@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { useErfassung } from "@/components/erfassung/ErfassungProvider";
 import { usePageView } from "@/hooks/usePageView";
 import { useOverlayStore } from "@/lib/overlayStore";
@@ -129,11 +130,83 @@ export function WarendurchlaufCockpitClient({ view }: { view: PhillipWerkstattVi
   usePageView();
   const { openErfassung } = useErfassung();
   const openOrder = useOverlayStore((state) => state.openOrder);
+  const [isOrderPickerOpen, setIsOrderPickerOpen] = useState(false);
+  const pickerTriggerRef = useRef<HTMLButtonElement>(null);
+  const pickerDialogRef = useRef<HTMLElement>(null);
+  const pickerCloseRef = useRef<HTMLButtonElement>(null);
+  const restorePickerFocusRef = useRef(false);
 
   const authorized = view.kind === "data" || view.kind === "empty";
   const canCreateOrder = authorized && view.canCreateOrder;
   const wareneingang = view.kind === "data" ? view.wareneingang : [];
   const galvanik = view.kind === "data" ? view.galvanik : [];
+  const pickerOrders = view.kind === "data" ? [...view.galvanik, ...view.wareneingang] : [];
+
+  useEffect(() => {
+    if (!isOrderPickerOpen) {
+      if (restorePickerFocusRef.current) {
+        restorePickerFocusRef.current = false;
+        pickerTriggerRef.current?.focus();
+      }
+      return;
+    }
+
+    pickerCloseRef.current?.focus();
+
+    const handleDialogKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        restorePickerFocusRef.current = true;
+        setIsOrderPickerOpen(false);
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+
+      const dialog = pickerDialogRef.current;
+      if (!dialog) return;
+
+      const focusableElements = dialog.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (focusableElements.length === 0) return;
+
+      const firstFocusable = focusableElements.item(0);
+      const lastFocusable = focusableElements.item(focusableElements.length - 1);
+      const activeElement = document.activeElement;
+
+      if (!dialog.contains(activeElement)) {
+        event.preventDefault();
+        (event.shiftKey ? lastFocusable : firstFocusable).focus();
+      } else if (event.shiftKey && activeElement === firstFocusable) {
+        event.preventDefault();
+        lastFocusable.focus();
+      } else if (!event.shiftKey && activeElement === lastFocusable) {
+        event.preventDefault();
+        firstFocusable.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleDialogKeyDown);
+    return () => document.removeEventListener("keydown", handleDialogKeyDown);
+  }, [isOrderPickerOpen]);
+
+  const openOrderPicker = () => {
+    restorePickerFocusRef.current = false;
+    setIsOrderPickerOpen(true);
+  };
+
+  const closeOrderPicker = () => {
+    restorePickerFocusRef.current = true;
+    setIsOrderPickerOpen(false);
+  };
+
+  const selectOrder = (orderId: string) => {
+    restorePickerFocusRef.current = false;
+    setIsOrderPickerOpen(false);
+    openOrder(orderId);
+  };
 
   return (
     <section className={styles.screen} aria-labelledby="werkstatt-title">
@@ -198,7 +271,20 @@ export function WarendurchlaufCockpitClient({ view }: { view: PhillipWerkstattVi
             </div>
 
             <nav className={styles.actionBar} aria-label="Werkstattaktionen">
-              <Link className={`${styles.primaryAction} ${styles.touchTarget}`} href="/warendurchlauf/galvanik">
+              {view.kind === "data" ? (
+                <button
+                  ref={pickerTriggerRef}
+                  type="button"
+                  className={[styles.primaryAction, styles.touchTarget].join(" ")}
+                  aria-haspopup="dialog"
+                  aria-expanded={isOrderPickerOpen}
+                  aria-controls="phillip-order-picker"
+                  onClick={openOrderPicker}
+                >
+                  Auftrag öffnen
+                </button>
+              ) : null}
+              <Link className={`${styles.secondaryAction} ${styles.touchTarget}`} href="/warendurchlauf/galvanik">
                 Galvanik öffnen
               </Link>
               {canCreateOrder ? (
@@ -219,6 +305,57 @@ export function WarendurchlaufCockpitClient({ view }: { view: PhillipWerkstattVi
                 Wareneingang öffnen
               </Link>
             </nav>
+
+            {view.kind === "data" && isOrderPickerOpen ? (
+              <div className={styles.pickerBackdrop}>
+                <section
+                  ref={pickerDialogRef}
+                  id="phillip-order-picker"
+                  className={styles.pickerDialog}
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="phillip-order-picker-title"
+                >
+                  <header className={styles.pickerHeader}>
+                    <div>
+                      <p className={styles.panelKicker}>Echte Werkstattaufträge</p>
+                      <h2 id="phillip-order-picker-title" className={styles.pickerTitle}>Auftrag öffnen</h2>
+                    </div>
+                    <button
+                      ref={pickerCloseRef}
+                      type="button"
+                      className={[styles.pickerClose, styles.touchTarget].join(" ")}
+                      onClick={closeOrderPicker}
+                    >
+                      Schließen
+                    </button>
+                  </header>
+                  <p className={styles.pickerIntro}>Galvanik zuerst, danach Wareneingang.</p>
+                  <ul className={styles.pickerList}>
+                    {pickerOrders.map((order) => (
+                      <li key={order.id}>
+                        <button
+                          type="button"
+                          className={[styles.pickerOrder, styles.touchTarget].join(" ")}
+                          data-testid={`order-picker-order-${order.id}`}
+                          aria-label={`Auftrag ${order.orderNumber} öffnen`}
+                          onClick={() => selectOrder(order.id)}
+                        >
+                          <span className={styles.pickerOrderCopy}>
+                            <span className={styles.pickerOrderNumber}>{order.orderNumber}</span>
+                            {order.customerName ? (
+                              <span className={styles.pickerCustomer}>{order.customerName}</span>
+                            ) : null}
+                            <span className={styles.pickerOrderTitle}>{order.title}</span>
+                          </span>
+                          <span className={styles.pickerStatus}>{order.statusText || order.status}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              </div>
+            ) : null}
           </>
         ) : null}
       </div>

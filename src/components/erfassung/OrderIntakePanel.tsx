@@ -29,6 +29,10 @@ const MIME_EXTENSION = {
 type DraftItem = { key: string; name: string; quantity: string; material: string; surfaceRequested: string };
 type PanelState = "loading" | "data" | "empty" | "denied" | "error" | "submitting" | "confirming" | "conflict" | "success";
 
+function canCustomerLoadCommit(state: PanelState): boolean {
+  return state === "loading" || state === "data" || state === "empty";
+}
+
 function newDraftItem(): DraftItem {
   return { key: crypto.randomUUID(), name: "", quantity: "1", material: "", surfaceRequested: "" };
 }
@@ -130,7 +134,12 @@ export function OrderIntakePanel({
   onClose: () => void;
   setCloseBlocked: (blocked: boolean) => void;
 }) {
-  const [panelState, setPanelState] = useState<PanelState>("loading");
+  const [panelState, setPanelStateValue] = useState<PanelState>("loading");
+  const panelStateRef = useRef<PanelState>("loading");
+  const setPanelState = useCallback((nextState: PanelState) => {
+    panelStateRef.current = nextState;
+    setPanelStateValue(nextState);
+  }, []);
   const [message, setMessage] = useState("Kunden werden geladen.");
   const [query, setQuery] = useState("");
   const [customers, setCustomers] = useState<OrderIntakeCustomerOption[]>([]);
@@ -151,9 +160,10 @@ export function OrderIntakePanel({
   const retryIntent = useRef<RetryIntent | null>(null);
 
   const loadCustomers = useCallback(async (search: string) => {
+    if (!canCustomerLoadCommit(panelStateRef.current)) return;
     const sequence = ++searchSequence.current;
     const result = await searchOrderIntakeCustomersAction({ query: search.trim() });
-    if (sequence !== searchSequence.current) return;
+    if (sequence !== searchSequence.current || !canCustomerLoadCommit(panelStateRef.current)) return;
     if (!result.ok) {
       setCustomers([]);
       setMessage(result.message);
@@ -162,10 +172,11 @@ export function OrderIntakePanel({
     }
     setCustomers(result.data.customers);
     setCanCreateCustomer(result.data.canCreateCustomer);
-    if (!selectedCustomerId && result.data.customers[0]) setSelectedCustomerId(result.data.customers[0].id);
+    const firstCustomerId = result.data.customers[0]?.id;
+    if (firstCustomerId) setSelectedCustomerId((current) => current || firstCustomerId);
     setMessage(result.data.customers.length === 0 ? "Noch keine passenden Kunden erfasst." : "Kunde auswählen oder neu anlegen.");
     setPanelState(result.data.customers.length === 0 ? "empty" : "data");
-  }, [selectedCustomerId]);
+  }, [setPanelState]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void loadCustomers(query), 250);
