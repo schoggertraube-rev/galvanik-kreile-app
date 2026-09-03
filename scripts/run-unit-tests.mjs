@@ -9,6 +9,9 @@ const result = spawnSync(
     "--exclude",
     "**/*.integration.test.ts",
     ...process.argv.slice(2),
+    "--maxWorkers=1",
+    "--no-file-parallelism",
+    "--testTimeout=15000",
   ],
   {
     cwd: process.cwd(),
