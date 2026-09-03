@@ -1,4 +1,4 @@
-import { WarendurchlaufStationNav } from "@/components/warendurchlauf/WarendurchlaufStationNav";
+import { WarendurchlaufRouteNav } from "./WarendurchlaufRouteNav";
 
 export default function WarendurchlaufLayout({
   children,
@@ -7,7 +7,7 @@ export default function WarendurchlaufLayout({
 }) {
   return (
     <div className="flex flex-col flex-1 min-h-0 w-full">
-      <WarendurchlaufStationNav />
+      <WarendurchlaufRouteNav />
       <div className="flex-1 w-full relative overflow-y-auto overflow-x-hidden">
         {children}
       </div>
