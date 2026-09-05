@@ -41,3 +41,12 @@
 ## OFFENE OWNER-ENTSCHEIDUNGEN
 - B1 Event-ID vs Rechnungsnummer · B3 Nummernvergabe-Zeitpunkt.
 - UI-Struktur-Flags (aus UI-Index): S-Scope (Bäder ganz raus?), S-Termin, S-Bündel, S-Mehrarbeit, S5 Warenausgang-Gate, Delegation Rolf↔Phillip.
+
+
+---
+## NACHTRAG 2026-09-05 (Orchestrator, im Owner-Auftrag)
+- **F1.4 = complete** (PR #68 Merge `466e45ef`, PR #70 Merge `11e8757`). **F1.5 aktiv** auf `f1/bestaetigter-zahlungseingang-20260904` (Mission-Bindung `3864605`); Bauvertrag V1 gilt wörtlich; Owner-Antwort §9: Bank-Abgleich als Adapter 1, Mollie später, Teilzahlung ja, Skonto offen. Writer baut Einheit A (Daten-/Read-Port-Vertrag).
+- **Repo-Kopie dieses Ordners:** PR #71 `gov/linie-import-20260905` → `docs/project/linie/` (SHA-256-Manifest), damit PL und Writer die Linie im Repo lesen. Bei Abweichung gilt dieser Ordner; Kopie per PR nachziehen.
+- **Aufgeräumt:** `_reviews/`, `neuer chat zusammenführung/`, `struktur und ideen zum UI umsetzen/` → `_archiv_2026-09-05/`. Lerninsel-Dokument in den Lerninsel-Ordner verschoben. Kundenprojekt-Root `galvanik_kreile\` (58 Alt-Einträge) → `_ARCHIV_2026-09-05_vor_LINIE/` mit Manifest. `_parallel/suche/LIEFERUNG_V1` bleibt bis PL-Disposition.
+- **Neuer PL-Chat:** Startup-Briefing `KREILE_PL_STARTUP_BRIEFING_2026-09-05.md` (in einen neuen PL-Chat einfügen).
+- **Merge-Ausführung** an den Orchestrator übertragen (Owner 2026-09-05), nur bei CI grün + PL-Review ohne P0/P1.
