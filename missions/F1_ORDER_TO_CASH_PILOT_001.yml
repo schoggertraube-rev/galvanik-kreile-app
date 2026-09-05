@@ -1,8 +1,8 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: f1c34b8f36c05912a094eb163950a24a9710df97
-branch: f1/immutable-invoice-m4-20260821
+base_sha: 11e8757879f616de42d094581b5243a64560f21c
+branch: f1/bestaetigter-zahlungseingang-20260904
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
 # ── M0 Konsolidierungsstand ───────────────────────────────────────
@@ -36,12 +36,12 @@ delivery_order:
   - F1.5_BESTAETIGTER_ZAHLUNGSEINGANG
   - F1.6_REALER_PILOT
 
-active_package: F1.4_UNVERAENDERLICHE_RECHNUNG
-next_gate_after_active_package: F1.4_REAL_E2E_AND_INDEPENDENT_REVIEW
+active_package: F1.5_BESTAETIGTER_ZAHLUNGSEINGANG
+next_gate_after_active_package: F1.5_REAL_E2E_AND_INDEPENDENT_REVIEW
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
-f1_4_status: IN_PROGRESS
+f1_4_status: complete # PR #68 merge 466e45efec28514ea2908a175d2892c73abb9f60; PR #70 merge 11e8757879f616de42d094581b5243a64560f21c
 f1_4_v1_ratified: true
 f1_4_contract_sha256: B1F4E10ECB0C907085D9BE90E859AAFEF1C9798AE5DEEE2E3CE0DD849AD2634A
 f1_4_invoice_truth: EVOLVE_PUBLIC_INVOICES
@@ -49,6 +49,24 @@ f1_4_master_data_source: EXISTING_COMPANY_SETTINGS_NOT_GIT
 f1_4_service_date_rule: FINAL_F1_3_FREEZE_DATE
 f1_4_pdf_scope: DOWNLOAD_ONLY_2026_TRANSITION
 f1_4_payment_term_rule: TENANT_CONFIG_REQUIRED_FAIL_CLOSED
+# ── F1.5 Bindung (Orchestrator 2026-09-05, Bauvertrag V1 2026-08-21 woertlich) ──
+f1_5_status: IN_PROGRESS
+f1_5_v1_ratified: true
+f1_5_contract_file: KREILE_F1_5_BAUVERTRAG_ZAHLUNGSEINGANG_WARENAUSGANG_V1_2026-08-21.md # Owner-Bibelordner, nicht im Repo
+f1_5_contract_sha256: 5BCD70BFC2BD9D6A6DF06CF48D0D95C4A288DD5C6364BE2783954DDA1196BDE1
+f1_5_payment_truth: EVOLVE_PUBLIC_INVOICES_NO_SECOND_PAYMENT_TABLE # Bauvertrag §4; public.zahlung = Legacy/Quarantaene
+f1_5_first_step: MANUAL_CONFIRM_PAYMENT_THEN_GOODS_OUT_GATE # Bauvertrag §0/§2/§3; Adapter erst danach (§5)
+f1_5_commands: confirmPayment(buero|meister|admin,PAYMENT_CONFIRMED_V1); recordGoodsOut(werkstatt|meister|admin,ORDER_PICKED_UP_V1)
+f1_5_gate_rule: VORKASSE_BLOCKED_UNTIL_PAID; ABHOLUNG_PAY_AT_HANDOVER; RECHNUNG_NO_GATE # D-F15-001
+f1_5_read_port: private.v_payment_summary_v1 # oder begruendete Erweiterung von v_invoice_summary_v1, mit Gate-Zustand
+f1_5_roles_rule: NO_GENERIC_PERM_FINANCE # M3 §1: enges Gate je Uebergang
+# Owner-Entscheidung 2026-09-05 (beantwortet Bauvertrag §9):
+f1_5_adapter_order: BANK_RECONCILIATION_FIRST_THEN_MOLLIE # Adapter 1 = Bank-Abgleich (eigener Bauvertrag nach F1.5-Merge), Adapter 2 = Mollie
+f1_5_partial_payment: ALLOWED
+f1_5_skonto: OPEN_NON_BLOCKING
+f1_5_not_in_scope: MAHNWESEN; DATEV_EXPORT; E_RECHNUNG_VERSAND; BUCHHALTUNGSMODUL; CAMT_MT940_IMPORT(Adapter-1); MOLLIE(Adapter-2)
+f1_5_legacy_quarantine: src/lib/payments/mollieAdapter.ts; src/lib/payments/paymentProvider.ts; src/app/buchhaltung/zahlung/page.tsx; FinanzenDashboardClient.tsx # nicht reaktivieren, nicht loeschen (D-ARCH-008)
+f1_5_units: A_DATA_READPORT -> B_CONFIRM_PAYMENT -> C_GOODS_OUT_GATE -> D_UI; T_SUPABASE_CLI_PIN unabhaengig (keine Commit-Voraussetzung, CI ist Gate)
 
 # ── F1.2 Entscheidungsgrundlage (bindend, ersetzt Altstand) ───────
 # D-F12-001A (ersetzt D-F12-001): F1.2 = genau EIN Uebergang
@@ -293,6 +311,43 @@ f1_4_allowlist:
   - docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json
   - docs/evidence/f0/W4_CROSS_MODULE_READ_PORT_INVENTORY.json
   - .github/workflows/quality.yml
+
+f1_5_allowlist:
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - .github/workflows/quality.yml
+  # A — Daten- und Read-Port-Vertrag
+  - supabase/migrations/*_f1_5_payment_goods_out_contract.sql
+  - src/lib/server/paymentContract.ts
+  - src/lib/server/paymentSummaryRead.ts
+  - src/lib/server/__tests__/paymentSummaryRead.test.ts
+  - src/test/f1_5_payment_goods_out_contract.integration.test.ts
+  - docs/evidence/f1/F1_5_PAYMENT_GOODS_OUT_CONTRACT.md
+  # B — manueller confirmPayment
+  - src/lib/server/commands/confirmPaymentCommand.ts
+  - src/lib/server/commands/__tests__/confirmPaymentCommand.test.ts
+  - src/app/actions/payments.actions.ts
+  - src/test/f1_5_confirm_payment.integration.test.ts
+  # C — recordGoodsOut + Gate
+  - src/lib/server/commands/recordGoodsOutCommand.ts
+  - src/lib/server/commands/__tests__/recordGoodsOutCommand.test.ts
+  - src/app/actions/goodsOut.actions.ts
+  - src/test/f1_5_goods_out.integration.test.ts
+  # T — Supabase-CLI-Pin (Tooling)
+  - package.json
+  - package-lock.json
+  - scripts/supabase-version-check.mjs
+  # D — Oberflaeche (nur Readback)
+  - src/app/warendurchlauf/warenausgang/page.tsx
+  - src/app/warendurchlauf/warenausgang/**
+  - src/app/buchhaltung/rechnungen/InvoicesClient.tsx
+  - src/app/buchhaltung/rechnungen/__tests__/**
+  - src/components/orders/OrderOverlay.tsx
+  # Evidence
+  - e2e/f1-5-*.real.spec.ts
+  - docs/evidence/f1/F1_5_BESTAETIGTER_ZAHLUNGSEINGANG_E2E_EVIDENCE.md
+  - docs/evidence/f1/artifacts/f1-5/**
+  - docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json
+  - docs/evidence/f0/W4_CROSS_MODULE_READ_PORT_INVENTORY.json
 
 f1_r0_required_gates:
   - REACHABLE_PRODUCTION_MOCKS=0

@@ -96,6 +96,9 @@
       "private.v_order_task_assignment_receipts_v1",
       "private.v_order_task_assignment_v1"
     ],
+    "src/lib/server/paymentSummaryRead.ts": [
+      "private.v_payment_summary_v1"
+    ],
     "src/lib/server/userLastSeen.ts": [
       "private.v_user_last_seen_receipts_v1",
       "private.v_user_last_seen_v1"
@@ -188,6 +191,13 @@
         "private.v_invoice_issue_source_v1",
         "private.v_invoice_receipt_v1",
         "private.v_invoice_summary_v1"
+      ],
+      "requiredLegacySource": null
+    },
+    {
+      "path": "supabase/migrations/20260905100000_f1_5_payment_goods_out_contract.sql",
+      "requiredSecurityInvokerViews": [
+        "private.v_payment_summary_v1"
       ],
       "requiredLegacySource": null
     }
