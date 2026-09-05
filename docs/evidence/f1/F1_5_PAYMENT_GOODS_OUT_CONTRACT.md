@@ -38,6 +38,12 @@ No client tenant value is accepted. Read results are `OK` with an empty or
 validated list, `FORBIDDEN` before a transaction, or data-free `UNAVAILABLE`
 for query, ambiguity or integrity failures.
 
+The W4 inventory binding is version `v1`, owner `accounting/F1.5`, consumer
+`src/lib/server/paymentSummaryRead.ts`; its fields are the migration-backed
+invoice/order identifiers, total/paid/open cent amounts, mode, status,
+currency, method, paid timestamp, receipt/event/correlation identifiers,
+payment version and the derived `goods_out_allowed` flag.
+
 The private view is `security_invoker=true`, tenant-filtered via
 `app.tenant_id`, and granted only to `service_role`; no anonymous or
 authenticated grant is added. The migration does not alter exposed-table RLS
