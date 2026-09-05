@@ -498,6 +498,13 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ""
         run: npx vitest run src/test/f1_5_payment_goods_out_contract.integration.test.ts --maxWorkers=1 --no-file-parallelism
 
+      - name: F1.5 confirm-payment command integration test (blocking)
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          F1_5_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          SUPABASE_SERVICE_ROLE_KEY: ""
+        run: npx vitest run src/test/f1_5_confirm_payment.integration.test.ts --maxWorkers=1 --no-file-parallelism
+
       - name: Stop isolated local Supabase
         if: always()
         run: npx --yes supabase@2.111.0 stop --no-backup
