@@ -1,6 +1,6 @@
 # Dokumentenautorität
 
-Stand: 2026-08-13
+Stand: 2026-09-05 (Abschnitt Owner-Beschlusslinie ergänzt; Rest 2026-08-13)
 
 ## Zweck
 
@@ -32,6 +32,19 @@ Diese Ebenen koennen voneinander abweichen. Dann gewinnt nicht still eine andere
   F0-Mission und ihre Evidence sind eingefrorene Historie; R0-A ist nur ein Checkpoint, kein R0-PASS.
 - Sie duerfen weder reale Systemfakten umdeuten noch Sicherheitsgesetze aushebeln.
 - Verlangt die Mission eine neue Produktentscheidung ausserhalb ihres Scopes oder widerspricht sie einer geschuetzten Produktentscheidung, wird der Konflikt explizit eskaliert.
+
+### Owner-Beschlusslinie (LINIE, Bauverträge, Leitplanken)
+
+- `docs/project/linie/` enthält byteidentische Repo-Kopien der ratifizierten Owner-Steuerdokumente
+  (Index `00_BIBEL_INDEX.md`; Manifest mit SHA-256 in `docs/project/linie/README.md`).
+- `KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md` ist Beschluss-Autorität für Produkt- und
+  Architekturentscheidungen (D-ARCH-*, D-F1x-*). Bauverträge (`KREILE_F1_*_BAUVERTRAG_*.md`) sind
+  wörtliches Gesetz der jeweiligen Lieferpakete und werden nie interpretiert; Unklarheit = STOP
+  (`BLOCKED_PRODUCT_DECISION`), Beschluss in die Linie, dann bauen.
+- `00_AUTONOMER_BETRIEB_LEITPLANKEN.md` Teil B (Ehrlichkeit, Merge-Gate, Isolation, atomare
+  closed-world-Lanes, Owner-Grenzen) schlägt alle anderen Prozessregeln.
+- Owner = Siglinder. Master liegt im Projektordner `galvanik_kreile/00_BIBEL/` (ausserhalb des Repos); bei Abweichung zwischen Repo-Kopie und `00_BIBEL/` gilt `00_BIBEL/`;
+  die Kopie wird per PR nachgezogen. Die Missionsdatei bindet Bauverträge zusätzlich per SHA-256.
 
 ### Produktsteuerung und Erhalt
 
