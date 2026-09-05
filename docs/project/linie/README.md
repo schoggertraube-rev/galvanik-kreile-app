@@ -1,15 +1,15 @@
-# LINIE — importierte Owner-Steuerdokumente (Stand 2026-09-05)
+# LINIE — Repo-Kopie der Owner-Steuerdokumente (Stand 2026-09-05)
 
-Quelle: Owner-Bibelordner `C:\Users\Traube\Desktop\App und Web Projekte 2026\Kreile app\`. Byteidentische Kopien, importiert durch den Orchestrator (Prozess-Hygiene, kein App-Code), damit PL und Writer die ratifizierte Beschluss- und Vertragslage im Repo lesen können.
+Quelle (Master): Projektordner `C:\Antygravityprojekte\04_Kundenprojekte\galvanik_kreile\00_BIBEL\` (Einstieg `00_BIBEL_INDEX.md`; Projektstruktur `galvanik_kreile\00_README_PROJEKTSTRUKTUR.md`). Byteidentische Kopien, importiert durch den Orchestrator (Prozess-Hygiene, kein App-Code), damit PL und Writer die ratifizierte Beschluss- und Vertragslage im Repo lesen können.
 
-Autorität: siehe `docs/project/DOCUMENT_AUTHORITY.md`. `KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md` ist Beschluss-Autorität; Bauverträge sind wörtliches Gesetz und werden nie interpretiert; `00_AUTONOMER_BETRIEB_LEITPLANKEN.md` Teil B schlägt alles. Bei Abweichung zwischen Repo-Kopie und Owner-Ordner gilt der Owner-Ordner; die Kopie wird per PR nachgezogen.
+Autorität: siehe `docs/project/DOCUMENT_AUTHORITY.md`. `KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md` ist Beschluss-Autorität; Bauverträge sind wörtliches Gesetz und werden nie interpretiert; `00_AUTONOMER_BETRIEB_LEITPLANKEN.md` Teil B schlägt alles. Bei Abweichung zwischen Repo-Kopie und `00_BIBEL\` gilt `00_BIBEL\`; die Kopie wird per PR nachgezogen.
 
-Nicht importiert (Design-Referenzen, Reviews, Parallel-Lieferungen): `design und klickpfade UI/`, `_reviews/`, `_parallel/`, `neuer chat zusammenführung/`, `struktur und ideen zum UI umsetzen/` — Pfade siehe `00_UI_REFERENZEN_PFADE.md`.
+Nicht importiert (nur in `00_BIBEL\`): `design und klickpfade UI\` (Rolf V8, Phillip V4, Karten V8/V2 als HTML), `_bibel_historie_2026-08\` (Bibel V1/V2, Einzelbeschlüsse D-ARCH-010, D-F13-001, D-F15-001, D-UI-003, D-USP-001, F1.2 — historisches Fundament), `_parallel\` (Suchmodul-Lieferung), `_archiv_2026-09-05\`.
 
 | Datei | SHA-256 | Quelle-Änderungsdatum |
 |---|---|---|
 | `00_AUTONOMER_BETRIEB_LEITPLANKEN.md` | `05097E9FCD2063CA80DB5627036B7ADCDC1136EEC57AE2316963D0B3D629CDF3` | 2026-09-02 |
-| `00_BIBEL_INDEX.md` | `79A12210DA4EAB44DFBF3A711E226DFF6BB14DE49C3E1D215150B32878E106A3` | 2026-09-05 |
+| `00_BIBEL_INDEX.md` | `B2ECBF3B2DCF391A887D910CAF75B07A24B25987269F95773403D9C2846D1C42` | 2026-09-05 |
 | `00_UI_REFERENZEN_PFADE.md` | `868CB6862C2A4B62DDC385E01EEB572ED0B0E890BBD2DAE6336A3E9C1FDF0922` | 2026-08-28 |
 | `KREILE_AUTONOMIE_MANDAT_2026-08-27.md` | `C244EC1C5F1FF1493420F4DCC44FEFCD8F0E76CEAEFD16853BE2A4E4C539364A` | 2026-08-27 |
 | `KREILE_F1_4_BAUVERTRAG_UNVERAENDERLICHE_RECHNUNG_V1_2026-08-21.md` | `B324AC9278DD461477DF2F28B5AA22849D2F616F91C4143DAA7E814CE0F01AA2` | 2026-08-28 |
@@ -17,6 +17,6 @@ Nicht importiert (Design-Referenzen, Reviews, Parallel-Lieferungen): `design und
 | `KREILE_GESAMTUEBERSICHT_STATUS_2026-09-01.md` | `D4C68B1002A5E40AEBE3F7197099B3EF38DEBC266BD7362271450320728A7208` | 2026-09-01 |
 | `KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md` | `4C493E71259A80236A114E5AE8F30EE1248F71A068934DF3EC2C8B28CF07CFDE` | 2026-08-28 |
 | `KREILE_M3_BAUPLAN_V1_2026-08-18.md` | `50053734C51C5E3B2250C374D67AFC92AD54F2705DB1CB926F4A910FCFFA17E4` | 2026-09-01 |
-| `KREILE_PL_STARTUP_BRIEFING_2026-09-05.md` | `6F2E6321B5C77ED9D3AE63765CB07765035BC85C06F97DB2BF267DABDC8ACD51` | 2026-09-05 |
+| `KREILE_PL_STARTUP_BRIEFING_2026-09-05.md` | `95A7D810F7BA731A4C9F75A366928768D505750A8729BB414C35C1CEC66CC26C` | 2026-09-05 |
 | `KREILE_UEBERGABE_FRONTEND_UMSETZUNG_V1_2026-08-21.md` | `1CC0BDD969E1E5BB8F437542FCD8208FCDD2DF5B3B7FC8A0B18030AAC21B5C8C` | 2026-08-27 |
 | `STARTSEITEN_UI_REFERENZ_SPEC_2026-09-01.md` | `398CCAE0A48D046BBD2429DACB9346081C1FD1C1F98E754F0380DB870DF94AF6` | 2026-09-01 |

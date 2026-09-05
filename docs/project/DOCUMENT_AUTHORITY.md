@@ -43,7 +43,7 @@ Diese Ebenen koennen voneinander abweichen. Dann gewinnt nicht still eine andere
   (`BLOCKED_PRODUCT_DECISION`), Beschluss in die Linie, dann bauen.
 - `00_AUTONOMER_BETRIEB_LEITPLANKEN.md` Teil B (Ehrlichkeit, Merge-Gate, Isolation, atomare
   closed-world-Lanes, Owner-Grenzen) schlägt alle anderen Prozessregeln.
-- Owner = Siglinder. Bei Abweichung zwischen Repo-Kopie und Owner-Ordner gilt der Owner-Ordner;
+- Owner = Siglinder. Master liegt im Projektordner `galvanik_kreile/00_BIBEL/` (ausserhalb des Repos); bei Abweichung zwischen Repo-Kopie und `00_BIBEL/` gilt `00_BIBEL/`;
   die Kopie wird per PR nachgezogen. Die Missionsdatei bindet Bauverträge zusätzlich per SHA-256.
 
 ### Produktsteuerung und Erhalt

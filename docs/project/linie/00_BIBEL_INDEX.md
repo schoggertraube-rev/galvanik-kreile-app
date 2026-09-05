@@ -1,5 +1,5 @@
 # 00 · KREILE BIBEL-INDEX — START HIER (PL liest zuerst dies)
-*Stand 2026-09-01 · Dieser Ordner `Kreile app\` ist die EINZIGE Bau-Wahrheit (PL-Inventar). Nichts ausserhalb ist Quelle. Nicht suchen — hier steht, wo alles liegt.*
+*Stand 2026-09-01 · Dieser Ordner `galvanik_kreile\00_BIBEL\` ist die EINZIGE Bau-Wahrheit (PL-Inventar). Nichts ausserhalb ist Quelle. Nicht suchen — hier steht, wo alles liegt.*
 
 ## REGELN (Verfassung)
 - Ein Bauplan/Vertrag ist wörtliches Gesetz — NIE interpretieren. Unklarheit = STOP `BLOCKED_PRODUCT_DECISION`, Beschluss in DIE LINIE, dann bauen.
@@ -50,3 +50,5 @@
 - **Aufgeräumt:** `_reviews/`, `neuer chat zusammenführung/`, `struktur und ideen zum UI umsetzen/` → `_archiv_2026-09-05/`. Lerninsel-Dokument in den Lerninsel-Ordner verschoben. Kundenprojekt-Root `galvanik_kreile\` (58 Alt-Einträge) → `_ARCHIV_2026-09-05_vor_LINIE/` mit Manifest. `_parallel/suche/LIEFERUNG_V1` bleibt bis PL-Disposition.
 - **Neuer PL-Chat:** Startup-Briefing `KREILE_PL_STARTUP_BRIEFING_2026-09-05.md` (in einen neuen PL-Chat einfügen).
 - **Merge-Ausführung** an den Orchestrator übertragen (Owner 2026-09-05), nur bei CI grün + PL-Review ohne P0/P1.
+
+- **2026-09-05 (später): Bibel-Ordner vom Desktop in das Projekt verschoben:** `C:\Antygravityprojekte\04_Kundenprojekte\galvanik_kreile\00_BIBEL\` (Owner-Auftrag: sauber im Projekt, beschriftet, PL/Main-Zugriff). Projektstruktur: `..\00_README_PROJEKTSTRUKTUR.md`. Bibel V2 + Einzelbeschlüsse: `_bibel_historie_2026-08\`.
