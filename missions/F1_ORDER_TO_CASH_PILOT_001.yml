@@ -314,6 +314,7 @@ f1_4_allowlist:
 
 f1_5_allowlist:
   - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - .github/workflows/quality.yml
   # A — Daten- und Read-Port-Vertrag
   - supabase/migrations/*_f1_5_payment_goods_out_contract.sql
   - src/lib/server/paymentContract.ts

@@ -22,6 +22,11 @@ checks so existing history is not rewritten. Receipt and invoice/version
 unique indexes make duplicate confirmation evidence fail closed. Update/delete
 triggers use the existing immutable audit trigger.
 
+The goods-out event preserves the fixed location chain literally:
+`from_station = fertig` and `station = abgeholt`. Whether the handoff is an
+`abholung` or `versand` remains the event payload mode and never creates a
+second location state such as `warenausgang`.
+
 For `vorkasse`, goods-out is allowed only after `bezahlt`; `abholung` is paid
 at handover; `rechnung` has no payment gate. The view exposes this as the
 server-derived `goods_out_allowed` flag. Commands, provider adapters and UI
@@ -53,11 +58,16 @@ policies.
 
 The unit contract test covers the filled and empty DTO, role denial before the
 transaction, foreign-tenant/integrity/ambiguous/error fail-closed behavior and
-the private-view query. The integration contract test uses only a dedicated
-loopback PostgreSQL 17 database and checks migration metadata, view grants and
-tenant binding. It must be reported `NOT_RUN/ENV_BLOCKER` when the explicit
-`DATABASE_URL`/`F1_5_EXPECTED_DATABASE_URL` local environment is unavailable;
-no remote database or service-role secret is accepted.
+the private-view query. The integration contract test creates non-vacuous own
+and foreign tenant invoice/event fixtures plus a real empty tenant, asserts
+exact row and event counts, verifies tenant isolation, and proves that
+`ORDER_PICKED_UP_V1` accepts `abgeholt` while rejecting the obsolete
+`warenausgang` value. It uses only a dedicated loopback PostgreSQL 17 database.
+The blocking CI lane resets a fresh local Supabase through migration
+`20260905100000` before running this test. A local run must be reported
+`NOT_RUN/ENV_BLOCKER` when the explicit
+`DATABASE_URL`/`F1_5_EXPECTED_DATABASE_URL` environment is unavailable; no
+remote database or service-role secret is accepted.
 
 Static commands for this package are:
 

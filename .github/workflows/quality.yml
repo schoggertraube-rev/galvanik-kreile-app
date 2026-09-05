@@ -486,6 +486,18 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ""
         run: npx vitest run src/test/f1_4_immutable_invoice.integration.test.ts src/test/f1_4_immutable_invoice_contract.integration.test.ts --maxWorkers=1 --no-file-parallelism
 
+      - name: F1.5 candidate replay fresh from zero without seed
+        # Blocking F1.5 contract: additive payment and goods-out schema through 20260905100000.
+        # Fail-closed: without an always condition, a failed reset stops the job.
+        run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260905100000
+
+      - name: F1.5 payment and goods-out contract integration test (blocking)
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          F1_5_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          SUPABASE_SERVICE_ROLE_KEY: ""
+        run: npx vitest run src/test/f1_5_payment_goods_out_contract.integration.test.ts --maxWorkers=1 --no-file-parallelism
+
       - name: Stop isolated local Supabase
         if: always()
         run: npx --yes supabase@2.111.0 stop --no-backup

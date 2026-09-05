@@ -265,7 +265,7 @@ ALTER TABLE public.events
       AND item_id IS NULL
       AND status = 'success'
       AND from_station = 'fertig'
-      AND station = 'warenausgang'
+      AND station = 'abgeholt'
       AND jsonb_typeof(payload) = 'object'
       AND payload = jsonb_build_object(
         'orderId', payload->'orderId',
