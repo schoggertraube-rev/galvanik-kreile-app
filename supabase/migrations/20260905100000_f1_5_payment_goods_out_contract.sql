@@ -217,7 +217,7 @@ ALTER TABLE public.events
       AND payload->>'paymentStatus' IN ('teilbezahlt', 'bezahlt')
       AND payload->>'method' IN ('bar', 'ueberweisung', 'karte')
       AND payload->>'source' IN ('manual', 'bank', 'mollie')
-      AND payload->>'occurredAt' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$'
+      AND payload->>'occurredAt' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$'
       AND CASE
         WHEN jsonb_typeof(payload->'amountCents') = 'number'
          AND jsonb_typeof(payload->'grossAmountCents') = 'number'
