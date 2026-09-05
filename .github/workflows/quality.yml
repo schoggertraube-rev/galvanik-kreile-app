@@ -332,12 +332,12 @@ jobs:
         # Enables F1.3 integration tests against foundation ports and live card.
         run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260820143000
 
-      - name: F1.3 foundation ports and live card integration tests
+      - name: F1.3 foundation ports integration test
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           F1_3_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           SUPABASE_SERVICE_ROLE_KEY: ""
-        run: npx vitest run src/test/f1_3_foundation_ports.integration.test.ts src/test/f1_3_live_card.integration.test.ts
+        run: npx vitest run src/test/f1_3_foundation_ports.integration.test.ts
 
       - name: Persist W4 candidate fingerprint artifact
         run: |
@@ -474,22 +474,17 @@ jobs:
             docs/evidence/f0/W4_CANDIDATE_SCHEMA_CONTRACT.json
             docs/evidence/f0/W4_CANDIDATE_FINGERPRINT_EVIDENCE.md
 
-      - name: F1.4 candidate replay fresh from zero without seed
-        # Blocking F1.4 contract: integral F1.4 invoice schema through 20260821152949.
-        # Fail-closed: ohne Always-Bedingung stoppt ein fehlgeschlagener Reset den Job hart.
-        run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260821152949
+      - name: F1.5 B2 candidate replay fresh from zero without seed
+        # Blocking F1.5 contract: payment mode truth from intake through 20260905201850.
+        # Fail-closed: without an always condition, a failed reset stops the job.
+        run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260905201850
 
-      - name: F1.4 immutable invoice contract and integration tests (blocking)
+      - name: F1.4 immutable invoice regression on the F1.5 B2 schema (blocking)
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           F1_4_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           SUPABASE_SERVICE_ROLE_KEY: ""
         run: npx vitest run src/test/f1_4_immutable_invoice.integration.test.ts src/test/f1_4_immutable_invoice_contract.integration.test.ts --maxWorkers=1 --no-file-parallelism
-
-      - name: F1.5 candidate replay fresh from zero without seed
-        # Blocking F1.5 contract: additive payment and goods-out schema through 20260905100000.
-        # Fail-closed: without an always condition, a failed reset stops the job.
-        run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260905100000
 
       - name: F1.5 payment and goods-out contract integration test (blocking)
         env:
@@ -504,6 +499,20 @@ jobs:
           F1_5_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           SUPABASE_SERVICE_ROLE_KEY: ""
         run: npx vitest run src/test/f1_5_confirm_payment.integration.test.ts --maxWorkers=1 --no-file-parallelism
+
+      - name: F1.5 intake payment-mode and canonical invoice integration test (blocking)
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          F1_5_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          SUPABASE_SERVICE_ROLE_KEY: ""
+        run: npx vitest run src/test/f1_5_set_payment_mode.integration.test.ts --maxWorkers=1 --no-file-parallelism
+
+      - name: F1.3 live-card regression on the F1.5 B2 schema (blocking)
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          F1_3_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          SUPABASE_SERVICE_ROLE_KEY: ""
+        run: npx vitest run src/test/f1_3_live_card.integration.test.ts --maxWorkers=1 --no-file-parallelism
 
       - name: Stop isolated local Supabase
         if: always()

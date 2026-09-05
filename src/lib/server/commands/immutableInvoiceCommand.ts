@@ -4,7 +4,15 @@ import { createHash, randomUUID } from "node:crypto";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { sql } from "drizzle-orm";
 import { resolveAuthorization } from "@/lib/server/authorization";
-import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import {
+  withPrivilegedTenantTransaction,
+  type PrivilegedTenantTransaction,
+} from "@/lib/server/privilegedDb";
+import {
+  isPaymentMode,
+  PAYMENT_CONTRACT_VERSION,
+  type PaymentMode,
+} from "@/lib/server/paymentContract";
 import {
   createImmutableInvoiceCancellationPdfDocument,
   createImmutableInvoicePdfDocument,
@@ -113,6 +121,27 @@ type LockedOrder = {
   station: string;
   status: string;
   version: number;
+  payment_mode: string;
+  payment_mode_version: number;
+};
+
+type InvoicePaymentInitializationRow = {
+  id: string;
+  tenant_id: string;
+  order_id: string;
+  gross_amount_cents: number | string | null;
+  payment_contract_version: number | string | null;
+  payment_mode: string | null;
+  payment_status: string | null;
+  payment_open_amount_cents: number | string | null;
+  payment_paid_amount_cents: number | string | null;
+  payment_currency: string | null;
+  payment_method: string | null;
+  payment_paid_at: Date | string | null;
+  payment_receipt_id: string | null;
+  payment_event_id: string | null;
+  payment_correlation_id: string | null;
+  payment_version: number | string | null;
 };
 
 type SourceRow = {
@@ -713,6 +742,57 @@ function cancellationReceiptMatchesIntent(
     && receipt.reason === input.reason;
 }
 
+async function readInitialPaymentState(
+  tx: PrivilegedTenantTransaction,
+  expected: {
+    tenantId: string;
+    invoiceId: string;
+    orderId: string;
+    grossAmountCents: number;
+    paymentMode: PaymentMode;
+  },
+): Promise<void> {
+  const rows = await tx.execute<InvoicePaymentInitializationRow>(sql`
+    SELECT
+      id::text,
+      tenant_id,
+      order_id,
+      gross_amount_cents,
+      payment_contract_version,
+      payment_mode,
+      payment_status,
+      payment_open_amount_cents,
+      payment_paid_amount_cents,
+      payment_currency,
+      payment_method,
+      payment_paid_at,
+      payment_receipt_id,
+      payment_event_id,
+      payment_correlation_id::text,
+      payment_version
+    FROM public.invoices
+    WHERE id = ${expected.invoiceId}::uuid
+      AND tenant_id = ${expected.tenantId}
+      AND order_id = ${expected.orderId}
+    LIMIT 2
+  `);
+  const row = rows[0];
+  if (
+    rows.length !== 1 || !row || row.id !== expected.invoiceId ||
+    row.tenant_id !== expected.tenantId || row.order_id !== expected.orderId ||
+    toSafeInteger(row.gross_amount_cents, "INVOICE_PAYMENT_GROSS_INVALID") !== expected.grossAmountCents ||
+    toSafeInteger(row.payment_contract_version, "INVOICE_PAYMENT_CONTRACT_INVALID") !== PAYMENT_CONTRACT_VERSION ||
+    row.payment_mode !== expected.paymentMode || row.payment_status !== "offen" ||
+    toSafeInteger(row.payment_open_amount_cents, "INVOICE_PAYMENT_OPEN_INVALID") !== expected.grossAmountCents ||
+    toSafeInteger(row.payment_paid_amount_cents, "INVOICE_PAYMENT_PAID_INVALID") !== 0 ||
+    row.payment_currency !== "EUR" || row.payment_method !== null || row.payment_paid_at !== null ||
+    row.payment_receipt_id !== null || row.payment_event_id !== null || row.payment_correlation_id !== null ||
+    toSafeInteger(row.payment_version, "INVOICE_PAYMENT_VERSION_INVALID") !== 0
+  ) {
+    throw new Error("INVOICE_PAYMENT_INITIALIZATION_READBACK_INVALID");
+  }
+}
+
 export async function createInvoice(input: unknown): Promise<CreateInvoiceResult> {
   if (!isValidInput(input)) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Rechnungsanfrage." };
@@ -778,7 +858,9 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
       }
 
       const orderRows = await tx.execute<LockedOrder>(sql`
-        SELECT id, tenant_id, customer_id, station, status, version
+        SELECT
+          id, tenant_id, customer_id, station, status, version,
+          payment_mode, payment_mode_version
         FROM public.orders
         WHERE id = ${input.orderId}
           AND tenant_id = ${tenantId}
@@ -790,6 +872,12 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
       }
       if (order.version !== input.expectedVersion) {
         return { code: "CONFLICT", message: "Auftrag wurde bereits geändert." };
+      }
+      if (
+        !isPaymentMode(order.payment_mode) || !Number.isSafeInteger(order.payment_mode_version) ||
+        order.payment_mode_version < 0
+      ) {
+        return { code: "VALIDATION_ERROR", message: "Zahlungsmodus des Auftrags ist nicht verfügbar." };
       }
       if (order.station !== STATION || order.status !== STATION) {
         return { code: "VALIDATION_ERROR", message: "Nur ein fertiggestellter Auftrag kann in Rechnung gestellt werden." };
@@ -937,7 +1025,11 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
           contract_version, freeze_id, snapshot, net_amount_cents, vat_rate_basis_points,
           vat_amount_cents, gross_amount_cents, service_date, payment_term_days,
           order_version, aggregate_version, client_event_id, correlation_id, issue_event_id,
-          issued_at, issued_by, pdf_ref, pdf_sha256, pdf_content
+          issued_at, issued_by, pdf_ref, pdf_sha256, pdf_content,
+          payment_contract_version, payment_mode, payment_status,
+          payment_open_amount_cents, payment_paid_amount_cents, payment_currency,
+          payment_method, payment_paid_at, payment_receipt_id, payment_event_id,
+          payment_correlation_id, payment_version
         ) VALUES (
           ${invoiceId}::uuid, ${tenantId}, ${order.customer_id}, ${order.id},
           ${invoiceNumber}, (${grossAmountCents}::numeric / 100), 'issued', ${dueDate}::date,
@@ -946,7 +1038,9 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
           ${serviceDate}::date, ${paymentTermDays}, ${order.version}, 1,
           ${input.clientEventId}::uuid, ${correlationId}::uuid,
           ${event.event_id}, ${issuedAtIso}::timestamptz, ${actorId}::uuid,
-          ${pdfRef}, ${pdfSha256}, ${pdfBuffer}
+          ${pdfRef}, ${pdfSha256}, ${pdfBuffer},
+          ${PAYMENT_CONTRACT_VERSION}, ${order.payment_mode}, 'offen',
+          ${grossAmountCents}, 0, 'EUR', NULL, NULL, NULL, NULL, NULL, 0
         )
         RETURNING id
       `);
@@ -954,6 +1048,14 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
       if (invoiceRows.length !== 1 || !insertedInvoice || insertedInvoice.id !== invoiceId) {
         throw new Error("INVOICE_INSERT_FAILED");
       }
+
+      await readInitialPaymentState(tx, {
+        tenantId,
+        invoiceId,
+        orderId: order.id,
+        grossAmountCents,
+        paymentMode: order.payment_mode,
+      });
 
       const receiptRows = await tx.execute<ReceiptRow>(sql`
         SELECT *

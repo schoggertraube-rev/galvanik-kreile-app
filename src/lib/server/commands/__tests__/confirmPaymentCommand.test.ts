@@ -35,6 +35,12 @@ const EVENT = "44444444-4444-4444-8444-444444444444";
 const CORRELATION = "55555555-5555-4555-8555-555555555555";
 const ORDER = "f15-payment-order";
 const OCCURRED_AT = "2026-09-05T12:30:00.000Z";
+const orderReference = {
+  id: ORDER,
+  tenant_id: "galvanik-kreile",
+  payment_mode: "vorkasse",
+  payment_mode_version: 0,
+};
 
 const authorization = {
   ok: true as const,
@@ -126,6 +132,17 @@ const partialInvoice = {
 
 type Query = { text: string; values: unknown[] };
 
+function queryText(query: Query): string {
+  return [
+    query.text,
+    ...query.values.flatMap((value) => (
+      value && typeof value === "object" && "text" in value
+        ? [String((value as { text: unknown }).text)]
+        : []
+    )),
+  ].join(" ");
+}
+
 function configureSuccessfulWrite(
   currentInvoice: unknown = openInvoice,
   persistedEvent: unknown = partialEvent,
@@ -133,18 +150,22 @@ function configureSuccessfulWrite(
 ) {
   let eventReads = 0;
   execute.mockImplementation((query: Query) => {
-    if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
-    if (query.text.includes("FROM public.events")) {
+    const text = queryText(query);
+    if (text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+    if (text.includes("FROM public.events")) {
       eventReads += 1;
       return Promise.resolve(eventReads === 1 ? [] : [persistedEvent]);
     }
-    if (query.text.includes("FOR UPDATE")) return Promise.resolve([currentInvoice]);
-    if (query.text.includes("clock_timestamp")) return Promise.resolve([{ occurred_at: OCCURRED_AT }]);
-    if (query.text.includes("INSERT INTO public.events")) return Promise.resolve([{ event_id: EVENT }]);
-    if (query.text.includes("set_config")) return Promise.resolve([]);
-    if (query.text.includes("UPDATE public.invoices")) return Promise.resolve([{ id: INVOICE }]);
-    if (query.text.includes("FROM public.invoices")) return Promise.resolve([persistedInvoice]);
-    throw new Error(`Unexpected SQL: ${query.text}`);
+    if (text.includes("FOR UPDATE OF orders")) return Promise.resolve([orderReference]);
+    if (text.includes("FROM public.invoices") && text.includes("FOR UPDATE")) {
+      return Promise.resolve([currentInvoice]);
+    }
+    if (text.includes("clock_timestamp")) return Promise.resolve([{ occurred_at: OCCURRED_AT }]);
+    if (text.includes("INSERT INTO public.events")) return Promise.resolve([{ event_id: EVENT }]);
+    if (text.includes("set_config")) return Promise.resolve([]);
+    if (text.includes("UPDATE public.invoices")) return Promise.resolve([{ id: INVOICE }]);
+    if (text.includes("FROM public.invoices")) return Promise.resolve([persistedInvoice]);
+    throw new Error(`Unexpected SQL: ${text}`);
   });
 }
 
@@ -206,10 +227,11 @@ describe("confirmPayment", () => {
   it("allows exactly buero, meister, and admin without a generic finance permission", async () => {
     const { confirmPayment } = await import("../confirmPaymentCommand");
     execute.mockImplementation((query: Query) => {
-      if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
-      if (query.text.includes("FROM public.events")) return Promise.resolve([]);
-      if (query.text.includes("FOR UPDATE")) return Promise.resolve([]);
-      throw new Error(`Unexpected SQL: ${query.text}`);
+      const text = queryText(query);
+      if (text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if (text.includes("FROM public.events")) return Promise.resolve([]);
+      if (text.includes("FOR UPDATE OF orders")) return Promise.resolve([]);
+      throw new Error(`Unexpected SQL: ${text}`);
     });
     for (const role of ["buero", "meister", "admin"] as const) {
       resolveAuthorization.mockResolvedValueOnce({
@@ -226,17 +248,18 @@ describe("confirmPayment", () => {
 
   it("makes missing and foreign invoices indistinguishable and performs no write", async () => {
     execute.mockImplementation((query: Query) => {
-      if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
-      if (query.text.includes("FROM public.events")) return Promise.resolve([]);
-      if (query.text.includes("FOR UPDATE")) return Promise.resolve([]);
-      throw new Error(`Unexpected SQL: ${query.text}`);
+      const text = queryText(query);
+      if (text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if (text.includes("FROM public.events")) return Promise.resolve([]);
+      if (text.includes("FOR UPDATE OF orders")) return Promise.resolve([]);
+      throw new Error(`Unexpected SQL: ${text}`);
     });
     const { confirmPayment } = await import("../confirmPaymentCommand");
     await expect(confirmPayment(input)).resolves.toEqual({
       code: "NOT_FOUND",
       message: "Rechnung nicht verfügbar.",
     });
-    const sqlText = execute.mock.calls.map(([query]) => query.text).join("\n");
+    const sqlText = execute.mock.calls.map(([query]) => queryText(query)).join("\n");
     expect(sqlText).not.toContain("INSERT INTO");
     expect(sqlText).not.toContain("UPDATE public.invoices");
   });
@@ -250,13 +273,17 @@ describe("confirmPayment", () => {
     ] as const) {
       execute.mockReset();
       execute.mockImplementation((query: Query) => {
-        if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
-        if (query.text.includes("FROM public.events")) return Promise.resolve([]);
-        if (query.text.includes("FOR UPDATE")) return Promise.resolve([invoice]);
-        throw new Error(`Unexpected SQL: ${query.text}`);
+        const text = queryText(query);
+        if (text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+        if (text.includes("FROM public.events")) return Promise.resolve([]);
+        if (text.includes("FOR UPDATE OF orders")) return Promise.resolve([orderReference]);
+        if (text.includes("FROM public.invoices") && text.includes("FOR UPDATE")) {
+          return Promise.resolve([invoice]);
+        }
+        throw new Error(`Unexpected SQL: ${text}`);
       });
       await expect(confirmPayment(input)).resolves.toMatchObject({ code: expectedCode });
-      expect(execute.mock.calls.map(([query]) => query.text).join("\n")).not.toContain("INSERT INTO");
+      expect(execute.mock.calls.map(([query]) => queryText(query)).join("\n")).not.toContain("INSERT INTO");
     }
   });
 
@@ -268,14 +295,20 @@ describe("confirmPayment", () => {
     ]) {
       execute.mockReset();
       execute.mockImplementation((query: Query) => {
-        if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
-        if (query.text.includes("FROM public.events")) return Promise.resolve([]);
-        if (query.text.includes("FOR UPDATE")) return Promise.resolve([openInvoice]);
-        throw new Error(`Unexpected SQL: ${query.text}`);
+        const text = queryText(query);
+        if (text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+        if (text.includes("FROM public.events")) return Promise.resolve([]);
+        if (text.includes("FOR UPDATE OF orders")) {
+          return Promise.resolve([orderReference]);
+        }
+        if (text.includes("FROM public.invoices") && text.includes("FOR UPDATE")) {
+          return Promise.resolve([openInvoice]);
+        }
+        throw new Error(`Unexpected SQL: ${text}`);
       });
       const result = await confirmPayment(command);
       expect(result.code).toBe(command.expectedVersion === 1 ? "CONFLICT" : "VALIDATION_ERROR");
-      const sqlText = execute.mock.calls.map(([query]) => query.text).join("\n");
+      const sqlText = execute.mock.calls.map(([query]) => queryText(query)).join("\n");
       expect(sqlText).not.toContain("INSERT INTO");
       expect(sqlText).not.toContain("UPDATE public.invoices");
     }
@@ -312,8 +345,8 @@ describe("confirmPayment", () => {
       },
     });
     const queries = execute.mock.calls.map(([query]) => query as Query);
-    const insert = queries.find((query) => query.text.includes("INSERT INTO public.events"));
-    const update = queries.find((query) => query.text.includes("UPDATE public.invoices"));
+    const insert = queries.find((query) => queryText(query).includes("INSERT INTO public.events"));
+    const update = queries.find((query) => queryText(query).includes("UPDATE public.invoices"));
     expect(insert).toBeDefined();
     expect(update).toBeDefined();
     const storedPayload = JSON.parse(
@@ -323,6 +356,9 @@ describe("confirmPayment", () => {
     expect(update?.text).toContain("payment_version =");
     expect(update?.text).toContain("payment_open_amount_cents =");
     expect(queries.some((query) => query.text.includes("set_config"))).toBe(true);
+    expect(queries.some((query) => (
+      queryText(query).includes("FOR UPDATE OF orders")
+    ))).toBe(true);
   });
 
   it("supports a full payment from a valid partial state", async () => {
@@ -368,10 +404,11 @@ describe("confirmPayment", () => {
 
   it("replays only an identical client-event intent without another mutation", async () => {
     execute.mockImplementation((query: Query) => {
-      if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
-      if (query.text.includes("FROM public.events")) return Promise.resolve([partialEvent]);
-      if (query.text.includes("FROM public.invoices")) return Promise.resolve([partialInvoice]);
-      throw new Error(`Unexpected SQL: ${query.text}`);
+      const text = queryText(query);
+      if (text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if (text.includes("FROM public.events")) return Promise.resolve([partialEvent]);
+      if (text.includes("FROM public.invoices")) return Promise.resolve([partialInvoice]);
+      throw new Error(`Unexpected SQL: ${text}`);
     });
     const { confirmPayment } = await import("../confirmPaymentCommand");
     await expect(confirmPayment(input)).resolves.toMatchObject({
@@ -379,7 +416,7 @@ describe("confirmPayment", () => {
       replayed: true,
       receipt: { eventId: EVENT, amountCents: 2_500, expectedVersion: 0 },
     });
-    expect(execute.mock.calls.map(([query]) => query.text).join("\n")).not.toContain("INSERT INTO");
+    expect(execute.mock.calls.map(([query]) => queryText(query)).join("\n")).not.toContain("INSERT INTO");
 
     for (const changed of [
       { amount: 2_501 },
@@ -391,7 +428,7 @@ describe("confirmPayment", () => {
         code: "CONFLICT",
         message: "Anfragekennung wurde bereits anders verwendet.",
       });
-      expect(execute.mock.calls.map(([query]) => query.text).join("\n")).not.toContain("FROM public.invoices");
+      expect(execute.mock.calls.map(([query]) => queryText(query)).join("\n")).not.toContain("FROM public.invoices");
     }
   });
 

@@ -2,7 +2,12 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import type { PaymentMethod, PaymentMode, PaymentStatus } from "@/lib/server/paymentContract";
+import {
+  isPaymentMode,
+  type PaymentMethod,
+  type PaymentMode,
+  type PaymentStatus,
+} from "@/lib/server/paymentContract";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import {
   withPrivilegedTenantTransaction,
@@ -83,6 +88,13 @@ type LockedInvoice = {
   payment_version: number | string | null;
 };
 
+type LockedPaymentOrder = {
+  id: string;
+  tenant_id: string;
+  payment_mode: string;
+  payment_mode_version: number | string;
+};
+
 type PaymentEventRow = {
   event_id: string;
   tenant_id: string | null;
@@ -115,10 +127,6 @@ type PaymentEventData = Omit<ConfirmPaymentReceipt, "invoiceNumber">;
 
 function isPaymentMethod(value: unknown): value is PaymentMethod {
   return value === "bar" || value === "ueberweisung" || value === "karte";
-}
-
-function isPaymentMode(value: unknown): value is PaymentMode {
-  return value === "vorkasse" || value === "abholung" || value === "rechnung";
 }
 
 function isSettledPaymentStatus(value: unknown): value is Exclude<PaymentStatus, "offen"> {
@@ -435,6 +443,28 @@ async function readInvoice(
   return tx.execute<LockedInvoice>(sql`${base} FOR UPDATE`);
 }
 
+async function lockInvoiceOrder(
+  tx: PrivilegedTenantTransaction,
+  tenantId: string,
+  invoiceId: string,
+): Promise<LockedPaymentOrder[]> {
+  return tx.execute<LockedPaymentOrder>(sql`
+    SELECT
+      orders.id,
+      orders.tenant_id,
+      orders.payment_mode,
+      orders.payment_mode_version
+    FROM public.invoices invoice
+    JOIN public.orders orders
+      ON orders.id = invoice.order_id
+     AND orders.tenant_id = invoice.tenant_id
+    WHERE invoice.id = ${invoiceId}::uuid
+      AND invoice.tenant_id = ${tenantId}
+    LIMIT 2
+    FOR UPDATE OF orders
+  `);
+}
+
 export async function confirmPayment(input: unknown): Promise<ConfirmPaymentResult> {
   if (!isValidInput(input)) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Zahlungsbestätigung." };
@@ -491,9 +521,21 @@ export async function confirmPayment(input: unknown): Promise<ConfirmPaymentResu
         };
       }
 
+      // All payment-axis commands lock the order first. That serializes mode
+      // changes, invoice issuance and payment confirmation without reversing
+      // the createInvoice lock order.
+      const orderRows = await lockInvoiceOrder(tx, tenantId, input.invoiceId);
+      const order = orderRows[0];
+      if (
+        orderRows.length !== 1 || !order || order.tenant_id !== tenantId ||
+        !isPaymentMode(order.payment_mode) || toSafeInteger(order.payment_mode_version) === null
+      ) {
+        return { code: "NOT_FOUND", message: "Rechnung nicht verfügbar." };
+      }
+
       const invoiceRows = await readInvoice(tx, tenantId, input.invoiceId, true);
       const invoice = invoiceRows[0];
-      if (invoiceRows.length !== 1 || !invoice) {
+      if (invoiceRows.length !== 1 || !invoice || invoice.order_id !== order.id) {
         return { code: "NOT_FOUND", message: "Rechnung nicht verfügbar." };
       }
       if (invoice.status !== "issued") {

@@ -1373,10 +1373,11 @@
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/payments.actions.ts",
       "exported_functions": [
-        "confirmPaymentAction"
+        "confirmPaymentAction",
+        "setPaymentModeAction"
       ],
       "classification": "PENDING_CONTRACT",
-      "open_reason": "F1.5 manual payment confirmation candidate using the additive invoice payment contract and append-only receipt readback. Fresh-database CI and independent acceptance remain pending.",
+      "open_reason": "F1.5 manual payment confirmation and audited order payment-mode change candidates using the additive invoice payment contract, D-F15-002 intake default, independent mode version and append-only receipt readback. Fresh-database CI and independent acceptance remain pending.",
       "visible": false,
       "reachable": true
     },
