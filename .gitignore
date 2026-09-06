@@ -50,3 +50,7 @@ next-env.d.ts
 # Untracked Steuerungs-ZIP und Runtime-Ordner ausschließen
 Agentur für App und Web/KREILE_COWORK_AUTONOME_IDEA_TO_LIVE_STEUERUNG/
 Agentur für App und Web/KREILE_COWORK_AUTONOME_IDEA_TO_LIVE_STEUERUNG.zip
+
+# Chat-/Agent-Artefakte (nie Repo-Inhalt) — verhindern "fremde ungetrackte Dateien"-Verwirrung
+.claude/
+Claude outputs/

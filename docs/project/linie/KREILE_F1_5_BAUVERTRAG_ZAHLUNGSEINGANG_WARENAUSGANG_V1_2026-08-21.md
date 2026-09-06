@@ -49,7 +49,7 @@ Ein Writer · PR statt Push · **kein Mock** im Abnahmepfad · Tenant aus `resol
 - Vertragstests je Port (leer/gefüllt/fremder Tenant); **kein Mock**; Abschlussbericht mit SHA + Prüfsumme; CI grün am selben SHA; unabhängiges Review ohne P0/P1.
 
 ## 9 — Offen zur Owner-Entscheidung (blockiert den Vertrag nicht; vor Adapter-Phase klären)
-- Welcher Zahlungs-Adapter zuerst: **Mollie (Karte/Abholung)** vs. **Bank-Abgleich (Vorkasse/Rechnung)** vs. beide.
+- Welcher Zahlungs-Adapter zuerst: **ENTSCHIEDEN 2026-09-06 (Owner): Bank-Abgleich zuerst, Mollie spaeter** (Register §7-Nachtrag #10). Verbleibend nur Provider-Credentials/Kosten (Go-live-Gate).
 - Teilzahlungen zulassen (ja/nein) und Skonto-Behandlung (Bezug Rolf-Skonto-Punkt / Buchhaltung).
 
 ---
