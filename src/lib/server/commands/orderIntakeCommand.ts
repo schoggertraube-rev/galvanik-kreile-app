@@ -438,7 +438,14 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
       const title = `${customerDisplayName} · ${items[0]?.name ?? "Wareneingang"}`.slice(0, 240);
       const task = items.map((item) => `${item.quantity}× ${item.name} · ${item.surfaceRequested}`).join("; ").slice(0, 2000);
 
-      const insertedOrders = await tx.execute<{ id: string; tenant_id: string; order_number: string; version: number }>(sql`
+      const insertedOrders = await tx.execute<{
+        id: string;
+        tenant_id: string;
+        order_number: string;
+        version: number;
+        payment_mode: string;
+        payment_mode_version: number;
+      }>(sql`
         INSERT INTO public.orders (
           id, tenant_id, order_number, customer_id, title, task, station,
           current_station, current_station_id, version, status, risk, priority_computed,
@@ -449,12 +456,14 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
           statement_timestamp() AT TIME ZONE 'UTC', ${normalized.dueDate}::date,
           'F1_ORDER_INTAKE', ${normalized.clientEventId}, ${normalized.note}, statement_timestamp() AT TIME ZONE 'UTC'
         )
-        RETURNING id, tenant_id, order_number, version
+        RETURNING id, tenant_id, order_number, version, payment_mode, payment_mode_version
       `);
       const insertedOrder = insertedOrders[0];
       if (
         insertedOrders.length !== 1 || !insertedOrder || insertedOrder.id !== orderId ||
-        insertedOrder.tenant_id !== expected.tenantId || insertedOrder.order_number !== orderNumber || insertedOrder.version !== 1
+        insertedOrder.tenant_id !== expected.tenantId || insertedOrder.order_number !== orderNumber ||
+        insertedOrder.version !== 1 || insertedOrder.payment_mode !== "vorkasse" ||
+        insertedOrder.payment_mode_version !== 0
       ) throw new Error("ORDER_INTAKE_ORDER_INSERT_FAILED");
 
       for (const item of items) {

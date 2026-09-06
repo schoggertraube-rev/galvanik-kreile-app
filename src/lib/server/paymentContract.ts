@@ -1,8 +1,9 @@
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 
 export const PAYMENT_CONTRACT_VERSION = 1 as const;
+export const PAYMENT_MODES = ["vorkasse", "abholung", "rechnung"] as const;
 
-export type PaymentMode = "vorkasse" | "abholung" | "rechnung";
+export type PaymentMode = (typeof PAYMENT_MODES)[number];
 export type PaymentStatus = "offen" | "teilbezahlt" | "bezahlt";
 export type PaymentMethod = "bar" | "ueberweisung" | "karte";
 export type PaymentCurrency = "EUR";
@@ -23,6 +24,7 @@ export type PaymentSummary = {
   receiptId: string | null;
   eventId: string | null;
   correlationId: string | null;
+  paymentModeVersion: number;
   paymentVersion: number;
   goodsOutAllowed: boolean;
 };
@@ -45,6 +47,7 @@ export type PaymentSummaryRow = {
   payment_receipt_id: string | null;
   payment_event_id: string | null;
   payment_correlation_id: string | null;
+  payment_mode_version: number | string;
   payment_version: number | string | null;
   goods_out_allowed: boolean;
   integrity_ok: boolean;
@@ -90,8 +93,8 @@ function toIsoTimestamp(value: unknown): string {
   return parsed.toISOString();
 }
 
-function isPaymentMode(value: unknown): value is PaymentMode {
-  return value === "vorkasse" || value === "abholung" || value === "rechnung";
+export function isPaymentMode(value: unknown): value is PaymentMode {
+  return PAYMENT_MODES.includes(value as PaymentMode);
 }
 
 function isPaymentStatus(value: unknown): value is PaymentStatus {
@@ -110,6 +113,7 @@ export function mapPaymentSummaryRow(
   const totalAmountCents = toSafeInteger(row.total_amount_cents, "PAYMENT_SUMMARY_TOTAL_INVALID");
   const paidAmountCents = toSafeInteger(row.payment_paid_amount_cents, "PAYMENT_SUMMARY_PAID_INVALID");
   const openAmountCents = toSafeInteger(row.payment_open_amount_cents, "PAYMENT_SUMMARY_OPEN_INVALID");
+  const paymentModeVersion = toSafeInteger(row.payment_mode_version, "PAYMENT_SUMMARY_MODE_VERSION_INVALID");
   const paymentVersion = toSafeInteger(row.payment_version, "PAYMENT_SUMMARY_VERSION_INVALID");
   const mode = row.payment_mode;
   const status = row.payment_status;
@@ -132,6 +136,7 @@ export function mapPaymentSummaryRow(
     || paidAmountCents < 0
     || openAmountCents < 0
     || paidAmountCents + openAmountCents !== totalAmountCents
+    || paymentModeVersion < 0
     || paymentVersion < 0
     || typeof row.goods_out_allowed !== "boolean"
   ) {
@@ -185,6 +190,7 @@ export function mapPaymentSummaryRow(
     receiptId: row.payment_receipt_id,
     eventId: row.payment_event_id,
     correlationId: row.payment_correlation_id,
+    paymentModeVersion,
     paymentVersion,
     goodsOutAllowed: row.goods_out_allowed,
   };

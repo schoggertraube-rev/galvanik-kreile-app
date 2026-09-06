@@ -55,8 +55,9 @@ f1_5_v1_ratified: true
 f1_5_contract_file: KREILE_F1_5_BAUVERTRAG_ZAHLUNGSEINGANG_WARENAUSGANG_V1_2026-08-21.md # Owner-Bibelordner, nicht im Repo
 f1_5_contract_sha256: 5BCD70BFC2BD9D6A6DF06CF48D0D95C4A288DD5C6364BE2783954DDA1196BDE1
 f1_5_payment_truth: EVOLVE_PUBLIC_INVOICES_NO_SECOND_PAYMENT_TABLE # Bauvertrag §4; public.zahlung = Legacy/Quarantaene
+f1_5_payment_mode_truth: ORDERS_FROM_INTAKE_DEFAULT_VORKASSE_AUDITED_COMMAND # D-F15-002; invoice stores immutable issuance snapshot
 f1_5_first_step: MANUAL_CONFIRM_PAYMENT_THEN_GOODS_OUT_GATE # Bauvertrag §0/§2/§3; Adapter erst danach (§5)
-f1_5_commands: confirmPayment(buero|meister|admin,PAYMENT_CONFIRMED_V1); recordGoodsOut(werkstatt|meister|admin,ORDER_PICKED_UP_V1)
+f1_5_commands: confirmPayment(buero|meister|admin,PAYMENT_CONFIRMED_V1); setPaymentMode(buero|meister|admin,PAYMENT_MODE_SET_V1); recordGoodsOut(werkstatt|meister|admin,ORDER_PICKED_UP_V1)
 f1_5_gate_rule: VORKASSE_BLOCKED_UNTIL_PAID; ABHOLUNG_PAY_AT_HANDOVER; RECHNUNG_NO_GATE # D-F15-001
 f1_5_read_port: private.v_payment_summary_v1 # oder begruendete Erweiterung von v_invoice_summary_v1, mit Gate-Zustand
 f1_5_roles_rule: NO_GENERIC_PERM_FINANCE # M3 §1: enges Gate je Uebergang
@@ -66,7 +67,7 @@ f1_5_partial_payment: ALLOWED
 f1_5_skonto: OPEN_NON_BLOCKING
 f1_5_not_in_scope: MAHNWESEN; DATEV_EXPORT; E_RECHNUNG_VERSAND; BUCHHALTUNGSMODUL; CAMT_MT940_IMPORT(Adapter-1); MOLLIE(Adapter-2)
 f1_5_legacy_quarantine: src/lib/payments/mollieAdapter.ts; src/lib/payments/paymentProvider.ts; src/app/buchhaltung/zahlung/page.tsx; FinanzenDashboardClient.tsx # nicht reaktivieren, nicht loeschen (D-ARCH-008)
-f1_5_units: A_DATA_READPORT -> B_CONFIRM_PAYMENT -> C_GOODS_OUT_GATE -> D_UI; T_SUPABASE_CLI_PIN unabhaengig (keine Commit-Voraussetzung, CI ist Gate)
+f1_5_units: A_DATA_READPORT -> B_CONFIRM_PAYMENT+B2_PAYMENT_MODE_INTAKE -> C_GOODS_OUT_GATE -> D_UI; T_SUPABASE_CLI_PIN unabhaengig (keine Commit-Voraussetzung, CI ist Gate)
 
 # ── F1.2 Entscheidungsgrundlage (bindend, ersetzt Altstand) ───────
 # D-F12-001A (ersetzt D-F12-001): F1.2 = genau EIN Uebergang
@@ -327,6 +328,17 @@ f1_5_allowlist:
   - src/lib/server/commands/__tests__/confirmPaymentCommand.test.ts
   - src/app/actions/payments.actions.ts
   - src/test/f1_5_confirm_payment.integration.test.ts
+  # B2 — D-F15-002 payment mode from intake with auditable changes
+  - supabase/migrations/*_f1_5_payment_mode_intake_contract.sql
+  - src/lib/server/commands/orderIntakeCommand.ts
+  - src/lib/server/commands/__tests__/orderIntakeCommand.test.ts
+  - src/lib/server/commands/immutableInvoiceCommand.ts
+  - src/lib/server/commands/__tests__/immutableInvoiceCommand.test.ts
+  - src/test/f1_4_immutable_invoice.integration.test.ts
+  - src/lib/server/commands/setPaymentModeCommand.ts
+  - src/lib/server/commands/__tests__/setPaymentModeCommand.test.ts
+  - src/app/actions/__tests__/payments.actions.test.ts
+  - src/test/f1_5_set_payment_mode.integration.test.ts
   # C — recordGoodsOut + Gate
   - src/lib/server/commands/recordGoodsOutCommand.ts
   - src/lib/server/commands/__tests__/recordGoodsOutCommand.test.ts

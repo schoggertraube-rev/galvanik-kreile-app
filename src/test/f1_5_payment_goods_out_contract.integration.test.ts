@@ -62,6 +62,7 @@ type PaymentViewRow = {
   payment_receipt_id: string;
   payment_event_id: string;
   payment_correlation_id: string;
+  payment_mode_version: number;
   payment_version: number;
   goods_out_allowed: boolean;
   integrity_ok: boolean;
@@ -207,6 +208,7 @@ async function readForTenant(transaction: Tx, tenantId: string): Promise<Payment
       payment_receipt_id,
       payment_event_id,
       payment_correlation_id::text,
+      payment_mode_version,
       payment_version,
       goods_out_allowed,
       integrity_ok
@@ -360,6 +362,7 @@ describe("F1.5 payment and goods-out contract", () => {
         payment_receipt_id: OWN.receiptId,
         payment_event_id: OWN.paymentEventId,
         payment_correlation_id: OWN.paymentCorrelationId,
+        payment_mode_version: 0,
         payment_version: 1,
         goods_out_allowed: true,
         integrity_ok: true,

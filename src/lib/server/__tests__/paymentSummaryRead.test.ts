@@ -45,6 +45,7 @@ const paidRow = {
   payment_receipt_id: "bank-receipt-0009",
   payment_event_id: "payment-event-0009",
   payment_correlation_id: CORRELATION,
+  payment_mode_version: 0,
   payment_version: 1,
   goods_out_allowed: true,
   integrity_ok: true,
@@ -93,6 +94,7 @@ describe("readPaymentSummary", () => {
         receiptId: "bank-receipt-0009",
         eventId: "payment-event-0009",
         correlationId: CORRELATION,
+        paymentModeVersion: 0,
         paymentVersion: 1,
         goodsOutAllowed: true,
       }],
@@ -127,6 +129,9 @@ describe("readPaymentSummary", () => {
     await expect(readPaymentSummary(admin)).resolves.toMatchObject({ code: "UNAVAILABLE" });
 
     execute.mockResolvedValueOnce([{ ...paidRow, integrity_ok: false }]);
+    await expect(readPaymentSummary(admin)).resolves.toMatchObject({ code: "UNAVAILABLE" });
+
+    execute.mockResolvedValueOnce([{ ...paidRow, payment_mode_version: -1 }]);
     await expect(readPaymentSummary(admin)).resolves.toMatchObject({ code: "UNAVAILABLE" });
 
     execute.mockResolvedValueOnce(Array.from({ length: 251 }, () => paidRow));

@@ -8,11 +8,11 @@
   "summary": {
     "page_routes": 78,
     "api_routes": 19,
-    "server_action_groups": 49,
+    "server_action_groups": 50,
     "kpi_definitions": 7,
     "provider_connections": 17,
     "nav_links_without_page": 3,
-    "total": 173
+    "total": 174
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -1365,6 +1365,19 @@
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "Order lifecycle action group. F1.2 transition and correction are released with real E2E evidence. F1.3 extra-work, live-card, shared task assignment, finish/freeze and append-only freeze-correction actions passed the real local DB/Auth/Storage/browser E2E on 2026-08-21; exact-SHA CI and independent review remain pending. getRiskOrders returns NOT_AVAILABLE and transitionOrderProcess remains under F0-W2C quarantine.",
+      "visible": false,
+      "reachable": true
+    },
+    {
+      "stable_id": "server-actions.payments",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/payments.actions.ts",
+      "exported_functions": [
+        "confirmPaymentAction",
+        "setPaymentModeAction"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "F1.5 manual payment confirmation and audited order payment-mode change candidates using the additive invoice payment contract, D-F15-002 intake default, independent mode version and append-only receipt readback. Fresh-database CI and independent acceptance remain pending.",
       "visible": false,
       "reachable": true
     },
