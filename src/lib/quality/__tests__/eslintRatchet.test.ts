@@ -261,23 +261,28 @@ describe("ESLint repository ratchet", () => {
     expect(baselineRegressions(candidate, base)).toEqual([]);
   });
 
-  it("rejects ESLint contract drift even when issue totals fall", () => {
+  // D-QA-001 (2026-09-06): contract/judge migration is explicit via the candidate baseline
+  // (checked against the candidate's own config before the base comparison) and safe because
+  // CI lints with the BASE config. A migrated contract is therefore not a base violation —
+  // but debt growth under the base judge still is, contract change or not.
+  it("allows an explicit ESLint contract migration when debt does not grow", () => {
     const base = snapshot([{ ...existingIssue, count: 2 }]);
     const candidate = snapshot([existingIssue]);
     candidate.lintContractHash = "b".repeat(64);
+    candidate.judgeContractHash = "c".repeat(64);
+    candidate.eslintVersion = "9.99.0";
 
-    expect(baselineRegressions(candidate, base)).toEqual([
-      "lintContractHash changed; ESLint configuration or lint dependencies drifted",
-    ]);
+    expect(baselineRegressions(candidate, base)).toEqual([]);
   });
 
-  it("rejects judge contract drift even when issue totals fall", () => {
-    const base = snapshot([{ ...existingIssue, count: 2 }]);
-    const candidate = snapshot([existingIssue]);
-    candidate.judgeContractHash = "c".repeat(64);
+  it("still rejects debt growth when the contract migrated", () => {
+    const base = snapshot([existingIssue]);
+    const candidate = snapshot([{ ...existingIssue, count: 3 }]);
+    candidate.lintContractHash = "b".repeat(64);
 
     expect(baselineRegressions(candidate, base)).toEqual([
-      "judgeContractHash changed; the ratchet implementation or invocation drifted",
+      "errors increased from 1 to 3",
+      "src/example.ts: example/rule added 2 occurrence(s)",
     ]);
   });
 

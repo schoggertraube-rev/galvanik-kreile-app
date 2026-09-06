@@ -128,16 +128,29 @@ jobs:
           fi
           npx eslint --max-warnings 0 "${files[@]}"
 
-      - name: Repository ESLint ratchet
+      - name: Repository ESLint ratchet (judge = BASE eslint config, D-QA-001)
+        # Debt is measured with the BASE revision's eslint.config.mjs, so a PR cannot lower
+        # its debt by changing rules; the candidate's own config change is still explicit
+        # (candidate baseline must carry the candidate's contract hash, checked first).
+        # The base config is written INTO the workspace so its bare-specifier imports
+        # (eslint-config-next, plugins) resolve against the installed node_modules; the file
+        # is untracked and removed afterwards, so it never enters the ignored-code inventory.
         shell: bash
         run: |
           set -euo pipefail
+          base_config="$GITHUB_WORKSPACE/eslint.config.ratchet-base.mjs"
+          if git show "${{ steps.diff.outputs.base }}:eslint.config.mjs" > "$base_config" 2>/dev/null; then
+            echo "ratchet judge: eslint.config.mjs from base ${{ steps.diff.outputs.base }}"
+          else
+            cp "$GITHUB_WORKSPACE/eslint.config.mjs" "$base_config"
+            echo "ratchet judge: base has no eslint.config.mjs, using candidate config"
+          fi
           ratchet_config="$RUNNER_TEMP/eslint-ratchet-frozen-r0.mjs"
           cat > "$ratchet_config" <<'EOF'
           import { pathToFileURL } from "node:url";
 
           const canonicalConfig = (
-            await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/eslint.config.mjs`).href)
+            await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/eslint.config.ratchet-base.mjs`).href)
           ).default;
 
           export default [
@@ -145,9 +158,12 @@ jobs:
           ];
           EOF
 
+          status=0
           node --import tsx scripts/quality/check-eslint-ratchet.ts \
             --config "$ratchet_config" \
-            --base "${{ steps.diff.outputs.base }}"
+            --base "${{ steps.diff.outputs.base }}" || status=$?
+          rm -f "$base_config"
+          exit "$status"
 
       - name: F0 doc truth gate
         run: node scripts/quality/check-f0-doc-truth.mjs

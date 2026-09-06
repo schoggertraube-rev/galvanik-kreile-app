@@ -440,17 +440,15 @@ export function baselineRegressions(
 ): string[] {
   const differences = compareSnapshots(candidate, base);
   const violations: string[] = [];
-  if (candidate.eslintVersion !== base.eslintVersion) {
-    violations.push(
-      `eslintVersion changed from ${base.eslintVersion} to ${candidate.eslintVersion}`,
-    );
-  }
-  if (candidate.lintContractHash !== base.lintContractHash) {
-    violations.push("lintContractHash changed; ESLint configuration or lint dependencies drifted");
-  }
-  if (candidate.judgeContractHash !== base.judgeContractHash) {
-    violations.push("judgeContractHash changed; the ratchet implementation or invocation drifted");
-  }
+  // Contract migration (D-QA-001, 2026-09-06): a changed eslintVersion / lintContractHash /
+  // judgeContractHash is NOT a base violation any more. Under enforce_admins=true the old
+  // rule made every ESLint-rule or judge change unmergeable for anyone (no in-band path;
+  // #36/#55 needed owner overrides). The migration stays explicit and reviewable: the
+  // candidate baseline MUST carry the hashes of the candidate's own config/judge (checked
+  // before this function runs), so a config change is always a visible baseline diff.
+  // Debt cannot be hidden by changing the config: both CI runs (quality.yml and the
+  // protected eslint-ratchet.yml) lint the candidate with the BASE config and compare the
+  // result against the baselines below.
   const baseIgnored = new Map(
     base.ignoredCodeFiles.map((ignored) => [ignored.file, ignored.contentHash]),
   );

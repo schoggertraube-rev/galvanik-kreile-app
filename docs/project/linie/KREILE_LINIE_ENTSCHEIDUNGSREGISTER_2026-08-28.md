@@ -142,3 +142,9 @@ Die Owner-Modulmindmap „Baustruktur Mini-USP" (Stand 15.08.2026) wird ratifizi
 **Folge:** „4 Mocks vs. 36 Routen" ist KEIN Baubarkeits-Problem — ~30 Routen sind ENTFÄLLT/QUARANTÄNE. Die Vorlagen reichen für die beabsichtigte App. Arbeit = Subtraktion + Path-1-Nähte + Suchleiste. `buchhaltung` (54 Dateien) auf Accounting-minimal trimmen. AMBIG (lager/lieferanten/items/telefonnotiz) = Owner-Entscheid vor Löschung, nicht raten.
 
 **Nicht mehr fragen:** Was ein Modul ist, was es gibt, was entfällt.
+
+## D-QA-001 — Ratschen-Migrationspfad (Orchestrator im Owner-Mandat „mach, was das Projekt sauber zum Ziel führt", 2026-09-06)
+
+Die ESLint-Ratsche wertete jede Änderung von `lintContractHash`/`judgeContractHash` gegenüber main als Basis-Verstoß. Mit `quality` als Required Check und `enforce_admins=true` war damit keine ESLint-Regel (S0 Tenant-Verbot, S1 Fassade) und keine Judge-Änderung für irgendjemanden mergebar; #36/#55 gingen nur per Override durch (Präzedenz). Entscheid: Kontraktwechsel = explizite, sichtbare Migration (Kandidaten-Baseline trägt den eigenen Hash), kein Basis-Verstoß; Debt wird in beiden CI-Läufen mit dem **Basis**-Config gemessen (quality.yml + geschützter ratchet-Job), damit Regeländerungen keinen Debt verstecken können. Details: PROBLEMLOESUNGEN P8. Umgesetzt in PR #75 (S0+S1).
+
+**Owner-Aufgabe (Einstellung, nicht Code):** Branch-Protection → `ratchet` und `Fresh Supabase replay` als Required Checks eintragen; bis dahin ist die geschützte S1-Kopie nur informativ.
