@@ -31,10 +31,21 @@ const erfassungMustNotImport = [
   "@/lib/marketing", "@/lib/marketing/*",
 ];
 
+// ── Positive Fassade (D-ARCH-008 Naht 2 / S1): Fremdmodul nur ueber public.ts ──
+// Editor-Feedback; die verbindliche Pruefung (auch relative Tiefimporte, dynamic
+// import, vi.mock, eigenes Modul nur relativ) ist scripts/quality/check-module-gates.mjs.
+// Flat config: ein spaeterer no-restricted-imports-Block ERSETZT die Optionen eines
+// frueheren. Darum haengt boundaryRule() dieses Pattern an JEDE Domaenen-Regel an, und
+// der globale src/**-Block steht VOR den Domaenen-Bloecken.
+const modulesFacadePattern = {
+  group: ["@/modules/*/*", "!@/modules/*/public"],
+  message: "Tiefimport in ein Modul. Fremdmodule nur ueber @/modules/<fach>/public (ARCHITEKTUR_MODULE_PATH1.md Naht 2, S1).",
+};
+
 function boundaryRule(forbidden, message) {
   return {
     "no-restricted-imports": ["error", {
-      patterns: forbidden.map(group => ({ group: [group], message })),
+      patterns: [...forbidden.map(group => ({ group: [group], message })), modulesFacadePattern],
     }],
   };
 }
@@ -55,6 +66,11 @@ const eslintConfig = defineConfig([
       noInlineConfig: true,
       reportUnusedDisableDirectives: "error",
     },
+  },
+  // ── S1 Naht 2 fuer alle src-Dateien ohne eigene Domaenen-Regel ──
+  {
+    files: ["src/**/*.ts", "src/**/*.tsx"],
+    rules: { "no-restricted-imports": ["error", { patterns: [modulesFacadePattern] }] },
   },
   // ── Domain isolation: auth must not depend on business domains ──
   {

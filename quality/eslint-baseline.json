@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "eslintVersion": "9.39.4",
-  "lintContractHash": "c2c9d499c4aea4e31f7066129a91f155e4903d0b7efc03f7462a0a39d9e1d25c",
-  "judgeContractHash": "4ea5120f86092337d49d48850676fc333dfe222e1118663c0087c4922d0ae3dd",
+  "lintContractHash": "fd059f7c1722b49a583058026244490c35704f476d864b3a83d9aafc6429f469",
+  "judgeContractHash": "7e5a8404ec31195a2402f1a3c4025a2d0e639375b22aafe948c11dcf374c0ae2",
   "totals": {
     "filesWithIssues": 0,
     "errors": 0,
