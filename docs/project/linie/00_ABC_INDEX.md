@@ -1,6 +1,8 @@
 # KREILE — DAS ABC (Einstieg für jeden Bau-Chat)
 
-**Wenn du diese App bauen sollst, lies ZUERST diese Datei, dann in dieser Reihenfolge.** Alles, was du brauchst, liegt in `docs/project/linie/` (nichts ausserhalb `02_app/`). Du baust NUR, was hier vorgegeben ist — nichts, was du dir selbst ausdenkst. Die offenen Owner-Entscheidungen stehen als **harte STOP-Liste** in `00_BIBEL_INDEX.md`: an genau diesen Punkten baust du NICHT, sondern stoppst (`BLOCKED_PRODUCT_DECISION`) und fragst den Owner.
+> **ZUERST `00_JETZT_UND_LEITPLANKEN.md` lesen** — was gerade dran ist + die harten Regeln (ein Writer/ein Checkout, kein Testbiegen, kein ungeführtes Bauen). Erst danach diese Datei. Bei Widerspruch gilt `00_JETZT`.
+
+**Wenn du diese App bauen sollst, lies ZUERST `00_JETZT`, dann diese Datei in dieser Reihenfolge.** Alles, was du brauchst, liegt in `docs/project/linie/` (nichts ausserhalb `02_app/`). Du baust NUR, was hier vorgegeben ist — nichts, was du dir selbst ausdenkst. Die offenen Owner-Entscheidungen stehen als **harte STOP-Liste** in `00_BIBEL_INDEX.md`: an genau diesen Punkten baust du NICHT, sondern stoppst (`BLOCKED_PRODUCT_DECISION`) und fragst den Owner.
 
 ## Grundgesetz (zwei Sätze)
 1. Gebaut wird die **Modulbauweise Path 1** (wenige, vollständige, forkbare Module) nach der **Modulkarte** — nichts anderes; verworfene Muster (Stationsband-Home, 2. Designsystem, Tenant-Literal) sind CI-FAIL.
