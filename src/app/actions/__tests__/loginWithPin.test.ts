@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockSetAppSession = vi.fn();
@@ -27,7 +28,7 @@ vi.mock("@/lib/server/pinRateLimit", () => ({
 }));
 
 vi.mock("@/lib/server/appSession", () => ({
-  APP_TENANT_ID: "galvanik-kreile",
+  APP_TENANT_ID: KREILE_TENANT_SLUG,
   clearAppSession: mockClearAppSession,
   setAppSession: mockSetAppSession,
   SESSION_TTL_MS: 12 * 60 * 60 * 1000,
@@ -90,7 +91,7 @@ function makeUser(overrides: Partial<PinLoginUser> = {}): PinLoginUser {
     id: "user-abc",
     pinHash: "$2b$10$valid-bcrypt-hash",
     role: "werkstatt",
-    tenantId: "galvanik-kreile",
+    tenantId: KREILE_TENANT_SLUG,
     ...overrides,
   };
 }
@@ -125,7 +126,7 @@ describe("loginWithPin() – PIN-Security (M4: SEC-PIN-002B)", () => {
       expect.objectContaining({
         displayName: "Max Mustermann",
         role: "werkstatt",
-        tenantId: "galvanik-kreile",
+        tenantId: KREILE_TENANT_SLUG,
         userId: "user-abc",
       }),
     );

@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { readAppSession } from "@/lib/server/appSession";
 import { db } from "@/db";
 import { appUsers } from "@/db/schema";
@@ -97,7 +98,7 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
 
   const { userId, tenantId: sessionTenantId, role: sessionRole } = sessionResult.session;
 
-  if (sessionTenantId !== "galvanik-kreile") {
+  if (sessionTenantId !== KREILE_TENANT_SLUG) {
     return {
       ok: false,
       reason: "INVALID_SESSION",

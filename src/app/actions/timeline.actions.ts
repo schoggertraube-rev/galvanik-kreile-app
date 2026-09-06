@@ -1,4 +1,5 @@
 "use server";
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
 import { db } from "@/db";
 import { events, orders, customers, complaints } from "@/db/schema";
@@ -22,7 +23,7 @@ export async function getGlobalTimelineDb(): Promise<ActionResult<TimelineEntry[
       title: orders.title,
       orderNumber: orders.orderNumber,
       createdAt: orders.createdAt
-    }).from(orders).where(eq(orders.tenantId, "galvanik-kreile")).orderBy(desc(orders.createdAt)).limit(20);
+    }).from(orders).where(eq(orders.tenantId, KREILE_TENANT_SLUG)).orderBy(desc(orders.createdAt)).limit(20);
     
     dbOrders.forEach(o => {
       entries.push({
@@ -46,7 +47,7 @@ export async function getGlobalTimelineDb(): Promise<ActionResult<TimelineEntry[
       createdAt: events.createdAt
     }).from(events)
       .leftJoin(orders, eq(events.orderId, orders.id))
-      .where(eq(events.tenantId, "galvanik-kreile"))
+      .where(eq(events.tenantId, KREILE_TENANT_SLUG))
       .orderBy(desc(events.createdAt))
       .limit(20);
       

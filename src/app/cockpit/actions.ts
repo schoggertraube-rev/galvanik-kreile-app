@@ -1,4 +1,5 @@
 "use server";
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
 import {
   createAuthorizedDataClient,
@@ -171,7 +172,7 @@ export async function getCockpitKpis() {
   const { data: zeiten } = await supabase
     .from('arbeitszeit_buchung')
     .select('kostenstelle_kuerzel, dauer_minuten, kostensatz_eur_pro_stunde')
-    .eq('tenant_id', 'galvanik-kreile')
+    .eq('tenant_id', KREILE_TENANT_SLUG)
     .gte('start_zeit', firstDay);
 
   const umsatzNachStation: Record<string, number> = {};
@@ -321,7 +322,7 @@ export async function getWhatIfKontext(): Promise<KontextDaten> {
   const { data: kostenstellen } = await privileged
     .from('kostenstelle')
     .select('kuerzel, name, verfuegbare_stunden_monatlich')
-    .eq('tenant_id', 'galvanik-kreile')
+    .eq('tenant_id', KREILE_TENANT_SLUG)
     .eq('typ', 'produktion');
   if (kostenstellen) {
     kontext.kostenstellen_liste = kostenstellen.map(ks => ({ kuerzel: ks.kuerzel, name: ks.name }));
@@ -435,7 +436,7 @@ export async function getForecastDaten(): Promise<ForecastDaten> {
   const currentYear = new Date().getFullYear();
   const { data: plan } = await privileged.from('forecast_version')
     .select('werte')
-    .eq('tenant_id', 'galvanik-kreile')
+    .eq('tenant_id', KREILE_TENANT_SLUG)
     .eq('jahr', currentYear)
     .eq('version_typ', 'plan')
     .eq('ist_aktiv', true)
@@ -500,7 +501,7 @@ export async function getAktiveWarnungen(): Promise<ActiveWarning[]> {
   const { data, error } = await supabase
     .from('warning_event')
     .select('*')
-    .eq('tenant_id', 'galvanik-kreile')
+    .eq('tenant_id', KREILE_TENANT_SLUG)
     .is('dismissed_am', null)
     .order('erzeugt_am', { ascending: false });
 
@@ -537,7 +538,7 @@ export async function getAktiverJahresplan(jahr: number) {
   const { data, error } = await supabase
     .from('forecast_version')
     .select('*')
-    .eq('tenant_id', 'galvanik-kreile')
+    .eq('tenant_id', KREILE_TENANT_SLUG)
     .eq('jahr', jahr)
     .eq('version_typ', 'plan')
     .eq('ist_aktiv', true)

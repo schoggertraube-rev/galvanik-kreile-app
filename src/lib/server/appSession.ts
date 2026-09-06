@@ -1,10 +1,11 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import crypto from "crypto";
 import { cookies } from "next/headers";
 
 // ─── Konstanten ─────────────────────────────────────────────────────────────
 export const COOKIE_NAME = "kreile_app_session";
 export const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12 Stunden
-export const APP_TENANT_ID = "galvanik-kreile";
+export const APP_TENANT_ID = KREILE_TENANT_SLUG;
 
 // ─── Secret Key ──────────────────────────────────────────────────────────────
 export function getSecretKey(): string {

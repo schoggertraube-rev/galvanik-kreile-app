@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockCheckAppAuthorization = vi.fn();
@@ -53,7 +54,7 @@ describe("authorized Supabase server data client", () => {
       ok: true,
       data: {
         userId: "223e4567-e89b-12d3-a456-426614174001",
-        tenantId: "galvanik-kreile",
+        tenantId: KREILE_TENANT_SLUG,
         displayName: "Max Kreile",
         role: "meister",
         permissions: [],
@@ -81,7 +82,7 @@ describe("authorized Supabase server data client", () => {
   it("returns the canonical app identity with the privileged client", async () => {
     const authorization = {
       userId: "223e4567-e89b-12d3-a456-426614174001",
-      tenantId: "galvanik-kreile",
+      tenantId: KREILE_TENANT_SLUG,
       displayName: "Max Kreile",
       role: "meister",
       permissions: [],
@@ -102,7 +103,7 @@ describe("authorized Supabase server data client", () => {
   it("authorizes before creating a session-bound client", async () => {
     const authorization = {
       userId: "223e4567-e89b-12d3-a456-426614174001",
-      tenantId: "galvanik-kreile",
+      tenantId: KREILE_TENANT_SLUG,
       displayName: "Max Kreile",
       role: "meister",
       permissions: [],
@@ -127,7 +128,7 @@ describe("authorized Supabase server data client", () => {
       ok: true,
       data: {
         userId: "223e4567-e89b-12d3-a456-426614174001",
-        tenantId: "galvanik-kreile",
+        tenantId: KREILE_TENANT_SLUG,
         displayName: "Max Kreile",
         role: "meister",
         permissions: [],

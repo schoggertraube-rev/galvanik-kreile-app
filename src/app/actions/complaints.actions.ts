@@ -1,4 +1,5 @@
 "use server";
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
 import { db } from "@/db";
 import { complaints } from "@/db/schema";
@@ -43,7 +44,7 @@ export async function createComplaint(data: {
     
     const newComplaint = {
       id: complaintId,
-      tenantId: "galvanik-kreile",
+      tenantId: KREILE_TENANT_SLUG,
       orderId: data.orderId,
       customerId: data.customerId,
       itemId: data.itemId || null,

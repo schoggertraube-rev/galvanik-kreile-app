@@ -94,6 +94,21 @@ const eslintConfig = defineConfig([
       ["@/app", "@/app/*", "@/lib", "@/lib/*"],
       "db/ must not import from app/ or lib/ — schema is a leaf dependency"),
   },
+  // ── Tenant-Literal-Verbot (D-ARCH-007 / S0): kein 'galvanik-kreile' im Code ──
+  {
+    files: ["src/**/*.ts", "src/**/*.tsx"],
+    rules: {
+      "no-restricted-syntax": ["error", {
+        selector: "Literal[value='galvanik-kreile']",
+        message: "Kein Tenant-Literal 'galvanik-kreile'. Nutze KREILE_TENANT_SLUG aus @/lib/tenant (D-ARCH-007, S0).",
+      }],
+    },
+  },
+  {
+    // Einzige erlaubte Stelle + noch nicht migrierte db/ (SQL/Seed, TODO S0-Rest).
+    files: ["src/lib/tenant.ts", "src/db/**/*.ts", "src/db/**/*.tsx"],
+    rules: { "no-restricted-syntax": "off" },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

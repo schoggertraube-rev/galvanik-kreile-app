@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ports = vi.hoisted(() => ({
@@ -25,7 +26,7 @@ vi.mock("@/lib/server/invoiceRead", () => ({
 const authorization = {
   ok: true as const,
   data: {
-    tenantId: "galvanik-kreile",
+    tenantId: KREILE_TENANT_SLUG,
     userId: "11111111-1111-4111-8111-111111111111",
     displayName: "Meister",
     role: "meister" as const,

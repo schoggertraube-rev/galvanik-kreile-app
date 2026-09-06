@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,7 +19,7 @@ vi.mock("@/lib/server/privilegedDb", () => ({
 
 import { readEvidenceRecordsByTarget, readOrderEvidenceRecords } from "@/lib/server/evidenceRead";
 
-const TENANT = "galvanik-kreile";
+const TENANT = KREILE_TENANT_SLUG;
 const ORDER = "order-a";
 const ITEM = "item-a";
 const RECEIPT = "11111111-1111-4111-8111-111111111111";

@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { withTransaction, execute } = vi.hoisted(() => ({ withTransaction: vi.fn(), execute: vi.fn() }));
@@ -14,7 +15,7 @@ const ACTOR = "66666666-6666-4666-8666-666666666666";
 const PDF_SHA256 = "b".repeat(64);
 
 const buero = {
-  tenantId: "galvanik-kreile",
+  tenantId: KREILE_TENANT_SLUG,
   userId: ACTOR,
   displayName: "Büro",
   role: "buero" as const,
@@ -25,7 +26,7 @@ const werkstatt = { ...buero, role: "werkstatt" as const };
 
 const validReceiptRow = {
   event_id: EVENT,
-  tenant_id: "galvanik-kreile",
+  tenant_id: KREILE_TENANT_SLUG,
   order_id: ORDER,
   event_type: "INVOICE_CREATED_V1",
   client_event_id: CLIENT,
@@ -169,7 +170,7 @@ describe("readInvoicePdf", () => {
     const storedBytes = Buffer.from([1, 2, 3, 4, 250, 251, 252]);
     execute.mockResolvedValueOnce([{
       id: INVOICE,
-      tenant_id: "galvanik-kreile",
+      tenant_id: KREILE_TENANT_SLUG,
       invoice_number: "R-2026-0009",
       status: "issued",
       pdf_sha256: PDF_SHA256,
@@ -191,19 +192,19 @@ describe("readInvoicePdf", () => {
     const { readInvoicePdf } = await import("../invoiceRead");
 
     execute.mockResolvedValueOnce([
-      { id: INVOICE, tenant_id: "galvanik-kreile", invoice_number: "R-2026-0009", status: "issued", pdf_sha256: PDF_SHA256, pdf_content: Buffer.from([1]), integrity_ok: true },
-      { id: INVOICE, tenant_id: "galvanik-kreile", invoice_number: "R-2026-0009", status: "issued", pdf_sha256: PDF_SHA256, pdf_content: Buffer.from([1]), integrity_ok: true },
+      { id: INVOICE, tenant_id: KREILE_TENANT_SLUG, invoice_number: "R-2026-0009", status: "issued", pdf_sha256: PDF_SHA256, pdf_content: Buffer.from([1]), integrity_ok: true },
+      { id: INVOICE, tenant_id: KREILE_TENANT_SLUG, invoice_number: "R-2026-0009", status: "issued", pdf_sha256: PDF_SHA256, pdf_content: Buffer.from([1]), integrity_ok: true },
     ]);
     await expect(readInvoicePdf(buero, INVOICE)).resolves.toMatchObject({ code: "UNAVAILABLE" });
 
     execute.mockResolvedValueOnce([{
-      id: INVOICE, tenant_id: "galvanik-kreile", invoice_number: "R-2026-0009", status: "issued",
+      id: INVOICE, tenant_id: KREILE_TENANT_SLUG, invoice_number: "R-2026-0009", status: "issued",
       pdf_sha256: PDF_SHA256, pdf_content: Buffer.from([1]), integrity_ok: false,
     }]);
     await expect(readInvoicePdf(buero, INVOICE)).resolves.toMatchObject({ code: "UNAVAILABLE" });
 
     execute.mockResolvedValueOnce([{
-      id: INVOICE, tenant_id: "galvanik-kreile", invoice_number: "R-2026-0009", status: "issued",
+      id: INVOICE, tenant_id: KREILE_TENANT_SLUG, invoice_number: "R-2026-0009", status: "issued",
       pdf_sha256: PDF_SHA256, pdf_content: null, integrity_ok: true,
     }]);
     await expect(readInvoicePdf(buero, INVOICE)).resolves.toMatchObject({ code: "UNAVAILABLE" });
@@ -219,7 +220,7 @@ describe("readInvoicePdf", () => {
     const storedBytes = Buffer.from([37, 80, 68, 70, 9, 8, 7]);
     execute.mockResolvedValueOnce([{
       id: INVOICE,
-      tenant_id: "galvanik-kreile",
+      tenant_id: KREILE_TENANT_SLUG,
       invoice_number: "R-2026-0009",
       status: "cancelled",
       pdf_sha256: "c".repeat(64),
@@ -272,7 +273,7 @@ describe("readInvoiceSummaries", () => {
   it("maps issued and cancelled tenant summaries without payment truth", async () => {
     const base = {
       id: INVOICE,
-      tenant_id: "galvanik-kreile",
+      tenant_id: KREILE_TENANT_SLUG,
       order_id: "f1-4-order-text-id",
       customer_id: "f1-4-customer-text-id",
       invoice_number: "R-2026-0009",
