@@ -129,7 +129,8 @@ async function seedPrerequisites() {
         'DE02120300000000202051', 'BYLADEM1001', 'F1.5 Testbank',
         'DE-SYNTHETIC-TAX', 1900, 14
       )
-      ON CONFLICT (id) DO NOTHING
+      ON CONFLICT (id) DO UPDATE
+      SET invoice_vat_rate_basis_points = EXCLUDED.invoice_vat_rate_basis_points
     `;
     await transaction`
       INSERT INTO public.customers (
