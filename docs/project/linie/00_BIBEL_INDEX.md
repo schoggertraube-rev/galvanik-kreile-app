@@ -31,11 +31,16 @@
 ## HARTE STOP-LISTE — Owner-Entscheidungen (Chat baut NICHT, fragt Owner)
 An diesen Punkten gibt es **keine Eigenentscheidung** durch Chat/PL. Wer hier ankommt: STOP `BLOCKED_PRODUCT_DECISION`, Owner fragen, Antwort ins Register (§7), dann bauen.
 
-**Noch offen (nur diese zwei):**
-- **B2** — Katalog-ID-Klassifikation: wie Mehrarbeit-Positionen in den Rechnungs-Snapshot gruppiert werden (gekoppelt vs. isoliert). Register §7 #3.
-- **Skonto-Satz** — Skonto ist entschieden (JA); nur der konkrete Satz fehlt (Vorschlag 2 % bei ≤10 Tagen, netto 30). Register §7 #5.
+**Stand 2026-09-06: keine offene Owner-Entscheidung auf dem kritischen Pfad.** Alle im Register §7 entschieden:
+- B1 = Auftrags-Identität ist die Rechnungsnummer (§7 #2).
+- B3 = Nummer bei Annahme (= spätere Rechnungsnummer, lückenlos halten, GoBD) (§7 #4).
+- Skonto = JA, 2 % bei ≤10 Tagen, netto 30 (Satz ist Parameter) (§7 #5).
+- Galvanik statt Bäder, `baeder` entfällt (§7 #6).
+- Genau EINE personalisierte Startseite pro Login, Admin = Einstellungen (§7 #7).
+- Kill-Liste freigegeben (reiner Mock löschen) (§7 #8).
+- B2 = Gruppierung folgt echter Preislisten-Semantik, Klassifikation je Position gegen Katalog belegt (§7 #3).
 
-**Am 2026-09-06 Owner-entschieden (nicht mehr offen — Details Register §7 #2/#4/#5/#6/#7/#8):** B1 = Auftrags-Identität ist die Rechnungsnummer · B3 = Nummer bei Annahme (= spätere Rechnungsnummer, lückenlos halten) · Galvanik statt Bäder (`baeder` entfällt) · genau EINE personalisierte Startseite pro Login (Admin = Einstellungen) · Kill-Liste freigegeben (reiner Mock wird gelöscht).
+Was HIER trotzdem STOP bleibt: nur wirklich **neue** Produktfragen, die im Register nicht stehen (dann `BLOCKED_PRODUCT_DECISION`, Owner fragen, eintragen). Nicht: die oben entschiedenen Punkte selbst umdeuten.
 
 ## LIVE ≠ BAUBAR (ehrliche Grenze)
 Ein Chat baut bis „grün + designtreu + modultreu + im Scope". **Live schaltet der Owner** — Prod-Supabase-Migration, RLS, echte Secrets, Deploy und Go-live sind Owner-Grenzen (AGENTS.md). Kein Chat wird die App selbst „live" schalten; das ist gewollt.
