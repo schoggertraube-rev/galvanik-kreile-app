@@ -1,5 +1,7 @@
 # SUCHE-LIEFERUNG — Parallelmodul search, V1 (2026-08-18)
 
+> **Ablage-Hinweis (2026-09-06):** Die Quelldateien liegen hier als **Referenztext** (`SearchBar.tsx.txt`, `searchTenant.ts.txt`) — bewusst NICHT als `.ts/.tsx`, damit sie weder gebaut noch gelintet noch als „ESLint-ignorierter Code" inventarisiert werden. Beim Fork nach `src/modules/suche/` (S5, fünf Nähte) werden sie zurück in `.ts/.tsx` überführt und dort gegen die S1-Gates gebaut. Die im Lieferschein genannten `__tests__` sind nicht mitgeliefert; sie entstehen beim Fork neu gegen die echte Testinfrastruktur.
+
 ```
 SUCHE-LIEFERUNG
 Status: PASS

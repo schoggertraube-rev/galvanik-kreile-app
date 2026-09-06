@@ -10,16 +10,15 @@
 5. **Owner-Grenzen** (nur der Owner): Merge, Deploy, Remote-Migration, RLS, Löschen, Secrets, Go-live. Produktentscheidungen = STOP-Liste im Register §7 (Stand: 0 offen).
 
 ## DIE ZWEI SPUREN (nicht verwechseln)
-- **Spur A — F1 Order-to-Cash-Pilot** (Domänen-Logik): F1.4 fertig · **F1.5 = PR #73, läuft, aktuell BLOCKIERT** (s.u.). Reihenfolge: Mission `../../missions/F1_ORDER_TO_CASH_PILOT_001.yml`. Operativer Ist-Stand: `_kette/state_kreile.json`.
-- **Spur B — Path-1 Modul-Umbau** (Architektur): S0 gebaut (PR #75) · **S1 (5 CI-Gates) = nächster Architektur-Schritt.** Plan: `ARCHITEKTUR_MODULE_PATH1.md` §4.
-- **Kein Widerspruch:** Reference (ABC/Modulkarte/Verträge) = das WIE/WAS gebaut wird. `state_kreile.json` = die AKTUELL in-flight-Aufgabe. Wenn beide etwas Verschiedenes als „nächstes" nahelegen, entscheidet der Owner die Priorität (siehe unten) — du entscheidest sie NICHT.
+- **Spur A — F1 Order-to-Cash-Pilot** (Domänen-Logik): F1.4 fertig · **F1.5 gemerged (#73, main `c1d9e99`, 2026-09-06)**. Nächste Einheit: Skonto 2 %/10 Tage/netto 30 (Register #5) — **erst nach Merge von S0+S1.** Reihenfolge: Mission `../../missions/F1_ORDER_TO_CASH_PILOT_001.yml`. Operativer Ist-Stand: `_kette/state_kreile.json`.
+- **Spur B — Path-1 Modul-Umbau** (Architektur): **S0 + S1 gebaut, PR #75** (Tenant zentral + die Naht-Gates als CI, Red-Team bestanden). Danach S2 (Kill-Liste) → S3 (Muster-Modul `erfassung`). Plan: `ARCHITEKTUR_MODULE_PATH1.md` §4.
+- **Kein Widerspruch:** Reference (ABC/Modulkarte/Verträge) = das WIE/WAS gebaut wird. `state_kreile.json` = die AKTUELL in-flight-Aufgabe. Wenn beide etwas Verschiedenes als „nächstes" nahelegen, entscheidet der Owner die Priorität — du entscheidest sie NICHT.
 
-## WAS JETZT DRAN IST (Stand 2026-09-06)
-- **Spur A ist BLOCKIERT und braucht zuerst eine Ursachenklärung, KEINEN Fix.**
-  PR #73 (F1.5). CI-Rot im „Fresh Supabase replay": `src/test/f1_3_live_card.integration.test.ts` → *„expected 'CONFLICT' to be 'OK'"* auf dem F1.5-B2-Zahlungsmodus-Schema.
-  **UNBEWIESEN**, ob (a) Zustands-Leak zwischen Testphasen (dann wäre saubere Test-Isolation legitim) oder (b) echter Vertragskonflikt F1.5-B2 ↔ F1.3 (dann wäre jeder „Reset bis grün" das Verstecken eines realen Bugs).
-  **HARTER STOP:** niemand ändert `.github/workflows/quality.yml`, fügt einen zweiten DB-Reset ein oder schwächt einen Test, BEVOR (a) vs. (b) belegt ist. Erst Ursache, dann Entscheidung.
-- **Owner-Entscheidung offen (Priorität, nur der Owner):** zuerst den F1.5-Blocker belegen/lösen (Spur A) — oder S1 bauen (Spur B)? Bis der Owner das sagt: **kein Bau auf Verdacht.**
+## WAS JETZT DRAN IST (Stand 2026-09-06, abends)
+- **Der frühere HARTE STOP zu `quality.yml` ist aufgehoben — Ursache belegt:** das F1.3-Rot war eine **Test-Isolations-Regression** (geteilte DB ohne Reset vor F1.3; Stammdaten mit `expectedVersion: 0` existierten schon → Command antwortete korrekt CONFLICT), **kein Produktbefund**. Fix = genau ein fail-closed `db reset` vor F1.3 (`cc13aec`), zweimal grün, Red-Team PASS, gemerged. Siehe PROBLEMLOESUNGEN P3.
+- **Offen: PR #75 (S0+S1) mergen** — Bedingungen: CI `quality` grün, unabhängiger Review PASS ohne P0/P1 (Autor = Orchestrator-Chat; Red-Team + Runner-PL haben unabhängig geprüft), Owner-OK. Der Check `ratchet` ist für DIESEN PR rot by design (er läuft mit dem alten Basis-Judge, der jede Vertragsänderung ablehnt — genau das behebt D-QA-001, PROBLEMLOESUNGEN P8); ab dem nächsten PR ist er grün.
+- **Owner-Aufgabe (Einstellung):** Branch-Protection → `ratchet` und `Fresh Supabase replay` als Required Checks. Bis dahin ist die geschützte S1-Kopie nur informativ.
+- **Danach:** S2 (Kill-Liste löschen, Baseline `quality/module-gates-baseline.json` schrumpft) → S3 (`src/modules/erfassung/` als Muster) → Skonto.
 
-## DER EIGENTLICHE DETERMINISMUS-REST (Bau, nicht Aufräumen)
-**S1 — die fünf CI-Gates.** Ohne sie erzwingt der Ordner „nur das Vorgegebene" nur durch Text, nicht durch die CI. Erst mit S1 kann ein abweichender Bau nicht grün werden. Das ist der Hebel — und es ist Bau, kein Aufräumen.
+## DER DETERMINISMUS-HEBEL (gebaut in #75)
+**S1 — die Naht-Gates.** `npm run quality:module-gates`: Manifest je Modul, Tiefimport = rot, Fremddaten nur über deklarierte `v_*`-Views, Stationsband/Transport-Home = rot (Altlasten shrink-only), AGENTS-Verweis. Beweis: `src/test/s1_module_gates.test.ts`. Ein abweichender Bau kann damit nicht grün werden — sobald #75 auf main ist.

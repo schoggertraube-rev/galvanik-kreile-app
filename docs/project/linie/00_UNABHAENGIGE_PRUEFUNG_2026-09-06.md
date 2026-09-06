@@ -21,3 +21,10 @@ Der Ordner ist von „chaotisch" auf „sehr guter Bauplan" gesprungen. **Aber**
 
 ## Nächster Schritt (Bau, nicht Aufräumen)
 S1 als Writer-Pakete spezifizieren und bauen. Danach: erneute unabhängige §5-Prüfung gegen den Abnahmetest in `00_ABC_INDEX.md`.
+
+## NACHTRAG (Autor-Seite, 2026-09-06 abends — erneut unabhängig zu prüfen)
+- Lücke 3 ist als **Code** geschlossen: PR #75 = S0 (Tenant zentral, ESLint-Verbot, alle Fundstellen mechanisch verifiziert) **+ S1** (`scripts/quality/check-module-gates.mjs`, Nähte 1/2/4/5/6 in quality.yml und geschützt in eslint-ratchet.yml; Beweis-Tests `src/test/s1_module_gates.test.ts`). Unabhängiges Red-Team des Gates: 2×P0 + 7×P1 gefunden und geschlossen (`9f9332c`).
+- Dabei aufgedeckt und behoben: die ESLint-Ratsche hatte keinen Migrationspfad (jede Regeländerung war unmergebar) → D-QA-001 / PROBLEMLOESUNGEN P8, ebenfalls unabhängig red-teamt (`97f3161`).
+- Der Runner-PL (Codex) kam **unabhängig** zum gleichen Ratschen-Befund (Commit 8b0d1e1, Nullmutation) — zwei Prüfer, ein Befund.
+- Zwei Punkte kann nur der Owner: **Merge #75** und **Required Checks** (`ratchet`, `Fresh Supabase replay`) in der Branch-Protection.
+- Die Aussage „Heute erzwungen: nur der Tenant-Literal-Bann" oben gilt bis zum Merge von #75; danach gilt der SOLL-Zustand des Abnahmetests.
