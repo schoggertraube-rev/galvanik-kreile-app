@@ -39,6 +39,7 @@ An diesen Punkten gibt es **keine Eigenentscheidung** durch Chat/PL. Wer hier an
 - Genau EINE personalisierte Startseite pro Login, Admin = Einstellungen (§7 #7).
 - Kill-Liste freigegeben (reiner Mock löschen) (§7 #8).
 - B2 = Gruppierung folgt echter Preislisten-Semantik, Klassifikation je Position gegen Katalog belegt (§7 #3).
+- AMBIG-Routen: `items` behalten (Orders/Accounting), `telefonnotiz` → Customers/Intake, `lager` + `lieferanten` löschen (§7 #9).
 
 Was HIER trotzdem STOP bleibt: nur wirklich **neue** Produktfragen, die im Register nicht stehen (dann `BLOCKED_PRODUCT_DECISION`, Owner fragen, eintragen). Nicht: die oben entschiedenen Punkte selbst umdeuten.
 
