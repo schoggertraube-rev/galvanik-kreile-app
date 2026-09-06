@@ -1,9 +1,11 @@
 # Galvanik-Kreile WerkstattCockpit
 
+> ⚠️ ARCHITEKTUR-GESETZ (ZUERST LESEN): Gebaut wird nach `docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md` (Path 1 — Modulbauweise) und der kanonischen UI-Referenz `docs/project/linie/ui/00_UI_REFERENZ_KANONISCH.md`. Bei Widerspruch gelten diese Dateien. Gruen in der CI ist NICHT genug — Modul-Naehte + Designtreue sind Teil der Abnahme.
+
 ## Projekt
 
 - Arbeite ausschliesslich fuer das Galvanik-Kreile WerkstattCockpit.
-- Der feste Tenant ist `galvanik-kreile`.
+- Der Tenant dieser Auslieferung ist `galvanik-kreile` — aber NUR ueber `TenantProvider`/Injektion, NIE als Literal in Modul-Kernen (D-ARCH-007; siehe ARCHITEKTUR_MODULE_PATH1.md Naht 3).
 - Stack: Next.js App Router, TypeScript, Supabase, Drizzle, Recharts, Framer Motion und PWA.
 - `main` ist die einzige Lieferwahrheit.
 - Vor Next.js-Codeaenderungen die relevante Dokumentation unter `node_modules/next/dist/docs/` lesen.
