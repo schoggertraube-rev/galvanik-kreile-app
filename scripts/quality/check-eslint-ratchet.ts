@@ -112,6 +112,18 @@ function readBaselineFile(filePath: string): RatchetSnapshot {
   return parseSnapshot(readFileSync(filePath, "utf8"), filePath);
 }
 
+// D-QA-001: a contract migration is allowed but never silent — it is announced so the
+// reviewer sees that eslint.config.mjs / lint dependencies / the judge changed in this PR.
+function noteContractMigration(candidate: RatchetSnapshot, base: RatchetSnapshot): void {
+  const notes: string[] = [];
+  if (candidate.eslintVersion !== base.eslintVersion) notes.push(`eslintVersion ${base.eslintVersion} -> ${candidate.eslintVersion}`);
+  if (candidate.lintContractHash !== base.lintContractHash) notes.push("lintContractHash (eslint.config.mjs or lint dependencies)");
+  if (candidate.judgeContractHash !== base.judgeContractHash) notes.push("judgeContractHash (ratchet scripts/workflows)");
+  if (notes.length > 0) {
+    console.log(`NOTICE ratchet contract migration in this candidate (reviewed change expected): ${notes.join("; ")}. Debt is judged with the BASE config.`);
+  }
+}
+
 function printDifferences(label: string, issues: ReturnType<typeof compareSnapshots>["regressions"]): void {
   console.error(label);
   for (const issue of issues.slice(0, MAX_DISPLAYED_DIFFERENCES)) {
@@ -122,10 +134,15 @@ function printDifferences(label: string, issues: ReturnType<typeof compareSnapsh
   }
 }
 
+// quality.yml materialises the base revision's eslint.config.mjs under this name inside the
+// workspace (bare-specifier imports must resolve). It is a judge artefact, never measured.
+const JUDGE_CONFIG_COPY = "eslint.config.ratchet-base.mjs";
+
 async function collectSnapshot(root: string, config?: string): Promise<RatchetSnapshot> {
   const eslint = new ESLint({
     cwd: root,
     ...(config ? { overrideConfigFile: config } : {}),
+    overrideConfig: [{ ignores: [JUDGE_CONFIG_COPY] }],
   });
   const results = await eslint.lintFiles(["."]);
   const ignoredCodeFiles = await collectIgnoredCodeFiles(root, eslint);
@@ -193,6 +210,7 @@ function lintContractHash(root: string): string {
 function judgeContractHash(root: string): string {
   const judgeFiles = [
     ".github/workflows/eslint-ratchet.yml",
+    ".github/workflows/quality.yml",
     "scripts/quality/check-eslint-ratchet.ts",
     "scripts/quality/eslint-ratchet-core.ts",
   ];
@@ -215,8 +233,14 @@ async function main(): Promise<void> {
     throw new Error("Use either --base or --base-baseline, not both.");
   }
   const root = path.resolve(args.root ?? process.cwd());
-  const config = args.config ? path.resolve(args.config) : undefined;
-  const current = await collectSnapshot(root, config);
+  // `current` = the candidate linted with its OWN config (consistency with the committed
+  // candidate baseline). `--config` names the JUDGE config (the base revision's
+  // eslint.config.mjs in CI): the candidate is linted with it a second time and that
+  // snapshot is what the base comparison uses, so a config change can never lower debt
+  // (D-QA-001). Without `--config` the judge is the candidate's own config.
+  const judgeConfig = args.config ? path.resolve(args.config) : undefined;
+  const current = await collectSnapshot(root);
+  const judge = judgeConfig ? await collectSnapshot(root, judgeConfig) : current;
   const baselinePath = path.join(root, BASELINE_PATH);
 
   if (args.update) {
@@ -275,7 +299,8 @@ async function main(): Promise<void> {
   if (args.base) {
     const base = readBaseBaseline(root, args.base);
     if (base) {
-      const violations = baselineRegressions(candidate, base);
+      noteContractMigration(candidate, base);
+      const violations = baselineRegressions(candidate, base, judge);
       if (violations.length > 0) {
         console.error("The committed ESLint baseline regresses relative to the base revision:");
         for (const violation of violations.slice(0, MAX_DISPLAYED_DIFFERENCES)) {
@@ -293,7 +318,8 @@ async function main(): Promise<void> {
   }
   if (args.baseBaseline) {
     const base = readBaselineFile(path.resolve(args.baseBaseline));
-    const violations = baselineRegressions(candidate, base);
+    noteContractMigration(candidate, base);
+    const violations = baselineRegressions(candidate, base, judge);
     if (violations.length > 0) {
       console.error("The committed ESLint baseline regresses relative to the protected base:");
       for (const violation of violations.slice(0, MAX_DISPLAYED_DIFFERENCES)) {

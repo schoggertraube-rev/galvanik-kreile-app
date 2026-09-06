@@ -1,10 +1,11 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import postgres from "postgres";
 
 const LOCAL_DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 const LOCAL_SUPABASE_URL = "http://127.0.0.1:54321";
-const TENANT_A = "galvanik-kreile";
+const TENANT_A = KREILE_TENANT_SLUG;
 const RUN_SUFFIX = randomUUID().slice(0, 8);
 
 if (process.env.NODE_ENV !== "test" || process.env.DATABASE_URL !== LOCAL_DATABASE_URL) {
@@ -88,7 +89,7 @@ async function seedFixtures() {
        ($1, $2, $3, 'Readonly User', 'readonly', true, '2026-01-01', '2026-01-01')`,
     [USERS.readonly, TENANT_A, `readonly-${RUN_SUFFIX}@test.local`],
   );
-  // Foreign-tenant user is NOT seeded: authorization.ts rejects tenantId !== "galvanik-kreile"
+  // Foreign-tenant user is NOT seeded: authorization.ts rejects tenantId !== KREILE_TENANT_SLUG
   // before any DB access, so no app_users row is required for the invalid-tenant isolation test.
 }
 
@@ -580,7 +581,7 @@ describe("F1.1: Digital Order Intake", () => {
 
   it("should isolate wrong tenant (foreign user), rejects UNAUTHENTICATED", async () => {
     // Uses a fresh random userId; no app_users row is seeded for the foreign tenant.
-    // authorization.ts rejects tenantId !== "galvanik-kreile" before any DB access.
+    // authorization.ts rejects tenantId !== KREILE_TENANT_SLUG before any DB access.
     const foreignUserId = randomUUID();
     const foreignTenant = `f1-intake-foreign-${RUN_SUFFIX}`;
     setSession(foreignUserId, "buero", foreignTenant);

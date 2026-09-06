@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import "server-only";
 
 import { db } from "@/db";
@@ -79,7 +80,7 @@ export async function createOperationalOrderService(data: Record<string, unknown
 
     const newOrderVal = {
       id: orderId,
-      tenantId: "galvanik-kreile",
+      tenantId: KREILE_TENANT_SLUG,
       orderNumber,
       customerId: validData.customerId as string,
       title: validData.title || "Unbenannt",
@@ -94,7 +95,7 @@ export async function createOperationalOrderService(data: Record<string, unknown
     if (validData.parts && validData.parts.length > 0) {
       const newItems = validData.parts.map((p) => ({
         id: p.id || createId(),
-        tenantId: "galvanik-kreile",
+        tenantId: KREILE_TENANT_SLUG,
         orderId,
         customerId: validData.customerId || "",
         name: p.name,
@@ -107,7 +108,7 @@ export async function createOperationalOrderService(data: Record<string, unknown
 
     await tx.insert(events).values({
       id: createId(),
-      tenantId: "galvanik-kreile",
+      tenantId: KREILE_TENANT_SLUG,
       orderId,
       eventType: "ORDER_CREATED",
       description: "Auftrag erstellt",

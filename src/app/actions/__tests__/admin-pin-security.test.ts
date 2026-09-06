@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { readFile } from "node:fs/promises";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -40,7 +41,7 @@ vi.mock("drizzle-orm", () => ({ eq: vi.fn() }));
 vi.mock("@/lib/auth/userDtos", () => ({ toAdminUserDto: vi.fn() }));
 
 vi.mock("@/lib/server/appSession", () => ({
-  APP_TENANT_ID: "galvanik-kreile",
+  APP_TENANT_ID: KREILE_TENANT_SLUG,
 }));
 
 const denial = "NOT_AVAILABLE: Sichere Benutzerverwaltung benötigt den W3-Command-Vertrag.";

@@ -434,23 +434,29 @@ export function compareSnapshots(
   };
 }
 
+/**
+ * Base comparison. `judge` is the snapshot of the candidate tree linted with the BASE
+ * config (apples to apples with `base`); it defaults to the candidate baseline itself.
+ * Debt totals / per-rule counts are taken from `judge`; the ignored-code inventory is
+ * taken from the candidate baseline (the candidate's own config decides what it ignores,
+ * and that must not grow relative to the base).
+ */
 export function baselineRegressions(
   candidate: RatchetSnapshot,
   base: RatchetSnapshot,
+  judge: RatchetSnapshot = candidate,
 ): string[] {
-  const differences = compareSnapshots(candidate, base);
+  const differences = compareSnapshots(judge, base);
   const violations: string[] = [];
-  if (candidate.eslintVersion !== base.eslintVersion) {
-    violations.push(
-      `eslintVersion changed from ${base.eslintVersion} to ${candidate.eslintVersion}`,
-    );
-  }
-  if (candidate.lintContractHash !== base.lintContractHash) {
-    violations.push("lintContractHash changed; ESLint configuration or lint dependencies drifted");
-  }
-  if (candidate.judgeContractHash !== base.judgeContractHash) {
-    violations.push("judgeContractHash changed; the ratchet implementation or invocation drifted");
-  }
+  // Contract migration (D-QA-001, 2026-09-06): a changed eslintVersion / lintContractHash /
+  // judgeContractHash is NOT a base violation any more. Under enforce_admins=true the old
+  // rule made every ESLint-rule or judge change unmergeable for anyone (no in-band path;
+  // #36/#55 needed owner overrides). The migration stays explicit and reviewable: the
+  // candidate baseline MUST carry the hashes of the candidate's own config/judge (checked
+  // before this function runs), so a config change is always a visible baseline diff.
+  // Debt cannot be hidden by changing the config: both CI runs (quality.yml and the
+  // protected eslint-ratchet.yml) lint the candidate with the BASE config and compare the
+  // result against the baselines below.
   const baseIgnored = new Map(
     base.ignoredCodeFiles.map((ignored) => [ignored.file, ignored.contentHash]),
   );
@@ -463,9 +469,9 @@ export function baselineRegressions(
     }
   }
   for (const key of ["filesWithIssues", "errors", "warnings"] as const) {
-    if (candidate.totals[key] > base.totals[key]) {
+    if (judge.totals[key] > base.totals[key]) {
       violations.push(
-        `${key} increased from ${base.totals[key]} to ${candidate.totals[key]}`,
+        `${key} increased from ${base.totals[key]} to ${judge.totals[key]}`,
       );
     }
   }

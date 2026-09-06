@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import React from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { readFileSync } from "node:fs";
@@ -45,7 +46,7 @@ vi.mock("drizzle-orm", () => ({
 }));
 
 vi.mock("@/lib/server/appSession", () => ({
-  APP_TENANT_ID: "galvanik-kreile",
+  APP_TENANT_ID: KREILE_TENANT_SLUG,
 }));
 
 vi.mock("@/lib/server/pinLoginHandle", () => ({
@@ -77,7 +78,7 @@ const targetActiveUser = {
   id: "target-active",
   fullName: "Werkstatt Ziel",
   role: "werkstatt",
-  tenantId: "galvanik-kreile",
+  tenantId: KREILE_TENANT_SLUG,
   active: true,
   pinHash: "target-pin-hash",
 };
@@ -95,7 +96,7 @@ const targetInactiveUser = {
   id: "target-inactive",
   fullName: "Inaktiv User",
   role: "werkstatt",
-  tenantId: "galvanik-kreile",
+  tenantId: KREILE_TENANT_SLUG,
   active: false,
   pinHash: "inactive-pin-hash",
 };
@@ -104,7 +105,7 @@ const targetDeveloperUser = {
   id: "target-developer",
   fullName: "Dev User",
   role: "developer",
-  tenantId: "galvanik-kreile",
+  tenantId: KREILE_TENANT_SLUG,
   active: true,
   pinHash: "developer-pin-hash",
 };
@@ -132,14 +133,14 @@ describe("StartPage payload sanitization", () => {
     const element = await StartPage();
 
     expect(mockAnd).toHaveBeenCalledWith(
-      { kind: "eq", column: "tenant_id", value: "galvanik-kreile" },
+      { kind: "eq", column: "tenant_id", value: KREILE_TENANT_SLUG },
       { kind: "eq", column: "active", value: true },
       { kind: "ne", column: "role", value: "developer" },
     );
     expect(mockWhere).toHaveBeenCalledWith({
       kind: "and",
       conditions: [
-        { kind: "eq", column: "tenant_id", value: "galvanik-kreile" },
+        { kind: "eq", column: "tenant_id", value: KREILE_TENANT_SLUG },
         { kind: "eq", column: "active", value: true },
         { kind: "ne", column: "role", value: "developer" },
       ],

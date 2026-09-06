@@ -9,6 +9,7 @@ import {
   type PaymentStatus,
 } from "@/lib/server/paymentContract";
 import { resolveAuthorization } from "@/lib/server/authorization";
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import {
   withPrivilegedTenantTransaction,
   type PrivilegedTenantTransaction,
@@ -482,7 +483,7 @@ export async function confirmPayment(input: unknown): Promise<ConfirmPaymentResu
       : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
   if (
-    authorization.data.tenantId !== "galvanik-kreile"
+    authorization.data.tenantId !== KREILE_TENANT_SLUG
     || !PAYMENT_ROLES.includes(authorization.data.role as (typeof PAYMENT_ROLES)[number])
   ) {
     return { code: "FORBIDDEN", message: "Zahlungsbestätigung ist mit dieser Rolle nicht erlaubt." };

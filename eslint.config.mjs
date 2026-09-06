@@ -31,10 +31,21 @@ const erfassungMustNotImport = [
   "@/lib/marketing", "@/lib/marketing/*",
 ];
 
+// ── Positive Fassade (D-ARCH-008 Naht 2 / S1): Fremdmodul nur ueber public.ts ──
+// Editor-Feedback; die verbindliche Pruefung (auch relative Tiefimporte, dynamic
+// import, vi.mock, eigenes Modul nur relativ) ist scripts/quality/check-module-gates.mjs.
+// Flat config: ein spaeterer no-restricted-imports-Block ERSETZT die Optionen eines
+// frueheren. Darum haengt boundaryRule() dieses Pattern an JEDE Domaenen-Regel an, und
+// der globale src/**-Block steht VOR den Domaenen-Bloecken.
+const modulesFacadePattern = {
+  group: ["@/modules/*/*", "!@/modules/*/public"],
+  message: "Tiefimport in ein Modul. Fremdmodule nur ueber @/modules/<fach>/public (ARCHITEKTUR_MODULE_PATH1.md Naht 2, S1).",
+};
+
 function boundaryRule(forbidden, message) {
   return {
     "no-restricted-imports": ["error", {
-      patterns: forbidden.map(group => ({ group: [group], message })),
+      patterns: [...forbidden.map(group => ({ group: [group], message })), modulesFacadePattern],
     }],
   };
 }
@@ -55,6 +66,11 @@ const eslintConfig = defineConfig([
       noInlineConfig: true,
       reportUnusedDisableDirectives: "error",
     },
+  },
+  // ── S1 Naht 2 fuer alle src-Dateien ohne eigene Domaenen-Regel ──
+  {
+    files: ["src/**/*.ts", "src/**/*.tsx"],
+    rules: { "no-restricted-imports": ["error", { patterns: [modulesFacadePattern] }] },
   },
   // ── Domain isolation: auth must not depend on business domains ──
   {
@@ -93,6 +109,28 @@ const eslintConfig = defineConfig([
     rules: boundaryRule(
       ["@/app", "@/app/*", "@/lib", "@/lib/*"],
       "db/ must not import from app/ or lib/ — schema is a leaf dependency"),
+  },
+  // ── Tenant-Literal-Verbot (D-ARCH-007 / S0): kein 'galvanik-kreile' im Code ──
+  {
+    files: ["src/**/*.ts", "src/**/*.tsx"],
+    rules: {
+      "no-restricted-syntax": ["error", {
+        selector: "Literal[value='galvanik-kreile']",
+        message: "Kein Tenant-Literal 'galvanik-kreile'. Nutze KREILE_TENANT_SLUG aus @/lib/tenant (D-ARCH-007, S0).",
+      }],
+    },
+  },
+  {
+    // Einzige erlaubte Stelle + noch nicht migrierte db/ (SQL/Seed, TODO S0-Rest)
+    // + byte-gepinnte Evidence-Tests: quality.yml prueft deren Blob-Hash exakt
+    //   (W4_TEST_BLOB), sie duerfen NICHT migriert/veraendert werden.
+    files: [
+      "src/lib/tenant.ts",
+      "src/db/**/*.ts",
+      "src/db/**/*.tsx",
+      "src/test/w4_order_station_attachment.integration.test.ts",
+    ],
+    rules: { "no-restricted-syntax": "off" },
   },
   // Override default ignores of eslint-config-next.
   globalIgnores([

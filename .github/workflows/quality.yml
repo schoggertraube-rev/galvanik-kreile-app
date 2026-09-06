@@ -64,6 +64,12 @@ jobs:
           node scripts/quality/check-w4-cross-module-read-ports.mjs --selftest
           node scripts/quality/check-w4-cross-module-read-ports.mjs --check
 
+      - name: S1 module gates (Path 1 Naehte 1/2/4/5/6, candidate view; protected copy runs in eslint-ratchet.yml)
+        # Manifest je Modul, positive Fassade (kein Tiefimport), Cross-Modul-Fakten nur
+        # ueber deklarierte public.v_*-Views, UI-Vertrag (kein Stationsband/Transport-Home,
+        # Baseline shrink-only), AGENTS-Verweis. Siehe ARCHITEKTUR_MODULE_PATH1.md §2/§5.
+        run: node scripts/quality/check-module-gates.mjs
+
       - name: Resolve diff range
         id: diff
         shell: bash
@@ -122,26 +128,53 @@ jobs:
           fi
           npx eslint --max-warnings 0 "${files[@]}"
 
-      - name: Repository ESLint ratchet
+      - name: Repository ESLint ratchet (judge = BASE eslint config, D-QA-001)
+        # Debt is measured with the BASE revision's eslint.config.mjs, so a PR cannot lower
+        # its debt by changing rules; the candidate's own config change is still explicit
+        # (candidate baseline must carry the candidate's contract hash, checked first).
+        # The base config is written INTO the workspace so its bare-specifier imports
+        # (eslint-config-next, plugins) resolve against the installed node_modules; the file
+        # is untracked and removed afterwards, so it never enters the ignored-code inventory.
         shell: bash
         run: |
           set -euo pipefail
+          base="${{ steps.diff.outputs.base }}"
+          base_config="$GITHUB_WORKSPACE/eslint.config.ratchet-base.mjs"
+          # Fail-closed (red-team P0): an unreachable base commit must NOT silently fall back
+          # to the candidate config. Only a base that exists but has no eslint.config.mjs
+          # (ratchet initialisation) may use the candidate config.
+          if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "::error::ratchet judge: base commit $base is not available in this checkout"
+            exit 1
+          fi
+          if git cat-file -e "$base:eslint.config.mjs" 2>/dev/null; then
+            git show "$base:eslint.config.mjs" > "$base_config"
+            echo "ratchet judge: eslint.config.mjs from base $base"
+          else
+            cp "$GITHUB_WORKSPACE/eslint.config.mjs" "$base_config"
+            echo "ratchet judge: base $base has no eslint.config.mjs (initialisation), using candidate config"
+          fi
           ratchet_config="$RUNNER_TEMP/eslint-ratchet-frozen-r0.mjs"
           cat > "$ratchet_config" <<'EOF'
           import { pathToFileURL } from "node:url";
 
           const canonicalConfig = (
-            await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/eslint.config.mjs`).href)
+            await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/eslint.config.ratchet-base.mjs`).href)
           ).default;
 
           export default [
             ...canonicalConfig,
+            // the untracked judge copy itself is not part of the measured tree
+            { ignores: ["eslint.config.ratchet-base.mjs"] },
           ];
           EOF
 
+          status=0
           node --import tsx scripts/quality/check-eslint-ratchet.ts \
             --config "$ratchet_config" \
-            --base "${{ steps.diff.outputs.base }}"
+            --base "$base" || status=$?
+          rm -f "$base_config"
+          exit "$status"
 
       - name: F0 doc truth gate
         run: node scripts/quality/check-f0-doc-truth.mjs

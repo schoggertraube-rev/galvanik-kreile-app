@@ -30,3 +30,8 @@ Fix (Rollenregel): Der Prüfer eines Baus ist NIE sein Autor. Ein unabhängiger 
 
 ## P7 — Closed-world-Naht (Vorbild Lerninsel, so wird die CI-Grenze gebaut)
 Muster: Pfad-Allowlist je Einheit im Workflow, genau EIN Commit auf beobachteter Basis, Manifest/Public-Surface je Modul, keine Binärdeltas, Exact-SHA-Review. Das ist die Blaupause für Kreiles S1-Gate — nicht neu erfinden, von Lerninsel übernehmen.
+
+## P8 — ESLint-Ratsche blockierte JEDE Regeländerung (D-QA-001, 2026-09-06)
+Befund (codetechnisch): `baselineRegressions()` wertete geänderte `lintContractHash`/`judgeContractHash` gegenüber main als Verstoß. `quality` ist Required Check mit `enforce_admins=true` → eine neue ESLint-Regel (S0 Tenant-Verbot, S1 Fassade) war für niemanden mergebar; #36/#55 gingen nur per Owner-Override durch. Kein Migrationspfad im Band = Ratsche ohne Tür.
+Fix: Kontraktwechsel ist kein Basis-Verstoß mehr, bleibt aber **explizit** (Kandidaten-Baseline muss den Hash des eigenen Configs tragen → sichtbarer Diff, Review) und **sicher**: quality.yml UND der geschützte ratchet-Job linten den Kandidaten mit dem **Basis**-Config. Debt lässt sich also nicht durch Regelabschaltung senken. Regel-Entfernung mit noch offenem Debt ist dadurch weiterhin rot — gewollt.
+Lehre: Ein Gate ohne Migrationspfad wird umgangen (Override) statt gepflegt. Jedes Gate braucht den „so ändert man mich legal"-Weg, und der muss selbst geprüft sein.

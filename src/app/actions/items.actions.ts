@@ -1,4 +1,5 @@
 "use server";
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
 import { db } from "@/db";
 import { items } from "@/db/schema";
@@ -28,7 +29,7 @@ export async function getItemsDb(): Promise<ActionResult<ItemResponse[]>> {
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
   try {
-    const dbItems = await db.select().from(items).where(eq(items.tenantId, "galvanik-kreile")).orderBy(desc(items.createdAt));
+    const dbItems = await db.select().from(items).where(eq(items.tenantId, KREILE_TENANT_SLUG)).orderBy(desc(items.createdAt));
     
     const data = dbItems.map(i => ({
       id: i.id,

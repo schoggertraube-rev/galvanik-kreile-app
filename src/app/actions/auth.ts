@@ -1,4 +1,5 @@
 'use server'
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
@@ -36,7 +37,7 @@ export async function login(formData: FormData) {
   }
 
   // tenantgebundenen app_users-Datensatz laden
-  const identityResult = await resolveLoginIdentityByEmail(user.email, 'galvanik-kreile')
+  const identityResult = await resolveLoginIdentityByEmail(user.email, KREILE_TENANT_SLUG)
   if (!identityResult.ok) {
     await supabase.auth.signOut()
     if (identityResult.message.includes("deaktiviert")) {

@@ -16,8 +16,8 @@
 
 ## WAS JETZT DRAN IST (Stand 2026-09-06, abends)
 - **Der frühere HARTE STOP zu `quality.yml` ist aufgehoben — Ursache belegt:** das F1.3-Rot war eine **Test-Isolations-Regression** (geteilte DB ohne Reset vor F1.3; Stammdaten mit `expectedVersion: 0` existierten schon → Command antwortete korrekt CONFLICT), **kein Produktbefund**. Fix = genau ein fail-closed `db reset` vor F1.3 (`cc13aec`), zweimal grün, Red-Team PASS, gemerged. Siehe PROBLEMLOESUNGEN P3.
-- **Offen: PR #75 (S0+S1) mergen** — Bedingungen: CI `quality` grün, unabhängiger Review PASS ohne P0/P1 (Autor = Orchestrator-Chat; Red-Team + Runner-PL haben unabhängig geprüft), Owner-OK. Der Check `ratchet` ist für DIESEN PR rot by design (er läuft mit dem alten Basis-Judge, der jede Vertragsänderung ablehnt — genau das behebt D-QA-001, PROBLEMLOESUNGEN P8); ab dem nächsten PR ist er grün.
-- **Owner-Aufgabe (Einstellung):** Branch-Protection → `ratchet` und `Fresh Supabase replay` als Required Checks. Bis dahin ist die geschützte S1-Kopie nur informativ.
+- **Offen: PR #75 (S0+S1) mergen** — CI `quality` grün, Red-Team + Runner-PL haben unabhängig geprüft, Owner-OK liegt vor. Der Check `ratchet` ist für DIESEN PR rot by design (er läuft mit dem alten Basis-Judge, der jede Vertragsänderung ablehnt — genau das behebt D-QA-001, PROBLEMLOESUNGEN P8). `ratchet` ist per Ruleset `main-protection` Pflicht ohne Bypass (auch Admin) → **einmaliger Owner-Akt:** `ratchet` für diesen einen Merge aus dem Ruleset nehmen, danach wieder eintragen. Ab dann grün UND bindend für alle weiteren PRs.
+- **Owner-Aufgabe (Einstellung, danach):** `Fresh Supabase replay` ebenfalls als Required Check ins Ruleset.
 - **Danach:** S2 (Kill-Liste löschen, Baseline `quality/module-gates-baseline.json` schrumpft) → S3 (`src/modules/erfassung/` als Muster) → Skonto.
 
 ## DER DETERMINISMUS-HEBEL (gebaut in #75)

@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { resolveAuthorization, withTransaction, execute, renderToBuffer } = vi.hoisted(() => ({
@@ -45,7 +46,7 @@ const authorization = {
   ok: true as const,
   data: {
     userId: ACTOR,
-    tenantId: "galvanik-kreile",
+    tenantId: KREILE_TENANT_SLUG,
     displayName: "Büro",
     role: "buero" as const,
     permissions: ["perm_data_orders"] as const,
@@ -55,7 +56,7 @@ const authorization = {
 
 const validReceiptRow = {
   event_id: EVENT,
-  tenant_id: "galvanik-kreile",
+  tenant_id: KREILE_TENANT_SLUG,
   order_id: ORDER,
   event_type: "INVOICE_CREATED_V1",
   client_event_id: CLIENT,

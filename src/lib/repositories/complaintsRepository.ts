@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { createId } from "@paralleldrive/cuid2";
 import { createClient } from "@/lib/supabase/client";
 
@@ -90,7 +91,7 @@ export const complaintsRepository = {
       const supabase = createClient();
       const { error } = await supabase.from('complaints').insert({
         id,
-        tenant_id: "galvanik-kreile",
+        tenant_id: KREILE_TENANT_SLUG,
         customer_id: complaint.customerId,
         order_id: complaint.orderId,
         item_id: complaint.itemId || null,

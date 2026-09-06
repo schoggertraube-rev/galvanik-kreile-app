@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const EXPECTED_DATABASE_URL = process.env.F1_5_EXPECTED_DATABASE_URL;
@@ -31,7 +32,7 @@ if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
 const readAppSessionSpy = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/server/appSession", () => ({ readAppSession: readAppSessionSpy }));
 
-const TENANT = "galvanik-kreile";
+const TENANT = KREILE_TENANT_SLUG;
 const FOREIGN_TENANT = "f15-b2-foreign";
 const USERS = {
   buero: "25252525-2525-4252-8252-252525252501",

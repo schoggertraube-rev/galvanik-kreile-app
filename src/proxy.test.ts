@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { unstable_doesMiddlewareMatch } from "next/experimental/testing/server";
@@ -27,7 +28,7 @@ function validSession(): AppSession {
   const now = Date.now();
   return {
     userId: "user-1",
-    tenantId: "galvanik-kreile",
+    tenantId: KREILE_TENANT_SLUG,
     role: "werkstatt",
     displayName: "Philipp Werkstatt",
     issuedAt: now - 1_000,

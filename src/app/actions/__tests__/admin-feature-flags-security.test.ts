@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { readFile } from "node:fs/promises";
 import ts from "typescript";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -26,7 +27,7 @@ vi.mock("@/db", () => ({
 vi.mock("@/db/schema", () => ({ appUsers: {}, featureFlags: {} }));
 vi.mock("drizzle-orm", () => ({ eq: vi.fn() }));
 vi.mock("@/lib/auth/userDtos", () => ({ toAdminUserDto: vi.fn() }));
-vi.mock("@/lib/server/appSession", () => ({ APP_TENANT_ID: "galvanik-kreile" }));
+vi.mock("@/lib/server/appSession", () => ({ APP_TENANT_ID: KREILE_TENANT_SLUG }));
 
 const denial = "NOT_AVAILABLE: Sichere Feature- und Rollenverwaltung benötigt den W3-Command-Vertrag.";
 

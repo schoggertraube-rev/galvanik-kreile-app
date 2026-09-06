@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { resolveAuthorization, readInvoicePdf } = vi.hoisted(() => ({
@@ -12,7 +13,7 @@ vi.mock("@/lib/server/invoiceRead", () => ({ readInvoicePdf }));
 const VALID_ID = "11111111-1111-4111-8111-111111111111";
 const authorization = {
   ok: true as const,
-  data: { tenantId: "galvanik-kreile", userId: "22222222-2222-4222-8222-222222222222", role: "buero" as const },
+  data: { tenantId: KREILE_TENANT_SLUG, userId: "22222222-2222-4222-8222-222222222222", role: "buero" as const },
 };
 
 function context(invoiceId: string) {

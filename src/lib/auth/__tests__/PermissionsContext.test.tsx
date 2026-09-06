@@ -1,5 +1,6 @@
 process.env.DATABASE_URL = "postgres://mock:mock@localhost:5432/mock";
 
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { act } from "react";
@@ -46,7 +47,7 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
       ok: true,
       data: {
         userId: "user-1",
-        tenantId: "galvanik-kreile",
+        tenantId: KREILE_TENANT_SLUG,
         displayName: "Hans Meister",
         role: "buero",
         permissions: ["perm_view_leitstand"],

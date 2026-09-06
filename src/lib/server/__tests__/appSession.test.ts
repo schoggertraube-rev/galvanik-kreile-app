@@ -19,6 +19,7 @@
  * 12. readAppSession() mit falschem Tenant → INVALID_TENANT
  */
 
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   signAppSession,
@@ -54,7 +55,7 @@ function makeSession(overrides?: Partial<AppSession>): AppSession {
   const now = Date.now();
   return {
     userId: "user-123",
-    tenantId: "galvanik-kreile",
+    tenantId: KREILE_TENANT_SLUG,
     role: "werkstatt",
     displayName: "Hans Meister",
     issuedAt: now - 1000,
@@ -77,7 +78,7 @@ describe("signAppSession + verifyAppSessionToken – pure Krypto", () => {
       expect(result.session.userId).toBe("user-123");
       expect(result.session.role).toBe("werkstatt");
       expect(result.session.displayName).toBe("Hans Meister");
-      expect(result.session.tenantId).toBe("galvanik-kreile");
+      expect(result.session.tenantId).toBe(KREILE_TENANT_SLUG);
     }
   });
 
