@@ -127,3 +127,18 @@ Dies konkretisiert die Fachfragen B1 (Eventreihenfolge) und B2 (Katalog-ID-Klass
 **Reihenfolge:** S0 Tenant-Fix → S1 Gate → S2 Löschung toter Parallel-Routen → S3 Muster-Modul erfassung → S4 Home neu (V4) → S5 restliche Domänen. F1.5 bleibt geparkt bis S1.
 
 **Nicht mehr fragen:** Ob modular gebaut wird (ja, Path 1). Ob das Stationshome gilt (nein, verworfen).
+
+
+---
+
+## D-ARCH-009 — Modulkarte / Scope-Kanon (Owner-Ratifizierung 2026-09-06)
+
+Die Owner-Modulmindmap „Baustruktur Mini-USP" (Stand 15.08.2026) wird ratifiziert als verbindlicher Modul- und Scope-Kanon: `docs/project/linie/MODULKARTE_KANON.md`. Roter Faden INFOS REIN → KARTE → SUCHEN → RAUS; wenige, vollständige Module.
+
+**KANON (einzige Module):** Fundament (gebaut), Suchleiste (F1.6, muss aus 00_BIBEL\_parallel herein), Intake (F1.1), Orders/Auftragskarte (F1.2/1.3), Customers/Kundenkarte (F1.3), Kalender (F1.6), Accounting-minimal (F1.4/1.5).
+**QUARANTÄNE (nur Vertrag):** OCR, Galvanik-Innenleben, F2-Büro, DHL/Mollie/Mahnwesen.
+**ENTFÄLLT (löschen):** Analyse/KPI-Cockpit, eigenständiges Buchhaltungs-Modul, Zeiterfassung, Teilfertigung, Kundenportal, eigenes Kalender-Produkt, Galvanik-Stufentracking, E-Mail/OCR/Bank-Eigenbau, Marketing.
+
+**Folge:** „4 Mocks vs. 36 Routen" ist KEIN Baubarkeits-Problem — ~30 Routen sind ENTFÄLLT/QUARANTÄNE. Die Vorlagen reichen für die beabsichtigte App. Arbeit = Subtraktion + Path-1-Nähte + Suchleiste. `buchhaltung` (54 Dateien) auf Accounting-minimal trimmen. AMBIG (lager/lieferanten/items/telefonnotiz) = Owner-Entscheid vor Löschung, nicht raten.
+
+**Nicht mehr fragen:** Was ein Modul ist, was es gibt, was entfällt.
