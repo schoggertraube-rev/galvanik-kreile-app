@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kreile · Startseite Phillip — Machart V4 (Kontroll-Home, abstrahiert)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy-900:#12161F; --navy-800:#1A1F2E; --navy-700:#262C3C; --navy-600:#353C4E;
+    --navy-500:#4B5366; --navy-400:#6B7286; --navy-300:#8E94A6;
+    --cream-50:#FBF8F2; --cream-100:#F6F0E6; --cream-200:#F1E9DC; --cream-300:#E7DCC9;
+    --cream-400:#D9CBB3; --cream-500:#C7B79A;
+    --amber:#F6A93B;
+    --grad:linear-gradient(115deg,#7A3FB0 0%,#C2185B 40%,#F2643C 76%,#F6A93B 100%);
+    --succ:#3F9E56; --succ-d:#337F45; --succ-bg:#E3EDDD; --succ-fg:#2C6B3C; --succ-bd:#B7CFAE;
+    --warn:#D9722B; --warn-bg:#FAE7D6; --warn-fg:#9C5214; --warn-bd:#ECC39C;
+    --info:#4B5366; --info-bg:#E6E8EE; --info-fg:#3A4763;
+    --ral:#AF2B1E; --ral-bg:#F7E1DC; --ral-fg:#7E1D14; --ral-bd:#E7B4AA;
+    --ground:#EFE6D6; --surface:#FFFDF9; --line:#E1D5BE;
+    --serif:"Fraunces",Georgia,serif; --sans:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+    --sh-sm:0 1px 2px rgba(26,31,46,.06),0 1px 3px rgba(26,31,46,.05);
+    --sh-md:0 2px 6px rgba(26,31,46,.08),0 6px 16px rgba(26,31,46,.06);
+    --sh-lg:0 14px 40px rgba(26,31,46,.20);
+    --ease:cubic-bezier(.2,.7,.2,1);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--cream-200);font-family:var(--sans);color:var(--navy-900);padding:24px 20px 70px;-webkit-font-smoothing:antialiased;}
+  svg.i{width:1em;height:1em;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vertical-align:-.14em;flex:none;}
+  .scroll{scrollbar-width:none;-ms-overflow-style:none;} .scroll::-webkit-scrollbar{width:0;height:0;display:none;}
+
+  .page-head{max-width:1220px;margin:0 auto 6px;text-align:center;}
+  .ph-title{font-family:var(--serif);font-size:22px;color:var(--navy-900);font-weight:500;}
+  .ph-sub{font-size:12.5px;color:var(--navy-400);margin-top:6px;line-height:1.5;}
+  .demo-bar{max-width:1220px;margin:10px auto 0;text-align:center;font-size:12px;color:var(--navy-500);}
+  .demo-bar .conn{border:1px solid var(--cream-400);background:var(--surface);border-radius:999px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer;color:var(--succ-fg);}
+  .demo-bar .conn.off{color:var(--ral-fg);background:var(--ral-bg);border-color:var(--ral-bd);}
+  .sec-cap{max-width:1220px;margin:30px auto 12px;text-align:center;font-family:var(--serif);font-size:16px;color:var(--navy-600);}
+  .sec-cap small{display:block;font-family:var(--sans);font-size:12px;color:var(--navy-400);margin-top:3px;}
+
+  .frame{position:relative;background:var(--surface);border:1px solid var(--cream-400);border-radius:16px;box-shadow:var(--sh-lg);overflow:hidden;margin:0 auto;}
+  .frame.tabletL{width:1220px;max-width:100%;height:880px;}
+  .frame.phone{width:392px;height:880px;}
+  .stripe{height:3px;background:var(--grad);}
+  .tshell{display:flex;flex-direction:column;height:calc(100% - 3px);position:relative;}
+
+  .ttop{display:flex;align-items:center;gap:14px;padding:0 18px;height:62px;border-bottom:1px solid var(--line);background:var(--surface);flex:none;}
+  .logo{width:40px;height:40px;border-radius:11px;background:var(--navy-800);color:var(--cream-50);font-family:var(--serif);font-size:15px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;}
+  .brand{display:flex;flex-direction:column;cursor:pointer;} .brand-name{font-family:var(--serif);font-size:15px;letter-spacing:1.4px;color:var(--navy-800);} .brand-home{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--navy-300);}
+  .search{flex:1;height:46px;background:var(--cream-50);border:1.5px solid var(--cream-400);border-radius:12px;display:flex;align-items:center;gap:11px;padding:0 16px;cursor:pointer;box-shadow:var(--sh-sm);} .search svg.i{font-size:19px;color:var(--navy-500);} .search .ph{font-size:14px;color:var(--navy-400);font-weight:500;} .search .kbd{margin-left:auto;font-size:10.5px;color:var(--navy-300);border:1px solid var(--cream-400);border-radius:6px;padding:2px 8px;}
+  .avatar{width:42px;height:42px;border-radius:999px;background:var(--navy-800);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex:none;}
+
+  .body{flex:1;overflow-y:auto;background:var(--ground);padding:18px 20px 100px;} .frame.phone .body{padding:14px 12px 92px;}
+  .day-title{font-family:var(--serif);font-size:26px;color:var(--navy-900);font-weight:500;letter-spacing:-.3px;} .frame.phone .day-title{font-size:22px;}
+  .day-line{font-size:14px;color:var(--navy-600);margin-top:5px;line-height:1.45;} .day-line b{color:var(--navy-900);font-weight:600;} .rp{color:var(--ral-fg);font-weight:700;} .rp b{color:var(--ral-fg);}
+  .day-line.clear{color:var(--succ-fg);} .day-line.clear b{color:var(--succ-fg);}
+
+  .cols{display:grid;grid-template-columns:1.55fr 1fr;gap:16px;margin-top:16px;} .frame.phone .cols{grid-template-columns:1fr;gap:14px;}
+  .sec-t{display:flex;align-items:center;gap:10px;font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--navy-800);margin:0 0 10px;} .sec-ic{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;background:var(--warn);color:#fff;}
+  .sec-t .hint{margin-left:auto;font-size:11px;font-weight:500;letter-spacing:0;text-transform:none;color:var(--navy-400);}
+
+  /* Held: Heute sichern (Termintreue) */
+  .pri{display:flex;flex-direction:column;gap:9px;}
+  .pi{position:relative;display:grid;grid-template-columns:auto 1fr;gap:11px;align-items:start;background:var(--surface);border:1px solid var(--cream-300);border-left:4px solid var(--cream-400);border-radius:13px;padding:13px 14px;box-shadow:var(--sh-sm);overflow:visible;transition:opacity .25s,background .15s,height .5s var(--ease),transform .4s var(--ease),padding .4s,border-width .4s;animation:rise .45s var(--ease) both;}
+  .pi.menuopen{z-index:30;}
+  .pi.crit{border-left-color:var(--ral);background:linear-gradient(90deg,rgba(175,43,30,.05),var(--surface) 60%);}
+  .pi.soon{border-left-color:var(--warn);} .pi.fromrolf{border-left-color:var(--info);background:linear-gradient(90deg,rgba(75,83,102,.07),var(--surface) 60%);}
+  .pi.pending{opacity:.7;} .pi.offline{border-left-color:var(--ral);}
+  .pi-dot{width:11px;height:11px;border-radius:50%;flex:none;background:var(--navy-300);margin-top:5px;} .pi.crit .pi-dot{background:var(--ral);box-shadow:0 0 0 4px rgba(175,43,30,.14);} .pi.soon .pi-dot{background:var(--warn);} .pi.fromrolf .pi-dot{background:var(--info);box-shadow:0 0 0 4px rgba(75,83,102,.14);}
+  .pi-main{min-width:0;} .pi-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .pi-t{font-size:14px;font-weight:600;color:var(--navy-900);line-height:1.3;} .pi-t .id{font-family:var(--serif);color:var(--navy-700);font-weight:500;}
+  .from{font-size:10px;font-weight:700;color:var(--info-fg);background:var(--info-bg);border-radius:999px;padding:3px 8px;display:inline-flex;align-items:center;gap:5px;} .from svg.i{font-size:12px;}
+  .zust{font-size:10px;font-weight:700;border-radius:999px;padding:3px 8px;letter-spacing:.02em;} .zust.arb{background:var(--info-bg);color:var(--info-fg);} .zust.fertig{background:var(--succ-bg);color:var(--succ-fg);} .zust.neu{background:var(--cream-200);color:var(--navy-500);}
+  .pi-s{font-size:12px;color:var(--navy-500);margin-top:3px;line-height:1.4;}
+  .pchip{font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;display:inline-block;margin-top:6px;} .pc-red{background:var(--ral-bg);color:var(--ral-fg);}
+  .lockline{display:inline-flex;align-items:center;gap:5px;margin-top:6px;font-size:11px;font-weight:700;color:var(--ral-fg);} .lockline svg.i{font-size:13px;}
+  .pi-cond{display:flex;align-items:center;gap:6px;margin-top:7px;font-size:11px;color:var(--navy-400);} .pi-cond svg.i{font-size:12px;color:var(--succ);}
+  .pi-a{position:relative;display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:10px;}
+  .btn-do{min-height:42px;padding:0 15px;border-radius:11px;background:var(--succ);color:#fff;border:none;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:7px;cursor:pointer;box-shadow:0 2px 8px rgba(63,158,86,.26);} .btn-do svg.i{font-size:15px;}
+  .btn-do.freeze{background:var(--navy-800);box-shadow:0 2px 8px rgba(26,31,46,.22);} .btn-do.freeze .tag{font-size:9px;letter-spacing:.04em;text-transform:uppercase;background:rgba(255,255,255,.16);border-radius:999px;padding:1px 6px;margin-left:6px;}
+  .btn-return{min-height:42px;padding:0 12px;border-radius:11px;background:var(--surface);color:var(--ral-fg);border:1.5px solid var(--ral-bd);font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;} .btn-return svg.i{font-size:14px;}
+  .btn-later{min-height:42px;padding:0 13px;border-radius:11px;background:transparent;color:var(--navy-500);border:1px solid var(--cream-400);font-size:12px;font-weight:500;cursor:pointer;}
+  .pi.done{opacity:.85;} .pi.done .pi-t{color:var(--succ-fg);} .pi .mut{font-weight:400;color:var(--navy-400);font-size:12px;}
+  .pi.removing{opacity:0;transform:translateX(14px);padding-top:0!important;padding-bottom:0!important;border-top-width:0;border-bottom-width:0;margin:0;}
+  .pi-note{font-size:11.5px;color:var(--navy-400);display:flex;align-items:center;gap:6px;flex-wrap:wrap;} .pi-note svg.i{font-size:13px;}
+  .pi-note.offline-note{color:var(--ral-fg);font-weight:600;} .pi-note.offline-note svg.i{color:var(--ral);}
+  .pi-note.ret{color:var(--ral-fg);font-weight:600;} .pi-note.ret svg.i{color:var(--ral);}
+  .pi-note a{text-decoration:underline;cursor:pointer;font-size:11px;opacity:.72;color:inherit;}
+  .spin{width:14px;height:14px;border-radius:50%;border:2px solid var(--cream-400);border-top-color:var(--navy-500);display:inline-block;animation:spin .7s linear infinite;} @keyframes spin{to{transform:rotate(360deg);}}
+  .snooze{position:absolute;left:0;top:calc(100% + 6px);z-index:16;background:var(--surface);border:1px solid var(--cream-400);border-radius:12px;box-shadow:var(--sh-lg);padding:8px;min-width:200px;display:flex;flex-direction:column;gap:4px;animation:rise .16s var(--ease) both;}
+  .snooze-h{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--navy-500);padding:3px 8px 5px;}
+  .snooze-o{text-align:left;background:transparent;border:none;border-radius:8px;padding:9px 10px;font-size:13px;color:var(--navy-800);cursor:pointer;font-weight:500;} .snooze-o:hover{background:var(--cream-100);}
+  .snooze-note{font-size:10.5px;color:var(--ral-fg);padding:5px 8px 2px;line-height:1.35;border-top:1px solid var(--line);margin-top:2px;}
+
+  /* Rail */
+  .rail{display:flex;flex-direction:column;gap:12px;}
+  .bundle{border-radius:15px;padding:15px 16px;background:linear-gradient(120deg,rgba(246,169,59,.16),rgba(122,63,176,.10));border:1px solid var(--cream-300);box-shadow:var(--sh-sm);}
+  .bundle-h{display:flex;align-items:center;gap:9px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--navy-700);} .bundle-h svg.i{font-size:15px;color:var(--warn-fg);}
+  .bundle-t{font-size:14px;font-weight:600;color:var(--navy-900);margin-top:8px;line-height:1.35;} .bundle-s{font-size:11.5px;color:var(--navy-500);margin-top:3px;}
+  .bundle-a{margin-top:11px;} .b-soft{min-height:42px;padding:0 15px;border-radius:11px;background:var(--surface);color:var(--navy-800);border:1.5px solid var(--cream-500);font-size:12.5px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:7px;} .b-soft svg.i{font-size:15px;color:var(--warn-fg);}
+  .wip{border-radius:15px;padding:16px;background:var(--navy-800);color:#fff;box-shadow:var(--sh-md);cursor:pointer;position:relative;overflow:hidden;}
+  .wip::after{content:"";position:absolute;right:-24px;bottom:-24px;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,rgba(246,169,59,.16),transparent 70%);}
+  .wip-l{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--cream-300);display:flex;align-items:center;gap:8px;} .wip-n{font-family:var(--serif);font-size:46px;line-height:1;margin-top:10px;} .wip-n small{font-family:var(--sans);font-size:13px;color:var(--cream-300);font-weight:500;margin-left:8px;} .wip-go{margin-top:10px;font-size:12px;color:var(--cream-200);display:flex;align-items:center;gap:7px;}
+  .tile{background:var(--surface);border:1px solid var(--cream-300);border-radius:14px;box-shadow:var(--sh-sm);padding:13px 15px;cursor:pointer;} .tile:hover{background:var(--cream-50);}
+  .tile-r{display:flex;align-items:center;justify-content:space-between;gap:10px;} .tile-l{display:flex;align-items:center;gap:11px;} .tile-ic{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;background:var(--succ);color:#fff;flex:none;} .tile-ic.in{background:var(--info);}
+  .tile-tx{font-size:13px;font-weight:600;color:var(--navy-900);} .tile-n{font-family:var(--serif);font-size:22px;color:var(--navy-700);}
+  .tile-note{font-size:11px;color:var(--ral-fg);font-weight:600;margin-top:7px;display:flex;align-items:center;gap:5px;} .tile-note svg.i{font-size:12px;}
+
+  /* Aktionsleiste */
+  .actionbar{position:absolute;left:0;right:0;bottom:0;height:80px;background:var(--navy-800);display:flex;align-items:center;gap:10px;padding:0 16px;box-shadow:0 -8px 24px rgba(18,22,31,.24);z-index:8;}
+  .ab{height:56px;border-radius:13px;display:flex;align-items:center;justify-content:center;gap:9px;font-size:13.5px;font-weight:600;cursor:pointer;background:var(--navy-700);color:var(--cream-100);border:1px solid var(--navy-600);padding:0 16px;white-space:nowrap;} .ab svg.i{font-size:19px;color:var(--cream-200);}
+  .ab.primary{flex:1.5;background:var(--grad);border-color:transparent;color:#fff;font-weight:700;box-shadow:0 4px 14px rgba(120,50,120,.34);} .ab.primary svg.i{color:#fff;}
+  .ab.mid{flex:1;} .ab.norm{flex:1;background:transparent;} .ab.ghost{flex:.9;background:transparent;border-style:dashed;color:var(--navy-300);} .ab.ghost svg.i{color:var(--navy-400);}
+  .ab .tag{font-size:9px;letter-spacing:.05em;text-transform:uppercase;background:rgba(255,255,255,.16);color:#fff;border-radius:999px;padding:2px 6px;} .ab.ghost .tag{background:var(--navy-700);color:var(--cream-300);}
+  .frame.phone .actionbar{gap:6px;padding:0 10px;height:74px;} .frame.phone .ab{height:52px;font-size:11px;flex-direction:column;gap:2px;padding:0 6px;} .frame.phone .ab svg.i{font-size:18px;} .frame.phone .ab .tag{display:none;}
+
+  .toast{position:absolute;left:50%;transform:translateX(-50%);bottom:94px;z-index:14;background:var(--navy-900);color:#fff;border-radius:13px;box-shadow:var(--sh-lg);padding:11px 15px;display:none;align-items:center;gap:14px;font-size:13px;max-width:92%;} .toast.show{display:flex;animation:rise .2s var(--ease) both;}
+  .toast .t-ic{color:var(--succ);font-size:16px;display:inline-flex;} .toast b{font-weight:600;} .toast .t-act{color:var(--amber);font-weight:700;cursor:pointer;border:none;background:transparent;font-size:13px;} .toast .t-sep{width:1px;height:18px;background:var(--navy-600);}
+
+  /* Overlays */
+  .ovl{position:absolute;inset:0;background:rgba(18,22,31,.52);display:none;align-items:center;justify-content:center;z-index:20;padding:26px;} .ovl.open{display:flex;}
+  .oc{background:var(--surface);border-radius:18px;box-shadow:var(--sh-lg);width:580px;max-width:100%;max-height:92%;display:flex;flex-direction:column;overflow:hidden;animation:pop .25s var(--ease) both;} @keyframes pop{from{opacity:0;transform:translateY(10px) scale(.98);}to{opacity:1;transform:none;}}
+  .oc-h{padding:16px 18px;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;gap:12px;} .oc-h .oc-ic{width:34px;height:34px;border-radius:9px;background:var(--navy-800);color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;flex:none;} .oc-h .oc-tt{font-family:var(--serif);font-size:17px;color:var(--navy-900);} .oc-h .oc-ss{font-size:12px;color:var(--navy-500);margin-top:2px;} .oc-x2{margin-left:auto;width:32px;height:32px;border-radius:8px;border:1px solid var(--cream-400);background:var(--surface);color:var(--navy-500);font-size:15px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;}
+  .oc-b{padding:16px 18px;overflow-y:auto;}
+  /* Picker */
+  .pick-s{height:44px;border:1.5px solid var(--cream-400);border-radius:11px;display:flex;align-items:center;gap:10px;padding:0 14px;margin-bottom:12px;color:var(--navy-400);font-size:13.5px;} .pick-s svg.i{font-size:18px;color:var(--navy-500);}
+  .pick-row{display:flex;align-items:center;gap:11px;padding:12px 12px;border:1px solid var(--cream-300);border-radius:12px;margin-bottom:8px;cursor:pointer;background:var(--surface);} .pick-row:hover{background:var(--cream-50);}
+  .pick-row .id{font-family:var(--serif);font-size:13px;color:var(--navy-700);flex:none;} .pick-row .nm{font-size:13.5px;font-weight:600;color:var(--navy-900);} .pick-row .go{margin-left:auto;color:var(--navy-400);font-size:16px;}
+  /* Freeze/Mehrarbeit */
+  .freeze-note{display:flex;gap:9px;align-items:flex-start;background:var(--cream-100);border:1px solid var(--cream-300);border-radius:11px;padding:11px 13px;font-size:12px;color:var(--navy-600);line-height:1.45;} .freeze-note svg.i{font-size:16px;color:var(--navy-500);flex:none;margin-top:1px;}
+  .mk-t{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--navy-500);margin:15px 0 8px;}
+  .teil{border:1px solid var(--cream-300);border-radius:12px;padding:11px 13px;margin-bottom:9px;background:var(--surface);} .teil-h{display:flex;align-items:center;gap:8px;} .teil-id{font-family:var(--serif);font-size:13px;color:var(--navy-700);} .teil-nm{font-size:13px;font-weight:600;color:var(--navy-900);} .teil-std{font-size:11.5px;color:var(--navy-500);margin-top:4px;}
+  .mehr{margin-top:9px;display:flex;flex-wrap:wrap;gap:7px;} .mchip{font-size:11.5px;font-weight:600;border-radius:999px;padding:6px 11px;border:1.5px dashed var(--cream-500);color:var(--navy-600);background:var(--surface);cursor:pointer;display:inline-flex;align-items:center;gap:6px;} .mchip svg.i{font-size:13px;} .mchip.on{border-style:solid;border-color:var(--warn-bd);background:var(--warn-bg);color:var(--warn-fg);}
+  .oc-f{padding:14px 18px;border-top:1px solid var(--line);display:flex;gap:10px;align-items:center;flex-wrap:wrap;} .oc-sum{font-size:12px;color:var(--navy-500);} .oc-sum b{color:var(--navy-800);} .oc-f .sp{flex:1;}
+  .btn-freeze{min-height:48px;padding:0 18px;border-radius:12px;background:var(--navy-800);color:#fff;border:none;font-size:14px;font-weight:700;display:inline-flex;align-items:center;gap:9px;cursor:pointer;box-shadow:0 3px 10px rgba(26,31,46,.24);} .btn-freeze svg.i{font-size:17px;}
+  .btn-save{min-height:48px;padding:0 15px;border-radius:12px;background:var(--surface);border:1.5px solid var(--cream-500);color:var(--navy-700);font-size:13px;font-weight:600;cursor:pointer;}
+  .btn-cancel{min-height:48px;padding:0 14px;border-radius:12px;background:transparent;border:1px solid var(--cream-400);color:var(--navy-600);font-size:13px;font-weight:500;cursor:pointer;}
+
+  @keyframes rise{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
+  .devrow{display:flex;gap:32px;justify-content:center;align-items:flex-start;flex-wrap:wrap;}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l1.8 4.9L18.7 9.7 13.8 11.5 12 16.4 10.2 11.5 5.3 9.7 10.2 7.9z"/><path d="M18.5 15.5l.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9-1.9-.7 1.9-.7z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.2-3.2"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M4 13l2.5 5h11L20 13"/><path d="M4 13V5h16v8"/><path d="M9 9l3 3 3-3"/></symbol>
+  <symbol id="i-truck" viewBox="0 0 24 24"><path d="M3 6.5h11v9H3z"/><path d="M14 9.5h4l3 3v3h-7z"/><circle cx="7.5" cy="17" r="1.7"/><circle cx="17.5" cy="17" r="1.7"/></symbol>
+  <symbol id="i-flask" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3"/><path d="M7.5 15h9"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l4.5 4.5L19 7"/></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.4"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.4"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.4"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.4"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.4"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-open" viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></symbol>
+</svg>
+
+<div class="page-head">
+  <div class="ph-title">Startseite Phillip — Machart V4</div>
+  <div class="ph-sub">Kontroll-Home statt Produktionsband: <b>Held = „Heute sichern"</b> (nach Fälligkeit) · proaktiver <b>Bündel-Vorschlag (Zink)</b> · <b>„In Arbeit"</b> als eine ruhige Menge (Bäder/Bereiche liegen eine Ebene tiefer) · <b>„Auftrag öffnen / scannen"</b> als Primärgriff → Mehrarbeit / fertig. Gehärtete Zustände (S1–S6) beibehalten. Kein Geld.</div>
+</div>
+<div class="demo-bar">Demo-Verbindung: <button class="conn on" data-conn>online</button></div>
+
+<div class="sec-cap">Tablet quer — Hauptgerät für Phillip</div>
+
+<!-- ============ TABLET QUER ============ -->
+<div class="frame tabletL">
+  <div class="stripe"></div>
+  <div class="tshell">
+    <div class="ttop">
+      <div class="logo" data-home>GK</div>
+      <div class="brand" data-home><div class="brand-name">KREILE</div><div class="brand-home">▸ Werkstatt</div></div>
+      <div class="search" data-open><svg class="i"><use href="#i-search"/></svg><span class="ph">Auftrag, Nummer … oder frag mich</span><span class="kbd">scannen</span></div>
+      <div class="avatar">PK</div>
+    </div>
+
+    <div class="body scroll">
+      <div class="day-title">Werkstatt</div>
+      <div class="day-line" data-status>Servus Phillip. <span class="rp"><b data-dringend>2</b> dringend</span> · <b data-weitere>2</b> weitere — bring die durch, dann sind heute alle Termine sicher.</div>
+
+      <div class="cols">
+        <!-- HELD: Heute sichern -->
+        <div>
+          <div class="sec-t"><span class="sec-ic"><svg class="i"><use href="#i-clock"/></svg></span>Heute sichern<span class="hint">nach Termin · was heute raus/fertig muss</span></div>
+          <div class="pri">
+            <div class="pi fromrolf crit" data-crit data-order="A-2026-0042">
+              <span class="pi-dot"></span>
+              <div class="pi-main">
+                <div class="pi-top"><span class="from"><svg class="i"><use href="#i-user"/></svg>von Rolf</span><span class="pi-t"><span class="id">A-2026-0042</span> Mustermann · Foto T-03</span><span class="zust arb">in Arbeit</span></div>
+                <div class="pi-s">Ohne Foto kein Weitergang. Express — heute erledigen.</div>
+                <span class="pchip pc-red">Liefertermin in 3 Tagen</span>
+                <div class="pi-cond"><svg class="i"><use href="#i-check"/></svg>erledigt, sobald das Foto hochgeladen ist</div>
+                <div class="pi-a"><button class="btn-do" data-complete data-done="Foto ist da"><svg class="i"><use href="#i-camera"/></svg>Foto machen</button><button class="btn-return" data-return><svg class="i"><use href="#i-back"/></svg>zurückgeben</button><button class="btn-later" data-snooze>Später</button></div>
+              </div>
+            </div>
+            <div class="pi crit" data-crit data-order="A-2026-0044" data-today="1">
+              <span class="pi-dot"></span>
+              <div class="pi-main">
+                <div class="pi-top"><span class="pi-t"><span class="id">A-2026-0044</span> Steiner · Vergaser-Teile</span><span class="zust arb">in Arbeit</span></div>
+                <div class="pi-s">Heute fällig. Muss heute durch, sonst reißt der Termin.</div>
+                <span class="pchip pc-red">heute fällig</span>
+                <div class="pi-cond"><svg class="i"><use href="#i-check"/></svg>erledigt, sobald fertig gemeldet (→ Karte: Mehrarbeit → Freeze)</div>
+                <div class="pi-a"><button class="btn-do freeze" data-fertig="A-2026-0044"><svg class="i"><use href="#i-check"/></svg>Fertig melden<span class="tag">öffnet Karte</span></button><button class="btn-later" data-snooze>Später</button></div>
+              </div>
+            </div>
+            <div class="pi soon" data-order="A-2026-0051">
+              <span class="pi-dot"></span>
+              <div class="pi-main">
+                <div class="pi-top"><span class="pi-t"><span class="id">A-2026-0051</span> Fischer · 2 Teile ohne Eingangsfoto</span><span class="zust neu">noch nicht gestartet</span></div>
+                <div class="pi-s">Zustandsfoto fehlt — vor Bearbeitung nachholen (Absicherung).</div>
+                <div class="pi-cond"><svg class="i"><use href="#i-check"/></svg>erledigt, sobald die Fotos hochgeladen sind</div>
+                <div class="pi-a"><button class="btn-do" data-complete data-done="Fotos sind da"><svg class="i"><use href="#i-camera"/></svg>Fotos nachholen</button><button class="btn-later" data-snooze>Später</button></div>
+              </div>
+            </div>
+            <div class="pi soon" data-order="A-2026-0029">
+              <span class="pi-dot"></span>
+              <div class="pi-main">
+                <div class="pi-top"><span class="pi-t"><span class="id">A-2026-0029</span> Huber · Zierrat</span><span class="zust arb">in Arbeit</span></div>
+                <div class="pi-s">Wird diese Woche knapp — heute ein Stück weiterbringen hält den Termin sicher.</div>
+                <div class="pi-cond"><svg class="i"><use href="#i-check"/></svg>ruhig, solange der Wochentermin gehalten wird</div>
+                <div class="pi-a"><button class="btn-do" data-fertig="A-2026-0029"><svg class="i"><use href="#i-open"/></svg>Auftrag öffnen</button><button class="btn-later" data-snooze>Später</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RAIL -->
+        <div class="rail">
+          <div class="bundle">
+            <div class="bundle-h"><svg class="i"><use href="#i-layers"/></svg>Bündeln heute</div>
+            <div class="bundle-t">3 Aufträge mit <b>Zink</b> — heute zusammen fahren?</div>
+            <div class="bundle-s">Huber · Berger · Lang · spart Rüstzeit, ein gemeinsamer Lauf.</div>
+            <div class="bundle-a"><button class="b-soft" data-bundle><svg class="i"><use href="#i-layers"/></svg>Zink-Lauf bündeln</button></div>
+          </div>
+          <div class="wip" data-open>
+            <div class="wip-l"><svg class="i"><use href="#i-flask"/></svg>In Arbeit (Galvanik)</div>
+            <div class="wip-n">12<small>Aufträge</small></div>
+            <div class="wip-go">2 werden knapp · antippen → öffnen <svg class="i"><use href="#i-arrow"/></svg></div>
+          </div>
+          <div class="tile">
+            <div class="tile-r"><div class="tile-l"><span class="tile-ic"><svg class="i"><use href="#i-truck"/></svg></span><span class="tile-tx">Heute raus</span></div><span class="tile-n">3</span></div>
+            <div class="tile-note"><svg class="i"><use href="#i-lock"/></svg>1× noch nicht rausgeben — Freigabe fehlt (Klassik-Garage)</div>
+          </div>
+          <div class="tile">
+            <div class="tile-r"><div class="tile-l"><span class="tile-ic in"><svg class="i"><use href="#i-clock"/></svg></span><span class="tile-tx">Fällig diese Woche</span></div><span class="tile-n">6</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="actionbar">
+      <div class="ab primary" data-open><svg class="i"><use href="#i-open"/></svg>Auftrag öffnen / scannen</div>
+      <div class="ab mid" data-open><svg class="i"><use href="#i-layers"/></svg>Mehrarbeit</div>
+      <div class="ab mid" data-open><svg class="i"><use href="#i-check"/></svg>Fertig melden<span class="tag">bald</span></div>
+      <div class="ab norm"><svg class="i"><use href="#i-inbox"/></svg>Neuer Eingang</div>
+      <div class="ab ghost"><svg class="i"><use href="#i-truck"/></svg>Ware raus<span class="tag">kommt</span></div>
+    </div>
+
+    <div class="toast" data-toast><span class="t-ic"><svg class="i"><use href="#i-check"/></svg></span><span data-toast-txt></span><span class="t-sep"></span><button class="t-act" data-undo>Rückgängig</button></div>
+
+    <!-- Picker: Auftrag öffnen -->
+    <div class="ovl" data-pick>
+      <div class="oc">
+        <div class="oc-h"><span class="oc-ic"><svg class="i"><use href="#i-open"/></svg></span><div><div class="oc-tt">Auftrag öffnen</div><div class="oc-ss">laufenden Auftrag antippen → Mehrarbeit / fertig</div></div><div class="oc-x2" data-pick-close><svg class="i"><use href="#i-x"/></svg></div></div>
+        <div class="oc-b">
+          <div class="pick-s"><svg class="i"><use href="#i-search"/></svg>Nummer, Kunde oder Scan …</div>
+          <div class="pick-row" data-fertig="A-2026-0044"><span class="id">A-2026-0044</span><span class="nm">Steiner · Vergaser-Teile</span><span class="zust arb">in Arbeit</span><span class="go"><svg class="i"><use href="#i-arrow"/></svg></span></div>
+          <div class="pick-row" data-fertig="A-2026-0041"><span class="id">A-2026-0041</span><span class="nm">Vogt · Beschläge</span><span class="zust arb">in Arbeit</span><span class="go"><svg class="i"><use href="#i-arrow"/></svg></span></div>
+          <div class="pick-row" data-fertig="A-2026-0047"><span class="id">A-2026-0047</span><span class="nm">Roth · Halter</span><span class="zust arb">in Arbeit</span><span class="go"><svg class="i"><use href="#i-arrow"/></svg></span></div>
+          <div class="pick-row" data-fertig="A-2026-0029"><span class="id">A-2026-0029</span><span class="nm">Huber · Zierrat</span><span class="zust arb">in Arbeit</span><span class="go"><svg class="i"><use href="#i-arrow"/></svg></span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Karte: Mehrarbeit + fertig-Flow -->
+    <div class="ovl" data-ovl>
+      <div class="oc">
+        <div class="oc-h"><span class="oc-ic"><svg class="i"><use href="#i-layers"/></svg></span><div><div class="oc-tt" data-ovl-t>Auftragskarte</div><div class="oc-ss">Mehrarbeit erfassen · fertig = Freeze</div></div><div class="oc-x2" data-ovl-close><svg class="i"><use href="#i-x"/></svg></div></div>
+        <div class="oc-b">
+          <div class="freeze-note"><svg class="i"><use href="#i-lock"/></svg><span><b>„fertig" ist der Freeze.</b> Er friert Positionen und die erfasste Mehrarbeit für die Abrechnung ein — deshalb vorher kurz bestätigen, nicht blind abhaken.</span></div>
+          <div class="mk-t">Teile &amp; Mehrarbeit</div>
+          <div class="teil"><div class="teil-h"><span class="teil-id">T-01</span><span class="teil-nm">Vergaser-Gehäuse</span></div><div class="teil-std">Standard laut KV: Entfetten · Verzinken · Passivieren</div><div class="mehr"><span class="mchip" data-mtoggle>+ starke Korrosion entfernen</span><span class="mchip" data-mtoggle>+ Sonderabdeckung</span></div></div>
+          <div class="teil"><div class="teil-h"><span class="teil-id">T-02</span><span class="teil-nm">Deckel (2 Stück)</span></div><div class="teil-std">Standard laut KV: Entfetten · Verzinken</div><div class="mehr"><span class="mchip" data-mtoggle>+ Gewinde nacharbeiten</span></div></div>
+        </div>
+        <div class="oc-f">
+          <div class="oc-sum">Mehrarbeit erfasst: <b data-msum>0 Positionen</b></div>
+          <div class="sp"></div>
+          <button class="btn-save" data-save>nur Mehrarbeit speichern</button>
+          <button class="btn-freeze" data-freeze><svg class="i"><use href="#i-lock"/></svg>Freeze — fertig melden</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="sec-cap">Handy — für zwischendurch</div>
+<div class="devrow">
+  <div class="frame phone">
+    <div class="stripe"></div>
+    <div class="tshell">
+      <div class="ttop"><div class="logo" data-home>GK</div><div class="search" data-open><svg class="i"><use href="#i-search"/></svg><span class="ph">Auftrag öffnen / scannen</span></div><div class="avatar" style="width:36px;height:36px;">PK</div></div>
+      <div class="body scroll">
+        <div class="day-title">Werkstatt</div>
+        <div class="day-line" data-status><span class="rp"><b data-dringend>2</b> dringend</span> · <b data-weitere>2</b> weitere — dann sind heute alle Termine sicher.</div>
+
+        <div class="bundle" style="margin-top:14px;">
+          <div class="bundle-h"><svg class="i"><use href="#i-layers"/></svg>Bündeln heute</div>
+          <div class="bundle-t">3× <b>Zink</b> — zusammen fahren?</div>
+          <div class="bundle-a"><button class="b-soft" data-bundle><svg class="i"><use href="#i-layers"/></svg>Zink-Lauf bündeln</button></div>
+        </div>
+
+        <div class="sec-t" style="margin-top:16px;"><span class="sec-ic"><svg class="i"><use href="#i-clock"/></svg></span>Heute sichern</div>
+        <div class="pri">
+          <div class="pi fromrolf crit" data-crit data-order="A-2026-0042">
+            <span class="pi-dot"></span>
+            <div class="pi-main">
+              <div class="pi-top"><span class="from"><svg class="i"><use href="#i-user"/></svg>von Rolf</span><span class="pi-t"><span class="id">A-2026-0042</span> Foto T-03</span></div>
+              <div class="pi-s">Express — heute.</div>
+              <div class="pi-cond"><svg class="i"><use href="#i-check"/></svg>erledigt, sobald das Foto da ist</div>
+              <div class="pi-a"><button class="btn-do" data-complete data-done="Foto ist da"><svg class="i"><use href="#i-camera"/></svg>Foto machen</button><button class="btn-return" data-return><svg class="i"><use href="#i-back"/></svg>zurück</button></div>
+            </div>
+          </div>
+          <div class="pi crit" data-crit data-order="A-2026-0044" data-today="1">
+            <span class="pi-dot"></span>
+            <div class="pi-main">
+              <div class="pi-top"><span class="pi-t"><span class="id">A-2026-0044</span> Steiner — heute fällig</span></div>
+              <div class="pi-cond"><svg class="i"><use href="#i-check"/></svg>fertig melden → Karte</div>
+              <div class="pi-a"><button class="btn-do freeze" data-fertig="A-2026-0044"><svg class="i"><use href="#i-check"/></svg>Fertig melden<span class="tag">Karte</span></button><button class="btn-later" data-snooze>Später</button></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="wip" data-open style="margin-top:14px;">
+          <div class="wip-l"><svg class="i"><use href="#i-flask"/></svg>In Arbeit</div>
+          <div class="wip-n">12<small>Aufträge</small></div>
+          <div class="wip-go">2 knapp · antippen <svg class="i"><use href="#i-arrow"/></svg></div>
+        </div>
+        <div class="tile" style="margin-top:12px;">
+          <div class="tile-r"><div class="tile-l"><span class="tile-ic"><svg class="i"><use href="#i-truck"/></svg></span><span class="tile-tx">Heute raus</span></div><span class="tile-n">3</span></div>
+          <div class="tile-note"><svg class="i"><use href="#i-lock"/></svg>1× Freigabe fehlt</div>
+        </div>
+      </div>
+
+      <div class="actionbar">
+        <div class="ab primary" data-open><svg class="i"><use href="#i-open"/></svg>Öffnen</div>
+        <div class="ab mid" data-open><svg class="i"><use href="#i-layers"/></svg>Mehrarbeit</div>
+        <div class="ab norm"><svg class="i"><use href="#i-inbox"/></svg>Eingang</div>
+        <div class="ab ghost"><svg class="i"><use href="#i-truck"/></svg>Raus</div>
+      </div>
+      <div class="toast" data-toast><span class="t-ic"><svg class="i"><use href="#i-check"/></svg></span><span data-toast-txt></span><span class="t-sep"></span><button class="t-act" data-undo>Rückgängig</button></div>
+      <div class="ovl" data-pick>
+        <div class="oc">
+          <div class="oc-h"><span class="oc-ic"><svg class="i"><use href="#i-open"/></svg></span><div><div class="oc-tt">Auftrag öffnen</div><div class="oc-ss">antippen → Mehrarbeit / fertig</div></div><div class="oc-x2" data-pick-close><svg class="i"><use href="#i-x"/></svg></div></div>
+          <div class="oc-b">
+            <div class="pick-s"><svg class="i"><use href="#i-search"/></svg>Nummer, Kunde oder Scan …</div>
+            <div class="pick-row" data-fertig="A-2026-0044"><span class="id">A-2026-0044</span><span class="nm">Steiner</span><span class="go"><svg class="i"><use href="#i-arrow"/></svg></span></div>
+            <div class="pick-row" data-fertig="A-2026-0041"><span class="id">A-2026-0041</span><span class="nm">Vogt</span><span class="go"><svg class="i"><use href="#i-arrow"/></svg></span></div>
+            <div class="pick-row" data-fertig="A-2026-0047"><span class="id">A-2026-0047</span><span class="nm">Roth</span><span class="go"><svg class="i"><use href="#i-arrow"/></svg></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="ovl" data-ovl>
+        <div class="oc">
+          <div class="oc-h"><span class="oc-ic"><svg class="i"><use href="#i-layers"/></svg></span><div><div class="oc-tt" data-ovl-t>Auftragskarte</div><div class="oc-ss">Mehrarbeit · fertig = Freeze</div></div><div class="oc-x2" data-ovl-close><svg class="i"><use href="#i-x"/></svg></div></div>
+          <div class="oc-b">
+            <div class="freeze-note"><svg class="i"><use href="#i-lock"/></svg><span><b>„fertig" ist der Freeze.</b> Friert Positionen &amp; Mehrarbeit ein.</span></div>
+            <div class="mk-t">Teile &amp; Mehrarbeit</div>
+            <div class="teil"><div class="teil-h"><span class="teil-id">T-01</span><span class="teil-nm">Vergaser-Gehäuse</span></div><div class="teil-std">Standard: Entfetten · Verzinken</div><div class="mehr"><span class="mchip" data-mtoggle>+ starke Korrosion</span></div></div>
+          </div>
+          <div class="oc-f"><div class="oc-sum"><b data-msum>0 Positionen</b></div><div class="sp"></div><button class="btn-save" data-save>nur speichern</button><button class="btn-freeze" data-freeze><svg class="i"><use href="#i-lock"/></svg>Freeze</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let ONLINE = true;
+  document.querySelectorAll('[data-conn]').forEach(b=>b.addEventListener('click',()=>{ONLINE=!ONLINE;document.querySelectorAll('[data-conn]').forEach(x=>{x.textContent=ONLINE?'online':'offline';x.classList.toggle('on',ONLINE);x.classList.toggle('off',!ONLINE);});}));
+  function collapseRemove(el){ el.style.overflow='hidden'; el.style.height=el.offsetHeight+'px'; requestAnimationFrame(()=>requestAnimationFrame(()=>{ el.classList.add('removing'); el.style.height='0px'; })); setTimeout(()=>el.remove(),560); }
+
+  document.querySelectorAll('.frame').forEach(frame => {
+    const dEl=frame.querySelector('[data-dringend]'), wEl=frame.querySelector('[data-weitere]');
+    const statusEl=frame.querySelector('[data-status]');
+    let dringend=frame.querySelectorAll('.pi.crit').length;
+    let weitere =frame.querySelectorAll('.pi.soon').length;
+    const toast=frame.querySelector('[data-toast]'); let toastTimer=null, toastFn=null;
+    const pick=frame.querySelector('[data-pick]'); const ovl=frame.querySelector('[data-ovl]'); let ovlOrder=null;
+
+    function refresh(){
+      if(dEl) dEl.textContent=dringend; if(wEl) wEl.textContent=weitere;
+      if(dringend===0 && statusEl && !statusEl.dataset.clr){ statusEl.dataset.clr='1'; statusEl.classList.add('clear'); statusEl.innerHTML='<svg class="i" style="color:var(--succ);"><use href="#i-check"/></svg> <b>Werkstatt läuft rund · nichts hängt.</b> Termine für heute sind gesichert.'; }
+    }
+    refresh();
+    function uncount(pi){ if(pi.dataset.counted==='0')return; pi.dataset.counted='0'; if(pi.classList.contains('crit'))dringend=Math.max(0,dringend-1); else if(pi.classList.contains('soon'))weitere=Math.max(0,weitere-1); refresh(); }
+    function resolveOrder(id, label){ const kin=[...frame.querySelectorAll('.pi[data-order="'+id+'"]')]; if(!kin.length)return;
+      kin.forEach(t=>{ if(t.dataset.resolved)return; t.dataset.resolved='1'; uncount(t); t.classList.remove('pending','offline'); t.classList.add('done'); const dot=t.querySelector('.pi-dot'); if(dot)dot.style.background='var(--succ)'; t.querySelector('.pi-main').innerHTML='<div class="pi-t" style="color:var(--succ-fg);">'+label+' <span class="mut">— wird abgehakt</span></div>'; const a=t.querySelector('.pi-a'); if(a)a.remove(); setTimeout(()=>collapseRemove(t),1150); });
+    }
+    function commit(pi, onSuccess){ if(pi.dataset.busy)return; pi.dataset.busy='1'; const a=pi.querySelector('.pi-a'); const prev=a?a.innerHTML:'';
+      if(a) a.innerHTML='<span class="pi-note"><span class="spin"></span>wird gemeldet…</span>'; pi.classList.add('pending');
+      setTimeout(()=>{ pi.classList.remove('pending'); pi.dataset.busy='';
+        if(!ONLINE){ pi.classList.add('offline'); if(a) a.innerHTML='<span class="pi-note offline-note"><svg class="i"><use href="#i-alert"/></svg>keine Verbindung — nicht gemeldet</span> <button class="btn-later" data-retry>nochmal</button>'; pi._prev=prev; return; }
+        onSuccess(); },850);
+    }
+    function showToast(html, actLabel, fn){ if(!toast)return; clearTimeout(toastTimer); toast.querySelector('[data-toast-txt]').innerHTML=html; const act=toast.querySelector('[data-undo]'); if(actLabel){act.textContent=actLabel;act.style.display='';toastFn=fn;}else{act.style.display='none';toastFn=null;} toast.classList.add('show'); toastTimer=setTimeout(()=>toast.classList.remove('show'),5000); }
+
+    function openPick(){ if(pick) pick.classList.add('open'); }
+    function closePick(){ if(pick) pick.classList.remove('open'); }
+    function openCard(id){ ovlOrder=id; const t=ovl.querySelector('[data-ovl-t]'); if(t)t.textContent='Auftragskarte · '+(id||''); ovl.querySelectorAll('.mchip.on').forEach(c=>c.classList.remove('on')); sumMehr(); ovl.classList.add('open'); }
+    function closeCard(){ ovl.classList.remove('open'); }
+    function sumMehr(){ const n=ovl.querySelectorAll('.mchip.on').length; const el=ovl.querySelector('[data-msum]'); if(el)el.textContent=n+(n===1?' Position':' Positionen'); }
+
+    frame.addEventListener('click',(e)=>{
+      const rt=e.target.closest('[data-retry]'); if(rt){ const pi=rt.closest('.pi'); if(pi){ pi.classList.remove('offline'); const a=pi.querySelector('.pi-a'); if(a&&pi._prev!=null)a.innerHTML=pi._prev; } return; }
+
+      // Auftrag öffnen (Picker) — generischer Immer-Griff
+      if(e.target.closest('[data-open]')){ openPick(); return; }
+      if(e.target.closest('[data-pick-close]')||e.target===pick){ closePick(); return; }
+
+      // Snooze mit Zeitwahl + Frist-Grenze
+      const sn=e.target.closest('[data-snooze]');
+      if(sn){ const pi=sn.closest('.pi'); if(!pi)return; const ex=pi.querySelector('.snooze'); if(ex){ex.remove();pi.classList.remove('menuopen');return;} pi.classList.add('menuopen');
+        const today=pi.dataset.today==='1';
+        const opts= today?[['in 1 Stunde','heute, in 1 Std'],['bis Mittag','heute 12:00']]:[['heute Nachmittag','heute 14:00'],['morgen früh','morgen 07:00'],['nach dem Termin','nach Termin']];
+        let html='<div class="snooze"><div class="snooze-h">Später — wann zurück?</div>'; opts.forEach(o=>html+='<button class="snooze-o" data-pick2="'+o[1]+'">'+o[0]+'</button>'); if(today)html+='<div class="snooze-note">Heute fällig — nur bis zur Frist aufschiebbar; danach kommt der Punkt verstärkt zurück.</div>'; html+='</div>';
+        sn.parentElement.insertAdjacentHTML('beforeend',html); return; }
+      const pk=e.target.closest('[data-pick2]'); if(pk){ const pi=pk.closest('.pi'); pi.classList.remove('menuopen'); pi.querySelector('.pi-a').innerHTML='<span class="pi-note"><svg class="i"><use href="#i-clock"/></svg>aufgeschoben · zurück '+pk.getAttribute('data-pick2')+'</span>'; return; }
+
+      // Zurückgeben an Rolf
+      const ret=e.target.closest('[data-return]');
+      if(ret){ const pi=ret.closest('.pi'); if(!pi||pi.dataset.busy)return; commit(pi, ()=>{ uncount(pi); pi.classList.add('done'); pi.querySelector('.pi-dot').style.background='var(--ral)'; pi.querySelector('.pi-main').innerHTML='<div class="pi-t" style="color:var(--ral-fg);">zurückgegeben an Rolf</div><div class="pi-note ret" style="margin-top:4px;"><svg class="i"><use href="#i-back"/></svg>„schaffe ich heute nicht" · liegt sofort rot bei Rolf</div>'; setTimeout(()=>collapseRemove(pi),1500); }); return; }
+
+      // Bündeln (Sammellauf) — proaktiver USP
+      if(e.target.closest('[data-bundle]')){ const card=e.target.closest('.bundle'); showToast('<b>Zink-Lauf</b> vorgeschlagen · 3 Aufträge zusammengefasst', 'Rückgängig', ()=>{}); if(card){ card.style.opacity='.55'; card.querySelector('.bundle-a').innerHTML='<span class="pi-note"><svg class="i"><use href="#i-check"/></svg>gebündelt · als ein Lauf geplant</span>'; } return; }
+
+      // Karte öffnen (Picker-Zeile, Fertig, Auftrag öffnen)
+      const fert=e.target.closest('[data-fertig]'); if(fert){ closePick(); openCard(fert.getAttribute('data-fertig')); return; }
+      if(e.target.closest('[data-ovl-close]')||e.target===ovl){ closeCard(); return; }
+      const mt=e.target.closest('[data-mtoggle]'); if(mt){ mt.classList.toggle('on'); sumMehr(); return; }
+      if(e.target.closest('[data-save]')){ closeCard(); showToast('Mehrarbeit gespeichert · '+(ovlOrder||''), null); return; }
+      if(e.target.closest('[data-freeze]')){ const id=ovlOrder; closeCard();
+        const anchor=frame.querySelector('.pi[data-order="'+id+'"]');
+        if(anchor){ commit(anchor, ()=>{ resolveOrder(id,'Fertig gemeldet ✓ · Freeze gesetzt'); showToast('<b>'+id+'</b> fertig · Freeze gesetzt', 'Freeze korrigieren', ()=>{}); }); }
+        else { showToast('<b>'+id+'</b> fertig · Freeze gesetzt', 'Freeze korrigieren', ()=>{}); }
+        return; }
+
+      // Ausnahme direkt erledigen
+      const comp=e.target.closest('[data-complete]');
+      if(comp){ const pi=comp.closest('.pi'); if(!pi||pi.dataset.busy)return; const id=pi.getAttribute('data-order'); commit(pi, ()=>{ if(id) resolveOrder(id,'Erledigt ✓'); }); return; }
+
+      const ud=e.target.closest('[data-undo]'); if(ud){ if(toastFn)toastFn(); toast.classList.remove('show'); toastFn=null; return; }
+    });
+  });
+</script>
+
+</body>
+</html>
