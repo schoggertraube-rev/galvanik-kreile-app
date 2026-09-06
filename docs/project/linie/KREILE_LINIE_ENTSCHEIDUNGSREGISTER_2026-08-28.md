@@ -93,7 +93,7 @@ Jede neue Entscheidung — egal aus welchem Chat — wird **hier** eingetragen (
 
 ---
 
-## 10 — ABLAGE-STATUS (WICHTIG — Konsolidierung offen)
+## 10 — ABLAGE-STATUS (Konsolidierung ERLEDIGT 2026-09-06)
 
 **Befund 2026-08-28 (Disk-verifiziert):** Baupläne/Specs/Entscheidungen liegen verstreut über **mindestens drei Ordner** plus Bibel-Zip plus Cloud-Workspace plus PL-Bibel:
 - `Kreile app\` — die aktuellen Orchestrator-Steuerdokumente (Mandat, Frontend-Übergabe, F1.5, Pathfinder, **diese Linie**). **= KANONISCHER ORDNER (PL-Inventar).**
@@ -147,3 +147,20 @@ Die Owner-Modulmindmap „Baustruktur Mini-USP" (Stand 15.08.2026) wird ratifizi
 **Folge:** „4 Mocks vs. 36 Routen" ist KEIN Baubarkeits-Problem — ~30 Routen sind ENTFÄLLT/QUARANTÄNE. Die Vorlagen reichen für die beabsichtigte App. Arbeit = Subtraktion + Path-1-Nähte + Suchleiste. `buchhaltung` (54 Dateien) auf Accounting-minimal trimmen. AMBIG (lager/lieferanten/items/telefonnotiz) = Owner-Entscheid vor Löschung, nicht raten.
 
 **Nicht mehr fragen:** Was ein Modul ist, was es gibt, was entfällt.
+
+
+---
+## NACHTRAG 2026-09-06 (Ablage-Bereinigung, Owner-Auftrag) — Entscheidungen nachgezogen, 0 offene Produktfrage
+
+Zweck: bereits getroffene Entscheidungen an allen Stellen konsistent machen. Bei Divergenz gilt diese Linie.
+
+- **#2/#4 KORRIGIERT (Owner 2026-09-06): Zwei Nummernkreise, kein einheitlicher.**
+  - **Auftragsnummer `A-JJJJ-NNNN`** = sichtbare Identitaet, vergeben bei Auftragsanlage (Wareneingang); `public.orders.order_number` (NOT NULL, UNIQUE).
+  - **Rechnungsnummer `R-JJJJ-NNNN`** = eigener, lueckenloser Kreis (GoBD), vergeben **erst bei `createInvoice`** (Auftrag = fertig); `private.allocate_invoice_number`.
+  - Grund: die fruehere Fassung (#2 „Identitaet = Rechnungsnummer", #4 „Nummer bei Annahme = Rechnungsnummer") widersprach dem F1.4-Bauvertrag, den kanonischen Mocks (sichtbar `A-2026-…`) und GoBD. Das Zwei-Nummern-Modell ist der bereits gebaute Ist-Zustand. Interne Event-ID bleibt rein technisch.
+- **#10 [ENTSCHIEDEN, Owner] Zahlungs-Adapter-Reihenfolge = Bank-Abgleich zuerst, Mollie spaeter** (Quelle: PL-Startup-Briefing 2026-09-05). Die „Offen"-Zeile in F1.5-§9 ist damit entschieden; offen bleibt nur die Provider-Credential-/Kosten-Freigabe (Go-live-Gate).
+- **Skonto:** entschieden (#5). Etwaige „Skonto offen"-Zeilen sind ueberholt.
+- **UI-Referenz-Export / Konsolidierung:** erledigt (Dateien in `docs/project/linie/ui/`). „OFFEN"-Zeilen in GESAMTUEBERSICHT/STARTSEITEN und die fruehere §10-Ueberschrift sind historisch.
+- **Legitim offen (KEINE Produktentscheidung):** OWNER_UX_PASS (Nutzer-Abnahme) und Provider-Credentials/kostenpflichtiger Dienst (Owner-Geld-Gate). Gates, keine offenen Specs.
+
+**Damit: 0 offene Produktentscheidung auf dem kritischen Pfad.** Verbleibender Rueckstand ist ausschliesslich Code: S0 wirksam (Tenant-Injektion, 65 Literale migrieren, Literal-Lint) + S1 (fuenf CI-Gates). Kein Aufraeumen, sondern Bau.
