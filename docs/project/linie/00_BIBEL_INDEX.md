@@ -29,13 +29,13 @@
 - **Status/Orientierung:** `KREILE_GESAMTUEBERSICHT_STATUS_2026-09-01.md` · `KREILE_PL_STARTUP_BRIEFING_2026-09-05.md`
 
 ## HARTE STOP-LISTE — Owner-Entscheidungen (Chat baut NICHT, fragt Owner)
-An diesen Punkten gibt es **keine Eigenentscheidung** durch Chat/PL mehr. Wer hier ankommt: STOP `BLOCKED_PRODUCT_DECISION`, Owner fragen, Antwort ins Entscheidungsregister, dann bauen. Das frühere „darf PL selbst" ist aufgehoben.
-- **B1** — Auftrags-Identität: Event-ID **oder** Rechnungsnummer?
-- **B3** — Nummernvergabe: **wann** (bei Erfassung / erst bei Rechnung)?
-- **Skonto** — existiert Skonto? Ja/Nein + Regel.
-- **S-Scope Bäder** — Bäder ganz raus, oder nur eine Ebene tiefer? (`baeder`-Route entfernen/parken ist D-ARCH-010; „ganz raus" ist offen.)
-- **Rolf-Route** — Konsolidierung today/start/cockpit auf eine Route + Delegation Rolf↔Phillip.
-- **Kill-Liste** — Freigabe zum Löschen der ENTFÄLLT-Routen (S2) aus der Modulkarte.
+An diesen Punkten gibt es **keine Eigenentscheidung** durch Chat/PL. Wer hier ankommt: STOP `BLOCKED_PRODUCT_DECISION`, Owner fragen, Antwort ins Register (§7), dann bauen.
+
+**Noch offen (nur diese zwei):**
+- **B2** — Katalog-ID-Klassifikation: wie Mehrarbeit-Positionen in den Rechnungs-Snapshot gruppiert werden (gekoppelt vs. isoliert). Register §7 #3.
+- **Skonto-Satz** — Skonto ist entschieden (JA); nur der konkrete Satz fehlt (Vorschlag 2 % bei ≤10 Tagen, netto 30). Register §7 #5.
+
+**Am 2026-09-06 Owner-entschieden (nicht mehr offen — Details Register §7 #2/#4/#5/#6/#7/#8):** B1 = Auftrags-Identität ist die Rechnungsnummer · B3 = Nummer bei Annahme (= spätere Rechnungsnummer, lückenlos halten) · Galvanik statt Bäder (`baeder` entfällt) · genau EINE personalisierte Startseite pro Login (Admin = Einstellungen) · Kill-Liste freigegeben (reiner Mock wird gelöscht).
 
 ## LIVE ≠ BAUBAR (ehrliche Grenze)
 Ein Chat baut bis „grün + designtreu + modultreu + im Scope". **Live schaltet der Owner** — Prod-Supabase-Migration, RLS, echte Secrets, Deploy und Go-live sind Owner-Grenzen (AGENTS.md). Kein Chat wird die App selbst „live" schalten; das ist gewollt.

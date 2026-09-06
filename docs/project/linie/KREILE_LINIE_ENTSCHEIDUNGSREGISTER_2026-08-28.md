@@ -52,23 +52,27 @@ Vertrag liegt: `KREILE_F1_5_BAUVERTRAG_ZAHLUNGSEINGANG_WARENAUSGANG_V1_2026-08-2
 
 ## 5 — FRONTEND-UMSETZUNG (Parallel-Paket, ratifiziert „jetzt")
 
-Bestehendes Designsystem konsolidieren statt forken; echte F1.2/F1.3-Ports, kein Mock; Phase 0 Inventar → Phase 1 EIN Proof-Screen (Phillip Werkstatt) → Rest OTC-Pfad. Paket: `KREILE_UEBERGABE_FRONTEND_UMSETZUNG_V1_2026-08-21.md`. Rolf-Routen-Konsolidierung & baeder-Disposition = an PL delegiert (evidenzbasiert, im Git reversibel).
+Bestehendes Designsystem konsolidieren statt forken; echte F1.2/F1.3-Ports, kein Mock; Phase 0 Inventar → Phase 1 EIN Proof-Screen (Phillip Werkstatt) → Rest OTC-Pfad. Paket: `KREILE_UEBERGABE_FRONTEND_UMSETZUNG_V1_2026-08-21.md`. Rolf-Routen-Konsolidierung & baeder-Disposition sind **nicht mehr PL-Ermessen** — Owner-entschieden (§7 #6/#7): eine Startseite pro Login, `baeder` entfällt.
 
 ---
 
 ## 6 — UI-REFERENZEN (eingefroren, GÜLTIG/FINAL)
 
 Rolf V8 · Phillip V4 · Auftragskarte MACHART_V8 · Kundenkarte MACHART_V2. HTML-Selbstläufer; Demo-Daten nie als Produktdaten.
-**ACHTUNG Speicherort (2026-08-28 verifiziert):** Diese vier Dateien existieren **NICHT** auf der Platte (Suche „MACHART"/„STARTSEITE_ROLF" im gesamten Projektordner = 0 Treffer). Der bisherige Wegweiser `00_UI_REFERENZEN_PFADE.md` zeigt auf einen nicht existierenden Unterordner `design und klickpfade UI\` → **falsch, wird korrigiert.** Kanonische Referenz sind bis auf Weiteres die **Claude-Artefakte**: Rolf `https://claude.ai/code/artifact/3c92c2b9-387a-4fff-8e91-3e77e291e950` · Phillip `https://claude.ai/code/artifact/1dd88584-14be-4dea-b032-ba075389f875`. **Owner-Entscheidung nötig:** die vier Referenzen als Dateien in den kanonischen Ordner exportieren (dann Freeze auf Disk).
+**Speicherort (2026-09-06 aktualisiert):** Die vier Referenzen liegen **auf der Platte, im Repo eingefroren:** `docs/project/linie/ui/` (`KREILE_STARTSEITE_ROLF_V8_2026-08-20.html`, `KREILE_STARTSEITE_PHILLIP_V4_2026-08-20.html`, `KREILE_AUFTRAGSKARTE_MACHART_V8_2026-08-19.html`, `KREILE_KUNDENKARTE_MACHART_V2_2026-08-19.html`). Index: `ui/00_UI_REFERENZ_KANONISCH.md`. Der frühere Verweis auf Claude-Artefakt-URLs bzw. den externen Ordner `design und klickpfade UI\` ist damit erledigt. Freeze auf Disk = erfüllt.
 
 ---
 
 ## 7 — ENTSCHEIDUNGSREGISTER (chronologisch, mit Status)
 
 - **#1 [ENTSCHIEDEN 2026-08-28]** — 4. Reparaturschleife F1.4-Testdatei: **Kein Blindpatch. Zuerst belegter Root-Cause** (warum 3 Runden nicht konvergierten; prüft der Test das Richtige oder wird er bis-grün gebogen; Beleg dass Restfehler rein Test-Harness). Erst danach gemeinsame Entscheidung über eine eng begrenzte, wirklich letzte Korrektur. *(Owner-Chat)*
-- **#2 [OFFEN → nach Root-Cause]** — **B1 Event-ID vs Rechnungsnummer:** getrennt führen/prüfen — Rechnungsnummer `R-JJJJ-NNNN` = rechtlicher Beleg-Identifikator; Event-ID = append-only Ereignisstrom-ID.
-- **#3 [OFFEN → nach Root-Cause]** — **B2 Katalog-ID-Klassifikation:** verbindliche Regel, wie Mehrarbeit-Katalogpositionen in den Rechnungs-Snapshot abgebildet/gruppiert werden (gekoppelte Gruppe vs. isoliert).
-- **#4 [OFFEN → nach Root-Cause]** — **B3 Nummernvergabe-Zeitpunkt / Lifecycle-Reihenfolge:** Invariante, wann die Nummer relativ zum Lifecycle-Event vergeben wird (Nummer-only-Fälle „vor dem Event").
+- **#2 [ENTSCHIEDEN 2026-09-06, Owner]** — **B1 Auftrags-Identität = Rechnungsnummer `R-JJJJ-NNNN`.** Kein zweiter fachlicher Nummernkreis („sonst läuft eine Nummer parallel"). Die interne append-only Event-ID bleibt rein technisch und nicht nutzer-sichtbar.
+- **#3 [OFFEN]** — **B2 Katalog-ID-Klassifikation:** verbindliche Regel, wie Mehrarbeit-Katalogpositionen in den Rechnungs-Snapshot abgebildet/gruppiert werden (gekoppelte Gruppe vs. isoliert). *(einziger noch offener technischer Punkt der B-Reihe)*
+- **#4 [ENTSCHIEDEN 2026-09-06, Owner]** — **B3 Nummernvergabe = bei Annahme (Wareneingang).** Die Nummer entsteht bei der Auftragsannahme und ist zugleich die spätere Rechnungsnummer (#2). ⚠️ Umsetzungsregel: Rechnungsnummern müssen lückenlos bleiben (GoBD) — Storno/Nicht-Rechnungs-Fälle vor Rechnung so behandeln, dass keine Lücke im Rechnungsnummernkreis entsteht (bindet F1.4/F1.5).
+- **#5 [ENTSCHIEDEN 2026-09-06, Owner]** — **Skonto = JA** (Standard-Geschäftspraxis). Konkreter Satz noch zu bestätigen; Vorschlag: 2 % bei Zahlung ≤ 10 Tage, sonst netto 30 Tage. Bis zur Satz-Bestätigung gilt nur „Skonto existiert".
+- **#6 [ENTSCHIEDEN 2026-09-06, Owner]** — **Galvanik statt Bäder.** Galvanik = EINE Blackbox-Stufe (angenommen→galvanik→fertig→abgeholt); `baeder`-Route entfällt (löschen); kein Stations-/Bäder-Innenleben. „Badpflege" (einziger Bäder-Kontext) ist derzeit NICHT im Scope; falls gewünscht, eigenes Modul per neuer Owner-Entscheidung.
+- **#7 [ENTSCHIEDEN 2026-09-06, Owner]** — **Genau EINE Startseite pro Login, personalisiert.** Keine drei konkurrierenden Start-Routen: today/start/cockpit werden auf eine konsolidiert, die anderen entfallen. Jede Rolle sieht nach Login IHRE personalisierte Startseite; das linke Menü ist für alle frei klickbar. Admin: App-Einstellungen als Startseite. Festgenagelt.
+- **#8 [ENTSCHIEDEN 2026-09-06, Owner]** — **Kill-Liste freigegeben:** die ENTFÄLLT-Routen der Modulkarte, die reiner Mock / nicht verwertbar sind, werden gelöscht (S2). `archive` und `feedback` vorher kurz auf Verwertbarkeit prüfen; wenn reiner Mock, ebenfalls löschen. „Sauber = weg, was man nicht verwerten kann."
 - **Künftige Owner-Grenzen** (bei Bedarf hier eintragen): E-Rechnungs-Strategie · F1.5-Baustart · F1.6/Pilot · Echtdatenfreigabe · „zugewiesen an"-Delegationsmodell · UI-Gerätetest→Freeze · neue Tabellen/Provider/Credentials.
 
 ---
