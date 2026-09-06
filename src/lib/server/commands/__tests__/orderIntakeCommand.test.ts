@@ -111,7 +111,14 @@ describe("createOrderIntake", () => {
       if (query.text.includes("next_number")) return Promise.resolve([{ current_year: 2026, next_number: 42 }]);
       if (query.text.includes("INSERT INTO public.orders")) {
         created.orderId = String(query.values[0]);
-        return Promise.resolve([{ id: created.orderId, tenant_id: "galvanik-kreile", order_number: "A-2026-0042", version: 1 }]);
+        return Promise.resolve([{
+          id: created.orderId,
+          tenant_id: "galvanik-kreile",
+          order_number: "A-2026-0042",
+          version: 1,
+          payment_mode: "vorkasse",
+          payment_mode_version: 0,
+        }]);
       }
       if (query.text.includes("INSERT INTO public.items")) {
         created.itemId = String(query.values[0]);
@@ -167,6 +174,11 @@ describe("createOrderIntake", () => {
     expect(sqlText).toContain("INSERT INTO public.events");
     expect(sqlText).toContain("INSERT INTO private.order_intake_receipts");
     expect(sqlText).toContain("private.v_order_intake_receipts_v1");
+    const orderInsert = execute.mock.calls
+      .map(([query]) => query)
+      .find((query) => query.text.includes("INSERT INTO public.orders"));
+    expect(orderInsert?.text.split(") VALUES")[0]).not.toContain("payment_mode");
+    expect(orderInsert?.text).toContain("payment_mode_version");
     expect(sqlText).not.toMatch(/createClient|supabase|rpc\(/i);
   });
 

@@ -566,6 +566,19 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
         order: { orderId: string; orderVersion: number; freezeId: string };
         totals: { grossAmountCents: number };
       };
+      gross_amount_cents: number;
+      payment_contract_version: number;
+      payment_mode: string;
+      payment_status: string;
+      payment_open_amount_cents: number;
+      payment_paid_amount_cents: number;
+      payment_currency: string;
+      payment_method: string | null;
+      payment_paid_at: Date | null;
+      payment_receipt_id: string | null;
+      payment_event_id: string | null;
+      payment_correlation_id: string | null;
+      payment_version: number;
       pdf_content: Buffer;
       pdf_sha256: string;
       calculated_pdf_sha256: string;
@@ -575,6 +588,19 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
         id::text,
         order_version,
         snapshot,
+        gross_amount_cents,
+        payment_contract_version,
+        payment_mode,
+        payment_status,
+        payment_open_amount_cents,
+        payment_paid_amount_cents,
+        payment_currency,
+        payment_method,
+        payment_paid_at,
+        payment_receipt_id,
+        payment_event_id,
+        payment_correlation_id::text,
+        payment_version,
         pdf_content,
         pdf_sha256,
         encode(sha256(pdf_content), 'hex') AS calculated_pdf_sha256,
@@ -589,6 +615,20 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
       orderId: ORDER_ID,
       orderVersion: ORDER_VERSION,
       freezeId: FREEZE_ID,
+    });
+    expect(stored).toMatchObject({
+      payment_contract_version: 1,
+      payment_mode: "vorkasse",
+      payment_status: "offen",
+      payment_open_amount_cents: stored?.gross_amount_cents,
+      payment_paid_amount_cents: 0,
+      payment_currency: "EUR",
+      payment_method: null,
+      payment_paid_at: null,
+      payment_receipt_id: null,
+      payment_event_id: null,
+      payment_correlation_id: null,
+      payment_version: 0,
     });
     expect(stored?.pdf_bytes).toBeGreaterThan(0);
     expect(stored?.calculated_pdf_sha256).toBe(stored?.pdf_sha256);
