@@ -434,11 +434,19 @@ export function compareSnapshots(
   };
 }
 
+/**
+ * Base comparison. `judge` is the snapshot of the candidate tree linted with the BASE
+ * config (apples to apples with `base`); it defaults to the candidate baseline itself.
+ * Debt totals / per-rule counts are taken from `judge`; the ignored-code inventory is
+ * taken from the candidate baseline (the candidate's own config decides what it ignores,
+ * and that must not grow relative to the base).
+ */
 export function baselineRegressions(
   candidate: RatchetSnapshot,
   base: RatchetSnapshot,
+  judge: RatchetSnapshot = candidate,
 ): string[] {
-  const differences = compareSnapshots(candidate, base);
+  const differences = compareSnapshots(judge, base);
   const violations: string[] = [];
   // Contract migration (D-QA-001, 2026-09-06): a changed eslintVersion / lintContractHash /
   // judgeContractHash is NOT a base violation any more. Under enforce_admins=true the old
@@ -461,9 +469,9 @@ export function baselineRegressions(
     }
   }
   for (const key of ["filesWithIssues", "errors", "warnings"] as const) {
-    if (candidate.totals[key] > base.totals[key]) {
+    if (judge.totals[key] > base.totals[key]) {
       violations.push(
-        `${key} increased from ${base.totals[key]} to ${candidate.totals[key]}`,
+        `${key} increased from ${base.totals[key]} to ${judge.totals[key]}`,
       );
     }
   }

@@ -138,12 +138,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          base="${{ steps.diff.outputs.base }}"
           base_config="$GITHUB_WORKSPACE/eslint.config.ratchet-base.mjs"
-          if git show "${{ steps.diff.outputs.base }}:eslint.config.mjs" > "$base_config" 2>/dev/null; then
-            echo "ratchet judge: eslint.config.mjs from base ${{ steps.diff.outputs.base }}"
+          # Fail-closed (red-team P0): an unreachable base commit must NOT silently fall back
+          # to the candidate config. Only a base that exists but has no eslint.config.mjs
+          # (ratchet initialisation) may use the candidate config.
+          if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "::error::ratchet judge: base commit $base is not available in this checkout"
+            exit 1
+          fi
+          if git cat-file -e "$base:eslint.config.mjs" 2>/dev/null; then
+            git show "$base:eslint.config.mjs" > "$base_config"
+            echo "ratchet judge: eslint.config.mjs from base $base"
           else
             cp "$GITHUB_WORKSPACE/eslint.config.mjs" "$base_config"
-            echo "ratchet judge: base has no eslint.config.mjs, using candidate config"
+            echo "ratchet judge: base $base has no eslint.config.mjs (initialisation), using candidate config"
           fi
           ratchet_config="$RUNNER_TEMP/eslint-ratchet-frozen-r0.mjs"
           cat > "$ratchet_config" <<'EOF'
@@ -155,13 +164,15 @@ jobs:
 
           export default [
             ...canonicalConfig,
+            // the untracked judge copy itself is not part of the measured tree
+            { ignores: ["eslint.config.ratchet-base.mjs"] },
           ];
           EOF
 
           status=0
           node --import tsx scripts/quality/check-eslint-ratchet.ts \
             --config "$ratchet_config" \
-            --base "${{ steps.diff.outputs.base }}" || status=$?
+            --base "$base" || status=$?
           rm -f "$base_config"
           exit "$status"
 

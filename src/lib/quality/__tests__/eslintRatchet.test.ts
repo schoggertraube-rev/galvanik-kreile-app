@@ -320,3 +320,30 @@ describe("ESLint repository ratchet", () => {
     );
   });
 });
+
+describe("ESLint ratchet judge snapshot (D-QA-001)", () => {
+  it("judges debt from the base-config snapshot, not from the candidate baseline", () => {
+    const base = snapshot([existingIssue]);
+    // candidate baseline (own config, rule switched off) claims zero debt ...
+    const candidate = snapshot([]);
+    candidate.lintContractHash = "b".repeat(64);
+    // ... but linted with the BASE config the debt is still there and grew
+    const judge = snapshot([{ ...existingIssue, count: 2 }]);
+
+    expect(baselineRegressions(candidate, base, judge)).toEqual([
+      "errors increased from 1 to 2",
+      "src/example.ts: example/rule added 1 occurrence(s)",
+    ]);
+  });
+
+  it("takes the ignored-code inventory from the candidate baseline even with a judge snapshot", () => {
+    const base = snapshot([existingIssue]);
+    const candidate = snapshot([existingIssue]);
+    candidate.ignoredCodeFiles = [{ file: "src/hidden.ts", contentHash: "f".repeat(64) }];
+    const judge = snapshot([existingIssue]);
+
+    expect(baselineRegressions(candidate, base, judge)).toEqual([
+      "src/hidden.ts: newly tracked code is ignored by ESLint",
+    ]);
+  });
+});
