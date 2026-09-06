@@ -15,7 +15,7 @@ Gib danach einen Startup-Block aus: PROJECT=GALVANIK_KREILE · ROOT · main-SHA 
 ## 2. Ist-Stand 2026-09-05
 - `main = 11e8757` (PR #68 unveränderliche Rechnung F1.4 + PR #70 Order-Picker gemergt). F1.4 = complete.
 - **Aktiv: F1.5 Bestätigter Zahlungseingang & Warenausgang** auf Branch `f1/bestaetigter-zahlungseingang-20260904` (Basis 11e8757, Commit 3864605 = Mission-Bindung). Einheiten: A Daten-/Read-Port-Vertrag → B `confirmPayment` → C `recordGoodsOut` + Modus-Gate → D Oberfläche (nur Readback); T Supabase-CLI-Pin (unabhängig, keine Commit-Voraussetzung). Writer arbeitet an A.
-- Owner-Entscheidung zu Bauvertrag §9: Adapter 1 = **Bank-Abgleich** (eigener Bauvertrag nach F1.5-Merge), Adapter 2 = Mollie; Teilzahlung ja; Skonto offen (nicht blockierend). `mollieAdapter.ts`/`paymentProvider.ts`/Mock-Finanzseiten = Legacy/Quarantäne, nicht reaktivieren, nicht löschen.
+- Owner-Entscheidung zu Bauvertrag §9: Adapter 1 = **Bank-Abgleich** (eigener Bauvertrag nach F1.5-Merge), Adapter 2 = Mollie; Teilzahlung ja; Skonto entschieden (Register §7 #5: 2 % ≤ 10 Tage, netto 30). `mollieAdapter.ts`/`paymentProvider.ts`/Mock-Finanzseiten = Legacy/Quarantäne, nicht reaktivieren, nicht löschen.
 - PR #71 `gov/linie-import-20260905`: Import der Owner-Steuerdokumente ins Repo — **bitte reviewen** (Byteidentität per SHA-256-Manifest prüfen).
 - Kreile-Workflows registrieren keine Source-Branchnamen (PR gegen main, Head-SHA) → keine Guard-Registrierung nötig.
 - Docker-Hub-Secrets (`DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN`) sind im Repo gesetzt; Login-Step im Workflow fehlt noch (kleine Einheit).

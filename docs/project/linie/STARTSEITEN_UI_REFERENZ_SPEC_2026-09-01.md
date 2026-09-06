@@ -6,7 +6,7 @@
 - **Phillip „Werkstatt" V4** → https://claude.ai/code/artifact/1dd88584-14be-4dea-b032-ba075389f875
 - **Auftragskarte MACHART_V8** · **Kundenkarte MACHART_V2** — dieselbe Design-Iteration, noch NICHT als Datei eingefroren.
 - Demo-Daten in den Referenzen (Mustermann/300 SL) sind reine Design-Demo — **nie** als Produktdaten (kein Mock).
-- OFFEN (Owner, Linie §6): die vier Referenzen als Dateien in `Kreile app\` exportieren → Freeze auf Disk.
+- ERLEDIGT 2026-09-06: die vier Referenzen sind als Dateien in `docs/project/linie/ui/` eingefroren (Register §6/§10).
 
 ## 2 — DESIGNSYSTEM (auf Disk, konsolidieren statt forken)
 - `..\ui oberfläche app\Kreile Designsystem (Standalone) V2.html` = Kreile-Tokens (Navy/Cream/Brand, Fraunces + Inter, Touch 48px). Bestehende `globals.css` reconcilen, KEIN zweites Designsystem.

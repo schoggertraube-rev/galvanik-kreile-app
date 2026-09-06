@@ -52,23 +52,28 @@ Vertrag liegt: `KREILE_F1_5_BAUVERTRAG_ZAHLUNGSEINGANG_WARENAUSGANG_V1_2026-08-2
 
 ## 5 — FRONTEND-UMSETZUNG (Parallel-Paket, ratifiziert „jetzt")
 
-Bestehendes Designsystem konsolidieren statt forken; echte F1.2/F1.3-Ports, kein Mock; Phase 0 Inventar → Phase 1 EIN Proof-Screen (Phillip Werkstatt) → Rest OTC-Pfad. Paket: `KREILE_UEBERGABE_FRONTEND_UMSETZUNG_V1_2026-08-21.md`. Rolf-Routen-Konsolidierung & baeder-Disposition = an PL delegiert (evidenzbasiert, im Git reversibel).
+Bestehendes Designsystem konsolidieren statt forken; echte F1.2/F1.3-Ports, kein Mock; Phase 0 Inventar → Phase 1 EIN Proof-Screen (Phillip Werkstatt) → Rest OTC-Pfad. Paket: `KREILE_UEBERGABE_FRONTEND_UMSETZUNG_V1_2026-08-21.md`. Rolf-Routen-Konsolidierung & baeder-Disposition sind **nicht mehr PL-Ermessen** — Owner-entschieden (§7 #6/#7): eine Startseite pro Login, `baeder` entfällt.
 
 ---
 
 ## 6 — UI-REFERENZEN (eingefroren, GÜLTIG/FINAL)
 
 Rolf V8 · Phillip V4 · Auftragskarte MACHART_V8 · Kundenkarte MACHART_V2. HTML-Selbstläufer; Demo-Daten nie als Produktdaten.
-**ACHTUNG Speicherort (2026-08-28 verifiziert):** Diese vier Dateien existieren **NICHT** auf der Platte (Suche „MACHART"/„STARTSEITE_ROLF" im gesamten Projektordner = 0 Treffer). Der bisherige Wegweiser `00_UI_REFERENZEN_PFADE.md` zeigt auf einen nicht existierenden Unterordner `design und klickpfade UI\` → **falsch, wird korrigiert.** Kanonische Referenz sind bis auf Weiteres die **Claude-Artefakte**: Rolf `https://claude.ai/code/artifact/3c92c2b9-387a-4fff-8e91-3e77e291e950` · Phillip `https://claude.ai/code/artifact/1dd88584-14be-4dea-b032-ba075389f875`. **Owner-Entscheidung nötig:** die vier Referenzen als Dateien in den kanonischen Ordner exportieren (dann Freeze auf Disk).
+**Speicherort (2026-09-06 aktualisiert):** Die vier Referenzen liegen **auf der Platte, im Repo eingefroren:** `docs/project/linie/ui/` (`KREILE_STARTSEITE_ROLF_V8_2026-08-20.html`, `KREILE_STARTSEITE_PHILLIP_V4_2026-08-20.html`, `KREILE_AUFTRAGSKARTE_MACHART_V8_2026-08-19.html`, `KREILE_KUNDENKARTE_MACHART_V2_2026-08-19.html`). Index: `ui/00_UI_REFERENZ_KANONISCH.md`. Der frühere Verweis auf Claude-Artefakt-URLs bzw. den externen Ordner `design und klickpfade UI\` ist damit erledigt. Freeze auf Disk = erfüllt.
 
 ---
 
 ## 7 — ENTSCHEIDUNGSREGISTER (chronologisch, mit Status)
 
 - **#1 [ENTSCHIEDEN 2026-08-28]** — 4. Reparaturschleife F1.4-Testdatei: **Kein Blindpatch. Zuerst belegter Root-Cause** (warum 3 Runden nicht konvergierten; prüft der Test das Richtige oder wird er bis-grün gebogen; Beleg dass Restfehler rein Test-Harness). Erst danach gemeinsame Entscheidung über eine eng begrenzte, wirklich letzte Korrektur. *(Owner-Chat)*
-- **#2 [OFFEN → nach Root-Cause]** — **B1 Event-ID vs Rechnungsnummer:** getrennt führen/prüfen — Rechnungsnummer `R-JJJJ-NNNN` = rechtlicher Beleg-Identifikator; Event-ID = append-only Ereignisstrom-ID.
-- **#3 [OFFEN → nach Root-Cause]** — **B2 Katalog-ID-Klassifikation:** verbindliche Regel, wie Mehrarbeit-Katalogpositionen in den Rechnungs-Snapshot abgebildet/gruppiert werden (gekoppelte Gruppe vs. isoliert).
-- **#4 [OFFEN → nach Root-Cause]** — **B3 Nummernvergabe-Zeitpunkt / Lifecycle-Reihenfolge:** Invariante, wann die Nummer relativ zum Lifecycle-Event vergeben wird (Nummer-only-Fälle „vor dem Event").
+- **#2 [ENTSCHIEDEN 2026-09-06, Owner — an Ist-Code angeglichen]** — **B1 Zwei Nummernkreise.** Auftragsnummer `A-JJJJ-NNNN` = sichtbare Identität, vergeben bei Auftragsanlage (Wareneingang), `public.orders.order_number` (NOT NULL, UNIQUE). Rechnungsnummer `R-JJJJ-NNNN` = eigener, lückenloser Kreis, vergeben erst bei `createInvoice` (Auftrag = fertig), `private.allocate_invoice_number`. Beide koexistieren; die interne Event-ID bleibt rein technisch. **Das ist der Ist-Code — reine Doku-Korrektur, keine Code-Änderung.** (Der frühere Registertext „eine Nummer = Rechnungsnummer bei Annahme" war die erste Owner-Formulierung, widersprach dem Code, ist ersetzt.)
+- **#3 [ENTSCHIEDEN 2026-09-06 — Regel steht, vgl. #1-FINAL]** — **B2 Katalog-ID-Klassifikation:** Die Gruppierung im Rechnungs-Snapshot folgt der **echten Produktsemantik der Preisliste**, nicht willkürlich: fachlich zusammengehörende Positionen = `coupled` (eine Gruppe), sonst `isolated`. Das ist keine freie Owner-Wahl — die konkrete Klassifikation je Position (z. B. Pos. 42) wird bei der Umsetzung **gegen den echten Katalog belegt** (Beleg-Pflicht), nicht geraten.
+- **#4 [ENTSCHIEDEN 2026-09-06, Owner — an Ist-Code angeglichen]** — **B3 Vergabezeitpunkte getrennt:** `A-…` bei Annahme (Auftragsanlage), `R-…` erst bei `createInvoice`. GoBD-Lückenlosigkeit gilt **nur für den Rechnungskreis** (an `createInvoice` gebunden) — nie berechnete Aufträge erzeugen keine Lücke, weil sie nie eine `R-`Nummer ziehen. F1.4-Bauvertrag bleibt unverändert gültig. Build-Check (kein Owner-Thema, S1): ob `order_number` schon serverseitig sequenziell (`A-JJJJ-NNNN`) allokiert wird; falls clientseitig gesetzt, kleines `allocate_order_number` ergänzen, damit Mocks (`A-2026-0042`) stimmen.
+- **#5 [ENTSCHIEDEN 2026-09-06, Owner]** — **Skonto = JA, Satz = 2 % bei Zahlung ≤ 10 Tage, sonst netto 30 Tage** („wie in jeder Firma", Standard). Prozentsatz und Frist sind ein Konfig-Parameter — jederzeit per Owner-Wort änderbar, keine Architekturfrage.
+- **#6 [ENTSCHIEDEN 2026-09-06, Owner]** — **Galvanik statt Bäder.** Galvanik = EINE Blackbox-Stufe (angenommen→galvanik→fertig→abgeholt); `baeder`-Route entfällt (löschen); kein Stations-/Bäder-Innenleben. „Badpflege" (einziger Bäder-Kontext) ist derzeit NICHT im Scope; falls gewünscht, eigenes Modul per neuer Owner-Entscheidung.
+- **#7 [ENTSCHIEDEN 2026-09-06, Owner]** — **Genau EINE Startseite pro Login, personalisiert.** Keine drei konkurrierenden Start-Routen: today/start/cockpit werden auf eine konsolidiert, die anderen entfallen. Jede Rolle sieht nach Login IHRE personalisierte Startseite; das linke Menü ist für alle frei klickbar. Admin: App-Einstellungen als Startseite. Festgenagelt.
+- **#8 [ENTSCHIEDEN 2026-09-06, Owner]** — **Kill-Liste freigegeben:** die ENTFÄLLT-Routen der Modulkarte, die reiner Mock / nicht verwertbar sind, werden gelöscht (S2). `archive` und `feedback` vorher kurz auf Verwertbarkeit prüfen; wenn reiner Mock, ebenfalls löschen. „Sauber = weg, was man nicht verwerten kann."
+- **#9 [ENTSCHIEDEN 2026-09-06, Owner]** — **AMBIG-Routen (S2-Löschung):** `items` (Katalog/Preis) **behalten** → gehört zu Orders/Accounting (Preis-/Rechnungsdaten, vgl. B2); `telefonnotiz` **kein eigenes Modul** → Teil von Customers/Intake; `lager` **löschen**; `lieferanten` **löschen**. Damit ist die Modulkarten-Zeile „Nicht raten" aufgelöst.
 - **Künftige Owner-Grenzen** (bei Bedarf hier eintragen): E-Rechnungs-Strategie · F1.5-Baustart · F1.6/Pilot · Echtdatenfreigabe · „zugewiesen an"-Delegationsmodell · UI-Gerätetest→Freeze · neue Tabellen/Provider/Credentials.
 
 ---
@@ -88,7 +93,7 @@ Jede neue Entscheidung — egal aus welchem Chat — wird **hier** eingetragen (
 
 ---
 
-## 10 — ABLAGE-STATUS (WICHTIG — Konsolidierung offen)
+## 10 — ABLAGE-STATUS (Konsolidierung ERLEDIGT 2026-09-06)
 
 **Befund 2026-08-28 (Disk-verifiziert):** Baupläne/Specs/Entscheidungen liegen verstreut über **mindestens drei Ordner** plus Bibel-Zip plus Cloud-Workspace plus PL-Bibel:
 - `Kreile app\` — die aktuellen Orchestrator-Steuerdokumente (Mandat, Frontend-Übergabe, F1.5, Pathfinder, **diese Linie**). **= KANONISCHER ORDNER (PL-Inventar).**
@@ -98,7 +103,7 @@ Jede neue Entscheidung — egal aus welchem Chat — wird **hier** eingetragen (
 
 **Regel (ab jetzt):** Quelle der Wahrheit ist **nur**, was in DIESER Linie steht bzw. hier verlinkt ist. Alles in den anderen Ordnern ist **historisch/Archiv** und **kein Bauplan-Input**, bis es hier ausdrücklich promotet wird. So kann kein alter/konkurrierender Bauplan „interpretiert" werden.
 
-**Offene Owner-Entscheidung (Konsolidierung):** (a) `Kreile app\` als einzigen kanonischen Ordner bestätigen; (b) die alten Bauplan-/Spec-Ordner als `_ARCHIV\` markieren (nicht löschen); (c) UI-Referenzen als Dateien exportieren (§6); (d) den bisherigen Pathfinder korrigieren. Bis diese Entscheidung fällt, gilt die Regel oben.
+**Konsolidierung — ERLEDIGT 2026-09-06:** (a) kanonischer Ordner ist jetzt der **Repo-Ordner** `02_app/docs/project/linie/` (verbindlicher Master, `00_BIBEL_INDEX.md`); der frühere Desktop-`00_BIBEL\` ist Archiv (Redirect-Marker). (b) Alte Bauplan-/Spec-Ordner archiviert (`_ARCHIV_2026-09-05_vor_LINIE/`, 127 Müll-Dateien in PR #74 entfernt). (c) UI-Referenzen als Dateien in `ui/` eingefroren (§6). (d) Pathfinder korrigiert (`00_UI_REFERENZEN_PFADE.md`). Skonto ist entschieden (§7 #5) — etwaige „Skonto offen"-Zeilen in PL-Briefing / F1.5-§9 sind damit überholt (bei Divergenz gilt die Linie).
 
 ---
 *Die Linie · 2026-08-28 · Owner + Orchestrator · Verfassungsprinzip: Ein Bauplan wird nie interpretiert. · Änderungen nur additiv mit Datum/Grund.*
@@ -143,8 +148,25 @@ Die Owner-Modulmindmap „Baustruktur Mini-USP" (Stand 15.08.2026) wird ratifizi
 
 **Nicht mehr fragen:** Was ein Modul ist, was es gibt, was entfällt.
 
+
+---
+## NACHTRAG 2026-09-06 (Ablage-Bereinigung, Owner-Auftrag) — Entscheidungen nachgezogen, 0 offene Produktfrage
+
+Zweck: bereits getroffene Entscheidungen an allen Stellen konsistent machen. Bei Divergenz gilt diese Linie.
+
+- **#2/#4 KORRIGIERT (Owner 2026-09-06): Zwei Nummernkreise, kein einheitlicher.**
+  - **Auftragsnummer `A-JJJJ-NNNN`** = sichtbare Identitaet, vergeben bei Auftragsanlage (Wareneingang); `public.orders.order_number` (NOT NULL, UNIQUE).
+  - **Rechnungsnummer `R-JJJJ-NNNN`** = eigener, lueckenloser Kreis (GoBD), vergeben **erst bei `createInvoice`** (Auftrag = fertig); `private.allocate_invoice_number`.
+  - Grund: die fruehere Fassung (#2 „Identitaet = Rechnungsnummer", #4 „Nummer bei Annahme = Rechnungsnummer") widersprach dem F1.4-Bauvertrag, den kanonischen Mocks (sichtbar `A-2026-…`) und GoBD. Das Zwei-Nummern-Modell ist der bereits gebaute Ist-Zustand. Interne Event-ID bleibt rein technisch.
+- **#10 [ENTSCHIEDEN, Owner] Zahlungs-Adapter-Reihenfolge = Bank-Abgleich zuerst, Mollie spaeter** (Quelle: PL-Startup-Briefing 2026-09-05). Die „Offen"-Zeile in F1.5-§9 ist damit entschieden; offen bleibt nur die Provider-Credential-/Kosten-Freigabe (Go-live-Gate).
+- **Skonto:** entschieden (#5). Etwaige „Skonto offen"-Zeilen sind ueberholt.
+- **UI-Referenz-Export / Konsolidierung:** erledigt (Dateien in `docs/project/linie/ui/`). „OFFEN"-Zeilen in GESAMTUEBERSICHT/STARTSEITEN und die fruehere §10-Ueberschrift sind historisch.
+- **Legitim offen (KEINE Produktentscheidung):** OWNER_UX_PASS (Nutzer-Abnahme) und Provider-Credentials/kostenpflichtiger Dienst (Owner-Geld-Gate). Gates, keine offenen Specs.
+
+**Damit: 0 offene Produktentscheidung auf dem kritischen Pfad.** Verbleibender Rueckstand war ausschliesslich Code: S0 wirksam + S1 (CI-Gates) — **gebaut in PR #75** (siehe D-QA-001).
+
 ## D-QA-001 — Ratschen-Migrationspfad (Orchestrator im Owner-Mandat „mach, was das Projekt sauber zum Ziel führt", 2026-09-06)
 
-Die ESLint-Ratsche wertete jede Änderung von `lintContractHash`/`judgeContractHash` gegenüber main als Basis-Verstoß. Mit `quality` als Required Check und `enforce_admins=true` war damit keine ESLint-Regel (S0 Tenant-Verbot, S1 Fassade) und keine Judge-Änderung für irgendjemanden mergebar; #36/#55 gingen nur per Override durch (Präzedenz). Entscheid: Kontraktwechsel = explizite, sichtbare Migration (Kandidaten-Baseline trägt den eigenen Hash), kein Basis-Verstoß; Debt wird in beiden CI-Läufen mit dem **Basis**-Config gemessen (quality.yml + geschützter ratchet-Job), damit Regeländerungen keinen Debt verstecken können. Details: PROBLEMLOESUNGEN P8. Umgesetzt in PR #75 (S0+S1).
+Die ESLint-Ratsche wertete jede Änderung von `lintContractHash`/`judgeContractHash` gegenüber main als Basis-Verstoß. `quality` UND `ratchet` sind Required Checks (Ruleset `main-protection`, kein Bypass, auch nicht für Admins) — damit war keine ESLint-Regel (S0 Tenant-Verbot, S1 Fassade) und keine Judge-Änderung für irgendjemanden mergebar; #36/#55 gingen nur per Override durch (Präzedenz). Entscheid: Kontraktwechsel = explizite, sichtbare Migration (Kandidaten-Baseline trägt den eigenen Hash, NOTICE im CI-Log), kein Basis-Verstoß; Debt wird in beiden CI-Läufen mit dem **Basis**-Config gemessen (quality.yml + geschützter ratchet-Job, fail-closed), damit Regeländerungen keinen Debt verstecken können. Details: PROBLEMLOESUNGEN P8. Umgesetzt in PR #75 (S0+S1). Unabhängig red-teamt.
 
-**Owner-Aufgabe (Einstellung, nicht Code):** Branch-Protection → `ratchet` und `Fresh Supabase replay` als Required Checks eintragen; bis dahin ist die geschützte S1-Kopie nur informativ.
+**Einmaliger Owner-Akt:** der Migrations-PR #75 selbst kann `ratchet` nie bestehen (Basis-Judge = alte Regel) → Owner nimmt `ratchet` für diesen einen Merge aus dem Ruleset und trägt ihn danach wieder ein. Ab dann ist `ratchet` für jeden weiteren PR normal grün UND bindend.
