@@ -101,6 +101,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Reference deliveries in the LINIE folder are NOT repo source; they are
+    // parked code to be forked into src/modules/ later (e.g. Suchleiste).
+    "docs/project/linie/_lieferungen/**",
     // Standalone maintenance and local verification CLIs; none are part of the Next.js build.
     "create_migrate.js",
     "enrich.js",
