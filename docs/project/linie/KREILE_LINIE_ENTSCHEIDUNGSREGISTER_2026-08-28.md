@@ -112,3 +112,33 @@ Jede neue Entscheidung — egal aus welchem Chat — wird **hier** eingetragen (
 **Owner+Orchestrator-Entscheidung (#1 FINAL):** EINE letzte, vertraglich gebundene Testkorrektur freigegeben — exakt eine Datei (Prehash B3696823…/233135): nur Eventfälle in kollisionsfreie Reihenfolge; nur `catalogPositionId:42` von `isolated`→`coupled` **und nur wenn 42 nach echter Produktsemantik coupled ist (Beleg)**; KEINE Migration/Command/Werte/Erwartungen ändern. **ZUSÄTZLICH (Lücke schließen):** Integrationstest MUSS eine echte Extra-Work-/Katalogzeile fahren; Migration-Replay (frische DB) belegen; Pos.42-Klassifikation gegen echte Produktsemantik bestätigen. **HARTE STOP-REGEL:** jeder weitere Fehler danach = echter DB-/Produktbefund, ursachenklären — KEIN weiteres Testbiegen.
 
 Dies konkretisiert die Fachfragen B1 (Eventreihenfolge) und B2 (Katalog-ID-Klassifikation, Pos.42) aus §7; endgültiger Abschluss nach sauberem Real-Gate-PASS.
+
+
+---
+
+## D-ARCH-008 — Path 1 Modulbauweise (Owner-Entscheid 2026-09-06)
+
+**Kontext (P1-Architektur-Drift, belegt):** 02_app hat keine Modul-Einheit (Domäne über app+components+lib+features verschmiert); Modul-Manifest ~3 % (1 von ~30); Grenzen nur negativ/ratschenhaft und nur auf `lib/`; Tenant `'galvanik-kreile'` 65× in 23 Dateien (verletzt D-ARCH-007). „Später extrahieren" wird pro Woche teurer.
+
+**Entscheid:** Es wird **Path 1** gebaut — forkbare Module sind echte Anforderung. Nähte werden JETZT gelegt, inkrementell, naht-zuerst; kein Neustart (korrekte Domänen-Logik bleibt). Verbindliche Bauanleitung: `docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md`.
+
+**Erzwungen (CI, nicht Prosa):** Modul = ein Ordner `src/modules/<fach>/` (ui+server+api+db+manifest+public.ts); Manifest je Modul; positive Fassade `public.ts`, Tiefimporte build-rot (dependency-cruiser); Tenant per Provider injiziert, Literal per Lint verboten; Cross-Modul nur über `v_*`-Views; UI = Phillip V4, Stationshome = FAIL.
+
+**Reihenfolge:** S0 Tenant-Fix → S1 Gate → S2 Löschung toter Parallel-Routen → S3 Muster-Modul erfassung → S4 Home neu (V4) → S5 restliche Domänen. F1.5 bleibt geparkt bis S1.
+
+**Nicht mehr fragen:** Ob modular gebaut wird (ja, Path 1). Ob das Stationshome gilt (nein, verworfen).
+
+
+---
+
+## D-ARCH-009 — Modulkarte / Scope-Kanon (Owner-Ratifizierung 2026-09-06)
+
+Die Owner-Modulmindmap „Baustruktur Mini-USP" (Stand 15.08.2026) wird ratifiziert als verbindlicher Modul- und Scope-Kanon: `docs/project/linie/MODULKARTE_KANON.md`. Roter Faden INFOS REIN → KARTE → SUCHEN → RAUS; wenige, vollständige Module.
+
+**KANON (einzige Module):** Fundament (gebaut), Suchleiste (F1.6, muss aus 00_BIBEL\_parallel herein), Intake (F1.1), Orders/Auftragskarte (F1.2/1.3), Customers/Kundenkarte (F1.3), Kalender (F1.6), Accounting-minimal (F1.4/1.5).
+**QUARANTÄNE (nur Vertrag):** OCR, Galvanik-Innenleben, F2-Büro, DHL/Mollie/Mahnwesen.
+**ENTFÄLLT (löschen):** Analyse/KPI-Cockpit, eigenständiges Buchhaltungs-Modul, Zeiterfassung, Teilfertigung, Kundenportal, eigenes Kalender-Produkt, Galvanik-Stufentracking, E-Mail/OCR/Bank-Eigenbau, Marketing.
+
+**Folge:** „4 Mocks vs. 36 Routen" ist KEIN Baubarkeits-Problem — ~30 Routen sind ENTFÄLLT/QUARANTÄNE. Die Vorlagen reichen für die beabsichtigte App. Arbeit = Subtraktion + Path-1-Nähte + Suchleiste. `buchhaltung` (54 Dateien) auf Accounting-minimal trimmen. AMBIG (lager/lieferanten/items/telefonnotiz) = Owner-Entscheid vor Löschung, nicht raten.
+
+**Nicht mehr fragen:** Was ein Modul ist, was es gibt, was entfällt.
