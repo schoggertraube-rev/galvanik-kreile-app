@@ -32,8 +32,8 @@
 An diesen Punkten gibt es **keine Eigenentscheidung** durch Chat/PL. Wer hier ankommt: STOP `BLOCKED_PRODUCT_DECISION`, Owner fragen, Antwort ins Register (§7), dann bauen.
 
 **Stand 2026-09-06: keine offene Owner-Entscheidung auf dem kritischen Pfad.** Alle im Register §7 entschieden:
-- B1 = Auftrags-Identität ist die Rechnungsnummer (§7 #2).
-- B3 = Nummer bei Annahme (= spätere Rechnungsnummer, lückenlos halten, GoBD) (§7 #4).
+- B1 = **zwei Nummernkreise** (= Ist-Code): Auftragsnummer `A-JJJJ-NNNN` bei Annahme (`public.orders.order_number`), Rechnungsnummer `R-JJJJ-NNNN` bei `createInvoice` (§7 #2).
+- B3 = Vergabezeitpunkte getrennt: `A-…` bei Annahme, `R-…` bei Rechnung; GoBD-Lückenlosigkeit nur im `R-`Kreis (§7 #4).
 - Skonto = JA, 2 % bei ≤10 Tagen, netto 30 (Satz ist Parameter) (§7 #5).
 - Galvanik statt Bäder, `baeder` entfällt (§7 #6).
 - Genau EINE personalisierte Startseite pro Login, Admin = Einstellungen (§7 #7).
