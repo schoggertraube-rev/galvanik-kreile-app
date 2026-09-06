@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kreile · Kundenkarte — Machart-Entwurf V2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy-900:#12161F; --navy-800:#1A1F2E; --navy-700:#262C3C; --navy-600:#353C4E;
+    --navy-500:#4B5366; --navy-400:#6B7286; --navy-300:#8E94A6;
+    --cream-50:#FBF8F2; --cream-100:#F6F0E6; --cream-200:#F1E9DC; --cream-300:#E7DCC9;
+    --cream-400:#D9CBB3; --cream-500:#C7B79A;
+    --purple:#7A3FB0; --magenta:#C2185B; --orange:#F2643C; --amber:#F6A93B;
+    --grad:linear-gradient(115deg,#7A3FB0 0%,#C2185B 40%,#F2643C 76%,#F6A93B 100%);
+    --succ:#4F9A5E; --succ-bg:#E3EDDD; --succ-fg:#336B40; --succ-bd:#B7CFAE;
+    --warn:#D9722B; --warn-bg:#FAE7D6; --warn-fg:#9C5214; --warn-bd:#ECC39C;
+    --info:#4B5366; --info-bg:#E6E8EE; --info-fg:#3A4763;
+    --ral:#AF2B1E; --ral-bg:#F7E1DC; --ral-fg:#7E1D14; --ral-bd:#E7B4AA;
+    --part-bg:#EBE4F3; --part-fg:#5A3E86;
+    --serif:"Fraunces",Georgia,serif;
+    --sans:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+    --sh-sm:0 1px 3px rgba(26,31,46,.08); --sh-md:0 4px 12px rgba(26,31,46,.08); --sh-lg:0 12px 28px rgba(26,31,46,.12);
+    --ease:cubic-bezier(.2,.7,.2,1);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--cream-200);font-family:var(--sans);color:var(--navy-900);padding:30px 20px 70px;-webkit-font-smoothing:antialiased;}
+  svg.i{width:1em;height:1em;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vertical-align:-.14em;flex:none;}
+
+  .page-head{max-width:1600px;margin:0 auto 22px;text-align:center;}
+  .ph-brand{display:inline-flex;align-items:center;gap:11px;margin-bottom:10px;}
+  .ph-logo{width:40px;height:40px;border-radius:10px;background:var(--navy-800);color:var(--cream-50);font-family:var(--serif);font-size:16px;display:flex;align-items:center;justify-content:center;letter-spacing:.5px;}
+  .ph-name{font-family:var(--serif);font-size:16px;letter-spacing:2px;color:var(--navy-800);}
+  .ph-title{font-family:var(--serif);font-size:23px;color:var(--navy-900);font-weight:500;}
+  .ph-sub{font-size:13px;color:var(--navy-400);margin-top:6px;line-height:1.5;}
+
+  .stage{display:flex;gap:30px;align-items:flex-start;justify-content:center;flex-wrap:wrap;max-width:1600px;margin:0 auto;}
+  .frame-col{display:flex;flex-direction:column;align-items:center;}
+  .frame-label{font-size:11px;font-weight:600;letter-spacing:1.4px;text-transform:uppercase;color:var(--navy-400);margin-bottom:10px;}
+  .frame-label b{color:var(--navy-700);font-weight:600;}
+  .frame{container-type:inline-size;background:var(--cream-50);overflow:hidden;}
+  .frame.desktop{width:1080px;max-width:100%;border:1px solid var(--cream-300);border-radius:20px;box-shadow:var(--sh-lg);}
+  .frame.tablet{width:428px;max-width:100%;height:868px;border:9px solid var(--navy-800);border-radius:34px;box-shadow:var(--sh-lg);}
+  .frame.tablet .card{height:100%;overflow-y:auto;}
+
+  .card{display:flex;flex-direction:column;background:var(--cream-50);animation:rise .5s var(--ease) both;}
+  .stripe{height:3px;background:var(--grad);flex:none;}
+
+  /* Kopf */
+  .head{padding:20px 26px 16px;border-bottom:1px solid var(--cream-300);display:flex;justify-content:space-between;gap:18px;align-items:flex-start;flex:none;}
+  .head-l{flex:1;min-width:0;}
+  .ord-kicker{font-size:12px;color:var(--navy-400);letter-spacing:.2px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .ord-kicker .no{font-family:var(--serif);color:var(--navy-500);}
+  .ord-title{font-family:var(--serif);font-size:31px;font-weight:500;color:var(--navy-900);line-height:1.05;margin-top:5px;letter-spacing:-.3px;}
+  .ord-sub{font-size:13.5px;color:var(--navy-500);margin-top:5px;}
+  .contact{font-size:13px;color:var(--navy-600);margin-top:9px;display:flex;flex-wrap:wrap;gap:3px 8px;align-items:center;}
+  .contact a{color:var(--magenta);text-decoration:none;} .contact .sep{color:var(--cream-400);}
+  .meta{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-top:12px;}
+  .pref{font-size:12px;color:var(--navy-400);margin-top:9px;font-style:italic;}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:999px;font-size:12px;font-weight:500;line-height:1;}
+  .pill-succ{background:var(--succ-bg);color:var(--succ-fg);border:1px solid var(--succ-bd);}
+  .pill-soft{background:var(--cream-100);color:var(--navy-500);border:1px solid var(--cream-300);}
+  .close{background:transparent;border:1px solid var(--cream-300);width:40px;height:40px;border-radius:999px;color:var(--navy-400);display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;flex:none;}
+  .close:hover{background:var(--cream-100);}
+  .head-r{display:flex;flex-direction:column;align-items:flex-end;gap:12px;flex:none;}
+  .tags{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;max-width:290px;}
+  .tag{display:inline-flex;align-items:center;gap:5px;background:var(--cream-100);border:1px solid var(--cream-300);border-radius:999px;padding:5px 11px;font-size:11.5px;color:var(--navy-600);min-height:32px;}
+  .tag svg.i{font-size:12px;color:var(--navy-400);} .tag.add{border-style:dashed;color:var(--navy-400);cursor:pointer;}
+
+  /* Körper */
+  .body{display:grid;grid-template-columns:1.62fr 1fr;}
+  .main{padding:6px 24px 22px;border-right:1px solid var(--cream-300);min-width:0;}
+  .rail{padding:6px 22px 22px;background:var(--cream-100);min-width:0;}
+  .sec{padding:20px 0;border-top:1px solid var(--cream-300);}
+  .sec:first-child{border-top:none;padding-top:16px;}
+  .sec:last-child{padding-bottom:2px;}
+  .sec-h{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--navy-700);font-weight:600;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;}
+  .sec-h .add{letter-spacing:0;text-transform:none;font-weight:500;color:var(--magenta);cursor:pointer;font-size:11px;display:inline-flex;align-items:center;gap:4px;}
+
+  /* Nächste Aktion */
+  .next{position:relative;border-radius:16px;padding:16px 18px;overflow:hidden;background:linear-gradient(180deg,#FCEFF3 0%,#FBF8F2 74%);border:1px solid #EBC6D5;border-left:3px solid var(--magenta);}
+  .next-k{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--magenta);font-weight:600;}
+  .next-t{font-family:var(--serif);font-size:21px;color:var(--navy-900);margin-top:5px;line-height:1.2;}
+  .next-s{font-size:13px;color:var(--navy-500);margin-top:5px;line-height:1.45;} .next-s .due-red{color:var(--ral-fg);font-weight:700;}
+  .next-a{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px;}
+
+  .btn{min-height:48px;border-radius:11px;font-family:var(--sans);font-size:13px;font-weight:500;cursor:pointer;border:1px solid var(--cream-300);background:var(--cream-50);color:var(--navy-800);display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:0 16px;transition:transform .12s var(--ease),background .15s;}
+  .btn:hover{background:var(--cream-100);} .btn:active{transform:translateY(1px);}
+  .btn-primary{background:var(--navy-800);color:var(--cream-50);border-color:var(--navy-800);} .btn-primary:hover{background:var(--navy-700);}
+  .btn svg.i{font-size:16px;}
+
+  /* Aktive Aufträge */
+  .order{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;background:var(--cream-50);border:1px solid var(--cream-300);border-radius:12px;padding:12px 14px;min-height:56px;cursor:pointer;margin-bottom:8px;transition:box-shadow .15s;}
+  .order:hover{box-shadow:var(--sh-sm);}
+  .odot{width:9px;height:9px;border-radius:50%;} .odot.warn{background:var(--ral);} .odot.ok{background:var(--succ);}
+  .onum{font-family:var(--serif);font-size:14px;color:var(--navy-900);} .otitle{font-size:12.5px;color:var(--navy-600);margin-top:2px;}
+  .oright{text-align:right;white-space:nowrap;} .ostage{font-size:11px;color:var(--navy-400);} .odue{font-size:11px;font-weight:600;margin-top:2px;} .odue.warn{color:var(--ral-fg);} .odue.ok{color:var(--succ-fg);}
+
+  /* Fakten / Absprachen */
+  .facts{display:flex;flex-direction:column;gap:8px;}
+  .fact{background:var(--cream-50);border:1px solid var(--cream-300);border-radius:12px;padding:11px 14px;font-size:13px;color:var(--navy-700);line-height:1.45;display:flex;gap:10px;align-items:flex-start;}
+  .fact svg.i{font-size:15px;color:var(--navy-400);margin-top:2px;flex:none;}
+  .fact .fk{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--navy-300);font-weight:600;display:block;margin-bottom:2px;} .fact b{color:var(--navy-900);font-weight:600;}
+
+  /* Notizen (hervorgehoben) */
+  .notes{display:flex;flex-direction:column;gap:9px;}
+  .note{background:var(--cream-100);border:1px solid var(--cream-300);border-left:4px solid var(--navy-700);border-radius:12px;padding:14px 16px;box-shadow:var(--sh-sm);}
+  .note-scope{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;padding:3px 10px;border-radius:999px;margin-bottom:8px;}
+  .scope-cust{background:var(--info-bg);color:var(--info-fg);} .scope-part{background:var(--part-bg);color:var(--part-fg);} .scope-phone{background:var(--warn-bg);color:var(--warn-fg);}
+  .note-t{font-size:14px;color:var(--navy-900);line-height:1.5;} .note-m{font-size:11px;color:var(--navy-300);margin-top:8px;}
+
+  /* Historie / Referenz */
+  .ref{background:var(--cream-50);border:1px solid var(--cream-300);border-radius:12px;padding:12px 14px;margin-bottom:8px;}
+  .ref-top{font-family:var(--serif);font-size:13.5px;color:var(--navy-900);} .ref-s{font-size:11.5px;color:var(--navy-400);margin-top:4px;}
+  .ref-a{display:flex;gap:7px;margin-top:9px;flex-wrap:wrap;}
+  .btn-sm{min-height:40px;border:1px solid var(--cream-300);background:var(--cream-50);color:var(--navy-700);border-radius:9px;font-size:11.5px;padding:0 12px;display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-family:var(--sans);} .btn-sm:hover{border-color:var(--magenta);color:var(--magenta);} .btn-sm svg.i{font-size:13px;}
+
+  /* Profil */
+  .profile{display:flex;flex-wrap:wrap;gap:7px;}
+  .pchip{background:var(--cream-100);border:1px solid var(--cream-300);border-radius:9px;padding:8px 12px;font-size:12px;color:var(--navy-700);} .profile-m{font-size:11px;color:var(--navy-300);margin-top:8px;}
+
+  /* Empty / Reklamation */
+  .empty{border:1px dashed var(--cream-400);border-radius:12px;padding:13px 15px;font-size:12.5px;color:var(--navy-500);display:flex;align-items:center;gap:9px;line-height:1.4;} .empty svg.i{font-size:16px;color:var(--succ);flex:none;}
+
+  /* Fotos */
+  .docs{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .dthumb{width:52px;height:52px;border-radius:10px;background:linear-gradient(135deg,#B89F7A,#8E7355);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.85);font-size:17px;}
+  .dfile{display:inline-flex;align-items:center;gap:7px;min-height:48px;padding:0 13px;border-radius:10px;background:var(--cream-50);border:1px solid var(--cream-300);font-size:12px;color:var(--navy-700);}
+  .dadd{width:52px;height:52px;border-radius:10px;border:1.5px dashed var(--cream-400);display:flex;align-items:center;justify-content:center;color:var(--navy-400);cursor:pointer;font-size:17px;} .dadd:hover{border-color:var(--magenta);color:var(--magenta);}
+
+  /* Steckplatz */
+  .slot{border:1px dashed var(--cream-400);border-radius:14px;padding:15px 17px;background:repeating-linear-gradient(135deg,transparent,transparent 9px,rgba(139,115,85,.03) 9px,rgba(139,115,85,.03) 18px);}
+  .slot-h{display:flex;align-items:center;gap:9px;margin-bottom:11px;} .slot-h svg.i{font-size:17px;color:var(--navy-300);} .slot-h .t{font-family:var(--serif);font-size:15px;color:var(--navy-600);}
+  .slot-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--cream-300);font-size:12.5px;} .slot-row:last-of-type{border-bottom:none;} .slot-row .k{color:var(--navy-500);}
+  .slot-tag{font-size:9.5px;letter-spacing:.4px;text-transform:uppercase;color:var(--info-fg);background:var(--info-bg);border-radius:999px;padding:3px 8px;font-weight:600;}
+  .slot-foot{font-size:11.5px;color:var(--navy-400);margin-top:11px;line-height:1.5;font-style:italic;}
+
+  /* Schnellaktionen (Desktop-Grid) */
+  .qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .qa{min-height:66px;background:var(--cream-50);border:1px solid var(--cream-300);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;color:var(--navy-800);font-family:var(--sans);transition:transform .12s var(--ease),background .15s;padding:8px;}
+  .qa:hover{background:var(--cream-100);} .qa:active{transform:translateY(1px);}
+  .qa svg.i{font-size:19px;color:var(--navy-600);} .qa .ql{font-size:11.5px;}
+  .qa.primary{background:var(--navy-800);border-color:var(--navy-800);color:var(--cream-50);} .qa.primary svg.i{color:var(--cream-50);} .qa.primary:hover{background:var(--navy-700);}
+
+  .tl{display:flex;flex-direction:column;}
+  .tl-i{display:grid;grid-template-columns:28px 1fr;gap:11px;padding:9px 0;position:relative;}
+  .tl-i:not(:last-child)::after{content:"";position:absolute;left:13px;top:32px;bottom:-3px;width:1px;background:var(--cream-300);}
+  .tl-d{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;z-index:2;position:relative;flex:none;font-size:14px;}
+  .tl-d.succ{background:var(--succ-bg);color:var(--succ-fg);} .tl-d.warn{background:var(--warn-bg);color:var(--warn-fg);} .tl-d.info{background:var(--cream-200);color:var(--navy-500);}
+  .tl-time{font-size:10.5px;color:var(--navy-300);} .tl-t{font-size:12.5px;color:var(--navy-800);margin-top:1px;line-height:1.35;} .tl-s{font-size:11px;color:var(--navy-300);margin-top:1px;}
+
+  .foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:15px 26px;border-top:1px solid var(--cream-300);background:var(--cream-100);flex:none;}
+  .foot-v{font-size:11px;color:var(--navy-300);letter-spacing:.3px;} .foot-a{display:flex;gap:8px;flex-wrap:wrap;}
+
+  /* Mobile Dock */
+  .dock{display:none;position:sticky;bottom:0;z-index:9;background:var(--cream-50);border-top:1px solid var(--cream-300);box-shadow:0 -8px 22px rgba(26,31,46,.12);padding:8px 10px 12px;flex:none;}
+  .dock-sheet{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;max-height:0;overflow:hidden;transition:max-height .32s var(--ease);}
+  .dock.open .dock-sheet{max-height:120px;margin-bottom:8px;}
+  .dock-main{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;}
+  .da{min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:1px solid transparent;background:transparent;color:var(--navy-700);font-size:10px;border-radius:11px;cursor:pointer;padding:5px 2px;font-family:var(--sans);}
+  .da svg.i{font-size:21px;color:var(--navy-600);}
+  .da.primary{background:var(--navy-800);color:var(--cream-50);} .da.primary svg.i{color:var(--cream-50);}
+  .da.more{color:var(--navy-500);} .da.more svg.i{color:var(--navy-500);} .dock.open .da.more svg.i{transform:rotate(180deg);}
+  .dock-sheet .da{border:1px solid var(--cream-300);background:var(--cream-50);}
+
+  @container (max-width:720px){
+    .body{grid-template-columns:1fr;}
+    .main{border-right:none;border-bottom:1px solid var(--cream-300);}
+    .next-a .btn{flex:1 1 100%;}
+    .head{flex-wrap:wrap;} .head-r{width:100%;align-items:flex-start;} .tags{justify-content:flex-start;max-width:none;}
+    .ord-title{font-size:28px;}
+    .foot{justify-content:stretch;} .foot-a{flex:1 1 100%;} .foot-a .btn{flex:1 1 auto;}
+    .qa-sec{display:none;} .dock{display:block;}
+  }
+  @container (max-width:470px){
+    .head{padding:18px 15px 14px;} .main,.rail{padding:6px 15px 18px;} .foot{padding:14px 15px;}
+  }
+
+  @keyframes rise{from{opacity:0;transform:translateY(7px);}to{opacity:1;transform:none;}}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l4.5 4.5L19 7"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24"><path d="M12 3l8 4v10l-8 4-8-4V7z"/><path d="M4 7l8 4 8-4M12 11v10"/></symbol>
+  <symbol id="i-card" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10h18M7 14.5h4"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 7l8.5 6 8.5-6"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M15.8 21A13.5 13.5 0 0 1 3 8.2 2.4 2.4 0 0 1 5.4 6h1.9L9 9.6 7 11a10 10 0 0 0 6 6l1.4-2 3.6 1.7v1.9A2.4 2.4 0 0 1 15.8 21z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9 12.5h6M9 16h6"/></symbol>
+  <symbol id="i-receipt" viewBox="0 0 24 24"><path d="M6 3h12v18l-2-1.4L14 21l-2-1.4L10 21l-2-1.4L6 21z"/><path d="M9.5 8.5h5M9.5 12.5h5"/></symbol>
+  <symbol id="i-truck" viewBox="0 0 24 24"><path d="M3 6.5h11v9H3z"/><path d="M14 9.5h4l3 3v3h-7z"/><circle cx="7.5" cy="17" r="1.7"/><circle cx="17.5" cy="17" r="1.7"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-photo" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.7"/><path d="M4 18l5-5 3.5 3L16 13l4 4"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M5 19h4L20 8l-4-4L5 15z"/></symbol>
+  <symbol id="i-open" viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-msg" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 4l2.5 5.2 5.5.7-4 3.9 1 5.6-5-2.8-5 2.8 1-5.6-4-3.9 5.5-.7z"/></symbol>
+  <symbol id="i-tag" viewBox="0 0 24 24"><path d="M4 4h7l9 9-7 7-9-9z"/><circle cx="8.5" cy="8.5" r="1.3"/></symbol>
+  <symbol id="i-package" viewBox="0 0 24 24"><path d="M3 8l9-4 9 4-9 4z"/><path d="M3 8v8l9 4 9-4V8"/></symbol>
+  <symbol id="i-tool" viewBox="0 0 24 24"><path d="M14 6a3.5 3.5 0 0 0 4.5 4.5L21 13l-8 8-3-3 8-8-2.5-2.5A3.5 3.5 0 0 0 14 6z"/></symbol>
+</svg>
+
+<div class="page-head">
+  <div class="ph-brand"><div class="ph-logo">GK</div><div class="ph-name">KREILE</div></div>
+  <div class="ph-title">Kundenkarte — Machart-Entwurf V2</div>
+  <div class="ph-sub">Klarere Trennung &amp; kräftige Rubriken · Notizen nach oben &amp; hervorgehoben · Verlauf entdoppelt.<br>Tablet/Handy: Schnellaktionen als unten angepinnte Leiste mit „Mehr…".</div>
+</div>
+
+<div class="stage">
+  <div class="frame-col">
+    <div class="frame-label"><b>Desktop</b> · Maus · Variante&nbsp;S</div>
+    <div class="frame desktop" data-card></div>
+  </div>
+  <div class="frame-col">
+    <div class="frame-label"><b>Tablet / Handy</b> · Touch · Dock unten</div>
+    <div class="frame tablet" data-card></div>
+  </div>
+</div>
+
+<template id="tpl-card">
+  <div class="card">
+    <div class="stripe"></div>
+
+    <div class="head">
+      <div class="head-l">
+        <div class="ord-kicker">Kunde <span class="no">K-2026-0018</span></div>
+        <div class="ord-title">Max Mustermann</div>
+        <div class="ord-sub">Privatkunde · Oldtimer-Sammler · Kunde seit März 2024</div>
+        <div class="contact">
+          <span>60325 Frankfurt</span><span class="sep">·</span>
+          <a href="tel:+4969">+49 69 1234 567</a><span class="sep">·</span>
+          <a href="mailto:max.mustermann@example.de">max.mustermann@example.de</a>
+        </div>
+        <div class="meta">
+          <span class="pill pill-succ"><svg class="i"><use href="#i-star"/></svg>A-Kunde</span>
+          <span class="pill pill-succ"><svg class="i"><use href="#i-box"/></svg>3 Aufträge im Haus</span>
+          <span class="pill pill-soft"><svg class="i"><use href="#i-truck"/></svg>Versand DHL</span>
+        </div>
+        <div class="pref">Bevorzugt E-Mail · Ton locker-direkt · Preisfreigabe schriftlich</div>
+      </div>
+      <div class="head-r">
+        <button class="close" aria-label="Schließen"><svg class="i"><use href="#i-x"/></svg></button>
+        <div class="tags">
+          <span class="tag"><svg class="i"><use href="#i-tag"/></svg>Oldtimer</span>
+          <span class="tag">zahlt zuverlässig</span>
+          <span class="tag">sammelt &amp; bündelt</span>
+          <span class="tag add"><svg class="i"><use href="#i-plus"/></svg>Tag</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="body">
+      <div class="main">
+
+        <!-- 1 · Nächste Aktion -->
+        <div class="sec">
+          <div class="next">
+            <div class="next-k">Nächste Aktion</div>
+            <div class="next-t">Mustermann über den Versand des 300 SL informieren</div>
+            <div class="next-s">Auftrag A-2026-0042 · Express · <span class="due-red">Liefertermin in 3 Tagen · 15.07.</span></div>
+            <div class="next-a">
+              <button class="btn btn-primary"><svg class="i"><use href="#i-mail"/></svg>E-Mail schreiben</button>
+              <button class="btn"><svg class="i"><use href="#i-phone"/></svg>Anrufen</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2 · Aktive Aufträge -->
+        <div class="sec">
+          <div class="sec-h">Aktive Aufträge · 3<span class="add"><svg class="i"><use href="#i-plus"/></svg>Neuer Auftrag</span></div>
+          <div class="order">
+            <span class="odot warn"></span>
+            <div><span class="onum">A-2026-0042</span><div class="otitle">Mercedes-Benz 300 SL · Chrom-Restauration</div></div>
+            <div class="oright"><div class="ostage">Galvanik · Express</div><div class="odue warn">Liefertermin in 3 T</div></div>
+          </div>
+          <div class="order">
+            <span class="odot ok"></span>
+            <div><span class="onum">A-2026-0051</span><div class="otitle">Zierrat &amp; Kleinteile · vernickeln</div></div>
+            <div class="oright"><div class="ostage">angenommen</div><div class="odue ok">im Plan</div></div>
+          </div>
+          <div class="order">
+            <span class="odot ok"></span>
+            <div><span class="onum">A-2026-0038</span><div class="otitle">Scheinwerfertöpfe · verchromen</div></div>
+            <div class="oright"><div class="ostage">fertig</div><div class="odue ok">Versand offen</div></div>
+          </div>
+        </div>
+
+        <!-- 3 · Notizen (nach oben, hervorgehoben) -->
+        <div class="sec">
+          <div class="sec-h">Notizen &amp; Telefonnotizen<span class="add"><svg class="i"><use href="#i-plus"/></svg>Notiz · Kunde oder Auftrag</span></div>
+          <div class="notes">
+            <div class="note">
+              <span class="note-scope scope-phone"><svg class="i"><use href="#i-phone"/></svg>Telefonnotiz · A-2026-0042 · Zierleisten</span>
+              <div class="note-t">Rückfrage zum Glanzgrad der Zierleisten. Kunde möchte ein Muster sehen. <b>Folgeaktion: Muster senden.</b></div>
+              <div class="note-m">M. Krause · 02.06.</div>
+            </div>
+            <div class="note">
+              <span class="note-scope scope-cust"><svg class="i"><use href="#i-user"/></svg>Kunde allgemein</span>
+              <div class="note-t">Sammelt Teile übers Jahr und bringt sie gebündelt. Nächste größere Lieferung voraussichtlich August.</div>
+              <div class="note-m">M. Krause · 12.05.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4 · Eigenheiten & Absprachen -->
+        <div class="sec">
+          <div class="sec-h">Eigenheiten &amp; Absprachen<span class="add"><svg class="i"><use href="#i-plus"/></svg>Absprache</span></div>
+          <div class="facts">
+            <div class="fact"><svg class="i"><use href="#i-package"/></svg><div><span class="fk">Verpackung</span>Zierteile einzeln in Seidenpapier, getrennt von den Stoßstangen verpacken.</div></div>
+            <div class="fact"><svg class="i"><use href="#i-tool"/></svg><div><span class="fk">Bearbeitung</span>Originalschrauben mit Patina <b>erhalten</b> — nicht neu verchromen.</div></div>
+            <div class="fact"><svg class="i"><use href="#i-file"/></svg><div><span class="fk">Preisabsprache</span>Chrom hochglanz Stoßstange · <b>Festpreis vereinbart</b> · gültig bis 12/2026 · Mindestpreis hinterlegt.</div></div>
+          </div>
+        </div>
+
+        <!-- 5 · Historie & ähnliche -->
+        <div class="sec">
+          <div class="sec-h">Historie &amp; ähnliche Arbeiten<span class="add">Filter: Oberfläche ▾</span></div>
+          <div class="ref">
+            <div class="ref-top">A-2025-0188 · Motorradteile BMW R75 · verchromt</div>
+            <div class="ref-s">abgeschlossen Mai 2025 · 8 Fotos · keine Reklamation</div>
+            <div class="ref-a"><button class="btn-sm"><svg class="i"><use href="#i-open"/></svg>Öffnen</button><button class="btn-sm"><svg class="i"><use href="#i-copy"/></svg>Als Referenz verwenden</button></div>
+          </div>
+          <div class="ref">
+            <div class="ref-top">A-2024-0402 · Stoßstange Opel Rekord · Chrom hochglanz</div>
+            <div class="ref-s">abgeschlossen 2024 · 5 Fotos · keine Reklamation</div>
+            <div class="ref-a"><button class="btn-sm"><svg class="i"><use href="#i-open"/></svg>Öffnen</button><button class="btn-sm"><svg class="i"><use href="#i-copy"/></svg>Als Referenz verwenden</button></div>
+          </div>
+        </div>
+
+        <!-- 6 · Fotos -->
+        <div class="sec">
+          <div class="sec-h">Fotos &amp; Dokumente</div>
+          <div class="docs">
+            <div class="dthumb"><svg class="i"><use href="#i-photo"/></svg></div>
+            <div class="dthumb"><svg class="i"><use href="#i-photo"/></svg></div>
+            <div class="dfile"><svg class="i"><use href="#i-file"/></svg>Preisvereinbarung.pdf</div>
+            <div class="dadd"><svg class="i"><use href="#i-plus"/></svg></div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="rail">
+        <!-- Schnellaktionen (Desktop-Grid; schmal → Dock) -->
+        <div class="sec qa-sec">
+          <div class="sec-h">Schnellaktionen</div>
+          <div class="qa-grid">
+            <button class="qa primary"><svg class="i"><use href="#i-plus"/></svg><span class="ql">Neuer Auftrag</span></button>
+            <button class="qa"><svg class="i"><use href="#i-phone"/></svg><span class="ql">Anrufen</span></button>
+            <button class="qa"><svg class="i"><use href="#i-mail"/></svg><span class="ql">E-Mail</span></button>
+            <button class="qa"><svg class="i"><use href="#i-receipt"/></svg><span class="ql">Rechnung</span></button>
+            <button class="qa"><svg class="i"><use href="#i-card"/></svg><span class="ql">Zahlung</span></button>
+            <button class="qa"><svg class="i"><use href="#i-alert"/></svg><span class="ql">Reklamation</span></button>
+            <button class="qa"><svg class="i"><use href="#i-edit"/></svg><span class="ql">Bearbeiten</span></button>
+            <button class="qa"><svg class="i"><use href="#i-copy"/></svg><span class="ql">Duplizieren</span></button>
+          </div>
+        </div>
+
+        <!-- Teile & Profil -->
+        <div class="sec">
+          <div class="sec-h">Teile &amp; Profil</div>
+          <div class="profile">
+            <span class="pchip">Chrom hochglanz · Stoßstangen</span>
+            <span class="pchip">Chrom hochglanz · Zierleisten</span>
+            <span class="pchip">vernickeln · Kleinteile</span>
+            <span class="pchip">verkupfern + verchromen · Ringe</span>
+          </div>
+          <div class="profile-m">Wiederkehrende Oberflächen dieses Kunden seit 2024.</div>
+        </div>
+
+        <!-- Reklamationen -->
+        <div class="sec">
+          <div class="sec-h">Reklamationen</div>
+          <div class="empty"><svg class="i"><use href="#i-check"/></svg>Keine offenen · 1 erledigt (2024, Kulanz-Nachpolitur).</div>
+        </div>
+
+        <!-- Kontaktverlauf (entdoppelt: Ereignisse, keine Notiz-Wiederholung) -->
+        <div class="sec">
+          <div class="sec-h">Kontaktverlauf</div>
+          <div class="tl">
+            <div class="tl-i"><div class="tl-d succ"><svg class="i"><use href="#i-mail"/></svg></div>
+              <div><div class="tl-time">heute · 08:14</div><div class="tl-t">Status-Mail „300 SL in Bearbeitung"</div></div></div>
+            <div class="tl-i"><div class="tl-d warn"><svg class="i"><use href="#i-phone"/></svg></div>
+              <div><div class="tl-time">02.06. · 10:30</div><div class="tl-t">Anruf · Glanzgrad Zierleisten</div></div></div>
+            <div class="tl-i"><div class="tl-d info"><svg class="i"><use href="#i-check"/></svg></div>
+              <div><div class="tl-time">21.05. · 09:12</div><div class="tl-t">A-2026-0042 angenommen · Versand vereinbart</div></div></div>
+            <div class="tl-i"><div class="tl-d info"><svg class="i"><use href="#i-box"/></svg></div>
+              <div><div class="tl-time">12.05.</div><div class="tl-t">Neuer Auftrag angelegt · A-2026-0051</div></div></div>
+            <div class="tl-i"><div class="tl-d info"><svg class="i"><use href="#i-user"/></svg></div>
+              <div><div class="tl-time">März 2024</div><div class="tl-t">Kunde angelegt</div></div></div>
+          </div>
+        </div>
+
+        <!-- Steckplatz: Rechnungen / offene Posten -->
+        <div class="sec">
+          <div class="slot">
+            <div class="slot-h"><svg class="i"><use href="#i-receipt"/></svg><span class="t">Rechnungen &amp; offene Posten</span></div>
+            <div class="slot-row"><span class="k">Offene Posten</span><span class="slot-tag">geplant</span></div>
+            <div class="slot-row"><span class="k">Letzte Rechnung</span><span class="slot-tag">geplant</span></div>
+            <div class="slot-foot">Kommt mit dem Abrechnungs-Modul (F1.4 / F1.5).</div>
+          </div>
+        </div>
+
+        <!-- Steckplatz: Analyse & Kundenwert -->
+        <div class="sec">
+          <div class="slot">
+            <div class="slot-h"><svg class="i"><use href="#i-clock"/></svg><span class="t">Analyse &amp; Kundenwert</span></div>
+            <div class="slot-row"><span class="k">Umsatz (LTV) · Gewinn</span><span class="slot-tag">geplant</span></div>
+            <div class="slot-row"><span class="k">Marge · Ø Zahlungsdauer</span><span class="slot-tag">geplant</span></div>
+            <div class="slot-row"><span class="k">Risk-Level · Zielgruppe</span><span class="slot-tag">geplant</span></div>
+            <div class="slot-foot">Kommt mit dem Analyse-Modul — hier bewusst kein vorläufiger Wert.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <div class="foot-v">Machart-Entwurf V2 · 19.08.2026</div>
+      <div class="foot-a">
+        <button class="btn">Schließen</button>
+        <button class="btn btn-primary"><svg class="i"><use href="#i-open"/></svg>Ganze Akte öffnen</button>
+      </div>
+    </div>
+
+    <!-- Mobile Dock -->
+    <div class="dock" data-dock>
+      <div class="dock-sheet">
+        <button class="da"><svg class="i"><use href="#i-card"/></svg>Zahlung</button>
+        <button class="da"><svg class="i"><use href="#i-alert"/></svg>Reklam.</button>
+        <button class="da"><svg class="i"><use href="#i-edit"/></svg>Bearbeiten</button>
+        <button class="da"><svg class="i"><use href="#i-copy"/></svg>Dupliz.</button>
+      </div>
+      <div class="dock-main">
+        <button class="da primary"><svg class="i"><use href="#i-plus"/></svg>Auftrag</button>
+        <button class="da"><svg class="i"><use href="#i-phone"/></svg>Anrufen</button>
+        <button class="da"><svg class="i"><use href="#i-mail"/></svg>E-Mail</button>
+        <button class="da"><svg class="i"><use href="#i-receipt"/></svg>Rechnung</button>
+        <button class="da more" data-dock-more><svg class="i"><use href="#i-chev"/></svg>Mehr…</button>
+      </div>
+    </div>
+
+  </div>
+</template>
+
+<script>
+  const tpl = document.getElementById('tpl-card');
+  for (const frame of document.querySelectorAll('[data-card]')) frame.appendChild(tpl.content.cloneNode(true));
+  document.addEventListener('click', (e) => {
+    const dm = e.target.closest('[data-dock-more]');
+    if (dm) { dm.closest('[data-dock]').classList.toggle('open'); }
+  });
+</script>
+
+</body>
+</html>

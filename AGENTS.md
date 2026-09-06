@@ -1,9 +1,11 @@
 # Galvanik-Kreile WerkstattCockpit
 
+> ⚠️ BAUANLEITUNG (ZUERST LESEN): `docs/project/linie/00_ABC_INDEX.md` — das komplette ABC (WAS=Modulkarte, WIE=Path 1, AUSSEHEN=ui/, WARUM=LINIE, BEISPIEL=Modul, PROBLEME=Problemlösungen, BAUPLAN). Gebaut wird die Modulbauweise Path 1 (`ARCHITEKTUR_MODULE_PATH1.md`) nach der Modulkarte (`MODULKARTE_KANON.md`), Optik gegen `ui/`. Bei Widerspruch gelten diese Dateien. Gruen in der CI ist NICHT genug — Modul-Naehte + Designtreue + Scope sind Teil der Abnahme; Pruefer ≠ Autor.
+
 ## Projekt
 
 - Arbeite ausschliesslich fuer das Galvanik-Kreile WerkstattCockpit.
-- Der feste Tenant ist `galvanik-kreile`.
+- Der Tenant dieser Auslieferung ist `galvanik-kreile` — aber NUR ueber `TenantProvider`/Injektion, NIE als Literal in Modul-Kernen (D-ARCH-007; siehe ARCHITEKTUR_MODULE_PATH1.md Naht 3).
 - Stack: Next.js App Router, TypeScript, Supabase, Drizzle, Recharts, Framer Motion und PWA.
 - `main` ist die einzige Lieferwahrheit.
 - Vor Next.js-Codeaenderungen die relevante Dokumentation unter `node_modules/next/dist/docs/` lesen.
