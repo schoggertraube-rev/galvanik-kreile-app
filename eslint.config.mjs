@@ -105,8 +105,15 @@ const eslintConfig = defineConfig([
     },
   },
   {
-    // Einzige erlaubte Stelle + noch nicht migrierte db/ (SQL/Seed, TODO S0-Rest).
-    files: ["src/lib/tenant.ts", "src/db/**/*.ts", "src/db/**/*.tsx"],
+    // Einzige erlaubte Stelle + noch nicht migrierte db/ (SQL/Seed, TODO S0-Rest)
+    // + byte-gepinnte Evidence-Tests: quality.yml prueft deren Blob-Hash exakt
+    //   (W4_TEST_BLOB), sie duerfen NICHT migriert/veraendert werden.
+    files: [
+      "src/lib/tenant.ts",
+      "src/db/**/*.ts",
+      "src/db/**/*.tsx",
+      "src/test/w4_order_station_attachment.integration.test.ts",
+    ],
     rules: { "no-restricted-syntax": "off" },
   },
   // Override default ignores of eslint-config-next.

@@ -1,4 +1,3 @@
-import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { createHash, randomUUID } from "node:crypto";
 import { File as NodeFile } from "node:buffer";
 import { createElement } from "react";
@@ -10,7 +9,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 const LOCAL_DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 const LOCAL_SUPABASE_URL = "http://127.0.0.1:54321";
 const BUCKET_ID = "item-photos";
-const TENANT_A = KREILE_TENANT_SLUG;
+const TENANT_A = "galvanik-kreile";
 const RUN_SUFFIX = randomUUID().slice(0, 8);
 const TENANT_B = `w4-attachment-tenant-b-${RUN_SUFFIX}`;
 const PNG_BYTES = new Uint8Array([
