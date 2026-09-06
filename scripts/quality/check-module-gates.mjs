@@ -27,7 +27,7 @@
 // Kandidatenbaum — ein Kandidat kann das Gate nicht durch Aendern von Skript/Baseline/Schema umgehen.
 // Exit 0 = alle Naehte halten. Exit 1 = mindestens ein Verstoss (Datei:Zeile im Output).
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -61,8 +61,11 @@ export const LEGACY_DOMAIN_PARENTS = [
   "src/contexts",
 ];
 
-const CODE_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"]);
-const SKIP_DIRS = new Set(["node_modules", ".next", "out", "build", ".git"]);
+const CODE_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".mdx"]);
+const SQL_EXTENSIONS = new Set([...CODE_EXTENSIONS, ".sql"]);
+// Red-Team P0: NUR node_modules/.git ueberspringen — ein Ordner namens build/ oder out/
+// unter src/ ist Quellcode und wird gescannt.
+const SKIP_DIRS = new Set(["node_modules", ".git"]);
 
 // ── Hilfen ────────────────────────────────────────────────────────────────────
 
@@ -70,20 +73,52 @@ function toPosix(p) {
   return p.replaceAll("\\", "/");
 }
 
-function walk(root, relDir, out) {
+// Symlinks (Red-Team P0): werden verfolgt, muessen aber innerhalb <root> bleiben —
+// sonst Befund (Dateien ausserhalb waeren fuer das Gate unsichtbar). Schleifenschutz via Realpath.
+function walk(root, relDir, out, seen = new Set(), findings = null) {
   const abs = path.join(root, relDir);
   if (!existsSync(abs)) return out;
+  const rootReal = realpathSync(root);
   for (const entry of readdirSync(abs, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
     if (SKIP_DIRS.has(entry.name)) continue;
     const rel = toPosix(path.join(relDir, entry.name));
-    if (entry.isDirectory()) walk(root, rel, out);
-    else if (entry.isFile()) out.push(rel);
+    const entryAbs = path.join(abs, entry.name);
+    let isDir = entry.isDirectory();
+    let isFile = entry.isFile();
+    if (entry.isSymbolicLink()) {
+      let real;
+      try {
+        real = realpathSync(entryAbs);
+      } catch {
+        findings?.push(`[naht2] ${rel}: haengender Symlink`);
+        continue;
+      }
+      if (real !== rootReal && !real.startsWith(rootReal + path.sep)) {
+        findings?.push(`[naht2] ${rel}: Symlink zeigt aus dem Repo heraus (${toPosix(real)}) — fuer das Gate unsichtbarer Code ist verboten`);
+        continue;
+      }
+      if (seen.has(real)) continue;
+      seen.add(real);
+      const st = statSync(real);
+      isDir = st.isDirectory();
+      isFile = st.isFile();
+    }
+    if (isDir) walk(root, rel, out, seen, findings);
+    else if (isFile) out.push(rel);
   }
   return out;
 }
 
-function listCodeFiles(root, relDir) {
-  return walk(root, relDir, []).filter((f) => CODE_EXTENSIONS.has(path.extname(f)));
+function listFiles(root, relDir, extensions, findings = null) {
+  return walk(root, relDir, [], new Set(), findings).filter((f) => extensions.has(path.extname(f)));
+}
+
+function listCodeFiles(root, relDir, findings = null) {
+  return listFiles(root, relDir, CODE_EXTENSIONS, findings);
+}
+
+function asStringArray(value) {
+  return Array.isArray(value) ? value.filter((v) => typeof v === "string") : [];
 }
 
 function lineOf(text, index) {
@@ -146,9 +181,13 @@ export function validateAgainstSchema(value, schema, at = "$") {
 
 // ── Export-/Import-Extraktion (regex-basiert, bewusst konservativ) ─────────────
 
+// Star-Re-Exports (`export * from`) sind in public.ts VERBOTEN: die Fassade ist eine
+// explizite Liste, sonst waere publicExports nicht pruefbar (Red-Team P1).
+export const STAR_REEXPORT = /^\s*export\s+(?:type\s+)?\*\s*(?:as\s+[\w$]+\s+)?from\b/m;
+
 export function exportedSymbols(source) {
   const names = new Set();
-  const decl = /^\s*export\s+(?:default\s+)?(?:declare\s+)?(?:async\s+)?(?:const|let|var|function\*?|class|type|interface|enum|abstract\s+class)\s+([A-Za-z_$][\w$]*)/gm;
+  const decl = /^\s*export\s+(?:default\s+)?(?:declare\s+)?(?:async\s+)?(?:const|let|var|function\*?|class|type|interface|enum|namespace|abstract\s+class)\s+([A-Za-z_$][\w$]*)/gm;
   for (const m of source.matchAll(decl)) names.add(m[1]);
   const list = /^\s*export\s+(?:type\s+)?\{([^}]*)\}/gm;
   for (const m of source.matchAll(list)) {
@@ -164,13 +203,17 @@ export function exportedSymbols(source) {
 
 export function importSources(source) {
   const out = [];
+  // Quelle in ' " oder ` (Template ohne Interpolation). Bewusst NICHT erfasst (Design-
+  // Grenze, dokumentiert): dynamisch zusammengesetzte Pfade, Aliase ausser @/ (tsconfig
+  // wird separat auf genau "@/*" festgenagelt).
+  const q = `['"\`]([^'"\`$\\n]+)['"\`]`;
   const patterns = [
-    /\bimport\s+(?:type\s+)?[^'"`;]*?\bfrom\s*['"]([^'"]+)['"]/g,
-    /\bexport\s+(?:type\s+)?(?:\*|\{[^}]*\})\s*from\s*['"]([^'"]+)['"]/g,
-    /\bimport\s*['"]([^'"]+)['"]/g,
-    /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
-    /\brequire\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
-    /\bvi\.mock\s*\(\s*['"]([^'"]+)['"]/g,
+    new RegExp(`\\bimport\\s+(?:type\\s+)?[^'"\`;]*?\\bfrom\\s*${q}`, "g"),
+    new RegExp(`\\bexport\\s+(?:type\\s+)?(?:\\*(?:\\s+as\\s+[\\w$]+)?|\\{[^}]*\\})\\s*from\\s*${q}`, "g"),
+    new RegExp(`\\bimport\\s*${q}`, "g"),
+    new RegExp(`\\bimport\\s*\\(\\s*${q}\\s*\\)`, "g"),
+    new RegExp(`\\brequire\\s*\\(\\s*${q}\\s*\\)`, "g"),
+    new RegExp(`\\b(?:vi|jest)\\.(?:mock|doMock|unmock|importActual|requireActual|importMock)\\s*\\(\\s*${q}`, "g"),
   ];
   for (const re of patterns) {
     for (const m of source.matchAll(re)) out.push({ spec: m[1], index: m.index });
@@ -185,7 +228,8 @@ export function resolveSpec(importerRel, spec) {
   if (spec.startsWith("@/")) target = "src/" + spec.slice(2);
   else if (spec.startsWith("./") || spec.startsWith("../")) target = toPosix(path.posix.join(path.posix.dirname(importerRel), spec));
   else return null;
-  return target.replace(/\.(?:[cm]?[jt]sx?)$/, "").replace(/\/index$/, "");
+  // Bewusst KEIN /index-Kollaps (Red-Team P1): `@/modules/x/public/index` ist NICHT die Fassade.
+  return target.replace(/\.(?:[cm]?[jt]sx?)$/, "");
 }
 
 export function moduleOf(relPath) {
@@ -218,14 +262,23 @@ function gateManifests(root, findings, schemaPath) {
       findings.push(`[naht1] ${manifestRel}: kein gueltiges JSON (${error.message})`);
       continue;
     }
-    for (const err of validateAgainstSchema(manifest, schema)) findings.push(`[naht1] ${manifestRel}: ${err}`);
+    const schemaErrors = validateAgainstSchema(manifest, schema);
+    for (const err of schemaErrors) findings.push(`[naht1] ${manifestRel}: ${err}`);
+    if (manifest === null || typeof manifest !== "object" || Array.isArray(manifest)) continue; // Rest waere Folgefehler
     if (manifest.moduleId !== fach) findings.push(`[naht1] ${manifestRel}: moduleId '${manifest.moduleId}' != Ordnername '${fach}'`);
+    if (existsSync(path.join(root, MODULES_DIR, fach, "public"))) {
+      findings.push(`[naht1] ${MODULES_DIR}/${fach}/public: Ordner 'public/' verboten — die Fassade ist genau die Datei public.ts`);
+    }
     if (!existsSync(path.join(root, publicRel))) {
       findings.push(`[naht1] ${publicRel}: positive Fassade public.ts fehlt`);
     } else {
-      const exported = exportedSymbols(readFileSync(path.join(root, publicRel), "utf8"));
-      for (const entry of manifest.publicExports ?? []) {
-        const m = typeof entry === "string" ? entry.match(/^@\/modules\/([^/#]+)\/public#([A-Za-z_$][\w$]*)$/) : null;
+      const publicSource = readFileSync(path.join(root, publicRel), "utf8");
+      if (STAR_REEXPORT.test(publicSource)) {
+        findings.push(`[naht1] ${publicRel}: 'export * from' verboten — Fassade ist eine explizite Liste (publicExports)`);
+      }
+      const exported = exportedSymbols(publicSource);
+      for (const entry of asStringArray(manifest.publicExports)) {
+        const m = entry.match(/^@\/modules\/([^/#]+)\/public#([A-Za-z_$][\w$]*)$/);
         if (!m || m[1] !== fach) {
           findings.push(`[naht1] ${manifestRel}: publicExports '${entry}' muss '@/modules/${fach}/public#Symbol' sein`);
         } else if (!exported.has(m[2])) {
@@ -233,25 +286,61 @@ function gateManifests(root, findings, schemaPath) {
         }
       }
     }
-    for (const dep of manifest.dependencies ?? []) {
+    for (const dep of asStringArray(manifest.dependencies)) {
       if (!modules.includes(dep)) findings.push(`[naht1] ${manifestRel}: dependency '${dep}' ist kein Modul unter ${MODULES_DIR}/`);
       if (dep === fach) findings.push(`[naht1] ${manifestRel}: Modul haengt von sich selbst ab`);
     }
+    // Ablage (Red-Team P2): jedes Pfadsegment == fach (case-insensitive) unter den
+    // Legacy-Eltern, plus Datei <fach>.ts(x) direkt darunter.
     for (const parent of LEGACY_DOMAIN_PARENTS) {
-      const legacy = `${parent}/${fach}`;
-      if (existsSync(path.join(root, legacy))) {
-        findings.push(`[naht1] ${legacy}: Fach '${fach}' hat ein Modul, darf nicht mehr ausserhalb ${MODULES_DIR}/${fach}/ liegen`);
+      for (const rel of walk(root, parent, [])) {
+        const segments = rel.split("/").slice(parent.split("/").length);
+        const dirs = segments.slice(0, -1);
+        const file = segments.at(-1) ?? "";
+        const dirHit = dirs.find((d) => d.replace(/^[([]|[)\]]$/g, "").toLowerCase() === fach);
+        const fileHit = dirs.length === 0 && file.replace(/\.[cm]?[jt]sx?$/, "").toLowerCase() === fach;
+        if (dirHit || fileHit) {
+          findings.push(`[naht1] ${rel}: Fach '${fach}' hat ein Modul, darf nicht mehr ausserhalb ${MODULES_DIR}/${fach}/ liegen`);
+        }
       }
     }
     manifests.set(fach, manifest);
+  }
+  // ownsTables eindeutig (Red-Team P1): eine Tabelle gehoert genau EINEM Modul.
+  const owners = new Map();
+  for (const [fach, manifest] of manifests) {
+    for (const t of asStringArray(manifest.ownsTables)) {
+      const key = t.toLowerCase();
+      if (owners.has(key)) findings.push(`[naht1] ${MODULES_DIR}/${fach}/${fach}.manifest.json: ownsTables '${t}' gehoert bereits Modul '${owners.get(key)}'`);
+      else owners.set(key, fach);
+    }
   }
   return { modules, manifests };
 }
 
 // ── Naht 2: Positive Fassade / Tiefimport-Verbot ─────────────────────────────
 
+// tsconfig paths (Red-Team P1): das Gate loest nur "@/" auf. Jeder weitere Alias waere ein
+// unsichtbarer Importpfad -> verboten. Erlaubt ist exakt {"@/*": ["./src/*"]}.
+function gateTsconfigAliases(root, findings) {
+  const tsconfigAbs = path.join(root, "tsconfig.json");
+  if (!existsSync(tsconfigAbs)) return;
+  let paths;
+  try {
+    paths = readJson(tsconfigAbs)?.compilerOptions?.paths ?? {};
+  } catch {
+    findings.push("[naht2] tsconfig.json: kein gueltiges JSON");
+    return;
+  }
+  for (const [alias, targets] of Object.entries(paths)) {
+    const ok = alias === "@/*" && Array.isArray(targets) && targets.length === 1 && /^\.\/src\/\*$/.test(targets[0]);
+    if (!ok) findings.push(`[naht2] tsconfig.json: paths '${alias}' -> ${JSON.stringify(targets)} — nur "@/*": ["./src/*"] erlaubt (Gate loest nur @/ auf)`);
+  }
+}
+
 function gateImports(root, findings) {
-  for (const file of listCodeFiles(root, "src")) {
+  gateTsconfigAliases(root, findings);
+  for (const file of listCodeFiles(root, "src", findings)) {
     const source = readFileSync(path.join(root, file), "utf8");
     const importer = moduleOf(file);
     for (const { spec, index } of importSources(source)) {
@@ -273,19 +362,30 @@ function gateImports(root, findings) {
 
 // ── Naht 4: Cross-Modul-Fakten nur ueber v_*-Views ───────────────────────────
 
-const SQL_TABLE_REF = /\b(?:from|join|into|update|table|only)\s+((?:public|private)\.[a-z_][a-z0-9_]*)/gi;
+// Roh-SQL: schema-qualifiziert, optional mit "-Quoting. Supabase-Client: .from('tabelle')
+// zaehlt als public.tabelle. Bewusst NICHT erfasst (Design-Grenze, in ARCHITEKTUR §2
+// dokumentiert): unqualifizierte Tabellennamen, Drizzle-Tabellenobjekte, interpolierte Namen.
+const SQL_TABLE_REF = /\b(?:from|join|into|update|table|only|truncate)\s+"?(public|private)"?\."?([a-z_][a-z0-9_]*)"?/gi;
+const SUPABASE_FROM = /(?<!storage)\.from\s*\(\s*['"`]([a-z_][a-z0-9_]*)['"`]\s*\)/gi; // storage.from(bucket) ist keine Tabelle
+
+function tableRefs(source) {
+  const refs = [];
+  for (const m of source.matchAll(SQL_TABLE_REF)) refs.push({ ref: `${m[1]}.${m[2]}`.toLowerCase(), index: m.index });
+  for (const m of source.matchAll(SUPABASE_FROM)) refs.push({ ref: `public.${m[1]}`.toLowerCase(), index: m.index });
+  return refs;
+}
 
 function gateData(root, findings, manifests) {
   const declaredViews = new Set();
   for (const manifest of manifests.values()) {
-    for (const v of manifest.viewsFunctions ?? []) if (/^public\.v_/.test(v)) declaredViews.add(v);
+    for (const v of asStringArray(manifest.viewsFunctions)) if (/^public\.v_/i.test(v)) declaredViews.add(v.toLowerCase());
   }
   for (const [fach, manifest] of manifests) {
-    const owned = new Set(manifest.ownsTables ?? []);
-    for (const file of listCodeFiles(root, `${MODULES_DIR}/${fach}`)) {
+    const owned = new Set(asStringArray(manifest.ownsTables).map((t) => t.toLowerCase()));
+    for (const file of listFiles(root, `${MODULES_DIR}/${fach}`, SQL_EXTENSIONS)) {
       const source = readFileSync(path.join(root, file), "utf8");
-      for (const m of source.matchAll(SQL_TABLE_REF)) {
-        const ref = m[1].toLowerCase();
+      for (const m of tableRefs(source)) {
+        const ref = m.ref;
         if (owned.has(ref)) continue;
         if (/^public\.v_/.test(ref)) {
           if (!declaredViews.has(ref)) findings.push(`[naht4] ${file}:${lineOf(source, m.index)}: View '${ref}' ist in keinem Manifest (viewsFunctions) deklariert`);
@@ -348,9 +448,21 @@ function gateAgents(root, findings) {
 
 // ── Orchestrierung ───────────────────────────────────────────────────────────
 
-function readBaseline(absPath) {
-  if (!existsSync(absPath)) return { uiContract: { allowedLegacyFiles: [] } };
-  return readJson(absPath);
+function readBaseline(absPath, findings) {
+  const empty = { uiContract: { allowedLegacyFiles: [] } };
+  if (!existsSync(absPath)) return empty;
+  try {
+    const parsed = readJson(absPath);
+    const files = parsed?.uiContract?.allowedLegacyFiles;
+    if (!Array.isArray(files) || files.some((f) => typeof f !== "string")) {
+      findings.push(`[naht5] ${toPosix(absPath)}: uiContract.allowedLegacyFiles muss ein String-Array sein`);
+      return empty;
+    }
+    return parsed;
+  } catch (error) {
+    findings.push(`[naht5] ${toPosix(absPath)}: kein gueltiges JSON (${error.message})`);
+    return empty;
+  }
 }
 
 /**
@@ -360,8 +472,8 @@ function readBaseline(absPath) {
  */
 export function runModuleGates(root, { baseBaselinePath = null, schemaPath = null } = {}) {
   const findings = [];
-  const baseline = readBaseline(path.join(root, BASELINE_PATH));
-  const baseBaseline = baseBaselinePath ? readBaseline(baseBaselinePath) : null;
+  const baseline = readBaseline(path.join(root, BASELINE_PATH), findings);
+  const baseBaseline = baseBaselinePath ? readBaseline(baseBaselinePath, findings) : null;
   const { manifests } = gateManifests(root, findings, schemaPath);
   gateImports(root, findings);
   gateData(root, findings, manifests);

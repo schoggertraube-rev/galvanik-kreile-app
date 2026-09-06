@@ -4,7 +4,7 @@
 // Die Fixtures sind Mini-Repos in einem Temp-Ordner; das echte Schema wird 1:1 kopiert,
 // damit die Pruefung gegen den realen Vertrag laeuft und nicht gegen eine Kopie.
 
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -120,8 +120,8 @@ describe("S1 Naht 1 — Manifest je Modul + Ablage", () => {
       "src/lib/orders/read.ts": "export const r = 1;\n",
     });
     const f = findingsOf(root);
-    expect(f).toContainEqual(expect.stringContaining("[naht1] src/components/orders: Fach 'orders' hat ein Modul"));
-    expect(f).toContainEqual(expect.stringContaining("[naht1] src/lib/orders: Fach 'orders' hat ein Modul"));
+    expect(f).toContainEqual(expect.stringContaining("[naht1] src/components/orders/OrderCard.tsx: Fach 'orders' hat ein Modul"));
+    expect(f).toContainEqual(expect.stringContaining("[naht1] src/lib/orders/read.ts: Fach 'orders' hat ein Modul"));
   });
 
   it("Schema-Validator deckt object/required/additionalProperties/array/pattern/minLength ab", () => {
@@ -188,7 +188,8 @@ describe("S1 Naht 2 — positive Fassade / Tiefimport-Verbot", () => {
   it("resolveSpec: Alias, relativ, Endungen, index; Pakete ignoriert", () => {
     expect(resolveSpec("src/app/page.tsx", "@/modules/orders/public")).toBe("src/modules/orders/public");
     expect(resolveSpec("src/modules/a/server/x.ts", "../../b/public.ts")).toBe("src/modules/b/public");
-    expect(resolveSpec("src/modules/a/x.ts", "../b/server/index")).toBe("src/modules/b/server");
+    // bewusst KEIN index-Kollaps (Red-Team P1): public/index ist nicht die Fassade
+    expect(resolveSpec("src/modules/a/x.ts", "../b/server/index")).toBe("src/modules/b/server/index");
     expect(resolveSpec("src/app/page.tsx", "react")).toBeNull();
   });
 
@@ -285,5 +286,115 @@ describe("S1 Naht 6 — AGENTS.md verweist auf die Bauanleitung", () => {
 describe("S1 — echtes Repo", () => {
   it("der aktuelle Stand haelt alle Naehte (Baseline = Altlasten der Kill-Liste)", () => {
     expect(runModuleGates(process.cwd()).findings).toEqual([]);
+  });
+});
+
+describe("S1 Red-Team-Fixes (unabhaengige Pruefung 2026-09-06)", () => {
+  it("P0: Ordner build/ oder out/ unter src werden gescannt (kein Namens-Skip in der Tiefe)", () => {
+    const root = repo({
+      ...goodModule,
+      "src/modules/invoices/invoices.manifest.json": manifest("invoices"),
+      "src/modules/invoices/public.ts": "export {};\n",
+      "src/modules/invoices/build/leak.ts": `${IMP} { readOrder } from "../../orders/server/readOrder";\n`,
+      "src/app/out/leak.ts": `${IMP} { readOrder } from "@/modules/orders/server/readOrder";\n`,
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("[naht2] src/modules/invoices/build/leak.ts:1: Tiefimport"));
+    expect(f).toContainEqual(expect.stringContaining("[naht2] src/app/out/leak.ts:1: Tiefimport"));
+  });
+
+  it("P0: Symlink aus dem Repo heraus = FAIL, Symlink innerhalb wird gescannt", () => {
+    const outside = mkdtempSync(path.join(tmpdir(), "s1-outside-"));
+    temps.push(outside);
+    writeFileSync(path.join(outside, "leak.ts"), `${IMP} { x } from "@/modules/orders/server/readOrder";\n`);
+    const root = repo({ ...goodModule, "src/inner/real.ts": `${IMP} { x } from "@/modules/orders/server/readOrder";\n` });
+    try {
+      symlinkSync(outside, path.join(root, "src/app/vendor"), "junction");
+      symlinkSync(path.join(root, "src/inner"), path.join(root, "src/app/linked"), "junction");
+    } catch {
+      return; // Symlinks auf diesem System nicht erlaubt — Test nicht aussagekraeftig, nicht gruenwaschen
+    }
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("[naht2] src/app/vendor: Symlink zeigt aus dem Repo heraus"));
+    expect(f).toContainEqual(expect.stringContaining("[naht2] src/app/linked/real.ts:1: Tiefimport"));
+  });
+
+  it("P1: public/index, export * as, Template-Literal, vi.importActual werden erkannt", () => {
+    const root = repo({
+      ...goodModule,
+      "src/modules/orders/public/index.ts": "export const y = 1;\n",
+      "src/app/a.ts": `${IMP} { y } from "@/modules/orders/public/index";\n`,
+      "src/app/b.ts": `${EXP} * as ns from "@/modules/orders/server/readOrder";\n`,
+      "src/app/c.ts": `const m = await ${IMP}(\`@/modules/orders/server/readOrder\`);\n`,
+      "src/app/d.test.ts": `const real = await vi.${["import", "Actual"].join("")}("@/modules/orders/server/readOrder");\n`,
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("[naht1] src/modules/orders/public: Ordner 'public/' verboten"));
+    expect(f).toContainEqual(expect.stringContaining("[naht2] src/app/a.ts:1: Tiefimport '@/modules/orders/public/index'"));
+    expect(f).toContainEqual(expect.stringContaining("[naht2] src/app/b.ts:1: Tiefimport"));
+    expect(f).toContainEqual(expect.stringContaining("[naht2] src/app/c.ts:1: Tiefimport"));
+    expect(f).toContainEqual(expect.stringContaining("[naht2] src/app/d.test.ts:1: Tiefimport"));
+  });
+
+  it("P1: export * in public.ts verboten; fremde tsconfig-Aliase verboten", () => {
+    const root = repo({
+      ...goodModule,
+      "src/modules/orders/public.ts": `${EXP} * from "./server/readOrder";\n`,
+      "tsconfig.json": JSON.stringify({ compilerOptions: { paths: { "@/*": ["./src/*"], "~/*": ["./src/*"] } } }),
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("[naht1] src/modules/orders/public.ts: 'export * from' verboten"));
+    expect(f).toContainEqual(expect.stringContaining("[naht1] src/modules/orders/public.ts: exportiert 'readOrder' nicht"));
+    expect(f).toContainEqual(expect.stringContaining("[naht2] tsconfig.json: paths '~/*'"));
+    expect(f.filter((x) => x.includes("paths '@/*'"))).toEqual([]);
+  });
+
+  it("P1: ownsTables eindeutig; Supabase .from('tabelle'), \"public\".\"t\"-Quoting und .sql-Dateien werden geprueft; storage.from ist frei", () => {
+    const root = repo({
+      ...goodModule,
+      "src/modules/invoices/invoices.manifest.json": manifest("invoices", { ownsTables: ["public.orders", "public.invoices"] }),
+      "src/modules/invoices/public.ts": "export {};\n",
+      "src/modules/invoices/server/q.ts": [
+        'const a = supabase.from("customers").select("*");',
+        'const b = supabase.storage.from("scans").upload(p, f);',
+        'const c = sql`select * from "public"."customers"`;',
+        'const d = supabase.from("invoices").select("*");',
+      ].join("\n"),
+      "src/modules/invoices/db/view.sql": "create view public.v_invoice_facts as select * from public.customers;\n",
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("ownsTables 'public.orders' gehoert bereits Modul"));
+    expect(f).toContainEqual(expect.stringContaining("[naht4] src/modules/invoices/server/q.ts:1: Tabelle 'public.customers'"));
+    expect(f).toContainEqual(expect.stringContaining("[naht4] src/modules/invoices/server/q.ts:3: Tabelle 'public.customers'"));
+    expect(f).toContainEqual(expect.stringContaining("[naht4] src/modules/invoices/db/view.sql:1: Tabelle 'public.customers'"));
+    expect(f.filter((x) => x.includes("scans") || x.includes("q.ts:4"))).toEqual([]);
+  });
+
+  it("P2: Ablage-Check trifft auch (orders)-Routen, Orders/ und lib/orders.ts", () => {
+    const root = repo({
+      ...goodModule,
+      "src/app/(orders)/page.tsx": "export default () => null;\n",
+      "src/components/Orders/Card.tsx": "export const Card = () => null;\n",
+      "src/lib/orders.ts": "export const o = 1;\n",
+      "src/lib/ordersLegacy/x.ts": "export const l = 1;\n",
+    });
+    const f = findingsOf(root).filter((x) => x.startsWith("[naht1]"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/(orders)/page.tsx: Fach 'orders'"));
+    expect(f).toContainEqual(expect.stringContaining("src/components/Orders/Card.tsx: Fach 'orders'"));
+    expect(f).toContainEqual(expect.stringContaining("src/lib/orders.ts: Fach 'orders'"));
+    expect(f.filter((x) => x.includes("ordersLegacy"))).toEqual([]); // bewusst nicht (Spec: Fachname)
+  });
+
+  it("P2: kaputte Manifest-/Baseline-Strukturen ergeben Befunde statt Abstuerze", () => {
+    const root = repo({
+      "src/modules/a/a.manifest.json": "null",
+      "src/modules/b/b.manifest.json": JSON.stringify({ moduleId: "b", version: "1.0.0", owner: "k", publicExports: 5, dependencies: "x", ownsTables: 7 }),
+      "src/modules/b/public.ts": "export {};\n",
+      [BASELINE_PATH]: JSON.stringify({ uiContract: { allowedLegacyFiles: "nope" } }),
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("[naht1] src/modules/a/a.manifest.json: $: erwartet object"));
+    expect(f).toContainEqual(expect.stringContaining("[naht1] src/modules/b/b.manifest.json: $.publicExports: erwartet array"));
+    expect(f).toContainEqual(expect.stringContaining("allowedLegacyFiles muss ein String-Array sein"));
   });
 });
