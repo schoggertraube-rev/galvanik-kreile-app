@@ -58,6 +58,26 @@ async function bodySnippet(response) {
   }
 }
 
+// S10-Fix: Das letzte Base64URL-Zeichen zu aendern reicht nicht — wegen ungenutzter
+// Pad-Bits koennen verschiedene letzte Zeichen dieselben Signaturbytes dekodieren,
+// der JWT bleibt dann gueltig. Deshalb: Signatur dekodieren, ein Byte kippen,
+// Ungleichheit der Bytes beweisen, kanonisch re-encodieren.
+function tamperSignedUrlToken(signedUrlPath) {
+  const url = new URL(signedUrlPath, "http://f0-dummy.invalid");
+  const token = url.searchParams.get("token");
+  if (!token) throw new Error("signed URL enthaelt keinen token-Query-Parameter");
+  const segments = token.split(".");
+  if (segments.length !== 3) throw new Error(`token ist kein JWT mit exakt 3 Segmenten (${segments.length})`);
+  const signature = Buffer.from(segments[2], "base64url");
+  if (signature.length === 0) throw new Error("JWT-Signatursegment dekodiert zu 0 Bytes");
+  const tamperedSignature = Buffer.from(signature);
+  tamperedSignature[0] ^= 0x01;
+  if (signature.equals(tamperedSignature)) throw new Error("Signaturbytes nach XOR unveraendert");
+  segments[2] = tamperedSignature.toString("base64url");
+  url.searchParams.set("token", segments.join("."));
+  return url.pathname + url.search;
+}
+
 function pngBytes() {
   // Minimaler, aber gueltiger 1x1-PNG (Signatur + IHDR + IDAT + IEND) - ausreichend fuer
   // "gueltiges PNG" ohne eine Bildbibliothek als Abhaengigkeit einzufuehren.
@@ -145,11 +165,15 @@ async function main() {
     report(9, false, `konnte keine signed URL fuer Expiry-Test erzeugen: status=${s9SignResponse.status}`);
   }
 
-  // S10: signed URL manipuliert (Token-Suffix veraendert) -> 4xx
+  // S10: signed URL manipuliert (Signaturbyte gekippt) -> 4xx
   if (signedUrlPath) {
-    const tampered = signedUrlPath.slice(0, -1) + (signedUrlPath.endsWith("a") ? "b" : "a");
+    const tampered = tamperSignedUrlToken(signedUrlPath);
     const s10 = await fetch(`${STORAGE_BASE}${tampered}`, { headers: authHeaders(anonKey) });
-    report(10, s10.status >= 400 && s10.status < 500, `tampered signed URL GET status=${s10.status} ${await bodySnippet(s10)}`);
+    report(
+      10,
+      s10.status >= 400 && s10.status < 500,
+      `tampered signed URL GET status=${s10.status} signatureBytesChanged=true ${await bodySnippet(s10)}`,
+    );
   } else {
     report(10, false, "keine signed URL aus S2 verfuegbar, um sie zu manipulieren");
   }
