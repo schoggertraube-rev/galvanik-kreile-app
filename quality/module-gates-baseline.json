@@ -3,15 +3,12 @@
   "uiContract": {
     "allowedLegacyFiles": [
       "src/app/station/layout.tsx",
-      "src/app/warendurchlauf/WarendurchlaufCockpitClient.tsx",
       "src/app/warendurchlauf/WarendurchlaufRouteNav.tsx",
       "src/app/warendurchlauf/__tests__/w2cB2m5j.unavailable.realRender.test.tsx",
       "src/components/flow/WorkflowStrip.tsx",
       "src/components/layout/KreileAppShell.tsx",
-      "src/components/layout/KreileHeader.tsx",
       "src/components/layout/TabletTopFlowNav.tsx",
       "src/components/layout/TopWorkflowBar.tsx",
-      "src/components/ui/ThemeToggle.tsx",
       "src/components/warendurchlauf/WarendurchlaufStationNav.tsx",
       "src/components/warendurchlauf/__tests__/w2cB2m5u.stationNavTrend.failClosed.test.tsx"
     ]

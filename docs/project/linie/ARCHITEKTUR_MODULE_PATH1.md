@@ -26,11 +26,11 @@ Nichts vom Fach liegt außerhalb. Keine Parallel-Ablage in `components/<fach>` /
 - **TOT/PARALLEL (nach Check löschen):** cockpit, kontrolle, performance, status, analyse, baeder; Leichen finanzen (06.), kunden-auftraege (06.); Falsch-Nav WorkflowStrip, TabletTopFlowNav, TopWorkflowBar, WarendurchlaufStationNav; zweites Theme ThemeProvider/ThemeToggle („Dunkel").
 
 ## 4. Baureihenfolge (naht-zuerst)
-- **S0 Tenant-Fix (zuerst):** `src/lib/tenant.ts` + Lint-Verbot des Literals + alle Stellen migriert (Ausnahmen: `src/db/` Seeds, byte-gepinnter W4-Evidence-Test). **Gebaut: PR #75.**
-- **S1 Gate:** Manifest-CI, Tiefimport = CI-FAIL, v_*-Daten-CI, UI-Contract-CI (Baseline shrink-only), AGENTS-Verweis auf diese Datei. **Gebaut: PR #75 (gleicher Branch, S0+S1).** **Vor S1 kein Feature-Bau.**
+- **S0 Tenant-Fix (zuerst):** `src/lib/tenant.ts` + Lint-Verbot des Literals + alle Stellen migriert (Ausnahmen: `src/db/` Seeds, byte-gepinnter W4-Evidence-Test). **In main integriert: PR #75, `main@160bcf40`.**
+- **S1 Gate:** Manifest-CI, Tiefimport = CI-FAIL, v_*-Daten-CI, UI-Contract-CI (Baseline shrink-only), AGENTS-Verweis auf diese Datei. **In main integriert: PR #75 (gleicher Branch, S0+S1), `main@160bcf40`.** **Vor S1 kein Feature-Bau.**
 - **S2 Löschung Eimer 3** nach Verlinkungs-Prüfung.
 - **S3 Muster-Modul:** `erfassung` (hat schon Manifest) vollständig nach `src/modules/erfassung/` inkl. `public.ts` — Vorlage für alle.
-- **S4 Home neu:** `src/modules/werkstatt` gegen Phillip V4; `warendurchlauf`-Stationsmodell gelöscht.
+- **S4 Home neu:** `src/modules/werkstatt` gegen Phillip V4; `warendurchlauf`-Stationsmodell gelöscht. **Kandidat gebaut** (Branch `path1/werkstatt-phillip-v4-20260907`, Basis `main@160bcf40`): `/warendurchlauf` liest weiterhin unveraendert ueber `getWareneingangOrdersAction`/`getGalvanikOrdersAction`, reicht die echten Daten an `@/modules/werkstatt/public`; `WarendurchlaufCockpitClient.tsx`/`PhillipWerkstatt.module.css`/`ThemeToggle.tsx` geloescht, Baseline entsprechend geschrumpft. Breitere Subrouten/Stationsnavigation (`wareneingang/`, `galvanik/`, `warenausgang/`, `WarendurchlaufRouteNav.tsx`) bewusst unangetastet — S2/S4-Rest folgt separat. **Noch nicht reviewed/gemergt.**
 - **S5 restliche Domänen** Modul für Modul, jeweils Naht mitbauend.
 - **F1.5** wurde mit Owner-Mandat vor S1 gemerged (#73, 2026-09-06; Red-Team PASS, Tenant-Literale in S0 nachgezogen). Ab S1 gilt ohne Ausnahme: **kein Feature-Bau, der die Naht-Gates rot lässt.**
 

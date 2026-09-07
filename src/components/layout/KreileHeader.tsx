@@ -7,7 +7,6 @@ import { GlobalSearch } from "./GlobalSearch";
 import { useState, useEffect, useRef } from "react";
 import { logout } from "@/app/actions/auth";
 import { useRealtimeStatus } from "./RealtimeSyncManager";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useSync } from "@/lib/offline/SyncContext";
 import { useErfassung } from "@/components/erfassung/ErfassungProvider";
@@ -188,11 +187,6 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
             )}
           </div>
         )}
-
-        {/* Theme Switcher (Desktop & Mobile) */}
-        <div className="ml-2">
-          <ThemeToggle />
-        </div>
 
         {/* Profilbild rund (Kreis 48px) */}
         {status === "authenticated" && initials && (

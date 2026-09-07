@@ -1,10 +1,10 @@
 import { isOrderStationForwardRole } from "@/lib/orders/orderLifecycleContract";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import {
-  WarendurchlaufCockpitClient,
-  type PhillipOrderCard,
+  buildWerkstattData,
+  WerkstattView,
   type PhillipWerkstattViewModel,
-} from "./WarendurchlaufCockpitClient";
+} from "@/modules/werkstatt/public";
 import {
   getGalvanikOrdersAction,
   getWareneingangOrdersAction,
@@ -15,25 +15,8 @@ const DENIAL_MESSAGE = "Zugriff nicht erlaubt.";
 const ERROR_MESSAGE = "Werkstattdaten konnten nicht sicher geladen werden.";
 const CONFLICT_MESSAGE = "Werkstattdaten enthalten widersprüchliche Auftragskennungen.";
 
-function toPhillipOrderCard(order: WarendurchlaufOrder): PhillipOrderCard {
-  return {
-    id: order.id,
-    orderNumber: order.orderNumber,
-    customerName: order.customerName,
-    title: order.title,
-    itemDescription: order.itemDescription,
-    surfaceRequested: order.surfaceRequested,
-    station: order.station,
-    status: order.status,
-    statusText: order.statusText,
-    risk: order.risk,
-    dueLabel: order.dueLabel,
-    dueValue: order.dueValue,
-  };
-}
-
 function render(view: PhillipWerkstattViewModel) {
-  return <WarendurchlaufCockpitClient view={view} />;
+  return <WerkstattView view={view} />;
 }
 
 function hasDuplicateCanonicalOrder(orders: readonly WarendurchlaufOrder[]) {
@@ -90,21 +73,23 @@ export default async function WarendurchlaufIndex() {
     });
   }
 
+  const canCreateOrder = authorization.data.permissions.includes("perm_data_orders");
+
   if (hasDuplicateCanonicalOrder([...wareneingangResult.data, ...galvanikResult.data])) {
     return render({ kind: "conflict", message: CONFLICT_MESSAGE });
   }
 
   if (wareneingangResult.data.length === 0 && galvanikResult.data.length === 0) {
-    return render({
-      kind: "empty",
-      canCreateOrder: authorization.data.permissions.includes("perm_data_orders"),
-    });
+    return render({ kind: "empty", canCreateOrder });
   }
 
   return render({
     kind: "data",
-    canCreateOrder: authorization.data.permissions.includes("perm_data_orders"),
-    wareneingang: wareneingangResult.data.map(toPhillipOrderCard),
-    galvanik: galvanikResult.data.map(toPhillipOrderCard),
+    ...buildWerkstattData({
+      wareneingang: wareneingangResult.data,
+      galvanik: galvanikResult.data,
+      canCreateOrder,
+      greetingName: authorization.data.displayName ?? null,
+    }),
   });
 }
