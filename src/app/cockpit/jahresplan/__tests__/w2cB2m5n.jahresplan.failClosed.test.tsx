@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
@@ -14,7 +15,7 @@ const ports = vi.hoisted(() => {
   return {
     resolveAuthorization: vi.fn(async () => ({
       ok: true as const,
-      data: { tenantId: "galvanik-kreile", role: "admin" as const },
+      data: { tenantId: KREILE_TENANT_SLUG, role: "admin" as const },
     })),
     createAuthorizedDataClient: vi.fn(async () => ({ from })),
     createAuthorizedDataContext: vi.fn(),
@@ -27,7 +28,7 @@ const ports = vi.hoisted(() => {
 });
 
 vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization: ports.resolveAuthorization }));
-vi.mock("@/lib/server/appSession", () => ({ APP_TENANT_ID: "galvanik-kreile" }));
+vi.mock("@/lib/server/appSession", () => ({ APP_TENANT_ID: KREILE_TENANT_SLUG }));
 vi.mock("@/lib/supabase/server", () => ({
   createAuthorizedDataClient: ports.createAuthorizedDataClient,
   createAuthorizedDataContext: ports.createAuthorizedDataContext,
@@ -68,7 +69,7 @@ describe("W2C-B2M5N Jahresplan fail-closed", () => {
     expect(writer?.[0]).toBe(`export async function speichereJahresplan(jahr: number, monate: Record<string, number>) {\n  void jahr;\n  void monate;\n  return { ok: false as const, error: "NOT_AVAILABLE" as const, message: "${denial}" };\n}\n\nexport async function savePhoneNote`);
     expect(reader?.[0]).toContain("createAuthorizedDataClient('read')");
     expect(reader?.[0]).toContain(".from('forecast_version')");
-    expect(reader?.[0]).toContain(".eq('tenant_id', 'galvanik-kreile')");
+    expect(reader?.[0]).toContain(".eq('tenant_id', KREILE_TENANT_SLUG)");
     expect(reader?.[0]).toContain(".eq('jahr', jahr)");
     expect(reader?.[0]).toContain(".eq('version_typ', 'plan')");
     expect(reader?.[0]).toContain(".eq('ist_aktiv', true)");
@@ -108,7 +109,7 @@ describe("W2C-B2M5N Jahresplan fail-closed", () => {
     );
     expect(ports.from).toHaveBeenCalledWith("forecast_version");
     expect(ports.query.eq).toHaveBeenCalledTimes(4);
-    expect(ports.query.eq).toHaveBeenNthCalledWith(1, "tenant_id", "galvanik-kreile");
+    expect(ports.query.eq).toHaveBeenNthCalledWith(1, "tenant_id", KREILE_TENANT_SLUG);
     expect(ports.query.eq).toHaveBeenNthCalledWith(2, "jahr", new Date().getFullYear());
     expect(ports.query.eq).toHaveBeenNthCalledWith(3, "version_typ", "plan");
     expect(ports.query.eq).toHaveBeenNthCalledWith(4, "ist_aktiv", true);

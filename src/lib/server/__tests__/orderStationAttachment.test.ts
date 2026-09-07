@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -40,7 +41,7 @@ import {
   readStableOrderStationAttachment,
 } from "@/lib/server/orderStationAttachmentStorage";
 
-const TENANT = "galvanik-kreile";
+const TENANT = KREILE_TENANT_SLUG;
 const ACTOR = "11111111-1111-4111-8111-111111111111";
 const RESERVATION_ID = "22222222-2222-4222-8222-222222222222";
 const OTHER_RESERVATION_ID = "33333333-3333-4333-8333-333333333333";

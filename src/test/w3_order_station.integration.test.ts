@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import postgres from "postgres";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -22,7 +23,7 @@ const readAppSessionSpy = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/server/appSession", () => ({ readAppSession: readAppSessionSpy }));
 vi.mock("next/cache", () => ({ unstable_noStore: vi.fn() }));
 
-const TENANT_A = "galvanik-kreile";
+const TENANT_A = KREILE_TENANT_SLUG;
 const TENANT_B = "tenant-b";
 
 const USERS = {

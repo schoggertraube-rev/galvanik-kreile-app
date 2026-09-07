@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
 
@@ -81,7 +82,7 @@ export async function runPinAttempt(
         last_failed_at,
         tenant_id
       )
-      VALUES (${operatorId}, 1, now(), 'galvanik-kreile')
+      VALUES (${operatorId}, 1, now(), ${KREILE_TENANT_SLUG})
       ON CONFLICT (operator_id)
       DO UPDATE SET
         failed_attempts = pin_rate_limits.failed_attempts + 1,

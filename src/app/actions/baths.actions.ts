@@ -1,4 +1,5 @@
 "use server";
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
 import { db } from "@/db";
 import { baeder, badMesswerte } from "@/db/schema";
@@ -54,14 +55,14 @@ export async function getBathMeasurementsDb(bathId?: string): Promise<ActionResu
     if (bathId) {
       const data = await query.where(
         and(
-          eq(badMesswerte.tenantId, "galvanik-kreile"),
+          eq(badMesswerte.tenantId, KREILE_TENANT_SLUG),
           eq(badMesswerte.badId, bathId)
         )
       ).orderBy(desc(badMesswerte.measuredAt));
       return { ok: true, data };
     } else {
       const data = await query.where(
-        eq(badMesswerte.tenantId, "galvanik-kreile")
+        eq(badMesswerte.tenantId, KREILE_TENANT_SLUG)
       ).orderBy(desc(badMesswerte.measuredAt));
       return { ok: true, data };
     }
@@ -89,7 +90,7 @@ export async function createBathMeasurementDb(payload: {
 
     const insertPayload = {
       id: newId,
-      tenantId: "galvanik-kreile",
+      tenantId: KREILE_TENANT_SLUG,
       badId: payload.bathId,
       temperature: payload.temperature !== undefined && payload.temperature !== null ? String(payload.temperature) : null,
       phValue: payload.phValue !== undefined && payload.phValue !== null ? String(payload.phValue) : null,

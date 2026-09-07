@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://kreile.internal/schemas/module-manifest.schema.json",
   "title": "Module Manifest",
-  "description": "Declares the public boundary of one modular slice of the Kreile app: what it exports for other modules to consume, what database and storage objects it owns, what domain events it emits/consumes, and what it depends on. One manifest file per module lives under docs/architecture/modules/<moduleId>.manifest.json. Documentation-as-data for F0-07 (minimal modular boundary); not (yet) enforced at build time.",
+  "description": "Declares the public boundary of one modular slice of the Kreile app: what it exports for other modules to consume, what database and storage objects it owns, what domain events it emits/consumes, and what it depends on. Pre-Path-1 manifests live under docs/architecture/modules/<moduleId>.manifest.json (documentation-as-data, F0-07). Path 1 modules (ARCHITEKTUR_MODULE_PATH1.md) carry their manifest INSIDE the module as src/modules/<moduleId>/<moduleId>.manifest.json; there it is CI-enforced by scripts/quality/check-module-gates.mjs (S1): moduleId == folder, public.ts exists, publicExports = '@/modules/<moduleId>/public#Symbol'.",
   "type": "object",
   "additionalProperties": false,
   "required": ["moduleId", "version", "owner"],
@@ -42,8 +42,14 @@
     },
     "viewsFunctions": {
       "type": "array",
-      "description": "Database views and functions this module owns, schema-qualified (e.g. 'public.fn_erfassung_snapshot').",
-      "items": { "type": "string" },
+      "description": "Database views and functions this module owns, schema-qualified (e.g. 'public.fn_erfassung_snapshot'). Cross-module read contracts MUST be 'public.v_*' views listed here (Path 1 Naht 4); scripts/quality/check-module-gates.mjs only accepts v_* views that some manifest declares.",
+      "items": { "type": "string", "pattern": "^(public|private)\\.[a-z_][a-z0-9_]*$" },
+      "default": []
+    },
+    "ownsTables": {
+      "type": "array",
+      "description": "Base tables this module owns, schema-qualified ('public.orders', 'private.invoice_numbers'). SQL under src/modules/<moduleId>/ may touch ONLY these tables directly; every other module's facts come in via declared public.v_* views (Path 1 Naht 4, enforced by scripts/quality/check-module-gates.mjs).",
+      "items": { "type": "string", "pattern": "^(public|private)\\.[a-z_][a-z0-9_]*$" },
       "default": []
     },
     "storagePurposes": {

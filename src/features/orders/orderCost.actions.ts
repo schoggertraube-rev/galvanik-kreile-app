@@ -1,4 +1,5 @@
 'use server';
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
 import { createAuthorizedDataClient } from '@/lib/supabase/server';
 import type { WorkEntry, MaterialEntry, ExtraCostEntry } from '@/lib/orders/costCalculation';
@@ -37,20 +38,20 @@ export async function getBenchmarkData(station: string) {
     .from('vorlage_zeit')
     .select('*')
     .eq('station_kuerzel', station)
-    .eq('tenant_id', 'galvanik-kreile');
+    .eq('tenant_id', KREILE_TENANT_SLUG);
 
   const { data: verbrauchVorlagen } = await supabase
     .from('vorlage_verbrauch')
     .select('*')
     .eq('station_kuerzel', station)
-    .eq('tenant_id', 'galvanik-kreile')
+    .eq('tenant_id', KREILE_TENANT_SLUG)
     .gte('haeufigkeit_prozent', 50);
 
   // Get Kostensatz
   const { data: kostensatzRow } = await supabase
     .from('kostenstelle')
     .select('kuerzel, kostensatz_plan_eur_pro_stunde')
-    .eq('tenant_id', 'galvanik-kreile')
+    .eq('tenant_id', KREILE_TENANT_SLUG)
     .eq('kuerzel', station)
     .single();
 

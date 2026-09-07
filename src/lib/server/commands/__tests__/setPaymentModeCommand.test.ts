@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
 const { execute, randomUUID, resolveAuthorization, withTransaction } = vi.hoisted(() => ({
   execute: vi.fn(),
@@ -29,7 +30,7 @@ const authorization = {
   ok: true as const,
   data: {
     userId: ACTOR,
-    tenantId: "galvanik-kreile",
+    tenantId: KREILE_TENANT_SLUG,
     displayName: "Büro",
     role: "buero" as const,
     permissions: [] as const,
@@ -46,7 +47,7 @@ const input = {
 
 const openOrder = {
   id: ORDER,
-  tenant_id: "galvanik-kreile",
+  tenant_id: KREILE_TENANT_SLUG,
   station: "fertig",
   current_station: "fertig",
   current_station_id: "fertig",
@@ -73,7 +74,7 @@ const payload = {
 
 const eventRow = {
   event_id: EVENT,
-  tenant_id: "galvanik-kreile",
+  tenant_id: KREILE_TENANT_SLUG,
   order_id: ORDER,
   event_type: "PAYMENT_MODE_SET_V1",
   client_event_id: CLIENT_EVENT,

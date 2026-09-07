@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { withTransaction, execute } = vi.hoisted(() => ({
@@ -15,7 +16,7 @@ const INVOICE = "33333333-3333-4333-8333-333333333333";
 const CORRELATION = "55555555-5555-4555-8555-555555555555";
 
 const admin = {
-  tenantId: "galvanik-kreile",
+  tenantId: KREILE_TENANT_SLUG,
   userId: "66666666-6666-4666-8666-666666666666",
   displayName: "Administrator",
   role: "admin" as const,
@@ -29,7 +30,7 @@ const developer = { ...admin, role: "developer" as const };
 
 const paidRow = {
   invoice_id: INVOICE,
-  tenant_id: "galvanik-kreile",
+  tenant_id: KREILE_TENANT_SLUG,
   order_id: "order-2026-0009",
   order_number: "A-2026-0009",
   invoice_number: "R-2026-0009",

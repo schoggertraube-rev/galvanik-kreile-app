@@ -163,4 +163,10 @@ Zweck: bereits getroffene Entscheidungen an allen Stellen konsistent machen. Bei
 - **UI-Referenz-Export / Konsolidierung:** erledigt (Dateien in `docs/project/linie/ui/`). „OFFEN"-Zeilen in GESAMTUEBERSICHT/STARTSEITEN und die fruehere §10-Ueberschrift sind historisch.
 - **Legitim offen (KEINE Produktentscheidung):** OWNER_UX_PASS (Nutzer-Abnahme) und Provider-Credentials/kostenpflichtiger Dienst (Owner-Geld-Gate). Gates, keine offenen Specs.
 
-**Damit: 0 offene Produktentscheidung auf dem kritischen Pfad.** Verbleibender Rueckstand ist ausschliesslich Code: S0 wirksam (Tenant-Injektion, 65 Literale migrieren, Literal-Lint) + S1 (fuenf CI-Gates). Kein Aufraeumen, sondern Bau.
+**Damit: 0 offene Produktentscheidung auf dem kritischen Pfad.** Verbleibender Rueckstand war ausschliesslich Code: S0 wirksam + S1 (CI-Gates) — **gebaut in PR #75** (siehe D-QA-001).
+
+## D-QA-001 — Ratschen-Migrationspfad (Orchestrator im Owner-Mandat „mach, was das Projekt sauber zum Ziel führt", 2026-09-06)
+
+Die ESLint-Ratsche wertete jede Änderung von `lintContractHash`/`judgeContractHash` gegenüber main als Basis-Verstoß. `quality` UND `ratchet` sind Required Checks (Ruleset `main-protection`, kein Bypass, auch nicht für Admins) — damit war keine ESLint-Regel (S0 Tenant-Verbot, S1 Fassade) und keine Judge-Änderung für irgendjemanden mergebar; #36/#55 gingen nur per Override durch (Präzedenz). Entscheid: Kontraktwechsel = explizite, sichtbare Migration (Kandidaten-Baseline trägt den eigenen Hash, NOTICE im CI-Log), kein Basis-Verstoß; Debt wird in beiden CI-Läufen mit dem **Basis**-Config gemessen (quality.yml + geschützter ratchet-Job, fail-closed), damit Regeländerungen keinen Debt verstecken können. Details: PROBLEMLOESUNGEN P8. Umgesetzt in PR #75 (S0+S1). Unabhängig red-teamt.
+
+**Einmaliger Owner-Akt:** der Migrations-PR #75 selbst kann `ratchet` nie bestehen (Basis-Judge = alte Regel) → Owner nimmt `ratchet` für diesen einen Merge aus dem Ruleset und trägt ihn danach wieder ein. Ab dann ist `ratchet` für jeden weiteren PR normal grün UND bindend.

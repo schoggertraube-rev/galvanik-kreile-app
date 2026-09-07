@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -23,7 +24,7 @@ if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
 const readAppSessionSpy = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/server/appSession", () => ({ readAppSession: readAppSessionSpy }));
 
-const TENANT = "galvanik-kreile";
+const TENANT = KREILE_TENANT_SLUG;
 const FOREIGN_TENANT = "f1-3-foreign-tenant";
 const EMPTY_TENANT = "f1-3-empty-tenant";
 const ADMIN_ID = "31313131-3131-4313-8313-313131313131";

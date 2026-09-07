@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockDirectValues = vi.fn();
@@ -81,7 +82,7 @@ vi.mock("drizzle-orm", () => ({
 }));
 
 vi.mock("@/lib/server/appSession", () => ({
-  APP_TENANT_ID: "galvanik-kreile",
+  APP_TENANT_ID: KREILE_TENANT_SLUG,
 }));
 
 vi.mock("@/lib/server/pinLoginHandle", () => ({
@@ -160,7 +161,7 @@ describe("public start actions", () => {
     expect(mockTxValues).toHaveBeenCalledOnce();
     expect(mockTxValues).toHaveBeenCalledWith(
       expect.objectContaining({
-        tenantId: "galvanik-kreile",
+        tenantId: KREILE_TENANT_SLUG,
         eventType: "pin_reset_requested",
         payload: expect.objectContaining({
           userId: canonicalUser.id,
@@ -171,7 +172,7 @@ describe("public start actions", () => {
     expect(JSON.stringify(mockTxValues.mock.calls)).not.toContain(
       "Attacker Controlled Name",
     );
-    expect(mockEq).toHaveBeenCalledWith("tenant_id", "galvanik-kreile");
+    expect(mockEq).toHaveBeenCalledWith("tenant_id", KREILE_TENANT_SLUG);
     expect(mockEq).toHaveBeenCalledWith("active", true);
     expect(mockNe).toHaveBeenCalledWith("role", "developer");
     expect(mockGte).toHaveBeenCalledWith("created_at", expect.any(Date));

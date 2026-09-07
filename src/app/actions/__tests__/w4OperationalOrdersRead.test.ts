@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -302,7 +303,7 @@ describe("W4 operational order read actions", () => {
       ts.forEachChild(node, visitAction);
     };
     visitAction(actionSource);
-    expect(actionStringLiterals).not.toContain("galvanik-kreile");
+    expect(actionStringLiterals).not.toContain(KREILE_TENANT_SLUG);
 
     const adapterSource = parseSource("operationalOrders.ts", adapter);
     expect(

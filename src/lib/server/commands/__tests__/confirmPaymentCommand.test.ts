@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
 const {
   execute,
@@ -37,7 +38,7 @@ const ORDER = "f15-payment-order";
 const OCCURRED_AT = "2026-09-05T12:30:00.000Z";
 const orderReference = {
   id: ORDER,
-  tenant_id: "galvanik-kreile",
+  tenant_id: KREILE_TENANT_SLUG,
   payment_mode: "vorkasse",
   payment_mode_version: 0,
 };
@@ -46,7 +47,7 @@ const authorization = {
   ok: true as const,
   data: {
     userId: ACTOR,
-    tenantId: "galvanik-kreile",
+    tenantId: KREILE_TENANT_SLUG,
     displayName: "Büro",
     role: "buero" as const,
     permissions: ["perm_data_orders"] as const,
@@ -64,7 +65,7 @@ const input = {
 
 const openInvoice = {
   id: INVOICE,
-  tenant_id: "galvanik-kreile",
+  tenant_id: KREILE_TENANT_SLUG,
   order_id: ORDER,
   invoice_number: "R-2026-9501",
   status: "issued",
@@ -102,7 +103,7 @@ const partialPayload = {
 
 const partialEvent = {
   event_id: EVENT,
-  tenant_id: "galvanik-kreile",
+  tenant_id: KREILE_TENANT_SLUG,
   order_id: ORDER,
   event_type: "PAYMENT_CONFIRMED_V1",
   client_event_id: CLIENT_EVENT,

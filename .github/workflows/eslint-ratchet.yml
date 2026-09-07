@@ -60,3 +60,14 @@ jobs:
             --root "$GITHUB_WORKSPACE/candidate" \
             --config "$GITHUB_WORKSPACE/ratchet-base/eslint.config.mjs" \
             --base-baseline "$GITHUB_WORKSPACE/ratchet-base/quality/eslint-baseline.json"
+
+      - name: Enforce protected S1 module gates (Path 1 Naehte)
+        # Base-Skript gegen den Kandidatenbaum; die UI-Vertrag-Baseline des Kandidaten darf
+        # gegenueber der Basis nur schrumpfen. Ein Kandidat kann das Gate nicht durch
+        # Aendern des Skripts oder der Baseline umgehen.
+        working-directory: ratchet-base
+        run: |
+          node scripts/quality/check-module-gates.mjs \
+            --root "$GITHUB_WORKSPACE/candidate" \
+            --base-baseline "$GITHUB_WORKSPACE/ratchet-base/quality/module-gates-baseline.json" \
+            --schema "$GITHUB_WORKSPACE/ratchet-base/docs/architecture/MODULE_MANIFEST.schema.json"

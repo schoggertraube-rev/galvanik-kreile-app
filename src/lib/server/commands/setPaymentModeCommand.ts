@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { resolveAuthorization } from "@/lib/server/authorization";
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import {
   isPaymentMode,
   type PaymentMode,
@@ -279,7 +280,7 @@ export async function setPaymentMode(input: unknown): Promise<SetPaymentModeResu
       : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
   if (
-    authorization.data.tenantId !== "galvanik-kreile" ||
+    authorization.data.tenantId !== KREILE_TENANT_SLUG ||
     !PAYMENT_MODE_ROLES.includes(authorization.data.role as (typeof PAYMENT_MODE_ROLES)[number])
   ) {
     return { code: "FORBIDDEN", message: "Zahlungsmodus darf mit dieser Rolle nicht geändert werden." };

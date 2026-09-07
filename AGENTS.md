@@ -5,7 +5,8 @@
 ## Projekt
 
 - Arbeite ausschliesslich fuer das Galvanik-Kreile WerkstattCockpit.
-- Der Tenant dieser Auslieferung ist `galvanik-kreile` — aber NUR ueber `TenantProvider`/Injektion, NIE als Literal in Modul-Kernen (D-ARCH-007; siehe ARCHITEKTUR_MODULE_PATH1.md Naht 3).
+- Der Tenant dieser Auslieferung ist `galvanik-kreile` — aber NUR ueber `KREILE_TENANT_SLUG` aus `src/lib/tenant.ts` (S0) bzw. spaeter Injektion, NIE als Literal in Modul-Kernen (D-ARCH-007; ESLint verbietet das Literal; siehe ARCHITEKTUR_MODULE_PATH1.md Naht 3).
+- Die Modul-Naehte sind CI-erzwungen (S1): `npm run quality:module-gates` = Manifest je Modul, positive Fassade (kein Tiefimport, Fremdmodul nur `@/modules/<fach>/public`), Cross-Modul-Fakten nur ueber deklarierte `public.v_*`-Views, UI-Vertrag (kein Stationsband/Transport-Home; Altlasten-Baseline `quality/module-gates-baseline.json` shrink-only), Ablage nur im Modulordner. Laeuft in quality.yml UND geschuetzt (Basis-Skript/-Baseline/-Schema) in eslint-ratchet.yml. Beweis-Tests: `src/test/s1_module_gates.test.ts`.
 - Stack: Next.js App Router, TypeScript, Supabase, Drizzle, Recharts, Framer Motion und PWA.
 - `main` ist die einzige Lieferwahrheit.
 - Vor Next.js-Codeaenderungen die relevante Dokumentation unter `node_modules/next/dist/docs/` lesen.

@@ -1,5 +1,6 @@
 process.env.DATABASE_URL = "postgres://mock:mock@localhost:5432/mock";
 
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { resolveAuthorization } from "../authorization";
 import * as appSessionModule from "../appSession";
@@ -36,7 +37,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
       ok: true,
       session: {
         userId: "user-1",
-        tenantId: "galvanik-kreile",
+        tenantId: KREILE_TENANT_SLUG,
         role: "admin",
         displayName: "Max Kreile",
         issuedAt: 0,
@@ -95,7 +96,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
       ok: true,
       session: {
         userId: "user-1",
-        tenantId: "galvanik-kreile",
+        tenantId: KREILE_TENANT_SLUG,
         role: "admin",
         displayName: "Max Kreile",
         issuedAt: 0,
@@ -118,7 +119,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
       ok: true,
       session: {
         userId: "user-1",
-        tenantId: "galvanik-kreile",
+        tenantId: KREILE_TENANT_SLUG,
         role: "admin",
         displayName: "Max Kreile",
         issuedAt: 0,
@@ -148,7 +149,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
       ok: true,
       session: {
         userId: "user-1",
-        tenantId: "galvanik-kreile",
+        tenantId: KREILE_TENANT_SLUG,
         role: "buero",
         displayName: "Max Kreile",
         issuedAt: 0,
@@ -178,7 +179,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
       ok: true,
       session: {
         userId: "user-1",
-        tenantId: "galvanik-kreile",
+        tenantId: KREILE_TENANT_SLUG,
         role: "invalid-role",
         displayName: "Max Kreile",
         issuedAt: 0,
@@ -208,7 +209,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
       ok: true,
       session: {
         userId: "user-1",
-        tenantId: "galvanik-kreile",
+        tenantId: KREILE_TENANT_SLUG,
         role: "admin",
         displayName: "Max Kreile",
         issuedAt: 0,
@@ -231,7 +232,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
       ok: true,
       session: {
         userId: "user-1",
-        tenantId: "galvanik-kreile",
+        tenantId: KREILE_TENANT_SLUG,
         role: "werkstatt",
         displayName: "Max Kreile",
         issuedAt: 0,
@@ -266,7 +267,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
       ok: true,
       session: {
         userId: "u1",
-        tenantId: "galvanik-kreile",
+        tenantId: KREILE_TENANT_SLUG,
         role: "admin",
         displayName: "Admin User",
         issuedAt: 0,
@@ -288,7 +289,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
       ok: true,
       session: {
         userId: "user-1",
-        tenantId: "galvanik-kreile",
+        tenantId: KREILE_TENANT_SLUG,
         role: "admin",
         displayName: "Max Kreile",
         issuedAt: 0,
@@ -328,7 +329,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
       ok: true,
       session: {
         userId: "user-1",
-        tenantId: "galvanik-kreile",
+        tenantId: KREILE_TENANT_SLUG,
         role: "admin",
         displayName: "Max Kreile",
         issuedAt,
@@ -339,7 +340,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     vi.mocked(db.select().from(appUsers).where).mockResolvedValue([
       {
         id: "user-1",
-        tenantId: "galvanik-kreile",
+        tenantId: KREILE_TENANT_SLUG,
         email: "max@example.test",
         fullName: "Max Kreile",
         role: "admin",

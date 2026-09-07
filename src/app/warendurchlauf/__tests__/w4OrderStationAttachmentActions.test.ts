@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -51,7 +52,7 @@ vi.mock("@/lib/server/evidenceRead", () => {
 const USER_ID = "11111111-1111-4111-8111-111111111111";
 const snapshot = {
   userId: USER_ID,
-  tenantId: "galvanik-kreile",
+  tenantId: KREILE_TENANT_SLUG,
   displayName: "Werkstatt",
   role: "werkstatt" as const,
   permissions: ["perm_view_leitstand", "perm_op_photos"] as const,

@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import React from "react";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -56,7 +57,7 @@ const allowedAuthorization = (role: string = "werkstatt") => ({
   ok: true as const,
   data: {
     userId: "user-phillip",
-    tenantId: "galvanik-kreile",
+    tenantId: KREILE_TENANT_SLUG,
     displayName: "Phillip",
     role,
     permissions: role === "werkstatt"

@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 
 export const PAYMENT_CONTRACT_VERSION = 1 as const;
@@ -64,7 +65,7 @@ function isPaymentReadRole(value: AuthorizationSnapshot["role"]): boolean {
 
 export function canReadPaymentSummary(authorization: AuthorizationSnapshot): boolean {
   return authorization.active === true
-    && authorization.tenantId === "galvanik-kreile"
+    && authorization.tenantId === KREILE_TENANT_SLUG
     && isPaymentReadRole(authorization.role)
     && authorization.permissions.includes("perm_view_leitstand");
 }

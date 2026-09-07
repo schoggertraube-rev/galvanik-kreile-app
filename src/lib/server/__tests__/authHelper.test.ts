@@ -6,6 +6,7 @@ process.env.DATABASE_URL = "postgres://mock:mock@localhost:5432/mock";
  * Unit-Tests für checkAppSession() und checkAppAuth().
  */
 
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { signAppSession, type AppSession } from "@/lib/server/appSession";
 import { db } from "@/db";
@@ -45,7 +46,7 @@ function makeSession(overrides?: Partial<AppSession>): AppSession {
   const now = Date.now();
   return {
     userId: "user-xyz",
-    tenantId: "galvanik-kreile",
+    tenantId: KREILE_TENANT_SLUG,
     role: "meister",
     displayName: "Klaus Meister",
     issuedAt: now - 500,

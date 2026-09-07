@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -40,7 +41,7 @@ const itemSnapshot = [{ id: ITEM, position: 1, ...input.items[0] }];
 const receiptRow = {
   receipt_id: RECEIPT,
   event_id: EVENT,
-  tenant_id: "galvanik-kreile",
+  tenant_id: KREILE_TENANT_SLUG,
   order_id: ORDER,
   customer_id: CUSTOMER,
   actor_id: ACTOR,
@@ -64,7 +65,7 @@ const authorization = {
   ok: true as const,
   data: {
     userId: ACTOR,
-    tenantId: "galvanik-kreile",
+    tenantId: KREILE_TENANT_SLUG,
     displayName: "Büro",
     role: "buero" as const,
     permissions: ["perm_data_customers", "perm_data_orders", "perm_view_customers", "perm_view_leitstand"] as const,
@@ -107,13 +108,13 @@ describe("createOrderIntake", () => {
     execute.mockImplementation((query: { text: string; values: unknown[] }) => {
       if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
       if (query.text.includes("FROM private.order_intake_receipts") && !query.text.includes("v_order")) return Promise.resolve([]);
-      if (query.text.includes("FROM public.customers")) return Promise.resolve([{ id: CUSTOMER, tenant_id: "galvanik-kreile", name: "Kunde A", company_name: null }]);
+      if (query.text.includes("FROM public.customers")) return Promise.resolve([{ id: CUSTOMER, tenant_id: KREILE_TENANT_SLUG, name: "Kunde A", company_name: null }]);
       if (query.text.includes("next_number")) return Promise.resolve([{ current_year: 2026, next_number: 42 }]);
       if (query.text.includes("INSERT INTO public.orders")) {
         created.orderId = String(query.values[0]);
         return Promise.resolve([{
           id: created.orderId,
-          tenant_id: "galvanik-kreile",
+          tenant_id: KREILE_TENANT_SLUG,
           order_number: "A-2026-0042",
           version: 1,
           payment_mode: "vorkasse",
@@ -122,12 +123,12 @@ describe("createOrderIntake", () => {
       }
       if (query.text.includes("INSERT INTO public.items")) {
         created.itemId = String(query.values[0]);
-        return Promise.resolve([{ id: created.itemId, tenant_id: "galvanik-kreile", order_id: created.orderId, customer_id: CUSTOMER }]);
+        return Promise.resolve([{ id: created.itemId, tenant_id: KREILE_TENANT_SLUG, order_id: created.orderId, customer_id: CUSTOMER }]);
       }
       if (query.text.includes("INSERT INTO public.events")) {
         created.eventId = String(query.values[0]);
         created.correlationId = String(query.values[10]);
-        return Promise.resolve([{ id: created.eventId, tenant_id: "galvanik-kreile", order_id: created.orderId, user_id: ACTOR, client_event_id: CLIENT }]);
+        return Promise.resolve([{ id: created.eventId, tenant_id: KREILE_TENANT_SLUG, order_id: created.orderId, user_id: ACTOR, client_event_id: CLIENT }]);
       }
       if (query.text.includes("INSERT INTO private.order_intake_receipts")) {
         created.receiptId = String(query.values[0]);

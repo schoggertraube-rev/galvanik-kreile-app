@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ports = vi.hoisted(() => ({
@@ -23,7 +24,7 @@ const auth = (permissions: string[]) => ({
   ok: true as const,
   data: {
     userId: "11111111-1111-4111-8111-111111111111",
-    tenantId: "galvanik-kreile",
+    tenantId: KREILE_TENANT_SLUG,
     displayName: "Büro",
     role: "buero" as const,
     permissions,
@@ -55,7 +56,7 @@ describe("F1 order intake actions", () => {
       ok: true,
       data: { customers: [], canCreateCustomer: true },
     });
-    expect(ports.search).toHaveBeenCalledWith(expect.objectContaining({ tenantId: "galvanik-kreile" }), { query: "" });
+    expect(ports.search).toHaveBeenCalledWith(expect.objectContaining({ tenantId: KREILE_TENANT_SLUG }), { query: "" });
 
     ports.resolveAuthorization.mockResolvedValueOnce(auth(["perm_data_orders", "perm_view_customers"]));
     await expect(searchOrderIntakeCustomersAction({ query: "" })).resolves.toMatchObject({

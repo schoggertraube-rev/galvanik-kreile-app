@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 
@@ -20,7 +21,7 @@ vi.mock("@google/generative-ai", () => ({ GoogleGenerativeAI }));
 vi.mock("@/db", () => ({ db: {} }));
 vi.mock("@/db/schema", () => ({ appUsers: {}, uiEventsTable: {} }));
 vi.mock("drizzle-orm", () => ({ and: vi.fn(), eq: vi.fn(), gte: vi.fn(), ne: vi.fn(), sql: vi.fn() }));
-vi.mock("@/lib/server/appSession", () => ({ APP_TENANT_ID: "galvanik-kreile" }));
+vi.mock("@/lib/server/appSession", () => ({ APP_TENANT_ID: KREILE_TENANT_SLUG }));
 vi.mock("@/lib/server/pinLoginHandle", () => ({ isValidPinLoginHandle: vi.fn(), resolvePinLoginCandidate: vi.fn() }));
 
 const denial = "NOT_AVAILABLE: Sicherer W3-KI-/Provider-Vertrag fehlt.";

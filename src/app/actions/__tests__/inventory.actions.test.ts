@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -33,11 +34,11 @@ vi.mock("next/cache", () => ({ revalidatePath: mockRevalidatePath }));
 
 const authorization = {
   ok: true as const,
-  data: { userId: "user-1", tenantId: "galvanik-kreile", displayName: "Max Kreile", role: "meister" as const, permissions: [], active: true as const },
+  data: { userId: "user-1", tenantId: KREILE_TENANT_SLUG, displayName: "Max Kreile", role: "meister" as const, permissions: [], active: true as const },
 };
 
 function inventoryRow() {
-  return { id: "test-inv-123", tenantId: "galvanik-kreile", name: "Testartikel", category: null, currentStock: 10, minStock: 2, unit: "pcs", einkaufspreisEur: "2.50", einheitNormiert: null };
+  return { id: "test-inv-123", tenantId: KREILE_TENANT_SLUG, name: "Testartikel", category: null, currentStock: 10, minStock: 2, unit: "pcs", einkaufspreisEur: "2.50", einheitNormiert: null };
 }
 
 describe("inventory actions", () => {
@@ -59,7 +60,7 @@ describe("inventory actions", () => {
     mockDbSelect.mockReturnValue({ from: vi.fn(() => ({ where })) });
     const { getInventoryItemsAction } = await import("@/app/actions/inventory.actions");
     await expect(getInventoryItemsAction()).resolves.toEqual({ ok: true, data: [{ id: "test-inv-123", name: "Testartikel", category: "uncategorized", unit: "pcs", currentStock: 10, minStock: 2, isConsumable: true, pricePerUnit: 2.5 }] });
-    expect(mockEq).toHaveBeenCalledWith("inventory_items.tenant_id", "galvanik-kreile");
+    expect(mockEq).toHaveBeenCalledWith("inventory_items.tenant_id", KREILE_TENANT_SLUG);
   });
 
   it("denies every inventory movement before authorization or a write port", async () => {

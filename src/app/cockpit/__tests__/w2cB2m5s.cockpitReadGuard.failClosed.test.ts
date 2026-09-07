@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -32,14 +33,14 @@ const ports = vi.hoisted(() => {
 });
 
 vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization: ports.resolveAuthorization }));
-vi.mock("@/lib/server/appSession", () => ({ APP_TENANT_ID: "galvanik-kreile" }));
+vi.mock("@/lib/server/appSession", () => ({ APP_TENANT_ID: KREILE_TENANT_SLUG }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: ports.createClient,
   createAuthorizedDataClient: ports.createAuthorizedDataClient,
 }));
 
 function allowed(role: "admin" | "developer") {
-  return { ok: true, data: { tenantId: "galvanik-kreile", role } };
+  return { ok: true, data: { tenantId: KREILE_TENANT_SLUG, role } };
 }
 
 function source() {
@@ -91,8 +92,8 @@ describe("W2C-B2M5S Cockpit Read Guard", () => {
     ["no session", { ok: false, error: "NO_SESSION" }],
     ["authorization error", { ok: false, error: "ROLE_MISMATCH" }],
     ["wrong tenant", { ok: true, data: { tenantId: "other-tenant", role: "admin" } }],
-    ["operator", { ok: true, data: { tenantId: "galvanik-kreile", role: "operator" } }],
-    ["inhaber is not an AppRole", { ok: true, data: { tenantId: "galvanik-kreile", role: "inhaber" } }],
+    ["operator", { ok: true, data: { tenantId: KREILE_TENANT_SLUG, role: "operator" } }],
+    ["inhaber is not an AppRole", { ok: true, data: { tenantId: KREILE_TENANT_SLUG, role: "inhaber" } }],
   ])("denies %s before every data, event, realtime, clock, or revalidation port", async (_caseName, result) => {
     ports.resolveAuthorization.mockResolvedValue(result);
     const actions = await import("../actions");

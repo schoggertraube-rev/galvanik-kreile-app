@@ -1,4 +1,5 @@
 "use server";
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
 import { db } from "@/db";
 import { uiEventsTable } from "@/db/schema";
@@ -37,7 +38,7 @@ export async function getRecentUiEvents() {
   await requireAdminOrDeveloper();
   if (!db) return [];
   try {
-    const tenantId = "galvanik-kreile";
+    const tenantId = KREILE_TENANT_SLUG;
     const { desc, eq } = await import("drizzle-orm");
     
     return await db
@@ -57,7 +58,7 @@ export async function getRealAnalyticsStats() {
   
   if (!db) return { topEvents: [], activityData: [], recentEvents: [] };
   try {
-    const tenantId = "galvanik-kreile";
+    const tenantId = KREILE_TENANT_SLUG;
     const { desc, eq } = await import("drizzle-orm");
     
     const allEvents = await db

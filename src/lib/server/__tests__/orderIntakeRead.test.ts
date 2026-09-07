@@ -1,3 +1,4 @@
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ORDER_LIFECYCLE_STATUS } from "@/lib/orders/orderLifecycleContract";
 
@@ -6,13 +7,13 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/server/privilegedDb", () => ({ withPrivilegedTenantTransaction: withTransaction }));
 vi.mock("drizzle-orm", () => ({ sql: (parts: TemplateStringsArray, ...values: unknown[]) => ({ text: parts.join("?"), values }) }));
 
-const authorization = { tenantId: "galvanik-kreile", userId: "11111111-1111-4111-8111-111111111111" };
+const authorization = { tenantId: KREILE_TENANT_SLUG, userId: "11111111-1111-4111-8111-111111111111" };
 const orderId = "22222222-2222-4222-8222-222222222222";
 const clientEventId = "33333333-3333-4333-8333-333333333333";
 const receiptRow = {
   receipt_id: "44444444-4444-4444-8444-444444444444",
   event_id: "55555555-5555-4555-8555-555555555555",
-  tenant_id: "galvanik-kreile",
+  tenant_id: KREILE_TENANT_SLUG,
   order_id: orderId,
   customer_id: "legacy-customer",
   actor_id: authorization.userId,
@@ -46,7 +47,7 @@ describe("order intake read ports", () => {
 
   it("uses the private tenant customer view, caps results, and rejects malformed rows", async () => {
     execute.mockResolvedValueOnce([{
-      id: "customer-a", tenant_id: "galvanik-kreile", customer_number: "K-1", name: "Musterkunde",
+      id: "customer-a", tenant_id: KREILE_TENANT_SLUG, customer_number: "K-1", name: "Musterkunde",
       company_name: null, customer_type: "business", city: "Berlin", orders_count: 3, integrity_ok: true,
     }]);
     const { searchOrderIntakeCustomers } = await import("../orderIntakeRead");
