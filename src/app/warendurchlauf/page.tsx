@@ -10,14 +10,14 @@ import {
   getWareneingangOrdersAction,
   type WarendurchlaufOrder,
 } from "@/app/warendurchlauf/actions";
-import { WarendurchlaufCockpitClient } from "./WarendurchlaufCockpitClient";
+import { WerkstattAppAdapter } from "./WerkstattAppAdapter";
 
 const DENIAL_MESSAGE = "Zugriff nicht erlaubt.";
 const ERROR_MESSAGE = "Werkstattdaten konnten nicht sicher geladen werden.";
 const CONFLICT_MESSAGE = "Werkstattdaten enthalten widersprüchliche Auftragskennungen.";
 
 function render(view: PhillipWerkstattViewModel) {
-  return <WarendurchlaufCockpitClient view={view} />;
+  return <WerkstattAppAdapter view={view} />;
 }
 
 function toWerkstattSurfaceOrder(order: WarendurchlaufOrder): WerkstattSurfaceOrder {

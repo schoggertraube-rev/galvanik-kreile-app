@@ -9,7 +9,7 @@ import {
 } from "@/modules/werkstatt/public";
 
 /** App composition adapter: owns legacy app hooks and injects narrow Werkstatt ports. */
-export function WarendurchlaufCockpitClient({
+export function WerkstattAppAdapter({
   view,
 }: {
   view: PhillipWerkstattViewModel;

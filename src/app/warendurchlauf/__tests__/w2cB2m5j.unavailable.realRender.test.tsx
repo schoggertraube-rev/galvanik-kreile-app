@@ -410,7 +410,7 @@ describe("W2C-B2M5J unavailable UI", () => {
       "utf8",
     );
     const adapterSource = readFileSync(
-      resolve(process.cwd(), "src/app/warendurchlauf/WarendurchlaufCockpitClient.tsx"),
+      resolve(process.cwd(), "src/app/warendurchlauf/WerkstattAppAdapter.tsx"),
       "utf8",
     );
     const routeSource = readFileSync(resolve(process.cwd(), "src/app/warendurchlauf/page.tsx"), "utf8");
