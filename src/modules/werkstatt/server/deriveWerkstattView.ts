@@ -35,33 +35,74 @@ function heldGroupWeight(group: WerkstattHeldGroup): number {
   return group === "crit" ? 0 : 1;
 }
 
-function parseDueDate(dueDate: string): Date | null {
+type BerlinCalendarDay = {
+  year: number;
+  month: number;
+  day: number;
+};
+
+const BERLIN_TIME_ZONE = "Europe/Berlin";
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+const BERLIN_DATE_FORMAT = new Intl.DateTimeFormat("en-CA", {
+  timeZone: BERLIN_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+function validatedCalendarDay(year: number, month: number, day: number): BerlinCalendarDay | null {
+  const candidate = new Date(Date.UTC(year, month - 1, day));
+  if (
+    candidate.getUTCFullYear() !== year ||
+    candidate.getUTCMonth() !== month - 1 ||
+    candidate.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return { year, month, day };
+}
+
+function berlinCalendarDay(date: Date): BerlinCalendarDay | null {
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = BERLIN_DATE_FORMAT.formatToParts(date);
+  const value = (type: "year" | "month" | "day") =>
+    Number(parts.find((part) => part.type === type)?.value);
+  return validatedCalendarDay(value("year"), value("month"), value("day"));
+}
+
+function parseDueCalendarDay(dueDate: string): BerlinCalendarDay | null {
   const trimmed = dueDate.trim();
   if (!trimmed) return null;
-  const isoDateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
-  if (isoDateOnly) {
-    const [, year, month, day] = isoDateOnly;
-    const local = new Date(Number(year), Number(month) - 1, Number(day));
-    return Number.isNaN(local.getTime()) ? null : local;
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (dateOnly) {
+    return validatedCalendarDay(Number(dateOnly[1]), Number(dateOnly[2]), Number(dateOnly[3]));
   }
-  const parsed = new Date(trimmed);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+
+  // A timestamp without an explicit offset would reintroduce a runtime-timezone dependency.
+  if (!/(?:Z|[+-]\d{2}:\d{2})$/i.test(trimmed)) return null;
+  return berlinCalendarDay(new Date(trimmed));
 }
 
-/** Calendar week ending the local Sunday, not a rolling 7-day window. */
+function calendarOrdinal(day: BerlinCalendarDay): number {
+  return Date.UTC(day.year, day.month - 1, day.day);
+}
+
+/** Calendar week ending Sunday in Europe/Berlin, never a runtime-local rolling window. */
 function isDueThisWeek(dueDate: string, now: Date): boolean {
-  const parsed = parseDueDate(dueDate);
-  if (!parsed) return false;
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const dueDay = new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
-  if (dueDay.getTime() < today.getTime()) return false;
-  const daysUntilSunday = today.getDay() === 0 ? 0 : 7 - today.getDay();
-  const endOfWeek = new Date(today.getFullYear(), today.getMonth(), today.getDate() + daysUntilSunday);
-  return dueDay.getTime() <= endOfWeek.getTime();
+  const dueDay = parseDueCalendarDay(dueDate);
+  const today = berlinCalendarDay(now);
+  if (!dueDay || !today) return false;
+
+  const dueOrdinal = calendarOrdinal(dueDay);
+  const todayOrdinal = calendarOrdinal(today);
+  if (dueOrdinal < todayOrdinal) return false;
+  const weekday = new Date(todayOrdinal).getUTCDay();
+  const daysUntilSunday = weekday === 0 ? 0 : 7 - weekday;
+  return dueOrdinal <= todayOrdinal + daysUntilSunday * DAY_IN_MS;
 }
 
-function buildBundleSuggestion(orders: readonly PhillipOrderCard[]): WerkstattBundleSuggestion | null {
-  const groups = new Map<string, PhillipOrderCard[]>();
+function buildBundleSuggestion(orders: readonly WerkstattHeldCard[]): WerkstattBundleSuggestion | null {
+  const groups = new Map<string, WerkstattHeldCard[]>();
   for (const order of orders) {
     const surface = order.surfaceRequested?.trim();
     if (!surface) continue;
@@ -102,8 +143,10 @@ export function buildWerkstattData(
     .sort((a, b) => {
       const weightDiff = heldGroupWeight(a.heldGroup) - heldGroupWeight(b.heldGroup);
       if (weightDiff !== 0) return weightDiff;
-      const dueA = parseDueDate(a.dueDate)?.getTime() ?? Number.POSITIVE_INFINITY;
-      const dueB = parseDueDate(b.dueDate)?.getTime() ?? Number.POSITIVE_INFINITY;
+      const parsedDueA = parseDueCalendarDay(a.dueDate);
+      const parsedDueB = parseDueCalendarDay(b.dueDate);
+      const dueA = parsedDueA ? calendarOrdinal(parsedDueA) : Number.POSITIVE_INFINITY;
+      const dueB = parsedDueB ? calendarOrdinal(parsedDueB) : Number.POSITIVE_INFINITY;
       return dueA - dueB;
     });
 
@@ -112,7 +155,7 @@ export function buildWerkstattData(
     dringendCount: held.filter((order) => order.heldGroup === "crit").length,
     weitereCount: held.filter((order) => order.heldGroup === "soon").length,
     held,
-    bundleSuggestion: buildBundleSuggestion(combined),
+    bundleSuggestion: buildBundleSuggestion(held),
     wipCount: galvanik.length,
     dueThisWeekCount: combined.filter((order) => isDueThisWeek(order.dueDate, now)).length,
     pickerOrders: combined,

@@ -409,6 +409,19 @@ describe("W2C-B2M5J unavailable UI", () => {
       resolve(process.cwd(), "src/modules/werkstatt/ui/WerkstattView.module.css"),
       "utf8",
     );
+    const adapterSource = readFileSync(
+      resolve(process.cwd(), "src/app/warendurchlauf/WarendurchlaufCockpitClient.tsx"),
+      "utf8",
+    );
+    const routeSource = readFileSync(resolve(process.cwd(), "src/app/warendurchlauf/page.tsx"), "utf8");
+    const typesSource = readFileSync(
+      resolve(process.cwd(), "src/modules/werkstatt/server/types.ts"),
+      "utf8",
+    );
+    const manifestSource = readFileSync(
+      resolve(process.cwd(), "src/modules/werkstatt/werkstatt.manifest.json"),
+      "utf8",
+    );
 
     expect(clientSource).toContain('data-testid="werkstatt-held-list"');
     expect(clientSource).toContain("Auftrag öffnen / scannen");
@@ -420,10 +433,20 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(cssSource).toMatch(/\.pickerClose\s*\{[^}]*min-height:\s*48px;/);
     expect(cssSource).toMatch(/\.pickerBackdrop\s*\{[^}]*overflow-x:\s*hidden;/);
     expect(cssSource).toMatch(/\.actionBar\s*\{[^}]*position:\s*sticky;[^}]*bottom:\s*0;[^}]*max-width:\s*100%;/);
-    expect(cssSource).toMatch(/@media \(hover: hover\) and \(pointer: fine\)[\s\S]*\.actionBar\s*\{[^}]*position:\s*relative;/);
+    expect(cssSource).not.toMatch(/\.actionBar\s*\{[^}]*position:\s*relative;/);
     expect(cssSource).toMatch(/@media \(min-width: 64rem\)[\s\S]*grid-template-columns:\s*minmax\(0, 1\.6fr\) minmax\(18rem, 0\.9fr\)/);
     expect(cssSource).toContain("@media (prefers-reduced-motion: reduce)");
     expect(cssSource).toContain("overflow-x: clip");
+    expect(typesSource).not.toContain("OperationalOrder");
+    expect(typesSource).toContain("export type WerkstattViewPorts");
+    expect(clientSource).not.toMatch(/@\/components\/|@\/hooks\/|@\/lib\/overlayStore/);
+    expect(adapterSource).toContain('from "@/components/erfassung/ErfassungProvider"');
+    expect(adapterSource).toContain('from "@/hooks/usePageView"');
+    expect(adapterSource).toContain('from "@/lib/overlayStore"');
+    expect(routeSource).toContain("wareneingangResult.data.map(toWerkstattSurfaceOrder)");
+    expect(routeSource).toContain("galvanikResult.data.map(toWerkstattSurfaceOrder)");
+    expect(manifestSource).toContain("@/modules/werkstatt/public#WerkstattViewPorts");
+    expect(manifestSource).toContain('"dependencies": []');
     expect(clientSource).not.toMatch(/Demo|Mock|Station öffnen|In Galvanik starten|Als Nächstes|ThemeToggle/);
   });
 

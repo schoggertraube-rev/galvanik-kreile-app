@@ -329,12 +329,6 @@
   overflow-x: clip;
 }
 
-@media (hover: hover) and (pointer: fine) {
-  .actionBar {
-    position: relative;
-  }
-}
-
 .actionPrimary,
 .actionSecondary,
 .actionGhost {

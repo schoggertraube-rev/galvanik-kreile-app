@@ -8,6 +8,7 @@
     "@/modules/werkstatt/public#WerkstattData",
     "@/modules/werkstatt/public#WerkstattHeldCard",
     "@/modules/werkstatt/public#WerkstattSurfaceOrder",
+    "@/modules/werkstatt/public#WerkstattViewPorts",
     "@/modules/werkstatt/public#buildWerkstattData",
     "@/modules/werkstatt/public#WerkstattView",
     "@/modules/werkstatt/public#WerkstattLoading"

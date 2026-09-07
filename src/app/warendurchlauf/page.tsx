@@ -2,21 +2,40 @@ import { isOrderStationForwardRole } from "@/lib/orders/orderLifecycleContract";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import {
   buildWerkstattData,
-  WerkstattView,
   type PhillipWerkstattViewModel,
+  type WerkstattSurfaceOrder,
 } from "@/modules/werkstatt/public";
 import {
   getGalvanikOrdersAction,
   getWareneingangOrdersAction,
   type WarendurchlaufOrder,
 } from "@/app/warendurchlauf/actions";
+import { WarendurchlaufCockpitClient } from "./WarendurchlaufCockpitClient";
 
 const DENIAL_MESSAGE = "Zugriff nicht erlaubt.";
 const ERROR_MESSAGE = "Werkstattdaten konnten nicht sicher geladen werden.";
 const CONFLICT_MESSAGE = "Werkstattdaten enthalten widersprüchliche Auftragskennungen.";
 
 function render(view: PhillipWerkstattViewModel) {
-  return <WerkstattView view={view} />;
+  return <WarendurchlaufCockpitClient view={view} />;
+}
+
+function toWerkstattSurfaceOrder(order: WarendurchlaufOrder): WerkstattSurfaceOrder {
+  return {
+    id: order.id,
+    orderNumber: order.orderNumber,
+    customerName: order.customerName,
+    title: order.title,
+    itemDescription: order.itemDescription,
+    surfaceRequested: order.surfaceRequested,
+    station: order.station,
+    status: order.status,
+    statusText: order.statusText,
+    risk: order.risk,
+    dueDate: order.dueDate,
+    dueLabel: order.dueLabel,
+    dueValue: order.dueValue,
+  };
 }
 
 function hasDuplicateCanonicalOrder(orders: readonly WarendurchlaufOrder[]) {
@@ -86,8 +105,8 @@ export default async function WarendurchlaufIndex() {
   return render({
     kind: "data",
     ...buildWerkstattData({
-      wareneingang: wareneingangResult.data,
-      galvanik: galvanikResult.data,
+      wareneingang: wareneingangResult.data.map(toWerkstattSurfaceOrder),
+      galvanik: galvanikResult.data.map(toWerkstattSurfaceOrder),
       canCreateOrder,
       greetingName: authorization.data.displayName ?? null,
     }),

@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { useErfassung } from "@/components/erfassung/ErfassungProvider";
-import { usePageView } from "@/hooks/usePageView";
-import { useOverlayStore } from "@/lib/overlayStore";
-import type { PhillipOrderCard, PhillipWerkstattViewModel, WerkstattHeldCard } from "../server/types";
+import type {
+  PhillipOrderCard,
+  PhillipWerkstattViewModel,
+  WerkstattHeldCard,
+  WerkstattViewPorts,
+} from "../server/types";
 import styles from "./WerkstattView.module.css";
 
 const PICKER_TITLE_ID = "werkstatt-order-picker-title";
@@ -49,11 +51,13 @@ function HeldCard({ order, onOpenOrder }: { order: WerkstattHeldCard; onOpenOrde
   );
 }
 
-export function WerkstattView({ view }: { view: PhillipWerkstattViewModel }) {
-  usePageView();
-  const { openErfassung } = useErfassung();
-  const openOrder = useOverlayStore((state) => state.openOrder);
-
+export function WerkstattView({
+  view,
+  ports,
+}: {
+  view: PhillipWerkstattViewModel;
+  ports: WerkstattViewPorts;
+}) {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [bundleFilterActive, setBundleFilterActive] = useState(false);
   const pickerTriggerRef = useRef<HTMLElement | null>(null);
@@ -127,19 +131,19 @@ export function WerkstattView({ view }: { view: PhillipWerkstattViewModel }) {
   const selectOrder = (orderId: string) => {
     restoreFocusRef.current = false;
     setIsPickerOpen(false);
-    openOrder(orderId);
+    ports.onOpenOrder(orderId);
   };
 
   const scanOrder = () => {
     restoreFocusRef.current = false;
     setIsPickerOpen(false);
-    openErfassung({ mode: "scan" });
+    ports.onScanOrder();
   };
 
   const pickerOrders: readonly PhillipOrderCard[] = isData ? view.pickerOrders : [];
   const heldOrders = isData
     ? bundleFilterActive && view.bundleSuggestion
-      ? view.held.filter((order) => order.surfaceRequested === view.bundleSuggestion!.surfaceRequested)
+      ? view.bundleSuggestion.orders
       : view.held
     : [];
 
@@ -208,7 +212,7 @@ export function WerkstattView({ view }: { view: PhillipWerkstattViewModel }) {
               ) : (
                 <ul className={styles.heldList} data-testid="werkstatt-held-list">
                   {heldOrders.map((order) => (
-                    <HeldCard key={order.id} order={order} onOpenOrder={openOrder} />
+                    <HeldCard key={order.id} order={order} onOpenOrder={ports.onOpenOrder} />
                   ))}
                 </ul>
               )}
@@ -287,12 +291,7 @@ export function WerkstattView({ view }: { view: PhillipWerkstattViewModel }) {
               <button
                 type="button"
                 className={`${styles.actionSecondary} ${styles.touchTarget}`}
-                onClick={() => openErfassung({
-                  mode: "order",
-                  intent: "create_order",
-                  source: "shortcut",
-                  returnTo: "/warendurchlauf",
-                })}
+                onClick={ports.onCreateOrder}
               >
                 Neuer Eingang
               </button>

@@ -4,6 +4,7 @@ export type {
   WerkstattData,
   WerkstattHeldCard,
   WerkstattSurfaceOrder,
+  WerkstattViewPorts,
 } from "./server/types";
 export { buildWerkstattData } from "./server/deriveWerkstattView";
 export { WerkstattView } from "./ui/WerkstattView";

@@ -5,25 +5,18 @@ import type { WerkstattSurfaceOrder } from "../server/types";
 function order(overrides: Partial<WerkstattSurfaceOrder> & { id: string; orderNumber: string }): WerkstattSurfaceOrder {
   return {
     id: overrides.id,
-    version: 1,
     orderNumber: overrides.orderNumber,
-    customerId: `customer-${overrides.id}`,
     customerName: overrides.customerName ?? `Kunde ${overrides.id}`,
     title: overrides.title ?? "Titel",
-    task: null,
     itemDescription: null,
     surfaceRequested: overrides.surfaceRequested ?? null,
     station: overrides.station ?? "wareneingang",
     status: overrides.status ?? "angenommen",
     statusText: overrides.statusText ?? "Angenommen",
     risk: overrides.risk ?? "green",
-    currentStationId: overrides.station ?? "wareneingang",
-    parts: [],
-    intakeDate: "2026-08-01",
     dueDate: overrides.dueDate ?? "2026-09-10",
     dueLabel: overrides.dueLabel ?? "Fällig in",
     dueValue: overrides.dueValue ?? "3 Tagen",
-    createdAt: "2026-08-01T08:00:00.000Z",
   };
 }
 
@@ -74,9 +67,9 @@ describe("buildWerkstattData", () => {
     expect(data.held.map((h) => h.id)).toEqual(["b", "a", "c"]);
   });
 
-  it("suggests a bundle only when surfaceRequested repeats, and never mutates orders", () => {
-    const a = order({ id: "a", orderNumber: "A", surfaceRequested: "Verzinken" });
-    const b = order({ id: "b", orderNumber: "B", surfaceRequested: "Verzinken" });
+  it("suggests a bundle only from the same held orders that its filter displays", () => {
+    const a = order({ id: "a", orderNumber: "A", surfaceRequested: "Verzinken", risk: "orange" });
+    const b = order({ id: "b", orderNumber: "B", surfaceRequested: "Verzinken", risk: "yellow" });
     const c = order({ id: "c", orderNumber: "C", surfaceRequested: "Passivieren" });
 
     const withBundle = buildWerkstattData(
@@ -93,6 +86,19 @@ describe("buildWerkstattData", () => {
     expect(withoutBundle.bundleSuggestion).toBeNull();
   });
 
+  it("does not suggest an empty bundle when only green orders share a surface", () => {
+    const first = order({ id: "green-a", orderNumber: "G-A", surfaceRequested: "Verzinken" });
+    const second = order({ id: "green-b", orderNumber: "G-B", surfaceRequested: "Verzinken" });
+
+    const data = buildWerkstattData(
+      { wareneingang: [first], galvanik: [second], canCreateOrder: true, greetingName: null },
+      NOW,
+    );
+
+    expect(data.held).toEqual([]);
+    expect(data.bundleSuggestion).toBeNull();
+  });
+
   it("derives wipCount from the real galvanik surface count only", () => {
     const data = buildWerkstattData(
       {
@@ -106,7 +112,7 @@ describe("buildWerkstattData", () => {
     expect(data.wipCount).toBe(1);
   });
 
-  it("counts dueThisWeek only for the local calendar week up to Sunday, not a rolling 7-day window", () => {
+  it("counts dueThisWeek only for the Europe/Berlin calendar week up to Sunday", () => {
     const today = order({ id: "today", orderNumber: "T", dueDate: "2026-09-07" });
     const sunday = order({ id: "sunday", orderNumber: "S", dueDate: "2026-09-13" });
     const nextWeek = order({ id: "next", orderNumber: "N", dueDate: "2026-09-14" });
@@ -119,7 +125,7 @@ describe("buildWerkstattData", () => {
     expect(data.dueThisWeekCount).toBe(2);
   });
 
-  it("parses YYYY-MM-DD dueDate as a local date, matching the calendar-week Sunday boundary at NOW 2026-09-07", () => {
+  it("treats YYYY-MM-DD as a Europe/Berlin calendar date at the Sunday boundary", () => {
     const sunday = order({ id: "sunday", orderNumber: "S", dueDate: "2026-09-13" });
     const monday = order({ id: "monday", orderNumber: "M", dueDate: "2026-09-14" });
 
@@ -127,6 +133,31 @@ describe("buildWerkstattData", () => {
       { wareneingang: [sunday, monday], galvanik: [], canCreateOrder: true, greetingName: null },
       NOW,
     );
+    expect(data.dueThisWeekCount).toBe(1);
+  });
+
+  it("keeps the UTC-to-Berlin Sunday/Monday boundary deterministic", () => {
+    const berlinSunday = order({
+      id: "berlin-sunday",
+      orderNumber: "BER-SO",
+      dueDate: "2026-09-13T21:59:59Z",
+    });
+    const berlinMonday = order({
+      id: "berlin-monday",
+      orderNumber: "BER-MO",
+      dueDate: "2026-09-13T22:00:00Z",
+    });
+
+    const data = buildWerkstattData(
+      {
+        wareneingang: [berlinSunday, berlinMonday],
+        galvanik: [],
+        canCreateOrder: true,
+        greetingName: null,
+      },
+      new Date("2026-09-13T21:30:00Z"),
+    );
+
     expect(data.dueThisWeekCount).toBe(1);
   });
 
