@@ -10,6 +10,7 @@ const ports = vi.hoisted(() => ({
   resolveAuthorization: vi.fn(),
   getWareneingangOrdersAction: vi.fn(),
   getGalvanikOrdersAction: vi.fn(),
+  getWarendurchlaufKPIs: vi.fn(),
   openErfassung: vi.fn(),
   openOrder: vi.fn(),
   pushRoute: vi.fn(),
@@ -19,6 +20,7 @@ const ports = vi.hoisted(() => ({
 vi.mock("@/app/warendurchlauf/actions", () => ({
   getWareneingangOrdersAction: ports.getWareneingangOrdersAction,
   getGalvanikOrdersAction: ports.getGalvanikOrdersAction,
+  getWarendurchlaufKPIs: ports.getWarendurchlaufKPIs,
 }));
 vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization: ports.resolveAuthorization }));
 vi.mock("next/navigation", () => ({
@@ -92,6 +94,7 @@ beforeEach(() => {
   ports.resolveAuthorization.mockResolvedValue(allowedAuthorization());
   ports.getWareneingangOrdersAction.mockResolvedValue({ ok: true, data: [] });
   ports.getGalvanikOrdersAction.mockResolvedValue({ ok: true, data: [] });
+  ports.getWarendurchlaufKPIs.mockResolvedValue({ ok: true, data: { wipCount: 0, dueThisWeekCount: 0 } });
   ports.useSelectedLayoutSegment.mockReturnValue(null);
 });
 
@@ -124,6 +127,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     const galvanik = order("ga-1", "GA-001", "Galvanik Sentinel", "fertig", "yellow");
     ports.getWareneingangOrdersAction.mockResolvedValueOnce({ ok: true, data: [wareneingang] });
     ports.getGalvanikOrdersAction.mockResolvedValueOnce({ ok: true, data: [galvanik] });
+    ports.getWarendurchlaufKPIs.mockResolvedValueOnce({ ok: true, data: { wipCount: 1, dueThisWeekCount: 2 } });
     const { default: WarendurchlaufIndex } = await import("../page");
     render(await WarendurchlaufIndex());
 
@@ -327,6 +331,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(screen.getByText("Zugriff nicht erlaubt.")).toBeInTheDocument();
     expect(ports.getWareneingangOrdersAction).not.toHaveBeenCalled();
     expect(ports.getGalvanikOrdersAction).not.toHaveBeenCalled();
+    expect(ports.getWarendurchlaufKPIs).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Auftrag öffnen / scannen" })).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Auftrag öffnen" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Neuer Eingang" })).not.toBeInTheDocument();
@@ -359,6 +364,24 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(screen.queryByTestId("werkstatt-held-ga-secret")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Auftrag öffnen / scannen" })).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Auftrag öffnen" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Werkstattaktionen" })).not.toBeInTheDocument();
+  });
+
+  it("suppresses both station payloads when the canonical KPI read fails closed", async () => {
+    ports.getWareneingangOrdersAction.mockResolvedValueOnce({
+      ok: true,
+      data: [order("we-kpi", "WE-KPI", "Wareneingang KPI Sentinel", "wareneingang")],
+    });
+    ports.getGalvanikOrdersAction.mockResolvedValueOnce({
+      ok: true,
+      data: [order("ga-kpi", "GA-KPI", "Galvanik KPI Sentinel", "galvanik")],
+    });
+    ports.getWarendurchlaufKPIs.mockResolvedValueOnce({ ok: false, error: "QUERY_ERROR", message: "query" });
+    const { default: WarendurchlaufIndex } = await import("../page");
+    render(await WarendurchlaufIndex());
+
+    expect(screen.getByText("Werkstattdaten konnten nicht sicher geladen werden.")).toBeInTheDocument();
+    expect(screen.queryByText(/KPI Sentinel/)).not.toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: "Werkstattaktionen" })).not.toBeInTheDocument();
   });
 

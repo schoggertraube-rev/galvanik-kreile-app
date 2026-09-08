@@ -4,6 +4,7 @@ import type {
   WerkstattData,
   WerkstattHeldCard,
   WerkstattHeldGroup,
+  WerkstattKpiSnapshot,
   WerkstattSurfaceOrder,
 } from "./types";
 
@@ -42,7 +43,6 @@ type BerlinCalendarDay = {
 };
 
 const BERLIN_TIME_ZONE = "Europe/Berlin";
-const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const BERLIN_DATE_FORMAT = new Intl.DateTimeFormat("en-CA", {
   timeZone: BERLIN_TIME_ZONE,
   year: "numeric",
@@ -87,20 +87,6 @@ function calendarOrdinal(day: BerlinCalendarDay): number {
   return Date.UTC(day.year, day.month - 1, day.day);
 }
 
-/** Calendar week ending Sunday in Europe/Berlin, never a runtime-local rolling window. */
-function isDueThisWeek(dueDate: string, now: Date): boolean {
-  const dueDay = parseDueCalendarDay(dueDate);
-  const today = berlinCalendarDay(now);
-  if (!dueDay || !today) return false;
-
-  const dueOrdinal = calendarOrdinal(dueDay);
-  const todayOrdinal = calendarOrdinal(today);
-  if (dueOrdinal < todayOrdinal) return false;
-  const weekday = new Date(todayOrdinal).getUTCDay();
-  const daysUntilSunday = weekday === 0 ? 0 : 7 - weekday;
-  return dueOrdinal <= todayOrdinal + daysUntilSunday * DAY_IN_MS;
-}
-
 function buildBundleSuggestion(orders: readonly WerkstattHeldCard[]): WerkstattBundleSuggestion | null {
   const groups = new Map<string, WerkstattHeldCard[]>();
   for (const order of orders) {
@@ -127,8 +113,8 @@ export function buildWerkstattData(
     galvanik: readonly WerkstattSurfaceOrder[];
     canCreateOrder: boolean;
     greetingName: string | null;
+    kpis: WerkstattKpiSnapshot;
   },
-  now: Date = new Date(),
 ): WerkstattData {
   const wareneingang = input.wareneingang.map(toPhillipOrderCard);
   const galvanik = input.galvanik.map(toPhillipOrderCard);
@@ -156,8 +142,8 @@ export function buildWerkstattData(
     weitereCount: held.filter((order) => order.heldGroup === "soon").length,
     held,
     bundleSuggestion: buildBundleSuggestion(held),
-    wipCount: galvanik.length,
-    dueThisWeekCount: combined.filter((order) => isDueThisWeek(order.dueDate, now)).length,
+    wipCount: input.kpis.wipCount,
+    dueThisWeekCount: input.kpis.dueThisWeekCount,
     pickerOrders: combined,
     canCreateOrder: input.canCreateOrder,
   };

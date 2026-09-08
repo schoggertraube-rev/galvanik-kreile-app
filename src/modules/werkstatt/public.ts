@@ -3,6 +3,7 @@ export type {
   PhillipWerkstattViewModel,
   WerkstattData,
   WerkstattHeldCard,
+  WerkstattKpiSnapshot,
   WerkstattSurfaceOrder,
   WerkstattViewPorts,
 } from "./server/types";

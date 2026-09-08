@@ -7,6 +7,7 @@ import {
 } from "@/modules/werkstatt/public";
 import {
   getGalvanikOrdersAction,
+  getWarendurchlaufKPIs,
   getWareneingangOrdersAction,
   type WarendurchlaufOrder,
 } from "@/app/warendurchlauf/actions";
@@ -72,19 +73,22 @@ export default async function WarendurchlaufIndex() {
 
   let wareneingangResult;
   let galvanikResult;
+  let kpiResult;
   try {
-    [wareneingangResult, galvanikResult] = await Promise.all([
+    [wareneingangResult, galvanikResult, kpiResult] = await Promise.all([
       getWareneingangOrdersAction(),
       getGalvanikOrdersAction(),
+      getWarendurchlaufKPIs(),
     ]);
   } catch {
     return render({ kind: "error", message: ERROR_MESSAGE });
   }
 
-  if (!wareneingangResult.ok || !galvanikResult.ok) {
+  if (!wareneingangResult.ok || !galvanikResult.ok || !kpiResult.ok) {
     const denied =
       (!wareneingangResult.ok && ["AUTH_ERROR", "FORBIDDEN"].includes(wareneingangResult.error)) ||
-      (!galvanikResult.ok && ["AUTH_ERROR", "FORBIDDEN"].includes(galvanikResult.error));
+      (!galvanikResult.ok && ["AUTH_ERROR", "FORBIDDEN"].includes(galvanikResult.error)) ||
+      (!kpiResult.ok && ["AUTH_ERROR", "FORBIDDEN"].includes(kpiResult.error));
 
     return render({
       kind: denied ? "denied" : "error",
@@ -109,6 +113,7 @@ export default async function WarendurchlaufIndex() {
       galvanik: galvanikResult.data.map(toWerkstattSurfaceOrder),
       canCreateOrder,
       greetingName: authorization.data.displayName ?? null,
+      kpis: kpiResult.data,
     }),
   });
 }

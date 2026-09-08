@@ -1,6 +1,7 @@
 "use server";
 
 import { unstable_noStore as noStore } from "next/cache";
+import { sql } from "drizzle-orm";
 import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import {
   readTenantOrderStationReceipt,
@@ -32,9 +33,11 @@ import type {
 } from "@/lib/server/orderStationAttachment";
 import type { EvidenceReadRecord, ReadEvidenceTargetInput } from "@/lib/server/evidenceRead";
 import type { OperationalOrder } from "@/lib/types/operationalOrder";
+import type { WerkstattKpiSnapshot } from "@/modules/werkstatt/public";
 
 export type WarendurchlaufOrder = OperationalOrder;
 
+/** Legacy route-card contract; not used by the Path-1 Werkstatt KPI read. */
 export interface WarendurchlaufKpiData {
   termintreue: number;
   durchlaufzeitTage: number;
@@ -43,6 +46,13 @@ export interface WarendurchlaufKpiData {
   offeneAuftraege: number;
   orders: WarendurchlaufOrder[];
 }
+
+type WerkstattKpiRow = {
+  tenant_id: string;
+  contract_version: number | string;
+  wip_count: number | string;
+  due_this_week_count: number | string;
+};
 
 export type WarendurchlaufActionResult<T> =
   | { ok: true; data: T }
@@ -380,6 +390,58 @@ export async function startProcessingStation(orderId: string, stationId: string)
   return { ok: false, error: "CONFLICT", message: "NOT_AVAILABLE: Stationsstart benötigt den W3-Command-Vertrag." };
 }
 
-export async function getWarendurchlaufKPIs(): Promise<WarendurchlaufActionResult<WarendurchlaufKpiData>> {
-  return { ok: false, error: "NOT_AVAILABLE", message: "NOT_AVAILABLE: Warendurchlauf-KPIs benötigen einen kanonischen SQL-Read-Model-Vertrag." };
+function parseKpiCount(value: number | string): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error("WERKSTATT_KPI_READMODEL_INVALID");
+  }
+  return parsed;
+}
+
+export async function getWarendurchlaufKPIs(): Promise<WarendurchlaufActionResult<WerkstattKpiSnapshot>> {
+  noStore();
+  let authorization;
+  try {
+    authorization = await resolveAuthorization();
+  } catch {
+    return { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." };
+  }
+
+  if (!authorization.ok) {
+    if (authorization.reason === "AUTHORIZATION_UNAVAILABLE") {
+      return { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." };
+    }
+    return { ok: false, error: "AUTH_ERROR", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+  }
+  if (!authorization.data.permissions.includes("perm_view_leitstand")) {
+    return { ok: false, error: "FORBIDDEN", message: "Werkstatt-KPIs sind nicht erlaubt." };
+  }
+
+  try {
+    const { withPrivilegedTenantTransaction } = await import("@/lib/server/privilegedDb");
+    const data = await withPrivilegedTenantTransaction(authorization.data, async (tx) => {
+      const rows = await tx.execute<WerkstattKpiRow>(sql`
+        SELECT tenant_id, contract_version, wip_count, due_this_week_count
+        FROM public.v_werkstatt_kpis_v1
+        WHERE tenant_id = ${authorization.data.tenantId}
+        LIMIT 2
+      `);
+      const row = rows[0];
+      if (
+        rows.length !== 1 ||
+        !row ||
+        row.tenant_id !== authorization.data.tenantId ||
+        Number(row.contract_version) !== 1
+      ) {
+        throw new Error("WERKSTATT_KPI_READMODEL_INVALID");
+      }
+      return {
+        wipCount: parseKpiCount(row.wip_count),
+        dueThisWeekCount: parseKpiCount(row.due_this_week_count),
+      };
+    });
+    return { ok: true, data };
+  } catch {
+    return { ok: false, error: "QUERY_ERROR", message: "Werkstatt-KPIs konnten nicht sicher geladen werden." };
+  }
 }

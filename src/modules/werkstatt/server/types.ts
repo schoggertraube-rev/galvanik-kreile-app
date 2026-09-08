@@ -41,6 +41,12 @@ export type WerkstattBundleSuggestion = {
   orders: readonly WerkstattHeldCard[];
 };
 
+/** Tenant-bound KPI snapshot supplied by the canonical SQL read model. */
+export type WerkstattKpiSnapshot = {
+  wipCount: number;
+  dueThisWeekCount: number;
+};
+
 /** App-owned interactions injected into the reusable Werkstatt UI. */
 export type WerkstattViewPorts = {
   onOpenOrder: (orderId: string) => void;

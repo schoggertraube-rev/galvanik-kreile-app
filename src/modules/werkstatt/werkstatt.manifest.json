@@ -7,6 +7,7 @@
     "@/modules/werkstatt/public#PhillipWerkstattViewModel",
     "@/modules/werkstatt/public#WerkstattData",
     "@/modules/werkstatt/public#WerkstattHeldCard",
+    "@/modules/werkstatt/public#WerkstattKpiSnapshot",
     "@/modules/werkstatt/public#WerkstattSurfaceOrder",
     "@/modules/werkstatt/public#WerkstattViewPorts",
     "@/modules/werkstatt/public#buildWerkstattData",
@@ -14,8 +15,12 @@
     "@/modules/werkstatt/public#WerkstattLoading"
   ],
   "capabilities": [],
-  "migrations": [],
-  "viewsFunctions": [],
+  "migrations": [
+    "20260908101500_werkstatt_kpi_view.sql"
+  ],
+  "viewsFunctions": [
+    "public.v_werkstatt_kpis_v1"
+  ],
   "ownsTables": [],
   "storagePurposes": [],
   "events": {

@@ -32,7 +32,7 @@ Nichts vom Fach liegt außerhalb. Keine Parallel-Ablage in `components/<fach>` /
 - **S3 Muster-Modul:** `erfassung` (hat schon Manifest) vollständig nach `src/modules/erfassung/` inkl. `public.ts` — Vorlage für alle.
 - **S4 Home neu:** `src/modules/werkstatt` gegen Phillip V4; `warendurchlauf`-Stationsmodell gelöscht. **Kandidat gebaut** (Branch `path1/werkstatt-phillip-v4-20260907`, Basis `main@160bcf40`): `/warendurchlauf` liest weiterhin unveraendert ueber `getWareneingangOrdersAction`/`getGalvanikOrdersAction`, reicht die echten Daten an `@/modules/werkstatt/public`; `WarendurchlaufCockpitClient.tsx`/`PhillipWerkstatt.module.css`/`ThemeToggle.tsx` geloescht, Baseline entsprechend geschrumpft. Breitere Subrouten/Stationsnavigation (`wareneingang/`, `galvanik/`, `warenausgang/`, `WarendurchlaufRouteNav.tsx`) bewusst unangetastet — S2/S4-Rest folgt separat. **Noch nicht reviewed/gemergt.**
 - **S5 restliche Domänen** Modul für Modul, jeweils Naht mitbauend.
-- **F1.5** wurde mit Owner-Mandat vor S1 gemerged (#73, 2026-09-06; Red-Team PASS, Tenant-Literale in S0 nachgezogen). Ab S1 gilt ohne Ausnahme: **kein Feature-Bau, der die Naht-Gates rot lässt.**
+- **F1.5 A+B/B2** wurde mit Owner-Mandat vor S1 gemerged (#73, 2026-09-06; Red-Team PASS, Tenant-Literale in S0 nachgezogen). **F1.5 C Warenausgang/Gate und D UI sind offen.** Ab S1 gilt ohne Ausnahme: **kein Feature-Bau, der die Naht-Gates rot lässt.**
 
 ## 5. Abnahmetest = „sauber"
 Ein frischer Chat mit NUR diesem Repo kann widerspruchsfrei sagen: welches Modul, welche Naht, welcher nächste Schritt — ohne Owner-Rückfrage. CI lässt NICHT grün: einen Tiefimport, ein Tenant-Literal, ein Stationshome, ein manifestloses Modul, eine Domäne mit Ablage außerhalb ihres Modulordners.

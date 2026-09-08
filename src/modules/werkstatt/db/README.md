@@ -1,12 +1,12 @@
-# werkstatt/db — ehrlicher Vertrag
+# werkstatt/db - ehrlicher Vertrag
 
-Dieses Modul besitzt **keine** Tabellen, Migrationen oder `v_*`-Views (`ownsTables`,
-`migrations` und `viewsFunctions` in `werkstatt.manifest.json` sind bewusst leer).
+Dieses Modul besitzt keine Tabellen. Seine beiden Startseiten-KPIs kommen ausschliesslich
+aus dem tenantgebundenen SQL-Vertrag `public.v_werkstatt_kpis_v1` (Migration
+`20260908101500_werkstatt_kpi_view.sql`).
 
-Alle Auftragsdaten kommen unverändert von den bestehenden, tenant-/rollenrichtigen
-Reads `getWareneingangOrdersAction` / `getGalvanikOrdersAction`
-(`src/app/warendurchlauf/actions.ts`, dahinter `src/lib/server/orderStationRead.ts`).
-`werkstatt` selbst führt nur reine Ableitung auf den bereits gelesenen, echten
-Datensätzen aus (Sortierung nach Risiko/Fälligkeit, Bündel-Erkennung nach
-`surfaceRequested`, Zählungen) — siehe `server/deriveWerkstattView.ts`. Keine eigene
-Persistenz, keine erfundene Eigentümerschaft an fremden Tabellen.
+Die bestehenden Stations-Reads liefern weiterhin die Auftragskarten. Der App-Read-Port
+liest genau einen typisierten KPI-Snapshot; fehlender Tenant-Kontext sowie fehlende oder
+ungueltige Projektionen schlagen geschlossen fehl. `werkstatt` selbst leitet nur
+Kartenreihenfolge, Risikogruppen und Buendelvorschlag ab. Auftrags- und Terminmengen
+werden dort nicht berechnet. Keine eigene Persistenz und keine erfundene Eigentuemerschaft
+an fremden Tabellen.
