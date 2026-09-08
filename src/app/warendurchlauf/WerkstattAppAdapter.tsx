@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useErfassung } from "@/components/erfassung/ErfassungProvider";
 import { usePageView } from "@/hooks/usePageView";
 import { useOverlayStore } from "@/lib/overlayStore";
@@ -15,6 +16,7 @@ export function WerkstattAppAdapter({
   view: PhillipWerkstattViewModel;
 }) {
   usePageView();
+  const router = useRouter();
   const { openErfassung } = useErfassung();
   const openOrder = useOverlayStore((state) => state.openOrder);
 
@@ -23,6 +25,7 @@ export function WerkstattAppAdapter({
       view={view}
       ports={{
         onOpenOrder: openOrder,
+        onOpenWip: () => router.push("/warendurchlauf/galvanik"),
         onScanOrder: () => openErfassung({ mode: "scan" }),
         onCreateOrder: () => openErfassung({
           mode: "order",

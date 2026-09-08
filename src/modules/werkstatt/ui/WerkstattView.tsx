@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import type {
   PhillipOrderCard,
@@ -236,10 +235,15 @@ export function WerkstattView({
                 </div>
               ) : null}
 
-              <Link href="/warendurchlauf/galvanik" className={styles.wipTile} data-testid="werkstatt-wip-tile">
-                <p className={styles.wipLabel}>In Arbeit (Galvanik)</p>
-                <p className={styles.wipCount}>{view.wipCount}</p>
-              </Link>
+              <button
+                type="button"
+                className={styles.wipTile}
+                data-testid="werkstatt-wip-tile"
+                onClick={ports.onOpenWip}
+              >
+                <span className={styles.wipLabel}>In Arbeit (Galvanik)</span>
+                <span className={styles.wipCount}>{view.wipCount}</span>
+              </button>
 
               <div className={styles.infoTile} data-testid="werkstatt-due-week-tile">
                 <p className={styles.infoLabel}>Fällig diese Woche</p>

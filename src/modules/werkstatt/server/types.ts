@@ -44,6 +44,7 @@ export type WerkstattBundleSuggestion = {
 /** App-owned interactions injected into the reusable Werkstatt UI. */
 export type WerkstattViewPorts = {
   onOpenOrder: (orderId: string) => void;
+  onOpenWip: () => void;
   onScanOrder: () => void;
   onCreateOrder: () => void;
 };

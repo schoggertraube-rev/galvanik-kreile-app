@@ -1,5 +1,4 @@
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
-import React from "react";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -13,6 +12,7 @@ const ports = vi.hoisted(() => ({
   getGalvanikOrdersAction: vi.fn(),
   openErfassung: vi.fn(),
   openOrder: vi.fn(),
+  pushRoute: vi.fn(),
   useSelectedLayoutSegment: vi.fn(),
 }));
 
@@ -21,11 +21,8 @@ vi.mock("@/app/warendurchlauf/actions", () => ({
   getGalvanikOrdersAction: ports.getGalvanikOrdersAction,
 }));
 vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization: ports.resolveAuthorization }));
-vi.mock("next/link", () => ({
-  default: ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a {...props}>{children}</a>,
-}));
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: ports.pushRoute }),
   useSearchParams: () => new URLSearchParams(),
   useSelectedLayoutSegment: ports.useSelectedLayoutSegment,
 }));
@@ -142,7 +139,11 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(within(held).getByText("Galvanik Sentinel")).toBeInTheDocument();
     expect(screen.getByTestId("werkstatt-held-we-1")).toBeInTheDocument();
     expect(screen.getByTestId("werkstatt-held-ga-1")).toBeInTheDocument();
-    expect(screen.getByTestId("werkstatt-wip-tile")).toHaveTextContent("1");
+    const wipTile = screen.getByRole("button", { name: /In Arbeit \(Galvanik\)/ });
+    expect(wipTile).toHaveTextContent("1");
+    fireEvent.click(wipTile);
+    expect(ports.pushRoute).toHaveBeenCalledTimes(1);
+    expect(ports.pushRoute).toHaveBeenCalledWith("/warendurchlauf/galvanik");
 
     const wareneingangOrder = screen.getByRole("button", { name: /Auftrag WE-001/ });
     const galvanikOrder = screen.getByRole("button", { name: /Auftrag GA-001/ });
@@ -437,6 +438,9 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(cssSource).toMatch(/\.pickerClose\s*\{[^}]*min-height:\s*48px;/);
     expect(cssSource).toMatch(/\.pickerBackdrop\s*\{[^}]*overflow-x:\s*hidden;/);
     expect(cssSource).toMatch(
+      /\.wipTile\s*\{[^}]*display:\s*block;[^}]*width:\s*100%;[^}]*appearance:\s*none;[^}]*border:\s*0;[^}]*font:\s*inherit;[^}]*text-align:\s*left;[^}]*cursor:\s*pointer;/,
+    );
+    expect(cssSource).toMatch(
       /\.screen\s*\{[^}]*box-sizing:\s*border-box;[^}]*width:\s*100%;[^}]*min-width:\s*0;[^}]*height:\s*100%;[^}]*min-height:\s*0;[^}]*display:\s*flex;[^}]*flex-direction:\s*column;[^}]*overflow:\s*hidden;[^}]*padding:\s*20px 16px 0;/,
     );
     expect(cssSource).toMatch(
@@ -454,10 +458,15 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(cssSource).toContain("overflow-x: clip");
     expect(typesSource).not.toContain("OperationalOrder");
     expect(typesSource).toContain("export type WerkstattViewPorts");
+    expect(typesSource).toContain("onOpenWip: () => void;");
     expect(clientSource).not.toMatch(/@\/components\/|@\/hooks\/|@\/lib\/overlayStore/);
+    expect(clientSource).toContain("onClick={ports.onOpenWip}");
+    expect(clientSource).not.toMatch(/next\/link|next\/navigation|\/warendurchlauf\//);
     expect(adapterSource).toContain('from "@/components/erfassung/ErfassungProvider"');
     expect(adapterSource).toContain('from "@/hooks/usePageView"');
     expect(adapterSource).toContain('from "@/lib/overlayStore"');
+    expect(adapterSource).toContain('from "next/navigation"');
+    expect(adapterSource).toContain('onOpenWip: () => router.push("/warendurchlauf/galvanik")');
     expect(routeSource).toContain("wareneingangResult.data.map(toWerkstattSurfaceOrder)");
     expect(routeSource).toContain("galvanikResult.data.map(toWerkstattSurfaceOrder)");
     expect(manifestSource).toContain("@/modules/werkstatt/public#WerkstattViewPorts");
