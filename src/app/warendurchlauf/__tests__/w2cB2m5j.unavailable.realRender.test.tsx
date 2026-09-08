@@ -135,6 +135,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(status).toHaveTextContent("Servus Phillip.");
     expect(status).toHaveTextContent("1 dringend");
     expect(status).toHaveTextContent("1 weitere");
+    expect(screen.getByRole("navigation", { name: "Werkstattaktionen" })).toBeInTheDocument();
 
     const held = screen.getByTestId("werkstatt-held-list");
     expect(within(held).getByText("Wareneingang Sentinel")).toBeInTheDocument();
@@ -314,6 +315,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(screen.queryByRole("button", { name: "Auftrag öffnen / scannen" })).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Auftrag öffnen" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Neuer Eingang" })).not.toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Werkstattaktionen" })).toBeInTheDocument();
   });
 
   it("denies an excluded root role before either station action is invoked", async () => {
@@ -356,6 +358,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(screen.queryByTestId("werkstatt-held-ga-secret")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Auftrag öffnen / scannen" })).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Auftrag öffnen" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Werkstattaktionen" })).not.toBeInTheDocument();
   });
 
   it.each([
@@ -385,6 +388,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(screen.queryByRole("button", { name: "Neuer Eingang" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Auftrag öffnen / scannen" })).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Auftrag öffnen" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Werkstattaktionen" })).not.toBeInTheDocument();
     expect(ports.openErfassung).not.toHaveBeenCalled();
     expect(ports.openOrder).not.toHaveBeenCalled();
   });
@@ -432,8 +436,19 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(cssSource).toMatch(/\.touchTarget\s*\{[^}]*min-height:\s*48px;/);
     expect(cssSource).toMatch(/\.pickerClose\s*\{[^}]*min-height:\s*48px;/);
     expect(cssSource).toMatch(/\.pickerBackdrop\s*\{[^}]*overflow-x:\s*hidden;/);
-    expect(cssSource).toMatch(/\.actionBar\s*\{[^}]*position:\s*sticky;[^}]*bottom:\s*0;[^}]*max-width:\s*100%;/);
-    expect(cssSource).not.toMatch(/\.actionBar\s*\{[^}]*position:\s*relative;/);
+    expect(cssSource).toMatch(
+      /\.screen\s*\{[^}]*box-sizing:\s*border-box;[^}]*width:\s*100%;[^}]*min-width:\s*0;[^}]*height:\s*100%;[^}]*min-height:\s*0;[^}]*display:\s*flex;[^}]*flex-direction:\s*column;[^}]*overflow:\s*hidden;[^}]*padding:\s*20px 16px 0;/,
+    );
+    expect(cssSource).toMatch(
+      /\.inner\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*1220px;[^}]*min-width:\s*0;[^}]*height:\s*100%;[^}]*min-height:\s*0;[^}]*flex:\s*1 1 auto;[^}]*overflow:\s*hidden;/,
+    );
+    expect(cssSource).toMatch(
+      /\.cols\s*\{[^}]*min-width:\s*0;[^}]*min-height:\s*0;[^}]*flex:\s*1 1 auto;[^}]*overflow-y:\s*auto;[^}]*overflow-x:\s*hidden;/,
+    );
+    expect(cssSource).toMatch(
+      /\.actionBar\s*\{[^}]*position:\s*sticky;[^}]*bottom:\s*0;[^}]*width:\s*100%;[^}]*min-width:\s*0;[^}]*max-width:\s*100%;[^}]*flex:\s*0 0 auto;[^}]*margin-top:\s*auto;[^}]*overflow-x:\s*clip;/,
+    );
+    expect(cssSource).not.toMatch(/\.actionBar\s*\{[^}]*position:\s*(?:relative|absolute|fixed);/);
     expect(cssSource).toMatch(/@media \(min-width: 64rem\)[\s\S]*grid-template-columns:\s*minmax\(0, 1\.6fr\) minmax\(18rem, 0\.9fr\)/);
     expect(cssSource).toContain("@media (prefers-reduced-motion: reduce)");
     expect(cssSource).toContain("overflow-x: clip");
