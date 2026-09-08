@@ -76,6 +76,51 @@ describe("W2C-B2M5J station and KPI fail-closed boundaries", () => {
     expect(noStore).toHaveBeenCalledOnce();
   });
 
+  it("logs only structured database diagnostics and keeps the client result generic", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const databaseError = {
+      message: "KPI view query failed",
+      details: "The KPI projection is temporarily unavailable",
+      hint: "Retry after the database service has recovered",
+      token: "server-token-must-not-leak",
+      sql: "SELECT * FROM private.internal_table",
+      tenantId: authorization.tenantId,
+      userId: authorization.userId,
+    };
+    allowKpis();
+    withPrivilegedTenantTransaction.mockRejectedValueOnce(databaseError);
+
+    const { getWarendurchlaufKPIs } = await import("../actions");
+    const result = await getWarendurchlaufKPIs();
+
+    expect(consoleError).toHaveBeenCalledOnce();
+    expect(consoleError).toHaveBeenCalledWith("Werkstatt KPI query failed", {
+      message: databaseError.message,
+      details: databaseError.details,
+      hint: databaseError.hint,
+    });
+
+    const serializedLog = JSON.stringify(consoleError.mock.calls);
+    expect(serializedLog).not.toContain(databaseError.token);
+    expect(serializedLog).not.toContain(databaseError.sql);
+    expect(serializedLog).not.toContain(databaseError.tenantId);
+    expect(serializedLog).not.toContain(databaseError.userId);
+
+    expect(result).toEqual({
+      ok: false,
+      error: "QUERY_ERROR",
+      message: "Werkstatt-KPIs konnten nicht sicher geladen werden.",
+    });
+    const serializedResult = JSON.stringify(result);
+    expect(serializedResult).not.toContain(databaseError.message);
+    expect(serializedResult).not.toContain(databaseError.details);
+    expect(serializedResult).not.toContain(databaseError.hint);
+    expect(serializedResult).not.toContain(databaseError.token);
+    expect(serializedResult).not.toContain(databaseError.sql);
+    expect(serializedResult).not.toContain(databaseError.tenantId);
+    expect(serializedResult).not.toContain(databaseError.userId);
+  });
+
   it.each([
     { rows: [] },
     { rows: [{ tenant_id: "foreign", contract_version: 1, wip_count: 1, due_this_week_count: 1 }] },

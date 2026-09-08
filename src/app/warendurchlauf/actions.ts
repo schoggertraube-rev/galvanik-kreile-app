@@ -398,6 +398,21 @@ function parseKpiCount(value: number | string): number {
   return parsed;
 }
 
+type DatabaseErrorDiagnosticField = "message" | "details" | "hint";
+
+function readDatabaseErrorDiagnostic(error: unknown, field: DatabaseErrorDiagnosticField): string | undefined {
+  if (typeof error !== "object" || error === null) {
+    return undefined;
+  }
+
+  try {
+    const value = (error as Record<DatabaseErrorDiagnosticField, unknown>)[field];
+    return typeof value === "string" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function getWarendurchlaufKPIs(): Promise<WarendurchlaufActionResult<WerkstattKpiSnapshot>> {
   noStore();
   let authorization;
@@ -441,7 +456,12 @@ export async function getWarendurchlaufKPIs(): Promise<WarendurchlaufActionResul
       };
     });
     return { ok: true, data };
-  } catch {
+  } catch (error: unknown) {
+    console.error("Werkstatt KPI query failed", {
+      message: readDatabaseErrorDiagnostic(error, "message"),
+      details: readDatabaseErrorDiagnostic(error, "details"),
+      hint: readDatabaseErrorDiagnostic(error, "hint"),
+    });
     return { ok: false, error: "QUERY_ERROR", message: "Werkstatt-KPIs konnten nicht sicher geladen werden." };
   }
 }
