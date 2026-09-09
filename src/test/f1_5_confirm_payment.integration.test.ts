@@ -215,7 +215,7 @@ async function readInvoiceState(invoiceId: string): Promise<PaymentState> {
   return state;
 }
 
-async function paymentEvents() {
+async function paymentEvents(invoiceId: string) {
   return sql<{
     event_id: string;
     tenant_id: string;
@@ -240,6 +240,7 @@ async function paymentEvents() {
     FROM public.events
     WHERE event_type = 'PAYMENT_CONFIRMED_V1'
       AND tenant_id IN (${TENANT}, ${FOREIGN_TENANT})
+      AND payload ->> 'invoiceId' = ${invoiceId}
     ORDER BY aggregate_version, client_event_id
   `;
 }
@@ -247,7 +248,7 @@ async function paymentEvents() {
 async function snapshot(invoiceId: string) {
   return {
     invoice: await readInvoiceState(invoiceId),
-    events: await paymentEvents(),
+    events: await paymentEvents(invoiceId),
   };
 }
 
@@ -504,6 +505,6 @@ describe("F1.5 confirmPayment real command integration — AUTH_ADAPTER_SYNTHETI
       clientEventId: CLIENT_EVENTS.paidOverpay,
     })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
     expect(await snapshot(INVOICES.happy)).toEqual(paidState);
-    expect((await paymentEvents()).filter((event) => event.tenant_id === FOREIGN_TENANT)).toEqual([]);
+    expect(await paymentEvents(INVOICES.foreign)).toEqual([]);
   });
 });
