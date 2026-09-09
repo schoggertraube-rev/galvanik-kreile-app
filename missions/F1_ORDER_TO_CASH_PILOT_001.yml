@@ -359,7 +359,9 @@ f1_5_allowlist:
   - src/app/buchhaltung/rechnungen/InvoicesClient.tsx
   - src/app/buchhaltung/rechnungen/__tests__/**
   - src/components/orders/OrderOverlay.tsx
+  - src/components/orders/OrderImmutableInvoiceButton.tsx
   - src/components/orders/__tests__/w2cOrderOverlay.failClosed.test.tsx
+  - src/components/orders/__tests__/OrderImmutableInvoiceButton.test.tsx
   # Evidence
   - e2e/f1-5-*.real.spec.ts
   - docs/evidence/f1/F1_5_BESTAETIGTER_ZAHLUNGSEINGANG_E2E_EVIDENCE.md

@@ -10,6 +10,8 @@ import type { ImmutableInvoiceReceipt } from "@/lib/server/commands/immutableInv
 
 type Props = {
   order: LiveOrderCard;
+  allowAfterGoodsOut?: boolean;
+  onConfirmedReadback?: (receipt: ImmutableInvoiceReceipt) => boolean | Promise<boolean>;
 };
 
 function sameReceipt(left: ImmutableInvoiceReceipt, right: ImmutableInvoiceReceipt): boolean {
@@ -32,14 +34,16 @@ function sameReceipt(left: ImmutableInvoiceReceipt, right: ImmutableInvoiceRecei
     && left.clientEventId === right.clientEventId
     && left.correlationId === right.correlationId
     && left.aggregateVersion === right.aggregateVersion
-    && left.eventSchemaVersion === right.eventSchemaVersion;
+    && left.eventSchemaVersion === right.eventSchemaVersion
+    && (left.eventSchemaVersion !== 2
+      || (right.eventSchemaVersion === 2 && left.invoiceSourceState === right.invoiceSourceState));
 }
 
 function formatGross(cents: number): string {
   return (cents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
 }
 
-export function OrderImmutableInvoiceButton({ order }: Props) {
+export function OrderImmutableInvoiceButton({ order, allowAfterGoodsOut = false, onConfirmedReadback }: Props) {
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<ImmutableInvoiceReceipt | null>(null);
@@ -79,20 +83,28 @@ export function OrderImmutableInvoiceButton({ order }: Props) {
         setMessage(command.message);
         return;
       }
-      const receiptRead = await getInvoiceReceiptAction({
-        orderId: order.id,
-        clientEventId: stable.clientEventId,
-      });
-      if (
-        receiptRead.code !== "OK"
-        || !receiptRead.data
-        || !sameReceipt(command.receipt, receiptRead.data)
-      ) {
-        setMessage("Rechnung wurde nicht bestätigt; Auftragskarte neu laden.");
+      let confirmedReceipt = command.receipt;
+      if (command.receipt.eventSchemaVersion === 1) {
+        const receiptRead = await getInvoiceReceiptAction({
+          orderId: order.id,
+          clientEventId: stable.clientEventId,
+        });
+        if (
+          receiptRead.code !== "OK"
+          || !receiptRead.data
+          || !sameReceipt(command.receipt, receiptRead.data)
+        ) {
+          setMessage("Rechnung wurde nicht bestätigt; Auftragskarte neu laden.");
+          return;
+        }
+        confirmedReceipt = receiptRead.data;
+      }
+      if (onConfirmedReadback && !await onConfirmedReadback(confirmedReceipt)) {
+        setMessage("Rechnung wurde nicht durch den Zahlungsstatus bestätigt; Auftragskarte neu laden.");
         return;
       }
       stableRequest.current = null;
-      setReceipt(receiptRead.data);
+      setReceipt(confirmedReceipt);
       setMessage(command.replayed ? "Rechnung war bereits ausgestellt." : "Rechnung wurde unveränderlich ausgestellt.");
     } catch {
       setMessage("Rechnungsausgabe ist derzeit nicht verfügbar.");
@@ -101,7 +113,11 @@ export function OrderImmutableInvoiceButton({ order }: Props) {
     }
   }
 
-  if (order.station !== "fertig" || order.status !== "fertig" || !order.freeze) return null;
+  const isFinalFreeze = order.station === "fertig" && order.status === "fertig";
+  const isRatifiedInvoiceAfterGoodsOut = allowAfterGoodsOut
+    && order.station === "abgeholt"
+    && order.status === "abgeholt";
+  if ((!isFinalFreeze && !isRatifiedInvoiceAfterGoodsOut) || !order.freeze) return null;
 
   return (
     <div className="rounded-xl border border-neutral-gray-200 bg-bg-app-soft p-4" data-testid="order-immutable-invoice-panel">

@@ -184,6 +184,20 @@ async function capture(page: Page, filename: string) {
   return target;
 }
 
+async function captureDesktopAndTablet(page: Page, anchor: Locator, step: string) {
+  const captures: string[] = [];
+  for (const viewport of [
+    { width: 1440, height: 900, label: "desktop-1440x900" },
+    { width: 1220, height: 880, label: "tablet-1220x880" },
+  ]) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await anchor.scrollIntoViewIfNeeded();
+    captures.push(await capture(page, `f1-5-d-${viewport.label}-rechnung-${step}.png`));
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  return captures;
+}
+
 test.describe("F1.5-D schmale echte Zahlungs-/Warenausgangsoberfläche", () => {
   test("belegt drei Zahlungsmodi, Reload-Readback, Konflikt, Rollen und Desktop/Tablet", async ({ browser }) => {
     test.setTimeout(600_000);
@@ -294,6 +308,8 @@ test.describe("F1.5-D schmale echte Zahlungs-/Warenausgangsoberfläche", () => {
       const rechnungTabletEmpty = rechnungTablet.getByTestId("f1-5-no-invoice-values");
       await expect(rechnungDesktopEmpty).toContainText("weder Betrag noch Zahlungsstatus");
       await expect(rechnungTabletEmpty).toContainText("weder Betrag noch Zahlungsstatus");
+      expect(await rechnungDesktop.getByTestId("order-immutable-invoice-panel").count()).toBe(0);
+      expect(await rechnungTablet.getByTestId("order-immutable-invoice-panel").count()).toBe(0);
       await rechnungDesktopEmpty.scrollIntoViewIfNeeded();
       await rechnungTabletEmpty.scrollIntoViewIfNeeded();
       screenshots.push(await capture(desktopPage, "f1-5-d-desktop-rechnung-empty-1440x900.png"));
@@ -306,16 +322,33 @@ test.describe("F1.5-D schmale echte Zahlungs-/Warenausgangsoberfläche", () => {
       await expect(rechnungTablet.getByRole("alert")).toContainText("Der Auftrag wurde neu geladen", { timeout: 30_000 });
       expect(await rechnungTablet.getByTestId("f1-5-receipt").count()).toBe(0);
 
+      const rechnungInvoice = rechnungDesktop.getByTestId("order-immutable-invoice-panel");
+      await expectOne(rechnungInvoice);
+      await expect(rechnungDesktop.getByTestId("f1-5-physical-status")).toHaveText("abgeholt");
+      screenshots.push(...await captureDesktopAndTablet(desktopPage, rechnungInvoice, "nach-ausgang-v2"));
+      await rechnungInvoice.getByRole("button", { name: "Unveränderliche Rechnung ausstellen", exact: true }).click();
+      await expect(rechnungDesktop.getByTestId("f1-5-invoice-state")).toContainText(/Rechnung R-\d{4}-\d+/, { timeout: 45_000 });
+      await expect(rechnungDesktop.getByTestId("f1-5-receipt")).toContainText("Rechnung bestätigt", { timeout: 45_000 });
+      await expect(rechnungDesktop.getByText("Spätere Zahlung bestätigen", { exact: true })).toBeVisible();
+      screenshots.push(...await captureDesktopAndTablet(desktopPage, rechnungDesktop.getByTestId("f1-5-payment-action"), "nach-rechnung-v2"));
+      await rechnungDesktop.locator("#f1-5-payment-method").selectOption("ueberweisung");
+      await rechnungDesktop.getByTestId("f1-5-payment-action").click();
+      await expect(rechnungDesktop.getByTestId("f1-5-receipt")).toContainText("Zahlung bestätigt", { timeout: 30_000 });
+      await expect(rechnungDesktop.getByTestId("f1-5-payment-status")).toHaveText("bezahlt");
+      screenshots.push(...await captureDesktopAndTablet(desktopPage, rechnungDesktop.getByTestId("f1-5-receipt"), "nach-zahlung-v1"));
+
       const [readback] = await sql<{
-        vorkasse_events: number; abholung_events: number; rechnung_v2_events: number; payment_events: number;
+        vorkasse_events: number; abholung_events: number; rechnung_v2_events: number;
+        rechnung_invoice_v2_events: number; payment_events: number;
       }[]>`
         SELECT
           (SELECT count(*)::integer FROM public.events WHERE tenant_id=${TENANT} AND order_id=${vorkasse.orderId} AND event_type='ORDER_PICKED_UP_V1') AS vorkasse_events,
           (SELECT count(*)::integer FROM public.events WHERE tenant_id=${TENANT} AND order_id=${abholung.orderId} AND event_type='ORDER_PICKED_UP_V1') AS abholung_events,
           (SELECT count(*)::integer FROM public.events WHERE tenant_id=${TENANT} AND order_id=${rechnung.orderId} AND event_type='ORDER_PICKED_UP_V2') AS rechnung_v2_events,
-          (SELECT count(*)::integer FROM public.events WHERE tenant_id=${TENANT} AND order_id IN (${vorkasse.orderId},${abholung.orderId}) AND event_type='PAYMENT_CONFIRMED_V1') AS payment_events
+          (SELECT count(*)::integer FROM public.events WHERE tenant_id=${TENANT} AND order_id=${rechnung.orderId} AND event_type='INVOICE_CREATED_V2') AS rechnung_invoice_v2_events,
+          (SELECT count(*)::integer FROM public.events WHERE tenant_id=${TENANT} AND order_id IN (${vorkasse.orderId},${abholung.orderId},${rechnung.orderId}) AND event_type='PAYMENT_CONFIRMED_V1') AS payment_events
       `;
-      expect(readback).toEqual({ vorkasse_events: 1, abholung_events: 1, rechnung_v2_events: 1, payment_events: 2 });
+      expect(readback).toEqual({ vorkasse_events: 1, abholung_events: 1, rechnung_v2_events: 1, rechnung_invoice_v2_events: 1, payment_events: 3 });
 
       const receipts = await sql<{
         event_id: string; order_id: string; event_type: string; actor_id: string;
@@ -326,10 +359,10 @@ test.describe("F1.5-D schmale echte Zahlungs-/Warenausgangsoberfläche", () => {
         FROM public.events
         WHERE tenant_id = ${TENANT}
           AND order_id IN (${vorkasse.orderId}, ${abholung.orderId}, ${rechnung.orderId})
-          AND event_type IN ('PAYMENT_CONFIRMED_V1', 'ORDER_PICKED_UP_V1', 'ORDER_PICKED_UP_V2')
+          AND event_type IN ('PAYMENT_CONFIRMED_V1', 'ORDER_PICKED_UP_V1', 'ORDER_PICKED_UP_V2', 'INVOICE_CREATED_V2')
         ORDER BY occurred_at, id
       `;
-      expect(receipts).toHaveLength(5);
+      expect(receipts).toHaveLength(7);
 
       const foreignContext = await browser.newContext({ viewport: { width: 1220, height: 880 } });
       contexts.push(foreignContext);

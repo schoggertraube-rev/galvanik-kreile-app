@@ -38,7 +38,24 @@ vi.mock("../OrderExtraWorkEditor", () => ({ OrderExtraWorkEditor: () => null }))
 vi.mock("../OrderFreezeButton", () => ({ OrderFreezeButton: () => null }));
 vi.mock("../OrderFreezeCorrectionButton", () => ({ OrderFreezeCorrectionButton: () => null }));
 vi.mock("../OrderTaskAssignmentPanel", () => ({ OrderTaskAssignmentPanel: () => null }));
-vi.mock("../OrderImmutableInvoiceButton", () => ({ OrderImmutableInvoiceButton: () => null }));
+vi.mock("../OrderImmutableInvoiceButton", () => ({
+  OrderImmutableInvoiceButton: ({
+    allowAfterGoodsOut,
+    onConfirmedReadback,
+  }: {
+    allowAfterGoodsOut?: boolean;
+    onConfirmedReadback?: (receipt: { invoiceId: string }) => boolean | Promise<boolean>;
+  }) => (
+    <button
+      data-testid="order-immutable-invoice-panel"
+      data-after-goods-out={allowAfterGoodsOut ? "true" : "false"}
+      onClick={() => void onConfirmedReadback?.({ invoiceId: "33333333-3333-4333-8333-333333333333" })}
+      type="button"
+    >
+      Unveränderliche Rechnung ausstellen
+    </button>
+  ),
+}));
 
 import { OrderOverlay } from "../OrderOverlay";
 
@@ -199,13 +216,13 @@ describe("F1.5-D live order overlay fail-closed flow", () => {
     fireEvent.click(screen.getByTestId("f1-5-goods-out-action"));
     await waitFor(() => expect(screen.getByTestId("f1-5-receipt")).toHaveTextContent("Warenausgang bestätigt"));
     expect(mocked.recordGoodsOutAction).toHaveBeenCalledWith(expect.objectContaining({ mode: "abholung", expectedVersion: 4 }));
-    expect(mocked.getLiveOrderCardAction).toHaveBeenCalledTimes(2);
+    expect(mocked.getLiveOrderCardAction).toHaveBeenCalledTimes(1);
     expect(mocked.getOrderPaymentStateAction).toHaveBeenCalledTimes(3);
   });
 
-  it("allows Rechnung goods-out through V2 without rendering invented payment values", async () => {
+  it("enforces Rechnung goods-out V2 before invoice V2 and then confirms the later payment", async () => {
     const noInvoice = paymentState({ mode: "rechnung", invoiceState: "not_issued", payment: null, goodsOutAllowed: true });
-    const pickedCard = { ...card, version: 5, station: "abgeholt", status: "abgeholt" };
+    const pickedCard = { ...card, version: 5, station: "abgeholt", status: "abgeholt", freeze: { freezeId: "freeze-1", rateId: "rate-1", hourlyRateCents: 6000, totalAmountCents: 11900, lineCount: 1, frozenAt: "2026-09-09T10:00:00.000Z" } };
     const picked = paymentState({
       ...noInvoice,
       orderVersion: 5,
@@ -213,19 +230,40 @@ describe("F1.5-D live order overlay fail-closed flow", () => {
       goodsOutAllowed: false,
       goodsOut: { eventId: GOODS_EVENT_ID, clientEventId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", correlationId: CORRELATION_ID, eventSchemaVersion: 2, orderVersion: 5, actorId: ACTOR_ID, occurredAt: "2026-09-09T11:00:00.000Z", mode: "versand" },
     });
-    mocked.getOrderPaymentStateAction.mockResolvedValueOnce({ code: "OK", data: noInvoice }).mockResolvedValueOnce({ code: "OK", data: picked });
-    mocked.getLiveOrderCardAction.mockResolvedValueOnce(cardResult()).mockResolvedValueOnce(cardResult(pickedCard));
+    const issuedInvoice = { ...openInvoice, mode: "rechnung" as const };
+    const invoiced = paymentState({ ...picked, invoiceState: "issued", payment: issuedInvoice });
+    const paidInvoice = { ...issuedInvoice, status: "bezahlt" as const, paidAmountCents: 11900, openAmountCents: 0, method: "ueberweisung" as const, paidAt: "2026-09-09T11:02:00.000Z", receiptId: "receipt-rechnung", eventId: PAYMENT_EVENT_ID, correlationId: CORRELATION_ID, paymentVersion: 1, goodsOutAllowed: false };
+    const paid = paymentState({ ...invoiced, payment: paidInvoice, paymentActorId: ACTOR_ID });
+    mocked.getOrderPaymentStateAction
+      .mockResolvedValueOnce({ code: "OK", data: noInvoice })
+      .mockResolvedValueOnce({ code: "OK", data: picked })
+      .mockResolvedValueOnce({ code: "OK", data: invoiced })
+      .mockResolvedValueOnce({ code: "OK", data: paid });
+    mocked.getLiveOrderCardAction.mockResolvedValueOnce(cardResult({ ...card, freeze: pickedCard.freeze }));
     mocked.recordGoodsOutAction.mockResolvedValue({ code: "OK", replayed: false, receipt: { eventId: GOODS_EVENT_ID, clientEventId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", correlationId: CORRELATION_ID, eventSchemaVersion: 2, expectedVersion: 4, orderVersion: 5, orderId: "order-1", fromStation: "fertig", toStation: "abgeholt", mode: "versand", paymentMode: "rechnung", invoiceState: "not_issued", actorId: ACTOR_ID, occurredAt: "2026-09-09T11:00:00.000Z" } });
-    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue("cccccccc-cccc-4ccc-8ccc-cccccccccccc");
+    mocked.confirmPaymentAction.mockResolvedValue({ code: "OK", replayed: false, receipt: { eventId: PAYMENT_EVENT_ID, invoiceId: openInvoice.invoiceId, invoiceNumber: openInvoice.invoiceNumber, orderId: "order-1", receiptId: "receipt-rechnung", clientEventId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", correlationId: CORRELATION_ID, eventSchemaVersion: 1, expectedVersion: 0, paymentVersion: 1, amountCents: 11900, grossAmountCents: 11900, paidAmountCents: 11900, openAmountCents: 0, currency: "EUR", paymentMode: "rechnung", paymentStatus: "bezahlt", method: "ueberweisung", confirmedAt: "2026-09-09T11:02:00.000Z", confirmedBy: ACTOR_ID, source: "manual" } });
+    vi.spyOn(globalThis.crypto, "randomUUID")
+      .mockReturnValueOnce("cccccccc-cccc-4ccc-8ccc-cccccccccccc")
+      .mockReturnValueOnce("dddddddd-dddd-4ddd-8ddd-dddddddddddd");
 
     render(<OrderOverlay />);
     expect(await screen.findByTestId("f1-5-no-invoice-values")).toHaveTextContent("weder Betrag noch Zahlungsstatus");
     expect(screen.queryByTestId("f1-5-payment-values")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("order-immutable-invoice-panel")).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId("f1-5-goods-out-mode-versand"));
     fireEvent.click(screen.getByTestId("f1-5-goods-out-action"));
     await waitFor(() => expect(screen.getByTestId("f1-5-receipt")).toHaveTextContent(GOODS_EVENT_ID));
+    const invoiceAction = await screen.findByTestId("order-immutable-invoice-panel");
+    expect(invoiceAction).toHaveAttribute("data-after-goods-out", "true");
+    fireEvent.click(invoiceAction);
+    await waitFor(() => expect(screen.getByTestId("f1-5-invoice-state")).toHaveTextContent("Rechnung R-2026-0001"));
+    expect(screen.getByText("Spätere Zahlung bestätigen")).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Zahlungsart"), { target: { value: "ueberweisung" } });
+    fireEvent.click(screen.getByTestId("f1-5-payment-action"));
+    await waitFor(() => expect(screen.getByTestId("f1-5-receipt")).toHaveTextContent("Zahlung bestätigt"));
+    expect(mocked.confirmPaymentAction).toHaveBeenCalledWith(expect.objectContaining({ invoiceId: openInvoice.invoiceId, amount: 11900, method: "ueberweisung" }));
     expect(mocked.getLiveOrderCardAction).toHaveBeenCalledTimes(1);
-    expect(mocked.getOrderPaymentStateAction).toHaveBeenCalledTimes(2);
+    expect(mocked.getOrderPaymentStateAction).toHaveBeenCalledTimes(4);
   });
 
   it.each([

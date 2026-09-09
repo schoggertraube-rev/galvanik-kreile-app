@@ -8,6 +8,7 @@ Status: `CANDIDATE_LOCAL_PASS` — Exact-SHA-CI und unabhaengiger Review stehen 
 - Vorkasse bleibt bis zur bestaetigten Vollzahlung gesperrt.
 - Abholung bestaetigt zuerst die Zahlung ueber `confirmPayment`, danach separat den physischen Warenausgang.
 - Rechnung/Stammkunde erlaubt den Ausgang ueber `ORDER_PICKED_UP_V2`, ohne vor Rechnungsstellung Betrag, Zahlungsstatus oder offenen Betrag zu behaupten.
+- Erst nach bestaetigtem V2-Ausgang erscheint der kanonische Rechnungsweg; `INVOICE_CREATED_V2` wird als `issued/offen` zurueckgelesen und erst danach ist `confirmPayment` erreichbar.
 - Versand oder Abholung werden explizit gewaehlt. Erfolg erscheint erst nach persistiertem Readback mit Akteur, Zeitpunkt, Receipt und Event-ID.
 - `CONFLICT`, fehlende Rolle, fehlende Daten und Read-Fehler bleiben fail-closed.
 
@@ -17,18 +18,18 @@ Am 2026-09-09 lief nach einem frischen lokalen Supabase-Reset die echte Kette:
 
 `echte Migrationen -> echte Supabase Auth/Session -> echte Intake-/Stations-/Freeze-/Invoice-Commands -> confirmPayment/recordGoodsOut -> persistierte Events -> erneuter serverseitiger Read-Port -> sichtbares Overlay`
 
-Playwright: `e2e/f1-5-goods-out-ui.real.spec.ts`, Projekt `Tablet`, ein Worker: `1 passed` in 9.4 Minuten.
+Playwright: `e2e/f1-5-goods-out-ui.real.spec.ts`, Projekt `Tablet`, ein Worker: `1 passed` in 8.8 Minuten.
 
 Belegt wurden:
 
 - Vorkasse vor Zahlung gesperrt, nach Vollzahlung `PAYMENT_CONFIRMED_V1` und `ORDER_PICKED_UP_V1` jeweils genau einmal.
 - Abholung vor Zahlung gesperrt, danach getrennte Zahlung und Ausgabe, beide Events jeweils genau einmal.
-- Rechnung ohne ausgestellte Rechnung mit null erfundenen Zahlungswerten und genau einem `ORDER_PICKED_UP_V2`.
+- Rechnung am selben Auftrag `A-2026-0003`: vor Ausgang kein Rechnungsweg und null erfundene Zahlungswerte; danach genau ein `ORDER_PICKED_UP_V2`, genau ein `INVOICE_CREATED_V2` mit Readback `issued/offen` und genau ein `PAYMENT_CONFIRMED_V1` mit Readback `bezahlt`.
 - Stale-Version als `CONFLICT` mit echtem Reload und ohne falsches Erfolgs-Receipt.
 - Rolle `readonly` als `Denied` ohne erreichbare Payment-/Goods-out-Aktion; fremder Tenant ohne Sitzung.
-- Desktop 1440x900 und Tablet 1220x880 fuer Sperre, Erfolg und rechnungslosen Zustand.
+- Desktop 1440x900 und Tablet 1220x880 fuer Sperre, rechnungslosen Zustand sowie die Rechnungsschritte nach Ausgang, nach Rechnungsstellung und nach Zahlung.
 
-Maschinenlesbares Receipt: `docs/evidence/f1/artifacts/f1-5/f1-5-d-real-browser-receipt.json` (`SHA256 A47C1CD9464003C467A9D2008578F4084F0D450A1E66E8AAB5B1A9DC492291E8`). Es enthaelt die drei synthetischen Auftrags-IDs, fuenf persistierte Event-Receipts und die SHA256-Werte aller sechs Screenshots.
+Maschinenlesbares Receipt: `docs/evidence/f1/artifacts/f1-5/f1-5-d-real-browser-receipt.json` (`SHA256 DD81ECAED8644C00936BEE7C0195C087777B4C93AEBA1B2A58B03CF05528961C`). Es enthaelt die drei synthetischen Auftrags-IDs, sieben persistierte Event-Receipts und die SHA256-Werte aller zwoelf Screenshots.
 
 ## Produktions- und Mockwahrheit
 

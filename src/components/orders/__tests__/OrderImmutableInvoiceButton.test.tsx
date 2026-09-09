@@ -80,6 +80,16 @@ describe("OrderImmutableInvoiceButton", () => {
     expect(issueSpy).not.toHaveBeenCalled();
   });
 
+  it("only enables the ratified invoice path after goods-out through an explicit opt-in", () => {
+    const pickedOrder = { ...baseOrder, version: 5, station: "abgeholt", status: "abgeholt" };
+    const { container: defaultPath } = render(<OrderImmutableInvoiceButton order={pickedOrder} />);
+    expect(defaultPath.firstChild).toBeNull();
+
+    render(<OrderImmutableInvoiceButton order={pickedOrder} allowAfterGoodsOut />);
+    expect(screen.getByRole("button", { name: "Unveränderliche Rechnung ausstellen" })).toBeVisible();
+    expect(issueSpy).not.toHaveBeenCalled();
+  });
+
   it("shows a loading state while pending and prevents a second concurrent submit", async () => {
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(CLIENT_EVENT_ID as `${string}-${string}-${string}-${string}-${string}`);
     let resolveIssue!: (value: { code: "UNAUTHENTICATED"; message: string }) => void;
@@ -120,6 +130,41 @@ describe("OrderImmutableInvoiceButton", () => {
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Rechnung wurde unveränderlich ausgestellt."));
     const link = screen.getByTestId("order-immutable-invoice-pdf-link");
     expect(link).toHaveAttribute("href", "/api/invoices/invoice-1/pdf");
+  });
+
+  it("confirms the V2 invoice only after its receipt and the parent payment readback agree", async () => {
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(CLIENT_EVENT_ID as `${string}-${string}-${string}-${string}-${string}`);
+    const v2Receipt = {
+      ...receipt,
+      orderVersion: 5,
+      eventSchemaVersion: 2 as const,
+      invoiceSourceState: "after_goods_out" as const,
+    };
+    const onConfirmedReadback = vi.fn().mockResolvedValue(true);
+    issueSpy.mockResolvedValueOnce({ code: "OK", receipt: v2Receipt, replayed: false });
+    render(
+      <OrderImmutableInvoiceButton
+        order={{ ...baseOrder, version: 5, station: "abgeholt", status: "abgeholt" }}
+        allowAfterGoodsOut
+        onConfirmedReadback={onConfirmedReadback}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Unveränderliche Rechnung ausstellen" }));
+    await waitFor(() => expect(onConfirmedReadback).toHaveBeenCalledWith(v2Receipt));
+    expect(receiptSpy).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Rechnung wurde unveränderlich ausgestellt."));
+  });
+
+  it("does not claim success when the parent cannot read the issued invoice state back", async () => {
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(CLIENT_EVENT_ID as `${string}-${string}-${string}-${string}-${string}`);
+    issueSpy.mockResolvedValueOnce({ code: "OK", receipt, replayed: false });
+    receiptSpy.mockResolvedValueOnce({ code: "OK", data: receipt });
+    render(<OrderImmutableInvoiceButton order={baseOrder} onConfirmedReadback={() => false} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Unveränderliche Rechnung ausstellen" }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Rechnung wurde nicht durch den Zahlungsstatus bestätigt"));
+    expect(screen.queryByTestId("order-immutable-invoice-pdf-link")).not.toBeInTheDocument();
   });
 
   it("does not claim success and shows no download link when the readback is missing or mismatched", async () => {

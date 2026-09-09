@@ -22,13 +22,15 @@ import type { ExtraWorkMasterData, LiveOrderCard } from "@/lib/server/orderCardR
 import type { PaymentMethod, OrderPaymentState } from "@/lib/server/paymentContract";
 import type { ConfirmPaymentReceipt } from "@/lib/server/commands/confirmPaymentCommand";
 import type { GoodsOutMode, GoodsOutReceipt } from "@/lib/server/commands/recordGoodsOutCommand";
+import type { ImmutableInvoiceReceipt } from "@/lib/server/commands/immutableInvoiceCommand";
 
 type DataState = "loading" | "data" | "empty" | "denied" | "error";
 type FlowState = "loading" | "data" | "empty" | "denied" | "error";
 type MutationState = "idle" | "submitting" | "success" | "conflict" | "error";
 type FlowReceipt =
   | { kind: "payment"; receipt: ConfirmPaymentReceipt }
-  | { kind: "goods-out"; receipt: GoodsOutReceipt };
+  | { kind: "goods-out"; receipt: GoodsOutReceipt }
+  | { kind: "invoice"; receipt: ImmutableInvoiceReceipt };
 const STATIONS = ["angenommen", "galvanik", "fertig", "abgeholt"] as const;
 
 function moneyLabel(value: number): string {
@@ -164,6 +166,23 @@ export function OrderOverlay() {
     return () => window.clearTimeout(timer);
   }, [currentOrderId, load]);
 
+  const reloadFlowState = useCallback(async (orderId: string) => {
+    const readback = await getOrderPaymentStateAction({ orderId }).catch(() => ({
+      code: "UNAVAILABLE" as const,
+      message: "Zahlungs- und Warenausgangsstatus konnte nicht sicher zurückgelesen werden.",
+    }));
+    if (readback.code !== "OK") return readback;
+    setPayment(readback.data);
+    setPaymentState("data");
+    setCard((current) => current ? {
+      ...current,
+      station: readback.data.physicalStatus,
+      status: readback.data.physicalStatus,
+      version: readback.data.orderVersion,
+    } : current);
+    return readback;
+  }, []);
+
   const confirmOutstandingPayment = useCallback(async () => {
     const invoice = payment?.payment;
     if (!currentOrderId || !invoice || invoice.openAmountCents <= 0) return;
@@ -178,13 +197,13 @@ export function OrderOverlay() {
       clientEventId: crypto.randomUUID(),
     }).catch(() => ({ code: "UNAVAILABLE" as const, message: "Zahlung konnte nicht sicher bestätigt werden." }));
     if (result.code !== "OK") {
-      if (result.code === "CONFLICT") await load(currentOrderId, true);
+      if (result.code === "CONFLICT") await reloadFlowState(currentOrderId);
       setMutationState(result.code === "CONFLICT" ? "conflict" : "error");
       setMutationMessage(result.code === "CONFLICT" ? `${result.message} Der Auftrag wurde neu geladen.` : result.message);
       return;
     }
-    const readback = await load(currentOrderId, true);
-    const persisted = readback?.payment?.payment;
+    const readback = await reloadFlowState(currentOrderId);
+    const persisted = readback.code === "OK" ? readback.data.payment : null;
     if (
       !persisted
       || persisted.eventId !== result.receipt.eventId
@@ -198,24 +217,7 @@ export function OrderOverlay() {
     setFlowReceipt({ kind: "payment", receipt: result.receipt });
     setMutationState("success");
     setMutationMessage("Zahlung bestätigt und aus der Datenbank zurückgelesen.");
-  }, [currentOrderId, load, payment, paymentMethod]);
-
-  const reloadGoodsOutState = useCallback(async (orderId: string) => {
-    const readback = await getOrderPaymentStateAction({ orderId }).catch(() => ({
-      code: "UNAVAILABLE" as const,
-      message: "Der Warenausgang konnte nicht sicher zurückgelesen werden.",
-    }));
-    if (readback.code !== "OK") return readback;
-    setPayment(readback.data);
-    setPaymentState("data");
-    setCard((current) => current ? {
-      ...current,
-      station: readback.data.physicalStatus,
-      status: readback.data.physicalStatus,
-      version: readback.data.orderVersion,
-    } : current);
-    return readback;
-  }, []);
+  }, [currentOrderId, payment, paymentMethod, reloadFlowState]);
 
   const recordGoodsOut = useCallback(async () => {
     if (!currentOrderId || !card || !goodsOutMode) return;
@@ -229,12 +231,12 @@ export function OrderOverlay() {
       clientEventId: crypto.randomUUID(),
     }).catch(() => ({ code: "UNAVAILABLE" as const, message: "Warenausgang konnte nicht sicher gebucht werden." }));
     if (result.code !== "OK") {
-      if (result.code === "CONFLICT") await reloadGoodsOutState(currentOrderId);
+      if (result.code === "CONFLICT") await reloadFlowState(currentOrderId);
       setMutationState(result.code === "CONFLICT" ? "conflict" : "error");
       setMutationMessage(result.code === "CONFLICT" ? `${result.message} Der Auftrag wurde neu geladen.` : result.message);
       return;
     }
-    const readback = await reloadGoodsOutState(currentOrderId);
+    const readback = await reloadFlowState(currentOrderId);
     if (
       readback.code !== "OK"
       || readback.data.physicalStatus !== "abgeholt"
@@ -248,7 +250,7 @@ export function OrderOverlay() {
     setFlowReceipt({ kind: "goods-out", receipt: result.receipt });
     setMutationState("success");
     setMutationMessage("Warenausgang bestätigt und aus der Datenbank zurückgelesen.");
-  }, [card, currentOrderId, goodsOutMode, reloadGoodsOutState]);
+  }, [card, currentOrderId, goodsOutMode, reloadFlowState]);
 
   if (!currentOrderId) return null;
 
@@ -261,6 +263,11 @@ export function OrderOverlay() {
   const paymentSettled = invoice?.status === "bezahlt";
   const paymentGateOpen = payment?.mode === "rechnung" || paymentSettled;
   const physicalReady = card?.station === "fertig" && card.status === "fertig";
+  const invoiceAfterGoodsOutReady = payment?.mode === "rechnung"
+    && payment.invoiceState === "not_issued"
+    && payment.physicalStatus === "abgeholt"
+    && payment.goodsOut?.eventSchemaVersion === 2;
+  const showInvoiceAction = payment?.mode !== "rechnung" ? physicalReady : invoiceAfterGoodsOutReady;
   const goodsOutBlockedReason = !physicalReady
     ? "Nur ein fertig gemeldeter Auftrag kann ausgegeben werden."
     : !canRecordGoodsOut
@@ -382,7 +389,28 @@ export function OrderOverlay() {
 
                   <OrderFreezeButton order={card} rateConfigured={masterData.currentRate !== null} onConfirmedCard={setCard} />
 
-                  <OrderImmutableInvoiceButton order={card} />
+                  {showInvoiceAction ? (
+                    <OrderImmutableInvoiceButton
+                      order={card}
+                      allowAfterGoodsOut={invoiceAfterGoodsOutReady}
+                      onConfirmedReadback={async (receipt) => {
+                        const readback = await reloadFlowState(currentOrderId);
+                        const confirmed = readback.code === "OK"
+                          && readback.data.invoiceState === "issued"
+                          && readback.data.payment?.invoiceId === receipt.invoiceId;
+                        if (confirmed) {
+                          setFlowReceipt({ kind: "invoice", receipt });
+                          setMutationState("success");
+                          setMutationMessage("Rechnung bestätigt und aus der Datenbank zurückgelesen.");
+                        } else {
+                          setFlowReceipt(null);
+                          setMutationState("error");
+                          setMutationMessage("Die Rechnung wurde nicht durch einen eindeutigen Zahlungsstatus-Readback bestätigt.");
+                        }
+                        return confirmed;
+                      }}
+                    />
+                  ) : null}
 
                   <OrderFreezeCorrectionButton
                     order={card}
@@ -444,10 +472,10 @@ export function OrderOverlay() {
                             </div>
                           )}
 
-                          {(payment.mode === "vorkasse" || payment.mode === "abholung") && invoice && !paymentSettled ? (
+                          {invoice && !paymentSettled ? (
                             <div className="rounded-xl border border-[#e0b45c] bg-[#fff8e8] p-4">
                               <div className="flex items-start gap-3"><CreditCard className="mt-0.5 h-5 w-5 text-[#8a5a00]" /><div className="min-w-0 flex-1">
-                                <strong className="text-sm text-navy-900">{payment.mode === "abholung" ? "Zahlung bei Übergabe bestätigen" : "Vollzahlung bestätigen"}</strong>
+                                <strong className="text-sm text-navy-900">{payment.mode === "abholung" ? "Zahlung bei Übergabe bestätigen" : payment.mode === "rechnung" ? "Spätere Zahlung bestätigen" : "Vollzahlung bestätigen"}</strong>
                                 <p className="mt-1 text-xs text-text-muted">Offen: {moneyLabel(invoice.openAmountCents)}. Erst der bestätigte Readback öffnet das Ausgangs-Gate.</p>
                                 <label className="mt-3 block text-xs font-semibold text-navy-900" htmlFor="f1-5-payment-method">Zahlungsart</label>
                                 <select id="f1-5-payment-method" className="mt-1 min-h-11 w-full rounded-lg border border-neutral-gray-300 bg-white px-3 text-sm" onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)} value={paymentMethod}>
@@ -486,9 +514,9 @@ export function OrderOverlay() {
                             <div className="rounded-xl border border-[#8db59b] bg-[#edf7f0] p-4 text-sm text-[#225c35]" data-testid="f1-5-receipt" role="status">
                               <CheckCircle2 className="mb-2 h-5 w-5" /><strong>{mutationMessage}</strong>
                               <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
-                                <div><dt className="font-semibold">Akteur</dt><dd className="break-all font-mono">{flowReceipt.kind === "payment" ? flowReceipt.receipt.confirmedBy : flowReceipt.receipt.actorId}</dd></div>
-                                <div><dt className="font-semibold">Zeitpunkt</dt><dd>{timestampLabel(flowReceipt.kind === "payment" ? flowReceipt.receipt.confirmedAt : flowReceipt.receipt.occurredAt)}</dd></div>
-                                <div><dt className="font-semibold">Receipt</dt><dd className="break-all font-mono">{flowReceipt.kind === "payment" ? flowReceipt.receipt.receiptId : `goods-out://${flowReceipt.receipt.orderId}/${flowReceipt.receipt.orderVersion}`}</dd></div>
+                                <div><dt className="font-semibold">Akteur</dt><dd className="break-all font-mono">{flowReceipt.kind === "payment" ? flowReceipt.receipt.confirmedBy : flowReceipt.kind === "invoice" ? flowReceipt.receipt.issuedBy : flowReceipt.receipt.actorId}</dd></div>
+                                <div><dt className="font-semibold">Zeitpunkt</dt><dd>{timestampLabel(flowReceipt.kind === "payment" ? flowReceipt.receipt.confirmedAt : flowReceipt.kind === "invoice" ? flowReceipt.receipt.issuedAt : flowReceipt.receipt.occurredAt)}</dd></div>
+                                <div><dt className="font-semibold">Receipt</dt><dd className="break-all font-mono">{flowReceipt.kind === "payment" ? flowReceipt.receipt.receiptId : flowReceipt.kind === "invoice" ? `invoice://${flowReceipt.receipt.invoiceId}/${flowReceipt.receipt.aggregateVersion}` : `goods-out://${flowReceipt.receipt.orderId}/${flowReceipt.receipt.orderVersion}`}</dd></div>
                                 <div><dt className="font-semibold">Event-ID</dt><dd className="break-all font-mono">{flowReceipt.receipt.eventId}</dd></div>
                               </dl>
                             </div>
