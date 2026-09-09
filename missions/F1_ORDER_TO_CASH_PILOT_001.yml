@@ -353,6 +353,7 @@ f1_5_allowlist:
   - package-lock.json
   - scripts/supabase-version-check.mjs
   # D — Oberflaeche (nur Readback)
+  - supabase/migrations/20260909180000_f1_5_goods_out_ui_read_contract.sql
   - src/app/warendurchlauf/warenausgang/page.tsx
   - src/app/warendurchlauf/warenausgang/**
   - src/app/buchhaltung/rechnungen/InvoicesClient.tsx
