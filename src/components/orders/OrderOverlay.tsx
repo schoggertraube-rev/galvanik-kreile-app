@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, CalendarDays, Loader2, PackageCheck, UserRound } from "lucide-react";
+import { AlertTriangle, CalendarDays, CheckCircle2, CreditCard, Loader2, PackageCheck, Truck, UserRound } from "lucide-react";
+import { confirmPaymentAction, getOrderPaymentStateAction } from "@/app/actions/payments.actions";
+import { recordGoodsOutAction } from "@/app/actions/goodsOut.actions";
 import {
   getExtraWorkMasterDataAction,
   getLiveOrderCardAction,
@@ -17,9 +19,28 @@ import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useOverlayStore } from "@/lib/overlayStore";
 import type { EvidenceReadRecord } from "@/lib/server/evidenceRead";
 import type { ExtraWorkMasterData, LiveOrderCard } from "@/lib/server/orderCardRead";
+import type { PaymentMethod, OrderPaymentState } from "@/lib/server/paymentContract";
+import type { ConfirmPaymentReceipt } from "@/lib/server/commands/confirmPaymentCommand";
+import type { GoodsOutMode, GoodsOutReceipt } from "@/lib/server/commands/recordGoodsOutCommand";
 
 type DataState = "loading" | "data" | "empty" | "denied" | "error";
+type FlowState = "loading" | "data" | "empty" | "denied" | "error";
+type MutationState = "idle" | "submitting" | "success" | "conflict" | "error";
+type FlowReceipt =
+  | { kind: "payment"; receipt: ConfirmPaymentReceipt }
+  | { kind: "goods-out"; receipt: GoodsOutReceipt };
 const STATIONS = ["angenommen", "galvanik", "fertig", "abgeholt"] as const;
+
+function moneyLabel(value: number): string {
+  return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(value / 100);
+}
+
+function timestampLabel(value: string): string {
+  const date = new Date(value);
+  return Number.isFinite(date.getTime())
+    ? new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" }).format(date)
+    : "Nicht verfügbar";
+}
 
 function dateLabel(value: string | null): string {
   if (!value) return "Nicht erfasst";
@@ -66,16 +87,34 @@ export function OrderOverlay() {
   const [card, setCard] = useState<LiveOrderCard | null>(null);
   const [evidence, setEvidence] = useState<EvidenceReadRecord[]>([]);
   const [masterData, setMasterData] = useState<ExtraWorkMasterData | null>(null);
+  const [paymentState, setPaymentState] = useState<FlowState>("loading");
+  const [paymentMessage, setPaymentMessage] = useState("Zahlungs- und Warenausgangsstatus wird geladen.");
+  const [payment, setPayment] = useState<OrderPaymentState | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("bar");
+  const [goodsOutMode, setGoodsOutMode] = useState<GoodsOutMode | null>(null);
+  const [mutationState, setMutationState] = useState<MutationState>("idle");
+  const [mutationMessage, setMutationMessage] = useState("");
+  const [flowReceipt, setFlowReceipt] = useState<FlowReceipt | null>(null);
 
-  const load = useCallback(async (orderId: string) => {
+  const load = useCallback(async (orderId: string, preserveMutation = false) => {
     setDataState("loading");
     setMessage("Auftragskarte wird geladen.");
     setCard(null);
     setEvidence([]);
+    setPaymentState("loading");
+    setPaymentMessage("Zahlungs- und Warenausgangsstatus wird geladen.");
+    setPayment(null);
+    if (!preserveMutation) {
+      setMutationState("idle");
+      setMutationMessage("");
+      setFlowReceipt(null);
+      setGoodsOutMode(null);
+    }
     try {
-      const [cardResult, masterResult] = await Promise.all([
+      const [cardResult, masterResult, paymentResult] = await Promise.all([
         getLiveOrderCardAction({ orderId }),
         getExtraWorkMasterDataAction(),
+        getOrderPaymentStateAction({ orderId }),
       ]);
       if (cardResult.code !== "OK") {
         setMessage(cardResult.message);
@@ -84,7 +123,7 @@ export function OrderOverlay() {
             ? "denied"
             : cardResult.code === "NOT_FOUND" ? "empty" : "error",
         );
-        return;
+        return null;
       }
       if (masterResult.code !== "OK") {
         setMessage(masterResult.message);
@@ -92,15 +131,30 @@ export function OrderOverlay() {
           masterResult.code === "UNAUTHENTICATED" || masterResult.code === "FORBIDDEN"
             ? "denied" : "error",
         );
-        return;
+        return null;
       }
       setCard(cardResult.data.card);
       setEvidence(cardResult.data.evidence);
       setMasterData(masterResult.data);
+      if (paymentResult.code === "OK") {
+        setPayment(paymentResult.data);
+        setPaymentState("data");
+      } else {
+        setPaymentMessage(paymentResult.message);
+        setPaymentState(
+          paymentResult.code === "UNAUTHENTICATED" || paymentResult.code === "FORBIDDEN"
+            ? "denied"
+            : paymentResult.code === "NOT_FOUND" ? "empty" : "error",
+        );
+      }
       setDataState("data");
+      return { card: cardResult.data.card, payment: paymentResult.code === "OK" ? paymentResult.data : null };
     } catch {
       setMessage("Auftragskarte konnte nicht sicher geladen werden.");
       setDataState("error");
+      setPaymentMessage("Zahlungs- und Warenausgangsstatus konnte nicht sicher geladen werden.");
+      setPaymentState("error");
+      return null;
     }
   }, []);
 
@@ -110,11 +164,114 @@ export function OrderOverlay() {
     return () => window.clearTimeout(timer);
   }, [currentOrderId, load]);
 
+  const confirmOutstandingPayment = useCallback(async () => {
+    const invoice = payment?.payment;
+    if (!currentOrderId || !invoice || invoice.openAmountCents <= 0) return;
+    setMutationState("submitting");
+    setMutationMessage("Zahlung wird bestätigt und anschließend neu geladen.");
+    setFlowReceipt(null);
+    const result = await confirmPaymentAction({
+      invoiceId: invoice.invoiceId,
+      amount: invoice.openAmountCents,
+      method: paymentMethod,
+      expectedVersion: invoice.paymentVersion,
+      clientEventId: crypto.randomUUID(),
+    }).catch(() => ({ code: "UNAVAILABLE" as const, message: "Zahlung konnte nicht sicher bestätigt werden." }));
+    if (result.code !== "OK") {
+      if (result.code === "CONFLICT") await load(currentOrderId, true);
+      setMutationState(result.code === "CONFLICT" ? "conflict" : "error");
+      setMutationMessage(result.code === "CONFLICT" ? `${result.message} Der Auftrag wurde neu geladen.` : result.message);
+      return;
+    }
+    const readback = await load(currentOrderId, true);
+    const persisted = readback?.payment?.payment;
+    if (
+      !persisted
+      || persisted.eventId !== result.receipt.eventId
+      || persisted.receiptId !== result.receipt.receiptId
+      || persisted.paymentVersion !== result.receipt.paymentVersion
+    ) {
+      setMutationState("error");
+      setMutationMessage("Die Zahlung wurde nicht durch einen eindeutigen Readback bestätigt.");
+      return;
+    }
+    setFlowReceipt({ kind: "payment", receipt: result.receipt });
+    setMutationState("success");
+    setMutationMessage("Zahlung bestätigt und aus der Datenbank zurückgelesen.");
+  }, [currentOrderId, load, payment, paymentMethod]);
+
+  const reloadGoodsOutState = useCallback(async (orderId: string) => {
+    const readback = await getOrderPaymentStateAction({ orderId }).catch(() => ({
+      code: "UNAVAILABLE" as const,
+      message: "Der Warenausgang konnte nicht sicher zurückgelesen werden.",
+    }));
+    if (readback.code !== "OK") return readback;
+    setPayment(readback.data);
+    setPaymentState("data");
+    setCard((current) => current ? {
+      ...current,
+      station: readback.data.physicalStatus,
+      status: readback.data.physicalStatus,
+      version: readback.data.orderVersion,
+    } : current);
+    return readback;
+  }, []);
+
+  const recordGoodsOut = useCallback(async () => {
+    if (!currentOrderId || !card || !goodsOutMode) return;
+    setMutationState("submitting");
+    setMutationMessage("Warenausgang wird gebucht und anschließend neu geladen.");
+    setFlowReceipt(null);
+    const result = await recordGoodsOutAction({
+      orderId: currentOrderId,
+      mode: goodsOutMode,
+      expectedVersion: card.version,
+      clientEventId: crypto.randomUUID(),
+    }).catch(() => ({ code: "UNAVAILABLE" as const, message: "Warenausgang konnte nicht sicher gebucht werden." }));
+    if (result.code !== "OK") {
+      if (result.code === "CONFLICT") await reloadGoodsOutState(currentOrderId);
+      setMutationState(result.code === "CONFLICT" ? "conflict" : "error");
+      setMutationMessage(result.code === "CONFLICT" ? `${result.message} Der Auftrag wurde neu geladen.` : result.message);
+      return;
+    }
+    const readback = await reloadGoodsOutState(currentOrderId);
+    if (
+      readback.code !== "OK"
+      || readback.data.physicalStatus !== "abgeholt"
+      || readback.data.orderVersion !== result.receipt.orderVersion
+      || readback.data.goodsOut?.eventId !== result.receipt.eventId
+    ) {
+      setMutationState("error");
+      setMutationMessage("Der Warenausgang wurde nicht durch einen eindeutigen Readback bestätigt.");
+      return;
+    }
+    setFlowReceipt({ kind: "goods-out", receipt: result.receipt });
+    setMutationState("success");
+    setMutationMessage("Warenausgang bestätigt und aus der Datenbank zurückgelesen.");
+  }, [card, currentOrderId, goodsOutMode, reloadGoodsOutState]);
+
   if (!currentOrderId) return null;
 
   const stackIndex = stack.findLastIndex((item) => item.type === "order" && item.id === currentOrderId);
   const zIndex = stackIndex >= 0 ? 1010 + stackIndex * 10 : 1010;
   const currentStationIndex = card ? STATIONS.indexOf(card.station as (typeof STATIONS)[number]) : -1;
+  const canConfirmPayment = role === "buero" || role === "meister" || role === "admin";
+  const canRecordGoodsOut = role === "werkstatt" || role === "meister" || role === "admin";
+  const invoice = payment?.payment ?? null;
+  const paymentSettled = invoice?.status === "bezahlt";
+  const paymentGateOpen = payment?.mode === "rechnung" || paymentSettled;
+  const physicalReady = card?.station === "fertig" && card.status === "fertig";
+  const goodsOutBlockedReason = !physicalReady
+    ? "Nur ein fertig gemeldeter Auftrag kann ausgegeben werden."
+    : !canRecordGoodsOut
+      ? "Ihre Rolle darf keinen Warenausgang buchen."
+      : payment?.mode !== "rechnung" && !invoice
+        ? "Für Vorkasse oder Abholung fehlt die kanonische Rechnung."
+        : !paymentGateOpen
+          ? payment?.mode === "abholung"
+            ? "Zahlung muss bei der Übergabe zuerst vollständig bestätigt werden."
+            : "Vorkasse ist noch nicht vollständig bestätigt."
+          : null;
 
   return (
     <AppOverlayPortal>
@@ -177,7 +334,7 @@ export function OrderOverlay() {
                         </div>
                       ))}
                     </div>
-                    <p className="mt-3 text-xs text-text-muted">Ort ist der Werkstattzustand; Zahlung bleibt eine getrennte, hier inaktive Achse.</p>
+                    <p className="mt-3 text-xs text-text-muted">Ort ist der physische Werkstattzustand. Rechnung und Zahlung werden darunter getrennt und ohne erfundene Werte geführt.</p>
                   </section>
 
                   <OrderTaskAssignmentPanel
@@ -233,8 +390,112 @@ export function OrderOverlay() {
                     onConfirmedCard={setCard}
                   />
 
-                  <section className="rounded-xl border border-dashed border-neutral-gray-300 p-4 text-sm text-text-muted">
-                    Zahlung und Abholung sind sichtbar geplant, bleiben in F1.3 jedoch inaktiv. Keine Buchungs- oder Warenausgangsaktion wurde vorgezogen.
+                  <section aria-labelledby="goods-out-title" className="overflow-hidden rounded-2xl border border-neutral-gray-200 bg-white shadow-sm" data-testid="f1-5-flow">
+                    <div className="bg-navy-900 px-4 py-4 text-white md:px-5">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10"><Truck className="h-5 w-5" /></span>
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/70">Zahlung und Warenausgang</p>
+                          <h3 id="goods-out-title" className="font-serif text-xl font-bold">Ware sicher übergeben</h3>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4 p-4 md:p-5">
+                      {paymentState === "loading" ? (
+                        <div className="flex min-h-24 items-center justify-center gap-2 text-sm text-text-muted" role="status"><Loader2 className="h-5 w-5 animate-spin" />{paymentMessage}</div>
+                      ) : paymentState === "denied" ? (
+                        <div className="rounded-xl bg-[#fdf0ee] p-4 text-sm text-[#c0392b]" role="status"><strong>Zugriff nicht erlaubt</strong><p className="mt-1">{paymentMessage}</p></div>
+                      ) : paymentState === "empty" ? (
+                        <div className="rounded-xl border border-dashed border-neutral-gray-300 p-4 text-sm text-text-muted" role="status"><strong>Keine Ausgangsdaten</strong><p className="mt-1">{paymentMessage}</p></div>
+                      ) : paymentState === "error" || !payment ? (
+                        <div className="rounded-xl bg-[#fdf0ee] p-4 text-sm text-[#c0392b]" role="status">
+                          <strong>Status nicht sicher verfügbar</strong><p className="mt-1">{paymentMessage}</p>
+                          <button className="mt-3 min-h-11 rounded-lg border border-[#c0392b]/40 bg-white px-4 font-semibold" onClick={() => void load(currentOrderId)} type="button">Neu laden</button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <div className="rounded-xl border border-neutral-gray-200 bg-bg-app-soft p-4">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Physischer Status</p>
+                              <p className="mt-1 text-lg font-bold capitalize text-navy-900" data-testid="f1-5-physical-status">{payment.physicalStatus}</p>
+                              <p className="mt-1 text-xs text-text-muted">Ortsversion {payment.orderVersion}</p>
+                            </div>
+                            <div className="rounded-xl border border-neutral-gray-200 bg-bg-app-soft p-4">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">Rechnung und Zahlung</p>
+                              <p className="mt-1 text-lg font-bold text-navy-900" data-testid="f1-5-payment-mode">
+                                {payment.mode === "vorkasse" ? "Vorkasse" : payment.mode === "abholung" ? "Zahlung bei Abholung" : "Rechnung / Stammkunde"}
+                              </p>
+                              <p className="mt-1 text-xs text-text-muted" data-testid="f1-5-invoice-state">
+                                {payment.invoiceState === "not_issued" ? "Noch keine Rechnung ausgestellt" : `Rechnung ${invoice?.invoiceNumber}`}
+                              </p>
+                            </div>
+                          </div>
+
+                          {invoice ? (
+                            <div className="grid gap-3 rounded-xl border border-neutral-gray-200 p-4 sm:grid-cols-3" data-testid="f1-5-payment-values">
+                              <div><p className="text-xs text-text-muted">Zahlungsstatus</p><strong className="text-sm text-navy-900" data-testid="f1-5-payment-status">{invoice.status}</strong></div>
+                              <div><p className="text-xs text-text-muted">Bestätigt</p><strong className="text-sm text-navy-900">{moneyLabel(invoice.paidAmountCents)}</strong></div>
+                              <div><p className="text-xs text-text-muted">Offen</p><strong className="text-sm text-navy-900">{moneyLabel(invoice.openAmountCents)}</strong></div>
+                            </div>
+                          ) : (
+                            <div className="rounded-xl border border-[#d8c9ad] bg-[#fbf6ec] p-4 text-sm text-navy-900" data-testid="f1-5-no-invoice-values">
+                              Vor Rechnungsstellung werden weder Betrag noch Zahlungsstatus oder offener Betrag behauptet.
+                            </div>
+                          )}
+
+                          {(payment.mode === "vorkasse" || payment.mode === "abholung") && invoice && !paymentSettled ? (
+                            <div className="rounded-xl border border-[#e0b45c] bg-[#fff8e8] p-4">
+                              <div className="flex items-start gap-3"><CreditCard className="mt-0.5 h-5 w-5 text-[#8a5a00]" /><div className="min-w-0 flex-1">
+                                <strong className="text-sm text-navy-900">{payment.mode === "abholung" ? "Zahlung bei Übergabe bestätigen" : "Vollzahlung bestätigen"}</strong>
+                                <p className="mt-1 text-xs text-text-muted">Offen: {moneyLabel(invoice.openAmountCents)}. Erst der bestätigte Readback öffnet das Ausgangs-Gate.</p>
+                                <label className="mt-3 block text-xs font-semibold text-navy-900" htmlFor="f1-5-payment-method">Zahlungsart</label>
+                                <select id="f1-5-payment-method" className="mt-1 min-h-11 w-full rounded-lg border border-neutral-gray-300 bg-white px-3 text-sm" onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)} value={paymentMethod}>
+                                  <option value="bar">Bar</option><option value="karte">Karte</option><option value="ueberweisung">Überweisung</option>
+                                </select>
+                                {canConfirmPayment ? (
+                                  <button className="mt-3 min-h-12 w-full rounded-xl bg-navy-900 px-4 font-semibold text-white disabled:opacity-50" data-testid="f1-5-payment-action" disabled={mutationState === "submitting"} onClick={() => void confirmOutstandingPayment()} type="button">{mutationState === "submitting" ? "Wird bestätigt …" : `${moneyLabel(invoice.openAmountCents)} bestätigen`}</button>
+                                ) : <p className="mt-3 text-xs font-semibold text-[#8a5a00]">Ihre Rolle darf die Zahlung nicht bestätigen.</p>}
+                              </div></div>
+                            </div>
+                          ) : null}
+
+                          {physicalReady ? (
+                            <div className="rounded-xl border border-neutral-gray-200 p-4">
+                              <p className="text-sm font-semibold text-navy-900">Wie verlässt die Ware den Betrieb?</p>
+                              <div className="mt-3 grid gap-2 sm:grid-cols-2" role="group" aria-label="Physischer Übergabemodus">
+                                {(["versand", "abholung"] as const).map((mode) => (
+                                  <button key={mode} type="button" data-testid={`f1-5-goods-out-mode-${mode}`} aria-pressed={goodsOutMode === mode} onClick={() => setGoodsOutMode(mode)} className={`min-h-12 rounded-xl border px-4 text-sm font-semibold ${goodsOutMode === mode ? "border-navy-900 bg-navy-900 text-white" : "border-neutral-gray-300 bg-white text-navy-900"}`}>
+                                    {mode === "versand" ? "Versand bestätigen" : "Abholung bestätigen"}
+                                  </button>
+                                ))}
+                              </div>
+                              {goodsOutBlockedReason ? <p className="mt-3 rounded-lg bg-[#fff8e8] p-3 text-xs font-semibold text-[#8a5a00]" data-testid="f1-5-blocked">{goodsOutBlockedReason}</p> : null}
+                              <button className="mt-3 min-h-12 w-full rounded-xl bg-gradient-to-r from-[#c4a15a] to-[#e0c788] px-4 font-bold text-navy-900 disabled:cursor-not-allowed disabled:opacity-50" data-testid="f1-5-goods-out-action" disabled={!goodsOutMode || Boolean(goodsOutBlockedReason) || mutationState === "submitting"} onClick={() => void recordGoodsOut()} type="button">{mutationState === "submitting" ? "Wird gebucht …" : "Warenausgang verbindlich buchen"}</button>
+                            </div>
+                          ) : payment.goodsOut ? (
+                            <div className="rounded-xl border border-[#8db59b] bg-[#edf7f0] p-4 text-sm text-[#225c35]">
+                              <strong>Ware ist {payment.goodsOut.mode === "versand" ? "im Versand" : "abgeholt"}.</strong>
+                              <p className="mt-1">Der persistierte Ausgangsbeleg wurde erneut geladen.</p>
+                            </div>
+                          ) : <p className="rounded-xl bg-[#fff8e8] p-4 text-sm font-semibold text-[#8a5a00]" data-testid="f1-5-blocked">Nur ein fertig gemeldeter Auftrag kann ausgegeben werden.</p>}
+
+                          {mutationState === "conflict" || mutationState === "error" ? (
+                            <div className="rounded-xl bg-[#fdf0ee] p-4 text-sm text-[#c0392b]" role="alert"><AlertTriangle className="mb-2 h-5 w-5" /><strong>{mutationState === "conflict" ? "Zwischenstand geändert" : "Aktion nicht bestätigt"}</strong><p className="mt-1">{mutationMessage}</p></div>
+                          ) : mutationState === "success" && flowReceipt ? (
+                            <div className="rounded-xl border border-[#8db59b] bg-[#edf7f0] p-4 text-sm text-[#225c35]" data-testid="f1-5-receipt" role="status">
+                              <CheckCircle2 className="mb-2 h-5 w-5" /><strong>{mutationMessage}</strong>
+                              <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
+                                <div><dt className="font-semibold">Akteur</dt><dd className="break-all font-mono">{flowReceipt.kind === "payment" ? flowReceipt.receipt.confirmedBy : flowReceipt.receipt.actorId}</dd></div>
+                                <div><dt className="font-semibold">Zeitpunkt</dt><dd>{timestampLabel(flowReceipt.kind === "payment" ? flowReceipt.receipt.confirmedAt : flowReceipt.receipt.occurredAt)}</dd></div>
+                                <div><dt className="font-semibold">Receipt</dt><dd className="break-all font-mono">{flowReceipt.kind === "payment" ? flowReceipt.receipt.receiptId : `goods-out://${flowReceipt.receipt.orderId}/${flowReceipt.receipt.orderVersion}`}</dd></div>
+                                <div><dt className="font-semibold">Event-ID</dt><dd className="break-all font-mono">{flowReceipt.receipt.eventId}</dd></div>
+                              </dl>
+                            </div>
+                          ) : null}
+                        </>
+                      )}
+                    </div>
                   </section>
                 </div>
               )}

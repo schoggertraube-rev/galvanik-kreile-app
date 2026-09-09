@@ -1,0 +1,106 @@
+{
+  "testedAt": "2026-09-09T19:08:55.164Z",
+  "source": "fresh local Supabase + real auth/session + real server actions + browser reload readback",
+  "viewports": [
+    "1440x900",
+    "1220x880"
+  ],
+  "orders": {
+    "vorkasse": {
+      "orderId": "a668f7cb-4615-4ee6-bef8-bc620075e272",
+      "orderNumber": "A-2026-0001"
+    },
+    "abholung": {
+      "orderId": "d0f809c4-6aea-4a31-9ac3-1fcec5103063",
+      "orderNumber": "A-2026-0002"
+    },
+    "rechnung": {
+      "orderId": "4834bff8-8358-4eb9-951b-8e20ba02c20d",
+      "orderNumber": "A-2026-0003"
+    }
+  },
+  "readback": {
+    "vorkasse_events": 1,
+    "abholung_events": 1,
+    "rechnung_v2_events": 1,
+    "payment_events": 2
+  },
+  "receipts": [
+    {
+      "event_id": "7e202dee-baf5-4e2c-87e0-5ef8592510b8",
+      "order_id": "a668f7cb-4615-4ee6-bef8-bc620075e272",
+      "event_type": "PAYMENT_CONFIRMED_V1",
+      "actor_id": "b4fcf588-2255-4d50-8971-3b4b3567330e",
+      "occurred_at": "2026-09-09 19:06:19.024",
+      "client_event_id": "073ee744-8663-454c-ad29-40fc03a57c99",
+      "correlation_id": "2857a68f-adad-42a4-8c2d-47b74fc9416f",
+      "event_schema_version": 1
+    },
+    {
+      "event_id": "9e7ba7e4-5514-4646-93e8-f4c2bccd3a5a",
+      "order_id": "a668f7cb-4615-4ee6-bef8-bc620075e272",
+      "event_type": "ORDER_PICKED_UP_V1",
+      "actor_id": "b4fcf588-2255-4d50-8971-3b4b3567330e",
+      "occurred_at": "2026-09-09 19:06:35.914316",
+      "client_event_id": "9f981775-cc8a-4482-b736-231371d25fb8",
+      "correlation_id": "936880c1-8030-44fe-b52f-df89b8dc7daa",
+      "event_schema_version": 1
+    },
+    {
+      "event_id": "188c109d-a7b3-47f1-9120-b6fc40a7449d",
+      "order_id": "d0f809c4-6aea-4a31-9ac3-1fcec5103063",
+      "event_type": "PAYMENT_CONFIRMED_V1",
+      "actor_id": "b4fcf588-2255-4d50-8971-3b4b3567330e",
+      "occurred_at": "2026-09-09 19:07:07.423",
+      "client_event_id": "fe2facaa-0db8-4a97-9b1a-c6a9c3c0b876",
+      "correlation_id": "eead3fa8-d855-447d-adb9-f95a092f3d9b",
+      "event_schema_version": 1
+    },
+    {
+      "event_id": "8b91a70c-f9f7-41c8-94be-07acf671954e",
+      "order_id": "d0f809c4-6aea-4a31-9ac3-1fcec5103063",
+      "event_type": "ORDER_PICKED_UP_V1",
+      "actor_id": "b4fcf588-2255-4d50-8971-3b4b3567330e",
+      "occurred_at": "2026-09-09 19:07:20.277269",
+      "client_event_id": "35937af5-82bb-43fb-8c1a-e70d950aa212",
+      "correlation_id": "376fb5e6-a3a0-4497-9c5f-912e3f40a0ab",
+      "event_schema_version": 1
+    },
+    {
+      "event_id": "1fbd4f86-4681-4bf4-99dc-57581f5e1d39",
+      "order_id": "4834bff8-8358-4eb9-951b-8e20ba02c20d",
+      "event_type": "ORDER_PICKED_UP_V2",
+      "actor_id": "b4fcf588-2255-4d50-8971-3b4b3567330e",
+      "occurred_at": "2026-09-09 19:08:32.879091",
+      "client_event_id": "460619c6-61b1-4f3f-91df-b24ab38fe2bc",
+      "correlation_id": "92cdaece-c953-4572-9308-01024d00f1d0",
+      "event_schema_version": 2
+    }
+  ],
+  "screenshots": [
+    {
+      "file": "docs/evidence/f1/artifacts/f1-5/f1-5-d-desktop-vorkasse-blocked-1440x900.png",
+      "sha256": "8e6c0c02bbc2a4f69ee9b669b55407a034d5efaa5584c336665245e370e0aace"
+    },
+    {
+      "file": "docs/evidence/f1/artifacts/f1-5/f1-5-d-tablet-vorkasse-blocked-1220x880.png",
+      "sha256": "1392a0583aadcb90db3f55eed4f747e42aceffb1b91e0f4a8f0fe362b0d4da93"
+    },
+    {
+      "file": "docs/evidence/f1/artifacts/f1-5/f1-5-d-desktop-vorkasse-success-1440x900.png",
+      "sha256": "f1cab3cc59b2aba65fbad5b5c6e5bc8e1677ebe8884012fe483e5fe20516ac2e"
+    },
+    {
+      "file": "docs/evidence/f1/artifacts/f1-5/f1-5-d-tablet-abholung-success-1220x880.png",
+      "sha256": "1d6cc815cb1f25d85de0ae90da2dbc010ab87100a10023bafa74f9df0143d747"
+    },
+    {
+      "file": "docs/evidence/f1/artifacts/f1-5/f1-5-d-desktop-rechnung-empty-1440x900.png",
+      "sha256": "396f6452b89f59d291b86a594f5c0d3942cb12cc699d1622cdf605f170e5b1fe"
+    },
+    {
+      "file": "docs/evidence/f1/artifacts/f1-5/f1-5-d-tablet-rechnung-empty-1220x880.png",
+      "sha256": "da01ec9e9e5af08b7c8c76dd4382c6f096ab8f7ff43a10289752801c57a17c2d"
+    }
+  ]
+}

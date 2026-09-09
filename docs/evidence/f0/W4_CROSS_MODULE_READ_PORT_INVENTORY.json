@@ -101,6 +101,7 @@
       "private.v_order_task_assignment_v1"
     ],
     "src/lib/server/paymentSummaryRead.ts": [
+      "private.v_goods_out_ui_state_v1",
       "private.v_payment_summary_v1"
     ],
     "src/lib/server/userLastSeen.ts": [
@@ -211,6 +212,13 @@
         "private.v_goods_out_receipt_v2",
         "private.v_invoice_created_receipt_v2",
         "private.v_invoice_issue_source_v2"
+      ],
+      "requiredLegacySource": null
+    },
+    {
+      "path": "supabase/migrations/20260909180000_f1_5_payment_goods_out_contract.sql",
+      "requiredSecurityInvokerViews": [
+        "private.v_goods_out_ui_state_v1"
       ],
       "requiredLegacySource": null
     }

@@ -54,6 +54,74 @@ export type PaymentSummaryRow = {
   integrity_ok: boolean;
 };
 
+export type GoodsOutReadback = {
+  eventId: string;
+  clientEventId: string;
+  correlationId: string;
+  eventSchemaVersion: 1 | 2;
+  orderVersion: number;
+  actorId: string;
+  occurredAt: string;
+  mode: "versand" | "abholung";
+};
+
+export type OrderPaymentState = {
+  orderId: string;
+  orderNumber: string;
+  orderVersion: number;
+  physicalStatus: string;
+  mode: PaymentMode;
+  paymentModeVersion: number;
+  invoiceState: "not_issued" | "issued";
+  payment: PaymentSummary | null;
+  paymentActorId: string | null;
+  goodsOut: GoodsOutReadback | null;
+  goodsOutAllowed: boolean;
+};
+
+export type OrderPaymentStateRow = {
+  order_id: string;
+  tenant_id: string;
+  order_number: string;
+  order_version: number | string;
+  station: string;
+  current_station: string;
+  current_station_id: string;
+  order_status: string;
+  payment_mode: string;
+  payment_mode_version: number | string;
+  invoice_state: string;
+  active_invoice_count: number | string;
+  invoice_id: string | null;
+  invoice_number: string | null;
+  total_amount_cents: number | string | null;
+  payment_contract_version: number | string | null;
+  payment_status: string | null;
+  payment_open_amount_cents: number | string | null;
+  payment_paid_amount_cents: number | string | null;
+  payment_currency: string | null;
+  payment_method: string | null;
+  payment_paid_at: Date | string | null;
+  payment_receipt_id: string | null;
+  payment_event_id: string | null;
+  payment_correlation_id: string | null;
+  payment_version: number | string | null;
+  payment_goods_out_allowed: boolean | null;
+  payment_integrity_ok: boolean | null;
+  payment_actor_id: string | null;
+  goods_out_event_count: number | string;
+  goods_out_event_id: string | null;
+  goods_out_client_event_id: string | null;
+  goods_out_correlation_id: string | null;
+  goods_out_event_schema_version: number | string | null;
+  goods_out_order_version: number | string | null;
+  goods_out_actor_id: string | null;
+  goods_out_occurred_at: string | null;
+  goods_out_mode: string | null;
+  goods_out_allowed: boolean;
+  integrity_ok: boolean;
+};
+
 export const PAYMENT_SUMMARY_READ_ROLES = ["buero", "werkstatt", "meister", "admin"] as const;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -193,6 +261,171 @@ export function mapPaymentSummaryRow(
     correlationId: row.payment_correlation_id,
     paymentModeVersion,
     paymentVersion,
+    goodsOutAllowed: row.goods_out_allowed,
+  };
+}
+
+export function mapOrderPaymentStateRow(
+  row: OrderPaymentStateRow,
+  authorization: AuthorizationSnapshot,
+): OrderPaymentState {
+  const orderVersion = toSafeInteger(row.order_version, "ORDER_PAYMENT_STATE_VERSION_INVALID");
+  const paymentModeVersion = toSafeInteger(
+    row.payment_mode_version,
+    "ORDER_PAYMENT_STATE_MODE_VERSION_INVALID",
+  );
+  const activeInvoiceCount = toSafeInteger(
+    row.active_invoice_count,
+    "ORDER_PAYMENT_STATE_INVOICE_COUNT_INVALID",
+  );
+  const goodsOutEventCount = toSafeInteger(
+    row.goods_out_event_count,
+    "ORDER_PAYMENT_STATE_GOODS_OUT_COUNT_INVALID",
+  );
+  const mode = row.payment_mode;
+  const invoiceState = row.invoice_state;
+
+  if (
+    !canReadPaymentSummary(authorization)
+    || row.integrity_ok !== true
+    || row.tenant_id !== authorization.tenantId
+    || !isCanonicalTextId(row.order_id)
+    || !isCanonicalTextId(row.order_number)
+    || !isCanonicalTextId(row.station)
+    || row.station !== row.current_station
+    || row.station !== row.current_station_id
+    || row.station !== row.order_status
+    || !isPaymentMode(mode)
+    || paymentModeVersion < 0
+    || (invoiceState !== "not_issued" && invoiceState !== "issued")
+    || activeInvoiceCount !== (invoiceState === "issued" ? 1 : 0)
+    || typeof row.goods_out_allowed !== "boolean"
+    || goodsOutEventCount < 0
+    || goodsOutEventCount > 1
+  ) {
+    throw new Error("ORDER_PAYMENT_STATE_INTEGRITY_INVALID");
+  }
+
+  let payment: PaymentSummary | null = null;
+  if (invoiceState === "issued") {
+    if (
+      row.invoice_id === null
+      || row.invoice_number === null
+      || row.payment_goods_out_allowed === null
+      || row.payment_integrity_ok !== true
+    ) throw new Error("ORDER_PAYMENT_STATE_INVOICE_INVALID");
+    payment = mapPaymentSummaryRow({
+      invoice_id: row.invoice_id,
+      tenant_id: row.tenant_id,
+      order_id: row.order_id,
+      order_number: row.order_number,
+      invoice_number: row.invoice_number,
+      total_amount_cents: row.total_amount_cents as number | string,
+      payment_contract_version: row.payment_contract_version,
+      payment_mode: row.payment_mode,
+      payment_status: row.payment_status,
+      payment_open_amount_cents: row.payment_open_amount_cents,
+      payment_paid_amount_cents: row.payment_paid_amount_cents,
+      payment_currency: row.payment_currency,
+      payment_method: row.payment_method,
+      payment_paid_at: row.payment_paid_at,
+      payment_receipt_id: row.payment_receipt_id,
+      payment_event_id: row.payment_event_id,
+      payment_correlation_id: row.payment_correlation_id,
+      payment_mode_version: row.payment_mode_version,
+      payment_version: row.payment_version,
+      goods_out_allowed: row.payment_goods_out_allowed,
+      integrity_ok: row.payment_integrity_ok,
+    }, authorization);
+  } else {
+    const invoiceFields = [
+      row.invoice_id,
+      row.invoice_number,
+      row.total_amount_cents,
+      row.payment_contract_version,
+      row.payment_status,
+      row.payment_open_amount_cents,
+      row.payment_paid_amount_cents,
+      row.payment_currency,
+      row.payment_method,
+      row.payment_paid_at,
+      row.payment_receipt_id,
+      row.payment_event_id,
+      row.payment_correlation_id,
+      row.payment_version,
+      row.payment_actor_id,
+    ];
+    if (invoiceFields.some((value) => value !== null)) {
+      throw new Error("ORDER_PAYMENT_STATE_UNISSUED_VALUES_INVALID");
+    }
+  }
+
+  let goodsOut: GoodsOutReadback | null = null;
+  if (goodsOutEventCount === 1) {
+    const eventSchemaVersion = toSafeInteger(
+      row.goods_out_event_schema_version,
+      "ORDER_PAYMENT_STATE_GOODS_OUT_SCHEMA_INVALID",
+    );
+    const goodsOutOrderVersion = toSafeInteger(
+      row.goods_out_order_version,
+      "ORDER_PAYMENT_STATE_GOODS_OUT_VERSION_INVALID",
+    );
+    if (
+      typeof row.goods_out_event_id !== "string"
+      || !UUID_PATTERN.test(row.goods_out_event_id)
+      || typeof row.goods_out_client_event_id !== "string"
+      || !UUID_PATTERN.test(row.goods_out_client_event_id)
+      || typeof row.goods_out_correlation_id !== "string"
+      || !UUID_PATTERN.test(row.goods_out_correlation_id)
+      || (eventSchemaVersion !== 1 && eventSchemaVersion !== 2)
+      || goodsOutOrderVersion !== orderVersion
+      || typeof row.goods_out_actor_id !== "string"
+      || !UUID_PATTERN.test(row.goods_out_actor_id)
+      || typeof row.goods_out_occurred_at !== "string"
+      || !Number.isFinite(new Date(row.goods_out_occurred_at).getTime())
+      || (row.goods_out_mode !== "versand" && row.goods_out_mode !== "abholung")
+    ) throw new Error("ORDER_PAYMENT_STATE_GOODS_OUT_INVALID");
+    goodsOut = {
+      eventId: row.goods_out_event_id,
+      clientEventId: row.goods_out_client_event_id,
+      correlationId: row.goods_out_correlation_id,
+      eventSchemaVersion,
+      orderVersion: goodsOutOrderVersion,
+      actorId: row.goods_out_actor_id,
+      occurredAt: toIsoTimestamp(row.goods_out_occurred_at),
+      mode: row.goods_out_mode,
+    };
+  } else if ([
+    row.goods_out_event_id,
+    row.goods_out_client_event_id,
+    row.goods_out_correlation_id,
+    row.goods_out_event_schema_version,
+    row.goods_out_order_version,
+    row.goods_out_actor_id,
+    row.goods_out_occurred_at,
+    row.goods_out_mode,
+  ].some((value) => value !== null)) {
+    throw new Error("ORDER_PAYMENT_STATE_GOODS_OUT_EMPTY_INVALID");
+  }
+
+  if (payment && row.payment_actor_id !== null && !UUID_PATTERN.test(row.payment_actor_id)) {
+    throw new Error("ORDER_PAYMENT_STATE_PAYMENT_ACTOR_INVALID");
+  }
+  if (payment?.eventId && row.payment_actor_id === null) {
+    throw new Error("ORDER_PAYMENT_STATE_PAYMENT_ACTOR_MISSING");
+  }
+
+  return {
+    orderId: row.order_id,
+    orderNumber: row.order_number,
+    orderVersion,
+    physicalStatus: row.station,
+    mode,
+    paymentModeVersion,
+    invoiceState,
+    payment,
+    paymentActorId: row.payment_actor_id,
+    goodsOut,
     goodsOutAllowed: row.goods_out_allowed,
   };
 }

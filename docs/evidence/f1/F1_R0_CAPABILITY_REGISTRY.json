@@ -1374,10 +1374,11 @@
       "entry_point": "src/app/actions/payments.actions.ts",
       "exported_functions": [
         "confirmPaymentAction",
-        "setPaymentModeAction"
+        "setPaymentModeAction",
+        "getOrderPaymentStateAction"
       ],
       "classification": "PENDING_CONTRACT",
-      "open_reason": "F1.5 manual payment confirmation and audited order payment-mode change candidates using the additive invoice payment contract, D-F15-002 intake default, independent mode version and append-only receipt readback. Fresh-database CI and independent acceptance remain pending.",
+      "open_reason": "F1.5-A/B/B2/C are delivered on main. The F1.5-D overlay candidate reads the tenant-bound payment/goods-out state through getOrderPaymentStateAction and passed fresh local real Auth/DB/browser E2E; Exact-SHA CI and independent acceptance remain pending.",
       "visible": false,
       "reachable": true
     },
@@ -1389,7 +1390,7 @@
         "recordGoodsOutAction"
       ],
       "classification": "PENDING_CONTRACT",
-      "open_reason": "F1.5-C tenant-bound V1/V2 goods-out command candidate: V2 records invoiceState=not_issued without payment values and permits later canonical invoice issuance. Exact-SHA Fresh-Supabase CI and independent acceptance remain pending.",
+      "open_reason": "F1.5-C tenant-bound V1/V2 goods-out command is delivered on main. F1.5-D invokes it only through the existing typed action and passed fresh local real Auth/DB/browser E2E; Exact-SHA CI and independent D acceptance remain pending.",
       "visible": false,
       "reachable": true
     },
