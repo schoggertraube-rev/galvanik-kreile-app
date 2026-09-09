@@ -47,6 +47,9 @@
     "src/lib/server/commands/orderTaskAssignmentCommand.ts": [
       "private.v_order_task_assignment_receipts_v1"
     ],
+    "src/lib/server/commands/recordGoodsOutCommand.ts": [
+      "private.v_payment_summary_v1"
+    ],
     "src/lib/server/customerSummaryRead.ts": [
       "private.v_customer_summary_v1"
     ],
