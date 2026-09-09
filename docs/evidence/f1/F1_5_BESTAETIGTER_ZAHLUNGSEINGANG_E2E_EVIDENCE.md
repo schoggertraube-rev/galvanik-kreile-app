@@ -8,7 +8,7 @@ Status: `CANDIDATE_LOCAL_PASS` — Exact-SHA-CI und unabhaengiger Review stehen 
 - Vorkasse bleibt bis zur bestaetigten Vollzahlung gesperrt.
 - Abholung bestaetigt zuerst die Zahlung ueber `confirmPayment`, danach separat den physischen Warenausgang.
 - Rechnung/Stammkunde erlaubt den Ausgang ueber `ORDER_PICKED_UP_V2`, ohne vor Rechnungsstellung Betrag, Zahlungsstatus oder offenen Betrag zu behaupten.
-- Erst nach bestaetigtem V2-Ausgang erscheint der kanonische Rechnungsweg; `INVOICE_CREATED_V2` wird als `issued/offen` zurueckgelesen und erst danach ist `confirmPayment` erreichbar.
+- Erst nach bestaetigtem V2-Ausgang erscheint der kanonische Rechnungsweg; `INVOICE_CREATED_V2` wird als `issued/offen` zurueckgelesen und erst danach ist `confirmPayment` erreichbar. Der sichtbare Hilfetext benennt dabei wahrheitsgemaess den bereits bestaetigten Warenausgang und die separat per Readback dokumentierte spaetere Zahlung; die Vorkasse-/Abholung-Gate-Erklaerung bleibt unveraendert.
 - Versand oder Abholung werden explizit gewaehlt. Erfolg erscheint erst nach persistiertem Readback mit Akteur, Zeitpunkt, Receipt und Event-ID.
 - `CONFLICT`, fehlende Rolle, fehlende Daten und Read-Fehler bleiben fail-closed.
 
@@ -29,7 +29,7 @@ Belegt wurden:
 - Rolle `readonly` als `Denied` ohne erreichbare Payment-/Goods-out-Aktion; fremder Tenant ohne Sitzung.
 - Desktop 1440x900 und Tablet 1220x880 fuer Sperre, rechnungslosen Zustand sowie die Rechnungsschritte nach Ausgang, nach Rechnungsstellung und nach Zahlung.
 
-Maschinenlesbares Receipt: `docs/evidence/f1/artifacts/f1-5/f1-5-d-real-browser-receipt.json` (`SHA256 DD81ECAED8644C00936BEE7C0195C087777B4C93AEBA1B2A58B03CF05528961C`). Es enthaelt die drei synthetischen Auftrags-IDs, sieben persistierte Event-Receipts und die SHA256-Werte aller zwoelf Screenshots.
+Maschinenlesbares Receipt: `docs/evidence/f1/artifacts/f1-5/f1-5-d-real-browser-receipt.json` (`SHA256 7B05572444746C0E5A775A3DD808705153CB910BA6E61D61637EA6F1D6EF578D`). Es enthaelt die drei synthetischen Auftrags-IDs, sieben persistierte Event-Receipts und die SHA256-Werte aller zwoelf Screenshots.
 
 ## Produktions- und Mockwahrheit
 

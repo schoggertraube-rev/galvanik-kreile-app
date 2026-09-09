@@ -330,6 +330,8 @@ test.describe("F1.5-D schmale echte Zahlungs-/Warenausgangsoberfläche", () => {
       await expect(rechnungDesktop.getByTestId("f1-5-invoice-state")).toContainText(/Rechnung R-\d{4}-\d+/, { timeout: 45_000 });
       await expect(rechnungDesktop.getByTestId("f1-5-receipt")).toContainText("Rechnung bestätigt", { timeout: 45_000 });
       await expect(rechnungDesktop.getByText("Spätere Zahlung bestätigen", { exact: true })).toBeVisible();
+      await expect(rechnungDesktop.getByText(/Der Warenausgang ist bereits bestätigt; die spätere Zahlung wird separat mit Readback dokumentiert/)).toBeVisible();
+      await expect(rechnungDesktop.getByText(/Erst der bestätigte Readback öffnet das Ausgangs-Gate/)).toHaveCount(0);
       screenshots.push(...await captureDesktopAndTablet(desktopPage, rechnungDesktop.getByTestId("f1-5-payment-action"), "nach-rechnung-v2"));
       await rechnungDesktop.locator("#f1-5-payment-method").selectOption("ueberweisung");
       await rechnungDesktop.getByTestId("f1-5-payment-action").click();

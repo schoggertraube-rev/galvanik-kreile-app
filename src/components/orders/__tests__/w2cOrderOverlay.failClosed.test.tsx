@@ -156,6 +156,7 @@ describe("F1.5-D live order overlay fail-closed flow", () => {
     render(<OrderOverlay />);
     expect(await screen.findByTestId("f1-5-payment-mode")).toHaveTextContent("Vorkasse");
     expect(screen.getByTestId("f1-5-payment-status")).toHaveTextContent("offen");
+    expect(screen.getByText(/Erst der bestätigte Readback öffnet das Ausgangs-Gate/)).toBeVisible();
     expect(screen.getByTestId("f1-5-blocked")).toHaveTextContent("Vorkasse ist noch nicht vollständig bestätigt");
     expect(screen.getByTestId("f1-5-goods-out-action")).toBeDisabled();
     expect(screen.queryByTestId("f1-5-receipt")).not.toBeInTheDocument();
@@ -209,6 +210,7 @@ describe("F1.5-D live order overlay fail-closed flow", () => {
       .mockReturnValueOnce("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
 
     render(<OrderOverlay />);
+    expect(await screen.findByText(/Erst der bestätigte Readback öffnet das Ausgangs-Gate/)).toBeVisible();
     fireEvent.click(await screen.findByTestId("f1-5-payment-action"));
     await waitFor(() => expect(screen.getByTestId("f1-5-receipt")).toHaveTextContent("Zahlung bestätigt"));
     expect(mocked.confirmPaymentAction).toHaveBeenCalledWith(expect.objectContaining({ amount: 11900, expectedVersion: 0 }));
@@ -258,6 +260,8 @@ describe("F1.5-D live order overlay fail-closed flow", () => {
     fireEvent.click(invoiceAction);
     await waitFor(() => expect(screen.getByTestId("f1-5-invoice-state")).toHaveTextContent("Rechnung R-2026-0001"));
     expect(screen.getByText("Spätere Zahlung bestätigen")).toBeVisible();
+    expect(screen.getByText(/Der Warenausgang ist bereits bestätigt; die spätere Zahlung wird separat mit Readback dokumentiert/)).toBeVisible();
+    expect(screen.queryByText(/Erst der bestätigte Readback öffnet das Ausgangs-Gate/)).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Zahlungsart"), { target: { value: "ueberweisung" } });
     fireEvent.click(screen.getByTestId("f1-5-payment-action"));
     await waitFor(() => expect(screen.getByTestId("f1-5-receipt")).toHaveTextContent("Zahlung bestätigt"));

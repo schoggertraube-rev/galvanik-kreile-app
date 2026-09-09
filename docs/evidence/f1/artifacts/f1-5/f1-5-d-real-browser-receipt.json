@@ -1,5 +1,5 @@
 {
-  "testedAt": "2026-09-09T21:03:46.984Z",
+  "testedAt": "2026-09-09T22:05:03.294Z",
   "source": "fresh local Supabase + real auth/session + real server actions + browser reload readback",
   "viewports": [
     "1440x900",
@@ -7,15 +7,15 @@
   ],
   "orders": {
     "vorkasse": {
-      "orderId": "9975bfce-e7bb-4fb5-ae8e-03f0bf42bb7b",
+      "orderId": "de38c6ea-7ac8-4890-9102-7d361c19f2c5",
       "orderNumber": "A-2026-0001"
     },
     "abholung": {
-      "orderId": "e496f21b-4cdb-4af4-90a0-39b5393128e9",
+      "orderId": "3de75dd6-0a79-499c-bec1-a060f1abc56e",
       "orderNumber": "A-2026-0002"
     },
     "rechnung": {
-      "orderId": "99926612-d544-49d6-8166-79173ca67b0e",
+      "orderId": "e137c8ef-1e9e-49d5-b83c-3dc4ddb9e414",
       "orderNumber": "A-2026-0003"
     }
   },
@@ -28,124 +28,124 @@
   },
   "receipts": [
     {
-      "event_id": "b06185ce-a0cb-4df8-aa52-092fb2fa7015",
-      "order_id": "9975bfce-e7bb-4fb5-ae8e-03f0bf42bb7b",
+      "event_id": "9f3603a7-d004-42cf-b9e6-f91678a92151",
+      "order_id": "de38c6ea-7ac8-4890-9102-7d361c19f2c5",
       "event_type": "PAYMENT_CONFIRMED_V1",
-      "actor_id": "dc207cf3-1e18-4926-b6c0-2830f4861db7",
-      "occurred_at": "2026-09-09 21:00:25.131",
-      "client_event_id": "89c2c1bd-6289-4e9a-adf6-9b5324b81954",
-      "correlation_id": "fd3b42cd-7a82-4eff-9068-562cb82152b7",
+      "actor_id": "dd3da006-e1fd-4fe9-bf71-516ec95b452f",
+      "occurred_at": "2026-09-09 22:01:31.585",
+      "client_event_id": "a745e981-1a9c-4193-a058-95a05fc4cf42",
+      "correlation_id": "3dfe4320-1247-4ec3-ac36-fb6a8a427c14",
       "event_schema_version": 1
     },
     {
-      "event_id": "c9ed1ecc-9327-40bd-b601-7fd47ec941a1",
-      "order_id": "9975bfce-e7bb-4fb5-ae8e-03f0bf42bb7b",
+      "event_id": "3cd84f07-a797-4dc4-a8dd-0abb6228ca1c",
+      "order_id": "de38c6ea-7ac8-4890-9102-7d361c19f2c5",
       "event_type": "ORDER_PICKED_UP_V1",
-      "actor_id": "dc207cf3-1e18-4926-b6c0-2830f4861db7",
-      "occurred_at": "2026-09-09 21:00:39.121561",
-      "client_event_id": "9cc3c760-a58a-491c-ac53-4bcf7fb22f64",
-      "correlation_id": "6b0d8d78-95d3-4b58-8dec-f2dd031e2a00",
+      "actor_id": "dd3da006-e1fd-4fe9-bf71-516ec95b452f",
+      "occurred_at": "2026-09-09 22:01:47.024008",
+      "client_event_id": "47a3b0d7-f59d-4f46-a951-2054a7223d9a",
+      "correlation_id": "6da85513-737a-43a2-a91b-7cd450b8b0ee",
       "event_schema_version": 1
     },
     {
-      "event_id": "bdd3deff-5768-451f-9772-70997ed97ba7",
-      "order_id": "e496f21b-4cdb-4af4-90a0-39b5393128e9",
+      "event_id": "54c6898f-e186-4241-9a2d-4ca5b9661dce",
+      "order_id": "3de75dd6-0a79-499c-bec1-a060f1abc56e",
       "event_type": "PAYMENT_CONFIRMED_V1",
-      "actor_id": "dc207cf3-1e18-4926-b6c0-2830f4861db7",
-      "occurred_at": "2026-09-09 21:01:04.552",
-      "client_event_id": "43aeac19-8396-4fa7-8eb1-a5d2225b49ad",
-      "correlation_id": "1b50f077-096a-4ab3-b91d-8b60babda978",
+      "actor_id": "dd3da006-e1fd-4fe9-bf71-516ec95b452f",
+      "occurred_at": "2026-09-09 22:02:15.656",
+      "client_event_id": "b52b4f61-872d-4be4-8570-bdedc344c636",
+      "correlation_id": "ba5846d4-f87d-4c64-9723-5798c1ebf451",
       "event_schema_version": 1
     },
     {
-      "event_id": "e5fc0d10-9e53-4a81-bb18-7ade2f6ea654",
-      "order_id": "e496f21b-4cdb-4af4-90a0-39b5393128e9",
+      "event_id": "e09b9c9a-32e0-4c3d-aeba-2b675924b989",
+      "order_id": "3de75dd6-0a79-499c-bec1-a060f1abc56e",
       "event_type": "ORDER_PICKED_UP_V1",
-      "actor_id": "dc207cf3-1e18-4926-b6c0-2830f4861db7",
-      "occurred_at": "2026-09-09 21:01:17.233685",
-      "client_event_id": "59f7ea7f-f5ea-4212-9f7a-ba4d5a2edc24",
-      "correlation_id": "137fadac-8469-4507-b394-7707c0ce7cc9",
+      "actor_id": "dd3da006-e1fd-4fe9-bf71-516ec95b452f",
+      "occurred_at": "2026-09-09 22:02:30.555335",
+      "client_event_id": "0110c261-6650-44bd-8de7-52849405ba9a",
+      "correlation_id": "04c42be1-3358-4856-9801-63f161a9b3c2",
       "event_schema_version": 1
     },
     {
-      "event_id": "e11eeb5c-496e-4ada-be91-310d7ff1fccc",
-      "order_id": "99926612-d544-49d6-8166-79173ca67b0e",
+      "event_id": "d5c4b18f-2c46-42b8-b158-3cbf6bd88e50",
+      "order_id": "e137c8ef-1e9e-49d5-b83c-3dc4ddb9e414",
       "event_type": "ORDER_PICKED_UP_V2",
-      "actor_id": "dc207cf3-1e18-4926-b6c0-2830f4861db7",
-      "occurred_at": "2026-09-09 21:02:25.301618",
-      "client_event_id": "a64d1bd7-2e00-4f3f-a978-de995aa3e393",
-      "correlation_id": "f2be32c9-84c7-45db-84fe-888a9951c340",
+      "actor_id": "dd3da006-e1fd-4fe9-bf71-516ec95b452f",
+      "occurred_at": "2026-09-09 22:03:38.550858",
+      "client_event_id": "88facebb-d741-4b1b-b571-e6c9757299ec",
+      "correlation_id": "8ae736e4-7b64-4cf5-b961-2cb5058e87d4",
       "event_schema_version": 2
     },
     {
-      "event_id": "1bd9b91a-30ae-4c91-93b5-97f70d9ea233",
-      "order_id": "99926612-d544-49d6-8166-79173ca67b0e",
+      "event_id": "3c832f2b-5d31-4bfb-97f6-2e0d189ffd73",
+      "order_id": "e137c8ef-1e9e-49d5-b83c-3dc4ddb9e414",
       "event_type": "INVOICE_CREATED_V2",
-      "actor_id": "dc207cf3-1e18-4926-b6c0-2830f4861db7",
-      "occurred_at": "2026-09-09 21:02:56.51",
-      "client_event_id": "83e0e08c-24dc-45c2-a442-7aae859a39a0",
-      "correlation_id": "17a9e44a-8695-4d15-8265-a48518ac4173",
+      "actor_id": "dd3da006-e1fd-4fe9-bf71-516ec95b452f",
+      "occurred_at": "2026-09-09 22:04:11.422",
+      "client_event_id": "0260a764-6638-4f6e-a214-0f630d7a49fa",
+      "correlation_id": "806e8b60-102f-43d3-aa34-7e6295cb310c",
       "event_schema_version": 2
     },
     {
-      "event_id": "36fe48d9-2e76-4e82-ab38-0c46c1861e36",
-      "order_id": "99926612-d544-49d6-8166-79173ca67b0e",
+      "event_id": "6d6b6888-3ef7-416d-b84a-9165c60e9f89",
+      "order_id": "e137c8ef-1e9e-49d5-b83c-3dc4ddb9e414",
       "event_type": "PAYMENT_CONFIRMED_V1",
-      "actor_id": "dc207cf3-1e18-4926-b6c0-2830f4861db7",
-      "occurred_at": "2026-09-09 21:03:20.345",
-      "client_event_id": "e2bf3f21-f1e4-4ce7-8a80-0e5c921e5b05",
-      "correlation_id": "d64af47a-ca6c-4d18-9a0b-753ae7845edd",
+      "actor_id": "dd3da006-e1fd-4fe9-bf71-516ec95b452f",
+      "occurred_at": "2026-09-09 22:04:37.518",
+      "client_event_id": "9101650f-7b67-4764-9847-e75d0f5c523a",
+      "correlation_id": "1b9f8af6-1600-4eb4-903f-2ff13ff31adf",
       "event_schema_version": 1
     }
   ],
   "screenshots": [
     {
       "file": "docs/evidence/f1/artifacts/f1-5/f1-5-d-desktop-vorkasse-blocked-1440x900.png",
-      "sha256": "8e6c0c02bbc2a4f69ee9b669b55407a034d5efaa5584c336665245e370e0aace"
+      "sha256": "79eb3e3b0cde7a65bea61279c6b046af565891c864d8524f8aa6234a1da204e3"
     },
     {
       "file": "docs/evidence/f1/artifacts/f1-5/f1-5-d-tablet-vorkasse-blocked-1220x880.png",
-      "sha256": "1392a0583aadcb90db3f55eed4f747e42aceffb1b91e0f4a8f0fe362b0d4da93"
+      "sha256": "9f75fba4a65bbb3834bbd8aba7cdafc600b61a62280b738fe4538a215a2e59ac"
     },
     {
       "file": "docs/evidence/f1/artifacts/f1-5/f1-5-d-desktop-vorkasse-success-1440x900.png",
-      "sha256": "bc0bcb17be8fe57a001562f32a18a75ba93c11c4cae3fad6d300909bd06f3fff"
+      "sha256": "00072be2bab1009bf0db1b6d8ccf6184dd6de522deb8c62bad9f413d498481a1"
     },
     {
       "file": "docs/evidence/f1/artifacts/f1-5/f1-5-d-tablet-abholung-success-1220x880.png",
-      "sha256": "5549f359ac6fec71b9c2eddb8eae56f8d4e0a031999a0e0655e6d9ac6a5fe3df"
+      "sha256": "4c115cc857a043e8f32e3392b813437fbd7cc17af487d922c3a0c1367e6abb2c"
     },
     {
       "file": "docs/evidence/f1/artifacts/f1-5/f1-5-d-desktop-rechnung-empty-1440x900.png",
-      "sha256": "055d31d1f180cd86fd1bc14257febe55de2e8f68698d346f201d02c95b43d8eb"
+      "sha256": "6aeea4cfa4ee6a8df173161c87e271bfb984fa519ec20644576a9b59e4b622ec"
     },
     {
       "file": "docs/evidence/f1/artifacts/f1-5/f1-5-d-tablet-rechnung-empty-1220x880.png",
-      "sha256": "60593bfb5ac68ce0e65c7f042909636492f30470b2fee53d94c4ab7356af6b1d"
+      "sha256": "fd4f8d3b106b053b543b4dbb4beda34704e109ea39611f841edf5e32b3e3c1d4"
     },
     {
       "file": "docs/evidence/f1/artifacts/f1-5/f1-5-d-desktop-1440x900-rechnung-nach-ausgang-v2.png",
-      "sha256": "4340f020edd529637d3b7b5055812ab6d21ea7dc230bce5af53edfedd2b897a3"
+      "sha256": "17e29c3d86c3b633afdc7977d75c7a24253e855c87be26fff583871e05062c6d"
     },
     {
       "file": "docs/evidence/f1/artifacts/f1-5/f1-5-d-tablet-1220x880-rechnung-nach-ausgang-v2.png",
-      "sha256": "061167fb32dcf1686975e01578afe20ac8749ccc997bbfd35a0915fcff6783c2"
+      "sha256": "d416a33a111f7652b6fe4d0faf8e958917a7a13d4fa698b97e877dadcc90d47f"
     },
     {
       "file": "docs/evidence/f1/artifacts/f1-5/f1-5-d-desktop-1440x900-rechnung-nach-rechnung-v2.png",
-      "sha256": "d0fbda13f51dac3c8506354d669a3845e5845f83687670b9b2bbb332cdfd39a8"
+      "sha256": "e137a8a7974f975499a284c90c18e3110b3d277b50177fa1987200e4108d1c28"
     },
     {
       "file": "docs/evidence/f1/artifacts/f1-5/f1-5-d-tablet-1220x880-rechnung-nach-rechnung-v2.png",
-      "sha256": "1f156a749516ddfb442aea8088637ef5d16461b793c6c97e75fdd552797194c3"
+      "sha256": "fcd5554d9c3164dca97fcf021e0c12a57d11e41e035b586e8ec6a04ae7ce1373"
     },
     {
       "file": "docs/evidence/f1/artifacts/f1-5/f1-5-d-desktop-1440x900-rechnung-nach-zahlung-v1.png",
-      "sha256": "dd2bf7b14d436c5acac0e1f77bb7d73ec898e9e9f802ed329dc6d3fe0ed0fe5d"
+      "sha256": "f14535db15385be52fa45100074a55e32c957737ff2fd1af70ce6ea21cf886e2"
     },
     {
       "file": "docs/evidence/f1/artifacts/f1-5/f1-5-d-tablet-1220x880-rechnung-nach-zahlung-v1.png",
-      "sha256": "62772529c94e2258f8d59791deab6f76eed494e45787f2f7f9337330051b6494"
+      "sha256": "b27f781cff5d07761f93afe559106b73de7854d52e08a41845664188930ed5ee"
     }
   ]
 }

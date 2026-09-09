@@ -476,7 +476,11 @@ export function OrderOverlay() {
                             <div className="rounded-xl border border-[#e0b45c] bg-[#fff8e8] p-4">
                               <div className="flex items-start gap-3"><CreditCard className="mt-0.5 h-5 w-5 text-[#8a5a00]" /><div className="min-w-0 flex-1">
                                 <strong className="text-sm text-navy-900">{payment.mode === "abholung" ? "Zahlung bei Übergabe bestätigen" : payment.mode === "rechnung" ? "Spätere Zahlung bestätigen" : "Vollzahlung bestätigen"}</strong>
-                                <p className="mt-1 text-xs text-text-muted">Offen: {moneyLabel(invoice.openAmountCents)}. Erst der bestätigte Readback öffnet das Ausgangs-Gate.</p>
+                                <p className="mt-1 text-xs text-text-muted">
+                                  {payment.mode === "rechnung"
+                                    ? `Offen: ${moneyLabel(invoice.openAmountCents)}. Der Warenausgang ist bereits bestätigt; die spätere Zahlung wird separat mit Readback dokumentiert.`
+                                    : <>Offen: {moneyLabel(invoice.openAmountCents)}. Erst der bestätigte Readback öffnet das Ausgangs-Gate.</>}
+                                </p>
                                 <label className="mt-3 block text-xs font-semibold text-navy-900" htmlFor="f1-5-payment-method">Zahlungsart</label>
                                 <select id="f1-5-payment-method" className="mt-1 min-h-11 w-full rounded-lg border border-neutral-gray-300 bg-white px-3 text-sm" onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)} value={paymentMethod}>
                                   <option value="bar">Bar</option><option value="karte">Karte</option><option value="ueberweisung">Überweisung</option>
