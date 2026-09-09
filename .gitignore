@@ -45,6 +45,7 @@ next-env.d.ts
 # playwright
 /playwright-report/
 /test-results/
+/.playwright-cli/
 
 # Governance: autonome Steuerungsdateien (kein Produktcode, nicht nach Vercel)
 # Untracked Steuerungs-ZIP und Runtime-Ordner ausschließen

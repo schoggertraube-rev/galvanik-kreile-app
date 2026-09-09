@@ -1,0 +1,19 @@
+{
+  "description": "Kreile-Schutzguard. Die Laufzeitwirkung gilt erst nach Trust des Projekts und Bestätigung des exakten Hook-Hashes über /hooks als verifiziert.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$(git rev-parse --show-toplevel)/.codex/hooks/guard-destructive.mjs\"",
+            "commandWindows": "node \"C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.codex\\hooks\\guard-destructive.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Kreile-Projektguard prüft den Befehl"
+          }
+        ]
+      }
+    ]
+  }
+}
