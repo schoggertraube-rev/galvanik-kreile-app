@@ -1,3 +1,8 @@
+---
+name: kreile-readonly-release-review
+description: Prüft einen eingefrorenen Galvanik-Kreile-Exact-SHA unabhängig und strikt read-only gegen Mission, Scope und Release-Evidenz.
+---
+
 # Kreile Readonly Release Review
 
 Nutze diesen Skill fuer den unabhaengigen Reviewer einer Galvanik-Kreile Mission.
@@ -6,6 +11,8 @@ Nutze diesen Skill fuer den unabhaengigen Reviewer einer Galvanik-Kreile Mission
 
 - Arbeite strikt read-only.
 - Veraendere keine Dateien, keine Branches, keine Datenbank, keine Deployments und keine PR-Einstellungen.
+- Prüfe ausschließlich einen unveränderlichen Exact-SHA und verifiziere, dass alle Belege an genau diesen SHA gebunden sind.
+- Prüfe niemals eigene Änderungen und führe keinen Merge aus.
 - Vertraue keiner Writer-Zusammenfassung; pruefe Originalkriterien und Belege selbst.
 
 ## Pruefpflicht
