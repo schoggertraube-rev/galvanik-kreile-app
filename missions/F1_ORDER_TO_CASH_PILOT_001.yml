@@ -57,8 +57,8 @@ f1_5_contract_sha256: 5BCD70BFC2BD9D6A6DF06CF48D0D95C4A288DD5C6364BE2783954DDA11
 f1_5_payment_truth: EVOLVE_PUBLIC_INVOICES_NO_SECOND_PAYMENT_TABLE # Bauvertrag §4; public.zahlung = Legacy/Quarantaene
 f1_5_payment_mode_truth: ORDERS_FROM_INTAKE_DEFAULT_VORKASSE_AUDITED_COMMAND # D-F15-002; invoice stores immutable issuance snapshot
 f1_5_first_step: MANUAL_CONFIRM_PAYMENT_THEN_GOODS_OUT_GATE # Bauvertrag §0/§2/§3; Adapter erst danach (§5)
-f1_5_commands: confirmPayment(buero|meister|admin,PAYMENT_CONFIRMED_V1); setPaymentMode(buero|meister|admin,PAYMENT_MODE_SET_V1); recordGoodsOut(werkstatt|meister|admin,ORDER_PICKED_UP_V1)
-f1_5_gate_rule: VORKASSE_BLOCKED_UNTIL_PAID; ABHOLUNG_PAY_AT_HANDOVER; RECHNUNG_NO_GATE # D-F15-001
+f1_5_commands: confirmPayment(buero|meister|admin,PAYMENT_CONFIRMED_V1); setPaymentMode(buero|meister|admin,PAYMENT_MODE_SET_V1); recordGoodsOut(werkstatt|meister|admin,ORDER_PICKED_UP_V1|ORDER_PICKED_UP_V2)
+f1_5_gate_rule: VORKASSE_BLOCKED_UNTIL_PAID; ABHOLUNG_PAY_AT_HANDOVER; RECHNUNG_NO_GATE_WITH_V2_NOT_ISSUED_RECEIPT # D-F15-001 + Owner-Nachtrag 2026-09-09
 f1_5_read_port: private.v_payment_summary_v1 # oder begruendete Erweiterung von v_invoice_summary_v1, mit Gate-Zustand
 f1_5_roles_rule: NO_GENERIC_PERM_FINANCE # M3 §1: enges Gate je Uebergang
 # Owner-Entscheidung 2026-09-05 (beantwortet Bauvertrag §9):
@@ -315,9 +315,13 @@ f1_4_allowlist:
 
 f1_5_allowlist:
   - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md
+  - docs/project/linie/README.md
   - .github/workflows/quality.yml
+  - quality/eslint-baseline.json
   # A — Daten- und Read-Port-Vertrag
   - supabase/migrations/*_f1_5_payment_goods_out_contract.sql
+  - supabase/migrations/*_f1_5_payment_goods_out_v2_contract.sql
   - src/lib/server/paymentContract.ts
   - src/lib/server/paymentSummaryRead.ts
   - src/lib/server/__tests__/paymentSummaryRead.test.ts

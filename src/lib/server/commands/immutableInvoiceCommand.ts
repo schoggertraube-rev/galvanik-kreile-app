@@ -29,6 +29,7 @@ import {
  */
 
 const EVENT_TYPE = "INVOICE_CREATED_V1";
+const EVENT_TYPE_V2 = "INVOICE_CREATED_V2";
 const CANCEL_EVENT_TYPE = "INVOICE_CANCELLED_V1";
 const EVENT_SCHEMA_VERSION = 1 as const;
 const STATION = "fertig" as const;
@@ -46,7 +47,7 @@ export type CreateInvoiceInput = {
   clientEventId: string;
 };
 
-export type ImmutableInvoiceReceipt = {
+type ImmutableInvoiceReceiptBase = {
   invoiceId: string;
   invoiceNumber: string;
   orderId: string;
@@ -66,8 +67,12 @@ export type ImmutableInvoiceReceipt = {
   clientEventId: string;
   correlationId: string;
   aggregateVersion: 1;
-  eventSchemaVersion: 1;
 };
+
+export type ImmutableInvoiceReceipt = ImmutableInvoiceReceiptBase & (
+  | { eventSchemaVersion: 1 }
+  | { eventSchemaVersion: 2; invoiceSourceState: "after_goods_out" }
+);
 
 export type CreateInvoiceResult =
   | { code: "OK"; receipt: ImmutableInvoiceReceipt; replayed: boolean }
@@ -180,6 +185,8 @@ type SourceRow = {
   base_prices_complete: boolean;
   no_active_invoice: boolean;
   integrity_ok: boolean;
+  post_goods_out_invoice_eligible: boolean;
+  effective_integrity_ok: boolean;
   current_order_version: number;
   service_date: Date | string;
 };
@@ -623,8 +630,8 @@ function mapReceipt(row: ReceiptRow, tenantId: string, actorId: string): Immutab
     row.integrity_ok !== true
     || row.tenant_id !== tenantId
     || row.actor_id !== actorId
-    || row.event_type !== EVENT_TYPE
-    || eventSchemaVersion !== EVENT_SCHEMA_VERSION
+    || (row.event_type !== EVENT_TYPE && row.event_type !== EVENT_TYPE_V2)
+    || (row.event_type === EVENT_TYPE ? eventSchemaVersion !== EVENT_SCHEMA_VERSION : eventSchemaVersion !== 2)
     || aggregateVersion !== 1
     || !currentLifecycleValid
     || orderVersion < 1
@@ -644,7 +651,7 @@ function mapReceipt(row: ReceiptRow, tenantId: string, actorId: string): Immutab
     || vatAmountCents !== Math.round((netAmountCents * vatRateBasisPoints) / 10000)
   ) throw new Error("INVOICE_RECEIPT_INVALID");
 
-  return {
+  const receipt: ImmutableInvoiceReceiptBase = {
     invoiceId: row.invoice_id,
     invoiceNumber: row.invoice_number,
     orderId: row.order_id,
@@ -664,8 +671,10 @@ function mapReceipt(row: ReceiptRow, tenantId: string, actorId: string): Immutab
     clientEventId: row.client_event_id,
     correlationId: row.correlation_id,
     aggregateVersion: 1,
-    eventSchemaVersion: 1,
   };
+  return row.event_type === EVENT_TYPE_V2
+    ? { ...receipt, eventSchemaVersion: 2, invoiceSourceState: "after_goods_out" }
+    : { ...receipt, eventSchemaVersion: 1 };
 }
 
 function mapCancellationReceipt(
@@ -731,6 +740,24 @@ function mapCancellationReceipt(
 function receiptMatchesIntent(receipt: ImmutableInvoiceReceipt, input: CreateInvoiceInput): boolean {
   return receipt.orderId === input.orderId
     && receipt.orderVersion === input.expectedVersion;
+}
+
+async function readCreateInvoiceReceipts(
+  tx: PrivilegedTenantTransaction,
+  clientEventId: string,
+): Promise<ReceiptRow[]> {
+  return tx.execute<ReceiptRow>(sql`
+    SELECT *
+    FROM private.v_invoice_receipt_v1
+    WHERE client_event_id = ${clientEventId}
+      AND event_type = ${EVENT_TYPE}
+    UNION ALL
+    SELECT *
+    FROM private.v_invoice_created_receipt_v2
+    WHERE client_event_id = ${clientEventId}
+      AND event_type = ${EVENT_TYPE_V2}
+    LIMIT 2
+  `);
 }
 
 function cancellationReceiptMatchesIntent(
@@ -829,13 +856,7 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
         )
       `);
 
-      const replayRows = await tx.execute<ReceiptRow>(sql`
-        SELECT *
-        FROM private.v_invoice_receipt_v1
-        WHERE client_event_id = ${input.clientEventId}
-          AND event_type = ${EVENT_TYPE}
-        LIMIT 2
-      `);
+      const replayRows = await readCreateInvoiceReceipts(tx, input.clientEventId);
       if (replayRows.length > 0) {
         if (replayRows.length !== 1 || !replayRows[0]) {
           return { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
@@ -879,7 +900,11 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
       ) {
         return { code: "VALIDATION_ERROR", message: "Zahlungsmodus des Auftrags ist nicht verfügbar." };
       }
-      if (order.station !== STATION || order.status !== STATION) {
+      const afterGoodsOut = order.station === "abgeholt" && order.status === "abgeholt";
+      if (
+        (order.station !== STATION || order.status !== STATION)
+        && !(afterGoodsOut && order.payment_mode === "rechnung")
+      ) {
         return { code: "VALIDATION_ERROR", message: "Nur ein fertiggestellter Auftrag kann in Rechnung gestellt werden." };
       }
 
@@ -887,7 +912,7 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
       // never derives a calendar day from the database session time zone.
       const sourceRows = await tx.execute<SourceRow>(sql`
         SELECT source.*
-        FROM private.v_invoice_issue_source_v1 source
+        FROM private.v_invoice_issue_source_v2 source
         WHERE source.order_id = ${order.id}
         LIMIT 2
       `);
@@ -906,7 +931,8 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
         return { code: "CONFLICT", message: "Für diesen Auftrag besteht bereits eine aktive Rechnung." };
       }
       if (
-        !source.integrity_ok
+        !source.effective_integrity_ok
+        || (afterGoodsOut && !source.post_goods_out_invoice_eligible)
         || !source.seller_config_complete
         || !source.customer_config_complete
         || !source.base_prices_complete
@@ -987,6 +1013,22 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
       const invoiceId = randomUUID();
       const correlationId = randomUUID();
       const pdfRef = `invoice://${invoiceId}/original`;
+      const invoiceEventType = afterGoodsOut ? EVENT_TYPE_V2 : EVENT_TYPE;
+      const invoiceEventSchemaVersion = afterGoodsOut ? 2 : EVENT_SCHEMA_VERSION;
+      const invoiceEventStation = afterGoodsOut ? "abgeholt" : STATION;
+      const eventPayload = {
+        invoiceId,
+        freezeId: source.freeze_id,
+        invoiceNumber,
+        orderVersion: order.version,
+        netAmountCents,
+        vatRateBasisPoints,
+        vatAmountCents,
+        grossAmountCents,
+        pdfSha256,
+        invoiceVersion: 1,
+        ...(afterGoodsOut ? { invoiceSourceState: "after_goods_out" as const } : {}),
+      };
 
       const eventRows = await tx.execute<{ event_id: string }>(sql`
         INSERT INTO public.events (
@@ -995,21 +1037,10 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
           correlation_id, aggregate_version, from_station, created_at
         ) VALUES (
           gen_random_uuid()::text, ${tenantId}, ${order.id}, NULL,
-          ${EVENT_TYPE}, 'Unveränderliche Rechnung erstellt', ${actorId}::uuid,
-          ${JSON.stringify({
-            invoiceId,
-            freezeId: source.freeze_id,
-            invoiceNumber,
-            orderVersion: order.version,
-            netAmountCents,
-            vatRateBasisPoints,
-            vatAmountCents,
-            grossAmountCents,
-            pdfSha256,
-            invoiceVersion: 1,
-          })}::jsonb,
-          'success', ${STATION}, ${input.clientEventId}::uuid, ${EVENT_SCHEMA_VERSION},
-          ${correlationId}::uuid, 1, ${STATION},
+          ${invoiceEventType}, 'Unveränderliche Rechnung erstellt', ${actorId}::uuid,
+          ${JSON.stringify(eventPayload)}::jsonb,
+          'success', ${invoiceEventStation}, ${input.clientEventId}::uuid, ${invoiceEventSchemaVersion},
+          ${correlationId}::uuid, 1, ${invoiceEventStation},
           ${issuedAtIso}::timestamptz AT TIME ZONE 'UTC'
         )
         RETURNING id AS event_id
@@ -1057,13 +1088,7 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
         paymentMode: order.payment_mode,
       });
 
-      const receiptRows = await tx.execute<ReceiptRow>(sql`
-        SELECT *
-        FROM private.v_invoice_receipt_v1
-        WHERE client_event_id = ${input.clientEventId}
-          AND event_type = ${EVENT_TYPE}
-        LIMIT 2
-      `);
+      const receiptRows = await readCreateInvoiceReceipts(tx, input.clientEventId);
       if (receiptRows.length !== 1 || !receiptRows[0]) throw new Error("INVOICE_RECEIPT_MISSING");
       const receipt = mapReceipt(receiptRows[0], tenantId, actorId);
       if (

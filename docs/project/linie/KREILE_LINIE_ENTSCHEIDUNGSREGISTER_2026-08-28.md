@@ -170,3 +170,23 @@ Zweck: bereits getroffene Entscheidungen an allen Stellen konsistent machen. Bei
 Die ESLint-Ratsche wertete jede Änderung von `lintContractHash`/`judgeContractHash` gegenüber main als Basis-Verstoß. `quality` UND `ratchet` sind Required Checks (Ruleset `main-protection`, kein Bypass, auch nicht für Admins) — damit war keine ESLint-Regel (S0 Tenant-Verbot, S1 Fassade) und keine Judge-Änderung für irgendjemanden mergebar; #36/#55 gingen nur per Override durch (Präzedenz). Entscheid: Kontraktwechsel = explizite, sichtbare Migration (Kandidaten-Baseline trägt den eigenen Hash, NOTICE im CI-Log), kein Basis-Verstoß; Debt wird in beiden CI-Läufen mit dem **Basis**-Config gemessen (quality.yml + geschützter ratchet-Job, fail-closed), damit Regeländerungen keinen Debt verstecken können. Details: PROBLEMLOESUNGEN P8. Umgesetzt in PR #75 (S0+S1). Unabhängig red-teamt.
 
 **Einmaliger Owner-Akt:** der Migrations-PR #75 selbst kann `ratchet` nie bestehen (Basis-Judge = alte Regel) → Owner nimmt `ratchet` für diesen einen Merge aus dem Ruleset und trägt ihn danach wieder ein. Ab dann ist `ratchet` für jeden weiteren PR normal grün UND bindend.
+
+## D-F15-002 — Zahlungsmodus (Owner-Entscheidung 2026-09-05)
+
+**Frage (PL, Review PR #73):** Wer setzt den Zahlungsmodus (Vorkasse | Abholung | Rechnung), damit `confirmPayment`/`recordGoodsOut` eine kanonisch erzeugte Rechnung erreichen?
+
+**Entscheidung Owner (Siglinder, 2026-09-05 22:05):** „Zahlungsmodus wird bei Auftragsannahme angelegt und kann später aber geändert werden, wenn der Kunde doch per Überweisung etc. zahlen will. Aber generell eigentlich Vorkasse."
+
+**Bindende Ableitung:**
+1. `payment_mode` wird **bei der Auftragsannahme (Intake)** gesetzt; **Default = Vorkasse**, wenn nichts anderes gewählt wird. Kein NULL-Zustand im kanonischen Pfad.
+2. Der Modus ist **später änderbar** über einen eigenen, tenantgebundenen, auditierbaren Command (`setPaymentMode`, Rolle `buero|meister|admin`, append-only Ereignis, `expectedVersion`/`clientEventId` wie alle Commands) — z. B. Wechsel auf Rechnung/Überweisung oder Abholung.
+3. Gate-Regel je Modus bleibt D-F15-001 (Vorkasse gesperrt bis bezahlt; Abholung zahlen bei Übergabe; Rechnung kein Gate). Ein Moduswechsel nach bereits erfolgtem Warenausgang ist unzulässig (CONFLICT).
+4. Technischer Schnitt: Default-Setzung im Intake-/Rechnungs-Pfad additiv (kein F1.4-Vertragsbruch), `setPaymentMode` als Teil von F1.5/B2; `f1_5_allowlist` entsprechend erweitert. Bauvertrag F1.5 §2 „besitzt: … Modus" ist damit konkretisiert.
+
+## D-F15-003 — Rechnung-Warenausgang vor Rechnungserstellung (Owner 2026-09-09)
+
+**Entscheidung/Wortlaut:** Für `payment_mode=rechnung` darf der Ortsübergang `fertig -> abgeholt` auch ohne bereits ausgestellte Rechnung erfolgen. Dieser Fall erhält ausschließlich den additiven, DB-validierten Beleg `ORDER_PICKED_UP_V2` mit `invoiceState: not_issued`; es werden weder `paymentStatus` noch `openAmount` erfunden. Danach darf der kanonische Rechnungspfad für genau diesen belegten Zustand aus demselben eingefrorenen F1.4-Quellstand eine unveränderliche Rechnung mit `INVOICE_CREATED_V2` und `invoiceSourceState: after_goods_out` erstellen und anschließend `confirmPayment` ausführen. `ORDER_PICKED_UP_V1` und `INVOICE_CREATED_V1` bleiben vollständig unverändert.
+
+**Zweck:** Der reale Ablauf für Rechnungskunden bleibt möglich, ohne eine nicht existente Rechnung oder Zahlungswahrheit vorzutäuschen.
+
+**Wesentlicher Nachteil:** Der additive V2-Ereignis- und Read-Port-Vertrag erweitert die dauerhaft zu pflegende Vertrags- und Testmatrix; die strengere DB-Validierung verhindert dafür einen zweiten Zahlungs- oder Rechnungsstand.
