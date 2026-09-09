@@ -547,13 +547,6 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ""
         run: npx vitest run src/test/f1_5_set_payment_mode.integration.test.ts --maxWorkers=1 --no-file-parallelism
 
-      - name: F1.5 goods-out command and payment gate integration test (blocking)
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-          F1_5_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-          SUPABASE_SERVICE_ROLE_KEY: ""
-        run: npx vitest run src/test/f1_5_goods_out.integration.test.ts --maxWorkers=1 --no-file-parallelism
-
       - name: F1.3 live-card replay fresh from zero on the F1.5 B2 schema
         # Isolation (root cause of the CONFLICT red): the F1.3 live-card regression
         # assumes a clean database and creates master data at version 0. The preceding

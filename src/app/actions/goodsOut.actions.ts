@@ -13,7 +13,6 @@ export async function recordGoodsOutAction(
   const result = await recordGoodsOut(input);
   if (result.code === "OK") {
     revalidatePath("/warendurchlauf");
-    revalidatePath("/cockpit");
     revalidatePath("/buchhaltung/rechnungen");
   }
   return result;
