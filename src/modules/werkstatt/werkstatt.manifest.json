@@ -1,0 +1,32 @@
+{
+  "moduleId": "werkstatt",
+  "version": "1.0.0",
+  "owner": "Path-1 Werkstatt (Phillip V4 Kontroll-Home)",
+  "publicExports": [
+    "@/modules/werkstatt/public#PhillipOrderCard",
+    "@/modules/werkstatt/public#PhillipWerkstattViewModel",
+    "@/modules/werkstatt/public#WerkstattData",
+    "@/modules/werkstatt/public#WerkstattHeldCard",
+    "@/modules/werkstatt/public#WerkstattKpiSnapshot",
+    "@/modules/werkstatt/public#WerkstattSurfaceOrder",
+    "@/modules/werkstatt/public#WerkstattViewPorts",
+    "@/modules/werkstatt/public#buildWerkstattData",
+    "@/modules/werkstatt/public#WerkstattView",
+    "@/modules/werkstatt/public#WerkstattLoading"
+  ],
+  "capabilities": [],
+  "migrations": [
+    "20260908101500_werkstatt_kpi_view.sql"
+  ],
+  "viewsFunctions": [
+    "public.v_werkstatt_kpis_v1"
+  ],
+  "ownsTables": [],
+  "storagePurposes": [],
+  "events": {
+    "emits": [],
+    "consumes": []
+  },
+  "config": {},
+  "dependencies": []
+}

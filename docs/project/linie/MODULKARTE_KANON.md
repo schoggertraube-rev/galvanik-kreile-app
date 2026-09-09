@@ -13,6 +13,7 @@ Quelle: Owner-Modulmindmap „Baustruktur Mini-USP" (Stand 15.08.2026), ratifizi
 
 ## HOME/UI (kein eigenes „Modul", sondern Sicht auf dieselben Daten)
 - Werkstatt = Phillip V4 (Kontroll-Home „Heute sichern"). „Der Tag" = Rolf V8. Referenz: `ui/`.
+- **Kandidat (S4, noch nicht reviewed/gemergt):** `src/modules/werkstatt/` traegt die Phillip-V4-UI; `/warendurchlauf` bleibt Kompositionswurzel und liest unveraendert ueber die bestehenden `getWareneingangOrdersAction`/`getGalvanikOrdersAction`.
 
 ## QUARANTÄNE — später andocken, jetzt NUR als Vertrag/Anschluss-Stelle, kein Eigenbau
 - OCR (externer Provider/API, kein Eigenbau).

@@ -1,21 +1,27 @@
 import { isOrderStationForwardRole } from "@/lib/orders/orderLifecycleContract";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import {
-  WarendurchlaufCockpitClient,
-  type PhillipOrderCard,
+  buildWerkstattData,
   type PhillipWerkstattViewModel,
-} from "./WarendurchlaufCockpitClient";
+  type WerkstattSurfaceOrder,
+} from "@/modules/werkstatt/public";
 import {
   getGalvanikOrdersAction,
+  getWarendurchlaufKPIs,
   getWareneingangOrdersAction,
   type WarendurchlaufOrder,
 } from "@/app/warendurchlauf/actions";
+import { WerkstattAppAdapter } from "./WerkstattAppAdapter";
 
 const DENIAL_MESSAGE = "Zugriff nicht erlaubt.";
 const ERROR_MESSAGE = "Werkstattdaten konnten nicht sicher geladen werden.";
 const CONFLICT_MESSAGE = "Werkstattdaten enthalten widersprüchliche Auftragskennungen.";
 
-function toPhillipOrderCard(order: WarendurchlaufOrder): PhillipOrderCard {
+function render(view: PhillipWerkstattViewModel) {
+  return <WerkstattAppAdapter view={view} />;
+}
+
+function toWerkstattSurfaceOrder(order: WarendurchlaufOrder): WerkstattSurfaceOrder {
   return {
     id: order.id,
     orderNumber: order.orderNumber,
@@ -27,13 +33,10 @@ function toPhillipOrderCard(order: WarendurchlaufOrder): PhillipOrderCard {
     status: order.status,
     statusText: order.statusText,
     risk: order.risk,
+    dueDate: order.dueDate,
     dueLabel: order.dueLabel,
     dueValue: order.dueValue,
   };
-}
-
-function render(view: PhillipWerkstattViewModel) {
-  return <WarendurchlaufCockpitClient view={view} />;
 }
 
 function hasDuplicateCanonicalOrder(orders: readonly WarendurchlaufOrder[]) {
@@ -70,19 +73,22 @@ export default async function WarendurchlaufIndex() {
 
   let wareneingangResult;
   let galvanikResult;
+  let kpiResult;
   try {
-    [wareneingangResult, galvanikResult] = await Promise.all([
+    [wareneingangResult, galvanikResult, kpiResult] = await Promise.all([
       getWareneingangOrdersAction(),
       getGalvanikOrdersAction(),
+      getWarendurchlaufKPIs(),
     ]);
   } catch {
     return render({ kind: "error", message: ERROR_MESSAGE });
   }
 
-  if (!wareneingangResult.ok || !galvanikResult.ok) {
+  if (!wareneingangResult.ok || !galvanikResult.ok || !kpiResult.ok) {
     const denied =
       (!wareneingangResult.ok && ["AUTH_ERROR", "FORBIDDEN"].includes(wareneingangResult.error)) ||
-      (!galvanikResult.ok && ["AUTH_ERROR", "FORBIDDEN"].includes(galvanikResult.error));
+      (!galvanikResult.ok && ["AUTH_ERROR", "FORBIDDEN"].includes(galvanikResult.error)) ||
+      (!kpiResult.ok && ["AUTH_ERROR", "FORBIDDEN"].includes(kpiResult.error));
 
     return render({
       kind: denied ? "denied" : "error",
@@ -90,21 +96,24 @@ export default async function WarendurchlaufIndex() {
     });
   }
 
+  const canCreateOrder = authorization.data.permissions.includes("perm_data_orders");
+
   if (hasDuplicateCanonicalOrder([...wareneingangResult.data, ...galvanikResult.data])) {
     return render({ kind: "conflict", message: CONFLICT_MESSAGE });
   }
 
   if (wareneingangResult.data.length === 0 && galvanikResult.data.length === 0) {
-    return render({
-      kind: "empty",
-      canCreateOrder: authorization.data.permissions.includes("perm_data_orders"),
-    });
+    return render({ kind: "empty", canCreateOrder });
   }
 
   return render({
     kind: "data",
-    canCreateOrder: authorization.data.permissions.includes("perm_data_orders"),
-    wareneingang: wareneingangResult.data.map(toPhillipOrderCard),
-    galvanik: galvanikResult.data.map(toPhillipOrderCard),
+    ...buildWerkstattData({
+      wareneingang: wareneingangResult.data.map(toWerkstattSurfaceOrder),
+      galvanik: galvanikResult.data.map(toWerkstattSurfaceOrder),
+      canCreateOrder,
+      greetingName: authorization.data.displayName ?? null,
+      kpis: kpiResult.data,
+    }),
   });
 }
