@@ -18,8 +18,8 @@ import {
 } from "@/lib/server/privilegedDb";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
-const EVENT_TYPE = "ORDER_PICKED_UP_V1" as const;
-const EVENT_SCHEMA_VERSION = 1 as const;
+const EVENT_TYPE_V1 = "ORDER_PICKED_UP_V1" as const;
+const EVENT_TYPE_V2 = "ORDER_PICKED_UP_V2" as const;
 const SOURCE_STATION = ORDER_LIFECYCLE_STATUS.FERTIG;
 const TARGET_STATION = ORDER_LIFECYCLE_STATUS.ABGEHOLT;
 const GOODS_OUT_ROLES = ["werkstatt", "meister", "admin"] as const;
@@ -35,11 +35,10 @@ export type RecordGoodsOutInput = {
   clientEventId: string;
 };
 
-export type GoodsOutReceipt = {
+type GoodsOutReceiptBase = {
   eventId: string;
   clientEventId: string;
   correlationId: string;
-  eventSchemaVersion: 1;
   orderId: string;
   expectedVersion: number;
   orderVersion: number;
@@ -47,11 +46,23 @@ export type GoodsOutReceipt = {
   toStation: "abgeholt";
   mode: GoodsOutMode;
   paymentMode: PaymentMode;
-  paymentStatus: PaymentStatus;
-  openAmountCents: number;
   actorId: string;
   occurredAt: string;
 };
+
+export type GoodsOutReceiptV1 = GoodsOutReceiptBase & {
+  eventSchemaVersion: 1;
+  paymentStatus: PaymentStatus;
+  openAmountCents: number;
+};
+
+export type GoodsOutReceiptV2 = GoodsOutReceiptBase & {
+  eventSchemaVersion: 2;
+  paymentMode: "rechnung";
+  invoiceState: "not_issued";
+};
+
+export type GoodsOutReceipt = GoodsOutReceiptV1 | GoodsOutReceiptV2;
 
 export type RecordGoodsOutResult =
   | { code: "OK"; receipt: GoodsOutReceipt; replayed: boolean }
@@ -236,27 +247,23 @@ function parseEvent(row: GoodsOutEventRow, tenantId: string): GoodsOutReceipt {
     throw new Error("GOODS_OUT_RECEIPT_PAYLOAD_INVALID");
   }
   const payload = row.payload as Record<string, unknown>;
-  const expectedKeys = [
-    "gateAllowed", "mode", "openAmountCents", "orderId", "orderVersion",
-    "paymentMode", "paymentStatus",
-  ];
   const actualKeys = Object.keys(payload).sort();
   const orderVersion = toNonNegativeInteger(payload.orderVersion);
-  const openAmountCents = toNonNegativeInteger(payload.openAmountCents);
   const eventVersion = toNonNegativeInteger(row.aggregate_version);
+  const eventSchemaVersion = toNonNegativeInteger(row.event_schema_version);
   const occurredAt = toIso(row.occurred_at);
   if (
-    row.event_type !== EVENT_TYPE
+    (row.event_type !== EVENT_TYPE_V1 && row.event_type !== EVENT_TYPE_V2)
     || row.tenant_id !== tenantId
     || row.status !== "success"
     || row.from_station !== SOURCE_STATION
     || row.station !== TARGET_STATION
-    || toNonNegativeInteger(row.event_schema_version) !== EVENT_SCHEMA_VERSION
+    || eventSchemaVersion === null
+    || (row.event_type === EVENT_TYPE_V1 ? eventSchemaVersion !== 1 : eventSchemaVersion !== 2)
     || eventVersion === null
     || orderVersion === null
     || orderVersion !== eventVersion
     || orderVersion <= 0
-    || openAmountCents === null
     || typeof row.event_id !== "string"
     || row.event_id.length === 0
     || typeof row.client_event_id !== "string"
@@ -268,21 +275,16 @@ function parseEvent(row: GoodsOutEventRow, tenantId: string): GoodsOutReceipt {
     || typeof row.order_id !== "string"
     || row.order_id.length === 0
     || occurredAt === null
-    || actualKeys.length !== expectedKeys.length
-    || !actualKeys.every((key, index) => key === expectedKeys[index])
     || payload.orderId !== row.order_id
     || !isGoodsOutMode(payload.mode)
     || !isPaymentMode(payload.paymentMode)
-    || (payload.paymentStatus !== "offen" && payload.paymentStatus !== "teilbezahlt" && payload.paymentStatus !== "bezahlt")
     || payload.gateAllowed !== true
-    || (payload.paymentMode !== "rechnung" && (payload.paymentStatus !== "bezahlt" || openAmountCents !== 0))
   ) throw new Error("GOODS_OUT_RECEIPT_INVALID");
 
-  return {
+  const base = {
     eventId: row.event_id,
     clientEventId: row.client_event_id,
     correlationId: row.correlation_id,
-    eventSchemaVersion: EVENT_SCHEMA_VERSION,
     orderId: row.order_id,
     expectedVersion: orderVersion - 1,
     orderVersion,
@@ -290,10 +292,38 @@ function parseEvent(row: GoodsOutEventRow, tenantId: string): GoodsOutReceipt {
     toStation: TARGET_STATION,
     mode: payload.mode,
     paymentMode: payload.paymentMode,
-    paymentStatus: payload.paymentStatus,
-    openAmountCents,
     actorId: row.actor_id,
     occurredAt,
+  };
+
+  if (row.event_type === EVENT_TYPE_V2) {
+    const expectedKeys = ["gateAllowed", "invoiceState", "mode", "orderId", "orderVersion", "paymentMode"];
+    if (
+      actualKeys.length !== expectedKeys.length
+      || !actualKeys.every((key, index) => key === expectedKeys[index])
+      || payload.paymentMode !== "rechnung"
+      || payload.invoiceState !== "not_issued"
+    ) throw new Error("GOODS_OUT_RECEIPT_INVALID");
+    return { ...base, eventSchemaVersion: 2, paymentMode: "rechnung", invoiceState: "not_issued" };
+  }
+
+  const expectedKeys = [
+    "gateAllowed", "mode", "openAmountCents", "orderId", "orderVersion",
+    "paymentMode", "paymentStatus",
+  ];
+  const openAmountCents = toNonNegativeInteger(payload.openAmountCents);
+  if (
+    actualKeys.length !== expectedKeys.length
+    || !actualKeys.every((key, index) => key === expectedKeys[index])
+    || openAmountCents === null
+    || (payload.paymentStatus !== "offen" && payload.paymentStatus !== "teilbezahlt" && payload.paymentStatus !== "bezahlt")
+    || (payload.paymentMode !== "rechnung" && (payload.paymentStatus !== "bezahlt" || openAmountCents !== 0))
+  ) throw new Error("GOODS_OUT_RECEIPT_INVALID");
+  return {
+    ...base,
+    eventSchemaVersion: 1,
+    paymentStatus: payload.paymentStatus,
+    openAmountCents,
   };
 }
 
@@ -362,7 +392,11 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
 
       const existingEvents = await readEventsByClientId(tx, tenantId, input.clientEventId);
       if (existingEvents.length > 0) {
-        if (existingEvents.length !== 1 || !existingEvents[0] || existingEvents[0].event_type !== EVENT_TYPE) {
+        if (
+          existingEvents.length !== 1
+          || !existingEvents[0]
+          || (existingEvents[0].event_type !== EVENT_TYPE_V1 && existingEvents[0].event_type !== EVENT_TYPE_V2)
+        ) {
           return { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
         }
         const receipt = parseEvent(existingEvents[0], tenantId);
@@ -398,26 +432,36 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
       }
 
       const invoices = await readActiveInvoice(tx, tenantId, order.id);
-      const invoice = invoices[0];
-      if (
-        invoices.length !== 1
-        || !invoice
-        || invoice.tenant_id !== tenantId
-        || invoice.order_id !== order.id
-        || invoice.status !== "issued"
-        || toNonNegativeInteger(invoice.contract_version) !== 1
-        || toNonNegativeInteger(invoice.payment_contract_version) !== PAYMENT_CONTRACT_VERSION
-      ) {
+      if (invoices.length > 1) {
         return { code: "CONFLICT", message: "Warenausgang erfordert eine gültige Rechnung." };
       }
+      const invoice = invoices[0];
+      const invoiceNotIssued = invoices.length === 0;
+      let summary: ReturnType<typeof mapPaymentSummaryRow> | null = null;
+      if (invoiceNotIssued) {
+        if (order.payment_mode !== "rechnung") {
+          return { code: "CONFLICT", message: "Warenausgang erfordert eine gültige Rechnung." };
+        }
+      } else {
+        if (
+          !invoice
+          || invoice.tenant_id !== tenantId
+          || invoice.order_id !== order.id
+          || invoice.status !== "issued"
+          || toNonNegativeInteger(invoice.contract_version) !== 1
+          || toNonNegativeInteger(invoice.payment_contract_version) !== PAYMENT_CONTRACT_VERSION
+        ) {
+          return { code: "CONFLICT", message: "Warenausgang erfordert eine gültige Rechnung." };
+        }
 
-      const summaryRows = await readPaymentSummary(tx, tenantId, order.id);
-      if (summaryRows.length !== 1 || !summaryRows[0] || summaryRows[0].invoice_id !== invoice.id) {
-        return { code: "CONFLICT", message: "Zahlungsfreigabe ist nicht verfügbar." };
-      }
-      const summary = mapPaymentSummaryRow(summaryRows[0], paymentAuthorization(authorization.data));
-      if (summary.mode !== order.payment_mode || !summary.goodsOutAllowed) {
-        return { code: "CONFLICT", message: "Zahlung ist für den Warenausgang noch offen." };
+        const summaryRows = await readPaymentSummary(tx, tenantId, order.id);
+        if (summaryRows.length !== 1 || !summaryRows[0] || summaryRows[0].invoice_id !== invoice.id) {
+          return { code: "CONFLICT", message: "Zahlungsfreigabe ist nicht verfügbar." };
+        }
+        summary = mapPaymentSummaryRow(summaryRows[0], paymentAuthorization(authorization.data));
+        if (summary.mode !== order.payment_mode || !summary.goodsOutAllowed) {
+          return { code: "CONFLICT", message: "Zahlung ist für den Warenausgang noch offen." };
+        }
       }
 
       const items = await tx.execute<LockedItem>(sql`
@@ -470,13 +514,22 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
       }
 
       const correlationId = randomUUID();
-      const payload = {
+      const eventType = invoiceNotIssued ? EVENT_TYPE_V2 : EVENT_TYPE_V1;
+      const eventSchemaVersion = invoiceNotIssued ? 2 : 1;
+      const payload = invoiceNotIssued ? {
         orderId: order.id,
         mode: input.mode,
         orderVersion: nextVersion,
-        paymentMode: summary.mode,
-        paymentStatus: summary.status,
-        openAmountCents: summary.openAmountCents,
+        paymentMode: "rechnung" as const,
+        invoiceState: "not_issued" as const,
+        gateAllowed: true,
+      } : {
+        orderId: order.id,
+        mode: input.mode,
+        orderVersion: nextVersion,
+        paymentMode: summary!.mode,
+        paymentStatus: summary!.status,
+        openAmountCents: summary!.openAmountCents,
         gateAllowed: true,
       };
       const inserted = await tx.execute<{ event_id: string }>(sql`
@@ -485,10 +538,10 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
           payload, status, station, client_event_id, event_schema_version,
           correlation_id, aggregate_version, from_station, created_at
         ) VALUES (
-          gen_random_uuid()::text, ${tenantId}, ${order.id}, NULL, ${EVENT_TYPE},
+          gen_random_uuid()::text, ${tenantId}, ${order.id}, NULL, ${eventType},
           'Warenausgang gebucht', ${actorId}::uuid, ${JSON.stringify(payload)}::jsonb,
           'success', ${TARGET_STATION}, ${input.clientEventId}::uuid,
-          ${EVENT_SCHEMA_VERSION}, ${correlationId}::uuid, ${nextVersion},
+          ${eventSchemaVersion}, ${correlationId}::uuid, ${nextVersion},
           ${SOURCE_STATION}, clock_timestamp() AT TIME ZONE 'UTC'
         )
         RETURNING id AS event_id

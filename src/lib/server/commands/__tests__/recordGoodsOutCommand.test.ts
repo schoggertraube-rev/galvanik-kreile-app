@@ -133,6 +133,22 @@ function eventRow(mode: "versand" | "abholung" = "versand", paymentMode: "vorkas
   };
 }
 
+function eventRowV2(mode: "versand" | "abholung" = "versand") {
+  return {
+    ...eventRow(mode, "rechnung", "offen"),
+    event_schema_version: 2,
+    event_type: "ORDER_PICKED_UP_V2",
+    payload: {
+      orderId: ORDER,
+      mode,
+      orderVersion: 4,
+      paymentMode: "rechnung",
+      invoiceState: "not_issued",
+      gateAllowed: true,
+    },
+  };
+}
+
 function queryText(query: Query): string {
   return [
     query.text,
@@ -150,11 +166,13 @@ function configureSuccess(options: {
   paymentStatus?: "offen" | "teilbezahlt" | "bezahlt";
   items?: number;
   malformedReadback?: boolean;
+  invoiceIssued?: boolean;
 } = {}) {
   const mode = options.mode ?? "versand";
   const paymentMode = options.paymentMode ?? "vorkasse";
   const paymentStatus = options.paymentStatus ?? "bezahlt";
   const itemCount = options.items ?? 1;
+  const invoiceIssued = options.invoiceIssued ?? true;
   let eventReads = 0;
   let orderReads = 0;
   execute.mockImplementation((query: Query) => {
@@ -163,7 +181,7 @@ function configureSuccess(options: {
     if (text.includes("FROM public.events")) {
       eventReads += 1;
       return Promise.resolve(eventReads === 1 ? [] : [{
-        ...eventRow(mode, paymentMode, paymentStatus),
+        ...(invoiceIssued ? eventRow(mode, paymentMode, paymentStatus) : eventRowV2(mode)),
         ...(options.malformedReadback ? { aggregate_version: 5 } : {}),
       }]);
     }
@@ -173,7 +191,7 @@ function configureSuccess(options: {
         ? [{ ...finishedOrder, payment_mode: paymentMode }]
         : [pickedUpOrder]);
     }
-    if (text.includes("FROM public.invoices")) return Promise.resolve([invoice]);
+    if (text.includes("FROM public.invoices")) return Promise.resolve(invoiceIssued ? [invoice] : []);
     if (text.includes("FROM private.v_payment_summary_v1")) return Promise.resolve([summary(paymentMode, paymentStatus)]);
     if (text.includes("FROM public.items")) return Promise.resolve(Array.from({ length: itemCount }, (_, index) => ({
       id: `item-${index}`,
@@ -301,12 +319,30 @@ describe("recordGoodsOut", () => {
       receipt: { paymentMode: "rechnung", paymentStatus: "offen", openAmountCents: 10_000 },
     });
 
+    execute.mockReset();
+    configureSuccess({ paymentMode: "rechnung", mode: "versand", invoiceIssued: false });
+    await expect(recordGoodsOut(input)).resolves.toMatchObject({
+      code: "OK",
+      replayed: false,
+      receipt: {
+        eventSchemaVersion: 2,
+        paymentMode: "rechnung",
+        invoiceState: "not_issued",
+      },
+    });
+    const v2Sql = execute.mock.calls.map(([query]) => queryText(query as Query)).join("\n");
+    expect(v2Sql).not.toContain("FROM private.v_payment_summary_v1");
+    const v2Insert = execute.mock.calls
+      .map(([query]) => query as Query)
+      .find((query) => queryText(query).includes("INSERT INTO public.events"));
+    expect(v2Insert?.values).toContain("ORDER_PICKED_UP_V2");
+
     for (const label of ["missing", "cancelled", "foreign"] as const) {
       execute.mockReset();
       execute.mockImplementation((query: Query) => {
         const text = queryText(query);
         if (text.includes("pg_advisory_xact_lock") || text.includes("FROM public.events")) return Promise.resolve([]);
-        if (text.includes("FROM public.orders")) return Promise.resolve([finishedOrder]);
+        if (text.includes("FROM public.orders")) return Promise.resolve([{ ...finishedOrder, payment_mode: "vorkasse" }]);
         if (text.includes("FROM public.invoices")) return Promise.resolve([]);
         throw new Error(`Unexpected SQL: ${text}`);
       });

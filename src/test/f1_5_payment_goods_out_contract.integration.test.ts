@@ -1,6 +1,14 @@
+// @vitest-environment node
+
+import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
+import type { AppSession } from "@/lib/server/appSession";
+import type { PaymentMode } from "@/lib/server/paymentContract";
+
+(globalThis as typeof globalThis & { AsyncLocalStorage: typeof AsyncLocalStorage }).AsyncLocalStorage = AsyncLocalStorage;
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const EXPECTED_DATABASE_URL = process.env.F1_5_EXPECTED_DATABASE_URL;
@@ -25,6 +33,9 @@ if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
 const sql = postgres(DATABASE_URL, { max: 2, prepare: false });
 const suffix = `${Date.now()}-${process.pid}`;
 const PAID_AT = "2026-09-05T10:00:00.000Z";
+const TEST_SESSION_SECRET = "f1-5-contract-real-session-local-only";
+const ORIGINAL_SESSION_SECRET = process.env.APP_SESSION_SECRET;
+process.env.APP_SESSION_SECRET = TEST_SESSION_SECRET;
 
 type Tx = postgres.ISql;
 
@@ -91,6 +102,236 @@ const OWN = createFixture("own", "R-2026-9501");
 const FOREIGN = createFixture("foreign", "R-2026-9502");
 const EMPTY_TENANT = `f15-empty-${suffix}`;
 const EMPTY_USER_ID = randomUUID();
+const COMMAND_TENANT = KREILE_TENANT_SLUG;
+const COMMAND_USERS = {
+  werkstatt: randomUUID(),
+  admin: randomUUID(),
+  readonly: randomUUID(),
+} as const;
+const COMMAND_CUSTOMER = `f15-command-customer-${suffix}`;
+const COMMAND_RATE = randomUUID();
+
+async function withRealSession<T>(
+  role: keyof typeof COMMAND_USERS,
+  work: () => Promise<T>,
+): Promise<T> {
+  const { NextRequest } = await import("next/server");
+  const { createRequestStoreForAPI } = await import("next/dist/server/async-storage/request-store");
+  const { workAsyncStorage } = await import("next/dist/server/app-render/work-async-storage.external");
+  const { workUnitAsyncStorage } = await import("next/dist/server/app-render/work-unit-async-storage.external");
+  const {
+    COOKIE_NAME,
+    getSecretKey,
+    readAppSession,
+    signAppSession,
+  } = await import("@/lib/server/appSession");
+  process.env.APP_SESSION_SECRET = TEST_SESSION_SECRET;
+  const now = Date.now();
+  const session: AppSession = {
+    userId: COMMAND_USERS[role],
+    tenantId: COMMAND_TENANT,
+    role,
+    displayName: `F1.5 Contract ${role}`,
+    issuedAt: now - 1_000,
+    expiresAt: now + 60_000,
+  };
+  const token = signAppSession(session, getSecretKey());
+  const request = new NextRequest("http://127.0.0.1/test", {
+    headers: { cookie: `${COOKIE_NAME}=${token}` },
+  });
+  const workStore = {
+    isStaticGeneration: false,
+    page: "/test",
+    route: "/test",
+    afterContext: {},
+    previouslyRevalidatedTags: [],
+    refreshTagsByCacheKind: new Map(),
+    shouldTrackFetchMetrics: false,
+    deploymentId: "test",
+    buildId: "test",
+    cacheComponentsEnabled: false,
+    runInCleanSnapshot: (fn: (...args: never[]) => unknown, ...args: never[]) => fn(...args),
+    reactServerErrorsByDigest: new Map(),
+  } as unknown as import("next/dist/server/app-render/work-async-storage.external").WorkStore;
+  const requestStore = createRequestStoreForAPI(
+    request,
+    { pathname: "/test", search: "" },
+    { tags: [], expirationsByCacheKind: new Map() },
+    undefined,
+    undefined as never,
+  );
+  return workAsyncStorage.run(workStore, () => workUnitAsyncStorage.run(requestStore, async () => {
+    const sessionReadback = await readAppSession();
+    if (!sessionReadback.ok) {
+      throw new Error(`REAL_SESSION_READBACK_FAILED:${sessionReadback.reason}`);
+    }
+    expect(sessionReadback.session).toMatchObject({
+      userId: session.userId,
+      tenantId: session.tenantId,
+      role: session.role,
+    });
+    return work();
+  }));
+}
+
+async function seedCommandPrerequisites() {
+  await sql.begin(async (transaction) => {
+    for (const [role, userId] of Object.entries(COMMAND_USERS)) {
+      await transaction`
+        INSERT INTO public.app_users
+          (id, tenant_id, email, full_name, role, active, created_at, updated_at)
+        VALUES (
+          ${userId}::uuid, ${COMMAND_TENANT}, ${`f15-contract-${role}-${suffix}@local.invalid`},
+          ${`F1.5 Contract ${role}`}, ${role}, true, now(), now()
+        ) ON CONFLICT (id) DO UPDATE SET active = true, role = EXCLUDED.role
+      `;
+    }
+    await transaction`
+      INSERT INTO public.company_settings (
+        id, tenant_id, company_name, street, zip, city, country,
+        iban, bic, bank_name, tax_id, invoice_vat_rate_basis_points,
+        invoice_payment_term_days
+      ) VALUES (
+        'f14-command-settings', ${COMMAND_TENANT}, 'F1.5 Contract GmbH',
+        'Testweg 1', '70173', 'Stuttgart', 'Deutschland',
+        'DE02120300000000202051', 'BYLADEM1001', 'Testbank',
+        'DE-SYNTHETIC-TAX', 1900, 14
+      ) ON CONFLICT (id) DO UPDATE SET
+        invoice_vat_rate_basis_points = EXCLUDED.invoice_vat_rate_basis_points,
+        invoice_payment_term_days = EXCLUDED.invoice_payment_term_days
+    `;
+    await transaction`
+      INSERT INTO public.customers (
+        id, tenant_id, customer_number, name, company_name, type,
+        street, zip_code, city, country, created_at, updated_at
+      ) VALUES (
+        ${COMMAND_CUSTOMER}, ${COMMAND_TENANT}, ${`F15-${suffix}`}, 'F1.5 Contract Customer',
+        'F1.5 Contract Customer GmbH', 'business', 'Kundenweg 2',
+        '70174', 'Stuttgart', 'Deutschland', now(), now()
+      ) ON CONFLICT (id) DO NOTHING
+    `;
+    await transaction`
+      INSERT INTO private.extra_work_hourly_rates
+        (id, tenant_id, hourly_rate_cents, version, created_by, effective_at)
+      VALUES (${COMMAND_RATE}::uuid, ${COMMAND_TENANT}, 12000, 2900, ${COMMAND_USERS.admin}::uuid, now())
+      ON CONFLICT (tenant_id, version) DO NOTHING
+    `;
+  });
+}
+
+type CommandReadyOrder = {
+  orderId: string;
+  version: number;
+  invoiceId: string | null;
+  grossAmountCents: number | null;
+};
+
+async function createCommandReadyOrder(
+  label: string,
+  paymentMode: PaymentMode,
+  issueInvoice: boolean,
+): Promise<CommandReadyOrder> {
+  const { createOrderIntake } = await import("@/lib/server/commands/orderIntakeCommand");
+  const intake = await withRealSession("admin", () => createOrderIntake({
+    clientEventId: randomUUID(),
+    customer: { mode: "EXISTING", customerId: COMMAND_CUSTOMER },
+    dueDate: "2026-09-30",
+    note: `F1.5 contract ${label}`,
+    items: [{ name: label, quantity: 1, material: "Stahl", surfaceRequested: "Galvanik" }],
+  }));
+  expect(intake.code).toBe("OK");
+  if (intake.code !== "OK") throw new Error(`INTAKE_FAILED:${intake.code}`);
+  const itemId = intake.receipt.items[0]?.id;
+  if (!itemId) throw new Error("ITEM_MISSING");
+
+  if (paymentMode !== "vorkasse") {
+    const { setPaymentMode } = await import("@/lib/server/commands/setPaymentModeCommand");
+    const mode = await withRealSession("admin", () => setPaymentMode({
+      orderId: intake.receipt.orderId,
+      paymentMode,
+      expectedVersion: 0,
+      clientEventId: randomUUID(),
+    }));
+    expect(mode.code).toBe("OK");
+  }
+
+  const { transitionWareneingangToGalvanik } = await import("@/lib/server/commands/orderStationCommand");
+  const station = await withRealSession("admin", () => transitionWareneingangToGalvanik({
+    orderId: intake.receipt.orderId,
+    expectedVersion: intake.receipt.orderVersion,
+    clientEventId: randomUUID(),
+  }));
+  expect(station.code).toBe("OK");
+  if (station.code !== "OK") throw new Error(`STATION_FAILED:${station.code}`);
+
+  await sql`
+    UPDATE public.items SET preis_netto = 100.00
+    WHERE id = ${itemId} AND order_id = ${intake.receipt.orderId} AND tenant_id = ${COMMAND_TENANT}
+  `;
+  const { freezeOrder } = await import("@/lib/server/commands/orderFreezeCommand");
+  const frozen = await withRealSession("admin", () => freezeOrder({
+    orderId: intake.receipt.orderId,
+    freezeId: randomUUID(),
+    expectedVersion: station.receipt.aggregateVersion,
+    clientEventId: randomUUID(),
+  }));
+  expect(frozen.code).toBe("OK");
+  if (frozen.code !== "OK") throw new Error(`FREEZE_FAILED:${frozen.code}`);
+
+  if (!issueInvoice) {
+    return { orderId: intake.receipt.orderId, version: frozen.receipt.aggregateVersion, invoiceId: null, grossAmountCents: null };
+  }
+  const { createInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
+  const issued = await withRealSession("admin", () => createInvoice({
+    orderId: intake.receipt.orderId,
+    expectedVersion: frozen.receipt.aggregateVersion,
+    clientEventId: randomUUID(),
+  }));
+  expect(issued.code).toBe("OK");
+  if (issued.code !== "OK") throw new Error(`INVOICE_FAILED:${issued.code}`);
+  return {
+    orderId: intake.receipt.orderId,
+    version: frozen.receipt.aggregateVersion,
+    invoiceId: issued.receipt.invoiceId,
+    grossAmountCents: issued.receipt.grossAmountCents,
+  };
+}
+
+async function readCommandSnapshot(orderId: string) {
+  const [row] = await sql<{
+    station: string;
+    version: number;
+    v1_events: number;
+    v2_events: number;
+    invoices: number;
+  }[]>`
+    SELECT orders.station, orders.version,
+      (SELECT count(*)::integer FROM public.events event
+       WHERE event.tenant_id = orders.tenant_id AND event.order_id = orders.id
+         AND event.event_type = 'ORDER_PICKED_UP_V1') AS v1_events,
+      (SELECT count(*)::integer FROM public.events event
+       WHERE event.tenant_id = orders.tenant_id AND event.order_id = orders.id
+         AND event.event_type = 'ORDER_PICKED_UP_V2') AS v2_events,
+      (SELECT count(*)::integer FROM public.invoices invoice
+       WHERE invoice.tenant_id = orders.tenant_id AND invoice.order_id = orders.id
+         AND invoice.contract_version = 1 AND invoice.status = 'issued') AS invoices
+    FROM public.orders orders
+    WHERE orders.tenant_id = ${COMMAND_TENANT} AND orders.id = ${orderId}
+  `;
+  if (!row) throw new Error("COMMAND_ORDER_READBACK_MISSING");
+  return row;
+}
+
+async function confirmCommandPayment(invoiceId: string, amount: number) {
+  const { confirmPayment } = await import("@/lib/server/commands/confirmPaymentCommand");
+  return withRealSession("admin", () => confirmPayment({
+    invoiceId,
+    amount,
+    method: "ueberweisung",
+    expectedVersion: 0,
+    clientEventId: randomUUID(),
+  }));
+}
 
 async function seedUser(transaction: Tx, tenantId: string, userId: string, label: string) {
   await transaction`
@@ -229,6 +470,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await sql.end({ timeout: 1 });
+  if (ORIGINAL_SESSION_SECRET === undefined) delete process.env.APP_SESSION_SECRET;
+  else process.env.APP_SESSION_SECRET = ORIGINAL_SESSION_SECRET;
 });
 
 describe("F1.5 payment and goods-out contract", () => {
@@ -260,6 +503,17 @@ describe("F1.5 payment and goods-out contract", () => {
       SELECT to_regclass('private.v_payment_summary_v1')::text AS view_name
     `;
     expect(view?.view_name).toBe("private.v_payment_summary_v1");
+    const [v2Views] = await sql<{ goods_out: string | null; invoice_source: string | null; invoice_receipt: string | null }[]>`
+      SELECT
+        to_regclass('private.v_goods_out_receipt_v2')::text AS goods_out,
+        to_regclass('private.v_invoice_issue_source_v2')::text AS invoice_source,
+        to_regclass('private.v_invoice_created_receipt_v2')::text AS invoice_receipt
+    `;
+    expect(v2Views).toEqual({
+      goods_out: "private.v_goods_out_receipt_v2",
+      invoice_source: "private.v_invoice_issue_source_v2",
+      invoice_receipt: "private.v_invoice_created_receipt_v2",
+    });
 
     const constraints = await sql<{ conname: string }[]>`
       SELECT conname
@@ -268,12 +522,16 @@ describe("F1.5 payment and goods-out contract", () => {
         'invoices_f15_contract_version_chk',
         'invoices_f15_amounts_chk',
         'events_payment_confirmed_v1_contract_chk',
-        'events_order_picked_up_v1_contract_chk'
+        'events_order_picked_up_v1_contract_chk',
+        'events_order_picked_up_v2_contract_chk',
+        'events_invoice_created_v2_contract_chk'
       )
       ORDER BY conname
     `;
     expect(constraints.map((row) => row.conname)).toEqual([
+      "events_invoice_created_v2_contract_chk",
       "events_order_picked_up_v1_contract_chk",
+      "events_order_picked_up_v2_contract_chk",
       "events_payment_confirmed_v1_contract_chk",
       "invoices_f15_amounts_chk",
       "invoices_f15_contract_version_chk",
@@ -424,5 +682,131 @@ describe("F1.5 payment and goods-out contract", () => {
 
       throw rollbackSignal;
     })).rejects.toBe(rollbackSignal);
+  });
+
+  it("runs the blocking real command path through payment gates and invoice-less Rechnung V2", async () => {
+    await seedCommandPrerequisites();
+    const { recordGoodsOut } = await import("@/lib/server/commands/recordGoodsOutCommand");
+    const { createInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
+
+    for (const paymentMode of ["vorkasse", "abholung"] as const) {
+      const ready = await createCommandReadyOrder(`${paymentMode}-${suffix}`, paymentMode, true);
+      if (!ready.invoiceId || ready.grossAmountCents === null) throw new Error("ISSUED_INVOICE_MISSING");
+      const input = {
+        orderId: ready.orderId,
+        mode: paymentMode === "vorkasse" ? "versand" as const : "abholung" as const,
+        expectedVersion: ready.version,
+        clientEventId: randomUUID(),
+      };
+      const before = await readCommandSnapshot(ready.orderId);
+      await expect(withRealSession("werkstatt", () => recordGoodsOut(input)))
+        .resolves.toMatchObject({ code: "CONFLICT" });
+      expect(await readCommandSnapshot(ready.orderId)).toEqual(before);
+
+      const payment = await confirmCommandPayment(ready.invoiceId, ready.grossAmountCents);
+      expect(payment).toMatchObject({ code: "OK", receipt: { paymentStatus: "bezahlt", openAmountCents: 0 } });
+      const goodsOut = await withRealSession("werkstatt", () => recordGoodsOut(input));
+      expect(goodsOut).toMatchObject({
+        code: "OK",
+        replayed: false,
+        receipt: { eventSchemaVersion: 1, paymentMode, paymentStatus: "bezahlt", openAmountCents: 0 },
+      });
+    }
+
+    const rechnung = await createCommandReadyOrder(`rechnung-${suffix}`, "rechnung", false);
+    const rechnungInput = {
+      orderId: rechnung.orderId,
+      mode: "versand" as const,
+      expectedVersion: rechnung.version,
+      clientEventId: randomUUID(),
+    };
+    const goodsOut = await withRealSession("werkstatt", () => recordGoodsOut(rechnungInput));
+    expect(goodsOut).toMatchObject({
+      code: "OK",
+      replayed: false,
+      receipt: {
+        eventSchemaVersion: 2,
+        paymentMode: "rechnung",
+        invoiceState: "not_issued",
+      },
+    });
+    if (goodsOut.code !== "OK") throw new Error(`GOODS_OUT_V2_FAILED:${goodsOut.code}`);
+    expect(goodsOut.receipt).not.toHaveProperty("paymentStatus");
+    expect(goodsOut.receipt).not.toHaveProperty("openAmountCents");
+    expect(await readCommandSnapshot(rechnung.orderId)).toMatchObject({
+      station: "abgeholt",
+      version: rechnung.version + 1,
+      v1_events: 0,
+      v2_events: 1,
+      invoices: 0,
+    });
+
+    await expect(withRealSession("werkstatt", () => recordGoodsOut(rechnungInput)))
+      .resolves.toMatchObject({ code: "OK", replayed: true, receipt: { eventSchemaVersion: 2 } });
+    await expect(withRealSession("werkstatt", () => recordGoodsOut({ ...rechnungInput, mode: "abholung" })))
+      .resolves.toMatchObject({ code: "CONFLICT" });
+    await expect(withRealSession("werkstatt", () => recordGoodsOut({
+      ...rechnungInput,
+      clientEventId: randomUUID(),
+    }))).resolves.toMatchObject({ code: "CONFLICT" });
+
+    const issued = await withRealSession("admin", () => createInvoice({
+      orderId: rechnung.orderId,
+      expectedVersion: goodsOut.receipt.orderVersion,
+      clientEventId: randomUUID(),
+    }));
+    expect(issued).toMatchObject({
+      code: "OK",
+      replayed: false,
+      receipt: { eventSchemaVersion: 2, invoiceSourceState: "after_goods_out" },
+    });
+    if (issued.code !== "OK") throw new Error(`INVOICE_V2_FAILED:${issued.code}`);
+    const paid = await confirmCommandPayment(issued.receipt.invoiceId, issued.receipt.grossAmountCents);
+    expect(paid).toMatchObject({
+      code: "OK",
+      receipt: { paymentMode: "rechnung", paymentStatus: "bezahlt", openAmountCents: 0 },
+    });
+
+    const persisted = await sql.begin(async (transaction) => {
+      await transaction`SELECT set_config('app.tenant_id', ${COMMAND_TENANT}, true)`;
+      const [row] = await transaction<{
+      invoice_events: number;
+      payment_status: string;
+      payment_open_amount_cents: number;
+      integrity_ok: boolean;
+      }[]>`
+        SELECT
+          (SELECT count(*)::integer FROM public.events event
+           WHERE event.tenant_id = invoice.tenant_id AND event.order_id = invoice.order_id
+             AND event.event_type = 'INVOICE_CREATED_V2') AS invoice_events,
+          summary.payment_status,
+          summary.payment_open_amount_cents,
+          summary.integrity_ok
+        FROM public.invoices invoice
+        JOIN private.v_payment_summary_v1 summary ON summary.invoice_id = invoice.id
+        WHERE invoice.id = ${issued.receipt.invoiceId}::uuid
+          AND invoice.tenant_id = ${COMMAND_TENANT}
+      `;
+      return row;
+    });
+    expect(persisted).toEqual({
+      invoice_events: 1,
+      payment_status: "bezahlt",
+      payment_open_amount_cents: 0,
+      integrity_ok: true,
+    });
+
+    await expect(withRealSession("readonly", () => recordGoodsOut({
+      ...rechnungInput,
+      orderId: FOREIGN.orderId,
+      expectedVersion: 3,
+      clientEventId: randomUUID(),
+    }))).resolves.toMatchObject({ code: "FORBIDDEN" });
+    await expect(withRealSession("werkstatt", () => recordGoodsOut({
+      ...rechnungInput,
+      orderId: FOREIGN.orderId,
+      expectedVersion: 3,
+      clientEventId: randomUUID(),
+    }))).resolves.toMatchObject({ code: "NOT_FOUND" });
   });
 });

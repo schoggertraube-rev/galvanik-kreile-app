@@ -1389,7 +1389,7 @@
         "recordGoodsOutAction"
       ],
       "classification": "PENDING_CONTRACT",
-      "open_reason": "F1.5-C tenant-bound goods-out command candidate. Exact-SHA Fresh-Supabase CI and independent acceptance remain pending.",
+      "open_reason": "F1.5-C tenant-bound V1/V2 goods-out command candidate: V2 records invoiceState=not_issued without payment values and permits later canonical invoice issuance. Exact-SHA Fresh-Supabase CI and independent acceptance remain pending.",
       "visible": false,
       "reachable": true
     },

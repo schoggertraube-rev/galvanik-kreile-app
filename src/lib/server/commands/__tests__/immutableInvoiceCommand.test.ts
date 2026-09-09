@@ -181,6 +181,28 @@ describe("createInvoice", () => {
     expect(sqlText).not.toMatch(/createClient|supabase|rpc\(/i);
   });
 
+  it("replays the additive after-goods-out invoice receipt without changing the V1 receipt", async () => {
+    const v2ReceiptRow = {
+      ...validReceiptRow,
+      event_type: "INVOICE_CREATED_V2",
+      event_schema_version: 2,
+    };
+    execute.mockImplementation((query: { text: string }) => {
+      if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if (query.text.includes("private.v_invoice_receipt_v1")) return Promise.resolve([v2ReceiptRow]);
+      throw new Error(`unexpected SQL in V2 replay test: ${query.text}`);
+    });
+    const { createInvoice } = await import("../immutableInvoiceCommand");
+    await expect(createInvoice(validInput)).resolves.toMatchObject({
+      code: "OK",
+      replayed: true,
+      receipt: {
+        eventSchemaVersion: 2,
+        invoiceSourceState: "after_goods_out",
+      },
+    });
+  });
+
   it("rejects a replayed row that fails the integrity/tenant/actor contract as CONFLICT, never OK", async () => {
     execute.mockImplementation((query: { text: string }) => {
       if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
