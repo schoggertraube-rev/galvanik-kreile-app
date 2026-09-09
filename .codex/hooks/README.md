@@ -8,6 +8,7 @@ Blockiert typische Befehle, die uncommittete Arbeit, Git-Historie oder Datenbank
 
 - Das Schema in `.codex/hooks.json` entspricht der lokal vorhandenen Codex-CLI `0.146.0`.
 - JSON- und JavaScript-Syntax sowie die Klassifikation ungefährlicher und destruktiver Testeingaben werden lokal geprüft.
+- Die vollständige Safe-/Deny-Matrix läuft mit `node --test .codex/hooks/guard-destructive.test.mjs`.
 - Die Laufzeitaktivierung ist **NOT_VERIFIED**, bis das Projekt als vertrauenswürdig gilt und der exakte Hook-Hash in Codex über `/hooks` bestätigt und zurückgelesen wurde.
 - Bis zu diesem Readback darf der Guard nicht als aktiv oder als vollständige Sicherheitsgrenze bezeichnet werden.
 
