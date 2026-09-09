@@ -32,7 +32,29 @@ second location state such as `warenausgang`.
 For `vorkasse`, goods-out is allowed only after `bezahlt`; `abholung` is paid
 at handover; `rechnung` has no payment gate. The view derives
 `goods_out_allowed` from the current order mode and invoice payment status.
-Provider adapters, goods-out commands and UI remain outside A+B+B2.
+Provider adapters and UI remain outside A+B+B2+C.
+
+## C — atomic goods-out command
+
+`recordGoodsOut({orderId, mode, expectedVersion, clientEventId})` consumes the
+current, integrity-checked row from `private.v_payment_summary_v1`; it neither
+calculates a second payment truth nor books a payment. The command accepts only
+`werkstatt|meister|admin`, derives tenant and actor from the server session and
+serializes the order, its one active canonical invoice and linked items in one
+tenant-bound transaction.
+
+Only an exact `fertig` order/item state can move to the generic location
+`abgeholt`. The transport mode remains independently recorded as
+`versand|abholung`. A successful transaction increments the canonical order
+version once, moves the order and linked items, appends one
+`ORDER_PICKED_UP_V1` event and rereads both event and order before returning
+the receipt. Same-client-event retries return that persisted receipt; a changed
+intent conflicts before any write.
+
+An active canonical invoice is required for every goods-out. `vorkasse` and
+`abholung` additionally require the existing `confirmPayment` truth
+`bezahlt/openAmountCents=0`. `rechnung` may leave that invoice `offen`; the
+goods-out command does not mutate its payment fields.
 
 ## Intake, invoice and command contract
 
@@ -100,12 +122,27 @@ steps. A local integration run must be reported
 `DATABASE_URL`/`F1_5_EXPECTED_DATABASE_URL` environment is unavailable; no
 remote database or service-role secret is accepted.
 
+The C command unit matrix is `recordGoodsOutCommand.test.ts` (7 tests): exact
+input and roles, tenant denial, both transport modes, all three payment modes,
+missing/cancelled/foreign invoice outcomes, partial/open payment denial, stale
+version, idempotency and changed intent, linked-item integrity, atomic failure
+and exact receipt/order readback. The focused local run passed on 2026-09-09.
+The blocking fresh-database test `f1_5_goods_out.integration.test.ts` builds the
+real A -> B/B2 -> C path using the production intake, lifecycle, freeze,
+invoice, payment-mode, payment and goods-out commands. It covers Vorkasse and
+Abholung before/after full payment, Rechnung while payment remains open,
+foreign-tenant and wrong-role denial, and zero order/event mutation on the
+negative paths. Its cookie/session adapter is explicitly synthetic; database,
+domain commands, mutations and readbacks are real. Exact-SHA CI remains the
+authoritative Real-DB acceptance run.
+
 Static commands for this package are:
 
 ```text
 npx.cmd vitest run src/lib/server/__tests__/paymentSummaryRead.test.ts --maxWorkers=1 --no-file-parallelism
 npx.cmd vitest run src/lib/server/commands/__tests__/confirmPaymentCommand.test.ts src/lib/server/commands/__tests__/setPaymentModeCommand.test.ts src/app/actions/__tests__/payments.actions.test.ts --maxWorkers=1 --no-file-parallelism
-npx.cmd vitest run src/test/f1_5_payment_goods_out_contract.integration.test.ts src/test/f1_5_confirm_payment.integration.test.ts src/test/f1_5_set_payment_mode.integration.test.ts --maxWorkers=1 --no-file-parallelism
+npx.cmd vitest run src/lib/server/commands/__tests__/recordGoodsOutCommand.test.ts --maxWorkers=1 --no-file-parallelism
+npx.cmd vitest run src/test/f1_5_payment_goods_out_contract.integration.test.ts src/test/f1_5_confirm_payment.integration.test.ts src/test/f1_5_set_payment_mode.integration.test.ts src/test/f1_5_goods_out.integration.test.ts --maxWorkers=1 --no-file-parallelism
 npx.cmd tsc --noEmit --incremental false --pretty false
 npm.cmd run lint
 git diff --check

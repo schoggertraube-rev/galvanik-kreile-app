@@ -8,11 +8,11 @@
   "summary": {
     "page_routes": 78,
     "api_routes": 19,
-    "server_action_groups": 50,
+    "server_action_groups": 51,
     "kpi_definitions": 7,
     "provider_connections": 17,
     "nav_links_without_page": 3,
-    "total": 174
+    "total": 175
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -1378,6 +1378,18 @@
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "F1.5 manual payment confirmation and audited order payment-mode change candidates using the additive invoice payment contract, D-F15-002 intake default, independent mode version and append-only receipt readback. Fresh-database CI and independent acceptance remain pending.",
+      "visible": false,
+      "reachable": true
+    },
+    {
+      "stable_id": "server-actions.goods-out",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/goodsOut.actions.ts",
+      "exported_functions": [
+        "recordGoodsOutAction"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "F1.5-C tenant-bound goods-out command candidate. Exact-SHA Fresh-Supabase CI and independent acceptance remain pending.",
       "visible": false,
       "reachable": true
     },
