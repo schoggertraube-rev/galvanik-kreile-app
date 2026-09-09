@@ -1,5 +1,5 @@
 -- F1.5-C additive V2 owner addendum: Rechnung goods-out before invoice issuance.
--- V1 remains untouched. V2 carries no derived payment status or amount.
+-- V1 remains untouched; V2 carries no derived payment status or amount.
 
 ALTER TABLE public.events
   ADD CONSTRAINT events_order_picked_up_v2_contract_chk
@@ -92,9 +92,97 @@ ALTER TABLE public.events
     ), false)
   ) NOT VALID;
 
+CREATE FUNCTION private.validate_f15_v2_event_insert()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  matching_goods_out_count integer;
+BEGIN
+  IF NEW.event_type NOT IN ('ORDER_PICKED_UP_V2', 'INVOICE_CREATED_V2') THEN
+    RETURN NEW;
+  END IF;
+
+  PERFORM 1
+  FROM public.orders orders
+  WHERE orders.tenant_id = NEW.tenant_id
+    AND orders.id = NEW.order_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'F15_V2_ORDER_MISSING' USING ERRCODE = '23514';
+  END IF;
+
+  IF NEW.event_type = 'ORDER_PICKED_UP_V2' THEN
+    IF NOT EXISTS (
+      SELECT 1
+      FROM public.orders orders
+      WHERE orders.tenant_id = NEW.tenant_id
+        AND orders.id = NEW.order_id
+        AND orders.payment_mode = 'rechnung'
+        AND orders.version = NEW.aggregate_version
+        AND orders.station = 'abgeholt'
+        AND orders.current_station = 'abgeholt'
+        AND orders.current_station_id = 'abgeholt'
+        AND orders.status = 'abgeholt'
+    ) OR EXISTS (
+      SELECT 1
+      FROM public.invoices invoice
+      WHERE invoice.tenant_id = NEW.tenant_id
+        AND invoice.order_id = NEW.order_id
+        AND invoice.status = 'issued'
+        AND invoice.issued_at <= NEW.created_at
+    ) THEN
+      RAISE EXCEPTION 'F15_GOODS_OUT_V2_SOURCE_INVALID' USING ERRCODE = '23514';
+    END IF;
+  ELSE
+    SELECT count(*)::integer
+    INTO matching_goods_out_count
+    FROM public.events goods_out
+    WHERE goods_out.tenant_id = NEW.tenant_id
+      AND goods_out.order_id = NEW.order_id
+      AND goods_out.event_type = 'ORDER_PICKED_UP_V2'
+      AND goods_out.event_schema_version = 2
+      AND goods_out.status = 'success'
+      AND goods_out.from_station = 'fertig'
+      AND goods_out.station = 'abgeholt'
+      AND goods_out.aggregate_version = (NEW.payload->>'orderVersion')::integer
+      AND goods_out.payload->>'orderId' = NEW.order_id
+      AND goods_out.payload->>'paymentMode' = 'rechnung'
+      AND goods_out.payload->>'invoiceState' = 'not_issued'
+      AND goods_out.created_at <= NEW.created_at
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.invoices prior_invoice
+        WHERE prior_invoice.tenant_id = goods_out.tenant_id
+          AND prior_invoice.order_id = goods_out.order_id
+          AND prior_invoice.status = 'issued'
+          AND prior_invoice.issued_at <= goods_out.created_at
+      );
+    IF matching_goods_out_count <> 1 THEN
+      RAISE EXCEPTION 'F15_INVOICE_CREATED_V2_SOURCE_INVALID' USING ERRCODE = '23514';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION private.validate_f15_v2_event_insert() FROM PUBLIC;
+
+CREATE TRIGGER events_f15_v2_insert_guard
+  BEFORE INSERT ON public.events
+  FOR EACH ROW
+  WHEN (NEW.event_type IN ('ORDER_PICKED_UP_V2', 'INVOICE_CREATED_V2'))
+  EXECUTE FUNCTION private.validate_f15_v2_event_insert();
+
 CREATE UNIQUE INDEX events_goods_out_client_event_v2_uidx
   ON public.events (tenant_id, client_event_id)
   WHERE event_type IN ('ORDER_PICKED_UP_V1', 'ORDER_PICKED_UP_V2');
+CREATE UNIQUE INDEX events_goods_out_order_version_v2_uidx
+  ON public.events (tenant_id, order_id, aggregate_version)
+  WHERE event_type = 'ORDER_PICKED_UP_V2';
 CREATE UNIQUE INDEX events_invoice_lifecycle_client_event_v2_uidx
   ON public.events (tenant_id, client_event_id)
   WHERE event_type IN ('INVOICE_CREATED_V1', 'INVOICE_CREATED_V2', 'INVOICE_CANCELLED_V1');
@@ -141,6 +229,14 @@ SELECT
     AND event.payload->>'paymentMode' = orders.payment_mode
     AND event.payload->>'invoiceState' = 'not_issued'
     AND (event.payload->>'orderVersion')::integer = orders.version
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.invoices invoice_at_goods_out
+      WHERE invoice_at_goods_out.tenant_id = event.tenant_id
+        AND invoice_at_goods_out.order_id = event.order_id
+        AND invoice_at_goods_out.status = 'issued'
+        AND invoice_at_goods_out.issued_at <= event.created_at
+    )
   ) AS integrity_ok
 FROM public.events event
 JOIN public.app_users actor
@@ -246,6 +342,30 @@ SELECT
     AND event.payload->>'invoiceSourceState' = 'after_goods_out'
     AND event.payload->>'pdfSha256' = invoice.pdf_sha256
     AND encode(sha256(invoice.pdf_content), 'hex') = invoice.pdf_sha256
+    AND 1 = (
+      SELECT count(*)::integer
+      FROM public.events goods_out
+      WHERE goods_out.tenant_id = event.tenant_id
+        AND goods_out.order_id = event.order_id
+        AND goods_out.event_type = 'ORDER_PICKED_UP_V2'
+        AND goods_out.event_schema_version = 2
+        AND goods_out.status = 'success'
+        AND goods_out.from_station = 'fertig'
+        AND goods_out.station = 'abgeholt'
+        AND goods_out.aggregate_version = (event.payload->>'orderVersion')::integer
+        AND goods_out.payload->>'orderId' = event.order_id
+        AND goods_out.payload->>'paymentMode' = 'rechnung'
+        AND goods_out.payload->>'invoiceState' = 'not_issued'
+        AND goods_out.created_at <= event.created_at
+        AND NOT EXISTS (
+          SELECT 1
+          FROM public.invoices prior_invoice
+          WHERE prior_invoice.tenant_id = goods_out.tenant_id
+            AND prior_invoice.order_id = goods_out.order_id
+            AND prior_invoice.status = 'issued'
+            AND prior_invoice.issued_at <= goods_out.created_at
+        )
+    )
   ) AS integrity_ok
 FROM public.events event
 JOIN public.invoices invoice

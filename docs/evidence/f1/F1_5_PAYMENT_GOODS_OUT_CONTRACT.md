@@ -37,6 +37,15 @@ Without an issued Rechnung invoice, only V2 with `invoiceState: not_issued`
 is legal; it contains no payment status or amount.
 Provider adapters and UI remain outside A+B+B2+C.
 
+The additive V2 insert guard locks the tenant-bound order and rejects an
+`ORDER_PICKED_UP_V2` unless the same Rechnung order/version is already in
+`abgeholt` and no active issued invoice existed at or before the event instant.
+It rejects `INVOICE_CREATED_V2` unless exactly one earlier intact
+`ORDER_PICKED_UP_V2` exists for the same tenant, order and version. Both V2
+receipt ports repeat the timestamp-bound historical checks; therefore the
+later canonical invoice does not invalidate the earlier invoice-less goods-out
+receipt. V1 constraints, events and read ports are unchanged.
+
 ## C — atomic goods-out command
 
 `recordGoodsOut({orderId, mode, expectedVersion, clientEventId})` consumes the
@@ -128,8 +137,8 @@ The blocking A integration test creates non-vacuous own and foreign tenant
 invoice/event fixtures plus a real empty tenant, asserts exact row and event
 counts, verifies tenant isolation, and proves that `ORDER_PICKED_UP_V1` accepts
 `abgeholt` while rejecting the obsolete `warenausgang` value. The blocking CI
-lane resets a fresh local Supabase through migration `20260908101500`, including
-the additive V2 contract migration `20260908101459`, reruns
+lane resets a fresh local Supabase through migration `20260909170000`, including
+the additive V2 contract migration at that version, reruns
 the F1.4 invoice regression, and then runs A, B and B2 serially as blocking
 steps. The same blocking test now also drives real signed sessions through
 intake, mode selection, station transition, freeze, invoice, payment and
@@ -137,7 +146,11 @@ goods-out. It proves Vorkasse and Abholung before/after payment plus the
 invoice-less Rechnung sequence `ORDER_PICKED_UP_V2 -> INVOICE_CREATED_V2 ->
 PAYMENT_CONFIRMED_V1`, including replay, changed intent, stale version,
 foreign tenant and wrong-role denial. No command, database or receipt is
-mocked on this acceptance path. A local integration run must be reported
+mocked on this acceptance path. Direct negative inserts additionally prove
+that a V2 goods-out after an already issued invoice and an invoice V2 without
+the required goods-out V2 are rejected with zero persisted event; both valid
+receipt ports remain `integrity_ok=true` after invoice creation and payment. A
+local integration run must be reported
 `NOT_RUN/ENV_BLOCKER` when the explicit
 `DATABASE_URL`/`F1_5_EXPECTED_DATABASE_URL` environment is unavailable; no
 remote database or service-role secret is accepted.
@@ -147,14 +160,16 @@ input and roles, tenant denial, both transport modes, all three payment modes,
 missing/cancelled/foreign invoice outcomes, partial/open payment denial, stale
 version, idempotency and changed intent, linked-item integrity, atomic failure
 and exact receipt/order readback. The focused local run passed on 2026-09-09.
-The blocking fresh-database test `f1_5_goods_out.integration.test.ts` builds the
-real A -> B/B2 -> C path using the production intake, lifecycle, freeze,
-invoice, payment-mode, payment and goods-out commands. It covers Vorkasse and
-Abholung before/after full payment, Rechnung while payment remains open,
-foreign-tenant and wrong-role denial, and zero order/event mutation on the
-negative paths. Its cookie/session adapter is explicitly synthetic; database,
-domain commands, mutations and readbacks are real. Exact-SHA CI remains the
-authoritative Real-DB acceptance run.
+The local supplemental test `f1_5_goods_out.integration.test.ts` builds the real
+A -> B/B2 -> C path using the production intake, lifecycle, freeze, invoice,
+payment-mode, payment and goods-out commands. It covers Vorkasse and Abholung
+before/after full payment, Rechnung while payment remains open, foreign-tenant
+and wrong-role denial, and zero order/event mutation on the negative paths. Its
+cookie/session adapter is explicitly synthetic; database, domain commands,
+mutations and readbacks are real. It is not a blocking Quality-lane gate. The
+integrated `f1_5_payment_goods_out_contract.integration.test.ts` is the only
+blocking CI acceptance gate for the A/B/B2/C Real-DB path and uses a real signed
+session with request-context readback before each command.
 
 Static commands for this package are:
 

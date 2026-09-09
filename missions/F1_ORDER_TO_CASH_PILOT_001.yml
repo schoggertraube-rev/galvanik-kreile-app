@@ -316,9 +316,12 @@ f1_4_allowlist:
 f1_5_allowlist:
   - missions/F1_ORDER_TO_CASH_PILOT_001.yml
   - docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md
+  - docs/project/linie/README.md
   - .github/workflows/quality.yml
+  - quality/eslint-baseline.json
   # A — Daten- und Read-Port-Vertrag
   - supabase/migrations/*_f1_5_payment_goods_out_contract.sql
+  - supabase/migrations/*_f1_5_payment_goods_out_v2_contract.sql
   - src/lib/server/paymentContract.ts
   - src/lib/server/paymentSummaryRead.ts
   - src/lib/server/__tests__/paymentSummaryRead.test.ts

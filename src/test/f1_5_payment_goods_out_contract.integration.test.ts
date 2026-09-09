@@ -36,6 +36,7 @@ const PAID_AT = "2026-09-05T10:00:00.000Z";
 const TEST_SESSION_SECRET = "f1-5-contract-real-session-local-only";
 const ORIGINAL_SESSION_SECRET = process.env.APP_SESSION_SECRET;
 process.env.APP_SESSION_SECRET = TEST_SESSION_SECRET;
+let commandSessionIssuedAt = 0;
 
 type Tx = postgres.ISql;
 
@@ -126,14 +127,15 @@ async function withRealSession<T>(
     signAppSession,
   } = await import("@/lib/server/appSession");
   process.env.APP_SESSION_SECRET = TEST_SESSION_SECRET;
+  if (commandSessionIssuedAt < 1) throw new Error("COMMAND_SESSION_NOT_SEEDED");
   const now = Date.now();
   const session: AppSession = {
     userId: COMMAND_USERS[role],
     tenantId: COMMAND_TENANT,
     role,
     displayName: `F1.5 Contract ${role}`,
-    issuedAt: now - 1_000,
-    expiresAt: now + 60_000,
+    issuedAt: commandSessionIssuedAt,
+    expiresAt: now + 5 * 60_000,
   };
   const token = signAppSession(session, getSecretKey());
   const request = new NextRequest("http://127.0.0.1/test", {
@@ -175,6 +177,8 @@ async function withRealSession<T>(
 }
 
 async function seedCommandPrerequisites() {
+  const persistedUserUpdatedAt = new Date(Date.now() - 5_000).toISOString();
+  const proposedSessionIssuedAt = Date.now();
   await sql.begin(async (transaction) => {
     for (const [role, userId] of Object.entries(COMMAND_USERS)) {
       await transaction`
@@ -182,8 +186,12 @@ async function seedCommandPrerequisites() {
           (id, tenant_id, email, full_name, role, active, created_at, updated_at)
         VALUES (
           ${userId}::uuid, ${COMMAND_TENANT}, ${`f15-contract-${role}-${suffix}@local.invalid`},
-          ${`F1.5 Contract ${role}`}, ${role}, true, now(), now()
-        ) ON CONFLICT (id) DO UPDATE SET active = true, role = EXCLUDED.role
+          ${`F1.5 Contract ${role}`}, ${role}, true,
+          ${persistedUserUpdatedAt}::timestamptz, ${persistedUserUpdatedAt}::timestamptz
+        ) ON CONFLICT (id) DO UPDATE SET
+          active = true,
+          role = EXCLUDED.role,
+          updated_at = EXCLUDED.updated_at
       `;
     }
     await transaction`
@@ -217,6 +225,21 @@ async function seedCommandPrerequisites() {
       ON CONFLICT (tenant_id, version) DO NOTHING
     `;
   });
+  const [persistedUserClock] = await sql<{ latest_updated_at_ms: string }[]>`
+    SELECT floor(extract(epoch FROM max(updated_at)) * 1000)::bigint::text AS latest_updated_at_ms
+    FROM public.app_users
+    WHERE tenant_id = ${COMMAND_TENANT}
+      AND id IN (
+        ${COMMAND_USERS.werkstatt}::uuid,
+        ${COMMAND_USERS.admin}::uuid,
+        ${COMMAND_USERS.readonly}::uuid
+      )
+  `;
+  const latestUpdatedAtMs = Number(persistedUserClock?.latest_updated_at_ms);
+  if (!Number.isSafeInteger(latestUpdatedAtMs) || latestUpdatedAtMs >= proposedSessionIssuedAt) {
+    throw new Error("COMMAND_SESSION_REVOCATION_ORDER_INVALID");
+  }
+  commandSessionIssuedAt = proposedSessionIssuedAt;
 }
 
 type CommandReadyOrder = {
@@ -457,6 +480,17 @@ async function readForTenant(transaction: Tx, tenantId: string): Promise<Payment
     ORDER BY invoice_id
     LIMIT 251
   `;
+}
+
+async function captureRejectedTransaction(
+  work: (transaction: Tx) => Promise<void>,
+): Promise<unknown> {
+  try {
+    await sql.begin(async (transaction) => work(transaction));
+  } catch (error) {
+    return error;
+  }
+  return undefined;
 }
 
 beforeAll(async () => {
@@ -713,6 +747,83 @@ describe("F1.5 payment and goods-out contract", () => {
       });
     }
 
+    const issuedRechnung = await createCommandReadyOrder(`rechnung-issued-${suffix}`, "rechnung", true);
+    const issuedRechnungGoodsOut = await withRealSession("werkstatt", () => recordGoodsOut({
+      orderId: issuedRechnung.orderId,
+      mode: "versand",
+      expectedVersion: issuedRechnung.version,
+      clientEventId: randomUUID(),
+    }));
+    expect(issuedRechnungGoodsOut).toMatchObject({
+      code: "OK",
+      receipt: { eventSchemaVersion: 1, paymentMode: "rechnung" },
+    });
+    if (issuedRechnungGoodsOut.code !== "OK") {
+      throw new Error(`ISSUED_RECHNUNG_GOODS_OUT_FAILED:${issuedRechnungGoodsOut.code}`);
+    }
+    const priorInvoiceV2Error = await captureRejectedTransaction(async (transaction) => {
+      await transaction`
+          INSERT INTO public.events (
+            id, tenant_id, order_id, item_id, event_type, description, user_id,
+            payload, status, station, client_event_id, event_schema_version,
+            correlation_id, aggregate_version, from_station, created_at
+          ) VALUES (
+            ${randomUUID()}, ${COMMAND_TENANT}, ${issuedRechnung.orderId}, NULL,
+            'ORDER_PICKED_UP_V2', 'F1.5 invalid V2 after issued invoice',
+            ${COMMAND_USERS.werkstatt}::uuid,
+            ${transaction.json({
+              orderId: issuedRechnung.orderId,
+              mode: "versand",
+              orderVersion: issuedRechnungGoodsOut.receipt.orderVersion,
+              paymentMode: "rechnung",
+              invoiceState: "not_issued",
+              gateAllowed: true,
+            })},
+            'success', 'abgeholt', ${randomUUID()}::uuid, 2, ${randomUUID()}::uuid,
+            ${issuedRechnungGoodsOut.receipt.orderVersion}, 'fertig',
+            clock_timestamp() AT TIME ZONE 'UTC'
+          )
+      `;
+    });
+    expect(priorInvoiceV2Error).toMatchObject({
+      code: "23514",
+      message: expect.stringContaining("F15_GOODS_OUT_V2_SOURCE_INVALID"),
+    });
+
+    const noGoodsOut = await createCommandReadyOrder(`rechnung-no-goods-out-${suffix}`, "rechnung", false);
+    const missingGoodsOutInvoiceV2Error = await captureRejectedTransaction(async (transaction) => {
+      await transaction`
+          INSERT INTO public.events (
+            id, tenant_id, order_id, item_id, event_type, description, user_id,
+            payload, status, station, client_event_id, event_schema_version,
+            correlation_id, aggregate_version, from_station, created_at
+          ) VALUES (
+            ${randomUUID()}, ${COMMAND_TENANT}, ${noGoodsOut.orderId}, NULL,
+            'INVOICE_CREATED_V2', 'F1.5 invalid invoice V2 without goods out',
+            ${COMMAND_USERS.admin}::uuid,
+            ${transaction.json({
+              invoiceId: randomUUID(),
+              freezeId: randomUUID(),
+              invoiceNumber: "R-2026-9999",
+              orderVersion: noGoodsOut.version,
+              netAmountCents: 10000,
+              vatRateBasisPoints: 1900,
+              vatAmountCents: 1900,
+              grossAmountCents: 11900,
+              pdfSha256: "a".repeat(64),
+              invoiceVersion: 1,
+              invoiceSourceState: "after_goods_out",
+            })},
+            'success', 'abgeholt', ${randomUUID()}::uuid, 2, ${randomUUID()}::uuid,
+            1, 'abgeholt', clock_timestamp() AT TIME ZONE 'UTC'
+          )
+      `;
+    });
+    expect(missingGoodsOutInvoiceV2Error).toMatchObject({
+      code: "23514",
+      message: expect.stringContaining("F15_INVOICE_CREATED_V2_SOURCE_INVALID"),
+    });
+
     const rechnung = await createCommandReadyOrder(`rechnung-${suffix}`, "rechnung", false);
     const rechnungInput = {
       orderId: rechnung.orderId,
@@ -770,10 +881,12 @@ describe("F1.5 payment and goods-out contract", () => {
     const persisted = await sql.begin(async (transaction) => {
       await transaction`SELECT set_config('app.tenant_id', ${COMMAND_TENANT}, true)`;
       const [row] = await transaction<{
-      invoice_events: number;
-      payment_status: string;
-      payment_open_amount_cents: number;
-      integrity_ok: boolean;
+        invoice_events: number;
+        payment_status: string;
+        payment_open_amount_cents: number;
+        integrity_ok: boolean;
+        goods_out_v2_integrity_ok: boolean;
+        invoice_v2_integrity_ok: boolean;
       }[]>`
         SELECT
           (SELECT count(*)::integer FROM public.events event
@@ -781,7 +894,17 @@ describe("F1.5 payment and goods-out contract", () => {
              AND event.event_type = 'INVOICE_CREATED_V2') AS invoice_events,
           summary.payment_status,
           summary.payment_open_amount_cents,
-          summary.integrity_ok
+          summary.integrity_ok,
+          (
+            SELECT receipt.integrity_ok
+            FROM private.v_goods_out_receipt_v2 receipt
+            WHERE receipt.event_id = ${goodsOut.receipt.eventId}
+          ) AS goods_out_v2_integrity_ok,
+          (
+            SELECT receipt.integrity_ok
+            FROM private.v_invoice_created_receipt_v2 receipt
+            WHERE receipt.event_id = ${issued.receipt.eventId}
+          ) AS invoice_v2_integrity_ok
         FROM public.invoices invoice
         JOIN private.v_payment_summary_v1 summary ON summary.invoice_id = invoice.id
         WHERE invoice.id = ${issued.receipt.invoiceId}::uuid
@@ -794,6 +917,8 @@ describe("F1.5 payment and goods-out contract", () => {
       payment_status: "bezahlt",
       payment_open_amount_cents: 0,
       integrity_ok: true,
+      goods_out_v2_integrity_ok: true,
+      invoice_v2_integrity_ok: true,
     });
 
     await expect(withRealSession("readonly", () => recordGoodsOut({
@@ -808,5 +933,5 @@ describe("F1.5 payment and goods-out contract", () => {
       expectedVersion: 3,
       clientEventId: randomUUID(),
     }))).resolves.toMatchObject({ code: "NOT_FOUND" });
-  });
+  }, 15_000);
 });

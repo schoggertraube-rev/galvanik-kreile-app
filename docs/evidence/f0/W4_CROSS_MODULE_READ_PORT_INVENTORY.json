@@ -206,7 +206,7 @@
       "requiredLegacySource": null
     },
     {
-      "path": "supabase/migrations/20260908101459_f1_5_payment_goods_out_v2_contract.sql",
+      "path": "supabase/migrations/20260909170000_f1_5_payment_goods_out_v2_contract.sql",
       "requiredSecurityInvokerViews": [
         "private.v_goods_out_receipt_v2",
         "private.v_invoice_created_receipt_v2",
