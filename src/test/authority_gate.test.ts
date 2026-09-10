@@ -11,6 +11,6 @@ describe("D-GOV-001 authority gate", () => {
   });
 
   it("fails closed for every isolated negative contract class", () => {
-    expect(runAuthoritySelftest()).toEqual({ passed: 10, total: 10 });
+    expect(runAuthoritySelftest()).toEqual({ passed: 14, total: 14 });
   });
 });

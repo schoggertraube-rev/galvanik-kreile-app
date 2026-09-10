@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "governanceDecisions": ["D-GOV-001", "D-ARCH-011"],
+  "governanceDecisions": ["D-GOV-001", "D-ARCH-011", "D-UI-CORE-001"],
   "truthTypes": [
     { "id": "project_rules", "source": "AGENTS.md" },
     { "id": "product_decisions", "source": "docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md" },
@@ -77,11 +77,56 @@
     "expectedMissionId": "F1_ORDER_TO_CASH_PILOT_001",
     "expectedBranch": "gov/authority-provider-m365-20260910",
     "expectedBaseSha": "13240de2a5ca9e9cfae4f8c72552443dac1d7630",
-    "expectedActivePackage": "D_GOV_001_D_ARCH_011_AUTHORITY_PROVIDER_GOVERNANCE",
-    "expectedNextGate": "AUTHORITY_PROVIDER_GOVERNANCE_EXACT_SHA_REVIEW",
+    "expectedActivePackage": "D_GOV_001_D_ARCH_011_D_UI_CORE_001_GOVERNANCE",
+    "expectedNextGate": "GOVERNANCE_EXACT_SHA_REVIEW",
     "currentState": "docs/project/CURRENT_STATE.md",
     "expectedMainSha": "13240de2a5ca9e9cfae4f8c72552443dac1d7630",
     "forbiddenCurrentStateRefs": ["PR #84", "9845e91e3003e81ff9f8b5b28bf8882dd12bf0d7"]
+  },
+  "uiDeliveryPolicy": {
+    "mission": "missions/F1_ORDER_TO_CASH_PILOT_001.yml",
+    "currentState": "docs/project/CURRENT_STATE.md",
+    "scope": "docs/project/linie/MODULKARTE_KANON.md",
+    "architecture": "docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md",
+    "missionScalars": {
+      "path1_s5_search_status": "CANDIDATE_PR_84_NOT_ACCEPTED_NOT_MERGED",
+      "path1_s5_search_merge_gate": "BLOCKED_UNTIL_PATH1_UI_CONVERGENCE_AND_FULL_ROUTE_REACCEPTANCE",
+      "path1_calendar_status": "NOT_STARTED_BLOCKED_EXTERNAL_PERMISSION",
+      "f1_6_status": "NOT_STARTED",
+      "visible_product_backend_contracts": "PARTIALLY_REAL",
+      "visible_product_s4_workshop_interior": "DELIVERED",
+      "visible_product_total_target_ui": "OWNER_UX_FAIL_NOT_DELIVERED",
+      "visible_product_orders_card_v8": "NOT_DELIVERED",
+      "visible_product_customers_card_v2": "NOT_DELIVERED",
+      "visible_product_role_homes_and_target_navigation": "NOT_DELIVERED",
+      "visible_product_production_shell": "LEGACY_SHELL_NOT_TARGET_NOT_LIVE_CAPABLE_TOTAL_APP",
+      "next_product_priority": "PATH1_UI_CONVERGENCE",
+      "path1_ui_convergence_order": "A_SHELL_ROLE_HOMES_NAV -> B_ORDERS_CARD_V8 -> C_CUSTOMERS_CARD_V2 -> D_SEARCH_TARGET_HEADER_REACCEPTANCE -> E_CALENDAR_AND_FURTHER_MODULES"
+    },
+    "currentStateTokens": [
+      "Backend/Fachverträge | `PARTIALLY_REAL`",
+      "S4 Werkstatt-Innenmodul | `DELIVERED`",
+      "Gesamte Zieloberfläche | `OWNER_UX_FAIL / NOT_DELIVERED`",
+      "Orders/Auftragskarte V8 | `NOT_DELIVERED`",
+      "Customers/Kundenkarte V2 | `NOT_DELIVERED`",
+      "Rollen-Startseiten Phillip V4/Rolf V8 und Zielnavigation | `NOT_DELIVERED`",
+      "LEGACY_SHELL / NOT_TARGET / NOT_LIVE_CAPABLE_TOTAL_APP"
+    ],
+    "scopeTokens": [
+      "A — Shell/Rollen-Home/Navigation",
+      "B — Orders",
+      "C — Customers",
+      "D — Suche",
+      "E — Danach"
+    ],
+    "architectureTokens": [
+      "vollständige authentifizierte Route",
+      "1914x917",
+      "1220x880",
+      "390x844",
+      "nummerierte Abweichungsliste ohne P0/P1",
+      "shrink-only entfernt"
+    ]
   },
   "providerPolicy": {
     "matrix": "docs/project/PROVIDER_CAPABILITY_MATRIX.md",

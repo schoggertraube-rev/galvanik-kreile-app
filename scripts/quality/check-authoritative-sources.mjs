@@ -151,6 +151,30 @@ export function checkAuthorityRepository(root = process.cwd(), configRel = DEFAU
     }
   }
 
+  const ui = config.uiDeliveryPolicy ?? {};
+  if (typeof ui.mission !== "string" || !exists(root, ui.mission)) {
+    errors.push(`UI_DELIVERY_MISSION_PATH_MISSING:${ui.mission ?? "UNKNOWN"}`);
+  } else {
+    const mission = read(root, ui.mission);
+    for (const [key, value] of Object.entries(ui.missionScalars ?? {})) {
+      if (yamlScalar(mission, key, errors) !== value) errors.push(`UI_DELIVERY_MISSION_MISMATCH:${key}`);
+    }
+  }
+  for (const [kind, rel, tokens] of [
+    ["CURRENT_STATE", ui.currentState, ui.currentStateTokens],
+    ["SCOPE", ui.scope, ui.scopeTokens],
+    ["ARCHITECTURE", ui.architecture, ui.architectureTokens],
+  ]) {
+    if (typeof rel !== "string" || !exists(root, rel)) {
+      errors.push(`UI_DELIVERY_${kind}_PATH_MISSING:${rel ?? "UNKNOWN"}`);
+      continue;
+    }
+    const content = read(root, rel);
+    for (const token of tokens ?? []) {
+      if (!content.includes(token)) errors.push(`UI_DELIVERY_${kind}_TOKEN_MISSING:${token}`);
+    }
+  }
+
   const knownDocs = new Set([
     ...sources,
     ...(config.pointerDocuments ?? []),
@@ -189,20 +213,20 @@ export function checkAuthorityRepository(root = process.cwd(), configRel = DEFAU
 function writeFixture(root) {
   const files = {
     "AGENTS.md": "# Rules\n",
-    "decisions.md": "## D-GOV-001 — one\n## D-ARCH-011 — provider\n",
-    "scope.md": "# Scope\n",
-    "architecture.md": "# Architecture\n",
+    "decisions.md": "## D-GOV-001 — one\n## D-ARCH-011 — provider\n## D-UI-CORE-001 — visible truth\n",
+    "scope.md": "# Scope\nUI_SCOPE_OK\n",
+    "architecture.md": "# Architecture\nUI_ARCHITECTURE_OK\n",
     "ui-index.md": "# UI\n",
     "ui/ref.html": "ok\n",
     "pointer.md": "# Pointer\n",
-    "current.md": "main@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
+    "current.md": "main@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nUI_CURRENT_STATE_OK\n",
     "calendar.tsx": "Google Kalender vorbereitet\n",
     "registry.json": JSON.stringify({ capabilities: [
       { stable_id: "page.real", kind: "PAGE_ROUTE", visible: true },
       { stable_id: "provider.real", kind: "PROVIDER_CONNECTION" },
     ] }),
     "matrix.md": "`module.one` REAL\n`page.real` REAL\n`provider.real` REAL\nGoogle Kalender QUARANTINE\n",
-    "missions/main.yml": "mission_id: M\nstatus: active\nbase_sha: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nbranch: gov\nactive_package: GOV\nnext_gate_after_active_package: REVIEW\n",
+    "missions/main.yml": "mission_id: M\nstatus: active\nbase_sha: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nbranch: gov\nactive_package: GOV\nnext_gate_after_active_package: REVIEW\nnext_product_priority: PATH1_UI_CONVERGENCE\n",
   };
   for (const [rel, content] of Object.entries(files)) {
     mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
@@ -210,7 +234,7 @@ function writeFixture(root) {
   }
   const config = {
     schemaVersion: 1,
-    governanceDecisions: ["D-GOV-001", "D-ARCH-011"],
+    governanceDecisions: ["D-GOV-001", "D-ARCH-011", "D-UI-CORE-001"],
     truthTypes: [
       ["project_rules", "AGENTS.md"], ["product_decisions", "decisions.md"],
       ["scope_modules", "scope.md"], ["architecture", "architecture.md"],
@@ -226,6 +250,12 @@ function writeFixture(root) {
       expectedBaseSha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", expectedActivePackage: "GOV",
       expectedNextGate: "REVIEW", currentState: "current.md",
       expectedMainSha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", forbiddenCurrentStateRefs: ["candidate"],
+    },
+    uiDeliveryPolicy: {
+      mission: "missions/main.yml", currentState: "current.md", scope: "scope.md", architecture: "architecture.md",
+      missionScalars: { next_product_priority: "PATH1_UI_CONVERGENCE" },
+      currentStateTokens: ["UI_CURRENT_STATE_OK"], scopeTokens: ["UI_SCOPE_OK"],
+      architectureTokens: ["UI_ARCHITECTURE_OK"],
     },
     providerPolicy: {
       matrix: "matrix.md", registry: "registry.json", requiredModuleIds: ["module.one"],
@@ -259,6 +289,22 @@ export function runAuthoritySelftest() {
       const p = path.join(root, DEFAULT_CONFIG); const c = JSON.parse(readFileSync(p, "utf8"));
       c.providerPolicy.legacyCalendarStatus = "PENDING"; writeFileSync(p, JSON.stringify(c), "utf8");
     }, "LEGACY_GOOGLE_CALENDAR_ACTIVE"],
+    ["ui-priority-conflict", (root) => {
+      const p = path.join(root, "missions", "main.yml");
+      writeFileSync(p, readFileSync(p, "utf8").replace("PATH1_UI_CONVERGENCE", "CALENDAR_FIRST"), "utf8");
+    }, "UI_DELIVERY_MISSION_MISMATCH:next_product_priority"],
+    ["ui-current-state-missing", (root) => {
+      const p = path.join(root, "current.md");
+      writeFileSync(p, readFileSync(p, "utf8").replace("UI_CURRENT_STATE_OK", "UI_STATUS_MISSING"), "utf8");
+    }, "UI_DELIVERY_CURRENT_STATE_TOKEN_MISSING"],
+    ["ui-scope-missing", (root) => {
+      const p = path.join(root, "scope.md");
+      writeFileSync(p, "# Scope\n", "utf8");
+    }, "UI_DELIVERY_SCOPE_TOKEN_MISSING"],
+    ["ui-architecture-missing", (root) => {
+      const p = path.join(root, "architecture.md");
+      writeFileSync(p, "# Architecture\n", "utf8");
+    }, "UI_DELIVERY_ARCHITECTURE_TOKEN_MISSING"],
   ];
   let passed = 0;
   for (const [name, mutate, expected] of cases) {

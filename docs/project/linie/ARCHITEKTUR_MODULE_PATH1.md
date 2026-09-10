@@ -34,7 +34,13 @@ Nichts vom Fach liegt außerhalb. Keine Parallel-Ablage in `components/<fach>` /
 - **S5 restliche Domänen** Modul für Modul, jeweils Naht mitbauend.
 - Aktive Reihenfolge, Paketstatus und nächste Gates stehen ausschließlich in `missions/F1_ORDER_TO_CASH_PILOT_001.yml`. Ab S1 gilt ohne Ausnahme: **kein Feature-Bau, der die Naht-Gates rot lässt.**
 
-## 4a. Provider-Naht — D-ARCH-011
+## 4a. Vollständige Routenabnahme — D-UI-CORE-001
+
+Ein Innenmodul-, Komponenten- oder Fachvertrags-PASS ist kein sichtbarer Gesamtoberflächen-PASS. Jedes Path-1-UI-Teilpaket muss die vollständige authentifizierte Route mit Shell, Header, Navigation, Inhalt und Aktionsleiste belegen. Die Abnahme erfolgt side-by-side gegen die von `00_UI_REFERENZEN_PFADE.md` gelistete kanonische HTML-Referenz bei Desktop `1914x917`, Tablet `1220x880` und Mobile `390x844`.
+
+Pflichtbelege sind echte Klickpfade in einem isolierten Real-/Test-Tenant, klar synthetische Testdaten, ehrliche Leerzustände mit sinnvoller Primäraktion sowie eine nummerierte Abweichungsliste ohne P0/P1. Alt-Shell- und Navigationsausnahmen werden paketweise shrink-only entfernt. Grüne CI, ein isolierter Modultest oder eine vorhandene Production-Route reichen allein nicht. Die konkrete A-bis-E-Reihenfolge bestimmt ausschließlich die Mission; diese Architektur definiert nur den unveränderlichen Abnahmevertrag.
+
+## 4b. Provider-Naht — D-ARCH-011
 
 - Externe Anbieter liegen ausschließlich hinter tenantneutralen, eng typisierten Ports; UI und Fremdmodule kennen weder SDK noch Providerpayload oder URL.
 - Authentisierung, Consent und Tokens bleiben serverseitig; Connection, Health, Retry/Backoff, Rate Limits, Idempotenz, Korrelation und Readback sind Teil jedes Providervertrags.
