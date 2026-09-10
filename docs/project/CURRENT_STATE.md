@@ -7,7 +7,7 @@ ausführlichen F0-Tabellen darunter sind ein datierter historischer Snapshot.
 
 ## Auf main belegte Lieferwahrheit
 
-### Sichtbare Produktwahrheit nach D-UI-CORE-001
+### Sichtbare Produktwahrheit nach D-UI-CORE-001/002
 
 | Oberfläche/Vertrag | Belegter Stand auf `main` |
 |---|---|
@@ -22,8 +22,10 @@ ausführlichen F0-Tabellen darunter sind ein datierter historischer Snapshot.
 | Zielnavigation gemäß D-UI-CORE-002 | `NOT_DELIVERED`; Alt-Shell und sichtbare Altmodule bestehen noch |
 | Orders V8 / Customers V2 als identische Listen-, Detail- und Overlay-Wahrheit | `NOT_DELIVERED` |
 | Kalenderroute | `BLOCKING_VISIBLE_LEGACY_PROVIDER_CLAIM`; aktuell sichtbare Google-Calendar-Behauptung, keine akzeptierte Kalender-Capability |
+| Bestehende sichtbare Oberfläche | `FULLY_REJECTED_AS_DELIVERY_BASE`; Alt-Shell, Alt-Navigation, Alt-Startseite, Orders-/Customers-UI und responsive Alt-Navigation sind kein UX-Teilfortschritt und werden nicht als Ziel-UI weiterentwickelt |
+| Kanonische Zieloberfläche | `NOT_DELIVERED`; akzeptierbar erst als zusammenhängende Phillip-V4-/Rolf-V8-/Auftragskarte-V8-/Kundenkarte-V2-Oberfläche mit Navigation und Rückwegen auf Desktop, Tablet und Mobile |
 
-Ein geliefertes Innenmodul oder ein grüner Fachvertrag ist ausdrücklich kein Full-Route-/UX-PASS.
+Ein geliefertes Innenmodul, ein grüner Fachvertrag oder ein Teil-/Kosmetikpatch der Alt-UI ist ausdrücklich kein Full-Route-/UX-PASS, kein Zielscreen-PASS und keine livefähige Oberfläche.
 Die nächste Produktpriorität wird ausschließlich in der aktiven Mission gesteuert; diese Datei nimmt
 keinen Kandidaten als geliefert vorweg.
 

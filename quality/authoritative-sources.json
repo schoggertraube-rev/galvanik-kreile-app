@@ -100,8 +100,13 @@
       "visible_product_customers_card_v2": "NOT_DELIVERED",
       "visible_product_role_homes_and_target_navigation": "NOT_DELIVERED",
       "visible_product_production_shell": "LEGACY_SHELL_NOT_TARGET_NOT_LIVE_CAPABLE_TOTAL_APP",
-      "next_product_priority": "PATH1_UI_CONVERGENCE_A",
+      "next_product_priority": "PATH1_UI_CONVERGENCE",
+      "path1_ui_convergence_program": "ONE_CANONICAL_COHERENT_UI_REPLACEMENT_NO_COMPETING_ACTIVE_UI_PACKAGES",
       "path1_ui_convergence_order": "A_SHELL_ROLE_HOMES_NAV -> B_ORDERS_CARD_V8 -> C_CUSTOMERS_CARD_V2 -> D_SEARCH_TARGET_HEADER_REACCEPTANCE -> E_CALENDAR_AND_FURTHER_MODULES",
+      "path1_ui_convergence_legacy_ui": "FULLY_REJECTED_NOT_A_DELIVERY_BASE",
+      "path1_ui_convergence_reuse": "BACKEND_DATA_AUTH_CONTRACTS_AND_SOUND_NON_UI_LOGIC_ONLY",
+      "path1_ui_convergence_acceptance": "COHERENT_PHILLIP_V4_ROLF_V8_ORDER_V8_CUSTOMER_V2_SURFACE_WITH_NAV_AND_BACK_PATHS_ON_DESKTOP_TABLET_MOBILE",
+      "path1_ui_convergence_partial_delivery_rule": "NO_PARTIAL_UX_PROGRESS_NO_TARGET_SCREEN_PASS_NO_LIVE_CAPABLE_CLAIM",
       "path1_ui_convergence_a_roles": "developer|admin|meister|buero|werkstatt|readonly",
       "path1_ui_convergence_a_google_calendar_blocker": "ACTIVE_VISIBLE_GOOGLE_PROVIDER_CLAIM_MUST_BE_REMOVED_OR_ROUTE_FAIL_CLOSED_404"
     },
@@ -113,14 +118,21 @@
       "Customers/Kundenkarte V2 | `NOT_DELIVERED`",
       "Rollen-Startseiten Phillip V4/Rolf V8 und Zielnavigation | `NOT_DELIVERED`",
       "LEGACY_SHELL / NOT_TARGET / NOT_LIVE_CAPABLE_TOTAL_APP",
-      "BLOCKING_VISIBLE_LEGACY_PROVIDER_CLAIM"
+      "BLOCKING_VISIBLE_LEGACY_PROVIDER_CLAIM",
+      "FULLY_REJECTED_AS_DELIVERY_BASE",
+      "kein Zielscreen-PASS"
     ],
     "scopeTokens": [
       "A — Shell/Rollen-Home/Navigation",
       "B — Orders",
       "C — Customers",
       "D — Suche",
-      "E — Danach"
+      "E — Danach",
+      "genau ein kanonisches Vollersatzprogramm",
+      "KREILE_STARTSEITE_PHILLIP_V4_2026-08-20.html",
+      "KREILE_STARTSEITE_ROLF_V8_2026-08-20.html",
+      "KREILE_AUFTRAGSKARTE_MACHART_V8_2026-08-20.html",
+      "KREILE_KUNDENKARTE_MACHART_V2_2026-08-20.html"
     ],
     "architectureTokens": [
       "vollständige authentifizierte Route",
@@ -128,7 +140,9 @@
       "1220x880",
       "390x844",
       "nummerierte Abweichungsliste ohne P0/P1",
-      "shrink-only entfernt"
+      "shrink-only entfernt",
+      "kanonischer Vollersatz",
+      "keinen Teilpatch als UX-Lieferfortschritt"
     ]
   },
   "providerPolicy": {

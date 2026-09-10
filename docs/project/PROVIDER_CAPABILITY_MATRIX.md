@@ -5,6 +5,8 @@ Quellen: `MODULKARTE_KANON.md`, `ARCHITEKTUR_MODULE_PATH1.md`, `F1_R0_CAPABILITY
 
 Diese Matrix ist Inventar und Acceptance-Plan, keine Scope- oder Baustartautorität. `REAL` bedeutet ausschließlich: unveränderlicher echter Beleg im Capability-Register. `PENDING` bedeutet: Vertrag, Secret oder Real-E2E fehlt. `QUARANTINE` bedeutet: nicht reaktivieren; erst eigener Abbau-/Disposition-Nachweis.
 
+D-UI-CORE-002 verwirft die gesamte bestehende sichtbare Oberfläche als Lieferbasis. Die Zeilen dieses Inventars autorisieren deshalb keine Alt-UI-Reparatur und keinen Teilfortschritt: `PATH1_UI_CONVERGENCE` ersetzt Shell, Navigation, Startseite, Orders-/Customers-UI und responsive Navigation als eine zusammenhängende Oberfläche; ausschließlich belastbare Backend-/Daten-/Auth-Verträge und sinnvolle Nicht-UI-Logik dürfen übernommen werden. A bis E sind interne Schritte desselben Programms.
+
 ## Statusvertrag je Zeile
 
 | Status | Eigene Wahrheit | Provider/API | Querverbindung | Acceptance-Beleg | Verantwortlicher nächster Schritt |
