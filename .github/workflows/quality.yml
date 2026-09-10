@@ -52,7 +52,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(npx --yes supabase@2.111.0 --version)" = "2.111.0"
+          npm run quality:supabase-cli:selftest
+          npm run quality:supabase-cli
           echo "7d3a6d679e8e32e064297901d43fe2eacfe2a7681e408a76206a85ef6c2e4fcb  docs/evidence/f0/PROD_FINGERPRINT_REFERENCE.txt" | sha256sum --check --strict
           echo "175b8ca9f8b964532ef8ad6a5cff710fcea833874ceb5f7b1f7cf358f5a1357d  scripts/schema-parity-catalog.sql" | sha256sum --check --strict
           echo "814c888d0d9b25fdc7fdd066eddc9c34887e07fe839bc2702e6250e3a004f315  docs/evidence/f0/hardening/f0_schema_fingerprint.sql" | sha256sum --check --strict
@@ -242,7 +243,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(npx --yes supabase@2.111.0 --version)" = "2.111.0"
+          npm run quality:supabase-cli
           echo "7d3a6d679e8e32e064297901d43fe2eacfe2a7681e408a76206a85ef6c2e4fcb  docs/evidence/f0/PROD_FINGERPRINT_REFERENCE.txt" | sha256sum --check --strict
           echo "175b8ca9f8b964532ef8ad6a5cff710fcea833874ceb5f7b1f7cf358f5a1357d  scripts/schema-parity-catalog.sql" | sha256sum --check --strict
           echo "814c888d0d9b25fdc7fdd066eddc9c34887e07fe839bc2702e6250e3a004f315  docs/evidence/f0/hardening/f0_schema_fingerprint.sql" | sha256sum --check --strict
@@ -260,14 +261,14 @@ jobs:
         # 2026-08-10-Zyklus-2: "status -o env" lieferte nur DB_URL, storage-http-tests.mjs
         # brach mit FATAL ab). Alle anderen Schritte in diesem Job sprechen ohnehin nur die
         # Postgres-DB direkt an und sind von den zusaetzlich laufenden Diensten unberuehrt.
-        run: npx --yes supabase@2.111.0 start
+        run: ./node_modules/.bin/supabase start
 
       - name: Capture isolated local Supabase runtime credentials
         shell: bash
         run: |
           set -euo pipefail
           runtime_env="$(mktemp)"
-          npx --yes supabase@2.111.0 status -o env > "$runtime_env"
+          ./node_modules/.bin/supabase status -o env > "$runtime_env"
           set -a
           source "$runtime_env"
           set +a
@@ -282,7 +283,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Replay exact Production cutoff from zero without seed
-        run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260810100000
+        run: ./node_modules/.bin/supabase db reset --local --no-seed --version 20260810100000
 
       - name: Capture exact 9-migration Production-cutoff catalog and 11-component fingerprint
         run: |
@@ -298,7 +299,7 @@ jobs:
           node scripts/quality/fingerprint-compare.mjs "$FP_BASELINE" docs/evidence/f0/PROD_FINGERPRINT_REFERENCE.txt | tee replay-baseline-fingerprint.txt
 
       - name: Replay exact 13-migration W4 candidate from zero without seed
-        run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260812103446
+        run: ./node_modules/.bin/supabase db reset --local --no-seed --version 20260812103446
 
       - name: Capture and check exact W4 candidate catalog, ledger, and fingerprint
         run: |
@@ -319,7 +320,7 @@ jobs:
       - name: Replay F1.2 candidate fresh from zero without seed
         # Complete F1.2-candidate replay: integral F1.2 schema through 20260817120000.
         # Baseline and separate W4/production fingerprint anchors remain immutable.
-        run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260817120000
+        run: ./node_modules/.bin/supabase db reset --local --no-seed --version 20260817120000
 
       - name: W3/F1.2 order-station command, receipt, and private read-model integration
         env:
@@ -330,7 +331,7 @@ jobs:
         run: npx vitest run src/test/w3_order_station.integration.test.ts
 
       - name: M1-source-compatible 14-migration W4-03 replay
-        run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260812133649
+        run: ./node_modules/.bin/supabase db reset --local --no-seed --version 20260812133649
 
       - name: W4-03 Galvanik handoff attachment real DB, View, Actions, Panel, and Storage HTTP
         shell: bash
@@ -363,7 +364,7 @@ jobs:
       - name: F1.3 candidate replay fresh from zero without seed
         # Complete F1.3-candidate replay: integral F1.3 schema through 20260820143000.
         # Enables F1.3 integration tests against foundation ports and live card.
-        run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260820143000
+        run: ./node_modules/.bin/supabase db reset --local --no-seed --version 20260820143000
 
       - name: F1.3 foundation ports integration test
         env:
@@ -473,7 +474,7 @@ jobs:
       - name: Second exact 13-migration replay and byte-identical W4 captures
         run: |
           set -euo pipefail
-          npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260812103446
+          ./node_modules/.bin/supabase db reset --local --no-seed --version 20260812103446
           node scripts/quality/check-w4-candidate-schema.mjs --capture \
             --database-url postgresql://postgres:postgres@127.0.0.1:54322/postgres \
             --catalog w4-candidate-second.catalog --fingerprint w4-candidate-second-fingerprint.json --ledger w4-candidate-second-ledger.json
@@ -510,7 +511,7 @@ jobs:
       - name: F1.5 B2 candidate replay fresh from zero without seed
         # Blocking F1.5 contract: payment mode truth from intake through 20260905201850.
         # Fail-closed: without an always condition, a failed reset stops the job.
-        run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260909180000
+        run: ./node_modules/.bin/supabase db reset --local --no-seed --version 20260909180000
 
       - name: Werkstatt KPI SQL-view contract integration test (blocking)
         env:
@@ -554,7 +555,7 @@ jobs:
         # the F1.3 command correctly returns CONFLICT. On main, F1.3 live-card ran right
         # after its own fresh reset; this restores that isolation on the B2 schema.
         # Fail-closed: without an always condition, a failed reset stops the job.
-        run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260909180000
+        run: ./node_modules/.bin/supabase db reset --local --no-seed --version 20260909180000
 
       - name: F1.3 live-card regression on the F1.5 B2 schema (blocking)
         env:
@@ -565,4 +566,4 @@ jobs:
 
       - name: Stop isolated local Supabase
         if: always()
-        run: npx --yes supabase@2.111.0 stop --no-backup
+        run: ./node_modules/.bin/supabase stop --no-backup

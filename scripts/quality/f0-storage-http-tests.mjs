@@ -1,14 +1,22 @@
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import process from "node:process";
 
 // BF-007: echte Storage-HTTP-Negativmatrix gegen die lokale Supabase-Storage-REST-API im
 // Replay-Job (nicht nur SQL-Inventar wie scripts/quality/f0_negative_tests.sql Abschnitt F).
-// Keys werden zur Laufzeit aus "npx supabase status" geparst (keine gehardcodeten Secrets).
+// Keys werden zur Laufzeit aus der lokal gepinnten Supabase CLI geparst (keine gehardcodeten Secrets).
 //
-// Aufruf (Replay-Job, nach "npx supabase db start" + "npx supabase db reset --local"):
+// Aufruf (Replay-Job, nach lokalem "supabase start" + "supabase db reset --local"):
 //   node scripts/quality/f0-storage-http-tests.mjs
 
-const SUPABASE_BIN_ARGS = ["--yes", "supabase@2.111.0"];
+const SUPABASE_ENTRYPOINT = path.resolve(
+  process.cwd(),
+  "node_modules",
+  "supabase",
+  "dist",
+  "supabase.js",
+);
 const BUCKET = "item-photos"; // 12 MiB, image/jpeg|png|webp (siehe storage.buckets, BF-002/F0-06)
 const OTHER_BUCKET = "scans"; // fuer den bucketuebergreifenden Test (S6)
 const SIZE_LIMIT_BYTES = 12582912;
@@ -23,8 +31,12 @@ function report(id, ok, detail) {
 }
 
 function parseSupabaseStatus() {
-  const raw = execFileSync("npx", [...SUPABASE_BIN_ARGS, "status", "-o", "env"], {
+  if (!existsSync(SUPABASE_ENTRYPOINT)) {
+    throw new Error(`F0-STORAGE-HTTP FATAL: lokale Supabase CLI fehlt: ${SUPABASE_ENTRYPOINT}`);
+  }
+  const raw = execFileSync(process.execPath, [SUPABASE_ENTRYPOINT, "status", "-o", "env"], {
     encoding: "utf8",
+    windowsHide: true,
   });
   const map = {};
   for (const line of raw.split(/\r?\n/)) {
