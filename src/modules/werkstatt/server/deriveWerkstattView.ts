@@ -145,6 +145,7 @@ export function buildWerkstattData(
     wipCount: input.kpis.wipCount,
     dueThisWeekCount: input.kpis.dueThisWeekCount,
     pickerOrders: combined,
+    goodsOutCandidates: combined.filter((order) => order.station === "fertig"),
     canCreateOrder: input.canCreateOrder,
   };
 }

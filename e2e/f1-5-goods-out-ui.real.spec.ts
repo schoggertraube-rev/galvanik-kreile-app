@@ -178,6 +178,45 @@ async function openFinishedOverlay(page: Page, orderId: string, orderNumber: str
   return overlay;
 }
 
+async function openGoodsOutFromWerkstatt(
+  page: Page,
+  orderId: string,
+  orderNumber: string,
+  screenshots?: string[],
+  pickerScreenshot?: string,
+) {
+  await openRoute(page, "/warendurchlauf");
+  await page.getByRole("button", { name: "Ware raus", exact: true }).click();
+  const picker = page.getByRole("dialog", { name: "Ware raus", exact: true });
+  await expectOne(picker);
+  const candidate = picker.getByTestId(`goods-out-picker-order-${orderId}`);
+  await expectOne(candidate);
+  if (screenshots && pickerScreenshot) screenshots.push(await capture(page, pickerScreenshot));
+  await candidate.click();
+  const overlay = page.getByTestId("live-order-card");
+  await expectOne(overlay);
+  await expect(overlay).toContainText(orderNumber);
+  await expectOne(overlay.getByTestId("f1-5-flow"));
+  return overlay;
+}
+
+async function expectGoodsOutCandidateAbsentAfterHomeReload(
+  page: Page,
+  orderId: string,
+  screenshots: string[],
+  screenshotFilename: string,
+) {
+  await openRoute(page, "/warendurchlauf");
+  await page.reload();
+  await page.waitForURL((url) => url.pathname === "/warendurchlauf", { timeout: 30_000 });
+  await page.getByRole("button", { name: "Ware raus", exact: true }).click();
+  const picker = page.getByRole("dialog", { name: "Ware raus", exact: true });
+  await expectOne(picker);
+  await expect(picker.getByTestId(`goods-out-picker-order-${orderId}`)).toHaveCount(0);
+  screenshots.push(await capture(page, screenshotFilename));
+  await picker.getByRole("button", { name: "Schließen", exact: true }).click();
+}
+
 async function capture(page: Page, filename: string) {
   const target = path.join(EVIDENCE_DIR, filename);
   await page.screenshot({ path: target, fullPage: false });
@@ -271,12 +310,24 @@ test.describe("F1.5-D schmale echte Zahlungs-/Warenausgangsoberfläche", () => {
       expect(await readonlyOverlay.getByTestId("f1-5-payment-action").count()).toBe(0);
       await readonlyContext.close();
 
-      const vorkasseDesktop = await openFinishedOverlay(desktopPage, vorkasse.orderId, vorkasse.orderNumber);
+      const vorkasseDesktop = await openGoodsOutFromWerkstatt(
+        desktopPage,
+        vorkasse.orderId,
+        vorkasse.orderNumber,
+        screenshots,
+        "f1-5-d1-desktop-vorkasse-picker-1440x900.png",
+      );
       const vorkasseDesktopBlocked = vorkasseDesktop.getByTestId("f1-5-blocked");
       await expect(vorkasseDesktopBlocked).toContainText("Vorkasse ist noch nicht vollständig bestätigt");
       await vorkasseDesktopBlocked.scrollIntoViewIfNeeded();
       screenshots.push(await capture(desktopPage, "f1-5-d-desktop-vorkasse-blocked-1440x900.png"));
-      const vorkasseTablet = await openFinishedOverlay(tabletPage, vorkasse.orderId, vorkasse.orderNumber);
+      const vorkasseTablet = await openGoodsOutFromWerkstatt(
+        tabletPage,
+        vorkasse.orderId,
+        vorkasse.orderNumber,
+        screenshots,
+        "f1-5-d1-tablet-vorkasse-picker-1220x880.png",
+      );
       const vorkasseTabletBlocked = vorkasseTablet.getByTestId("f1-5-blocked");
       await expect(vorkasseTabletBlocked).toContainText("Vorkasse ist noch nicht vollständig bestätigt");
       await vorkasseTabletBlocked.scrollIntoViewIfNeeded();
@@ -291,8 +342,20 @@ test.describe("F1.5-D schmale echte Zahlungs-/Warenausgangsoberfläche", () => {
       await expect(vorkasseDesktop.getByTestId("f1-5-receipt")).toContainText("Warenausgang bestätigt", { timeout: 30_000 });
       screenshots.push(await capture(desktopPage, "f1-5-d-desktop-vorkasse-success-1440x900.png"));
       await vorkasseDesktop.getByRole("button", { name: "Auftragskarte schließen", exact: true }).click();
+      await expectGoodsOutCandidateAbsentAfterHomeReload(
+        desktopPage,
+        vorkasse.orderId,
+        screenshots,
+        "f1-5-d1-desktop-vorkasse-readback-1440x900.png",
+      );
 
-      const abholungTablet = await openFinishedOverlay(tabletPage, abholung.orderId, abholung.orderNumber);
+      const abholungTablet = await openGoodsOutFromWerkstatt(
+        tabletPage,
+        abholung.orderId,
+        abholung.orderNumber,
+        screenshots,
+        "f1-5-d1-tablet-abholung-picker-1220x880.png",
+      );
       await expect(abholungTablet.getByTestId("f1-5-blocked")).toContainText("bei der Übergabe zuerst vollständig bestätigt");
       await abholungTablet.getByTestId("f1-5-payment-action").click();
       await expect(abholungTablet.getByTestId("f1-5-receipt")).toContainText("Zahlung bestätigt", { timeout: 30_000 });
@@ -301,9 +364,27 @@ test.describe("F1.5-D schmale echte Zahlungs-/Warenausgangsoberfläche", () => {
       await expect(abholungTablet.getByTestId("f1-5-receipt")).toContainText("Warenausgang bestätigt", { timeout: 30_000 });
       screenshots.push(await capture(tabletPage, "f1-5-d-tablet-abholung-success-1220x880.png"));
       await abholungTablet.getByRole("button", { name: "Auftragskarte schließen", exact: true }).click();
+      await expectGoodsOutCandidateAbsentAfterHomeReload(
+        tabletPage,
+        abholung.orderId,
+        screenshots,
+        "f1-5-d1-tablet-abholung-readback-1220x880.png",
+      );
 
-      const rechnungDesktop = await openFinishedOverlay(desktopPage, rechnung.orderId, rechnung.orderNumber);
-      const rechnungTablet = await openFinishedOverlay(tabletPage, rechnung.orderId, rechnung.orderNumber);
+      const rechnungDesktop = await openGoodsOutFromWerkstatt(
+        desktopPage,
+        rechnung.orderId,
+        rechnung.orderNumber,
+        screenshots,
+        "f1-5-d1-desktop-rechnung-picker-1440x900.png",
+      );
+      const rechnungTablet = await openGoodsOutFromWerkstatt(
+        tabletPage,
+        rechnung.orderId,
+        rechnung.orderNumber,
+        screenshots,
+        "f1-5-d1-tablet-rechnung-picker-1220x880.png",
+      );
       const rechnungDesktopEmpty = rechnungDesktop.getByTestId("f1-5-no-invoice-values");
       const rechnungTabletEmpty = rechnungTablet.getByTestId("f1-5-no-invoice-values");
       await expect(rechnungDesktopEmpty).toContainText("weder Betrag noch Zahlungsstatus");
@@ -338,6 +419,13 @@ test.describe("F1.5-D schmale echte Zahlungs-/Warenausgangsoberfläche", () => {
       await expect(rechnungDesktop.getByTestId("f1-5-receipt")).toContainText("Zahlung bestätigt", { timeout: 30_000 });
       await expect(rechnungDesktop.getByTestId("f1-5-payment-status")).toHaveText("bezahlt");
       screenshots.push(...await captureDesktopAndTablet(desktopPage, rechnungDesktop.getByTestId("f1-5-receipt"), "nach-zahlung-v1"));
+      await rechnungDesktop.getByRole("button", { name: "Auftragskarte schließen", exact: true }).click();
+      await expectGoodsOutCandidateAbsentAfterHomeReload(
+        desktopPage,
+        rechnung.orderId,
+        screenshots,
+        "f1-5-d1-desktop-rechnung-readback-1440x900.png",
+      );
 
       const [readback] = await sql<{
         vorkasse_events: number; abholung_events: number; rechnung_v2_events: number;

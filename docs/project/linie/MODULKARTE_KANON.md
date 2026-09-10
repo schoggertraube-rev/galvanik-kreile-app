@@ -13,7 +13,7 @@ Quelle: Owner-Modulmindmap „Baustruktur Mini-USP" (Stand 15.08.2026), ratifizi
 
 ## HOME/UI (kein eigenes „Modul", sondern Sicht auf dieselben Daten)
 - Werkstatt = Phillip V4 (Kontroll-Home „Heute sichern"). „Der Tag" = Rolf V8. Referenz: `ui/`.
-- **Kandidat (S4, noch nicht reviewed/gemergt):** `src/modules/werkstatt/` traegt die Phillip-V4-UI; `/warendurchlauf` bleibt Kompositionswurzel und liest unveraendert ueber die bestehenden `getWareneingangOrdersAction`/`getGalvanikOrdersAction`.
+- **Integriert (S4, PR #77):** `src/modules/werkstatt/` traegt die Phillip-V4-UI; `/warendurchlauf` bleibt Kompositionswurzel und liest ueber die bestehenden `getWareneingangOrdersAction`/`getGalvanikOrdersAction`. D.1/D-UI-F15-004A bindet den `Ware raus`-Griff ueber einen engen Port an den gelieferten OrderOverlay-Fluss und filtert ausschliesslich die kanonische Station `fertig`.
 
 ## QUARANTÄNE — später andocken, jetzt NUR als Vertrag/Anschluss-Stelle, kein Eigenbau
 - OCR (externer Provider/API, kein Eigenbau).

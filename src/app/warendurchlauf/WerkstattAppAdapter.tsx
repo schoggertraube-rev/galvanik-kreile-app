@@ -25,6 +25,7 @@ export function WerkstattAppAdapter({
       view={view}
       ports={{
         onOpenOrder: openOrder,
+        onOpenGoodsOut: openOrder,
         onOpenWip: () => router.push("/warendurchlauf/galvanik"),
         onScanOrder: () => openErfassung({ mode: "scan" }),
         onCreateOrder: () => openErfassung({

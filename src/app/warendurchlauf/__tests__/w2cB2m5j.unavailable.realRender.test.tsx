@@ -242,7 +242,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(ports.openOrder).not.toHaveBeenCalled();
   });
 
-  it("uses the existing fail-closed scan capture path from within the picker, and shows Ware raus disabled with the F1.5-C hint", async () => {
+  it("uses the existing fail-closed scan capture path from within the unchanged order picker", async () => {
     ports.getWareneingangOrdersAction.mockResolvedValueOnce({
       ok: true,
       data: [order("we-scan", "WE-SCAN", "Scan Sentinel", "wareneingang")],
@@ -250,14 +250,60 @@ describe("W2C-B2M5J unavailable UI", () => {
     const { default: WarendurchlaufIndex } = await import("../page");
     render(await WarendurchlaufIndex());
 
-    const wareRausButton = screen.getByRole("button", { name: "Ware raus" });
-    expect(wareRausButton).toBeDisabled();
-    expect(screen.getByText("kommt mit F1.5-C")).toBeInTheDocument();
-
     fireEvent.click(screen.getByRole("button", { name: "Auftrag öffnen / scannen" }));
     fireEvent.click(screen.getByRole("button", { name: "Auftrag scannen" }));
     expect(ports.openErfassung).toHaveBeenCalledWith({ mode: "scan" });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("opens Ware raus with only canonical fertig candidates and selects through the injected app port", async () => {
+    ports.getWareneingangOrdersAction.mockResolvedValueOnce({
+      ok: true,
+      data: [order("we-out", "WE-OUT", "Wareneingang Ausgang Sentinel", "wareneingang")],
+    });
+    ports.getGalvanikOrdersAction.mockResolvedValueOnce({
+      ok: true,
+      data: [
+        order("ga-out", "GA-OUT", "Galvanik Ausgang Sentinel", "galvanik"),
+        order("fi-out", "FI-OUT", "Fertiger Ausgang Sentinel", "fertig"),
+      ],
+    });
+    const { default: WarendurchlaufIndex } = await import("../page");
+    render(await WarendurchlaufIndex());
+
+    const trigger = screen.getByRole("button", { name: "Ware raus" });
+    expect(trigger).toBeEnabled();
+    fireEvent.click(trigger);
+
+    const dialog = screen.getByRole("dialog", { name: "Ware raus" });
+    expect(within(dialog).getByTestId("goods-out-picker-order-fi-out")).toBeVisible();
+    expect(within(dialog).queryByText("WE-OUT", { exact: true })).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("GA-OUT", { exact: true })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Auftrag scannen" })).not.toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByTestId("goods-out-picker-order-fi-out"));
+
+    expect(ports.openOrder).toHaveBeenCalledTimes(1);
+    expect(ports.openOrder).toHaveBeenCalledWith("fi-out");
+    expect(screen.queryByRole("dialog", { name: "Ware raus" })).not.toBeInTheDocument();
+  });
+
+  it("shows an honest Ware-raus empty picker when real data contains no fertig order", async () => {
+    ports.getGalvanikOrdersAction.mockResolvedValueOnce({
+      ok: true,
+      data: [order("ga-no-out", "GA-NO-OUT", "Noch in Galvanik", "galvanik")],
+    });
+    const { default: WarendurchlaufIndex } = await import("../page");
+    render(await WarendurchlaufIndex());
+
+    fireEvent.click(screen.getByRole("button", { name: "Ware raus" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Ware raus" });
+    expect(within(dialog).getByTestId("goods-out-picker-empty")).toHaveTextContent(
+      "Keine fertig gemeldete Ware zur Ausgabe vorhanden.",
+    );
+    expect(within(dialog).queryAllByTestId(/^goods-out-picker-order-/)).toHaveLength(0);
+    expect(ports.openOrder).not.toHaveBeenCalled();
   });
 
   it("traps Tab focus, closes the real-order picker explicitly or with Escape, and returns focus", async () => {
@@ -321,6 +367,10 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(screen.queryByRole("dialog", { name: "Auftrag öffnen" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Neuer Eingang" })).not.toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Werkstattaktionen" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Ware raus" }));
+    expect(screen.getByRole("dialog", { name: "Ware raus" })).toHaveTextContent(
+      "Keine fertig gemeldete Ware zur Ausgabe vorhanden.",
+    );
   });
 
   it("denies an excluded root role before either station action is invoked", async () => {
@@ -454,7 +504,8 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(clientSource).toContain('data-testid="werkstatt-held-list"');
     expect(clientSource).toContain("Auftrag öffnen / scannen");
     expect(clientSource).toContain('aria-controls={PICKER_DIALOG_ID}');
-    expect(clientSource).toContain('const pickerOrders: readonly PhillipOrderCard[] = isData ? view.pickerOrders : [];');
+    expect(clientSource).toContain('activePicker === "goods-out"');
+    expect(clientSource).toContain("view.goodsOutCandidates");
     expect(clientSource).toContain('className={`${styles.actionPrimary} ${styles.touchTarget}`}');
     expect(clientSource).toContain('className={`${styles.heldOpenButton} ${styles.touchTarget}`}');
     expect(cssSource).toMatch(/\.touchTarget\s*\{[^}]*min-height:\s*48px;/);
@@ -482,6 +533,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(typesSource).not.toContain("OperationalOrder");
     expect(typesSource).toContain("export type WerkstattViewPorts");
     expect(typesSource).toContain("onOpenWip: () => void;");
+    expect(typesSource).toContain("onOpenGoodsOut: (orderId: string) => void;");
     expect(clientSource).not.toMatch(/@\/components\/|@\/hooks\/|@\/lib\/overlayStore/);
     expect(clientSource).toContain("onClick={ports.onOpenWip}");
     expect(clientSource).not.toMatch(/next\/link|next\/navigation|\/warendurchlauf\//);
@@ -490,6 +542,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(adapterSource).toContain('from "@/lib/overlayStore"');
     expect(adapterSource).toContain('from "next/navigation"');
     expect(adapterSource).toContain('onOpenWip: () => router.push("/warendurchlauf/galvanik")');
+    expect(adapterSource).toContain("onOpenGoodsOut: openOrder");
     expect(routeSource).toContain("wareneingangResult.data.map(toWerkstattSurfaceOrder)");
     expect(routeSource).toContain("galvanikResult.data.map(toWerkstattSurfaceOrder)");
     expect(manifestSource).toContain("@/modules/werkstatt/public#WerkstattViewPorts");

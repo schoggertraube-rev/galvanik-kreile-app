@@ -68,6 +68,9 @@ f1_5_skonto: OPEN_NON_BLOCKING
 f1_5_not_in_scope: MAHNWESEN; DATEV_EXPORT; E_RECHNUNG_VERSAND; BUCHHALTUNGSMODUL; CAMT_MT940_IMPORT(Adapter-1); MOLLIE(Adapter-2)
 f1_5_legacy_quarantine: src/lib/payments/mollieAdapter.ts; src/lib/payments/paymentProvider.ts; src/app/buchhaltung/zahlung/page.tsx; FinanzenDashboardClient.tsx # nicht reaktivieren, nicht loeschen (D-ARCH-008)
 f1_5_units: A_DATA_READPORT -> B_CONFIRM_PAYMENT+B2_PAYMENT_MODE_INTAKE -> C_GOODS_OUT_GATE -> D_UI; T_SUPABASE_CLI_PIN unabhaengig (keine Commit-Voraussetzung, CI ist Gate)
+f1_5_d_status: DELIVERED_PR_80_MERGE_001a7698b9ea4edff881ed56ea110832e9de7a46
+f1_5_d1_status: CANDIDATE_D_UI_F15_004A # Ware-raus-Griff; kein PASS vor Merge
+f1_5_t_status: OPEN
 
 # ── F1.2 Entscheidungsgrundlage (bindend, ersetzt Altstand) ───────
 # D-F12-001A (ersetzt D-F12-001): F1.2 = genau EIN Uebergang
@@ -362,6 +365,13 @@ f1_5_allowlist:
   - src/components/orders/OrderImmutableInvoiceButton.tsx
   - src/components/orders/__tests__/w2cOrderOverlay.failClosed.test.tsx
   - src/components/orders/__tests__/OrderImmutableInvoiceButton.test.tsx
+  # D.1 — D-UI-F15-004A: Phillip-Werkstattgriff auf den gelieferten Overlay-Fluss
+  - src/modules/werkstatt/server/types.ts
+  - src/modules/werkstatt/server/deriveWerkstattView.ts
+  - src/modules/werkstatt/__tests__/deriveWerkstattView.test.ts
+  - src/modules/werkstatt/ui/WerkstattView.tsx
+  - src/app/warendurchlauf/WerkstattAppAdapter.tsx
+  - src/app/warendurchlauf/__tests__/w2cB2m5j.unavailable.realRender.test.tsx
   # Evidence
   - e2e/f1-5-*.real.spec.ts
   - docs/evidence/f1/F1_5_BESTAETIGTER_ZAHLUNGSEINGANG_E2E_EVIDENCE.md
@@ -369,7 +379,11 @@ f1_5_allowlist:
   - docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json
   - docs/evidence/f0/W4_CROSS_MODULE_READ_PORT_INVENTORY.json
   - docs/project/CURRENT_STATE.md
+  - docs/project/MODULARITY_STRATEGY.md
   - docs/project/linie/00_JETZT_UND_LEITPLANKEN.md
+  - docs/project/linie/00_ABC_INDEX.md
+  - docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md
+  - docs/project/linie/MODULKARTE_KANON.md
 
 f1_r0_required_gates:
   - REACHABLE_PRODUCTION_MOCKS=0

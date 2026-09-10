@@ -2,6 +2,11 @@
 
 Stand: 2026-08-01
 
+> **Aktiver Nachtrag 2026-09-10:** Fuer den laufenden F1-/Path-1-Bau gelten D-ARCH-009,
+> `docs/project/linie/MODULKARTE_KANON.md` und `docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md`.
+> Die unten erhaltene historische Zielskizze startet kein `modules/cockpit`, Analyse-/KPI-Cockpit
+> oder eigenes KPI-Produkt; neue Arbeit folgt ausschliesslich der kanonischen Modulkarte.
+
 ## Ziel
 
 Die Kreile-App bleibt das Referenzprodukt und wird zuerst stabil und verkaufsfaehig. Die Struktur wird nicht durch eine grosse Ordnerumsortierung repariert, sondern durch eindeutige Ownership, stabile Vertraege und einen belegten operativen Vertikalschnitt.
