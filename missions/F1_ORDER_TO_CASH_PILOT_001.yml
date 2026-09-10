@@ -69,8 +69,8 @@ f1_5_not_in_scope: MAHNWESEN; DATEV_EXPORT; E_RECHNUNG_VERSAND; BUCHHALTUNGSMODU
 f1_5_legacy_quarantine: src/lib/payments/mollieAdapter.ts; src/lib/payments/paymentProvider.ts; src/app/buchhaltung/zahlung/page.tsx; FinanzenDashboardClient.tsx # nicht reaktivieren, nicht loeschen (D-ARCH-008)
 f1_5_units: A_DATA_READPORT -> B_CONFIRM_PAYMENT+B2_PAYMENT_MODE_INTAKE -> C_GOODS_OUT_GATE -> D_UI; T_SUPABASE_CLI_PIN unabhaengig (keine Commit-Voraussetzung, CI ist Gate)
 f1_5_d_status: DELIVERED_PR_80_MERGE_001a7698b9ea4edff881ed56ea110832e9de7a46
-f1_5_d1_status: CANDIDATE_D_UI_F15_004A # Ware-raus-Griff; kein PASS vor Merge
-f1_5_t_status: OPEN
+f1_5_d1_status: DELIVERED_PR_81_MERGE_bf17e8c5562ca772696176fabf4963ece683b88b
+f1_5_t_status: CANDIDATE_SUPABASE_CLI_PIN # kein F1.5-Gesamt-PASS vor T-Merge
 
 # ── F1.2 Entscheidungsgrundlage (bindend, ersetzt Altstand) ───────
 # D-F12-001A (ersetzt D-F12-001): F1.2 = genau EIN Uebergang
@@ -320,7 +320,6 @@ f1_5_allowlist:
   - missions/F1_ORDER_TO_CASH_PILOT_001.yml
   - docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md
   - docs/project/linie/README.md
-  - .github/workflows/quality.yml
   - quality/eslint-baseline.json
   # A — Daten- und Read-Port-Vertrag
   - supabase/migrations/*_f1_5_payment_goods_out_contract.sql
@@ -355,6 +354,8 @@ f1_5_allowlist:
   - package.json
   - package-lock.json
   - scripts/supabase-version-check.mjs
+  - .github/workflows/quality.yml
+  - scripts/quality/f0-storage-http-tests.mjs
   # D — Oberflaeche (nur Readback)
   - supabase/migrations/20260909180000_f1_5_goods_out_ui_read_contract.sql
   - src/app/warendurchlauf/warenausgang/page.tsx

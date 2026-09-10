@@ -10,15 +10,15 @@
 5. **Owner-Grenzen** (nur der Owner): Merge, Deploy, Remote-Migration, RLS, Löschen, Secrets, Go-live. Produktentscheidungen = STOP-Liste im Register §7 (Stand: 0 offen).
 
 ## DIE ZWEI SPUREN (nicht verwechseln)
-- **Spur A — F1 Order-to-Cash-Pilot** (Domänen-Logik): F1.4 sowie **F1.5-A + B/B2 + C + D sind geliefert**. C wurde mit PR #79 als Merge-Commit `b94821ca56634bcf75e8d5ddda130241bb75b9bf`, D mit PR #80 als Merge-Commit `001a7698b9ea4edff881ed56ea110832e9de7a46` integriert. D.1 ist aktueller Kandidat; T (Supabase-Pin) bleibt unabhängig offen. Reihenfolge und Paketstatus stehen in `../../../missions/F1_ORDER_TO_CASH_PILOT_001.yml`.
+- **Spur A — F1 Order-to-Cash-Pilot** (Domänen-Logik): F1.4 sowie **F1.5-A + B/B2 + C + D + D.1 sind geliefert**. C wurde mit PR #79 als Merge-Commit `b94821ca56634bcf75e8d5ddda130241bb75b9bf`, D mit PR #80 als Merge-Commit `001a7698b9ea4edff881ed56ea110832e9de7a46` und D.1 mit PR #81 als Merge-Commit `bf17e8c5562ca772696176fabf4963ece683b88b` integriert. T (Supabase-CLI-Pin) ist der aktuelle letzte F1.5-Kandidat. Reihenfolge und Paketstatus stehen in `../../../missions/F1_ORDER_TO_CASH_PILOT_001.yml`.
 - **Spur B — Path-1 Modul-Umbau** (Architektur): **S0 + S1 + S4 in main integriert**. Phillip-Werkstatt-V4 wurde mit PR #77 gemergt (Merge-SHA `019b1fbaad34e4f10a28298a29858f2fa599eb45`); CI und Vercel Production waren erfolgreich. S2 (Kill-Liste) und S3 (Muster-Modul `erfassung`) sind **nicht begonnen** und werden **nicht vorgezogen**. Plan: `ARCHITEKTUR_MODULE_PATH1.md` §4.
 - **Kein Widerspruch:** Reference (ABC/Modulkarte/Verträge) = das WIE/WAS gebaut wird. Der ausdrueckliche Owner-/PL-Handoff bestimmt die AKTUELL in-flight-Aufgabe. Wenn beide etwas Verschiedenes als „nächstes" nahelegen, entscheidet der Owner die Priorität — du entscheidest sie NICHT.
 
 ## WAS JETZT DRAN IST (Stand 2026-09-10)
 - **Der frühere HARTE STOP zu `quality.yml` ist aufgehoben — Ursache belegt:** das F1.3-Rot war eine **Test-Isolations-Regression** (geteilte DB ohne Reset vor F1.3; Stammdaten mit `expectedVersion: 0` existierten schon → Command antwortete korrekt CONFLICT), **kein Produktbefund**. Fix = genau ein fail-closed `db reset` vor F1.3 (`cc13aec`), zweimal grün, Red-Team PASS, gemerged. Siehe PROBLEMLOESUNGEN P3.
 - **S0 + S1 + S4 sind integriert:** PR #75 ist in `main` gemergt (`160bcf4`). PR #77 ist nach Exact-SHA-Abnahme gemergt (Merge-SHA `019b1fbaad34e4f10a28298a29858f2fa599eb45`); CI und Vercel Production waren erfolgreich. Kein offener S4-Merge-Schritt bleibt.
-- **Aktuell dran:** F1.5-D.1 gemaess D-UI-F15-004A: den Phillip-V4-Griff `Ware raus` ueber einen engen Werkstatt-Port an den gelieferten OrderOverlay-Fluss binden; ausschliesslich echte `fertig`-Auftraege anbieten.
-- **Nächster Schritt:** D.1 als einen Draft-PR-Kandidaten einfrieren, Real-E2E sowie CI/Preview am Exact-SHA belegen und unabhaengig pruefen lassen. T bleibt danach offen; kein F1.6- oder Nebenpaket vorziehen.
+- **Aktuell dran:** F1.5-T: Supabase CLI exakt und reproduzierbar lokal auf `2.111.0` sperren; CI und Quality duerfen sie nicht zur Laufzeit aus dem Netz nachinstallieren.
+- **Nächster Schritt:** T als einen Draft-PR-Kandidaten einfrieren, lokale Positiv-/Negativbelege sowie CI/Preview am Exact-SHA belegen und unabhaengig pruefen lassen. Kein F1.5-Gesamt-PASS vor T-Merge; kein F1.6- oder Nebenpaket vorziehen.
 - S2 (Kill-Liste löschen, Baseline `quality/module-gates-baseline.json` schrumpft) und S3 (`src/modules/erfassung/` als Muster) sind **nicht begonnen** und werden aktuell **nicht vorgezogen**.
 
 ## DER DETERMINISMUS-HEBEL (gebaut in #75)
