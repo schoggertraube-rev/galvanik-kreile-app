@@ -202,8 +202,8 @@ path1_ui_convergence_allowlist:
   - src/modules/customers/**
   - src/app/orders/**
   - src/app/customers/**
-  - src/components/orders/**
-  - src/components/customers/**
+  - src/components/entities/order-legacy/**
+  - src/components/entities/customer-legacy/**
   - src/components/entities/**
   - src/app/actions/orders.actions.ts
   - src/app/actions/customers.actions.ts
@@ -211,6 +211,48 @@ path1_ui_convergence_allowlist:
   - src/lib/server/operationalOrders.ts
   - src/lib/server/customerSummaryRead.ts
   - src/lib/server/__tests__/w2cB2m5u.operationalDueTruth.failClosed.test.ts
+  # B/C Gate-Reparatur: exakte neutrale Ablage bestehender, nicht mehr rendernder
+  # Altbausteine und ihrer direkten Importverbraucher. Keine zweite Kartenwahrheit.
+  - src/features/customer-support/customer-card/customerCard.actions.ts
+  - src/features/customer-support/customer-card/__tests__/w2cB2m5e.customerCardPrivacy.failClosed.test.ts
+  - src/features/order-support/orderCost.actions.ts
+  - src/features/order-support/orderPhoto.actions.ts
+  - src/features/order-support/shipment.actions.ts
+  - src/features/order-support/__tests__/w2cB2m5l.orderPhoto.failClosed.test.ts
+  - src/lib/customer-support/matchCustomer.ts
+  - src/lib/order-support/costCalculation.ts
+  - src/lib/order-support/getUrgency.ts
+  - src/lib/order-support/orderLifecycleContract.ts
+  - src/lib/order-support/stationContext.ts
+  - src/lib/order-support/__tests__/w2cB2m5u.urgencyDueTruth.failClosed.test.ts
+  - src/app/actions/__tests__/commerceAccountingContainment.test.ts
+  - src/app/actions/__tests__/erfassungContainment.test.ts
+  - src/app/actions/__tests__/w2cB2m3a.failClosed.test.ts
+  - src/app/actions/__tests__/w2cB2m3b.failClosed.test.ts
+  - src/app/actions/__tests__/w2cB2m5c.orderTransition.failClosed.test.ts
+  - src/app/actions/__tests__/w2cB2m5g.customerMutation.failClosed.test.ts
+  - src/app/api/__tests__/quarantine.test.ts
+  - src/app/warendurchlauf/components/OffeneAuftraegeKachel.tsx
+  - src/app/warendurchlauf/galvanik/page.tsx
+  - src/app/warendurchlauf/galvanik/__tests__/orderStationReadback.test.tsx
+  - src/app/warendurchlauf/galvanik/__tests__/w4OrderStationAttachmentPanel.test.tsx
+  - src/app/warendurchlauf/warenausgang/page.tsx
+  - src/app/warendurchlauf/warenausgang/__tests__/w2cB2m5t.warenausgangFinance.failClosed.test.tsx
+  - src/components/erfassung/OrderIntakePanel.tsx
+  - src/components/galvanik/GalvanikOrderRow.tsx
+  - src/components/galvanik/GalvanikQueue.tsx
+  - src/components/intake/OcrMatchResult.tsx
+  - src/components/warenausgang/WarenausgangQueue.tsx
+  - src/lib/pdf/OrderLabel.tsx
+  - src/lib/server/orderIntakeRead.ts
+  - src/lib/server/orderStationAttachment.ts
+  - src/lib/server/__tests__/orderIntakeRead.test.ts
+  - src/lib/server/commands/orderExtraWorkCommand.ts
+  - src/lib/server/commands/orderFreezeCommand.ts
+  - src/lib/server/commands/orderIntakeCommand.ts
+  - src/lib/server/commands/orderStationCommand.ts
+  - src/lib/server/commands/recordGoodsOutCommand.ts
+  - src/test/w4_order_station_attachment.integration.test.ts
   # Accounting-minimal: ausschliesslich echte vorhandene Zielwege
   - src/app/buchhaltung/page.tsx
   - src/app/buchhaltung/rechnungen/**
@@ -319,14 +361,14 @@ f1_2_allowlist:
   # zentralen orderLifecycleContract
   - src/components/erfassung/OrderIntakePanel.tsx
   - src/components/erfassung/__tests__/OrderIntakePanel.test.tsx
-  - src/components/orders/WareneingangHandoffButton.tsx
-  - src/components/orders/__tests__/WareneingangHandoffButton.test.tsx
+  - src/components/entities/order-legacy/WareneingangHandoffButton.tsx
+  - src/components/entities/order-legacy/__tests__/WareneingangHandoffButton.test.tsx
   - src/app/warendurchlauf/galvanik/page.tsx
   - src/app/warendurchlauf/galvanik/__tests__/orderStationReadback.test.tsx
   - src/app/warendurchlauf/galvanik/__tests__/w4OrderStationAttachmentPanel.test.tsx
-  - src/components/orders/__tests__/w2cB2m5u.unknownCards.realRender.test.tsx
-  - src/components/orders/GalvanikCorrectionButton.tsx
-  - src/components/orders/__tests__/GalvanikCorrectionButton.test.tsx
+  - src/components/entities/order-legacy/__tests__/w2cB2m5u.unknownCards.realRender.test.tsx
+  - src/components/entities/order-legacy/GalvanikCorrectionButton.tsx
+  - src/components/entities/order-legacy/__tests__/GalvanikCorrectionButton.test.tsx
   - src/app/warendurchlauf/wareneingang/page.tsx
   - src/app/warendurchlauf/__tests__/f1OrderIntakePage.test.tsx
   - src/app/actions/auth.ts
@@ -392,18 +434,18 @@ f1_3_allowlist:
   # F1.3 Real-E2E: ausschliesslich stabile, eindeutige Testanker an direkten
   # Verbrauchern des bestehenden Intake-/Handoff-/Login-Pfads; keine Logikaenderung.
   - src/app/warendurchlauf/wareneingang/page.tsx
-  - src/components/customers/CustomerOverlay.tsx
-  - src/components/customers/__tests__/w2cB2m5e.customerOverlay.failClosed.test.tsx
+  - src/components/entities/customer-legacy/CustomerOverlay.tsx
+  - src/components/entities/customer-legacy/__tests__/w2cB2m5e.customerOverlay.failClosed.test.tsx
   - src/components/erfassung/ErfassungModal.tsx
-  - src/components/orders/ExtraWorkAdminPanel.tsx
-  - src/components/orders/OrderCompactCard.tsx
-  - src/components/orders/OrderExtraWorkEditor.tsx
-  - src/components/orders/OrderFreezeButton.tsx
-  - src/components/orders/OrderFreezeCorrectionButton.tsx
-  - src/components/orders/OrderOverlay.tsx
-  - src/components/orders/OrderTaskAssignmentPanel.tsx
-  - src/components/orders/WareneingangHandoffButton.tsx
-  - src/components/orders/__tests__/w2cOrderOverlay.failClosed.test.tsx
+  - src/components/entities/order-legacy/ExtraWorkAdminPanel.tsx
+  - src/components/entities/order-legacy/OrderCompactCard.tsx
+  - src/components/entities/order-legacy/OrderExtraWorkEditor.tsx
+  - src/components/entities/order-legacy/OrderFreezeButton.tsx
+  - src/components/entities/order-legacy/OrderFreezeCorrectionButton.tsx
+  - src/components/entities/order-legacy/OrderOverlay.tsx
+  - src/components/entities/order-legacy/OrderTaskAssignmentPanel.tsx
+  - src/components/entities/order-legacy/WareneingangHandoffButton.tsx
+  - src/components/entities/order-legacy/__tests__/w2cOrderOverlay.failClosed.test.tsx
   - src/components/start/EmailLoginDialog.tsx
   - src/components/start/StartScreenClient.tsx
   - src/lib/server/userLastSeen.ts
@@ -439,13 +481,13 @@ f1_4_allowlist:
   - src/app/buchhaltung/rechnungen/page.tsx
   - src/app/buchhaltung/rechnungen/InvoicesClient.tsx
   - src/app/buchhaltung/rechnungen/loading.tsx
-  - src/components/orders/OrderImmutableInvoiceButton.tsx
-  - src/components/orders/OrderOverlay.tsx
+  - src/components/entities/order-legacy/OrderImmutableInvoiceButton.tsx
+  - src/components/entities/order-legacy/OrderOverlay.tsx
   - src/lib/server/commands/__tests__/immutableInvoiceCommand.test.ts
   - src/lib/server/__tests__/invoiceRead.test.ts
   - src/app/actions/__tests__/invoices.actions.test.ts
   - src/app/api/invoices/[invoiceId]/pdf/__tests__/route.test.ts
-  - src/components/orders/__tests__/OrderImmutableInvoiceButton.test.tsx
+  - src/components/entities/order-legacy/__tests__/OrderImmutableInvoiceButton.test.tsx
   - src/app/buchhaltung/rechnungen/__tests__/page.test.tsx
   - src/app/buchhaltung/__tests__/w2c.activeRouteContainment.test.tsx
   - src/test/f1_4_immutable_invoice_contract.integration.test.ts
@@ -503,10 +545,10 @@ f1_5_allowlist:
   - src/app/warendurchlauf/warenausgang/**
   - src/app/buchhaltung/rechnungen/InvoicesClient.tsx
   - src/app/buchhaltung/rechnungen/__tests__/**
-  - src/components/orders/OrderOverlay.tsx
-  - src/components/orders/OrderImmutableInvoiceButton.tsx
-  - src/components/orders/__tests__/w2cOrderOverlay.failClosed.test.tsx
-  - src/components/orders/__tests__/OrderImmutableInvoiceButton.test.tsx
+  - src/components/entities/order-legacy/OrderOverlay.tsx
+  - src/components/entities/order-legacy/OrderImmutableInvoiceButton.tsx
+  - src/components/entities/order-legacy/__tests__/w2cOrderOverlay.failClosed.test.tsx
+  - src/components/entities/order-legacy/__tests__/OrderImmutableInvoiceButton.test.tsx
   # D.1 — D-UI-F15-004A: Phillip-Werkstattgriff auf den gelieferten Overlay-Fluss
   - src/modules/werkstatt/server/types.ts
   - src/modules/werkstatt/server/deriveWerkstattView.ts

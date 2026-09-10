@@ -8,14 +8,14 @@ import {
 import { useState, Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useErfassung } from "@/components/erfassung/ErfassungProvider";
-import { OrderCompactCard } from "@/components/orders/OrderCompactCard";
-import { getUrgency } from "@/lib/orders/getUrgency";
+import { OrderCompactCard } from "@/components/entities/order-legacy/OrderCompactCard";
+import { getUrgency } from "@/lib/order-support/getUrgency";
 import { useOverlayStore } from "@/lib/overlayStore";
 import {
   getWareneingangOrdersAction,
   type WarendurchlaufOrder,
 } from "@/app/warendurchlauf/actions";
-import { WareneingangHandoffButton } from "@/components/orders/WareneingangHandoffButton";
+import { WareneingangHandoffButton } from "@/components/entities/order-legacy/WareneingangHandoffButton";
 
 function getLegacyStatusText(order: WarendurchlaufOrder) {
   if (

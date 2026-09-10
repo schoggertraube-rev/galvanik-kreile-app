@@ -94,7 +94,7 @@ describe('Commerce, accounting, shipment, and dunning containment (F0-W2C-B2M2)'
 
   it('denies all eleven commands before authentication or any client access', async () => {
     const [shipment, mahnung, accounting] = await Promise.all([
-      import('@/features/orders/shipment.actions'),
+      import('@/features/order-support/shipment.actions'),
       import('../mahnung.actions'),
       import('@/app/buchhaltung/actions'),
     ]);
@@ -118,8 +118,8 @@ describe('Commerce, accounting, shipment, and dunning containment (F0-W2C-B2M2)'
 
 describe('Commerce and accounting structural containment (F0-W2C-B2M2)', () => {
   const deniedBodies = [
-    ['features/orders/shipment.actions.ts', 'saveShipmentInfo'],
-    ['features/orders/shipment.actions.ts', 'sendShippingConfirmation'],
+    ['features/order-support/shipment.actions.ts', 'saveShipmentInfo'],
+    ['features/order-support/shipment.actions.ts', 'sendShippingConfirmation'],
     ['app/actions/mahnung.actions.ts', 'sendeZahlungserinnerung'],
     ['app/actions/mahnung.actions.ts', 'sendeMahnung'],
     ['app/buchhaltung/actions.ts', 'createBelegAction'],
@@ -143,7 +143,7 @@ describe('Commerce and accounting structural containment (F0-W2C-B2M2)', () => {
 
   it('quarantines the six noninteractive views and page', async () => {
     const files = [
-      'components/orders/variants/VersandVariant.tsx',
+      'components/entities/order-legacy/variants/VersandVariant.tsx',
       'app/buchhaltung/belege/BelegeClient.tsx',
       'app/buchhaltung/belege/[id]/BelegDetailClient.tsx',
       'app/buchhaltung/rechnungen/neu/RechnungForm.tsx',
@@ -197,7 +197,7 @@ describe('Commerce and accounting structural containment (F0-W2C-B2M2)', () => {
   });
 
   it('removes every fabricated shipment literal', async () => {
-    const source = await readFile(path.join(srcRoot, 'components/orders/variants/VersandVariant.tsx'), 'utf8');
+    const source = await readFile(path.join(srcRoot, 'components/entities/order-legacy/variants/VersandVariant.tsx'), 'utf8');
     expect(source).not.toMatch(/Anschrift 1|12345 Stadt|2 Kolli|12,4 kg|14,90|Versicherung/);
   });
 });

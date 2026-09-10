@@ -2,8 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { OrderOverlay } from "@/components/orders/OrderOverlay";
-import { CustomerOverlay } from "@/components/customers/CustomerOverlay";
+import { EntityOverlayStack } from "./EntityOverlayStack";
 import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
 import { SessionWarningBanner } from "./SessionWarningBanner";
 import { KreileHeader } from "./KreileHeader";
@@ -40,8 +39,7 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
       {!isWorkshop && <MobileBottomNav className="target-mobile-dock" />}
-      <OrderOverlay />
-      <CustomerOverlay />
+      <EntityOverlayStack />
     </div>
   );
 }

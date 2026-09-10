@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import type { OperationalOrder } from "@/lib/types/operationalOrder";
 import { GalvanikOrderRow } from "./GalvanikOrderRow";
-import { getUrgency } from "@/lib/orders/getUrgency";
+import { getUrgency } from "@/lib/order-support/getUrgency";
 import { ArrowUpDown, Users } from "lucide-react";
 
 interface GalvanikQueueProps {

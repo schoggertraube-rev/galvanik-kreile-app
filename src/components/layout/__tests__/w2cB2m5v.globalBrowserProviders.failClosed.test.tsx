@@ -15,8 +15,7 @@ vi.mock("@/components/layout/KreileHeader", () => ({ KreileHeader: () => <header
 vi.mock("@/components/layout/TargetNavigation", () => ({ TargetNavigation: () => <nav data-testid="target-navigation" /> }));
 vi.mock("@/components/layout/MobileBottomNav", () => ({ MobileBottomNav: () => <nav data-testid="target-dock" /> }));
 vi.mock("@/components/layout/SessionWarningBanner", () => ({ SessionWarningBanner: () => null }));
-vi.mock("@/components/orders/OrderOverlay", () => ({ OrderOverlay: () => <div data-testid="order-overlay" /> }));
-vi.mock("@/components/customers/CustomerOverlay", () => ({ CustomerOverlay: () => <div data-testid="customer-overlay" /> }));
+vi.mock("@/components/layout/EntityOverlayStack", () => ({ EntityOverlayStack: () => <div data-testid="entity-overlay-stack" /> }));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -31,7 +30,7 @@ describe("target shell composition", () => {
     render(<KreileAppShell><div>Login</div></KreileAppShell>);
     expect(screen.getByText("Login")).toBeInTheDocument();
     expect(screen.queryByTestId("target-header")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("order-overlay")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("entity-overlay-stack")).not.toBeInTheDocument();
     expect(boundary.auth).not.toHaveBeenCalled();
   });
 
@@ -41,8 +40,7 @@ describe("target shell composition", () => {
     expect(screen.getByTestId("target-header")).toBeInTheDocument();
     expect(screen.getByTestId("target-navigation")).toBeInTheDocument();
     expect(screen.getByTestId("target-dock")).toBeInTheDocument();
-    expect(screen.getByTestId("order-overlay")).toBeInTheDocument();
-    expect(screen.getByTestId("customer-overlay")).toBeInTheDocument();
+    expect(screen.getByTestId("entity-overlay-stack")).toBeInTheDocument();
     await waitFor(() => expect(boundary.auth).toHaveBeenCalledTimes(1));
   });
 

@@ -54,7 +54,7 @@ describe("W2C-B2M5D order creation quarantine", () => {
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
     const [repository, form] = await Promise.all([
       readFile(path.join(root, "lib/repositories/ordersRepository.ts"), "utf8"),
-      readFile(path.join(root, "components/orders/NewOrderForm.tsx"), "utf8"),
+      readFile(path.join(root, "components/entities/order-legacy/NewOrderForm.tsx"), "utf8"),
     ]);
     expect(repository).toContain('import { getOrdersDb, updateOrderDb } from "@/app/actions/orders.actions";');
     expect(repository).not.toContain("createOrderDb");

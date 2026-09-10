@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import type { OperationalOrder } from "@/lib/types/operationalOrder";
 import { PackageCheck, Mail, CheckCircle2, AlertCircle, FileText, Loader2 } from "lucide-react";
 
-import { getUrgency } from "@/lib/orders/getUrgency";
+import { getUrgency } from "@/lib/order-support/getUrgency";
 import { generateDeliveryNote } from "@/app/actions/pdf.actions";
 
 interface WarenausgangQueueProps {

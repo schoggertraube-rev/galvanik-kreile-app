@@ -1,0 +1,21 @@
+{
+  "moduleId": "orders",
+  "version": "1.0.0",
+  "owner": "Path-1 Orders (Auftragskarte V8)",
+  "publicExports": [
+    "@/modules/orders/public#OrderCardModel",
+    "@/modules/orders/public#OrderCardState",
+    "@/modules/orders/public#OrderCardView",
+    "@/modules/orders/public#OrdersListItem",
+    "@/modules/orders/public#OrdersView",
+    "@/modules/orders/public#OrdersViewState"
+  ],
+  "capabilities": [],
+  "migrations": [],
+  "viewsFunctions": [],
+  "ownsTables": [],
+  "storagePurposes": [],
+  "events": { "emits": [], "consumes": [] },
+  "config": {},
+  "dependencies": []
+}

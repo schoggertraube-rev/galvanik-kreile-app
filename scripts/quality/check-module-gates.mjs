@@ -62,6 +62,18 @@ export const LEGACY_DOMAIN_PARENTS = [
   "src/contexts",
 ];
 
+const NEXT_ENTRYPOINT = /^(?:page|layout|loading|error|not-found|default)\.(?:ts|tsx|js|jsx)$/;
+const APP_ADAPTER = /^[A-Z][A-Za-z0-9]*AppAdapter\.tsx$/;
+const ROUTE_TEST = /(?:^|\/)__tests__\/.+\.(?:test|spec)\.(?:ts|tsx|js|jsx)$/;
+
+export function isModuleAppCompositionPath(rel, fach) {
+  const prefix = `src/app/${fach}/`;
+  if (!rel.startsWith(prefix)) return false;
+  const tail = rel.slice(prefix.length);
+  const file = tail.split("/").at(-1) ?? "";
+  return NEXT_ENTRYPOINT.test(file) || APP_ADAPTER.test(file) || ROUTE_TEST.test(tail);
+}
+
 const CODE_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".mdx"]);
 const SQL_EXTENSIONS = new Set([...CODE_EXTENSIONS, ".sql"]);
 // Red-Team P0: NUR node_modules/.git ueberspringen — ein Ordner namens build/ oder out/
@@ -295,6 +307,15 @@ function gateManifests(root, findings, schemaPath) {
     // Legacy-Eltern, plus Datei <fach>.ts(x) direkt darunter.
     for (const parent of LEGACY_DOMAIN_PARENTS) {
       for (const rel of walk(root, parent, [])) {
+        if (parent === "src/app" && isModuleAppCompositionPath(rel, fach)) {
+          if (APP_ADAPTER.test(rel.split("/").at(-1) ?? "")) {
+            const source = readFileSync(path.join(root, rel), "utf8");
+            if (!source.includes(`@/modules/${fach}/public`)) {
+              findings.push(`[naht1] ${rel}: App-Adapter fuer '${fach}' muss die Modul-Fassade @/modules/${fach}/public verwenden`);
+            }
+          }
+          continue;
+        }
         const segments = rel.split("/").slice(parent.split("/").length);
         const dirs = segments.slice(0, -1);
         const file = segments.at(-1) ?? "";

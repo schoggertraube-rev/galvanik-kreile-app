@@ -3,12 +3,12 @@
 import React, { useCallback, useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowRight, Layers, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
-import { OrderCompactCard, UrgencyType } from "@/components/orders/OrderCompactCard";
-import { GalvanikHandoffAttachmentPanel } from "@/components/orders/GalvanikHandoffAttachmentPanel";
-import { GalvanikCorrectionButton } from "@/components/orders/GalvanikCorrectionButton";
-import { useOrderModal } from "@/components/orders/OrderModalProvider";
+import { OrderCompactCard, UrgencyType } from "@/components/entities/order-legacy/OrderCompactCard";
+import { GalvanikHandoffAttachmentPanel } from "@/components/entities/order-legacy/GalvanikHandoffAttachmentPanel";
+import { GalvanikCorrectionButton } from "@/components/entities/order-legacy/GalvanikCorrectionButton";
+import { useOrderModal } from "@/components/entities/order-legacy/OrderModalProvider";
 import { getGalvanikOrdersAction, type WarendurchlaufOrder } from "@/app/warendurchlauf/actions";
-import { ORDER_LIFECYCLE_STATUS } from "@/lib/orders/orderLifecycleContract";
+import { ORDER_LIFECYCLE_STATUS } from "@/lib/order-support/orderLifecycleContract";
 
 // D-ARCH-001: galvanik is a single stable outside station covering all
 // production (no internal steps, no workflow engine). This route therefore

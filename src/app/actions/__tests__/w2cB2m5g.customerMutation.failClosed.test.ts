@@ -54,7 +54,7 @@ describe("W2C-B2M5G customer mutation fail-closed", () => {
     const [actions, repository, form, wizard] = await Promise.all([
       readFile("src/app/actions/customers.actions.ts", "utf8"),
       readFile("src/lib/repositories/customersRepository.ts", "utf8"),
-      readFile("src/components/customers/NewCustomerForm.tsx", "utf8"),
+      readFile("src/components/entities/customer-legacy/NewCustomerForm.tsx", "utf8"),
       readFile("src/components/erfassung/ManualFlow/CustomerWizard.tsx", "utf8"),
     ]);
     const actionBodies = actions.match(/export async function (?:createCustomerDb|updateCustomerDb)[\s\S]*?(?=\nexport async function)/g) ?? [];

@@ -8,11 +8,11 @@
   "summary": {
     "page_routes": 36,
     "api_routes": 19,
-    "server_action_groups": 51,
+    "server_action_groups": 50,
     "kpi_definitions": 7,
     "provider_connections": 16,
     "nav_links_without_page": 3,
-    "total": 132
+    "total": 131
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -1202,18 +1202,6 @@
       "open_reason": "Owner cockpit KPI and scenario actions. Supabase read-models, no independent E2E evidence.",
       "visible": false,
       "reachable": true
-    },
-    {
-      "stable_id": "server-actions.customers-id",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/customers/[id]/actions.ts",
-      "exported_functions": [
-        "getCustomerDetailsAction"
-      ],
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Customer detail aggregation. Supabase-connected, no independent E2E evidence.",
-      "visible": false,
-      "reachable": false
     },
     {
       "stable_id": "server-actions.global-search",

@@ -71,10 +71,10 @@ describe("updateOrderDb fail-closed (F0-W2C-B1)", () => {
 describe("W2C-B1 caller containment", () => {
   const srcRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
   const callerFiles = [
-    "components/orders/StationStatusButton.tsx",
-    "components/orders/StationCompletionModal.tsx",
-    "components/orders/OrderActionGrid.tsx",
-    "components/orders/OrderMaterialTimeDrawer.tsx",
+    "components/entities/order-legacy/StationStatusButton.tsx",
+    "components/entities/order-legacy/StationCompletionModal.tsx",
+    "components/entities/order-legacy/OrderActionGrid.tsx",
+    "components/entities/order-legacy/OrderMaterialTimeDrawer.tsx",
     "app/warendurchlauf/galvanik/page.tsx",
     "app/warendurchlauf/wareneingang/page.tsx",
     "lib/offline/OfflineManager.ts",
@@ -88,12 +88,12 @@ describe("W2C-B1 caller containment", () => {
   });
 
   it("leaves non-atomic flows visibly blocked and removes the simple start from the process port", async () => {
-    const stationButton = await readFile(path.join(srcRoot, "components/orders/StationStatusButton.tsx"), "utf8");
+    const stationButton = await readFile(path.join(srcRoot, "components/entities/order-legacy/StationStatusButton.tsx"), "utf8");
     const blockedFiles = await Promise.all([
-      "components/orders/variants/WareneingangActive.tsx",
-      "components/orders/StationCompletionModal.tsx",
-      "components/orders/OrderActionGrid.tsx",
-      "components/orders/OrderMaterialTimeDrawer.tsx",
+      "components/entities/order-legacy/variants/WareneingangActive.tsx",
+      "components/entities/order-legacy/StationCompletionModal.tsx",
+      "components/entities/order-legacy/OrderActionGrid.tsx",
+      "components/entities/order-legacy/OrderMaterialTimeDrawer.tsx",
       "lib/offline/OfflineManager.ts",
     ].map((file) => readFile(path.join(srcRoot, file), "utf8")));
 
@@ -125,7 +125,7 @@ describe("W2C-B1 caller containment", () => {
 
   it("keeps the W3 handoff independent from legacy update and process writers", async () => {
     const [handoff, wareneingang] = await Promise.all([
-      readFile(path.join(srcRoot, "components/orders/WareneingangHandoffButton.tsx"), "utf8"),
+      readFile(path.join(srcRoot, "components/entities/order-legacy/WareneingangHandoffButton.tsx"), "utf8"),
       readFile(path.join(srcRoot, "app/warendurchlauf/wareneingang/page.tsx"), "utf8"),
     ]);
     expect(handoff).toContain("transitionWareneingangToGalvanikAction");

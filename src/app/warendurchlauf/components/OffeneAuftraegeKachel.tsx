@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Tile } from "@/app/buchhaltung/components/Tile";
 import { DetailOverlay } from "@/components/ui/DetailOverlay";
 import { ListTodo } from "lucide-react";
-import { OrderWideCard, UrgencyType } from "@/components/orders/OrderWideCard";
+import { OrderWideCard, UrgencyType } from "@/components/entities/order-legacy/OrderWideCard";
 import { useOverlayStore } from "@/lib/overlayStore";
 import type { WarendurchlaufKpiData, WarendurchlaufOrder } from "../actions";
 

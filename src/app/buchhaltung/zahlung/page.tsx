@@ -8,7 +8,7 @@ import Link from "next/link";
 import { ChevronRight, CreditCard, QrCode, Smartphone, BarChart3, Lock, Info, Globe, Users, ArrowLeft } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import { useState } from "react";
-import { OrderModalTrigger } from "@/components/orders/OrderModalTrigger";
+import { OrderModalTrigger } from "@/components/entities/order-legacy/OrderModalTrigger";
 
 const TABS = [
   { id: "provider", label: "Dienstleister", icon: CreditCard },
