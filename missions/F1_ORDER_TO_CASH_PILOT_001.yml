@@ -1,8 +1,8 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: 11e8757879f616de42d094581b5243a64560f21c
-branch: f1/bestaetigter-zahlungseingang-20260904
+base_sha: 2a2b24d2fecc65a79bf2ff0efe87c72f79db8f09
+branch: gov/f1-5-closeout-truth-20260910
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
 # ── M0 Konsolidierungsstand ───────────────────────────────────────
@@ -36,8 +36,8 @@ delivery_order:
   - F1.5_BESTAETIGTER_ZAHLUNGSEINGANG
   - F1.6_REALER_PILOT
 
-active_package: F1.5_BESTAETIGTER_ZAHLUNGSEINGANG
-next_gate_after_active_package: F1.5_REAL_E2E_AND_INDEPENDENT_REVIEW
+active_package: NONE_F1_6_BLOCKED_PRODUCT_DECISION
+next_gate_after_active_package: F1.6_PILOT_READINESS_BLOCKED_PRODUCT_DECISION
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
@@ -50,7 +50,7 @@ f1_4_service_date_rule: FINAL_F1_3_FREEZE_DATE
 f1_4_pdf_scope: DOWNLOAD_ONLY_2026_TRANSITION
 f1_4_payment_term_rule: TENANT_CONFIG_REQUIRED_FAIL_CLOSED
 # ── F1.5 Bindung (Orchestrator 2026-09-05, Bauvertrag V1 2026-08-21 woertlich) ──
-f1_5_status: IN_PROGRESS
+f1_5_status: complete
 f1_5_v1_ratified: true
 f1_5_contract_file: KREILE_F1_5_BAUVERTRAG_ZAHLUNGSEINGANG_WARENAUSGANG_V1_2026-08-21.md # Owner-Bibelordner, nicht im Repo
 f1_5_contract_sha256: 5BCD70BFC2BD9D6A6DF06CF48D0D95C4A288DD5C6364BE2783954DDA1196BDE1
@@ -67,10 +67,13 @@ f1_5_partial_payment: ALLOWED
 f1_5_skonto: OPEN_NON_BLOCKING
 f1_5_not_in_scope: MAHNWESEN; DATEV_EXPORT; E_RECHNUNG_VERSAND; BUCHHALTUNGSMODUL; CAMT_MT940_IMPORT(Adapter-1); MOLLIE(Adapter-2)
 f1_5_legacy_quarantine: src/lib/payments/mollieAdapter.ts; src/lib/payments/paymentProvider.ts; src/app/buchhaltung/zahlung/page.tsx; FinanzenDashboardClient.tsx # nicht reaktivieren, nicht loeschen (D-ARCH-008)
-f1_5_units: A_DATA_READPORT -> B_CONFIRM_PAYMENT+B2_PAYMENT_MODE_INTAKE -> C_GOODS_OUT_GATE -> D_UI; T_SUPABASE_CLI_PIN unabhaengig (keine Commit-Voraussetzung, CI ist Gate)
+f1_5_units: A_DATA_READPORT -> B_CONFIRM_PAYMENT+B2_PAYMENT_MODE_INTAKE -> C_GOODS_OUT_GATE -> D_UI -> D1_WERKSTATT_GOODS_OUT_ENTRY; T_SUPABASE_CLI_PIN
 f1_5_d_status: DELIVERED_PR_80_MERGE_001a7698b9ea4edff881ed56ea110832e9de7a46
 f1_5_d1_status: DELIVERED_PR_81_MERGE_bf17e8c5562ca772696176fabf4963ece683b88b
-f1_5_t_status: CANDIDATE_SUPABASE_CLI_PIN # kein F1.5-Gesamt-PASS vor T-Merge
+f1_5_t_status: DELIVERED_PR_82_HEAD_575052b6b47a7fd4b651c20e5a3ac42b2c5676e7_MERGE_2a2b24d2fecc65a79bf2ff0efe87c72f79db8f09
+f1_6_status: NOT_STARTED
+f1_6_pilot_readiness: BLOCKED_PRODUCT_DECISION
+f1_6_required_before_start: SEARCH_MODULE_REAL_MODULAR; CALENDAR_REAL_MODULAR
 
 # ── F1.2 Entscheidungsgrundlage (bindend, ersetzt Altstand) ───────
 # D-F12-001A (ersetzt D-F12-001): F1.2 = genau EIN Uebergang
