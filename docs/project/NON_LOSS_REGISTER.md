@@ -1,10 +1,12 @@
+<!-- STATUS: REFERENCE_ONLY_NON_EXECUTABLE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # NON_LOSS_REGISTER
 
-> **Ausfuehrungsautoritaet 2026-08-13:** Aktuell steuert ausschliesslich
+> **Ausführungsgrenze D-GOV-001 (2026-09-10):** Ausschließlich
 > `missions/F1_ORDER_TO_CASH_PILOT_001.yml` die Reihenfolge M0 -> F1-R0 -> F1.2 bis F1.6.
 > Aeltere Zeilen mit `ACTIVE`, offene PR-Listen und Worktree-Angaben unten sind bewahrte Historie
 > oder Produkt-Backlog; sie starten weder eine Parallelmission noch ueberschreiben sie `main`.
-> Der Produktumfang bleibt geschuetzt und wird seriell ueber reale Vertikalschnitte geliefert.
+> Der Produktumfang bleibt hier als Erhaltungsregister geschützt; `ACTIVE` in historischen Tabellen ist kein aktiver Paketstatus.
 
 > **Nachtrag 2026-08-10 (massgeblich fuer Fundament-Stati):** Alle FUNDAMENT-Eintraege dieses
 > Registers (u.a. DB-TRUTH-001, LEDGER-CONSOLIDATION-001, RLS-CONTRACT-001, die Fundament-PR-Listen

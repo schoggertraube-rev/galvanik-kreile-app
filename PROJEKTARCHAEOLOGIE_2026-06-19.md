@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # PROJEKTARCHÄOLOGIE — KREILE WERKSTATTCOCKPIT
 ## Principal Product Strategist & Requirements Archaeologist
 ### Analyse-Datum: 2026-06-19 | Methode: 7-Phasen-Archäologie

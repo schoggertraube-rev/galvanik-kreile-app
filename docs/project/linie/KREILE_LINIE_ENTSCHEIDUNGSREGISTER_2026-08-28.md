@@ -198,3 +198,23 @@ Die ESLint-Ratsche wertete jede Änderung von `lintContractHash`/`judgeContractH
 **Zweck:** Philipp erreicht den bereits gelieferten Zahlungs-/Warenausgangsfluss direkt aus seinem kanonischen Werkstatt-Home, ohne Stationsnavigation, zweiten Screen oder versteckte Entwicklerkenntnis.
 
 **Wesentlicher Nachteil:** Der Werkstatt-Read-Snapshot führt zusätzlich eine abgeleitete Kandidatenliste; deren Filter- und Portgrenze muss dauerhaft gegen die kanonische Station `fertig` getestet werden. Es entsteht keine neue Daten-, Zahlungs- oder Rechnungswahrheit.
+
+## D-GOV-001 — Eine Quelle je Wahrheitsart (Owner 2026-09-10)
+
+**Entscheidung/Wortlaut:** Jede Wahrheitsart besitzt exakt eine Autorität. Projektregeln stehen ausschließlich in Root-`AGENTS.md`; Produktentscheidungen ausschließlich in diesem Entscheidungsregister; Scope und Module ausschließlich in `docs/project/linie/MODULKARTE_KANON.md`; Architektur ausschließlich in `docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md`; aktive Ausführung mit Paket, Branch, Base, Status und nächstem Gate ausschließlich in `missions/F1_ORDER_TO_CASH_PILOT_001.yml`; der auf `main` belegte Lieferstand ausschließlich in `docs/project/CURRENT_STATE.md`; UI-Wahrheit ausschließlich in den von `docs/project/linie/00_UI_REFERENZEN_PFADE.md` explizit gelisteten neuesten Referenzen. Evidence beweist einen konkreten Stand, steuert aber niemals Scope oder Baustart. `00_JETZT`, `00_ABC` und `00_BIBEL` sind Navigation beziehungsweise Kurzansicht und dürfen keine eigene abweichende Zustandswahrheit besitzen. Frühere Aussagen über eine konkurrierende Rangfolge, einen anderen aktiven Master oder eine Auswahl nach Dateiname, Alter oder Kommentar sind supersediert. Ein Konflikt innerhalb derselben Wahrheitsart endet fail-closed als `BLOCKED_GOVERNANCE_CONFLICT`; es wird keine Quelle still ausgewählt.
+
+**Zweck:** Jeder neue Chat und jedes Gate kann Zuständigkeit, Lieferstand und nächste Ausführung deterministisch ermitteln, ohne historische Dokumente zu interpretieren oder Kandidaten als geliefert auszugeben.
+
+**Wesentlicher Nachteil:** Änderungen an einer Wahrheitsart müssen immer zuerst in ihrer einzigen Autorität erfolgen; Pointer und Kurzansichten dürfen nur synchronisiert werden und verlieren bewusst jede eigene Steuerungsfunktion.
+
+## D-ARCH-011 — Professionelle Provider/API-Architektur und Microsoft-365-Kalender (Owner 2026-09-10)
+
+**Entscheidung/Wortlaut:** Jede externe Capability wird real, tenantfähig, sicher und beobachtbar hinter einem tenantneutralen, eng typisierten Port umgesetzt. UI und Fremdmodule importieren niemals Anbieter-SDKs, Providerinternas oder generische URL-/Payload-Tunnel. Demo-, Mock-, Fake-, In-Memory- oder bloß „vorbereitete“ Capabilities sind im Produktpfad verboten. Eigene kanonische Wahrheit bleiben Fundament, Suche, Intake, Orders, Customers sowie die minimale unveränderliche Buchungs- und Zahlungswahrheit. Jeder weitere Provider benötigt eine eigene belegte Owner-Entscheidung.
+
+**Kalenderentscheidung:** Zielprovider ist Microsoft 365 über Microsoft Graph hinter einem `CalendarPort`. Domänentermine bleiben Wahrheit ihrer jeweiligen Module; der dedizierte M365-Kalender ist ausschließlich eine Projektion mit stabiler Korrelation und besitzt weder Kalender-Engine noch eigenen Event-Speicher. Empfohlener Start ist ein delegierter, benannter Büronutzer. App-only-Zugriff benötigt eine neue ausdrückliche Owner-Freigabe. Der spätere reale Vertrag muss OAuth/Consent, serverseitige Tokenablage, Least Privilege, tenantbezogene Connection, Change Notifications/Webhooks plus Delta-Sync, Idempotenz, Retry/Backoff, Rate Limits, Reconciliation/Readback, Zeitzonen, Serien, Teilnehmer und Free/Busy sowie sichtbare Zustände `Connect`, `Loading`, `Empty`, `Error`, `Synced`, `Health` und `Last Sync` abdecken.
+
+Ohne echtes Microsoft-365-/Exchange-/Entra-Konto und einen realen Provider-E2E-Beleg bleibt der Kalender `NOT_STARTED/BLOCKED_EXTERNAL_PERMISSION`; es gibt keinen Demo-Fallback. Frühere Google-Kalendertexte sind ausschließlich offene Quarantänebefunde und keine Providerentscheidung. F1.6 bleibt `NOT_STARTED`, bis Suche und Kalender jeweils real, modular und unabhängig akzeptiert sind.
+
+**Zweck:** Provider bleiben austauschbare Infrastruktur statt fachliche Schattenwahrheit; Kalenderdaten sind nachvollziehbare Projektionen aus den vorhandenen Domänenverträgen.
+
+**Wesentlicher Nachteil:** Die professionelle M365-Anbindung benötigt vor dem Bau ein reales Konto, Consent und einen vollständigen Betriebsvertrag; bis dahin bleibt die sichtbare Kalenderfähigkeit bewusst geschlossen.

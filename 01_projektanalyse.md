@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # Projektanalyse: Galvanik Werkstatt-OS (Phase 1)
 
 ## 1. Projektverständnis

@@ -23,6 +23,8 @@
     "test:e2e": "playwright test",
     "verify:precommit": "npx tsc --noEmit && npm run lint:staged && npm run test:unit",
     "quality:no-fake-production": "node scripts/quality/check-no-fake-production.mjs",
+    "quality:authority-gate": "node scripts/quality/check-authoritative-sources.mjs --check",
+    "quality:authority-gate:selftest": "node scripts/quality/check-authoritative-sources.mjs --selftest",
     "quality:module-gates": "node scripts/quality/check-module-gates.mjs",
     "quality:module-gates:update": "node scripts/quality/check-module-gates.mjs --update",
     "quality:supabase-cli": "node scripts/supabase-version-check.mjs",

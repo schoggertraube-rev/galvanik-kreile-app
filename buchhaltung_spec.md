@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 <USER_REQUEST>
 du hast jetzt folgende aufgabe: du wirst das markdown vollstÃ¤ndig lesen, jeden einzelnnen schritt analysieren und step by step umsetzen. sollten fehler oder misstÃ¤nde auftreten, stopst du direkt und informierst mich bzw gibst eine auswahl von lÃ¶sungsvorschlÃ¤gen. du arbeitest step by step. am ende gibst du einen bericht aus, welcher deine komplette arbeit dokumentiert. fehlstellen aufdeckt und umfÃ¤nglich dokumentiert             â€žLies Datei 30 Â§1 komplett. Baue das Ausgangsrechnungs-Formular, die Filter, die Detail-Route und die Offene-Posten-Sicht exakt nach diesen Feldern, Validierungen und Queries. Keine eigenen Feld- oder Formatentscheidungen. Persistenz-Smoke-Test: Rechnung anlegen â†’ Reload â†’ Liste â†’ Detail â†’ Filter (Status=offen, Kunde=X) â†’ in Offene-Posten-Sicht sichtbar. Dann lead_id-Feld auf Ausgangsrechnung sicherstellen (Spec 28). Commit F-BHS-03."             # 30 â€” Buchhaltung: Formulare, Filter, Berechnungen & Export-Formate
 

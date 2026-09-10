@@ -1,10 +1,11 @@
 # CURRENT_STATE — Galvanik-Kreile WerkstattCockpit
 
-**Massgeblicher Steuerungsstand: 2026-09-10.** `main` ist die einzige Lieferwahrheit. Der folgende
-M1/M2/M3/F1-Block ist aktuell; die ausfuehrlichen F0-Tabellen darunter sind ein datierter historischer
-Snapshot und keine aktuelle Paket- oder Branchsteuerung.
+**Lieferstand 2026-09-10: `main@13240de2a5ca9e9cfae4f8c72552443dac1d7630`.** Diese Datei
+beschreibt ausschließlich auf `main` belegte Lieferungen. Aktives Paket, Branch, Base, Kandidatenstatus
+und nächstes Gate stehen ausschließlich in `missions/F1_ORDER_TO_CASH_PILOT_001.yml`. Die
+ausführlichen F0-Tabellen darunter sind ein datierter historischer Snapshot.
 
-## Aktuelle Liefer- und Paketwahrheit
+## Auf main belegte Lieferwahrheit
 
 | Wahrheit | Stand |
 |---|---|
@@ -18,7 +19,7 @@ Snapshot und keine aktuelle Paket- oder Branchsteuerung.
 | F1.3 Leistungsabschluss | `PASS`; `galvanik -> fertig`, echte Mehrarbeit, Freeze, L6-Korrektur und fail-closed Rechnungssperre am Kandidaten `fb19c224e1542afdf1436f5f0fb76995fec3935b`; Real-E2E, CI und unabhaengige Exact-SHA-Abnahme ohne offene P0/P1-, Scope- oder False-Pass-Befunde |
 | M3-Integration | PR #66 als GitHub-verifizierter Merge-Commit `fc551b0732c52a0867cc4b0bbdfe4f8a52ad3550` nach `main` integriert; Main-Tree `0a77f85f8268ac721d8f15fc7edce5e2623482c5` bytegleich zum geprueften Kandidaten; `02_app` getrackt sauber auf `main`; der erhaltene Paketbranch ist ohne Writer keine aktive Produktwahrheit |
 | F1.5 Order-to-Cash | `complete`; A+B/B2+C+D+D.1+T vollstaendig geliefert. C wurde mit PR #79 als Merge-Commit `b94821ca56634bcf75e8d5ddda130241bb75b9bf`, D mit PR #80 als Merge-Commit `001a7698b9ea4edff881ed56ea110832e9de7a46`, D.1 mit PR #81 als Merge-Commit `bf17e8c5562ca772696176fabf4963ece683b88b` und T am Exact Head `575052b6b47a7fd4b651c20e5a3ac42b2c5676e7` mit PR #82 als Merge-Commit `2a2b24d2fecc65a79bf2ff0efe87c72f79db8f09` integriert. |
-| F1.6 Realer Pilot | `NOT_STARTED`; Pilot-Readiness bleibt `BLOCKED_PRODUCT_DECISION`, bis Suchleiste und Kalender gemaess Modulkarte beide real und modular geplant, gebaut und abgenommen sind. Dieses Abschlussdokument startet weder F1.6 noch S2/S3. |
+| F1.6 Realer Pilot | `NOT_STARTED`; auf `main` sind Suchleiste und Kalender noch nicht als real und modular akzeptierte Lieferungen enthalten. Diese Datei startet weder F1.6 noch S2/S3. |
 | Path-1 S4 Werkstatt-Modul | S0+S1 (PR #75) in `main@160bcf40fc872bea2c8303e074c57a0eb0402c0c` und S4/Phillip V4 mit PR #77 als Merge-Commit `019b1fbaad34e4f10a28298a29858f2fa599eb45` integriert; `/warendurchlauf` ist die Kompositionswurzel fuer `src/modules/werkstatt/`. |
 | Remote/Production in M2 | `main`-Merges loesen ueber die vorhandene Vercel-GitHub-Integration automatisch erfolgreiche Deployments mit Environment `Production` aus; fuer `733c22e5df95fd00987ba45408b9dac70f8638e1` (Deployment `5958527416`) und `c3489e9ad7f75286c23b45577ba5240e600e71f2` (Deployment `5958812163`) belegt; keine manuelle Promotion sowie keine Provider-, RLS-, Remote-DB- oder Datenmutation |
 | Remote/Production in M3 | Automatisches Vercel-Git-Deployment `dpl_67UsPkCLodKUS8Fa2Lp7vLhX6Par` fuer exakt `fc551b0732c52a0867cc4b0bbdfe4f8a52ad3550`: `target=production`, `READY`; keine manuelle Promotion sowie keine Provider-, RLS-, Remote-DB- oder Datenmutation |

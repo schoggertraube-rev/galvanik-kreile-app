@@ -1,6 +1,6 @@
 # KREILE — ARCHITEKTUR „PATH 1": Modulbauweise (verbindliche Bauanleitung)
 
-Status: Owner-Entscheid 2026-09-06 = **Path 1** (forkbare Module sind echte Anforderung). Diese Datei erzwingt und konkretisiert AGENTS.md / D-ARCH-007. **Sie ist die Bauanleitung: Ein neuer Chat liest sie ZUERST und weiß WAS / WIE / WARUM — ohne Rückfrage an den Owner.** Bei Widerspruch gilt diese Datei über ältere UI-/Struktur-Notizen.
+Status: Architekturautorität gemäß D-GOV-001; Path 1 ist durch D-ARCH-008/009 ratifiziert. Diese Datei bestimmt ausschließlich das WIE. Scope steht in `MODULKARTE_KANON.md`, aktive Ausführung ausschließlich in der Mission und Lieferstand ausschließlich in `CURRENT_STATE.md`. Ein Konflikt innerhalb der Architekturwahrheit ist `BLOCKED_GOVERNANCE_CONFLICT`.
 
 ## 0. Warum (P1-Architektur-Drift, siehe LINIE D-ARCH-008)
 Belegter Ist-Zustand (02_app, 1341 Dateien): keine Modul-Einheit — eine Domäne ist über `src/app/<route>` + `src/components/<fach>` + `src/lib/<fach>` (+ teils `src/features/`) verschmiert. Modul-Manifest ~3 % adoptiert (genau 1 von ~30 Domänen: `erfassung` v0.1.0). Grenzen nur negativ (ESLint no-import) und nur auf `lib/`, als Ratsche „0 bestehende Verstöße" — Isolation, keine Komponierbarkeit. Tenant-Literal `'galvanik-kreile'` 65× in 23 Dateien (verletzt D-ARCH-007 „tenant-neutral"). Folge: aus diesem Stand entstehen KEINE wiederverwendbaren Module; „stabilisieren, später extrahieren" wird pro Woche teurer. Entscheid: **Nähte JETZT, inkrementell, naht-zuerst.** Kein Neustart — die korrekte Domänen-Logik bleibt und bekommt Nähte, während wir sie anfassen.
@@ -26,13 +26,22 @@ Nichts vom Fach liegt außerhalb. Keine Parallel-Ablage in `components/<fach>` /
 - **TOT/PARALLEL (nach Check löschen):** cockpit, kontrolle, performance, status, analyse, baeder; Leichen finanzen (06.), kunden-auftraege (06.); Falsch-Nav WorkflowStrip, TabletTopFlowNav, TopWorkflowBar, WarendurchlaufStationNav; zweites Theme ThemeProvider/ThemeToggle („Dunkel").
 
 ## 4. Baureihenfolge (naht-zuerst)
-- **S0 Tenant-Fix (zuerst):** `src/lib/tenant.ts` + Lint-Verbot des Literals + alle Stellen migriert (Ausnahmen: `src/db/` Seeds, byte-gepinnter W4-Evidence-Test). **In main integriert: PR #75, `main@160bcf40`.**
-- **S1 Gate:** Manifest-CI, Tiefimport = CI-FAIL, v_*-Daten-CI, UI-Contract-CI (Baseline shrink-only), AGENTS-Verweis auf diese Datei. **In main integriert: PR #75 (gleicher Branch, S0+S1), `main@160bcf40`.** **Vor S1 kein Feature-Bau.**
+- **S0 Tenant-Fix (zuerst):** `src/lib/tenant.ts` + Lint-Verbot des Literals + alle Stellen migriert (Ausnahmen: `src/db/` Seeds, byte-gepinnter W4-Evidence-Test).
+- **S1 Gate:** Manifest-CI, Tiefimport = CI-FAIL, v_*-Daten-CI, UI-Contract-CI (Baseline shrink-only), AGENTS-Verweis auf diese Datei. **Vor S1 kein Feature-Bau.**
 - **S2 Löschung Eimer 3** nach Verlinkungs-Prüfung.
 - **S3 Muster-Modul:** `erfassung` (hat schon Manifest) vollständig nach `src/modules/erfassung/` inkl. `public.ts` — Vorlage für alle.
-- **S4 Home neu:** `src/modules/werkstatt` gegen Phillip V4; `warendurchlauf`-Stationsmodell gelöscht. **In main integriert:** PR #77, Merge-Commit `019b1fbaad34e4f10a28298a29858f2fa599eb45`. `/warendurchlauf` liest ueber `getWareneingangOrdersAction`/`getGalvanikOrdersAction` und reicht die echten Daten an `@/modules/werkstatt/public`; D.1/D-UI-F15-004A ergaenzt darauf den engen `Ware raus`-Port fuer echte `fertig`-Auftraege. Breitere Subrouten/Stationsnavigation bleiben bis zu ihrem eigenen freigegebenen Paket unangetastet.
+- **S4 Home neu:** `src/modules/werkstatt` gegen Phillip V4; `/warendurchlauf` komponiert die Modul-Fassade. Lieferstatus und konkrete Merge-SHAs gehören ausschließlich in `CURRENT_STATE.md`.
 - **S5 restliche Domänen** Modul für Modul, jeweils Naht mitbauend.
-- **F1.5 A+B/B2+C+D+D.1+T sind vollstaendig geliefert;** C mit PR #79, D mit PR #80, D.1 mit PR #81 und T mit PR #82 (Merge `2a2b24d2fecc65a79bf2ff0efe87c72f79db8f09`). F1.6 ist nicht gestartet und seine Pilot-Readiness bleibt bis zur realen modularen Suchleiste und zum realen modularen Kalender `BLOCKED_PRODUCT_DECISION`. S2/S3 sind weiterhin nicht begonnen und durch diesen Abschluss nicht freigegeben. Ab S1 gilt ohne Ausnahme: **kein Feature-Bau, der die Naht-Gates rot lässt.**
+- Aktive Reihenfolge, Paketstatus und nächste Gates stehen ausschließlich in `missions/F1_ORDER_TO_CASH_PILOT_001.yml`. Ab S1 gilt ohne Ausnahme: **kein Feature-Bau, der die Naht-Gates rot lässt.**
+
+## 4a. Provider-Naht — D-ARCH-011
+
+- Externe Anbieter liegen ausschließlich hinter tenantneutralen, eng typisierten Ports; UI und Fremdmodule kennen weder SDK noch Providerpayload oder URL.
+- Authentisierung, Consent und Tokens bleiben serverseitig; Connection, Health, Retry/Backoff, Rate Limits, Idempotenz, Korrelation und Readback sind Teil jedes Providervertrags.
+- Eigene Domänenwahrheit bleibt in Fundament, Suche, Intake, Orders, Customers und Accounting-minimal. Provider liefern oder spiegeln Fakten, besitzen sie aber nicht.
+- Kalender ist eine Projektion über `CalendarPort` auf Microsoft Graph. Domänentermine bleiben Quelle; es entsteht weder eigener Event-Speicher noch Kalender-Engine.
+- Startmodell ist delegierter Zugriff eines benannten Büronutzers. App-only benötigt eine neue Owner-Entscheidung.
+- Fehlendes Konto, Consent, Secret oder Provider-E2E endet fail-closed als `BLOCKED_EXTERNAL_PERMISSION`; niemals Demo-, Mock-, Fake- oder In-Memory-Erfolg.
 
 ## 5. Abnahmetest = „sauber"
 Ein frischer Chat mit NUR diesem Repo kann widerspruchsfrei sagen: welches Modul, welche Naht, welcher nächste Schritt — ohne Owner-Rückfrage. CI lässt NICHT grün: einen Tiefimport, ein Tenant-Literal, ein Stationshome, ein manifestloses Modul, eine Domäne mit Ablage außerhalb ihres Modulordners.

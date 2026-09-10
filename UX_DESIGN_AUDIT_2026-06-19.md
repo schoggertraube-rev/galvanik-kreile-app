@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # UX/Design-Audit: Kreile WerkstattCockpit
 ## Principal Product Designer – Vollständige Analyse
 **Datum:** 2026-06-19 | **Analysierer:** Claude (Principal Product Designer Framework)

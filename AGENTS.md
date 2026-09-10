@@ -1,6 +1,6 @@
 # Galvanik-Kreile WerkstattCockpit
 
-> ⚠️ BAUANLEITUNG (ZUERST LESEN): `docs/project/linie/00_ABC_INDEX.md` — das komplette ABC (WAS=Modulkarte, WIE=Path 1, AUSSEHEN=ui/, WARUM=LINIE, BEISPIEL=Modul, PROBLEME=Problemlösungen, BAUPLAN). Gebaut wird die Modulbauweise Path 1 (`ARCHITEKTUR_MODULE_PATH1.md`) nach der Modulkarte (`MODULKARTE_KANON.md`), Optik gegen `ui/`. Bei Widerspruch gelten diese Dateien. Gruen in der CI ist NICHT genug — Modul-Naehte + Designtreue + Scope sind Teil der Abnahme; Pruefer ≠ Autor.
+> ⚠️ BAUANLEITUNG (ZUERST LESEN): `docs/project/linie/00_ABC_INDEX.md` navigiert zum verbindlichen ABC. Gebaut wird Path 1 nach `MODULKARTE_KANON.md`, `ARCHITEKTUR_MODULE_PATH1.md` und den explizit gelisteten UI-Referenzen. Ein Konflikt innerhalb derselben Wahrheitsart ist `BLOCKED_GOVERNANCE_CONFLICT`; keine stille Auswahl nach Dateiname, Alter oder Kommentar. Gruen in der CI ist NICHT genug — Modul-Naehte + Designtreue + Scope sind Teil der Abnahme; Pruefer ≠ Autor.
 
 ## Projekt
 
@@ -23,6 +23,18 @@
 
 ## Dokumentenautoritaet
 
+D-GOV-001 ordnet jede Wahrheitsart genau einer Quelle zu:
+
+- Projektregeln: `AGENTS.md`.
+- Produktentscheidungen: `docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md`.
+- Scope und Module: `docs/project/linie/MODULKARTE_KANON.md`.
+- Architektur: `docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md`.
+- Aktive Ausfuehrung (Paket, Branch, Base, Status, naechstes Gate): `missions/F1_ORDER_TO_CASH_PILOT_001.yml`.
+- Auf `main` belegter Lieferstand: `docs/project/CURRENT_STATE.md`.
+- UI-Wahrheit: ausschliesslich die in `docs/project/linie/00_UI_REFERENZEN_PFADE.md` gelisteten neuesten Referenzen.
+
+Evidence beweist konkrete Staende, steuert aber niemals Scope oder Baustart. `00_JETZT`, `00_ABC` und `00_BIBEL` sind nur Navigation/Kurzansicht. Die maschinenlesbare Zuordnung liegt in `quality/authoritative-sources.json`; `npm run quality:authority-gate` prueft sie fail-closed.
+
 Vor jeder Mission aus aktuellem `origin/main` lesen:
 
 1. `AGENTS.md`
@@ -36,7 +48,7 @@ Vor jeder Mission aus aktuellem `origin/main` lesen:
 - Alte Masterplaene, Uebergaben, Review-Bundles, lokale Governance-Dateien und Dirty-Worktrees sind nur Quellenmaterial.
 - Sie duerfen den kanonischen Stand nicht ueberschreiben.
 - Reale Systemwahrheit kommt aus GitHub `main`, Vercel Production, Remote-Supabase und reproduzierbaren Nachweisen.
-- Widersprueche muessen benannt werden; keine stille Prioritaetsentscheidung.
+- Widersprueche muessen benannt werden. Innerhalb derselben Wahrheitsart gilt `BLOCKED_GOVERNANCE_CONFLICT`; keine stille Prioritaetsentscheidung.
 
 ## Arbeitsmodell
 

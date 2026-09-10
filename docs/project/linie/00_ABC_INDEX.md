@@ -1,25 +1,18 @@
-# KREILE — DAS ABC (Einstieg für jeden Bau-Chat)
+# KREILE — DAS ABC (Navigation)
 
-> **ZUERST `00_JETZT_UND_LEITPLANKEN.md` lesen** — was gerade dran ist + die harten Regeln (ein Writer/ein Checkout, kein Testbiegen, kein ungeführtes Bauen). Erst danach diese Datei. Bei Widerspruch gilt `00_JETZT`.
+Status: `REFERENCE_ONLY_NON_EXECUTABLE`
+Stand: 2026-09-10 · D-GOV-001
 
-**Wenn du diese App bauen sollst, lies ZUERST `00_JETZT`, dann diese Datei in dieser Reihenfolge.** Alles, was du brauchst, liegt in `docs/project/linie/` (nichts ausserhalb `02_app/`). Du baust NUR, was hier vorgegeben ist — nichts, was du dir selbst ausdenkst. Die offenen Owner-Entscheidungen stehen als **harte STOP-Liste** in `00_BIBEL_INDEX.md`: an genau diesen Punkten baust du NICHT, sondern stoppst (`BLOCKED_PRODUCT_DECISION`) und fragst den Owner.
+Diese Datei ist ausschließlich die Lesekarte und besitzt keine eigene Zustands- oder Ausführungswahrheit.
 
-## Grundgesetz (zwei Sätze)
-1. Gebaut wird die **Modulbauweise Path 1** (wenige, vollständige, forkbare Module) nach der **Modulkarte** — nichts anderes; verworfene Muster (Stationsband-Home, 2. Designsystem, Tenant-Literal) sind CI-FAIL.
-2. **Grün in der CI ist NICHT „fertig".** Fertig = grün UND designtreu (gegen `ui/`) UND modultreu (5 Nähte) UND im Scope der Modulkarte. Der Prüfer ist NIE der Autor.
+1. Regeln: `../../../AGENTS.md`
+2. Aktive Ausführung: `../../../missions/F1_ORDER_TO_CASH_PILOT_001.yml`
+3. Lieferstand auf `main`: `../../CURRENT_STATE.md`
+4. Entscheidungen: `KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md`
+5. Scope/Module: `MODULKARTE_KANON.md`
+6. Architektur/Path 1: `ARCHITEKTUR_MODULE_PATH1.md`
+7. UI: `00_UI_REFERENZEN_PFADE.md`
+8. Beispiel: `BEISPIELE_MODUL.md`
+9. Bekannte technische Fallen: `PROBLEMLOESUNGEN.md`
 
-## Lesereihenfolge = das ABC
-- **A — WARUM/Regeln:** `../../../AGENTS.md` (Spitze), `KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md` (alle Entscheidungen D-*), `00_AUTONOMER_BETRIEB_LEITPLANKEN.md`.
-- **B — WAS (Scope & Module):** `MODULKARTE_KANON.md` — die 6 Module + Fundament; was Quarantäne ist, was ENTFÄLLT (löschen). Roter Faden: INFOS REIN → KARTE → SUCHEN → RAUS.
-- **C — WIE (Architektur):** `ARCHITEKTUR_MODULE_PATH1.md` — Modul = ein Ordner `src/modules/<fach>/`, die fünf CI-erzwungenen Nähte, Baureihenfolge S0–S5.
-- **D — WIE es aussieht (Vorlagen):** `ui/00_UI_REFERENZ_KANONISCH.md` + die 4 HTML-Mocks (Phillip V4, Rolf V8, Auftragskarte V8, Kundenkarte V2). Startseite = V4, Stationsband verboten. Demo-Daten darin sind nie Produktdaten (kein Mock).
-- **E — Domänen-Verträge (wörtlich):** `KREILE_F1_4_BAUVERTRAG_...RECHNUNG_V1...md`, `KREILE_F1_5_BAUVERTRAG_ZAHLUNGSEINGANG_WARENAUSGANG_V1...md`. Mission/Reihenfolge: `../../../missions/F1_ORDER_TO_CASH_PILOT_001.yml`.
-- **F — BEISPIEL (so sieht ein korrektes Modul aus):** `BEISPIELE_MODUL.md`.
-- **G — PROBLEMLÖSUNGEN (bekannte Fallen + Fix):** `PROBLEMLOESUNGEN.md`.
-- **H — Bauplan/Reihenfolge:** `ARCHITEKTUR_MODULE_PATH1.md` §4 (S0 Tenant-Fix → S1 Gate → S2 Löschen → S3 Muster-Modul → S4 Home V4 → S5 restliche Module). F1.x-Reihenfolge aus der Mission.
-
-## Abnahmetest (das ist „der Ordner ist vollständig")
-Ein frischer Chat mit NUR diesem Repo kann ohne Owner-Rückfrage sagen: welches Modul, welche Naht, welcher nächste Schritt. **SOLL-Zustand:** die CI lässt keinen Tiefimport, kein Tenant-Literal, kein Stationshome, kein manifestloses Modul, keine Domäne mit Ablage außerhalb ihres Modulordners grün. **Heute erzwungen:** S0 (Tenant-Literal-Bann) UND S1 (Naht-Gates `npm run quality:module-gates`) sind voll CI-erzwungen — PR #75 ist gemerged (main `160bcf4`).
-
-## Status-Kurz (Stand 2026-09-10)
-Gebaut+geprüft: Fundament (F0/F1.1), F1.4 sowie F1.5 A+B/B2+C+D+D.1+T vollstaendig geliefert; C ist mit PR #79 (`b94821ca…`), D mit PR #80 (`001a7698…`), D.1 mit PR #81 (`bf17e8c5…`) und T mit PR #82 (`2a2b24d2…`) integriert. **S0 + S1 + S4 sind integriert:** PR #75 lieferte Tenant-/Naht-Gates, PR #77 das erste Path-1-Modul `src/modules/werkstatt/` mit Phillip V4 und `/warendurchlauf` als Kompositionswurzel. F1.6 ist `NOT_STARTED`; Pilot-Readiness bleibt `BLOCKED_PRODUCT_DECISION`, bis Suchleiste und Kalender gemaess Modulkarte beide real und modular geplant, gebaut und abgenommen sind. NICHT vorziehen: S2/S3, restliche Modul-Umzuege oder F1.6. Suchleiste: Lieferung als Referenztext in `_lieferungen/suche/`, Fork nach `src/modules/suche/` erst im freigegebenen Paket. Aktueller Stand + Leitplanken: `00_JETZT_UND_LEITPLANKEN.md`.
+Abnahme bleibt: grüne Gates plus Scope-, Modul- und Designtreue; Prüfer und Autor sind verschieden.
