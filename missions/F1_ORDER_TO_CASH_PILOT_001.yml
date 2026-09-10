@@ -353,17 +353,23 @@ f1_5_allowlist:
   - package-lock.json
   - scripts/supabase-version-check.mjs
   # D — Oberflaeche (nur Readback)
+  - supabase/migrations/20260909180000_f1_5_goods_out_ui_read_contract.sql
   - src/app/warendurchlauf/warenausgang/page.tsx
   - src/app/warendurchlauf/warenausgang/**
   - src/app/buchhaltung/rechnungen/InvoicesClient.tsx
   - src/app/buchhaltung/rechnungen/__tests__/**
   - src/components/orders/OrderOverlay.tsx
+  - src/components/orders/OrderImmutableInvoiceButton.tsx
+  - src/components/orders/__tests__/w2cOrderOverlay.failClosed.test.tsx
+  - src/components/orders/__tests__/OrderImmutableInvoiceButton.test.tsx
   # Evidence
   - e2e/f1-5-*.real.spec.ts
   - docs/evidence/f1/F1_5_BESTAETIGTER_ZAHLUNGSEINGANG_E2E_EVIDENCE.md
   - docs/evidence/f1/artifacts/f1-5/**
   - docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json
   - docs/evidence/f0/W4_CROSS_MODULE_READ_PORT_INVENTORY.json
+  - docs/project/CURRENT_STATE.md
+  - docs/project/linie/00_JETZT_UND_LEITPLANKEN.md
 
 f1_r0_required_gates:
   - REACHABLE_PRODUCTION_MOCKS=0

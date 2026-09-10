@@ -67,6 +67,54 @@ const openRow = {
   goods_out_allowed: false,
 };
 
+const orderPaidRow = {
+  ...paidRow,
+  order_version: 4,
+  station: "fertig",
+  current_station: "fertig",
+  current_station_id: "fertig",
+  order_status: "fertig",
+  invoice_state: "issued",
+  active_invoice_count: 1,
+  payment_goods_out_allowed: true,
+  payment_integrity_ok: true,
+  payment_actor_id: admin.userId,
+  goods_out_event_count: 0,
+  goods_out_event_id: null,
+  goods_out_client_event_id: null,
+  goods_out_correlation_id: null,
+  goods_out_event_schema_version: null,
+  goods_out_order_version: null,
+  goods_out_actor_id: null,
+  goods_out_occurred_at: null,
+  goods_out_mode: null,
+};
+
+const orderWithoutInvoiceRow = {
+  ...orderPaidRow,
+  payment_mode: "rechnung",
+  invoice_state: "not_issued",
+  active_invoice_count: 0,
+  invoice_id: null,
+  invoice_number: null,
+  total_amount_cents: null,
+  payment_contract_version: null,
+  payment_status: null,
+  payment_open_amount_cents: null,
+  payment_paid_amount_cents: null,
+  payment_currency: null,
+  payment_method: null,
+  payment_paid_at: null,
+  payment_receipt_id: null,
+  payment_event_id: null,
+  payment_correlation_id: null,
+  payment_version: null,
+  payment_goods_out_allowed: null,
+  payment_integrity_ok: null,
+  payment_actor_id: null,
+  goods_out_allowed: true,
+};
+
 describe("readPaymentSummary", () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -149,5 +197,76 @@ describe("readPaymentSummary", () => {
     execute.mockResolvedValueOnce([{ ...paidRow, payment_paid_at: "not-a-date" }]);
     const { readPaymentSummary } = await import("../paymentSummaryRead");
     await expect(readPaymentSummary(admin)).resolves.toMatchObject({ code: "UNAVAILABLE" });
+  });
+
+  it("reads one order-bound paid state through the dedicated UI view", async () => {
+    execute.mockResolvedValueOnce([orderPaidRow]);
+    const { readOrderPaymentState } = await import("../paymentSummaryRead");
+    await expect(readOrderPaymentState(admin, { orderId: paidRow.order_id })).resolves.toMatchObject({
+      code: "OK",
+      data: {
+        orderId: paidRow.order_id,
+        orderVersion: 4,
+        physicalStatus: "fertig",
+        mode: "vorkasse",
+        invoiceState: "issued",
+        payment: { status: "bezahlt", openAmountCents: 0, eventId: paidRow.payment_event_id },
+        paymentActorId: admin.userId,
+        goodsOut: null,
+        goodsOutAllowed: true,
+      },
+    });
+    expect(execute.mock.calls[0]?.[0].text).toContain("private.v_goods_out_ui_state_v1");
+    expect(execute.mock.calls[0]?.[0].values).toEqual([paidRow.order_id]);
+  });
+
+  it("returns Rechnung without an invoice and without inventing payment values", async () => {
+    execute.mockResolvedValueOnce([orderWithoutInvoiceRow]);
+    const { readOrderPaymentState } = await import("../paymentSummaryRead");
+    await expect(readOrderPaymentState(werkstatt, { orderId: paidRow.order_id })).resolves.toEqual({
+      code: "OK",
+      data: {
+        orderId: paidRow.order_id,
+        orderNumber: paidRow.order_number,
+        orderVersion: 4,
+        physicalStatus: "fertig",
+        mode: "rechnung",
+        paymentModeVersion: 0,
+        invoiceState: "not_issued",
+        payment: null,
+        paymentActorId: null,
+        goodsOut: null,
+        goodsOutAllowed: true,
+      },
+    });
+  });
+
+  it("fails closed for invalid input, denial, missing, ambiguous or corrupt order state", async () => {
+    const { readOrderPaymentState } = await import("../paymentSummaryRead");
+    await expect(readOrderPaymentState(admin, { orderId: " bad " })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(readOrderPaymentState(readonlyUser, { orderId: paidRow.order_id })).resolves.toMatchObject({ code: "FORBIDDEN" });
+    expect(withTransaction).not.toHaveBeenCalled();
+
+    execute.mockResolvedValueOnce([]);
+    await expect(readOrderPaymentState(admin, { orderId: paidRow.order_id })).resolves.toMatchObject({ code: "NOT_FOUND" });
+    execute.mockResolvedValueOnce([orderPaidRow, orderPaidRow]);
+    await expect(readOrderPaymentState(admin, { orderId: paidRow.order_id })).resolves.toMatchObject({ code: "UNAVAILABLE" });
+    execute.mockResolvedValueOnce([{ ...orderPaidRow, integrity_ok: false }]);
+    await expect(readOrderPaymentState(admin, { orderId: paidRow.order_id })).resolves.toMatchObject({ code: "UNAVAILABLE" });
+  });
+
+  it("logs available database diagnostics while returning only a generic error", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    execute.mockRejectedValueOnce({ message: "relation failed", details: "internal detail", hint: "retry later" });
+    const { readOrderPaymentState } = await import("../paymentSummaryRead");
+    const result = await readOrderPaymentState(admin, { orderId: paidRow.order_id });
+    expect(log).toHaveBeenCalledWith("readOrderPaymentState database error", {
+      message: "relation failed",
+      details: "internal detail",
+      hint: "retry later",
+    });
+    expect(result).toEqual({ code: "UNAVAILABLE", message: "Zahlungs- und Warenausgangsdaten konnten nicht sicher geladen werden." });
+    expect(JSON.stringify(result)).not.toContain("internal detail");
+    log.mockRestore();
   });
 });
