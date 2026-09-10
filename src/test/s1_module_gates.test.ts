@@ -122,7 +122,9 @@ describe("S1 Naht 1 — Manifest je Modul + Ablage", () => {
     const root = repo({
       ...goodModule,
       "src/app/orders/page.tsx": 'import { readOrder } from "@/modules/orders/public";\nexport default readOrder;\n',
+      "src/app/orders/[id]/page.tsx": 'import { OrdersAppAdapter } from "../OrdersAppAdapter";\nexport default OrdersAppAdapter;\n',
       "src/app/orders/OrdersAppAdapter.tsx": 'import { readOrder } from "@/modules/orders/public";\nexport const OrdersAppAdapter = readOrder;\n',
+      "src/app/orders/unbound/page.tsx": "export default () => null;\n",
       "src/app/orders/__tests__/route.test.tsx": "export const routeTest = true;\n",
       "src/app/orders/actions.ts": "export const action = true;\n",
       "src/app/orders/arbitrary.tsx": "export const arbitrary = true;\n",
@@ -133,11 +135,13 @@ describe("S1 Naht 1 — Manifest je Modul + Ablage", () => {
     });
     const f = findingsOf(root);
     expect(f.filter((entry) => entry.includes("src/app/orders/page.tsx"))).toEqual([]);
+    expect(f.filter((entry) => entry.includes("src/app/orders/[id]/page.tsx"))).toEqual([]);
     expect(f.filter((entry) => entry.includes("src/app/orders/OrdersAppAdapter.tsx"))).toEqual([]);
     expect(f.filter((entry) => entry.includes("src/app/orders/__tests__/route.test.tsx"))).toEqual([]);
     expect(f).toContainEqual(expect.stringContaining("src/app/orders/actions.ts: Fach 'orders'"));
     expect(f).toContainEqual(expect.stringContaining("src/app/orders/arbitrary.tsx: Fach 'orders'"));
     expect(f).toContainEqual(expect.stringContaining("src/app/orders/BrokenAppAdapter.tsx: App-Adapter"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/unbound/page.tsx: Next-Entrypoint"));
     expect(f).toContainEqual(expect.stringContaining("src/components/orders/OrderCard.tsx: Fach 'orders'"));
     expect(f).toContainEqual(expect.stringContaining("src/lib/orders/read.ts: Fach 'orders'"));
     expect(f).toContainEqual(expect.stringContaining("src/features/orders/read.ts: Fach 'orders'"));

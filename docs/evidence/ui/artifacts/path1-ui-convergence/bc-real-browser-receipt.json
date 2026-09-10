@@ -1,0 +1,37 @@
+{
+  "source": "fresh local Supabase + real auth/session + canonical intake + tenant reads",
+  "orderNumber": "A-2026-0003",
+  "orderId": "b50071b4-4b40-411e-ac3c-253083c647aa",
+  "customerId": "35cf159d-ccc2-4ffc-8fe7-8b7596441229",
+  "viewports": [
+    "1914x917",
+    "1220x880",
+    "390x844"
+  ],
+  "artifacts": [
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/bc-order-v8-desktop-1914x917.png",
+      "sha256": "902a162d3c260de537d49cda6be980079e62a0194c80b1d4f21077f0b10aaec6"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/bc-customer-v2-desktop-1914x917.png",
+      "sha256": "ae439b098e5e26ff989e24f1f0500a33dc7c00ca9b128a521d8ce3169c6d3b38"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/bc-order-v8-tablet-1220x880.png",
+      "sha256": "c6141a94d96bb1fb339b29c7da9f2c4ae6016989d1b93b86d80265aba97e69a8"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/bc-customer-v2-tablet-1220x880.png",
+      "sha256": "31fa5b57d82b16aee21b45ee4b3a82009ec39ce33e337466b38bb26abd24a9eb"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/bc-order-v8-mobile-390x844.png",
+      "sha256": "af36ebf96cd04268cbb25388dac7eefbe6b1db1de5fa9736e4f1f46162a851b8"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/bc-customer-v2-mobile-390x844.png",
+      "sha256": "a45f16c40b392f91a7b06965575c5d89099ca753f7be80303f0ad0211cb78b0a"
+    }
+  ]
+}

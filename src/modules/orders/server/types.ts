@@ -17,6 +17,14 @@ export type OrdersViewState =
   | { kind: "conflict"; message: string }
   | { kind: "data"; orders: OrdersListItem[] };
 
+export type OrderCardExtraWork = {
+  lineId: string;
+  name: string;
+  minutes: number;
+  amountCents: number;
+  frozen: boolean;
+};
+
 export type OrderCardItem = {
   id: string;
   position: number;
@@ -24,6 +32,29 @@ export type OrderCardItem = {
   quantity: number;
   material: string | null;
   surface: string;
+  extraWork: OrderCardExtraWork[];
+};
+
+export type OrderCardEvidence = {
+  key: string;
+  source: string;
+  state: string;
+  recordedAt: string;
+  itemIds: string[];
+};
+
+export type OrderCardPayment = {
+  mode: "vorkasse" | "abholung" | "rechnung";
+  invoiceState: "not_issued" | "issued";
+  status: "offen" | "teilbezahlt" | "bezahlt" | null;
+  openAmountCents: number | null;
+  goodsOutAllowed: boolean;
+  goodsOut: null | {
+    eventId: string;
+    actorId: string;
+    occurredAt: string;
+    mode: "versand" | "abholung";
+  };
 };
 
 export type OrderCardModel = {
@@ -38,9 +69,12 @@ export type OrderCardModel = {
   status: string;
   dueAt: string | null;
   intakeAt: string;
+  assignedTo: string | null;
   items: OrderCardItem[];
+  evidence: OrderCardEvidence[];
   frozenAt: string | null;
   totalAmountCents: number | null;
+  payment: OrderCardPayment | null;
 };
 
 export type OrderCardState =

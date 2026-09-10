@@ -4,6 +4,7 @@
   "owner": "Path-1 Orders (Auftragskarte V8)",
   "publicExports": [
     "@/modules/orders/public#OrderCardModel",
+    "@/modules/orders/public#OrderCardPayment",
     "@/modules/orders/public#OrderCardState",
     "@/modules/orders/public#OrderCardView",
     "@/modules/orders/public#OrdersListItem",
