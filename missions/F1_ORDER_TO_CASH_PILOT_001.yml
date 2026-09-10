@@ -1,8 +1,8 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: 13240de2a5ca9e9cfae4f8c72552443dac1d7630
-branch: gov/authority-provider-m365-20260910
+base_sha: 9e0290468f9d7c6ac9fb5d4c33466bd24b0dfa77
+branch: path1/ui-convergence-full-20260910
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
 # ── M0 Konsolidierungsstand ───────────────────────────────────────
@@ -36,8 +36,10 @@ delivery_order:
   - F1.5_BESTAETIGTER_ZAHLUNGSEINGANG
   - F1.6_REALER_PILOT
 
-active_package: D_GOV_001_D_ARCH_011_D_UI_CORE_001_D_UI_CORE_002_GOVERNANCE
-next_gate_after_active_package: GOVERNANCE_D_UI_CORE_002_EXACT_SHA_REVIEW
+active_package: PATH1_UI_CONVERGENCE
+active_package_status: IN_PROGRESS_NO_PARTIAL_UX_PASS
+active_package_stages: A_SHELL_ROLE_HOMES_NAV -> B_ORDERS_CARD_V8 -> C_CUSTOMERS_CARD_V2 -> D_SEARCH_TARGET_HEADER_REACCEPTANCE
+next_gate_after_active_package: PATH1_UI_CONVERGENCE_A_FULL_ROUTE_ROLE_AND_ROUTE_DISPOSITION
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
@@ -149,6 +151,101 @@ reused_contracts:
   - src/lib/server/evidenceRead.ts
   - private.v_operational_station_queue_v1
   - private.v_evidence_records_v1
+
+path1_ui_convergence_allowlist:
+  # Steuerung, Evidence und shrink-only Gates
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - docs/project/CURRENT_STATE.md
+  - docs/evidence/ui/PATH1_UI_CONVERGENCE_20260910.md
+  - docs/evidence/ui/artifacts/path1-ui-convergence/**
+  - docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json
+  - quality/module-gates-baseline.json
+  - scripts/quality/check-module-gates.mjs
+  - src/test/s1_module_gates.test.ts
+  - e2e/path1-ui-convergence.real.spec.ts
+  - package.json
+  # Einstieg, Rollen-Home, Ziel-Shell und Werkstatt
+  - src/app/layout.tsx
+  - src/app/globals.css
+  - src/app/page.tsx
+  - src/app/__tests__/**
+  - src/app/start/page.tsx
+  - src/app/start/__tests__/**
+  - src/components/start/**
+  - src/components/layout/**
+  - src/components/home/**
+  - src/modules/werkstatt/**
+  - src/app/warendurchlauf/page.tsx
+  - src/app/warendurchlauf/layout.tsx
+  - src/app/warendurchlauf/loading.tsx
+  - src/app/warendurchlauf/WerkstattAppAdapter.tsx
+  - src/app/warendurchlauf/WarendurchlaufRouteNav.tsx
+  - src/app/warendurchlauf/**tests__/**
+  # Orders und Customers inklusive enger App-Adapter/Read-Ports
+  - src/modules/orders/**
+  - src/modules/customers/**
+  - src/app/orders/**
+  - src/app/customers/**
+  - src/components/orders/**
+  - src/components/customers/**
+  - src/components/entities/**
+  - src/app/actions/orders.actions.ts
+  - src/app/actions/customers.actions.ts
+  - src/lib/server/orderCardRead.ts
+  - src/lib/server/operationalOrders.ts
+  - src/lib/server/customerSummaryRead.ts
+  - src/lib/server/__tests__/w2cB2m5u.operationalDueTruth.failClosed.test.ts
+  # Accounting-minimal: ausschliesslich echte vorhandene Zielwege
+  - src/app/buchhaltung/page.tsx
+  - src/app/buchhaltung/rechnungen/**
+  - src/app/buchhaltung/zahlung/page.tsx
+  # Routenstilllegung: nur Page/Layout/Nav und direkte Routentests
+  - src/app/analyse/**
+  - src/app/cockpit/**
+  - src/app/kontrolle/**
+  - src/app/performance/**
+  - src/app/status/**
+  - src/app/marketing/**
+  - src/app/baeder/**
+  - src/app/betrieb/**
+  - src/app/betrieb-kvp/**
+  - src/app/kvp/**
+  - src/app/today/**
+  - src/app/finanzen/**
+  - src/app/kunden-auftraege/**
+  - src/app/print-queue/**
+  - src/app/feedback/**
+  - src/app/archive/**
+  - src/app/lager/**
+  - src/app/lieferanten/**
+  - src/app/telefonnotiz/**
+  - src/app/items/page.tsx
+  - src/app/items/**tests__/**
+  - src/app/kalender/page.tsx
+  - src/app/kalender/**tests__/**
+  - src/app/station/[slug]/**
+  - src/app/scan/page.tsx
+  - src/app/scan/**tests__/**
+  - src/app/kommunikation/page.tsx
+  - src/app/kommunikation/**tests__/**
+  - src/app/quotes/page.tsx
+  - src/app/quotes/new/page.tsx
+  - src/app/quotes/**tests__/**
+  # Etappe D: eingefrorener PR-84-Suchkern und gebundene Verbraucher/Belege
+  - src/modules/suche/**
+  - src/app/actions/search.actions.ts
+  - src/components/layout/GlobalSearch.tsx
+  - src/components/layout/KreileHeader.tsx
+  - src/components/layout/__tests__/f0W2cGlobalSearch.unavailable.test.tsx
+  - src/components/layout/__tests__/w2cHeaderTruth.realRender.test.tsx
+  - src/app/actions/__tests__/w2cB2m4c.externalProvider.failClosed.test.ts
+  - src/test/search_tenant.integration.test.ts
+  - e2e/search.real.spec.ts
+  - docs/evidence/f1/F1_6_SEARCH_MODULE_E2E_EVIDENCE.md
+  - docs/evidence/f1/artifacts/search/**
+  - docs/evidence/f0/W4_CROSS_MODULE_READ_PORT_INVENTORY.json
+  - .github/workflows/quality.yml
+  - quality/eslint-baseline.json
 
 f1_1_allowlist:
   - missions/F1_ORDER_TO_CASH_PILOT_001.yml
