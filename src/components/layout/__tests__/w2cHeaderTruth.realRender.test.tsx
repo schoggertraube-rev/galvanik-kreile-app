@@ -14,6 +14,7 @@ const boundary = vi.hoisted(() => {
     logout: vi.fn(),
     onMenuToggle: vi.fn(),
     openErfassung: vi.fn(),
+    search: vi.fn(),
     realtime: { status: "disabled" as RealtimeStatus },
     routerReplace: vi.fn(),
     sync: {
@@ -49,6 +50,7 @@ vi.mock("@/lib/offline/SyncContext", () => ({
 vi.mock("@/components/erfassung/ErfassungProvider", () => ({
   useErfassung: () => ({ openErfassung: boundary.openErfassung }),
 }));
+vi.mock("@/app/actions/search.actions", () => ({ searchTenantAction: boundary.search }));
 
 function renderHeader() {
   return render(<KreileHeader onMenuToggle={boundary.onMenuToggle} />);
@@ -59,6 +61,7 @@ beforeEach(() => {
   boundary.realtime.status = "disabled";
   boundary.sync.isOnline = true;
   boundary.sync.outboxItems = [];
+  boundary.search.mockResolvedValue({ code: "OK", query: "", hits: [] });
 });
 
 afterEach(() => {
@@ -131,6 +134,20 @@ describe("W2C header truth", () => {
     expect(boundary.onMenuToggle).toHaveBeenCalledTimes(1);
     expect(boundary.openErfassung).toHaveBeenNthCalledWith(1, { mode: "gate" });
     expect(boundary.openErfassung).toHaveBeenNthCalledWith(2, { mode: "scan" });
+  });
+
+  it("opens the real modular search from the desktop header and advertises only searchable fields", () => {
+    renderHeader();
+
+    const searchTrigger = screen.getByRole("button", {
+      name: "Kunde, Auftrag, Teil, Material, Oberfläche oder Termin suchen …",
+    });
+    fireEvent.click(searchTrigger);
+
+    expect(screen.getByRole("dialog", { name: "Kunden und Aufträge" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", {
+      name: "Kunde, Auftrag, Teil, Material, Oberfläche oder Termin suchen",
+    })).toHaveFocus();
   });
 
   it("contains no fabricated notification or synchronization claims in the source", () => {

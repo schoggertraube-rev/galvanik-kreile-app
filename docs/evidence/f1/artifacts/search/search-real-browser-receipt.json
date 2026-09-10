@@ -1,0 +1,32 @@
+{
+  "orderId": "53cd65bd-d77f-4266-b76f-49e6350614f2",
+  "orderNumber": "A-2026-0006",
+  "customerId": "98103fbb-9ee4-4e8a-9860-3a1c1e38cd0c",
+  "customer": "Nordlicht 1789049376221-14096 GmbH",
+  "searchedFields": [
+    "customer",
+    "orderNumber",
+    "part",
+    "material",
+    "surface",
+    "dueDate"
+  ],
+  "states": [
+    "data",
+    "empty",
+    "denial",
+    "error"
+  ],
+  "sources": [
+    "Auftragsbestand",
+    "Kundenstamm"
+  ],
+  "measurement": {
+    "viewport": {
+      "width": 1220,
+      "height": 880
+    },
+    "horizontalOverflow": 0,
+    "dialogState": "data"
+  }
+}

@@ -1,8 +1,8 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: 2a2b24d2fecc65a79bf2ff0efe87c72f79db8f09
-branch: none
+base_sha: 13240de2a5ca9e9cfae4f8c72552443dac1d7630
+branch: path1/suche-real-modular-20260910
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
 # ── M0 Konsolidierungsstand ───────────────────────────────────────
@@ -36,8 +36,8 @@ delivery_order:
   - F1.5_BESTAETIGTER_ZAHLUNGSEINGANG
   - F1.6_REALER_PILOT
 
-active_package: NONE_F1_6_BLOCKED_PRODUCT_DECISION
-next_gate_after_active_package: F1.6_PILOT_READINESS_BLOCKED_PRODUCT_DECISION
+active_package: PATH1_S5_SEARCH_REAL_MODULAR
+next_gate_after_active_package: PATH1_S5_SEARCH_EXACT_SHA_REVIEW
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
@@ -72,8 +72,12 @@ f1_5_d_status: DELIVERED_PR_80_MERGE_001a7698b9ea4edff881ed56ea110832e9de7a46
 f1_5_d1_status: DELIVERED_PR_81_MERGE_bf17e8c5562ca772696176fabf4963ece683b88b
 f1_5_t_status: DELIVERED_PR_82_HEAD_575052b6b47a7fd4b651c20e5a3ac42b2c5676e7_MERGE_2a2b24d2fecc65a79bf2ff0efe87c72f79db8f09
 f1_6_status: NOT_STARTED
-f1_6_pilot_readiness: BLOCKED_PRODUCT_DECISION
+f1_6_pilot_readiness: BLOCKED_SEARCH_AND_CALENDAR_ACCEPTANCE
 f1_6_required_before_start: SEARCH_MODULE_REAL_MODULAR; CALENDAR_REAL_MODULAR
+path1_s5_search_status: CANDIDATE
+path1_s5_search_branch: path1/suche-real-modular-20260910
+path1_s5_search_base_sha: 13240de2a5ca9e9cfae4f8c72552443dac1d7630
+path1_calendar_status: NOT_STARTED
 
 # ── F1.2 Entscheidungsgrundlage (bindend, ersetzt Altstand) ───────
 # D-F12-001A (ersetzt D-F12-001): F1.2 = genau EIN Uebergang
@@ -388,6 +392,24 @@ f1_5_allowlist:
   - docs/project/linie/00_ABC_INDEX.md
   - docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md
   - docs/project/linie/MODULKARTE_KANON.md
+
+path1_s5_search_allowlist:
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - src/modules/suche/**
+  - src/app/actions/search.actions.ts
+  - src/components/layout/GlobalSearch.tsx
+  - src/components/layout/KreileHeader.tsx
+  - src/components/layout/__tests__/f0W2cGlobalSearch.unavailable.test.tsx
+  - src/components/layout/__tests__/w2cHeaderTruth.realRender.test.tsx
+  - src/app/actions/__tests__/w2cB2m4c.externalProvider.failClosed.test.ts
+  - src/test/search_tenant.integration.test.ts
+  - e2e/search.real.spec.ts
+  - docs/evidence/f1/F1_6_SEARCH_MODULE_E2E_EVIDENCE.md
+  - docs/evidence/f1/artifacts/search/**
+  - docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json
+  - docs/evidence/f0/W4_CROSS_MODULE_READ_PORT_INVENTORY.json
+  - .github/workflows/quality.yml
+  - quality/eslint-baseline.json
 
 f1_r0_required_gates:
   - REACHABLE_PRODUCTION_MOCKS=0

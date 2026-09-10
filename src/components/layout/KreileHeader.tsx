@@ -111,7 +111,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
         >
           <Search className="w-5 h-5 text-navy-500 shrink-0 pointer-events-none" strokeWidth={1.5} />
           <span className="text-sm text-text-muted flex-1 text-left pointer-events-none">
-            Bei Auftrag, Kunde, Teilenummer suchen...
+            Kunde, Auftrag, Teil, Material, Oberfläche oder Termin suchen …
           </span>
           {/* Skyline decorative SVG in der Mitte */}
           <div className="absolute left-1/2 -translate-x-1/2 bottom-0 h-10 w-48 overflow-hidden opacity-12 pointer-events-none">
@@ -137,6 +137,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
 
         {/* Mobile Suche */}
         <button
+          aria-label="Suche öffnen"
           onClick={() => setSearchOpen(true)}
           className="md:hidden w-9 h-9 rounded-full bg-white border border-neutral-gray-100 flex items-center justify-center text-navy-900"
         >
