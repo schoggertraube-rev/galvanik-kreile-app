@@ -1,6 +1,6 @@
 # CURRENT_STATE — Galvanik-Kreile WerkstattCockpit
 
-**Massgeblicher Steuerungsstand: 2026-09-09.** `main` ist die einzige Lieferwahrheit. Der folgende
+**Massgeblicher Steuerungsstand: 2026-09-10.** `main` ist die einzige Lieferwahrheit. Der folgende
 M1/M2/M3/F1-Block ist aktuell; die ausfuehrlichen F0-Tabellen darunter sind ein datierter historischer
 Snapshot und keine aktuelle Paket- oder Branchsteuerung.
 
@@ -17,8 +17,8 @@ Snapshot und keine aktuelle Paket- oder Branchsteuerung.
 | M2-Integration | PR #63 als Merge-Commit `733c22e5df95fd00987ba45408b9dac70f8638e1` nach `main` integriert; Statuspflege via PR #64 als Merge-Commit `c3489e9ad7f75286c23b45577ba5240e600e71f2`; Paket- und Statusbranch lokal und remote geloescht; `02_app` sauber auf aktuellem `main` |
 | F1.3 Leistungsabschluss | `PASS`; `galvanik -> fertig`, echte Mehrarbeit, Freeze, L6-Korrektur und fail-closed Rechnungssperre am Kandidaten `fb19c224e1542afdf1436f5f0fb76995fec3935b`; Real-E2E, CI und unabhaengige Exact-SHA-Abnahme ohne offene P0/P1-, Scope- oder False-Pass-Befunde |
 | M3-Integration | PR #66 als GitHub-verifizierter Merge-Commit `fc551b0732c52a0867cc4b0bbdfe4f8a52ad3550` nach `main` integriert; Main-Tree `0a77f85f8268ac721d8f15fc7edce5e2623482c5` bytegleich zum geprueften Kandidaten; `02_app` getrackt sauber auf `main`; der erhaltene Paketbranch ist ohne Writer keine aktive Produktwahrheit |
-| F1.5 Order-to-Cash | A+B/B2+C geliefert; C wurde mit PR #79 als Merge-Commit `b94821ca56634bcf75e8d5ddda130241bb75b9bf` integriert. D ist als schmaler Overlay-Kandidat lokal real E2E belegt und bleibt bis Exact-SHA-CI plus unabhaengigem Review `review-ready`, nicht geliefert |
-| Path-1 S4 Werkstatt-Modul | S0+S1 (PR #75) in `main@160bcf40fc872bea2c8303e074c57a0eb0402c0c` integriert. Auf Basis dieses Standes: `src/modules/werkstatt/` als erstes Path-1-Fachmodul gebaut (`/warendurchlauf` als Kompositionswurzel, UI gegen Phillip V4 `docs/project/linie/ui/KREILE_STARTSEITE_PHILLIP_V4_2026-08-20.html`); S4/Phillip-V4-Kandidat, **noch nicht reviewed/gemergt** |
+| F1.5 Order-to-Cash | A+B/B2+C+D geliefert. C wurde mit PR #79 als Merge-Commit `b94821ca56634bcf75e8d5ddda130241bb75b9bf`, D mit PR #80 als Merge-Commit `001a7698b9ea4edff881ed56ea110832e9de7a46` integriert. D.1 (D-UI-F15-004A, Phillip-`Ware raus`-Griff) ist aktueller Kandidat; T (Supabase-CLI-Pin) bleibt offen. Kein F1.5-Gesamt-PASS vor Merge und Abschluss von D.1 sowie T. |
+| Path-1 S4 Werkstatt-Modul | S0+S1 (PR #75) in `main@160bcf40fc872bea2c8303e074c57a0eb0402c0c` und S4/Phillip V4 mit PR #77 als Merge-Commit `019b1fbaad34e4f10a28298a29858f2fa599eb45` integriert; `/warendurchlauf` ist die Kompositionswurzel fuer `src/modules/werkstatt/`. |
 | Remote/Production in M2 | `main`-Merges loesen ueber die vorhandene Vercel-GitHub-Integration automatisch erfolgreiche Deployments mit Environment `Production` aus; fuer `733c22e5df95fd00987ba45408b9dac70f8638e1` (Deployment `5958527416`) und `c3489e9ad7f75286c23b45577ba5240e600e71f2` (Deployment `5958812163`) belegt; keine manuelle Promotion sowie keine Provider-, RLS-, Remote-DB- oder Datenmutation |
 | Remote/Production in M3 | Automatisches Vercel-Git-Deployment `dpl_67UsPkCLodKUS8Fa2Lp7vLhX6Par` fuer exakt `fc551b0732c52a0867cc4b0bbdfe4f8a52ad3550`: `target=production`, `READY`; keine manuelle Promotion sowie keine Provider-, RLS-, Remote-DB- oder Datenmutation |
 

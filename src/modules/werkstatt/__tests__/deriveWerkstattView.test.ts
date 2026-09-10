@@ -90,4 +90,24 @@ describe("buildWerkstattData", () => {
     expect(build({ wareneingang: [wareneingang], galvanik: [galvanik] }).pickerOrders.map((entry) => entry.id))
       .toEqual(["ga", "we"]);
   });
+
+  it("offers only canonical fertig orders as goods-out candidates", () => {
+    const wareneingang = order({ id: "we", orderNumber: "WE", station: "wareneingang" });
+    const galvanik = order({ id: "ga", orderNumber: "GA", station: "galvanik" });
+    const fertig = order({ id: "fi", orderNumber: "FI", station: "fertig", status: "fertig" });
+
+    const data = build({ wareneingang: [wareneingang], galvanik: [galvanik, fertig] });
+
+    expect(data.goodsOutCandidates.map((entry) => entry.id)).toEqual(["fi"]);
+    expect(data.pickerOrders.map((entry) => entry.id)).toEqual(["ga", "fi", "we"]);
+  });
+
+  it("keeps the goods-out candidates honestly empty when no order is at fertig", () => {
+    const data = build({
+      wareneingang: [order({ id: "we", orderNumber: "WE", station: "wareneingang" })],
+      galvanik: [order({ id: "ga", orderNumber: "GA", station: "galvanik" })],
+    });
+
+    expect(data.goodsOutCandidates).toEqual([]);
+  });
 });

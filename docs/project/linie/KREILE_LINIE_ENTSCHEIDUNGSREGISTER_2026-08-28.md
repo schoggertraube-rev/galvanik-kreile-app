@@ -190,3 +190,11 @@ Die ESLint-Ratsche wertete jede Änderung von `lintContractHash`/`judgeContractH
 **Zweck:** Der reale Ablauf für Rechnungskunden bleibt möglich, ohne eine nicht existente Rechnung oder Zahlungswahrheit vorzutäuschen.
 
 **Wesentlicher Nachteil:** Der additive V2-Ereignis- und Read-Port-Vertrag erweitert die dauerhaft zu pflegende Vertrags- und Testmatrix; die strengere DB-Validierung verhindert dafür einen zweiten Zahlungs- oder Rechnungsstand.
+
+## D-UI-F15-004A — Phillip-Werkstattgriff „Ware raus“ (Owner 2026-09-10)
+
+**Entscheidung/Wortlaut:** Der nach F1.5-D noch deaktivierte Griff „Ware raus“ in der bestehenden Phillip-V4-Aktionsleiste wird an denselben gelieferten OrderOverlay-Fluss gebunden. Der geführte Einstieg bietet ausschließlich echte Aufträge mit kanonischer Station `fertig` aus der bereits tenantgebunden geladenen Stationsquelle an. Das wiederverwendbare Werkstattmodul verwendet dafür einen engen typisierten Auswahl-Port; erst der App-Adapter bindet die ausgewählte Order-ID an das bestehende `openOrder(orderId)`. Fehlt ein Kandidat, erscheint ein ehrlicher Leerzustand. Nach persistiert bestätigtem Warenausgang und Home-Reload wird der Auftrag nicht mehr angeboten.
+
+**Zweck:** Philipp erreicht den bereits gelieferten Zahlungs-/Warenausgangsfluss direkt aus seinem kanonischen Werkstatt-Home, ohne Stationsnavigation, zweiten Screen oder versteckte Entwicklerkenntnis.
+
+**Wesentlicher Nachteil:** Der Werkstatt-Read-Snapshot führt zusätzlich eine abgeleitete Kandidatenliste; deren Filter- und Portgrenze muss dauerhaft gegen die kanonische Station `fertig` getestet werden. Es entsteht keine neue Daten-, Zahlungs- oder Rechnungswahrheit.

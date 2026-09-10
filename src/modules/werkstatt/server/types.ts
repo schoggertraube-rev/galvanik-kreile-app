@@ -50,6 +50,7 @@ export type WerkstattKpiSnapshot = {
 /** App-owned interactions injected into the reusable Werkstatt UI. */
 export type WerkstattViewPorts = {
   onOpenOrder: (orderId: string) => void;
+  onOpenGoodsOut: (orderId: string) => void;
   onOpenWip: () => void;
   onScanOrder: () => void;
   onCreateOrder: () => void;
@@ -64,6 +65,7 @@ export type WerkstattData = {
   wipCount: number;
   dueThisWeekCount: number;
   pickerOrders: readonly PhillipOrderCard[];
+  goodsOutCandidates: readonly PhillipOrderCard[];
   canCreateOrder: boolean;
 };
 
