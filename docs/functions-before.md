@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # Registry of Existing Functions (Before Overhaul)
 
 The following list maps all existing pages, routes, features, and data-endpoints of the Kreile Galvanik Cockpit. This registry serves as a checklist during and after the visual redesign to guarantee that **zero features are removed or compromised**.

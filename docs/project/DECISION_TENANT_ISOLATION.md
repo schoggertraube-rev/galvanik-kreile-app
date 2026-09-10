@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # Produktentscheidung: Datenzugriffs- und Tenant-Grenze
 
 Stand: 2026-08-05 — Korrektur des unvollstaendigen Architekturentscheids

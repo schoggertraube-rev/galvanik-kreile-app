@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # Produktentscheidung: PIN-Sicherheitsstrategie
 
 Stand: 2026-08-05 — korrigierter Live- und Recovery-Status

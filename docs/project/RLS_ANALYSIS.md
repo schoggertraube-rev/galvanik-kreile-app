@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # RLS-Analyse — Galvanik Kreile
 
 Stand: 2026-08-05 | Production-Projekt: `syhaigjhsbpjmtnggqka`

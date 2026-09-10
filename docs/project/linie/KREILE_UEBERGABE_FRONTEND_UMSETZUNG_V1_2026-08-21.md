@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # ÜBERGABE — Frontend-Umsetzung (Design → echte App) · V1 · 2026-08-21
 
 **An:** Projektleitung / Mainchat-Writer · **Von:** Orchestrator

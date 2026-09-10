@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # F-BH-08 — Migration Review: GoBD, RLS, Storage, Supabase-Plan
 
 **Datum:** 2026-06-03

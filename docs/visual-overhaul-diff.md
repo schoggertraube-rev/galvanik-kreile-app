@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # Visual Overhaul V1 - Changes & Architecture Decisions
 
 This document outlines the major architectural, visual, and conceptual changes introduced during the "Visual Overhaul V1" phase for the KREILE WerkstattCockpit.

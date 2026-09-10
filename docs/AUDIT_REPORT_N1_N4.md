@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # Audit Report: Läufe N1 bis N4 – Zusammenfassung der Refactorings & Erweiterungen
 
 Dieser Bericht fasst die Änderungen der vier Korrekturläufe (N1–N4) an der Kreile WerkstattCockpit App zusammen. Ziel der Läufe war es, die Navigation aufzuräumen, die Datenerfassung zu modernisieren und die User Experience bei der Auftragsanlage sowie dem Kunden-Matching signifikant zu verbessern.

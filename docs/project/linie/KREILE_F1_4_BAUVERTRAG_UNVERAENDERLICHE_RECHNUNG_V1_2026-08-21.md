@@ -1,3 +1,5 @@
+<!-- STATUS: REFERENCE_ONLY_NON_EXECUTABLE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 > **VERBINDLICHE RATIFIKATION (siehe DIE LINIE §3, 2026-08-28):** Es gilt **19 % USt ONLY** (kein 7 %-Mix), **PAYMENT_TERM_DAYS=14**, **SERVICE_DATE_RULE=FINAL_F1_3_FREEZE_DATE**, EVOLVE_PUBLIC_INVOICES additiv. Wo §1/§8 unten „7 % möglich" oder „Leistungsdatum offen" andeuten, ist das durch die Ratifikation ERSETZT — nicht interpretieren, die Linie gilt.
 
 # BAU-VERTRAG F1.4 — Unveränderliche Rechnung · V1 · 2026-08-21

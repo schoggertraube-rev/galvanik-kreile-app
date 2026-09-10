@@ -15,15 +15,17 @@ Quelle: Owner-Modulmindmap „Baustruktur Mini-USP" (Stand 15.08.2026), ratifizi
 - Werkstatt = Phillip V4 (Kontroll-Home „Heute sichern"). „Der Tag" = Rolf V8. Referenz: `ui/`.
 - `src/modules/werkstatt/` trägt die Phillip-V4-UI; `/warendurchlauf` ist die App-Kompositionswurzel. Der `Ware raus`-Port filtert ausschließlich die kanonische Station `fertig`. Ob diese Verträge auf `main` geliefert sind und welches Paket aktiv ist, steht ausschließlich in `CURRENT_STATE.md` beziehungsweise der Mission.
 
-### Verbindlicher Zielumfang der Path-1-UI-Konvergenz (D-UI-CORE-001)
+### Verbindlicher Zielumfang der Path-1-UI-Konvergenz (D-UI-CORE-001/002)
 
-- **A — Shell/Rollen-Home/Navigation:** globale Ziel-Shell und Rollen-Startseiten Phillip V4/Rolf V8; alte Sidebar und Warendurchlauf-Routennavigation entfallen. Entfallene oder quarantinisierte Module erscheinen nicht als verfügbare Navigation.
-- **B — Orders:** Auftragskarte V8 wird die verbindliche Hauptansicht des Orders-Moduls.
-- **C — Customers:** Kundenkarte V2 wird die verbindliche Hauptansicht des Customers-Moduls.
-- **D — Suche:** Der verwertbare Suchkern wird erst auf der Ziel-Shell in die Ziel-Kopfleiste integriert und anschließend als vollständige Route neu abgenommen.
-- **E — Danach:** Kalender und weitere Module folgen erst nach A bis D.
+- **A — Shell/Rollen-Home/Navigation:** `/start` ist nur der unauthentifizierte Login; nach PIN führt `/` zum einzigen Rollen-Home: `werkstatt=Phillip V4`, `buero|meister=Rolf V8`, `readonly=Rolf ohne Schreibaktionen`, `admin|developer=/settings`. Es gelten exakt `developer|admin|meister|buero|werkstatt|readonly`, keine Aliasrollen. Die Rolf-V8-Shell zeigt nur Home/Der Tag, Werkstatt, Aufträge, Kunden & Kontakt, Geld & Rechnungen und berechtigte Einstellungen. Kalender bleibt bis zur realen M365-Abnahme unsichtbar. Phillip behält kompakte Kopfleiste, fünf Werkstattaktionen und einen ehrlichen Empty mit sinnvoller Primäraktion; Tablet/Mobile zeigt ausschließlich Der Tag, Aufträge, Kunden, Geld, Mehr.
+- **B — Orders:** Reale Suche/Filter führen zur Auftragskarte V8 als einziger Haupt-, Detail- und Overlay-Wahrheit; `/orders/[id]` rendert dieselbe Karte. Rechnung und Zahlung bleiben darin. `archive` wird absorbiert; Wareneingang und Warenausgang bleiben Aktionspfade.
+- **C — Customers:** Reale Suche/Filter führen zur Kundenkarte V2 als einziger Haupt-, Detail- und Overlay-Wahrheit; `/customers/[id]` rendert dieselbe Karte. `telefonnotiz` gehört zu Customers/Intake; `items` ist kein eigenes Modul.
+- **D — Suche:** Der verwertbare Suchkern wird erst auf der Ziel-Shell in die Ziel-Kopfleiste integriert und anschließend als vollständige Route neu abgenommen. Eine gemeinsame Backstack-Wahrheit erhält Filter und Scroll bei Home→Auftrag→Kunde→Auftrag, Kunde→Auftrag und Intake→Auftrag.
+- **E — Danach:** Kalender und weitere Module folgen erst nach A bis D. `status` ist intern/Admin/API; `feedback` besitzt keine Produktpage; Galvanik bleibt flacher Blackbox-Drilldown und `station/[slug]` entfällt.
 
 Die Reihenfolge und das aktive Paket stehen ausschließlich in der Mission; Lieferstatus steht ausschließlich in `CURRENT_STATE.md`. HTML-Referenzen liefern Gestaltung und Interaktion, niemals Demo-Daten oder fachliche Wahrheit.
+
+**Routendisposition:** `ENTFÄLLT` heißt nach Link-/Importprüfung Route entfernen. `QUARANTÄNE` heißt keine produktiv rendernde Page, kein Navigationsziel und Direkt-URL fail-closed/404. Es gibt keine `NOT_AVAILABLE`- oder „kommt bald“-Fläche.
 
 ## QUARANTÄNE — später andocken, jetzt NUR als Vertrag/Anschluss-Stelle, kein Eigenbau
 - OCR (externer Provider/API, kein Eigenbau).

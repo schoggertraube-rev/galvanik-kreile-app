@@ -18,6 +18,10 @@ ausführlichen F0-Tabellen darunter sind ein datierter historischer Snapshot.
 | Customers/Kundenkarte V2 | `NOT_DELIVERED` |
 | Rollen-Startseiten Phillip V4/Rolf V8 und Zielnavigation | `NOT_DELIVERED` |
 | Production-Sichtstand | `LEGACY_SHELL / NOT_TARGET / NOT_LIVE_CAPABLE_TOTAL_APP` — Production ist kein Beleg für die Zieloberfläche oder eine livefähige Gesamt-App |
+| `/start` als reiner unauthentifizierter Login und `/` als einziges Rollen-Home | `NOT_DELIVERED` |
+| Zielnavigation gemäß D-UI-CORE-002 | `NOT_DELIVERED`; Alt-Shell und sichtbare Altmodule bestehen noch |
+| Orders V8 / Customers V2 als identische Listen-, Detail- und Overlay-Wahrheit | `NOT_DELIVERED` |
+| Kalenderroute | `BLOCKING_VISIBLE_LEGACY_PROVIDER_CLAIM`; aktuell sichtbare Google-Calendar-Behauptung, keine akzeptierte Kalender-Capability |
 
 Ein geliefertes Innenmodul oder ein grüner Fachvertrag ist ausdrücklich kein Full-Route-/UX-PASS.
 Die nächste Produktpriorität wird ausschließlich in der aktiven Mission gesteuert; diese Datei nimmt

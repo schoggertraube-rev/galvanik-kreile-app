@@ -40,6 +40,14 @@ Ein Innenmodul-, Komponenten- oder Fachvertrags-PASS ist kein sichtbarer Gesamto
 
 Pflichtbelege sind echte Klickpfade in einem isolierten Real-/Test-Tenant, klar synthetische Testdaten, ehrliche Leerzustände mit sinnvoller Primäraktion sowie eine nummerierte Abweichungsliste ohne P0/P1. Alt-Shell- und Navigationsausnahmen werden paketweise shrink-only entfernt. Grüne CI, ein isolierter Modultest oder eine vorhandene Production-Route reichen allein nicht. Die konkrete A-bis-E-Reihenfolge bestimmt ausschließlich die Mission; diese Architektur definiert nur den unveränderlichen Abnahmevertrag.
 
+### Shell-, Rollen- und Kartenvertrag — D-UI-CORE-002
+
+- `/start` besitzt ausschließlich den unauthentifizierten Fundament-Login; erfolgreiche PIN-Authentisierung führt zu `/`. `/` komponiert das einzige Rollen-Home über exakt `developer|admin|meister|buero|werkstatt|readonly`, ohne Aliasrollen. Lesen akzeptierter Kernbereiche ist für alle möglich; Schreibrechte verbleiben serverseitig in den bestehenden Commands.
+- Die Rolf-V8-Ziel-Shell und das mobile Dock erhalten ausschließlich die in der Modulkarte benannten kanonischen Ziele. Phillip bleibt eine kompakte Werkstattkomposition mit fünf eng typisierten Aktionsports. UI-Kerne kennen keine App-Routen, Router oder Rollenaliase.
+- Listen-, Detail- und Overlay-Darstellung teilen je Fach exakt dieselbe Auftragskarte-V8- beziehungsweise Kundenkarte-V2-Komposition. Ein app-seitiger Overlay-/Backstack-Adapter erhält Ausgangskontext, Filter und Scrollposition; Module erhalten nur enge typisierte Auswahl-/Schließports.
+- `ENTFÄLLT` wird nach Link-/Importprüfung physisch entfernt. `QUARANTÄNE` besitzt keine rendernde Page und kein Navziel; direkte URL-Aufrufe enden fail-closed/404. Ein Placeholder, `NOT_AVAILABLE` oder „kommt bald“ ist kein Ersatz.
+- Search PR #84 bleibt ein nicht integrierter Kernkandidat. Integration in Header und Overlays sowie Full-Route-Abnahme erfolgen erst nach Shell, Orders und Customers auf der neuen Basis.
+
 ## 4b. Provider-Naht — D-ARCH-011
 
 - Externe Anbieter liegen ausschließlich hinter tenantneutralen, eng typisierten Ports; UI und Fremdmodule kennen weder SDK noch Providerpayload oder URL.

@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # Kreile WerkstattCockpit — Übergabe nächster Chat
 
 ## 1. Kurzstand

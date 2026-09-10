@@ -1,3 +1,5 @@
+<!-- STATUS: REFERENCE_ONLY_NON_EXECUTABLE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # KREILE — PROBLEMLÖSUNGEN (teuer gelernte Fallen + verbindlicher Fix)
 
 Diese Fehler sind mehrfach passiert. Wiederhole sie nicht.

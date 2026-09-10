@@ -1,3 +1,5 @@
+<!-- STATUS: REFERENCE_ONLY_NON_EXECUTABLE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # M3 — BAUPLAN V1: Modul-Schnittstellenvertrag (aus echtem Code)
 
 **Quelle:** Repo `galvanik-kreile-app`, main = `54858e4ffebb5472b02d5dbdafdc42b2241e588a` (API-verifiziert, 2026-08-18). Alle IST-Angaben sind aus dem Code dieses SHA extrahiert — nichts erfunden.

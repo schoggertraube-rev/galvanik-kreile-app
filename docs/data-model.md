@@ -1,3 +1,5 @@
+<!-- STATUS: REFERENCE_ONLY_NON_EXECUTABLE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # Datenmodell-Analyse: Galvanik Kreile (Mock vs. Migration)
 
 Dieses Dokument vergleicht die TypeScript-Typen aus `src/lib/repositories/` und `src/lib/types/` mit dem initialen Supabase-Datenbankschema aus `0000_charming_ken_ellis.sql`.

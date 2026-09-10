@@ -1,3 +1,5 @@
+<!-- STATUS: REFERENCE_ONLY_NON_EXECUTABLE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # SO LÄUFT DIE KETTE AUTONOM — UND DIE LEITPLANKEN BLEIBEN HART
 **Stand 2026-09-02. Gilt für PL, Main/Writer und Orchestrator/Wächter. Bei Konflikt: die harten Leitplanken (Teil B) schlagen ALLES.**
 

@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # Audit Report - Kreile WerkstattCockpit App
 
 ## 1. ROUTING & SEITEN

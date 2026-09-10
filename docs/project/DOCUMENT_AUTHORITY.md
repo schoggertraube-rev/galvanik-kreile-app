@@ -47,16 +47,16 @@ Diese Ebenen koennen voneinander abweichen. Dann gewinnt nicht still eine andere
 - Sie duerfen weder reale Systemfakten umdeuten noch Sicherheitsgesetze aushebeln.
 - Verlangt die Mission eine neue Produktentscheidung ausserhalb ihres Scopes oder widerspricht sie einer geschuetzten Produktentscheidung, wird der Konflikt explizit eskaliert.
 
-### Owner-Beschlusslinie (LINIE, Bauverträge, Leitplanken)
+### Owner-Beschlusslinie
 
 - `docs/project/linie/` enthält Repo-Kopien ratifizierter Owner-Entscheidungen
   (Index `00_BIBEL_INDEX.md`; Manifest mit SHA-256 in `docs/project/linie/README.md`).
-- `KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md` ist Beschluss-Autorität für Produkt- und
-  Architekturentscheidungen (D-ARCH-*, D-F1x-*). Bauverträge (`KREILE_F1_*_BAUVERTRAG_*.md`) sind
-  wörtliches Gesetz der jeweiligen Lieferpakete und werden nie interpretiert; Unklarheit = STOP
-  (`BLOCKED_PRODUCT_DECISION`), Beschluss in die Linie, dann bauen.
-- `00_AUTONOMER_BETRIEB_LEITPLANKEN.md` Teil B (Ehrlichkeit, Merge-Gate, Isolation, atomare
-  closed-world-Lanes, Owner-Grenzen) schlägt alle anderen Prozessregeln.
+- `KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md` ist die einzige Autorität für
+  Produktentscheidungen. Bauverträge, Leitplanken und frühere Mandate sind ausschließlich
+  `REFERENCE_ONLY_NON_EXECUTABLE`; bestätigte Regeln daraus gelten erst nach Aufnahme in die
+  jeweils zuständige D-GOV-001-Quelle.
+- `00_AUTONOMER_BETRIEB_LEITPLANKEN.md` ist ausdrücklich supersedierte Referenz und besitzt
+  keinen Vorrang vor Root-`AGENTS.md`, Mission oder Entscheidungsregister.
 - Owner = Siglinder. Der externe `00_BIBEL`-Master wird vor einer Registeränderung aktualisiert und die Repo-Kopie byte-identisch nachgezogen. Eine Abweichung ist `BLOCKED_GOVERNANCE_CONFLICT`, keine Erlaubnis zur stillen Auswahl. CI und Git können ausschließlich die Repo-Kopie prüfen.
 
 ### Produktsteuerung und Erhalt

@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # F-BH-09 — Supabase Verification SQL
 
 Diese SQL-Befehle werden nach der erfolgreichen Migration auf Supabase zur Prüfung verwendet.

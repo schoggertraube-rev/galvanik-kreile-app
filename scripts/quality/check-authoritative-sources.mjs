@@ -23,6 +23,17 @@ const REQUIRED_TRUTH_TYPES = [
   "delivered_main",
   "ui_truth",
 ];
+const BANNER_EXEMPTIONS = new Map([
+  ["audit_results.md", "MACHINE_JSON_WITH_MD_SUFFIX"],
+  ["CLAUDE.md", "TOOL_POINTER_ONLY_AT_AGENTS"],
+  ["README.md", "GENERIC_PROJECT_README_NOT_STEERING"],
+]);
+const LEGACY_CALENDAR_CONTRACT = Object.freeze({
+  finding: "src/app/kalender/page.tsx",
+  registryId: "page.kalender",
+  sourceClaim: "Google Kalender",
+  disposition: "PATH1_UI_CONVERGENCE_A_REMOVE_OR_404",
+});
 
 const posix = (value) => value.replaceAll("\\", "/");
 const read = (root, rel) => readFileSync(path.join(root, rel), "utf8");
@@ -66,6 +77,8 @@ export function checkAuthorityRepository(root = process.cwd(), configRel = DEFAU
 
   const truthTypes = Array.isArray(config.truthTypes) ? config.truthTypes : [];
   const ids = truthTypes.map((entry) => entry?.id);
+  if (ids.length !== REQUIRED_TRUTH_TYPES.length) errors.push(`TRUTH_TYPE_TOTAL:${ids.length}`);
+  for (const id of ids) if (!REQUIRED_TRUTH_TYPES.includes(id)) errors.push(`TRUTH_TYPE_UNKNOWN:${id}`);
   for (const id of REQUIRED_TRUTH_TYPES) {
     if (ids.filter((value) => value === id).length !== 1) errors.push(`TRUTH_TYPE_COUNT:${id}`);
   }
@@ -84,6 +97,18 @@ export function checkAuthorityRepository(root = process.cwd(), configRel = DEFAU
   for (const rel of config.uiReferences ?? []) {
     if (!exists(root, rel)) errors.push(`UI_REFERENCE_PATH_MISSING:${rel}`);
   }
+  if (new Set(config.uiReferences ?? []).size !== (config.uiReferences ?? []).length) errors.push("UI_REFERENCE_CONFIG_DUPLICATE");
+  const uiIndex = truthTypes.find((entry) => entry.id === "ui_truth")?.source;
+  if (typeof uiIndex === "string" && exists(root, uiIndex)) {
+    const listed = [...read(root, uiIndex).matchAll(/^- `([^`]+\.html)`/gm)]
+      .map((match) => posix(path.join(path.dirname(uiIndex), "ui", match[1])));
+    if (new Set(listed).size !== listed.length) errors.push("UI_REFERENCE_INDEX_DUPLICATE");
+    const configured = [...(config.uiReferences ?? [])].map(posix).sort();
+    const indexed = [...listed].sort();
+    if (configured.length !== indexed.length || configured.some((value, index) => value !== indexed[index])) {
+      errors.push("UI_REFERENCE_INDEX_ASYMMETRIC");
+    }
+  }
   for (const rel of config.pointerDocuments ?? []) {
     if (!exists(root, rel)) errors.push(`POINTER_PATH_MISSING:${rel}`);
   }
@@ -100,6 +125,8 @@ export function checkAuthorityRepository(root = process.cwd(), configRel = DEFAU
       if (!head.includes(`STATUS: ${item.status}`) || !head.includes("CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md")) {
         errors.push(`HISTORICAL_BANNER_MISSING:${item.path}`);
       }
+    } else if (!BANNER_EXEMPTIONS.has(item.path) || BANNER_EXEMPTIONS.get(item.path) !== item.bannerExemption) {
+      errors.push(`HISTORICAL_BANNER_EXEMPTION_INVALID:${item.path}`);
     }
   }
 
@@ -119,6 +146,7 @@ export function checkAuthorityRepository(root = process.cwd(), configRel = DEFAU
     const mission = read(root, active.mission);
     const expected = [
       ["mission_id", active.expectedMissionId],
+      ["status", "active"],
       ["branch", active.expectedBranch],
       ["base_sha", active.expectedBaseSha],
       ["active_package", active.expectedActivePackage],
@@ -203,9 +231,41 @@ export function checkAuthorityRepository(root = process.cwd(), configRel = DEFAU
   if (provider.calendarState !== "NOT_STARTED_BLOCKED_EXTERNAL_PERMISSION") errors.push("CALENDAR_STATE_NOT_BLOCKED_EXTERNAL");
   if (provider.calendarAccessModel !== "DELEGATED_NAMED_OFFICE_USER") errors.push("CALENDAR_ACCESS_MODEL_INVALID");
   if (provider.legacyCalendarStatus !== "QUARANTINE") errors.push("LEGACY_GOOGLE_CALENDAR_ACTIVE");
-  if (!exists(root, provider.legacyCalendarFinding ?? "")) errors.push("LEGACY_CALENDAR_FINDING_MISSING");
-  const googleLines = matrix.split(/\r?\n/).filter((line) => /Google Kalender/i.test(line));
-  if (googleLines.length === 0 || googleLines.some((line) => !/QUARANTINE/i.test(line))) errors.push("LEGACY_GOOGLE_CALENDAR_NOT_QUARANTINED");
+  if (provider.legacyCalendarFinding !== LEGACY_CALENDAR_CONTRACT.finding
+    || provider.legacyCalendarRegistryId !== LEGACY_CALENDAR_CONTRACT.registryId
+    || provider.legacyCalendarSourceClaim !== LEGACY_CALENDAR_CONTRACT.sourceClaim
+    || provider.legacyCalendarDisposition !== LEGACY_CALENDAR_CONTRACT.disposition) {
+    errors.push(`LEGACY_CALENDAR_CONTRACT_RELABELLED:${provider.legacyCalendarFinding ?? "UNKNOWN"}:${provider.legacyCalendarRegistryId ?? "UNKNOWN"}:${provider.legacyCalendarSourceClaim ?? "UNKNOWN"}:${provider.legacyCalendarDisposition ?? "UNKNOWN"}`);
+  }
+  if (!exists(root, LEGACY_CALENDAR_CONTRACT.finding)) errors.push("LEGACY_CALENDAR_FINDING_MISSING");
+  const legacySource = exists(root, LEGACY_CALENDAR_CONTRACT.finding) ? read(root, LEGACY_CALENDAR_CONTRACT.finding) : "";
+  if (!legacySource.includes(LEGACY_CALENDAR_CONTRACT.sourceClaim)) {
+    errors.push("LEGACY_CALENDAR_SOURCE_CLAIM_NOT_DETECTED");
+  }
+  const calendarCapability = registry?.capabilities?.find((item) => item.stable_id === LEGACY_CALENDAR_CONTRACT.registryId);
+  if (!calendarCapability || calendarCapability.entry_point !== LEGACY_CALENDAR_CONTRACT.finding || calendarCapability.visible !== true || calendarCapability.reachable !== true) {
+    errors.push("LEGACY_CALENDAR_REGISTRY_STATE_NOT_DETECTED");
+  }
+  const calendarLine = matrix.split(/\r?\n/).find((line) => line.includes(`\`${LEGACY_CALENDAR_CONTRACT.registryId}\``)) ?? "";
+  for (const token of ["ACTIVE_VISIBLE_PROVIDER_DEFECT", "QUARANTINE", LEGACY_CALENDAR_CONTRACT.finding, LEGACY_CALENDAR_CONTRACT.disposition]) {
+    if (!calendarLine.includes(token)) errors.push(`LEGACY_CALENDAR_MATRIX_BLOCKER_MISSING:${token}`);
+  }
+
+  const pageRows = matrix.split(/\r?\n/).filter((line) => /^\| `page\./.test(line));
+  const matrixPageIds = pageRows.map((row) => row.split("|")[1].trim().replaceAll("`", ""));
+  for (const row of pageRows) {
+    const cells = row.split("|").slice(1, -1).map((cell) => cell.trim());
+    if (cells.length !== 7 || cells.some((cell) => cell.length === 0)) errors.push(`PROVIDER_MATRIX_ROUTE_COLUMNS:${cells[0] ?? "UNKNOWN"}`);
+  }
+  for (const capability of registry?.capabilities?.filter((item) => item.kind === "PAGE_ROUTE") ?? []) {
+    const count = matrixPageIds.filter((id) => id === capability.stable_id).length;
+    if (count !== 1) errors.push(`PROVIDER_MATRIX_ROUTE_COUNT:${capability.stable_id}:${count}`);
+  }
+  for (const id of new Set(matrixPageIds)) {
+    if (!registry?.capabilities?.some((item) => item.kind === "PAGE_ROUTE" && item.stable_id === id)) {
+      errors.push(`PROVIDER_MATRIX_UNKNOWN_ROUTE:${id}`);
+    }
+  }
 
   return errors;
 }
@@ -216,16 +276,18 @@ function writeFixture(root) {
     "decisions.md": "## D-GOV-001 — one\n## D-ARCH-011 — provider\n## D-UI-CORE-001 — visible truth\n",
     "scope.md": "# Scope\nUI_SCOPE_OK\n",
     "architecture.md": "# Architecture\nUI_ARCHITECTURE_OK\n",
-    "ui-index.md": "# UI\n",
+    "ui-index.md": "# UI\n- `ref.html`\n",
     "ui/ref.html": "ok\n",
     "pointer.md": "# Pointer\n",
+    "historical.md": "<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->\n# Old plan\n",
     "current.md": "main@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nUI_CURRENT_STATE_OK\n",
-    "calendar.tsx": "Google Kalender vorbereitet\n",
+    "src/app/kalender/page.tsx": "Google Kalender vorbereitet\n",
     "registry.json": JSON.stringify({ capabilities: [
       { stable_id: "page.real", kind: "PAGE_ROUTE", visible: true },
+      { stable_id: "page.kalender", kind: "PAGE_ROUTE", entry_point: "src/app/kalender/page.tsx", visible: true, reachable: true },
       { stable_id: "provider.real", kind: "PROVIDER_CONNECTION" },
     ] }),
-    "matrix.md": "`module.one` REAL\n`page.real` REAL\n`provider.real` REAL\nGoogle Kalender QUARANTINE\n",
+    "matrix.md": "`module.one` REAL\n| `page.real` | `/real` | own | none | PENDING | evidence | next |\n| `page.kalender` | `/kalender` | ACTIVE_VISIBLE_PROVIDER_DEFECT at src/app/kalender/page.tsx | Google Kalender | QUARANTINE | source+registry readback | PATH1_UI_CONVERGENCE_A_REMOVE_OR_404 |\n`provider.real` REAL\n",
     "missions/main.yml": "mission_id: M\nstatus: active\nbase_sha: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nbranch: gov\nactive_package: GOV\nnext_gate_after_active_package: REVIEW\nnext_product_priority: PATH1_UI_CONVERGENCE\n",
   };
   for (const [rel, content] of Object.entries(files)) {
@@ -243,7 +305,9 @@ function writeFixture(root) {
     ].map(([id, source]) => ({ id, source })),
     uiReferences: ["ui/ref.html"],
     pointerDocuments: ["pointer.md"],
-    historicalDocuments: [],
+    historicalDocuments: [
+      { path: "historical.md", status: "HISTORICAL_NON_AUTHORITATIVE", bannerRequired: true },
+    ],
     steeringScanDirectories: ["."],
     activeExecution: {
       mission: "missions/main.yml", expectedMissionId: "M", expectedBranch: "gov",
@@ -261,7 +325,9 @@ function writeFixture(root) {
       matrix: "matrix.md", registry: "registry.json", requiredModuleIds: ["module.one"],
       calendarTarget: "Microsoft 365/Graph", calendarState: "NOT_STARTED_BLOCKED_EXTERNAL_PERMISSION",
       calendarAccessModel: "DELEGATED_NAMED_OFFICE_USER", legacyCalendarProvider: "Google Kalender",
-      legacyCalendarStatus: "QUARANTINE", legacyCalendarFinding: "calendar.tsx",
+      legacyCalendarStatus: "QUARANTINE", legacyCalendarFinding: "src/app/kalender/page.tsx",
+      legacyCalendarRegistryId: "page.kalender", legacyCalendarSourceClaim: "Google Kalender",
+      legacyCalendarDisposition: "PATH1_UI_CONVERGENCE_A_REMOVE_OR_404",
     },
   };
   mkdirSync(path.join(root, "quality"), { recursive: true });
@@ -276,7 +342,7 @@ export function runAuthoritySelftest() {
       c.truthTypes[0].source = ["AGENTS.md", "scope.md"]; writeFileSync(p, JSON.stringify(c), "utf8");
     }, "TRUTH_SOURCE_NOT_SINGLE"],
     ["missing-path", (root) => rmSync(path.join(root, "ui", "ref.html")), "UI_REFERENCE_PATH_MISSING"],
-    ["duplicate-decision", (root) => writeFileSync(path.join(root, "decisions.md"), "## D-GOV-001 — one\n## D-GOV-001 — two\n## D-ARCH-011 — provider\n"), "DECISION_ID_DUPLICATE"],
+    ["duplicate-decision", (root) => writeFileSync(path.join(root, "decisions.md"), "## D-GOV-001 — one\n## D-GOV-001 — two\n## D-ARCH-011 — provider\n## D-UI-CORE-001 — visible truth\n"), "DECISION_ID_DUPLICATE"],
     ["two-active-missions", (root) => cpSync(path.join(root, "missions", "main.yml"), path.join(root, "missions", "second.yml")), "ACTIVE_MISSION_COUNT"],
     ["two-active-packages", (root) => {
       const p = path.join(root, "missions", "main.yml");
@@ -289,6 +355,32 @@ export function runAuthoritySelftest() {
       const p = path.join(root, DEFAULT_CONFIG); const c = JSON.parse(readFileSync(p, "utf8"));
       c.providerPolicy.legacyCalendarStatus = "PENDING"; writeFileSync(p, JSON.stringify(c), "utf8");
     }, "LEGACY_GOOGLE_CALENDAR_ACTIVE"],
+    ["calendar-contract-config-relabel", (root) => {
+      const p = path.join(root, DEFAULT_CONFIG); const c = JSON.parse(readFileSync(p, "utf8"));
+      c.providerPolicy.legacyCalendarFinding = "historical.md"; writeFileSync(p, JSON.stringify(c), "utf8");
+    }, "LEGACY_CALENDAR_CONTRACT_RELABELLED"],
+    ["provider-source-masked-by-config", (root) => {
+      const p = path.join(root, "matrix.md");
+      writeFileSync(p, readFileSync(p, "utf8").replace("ACTIVE_VISIBLE_PROVIDER_DEFECT", "CALENDAR_PENDING"), "utf8");
+    }, "LEGACY_CALENDAR_MATRIX_BLOCKER_MISSING:ACTIVE_VISIBLE_PROVIDER_DEFECT"],
+    ["missing-historical-banner", (root) => {
+      writeFileSync(path.join(root, "historical.md"), "# Old plan\n", "utf8");
+    }, "HISTORICAL_BANNER_MISSING:historical.md"],
+    ["banner-disabled-without-exemption", (root) => {
+      const p = path.join(root, DEFAULT_CONFIG); const c = JSON.parse(readFileSync(p, "utf8"));
+      c.historicalDocuments[0].bannerRequired = false; writeFileSync(p, JSON.stringify(c), "utf8");
+    }, "HISTORICAL_BANNER_EXEMPTION_INVALID:historical.md"],
+    ["extra-truth-type", (root) => {
+      const p = path.join(root, DEFAULT_CONFIG); const c = JSON.parse(readFileSync(p, "utf8"));
+      c.truthTypes.push({ id: "shadow_truth", source: "historical.md" }); writeFileSync(p, JSON.stringify(c), "utf8");
+    }, "TRUTH_TYPE_UNKNOWN:shadow_truth"],
+    ["configured-mission-inactive", (root) => {
+      const p = path.join(root, "missions", "main.yml");
+      writeFileSync(p, readFileSync(p, "utf8").replace("status: active", "status: complete"), "utf8");
+    }, "ACTIVE_EXECUTION_MISMATCH:status"],
+    ["ui-index-asymmetric", (root) => {
+      writeFileSync(path.join(root, "ui-index.md"), "# UI\n- `other.html`\n", "utf8");
+    }, "UI_REFERENCE_INDEX_ASYMMETRIC"],
     ["ui-priority-conflict", (root) => {
       const p = path.join(root, "missions", "main.yml");
       writeFileSync(p, readFileSync(p, "utf8").replace("PATH1_UI_CONVERGENCE", "CALENDAR_FIRST"), "utf8");

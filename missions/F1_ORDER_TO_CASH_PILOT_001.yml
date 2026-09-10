@@ -36,8 +36,8 @@ delivery_order:
   - F1.5_BESTAETIGTER_ZAHLUNGSEINGANG
   - F1.6_REALER_PILOT
 
-active_package: D_GOV_001_D_ARCH_011_D_UI_CORE_001_GOVERNANCE
-next_gate_after_active_package: GOVERNANCE_EXACT_SHA_REVIEW
+active_package: D_GOV_001_D_ARCH_011_D_UI_CORE_001_D_UI_CORE_002_GOVERNANCE
+next_gate_after_active_package: GOVERNANCE_D_UI_CORE_002_EXACT_SHA_REVIEW
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
@@ -76,7 +76,7 @@ f1_6_pilot_readiness: BLOCKED_PATH1_UI_CONVERGENCE_SEARCH_ACCEPTANCE_AND_CALENDA
 f1_6_required_before_start: PATH1_UI_CONVERGENCE; SEARCH_MODULE_REAL_MODULAR_ON_TARGET_SHELL; CALENDAR_REAL_MODULAR
 path1_s5_search_status: CANDIDATE_PR_84_NOT_ACCEPTED_NOT_MERGED
 path1_s5_search_exact_sha: 9845e91e3003e81ff9f8b5b28bf8882dd12bf0d7
-path1_s5_search_merge_gate: BLOCKED_UNTIL_PATH1_UI_CONVERGENCE_AND_FULL_ROUTE_REACCEPTANCE
+path1_s5_search_merge_gate: BLOCKED_UNTIL_PATH1_UI_CONVERGENCE_A_B_C_AND_FULL_ROUTE_REACCEPTANCE
 path1_calendar_status: NOT_STARTED_BLOCKED_EXTERNAL_PERMISSION
 path1_calendar_target_provider: MICROSOFT_365_GRAPH_DELEGATED_NAMED_OFFICE_USER
 authority_provider_governance_status: IN_REVIEW
@@ -88,8 +88,12 @@ visible_product_orders_card_v8: NOT_DELIVERED
 visible_product_customers_card_v2: NOT_DELIVERED
 visible_product_role_homes_and_target_navigation: NOT_DELIVERED
 visible_product_production_shell: LEGACY_SHELL_NOT_TARGET_NOT_LIVE_CAPABLE_TOTAL_APP
-next_product_priority: PATH1_UI_CONVERGENCE
+next_product_priority: PATH1_UI_CONVERGENCE_A
 path1_ui_convergence_order: A_SHELL_ROLE_HOMES_NAV -> B_ORDERS_CARD_V8 -> C_CUSTOMERS_CARD_V2 -> D_SEARCH_TARGET_HEADER_REACCEPTANCE -> E_CALENDAR_AND_FURTHER_MODULES
+path1_ui_convergence_a_roles: developer|admin|meister|buero|werkstatt|readonly
+path1_ui_convergence_a_entry: /start=UNAUTHENTICATED_LOGIN_ONLY -> /=ROLE_AWARE_HOME
+path1_ui_convergence_a_google_calendar_blocker: ACTIVE_VISIBLE_GOOGLE_PROVIDER_CLAIM_MUST_BE_REMOVED_OR_ROUTE_FAIL_CLOSED_404
+path1_ui_convergence_a_acceptance: SIX_REAL_ROLE_LOGINS; FULL_ROUTE_1914x917_1220x880_390x844; ALL_VISIBLE_NAV_CLICKED; REMOVED_AND_QUARANTINED_URLS_NEGATIVE; LEGACY_BASELINE_SHRINK_ONLY; NO_P0_P1
 
 # ── F1.2 Entscheidungsgrundlage (bindend, ersetzt Altstand) ───────
 # D-F12-001A (ersetzt D-F12-001): F1.2 = genau EIN Uebergang
@@ -430,6 +434,38 @@ authority_provider_governance_allowlist:
   - buchhaltung_spec.md
   - docs/STATUS_BERICHT.md
   - docs/UX_REVIEW_USP.md
+  - docs/AKTUELLER_PROJEKTSTAND.md
+  - docs/AUDIT_REPORT.md
+  - docs/AUDIT_REPORT_N1_N4.md
+  - docs/data-model.md
+  - docs/DB_HEALTH_REPORT.md
+  - docs/DB_MAPPING_ORDERS.md
+  - docs/DEMO_DATEN_SEED_CLEANUP.md
+  - docs/F_BH_08_MIGRATION_REVIEW.md
+  - docs/F_BH_09_SUPABASE_VERIFICATION_SQL.md
+  - docs/F_BH_09B_SUPABASE_MIGRATION_PROTOKOLL.md
+  - docs/functions-before.md
+  - docs/LIVEGANG_AUDIT_REPORT.md
+  - docs/UEBERGABE_BACKLOG.md
+  - docs/UEBERGABE_NAECHSTER_CHAT_2026-06-03_WARENDURCHLAUF_LIVE_MVP.md
+  - docs/visual-overhaul-diff.md
+  - docs/project/DECISION_PIN_SECURITY.md
+  - docs/project/DECISION_TENANT_ISOLATION.md
+  - docs/project/OWNERSHIP_MAP.md
+  - docs/project/RLS_ANALYSIS.md
+  - docs/project/linie/00_AUTONOMER_BETRIEB_LEITPLANKEN.md
+  - docs/project/linie/00_UNABHAENGIGE_PRUEFUNG_2026-09-06.md
+  - docs/project/linie/BEISPIELE_MODUL.md
+  - docs/project/linie/KREILE_AUTONOMIE_MANDAT_2026-08-27.md
+  - docs/project/linie/KREILE_F1_4_BAUVERTRAG_UNVERAENDERLICHE_RECHNUNG_V1_2026-08-21.md
+  - docs/project/linie/KREILE_F1_5_BAUVERTRAG_ZAHLUNGSEINGANG_WARENAUSGANG_V1_2026-08-21.md
+  - docs/project/linie/KREILE_GESAMTUEBERSICHT_STATUS_2026-09-01.md
+  - docs/project/linie/KREILE_M3_BAUPLAN_V1_2026-08-18.md
+  - docs/project/linie/KREILE_PL_STARTUP_BRIEFING_2026-09-05.md
+  - docs/project/linie/KREILE_UEBERGABE_FRONTEND_UMSETZUNG_V1_2026-08-21.md
+  - docs/project/linie/PROBLEMLOESUNGEN.md
+  - docs/project/linie/README.md
+  - docs/project/linie/STARTSEITEN_UI_REFERENZ_SPEC_2026-09-01.md
   - docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json
   - quality/authoritative-sources.json
   - scripts/quality/check-authoritative-sources.mjs
