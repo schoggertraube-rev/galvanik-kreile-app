@@ -520,6 +520,13 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ""
         run: npx vitest run src/test/werkstatt_kpi_contract.integration.test.ts --maxWorkers=1 --no-file-parallelism
 
+      - name: Path-1 S5 tenant search integration test (blocking)
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          SEARCH_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          SUPABASE_SERVICE_ROLE_KEY: ""
+        run: npx vitest run src/test/search_tenant.integration.test.ts --maxWorkers=1 --no-file-parallelism
+
       - name: F1.4 immutable invoice regression on the F1.5 B2 schema (blocking)
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres

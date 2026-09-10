@@ -1,0 +1,32 @@
+{
+  "moduleId": "suche",
+  "version": "1.0.0",
+  "owner": "Path-1 Suche (tenantgebundener Suchvertrag)",
+  "publicExports": [
+    "@/modules/suche/public#SEARCH_MAX_HITS",
+    "@/modules/suche/public#SEARCH_MAX_HITS_PER_TYPE",
+    "@/modules/suche/public#SEARCH_MAX_QUERY_LENGTH",
+    "@/modules/suche/public#SEARCH_MIN_QUERY_LENGTH",
+    "@/modules/suche/public#SearchCustomerDocument",
+    "@/modules/suche/public#SearchDialog",
+    "@/modules/suche/public#SearchDialogProps",
+    "@/modules/suche/public#SearchDialogState",
+    "@/modules/suche/public#SearchHit",
+    "@/modules/suche/public#SearchHitType",
+    "@/modules/suche/public#SearchMatchField",
+    "@/modules/suche/public#SearchOrderDocument",
+    "@/modules/suche/public#SearchOrderPart",
+    "@/modules/suche/public#SearchPorts",
+    "@/modules/suche/public#SearchTenantResult",
+    "@/modules/suche/public#normalizeSearchQuery",
+    "@/modules/suche/public#searchTenant"
+  ],
+  "capabilities": ["tenant-search:read"],
+  "migrations": [],
+  "viewsFunctions": [],
+  "ownsTables": [],
+  "storagePurposes": [],
+  "events": { "emits": [], "consumes": [] },
+  "config": {},
+  "dependencies": []
+}

@@ -1455,12 +1455,12 @@
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/search.actions.ts",
       "exported_functions": [
-        "globalSearch"
+        "searchTenantAction"
       ],
       "classification": "PENDING_CONTRACT",
-      "open_reason": "Global search action. Supabase full-text, no independent E2E evidence.",
-      "visible": false,
-      "reachable": false
+      "open_reason": "Path-1 S5 candidate: real signed-session/Fresh-Supabase and authenticated desktop/tablet browser readback through private.v_operational_station_queue_v1 and private.v_order_intake_customers_v1 passed locally; Exact-SHA CI and independent acceptance remain pending.",
+      "visible": true,
+      "reachable": true
     },
     {
       "stable_id": "server-actions.start",
