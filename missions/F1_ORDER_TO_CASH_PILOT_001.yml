@@ -159,10 +159,26 @@ path1_ui_convergence_allowlist:
   - docs/evidence/ui/PATH1_UI_CONVERGENCE_20260910.md
   - docs/evidence/ui/artifacts/path1-ui-convergence/**
   - docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json
+  - docs/project/PROVIDER_CAPABILITY_MATRIX.md
   - quality/module-gates-baseline.json
+  - scripts/quality/check-authoritative-sources.mjs
   - scripts/quality/check-module-gates.mjs
   - src/test/s1_module_gates.test.ts
   - e2e/path1-ui-convergence.real.spec.ts
+  # Direkte, bestehende Verbraucher der in A entfernten Routenziele; nur tote Links schließen.
+  - src/components/intake/IntakeEntry.tsx
+  - src/app/warendurchlauf/wareneingang/page.tsx
+  - src/app/buchhaltung/BuchhaltungCockpitClient.tsx
+  - src/app/buchhaltung/export/ExportClient.tsx
+  - src/app/buchhaltung/fristen/page.tsx
+  - src/app/buchhaltung/kraftstoff/KraftstoffClient.tsx
+  - src/app/buchhaltung/kosten/KostenClient.tsx
+  - src/app/buchhaltung/kosten/neu/page.tsx
+  - src/app/actions/auth.ts
+  - src/app/actions/__tests__/updateOrderDb.failClosed.test.ts
+  - src/app/actions/__tests__/w2cB2m5d.orderCreate.failClosed.test.ts
+  - src/app/actions/__tests__/w2cCompanySettings.failClosed.test.ts
+  - src/test/authority_gate.test.ts
   - package.json
   # Einstieg, Rollen-Home, Ziel-Shell und Werkstatt
   - src/app/layout.tsx

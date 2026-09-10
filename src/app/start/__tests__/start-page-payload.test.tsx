@@ -204,14 +204,17 @@ describe("StartPage payload sanitization", () => {
     expect(login).not.toHaveBeenCalled();
   });
 
-  it("routes successful email and PIN authentication directly to the operational entry point", () => {
+  it("routes successful authentication through the canonical role-aware entry", () => {
     const root = process.cwd();
     const emailAuth = readFileSync(path.join(root, "src/app/actions/auth.ts"), "utf8");
     const pinAuth = readFileSync(path.join(root, "src/components/start/StartScreenClient.tsx"), "utf8");
     const rootPage = readFileSync(path.join(root, "src/app/page.tsx"), "utf8");
 
-    expect(emailAuth).toContain("redirect('/warendurchlauf')");
-    expect(pinAuth).toContain('window.location.href = "/warendurchlauf"');
-    expect(rootPage).toContain('redirect("/warendurchlauf")');
+    expect(emailAuth).toContain("redirect('/settings')");
+    expect(emailAuth).not.toContain("redirect('/warendurchlauf')");
+    expect(pinAuth).toContain('window.location.href = "/"');
+    expect(rootPage).toContain('authorization.data.role === "werkstatt"');
+    expect(rootPage).toContain('["buero", "meister", "readonly"]');
+    expect(rootPage).not.toContain('redirect("/warendurchlauf")');
   });
 });

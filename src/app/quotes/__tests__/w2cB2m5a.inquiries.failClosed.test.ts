@@ -58,20 +58,9 @@ describe("W2C-B2M5A inquiry containment", () => {
     expect(dispatchEvent).not.toHaveBeenCalledWith(expect.objectContaining({ type: "kreile-inquiries-updated" }));
   });
 
-  it("keeps the routes as concrete FoundationUnavailable-only server compositions", async () => {
-    const expected = (name: string) => [
-      'import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";',
-      "",
-      'export const dynamic = "force-dynamic";',
-      "export const revalidate = 0;",
-      "",
-      `export default function ${name}() {`,
-      "  return <FoundationUnavailable />;",
-      "}",
-    ].join("\n");
-
-    await expect(source("src/app/quotes/page.tsx")).resolves.toBe(expected("QuotesPage") + "\n");
-    await expect(source("src/app/quotes/new/page.tsx")).resolves.toBe(expected("NewQuotePage") + "\n");
+  it("keeps both removed inquiry routes absent instead of rendering unavailable shells", async () => {
+    await expect(source("src/app/quotes/page.tsx")).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(source("src/app/quotes/new/page.tsx")).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("removes inquiry count truth while preserving the concrete orders and intake hooks", async () => {
@@ -84,12 +73,12 @@ describe("W2C-B2M5A inquiry containment", () => {
       expect(dashboard).not.toContain(forbidden);
       expect(intake).not.toContain(forbidden);
     }
-    expect(dashboard).toContain('redirect("/warendurchlauf")');
-    expect(intake).toContain("Anfragen derzeit nicht verfügbar");
+    expect(dashboard).toContain('authorization.data.role === "werkstatt"');
     expect(dashboard).not.toContain("getOrdersDb");
     expect(dashboard).not.toContain('"kreile-orders-updated"');
     expect(intake).toContain("ordersRepository.getAll");
     expect(intake).toContain('window.addEventListener("storage", fetchStats)');
-    expect(intake).toContain('href="/quotes"');
+    expect(intake).not.toContain('href="/quotes"');
+    expect(intake).not.toContain("Anfragen derzeit nicht verfügbar");
   });
 });

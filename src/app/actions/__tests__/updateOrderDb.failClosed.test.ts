@@ -76,7 +76,6 @@ describe("W2C-B1 caller containment", () => {
     "components/orders/OrderActionGrid.tsx",
     "components/orders/OrderMaterialTimeDrawer.tsx",
     "app/warendurchlauf/galvanik/page.tsx",
-    "app/status/page.tsx",
     "app/warendurchlauf/wareneingang/page.tsx",
     "lib/offline/OfflineManager.ts",
   ];
@@ -95,7 +94,6 @@ describe("W2C-B1 caller containment", () => {
       "components/orders/StationCompletionModal.tsx",
       "components/orders/OrderActionGrid.tsx",
       "components/orders/OrderMaterialTimeDrawer.tsx",
-      "app/status/page.tsx",
       "lib/offline/OfflineManager.ts",
     ].map((file) => readFile(path.join(srcRoot, file), "utf8")));
 
@@ -111,6 +109,10 @@ describe("W2C-B1 caller containment", () => {
     for (const source of sources) {
       expect(source.includes("eventsRepository.addEvent") && source.includes("createStatusEvent")).toBe(false);
     }
+  });
+
+  it("keeps the removed status product route absent", async () => {
+    await expect(readFile(path.join(srcRoot, "app/status/page.tsx"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("keeps the Wareneingang edit flow unavailable before an interactive modal can open", async () => {

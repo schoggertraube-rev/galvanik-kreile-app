@@ -39,9 +39,6 @@ vi.mock("@/lib/overlayStore", () => ({
     selector ? selector({ openOrder: ports.openOrder }) : { openOrder: ports.openOrder },
 }));
 vi.mock("@/hooks/usePageView", () => ({ usePageView: vi.fn() }));
-vi.mock("@/components/warendurchlauf/WarendurchlaufStationNav", () => ({
-  WarendurchlaufStationNav: () => <nav>Legacy-Station-Navigation</nav>,
-}));
 vi.mock("lucide-react", () => ({
   Camera: () => null,
   PenLine: () => null,
@@ -59,7 +56,7 @@ const allowedAuthorization = (role: string = "werkstatt") => ({
     tenantId: KREILE_TENANT_SLUG,
     displayName: "Phillip",
     role,
-    permissions: role === "werkstatt"
+    permissions: role === "werkstatt" || role === "readonly"
       ? ["perm_view_leitstand"]
       : ["perm_view_leitstand", "perm_data_orders"],
     active: true as const,
@@ -373,15 +370,15 @@ describe("W2C-B2M5J unavailable UI", () => {
     );
   });
 
-  it("denies an excluded root role before either station action is invoked", async () => {
-    ports.resolveAuthorization.mockResolvedValueOnce(allowedAuthorization("developer"));
+  it("lets readonly inspect the real empty workshop but exposes no mutation action", async () => {
+    ports.resolveAuthorization.mockResolvedValueOnce(allowedAuthorization("readonly"));
     const { default: WarendurchlaufIndex } = await import("../page");
     render(await WarendurchlaufIndex());
 
-    expect(screen.getByText("Zugriff nicht erlaubt.")).toBeInTheDocument();
-    expect(ports.getWareneingangOrdersAction).not.toHaveBeenCalled();
-    expect(ports.getGalvanikOrdersAction).not.toHaveBeenCalled();
-    expect(ports.getWarendurchlaufKPIs).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: "Noch keine Daten erfasst" })).toBeInTheDocument();
+    expect(ports.getWareneingangOrdersAction).toHaveBeenCalledTimes(1);
+    expect(ports.getGalvanikOrdersAction).toHaveBeenCalledTimes(1);
+    expect(ports.getWarendurchlaufKPIs).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: "Auftrag öffnen / scannen" })).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "Auftrag öffnen" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Neuer Eingang" })).not.toBeInTheDocument();
@@ -543,21 +540,11 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(adapterSource).toContain('from "next/navigation"');
     expect(adapterSource).toContain('onOpenWip: () => router.push("/warendurchlauf/galvanik")');
     expect(adapterSource).toContain("onOpenGoodsOut: openOrder");
-    expect(routeSource).toContain("wareneingangResult.data.map(toWerkstattSurfaceOrder)");
-    expect(routeSource).toContain("galvanikResult.data.map(toWerkstattSurfaceOrder)");
+    expect(routeSource).toContain('from "@/components/home/WerkstattHome"');
+    expect(routeSource).toContain("WerkstattHome({ authorization: authorization.data })");
     expect(manifestSource).toContain("@/modules/werkstatt/public#WerkstattViewPorts");
     expect(manifestSource).toContain('"dependencies": []');
     expect(clientSource).not.toMatch(/Demo|Mock|Station öffnen|In Galvanik starten|Als Nächstes|ThemeToggle/);
-  });
-
-  it("hides the legacy station navigation only on the exact root segment", async () => {
-    const { WarendurchlaufRouteNav } = await import("../WarendurchlaufRouteNav");
-    const view = render(<WarendurchlaufRouteNav />);
-
-    expect(screen.queryByText("Legacy-Station-Navigation")).not.toBeInTheDocument();
-    ports.useSelectedLayoutSegment.mockReturnValue("wareneingang");
-    view.rerender(<WarendurchlaufRouteNav />);
-    expect(screen.getByText("Legacy-Station-Navigation")).toBeInTheDocument();
   });
 
   it("renders station denial without confirmed empty-station success while KPI tiles remain unavailable", async () => {

@@ -7,11 +7,9 @@ import {
   Info,
   Camera,
   Edit3,
-  MessageSquare,
   ChevronRight,
   X,
   ChevronLeft,
-  Phone
 } from "lucide-react";
 import Link from "next/link";
 
@@ -49,22 +47,6 @@ export function IntakeEntry({
         <h2 className="text-2xl font-black text-navy-900 tracking-tight text-center">Neue Annahme erfassen</h2>
         <div className="h-1 w-14 bg-gold-600 rounded-full mt-2" />
       </div>
-
-      {/* ── TELEFONNOTIZ SHORTCUT ── */}
-      <Link href="/telefonnotiz?returnTo=/warendurchlauf/wareneingang" className="flex items-center justify-between w-full bg-navy-900 rounded-3xl p-6 hover:bg-navy-800 transition-all shadow-md group cursor-pointer">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center shrink-0">
-            <Phone className="w-6 h-6 text-white" strokeWidth={1.5} />
-          </div>
-          <div>
-            <p className="text-xl font-black text-white leading-snug">Telefonnotiz anlegen</p>
-            <p className="text-sm text-white/70 mt-0.5">Schnellerfassung starten</p>
-          </div>
-        </div>
-        <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center shrink-0 group-hover:bg-white/20 transition-all duration-200">
-          <ChevronRight className="w-5 h-5 text-white" strokeWidth={2} />
-        </div>
-      </Link>
 
       {/* ── ACTION GRID ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -105,29 +87,6 @@ export function IntakeEntry({
             <ChevronRight className="w-5 h-5 text-accent-orange group-hover:text-white transition-colors" strokeWidth={2} />
           </div>
         </button>
-      </div>
-
-      {/* ── ANFRAGEN MINI CARD ── */}
-      <div className="flex justify-center">
-        <Link
-          href="/quotes"
-          className="flex items-center justify-between w-full md:w-[60%] bg-white rounded-3xl border border-neutral-gray-100 p-5 hover:shadow-md hover:border-accent-orange/20 transition-all group"
-        >
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-bg-app-soft flex items-center justify-center shrink-0 border border-neutral-gray-100">
-              <MessageSquare className="w-6 h-6 text-navy-700" strokeWidth={1.5} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-navy-900 text-lg">Anfragen</span>
-              </div>
-              <p className="text-xs text-text-muted mt-0.5">Anfragen derzeit nicht verfügbar</p>
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shrink-0 shadow-sm border border-neutral-gray-100 group-hover:bg-accent-orange transition-all duration-200">
-            <ChevronRight className="w-5 h-5 text-accent-orange group-hover:text-white transition-colors" strokeWidth={2} />
-          </div>
-        </Link>
       </div>
 
       {/* ── LETZTE ANNAHMEN ── */}

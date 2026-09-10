@@ -68,6 +68,7 @@ export function WerkstattView({
   const isEmpty = view.kind === "empty";
   const authorized = isData || isEmpty;
   const canCreateOrder = authorized && view.canCreateOrder;
+  const canOperate = authorized && view.canOperate !== false;
   const isPickerOpen = activePicker !== null;
 
   useEffect(() => {
@@ -262,7 +263,7 @@ export function WerkstattView({
           </div>
         ) : null}
 
-        {authorized ? (
+        {canOperate ? (
           <nav className={styles.actionBar} aria-label="Werkstattaktionen">
             {isData ? (
               <button

@@ -67,11 +67,12 @@ export type WerkstattData = {
   pickerOrders: readonly PhillipOrderCard[];
   goodsOutCandidates: readonly PhillipOrderCard[];
   canCreateOrder: boolean;
+  canOperate?: boolean;
 };
 
 export type PhillipWerkstattViewModel =
   | ({ kind: "data" } & WerkstattData)
-  | { kind: "empty"; canCreateOrder: boolean }
+  | { kind: "empty"; canCreateOrder: boolean; canOperate?: boolean }
   | { kind: "denied"; message: string }
   | { kind: "conflict"; message: string }
   | { kind: "error"; message: string };
