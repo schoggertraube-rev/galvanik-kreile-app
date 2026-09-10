@@ -2,7 +2,7 @@ mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
 base_sha: 2a2b24d2fecc65a79bf2ff0efe87c72f79db8f09
-branch: gov/f1-5-closeout-truth-20260910
+branch: none
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
 # ── M0 Konsolidierungsstand ───────────────────────────────────────
