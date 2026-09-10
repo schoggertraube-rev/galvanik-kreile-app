@@ -1,3 +1,5 @@
+<!-- STATUS: REFERENCE_ONLY_NON_EXECUTABLE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # Provider- und Capability-Matrix
 
 Stand: 2026-09-10 · D-GOV-001 · D-ARCH-011 · D-UI-CORE-002

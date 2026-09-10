@@ -63,9 +63,19 @@ jobs:
 
       - name: Enforce D-GOV-001 authority contract on candidate
         working-directory: ratchet-base
+        env:
+          AUTHORITY_CHECKER_SHA256: 85abefe9c58c366258c1676752c1eff67598491f35c885454ee26b3d7f778d4c
+          AUTHORITY_SCHEMA_SHA256: 798139c41576c5b6652774ae2268a63286fdd43d7e4d71dcf4732e50f9c1194a
         run: |
-          node "$GITHUB_WORKSPACE/candidate/scripts/quality/check-authoritative-sources.mjs" --selftest
-          node "$GITHUB_WORKSPACE/candidate/scripts/quality/check-authoritative-sources.mjs" \
+          # Bootstrap the new contract with reviewed content hashes. This workflow is
+          # itself bound by the protected base ratchet above; after merge the same
+          # checker becomes the protected base executable for subsequent candidates.
+          checker="$GITHUB_WORKSPACE/candidate/scripts/quality/check-authoritative-sources.mjs"
+          schema="$GITHUB_WORKSPACE/candidate/quality/authoritative-sources.json"
+          test "$(sha256sum "$checker" | cut -d' ' -f1)" = "$AUTHORITY_CHECKER_SHA256"
+          test "$(sha256sum "$schema" | cut -d' ' -f1)" = "$AUTHORITY_SCHEMA_SHA256"
+          node "$checker" --selftest
+          node "$checker" \
             --root "$GITHUB_WORKSPACE/candidate" --check
 
       - name: Enforce protected S1 module gates (Path 1 Naehte)

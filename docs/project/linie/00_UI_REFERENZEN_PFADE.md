@@ -11,7 +11,7 @@ Ordner: `docs/project/linie/ui/`
 - `KREILE_STARTSEITE_ROLF_V8_2026-08-20.html` — „Der Tag".
 - `KREILE_AUFTRAGSKARTE_MACHART_V8_2026-08-19.html` — Auftragskarte.
 - `KREILE_KUNDENKARTE_MACHART_V2_2026-08-19.html` — Kundenkarte.
-- Manifest kanonisch vs. verworfen: `ui/00_UI_REFERENZ_KANONISCH.md`.
+- Nichtautoritative Erläuterung zu kanonisch/verworfen: `ui/00_UI_REFERENZ_KANONISCH.md`.
 
 Keine andere HTML-, Screenshot-, Mockup- oder Designdatei ist UI-Wahrheit. Änderungen an dieser Liste sind eine Produktentscheidung im Entscheidungsregister.
 
@@ -20,7 +20,7 @@ Demo-Daten darin (Mustermann, 300 SL …) sind Design-Demo — **nie** als Produ
 ## Verbindliche Nachbarschaft (zuerst lesen)
 - `ARCHITEKTUR_MODULE_PATH1.md` — WIE gebaut wird (Module, fünf CI-Nähte).
 - `MODULKARTE_KANON.md` — WAS es gibt (Module) und WAS entfällt/Quarantäne.
-- `ui/00_UI_REFERENZ_KANONISCH.md` — WIE es aussieht (Startseite = V4, Stationsband verboten).
+- `ui/00_UI_REFERENZ_KANONISCH.md` — ergänzende Referenzhinweise ohne eigene UI-Wahrheit.
 
 ## Verweis
 LINIE: D-ARCH-008 (Path 1), D-ARCH-009 (Modulkarte). Register: `KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md`.

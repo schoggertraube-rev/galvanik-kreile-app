@@ -1,6 +1,8 @@
-# KREILE — KANONISCHE UI-REFERENZ (verbindlich, im Repo eingefroren)
+<!-- STATUS: REFERENCE_ONLY_NON_EXECUTABLE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
 
-Stand 2026-09-06. Dies ist die EINZIGE gültige UI-Wahrheit für Kreile. Sie liegt bewusst im Repo (`02_app/docs/project/linie/ui/`), damit PL und Writer sie sehen. Alte Entwürfe außerhalb dieses Ordners sind NICHT Quelle der Wahrheit und dürfen nicht als Vorlage dienen.
+# KREILE — UI-Referenzmanifest (nicht autoritativ, im Repo eingefroren)
+
+Stand 2026-09-10. Die einzige Autorität für die erlaubte UI-Referenzgruppe ist `../00_UI_REFERENZEN_PFADE.md`. Diese Datei beschreibt die dort gelisteten Dateien nur ergänzend und besitzt keine eigene UI-Wahrheit. Alte Entwürfe außerhalb der autoritativen Liste sind keine Vorlage.
 
 ## Kanonisch (genau diese Dateien)
 - `KREILE_STARTSEITE_PHILLIP_V4_2026-08-20.html` — Startseite Phillip „Werkstatt".

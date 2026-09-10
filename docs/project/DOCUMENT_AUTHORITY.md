@@ -1,3 +1,5 @@
+<!-- STATUS: REFERENCE_ONLY_NON_EXECUTABLE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # Dokumentenautorität
 
 Stand: 2026-09-10 — D-GOV-001
@@ -49,8 +51,10 @@ Diese Ebenen koennen voneinander abweichen. Dann gewinnt nicht still eine andere
 
 ### Owner-Beschlusslinie
 
-- `docs/project/linie/` enthält Repo-Kopien ratifizierter Owner-Entscheidungen
-  (Index `00_BIBEL_INDEX.md`; Manifest mit SHA-256 in `docs/project/linie/README.md`).
+- `docs/project/linie/` enthält das master-first gepflegte Produktentscheidungsregister sowie
+  klassifizierte Repo-Referenzen und Derivate (Index `00_BIBEL_INDEX.md`; Repo-Hashes in
+  `docs/project/linie/README.md`). Ausschließlich das Register muss zur externen Master-Fassung
+  byte-identisch sein.
 - `KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md` ist die einzige Autorität für
   Produktentscheidungen. Bauverträge, Leitplanken und frühere Mandate sind ausschließlich
   `REFERENCE_ONLY_NON_EXECUTABLE`; bestätigte Regeln daraus gelten erst nach Aufnahme in die

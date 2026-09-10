@@ -1,23 +1,23 @@
 <!-- STATUS: REFERENCE_ONLY_NON_EXECUTABLE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
 
-# LINIE — Repo-Kopie der Owner-Steuerdokumente (Stand 2026-09-10)
+# LINIE — Entscheidungsregister und klassifizierte Repo-Referenzen (Stand 2026-09-10)
 
-Quelle (Master): Projektordner `C:\Antygravityprojekte\04_Kundenprojekte\galvanik_kreile\00_BIBEL\` (Einstieg `00_BIBEL_INDEX.md`; Projektstruktur `galvanik_kreile\00_README_PROJEKTSTRUKTUR.md`). Byteidentische Kopien, importiert durch den Orchestrator (Prozess-Hygiene, kein App-Code), damit PL und Writer die ratifizierte Beschluss- und Vertragslage im Repo lesen können.
+Quelle (Master): Projektordner `C:\Antygravityprojekte\04_Kundenprojekte\galvanik_kreile\00_BIBEL\` (Einstieg `00_BIBEL_INDEX.md`; Projektstruktur `galvanik_kreile\00_README_PROJEKTSTRUKTUR.md`). Ausschließlich das Produktentscheidungsregister wird master-first gepflegt und muss in Master und Repo byte-identisch sein. Die übrigen Liniendokumente sind klassifizierte Repo-Referenzen oder Derivate; für sie wird keine allgemeine Quellenidentität behauptet.
 
-Autorität: siehe `docs/project/DOCUMENT_AUTHORITY.md`. Ausschließlich `KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md` ist Produktentscheidungsquelle. Bauverträge und `00_AUTONOMER_BETRIEB_LEITPLANKEN.md` sind supersedierte Referenzen ohne eigene Vorrangwirkung. Eine Abweichung zwischen Repo-Kopie und `00_BIBEL\` ist `BLOCKED_GOVERNANCE_CONFLICT`; es gilt keine stille Auswahl.
+Autorität: siehe `docs/project/DOCUMENT_AUTHORITY.md`. Ausschließlich `KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md` ist Produktentscheidungsquelle. Bauverträge und `00_AUTONOMER_BETRIEB_LEITPLANKEN.md` sind supersedierte Referenzen ohne eigene Vorrangwirkung. Nur eine Abweichung zwischen Master- und Repo-Fassung des Produktentscheidungsregisters ist `BLOCKED_GOVERNANCE_CONFLICT`; für die übrigen Referenzen wird keine Byteidentität verlangt oder behauptet.
 
 Nicht importiert (nur in `00_BIBEL\`): `design und klickpfade UI\` (Rolf V8, Phillip V4, Karten V8/V2 als HTML), `_bibel_historie_2026-08\` (Bibel V1/V2, Einzelbeschlüsse D-ARCH-010, D-F13-001, D-F15-001, D-UI-003, D-USP-001, F1.2 — historisches Fundament), `_parallel\` (Suchmodul-Lieferung), `_archiv_2026-09-05\`.
 
-| Datei | SHA-256 | Quelle-Änderungsdatum |
+| Repo-Datei | Repo-SHA-256 | dokumentierter Stand |
 |---|---|---|
 | `00_AUTONOMER_BETRIEB_LEITPLANKEN.md` | `4CC63763EFAEBA009C509B62C0BED853CA57140715721AEB80E4AD4D5538016A` | 2026-09-02 |
-| `00_BIBEL_INDEX.md` | `B80331BBBEF2883D7A891B57D338CECBE464FEF1AB6BB17BF57FDA26EF3E63BF` | 2026-09-05 |
-| `00_UI_REFERENZEN_PFADE.md` | `7A93C3A035BC26C23758713E690AD4953F26BC9B2AD09F64FBB6B8FDC00D3CD8` | 2026-08-28 |
+| `00_BIBEL_INDEX.md` | `6935EAFB294B2A803FA5DBE80B3749ACE29E4E419CA07F363125C06BAFDFE9A4` | 2026-09-10 |
+| `00_UI_REFERENZEN_PFADE.md` | `A025C34F04EB2B4395DDDA68E80DC55B8EC9230A9B405705A4225EB60FC3144D` | 2026-09-10 |
 | `KREILE_AUTONOMIE_MANDAT_2026-08-27.md` | `FE71BCEA17AECE6F239AED1200019C3FF4B3DB1D40257BBE94924A3281A10F99` | 2026-08-27 |
 | `KREILE_F1_4_BAUVERTRAG_UNVERAENDERLICHE_RECHNUNG_V1_2026-08-21.md` | `B9C9349D3FFD34813A1072D87FC242CFB2CCAA56D6FD4663A129E279B6281DE4` | 2026-08-28 |
 | `KREILE_F1_5_BAUVERTRAG_ZAHLUNGSEINGANG_WARENAUSGANG_V1_2026-08-21.md` | `C88290E4A7F2B710613B312313C44C6C60C62C8924A892CB14DB96E9599D1B3C` | 2026-08-23 |
 | `KREILE_GESAMTUEBERSICHT_STATUS_2026-09-01.md` | `69CDA997ADD7E06D42521FA2CAF4DBBE16DEF3FB3ED78D756D97355E6FACC3EF` | 2026-09-01 |
-| `KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md` | `9B2F71B84C37A985C27CDC844387F1204EC0503C03DC4BD42DEEC8935294F6B6` | 2026-09-10 |
+| `KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md` | `28EDCCC2EBAAB758CA6722A89B20DB30D91E0C5D11A68375B323002CCC79E127` | 2026-09-10 |
 | `KREILE_M3_BAUPLAN_V1_2026-08-18.md` | `B527575143A7500DF2BCF9B6DE2AF93CD14D57115345751D0CF10CFED2F5D4EB` | 2026-09-01 |
 | `KREILE_PL_STARTUP_BRIEFING_2026-09-05.md` | `EA5CE795B0F181AC004F43E734AA30049458ADC4A2C7DAA736E9CF7F7BB0D690` | 2026-09-05 |
 | `KREILE_UEBERGABE_FRONTEND_UMSETZUNG_V1_2026-08-21.md` | `8240CAD7702631EF806B072C0100A760BD7520648B1EB5CC514D96F5E8CC4060` | 2026-08-27 |

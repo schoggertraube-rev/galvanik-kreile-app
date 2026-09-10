@@ -430,6 +430,7 @@ authority_provider_governance_allowlist:
   - docs/project/linie/MODULKARTE_KANON.md
   - docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md
   - docs/project/linie/00_UI_REFERENZEN_PFADE.md
+  - docs/project/linie/ui/00_UI_REFERENZ_KANONISCH.md
   - APP_Galvanik_Werkstatt_OS.md
   - ANTIGRAVITY_BUILDBRIEF_KREILE_WERKSTATTCOCKPIT.md
   - 01_projektanalyse.md
