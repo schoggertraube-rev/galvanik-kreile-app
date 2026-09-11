@@ -1,11 +1,16 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
-import { createHash } from "node:crypto";
+import { hash as hashPin } from "bcryptjs";
+import { execFileSync } from "node:child_process";
+import { createHash, createHmac } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import postgres from "postgres";
 
 const TENANT = "galvanik-kreile";
 const EVIDENCE_DIR = path.resolve(process.cwd(), "docs/evidence/ui/artifacts/path1-ui-convergence");
+let loopbackSecureCookieReplayUsed = false;
+
+test.describe.configure({ mode: "serial" });
 
 function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -14,14 +19,41 @@ function requiredEnv(name: string): string {
 }
 
 async function createAuthUser(apiUrl: string, anonKey: string, email: string, password: string): Promise<string> {
-  const response = await fetch(`${apiUrl.replace(/\/$/, "")}/auth/v1/signup`, {
-    method: "POST",
-    headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
-  const body = await response.json() as { user?: { id?: string }; message?: string };
-  if (!response.ok || typeof body.user?.id !== "string") throw new Error(`PATH1_UI_AUTH_SIGNUP_FAILED:${response.status}:${body.message ?? "invalid"}`);
-  return body.user.id;
+  const baseUrl = apiUrl.replace(/\/$/, "");
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const health = await fetch(`${baseUrl}/auth/v1/health`);
+    if (!health.ok) {
+      if (attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, 750));
+        continue;
+      }
+      throw new Error(`PATH1_UI_AUTH_HEALTH_FAILED:${health.status}`);
+    }
+
+    const response = await fetch(`${baseUrl}/auth/v1/signup`, {
+      method: "POST",
+      headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const body = await response.json() as { user?: { id?: string }; message?: string };
+    if (response.ok && typeof body.user?.id === "string") return body.user.id;
+    if (response.status !== 502 || attempt === 3) {
+      throw new Error(`PATH1_UI_AUTH_SIGNUP_FAILED:${response.status}:${body.message ?? "invalid"}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 750));
+  }
+  throw new Error("PATH1_UI_AUTH_SIGNUP_FAILED:retry-exhausted");
+}
+
+async function normalizeLoopbackSessionCookie(page: Page): Promise<void> {
+  const sessionCookie = (await page.context().cookies()).find((cookie) => cookie.name === "kreile_app_session");
+  if (!sessionCookie) throw new Error("PATH1_UI_SESSION_COOKIE_MISSING");
+  if (sessionCookie.secure && page.url().startsWith("http://localhost")) {
+    // next start correctly emits Secure in production. Reuse the byte-identical signed cookie
+    // without Secure solely for this loopback HTTP transport; server validation remains real.
+    await page.context().addCookies([{ ...sessionCookie, secure: false }]);
+    loopbackSecureCookieReplayUsed = true;
+  }
 }
 
 async function login(page: Page, email: string, password: string): Promise<void> {
@@ -32,18 +64,37 @@ async function login(page: Page, email: string, password: string): Promise<void>
   await dialog.locator("#password").fill(password);
   await dialog.getByRole("button", { name: "Einloggen", exact: true }).click();
   await page.waitForURL((url) => url.pathname !== "/start", { timeout: 30_000 });
-  expect((await page.context().cookies()).some((cookie) => cookie.name === "kreile_app_session")).toBe(true);
+  await normalizeLoopbackSessionCookie(page);
 }
 
-async function loginWithPin(page: Page, initials: string, pin: string): Promise<void> {
+async function loginWithPin(page: Page, userId: string, pin: string): Promise<Page> {
   await page.goto("/start");
-  await page.locator('[data-testid^="pin-user-card-"]').filter({ hasText: initials }).click();
+  const handle = createHmac("sha256", requiredEnv("APP_SESSION_SECRET"))
+    .update(`pin-login:${TENANT}:${userId}`)
+    .digest("base64url");
+  const userCard = page.getByTestId(`pin-user-card-${handle}`);
+  await userCard.focus();
+  await expect(userCard).toBeFocused();
+  await page.keyboard.press("Enter");
   const dialog = page.getByTestId("pin-login-dialog");
   for (const digit of pin) {
     await dialog.getByRole("button", { name: digit, exact: true }).click();
   }
-  await page.waitForURL((url) => url.pathname !== "/start", { timeout: 30_000 });
-  expect((await page.context().cookies()).some((cookie) => cookie.name === "kreile_app_session")).toBe(true);
+  await expect.poll(async () => (await page.context().cookies()).some((cookie) => cookie.name === "kreile_app_session"), {
+    timeout: 30_000,
+    message: "real signed app session cookie",
+  }).toBe(true);
+  // Let the production redirect settle first. On loopback HTTP the Secure cookie is
+  // intentionally not sent yet, so middleware may finish back on /start.
+  await page.waitForLoadState("networkidle");
+  await normalizeLoopbackSessionCookie(page);
+  const context = page.context();
+  await page.close();
+  const authenticatedPage = await context.newPage();
+  await authenticatedPage.goto("/");
+  await authenticatedPage.waitForURL((url) => url.pathname === "/", { timeout: 30_000 });
+  expect((await context.cookies()).some((cookie) => cookie.name === "kreile_app_session")).toBe(true);
+  return authenticatedPage;
 }
 
 async function seedPrerequisites(sql: postgres.Sql, adminId: string): Promise<void> {
@@ -65,10 +116,31 @@ async function seedPrerequisites(sql: postgres.Sql, adminId: string): Promise<vo
   `;
 }
 
-async function createIntake(page: Page, suffix: string, existingCustomerName?: string): Promise<{ orderNumber: string; customerName: string }> {
+type IntakeOptions = {
+  dueDate?: string;
+  itemName?: string;
+  material?: string;
+  surface?: string;
+  note?: string;
+};
+
+function isoDateFromToday(offsetDays: number): string {
+  const date = new Date();
+  date.setUTCHours(12, 0, 0, 0);
+  date.setUTCDate(date.getUTCDate() + offsetDays);
+  return date.toISOString().slice(0, 10);
+}
+
+async function createIntake(
+  page: Page,
+  suffix: string,
+  existingCustomerName?: string,
+  options: IntakeOptions = {},
+): Promise<{ orderNumber: string; customerName: string }> {
   const customerName = existingCustomerName ?? `UI-Konvergenz ${suffix}`;
-  await page.goto("/warendurchlauf/wareneingang");
-  await page.getByTestId("wareneingang-create-order").click();
+  await page.goto("/warendurchlauf/wareneingang", { waitUntil: "domcontentloaded", timeout: 120_000 });
+  await expect(page).toHaveURL(/\/warendurchlauf\/wareneingang$/, { timeout: 30_000 });
+  await page.getByTestId("wareneingang-create-order").click({ timeout: 120_000 });
   const modal = page.getByTestId("order-intake-modal");
   await expect(modal).toBeVisible();
   if (existingCustomerName) {
@@ -84,12 +156,12 @@ async function createIntake(page: Page, suffix: string, existingCustomerName?: s
     await modal.getByPlaceholder("Firmenname", { exact: true }).fill(`${customerName} GmbH`);
     await modal.getByPlaceholder("Ansprechperson", { exact: true }).fill("Lokale B/C-Abnahme");
   }
-  await modal.getByPlaceholder("Bezeichnung *", { exact: true }).fill(`Synthetisches Bauteil ${suffix}`);
+  await modal.getByPlaceholder("Bezeichnung *", { exact: true }).fill(options.itemName ?? `Synthetisches Bauteil ${suffix}`);
   await modal.getByPlaceholder("Menge *", { exact: true }).fill("2");
-  await modal.getByPlaceholder("Werkstoff", { exact: true }).fill("Stahl");
-  await modal.getByPlaceholder("Oberfläche / Behandlung *", { exact: true }).fill("Chrom hochglanz");
-  await modal.getByLabel("Wunschtermin *", { exact: true }).fill("2030-09-30");
-  await modal.getByLabel("Interner Hinweis", { exact: true }).fill("Klar synthetischer lokaler B/C-Browserbeleg");
+  await modal.getByPlaceholder("Werkstoff", { exact: true }).fill(options.material ?? "Stahl");
+  await modal.getByPlaceholder("Oberfläche / Behandlung *", { exact: true }).fill(options.surface ?? "Chrom hochglanz");
+  await modal.getByLabel("Wunschtermin *", { exact: true }).fill(options.dueDate ?? "2030-09-30");
+  await modal.getByLabel("Interner Hinweis", { exact: true }).fill(options.note ?? "Klar synthetischer lokaler B/C-Browserbeleg");
   await modal.getByRole("button", { name: "Wareneingang anlegen", exact: true }).click();
   const heading = modal.getByRole("heading", { name: /^A-\d{4}-\d+ bestätigt$/ });
   await expect(heading).toBeVisible({ timeout: 30_000 });
@@ -100,9 +172,10 @@ async function createIntake(page: Page, suffix: string, existingCustomerName?: s
 }
 
 async function transitionToGalvanik(page: Page, orderId: string): Promise<void> {
-  await page.goto("/warendurchlauf/wareneingang");
+  await page.goto("/warendurchlauf/wareneingang", { waitUntil: "domcontentloaded", timeout: 120_000 });
+  await expect(page).toHaveURL(/\/warendurchlauf\/wareneingang$/, { timeout: 30_000 });
   const row = page.getByTestId(`wareneingang-order-${orderId}`);
-  await expect(row).toBeVisible({ timeout: 30_000 });
+  await expect(row).toBeVisible({ timeout: 120_000 });
   await row.getByTestId("wareneingang-handoff").getByRole("button", { name: "An Galvanik übergeben", exact: true }).click();
   await expect(page.getByTestId("wareneingang-handoff-status")).toBeVisible({ timeout: 30_000 });
 }
@@ -112,6 +185,387 @@ async function capture(page: Page, filename: string): Promise<{ file: string; sh
   await page.screenshot({ path: target, fullPage: false });
   return { file: path.relative(process.cwd(), target).replaceAll("\\", "/"), sha256: createHash("sha256").update(readFileSync(target)).digest("hex") };
 }
+
+async function captureReference(
+  page: Page,
+  source: string,
+  filename: string,
+): Promise<{ file: string; sha256: string }> {
+  await page.setContent(readFileSync(path.resolve(process.cwd(), source), "utf8"), {
+    waitUntil: "domcontentloaded",
+  });
+  await page.evaluate(() => document.fonts.ready);
+  return capture(page, filename);
+}
+
+async function expectNoHorizontalOverflow(page: Page): Promise<void> {
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+}
+
+async function exerciseRolfNavigation(page: Page, mobile: boolean): Promise<string[]> {
+  const visited: string[] = [];
+  if (mobile) {
+    const navigation = page.getByRole("navigation", { name: "Mobile Hauptnavigation" });
+    for (const [name, pathname] of [["Der Tag", "/"], ["Aufträge", "/orders"], ["Kunden", "/customers"], ["Geld", "/buchhaltung/rechnungen"]] as const) {
+      await navigation.getByRole("link", { name, exact: true }).click();
+      await page.waitForURL((url) => url.pathname === pathname, { timeout: 30_000 });
+      visited.push(pathname);
+    }
+    await navigation.getByRole("button", { name: "Mehr", exact: true }).click();
+    const more = page.getByRole("dialog", { name: "Weitere Kernbereiche" });
+    await more.getByRole("link", { name: "Werkstatt", exact: true }).click();
+    await page.waitForURL((url) => url.pathname === "/warendurchlauf", { timeout: 30_000 });
+    visited.push("/warendurchlauf");
+  } else {
+    const navigation = page.getByRole("navigation", { name: "Hauptnavigation" });
+    for (const [name, pathname] of [["Der Tag", "/"], ["Werkstatt", "/warendurchlauf"], ["Aufträge", "/orders"], ["Kunden & Kontakt", "/customers"], ["Geld & Rechnungen", "/buchhaltung/rechnungen"]] as const) {
+      await navigation.getByRole("link", { name, exact: true }).click();
+      await page.waitForURL((url) => url.pathname === pathname, { timeout: 30_000 });
+      visited.push(pathname);
+    }
+  }
+  await expect(page.locator("body")).not.toContainText(/NOT_AVAILABLE|kommt bald|Google Calendar/i);
+  return visited;
+}
+
+test.describe("Path-1 UI convergence A", () => {
+  test("belegt sechs Rollen, Phillip/Rolf, Zielnavigation und entfernte Alt-Routen", async ({ browser }) => {
+    test.setTimeout(900_000);
+    mkdirSync(EVIDENCE_DIR, { recursive: true });
+    const apiUrl = requiredEnv("NEXT_PUBLIC_SUPABASE_URL");
+    const anonKey = requiredEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+    const databaseUrl = requiredEnv("DATABASE_URL");
+    requiredEnv("APP_SESSION_SECRET");
+    expect(apiUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+    expect(databaseUrl).toMatch(/^postgresql:\/\/postgres:postgres@127\.0\.0\.1:\d+\/postgres$/);
+
+    const suffix = `${Date.now()}-${process.pid}`;
+    const pin = "6142";
+    const users = [
+      { role: "developer", name: `Dora Entwicklung ${suffix}`, initials: "DE", email: `path1-a-developer-${suffix}@local.test`, password: `Path1-A-Developer-${suffix}!`, login: "email" },
+      { role: "admin", name: `Anton Administration ${suffix}`, initials: "AA", email: `path1-a-admin-${suffix}@local.test`, password: `Path1-A-Admin-${suffix}!`, login: "email" },
+      { role: "meister", name: `Mara Meister ${suffix}`, initials: "MM", email: `path1-a-meister-${suffix}@local.test`, password: `Path1-A-Meister-${suffix}!`, login: "pin" },
+      { role: "buero", name: `Berta Büro ${suffix}`, initials: "BB", email: `path1-a-buero-${suffix}@local.test`, password: `Path1-A-Buero-${suffix}!`, login: "pin" },
+      { role: "werkstatt", name: `Phillip Werkstatt ${suffix}`, initials: "PW", email: `path1-a-werkstatt-${suffix}@local.test`, password: `Path1-A-Werkstatt-${suffix}!`, login: "pin" },
+      { role: "readonly", name: `Rita Nurlesen ${suffix}`, initials: "RN", email: `path1-a-readonly-${suffix}@local.test`, password: `Path1-A-Readonly-${suffix}!`, login: "pin" },
+    ] as const;
+    const sql = postgres(databaseUrl, { max: 1, prepare: false });
+    const contexts: BrowserContext[] = [];
+    const artifacts: Array<{ file: string; sha256: string }> = [];
+    const routeProof: Array<{ role: string; pathname: string; login: string }> = [];
+    let renamedOperationalView = false;
+
+    try {
+      const persistedPinHash = await hashPin(pin, 12);
+      const identities = [] as Array<(typeof users)[number] & { id: string }>;
+      for (const user of users) {
+        identities.push({ ...user, id: await createAuthUser(apiUrl, anonKey, user.email, user.password) });
+      }
+      for (const user of identities) {
+        await sql`
+          INSERT INTO public.app_users (id, tenant_id, email, full_name, role, active, pin_hash)
+          VALUES (${user.id}::uuid, ${TENANT}, ${user.email}, ${user.name}, ${user.role}, true, ${user.login === "pin" ? persistedPinHash : null})
+        `;
+      }
+      await sql`
+        UPDATE public.app_users
+        SET updated_at = statement_timestamp() - interval '5 seconds'
+        WHERE id IN ${sql(identities.map((user) => user.id))}
+      `;
+      expect((await sql<Array<{ role: string }>>`
+        SELECT role FROM public.app_users WHERE id IN ${sql(identities.map((user) => user.id))} ORDER BY role
+      `).map((entry) => entry.role)).toEqual(["admin", "buero", "developer", "meister", "readonly", "werkstatt"]);
+
+      const deniedContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+      deniedContext.setDefaultTimeout(30_000);
+      contexts.push(deniedContext);
+      const deniedPage = await deniedContext.newPage();
+      const deniedResponse = await deniedPage.goto("/");
+      await deniedPage.waitForURL((url) => url.pathname === "/start", { timeout: 30_000 });
+      expect(deniedResponse?.status()).toBeLessThan(400);
+      await expect(deniedPage.locator("body")).not.toContainText(/Wetter|Google|Kalender|Provider|NOT_AVAILABLE/i);
+      artifacts.push(await capture(deniedPage, "a-start-denied-mobile-390x844.png"));
+
+      for (const role of ["werkstatt", "buero"] as const) {
+        const user = identities.find((candidate) => candidate.role === role)!;
+        const emptyContext = await browser.newContext({ viewport: role === "werkstatt" ? { width: 390, height: 844 } : { width: 1914, height: 917 } });
+        emptyContext.setDefaultTimeout(30_000);
+        contexts.push(emptyContext);
+        let emptyPage = await emptyContext.newPage();
+        emptyPage = await loginWithPin(emptyPage, user.id, pin);
+        if (role === "werkstatt") {
+          await expect(emptyPage.getByRole("heading", { name: "Noch keine Daten erfasst" })).toBeVisible();
+          artifacts.push(await capture(emptyPage, "a-phillip-empty-mobile-390x844.png"));
+        } else {
+          await expect(emptyPage.getByText("Heute liegt kein offener Auftrag vor.", { exact: true })).toBeVisible();
+          artifacts.push(await capture(emptyPage, "a-rolf-empty-desktop-1914x917.png"));
+        }
+      }
+
+      const admin = identities.find((candidate) => candidate.role === "admin")!;
+      await seedPrerequisites(sql, admin.id);
+      const setupContext = await browser.newContext({ viewport: { width: 1914, height: 917 } });
+      setupContext.setDefaultTimeout(30_000);
+      contexts.push(setupContext);
+      const setupPage = await setupContext.newPage();
+      await login(setupPage, admin.email, admin.password);
+      await expect(setupPage).toHaveURL(/\/settings$/);
+      routeProof.push({ role: admin.role, pathname: "/settings", login: admin.login });
+      const critical = await createIntake(setupPage, `a-critical-${suffix}`, undefined, {
+        dueDate: isoDateFromToday(-1), itemName: "Synthetischer kritischer Träger", surface: "Zink gelb",
+        note: "Klar synthetischer lokaler A-Beleg: kritisch",
+      });
+      const bundleIncoming = await createIntake(setupPage, `a-bundle-in-${suffix}`, critical.customerName, {
+        dueDate: isoDateFromToday(0), itemName: "Synthetische Bündelplatte A", surface: "Zink blau",
+        note: "Klar synthetischer lokaler A-Beleg: Bündel A",
+      });
+      const bundleProduction = await createIntake(setupPage, `a-bundle-prod-${suffix}`, critical.customerName, {
+        dueDate: isoDateFromToday(0), itemName: "Synthetische Bündelplatte B", surface: "Zink blau",
+        note: "Klar synthetischer lokaler A-Beleg: Bündel B",
+      });
+      const wip = await createIntake(setupPage, `a-wip-${suffix}`, critical.customerName, {
+        dueDate: isoDateFromToday(0), itemName: "Synthetischer Galvanik-WIP", surface: "Chrom matt",
+        note: "Klar synthetischer lokaler A-Beleg: Galvanik WIP",
+      });
+      const finished = await createIntake(setupPage, `a-finished-${suffix}`, critical.customerName, {
+        dueDate: isoDateFromToday(0), itemName: "Synthetischer Warenausgang", surface: "Nickel",
+        note: "Klar synthetischer lokaler A-Beleg: Ware raus",
+      });
+      const intakes = { critical, bundleIncoming, bundleProduction, wip, finished };
+      const orderRows = await sql<Array<{ order_id: string; order_number: string }>>`
+        SELECT id AS order_id, order_number FROM public.orders
+        WHERE tenant_id=${TENANT} AND order_number IN ${sql(Object.values(intakes).map((entry) => entry.orderNumber))}
+      `;
+      const orderIdByNumber = new Map(orderRows.map((row) => [row.order_number, row.order_id]));
+      const orderId = orderIdByNumber.get(wip.orderNumber);
+      const bundleProductionId = orderIdByNumber.get(bundleProduction.orderNumber);
+      const finishedOrderId = orderIdByNumber.get(finished.orderNumber);
+      if (!orderId || !bundleProductionId || !finishedOrderId || orderRows.length !== 5) {
+        throw new Error("PATH1_UI_A_ORDER_READBACK_MISSING");
+      }
+
+      // Synthetic local fixture facts are persisted explicitly; product reads still use the canonical tenant view.
+      await sql`
+        UPDATE public.orders SET priority_computed = CASE order_number
+          WHEN ${critical.orderNumber} THEN 'red'
+          WHEN ${bundleIncoming.orderNumber} THEN 'orange'
+          WHEN ${bundleProduction.orderNumber} THEN 'yellow'
+          ELSE 'green'
+        END
+        WHERE tenant_id=${TENANT} AND order_number IN ${sql(Object.values(intakes).map((entry) => entry.orderNumber))}
+      `;
+      await transitionToGalvanik(setupPage, bundleProductionId);
+      await transitionToGalvanik(setupPage, orderId);
+      await transitionToGalvanik(setupPage, finishedOrderId);
+      await setupPage.goto(`/orders/${finishedOrderId}`);
+      const finishedCard = setupPage.getByTestId("order-card-v8");
+      await expect(finishedCard.getByRole("button", { name: "Fertig melden & einfrieren" })).toBeEnabled();
+      await finishedCard.getByRole("button", { name: "Fertig melden & einfrieren" }).click();
+      await expect(finishedCard.getByText("Fertigstellung und Freeze bestätigt.")).toBeVisible({ timeout: 30_000 });
+
+      const developer = identities.find((candidate) => candidate.role === "developer")!;
+      const developerContext = await browser.newContext({ viewport: { width: 1914, height: 917 } });
+      developerContext.setDefaultTimeout(30_000);
+      contexts.push(developerContext);
+      const developerPage = await developerContext.newPage();
+      await login(developerPage, developer.email, developer.password);
+      await expect(developerPage).toHaveURL(/\/settings$/);
+      routeProof.push({ role: developer.role, pathname: "/settings", login: developer.login });
+
+      const viewports = [
+        { width: 1914, height: 917, label: "desktop-1914x917" },
+        { width: 1220, height: 880, label: "tablet-1220x880" },
+        { width: 390, height: 844, label: "mobile-390x844" },
+      ] as const;
+      for (const role of ["werkstatt", "buero", "meister", "readonly"] as const) {
+        const user = identities.find((candidate) => candidate.role === role)!;
+        const context = await browser.newContext({ viewport: { width: 1914, height: 917 } });
+        context.setDefaultTimeout(30_000);
+        contexts.push(context);
+        let page = await context.newPage();
+        page = await loginWithPin(page, user.id, pin);
+        await page.waitForURL((url) => url.pathname === "/", { timeout: 30_000 });
+        routeProof.push({ role, pathname: "/", login: user.login });
+
+        for (const viewport of viewports) {
+          await page.setViewportSize({ width: viewport.width, height: viewport.height });
+          await page.goto("/");
+          if (role === "werkstatt") {
+            await expect(page.getByRole("heading", { name: "Werkstatt", exact: true })).toBeVisible();
+            const actionBar = page.getByRole("navigation", { name: "Werkstattaktionen" });
+            await expect(actionBar).toBeVisible();
+            await expect(actionBar).toBeInViewport();
+            await expect(page.getByText("Heute sichern", { exact: true })).toBeVisible();
+            await expect(page.getByTestId("werkstatt-bundle")).toContainText("2 Aufträge mit");
+            await expect(page.getByTestId("werkstatt-wip-tile")).toContainText("3");
+            await expect(page.getByTestId("werkstatt-goods-out-tile")).toContainText("1");
+            await expect(page.getByTestId("werkstatt-due-week-tile")).toContainText("4");
+            for (const name of ["Auftrag öffnen / scannen", "Mehrarbeit", "Fertig melden", "Neuer Eingang", "Ware raus"]) {
+              await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
+            }
+            await expect(page.getByRole("button", { name: "Neuer Eingang", exact: true })).toBeDisabled();
+            artifacts.push(await capture(page, `a-phillip-${viewport.label}.png`));
+          } else {
+            await expect(page.getByRole("heading", { name: `Guten Tag, ${user.name}`, exact: true })).toBeVisible();
+            await expect(page.getByRole("heading", { name: "Das braucht dich", exact: true })).toBeVisible();
+            await expect(page.getByText("Kritisch", { exact: true })).toBeVisible();
+            await expect(page.getByRole("button", { name: new RegExp(critical.orderNumber) })).toBeVisible();
+            await expect(page.getByRole("button", { name: /Heute raus 1 fertig gemeldet/ })).toBeVisible();
+            if (role === "readonly") {
+              await expect(page.getByRole("navigation", { name: "Schnellaktionen" })).toHaveCount(0);
+              await expect(page.getByRole("button", { name: /Neuer Eingang/ })).toHaveCount(0);
+            } else {
+              await expect(page.getByRole("navigation", { name: "Schnellaktionen" })).toBeVisible();
+            }
+            if (role === "readonly") {
+              await expect(page.getByRole("link", { name: /Geld|Rechnung/i })).toHaveCount(0);
+            } else {
+              await expect(page.getByRole("link", { name: /Geld|Rechnung/i }).first()).toHaveAttribute("href", "/buchhaltung/rechnungen");
+            }
+            artifacts.push(await capture(page, `a-rolf-${role}-${viewport.label}.png`));
+          }
+          await expectNoHorizontalOverflow(page);
+        }
+
+        if (role === "buero") {
+          await page.setViewportSize({ width: 1914, height: 917 });
+          await page.goto("/");
+          expect(await exerciseRolfNavigation(page, false)).toEqual(["/", "/warendurchlauf", "/orders", "/customers", "/buchhaltung/rechnungen"]);
+          await page.setViewportSize({ width: 390, height: 844 });
+          await page.goto("/");
+          expect(await exerciseRolfNavigation(page, true)).toEqual(["/", "/orders", "/customers", "/buchhaltung/rechnungen", "/warendurchlauf"]);
+        }
+
+        if (role === "werkstatt") {
+          await page.setViewportSize({ width: 1914, height: 917 });
+          await page.goto("/");
+          for (const action of ["Auftrag öffnen / scannen", "Mehrarbeit", "Fertig melden"] as const) {
+            await page.getByRole("button", { name: action, exact: true }).click();
+            const picker = page.getByRole("dialog", { name: "Auftrag öffnen" });
+            await expect(picker).toBeVisible();
+            await picker.getByTestId(`order-picker-order-${orderId}`).click();
+            await expect(page.getByTestId("order-card-v8")).toBeVisible();
+            await page.getByTestId("order-card-v8").getByRole("button", { name: "Schließen / zurück" }).click();
+          }
+          await expect(page.getByRole("button", { name: "Neuer Eingang", exact: true })).toBeDisabled();
+          await page.getByRole("button", { name: "Ware raus", exact: true }).click();
+          const goodsOutPicker = page.getByRole("dialog", { name: "Ware raus" });
+          await expect(goodsOutPicker.getByTestId(`goods-out-picker-order-${finishedOrderId}`)).toBeVisible();
+          await goodsOutPicker.getByTestId(`goods-out-picker-order-${finishedOrderId}`).click();
+          await expect(page.getByTestId("order-card-v8")).toBeVisible();
+          await expect(page.getByTestId("order-card-v8")).toContainText(finished.orderNumber);
+          await page.getByTestId("order-card-v8").getByRole("button", { name: "Schließen / zurück" }).click();
+        }
+
+        if (role === "buero") {
+          await page.setViewportSize({ width: 1914, height: 917 });
+          await page.goto("/");
+          const quickActions = page.getByRole("navigation", { name: "Schnellaktionen" });
+          await quickActions.getByRole("button", { name: /Ware raus/ }).click();
+          const goodsOutDialog = page.getByRole("dialog", { name: "Ware raus" });
+          await expect(goodsOutDialog.getByRole("button", { name: new RegExp(finished.orderNumber) })).toBeVisible();
+          await goodsOutDialog.getByRole("button", { name: new RegExp(finished.orderNumber) }).click();
+          await expect(page.getByTestId("order-card-v8")).toContainText(finished.orderNumber);
+          await page.getByTestId("order-card-v8").getByRole("button", { name: "Schließen / zurück" }).click();
+        }
+      }
+
+      const retiredRoutes = [
+        "/analyse", "/cockpit", "/kontrolle", "/performance", "/status", "/marketing",
+        "/baeder", "/betrieb", "/betrieb-kvp", "/kvp", "/today", "/finanzen",
+        "/kunden-auftraege", "/print-queue", "/feedback", "/archive", "/lager",
+        "/lieferanten", "/telefonnotiz", "/items", "/kalender", "/station/galvanik",
+        "/scan", "/kommunikation", "/quotes",
+      ];
+      for (const pathname of retiredRoutes) {
+        const response = await setupPage.goto(pathname);
+        expect(response?.status(), `${pathname} must fail closed`).toBe(404);
+        await expect(setupPage.locator("body")).not.toContainText(/Google Calendar|NOT_AVAILABLE|kommt bald/i);
+      }
+
+      const buero = identities.find((candidate) => candidate.role === "buero")!;
+      const errorContext = await browser.newContext({ viewport: { width: 1914, height: 917 } });
+      errorContext.setDefaultTimeout(30_000);
+      contexts.push(errorContext);
+      let errorPage = await errorContext.newPage();
+      errorPage = await loginWithPin(errorPage, buero.id, pin);
+      await sql`ALTER VIEW private.v_operational_station_queue_v1 RENAME TO v_operational_station_queue_v1_path1_a_fault`;
+      renamedOperationalView = true;
+      await errorPage.goto("/");
+      await expect(errorPage.getByRole("alert").filter({ hasText: "Tagesansicht nicht verfügbar" })).toContainText("Tagesansicht nicht verfügbar");
+      artifacts.push(await capture(errorPage, "a-rolf-error-desktop-1914x917.png"));
+
+      const werkstatt = identities.find((candidate) => candidate.role === "werkstatt")!;
+      const werkstattErrorContext = await browser.newContext({ viewport: { width: 1914, height: 917 } });
+      werkstattErrorContext.setDefaultTimeout(30_000);
+      contexts.push(werkstattErrorContext);
+      let werkstattErrorPage = await werkstattErrorContext.newPage();
+      werkstattErrorPage = await loginWithPin(werkstattErrorPage, werkstatt.id, pin);
+      await werkstattErrorPage.goto("/");
+      await expect(werkstattErrorPage.getByRole("alert").filter({ hasText: "Werkstattdaten konnten nicht sicher geladen werden" })).toContainText("Werkstattdaten konnten nicht sicher geladen werden");
+      artifacts.push(await capture(werkstattErrorPage, "a-phillip-error-desktop-1914x917.png"));
+      await sql`ALTER VIEW private.v_operational_station_queue_v1_path1_a_fault RENAME TO v_operational_station_queue_v1`;
+      renamedOperationalView = false;
+
+      const referenceContext = await browser.newContext({ viewport: { width: 1914, height: 917 } });
+      referenceContext.setDefaultTimeout(30_000);
+      contexts.push(referenceContext);
+      const referencePage = await referenceContext.newPage();
+      for (const viewport of viewports) {
+        await referencePage.setViewportSize({ width: viewport.width, height: viewport.height });
+        artifacts.push(await captureReference(referencePage, "docs/project/linie/ui/KREILE_STARTSEITE_PHILLIP_V4_2026-08-20.html", `a-reference-phillip-${viewport.label}.png`));
+        artifacts.push(await captureReference(referencePage, "docs/project/linie/ui/KREILE_STARTSEITE_ROLF_V8_2026-08-20.html", `a-reference-rolf-${viewport.label}.png`));
+      }
+
+      const receiptPath = path.join(EVIDENCE_DIR, "a-real-browser-receipt.json");
+      const testedCodeCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: process.cwd(), encoding: "utf8" }).trim();
+      writeFileSync(receiptPath, `${JSON.stringify({
+        source: "fresh local Supabase + real auth/session + role-aware root + target navigation",
+        loopbackSessionTransport: {
+          used: loopbackSecureCookieReplayUsed,
+          invariant: "byte-identical signed server cookie; Secure removed only for localhost HTTP replay",
+        },
+        testedCodeCommit,
+        canonicalRoles: users.map((user) => user.role),
+        routeProof,
+        syntheticData: {
+          tenant: TENANT,
+          intakePath: "real OrderIntake UI/command",
+          stationPath: "real station handoff command",
+          finishPath: "real V8 freeze command/readback",
+          orders: Object.fromEntries(Object.entries(intakes).map(([purpose, entry]) => [purpose, {
+            orderNumber: entry.orderNumber,
+            orderId: orderIdByNumber.get(entry.orderNumber),
+          }])),
+          persistedRiskFixture: { critical: "red", bundleIncoming: "orange", bundleProduction: "yellow" },
+          sameSurfaceBundle: "Zink blau",
+          goodsOutCandidates: 1,
+          canonicalWipCount: 3,
+          dueThisWeek: 4,
+        },
+        states: ["data", "empty", "denied", "error", "conflict (focused contract test)"],
+        visibleNavigation: ["/", "/warendurchlauf", "/orders", "/customers", "/buchhaltung/rechnungen"],
+        retiredRoutes,
+        viewports: viewports.map((viewport) => `${viewport.width}x${viewport.height}`),
+        references: [
+          "KREILE_STARTSEITE_PHILLIP_V4_2026-08-20.html",
+          "KREILE_STARTSEITE_ROLF_V8_2026-08-20.html",
+          "KREILE_AUFTRAGSKARTE_MACHART_V8_2026-08-19.html (existing B/C evidence)",
+          "KREILE_KUNDENKARTE_MACHART_V2_2026-08-19.html (existing B/C evidence)",
+        ],
+        artifacts,
+      }, null, 2)}\n`);
+      const receiptHash = createHash("sha256").update(readFileSync(receiptPath)).digest("hex");
+      writeFileSync(path.join(EVIDENCE_DIR, "a-real-browser-receipt.sha256"), `${receiptHash}  a-real-browser-receipt.json\n`);
+    } finally {
+      if (renamedOperationalView) {
+        await sql`ALTER VIEW private.v_operational_station_queue_v1_path1_a_fault RENAME TO v_operational_station_queue_v1`;
+      }
+      await Promise.all(contexts.map((context) => context.close()));
+      await sql.end({ timeout: 5 });
+    }
+  });
+});
 
 test.describe("Path-1 UI convergence B/C", () => {
   test("belegt V8/V2, reale Fachaktionen, Rechte, Deeplinks und denselben Backstack", async ({ browser }) => {
@@ -162,8 +616,8 @@ test.describe("Path-1 UI convergence B/C", () => {
       const readonlyContext = await browser.newContext({ viewport: { width: 1220, height: 880 } });
       readonlyContext.setDefaultTimeout(30_000);
       contexts.push(readonlyContext);
-      const readonlyPage = await readonlyContext.newPage();
-      await loginWithPin(readonlyPage, "PL", "4827");
+      let readonlyPage = await readonlyContext.newPage();
+      readonlyPage = await loginWithPin(readonlyPage, readonlyId, "4827");
       await readonlyPage.goto(`/orders/${operativeRow.order_id}`);
       const readonlyCard = readonlyPage.getByTestId("order-card-v8");
       await expect(readonlyCard).toContainText("Zahlungsdetails sind für diese Rolle nicht freigegeben.");

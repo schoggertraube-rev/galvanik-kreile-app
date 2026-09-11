@@ -142,6 +142,15 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(screen.getByTestId("werkstatt-held-ga-1")).toBeInTheDocument();
     const wipTile = screen.getByRole("button", { name: /In Arbeit \(Galvanik\)/ });
     expect(wipTile).toHaveTextContent("1");
+    const goodsOutTile = screen.getByTestId("werkstatt-goods-out-tile");
+    expect(goodsOutTile).toHaveTextContent("Heute raus");
+    expect(goodsOutTile).toHaveTextContent("1");
+    expect(screen.getByTestId("werkstatt-due-week-tile")).toHaveTextContent("Fällig diese Woche");
+    expect(screen.getByTestId("werkstatt-due-week-tile")).toHaveTextContent("2");
+    fireEvent.click(goodsOutTile);
+    const goodsOutDialog = screen.getByRole("dialog", { name: "Ware raus" });
+    expect(within(goodsOutDialog).getByTestId("goods-out-picker-order-ga-1")).toBeVisible();
+    fireEvent.click(within(goodsOutDialog).getByRole("button", { name: "Schließen" }));
     fireEvent.click(wipTile);
     expect(ports.pushRoute).toHaveBeenCalledTimes(1);
     expect(ports.pushRoute).toHaveBeenCalledWith("/warendurchlauf/galvanik");
@@ -156,7 +165,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(ports.openOrder).toHaveBeenNthCalledWith(1, "ga-1");
     expect(ports.openOrder).toHaveBeenNthCalledWith(2, "we-1");
 
-    expect(screen.queryByRole("button", { name: "Neuer Eingang" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Neuer Eingang" })).toBeDisabled();
     expect(ports.openErfassung).not.toHaveBeenCalled();
 
     expect(ports.resolveAuthorization.mock.invocationCallOrder[0]).toBeLessThan(
@@ -360,9 +369,11 @@ describe("W2C-B2M5J unavailable UI", () => {
 
     expect(screen.getByRole("heading", { name: "Noch keine Daten erfasst" })).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Auftrag öffnen / scannen" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Auftrag öffnen / scannen" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Mehrarbeit" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Fertig melden" })).toBeDisabled();
     expect(screen.queryByRole("dialog", { name: "Auftrag öffnen" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Neuer Eingang" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Neuer Eingang" })).toBeDisabled();
     expect(screen.getByRole("navigation", { name: "Werkstattaktionen" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Ware raus" }));
     expect(screen.getByRole("dialog", { name: "Ware raus" })).toHaveTextContent(

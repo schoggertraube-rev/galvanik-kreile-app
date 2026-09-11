@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClipboardList, Home, PackageCheck, Settings, Users } from "lucide-react";
+import { ClipboardList, Home, PackageCheck, ReceiptText, Settings, Users } from "lucide-react";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 
 const CORE_LINKS = [
@@ -16,6 +16,7 @@ export function TargetNavigation() {
   const pathname = usePathname();
   const { role } = usePermissions();
   const canConfigure = role === "admin" || role === "developer";
+  const canReadInvoices = role === "buero" || role === "meister" || role === "admin";
 
   return (
     <aside className="target-sidebar">
@@ -29,6 +30,12 @@ export function TargetNavigation() {
             </Link>
           );
         })}
+        {canReadInvoices && (
+          <Link href="/buchhaltung/rechnungen" aria-current={pathname.startsWith("/buchhaltung/rechnungen") ? "page" : undefined}>
+            <ReceiptText aria-hidden="true" />
+            <span>Geld &amp; Rechnungen</span>
+          </Link>
+        )}
         {canConfigure && (
           <Link href="/settings" aria-current={pathname.startsWith("/settings") ? "page" : undefined}>
             <Settings aria-hidden="true" />

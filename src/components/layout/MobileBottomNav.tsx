@@ -1,6 +1,6 @@
 "use client";
 
-import { ClipboardList, Home, Menu, PackageCheck, Settings, Users, X } from "lucide-react";
+import { ClipboardList, Home, Menu, PackageCheck, ReceiptText, Settings, Users, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -17,15 +17,21 @@ export function MobileBottomNav({ className = "" }: { className?: string }) {
   const { role } = usePermissions();
   const [moreOpen, setMoreOpen] = useState(false);
   const canConfigure = role === "admin" || role === "developer";
+  const canReadInvoices = role === "buero" || role === "meister" || role === "admin";
 
   return (
     <>
-      <nav className={className} aria-label="Mobile Hauptnavigation">
+      <nav className={className} aria-label="Mobile Hauptnavigation" data-columns={canReadInvoices ? "5" : "4"}>
         {PRIMARY.map(({ href, label, icon: Icon }) => (
           <Link key={href} href={href} aria-current={pathname === href || (href !== "/" && pathname.startsWith(href)) ? "page" : undefined}>
             <Icon aria-hidden="true" /><span>{label}</span>
           </Link>
         ))}
+        {canReadInvoices && (
+          <Link href="/buchhaltung/rechnungen" aria-current={pathname.startsWith("/buchhaltung/rechnungen") ? "page" : undefined}>
+            <ReceiptText aria-hidden="true" /><span>Geld</span>
+          </Link>
+        )}
         <button type="button" onClick={() => setMoreOpen(true)} aria-expanded={moreOpen}>
           <Menu aria-hidden="true" /><span>Mehr</span>
         </button>
