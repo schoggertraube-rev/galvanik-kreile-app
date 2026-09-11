@@ -57,6 +57,48 @@ export type OrderCardPayment = {
   };
 };
 
+export type OrderCardPaymentContext =
+  | { kind: "available"; value: OrderCardPayment }
+  | { kind: "restricted"; message: string }
+  | { kind: "unavailable"; message: string };
+
+export type OrderCardActionReceipt = {
+  kind: "handoff" | "evidence" | "freeze" | "invoice" | "payment" | "goods-out";
+  actorId: string;
+  occurredAt: string;
+  eventId: string;
+  receiptId: string;
+};
+
+export type OrderCardActionFeedback =
+  | { kind: "idle"; message: string }
+  | { kind: "submitting"; message: string }
+  | { kind: "success"; message: string; receipt: OrderCardActionReceipt }
+  | { kind: "conflict" | "error"; message: string };
+
+export type OrderCardActionAvailability = {
+  visible: boolean;
+  enabled: boolean;
+  reason: string | null;
+};
+
+export type OrderCardActionPorts = {
+  handoff: OrderCardActionAvailability;
+  evidence: OrderCardActionAvailability;
+  freeze: OrderCardActionAvailability;
+  invoice: OrderCardActionAvailability;
+  payment: OrderCardActionAvailability;
+  goodsOut: OrderCardActionAvailability;
+  feedback: OrderCardActionFeedback;
+  onHandoff: () => void | Promise<void>;
+  onUploadEvidence: (itemId: string, file: File) => void | Promise<void>;
+  onFreeze: () => void | Promise<void>;
+  onIssueInvoice: () => void | Promise<void>;
+  onConfirmPayment: (method: "bar" | "ueberweisung" | "karte") => void | Promise<void>;
+  onRecordGoodsOut: (mode: "versand" | "abholung") => void | Promise<void>;
+  onReload: () => void | Promise<void>;
+};
+
 export type OrderCardModel = {
   id: string;
   version: number;
@@ -74,7 +116,7 @@ export type OrderCardModel = {
   evidence: OrderCardEvidence[];
   frozenAt: string | null;
   totalAmountCents: number | null;
-  payment: OrderCardPayment | null;
+  payment: OrderCardPaymentContext;
 };
 
 export type OrderCardState =

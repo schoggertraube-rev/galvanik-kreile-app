@@ -1,6 +1,7 @@
 import { fireEvent,render,screen } from "@testing-library/react";
 import { describe,expect,it,vi } from "vitest";
 const ports=vi.hoisted(()=>({read:vi.fn(),openOrder:vi.fn(),pop:vi.fn()}));
+vi.mock("next/navigation",()=>({useRouter:()=>({replace:vi.fn()})}));
 vi.mock("@/app/actions/customers.actions",()=>({getCustomerSummaryAction:ports.read}));
 vi.mock("@/lib/overlayStore",()=>({useOverlayStore:(selector:(s:{openOrder:typeof ports.openOrder;pop:typeof ports.pop})=>unknown)=>selector({openOrder:ports.openOrder,pop:ports.pop})}));
 import CustomerDetailPage from "../page";

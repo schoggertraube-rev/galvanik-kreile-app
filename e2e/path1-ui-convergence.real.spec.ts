@@ -31,8 +31,38 @@ async function login(page: Page, email: string, password: string): Promise<void>
   await dialog.locator("#email").fill(email);
   await dialog.locator("#password").fill(password);
   await dialog.getByRole("button", { name: "Einloggen", exact: true }).click();
-  await page.waitForURL((url) => url.pathname === "/settings", { timeout: 30_000 });
+  await page.waitForURL((url) => url.pathname !== "/start", { timeout: 30_000 });
   expect((await page.context().cookies()).some((cookie) => cookie.name === "kreile_app_session")).toBe(true);
+}
+
+async function loginWithPin(page: Page, initials: string, pin: string): Promise<void> {
+  await page.goto("/start");
+  await page.locator('[data-testid^="pin-user-card-"]').filter({ hasText: initials }).click();
+  const dialog = page.getByTestId("pin-login-dialog");
+  for (const digit of pin) {
+    await dialog.getByRole("button", { name: digit, exact: true }).click();
+  }
+  await page.waitForURL((url) => url.pathname !== "/start", { timeout: 30_000 });
+  expect((await page.context().cookies()).some((cookie) => cookie.name === "kreile_app_session")).toBe(true);
+}
+
+async function seedPrerequisites(sql: postgres.Sql, adminId: string): Promise<void> {
+  await sql`
+    INSERT INTO public.company_settings (
+      id, tenant_id, company_name, street, zip, city, country, iban, bic, bank_name,
+      tax_id, invoice_vat_rate_basis_points, invoice_payment_term_days
+    ) VALUES (
+      'path1-ui-convergence', ${TENANT}, 'Path1 UI Test GmbH', 'Testweg 1', '70173',
+      'Stuttgart', 'Deutschland', 'DE02120300000000202051', 'BYLADEM1001', 'Testbank',
+      'DE-SYNTHETIC-TAX', 1900, 14
+    ) ON CONFLICT (id) DO NOTHING
+  `;
+  await sql`
+    INSERT INTO private.extra_work_hourly_rates
+      (id, tenant_id, hourly_rate_cents, version, created_by, effective_at)
+    VALUES ('a1000000-0000-4000-8000-000000000001'::uuid, ${TENANT}, 12000, 91011, ${adminId}::uuid, now())
+    ON CONFLICT (tenant_id, version) DO NOTHING
+  `;
 }
 
 async function createIntake(page: Page, suffix: string): Promise<{ orderNumber: string; customerName: string }> {
@@ -75,8 +105,8 @@ async function capture(page: Page, filename: string): Promise<{ file: string; sh
 }
 
 test.describe("Path-1 UI convergence B/C", () => {
-  test("belegt V8/V2, Deeplinks und denselben Home-Auftrag-Kunde-Auftrag-Stack", async ({ browser }) => {
-    test.setTimeout(360_000);
+  test("belegt V8/V2, reale Fachaktionen, Rechte, Deeplinks und denselben Backstack", async ({ browser }) => {
+    test.setTimeout(600_000);
     mkdirSync(EVIDENCE_DIR, { recursive: true });
     const apiUrl = requiredEnv("NEXT_PUBLIC_SUPABASE_URL");
     const anonKey = requiredEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
@@ -93,7 +123,11 @@ test.describe("Path-1 UI convergence B/C", () => {
     const artifacts: Array<{ file: string; sha256: string }> = [];
     try {
       const userId = await createAuthUser(apiUrl, anonKey, email, password);
-      await sql`INSERT INTO public.app_users (id, tenant_id, email, full_name, role, active) VALUES (${userId}::uuid, ${TENANT}, ${email}, 'Path1 B/C Prüfer', 'admin', true)`;
+      const readonlyEmail = `path1-bc-readonly-${suffix}@local.test`;
+      const readonlyPassword = `Path1-BC-Readonly-${suffix}!`;
+      const readonlyId = await createAuthUser(apiUrl, anonKey, readonlyEmail, readonlyPassword);
+      await sql`INSERT INTO public.app_users (id, tenant_id, email, full_name, role, active, pin_hash) VALUES (${userId}::uuid, ${TENANT}, ${email}, 'Path1 B/C Admin', 'admin', true, null), (${readonlyId}::uuid, ${TENANT}, ${readonlyEmail}, 'Path1 B/C Nur Lesen', 'readonly', true, '4827')`;
+      await seedPrerequisites(sql, userId);
       const setupContext = await browser.newContext({ viewport: { width: 1914, height: 917 } });
       contexts.push(setupContext);
       const setupPage = await setupContext.newPage();
@@ -103,7 +137,54 @@ test.describe("Path-1 UI convergence B/C", () => {
       const rows = await sql<Array<{ order_id: string; customer_id: string }>>`SELECT id AS order_id, customer_id FROM public.orders WHERE tenant_id=${TENANT} AND order_number=${receipt.orderNumber}`;
       const row = rows[0];
       if (!row) throw new Error("PATH1_UI_ORDER_READBACK_MISSING");
+      await sql`UPDATE public.customers SET street='Kundenweg 2', zip_code='70174', city='Stuttgart', country='Deutschland' WHERE tenant_id=${TENANT} AND id=${row.customer_id}`;
+      await sql`UPDATE public.items SET preis_netto=100.00 WHERE tenant_id=${TENANT} AND order_id=${row.order_id}`;
       await transitionToGalvanik(setupPage, row.order_id);
+
+      const readonlyContext = await browser.newContext({ viewport: { width: 1220, height: 880 } });
+      contexts.push(readonlyContext);
+      const readonlyPage = await readonlyContext.newPage();
+      await loginWithPin(readonlyPage, "PL", "4827");
+      await readonlyPage.goto(`/orders/${row.order_id}`);
+      const readonlyCard = readonlyPage.getByTestId("order-card-v8");
+      await expect(readonlyCard).toContainText("Zahlungsdetails sind für diese Rolle nicht freigegeben.");
+      await expect(readonlyCard.getByRole("button", { name: "Fertig melden & einfrieren" })).toBeDisabled();
+
+      const anonymousContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+      contexts.push(anonymousContext);
+      const anonymousPage = await anonymousContext.newPage();
+      await anonymousPage.goto(`/orders/${row.order_id}`);
+      await anonymousPage.waitForURL((url) => url.pathname === "/start");
+
+      await setupPage.goto("/orders");
+      const filter = setupPage.getByPlaceholder("Auftragsnummer, Kunde, Teil, Material …");
+      await expect(setupPage.getByRole("button", { name: new RegExp(receipt.orderNumber) })).toBeVisible();
+      await filter.click();
+      await filter.fill("kein-belegter-treffer-xyz");
+      await expect(filter).toHaveValue("kein-belegter-treffer-xyz");
+      await expect(setupPage.getByText("Keine Aufträge passen zu diesem Filter.")).toBeVisible();
+      await filter.fill(receipt.orderNumber);
+      await setupPage.getByRole("button", { name: new RegExp(receipt.orderNumber) }).click();
+      const actionCard = setupPage.getByTestId("order-card-v8");
+      await expect(actionCard).toContainText("Vorkasse · Rechnung noch nicht gestellt");
+      const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
+      await actionCard.locator('input[type="file"]').setInputFiles({ name: "synthetischer-zustandsbeleg.png", mimeType: "image/png", buffer: png });
+      await expect(actionCard.getByText("Zustandsfoto wurde unverändert gespeichert und zurückgelesen.")).toBeVisible({ timeout: 30_000 });
+      await actionCard.getByRole("button", { name: "Fertig melden & einfrieren" }).click();
+      await expect(actionCard.getByText("Fertigstellung und Freeze bestätigt.")).toBeVisible({ timeout: 30_000 });
+      await actionCard.getByRole("button", { name: "Rechnung ausstellen" }).click();
+      await expect(actionCard.getByText(/wurde unveränderlich ausgestellt/)).toBeVisible({ timeout: 30_000 });
+      await actionCard.getByRole("button", { name: "Offenen Betrag bestätigen" }).click();
+      await expect(actionCard.getByText("Zahlung wurde bestätigt und aus der Datenbank zurückgelesen.")).toBeVisible({ timeout: 30_000 });
+      await actionCard.getByRole("button", { name: "Warenausgang bestätigen" }).click();
+      await expect(actionCard.getByText("Warenausgang wurde bestätigt und aus der Datenbank zurückgelesen.")).toBeVisible({ timeout: 30_000 });
+      const eventRows = await sql<Array<{ event_type: string; count: number }>>`
+        SELECT event_type, count(*)::integer AS count FROM public.events
+        WHERE tenant_id=${TENANT} AND order_id=${row.order_id}
+          AND event_type IN ('ORDER_STATION_MOVED_V1','ORDER_FROZEN_V1','INVOICE_CREATED_V1','PAYMENT_CONFIRMED_V1','ORDER_PICKED_UP_V1')
+        GROUP BY event_type ORDER BY event_type
+      `;
+      expect(eventRows.every((entry) => entry.count === 1)).toBe(true);
 
       for (const viewport of [
         { width: 1914, height: 917, label: "desktop-1914x917" },
@@ -115,6 +196,10 @@ test.describe("Path-1 UI convergence B/C", () => {
         const page = await context.newPage();
         await login(page, email, password);
         await page.goto("/orders");
+        const listFilter = page.getByPlaceholder("Auftragsnummer, Kunde, Teil, Material …");
+        await expect(listFilter).toHaveAttribute("data-hydrated", "true");
+        await listFilter.fill(receipt.orderNumber);
+        const initialScroll = await page.evaluate(() => window.scrollY);
         const orderButton = page.getByRole("button", { name: new RegExp(receipt.orderNumber) });
         await expect(orderButton).toBeVisible();
         await orderButton.click();
@@ -123,6 +208,9 @@ test.describe("Path-1 UI convergence B/C", () => {
         await expect(orderCard).toContainText("Zahlung · getrennte Schwelle");
         await expect(orderCard).toContainText("Synthetische Stoßstange");
         artifacts.push(await capture(page, `bc-order-v8-${viewport.label}.png`));
+        await orderCard.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+        await expect(orderCard.getByText("Warenausgang bestätigt").first()).toBeVisible();
+        artifacts.push(await capture(page, `bc-order-v8-actions-${viewport.label}.png`));
 
         await orderCard.getByRole("button", { name: /Kundenkarte öffnen/ }).click();
         const customerCard = page.getByTestId("customer-card-v2");
@@ -132,16 +220,29 @@ test.describe("Path-1 UI convergence B/C", () => {
         artifacts.push(await capture(page, `bc-customer-v2-${viewport.label}.png`));
         await customerCard.getByRole("button", { name: new RegExp(receipt.orderNumber) }).first().click();
         await expect(page.getByTestId("order-card-v8")).toContainText(receipt.orderNumber);
+        await page.getByTestId("order-card-v8").getByRole("button", { name: "Schließen / zurück" }).click();
+        await page.getByTestId("customer-card-v2").getByRole("button", { name: /Schließen/ }).click();
+        await page.getByTestId("order-card-v8").getByRole("button", { name: "Schließen / zurück" }).click();
+        await expect(listFilter).toHaveValue(receipt.orderNumber);
+        expect(await page.evaluate(() => window.scrollY)).toBe(initialScroll);
 
         await page.goto(`/orders/${row.order_id}`);
         await expect(page.getByTestId("order-card-v8")).toContainText(receipt.orderNumber);
+        await page.getByTestId("order-card-v8").getByRole("button", { name: "Schließen / zurück" }).click();
+        await page.waitForURL((url) => url.pathname === "/orders");
+        await page.goto("/orders/00000000-0000-4000-8000-000000000099");
+        await expect(page.getByText("Auftrag nicht verfügbar.", { exact: true })).toBeVisible();
+        await page.getByRole("button", { name: "Schließen" }).click();
+        await page.waitForURL((url) => url.pathname === "/orders");
         await page.goto(`/customers/${row.customer_id}`);
         await expect(page.getByTestId("customer-card-v2")).toContainText(receipt.customerName);
+        await page.getByTestId("customer-card-v2").getByRole("button", { name: /Schließen/ }).click();
+        await page.waitForURL((url) => url.pathname === "/customers");
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
       }
 
       const receiptPath = path.join(EVIDENCE_DIR, "bc-real-browser-receipt.json");
-      writeFileSync(receiptPath, `${JSON.stringify({ source: "fresh local Supabase + real auth/session + canonical intake + tenant reads", orderNumber: receipt.orderNumber, orderId: row.order_id, customerId: row.customer_id, viewports: ["1914x917", "1220x880", "390x844"], artifacts }, null, 2)}\n`);
+      writeFileSync(receiptPath, `${JSON.stringify({ source: "fresh local Supabase + real auth/session + canonical intake/actions/readbacks", roles: ["admin", "readonly", "unauthenticated"], orderNumber: receipt.orderNumber, orderId: row.order_id, customerId: row.customer_id, verifiedActions: ["station handoff", "station evidence upload", "finish/freeze", "immutable invoice", "confirm payment", "goods out"], negativeStates: ["readonly payment detail restricted without hiding core card", "unauthenticated redirect", "empty filter", "not found deeplink"], viewports: ["1914x917", "1220x880", "390x844"], artifacts }, null, 2)}\n`);
     } finally {
       await Promise.all(contexts.map((context) => context.close()));
       await sql.end({ timeout: 5 });

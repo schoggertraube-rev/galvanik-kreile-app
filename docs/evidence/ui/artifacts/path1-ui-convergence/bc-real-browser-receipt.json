@@ -1,8 +1,27 @@
 {
-  "source": "fresh local Supabase + real auth/session + canonical intake + tenant reads",
-  "orderNumber": "A-2026-0003",
-  "orderId": "b50071b4-4b40-411e-ac3c-253083c647aa",
-  "customerId": "35cf159d-ccc2-4ffc-8fe7-8b7596441229",
+  "source": "fresh local Supabase + real auth/session + canonical intake/actions/readbacks",
+  "roles": [
+    "admin",
+    "readonly",
+    "unauthenticated"
+  ],
+  "orderNumber": "A-2026-0001",
+  "orderId": "1cc334b7-76dd-4f22-bd26-3bc598408b3c",
+  "customerId": "9d8a1bee-8d4e-4c40-becf-96e5bd59701c",
+  "verifiedActions": [
+    "station handoff",
+    "station evidence upload",
+    "finish/freeze",
+    "immutable invoice",
+    "confirm payment",
+    "goods out"
+  ],
+  "negativeStates": [
+    "readonly payment detail restricted without hiding core card",
+    "unauthenticated redirect",
+    "empty filter",
+    "not found deeplink"
+  ],
   "viewports": [
     "1914x917",
     "1220x880",
@@ -11,27 +30,39 @@
   "artifacts": [
     {
       "file": "docs/evidence/ui/artifacts/path1-ui-convergence/bc-order-v8-desktop-1914x917.png",
-      "sha256": "902a162d3c260de537d49cda6be980079e62a0194c80b1d4f21077f0b10aaec6"
+      "sha256": "5c4329ff7511e4d776db0f46e3b2a80cff1f29b7b8be36c5823c448c7af3978f"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/bc-order-v8-actions-desktop-1914x917.png",
+      "sha256": "2e4e6b960daa29b96708671b3d32ac32503cfdcf420263629ea425c0dde7dc72"
     },
     {
       "file": "docs/evidence/ui/artifacts/path1-ui-convergence/bc-customer-v2-desktop-1914x917.png",
-      "sha256": "ae439b098e5e26ff989e24f1f0500a33dc7c00ca9b128a521d8ce3169c6d3b38"
+      "sha256": "b0df7c45b78e8223dd7722ca12db0ac8ec9d40a1a12ebc82d3fff904965a0af5"
     },
     {
       "file": "docs/evidence/ui/artifacts/path1-ui-convergence/bc-order-v8-tablet-1220x880.png",
-      "sha256": "c6141a94d96bb1fb339b29c7da9f2c4ae6016989d1b93b86d80265aba97e69a8"
+      "sha256": "9f11aa08f3d17e0bc0800b487b097610f1cdaec1b32e6ab90b9938cfca7d3f8c"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/bc-order-v8-actions-tablet-1220x880.png",
+      "sha256": "853af399144017035cc93642f9109fa8712ee50fe02f7949526ddf86ea850849"
     },
     {
       "file": "docs/evidence/ui/artifacts/path1-ui-convergence/bc-customer-v2-tablet-1220x880.png",
-      "sha256": "31fa5b57d82b16aee21b45ee4b3a82009ec39ce33e337466b38bb26abd24a9eb"
+      "sha256": "91274e50f9c2ad5b9ba4c6b96d946fb596d5beadf915f8a517262e7fd73eae68"
     },
     {
       "file": "docs/evidence/ui/artifacts/path1-ui-convergence/bc-order-v8-mobile-390x844.png",
-      "sha256": "af36ebf96cd04268cbb25388dac7eefbe6b1db1de5fa9736e4f1f46162a851b8"
+      "sha256": "2a1c83aed2537d15fd9069eda423d94277d953054c3cb7cfaf7586ecd3808f80"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/bc-order-v8-actions-mobile-390x844.png",
+      "sha256": "5228a88d5ae1a4b7b684c407231fe89bb01edc71b52f51e3ef7ef0874b390179"
     },
     {
       "file": "docs/evidence/ui/artifacts/path1-ui-convergence/bc-customer-v2-mobile-390x844.png",
-      "sha256": "a45f16c40b392f91a7b06965575c5d89099ca753f7be80303f0ad0211cb78b0a"
+      "sha256": "832b9744e9333fbc398bf522701202d946fae3205cc9ae7f7acdc619ae5be1a7"
     }
   ]
 }

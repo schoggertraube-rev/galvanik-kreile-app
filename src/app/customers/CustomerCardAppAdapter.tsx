@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { getCustomerSummaryAction } from "@/app/actions/customers.actions";
 import { CustomerCardView, type CustomerCardState } from "@/modules/customers/public";
 import { useOverlayStore } from "@/lib/overlayStore";
 
-export function CustomerCardAppAdapter({ customerId, onOpenOrder, onClose }: { customerId: string; onOpenOrder?: (orderId: string) => void; onClose?: () => void }) {
+export function CustomerCardAppAdapter({ customerId, onOpenOrder, onClose, fallbackHref }: { customerId: string; onOpenOrder?: (orderId: string) => void; onClose?: () => void; fallbackHref?: "/customers" }) {
+  const router = useRouter();
   const storeOpenOrder = useOverlayStore((state) => state.openOrder);
   const storeClose = useOverlayStore((state) => state.pop);
   const [state, setState] = useState<CustomerCardState>({ kind: "loading" });
@@ -29,5 +31,6 @@ export function CustomerCardAppAdapter({ customerId, onOpenOrder, onClose }: { c
     }).catch(() => { if (active) setState({ kind: "error", message: "Kundenkarte konnte nicht sicher geladen werden." }); });
     return () => { active = false; };
   }, [customerId]);
-  return <CustomerCardView state={state} onOpenOrder={onOpenOrder ?? storeOpenOrder} onClose={onClose ?? storeClose} />;
+  const close = onClose ?? (fallbackHref ? () => router.replace(fallbackHref) : storeClose);
+  return <CustomerCardView state={state} onOpenOrder={onOpenOrder ?? storeOpenOrder} onClose={close} />;
 }

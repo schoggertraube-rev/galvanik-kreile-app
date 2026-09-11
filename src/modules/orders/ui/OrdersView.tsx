@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { OrdersViewState } from "../server/types";
 import styles from "./orders.module.css";
 
@@ -12,6 +12,16 @@ export function OrdersView({
   onOpenOrder: (orderId: string) => void;
 }) {
   const [query, setQuery] = useState("");
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      setQuery(window.sessionStorage.getItem("kreile.orders.filter") ?? "");
+      setHydrated(true);
+    });
+    return () => { active = false; };
+  }, []);
   const orders = state.kind === "data" ? state.orders : [];
   const visible = (() => {
     const term = query.trim().toLocaleLowerCase("de-DE");
@@ -29,7 +39,11 @@ export function OrdersView({
         <p>{orders.length} tenantgebundene Aufträge</p>
       </header>
       <label className={styles.search}>Aufträge filtern
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Auftragsnummer, Kunde, Teil, Material …" />
+        <input value={query} onChange={(event) => {
+          const nextQuery = event.target.value;
+          window.sessionStorage.setItem("kreile.orders.filter", nextQuery);
+          setQuery(nextQuery);
+        }} data-hydrated={hydrated} placeholder="Auftragsnummer, Kunde, Teil, Material …" />
       </label>
       {state.kind === "loading" && <p role="status" className={styles.notice}>Aufträge werden geladen …</p>}
       {state.kind === "denied" && <p role="alert" className={styles.notice}>{state.message}</p>}
