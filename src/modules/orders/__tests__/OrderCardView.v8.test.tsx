@@ -55,4 +55,19 @@ describe("Auftragskarte V8", () => {
     expect(screen.getByText("event-1")).toBeVisible();
     expect(screen.getByRole("button", { name: "Warenausgang bestätigen" })).toBeDisabled();
   });
+
+  it("verbirgt ein leeres Fachaktionspanel und verteilt das Dock nur auf echte Ziele", () => {
+    const actions: OrderCardActionPorts = {
+      handoff: { visible: false, enabled: false, reason: null }, evidence: { visible: false, enabled: false, reason: null },
+      freeze: { visible: false, enabled: false, reason: null }, invoice: { visible: false, enabled: false, reason: null },
+      payment: { visible: false, enabled: false, reason: null }, goodsOut: { visible: false, enabled: false, reason: null },
+      feedback: { kind: "idle", message: "" }, onHandoff: vi.fn(), onUploadEvidence: vi.fn(), onFreeze: vi.fn(),
+      onIssueInvoice: vi.fn(), onConfirmPayment: vi.fn(), onRecordGoodsOut: vi.fn(), onReload: vi.fn(),
+    };
+    render(<OrderCardView state={{ kind: "data", card: { ...card, station: "abgeholt", status: "abgeholt" } }} actions={actions} onOpenCustomer={vi.fn()} onClose={vi.fn()} />);
+    expect(screen.queryByText("Verbindliche Fachaktionen")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Fachaktionen" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Kunde" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Schließen / zurück" })).toBeVisible();
+  });
 });

@@ -8,5 +8,6 @@ export type {
   OrderCardPaymentContext,
   OrderCardState,
   OrdersListItem,
+  OrdersQueryPort,
   OrdersViewState,
 } from "./server/types";

@@ -2,12 +2,25 @@
 
 import { useEffect, useState } from "react";
 import { getOrdersDb } from "@/app/actions/orders.actions";
-import { OrdersView, type OrdersViewState } from "@/modules/orders/public";
+import { OrdersView, type OrdersQueryPort, type OrdersViewState } from "@/modules/orders/public";
 import { useOverlayStore } from "@/lib/overlayStore";
+
+const ORDERS_FILTER_STORAGE_KEY = "kreile.orders.filter";
 
 export function OrdersAppAdapter() {
   const openOrder = useOverlayStore((state) => state.openOrder);
   const [state, setState] = useState<OrdersViewState>({ kind: "loading" });
+  const [query, setQuery] = useState("");
+  const [queryReady, setQueryReady] = useState(false);
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      setQuery(window.sessionStorage.getItem(ORDERS_FILTER_STORAGE_KEY) ?? "");
+      setQueryReady(true);
+    });
+    return () => { active = false; };
+  }, []);
   useEffect(() => {
     let active = true;
     const load = async () => {
@@ -42,5 +55,12 @@ export function OrdersAppAdapter() {
     window.addEventListener("kreile-sync-orders", load);
     return () => { active = false; window.removeEventListener("kreile-sync-orders", load); };
   }, []);
-  return <OrdersView state={state} onOpenOrder={openOrder} />;
+  const queryPort: OrdersQueryPort = {
+    value: query,
+    onChange: (value) => {
+      window.sessionStorage.setItem(ORDERS_FILTER_STORAGE_KEY, value);
+      setQuery(value);
+    },
+  };
+  return <OrdersView state={queryReady ? state : { kind: "loading" }} query={queryPort} onOpenOrder={openOrder} />;
 }

@@ -24,6 +24,8 @@ describe("Kundenkarte V2", () => {
     expect(screen.getByText("Originalschrauben mit Patina erhalten.")).toBeVisible();
     expect(screen.getByText("Historie & Referenzen")).toBeVisible();
     expect(screen.getByText(/Kein eigener Kunden-Dokumentenvertrag/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Notiz +" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Neuer Auftrag" })).not.toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("button", { name: /A-42/ })[0]!);
     expect(openOrder).toHaveBeenCalledWith("order-1");
   });

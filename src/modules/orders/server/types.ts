@@ -17,6 +17,11 @@ export type OrdersViewState =
   | { kind: "conflict"; message: string }
   | { kind: "data"; orders: OrdersListItem[] };
 
+export type OrdersQueryPort = {
+  value: string;
+  onChange: (value: string) => void;
+};
+
 export type OrderCardExtraWork = {
   lineId: string;
   name: string;

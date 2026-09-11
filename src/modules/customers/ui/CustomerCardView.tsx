@@ -55,6 +55,6 @@ export function CustomerCardView({ state, onOpenOrder, onClose }: { state: Custo
         <section className={styles.section}><div className={styles.sectionHeader}><h3>Schnellaktionen</h3></div><div className={styles.quickActions}>{card.phone && <a href={`tel:${card.phone}`}>Anrufen</a>}{card.email && <a href={`mailto:${card.email}`}>E-Mail</a>}<p className={styles.empty}>Weitere Aktionen bleiben verborgen, bis ein echter Schreibvertrag angebunden ist.</p></div></section>
       </aside>
     </div>
-    <footer className={styles.actionDock}>{card.phone && <a href={`tel:${card.phone}`}>Anrufen</a>}{card.email && <a href={`mailto:${card.email}`}>E-Mail</a>}<button disabled>Notiz +</button><button disabled>Neuer Auftrag</button><button className={styles.primaryAction} onClick={onClose}>Schließen</button></footer>
+    <footer className={styles.actionDock}>{card.phone && <a href={`tel:${card.phone}`}>Anrufen</a>}{card.email && <a href={`mailto:${card.email}`}>E-Mail</a>}<button className={styles.primaryAction} onClick={onClose}>Schließen</button></footer>
   </section>;
 }

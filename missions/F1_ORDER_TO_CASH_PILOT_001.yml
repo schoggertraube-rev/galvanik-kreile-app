@@ -38,8 +38,8 @@ delivery_order:
 
 active_package: PATH1_UI_CONVERGENCE
 active_package_status: IN_PROGRESS_NO_PARTIAL_UX_PASS
-active_package_stages: A_SECURED_ed2147cd -> B_C_REPAIR_REAL_E2E_PASS_REVIEW_PENDING -> D_SEARCH_NOT_IN_THIS_DELTA
-next_gate_after_active_package: B_C_LOCAL_GATES_COMMIT_PUSH_EXACT_SHA_THEN_INDEPENDENT_PL_REVIEW
+active_package_stages: A_SECURED_ed2147cd -> B_C_REPAIR_2_CANDIDATE_PENDING_INDEPENDENT_EXACT_SHA_REVIEW -> D_SEARCH_NOT_IN_THIS_DELTA
+next_gate_after_active_package: B_C_REPAIR_2_INDEPENDENT_EXACT_SHA_REVIEW
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete

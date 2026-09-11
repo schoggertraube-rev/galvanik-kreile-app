@@ -34,7 +34,7 @@ describe("OrderCardAppAdapter reale Port-Orchestrierung", () => {
 
   it("liest den persistenten Zahlungsmodus bereits vor fertig", async () => {
     render(<OrderCardAppAdapter orderId="order-1" />);
-    expect(await screen.findByTestId("adapter-state")).toHaveTextContent("dataavailable:vorkasse");
+    await waitFor(() => expect(screen.getByTestId("adapter-state")).toHaveTextContent("dataavailable:vorkasse"));
     expect(ports.payment).toHaveBeenCalledWith({ orderId: "order-1" });
   });
 

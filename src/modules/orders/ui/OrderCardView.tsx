@@ -80,6 +80,18 @@ function OrderActions({ card, actions }: { card: OrderCardModel; actions: OrderC
   </section>;
 }
 
+function hasVisibleActions(actions: OrderCardActionPorts | undefined): actions is OrderCardActionPorts {
+  return Boolean(actions && (
+    actions.handoff.visible
+    || actions.evidence.visible
+    || actions.freeze.visible
+    || actions.invoice.visible
+    || actions.payment.visible
+    || actions.goodsOut.visible
+    || actions.feedback.kind !== "idle"
+  ));
+}
+
 function StateCard({ state, onClose }: { state: Exclude<OrderCardState, { kind: "data" }>; onClose: () => void }) {
   const isLoading = state.kind === "loading";
   return <section className={styles.card} aria-live="polite">
@@ -105,6 +117,7 @@ export function OrderCardView({ state, actions, onOpenCustomer, onClose }: {
   const paymentLabel = card.payment.kind === "restricted" ? card.payment.message : card.payment.kind === "unavailable" ? card.payment.message : card.payment.value.invoiceState === "not_issued"
     ? `${card.payment.value.mode === "rechnung" ? "Rechnung" : card.payment.value.mode === "vorkasse" ? "Vorkasse" : "Zahlung bei Abholung"} · Rechnung noch nicht gestellt`
     : `${card.payment.value.mode === "rechnung" ? "Rechnung" : card.payment.value.mode === "vorkasse" ? "Vorkasse" : "Abholung"} · ${card.payment.value.status === "bezahlt" ? "Vollständig bezahlt" : card.payment.value.status === "teilbezahlt" ? "Teilbezahlt" : "Zahlung offen"}`;
+  const showActions = hasVisibleActions(actions);
 
   return <section className={styles.card} aria-labelledby="order-card-title" data-testid="order-card-v8">
     <div className={styles.brandStripe} />
@@ -160,10 +173,10 @@ export function OrderCardView({ state, actions, onOpenCustomer, onClose }: {
             <li><time>{dateTimeLabel(card.intakeAt)}</time><strong>Wareneingang erfasst</strong><span>Version {card.version}</span></li>
           </ol>
         </section>
-        {actions ? <OrderActions card={card} actions={actions} /> : <section className={styles.section}><div className={styles.sectionHeader}><h3>Schnellaktionen</h3></div><p className={styles.empty}>Fachaktionen werden nur über bestätigte App-Ports angeboten.</p></section>}
+        {showActions && <OrderActions card={card} actions={actions} />}
       </aside>
     </div>
 
-    <footer className={styles.actionDock}><button onClick={() => onOpenCustomer(card.customerId)}>Kunde</button>{actions?.evidence.visible && <button disabled={!actions.evidence.enabled || actions.feedback.kind === "submitting"} onClick={() => document.getElementById("order-actions-title")?.scrollIntoView({ behavior: "smooth", block: "center" })}>Foto +</button>}<button onClick={() => document.getElementById("order-actions-title")?.scrollIntoView({ behavior: "smooth", block: "center" })} disabled={!actions}>Fachaktionen</button><button className={styles.primaryAction} onClick={onClose}>Schließen / zurück</button></footer>
+    <footer className={styles.actionDock}><button onClick={() => onOpenCustomer(card.customerId)}>Kunde</button>{showActions && actions.evidence.visible && <button disabled={!actions.evidence.enabled || actions.feedback.kind === "submitting"} onClick={() => document.getElementById("order-actions-title")?.scrollIntoView({ behavior: "smooth", block: "center" })}>Foto +</button>}{showActions && <button onClick={() => document.getElementById("order-actions-title")?.scrollIntoView({ behavior: "smooth", block: "center" })}>Fachaktionen</button>}<button className={styles.primaryAction} onClick={onClose}>Schließen / zurück</button></footer>
   </section>;
 }

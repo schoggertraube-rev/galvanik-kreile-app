@@ -65,17 +65,26 @@ async function seedPrerequisites(sql: postgres.Sql, adminId: string): Promise<vo
   `;
 }
 
-async function createIntake(page: Page, suffix: string): Promise<{ orderNumber: string; customerName: string }> {
-  const customerName = `UI-Konvergenz ${suffix}`;
+async function createIntake(page: Page, suffix: string, existingCustomerName?: string): Promise<{ orderNumber: string; customerName: string }> {
+  const customerName = existingCustomerName ?? `UI-Konvergenz ${suffix}`;
   await page.goto("/warendurchlauf/wareneingang");
   await page.getByTestId("wareneingang-create-order").click();
   const modal = page.getByTestId("order-intake-modal");
   await expect(modal).toBeVisible();
-  await modal.getByRole("button", { name: "Neu anlegen", exact: true }).click();
-  await modal.getByPlaceholder("Kundenname *", { exact: true }).fill(customerName);
-  await modal.getByPlaceholder("Firmenname", { exact: true }).fill(`${customerName} GmbH`);
-  await modal.getByPlaceholder("Ansprechperson", { exact: true }).fill("Lokale B/C-Abnahme");
-  await modal.getByPlaceholder("Bezeichnung *", { exact: true }).fill("Synthetische Stoßstange");
+  if (existingCustomerName) {
+    await modal.getByRole("button", { name: "Bestehend", exact: true }).click();
+    await modal.getByPlaceholder("Name, Nummer oder Ort", { exact: true }).fill(existingCustomerName);
+    const select = modal.getByLabel("Kunde auswählen", { exact: true });
+    await expect(select).toBeVisible({ timeout: 30_000 });
+    await expect.poll(() => select.locator("option").count()).toBeGreaterThan(0);
+    await select.selectOption({ index: 0 });
+  } else {
+    await modal.getByRole("button", { name: "Neu anlegen", exact: true }).click();
+    await modal.getByPlaceholder("Kundenname *", { exact: true }).fill(customerName);
+    await modal.getByPlaceholder("Firmenname", { exact: true }).fill(`${customerName} GmbH`);
+    await modal.getByPlaceholder("Ansprechperson", { exact: true }).fill("Lokale B/C-Abnahme");
+  }
+  await modal.getByPlaceholder("Bezeichnung *", { exact: true }).fill(`Synthetisches Bauteil ${suffix}`);
   await modal.getByPlaceholder("Menge *", { exact: true }).fill("2");
   await modal.getByPlaceholder("Werkstoff", { exact: true }).fill("Stahl");
   await modal.getByPlaceholder("Oberfläche / Behandlung *", { exact: true }).fill("Chrom hochglanz");
@@ -106,7 +115,7 @@ async function capture(page: Page, filename: string): Promise<{ file: string; sh
 
 test.describe("Path-1 UI convergence B/C", () => {
   test("belegt V8/V2, reale Fachaktionen, Rechte, Deeplinks und denselben Backstack", async ({ browser }) => {
-    test.setTimeout(600_000);
+    test.setTimeout(900_000);
     mkdirSync(EVIDENCE_DIR, { recursive: true });
     const apiUrl = requiredEnv("NEXT_PUBLIC_SUPABASE_URL");
     const anonKey = requiredEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
@@ -129,6 +138,7 @@ test.describe("Path-1 UI convergence B/C", () => {
       await sql`INSERT INTO public.app_users (id, tenant_id, email, full_name, role, active, pin_hash) VALUES (${userId}::uuid, ${TENANT}, ${email}, 'Path1 B/C Admin', 'admin', true, null), (${readonlyId}::uuid, ${TENANT}, ${readonlyEmail}, 'Path1 B/C Nur Lesen', 'readonly', true, '4827')`;
       await seedPrerequisites(sql, userId);
       const setupContext = await browser.newContext({ viewport: { width: 1914, height: 917 } });
+      setupContext.setDefaultTimeout(30_000);
       contexts.push(setupContext);
       const setupPage = await setupContext.newPage();
       await login(setupPage, email, password);
@@ -140,20 +150,30 @@ test.describe("Path-1 UI convergence B/C", () => {
       await sql`UPDATE public.customers SET street='Kundenweg 2', zip_code='70174', city='Stuttgart', country='Deutschland' WHERE tenant_id=${TENANT} AND id=${row.customer_id}`;
       await sql`UPDATE public.items SET preis_netto=100.00 WHERE tenant_id=${TENANT} AND order_id=${row.order_id}`;
       await transitionToGalvanik(setupPage, row.order_id);
+      const operativeReceipt = await createIntake(setupPage, `${suffix}-operativ`, receipt.customerName);
+      for (let index = 1; index <= 10; index += 1) {
+        await createIntake(setupPage, `${suffix}-scroll-${String(index).padStart(2, "0")}`, receipt.customerName);
+      }
+      const operativeRows = await sql<Array<{ order_id: string }>>`SELECT id AS order_id FROM public.orders WHERE tenant_id=${TENANT} AND order_number=${operativeReceipt.orderNumber}`;
+      const operativeRow = operativeRows[0];
+      if (!operativeRow) throw new Error("PATH1_UI_OPERATIVE_ORDER_READBACK_MISSING");
+      await transitionToGalvanik(setupPage, operativeRow.order_id);
 
       const readonlyContext = await browser.newContext({ viewport: { width: 1220, height: 880 } });
+      readonlyContext.setDefaultTimeout(30_000);
       contexts.push(readonlyContext);
       const readonlyPage = await readonlyContext.newPage();
       await loginWithPin(readonlyPage, "PL", "4827");
-      await readonlyPage.goto(`/orders/${row.order_id}`);
+      await readonlyPage.goto(`/orders/${operativeRow.order_id}`);
       const readonlyCard = readonlyPage.getByTestId("order-card-v8");
       await expect(readonlyCard).toContainText("Zahlungsdetails sind für diese Rolle nicht freigegeben.");
       await expect(readonlyCard.getByRole("button", { name: "Fertig melden & einfrieren" })).toBeDisabled();
 
       const anonymousContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+      anonymousContext.setDefaultTimeout(30_000);
       contexts.push(anonymousContext);
       const anonymousPage = await anonymousContext.newPage();
-      await anonymousPage.goto(`/orders/${row.order_id}`);
+      await anonymousPage.goto(`/orders/${operativeRow.order_id}`);
       await anonymousPage.waitForURL((url) => url.pathname === "/start");
 
       await setupPage.goto("/orders");
@@ -186,48 +206,72 @@ test.describe("Path-1 UI convergence B/C", () => {
       `;
       expect(eventRows.every((entry) => entry.count === 1)).toBe(true);
 
+      await setupPage.goto(`/orders/${operativeRow.order_id}`);
+      const operativeActionCard = setupPage.getByTestId("order-card-v8");
+      await expect(operativeActionCard.getByRole("button", { name: "Fertig melden & einfrieren" })).toBeEnabled();
+      await operativeActionCard.locator('input[type="file"]').setInputFiles({ name: "synthetischer-operativer-readback.png", mimeType: "image/png", buffer: png });
+      await expect(operativeActionCard.getByText("Zustandsfoto wurde unverändert gespeichert und zurückgelesen.")).toBeVisible({ timeout: 30_000 });
+      await operativeActionCard.getByText("Readback bestätigt").scrollIntoViewIfNeeded();
+      artifacts.push(await capture(setupPage, "bc-order-v8-action-readback-desktop-1914x917.png"));
+
       for (const viewport of [
         { width: 1914, height: 917, label: "desktop-1914x917" },
         { width: 1220, height: 880, label: "tablet-1220x880" },
         { width: 390, height: 844, label: "mobile-390x844" },
       ]) {
         const context = await browser.newContext({ viewport: { width: viewport.width, height: viewport.height } });
+        context.setDefaultTimeout(30_000);
         contexts.push(context);
         const page = await context.newPage();
         await login(page, email, password);
         await page.goto("/orders");
         const listFilter = page.getByPlaceholder("Auftragsnummer, Kunde, Teil, Material …");
-        await expect(listFilter).toHaveAttribute("data-hydrated", "true");
-        await listFilter.fill(receipt.orderNumber);
-        const initialScroll = await page.evaluate(() => window.scrollY);
-        const orderButton = page.getByRole("button", { name: new RegExp(receipt.orderNumber) });
+        await expect(page.getByRole("button", { name: new RegExp(operativeReceipt.orderNumber) })).toBeVisible();
+        await listFilter.fill(receipt.customerName);
+        const orderButton = page.getByRole("button", { name: new RegExp(operativeReceipt.orderNumber) });
         await expect(orderButton).toBeVisible();
+        await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+        await orderButton.scrollIntoViewIfNeeded();
+        const initialScroll = await page.evaluate(() => window.scrollY);
+        expect(initialScroll).toBeGreaterThan(0);
         await orderButton.click();
         const orderCard = page.getByTestId("order-card-v8");
         await expect(orderCard).toBeVisible();
         await expect(orderCard).toContainText("Zahlung · getrennte Schwelle");
-        await expect(orderCard).toContainText("Synthetische Stoßstange");
+        await expect(orderCard).toContainText(`Synthetisches Bauteil ${suffix}-operativ`);
+        await expect(orderCard.getByRole("button", { name: "Fertig melden & einfrieren" })).toBeEnabled();
+        expect(await orderCard.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
         artifacts.push(await capture(page, `bc-order-v8-${viewport.label}.png`));
         await orderCard.evaluate((element) => { element.scrollTop = element.scrollHeight; });
-        await expect(orderCard.getByText("Warenausgang bestätigt").first()).toBeVisible();
+        await expect(orderCard.getByText("Verbindliche Fachaktionen")).toBeVisible();
         artifacts.push(await capture(page, `bc-order-v8-actions-${viewport.label}.png`));
 
         await orderCard.getByRole("button", { name: /Kundenkarte öffnen/ }).click();
         const customerCard = page.getByTestId("customer-card-v2");
         await expect(customerCard).toBeVisible();
         await expect(customerCard).toContainText(receipt.customerName);
+        await expect(customerCard.getByText("Kein aktiver Auftrag im Haus")).not.toBeVisible();
+        await expect(customerCard.getByText("Historie & Referenzen")).toBeVisible();
+        await expect(customerCard.getByRole("button", { name: "Notiz +" })).toHaveCount(0);
+        await expect(customerCard.getByRole("button", { name: "Neuer Auftrag" })).toHaveCount(0);
+        await expect(customerCard.getByRole("button", { name: new RegExp(operativeReceipt.orderNumber) }).first()).toBeVisible();
         await expect(customerCard.getByRole("button", { name: new RegExp(receipt.orderNumber) }).first()).toBeVisible();
+        expect(await customerCard.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
         artifacts.push(await capture(page, `bc-customer-v2-${viewport.label}.png`));
-        await customerCard.getByRole("button", { name: new RegExp(receipt.orderNumber) }).first().click();
-        await expect(page.getByTestId("order-card-v8")).toContainText(receipt.orderNumber);
+        const operativeCustomerOrder = customerCard.getByRole("button", { name: new RegExp(operativeReceipt.orderNumber) }).first();
+        await operativeCustomerOrder.focus();
+        await page.keyboard.press("Enter");
+        await expect(page.getByTestId("order-card-v8")).toContainText(operativeReceipt.orderNumber, { timeout: 30_000 });
         await page.getByTestId("order-card-v8").getByRole("button", { name: "Schließen / zurück" }).click();
         await page.getByTestId("customer-card-v2").getByRole("button", { name: /Schließen/ }).click();
         await page.getByTestId("order-card-v8").getByRole("button", { name: "Schließen / zurück" }).click();
-        await expect(listFilter).toHaveValue(receipt.orderNumber);
+        await expect(listFilter).toHaveValue(receipt.customerName);
         expect(await page.evaluate(() => window.scrollY)).toBe(initialScroll);
 
-        await page.goto(`/orders/${row.order_id}`);
-        await expect(page.getByTestId("order-card-v8")).toContainText(receipt.orderNumber);
+        await page.goto(`/orders/${operativeRow.order_id}`);
+        await expect(page.getByTestId("order-card-v8")).toContainText(operativeReceipt.orderNumber);
         await page.getByTestId("order-card-v8").getByRole("button", { name: "Schließen / zurück" }).click();
         await page.waitForURL((url) => url.pathname === "/orders");
         await page.goto("/orders/00000000-0000-4000-8000-000000000099");
@@ -242,7 +286,18 @@ test.describe("Path-1 UI convergence B/C", () => {
       }
 
       const receiptPath = path.join(EVIDENCE_DIR, "bc-real-browser-receipt.json");
-      writeFileSync(receiptPath, `${JSON.stringify({ source: "fresh local Supabase + real auth/session + canonical intake/actions/readbacks", roles: ["admin", "readonly", "unauthenticated"], orderNumber: receipt.orderNumber, orderId: row.order_id, customerId: row.customer_id, verifiedActions: ["station handoff", "station evidence upload", "finish/freeze", "immutable invoice", "confirm payment", "goods out"], negativeStates: ["readonly payment detail restricted without hiding core card", "unauthenticated redirect", "empty filter", "not found deeplink"], viewports: ["1914x917", "1220x880", "390x844"], artifacts }, null, 2)}\n`);
+      writeFileSync(receiptPath, `${JSON.stringify({
+        source: "fresh local Supabase + real auth/session + canonical intake/actions/readbacks",
+        roles: ["admin", "readonly", "unauthenticated"],
+        completedOrder: { orderNumber: receipt.orderNumber, orderId: row.order_id },
+        operativeOrder: { orderNumber: operativeReceipt.orderNumber, orderId: operativeRow.order_id, station: "galvanik" },
+        customerId: row.customer_id,
+        verifiedActions: ["station handoff", "station evidence upload with persisted readback", "finish/freeze", "immutable invoice", "confirm payment", "goods out"],
+        contextProof: { filter: receipt.customerName, scroll: "strictly positive and equal after order -> customer -> order -> list", activeAndHistoryForSameCustomer: true },
+        negativeStates: ["readonly payment detail restricted without hiding core card", "unauthenticated redirect", "empty filter", "not found deeplink"],
+        viewports: ["1914x917", "1220x880", "390x844"],
+        artifacts,
+      }, null, 2)}\n`);
     } finally {
       await Promise.all(contexts.map((context) => context.close()));
       await sql.end({ timeout: 5 });
