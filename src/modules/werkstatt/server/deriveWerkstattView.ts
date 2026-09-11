@@ -112,6 +112,7 @@ export function buildWerkstattData(
     wareneingang: readonly WerkstattSurfaceOrder[];
     galvanik: readonly WerkstattSurfaceOrder[];
     canCreateOrder: boolean;
+    canOperate?: boolean;
     greetingName: string | null;
     kpis: WerkstattKpiSnapshot;
   },
@@ -147,5 +148,6 @@ export function buildWerkstattData(
     pickerOrders: combined,
     goodsOutCandidates: combined.filter((order) => order.station === "fertig"),
     canCreateOrder: input.canCreateOrder,
+    canOperate: input.canOperate,
   };
 }

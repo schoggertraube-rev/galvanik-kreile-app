@@ -92,8 +92,8 @@ describe("W2C B2M3B fail-closed commands", () => {
 describe("W2C B2M3B caller quarantine", () => {
   it("keeps read paths and removes unavailable writer calls and local KVP persistence", async () => {
     const files = await Promise.all([
-      "components/orders/ItemDrawer.tsx",
-      "components/orders/PriceLinesEditor.tsx",
+      "components/entities/order-legacy/ItemDrawer.tsx",
+      "components/entities/order-legacy/PriceLinesEditor.tsx",
       "components/admin/AdminDashboard.tsx",
       "app/kvp/KvpClient.tsx",
       "app/cockpit/components/FruehwarnungenKachel.tsx",

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
-import { ORDER_LIFECYCLE_STATUS, ORDER_STATION_FORWARD_ROLES } from "@/lib/orders/orderLifecycleContract";
+import { ORDER_LIFECYCLE_STATUS, ORDER_STATION_FORWARD_ROLES } from "@/lib/order-support/orderLifecycleContract";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 

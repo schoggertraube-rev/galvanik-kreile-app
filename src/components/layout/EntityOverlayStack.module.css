@@ -1,0 +1,1 @@
+.backdrop{position:fixed;inset:0;z-index:80;display:grid;place-items:center;background:#07172599;padding:16px;backdrop-filter:blur(6px)}

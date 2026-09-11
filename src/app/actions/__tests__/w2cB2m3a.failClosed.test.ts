@@ -46,7 +46,7 @@ describe("W2C B2M3A caller quarantine", () => {
   it("removes event, local persistence, and unavailable writer chains while retaining explicitly allowed UI", async () => {
     const files = await Promise.all([
       "components/telefonnotiz/TelefonnotizDesktop.tsx", "app/kommunikation/KommunikationClient.tsx", "app/kommunikation/PhoneNoteDetailView.tsx",
-      "components/orders/OrderActionGrid.tsx", "components/intake/OcrMatchResult.tsx", "components/orders/LabelPrintView.tsx", "components/intake/IntakeCompletionSummary.tsx",
+      "components/entities/order-legacy/OrderActionGrid.tsx", "components/intake/OcrMatchResult.tsx", "components/entities/order-legacy/LabelPrintView.tsx", "components/intake/IntakeCompletionSummary.tsx",
       "app/cockpit/components/AgingKachel.tsx", "lib/repositories/eventsRepository.ts",
     ].map((file) => readFile(path.join(root, file), "utf8")));
     const [phoneDesktop, kommunikation, detail, grid, ocr, label, intake, aging, events] = files;

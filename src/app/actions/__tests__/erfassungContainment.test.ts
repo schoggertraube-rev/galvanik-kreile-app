@@ -65,7 +65,7 @@ describe("Erfassung containment (F0-W2C-B2M1)", () => {
   });
 
   it("denies station-cost write and read commands before any client or database access", async () => {
-    const costs = await import("@/features/orders/orderCost.actions");
+    const costs = await import("@/features/order-support/orderCost.actions");
 
     await expect(costs.bookStationCosts({
       orderId: "order-1", station: "galvanik", workEntries: [], consumableEntries: [], extraCostEvents: [], employeeId: "employee-1", kostenstelleKuerzel: "galvanik",
@@ -81,8 +81,8 @@ describe("Erfassung caller containment (F0-W2C-B2M1)", () => {
   const callerFiles = [
     "components/erfassung/ErfassungCard.tsx",
     "components/erfassung/ErfassungSheet.tsx",
-    "components/orders/variants/ErfassungVariant.tsx",
-    "components/orders/variants/WareneingangReadOnly.tsx",
+    "components/entities/order-legacy/variants/ErfassungVariant.tsx",
+    "components/entities/order-legacy/variants/WareneingangReadOnly.tsx",
   ];
 
   it("replaces every named browser caller with a non-interactive FoundationUnavailable state", async () => {
@@ -108,8 +108,8 @@ describe("Erfassung caller containment (F0-W2C-B2M1)", () => {
 
   it("removes fabricated Erfassung and Wareneingang values and paths", async () => {
     const [erfassung, wareneingang] = await Promise.all([
-      readFile(path.join(srcRoot, "components/orders/variants/ErfassungVariant.tsx"), "utf8"),
-      readFile(path.join(srcRoot, "components/orders/variants/WareneingangReadOnly.tsx"), "utf8"),
+      readFile(path.join(srcRoot, "components/entities/order-legacy/variants/ErfassungVariant.tsx"), "utf8"),
+      readFile(path.join(srcRoot, "components/entities/order-legacy/variants/WareneingangReadOnly.tsx"), "utf8"),
     ]);
 
     expect(erfassung).not.toContain("00000000-0000-0000-0000-000000000000");

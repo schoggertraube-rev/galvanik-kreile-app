@@ -1,119 +1,23 @@
-import { isOrderStationForwardRole } from "@/lib/orders/orderLifecycleContract";
 import { resolveAuthorization } from "@/lib/server/authorization";
-import {
-  buildWerkstattData,
-  type PhillipWerkstattViewModel,
-  type WerkstattSurfaceOrder,
-} from "@/modules/werkstatt/public";
-import {
-  getGalvanikOrdersAction,
-  getWarendurchlaufKPIs,
-  getWareneingangOrdersAction,
-  type WarendurchlaufOrder,
-} from "@/app/warendurchlauf/actions";
+import { WerkstattHome } from "@/components/home/WerkstattHome";
 import { WerkstattAppAdapter } from "./WerkstattAppAdapter";
 
-const DENIAL_MESSAGE = "Zugriff nicht erlaubt.";
-const ERROR_MESSAGE = "Werkstattdaten konnten nicht sicher geladen werden.";
-const CONFLICT_MESSAGE = "Werkstattdaten enthalten widersprüchliche Auftragskennungen.";
+export const dynamic = "force-dynamic";
 
-function render(view: PhillipWerkstattViewModel) {
-  return <WerkstattAppAdapter view={view} />;
-}
-
-function toWerkstattSurfaceOrder(order: WarendurchlaufOrder): WerkstattSurfaceOrder {
-  return {
-    id: order.id,
-    orderNumber: order.orderNumber,
-    customerName: order.customerName,
-    title: order.title,
-    itemDescription: order.itemDescription,
-    surfaceRequested: order.surfaceRequested,
-    station: order.station,
-    status: order.status,
-    statusText: order.statusText,
-    risk: order.risk,
-    dueDate: order.dueDate,
-    dueLabel: order.dueLabel,
-    dueValue: order.dueValue,
-  };
-}
-
-function hasDuplicateCanonicalOrder(orders: readonly WarendurchlaufOrder[]) {
-  const ids = new Set<string>();
-  const orderNumbers = new Set<string>();
-
-  for (const order of orders) {
-    if (ids.has(order.id) || orderNumbers.has(order.orderNumber)) return true;
-    ids.add(order.id);
-    orderNumbers.add(order.orderNumber);
-  }
-
-  return false;
-}
-
-export default async function WarendurchlaufIndex() {
-  let authorization;
-  try {
-    authorization = await resolveAuthorization();
-  } catch {
-    return render({ kind: "error", message: ERROR_MESSAGE });
-  }
-
+export default async function WarendurchlaufPage() {
+  const authorization = await resolveAuthorization();
   if (!authorization.ok) {
-    return render({
-      kind: authorization.reason === "AUTHORIZATION_UNAVAILABLE" ? "error" : "denied",
-      message: authorization.reason === "AUTHORIZATION_UNAVAILABLE" ? ERROR_MESSAGE : DENIAL_MESSAGE,
-    });
+    const unavailable = authorization.reason === "AUTHORIZATION_UNAVAILABLE";
+    return (
+      <WerkstattAppAdapter
+        view={{
+          kind: unavailable ? "error" : "denied",
+          message: unavailable
+            ? "Werkstattdaten konnten nicht sicher geladen werden."
+            : "Zugriff nicht erlaubt.",
+        }}
+      />
+    );
   }
-
-  if (!isOrderStationForwardRole(authorization.data.role)) {
-    return render({ kind: "denied", message: DENIAL_MESSAGE });
-  }
-
-  let wareneingangResult;
-  let galvanikResult;
-  let kpiResult;
-  try {
-    [wareneingangResult, galvanikResult, kpiResult] = await Promise.all([
-      getWareneingangOrdersAction(),
-      getGalvanikOrdersAction(),
-      getWarendurchlaufKPIs(),
-    ]);
-  } catch {
-    return render({ kind: "error", message: ERROR_MESSAGE });
-  }
-
-  if (!wareneingangResult.ok || !galvanikResult.ok || !kpiResult.ok) {
-    const denied =
-      (!wareneingangResult.ok && ["AUTH_ERROR", "FORBIDDEN"].includes(wareneingangResult.error)) ||
-      (!galvanikResult.ok && ["AUTH_ERROR", "FORBIDDEN"].includes(galvanikResult.error)) ||
-      (!kpiResult.ok && ["AUTH_ERROR", "FORBIDDEN"].includes(kpiResult.error));
-
-    return render({
-      kind: denied ? "denied" : "error",
-      message: denied ? DENIAL_MESSAGE : ERROR_MESSAGE,
-    });
-  }
-
-  const canCreateOrder = authorization.data.permissions.includes("perm_data_orders");
-
-  if (hasDuplicateCanonicalOrder([...wareneingangResult.data, ...galvanikResult.data])) {
-    return render({ kind: "conflict", message: CONFLICT_MESSAGE });
-  }
-
-  if (wareneingangResult.data.length === 0 && galvanikResult.data.length === 0) {
-    return render({ kind: "empty", canCreateOrder });
-  }
-
-  return render({
-    kind: "data",
-    ...buildWerkstattData({
-      wareneingang: wareneingangResult.data.map(toWerkstattSurfaceOrder),
-      galvanik: galvanikResult.data.map(toWerkstattSurfaceOrder),
-      canCreateOrder,
-      greetingName: authorization.data.displayName ?? null,
-      kpis: kpiResult.data,
-    }),
-  });
+  return WerkstattHome({ authorization: authorization.data });
 }

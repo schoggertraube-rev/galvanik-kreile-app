@@ -1,0 +1,231 @@
+{
+  "source": "fresh local Supabase + real auth/session + role-aware root + target navigation",
+  "loopbackSessionTransport": {
+    "used": true,
+    "invariant": "byte-identical signed server cookie; Secure removed only for localhost HTTP replay"
+  },
+  "testedCodeCommit": "d2240e7c31f31b7f4e1acb670d0b8e36e56a2ab9",
+  "canonicalRoles": [
+    "developer",
+    "admin",
+    "meister",
+    "buero",
+    "werkstatt",
+    "readonly"
+  ],
+  "routeProof": [
+    {
+      "role": "admin",
+      "pathname": "/settings",
+      "login": "email"
+    },
+    {
+      "role": "developer",
+      "pathname": "/settings",
+      "login": "email"
+    },
+    {
+      "role": "werkstatt",
+      "pathname": "/",
+      "login": "pin"
+    },
+    {
+      "role": "buero",
+      "pathname": "/",
+      "login": "pin"
+    },
+    {
+      "role": "meister",
+      "pathname": "/",
+      "login": "pin"
+    },
+    {
+      "role": "readonly",
+      "pathname": "/",
+      "login": "pin"
+    }
+  ],
+  "syntheticData": {
+    "tenant": "galvanik-kreile",
+    "intakePath": "real OrderIntake UI/command",
+    "stationPath": "real station handoff command",
+    "finishPath": "real V8 freeze command/readback",
+    "orders": {
+      "critical": {
+        "orderNumber": "A-2026-0001",
+        "orderId": "24bd50ae-2142-43e1-8684-d3b34b855b85"
+      },
+      "bundleIncoming": {
+        "orderNumber": "A-2026-0002",
+        "orderId": "2c43fe5d-9048-4020-9ef4-3693e98d6c0b"
+      },
+      "bundleProduction": {
+        "orderNumber": "A-2026-0003",
+        "orderId": "d1671aa3-9fd1-4725-8f1f-3bce3183948a"
+      },
+      "wip": {
+        "orderNumber": "A-2026-0004",
+        "orderId": "21e255a3-021f-43c9-8a82-2d739bf74b1c"
+      },
+      "finished": {
+        "orderNumber": "A-2026-0005",
+        "orderId": "680fad46-f9d6-4f50-8599-1014891d5bd4"
+      }
+    },
+    "persistedRiskFixture": {
+      "critical": "red",
+      "bundleIncoming": "orange",
+      "bundleProduction": "yellow"
+    },
+    "sameSurfaceBundle": "Zink blau",
+    "goodsOutCandidates": 1,
+    "canonicalWipCount": 3,
+    "dueThisWeek": 4
+  },
+  "states": [
+    "data",
+    "empty",
+    "denied",
+    "error",
+    "conflict (focused contract test)"
+  ],
+  "visibleNavigation": [
+    "/",
+    "/warendurchlauf",
+    "/orders",
+    "/customers",
+    "/buchhaltung/rechnungen"
+  ],
+  "retiredRoutes": [
+    "/analyse",
+    "/cockpit",
+    "/kontrolle",
+    "/performance",
+    "/status",
+    "/marketing",
+    "/baeder",
+    "/betrieb",
+    "/betrieb-kvp",
+    "/kvp",
+    "/today",
+    "/finanzen",
+    "/kunden-auftraege",
+    "/print-queue",
+    "/feedback",
+    "/archive",
+    "/lager",
+    "/lieferanten",
+    "/telefonnotiz",
+    "/items",
+    "/kalender",
+    "/station/galvanik",
+    "/scan",
+    "/kommunikation",
+    "/quotes"
+  ],
+  "viewports": [
+    "1914x917",
+    "1220x880",
+    "390x844"
+  ],
+  "references": [
+    "KREILE_STARTSEITE_PHILLIP_V4_2026-08-20.html",
+    "KREILE_STARTSEITE_ROLF_V8_2026-08-20.html",
+    "KREILE_AUFTRAGSKARTE_MACHART_V8_2026-08-19.html (existing B/C evidence)",
+    "KREILE_KUNDENKARTE_MACHART_V2_2026-08-19.html (existing B/C evidence)"
+  ],
+  "artifacts": [
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/a-start-denied-mobile-390x844.png",
+      "sha256": "07af1ef4c01595eba53449fcf9e19937063d35b51d920df74b9c7a4a3bc7345a"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/a-phillip-empty-mobile-390x844.png",
+      "sha256": "86e2f722ef8da187f16ca9271f7cdff50b3fd7c86c4feb9e6ef5022dc2e3c2eb"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/a-rolf-empty-desktop-1914x917.png",
+      "sha256": "e4a48f3bbfa5ea126579729a0169b7065ba9b97ebfd6b6e93a4d6c36eb07e2cb"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/a-phillip-desktop-1914x917.png",
+      "sha256": "dd56b16df8fcde216baa6238da5132a189dfbafc95de92e3de3912bc4f242283"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/a-phillip-tablet-1220x880.png",
+      "sha256": "3effac737e4406a20ef7dda108c73b785566e783b1bdb2d97ab8fbe9fbaafa18"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/a-phillip-mobile-390x844.png",
+      "sha256": "52c6fc76f2fa61487485321f053c9de3adcaf6cb9c8494a6d4c200ff31369003"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/a-rolf-buero-desktop-1914x917.png",
+      "sha256": "5d5258b713815272cb11ea6af07e950fdf246ba39e7d3c333479c07e0968e6b9"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/a-rolf-buero-tablet-1220x880.png",
+      "sha256": "d90e9b589050b151b3855f903bcaf6c681f80fbffef5dd6f678a38bd1a423b3b"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/a-rolf-buero-mobile-390x844.png",
+      "sha256": "c4f9891ade80ec51f65d52d66c417c4c52b237a84434831783abe8b0cc4c4fc3"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/a-rolf-meister-desktop-1914x917.png",
+      "sha256": "626e3cab29b9cf0ed5318b9476f6103359fdb535c751f8864770fbad306b76c0"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/a-rolf-meister-tablet-1220x880.png",
+      "sha256": "ade92814728ac23d9056178c54bb0c80f46675d2560fc3296f176ebb81827d60"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/a-rolf-meister-mobile-390x844.png",
+      "sha256": "f9527a4389ede1abf6d6d6da6e466eb2b6ea849ed0661fef638604b13107ef41"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/a-rolf-readonly-desktop-1914x917.png",
+      "sha256": "2759296eff8919166e7fc9eb46eb500b65a7eddb1118de07395f94db7a36f197"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/a-rolf-readonly-tablet-1220x880.png",
+      "sha256": "6e9d158dd2b8b9faeae148be0c902b6fd2a4d2f329e00f5d5ea9655b2d39bfbc"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/a-rolf-readonly-mobile-390x844.png",
+      "sha256": "ca38a5fbd91c63ae8ca6f72062a50b0109210a30935b7309124c1df09f94f012"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/a-rolf-error-desktop-1914x917.png",
+      "sha256": "b1cd6ef43e4ed4acf217605c6289a1a2720617170773067d01bf55f0cf3f4ef1"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/a-phillip-error-desktop-1914x917.png",
+      "sha256": "7f8f9c6e7dfd086af3ce9651e8aaadb8b4d080caa93d979b0855755fc677e2c6"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/a-reference-phillip-desktop-1914x917.png",
+      "sha256": "f23ef3727334b891d1baa3aea454aa143dbcc8de2415473932f6281f2c1b7ec7"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/a-reference-rolf-desktop-1914x917.png",
+      "sha256": "59be5a53b8090b3a996193792baffb81b1124f97c731cc545570a3acead27b09"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/a-reference-phillip-tablet-1220x880.png",
+      "sha256": "c86f349ae3ed3017cf98eef7c8764312c8460e3ae88432d44267b8c1fae3bb2c"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/a-reference-rolf-tablet-1220x880.png",
+      "sha256": "ea40cbcef84bc75180f3fce2acc0cd760a57c8e0a26a8b64580bdf06e60e4a10"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/a-reference-phillip-mobile-390x844.png",
+      "sha256": "d53fb591a8e0af2132dbe70946dbadee1f5cdd42bd6843a75e46fab5281b10de"
+    },
+    {
+      "file": "docs/evidence/ui/artifacts/path1-ui-convergence/a-reference-rolf-mobile-390x844.png",
+      "sha256": "9a3218d467ef533c7ec7a8b25fdc61ae7a530c6d6932de6a9eb843379faed8db"
+    }
+  ]
+}

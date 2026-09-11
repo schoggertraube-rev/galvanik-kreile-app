@@ -1,0 +1,21 @@
+{
+  "moduleId": "customers",
+  "version": "1.0.0",
+  "owner": "Path-1 Customers (Kundenkarte V2)",
+  "publicExports": [
+    "@/modules/customers/public#CustomerCardModel",
+    "@/modules/customers/public#CustomerCardState",
+    "@/modules/customers/public#CustomerCardView",
+    "@/modules/customers/public#CustomerListItem",
+    "@/modules/customers/public#CustomersView",
+    "@/modules/customers/public#CustomersViewState"
+  ],
+  "capabilities": [],
+  "migrations": [],
+  "viewsFunctions": [],
+  "ownsTables": [],
+  "storagePurposes": [],
+  "events": { "emits": [], "consumes": [] },
+  "config": {},
+  "dependencies": []
+}

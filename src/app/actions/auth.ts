@@ -83,11 +83,7 @@ export async function login(formData: FormData) {
 
   revalidatePath('/', 'layout')
 
-  if (dbUser.role === 'developer') {
-    redirect('/settings')
-  } else {
-    redirect('/warendurchlauf')
-  }
+  redirect('/settings')
 }
 
 // ─── Kanonischer Logout ───────────────────────────────────────────────────────

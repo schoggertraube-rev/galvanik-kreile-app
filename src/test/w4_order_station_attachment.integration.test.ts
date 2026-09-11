@@ -122,7 +122,7 @@ const pool = {
 };
 
 let actions: typeof import("@/app/warendurchlauf/actions");
-let Panel: typeof import("@/components/orders/GalvanikHandoffAttachmentPanel").GalvanikHandoffAttachmentPanel;
+let Panel: typeof import("@/components/entities/order-legacy/GalvanikHandoffAttachmentPanel").GalvanikHandoffAttachmentPanel;
 let anonClient: SupabaseClient;
 let serviceClient: SupabaseClient;
 
@@ -400,7 +400,7 @@ beforeAll(async () => {
   await seedFixtures();
   actions = await import("@/app/warendurchlauf/actions");
   ({ GalvanikHandoffAttachmentPanel: Panel } = await import(
-    "@/components/orders/GalvanikHandoffAttachmentPanel"
+    "@/components/entities/order-legacy/GalvanikHandoffAttachmentPanel"
   ));
   anonClient = (await import("@/lib/supabase/client")).createClient();
   serviceClient = (await import("@/lib/supabase/admin")).createAdminClient();

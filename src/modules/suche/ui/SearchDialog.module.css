@@ -1,0 +1,261 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(4.5rem, 12vh, 7rem) 1rem 1rem;
+  overflow-x: hidden;
+  background: rgb(17 35 58 / 48%);
+  backdrop-filter: blur(5px);
+}
+
+.dialog {
+  width: min(42rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - clamp(5.5rem, 14vh, 8rem));
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 70%);
+  border-radius: 1.5rem;
+  background: #fcfbf9;
+  box-shadow: 0 28px 70px rgb(17 35 58 / 28%);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid #e5dfd5;
+}
+
+.eyebrow {
+  margin: 0 0 0.15rem;
+  color: #9a6f20;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0;
+  color: #11233a;
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 1.3rem;
+  font-weight: 650;
+}
+
+.closeButton {
+  min-width: 3rem;
+  min-height: 3rem;
+  border: 1px solid #ded6ca;
+  border-radius: 999px;
+  background: #fff;
+  color: #11233a;
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
+.body {
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+.inputWrap {
+  display: flex;
+  min-height: 3.25rem;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid #d8d0c4;
+  border-radius: 1rem;
+  background: #fff;
+  padding: 0 1rem;
+  color: #526274;
+}
+
+.inputWrap:focus-within {
+  border-color: #b8923f;
+  box-shadow: 0 0 0 3px rgb(184 146 63 / 18%);
+}
+
+.input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #11233a;
+  font-size: 1rem;
+}
+
+.input::placeholder {
+  color: #778391;
+}
+
+.hint {
+  margin: 0.65rem 0 0;
+  color: #687585;
+  font-size: 0.78rem;
+}
+
+.statePanel {
+  margin-top: 0.9rem;
+  border: 1px solid #e2dbd0;
+  border-radius: 1rem;
+  background: #fff;
+  padding: 1rem;
+  color: #526274;
+  font-size: 0.9rem;
+}
+
+.statePanel p {
+  margin: 0;
+}
+
+.statePanel p + p {
+  margin-top: 0.55rem;
+}
+
+.checked,
+.alternatives {
+  color: #687585;
+  font-size: 0.8rem;
+}
+
+.denial,
+.conflict {
+  border-color: #e5c778;
+  background: #fff9e8;
+  color: #624910;
+}
+
+.error {
+  border-color: #e4aaa4;
+  background: #fff2f0;
+  color: #7c2c24;
+}
+
+.results {
+  max-height: min(26rem, calc(100dvh - 17rem));
+  margin: 0.9rem 0 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid #e2dbd0;
+  border-radius: 1rem;
+  background: #fff;
+  list-style: none;
+}
+
+.resultButton {
+  display: grid;
+  width: 100%;
+  min-height: 3.5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  border: 0;
+  border-bottom: 1px solid #eee8df;
+  background: #fff;
+  padding: 0.75rem 1rem;
+  color: #11233a;
+  text-align: left;
+  cursor: pointer;
+}
+
+.results li:last-child .resultButton {
+  border-bottom: 0;
+}
+
+.resultButton:hover,
+.resultButton[data-active="true"] {
+  background: #f4efe6;
+}
+
+.resultTitle,
+.resultSubtitle {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resultEvidence,
+.resultContext {
+  display: block;
+  margin-top: 0.28rem;
+  color: #526274;
+  font-size: 0.74rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.resultContext {
+  color: #687585;
+}
+
+.resultAction {
+  display: flex;
+  min-width: 8.5rem;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.4rem;
+  color: #526274;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.resultTitle {
+  font-weight: 750;
+}
+
+.resultSubtitle {
+  margin-top: 0.2rem;
+  color: #687585;
+  font-size: 0.78rem;
+}
+
+.type {
+  border-radius: 999px;
+  background: #11233a;
+  padding: 0.32rem 0.55rem;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 640px) {
+  .backdrop {
+    padding: 0;
+  }
+
+  .dialog {
+    width: 100vw;
+    max-height: 100dvh;
+    min-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .header,
+  .body {
+    padding-inline: 1rem;
+  }
+
+  .results {
+    max-height: calc(100dvh - 14rem);
+  }
+
+  .resultButton {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .resultAction {
+    min-width: 0;
+    flex-direction: row;
+    align-items: center;
+  }
+}

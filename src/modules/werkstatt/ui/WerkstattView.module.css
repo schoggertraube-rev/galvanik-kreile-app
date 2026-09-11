@@ -323,11 +323,14 @@
 }
 
 .infoTile {
+  width: 100%;
   background: var(--surface-card);
   border: 1px solid var(--neutral-gray-100);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
   padding: 13px 15px;
+  color: var(--navy-900);
+  text-align: left;
 }
 
 .infoLabel {
@@ -390,6 +393,12 @@
   background: var(--navy-700);
   color: var(--neutral-gray-100);
   border: 1px solid var(--navy-500);
+}
+
+.actionPrimary:disabled,
+.actionSecondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .actionGhostGroup {

@@ -3,35 +3,13 @@
 import { usePageView } from "@/hooks/usePageView";
 import Image from "next/image";
 import { useState, useEffect, useEffectEvent } from "react";
-import { Delete, Clock, Wrench, Calculator, Sun } from "lucide-react";
+import { Delete, Wrench, Calculator } from "lucide-react";
 import { getGreeting } from "@/lib/greeting";
 import { EmailLoginDialog } from "@/components/start/EmailLoginDialog";
 import { useSearchParams } from "next/navigation";
 import { notifyAdminPinReset } from "@/app/actions/start.actions";
 import { loginWithPin } from "@/app/actions/auth.actions";
 import type { StartUserDto } from "@/lib/auth/userDtos";
-
-// Provider-dependent weather and event hints remain unavailable until contracted safely.
-function WeatherCard() {
-  return (
-    <div className="absolute top-6 right-6 w-[320px] bg-white rounded-2xl border border-neutral-gray-100 p-5 shadow-card animate-in fade-in duration-300">
-      <div className="flex gap-3.5 items-start">
-        <div className="shrink-0 mt-0.5">
-          <Sun className="w-7 h-7 text-accent-orange" strokeWidth={1.5} />
-        </div>
-        <div className="text-sm leading-relaxed text-navy-900 font-medium">
-          NOT_AVAILABLE: Wetter- und Eventhinweise sind bis zu einem sicheren Provider-Vertrag nicht verfügbar.
-        </div>
-      </div>
-      <div className="flex justify-end items-center gap-1.5 mt-3">
-        <svg viewBox="0 0 16 10" fill="none" className="w-4 h-3">
-          <path d="M1 5l3 4L13 1" stroke="#B8923F" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-          <path d="M4 5l3 4L16 1" stroke="#B8923F" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      </div>
-    </div>
-  );
-}
 
 // PIN Dialog Component
 function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void }) {
@@ -53,7 +31,7 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
 
         if (res.ok) {
           // Redirect to home — PermissionsContext picks up identity atomically via server action
-          window.location.href = "/warendurchlauf";
+          window.location.href = "/";
         } else {
           setError(true);
           setTimeout(() => setPin(""), 600);
@@ -188,9 +166,6 @@ function StartScreenContent({
 
   return (
     <div className="relative min-h-screen bg-bg-app flex flex-col items-center justify-center p-6 overflow-hidden">
-      {/* Wetterkarte oben rechts */}
-      <WeatherCard />
-
       {/* Skyline Logo wordmark block */}
       <div className="flex flex-col items-center mb-8 animate-in fade-in slide-in-from-bottom-6 duration-700 fill-mode-both">
         <Image
@@ -211,27 +186,9 @@ function StartScreenContent({
         </h2>
       </div>
 
-      {/* Clock notice card / Priority job */}
-      <div className="w-full max-w-xl mb-8 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-200 fill-mode-both">
-        <div className="bg-white rounded-[24px] border border-neutral-gray-100 shadow-card px-6 py-5 flex items-center justify-between gap-4 hover:shadow-md transition-shadow">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full border-2 border-gold-600/30 flex items-center justify-center shrink-0 bg-gold-100/50">
-              <Clock className="w-6 h-6 text-gold-600" strokeWidth={1.5} />
-            </div>
-            <div>
-              <p className="font-bold text-navy-900 text-sm md:text-base leading-snug">
-                Zuerst steht an: <span className="font-extrabold text-navy-900">Tagesplan nach dem Einloggen prüfen.</span>
-              </p>
-              <p className="text-xs md:text-sm text-text-muted mt-1 leading-relaxed">
-                Nach dem Login sehen Sie Ihre aktuellen Aufgaben und Fristen.
-              </p>
-            </div>
-          </div>
-          <svg viewBox="0 0 24 24" fill="none" stroke="#B8923F" strokeWidth="2" className="w-5 h-5 shrink-0 ml-2">
-            <polyline points="9 18 15 12 9 6"/>
-          </svg>
-        </div>
-      </div>
+      <p className="mb-8 max-w-xl text-center text-sm font-semibold text-text-muted">
+        Benutzer auswählen und mit der persönlichen PIN anmelden.
+      </p>
 
       {/* User Avatar Kacheln */}
       <div className="flex gap-5 md:gap-7 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-300 fill-mode-both overflow-x-auto pb-4 snap-x">

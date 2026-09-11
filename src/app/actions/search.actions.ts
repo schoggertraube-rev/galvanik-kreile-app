@@ -1,96 +1,74 @@
 "use server";
 
-import { db } from "@/db";
-import { customers, orders, items } from "@/db/schema";
-import { ilike, or, eq } from "drizzle-orm";
-import { checkAppAuth } from "@/lib/server/authHelper";
+import { resolveAuthorization } from "@/lib/server/authorization";
+import { searchOrderIntakeCustomers } from "@/lib/server/orderIntakeRead";
+import { readTenantOperationalOrders } from "@/lib/server/orderStationRead";
+import {
+  normalizeSearchQuery,
+  searchTenant,
+  type SearchTenantResult,
+} from "@/modules/suche/public";
 
-export interface SearchResult {
-  id: string;
-  type: "customer" | "order" | "item";
-  title: string;
-  subtitle: string;
-  url: string;
+const UNAVAILABLE_MESSAGE = "Suche ist derzeit nicht verfügbar.";
+const DENIAL_MESSAGE = "Sitzung oder Berechtigung ist nicht verfügbar.";
+
+/**
+ * Closed-world read-port binding:
+ * - readTenantOperationalOrders -> private.v_operational_station_queue_v1
+ * - searchOrderIntakeCustomers -> private.v_order_intake_customers_v1
+ */
+
+function diagnosticFields(error: unknown): { message?: string; details?: string; hint?: string } {
+  if (!error || typeof error !== "object") return {};
+  const candidate = error as Record<string, unknown>;
+  const result: { message?: string; details?: string; hint?: string } = {};
+  if (typeof candidate.message === "string") result.message = candidate.message;
+  if (typeof candidate.details === "string") result.details = candidate.details;
+  if (typeof candidate.hint === "string") result.hint = candidate.hint;
+  return result;
 }
 
-export async function globalSearch(query: string): Promise<{ ok: boolean; results?: SearchResult[]; error?: string }> {
-  const auth = await checkAppAuth("read");
-  if (!auth.ok) return { ok: false, error: auth.message };
+function logPortFailure(port: "orders" | "customers", error: unknown): void {
+  console.error("searchTenantAction read-port failure", {
+    port,
+    ...diagnosticFields(error),
+  });
+}
 
-  if (!query || query.trim().length < 2) {
-    return { ok: true, results: [] };
+export async function searchTenantAction(query: string): Promise<SearchTenantResult> {
+  const normalized = normalizeSearchQuery(query);
+  if (normalized.code === "INVALID") {
+    return { code: "VALIDATION_ERROR", message: "Suchbegriff ist ungültig oder zu lang." };
   }
 
-  const q = `%${query.trim()}%`;
-  const results: SearchResult[] = [];
-
+  let authorization;
   try {
-    // 1. Search Customers
-    const foundCustomers = await db.select({
-      id: customers.id,
-      name: customers.name,
-      city: customers.city
-    })
-    .from(customers)
-    .where(or(ilike(customers.name, q), ilike(customers.city, q)))
-    .limit(5);
-
-    for (const c of foundCustomers) {
-      results.push({
-        id: c.id,
-        type: "customer",
-        title: c.name,
-        subtitle: c.city || "Kunde",
-        url: `/customers?id=${c.id}`
-      });
-    }
-
-    // 2. Search Orders
-    const foundOrders = await db.select({
-      id: orders.id,
-      orderNumber: orders.orderNumber,
-      title: orders.title,
-      customerName: customers.name
-    })
-    .from(orders)
-    .leftJoin(customers, eq(orders.customerId, customers.id))
-    .where(or(ilike(orders.orderNumber, q), ilike(orders.title, q)))
-    .limit(5);
-
-    for (const o of foundOrders) {
-      results.push({
-        id: o.id,
-        type: "order",
-        title: o.orderNumber,
-        subtitle: `${o.title} (${o.customerName || "Unbekannt"})`,
-        url: `/orders?id=${o.id}`
-      });
-    }
-
-    // 3. Search Items
-    const foundItems = await db.select({
-      id: items.id,
-      name: items.name,
-      orderNumber: orders.orderNumber
-    })
-    .from(items)
-    .leftJoin(orders, eq(items.orderId, orders.id))
-    .where(ilike(items.name, q))
-    .limit(5);
-
-    for (const i of foundItems) {
-      results.push({
-        id: i.id,
-        type: "item",
-        title: i.name,
-        subtitle: `Teil in Auftrag ${i.orderNumber || "?"}`,
-        url: `/orders?id=${i.orderNumber ? "search" : ""}` // Depending on actual routing
-      });
-    }
-
-    return { ok: true, results };
-  } catch (err: unknown) {
-    console.error("Global search failed:", err);
-    return { ok: false, error: err instanceof Error ? err.message : "Suche fehlgeschlagen" };
+    authorization = await resolveAuthorization();
+  } catch {
+    return { code: "UNAVAILABLE", message: UNAVAILABLE_MESSAGE };
   }
+  if (!authorization.ok) {
+    return authorization.reason === "AUTHORIZATION_UNAVAILABLE"
+      ? { code: "UNAVAILABLE", message: UNAVAILABLE_MESSAGE }
+      : { code: "UNAUTHENTICATED", message: DENIAL_MESSAGE };
+  }
+
+  return searchTenant(query, {
+    readOrders: async () => {
+      try {
+        return await readTenantOperationalOrders(authorization.data);
+      } catch (error) {
+        logPortFailure("orders", error);
+        throw error;
+      }
+    },
+    searchCustomers: async (customerQuery) => {
+      try {
+        return await searchOrderIntakeCustomers(authorization.data, { query: customerQuery });
+      } catch (error) {
+        logPortFailure("customers", error);
+        throw error;
+      }
+    },
+  });
 }

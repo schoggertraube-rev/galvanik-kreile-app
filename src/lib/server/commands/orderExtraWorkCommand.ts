@@ -2,7 +2,7 @@ import "server-only";
 
 import { sql } from "drizzle-orm";
 import { resolveAuthorization } from "@/lib/server/authorization";
-import { ORDER_LIFECYCLE_STATUS, ORDER_STATION_FORWARD_ROLES } from "@/lib/orders/orderLifecycleContract";
+import { ORDER_LIFECYCLE_STATUS, ORDER_STATION_FORWARD_ROLES } from "@/lib/order-support/orderLifecycleContract";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
 const EVENT_TYPE = "ORDER_ITEM_EXTRA_WORK_CHANGED_V1";
