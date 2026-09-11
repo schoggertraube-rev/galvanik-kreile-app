@@ -1,3 +1,5 @@
+<!-- STATUS: REFERENCE_ONLY_NON_EXECUTABLE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # KREILE — UI-Referenz & Startseiten-Spec (Konsolidierung) · 2026-09-01
 *KEIN neuer Entwurf — Zusammenstellung bestehender, ratifizierter Festlegungen + Verweise. Gültigkeit über „DIE LINIE" (2026-08-28) + die Claude-Artefakte. Quellen: DIE LINIE, arbeitsmodus-Erinnerung, KREILE_UEBERGABE_FRONTEND_UMSETZUNG_V1. Owner ratifiziert Abweichungen.*
 

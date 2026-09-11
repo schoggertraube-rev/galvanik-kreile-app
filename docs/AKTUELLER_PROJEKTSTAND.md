@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # 📊 Aktueller Projektstand: Galvanik-Kreile-WerkstattCockpit
 *Stand: 03. Juni 2026*
 

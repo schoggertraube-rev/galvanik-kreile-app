@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # 📊 Status-Bericht: Kreile WerkstattCockpit
 *Stand: 29. Mai 2026*
 

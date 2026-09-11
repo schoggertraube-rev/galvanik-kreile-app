@@ -1,11 +1,13 @@
+<!-- STATUS: REFERENCE_ONLY_NON_EXECUTABLE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # Modularitaetsstrategie
 
 Stand: 2026-08-01
 
-> **Aktiver Nachtrag 2026-09-10:** Fuer den laufenden F1-/Path-1-Bau gelten D-ARCH-009,
+> **Superseded 2026-09-10:** Für Architektur gilt ausschließlich D-ARCH-009/D-ARCH-011 in
 > `docs/project/linie/MODULKARTE_KANON.md` und `docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md`.
 > Die unten erhaltene historische Zielskizze startet kein `modules/cockpit`, Analyse-/KPI-Cockpit
-> oder eigenes KPI-Produkt; neue Arbeit folgt ausschliesslich der kanonischen Modulkarte.
+> oder eigenes KPI-Produkt. Aktive Ausführung steht ausschließlich in der Mission.
 
 ## Ziel
 

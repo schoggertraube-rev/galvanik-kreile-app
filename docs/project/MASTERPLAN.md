@@ -1,3 +1,5 @@
+<!-- STATUS: REFERENCE_ONLY_NON_EXECUTABLE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # Masterplan
 
 Stand: 2026-08-13
@@ -26,7 +28,9 @@ Primaerer Kundennutzen:
 - Alt-Arbeit wird nicht pauschal gemergt oder geloescht. Sie wird klassifiziert, als Salvage erhalten und nur ueber neue kleine PRs verwertet.
 - Ein gemergter Infrastruktur- oder Security-Baustein ist kein Gesamtprodukt-PASS.
 
-## Verbindliche aktive Reihenfolge
+## Historisch ratifizierte Lieferfolge (keine aktive Ausführung)
+
+Paket, Branch, Base, Status und nächstes Gate stehen ausschließlich in `missions/F1_ORDER_TO_CASH_PILOT_001.yml`.
 
 1. `M0_REPOSITORY_CONSOLIDATION`: verlustfrei archivieren, genau eine Steuerungs- und Lieferlinie
    herstellen, den F1-R0-Kandidaten integrieren und `02_app` auf sauberes aktuelles `main` bringen.

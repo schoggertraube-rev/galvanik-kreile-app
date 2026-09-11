@@ -1,10 +1,33 @@
 # CURRENT_STATE — Galvanik-Kreile WerkstattCockpit
 
-**Massgeblicher Steuerungsstand: 2026-09-10.** `main` ist die einzige Lieferwahrheit. Der folgende
-M1/M2/M3/F1-Block ist aktuell; die ausfuehrlichen F0-Tabellen darunter sind ein datierter historischer
-Snapshot und keine aktuelle Paket- oder Branchsteuerung.
+**Lieferstand 2026-09-10: `main@13240de2a5ca9e9cfae4f8c72552443dac1d7630`.** Diese Datei
+beschreibt ausschließlich auf `main` belegte Lieferungen. Aktives Paket, Branch, Base, Kandidatenstatus
+und nächstes Gate stehen ausschließlich in `missions/F1_ORDER_TO_CASH_PILOT_001.yml`. Die
+ausführlichen F0-Tabellen darunter sind ein datierter historischer Snapshot.
 
-## Aktuelle Liefer- und Paketwahrheit
+## Auf main belegte Lieferwahrheit
+
+### Sichtbare Produktwahrheit nach D-UI-CORE-001/002
+
+| Oberfläche/Vertrag | Belegter Stand auf `main` |
+|---|---|
+| Backend/Fachverträge | `PARTIALLY_REAL` |
+| S4 Werkstatt-Innenmodul | `DELIVERED` |
+| Gesamte Zieloberfläche | `OWNER_UX_FAIL / NOT_DELIVERED` |
+| Orders/Auftragskarte V8 | `NOT_DELIVERED` |
+| Customers/Kundenkarte V2 | `NOT_DELIVERED` |
+| Rollen-Startseiten Phillip V4/Rolf V8 und Zielnavigation | `NOT_DELIVERED` |
+| Production-Sichtstand | `LEGACY_SHELL / NOT_TARGET / NOT_LIVE_CAPABLE_TOTAL_APP` — Production ist kein Beleg für die Zieloberfläche oder eine livefähige Gesamt-App |
+| `/start` als reiner unauthentifizierter Login und `/` als einziges Rollen-Home | `NOT_DELIVERED` |
+| Zielnavigation gemäß D-UI-CORE-002 | `NOT_DELIVERED`; Alt-Shell und sichtbare Altmodule bestehen noch |
+| Orders V8 / Customers V2 als identische Listen-, Detail- und Overlay-Wahrheit | `NOT_DELIVERED` |
+| Kalenderroute | `BLOCKING_VISIBLE_LEGACY_PROVIDER_CLAIM`; aktuell sichtbare Google-Calendar-Behauptung, keine akzeptierte Kalender-Capability |
+| Bestehende sichtbare Oberfläche | `FULLY_REJECTED_AS_DELIVERY_BASE`; Alt-Shell, Alt-Navigation, Alt-Startseite, Orders-/Customers-UI und responsive Alt-Navigation sind kein UX-Teilfortschritt und werden nicht als Ziel-UI weiterentwickelt |
+| Kanonische Zieloberfläche | `NOT_DELIVERED`; akzeptierbar erst als zusammenhängende Phillip-V4-/Rolf-V8-/Auftragskarte-V8-/Kundenkarte-V2-Oberfläche mit Navigation und Rückwegen auf Desktop, Tablet und Mobile |
+
+Ein geliefertes Innenmodul, ein grüner Fachvertrag oder ein Teil-/Kosmetikpatch der Alt-UI ist ausdrücklich kein Full-Route-/UX-PASS, kein Zielscreen-PASS und keine livefähige Oberfläche.
+Die nächste Produktpriorität wird ausschließlich in der aktiven Mission gesteuert; diese Datei nimmt
+keinen Kandidaten als geliefert vorweg.
 
 | Wahrheit | Stand |
 |---|---|
@@ -18,8 +41,8 @@ Snapshot und keine aktuelle Paket- oder Branchsteuerung.
 | F1.3 Leistungsabschluss | `PASS`; `galvanik -> fertig`, echte Mehrarbeit, Freeze, L6-Korrektur und fail-closed Rechnungssperre am Kandidaten `fb19c224e1542afdf1436f5f0fb76995fec3935b`; Real-E2E, CI und unabhaengige Exact-SHA-Abnahme ohne offene P0/P1-, Scope- oder False-Pass-Befunde |
 | M3-Integration | PR #66 als GitHub-verifizierter Merge-Commit `fc551b0732c52a0867cc4b0bbdfe4f8a52ad3550` nach `main` integriert; Main-Tree `0a77f85f8268ac721d8f15fc7edce5e2623482c5` bytegleich zum geprueften Kandidaten; `02_app` getrackt sauber auf `main`; der erhaltene Paketbranch ist ohne Writer keine aktive Produktwahrheit |
 | F1.5 Order-to-Cash | `complete`; A+B/B2+C+D+D.1+T vollstaendig geliefert. C wurde mit PR #79 als Merge-Commit `b94821ca56634bcf75e8d5ddda130241bb75b9bf`, D mit PR #80 als Merge-Commit `001a7698b9ea4edff881ed56ea110832e9de7a46`, D.1 mit PR #81 als Merge-Commit `bf17e8c5562ca772696176fabf4963ece683b88b` und T am Exact Head `575052b6b47a7fd4b651c20e5a3ac42b2c5676e7` mit PR #82 als Merge-Commit `2a2b24d2fecc65a79bf2ff0efe87c72f79db8f09` integriert. |
-| F1.6 Realer Pilot | `NOT_STARTED`; Pilot-Readiness bleibt `BLOCKED_PRODUCT_DECISION`, bis Suchleiste und Kalender gemaess Modulkarte beide real und modular geplant, gebaut und abgenommen sind. Dieses Abschlussdokument startet weder F1.6 noch S2/S3. |
-| Path-1 S4 Werkstatt-Modul | S0+S1 (PR #75) in `main@160bcf40fc872bea2c8303e074c57a0eb0402c0c` und S4/Phillip V4 mit PR #77 als Merge-Commit `019b1fbaad34e4f10a28298a29858f2fa599eb45` integriert; `/warendurchlauf` ist die Kompositionswurzel fuer `src/modules/werkstatt/`. |
+| F1.6 Realer Pilot | `NOT_STARTED`; auf `main` fehlen die akzeptierte Path-1-Zieloberfläche, die darauf vollständig neu abgenommene Suche und der reale modulare Kalender. Diese Datei startet weder F1.6 noch S2/S3. |
+| Path-1 S4 Werkstatt-Modul | Ausschließlich das Werkstatt-Innenmodul ist geliefert: S0+S1 (PR #75) in `main@160bcf40fc872bea2c8303e074c57a0eb0402c0c` und S4/Phillip V4 mit PR #77 als Merge-Commit `019b1fbaad34e4f10a28298a29858f2fa599eb45` integriert; `/warendurchlauf` ist die bestehende Kompositionswurzel für `src/modules/werkstatt/`. Dies ist kein Beleg für gelieferte Shell, Rollen-Startseiten, Zielnavigation oder Gesamtoberfläche. |
 | Remote/Production in M2 | `main`-Merges loesen ueber die vorhandene Vercel-GitHub-Integration automatisch erfolgreiche Deployments mit Environment `Production` aus; fuer `733c22e5df95fd00987ba45408b9dac70f8638e1` (Deployment `5958527416`) und `c3489e9ad7f75286c23b45577ba5240e600e71f2` (Deployment `5958812163`) belegt; keine manuelle Promotion sowie keine Provider-, RLS-, Remote-DB- oder Datenmutation |
 | Remote/Production in M3 | Automatisches Vercel-Git-Deployment `dpl_67UsPkCLodKUS8Fa2Lp7vLhX6Par` fuer exakt `fc551b0732c52a0867cc4b0bbdfe4f8a52ad3550`: `target=production`, `READY`; keine manuelle Promotion sowie keine Provider-, RLS-, Remote-DB- oder Datenmutation |
 

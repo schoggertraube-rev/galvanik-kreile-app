@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # Übergabe-Backlog — Galvanik Kreile WerkstattCockpit
 
 ## Kern-USP (Designleitplanke)

@@ -1,10 +1,26 @@
+<!-- STATUS: REFERENCE_ONLY_NON_EXECUTABLE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # Dokumentenautorität
 
-Stand: 2026-09-05 (Abschnitt Owner-Beschlusslinie ergänzt; Rest 2026-08-13)
+Stand: 2026-09-10 — D-GOV-001
 
 ## Zweck
 
 Diese Datei verhindert, dass veraltete Masterpläne, Übergaben, Agenturkonzepte oder lokale Artefakte die aktuelle Produkt- und Lieferwahrheit überschreiben.
+
+Diese Datei ist ein Wegweiser, keine zweite Steuerungsquelle. Die maschinenlesbare Zuordnung steht in `quality/authoritative-sources.json`.
+
+| Wahrheitsart | Einzige Quelle |
+|---|---|
+| Projektregeln | `AGENTS.md` |
+| Produktentscheidungen | `docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md` |
+| Scope und Module | `docs/project/linie/MODULKARTE_KANON.md` |
+| Architektur | `docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md` |
+| aktive Ausführung | `missions/F1_ORDER_TO_CASH_PILOT_001.yml` |
+| auf `main` belegter Lieferstand | `docs/project/CURRENT_STATE.md` |
+| UI-Wahrheit | die in `docs/project/linie/00_UI_REFERENZEN_PFADE.md` explizit gelisteten neuesten Referenzen |
+
+Evidence beweist nur einen konkreten Stand. `00_JETZT`, `00_ABC` und `00_BIBEL` sind Pointer/Kurzansichten. Konflikt innerhalb einer Wahrheitsart bedeutet `BLOCKED_GOVERNANCE_CONFLICT`; Dateiname, Alter und Kommentar lösen ihn nicht auf. Abweichende Rangfolgen im erhaltenen historischen Text darunter sind durch D-GOV-001 supersediert.
 
 ## Autoritaetsbereiche
 
@@ -28,29 +44,30 @@ Diese Ebenen koennen voneinander abweichen. Dann gewinnt nicht still eine andere
 ### Aktuelle Mission
 
 - Die ausdruecklich freigegebene Missionsdatei oder die aktuellen nummerierten Akzeptanzkriterien bestimmen Scope und Abnahme der Mission.
-- Fuer den laufenden F1-Lauf ist allein `missions/F1_ORDER_TO_CASH_PILOT_001.yml` aktiv. Die
+- Fuer die aktive Ausfuehrung ist allein `missions/F1_ORDER_TO_CASH_PILOT_001.yml` autoritativ. Die
   F0-Mission und ihre Evidence sind eingefrorene Historie; R0-A ist nur ein Checkpoint, kein R0-PASS.
 - Sie duerfen weder reale Systemfakten umdeuten noch Sicherheitsgesetze aushebeln.
 - Verlangt die Mission eine neue Produktentscheidung ausserhalb ihres Scopes oder widerspricht sie einer geschuetzten Produktentscheidung, wird der Konflikt explizit eskaliert.
 
-### Owner-Beschlusslinie (LINIE, Bauverträge, Leitplanken)
+### Owner-Beschlusslinie
 
-- `docs/project/linie/` enthält byteidentische Repo-Kopien der ratifizierten Owner-Steuerdokumente
-  (Index `00_BIBEL_INDEX.md`; Manifest mit SHA-256 in `docs/project/linie/README.md`).
-- `KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md` ist Beschluss-Autorität für Produkt- und
-  Architekturentscheidungen (D-ARCH-*, D-F1x-*). Bauverträge (`KREILE_F1_*_BAUVERTRAG_*.md`) sind
-  wörtliches Gesetz der jeweiligen Lieferpakete und werden nie interpretiert; Unklarheit = STOP
-  (`BLOCKED_PRODUCT_DECISION`), Beschluss in die Linie, dann bauen.
-- `00_AUTONOMER_BETRIEB_LEITPLANKEN.md` Teil B (Ehrlichkeit, Merge-Gate, Isolation, atomare
-  closed-world-Lanes, Owner-Grenzen) schlägt alle anderen Prozessregeln.
-- Owner = Siglinder. Master liegt im Projektordner `galvanik_kreile/00_BIBEL/` (ausserhalb des Repos); bei Abweichung zwischen Repo-Kopie und `00_BIBEL/` gilt `00_BIBEL/`;
-  die Kopie wird per PR nachgezogen. Die Missionsdatei bindet Bauverträge zusätzlich per SHA-256.
+- `docs/project/linie/` enthält das master-first gepflegte Produktentscheidungsregister sowie
+  klassifizierte Repo-Referenzen und Derivate (Index `00_BIBEL_INDEX.md`; Repo-Hashes in
+  `docs/project/linie/README.md`). Ausschließlich das Register muss zur externen Master-Fassung
+  byte-identisch sein.
+- `KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md` ist die einzige Autorität für
+  Produktentscheidungen. Bauverträge, Leitplanken und frühere Mandate sind ausschließlich
+  `REFERENCE_ONLY_NON_EXECUTABLE`; bestätigte Regeln daraus gelten erst nach Aufnahme in die
+  jeweils zuständige D-GOV-001-Quelle.
+- `00_AUTONOMER_BETRIEB_LEITPLANKEN.md` ist ausdrücklich supersedierte Referenz und besitzt
+  keinen Vorrang vor Root-`AGENTS.md`, Mission oder Entscheidungsregister.
+- Owner = Siglinder. Der externe `00_BIBEL`-Master wird vor einer Registeränderung aktualisiert und die Repo-Kopie byte-identisch nachgezogen. Eine Abweichung ist `BLOCKED_GOVERNANCE_CONFLICT`, keine Erlaubnis zur stillen Auswahl. CI und Git können ausschließlich die Repo-Kopie prüfen.
 
 ### Produktsteuerung und Erhalt
 
-- `docs/project/MASTERPLAN.md` bestimmt Produktziel und aktive Reihenfolge.
-- `docs/project/CURRENT_STATE.md` beschreibt den letzten verifizierten Stand und offene Blocker.
-- `docs/project/NON_LOSS_REGISTER.md` schuetzt Ziele, verschobene Missionen und Salvage vor stillem Verlust.
+- `docs/project/MASTERPLAN.md` bewahrt Zielbild und historische Roadmap, steuert aber kein aktives Paket.
+- `docs/project/CURRENT_STATE.md` beschreibt ausschließlich den auf `main` belegten Lieferstand.
+- `docs/project/NON_LOSS_REGISTER.md` schuetzt Ziele, verschobene Missionen und Salvage vor stillem Verlust, steuert aber kein aktives Paket.
 - `docs/project/DOCUMENT_AUTHORITY.md` definiert diese Autoritaetsbereiche und Driftregeln.
 - `docs/project/MODULARITY_STRATEGY.md` definiert Ist-/Zielstruktur und Modulregeln.
 

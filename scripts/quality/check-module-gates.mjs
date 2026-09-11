@@ -31,6 +31,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSyn
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { checkAuthorityRepository } from "./check-authoritative-sources.mjs";
 
 export const BASELINE_PATH = "quality/module-gates-baseline.json";
 export const SCHEMA_PATH = "docs/architecture/MODULE_MANIFEST.schema.json";
@@ -479,6 +480,11 @@ export function runModuleGates(root, { baseBaselinePath = null, schemaPath = nul
   gateData(root, findings, manifests);
   gateUi(root, findings, baseline, baseBaseline);
   gateAgents(root, findings);
+  if (existsSync(path.join(root, "quality/authoritative-sources.json"))) {
+    for (const finding of checkAuthorityRepository(root)) findings.push(`[authority] ${finding}`);
+  } else if (existsSync(path.join(root, "package.json"))) {
+    findings.push("[authority] AUTHORITY_CONFIG_PATH_MISSING:quality/authoritative-sources.json");
+  }
   return { ok: findings.length === 0, findings: findings.sort() };
 }
 
@@ -514,7 +520,7 @@ if (isMain) {
   }
   const result = runModuleGates(opts.root, { baseBaselinePath: opts.baseBaselinePath, schemaPath: opts.schemaPath });
   if (result.ok) {
-    console.log("module-gates: alle Naehte halten (Manifest, Fassade, v_*-Daten, UI-Vertrag, AGENTS).");
+    console.log("module-gates: alle Naehte halten (Manifest, Fassade, v_*-Daten, UI-Vertrag, AGENTS, Authority).");
   } else {
     console.error(`module-gates: ${result.findings.length} Verstoss/Verstoesse`);
     for (const f of result.findings) console.error("  " + f);

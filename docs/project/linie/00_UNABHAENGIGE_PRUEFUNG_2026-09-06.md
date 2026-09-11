@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # Unabhängige §5-Prüfung (Prüfer ≠ Autor) — Stand 2026-09-06
 
 *Diese Datei erfüllt `PROBLEMLOESUNGEN.md` P6: der „aufgeräumt/fertig"-Claim wird NICHT vom Autor selbst benotet. Rotstand von einem unabhängigen Prüf-Chat. Der Autor (Orchestrator) hat danach reagiert; die Reaktions-Spalte ist wieder autor-seitig und muss beim nächsten Durchlauf erneut unabhängig geprüft werden.*

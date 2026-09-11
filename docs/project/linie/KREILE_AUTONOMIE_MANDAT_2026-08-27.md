@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # AUTONOMIE-MANDAT — Projektleitung arbeitet selbstständig · 2026-08-27
 
 **Von:** Owner + Orchestrator (Cowork/Claude) · **An:** ChatGPT-Projektleitung („Kreileapp projektleiter") · **Gültig:** ab sofort, bis zur nächsten ECHTEN Owner-Entscheidung (trifft der Owner gemeinsam mit dem Orchestrator). Ziel: Der Owner geht vom Rechner; bei Rückkehr ist das Besprochene umgesetzt — sauber, ohne Müll, ohne Mock, ohne Sackgassen.

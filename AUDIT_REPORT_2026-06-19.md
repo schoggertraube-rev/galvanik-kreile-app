@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # Qualitäts-, Integrations- und Vernetzungsprüfung
 ## Kreile WerkstattCockpit — Audit 2026-06-19
 

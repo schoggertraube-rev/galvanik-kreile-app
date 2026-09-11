@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # APP.md – Galvanik Werkstatt-OS MVP
 
 **Projekt:** Interne Werkstatt-App für einen kleinen Galvanik-/Restaurationsbetrieb  

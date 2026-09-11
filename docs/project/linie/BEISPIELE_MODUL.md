@@ -1,3 +1,5 @@
+<!-- STATUS: REFERENCE_ONLY_NON_EXECUTABLE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # KREILE — BEISPIEL: so sieht ein korrektes Modul aus (Path 1)
 
 Vorbild-Disziplin: Lerninsel `modules/*/public.ts` (closed-world, CI-erzwungen) — dieselbe Naht kommt nach Kreile. Ein Modul besitzt ALLES seines Fachs an EINEM Ort; Quer-Zugriff nur über die Fassade.

@@ -70,6 +70,11 @@ function findingsOf(root: string, opts?: { baseBaselinePath?: string }): string[
 }
 
 describe("S1 Naht 1 — Manifest je Modul + Ablage", () => {
+  it("bindet den Authority-Vertrag fail-closed in ein echtes Repository", () => {
+    const root = repo({ "package.json": "{}\n" });
+    expect(findingsOf(root)).toContain("[authority] AUTHORITY_CONFIG_PATH_MISSING:quality/authoritative-sources.json");
+  });
+
   it("ein regelkonformes Modul ist gruen", () => {
     expect(findingsOf(repo(goodModule))).toEqual([]);
   });

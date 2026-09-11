@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # KREILE — GESAMTÜBERSICHT: was/wie/wo/wann/warum · Stand & Richtung
 *Orientierungs-/Status-Snapshot · 2026-09-01 · Orchestrator/Wächter · KEIN Beschluss (Beschlüsse leben nur in „DIE LINIE" 2026-08-28). Additiv, mit Datum/Grund.*
 

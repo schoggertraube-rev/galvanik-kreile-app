@@ -1,3 +1,5 @@
+<!-- STATUS: REFERENCE_ONLY_NON_EXECUTABLE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # Repository Mapping: Supabase vs. App
 
 Dieses Dokument beschreibt exakt, wie die App-Repositories die Supabase-Tabellen nutzen, welche Felder gelesen/geschrieben werden und welche Pflicht- oder Optionsfelder existieren.

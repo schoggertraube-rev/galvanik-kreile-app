@@ -1,3 +1,5 @@
+<!-- STATUS: REFERENCE_ONLY_NON_EXECUTABLE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # BAU-VERTRAG F1.5 — Bestätigter Zahlungseingang & Warenausgang · V1 · 2026-08-21
 
 **Paket:** `F1.5_BESTAETIGTER_ZAHLUNGSEINGANG` · **Für:** Mainchat/Writer · **Von:** Orchestrator (im Auftrag des Owners)

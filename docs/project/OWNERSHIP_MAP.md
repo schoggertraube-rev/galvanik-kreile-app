@@ -1,3 +1,5 @@
+<!-- STATUS: REFERENCE_ONLY_NON_EXECUTABLE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # Ownership Map — Galvanik Kreile
 
 Stand: 2026-08-04 | Referenz: `MODULARITY_STRATEGY.md`

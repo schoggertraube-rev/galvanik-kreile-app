@@ -65,7 +65,12 @@ jobs:
           node scripts/quality/check-w4-cross-module-read-ports.mjs --selftest
           node scripts/quality/check-w4-cross-module-read-ports.mjs --check
 
-      - name: S1 module gates (Path 1 Naehte 1/2/4/5/6, candidate view; protected copy runs in eslint-ratchet.yml)
+      - name: D-GOV-001 authoritative sources gate (blocking)
+        run: |
+          npm run quality:authority-gate:selftest
+          npm run quality:authority-gate
+
+      - name: S1 module gates (Path 1 Naehte plus Authority, candidate view; protected copies run in eslint-ratchet.yml)
         # Manifest je Modul, positive Fassade (kein Tiefimport), Cross-Modul-Fakten nur
         # ueber deklarierte public.v_*-Views, UI-Vertrag (kein Stationsband/Transport-Home,
         # Baseline shrink-only), AGENTS-Verweis. Siehe ARCHITEKTUR_MODULE_PATH1.md §2/§5.

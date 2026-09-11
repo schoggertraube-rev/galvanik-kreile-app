@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # UX-Review: Kern-USP Analyse
 
 **KERN-USP:** "Wo ist die Ware? Wann wird sie geliefert?"

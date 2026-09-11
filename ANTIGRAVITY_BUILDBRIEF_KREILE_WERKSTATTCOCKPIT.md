@@ -1,3 +1,5 @@
+<!-- STATUS: HISTORICAL_NON_AUTHORITATIVE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+
 # Antigravity-Umsetzungsbriefing  
 ## Kreile WerkstattCockpit – UI-, Prozess- und OCR-Revision
 
