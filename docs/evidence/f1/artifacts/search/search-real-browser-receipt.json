@@ -1,0 +1,63 @@
+{
+  "orderId": "2bd86b7e-f5db-44f5-af2a-0508b40542c5",
+  "orderNumber": "A-2026-0003",
+  "customerId": "9584c11b-ade1-45f7-a09f-61d655221f4b",
+  "customer": "Nordlicht 1789096754759-22440 GmbH",
+  "searchedFields": [
+    "customer",
+    "orderNumber",
+    "part",
+    "material",
+    "surface",
+    "dueDate"
+  ],
+  "states": [
+    "data",
+    "empty",
+    "denial",
+    "error"
+  ],
+  "sources": [
+    "Auftragsbestand",
+    "Kundenstamm"
+  ],
+  "overlayBackstack": "customer -> order -> customer -> target shell",
+  "tabletMeasurement": {
+    "viewport": {
+      "width": 1220,
+      "height": 880
+    },
+    "horizontalOverflow": 0,
+    "dialogState": "data"
+  },
+  "artifacts": [
+    {
+      "file": "docs/evidence/f1/artifacts/search/search-desktop-customer-1914x917.png",
+      "sha256": "471fcdb72d6c87ce1612c6f2ae07de790937afa8e5553b4465fe5dfa2b99d00f"
+    },
+    {
+      "file": "docs/evidence/f1/artifacts/search/search-desktop-order-1914x917.png",
+      "sha256": "f2252918bdc149920ee0dd44b0bd9107fdc6c1baa63d94f3d291c2c08712a8db"
+    },
+    {
+      "file": "docs/evidence/f1/artifacts/search/search-desktop-empty-1914x917.png",
+      "sha256": "3427cb865c1276e30a13338702074e2c9213ac346654148033b9ccc66801b218"
+    },
+    {
+      "file": "docs/evidence/f1/artifacts/search/search-tablet-1220x880.png",
+      "sha256": "aaa45e4fb59e24e6264343f1931d965645634697bc3b4fca35af32b18947a867"
+    },
+    {
+      "file": "docs/evidence/f1/artifacts/search/search-mobile-customer-390x844.png",
+      "sha256": "5cc8dc91d0849c6b210cb7130282424d162721ff73ac2d5ba4c36e24c6930790"
+    },
+    {
+      "file": "docs/evidence/f1/artifacts/search/search-mobile-denial-390x844.png",
+      "sha256": "aa82599e74aeb6dbb3b89a07353487aabd9cc04abe98bddb16566d7e1c697bea"
+    },
+    {
+      "file": "docs/evidence/f1/artifacts/search/search-mobile-error-390x844.png",
+      "sha256": "5e70a80c6c6ddc5098ce158982bff6babdfe0c7f4cb438f60a6d2dfaf12ecb84"
+    }
+  ]
+}

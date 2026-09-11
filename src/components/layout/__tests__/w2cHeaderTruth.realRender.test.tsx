@@ -5,6 +5,9 @@ import { KreileHeader } from "@/components/layout/KreileHeader";
 const boundary = vi.hoisted(() => ({
   logout: vi.fn(),
   replace: vi.fn(),
+  search: vi.fn(),
+  openCustomer: vi.fn(),
+  openOrder: vi.fn(),
   role: "buero",
 }));
 
@@ -15,6 +18,16 @@ vi.mock("next/link", () => ({
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: boundary.replace }) }));
 vi.mock("@/app/actions/auth", () => ({ logout: boundary.logout }));
+vi.mock("@/app/actions/search.actions", () => ({ searchTenantAction: boundary.search }));
+vi.mock("@/lib/overlayStore", () => ({
+  useOverlayStore: (selector: (state: {
+    openCustomer: typeof boundary.openCustomer;
+    openOrder: typeof boundary.openOrder;
+  }) => unknown) => selector({
+    openCustomer: boundary.openCustomer,
+    openOrder: boundary.openOrder,
+  }),
+}));
 vi.mock("@/lib/auth/PermissionsContext", () => ({
   usePermissions: () => ({
     initials: "BK",
@@ -28,12 +41,26 @@ beforeEach(() => vi.clearAllMocks());
 afterEach(() => cleanup());
 
 describe("target header truth", () => {
-  it("shows the target identity without calendar/provider or dead search claims", () => {
+  it("shows the target identity and the real search without provider claims", () => {
     render(<KreileHeader />);
     expect(screen.getByRole("link", { name: "Kreile Startseite" })).toHaveAttribute("href", "/");
     expect(screen.getByText("Berta Kreile")).toBeInTheDocument();
-    expect(screen.queryByText(/Kalender|Wetter|Echtzeit|NOT_AVAILABLE|Suche/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", {
+      name: "Kunde, Auftrag, Teil, Material, Oberfläche oder Termin suchen",
+    })).toBeInTheDocument();
+    expect(screen.queryByText(/Kalender|Wetter|Echtzeit|NOT_AVAILABLE/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Einstellungen" })).not.toBeInTheDocument();
+  });
+
+  it("opens the modular search in the target header", () => {
+    render(<KreileHeader />);
+    fireEvent.click(screen.getByRole("button", {
+      name: "Kunde, Auftrag, Teil, Material, Oberfläche oder Termin suchen",
+    }));
+    expect(screen.getByRole("dialog", { name: "Kunden und Aufträge" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", {
+      name: "Kunde, Auftrag, Teil, Material, Oberfläche oder Termin suchen",
+    })).toHaveFocus();
   });
 
   it("offers settings only to admin/developer and logs out to the dedicated login", async () => {

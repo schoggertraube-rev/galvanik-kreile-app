@@ -1029,12 +1029,12 @@
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/search.actions.ts",
       "exported_functions": [
-        "globalSearch"
+        "searchTenantAction"
       ],
       "classification": "PENDING_CONTRACT",
-      "open_reason": "Global search action. Supabase full-text, no independent E2E evidence.",
-      "visible": false,
-      "reachable": false
+      "open_reason": "Path-1 UI convergence stage D candidate: tenant-bound modular search is integrated into the target header; fresh database, target-shell browser evidence, Exact-SHA CI and independent acceptance remain pending.",
+      "visible": true,
+      "reachable": true
     },
     {
       "stable_id": "server-actions.start",
