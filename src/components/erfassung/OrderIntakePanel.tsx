@@ -17,7 +17,7 @@ import type {
   OrderIntakeReceipt,
 } from "@/lib/server/commands/orderIntakeCommand";
 import type { OrderIntakeCustomerOption } from "@/lib/server/orderIntakeRead";
-import { ORDER_LIFECYCLE_STATUS } from "@/lib/orders/orderLifecycleContract";
+import { ORDER_LIFECYCLE_STATUS } from "@/lib/order-support/orderLifecycleContract";
 
 const MAX_FILE_BYTES = 12 * 1024 * 1024;
 const MIME_EXTENSION = {

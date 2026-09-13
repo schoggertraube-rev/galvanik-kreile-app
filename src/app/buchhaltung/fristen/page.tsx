@@ -4,7 +4,7 @@ import { BackButton } from "@/components/ui/BackButton";
 import { usePageView } from "@/hooks/usePageView";
 import Link from "next/link";
 import { pruefeFristen } from "@/lib/buchhaltung/regeln";
-import { ChevronRight, CalendarClock, AlertCircle, Calendar } from "lucide-react";
+import { ChevronRight, CalendarClock, AlertCircle } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 
 const FESTEN_FRISTEN = [
@@ -39,9 +39,6 @@ export default function FristenPage() {
           <h1 className="text-2xl font-extrabold text-navy-900 mb-1">Fristen & Pflichten</h1>
           <p className="text-sm text-text-muted">Steuer-, Melde- und Aufbewahrungsfristen im Überblick.</p>
         </div>
-        <Link href="/kalender" className="flex items-center gap-2 px-4 py-2.5 bg-white text-navy-900 rounded-xl font-semibold text-sm border border-neutral-gray-200 hover:bg-neutral-gray-50 transition-colors">
-          <Calendar className="w-4 h-4" /> Zum Kalender
-        </Link>
       </div>
 
       {/* Aktuelle Hinweise */}

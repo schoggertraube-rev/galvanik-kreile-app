@@ -1,94 +1,45 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { KreileHeader } from "./KreileHeader";
-import { RightNav } from "./RightNav";
-import { MobileNav } from "./MobileNav";
-import { MobileBottomNav } from "./MobileBottomNav";
 import { useEffect, useState } from "react";
-import { OrderOverlay } from "@/components/orders/OrderOverlay";
-import { CustomerOverlay } from "@/components/customers/CustomerOverlay";
+import { EntityOverlayStack } from "./EntityOverlayStack";
 import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
 import { SessionWarningBanner } from "./SessionWarningBanner";
+import { KreileHeader } from "./KreileHeader";
+import { TargetNavigation } from "./TargetNavigation";
+import { MobileBottomNav } from "./MobileBottomNav";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
 
 export function KreileAppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const { role } = usePermissions();
   const [isSessionExpired, setIsSessionExpired] = useState(false);
+  const isStartScreen = pathname === "/start" || pathname === "/login";
+  const isWorkshop = role === "werkstatt";
 
   useEffect(() => {
-    if (pathname !== "/start" && pathname !== "/login") {
-      getAuthorizationSnapshotAction().then(res => {
-        if (!res.ok) {
-          setIsSessionExpired(true);
-        } else {
-          setIsSessionExpired(false);
-        }
-      }).catch(() => {
-        setIsSessionExpired(true);
-      });
-    }
-  }, [pathname]);
-
-  const isStartScreen = pathname === "/start" || pathname === "/login";
+    if (isStartScreen) return;
+    getAuthorizationSnapshotAction()
+      .then((result) => setIsSessionExpired(!result.ok))
+      .catch(() => setIsSessionExpired(true));
+  }, [isStartScreen, pathname]);
 
   if (isStartScreen) {
-    return (
-          <div className="min-h-screen bg-bg-app text-kreile-text antialiased">
-            {children}
-            <OrderOverlay />
-            <CustomerOverlay />
-          </div>
-    );
+    return <div className="min-h-screen bg-bg-app text-navy-900 antialiased">{children}</div>;
   }
 
   return (
-        <div
-          className="flex flex-col bg-bg-app text-navy-900 antialiased"
-          style={{ height: "100dvh" }}          // dvh für korrekte mobile Viewport-Höhe
-        >
-          <SessionWarningBanner show={isSessionExpired} />
-
-          {/* Header — fixe Höhe 72px */}
-          <KreileHeader onMenuToggle={() => setMobileNavOpen(true)} />
-
-          {/* Tablet Landscape Top Nav is removed per F-MENU-ANIM (Hamburger on tablet) */}
-          {/* <TabletTopFlowNav className="hidden md:flex xl:hidden shrink-0" /> */}
-
-          {/* Body: Hauptinhalt */}
-          <div className="flex flex-1 min-h-0">   {/* min-h-0 verhindert Flex-Overflow */}
-
-            {/* Linke Navigation (Desktop Sidebar, sichtbar ab xl) */}
-            <div className="hidden xl:flex shrink-0 w-[72px] relative z-30">
-              {/* Desktop (≥1280px): RightNav permanent sichtbar */}
-              <RightNav />
-            </div>
-
-            <MobileNav open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
-
-            {/* Scroll-Container für Seiteninhalt */}
-            <main
-              className={`flex-1 relative flex flex-col ${
-                pathname.startsWith('/warendurchlauf') ? "bg-[#fcfbf9] lg:rounded-tl-[40px] border-l border-t border-[#d8d0c4] shadow-[-4px_-4px_16px_rgba(0,0,0,0.02)]" :
-                pathname.startsWith('/kommunikation') ? "bg-transparent overflow-hidden overflow-x-hidden" : 
-                "bg-transparent lg:rounded-tl-[40px] border-l border-t border-[#d8d0c4] shadow-[-4px_-4px_16px_rgba(0,0,0,0.02)] overflow-y-auto overflow-x-hidden p-4 md:p-6 lg:p-8"
-              }`}
-            >
-              {/* Max-Width Container — auf großen Screens zentriert */}
-              <div className="w-full h-full pb-24 md:pb-0 flex flex-col min-h-0">
-                {children}
-              </div>
-            </main>
-          </div>
-
-          {/* Mobile Bottom Nav (nur auf Handys sichtbar) */}
-          <MobileBottomNav className="flex md:hidden z-40" />
-
-          {/* Global Order Overlay Drawer */}
-          <OrderOverlay />
-          
-          {/* Global Customer Overlay */}
-          <CustomerOverlay />
-        </div>
+    <div className={`target-shell ${isWorkshop ? "target-shell--workshop" : ""}`}>
+      <SessionWarningBanner show={isSessionExpired} />
+      <KreileHeader />
+      <div className="target-shell__body">
+        {!isWorkshop && <TargetNavigation />}
+        <main className="target-shell__content">
+          <div className="target-shell__page">{children}</div>
+        </main>
+      </div>
+      {!isWorkshop && <MobileBottomNav className="target-mobile-dock" />}
+      <EntityOverlayStack />
+    </div>
   );
 }

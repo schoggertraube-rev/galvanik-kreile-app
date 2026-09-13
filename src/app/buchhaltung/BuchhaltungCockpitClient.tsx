@@ -63,8 +63,8 @@ export function BuchhaltungCockpitClient() {
     <div className="w-full pb-24 px-4 sm:px-6 xl:px-8">
       {/* Breadcrumb & BackButton */}
       <div className="mb-4">
-        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Betrieb',href:'/betrieb'}, {label:'Buchhaltung & Finanzen'}]} />
-        <BackButton label="Betrieb" href="/betrieb" />
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Buchhaltung & Finanzen'}]} />
+        <BackButton label="Startseite" href="/" />
       </div>
 
       {/* Header */}

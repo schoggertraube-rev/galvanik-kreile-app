@@ -68,6 +68,7 @@ export function WerkstattView({
   const isEmpty = view.kind === "empty";
   const authorized = isData || isEmpty;
   const canCreateOrder = authorized && view.canCreateOrder;
+  const canOperate = authorized && view.canOperate !== false;
   const isPickerOpen = activePicker !== null;
 
   useEffect(() => {
@@ -254,6 +255,19 @@ export function WerkstattView({
                 <span className={styles.wipCount}>{view.wipCount}</span>
               </button>
 
+              <button
+                type="button"
+                className={styles.infoTile}
+                data-testid="werkstatt-goods-out-tile"
+                aria-haspopup="dialog"
+                aria-expanded={activePicker === "goods-out"}
+                aria-controls={PICKER_DIALOG_ID}
+                onClick={(event) => openPicker(event, "goods-out")}
+              >
+                <span className={styles.infoLabel}>Heute raus</span>
+                <span className={styles.infoCount}>{view.goodsOutCandidates.length}</span>
+              </button>
+
               <div className={styles.infoTile} data-testid="werkstatt-due-week-tile">
                 <p className={styles.infoLabel}>Fällig diese Woche</p>
                 <p className={styles.infoCount}>{view.dueThisWeekCount}</p>
@@ -262,53 +276,53 @@ export function WerkstattView({
           </div>
         ) : null}
 
-        {authorized ? (
+        {canOperate ? (
           <nav className={styles.actionBar} aria-label="Werkstattaktionen">
-            {isData ? (
-              <button
-                type="button"
-                className={`${styles.actionPrimary} ${styles.touchTarget}`}
-                aria-haspopup="dialog"
-                aria-expanded={isPickerOpen}
-                aria-controls={PICKER_DIALOG_ID}
-                onClick={(event) => openPicker(event, "order")}
-              >
-                Auftrag öffnen / scannen
-              </button>
-            ) : null}
-            {isData ? (
-              <button
-                type="button"
-                className={`${styles.actionSecondary} ${styles.touchTarget}`}
-                aria-haspopup="dialog"
-                aria-expanded={isPickerOpen}
-                aria-controls={PICKER_DIALOG_ID}
-                onClick={(event) => openPicker(event, "order")}
-              >
-                Mehrarbeit
-              </button>
-            ) : null}
-            {isData ? (
-              <button
-                type="button"
-                className={`${styles.actionSecondary} ${styles.touchTarget}`}
-                aria-haspopup="dialog"
-                aria-expanded={isPickerOpen}
-                aria-controls={PICKER_DIALOG_ID}
-                onClick={(event) => openPicker(event, "order")}
-              >
-                Fertig melden
-              </button>
-            ) : null}
-            {canCreateOrder ? (
-              <button
-                type="button"
-                className={`${styles.actionSecondary} ${styles.touchTarget}`}
-                onClick={ports.onCreateOrder}
-              >
-                Neuer Eingang
-              </button>
-            ) : null}
+            <button
+              type="button"
+              className={`${styles.actionPrimary} ${styles.touchTarget}`}
+              aria-haspopup="dialog"
+              aria-expanded={isPickerOpen}
+              aria-controls={PICKER_DIALOG_ID}
+              disabled={!isData}
+              title={isData ? undefined : "Kein Werkstattauftrag vorhanden."}
+              onClick={(event) => openPicker(event, "order")}
+            >
+              Auftrag öffnen / scannen
+            </button>
+            <button
+              type="button"
+              className={`${styles.actionSecondary} ${styles.touchTarget}`}
+              aria-haspopup="dialog"
+              aria-expanded={isPickerOpen}
+              aria-controls={PICKER_DIALOG_ID}
+              disabled={!isData}
+              title={isData ? undefined : "Kein Werkstattauftrag vorhanden."}
+              onClick={(event) => openPicker(event, "order")}
+            >
+              Mehrarbeit
+            </button>
+            <button
+              type="button"
+              className={`${styles.actionSecondary} ${styles.touchTarget}`}
+              aria-haspopup="dialog"
+              aria-expanded={isPickerOpen}
+              aria-controls={PICKER_DIALOG_ID}
+              disabled={!isData}
+              title={isData ? undefined : "Kein Werkstattauftrag vorhanden."}
+              onClick={(event) => openPicker(event, "order")}
+            >
+              Fertig melden
+            </button>
+            <button
+              type="button"
+              className={`${styles.actionSecondary} ${styles.touchTarget}`}
+              disabled={!canCreateOrder}
+              title={canCreateOrder ? undefined : "Für diese Rolle nicht freigegeben."}
+              onClick={ports.onCreateOrder}
+            >
+              Neuer Eingang
+            </button>
             <button
               type="button"
               className={`${styles.actionSecondary} ${styles.touchTarget}`}

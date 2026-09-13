@@ -4,7 +4,7 @@ import Link from "next/link";
 import { CheckCircle2, Package, Truck, MessageSquare, CreditCard } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getOrdersDb, type OrderResponse } from "@/app/actions/orders.actions";
-import { useOrderModal } from "@/components/orders/OrderModalProvider";
+import { useOrderModal } from "@/components/entities/order-legacy/OrderModalProvider";
 
 const ACCOUNTING_AND_COMMUNICATION_DENIAL =
   "NOT_AVAILABLE: Zahlungsstatus, Zahlungserfassung, Rechnungsversand und Kundenbenachrichtigungen benötigen einen tenant- und ownership-geprüften Accounting- und Kommunikationsvertrag.";

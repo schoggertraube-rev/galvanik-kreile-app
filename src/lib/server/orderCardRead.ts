@@ -471,7 +471,9 @@ export async function readLiveOrderCard(
       `);
       if (freezeRows.length > 1) throw new Error("ORDER_CARD_FREEZE_AMBIGUOUS");
       const freeze = freezeRows[0] ?? null;
-      const frozenFlag = queue.status === "fertig";
+      // A confirmed goods-out changes only the physical location. The immutable
+      // freeze remains the canonical commercial snapshot after `fertig`.
+      const frozenFlag = queue.status === "fertig" || queue.status === "abgeholt";
       if ((freeze !== null) !== frozenFlag) throw new Error("ORDER_CARD_FREEZE_STATE_INVALID");
 
       let mappedFreeze: LiveOrderCard["freeze"] = null;

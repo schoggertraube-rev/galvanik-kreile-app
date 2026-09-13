@@ -198,8 +198,7 @@ describe("W2C company settings read containment", () => {
     const source = await readFile("src/components/layout/KreileHeader.tsx", "utf8");
 
     expect(source).not.toContain("getCompanySettings");
-    expect(source).toContain('const logoUrl = "/assets/logo/kreile-wordmark-skyline.svg";');
-    expect(source).toContain("src={logoUrl}");
+    expect(source).toContain('src="/assets/logo/kreile-wordmark-skyline.svg"');
   });
 
   it("renders the unavailable form without editable controls or read dependencies", async () => {

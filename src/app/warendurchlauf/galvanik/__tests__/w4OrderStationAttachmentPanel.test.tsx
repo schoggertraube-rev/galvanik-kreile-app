@@ -27,10 +27,10 @@ vi.mock("@/lib/supabase/client", () => ({
     },
   },
 }));
-vi.mock("@/components/orders/OrderModalProvider", () => ({
+vi.mock("@/components/entities/order-legacy/OrderModalProvider", () => ({
   useOrderModal: () => ({ openOrder: vi.fn() }),
 }));
-vi.mock("@/components/orders/OrderCompactCard", () => ({
+vi.mock("@/components/entities/order-legacy/OrderCompactCard", () => ({
   OrderCompactCard: ({ orderNumber, onClick }: { orderNumber: string; onClick: () => void }) => (
     <button type="button" onClick={onClick}>{orderNumber}</button>
   ),
@@ -54,14 +54,14 @@ vi.mock("lucide-react", () => {
     Upload: Icon,
   };
 });
-vi.mock("@/components/orders/GalvanikCorrectionButton", () => ({
+vi.mock("@/components/entities/order-legacy/GalvanikCorrectionButton", () => ({
   GalvanikCorrectionButton: () => null,
 }));
 
-import { GalvanikHandoffAttachmentPanel } from "@/components/orders/GalvanikHandoffAttachmentPanel";
+import { GalvanikHandoffAttachmentPanel } from "@/components/entities/order-legacy/GalvanikHandoffAttachmentPanel";
 import GalvanikPage from "@/app/warendurchlauf/galvanik/page";
 import type { EvidenceReadRecord } from "@/lib/server/evidenceRead";
-import { ORDER_LIFECYCLE_STATUS } from "@/lib/orders/orderLifecycleContract";
+import { ORDER_LIFECYCLE_STATUS } from "@/lib/order-support/orderLifecycleContract";
 
 const ACTOR = "11111111-1111-4111-8111-111111111111";
 const OTHER_ACTOR = "22222222-2222-4222-8222-222222222222";

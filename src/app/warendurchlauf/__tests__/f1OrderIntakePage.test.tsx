@@ -20,8 +20,8 @@ vi.mock("@/app/warendurchlauf/actions", () => ({
 vi.mock("@/components/erfassung/ErfassungProvider", () => ({
   useErfassung: () => ({ openErfassung: ports.openErfassung }),
 }));
-vi.mock("@/components/orders/OrderCompactCard", () => ({ OrderCompactCard: () => <div /> }));
-vi.mock("@/components/orders/WareneingangHandoffButton", () => ({
+vi.mock("@/components/entities/order-legacy/OrderCompactCard", () => ({ OrderCompactCard: () => <div /> }));
+vi.mock("@/components/entities/order-legacy/WareneingangHandoffButton", () => ({
   WareneingangHandoffButton: (props: {
     onConflictReadback?: (orders: unknown[], message: string) => void;
   }) => {
@@ -36,7 +36,7 @@ vi.mock("@/components/orders/WareneingangHandoffButton", () => ({
     );
   },
 }));
-vi.mock("@/lib/orders/getUrgency", () => ({ getUrgency: () => "ok" }));
+vi.mock("@/lib/order-support/getUrgency", () => ({ getUrgency: () => "ok" }));
 vi.mock("@/lib/overlayStore", () => ({ useOverlayStore: () => ({ openOrder: vi.fn() }) }));
 vi.mock("next/link", () => ({ default: ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a {...props}>{children}</a> }));
 vi.mock("next/navigation", () => ({

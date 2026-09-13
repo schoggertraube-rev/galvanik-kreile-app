@@ -3,10 +3,10 @@
 import { useState, useEffect } from "react";
 import { UserPlus, UserCheck, FilePlus2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { matchCustomer } from "@/lib/customers/matchCustomer";
+import { matchCustomer } from "@/lib/customer-support/matchCustomer";
 import { Customer } from "@/lib/repositories/customersRepository";
-import { NewCustomerForm } from "@/components/customers/NewCustomerForm";
-import { NewOrderForm } from "@/components/orders/NewOrderForm";
+import { NewCustomerForm } from "@/components/entities/customer-legacy/NewCustomerForm";
+import { NewOrderForm } from "@/components/entities/order-legacy/NewOrderForm";
 import Image from "next/image";
 
 interface OcrMatchResultProps {

@@ -1,6 +1,6 @@
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ORDER_LIFECYCLE_STATUS } from "@/lib/orders/orderLifecycleContract";
+import { ORDER_LIFECYCLE_STATUS } from "@/lib/order-support/orderLifecycleContract";
 
 const { withTransaction, execute } = vi.hoisted(() => ({ withTransaction: vi.fn(), execute: vi.fn() }));
 vi.mock("server-only", () => ({}));

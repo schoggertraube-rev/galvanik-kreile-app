@@ -4,7 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import { ORDER_LIFECYCLE_STATUS } from "@/lib/orders/orderLifecycleContract";
+import { ORDER_LIFECYCLE_STATUS } from "@/lib/order-support/orderLifecycleContract";
 
 const EVENT_TYPE = "ORDER_INTAKE_CREATED_V1";
 const EVENT_SCHEMA_VERSION = 1 as const;

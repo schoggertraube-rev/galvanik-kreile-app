@@ -57,9 +57,9 @@ describe("F0 W2C active client containment", () => {
       "src/components/erfassung/ScanFlow/ScanUpload.tsx",
       "src/components/erfassung/shared/ItemPhotoUploader.tsx",
       "src/components/intake/CameraCapture.tsx",
-      "src/components/customers/NewCustomerForm.tsx",
-      "src/components/orders/NewOrderForm.tsx",
-      "src/components/orders/StatusMailDrawer.tsx",
+      "src/components/entities/customer-legacy/NewCustomerForm.tsx",
+      "src/components/entities/order-legacy/NewOrderForm.tsx",
+      "src/components/entities/order-legacy/StatusMailDrawer.tsx",
       "src/lib/services/intakeService.ts",
       "src/lib/services/photoService.ts",
     ].map((file) => readFileSync(resolve(process.cwd(), file), "utf8"));
@@ -76,7 +76,7 @@ describe("F0 W2C active client containment", () => {
   });
 
   it("removes the active payment-provider invocation and exposes an honest disabled control", () => {
-    const source = readFileSync(resolve(process.cwd(), "src/components/orders/PaymentDrawer.tsx"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "src/components/entities/order-legacy/PaymentDrawer.tsx"), "utf8");
 
     expect(source).not.toMatch(/createPaymentIntent|mollieAdapter|functions\.invoke/);
     expect(source).toContain("disabled");

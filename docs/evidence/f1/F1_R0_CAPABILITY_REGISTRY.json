@@ -6,13 +6,13 @@
   "tenant": "galvanik-kreile",
   "note": "Machine-readable capability inventory based on snapshot_sha; the immutable review SHA is recorded separately when the candidate is frozen. Every page route, API route, Server Action group, KPI definition, and provider connection must carry exactly one of: REAL_VERIFIED | REAL_PENDING_SECRET | PENDING_CONTRACT | TEST_ONLY | LEGACY_REMOVE",
   "summary": {
-    "page_routes": 78,
+    "page_routes": 36,
     "api_routes": 19,
-    "server_action_groups": 51,
+    "server_action_groups": 50,
     "kpi_definitions": 7,
-    "provider_connections": 17,
+    "provider_connections": 16,
     "nav_links_without_page": 3,
-    "total": 175
+    "total": 131
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -89,56 +89,6 @@
       "reachable": true,
       "classification": "PENDING_CONTRACT",
       "open_reason": "Former production test-tool route is detached and fail-closed with FoundationUnavailable. No operational contract exists."
-    },
-    {
-      "stable_id": "page.analyse",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/analyse/page.tsx",
-      "route": "/analyse",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Analytics module. No verified read-model contract."
-    },
-    {
-      "stable_id": "page.archive",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/archive/page.tsx",
-      "route": "/archive",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Archive view. No verified contract."
-    },
-    {
-      "stable_id": "page.baeder",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/baeder/page.tsx",
-      "route": "/baeder",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Bath/process bath management. Supabase-connected but no E2E evidence."
-    },
-    {
-      "stable_id": "page.betrieb-kvp",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/betrieb-kvp/page.tsx",
-      "route": "/betrieb-kvp",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Operations KVP dashboard. No verified contract."
-    },
-    {
-      "stable_id": "page.betrieb",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/betrieb/page.tsx",
-      "route": "/betrieb",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Operations overview. Navigation hub with links to sub-modules."
     },
     {
       "stable_id": "page.buchhaltung.ausgaben",
@@ -331,26 +281,6 @@
       "open_reason": "Payment management. Mollie route quarantined. No verified contract."
     },
     {
-      "stable_id": "page.cockpit.jahresplan",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/cockpit/jahresplan/page.tsx",
-      "route": "/cockpit/jahresplan",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Annual plan view. No verified read-model contract."
-    },
-    {
-      "stable_id": "page.cockpit",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/cockpit/page.tsx",
-      "route": "/cockpit",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Owner cockpit dashboard. Supabase read-models connected, no independent E2E evidence."
-    },
-    {
       "stable_id": "page.customers.id",
       "kind": "PAGE_ROUTE",
       "entry_point": "src/app/customers/[id]/page.tsx",
@@ -369,206 +299,6 @@
       "reachable": true,
       "classification": "PENDING_CONTRACT",
       "open_reason": "Customer list. Supabase-connected, no independent E2E evidence."
-    },
-    {
-      "stable_id": "page.feedback.token",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/feedback/[token]/page.tsx",
-      "route": "/feedback/[token]",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Customer feedback form by token. Email route quarantined. No verified contract."
-    },
-    {
-      "stable_id": "page.finanzen",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/finanzen/page.tsx",
-      "route": "/finanzen",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Finance overview. No verified contract."
-    },
-    {
-      "stable_id": "page.items",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/items/page.tsx",
-      "route": "/items",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Item/part catalog. No verified contract."
-    },
-    {
-      "stable_id": "page.kalender",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/kalender/page.tsx",
-      "route": "/kalender",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Calendar view. No verified contract."
-    },
-    {
-      "stable_id": "page.kommunikation",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/kommunikation/page.tsx",
-      "route": "/kommunikation",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Communication center. Email/notification provider not activated. No verified contract."
-    },
-    {
-      "stable_id": "page.kontrolle",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/kontrolle/page.tsx",
-      "route": "/kontrolle",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Quality control view. No verified contract."
-    },
-    {
-      "stable_id": "page.kunden-auftraege",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/kunden-auftraege/page.tsx",
-      "route": "/kunden-auftraege",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Customer order view. No verified contract."
-    },
-    {
-      "stable_id": "page.kvp",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/kvp/page.tsx",
-      "route": "/kvp",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "KVP route is fail-closed with FoundationUnavailable. All localStorage and hardcoded business state were removed; a real server contract is still pending."
-    },
-    {
-      "stable_id": "page.lager",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/lager/page.tsx",
-      "route": "/lager",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Inventory/stock management. Supabase-connected, no independent E2E evidence."
-    },
-    {
-      "stable_id": "page.lieferanten.id",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/lieferanten/[id]/page.tsx",
-      "route": "/lieferanten/[id]",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Supplier detail. No verified contract."
-    },
-    {
-      "stable_id": "page.lieferanten",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/lieferanten/page.tsx",
-      "route": "/lieferanten",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Supplier list. No verified contract."
-    },
-    {
-      "stable_id": "page.marketing.aktion.neu",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/marketing/aktion/neu/page.tsx",
-      "route": "/marketing/aktion/neu",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "New marketing campaign. No verified contract."
-    },
-    {
-      "stable_id": "page.marketing.aktion",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/marketing/aktion/page.tsx",
-      "route": "/marketing/aktion",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Marketing campaign list. No verified external provider integration."
-    },
-    {
-      "stable_id": "page.marketing.attribution",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/marketing/attribution/page.tsx",
-      "route": "/marketing/attribution",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Marketing attribution analytics. No verified external data source."
-    },
-    {
-      "stable_id": "page.marketing.einwilligungen",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/marketing/einwilligungen/page.tsx",
-      "route": "/marketing/einwilligungen",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Marketing consent management. No verified contract."
-    },
-    {
-      "stable_id": "page.marketing.kanaele",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/marketing/kanaele/page.tsx",
-      "route": "/marketing/kanaele",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Marketing channels configuration. No verified external integration."
-    },
-    {
-      "stable_id": "page.marketing",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/marketing/page.tsx",
-      "route": "/marketing",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Marketing hub. No verified external provider integration."
-    },
-    {
-      "stable_id": "page.marketing.segmente.id",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/marketing/segmente/[id]/page.tsx",
-      "route": "/marketing/segmente/[id]",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Customer segment detail. No verified contract."
-    },
-    {
-      "stable_id": "page.marketing.segmente.neu",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/marketing/segmente/neu/page.tsx",
-      "route": "/marketing/segmente/neu",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "New customer segment. No verified contract."
-    },
-    {
-      "stable_id": "page.marketing.segmente",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/marketing/segmente/page.tsx",
-      "route": "/marketing/segmente",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Customer segment list. No verified contract."
     },
     {
       "stable_id": "page.orders.id",
@@ -591,116 +321,6 @@
       "open_reason": "Order list. Supabase-connected, no independent E2E evidence."
     },
     {
-      "stable_id": "page.performance.baeder-material",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/performance/baeder-material/page.tsx",
-      "route": "/performance/baeder-material",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Bath material performance KPI. No verified read-model."
-    },
-    {
-      "stable_id": "page.performance.ki-empfehlungen",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/performance/ki-empfehlungen/page.tsx",
-      "route": "/performance/ki-empfehlungen",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "AI recommendations. Gemini integration pending secret configuration."
-    },
-    {
-      "stable_id": "page.performance.kunden-markt",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/performance/kunden-markt/page.tsx",
-      "route": "/performance/kunden-markt",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Customer/market performance KPI. No verified read-model."
-    },
-    {
-      "stable_id": "page.performance",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/performance/page.tsx",
-      "route": "/performance",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Performance dashboard hub. No verified read-model contract."
-    },
-    {
-      "stable_id": "page.performance.qualitaet-risiko",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/performance/qualitaet-risiko/page.tsx",
-      "route": "/performance/qualitaet-risiko",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Quality/risk KPI. No verified read-model."
-    },
-    {
-      "stable_id": "page.performance.umsatz-marge",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/performance/umsatz-marge/page.tsx",
-      "route": "/performance/umsatz-marge",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Revenue/margin KPI. No verified read-model."
-    },
-    {
-      "stable_id": "page.performance.werkstatt-puls",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/performance/werkstatt-puls/page.tsx",
-      "route": "/performance/werkstatt-puls",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Workshop pulse KPI. No verified read-model."
-    },
-    {
-      "stable_id": "page.print-queue",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/print-queue/page.tsx",
-      "route": "/print-queue",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Print queue management. No verified contract."
-    },
-    {
-      "stable_id": "page.quotes.new",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/quotes/new/page.tsx",
-      "route": "/quotes/new",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "New quote/inquiry form. No verified contract."
-    },
-    {
-      "stable_id": "page.quotes",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/quotes/page.tsx",
-      "route": "/quotes",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Quote/inquiry list. No verified contract."
-    },
-    {
-      "stable_id": "page.scan",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/scan/page.tsx",
-      "route": "/scan",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "QR/document scan entry point. OCR routes quarantined."
-    },
-    {
       "stable_id": "page.settings",
       "kind": "PAGE_ROUTE",
       "entry_point": "src/app/settings/page.tsx",
@@ -719,52 +339,6 @@
       "reachable": true,
       "classification": "PENDING_CONTRACT",
       "open_reason": "Today/start page. today/* API routes connected but no independent E2E evidence."
-    },
-    {
-      "stable_id": "page.station.slug",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/station/[slug]/page.tsx",
-      "route": "/station/[slug]",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Station page uses real getOrdersDb(). Phantom /orders/new CTA replaced with /warendurchlauf/wareneingang in F1-R0. No independent E2E evidence."
-    },
-    {
-      "stable_id": "page.status",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/status/page.tsx",
-      "route": "/status",
-      "visible": true,
-      "reachable": true,
-      "classification": "REAL_VERIFIED",
-      "evidence": {
-        "mission": "F1.1_DIGITALER_WARENEINGANG",
-        "role": "Readback confirmation page proving order was written and readable",
-        "product_sha": "333368cb2a0b8db06938a0f8d646493feb61537b",
-        "evidence_sha": "228316b7674d3363a9ab62d97b41500bd1409395",
-        "evidence_sha256": "69F7017DD45700D69FC65D2D2099AB33497D6D1705C2FC03B86260A68323BE9C"
-      }
-    },
-    {
-      "stable_id": "page.telefonnotiz",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/telefonnotiz/page.tsx",
-      "route": "/telefonnotiz",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Phone note capture. No verified contract."
-    },
-    {
-      "stable_id": "page.today",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/today/page.tsx",
-      "route": "/today",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Today overview. API routes connected but no independent E2E evidence."
     },
     {
       "stable_id": "page.warendurchlauf.galvanik",
@@ -1455,12 +1029,12 @@
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/search.actions.ts",
       "exported_functions": [
-        "globalSearch"
+        "searchTenantAction"
       ],
       "classification": "PENDING_CONTRACT",
-      "open_reason": "Global search action. Supabase full-text, no independent E2E evidence.",
-      "visible": false,
-      "reachable": false
+      "open_reason": "Path-1 UI convergence stage D candidate: tenant-bound modular search is integrated into the target header; fresh database, target-shell browser evidence, Exact-SHA CI and independent acceptance remain pending.",
+      "visible": true,
+      "reachable": true
     },
     {
       "stable_id": "server-actions.start",
@@ -1628,18 +1202,6 @@
       "open_reason": "Owner cockpit KPI and scenario actions. Supabase read-models, no independent E2E evidence.",
       "visible": false,
       "reachable": true
-    },
-    {
-      "stable_id": "server-actions.customers-id",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/customers/[id]/actions.ts",
-      "exported_functions": [
-        "getCustomerDetailsAction"
-      ],
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Customer detail aggregation. Supabase-connected, no independent E2E evidence.",
-      "visible": false,
-      "reachable": false
     },
     {
       "stable_id": "server-actions.global-search",
@@ -2092,17 +1654,6 @@
       "env_vars": [],
       "classification": "PENDING_CONTRACT",
       "open_reason": "logUiEvent and getRealAnalyticsStats in tracking.actions.ts. Internal event log to Supabase. No confirmed external analytics provider contract.",
-      "visible": false,
-      "reachable": true
-    },
-    {
-      "stable_id": "provider.kommunikation",
-      "kind": "PROVIDER_CONNECTION",
-      "provider": "Kommunikation/Notifications (WhatsApp/SMS/Push)",
-      "adapter_file": "src/app/kommunikation/page.tsx",
-      "env_vars": [],
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Communication center page exists. No adapter, provider, or API integration found. Planned for customer status notifications.",
       "visible": false,
       "reachable": true
     },

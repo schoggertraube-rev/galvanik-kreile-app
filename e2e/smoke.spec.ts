@@ -10,7 +10,7 @@ test.describe("Kreile auth boundary", () => {
       page.getByRole("button", { name: "Administrator / E-Mail Login" }),
     ).toBeVisible();
     await expect(
-      page.getByText("Tagesplan nach dem Einloggen prüfen."),
+      page.getByText("Benutzer auswählen und mit der persönlichen PIN anmelden."),
     ).toBeVisible();
     await expect(page.locator("body")).not.toContainText(/Auftrag\s+[A-Z]-?\d+/i);
     await expect(

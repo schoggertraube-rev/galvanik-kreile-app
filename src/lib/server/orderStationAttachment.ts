@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import {
   ORDER_LIFECYCLE_STATUS,
   type OrderLifecycleStatus,
-} from "@/lib/orders/orderLifecycleContract";
+} from "@/lib/order-support/orderLifecycleContract";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import {
   withPrivilegedTenantTransaction,

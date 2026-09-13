@@ -14,6 +14,10 @@
     "public.scan_uploads"
   ],
   "readPorts": {
+    "src/app/actions/search.actions.ts": [
+      "private.v_operational_station_queue_v1",
+      "private.v_order_intake_customers_v1"
+    ],
     "src/lib/server/cardSearchRead.ts": [
       "private.v_card_search_documents_v1"
     ],

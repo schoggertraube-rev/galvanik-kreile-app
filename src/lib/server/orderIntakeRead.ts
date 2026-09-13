@@ -1,7 +1,7 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
-import { ORDER_LIFECYCLE_STATUS } from "@/lib/orders/orderLifecycleContract";
+import { ORDER_LIFECYCLE_STATUS } from "@/lib/order-support/orderLifecycleContract";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type { OrderIntakeReceipt, OrderIntakeReceiptItem } from "@/lib/server/commands/orderIntakeCommand";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";

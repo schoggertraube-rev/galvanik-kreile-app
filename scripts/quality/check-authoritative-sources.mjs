@@ -43,13 +43,12 @@ const REQUIRED_CLASSIFICATIONS = Object.freeze([
 ]);
 const BANNER_EXEMPTIONS = new Set(["audit_results.md", "CLAUDE.md", "README.md"]);
 const ALLOWED_DOCUMENT_STATUS = new Set(["HISTORICAL_NON_AUTHORITATIVE", "REFERENCE_ONLY_NON_EXECUTABLE"]);
-const LEGACY_CALENDAR_CONTRACT = Object.freeze({
-  finding: "src/app/kalender/page.tsx",
+const REMOVED_CALENDAR_CONTRACT = Object.freeze({
+  removedPage: "src/app/kalender/page.tsx",
   registry: "docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json",
   registryId: "page.kalender",
-  sourceClaim: "Google Kalender",
   matrix: "docs/project/PROVIDER_CAPABILITY_MATRIX.md",
-  disposition: "PATH1_UI_CONVERGENCE_A_REMOVE_OR_404",
+  requiredMatrixTokens: ["REMOVED_NON_RENDERING", "M365_NOT_CONNECTED"],
 });
 const REQUIRED_MODULE_IDS = Object.freeze([
   "module.fundament",
@@ -234,18 +233,25 @@ export function checkAuthorityRepository(root = process.cwd(), configRel = DEFAU
     if (!knownDocs.has(rel) && AUTHORITY_CLAIM.test(read(root, rel))) errors.push(`UNCLASSIFIED_COMPETING_AUTHORITY:${rel}`);
   }
 
-  const registry = parseJson(root, LEGACY_CALENDAR_CONTRACT.registry, errors, "CAPABILITY_REGISTRY");
-  const matrix = exists(root, LEGACY_CALENDAR_CONTRACT.matrix) ? read(root, LEGACY_CALENDAR_CONTRACT.matrix) : "";
-  const legacySource = exists(root, LEGACY_CALENDAR_CONTRACT.finding) ? read(root, LEGACY_CALENDAR_CONTRACT.finding) : "";
-  if (!legacySource.includes(LEGACY_CALENDAR_CONTRACT.sourceClaim)) errors.push("LEGACY_CALENDAR_SOURCE_CLAIM_NOT_DETECTED");
-  const calendarCapability = registry?.capabilities?.find((item) => item.stable_id === LEGACY_CALENDAR_CONTRACT.registryId);
-  if (!calendarCapability || calendarCapability.entry_point !== LEGACY_CALENDAR_CONTRACT.finding || calendarCapability.visible !== true || calendarCapability.reachable !== true) {
-    errors.push("LEGACY_CALENDAR_REGISTRY_STATE_NOT_DETECTED");
+  const registry = parseJson(root, REMOVED_CALENDAR_CONTRACT.registry, errors, "CAPABILITY_REGISTRY");
+  const matrix = exists(root, REMOVED_CALENDAR_CONTRACT.matrix) ? read(root, REMOVED_CALENDAR_CONTRACT.matrix) : "";
+  if (exists(root, REMOVED_CALENDAR_CONTRACT.removedPage)) errors.push("REMOVED_CALENDAR_PAGE_REINTRODUCED");
+  const calendarCapability = registry?.capabilities?.find((item) =>
+    item.stable_id === REMOVED_CALENDAR_CONTRACT.registryId
+    || item.entry_point === REMOVED_CALENDAR_CONTRACT.removedPage
+    || item.adapter_file === REMOVED_CALENDAR_CONTRACT.removedPage
+  );
+  if (calendarCapability) errors.push("REMOVED_CALENDAR_REGISTRY_REINTRODUCED");
+  const activeCalendarProvider = registry?.capabilities?.find((item) =>
+    item.kind === "PROVIDER_CONNECTION"
+    && /(?:google\s*calendar|google\s*kalender|microsoft\s*365|m365|calendar)/iu.test(`${item.stable_id ?? ""} ${item.provider ?? ""} ${item.entry_point ?? ""} ${item.adapter_file ?? ""}`)
+    && (item.visible === true || item.reachable === true || item.classification === "REAL_VERIFIED")
+  );
+  if (activeCalendarProvider) errors.push(`ACTIVE_CALENDAR_PROVIDER_REINTRODUCED:${activeCalendarProvider.stable_id}`);
+  for (const token of REMOVED_CALENDAR_CONTRACT.requiredMatrixTokens) {
+    if (!matrix.includes(token)) errors.push(`REMOVED_CALENDAR_MATRIX_TRUTH_MISSING:${token}`);
   }
-  const calendarLine = matrix.split(/\r?\n/).find((line) => line.includes(`\`${LEGACY_CALENDAR_CONTRACT.registryId}\``)) ?? "";
-  for (const token of ["ACTIVE_VISIBLE_PROVIDER_DEFECT", "QUARANTINE", LEGACY_CALENDAR_CONTRACT.finding, LEGACY_CALENDAR_CONTRACT.disposition]) {
-    if (!calendarLine.includes(token)) errors.push(`LEGACY_CALENDAR_MATRIX_BLOCKER_MISSING:${token}`);
-  }
+  if (/ACTIVE_VISIBLE_PROVIDER_DEFECT|Google Kalender|Google Calendar/iu.test(matrix)) errors.push("ACTIVE_CALENDAR_MATRIX_CLAIM_REINTRODUCED");
   for (const id of REQUIRED_MODULE_IDS) if (!matrix.includes(`\`${id}\``)) errors.push(`PROVIDER_MATRIX_MODULE_MISSING:${id}`);
   const pageRows = matrix.split(/\r?\n/).filter((line) => /^\| `page\./.test(line));
   const matrixPageIds = pageRows.map((row) => row.split("|")[1].trim().replaceAll("`", ""));
@@ -275,10 +281,8 @@ function writeFixture(root) {
     "docs/project/linie/00_UI_REFERENZEN_PFADE.md": `# UI truth\n${UI_REFERENCE_CONTRACT.map((rel) => `- \`${path.basename(rel)}\``).join("\n")}\n`,
     "docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json": JSON.stringify({ capabilities: [
       { stable_id: "page.real", kind: "PAGE_ROUTE", visible: true },
-      { stable_id: "page.kalender", kind: "PAGE_ROUTE", entry_point: LEGACY_CALENDAR_CONTRACT.finding, visible: true, reachable: true },
     ] }),
-    "src/app/kalender/page.tsx": "Google Kalender vorbereitet\n",
-    "docs/project/PROVIDER_CAPABILITY_MATRIX.md": `${banner("REFERENCE_ONLY_NON_EXECUTABLE", "Matrix")}${REQUIRED_MODULE_IDS.map((id) => `\`${id}\``).join("\n")}\n| \`page.real\` | /real | own | none | PENDING | evidence | next |\n| \`page.kalender\` | /kalender | ACTIVE_VISIBLE_PROVIDER_DEFECT at src/app/kalender/page.tsx | Google Kalender | QUARANTINE | source+registry | PATH1_UI_CONVERGENCE_A_REMOVE_OR_404 |\n`,
+    "docs/project/PROVIDER_CAPABILITY_MATRIX.md": `${banner("REFERENCE_ONLY_NON_EXECUTABLE", "Matrix")}${REQUIRED_MODULE_IDS.map((id) => `\`${id}\``).join("\n")}\nREMOVED_NON_RENDERING M365_NOT_CONNECTED\n| \`page.real\` | /real | own | none | PENDING | evidence | next |\n`,
   };
   const classified = [
     ["docs/project/DOCUMENT_AUTHORITY.md", "Authority"],
@@ -325,7 +329,10 @@ export function runAuthoritySelftest() {
     ["mission-inactive", (root) => { const p = absolute(root, TRUTH_SOURCE_CONTRACT.active_execution); writeFileSync(p, readFileSync(p, "utf8").replace("status: active", "status: paused"), "utf8"); }, "CONFIGURED_MISSION_NOT_ACTIVE"],
     ["program-shadow", (root) => { const p = absolute(root, TRUTH_SOURCE_CONTRACT.active_execution); writeFileSync(p, readFileSync(p, "utf8").replace("PATH1_UI_CONVERGENCE", "PATH1_UI_CONVERGENCE_A"), "utf8"); }, "UI_PROGRAM_NOT_CANONICAL"],
     ["duplicate-decision", (root) => { const p = absolute(root, TRUTH_SOURCE_CONTRACT.product_decisions); writeFileSync(p, `${readFileSync(p, "utf8")}## D-UI-CORE-002 — shadow\n`, "utf8"); }, "DECISION_ID_DUPLICATE"],
-    ["provider-source-masked", (root) => { const p = absolute(root, LEGACY_CALENDAR_CONTRACT.finding); writeFileSync(p, "Provider nicht konfiguriert\n", "utf8"); }, "LEGACY_CALENDAR_SOURCE_CLAIM_NOT_DETECTED"],
+    ["calendar-page-reintroduced", (root) => { const p = absolute(root, REMOVED_CALENDAR_CONTRACT.removedPage); mkdirSync(path.dirname(p), { recursive: true }); writeFileSync(p, "export default function Calendar() { return null; }\n", "utf8"); }, "REMOVED_CALENDAR_PAGE_REINTRODUCED"],
+    ["calendar-registry-reintroduced", (root) => { const p = absolute(root, REMOVED_CALENDAR_CONTRACT.registry); const value = JSON.parse(readFileSync(p, "utf8")); value.capabilities.push({ stable_id: "page.kalender", kind: "PAGE_ROUTE", entry_point: REMOVED_CALENDAR_CONTRACT.removedPage }); writeFileSync(p, JSON.stringify(value), "utf8"); }, "REMOVED_CALENDAR_REGISTRY_REINTRODUCED"],
+    ["calendar-provider-activated", (root) => { const p = absolute(root, REMOVED_CALENDAR_CONTRACT.registry); const value = JSON.parse(readFileSync(p, "utf8")); value.capabilities.push({ stable_id: "provider.calendar", kind: "PROVIDER_CONNECTION", provider: "Microsoft 365 Calendar", reachable: true, classification: "REAL_VERIFIED" }); writeFileSync(p, JSON.stringify(value), "utf8"); }, "ACTIVE_CALENDAR_PROVIDER_REINTRODUCED"],
+    ["calendar-matrix-weakened", (root) => { const p = absolute(root, REMOVED_CALENDAR_CONTRACT.matrix); writeFileSync(p, readFileSync(p, "utf8").replace("M365_NOT_CONNECTED", "PENDING"), "utf8"); }, "REMOVED_CALENDAR_MATRIX_TRUTH_MISSING"],
     ["candidate-checker-weakened", (root) => { const p = absolute(root, "scripts/quality/check-authoritative-sources.mjs"); mkdirSync(path.dirname(p), { recursive: true }); writeFileSync(p, "process.exit(0)\n", "utf8"); const c = absolute(root, DEFAULT_CONFIG); const value = JSON.parse(readFileSync(c, "utf8")); value.shadowTruth = true; writeFileSync(c, JSON.stringify(value), "utf8"); }, "AUTHORITY_CONFIG_CLOSED_SCHEMA"],
   ];
   let passed = 0;

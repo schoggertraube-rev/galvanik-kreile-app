@@ -11,7 +11,7 @@ import {
 import { KachelInfo } from "@/components/ui/KachelInfo";
 import { ResponsiveDetailDrawer } from "@/components/ui/ResponsiveDetailDrawer";
 import Link from "next/link";
-import { useOrderModal } from "@/components/orders/OrderModalProvider";
+import { useOrderModal } from "@/components/entities/order-legacy/OrderModalProvider";
 
 export function EngpassKachel() {
   const [data, setData] = useState<EngpassStation[]>([]);

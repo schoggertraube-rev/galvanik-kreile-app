@@ -80,8 +80,8 @@ describe("W2C-B2M5C transitionOrderProcess quarantine", () => {
   it("keeps legacy writers denied while the named W3 handoff remains the sole reactivated entry", async () => {
     const srcRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
     const [wareneingang, stationStatus, galvanik, wareneingangPage] = await Promise.all([
-      readFile(path.join(srcRoot, "components/orders/variants/WareneingangActive.tsx"), "utf8"),
-      readFile(path.join(srcRoot, "components/orders/StationStatusButton.tsx"), "utf8"),
+      readFile(path.join(srcRoot, "components/entities/order-legacy/variants/WareneingangActive.tsx"), "utf8"),
+      readFile(path.join(srcRoot, "components/entities/order-legacy/StationStatusButton.tsx"), "utf8"),
       readFile(path.join(srcRoot, "app/warendurchlauf/galvanik/page.tsx"), "utf8"),
       readFile(path.join(srcRoot, "app/warendurchlauf/wareneingang/page.tsx"), "utf8"),
     ]);

@@ -52,10 +52,9 @@ describe("W2C-B2M5D order creation quarantine", () => {
 
   it("source-locks repository and UI fail-closed boundaries", async () => {
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-    const [repository, form, scan] = await Promise.all([
+    const [repository, form] = await Promise.all([
       readFile(path.join(root, "lib/repositories/ordersRepository.ts"), "utf8"),
-      readFile(path.join(root, "components/orders/NewOrderForm.tsx"), "utf8"),
-      readFile(path.join(root, "app/scan/page.tsx"), "utf8"),
+      readFile(path.join(root, "components/entities/order-legacy/NewOrderForm.tsx"), "utf8"),
     ]);
     expect(repository).toContain('import { getOrdersDb, updateOrderDb } from "@/app/actions/orders.actions";');
     expect(repository).not.toContain("createOrderDb");
@@ -67,7 +66,6 @@ describe("W2C-B2M5D order creation quarantine", () => {
     const saveStart = form.indexOf("<Button disabled"); const saveEnd = form.indexOf(">", saveStart);
     expect(saveStart).toBeGreaterThanOrEqual(0); expect(saveEnd).toBeGreaterThan(saveStart);
     const saveTag = form.slice(saveStart, saveEnd + 1); expect(saveTag).toContain("disabled"); expect(saveTag).not.toContain("onClick"); expect(saveTag).not.toMatch(/disabled=\{false\}/);
-    expect(scan).not.toContain("createOrderFromScan"); expect(scan).not.toContain("SuggestedItemsPanel"); expect(scan).not.toContain("handleConfirmOrder"); expect(scan).not.toContain("Kunde neu anlegen"); expect(scan).not.toContain("erfolgreich");
-    expect(scan).toContain(message); expect(scan).toContain("PageHeader"); expect(scan).toContain("CameraCapture"); expect(scan).toContain("onScanComplete={() => {}}");
+    await expect(readFile(path.join(root, "app/scan/page.tsx"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

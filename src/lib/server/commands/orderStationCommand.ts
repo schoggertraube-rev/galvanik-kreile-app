@@ -6,7 +6,7 @@ import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {
   ORDER_LIFECYCLE_STATUS,
   ORDER_STATION_FORWARD_ROLES,
-} from "@/lib/orders/orderLifecycleContract";
+} from "@/lib/order-support/orderLifecycleContract";
 
 const SOURCE_STATION = "wareneingang";
 const TARGET_STATION = "galvanik";

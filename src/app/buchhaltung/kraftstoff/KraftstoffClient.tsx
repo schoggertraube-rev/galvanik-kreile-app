@@ -39,7 +39,7 @@ export function KraftstoffClient({ initialTankungen, gesamtLiter, gesamtKosten }
       
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-xs font-semibold text-text-muted mt-4 mb-3">
-        <Link href="/betrieb" className="hover:text-navy-900 transition-colors">Betrieb</Link>
+        <Link href="/" className="hover:text-navy-900 transition-colors">Startseite</Link>
         <ChevronRight className="w-3 h-3" />
         <Link href="/buchhaltung" className="hover:text-navy-900 transition-colors">Buchhaltung</Link>
         <ChevronRight className="w-3 h-3" />
@@ -184,4 +184,3 @@ export function KraftstoffClient({ initialTankungen, gesamtLiter, gesamtKosten }
     </div>
   );
 }
-
