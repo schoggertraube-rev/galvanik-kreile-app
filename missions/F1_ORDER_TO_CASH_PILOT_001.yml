@@ -1,7 +1,7 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: 9e0290468f9d7c6ac9fb5d4c33466bd24b0dfa77
+base_sha: 330aaf7717b489ae68b62801610e2ebcb27a7b11
 branch: path1/ui-convergence-full-20260910
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
@@ -37,9 +37,9 @@ delivery_order:
   - F1.6_REALER_PILOT
 
 active_package: PATH1_UI_CONVERGENCE
-active_package_status: IN_PROGRESS_NO_PARTIAL_UX_PASS
-active_package_stages: A_SECURED_ed2147cd -> B_C_REPAIR_2_CANDIDATE_2aef5c5_PRESERVED -> D_SEARCH_LOCAL_REAL_E2E_PASS_PENDING_EXACT_SHA_REVIEW
-next_gate_after_active_package: D_SEARCH_COMMIT_PUSH_EXACT_SHA_CI_AND_INDEPENDENT_REVIEW
+active_package_status: FINAL_REPAIR_PENDING_EXACT_SHA_CI_AND_INDEPENDENT_REVIEW
+active_package_stages: A_D_CANDIDATE_BUILT_REMOTE_1185c8f5788d976b008d3e72369532ecf7b7b313_NOT_DELIVERED
+next_gate_after_active_package: FINAL_REPAIR_COMMIT_PUSH_EXACT_SHA_CI_THEN_INDEPENDENT_REVIEW
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
@@ -81,8 +81,8 @@ path1_s5_search_exact_sha: 9845e91e3003e81ff9f8b5b28bf8882dd12bf0d7
 path1_s5_search_merge_gate: BLOCKED_UNTIL_PATH1_UI_CONVERGENCE_A_B_C_AND_FULL_ROUTE_REACCEPTANCE
 path1_calendar_status: NOT_STARTED_BLOCKED_EXTERNAL_PERMISSION
 path1_calendar_target_provider: MICROSOFT_365_GRAPH_DELEGATED_NAMED_OFFICE_USER
-authority_provider_governance_status: IN_REVIEW
-ui_core_governance_status: IN_REVIEW
+authority_provider_governance_status: DELIVERED_PR_85_MERGE_330aaf7717b489ae68b62801610e2ebcb27a7b11
+ui_core_governance_status: DELIVERED_PR_85_MERGE_330aaf7717b489ae68b62801610e2ebcb27a7b11
 visible_product_backend_contracts: PARTIALLY_REAL
 visible_product_s4_workshop_interior: DELIVERED
 visible_product_total_target_ui: OWNER_UX_FAIL_NOT_DELIVERED
@@ -156,6 +156,8 @@ path1_ui_convergence_allowlist:
   # Steuerung, Evidence und shrink-only Gates
   - missions/F1_ORDER_TO_CASH_PILOT_001.yml
   - docs/project/CURRENT_STATE.md
+  - .github/workflows/eslint-ratchet.yml
+  - e2e/smoke.spec.ts
   - docs/evidence/ui/PATH1_UI_CONVERGENCE_20260910.md
   - docs/evidence/ui/artifacts/path1-ui-convergence/**
   - docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json
