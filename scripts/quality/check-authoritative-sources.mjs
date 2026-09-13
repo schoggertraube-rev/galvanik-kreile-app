@@ -43,14 +43,20 @@ const REQUIRED_CLASSIFICATIONS = Object.freeze([
 ]);
 const BANNER_EXEMPTIONS = new Set(["audit_results.md", "CLAUDE.md", "README.md"]);
 const ALLOWED_DOCUMENT_STATUS = new Set(["HISTORICAL_NON_AUTHORITATIVE", "REFERENCE_ONLY_NON_EXECUTABLE"]);
-const LEGACY_CALENDAR_CONTRACT = Object.freeze({
-  finding: "src/app/kalender/page.tsx",
+const CALENDAR_TRANSITION_CONTRACT = Object.freeze({
+  page: "src/app/kalender/page.tsx",
   registry: "docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json",
   registryId: "page.kalender",
-  sourceClaim: "Google Kalender",
   matrix: "docs/project/PROVIDER_CAPABILITY_MATRIX.md",
-  disposition: "PATH1_UI_CONVERGENCE_A_REMOVE_OR_404",
+  legacyTokens: [
+    "ACTIVE_VISIBLE_PROVIDER_DEFECT",
+    "QUARANTINE",
+    "src/app/kalender/page.tsx",
+    "PATH1_UI_CONVERGENCE_A_REMOVE_OR_404",
+  ],
+  targetTokens: ["REMOVED_NON_RENDERING", "M365_NOT_CONNECTED"],
 });
+const NEXT_PRODUCT_PROGRAM = "PATH1_UI_CONVERGENCE_FULL_REPLACEMENT";
 const REQUIRED_MODULE_IDS = Object.freeze([
   "module.fundament",
   "module.suche",
@@ -203,7 +209,7 @@ export function checkAuthorityRepository(root = process.cwd(), configRel = DEFAU
     if (!value || value === "none") errors.push(`ACTIVE_EXECUTION_VALUE_EMPTY:${key}`);
   }
   if (yamlScalar(mission, "status", errors) !== "active") errors.push("CONFIGURED_MISSION_NOT_ACTIVE");
-  if (yamlScalar(mission, "next_product_priority", errors) !== "PATH1_UI_CONVERGENCE") errors.push("UI_PROGRAM_NOT_CANONICAL");
+  if (yamlScalar(mission, "next_product_priority", errors) !== NEXT_PRODUCT_PROGRAM) errors.push("UI_PROGRAM_NOT_CANONICAL");
   if (yamlScalar(mission, "path1_s5_search_status", errors) !== "CANDIDATE_PR_84_NOT_ACCEPTED_NOT_MERGED") errors.push("SEARCH_CANDIDATE_STATUS_DRIFT");
   if (yamlScalar(mission, "path1_calendar_status", errors) !== "NOT_STARTED_BLOCKED_EXTERNAL_PERMISSION") errors.push("CALENDAR_START_STATUS_DRIFT");
   if (yamlScalar(mission, "f1_6_status", errors) !== "NOT_STARTED") errors.push("F1_6_STATUS_DRIFT");
@@ -234,17 +240,70 @@ export function checkAuthorityRepository(root = process.cwd(), configRel = DEFAU
     if (!knownDocs.has(rel) && AUTHORITY_CLAIM.test(read(root, rel))) errors.push(`UNCLASSIFIED_COMPETING_AUTHORITY:${rel}`);
   }
 
-  const registry = parseJson(root, LEGACY_CALENDAR_CONTRACT.registry, errors, "CAPABILITY_REGISTRY");
-  const matrix = exists(root, LEGACY_CALENDAR_CONTRACT.matrix) ? read(root, LEGACY_CALENDAR_CONTRACT.matrix) : "";
-  const legacySource = exists(root, LEGACY_CALENDAR_CONTRACT.finding) ? read(root, LEGACY_CALENDAR_CONTRACT.finding) : "";
-  if (!legacySource.includes(LEGACY_CALENDAR_CONTRACT.sourceClaim)) errors.push("LEGACY_CALENDAR_SOURCE_CLAIM_NOT_DETECTED");
-  const calendarCapability = registry?.capabilities?.find((item) => item.stable_id === LEGACY_CALENDAR_CONTRACT.registryId);
-  if (!calendarCapability || calendarCapability.entry_point !== LEGACY_CALENDAR_CONTRACT.finding || calendarCapability.visible !== true || calendarCapability.reachable !== true) {
-    errors.push("LEGACY_CALENDAR_REGISTRY_STATE_NOT_DETECTED");
+  const registry = parseJson(root, CALENDAR_TRANSITION_CONTRACT.registry, errors, "CAPABILITY_REGISTRY");
+  const matrix = exists(root, CALENDAR_TRANSITION_CONTRACT.matrix) ? read(root, CALENDAR_TRANSITION_CONTRACT.matrix) : "";
+  const pagePresent = exists(root, CALENDAR_TRANSITION_CONTRACT.page);
+  const pageSource = pagePresent ? read(root, CALENDAR_TRANSITION_CONTRACT.page) : "";
+  const calendarCapabilities = registry?.capabilities?.filter((item) =>
+    item.stable_id === CALENDAR_TRANSITION_CONTRACT.registryId
+    || item.entry_point === CALENDAR_TRANSITION_CONTRACT.page
+    || item.adapter_file === CALENDAR_TRANSITION_CONTRACT.page
+  ) ?? [];
+  const calendarPageRows = matrix.split(/\r?\n/).filter((line) => {
+    if (!/^\| `page\./.test(line)) return false;
+    const id = line.split("|")[1]?.trim().replaceAll("`", "");
+    return id === CALENDAR_TRANSITION_CONTRACT.registryId;
+  });
+  const calendarModuleRows = matrix.split(/\r?\n/).filter((line) => /^\| `module\.calendar`/.test(line));
+  const targetMatrixTruth = CALENDAR_TRANSITION_CONTRACT.targetTokens.every((token) =>
+    calendarModuleRows.length === 1 && calendarModuleRows[0].includes(token)
+  );
+  const activeCalendarProvider = registry?.capabilities?.find((item) =>
+    item.kind === "PROVIDER_CONNECTION"
+    && /(?:google\s*calendar|google\s*kalender|microsoft\s*365|m365|calendar)/iu.test(`${item.stable_id ?? ""} ${item.provider ?? ""} ${item.entry_point ?? ""} ${item.adapter_file ?? ""}`)
+    && (item.visible === true || item.reachable === true || item.classification === "REAL_VERIFIED")
+  );
+  const calendarProviderRows = matrix.split(/\r?\n/).filter((line) =>
+    /^\| `provider\./.test(line)
+    && /(?:google\s*(?:calendar|kalender)|microsoft\s*365|m365|calendar)/iu.test(line)
+  );
+  const activeCalendarProviderRows = calendarProviderRows.filter((line) => {
+    const cells = line.split("|").slice(1, -1).map((cell) => cell.trim());
+    return cells[3] !== "PENDING" || /\b(?:ACTIVE|CONNECTED|REAL_VERIFIED)\b/iu.test(line);
+  });
+  if (calendarProviderRows.length !== 1 || !calendarProviderRows[0]?.includes("`provider.calendar-m365-graph`")) {
+    errors.push(`CALENDAR_PROVIDER_MATRIX_CONTRACT:${calendarProviderRows.length}`);
   }
-  const calendarLine = matrix.split(/\r?\n/).find((line) => line.includes(`\`${LEGACY_CALENDAR_CONTRACT.registryId}\``)) ?? "";
-  for (const token of ["ACTIVE_VISIBLE_PROVIDER_DEFECT", "QUARANTINE", LEGACY_CALENDAR_CONTRACT.finding, LEGACY_CALENDAR_CONTRACT.disposition]) {
-    if (!calendarLine.includes(token)) errors.push(`LEGACY_CALENDAR_MATRIX_BLOCKER_MISSING:${token}`);
+  if (activeCalendarProvider) errors.push(`ACTIVE_CALENDAR_PROVIDER:${activeCalendarProvider.stable_id}`);
+  if (activeCalendarProviderRows.length > 0) errors.push("ACTIVE_CALENDAR_PROVIDER_MATRIX_CLAIM");
+
+  const legacyState = pagePresent || calendarCapabilities.length > 0 || calendarPageRows.length > 0 || matrix.includes("ACTIVE_VISIBLE_PROVIDER_DEFECT");
+  if (legacyState) {
+    if (!pagePresent) errors.push("LEGACY_CALENDAR_PAGE_MISSING");
+    if (!/(?:Google Kalender|Google Calendar)/iu.test(pageSource)) errors.push("LEGACY_CALENDAR_SOURCE_CLAIM_NOT_DETECTED");
+    if (
+      calendarCapabilities.length !== 1
+      || calendarCapabilities[0].stable_id !== CALENDAR_TRANSITION_CONTRACT.registryId
+      || calendarCapabilities[0].entry_point !== CALENDAR_TRANSITION_CONTRACT.page
+      || calendarCapabilities[0].visible !== true
+      || calendarCapabilities[0].reachable !== true
+    ) errors.push("LEGACY_CALENDAR_REGISTRY_STATE_NOT_DETECTED");
+    for (const token of CALENDAR_TRANSITION_CONTRACT.legacyTokens) {
+      if (!calendarPageRows[0]?.includes(token)) errors.push(`LEGACY_CALENDAR_MATRIX_BLOCKER_MISSING:${token}`);
+    }
+    if (targetMatrixTruth || matrix.includes("REMOVED_NON_RENDERING") || matrix.includes("M365_NOT_CONNECTED")) {
+      errors.push("CALENDAR_TRANSITION_MIXED_LEGACY_AND_TARGET");
+    }
+  } else {
+    if (pagePresent) errors.push("REMOVED_CALENDAR_PAGE_REINTRODUCED");
+    if (calendarCapabilities.length > 0) errors.push("REMOVED_CALENDAR_REGISTRY_REINTRODUCED");
+    if (calendarPageRows.length > 0) errors.push("REMOVED_CALENDAR_MATRIX_ROUTE_REINTRODUCED");
+    for (const token of CALENDAR_TRANSITION_CONTRACT.targetTokens) {
+      if (!calendarModuleRows[0]?.includes(token)) errors.push(`REMOVED_CALENDAR_MATRIX_TRUTH_MISSING:${token}`);
+    }
+    if (/ACTIVE_VISIBLE_PROVIDER_DEFECT|Google Kalender|Google Calendar/iu.test(matrix)) {
+      errors.push("REMOVED_CALENDAR_LEGACY_CLAIM_REINTRODUCED");
+    }
   }
   for (const id of REQUIRED_MODULE_IDS) if (!matrix.includes(`\`${id}\``)) errors.push(`PROVIDER_MATRIX_MODULE_MISSING:${id}`);
   const pageRows = matrix.split(/\r?\n/).filter((line) => /^\| `page\./.test(line));
@@ -263,23 +322,39 @@ export function checkAuthorityRepository(root = process.cwd(), configRel = DEFAU
   return errors;
 }
 
-function writeFixture(root) {
+function writeFixture(root, calendarState = "legacy") {
   const banner = (status, title) => `<!-- STATUS: ${status} | CANONICAL_ENTRY: ${STANDARD_ENTRY} -->\n# ${title}\n`;
   const files = {
     "AGENTS.md": "# Rules\n",
     "docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md": `## D-GOV-001 — one\n## D-ARCH-011 — provider\n## D-UI-CORE-001 — route\n## D-UI-CORE-002 — PATH1_UI_CONVERGENCE\nvollständig als Lieferbasis verworfen; kein UX-Lieferfortschritt\n${UI_REFERENCE_CONTRACT.map((rel) => `\`${path.basename(rel)}\``).join("\n")}\n`,
     "docs/project/linie/MODULKARTE_KANON.md": `PATH1_UI_CONVERGENCE\nvollständig als Lieferbasis verworfen; kein UX-Lieferfortschritt\n${UI_REFERENCE_CONTRACT.map((rel) => `\`${path.basename(rel)}\``).join("\n")}\n`,
     "docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md": "PATH1_UI_CONVERGENCE\nvollständig als Lieferbasis verworfen; kein UX-Lieferfortschritt\n",
-    "missions/F1_ORDER_TO_CASH_PILOT_001.yml": "mission_id: F1\nstatus: active\nbranch: gov\nbase_sha: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nactive_package: GOV\nnext_gate_after_active_package: REVIEW\nnext_product_priority: PATH1_UI_CONVERGENCE\npath1_s5_search_status: CANDIDATE_PR_84_NOT_ACCEPTED_NOT_MERGED\npath1_calendar_status: NOT_STARTED_BLOCKED_EXTERNAL_PERMISSION\nf1_6_status: NOT_STARTED\n",
+    "missions/F1_ORDER_TO_CASH_PILOT_001.yml": `mission_id: F1\nstatus: active\nbranch: gov\nbase_sha: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nactive_package: GOV\nnext_gate_after_active_package: REVIEW\nnext_product_priority: ${NEXT_PRODUCT_PROGRAM}\npath1_s5_search_status: CANDIDATE_PR_84_NOT_ACCEPTED_NOT_MERGED\npath1_calendar_status: NOT_STARTED_BLOCKED_EXTERNAL_PERMISSION\nf1_6_status: NOT_STARTED\n`,
     "docs/project/CURRENT_STATE.md": "# Current main@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nOWNER_UX_FAIL / NOT_DELIVERED\nFULLY_REJECTED_AS_DELIVERY_BASE\nkein Zielscreen-PASS\n",
     "docs/project/linie/00_UI_REFERENZEN_PFADE.md": `# UI truth\n${UI_REFERENCE_CONTRACT.map((rel) => `- \`${path.basename(rel)}\``).join("\n")}\n`,
     "docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json": JSON.stringify({ capabilities: [
       { stable_id: "page.real", kind: "PAGE_ROUTE", visible: true },
-      { stable_id: "page.kalender", kind: "PAGE_ROUTE", entry_point: LEGACY_CALENDAR_CONTRACT.finding, visible: true, reachable: true },
     ] }),
-    "src/app/kalender/page.tsx": "Google Kalender vorbereitet\n",
-    "docs/project/PROVIDER_CAPABILITY_MATRIX.md": `${banner("REFERENCE_ONLY_NON_EXECUTABLE", "Matrix")}${REQUIRED_MODULE_IDS.map((id) => `\`${id}\``).join("\n")}\n| \`page.real\` | /real | own | none | PENDING | evidence | next |\n| \`page.kalender\` | /kalender | ACTIVE_VISIBLE_PROVIDER_DEFECT at src/app/kalender/page.tsx | Google Kalender | QUARANTINE | source+registry | PATH1_UI_CONVERGENCE_A_REMOVE_OR_404 |\n`,
+    "docs/project/PROVIDER_CAPABILITY_MATRIX.md": `${banner("REFERENCE_ONLY_NON_EXECUTABLE", "Matrix")}${REQUIRED_MODULE_IDS.filter((id) => id !== "module.calendar").map((id) => `\`${id}\``).join("\n")}\n| \`provider.calendar-m365-graph\` | none | Microsoft 365 Graph | PENDING | CalendarPort | no account/consent/E2E | later |\n| \`page.real\` | /real | own | none | PENDING | evidence | next |\n`,
   };
+  const registry = JSON.parse(files[CALENDAR_TRANSITION_CONTRACT.registry]);
+  if (calendarState === "legacy") {
+    registry.capabilities.push({
+      stable_id: CALENDAR_TRANSITION_CONTRACT.registryId,
+      kind: "PAGE_ROUTE",
+      entry_point: CALENDAR_TRANSITION_CONTRACT.page,
+      visible: true,
+      reachable: true,
+    });
+    files[CALENDAR_TRANSITION_CONTRACT.registry] = JSON.stringify(registry);
+    files[CALENDAR_TRANSITION_CONTRACT.page] = "Google Kalender vorbereitet\n";
+    files[CALENDAR_TRANSITION_CONTRACT.matrix] += "| `module.calendar` | ACTIVE_VISIBLE_PROVIDER_DEFECT | Microsoft 365 Graph later | PENDING | domain dates | source evidence | remove legacy route |\n";
+    files[CALENDAR_TRANSITION_CONTRACT.matrix] += `| \`${CALENDAR_TRANSITION_CONTRACT.registryId}\` | /kalender | ACTIVE_VISIBLE_PROVIDER_DEFECT at ${CALENDAR_TRANSITION_CONTRACT.page} | Google Kalender | QUARANTINE | source+registry | PATH1_UI_CONVERGENCE_A_REMOVE_OR_404 |\n`;
+  } else if (calendarState === "target") {
+    files[CALENDAR_TRANSITION_CONTRACT.matrix] += "| `module.calendar` | REMOVED_NON_RENDERING | Microsoft 365 Graph; M365_NOT_CONNECTED | PENDING | domain dates | no account/consent/E2E | later |\n";
+  } else {
+    throw new Error(`Unknown calendar fixture state: ${calendarState}`);
+  }
   const classified = [
     ["docs/project/DOCUMENT_AUTHORITY.md", "Authority"],
     ["docs/project/MASTERPLAN.md", "Master"],
@@ -325,9 +400,30 @@ export function runAuthoritySelftest() {
     ["mission-inactive", (root) => { const p = absolute(root, TRUTH_SOURCE_CONTRACT.active_execution); writeFileSync(p, readFileSync(p, "utf8").replace("status: active", "status: paused"), "utf8"); }, "CONFIGURED_MISSION_NOT_ACTIVE"],
     ["program-shadow", (root) => { const p = absolute(root, TRUTH_SOURCE_CONTRACT.active_execution); writeFileSync(p, readFileSync(p, "utf8").replace("PATH1_UI_CONVERGENCE", "PATH1_UI_CONVERGENCE_A"), "utf8"); }, "UI_PROGRAM_NOT_CANONICAL"],
     ["duplicate-decision", (root) => { const p = absolute(root, TRUTH_SOURCE_CONTRACT.product_decisions); writeFileSync(p, `${readFileSync(p, "utf8")}## D-UI-CORE-002 — shadow\n`, "utf8"); }, "DECISION_ID_DUPLICATE"],
-    ["provider-source-masked", (root) => { const p = absolute(root, LEGACY_CALENDAR_CONTRACT.finding); writeFileSync(p, "Provider nicht konfiguriert\n", "utf8"); }, "LEGACY_CALENDAR_SOURCE_CLAIM_NOT_DETECTED"],
+    ["provider-source-masked", (root) => { const p = absolute(root, CALENDAR_TRANSITION_CONTRACT.page); writeFileSync(p, "Provider nicht konfiguriert\n", "utf8"); }, "LEGACY_CALENDAR_SOURCE_CLAIM_NOT_DETECTED"],
+    ["legacy-page-without-registry", (root) => { const p = absolute(root, CALENDAR_TRANSITION_CONTRACT.registry); const value = JSON.parse(readFileSync(p, "utf8")); value.capabilities = value.capabilities.filter((item) => item.stable_id !== CALENDAR_TRANSITION_CONTRACT.registryId); writeFileSync(p, JSON.stringify(value), "utf8"); }, "LEGACY_CALENDAR_REGISTRY_STATE_NOT_DETECTED"],
+    ["legacy-registry-without-page", (root) => { rmSync(absolute(root, CALENDAR_TRANSITION_CONTRACT.page)); }, "LEGACY_CALENDAR_PAGE_MISSING"],
+    ["legacy-page-without-matrix-truth", (root) => { const p = absolute(root, CALENDAR_TRANSITION_CONTRACT.matrix); writeFileSync(p, readFileSync(p, "utf8").replace("PATH1_UI_CONVERGENCE_A_REMOVE_OR_404", "UNBOUND"), "utf8"); }, "LEGACY_CALENDAR_MATRIX_BLOCKER_MISSING"],
+    ["legacy-mixed-with-target", (root) => { const p = absolute(root, CALENDAR_TRANSITION_CONTRACT.matrix); writeFileSync(p, `${readFileSync(p, "utf8")}REMOVED_NON_RENDERING M365_NOT_CONNECTED\n`, "utf8"); }, "CALENDAR_TRANSITION_MIXED_LEGACY_AND_TARGET"],
+    ["target-page-reintroduced", (root) => { rmSync(root, { recursive: true, force: true }); mkdirSync(root, { recursive: true }); writeFixture(root, "target"); const p = absolute(root, CALENDAR_TRANSITION_CONTRACT.page); mkdirSync(path.dirname(p), { recursive: true }); writeFileSync(p, "Google Kalender\n", "utf8"); }, "CALENDAR_TRANSITION_MIXED_LEGACY_AND_TARGET"],
+    ["target-registry-reintroduced", (root) => { rmSync(root, { recursive: true, force: true }); mkdirSync(root, { recursive: true }); writeFixture(root, "target"); const p = absolute(root, CALENDAR_TRANSITION_CONTRACT.registry); const value = JSON.parse(readFileSync(p, "utf8")); value.capabilities.push({ stable_id: CALENDAR_TRANSITION_CONTRACT.registryId, kind: "PAGE_ROUTE", entry_point: CALENDAR_TRANSITION_CONTRACT.page, visible: true, reachable: true }); writeFileSync(p, JSON.stringify(value), "utf8"); }, "CALENDAR_TRANSITION_MIXED_LEGACY_AND_TARGET"],
+    ["target-legacy-matrix-reintroduced", (root) => { rmSync(root, { recursive: true, force: true }); mkdirSync(root, { recursive: true }); writeFixture(root, "target"); const p = absolute(root, CALENDAR_TRANSITION_CONTRACT.matrix); writeFileSync(p, `${readFileSync(p, "utf8")}| \`${CALENDAR_TRANSITION_CONTRACT.registryId}\` | /kalender | ACTIVE_VISIBLE_PROVIDER_DEFECT at ${CALENDAR_TRANSITION_CONTRACT.page} | Google Kalender | QUARANTINE | source+registry | PATH1_UI_CONVERGENCE_A_REMOVE_OR_404 |\n`, "utf8"); }, "CALENDAR_TRANSITION_MIXED_LEGACY_AND_TARGET"],
+    ["target-matrix-truth-missing", (root) => { rmSync(root, { recursive: true, force: true }); mkdirSync(root, { recursive: true }); writeFixture(root, "target"); const p = absolute(root, CALENDAR_TRANSITION_CONTRACT.matrix); writeFileSync(p, readFileSync(p, "utf8").replace("M365_NOT_CONNECTED", "PENDING"), "utf8"); }, "REMOVED_CALENDAR_MATRIX_TRUTH_MISSING"],
+    ["calendar-provider-activated", (root) => { const p = absolute(root, CALENDAR_TRANSITION_CONTRACT.registry); const value = JSON.parse(readFileSync(p, "utf8")); value.capabilities.push({ stable_id: "provider.calendar", kind: "PROVIDER_CONNECTION", provider: "Microsoft 365 Calendar", reachable: true, classification: "REAL_VERIFIED" }); writeFileSync(p, JSON.stringify(value), "utf8"); }, "ACTIVE_CALENDAR_PROVIDER"],
+    ["calendar-provider-matrix-activated", (root) => { const p = absolute(root, CALENDAR_TRANSITION_CONTRACT.matrix); writeFileSync(p, readFileSync(p, "utf8").replace("| PENDING | CalendarPort", "| REAL | CalendarPort"), "utf8"); }, "ACTIVE_CALENDAR_PROVIDER_MATRIX_CLAIM"],
     ["candidate-checker-weakened", (root) => { const p = absolute(root, "scripts/quality/check-authoritative-sources.mjs"); mkdirSync(path.dirname(p), { recursive: true }); writeFileSync(p, "process.exit(0)\n", "utf8"); const c = absolute(root, DEFAULT_CONFIG); const value = JSON.parse(readFileSync(c, "utf8")); value.shadowTruth = true; writeFileSync(c, JSON.stringify(value), "utf8"); }, "AUTHORITY_CONFIG_CLOSED_SCHEMA"],
   ];
+  const validStates = ["legacy", "target"];
+  for (const calendarState of validStates) {
+    const root = mkdtempSync(path.join(os.tmpdir(), `authority-gate-${calendarState}-`));
+    try {
+      writeFixture(root, calendarState);
+      const errors = checkAuthorityRepository(root);
+      if (errors.length > 0) throw new Error(`selftest valid ${calendarState} fixture failed: ${errors.join(" | ")}`);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
   let passed = 0;
   for (const [name, mutate, expected] of cases) {
     const root = mkdtempSync(path.join(os.tmpdir(), "authority-gate-"));
@@ -343,7 +439,7 @@ export function runAuthoritySelftest() {
       rmSync(root, { recursive: true, force: true });
     }
   }
-  return { passed, total: cases.length };
+  return { passed, total: cases.length, validStates: validStates.length };
 }
 
 function parseArgs(argv) {
@@ -369,7 +465,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const args = parseArgs(process.argv.slice(2));
   if (args.selftest) {
     const result = runAuthoritySelftest();
-    console.log(`AUTHORITY_GATE_SELFTEST=PASS cases=${result.passed}/${result.total}`);
+    console.log(`AUTHORITY_GATE_SELFTEST=PASS valid_states=${result.validStates} negative_cases=${result.passed}/${result.total}`);
   } else {
     const errors = checkAuthorityRepository(args.root, args.config);
     if (errors.length > 0) {

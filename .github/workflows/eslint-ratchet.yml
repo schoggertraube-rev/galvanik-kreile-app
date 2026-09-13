@@ -64,7 +64,7 @@ jobs:
       - name: Enforce D-GOV-001 authority contract on candidate
         working-directory: ratchet-base
         env:
-          AUTHORITY_CHECKER_SHA256: 85abefe9c58c366258c1676752c1eff67598491f35c885454ee26b3d7f778d4c
+          AUTHORITY_CHECKER_SHA256: 86051c96ad35a4e067819e78dda7bae0d34ca269c5d2647de098ecec3bdc713b
           AUTHORITY_SCHEMA_SHA256: 798139c41576c5b6652774ae2268a63286fdd43d7e4d71dcf4732e50f9c1194a
         run: |
           # Bootstrap the new contract with reviewed content hashes. This workflow is
