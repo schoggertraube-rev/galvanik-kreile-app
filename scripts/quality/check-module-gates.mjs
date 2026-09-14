@@ -63,7 +63,8 @@ export const LEGACY_DOMAIN_PARENTS = [
 ];
 const NEXT_COMPOSITION_ENTRYPOINTS = new Set(["page.tsx", "layout.tsx", "loading.tsx", "error.tsx", "not-found.tsx"]);
 const APP_ADAPTER_NAME = /^[A-Z][A-Za-z0-9]*AppAdapter\.tsx$/;
-const ADAPTER_FORBIDDEN_IMPORT = /(?:^@\/db(?:\/|$)|\/commands(?:\/|$)|\/repositories?(?:\/|$))/;
+const ADAPTER_FORBIDDEN_IMPORT = /(?:^@\/lib\/supabase(?:\/|$)|(?:^|\/)(?:db|database|commands?|repositories?)(?:\/|$)|(?:^|\/)[^/]*(?:Command|Repository)$)/i;
+const ADAPTER_GENERIC_ROUTE_TUNNEL = /\b(?:href|url|route|pathname)\??\s*:\s*string\b/i;
 const ROUTE_LITERAL = /['"`](\/(?!\/)[^'"`\s]*)['"`]/g;
 
 const CODE_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".mdx"]);
@@ -270,13 +271,17 @@ function gateAppCompositionFile(root, rel, fach, findings) {
       findings.push(`[naht1] ${rel}:${lineOf(source, index)}: Next-Entrypoint darf lokalen Code nur ueber @/modules/${fach}/public oder einen direkten *AppAdapter.tsx komponieren ('${spec}')`);
     }
     if (isDirectAdapter && ADAPTER_FORBIDDEN_IMPORT.test(spec)) {
-      findings.push(`[naht1] ${rel}:${lineOf(source, index)}: AppAdapter darf keine DB-, Repository-, Command-Implementierung oder Navigation importieren ('${spec}')`);
+      findings.push(`[naht1] ${rel}:${lineOf(source, index)}: AppAdapter darf keine DB-, Supabase-, Repository- oder Command-Implementierung importieren ('${spec}')`);
     }
   }
   if (!hasCompositionSeam) {
     findings.push(`[naht1] ${rel}: App-Kompositionsdatei muss @/modules/${fach}/public konsumieren oder ueber einen direkten *AppAdapter.tsx dorthin fuehren`);
   }
   if (isDirectAdapter) {
+    const genericRouteTunnel = source.match(ADAPTER_GENERIC_ROUTE_TUNNEL);
+    if (genericRouteTunnel) {
+      findings.push(`[naht1] ${rel}:${lineOf(source, genericRouteTunnel.index ?? 0)}: AppAdapter darf keinen breit typisierten href/url/route/pathname:string-Tunnel anbieten`);
+    }
     for (const match of source.matchAll(ROUTE_LITERAL)) {
       if (match[1] !== `/${fach}`) {
         findings.push(`[naht1] ${rel}:${lineOf(source, match.index)}: AppAdapter darf nur den festen eigenen Deeplink-Fallback '/${fach}' kennen, keinen generischen Router-/URL-Tunnel ('${match[1]}')`);
@@ -427,21 +432,22 @@ function tableRefs(source) {
 function gateData(root, findings, manifests) {
   const declaredViews = new Set();
   for (const manifest of manifests.values()) {
-    for (const v of asStringArray(manifest.viewsFunctions)) if (/^public\.v_/i.test(v)) declaredViews.add(v.toLowerCase());
+    for (const v of asStringArray(manifest.viewsFunctions)) {
+      if (/^(?:public|private)\.v_/i.test(v)) declaredViews.add(v.toLowerCase());
+    }
   }
   for (const [fach, manifest] of manifests) {
     const owned = new Set(asStringArray(manifest.ownsTables).map((t) => t.toLowerCase()));
-    const ownedViewsFunctions = new Set(asStringArray(manifest.viewsFunctions).map((t) => t.toLowerCase()));
     for (const file of listFiles(root, `${MODULES_DIR}/${fach}`, SQL_EXTENSIONS)) {
       const source = readFileSync(path.join(root, file), "utf8");
       for (const m of tableRefs(source)) {
         const ref = m.ref;
-        if (owned.has(ref) || ownedViewsFunctions.has(ref)) continue;
-        if (/^public\.v_/.test(ref)) {
+        if (owned.has(ref)) continue;
+        if (/^(?:public|private)\.v_/.test(ref)) {
           if (!declaredViews.has(ref)) findings.push(`[naht4] ${file}:${lineOf(source, m.index)}: View '${ref}' ist in keinem Manifest (viewsFunctions) deklariert`);
           continue;
         }
-        findings.push(`[naht4] ${file}:${lineOf(source, m.index)}: Tabelle '${ref}' gehoert nicht zu Modul '${fach}' (ownsTables) — Fremdfakten nur ueber public.v_*`);
+        findings.push(`[naht4] ${file}:${lineOf(source, m.index)}: Tabelle '${ref}' gehoert nicht zu Modul '${fach}' (ownsTables) — Fremdfakten nur ueber public.v_* oder private.v_*`);
       }
     }
   }

@@ -135,7 +135,7 @@ describe("S1 Naht 1 — Manifest je Modul + Ablage", () => {
       "src/app/orders/page.tsx": `${IMP} { OrdersAppAdapter } from "./OrdersAppAdapter";\nexport default function Page(){ return OrdersAppAdapter(); }\n`,
       "src/app/orders/[id]/page.tsx": `${IMP} { OrderCardAppAdapter } from "../OrderCardAppAdapter";\nexport default function Page(){ return OrderCardAppAdapter({ orderId: "x" }); }\n`,
       "src/app/orders/OrdersAppAdapter.tsx": `${IMP} { readOrder } from "@/modules/orders/public";\n${IMP} { action } from "@/app/actions/orders.actions";\nexport function OrdersAppAdapter(){ void action; return readOrder(); }\n`,
-      "src/app/orders/OrderCardAppAdapter.tsx": `${IMP} { readOrder } from "@/modules/orders/public";\nexport function OrderCardAppAdapter(){ return readOrder(); }\n`,
+      "src/app/orders/OrderCardAppAdapter.tsx": `${IMP} { useRouter } from "next/navigation";\n${IMP} { readOrder } from "@/modules/orders/public";\n${IMP} { useOverlayStore } from "@/lib/overlayStore";\nexport function OrderCardAppAdapter({ fallbackHref }: { fallbackHref?: "/orders" }){ const router = useRouter(); void useOverlayStore; if (fallbackHref) router.replace(fallbackHref); return readOrder(); }\n`,
     });
     expect(findingsOf(root)).toEqual([]);
   });
@@ -156,11 +156,31 @@ describe("S1 Naht 1 — Manifest je Modul + Ablage", () => {
     expect(f).toContainEqual(expect.stringContaining("src/app/orders/actions.ts: Fach 'orders' hat ein Modul"));
     expect(f).toContainEqual(expect.stringContaining("src/app/orders/server/read.ts: Fach 'orders' hat ein Modul"));
     expect(f).toContainEqual(expect.stringContaining("src/app/orders/domain/calculate.ts: Fach 'orders' hat ein Modul"));
-    expect(f).toContainEqual(expect.stringContaining("src/app/orders/BadAppAdapter.tsx:2: AppAdapter darf keine DB-, Repository-, Command-Implementierung"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/BadAppAdapter.tsx:2: AppAdapter darf keine DB-, Supabase-, Repository- oder Command-Implementierung"));
     expect(f).toContainEqual(expect.stringContaining("src/app/orders/BadAppAdapter.tsx: App-Kompositionsdatei muss"));
+    expect(f).toContainEqual(expect.stringContaining("href/url/route/pathname:string-Tunnel"));
     expect(f).toContainEqual(expect.stringContaining("generischen Router-/URL-Tunnel"));
     expect(f).toContainEqual(expect.stringContaining("src/components/orders/Card.tsx: Fach 'orders' hat ein Modul"));
     expect(f).toContainEqual(expect.stringContaining("src/lib/orders/read.ts: Fach 'orders' hat ein Modul"));
+  });
+
+  it("weist direkte Supabase-, Base-Table-, Repository- und Command-Implementierungen im AppAdapter ab", () => {
+    const root = repo({
+      ...goodModule,
+      "src/app/orders/UnsafeAppAdapter.tsx": [
+        `${IMP} { readOrder } from "@/modules/orders/public";`,
+        `${IMP} { supabase } from "@/lib/supabase/client";`,
+        `${IMP} { ordersTable } from "@/db/tables/orders";`,
+        `${IMP} { customerRepository } from "@/lib/server/customerRepository";`,
+        `${IMP} { recordGoodsOutCommand } from "@/lib/server/recordGoodsOutCommand";`,
+        "export function UnsafeAppAdapter({ url }: { url: string }) { void supabase; void ordersTable; void customerRepository; void recordGoodsOutCommand; void url; return readOrder(); }",
+      ].join("\n"),
+    });
+    const f = findingsOf(root);
+    for (const line of [2, 3, 4, 5]) {
+      expect(f).toContainEqual(expect.stringContaining(`src/app/orders/UnsafeAppAdapter.tsx:${line}: AppAdapter darf keine DB-, Supabase-, Repository- oder Command-Implementierung`));
+    }
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/UnsafeAppAdapter.tsx:6: AppAdapter darf keinen breit typisierten href/url/route/pathname:string-Tunnel"));
   });
 
   it("Schema-Validator deckt object/required/additionalProperties/array/pattern/minLength ab", () => {
@@ -249,17 +269,41 @@ describe("S1 Naht 4 — Cross-Modul-Fakten nur ueber v_*-Views", () => {
   it("eigene Tabellen und deklarierte v_*-Views sind erlaubt", () => {
     const root = repo({
       ...goodModule,
-      "src/modules/invoices/invoices.manifest.json": manifest("invoices", { ownsTables: ["public.invoices", "private.invoice_numbers"] }),
+      "src/modules/invoices/invoices.manifest.json": manifest("invoices", {
+        ownsTables: ["public.invoices", "private.invoice_numbers"],
+        viewsFunctions: ["private.v_invoice_receipts"],
+      }),
       "src/modules/invoices/public.ts": "export {};\n",
       "src/modules/invoices/server/q.ts": [
         "export const q = sql`",
         "  UPDATE public.invoices SET x = 1;",
         "  INSERT INTO private.invoice_numbers (n) VALUES (1);",
-        "  SELECT o.id FROM public.v_order_facts o JOIN public.invoices i ON i.order_id = o.id;",
+        "  SELECT o.id FROM public.v_order_facts o JOIN private.v_invoice_receipts r ON r.order_id = o.id JOIN public.invoices i ON i.order_id = o.id;",
         "`;",
       ].join("\n"),
     });
     expect(findingsOf(root)).toEqual([]);
+  });
+
+  it("viewsFunctions kann fremde Basistabellen oder Funktionen nicht als Lesenaht autorisieren", () => {
+    const root = repo({
+      ...goodModule,
+      "src/modules/invoices/invoices.manifest.json": manifest("invoices", {
+        ownsTables: ["public.invoices"],
+        viewsFunctions: ["public.orders", "private.customer_number_counters", "public.calculate_total"],
+      }),
+      "src/modules/invoices/public.ts": "export {};\n",
+      "src/modules/invoices/server/q.ts": [
+        "export const q = sql`",
+        "  SELECT * FROM public.orders o",
+        "  JOIN private.customer_number_counters c ON c.tenant_id = o.tenant_id",
+        "`;",
+      ].join("\n"),
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("[naht4] src/modules/invoices/server/q.ts:2: Tabelle 'public.orders' gehoert nicht zu Modul 'invoices'"));
+    expect(f).toContainEqual(expect.stringContaining("[naht4] src/modules/invoices/server/q.ts:3: Tabelle 'private.customer_number_counters' gehoert nicht zu Modul 'invoices'"));
+    expect(f).toHaveLength(2);
   });
 
   it("Fremdtabelle direkt oder undeklarierte View = FAIL", () => {

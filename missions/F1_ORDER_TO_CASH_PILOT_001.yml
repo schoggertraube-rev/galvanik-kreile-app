@@ -37,7 +37,7 @@ delivery_order:
   - F1.6_REALER_PILOT
 
 active_package: PATH1_MODULE_ENTRYPOINT_GATE_BOOTSTRAP
-active_package_status: CANDIDATE_LOCAL_GATES_PENDING
+active_package_status: DRAFT_PR_REPAIR_1_EXACT_SHA_CI_AND_INDEPENDENT_REVIEW_PENDING
 next_gate_after_active_package: DRAFT_PR_EXACT_SHA_CI_THEN_INDEPENDENT_REVIEW
 f1_r0_status: complete
 f1_2_status: complete
