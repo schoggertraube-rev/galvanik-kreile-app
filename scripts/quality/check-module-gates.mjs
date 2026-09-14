@@ -61,6 +61,10 @@ export const LEGACY_DOMAIN_PARENTS = [
   "src/hooks",
   "src/contexts",
 ];
+const NEXT_COMPOSITION_ENTRYPOINTS = new Set(["page.tsx", "layout.tsx", "loading.tsx", "error.tsx", "not-found.tsx"]);
+const APP_ADAPTER_NAME = /^[A-Z][A-Za-z0-9]*AppAdapter\.tsx$/;
+const ADAPTER_FORBIDDEN_IMPORT = /(?:^@\/db(?:\/|$)|\/commands(?:\/|$)|\/repositories?(?:\/|$))/;
+const ROUTE_LITERAL = /['"`](\/(?!\/)[^'"`\s]*)['"`]/g;
 
 const CODE_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".mdx"]);
 const SQL_EXTENSIONS = new Set([...CODE_EXTENSIONS, ".sql"]);
@@ -238,6 +242,50 @@ export function moduleOf(relPath) {
   return m ? m[1] : null;
 }
 
+function gateAppCompositionFile(root, rel, fach, findings) {
+  const prefix = `src/app/${fach}/`;
+  if (!rel.startsWith(prefix)) return false;
+  const nested = rel.slice(prefix.length);
+  const basename = path.posix.basename(nested);
+  const isEntrypoint = NEXT_COMPOSITION_ENTRYPOINTS.has(basename);
+  const isDirectAdapter = !nested.includes("/") && APP_ADAPTER_NAME.test(basename);
+  if (!isEntrypoint && !isDirectAdapter) return false;
+
+  const source = readFileSync(path.join(root, rel), "utf8");
+  const imports = importSources(source);
+  const moduleFacade = `${MODULES_DIR}/${fach}/public`;
+  const adapterRoot = `src/app/${fach}/`;
+  let hasCompositionSeam = false;
+  for (const { spec, index } of imports) {
+    const target = resolveSpec(rel, spec);
+    if (target === moduleFacade) {
+      hasCompositionSeam = true;
+      continue;
+    }
+    if (isEntrypoint && target?.startsWith(adapterRoot) && APP_ADAPTER_NAME.test(path.posix.basename(target) + ".tsx")) {
+      hasCompositionSeam = true;
+      continue;
+    }
+    if (isEntrypoint && target) {
+      findings.push(`[naht1] ${rel}:${lineOf(source, index)}: Next-Entrypoint darf lokalen Code nur ueber @/modules/${fach}/public oder einen direkten *AppAdapter.tsx komponieren ('${spec}')`);
+    }
+    if (isDirectAdapter && ADAPTER_FORBIDDEN_IMPORT.test(spec)) {
+      findings.push(`[naht1] ${rel}:${lineOf(source, index)}: AppAdapter darf keine DB-, Repository-, Command-Implementierung oder Navigation importieren ('${spec}')`);
+    }
+  }
+  if (!hasCompositionSeam) {
+    findings.push(`[naht1] ${rel}: App-Kompositionsdatei muss @/modules/${fach}/public konsumieren oder ueber einen direkten *AppAdapter.tsx dorthin fuehren`);
+  }
+  if (isDirectAdapter) {
+    for (const match of source.matchAll(ROUTE_LITERAL)) {
+      if (match[1] !== `/${fach}`) {
+        findings.push(`[naht1] ${rel}:${lineOf(source, match.index)}: AppAdapter darf nur den festen eigenen Deeplink-Fallback '/${fach}' kennen, keinen generischen Router-/URL-Tunnel ('${match[1]}')`);
+      }
+    }
+  }
+  return true;
+}
+
 // ── Naht 1: Manifest je Modul + Ablage ───────────────────────────────────────
 
 function gateManifests(root, findings, schemaPath) {
@@ -300,7 +348,7 @@ function gateManifests(root, findings, schemaPath) {
         const file = segments.at(-1) ?? "";
         const dirHit = dirs.find((d) => d.replace(/^[([]|[)\]]$/g, "").toLowerCase() === fach);
         const fileHit = dirs.length === 0 && file.replace(/\.[cm]?[jt]sx?$/, "").toLowerCase() === fach;
-        if (dirHit || fileHit) {
+        if ((dirHit || fileHit) && !(parent === "src/app" && gateAppCompositionFile(root, rel, fach, findings))) {
           findings.push(`[naht1] ${rel}: Fach '${fach}' hat ein Modul, darf nicht mehr ausserhalb ${MODULES_DIR}/${fach}/ liegen`);
         }
       }
@@ -383,11 +431,12 @@ function gateData(root, findings, manifests) {
   }
   for (const [fach, manifest] of manifests) {
     const owned = new Set(asStringArray(manifest.ownsTables).map((t) => t.toLowerCase()));
+    const ownedViewsFunctions = new Set(asStringArray(manifest.viewsFunctions).map((t) => t.toLowerCase()));
     for (const file of listFiles(root, `${MODULES_DIR}/${fach}`, SQL_EXTENSIONS)) {
       const source = readFileSync(path.join(root, file), "utf8");
       for (const m of tableRefs(source)) {
         const ref = m.ref;
-        if (owned.has(ref)) continue;
+        if (owned.has(ref) || ownedViewsFunctions.has(ref)) continue;
         if (/^public\.v_/.test(ref)) {
           if (!declaredViews.has(ref)) findings.push(`[naht4] ${file}:${lineOf(source, m.index)}: View '${ref}' ist in keinem Manifest (viewsFunctions) deklariert`);
           continue;

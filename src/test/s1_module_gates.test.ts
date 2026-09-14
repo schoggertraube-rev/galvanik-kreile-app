@@ -129,6 +129,40 @@ describe("S1 Naht 1 — Manifest je Modul + Ablage", () => {
     expect(f).toContainEqual(expect.stringContaining("[naht1] src/lib/orders/read.ts: Fach 'orders' hat ein Modul"));
   });
 
+  it("erlaubt ausschliesslich duenne Next-Entrypoints und direkte typisierte AppAdapter als App-Kompositionsnaht", () => {
+    const root = repo({
+      ...goodModule,
+      "src/app/orders/page.tsx": `${IMP} { OrdersAppAdapter } from "./OrdersAppAdapter";\nexport default function Page(){ return OrdersAppAdapter(); }\n`,
+      "src/app/orders/[id]/page.tsx": `${IMP} { OrderCardAppAdapter } from "../OrderCardAppAdapter";\nexport default function Page(){ return OrderCardAppAdapter({ orderId: "x" }); }\n`,
+      "src/app/orders/OrdersAppAdapter.tsx": `${IMP} { readOrder } from "@/modules/orders/public";\n${IMP} { action } from "@/app/actions/orders.actions";\nexport function OrdersAppAdapter(){ void action; return readOrder(); }\n`,
+      "src/app/orders/OrderCardAppAdapter.tsx": `${IMP} { readOrder } from "@/modules/orders/public";\nexport function OrderCardAppAdapter(){ return readOrder(); }\n`,
+    });
+    expect(findingsOf(root)).toEqual([]);
+  });
+
+  it("weist beliebige App-Dateien, actions/server/domain, fehlende Modulnaht, Tiefimport und generische URL-Tunnel ab", () => {
+    const root = repo({
+      ...goodModule,
+      "src/app/orders/page.tsx": "export default function Page(){ return null; }\n",
+      "src/app/orders/actions.ts": "export const action = 1;\n",
+      "src/app/orders/server/read.ts": "export const read = 1;\n",
+      "src/app/orders/domain/calculate.ts": "export const calculate = 1;\n",
+      "src/app/orders/BadAppAdapter.tsx": `${IMP} { x } from "@/modules/orders/server/readOrder";\n${IMP} { db } from "@/db";\nexport const BadAppAdapter = ({ href }: { href: string }) => href || "/foreign";\n`,
+      "src/components/orders/Card.tsx": "export const Card = () => null;\n",
+      "src/lib/orders/read.ts": "export const read = 1;\n",
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/page.tsx: App-Kompositionsdatei muss"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/actions.ts: Fach 'orders' hat ein Modul"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/server/read.ts: Fach 'orders' hat ein Modul"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/domain/calculate.ts: Fach 'orders' hat ein Modul"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/BadAppAdapter.tsx:2: AppAdapter darf keine DB-, Repository-, Command-Implementierung"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/BadAppAdapter.tsx: App-Kompositionsdatei muss"));
+    expect(f).toContainEqual(expect.stringContaining("generischen Router-/URL-Tunnel"));
+    expect(f).toContainEqual(expect.stringContaining("src/components/orders/Card.tsx: Fach 'orders' hat ein Modul"));
+    expect(f).toContainEqual(expect.stringContaining("src/lib/orders/read.ts: Fach 'orders' hat ein Modul"));
+  });
+
   it("Schema-Validator deckt object/required/additionalProperties/array/pattern/minLength ab", () => {
     const schema = JSON.parse(REAL_SCHEMA);
     expect(validateAgainstSchema({ moduleId: "a", version: "0.1.0", owner: "x" }, schema)).toEqual([]);
