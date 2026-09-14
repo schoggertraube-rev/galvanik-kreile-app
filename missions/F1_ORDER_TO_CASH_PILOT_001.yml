@@ -1,8 +1,8 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: 55047090c2df0e47b1311308be165b8300086eb1
-branch: gov/authority-calendar-target-stage2-20260913
+base_sha: 456a81fee2e7a56d4c09fe781ba25b2f12a0f6ba
+branch: gov/path1-module-entrypoint-gate-20260914
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
 # ── M0 Konsolidierungsstand ───────────────────────────────────────
@@ -36,9 +36,9 @@ delivery_order:
   - F1.5_BESTAETIGTER_ZAHLUNGSEINGANG
   - F1.6_REALER_PILOT
 
-active_package: AUTHORITY_UI_CONVERGENCE_TRANSITION_GOVERNANCE
-active_package_status: CANDIDATE_BUILD_AND_EXACT_SHA_REVIEW_PENDING
-next_gate_after_active_package: DRAFT_PR_EXACT_SHA_CI_THEN_INDEPENDENT_CODEX_REVIEW
+active_package: PATH1_MODULE_ENTRYPOINT_GATE_BOOTSTRAP
+active_package_status: DRAFT_PR_REPAIR_4_FINAL_EXACT_SHA_CI_AND_INDEPENDENT_REVIEW_PENDING
+next_gate_after_active_package: DRAFT_PR_EXACT_SHA_CI_THEN_INDEPENDENT_REVIEW
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
@@ -133,6 +133,7 @@ rules:
   single_writer: true
   max_read_only_reviewers: 1
   max_repair_loops_per_gate: 2
+  owner_approved_repair_exception_pr_90: ROUND_4_FINAL_NO_PRECEDENT_ROUND_5_FORBIDDEN_TERMINAL
   f0_worktree_frozen: true
   protected_checkout_untouched: true
   no_parallel_architecture: true
@@ -421,6 +422,11 @@ authority_ui_transition_allowlist:
   - scripts/quality/check-authoritative-sources.mjs
   - src/test/authority_gate.test.ts
   - quality/eslint-baseline.json
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+
+path1_module_entrypoint_gate_bootstrap_allowlist:
+  - scripts/quality/check-module-gates.mjs
+  - src/test/s1_module_gates.test.ts
   - missions/F1_ORDER_TO_CASH_PILOT_001.yml
 
 authority_provider_governance_allowlist:
