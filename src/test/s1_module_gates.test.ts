@@ -61,6 +61,14 @@ const goodModule = {
   "src/modules/orders/server/readOrder.ts": "export const readOrder = () => sql`select id from public.orders`;\n",
 };
 
+const goodWerkstattModule = {
+  "src/modules/werkstatt/werkstatt.manifest.json": manifest("werkstatt", {
+    publicExports: ["@/modules/werkstatt/public#WerkstattView"],
+  }),
+  "src/modules/werkstatt/public.ts": 'export { WerkstattView } from "./ui/WerkstattView";\n',
+  "src/modules/werkstatt/ui/WerkstattView.tsx": "export const WerkstattView = () => null;\n",
+};
+
 afterEach(() => {
   for (const t of temps.splice(0)) rmSync(t, { recursive: true, force: true });
 });
@@ -129,13 +137,27 @@ describe("S1 Naht 1 — Manifest je Modul + Ablage", () => {
     expect(f).toContainEqual(expect.stringContaining("[naht1] src/lib/orders/read.ts: Fach 'orders' hat ein Modul"));
   });
 
-  it("erlaubt ausschliesslich duenne Next-Entrypoints und direkte typisierte AppAdapter als App-Kompositionsnaht", () => {
+  it("erlaubt ausschliesslich duenne Next-Entrypoints und manifestgebundene typisierte AppAdapter als App-Kompositionsnaht", () => {
     const root = repo({
       ...goodModule,
       "src/app/orders/page.tsx": `${IMP} { OrdersAppAdapter } from "./OrdersAppAdapter";\nexport default function Page(){ return OrdersAppAdapter(); }\n`,
       "src/app/orders/[id]/page.tsx": `${IMP} { OrderCardAppAdapter } from "../OrderCardAppAdapter";\nexport default function Page(){ return OrderCardAppAdapter({ orderId: "x" }); }\n`,
       "src/app/orders/OrdersAppAdapter.tsx": `${IMP} { readOrder } from "@/modules/orders/public";\n${IMP} { action } from "@/app/actions/orders.actions";\nexport function OrdersAppAdapter(){ void action; return readOrder(); }\n`,
       "src/app/orders/OrderCardAppAdapter.tsx": `${IMP} { useRouter } from "next/navigation";\n${IMP} { readOrder } from "@/modules/orders/public";\n${IMP} { useOverlayStore } from "@/lib/overlayStore";\nexport function OrderCardAppAdapter({ fallbackHref }: { fallbackHref?: "/orders" }){ const router = useRouter(); void useOverlayStore; if (fallbackHref) router.replace(fallbackHref); return readOrder(); }\n`,
+    });
+    expect(findingsOf(root)).toEqual([]);
+  });
+
+  it("ordnet den realen Routen-/Modul-Mismatch warendurchlauf/WerkstattAppAdapter ueber die Werkstatt-Fassade zu", () => {
+    const root = repo({
+      ...goodWerkstattModule,
+      "src/app/warendurchlauf/WerkstattAppAdapter.tsx": [
+        `${IMP} { WerkstattView } from "@/modules/werkstatt/public";`,
+        `${IMP} { useRouter } from "next/navigation";`,
+        `${IMP} { action } from "@/app/actions/orders.actions";`,
+        `${IMP} { useOverlayStore } from "@/lib/overlayStore";`,
+        "export function WerkstattAppAdapter() { const router = useRouter(); void action; void useOverlayStore; router.push(\"/warendurchlauf/galvanik\"); return WerkstattView(); }",
+      ].join("\n"),
     });
     expect(findingsOf(root)).toEqual([]);
   });
@@ -157,11 +179,52 @@ describe("S1 Naht 1 — Manifest je Modul + Ablage", () => {
     expect(f).toContainEqual(expect.stringContaining("src/app/orders/server/read.ts: Fach 'orders' hat ein Modul"));
     expect(f).toContainEqual(expect.stringContaining("src/app/orders/domain/calculate.ts: Fach 'orders' hat ein Modul"));
     expect(f).toContainEqual(expect.stringContaining("src/app/orders/BadAppAdapter.tsx:2: AppAdapter darf keine DB-, Supabase-, Repository- oder Command-Implementierung"));
-    expect(f).toContainEqual(expect.stringContaining("src/app/orders/BadAppAdapter.tsx: App-Kompositionsdatei muss"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/BadAppAdapter.tsx: AppAdapter muss genau eine kanonische Modul-public-Fassade importieren; Zuordnung ist keine"));
     expect(f).toContainEqual(expect.stringContaining("href/url/route/pathname:string-Tunnel"));
-    expect(f).toContainEqual(expect.stringContaining("generischen Router-/URL-Tunnel"));
     expect(f).toContainEqual(expect.stringContaining("src/components/orders/Card.tsx: Fach 'orders' hat ein Modul"));
     expect(f).toContainEqual(expect.stringContaining("src/lib/orders/read.ts: Fach 'orders' hat ein Modul"));
+  });
+
+  it("prueft verbotene Implementierungsimporte auch beim realen Routen-/Modul-Mismatch", () => {
+    const root = repo({
+      ...goodWerkstattModule,
+      "src/app/warendurchlauf/WerkstattAppAdapter.tsx": [
+        `${IMP} { WerkstattView } from "@/modules/werkstatt/public";`,
+        `${IMP} { supabase } from "@/lib/supabase/client";`,
+        `${IMP} { orderRepository } from "@/lib/server/orderRepository";`,
+        `${IMP} { recordGoodsOutCommand } from "@/lib/server/commands/recordGoodsOutCommand";`,
+        "export function WerkstattAppAdapter() { void supabase; void orderRepository; void recordGoodsOutCommand; return WerkstattView(); }",
+      ].join("\n"),
+    });
+    const f = findingsOf(root);
+    for (const line of [2, 3, 4]) {
+      expect(f).toContainEqual(expect.stringContaining(`src/app/warendurchlauf/WerkstattAppAdapter.tsx:${line}: AppAdapter darf keine DB-, Supabase-, Repository- oder Command-Implementierung`));
+    }
+    expect(f).toHaveLength(3);
+  });
+
+  it("weist fehlende und mehrdeutige Modulzuordnung direkter AppAdapter fail-closed ab", () => {
+    const root = repo({
+      ...goodModule,
+      ...goodWerkstattModule,
+      "src/app/warendurchlauf/OrphanAppAdapter.tsx": `${IMP} { action } from "@/app/actions/orders.actions";\nexport function OrphanAppAdapter() { void action; return null; }\n`,
+      "src/app/warendurchlauf/AmbiguousAppAdapter.tsx": `${IMP} { readOrder } from "@/modules/orders/public";\n${IMP} { WerkstattView } from "@/modules/werkstatt/public";\nexport function AmbiguousAppAdapter() { readOrder(); return WerkstattView(); }\n`,
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("src/app/warendurchlauf/OrphanAppAdapter.tsx: AppAdapter muss genau eine kanonische Modul-public-Fassade importieren; Zuordnung ist keine"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/warendurchlauf/AmbiguousAppAdapter.tsx: AppAdapter muss genau eine kanonische Modul-public-Fassade importieren; Zuordnung ist mehrere (orders, werkstatt)"));
+    expect(f).toHaveLength(2);
+  });
+
+  it("weist eine einzelne Fassade ohne gueltiges Manifest als Adapterzuordnung ab", () => {
+    const root = repo({
+      "src/modules/werkstatt/werkstatt.manifest.json": manifest("falsches-modul"),
+      "src/modules/werkstatt/public.ts": "export const WerkstattView = () => null;\n",
+      "src/app/warendurchlauf/WerkstattAppAdapter.tsx": `${IMP} { WerkstattView } from "@/modules/werkstatt/public";\nexport function WerkstattAppAdapter() { return WerkstattView(); }\n`,
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("moduleId 'falsches-modul' != Ordnername 'werkstatt'"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/warendurchlauf/WerkstattAppAdapter.tsx: AppAdapter-Fassade '@/modules/werkstatt/public' gehoert nicht zu einem gueltigen Manifest"));
   });
 
   it("weist direkte Supabase-, Base-Table-, Repository- und Command-Implementierungen im AppAdapter ab", () => {

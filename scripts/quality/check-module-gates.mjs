@@ -65,7 +65,6 @@ const NEXT_COMPOSITION_ENTRYPOINTS = new Set(["page.tsx", "layout.tsx", "loading
 const APP_ADAPTER_NAME = /^[A-Z][A-Za-z0-9]*AppAdapter\.tsx$/;
 const ADAPTER_FORBIDDEN_IMPORT = /(?:^@\/lib\/supabase(?:\/|$)|(?:^|\/)(?:db|database|commands?|repositories?)(?:\/|$)|(?:^|\/)[^/]*(?:Command|Repository)$)/i;
 const ADAPTER_GENERIC_ROUTE_TUNNEL = /\b(?:href|url|route|pathname|[A-Za-z_$][\w$]*(?:href|url|route|pathname))\??\s*:\s*string\b/i;
-const ROUTE_LITERAL = /['"`](\/(?!\/)[^'"`\s]*)['"`]/g;
 
 const CODE_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".mdx"]);
 const SQL_EXTENSIONS = new Set([...CODE_EXTENSIONS, ".sql"]);
@@ -243,14 +242,18 @@ export function moduleOf(relPath) {
   return m ? m[1] : null;
 }
 
+function isDirectAppAdapterFile(rel) {
+  return rel.startsWith("src/app/") && APP_ADAPTER_NAME.test(path.posix.basename(rel));
+}
+
 function gateAppCompositionFile(root, rel, fach, findings) {
+  if (isDirectAppAdapterFile(rel)) return true;
   const prefix = `src/app/${fach}/`;
   if (!rel.startsWith(prefix)) return false;
   const nested = rel.slice(prefix.length);
   const basename = path.posix.basename(nested);
   const isEntrypoint = NEXT_COMPOSITION_ENTRYPOINTS.has(basename);
-  const isDirectAdapter = !nested.includes("/") && APP_ADAPTER_NAME.test(basename);
-  if (!isEntrypoint && !isDirectAdapter) return false;
+  if (!isEntrypoint) return false;
 
   const source = readFileSync(path.join(root, rel), "utf8");
   const imports = importSources(source);
@@ -270,25 +273,45 @@ function gateAppCompositionFile(root, rel, fach, findings) {
     if (isEntrypoint && target) {
       findings.push(`[naht1] ${rel}:${lineOf(source, index)}: Next-Entrypoint darf lokalen Code nur ueber @/modules/${fach}/public oder einen direkten *AppAdapter.tsx komponieren ('${spec}')`);
     }
-    if (isDirectAdapter && ADAPTER_FORBIDDEN_IMPORT.test(spec)) {
-      findings.push(`[naht1] ${rel}:${lineOf(source, index)}: AppAdapter darf keine DB-, Supabase-, Repository- oder Command-Implementierung importieren ('${spec}')`);
-    }
   }
   if (!hasCompositionSeam) {
     findings.push(`[naht1] ${rel}: App-Kompositionsdatei muss @/modules/${fach}/public konsumieren oder ueber einen direkten *AppAdapter.tsx dorthin fuehren`);
   }
-  if (isDirectAdapter) {
+  return true;
+}
+
+// Direkte AppAdapter sind App-Komposition und duerfen deshalb ausserhalb des
+// gleichnamigen Next-Routenordners liegen. Ihre Modulzuordnung entsteht jedoch
+// ausschliesslich durch genau eine kanonische, valide Modul-public-Fassade.
+function gateAppAdapters(root, findings, validModules) {
+  const adapters = listCodeFiles(root, "src/app").filter(isDirectAppAdapterFile);
+  for (const rel of adapters) {
+    const source = readFileSync(path.join(root, rel), "utf8");
+    const imports = importSources(source);
+    const facadeModules = new Set();
+
+    for (const { spec, index } of imports) {
+      const target = resolveSpec(rel, spec);
+      const facade = target?.match(/^src\/modules\/([^/]+)\/public$/);
+      if (facade) facadeModules.add(facade[1]);
+      if (ADAPTER_FORBIDDEN_IMPORT.test(spec)) {
+        findings.push(`[naht1] ${rel}:${lineOf(source, index)}: AppAdapter darf keine DB-, Supabase-, Repository- oder Command-Implementierung importieren ('${spec}')`);
+      }
+    }
+
+    const assigned = [...facadeModules].sort();
+    if (assigned.length !== 1) {
+      const detail = assigned.length === 0 ? "keine" : `mehrere (${assigned.join(", ")})`;
+      findings.push(`[naht1] ${rel}: AppAdapter muss genau eine kanonische Modul-public-Fassade importieren; Zuordnung ist ${detail}`);
+    } else if (!validModules.has(assigned[0])) {
+      findings.push(`[naht1] ${rel}: AppAdapter-Fassade '@/modules/${assigned[0]}/public' gehoert nicht zu einem gueltigen Manifest`);
+    }
+
     const genericRouteTunnel = source.match(ADAPTER_GENERIC_ROUTE_TUNNEL);
     if (genericRouteTunnel) {
       findings.push(`[naht1] ${rel}:${lineOf(source, genericRouteTunnel.index ?? 0)}: AppAdapter darf keinen breit typisierten href/url/route/pathname:string-Tunnel anbieten`);
     }
-    for (const match of source.matchAll(ROUTE_LITERAL)) {
-      if (match[1] !== `/${fach}`) {
-        findings.push(`[naht1] ${rel}:${lineOf(source, match.index)}: AppAdapter darf nur den festen eigenen Deeplink-Fallback '/${fach}' kennen, keinen generischen Router-/URL-Tunnel ('${match[1]}')`);
-      }
-    }
   }
-  return true;
 }
 
 // ── Naht 1: Manifest je Modul + Ablage ───────────────────────────────────────
@@ -298,11 +321,13 @@ function gateManifests(root, findings, schemaPath) {
   const schemaAbs = schemaPath ?? path.join(root, SCHEMA_PATH);
   if (modules.length > 0 && !existsSync(schemaAbs)) {
     findings.push(`[naht1] ${SCHEMA_PATH}: Schema fehlt, Manifeste nicht pruefbar`);
-    return { modules, manifests: new Map() };
+    return { modules, manifests: new Map(), validModules: new Set() };
   }
   const schema = modules.length > 0 ? readJson(schemaAbs) : null;
   const manifests = new Map();
+  const validModules = new Set();
   for (const fach of modules) {
+    const manifestFindingStart = findings.length;
     const manifestRel = `${MODULES_DIR}/${fach}/${fach}.manifest.json`;
     const publicRel = `${MODULES_DIR}/${fach}/public.ts`;
     if (!existsSync(path.join(root, manifestRel))) {
@@ -344,6 +369,7 @@ function gateManifests(root, findings, schemaPath) {
       if (!modules.includes(dep)) findings.push(`[naht1] ${manifestRel}: dependency '${dep}' ist kein Modul unter ${MODULES_DIR}/`);
       if (dep === fach) findings.push(`[naht1] ${manifestRel}: Modul haengt von sich selbst ab`);
     }
+    if (findings.length === manifestFindingStart) validModules.add(fach);
     // Ablage (Red-Team P2): jedes Pfadsegment == fach (case-insensitive) unter den
     // Legacy-Eltern, plus Datei <fach>.ts(x) direkt darunter.
     for (const parent of LEGACY_DOMAIN_PARENTS) {
@@ -369,7 +395,7 @@ function gateManifests(root, findings, schemaPath) {
       else owners.set(key, fach);
     }
   }
-  return { modules, manifests };
+  return { modules, manifests, validModules };
 }
 
 // ── Naht 2: Positive Fassade / Tiefimport-Verbot ─────────────────────────────
@@ -550,7 +576,8 @@ export function runModuleGates(root, { baseBaselinePath = null, schemaPath = nul
   const findings = [];
   const baseline = readBaseline(path.join(root, BASELINE_PATH), findings);
   const baseBaseline = baseBaselinePath ? readBaseline(baseBaselinePath, findings) : null;
-  const { manifests } = gateManifests(root, findings, schemaPath);
+  const { manifests, validModules } = gateManifests(root, findings, schemaPath);
+  gateAppAdapters(root, findings, validModules);
   gateImports(root, findings);
   gateData(root, findings, manifests);
   gateUi(root, findings, baseline, baseBaseline);
