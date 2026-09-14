@@ -63,7 +63,9 @@ export const LEGACY_DOMAIN_PARENTS = [
 ];
 const NEXT_COMPOSITION_ENTRYPOINTS = new Set(["page.tsx", "layout.tsx", "loading.tsx", "error.tsx", "not-found.tsx"]);
 const APP_ADAPTER_NAME = /^[A-Z][A-Za-z0-9]*AppAdapter\.tsx$/;
-const ADAPTER_FORBIDDEN_IMPORT = /(?:^@\/lib\/supabase(?:\/|$)|(?:^|\/)(?:db|database|commands?|repositories?)(?:\/|$)|(?:^|\/)[^/]*(?:Command|Repository)$)/i;
+const APP_ADAPTER_SUFFIX = /appadapter\.tsx$/i;
+const APP_ADAPTER_STEM = /appadapter$/i;
+const ADAPTER_FORBIDDEN_IMPORT = /(?:^@supabase(?:\/|$)|(?:^|\/)supabase(?:\/|$)|(?:^|\/)(?:db|database|commands?|repositories?)(?:\/|$)|(?:^|\/)[^/]*(?:Command|Repository)$)/i;
 const ADAPTER_GENERIC_ROUTE_TUNNEL = /\b(?:href|url|route|pathname|[A-Za-z_$][\w$]*(?:href|url|route|pathname))\??\s*:\s*string\b/i;
 
 const CODE_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".mdx"]);
@@ -243,7 +245,7 @@ export function moduleOf(relPath) {
 }
 
 function isDirectAppAdapterFile(rel) {
-  return rel.startsWith("src/app/") && APP_ADAPTER_NAME.test(path.posix.basename(rel));
+  return rel.startsWith("src/app/") && APP_ADAPTER_SUFFIX.test(path.posix.basename(rel));
 }
 
 function gateAppCompositionFile(root, rel, fach, findings) {
@@ -266,7 +268,7 @@ function gateAppCompositionFile(root, rel, fach, findings) {
       hasCompositionSeam = true;
       continue;
     }
-    if (isEntrypoint && target?.startsWith(adapterRoot) && APP_ADAPTER_NAME.test(path.posix.basename(target) + ".tsx")) {
+    if (isEntrypoint && target?.startsWith(adapterRoot) && APP_ADAPTER_STEM.test(path.posix.basename(target))) {
       hasCompositionSeam = true;
       continue;
     }
@@ -284,11 +286,17 @@ function gateAppCompositionFile(root, rel, fach, findings) {
 // gleichnamigen Next-Routenordners liegen. Ihre Modulzuordnung entsteht jedoch
 // ausschliesslich durch genau eine kanonische, valide Modul-public-Fassade.
 function gateAppAdapters(root, findings, validModules) {
-  const adapters = listCodeFiles(root, "src/app").filter(isDirectAppAdapterFile);
+  // `walk` statt Code-Extension-Filter: auch falsch geschriebene `.TSX`-Varianten
+  // duerfen die Adapterpruefung nicht durch Dateinamen-Casing umgehen.
+  const adapters = walk(root, "src/app", []).filter(isDirectAppAdapterFile);
   for (const rel of adapters) {
     const source = readFileSync(path.join(root, rel), "utf8");
     const imports = importSources(source);
     const facadeModules = new Set();
+
+    if (!APP_ADAPTER_NAME.test(path.posix.basename(rel))) {
+      findings.push(`[naht1] ${rel}: AppAdapter-Dateiname muss kanonisch '<PascalCase>AppAdapter.tsx' geschrieben sein`);
+    }
 
     for (const { spec, index } of imports) {
       const target = resolveSpec(rel, spec);

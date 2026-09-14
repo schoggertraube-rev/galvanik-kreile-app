@@ -203,6 +203,30 @@ describe("S1 Naht 1 — Manifest je Modul + Ablage", () => {
     expect(f).toHaveLength(3);
   });
 
+  it("erkennt AppAdapter-Suffixe case-insensitiv, meldet die Namensform und prueft ihren Inhalt weiter", () => {
+    const unsafeAdapters = [
+      ["unsafeAppAdapter.tsx", "@/utils/supabase/client"],
+      ["UnsafeFeatureappadapter.tsx", "@/lib/supabase/client"],
+      ["UnsafeToolAPPADAPTER.tsx", "@supabase/supabase-js"],
+      ["UnsafeUpperAppAdapter.TSX", "@supabase/ssr"],
+    ] as const;
+    const files: Record<string, string> = { ...goodModule };
+    for (const [filename, implementationImport] of unsafeAdapters) {
+      files[`src/app/orders/${filename}`] = [
+        `${IMP} { readOrder } from "@/modules/orders/public";`,
+        `${IMP} { unsafe } from "${implementationImport}";`,
+        "export function Adapter() { void unsafe; return readOrder(); }",
+      ].join("\n");
+    }
+
+    const f = findingsOf(repo(files));
+    for (const [filename, implementationImport] of unsafeAdapters) {
+      expect(f).toContainEqual(expect.stringContaining(`src/app/orders/${filename}: AppAdapter-Dateiname muss kanonisch '<PascalCase>AppAdapter.tsx' geschrieben sein`));
+      expect(f).toContainEqual(expect.stringContaining(`src/app/orders/${filename}:2: AppAdapter darf keine DB-, Supabase-, Repository- oder Command-Implementierung importieren ('${implementationImport}')`));
+    }
+    expect(f).toHaveLength(unsafeAdapters.length * 2);
+  });
+
   it("weist fehlende und mehrdeutige Modulzuordnung direkter AppAdapter fail-closed ab", () => {
     const root = repo({
       ...goodModule,

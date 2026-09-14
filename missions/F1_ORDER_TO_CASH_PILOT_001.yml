@@ -37,7 +37,7 @@ delivery_order:
   - F1.6_REALER_PILOT
 
 active_package: PATH1_MODULE_ENTRYPOINT_GATE_BOOTSTRAP
-active_package_status: DRAFT_PR_REPAIR_3_EXACT_SHA_CI_AND_INDEPENDENT_REVIEW_PENDING
+active_package_status: DRAFT_PR_REPAIR_4_FINAL_EXACT_SHA_CI_AND_INDEPENDENT_REVIEW_PENDING
 next_gate_after_active_package: DRAFT_PR_EXACT_SHA_CI_THEN_INDEPENDENT_REVIEW
 f1_r0_status: complete
 f1_2_status: complete
@@ -133,6 +133,7 @@ rules:
   single_writer: true
   max_read_only_reviewers: 1
   max_repair_loops_per_gate: 2
+  owner_approved_repair_exception_pr_90: ROUND_4_FINAL_NO_PRECEDENT_ROUND_5_FORBIDDEN_TERMINAL
   f0_worktree_frozen: true
   protected_checkout_untouched: true
   no_parallel_architecture: true
