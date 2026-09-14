@@ -123,7 +123,7 @@ describe("PATH1 customer persistence", () => {
   });
 
   it("isoliert Tenants über Command und kanonischen Read-Port", async () => {
-    const { createCustomerCommand } = await import("@/modules/customers/public");
+    const { createCustomerCommand } = await import("@/modules/customers/server-public");
     const { readCustomerSummary } = await import("@/lib/server/customerSummaryRead");
     const foreign = await createCustomerCommand({
       tenantId: foreignTenant,

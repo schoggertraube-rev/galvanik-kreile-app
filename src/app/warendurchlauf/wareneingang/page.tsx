@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import {
-  Camera, PenLine, Phone, MessageSquare, Clock,
+  Camera, PenLine, Phone, Clock,
   ChevronRight
 } from "lucide-react";
 import { useState, Suspense, useEffect } from "react";
@@ -154,22 +154,6 @@ function WarendurchlaufLeitstandContent() {
                   <span className="text-xs text-[#9e9689]">Kunde &middot; Teile &middot; Termin</span>
                 </button>
               </div>
-
-              {/* Breite Verweiskarten */}
-              <Link
-                href="/quotes"
-                className="flex items-center gap-4 p-4 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-sm hover:bg-[#f4f0e8] mb-3"
-                style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
-              >
-                <div className="w-10 h-10 rounded-[10px] bg-[#fef3e2] flex items-center justify-center shrink-0">
-                  <MessageSquare className="w-5 h-5 text-[#c8922a]" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-bold text-[#1a1a1a]">Anfragen</div>
-                  <div className="text-[11px] text-[#9e9689]">Offene Angebotsanfragen</div>
-                </div>
-                <ChevronRight className="w-4 h-4 text-[#9e9689] shrink-0" />
-              </Link>
 
               <Link
                 href="/orders"

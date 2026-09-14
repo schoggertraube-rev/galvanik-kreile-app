@@ -1,0 +1,114 @@
+export type QuoteCommandAuthorization = {
+  tenantId: string;
+  userId: string;
+  permissions: readonly string[];
+};
+
+export type QuotePositionInput = {
+  name: string;
+  quantity: number;
+  material: string | null;
+  surfaceRequested: string;
+  unitPriceCents: number;
+};
+
+export type CreateQuoteInput = {
+  clientEventId: string;
+  customerId: string;
+  dueDate: string;
+  note: string | null;
+  positions: QuotePositionInput[];
+};
+
+export type ConvertQuoteInput = {
+  quoteId: string;
+  clientEventId: string;
+  expectedVersion: number;
+  confirmedAward: true;
+};
+
+export type QuotePosition = QuotePositionInput & {
+  id: string;
+  position: number;
+  lineTotalCents: number;
+};
+
+export type QuoteReadback = {
+  quoteId: string;
+  quoteNumber: string;
+  customerId: string;
+  customerNumber: string | null;
+  customerDisplayName: string;
+  status: "draft" | "converted";
+  version: 1 | 2;
+  currency: "EUR";
+  dueDate: string;
+  note: string | null;
+  totalNetCents: number;
+  linkedOrderId: string | null;
+  actorId: string;
+  actorDisplayName: string;
+  createdAt: string;
+  convertedAt: string | null;
+  positions: QuotePosition[];
+};
+
+export type QuoteCreateReceipt = {
+  receiptId: string;
+  eventId: string;
+  quoteId: string;
+  customerId: string;
+  actorId: string;
+  clientEventId: string;
+  correlationId: string;
+  recordedAt: string;
+  aggregateVersion: 1;
+};
+
+export type QuoteConversionReceipt = {
+  receiptId: string;
+  eventId: string;
+  quoteId: string;
+  customerId: string;
+  orderId: string;
+  orderIntakeReceiptId: string;
+  actorId: string;
+  clientEventId: string;
+  correlationId: string;
+  recordedAt: string;
+  aggregateVersion: 2;
+};
+
+export type QuoteCommandFailure = {
+  code: "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "VALIDATION_ERROR" | "UNAVAILABLE";
+  message: string;
+};
+
+export type CreateQuoteResult =
+  | { code: "OK"; quote: QuoteReadback; receipt: QuoteCreateReceipt; replayed: boolean }
+  | QuoteCommandFailure;
+
+export type ReadQuoteResult =
+  | { code: "OK"; quote: QuoteReadback }
+  | QuoteCommandFailure;
+
+export type QuoteOrderInput = {
+  clientEventId: string;
+  customer: { mode: "EXISTING"; customerId: string };
+  dueDate: string;
+  note: string | null;
+  items: Array<{
+    name: string;
+    quantity: number;
+    material: string | null;
+    surfaceRequested: string;
+  }>;
+};
+
+export type PrepareQuoteConversionResult =
+  | { code: "OK"; quoteId: string; orderInput: QuoteOrderInput; replayed: boolean }
+  | QuoteCommandFailure;
+
+export type ReadQuoteConversionReceiptResult =
+  | { code: "OK"; receipt: QuoteConversionReceipt; quote: QuoteReadback }
+  | QuoteCommandFailure;

@@ -1,0 +1,90 @@
+"use server";
+
+import { revalidatePath, unstable_noStore as noStore } from "next/cache";
+import { resolveAuthorization } from "@/lib/server/authorization";
+import { createOrderIntake } from "@/lib/server/commands/orderIntakeCommand";
+import {
+  createQuoteCommand,
+  prepareQuoteConversionCommand,
+  readQuoteCommand,
+  readQuoteConversionReceiptCommand,
+  type ConvertQuoteInput,
+  type CreateQuoteInput,
+} from "@/modules/quotes/server-public";
+
+function authorizationFailure(result: Awaited<ReturnType<typeof resolveAuthorization>>) {
+  if (result.ok) return null;
+  return result.reason === "AUTHORIZATION_UNAVAILABLE"
+    ? { code: "UNAVAILABLE" as const, message: "KV-Funktion ist derzeit nicht verfügbar." }
+    : { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+}
+
+export async function createQuoteAction(input: CreateQuoteInput) {
+  let authorization;
+  try {
+    authorization = await resolveAuthorization();
+  } catch {
+    return { code: "UNAVAILABLE" as const, message: "KV konnte nicht sicher gespeichert werden." };
+  }
+  const failure = authorizationFailure(authorization);
+  if (failure || !authorization.ok) return failure!;
+  const result = await createQuoteCommand(authorization.data, input);
+  if (result.code === "OK") {
+    revalidatePath("/customers");
+    revalidatePath(`/customers/${result.quote.customerId}`);
+  }
+  return result;
+}
+
+export async function readQuoteAction(input: { quoteId: string }) {
+  noStore();
+  let authorization;
+  try {
+    authorization = await resolveAuthorization();
+  } catch {
+    return { code: "UNAVAILABLE" as const, message: "KV konnte nicht sicher gelesen werden." };
+  }
+  const failure = authorizationFailure(authorization);
+  if (failure || !authorization.ok) return failure!;
+  return readQuoteCommand(authorization.data, input);
+}
+
+export async function convertQuoteToOrderAction(input: ConvertQuoteInput) {
+  let authorization;
+  try {
+    authorization = await resolveAuthorization();
+  } catch {
+    return { code: "UNAVAILABLE" as const, message: "KV konnte nicht sicher beauftragt werden." };
+  }
+  const failure = authorizationFailure(authorization);
+  if (failure || !authorization.ok) return failure!;
+
+  const prepared = await prepareQuoteConversionCommand(authorization.data, input);
+  if (prepared.code !== "OK") return prepared;
+
+  const order = await createOrderIntake(prepared.orderInput);
+  if (order.code !== "OK") return order;
+
+  const persisted = await readQuoteConversionReceiptCommand(authorization.data, {
+    quoteId: input.quoteId,
+    clientEventId: input.clientEventId,
+  });
+  if (persisted.code !== "OK"
+    || persisted.receipt.orderId !== order.receipt.orderId
+    || persisted.receipt.orderIntakeReceiptId !== order.receipt.receiptId
+    || persisted.quote.linkedOrderId !== order.receipt.orderId) {
+    return { code: "UNAVAILABLE" as const, message: "Auftrag wurde angelegt, der sichere KV-Readback ist noch nicht verfügbar." };
+  }
+
+  revalidatePath("/orders");
+  revalidatePath(`/orders/${order.receipt.orderId}`);
+  revalidatePath("/customers");
+  revalidatePath(`/customers/${persisted.receipt.customerId}`);
+  return {
+    code: "OK" as const,
+    quote: persisted.quote,
+    quoteReceipt: persisted.receipt,
+    orderReceipt: order.receipt,
+    replayed: prepared.replayed && order.replayed,
+  };
+}

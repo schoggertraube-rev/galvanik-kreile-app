@@ -12,7 +12,7 @@ import { readCustomerSummary } from "@/lib/server/customerSummaryRead";
 import {
   createCustomerCommand,
   type CreateCustomerInput,
-} from "@/modules/customers/public";
+} from "@/modules/customers/server-public";
 
 export async function getCustomerSummaryAction(input: { customerId: string }) {
   noStore();

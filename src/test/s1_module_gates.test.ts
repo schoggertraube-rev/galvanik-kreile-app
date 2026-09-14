@@ -108,6 +108,47 @@ describe("S1 Naht 1 — Manifest je Modul + Ablage", () => {
     expect(f).toContainEqual(expect.stringContaining("'@/modules/other/public#y' muss '@/modules/orders/public#Symbol' sein"));
   });
 
+  it("trennt browser-sichere public- und explizite server-public-Fassade", () => {
+    const root = repo({
+      "src/modules/customers/customers.manifest.json": manifest("customers", {
+        publicExports: [
+          "@/modules/customers/public#CustomerView",
+          "@/modules/customers/public#CustomerInput",
+          "@/modules/customers/server-public#CustomerInput",
+          "@/modules/customers/server-public#createCustomer",
+        ],
+      }),
+      "src/modules/customers/public.ts": `${EXP} { CustomerView } from "./ui/CustomerView";\n${EXP} type { CustomerInput } from "./server/types";\n`,
+      "src/modules/customers/server-public.ts": `${IMP} "server-only";\n${EXP} { createCustomer } from "./server/createCustomer";\n${EXP} type { CustomerInput } from "./server/types";\n`,
+      "src/modules/customers/ui/CustomerView.tsx": "export const CustomerView = () => null;\n",
+      "src/modules/customers/server/types.ts": "export type CustomerInput = { name: string };\n",
+      "src/modules/customers/server/createCustomer.ts": `${IMP} "server-only";\n${IMP} { sql } from "drizzle-orm";\nexport const createCustomer = () => sql;\n`,
+      "src/app/actions/customers.actions.ts": `"use server";\n${IMP} { createCustomer } from "@/modules/customers/server-public";\nexport const action = createCustomer;\n`,
+      "src/app/customers/CustomersAppAdapter.tsx": `${IMP} { CustomerView } from "@/modules/customers/public";\nexport const CustomersAppAdapter = CustomerView;\n`,
+      "src/test/customer.integration.test.ts": `${IMP} { createCustomer } from "@/modules/customers/server-public";\nvoid createCustomer;\n`,
+    });
+    expect(findingsOf(root)).toEqual([]);
+  });
+
+  it("weist server-only im transitiven Client-Fassadengraph und fehlende Servermarkierung ab", () => {
+    const root = repo({
+      "src/modules/customers/customers.manifest.json": manifest("customers", {
+        publicExports: [
+          "@/modules/customers/public#CustomerView",
+          "@/modules/customers/server-public#createCustomer",
+        ],
+      }),
+      "src/modules/customers/public.ts": `${EXP} { CustomerView } from "./ui/CustomerView";\n`,
+      "src/modules/customers/server-public.ts": `${EXP} { createCustomer } from "./server/createCustomer";\n`,
+      "src/modules/customers/ui/CustomerView.tsx": `${EXP} { createCustomer as CustomerView } from "../server/createCustomer";\n`,
+      "src/modules/customers/server/createCustomer.ts": `${IMP} "server-only";\nexport const createCustomer = () => null;\n`,
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("Client-Fassade ist nicht browser-sicher"));
+    expect(f).toContainEqual(expect.stringContaining("importiert server-only 'server-only'"));
+    expect(f).toContainEqual(expect.stringContaining("Server-Fassade muss direkt 'server-only' importieren"));
+  });
+
   it("dependencies muessen existierende Module sein; Selbstabhaengigkeit = FAIL", () => {
     const root = repo({
       ...goodModule,
@@ -214,6 +255,30 @@ describe("S1 Naht 2 — positive Fassade / Tiefimport-Verbot", () => {
     expect(f).toContainEqual(expect.stringContaining("[naht2] src/app/x.test.ts:1: Tiefimport"));
     expect(f).toContainEqual(expect.stringContaining("[naht2] src/app/root.ts:1: Tiefimport '@/modules/orders'"));
     expect(f).toHaveLength(6);
+  });
+
+  it("erlaubt server-public nur fuer Server Actions und Real-DB-Tests; Client, Re-Export und Tiefimport bleiben rot", () => {
+    const root = repo({
+      "src/modules/customers/customers.manifest.json": manifest("customers", {
+        publicExports: [
+          "@/modules/customers/public#CustomerView",
+          "@/modules/customers/server-public#createCustomer",
+        ],
+      }),
+      "src/modules/customers/public.ts": `${EXP} { CustomerView } from "./ui/CustomerView";\n`,
+      "src/modules/customers/server-public.ts": `${IMP} "server-only";\n${EXP} { createCustomer } from "./server/createCustomer";\n`,
+      "src/modules/customers/ui/CustomerView.tsx": "export const CustomerView = () => null;\n",
+      "src/modules/customers/server/createCustomer.ts": `${IMP} "server-only";\nexport const createCustomer = () => null;\n`,
+      "src/app/customers/CustomersAppAdapter.tsx": `${IMP} { CustomerView } from "@/modules/customers/public";\n${IMP} { createCustomer } from "@/modules/customers/server-public";\nexport const CustomersAppAdapter = () => { void createCustomer; return CustomerView(); };\n`,
+      "src/app/client.tsx": `${IMP} { createCustomer } from "@/modules/customers/server-public";\nvoid createCustomer;\n`,
+      "src/app/actions/bad.actions.ts": `"use server";\n${IMP} { createCustomer } from "@/modules/customers/server/createCustomer";\nvoid createCustomer;\n`,
+      "src/app/reexport.ts": `${EXP} { createCustomer } from "@/modules/customers/server-public";\n`,
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("src/app/customers/CustomersAppAdapter.tsx:2: Server-Fassade"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/client.tsx:1: Server-Fassade"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/reexport.ts:1: Server-Fassade"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/actions/bad.actions.ts:2: Tiefimport"));
   });
 
   it("Im eigenen Modul nur relative Imports; @/modules/<eigen>/... = FAIL", () => {

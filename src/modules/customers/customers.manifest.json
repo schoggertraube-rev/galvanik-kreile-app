@@ -1,6 +1,6 @@
 {
   "moduleId": "customers",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "owner": "Path-1 Customers (Kundenkarte V2)",
   "publicExports": [
     "@/modules/customers/public#CustomerCardModel",
@@ -13,7 +13,8 @@
     "@/modules/customers/public#CustomerCreateReceipt",
     "@/modules/customers/public#CustomersView",
     "@/modules/customers/public#CustomersViewState",
-    "@/modules/customers/public#createCustomerCommand"
+    "@/modules/customers/server-public#CreateCustomerInput",
+    "@/modules/customers/server-public#createCustomerCommand"
   ],
   "capabilities": ["customers:create"],
   "migrations": ["20260914100000_path1_customer_persistence_contract.sql"],

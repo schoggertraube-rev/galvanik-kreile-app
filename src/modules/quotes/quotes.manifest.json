@@ -1,0 +1,47 @@
+{
+  "moduleId": "quotes",
+  "version": "1.0.0",
+  "owner": "Path-1 Quotes (KV persistence and F1.1 conversion)",
+  "publicExports": [
+    "@/modules/quotes/public#ConvertQuoteInput",
+    "@/modules/quotes/public#CreateQuoteInput",
+    "@/modules/quotes/public#CreateQuoteResult",
+    "@/modules/quotes/public#PrepareQuoteConversionResult",
+    "@/modules/quotes/public#QuoteCommandAuthorization",
+    "@/modules/quotes/public#QuoteConversionReceipt",
+    "@/modules/quotes/public#QuoteCreateReceipt",
+    "@/modules/quotes/public#QuoteOrderInput",
+    "@/modules/quotes/public#QuotePosition",
+    "@/modules/quotes/public#QuotePositionInput",
+    "@/modules/quotes/public#QuoteReadback",
+    "@/modules/quotes/public#ReadQuoteConversionReceiptResult",
+    "@/modules/quotes/public#ReadQuoteResult",
+    "@/modules/quotes/server-public#ConvertQuoteInput",
+    "@/modules/quotes/server-public#CreateQuoteInput",
+    "@/modules/quotes/server-public#createQuoteCommand",
+    "@/modules/quotes/server-public#prepareQuoteConversionCommand",
+    "@/modules/quotes/server-public#readQuoteCommand",
+    "@/modules/quotes/server-public#readQuoteConversionReceiptCommand"
+  ],
+  "capabilities": ["quotes:create", "quotes:read", "quotes:convert-to-order"],
+  "migrations": ["20260914110000_path1_quote_persistence_contract.sql"],
+  "viewsFunctions": [
+    "private.create_quote_v1",
+    "private.prepare_quote_conversion_v1",
+    "private.v_quote_conversion_receipts_v1",
+    "private.v_quote_create_receipts_v1",
+    "private.v_quotes_v1"
+  ],
+  "ownsTables": [
+    "private.quote_conversion_receipts",
+    "private.quote_conversion_requests",
+    "private.quote_create_receipts",
+    "private.quote_number_counters",
+    "private.quote_positions",
+    "private.quotes"
+  ],
+  "storagePurposes": [],
+  "events": { "emits": ["QUOTE_AWARDED_V1", "QUOTE_CREATED_V1"], "consumes": ["ORDER_INTAKE_CREATED_V1"] },
+  "config": {},
+  "dependencies": ["orders", "customers"]
+}

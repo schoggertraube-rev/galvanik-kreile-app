@@ -1,7 +1,7 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: 456a81fee2e7a56d4c09fe781ba25b2f12a0f6ba
+base_sha: da6e6ef2c6d66d90ffc7f855f03016d2645b4a05
 branch: path1/ui-convergence-20260914
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
@@ -37,8 +37,8 @@ delivery_order:
   - F1.6_REALER_PILOT
 
 active_package: PATH1_UI_CONVERGENCE
-active_package_status: V5_WORK_UNIT_1_REMOTE_CHECKPOINT_SECURED_NO_UI_PASS
-next_gate_after_active_package: NEXT_PL_HANDOFF_QUOTES_KV_PERSISTENCE
+active_package_status: V5_WORK_UNIT_2_REMOTE_CHECKPOINT_CANDIDATE_LOCAL_GATES_COMPLETE_NO_UI_PASS
+next_gate_after_active_package: V5_WORK_UNIT_2_REMOTE_CHECKPOINT_PUSH_AND_PL_HANDOFF
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
@@ -108,6 +108,8 @@ path1_ui_convergence_flow_reference_role: FLOW_AND_INTERMEDIATE_STEP_REFERENCE
 path1_ui_convergence_visible_personas: ROLF_MEISTER_DESKTOP; PHILLIP_WERKSTATT_TABLET
 path1_ui_convergence_global_plus: CUSTOMER_OR_ORDER_QUOTE_MANUAL_INPUT_WITHIN_TWO_CLICKS_REAL_PORTS_ONLY
 path1_ui_convergence_v5_work_unit_1: CANON_BINDING; NARROW_NEXT_APP_COMPOSITION_GATE; TENANT_BOUND_CUSTOMER_CREATE_COMMAND
+path1_ui_convergence_v5_work_unit_2: TENANT_BOUND_QUOTE_CREATE_READBACK; ATOMIC_IDEMPOTENT_AWARD_TO_EXISTING_F1_1_ORDER; RECEIPT_AND_LINK_READBACK
+path1_ui_convergence_customer_facades: CLIENT_SAFE_PUBLIC_UI_AND_TYPES; SERVER_ONLY_SERVER_PUBLIC_COMMANDS; FAIL_CLOSED_MODULE_GATE
 path1_ui_convergence_followup_scope: QUOTES_PERSISTENCE_AND_RECEIPTS -> QUOTE_TO_EXISTING_F1_1_ORDER_ATOMIC_IDEMPOTENT_ONE_LINKED_ORDER -> GLOBAL_PLUS_MANUAL_CUSTOMER_QUOTE_ORDER -> RECHECK_A_C_AGAINST_V5 -> SEARCH_AND_DAILY_JOBS_ST1_ST3 -> REAL_BROWSER_MATRIX
 path1_ui_convergence_smart_capture: PASSIVE_UNCONNECTED_LABEL_ONLY_UNTIL_RATIFIED_REAL_GRAPH_OCR_CONTRACT
 path1_ui_convergence_v5_delivery_claim: TECHNICAL_MILESTONE_ONLY_NO_UI_PARTIAL_PASS_NO_DRAFT_NO_MERGE
@@ -116,7 +118,7 @@ path1_provider_platform_policy: APPROX_MAX_FIVE_PLATFORMS; SUPABASE_DATA_AUTH_ST
 path1_document_intelligence_policy: CHEAP_FIRST; ORIGINAL_PRIVATE_FIRST; UNTRUSTED_CONTENT; HUMAN_CONFIRMATION; ONE_SAFE_COMMAND_RECEIPT_READBACK
 path1_search_intelligence_policy: RLS_BEFORE_RETRIEVAL; STRUCTURED_FIRST; AUTHORIZED_PUBLIC_READ_PORTS_ONLY; DB_VIEWS_TRUTH; INDEX_RENEWABLE_PROJECTION; NO_MODEL_MUTATION
 path1_provider_activation_status: NONE_ACTIVATED_BY_THIS_WORK_UNIT
-path1_ui_convergence_next_product_build: QUOTES_KV_PERSISTENCE_AND_RECEIPTS
+path1_ui_convergence_next_product_build: GLOBAL_PLUS_MANUAL_CUSTOMER_QUOTE_ORDER
 
 # ── F1.2 Entscheidungsgrundlage (bindend, ersetzt Altstand) ───────
 # D-F12-001A (ersetzt D-F12-001): F1.2 = genau EIN Uebergang
@@ -460,10 +462,30 @@ path1_ui_convergence_allowlist:
   # Enge Next-App-Kompositionsnaht mit fail-closed Beweistests
   - scripts/quality/check-module-gates.mjs
   - src/test/s1_module_gates.test.ts
+  - eslint.config.mjs
+  - quality/eslint-baseline.json
   # V5-Arbeitseinheit 1: reale Customer-Persistenz
   - supabase/migrations/20260914100000_path1_customer_persistence_contract.sql
   - src/app/actions/customers.actions.ts
   - src/test/path1_customer_persistence.integration.test.ts
+  # V5-Arbeitseinheit 2: Kunde -> persistenter KV -> bestehender F1.1-Auftrag
+  - supabase/migrations/20260914110000_path1_quote_persistence_contract.sql
+  - src/modules/quotes/**
+  - src/app/actions/quotes.actions.ts
+  - src/test/path1_quote_to_order.integration.test.ts
+  - docs/evidence/path1/PATH1_UI_CONVERGENCE_V5_WORK_UNIT_2.md
+  # Work Unit 2 entfernt nach Link-/Importinventar die drei alten KV-Attrappenpfade
+  # sowie ausschließlich die belegten toten Links; die Page-Pfade stehen unten.
+  - src/app/quotes/__tests__/w2cB2m5a.inquiries.failClosed.test.ts
+  - src/components/intake/IntakeEntry.tsx
+  # Owner-freigegebene WU2-Buildkorrektur: eindeutige Client-/Server-Fassaden
+  - src/modules/customers/public.ts
+  - src/modules/customers/server-public.ts
+  - src/modules/customers/customers.manifest.json
+  - src/app/actions/customers.actions.ts
+  - src/test/path1_customer_persistence.integration.test.ts
+  - scripts/quality/check-module-gates.mjs
+  - src/test/s1_module_gates.test.ts
   # Zielkomposition A-D
   - src/app/page.tsx
   - src/app/layout.tsx
@@ -566,7 +588,6 @@ path1_ui_convergence_allowlist:
   - src/app/orders/OrdersAppAdapter.tsx
   - src/app/orders/page.tsx
   - src/app/page.tsx
-  - src/app/quotes/__tests__/w2cB2m5a.inquiries.failClosed.test.ts
   - src/app/start/__tests__/start-page-payload.test.tsx
   - src/app/station/[slug]/page.tsx
   - src/app/warendurchlauf/__tests__/f1OrderIntakePage.test.tsx

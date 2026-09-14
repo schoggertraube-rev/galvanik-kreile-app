@@ -4,12 +4,12 @@
 //
 // Naht 1  Manifest je Modul:  src/modules/<fach>/<fach>.manifest.json valide gegen
 //         docs/architecture/MODULE_MANIFEST.schema.json, moduleId == Ordnername,
-//         public.ts vorhanden, publicExports = "@/modules/<fach>/public#Symbol" und
-//         Symbol wird von public.ts exportiert, dependencies = existierende Module.
+//         public.ts client-sicher vorhanden; optionale server-public.ts ist explizit
+//         server-only. publicExports bindet Symbol und genaue Fassade.
 //         Ablage: nichts vom Fach ausserhalb src/modules/<fach>/ (kein src/app|components|
 //         lib|features|hooks|contexts/<fach>).
-// Naht 2  Positive Fassade: Fremdmodul NUR ueber @/modules/<fach>/public (Alias ODER
-//         relativ); Tiefimport = FAIL. Eigenes Modul NUR relativ (kein @/modules/<eigen>/...).
+// Naht 2  Positive Fassade: Browser-/UI-Vertrag nur ueber public; Commands nur ueber
+//         server-public aus serverseitigen App-Actions/Real-DB-Tests. Tiefimport = FAIL.
 // Naht 3  Tenant-Literal: ESLint (S0). Hier nicht doppelt.
 // Naht 4  Cross-Modul-Fakten NUR ueber v_*-Views: SQL in src/modules/<fach>/ darf
 //         public./private.-Tabellen nur anfassen, wenn ownsTables sie dem Modul zuordnet,
@@ -65,6 +65,9 @@ const NEXT_COMPOSITION_ENTRYPOINTS = new Set(["page.tsx", "layout.tsx", "loading
 const APP_ADAPTER_NAME = /^[A-Z][A-Za-z0-9]*AppAdapter\.tsx$/;
 const ADAPTER_FORBIDDEN_IMPORT = /(?:^@\/db(?:\/|$)|\/commands(?:\/|$)|\/repositories?(?:\/|$))/;
 const ROUTE_LITERAL = /['"`](\/(?!\/)[^'"`\s]*)['"`]/g;
+const SERVER_ACTION_FILE = /^src\/app\/actions\/[^/]+\.actions\.ts$/;
+const REAL_DB_TEST_FILE = /^src\/test\/.+\.integration\.test\.[cm]?[jt]s$/;
+const SERVER_ONLY_SPEC = /^(?:server-only|postgres(?:\/|$)|drizzle-orm(?:\/|$)|@supabase(?:\/|$)|node:)|^@\/(?:db(?:\/|$)|lib\/server\/privilegedDb(?:\/|$)|lib\/supabase(?:\/|$)|utils\/supabase(?:\/|$))/;
 
 const CODE_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".mdx"]);
 const SQL_EXTENSIONS = new Set([...CODE_EXTENSIONS, ".sql"]);
@@ -242,6 +245,49 @@ export function moduleOf(relPath) {
   return m ? m[1] : null;
 }
 
+function isTypeOnlyReference(source, index) {
+  return /^(?:import|export)\s+type\b/.test(source.slice(index, index + 80));
+}
+
+function existingCodeTarget(root, target) {
+  const candidates = [
+    ...[".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"].map((extension) => `${target}${extension}`),
+    ...[".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"].map((extension) => `${target}/index${extension}`),
+  ];
+  return candidates.find((candidate) => existsSync(path.join(root, candidate))) ?? null;
+}
+
+function clientFacadeViolation(root, entryRel) {
+  const pending = [{ rel: entryRel, chain: [entryRel] }];
+  const seen = new Set();
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current || seen.has(current.rel)) continue;
+    seen.add(current.rel);
+    const source = readFileSync(path.join(root, current.rel), "utf8");
+    if (/^\s*['"]use server['"]\s*;/m.test(source)) {
+      return `${current.chain.join(" -> ")} erreicht 'use server'`;
+    }
+    for (const { spec, index } of importSources(source)) {
+      if (isTypeOnlyReference(source, index)) continue;
+      if (SERVER_ONLY_SPEC.test(spec)) {
+        return `${current.chain.join(" -> ")} importiert server-only '${spec}'`;
+      }
+      const target = resolveSpec(current.rel, spec);
+      const targetFile = target ? existingCodeTarget(root, target) : null;
+      if (targetFile && !seen.has(targetFile)) {
+        pending.push({ rel: targetFile, chain: [...current.chain, targetFile] });
+      }
+    }
+  }
+  return null;
+}
+
+function allowedServerFacadeConsumer(file, source) {
+  if (REAL_DB_TEST_FILE.test(file)) return true;
+  return SERVER_ACTION_FILE.test(file) && /^\s*['"]use server['"]\s*;/m.test(source);
+}
+
 function gateAppCompositionFile(root, rel, fach, findings) {
   const prefix = `src/app/${fach}/`;
   if (!rel.startsWith(prefix)) return false;
@@ -300,6 +346,7 @@ function gateManifests(root, findings, schemaPath) {
   for (const fach of modules) {
     const manifestRel = `${MODULES_DIR}/${fach}/${fach}.manifest.json`;
     const publicRel = `${MODULES_DIR}/${fach}/public.ts`;
+    const serverPublicRel = `${MODULES_DIR}/${fach}/server-public.ts`;
     if (!existsSync(path.join(root, manifestRel))) {
       findings.push(`[naht1] ${manifestRel}: Manifest fehlt (Modul ohne Manifest = FAIL)`);
       continue;
@@ -325,13 +372,29 @@ function gateManifests(root, findings, schemaPath) {
       if (STAR_REEXPORT.test(publicSource)) {
         findings.push(`[naht1] ${publicRel}: 'export * from' verboten — Fassade ist eine explizite Liste (publicExports)`);
       }
-      const exported = exportedSymbols(publicSource);
+      const publicViolation = clientFacadeViolation(root, publicRel);
+      if (publicViolation) {
+        findings.push(`[naht1] ${publicRel}: Client-Fassade ist nicht browser-sicher (${publicViolation})`);
+      }
+      const facadeExports = new Map([["public", exportedSymbols(publicSource)]]);
+      if (existsSync(path.join(root, serverPublicRel))) {
+        const serverPublicSource = readFileSync(path.join(root, serverPublicRel), "utf8");
+        if (!/^\s*import\s+['"]server-only['"]\s*;/m.test(serverPublicSource)) {
+          findings.push(`[naht1] ${serverPublicRel}: Server-Fassade muss direkt 'server-only' importieren`);
+        }
+        if (STAR_REEXPORT.test(serverPublicSource)) {
+          findings.push(`[naht1] ${serverPublicRel}: 'export * from' verboten — Server-Fassade ist eine explizite Liste (publicExports)`);
+        }
+        facadeExports.set("server-public", exportedSymbols(serverPublicSource));
+      }
       for (const entry of asStringArray(manifest.publicExports)) {
-        const m = entry.match(/^@\/modules\/([^/#]+)\/public#([A-Za-z_$][\w$]*)$/);
+        const m = entry.match(/^@\/modules\/([^/#]+)\/(public|server-public)#([A-Za-z_$][\w$]*)$/);
         if (!m || m[1] !== fach) {
-          findings.push(`[naht1] ${manifestRel}: publicExports '${entry}' muss '@/modules/${fach}/public#Symbol' sein`);
-        } else if (!exported.has(m[2])) {
-          findings.push(`[naht1] ${publicRel}: exportiert '${m[2]}' nicht, steht aber in publicExports`);
+          findings.push(`[naht1] ${manifestRel}: publicExports '${entry}' muss '@/modules/${fach}/public#Symbol' sein oder '@/modules/${fach}/server-public#Symbol'`);
+        } else if (!facadeExports.has(m[2])) {
+          findings.push(`[naht1] ${manifestRel}: publicExports '${entry}' verweist auf fehlende Fassade ${m[2]}.ts`);
+        } else if (!facadeExports.get(m[2]).has(m[3])) {
+          findings.push(`[naht1] ${MODULES_DIR}/${fach}/${m[2]}.ts: exportiert '${m[3]}' nicht, steht aber in publicExports`);
         }
       }
     }
@@ -400,6 +463,13 @@ function gateImports(root, findings) {
       const where = `${file}:${lineOf(source, index)}`;
       if (targetModule === importer) {
         if (spec.startsWith("@/")) findings.push(`[naht2] ${where}: Import im eigenen Modul muss relativ sein, nicht '${spec}'`);
+        continue;
+      }
+      if (target === `${MODULES_DIR}/${targetModule}/public`) continue;
+      if (target === `${MODULES_DIR}/${targetModule}/server-public`) {
+        if (!allowedServerFacadeConsumer(file, source)) {
+          findings.push(`[naht2] ${where}: Server-Fassade '${spec}' darf nur eine 'use server'-App-Action oder ein Real-DB-Integrationstest konsumieren`);
+        }
         continue;
       }
       if (target !== `${MODULES_DIR}/${targetModule}/public`) {
