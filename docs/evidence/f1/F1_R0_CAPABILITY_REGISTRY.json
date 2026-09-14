@@ -8,11 +8,11 @@
   "summary": {
     "page_routes": 78,
     "api_routes": 19,
-    "server_action_groups": 51,
+    "server_action_groups": 50,
     "kpi_definitions": 7,
     "provider_connections": 17,
     "nav_links_without_page": 3,
-    "total": 175
+    "total": 174
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -1196,6 +1196,7 @@
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/customers.actions.ts",
       "exported_functions": [
+        "createCustomerAction",
         "getCustomerSummaryAction",
         "getCustomersDb",
         "getCustomerByIdDb",
@@ -1630,18 +1631,6 @@
       "reachable": true
     },
     {
-      "stable_id": "server-actions.customers-id",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/customers/[id]/actions.ts",
-      "exported_functions": [
-        "getCustomerDetailsAction"
-      ],
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Customer detail aggregation. Supabase-connected, no independent E2E evidence.",
-      "visible": false,
-      "reachable": false
-    },
-    {
       "stable_id": "server-actions.global-search",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/global-search-actions.ts",
@@ -2002,8 +1991,8 @@
         "GEMINI_MODEL_PRIMARY",
         "GEMINI_MODEL_FALLBACK"
       ],
-      "classification": "REAL_PENDING_SECRET",
-      "open_reason": "GeminiClient throws GeminiConfigError on missing GEMINI_API_KEY (honest, no fake fallback). Used for AI enrichment, OCR, morning messages. Activated when secret is provided.",
+      "classification": "LEGACY_REMOVE",
+      "open_reason": "LEGACY_QUARANTINE_SUPERSEDED by D-ARCH-012/D-AI-001. The adapter remains inventory-only, invisible and unreachable; a secret must not activate it and there is no runtime fallback.",
       "visible": false,
       "reachable": false,
       "evidence_files": [
@@ -2018,8 +2007,8 @@
       "env_vars": [
         "KLIPPA_API_KEY"
       ],
-      "classification": "REAL_PENDING_SECRET",
-      "open_reason": "KlippaProvider throws on missing KLIPPA_API_KEY (honest, no fake fallback). Route /api/erfassung/scan-upload quarantined. OCR service for receipt processing.",
+      "classification": "LEGACY_REMOVE",
+      "open_reason": "LEGACY_QUARANTINE_SUPERSEDED by D-ARCH-012/D-AI-001. The adapter and scan route remain quarantined, invisible and unreachable; a secret must not activate them.",
       "visible": false,
       "reachable": false
     },

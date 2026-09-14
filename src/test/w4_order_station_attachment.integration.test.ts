@@ -122,9 +122,24 @@ const pool = {
 };
 
 let actions: typeof import("@/app/warendurchlauf/actions");
-let Panel: typeof import("@/components/orders/GalvanikHandoffAttachmentPanel").GalvanikHandoffAttachmentPanel;
+let Panel: typeof import("@/modules/orders/public").GalvanikHandoffAttachmentPanel;
 let anonClient: SupabaseClient;
 let serviceClient: SupabaseClient;
+
+const panelPorts: import("@/modules/orders/public").GalvanikHandoffAttachmentPorts = {
+  read: (input) => actions.getGalvanikHandoffAttachmentsAction(input),
+  reserve: (input) => actions.reserveGalvanikHandoffAttachmentAction(input),
+  finalize: (input) => actions.finalizeGalvanikHandoffAttachmentAction(input),
+  readOriginal: (input) => actions.getGalvanikHandoffAttachmentOriginalAction(input),
+  async uploadSigned(input) {
+    return anonClient.storage.from(input.bucketId).uploadToSignedUrl(
+      input.path,
+      input.token,
+      input.bytes,
+      { contentType: input.contentType, upsert: false },
+    );
+  },
+};
 
 function setSession(userId: string, role: string, tenantId = TENANT_A) {
   readAppSessionSpy.mockResolvedValue({
@@ -400,7 +415,7 @@ beforeAll(async () => {
   await seedFixtures();
   actions = await import("@/app/warendurchlauf/actions");
   ({ GalvanikHandoffAttachmentPanel: Panel } = await import(
-    "@/components/orders/GalvanikHandoffAttachmentPanel"
+    "@/modules/orders/public"
   ));
   anonClient = (await import("@/lib/supabase/client")).createClient();
   serviceClient = (await import("@/lib/supabase/admin")).createAdminClient();
@@ -1675,7 +1690,7 @@ describe("W4 order-station attachment local acceptance", () => {
       expectedVersion: 2,
       items: [{ id: ITEMS.ui, name: "W4 Übergabeteil UI" }],
     };
-    const view = render(createElement(Panel, props));
+    const view = render(createElement(Panel, { ...props, ports: panelPorts }));
     expect(await screen.findByText("Noch kein Übergabeoriginal erfasst.", {}, { timeout: 15_000 }))
       .toBeInTheDocument();
     expect(screen.getByText("Bestehender Legacy-Nachweis (nur lesen)")).toBeInTheDocument();
@@ -1765,7 +1780,7 @@ describe("W4 order-station attachment local acceptance", () => {
     expect(legacyAfter.rows).toEqual(legacyBefore.rows);
 
     view.unmount();
-    render(createElement(Panel, props));
+    render(createElement(Panel, { ...props, ports: panelPorts }));
     expect(await screen.findByText("Bestätigt", {}, { timeout: 15_000 })).toBeInTheDocument();
     expect(screen.getByText("Keine Extraktion angefordert.")).toBeInTheDocument();
     expect(screen.getByText("Bestehender Legacy-Nachweis (nur lesen)")).toBeInTheDocument();

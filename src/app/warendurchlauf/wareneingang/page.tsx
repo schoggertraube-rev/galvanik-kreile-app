@@ -8,14 +8,14 @@ import {
 import { useState, Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useErfassung } from "@/components/erfassung/ErfassungProvider";
-import { OrderCompactCard } from "@/components/orders/OrderCompactCard";
-import { getUrgency } from "@/lib/orders/getUrgency";
+import { OrderCompactCard } from "@/modules/orders/public";
+import { getUrgency } from "@/modules/orders/public";
 import { useOverlayStore } from "@/lib/overlayStore";
 import {
   getWareneingangOrdersAction,
   type WarendurchlaufOrder,
 } from "@/app/warendurchlauf/actions";
-import { WareneingangHandoffButton } from "@/components/orders/WareneingangHandoffButton";
+import { WareneingangHandoffAppAdapter } from "./WareneingangHandoffAppAdapter";
 
 function getLegacyStatusText(order: WarendurchlaufOrder) {
   if (
@@ -234,7 +234,7 @@ function WarendurchlaufLeitstandContent() {
                             onClick={() => openOrder(order.id)}
                           />
                           {Number.isSafeInteger(order.version) && order.version > 0 ? (
-                            <WareneingangHandoffButton
+                            <WareneingangHandoffAppAdapter
                               orderId={order.id}
                               expectedVersion={order.version}
                               onConfirmedReadback={(nextWeOrders) => {

@@ -2,10 +2,18 @@
 
 # Provider- und Capability-Matrix
 
-Stand: 2026-09-10 · D-GOV-001 · D-ARCH-011 · D-UI-CORE-002
-Quellen: `MODULKARTE_KANON.md`, `ARCHITEKTUR_MODULE_PATH1.md`, `F1_R0_CAPABILITY_REGISTRY.json` auf `main@13240de2a5ca9e9cfae4f8c72552443dac1d7630`.
+Stand: 2026-09-14 · D-GOV-001 · D-ARCH-011/012 · D-AI-001 · D-UI-CORE-002
+Quellen: `MODULKARTE_KANON.md`, `ARCHITEKTUR_MODULE_PATH1.md`, `F1_R0_CAPABILITY_REGISTRY.json` auf `main@456a81fee2e7a56d4c09fe781ba25b2f12a0f6ba`.
 
 Diese Matrix ist Inventar und Acceptance-Plan, keine Scope- oder Baustartautorität. `REAL` bedeutet ausschließlich: unveränderlicher echter Beleg im Capability-Register. `PENDING` bedeutet: Vertrag, Secret oder Real-E2E fehlt. `QUARANTINE` bedeutet: nicht reaktivieren; erst eigener Abbau-/Disposition-Nachweis.
+
+D-ARCH-012 konsolidiert die strategischen Plattformrollen, aktiviert aber
+keinen Provider: Supabase bleibt Daten/Auth/Storage-Wahrheit;
+Microsoft/Azure ist der bevorzugte Zielstack nach realem Struktur-, Region-,
+Quota-, Capability- und Kostengate; Vercel bleibt Hosting. Direkte OpenAI API,
+Mollie, Google Maps und weitere Anbieter benötigen die jeweils dokumentierte
+Owner-Entscheidung beziehungsweise Reihenfolge. Es gibt keinen stillen
+Runtime-Fallback.
 
 D-UI-CORE-002 verwirft die gesamte bestehende sichtbare Oberfläche als Lieferbasis. Die Zeilen dieses Inventars autorisieren deshalb keine Alt-UI-Reparatur und keinen Teilfortschritt: `PATH1_UI_CONVERGENCE` ersetzt Shell, Navigation, Startseite, Orders-/Customers-UI und responsive Navigation als eine zusammenhängende Oberfläche; ausschließlich belastbare Backend-/Daten-/Auth-Verträge und sinnvolle Nicht-UI-Logik dürfen übernommen werden. A bis E sind interne Schritte desselben Programms.
 
@@ -36,13 +44,17 @@ D-UI-CORE-002 verwirft die gesamte bestehende sichtbare Oberfläche als Lieferba
 | `provider.supabase-postgres` | keine fachliche Wahrheit; Adapter/Connection | Supabase/Postgres | REAL | tenantneutraler typisierter Capability-Port | Registry `REAL_VERIFIED` | erhalten |
 | `provider.supabase-auth` | keine fachliche Wahrheit; Adapter/Connection | Supabase/Auth | REAL | tenantneutraler typisierter Capability-Port | Registry `REAL_VERIFIED` | erhalten |
 | `provider.supabase-storage` | keine fachliche Wahrheit; Adapter/Connection | Supabase/Storage | REAL | tenantneutraler typisierter Capability-Port | Registry `REAL_VERIFIED` | erhalten |
-| `provider.calendar-m365-graph` | keine fachliche Wahrheit; Adapter/Connection | Microsoft 365/Graph | PENDING | tenantneutraler typisierter Capability-Port | D-ARCH-011; kein Konto/Consent/Port/E2E | delegierten benannten Büronutzer und Least-Privilege-Consent ownerseitig bereitstellen |
-| `provider.gemini` | keine fachliche Wahrheit; Adapter/Connection | Gemini/Google GenAI | PENDING | tenantneutraler typisierter Capability-Port | Registry `REAL_PENDING_SECRET`; keine Kalenderentscheidung | eigener Capability-Vertrag und Secret-Gate |
-| `provider.klippa` | keine fachliche Wahrheit; Adapter/Connection | Klippa/OCR | PENDING | tenantneutraler typisierter Capability-Port | Registry `REAL_PENDING_SECRET`; Scanpfad quarantiniert | eigener OCR-E2E |
+| `provider.calendar-m365-graph` | keine fachliche Wahrheit; Adapter/Connection | Microsoft 365/Graph | PENDING | tenantneutraler typisierter `CalendarPort` | D-ARCH-011; kein Konto/Consent/Port/E2E | delegierten benannten Büronutzer und Least-Privilege-Consent ownerseitig bereitstellen |
+| `provider.azure-foundry-openai` | keine fachliche Wahrheit; geplanter Adapter | Azure Foundry/Azure OpenAI | PLANNED_BLOCKED_EXTERNAL_PERMISSION_AND_STRUCTURE_COST_GATE | `DocumentIntelligencePort`, Search-Capability, Speech; keine Runtime-Bindung | D-ARCH-012/D-AI-001; Region/Quota/Responses/Bild-PDF/Structured-Outputs/Kosten noch unbelegt | erst getrennten Realtest und Owner-Freigabe durchführen |
+| `provider.openai-direct-alternative` | keine fachliche Wahrheit; keine aktive Connection | direkte OpenAI API | PENDING_EXPLICIT_OWNER_GAP_DECISION | ausschließlich dieselben tenantneutralen Capability-Ports | nur als kleine Alternative bei belegtem Pflichtfähigkeits-/EU-/Quota-/Kostengap entschieden | nicht aktivieren; gegebenenfalls neue Owner-Entscheidung |
+| `provider.gemini` | keine fachliche Wahrheit; eingefrorener Legacy-Adapter | Gemini/Google GenAI | LEGACY_QUARANTINE_SUPERSEDED | keine neue Kopplung | Registry `LEGACY_REMOVE`, unsichtbar/nicht erreichbar; D-ARCH-012 supersediert Secret-Aktivierung | nicht aktivieren; kontrollierter späterer Abbau |
+| `provider.klippa` | keine fachliche Wahrheit; eingefrorener Legacy-Adapter | Klippa/OCR | LEGACY_QUARANTINE_SUPERSEDED | keine neue Kopplung | Registry `LEGACY_REMOVE`, unsichtbar/nicht erreichbar; Scanpfad quarantiniert | nicht aktivieren; kontrollierter späterer Abbau |
 | `provider.mail-smtp` | keine fachliche Wahrheit; Adapter/Connection | Mail/SMTP | PENDING | tenantneutraler typisierter Capability-Port | kein aktivierter Providervertrag | eigene Entscheidung/Connection |
-| `provider.mollie` | keine fachliche Wahrheit; Adapter/Connection | Mollie/Payment | PENDING | tenantneutraler typisierter Capability-Port | Legacy-Adapter, nicht aktiviert | spätere eigene Owner-Entscheidung |
-| `provider.banking` | keine fachliche Wahrheit; Adapter/Connection | Banking-Import | PENDING | tenantneutraler typisierter Capability-Port | kein Adapter belegt | spätere eigene Owner-Entscheidung |
-| `provider.datev-lexware` | keine fachliche Wahrheit; Adapter/Connection | DATEV/Lexware Export | PENDING | tenantneutraler typisierter Capability-Port | Formatlogik ohne Provider-E2E | Steuerberaterformat und E2E ratifizieren |
+| `provider.mollie` | keine fachliche Wahrheit; Adapter/Connection | Mollie/Payment | PENDING_AFTER_BANK_RECONCILIATION | tenantneutraler typisierter Capability-Port | Legacy-Adapter, nicht aktiviert | erst Bankabgleich, danach eigene Owner-/E2E-Freigabe |
+| `provider.banking` | keine fachliche Wahrheit; Adapter/Connection | CAMT.053 Bankabgleich | PENDING_FIRST | tenantneutraler typisierter Capability-Port | kein produktiver Adapter-/E2E-Beleg | CAMT.053-Vertrag und Abgleich vor Mollie liefern |
+| `provider.datev-lexware` | keine fachliche Wahrheit; Adapter/Connection | DATEV/Lexware Export | PENDING_FIRST | tenantneutraler typisierter Capability-Port | Formatlogik ohne Provider-E2E | Exportformat und E2E vor weiteren Zahlungsprovidern ratifizieren |
+| `provider.google-maps` | keine fachliche Wahrheit; keine Connection | Google Maps | PENDING_MODULE_DECISION | noch kein ratifiziertes Fachmodul/Port | D-ARCH-012 erlaubt Prüfung erst bei konkretem Modulbedarf | nicht aktivieren; bei Bedarf neue Owner-Entscheidung |
+| `provider.vercel-hosting` | keine fachliche Wahrheit | Vercel Hosting | REAL_HOSTING_ONLY | Deployment-Infrastruktur, kein Fachport | bestehende Preview-/Production-Checks; keine Daten-/Providerwahrheit | auf Hosting begrenzen |
 | `provider.meta-marketing` | keine fachliche Wahrheit; Adapter/Connection | Meta Ads | QUARANTINE | tenantneutraler typisierter Capability-Port | Marketing entfällt laut Modulkarte | nicht reaktivieren |
 | `provider.analytics-telemetry` | keine fachliche Wahrheit; Adapter/Connection | Analytics/Telemetry | QUARANTINE | tenantneutraler typisierter Capability-Port | kein externer Vertrag; KPI-/Analyseprodukt entfällt | nicht reaktivieren |
 | `provider.kommunikation` | keine fachliche Wahrheit; Adapter/Connection | WhatsApp/SMS/Push | PENDING | tenantneutraler typisierter Capability-Port | F2, kein Adapter/API | eigenes F2-Paket |

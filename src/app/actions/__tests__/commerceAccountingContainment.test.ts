@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -92,16 +93,13 @@ function extractExportedFunctionBody(source: string, name: string) {
 describe('Commerce, accounting, shipment, and dunning containment (F0-W2C-B2M2)', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('denies all eleven commands before authentication or any client access', async () => {
-    const [shipment, mahnung, accounting] = await Promise.all([
-      import('@/features/orders/shipment.actions'),
+  it('denies all remaining accounting commands before authentication or any client access', async () => {
+    const [mahnung, accounting] = await Promise.all([
       import('../mahnung.actions'),
       import('@/app/buchhaltung/actions'),
     ]);
     const formData = new FormData();
 
-    await expect(shipment.saveShipmentInfo({ orderId: 'order-1', carrier: 'dhl', trackingNumber: 'tracking-1' })).resolves.toEqual({ success: false, error: denial });
-    await expect(shipment.sendShippingConfirmation({ orderId: 'order-1', carrier: 'dhl', trackingNumber: 'tracking-1' })).resolves.toEqual({ success: false, error: denial });
     await expect(mahnung.sendeZahlungserinnerung('invoice-1')).resolves.toEqual({ success: false, error: denial });
     await expect(mahnung.sendeMahnung('invoice-1')).resolves.toEqual({ success: false, error: denial });
     await expect(accounting.createBelegAction(formData)).rejects.toThrow(denial);
@@ -118,8 +116,6 @@ describe('Commerce, accounting, shipment, and dunning containment (F0-W2C-B2M2)'
 
 describe('Commerce and accounting structural containment (F0-W2C-B2M2)', () => {
   const deniedBodies = [
-    ['features/orders/shipment.actions.ts', 'saveShipmentInfo'],
-    ['features/orders/shipment.actions.ts', 'sendShippingConfirmation'],
     ['app/actions/mahnung.actions.ts', 'sendeZahlungserinnerung'],
     ['app/actions/mahnung.actions.ts', 'sendeMahnung'],
     ['app/buchhaltung/actions.ts', 'createBelegAction'],
@@ -141,9 +137,8 @@ describe('Commerce and accounting structural containment (F0-W2C-B2M2)', () => {
     }
   });
 
-  it('quarantines the six noninteractive views and page', async () => {
+  it('removes the obsolete shipment shell and quarantines the five accounting views', async () => {
     const files = [
-      'components/orders/variants/VersandVariant.tsx',
       'app/buchhaltung/belege/BelegeClient.tsx',
       'app/buchhaltung/belege/[id]/BelegDetailClient.tsx',
       'app/buchhaltung/rechnungen/neu/RechnungForm.tsx',
@@ -155,6 +150,7 @@ describe('Commerce and accounting structural containment (F0-W2C-B2M2)', () => {
       expect(source).toContain('FoundationUnavailable');
       expect(source).not.toMatch(/actions|OfflineManager|enqueue|<form\b|<button\b|<input\b|useRouter|fetch\(/i);
     }
+    expect(existsSync(path.join(srcRoot, 'components/orders/variants/VersandVariant.tsx'))).toBe(false);
   });
 
   it('renders accounting receipt routes as prop-free quarantined clients', async () => {
@@ -196,9 +192,9 @@ describe('Commerce and accounting structural containment (F0-W2C-B2M2)', () => {
     expect(source).toMatch(/Mahnung[\s\S]{0,300}disabled[\s\S]{0,300}NOT_AVAILABLE|disabled[\s\S]{0,300}NOT_AVAILABLE[\s\S]{0,300}Mahnung/);
   });
 
-  it('removes every fabricated shipment literal', async () => {
-    const source = await readFile(path.join(srcRoot, 'components/orders/variants/VersandVariant.tsx'), 'utf8');
-    expect(source).not.toMatch(/Anschrift 1|12345 Stadt|2 Kolli|12,4 kg|14,90|Versicherung/);
+  it('removes the fabricated shipment shell instead of relocating it', () => {
+    expect(existsSync(path.join(srcRoot, 'components/orders/variants/VersandVariant.tsx'))).toBe(false);
+    expect(existsSync(path.join(srcRoot, 'modules/orders/legacy-ui/variants/VersandVariant.tsx'))).toBe(false);
   });
 });
 

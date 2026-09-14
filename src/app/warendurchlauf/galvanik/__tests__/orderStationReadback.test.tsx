@@ -4,10 +4,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const getGalvanikOrdersAction = vi.hoisted(() => vi.fn());
 
 vi.mock("@/app/warendurchlauf/actions", () => ({ getGalvanikOrdersAction }));
-vi.mock("@/components/orders/GalvanikHandoffAttachmentPanel", () => ({
+vi.mock("@/modules/orders/public", () => ({
   GalvanikHandoffAttachmentPanel: () => null,
-}));
-vi.mock("@/components/orders/GalvanikCorrectionButton", () => ({
+  OrderCompactCard: ({ orderNumber, onClick }: { orderNumber: string; onClick: () => void }) => (
+    <button type="button" onClick={onClick}>{orderNumber}</button>
+  ),
+  ORDER_LIFECYCLE_STATUS: { ANGENOMMEN: "angenommen", GALVANIK: "galvanik" },
   GalvanikCorrectionButton: (props: {
     orderId: string;
     onConfirmedReadback: (orders: unknown[]) => void;
@@ -21,7 +23,24 @@ vi.mock("@/components/orders/GalvanikCorrectionButton", () => ({
     </div>
   ),
 }));
-vi.mock("@/components/orders/OrderModalProvider", () => ({ useOrderModal: () => ({ openOrder: vi.fn() }) }));
+vi.mock("@/app/warendurchlauf/galvanik/GalvanikHandoffAttachmentAppAdapter", () => ({
+  GalvanikHandoffAttachmentAppAdapter: () => null,
+}));
+vi.mock("@/app/warendurchlauf/galvanik/GalvanikCorrectionAppAdapter", () => ({
+  GalvanikCorrectionAppAdapter: (props: {
+    orderId: string;
+    onConfirmedReadback: (orders: unknown[]) => void;
+    onConflictReadback?: (orders: unknown[], message: string) => void;
+  }) => (
+    <div>
+      <button onClick={() => props.onConfirmedReadback([])}>Korrektur-Test-Erfolg-{props.orderId}</button>
+      <button onClick={() => props.onConflictReadback?.([], `Konflikt-${props.orderId}`)}>
+        Korrektur-Test-Konflikt-{props.orderId}
+      </button>
+    </div>
+  ),
+}));
+vi.mock("@/lib/overlayStore", () => ({ useOverlayStore: () => vi.fn() }));
 vi.mock("next/link", () => ({ default: ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a {...props}>{children}</a> }));
 vi.mock("lucide-react", () => ({ ArrowRight: () => null, Layers: () => null, PlayCircle: () => null, CheckCircle2: () => null, AlertTriangle: () => null, Loader2: () => null, ChevronRight: () => null }));
 

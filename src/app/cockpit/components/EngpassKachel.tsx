@@ -11,7 +11,7 @@ import {
 import { KachelInfo } from "@/components/ui/KachelInfo";
 import { ResponsiveDetailDrawer } from "@/components/ui/ResponsiveDetailDrawer";
 import Link from "next/link";
-import { useOrderModal } from "@/components/orders/OrderModalProvider";
+import { useOverlayStore } from "@/lib/overlayStore";
 
 export function EngpassKachel() {
   const [data, setData] = useState<EngpassStation[]>([]);
@@ -21,7 +21,7 @@ export function EngpassKachel() {
   const [selectedStation, setSelectedStation] = useState<EngpassStation | null>(null);
   const [details, setDetails] = useState<EngpassDetails | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
-  const { openOrder } = useOrderModal();
+  const openOrder = useOverlayStore((state) => state.openOrder);
 
   useEffect(() => {
     async function load() {

@@ -27,14 +27,39 @@ vi.mock("@/lib/supabase/client", () => ({
     },
   },
 }));
-vi.mock("@/components/orders/OrderModalProvider", () => ({
-  useOrderModal: () => ({ openOrder: vi.fn() }),
+vi.mock("@/app/warendurchlauf/galvanik/GalvanikCorrectionAppAdapter", () => ({
+  GalvanikCorrectionAppAdapter: () => null,
 }));
-vi.mock("@/components/orders/OrderCompactCard", () => ({
+vi.mock("@/app/warendurchlauf/galvanik/GalvanikHandoffAttachmentAppAdapter", async () => {
+  const orderModule = await vi.importActual<typeof import("@/modules/orders/public")>("@/modules/orders/public");
+  return {
+    GalvanikHandoffAttachmentAppAdapter: (
+      props: Omit<import("@/modules/orders/public").GalvanikHandoffAttachmentPanelProps, "ports">,
+    ) => (
+      <orderModule.GalvanikHandoffAttachmentPanel
+        {...props}
+        ports={{
+          read: ports.getAttachments,
+          reserve: ports.reserve,
+          finalize: ports.finalize,
+          readOriginal: ports.original,
+          uploadSigned: ({ bucketId, path, token, bytes, contentType }) => {
+            ports.storageFrom(bucketId);
+            return ports.upload(path, token, bytes, { contentType, upsert: false });
+          },
+        }}
+      />
+    ),
+  };
+});
+vi.mock("@/modules/orders/public", async () => ({
+  ...(await vi.importActual<typeof import("@/modules/orders/public")>("@/modules/orders/public")),
   OrderCompactCard: ({ orderNumber, onClick }: { orderNumber: string; onClick: () => void }) => (
     <button type="button" onClick={onClick}>{orderNumber}</button>
   ),
+  GalvanikCorrectionButton: () => null,
 }));
+vi.mock("@/lib/overlayStore", () => ({ useOverlayStore: () => vi.fn() }));
 vi.mock("next/link", () => ({
   default: ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a {...props}>{children}</a>,
 }));
@@ -54,14 +79,13 @@ vi.mock("lucide-react", () => {
     Upload: Icon,
   };
 });
-vi.mock("@/components/orders/GalvanikCorrectionButton", () => ({
-  GalvanikCorrectionButton: () => null,
-}));
-
-import { GalvanikHandoffAttachmentPanel } from "@/components/orders/GalvanikHandoffAttachmentPanel";
+import {
+  GalvanikHandoffAttachmentPanel as ModuleGalvanikHandoffAttachmentPanel,
+  type GalvanikHandoffAttachmentPanelProps,
+} from "@/modules/orders/public";
 import GalvanikPage from "@/app/warendurchlauf/galvanik/page";
 import type { EvidenceReadRecord } from "@/lib/server/evidenceRead";
-import { ORDER_LIFECYCLE_STATUS } from "@/lib/orders/orderLifecycleContract";
+import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 
 const ACTOR = "11111111-1111-4111-8111-111111111111";
 const OTHER_ACTOR = "22222222-2222-4222-8222-222222222222";
@@ -75,6 +99,27 @@ const ZERO_SHA = "0".repeat(64);
 const ORDER_ID = "order-a";
 const ITEM_ID = "item-a";
 const FILE_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
+const attachmentPanelPorts: GalvanikHandoffAttachmentPanelProps["ports"] = {
+  read: ports.getAttachments,
+  reserve: ports.reserve,
+  finalize: ports.finalize,
+  readOriginal: ports.original,
+  uploadSigned: ({ bucketId, path, token, bytes, contentType }) => {
+    ports.storageFrom(bucketId);
+    return ports.upload(path, token, bytes, { contentType, upsert: false });
+  },
+};
+
+function GalvanikHandoffAttachmentPanel(
+  props: Omit<GalvanikHandoffAttachmentPanelProps, "ports">,
+) {
+  return (
+    <ModuleGalvanikHandoffAttachmentPanel
+      {...props}
+      ports={attachmentPanelPorts}
+    />
+  );
+}
 
 function receipt(overrides: Record<string, unknown> = {}) {
   return {
@@ -320,7 +365,7 @@ describe("W4 Galvanik handoff attachment panel", () => {
     const retry = await screen.findByRole("button", { name: "Metadaten erneut laden" });
     fireEvent.click(retry);
     fireEvent.click(retry);
-    expect(ports.getAttachments).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(ports.getAttachments).toHaveBeenCalledTimes(2));
     retryResult.resolve(envelope([]));
     expect(await screen.findByText("Noch kein Übergabeoriginal erfasst.")).toBeInTheDocument();
     expect(ports.getAttachments).toHaveBeenCalledTimes(2);

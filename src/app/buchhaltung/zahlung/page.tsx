@@ -8,7 +8,7 @@ import Link from "next/link";
 import { ChevronRight, CreditCard, QrCode, Smartphone, BarChart3, Lock, Info, Globe, Users, ArrowLeft } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import { useState } from "react";
-import { OrderModalTrigger } from "@/components/orders/OrderModalTrigger";
+import { useOverlayStore } from "@/lib/overlayStore";
 
 const TABS = [
   { id: "provider", label: "Dienstleister", icon: CreditCard },
@@ -40,6 +40,7 @@ const MOCK_STATISTIK = {
 
 function ZahlungContent() {
   usePageView();
+  const openOrder = useOverlayStore((state) => state.openOrder);
   const searchParams = useSearchParams();
   const initialTab = searchParams?.get("tab") ?? "provider";
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -110,7 +111,7 @@ function ZahlungContent() {
                       <div className="flex-1 min-w-0">
                         <Link href={`/customers/${m.kundeId}`} className="text-base font-extrabold text-navy-900 truncate hover:text-blue-600 transition-colors inline-block">{m.kunde}</Link>
                         <div className="text-xs font-semibold text-text-muted mt-0.5">
-                          <OrderModalTrigger orderId={m.auftragId} className="hover:text-navy-900 hover:underline">{m.auftragId}</OrderModalTrigger>
+                          <button type="button" onClick={() => openOrder(m.auftragId)} className="hover:text-navy-900 hover:underline">{m.auftragId}</button>
                           <span className="mx-1.5">•</span>
                           <span>{m.letzteRechnung}</span>
                         </div>

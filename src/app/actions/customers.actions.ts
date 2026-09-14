@@ -6,9 +6,13 @@ import { eq, ilike, or, and, sql } from "drizzle-orm";
 import type { InferSelectModel } from "drizzle-orm";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 import { Customer } from "@/lib/types/customer";
-import { unstable_noStore as noStore } from "next/cache";
+import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { readCustomerSummary } from "@/lib/server/customerSummaryRead";
+import {
+  createCustomerCommand,
+  type CreateCustomerInput,
+} from "@/modules/customers/public";
 
 export async function getCustomerSummaryAction(input: { customerId: string }) {
   noStore();
@@ -24,6 +28,30 @@ export async function getCustomerSummaryAction(input: { customerId: string }) {
       : { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
   return readCustomerSummary(authorization.data, input);
+}
+
+export async function createCustomerAction(input: CreateCustomerInput) {
+  let authorization;
+  try {
+    authorization = await resolveAuthorization();
+  } catch {
+    return { code: "UNAVAILABLE" as const, message: "Kunde konnte nicht sicher gespeichert werden." };
+  }
+  if (!authorization.ok) {
+    return authorization.reason === "AUTHORIZATION_UNAVAILABLE"
+      ? { code: "UNAVAILABLE" as const, message: "Kunde konnte nicht sicher gespeichert werden." }
+      : { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+  }
+
+  const command = await createCustomerCommand(authorization.data, input);
+  if (command.code !== "OK") return command;
+  const readback = await readCustomerSummary(authorization.data, { customerId: command.receipt.customerId });
+  if (readback.code !== "OK" || readback.data.customerNumber !== command.receipt.customerNumber) {
+    return { code: "UNAVAILABLE" as const, message: "Kunde wurde gespeichert, der sichere Readback ist noch nicht verfügbar." };
+  }
+  revalidatePath("/customers");
+  revalidatePath(`/customers/${command.receipt.customerId}`);
+  return { ...command, customer: readback.data };
 }
 
 type DbCustomer = InferSelectModel<typeof customers>;

@@ -1,4 +1,4 @@
-import { isOrderStationForwardRole } from "@/lib/orders/orderLifecycleContract";
+import { isOrderStationForwardRole } from "@/modules/orders/public";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import {
   buildWerkstattData,

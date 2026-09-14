@@ -6,7 +6,6 @@
       "src/app/warendurchlauf/WarendurchlaufRouteNav.tsx",
       "src/app/warendurchlauf/__tests__/w2cB2m5j.unavailable.realRender.test.tsx",
       "src/components/flow/WorkflowStrip.tsx",
-      "src/components/layout/KreileAppShell.tsx",
       "src/components/layout/TabletTopFlowNav.tsx",
       "src/components/layout/TopWorkflowBar.tsx",
       "src/components/warendurchlauf/WarendurchlaufStationNav.tsx",

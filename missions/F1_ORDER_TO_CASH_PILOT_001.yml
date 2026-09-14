@@ -1,8 +1,8 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: 55047090c2df0e47b1311308be165b8300086eb1
-branch: gov/authority-calendar-target-stage2-20260913
+base_sha: 456a81fee2e7a56d4c09fe781ba25b2f12a0f6ba
+branch: path1/ui-convergence-20260914
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
 # ── M0 Konsolidierungsstand ───────────────────────────────────────
@@ -36,9 +36,9 @@ delivery_order:
   - F1.5_BESTAETIGTER_ZAHLUNGSEINGANG
   - F1.6_REALER_PILOT
 
-active_package: AUTHORITY_UI_CONVERGENCE_TRANSITION_GOVERNANCE
-active_package_status: CANDIDATE_BUILD_AND_EXACT_SHA_REVIEW_PENDING
-next_gate_after_active_package: DRAFT_PR_EXACT_SHA_CI_THEN_INDEPENDENT_CODEX_REVIEW
+active_package: PATH1_UI_CONVERGENCE
+active_package_status: V5_WORK_UNIT_1_REMOTE_CHECKPOINT_SECURED_NO_UI_PASS
+next_gate_after_active_package: NEXT_PL_HANDOFF_QUOTES_KV_PERSISTENCE
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
@@ -101,6 +101,22 @@ path1_ui_convergence_a_roles: developer|admin|meister|buero|werkstatt|readonly
 path1_ui_convergence_a_entry: /start=UNAUTHENTICATED_LOGIN_ONLY -> /=ROLE_AWARE_HOME
 path1_ui_convergence_a_google_calendar_blocker: ACTIVE_VISIBLE_GOOGLE_PROVIDER_CLAIM_MUST_BE_REMOVED_OR_ROUTE_FAIL_CLOSED_404
 path1_ui_convergence_a_acceptance: SIX_REAL_ROLE_LOGINS; FULL_ROUTE_1914x917_1220x880_390x844; ALL_VISIBLE_NAV_CLICKED; REMOVED_AND_QUARANTINED_URLS_NEGATIVE; LEGACY_BASELINE_SHRINK_ONLY; NO_P0_P1
+path1_ui_convergence_design_pointer: docs/project/linie/ui/CURRENT_DESIGN_REFERENCE.json
+path1_ui_convergence_flow_reference: docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html
+path1_ui_convergence_flow_reference_sha256: 75258FF3BD4CC212C8E989061708A29DC26EA44B851BD28E8F16E8509B0CC0AA
+path1_ui_convergence_flow_reference_role: FLOW_AND_INTERMEDIATE_STEP_REFERENCE
+path1_ui_convergence_visible_personas: ROLF_MEISTER_DESKTOP; PHILLIP_WERKSTATT_TABLET
+path1_ui_convergence_global_plus: CUSTOMER_OR_ORDER_QUOTE_MANUAL_INPUT_WITHIN_TWO_CLICKS_REAL_PORTS_ONLY
+path1_ui_convergence_v5_work_unit_1: CANON_BINDING; NARROW_NEXT_APP_COMPOSITION_GATE; TENANT_BOUND_CUSTOMER_CREATE_COMMAND
+path1_ui_convergence_followup_scope: QUOTES_PERSISTENCE_AND_RECEIPTS -> QUOTE_TO_EXISTING_F1_1_ORDER_ATOMIC_IDEMPOTENT_ONE_LINKED_ORDER -> GLOBAL_PLUS_MANUAL_CUSTOMER_QUOTE_ORDER -> RECHECK_A_C_AGAINST_V5 -> SEARCH_AND_DAILY_JOBS_ST1_ST3 -> REAL_BROWSER_MATRIX
+path1_ui_convergence_smart_capture: PASSIVE_UNCONNECTED_LABEL_ONLY_UNTIL_RATIFIED_REAL_GRAPH_OCR_CONTRACT
+path1_ui_convergence_v5_delivery_claim: TECHNICAL_MILESTONE_ONLY_NO_UI_PARTIAL_PASS_NO_DRAFT_NO_MERGE
+path1_provider_requirement_decisions: D-ARCH-012; D-AI-001
+path1_provider_platform_policy: APPROX_MAX_FIVE_PLATFORMS; SUPABASE_DATA_AUTH_STORAGE_TRUTH; MICROSOFT_AZURE_M365_FOUNDRY_SPEECH_PREFERRED_AFTER_REAL_GATES; NO_SILENT_PROVIDER_FALLBACK
+path1_document_intelligence_policy: CHEAP_FIRST; ORIGINAL_PRIVATE_FIRST; UNTRUSTED_CONTENT; HUMAN_CONFIRMATION; ONE_SAFE_COMMAND_RECEIPT_READBACK
+path1_search_intelligence_policy: RLS_BEFORE_RETRIEVAL; STRUCTURED_FIRST; AUTHORIZED_PUBLIC_READ_PORTS_ONLY; DB_VIEWS_TRUTH; INDEX_RENEWABLE_PROJECTION; NO_MODEL_MUTATION
+path1_provider_activation_status: NONE_ACTIVATED_BY_THIS_WORK_UNIT
+path1_ui_convergence_next_product_build: QUOTES_KV_PERSISTENCE_AND_RECEIPTS
 
 # ── F1.2 Entscheidungsgrundlage (bindend, ersetzt Altstand) ───────
 # D-F12-001A (ersetzt D-F12-001): F1.2 = genau EIN Uebergang
@@ -422,6 +438,295 @@ authority_ui_transition_allowlist:
   - src/test/authority_gate.test.ts
   - quality/eslint-baseline.json
   - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+
+path1_ui_convergence_allowlist:
+  # Steuerung, Lieferwahrheit und paketgebundene Evidence
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - docs/project/CURRENT_STATE.md
+  - docs/evidence/path1/**
+  - docs/evidence/path1/PATH1_UI_CONVERGENCE_V5_WORK_UNIT_1.md
+  - docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json
+  - docs/evidence/f0/W4_CROSS_MODULE_READ_PORT_INVENTORY.json
+  - docs/project/PROVIDER_CAPABILITY_MATRIX.md
+  - e2e/path1-ui-convergence*.spec.ts
+  - quality/module-gates-baseline.json
+  # D-UI-V5-001: kanonische Ablaufreferenz und ihre autoritativen Bindungen
+  - docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html
+  - docs/project/linie/ui/CURRENT_DESIGN_REFERENCE.json
+  - docs/project/linie/00_UI_REFERENZEN_PFADE.md
+  - docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md
+  - docs/project/linie/MODULKARTE_KANON.md
+  - docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md
+  # Enge Next-App-Kompositionsnaht mit fail-closed Beweistests
+  - scripts/quality/check-module-gates.mjs
+  - src/test/s1_module_gates.test.ts
+  # V5-Arbeitseinheit 1: reale Customer-Persistenz
+  - supabase/migrations/20260914100000_path1_customer_persistence_contract.sql
+  - src/app/actions/customers.actions.ts
+  - src/test/path1_customer_persistence.integration.test.ts
+  # Zielkomposition A-D
+  - src/app/page.tsx
+  - src/app/layout.tsx
+  - src/app/start/**
+  - src/app/orders/**
+  - src/app/customers/**
+  - src/app/warendurchlauf/**
+  - src/components/start/**
+  - src/components/layout/**
+  - src/components/home/**
+  - src/components/orders/**
+  - src/components/customers/**
+  - src/modules/werkstatt/**
+  - src/modules/orders/**
+  - src/modules/customers/**
+  - src/modules/suche/**
+  # Nach Link-/Importinventar physisch entfallende oder nicht-rendernde Pages
+  - src/app/analyse/page.tsx
+  - src/app/archive/page.tsx
+  - src/app/baeder/page.tsx
+  - src/app/betrieb/page.tsx
+  - src/app/betrieb-kvp/page.tsx
+  - src/app/cockpit/page.tsx
+  - src/app/cockpit/jahresplan/page.tsx
+  - src/app/feedback/[token]/page.tsx
+  - src/app/finanzen/page.tsx
+  - src/app/items/page.tsx
+  - src/app/kalender/page.tsx
+  - src/app/kommunikation/page.tsx
+  - src/app/kontrolle/page.tsx
+  - src/app/kunden-auftraege/page.tsx
+  - src/app/kvp/page.tsx
+  - src/app/lager/page.tsx
+  - src/app/lieferanten/page.tsx
+  - src/app/lieferanten/[id]/page.tsx
+  - src/app/marketing/page.tsx
+  - src/app/marketing/aktion/page.tsx
+  - src/app/marketing/aktion/neu/page.tsx
+  - src/app/marketing/attribution/page.tsx
+  - src/app/marketing/einwilligungen/page.tsx
+  - src/app/marketing/kanaele/page.tsx
+  - src/app/marketing/segmente/page.tsx
+  - src/app/marketing/segmente/neu/page.tsx
+  - src/app/marketing/segmente/[id]/page.tsx
+  - src/app/performance/page.tsx
+  - src/app/performance/baeder-material/page.tsx
+  - src/app/performance/ki-empfehlungen/page.tsx
+  - src/app/performance/kunden-markt/page.tsx
+  - src/app/performance/qualitaet-risiko/page.tsx
+  - src/app/performance/umsatz-marge/page.tsx
+  - src/app/performance/werkstatt-puls/page.tsx
+  - src/app/print-queue/page.tsx
+  - src/app/quotes/page.tsx
+  - src/app/quotes/new/page.tsx
+  - src/app/scan/page.tsx
+  - src/app/station/[slug]/page.tsx
+  - src/app/status/page.tsx
+  - src/app/telefonnotiz/page.tsx
+  - src/app/today/page.tsx
+
+  # Repair 1/2: exakter beruehrter Pfadstand; breite Programmgrenzen oben
+  # bleiben historisch ratifiziert, dieser Block ist der fail-closed Reparaturscope.
+  - docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json
+  - docs/evidence/path1/PATH1_UI_CONVERGENCE_V5_WORK_UNIT_1.md
+  - docs/project/linie/00_UI_REFERENZEN_PFADE.md
+  - docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md
+  - docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md
+  - docs/project/linie/MODULKARTE_KANON.md
+  - docs/project/linie/ui/CURRENT_DESIGN_REFERENCE.json
+  - docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - quality/module-gates-baseline.json
+  - scripts/quality/check-module-gates.mjs
+  - src/app/__tests__/w2cB2m5u.homeDueTruth.realRender.test.tsx
+  - src/app/actions/__tests__/commerceAccountingContainment.test.ts
+  - src/app/actions/__tests__/erfassungContainment.test.ts
+  - src/app/actions/__tests__/updateOrderDb.failClosed.test.ts
+  - src/app/actions/__tests__/w2cB2m3a.failClosed.test.ts
+  - src/app/actions/__tests__/w2cB2m3b.failClosed.test.ts
+  - src/app/actions/__tests__/w2cB2m4c.externalProvider.failClosed.test.ts
+  - src/app/actions/__tests__/w2cB2m5c.orderTransition.failClosed.test.ts
+  - src/app/actions/__tests__/w2cB2m5d.orderCreate.failClosed.test.ts
+  - src/app/actions/__tests__/w2cB2m5g.customerMutation.failClosed.test.ts
+  - src/app/actions/customers.actions.ts
+  - src/app/api/__tests__/quarantine.test.ts
+  - src/app/buchhaltung/zahlung/page.tsx
+  - src/app/cockpit/components/EngpassKachel.tsx
+  - src/app/customers/[id]/__tests__/w2cB2m5f.customerDetailPrivacy.failClosed.test.ts
+  - src/app/customers/[id]/actions.ts
+  - src/app/customers/[id]/page.tsx
+  - src/app/customers/CustomerCardAppAdapter.tsx
+  - src/app/customers/CustomersAppAdapter.tsx
+  - src/app/customers/page.tsx
+  - src/app/customers/page.tsx.bak
+  - src/app/layout.tsx
+  - src/app/orders/__tests__/w4OperationalOrdersReadStates.test.tsx
+  - src/app/orders/[id]/__tests__/w2cOrderDetail.failClosed.test.tsx
+  - src/app/orders/[id]/page.tsx
+  - src/app/orders/OrderCardAppAdapter.tsx
+  - src/app/orders/OrdersAppAdapter.tsx
+  - src/app/orders/page.tsx
+  - src/app/page.tsx
+  - src/app/quotes/__tests__/w2cB2m5a.inquiries.failClosed.test.ts
+  - src/app/start/__tests__/start-page-payload.test.tsx
+  - src/app/station/[slug]/page.tsx
+  - src/app/warendurchlauf/__tests__/f1OrderIntakePage.test.tsx
+  - src/app/warendurchlauf/__tests__/w2cB2m5j.unavailable.realRender.test.tsx
+  - src/app/warendurchlauf/components/OffeneAuftraegeKachel.tsx
+  - src/app/warendurchlauf/galvanik/__tests__/orderStationReadback.test.tsx
+  - src/app/warendurchlauf/galvanik/__tests__/w4OrderStationAttachmentPanel.test.tsx
+  - src/app/warendurchlauf/galvanik/GalvanikCorrectionAppAdapter.tsx
+  - src/app/warendurchlauf/galvanik/GalvanikHandoffAttachmentAppAdapter.tsx
+  - src/app/warendurchlauf/galvanik/page.tsx
+  - src/app/warendurchlauf/page.tsx
+  - src/app/warendurchlauf/warenausgang/__tests__/w2cB2m5t.warenausgangFinance.failClosed.test.tsx
+  - src/app/warendurchlauf/warenausgang/page.tsx
+  - src/app/warendurchlauf/wareneingang/page.tsx
+  - src/app/warendurchlauf/wareneingang/WareneingangHandoffAppAdapter.tsx
+  - src/components/customers/__tests__/w2cB2m5e.customerOverlay.failClosed.test.tsx
+  - src/components/customers/CustomerAuftraege.tsx
+  - src/components/customers/CustomerEditModal.tsx
+  - src/components/customers/CustomerHeader.tsx
+  - src/components/customers/CustomerKommHistorie.tsx
+  - src/components/customers/CustomerKpiRow.tsx
+  - src/components/customers/CustomerMemoryCard.tsx
+  - src/components/customers/CustomerOverlay.tsx
+  - src/components/customers/CustomerProfileHeader.tsx
+  - src/components/customers/CustomerStammdaten.tsx
+  - src/components/customers/CustomerTagEditor.tsx
+  - src/components/customers/CustomerTile.tsx
+  - src/components/customers/CustomerTypeConsequences.tsx
+  - src/components/customers/CustomerZahlungen.tsx
+  - src/components/customers/NewCustomerForm.tsx
+  - src/components/customers/PriceAgreementPanel.tsx
+  - src/components/customers/tabs/CustomerAnalysisTab.tsx
+  - src/components/customers/tabs/CustomerCommunicationTab.tsx
+  - src/components/customers/tabs/CustomerComplaintsTab.tsx
+  - src/components/customers/tabs/CustomerHistorySimilarTab.tsx
+  - src/components/customers/tabs/CustomerInvoicesTab.tsx
+  - src/components/customers/tabs/CustomerItemsProfileTab.tsx
+  - src/components/customers/tabs/CustomerNotesTab.tsx
+  - src/components/customers/tabs/CustomerOrdersTab.tsx
+  - src/components/customers/tabs/CustomerOverviewTab.tsx
+  - src/components/customers/tabs/CustomerPhotosTab.tsx
+  - src/components/customers/tabs/CustomerPricesTab.tsx
+  - src/components/customers/useCustomerData.ts
+  - src/components/customers/useCustomerKpi.ts
+  - src/components/customers/useCustomerOverlay.ts
+  - src/components/erfassung/OrderIntakePanel.tsx
+  - src/components/galvanik/GalvanikOrderRow.tsx
+  - src/components/galvanik/GalvanikQueue.tsx
+  - src/components/home/RolfHome.module.css
+  - src/components/home/RolfHome.tsx
+  - src/components/home/RolfHomeClient.tsx
+  - src/components/home/WerkstattHome.tsx
+  - src/components/intake/OcrMatchResult.tsx
+  - src/components/layout/__tests__/w2cB2m5v.globalBrowserProviders.failClosed.test.tsx
+  - src/components/layout/EntityOverlayStack.module.css
+  - src/components/layout/EntityOverlayStack.tsx
+  - src/components/layout/KreileAppShell.tsx
+  - src/components/layout/MobileBottomNav.tsx
+  - src/components/layout/TargetHeader.tsx
+  - src/components/layout/TargetNavigation.tsx
+  - src/components/layout/TargetShell.module.css
+  - src/components/orders/__tests__/GalvanikCorrectionButton.test.tsx
+  - src/components/orders/__tests__/OrderImmutableInvoiceButton.test.tsx
+  - src/components/orders/__tests__/w2cB2m5u.unknownCards.realRender.test.tsx
+  - src/components/orders/__tests__/w2cOrderOverlay.failClosed.test.tsx
+  - src/components/orders/__tests__/WareneingangHandoffButton.test.tsx
+  - src/components/orders/BenchmarkSlider.tsx
+  - src/components/orders/BulkLabelPrintView.tsx
+  - src/components/orders/CostSummaryTable.tsx
+  - src/components/orders/ExtraEffortToggles.tsx
+  - src/components/orders/ExtraWorkAdminPanel.tsx
+  - src/components/orders/GalvanikCorrectionButton.tsx
+  - src/components/orders/GalvanikHandoffAttachmentPanel.tsx
+  - src/components/orders/HeadCostBadge.tsx
+  - src/components/orders/ItemDrawer.tsx
+  - src/components/orders/LabelPrintView.tsx
+  - src/components/orders/MaterialStepper.tsx
+  - src/components/orders/NewOrderForm.tsx
+  - src/components/orders/OrderActionGrid.tsx
+  - src/components/orders/OrderCompactCard.tsx
+  - src/components/orders/OrderEditModal.tsx
+  - src/components/orders/OrderExtraWorkEditor.tsx
+  - src/components/orders/OrderFreezeButton.tsx
+  - src/components/orders/OrderFreezeCorrectionButton.tsx
+  - src/components/orders/OrderImmutableInvoiceButton.tsx
+  - src/components/orders/OrderMaterialTimeDrawer.tsx
+  - src/components/orders/OrderModalProvider.tsx
+  - src/components/orders/OrderModalTrigger.tsx
+  - src/components/orders/OrderOverlay.tsx
+  - src/components/orders/OrderProfitabilityCard.tsx
+  - src/components/orders/OrderTaskAssignmentPanel.tsx
+  - src/components/orders/OrderTile.tsx
+  - src/components/orders/OrderTimeline.tsx
+  - src/components/orders/OrderWideCard.tsx
+  - src/components/orders/PaymentDrawer.tsx
+  - src/components/orders/PriceLinesEditor.tsx
+  - src/components/orders/StationCompletionModal.tsx
+  - src/components/orders/StationContextBlock.tsx
+  - src/components/orders/StationStatusButton.tsx
+  - src/components/orders/StatusMailDrawer.tsx
+  - src/components/orders/variants/ErfassungVariant.tsx
+  - src/components/orders/variants/GalvanikExtras.tsx
+  - src/components/orders/variants/VersandVariant.tsx
+  - src/components/orders/variants/WareneingangActive.tsx
+  - src/components/orders/variants/WareneingangReadOnly.tsx
+  - src/components/orders/WareneingangHandoffButton.tsx
+  - src/components/start/StartScreenClient.module.css
+  - src/components/start/StartScreenClient.tsx
+  - src/components/warenausgang/WarenausgangQueue.tsx
+  - src/features/customers/customer-card/__tests__/w2cB2m5e.customerCardPrivacy.failClosed.test.ts
+  - src/features/customers/customer-card/customerCard.actions.ts
+  - src/features/orders/__tests__/w2cB2m5l.orderPhoto.failClosed.test.ts
+  - src/features/orders/orderCost.actions.ts
+  - src/features/orders/orderPhoto.actions.ts
+  - src/features/orders/shipment.actions.ts
+  - src/lib/customers/matchCustomer.ts
+  - src/lib/orders/__tests__/w2cB2m5u.urgencyDueTruth.failClosed.test.ts
+  - src/lib/orders/costCalculation.ts
+  - src/lib/orders/getUrgency.ts
+  - src/lib/orders/orderLifecycleContract.ts
+  - src/lib/orders/stationContext.ts
+  - src/lib/pdf/OrderLabel.tsx
+  - src/lib/server/__tests__/orderIntakeRead.test.ts
+  - src/lib/server/commands/orderExtraWorkCommand.ts
+  - src/lib/server/commands/orderFreezeCommand.ts
+  - src/lib/server/commands/orderIntakeCommand.ts
+  - src/lib/server/commands/orderStationCommand.ts
+  - src/lib/server/commands/recordGoodsOutCommand.ts
+  - src/lib/server/orderIntakeRead.ts
+  - src/lib/server/orderStationAttachment.ts
+  - src/modules/customers/__tests__/createCustomerCommand.test.ts
+  - src/modules/customers/customers.manifest.json
+  - src/modules/customers/public.ts
+  - src/modules/customers/server/createCustomerCommand.ts
+  - src/modules/customers/server/types.ts
+  - src/modules/customers/ui/CustomerCardView.tsx
+  - src/modules/customers/ui/customers.module.css
+  - src/modules/customers/ui/CustomersView.tsx
+  - src/modules/orders/__tests__/GalvanikCorrectionButton.test.tsx
+  - src/modules/orders/__tests__/unknownCards.realRender.test.tsx
+  - src/modules/orders/__tests__/urgencyDueTruth.failClosed.test.ts
+  - src/modules/orders/__tests__/WareneingangHandoffButton.test.tsx
+  - src/modules/orders/domain/getUrgency.ts
+  - src/modules/orders/domain/orderLifecycleContract.ts
+  - src/modules/orders/legacy-ui/GalvanikCorrectionButton.tsx
+  - src/modules/orders/legacy-ui/GalvanikHandoffAttachmentPanel.tsx
+  - src/modules/orders/legacy-ui/OrderCompactCard.tsx
+  - src/modules/orders/legacy-ui/OrderWideCard.tsx
+  - src/modules/orders/legacy-ui/WareneingangHandoffButton.tsx
+  - src/modules/orders/orders.manifest.json
+  - src/modules/orders/public.ts
+  - src/modules/orders/server/types.ts
+  - src/modules/orders/ui/OrderCardView.tsx
+  - src/modules/orders/ui/orders.module.css
+  - src/modules/orders/ui/OrdersView.tsx
+  - src/test/path1_customer_persistence.integration.test.ts
+  - src/test/path1_orders_read_states.test.tsx
+  - src/test/s1_module_gates.test.ts
+  - src/test/w4_order_station_attachment.integration.test.ts
+  - supabase/migrations/20260914100000_path1_customer_persistence_contract.sql
 
 authority_provider_governance_allowlist:
   - AGENTS.md

@@ -250,3 +250,111 @@ Das eine kanonische Programm `PATH1_UI_CONVERGENCE` verbindet exakt die vier fre
 **Zweck:** Rollen, Einstiege, Navigation, Karten und Routendisposition sind ohne Alias, Übergangsscreen oder Interpretationsspielraum festgelegt; die sichtbare Gesamt-App kann nur über echte Full-Route-Belege freigegeben werden.
 
 **Wesentlicher Nachteil:** Der Umbau beginnt mit Shell und Routensubtraktion, bevor bereits entwickelte Kandidaten integriert werden; dadurch wird die Suchoberfläche später bewusst erneut abgenommen, statt die verworfene Shell zu konservieren.
+
+## D-UI-V5-001 — Ablaufkanon V5, Alltagspersonen, Global-Plus und persistentes KV (Owner 2026-09-14)
+
+**Entscheidung/Wortlaut:** `docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html`
+mit SHA-256 `75258FF3BD4CC212C8E989061708A29DC26EA44B851BD28E8F16E8509B0CC0AA`
+ist die aktuelle Ablauf-/Zwischenschritt-Referenz des Programms
+`PATH1_UI_CONVERGENCE`. Die vier im UI-Index geführten Einzelreferenzen bleiben
+die Seitenwahrheit. V2/V3/V4-Gesamtmocks sind kein Bauinput; ein interner
+HTML-Titel wie „V2-MOCK“ ist veraltete Metadaten und niemals Produkttext. Eine
+spätere Designreferenz gilt nur nach ausdrücklicher Owner-Bestätigung und
+Bindung von Pfad plus SHA-256. Der Hash wird vor jeder Etappe,
+Browserabnahme und Draft-PR geprüft; weder Versionsnummer noch Datum oder
+HTML-Titel wählen selbstständig eine Referenz aus.
+
+**Alltag und Handlungsweg:** Sichtbare Alltagspersonen sind Rolf
+(`meister`, Desktop) und Phillip (`werkstatt`, Tablet); technische Rollen
+bleiben ausschließlich Auth-/Berechtigungsrealität und werden nicht destruktiv
+migriert. Jede Kernseite erhält ein globales Plus in Primärfarbe. Von dort sind
+es höchstens zwei Klicks bis zur manuellen Eingabe für „Kunde anlegen“ oder
+„Auftrag/KV“. Nur reale Commands werden angeboten; KI-, OCR- oder
+Providerfunktionen ohne ratifizierten Vertrag bleiben unsichtbar. „Schlaue
+Erfassung“ darf bis dahin ausschließlich passiv und ehrlich als nicht
+verbundener Zweck bezeichnet werden.
+
+**KV-Vertrag:** KV/Angebot wird ein eigenes persistentes, tenantgebundenes Modul
+und Datenobjekt mit Status, Positionen, Ereignissen und Receipts. Ein Zuschlag
+wandelt genau ein KV atomar und idempotent über den bestehenden F1.1-Vertrag in
+genau einen verknüpften Auftrag um. Der erste technische Meilenstein davor ist
+ein sicherer tenantgebundener Customer-Command mit DB-seitigem Nummernkreis,
+Idempotenz, append-only Receipt/Event und kanonischem Readback. Eine
+Remote-/Production-Migration ist davon nicht freigegeben.
+
+**Zweck:** Die zusammenhängende Zieloberfläche erhält einen eindeutigen,
+hashgebundenen Ablaufkanon und einen echten kurzen Einstieg in die zentralen
+Geschäftsobjekte, ohne Demo- oder Schattenwahrheit.
+
+**Wesentlicher Nachteil:** Das persistente KV ist ein zusätzlich dauerhaft zu
+wartendes Modul mit eigenem Daten- und Ereignisvertrag; dafür wird der
+Auftrags-Intake nicht als zweiter, unverbundener Angebotsweg dupliziert.
+
+## D-ARCH-012 — Strategische Providerkonsolidierung (Owner 2026-09-14)
+
+**Entscheidung/Wortlaut:** Die Plattformlandschaft wird strategisch auf
+höchstens etwa fünf Anbieter konsolidiert. Supabase bleibt die einzige
+Wahrheit für Datenbank, Authentisierung und Storage. Microsoft/Azure ist der
+Zielstack für Microsoft-365-Graph, Foundry, Speech und — falls der reale Test
+es trägt — technische Dokumentvorverarbeitung. Azure OpenAI/Foundry ist der
+bevorzugte Bezugsweg für Dokumenten-KI, wird aber erst nach einem realen
+Region-, Quota-, Capability- und Kostentest für Responses API, Bild/PDF und
+Structured Outputs aktiviert. Die direkte OpenAI API ist nur eine kleine,
+explizit vom Owner zu entscheidende Alternative bei belegtem
+Pflichtfähigkeits-, EU-, Quota- oder Kostengap; sie ist niemals stiller
+Runtime-Fallback. Mollie folgt erst nach dem Bankabgleich. Google Maps folgt
+erst bei einem ratifizierten Modulbedarf. Vercel bleibt Hosting. CAMT.053 und
+Export kommen vor einem weiteren Zahlungsprovider. Jeder weitere Anbieter
+benötigt eine neue, eigenständige Owner-Entscheidung.
+
+Alle Anbieter liegen hinter wiederverwendbaren, versionierten,
+tenantneutralen Capability-Ports, Adaptern und Schemata. Provider und Modell
+sind konfigurierbar; UI und Fremdmodule importieren weder SDK noch
+Providerpayload. Auth, Consent, Audit, Health, Retry/Backoff, Rate Limits,
+Kosten-/Usage-Messung, Korrelation und reproduzierbarer Readback gelten für
+jeden Adapter gleich. Diese Entscheidung aktiviert keinen Provider, kein
+Secret und keine Runtime-Abhängigkeit.
+
+**Zweck:** Wenige professionell betriebene Plattformen reduzieren
+Integrations-, Datenschutz-, Kosten- und Betriebsrisiken, ohne fachliche
+Wahrheit an einen Anbieter zu koppeln.
+
+**Wesentlicher Nachteil:** Bevorzugte Plattformen dürfen trotz der
+Konsolidierung erst nach Capability- und Kostenbeleg genutzt werden; bis dahin
+bleiben Automatisierungen bewusst blockiert und der manuelle Kernweg nötig.
+
+## D-AI-001 — Cheap-first-Eskalation, Suchgehirn und Dokumentenintelligenz (Owner 2026-09-14)
+
+**Entscheidung/Wortlaut:** Automatisierte Auswertung eskaliert strikt
+cheap-first: deterministische Datenbank-/Regellogik zuerst, danach eine
+günstige Spezial-API, danach ein günstiges geeignetes Modell und erst bei
+niedriger Konfidenz, Konflikt, unbekanntem oder komplexem Inhalt ein starkes
+multimodales beziehungsweise Reasoning-Modell. Kritische Felder werden immer
+von einem Menschen bestätigt. Jede Stufe protokolliert Quelle und Fundstelle,
+Konfidenz, Provider und Modellversion, Latenz, Kosten/Usage, Correlation-ID
+und einen reproduzierbaren Readback. Budgets, Rate Limits und Circuit Breaker
+sind Pflicht; der manuelle Kernweg bleibt ohne Provider nutzbar.
+
+Dokumentenaufnahme umfasst Kamera, Bild, Scan, PDF, Mail samt Anhang und
+Office-Dateien. Das Original wird vor jeder Verarbeitung privat gesichert.
+Die Pipeline darf Typ, Zweck, Entitäten, Positionen und Fakten erkennen sowie
+Matches, Dubletten, Widersprüche und fehlende Angaben markieren. Sie liefert
+ausschließlich einen editierbaren Vorschlag. Erst die menschliche Bestätigung
+ruft genau einen bestehenden sicheren Command mit Receipt und Readback auf.
+Dokumentinhalt ist untrusted data und niemals Instruktion oder
+Autorisierungsquelle.
+
+Die globale Suche wendet RLS vor Retrieval an. Exakte und strukturierte Suche
+kommt zuerst; semantische beziehungsweise natürlichsprachliche Suche darf nur
+über berechtigte öffentliche Read-Ports folgen. Ausgabe trennt Fakten,
+Schlussfolgerungen und Unsicherheit und verlinkt App-Fundstellen. Datenbank und
+Views bleiben Wahrheit; Suchindizes sind erneuerbare Projektionen. Es wird
+weder eine Voll-Datenbank an Modelle übertragen noch ohne explizite
+Bestätigung und sicheren Command mutiert.
+
+**Zweck:** Dokumente und Suche sparen Arbeit, ohne Unsicherheit, Kosten oder
+Providerergebnisse als kanonische Wahrheit auszugeben.
+
+**Wesentlicher Nachteil:** Mehrstufige Telemetrie, Kostenkontrolle und
+menschliche Bestätigung erhöhen Implementierungsaufwand und Latenz, sind aber
+die Voraussetzung für einen sicheren, nachvollziehbaren Produktweg.

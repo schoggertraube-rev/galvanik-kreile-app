@@ -12,7 +12,7 @@ Nichts vom Fach liegt außerhalb. Keine Parallel-Ablage in `components/<fach>` /
 
 ## 2. Die fünf Nähte — jede CI-ERZWUNGEN, nicht Prosa
 **Ausführbar seit S1:** `npm run quality:module-gates` = `scripts/quality/check-module-gates.mjs`. Läuft in `quality.yml` (Kandidatensicht) UND geschützt in `eslint-ratchet.yml` (Basis-Skript + Basis-Baseline + Basis-Schema gegen den Kandidatenbaum — ein PR kann das Gate nicht durch Ändern von Skript/Baseline/Schema umgehen). Beweis, dass jede Naht bei Verstoß rot wird: `src/test/s1_module_gates.test.ts`.
-1. **Manifest je Modul** (nicht 1 total): `src/modules/<fach>/<fach>.manifest.json` nach `docs/architecture/MODULE_MANIFEST.schema.json` (`publicExports`, `ownsTables`, `viewsFunctions`, `events`, `migrations`). CI: `moduleId` == Ordnername, `public.ts` vorhanden, jeder `publicExports`-Eintrag = `@/modules/<fach>/public#Symbol` und von `public.ts` exportiert, `dependencies` = existierende Module, **Ablage:** kein `src/{app,components,lib,features,hooks,contexts}/<fach>` mehr, sobald das Modul existiert.
+1. **Manifest je Modul** (nicht 1 total): `src/modules/<fach>/<fach>.manifest.json` nach `docs/architecture/MODULE_MANIFEST.schema.json` (`publicExports`, `ownsTables`, `viewsFunctions`, `events`, `migrations`). CI: `moduleId` == Ordnername, `public.ts` vorhanden, jeder `publicExports`-Eintrag = `@/modules/<fach>/public#Symbol` und von `public.ts` exportiert, `dependencies` = existierende Module, **Ablage:** kein Fachcode in `src/{app,components,lib,features,hooks,contexts}/<fach>` mehr, sobald das Modul existiert. Eng erlaubte Ausnahme sind zwingende Next-Entrypoints unter `src/app/<fach>/` sowie typisierte `*AppAdapter.tsx`: Entrypoints komponieren ausschließlich die öffentliche Modul-Fassade oder einen solchen Adapter; Adapter enthalten ausschließlich UI-/Port-Komposition. Fachberechnung, DB-/Repository-/Command-Implementierung, generische Router-/URL-Tunnel, Tiefimporte und beliebige weitere Dateien bleiben Gate-Verstoß.
 2. **Positive Fassade:** Quer-Zugriff NUR über `src/modules/<fach>/public.ts`. Tiefimport von außen (`@/modules/x/server/...`, relativ `../x/server/...`, `import()`, `export * from`, `vi.mock`) = **CI-FAIL**; im eigenen Modul nur relative Imports. ESLint `no-restricted-imports` (`@/modules/*/*` außer `public`) gibt dasselbe sofort im Editor.
 3. **Tenant injiziert:** einzige Quelle `src/lib/tenant.ts` (`KREILE_TENANT_SLUG`, S0); das Literal `'galvanik-kreile'` per ESLint VERBOTEN (Fehler). Spätere Naht je Modul: Injektion statt Konstante.
 4. **Cross-Modul-Fakten NUR über `v_*`-Views + TS-Typen + Props.** CI: SQL unter `src/modules/<fach>/` darf `public.`/`private.`-Tabellen nur anfassen, wenn `ownsTables` sie dem Modul zuordnet; Fremdfakten nur über `public.v_*`, die in irgendeinem Manifest (`viewsFunctions`) deklariert sind.
@@ -50,6 +50,23 @@ Pflichtbelege sind echte Klickpfade in einem isolierten Real-/Test-Tenant, klar 
 - `ENTFÄLLT` wird nach Link-/Importprüfung physisch entfernt. `QUARANTÄNE` besitzt keine rendernde Page und kein Navziel; direkte URL-Aufrufe enden fail-closed/404. Ein Placeholder, `NOT_AVAILABLE` oder „kommt bald“ ist kein Ersatz.
 - Search PR #84 bleibt ein nicht integrierter Kernkandidat. Integration in Header und Overlays sowie Full-Route-Abnahme erfolgen erst nach Shell, Orders und Customers auf der neuen Basis.
 
+### Ablauf-/Zwischenschritt-Kanon — D-UI-V5-001
+
+`ui/CURRENT_DESIGN_REFERENCE.json` bindet genau eine aktuelle Ablaufreferenz
+mit Pfad und SHA-256. V5 ergänzt die vier unveränderten Seitenreferenzen um
+deren zusammenhängenden Ablauf und darf sie nicht überschreiben. Vor jeder
+internen Etappe, Browserabnahme und jedem Draft-PR wird der gebundene Hash
+erneut geprüft; ein Delta wird dokumentiert. Versionsnummer, Dateidatum und
+HTML-Titel besitzen keine Auswahlwirkung.
+
+Das globale Plus ist App-Komposition: Es führt auf jeder Kernseite in höchstens
+zwei Klicks zur manuellen Eingabe für Customer oder Auftrag/KV und importiert
+Fachmodule nur über deren öffentliche Fassaden. KV wird als eigenes persistentes
+Modul mit typisierten Ports gebaut; die Konversion injiziert den bestehenden
+F1.1-Intake-Port und erzeugt atomar/idempotent genau einen verknüpften Auftrag.
+Nicht verbundene KI-, OCR- oder Providerzwecke bleiben unsichtbar oder rein
+passiv bezeichnet, niemals ausführbarer Scheinweg.
+
 ## 4b. Provider-Naht — D-ARCH-011
 
 - Externe Anbieter liegen ausschließlich hinter tenantneutralen, eng typisierten Ports; UI und Fremdmodule kennen weder SDK noch Providerpayload oder URL.
@@ -58,6 +75,44 @@ Pflichtbelege sind echte Klickpfade in einem isolierten Real-/Test-Tenant, klar 
 - Kalender ist eine Projektion über `CalendarPort` auf Microsoft Graph. Domänentermine bleiben Quelle; es entsteht weder eigener Event-Speicher noch Kalender-Engine.
 - Startmodell ist delegierter Zugriff eines benannten Büronutzers. App-only benötigt eine neue Owner-Entscheidung.
 - Fehlendes Konto, Consent, Secret oder Provider-E2E endet fail-closed als `BLOCKED_EXTERNAL_PERMISSION`; niemals Demo-, Mock-, Fake- oder In-Memory-Erfolg.
+
+## 4c. Konsolidierte Capability-Naht — D-ARCH-012 / D-AI-001
+
+Providerfähigkeiten werden als versionierte, tenantneutrale Ports mit
+providerunabhängigen DTOs modelliert. Für Dokumentverarbeitung ist die
+Zielnaht ein `DocumentIntelligencePort`; Suche verwendet entsprechend enge
+Search-Capability-Ports hinter der öffentlichen Modulfassade. Provider und
+Modell werden serverseitig konfiguriert. In UI, Fremdmodulen und
+wiederverwendbaren Kernen sind Kreile-Literale, Provider-SDK-Imports,
+Providerpayloads und generische URL-/RPC-Tunnel verboten.
+
+Jeder Adapter erfüllt denselben Vertrag für serverseitige Authentisierung,
+Tenantbindung, Consent, Audit, Health, Timeouts, Retry/Backoff, Rate Limits,
+Circuit Breaker, Idempotenz, Kosten-/Usage-Erfassung, Correlation-ID und
+reproduzierbaren Readback. Fehlen Capability-, Region-, Quota-, Kosten-,
+Secret- oder Real-E2E-Belege, bleibt der Port fail-closed und der manuelle
+Kernweg verfügbar. Es gibt keinen stillen Provider- oder Modellfallback.
+
+`DocumentIntelligencePort` erhält ausschließlich Referenzen auf zuvor privat
+gesicherte Originale und untrusted content. Die cheap-first-Orchestrierung
+liefert pro Stufe Fundstellen, Konfidenz, Provider-/Modellversion, Latenz und
+Kosten. Ihr Ergebnis ist ein editierbarer Vorschlag; eine Mutation erfolgt
+erst nach menschlicher Bestätigung über genau einen bestehenden sicheren
+Command mit Receipt und Readback. Der Port besitzt keine Auth- oder
+Fachwahrheit.
+
+Search-Capabilities wenden RLS vor Retrieval an, beginnen deterministisch und
+strukturiert und dürfen semantische/NL-Auswertung nur über berechtigte
+öffentliche Read-Ports ergänzen. Datenbank und Views bleiben Wahrheit;
+Suchindizes sind erneuerbare Projektionen. Fakten, Schlussfolgerung und
+Unsicherheit bleiben getrennt, Fundstellen werden verlinkt, und es werden
+weder Voll-Datenbanken an Modelle übertragen noch Mutationen ausgelöst.
+
+Supabase bleibt Daten/Auth/Storage-Wahrheit. Microsoft/Azure ist die
+strategische Plattformrolle für M365 Graph, Foundry, Speech und optional
+Dokumentvorverarbeitung; eine Aktivierung folgt daraus nicht. Gemini und
+Klippa bleiben supersedierte Legacy-Quarantäne. Direkte OpenAI API ist nur
+eine separat owner-entschiedene Alternative bei belegtem Gap.
 
 ## 5. Abnahmetest = „sauber"
 Ein frischer Chat mit NUR diesem Repo kann widerspruchsfrei sagen: welches Modul, welche Naht, welcher nächste Schritt — ohne Owner-Rückfrage. CI lässt NICHT grün: einen Tiefimport, ein Tenant-Literal, ein Stationshome, ein manifestloses Modul, eine Domäne mit Ablage außerhalb ihres Modulordners.

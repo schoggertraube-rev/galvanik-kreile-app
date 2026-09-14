@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -64,14 +65,9 @@ describe("Erfassung containment (F0-W2C-B2M1)", () => {
     expectNoPortCalls();
   });
 
-  it("denies station-cost write and read commands before any client or database access", async () => {
-    const costs = await import("@/features/orders/orderCost.actions");
-
-    await expect(costs.bookStationCosts({
-      orderId: "order-1", station: "galvanik", workEntries: [], consumableEntries: [], extraCostEvents: [], employeeId: "employee-1", kostenstelleKuerzel: "galvanik",
-    })).resolves.toEqual({ success: false, errors: [denial] });
-    await expect(costs.getStationCostSummary("order-1")).resolves.toEqual({ success: false, error: denial });
-
+  it("removes the unratified station-cost action instead of exporting a dead capability", () => {
+    expect(existsSync(path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../.."), "features/orders/orderCost.actions.ts"))).toBe(false);
+    expect(existsSync(path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../.."), "modules/orders/legacy-server/orderCost.actions.ts"))).toBe(false);
     expectNoPortCalls();
   });
 });
@@ -81,8 +77,6 @@ describe("Erfassung caller containment (F0-W2C-B2M1)", () => {
   const callerFiles = [
     "components/erfassung/ErfassungCard.tsx",
     "components/erfassung/ErfassungSheet.tsx",
-    "components/orders/variants/ErfassungVariant.tsx",
-    "components/orders/variants/WareneingangReadOnly.tsx",
   ];
 
   it("replaces every named browser caller with a non-interactive FoundationUnavailable state", async () => {
@@ -106,16 +100,12 @@ describe("Erfassung caller containment (F0-W2C-B2M1)", () => {
     expect(source).not.toMatch(/erfassung\.actions|orderCost\.actions|createClient|supabase/);
   });
 
-  it("removes fabricated Erfassung and Wareneingang values and paths", async () => {
-    const [erfassung, wareneingang] = await Promise.all([
-      readFile(path.join(srcRoot, "components/orders/variants/ErfassungVariant.tsx"), "utf8"),
-      readFile(path.join(srcRoot, "components/orders/variants/WareneingangReadOnly.tsx"), "utf8"),
-    ]);
-
-    expect(erfassung).not.toContain("00000000-0000-0000-0000-000000000000");
-    expect(erfassung).not.toMatch(/\|\|\s*70/);
-    expect(erfassung).not.toContain("getStationCostSummary");
-    expect(erfassung).not.toContain("getBenchmarkData");
-    expect(wareneingang).not.toMatch(/ErfassungVariant|editMode|nacherfassen|20\s*Min|23\s*(?:€|â‚¬)|L-WE-R1-F2/);
+  it("removes the obsolete order variant shells rather than relocating them", () => {
+    for (const file of [
+      "components/orders/variants/ErfassungVariant.tsx",
+      "components/orders/variants/WareneingangReadOnly.tsx",
+      "modules/orders/legacy-ui/variants/ErfassungVariant.tsx",
+      "modules/orders/legacy-ui/variants/WareneingangReadOnly.tsx",
+    ]) expect(existsSync(path.join(srcRoot, file))).toBe(false);
   });
 });

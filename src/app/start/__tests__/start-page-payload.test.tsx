@@ -177,7 +177,7 @@ describe("StartPage payload sanitization", () => {
     expect(screen.getByText("PIN eingeben", { exact: true })).toBeInTheDocument();
     expect(loginWithPin).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Administrator / E-Mail Login" }));
+    fireEvent.click(screen.getByRole("button", { name: "Administration per E-Mail" }));
     expect(screen.getByText("Mit E-Mail anmelden", { exact: true })).toBeInTheDocument();
     expect(screen.getByPlaceholderText("E-Mail Adresse")).toBeInTheDocument();
     expect(login).not.toHaveBeenCalled();
@@ -198,20 +198,23 @@ describe("StartPage payload sanitization", () => {
     expect(screen.queryByText("Fallback Admin", { exact: true })).not.toBeInTheDocument();
     expect(loginWithPin).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Administrator / E-Mail Login" }));
+    fireEvent.click(screen.getByRole("button", { name: "Administration per E-Mail" }));
     expect(screen.getByText("Mit E-Mail anmelden", { exact: true })).toBeInTheDocument();
     expect(screen.getByPlaceholderText("E-Mail Adresse")).toBeInTheDocument();
     expect(login).not.toHaveBeenCalled();
   });
 
-  it("routes successful email and PIN authentication directly to the operational entry point", () => {
+  it("routes successful authentication through the canonical role-aware entry points", () => {
     const root = process.cwd();
     const emailAuth = readFileSync(path.join(root, "src/app/actions/auth.ts"), "utf8");
     const pinAuth = readFileSync(path.join(root, "src/components/start/StartScreenClient.tsx"), "utf8");
     const rootPage = readFileSync(path.join(root, "src/app/page.tsx"), "utf8");
 
-    expect(emailAuth).toContain("redirect('/warendurchlauf')");
-    expect(pinAuth).toContain('window.location.href = "/warendurchlauf"');
-    expect(rootPage).toContain('redirect("/warendurchlauf")');
+    expect(emailAuth).toContain("redirect('/settings')");
+    expect(pinAuth).toContain('window.location.assign("/")');
+    expect(rootPage).toContain('redirect("/start")');
+    expect(rootPage).toContain('redirect("/settings")');
+    expect(rootPage).toContain('role === "werkstatt"');
+    expect(rootPage).toContain('role === "buero" || role === "meister" || role === "readonly"');
   });
 });

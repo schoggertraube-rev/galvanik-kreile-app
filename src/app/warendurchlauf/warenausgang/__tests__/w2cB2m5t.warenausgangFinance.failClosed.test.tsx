@@ -10,7 +10,10 @@ const { getOrdersDbMock, openOrderMock } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/app/actions/orders.actions", () => ({ getOrdersDb: getOrdersDbMock }));
-vi.mock("@/components/orders/OrderModalProvider", () => ({ useOrderModal: () => ({ openOrder: openOrderMock }) }));
+vi.mock("@/lib/overlayStore", () => ({
+  useOverlayStore: (selector: (state: { openOrder: typeof openOrderMock }) => unknown) =>
+    selector({ openOrder: openOrderMock }),
+}));
 vi.mock("next/link", () => ({ default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }));
 vi.mock("lucide-react", () => ({
   CheckCircle2: () => <svg />,

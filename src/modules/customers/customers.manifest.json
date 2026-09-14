@@ -1,0 +1,35 @@
+{
+  "moduleId": "customers",
+  "version": "1.0.0",
+  "owner": "Path-1 Customers (Kundenkarte V2)",
+  "publicExports": [
+    "@/modules/customers/public#CustomerCardModel",
+    "@/modules/customers/public#CustomerCardState",
+    "@/modules/customers/public#CustomerCardView",
+    "@/modules/customers/public#CreateCustomerInput",
+    "@/modules/customers/public#CustomerListItem",
+    "@/modules/customers/public#CustomerCommandAuthorization",
+    "@/modules/customers/public#CustomerCreateCommandResult",
+    "@/modules/customers/public#CustomerCreateReceipt",
+    "@/modules/customers/public#CustomersView",
+    "@/modules/customers/public#CustomersViewState",
+    "@/modules/customers/public#createCustomerCommand"
+  ],
+  "capabilities": ["customers:create"],
+  "migrations": ["20260914100000_path1_customer_persistence_contract.sql"],
+  "viewsFunctions": [
+    "private.allocate_customer_number",
+    "private.v_customer_create_receipts_v1",
+    "private.v_customer_summary_v1"
+  ],
+  "ownsTables": [
+    "private.customer_create_receipts",
+    "private.customer_number_counters",
+    "public.customers",
+    "public.events"
+  ],
+  "storagePurposes": [],
+  "events": { "emits": ["CUSTOMER_CREATED_V1"], "consumes": [] },
+  "config": {},
+  "dependencies": []
+}

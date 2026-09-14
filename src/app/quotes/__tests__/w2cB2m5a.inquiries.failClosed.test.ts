@@ -84,7 +84,11 @@ describe("W2C-B2M5A inquiry containment", () => {
       expect(dashboard).not.toContain(forbidden);
       expect(intake).not.toContain(forbidden);
     }
-    expect(dashboard).toContain('redirect("/warendurchlauf")');
+    expect(dashboard).toContain("resolveAuthorization");
+    expect(dashboard).toContain("<WerkstattHome");
+    expect(dashboard).toContain("<RolfHome");
+    expect(dashboard).toContain('redirect("/settings")');
+    expect(dashboard).toContain('redirect("/start")');
     expect(intake).toContain("Anfragen derzeit nicht verfügbar");
     expect(dashboard).not.toContain("getOrdersDb");
     expect(dashboard).not.toContain('"kreile-orders-updated"');

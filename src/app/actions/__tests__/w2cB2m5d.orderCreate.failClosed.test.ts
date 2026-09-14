@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +15,10 @@ vi.mock("@/lib/server/authHelper", () => ({ checkAppAuth: spies.checkAppAuth }))
 vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization: spies.resolveAuthorization }));
 vi.mock("@paralleldrive/cuid2", () => ({ createId: spies.createId }));
 vi.mock("next/cache", () => ({ unstable_noStore: vi.fn(), revalidatePath: spies.revalidatePath }));
+vi.mock("@/modules/orders/public", () => ({
+  ORDER_LIFECYCLE_STATUS: { ANGENOMMEN: "angenommen", GALVANIK: "galvanik", FERTIG: "fertig", ABGEHOLT: "abgeholt" },
+  ORDER_STATION_FORWARD_ROLES: ["buero", "werkstatt", "meister", "admin"],
+}));
 
 const message = "NOT_AVAILABLE: Auftragserstellung benötigt den W3-Command-Vertrag.";
 const denial = { ok: false, error: "CONFLICT", message };
@@ -52,9 +57,8 @@ describe("W2C-B2M5D order creation quarantine", () => {
 
   it("source-locks repository and UI fail-closed boundaries", async () => {
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-    const [repository, form, scan] = await Promise.all([
+    const [repository, scan] = await Promise.all([
       readFile(path.join(root, "lib/repositories/ordersRepository.ts"), "utf8"),
-      readFile(path.join(root, "components/orders/NewOrderForm.tsx"), "utf8"),
       readFile(path.join(root, "app/scan/page.tsx"), "utf8"),
     ]);
     expect(repository).toContain('import { getOrdersDb, updateOrderDb } from "@/app/actions/orders.actions";');
@@ -62,11 +66,8 @@ describe("W2C-B2M5D order creation quarantine", () => {
     expect(repository).toContain(`void data;\n    throw new Error("${message}");`);
     expect(repository).toContain("async getAll()");
     expect(repository).toContain("getOrdersDb()");
-    expect(form).not.toContain("ordersRepository"); expect(form).not.toContain("handleSave"); expect(form).not.toContain("Auftrag gespeichert");
-    expect(form).toContain(message); expect(form).toContain("onClose"); expect(form).toContain("Bezeichnung / Bauteil"); expect(form).toContain("Zusätzliche Hinweise");
-    const saveStart = form.indexOf("<Button disabled"); const saveEnd = form.indexOf(">", saveStart);
-    expect(saveStart).toBeGreaterThanOrEqual(0); expect(saveEnd).toBeGreaterThan(saveStart);
-    const saveTag = form.slice(saveStart, saveEnd + 1); expect(saveTag).toContain("disabled"); expect(saveTag).not.toContain("onClick"); expect(saveTag).not.toMatch(/disabled=\{false\}/);
+    expect(existsSync(path.join(root, "components/orders/NewOrderForm.tsx"))).toBe(false);
+    expect(existsSync(path.join(root, "modules/orders/legacy-ui/NewOrderForm.tsx"))).toBe(false);
     expect(scan).not.toContain("createOrderFromScan"); expect(scan).not.toContain("SuggestedItemsPanel"); expect(scan).not.toContain("handleConfirmOrder"); expect(scan).not.toContain("Kunde neu anlegen"); expect(scan).not.toContain("erfolgreich");
     expect(scan).toContain(message); expect(scan).toContain("PageHeader"); expect(scan).toContain("CameraCapture"); expect(scan).toContain("onScanComplete={() => {}}");
   });

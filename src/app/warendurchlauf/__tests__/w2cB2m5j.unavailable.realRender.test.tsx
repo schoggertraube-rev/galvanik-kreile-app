@@ -31,9 +31,15 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/components/erfassung/ErfassungProvider", () => ({
   useErfassung: () => ({ openErfassung: ports.openErfassung }),
 }));
-vi.mock("@/components/orders/OrderCompactCard", () => ({ OrderCompactCard: () => <div /> }));
-vi.mock("@/components/orders/WareneingangHandoffButton", () => ({ WareneingangHandoffButton: () => <div /> }));
-vi.mock("@/lib/orders/getUrgency", () => ({ getUrgency: () => "ok" }));
+vi.mock("@/modules/orders/public", () => ({
+  isOrderStationForwardRole: (role: string) => ["buero", "werkstatt", "meister", "admin"].includes(role),
+  OrderCompactCard: () => <div />,
+  WareneingangHandoffButton: () => <div />,
+  getUrgency: () => "ok",
+}));
+vi.mock("@/app/warendurchlauf/wareneingang/WareneingangHandoffAppAdapter", () => ({
+  WareneingangHandoffAppAdapter: () => null,
+}));
 vi.mock("@/lib/overlayStore", () => ({
   useOverlayStore: (selector?: (state: { openOrder: typeof ports.openOrder }) => unknown) =>
     selector ? selector({ openOrder: ports.openOrder }) : { openOrder: ports.openOrder },

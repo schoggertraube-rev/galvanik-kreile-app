@@ -4,7 +4,7 @@ import Link from "next/link";
 import { CheckCircle2, Package, Truck, MessageSquare, CreditCard } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getOrdersDb, type OrderResponse } from "@/app/actions/orders.actions";
-import { useOrderModal } from "@/components/orders/OrderModalProvider";
+import { useOverlayStore } from "@/lib/overlayStore";
 
 const ACCOUNTING_AND_COMMUNICATION_DENIAL =
   "NOT_AVAILABLE: Zahlungsstatus, Zahlungserfassung, Rechnungsversand und Kundenbenachrichtigungen benötigen einen tenant- und ownership-geprüften Accounting- und Kommunikationsvertrag.";
@@ -16,7 +16,7 @@ type OrdersState =
 
 export default function WarenausgangPage() {
   const [ordersState, setOrdersState] = useState<OrdersState>({ status: "loading" });
-  const { openOrder } = useOrderModal();
+  const openOrder = useOverlayStore((state) => state.openOrder);
 
   useEffect(() => {
     let active = true;

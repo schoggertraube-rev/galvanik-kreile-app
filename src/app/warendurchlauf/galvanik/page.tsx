@@ -3,12 +3,12 @@
 import React, { useCallback, useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowRight, Layers, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
-import { OrderCompactCard, UrgencyType } from "@/components/orders/OrderCompactCard";
-import { GalvanikHandoffAttachmentPanel } from "@/components/orders/GalvanikHandoffAttachmentPanel";
-import { GalvanikCorrectionButton } from "@/components/orders/GalvanikCorrectionButton";
-import { useOrderModal } from "@/components/orders/OrderModalProvider";
+import { OrderCompactCard, UrgencyType } from "@/modules/orders/public";
+import { GalvanikHandoffAttachmentAppAdapter } from "./GalvanikHandoffAttachmentAppAdapter";
+import { GalvanikCorrectionAppAdapter } from "./GalvanikCorrectionAppAdapter";
+import { useOverlayStore } from "@/lib/overlayStore";
 import { getGalvanikOrdersAction, type WarendurchlaufOrder } from "@/app/warendurchlauf/actions";
-import { ORDER_LIFECYCLE_STATUS } from "@/lib/orders/orderLifecycleContract";
+import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 
 // D-ARCH-001: galvanik is a single stable outside station covering all
 // production (no internal steps, no workflow engine). This route therefore
@@ -52,7 +52,7 @@ export default function GalvanikPage() {
   // Page-level so it survives the correction removing the order's card from the list.
   const [correctionSuccessMessage, setCorrectionSuccessMessage] = useState<string | null>(null);
   const [correctionConflictMessage, setCorrectionConflictMessage] = useState<string | null>(null);
-  const { openOrder } = useOrderModal();
+  const openOrder = useOverlayStore((state) => state.openOrder);
 
   // Consistently derives galvanikOrders/finishedOrders/topUrgent from one fresh
   // getGalvanikOrdersAction dataset. Reused by the initial load AND by the
@@ -140,12 +140,12 @@ export default function GalvanikPage() {
             />
             {isActive && bucket === "galvanik" && o.status === ORDER_LIFECYCLE_STATUS.GALVANIK && (
               <>
-                <GalvanikHandoffAttachmentPanel
+                <GalvanikHandoffAttachmentAppAdapter
                   orderId={o.id}
                   expectedVersion={o.version}
                   items={o.parts.map((item) => ({ id: item.id, name: item.name }))}
                 />
-                <GalvanikCorrectionButton
+                <GalvanikCorrectionAppAdapter
                   orderId={o.id}
                   expectedVersion={o.version}
                   onConfirmedReadback={(nextGalvanikOrders) => {

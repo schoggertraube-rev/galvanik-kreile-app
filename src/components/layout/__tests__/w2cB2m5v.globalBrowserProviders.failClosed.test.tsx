@@ -17,14 +17,14 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/app/actions/auth.actions", () => ({
   getAuthorizationSnapshotAction: boundary.getAuthorizationSnapshotAction,
 }));
-vi.mock("@/components/layout/KreileHeader", () => ({
-  KreileHeader: () => <div data-testid="header-marker" />,
+vi.mock("@/lib/auth/PermissionsContext", () => ({
+  usePermissions: () => ({ role: "buero" }),
 }));
-vi.mock("@/components/layout/RightNav", () => ({
-  RightNav: () => <div data-testid="right-nav-marker" />,
+vi.mock("@/components/layout/TargetHeader", () => ({
+  TargetHeader: () => <div data-testid="target-header-marker" />,
 }));
-vi.mock("@/components/layout/MobileNav", () => ({
-  MobileNav: () => <div data-testid="mobile-nav-marker" />,
+vi.mock("@/components/layout/TargetNavigation", () => ({
+  TargetNavigation: () => <div data-testid="target-navigation-marker" />,
 }));
 vi.mock("@/components/layout/MobileBottomNav", () => ({
   MobileBottomNav: () => <div data-testid="mobile-bottom-nav-marker" />,
@@ -34,11 +34,8 @@ vi.mock("@/components/layout/SessionWarningBanner", () => ({
     <div data-show={String(show)} data-testid="session-warning-marker" />
   ),
 }));
-vi.mock("@/components/orders/OrderOverlay", () => ({
-  OrderOverlay: () => <div data-testid="order-overlay-marker" />,
-}));
-vi.mock("@/components/customers/CustomerOverlay", () => ({
-  CustomerOverlay: () => <div data-testid="customer-overlay-marker" />,
+vi.mock("@/components/layout/EntityOverlayStack", () => ({
+  EntityOverlayStack: () => <div data-testid="entity-overlay-stack-marker" />,
 }));
 vi.mock("@/components/layout/RealtimeSyncManager", () => ({
   RealtimeSyncProvider: ({ children }: { children: React.ReactNode }) => {
@@ -95,11 +92,9 @@ describe("W2C-B2M5V global browser provider containment", () => {
     renderShell(pathname);
 
     expect(screen.getByTestId("children-marker")).toBeInTheDocument();
-    expect(screen.getByTestId("order-overlay-marker")).toBeInTheDocument();
-    expect(screen.getByTestId("customer-overlay-marker")).toBeInTheDocument();
-    expect(screen.queryByTestId("header-marker")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("right-nav-marker")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("mobile-nav-marker")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("entity-overlay-stack-marker")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("target-header-marker")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("target-navigation-marker")).not.toBeInTheDocument();
     expect(screen.queryByTestId("mobile-bottom-nav-marker")).not.toBeInTheDocument();
     expect(screen.queryByTestId("session-warning-marker")).not.toBeInTheDocument();
     expect(boundary.getAuthorizationSnapshotAction).not.toHaveBeenCalled();
@@ -110,19 +105,17 @@ describe("W2C-B2M5V global browser provider containment", () => {
     renderShell("/orders");
 
     expect(screen.getByTestId("children-marker")).toBeInTheDocument();
-    expect(screen.getByTestId("header-marker")).toBeInTheDocument();
-    expect(screen.getByTestId("right-nav-marker")).toBeInTheDocument();
-    expect(screen.getByTestId("mobile-nav-marker")).toBeInTheDocument();
+    expect(screen.getByTestId("target-header-marker")).toBeInTheDocument();
+    expect(screen.getByTestId("target-navigation-marker")).toBeInTheDocument();
     expect(screen.getByTestId("mobile-bottom-nav-marker")).toBeInTheDocument();
     expect(screen.getByTestId("session-warning-marker")).toHaveAttribute("data-show", "false");
-    expect(screen.getByTestId("order-overlay-marker")).toBeInTheDocument();
-    expect(screen.getByTestId("customer-overlay-marker")).toBeInTheDocument();
+    expect(screen.getByTestId("entity-overlay-stack-marker")).toBeInTheDocument();
     await waitFor(() => expect(boundary.getAuthorizationSnapshotAction).toHaveBeenCalledTimes(1));
     await act(async () => Promise.resolve());
     expectRemovedBrowserProvidersAbsent();
   });
 
-  it("removes unsafe global provider and system-status identifiers while preserving both overlays in both branches", () => {
+  it("removes unsafe global providers and composes the single app-side entity stack", () => {
     const source = readFileSync(
       resolve(process.cwd(), "src/components/layout/KreileAppShell.tsx"),
       "utf8",
@@ -141,8 +134,8 @@ describe("W2C-B2M5V global browser provider containment", () => {
       "Supabase nicht erreichbar oder deaktiviert",
     ]) expect(source).not.toContain(removed);
 
-    expect(source.match(/<OrderOverlay\s*\/>/g)).toHaveLength(2);
-    expect(source.match(/<CustomerOverlay\s*\/>/g)).toHaveLength(2);
+    expect(source).toContain("<EntityOverlayStack />");
+    expect(source).not.toMatch(/OrderOverlay|CustomerOverlay/);
   });
 
   it("keeps the touch-tablet navigation out of the desktop sidebar overlap", () => {
@@ -150,14 +143,9 @@ describe("W2C-B2M5V global browser provider containment", () => {
       resolve(process.cwd(), "src/components/layout/KreileAppShell.tsx"),
       "utf8",
     );
-    const headerSource = readFileSync(
-      resolve(process.cwd(), "src/components/layout/KreileHeader.tsx"),
-      "utf8",
-    );
-
-    expect(shellSource).toContain('className="hidden xl:flex shrink-0 w-[72px] relative z-30"');
-    expect(shellSource).not.toContain('className="hidden lg:flex shrink-0 w-[72px] relative z-30"');
-    expect(headerSource).toContain('className="flex xl:hidden p-3');
-    expect(headerSource).not.toContain('className="flex lg:hidden p-3');
+    expect(shellSource).toContain("<TargetNavigation />");
+    expect(shellSource).toContain("<MobileBottomNav />");
+    expect(shellSource).not.toContain("RightNav");
+    expect(shellSource).not.toContain("MobileNav");
   });
 });

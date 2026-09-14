@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -46,10 +47,10 @@ describe("W2C B2M3A caller quarantine", () => {
   it("removes event, local persistence, and unavailable writer chains while retaining explicitly allowed UI", async () => {
     const files = await Promise.all([
       "components/telefonnotiz/TelefonnotizDesktop.tsx", "app/kommunikation/KommunikationClient.tsx", "app/kommunikation/PhoneNoteDetailView.tsx",
-      "components/orders/OrderActionGrid.tsx", "components/intake/OcrMatchResult.tsx", "components/orders/LabelPrintView.tsx", "components/intake/IntakeCompletionSummary.tsx",
+      "components/intake/IntakeCompletionSummary.tsx",
       "app/cockpit/components/AgingKachel.tsx", "lib/repositories/eventsRepository.ts",
     ].map((file) => readFile(path.join(root, file), "utf8")));
-    const [phoneDesktop, kommunikation, detail, grid, ocr, label, intake, aging, events] = files;
+    const [phoneDesktop, kommunikation, detail, intake, aging, events] = files;
 
     for (const source of [phoneDesktop, kommunikation, detail, intake]) {
       expect(source).toContain("FoundationUnavailable");
@@ -57,14 +58,13 @@ describe("W2C B2M3A caller quarantine", () => {
     }
     expect(kommunikation).not.toContain("getRecentPhoneNotes");
     expect(detail).not.toContain("updatePhoneNote");
-    expect(grid).toContain("StationStatusButton");
-    expect(grid).toContain("onPrint");
-    expect(grid).toContain("tel:");
-    expect(grid).toContain("NOT_AVAILABLE");
-    expect(grid).not.toMatch(/FileReader|canvas|localStorage|addEvent|type="file"|new Event/);
-    expect(ocr).not.toMatch(/eventsRepository|addEvent|OCR_SCAN_COMPLETED|CUSTOMER_MATCHED/);
-    expect(label).toContain("window.print");
-    expect(label).not.toMatch(/labelService|generateLabel|LABEL_PREPARED/);
+    for (const file of [
+      "components/orders/OrderActionGrid.tsx",
+      "components/intake/OcrMatchResult.tsx",
+      "components/orders/LabelPrintView.tsx",
+      "modules/orders/legacy-ui/OrderActionGrid.tsx",
+      "modules/orders/legacy-ui/LabelPrintView.tsx",
+    ]) expect(existsSync(path.join(root, file))).toBe(false);
     expect(aging).toContain("BUCKET_ORDER");
     expect(aging).toContain("LABELS");
     expect(aging).toContain("getAgingBucket");
