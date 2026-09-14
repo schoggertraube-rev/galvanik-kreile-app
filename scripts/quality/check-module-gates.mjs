@@ -64,7 +64,7 @@ export const LEGACY_DOMAIN_PARENTS = [
 const NEXT_COMPOSITION_ENTRYPOINTS = new Set(["page.tsx", "layout.tsx", "loading.tsx", "error.tsx", "not-found.tsx"]);
 const APP_ADAPTER_NAME = /^[A-Z][A-Za-z0-9]*AppAdapter\.tsx$/;
 const ADAPTER_FORBIDDEN_IMPORT = /(?:^@\/lib\/supabase(?:\/|$)|(?:^|\/)(?:db|database|commands?|repositories?)(?:\/|$)|(?:^|\/)[^/]*(?:Command|Repository)$)/i;
-const ADAPTER_GENERIC_ROUTE_TUNNEL = /\b(?:href|url|route|pathname)\??\s*:\s*string\b/i;
+const ADAPTER_GENERIC_ROUTE_TUNNEL = /\b(?:href|url|route|pathname|[A-Za-z_$][\w$]*(?:href|url|route|pathname))\??\s*:\s*string\b/i;
 const ROUTE_LITERAL = /['"`](\/(?!\/)[^'"`\s]*)['"`]/g;
 
 const CODE_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".mdx"]);
@@ -430,10 +430,22 @@ function tableRefs(source) {
 }
 
 function gateData(root, findings, manifests) {
-  const declaredViews = new Set();
-  for (const manifest of manifests.values()) {
+  const declaredPublicViews = new Set();
+  const privateViewOwners = new Map();
+  for (const [fach, manifest] of manifests) {
     for (const v of asStringArray(manifest.viewsFunctions)) {
-      if (/^(?:public|private)\.v_/i.test(v)) declaredViews.add(v.toLowerCase());
+      const ref = v.toLowerCase();
+      if (/^public\.v_/.test(ref)) declaredPublicViews.add(ref);
+      if (/^private\.v_/.test(ref)) {
+        const owners = privateViewOwners.get(ref) ?? new Set();
+        owners.add(fach);
+        privateViewOwners.set(ref, owners);
+      }
+    }
+  }
+  for (const [ref, owners] of privateViewOwners) {
+    if (owners.size > 1) {
+      findings.push(`[naht4] private View '${ref}' ist in mehreren Modulen deklariert (${[...owners].sort().join(", ")}) — Eigentum ist nicht eindeutig`);
     }
   }
   for (const [fach, manifest] of manifests) {
@@ -443,11 +455,19 @@ function gateData(root, findings, manifests) {
       for (const m of tableRefs(source)) {
         const ref = m.ref;
         if (owned.has(ref)) continue;
-        if (/^(?:public|private)\.v_/.test(ref)) {
-          if (!declaredViews.has(ref)) findings.push(`[naht4] ${file}:${lineOf(source, m.index)}: View '${ref}' ist in keinem Manifest (viewsFunctions) deklariert`);
+        if (/^public\.v_/.test(ref)) {
+          if (!declaredPublicViews.has(ref)) findings.push(`[naht4] ${file}:${lineOf(source, m.index)}: View '${ref}' ist in keinem Manifest (viewsFunctions) deklariert`);
           continue;
         }
-        findings.push(`[naht4] ${file}:${lineOf(source, m.index)}: Tabelle '${ref}' gehoert nicht zu Modul '${fach}' (ownsTables) — Fremdfakten nur ueber public.v_* oder private.v_*`);
+        if (/^private\.v_/.test(ref)) {
+          const owners = privateViewOwners.get(ref);
+          if (!owners?.has(fach) || owners.size !== 1) {
+            const ownerText = owners?.size ? [...owners].sort().join(", ") : "kein Modul";
+            findings.push(`[naht4] ${file}:${lineOf(source, m.index)}: private View '${ref}' gehoert ${ownerText}; private Views sind keine Cross-Modul-Naht`);
+          }
+          continue;
+        }
+        findings.push(`[naht4] ${file}:${lineOf(source, m.index)}: Tabelle '${ref}' gehoert nicht zu Modul '${fach}' (ownsTables) — Fremdfakten nur ueber deklarierte public.v_*`);
       }
     }
   }

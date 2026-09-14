@@ -183,6 +183,18 @@ describe("S1 Naht 1 — Manifest je Modul + Ablage", () => {
     expect(f).toContainEqual(expect.stringContaining("src/app/orders/UnsafeAppAdapter.tsx:6: AppAdapter darf keinen breit typisierten href/url/route/pathname:string-Tunnel"));
   });
 
+  it("weist breit typisierte Route-Props auch mit fachlichem Praefix ab", () => {
+    const root = repo({
+      ...goodModule,
+      "src/app/orders/FallbackAppAdapter.tsx": `${IMP} { readOrder } from "@/modules/orders/public";\nexport function FallbackAppAdapter({ fallbackHref }: { fallbackHref?: string }) { void fallbackHref; return readOrder(); }\n`,
+      "src/app/orders/TargetAppAdapter.tsx": `${IMP} { readOrder } from "@/modules/orders/public";\nexport function TargetAppAdapter({ targetUrl }: { targetUrl: string }) { void targetUrl; return readOrder(); }\n`,
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/FallbackAppAdapter.tsx:2: AppAdapter darf keinen breit typisierten href/url/route/pathname:string-Tunnel"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/TargetAppAdapter.tsx:2: AppAdapter darf keinen breit typisierten href/url/route/pathname:string-Tunnel"));
+    expect(f).toHaveLength(2);
+  });
+
   it("Schema-Validator deckt object/required/additionalProperties/array/pattern/minLength ab", () => {
     const schema = JSON.parse(REAL_SCHEMA);
     expect(validateAgainstSchema({ moduleId: "a", version: "0.1.0", owner: "x" }, schema)).toEqual([]);
@@ -283,6 +295,46 @@ describe("S1 Naht 4 — Cross-Modul-Fakten nur ueber v_*-Views", () => {
       ].join("\n"),
     });
     expect(findingsOf(root)).toEqual([]);
+  });
+
+  it("erlaubt public Views moduluebergreifend, private Views aber nur ihrem deklarierenden Modul", () => {
+    const root = repo({
+      ...goodModule,
+      "src/modules/orders/orders.manifest.json": manifest("orders", {
+        publicExports: ["@/modules/orders/public#readOrder"],
+        ownsTables: ["public.orders"],
+        viewsFunctions: ["public.v_order_facts", "private.v_order_secret"],
+      }),
+      "src/modules/orders/server/privateRead.ts": "export const q = sql`select * from private.v_order_secret`;\n",
+      "src/modules/invoices/invoices.manifest.json": manifest("invoices", { ownsTables: ["public.invoices"] }),
+      "src/modules/invoices/public.ts": "export {};\n",
+      "src/modules/invoices/server/q.ts": "export const q = sql`select * from public.v_order_facts o join private.v_order_secret s on s.id = o.id`;\n",
+    });
+    const f = findingsOf(root);
+    expect(f).toEqual([
+      expect.stringContaining("[naht4] src/modules/invoices/server/q.ts:1: private View 'private.v_order_secret' gehoert orders; private Views sind keine Cross-Modul-Naht"),
+    ]);
+  });
+
+  it("weist eine doppelte private-View-Deklaration und ihren Cross-Modul-Zugriff fail-closed ab", () => {
+    const root = repo({
+      ...goodModule,
+      "src/modules/orders/orders.manifest.json": manifest("orders", {
+        publicExports: ["@/modules/orders/public#readOrder"],
+        ownsTables: ["public.orders"],
+        viewsFunctions: ["public.v_order_facts", "private.v_order_secret"],
+      }),
+      "src/modules/invoices/invoices.manifest.json": manifest("invoices", {
+        ownsTables: ["public.invoices"],
+        viewsFunctions: ["private.v_order_secret"],
+      }),
+      "src/modules/invoices/public.ts": "export {};\n",
+      "src/modules/invoices/server/q.ts": "export const q = sql`select * from private.v_order_secret`;\n",
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("[naht4] private View 'private.v_order_secret' ist in mehreren Modulen deklariert (invoices, orders)"));
+    expect(f).toContainEqual(expect.stringContaining("[naht4] src/modules/invoices/server/q.ts:1: private View 'private.v_order_secret' gehoert invoices, orders; private Views sind keine Cross-Modul-Naht"));
+    expect(f).toHaveLength(2);
   });
 
   it("viewsFunctions kann fremde Basistabellen oder Funktionen nicht als Lesenaht autorisieren", () => {
