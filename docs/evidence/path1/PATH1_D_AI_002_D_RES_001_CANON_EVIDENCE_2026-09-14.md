@@ -64,11 +64,12 @@ Der Status bleibt `ISOLATED_DEV_CAPABILITY_PARTIAL`.
 
 ## Isolierter Entwicklungsbeleg — kein Produkt-E2E
 
-- Azure Document Intelligence F0: realer isolierter
-  3-Bildseiten-/Layout-Beleg. Layout, Text, Tabellen, Key-Value-Paare,
-  Drehung und Handschrift wurden technisch erkannt; die generische Semantik
-  verwechselte beim Versandbeleg Absender und möglichen Kunden. Deshalb darf
-  generische Semantik nie direkt Fachfelder schreiben.
+- Azure Document Intelligence F0: realer isolierter Layout-Beleg aus genau
+  zwei realen Fotos, einem UPS-Dokument und einem gedrehten ADAC-Kuvert.
+  Layout, Text, Tabellen, Key-Value-Paare, Drehung und Handschrift wurden
+  technisch erkannt; die generische Semantik verwechselte beim Versandbeleg
+  Absender und möglichen Kunden. Deshalb darf generische Semantik nie direkt
+  Fachfelder schreiben.
 - Foundry/Azure OpenAI `gpt-5-mini`, Version `2025-08-07`, Deployment
   `GlobalStandard` Kapazität 1, Responses API und strikte Structured Outputs:
   Der erste Fact-Lauf verlor eine explizit vorhandene Tatsache und ist FAIL.
