@@ -29,7 +29,7 @@ Quelle: Owner-Modulmindmap „Baustruktur Mini-USP" (Stand 15.08.2026), ratifizi
 
 Die Reihenfolge A bis E sind interne Etappen dieses einen Programms, keine konkurrierenden aktiven UI-Pakete. Ein Einzel-, Teil- oder Kosmetikpatch zählt weder als UX-Lieferfortschritt noch Zielscreen-PASS oder livefähige Oberfläche. Die Reihenfolge und das aktive Paket stehen ausschließlich in der Mission; Lieferstatus steht ausschließlich in `CURRENT_STATE.md`. HTML-Referenzen liefern Gestaltung und Interaktion, niemals Demo-Daten oder fachliche Wahrheit. Nebenmodule, Platzhalterseiten und Schattenmodule sind ausgeschlossen.
 
-### Scope-Kante für externe Capabilities — D-ARCH-012 / D-AI-001
+### Scope-Kante für externe Capabilities — D-ARCH-012 / D-AI-001 / D-AI-002 / D-RES-001
 
 Module konsumieren externe Fähigkeiten ausschließlich über wiederverwendbare,
 versionierte und tenantneutrale Capability-Ports, Adapter und Schemas. Supabase
@@ -48,6 +48,24 @@ Sie dürfen nur über berechtigte öffentliche Read-Ports arbeiten, liefern
 editierbare Vorschläge mit Fundstelle, Konfidenz und Korrelation und mutieren
 erst nach menschlicher Bestätigung über einen bestehenden sicheren Command.
 Der manuelle Kernweg bleibt ohne Provider vollständig nutzbar.
+
+Dokument/Foto/PDF, Freitext/Telefonnotiz, M365-Mail/Anhang und spätere Sprache
+bleiben getrennte Capture-/Provider-Capabilities. Sie dürfen ausschließlich
+über versionierte, tenantneutrale Ports einen gemeinsamen `SourceEnvelope`
+mit Fundstellen an die Fakten-/Konflikt-/Aktionsorchestrierung liefern. Die
+besitzenden Fachmodule behalten Quelle und Wahrheit. `FactLedger`,
+`EntityCandidates`, `ConflictSet` und `actionKey`-Vorschläge sind
+Querschnittsverträge, kein neues Fachmodul, kein Schattenobjekt und keine
+Freigabe für Tabelle, Route, Provider oder Runtime-Abhängigkeit. Nur
+menschlich bestätigte Fakten dürfen über einen bereits vorhandenen sicheren
+Command mit Receipt und Readback kanonisch werden.
+
+Die appweite Rettungsleine wird vertikal im jeweils besitzenden Modul
+umgesetzt: Quelle bleibt erhalten, Fehler und `AUSGANG_UNGEKLÄRT` bleiben mit
+Correlation-ID und nächstem rollenrichtigen Schritt sichtbar und
+wiederaufnehmbar. Globale Home-/Aufgabensichten lesen solche Fälle später nur
+über öffentliche Ports. D-RES-001 begründet weder ein Error-Schattenmodul noch
+einen Big-Bang und ändert keine bestehende Rollen-, Auth- oder Schreibwahrheit.
 
 **Routendisposition:** `ENTFÄLLT` heißt nach Link-/Importprüfung Route entfernen. `QUARANTÄNE` heißt keine produktiv rendernde Page, kein Navigationsziel und Direkt-URL fail-closed/404. Es gibt keine `NOT_AVAILABLE`- oder „kommt bald“-Fläche.
 

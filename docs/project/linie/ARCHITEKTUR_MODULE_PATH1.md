@@ -76,7 +76,7 @@ passiv bezeichnet, niemals ausführbarer Scheinweg.
 - Startmodell ist delegierter Zugriff eines benannten Büronutzers. App-only benötigt eine neue Owner-Entscheidung.
 - Fehlendes Konto, Consent, Secret oder Provider-E2E endet fail-closed als `BLOCKED_EXTERNAL_PERMISSION`; niemals Demo-, Mock-, Fake- oder In-Memory-Erfolg.
 
-## 4c. Konsolidierte Capability-Naht — D-ARCH-012 / D-AI-001
+## 4c. Konsolidierte Capability- und Rettungsnaht — D-ARCH-012 / D-AI-001 / D-AI-002 / D-RES-001
 
 Providerfähigkeiten werden als versionierte, tenantneutrale Ports mit
 providerunabhängigen DTOs modelliert. Für Dokumentverarbeitung ist die
@@ -113,6 +113,41 @@ strategische Plattformrolle für M365 Graph, Foundry, Speech und optional
 Dokumentvorverarbeitung; eine Aktivierung folgt daraus nicht. Gemini und
 Klippa bleiben supersedierte Legacy-Quarantäne. Direkte OpenAI API ist nur
 eine separat owner-entschiedene Alternative bei belegtem Gap.
+
+Capture bleibt kanalgebunden: `DocumentIntelligencePort` verarbeitet
+Referenzen auf Dokument/Foto/PDF, ein Text-/Telefon-Port unveränderliche
+Text-Snapshots, ein Graph-Mail-Port stabile Nachrichten-/Anhangreferenzen und
+ein späterer Speech-Port nur eingewilligte Audioquellen. Alle Adapter liefern
+denselben providerneutralen `SourceEnvelope` mit Fundstellen. Danach gilt die
+eine Orchestrierungsfolge `FactLedger 1:1 -> EntityCandidates/ConflictSet ->
+actionKey-Vorschläge -> serverseitige Rechte/Preconditions -> menschliche
+Bestätigung -> bestehender Command -> Receipt/Readback`. Die Ports bleiben
+versioniert, tenantneutral und ohne Kreile-Literal; UI und Fremdmodule
+importieren weder Provider-SDKs noch interne Adapter.
+
+Die Anwendung validiert jede `factId` auf genau eine Disposition
+`ASSIGNED|REFERENCE_ONLY|CONFLICT|UNASSIGNED` und verwirft unvollständige oder
+doppelte Modellantworten insgesamt. Modelle dürfen ausschließlich
+`actionKey`, Relevanz/Begründung und `sourceFactIds` vorschlagen. Labels,
+Rechte, Preconditions, Risiko und `AVAILABLE|BLOCKED` werden serverseitig aus
+einem versionierten Capability-/Command-Katalog neu berechnet. Nur
+`AVAILABLE` ist ausführbar; `BLOCKED` liefert einen konkreten Klärungsweg.
+
+D-RES-001 ergänzt jeden vertikalen Port-/Command-Weg um denselben
+Fehlervertrag, ohne ein neues Framework oder Datenmodell vorwegzunehmen:
+Quelle/Snapshot erhalten, verständliche Wirkung und sichere Datenlage,
+Correlation-ID, nächster rollenrichtiger Schritt und kein Erfolg vor Receipt
+plus Fach-Readback. Bei unklarem Ausgang gilt `AUSGANG_UNGEKLÄRT` und zuerst
+Ist-Readback statt blindem Retry. Offene, zuvor serverseitig gesicherte Fälle
+bleiben im besitzenden Modul wiederaufnehmbar; eine spätere Home-Sicht liest
+sie ausschließlich über dessen öffentlichen Port. Provider-/Modellwechsel
+sind niemals still.
+
+Diese Naht aktiviert keinen Provider, kein Secret, keine Runtime-Abhängigkeit,
+keine Tabelle, Route, Rolle oder neuen Schreibweg. Der heutige KI-Beleg bleibt
+`ISOLATED_DEV_CAPABILITY_PARTIAL`; Produktakzeptanz entsteht erst pro realem
+vertikalem Nutzerweg durch Failure Injection, menschliche Bestätigung,
+Receipt/Readback und Reload.
 
 ## 5. Abnahmetest = „sauber"
 Ein frischer Chat mit NUR diesem Repo kann widerspruchsfrei sagen: welches Modul, welche Naht, welcher nächste Schritt — ohne Owner-Rückfrage. CI lässt NICHT grün: einen Tiefimport, ein Tenant-Literal, ein Stationshome, ein manifestloses Modul, eine Domäne mit Ablage außerhalb ihres Modulordners.

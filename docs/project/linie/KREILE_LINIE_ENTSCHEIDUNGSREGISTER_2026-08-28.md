@@ -358,3 +358,87 @@ Providerergebnisse als kanonische Wahrheit auszugeben.
 **Wesentlicher Nachteil:** Mehrstufige Telemetrie, Kostenkontrolle und
 menschliche Bestätigung erhöhen Implementierungsaufwand und Latenz, sind aber
 die Voraussetzung für einen sicheren, nachvollziehbaren Produktweg.
+
+## D-AI-002 — Quellengebundene Fakten- und Aktionsorchestrierung (Owner 2026-09-14)
+
+**Entscheidung/Wortlaut:** Dokumente/Fotos/PDF, Freitext/Telefonnotiz,
+Microsoft-365-Mail samt Anhang und später Sprache besitzen getrennte Capture-
+und Provider-Ports. Sie münden ausschließlich in eine gemeinsame,
+providerneutrale Orchestrierung:
+`SourceEnvelope mit Fundstellen -> FactLedger 1:1 -> EntityCandidates und ConflictSet -> actionKey-Vorschläge -> serverseitige Rechte und Preconditions -> menschliche Bestätigung -> genau ein bestehender sicherer Command -> Receipt und fachlicher Readback`.
+Kein Kanal wird zum generischen Allzweckprovider und kein Modell besitzt
+Autorisierungs-, Fach- oder Schreibwahrheit.
+
+Die Quelle wird vor jeder Verarbeitung privat, tenantgebunden und versioniert
+gesichert. Binärquellen besitzen Objekt-ID, Version und Prüfsumme;
+Freitext/Telefonnotiz einen unveränderlichen Snapshot; Audio wird nur mit
+Einwilligung verarbeitet; Mail verwendet eine stabile Graph-Referenz plus
+gesicherte Verarbeitungsversion. Ein Ergebnis ohne Original- oder
+Quellreferenz ist ungültig. Jede erkannte Tatsache besitzt eine stabile
+`factId` und genau eine Disposition `ASSIGNED`, `REFERENCE_ONLY`, `CONFLICT`
+oder `UNASSIGNED`. Die App prüft 100 Prozent Coverage und Dubletten selbst;
+fehlende oder doppelte Fakten machen den Gesamtlauf ungültig.
+
+Das Modell liefert ausschließlich `actionKey`, Relevanz/Begründung und
+`sourceFactIds`. Feste deutsche Labels, Rechte, Preconditions, Risiko und
+`AVAILABLE`/`BLOCKED` berechnet die App serverseitig aus einem versionierten
+Capability-/Command-Katalog neu; Modellangaben dazu sind niemals autoritativ.
+Nur `AVAILABLE` wird zur ausführbaren Aktion. `BLOCKED` nennt den
+verständlichen nächsten Klärungsschritt. Ausschließlich bestätigte kanonische
+Fakten fließen in Customer, Quote, Order, Accounting und Calendar sowie später
+Suche und Analyse. Rohtext und Modellschluss bleiben Provenienz und werden nie
+zweite Wahrheit.
+
+Diese Entscheidung aktiviert keinen Provider, kein Secret, kein Runtime-Paket
+und keinen Produktpfad. Der belegte Status ist ausschließlich
+`ISOLATED_DEV_CAPABILITY_PARTIAL`.
+
+**Zweck:** Alle unstrukturierten Eingangskanäle teilen eine verlustfreie,
+prüfbare Fakten- und Aktionslogik, ohne ihre Capture-Verträge oder fachlichen
+Wahrheiten zu vermischen.
+
+**Wesentlicher Nachteil:** Vollständige Quellenreferenzen, 1:1-Fact-Coverage
+und serverseitige Katalogprüfung erhöhen Schema-, Test- und
+Bestätigungsaufwand; sie verhindern dafür stille Faktverluste und autonome
+Fehlmutationen.
+
+## D-RES-001 — Appweite Fehlertransparenz und Rettungsleine (Owner 2026-09-14)
+
+**Entscheidung/Wortlaut:** Fehlerwirkung wird minimiert, aber kein Fehler wird
+verschluckt, als Erfolg ausgegeben oder durch einen stillen Fallback verdeckt.
+Quelle beziehungsweise unveränderlicher Snapshot bleiben erhalten. Die
+Mitarbeiteransicht nennt verständlich Fehlerwirkung, sichere Datenlage,
+nächsten erlaubten Weg und eine kopierbare Correlation-ID, ohne Secrets oder
+unnötige personenbezogene Inhalte. Technische Details bleiben im
+autorisierten Audit.
+
+Eine Fachaktion ist ausschließlich nach Command-Receipt und fachlichem
+Readback erfolgreich. Ist der Ausgang nach Verbindungsabbruch unklar, lautet
+der Endstatus `AUSGANG_UNGEKLÄRT`; zuerst wird der Ist-Stand gelesen und nicht
+blind wiederholt. Offene Fälle bleiben im besitzenden Fachkontext und
+rollenrichtig in der neuen Home-/Aufgabenlogik sichtbar und wiederaufnehmbar.
+Es entsteht weder ein Schattenmodul noch eine zweite Wahrheit. Es gibt null
+stillen Provider-/Modellwechsel und keinen Error-Framework-Big-Bang.
+
+Diese Entscheidung gibt keine neue Tabelle, Route, kein Modul, keine
+Runtime-Abhängigkeit, Auth-/Rollenänderung und keinen neuen Schreibweg frei.
+Sie wird vertikal zuerst in Customer/KV/Order und neuer Shell, danach in
+Suche, Wareneingang/Capture und zuletzt in realen M365-/OCR-/KI-Pfaden
+umgesetzt.
+
+Jede berührte vertikale Einheit muss durch Failure Injection beweisen: null
+Quellenverlust; null Fehler ohne Correlation-ID und nachvollziehbaren
+Endstatus; null UI-Erfolg ohne Receipt und Readback; null Doppelmutation; null
+unmarkierte Teilwahrheit oder stillen Fallback; nach Login/Reload
+wiederaufnehmbare zuvor serverseitig gesicherte Fälle sowie eine klare nächste
+Rolle und Handlung. Ein unklarer externer oder fachlicher Ausgang bleibt
+sichtbar, bis Readback oder bewusste Auflösung mit Grund, Person und Zeitpunkt
+vorliegt.
+
+**Zweck:** Fehler erzeugen möglichst wenig Zusatzarbeit, ohne Datenverlust,
+Scheinerfolg oder Sackgassen zu erlauben.
+
+**Wesentlicher Nachteil:** Quellenhalt, Korrelation, Readback und
+Wiederaufnahme müssen pro vertikalem Nutzerweg mitgebaut und getestet werden;
+dadurch steigt der Abnahmeaufwand gegenüber einer rein technischen
+Fehlermeldung.
