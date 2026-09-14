@@ -55,6 +55,7 @@ import { ErfassungProvider } from "@/components/erfassung/ErfassungProvider";
 
 import { isAdminOrDeveloper } from "@/lib/auth/permissions";
 import { getAuthBootstrapState } from "@/lib/server/authBootstrap";
+import { GlobalCreateAppAdapter } from "./GlobalCreateAppAdapter";
 
 export default async function RootLayout({
   children,
@@ -79,7 +80,7 @@ export default async function RootLayout({
                   <AppShortcutProvider>
                     <FeatureFlagProvider>
                       <ErfassungProvider>
-                        <KreileAppShell>
+                        <KreileAppShell globalCreate={<GlobalCreateAppAdapter />}>
                           {children}
                         </KreileAppShell>
                       </ErfassungProvider>

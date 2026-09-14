@@ -1,7 +1,7 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: 8dbc391d484c866e8442c4168858ec2edee1b2ee
+base_sha: 57059721924084d1d27c13c7855644cfccf98a3d
 branch: path1/ui-convergence-20260914
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
@@ -37,8 +37,8 @@ delivery_order:
   - F1.6_REALER_PILOT
 
 active_package: PATH1_UI_CONVERGENCE
-active_package_status: D_AI_002_D_RES_001_CANONIZATION_REMOTE_CHECKPOINT_CANDIDATE_INDEPENDENT_TERRA_REVIEW_PENDING_NO_PRODUCT_ACTIVATION
-next_gate_after_active_package: INDEPENDENT_TERRA_EXACT_SHA_REVIEW_THEN_VISIBLE_V5_BUILD_HANDOFF
+active_package_status: V5_GLOBAL_PLUS_CUSTOMER_QUOTE_ORDER_EXACT_SHA_CI_PREVIEW_AND_INDEPENDENT_REVIEW_PENDING_NO_UI_PASS
+next_gate_after_active_package: DRAFT_PR_EXACT_SHA_CI_PREVIEW_THEN_INDEPENDENT_REVIEW
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
@@ -123,6 +123,8 @@ path1_document_intelligence_policy: CHEAP_FIRST; ORIGINAL_PRIVATE_FIRST; UNTRUST
 path1_search_intelligence_policy: RLS_BEFORE_RETRIEVAL; STRUCTURED_FIRST; AUTHORIZED_PUBLIC_READ_PORTS_ONLY; DB_VIEWS_TRUTH; INDEX_RENEWABLE_PROJECTION; NO_MODEL_MUTATION
 path1_provider_activation_status: NONE_ACTIVATED_BY_THIS_WORK_UNIT
 path1_ui_convergence_next_product_build: GLOBAL_PLUS_MANUAL_CUSTOMER_QUOTE_ORDER
+path1_ui_convergence_v5_visible_build: GLOBAL_PLUS -> CUSTOMER_RECEIPT_READBACK -> QUOTE_RECEIPT_RELOAD_READBACK -> EXACTLY_ONE_EXISTING_F1_1_ORDER_RECEIPT_READBACK
+path1_ui_convergence_v5_visible_build_status: LOCAL_ACCEPTANCE_PENDING_NO_PARTIAL_UI_PASS
 
 # ── F1.2 Entscheidungsgrundlage (bindend, ersetzt Altstand) ───────
 # D-F12-001A (ersetzt D-F12-001): F1.2 = genau EIN Uebergang
@@ -478,6 +480,12 @@ path1_ui_convergence_allowlist:
   - src/app/actions/quotes.actions.ts
   - src/test/path1_quote_to_order.integration.test.ts
   - docs/evidence/path1/PATH1_UI_CONVERGENCE_V5_WORK_UNIT_2.md
+  # V5 sichtbarer Vertikalschnitt: globales Plus -> Kunde -> KV -> F1.1-Auftrag
+  - src/app/GlobalCreateAppAdapter.tsx
+  - src/components/layout/GlobalCreateFlow.tsx
+  - src/components/layout/__tests__/path1GlobalCreateFlow.realRender.test.tsx
+  - e2e/path1-ui-convergence-v5-global-create.spec.ts
+  - docs/evidence/path1/PATH1_UI_CONVERGENCE_V5_GLOBAL_CREATE.md
   # Work Unit 2 entfernt nach Link-/Importinventar die drei alten KV-Attrappenpfade
   # sowie ausschließlich die belegten toten Links; die Page-Pfade stehen unten.
   - src/app/quotes/__tests__/w2cB2m5a.inquiries.failClosed.test.ts

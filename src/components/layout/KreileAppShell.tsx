@@ -11,7 +11,7 @@ import { MobileBottomNav } from "./MobileBottomNav";
 import { EntityOverlayStack } from "./EntityOverlayStack";
 import styles from "./TargetShell.module.css";
 
-export function KreileAppShell({ children }: { children: React.ReactNode }) {
+export function KreileAppShell({ children, globalCreate }: { children: React.ReactNode; globalCreate?: React.ReactNode }) {
   const pathname = usePathname();
   const { role } = usePermissions();
   const [sessionInvalid, setSessionInvalid] = useState(false);
@@ -39,6 +39,7 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
       </div>
       {!workshop ? <MobileBottomNav /> : null}
       <EntityOverlayStack />
+      {globalCreate}
     </div>
   );
 }
