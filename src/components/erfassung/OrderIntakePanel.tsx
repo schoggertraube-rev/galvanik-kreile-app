@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Loader2, PackagePlus, Plus, Search, ShieldCheck, Trash2, Upload } from "lucide-react";
 import {
   createOrderIntakeAction,
@@ -17,7 +18,7 @@ import type {
   OrderIntakeReceipt,
 } from "@/lib/server/commands/orderIntakeCommand";
 import type { OrderIntakeCustomerOption } from "@/lib/server/orderIntakeRead";
-import { ORDER_LIFECYCLE_STATUS } from "@/lib/orders/orderLifecycleContract";
+import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 
 const MAX_FILE_BYTES = 12 * 1024 * 1024;
 const MIME_EXTENSION = {
@@ -134,6 +135,7 @@ export function OrderIntakePanel({
   onClose: () => void;
   setCloseBlocked: (blocked: boolean) => void;
 }) {
+  const router = useRouter();
   const [panelState, setPanelStateValue] = useState<PanelState>("loading");
   const panelStateRef = useRef<PanelState>("loading");
   const setPanelState = useCallback((nextState: PanelState) => {
@@ -310,6 +312,7 @@ export function OrderIntakePanel({
       setPanelState("success");
       setMessage(`Wareneingang ${confirmedReceipt.orderNumber} ist bestätigt.`);
       window.dispatchEvent(new CustomEvent("order-intake:created", { detail: { orderId: confirmedReceipt.orderId } }));
+      router.refresh();
     } catch {
       setPanelState("error");
       setMessage("Wareneingang ist derzeit nicht sicher verfügbar.");

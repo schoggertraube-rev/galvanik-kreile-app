@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useErfassung } from "@/components/erfassung/ErfassungProvider";
+import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { usePageView } from "@/hooks/usePageView";
 import { useOverlayStore } from "@/lib/overlayStore";
 import {
@@ -17,7 +17,6 @@ export function WerkstattAppAdapter({
 }) {
   usePageView();
   const router = useRouter();
-  const { openErfassung } = useErfassung();
   const openOrder = useOverlayStore((state) => state.openOrder);
 
   return (
@@ -27,13 +26,8 @@ export function WerkstattAppAdapter({
         onOpenOrder: openOrder,
         onOpenGoodsOut: openOrder,
         onOpenWip: () => router.push("/warendurchlauf/galvanik"),
-        onScanOrder: () => openErfassung({ mode: "scan" }),
-        onCreateOrder: () => openErfassung({
-          mode: "order",
-          intent: "create_order",
-          source: "shortcut",
-          returnTo: "/warendurchlauf",
-        }),
+        onScanOrder: () => requestGlobalCreate("DIRECT_INTAKE"),
+        onCreateOrder: () => requestGlobalCreate("DIRECT_INTAKE"),
       }}
     />
   );

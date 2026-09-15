@@ -1,7 +1,7 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
-import { ORDER_LIFECYCLE_STATUS, ORDER_STATION_FORWARD_ROLES } from "@/lib/orders/orderLifecycleContract";
+import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
@@ -10,6 +10,7 @@ const EVENT_SCHEMA_VERSION = 1 as const;
 const SOURCE_STATION = ORDER_LIFECYCLE_STATUS.GALVANIK;
 const TARGET_STATION = ORDER_LIFECYCLE_STATUS.FERTIG;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const ORDER_STATION_FORWARD_ROLES = ["buero", "werkstatt", "meister", "admin"] as const;
 
 export type FreezeOrderInput = {
   orderId: string;

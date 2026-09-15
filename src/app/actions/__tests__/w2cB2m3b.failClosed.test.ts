@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -92,22 +93,16 @@ describe("W2C B2M3B fail-closed commands", () => {
 describe("W2C B2M3B caller quarantine", () => {
   it("keeps read paths and removes unavailable writer calls and local KVP persistence", async () => {
     const files = await Promise.all([
-      "components/orders/ItemDrawer.tsx",
-      "components/orders/PriceLinesEditor.tsx",
       "components/admin/AdminDashboard.tsx",
       "app/kvp/KvpClient.tsx",
       "app/cockpit/components/FruehwarnungenKachel.tsx",
     ].map((file) => readFile(path.join(root, file), "utf8")));
-    const [itemDrawer, priceEditor, admin, kvp, warnings] = files;
+    const [admin, kvp, warnings] = files;
 
-    expect(itemDrawer).toContain("PriceLinesEditor");
-    expect(priceEditor).toContain("getPriceLinesDb");
+    expect(existsSync(path.join(root, "components/orders/ItemDrawer.tsx"))).toBe(false);
+    expect(existsSync(path.join(root, "components/orders/PriceLinesEditor.tsx"))).toBe(false);
     expect(warnings).toContain("getAktiveWarnungen");
     expect(warnings).toMatch(/<button\s+disabled[\s\S]*?>\s*Aktualisieren \(NOT_AVAILABLE\)\s*<\/button>/);
-    expect(itemDrawer).toMatch(/<button\s+disabled[\s\S]*?>[\s\S]*?<span className="text-xs">Löschen \(NOT_AVAILABLE\)<\/span>[\s\S]*?<\/button>/);
-    expect(priceEditor).toMatch(/<button disabled[^>]*><Edit2[\s\S]*?<\/button>\s*<button disabled[^>]*><Trash2[\s\S]*?<\/button>\s*<span className="text-\[10px\] -\(\)">NOT_AVAILABLE<\/span>/);
-    expect(itemDrawer).not.toMatch(/createItemDb|updateItemDb|deleteItemDb|onSaved\(\)/);
-    expect(priceEditor).not.toMatch(/createPriceLineDb|updatePriceLineDb|deletePriceLineDb/);
     expect(admin).not.toContain("runSupabaseWriteTest");
     expect(kvp).not.toMatch(/localStorage\.setItem|enqueueAction|Date\.now|OfflineManager/);
     expect(warnings).not.toMatch(/refreshWarnungen|dismissWarnung/);

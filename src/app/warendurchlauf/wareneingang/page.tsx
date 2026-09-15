@@ -1,33 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import {
-  Camera, PenLine, Phone, MessageSquare, Clock,
-  ChevronRight
-} from "lucide-react";
+import { PenLine, Clock, ChevronRight } from "lucide-react";
 import { useState, Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { useErfassung } from "@/components/erfassung/ErfassungProvider";
-import { OrderCompactCard } from "@/components/orders/OrderCompactCard";
-import { getUrgency } from "@/lib/orders/getUrgency";
+import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
+import { OrderQueueRow } from "@/modules/orders/public";
 import { useOverlayStore } from "@/lib/overlayStore";
 import {
   getWareneingangOrdersAction,
   type WarendurchlaufOrder,
 } from "@/app/warendurchlauf/actions";
-import { WareneingangHandoffButton } from "@/components/orders/WareneingangHandoffButton";
-
-function getLegacyStatusText(order: WarendurchlaufOrder) {
-  if (
-    typeof order === "object" &&
-    "statusText" in order &&
-    typeof order.statusText === "string"
-  ) {
-    return order.statusText;
-  }
-
-  return undefined;
-}
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    Wareneingang — nur echte Stationsdaten
@@ -39,29 +22,33 @@ function getLegacyStatusText(order: WarendurchlaufOrder) {
 function WarendurchlaufLeitstandContent() {
   const searchParams = useSearchParams();
   void searchParams;
-  const { openErfassung } = useErfassung();
   const { openOrder } = useOverlayStore();
   const [stationOrders, setStationOrders] = useState<WarendurchlaufOrder[]>([]);
-  const [stationUnavailableMessage, setStationUnavailableMessage] = useState<string | null>(null);
+  const [stationUnavailableMessage, setStationUnavailableMessage] = useState<
+    string | null
+  >(null);
   const [stationAccessDenied, setStationAccessDenied] = useState(false);
   const [stationListLoaded, setStationListLoaded] = useState(false);
   const [stationListPending, setStationListPending] = useState(true);
-  const [handoffSuccessMessage, setHandoffSuccessMessage] = useState<string | null>(null);
-  const [handoffConflictMessage, setHandoffConflictMessage] = useState<string | null>(null);
+
+  const safeStationError =
+    "Die Aufträge im Wareneingang sind gerade nicht abrufbar. Es wurde nichts verändert. Bitte prüfen Sie die Verbindung und versuchen Sie es erneut.";
 
   useEffect(() => {
     const load = async () => {
       setStationListPending(true);
-      setHandoffSuccessMessage(null);
-      setHandoffConflictMessage(null);
       try {
         const resList = await getWareneingangOrdersAction();
         if (!resList.ok) {
           // Fail closed: kein Kartenbestand und kein leerer Erfolgszustand ohne gelesene Wahrheit.
           setStationOrders([]);
           setStationListLoaded(false);
-          setStationAccessDenied(resList.error === "AUTH_ERROR" || resList.error === "FORBIDDEN");
-          setStationUnavailableMessage(resList.message);
+          const denied =
+            resList.error === "AUTH_ERROR" || resList.error === "FORBIDDEN";
+          setStationAccessDenied(denied);
+          setStationUnavailableMessage(
+            denied ? resList.message : safeStationError,
+          );
         } else {
           setStationOrders(resList.data);
           setStationListLoaded(true);
@@ -72,25 +59,27 @@ function WarendurchlaufLeitstandContent() {
         setStationOrders([]);
         setStationListLoaded(false);
         setStationAccessDenied(false);
-        setStationUnavailableMessage("NOT_AVAILABLE: Stationsliste konnte nicht sicher geladen werden.");
+        setStationUnavailableMessage(safeStationError);
       } finally {
         setStationListPending(false);
       }
     };
     load();
 
-    const handleIntakeCreated = () => { void load(); };
+    const handleIntakeCreated = () => {
+      void load();
+    };
     window.addEventListener("order-intake:created", handleIntakeCreated);
-    return () => window.removeEventListener("order-intake:created", handleIntakeCreated);
-
+    return () =>
+      window.removeEventListener("order-intake:created", handleIntakeCreated);
   }, []);
 
-  const showStationCount = !stationListPending && stationListLoaded && !stationUnavailableMessage;
+  const showStationCount =
+    !stationListPending && stationListLoaded && !stationUnavailableMessage;
 
   return (
     <div className="w-full h-full font-sans antialiased text-[#1a1a1a]">
       <div className="w-full mx-auto px-5 md:px-8 lg:px-12 xl:px-16 py-6">
-
         {stationAccessDenied ? (
           /* Denial: keine Karten, kein leerer Erfolgszustand, keine Intake-Controls. */
           <div
@@ -99,7 +88,9 @@ function WarendurchlaufLeitstandContent() {
             className="p-4 rounded-[14px] text-sm text-[#5e5850]"
             style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
           >
-            <div className="text-[15px] font-bold text-[#1a1a1a] mb-1">Dieser Bereich ist geschützt</div>
+            <div className="text-[15px] font-bold text-[#1a1a1a] mb-1">
+              Dieser Bereich ist geschützt
+            </div>
             <p>{stationUnavailableMessage}</p>
           </div>
         ) : (
@@ -113,63 +104,27 @@ function WarendurchlaufLeitstandContent() {
               </div>
 
               {/* Aktionskarten */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-                {/* Kamera — primary */}
-                <button
-                  onClick={() => openErfassung({ mode: "scan" })}
-                  className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md text-center text-white"
-                  style={{ background: "#1a6b38", border: "1.5px solid #1a6b38" }}
-                >
-                  <div className="w-[52px] h-[52px] rounded-[14px] bg-white/15 flex items-center justify-center">
-                    <Camera className="w-6 h-6 text-white" />
-                  </div>
-                  <span className="text-[15px] font-bold">Kamera</span>
-                  <span className="text-xs text-white/60">Foto &middot; Scan</span>
-                </button>
-
-                {/* Telefonnotiz */}
-                <Link
-                  href="/telefonnotiz?returnTo=/warendurchlauf/wareneingang"
-                  className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8] text-center"
-                  style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
-                >
-                  <div className="w-[52px] h-[52px] rounded-[14px] bg-[#fef3e2] flex items-center justify-center">
-                    <Phone className="w-6 h-6 text-[#2471a3]" />
-                  </div>
-                  <span className="text-[15px] font-bold text-[#1a1a1a]">Telefonnotiz</span>
-                  <span className="text-xs text-[#9e9689]">Schnellerfassung</span>
-                </Link>
-
-                {/* Manuell anlegen */}
+              <div className="grid grid-cols-1 gap-3 mb-5">
                 <button
                   data-testid="wareneingang-create-order"
-                  onClick={() => openErfassung({ mode: "order" })}
+                  onClick={() => requestGlobalCreate("DIRECT_INTAKE")}
                   className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8] text-center"
-                  style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
+                  style={{
+                    background: "#faf8f4",
+                    border: "1.5px solid #d8d0c4",
+                  }}
                 >
                   <div className="w-[52px] h-[52px] rounded-[14px] bg-[#fef3e2] flex items-center justify-center">
                     <PenLine className="w-6 h-6 text-[#c8922a]" />
                   </div>
-                  <span className="text-[15px] font-bold text-[#1a1a1a]">Wareneingang anlegen</span>
-                  <span className="text-xs text-[#9e9689]">Kunde &middot; Teile &middot; Termin</span>
+                  <span className="text-[15px] font-bold text-[#1a1a1a]">
+                    Wareneingang anlegen
+                  </span>
+                  <span className="text-xs text-[#9e9689]">
+                    Kunde &middot; Teile &middot; Termin
+                  </span>
                 </button>
               </div>
-
-              {/* Breite Verweiskarten */}
-              <Link
-                href="/quotes"
-                className="flex items-center gap-4 p-4 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-sm hover:bg-[#f4f0e8] mb-3"
-                style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
-              >
-                <div className="w-10 h-10 rounded-[10px] bg-[#fef3e2] flex items-center justify-center shrink-0">
-                  <MessageSquare className="w-5 h-5 text-[#c8922a]" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-bold text-[#1a1a1a]">Anfragen</div>
-                  <div className="text-[11px] text-[#9e9689]">Offene Angebotsanfragen</div>
-                </div>
-                <ChevronRight className="w-4 h-4 text-[#9e9689] shrink-0" />
-              </Link>
 
               <Link
                 href="/orders"
@@ -180,81 +135,92 @@ function WarendurchlaufLeitstandContent() {
                   <Clock className="w-5 h-5 text-[#c8922a]" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-bold text-[#1a1a1a]">Letzte Annahmen</div>
-                  <div className="text-[11px] text-[#9e9689]">Auftragsübersicht öffnen</div>
+                  <div className="text-[13px] font-bold text-[#1a1a1a]">
+                    Letzte Annahmen
+                  </div>
+                  <div className="text-[11px] text-[#9e9689]">
+                    Auftragsübersicht öffnen
+                  </div>
                 </div>
                 <ChevronRight className="w-4 h-4 text-[#9e9689] shrink-0" />
               </Link>
             </div>
 
             {/* â”€â”€ ARBEITSLISTE WARENEINGANG â”€â”€ */}
-            <div className="mt-12" style={{ animation: "fadeUp .5s .2s ease both" }}>
+            <div
+              className="mt-12"
+              style={{ animation: "fadeUp .5s .2s ease both" }}
+            >
               <div className="text-[15px] font-bold text-[#5e5850] mb-4 flex items-center gap-2">
                 Aktuelle Aufträge im Wareneingang
                 <span className="flex-1 h-px bg-[#d8d0c4]" />
-                {showStationCount && <span className="text-xs bg-[#f4f0e8] px-2 py-1 rounded text-[#9e9689]">{stationOrders.length}</span>}
+                {showStationCount && (
+                  <span className="text-xs bg-[#f4f0e8] px-2 py-1 rounded text-[#9e9689]">
+                    {stationOrders.length}
+                  </span>
+                )}
               </div>
 
               {stationListPending ? (
-                <div data-testid="wareneingang-loading" className="p-3 rounded-[14px] text-sm text-[#5e5850]" role="status" style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}>
+                <div
+                  data-testid="wareneingang-loading"
+                  className="p-3 rounded-[14px] text-sm text-[#5e5850]"
+                  role="status"
+                  style={{
+                    background: "#faf8f4",
+                    border: "1.5px solid #d8d0c4",
+                  }}
+                >
                   Stationsliste wird geladen.
                 </div>
               ) : stationUnavailableMessage ? (
                 /* Error: keine Karten und kein leerer Erfolgszustand. */
-                <div data-testid="wareneingang-error" className="p-3 rounded-[14px] text-sm text-[#5e5850]" role="status" style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}>
-                  {stationUnavailableMessage}
+                <div
+                  data-testid="wareneingang-error"
+                  className="p-3 rounded-[14px] text-sm text-[#5e5850]"
+                  role="status"
+                  style={{
+                    background: "#faf8f4",
+                    border: "1.5px solid #d8d0c4",
+                  }}
+                >
+                  <p>{stationUnavailableMessage}</p>
+                  <details className="mt-2 text-xs text-[#756f66]">
+                    <summary>Technische Details für Support</summary>
+                    <p>Stationsliste konnte nicht sicher gelesen werden.</p>
+                  </details>
                 </div>
               ) : stationListLoaded ? (
                 <>
-                  <p className="mb-3 text-xs text-[#9e9689]">Die Übergabe an Galvanik wird erst nach einem bestätigten Reload als erfolgreich angezeigt. Weitere Auftragsbearbeitung bleibt nicht verfügbar.</p>
-                  {handoffSuccessMessage ? <p className="mb-3 text-xs text-[#1a6b38]" data-testid="wareneingang-handoff-status" role="status">{handoffSuccessMessage}</p> : null}
-                  {handoffConflictMessage ? <p className="mb-3 text-xs text-[#c0392b]" role="alert">{handoffConflictMessage}</p> : null}
+                  <p className="mb-3 text-xs text-[#9e9689]">
+                    Auftrag öffnen, um Details, Verlauf und die verfügbaren
+                    nächsten Schritte zu sehen.
+                  </p>
                   <div className="flex flex-col gap-2">
                     {stationOrders.length > 0 ? (
-                      stationOrders.map((order) => {
-                        const u = getUrgency(order.dueDate);
-                        let urgencyType: "ok" | "soon" | "crit" | "wait" | "unknown" = "ok";
-                        if (order.risk === "red") urgencyType = "crit";
-                        else if (order.risk === "orange" || u === "gefaehrdet") urgencyType = "soon";
-                        else if (order.risk === "blocked") urgencyType = "wait";
-                        else if (order.risk === "unknown" || u === "unknown") urgencyType = "unknown";
-
-                        return (
-                          <div data-testid={`wareneingang-order-${order.id}`} key={order.id}>
-                          <OrderCompactCard
-                            id={order.id}
-                            orderNumber={order.orderNumber}
-                            customerName={order.customerName || "Kunde nicht hinterlegt"}
-                            article={order.itemDescription || "Artikel nicht hinterlegt"}
-                            surface={order.surfaceRequested || "Oberfläche nicht hinterlegt"}
-                            urgency={urgencyType}
-                            dueValue={order.dueValue || (urgencyType === "unknown" ? "Nicht erfasst" : "--")}
-                            dueLabel={order.dueLabel || (urgencyType === "unknown" ? "Termin" : "Fällig")}
-                            badgeText={getLegacyStatusText(order) || "Wartend"}
-                            onClick={() => openOrder(order.id)}
-                          />
-                          {Number.isSafeInteger(order.version) && order.version > 0 ? (
-                            <WareneingangHandoffButton
-                              orderId={order.id}
-                              expectedVersion={order.version}
-                              onConfirmedReadback={(nextWeOrders) => {
-                                setStationOrders(nextWeOrders);
-                                setHandoffConflictMessage(null);
-                                setHandoffSuccessMessage("Übergabe an Galvanik bestätigt.");
-                              }}
-                              onConflictReadback={(nextWeOrders, message) => {
-                                setStationOrders(nextWeOrders);
-                                setHandoffSuccessMessage(null);
-                                setHandoffConflictMessage(message);
-                              }}
-                            />
-                          ) : null}
-                          </div>
-                        );
-                      })
+                      stationOrders.map((order) => (
+                        <OrderQueueRow
+                          key={order.id}
+                          order={{
+                            id: order.id,
+                            orderNumber: order.orderNumber,
+                            customerName:
+                              order.customerName || "Kunde nicht hinterlegt",
+                            title:
+                              order.itemDescription ||
+                              "Artikel nicht hinterlegt",
+                            detail: order.surfaceRequested || null,
+                            station: order.station,
+                            dueLabel: order.dueValue || "Termin nicht erfasst",
+                            risk: order.risk,
+                          }}
+                          onOpen={openOrder}
+                        />
+                      ))
                     ) : (
                       <div className="p-8 text-center border-2 border-dashed border-[#d8d0c4] rounded-[14px] text-[#9e9689]">
-                        Noch keine Daten erfasst. <Link href="/orders">Aufträge anzeigen</Link>
+                        Noch keine Daten erfasst.{" "}
+                        <Link href="/orders">Aufträge anzeigen</Link>
                       </div>
                     )}
                   </div>
@@ -278,7 +244,9 @@ function WarendurchlaufLeitstandContent() {
 
 export default function WarendurchlaufLeitstand() {
   return (
-    <Suspense fallback={<div className="p-8 text-center">Lade Leitstand...</div>}>
+    <Suspense
+      fallback={<div className="p-8 text-center">Lade Leitstand...</div>}
+    >
       <WarendurchlaufLeitstandContent />
     </Suspense>
   );

@@ -1,0 +1,2 @@
+/** Browser-safe product-profile contract for the App Router composition seam. */
+export type { StartUserDto as ProductStartProfile } from "@/lib/auth/userDtos";

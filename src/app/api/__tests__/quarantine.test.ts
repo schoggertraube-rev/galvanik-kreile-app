@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -57,9 +57,6 @@ describe("F0 W2C active client containment", () => {
       "src/components/erfassung/ScanFlow/ScanUpload.tsx",
       "src/components/erfassung/shared/ItemPhotoUploader.tsx",
       "src/components/intake/CameraCapture.tsx",
-      "src/components/customers/NewCustomerForm.tsx",
-      "src/components/orders/NewOrderForm.tsx",
-      "src/components/orders/StatusMailDrawer.tsx",
       "src/lib/services/intakeService.ts",
       "src/lib/services/photoService.ts",
     ].map((file) => readFileSync(resolve(process.cwd(), file), "utf8"));
@@ -67,7 +64,7 @@ describe("F0 W2C active client containment", () => {
     for (const source of sources) {
       expect(source).not.toMatch(/getPublicUrl|\.storage\.from\(|\.upload\(|functions\.invoke|type="file"/);
     }
-    for (const source of sources.slice(0, 7)) {
+    for (const source of sources.slice(0, 4)) {
       expect(source).toMatch(/disabled|nicht verfügbar/i);
       expect(source).not.toMatch(/addEvent|processImage|createPaymentIntent|emailProvider\.send/);
     }
@@ -75,12 +72,15 @@ describe("F0 W2C active client containment", () => {
     expect(sources[0]).toContain("nicht verfügbar");
   });
 
-  it("removes the active payment-provider invocation and exposes an honest disabled control", () => {
-    const source = readFileSync(resolve(process.cwd(), "src/components/orders/PaymentDrawer.tsx"), "utf8");
-
-    expect(source).not.toMatch(/createPaymentIntent|mollieAdapter|functions\.invoke/);
-    expect(source).toContain("disabled");
-    expect(source).toContain("nicht verfügbar");
+  it("removes obsolete order/customer form and payment shells instead of retaining dead controls", () => {
+    for (const file of [
+      "src/components/customers/NewCustomerForm.tsx",
+      "src/components/orders/NewOrderForm.tsx",
+      "src/components/orders/PaymentDrawer.tsx",
+      "src/modules/customers/legacy-ui/NewCustomerForm.tsx",
+      "src/modules/orders/legacy-ui/NewOrderForm.tsx",
+      "src/modules/orders/legacy-ui/PaymentDrawer.tsx",
+    ]) expect(existsSync(resolve(process.cwd(), file))).toBe(false);
   });
 
   it("keeps every quarantined route limited to the quarantine port", () => {

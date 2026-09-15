@@ -1,7 +1,6 @@
 export type StartUserDto = {
   loginHandle: string;
-  initials: string;
-  tileKind: "office" | "workshop";
+  identity: "rolf" | "phillip";
 };
 
 export type StartUserSource = {
@@ -35,11 +34,20 @@ export function deriveUserInitials(fullName: string): string {
 export function toStartUserDto(
   user: StartUserSource,
   loginHandle: string,
-): StartUserDto {
+): StartUserDto | null {
+  const productIdentity = getProductIdentity(user.id);
+  if (
+    !productIdentity
+    || (productIdentity.name !== "Rolf" && productIdentity.name !== "Phillip")
+    || (productIdentity.name === "Rolf" && user.role !== "meister")
+    || (productIdentity.name === "Phillip" && user.role !== "werkstatt")
+  ) {
+    return null;
+  }
+
   return {
     loginHandle,
-    initials: deriveUserInitials(user.fullName),
-    tileKind: user.role === "buero" ? "office" : "workshop",
+    identity: productIdentity.name === "Rolf" ? "rolf" : "phillip",
   };
 }
 
@@ -54,3 +62,4 @@ export function toAdminUserDto(user: AdminUserDto): AdminUserDto {
     language: user.language,
   };
 }
+import { getProductIdentity } from "./authorizationContract";

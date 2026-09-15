@@ -5,8 +5,6 @@ import { SessionWarningBanner } from "../SessionWarningBanner";
 const mocks = vi.hoisted(() => ({
   replace: vi.fn(),
   logout: vi.fn(),
-  closeErfassung: vi.fn(),
-  providerState: { isOpen: false },
 }));
 
 vi.mock("next/navigation", () => ({
@@ -17,16 +15,8 @@ vi.mock("@/app/actions/auth", () => ({
   logout: (...args: unknown[]) => mocks.logout(...args),
 }));
 
-vi.mock("@/components/erfassung/ErfassungProvider", () => ({
-  useErfassung: () => ({
-    isOpen: mocks.providerState.isOpen,
-    closeErfassung: mocks.closeErfassung,
-  }),
-}));
-
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.providerState.isOpen = false;
   mocks.logout.mockResolvedValue({ ok: true, remoteSignOut: "success" });
 });
 
@@ -36,13 +26,11 @@ describe("SessionWarningBanner (LIVE-AUTH-001)", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("schließt ein aktives Erfassungs-Overlay vor dem Logout", async () => {
-    mocks.providerState.isOpen = true;
+  it("meldet unabhängig von einer Alt-Erfassungs-Montage sicher ab", async () => {
     render(<SessionWarningBanner show />);
 
     fireEvent.click(screen.getByTestId("session-warning-relogin"));
 
-    expect(mocks.closeErfassung).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(mocks.logout).toHaveBeenCalledTimes(1));
   });
 

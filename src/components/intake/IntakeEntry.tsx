@@ -7,7 +7,6 @@ import {
   Info,
   Camera,
   Edit3,
-  MessageSquare,
   ChevronRight,
   X,
   ChevronLeft,
@@ -105,29 +104,6 @@ export function IntakeEntry({
             <ChevronRight className="w-5 h-5 text-accent-orange group-hover:text-white transition-colors" strokeWidth={2} />
           </div>
         </button>
-      </div>
-
-      {/* ── ANFRAGEN MINI CARD ── */}
-      <div className="flex justify-center">
-        <Link
-          href="/quotes"
-          className="flex items-center justify-between w-full md:w-[60%] bg-white rounded-3xl border border-neutral-gray-100 p-5 hover:shadow-md hover:border-accent-orange/20 transition-all group"
-        >
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-bg-app-soft flex items-center justify-center shrink-0 border border-neutral-gray-100">
-              <MessageSquare className="w-6 h-6 text-navy-700" strokeWidth={1.5} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-navy-900 text-lg">Anfragen</span>
-              </div>
-              <p className="text-xs text-text-muted mt-0.5">Anfragen derzeit nicht verfügbar</p>
-            </div>
-          </div>
-          <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shrink-0 shadow-sm border border-neutral-gray-100 group-hover:bg-accent-orange transition-all duration-200">
-            <ChevronRight className="w-5 h-5 text-accent-orange group-hover:text-white transition-colors" strokeWidth={2} />
-          </div>
-        </Link>
       </div>
 
       {/* ── LETZTE ANNAHMEN ── */}

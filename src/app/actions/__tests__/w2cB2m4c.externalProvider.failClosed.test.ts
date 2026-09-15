@@ -83,6 +83,7 @@ describe("W2C-B2M4C external provider fail-closed", () => {
     expect(startScreen).not.toContain("frankfurt-tipp");
     expect(startScreen).toContain("loginWithPin");
     expect(startScreen).toContain("notifyAdminPinReset");
-    expect(startScreen).toContain("Anfrage wurde verarbeitet. Falls das Konto vorhanden ist, wird sie intern weitergeleitet.");
+    expect(startScreen).toContain("void notifyAdminPinReset(user.loginHandle)");
+    expect(startScreen).not.toContain("result.success");
   });
 });

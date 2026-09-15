@@ -107,6 +107,14 @@
     "src/lib/server/userLastSeen.ts": [
       "private.v_user_last_seen_receipts_v1",
       "private.v_user_last_seen_v1"
+    ],
+    "src/modules/customers/server/createCustomerCommand.ts": [
+      "private.v_customer_create_receipts_v1"
+    ],
+    "src/modules/quotes/server/quoteCommands.ts": [
+      "private.v_quote_conversion_receipts_v1",
+      "private.v_quote_create_receipts_v1",
+      "private.v_quotes_v1"
     ]
   },
   "commandOwners": {
@@ -219,6 +227,15 @@
       "path": "supabase/migrations/20260909180000_f1_5_goods_out_ui_read_contract.sql",
       "requiredSecurityInvokerViews": [
         "private.v_goods_out_ui_state_v1"
+      ],
+      "requiredLegacySource": null
+    },
+    {
+      "path": "supabase/migrations/20260914110000_path1_quote_persistence_contract.sql",
+      "requiredSecurityInvokerViews": [
+        "private.v_quote_conversion_receipts_v1",
+        "private.v_quote_create_receipts_v1",
+        "private.v_quotes_v1"
       ],
       "requiredLegacySource": null
     }

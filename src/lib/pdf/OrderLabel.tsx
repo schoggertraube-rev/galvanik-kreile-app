@@ -1,7 +1,7 @@
 import React from "react";
 import { Page, Text, View, Document, StyleSheet, Image as PdfImage } from "@react-pdf/renderer";
 import type { Order } from "@/lib/repositories/ordersRepository";
-import { getUrgency } from "@/lib/orders/getUrgency";
+import { getUrgency } from "@/modules/orders/public";
 import { format } from "date-fns";
 
 // Create styles

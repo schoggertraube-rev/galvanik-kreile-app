@@ -6,13 +6,13 @@
   "tenant": "galvanik-kreile",
   "note": "Machine-readable capability inventory based on snapshot_sha; the immutable review SHA is recorded separately when the candidate is frozen. Every page route, API route, Server Action group, KPI definition, and provider connection must carry exactly one of: REAL_VERIFIED | REAL_PENDING_SECRET | PENDING_CONTRACT | TEST_ONLY | LEGACY_REMOVE",
   "summary": {
-    "page_routes": 78,
+    "page_routes": 73,
     "api_routes": 19,
     "server_action_groups": 51,
     "kpi_definitions": 7,
     "provider_connections": 17,
     "nav_links_without_page": 3,
-    "total": 175
+    "total": 170
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -319,16 +319,6 @@
       "reachable": true,
       "classification": "PENDING_CONTRACT",
       "open_reason": "Tax profile configuration. No verified contract."
-    },
-    {
-      "stable_id": "page.buchhaltung.zahlung",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/buchhaltung/zahlung/page.tsx",
-      "route": "/buchhaltung/zahlung",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Payment management. Mollie route quarantined. No verified contract."
     },
     {
       "stable_id": "page.cockpit.jahresplan",
@@ -671,26 +661,6 @@
       "open_reason": "Print queue management. No verified contract."
     },
     {
-      "stable_id": "page.quotes.new",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/quotes/new/page.tsx",
-      "route": "/quotes/new",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "New quote/inquiry form. No verified contract."
-    },
-    {
-      "stable_id": "page.quotes",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/quotes/page.tsx",
-      "route": "/quotes",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Quote/inquiry list. No verified contract."
-    },
-    {
       "stable_id": "page.scan",
       "kind": "PAGE_ROUTE",
       "entry_point": "src/app/scan/page.tsx",
@@ -719,16 +689,6 @@
       "reachable": true,
       "classification": "PENDING_CONTRACT",
       "open_reason": "Today/start page. today/* API routes connected but no independent E2E evidence."
-    },
-    {
-      "stable_id": "page.station.slug",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/station/[slug]/page.tsx",
-      "route": "/station/[slug]",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Station page uses real getOrdersDb(). Phantom /orders/new CTA replaced with /warendurchlauf/wareneingang in F1-R0. No independent E2E evidence."
     },
     {
       "stable_id": "page.status",
@@ -795,16 +755,6 @@
       "reachable": true,
       "classification": "PENDING_CONTRACT",
       "open_reason": "Workflow overview hub. Supabase-connected, no independent hub-level E2E evidence."
-    },
-    {
-      "stable_id": "page.warendurchlauf.warenausgang",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/warendurchlauf/warenausgang/page.tsx",
-      "route": "/warendurchlauf/warenausgang",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Goods-out station. F1.3 not yet released."
     },
     {
       "stable_id": "page.warendurchlauf.wareneingang",
@@ -1196,6 +1146,8 @@
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/customers.actions.ts",
       "exported_functions": [
+        "createCustomerAction",
+        "readCustomerCreateReceiptAction",
         "getCustomerSummaryAction",
         "getCustomersDb",
         "getCustomerByIdDb",
@@ -1205,7 +1157,23 @@
         "getTopKunden"
       ],
       "classification": "PENDING_CONTRACT",
-      "open_reason": "Customer CRUD. Supabase-connected. searchCustomersDb and createCustomerDb exercised in F1.1 but not independently evidenced here.",
+      "open_reason": "Customer CRUD. The read-only customer receipt action supports safe recovery of an interrupted V5 command; it never starts a mutation. Remaining CRUD evidence is still package-bound.",
+      "visible": false,
+      "reachable": true
+    },
+    {
+      "stable_id": "server-actions.quotes",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/quotes.actions.ts",
+      "exported_functions": [
+        "convertQuoteToOrderAction",
+        "createQuoteAction",
+        "readQuoteAction",
+        "readQuoteCreateReceiptAction",
+        "readQuoteConversionReceiptAction"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "V5 Work Unit 2 implements the real tenant-bound quote and existing F1.1 conversion candidate. The two additional read-only receipt actions recover a known outcome without a mutation; the technical checkpoint remains no UI delivery claim.",
       "visible": false,
       "reachable": true
     },
@@ -1630,18 +1598,6 @@
       "reachable": true
     },
     {
-      "stable_id": "server-actions.customers-id",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/customers/[id]/actions.ts",
-      "exported_functions": [
-        "getCustomerDetailsAction"
-      ],
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Customer detail aggregation. Supabase-connected, no independent E2E evidence.",
-      "visible": false,
-      "reachable": false
-    },
-    {
       "stable_id": "server-actions.global-search",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/global-search-actions.ts",
@@ -2002,8 +1958,8 @@
         "GEMINI_MODEL_PRIMARY",
         "GEMINI_MODEL_FALLBACK"
       ],
-      "classification": "REAL_PENDING_SECRET",
-      "open_reason": "GeminiClient throws GeminiConfigError on missing GEMINI_API_KEY (honest, no fake fallback). Used for AI enrichment, OCR, morning messages. Activated when secret is provided.",
+      "classification": "LEGACY_REMOVE",
+      "open_reason": "LEGACY_QUARANTINE_SUPERSEDED by D-ARCH-012/D-AI-001. The adapter remains inventory-only, invisible and unreachable; a secret must not activate it and there is no runtime fallback.",
       "visible": false,
       "reachable": false,
       "evidence_files": [
@@ -2018,8 +1974,8 @@
       "env_vars": [
         "KLIPPA_API_KEY"
       ],
-      "classification": "REAL_PENDING_SECRET",
-      "open_reason": "KlippaProvider throws on missing KLIPPA_API_KEY (honest, no fake fallback). Route /api/erfassung/scan-upload quarantined. OCR service for receipt processing.",
+      "classification": "LEGACY_REMOVE",
+      "open_reason": "LEGACY_QUARANTINE_SUPERSEDED by D-ARCH-012/D-AI-001. The adapter and scan route remain quarantined, invisible and unreachable; a secret must not activate them.",
       "visible": false,
       "reachable": false
     },

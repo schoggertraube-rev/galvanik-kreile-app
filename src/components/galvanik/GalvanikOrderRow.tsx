@@ -7,7 +7,7 @@ import { FocusOverlay } from "@/components/entities/FocusOverlay";
 import { OrderFocusView } from "@/components/entities/OrderFocusView";
 import { CustomerFocusView } from "@/components/entities/CustomerFocusView";
 import type { OperationalOrder } from "@/lib/types/operationalOrder";
-import { getUrgency } from "@/lib/orders/getUrgency";
+import { getUrgency } from "@/modules/orders/public";
 
 interface GalvanikOrderRowProps {
   order: OperationalOrder;

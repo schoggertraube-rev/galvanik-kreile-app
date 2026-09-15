@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -29,6 +30,10 @@ vi.mock("@/lib/server/authHelper", () => ({
 vi.mock("next/cache", () => ({
   unstable_noStore: vi.fn(),
   revalidatePath: revalidatePathSpy,
+}));
+vi.mock("@/modules/orders/public", () => ({
+  ORDER_LIFECYCLE_STATUS: { ANGENOMMEN: "angenommen", GALVANIK: "galvanik", FERTIG: "fertig", ABGEHOLT: "abgeholt" },
+  ORDER_STATION_FORWARD_ROLES: ["buero", "werkstatt", "meister", "admin"],
 }));
 vi.mock("@/lib/offline/IndexedDBHelper", () => ({
   IndexedDBHelper: {
@@ -71,10 +76,6 @@ describe("updateOrderDb fail-closed (F0-W2C-B1)", () => {
 describe("W2C-B1 caller containment", () => {
   const srcRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
   const callerFiles = [
-    "components/orders/StationStatusButton.tsx",
-    "components/orders/StationCompletionModal.tsx",
-    "components/orders/OrderActionGrid.tsx",
-    "components/orders/OrderMaterialTimeDrawer.tsx",
     "app/warendurchlauf/galvanik/page.tsx",
     "app/status/page.tsx",
     "app/warendurchlauf/wareneingang/page.tsx",
@@ -89,21 +90,21 @@ describe("W2C-B1 caller containment", () => {
   });
 
   it("leaves non-atomic flows visibly blocked and removes the simple start from the process port", async () => {
-    const stationButton = await readFile(path.join(srcRoot, "components/orders/StationStatusButton.tsx"), "utf8");
     const blockedFiles = await Promise.all([
-      "components/orders/variants/WareneingangActive.tsx",
-      "components/orders/StationCompletionModal.tsx",
-      "components/orders/OrderActionGrid.tsx",
-      "components/orders/OrderMaterialTimeDrawer.tsx",
       "app/status/page.tsx",
       "lib/offline/OfflineManager.ts",
     ].map((file) => readFile(path.join(srcRoot, file), "utf8")));
 
-    expect(stationButton).not.toContain("transitionOrderProcess");
-    expect(stationButton).not.toContain('action: "start"');
     for (const source of blockedFiles) {
       expect(source).toMatch(/FoundationUnavailable|NOT_AVAILABLE|disabled/);
     }
+    for (const file of [
+      "components/orders/variants/WareneingangActive.tsx",
+      "components/orders/StationStatusButton.tsx",
+      "components/orders/StationCompletionModal.tsx",
+      "components/orders/OrderActionGrid.tsx",
+      "components/orders/OrderMaterialTimeDrawer.tsx",
+    ]) expect(existsSync(path.join(srcRoot, file))).toBe(false);
   });
 
   it("does not directly combine repository events with createStatusEvent in a caller", async () => {
@@ -113,23 +114,26 @@ describe("W2C-B1 caller containment", () => {
     }
   });
 
-  it("keeps the Wareneingang edit flow unavailable before an interactive modal can open", async () => {
+  it("keeps the Wareneingang route free of a second edit surface", async () => {
     const wareneingang = await readFile(path.join(srcRoot, "app/warendurchlauf/wareneingang/page.tsx"), "utf8");
 
-    expect(wareneingang).toContain("Weitere Auftragsbearbeitung bleibt nicht verfügbar.");
+    expect(wareneingang).toContain("Details, Verlauf und die verfügbaren");
     expect(wareneingang).not.toContain("OrderEditModal");
     expect(wareneingang).not.toContain("selectedOrderForEdit");
   });
 
-  it("keeps the W3 handoff independent from legacy update and process writers", async () => {
-    const [handoff, wareneingang] = await Promise.all([
-      readFile(path.join(srcRoot, "components/orders/WareneingangHandoffButton.tsx"), "utf8"),
-      readFile(path.join(srcRoot, "app/warendurchlauf/wareneingang/page.tsx"), "utf8"),
-    ]);
-    expect(handoff).toContain("transitionWareneingangToGalvanikAction");
-    expect(handoff).not.toContain("updateOrderDb");
-    expect(handoff).not.toContain("transitionOrderProcess");
-    expect(wareneingang).not.toContain("updateOrderDb");
+  it("keeps the V8 handoff independent from legacy update and process writers", async () => {
+      const [orderCard, orderCardAdapter, wareneingang] = await Promise.all([
+        readFile(path.join(srcRoot, "modules/orders/ui/OrderCardView.tsx"), "utf8"),
+        readFile(path.join(srcRoot, "app/orders/OrderCardAppAdapter.tsx"), "utf8"),
+        readFile(path.join(srcRoot, "app/warendurchlauf/wareneingang/page.tsx"), "utf8"),
+      ]);
+      expect(orderCard).not.toContain("@/app/");
+      expect(orderCard).toContain("actions.onHandoff");
+      expect(orderCardAdapter).toContain("transitionWareneingangToGalvanikAction");
+      expect(orderCardAdapter).not.toContain("updateOrderDb");
+      expect(orderCardAdapter).not.toContain("transitionOrderProcess");
+      expect(wareneingang).not.toContain("updateOrderDb");
   });
 });
 
