@@ -1,8 +1,8 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: 55047090c2df0e47b1311308be165b8300086eb1
-branch: gov/authority-calendar-target-stage2-20260913
+base_sha: 0b9f95d41a10bff14221b8150959b5c8ab7ab496
+branch: gov/path1-entrypoint-baseline-bootstrap-20260915
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
 # ── M0 Konsolidierungsstand ───────────────────────────────────────
@@ -36,9 +36,22 @@ delivery_order:
   - F1.5_BESTAETIGTER_ZAHLUNGSEINGANG
   - F1.6_REALER_PILOT
 
-active_package: AUTHORITY_UI_CONVERGENCE_TRANSITION_GOVERNANCE
-active_package_status: CANDIDATE_BUILD_AND_EXACT_SHA_REVIEW_PENDING
-next_gate_after_active_package: DRAFT_PR_EXACT_SHA_CI_THEN_INDEPENDENT_CODEX_REVIEW
+active_package: PATH1_ENTRYPOINT_BASELINE_BOOTSTRAP
+active_package_status: DRAFT_PR_EXACT_SHA_CI_AND_INDEPENDENT_REVIEW_PENDING
+next_gate_after_active_package: EXACT_SHA_CI_THEN_INDEPENDENT_REVIEW
+entrypoint_baseline_bootstrap_status: OWNER_APPROVED_ONE_TIME
+entrypoint_baseline_expected_count: 83
+entrypoint_baseline_policy: TRANSITIONAL_BOOTSTRAP_SHRINK_ONLY_PATH_AND_SHA256_NO_REHASH
+entrypoint_baseline_product_delta: NONE
+entrypoint_baseline_pr90: TERMINAL_FROZEN_NOT_REPAIRED_NOT_MERGED
+entrypoint_baseline_pr91: DRAFT_FROZEN_UNCHANGED
+entrypoint_baseline_pr93: DRAFT_UNCHANGED_NOT_REPAIRED_NOT_MERGED
+entrypoint_baseline_followup: RETURN_TO_PR_91_AFTER_INDEPENDENT_PASS_AND_OWNER_MERGE
+path1_entrypoint_baseline_bootstrap_allowlist:
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - quality/module-gates-baseline.json
+  - scripts/quality/check-module-gates.mjs
+  - src/test/s1_module_gates.test.ts
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
