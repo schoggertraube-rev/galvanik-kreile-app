@@ -67,6 +67,20 @@ F1.1-Intake-Port und erzeugt atomar/idempotent genau einen verknüpften Auftrag.
 Nicht verbundene KI-, OCR- oder Providerzwecke bleiben unsichtbar oder rein
 passiv bezeichnet, niemals ausführbarer Scheinweg.
 
+### Sichtbare Identität und Kernwege — D-UI-V5-002
+
+Die sichtbare Produktidentität ist eine enge App-/Identity-Adapterprojektion:
+Rolf steht für Meister, Phillip für Werkstatt und Gregor für den erhöhten
+Systemzugang. Technische Rollen, actorId und individuelle Auditdaten bleiben
+serverseitige Verträge und werden weder als zweite sichtbare Rollenwahrheit noch
+als benutzer-ID-basierte Fachlogik verwendet. Der Adapter löst Capabilities
+fail-closed aus dem bestehenden Rollenvertrag auf; fehlende oder mehrdeutige
+Produktprofile führen nicht zur willkürlichen Kontoauswahl. Meister kann über
+die vorhandenen Customer-, KV-/Order- und F1.1-Ports den manuellen Kernweg
+starten, Phillip bleibt auf Werkstattarbeit begrenzt, und Gregor wird nicht
+stillschweigend zum Betriebs-Impersonator. Erfolg bleibt Receipt plus fachlicher
+Readback; nicht verbundene Provider- oder Suchzwecke erhalten keinen Ersatzweg.
+
 ## 4b. Provider-Naht — D-ARCH-011
 
 - Externe Anbieter liegen ausschließlich hinter tenantneutralen, eng typisierten Ports; UI und Fremdmodule kennen weder SDK noch Providerpayload oder URL.

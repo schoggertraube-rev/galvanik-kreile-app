@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Camera, PenLine, Phone, Clock, ChevronRight } from "lucide-react";
+import { PenLine, Clock, ChevronRight } from "lucide-react";
 import { useState, Suspense, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { useErfassung } from "@/components/erfassung/ErfassungProvider";
+import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { OrderQueueRow } from "@/modules/orders/public";
 import { useOverlayStore } from "@/lib/overlayStore";
 import {
@@ -22,7 +22,6 @@ import {
 function WarendurchlaufLeitstandContent() {
   const searchParams = useSearchParams();
   void searchParams;
-  const { openErfassung } = useErfassung();
   const { openOrder } = useOverlayStore();
   const [stationOrders, setStationOrders] = useState<WarendurchlaufOrder[]>([]);
   const [stationUnavailableMessage, setStationUnavailableMessage] = useState<
@@ -31,6 +30,9 @@ function WarendurchlaufLeitstandContent() {
   const [stationAccessDenied, setStationAccessDenied] = useState(false);
   const [stationListLoaded, setStationListLoaded] = useState(false);
   const [stationListPending, setStationListPending] = useState(true);
+
+  const safeStationError =
+    "Die Aufträge im Wareneingang sind gerade nicht abrufbar. Es wurde nichts verändert. Bitte prüfen Sie die Verbindung und versuchen Sie es erneut.";
 
   useEffect(() => {
     const load = async () => {
@@ -41,10 +43,12 @@ function WarendurchlaufLeitstandContent() {
           // Fail closed: kein Kartenbestand und kein leerer Erfolgszustand ohne gelesene Wahrheit.
           setStationOrders([]);
           setStationListLoaded(false);
-          setStationAccessDenied(
-            resList.error === "AUTH_ERROR" || resList.error === "FORBIDDEN",
+          const denied =
+            resList.error === "AUTH_ERROR" || resList.error === "FORBIDDEN";
+          setStationAccessDenied(denied);
+          setStationUnavailableMessage(
+            denied ? resList.message : safeStationError,
           );
-          setStationUnavailableMessage(resList.message);
         } else {
           setStationOrders(resList.data);
           setStationListLoaded(true);
@@ -55,9 +59,7 @@ function WarendurchlaufLeitstandContent() {
         setStationOrders([]);
         setStationListLoaded(false);
         setStationAccessDenied(false);
-        setStationUnavailableMessage(
-          "NOT_AVAILABLE: Stationsliste konnte nicht sicher geladen werden.",
-        );
+        setStationUnavailableMessage(safeStationError);
       } finally {
         setStationListPending(false);
       }
@@ -102,49 +104,10 @@ function WarendurchlaufLeitstandContent() {
               </div>
 
               {/* Aktionskarten */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-                {/* Kamera — primary */}
-                <button
-                  onClick={() => openErfassung({ mode: "scan" })}
-                  className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md text-center text-white"
-                  style={{
-                    background: "#1a6b38",
-                    border: "1.5px solid #1a6b38",
-                  }}
-                >
-                  <div className="w-[52px] h-[52px] rounded-[14px] bg-white/15 flex items-center justify-center">
-                    <Camera className="w-6 h-6 text-white" />
-                  </div>
-                  <span className="text-[15px] font-bold">Kamera</span>
-                  <span className="text-xs text-white/60">
-                    Foto &middot; Scan
-                  </span>
-                </button>
-
-                {/* Telefonnotiz */}
-                <Link
-                  href="/telefonnotiz?returnTo=/warendurchlauf/wareneingang"
-                  className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8] text-center"
-                  style={{
-                    background: "#faf8f4",
-                    border: "1.5px solid #d8d0c4",
-                  }}
-                >
-                  <div className="w-[52px] h-[52px] rounded-[14px] bg-[#fef3e2] flex items-center justify-center">
-                    <Phone className="w-6 h-6 text-[#2471a3]" />
-                  </div>
-                  <span className="text-[15px] font-bold text-[#1a1a1a]">
-                    Telefonnotiz
-                  </span>
-                  <span className="text-xs text-[#9e9689]">
-                    Schnellerfassung
-                  </span>
-                </Link>
-
-                {/* Manuell anlegen */}
+              <div className="grid grid-cols-1 gap-3 mb-5">
                 <button
                   data-testid="wareneingang-create-order"
-                  onClick={() => openErfassung({ mode: "order" })}
+                  onClick={() => requestGlobalCreate("DIRECT_INTAKE")}
                   className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8] text-center"
                   style={{
                     background: "#faf8f4",
@@ -221,13 +184,17 @@ function WarendurchlaufLeitstandContent() {
                     border: "1.5px solid #d8d0c4",
                   }}
                 >
-                  {stationUnavailableMessage}
+                  <p>{stationUnavailableMessage}</p>
+                  <details className="mt-2 text-xs text-[#756f66]">
+                    <summary>Technische Details für Support</summary>
+                    <p>Stationsliste konnte nicht sicher gelesen werden.</p>
+                  </details>
                 </div>
               ) : stationListLoaded ? (
                 <>
                   <p className="mb-3 text-xs text-[#9e9689]">
-                    Auftrag öffnen, um die kanonische V8-Karte mit den
-                    freigegebenen Fachaktionen zu verwenden.
+                    Auftrag öffnen, um Details, Verlauf und die verfügbaren
+                    nächsten Schritte zu sehen.
                   </p>
                   <div className="flex flex-col gap-2">
                     {stationOrders.length > 0 ? (

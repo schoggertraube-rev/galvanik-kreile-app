@@ -127,7 +127,7 @@ describe("PATH1 quote to existing F1.1 order", () => {
     const created = await createQuoteAction(quoteInput(customerId, "CONVERT"));
     expect(created.code).toBe("OK");
     if (created.code !== "OK") return;
-    const conversion = { quoteId: created.quote.quoteId, clientEventId: randomUUID(), expectedVersion: 1, confirmedAward: true as const };
+    const conversion = { quoteId: created.quote.quoteId, clientEventId: randomUUID(), expectedVersion: 1, confirmedAward: true as const, confirmedOrderDueDate: "2026-10-20" };
     const first = await convertQuoteToOrderAction(conversion);
     expect(first.code).toBe("OK");
     if (first.code !== "OK") return;
@@ -160,14 +160,14 @@ describe("PATH1 quote to existing F1.1 order", () => {
     const staleQuote = await createQuoteAction(quoteInput(customerId, "STALE"));
     expect(staleQuote.code).toBe("OK");
     if (staleQuote.code !== "OK") return;
-    await expect(convertQuoteToOrderAction({ quoteId: staleQuote.quote.quoteId, clientEventId: randomUUID(), expectedVersion: 2, confirmedAward: true })).resolves.toMatchObject({ code: "CONFLICT" });
+    await expect(convertQuoteToOrderAction({ quoteId: staleQuote.quote.quoteId, clientEventId: randomUUID(), expectedVersion: 2, confirmedAward: true, confirmedOrderDueDate: "2026-10-20" })).resolves.toMatchObject({ code: "CONFLICT" });
 
     const concurrentQuote = await createQuoteAction(quoteInput(customerId, "CONCURRENT"));
     expect(concurrentQuote.code).toBe("OK");
     if (concurrentQuote.code !== "OK") return;
     const results = await Promise.all([
-      convertQuoteToOrderAction({ quoteId: concurrentQuote.quote.quoteId, clientEventId: randomUUID(), expectedVersion: 1, confirmedAward: true }),
-      convertQuoteToOrderAction({ quoteId: concurrentQuote.quote.quoteId, clientEventId: randomUUID(), expectedVersion: 1, confirmedAward: true }),
+      convertQuoteToOrderAction({ quoteId: concurrentQuote.quote.quoteId, clientEventId: randomUUID(), expectedVersion: 1, confirmedAward: true, confirmedOrderDueDate: "2026-10-20" }),
+      convertQuoteToOrderAction({ quoteId: concurrentQuote.quote.quoteId, clientEventId: randomUUID(), expectedVersion: 1, confirmedAward: true, confirmedOrderDueDate: "2026-10-20" }),
     ]);
     expect(results.filter((result) => result.code === "OK")).toHaveLength(1);
     expect(results.filter((result) => result.code === "CONFLICT")).toHaveLength(1);
@@ -206,7 +206,7 @@ describe("PATH1 quote to existing F1.1 order", () => {
     const clientEventId = randomUUID();
     const { prepareQuoteConversionCommand } = await import("@/modules/quotes/server-public");
     const prepared = await prepareQuoteConversionCommand({ tenantId: KREILE_TENANT_SLUG, userId: users.buero, capabilities: { canCreateQuote: true, canReadQuote: true, canConvertQuote: true } }, {
-      quoteId: created.quote.quoteId, clientEventId, expectedVersion: 1, confirmedAward: true,
+      quoteId: created.quote.quoteId, clientEventId, expectedVersion: 1, confirmedAward: true, confirmedOrderDueDate: "2026-10-20",
     });
     expect(prepared.code).toBe("OK");
     if (prepared.code !== "OK") return;

@@ -4,6 +4,7 @@ export {
   createQuoteCommand,
   prepareQuoteConversionCommand,
   readQuoteCommand,
+  readQuoteCreateReceiptCommand,
   readQuoteConversionReceiptCommand,
 } from "./server/quoteCommands";
 export type {
@@ -11,4 +12,5 @@ export type {
   CreateQuoteInput,
   QuoteCommandCapabilities,
   QuoteCommandContext,
+  ReadQuoteCreateReceiptResult,
 } from "./server/types";

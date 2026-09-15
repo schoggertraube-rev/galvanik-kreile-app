@@ -4,6 +4,7 @@ export type {
   CreateCustomerInput,
   CustomerCreateCommandResult,
   CustomerCreateReceipt,
+  ReadCustomerCreateReceiptResult,
 } from "./server/types";
 export type {
   CustomerCardModel,

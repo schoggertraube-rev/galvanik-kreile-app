@@ -117,7 +117,7 @@ describe("W2C-B1 caller containment", () => {
   it("keeps the Wareneingang route free of a second edit surface", async () => {
     const wareneingang = await readFile(path.join(srcRoot, "app/warendurchlauf/wareneingang/page.tsx"), "utf8");
 
-    expect(wareneingang).toContain("kanonische V8-Karte");
+    expect(wareneingang).toContain("Details, Verlauf und die verfügbaren");
     expect(wareneingang).not.toContain("OrderEditModal");
     expect(wareneingang).not.toContain("selectedOrderForEdit");
   });

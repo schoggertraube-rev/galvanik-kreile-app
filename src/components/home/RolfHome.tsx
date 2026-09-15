@@ -31,7 +31,6 @@ export async function loadRolfHome(authorization: AuthorizationSnapshot): Promis
   try {
     const orders = await getOperationalOrders(authorization);
     const common = {
-      displayName: authorization.displayName,
       role: authorization.role,
       canCreateOrder: authorization.permissions.includes("perm_data_orders"),
     } as const;
@@ -39,7 +38,7 @@ export async function loadRolfHome(authorization: AuthorizationSnapshot): Promis
       ? { kind: "empty", ...common }
       : { kind: "data", ...common, orders: orders.map(toRolfOrder) };
   } catch {
-    return { kind: "error", message: "Der Tag konnte nicht sicher geladen werden." };
+    return { kind: "error", message: "Die mandantengebundene Auftragsprojektion konnte nicht sicher geladen werden." };
   }
 }
 

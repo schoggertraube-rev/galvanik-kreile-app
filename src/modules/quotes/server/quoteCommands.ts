@@ -14,6 +14,7 @@ import type {
   QuotePosition,
   QuoteReadback,
   ReadQuoteConversionReceiptResult,
+  ReadQuoteCreateReceiptResult,
   ReadQuoteResult,
 } from "./types";
 
@@ -110,11 +111,12 @@ function normalizeCreate(value: unknown): CreateQuoteInput | null {
 }
 
 function normalizeConvert(value: unknown): ConvertQuoteInput | null {
-  if (!plainObject(value) || !exactKeys(value, ["clientEventId", "confirmedAward", "expectedVersion", "quoteId"])) return null;
+  if (!plainObject(value) || !exactKeys(value, ["clientEventId", "confirmedAward", "confirmedOrderDueDate", "expectedVersion", "quoteId"])) return null;
   if (typeof value.quoteId !== "string" || !UUID_PATTERN.test(value.quoteId)
     || typeof value.clientEventId !== "string" || !UUID_PATTERN.test(value.clientEventId)
     || value.confirmedAward !== true || typeof value.expectedVersion !== "number"
-    || !Number.isSafeInteger(value.expectedVersion) || value.expectedVersion < 1) return null;
+    || !Number.isSafeInteger(value.expectedVersion) || value.expectedVersion < 1
+    || !validDate(value.confirmedOrderDueDate)) return null;
   return value as ConvertQuoteInput;
 }
 
@@ -261,6 +263,43 @@ export async function readQuoteCommand(authorization: QuoteCommandContext, input
   }
 }
 
+/** Read-only recovery for an interrupted KV create using the original client event. */
+export async function readQuoteCreateReceiptCommand(
+  authorization: QuoteCommandContext,
+  input: unknown,
+): Promise<ReadQuoteCreateReceiptResult> {
+  const normalized = normalizeCreate(input);
+  if (!normalized) return { code: "VALIDATION_ERROR", message: "Die gespeicherte KV-Anfrage kann nicht sicher geprüft werden." };
+  if (!authorization.capabilities.canReadQuote) return { code: "FORBIDDEN", message: "Der gespeicherte KV-Stand darf mit dieser Rolle nicht gelesen werden." };
+  const intentSha256 = hashIntent(normalized);
+  try {
+    return await withPrivilegedTenantTransaction(authorization, async (tx) => {
+      const rows = await tx.execute<CreateReceiptRow>(sql`
+        SELECT * FROM private.v_quote_create_receipts_v1
+        WHERE actor_id = ${authorization.userId}::uuid AND client_event_id = ${normalized.clientEventId}::uuid LIMIT 2
+      `);
+      if (rows.length === 0) return { code: "NOT_FOUND", message: "Zu dieser Anfrage wurde noch kein sicherer KV-Stand gefunden." };
+      const receipt = rows.length === 1 ? rows[0] : null;
+      const recordedAt = receipt ? iso(receipt.recorded_at) : null;
+      if (!receipt || receipt.integrity_ok !== true || receipt.tenant_id !== authorization.tenantId
+        || receipt.customer_id !== normalized.customerId || receipt.actor_id !== authorization.userId
+        || receipt.client_event_id !== normalized.clientEventId || receipt.intent_sha256 !== intentSha256 || !recordedAt) {
+        throw new Error("QUOTE_CREATE_RECEIPT_INVALID");
+      }
+      const quote = await readQuote(tx, authorization.tenantId, receipt.quote_id);
+      if (!quote || quote.customerId !== normalized.customerId) throw new Error("QUOTE_CREATE_RECEIPT_READBACK_INVALID");
+      return { code: "OK", quote, receipt: {
+        receiptId: receipt.receipt_id, eventId: receipt.event_id, quoteId: receipt.quote_id, customerId: receipt.customer_id,
+        actorId: receipt.actor_id, clientEventId: receipt.client_event_id, correlationId: receipt.correlation_id,
+        recordedAt, aggregateVersion: 1,
+      } };
+    });
+  } catch (error) {
+    console.error("quote_create_receipt_read_failed", { message: diagnostic(error, "message"), details: diagnostic(error, "details"), hint: diagnostic(error, "hint") });
+    return { code: "UNAVAILABLE", message: "Der gespeicherte KV-Stand konnte nicht sicher gelesen werden." };
+  }
+}
+
 export async function prepareQuoteConversionCommand(authorization: QuoteCommandContext, input: unknown): Promise<PrepareQuoteConversionResult> {
   const normalized = normalizeConvert(input);
   if (!normalized) return { code: "VALIDATION_ERROR", message: "Beauftragungsdaten sind ungültig." };
@@ -270,7 +309,7 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const quote = await readQuote(tx, authorization.tenantId, normalized.quoteId);
       if (!quote) return { code: "NOT_FOUND", message: "KV ist nicht verfügbar." };
-      const orderInput: QuoteOrderInput = {
+      const sourceOrderInput: QuoteOrderInput = {
         clientEventId: normalized.clientEventId,
         customer: { mode: "EXISTING", customerId: quote.customerId },
         dueDate: quote.dueDate,
@@ -278,6 +317,12 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
         items: quote.positions.map(({ name, quantity, material, surfaceRequested }) => ({
           name, quantity, material, surfaceRequested,
         })),
+      };
+      // The quote keeps the customer's requested date. The confirmed order date is
+      // explicitly part of the immutable F1.1 intent and therefore of replay/conflict.
+      const orderInput: QuoteOrderInput = {
+        ...sourceOrderInput,
+        dueDate: normalized.confirmedOrderDueDate,
       };
       const orderIntentSha256 = hashOrderIntent(orderInput);
       const rows = await tx.execute<{ result_code: string; order_input: unknown; replayed: boolean }>(sql`
@@ -293,11 +338,27 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
         }
         throw new Error("QUOTE_CONVERSION_PLAN_INVALID");
       }
-      const persistedOrderInput = result.order_input as QuoteOrderInput;
-      if (!plainObject(persistedOrderInput) || persistedOrderInput.clientEventId !== normalized.clientEventId
-        || persistedOrderInput.customer?.mode !== "EXISTING" || persistedOrderInput.customer.customerId !== orderInput.customer.customerId
-        || persistedOrderInput.dueDate !== orderInput.dueDate || persistedOrderInput.note !== orderInput.note
-        || hashOrderIntent(persistedOrderInput) !== orderIntentSha256) throw new Error("QUOTE_ORDER_INPUT_INVALID");
+      let persistedOrderInput: unknown = result.order_input;
+      if (typeof persistedOrderInput === "string") {
+        try {
+          persistedOrderInput = JSON.parse(persistedOrderInput) as unknown;
+        } catch {
+          throw new Error("QUOTE_ORDER_INPUT_INVALID");
+        }
+      }
+      // SQL preserves the quote's wish-date snapshot and its immutable order-intent
+      // hash. The actual F1.1 input below uses the explicit promised date; changing
+      // that date with the same client event conflicts on the stored hash.
+      if (!plainObject(persistedOrderInput) || !plainObject(persistedOrderInput.customer)
+        || persistedOrderInput.clientEventId !== normalized.clientEventId
+        || persistedOrderInput.customer.mode !== "EXISTING" || persistedOrderInput.customer.customerId !== sourceOrderInput.customer.customerId
+        || persistedOrderInput.dueDate !== sourceOrderInput.dueDate || persistedOrderInput.note !== sourceOrderInput.note
+        || !Array.isArray(persistedOrderInput.items) || persistedOrderInput.items.length !== sourceOrderInput.items.length
+        || !persistedOrderInput.items.every((item, index) => plainObject(item)
+          && item.name === sourceOrderInput.items[index]?.name
+          && item.quantity === sourceOrderInput.items[index]?.quantity
+          && item.material === sourceOrderInput.items[index]?.material
+          && item.surfaceRequested === sourceOrderInput.items[index]?.surfaceRequested)) throw new Error("QUOTE_ORDER_INPUT_INVALID");
       return { code: "OK", quoteId: normalized.quoteId, orderInput, replayed: result.replayed };
     });
   } catch (error) {

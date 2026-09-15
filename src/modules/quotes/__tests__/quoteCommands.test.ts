@@ -76,7 +76,7 @@ describe("quotes command boundary", () => {
       .mockResolvedValueOnce([{ result_code: "CONFLICT", order_input: null, replayed: false }]);
     const { prepareQuoteConversionCommand } = await import("../server/quoteCommands");
     await expect(prepareQuoteConversionCommand(authorization, {
-      quoteId: QUOTE, clientEventId: CLIENT, expectedVersion: 2, confirmedAward: true,
+      quoteId: QUOTE, clientEventId: CLIENT, expectedVersion: 2, confirmedAward: true, confirmedOrderDueDate: "2026-10-20",
     })).resolves.toMatchObject({ code: "CONFLICT" });
   });
 

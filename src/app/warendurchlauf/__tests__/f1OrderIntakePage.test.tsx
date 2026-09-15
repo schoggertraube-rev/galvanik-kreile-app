@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const ports = vi.hoisted(() => ({
   orders: vi.fn(),
-  openErfassung: vi.fn(),
+  openGlobalCreate: vi.fn(),
   openOrder: vi.fn(),
 }));
 
@@ -21,8 +21,8 @@ const ports = vi.hoisted(() => ({
 vi.mock("@/app/warendurchlauf/actions", () => ({
   getWareneingangOrdersAction: ports.orders,
 }));
-vi.mock("@/components/erfassung/ErfassungProvider", () => ({
-  useErfassung: () => ({ openErfassung: ports.openErfassung }),
+vi.mock("@/components/layout/GlobalCreateFlow", () => ({
+  requestGlobalCreate: ports.openGlobalCreate,
 }));
 vi.mock("@/modules/orders/public", () => ({
   OrderQueueRow: ({
@@ -83,7 +83,7 @@ const stationOrder = {
   status: "angenommen",
 };
 
-const intakeControlNames = [/Kamera/i, /Wareneingang anlegen/i];
+const intakeControlNames = [/Wareneingang anlegen/i];
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -100,8 +100,8 @@ describe("F1.1 Wareneingang placement", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /Wareneingang anlegen/i }),
     );
-    expect(ports.openErfassung).toHaveBeenCalledTimes(1);
-    expect(ports.openErfassung).toHaveBeenCalledWith({ mode: "order" });
+    expect(ports.openGlobalCreate).toHaveBeenCalledTimes(1);
+    expect(ports.openGlobalCreate).toHaveBeenCalledWith("DIRECT_INTAKE");
 
     window.dispatchEvent(
       new CustomEvent("order-intake:created", {
@@ -219,24 +219,31 @@ describe("F1.1 Wareneingang truthful states", () => {
       expect(
         screen.queryByRole("link", { name: /Telefonnotiz/i }),
       ).not.toBeInTheDocument();
-      expect(ports.openErfassung).not.toHaveBeenCalled();
+      expect(ports.openGlobalCreate).not.toHaveBeenCalled();
     },
   );
 
   it.each([
-    ["UNAVAILABLE", "Berechtigungen sind derzeit nicht verfügbar."],
-    ["QUERY_ERROR", "Stationsliste konnte nicht sicher geladen werden."],
-    ["NOT_AVAILABLE", "NOT_AVAILABLE: Stationsliste ist nicht verfügbar."],
+    ["UNAVAILABLE"],
+    ["QUERY_ERROR"],
+    ["NOT_AVAILABLE"],
   ])(
     "reports %s as an error without cards or empty success",
-    async (error, message) => {
-      ports.orders.mockResolvedValueOnce({ ok: false, error, message });
+    async (error) => {
+      ports.orders.mockResolvedValueOnce({
+        ok: false,
+        error,
+        message: "Interner Lesefehler",
+      });
       render(<WareneingangPage />);
 
       await waitFor(() =>
         expect(screen.getByTestId("wareneingang-error")).toBeInTheDocument(),
       );
-      expect(screen.getByText(message)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Die Aufträge im Wareneingang sind gerade nicht abrufbar/i),
+      ).toBeInTheDocument();
+      expect(screen.getByText("Technische Details für Support")).toBeInTheDocument();
       expect(
         screen.queryByText("Noch keine Daten erfasst."),
       ).not.toBeInTheDocument();
@@ -259,7 +266,7 @@ describe("F1.1 Wareneingang truthful states", () => {
     );
     expect(
       screen.getByText(
-        "NOT_AVAILABLE: Stationsliste konnte nicht sicher geladen werden.",
+        /Die Aufträge im Wareneingang sind gerade nicht abrufbar/i,
       ),
     ).toBeInTheDocument();
     expect(

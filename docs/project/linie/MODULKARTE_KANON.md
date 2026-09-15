@@ -15,7 +15,7 @@ Quelle: Owner-Modulmindmap „Baustruktur Mini-USP" (Stand 15.08.2026), ratifizi
 ## HOME/UI (kein eigenes „Modul", sondern Sicht auf dieselben Daten)
 - Werkstatt = Phillip V4 (Kontroll-Home „Heute sichern"). „Der Tag" = Rolf V8. Referenz: `ui/`.
 - `src/modules/werkstatt/` trägt die Phillip-V4-UI; `/warendurchlauf` ist die App-Kompositionswurzel. Der `Ware raus`-Port filtert ausschließlich die kanonische Station `fertig`. Ob diese Verträge auf `main` geliefert sind und welches Paket aktiv ist, steht ausschließlich in `CURRENT_STATE.md` beziehungsweise der Mission.
-- `ui/CURRENT_DESIGN_REFERENCE.json` bindet zusätzlich genau eine aktuelle Ablauf-/Zwischenschritt-Referenz. D-UI-V5-001 legt V5 für den Ablauf fest; die vier Einzelreferenzen bleiben Seitenwahrheit. Jede Kernseite besitzt ein globales Plus mit höchstens zwei Klicks bis zur manuellen Eingabe für Kunde oder Auftrag/KV. Sichtbare Alltagspersonen sind Rolf und Phillip; technische Rollen bleiben im Auth-Vertrag.
+- `ui/CURRENT_DESIGN_REFERENCE.json` bindet zusätzlich genau eine aktuelle Ablauf-/Zwischenschritt-Referenz. D-UI-V5-001 legt V5 für den Ablauf fest; die vier Einzelreferenzen bleiben Seitenwahrheit. Jede Kernseite besitzt ein globales Plus mit höchstens zwei Klicks bis zur manuellen Eingabe für Kunde oder Auftrag/KV. D-UI-V5-002 bindet sichtbar ausschließlich Rolf (Meister), Phillip (Werkstatt) und Gregor (Systemadministrator); technische Rollen bleiben ausschließlich der kompatible serverseitige Auth-/Audit-Vertrag. Die Produktidentität wird aus der serverseitig festgestellten Rolle abgeleitet; fehlende oder mehrdeutige Profile bleiben geschlossen.
 
 ### Verbindlicher Zielumfang der Path-1-UI-Konvergenz (D-UI-CORE-001/002)
 

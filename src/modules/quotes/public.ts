@@ -10,5 +10,6 @@ export type {
   QuotePositionInput,
   QuoteReadback,
   ReadQuoteConversionReceiptResult,
+  ReadQuoteCreateReceiptResult,
   ReadQuoteResult,
 } from "./server/types";

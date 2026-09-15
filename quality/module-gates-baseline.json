@@ -109,10 +109,6 @@
         "sha256": "4D9CD76B2CA96D2B78847099FD04BD30C00C3E6AD8BCCEF92F1A487042D42503"
       },
       {
-        "path": "src/app/buchhaltung/page.tsx",
-        "sha256": "4D9CD76B2CA96D2B78847099FD04BD30C00C3E6AD8BCCEF92F1A487042D42503"
-      },
-      {
         "path": "src/app/buchhaltung/periodenabschluss/page.tsx",
         "sha256": "4D9CD76B2CA96D2B78847099FD04BD30C00C3E6AD8BCCEF92F1A487042D42503"
       },
@@ -263,10 +259,6 @@
       {
         "path": "src/app/settings/page.tsx",
         "sha256": "405E4D266A40D4B78C2EB8CAF8DACA26DCB47F5206AEF815944BC9950ED7E29C"
-      },
-      {
-        "path": "src/app/start/page.tsx",
-        "sha256": "80B626C9DC9B2CBA112529F6104B912A3DF46989241E564768946C2EBBC9D3C5"
       },
       {
         "path": "src/app/station/layout.tsx",

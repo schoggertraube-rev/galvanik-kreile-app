@@ -11,15 +11,16 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const stationDenial = "NOT_AVAILABLE: Stationsliste ist nicht verfügbar.";
+const stationDenial =
+  "Die Aufträge im Wareneingang sind gerade nicht abrufbar. Es wurde nichts verändert. Bitte prüfen Sie die Verbindung und versuchen Sie es erneut.";
 const stationThrowDenial =
-  "NOT_AVAILABLE: Stationsliste konnte nicht sicher geladen werden.";
+  "Die Aufträge im Wareneingang sind gerade nicht abrufbar. Es wurde nichts verändert. Bitte prüfen Sie die Verbindung und versuchen Sie es erneut.";
 const ports = vi.hoisted(() => ({
   resolveAuthorization: vi.fn(),
   getWareneingangOrdersAction: vi.fn(),
   getGalvanikOrdersAction: vi.fn(),
   getWarendurchlaufKPIs: vi.fn(),
-  openErfassung: vi.fn(),
+  openGlobalCreate: vi.fn(),
   openOrder: vi.fn(),
   pushRoute: vi.fn(),
   useSelectedLayoutSegment: vi.fn(),
@@ -38,8 +39,8 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
   useSelectedLayoutSegment: ports.useSelectedLayoutSegment,
 }));
-vi.mock("@/components/erfassung/ErfassungProvider", () => ({
-  useErfassung: () => ({ openErfassung: ports.openErfassung }),
+vi.mock("@/components/layout/GlobalCreateFlow", () => ({
+  requestGlobalCreate: ports.openGlobalCreate,
 }));
 vi.mock("@/modules/orders/public", () => ({
   isOrderStationForwardRole: (role: string) =>
@@ -235,7 +236,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(
       screen.queryByRole("button", { name: "Neuer Eingang" }),
     ).not.toBeInTheDocument();
-    expect(ports.openErfassung).not.toHaveBeenCalled();
+    expect(ports.openGlobalCreate).not.toHaveBeenCalled();
 
     expect(ports.resolveAuthorization.mock.invocationCallOrder[0]).toBeLessThan(
       ports.getWareneingangOrdersAction.mock.invocationCallOrder[0],
@@ -383,7 +384,7 @@ describe("W2C-B2M5J unavailable UI", () => {
       screen.getByRole("button", { name: "Auftrag öffnen / scannen" }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Auftrag scannen" }));
-    expect(ports.openErfassung).toHaveBeenCalledWith({ mode: "scan" });
+    expect(ports.openGlobalCreate).toHaveBeenCalledWith("DIRECT_INTAKE");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -520,12 +521,7 @@ describe("W2C-B2M5J unavailable UI", () => {
 
     const intakeButton = screen.getByRole("button", { name: "Neuer Eingang" });
     fireEvent.click(intakeButton);
-    expect(ports.openErfassung).toHaveBeenCalledWith({
-      mode: "order",
-      intent: "create_order",
-      source: "shortcut",
-      returnTo: "/warendurchlauf",
-    });
+    expect(ports.openGlobalCreate).toHaveBeenCalledWith("DIRECT_INTAKE");
   });
 
   it("renders a truthful root empty state only after both station ports succeed empty", async () => {
@@ -754,7 +750,7 @@ describe("W2C-B2M5J unavailable UI", () => {
       expect(
         screen.queryByRole("navigation", { name: "Werkstattaktionen" }),
       ).not.toBeInTheDocument();
-      expect(ports.openErfassung).not.toHaveBeenCalled();
+      expect(ports.openGlobalCreate).not.toHaveBeenCalled();
       expect(ports.openOrder).not.toHaveBeenCalled();
     },
   );
@@ -858,8 +854,9 @@ describe("W2C-B2M5J unavailable UI", () => {
       /next\/link|next\/navigation|\/warendurchlauf\//,
     );
     expect(adapterSource).toContain(
-      'from "@/components/erfassung/ErfassungProvider"',
+      'from "@/components/layout/GlobalCreateFlow"',
     );
+    expect(adapterSource).not.toContain("ErfassungProvider");
     expect(adapterSource).toContain('from "@/hooks/usePageView"');
     expect(adapterSource).toContain('from "@/lib/overlayStore"');
     expect(adapterSource).toContain('from "next/navigation"');
@@ -978,9 +975,9 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(source).toContain("setStationListPending(false);");
     expect(source).toContain("{stationListPending ? (");
     expect(source).toContain("Stationsliste wird geladen.");
-    expect(source).toContain("setStationUnavailableMessage(resList.message)");
+    expect(source).toContain("setStationUnavailableMessage(safeStationError)");
     expect(source).toContain(
-      "NOT_AVAILABLE: Stationsliste konnte nicht sicher geladen werden.",
+      "Die Aufträge im Wareneingang sind gerade nicht abrufbar. Es wurde nichts verändert. Bitte prüfen Sie die Verbindung und versuchen Sie es erneut.",
     );
     expect(source).toContain("getWareneingangOrdersAction()");
     expect(source).not.toContain('getStationOrders("wareneingang")');

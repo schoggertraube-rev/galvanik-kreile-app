@@ -37,8 +37,8 @@ delivery_order:
   - F1.6_REALER_PILOT
 
 active_package: PATH1_UI_CONVERGENCE
-active_package_status: V5_GLOBAL_PLUS_CUSTOMER_QUOTE_ORDER_CANDIDATE_EXACT_SHA_CI_PREVIEW_AND_INDEPENDENT_REVIEW_PENDING_NO_UI_PASS
-next_gate_after_active_package: EXACT_SHA_CI_PREVIEW_AND_INDEPENDENT_REVIEW
+active_package_status: V5_ROLE_SESSION_SHELL_AND_MANUAL_CORE_PATH_REPAIR_CANDIDATE_LOCAL_ACCEPTANCE_PENDING_NO_UI_PASS
+next_gate_after_active_package: FRESH_SUPABASE_BROWSER_MATRIX_EXACT_SHA_CI_PREVIEW_AND_INDEPENDENT_REVIEW
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
@@ -97,10 +97,10 @@ path1_ui_convergence_legacy_ui: FULLY_REJECTED_NOT_A_DELIVERY_BASE
 path1_ui_convergence_reuse: BACKEND_DATA_AUTH_CONTRACTS_AND_SOUND_NON_UI_LOGIC_ONLY
 path1_ui_convergence_acceptance: COHERENT_PHILLIP_V4_ROLF_V8_ORDER_V8_CUSTOMER_V2_SURFACE_WITH_NAV_AND_BACK_PATHS_ON_DESKTOP_TABLET_MOBILE
 path1_ui_convergence_partial_delivery_rule: NO_PARTIAL_UX_PROGRESS_NO_TARGET_SCREEN_PASS_NO_LIVE_CAPABLE_CLAIM
-path1_ui_convergence_a_roles: developer|admin|meister|buero|werkstatt|readonly
+path1_ui_convergence_a_roles: INTERNAL_AUTH_COMPATIBILITY_ONLY_developer|admin|meister|buero|werkstatt|readonly; VISIBLE_PRODUCT_IDENTITIES_ONLY_ROLF_MEISTER_PHILLIP_WERKSTATT_GREGOR_SYSTEMADMIN
 path1_ui_convergence_a_entry: /start=UNAUTHENTICATED_LOGIN_ONLY -> /=ROLE_AWARE_HOME
 path1_ui_convergence_a_google_calendar_blocker: ACTIVE_VISIBLE_GOOGLE_PROVIDER_CLAIM_MUST_BE_REMOVED_OR_ROUTE_FAIL_CLOSED_404
-path1_ui_convergence_a_acceptance: SIX_REAL_ROLE_LOGINS; FULL_ROUTE_1914x917_1220x880_390x844; ALL_VISIBLE_NAV_CLICKED; REMOVED_AND_QUARANTINED_URLS_NEGATIVE; LEGACY_BASELINE_SHRINK_ONLY; NO_P0_P1
+path1_ui_convergence_a_acceptance: PRODUCT_PROFILE_LOGINS_ROLF_PHILLIP_GREGOR; INTERNAL_AUTH_COMPATIBILITY_FAIL_CLOSED; FULL_ROUTE_1914x917_1220x880_390x844; ALL_VISIBLE_NAV_CLICKED; REMOVED_AND_QUARANTINED_URLS_NEGATIVE; LEGACY_BASELINE_SHRINK_ONLY; NO_P0_P1
 path1_ui_convergence_design_pointer: docs/project/linie/ui/CURRENT_DESIGN_REFERENCE.json
 path1_ui_convergence_flow_reference: docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html
 path1_ui_convergence_flow_reference_sha256: 75258FF3BD4CC212C8E989061708A29DC26EA44B851BD28E8F16E8509B0CC0AA
@@ -111,9 +111,9 @@ path1_ui_convergence_v5_work_unit_1: CANON_BINDING; NARROW_NEXT_APP_COMPOSITION_
 path1_ui_convergence_v5_work_unit_2: TENANT_BOUND_QUOTE_CREATE_READBACK; ATOMIC_IDEMPOTENT_AWARD_TO_EXISTING_F1_1_ORDER; RECEIPT_AND_LINK_READBACK
 path1_ui_convergence_v5_work_unit_2_status: REMOTE_CHECKPOINT_PASS_8dbc391d484c866e8442c4168858ec2edee1b2ee_NO_UI_PASS
 path1_ui_convergence_customer_facades: CLIENT_SAFE_PUBLIC_UI_AND_TYPES; SERVER_ONLY_SERVER_PUBLIC_COMMANDS; FAIL_CLOSED_MODULE_GATE
-path1_ui_convergence_followup_scope: QUOTES_PERSISTENCE_AND_RECEIPTS -> QUOTE_TO_EXISTING_F1_1_ORDER_ATOMIC_IDEMPOTENT_ONE_LINKED_ORDER -> GLOBAL_PLUS_MANUAL_CUSTOMER_QUOTE_ORDER -> RECHECK_A_C_AGAINST_V5 -> SEARCH_AND_DAILY_JOBS_ST1_ST3 -> REAL_BROWSER_MATRIX
-path1_ui_convergence_smart_capture: PASSIVE_UNCONNECTED_LABEL_ONLY_UNTIL_RATIFIED_REAL_GRAPH_OCR_CONTRACT
-path1_ui_convergence_v5_delivery_claim: TECHNICAL_MILESTONE_ONLY_NO_UI_PARTIAL_PASS_NO_DRAFT_NO_MERGE
+path1_ui_convergence_followup_scope: ONE_V5_CAPTURE_DIRECT_F1_1_INTAKE_AND_CUSTOMER_TO_KV_TO_ORDER -> RECHECK_A_C_AGAINST_V5 -> SEARCH_AND_DAILY_JOBS_ST1_ST3 -> REAL_BROWSER_MATRIX
+path1_ui_convergence_smart_capture: RATIFIED_PORT_AND_MAPPING_SEAM_PENDING_PRODUCT_INTEGRATION_HIDDEN_UNTIL_REAL_GRAPH_OCR_CONTRACT
+path1_ui_convergence_v5_delivery_claim: TECHNICAL_MILESTONE_ONLY_NO_UI_PARTIAL_PASS_DRAFT_CANDIDATE_NO_MERGE
 path1_provider_requirement_decisions: D-ARCH-012; D-AI-001; D-AI-002; D-RES-001
 path1_ai_002_status: CANONICAL_CROSS_CUTTING_CONTRACT_ISOLATED_DEV_CAPABILITY_PARTIAL_NO_PROVIDER_ACTIVATION
 path1_res_001_status: CANONICAL_CROSS_CUTTING_ACCEPTANCE_NO_NEW_TABLE_ROUTE_MODULE_RUNTIME_AUTH_OR_WRITE_PATH
@@ -122,9 +122,20 @@ path1_provider_platform_policy: APPROX_MAX_FIVE_PLATFORMS; SUPABASE_DATA_AUTH_ST
 path1_document_intelligence_policy: CHEAP_FIRST; ORIGINAL_PRIVATE_FIRST; UNTRUSTED_CONTENT; HUMAN_CONFIRMATION; ONE_SAFE_COMMAND_RECEIPT_READBACK
 path1_search_intelligence_policy: RLS_BEFORE_RETRIEVAL; STRUCTURED_FIRST; AUTHORIZED_PUBLIC_READ_PORTS_ONLY; DB_VIEWS_TRUTH; INDEX_RENEWABLE_PROJECTION; NO_MODEL_MUTATION
 path1_provider_activation_status: NONE_ACTIVATED_BY_THIS_WORK_UNIT
-path1_ui_convergence_next_product_build: GLOBAL_PLUS_MANUAL_CUSTOMER_QUOTE_ORDER
+path1_ui_convergence_next_product_build: OWNER_V5_RECOVERY_EXECUTION_20260915
 path1_ui_convergence_v5_visible_build: GLOBAL_PLUS -> CUSTOMER_RECEIPT_READBACK -> QUOTE_RECEIPT_RELOAD_READBACK -> EXACTLY_ONE_EXISTING_F1_1_ORDER_RECEIPT_READBACK
 path1_ui_convergence_v5_visible_build_status: LOCAL_ACCEPTANCE_PENDING_NO_PARTIAL_UI_PASS
+path1_ui_convergence_v5_002: VISIBLE_PRODUCT_IDENTITIES_ROLF_MEISTER_PHILLIP_WERKSTATT_GREGOR_SYSTEMADMIN; UNIQUE_PROFILE_FAIL_CLOSED; ROLF_CAPABILITY_BASED_CUSTOMER_KV_ORDER_AND_F1_1_INTAKE; NO_TECHNICAL_ROLE_OR_TEST_PERSONA_UI
+owner_v5_recovery_execution_20260915:
+  status: TECHNICAL_SLICE_NO_UI_PASS_UNTIL_COMPLETE_A_TO_D_GATE
+  execution: ONE_VISIBLE_V5_CAPTURE_DIRECT_F1_1_INTAKE_AND_CUSTOMER_TO_KV_TO_ONE_ORDER; P0_STATUS_READBACK_WITHOUT_MUTATION_AND_EXPLICIT_RETRY; P0_QUOTE_WISH_DATE_SEPARATE_FROM_CONFIRMED_ORDER_DATE; P0_PRODUCT_LANGUAGE; P1_ROLES_SHELL_AND_CORE_PATHS; P1_EQUIVALENT_PRIVACY_DENIAL_LOADING_ERROR_DEEPLINK_PROOFS
+  visible_product_identities: ROLF_MEISTER; PHILLIP_WERKSTATT; GREGOR_SYSTEMADMIN
+  product_identity_binding: SERVER_ONLY_EXACT_NON_SECRET_APPUSER_ID_CONFIGURATION; NO_ROLE_ALIAS_OR_PERSON_MASKING; MISSING_OR_DUPLICATE_MAPPING_FAIL_CLOSED
+  internal_roles: SIX_TECHNICAL_AUTH_COMPATIBILITY_ROLES_ONLY_NEVER_VISIBLE_PRODUCT_PROFILES
+  environment: FRESH_SUPABASE_LOOPBACK_ONLY_NO_REMOTE_DB_OR_PROVIDER
+  p2_after_recovery: SERVER_RESUMABLE_QUOTE_DRAFTS_OPEN_LIST_EDIT_VERSION_STATUS_PDF_M365_PORT_LATER_TECHNICAL_SLICE_NO_KV_PRODUCT_PASS
+  p3_after_recovery: ORDERS_V8_CUSTOMERS_V2_INTELLIGENT_HOMES_SEARCH_STATUS_APP_FACTS_LANE_0_METERED_COST_0_AI_LATER_SOURCE_CONFIRM_COMMAND
+  p4_after_recovery: ORIGINAL_FIRST_OCR_M365_AFTER_VISIBLE_A_TO_D_CHEAP_FIRST_FACT_LEDGER_HUMAN_CONFIRM_NO_IMPLEMENTATION_NOW
 
 # ── F1.2 Entscheidungsgrundlage (bindend, ersetzt Altstand) ───────
 # D-F12-001A (ersetzt D-F12-001): F1.2 = genau EIN Uebergang
@@ -361,6 +372,14 @@ f1_4_allowlist:
   - src/components/orders/__tests__/OrderImmutableInvoiceButton.test.tsx
   - src/app/buchhaltung/rechnungen/__tests__/page.test.tsx
   - src/app/buchhaltung/__tests__/w2c.activeRouteContainment.test.tsx
+  - src/app/actions/__tests__/updateOrderDb.failClosed.test.ts
+  # Owner-20260915: kanonische FUNDAMENT- und ACCOUNTING-minimal-Fassaden
+  - src/modules/fundament/fundament.manifest.json
+  - src/modules/fundament/public.ts
+  - src/app/start/StartAppAdapter.tsx
+  - src/modules/accounting/accounting.manifest.json
+  - src/modules/accounting/public.ts
+  - src/modules/accounting/ui/AccountingEntry.tsx
   - src/test/f1_4_immutable_invoice_contract.integration.test.ts
   - src/test/f1_4_immutable_invoice.integration.test.ts
   - e2e/f1-4-immutable-invoice.real.spec.ts
@@ -486,8 +505,27 @@ path1_ui_convergence_allowlist:
   - src/app/GlobalCreateAppAdapter.tsx
   - src/components/layout/GlobalCreateFlow.tsx
   - src/components/layout/__tests__/path1GlobalCreateFlow.realRender.test.tsx
+  - src/components/erfassung/__tests__/OrderIntakePanel.test.tsx
   - e2e/path1-ui-convergence-v5-global-create.spec.ts
   - docs/evidence/path1/PATH1_UI_CONVERGENCE_V5_GLOBAL_CREATE.md
+  # D-UI-V5-002: sichtbare Identität, capability-basierte Kernwege und reale Rechnungsroute
+  - src/lib/auth/authorizationContract.ts
+  - src/lib/auth/userDtos.ts
+  - src/lib/auth/PermissionsContext.tsx
+  - src/lib/auth/__tests__/PermissionsContext.test.tsx
+  - src/app/buchhaltung/page.tsx
+  - src/app/buchhaltung/rechnungen/page.tsx
+  - src/app/buchhaltung/rechnungen/InvoicesClient.tsx
+  - src/app/buchhaltung/__tests__/w2c.activeRouteContainment.test.tsx
+  # Owner-20260915: enge, manifestierte FUNDAMENT- und ACCOUNTING-minimal-
+  # Fassaden fuer die beiden geaenderten App-Entrypoints; keine generische
+  # Routenzuordnung und keine neue Fachfaehigkeit.
+  - src/modules/fundament/fundament.manifest.json
+  - src/modules/fundament/public.ts
+  - src/app/start/StartAppAdapter.tsx
+  - src/modules/accounting/accounting.manifest.json
+  - src/modules/accounting/public.ts
+  - src/modules/accounting/ui/AccountingEntry.tsx
   # Work Unit 2 entfernt nach Link-/Importinventar die drei alten KV-Attrappenpfade
   # sowie ausschließlich die belegten toten Links; die Page-Pfade stehen unten.
   - src/app/quotes/__tests__/w2cB2m5a.inquiries.failClosed.test.ts

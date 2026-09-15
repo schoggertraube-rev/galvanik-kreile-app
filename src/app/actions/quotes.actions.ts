@@ -3,10 +3,12 @@
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { createOrderIntake } from "@/lib/server/commands/orderIntakeCommand";
+import { readOrderIntakeReceipt } from "@/lib/server/orderIntakeRead";
 import {
   createQuoteCommand,
   prepareQuoteConversionCommand,
   readQuoteCommand,
+  readQuoteCreateReceiptCommand,
   readQuoteConversionReceiptCommand,
   type ConvertQuoteInput,
   type CreateQuoteInput,
@@ -60,6 +62,46 @@ export async function readQuoteAction(input: { quoteId: string }) {
   const failure = authorizationFailure(authorization);
   if (failure || !authorization.ok) return failure!;
   return readQuoteCommand(quoteCommandContext(authorization.data), input);
+}
+
+/** Read-only recovery for an interrupted KV create; it never starts a command. */
+export async function readQuoteCreateReceiptAction(input: CreateQuoteInput) {
+  noStore();
+  let authorization;
+  try {
+    authorization = await resolveAuthorization();
+  } catch {
+    return { code: "UNAVAILABLE" as const, message: "Der gespeicherte KV-Stand konnte nicht sicher gelesen werden." };
+  }
+  const failure = authorizationFailure(authorization);
+  if (failure || !authorization.ok) return failure!;
+  return readQuoteCreateReceiptCommand(quoteCommandContext(authorization.data), input);
+}
+
+/** Read-only recovery for an interrupted award. It verifies both receipts. */
+export async function readQuoteConversionReceiptAction(input: { quoteId: string; clientEventId: string }) {
+  noStore();
+  let authorization;
+  try {
+    authorization = await resolveAuthorization();
+  } catch {
+    return { code: "UNAVAILABLE" as const, message: "Der gespeicherte Auftragsstand konnte nicht sicher gelesen werden." };
+  }
+  const failure = authorizationFailure(authorization);
+  if (failure || !authorization.ok) return failure!;
+  const persisted = await readQuoteConversionReceiptCommand(quoteCommandContext(authorization.data), input);
+  if (persisted.code !== "OK") return persisted;
+  try {
+    const orderReceipt = await readOrderIntakeReceipt(authorization.data, {
+      orderId: persisted.receipt.orderId, clientEventId: input.clientEventId,
+    });
+    if (!orderReceipt || orderReceipt.orderId !== persisted.receipt.orderId || orderReceipt.customerId !== persisted.receipt.customerId) {
+      return { code: "UNAVAILABLE" as const, message: "Ein KV-Zuschlag wurde gefunden, der zugehörige Auftragsstand ist aber noch nicht sicher lesbar." };
+    }
+    return { code: "OK" as const, quote: persisted.quote, quoteReceipt: persisted.receipt, orderReceipt };
+  } catch {
+    return { code: "UNAVAILABLE" as const, message: "Der gespeicherte Auftragsstand konnte nicht sicher gelesen werden." };
+  }
 }
 
 export async function convertQuoteToOrderAction(input: ConvertQuoteInput) {

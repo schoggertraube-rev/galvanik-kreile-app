@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ArrowRight, ClipboardList, Factory, Inbox, PackageCheck, Truck, X } from "lucide-react";
-import { useErfassung } from "@/components/erfassung/ErfassungProvider";
+import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { useOverlayStore } from "@/lib/overlayStore";
 import styles from "./RolfHome.module.css";
 
@@ -23,7 +23,6 @@ export type RolfOrder = {
 };
 
 type RolfIdentity = {
-  displayName: string;
   role: "buero" | "meister" | "readonly";
   canCreateOrder: boolean;
 };
@@ -68,15 +67,14 @@ function riskLabel(risk: string): string {
 }
 
 export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
-  const { openErfassung } = useErfassung();
   const openOrder = useOverlayStore((state) => state.openOrder);
   const [goodsOutOpen, setGoodsOutOpen] = useState(false);
 
   if (model.kind === "denied") {
-    return <section className={styles.state} role="status"><h1>Zugriff nicht freigegeben</h1><p>{model.message}</p></section>;
+    return <section className={styles.state} role="status"><h1>Der Tagesbestand ist nicht freigegeben</h1><p>Datenstand: Es wurden für dieses Profil keine Auftragsdaten geladen.</p><p>{model.message} Nächster Schritt: Mit dem freigegebenen Profil erneut anmelden.</p></section>;
   }
   if (model.kind === "error") {
-    return <section className={styles.state} role="alert"><h1>Der Tag ist nicht verfügbar</h1><p>{model.message}</p><p>Es werden keine veralteten Daten angezeigt.</p></section>;
+    return <section className={styles.state} role="alert"><h1>Der Tagesbestand ist nicht verfügbar</h1><p>Datenstand: Es werden keine älteren Auftragsdaten angezeigt.</p><p>{model.message} Nächster Schritt: Seite erneut laden.</p></section>;
   }
 
   const orders = model.kind === "data" ? model.orders : [];
@@ -90,7 +88,7 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
       <header className={styles.hero}>
         <div>
           <p className={styles.eyebrow}>Der Tag</p>
-          <h1 id="rolf-title">Guten Tag, {model.displayName}</h1>
+          <h1 id="rolf-title">Guten Tag, Rolf</h1>
           <p>Was heute Aufmerksamkeit braucht – aus dem aktuellen Auftragsbestand.</p>
         </div>
         <Link className={styles.primaryLink} href="/orders"><ClipboardList aria-hidden="true" />Alle Aufträge<ArrowRight aria-hidden="true" /></Link>
@@ -98,8 +96,8 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
 
       <nav className={styles.quick} aria-label="Schnellaktionen">
         {canWrite && model.canCreateOrder ? (
-          <button type="button" onClick={() => openErfassung({ mode: "order", intent: "create_order", source: "shortcut", returnTo: "/" })}>
-            <Inbox aria-hidden="true" /><span><strong>Neuer Eingang</strong><small>Auftrag kanonisch erfassen</small></span>
+          <button type="button" onClick={() => requestGlobalCreate("DIRECT_INTAKE")}>
+            <Inbox aria-hidden="true" /><span><strong>Neuer Eingang</strong><small>Kunde, Teile und Termin erfassen</small></span>
           </button>
         ) : null}
         {canWrite ? (
@@ -113,8 +111,9 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
       {model.kind === "empty" ? (
         <div className={styles.state} role="status">
           <PackageCheck aria-hidden="true" />
-          <h2>Der Auftragsbestand ist leer</h2>
-          <p>Aufträge und Werkstattstatus wurden geprüft. Es liegen derzeit keine offenen Aufgaben vor.</p>
+          <h2>Heute ist kein offener Auftrag eingegangen</h2>
+          <p>Datenstand: Die mandantengebundene Auftragsprojektion ist geladen und enthält derzeit keine offenen Aufträge.</p>
+          {canWrite && model.canCreateOrder ? <button type="button" className={styles.primaryLink} onClick={() => requestGlobalCreate("DIRECT_INTAKE")}>Neuen Eingang anlegen<ArrowRight aria-hidden="true" /></button> : <Link className={styles.primaryLink} href="/orders">Aufträge öffnen<ArrowRight aria-hidden="true" /></Link>}
         </div>
       ) : (
         <div className={styles.grid}>

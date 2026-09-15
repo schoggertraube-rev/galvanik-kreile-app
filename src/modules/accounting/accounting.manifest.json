@@ -1,0 +1,16 @@
+{
+  "moduleId": "accounting",
+  "version": "1.0.0",
+  "owner": "Path-1 Accounting-minimal (Rechnungseinstieg)",
+  "publicExports": [
+    "@/modules/accounting/public#AccountingEntry"
+  ],
+  "capabilities": [],
+  "migrations": [],
+  "viewsFunctions": [],
+  "ownsTables": [],
+  "storagePurposes": [],
+  "events": { "emits": [], "consumes": [] },
+  "config": {},
+  "dependencies": []
+}

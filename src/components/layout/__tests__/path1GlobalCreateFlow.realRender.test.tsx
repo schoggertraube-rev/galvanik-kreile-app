@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   GlobalCreateFlow,
@@ -44,7 +44,7 @@ function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
   return {
     canCreateCustomer: true,
     canCreateQuote: true,
-    roleLabel: "Büro",
+    roleLabel: "Rolf",
     resumeQuoteId: null,
     listCustomers: vi.fn().mockResolvedValue({ code: "OK", customers: [{ id: CUSTOMER_ID, customerNumber: "K-2026-0042", name: "SYNTHETISCH Musterkunde GmbH", city: "Teststadt" }] }),
     createCustomer: vi.fn().mockImplementation(async (input) => ({
@@ -62,6 +62,7 @@ function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
       },
       customer: { id: CUSTOMER_ID, customerNumber: "K-2026-0042", name: input.name },
     })),
+    readCustomerCreateReceipt: vi.fn().mockResolvedValue({ code: "NOT_FOUND", message: "Kein Kundenstand gefunden." }),
     createQuote: vi.fn().mockImplementation(async (input) => ({
       code: "OK",
       replayed: false,
@@ -78,6 +79,7 @@ function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
         aggregateVersion: 1,
       },
     })),
+    readQuoteCreateReceipt: vi.fn().mockResolvedValue({ code: "NOT_FOUND", message: "Kein KV-Stand gefunden." }),
     readQuote: vi.fn().mockResolvedValue({ code: "OK", quote: quote() }),
     convertQuote: vi.fn().mockImplementation(async (input) => ({
       code: "OK",
@@ -108,9 +110,43 @@ function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
         recordedAt: "2026-09-14T10:10:00.000Z",
       },
     })),
+    readQuoteConversionReceipt: vi.fn().mockResolvedValue({ code: "NOT_FOUND", message: "Kein Auftragsstand gefunden." }),
+    createDirectIntake: vi.fn().mockImplementation(async (input) => ({
+      code: "OK",
+      replayed: false,
+      receipt: {
+        receiptId: "b4ef7f74-f0e0-49e2-bf7f-a675b1070768",
+        eventId: "1b3ef014-582c-445f-9fdc-e399d7aa6ef0",
+        orderId: ORDER_ID,
+        orderNumber: "A-2026-0061",
+        customerId: CUSTOMER_ID,
+        clientEventId: input.clientEventId,
+        correlationId: "9c0a2813-c5ba-41dc-afd8-80a343adbf31",
+        actorId: "42026a2b-1457-4058-b1bf-20846d7bc654",
+        dueDate: input.dueDate,
+        recordedAt: "2026-09-15T10:10:00.000Z",
+      },
+    })),
+    readDirectIntakeReceipt: vi.fn().mockImplementation(async (input) => ({
+      code: "OK",
+      replayed: true,
+      receipt: {
+        receiptId: "b4ef7f74-f0e0-49e2-bf7f-a675b1070768",
+        eventId: "1b3ef014-582c-445f-9fdc-e399d7aa6ef0",
+        orderId: input.orderId,
+        orderNumber: "A-2026-0061",
+        customerId: CUSTOMER_ID,
+        clientEventId: input.clientEventId,
+        correlationId: "9c0a2813-c5ba-41dc-afd8-80a343adbf31",
+        actorId: "42026a2b-1457-4058-b1bf-20846d7bc654",
+        dueDate: "2026-10-20",
+        recordedAt: "2026-09-15T10:10:00.000Z",
+      },
+    })),
     rememberQuote: vi.fn(),
     openCustomer: vi.fn(),
     openOrder: vi.fn(),
+    refresh: vi.fn(),
     switchProfile: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
@@ -154,7 +190,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     openFlow();
     await fillCustomer();
     expect(value.createCustomer).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("region", { name: "Kunden-Receipt" })).toHaveTextContent("fc8ccfbb-40cf-4050-b4ef-d2b979d9eef5");
+    expect(screen.getByRole("group", { name: "Kundenanlage – technische Details für Support" })).toHaveTextContent("fc8ccfbb-40cf-4050-b4ef-d2b979d9eef5");
 
     await fillQuote();
     expect(value.createQuote).toHaveBeenCalledWith(expect.objectContaining({
@@ -163,19 +199,19 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
       positions: [expect.objectContaining({ quantity: 1, unitPriceCents: 12_500 })],
     }));
     expect(value.rememberQuote).toHaveBeenCalledWith(QUOTE_ID);
-    expect(screen.getByText(/kanonisch 250,00\s€ netto/)).toBeInTheDocument();
+    expect(screen.getByText(/250,00\s€ netto/)).toBeInTheDocument();
 
+    fireEvent.change(screen.getByLabelText("Zusagter Termin für den Auftrag"), { target: { value: "2026-10-20" } });
     fireEvent.click(screen.getByRole("button", { name: /Zuschlag bestätigen/ }));
     await screen.findByRole("heading", { name: "Auftrag A-2026-0061 angelegt" });
-    expect(value.convertQuote).toHaveBeenCalledWith(expect.objectContaining({ quoteId: QUOTE_ID, expectedVersion: 1, confirmedAward: true }));
+    expect(value.convertQuote).toHaveBeenCalledWith(expect.objectContaining({ quoteId: QUOTE_ID, expectedVersion: 1, confirmedAward: true, confirmedOrderDueDate: "2026-10-20" }));
     expect(value.rememberQuote).toHaveBeenLastCalledWith(null);
-    expect(screen.getByRole("region", { name: "KV-Zuschlagsreceipt" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "F1.1-Auftragsreceipt" })).toHaveTextContent(ORDER_ID);
+    expect(screen.getByRole("group", { name: "Auftrag – technische Details für Support" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Auftragskarte öffnen" }));
     expect(value.openOrder).toHaveBeenCalledWith(ORDER_ID);
   });
 
-  it("keeps validation input and the client event id stable across an explicit status check", async () => {
+  it("checks an unclear customer result read-only and restores only a verified receipt", async () => {
     const successfulCreate = ports().createCustomer;
     let attempt = 0;
     const createCustomer = vi.fn<GlobalCreatePorts["createCustomer"]>(async (input) => {
@@ -183,7 +219,8 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
       if (attempt === 1) throw new Error("network interrupted");
       return successfulCreate(input);
     });
-    const value = ports({ createCustomer });
+    const readCustomerCreateReceipt = vi.fn().mockImplementation(async (input) => successfulCreate(input));
+    const value = ports({ createCustomer, readCustomerCreateReceipt });
     render(<GlobalCreateFlow ports={value} />);
 
     openFlow();
@@ -194,22 +231,63 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(screen.getByLabelText("Firma / Name")).toHaveValue("SYNTHETISCH Bleibt erhalten");
     fireEvent.click(screen.getByRole("button", { name: "Status mit gleicher Kennung prüfen" }));
     await screen.findByRole("heading", { name: /SYNTHETISCH Bleibt erhalten · K-2026-0042/ });
-    expect(createCustomer).toHaveBeenCalledTimes(2);
-    expect(createCustomer.mock.calls[0][0].clientEventId).toBe(createCustomer.mock.calls[1][0].clientEventId);
+    expect(createCustomer).toHaveBeenCalledTimes(1);
+    expect(readCustomerCreateReceipt).toHaveBeenCalledTimes(1);
+    expect(readCustomerCreateReceipt.mock.calls[0][0].clientEventId).toBe(createCustomer.mock.calls[0][0].clientEventId);
+  });
+
+  it("keeps an unknown result open and requires a separate confirmed retry", async () => {
+    const createCustomer = vi.fn<GlobalCreatePorts["createCustomer"]>().mockRejectedValue(new Error("network"));
+    const value = ports({ createCustomer, readCustomerCreateReceipt: vi.fn().mockResolvedValue({ code: "NOT_FOUND", message: "Kein Kundenstand gefunden." }) });
+    render(<GlobalCreateFlow ports={value} />);
+    openFlow();
+    fireEvent.click(screen.getByRole("button", { name: /Kunde anlegen/ }));
+    fireEvent.change(screen.getByLabelText("Firma / Name"), { target: { value: "SYNTHETISCH offen" } });
+    fireEvent.click(screen.getByRole("button", { name: /Neukunde speichern/ }));
+    await screen.findByText("Ausgang ungeklärt", { selector: "strong" });
+    fireEvent.click(screen.getByRole("button", { name: "Status mit gleicher Kennung prüfen" }));
+    await screen.findByRole("button", { name: "Erneut senden vorbereiten" });
+    expect(createCustomer).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Erneut senden vorbereiten" }));
+    expect(createCustomer).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: "Ja, jetzt erneut senden" }));
+    await waitFor(() => expect(createCustomer).toHaveBeenCalledTimes(2));
   });
 
   it("never calls commands for readonly and offers a safe profile switch", async () => {
-    const value = ports({ canCreateCustomer: false, canCreateQuote: false, roleLabel: "Nur Leserechte" });
+    const value = ports({ canCreateCustomer: false, canCreateQuote: false, roleLabel: "Phillip" });
     render(<GlobalCreateFlow ports={value} />);
 
     openFlow();
     fireEvent.click(screen.getByRole("button", { name: /Kunde anlegen/ }));
-    expect(screen.getByRole("alert")).toHaveTextContent("Büro oder Administration");
+    expect(screen.getByRole("alert")).toHaveTextContent("Rolf ist für diesen Vorgang zuständig");
     fireEvent.click(screen.getByRole("button", { name: "Zum sicheren Profilwechsel" }));
     await waitFor(() => expect(value.switchProfile).toHaveBeenCalledTimes(1));
     expect(value.createCustomer).not.toHaveBeenCalled();
     expect(value.createQuote).not.toHaveBeenCalled();
     expect(value.convertQuote).not.toHaveBeenCalled();
+    expect(value.createDirectIntake).not.toHaveBeenCalled();
+  });
+
+  it("uses the same V5 flow for direct intake without loading an old intake panel", async () => {
+    const value = ports();
+    render(<GlobalCreateFlow ports={value} />);
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent("path1:global-create-open", { detail: "DIRECT_INTAKE" }));
+    });
+    await screen.findByRole("heading", { name: "Neuer Eingang" });
+    expect(screen.queryByText("Digitaler Wareneingang")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Neukunde" }));
+    fireEvent.change(screen.getByLabelText("Firma / Name"), { target: { value: "SYNTHETISCH Direkteingang GmbH" } });
+    fireEvent.change(screen.getByLabelText("Terminwunsch"), { target: { value: "2026-10-15" } });
+    fireEvent.change(screen.getByLabelText("Zugesagter Termin"), { target: { value: "2026-10-20" } });
+    fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "Synthetisches Teil" } });
+    fireEvent.change(screen.getByLabelText("Oberfläche"), { target: { value: "Verzinken" } });
+    fireEvent.click(screen.getByRole("button", { name: "Eingang speichern" }));
+    await screen.findByRole("heading", { name: "Auftrag A-2026-0061 angelegt" });
+    expect(value.createDirectIntake).toHaveBeenCalledWith(expect.objectContaining({ dueDate: "2026-10-20" }));
+    expect(value.readDirectIntakeReceipt).toHaveBeenCalledTimes(1);
+    expect(value.refresh).toHaveBeenCalledTimes(1);
   });
 
   it("loads only real customer choices and resumes a persisted quote after reload", async () => {
@@ -220,13 +298,26 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.click(screen.getByRole("button", { name: /Gespeicherten KV fortsetzen/ }));
     await screen.findByRole("heading", { name: "KV-2026-0042 gesichert" });
     expect(value.readQuote).toHaveBeenCalledWith({ quoteId: QUOTE_ID });
-    expect(screen.getByText(/nach Reload aus der Datenbank zurückgelesen/)).toBeInTheDocument();
+    expect(screen.getByText(/gespeicherte KV wurde erneut geprüft/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Zur Auswahl" }));
     fireEvent.click(screen.getByRole("button", { name: /Auftrag \/ KV anlegen/ }));
     const search = await screen.findByLabelText("Kunde suchen");
     fireEvent.change(search, { target: { value: "Teststadt" } });
     expect(within(screen.getByRole("dialog")).getByRole("button", { name: /SYNTHETISCH Musterkunde/ })).toBeInTheDocument();
+  });
+
+  it("keeps the KV context and offers Rolf the real customer path when the tenant is empty", async () => {
+    const value = ports({ listCustomers: vi.fn().mockResolvedValue({ code: "OK", customers: [] }) });
+    render(<GlobalCreateFlow ports={value} />);
+
+    openFlow();
+    fireEvent.click(screen.getByRole("button", { name: /Auftrag \/ KV anlegen/ }));
+    expect(await screen.findByText("Noch kein belegter Kunde")).toBeInTheDocument();
+    expect(screen.getByText(/Kundenstamm ist geladen/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Kunde anlegen" }));
+    await waitFor(() => expect(screen.getByLabelText("Firma / Name")).toHaveFocus());
+    expect(value.createQuote).not.toHaveBeenCalled();
   });
 
   it("keeps the draft visible for validation and conflict responses without false success", async () => {
@@ -255,6 +346,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     openFlow();
     await fillCustomer();
     await fillQuote();
+    fireEvent.change(screen.getByLabelText("Zusagter Termin für den Auftrag"), { target: { value: "2026-10-20" } });
     fireEvent.click(screen.getByRole("button", { name: /Zuschlag bestätigen/ }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Der KV wurde zwischenzeitlich geändert");
     expect(screen.getByRole("heading", { name: "KV-2026-0042 gesichert" })).toBeInTheDocument();

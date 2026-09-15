@@ -9,8 +9,10 @@ import { createPinLoginHandle } from "../src/lib/server/pinLoginHandle";
 const TENANT = "galvanik-kreile";
 const OUTPUT_DIR = path.resolve(process.cwd(), "test-results/path1-v5-global-create");
 
-type AuthSignupResponse = { user?: { id?: string }; message?: string };
 type Capture = { file: string; sha256: string; viewport: string; state: string };
+
+const ROLF_ACTOR_ID = "11111111-1111-4111-8111-111111111111";
+const PHILLIP_ACTOR_ID = "22222222-2222-4222-8222-222222222222";
 
 function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -18,29 +20,33 @@ function requiredEnv(name: string): string {
   return value;
 }
 
-async function createAuthUser(apiUrl: string, anonKey: string, email: string, password: string) {
-  const response = await fetch(`${apiUrl.replace(/\/$/, "")}/auth/v1/signup`, {
-    method: "POST",
-    headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
-  const body = (await response.json()) as AuthSignupResponse;
-  if (!response.ok || typeof body.user?.id !== "string") {
-    throw new Error(`PATH1_V5_GLOBAL_CREATE_AUTH_SIGNUP_FAILED:${response.status}:${body.message ?? "invalid"}`);
-  }
-  return body.user.id;
-}
-
 async function loginPin(page: Page, userId: string, pin: string) {
   await page.goto("/start");
-  await page.getByTestId(`pin-user-card-${createPinLoginHandle(userId)}`).click();
+  const profileCard = page.getByTestId(`pin-user-card-${createPinLoginHandle(userId)}`);
+  await expect(profileCard).toBeEnabled();
+  await profileCard.click();
   const dialog = page.getByTestId("pin-login-dialog");
-  for (const digit of pin) await dialog.getByRole("button", { name: digit, exact: true }).click();
+  // The dialog is rendered only by the client click handler. Its appearance
+  // therefore proves hydration and the real event binding without a fixed wait.
+  await expect(dialog).toBeVisible();
+  for (const digit of pin) {
+    const key = dialog.getByRole("button", { name: digit, exact: true });
+    await expect(key).toBeVisible();
+    await key.click({ timeout: 10_000 });
+  }
   await expect.poll(async () => (await page.context().cookies()).map((cookie) => cookie.name), { timeout: 10_000 })
     .toContain("kreile_app_session");
   const signedCookie = (await page.context().cookies()).find((cookie) => cookie.name === "kreile_app_session");
   if (!signedCookie || !signedCookie.httpOnly || signedCookie.value.length < 64) {
     throw new Error("PATH1_V5_REAL_SIGNED_SESSION_COOKIE_INVALID");
+  }
+  const sessionToken = decodeURIComponent(signedCookie.value);
+  const separator = sessionToken.lastIndexOf(".");
+  if (separator <= 0) throw new Error("PATH1_V5_REAL_SIGNED_SESSION_COOKIE_MALFORMED");
+  const encodedSession = sessionToken.slice(0, separator);
+  const sessionPayload = JSON.parse(Buffer.from(encodedSession, "base64").toString("utf8")) as { userId?: unknown };
+  if (sessionPayload.userId !== userId) {
+    throw new Error("PATH1_V5_PRODUCT_PROFILE_SESSION_ACTOR_MISMATCH");
   }
   // `next start` correctly emits a Secure production cookie. The local proof is
   // HTTP-only, so reuse that exact server-signed value with only its transport
@@ -89,20 +95,19 @@ async function receiptValues(region: Locator) {
 test.describe("PATH1 V5 globales Plus – realer Kunde zu KV zu F1.1-Auftrag", () => {
   test("belegt persistente Readbacks, genau einen Auftrag, responsive Bedienung und Rechte", async ({ browser }) => {
     test.setTimeout(600_000);
-    const apiUrl = requiredEnv("NEXT_PUBLIC_SUPABASE_URL");
-    const anonKey = requiredEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
     const databaseUrl = requiredEnv("DATABASE_URL");
     requiredEnv("APP_SESSION_SECRET");
-    expect(apiUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
     expect(databaseUrl).toMatch(/^postgresql:\/\/postgres:postgres@127\.0\.0\.1:\d+\/postgres$/);
+    expect(process.env.KREILE_ROLF_APP_USER_ID).toBe(ROLF_ACTOR_ID);
+    expect(process.env.KREILE_PHILLIP_APP_USER_ID).toBe(PHILLIP_ACTOR_ID);
 
     const suffix = `${Date.now()}-${process.pid}`;
-    const officePin = "4186";
-    const readonlyPin = "7315";
-    const officeEmail = `path1-v5-office-${suffix}@local.test`;
-    const readonlyEmail = `path1-v5-readonly-${suffix}@local.test`;
-    const password = `Path1-V5-${suffix}!`;
+    const rolfPin = "4186";
+    const phillipPin = "7315";
+    const rolfEmail = `path1-v5-rolf-${suffix}@local.test`;
+    const phillipEmail = `path1-v5-phillip-${suffix}@local.test`;
     const customerName = `SYNTHETISCH V5 Kunde ${suffix}`;
+    const intakeCustomerName = `SYNTHETISCH V5 Eingang ${suffix}`;
     const companyName = `SYNTHETISCH V5 ${suffix} GmbH`;
     const partName = `SYNTHETISCHER V5 Flansch ${suffix}`;
     const sql = postgres(databaseUrl, { max: 2, prepare: false });
@@ -112,14 +117,14 @@ test.describe("PATH1 V5 globales Plus – realer Kunde zu KV zu F1.1-Auftrag", (
     const actionErrors: string[] = [];
 
     try {
-      const officeId = await createAuthUser(apiUrl, anonKey, officeEmail, password);
-      const readonlyId = await createAuthUser(apiUrl, anonKey, readonlyEmail, password);
+      const rolfId = ROLF_ACTOR_ID;
+      const phillipId = PHILLIP_ACTOR_ID;
       const insertedAt = new Date(Date.now() - 5_000).toISOString();
       await sql`
         INSERT INTO public.app_users (id, tenant_id, email, full_name, role, pin_hash, active, created_at, updated_at)
         VALUES
-          (${officeId}::uuid, ${TENANT}, ${officeEmail}, 'SYNTHETISCH V5 Büro', 'buero', ${await bcrypt.hash(officePin, 12)}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz),
-          (${readonlyId}::uuid, ${TENANT}, ${readonlyEmail}, 'SYNTHETISCH V5 Readonly', 'readonly', ${await bcrypt.hash(readonlyPin, 12)}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz)
+          (${rolfId}::uuid, ${TENANT}, ${rolfEmail}, 'Rolf', 'meister', ${await bcrypt.hash(rolfPin, 12)}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz),
+          (${phillipId}::uuid, ${TENANT}, ${phillipEmail}, 'Phillip', 'werkstatt', ${await bcrypt.hash(phillipPin, 12)}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz)
       `;
 
       const desktop = await newContext(browser, { width: 1914, height: 917 });
@@ -132,7 +137,41 @@ test.describe("PATH1 V5 globales Plus – realer Kunde zu KV zu F1.1-Auftrag", (
         if (response.request().method() !== "POST" || !response.request().headers()["next-action"]) return;
         if (response.status() >= 400) actionErrors.push(`${response.status()}:${await response.text().catch(() => "unreadable")}`);
       });
-      await loginPin(desktop.page, officeId, officePin);
+      await desktop.page.goto("/start");
+      await expect(desktop.page.getByRole("heading", { name: "Willkommen" })).toBeVisible();
+      await expect(desktop.page.getByText("Rolf")).toBeVisible();
+      await expect(desktop.page.getByText("Phillip")).toBeVisible();
+      await expect(desktop.page.getByRole("button", { name: /Gregor.*Systemadministrator/ })).toBeVisible();
+      await expect(desktop.page.getByText(/Büro|Developer|Readonly|Sabrina/i)).toHaveCount(0);
+      captures.push(await capture(desktop.page, "v5-start-identities-desktop-1914x917.png", "start-product-identities"));
+      await loginPin(desktop.page, rolfId, rolfPin);
+      await expect(desktop.page.getByText("Guten Tag, Rolf")).toBeVisible();
+      captures.push(await capture(desktop.page, "v5-rolf-empty-desktop-1914x917.png", "rolf-empty"));
+      await desktop.page.getByRole("button", { name: "Neuer Eingang" }).click();
+      await expect(desktop.page.getByRole("heading", { name: "Neuer Eingang" })).toBeVisible();
+      await expect(desktop.page.getByText("Digitaler Wareneingang")).toHaveCount(0);
+      await desktop.page.getByRole("button", { name: "Neukunde" }).click();
+      await desktop.page.getByLabel("Firma / Name").fill(intakeCustomerName);
+      await desktop.page.getByLabel("Terminwunsch").fill("2026-10-15");
+      await desktop.page.getByLabel("Zugesagter Termin").fill("2026-10-20");
+      await desktop.page.getByLabel("Teil / Bezeichnung").fill(`SYNTHETISCHER Eingang ${suffix}`);
+      await desktop.page.getByLabel("Menge").fill("1");
+      await desktop.page.getByLabel("Material").fill("Stahl");
+      await desktop.page.getByLabel("Oberfläche").fill("Verzinken");
+      await desktop.page.getByRole("button", { name: "Eingang speichern" }).click();
+      await expect(desktop.page.getByRole("heading", { name: /^Auftrag A-\d{4}-\d+ angelegt$/ })).toBeVisible();
+      captures.push(await capture(desktop.page, "v5-rolf-intake-readback-desktop-1914x917.png", "rolf-intake-readback"));
+      await desktop.page.getByRole("button", { name: "Anlegen schließen", exact: true }).click();
+      await expect(desktop.page.getByText("Das braucht dich")).toBeVisible();
+      await desktop.page.setViewportSize({ width: 1220, height: 880 });
+      captures.push(await capture(desktop.page, "v5-rolf-data-tablet-1220x880.png", "rolf-data"));
+      await desktop.page.goto("/buchhaltung");
+      await desktop.page.waitForURL((url) => url.pathname === "/buchhaltung/rechnungen");
+      await expect(desktop.page.getByText("F1.4 · UNVERÄNDERLICHE BELEGE")).toHaveCount(0);
+      await expect(desktop.page.getByText("Zurück zur Buchhaltung")).toHaveCount(0);
+      await desktop.page.setViewportSize({ width: 1024, height: 768 });
+      captures.push(await capture(desktop.page, "v5-invoices-target-shell-1024x768.png", "invoices-target-shell"));
+      await desktop.page.goto("/");
       await openCreate(desktop.page);
       captures.push(await capture(desktop.page, "v5-global-plus-desktop-1914x917.png", "chooser"));
 
@@ -147,8 +186,8 @@ test.describe("PATH1 V5 globales Plus – realer Kunde zu KV zu F1.1-Auftrag", (
       await desktop.page.getByLabel("Ort").fill("Synthetische Teststadt");
       await desktop.page.getByRole("button", { name: /Neukunde speichern/ }).click();
       await expect(desktop.page.getByRole("heading", { name: new RegExp(customerName) })).toBeVisible();
-      const customerReceipt = await receiptValues(desktop.page.getByRole("region", { name: "Kunden-Receipt" }));
-      expect(customerReceipt).toHaveLength(4);
+      const customerReceipt = await receiptValues(desktop.page.getByRole("group", { name: "Kundenanlage – technische Details für Support" }));
+      expect(customerReceipt).toHaveLength(3);
       expect(customerReceipt.every(Boolean)).toBe(true);
 
       await desktop.page.getByRole("button", { name: /Kundenkarte öffnen/ }).click();
@@ -183,25 +222,24 @@ test.describe("PATH1 V5 globales Plus – realer Kunde zu KV zu F1.1-Auftrag", (
       const quoteHeading = desktop.page.getByRole("heading", { name: /^KV-\d{4}-\d+ gesichert$/ });
       await expect(quoteHeading).toBeVisible();
       const quoteNumber = (await quoteHeading.textContent())!.replace(" gesichert", "").trim();
-      const quoteReceipt = await receiptValues(desktop.page.getByRole("region", { name: "KV-Receipt" }));
-      expect(quoteReceipt).toHaveLength(4);
+      const quoteReceipt = await receiptValues(desktop.page.getByRole("group", { name: "KV – technische Details für Support" }));
+      expect(quoteReceipt).toHaveLength(3);
 
       await desktop.page.getByRole("button", { name: "Anlegen schließen" }).click();
       await desktop.page.reload();
       await openCreate(desktop.page);
       await desktop.page.getByRole("button", { name: /Gespeicherten KV fortsetzen/ }).click();
-      await expect(desktop.page.getByText(/nach Reload aus der Datenbank zurückgelesen/)).toBeVisible();
+      await expect(desktop.page.getByText(/gespeicherte KV wurde erneut geprüft/)).toBeVisible();
 
       await desktop.page.setViewportSize({ width: 390, height: 844 });
       captures.push(await capture(desktop.page, "v5-kv-readback-mobile-390x844.png", "quote-reload-readback"));
+      await desktop.page.getByLabel("Zusagter Termin für den Auftrag").fill("2026-10-20");
       await desktop.page.getByRole("button", { name: /Zuschlag bestätigen/ }).click();
       const orderHeading = desktop.page.getByRole("heading", { name: /^Auftrag A-\d{4}-\d+ angelegt$/ });
       await expect(orderHeading).toBeVisible();
       const orderNumber = (await orderHeading.textContent())!.replace(/^Auftrag /, "").replace(/ angelegt$/, "").trim();
-      const conversionReceipt = await receiptValues(desktop.page.getByRole("region", { name: "KV-Zuschlagsreceipt" }));
-      const orderReceipt = await receiptValues(desktop.page.getByRole("region", { name: "F1.1-Auftragsreceipt" }));
-      expect(conversionReceipt).toHaveLength(4);
-      expect(orderReceipt).toHaveLength(5);
+      const conversionReceipt = await receiptValues(desktop.page.getByRole("group", { name: "Auftrag – technische Details für Support" }));
+      expect(conversionReceipt).toHaveLength(3);
       captures.push(await capture(desktop.page, "v5-order-receipts-mobile-390x844.png", "order-receipts"));
 
       await desktop.page.getByRole("button", { name: "Auftragskarte öffnen" }).click();
@@ -232,18 +270,14 @@ test.describe("PATH1 V5 globales Plus – realer Kunde zu KV zu F1.1-Auftrag", (
       `;
       expect(integrity).toEqual({ customers: 1, quotes: 1, quote_create_events: 1, quote_award_events: 1, conversion_receipts: 1, orders: 1, intake_events: 1 });
 
-      const readonly = await newContext(browser, { width: 390, height: 844 });
-      contexts.push(readonly.context);
-      await loginPin(readonly.page, readonlyId, readonlyPin);
-      await openCreate(readonly.page);
-      await readonly.page.getByRole("button", { name: /Kunde anlegen/ }).click();
-      await expect(readonly.page.getByRole("dialog").getByRole("alert")).toContainText("Büro oder Administration");
-      captures.push(await capture(readonly.page, "v5-create-denied-mobile-390x844.png", "readonly-denied"));
-      await readonly.page.getByRole("button", { name: "Zum sicheren Profilwechsel" }).click();
-      await readonly.page.waitForURL((url) => url.pathname === "/start");
-      await expect(readonly.page.getByRole("button", { name: "Anlegen", exact: true })).toHaveCount(0);
+      const phillip = await newContext(browser, { width: 390, height: 844 });
+      contexts.push(phillip.context);
+      await loginPin(phillip.page, phillipId, phillipPin);
+      await expect(phillip.page.getByRole("button", { name: "Anlegen", exact: true })).toHaveCount(0);
+      await expect(phillip.page.getByText("Heute sichern")).toBeVisible();
+      captures.push(await capture(phillip.page, "v5-phillip-limited-mobile-390x844.png", "phillip-limited"));
 
-      console.log(`PATH1_V5_GLOBAL_CREATE_RECEIPT=${JSON.stringify({ customerReceipt, quoteReceipt, conversionReceipt, orderReceipt, quoteNumber, orderNumber, captures })}`);
+      console.log(`PATH1_V5_GLOBAL_CREATE_RECEIPT=${JSON.stringify({ customerReceipt, quoteReceipt, conversionReceipt, quoteNumber, orderNumber, captures })}`);
     } finally {
       await Promise.all(contexts.map((context) => context.close().catch(() => undefined)));
       await sql.end();

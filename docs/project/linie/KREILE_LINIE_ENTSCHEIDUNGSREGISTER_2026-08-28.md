@@ -442,3 +442,45 @@ Scheinerfolg oder Sackgassen zu erlauben.
 Wiederaufnahme müssen pro vertikalem Nutzerweg mitgebaut und getestet werden;
 dadurch steigt der Abnahmeaufwand gegenüber einer rein technischen
 Fehlermeldung.
+
+## D-UI-V5-002 — Sichtbare Produktidentitäten und realer Meister-Kernweg (Owner 2026-09-15)
+
+**Entscheidung/Wortlaut:** Sichtbar sind ausschließlich die Produktidentitäten
+Rolf (Meister), Phillip (Werkstatt) und Gregor (Systemadministrator über den
+erhöhten E-Mail-Einstieg). Die technischen Rollen `developer`, `admin`,
+`meister`, `buero`, `werkstatt` und `readonly` bleiben kompatibel als
+serverseitige Auth-, Berechtigungs- und Auditwahrheit bestehen, erscheinen aber
+nicht als zweite sichtbare Personen- oder Loginwahrheit. Ein Gast wird ohne
+eigenen Ablauf- und Nur-Lese-Vertrag nicht erfunden. Es gibt weder
+user-ID-basierte Fachlogik noch gemeinsame Produktionskonten oder eine
+destruktive Authmigration. Mehrdeutige oder fehlende PIN-Profile bleiben
+fail-closed und wählen niemals willkürlich einen Benutzer.
+
+Rolf erhält ausschließlich über den bestehenden capability-basierten Vertrag
+die engen Rechte, einen Kunden, KV/Auftrag und den F1.1-Wareneingang zu
+beginnen. Phillip bleibt auf seine Werkstattaufgaben begrenzt. Gregor bleibt
+erhöhter, protokollierter Systemzugang und wird nicht still zum operativen
+Impersonator. Header und Home zeigen die Produktidentität; Receipts und Audit
+bleiben an der individuellen serverseitigen actorId gebunden.
+
+Der Rolf-Kernweg ist real: globales Plus → Kunde anlegen → persistenter Kunde
+→ KV → genau ein über F1.1 verknüpfter Auftrag mit Receipt und Readback.
+Auf einer leeren Instanz kann Rolf über „Neuer Eingang“ sofort einen Neukunden
+und den vollständigen F1.1-Weg mit 1–20 Positionen, Termin und Zahlungsmodus
+erfassen. Home- und Fehlzustände nennen Datenquelle, sichere Datenlage und
+genau einen tatsächlich verfügbaren nächsten Weg; sie erfinden weder
+Dringlichkeit noch Erfolg. Geld & Rechnungen bleibt ausschließlich der reale
+Pfad `/buchhaltung/rechnungen` in derselben Ziel-Shell; ein Alt-Cockpit oder
+eine sichtbare NOT_AVAILABLE-Sackgasse ist kein Zielweg.
+
+Diese Entscheidung aktiviert weder Suche, KI, OCR, M365, Payment noch einen
+Provider. Sie liefert einen technischen V5-Meilenstein und keinen Gesamt-UX-
+oder F1.6-PASS.
+
+**Zweck:** Alltagspersonen erhalten einen verständlichen, realen Einstieg in
+Kunde, KV und Wareneingang, ohne technische Konten oder ungesicherte
+Fachaktionen sichtbar zu machen.
+
+**Wesentlicher Nachteil:** Die sichtbare Verdichtung verlangt zusätzliche
+Profil- und Rechtebeweise, damit eine technische Kompatibilitätsrolle nicht
+versehentlich als operativer oder berechtigter Produktweg erscheint.

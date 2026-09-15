@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const ports = vi.hoisted(() => ({
   create: vi.fn(), search: vi.fn(), receipt: vi.fn(), orders: vi.fn(),
   attachments: vi.fn(), reserve: vi.fn(), finalize: vi.fn(), storageFrom: vi.fn(),
+  refresh: vi.fn(),
 }));
 
 vi.mock("@/app/warendurchlauf/actions", () => ({
@@ -16,6 +17,7 @@ vi.mock("@/app/warendurchlauf/actions", () => ({
   finalizeOrderIntakeAttachmentAction: ports.finalize,
 }));
 vi.mock("@/lib/supabase/client", () => ({ supabase: { storage: { from: ports.storageFrom } } }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: ports.refresh }) }));
 vi.mock("lucide-react", () => {
   const Icon = () => null;
   return {
@@ -271,6 +273,7 @@ describe("F1.1 digitaler Wareneingang", () => {
     expect(await screen.findByRole("heading", { name: `${activeCommandReceipt!.orderNumber} bestätigt` })).toBeInTheDocument();
     expect(ports.receipt).toHaveBeenCalledWith({ orderId: activeCommandReceipt!.orderId, clientEventId: createArg.clientEventId });
     expect(ports.orders).toHaveBeenCalledTimes(1);
+    expect(ports.refresh).toHaveBeenCalledTimes(1);
     expect(setCloseBlocked).toHaveBeenLastCalledWith(false);
   });
 

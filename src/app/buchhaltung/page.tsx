@@ -1,8 +1,8 @@
-import { FoundationUnavailable } from '@/components/foundation/FoundationUnavailable';
+import { AccountingEntry } from "@/modules/accounting/public";
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-export default function AccountingUnavailablePage() {
-  return <FoundationUnavailable />;
+export default function AccountingPage() {
+  return <AccountingEntry />;
 }

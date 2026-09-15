@@ -4,7 +4,6 @@ import { AlertTriangle, LogIn } from "lucide-react";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { logout } from "@/app/actions/auth";
-import { useErfassung } from "@/components/erfassung/ErfassungProvider";
 
 interface SessionWarningBannerProps {
   show: boolean;
@@ -12,7 +11,6 @@ interface SessionWarningBannerProps {
 
 export function SessionWarningBanner({ show }: SessionWarningBannerProps) {
   const router = useRouter();
-  const { isOpen, closeErfassung } = useErfassung();
   const reloginInFlight = useRef(false);
   const [pending, setPending] = useState(false);
 
@@ -23,10 +21,6 @@ export function SessionWarningBanner({ show }: SessionWarningBannerProps) {
 
     reloginInFlight.current = true;
     setPending(true);
-
-    if (isOpen) {
-      closeErfassung();
-    }
 
     try {
       await logout();

@@ -6,11 +6,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const ports = vi.hoisted(() => ({
   redirect: vi.fn(),
   resolveAuthorization: vi.fn(),
+  getProductIdentity: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({ redirect: ports.redirect }));
 vi.mock("@/lib/server/authorization", () => ({
   resolveAuthorization: ports.resolveAuthorization,
+}));
+vi.mock("@/lib/auth/authorizationContract", () => ({
+  getProductIdentity: ports.getProductIdentity,
 }));
 vi.mock("@/components/home/RolfHome", () => ({
   RolfHome: ({ authorization }: { authorization: { role: string } }) => (
@@ -50,20 +54,26 @@ const authorization = (role: string) => ({
 });
 
 describe("F1-R0 root route containment", () => {
-  it.each(["buero", "meister", "readonly"])(
-    "renders the Rolf home for %s",
-    async (role) => {
-      ports.resolveAuthorization.mockResolvedValueOnce(authorization(role));
-      render(await RootPage());
-      expect(screen.getByTestId("rolf-home")).toHaveTextContent(role);
-      expect(ports.redirect).not.toHaveBeenCalled();
-    },
-  );
+  it("renders the Rolf home only for the configured Meister actor", async () => {
+    ports.resolveAuthorization.mockResolvedValueOnce(authorization("meister"));
+    ports.getProductIdentity.mockReturnValueOnce({ name: "Rolf", responsibility: "Meister", initials: "R" });
+    render(await RootPage());
+    expect(screen.getByTestId("rolf-home")).toHaveTextContent("meister");
+    expect(ports.redirect).not.toHaveBeenCalled();
+  });
+
+  it.each(["buero", "readonly"])("fails closed for the unconfigured technical role %s", async (role) => {
+    ports.resolveAuthorization.mockResolvedValueOnce(authorization(role));
+    ports.getProductIdentity.mockReturnValueOnce(null);
+    await RootPage();
+    expect(ports.redirect).toHaveBeenCalledWith("/start");
+  });
 
   it("renders the Phillip home for werkstatt", async () => {
     ports.resolveAuthorization.mockResolvedValueOnce(
       authorization("werkstatt"),
     );
+    ports.getProductIdentity.mockReturnValueOnce({ name: "Phillip", responsibility: "Werkstatt", initials: "P" });
     render(await RootPage());
     expect(screen.getByTestId("werkstatt-home")).toHaveTextContent("werkstatt");
     expect(ports.redirect).not.toHaveBeenCalled();
@@ -71,6 +81,7 @@ describe("F1-R0 root route containment", () => {
 
   it.each(["admin", "developer"])("redirects %s to settings", async (role) => {
     ports.resolveAuthorization.mockResolvedValueOnce(authorization(role));
+    ports.getProductIdentity.mockReturnValueOnce({ name: "Gregor", responsibility: "Systemadministrator", initials: "G" });
     await RootPage();
     expect(ports.redirect).toHaveBeenCalledWith("/settings");
   });

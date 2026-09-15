@@ -31,6 +31,8 @@ export type ConvertQuoteInput = {
   clientEventId: string;
   expectedVersion: number;
   confirmedAward: true;
+  /** The order promise is intentionally distinct from the customer's KV wish date. */
+  confirmedOrderDueDate: string;
 };
 
 export type QuotePosition = QuotePositionInput & {
@@ -96,6 +98,10 @@ export type CreateQuoteResult =
 
 export type ReadQuoteResult =
   | { code: "OK"; quote: QuoteReadback }
+  | QuoteCommandFailure;
+
+export type ReadQuoteCreateReceiptResult =
+  | { code: "OK"; quote: QuoteReadback; receipt: QuoteCreateReceipt }
   | QuoteCommandFailure;
 
 export type QuoteOrderInput = {

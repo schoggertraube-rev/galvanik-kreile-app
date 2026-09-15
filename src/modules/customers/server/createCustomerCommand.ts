@@ -8,6 +8,7 @@ import type {
   CustomerCommandContext,
   CustomerCreateCommandResult,
   CustomerCreateReceipt,
+  ReadCustomerCreateReceiptResult,
 } from "./types";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -210,5 +211,32 @@ export async function createCustomerCommand(
       hint: diagnosticField(error, "hint"),
     });
     return { code: "UNAVAILABLE", message: "Kunde konnte nicht sicher gespeichert werden." };
+  }
+}
+
+/** Read-only recovery path for an interrupted create with the original intent. */
+export async function readCustomerCreateReceiptCommand(
+  authorization: CustomerCommandContext,
+  input: unknown,
+): Promise<ReadCustomerCreateReceiptResult> {
+  const normalized = normalizeInput(input);
+  if (!normalized) return { code: "VALIDATION_ERROR", message: "Die gespeicherte Anfrage kann nicht sicher geprüft werden." };
+  if (!authorization.capabilities.canCreateCustomer) return { code: "FORBIDDEN", message: "Der gespeicherte Kundenstand darf mit dieser Rolle nicht gelesen werden." };
+  const expected = {
+    tenantId: authorization.tenantId,
+    userId: authorization.userId,
+    clientEventId: normalized.clientEventId,
+    intentSha256: intentHash(normalized),
+  };
+  try {
+    return await withPrivilegedTenantTransaction(authorization, async (tx) => {
+      const receipt = await readReceipt(tx, expected);
+      return receipt ? { code: "OK", receipt } : { code: "NOT_FOUND", message: "Zu dieser Anfrage wurde noch kein sicherer Kundenstand gefunden." };
+    });
+  } catch (error) {
+    console.error("customer_create_receipt_read_failed", {
+      message: diagnosticField(error, "message"), details: diagnosticField(error, "details"), hint: diagnosticField(error, "hint"),
+    });
+    return { code: "UNAVAILABLE", message: "Der gespeicherte Kundenstand konnte nicht sicher gelesen werden." };
   }
 }

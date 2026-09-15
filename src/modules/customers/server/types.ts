@@ -47,3 +47,7 @@ export type CustomerCreateReceipt = {
 export type CustomerCreateCommandResult =
   | { code: "OK"; receipt: CustomerCreateReceipt; replayed: boolean }
   | { code: "FORBIDDEN" | "CONFLICT" | "VALIDATION_ERROR" | "UNAVAILABLE"; message: string };
+
+export type ReadCustomerCreateReceiptResult =
+  | { code: "OK"; receipt: CustomerCreateReceipt }
+  | { code: "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_ERROR" | "UNAVAILABLE"; message: string };

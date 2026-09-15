@@ -9,6 +9,7 @@ import { PermissionsProvider, usePermissions, deriveInitials } from "../Permissi
 import type { AuthBootstrapState } from "@/lib/server/authBootstrap";
 import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
 import type { AuthorizationResult } from "@/lib/server/authorization";
+import { getPermissionsForRole, getProductIdentity } from "../authorizationContract";
 
 // Mock Supabase client to avoid real network
 vi.mock("@/lib/supabase/client", () => ({
@@ -34,6 +35,33 @@ describe("deriveInitials()", () => {
     expect(deriveInitials("User")).toBe("");
     expect(deriveInitials("Unknown")).toBe("");
     expect(deriveInitials("")).toBe("");
+  });
+});
+
+describe("product identities and capabilities", () => {
+  it("maps only explicitly configured AppUser IDs to product identities", () => {
+    vi.stubEnv("KREILE_ROLF_APP_USER_ID", "rolf-actor");
+    vi.stubEnv("KREILE_PHILLIP_APP_USER_ID", "phillip-actor");
+    vi.stubEnv("KREILE_GREGOR_APP_USER_ID", "gregor-actor");
+    expect(getProductIdentity("rolf-actor")).toEqual({ name: "Rolf", responsibility: "Meister", initials: "R" });
+    expect(getProductIdentity("phillip-actor")).toEqual({ name: "Phillip", responsibility: "Werkstatt", initials: "P" });
+    expect(getProductIdentity("gregor-actor")).toEqual({ name: "Gregor", responsibility: "Systemadministrator", initials: "G" });
+    expect(getProductIdentity("buero")).toBeNull();
+    expect(getProductIdentity("readonly")).toBeNull();
+  });
+
+  it("fails closed for missing or duplicate configured product actors", () => {
+    vi.stubEnv("KREILE_ROLF_APP_USER_ID", "same-actor");
+    vi.stubEnv("KREILE_PHILLIP_APP_USER_ID", "same-actor");
+    expect(getProductIdentity("same-actor")).toBeNull();
+    vi.unstubAllEnvs();
+    expect(getProductIdentity("rolf-actor")).toBeNull();
+  });
+
+  it("gives Meister the existing customer and order entry capabilities while keeping Werkstatt limited", () => {
+    expect(getPermissionsForRole("meister")).toEqual(expect.arrayContaining(["perm_data_customers", "perm_data_orders"]));
+    expect(getPermissionsForRole("werkstatt")).not.toContain("perm_data_customers");
+    expect(getPermissionsForRole("werkstatt")).not.toContain("perm_data_orders");
   });
 });
 

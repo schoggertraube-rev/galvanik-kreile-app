@@ -1147,6 +1147,7 @@
       "entry_point": "src/app/actions/customers.actions.ts",
       "exported_functions": [
         "createCustomerAction",
+        "readCustomerCreateReceiptAction",
         "getCustomerSummaryAction",
         "getCustomersDb",
         "getCustomerByIdDb",
@@ -1156,7 +1157,7 @@
         "getTopKunden"
       ],
       "classification": "PENDING_CONTRACT",
-      "open_reason": "Customer CRUD. Supabase-connected. searchCustomersDb and createCustomerDb exercised in F1.1 but not independently evidenced here.",
+      "open_reason": "Customer CRUD. The read-only customer receipt action supports safe recovery of an interrupted V5 command; it never starts a mutation. Remaining CRUD evidence is still package-bound.",
       "visible": false,
       "reachable": true
     },
@@ -1167,10 +1168,12 @@
       "exported_functions": [
         "convertQuoteToOrderAction",
         "createQuoteAction",
-        "readQuoteAction"
+        "readQuoteAction",
+        "readQuoteCreateReceiptAction",
+        "readQuoteConversionReceiptAction"
       ],
       "classification": "PENDING_CONTRACT",
-      "open_reason": "V5 Work Unit 2 implements the real tenant-bound quote and existing F1.1 conversion candidate; local Fresh-DB proof is 5/5 PASS. The technical checkpoint is not a UI delivery claim and independent acceptance remains open.",
+      "open_reason": "V5 Work Unit 2 implements the real tenant-bound quote and existing F1.1 conversion candidate. The two additional read-only receipt actions recover a known outcome without a mutation; the technical checkpoint remains no UI delivery claim.",
       "visible": false,
       "reachable": true
     },

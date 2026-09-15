@@ -11,6 +11,7 @@ import { resolveAuthorization } from "@/lib/server/authorization";
 import { readCustomerSummary } from "@/lib/server/customerSummaryRead";
 import {
   createCustomerCommand,
+  readCustomerCreateReceiptCommand,
   type CreateCustomerInput,
 } from "@/modules/customers/server-public";
 
@@ -58,6 +59,30 @@ export async function createCustomerAction(input: CreateCustomerInput) {
   revalidatePath("/customers");
   revalidatePath(`/customers/${command.receipt.customerId}`);
   return { ...command, customer: readback.data };
+}
+
+/** Read-only recovery for an interrupted customer command; it never writes. */
+export async function readCustomerCreateReceiptAction(input: CreateCustomerInput) {
+  noStore();
+  let authorization;
+  try {
+    authorization = await resolveAuthorization();
+  } catch {
+    return { code: "UNAVAILABLE" as const, message: "Der gespeicherte Kundenstand konnte nicht sicher gelesen werden." };
+  }
+  if (!authorization.ok) return authorization.reason === "AUTHORIZATION_UNAVAILABLE"
+    ? { code: "UNAVAILABLE" as const, message: "Der gespeicherte Kundenstand konnte nicht sicher gelesen werden." }
+    : { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+  const result = await readCustomerCreateReceiptCommand({
+    tenantId: authorization.data.tenantId, userId: authorization.data.userId,
+    capabilities: { canCreateCustomer: authorization.data.permissions.includes("perm_data_customers") },
+  }, input);
+  if (result.code !== "OK") return result;
+  const readback = await readCustomerSummary(authorization.data, { customerId: result.receipt.customerId });
+  if (readback.code !== "OK" || readback.data.customerNumber !== result.receipt.customerNumber) {
+    return { code: "UNAVAILABLE" as const, message: "Ein Kundenbeleg wurde gefunden, der fachliche Stand ist aber noch nicht sicher lesbar." };
+  }
+  return { code: "OK" as const, receipt: result.receipt, customer: readback.data };
 }
 
 type DbCustomer = InferSelectModel<typeof customers>;
