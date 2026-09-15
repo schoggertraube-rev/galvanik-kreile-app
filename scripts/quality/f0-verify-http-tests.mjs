@@ -10,7 +10,8 @@ import bcrypt from "bcryptjs";
 import { createFromFetch } from "next/dist/compiled/react-server-dom-turbopack/client.node.js";
 
 // BF-006: echte HTTP-Session-/Autorisierungskette gegen einen ECHTEN "next start"-Server im
-// Replay-Job. Testet die ECHTE Server Action reserveOrderIntakeAttachmentAction mit
+// Replay-Job. Testet die ECHTE, vom V5-GlobalCreateAppAdapter gebundene Server Action
+// createOrderIntakeAction mit
 // deterministischer Action-ID-Aufloesung aus dem Next.js Build-Manifest und DB-State-Snapshots.
 //
 // Der installierte Next-Build ist Turbopack (kein Webpack): das generierte Standalone-Artefakt
@@ -27,17 +28,17 @@ import { createFromFetch } from "next/dist/compiled/react-server-dom-turbopack/c
 // Kern-Vertraege:
 //  1. loginWithPin: echter Login-POST -> HTTP 200 + text/x-component + dekodiertes
 //     Ergebnis mit exakt {ok, role} + echtes kreile_app_session-Cookie (alles gemeinsam)
-//  2. reserveOrderIntakeAttachmentAction: echte Server Action auf /warendurchlauf/wareneingang
+//  2. createOrderIntakeAction: echte Server Action auf /warendurchlauf/wareneingang
 //     mit gueltigem meister-Session -> VALIDATION_ERROR (abgelehnt wegen ungueultiger Input)
 //  3. mit gueltigem readonly-Session -> FORBIDDEN (Rolle hat keine perm_op_photos)
 //  4. ohne Session -> UNAUTHENTICATED
 //  5. mit manipuliertem Cookie -> UNAUTHENTICATED
-//  6. Vor + nach den Reserve-Aufrufen: DB-State ist bit-for-bit unveraendert (Count+Digest).
+//  6. Vor + nach den ungültigen/abgewiesenen Intake-Aufrufen: DB-State ist bit-for-bit unveraendert (Count+Digest).
 //
 // Manifest-basierte Action-ID-Aufloesung (keine Kandidaten, kein HTML-Scraping):
 //  - Liest .next/standalone/.next/server/server-reference-manifest.json
 //  - Sucht nach exportedName="loginWithPin" im node + edge Mapping mit filename=auth.actions.ts
-//  - Sucht nach exportedName="reserveOrderIntakeAttachmentAction" mit filename=actions.ts (warendurchlauf)
+//  - Sucht nach exportedName="createOrderIntakeAction" mit filename=actions.ts (warendurchlauf)
 //  - Require genau eine Match pro Action, sonst FATAL.
 //
 // Aufruf (nach "npm run build" + "npx next start -p 3100"):
@@ -65,11 +66,19 @@ const START_CLIENT_REFERENCE_MANIFEST_PATH = path.join(
   "server/app/start/page_client-reference-manifest.js"
 );
 const START_CLIENT_REFERENCE_MANIFEST_ROUTE = "/start/page";
+const START_SERVER_REFERENCE_MANIFEST_PATH = path.join(
+  STANDALONE_NEXT_ROOT,
+  "server/app/start/page/server-reference-manifest.json"
+);
 const WARENEINGANG_CLIENT_REFERENCE_MANIFEST_PATH = path.join(
   STANDALONE_NEXT_ROOT,
   "server/app/warendurchlauf/wareneingang/page_client-reference-manifest.js"
 );
 const WARENEINGANG_CLIENT_REFERENCE_MANIFEST_ROUTE = "/warendurchlauf/wareneingang/page";
+const WARENEINGANG_SERVER_REFERENCE_MANIFEST_PATH = path.join(
+  STANDALONE_NEXT_ROOT,
+  "server/app/warendurchlauf/wareneingang/page/server-reference-manifest.json"
+);
 // Echte Route-Page-Artefakte des aktuellen generierten Builds, geladen aus der tatsaechlich
 // deployten Standalone-Next-Wurzel. Jedes Artefakt gehoert unverwechselbar zu genau einer Route
 // und wird per echtem Node/CommonJS-Require geladen (siehe loadRoutePageArtifact); dabei laedt es
@@ -91,9 +100,9 @@ const TURBOPACK_RUNTIME_PROVENANCE_PATH = path.join(
 const SESSION_COOKIE_NAME = "kreile_app_session";
 const LOGIN_ACTION_PATH = "/start";
 // V3/V4: unauthentifiziert -> proxy laesst /start unverandert durch.
-const UNAUTHENTICATED_RESERVE_ACTION_PATH = "/start";
+const UNAUTHENTICATED_INTAKE_ACTION_PATH = "/start";
 // V2/V5: authentifiziert -> proxy leitet /start per 307 um, echte Seite ist /warendurchlauf/wareneingang.
-const AUTHENTICATED_RESERVE_ACTION_PATH = "/warendurchlauf/wareneingang";
+const AUTHENTICATED_INTAKE_ACTION_PATH = "/warendurchlauf/wareneingang";
 
 let failures = 0;
 function report(id, ok, detail) {
@@ -155,7 +164,7 @@ function loginHandleFor(userId) {
 }
 
 // Resolves action IDs deterministically from the Next.js manifest.
-// Returns { loginWithPin, reserveOrderIntakeAttachmentAction } or throws FATAL.
+// Returns { loginWithPin, createOrderIntakeAction } or throws FATAL.
 function resolveActionIdsFromManifest() {
   let manifest;
   try {
@@ -246,37 +255,59 @@ function resolveActionIdsFromManifest() {
   }
   const loginWithPinId = [...loginIds.keys()][0];
 
-  // Resolve reserveOrderIntakeAttachmentAction from warendurchlauf/actions.ts (exact match only)
-  const reserveIds = new Map();
+  // Resolve the real V5 GlobalCreate intake action from warendurchlauf/actions.ts (exact match only).
+  const intakeIds = new Map();
   for (const [id, entry] of Object.entries(manifest.node ?? {})) {
     if (
-      entry.exportedName === "reserveOrderIntakeAttachmentAction" &&
+      entry.exportedName === "createOrderIntakeAction" &&
       normalizeAndValidateFilename(entry.filename, "src/app/warendurchlauf/actions.ts")
     ) {
-      reserveIds.set(id, entry);
+      intakeIds.set(id, entry);
     }
   }
   for (const [id, entry] of Object.entries(manifest.edge ?? {})) {
     if (
-      entry.exportedName === "reserveOrderIntakeAttachmentAction" &&
+      entry.exportedName === "createOrderIntakeAction" &&
       normalizeAndValidateFilename(entry.filename, "src/app/warendurchlauf/actions.ts")
     ) {
-      reserveIds.set(id, entry); // Deduplicate by id
+      intakeIds.set(id, entry); // Deduplicate by id
     }
   }
-  if (reserveIds.size === 0) {
+  if (intakeIds.size === 0) {
     throw new Error(
-      "reserveOrderIntakeAttachmentAction action ID nicht im Manifest gefunden."
+      "createOrderIntakeAction action ID nicht im Manifest gefunden."
     );
   }
-  if (reserveIds.size > 1) {
+  if (intakeIds.size > 1) {
     throw new Error(
-      `reserveOrderIntakeAttachmentAction hat ${reserveIds.size} Action IDs (ambiguous): ${[...reserveIds.keys()].join(", ")}`
+      `createOrderIntakeAction hat ${intakeIds.size} Action IDs (ambiguous): ${[...intakeIds.keys()].join(", ")}`
     );
   }
-  const reserveOrderIntakeAttachmentActionId = [...reserveIds.keys()][0];
+  const createOrderIntakeActionId = [...intakeIds.keys()][0];
 
-  return { loginWithPinId, reserveOrderIntakeAttachmentActionId };
+  return { loginWithPinId, createOrderIntakeActionId };
+}
+
+function assertActionIsBoundToRoute({ manifestPath, routeWorker, actionId, exportedName }) {
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  } catch (error) {
+    throw new Error(`Route-Manifest ${manifestPath} konnte nicht gelesen werden: ${error.message}`);
+  }
+
+  const entry = manifest?.node?.[actionId];
+  const worker = entry?.workers?.[routeWorker];
+  if (
+    entry?.exportedName !== exportedName ||
+    entry?.filename !== "src/app/warendurchlauf/actions.ts" ||
+    worker?.exportedName !== exportedName ||
+    worker?.filename !== "src/app/warendurchlauf/actions.ts"
+  ) {
+    throw new Error(
+      `Route-Manifest ${manifestPath} bindet ${exportedName} nicht genau an ${routeWorker}.`
+    );
+  }
 }
 
 // Laedt das ECHTE Next.js-Build-Artefakt fuer eine RSC-Client-Reference-Manifest-Route
@@ -738,14 +769,14 @@ async function loginAndAssert({
   return cookie;
 }
 
-// Reserve-/Fehlercode exakt pruefen. 503/NOT_AVAILABLE ist niemals ein PASS.
-function assertReserveCode(result, expectedCode) {
+// Intake-/Fehlercode exakt pruefen. 503/NOT_AVAILABLE ist niemals ein PASS.
+function assertIntakeCode(result, expectedCode) {
   const code = result.code;
   if (typeof code !== "string" || code.length === 0) {
     throw new Error(`Action-Result hat keinen nicht-leeren String 'code' (${JSON.stringify(code)})`);
   }
   if (code === "NOT_AVAILABLE") {
-    throw new Error("Action-Result code=NOT_AVAILABLE (503-Reserve) ist niemals ein PASS");
+    throw new Error("Action-Result code=NOT_AVAILABLE (503-Intake) ist niemals ein PASS");
   }
   if (code !== expectedCode) {
     throw new Error(`Erwartet code=${expectedCode}, erhalten code=${code}`);
@@ -839,20 +870,28 @@ function snapshotDatabaseState() {
   return snapshot;
 }
 
-const RESERVE_INVALID_INPUT = {
-  orderId: "INVALID_FORMAT",
-  itemId: "INVALID_FORMAT",
-  expectedVersion: -1,
-  clientRequestId: "invalid",
-  mimeType: "invalid/type",
-};
+// This is deliberately malformed, so a permitted writer receives VALIDATION_ERROR
+// before the F1.1 command boundary and no write is possible.
+const INTAKE_INVALID_INPUT = { clientEventId: "invalid" };
 
-const RESERVE_PROBE_INPUT = {
-  orderId: "x",
-  itemId: "y",
-  expectedVersion: 0,
-  clientRequestId: "z",
-  mimeType: "image/png",
+// This is structurally valid and reaches the server-side authorization boundary.
+// It must never be written in V3/V4/V5 because those requests are unauthenticated,
+// tampered, or readonly respectively.
+const INTAKE_AUTH_PROBE_INPUT = {
+  clientEventId: "6c68347a-f0be-4db5-9f5a-000000000001",
+  customer: {
+    mode: "NEW",
+    name: "F0 Intake Probe",
+    customerType: "business",
+    companyName: null,
+    contactPerson: null,
+    email: null,
+    phone: null,
+    city: null,
+  },
+  dueDate: "2026-09-16",
+  note: null,
+  items: [{ name: "Probe", quantity: 1, material: null, surfaceRequested: "Mattnickel" }],
 };
 
 async function main() {
@@ -870,13 +909,26 @@ async function main() {
     }
 
     // ── Setup: Action-IDs deterministisch aus dem Manifest (genau eine ID pro Action) ────────
-    const { loginWithPinId, reserveOrderIntakeAttachmentActionId } =
+    const { loginWithPinId, createOrderIntakeActionId } =
       resolveActionIdsFromManifest();
     report(
       "SETUP-MANIFEST",
       true,
-      `loginWithPin=${loginWithPinId.substring(0, 8)}... reserve=${reserveOrderIntakeAttachmentActionId.substring(0, 8)}...`
+      `loginWithPin=${loginWithPinId.substring(0, 8)}... intake=${createOrderIntakeActionId.substring(0, 8)}...`
     );
+    assertActionIsBoundToRoute({
+      manifestPath: START_SERVER_REFERENCE_MANIFEST_PATH,
+      routeWorker: "app/start/page",
+      actionId: createOrderIntakeActionId,
+      exportedName: "createOrderIntakeAction",
+    });
+    assertActionIsBoundToRoute({
+      manifestPath: WARENEINGANG_SERVER_REFERENCE_MANIFEST_PATH,
+      routeWorker: "app/warendurchlauf/wareneingang/page",
+      actionId: createOrderIntakeActionId,
+      exportedName: "createOrderIntakeAction",
+    });
+    report("SETUP-INTAKE-ROUTE-BINDING", true, "createOrderIntakeAction ist in den echten Start- und Wareneingang-Route-Manifesten gebunden");
     const startClientReferenceManifest = loadClientReferenceManifest(
       START_CLIENT_REFERENCE_MANIFEST_PATH,
       START_CLIENT_REFERENCE_MANIFEST_ROUTE
@@ -957,7 +1009,7 @@ async function main() {
       report("V1-READONLY", false, `readonly login: ${error.message}`);
     }
 
-    // ── DB-Snapshot vor den Reserve-Aufrufen ────────────────────────────────────────────────
+    // ── DB-Snapshot vor den abgewiesenen Intake-Aufrufen ─────────────────────────────────────
     let snapshotBefore = null;
     try {
       snapshotBefore = snapshotDatabaseState();
@@ -970,14 +1022,14 @@ async function main() {
     if (writerCookie) {
       try {
         const invocation = await invokeServerAction({
-          actionId: reserveOrderIntakeAttachmentActionId,
-          args: [RESERVE_INVALID_INPUT],
+          actionId: createOrderIntakeActionId,
+          args: [INTAKE_INVALID_INPUT],
           cookieHeader: writerCookie,
-          pathname: AUTHENTICATED_RESERVE_ACTION_PATH,
+          pathname: AUTHENTICATED_INTAKE_ACTION_PATH,
           clientReferenceManifest: wareneingangClientReferenceManifest,
           routeRuntime: wareneingangRouteRuntime,
         });
-        const code = assertReserveCode(invocation.result, "VALIDATION_ERROR");
+        const code = assertIntakeCode(invocation.result, "VALIDATION_ERROR");
         report("V2", true, `code=${code}`);
       } catch (error) {
         report("V2", false, `V2: ${error.message}`);
@@ -989,14 +1041,14 @@ async function main() {
     // ── V3: keine Session -> UNAUTHENTICATED ────────────────────────────────────────────────
     try {
       const invocation = await invokeServerAction({
-        actionId: reserveOrderIntakeAttachmentActionId,
-        args: [RESERVE_PROBE_INPUT],
+        actionId: createOrderIntakeActionId,
+        args: [INTAKE_AUTH_PROBE_INPUT],
         cookieHeader: null,
-        pathname: UNAUTHENTICATED_RESERVE_ACTION_PATH,
+        pathname: UNAUTHENTICATED_INTAKE_ACTION_PATH,
         clientReferenceManifest: startClientReferenceManifest,
         routeRuntime: startRouteRuntime,
       });
-      const code = assertReserveCode(invocation.result, "UNAUTHENTICATED");
+      const code = assertIntakeCode(invocation.result, "UNAUTHENTICATED");
       report("V3", true, `code=${code}`);
     } catch (error) {
       report("V3", false, `V3: ${error.message}`);
@@ -1008,14 +1060,14 @@ async function main() {
         const tampered =
           writerCookie.slice(0, -1) + (writerCookie.endsWith("a") ? "b" : "a");
         const invocation = await invokeServerAction({
-          actionId: reserveOrderIntakeAttachmentActionId,
-          args: [RESERVE_PROBE_INPUT],
+          actionId: createOrderIntakeActionId,
+          args: [INTAKE_AUTH_PROBE_INPUT],
           cookieHeader: tampered,
-          pathname: UNAUTHENTICATED_RESERVE_ACTION_PATH,
+          pathname: UNAUTHENTICATED_INTAKE_ACTION_PATH,
           clientReferenceManifest: startClientReferenceManifest,
           routeRuntime: startRouteRuntime,
         });
-        const code = assertReserveCode(invocation.result, "UNAUTHENTICATED");
+        const code = assertIntakeCode(invocation.result, "UNAUTHENTICATED");
         report("V4", true, `code=${code}`);
       } catch (error) {
         report("V4", false, `V4: ${error.message}`);
@@ -1028,14 +1080,14 @@ async function main() {
     if (readonlyCookie) {
       try {
         const invocation = await invokeServerAction({
-          actionId: reserveOrderIntakeAttachmentActionId,
-          args: [RESERVE_PROBE_INPUT],
+          actionId: createOrderIntakeActionId,
+          args: [INTAKE_AUTH_PROBE_INPUT],
           cookieHeader: readonlyCookie,
-          pathname: AUTHENTICATED_RESERVE_ACTION_PATH,
+          pathname: AUTHENTICATED_INTAKE_ACTION_PATH,
           clientReferenceManifest: wareneingangClientReferenceManifest,
           routeRuntime: wareneingangRouteRuntime,
         });
-        const code = assertReserveCode(invocation.result, "FORBIDDEN");
+        const code = assertIntakeCode(invocation.result, "FORBIDDEN");
         report("V5", true, `code=${code}`);
       } catch (error) {
         report("V5", false, `V5: ${error.message}`);
@@ -1044,7 +1096,7 @@ async function main() {
       report("V5", false, "readonly session fehlt (V1-READONLY nicht bestanden)");
     }
 
-    // ── DB-Snapshot nach den Reserve-Aufrufen ───────────────────────────────────────────────
+    // ── DB-Snapshot nach den abgewiesenen Intake-Aufrufen ────────────────────────────────────
     let snapshotAfter = null;
     try {
       snapshotAfter = snapshotDatabaseState();

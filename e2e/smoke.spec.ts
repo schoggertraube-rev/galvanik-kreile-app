@@ -7,7 +7,7 @@ test.describe("Kreile auth boundary", () => {
     await expect(page).toHaveURL(/\/start$/);
     await expect(page).toHaveTitle(/Kreile/i);
     await expect(
-      page.getByRole("button", { name: "Administration per E-Mail" }),
+      page.getByRole("button", { name: /Gregor.*Systemadministrator/ }),
     ).toBeVisible();
     await expect(
       page.getByRole("heading", { name: "Wer arbeitet gerade?" }),
