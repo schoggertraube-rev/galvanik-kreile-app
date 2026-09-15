@@ -61,6 +61,14 @@ const goodModule = {
   "src/modules/orders/server/readOrder.ts": "export const readOrder = () => sql`select id from public.orders`;\n",
 };
 
+const goodWerkstattModule = {
+  "src/modules/werkstatt/werkstatt.manifest.json": manifest("werkstatt", {
+    publicExports: ["@/modules/werkstatt/public#WerkstattView"],
+  }),
+  "src/modules/werkstatt/public.ts": 'export { WerkstattView } from "./ui/WerkstattView";\n',
+  "src/modules/werkstatt/ui/WerkstattView.tsx": "export const WerkstattView = () => null;\n",
+};
+
 afterEach(() => {
   for (const t of temps.splice(0)) rmSync(t, { recursive: true, force: true });
 });
@@ -108,6 +116,47 @@ describe("S1 Naht 1 — Manifest je Modul + Ablage", () => {
     expect(f).toContainEqual(expect.stringContaining("'@/modules/other/public#y' muss '@/modules/orders/public#Symbol' sein"));
   });
 
+  it("trennt browser-sichere public- und explizite server-public-Fassade", () => {
+    const root = repo({
+      "src/modules/customers/customers.manifest.json": manifest("customers", {
+        publicExports: [
+          "@/modules/customers/public#CustomerView",
+          "@/modules/customers/public#CustomerInput",
+          "@/modules/customers/server-public#CustomerInput",
+          "@/modules/customers/server-public#createCustomer",
+        ],
+      }),
+      "src/modules/customers/public.ts": `${EXP} { CustomerView } from "./ui/CustomerView";\n${EXP} type { CustomerInput } from "./server/types";\n`,
+      "src/modules/customers/server-public.ts": `${IMP} "server-only";\n${EXP} { createCustomer } from "./server/createCustomer";\n${EXP} type { CustomerInput } from "./server/types";\n`,
+      "src/modules/customers/ui/CustomerView.tsx": "export const CustomerView = () => null;\n",
+      "src/modules/customers/server/types.ts": "export type CustomerInput = { name: string };\n",
+      "src/modules/customers/server/createCustomer.ts": `${IMP} "server-only";\n${IMP} { sql } from "drizzle-orm";\nexport const createCustomer = () => sql;\n`,
+      "src/app/actions/customers.actions.ts": `"use server";\n${IMP} { createCustomer } from "@/modules/customers/server-public";\nexport const action = createCustomer;\n`,
+      "src/app/customers/CustomersAppAdapter.tsx": `${IMP} { CustomerView } from "@/modules/customers/public";\nexport const CustomersAppAdapter = CustomerView;\n`,
+      "src/test/customer.integration.test.ts": `${IMP} { createCustomer } from "@/modules/customers/server-public";\nvoid createCustomer;\n`,
+    });
+    expect(findingsOf(root)).toEqual([]);
+  });
+
+  it("weist server-only im transitiven Client-Fassadengraph und fehlende Servermarkierung ab", () => {
+    const root = repo({
+      "src/modules/customers/customers.manifest.json": manifest("customers", {
+        publicExports: [
+          "@/modules/customers/public#CustomerView",
+          "@/modules/customers/server-public#createCustomer",
+        ],
+      }),
+      "src/modules/customers/public.ts": `${EXP} { CustomerView } from "./ui/CustomerView";\n`,
+      "src/modules/customers/server-public.ts": `${EXP} { createCustomer } from "./server/createCustomer";\n`,
+      "src/modules/customers/ui/CustomerView.tsx": `${EXP} { createCustomer as CustomerView } from "../server/createCustomer";\n`,
+      "src/modules/customers/server/createCustomer.ts": `${IMP} "server-only";\nexport const createCustomer = () => null;\n`,
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("Client-Fassade ist nicht browser-sicher"));
+    expect(f).toContainEqual(expect.stringContaining("importiert server-only 'server-only'"));
+    expect(f).toContainEqual(expect.stringContaining("Server-Fassade muss direkt 'server-only' importieren"));
+  });
+
   it("dependencies muessen existierende Module sein; Selbstabhaengigkeit = FAIL", () => {
     const root = repo({
       ...goodModule,
@@ -127,6 +176,137 @@ describe("S1 Naht 1 — Manifest je Modul + Ablage", () => {
     const f = findingsOf(root);
     expect(f).toContainEqual(expect.stringContaining("[naht1] src/components/orders/OrderCard.tsx: Fach 'orders' hat ein Modul"));
     expect(f).toContainEqual(expect.stringContaining("[naht1] src/lib/orders/read.ts: Fach 'orders' hat ein Modul"));
+  });
+
+  it("erlaubt ausschliesslich duenne Next-Entrypoints und manifestgebundene typisierte AppAdapter als App-Kompositionsnaht", () => {
+    const root = repo({
+      ...goodModule,
+      "src/app/orders/page.tsx": `${IMP} { OrdersAppAdapter } from "./OrdersAppAdapter";\nexport default function Page(){ return OrdersAppAdapter(); }\n`,
+      "src/app/orders/[id]/page.tsx": `${IMP} { OrderCardAppAdapter } from "../OrderCardAppAdapter";\nexport default function Page(){ return OrderCardAppAdapter({ orderId: "x" }); }\n`,
+      "src/app/orders/OrdersAppAdapter.tsx": `${IMP} { readOrder } from "@/modules/orders/public";\n${IMP} { action } from "@/app/actions/orders.actions";\nexport function OrdersAppAdapter(){ void action; return readOrder(); }\n`,
+      "src/app/orders/OrderCardAppAdapter.tsx": `${IMP} { readOrder } from "@/modules/orders/public";\nexport function OrderCardAppAdapter({ fallbackHref }: { fallbackHref?: "/orders" }){ void fallbackHref; return readOrder(); }\n`,
+    });
+    expect(findingsOf(root)).toEqual([]);
+  });
+
+  it("ordnet den realen Routen-/Modul-Mismatch warendurchlauf/WerkstattAppAdapter ueber die Werkstatt-Fassade zu", () => {
+    const root = repo({
+      ...goodWerkstattModule,
+      "src/app/warendurchlauf/WerkstattAppAdapter.tsx": [
+        `${IMP} { WerkstattView } from "@/modules/werkstatt/public";`,
+        `${IMP} { useRouter } from "next/navigation";`,
+        `${IMP} { action } from "@/app/actions/orders.actions";`,
+        `${IMP} { useOverlayStore } from "@/lib/overlayStore";`,
+        "export function WerkstattAppAdapter() { const router = useRouter(); void action; void useOverlayStore; router.push(\"/warendurchlauf/galvanik\"); return WerkstattView(); }",
+      ].join("\n"),
+    });
+    expect(findingsOf(root)).toEqual([]);
+  });
+
+  it("weist einen Next-Entrypoint ab, dessen Adapter einem anderen Fachmodul zugeordnet ist", () => {
+    const root = repo({
+      ...goodModule,
+      ...goodWerkstattModule,
+      "src/app/orders/page.tsx": `${IMP} { OrdersAppAdapter } from "./OrdersAppAdapter";\nexport default function Page(){ return OrdersAppAdapter(); }\n`,
+      "src/app/orders/OrdersAppAdapter.tsx": `${IMP} { WerkstattView } from "@/modules/werkstatt/public";\nexport function OrdersAppAdapter(){ return WerkstattView(); }\n`,
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/page.tsx:1: Next-Entrypoint darf lokalen Code nur ueber @/modules/orders/public"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/page.tsx: App-Kompositionsdatei muss @/modules/orders/public konsumieren"));
+  });
+
+  it("weist beliebige App-Dateien, actions/server/domain, fehlende Modulnaht, Tiefimport und generische URL-Tunnel ab", () => {
+    const root = repo({
+      ...goodModule,
+      "src/app/orders/page.tsx": "export default function Page(){ return null; }\n",
+      "src/app/orders/actions.ts": "export const action = 1;\n",
+      "src/app/orders/server/read.ts": "export const read = 1;\n",
+      "src/app/orders/domain/calculate.ts": "export const calculate = 1;\n",
+      "src/app/orders/BadAppAdapter.tsx": `${IMP} { x } from "@/modules/orders/server/readOrder";\n${IMP} { db } from "@/db";\nexport const BadAppAdapter = ({ href }: { href: string }) => href || "/foreign";\n`,
+      "src/components/orders/Card.tsx": "export const Card = () => null;\n",
+      "src/lib/orders/read.ts": "export const read = 1;\n",
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/page.tsx: App-Kompositionsdatei muss"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/actions.ts: Fach 'orders' hat ein Modul"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/server/read.ts: Fach 'orders' hat ein Modul"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/domain/calculate.ts: Fach 'orders' hat ein Modul"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/BadAppAdapter.tsx:2: AppAdapter darf keine DB-, Supabase-, Repository- oder Command-Implementierung"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/BadAppAdapter.tsx: AppAdapter muss genau eine kanonische Modul-public-Fassade importieren; Zuordnung ist keine"));
+    expect(f).toContainEqual(expect.stringContaining("href/url/route/pathname:string-Tunnel"));
+    expect(f).toContainEqual(expect.stringContaining("src/components/orders/Card.tsx: Fach 'orders' hat ein Modul"));
+    expect(f).toContainEqual(expect.stringContaining("src/lib/orders/read.ts: Fach 'orders' hat ein Modul"));
+  });
+
+  it("prueft verbotene Implementierungsimporte auch beim realen Routen-/Modul-Mismatch", () => {
+    const root = repo({
+      ...goodWerkstattModule,
+      "src/app/warendurchlauf/WerkstattAppAdapter.tsx": [
+        `${IMP} { WerkstattView } from "@/modules/werkstatt/public";`,
+        `${IMP} { supabase } from "@/lib/supabase/client";`,
+        `${IMP} { orderRepository } from "@/lib/server/orderRepository";`,
+        `${IMP} { recordGoodsOutCommand } from "@/lib/server/recordGoodsOutCommand";`,
+        "export function WerkstattAppAdapter() { void supabase; void orderRepository; void recordGoodsOutCommand; return WerkstattView(); }",
+      ].join("\n"),
+    });
+    const f = findingsOf(root);
+    for (const line of [2, 3, 4]) {
+      expect(f).toContainEqual(expect.stringContaining(`src/app/warendurchlauf/WerkstattAppAdapter.tsx:${line}: AppAdapter darf keine DB-, Supabase-, Repository- oder Command-Implementierung`));
+    }
+    expect(f).toHaveLength(3);
+  });
+
+  it("erkennt alle AppAdapter-Endungen case-insensitiv, meldet die Namensform und prueft ihren Inhalt weiter", () => {
+    const unsafeAdapters = [
+      ["unsafeAppAdapter.tsx", "@/utils/supabase/client"],
+      ["UnsafeMixedappadapter.jsx", "@/lib/supabase/client"],
+      ["UnsafeScriptAPPADAPTER.js", "@supabase/supabase-js"],
+      ["UnsafeTypedAppAdapter.ts", "../../../utils/supabase/client"],
+      ["UnsafeUpperAppAdapter.TSX", "@/lib/server/recordGoodsOutCommand"],
+    ] as const;
+    const files: Record<string, string> = { ...goodModule };
+    for (const [filename, implementationImport] of unsafeAdapters) {
+      files[`src/app/orders/${filename}`] = [
+        `${IMP} { readOrder } from "@/modules/orders/public";`,
+        `${IMP} { unsafe } from "${implementationImport}";`,
+        "export function Adapter() { void unsafe; return readOrder(); }",
+      ].join("\n");
+    }
+
+    const f = findingsOf(repo(files));
+    for (const [filename, implementationImport] of unsafeAdapters) {
+      expect(f).toContainEqual(expect.stringContaining(`src/app/orders/${filename}: AppAdapter-Dateiname muss kanonisch '<PascalCase>AppAdapter.tsx' geschrieben sein`));
+      expect(f).toContainEqual(expect.stringContaining(`src/app/orders/${filename}:2: AppAdapter darf keine DB-, Supabase-, Repository- oder Command-Implementierung importieren ('${implementationImport}')`));
+    }
+    expect(f).toHaveLength(unsafeAdapters.length * 2);
+  });
+
+  it("weist fehlende, mehrdeutige und ungueltige Modulzuordnung direkter AppAdapter fail-closed ab", () => {
+    const root = repo({
+      ...goodModule,
+      ...goodWerkstattModule,
+      "src/modules/broken/broken.manifest.json": manifest("wrong"),
+      "src/modules/broken/public.ts": "export const BrokenView = () => null;\n",
+      "src/app/warendurchlauf/OrphanAppAdapter.tsx": `${IMP} { action } from "@/app/actions/orders.actions";\nexport function OrphanAppAdapter() { void action; return null; }\n`,
+      "src/app/warendurchlauf/AmbiguousAppAdapter.tsx": `${IMP} { readOrder } from "@/modules/orders/public";\n${IMP} { WerkstattView } from "@/modules/werkstatt/public";\nexport function AmbiguousAppAdapter() { readOrder(); return WerkstattView(); }\n`,
+      "src/app/broken/BrokenAppAdapter.tsx": `${IMP} { BrokenView } from "@/modules/broken/public";\nexport function BrokenAppAdapter() { return BrokenView(); }\n`,
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("src/app/warendurchlauf/OrphanAppAdapter.tsx: AppAdapter muss genau eine kanonische Modul-public-Fassade importieren; Zuordnung ist keine"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/warendurchlauf/AmbiguousAppAdapter.tsx: AppAdapter muss genau eine kanonische Modul-public-Fassade importieren; Zuordnung ist mehrere (orders, werkstatt)"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/broken/BrokenAppAdapter.tsx: AppAdapter-Fassade '@/modules/broken/public' gehoert nicht zu einem gueltigen Manifest"));
+  });
+
+  it("weist breite Route-Props ab und laesst enge Literal-Fallbacks sowie konkrete App-Navigation zu", () => {
+    const root = repo({
+      ...goodModule,
+      "src/app/orders/FallbackAppAdapter.tsx": `${IMP} { readOrder } from "@/modules/orders/public";\nexport function FallbackAppAdapter({ fallbackHref }: { fallbackHref?: string }) { void fallbackHref; return readOrder(); }\n`,
+      "src/app/orders/TargetAppAdapter.tsx": `${IMP} { readOrder } from "@/modules/orders/public";\nexport function TargetAppAdapter({ targetUrl }: { targetUrl: string }) { void targetUrl; return readOrder(); }\n`,
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/FallbackAppAdapter.tsx:2: AppAdapter darf keinen breit typisierten href/url/route/pathname:string-Tunnel"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/TargetAppAdapter.tsx:2: AppAdapter darf keinen breit typisierten href/url/route/pathname:string-Tunnel"));
+    expect(f).toHaveLength(2);
   });
 
   it("Schema-Validator deckt object/required/additionalProperties/array/pattern/minLength ab", () => {
@@ -182,6 +362,37 @@ describe("S1 Naht 2 — positive Fassade / Tiefimport-Verbot", () => {
     expect(f).toHaveLength(6);
   });
 
+  it("erlaubt server-public nur fuer Server Actions und Real-DB-Tests; Client, Re-Export und Tiefimport bleiben rot", () => {
+    const root = repo({
+      "src/modules/customers/customers.manifest.json": manifest("customers", {
+        publicExports: [
+          "@/modules/customers/public#CustomerView",
+          "@/modules/customers/server-public#createCustomer",
+        ],
+      }),
+      "src/modules/customers/public.ts": `${EXP} { CustomerView } from "./ui/CustomerView";\n`,
+      "src/modules/customers/server-public.ts": `${IMP} "server-only";\n${EXP} { createCustomer } from "./server/createCustomer";\n`,
+      "src/modules/customers/ui/CustomerView.tsx": "export const CustomerView = () => null;\n",
+      "src/modules/customers/server/createCustomer.ts": `${IMP} "server-only";\nexport const createCustomer = () => null;\n`,
+      "src/app/customers/CustomersAppAdapter.tsx": `${IMP} { CustomerView } from "@/modules/customers/public";\n${IMP} { createCustomer } from "@/modules/customers/server-public";\nexport const CustomersAppAdapter = () => { void createCustomer; return CustomerView(); };\n`,
+      "src/app/client.tsx": `${IMP} { createCustomer } from "@/modules/customers/server-public";\nvoid createCustomer;\n`,
+      "src/app/actions/bad.actions.ts": `"use server";\n${IMP} { createCustomer } from "@/modules/customers/server/createCustomer";\nvoid createCustomer;\n`,
+      "src/app/actions/missing-server-marker.actions.ts": `${IMP} { createCustomer } from "@/modules/customers/server-public";\nvoid createCustomer;\n`,
+      "src/app/actions/reexport.actions.ts": `"use server";\n${EXP} { createCustomer } from "@/modules/customers/server-public";\n`,
+      "src/test/customer.integration.test.tsx": `${IMP} { createCustomer } from "@/modules/customers/server-public";\nvoid createCustomer;\n`,
+      "src/app/reexport.ts": `${EXP} { createCustomer } from "@/modules/customers/server-public";\n`,
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("src/app/customers/CustomersAppAdapter.tsx:2: Server-Fassade"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/client.tsx:1: Server-Fassade"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/reexport.ts:1: Server-Fassade"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/actions/bad.actions.ts:2: Tiefimport"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/actions/missing-server-marker.actions.ts:1: Server-Fassade"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/actions/reexport.actions.ts:2: Server-Fassade"));
+    expect(f).toContainEqual(expect.stringContaining("darf nicht re-exportiert werden"));
+    expect(f).toContainEqual(expect.stringContaining("src/test/customer.integration.test.tsx:1: Server-Fassade"));
+  });
+
   it("Im eigenen Modul nur relative Imports; @/modules/<eigen>/... = FAIL", () => {
     const root = repo({
       ...goodModule,
@@ -215,17 +426,96 @@ describe("S1 Naht 4 — Cross-Modul-Fakten nur ueber v_*-Views", () => {
   it("eigene Tabellen und deklarierte v_*-Views sind erlaubt", () => {
     const root = repo({
       ...goodModule,
-      "src/modules/invoices/invoices.manifest.json": manifest("invoices", { ownsTables: ["public.invoices", "private.invoice_numbers"] }),
+      "src/modules/invoices/invoices.manifest.json": manifest("invoices", {
+        ownsTables: ["public.invoices", "private.invoice_numbers"],
+        viewsFunctions: ["private.v_invoice_receipts", "private.issue_invoice_v1"],
+      }),
       "src/modules/invoices/public.ts": "export {};\n",
       "src/modules/invoices/server/q.ts": [
         "export const q = sql`",
         "  UPDATE public.invoices SET x = 1;",
         "  INSERT INTO private.invoice_numbers (n) VALUES (1);",
-        "  SELECT o.id FROM public.v_order_facts o JOIN public.invoices i ON i.order_id = o.id;",
+        "  SELECT o.id FROM public.v_order_facts o JOIN private.v_invoice_receipts r ON r.order_id = o.id JOIN public.invoices i ON i.order_id = o.id;",
+        "  SELECT * FROM private.issue_invoice_v1('order-id');",
         "`;",
       ].join("\n"),
     });
     expect(findingsOf(root)).toEqual([]);
+  });
+
+  it("erlaubt public Views moduluebergreifend, private Views/Funktionen aber nur ihrem deklarierenden Modul", () => {
+    const root = repo({
+      ...goodModule,
+      "src/modules/orders/orders.manifest.json": manifest("orders", {
+        publicExports: ["@/modules/orders/public#readOrder"],
+        ownsTables: ["public.orders"],
+        viewsFunctions: ["public.v_order_facts", "private.v_order_secret", "private.prepare_order_v1"],
+      }),
+      "src/modules/orders/server/privateRead.ts": "export const q = sql`select * from private.v_order_secret; select * from private.prepare_order_v1()`;\n",
+      "src/modules/invoices/invoices.manifest.json": manifest("invoices", { ownsTables: ["public.invoices"] }),
+      "src/modules/invoices/public.ts": "export {};\n",
+      "src/modules/invoices/server/q.ts": "export const q = sql`select * from public.v_order_facts o join private.v_order_secret s on s.id = o.id; select * from private.prepare_order_v1()`;\n",
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("[naht4] src/modules/invoices/server/q.ts:1: private View 'private.v_order_secret' gehoert orders"));
+    expect(f).toContainEqual(expect.stringContaining("[naht4] src/modules/invoices/server/q.ts:1: private Funktion 'private.prepare_order_v1' gehoert orders"));
+    expect(f).toHaveLength(2);
+  });
+
+  it("weist doppelte private-Relation-Deklaration fail-closed ab und verhindert Eigentumsumgehung", () => {
+    const root = repo({
+      ...goodModule,
+      "src/modules/orders/orders.manifest.json": manifest("orders", {
+        publicExports: ["@/modules/orders/public#readOrder"],
+        ownsTables: ["public.orders"],
+        viewsFunctions: ["public.v_order_facts", "private.v_order_secret"],
+      }),
+      "src/modules/invoices/invoices.manifest.json": manifest("invoices", {
+        ownsTables: ["public.invoices"],
+        viewsFunctions: ["private.v_order_secret"],
+      }),
+      "src/modules/invoices/public.ts": "export {};\n",
+      "src/modules/invoices/server/q.ts": "export const q = sql`select * from private.v_order_secret`;\n",
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("private Relation 'private.v_order_secret' ist in mehreren Modulen deklariert (invoices, orders)"));
+    expect(f).toContainEqual(expect.stringContaining("private View 'private.v_order_secret' gehoert invoices, orders"));
+    expect(f).toHaveLength(2);
+  });
+
+  it("viewsFunctions kann fremde Basistabellen nicht als Lesenaht autorisieren", () => {
+    const root = repo({
+      ...goodModule,
+      "src/modules/invoices/invoices.manifest.json": manifest("invoices", {
+        ownsTables: ["public.invoices"],
+        viewsFunctions: ["public.orders", "private.customer_number_counters", "public.calculate_total"],
+      }),
+      "src/modules/invoices/public.ts": "export {};\n",
+      "src/modules/invoices/server/q.ts": [
+        "export const q = sql`",
+        "  SELECT * FROM public.orders o",
+        "  JOIN private.customer_number_counters c ON c.tenant_id = o.tenant_id",
+        "`;",
+      ].join("\n"),
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("[naht4] src/modules/invoices/server/q.ts:2: Tabelle 'public.orders' gehoert nicht zu Modul 'invoices'"));
+    expect(f).toContainEqual(expect.stringContaining("[naht4] src/modules/invoices/server/q.ts:3: Tabelle 'private.customer_number_counters' gehoert nicht zu Modul 'invoices'"));
+    expect(f).toHaveLength(2);
+  });
+
+  it("ownsTables kann private Views oder Funktionsaufrufe nicht als Eigentum tarnen", () => {
+    const root = repo({
+      ...goodModule,
+      "src/modules/invoices/invoices.manifest.json": manifest("invoices", {
+        ownsTables: ["public.invoices", "private.v_order_secret", "private.prepare_order_v1"],
+      }),
+      "src/modules/invoices/public.ts": "export {};\n",
+      "src/modules/invoices/server/q.ts": "export const q = sql`select * from private.v_order_secret; select * from private.prepare_order_v1()`;\n",
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("ownsTables 'private.v_order_secret' ist eine View"));
+    expect(f).toContainEqual(expect.stringContaining("private Funktion 'private.prepare_order_v1' gehoert kein Modul"));
   });
 
   it("Fremdtabelle direkt oder undeklarierte View = FAIL", () => {

@@ -4,12 +4,12 @@
 //
 // Naht 1  Manifest je Modul:  src/modules/<fach>/<fach>.manifest.json valide gegen
 //         docs/architecture/MODULE_MANIFEST.schema.json, moduleId == Ordnername,
-//         public.ts vorhanden, publicExports = "@/modules/<fach>/public#Symbol" und
-//         Symbol wird von public.ts exportiert, dependencies = existierende Module.
+//         public.ts client-sicher vorhanden; optionale server-public.ts ist explizit
+//         server-only. publicExports bindet Symbol und genaue Fassade.
 //         Ablage: nichts vom Fach ausserhalb src/modules/<fach>/ (kein src/app|components|
 //         lib|features|hooks|contexts/<fach>).
-// Naht 2  Positive Fassade: Fremdmodul NUR ueber @/modules/<fach>/public (Alias ODER
-//         relativ); Tiefimport = FAIL. Eigenes Modul NUR relativ (kein @/modules/<eigen>/...).
+// Naht 2  Positive Fassade: Browser-/UI-Vertrag nur ueber public; Commands nur ueber
+//         server-public aus serverseitigen App-Actions/Real-DB-Tests. Tiefimport = FAIL.
 // Naht 3  Tenant-Literal: ESLint (S0). Hier nicht doppelt.
 // Naht 4  Cross-Modul-Fakten NUR ueber v_*-Views: SQL in src/modules/<fach>/ darf
 //         public./private.-Tabellen nur anfassen, wenn ownsTables sie dem Modul zuordnet,
@@ -61,6 +61,14 @@ export const LEGACY_DOMAIN_PARENTS = [
   "src/hooks",
   "src/contexts",
 ];
+const NEXT_COMPOSITION_ENTRYPOINTS = new Set(["page.tsx", "layout.tsx", "loading.tsx", "error.tsx", "not-found.tsx"]);
+const APP_ADAPTER_NAME = /^[A-Z][A-Za-z0-9]*AppAdapter\.tsx$/;
+const APP_ADAPTER_FILE = /appadapter\.(?:tsx|jsx|js|ts)$/i;
+const ADAPTER_FORBIDDEN_IMPORT = /(?:^@supabase(?:\/|$)|(?:^|\/)supabase(?:\/|$)|(?:^|\/)(?:db|database|commands?|repositories?)(?:\/|$)|(?:^|\/)[^/]*(?:Command|Repo(?:sitory)?)$)/i;
+const ADAPTER_GENERIC_ROUTE_TUNNEL = /\b(?:href|url|route|pathname|[A-Za-z_$][\w$]*(?:href|url|route|pathname))\??\s*:\s*string\b/i;
+const SERVER_ACTION_FILE = /^src\/app\/actions\/[^/]+\.actions\.ts$/;
+const REAL_DB_TEST_FILE = /^src\/test\/.+\.integration\.test\.ts$/;
+const SERVER_ONLY_SPEC = /^(?:server-only|postgres(?:\/|$)|drizzle-orm(?:\/|$)|@supabase(?:\/|$)|node:)|^@\/(?:db(?:\/|$)|lib\/server\/privilegedDb(?:\/|$)|lib\/supabase(?:\/|$)|utils\/supabase(?:\/|$))/;
 
 const CODE_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".mdx"]);
 const SQL_EXTENSIONS = new Set([...CODE_EXTENSIONS, ".sql"]);
@@ -238,6 +246,139 @@ export function moduleOf(relPath) {
   return m ? m[1] : null;
 }
 
+function isTypeOnlyReference(source, index) {
+  return /^(?:import|export)\s+type\b/.test(source.slice(index, index + 80));
+}
+
+function existingCodeTarget(root, target) {
+  const candidates = [
+    ...[".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"].map((extension) => `${target}${extension}`),
+    ...[".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"].map((extension) => `${target}/index${extension}`),
+  ];
+  return candidates.find((candidate) => existsSync(path.join(root, candidate))) ?? null;
+}
+
+function clientFacadeViolation(root, entryRel) {
+  const pending = [{ rel: entryRel, chain: [entryRel] }];
+  const seen = new Set();
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current || seen.has(current.rel)) continue;
+    seen.add(current.rel);
+    const source = readFileSync(path.join(root, current.rel), "utf8");
+    if (/^\s*['"]use server['"]\s*;/m.test(source)) {
+      return `${current.chain.join(" -> ")} erreicht 'use server'`;
+    }
+    for (const { spec, index } of importSources(source)) {
+      if (isTypeOnlyReference(source, index)) continue;
+      if (SERVER_ONLY_SPEC.test(spec)) {
+        return `${current.chain.join(" -> ")} importiert server-only '${spec}'`;
+      }
+      const target = resolveSpec(current.rel, spec);
+      const targetFile = target ? existingCodeTarget(root, target) : null;
+      if (targetFile && !seen.has(targetFile)) {
+        pending.push({ rel: targetFile, chain: [...current.chain, targetFile] });
+      }
+    }
+  }
+  return null;
+}
+
+function allowedServerFacadeConsumer(file, source) {
+  if (REAL_DB_TEST_FILE.test(file)) return true;
+  return SERVER_ACTION_FILE.test(file) && /^\s*['"]use server['"]\s*;/m.test(source);
+}
+
+function isReexportReference(source, index) {
+  return /^\s*export\b/.test(source.slice(index));
+}
+
+function isAppAdapterFile(rel) {
+  return rel.startsWith("src/app/") && APP_ADAPTER_FILE.test(path.posix.basename(rel));
+}
+
+function gateAppCompositionFile(root, rel, fach, findings) {
+  const prefix = `src/app/${fach}/`;
+  if (!rel.startsWith(prefix)) return false;
+  const nested = rel.slice(prefix.length);
+  const basename = path.posix.basename(nested);
+  const isEntrypoint = NEXT_COMPOSITION_ENTRYPOINTS.has(basename);
+  if (isAppAdapterFile(rel)) return true;
+  if (!isEntrypoint) return false;
+
+  const source = readFileSync(path.join(root, rel), "utf8");
+  const imports = importSources(source);
+  const moduleFacade = `${MODULES_DIR}/${fach}/public`;
+  const adapterRoot = `src/app/${fach}/`;
+  let hasCompositionSeam = false;
+  for (const { spec, index } of imports) {
+    const target = resolveSpec(rel, spec);
+    if (target === moduleFacade) {
+      hasCompositionSeam = true;
+      continue;
+    }
+    const targetFile = target ? existingCodeTarget(root, target) : null;
+    if (targetFile?.startsWith(adapterRoot) && APP_ADAPTER_NAME.test(path.posix.basename(targetFile))) {
+      const adapterSource = readFileSync(path.join(root, targetFile), "utf8");
+      const assignedModules = new Set(
+        importSources(adapterSource)
+          .map(({ spec: adapterSpec }) => resolveSpec(targetFile, adapterSpec)?.match(/^src\/modules\/([^/]+)\/public$/)?.[1])
+          .filter(Boolean),
+      );
+      if (assignedModules.size === 1 && assignedModules.has(fach)) {
+        hasCompositionSeam = true;
+        continue;
+      }
+    }
+    if (target) {
+      findings.push(`[naht1] ${rel}:${lineOf(source, index)}: Next-Entrypoint darf lokalen Code nur ueber @/modules/${fach}/public oder einen direkten *AppAdapter.tsx komponieren ('${spec}')`);
+    }
+  }
+  if (!hasCompositionSeam) {
+    findings.push(`[naht1] ${rel}: App-Kompositionsdatei muss @/modules/${fach}/public konsumieren oder ueber einen direkten *AppAdapter.tsx dorthin fuehren`);
+  }
+  return true;
+}
+
+// AppAdapter sind App-Komposition und duerfen deshalb ausserhalb eines gleichnamigen
+// Next-Routenordners liegen. Ihre Zuordnung entsteht ausschliesslich aus genau einer
+// kanonischen public-Fassade eines gueltig manifestierten Moduls.
+function gateAppAdapters(root, findings, validModules) {
+  // `walk` statt Code-Extension-Filter: auch .TSX und andere nicht kanonische
+  // Schreibweisen muessen erkannt, inhaltlich geprueft und explizit abgelehnt werden.
+  const adapters = walk(root, "src/app", []).filter(isAppAdapterFile);
+  for (const rel of adapters) {
+    const source = readFileSync(path.join(root, rel), "utf8");
+    const facadeModules = new Set();
+
+    if (!APP_ADAPTER_NAME.test(path.posix.basename(rel))) {
+      findings.push(`[naht1] ${rel}: AppAdapter-Dateiname muss kanonisch '<PascalCase>AppAdapter.tsx' geschrieben sein`);
+    }
+
+    for (const { spec, index } of importSources(source)) {
+      const target = resolveSpec(rel, spec);
+      const facade = target?.match(/^src\/modules\/([^/]+)\/public$/);
+      if (facade) facadeModules.add(facade[1]);
+      if (ADAPTER_FORBIDDEN_IMPORT.test(spec)) {
+        findings.push(`[naht1] ${rel}:${lineOf(source, index)}: AppAdapter darf keine DB-, Supabase-, Repository- oder Command-Implementierung importieren ('${spec}')`);
+      }
+    }
+
+    const assigned = [...facadeModules].sort();
+    if (assigned.length !== 1) {
+      const detail = assigned.length === 0 ? "keine" : `mehrere (${assigned.join(", ")})`;
+      findings.push(`[naht1] ${rel}: AppAdapter muss genau eine kanonische Modul-public-Fassade importieren; Zuordnung ist ${detail}`);
+    } else if (!validModules.has(assigned[0])) {
+      findings.push(`[naht1] ${rel}: AppAdapter-Fassade '@/modules/${assigned[0]}/public' gehoert nicht zu einem gueltigen Manifest`);
+    }
+
+    const genericRouteTunnel = source.match(ADAPTER_GENERIC_ROUTE_TUNNEL);
+    if (genericRouteTunnel) {
+      findings.push(`[naht1] ${rel}:${lineOf(source, genericRouteTunnel.index ?? 0)}: AppAdapter darf keinen breit typisierten href/url/route/pathname:string-Tunnel anbieten`);
+    }
+  }
+}
+
 // ── Naht 1: Manifest je Modul + Ablage ───────────────────────────────────────
 
 function gateManifests(root, findings, schemaPath) {
@@ -245,13 +386,16 @@ function gateManifests(root, findings, schemaPath) {
   const schemaAbs = schemaPath ?? path.join(root, SCHEMA_PATH);
   if (modules.length > 0 && !existsSync(schemaAbs)) {
     findings.push(`[naht1] ${SCHEMA_PATH}: Schema fehlt, Manifeste nicht pruefbar`);
-    return { modules, manifests: new Map() };
+    return { modules, manifests: new Map(), validModules: new Set() };
   }
   const schema = modules.length > 0 ? readJson(schemaAbs) : null;
   const manifests = new Map();
+  const validModules = new Set();
   for (const fach of modules) {
+    const manifestFindingStart = findings.length;
     const manifestRel = `${MODULES_DIR}/${fach}/${fach}.manifest.json`;
     const publicRel = `${MODULES_DIR}/${fach}/public.ts`;
+    const serverPublicRel = `${MODULES_DIR}/${fach}/server-public.ts`;
     if (!existsSync(path.join(root, manifestRel))) {
       findings.push(`[naht1] ${manifestRel}: Manifest fehlt (Modul ohne Manifest = FAIL)`);
       continue;
@@ -277,13 +421,29 @@ function gateManifests(root, findings, schemaPath) {
       if (STAR_REEXPORT.test(publicSource)) {
         findings.push(`[naht1] ${publicRel}: 'export * from' verboten — Fassade ist eine explizite Liste (publicExports)`);
       }
-      const exported = exportedSymbols(publicSource);
+      const publicViolation = clientFacadeViolation(root, publicRel);
+      if (publicViolation) {
+        findings.push(`[naht1] ${publicRel}: Client-Fassade ist nicht browser-sicher (${publicViolation})`);
+      }
+      const facadeExports = new Map([["public", exportedSymbols(publicSource)]]);
+      if (existsSync(path.join(root, serverPublicRel))) {
+        const serverPublicSource = readFileSync(path.join(root, serverPublicRel), "utf8");
+        if (!/^\s*import\s+['"]server-only['"]\s*;/m.test(serverPublicSource)) {
+          findings.push(`[naht1] ${serverPublicRel}: Server-Fassade muss direkt 'server-only' importieren`);
+        }
+        if (STAR_REEXPORT.test(serverPublicSource)) {
+          findings.push(`[naht1] ${serverPublicRel}: 'export * from' verboten — Server-Fassade ist eine explizite Liste (publicExports)`);
+        }
+        facadeExports.set("server-public", exportedSymbols(serverPublicSource));
+      }
       for (const entry of asStringArray(manifest.publicExports)) {
-        const m = entry.match(/^@\/modules\/([^/#]+)\/public#([A-Za-z_$][\w$]*)$/);
+        const m = entry.match(/^@\/modules\/([^/#]+)\/(public|server-public)#([A-Za-z_$][\w$]*)$/);
         if (!m || m[1] !== fach) {
-          findings.push(`[naht1] ${manifestRel}: publicExports '${entry}' muss '@/modules/${fach}/public#Symbol' sein`);
-        } else if (!exported.has(m[2])) {
-          findings.push(`[naht1] ${publicRel}: exportiert '${m[2]}' nicht, steht aber in publicExports`);
+          findings.push(`[naht1] ${manifestRel}: publicExports '${entry}' muss '@/modules/${fach}/public#Symbol' sein oder '@/modules/${fach}/server-public#Symbol'`);
+        } else if (!facadeExports.has(m[2])) {
+          findings.push(`[naht1] ${manifestRel}: publicExports '${entry}' verweist auf fehlende Fassade ${m[2]}.ts`);
+        } else if (!facadeExports.get(m[2]).has(m[3])) {
+          findings.push(`[naht1] ${MODULES_DIR}/${fach}/${m[2]}.ts: exportiert '${m[3]}' nicht, steht aber in publicExports`);
         }
       }
     }
@@ -291,6 +451,7 @@ function gateManifests(root, findings, schemaPath) {
       if (!modules.includes(dep)) findings.push(`[naht1] ${manifestRel}: dependency '${dep}' ist kein Modul unter ${MODULES_DIR}/`);
       if (dep === fach) findings.push(`[naht1] ${manifestRel}: Modul haengt von sich selbst ab`);
     }
+    if (findings.length === manifestFindingStart) validModules.add(fach);
     // Ablage (Red-Team P2): jedes Pfadsegment == fach (case-insensitive) unter den
     // Legacy-Eltern, plus Datei <fach>.ts(x) direkt darunter.
     for (const parent of LEGACY_DOMAIN_PARENTS) {
@@ -300,7 +461,7 @@ function gateManifests(root, findings, schemaPath) {
         const file = segments.at(-1) ?? "";
         const dirHit = dirs.find((d) => d.replace(/^[([]|[)\]]$/g, "").toLowerCase() === fach);
         const fileHit = dirs.length === 0 && file.replace(/\.[cm]?[jt]sx?$/, "").toLowerCase() === fach;
-        if (dirHit || fileHit) {
+        if ((dirHit || fileHit) && !(parent === "src/app" && gateAppCompositionFile(root, rel, fach, findings))) {
           findings.push(`[naht1] ${rel}: Fach '${fach}' hat ein Modul, darf nicht mehr ausserhalb ${MODULES_DIR}/${fach}/ liegen`);
         }
       }
@@ -312,11 +473,14 @@ function gateManifests(root, findings, schemaPath) {
   for (const [fach, manifest] of manifests) {
     for (const t of asStringArray(manifest.ownsTables)) {
       const key = t.toLowerCase();
+      if (/^(?:public|private)\.v_/.test(key)) {
+        findings.push(`[naht1] ${MODULES_DIR}/${fach}/${fach}.manifest.json: ownsTables '${t}' ist eine View; Views gehoeren ausschliesslich in viewsFunctions`);
+      }
       if (owners.has(key)) findings.push(`[naht1] ${MODULES_DIR}/${fach}/${fach}.manifest.json: ownsTables '${t}' gehoert bereits Modul '${owners.get(key)}'`);
       else owners.set(key, fach);
     }
   }
-  return { modules, manifests };
+  return { modules, manifests, validModules };
 }
 
 // ── Naht 2: Positive Fassade / Tiefimport-Verbot ─────────────────────────────
@@ -354,6 +518,15 @@ function gateImports(root, findings) {
         if (spec.startsWith("@/")) findings.push(`[naht2] ${where}: Import im eigenen Modul muss relativ sein, nicht '${spec}'`);
         continue;
       }
+      if (target === `${MODULES_DIR}/${targetModule}/public`) continue;
+      if (target === `${MODULES_DIR}/${targetModule}/server-public`) {
+        if (isReexportReference(source, index)) {
+          findings.push(`[naht2] ${where}: Server-Fassade '${spec}' darf nicht re-exportiert werden`);
+        } else if (!allowedServerFacadeConsumer(file, source)) {
+          findings.push(`[naht2] ${where}: Server-Fassade '${spec}' darf nur eine 'use server'-App-Action oder ein Real-DB-Integrationstest konsumieren`);
+        }
+        continue;
+      }
       if (target !== `${MODULES_DIR}/${targetModule}/public`) {
         findings.push(`[naht2] ${where}: Tiefimport '${spec}' — Fremdmodul '${targetModule}' nur ueber @/modules/${targetModule}/public`);
       }
@@ -371,15 +544,38 @@ const SUPABASE_FROM = /(?<!storage)\.from\s*\(\s*['"`]([a-z_][a-z0-9_]*)['"`]\s*
 
 function tableRefs(source) {
   const refs = [];
-  for (const m of source.matchAll(SQL_TABLE_REF)) refs.push({ ref: `${m[1]}.${m[2]}`.toLowerCase(), index: m.index });
-  for (const m of source.matchAll(SUPABASE_FROM)) refs.push({ ref: `public.${m[1]}`.toLowerCase(), index: m.index });
+  for (const m of source.matchAll(SQL_TABLE_REF)) {
+    const afterReference = source.slice((m.index ?? 0) + m[0].length);
+    refs.push({
+      ref: `${m[1]}.${m[2]}`.toLowerCase(),
+      index: m.index,
+      functionCall: /^(?:from|join)\b/i.test(m[0]) && /^\s*\(/.test(afterReference),
+    });
+  }
+  for (const m of source.matchAll(SUPABASE_FROM)) {
+    refs.push({ ref: `public.${m[1]}`.toLowerCase(), index: m.index, functionCall: false });
+  }
   return refs;
 }
 
 function gateData(root, findings, manifests) {
-  const declaredViews = new Set();
-  for (const manifest of manifests.values()) {
-    for (const v of asStringArray(manifest.viewsFunctions)) if (/^public\.v_/i.test(v)) declaredViews.add(v.toLowerCase());
+  const declaredPublicViews = new Set();
+  const privateRelationOwners = new Map();
+  for (const [fach, manifest] of manifests) {
+    for (const value of asStringArray(manifest.viewsFunctions)) {
+      const ref = value.toLowerCase();
+      if (/^public\.v_/.test(ref)) declaredPublicViews.add(ref);
+      if (/^private\./.test(ref)) {
+        const owners = privateRelationOwners.get(ref) ?? new Set();
+        owners.add(fach);
+        privateRelationOwners.set(ref, owners);
+      }
+    }
+  }
+  for (const [ref, owners] of privateRelationOwners) {
+    if (owners.size > 1) {
+      findings.push(`[naht4] private Relation '${ref}' ist in mehreren Modulen deklariert (${[...owners].sort().join(", ")}) - Eigentum ist nicht eindeutig`);
+    }
   }
   for (const [fach, manifest] of manifests) {
     const owned = new Set(asStringArray(manifest.ownsTables).map((t) => t.toLowerCase()));
@@ -387,9 +583,20 @@ function gateData(root, findings, manifests) {
       const source = readFileSync(path.join(root, file), "utf8");
       for (const m of tableRefs(source)) {
         const ref = m.ref;
-        if (owned.has(ref)) continue;
+        if (owned.has(ref) && !m.functionCall) continue;
         if (/^public\.v_/.test(ref)) {
-          if (!declaredViews.has(ref)) findings.push(`[naht4] ${file}:${lineOf(source, m.index)}: View '${ref}' ist in keinem Manifest (viewsFunctions) deklariert`);
+          if (!declaredPublicViews.has(ref)) findings.push(`[naht4] ${file}:${lineOf(source, m.index)}: View '${ref}' ist in keinem Manifest (viewsFunctions) deklariert`);
+          continue;
+        }
+        const isPrivateView = /^private\.v_/.test(ref) && !m.functionCall;
+        const isPrivateFunction = /^private\./.test(ref) && m.functionCall;
+        if (isPrivateView || isPrivateFunction) {
+          const owners = privateRelationOwners.get(ref);
+          if (!owners?.has(fach) || owners.size !== 1) {
+            const ownerText = owners?.size ? [...owners].sort().join(", ") : "kein Modul";
+            const kind = isPrivateView ? "View" : "Funktion";
+            findings.push(`[naht4] ${file}:${lineOf(source, m.index)}: private ${kind} '${ref}' gehoert ${ownerText}; private Views/Funktionen sind keine Cross-Modul-Naht`);
+          }
           continue;
         }
         findings.push(`[naht4] ${file}:${lineOf(source, m.index)}: Tabelle '${ref}' gehoert nicht zu Modul '${fach}' (ownsTables) — Fremdfakten nur ueber public.v_*`);
@@ -475,7 +682,8 @@ export function runModuleGates(root, { baseBaselinePath = null, schemaPath = nul
   const findings = [];
   const baseline = readBaseline(path.join(root, BASELINE_PATH), findings);
   const baseBaseline = baseBaselinePath ? readBaseline(baseBaselinePath, findings) : null;
-  const { manifests } = gateManifests(root, findings, schemaPath);
+  const { manifests, validModules } = gateManifests(root, findings, schemaPath);
+  gateAppAdapters(root, findings, validModules);
   gateImports(root, findings);
   gateData(root, findings, manifests);
   gateUi(root, findings, baseline, baseBaseline);
