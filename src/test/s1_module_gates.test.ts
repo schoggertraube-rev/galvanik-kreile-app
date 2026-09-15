@@ -265,6 +265,43 @@ describe("S1 Naht 1 — Manifest je Modul + Ablage", () => {
     expect(f).toHaveLength(2);
   });
 
+  it("verbietet jede Default-Export-Form in Fassaden und erlaubt den explizit benannten Default-Reexport", () => {
+    const publicDefaultForms = [
+      "export default function Port() {}\n",
+      "export default function() {}\n",
+      "export default class Port {}\n",
+      "export default class {}\n",
+      "export default (() => null);\n",
+      "const Port = () => null;\nexport default Port;\n",
+      "const Port = () => null;\nexport { Port as default };\n",
+      'export { default } from "./Port";\n',
+    ];
+    for (const publicSource of publicDefaultForms) {
+      const root = repo({
+        "src/modules/orders/orders.manifest.json": manifest("orders"),
+        "src/modules/orders/public.ts": publicSource,
+        "src/modules/orders/Port.ts": "export default function Port() {}\n",
+      });
+      expect(findingsOf(root)).toContainEqual(expect.stringContaining("src/modules/orders/public.ts: Default-Export verboten"));
+    }
+
+    const serverRoot = repo({
+      "src/modules/customers/customers.manifest.json": manifest("customers"),
+      "src/modules/customers/public.ts": "export {};\n",
+      "src/modules/customers/server-public.ts": 'import "server-only";\nexport default async function createCustomer() {}\n',
+    });
+    expect(findingsOf(serverRoot)).toContainEqual(expect.stringContaining("src/modules/customers/server-public.ts: Default-Export verboten"));
+
+    const namedReexportRoot = repo({
+      "src/modules/orders/orders.manifest.json": manifest("orders", {
+        publicExports: ["@/modules/orders/public#Port"],
+      }),
+      "src/modules/orders/public.ts": 'export { default as Port } from "./Port";\n',
+      "src/modules/orders/Port.ts": "export default function Port() {}\n",
+    });
+    expect(findingsOf(namedReexportRoot)).toEqual([]);
+  });
+
   it("trennt browser-sichere public- und explizite server-public-Fassade", () => {
     const root = repo({
       "src/modules/customers/customers.manifest.json": manifest("customers", {

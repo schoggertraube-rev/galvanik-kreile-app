@@ -198,17 +198,31 @@ export function validateAgainstSchema(value, schema, at = "$") {
 // explizite Liste, sonst waere publicExports nicht pruefbar (Red-Team P1).
 export const STAR_REEXPORT = /^\s*export\s+(?:type\s+)?\*\s*(?:as\s+[\w$]+\s+)?from\b/m;
 
+function exportedName(item) {
+  const normalized = item.trim().replace(/^type\s+/, "");
+  if (!normalized) return null;
+  const asMatch = normalized.match(/^[A-Za-z_$][\w$]*\s+as\s+([A-Za-z_$][\w$]*)$/);
+  return asMatch ? asMatch[1] : normalized.match(/^([A-Za-z_$][\w$]*)$/)?.[1] ?? null;
+}
+
+export function hasDefaultExport(source) {
+  if (/^\s*export\s+default\b/m.test(source)) return true;
+  const list = /^\s*export\s+(?:type\s+)?\{([^}]*)\}/gm;
+  for (const match of source.matchAll(list)) {
+    if (match[1].split(",").some((item) => exportedName(item) === "default")) return true;
+  }
+  return false;
+}
+
 export function exportedSymbols(source) {
   const names = new Set();
-  const decl = /^\s*export\s+(?:default\s+)?(?:declare\s+)?(?:async\s+)?(?:const|let|var|function\*?|class|type|interface|enum|namespace|abstract\s+class)\s+([A-Za-z_$][\w$]*)/gm;
+  const decl = /^\s*export\s+(?:declare\s+)?(?:async\s+)?(?:const|let|var|function\*?|class|type|interface|enum|namespace|abstract\s+class)\s+([A-Za-z_$][\w$]*)/gm;
   for (const m of source.matchAll(decl)) names.add(m[1]);
   const list = /^\s*export\s+(?:type\s+)?\{([^}]*)\}/gm;
   for (const m of source.matchAll(list)) {
     for (const part of m[1].split(",")) {
-      const item = part.trim().replace(/^type\s+/, "");
-      if (!item) continue;
-      const asMatch = item.match(/^[A-Za-z_$][\w$]*\s+as\s+([A-Za-z_$][\w$]*)$/);
-      names.add(asMatch ? asMatch[1] : item.split(/\s+/)[0]);
+      const name = exportedName(part);
+      if (name && name !== "default") names.add(name);
     }
   }
   return names;
@@ -641,6 +655,9 @@ function gateManifests(root, findings, schemaPath) {
       if (STAR_REEXPORT.test(publicSource)) {
         findings.push(`[naht1] ${publicRel}: 'export * from' verboten — Fassade ist eine explizite Liste (publicExports)`);
       }
+      if (hasDefaultExport(publicSource)) {
+        findings.push(`[naht1] ${publicRel}: Default-Export verboten — Fassade exportiert ausschliesslich explizit benannte, manifestierte Symbole`);
+      }
       const publicViolation = clientFacadeViolation(root, publicRel);
       if (publicViolation) {
         findings.push(`[naht1] ${publicRel}: Client-Fassade ist nicht browser-sicher (${publicViolation})`);
@@ -653,6 +670,9 @@ function gateManifests(root, findings, schemaPath) {
         }
         if (STAR_REEXPORT.test(serverPublicSource)) {
           findings.push(`[naht1] ${serverPublicRel}: 'export * from' verboten — Server-Fassade ist eine explizite Liste (publicExports)`);
+        }
+        if (hasDefaultExport(serverPublicSource)) {
+          findings.push(`[naht1] ${serverPublicRel}: Default-Export verboten — Server-Fassade exportiert ausschliesslich explizit benannte, manifestierte Symbole`);
         }
         facadeExports.set("server-public", exportedSymbols(serverPublicSource));
       }
