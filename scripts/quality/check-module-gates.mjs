@@ -32,6 +32,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 import { checkAuthorityRepository } from "./check-authoritative-sources.mjs";
 
 export const BASELINE_PATH = "quality/module-gates-baseline.json";
@@ -192,40 +193,92 @@ export function validateAgainstSchema(value, schema, at = "$") {
   return errors;
 }
 
-// ── Export-/Import-Extraktion (regex-basiert, bewusst konservativ) ─────────────
+// ── Fassaden-Exportanalyse (TypeScript-AST, Kommentare/Literale sind Daten) ───
 
-// Star-Re-Exports (`export * from`) sind in public.ts VERBOTEN: die Fassade ist eine
-// explizite Liste, sonst waere publicExports nicht pruefbar (Red-Team P1).
-export const STAR_REEXPORT = /^\s*export\s+(?:type\s+)?\*\s*(?:as\s+[\w$]+\s+)?from\b/m;
-
-function exportedName(item) {
-  const normalized = item.trim().replace(/^type\s+/, "");
-  if (!normalized) return null;
-  const asMatch = normalized.match(/^[A-Za-z_$][\w$]*\s+as\s+([A-Za-z_$][\w$]*)$/);
-  return asMatch ? asMatch[1] : normalized.match(/^([A-Za-z_$][\w$]*)$/)?.[1] ?? null;
+function hasModifier(node, kind) {
+  return node.modifiers?.some((modifier) => modifier.kind === kind) ?? false;
 }
 
-export function hasDefaultExport(source) {
-  if (/^\s*export\s+default\b/m.test(source)) return true;
-  const list = /^\s*export\s+(?:type\s+)?\{([^}]*)\}/gm;
-  for (const match of source.matchAll(list)) {
-    if (match[1].split(",").some((item) => exportedName(item) === "default")) return true;
+function addBindingNames(name, symbols) {
+  if (ts.isIdentifier(name)) {
+    symbols.add(name.text);
+    return;
   }
-  return false;
+  for (const element of name.elements) {
+    if (!ts.isOmittedExpression(element)) addBindingNames(element.name, symbols);
+  }
+}
+
+function facadeDiagnostic(sourceFile, diagnostic) {
+  const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, " ");
+  if (diagnostic.start === undefined) return message;
+  const location = sourceFile.getLineAndCharacterOfPosition(diagnostic.start);
+  return `${location.line + 1}:${location.character + 1}: ${message}`;
+}
+
+export function analyzeFacadeExports(source, fileName = "facade.ts") {
+  const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const symbols = new Set();
+  const errors = [...(sourceFile.parseDiagnostics ?? [])].map((diagnostic) => facadeDiagnostic(sourceFile, diagnostic));
+  let hasDefault = false;
+  let hasExportEquals = false;
+  let hasStarReexport = false;
+
+  for (const statement of sourceFile.statements) {
+    if (ts.isExportAssignment(statement)) {
+      if (statement.isExportEquals) hasExportEquals = true;
+      else hasDefault = true;
+      continue;
+    }
+
+    if (ts.isExportDeclaration(statement)) {
+      if (!statement.exportClause || ts.isNamespaceExport(statement.exportClause)) {
+        hasStarReexport = true;
+        continue;
+      }
+      for (const element of statement.exportClause.elements) {
+        if (!ts.isIdentifier(element.name)) {
+          errors.push(`${sourceFile.getLineAndCharacterOfPosition(element.name.getStart(sourceFile)).line + 1}: nicht eindeutig manifestierbarer Exportname`);
+        } else if (element.name.text === "default") {
+          hasDefault = true;
+        } else {
+          symbols.add(element.name.text);
+        }
+      }
+      continue;
+    }
+
+    if (!hasModifier(statement, ts.SyntaxKind.ExportKeyword)) continue;
+    if (hasModifier(statement, ts.SyntaxKind.DefaultKeyword)) {
+      hasDefault = true;
+      continue;
+    }
+
+    if (ts.isVariableStatement(statement)) {
+      for (const declaration of statement.declarationList.declarations) addBindingNames(declaration.name, symbols);
+      continue;
+    }
+    if (
+      ts.isFunctionDeclaration(statement)
+      || ts.isClassDeclaration(statement)
+      || ts.isInterfaceDeclaration(statement)
+      || ts.isTypeAliasDeclaration(statement)
+      || ts.isEnumDeclaration(statement)
+      || ts.isModuleDeclaration(statement)
+    ) {
+      if (statement.name && ts.isIdentifier(statement.name)) symbols.add(statement.name.text);
+      else errors.push(`${sourceFile.getLineAndCharacterOfPosition(statement.getStart(sourceFile)).line + 1}: nicht eindeutig manifestierbare Exportdeklaration`);
+      continue;
+    }
+
+    errors.push(`${sourceFile.getLineAndCharacterOfPosition(statement.getStart(sourceFile)).line + 1}: nicht unterstützte Exportdeklaration ${ts.SyntaxKind[statement.kind]}`);
+  }
+
+  return { symbols, errors, hasDefault, hasExportEquals, hasStarReexport };
 }
 
 export function exportedSymbols(source) {
-  const names = new Set();
-  const decl = /^\s*export\s+(?:declare\s+)?(?:async\s+)?(?:const|let|var|function\*?|class|type|interface|enum|namespace|abstract\s+class)\s+([A-Za-z_$][\w$]*)/gm;
-  for (const m of source.matchAll(decl)) names.add(m[1]);
-  const list = /^\s*export\s+(?:type\s+)?\{([^}]*)\}/gm;
-  for (const m of source.matchAll(list)) {
-    for (const part of m[1].split(",")) {
-      const name = exportedName(part);
-      if (name && name !== "default") names.add(name);
-    }
-  }
-  return names;
+  return analyzeFacadeExports(source).symbols;
 }
 
 export function importSources(source) {
@@ -652,29 +705,43 @@ function gateManifests(root, findings, schemaPath) {
       findings.push(`[naht1] ${publicRel}: positive Fassade public.ts fehlt`);
     } else {
       const publicSource = readFileSync(path.join(root, publicRel), "utf8");
-      if (STAR_REEXPORT.test(publicSource)) {
+      const publicAnalysis = analyzeFacadeExports(publicSource, publicRel);
+      for (const error of publicAnalysis.errors) {
+        findings.push(`[naht1] ${publicRel}: Fassade syntaktisch oder semantisch nicht eindeutig analysierbar (${error})`);
+      }
+      if (publicAnalysis.hasStarReexport) {
         findings.push(`[naht1] ${publicRel}: 'export * from' verboten — Fassade ist eine explizite Liste (publicExports)`);
       }
-      if (hasDefaultExport(publicSource)) {
+      if (publicAnalysis.hasDefault) {
         findings.push(`[naht1] ${publicRel}: Default-Export verboten — Fassade exportiert ausschliesslich explizit benannte, manifestierte Symbole`);
+      }
+      if (publicAnalysis.hasExportEquals) {
+        findings.push(`[naht1] ${publicRel}: 'export =' verboten — ESM-Fassade exportiert ausschliesslich explizit benannte, manifestierte Symbole`);
       }
       const publicViolation = clientFacadeViolation(root, publicRel);
       if (publicViolation) {
         findings.push(`[naht1] ${publicRel}: Client-Fassade ist nicht browser-sicher (${publicViolation})`);
       }
-      const facadeExports = new Map([["public", exportedSymbols(publicSource)]]);
+      const facadeExports = new Map([["public", publicAnalysis.symbols]]);
       if (existsSync(path.join(root, serverPublicRel))) {
         const serverPublicSource = readFileSync(path.join(root, serverPublicRel), "utf8");
+        const serverPublicAnalysis = analyzeFacadeExports(serverPublicSource, serverPublicRel);
         if (!/^\s*import\s+['"]server-only['"]\s*;/m.test(serverPublicSource)) {
           findings.push(`[naht1] ${serverPublicRel}: Server-Fassade muss direkt 'server-only' importieren`);
         }
-        if (STAR_REEXPORT.test(serverPublicSource)) {
+        for (const error of serverPublicAnalysis.errors) {
+          findings.push(`[naht1] ${serverPublicRel}: Fassade syntaktisch oder semantisch nicht eindeutig analysierbar (${error})`);
+        }
+        if (serverPublicAnalysis.hasStarReexport) {
           findings.push(`[naht1] ${serverPublicRel}: 'export * from' verboten — Server-Fassade ist eine explizite Liste (publicExports)`);
         }
-        if (hasDefaultExport(serverPublicSource)) {
+        if (serverPublicAnalysis.hasDefault) {
           findings.push(`[naht1] ${serverPublicRel}: Default-Export verboten — Server-Fassade exportiert ausschliesslich explizit benannte, manifestierte Symbole`);
         }
-        facadeExports.set("server-public", exportedSymbols(serverPublicSource));
+        if (serverPublicAnalysis.hasExportEquals) {
+          findings.push(`[naht1] ${serverPublicRel}: 'export =' verboten — ESM-Server-Fassade exportiert ausschliesslich explizit benannte, manifestierte Symbole`);
+        }
+        facadeExports.set("server-public", serverPublicAnalysis.symbols);
       }
       const declaredFacadeExports = new Map([["public", new Set()], ["server-public", new Set()]]);
       const seenManifestExports = new Set();
