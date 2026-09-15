@@ -8,7 +8,7 @@ import type {
   CreateQuoteInput,
   CreateQuoteResult,
   PrepareQuoteConversionResult,
-  QuoteCommandAuthorization,
+  QuoteCommandContext,
   QuoteConversionReceipt,
   QuoteOrderInput,
   QuotePosition,
@@ -58,7 +58,7 @@ type CreateReceiptRow = {
 
 type ConversionReceiptRow = CreateReceiptRow & {
   order_id: string;
-  order_intake_receipt_id: string;
+  order_intake_event_id: string;
   quote_version: number;
 };
 
@@ -120,6 +120,18 @@ function normalizeConvert(value: unknown): ConvertQuoteInput | null {
 
 function hashIntent(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value), "utf8").digest("hex");
+}
+
+function hashOrderIntent(input: QuoteOrderInput): string {
+  return hashIntent({
+    clientEventId: input.clientEventId,
+    customer: input.customer,
+    dueDate: input.dueDate,
+    items: input.items.map(({ name, quantity, material, surfaceRequested }) => ({
+      name, quantity, material, surfaceRequested,
+    })),
+    note: input.note,
+  });
 }
 
 function iso(value: Date | string | null): string | null {
@@ -191,10 +203,10 @@ async function readQuote(tx: PrivilegedTenantTransaction, tenantId: string, quot
   return quote;
 }
 
-export async function createQuoteCommand(authorization: QuoteCommandAuthorization, input: unknown): Promise<CreateQuoteResult> {
+export async function createQuoteCommand(authorization: QuoteCommandContext, input: unknown): Promise<CreateQuoteResult> {
   const normalized = normalizeCreate(input);
   if (!normalized) return { code: "VALIDATION_ERROR", message: "KV-Daten sind unvollständig oder ungültig." };
-  if (!authorization.permissions.includes("perm_data_orders")) return { code: "FORBIDDEN", message: "KVs dürfen mit dieser Rolle nicht angelegt werden." };
+  if (!authorization.capabilities.canCreateQuote) return { code: "FORBIDDEN", message: "KVs dürfen mit dieser Rolle nicht angelegt werden." };
   const intentSha256 = hashIntent(normalized);
   try {
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
@@ -235,9 +247,9 @@ export async function createQuoteCommand(authorization: QuoteCommandAuthorizatio
   }
 }
 
-export async function readQuoteCommand(authorization: QuoteCommandAuthorization, input: { quoteId: string }): Promise<ReadQuoteResult> {
+export async function readQuoteCommand(authorization: QuoteCommandContext, input: { quoteId: string }): Promise<ReadQuoteResult> {
   if (!plainObject(input) || !exactKeys(input, ["quoteId"]) || typeof input.quoteId !== "string" || !UUID_PATTERN.test(input.quoteId)) return { code: "VALIDATION_ERROR", message: "KV-Kennung ist ungültig." };
-  if (!authorization.permissions.includes("perm_view_leitstand")) return { code: "FORBIDDEN", message: "KV darf mit dieser Rolle nicht gelesen werden." };
+  if (!authorization.capabilities.canReadQuote) return { code: "FORBIDDEN", message: "KV darf mit dieser Rolle nicht gelesen werden." };
   try {
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const quote = await readQuote(tx, authorization.tenantId, input.quoteId);
@@ -249,17 +261,29 @@ export async function readQuoteCommand(authorization: QuoteCommandAuthorization,
   }
 }
 
-export async function prepareQuoteConversionCommand(authorization: QuoteCommandAuthorization, input: unknown): Promise<PrepareQuoteConversionResult> {
+export async function prepareQuoteConversionCommand(authorization: QuoteCommandContext, input: unknown): Promise<PrepareQuoteConversionResult> {
   const normalized = normalizeConvert(input);
   if (!normalized) return { code: "VALIDATION_ERROR", message: "Beauftragungsdaten sind ungültig." };
-  if (!authorization.permissions.includes("perm_data_orders")) return { code: "FORBIDDEN", message: "KV darf mit dieser Rolle nicht beauftragt werden." };
+  if (!authorization.capabilities.canConvertQuote) return { code: "FORBIDDEN", message: "KV darf mit dieser Rolle nicht beauftragt werden." };
   const intentSha256 = hashIntent(normalized);
   try {
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
+      const quote = await readQuote(tx, authorization.tenantId, normalized.quoteId);
+      if (!quote) return { code: "NOT_FOUND", message: "KV ist nicht verfügbar." };
+      const orderInput: QuoteOrderInput = {
+        clientEventId: normalized.clientEventId,
+        customer: { mode: "EXISTING", customerId: quote.customerId },
+        dueDate: quote.dueDate,
+        note: quote.note,
+        items: quote.positions.map(({ name, quantity, material, surfaceRequested }) => ({
+          name, quantity, material, surfaceRequested,
+        })),
+      };
+      const orderIntentSha256 = hashOrderIntent(orderInput);
       const rows = await tx.execute<{ result_code: string; order_input: unknown; replayed: boolean }>(sql`
         SELECT * FROM private.prepare_quote_conversion_v1(
           ${authorization.tenantId}, ${authorization.userId}::uuid, ${normalized.quoteId}::uuid,
-          ${normalized.clientEventId}::uuid, ${intentSha256}, ${normalized.expectedVersion}
+          ${normalized.clientEventId}::uuid, ${intentSha256}, ${orderIntentSha256}, ${normalized.expectedVersion}
         )
       `);
       const result = rows.length === 1 ? rows[0] : null;
@@ -269,8 +293,11 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandA
         }
         throw new Error("QUOTE_CONVERSION_PLAN_INVALID");
       }
-      const orderInput = result.order_input as QuoteOrderInput;
-      if (!plainObject(orderInput) || orderInput.clientEventId !== normalized.clientEventId || orderInput.customer?.mode !== "EXISTING" || !Array.isArray(orderInput.items)) throw new Error("QUOTE_ORDER_INPUT_INVALID");
+      const persistedOrderInput = result.order_input as QuoteOrderInput;
+      if (!plainObject(persistedOrderInput) || persistedOrderInput.clientEventId !== normalized.clientEventId
+        || persistedOrderInput.customer?.mode !== "EXISTING" || persistedOrderInput.customer.customerId !== orderInput.customer.customerId
+        || persistedOrderInput.dueDate !== orderInput.dueDate || persistedOrderInput.note !== orderInput.note
+        || hashOrderIntent(persistedOrderInput) !== orderIntentSha256) throw new Error("QUOTE_ORDER_INPUT_INVALID");
       return { code: "OK", quoteId: normalized.quoteId, orderInput, replayed: result.replayed };
     });
   } catch (error) {
@@ -280,12 +307,12 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandA
 }
 
 export async function readQuoteConversionReceiptCommand(
-  authorization: QuoteCommandAuthorization,
+  authorization: QuoteCommandContext,
   input: { quoteId: string; clientEventId: string },
 ): Promise<ReadQuoteConversionReceiptResult> {
   if (!plainObject(input) || !exactKeys(input, ["clientEventId", "quoteId"]) || typeof input.quoteId !== "string" || !UUID_PATTERN.test(input.quoteId)
     || typeof input.clientEventId !== "string" || !UUID_PATTERN.test(input.clientEventId)) return { code: "VALIDATION_ERROR", message: "Receipt-Kennung ist ungültig." };
-  if (!authorization.permissions.includes("perm_view_leitstand")) return { code: "FORBIDDEN", message: "Beauftragungsbeleg darf mit dieser Rolle nicht gelesen werden." };
+  if (!authorization.capabilities.canReadQuote) return { code: "FORBIDDEN", message: "Beauftragungsbeleg darf mit dieser Rolle nicht gelesen werden." };
   try {
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const rows = await tx.execute<ConversionReceiptRow>(sql`
@@ -301,7 +328,7 @@ export async function readQuoteConversionReceiptCommand(
         || row.quote_id !== quote.quoteId || row.order_id !== quote.linkedOrderId || !recordedAt) throw new Error("QUOTE_CONVERSION_RECEIPT_INVALID");
       const receipt: QuoteConversionReceipt = {
         receiptId: row.receipt_id, eventId: row.event_id, quoteId: row.quote_id, customerId: row.customer_id,
-        orderId: row.order_id, orderIntakeReceiptId: row.order_intake_receipt_id, actorId: row.actor_id,
+        orderId: row.order_id, orderIntakeEventId: row.order_intake_event_id, actorId: row.actor_id,
         clientEventId: row.client_event_id, correlationId: row.correlation_id, recordedAt, aggregateVersion: 2,
       };
       return { code: "OK", receipt, quote };

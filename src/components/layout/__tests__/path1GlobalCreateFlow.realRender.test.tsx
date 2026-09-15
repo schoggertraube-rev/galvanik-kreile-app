@@ -89,7 +89,7 @@ function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
         quoteId: QUOTE_ID,
         customerId: CUSTOMER_ID,
         orderId: ORDER_ID,
-        orderIntakeReceiptId: "d07f341c-3047-4cdd-b3de-d56eaa306b13",
+        orderIntakeEventId: "d07f341c-3047-4cdd-b3de-d56eaa306b13",
         actorId: "1b3ef014-582c-445f-9fdc-e399d7aa6ef0",
         clientEventId: input.clientEventId,
         correlationId: "cb167ddd-2b20-4b2d-ac15-1dff2807adef",

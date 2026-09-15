@@ -128,7 +128,7 @@ describe("PATH1 customer persistence", () => {
     const foreign = await createCustomerCommand({
       tenantId: foreignTenant,
       userId: users.foreign,
-      permissions: ["perm_data_customers"],
+      capabilities: { canCreateCustomer: true },
     }, customerInput("FOREIGN"));
     expect(foreign.code).toBe("OK");
     if (foreign.code !== "OK") return;

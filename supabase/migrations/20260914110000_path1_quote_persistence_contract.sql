@@ -101,6 +101,7 @@ CREATE TABLE private.quote_conversion_requests (
   actor_id uuid NOT NULL,
   client_event_id uuid NOT NULL,
   intent_sha256 text NOT NULL,
+  order_intent_sha256 text NOT NULL,
   expected_version integer NOT NULL,
   event_id text NOT NULL,
   award_client_event_id uuid NOT NULL,
@@ -119,6 +120,7 @@ CREATE TABLE private.quote_conversion_requests (
   CONSTRAINT quote_conversion_requests_actor_fkey
     FOREIGN KEY (actor_id) REFERENCES public.app_users (id) ON DELETE RESTRICT,
   CONSTRAINT quote_conversion_requests_intent_chk CHECK (intent_sha256 ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT quote_conversion_requests_order_intent_chk CHECK (order_intent_sha256 ~ '^[0-9a-f]{64}$'),
   CONSTRAINT quote_conversion_requests_version_chk CHECK (expected_version = 1)
 );
 
@@ -129,7 +131,8 @@ CREATE TABLE private.quote_conversion_receipts (
   quote_id uuid NOT NULL,
   customer_id text NOT NULL,
   order_id text NOT NULL,
-  order_intake_receipt_id uuid NOT NULL,
+  order_intake_event_id text NOT NULL,
+  order_intent_sha256 text NOT NULL,
   actor_id uuid NOT NULL,
   client_event_id uuid NOT NULL,
   award_client_event_id uuid NOT NULL,
@@ -149,13 +152,14 @@ CREATE TABLE private.quote_conversion_receipts (
     FOREIGN KEY (tenant_id, customer_id) REFERENCES public.customers (tenant_id, id) ON DELETE RESTRICT,
   CONSTRAINT quote_conversion_receipts_order_fkey
     FOREIGN KEY (tenant_id, order_id) REFERENCES public.orders (tenant_id, id) ON DELETE RESTRICT,
-  CONSTRAINT quote_conversion_receipts_intake_fkey
-    FOREIGN KEY (order_intake_receipt_id) REFERENCES private.order_intake_receipts (id) ON DELETE RESTRICT,
+  CONSTRAINT quote_conversion_receipts_intake_event_fkey
+    FOREIGN KEY (order_intake_event_id) REFERENCES public.events (id) ON DELETE RESTRICT,
   CONSTRAINT quote_conversion_receipts_actor_fkey
     FOREIGN KEY (actor_id) REFERENCES public.app_users (id) ON DELETE RESTRICT,
   CONSTRAINT quote_conversion_receipts_event_fkey
     FOREIGN KEY (event_id) REFERENCES public.events (id) ON DELETE RESTRICT,
   CONSTRAINT quote_conversion_receipts_intent_chk CHECK (intent_sha256 ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT quote_conversion_receipts_order_intent_chk CHECK (order_intent_sha256 ~ '^[0-9a-f]{64}$'),
   CONSTRAINT quote_conversion_receipts_version_chk CHECK (quote_version = 2)
 );
 
@@ -342,6 +346,7 @@ CREATE FUNCTION private.prepare_quote_conversion_v1(
   p_quote_id uuid,
   p_client_event_id uuid,
   p_intent_sha256 text,
+  p_order_intent_sha256 text,
   p_expected_version integer
 )
 RETURNS TABLE(result_code text, order_input jsonb, replayed boolean)
@@ -358,6 +363,7 @@ BEGIN
   IF p_tenant_id IS DISTINCT FROM nullif(btrim(current_setting('app.tenant_id', true)), '')
      OR p_actor_id IS NULL OR p_quote_id IS NULL OR p_client_event_id IS NULL
      OR p_intent_sha256 !~ '^[0-9a-f]{64}$'
+     OR p_order_intent_sha256 !~ '^[0-9a-f]{64}$'
      OR p_expected_version IS NULL OR p_expected_version < 1 OR p_expected_version > 2147483647
   THEN RETURN QUERY SELECT 'VALIDATION_ERROR', NULL::jsonb, false; RETURN; END IF;
 
@@ -366,6 +372,7 @@ BEGIN
    WHERE tenant_id = p_tenant_id AND actor_id = p_actor_id AND client_event_id = p_client_event_id;
   IF FOUND THEN
     IF v_request.quote_id IS DISTINCT FROM p_quote_id OR v_request.intent_sha256 IS DISTINCT FROM p_intent_sha256
+       OR v_request.order_intent_sha256 IS DISTINCT FROM p_order_intent_sha256
        OR v_request.expected_version IS DISTINCT FROM p_expected_version
     THEN RETURN QUERY SELECT 'CONFLICT', NULL::jsonb, false; RETURN; END IF;
     v_replayed := true;
@@ -379,10 +386,10 @@ BEGIN
       RETURN QUERY SELECT 'CONFLICT', NULL::jsonb, false; RETURN;
     END IF;
     INSERT INTO private.quote_conversion_requests (
-      tenant_id, quote_id, actor_id, client_event_id, intent_sha256, expected_version,
+      tenant_id, quote_id, actor_id, client_event_id, intent_sha256, order_intent_sha256, expected_version,
       event_id, award_client_event_id, receipt_id, correlation_id
     ) VALUES (
-      p_tenant_id, p_quote_id, p_actor_id, p_client_event_id, p_intent_sha256, p_expected_version,
+      p_tenant_id, p_quote_id, p_actor_id, p_client_event_id, p_intent_sha256, p_order_intent_sha256, p_expected_version,
       gen_random_uuid()::text, gen_random_uuid(), gen_random_uuid(), gen_random_uuid()
     ) RETURNING * INTO v_request;
   END IF;
@@ -407,7 +414,7 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION private.finalize_quote_conversion_v1()
+CREATE FUNCTION private.finalize_quote_conversion_from_order_event_v1()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -416,35 +423,24 @@ AS $$
 DECLARE
   v_request private.quote_conversion_requests%ROWTYPE;
   v_quote private.quotes%ROWTYPE;
-  v_quote_items jsonb;
-  v_order_items jsonb;
 BEGIN
   SELECT * INTO v_request FROM private.quote_conversion_requests
-   WHERE tenant_id = NEW.tenant_id AND actor_id = NEW.actor_id AND client_event_id = NEW.client_event_id;
+   WHERE tenant_id = NEW.tenant_id AND actor_id = NEW.user_id AND client_event_id = NEW.client_event_id;
   IF NOT FOUND THEN RETURN NEW; END IF;
+
+  IF NEW.event_type <> 'ORDER_INTAKE_CREATED_V1'
+     OR NEW.order_id IS NULL
+     OR NEW.status <> 'success'
+     OR NEW.station <> 'wareneingang'
+     OR NEW.event_schema_version <> 1
+     OR NEW.aggregate_version <> 1
+     OR NEW.payload IS DISTINCT FROM jsonb_build_object('intentSha256', v_request.order_intent_sha256)
+  THEN RAISE EXCEPTION 'QUOTE_CONVERSION_ORDER_EVENT_MISMATCH'; END IF;
 
   SELECT * INTO v_quote FROM private.quotes
    WHERE tenant_id = NEW.tenant_id AND id = v_request.quote_id FOR UPDATE;
   IF NOT FOUND OR v_quote.status <> 'draft' OR v_quote.version <> v_request.expected_version
-     OR NEW.customer_mode <> 'EXISTING' OR NEW.customer_id IS DISTINCT FROM v_quote.customer_id
-     OR NEW.due_date IS DISTINCT FROM v_quote.due_date OR NEW.note IS DISTINCT FROM v_quote.note
-  THEN RAISE EXCEPTION 'QUOTE_CONVERSION_ORDER_MISMATCH'; END IF;
-
-  SELECT jsonb_agg(jsonb_build_object(
-    'name', position.name, 'quantity', position.quantity, 'material', position.material,
-    'surfaceRequested', position.surface_requested
-  ) ORDER BY position.position) INTO v_quote_items
-  FROM private.quote_positions position
-  WHERE position.tenant_id = NEW.tenant_id AND position.quote_id = v_request.quote_id;
-  SELECT jsonb_agg(jsonb_build_object(
-    'name', item->>'name', 'quantity', (item->>'quantity')::integer,
-    'material', CASE WHEN item->'material' = 'null'::jsonb THEN NULL ELSE item->>'material' END,
-    'surfaceRequested', item->>'surfaceRequested'
-  ) ORDER BY (item->>'position')::integer) INTO v_order_items
-  FROM jsonb_array_elements(NEW.items_snapshot) entry(item);
-  IF v_quote_items IS DISTINCT FROM v_order_items THEN
-    RAISE EXCEPTION 'QUOTE_CONVERSION_ITEMS_MISMATCH';
-  END IF;
+  THEN RAISE EXCEPTION 'QUOTE_CONVERSION_STATE_MISMATCH'; END IF;
 
   UPDATE private.quotes SET
     status = 'converted', version = 2, linked_order_id = NEW.order_id,
@@ -457,24 +453,27 @@ BEGIN
   ) VALUES (
     v_request.event_id, NEW.tenant_id, NULL, NULL, 'QUOTE_AWARDED_V1', 'KV beauftragt', NULL,
     jsonb_build_object('quoteId', v_request.quote_id::text, 'orderId', NEW.order_id, 'intentSha256', v_request.intent_sha256),
-    'success', NEW.actor_id, NULL, v_request.award_client_event_id, 1, v_request.correlation_id, 2, NULL,
+    'success', NEW.user_id, NULL, v_request.award_client_event_id, 1, v_request.correlation_id, 2, NULL,
     statement_timestamp() AT TIME ZONE 'UTC'
   );
   INSERT INTO private.quote_conversion_receipts (
-    id, event_id, tenant_id, quote_id, customer_id, order_id, order_intake_receipt_id,
-    actor_id, client_event_id, award_client_event_id, correlation_id, intent_sha256, quote_version
+    id, event_id, tenant_id, quote_id, customer_id, order_id, order_intake_event_id,
+    order_intent_sha256, actor_id, client_event_id, award_client_event_id, correlation_id,
+    intent_sha256, quote_version
   ) VALUES (
-    v_request.receipt_id, v_request.event_id, NEW.tenant_id, v_request.quote_id, NEW.customer_id,
-    NEW.order_id, NEW.id, NEW.actor_id, NEW.client_event_id, v_request.award_client_event_id, v_request.correlation_id,
-    v_request.intent_sha256, 2
+    v_request.receipt_id, v_request.event_id, NEW.tenant_id, v_request.quote_id, v_quote.customer_id,
+    NEW.order_id, NEW.id, v_request.order_intent_sha256, NEW.user_id, NEW.client_event_id,
+    v_request.award_client_event_id, v_request.correlation_id, v_request.intent_sha256, 2
   );
   RETURN NEW;
 END;
 $$;
 
-CREATE TRIGGER order_intake_receipt_finalize_quote
-  AFTER INSERT ON private.order_intake_receipts
-  FOR EACH ROW EXECUTE FUNCTION private.finalize_quote_conversion_v1();
+CREATE TRIGGER order_intake_event_finalize_quote
+  AFTER INSERT ON public.events
+  FOR EACH ROW
+  WHEN (NEW.event_type = 'ORDER_INTAKE_CREATED_V1')
+  EXECUTE FUNCTION private.finalize_quote_conversion_from_order_event_v1();
 
 CREATE TRIGGER quote_events_update_immutable
   BEFORE UPDATE ON public.events FOR EACH ROW
@@ -564,15 +563,19 @@ CREATE VIEW private.v_quote_conversion_receipts_v1
 WITH (security_invoker = true)
 AS
 SELECT receipt.id AS receipt_id, receipt.event_id, receipt.tenant_id, receipt.quote_id,
-  receipt.customer_id, receipt.order_id, receipt.order_intake_receipt_id, receipt.actor_id,
+  receipt.customer_id, receipt.order_id, receipt.order_intake_event_id, receipt.actor_id,
   receipt.client_event_id, receipt.award_client_event_id, receipt.correlation_id, receipt.intent_sha256,
   receipt.quote_version, receipt.created_at AS recorded_at,
-  (event.id IS NOT NULL AND quote.id IS NOT NULL AND intake.id IS NOT NULL
-   AND quote.status = 'converted' AND quote.version = receipt.quote_version
-   AND quote.linked_order_id = receipt.order_id AND quote.customer_id = receipt.customer_id
-   AND intake.order_id = receipt.order_id AND intake.customer_id = receipt.customer_id
-   AND intake.actor_id = receipt.actor_id AND intake.client_event_id = receipt.client_event_id
-   AND event.event_type = 'QUOTE_AWARDED_V1' AND event.user_id = receipt.actor_id
+  (event.id IS NOT NULL AND quote.id IS NOT NULL AND intake_event.id IS NOT NULL
+    AND quote.status = 'converted' AND quote.version = receipt.quote_version
+    AND quote.linked_order_id = receipt.order_id AND quote.customer_id = receipt.customer_id
+    AND intake_event.order_id = receipt.order_id AND intake_event.user_id = receipt.actor_id
+    AND intake_event.client_event_id = receipt.client_event_id
+    AND intake_event.event_type = 'ORDER_INTAKE_CREATED_V1'
+    AND intake_event.status = 'success' AND intake_event.station = 'wareneingang'
+    AND intake_event.event_schema_version = 1 AND intake_event.aggregate_version = 1
+    AND intake_event.payload = jsonb_build_object('intentSha256', receipt.order_intent_sha256)
+    AND event.event_type = 'QUOTE_AWARDED_V1' AND event.user_id = receipt.actor_id
    AND event.client_event_id = receipt.award_client_event_id AND event.correlation_id = receipt.correlation_id
    AND event.aggregate_version = 2
    AND event.payload = jsonb_build_object('quoteId', receipt.quote_id::text,
@@ -580,7 +583,8 @@ SELECT receipt.id AS receipt_id, receipt.event_id, receipt.tenant_id, receipt.qu
 FROM private.quote_conversion_receipts receipt
 LEFT JOIN public.events event ON event.tenant_id = receipt.tenant_id AND event.id = receipt.event_id
 LEFT JOIN private.quotes quote ON quote.tenant_id = receipt.tenant_id AND quote.id = receipt.quote_id
-LEFT JOIN private.order_intake_receipts intake ON intake.id = receipt.order_intake_receipt_id
+LEFT JOIN public.events intake_event
+  ON intake_event.tenant_id = receipt.tenant_id AND intake_event.id = receipt.order_intake_event_id
 WHERE nullif(btrim(current_setting('app.tenant_id', true)), '') IS NOT NULL
   AND receipt.tenant_id = nullif(btrim(current_setting('app.tenant_id', true)), '');
 
@@ -597,8 +601,8 @@ REVOKE ALL ON TABLE private.v_quotes_v1, private.v_quote_create_receipts_v1,
   private.v_quote_conversion_receipts_v1 FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION private.allocate_quote_number(text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION private.create_quote_v1(text, uuid, uuid, text, text, date, text, jsonb) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION private.prepare_quote_conversion_v1(text, uuid, uuid, uuid, text, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.prepare_quote_conversion_v1(text, uuid, uuid, uuid, text, text, integer) FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON TABLE private.v_quotes_v1, private.v_quote_create_receipts_v1,
   private.v_quote_conversion_receipts_v1 TO service_role;
 GRANT EXECUTE ON FUNCTION private.create_quote_v1(text, uuid, uuid, text, text, date, text, jsonb) TO service_role;
-GRANT EXECUTE ON FUNCTION private.prepare_quote_conversion_v1(text, uuid, uuid, uuid, text, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION private.prepare_quote_conversion_v1(text, uuid, uuid, uuid, text, text, integer) TO service_role;

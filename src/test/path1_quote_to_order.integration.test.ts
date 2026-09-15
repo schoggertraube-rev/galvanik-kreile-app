@@ -70,7 +70,7 @@ function quoteInput(customerId: string, label: string, clientEventId = randomUUI
 
 async function createCustomer(label: string, tenantId = KREILE_TENANT_SLUG, userId = users.buero) {
   const { createCustomerCommand } = await import("@/modules/customers/server-public");
-  const result = await createCustomerCommand({ tenantId, userId, permissions: ["perm_data_customers"] }, customerInput(label));
+  const result = await createCustomerCommand({ tenantId, userId, capabilities: { canCreateCustomer: true } }, customerInput(label));
   expect(result.code).toBe("OK");
   if (result.code !== "OK") throw new Error(`CUSTOMER_SETUP_FAILED:${result.code}`);
   return result.receipt.customerId;
@@ -134,7 +134,7 @@ describe("PATH1 quote to existing F1.1 order", () => {
     expect(first).toMatchObject({
       replayed: false,
       quote: { status: "converted", version: 2, linkedOrderId: first.orderReceipt.orderId },
-      quoteReceipt: { orderId: first.orderReceipt.orderId, orderIntakeReceiptId: first.orderReceipt.receiptId, aggregateVersion: 2 },
+      quoteReceipt: { orderId: first.orderReceipt.orderId, orderIntakeEventId: first.orderReceipt.eventId, aggregateVersion: 2 },
       orderReceipt: { customerId, station: "wareneingang", orderVersion: 1 },
     });
     const replay = await convertQuoteToOrderAction(conversion);
@@ -190,11 +190,11 @@ describe("PATH1 quote to existing F1.1 order", () => {
     await expect(createQuoteAction(quoteInput(customerId, "READONLY"))).resolves.toMatchObject({ code: "FORBIDDEN" });
 
     const { createQuoteCommand, readQuoteCommand } = await import("@/modules/quotes/server-public");
-    const foreign = await createQuoteCommand({ tenantId: foreignTenant, userId: users.foreign, permissions: ["perm_data_orders"] }, quoteInput(foreignCustomerId, "FOREIGN-OWN"));
+    const foreign = await createQuoteCommand({ tenantId: foreignTenant, userId: users.foreign, capabilities: { canCreateQuote: true, canReadQuote: true, canConvertQuote: true } }, quoteInput(foreignCustomerId, "FOREIGN-OWN"));
     expect(foreign.code).toBe("OK");
     if (foreign.code !== "OK") return;
-    await expect(readQuoteCommand({ tenantId: KREILE_TENANT_SLUG, userId: users.buero, permissions: ["perm_view_leitstand"] }, { quoteId: foreign.quote.quoteId })).resolves.toMatchObject({ code: "NOT_FOUND" });
-    await expect(createQuoteCommand({ tenantId: "", userId: users.buero, permissions: ["perm_data_orders"] }, quoteInput(customerId, "EMPTY-TENANT"))).resolves.not.toMatchObject({ code: "OK" });
+    await expect(readQuoteCommand({ tenantId: KREILE_TENANT_SLUG, userId: users.buero, capabilities: { canCreateQuote: false, canReadQuote: true, canConvertQuote: false } }, { quoteId: foreign.quote.quoteId })).resolves.toMatchObject({ code: "NOT_FOUND" });
+    await expect(createQuoteCommand({ tenantId: "", userId: users.buero, capabilities: { canCreateQuote: true, canReadQuote: true, canConvertQuote: true } }, quoteInput(customerId, "EMPTY-TENANT"))).resolves.not.toMatchObject({ code: "OK" });
   });
 
   it("does not award when F1.1 fails and keeps events and receipts append-only", async () => {
@@ -205,7 +205,7 @@ describe("PATH1 quote to existing F1.1 order", () => {
     if (created.code !== "OK") return;
     const clientEventId = randomUUID();
     const { prepareQuoteConversionCommand } = await import("@/modules/quotes/server-public");
-    const prepared = await prepareQuoteConversionCommand({ tenantId: KREILE_TENANT_SLUG, userId: users.buero, permissions: ["perm_data_orders"] }, {
+    const prepared = await prepareQuoteConversionCommand({ tenantId: KREILE_TENANT_SLUG, userId: users.buero, capabilities: { canCreateQuote: true, canReadQuote: true, canConvertQuote: true } }, {
       quoteId: created.quote.quoteId, clientEventId, expectedVersion: 1, confirmedAward: true,
     });
     expect(prepared.code).toBe("OK");

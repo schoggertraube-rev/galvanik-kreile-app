@@ -1,4 +1,3 @@
-import { isOrderStationForwardRole } from "@/modules/orders/public";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import {
   buildWerkstattData,
@@ -67,7 +66,7 @@ export default async function WarendurchlaufIndex() {
     });
   }
 
-  if (!isOrderStationForwardRole(authorization.data.role)) {
+  if (!["buero", "werkstatt", "meister", "admin"].includes(authorization.data.role)) {
     return render({ kind: "denied", message: DENIAL_MESSAGE });
   }
 

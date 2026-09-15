@@ -43,7 +43,13 @@ export async function createCustomerAction(input: CreateCustomerInput) {
       : { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
 
-  const command = await createCustomerCommand(authorization.data, input);
+  const command = await createCustomerCommand({
+    tenantId: authorization.data.tenantId,
+    userId: authorization.data.userId,
+    capabilities: {
+      canCreateCustomer: authorization.data.permissions.includes("perm_data_customers"),
+    },
+  }, input);
   if (command.code !== "OK") return command;
   const readback = await readCustomerSummary(authorization.data, { customerId: command.receipt.customerId });
   if (readback.code !== "OK" || readback.data.customerNumber !== command.receipt.customerNumber) {

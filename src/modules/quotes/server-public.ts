@@ -9,4 +9,6 @@ export {
 export type {
   ConvertQuoteInput,
   CreateQuoteInput,
+  QuoteCommandCapabilities,
+  QuoteCommandContext,
 } from "./server/types";

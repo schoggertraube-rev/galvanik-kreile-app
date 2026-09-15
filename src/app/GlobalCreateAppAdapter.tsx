@@ -15,8 +15,9 @@ import {
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { getRoleLabel, isAppRole } from "@/lib/auth/authorizationContract";
 import { useOverlayStore } from "@/lib/overlayStore";
-import type { CreateCustomerInput } from "@/modules/customers/public";
 import type { ConvertQuoteInput, CreateQuoteInput } from "@/modules/quotes/public";
+
+type CreateCustomerInput = Parameters<typeof createCustomerAction>[0];
 
 const PENDING_QUOTE_KEY = "path1.global-create.pending-quote";
 

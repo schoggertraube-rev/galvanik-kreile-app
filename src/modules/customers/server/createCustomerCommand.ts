@@ -1,52 +1,17 @@
 import "server-only";
 
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import type {
+  CreateCustomerInput,
+  CustomerCommandContext,
+  CustomerCreateCommandResult,
+  CustomerCreateReceipt,
+} from "./types";
 
-const EVENT_TYPE = "CUSTOMER_CREATED_V1";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-export type CustomerCommandAuthorization = {
-  tenantId: string;
-  userId: string;
-  permissions: readonly string[];
-};
-
-export type CreateCustomerInput = {
-  clientEventId: string;
-  name: string;
-  customerType: "business" | "privat" | "institution";
-  companyName: string | null;
-  contactPerson: string | null;
-  email: string | null;
-  phone: string | null;
-  city: string | null;
-};
-
-export type CustomerCreateReceipt = {
-  receiptId: string;
-  eventId: string;
-  customerId: string;
-  customerNumber: string;
-  clientEventId: string;
-  correlationId: string;
-  actorId: string;
-  name: string;
-  customerType: CreateCustomerInput["customerType"];
-  companyName: string | null;
-  contactPerson: string | null;
-  email: string | null;
-  phone: string | null;
-  city: string | null;
-  recordedAt: string;
-  aggregateVersion: 1;
-};
-
-export type CustomerCreateCommandResult =
-  | { code: "OK"; receipt: CustomerCreateReceipt; replayed: boolean }
-  | { code: "FORBIDDEN" | "CONFLICT" | "VALIDATION_ERROR" | "UNAVAILABLE"; message: string };
 
 type ReceiptRow = {
   receipt_id: string;
@@ -197,12 +162,12 @@ async function readReceipt(
 }
 
 export async function createCustomerCommand(
-  authorization: CustomerCommandAuthorization,
+  authorization: CustomerCommandContext,
   input: unknown,
 ): Promise<CustomerCreateCommandResult> {
   const normalized = normalizeInput(input);
   if (!normalized) return { code: "VALIDATION_ERROR", message: "Kundendaten sind unvollständig oder ungültig." };
-  if (!authorization.permissions.includes("perm_data_customers")) {
+  if (!authorization.capabilities.canCreateCustomer) {
     return { code: "FORBIDDEN", message: "Kunden dürfen mit dieser Rolle nicht angelegt werden." };
   }
   const expected = {
@@ -214,97 +179,29 @@ export async function createCustomerCommand(
 
   try {
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
-      await tx.execute(sql`
-        SELECT pg_advisory_xact_lock(hashtextextended(
-          'path1:customer-create:' || ${expected.tenantId} || ':' || ${expected.userId} || ':' || ${expected.clientEventId}, 0
-        ))
+      const outcomes = await tx.execute<{ result_code: string; result_receipt_id: string | null; replayed: boolean }>(sql`
+        SELECT * FROM private.create_customer_v1(
+          ${expected.tenantId}, ${expected.userId}::uuid, ${expected.clientEventId}::uuid,
+          ${expected.intentSha256}, ${normalized.name}, ${normalized.customerType},
+          ${normalized.companyName}, ${normalized.contactPerson}, ${normalized.email},
+          ${normalized.phone}, ${normalized.city}
+        )
       `);
-      const prior = await tx.execute<{ intent_sha256: string }>(sql`
-        SELECT intent_sha256
-        FROM private.customer_create_receipts
-        WHERE tenant_id = ${expected.tenantId}
-          AND actor_id = ${expected.userId}::uuid
-          AND client_event_id = ${expected.clientEventId}::uuid
-        LIMIT 2
-      `);
-      if (prior.length > 0) {
-        if (prior.length !== 1 || prior[0]?.intent_sha256 !== expected.intentSha256) {
+      const outcome = outcomes.length === 1 ? outcomes[0] : null;
+      if (!outcome || outcome.result_code !== "OK" || !outcome.result_receipt_id) {
+        if (outcome?.result_code === "CONFLICT") {
           return { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
         }
-        const receipt = await readReceipt(tx, expected);
-        if (!receipt) throw new Error("CUSTOMER_CREATE_REPLAY_READBACK_INVALID");
-        return { code: "OK", receipt, replayed: true };
+        if (outcome?.result_code === "VALIDATION_ERROR") {
+          return { code: "VALIDATION_ERROR", message: "Kundendaten sind unvollständig oder ungültig." };
+        }
+        throw new Error("CUSTOMER_CREATE_RESULT_INVALID");
       }
-
-      const customerId = randomUUID();
-      const eventId = randomUUID();
-      const receiptId = randomUUID();
-      const correlationId = randomUUID();
-      const numberRows = await tx.execute<{ customer_number: string }>(sql`
-        SELECT private.allocate_customer_number(${expected.tenantId}) AS customer_number
-      `);
-      const customerNumber = numberRows.length === 1 ? numberRows[0]?.customer_number : null;
-      if (!customerNumber || !/^K-\d{4}-\d{4,}$/.test(customerNumber)) throw new Error("CUSTOMER_NUMBER_READBACK_INVALID");
-
-      const customers = await tx.execute<{ id: string; tenant_id: string; customer_number: string }>(sql`
-        INSERT INTO public.customers (
-          id, tenant_id, customer_number, name, type, company_name, contact_person,
-          email, phone, city, source, source_ref, created_at, updated_at
-        ) VALUES (
-          ${customerId}, ${expected.tenantId}, ${customerNumber}, ${normalized.name}, ${normalized.customerType},
-          ${normalized.companyName}, ${normalized.contactPerson}, ${normalized.email}, ${normalized.phone}, ${normalized.city},
-          'PATH1_CUSTOMER_COMMAND', ${normalized.clientEventId},
-          statement_timestamp() AT TIME ZONE 'UTC', statement_timestamp()
-        )
-        RETURNING id, tenant_id, customer_number
-      `);
-      if (customers.length !== 1 || customers[0]?.id !== customerId || customers[0]?.tenant_id !== expected.tenantId || customers[0]?.customer_number !== customerNumber) {
-        throw new Error("CUSTOMER_CREATE_INSERT_INVALID");
-      }
-
-      const payload = JSON.stringify({
-        customerId,
-        customerNumber,
-        intentSha256: expected.intentSha256,
-      });
-      const events = await tx.execute<{ id: string; tenant_id: string; user_id: string; client_event_id: string }>(sql`
-        INSERT INTO public.events (
-          id, tenant_id, order_id, item_id, event_type, description, notes, payload,
-          status, user_id, station, client_event_id, event_schema_version,
-          correlation_id, aggregate_version, from_station, created_at
-        ) VALUES (
-          ${eventId}, ${expected.tenantId}, NULL, NULL, ${EVENT_TYPE}, 'Kunde angelegt', NULL, ${payload}::jsonb,
-          'success', ${expected.userId}::uuid, NULL, ${normalized.clientEventId}::uuid, 1,
-          ${correlationId}::uuid, 1, NULL, statement_timestamp() AT TIME ZONE 'UTC'
-        )
-        RETURNING id, tenant_id, user_id::text AS user_id, client_event_id::text AS client_event_id
-      `);
-      if (events.length !== 1 || events[0]?.id !== eventId || events[0]?.tenant_id !== expected.tenantId || events[0]?.user_id !== expected.userId || events[0]?.client_event_id !== normalized.clientEventId) {
-        throw new Error("CUSTOMER_CREATE_EVENT_INVALID");
-      }
-
-      const receipts = await tx.execute<{ id: string; event_id: string; customer_id: string; intent_sha256: string }>(sql`
-        INSERT INTO private.customer_create_receipts (
-          id, event_id, tenant_id, customer_id, customer_number, actor_id,
-          client_event_id, correlation_id, intent_sha256, name, customer_type,
-          company_name, contact_person, email, phone, city, created_at
-        ) VALUES (
-          ${receiptId}::uuid, ${eventId}, ${expected.tenantId}, ${customerId}, ${customerNumber}, ${expected.userId}::uuid,
-          ${normalized.clientEventId}::uuid, ${correlationId}::uuid, ${expected.intentSha256}, ${normalized.name},
-          ${normalized.customerType}, ${normalized.companyName}, ${normalized.contactPerson}, ${normalized.email},
-          ${normalized.phone}, ${normalized.city}, statement_timestamp()
-        )
-        RETURNING id::text, event_id, customer_id, intent_sha256
-      `);
-      if (receipts.length !== 1 || receipts[0]?.id !== receiptId || receipts[0]?.event_id !== eventId || receipts[0]?.customer_id !== customerId || receipts[0]?.intent_sha256 !== expected.intentSha256) {
-        throw new Error("CUSTOMER_CREATE_RECEIPT_INSERT_INVALID");
-      }
-
       const receipt = await readReceipt(tx, expected);
-      if (!receipt || receipt.receiptId !== receiptId || receipt.eventId !== eventId || receipt.customerId !== customerId || receipt.customerNumber !== customerNumber) {
+      if (!receipt || receipt.receiptId !== outcome.result_receipt_id) {
         throw new Error("CUSTOMER_CREATE_READBACK_INVALID");
       }
-      return { code: "OK", receipt, replayed: false };
+      return { code: "OK", receipt, replayed: outcome.replayed };
     });
   } catch (error) {
     console.error("customer_create_command_failed", {

@@ -6,13 +6,13 @@
   "tenant": "galvanik-kreile",
   "note": "Machine-readable capability inventory based on snapshot_sha; the immutable review SHA is recorded separately when the candidate is frozen. Every page route, API route, Server Action group, KPI definition, and provider connection must carry exactly one of: REAL_VERIFIED | REAL_PENDING_SECRET | PENDING_CONTRACT | TEST_ONLY | LEGACY_REMOVE",
   "summary": {
-    "page_routes": 76,
+    "page_routes": 73,
     "api_routes": 19,
     "server_action_groups": 51,
     "kpi_definitions": 7,
     "provider_connections": 17,
     "nav_links_without_page": 3,
-    "total": 173
+    "total": 170
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -319,16 +319,6 @@
       "reachable": true,
       "classification": "PENDING_CONTRACT",
       "open_reason": "Tax profile configuration. No verified contract."
-    },
-    {
-      "stable_id": "page.buchhaltung.zahlung",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/buchhaltung/zahlung/page.tsx",
-      "route": "/buchhaltung/zahlung",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Payment management. Mollie route quarantined. No verified contract."
     },
     {
       "stable_id": "page.cockpit.jahresplan",
@@ -701,16 +691,6 @@
       "open_reason": "Today/start page. today/* API routes connected but no independent E2E evidence."
     },
     {
-      "stable_id": "page.station.slug",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/station/[slug]/page.tsx",
-      "route": "/station/[slug]",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Station page uses real getOrdersDb(). Phantom /orders/new CTA replaced with /warendurchlauf/wareneingang in F1-R0. No independent E2E evidence."
-    },
-    {
       "stable_id": "page.status",
       "kind": "PAGE_ROUTE",
       "entry_point": "src/app/status/page.tsx",
@@ -775,16 +755,6 @@
       "reachable": true,
       "classification": "PENDING_CONTRACT",
       "open_reason": "Workflow overview hub. Supabase-connected, no independent hub-level E2E evidence."
-    },
-    {
-      "stable_id": "page.warendurchlauf.warenausgang",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/warendurchlauf/warenausgang/page.tsx",
-      "route": "/warendurchlauf/warenausgang",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Goods-out station. F1.3 not yet released."
     },
     {
       "stable_id": "page.warendurchlauf.wareneingang",

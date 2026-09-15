@@ -22,7 +22,11 @@ const input = {
   positions: [{ name: "Flansch", quantity: 2, material: "Stahl", surfaceRequested: "Verzinken", unitPriceCents: 12500 }],
 };
 const intent = createHash("sha256").update(JSON.stringify(input), "utf8").digest("hex");
-const authorization = { tenantId: TENANT, userId: ACTOR, permissions: ["perm_data_orders", "perm_view_leitstand"] };
+const authorization = {
+  tenantId: TENANT,
+  userId: ACTOR,
+  capabilities: { canCreateQuote: true, canReadQuote: true, canConvertQuote: true },
+};
 const quoteRow = {
   quote_id: QUOTE, tenant_id: TENANT, quote_number: "KV-2026-0042", customer_id: CUSTOMER,
   customer_number: "K-2026-0041", customer_display_name: "Synthetischer Kunde", status: "draft",
@@ -43,7 +47,7 @@ describe("quotes command boundary", () => {
     const { createQuoteCommand } = await import("../server/quoteCommands");
     await expect(createQuoteCommand(authorization, { ...input, tenantId: TENANT })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
     await expect(createQuoteCommand(authorization, { ...input, positions: [] })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
-    await expect(createQuoteCommand({ ...authorization, permissions: ["perm_view_leitstand"] }, input)).resolves.toMatchObject({ code: "FORBIDDEN" });
+    await expect(createQuoteCommand({ ...authorization, capabilities: { ...authorization.capabilities, canCreateQuote: false } }, input)).resolves.toMatchObject({ code: "FORBIDDEN" });
     expect(withTransaction).not.toHaveBeenCalled();
   });
 
@@ -67,7 +71,9 @@ describe("quotes command boundary", () => {
   });
 
   it("keeps stale version and intent conflicts fail-closed", async () => {
-    execute.mockResolvedValueOnce([{ result_code: "CONFLICT", order_input: null, replayed: false }]);
+    execute
+      .mockResolvedValueOnce([quoteRow])
+      .mockResolvedValueOnce([{ result_code: "CONFLICT", order_input: null, replayed: false }]);
     const { prepareQuoteConversionCommand } = await import("../server/quoteCommands");
     await expect(prepareQuoteConversionCommand(authorization, {
       quoteId: QUOTE, clientEventId: CLIENT, expectedVersion: 2, confirmedAward: true,

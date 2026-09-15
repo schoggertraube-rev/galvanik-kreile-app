@@ -10,7 +10,20 @@ import {
   readQuoteConversionReceiptCommand,
   type ConvertQuoteInput,
   type CreateQuoteInput,
+  type QuoteCommandContext,
 } from "@/modules/quotes/server-public";
+
+function quoteCommandContext(authorization: { tenantId: string; userId: string; permissions: readonly string[] }): QuoteCommandContext {
+  return {
+    tenantId: authorization.tenantId,
+    userId: authorization.userId,
+    capabilities: {
+      canCreateQuote: authorization.permissions.includes("perm_data_orders"),
+      canReadQuote: authorization.permissions.includes("perm_view_leitstand"),
+      canConvertQuote: authorization.permissions.includes("perm_data_orders"),
+    },
+  };
+}
 
 function authorizationFailure(result: Awaited<ReturnType<typeof resolveAuthorization>>) {
   if (result.ok) return null;
@@ -28,7 +41,7 @@ export async function createQuoteAction(input: CreateQuoteInput) {
   }
   const failure = authorizationFailure(authorization);
   if (failure || !authorization.ok) return failure!;
-  const result = await createQuoteCommand(authorization.data, input);
+  const result = await createQuoteCommand(quoteCommandContext(authorization.data), input);
   if (result.code === "OK") {
     revalidatePath("/customers");
     revalidatePath(`/customers/${result.quote.customerId}`);
@@ -46,7 +59,7 @@ export async function readQuoteAction(input: { quoteId: string }) {
   }
   const failure = authorizationFailure(authorization);
   if (failure || !authorization.ok) return failure!;
-  return readQuoteCommand(authorization.data, input);
+  return readQuoteCommand(quoteCommandContext(authorization.data), input);
 }
 
 export async function convertQuoteToOrderAction(input: ConvertQuoteInput) {
@@ -59,19 +72,20 @@ export async function convertQuoteToOrderAction(input: ConvertQuoteInput) {
   const failure = authorizationFailure(authorization);
   if (failure || !authorization.ok) return failure!;
 
-  const prepared = await prepareQuoteConversionCommand(authorization.data, input);
+  const commandContext = quoteCommandContext(authorization.data);
+  const prepared = await prepareQuoteConversionCommand(commandContext, input);
   if (prepared.code !== "OK") return prepared;
 
   const order = await createOrderIntake(prepared.orderInput);
   if (order.code !== "OK") return order;
 
-  const persisted = await readQuoteConversionReceiptCommand(authorization.data, {
+  const persisted = await readQuoteConversionReceiptCommand(commandContext, {
     quoteId: input.quoteId,
     clientEventId: input.clientEventId,
   });
   if (persisted.code !== "OK"
     || persisted.receipt.orderId !== order.receipt.orderId
-    || persisted.receipt.orderIntakeReceiptId !== order.receipt.receiptId
+    || persisted.receipt.orderIntakeEventId !== order.receipt.eventId
     || persisted.quote.linkedOrderId !== order.receipt.orderId) {
     return { code: "UNAVAILABLE" as const, message: "Auftrag wurde angelegt, der sichere KV-Readback ist noch nicht verfügbar." };
   }

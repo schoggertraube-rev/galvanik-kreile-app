@@ -5,12 +5,15 @@
 // damit die Pruefung gegen den realen Vertrag laeuft und nicht gegen eine Kopie.
 
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   BASELINE_PATH,
   SCHEMA_PATH,
+  bootstrapEntrypointBaseline,
+  collectUnownedEntrypoints,
   exportedSymbols,
   resolveSpec,
   runModuleGates,
@@ -30,6 +33,7 @@ const IMP = ["im", "port"].join("");
 const EXP = ["ex", "port"].join("");
 const MOCK = ["vi.", "mock"].join("");
 const temps: string[] = [];
+type EntrypointBaselineEntry = { path: string; sha256: string };
 
 function repo(files: Record<string, string>): string {
   const root = mkdtempSync(path.join(tmpdir(), "s1-gates-"));
@@ -61,12 +65,41 @@ const goodModule = {
   "src/modules/orders/server/readOrder.ts": "export const readOrder = () => sql`select id from public.orders`;\n",
 };
 
+const goodWerkstattModule = {
+  "src/modules/werkstatt/werkstatt.manifest.json": manifest("werkstatt", {
+    publicExports: ["@/modules/werkstatt/public#WerkstattView"],
+  }),
+  "src/modules/werkstatt/public.ts": 'export { WerkstattView } from "./ui/WerkstattView";\n',
+  "src/modules/werkstatt/ui/WerkstattView.tsx": "export const WerkstattView = () => null;\n",
+};
+
 afterEach(() => {
   for (const t of temps.splice(0)) rmSync(t, { recursive: true, force: true });
 });
 
 function findingsOf(root: string, opts?: { baseBaselinePath?: string }): string[] {
   return runModuleGates(root, opts).findings;
+}
+
+function bootstrapMission(expectedCount: number): string {
+  return [
+    "active_package: PATH1_ENTRYPOINT_BASELINE_BOOTSTRAP",
+    "entrypoint_baseline_bootstrap_status: OWNER_APPROVED_ONE_TIME",
+    `entrypoint_baseline_expected_count: ${expectedCount}`,
+    "",
+  ].join("\n");
+}
+
+function seedLegacyEntrypoint(files: Record<string, string> = {}): string {
+  const root = repo({
+    ...goodModule,
+    "missions/F1_ORDER_TO_CASH_PILOT_001.yml": bootstrapMission(1),
+    [BASELINE_PATH]: JSON.stringify({ uiContract: { allowedLegacyFiles: [] } }),
+    "src/app/unowned/page.tsx": "export default function Page(){ return null; }\n",
+    ...files,
+  });
+  bootstrapEntrypointBaseline(root);
+  return root;
 }
 
 describe("S1 Naht 1 — Manifest je Modul + Ablage", () => {
@@ -77,6 +110,120 @@ describe("S1 Naht 1 — Manifest je Modul + Ablage", () => {
 
   it("ein regelkonformes Modul ist gruen", () => {
     expect(findingsOf(repo(goodModule))).toEqual([]);
+  });
+
+  it("bindet den aktuellen Repo-Stand sortiert und nur shrink-only an die geschuetzte Basis", () => {
+    const baseline = JSON.parse(readFileSync(path.resolve(process.cwd(), BASELINE_PATH), "utf8"));
+    const actual = collectUnownedEntrypoints(process.cwd());
+    const protectedBaseline = JSON.parse(execFileSync(
+      "git",
+      ["show", `origin/main:${BASELINE_PATH}`],
+      { cwd: process.cwd(), encoding: "utf8" },
+    ));
+    const protectedEntries = new Map<string, string>(protectedBaseline.entrypointContract.entries.map(
+      (entry: EntrypointBaselineEntry) => [entry.path, entry.sha256],
+    ));
+    expect(baseline.entrypointContract.status).toBe("TRANSITIONAL_BOOTSTRAP_SHRINK_ONLY");
+    expect(baseline.entrypointContract.entries).toEqual(actual);
+    expect(actual.map((entry: EntrypointBaselineEntry) => entry.path)).toEqual([...actual.map((entry: EntrypointBaselineEntry) => entry.path)].sort());
+    expect(actual.every((entry: EntrypointBaselineEntry) => protectedEntries.get(entry.path) === entry.sha256)).toBe(true);
+    expect(actual.length).toBeLessThanOrEqual(protectedEntries.size);
+  });
+
+  it("seedet nur einmal mit gebundener Mission und der allgemeine Updateweg rehasht nicht", () => {
+    const root = seedLegacyEntrypoint();
+    expect(findingsOf(root)).toEqual([]);
+    const before = JSON.parse(readFileSync(path.join(root, BASELINE_PATH), "utf8")).entrypointContract;
+    expect(() => bootstrapEntrypointBaseline(root)).toThrow(/Rebootstrap\/Rehash ist verboten/);
+    writeBaseline(root);
+    const after = JSON.parse(readFileSync(path.join(root, BASELINE_PATH), "utf8")).entrypointContract;
+    expect(after).toEqual(before);
+
+    const denied = repo({
+      ...goodModule,
+      [BASELINE_PATH]: JSON.stringify({ uiContract: { allowedLegacyFiles: [] } }),
+      "src/app/unowned/page.tsx": "export default function Page(){ return null; }\n",
+    });
+    expect(() => bootstrapEntrypointBaseline(denied)).toThrow(/Bootstrap verweigert/);
+  });
+
+  it("erlaubt den ersten Abschnitt gegen eine Basis ohne EntryPoint-Vertrag nur in der Bootstrap-Mission", () => {
+    const base = repo({ [BASELINE_PATH]: JSON.stringify({ uiContract: { allowedLegacyFiles: [] } }) });
+    const candidate = seedLegacyEntrypoint();
+    expect(findingsOf(candidate, { baseBaselinePath: path.join(base, BASELINE_PATH) })).toEqual([]);
+
+    writeFileSync(path.join(candidate, "missions/F1_ORDER_TO_CASH_PILOT_001.yml"), "active_package: OTHER\nentrypoint_baseline_expected_count: 1\n");
+    expect(findingsOf(candidate, { baseBaselinePath: path.join(base, BASELINE_PATH) })).toContainEqual(
+      expect.stringContaining("erstmaliger entrypointContract ist nur im owner-freigegebenen Paket"),
+    );
+  });
+
+  it("weist Add, Rename, Edit, Delete und Modularize der Legacy-Entrypoints fail-closed ab", () => {
+    const edited = seedLegacyEntrypoint();
+    writeFileSync(path.join(edited, "src/app/unowned/page.tsx"), "export default function Page(){ return 1; }\n");
+    expect(findingsOf(edited)).toContainEqual(expect.stringContaining("Legacy-Entrypoint-Hash driftet"));
+
+    const added = seedLegacyEntrypoint();
+    mkdirSync(path.join(added, "src/app/new"), { recursive: true });
+    writeFileSync(path.join(added, "src/app/new/page.tsx"), "export default function Page(){ return null; }\n");
+    expect(findingsOf(added)).toContainEqual(expect.stringContaining("src/app/new/page.tsx: neuer unowned Next-Entrypoint"));
+
+    const renamed = seedLegacyEntrypoint();
+    rmSync(path.join(renamed, "src/app/unowned/page.tsx"));
+    mkdirSync(path.join(renamed, "src/app/renamed"), { recursive: true });
+    writeFileSync(path.join(renamed, "src/app/renamed/page.tsx"), "export default function Page(){ return null; }\n");
+    const renamedFindings = findingsOf(renamed);
+    expect(renamedFindings).toContainEqual(expect.stringContaining("src/app/renamed/page.tsx: neuer unowned Next-Entrypoint"));
+    expect(renamedFindings).toContainEqual(expect.stringContaining("Legacy-Entrypoint 'src/app/unowned/page.tsx' fehlt"));
+
+    const deleted = seedLegacyEntrypoint();
+    rmSync(path.join(deleted, "src/app/unowned/page.tsx"));
+    expect(findingsOf(deleted)).toContainEqual(expect.stringContaining("Legacy-Entrypoint 'src/app/unowned/page.tsx' fehlt"));
+
+    const modularized = seedLegacyEntrypoint();
+    writeFileSync(path.join(modularized, "src/app/unowned/page.tsx"), `${IMP} { readOrder } from "@/modules/orders/public";\nexport default readOrder;\n`);
+    expect(findingsOf(modularized)).toContainEqual(expect.stringContaining("ist jetzt Modul 'orders' zugeordnet und muss aus entrypointContract entfernt werden"));
+  });
+
+  it("verweigert Rehash und Baseline-Wachstum gegen die geschuetzte Basis", () => {
+    const base = seedLegacyEntrypoint();
+    const changedHash = seedLegacyEntrypoint();
+    const changedBaselinePath = path.join(changedHash, BASELINE_PATH);
+    const changedBaseline = JSON.parse(readFileSync(changedBaselinePath, "utf8"));
+    changedBaseline.entrypointContract.entries[0].sha256 = "A".repeat(64);
+    writeFileSync(changedBaselinePath, JSON.stringify(changedBaseline));
+    expect(findingsOf(changedHash, { baseBaselinePath: path.join(base, BASELINE_PATH) })).toContainEqual(expect.stringContaining("Hash fuer 'src/app/unowned/page.tsx' darf nicht aktualisiert werden"));
+
+    const grown = seedLegacyEntrypoint();
+    const grownPage = path.join(grown, "src/app/another/page.tsx");
+    mkdirSync(path.dirname(grownPage), { recursive: true });
+    writeFileSync(grownPage, "export default function Page(){ return null; }\n");
+    const grownBaselinePath = path.join(grown, BASELINE_PATH);
+    const grownBaseline = JSON.parse(readFileSync(grownBaselinePath, "utf8"));
+    const hash = collectUnownedEntrypoints(grown).find((entry: EntrypointBaselineEntry) => entry.path === "src/app/another/page.tsx")!.sha256;
+    grownBaseline.entrypointContract.entries.unshift({ path: "src/app/another/page.tsx", sha256: hash });
+    writeFileSync(grownBaselinePath, JSON.stringify(grownBaseline));
+    expect(findingsOf(grown, { baseBaselinePath: path.join(base, BASELINE_PATH) })).toContainEqual(expect.stringContaining("neuer Legacy-Entrypoint 'src/app/another/page.tsx' ist verboten"));
+  });
+
+  it("prueft nur echte case-sensitive Next-Kompositionsdateien", () => {
+    const root = repo({
+      ...goodModule,
+      "src/app/unowned/page.mts": "export default null;\n",
+      "src/app/unowned/route.ts": "export const GET = () => null;\n",
+      "src/app/unowned/Page.tsx": "export default null;\n",
+      "src/app/unowned/page.TSX": "export default null;\n",
+    });
+    expect(findingsOf(root)).toEqual([]);
+  });
+
+  it("weist einen global unowned Next-Entrypoint ohne Baseline oder Manifest-Fassade ab", () => {
+    const root = repo({
+      ...goodModule,
+      "src/app/unowned/page.tsx": `${IMP} LocalProduct from "./LocalProduct";\nexport default LocalProduct;\n`,
+      "src/app/unowned/LocalProduct.tsx": "export default function LocalProduct(){ return null; }\n",
+    });
+    expect(findingsOf(root)).toContainEqual(expect.stringContaining("src/app/unowned/page.tsx: neuer unowned Next-Entrypoint"));
   });
 
   it("Modulordner ohne Manifest = FAIL", () => {
@@ -106,6 +253,97 @@ describe("S1 Naht 1 — Manifest je Modul + Ablage", () => {
     expect(f).toContainEqual(expect.stringContaining("exportiert 'missing' nicht"));
     expect(f).toContainEqual(expect.stringContaining("'@/lib/orders/x#readOrder' muss '@/modules/orders/public#Symbol' sein"));
     expect(f).toContainEqual(expect.stringContaining("'@/modules/other/public#y' muss '@/modules/orders/public#Symbol' sein"));
+  });
+
+  it("gleicht Manifest und public/server-public-Fassadenexports bidirektional exakt ab", () => {
+    const root = repo({
+      "src/modules/customers/customers.manifest.json": manifest("customers", {
+        publicExports: [
+          "@/modules/customers/public#CustomerView",
+          "@/modules/customers/server-public#createCustomer",
+        ],
+      }),
+      "src/modules/customers/public.ts": `${EXP} { CustomerView, HiddenClientPort } from "./ui/CustomerView";\n`,
+      "src/modules/customers/server-public.ts": `${IMP} "server-only";\n${EXP} { createCustomer, hiddenServerCommand } from "./server/createCustomer";\n`,
+      "src/modules/customers/ui/CustomerView.tsx": "export const CustomerView = () => null; export const HiddenClientPort = () => null;\n",
+      "src/modules/customers/server/createCustomer.ts": `${IMP} "server-only";\nexport const createCustomer = () => null; export const hiddenServerCommand = () => null;\n`,
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("public.ts: exportiert 'HiddenClientPort', fehlt aber in publicExports"));
+    expect(f).toContainEqual(expect.stringContaining("server-public.ts: exportiert 'hiddenServerCommand', fehlt aber in publicExports"));
+    expect(f).toHaveLength(2);
+  });
+
+  it("verbietet jede Default-Export-Form in Fassaden und erlaubt den explizit benannten Default-Reexport", () => {
+    const publicDefaultForms = [
+      "export default function Port() {}\n",
+      "export/* reviewer block-comment bypass */default function Port() {}\n",
+      "export // reviewer line-comment bypass\n default function Port() {}\n",
+      "export default function() {}\n",
+      "export default class Port {}\n",
+      "export default class {}\n",
+      "export default (() => null);\n",
+      "const Port = () => null;\nexport default Port;\n",
+      "const Port = () => null;\nexport { Port as default };\n",
+      "const Port = () => null;\nexport { Port /* comment */ as /* comment */ default };\n",
+      'export { default } from "./Port";\n',
+      'export { /* comment */ default /* comment */ } from "./Port";\n',
+    ];
+    for (const publicSource of publicDefaultForms) {
+      const root = repo({
+        "src/modules/orders/orders.manifest.json": manifest("orders"),
+        "src/modules/orders/public.ts": publicSource,
+        "src/modules/orders/Port.ts": "export default function Port() {}\n",
+      });
+      expect(findingsOf(root)).toContainEqual(expect.stringContaining("src/modules/orders/public.ts: Default-Export verboten"));
+    }
+
+    const serverRoot = repo({
+      "src/modules/customers/customers.manifest.json": manifest("customers"),
+      "src/modules/customers/public.ts": "export {};\n",
+      "src/modules/customers/server-public.ts": 'import "server-only";\nexport/* comment */default async function createCustomer() {}\n',
+    });
+    expect(findingsOf(serverRoot)).toContainEqual(expect.stringContaining("src/modules/customers/server-public.ts: Default-Export verboten"));
+
+    const namedReexportRoot = repo({
+      "src/modules/orders/orders.manifest.json": manifest("orders", {
+        publicExports: ["@/modules/orders/public#Port"],
+      }),
+      "src/modules/orders/public.ts": 'export { /* source default */ default /* explicit alias */ as Port } from "./Port";\n',
+      "src/modules/orders/Port.ts": "export default function Port() {}\n",
+    });
+    expect(findingsOf(namedReexportRoot)).toEqual([]);
+
+    const harmlessTextRoot = repo({
+      "src/modules/orders/orders.manifest.json": manifest("orders", {
+        publicExports: [
+          "@/modules/orders/public#Port",
+          "@/modules/orders/public#description",
+          "@/modules/orders/public#template",
+        ],
+      }),
+      "src/modules/orders/public.ts": [
+        "// export default function FalsePositive() {}",
+        "const description = 'export default';",
+        "const template = `export default class FalsePositive {}`;",
+        "class Port {}",
+        "export { Port, description, template };",
+      ].join("\n"),
+    });
+    expect(findingsOf(harmlessTextRoot)).toEqual([]);
+
+    const exportEqualsRoot = repo({
+      "src/modules/orders/orders.manifest.json": manifest("orders"),
+      "src/modules/orders/public.ts": "const Port = () => null;\nexport = Port;\n",
+    });
+    expect(findingsOf(exportEqualsRoot)).toContainEqual(expect.stringContaining("src/modules/orders/public.ts: 'export =' verboten"));
+
+    const syntaxErrorRoot = repo({
+      "src/modules/orders/orders.manifest.json": manifest("orders"),
+      "src/modules/orders/public.ts": 'export { Port as } from "./Port";\n',
+      "src/modules/orders/Port.ts": "export const Port = () => null;\n",
+    });
+    expect(findingsOf(syntaxErrorRoot)).toContainEqual(expect.stringContaining("Fassade syntaktisch oder semantisch nicht eindeutig analysierbar"));
   });
 
   it("trennt browser-sichere public- und explizite server-public-Fassade", () => {
@@ -170,15 +408,41 @@ describe("S1 Naht 1 — Manifest je Modul + Ablage", () => {
     expect(f).toContainEqual(expect.stringContaining("[naht1] src/lib/orders/read.ts: Fach 'orders' hat ein Modul"));
   });
 
-  it("erlaubt ausschliesslich duenne Next-Entrypoints und direkte typisierte AppAdapter als App-Kompositionsnaht", () => {
+  it("erlaubt ausschliesslich duenne Next-Entrypoints und manifestgebundene typisierte AppAdapter als App-Kompositionsnaht", () => {
     const root = repo({
       ...goodModule,
       "src/app/orders/page.tsx": `${IMP} { OrdersAppAdapter } from "./OrdersAppAdapter";\nexport default function Page(){ return OrdersAppAdapter(); }\n`,
       "src/app/orders/[id]/page.tsx": `${IMP} { OrderCardAppAdapter } from "../OrderCardAppAdapter";\nexport default function Page(){ return OrderCardAppAdapter({ orderId: "x" }); }\n`,
       "src/app/orders/OrdersAppAdapter.tsx": `${IMP} { readOrder } from "@/modules/orders/public";\n${IMP} { action } from "@/app/actions/orders.actions";\nexport function OrdersAppAdapter(){ void action; return readOrder(); }\n`,
-      "src/app/orders/OrderCardAppAdapter.tsx": `${IMP} { readOrder } from "@/modules/orders/public";\nexport function OrderCardAppAdapter(){ return readOrder(); }\n`,
+      "src/app/orders/OrderCardAppAdapter.tsx": `${IMP} { readOrder } from "@/modules/orders/public";\nexport function OrderCardAppAdapter({ fallbackHref }: { fallbackHref?: "/orders" }){ void fallbackHref; return readOrder(); }\n`,
     });
     expect(findingsOf(root)).toEqual([]);
+  });
+
+  it("ordnet den realen Routen-/Modul-Mismatch warendurchlauf/WerkstattAppAdapter ueber die Werkstatt-Fassade zu", () => {
+    const root = repo({
+      ...goodWerkstattModule,
+      "src/app/warendurchlauf/WerkstattAppAdapter.tsx": [
+        `${IMP} { WerkstattView } from "@/modules/werkstatt/public";`,
+        `${IMP} { useRouter } from "next/navigation";`,
+        `${IMP} { action } from "@/app/actions/orders.actions";`,
+        `${IMP} { useOverlayStore } from "@/lib/overlayStore";`,
+        "export function WerkstattAppAdapter() { const router = useRouter(); void action; void useOverlayStore; router.push(\"/warendurchlauf/galvanik\"); return WerkstattView(); }",
+      ].join("\n"),
+    });
+    expect(findingsOf(root)).toEqual([]);
+  });
+
+  it("weist einen Next-Entrypoint ab, dessen Adapter einem anderen Fachmodul zugeordnet ist", () => {
+    const root = repo({
+      ...goodModule,
+      ...goodWerkstattModule,
+      "src/app/orders/page.tsx": `${IMP} { OrdersAppAdapter } from "./OrdersAppAdapter";\nexport default function Page(){ return OrdersAppAdapter(); }\n`,
+      "src/app/orders/OrdersAppAdapter.tsx": `${IMP} { WerkstattView } from "@/modules/werkstatt/public";\nexport function OrdersAppAdapter(){ return WerkstattView(); }\n`,
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/page.tsx:1: Next-Entrypoint darf lokalen Code nur ueber @/modules/orders/public"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/page.tsx: App-Kompositionsdatei muss @/modules/orders/public konsumieren"));
   });
 
   it("weist beliebige App-Dateien, actions/server/domain, fehlende Modulnaht, Tiefimport und generische URL-Tunnel ab", () => {
@@ -197,11 +461,84 @@ describe("S1 Naht 1 — Manifest je Modul + Ablage", () => {
     expect(f).toContainEqual(expect.stringContaining("src/app/orders/actions.ts: Fach 'orders' hat ein Modul"));
     expect(f).toContainEqual(expect.stringContaining("src/app/orders/server/read.ts: Fach 'orders' hat ein Modul"));
     expect(f).toContainEqual(expect.stringContaining("src/app/orders/domain/calculate.ts: Fach 'orders' hat ein Modul"));
-    expect(f).toContainEqual(expect.stringContaining("src/app/orders/BadAppAdapter.tsx:2: AppAdapter darf keine DB-, Repository-, Command-Implementierung"));
-    expect(f).toContainEqual(expect.stringContaining("src/app/orders/BadAppAdapter.tsx: App-Kompositionsdatei muss"));
-    expect(f).toContainEqual(expect.stringContaining("generischen Router-/URL-Tunnel"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/BadAppAdapter.tsx:2: AppAdapter darf keine DB-, Supabase-, Repository- oder Command-Implementierung"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/BadAppAdapter.tsx: AppAdapter muss genau eine kanonische Modul-public-Fassade importieren; Zuordnung ist keine"));
+    expect(f).toContainEqual(expect.stringContaining("href/url/route/pathname:string-Tunnel"));
     expect(f).toContainEqual(expect.stringContaining("src/components/orders/Card.tsx: Fach 'orders' hat ein Modul"));
     expect(f).toContainEqual(expect.stringContaining("src/lib/orders/read.ts: Fach 'orders' hat ein Modul"));
+  });
+
+  it("prueft verbotene Implementierungsimporte auch beim realen Routen-/Modul-Mismatch", () => {
+    const root = repo({
+      ...goodWerkstattModule,
+      "src/app/warendurchlauf/WerkstattAppAdapter.tsx": [
+        `${IMP} { WerkstattView } from "@/modules/werkstatt/public";`,
+        `${IMP} { supabase } from "@/lib/supabase/client";`,
+        `${IMP} { orderRepository } from "@/lib/server/orderRepository";`,
+        `${IMP} { recordGoodsOutCommand } from "@/lib/server/recordGoodsOutCommand";`,
+        `${IMP} { privilegedDb } from "@/lib/server/privilegedDb";`,
+        `${IMP} { relativePrivilegedDb } from "../../lib/server/privilegedDb";`,
+        "export function WerkstattAppAdapter() { void supabase; void orderRepository; void recordGoodsOutCommand; void privilegedDb; void relativePrivilegedDb; return WerkstattView(); }",
+      ].join("\n"),
+    });
+    const f = findingsOf(root);
+    for (const line of [2, 3, 4, 5, 6]) {
+      expect(f).toContainEqual(expect.stringContaining(`src/app/warendurchlauf/WerkstattAppAdapter.tsx:${line}: AppAdapter darf keine DB-, Supabase-, Repository- oder Command-Implementierung`));
+    }
+    expect(f).toHaveLength(5);
+  });
+
+  it("erkennt alle AppAdapter-Endungen case-insensitiv, meldet die Namensform und prueft ihren Inhalt weiter", () => {
+    const unsafeAdapters = [
+      ["unsafeAppAdapter.tsx", "@/utils/supabase/client"],
+      ["UnsafeMixedappadapter.jsx", "@/lib/supabase/client"],
+      ["UnsafeScriptAPPADAPTER.js", "@supabase/supabase-js"],
+      ["UnsafeTypedAppAdapter.ts", "../../../utils/supabase/client"],
+      ["UnsafeUpperAppAdapter.TSX", "@/lib/server/recordGoodsOutCommand"],
+    ] as const;
+    const files: Record<string, string> = { ...goodModule };
+    for (const [filename, implementationImport] of unsafeAdapters) {
+      files[`src/app/orders/${filename}`] = [
+        `${IMP} { readOrder } from "@/modules/orders/public";`,
+        `${IMP} { unsafe } from "${implementationImport}";`,
+        "export function Adapter() { void unsafe; return readOrder(); }",
+      ].join("\n");
+    }
+
+    const f = findingsOf(repo(files));
+    for (const [filename, implementationImport] of unsafeAdapters) {
+      expect(f).toContainEqual(expect.stringContaining(`src/app/orders/${filename}: AppAdapter-Dateiname muss kanonisch '<PascalCase>AppAdapter.tsx' geschrieben sein`));
+      expect(f).toContainEqual(expect.stringContaining(`src/app/orders/${filename}:2: AppAdapter darf keine DB-, Supabase-, Repository- oder Command-Implementierung importieren ('${implementationImport}')`));
+    }
+    expect(f).toHaveLength(unsafeAdapters.length * 2);
+  });
+
+  it("weist fehlende, mehrdeutige und ungueltige Modulzuordnung direkter AppAdapter fail-closed ab", () => {
+    const root = repo({
+      ...goodModule,
+      ...goodWerkstattModule,
+      "src/modules/broken/broken.manifest.json": manifest("wrong"),
+      "src/modules/broken/public.ts": "export const BrokenView = () => null;\n",
+      "src/app/warendurchlauf/OrphanAppAdapter.tsx": `${IMP} { action } from "@/app/actions/orders.actions";\nexport function OrphanAppAdapter() { void action; return null; }\n`,
+      "src/app/warendurchlauf/AmbiguousAppAdapter.tsx": `${IMP} { readOrder } from "@/modules/orders/public";\n${IMP} { WerkstattView } from "@/modules/werkstatt/public";\nexport function AmbiguousAppAdapter() { readOrder(); return WerkstattView(); }\n`,
+      "src/app/broken/BrokenAppAdapter.tsx": `${IMP} { BrokenView } from "@/modules/broken/public";\nexport function BrokenAppAdapter() { return BrokenView(); }\n`,
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("src/app/warendurchlauf/OrphanAppAdapter.tsx: AppAdapter muss genau eine kanonische Modul-public-Fassade importieren; Zuordnung ist keine"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/warendurchlauf/AmbiguousAppAdapter.tsx: AppAdapter muss genau eine kanonische Modul-public-Fassade importieren; Zuordnung ist mehrere (orders, werkstatt)"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/broken/BrokenAppAdapter.tsx: AppAdapter-Fassade '@/modules/broken/public' gehoert nicht zu einem gueltigen Manifest"));
+  });
+
+  it("weist breite Route-Props ab und laesst enge Literal-Fallbacks sowie konkrete App-Navigation zu", () => {
+    const root = repo({
+      ...goodModule,
+      "src/app/orders/FallbackAppAdapter.tsx": `${IMP} { readOrder } from "@/modules/orders/public";\nexport function FallbackAppAdapter({ fallbackHref }: { fallbackHref?: string }) { void fallbackHref; return readOrder(); }\n`,
+      "src/app/orders/TargetAppAdapter.tsx": `${IMP} { readOrder } from "@/modules/orders/public";\nexport function TargetAppAdapter({ targetUrl }: { targetUrl: string }) { void targetUrl; return readOrder(); }\n`,
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/FallbackAppAdapter.tsx:2: AppAdapter darf keinen breit typisierten href/url/route/pathname:string-Tunnel"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/orders/TargetAppAdapter.tsx:2: AppAdapter darf keinen breit typisierten href/url/route/pathname:string-Tunnel"));
+    expect(f).toHaveLength(2);
   });
 
   it("Schema-Validator deckt object/required/additionalProperties/array/pattern/minLength ab", () => {
@@ -254,7 +591,8 @@ describe("S1 Naht 2 — positive Fassade / Tiefimport-Verbot", () => {
     expect(f).toContainEqual(expect.stringContaining("[naht2] src/app/re.ts:1: Tiefimport"));
     expect(f).toContainEqual(expect.stringContaining("[naht2] src/app/x.test.ts:1: Tiefimport"));
     expect(f).toContainEqual(expect.stringContaining("[naht2] src/app/root.ts:1: Tiefimport '@/modules/orders'"));
-    expect(f).toHaveLength(6);
+    expect(f).toContainEqual(expect.stringContaining("[naht1] src/app/page.tsx: neuer unowned Next-Entrypoint"));
+    expect(f).toHaveLength(7);
   });
 
   it("erlaubt server-public nur fuer Server Actions und Real-DB-Tests; Client, Re-Export und Tiefimport bleiben rot", () => {
@@ -272,6 +610,10 @@ describe("S1 Naht 2 — positive Fassade / Tiefimport-Verbot", () => {
       "src/app/customers/CustomersAppAdapter.tsx": `${IMP} { CustomerView } from "@/modules/customers/public";\n${IMP} { createCustomer } from "@/modules/customers/server-public";\nexport const CustomersAppAdapter = () => { void createCustomer; return CustomerView(); };\n`,
       "src/app/client.tsx": `${IMP} { createCustomer } from "@/modules/customers/server-public";\nvoid createCustomer;\n`,
       "src/app/actions/bad.actions.ts": `"use server";\n${IMP} { createCustomer } from "@/modules/customers/server/createCustomer";\nvoid createCustomer;\n`,
+      "src/app/actions/missing-server-marker.actions.ts": `${IMP} { createCustomer } from "@/modules/customers/server-public";\nvoid createCustomer;\n`,
+      "src/app/actions/late-server-directive.actions.ts": `${IMP} "./setup";\n"use server";\n${IMP} { createCustomer } from "@/modules/customers/server-public";\nvoid createCustomer;\n`,
+      "src/app/actions/reexport.actions.ts": `"use server";\n${EXP} { createCustomer } from "@/modules/customers/server-public";\n`,
+      "src/test/customer.integration.test.tsx": `${IMP} { createCustomer } from "@/modules/customers/server-public";\nvoid createCustomer;\n`,
       "src/app/reexport.ts": `${EXP} { createCustomer } from "@/modules/customers/server-public";\n`,
     });
     const f = findingsOf(root);
@@ -279,6 +621,11 @@ describe("S1 Naht 2 — positive Fassade / Tiefimport-Verbot", () => {
     expect(f).toContainEqual(expect.stringContaining("src/app/client.tsx:1: Server-Fassade"));
     expect(f).toContainEqual(expect.stringContaining("src/app/reexport.ts:1: Server-Fassade"));
     expect(f).toContainEqual(expect.stringContaining("src/app/actions/bad.actions.ts:2: Tiefimport"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/actions/missing-server-marker.actions.ts:1: Server-Fassade"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/actions/late-server-directive.actions.ts:3: Server-Fassade"));
+    expect(f).toContainEqual(expect.stringContaining("src/app/actions/reexport.actions.ts:2: Server-Fassade"));
+    expect(f).toContainEqual(expect.stringContaining("darf nicht re-exportiert werden"));
+    expect(f).toContainEqual(expect.stringContaining("src/test/customer.integration.test.tsx:1: Server-Fassade"));
   });
 
   it("Im eigenen Modul nur relative Imports; @/modules/<eigen>/... = FAIL", () => {
@@ -314,17 +661,96 @@ describe("S1 Naht 4 — Cross-Modul-Fakten nur ueber v_*-Views", () => {
   it("eigene Tabellen und deklarierte v_*-Views sind erlaubt", () => {
     const root = repo({
       ...goodModule,
-      "src/modules/invoices/invoices.manifest.json": manifest("invoices", { ownsTables: ["public.invoices", "private.invoice_numbers"] }),
+      "src/modules/invoices/invoices.manifest.json": manifest("invoices", {
+        ownsTables: ["public.invoices", "private.invoice_numbers"],
+        viewsFunctions: ["private.v_invoice_receipts", "private.issue_invoice_v1"],
+      }),
       "src/modules/invoices/public.ts": "export {};\n",
       "src/modules/invoices/server/q.ts": [
         "export const q = sql`",
         "  UPDATE public.invoices SET x = 1;",
         "  INSERT INTO private.invoice_numbers (n) VALUES (1);",
-        "  SELECT o.id FROM public.v_order_facts o JOIN public.invoices i ON i.order_id = o.id;",
+        "  SELECT o.id FROM public.v_order_facts o JOIN private.v_invoice_receipts r ON r.order_id = o.id JOIN public.invoices i ON i.order_id = o.id;",
+        "  SELECT * FROM private.issue_invoice_v1('order-id');",
         "`;",
       ].join("\n"),
     });
     expect(findingsOf(root)).toEqual([]);
+  });
+
+  it("erlaubt public Views moduluebergreifend, private Views/Funktionen aber nur ihrem deklarierenden Modul", () => {
+    const root = repo({
+      ...goodModule,
+      "src/modules/orders/orders.manifest.json": manifest("orders", {
+        publicExports: ["@/modules/orders/public#readOrder"],
+        ownsTables: ["public.orders"],
+        viewsFunctions: ["public.v_order_facts", "private.v_order_secret", "private.prepare_order_v1"],
+      }),
+      "src/modules/orders/server/privateRead.ts": "export const q = sql`select * from private.v_order_secret; select * from private.prepare_order_v1()`;\n",
+      "src/modules/invoices/invoices.manifest.json": manifest("invoices", { ownsTables: ["public.invoices"] }),
+      "src/modules/invoices/public.ts": "export {};\n",
+      "src/modules/invoices/server/q.ts": "export const q = sql`select * from public.v_order_facts o join private.v_order_secret s on s.id = o.id; select * from private.prepare_order_v1()`;\n",
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("[naht4] src/modules/invoices/server/q.ts:1: private View 'private.v_order_secret' gehoert orders"));
+    expect(f).toContainEqual(expect.stringContaining("[naht4] src/modules/invoices/server/q.ts:1: private Funktion 'private.prepare_order_v1' gehoert orders"));
+    expect(f).toHaveLength(2);
+  });
+
+  it("weist doppelte private-Relation-Deklaration fail-closed ab und verhindert Eigentumsumgehung", () => {
+    const root = repo({
+      ...goodModule,
+      "src/modules/orders/orders.manifest.json": manifest("orders", {
+        publicExports: ["@/modules/orders/public#readOrder"],
+        ownsTables: ["public.orders"],
+        viewsFunctions: ["public.v_order_facts", "private.v_order_secret"],
+      }),
+      "src/modules/invoices/invoices.manifest.json": manifest("invoices", {
+        ownsTables: ["public.invoices"],
+        viewsFunctions: ["private.v_order_secret"],
+      }),
+      "src/modules/invoices/public.ts": "export {};\n",
+      "src/modules/invoices/server/q.ts": "export const q = sql`select * from private.v_order_secret`;\n",
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("private Relation 'private.v_order_secret' ist in mehreren Modulen deklariert (invoices, orders)"));
+    expect(f).toContainEqual(expect.stringContaining("private View 'private.v_order_secret' gehoert invoices, orders"));
+    expect(f).toHaveLength(2);
+  });
+
+  it("viewsFunctions kann fremde Basistabellen nicht als Lesenaht autorisieren", () => {
+    const root = repo({
+      ...goodModule,
+      "src/modules/invoices/invoices.manifest.json": manifest("invoices", {
+        ownsTables: ["public.invoices"],
+        viewsFunctions: ["public.orders", "private.customer_number_counters", "public.calculate_total"],
+      }),
+      "src/modules/invoices/public.ts": "export {};\n",
+      "src/modules/invoices/server/q.ts": [
+        "export const q = sql`",
+        "  SELECT * FROM public.orders o",
+        "  JOIN private.customer_number_counters c ON c.tenant_id = o.tenant_id",
+        "`;",
+      ].join("\n"),
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("[naht4] src/modules/invoices/server/q.ts:2: Tabelle 'public.orders' gehoert nicht zu Modul 'invoices'"));
+    expect(f).toContainEqual(expect.stringContaining("[naht4] src/modules/invoices/server/q.ts:3: Tabelle 'private.customer_number_counters' gehoert nicht zu Modul 'invoices'"));
+    expect(f).toHaveLength(2);
+  });
+
+  it("ownsTables kann private Views oder Funktionsaufrufe nicht als Eigentum tarnen", () => {
+    const root = repo({
+      ...goodModule,
+      "src/modules/invoices/invoices.manifest.json": manifest("invoices", {
+        ownsTables: ["public.invoices", "private.v_order_secret", "private.prepare_order_v1"],
+      }),
+      "src/modules/invoices/public.ts": "export {};\n",
+      "src/modules/invoices/server/q.ts": "export const q = sql`select * from private.v_order_secret; select * from private.prepare_order_v1()`;\n",
+    });
+    const f = findingsOf(root);
+    expect(f).toContainEqual(expect.stringContaining("ownsTables 'private.v_order_secret' ist eine View"));
+    expect(f).toContainEqual(expect.stringContaining("private Funktion 'private.prepare_order_v1' gehoert kein Modul"));
   });
 
   it("Fremdtabelle direkt oder undeklarierte View = FAIL", () => {

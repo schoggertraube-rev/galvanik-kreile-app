@@ -82,22 +82,22 @@ describe("W2C-B2M5C transitionOrderProcess quarantine", () => {
     expect(dbSpies.insert).not.toHaveBeenCalled();
   });
 
-  it("keeps legacy writers denied while the named W3 handoff remains the sole reactivated entry", async () => {
+  it("keeps legacy writers denied while the V8 card remains the sole handoff entry", async () => {
     const srcRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-      const [handoff, handoffAdapter, galvanik, wareneingangPage] = await Promise.all([
-        readFile(path.join(srcRoot, "modules/orders/legacy-ui/WareneingangHandoffButton.tsx"), "utf8"),
-        readFile(path.join(srcRoot, "app/warendurchlauf/wareneingang/WareneingangHandoffAppAdapter.tsx"), "utf8"),
+      const [orderCard, orderCardAdapter, galvanik, wareneingangPage] = await Promise.all([
+        readFile(path.join(srcRoot, "modules/orders/ui/OrderCardView.tsx"), "utf8"),
+        readFile(path.join(srcRoot, "app/orders/OrderCardAppAdapter.tsx"), "utf8"),
         readFile(path.join(srcRoot, "app/warendurchlauf/galvanik/page.tsx"), "utf8"),
         readFile(path.join(srcRoot, "app/warendurchlauf/wareneingang/page.tsx"), "utf8"),
       ]);
 
       expect(galvanik).not.toContain("transitionOrderProcess");
-      expect(handoff).not.toContain("transitionOrderProcess");
-      expect(handoff).not.toContain("@/app/");
-      expect(handoff).toContain("ports.transition");
-      expect(handoffAdapter).toContain("transitionWareneingangToGalvanikAction");
-      expect(handoffAdapter).toContain("WareneingangHandoffButton");
-      expect(wareneingangPage).toContain("WareneingangHandoffAppAdapter");
+      expect(orderCard).not.toContain("@/app/");
+      expect(orderCard).toContain("actions.onHandoff");
+      expect(orderCardAdapter).toContain("transitionWareneingangToGalvanikAction");
+      expect(orderCardAdapter).toContain("getOrderStationReceiptAction");
+      expect(wareneingangPage).toContain("OrderQueueRow");
+      expect(wareneingangPage).not.toContain("WareneingangHandoffAppAdapter");
     for (const file of [
       "components/orders/variants/WareneingangActive.tsx",
       "components/orders/StationStatusButton.tsx",

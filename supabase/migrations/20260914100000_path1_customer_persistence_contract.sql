@@ -95,6 +95,117 @@ CREATE TABLE private.customer_create_receipts (
     CHECK (city IS NULL OR (city = btrim(city) AND length(city) BETWEEN 1 AND 120))
 );
 
+CREATE FUNCTION private.create_customer_v1(
+  p_tenant_id text,
+  p_actor_id uuid,
+  p_client_event_id uuid,
+  p_intent_sha256 text,
+  p_name text,
+  p_customer_type text,
+  p_company_name text,
+  p_contact_person text,
+  p_email text,
+  p_phone text,
+  p_city text
+)
+RETURNS TABLE(result_code text, result_receipt_id uuid, replayed boolean)
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+DECLARE
+  v_prior private.customer_create_receipts%ROWTYPE;
+  v_customer_id uuid;
+  v_customer_number text;
+  v_event_id uuid;
+  v_receipt_id uuid;
+  v_correlation_id uuid;
+BEGIN
+  IF p_tenant_id IS NULL
+     OR p_tenant_id IS DISTINCT FROM btrim(p_tenant_id)
+     OR length(p_tenant_id) NOT BETWEEN 1 AND 50
+     OR p_tenant_id IS DISTINCT FROM nullif(btrim(current_setting('app.tenant_id', true)), '')
+     OR p_actor_id IS NULL
+     OR p_client_event_id IS NULL
+     OR p_intent_sha256 !~ '^[0-9a-f]{64}$'
+     OR p_name IS DISTINCT FROM btrim(p_name)
+     OR length(p_name) NOT BETWEEN 2 AND 160
+     OR p_customer_type NOT IN ('business', 'privat', 'institution')
+     OR NOT EXISTS (
+       SELECT 1 FROM public.app_users actor
+       WHERE actor.id = p_actor_id AND actor.tenant_id = p_tenant_id AND actor.active = true
+     )
+  THEN
+    RETURN QUERY SELECT 'VALIDATION_ERROR'::text, NULL::uuid, false;
+    RETURN;
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtextextended(
+    'path1:customer-create:' || p_tenant_id || ':' || p_actor_id::text || ':' || p_client_event_id::text,
+    0
+  ));
+
+  SELECT receipt.* INTO v_prior
+  FROM private.customer_create_receipts receipt
+  WHERE receipt.tenant_id = p_tenant_id
+    AND receipt.actor_id = p_actor_id
+    AND receipt.client_event_id = p_client_event_id
+  LIMIT 2;
+
+  IF FOUND THEN
+    IF v_prior.intent_sha256 IS DISTINCT FROM p_intent_sha256 THEN
+      RETURN QUERY SELECT 'CONFLICT'::text, NULL::uuid, false;
+    ELSE
+      RETURN QUERY SELECT 'OK'::text, v_prior.id, true;
+    END IF;
+    RETURN;
+  END IF;
+
+  v_customer_id := gen_random_uuid();
+  v_event_id := gen_random_uuid();
+  v_receipt_id := gen_random_uuid();
+  v_correlation_id := gen_random_uuid();
+  v_customer_number := private.allocate_customer_number(p_tenant_id);
+
+  INSERT INTO public.customers (
+    id, tenant_id, customer_number, name, type, company_name, contact_person,
+    email, phone, city, source, source_ref, created_at, updated_at
+  ) VALUES (
+    v_customer_id::text, p_tenant_id, v_customer_number, p_name, p_customer_type,
+    p_company_name, p_contact_person, p_email, p_phone, p_city,
+    'PATH1_CUSTOMER_COMMAND', p_client_event_id::text,
+    statement_timestamp() AT TIME ZONE 'UTC', statement_timestamp()
+  );
+
+  INSERT INTO public.events (
+    id, tenant_id, order_id, item_id, event_type, description, notes, payload,
+    status, user_id, station, client_event_id, event_schema_version,
+    correlation_id, aggregate_version, from_station, created_at
+  ) VALUES (
+    v_event_id::text, p_tenant_id, NULL, NULL, 'CUSTOMER_CREATED_V1', 'Kunde angelegt', NULL,
+    jsonb_build_object(
+      'customerId', v_customer_id::text,
+      'customerNumber', v_customer_number,
+      'intentSha256', p_intent_sha256
+    ),
+    'success', p_actor_id, NULL, p_client_event_id, 1,
+    v_correlation_id, 1, NULL, statement_timestamp() AT TIME ZONE 'UTC'
+  );
+
+  INSERT INTO private.customer_create_receipts (
+    id, event_id, tenant_id, customer_id, customer_number, actor_id,
+    client_event_id, correlation_id, intent_sha256, name, customer_type,
+    company_name, contact_person, email, phone, city, created_at
+  ) VALUES (
+    v_receipt_id, v_event_id::text, p_tenant_id, v_customer_id::text, v_customer_number, p_actor_id,
+    p_client_event_id, v_correlation_id, p_intent_sha256, p_name, p_customer_type,
+    p_company_name, p_contact_person, p_email, p_phone, p_city, statement_timestamp()
+  );
+
+  RETURN QUERY SELECT 'OK'::text, v_receipt_id, false;
+END;
+$$;
+
 ALTER TABLE public.events
   ADD CONSTRAINT events_customer_created_v1_contract_chk
   CHECK (
@@ -232,7 +343,9 @@ REVOKE ALL ON TABLE private.customer_number_counters FROM PUBLIC, anon, authenti
 REVOKE ALL ON TABLE private.customer_create_receipts FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE private.v_customer_create_receipts_v1 FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION private.allocate_customer_number(text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.create_customer_v1(text, uuid, uuid, text, text, text, text, text, text, text, text) FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON TABLE private.customer_number_counters TO service_role;
 GRANT SELECT, INSERT ON TABLE private.customer_create_receipts TO service_role;
 GRANT SELECT ON TABLE private.v_customer_create_receipts_v1 TO service_role;
 GRANT EXECUTE ON FUNCTION private.allocate_customer_number(text) TO service_role;
+GRANT EXECUTE ON FUNCTION private.create_customer_v1(text, uuid, uuid, text, text, text, text, text, text, text, text) TO service_role;

@@ -3,10 +3,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import {
-  ORDER_LIFECYCLE_STATUS,
-  ORDER_STATION_FORWARD_ROLES,
-} from "@/modules/orders/public";
+import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 
 const SOURCE_STATION = "wareneingang";
 const TARGET_STATION = "galvanik";
@@ -17,6 +14,7 @@ const MAX_ORDER_ID_LENGTH = 128;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const REASON_MIN_LENGTH = 5;
 const REASON_MAX_LENGTH = 500;
+const ORDER_STATION_FORWARD_ROLES = ["buero", "werkstatt", "meister", "admin"] as const;
 
 export type OrderStationCommandInput = {
   orderId: string;

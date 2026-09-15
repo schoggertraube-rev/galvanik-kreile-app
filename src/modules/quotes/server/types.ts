@@ -1,7 +1,13 @@
-export type QuoteCommandAuthorization = {
+export type QuoteCommandCapabilities = {
+  canCreateQuote: boolean;
+  canReadQuote: boolean;
+  canConvertQuote: boolean;
+};
+
+export type QuoteCommandContext = {
   tenantId: string;
   userId: string;
-  permissions: readonly string[];
+  capabilities: QuoteCommandCapabilities;
 };
 
 export type QuotePositionInput = {
@@ -71,7 +77,7 @@ export type QuoteConversionReceipt = {
   quoteId: string;
   customerId: string;
   orderId: string;
-  orderIntakeReceiptId: string;
+  orderIntakeEventId: string;
   actorId: string;
   clientEventId: string;
   correlationId: string;

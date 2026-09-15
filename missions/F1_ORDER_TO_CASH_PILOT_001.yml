@@ -1,7 +1,7 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: 57059721924084d1d27c13c7855644cfccf98a3d
+base_sha: d050489c784376363f2759679db2f8d5e052d0ad
 branch: path1/ui-convergence-20260914
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
@@ -37,8 +37,8 @@ delivery_order:
   - F1.6_REALER_PILOT
 
 active_package: PATH1_UI_CONVERGENCE
-active_package_status: V5_GLOBAL_PLUS_CUSTOMER_QUOTE_ORDER_EXACT_SHA_CI_PREVIEW_AND_INDEPENDENT_REVIEW_PENDING_NO_UI_PASS
-next_gate_after_active_package: DRAFT_PR_EXACT_SHA_CI_PREVIEW_THEN_INDEPENDENT_REVIEW
+active_package_status: V5_GLOBAL_PLUS_CUSTOMER_QUOTE_ORDER_CANDIDATE_EXACT_SHA_CI_PREVIEW_AND_INDEPENDENT_REVIEW_PENDING_NO_UI_PASS
+next_gate_after_active_package: EXACT_SHA_CI_PREVIEW_AND_INDEPENDENT_REVIEW
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
@@ -457,6 +457,8 @@ path1_ui_convergence_allowlist:
   - docs/evidence/f0/W4_CROSS_MODULE_READ_PORT_INVENTORY.json
   - docs/project/PROVIDER_CAPABILITY_MATRIX.md
   - e2e/path1-ui-convergence*.spec.ts
+  - e2e/smoke.spec.ts
+  - .github/workflows/quality.yml
   - quality/module-gates-baseline.json
   # D-UI-V5-001: kanonische Ablaufreferenz und ihre autoritativen Bindungen
   - docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html
@@ -554,6 +556,7 @@ path1_ui_convergence_allowlist:
   - src/app/quotes/new/page.tsx
   - src/app/scan/page.tsx
   - src/app/station/[slug]/page.tsx
+  - src/app/station/[slug]/__tests__/w4StationOrdersReadStates.test.tsx
   - src/app/status/page.tsx
   - src/app/telefonnotiz/page.tsx
   - src/app/today/page.tsx
@@ -615,6 +618,8 @@ path1_ui_convergence_allowlist:
   - src/app/warendurchlauf/warenausgang/page.tsx
   - src/app/warendurchlauf/wareneingang/page.tsx
   - src/app/warendurchlauf/wareneingang/WareneingangHandoffAppAdapter.tsx
+  - src/components/warendurchlauf/WarendurchlaufStationNav.tsx
+  - src/components/warendurchlauf/__tests__/w2cB2m5u.stationNavTrend.failClosed.test.tsx
   - src/components/customers/__tests__/w2cB2m5e.customerOverlay.failClosed.test.tsx
   - src/components/customers/CustomerAuftraege.tsx
   - src/components/customers/CustomerEditModal.tsx
@@ -729,6 +734,7 @@ path1_ui_convergence_allowlist:
   - src/lib/server/commands/orderStationCommand.ts
   - src/lib/server/commands/recordGoodsOutCommand.ts
   - src/lib/server/orderIntakeRead.ts
+  - src/lib/server/orderCardRead.ts
   - src/lib/server/orderStationAttachment.ts
   - src/modules/customers/__tests__/createCustomerCommand.test.ts
   - src/modules/customers/customers.manifest.json
@@ -744,18 +750,21 @@ path1_ui_convergence_allowlist:
   - src/modules/orders/__tests__/WareneingangHandoffButton.test.tsx
   - src/modules/orders/domain/getUrgency.ts
   - src/modules/orders/domain/orderLifecycleContract.ts
-  - src/modules/orders/legacy-ui/GalvanikCorrectionButton.tsx
-  - src/modules/orders/legacy-ui/GalvanikHandoffAttachmentPanel.tsx
-  - src/modules/orders/legacy-ui/OrderCompactCard.tsx
-  - src/modules/orders/legacy-ui/OrderWideCard.tsx
-  - src/modules/orders/legacy-ui/WareneingangHandoffButton.tsx
+  - src/modules/orders/ui/GalvanikCorrectionButton.tsx
+  - src/modules/orders/ui/GalvanikHandoffAttachmentPanel.tsx
+  - src/modules/orders/ui/OrderCompactCard.tsx
+  - src/modules/orders/ui/OrderWideCard.tsx
+  - src/modules/orders/ui/WareneingangHandoffButton.tsx
   - src/modules/orders/orders.manifest.json
   - src/modules/orders/public.ts
   - src/modules/orders/server/types.ts
   - src/modules/orders/ui/OrderCardView.tsx
+  - src/modules/orders/ui/OrderQueueRow.tsx
+  - src/modules/orders/ui/OrderStationAttachmentPanel.tsx
   - src/modules/orders/ui/orders.module.css
   - src/modules/orders/ui/OrdersView.tsx
   - src/test/path1_customer_persistence.integration.test.ts
+  - src/test/f1_3_live_card.integration.test.ts
   - src/test/path1_orders_read_states.test.tsx
   - src/test/s1_module_gates.test.ts
   - src/test/w4_order_station_attachment.integration.test.ts
@@ -856,6 +865,7 @@ r0_allowlist:
   - scripts/quality/__tests__/check-no-fake-production.test.mjs
   # R0-B: direct source files of belegten R0 findings
   - src/components/warendurchlauf/WarendurchlaufStationNav.tsx
+  - src/components/warendurchlauf/__tests__/w2cB2m5u.stationNavTrend.failClosed.test.tsx
   - src/app/kvp/KvpClient.tsx
   - src/app/page.tsx
   - src/app/actions/developerAnalytics.actions.ts

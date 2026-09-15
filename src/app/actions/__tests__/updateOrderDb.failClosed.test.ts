@@ -114,27 +114,25 @@ describe("W2C-B1 caller containment", () => {
     }
   });
 
-  it("keeps the Wareneingang edit flow unavailable before an interactive modal can open", async () => {
+  it("keeps the Wareneingang route free of a second edit surface", async () => {
     const wareneingang = await readFile(path.join(srcRoot, "app/warendurchlauf/wareneingang/page.tsx"), "utf8");
 
-    expect(wareneingang).toContain("Weitere Auftragsbearbeitung bleibt nicht verfügbar.");
+    expect(wareneingang).toContain("kanonische V8-Karte");
     expect(wareneingang).not.toContain("OrderEditModal");
     expect(wareneingang).not.toContain("selectedOrderForEdit");
   });
 
-  it("keeps the W3 handoff independent from legacy update and process writers", async () => {
-      const [handoff, handoffAdapter, wareneingang] = await Promise.all([
-        readFile(path.join(srcRoot, "modules/orders/legacy-ui/WareneingangHandoffButton.tsx"), "utf8"),
-        readFile(path.join(srcRoot, "app/warendurchlauf/wareneingang/WareneingangHandoffAppAdapter.tsx"), "utf8"),
+  it("keeps the V8 handoff independent from legacy update and process writers", async () => {
+      const [orderCard, orderCardAdapter, wareneingang] = await Promise.all([
+        readFile(path.join(srcRoot, "modules/orders/ui/OrderCardView.tsx"), "utf8"),
+        readFile(path.join(srcRoot, "app/orders/OrderCardAppAdapter.tsx"), "utf8"),
         readFile(path.join(srcRoot, "app/warendurchlauf/wareneingang/page.tsx"), "utf8"),
       ]);
-      expect(handoff).not.toContain("@/app/");
-      expect(handoff).toContain("ports.transition");
-      expect(handoff).not.toContain("updateOrderDb");
-      expect(handoff).not.toContain("transitionOrderProcess");
-      expect(handoffAdapter).toContain("transitionWareneingangToGalvanikAction");
-      expect(handoffAdapter).not.toContain("updateOrderDb");
-      expect(handoffAdapter).not.toContain("transitionOrderProcess");
+      expect(orderCard).not.toContain("@/app/");
+      expect(orderCard).toContain("actions.onHandoff");
+      expect(orderCardAdapter).toContain("transitionWareneingangToGalvanikAction");
+      expect(orderCardAdapter).not.toContain("updateOrderDb");
+      expect(orderCardAdapter).not.toContain("transitionOrderProcess");
       expect(wareneingang).not.toContain("updateOrderDb");
   });
 });

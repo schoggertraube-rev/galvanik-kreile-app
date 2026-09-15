@@ -27,11 +27,11 @@ Persistenzzählung nach dem Browserlauf: genau ein passender Kunde, ein KV, ein 
 
 ## Receipt-Readback des lokalen PASS-Laufs
 
-- Customer receipt: `16e3b434-4217-466e-b48b-fd541b663c20`; Event: `8c4fbb1a-789b-4369-a4cb-341a4fe84a03`
-- Quote `KV-2026-0009`; Quote receipt: `2e73aaac-3fe6-4b68-89fe-d29c8251c86a`; Event: `aef4a65a-dadb-4779-b7ae-20c8aec87fc5`
-- Conversion receipt: `fcf21a9e-8e35-4862-acaa-31ea1fab93a8`; Event: `9d8a0c4a-3be3-40ab-85fa-9d5446220816`
-- Auftrag `A-2026-0007`; F1.1 receipt: `e10815bc-bb8b-464b-9069-37f535ec6680`; Event: `5ab55492-46b4-40f2-908d-de4b6ca72f95`
-- Actor: `b544150d-59bd-4214-b854-264d9106b7d5` (synthetischer lokaler Büro-Nutzer)
+- Customer receipt: `b18988a1-b104-4ecb-8d38-d77666302b35`; Event: `835cde30-5d7f-4176-909d-9b88c537ccf4`
+- Quote `KV-2026-0006`; Quote receipt: `9b8bd2ea-47d4-4f3b-ad00-d01b5174a552`; Event: `bb7ee8fd-8156-4202-b1e4-2bc8d2a190e1`
+- Conversion receipt: `14570a5e-1eed-4471-b9fc-9fec9e3b7365`; Event: `92051ac4-32d5-47e9-960e-32c5ed998bfa`
+- Auftrag `A-2026-0004`; F1.1 receipt: `5c76f439-940b-4c5f-985b-2358d558cf7d`; Event: `69a33c9a-6d37-4662-b464-e5dfcaa4b7b0`
+- Actor: `b2a435d1-0f72-4314-adce-2acc4cc1e0cc` (synthetischer lokaler Büro-Nutzer)
 
 ## Browserbelege der gebauten App
 
@@ -39,11 +39,11 @@ Die Bilder wurden aus dem lokal gebauten Production-Client erzeugt; Public-Supab
 
 | Zustand | Viewport | Lokales Artefakt | SHA-256 |
 | --- | --- | --- | --- |
-| Globales Plus / Auswahl | 1914×917 | `test-results/path1-v5-global-create/v5-global-plus-desktop-1914x917.png` | `a750f2c835c87395a9f03e44280a89b40f6b6305fdb74d13b6660a6f6aa53d6e` |
-| Manuelles KV-Formular | 768×1024 | `test-results/path1-v5-global-create/v5-kv-form-tablet-768x1024.png` | `108b9fedb64245442570c10e83ddcdaed21135015b73de64dc1461b15fda66fe` |
-| Persistierter KV nach Reload | 390×844 | `test-results/path1-v5-global-create/v5-kv-readback-mobile-390x844.png` | `c6bf78e229cd55d47c990ec88c41415380718f3ccbcafcf73fcd7ab90cb80904` |
-| Quote- und F1.1-Receipts | 390×844 | `test-results/path1-v5-global-create/v5-order-receipts-mobile-390x844.png` | `68ec4be5363ffa1ab34e374a3bca9833360186d144afa2f8b8c47f3509090ed6` |
-| Readonly-Denial | 390×844 | `test-results/path1-v5-global-create/v5-create-denied-mobile-390x844.png` | `53a3f67b1264ed88fc7103336aa67d1f4dc3c0a1917792ba73fcfd154e73d7b1` |
+| Globales Plus / Auswahl | 1914×917 | `test-results/path1-v5-global-create/v5-global-plus-desktop-1914x917.png` | `53161086b496c23d3bf2196413d3a1f987acbff8a3e56503c796dd7f1d826bd5` |
+| Manuelles KV-Formular | 768×1024 | `test-results/path1-v5-global-create/v5-kv-form-tablet-768x1024.png` | `95cf82bc6b6230259e772e42c51d054180230670b893b6a7d02a960ddac2d52c` |
+| Persistierter KV nach Reload | 390×844 | `test-results/path1-v5-global-create/v5-kv-readback-mobile-390x844.png` | `bf8ed5b06073609c6751562e01820ddef00e2e4010fc6d3c082fdfa111fdbec2` |
+| Quote- und F1.1-Receipts | 390×844 | `test-results/path1-v5-global-create/v5-order-receipts-mobile-390x844.png` | `81833d93c214b10f73acd3777b412ecba9795c6f42e100f5a2e93d4ea2ea9d8f` |
+| Readonly-Denial | 390×844 | `test-results/path1-v5-global-create/v5-create-denied-mobile-390x844.png` | `507a4b6e8aeb5fe27ad518e7bfc75edc526a116be1ff3e52b021e2081982e262` |
 
 Der Test prüft für jeden Screenshot zusätzlich `scrollWidth <= clientWidth`; Plus, Dialog und Aktionen bleiben damit ohne horizontalen Überlauf erreichbar.
 

@@ -39,21 +39,3 @@ export function isOrderLifecycleStatus(value: unknown): value is OrderLifecycleS
     (ORDER_LIFECYCLE_STATUS_SEQUENCE as readonly string[]).includes(value)
   );
 }
-
-/**
- * D-F12-003: exactly these four roles (Annahme, Produktion, Meister/Inhaber, Admin)
- * may trigger the wareneingang -> galvanik transition and its correction. This is a
- * narrow, explicit gate scoped to this transition only — it must never be grown by
- * widening the generic perm_op_status permission, which would leak into unrelated
- * perm_op_status-gated capabilities for buero and would not exclude developer.
- */
-export const ORDER_STATION_FORWARD_ROLES = ["buero", "werkstatt", "meister", "admin"] as const;
-
-export type OrderStationForwardRole = (typeof ORDER_STATION_FORWARD_ROLES)[number];
-
-export function isOrderStationForwardRole(value: unknown): value is OrderStationForwardRole {
-  return (
-    typeof value === "string" &&
-    (ORDER_STATION_FORWARD_ROLES as readonly string[]).includes(value)
-  );
-}

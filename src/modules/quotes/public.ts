@@ -3,7 +3,6 @@ export type {
   CreateQuoteInput,
   CreateQuoteResult,
   PrepareQuoteConversionResult,
-  QuoteCommandAuthorization,
   QuoteConversionReceipt,
   QuoteCreateReceipt,
   QuoteOrderInput,

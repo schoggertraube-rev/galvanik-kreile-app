@@ -64,10 +64,6 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
   const galvBald = galvOrders.filter(o => o.risk === "yellow" || o.status === "ready").length;
   const galvDone = galvOrders.filter(o => o.status === "done" || o.statusText?.toLowerCase().includes("fertig") || o.statusText?.toLowerCase().includes("qs")).length;
 
-  const waOrders = orders.filter(o => o.station === "warenausgang" || o.currentStationId === "warenausgang" || o.statusText?.toLowerCase().includes("versand") || o.statusText?.toLowerCase().includes("abhol"));
-  const waBereit = waOrders.filter(o => o.status === "ready" || o.statusText?.toLowerCase().includes("bereit")).length;
-  const waWeg = waOrders.filter(o => o.status === "done" || o.statusText?.toLowerCase().includes("abgeholt") || o.statusText?.toLowerCase().includes("versendet")).length;
-
   const getLast7DaysTrend = (filteredOrders: Order[]) => {
     const trend = [0, 0, 0, 0, 0, 0, 0];
     const now = new Date();
@@ -112,17 +108,6 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
         { label: `${galvDone} ✓`, color: "#1e7e45", bg: "rgba(30,126,69,.1)" },
       ],
       trend: trendFor(galvOrders)
-    },
-    {
-      id: "warenausgang" as StationId,
-      name: "Warenausgang",
-      path: "/warendurchlauf/warenausgang",
-      alt: "Warenausgang — Kreile-Transporter",
-      chips: [
-        { label: `${waBereit} bereit`, color: "#1e7e45", bg: "rgba(30,126,69,.1)" },
-        { label: `${waWeg} weg`, color: "#d4850a", bg: "rgba(212,133,10,.1)" },
-      ],
-      trend: trendFor(waOrders)
     },
   ];
 

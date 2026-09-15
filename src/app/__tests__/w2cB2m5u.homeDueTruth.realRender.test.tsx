@@ -18,8 +18,14 @@ vi.mock("@/components/home/RolfHome", () => ({
   ),
 }));
 vi.mock("@/components/home/WerkstattHome", () => ({
-  WerkstattHome: ({ authorization }: { authorization: { role: string } }) => (
-    <div data-testid="werkstatt-home">{authorization.role}</div>
+  loadWerkstattHome: vi.fn(async (authorization: { role: string }) => ({
+    kind: "data" as const,
+    role: authorization.role,
+  })),
+}));
+vi.mock("@/app/warendurchlauf/WerkstattAppAdapter", () => ({
+  WerkstattAppAdapter: ({ view }: { view: { role: string } }) => (
+    <div data-testid="werkstatt-home">{view.role}</div>
   ),
 }));
 
@@ -44,15 +50,20 @@ const authorization = (role: string) => ({
 });
 
 describe("F1-R0 root route containment", () => {
-  it.each(["buero", "meister", "readonly"])("renders the Rolf home for %s", async (role) => {
-    ports.resolveAuthorization.mockResolvedValueOnce(authorization(role));
-    render(await RootPage());
-    expect(screen.getByTestId("rolf-home")).toHaveTextContent(role);
-    expect(ports.redirect).not.toHaveBeenCalled();
-  });
+  it.each(["buero", "meister", "readonly"])(
+    "renders the Rolf home for %s",
+    async (role) => {
+      ports.resolveAuthorization.mockResolvedValueOnce(authorization(role));
+      render(await RootPage());
+      expect(screen.getByTestId("rolf-home")).toHaveTextContent(role);
+      expect(ports.redirect).not.toHaveBeenCalled();
+    },
+  );
 
   it("renders the Phillip home for werkstatt", async () => {
-    ports.resolveAuthorization.mockResolvedValueOnce(authorization("werkstatt"));
+    ports.resolveAuthorization.mockResolvedValueOnce(
+      authorization("werkstatt"),
+    );
     render(await RootPage());
     expect(screen.getByTestId("werkstatt-home")).toHaveTextContent("werkstatt");
     expect(ports.redirect).not.toHaveBeenCalled();
@@ -65,7 +76,10 @@ describe("F1-R0 root route containment", () => {
   });
 
   it("redirects an unauthenticated request to start", async () => {
-    ports.resolveAuthorization.mockResolvedValueOnce({ ok: false, reason: "UNAUTHENTICATED" });
+    ports.resolveAuthorization.mockResolvedValueOnce({
+      ok: false,
+      reason: "UNAUTHENTICATED",
+    });
     ports.redirect.mockImplementationOnce(() => {
       throw new Error("NEXT_REDIRECT");
     });
@@ -74,10 +88,16 @@ describe("F1-R0 root route containment", () => {
   });
 
   it("contains no former demo dashboard or client-side business state", () => {
-    const source = readFileSync(resolve(process.cwd(), "src/app/page.tsx"), "utf8");
-    expect(source).not.toMatch(/DEMO|HomeDashboard|localStorage|useState|useEffect|getOrdersDb|\/warendurchlauf["']/);
+    const source = readFileSync(
+      resolve(process.cwd(), "src/app/page.tsx"),
+      "utf8",
+    );
+    expect(source).not.toMatch(
+      /DEMO|HomeDashboard|localStorage|useState|useEffect|getOrdersDb|\/warendurchlauf["']/,
+    );
     expect(source).toContain("resolveAuthorization");
-    expect(source).toContain("<WerkstattHome");
+    expect(source).toContain("loadWerkstattHome");
+    expect(source).toContain("<WerkstattAppAdapter");
     expect(source).toContain("<RolfHome");
   });
 });
