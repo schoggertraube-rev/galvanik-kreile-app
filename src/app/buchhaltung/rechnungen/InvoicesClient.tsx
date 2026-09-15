@@ -2,8 +2,6 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { BackButton } from "@/components/ui/BackButton";
-import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { useHydrated } from "@/hooks/useHydrated";
 import {
   cancelInvoiceAction,
@@ -154,11 +152,8 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
   return (
     <main className="min-h-screen bg-bg-app-soft px-4 pb-24 pt-4 sm:px-6 xl:px-8" data-testid="immutable-invoice-page">
       <div className="mx-auto max-w-6xl">
-        <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Buchhaltung", href: "/buchhaltung" }, { label: "Rechnungen" }]} />
-        <BackButton label="Buchhaltung" href="/buchhaltung" />
-
         <header className="mb-8 mt-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">F1.4 · unveränderliche Belege</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">Geld &amp; Rechnungen</p>
           <h1 className="mt-2 font-display text-3xl font-bold text-navy-900">Rechnungen</h1>
           <p className="mt-2 max-w-2xl text-sm text-text-muted">
             Ausgestellte Rechnungen bleiben unverändert. Korrekturen erfolgen ausschließlich durch Storno und Neuausstellung.

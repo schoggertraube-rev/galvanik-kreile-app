@@ -51,11 +51,10 @@ import { AppShortcutProvider } from "@/components/ui/AppShortcutContext";
 import { SyncProvider } from "@/lib/offline/SyncContext";
 import { FeatureFlagProvider } from "@/lib/analytics/useFeatureFlag";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
-import { OrderModalProvider } from "@/components/orders/OrderModalProvider";
-import { ErfassungProvider } from "@/components/erfassung/ErfassungProvider";
 
 import { isAdminOrDeveloper } from "@/lib/auth/permissions";
 import { getAuthBootstrapState } from "@/lib/server/authBootstrap";
+import { GlobalCreateAppAdapter } from "./GlobalCreateAppAdapter";
 
 export default async function RootLayout({
   children,
@@ -79,13 +78,9 @@ export default async function RootLayout({
                 <LicenseProvider>
                   <AppShortcutProvider>
                     <FeatureFlagProvider>
-                      <OrderModalProvider>
-                        <ErfassungProvider>
-                          <KreileAppShell>
-                            {children}
-                          </KreileAppShell>
-                        </ErfassungProvider>
-                      </OrderModalProvider>
+                      <KreileAppShell globalCreate={<GlobalCreateAppAdapter />}>
+                        {children}
+                      </KreileAppShell>
                     </FeatureFlagProvider>
                   </AppShortcutProvider>
                 </LicenseProvider>

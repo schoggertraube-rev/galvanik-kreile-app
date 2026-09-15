@@ -388,7 +388,6 @@ export async function readLiveOrderCard(
         || queue.tenant_integrity_ok !== true
         || queue.station !== queue.current_station
         || queue.station !== queue.current_station_id
-        || queue.status !== queue.station
         || !validId(queue.customer_id)
         || typeof queue.customer_name !== "string"
         || queue.customer_name.trim().length === 0

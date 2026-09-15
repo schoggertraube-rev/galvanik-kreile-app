@@ -1,94 +1,45 @@
 "use client";
 
-import { usePathname } from "next/navigation";
-import { KreileHeader } from "./KreileHeader";
-import { RightNav } from "./RightNav";
-import { MobileNav } from "./MobileNav";
-import { MobileBottomNav } from "./MobileBottomNav";
 import { useEffect, useState } from "react";
-import { OrderOverlay } from "@/components/orders/OrderOverlay";
-import { CustomerOverlay } from "@/components/customers/CustomerOverlay";
+import { usePathname } from "next/navigation";
 import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { SessionWarningBanner } from "./SessionWarningBanner";
+import { TargetHeader } from "./TargetHeader";
+import { TargetNavigation } from "./TargetNavigation";
+import { MobileBottomNav } from "./MobileBottomNav";
+import { EntityOverlayStack } from "./EntityOverlayStack";
+import styles from "./TargetShell.module.css";
 
-export function KreileAppShell({ children }: { children: React.ReactNode }) {
+export function KreileAppShell({ children, globalCreate }: { children: React.ReactNode; globalCreate?: React.ReactNode }) {
   const pathname = usePathname();
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const [isSessionExpired, setIsSessionExpired] = useState(false);
+  const { role } = usePermissions();
+  const [sessionInvalid, setSessionInvalid] = useState(false);
+  const loginOnly = pathname === "/start" || pathname === "/login";
+  const workshop = role === "werkstatt";
 
   useEffect(() => {
-    if (pathname !== "/start" && pathname !== "/login") {
-      getAuthorizationSnapshotAction().then(res => {
-        if (!res.ok) {
-          setIsSessionExpired(true);
-        } else {
-          setIsSessionExpired(false);
-        }
-      }).catch(() => {
-        setIsSessionExpired(true);
-      });
-    }
-  }, [pathname]);
+    if (loginOnly) return;
+    let active = true;
+    void getAuthorizationSnapshotAction()
+      .then((result) => { if (active) setSessionInvalid(!result.ok); })
+      .catch(() => { if (active) setSessionInvalid(true); });
+    return () => { active = false; };
+  }, [loginOnly, pathname]);
 
-  const isStartScreen = pathname === "/start" || pathname === "/login";
-
-  if (isStartScreen) {
-    return (
-          <div className="min-h-screen bg-bg-app text-kreile-text antialiased">
-            {children}
-            <OrderOverlay />
-            <CustomerOverlay />
-          </div>
-    );
-  }
+  if (loginOnly) return <div className={styles.loginRoot}>{children}</div>;
 
   return (
-        <div
-          className="flex flex-col bg-bg-app text-navy-900 antialiased"
-          style={{ height: "100dvh" }}          // dvh für korrekte mobile Viewport-Höhe
-        >
-          <SessionWarningBanner show={isSessionExpired} />
-
-          {/* Header — fixe Höhe 72px */}
-          <KreileHeader onMenuToggle={() => setMobileNavOpen(true)} />
-
-          {/* Tablet Landscape Top Nav is removed per F-MENU-ANIM (Hamburger on tablet) */}
-          {/* <TabletTopFlowNav className="hidden md:flex xl:hidden shrink-0" /> */}
-
-          {/* Body: Hauptinhalt */}
-          <div className="flex flex-1 min-h-0">   {/* min-h-0 verhindert Flex-Overflow */}
-
-            {/* Linke Navigation (Desktop Sidebar, sichtbar ab xl) */}
-            <div className="hidden xl:flex shrink-0 w-[72px] relative z-30">
-              {/* Desktop (≥1280px): RightNav permanent sichtbar */}
-              <RightNav />
-            </div>
-
-            <MobileNav open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
-
-            {/* Scroll-Container für Seiteninhalt */}
-            <main
-              className={`flex-1 relative flex flex-col ${
-                pathname.startsWith('/warendurchlauf') ? "bg-[#fcfbf9] lg:rounded-tl-[40px] border-l border-t border-[#d8d0c4] shadow-[-4px_-4px_16px_rgba(0,0,0,0.02)]" :
-                pathname.startsWith('/kommunikation') ? "bg-transparent overflow-hidden overflow-x-hidden" : 
-                "bg-transparent lg:rounded-tl-[40px] border-l border-t border-[#d8d0c4] shadow-[-4px_-4px_16px_rgba(0,0,0,0.02)] overflow-y-auto overflow-x-hidden p-4 md:p-6 lg:p-8"
-              }`}
-            >
-              {/* Max-Width Container — auf großen Screens zentriert */}
-              <div className="w-full h-full pb-24 md:pb-0 flex flex-col min-h-0">
-                {children}
-              </div>
-            </main>
-          </div>
-
-          {/* Mobile Bottom Nav (nur auf Handys sichtbar) */}
-          <MobileBottomNav className="flex md:hidden z-40" />
-
-          {/* Global Order Overlay Drawer */}
-          <OrderOverlay />
-          
-          {/* Global Customer Overlay */}
-          <CustomerOverlay />
-        </div>
+    <div className={`${styles.shell} ${workshop ? styles.workshop : ""}`}>
+      <SessionWarningBanner show={sessionInvalid} />
+      <TargetHeader compact={workshop} />
+      <div className={styles.body}>
+        {!workshop ? <TargetNavigation /> : null}
+        <main className={styles.content}><div className={styles.page}>{children}</div></main>
+      </div>
+      {!workshop ? <MobileBottomNav /> : null}
+      <EntityOverlayStack />
+      {globalCreate}
+    </div>
   );
 }

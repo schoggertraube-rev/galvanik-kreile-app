@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,6 +23,10 @@ vi.mock("@/db/schema", () => ({ orders: {}, items: {}, customers: {}, events: {}
 vi.mock("@/lib/server/authHelper", () => ({ checkAppAuth: checkAppAuthSpy }));
 vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization: resolveAuthorizationSpy }));
 vi.mock("next/cache", () => ({ unstable_noStore: vi.fn(), revalidatePath: revalidatePathSpy }));
+vi.mock("@/modules/orders/public", () => ({
+  ORDER_LIFECYCLE_STATUS: { ANGENOMMEN: "angenommen", GALVANIK: "galvanik", FERTIG: "fertig", ABGEHOLT: "abgeholt" },
+  ORDER_STATION_FORWARD_ROLES: ["buero", "werkstatt", "meister", "admin"],
+}));
 
 const denial = {
   ok: false,
@@ -77,40 +82,28 @@ describe("W2C-B2M5C transitionOrderProcess quarantine", () => {
     expect(dbSpies.insert).not.toHaveBeenCalled();
   });
 
-  it("keeps legacy writers denied while the named W3 handoff remains the sole reactivated entry", async () => {
+  it("keeps legacy writers denied while the V8 card remains the sole handoff entry", async () => {
     const srcRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-    const [wareneingang, stationStatus, galvanik, wareneingangPage] = await Promise.all([
-      readFile(path.join(srcRoot, "components/orders/variants/WareneingangActive.tsx"), "utf8"),
-      readFile(path.join(srcRoot, "components/orders/StationStatusButton.tsx"), "utf8"),
-      readFile(path.join(srcRoot, "app/warendurchlauf/galvanik/page.tsx"), "utf8"),
-      readFile(path.join(srcRoot, "app/warendurchlauf/wareneingang/page.tsx"), "utf8"),
-    ]);
+      const [orderCard, orderCardAdapter, galvanik, wareneingangPage] = await Promise.all([
+        readFile(path.join(srcRoot, "modules/orders/ui/OrderCardView.tsx"), "utf8"),
+        readFile(path.join(srcRoot, "app/orders/OrderCardAppAdapter.tsx"), "utf8"),
+        readFile(path.join(srcRoot, "app/warendurchlauf/galvanik/page.tsx"), "utf8"),
+        readFile(path.join(srcRoot, "app/warendurchlauf/wareneingang/page.tsx"), "utf8"),
+      ]);
 
-    for (const source of [stationStatus, galvanik]) {
-      expect(source).not.toContain("transitionOrderProcess");
-    }
-    expect(wareneingang).not.toContain("transitionOrderProcess");
-    expect(wareneingangPage).toContain("WareneingangHandoffButton");
-
-    const wareneingangStart = wareneingang.indexOf("<button");
-    const wareneingangEnd = wareneingang.indexOf(">", wareneingangStart);
-    expect(wareneingangStart).toBeGreaterThanOrEqual(0);
-    expect(wareneingangEnd).toBeGreaterThan(wareneingangStart);
-    const wareneingangOpeningTag = wareneingang.slice(wareneingangStart, wareneingangEnd + 1);
-    expect(wareneingangOpeningTag).toContain("disabled");
-    expect(wareneingangOpeningTag).not.toContain("onClick");
-
-    let stationSearchFrom = 0;
-    for (let index = 0; index < 2; index += 1) {
-      const stationStart = stationStatus.indexOf("<Button", stationSearchFrom);
-      const stationEnd = stationStatus.indexOf(">", stationStart);
-      expect(stationStart).toBeGreaterThanOrEqual(0);
-      expect(stationEnd).toBeGreaterThan(stationStart);
-      const stationOpeningTag = stationStatus.slice(stationStart, stationEnd + 1);
-      expect(stationOpeningTag).toContain("disabled");
-      expect(stationOpeningTag).not.toContain("onClick");
-      stationSearchFrom = stationEnd + 1;
-    }
+      expect(galvanik).not.toContain("transitionOrderProcess");
+      expect(orderCard).not.toContain("@/app/");
+      expect(orderCard).toContain("actions.onHandoff");
+      expect(orderCardAdapter).toContain("transitionWareneingangToGalvanikAction");
+      expect(orderCardAdapter).toContain("getOrderStationReceiptAction");
+      expect(wareneingangPage).toContain("OrderQueueRow");
+      expect(wareneingangPage).not.toContain("WareneingangHandoffAppAdapter");
+    for (const file of [
+      "components/orders/variants/WareneingangActive.tsx",
+      "components/orders/StationStatusButton.tsx",
+      "modules/orders/legacy-ui/variants/WareneingangActive.tsx",
+      "modules/orders/legacy-ui/StationStatusButton.tsx",
+    ]) expect(existsSync(path.join(srcRoot, file))).toBe(false);
 
     expect(galvanik).not.toContain("handleAdvance");
     expect(galvanik).not.toContain("onAdvance");

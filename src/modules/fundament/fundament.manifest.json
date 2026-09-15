@@ -1,0 +1,16 @@
+{
+  "moduleId": "fundament",
+  "version": "1.0.0",
+  "owner": "Path-1 Fundament (authentifizierter Produkteinstieg)",
+  "publicExports": [
+    "@/modules/fundament/public#ProductStartProfile"
+  ],
+  "capabilities": [],
+  "migrations": [],
+  "viewsFunctions": [],
+  "ownsTables": [],
+  "storagePurposes": [],
+  "events": { "emits": [], "consumes": [] },
+  "config": {},
+  "dependencies": []
+}

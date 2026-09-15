@@ -1,4 +1,4 @@
-import { StartScreenClient } from "@/components/start/StartScreenClient";
+import { StartAppAdapter } from "./StartAppAdapter";
 import { db } from "@/db";
 import { appUsers } from "@/db/schema";
 import { and, eq, ne } from "drizzle-orm";
@@ -33,19 +33,25 @@ export default async function StartPage() {
       (user) =>
         user.tenantId === APP_TENANT_ID &&
         user.active === true &&
-        user.role !== "developer",
+        (user.role === "meister" || user.role === "werkstatt"),
     );
-
-    users = eligibleUsers.map((user) =>
-      toStartUserDto(user, createPinLoginHandle(user.id)),
-    );
+    const visibleProfiles = eligibleUsers
+      .map((user) => toStartUserDto(user, createPinLoginHandle(user.id)))
+      .filter((user): user is StartUserDto => user !== null);
+    const uniqueProfile = (identity: StartUserDto["identity"]) => {
+      const matches = visibleProfiles.filter((user) => user.identity === identity);
+      return matches.length === 1 ? matches[0] : null;
+    };
+    const rolf = uniqueProfile("rolf");
+    const phillip = uniqueProfile("phillip");
+    users = [rolf, phillip].filter((user): user is StartUserDto => user !== null);
   } catch (err) {
     console.error("Failed to fetch start users:", err);
     loginUnavailable = true;
   }
 
   return (
-    <StartScreenClient
+    <StartAppAdapter
       users={users}
       loginUnavailable={loginUnavailable}
     />

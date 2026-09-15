@@ -3,7 +3,6 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { cleanup, render, screen } from '@testing-library/react';
 import ts from 'typescript';
 import { afterEach, describe, expect, it } from 'vitest';
-import AccountingPage from '../page';
 import AusgabenPage from '../ausgaben/page';
 import BwaPage from '../bwa/page';
 import KostenPage from '../kosten/page';
@@ -36,8 +35,17 @@ export default function AccountingUnavailablePage() {
 }
 `;
 
+const accountingEntrySource = `import { AccountingEntry } from "@/modules/accounting/public";
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+export default function AccountingPage() {
+  return <AccountingEntry />;
+}
+`;
+
 const activeRoutes = [
-  ['buchhaltung/page.tsx', AccountingPage],
   ['buchhaltung/kosten/page.tsx', KostenPage],
   ['buchhaltung/kraftstoff/page.tsx', KraftstoffPage],
   ['buchhaltung/ausgaben/page.tsx', AusgabenPage],
@@ -333,12 +341,13 @@ describe('W2C accounting active-route containment', () => {
   });
 
   it('keeps each active accounting route byte-for-content fail-closed', () => {
+    expect(readFileSync(join(appRoot, 'buchhaltung/page.tsx'), 'utf8').replace(/\r\n/g, '\n')).toBe(accountingEntrySource);
     for (const [route] of activeRoutes) {
       expect(readFileSync(join(appRoot, route), 'utf8').replace(/\r\n/g, '\n')).toBe(expectedSource);
     }
   });
 
-  it('renders every active accounting route as the real foundation-unavailable state', () => {
+  it('renders every non-entry accounting route as the real foundation-unavailable state', () => {
     for (const [, Page] of activeRoutes) {
       render(<Page />);
       expect(screen.getByText('NOT_AVAILABLE')).toBeVisible();

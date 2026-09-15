@@ -160,6 +160,26 @@ describe("F1.3 DB-/Command-Vertragsintegration (Session-Port isoliert; kein Real
     customerId = intake.receipt.customerId;
     itemId = intake.receipt.items[0]!.id;
 
+    const { readLiveOrderCard } = await import("@/lib/server/orderCardRead");
+    const initialCard = await readLiveOrderCard(adminAuthorization, { orderId });
+    expect(initialCard.code).toBe("OK");
+    if (initialCard.code !== "OK") throw new Error("initial live order card failed");
+    expect(initialCard.data).toMatchObject({
+      id: orderId,
+      version: 1,
+      station: "wareneingang",
+      status: "angenommen",
+    });
+    await expect(readLiveOrderCard(foreignAuthorization, { orderId })).resolves.toMatchObject({ code: "NOT_FOUND" });
+
+    await sql`UPDATE public.orders SET order_number = order_number || '-DRIFT' WHERE id = ${orderId}`;
+    await expect(readLiveOrderCard(adminAuthorization, { orderId })).resolves.toMatchObject({ code: "UNAVAILABLE" });
+    await sql`UPDATE public.orders SET order_number = ${intake.receipt.orderNumber} WHERE id = ${orderId}`;
+
+    await sql`UPDATE public.orders SET current_station = 'galvanik' WHERE id = ${orderId}`;
+    await expect(readLiveOrderCard(adminAuthorization, { orderId })).resolves.toMatchObject({ code: "UNAVAILABLE" });
+    await sql`UPDATE public.orders SET current_station = station WHERE id = ${orderId}`;
+
     const { transitionWareneingangToGalvanik } = await import("@/lib/server/commands/orderStationCommand");
     const transition = await transitionWareneingangToGalvanik({
       orderId,
@@ -193,7 +213,6 @@ describe("F1.3 DB-/Command-Vertragsintegration (Session-Port isoliert; kein Real
       code: "OK",
       data: changed.receipt,
     });
-    const { readLiveOrderCard } = await import("@/lib/server/orderCardRead");
     const card = await readLiveOrderCard(adminAuthorization, { orderId });
     expect(card.code).toBe("OK");
     if (card.code !== "OK") throw new Error("live order card failed");

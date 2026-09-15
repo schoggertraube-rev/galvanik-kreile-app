@@ -6,7 +6,6 @@
       "src/app/warendurchlauf/WarendurchlaufRouteNav.tsx",
       "src/app/warendurchlauf/__tests__/w2cB2m5j.unavailable.realRender.test.tsx",
       "src/components/flow/WorkflowStrip.tsx",
-      "src/components/layout/KreileAppShell.tsx",
       "src/components/layout/TabletTopFlowNav.tsx",
       "src/components/layout/TopWorkflowBar.tsx",
       "src/components/warendurchlauf/WarendurchlaufStationNav.tsx",
@@ -110,10 +109,6 @@
         "sha256": "4D9CD76B2CA96D2B78847099FD04BD30C00C3E6AD8BCCEF92F1A487042D42503"
       },
       {
-        "path": "src/app/buchhaltung/page.tsx",
-        "sha256": "4D9CD76B2CA96D2B78847099FD04BD30C00C3E6AD8BCCEF92F1A487042D42503"
-      },
-      {
         "path": "src/app/buchhaltung/periodenabschluss/page.tsx",
         "sha256": "4D9CD76B2CA96D2B78847099FD04BD30C00C3E6AD8BCCEF92F1A487042D42503"
       },
@@ -138,24 +133,12 @@
         "sha256": "4D9CD76B2CA96D2B78847099FD04BD30C00C3E6AD8BCCEF92F1A487042D42503"
       },
       {
-        "path": "src/app/buchhaltung/zahlung/page.tsx",
-        "sha256": "28540D1AEEA8E662FA8BF99CA76F6459A2B3CCDD1C789481226CD5BE1A02D6CA"
-      },
-      {
         "path": "src/app/cockpit/jahresplan/page.tsx",
         "sha256": "FDEB5AB232B6C6EA7BE0F80A1519BA6B1A2E3B780E398F2BCA5B4542266F623C"
       },
       {
         "path": "src/app/cockpit/page.tsx",
         "sha256": "D3BF548637A9CBA2CF8810444B6CF0E9A0EB3C5471CA83F7395CB50445718B7D"
-      },
-      {
-        "path": "src/app/customers/[id]/page.tsx",
-        "sha256": "665254D76A0E5C34F88268D76B50504C24B116BAFE3F3716077FB1CBACF897F7"
-      },
-      {
-        "path": "src/app/customers/page.tsx",
-        "sha256": "AA0CD44F6FCE56D12F516C7E8DC982A7ABDAADB8F010D1EAAB25E7D20A750505"
       },
       {
         "path": "src/app/feedback/[token]/page.tsx",
@@ -192,10 +175,6 @@
       {
         "path": "src/app/lager/page.tsx",
         "sha256": "06BFFCEDB9474CD0065655A6A770A7E995D3023D6C3DD689541A42E20F4896CD"
-      },
-      {
-        "path": "src/app/layout.tsx",
-        "sha256": "1DF786F998DD9581A887010F8883BBDBC6CD3264780113BE3B545AF6B9E19CB8"
       },
       {
         "path": "src/app/lieferanten/[id]/page.tsx",
@@ -242,18 +221,6 @@
         "sha256": "55D466AFC05463F87350E38183D9D4BEF8D0FC64820608DF66A343A2760DA538"
       },
       {
-        "path": "src/app/orders/[id]/page.tsx",
-        "sha256": "A5D65C8DDAA3946CE66EE0627CD02F46A211FB51489513296C9E315A49596A39"
-      },
-      {
-        "path": "src/app/orders/page.tsx",
-        "sha256": "68C5697FA1DE40D84986675517109DE38103902E492DAE3EB908D996D345B471"
-      },
-      {
-        "path": "src/app/page.tsx",
-        "sha256": "2EEFF63547FEEBD5D8A26CDE9F2325E4F198C6EF4290A08FE0814A8545D11988"
-      },
-      {
         "path": "src/app/performance/baeder-material/page.tsx",
         "sha256": "221AB59CD960DE654805105B865D00B03DE872947AEB5A36344167C79559803F"
       },
@@ -286,28 +253,12 @@
         "sha256": "D4B121C5C1E3D97FC71995471AEE5AF9BEAF019AF866E4B9C5E09251E958B031"
       },
       {
-        "path": "src/app/quotes/new/page.tsx",
-        "sha256": "39DDB1F0865D385DDE859A46F46F05FDDC16BB6981A37FAA6254620B2759CD41"
-      },
-      {
-        "path": "src/app/quotes/page.tsx",
-        "sha256": "227303EF86CDE3BB44AB8503AD8F8FABB9E22114D46E39C5E3FD844266AEE037"
-      },
-      {
         "path": "src/app/scan/page.tsx",
         "sha256": "0059B45B1B0A937B694091275518AB76A75AEC818CE9E1655A18373F58F2580E"
       },
       {
         "path": "src/app/settings/page.tsx",
         "sha256": "405E4D266A40D4B78C2EB8CAF8DACA26DCB47F5206AEF815944BC9950ED7E29C"
-      },
-      {
-        "path": "src/app/start/page.tsx",
-        "sha256": "80B626C9DC9B2CBA112529F6104B912A3DF46989241E564768946C2EBBC9D3C5"
-      },
-      {
-        "path": "src/app/station/[slug]/page.tsx",
-        "sha256": "8664D5820E6B885447F18A6C30B2C98E068E84A877272EA0F024CF8E4F9AADFD"
       },
       {
         "path": "src/app/station/layout.tsx",
@@ -330,24 +281,12 @@
         "sha256": "01E90504FD752F0AB407665BA8BF6723AAD170A8E6CFFC40E68154A6C63F56A4"
       },
       {
-        "path": "src/app/warendurchlauf/galvanik/page.tsx",
-        "sha256": "CCEB5EA7B71FE00796E28A02DCC2D198638BEB3E43235316B71AA35D4B556BE0"
-      },
-      {
         "path": "src/app/warendurchlauf/layout.tsx",
         "sha256": "E5EBF1F196F253B510F737CB7D30E0D8D7CE83B6AD31FB071E4351BCDBD4D0F4"
       },
       {
         "path": "src/app/warendurchlauf/neu/page.tsx",
         "sha256": "27B6150774FE11CEB655B1E578717553EC84601EA86D424183D7493E13D6B4B1"
-      },
-      {
-        "path": "src/app/warendurchlauf/warenausgang/page.tsx",
-        "sha256": "745C329731F578D71061F591DB0981804802AE9695A4C87AB0A1DFAA0477336C"
-      },
-      {
-        "path": "src/app/warendurchlauf/wareneingang/page.tsx",
-        "sha256": "ED480D189A69C285C0A6EC2A624C7909170BB508554DF4E43B9F89DD9557639B"
       }
     ]
   }

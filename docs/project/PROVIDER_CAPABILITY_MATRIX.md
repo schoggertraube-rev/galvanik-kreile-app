@@ -2,10 +2,28 @@
 
 # Provider- und Capability-Matrix
 
-Stand: 2026-09-10 · D-GOV-001 · D-ARCH-011 · D-UI-CORE-002
-Quellen: `MODULKARTE_KANON.md`, `ARCHITEKTUR_MODULE_PATH1.md`, `F1_R0_CAPABILITY_REGISTRY.json` auf `main@13240de2a5ca9e9cfae4f8c72552443dac1d7630`.
+Stand: 2026-09-14 · D-GOV-001 · D-ARCH-011/012 · D-AI-001/002 · D-RES-001 · D-UI-CORE-002
+Quellen: `MODULKARTE_KANON.md`, `ARCHITEKTUR_MODULE_PATH1.md`, `F1_R0_CAPABILITY_REGISTRY.json` auf `main@456a81fee2e7a56d4c09fe781ba25b2f12a0f6ba`.
 
 Diese Matrix ist Inventar und Acceptance-Plan, keine Scope- oder Baustartautorität. `REAL` bedeutet ausschließlich: unveränderlicher echter Beleg im Capability-Register. `PENDING` bedeutet: Vertrag, Secret oder Real-E2E fehlt. `QUARANTINE` bedeutet: nicht reaktivieren; erst eigener Abbau-/Disposition-Nachweis.
+
+D-ARCH-012 konsolidiert die strategischen Plattformrollen, aktiviert aber
+keinen Provider: Supabase bleibt Daten/Auth/Storage-Wahrheit;
+Microsoft/Azure ist der bevorzugte Zielstack nach realem Struktur-, Region-,
+Quota-, Capability- und Kostengate; Vercel bleibt Hosting. Direkte OpenAI API,
+Mollie, Google Maps und weitere Anbieter benötigen die jeweils dokumentierte
+Owner-Entscheidung beziehungsweise Reihenfolge. Es gibt keinen stillen
+Runtime-Fallback.
+
+D-AI-002 bindet ausschließlich die providerneutrale Zielnaht aus getrennten
+Capture-Ports, `SourceEnvelope`, lückenlosem `FactLedger`, serverseitigem
+Capability-/Command-Katalog, menschlicher Bestätigung und genau einem sicheren
+Command mit Receipt/Readback. Der heutige Azure-Beleg hat nur den Status
+`ISOLATED_DEV_CAPABILITY_PARTIAL`; er aktiviert keinen Produktpfad, Provider,
+Secret oder Runtime-Vertrag. D-RES-001 verlangt pro späterem vertikalem Weg
+Quellenerhalt, Correlation-ID, sichtbaren Endstatus und Wiederaufnahme ohne
+stillen Providerwechsel. Diese Matrix bleibt Inventar und erteilt daraus keine
+Baufreigabe.
 
 D-UI-CORE-002 verwirft die gesamte bestehende sichtbare Oberfläche als Lieferbasis. Die Zeilen dieses Inventars autorisieren deshalb keine Alt-UI-Reparatur und keinen Teilfortschritt: `PATH1_UI_CONVERGENCE` ersetzt Shell, Navigation, Startseite, Orders-/Customers-UI und responsive Navigation als eine zusammenhängende Oberfläche; ausschließlich belastbare Backend-/Daten-/Auth-Verträge und sinnvolle Nicht-UI-Logik dürfen übernommen werden. A bis E sind interne Schritte desselben Programms.
 
@@ -23,7 +41,7 @@ D-UI-CORE-002 verwirft die gesamte bestehende sichtbare Oberfläche als Lieferba
 |---|---|---|---|---|---|---|
 | `module.fundament` | Identity, Tenant, Commands, Events, Receipts, Storage/Views; Backend-Verträge real, Ziel-Shell offen | Supabase/Postgres, Auth, Storage | REAL | stellt sichere Ports bereit | bestehende F0/F1.1-Belege; kein UI-Gesamt-PASS | PATH1_UI_CONVERGENCE_A nutzt unveränderte Ports |
 | `module.suche` | keine Speicherung; Search-Kernkandidat vorhanden, sichtbare Zielintegration nicht geliefert | keiner | PENDING | Orders- und Customers-Read-Ports; Ziel-Header/Overlays erst nach A–C | PR #84 ist nur DRAFT/CANDIDATE und kein akzeptierter Full-Route-Beleg | PATH1_UI_CONVERGENCE_D_REBASE_INTEGRATE_REACCEPT |
-| `module.intake` | Wareneingang/Originalzuordnung | Storage; OCR separat | REAL | Customers, Orders, Fundament | F1.1-Receipt/Reload | erhalten |
+| `module.intake` | Wareneingang/Originalzuordnung | Storage; Dokumentenintelligenz bleibt separat und nicht verbunden | REAL | Customers, Orders, Fundament | F1.1-Receipt/Reload; isolierter KI-Test ist kein Intake-Produktbeleg | manuellen Kern erhalten; Capture später vertikal nach D-AI-002/D-RES-001 abnehmen |
 | `module.orders` | Backend/Lifecycle teilweise real; sichtbare Auftragskarte V8 `NOT_DELIVERED` | keiner | PENDING | Intake, Customers, Accounting | F1.2/F1.3/F1.5-Receipts belegen Fachverträge, nicht V8-Gesamtansicht | PATH1_UI_CONVERGENCE_B |
 | `module.customers` | Backend teilweise real; sichtbare Kundenkarte V2 `NOT_DELIVERED` | keiner | PENDING | Orders, Suche | Tenant-/Readback-Belege belegen Fachverträge, nicht V2-Gesamtansicht | PATH1_UI_CONVERGENCE_C |
 | `module.calendar` | keine eigene Terminwahrheit; nur Projektion | Microsoft 365 Graph über `CalendarPort` | PENDING | Termin-Ports der Fachmodule | aktuelle Google-Behauptung ist `ACTIVE_VISIBLE_PROVIDER_DEFECT`; M365-Konto, Consent und E2E fehlen | A entfernt/404 aktuelle Route; E bleibt `BLOCKED_EXTERNAL_PERMISSION` |
@@ -36,17 +54,21 @@ D-UI-CORE-002 verwirft die gesamte bestehende sichtbare Oberfläche als Lieferba
 | `provider.supabase-postgres` | keine fachliche Wahrheit; Adapter/Connection | Supabase/Postgres | REAL | tenantneutraler typisierter Capability-Port | Registry `REAL_VERIFIED` | erhalten |
 | `provider.supabase-auth` | keine fachliche Wahrheit; Adapter/Connection | Supabase/Auth | REAL | tenantneutraler typisierter Capability-Port | Registry `REAL_VERIFIED` | erhalten |
 | `provider.supabase-storage` | keine fachliche Wahrheit; Adapter/Connection | Supabase/Storage | REAL | tenantneutraler typisierter Capability-Port | Registry `REAL_VERIFIED` | erhalten |
-| `provider.calendar-m365-graph` | keine fachliche Wahrheit; Adapter/Connection | Microsoft 365/Graph | PENDING | tenantneutraler typisierter Capability-Port | D-ARCH-011; kein Konto/Consent/Port/E2E | delegierten benannten Büronutzer und Least-Privilege-Consent ownerseitig bereitstellen |
-| `provider.gemini` | keine fachliche Wahrheit; Adapter/Connection | Gemini/Google GenAI | PENDING | tenantneutraler typisierter Capability-Port | Registry `REAL_PENDING_SECRET`; keine Kalenderentscheidung | eigener Capability-Vertrag und Secret-Gate |
-| `provider.klippa` | keine fachliche Wahrheit; Adapter/Connection | Klippa/OCR | PENDING | tenantneutraler typisierter Capability-Port | Registry `REAL_PENDING_SECRET`; Scanpfad quarantiniert | eigener OCR-E2E |
+| `provider.calendar-m365-graph` | keine fachliche Wahrheit; Adapter/Connection | Microsoft 365/Graph | PENDING | tenantneutraler typisierter `CalendarPort` | D-ARCH-011; kein Konto/Consent/Port/E2E | delegierten benannten Büronutzer und Least-Privilege-Consent ownerseitig bereitstellen |
+| `provider.azure-foundry-openai` | keine fachliche Wahrheit; isolierter Entwicklungsbeleg, kein Produktadapter | Azure Document Intelligence + Foundry/Azure OpenAI | PLANNED_BLOCKED_EXTERNAL_PERMISSION_AND_STRUCTURE_COST_GATE | getrennte Capture-Ports hinter `SourceEnvelope`; keine Runtime-Bindung | `ISOLATED_DEV_CAPABILITY_PARTIAL`: 3 reale Bildseiten/Layout, generische Semantik verwechselte Absender/Kunde; Foundry erster Fact-Verlust FAIL, danach 24/24 und Katalog-Aktionslauf, HumanConfirm=true/writeAllowed=false; keine Originalbilder/echte PII an Foundry | erst Original-Storage, Port, RLS, Kosten-/Ausfall- und vertikalen Receipt/Readback-E2E ratifizieren |
+| `provider.openai-direct-alternative` | keine fachliche Wahrheit; keine aktive Connection | direkte OpenAI API | PENDING_EXPLICIT_OWNER_GAP_DECISION | ausschließlich dieselben tenantneutralen Capability-Ports | nur als kleine Alternative bei belegtem Pflichtfähigkeits-/EU-/Quota-/Kostengap entschieden | nicht aktivieren; gegebenenfalls neue Owner-Entscheidung |
+| `provider.gemini` | keine fachliche Wahrheit; eingefrorener Legacy-Adapter | Gemini/Google GenAI | LEGACY_QUARANTINE_SUPERSEDED | keine neue Kopplung | Registry `LEGACY_REMOVE`; Base64-Direktübergabe ohne Originalreferenz/FactLedger, unsichtbar und nicht als D-AI-002-Port nutzbar | nicht aktivieren; kontrollierter späterer Abbau |
+| `provider.klippa` | keine fachliche Wahrheit; eingefrorener Legacy-Adapter | Klippa/OCR | LEGACY_QUARANTINE_SUPERSEDED | keine neue Kopplung | Registry `LEGACY_REMOVE`, unsichtbar/nicht erreichbar; Scanpfad quarantiniert | nicht aktivieren; kontrollierter späterer Abbau |
 | `provider.mail-smtp` | keine fachliche Wahrheit; Adapter/Connection | Mail/SMTP | PENDING | tenantneutraler typisierter Capability-Port | kein aktivierter Providervertrag | eigene Entscheidung/Connection |
-| `provider.mollie` | keine fachliche Wahrheit; Adapter/Connection | Mollie/Payment | PENDING | tenantneutraler typisierter Capability-Port | Legacy-Adapter, nicht aktiviert | spätere eigene Owner-Entscheidung |
-| `provider.banking` | keine fachliche Wahrheit; Adapter/Connection | Banking-Import | PENDING | tenantneutraler typisierter Capability-Port | kein Adapter belegt | spätere eigene Owner-Entscheidung |
-| `provider.datev-lexware` | keine fachliche Wahrheit; Adapter/Connection | DATEV/Lexware Export | PENDING | tenantneutraler typisierter Capability-Port | Formatlogik ohne Provider-E2E | Steuerberaterformat und E2E ratifizieren |
+| `provider.mollie` | keine fachliche Wahrheit; Adapter/Connection | Mollie/Payment | PENDING_AFTER_BANK_RECONCILIATION | tenantneutraler typisierter Capability-Port | Legacy-Adapter, nicht aktiviert | erst Bankabgleich, danach eigene Owner-/E2E-Freigabe |
+| `provider.banking` | keine fachliche Wahrheit; Adapter/Connection | CAMT.053 Bankabgleich | PENDING_FIRST | tenantneutraler typisierter Capability-Port | kein produktiver Adapter-/E2E-Beleg | CAMT.053-Vertrag und Abgleich vor Mollie liefern |
+| `provider.datev-lexware` | keine fachliche Wahrheit; Adapter/Connection | DATEV/Lexware Export | PENDING_FIRST | tenantneutraler typisierter Capability-Port | Formatlogik ohne Provider-E2E | Exportformat und E2E vor weiteren Zahlungsprovidern ratifizieren |
+| `provider.google-maps` | keine fachliche Wahrheit; keine Connection | Google Maps | PENDING_MODULE_DECISION | noch kein ratifiziertes Fachmodul/Port | D-ARCH-012 erlaubt Prüfung erst bei konkretem Modulbedarf | nicht aktivieren; bei Bedarf neue Owner-Entscheidung |
+| `provider.vercel-hosting` | keine fachliche Wahrheit | Vercel Hosting | REAL_HOSTING_ONLY | Deployment-Infrastruktur, kein Fachport | bestehende Preview-/Production-Checks; keine Daten-/Providerwahrheit | auf Hosting begrenzen |
 | `provider.meta-marketing` | keine fachliche Wahrheit; Adapter/Connection | Meta Ads | QUARANTINE | tenantneutraler typisierter Capability-Port | Marketing entfällt laut Modulkarte | nicht reaktivieren |
 | `provider.analytics-telemetry` | keine fachliche Wahrheit; Adapter/Connection | Analytics/Telemetry | QUARANTINE | tenantneutraler typisierter Capability-Port | kein externer Vertrag; KPI-/Analyseprodukt entfällt | nicht reaktivieren |
 | `provider.kommunikation` | keine fachliche Wahrheit; Adapter/Connection | WhatsApp/SMS/Push | PENDING | tenantneutraler typisierter Capability-Port | F2, kein Adapter/API | eigenes F2-Paket |
-| `provider.ocr-buchhaltung-abstract` | keine fachliche Wahrheit; Adapter/Connection | abstrakter OCR-Port | PENDING | tenantneutraler typisierter Capability-Port | Interface ohne Provider-E2E | nur mit ratifiziertem Provider binden |
+| `provider.ocr-buchhaltung-abstract` | keine fachliche Wahrheit; vorhandene abstrakte Legacy-Naht | abstrakter OCR-Port | PENDING | künftiger `DocumentIntelligencePort` nur mit Originalreferenz und FactLedger | Interface ohne Produkt-E2E; isolierter Layout-/Foundry-Beleg aktiviert es nicht | erst im vertikalen Capture-Paket nach D-AI-002/D-RES-001 binden |
 | `provider.ocr-manual` | keine fachliche Wahrheit; Adapter/Connection | manuelle OCR-Eingabe | PENDING | tenantneutraler typisierter Capability-Port | ehrlicher manueller Port, kein Real-E2E | eigenes Acceptance-Paket |
 | `provider.mock-ocr-buchhaltung` | keine fachliche Wahrheit; Adapter/Connection | Mock OCR | QUARANTINE | tenantneutraler typisierter Capability-Port | produktionsnaher Mock laut Registry | kontrolliert entfernen |
 | `provider.mock-buchhaltung` | keine fachliche Wahrheit; Adapter/Connection | Mock Buchhaltung | QUARANTINE | tenantneutraler typisierter Capability-Port | produktionsnaher Mock laut Registry | kontrolliert entfernen |
@@ -87,7 +109,6 @@ Jede Route besitzt eine eigene, konkrete Inventarzeile. `REAL` gilt nur für den
 | `page.buchhaltung.rechnungen.neu` | `/buchhaltung/rechnungen/neu` | Accounting-minimal | keiner | PENDING | keine neue Kopplung; Disposition gemäß Modulkarte; Registry: sichtbar+erreichbar; kein akzeptierter Full-Route-E2E | zuständiges Path-1-Teilpaket mit Full-Route-E2E |
 | `page.buchhaltung.rechnungen` | `/buchhaltung/rechnungen` | Accounting-minimal | keiner | PENDING | keine neue Kopplung; Disposition gemäß Modulkarte; Registry: sichtbar+erreichbar; kein akzeptierter Full-Route-E2E | zuständiges Path-1-Teilpaket mit Full-Route-E2E |
 | `page.buchhaltung.steuerprofil` | `/buchhaltung/steuerprofil` | außerhalb Accounting-minimal | keiner | QUARANTINE | keine neue Kopplung; Disposition gemäß Modulkarte; Registry: sichtbar+erreichbar; kein akzeptierter Full-Route-E2E | PATH1_UI_CONVERGENCE_A: Link-/Importprüfung, dann Route entfernen oder 404 |
-| `page.buchhaltung.zahlung` | `/buchhaltung/zahlung` | Legacy-Zahlung | Mollie | QUARANTINE | keine neue Kopplung; Disposition gemäß Modulkarte; Registry: sichtbar+erreichbar; kein akzeptierter Full-Route-E2E | PATH1_UI_CONVERGENCE_A: Link-/Importprüfung, dann Route entfernen oder 404 |
 | `page.cockpit.jahresplan` | `/cockpit/jahresplan` | Legacy KPI | keiner | QUARANTINE | keine neue Kopplung; Disposition gemäß Modulkarte; Registry: sichtbar+erreichbar; kein akzeptierter Full-Route-E2E | PATH1_UI_CONVERGENCE_A: Link-/Importprüfung, dann Route entfernen oder 404 |
 | `page.cockpit` | `/cockpit` | Legacy KPI | keiner | QUARANTINE | keine neue Kopplung; Disposition gemäß Modulkarte; Registry: sichtbar+erreichbar; kein akzeptierter Full-Route-E2E | PATH1_UI_CONVERGENCE_A: Link-/Importprüfung, dann Route entfernen oder 404 |
 | `page.customers.id` | `/customers/[id]` | Customers-Backend PARTIALLY_REAL; Kundenkarte V2 NOT_DELIVERED | keiner | PENDING | Customers ↔ Orders ↔ Intake; Detailroute vorhanden; Gleichheit mit V2-Overlay nicht belegt | PATH1_UI_CONVERGENCE_C |
@@ -122,19 +143,15 @@ Jede Route besitzt eine eigene, konkrete Inventarzeile. `REAL` gilt nur für den
 | `page.performance.umsatz-marge` | `/performance/umsatz-marge` | Legacy KPI | keiner | QUARANTINE | keine neue Kopplung; Disposition gemäß Modulkarte; Registry: sichtbar+erreichbar; kein akzeptierter Full-Route-E2E | PATH1_UI_CONVERGENCE_A: Link-/Importprüfung, dann Route entfernen oder 404 |
 | `page.performance.werkstatt-puls` | `/performance/werkstatt-puls` | Legacy KPI | keiner | QUARANTINE | keine neue Kopplung; Disposition gemäß Modulkarte; Registry: sichtbar+erreichbar; kein akzeptierter Full-Route-E2E | PATH1_UI_CONVERGENCE_A: Link-/Importprüfung, dann Route entfernen oder 404 |
 | `page.print-queue` | `/print-queue` | Legacy: laut Modulkarte entfallen | keiner | QUARANTINE | keine neue Kopplung; Disposition gemäß Modulkarte; Registry: sichtbar+erreichbar; kein akzeptierter Full-Route-E2E | PATH1_UI_CONVERGENCE_A: Link-/Importprüfung, dann Route entfernen oder 404 |
-| `page.quotes.new` | `/quotes/new` | F2 | Mail | QUARANTINE | keine neue Kopplung; Disposition gemäß Modulkarte; Registry: sichtbar+erreichbar; kein akzeptierter Full-Route-E2E | PATH1_UI_CONVERGENCE_A: Link-/Importprüfung, dann Route entfernen oder 404 |
-| `page.quotes` | `/quotes` | F2 | Mail | QUARANTINE | keine neue Kopplung; Disposition gemäß Modulkarte; Registry: sichtbar+erreichbar; kein akzeptierter Full-Route-E2E | PATH1_UI_CONVERGENCE_A: Link-/Importprüfung, dann Route entfernen oder 404 |
-| `page.scan` | `/scan` | Intake-Capture | OCR | QUARANTINE | keine neue Kopplung; Disposition gemäß Modulkarte; Registry: sichtbar+erreichbar; kein akzeptierter Full-Route-E2E | PATH1_UI_CONVERGENCE_A: Link-/Importprüfung, dann Route entfernen oder 404 |
+| `page.scan` | `/scan` | Intake-Capture | Legacy Gemini/Base64; kein D-AI-002-Port | QUARANTINE | fail-closed Scan→Order-Vertrag fehlt; Registry sichtbar+erreichbar; isolierter KI-Test ist kein Produktbeleg | PATH1_UI_CONVERGENCE_A: Link-/Importprüfung, dann Route entfernen oder 404; Capture später separat |
 | `page.settings` | `/settings` | Fundament/App-Konfiguration | keiner | PENDING | nur berechtigte Rollen admin/developer; Rollenweiterleitung und Full-Route-A fehlen | PATH1_UI_CONVERGENCE_A |
 | `page.start` | `/start` | Fundament-Login; aktuelle Startseite noch nicht login-only | keiner | PENDING | Auth → `/` Rollen-Home; Login-only ohne Wetter/Event/Provider noch nicht belegt | PATH1_UI_CONVERGENCE_A |
-| `page.station.slug` | `/station/[slug]` | entfällt; Galvanik ist flache Blackbox | keiner | QUARANTINE | keine Station-Engine; sichtbare Legacy-Page widerspricht D-UI-CORE-002 | PATH1_UI_CONVERGENCE_A_REMOVE_ROUTE |
 | `page.status` | `/status` | kein Nutzermodul; intern/Admin/API | keiner | QUARANTINE | Fundament-Readback nur über internen Vertrag; bestehende Produktpage sichtbar+erreichbar; Zielvertrag verletzt | PATH1_UI_CONVERGENCE_A_REMOVE_OR_404 |
-| `page.telefonnotiz` | `/telefonnotiz` | Aktion in Customers/Intake; kein eigenes Modul | keiner | QUARANTINE | Customers/Intake-Aktionsport; bestehende Produktpage sichtbar+erreichbar; keine integrierte V2-Abnahme | PATH1_UI_CONVERGENCE_A_REMOVE_ROUTE_THEN_C_INTEGRATE |
+| `page.telefonnotiz` | `/telefonnotiz` | Aktion in Customers/Intake; kein eigenes Modul | AI-Action `null`, lokale Mock-Kandidatenlisten leer | QUARANTINE | `FoundationUnavailable`; kein realer Read-Port oder D-AI-002-Quellvertrag, bestehende Page sichtbar+erreichbar | PATH1_UI_CONVERGENCE_A_REMOVE_ROUTE_THEN_C_INTEGRATE; später vertikaler Text-/Telefon-Snapshot-Vertrag |
 | `page.today` | `/today` | Legacy konkurrierendes Home | keiner | QUARANTINE | keine neue Kopplung; Disposition gemäß Modulkarte; Registry: sichtbar+erreichbar; kein akzeptierter Full-Route-E2E | PATH1_UI_CONVERGENCE_A: Link-/Importprüfung, dann Route entfernen oder 404 |
 | `page.warendurchlauf.galvanik` | `/warendurchlauf/galvanik` | Orders: flacher Galvanik-Blackbox-Drilldown | keiner | PENDING | Orders-Lifecycle-Port; bestehender Fachpfad; Ziel-Shell-/Nav-Abnahme fehlt | PATH1_UI_CONVERGENCE_A_THEN_B |
 | `page.warendurchlauf.neu` | `/warendurchlauf/neu` | Intake-Aktionspfad | Storage | PENDING | Intake → Orders; F1.1 realer Vertrag; Einbindung in Ziel-Shell offen | PATH1_UI_CONVERGENCE_A |
 | `page.warendurchlauf` | `/warendurchlauf` | S4-Werkstatt-Innenmodul DELIVERED; Gesamt-Shell NOT_DELIVERED | keiner | PENDING | Phillip-Ports → Orders/Intake/Accounting; S4-Innenmodul belegt; Full-Route-A ausdrücklich offen | PATH1_UI_CONVERGENCE_A |
-| `page.warendurchlauf.warenausgang` | `/warendurchlauf/warenausgang` | Orders/Accounting Warenausgang-Aktionspfad | keiner | PENDING | Orders → Accounting-minimal; F1.5 Command/Receipt real; eigenständige Zielroute nicht akzeptiert | PATH1_UI_CONVERGENCE_A |
 | `page.warendurchlauf.wareneingang` | `/warendurchlauf/wareneingang` | Intake-Backend REAL; Wareneingang-Aktionspfad | Storage | PENDING | Intake → Orders; F1.1 Receipt real; Full-Route-Zielintegration offen | PATH1_UI_CONVERGENCE_A |
 
 ## Belegte Quarantänebefunde

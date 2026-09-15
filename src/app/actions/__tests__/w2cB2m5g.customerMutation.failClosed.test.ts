@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -51,10 +52,9 @@ describe("W2C-B2M5G customer mutation fail-closed", () => {
   });
 
   it("locks mutation bodies and inert UI save controls", async () => {
-    const [actions, repository, form, wizard] = await Promise.all([
+    const [actions, repository, wizard] = await Promise.all([
       readFile("src/app/actions/customers.actions.ts", "utf8"),
       readFile("src/lib/repositories/customersRepository.ts", "utf8"),
-      readFile("src/components/customers/NewCustomerForm.tsx", "utf8"),
       readFile("src/components/erfassung/ManualFlow/CustomerWizard.tsx", "utf8"),
     ]);
     const actionBodies = actions.match(/export async function (?:createCustomerDb|updateCustomerDb)[\s\S]*?(?=\nexport async function)/g) ?? [];
@@ -67,20 +67,10 @@ describe("W2C-B2M5G customer mutation fail-closed", () => {
     expect(repository).toContain("searchCustomersDb");
     expect(repository).not.toContain("createCustomerDb");
     expect(repository).not.toContain("updateCustomerDb");
-    expect(form).toContain("customersRepository.getById");
-
-    for (const source of [form, wizard]) {
-      expect(source).not.toMatch(/createCustomerDb|updateCustomer|handleSave|Google|googlemaps|importLibrary|setOptions|Kunde gespeichert|erfolgreich gespeichert|automatisch gespeichert/);
-    }
-    expect(form).toContain(createDenial.message);
-    expect(form).toContain(updateDenial.message);
+    expect(existsSync("src/components/customers/NewCustomerForm.tsx")).toBe(false);
+    expect(existsSync("src/modules/customers/legacy-ui/NewCustomerForm.tsx")).toBe(false);
+    expect(wizard).not.toMatch(/createCustomerDb|updateCustomer|handleSave|Google|googlemaps|importLibrary|setOptions|Kunde gespeichert|erfolgreich gespeichert|automatisch gespeichert/);
     expect(wizard).toContain(createDenial.message);
-    expect(form).not.toMatch(/<X\b/);
-    expect(form).not.toMatch(/lucide-react"[^\n]*\bX\b/);
-    expect(form).not.toMatch(/setImageUrls\(\(previous\)\s*=>\s*previous\.filter/);
-    expect(form).not.toContain("itemIndex");
-    expect(form).not.toMatch(/<button\b(?=[^>]*\bonClick=)(?![^>]*\bdisabled\b)[^>]*>/);
-    expect(form).toMatch(/<Button disabled className="[^"]*">\s*<Save[\s\S]*?Speichern<\/Button>/);
     expect(wizard).toMatch(/<button disabled className="[^"]*">Speichern<\/button>/);
   });
 });

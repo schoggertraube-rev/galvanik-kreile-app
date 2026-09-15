@@ -1,131 +1,160 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const getGalvanikOrdersAction = vi.hoisted(() => vi.fn());
-
-vi.mock("@/app/warendurchlauf/actions", () => ({ getGalvanikOrdersAction }));
-vi.mock("@/components/orders/GalvanikHandoffAttachmentPanel", () => ({
-  GalvanikHandoffAttachmentPanel: () => null,
+const ports = vi.hoisted(() => ({
+  getGalvanikOrdersAction: vi.fn(),
+  openOrder: vi.fn(),
 }));
-vi.mock("@/components/orders/GalvanikCorrectionButton", () => ({
-  GalvanikCorrectionButton: (props: {
-    orderId: string;
-    onConfirmedReadback: (orders: unknown[]) => void;
-    onConflictReadback?: (orders: unknown[], message: string) => void;
+
+vi.mock("@/app/warendurchlauf/actions", () => ({
+  getGalvanikOrdersAction: ports.getGalvanikOrdersAction,
+}));
+vi.mock("@/modules/orders/public", () => ({
+  OrderQueueRow: ({
+    order,
+    onOpen,
+  }: {
+    order: { id: string; orderNumber: string };
+    onOpen: (id: string) => void;
   }) => (
-    <div>
-      <button onClick={() => props.onConfirmedReadback([])}>Korrektur-Test-Erfolg-{props.orderId}</button>
-      <button onClick={() => props.onConflictReadback?.([], `Konflikt-${props.orderId}`)}>
-        Korrektur-Test-Konflikt-{props.orderId}
-      </button>
-    </div>
+    <button type="button" onClick={() => onOpen(order.id)}>
+      {order.orderNumber}
+    </button>
+  ),
+  ORDER_LIFECYCLE_STATUS: {
+    ANGENOMMEN: "angenommen",
+    GALVANIK: "galvanik",
+    FERTIG: "fertig",
+  },
+}));
+vi.mock("@/lib/overlayStore", () => ({
+  useOverlayStore: () => ports.openOrder,
+}));
+vi.mock("next/link", () => ({
+  default: ({
+    children,
+    ...props
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
+    <a {...props}>{children}</a>
   ),
 }));
-vi.mock("@/components/orders/OrderModalProvider", () => ({ useOrderModal: () => ({ openOrder: vi.fn() }) }));
-vi.mock("next/link", () => ({ default: ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a {...props}>{children}</a> }));
-vi.mock("lucide-react", () => ({ ArrowRight: () => null, Layers: () => null, PlayCircle: () => null, CheckCircle2: () => null, AlertTriangle: () => null, Loader2: () => null, ChevronRight: () => null }));
+vi.mock("lucide-react", () => {
+  const Icon = () => null;
+  return {
+    ArrowRight: Icon,
+    Layers: Icon,
+    CheckCircle2: Icon,
+    AlertTriangle: Icon,
+    Loader2: Icon,
+    ChevronRight: Icon,
+  };
+});
 
 import GalvanikPage from "../page";
 
 const galvanikOrder = {
-  id: "order-1", version: 2, orderNumber: "A-1", customerId: "customer-1", customerName: "Kunde", title: "Auftrag", task: null,
-  itemDescription: "Teil", surfaceRequested: "Zink", station: "galvanik", currentStationId: "galvanik", status: "galvanik",
-  statusText: "IM PLAN", risk: "green", parts: [], intakeDate: "", dueDate: "", dueLabel: "Termin", dueValue: "Nicht erfasst", createdAt: undefined,
-};
-
-const urgentGalvanikOrder = {
-  ...galvanikOrder,
   id: "order-1",
+  version: 2,
   orderNumber: "A-1",
-  risk: "red",
+  customerId: "customer-1",
+  customerName: "Kunde",
+  title: "Auftrag",
+  task: null,
+  itemDescription: "Teil",
+  surfaceRequested: "Zink",
+  station: "galvanik",
+  currentStationId: "galvanik",
+  status: "galvanik",
+  statusText: "IM PLAN",
+  risk: "green",
+  parts: [],
+  intakeDate: "",
+  dueDate: "",
+  dueLabel: "Termin",
+  dueValue: "Nicht erfasst",
+  createdAt: undefined,
 };
 
 afterEach(() => {
   cleanup();
-  getGalvanikOrdersAction.mockReset();
-  vi.clearAllMocks();
+  ports.getGalvanikOrdersAction.mockReset();
+  ports.openOrder.mockReset();
 });
 
-describe("W3 Galvanik readback", () => {
+describe("W3 Galvanik readback on the V8 card seam", () => {
   it("keeps loading free of empty success claims", async () => {
-    getGalvanikOrdersAction.mockReturnValueOnce(new Promise(() => {}));
+    ports.getGalvanikOrdersAction.mockReturnValueOnce(new Promise(() => {}));
     render(<GalvanikPage />);
     expect(screen.getByText("Lade Galvanik Aufträge...")).toBeInTheDocument();
-    expect(screen.queryByText("Noch keine Daten erfasst.")).not.toBeInTheDocument();
-    await waitFor(() => expect(getGalvanikOrdersAction).toHaveBeenCalledTimes(1));
+    expect(
+      screen.queryByText("Noch keine Daten erfasst."),
+    ).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(ports.getGalvanikOrdersAction).toHaveBeenCalledTimes(1),
+    );
   });
 
-  it("renders the stable denial rather than an empty state", async () => {
-    getGalvanikOrdersAction.mockResolvedValueOnce({ ok: false, error: "FORBIDDEN", message: "Stationsliste ist nicht erlaubt." });
+  it("distinguishes denial from unavailable data", async () => {
+    ports.getGalvanikOrdersAction.mockResolvedValueOnce({
+      ok: false,
+      error: "FORBIDDEN",
+      message: "Stationsliste ist nicht erlaubt.",
+    });
+    const view = render(<GalvanikPage />);
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Stationsliste ist nicht erlaubt.",
+      ),
+    );
+    expect(
+      screen.queryByText("Noch keine Daten erfasst."),
+    ).not.toBeInTheDocument();
+    view.unmount();
+
+    ports.getGalvanikOrdersAction.mockResolvedValueOnce({
+      ok: false,
+      error: "QUERY_ERROR",
+      message: "Nicht sicher geladen.",
+    });
     render(<GalvanikPage />);
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Stationsliste ist nicht erlaubt."));
-    expect(screen.queryByText("Noch keine Daten erfasst.")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Nicht sicher geladen.",
+      ),
+    );
+    expect(
+      screen.getByText("Daten konnten nicht geladen werden"),
+    ).toBeInTheDocument();
   });
 
-  it("distinguishes denied (AUTH_ERROR/FORBIDDEN) from error (QUERY_ERROR/UNAVAILABLE/NOT_AVAILABLE)", async () => {
-    getGalvanikOrdersAction.mockResolvedValueOnce({ ok: false, error: "AUTH_ERROR", message: "Sitzung fehlt." });
-    const { unmount } = render(<GalvanikPage />);
-    await waitFor(() => expect(screen.getByText("Zugriff nicht erlaubt")).toBeInTheDocument());
-    expect(screen.getByRole("status")).toHaveTextContent("Sitzung fehlt.");
-    unmount();
-
-    getGalvanikOrdersAction.mockResolvedValueOnce({ ok: false, error: "QUERY_ERROR", message: "Nicht sicher geladen." });
+  it("renders true empty only after a successful read", async () => {
+    ports.getGalvanikOrdersAction.mockResolvedValueOnce({ ok: true, data: [] });
     render(<GalvanikPage />);
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Nicht sicher geladen."));
-    expect(screen.getByText("Daten konnten nicht geladen werden")).toBeInTheDocument();
-    expect(screen.queryByText("Zugriff nicht erlaubt")).not.toBeInTheDocument();
+    expect(
+      await screen.findByText("Noch keine Daten erfasst."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Aufträge anzeigen" }),
+    ).toHaveAttribute("href", "/orders");
   });
 
-  it("renders a true empty state only after the fixed action succeeds", async () => {
-    getGalvanikOrdersAction.mockResolvedValueOnce({ ok: true, data: [] });
+  it("opens the one V8 order-card stack from the real queue row", async () => {
+    ports.getGalvanikOrdersAction.mockResolvedValueOnce({
+      ok: true,
+      data: [galvanikOrder],
+    });
     render(<GalvanikPage />);
-    expect(await screen.findByText("Noch keine Daten erfasst.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Aufträge anzeigen" })).toHaveAttribute("href", "/orders");
-  });
-
-  it("shows an order handed over to galvanik while the separate start action remains unavailable", async () => {
-    getGalvanikOrdersAction.mockResolvedValueOnce({ ok: true, data: [galvanikOrder] });
-    render(<GalvanikPage />);
-    expect(await screen.findByText("A-1")).toBeInTheDocument();
-    expect(screen.getByText("Auftrag öffnen, Mehrarbeit je Teil erfassen und anschließend mit bestätigtem Beleg fertigsetzen. Ein separater Start-Klick bleibt bewusst entfallen.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /start/i })).not.toBeInTheDocument();
-  });
-
-  it("renders the correction control for an active galvanik order and keeps its page-level success message after the card disappears", async () => {
-    getGalvanikOrdersAction.mockResolvedValueOnce({ ok: true, data: [galvanikOrder] });
-    render(<GalvanikPage />);
-    expect(await screen.findByText("A-1")).toBeInTheDocument();
-    const successButton = screen.getByText("Korrektur-Test-Erfolg-order-1");
-    fireEvent.click(successButton);
-    await waitFor(() => expect(screen.getByText("Rücknahme nach Wareneingang bestätigt.")).toBeInTheDocument());
-    // The card is gone from the fresh (empty) list, yet the success message stays page-level.
-    expect(screen.queryByText("A-1")).not.toBeInTheDocument();
-  });
-
-  it("clears a corrected order from the urgent banner (topUrgent) too, not just the bucket list, after a confirmed readback", async () => {
-    getGalvanikOrdersAction.mockResolvedValueOnce({ ok: true, data: [urgentGalvanikOrder] });
-    render(<GalvanikPage />);
-    expect(await screen.findByText("Dringlich in Galvanik")).toBeInTheDocument();
-    expect(screen.getAllByText("A-1")).toHaveLength(2); // bucket list card + urgent banner card
-
-    fireEvent.click(screen.getByText("Korrektur-Test-Erfolg-order-1"));
-    await waitFor(() => expect(screen.getByText("Rücknahme nach Wareneingang bestätigt.")).toBeInTheDocument());
-
-    // The fresh (empty) dataset must clear the order from every derived bucket at once.
-    expect(screen.queryByText("A-1")).not.toBeInTheDocument();
-    expect(screen.queryByText("Dringlich in Galvanik")).not.toBeInTheDocument();
-  });
-
-  it("keeps the conflict message and offers a real reload after a correction conflict", async () => {
-    getGalvanikOrdersAction.mockResolvedValueOnce({ ok: true, data: [galvanikOrder] });
-    render(<GalvanikPage />);
-    expect(await screen.findByText("A-1")).toBeInTheDocument();
-    fireEvent.click(screen.getByText("Korrektur-Test-Konflikt-order-1"));
-    await waitFor(() => expect(screen.getByText("Konflikt-order-1")).toBeInTheDocument());
-
-    getGalvanikOrdersAction.mockResolvedValueOnce({ ok: true, data: [galvanikOrder] });
-    fireEvent.click(screen.getByRole("button", { name: "Stationsliste neu laden" }));
-    await waitFor(() => expect(getGalvanikOrdersAction).toHaveBeenCalledTimes(2));
-    expect(screen.queryByText("Konflikt-order-1")).not.toBeInTheDocument();
+    const orderButtons = await screen.findAllByRole("button", { name: "A-1" });
+    fireEvent.click(orderButtons[0]!);
+    expect(ports.openOrder).toHaveBeenCalledWith("order-1");
+    expect(
+      screen.queryByRole("button", { name: /start/i }),
+    ).not.toBeInTheDocument();
   });
 });

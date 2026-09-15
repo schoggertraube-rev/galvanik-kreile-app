@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "current": {
+    "path": "docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html",
+    "sha256": "75258FF3BD4CC212C8E989061708A29DC26EA44B851BD28E8F16E8509B0CC0AA",
+    "approvedAt": "2026-09-14",
+    "role": "FLOW_AND_INTERMEDIATE_STEP_REFERENCE"
+  },
+  "pageTruth": [
+    "docs/project/linie/ui/KREILE_STARTSEITE_PHILLIP_V4_2026-08-20.html",
+    "docs/project/linie/ui/KREILE_STARTSEITE_ROLF_V8_2026-08-20.html",
+    "docs/project/linie/ui/KREILE_AUFTRAGSKARTE_MACHART_V8_2026-08-19.html",
+    "docs/project/linie/ui/KREILE_KUNDENKARTE_MACHART_V2_2026-08-19.html"
+  ],
+  "supersededAggregateMocks": [
+    "KREILE_GESAMTMOCK_V2",
+    "KREILE_GESAMTMOCK_V3",
+    "KREILE_GESAMTMOCK_V4"
+  ],
+  "supersededAggregateMockStatus": "SUPERSEDED_NOT_BUILD_INPUT",
+  "metadataCaveat": "An internal HTML title such as V2-MOCK is stale metadata and never product text.",
+  "updateContract": {
+    "ownerConfirmationRequired": true,
+    "requiredBinding": [
+      "path",
+      "sha256"
+    ],
+    "verifyBefore": [
+      "implementation_stage",
+      "browser_acceptance",
+      "draft_pr"
+    ],
+    "documentHashDelta": true,
+    "selectionByVersionDateOrHtmlTitleForbidden": true
+  }
+}
