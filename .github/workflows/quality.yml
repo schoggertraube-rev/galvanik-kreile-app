@@ -345,7 +345,7 @@ jobs:
           W4_ATTACHMENT_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: |
           set -euo pipefail
-          W4_SOURCE_SHA="ef9a8411cad56b968dcbe97b089260d38c67f7d5"
+          W4_SOURCE_SHA="baaf5e6ac7e75de3f51dee30cc14c2f0d2cbee45"
           CURRENT_SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
           git cat-file -e "${W4_SOURCE_SHA}^{commit}"
           git merge-base --is-ancestor "$W4_SOURCE_SHA" "$CURRENT_SOURCE_SHA"
@@ -353,7 +353,7 @@ jobs:
           w4_source="$(mktemp -d)"
           git archive "$W4_SOURCE_SHA" | tar -x -C "$w4_source"
           W4_TEST_PATH="src/test/w4_order_station_attachment.integration.test.ts"
-          W4_TEST_BLOB="d2e7d4346114c9dd14649003939a3ef9182a53bd"
+          W4_TEST_BLOB="923988f0bd489ccb0730e5b08b6e4066f3cb6283"
           git cat-file -e "${W4_SOURCE_SHA}:${W4_TEST_PATH}"
           actual_w4_test_blob="$(git rev-parse "${CURRENT_SOURCE_SHA}:${W4_TEST_PATH}")"
           test "$actual_w4_test_blob" = "$W4_TEST_BLOB"
