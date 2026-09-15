@@ -77,8 +77,10 @@ const eslintConfig = defineConfig([
     files: ["src/**/*.ts", "src/**/*.tsx"],
     rules: { "no-restricted-imports": ["error", { patterns: [modulesFacadePattern] }] },
   },
-  // server-public bleibt auf echte, vom S1-Gate inhaltlich validierte Serverkonsumenten
-  // begrenzt. Client/AppAdapter und alle sonstigen src-Dateien behalten public-only.
+  // STAGE_1_PIN_ONLY: Dieser Override pinnt ausschliesslich den kuenftigen ESLint-Vertrag.
+  // Der geschuetzte S1-Modul-Checker bleibt bis zur atomaren Folgestufe absichtlich
+  // strenger/public-only und blockiert jeden server-public-Verbraucher weiterhin.
+  // Client/AppAdapter und alle sonstigen src-Dateien behalten ebenfalls public-only.
   {
     files: ["src/app/actions/*.actions.ts", "src/test/**/*.integration.test.ts"],
     rules: { "no-restricted-imports": ["error", { patterns: [modulesServerConsumerFacadePattern] }] },
