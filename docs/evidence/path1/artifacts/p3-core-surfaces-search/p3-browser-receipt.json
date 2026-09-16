@@ -1,5 +1,5 @@
 {
-  "candidateCodeShaAtRun": "4faa2ba97c0a4b6a7c43d7a3fcc06bdd7ce64609",
+  "candidateCodeShaAtRun": "711bd45579424ad6049f87b25ab6fec890c8ce1a",
   "tenant": "galvanik-kreile",
   "actors": {
     "rolf": "11111111-1111-4111-8111-111111111111",
@@ -8,9 +8,9 @@
   },
   "synthetic": true,
   "order": {
-    "id": "f54f17a4-37ce-433a-94b3-cc585b06b84f",
+    "id": "81c0baf4-3f7d-4eee-8fee-81131be74472",
     "orderNumber": "A-2026-0001",
-    "customerId": "46dd1cd4-54ac-4aba-ad56-d1355e7495d4",
+    "customerId": "4713f0c8-5b21-49f5-b75f-90f74bd7f353",
     "promisedDate": "2026-10-23",
     "exactlyOne": 1
   },
@@ -20,10 +20,32 @@
     "Deep-Link -> Liste",
     "Suche -> V8/V2",
     "Rolf -> Geld & Rechnungen -> Accounting-minimal",
+    "Rolf -> Werkstatt-Hub -> Wareneingang -> eine Erfassung -> Werkstatt-Hub",
+    "/warendurchlauf/neu -> /warendurchlauf/wareneingang",
     "Gregor -> E-Mail-Login -> Einstellungen -> Start -> Einstellungen",
-    "55 retired/quarantined routes -> 404; Galvanik blackbox -> 200"
+    "60 retired/quarantined routes -> 404; Galvanik blackbox -> 200"
   ],
   "retiredRouteResults": [
+    {
+      "path": "/admin/analytics",
+      "status": 404
+    },
+    {
+      "path": "/admin/devices",
+      "status": 404
+    },
+    {
+      "path": "/admin/import",
+      "status": 404
+    },
+    {
+      "path": "/admin/testanalyse",
+      "status": 404
+    },
+    {
+      "path": "/admin/testanalyse/live",
+      "status": 404
+    },
     {
       "path": "/analyse",
       "status": 404
@@ -247,122 +269,170 @@
   ],
   "captures": [
     {
+      "file": "p3-workshop-hub-desktop-1914x917.png",
+      "sha256": "afc4bfbd9c41f0b8991603f30a1f16062370509db77a1d72434bc914a8fc2dcf",
+      "viewport": "1914x917",
+      "state": "workshop-hub-real"
+    },
+    {
+      "file": "p3-wareneingang-desktop-1914x917.png",
+      "sha256": "dce510e6c99d627c0a151c620ba2616dd6da40c73fa436a1b94bb6862b76f592",
+      "viewport": "1914x917",
+      "state": "wareneingang-real"
+    },
+    {
+      "file": "p3-workshop-hub-tablet-landscape-1220x880.png",
+      "sha256": "81a3708e82f735aef2e7b5165c547908914830addabe91cc8f96efb851ff9fac",
+      "viewport": "1220x880",
+      "state": "workshop-hub-real"
+    },
+    {
+      "file": "p3-wareneingang-tablet-landscape-1220x880.png",
+      "sha256": "86083dbbb4ed6974e796595090905274cf7d46a2db0ef3e278b33496cea277e3",
+      "viewport": "1220x880",
+      "state": "wareneingang-real"
+    },
+    {
+      "file": "p3-workshop-hub-tablet-portrait-768x1024.png",
+      "sha256": "aa86d5d7a76551e0d22ff06e7d56936da8ffe925334629da7ebbe08909667a44",
+      "viewport": "768x1024",
+      "state": "workshop-hub-real"
+    },
+    {
+      "file": "p3-wareneingang-tablet-portrait-768x1024.png",
+      "sha256": "83db0af3f00b1d13a4e297cd33bd0be6999ea69ba80ac3179d84f2e9bd36b72a",
+      "viewport": "768x1024",
+      "state": "wareneingang-real"
+    },
+    {
+      "file": "p3-workshop-hub-mobile-390x844.png",
+      "sha256": "9b38fd9ffd266ed88fe41af1903cf9b6f85ffa36b4d7fba93cf241619ae2185b",
+      "viewport": "390x844",
+      "state": "workshop-hub-real"
+    },
+    {
+      "file": "p3-wareneingang-mobile-390x844.png",
+      "sha256": "afdf306394f0df045ab0651e24ea3f8131bb008f1c53211f98c7f6c1698820f7",
+      "viewport": "390x844",
+      "state": "wareneingang-real"
+    },
+    {
       "file": "p3-rolf-home-desktop-1914x917.png",
-      "sha256": "77509be7b6493d6775259106ddd1fb0d9ed9cd3b7a08b42c60d4ddc2a36d47b9",
+      "sha256": "b148991c3ee5a22c62e16f960ef866e2e35a02df347b0e578c8e5cfffadb16ee",
       "viewport": "1914x917",
       "state": "rolf-home-data"
     },
     {
       "file": "p3-order-v8-desktop-1914x917.png",
-      "sha256": "d4dc5ddf7be41a47dec6f6c555d3ca0129d2e4ac4dcca6088aa774add065d23e",
+      "sha256": "b099e3475e1130d1498f3087be739be82264c0c7d53a0ac6b2278e2ad190cdb2",
       "viewport": "1914x917",
       "state": "order-v8-overlay"
     },
     {
       "file": "p3-customer-v2-desktop-1914x917.png",
-      "sha256": "591f028bd083bb7b39904c836f9d97084ed367fa19c0c1ca1d4d48dbd0cca265",
+      "sha256": "a04b67cd0e485779263b6cad83592d4a65b1c2c7c4556bd42f39d597a0417536",
       "viewport": "1914x917",
       "state": "customer-v2-overlay"
     },
     {
       "file": "p3-search-desktop-1914x917.png",
-      "sha256": "ec900ff59b302b069325ac013b983adf6e159b1aa94e0b5e61f16912542e4afa",
+      "sha256": "c7bdc02b126f5ebe4648b710918ed2ca7701d4c4b29cd10d8ad2030aaf24307b",
       "viewport": "1914x917",
       "state": "search-real-hit"
     },
     {
       "file": "p3-rolf-home-tablet-landscape-1220x880.png",
-      "sha256": "ce258bb0cd844fd4dbeb41d67914637e6e4c87af48dc9ce8da02eb8e4b259d8e",
+      "sha256": "8ffc450ac87ab8e8bf8db34e3ed9a0eb4a1e9a860c236659403f3fbe201411d6",
       "viewport": "1220x880",
       "state": "rolf-home-data"
     },
     {
       "file": "p3-order-v8-tablet-landscape-1220x880.png",
-      "sha256": "9b2e305a769ac6c9232117fa3b285a1ca422d8df33ce05938d2d432ac073c635",
+      "sha256": "c1424efee44ca05b3fa28537027f843d25b8e0a2cc6263f5f5404f80a44bd82c",
       "viewport": "1220x880",
       "state": "order-v8-overlay"
     },
     {
       "file": "p3-customer-v2-tablet-landscape-1220x880.png",
-      "sha256": "4eca025e275508406c07d9313575839f6b81088f9a65f92102da84c043e7de15",
+      "sha256": "ace6c839c0d97ae0efe15e27db25e3fec88f2dff37b4c9645446354902e89ba0",
       "viewport": "1220x880",
       "state": "customer-v2-overlay"
     },
     {
       "file": "p3-search-tablet-landscape-1220x880.png",
-      "sha256": "373e08ca24ab2f82897f61d0f930868239d441020b503f74f638096b673fc9ac",
+      "sha256": "9b4e30d02c79442e29c5d87217be976b9b8080fe37000ad6541e6d011ec796f5",
       "viewport": "1220x880",
       "state": "search-real-hit"
     },
     {
       "file": "p3-rolf-home-tablet-portrait-768x1024.png",
-      "sha256": "894333edd03d09b0142684b1ab343013fbe62b4d6a32a7abd43ee409780ae8ae",
+      "sha256": "6385333908ae9e640fcf909b5efea2557fd1ae96a85f6f60d22011487c5b6fca",
       "viewport": "768x1024",
       "state": "rolf-home-data"
     },
     {
       "file": "p3-order-v8-tablet-portrait-768x1024.png",
-      "sha256": "40e271f2b7a0190b4802f0e19c7ca43b38d8b649a32447c18f5bf90819305f90",
+      "sha256": "79a02908fe1c25449805b82a03bee8be44a15197215f4051de3d2ab2ee160cdd",
       "viewport": "768x1024",
       "state": "order-v8-overlay"
     },
     {
       "file": "p3-customer-v2-tablet-portrait-768x1024.png",
-      "sha256": "db96a7eaea754836179b251d8f48459193408ebef3e169d533130ec53ca55a6c",
+      "sha256": "79cc9e7dc209c854bf1dfb0ea0818946235d05fbb1b3549376962104da1390b7",
       "viewport": "768x1024",
       "state": "customer-v2-overlay"
     },
     {
       "file": "p3-search-tablet-portrait-768x1024.png",
-      "sha256": "4b7382a7e534bc20ff4f2d1c3afe3a086a47f83f139bb7eacdd206f33af6bfc1",
+      "sha256": "d281ae4060b2ab1791ed82a84623fc2b35167a2e0dd61a20ae47b1c611f5c5a5",
       "viewport": "768x1024",
       "state": "search-real-hit"
     },
     {
       "file": "p3-rolf-home-mobile-390x844.png",
-      "sha256": "d1a3b4b774c63c95f8ce9337375747922b3e471f381e7cbd7bfb31c5a2f823ef",
+      "sha256": "651660653440a26128a2fe048a33ec670ba1f27d0fadcfc91d6f48f230fde0cd",
       "viewport": "390x844",
       "state": "rolf-home-data"
     },
     {
       "file": "p3-order-v8-mobile-390x844.png",
-      "sha256": "6890e728fcb705827cb394be497ce2c213f21c07c90dcdcde867cca743a77f59",
+      "sha256": "6c78ec06b147f8805d9497e2d68e0e23520085afde8d798dac51ca595cfe0577",
       "viewport": "390x844",
       "state": "order-v8-overlay"
     },
     {
       "file": "p3-customer-v2-mobile-390x844.png",
-      "sha256": "0666ba2a81698784dae417900687cb450d00ff4b78da556a7644da5d21dc81f0",
+      "sha256": "4682d724d521704e01acf2c097391cddf1e32bdc10564c3a9c7f35d7ce9bbafb",
       "viewport": "390x844",
       "state": "customer-v2-overlay"
     },
     {
       "file": "p3-search-mobile-390x844.png",
-      "sha256": "57b2a3482a1109e3d33154f584990b563790437d560b7e141faeef7cf50808a3",
+      "sha256": "94d58bdef7ea9bd1b84da968525a8529ea3b4c4cedd7404283520e2a5a2b8e0c",
       "viewport": "390x844",
       "state": "search-real-hit"
     },
     {
       "file": "p3-phillip-home-desktop-1914x917.png",
-      "sha256": "b1b72adff745cfb6566ee11c0aca01efce92bbeb168ec29da1c75f5b53587900",
+      "sha256": "7e139ab66cf1f894596f3b2a74ad1a072be8e9c3b767b82e10cec2cbfeacd040",
       "viewport": "1914x917",
       "state": "phillip-home-data"
     },
     {
       "file": "p3-phillip-home-tablet-landscape-1220x880.png",
-      "sha256": "70d399eadb5f56414263e9eedbb3615212626ca5a9fda804072c4ac067e6f7c8",
+      "sha256": "982e2cd5febb8435a64ec8a2c58faec1c4a0424b48fc5bb189d5288b801e0354",
       "viewport": "1220x880",
       "state": "phillip-home-data"
     },
     {
       "file": "p3-phillip-home-tablet-portrait-768x1024.png",
-      "sha256": "49b7498c46a83735072cbf71946620b7291fdb4f2c57ad9beb370ce4a0ff84bf",
+      "sha256": "fe865be82ae07b4eaed4388ec8ee5e175ef5f9cde56f146612099d8b0845a5e6",
       "viewport": "768x1024",
       "state": "phillip-home-data"
     },
     {
       "file": "p3-phillip-home-mobile-390x844.png",
-      "sha256": "b15406d028b7443efebb3d0564fe83d58e97bd9864024a09d7184ff085589adb",
+      "sha256": "0783df7ecb052982430d2bf2d9979c328a3b017289ec8eff63f2379a69a07cbb",
       "viewport": "390x844",
       "state": "phillip-home-data"
     }
