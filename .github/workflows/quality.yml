@@ -596,6 +596,7 @@ jobs:
           KREILE_PHILLIP_APP_USER_ID: 22222222-2222-4222-8222-222222222222
           KREILE_GREGOR_APP_USER_ID: 33333333-3333-4333-8333-333333333333
           P3_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          P3_TEST_ORIGIN: https://localhost:3443
         run: |
           set -euo pipefail
           if [ -d public ]; then
@@ -603,17 +604,75 @@ jobs:
           fi
           mkdir -p .next/standalone/.next
           cp -r .next/static .next/standalone/.next/static
+          p3_tls_dir="${RUNNER_TEMP}/p3-loopback-tls"
+          mkdir -p "$p3_tls_dir"
+          openssl req -x509 -newkey rsa:2048 -sha256 -days 1 -nodes \
+            -keyout "$p3_tls_dir/key.pem" \
+            -out "$p3_tls_dir/cert.pem" \
+            -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" \
+            >/dev/null 2>&1
           HOSTNAME=127.0.0.1 PORT=3001 node .next/standalone/server.js > p3-next-start.log 2>&1 &
           p3_pid=$!
-          trap 'kill "$p3_pid" 2>/dev/null || true; tail -n 100 p3-next-start.log || true' EXIT
+          P3_PROXY_CERT="$p3_tls_dir/cert.pem" P3_PROXY_KEY="$p3_tls_dir/key.pem" node <<'NODE' > p3-https-proxy.log 2>&1 &
+          const fs = require("node:fs");
+          const http = require("node:http");
+          const https = require("node:https");
+
+          const server = https.createServer(
+            {
+              cert: fs.readFileSync(process.env.P3_PROXY_CERT),
+              key: fs.readFileSync(process.env.P3_PROXY_KEY),
+            },
+            (request, response) => {
+              const upstream = http.request(
+                {
+                  host: "127.0.0.1",
+                  port: 3001,
+                  method: request.method,
+                  path: request.url,
+                  headers: {
+                    ...request.headers,
+                    host: "localhost:3443",
+                    "x-forwarded-host": "localhost:3443",
+                    "x-forwarded-port": "3443",
+                    "x-forwarded-proto": "https",
+                  },
+                },
+                (upstreamResponse) => {
+                  response.writeHead(
+                    upstreamResponse.statusCode ?? 502,
+                    upstreamResponse.headers,
+                  );
+                  upstreamResponse.pipe(response);
+                },
+              );
+              upstream.on("error", () => {
+                if (!response.headersSent) response.writeHead(502);
+                response.end("loopback proxy unavailable");
+              });
+              request.pipe(upstream);
+            },
+          );
+          server.listen(3443, "127.0.0.1");
+          NODE
+          p3_proxy_pid=$!
+          cleanup_p3() {
+            kill "$p3_proxy_pid" 2>/dev/null || true
+            kill "$p3_pid" 2>/dev/null || true
+            tail -n 100 p3-next-start.log || true
+            tail -n 100 p3-https-proxy.log || true
+          }
+          trap cleanup_p3 EXIT
           ready=0
           for i in $(seq 1 60); do
-            if curl -sf http://127.0.0.1:3001/start -o /dev/null; then
+            if curl -ksf https://localhost:3443/start -o /dev/null; then
               ready=1
               break
             fi
-            if ! kill -0 "$p3_pid" 2>/dev/null; then
+            if ! kill -0 "$p3_pid" 2>/dev/null || ! kill -0 "$p3_proxy_pid" 2>/dev/null; then
               cat p3-next-start.log
+              cat p3-https-proxy.log
               exit 1
             fi
             sleep 1

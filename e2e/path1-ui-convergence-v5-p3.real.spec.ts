@@ -7,7 +7,7 @@ import {
   type Page,
 } from "@playwright/test";
 import bcrypt from "bcryptjs";
-import { createHash } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import postgres from "postgres";
@@ -17,9 +17,14 @@ const TENANT = "galvanik-kreile";
 const ROLF_ACTOR_ID = "11111111-1111-4111-8111-111111111111";
 const PHILLIP_ACTOR_ID = "22222222-2222-4222-8222-222222222222";
 const GREGOR_ACTOR_ID = "33333333-3333-4333-8333-333333333333";
+const P3_TEST_ORIGIN =
+  process.env.P3_TEST_ORIGIN?.trim() || "https://localhost:3443";
 const OUTPUT_DIR = path.resolve(
-  process.cwd(),
-  "docs/evidence/path1/artifacts/p3-core-surfaces-search",
+  process.env.P3_EVIDENCE_OUTPUT_DIR?.trim() ||
+    path.join(
+      process.cwd(),
+      "docs/evidence/path1/artifacts/p3-core-surfaces-search",
+    ),
 );
 const VIEWPORTS = [
   { name: "desktop", width: 1914, height: 917 },
@@ -125,45 +130,50 @@ async function createRealLocalAuthUser(
   return body.user.id;
 }
 
-async function normalizeSignedAppSession(page: Page, actorId: string) {
-  await expect
-    .poll(
-      async () => {
-        const cookie = (await page.context().cookies()).find(
-          (candidate) => candidate.name === "kreile_app_session",
-        );
-        return Boolean(cookie?.httpOnly && cookie.value.length >= 64);
-      },
-      { timeout: 30_000 },
-    )
-    .toBe(true);
-  const signedCookie = (await page.context().cookies()).find(
+async function assertSignedAppSession(
+  page: Page,
+  actorId: string,
+  sessionSecret: string,
+) {
+  const signedCookie = (await page.context().cookies(P3_TEST_ORIGIN)).find(
     (cookie) => cookie.name === "kreile_app_session",
   );
   if (!signedCookie) throw new Error("PATH1_P3_SIGNED_SESSION_COOKIE_MISSING");
+  if (!signedCookie.httpOnly || !signedCookie.secure)
+    throw new Error("PATH1_P3_SESSION_COOKIE_FLAGS_INVALID");
   const token = decodeURIComponent(signedCookie.value);
   const separator = token.lastIndexOf(".");
   if (separator <= 0)
     throw new Error("PATH1_P3_SIGNED_SESSION_COOKIE_MALFORMED");
-  const payload = JSON.parse(
-    Buffer.from(token.slice(0, separator), "base64").toString("utf8"),
-  ) as { userId?: unknown };
-  if (payload.userId !== actorId)
+  const payloadText = Buffer.from(token.slice(0, separator), "base64").toString(
+    "utf8",
+  );
+  const signature = token.slice(separator + 1);
+  if (!/^[a-f0-9]{64}$/.test(signature))
+    throw new Error("PATH1_P3_SIGNED_SESSION_COOKIE_MALFORMED");
+  const expectedSignature = createHmac("sha256", sessionSecret)
+    .update(payloadText)
+    .digest();
+  const actualSignature = Buffer.from(signature, "hex");
+  if (
+    actualSignature.length !== expectedSignature.length ||
+    !timingSafeEqual(actualSignature, expectedSignature)
+  )
+    throw new Error("PATH1_P3_SESSION_SIGNATURE_INVALID");
+  const payload = JSON.parse(payloadText) as {
+    userId?: unknown;
+    tenantId?: unknown;
+  };
+  if (payload.userId !== actorId || payload.tenantId !== TENANT)
     throw new Error("PATH1_P3_SESSION_ACTOR_MISMATCH");
-  await page.context().addCookies([
-    {
-      name: signedCookie.name,
-      value: signedCookie.value,
-      url: "http://localhost:3001",
-      httpOnly: true,
-      secure: false,
-      sameSite: signedCookie.sameSite,
-      expires: signedCookie.expires,
-    },
-  ]);
 }
 
-async function loginPin(page: Page, userId: string, pin: string) {
+async function loginPin(
+  page: Page,
+  userId: string,
+  pin: string,
+  sessionSecret: string,
+) {
   await page.goto("/start");
   const card = page.getByTestId(
     `pin-user-card-${createPinLoginHandle(userId)}`,
@@ -172,32 +182,17 @@ async function loginPin(page: Page, userId: string, pin: string) {
   await card.click();
   const dialog = page.getByTestId("pin-login-dialog");
   await expect(dialog).toBeVisible();
-  const returnedToStart = page.waitForResponse(
-    (response) => {
-      const request = response.request();
-      return (
-        request.isNavigationRequest() &&
-        request.method() === "GET" &&
-        new URL(response.url()).pathname === "/start"
-      );
-    },
-    { timeout: 30_000 },
-  );
-  for (const digit of pin)
-    await dialog.getByRole("button", { name: digit, exact: true }).click();
-  // `next start` emits a Secure production cookie. On local HTTP the first
-  // real redirect therefore returns to /start; this response proves that the
-  // browser navigation has settled before its signed value is transport-normalized.
-  await returnedToStart;
-  await page.waitForURL((url) => url.pathname === "/start", {
+  const reachedHome = page.waitForURL((url) => url.pathname === "/", {
     timeout: 30_000,
   });
+  for (const digit of pin)
+    await dialog.getByRole("button", { name: digit, exact: true }).click();
+  await reachedHome;
   await page.waitForLoadState("networkidle");
-  await normalizeSignedAppSession(page, userId);
-  if (new URL(page.url()).pathname !== "/")
-    await page.goto("/", { waitUntil: "networkidle" });
+  await assertSignedAppSession(page, userId, sessionSecret);
+  await page.reload({ waitUntil: "networkidle" });
   await page.waitForURL((url) => url.pathname === "/", { timeout: 30_000 });
-  await page.waitForLoadState("networkidle");
+  await assertSignedAppSession(page, userId, sessionSecret);
 }
 
 async function loginEmail(
@@ -205,6 +200,7 @@ async function loginEmail(
   actorId: string,
   email: string,
   password: string,
+  sessionSecret: string,
 ) {
   await page.goto("/start");
   await page.getByRole("button", { name: /Gregor/ }).click();
@@ -212,12 +208,21 @@ async function loginEmail(
   await expect(dialog).toBeVisible();
   await dialog.locator("#email").fill(email);
   await dialog.locator("#password").fill(password);
+  const reachedSettings = page.waitForURL(
+    (url) => url.pathname === "/settings",
+    {
+      timeout: 30_000,
+    },
+  );
   await dialog.getByRole("button", { name: "Einloggen", exact: true }).click();
-  await normalizeSignedAppSession(page, actorId);
-  await page.goto("/settings", { waitUntil: "networkidle" });
+  await reachedSettings;
+  await page.waitForLoadState("networkidle");
+  await assertSignedAppSession(page, actorId, sessionSecret);
+  await page.reload({ waitUntil: "networkidle" });
   await page.waitForURL((url) => url.pathname === "/settings", {
     timeout: 30_000,
   });
+  await assertSignedAppSession(page, actorId, sessionSecret);
 }
 
 async function capture(
@@ -286,6 +291,11 @@ async function openSearch(page: Page, query: string) {
 }
 
 test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
+  test.use({
+    baseURL: P3_TEST_ORIGIN,
+    ignoreHTTPSErrors: true,
+  });
+
   test("belegt Orders V8, Customers V2, Homes, Backstack und deterministische Suche", async ({
     browser,
   }) => {
@@ -293,7 +303,8 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
     const databaseUrl = requiredEnv("DATABASE_URL");
     const apiUrl = requiredEnv("NEXT_PUBLIC_SUPABASE_URL");
     const anonKey = requiredEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
-    requiredEnv("APP_SESSION_SECRET");
+    const sessionSecret = requiredEnv("APP_SESSION_SECRET");
+    expect(P3_TEST_ORIGIN).toMatch(/^https:\/\/localhost:\d+$/);
     expect(databaseUrl).toMatch(
       /^postgresql:\/\/postgres:postgres@127\.0\.0\.1:\d+\/postgres$/,
     );
@@ -350,11 +361,9 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
 
       const rolf = await newContext(browser);
       contexts.push(rolf.context);
-      await loginPin(rolf.page, ROLF_ACTOR_ID, rolfPin);
-      // The signed production cookie is transport-normalized above only after
-      // its actor is verified. Start the P3 surface error contract afterwards,
-      // so the deliberate local HTTP login navigation is not mistaken for a
-      // product-surface runtime failure.
+      await loginPin(rolf.page, ROLF_ACTOR_ID, rolfPin, sessionSecret);
+      // Der echte Secure-Cookie, seine Signatur und der Actor sind vor diesem
+      // Zieloberflächen-Fehlervertrag bereits geprüft und nach Reload bestätigt.
       rolf.page.on("console", (message) => {
         if (message.type() !== "error") return;
         const location = message.location();
@@ -700,7 +709,7 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
 
       const phillip = await newContext(browser);
       contexts.push(phillip.context);
-      await loginPin(phillip.page, PHILLIP_ACTOR_ID, phillipPin);
+      await loginPin(phillip.page, PHILLIP_ACTOR_ID, phillipPin, sessionSecret);
       for (const viewport of VIEWPORTS) {
         await phillip.page.setViewportSize({
           width: viewport.width,
@@ -728,6 +737,7 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
         GREGOR_ACTOR_ID,
         gregorEmail,
         gregorPassword,
+        sessionSecret,
       );
       await expect(
         gregor.page.getByTestId("gregor-system-admin"),
