@@ -158,6 +158,10 @@ export type GlobalCreatePorts = {
 
 type Step = "choose" | "customer" | "customer-saved" | "customer-picker" | "quote-list" | "quote" | "quote-saved" | "order-saved" | "direct-intake" | "denied";
 type Feedback = { kind: "validation" | "conflict" | "denied" | "error" | "unclear"; message: string; requestId?: string };
+type OpenQuotesState =
+  | { kind: "idle" | "loading" | "empty" }
+  | { kind: "data"; quotes: QuoteReadback[] }
+  | { kind: "denied" | "error" | "unknown"; message: string; requestId?: string };
 type CustomerDraft = Omit<CreateCustomerInput, "clientEventId">;
 type PositionDraft = { key: string; name: string; quantity: string; material: string; surfaceRequested: string; unitPrice: string };
 type IntakePositionDraft = Omit<PositionDraft, "unitPrice">;
@@ -266,7 +270,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [directReceipt, setDirectReceipt] = useState<Extract<GlobalCreateDirectIntakeResult, { code: "OK" }> | null>(null);
   const [quote, setQuote] = useState<QuoteReadback | null>(null);
   const [quoteReceipt, setQuoteReceipt] = useState<(QuoteCreateReceipt | QuoteUpdateReceipt) | null>(null);
-  const [openQuotes, setOpenQuotes] = useState<QuoteReadback[]>([]);
+  const [openQuotesState, setOpenQuotesState] = useState<OpenQuotesState>({ kind: "idle" });
   const [conversion, setConversion] = useState<Extract<GlobalCreateConversionResult, { code: "OK" }> | null>(null);
   const requestIds = useRef({ customer: "", quote: "", conversion: "" });
   const customerRequestSeq = useRef(0);
@@ -446,16 +450,29 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       return;
     }
     setBusy(true);
+    setOpenQuotesState({ kind: "loading" });
     navigate("quote-list");
     try {
       const result = await ports.listOpenQuotes();
       if (result.code !== "OK") {
-        setFeedback(requestFeedback(result, "offene-kvs"));
+        setOpenQuotesState({
+          kind: result.code === "UNAUTHENTICATED" || result.code === "FORBIDDEN"
+            ? "denied"
+            : result.code === "UNAVAILABLE"
+              ? "unknown"
+              : "error",
+          message: result.message,
+        });
         return;
       }
-      setOpenQuotes(result.quotes);
+      setOpenQuotesState(result.quotes.length === 0
+        ? { kind: "empty" }
+        : { kind: "data", quotes: result.quotes });
     } catch {
-      setFeedback({ kind: "error", message: "Offene KVs konnten nicht sicher gelesen werden." });
+      setOpenQuotesState({
+        kind: "unknown",
+        message: "Der Stand der offenen KVs konnte nicht sicher geladen werden. Bitte später erneut öffnen.",
+      });
     } finally {
       setBusy(false);
     }
@@ -605,6 +622,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setCustomer(selected);
     setQuote(null);
     setQuoteReceipt(null);
+    setOpenQuotesState({ kind: "idle" });
     setConversion(null);
     requestIds.current.quote = "";
     requestIds.current.conversion = "";
@@ -923,7 +941,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
               {step === "quote-list" ? (
                 <section className={styles.createPanel} aria-label="Offene KVs">
-                  {openQuotes.length === 0 ? <p className={styles.createReadback}>Es gibt derzeit keine offenen KVs in diesem Datenstand.</p> : <div className={styles.createCustomerList}>{openQuotes.map((draft) => <button type="button" key={draft.quoteId} onClick={() => editQuote(draft)}><span><strong>{draft.quoteNumber} · {draft.customerDisplayName}</strong><small>Stand {draft.version} · Terminwunsch {draft.dueDate} · {euro(draft.totalNetCents)} netto</small></span><FileText /></button>)}</div>}
+                  {openQuotesState.kind === "idle" || openQuotesState.kind === "loading" ? <p className={styles.createLoading} role="status"><Loader2 className={styles.createSpinner} /> Offene KVs werden geladen …</p> : null}
+                  {openQuotesState.kind === "empty" ? <div className={styles.createEmpty} role="status"><h3>Keine offenen KVs</h3><p>Es ist derzeit kein gespeicherter KV zur Weiterbearbeitung offen.</p></div> : null}
+                  {openQuotesState.kind === "data" ? <div className={styles.createCustomerList}>{openQuotesState.quotes.map((draft) => <button type="button" key={draft.quoteId} onClick={() => editQuote(draft)}><span><strong>{draft.quoteNumber} · {draft.customerDisplayName}</strong><small>Stand {draft.version} · Terminwunsch {draft.dueDate} · {euro(draft.totalNetCents)} netto</small></span><FileText /></button>)}</div> : null}
+                  {openQuotesState.kind === "denied" || openQuotesState.kind === "error" || openQuotesState.kind === "unknown" ? <section className={styles.createFeedback} data-kind={openQuotesState.kind === "unknown" ? "unclear" : openQuotesState.kind === "denied" ? "denied" : "error"} role="alert"><strong>{openQuotesState.kind === "denied" ? "Zugriff nicht freigegeben" : openQuotesState.kind === "unknown" ? "Stand noch nicht geklärt" : "Offene KVs konnten nicht geladen werden"}</strong><p>{openQuotesState.message}</p>{openQuotesState.requestId ? <details><summary>Technische Details für Support</summary><code>{openQuotesState.requestId}</code></details> : null}</section> : null}
                 </section>
               ) : null}
 

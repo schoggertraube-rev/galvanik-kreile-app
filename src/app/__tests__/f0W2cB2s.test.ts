@@ -1,74 +1,78 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
-import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import BetriebKvpPage from "@/app/betrieb-kvp/page";
-import LagerPage from "@/app/lager/page";
-import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 
 const root = process.cwd();
 const source = (file: string) => readFileSync(resolve(root, file), "utf8");
 
-const unavailablePages = [
-  "src/app/performance/werkstatt-puls/page.tsx",
-  "src/app/performance/umsatz-marge/page.tsx",
-  "src/app/performance/kunden-markt/page.tsx",
-  "src/app/performance/qualitaet-risiko/page.tsx",
-  "src/app/performance/baeder-material/page.tsx",
-  "src/app/today/page.tsx",
-  "src/app/status/page.tsx",
-  "src/app/baeder/page.tsx",
-  "src/app/kontrolle/page.tsx",
+const retiredPageEntrypoints = [
   "src/app/analyse/page.tsx",
-  "src/app/performance/page.tsx",
-  "src/app/performance/ki-empfehlungen/page.tsx",
+  "src/app/archive/page.tsx",
+  "src/app/baeder/page.tsx",
   "src/app/betrieb-kvp/page.tsx",
+  "src/app/betrieb/page.tsx",
+  "src/app/buchhaltung/ausgaben/page.tsx",
+  "src/app/buchhaltung/belege/[id]/page.tsx",
+  "src/app/buchhaltung/belege/neu/page.tsx",
+  "src/app/buchhaltung/belege/page.tsx",
+  "src/app/buchhaltung/bwa/page.tsx",
+  "src/app/buchhaltung/einstellungen/page.tsx",
+  "src/app/buchhaltung/export/page.tsx",
+  "src/app/buchhaltung/fristen/page.tsx",
+  "src/app/buchhaltung/kosten/[id]/page.tsx",
+  "src/app/buchhaltung/kosten/neu/page.tsx",
+  "src/app/buchhaltung/kosten/page.tsx",
+  "src/app/buchhaltung/kraftstoff/page.tsx",
+  "src/app/buchhaltung/periodenabschluss/page.tsx",
+  "src/app/buchhaltung/rechnungen/[id]/page.tsx",
+  "src/app/buchhaltung/rechnungen/neu/page.tsx",
+  "src/app/buchhaltung/steuerprofil/page.tsx",
+  "src/app/cockpit/jahresplan/page.tsx",
+  "src/app/cockpit/page.tsx",
+  "src/app/feedback/[token]/page.tsx",
+  "src/app/finanzen/page.tsx",
+  "src/app/items/page.tsx",
+  "src/app/kalender/page.tsx",
+  "src/app/kommunikation/page.tsx",
+  "src/app/kontrolle/page.tsx",
+  "src/app/kunden-auftraege/page.tsx",
+  "src/app/kvp/page.tsx",
   "src/app/lager/page.tsx",
-];
+  "src/app/lieferanten/[id]/page.tsx",
+  "src/app/lieferanten/page.tsx",
+  "src/app/marketing/aktion/neu/page.tsx",
+  "src/app/marketing/aktion/page.tsx",
+  "src/app/marketing/attribution/page.tsx",
+  "src/app/marketing/einwilligungen/page.tsx",
+  "src/app/marketing/kanaele/page.tsx",
+  "src/app/marketing/page.tsx",
+  "src/app/marketing/segmente/[id]/page.tsx",
+  "src/app/marketing/segmente/neu/page.tsx",
+  "src/app/marketing/segmente/page.tsx",
+  "src/app/performance/baeder-material/page.tsx",
+  "src/app/performance/ki-empfehlungen/page.tsx",
+  "src/app/performance/kunden-markt/page.tsx",
+  "src/app/performance/page.tsx",
+  "src/app/performance/qualitaet-risiko/page.tsx",
+  "src/app/performance/umsatz-marge/page.tsx",
+  "src/app/performance/werkstatt-puls/page.tsx",
+  "src/app/print-queue/page.tsx",
+  "src/app/scan/page.tsx",
+  "src/app/status/page.tsx",
+  "src/app/telefonnotiz/page.tsx",
+  "src/app/today/page.tsx",
+] as const;
 
 describe("F0 W2C-B2S page truth containment", () => {
-  it.each(unavailablePages)("keeps %s a pure shared unavailable route", (file) => {
-    const page = source(file);
-    expect(page.match(/^import .+;$/gm)).toEqual(['import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";']);
-    expect(page).toContain('export const dynamic = "force-dynamic";');
-    expect(page).toContain("export const revalidate = 0;");
-    expect(page).toMatch(/return <FoundationUnavailable \/>;/);
-    expect(page).not.toMatch(/fetch\(|useEffect|Repository|actions|supabase|auftrag|termin|\d{4}|use client|features\/analyse|PerformanceCockpitClient|PerformanceDetailLayout|getAnalyseOverview|next\/link|useState|BetriebKvpClient|OfflineSyncBadge|FeedbackFooter|usePermissions|localStorage|IndexedDB/i);
+  it("keeps the complete canonical retired/quarantined route matrix sorted and unique", () => {
+    expect(retiredPageEntrypoints).toEqual([...retiredPageEntrypoints].sort());
+    expect(new Set(retiredPageEntrypoints).size).toBe(retiredPageEntrypoints.length);
+    expect(retiredPageEntrypoints).toHaveLength(55);
   });
 
-  it("renders Betrieb-KVP as the canonical shared denial without former claims", () => {
-    const markup = renderToStaticMarkup(BetriebKvpPage());
-
-    expect(markup).toBe(renderToStaticMarkup(FoundationUnavailable()));
-    expect(markup).toContain("NOT_AVAILABLE");
-    expect(markup).toContain("Operative Daten sind noch nicht verfügbar");
-    expect(markup).toContain("Für diesen Bereich ist noch keine kanonische, quellgestützte operative Datenbasis verfügbar.");
-    for (const formerClaim of [
-      "Häufigste Kategorie",
-      "Ordnung/Sauberkeit",
-      "2 an Station",
-      "Einträge",
-      "Einreichen",
-      "Detail-Report öffnen",
-      "Gemerkt!",
-      "Wieder Online",
-      "Offline – Eingaben werden lokal gesichert",
-    ]) expect(markup).not.toContain(formerClaim);
+  it.each(retiredPageEntrypoints)("keeps %s physically absent so direct URLs resolve to Next 404", (file) => {
+    expect(existsSync(resolve(root, file))).toBe(false);
   });
-
-  it("renders Lager as the canonical shared denial without former claims", () => {
-    const markup = renderToStaticMarkup(LagerPage());
-
-    expect(markup).toBe(renderToStaticMarkup(FoundationUnavailable()));
-    expect(markup).toContain("NOT_AVAILABLE");
-    for (const formerClaim of [
-      "Alle BestÃ¤nde sind ausreichend",
-      "Keine Chemie-Artikel in der Datenbank",
-      "Kritischer Bestand",
-      "Letzte 5 Tage",
-    ]) expect(markup).not.toContain(formerClaim);
-  });
-
 });
 
 describe("F0 W2C-B2S local provider denials", () => {

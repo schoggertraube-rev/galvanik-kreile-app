@@ -16,6 +16,7 @@ import { createPinLoginHandle } from "../src/lib/server/pinLoginHandle";
 const TENANT = "galvanik-kreile";
 const ROLF_ACTOR_ID = "11111111-1111-4111-8111-111111111111";
 const PHILLIP_ACTOR_ID = "22222222-2222-4222-8222-222222222222";
+const GREGOR_ACTOR_ID = "33333333-3333-4333-8333-333333333333";
 const OUTPUT_DIR = path.resolve(
   process.cwd(),
   "docs/evidence/path1/artifacts/p3-core-surfaces-search",
@@ -26,6 +27,66 @@ const VIEWPORTS = [
   { name: "tablet-portrait", width: 768, height: 1024 },
   { name: "mobile", width: 390, height: 844 },
 ] as const;
+
+const RETIRED_ROUTE_MATRIX = [
+  "/analyse",
+  "/archive",
+  "/baeder",
+  "/betrieb",
+  "/betrieb-kvp",
+  "/buchhaltung/ausgaben",
+  "/buchhaltung/belege",
+  "/buchhaltung/belege/neu",
+  "/buchhaltung/belege/synthetic-id",
+  "/buchhaltung/bwa",
+  "/buchhaltung/einstellungen",
+  "/buchhaltung/export",
+  "/buchhaltung/fristen",
+  "/buchhaltung/kosten",
+  "/buchhaltung/kosten/neu",
+  "/buchhaltung/kosten/synthetic-id",
+  "/buchhaltung/kraftstoff",
+  "/buchhaltung/periodenabschluss",
+  "/buchhaltung/rechnungen/neu",
+  "/buchhaltung/rechnungen/synthetic-id",
+  "/buchhaltung/steuerprofil",
+  "/cockpit",
+  "/cockpit/jahresplan",
+  "/feedback/synthetic-token",
+  "/finanzen",
+  "/items",
+  "/kalender",
+  "/kommunikation",
+  "/kontrolle",
+  "/kunden-auftraege",
+  "/kvp",
+  "/lager",
+  "/lieferanten",
+  "/lieferanten/synthetic-id",
+  "/marketing",
+  "/marketing/aktion",
+  "/marketing/aktion/neu",
+  "/marketing/attribution",
+  "/marketing/einwilligungen",
+  "/marketing/kanaele",
+  "/marketing/segmente",
+  "/marketing/segmente/neu",
+  "/marketing/segmente/synthetic-id",
+  "/performance",
+  "/performance/baeder-material",
+  "/performance/ki-empfehlungen",
+  "/performance/kunden-markt",
+  "/performance/qualitaet-risiko",
+  "/performance/umsatz-marge",
+  "/performance/werkstatt-puls",
+  "/print-queue",
+  "/scan",
+  "/status",
+  "/telefonnotiz",
+  "/today",
+] as const;
+
+type AuthSignupResponse = { user?: { id?: string }; message?: string };
 
 type Capture = {
   file: string;
@@ -38,6 +99,55 @@ function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`PATH1_P3_ENV_MISSING:${name}`);
   return value;
+}
+
+async function createRealLocalAuthUser(
+  apiUrl: string,
+  anonKey: string,
+  email: string,
+  password: string,
+) {
+  const response = await fetch(`${apiUrl.replace(/\/$/, "")}/auth/v1/signup`, {
+    method: "POST",
+    headers: {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email, password }),
+  });
+  const body = (await response.json()) as AuthSignupResponse;
+  if (!response.ok || typeof body.user?.id !== "string") {
+    throw new Error(`PATH1_P3_LOCAL_AUTH_SIGNUP_FAILED:${response.status}:${body.message ?? "invalid response"}`);
+  }
+  return body.user.id;
+}
+
+async function normalizeSignedAppSession(page: Page, actorId: string) {
+  await expect.poll(async () => {
+    const cookie = (await page.context().cookies()).find((candidate) => candidate.name === "kreile_app_session");
+    return Boolean(cookie?.httpOnly && cookie.value.length >= 64);
+  }, { timeout: 30_000 }).toBe(true);
+  const signedCookie = (await page.context().cookies()).find(
+    (cookie) => cookie.name === "kreile_app_session",
+  );
+  if (!signedCookie) throw new Error("PATH1_P3_SIGNED_SESSION_COOKIE_MISSING");
+  const token = decodeURIComponent(signedCookie.value);
+  const separator = token.lastIndexOf(".");
+  if (separator <= 0) throw new Error("PATH1_P3_SIGNED_SESSION_COOKIE_MALFORMED");
+  const payload = JSON.parse(
+    Buffer.from(token.slice(0, separator), "base64").toString("utf8"),
+  ) as { userId?: unknown };
+  if (payload.userId !== actorId) throw new Error("PATH1_P3_SESSION_ACTOR_MISMATCH");
+  await page.context().addCookies([{
+    name: signedCookie.name,
+    value: signedCookie.value,
+    url: "http://localhost:3001",
+    httpOnly: true,
+    secure: false,
+    sameSite: signedCookie.sameSite,
+    expires: signedCookie.expires,
+  }]);
 }
 
 async function loginPin(page: Page, userId: string, pin: string) {
@@ -68,40 +178,24 @@ async function loginPin(page: Page, userId: string, pin: string) {
   await returnedToStart;
   await page.waitForURL((url) => url.pathname === "/start", { timeout: 30_000 });
   await page.waitForLoadState("networkidle");
-  const signedCookie = (await page.context().cookies()).find(
-    (cookie) => cookie.name === "kreile_app_session",
-  );
-  if (
-    !signedCookie ||
-    !signedCookie.httpOnly ||
-    signedCookie.value.length < 64
-  ) {
-    throw new Error("PATH1_P3_SIGNED_SESSION_COOKIE_INVALID");
-  }
-  const token = decodeURIComponent(signedCookie.value);
-  const separator = token.lastIndexOf(".");
-  if (separator <= 0)
-    throw new Error("PATH1_P3_SIGNED_SESSION_COOKIE_MALFORMED");
-  const payload = JSON.parse(
-    Buffer.from(token.slice(0, separator), "base64").toString("utf8"),
-  ) as { userId?: unknown };
-  if (payload.userId !== userId)
-    throw new Error("PATH1_P3_SESSION_ACTOR_MISMATCH");
-  await page.context().addCookies([
-    {
-      name: signedCookie.name,
-      value: signedCookie.value,
-      url: "http://localhost:3001",
-      httpOnly: true,
-      secure: false,
-      sameSite: signedCookie.sameSite,
-      expires: signedCookie.expires,
-    },
-  ]);
+  await normalizeSignedAppSession(page, userId);
   if (new URL(page.url()).pathname !== "/")
     await page.goto("/", { waitUntil: "networkidle" });
   await page.waitForURL((url) => url.pathname === "/", { timeout: 30_000 });
   await page.waitForLoadState("networkidle");
+}
+
+async function loginEmail(page: Page, actorId: string, email: string, password: string) {
+  await page.goto("/start");
+  await page.getByRole("button", { name: /Gregor/ }).click();
+  const dialog = page.getByTestId("email-login-dialog");
+  await expect(dialog).toBeVisible();
+  await dialog.locator("#email").fill(email);
+  await dialog.locator("#password").fill(password);
+  await dialog.getByRole("button", { name: "Einloggen", exact: true }).click();
+  await normalizeSignedAppSession(page, actorId);
+  await page.goto("/settings", { waitUntil: "networkidle" });
+  await page.waitForURL((url) => url.pathname === "/settings", { timeout: 30_000 });
 }
 
 async function capture(
@@ -175,16 +269,23 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
   }) => {
     test.setTimeout(300_000);
     const databaseUrl = requiredEnv("DATABASE_URL");
+    const apiUrl = requiredEnv("NEXT_PUBLIC_SUPABASE_URL");
+    const anonKey = requiredEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
     requiredEnv("APP_SESSION_SECRET");
     expect(databaseUrl).toMatch(
       /^postgresql:\/\/postgres:postgres@127\.0\.0\.1:\d+\/postgres$/,
     );
     expect(process.env.KREILE_ROLF_APP_USER_ID).toBe(ROLF_ACTOR_ID);
     expect(process.env.KREILE_PHILLIP_APP_USER_ID).toBe(PHILLIP_ACTOR_ID);
+    expect(process.env.KREILE_GREGOR_APP_USER_ID).toBe(GREGOR_ACTOR_ID);
+    expect(apiUrl).toMatch(/^http:\/\/(?:127\.0\.0\.1|localhost):\d+$/);
+    expect(RETIRED_ROUTE_MATRIX).toHaveLength(55);
 
     const suffix = `${Date.now()}-${process.pid}`;
     const rolfPin = "4186";
     const phillipPin = "7315";
+    const gregorEmail = `p3-gregor-${suffix}@local.test`;
+    const gregorPassword = `P3-Gregor-${suffix}!`;
     const customerName = `SYNTHETISCH P3 Kunde ${suffix}`;
     const partName = `SYNTHETISCHER P3 Flansch ${suffix}`;
     const material = `P3-Material-${suffix}`;
@@ -204,11 +305,13 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
 
     try {
       const insertedAt = new Date(Date.now() - 5_000).toISOString();
+      await createRealLocalAuthUser(apiUrl, anonKey, gregorEmail, gregorPassword);
       await sql`
         INSERT INTO public.app_users (id, tenant_id, email, full_name, role, pin_hash, active, created_at, updated_at)
         VALUES
           (${ROLF_ACTOR_ID}::uuid, ${TENANT}, ${`p3-rolf-${suffix}@local.test`}, 'Rolf', 'meister', ${await bcrypt.hash(rolfPin, 12)}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz),
-          (${PHILLIP_ACTOR_ID}::uuid, ${TENANT}, ${`p3-phillip-${suffix}@local.test`}, 'Phillip', 'werkstatt', ${await bcrypt.hash(phillipPin, 12)}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz)
+          (${PHILLIP_ACTOR_ID}::uuid, ${TENANT}, ${`p3-phillip-${suffix}@local.test`}, 'Phillip', 'werkstatt', ${await bcrypt.hash(phillipPin, 12)}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz),
+          (${GREGOR_ACTOR_ID}::uuid, ${TENANT}, ${gregorEmail}, 'Technical Admin', 'admin', null, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz)
         ON CONFLICT (id) DO UPDATE SET
           email = excluded.email,
           full_name = excluded.full_name,
@@ -283,6 +386,41 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
       expect(stored?.count).toBe(1);
       if (!stored?.order_id || !stored.customer_id)
         throw new Error("PATH1_P3_ORDER_READBACK_MISSING");
+
+      await rolf.page.goto("/", { waitUntil: "networkidle" });
+      await rolf.page.getByRole("button", { name: "Anlegen", exact: true }).click();
+      await rolf.page.getByRole("button", { name: /Offene KVs bearbeiten/ }).click();
+      const openQuotesDialog = rolf.page.getByRole("dialog", { name: "Offene KVs" });
+      await expect(openQuotesDialog.getByRole("status")).toContainText("Keine offenen KVs");
+      await expect(openQuotesDialog.getByRole("alert")).toHaveCount(0);
+      await expect(openQuotesDialog).not.toContainText("Ausgang ungeklärt");
+      await rolf.page.getByRole("button", { name: "Anlegen schließen" }).click();
+
+      const moneyLink = rolf.page.getByRole("link", { name: "Geld & Rechnungen" });
+      await expect(moneyLink).toHaveAttribute("href", "/buchhaltung/rechnungen");
+      await moneyLink.click();
+      await rolf.page.waitForURL((url) => url.pathname === "/buchhaltung/rechnungen");
+      await expect(
+        rolf.page.getByRole("heading", { name: "Rechnungen", exact: true }),
+      ).toBeVisible();
+      await expect(rolf.page.locator("body")).not.toContainText("NOT_AVAILABLE");
+      const accountingEntry = await rolf.page.goto("/buchhaltung", { waitUntil: "networkidle" });
+      expect(accountingEntry?.status()).toBe(200);
+      await rolf.page.waitForURL((url) => url.pathname === "/buchhaltung/rechnungen");
+
+      const retiredRouteResults: Array<{ path: string; status: number }> = [];
+      for (const retiredRoute of RETIRED_ROUTE_MATRIX) {
+        const response = await rolf.page.goto(retiredRoute, { waitUntil: "domcontentloaded" });
+        const status = response?.status() ?? 0;
+        retiredRouteResults.push({ path: retiredRoute, status });
+        expect(status, `${retiredRoute} must resolve through Next's unmatched-route 404`).toBe(404);
+        await expect(rolf.page.locator("body")).not.toContainText(
+          /NOT_AVAILABLE|Liquidität Stabil|145 Belege|62 Rechnungen|1240 Zeitbuchungen|Google-API|Scan & KI-Erfassung/i,
+        );
+      }
+      const galvanikControl = await rolf.page.goto("/warendurchlauf/galvanik", { waitUntil: "networkidle" });
+      expect(galvanikControl?.status()).toBe(200);
+      await expect(rolf.page.getByRole("heading", { name: /Galvanik Bearbeitung/ })).toBeVisible();
 
       for (const viewport of VIEWPORTS) {
         await rolf.page.setViewportSize({
@@ -519,6 +657,25 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
         );
       }
 
+      const gregor = await newContext(browser);
+      contexts.push(gregor.context);
+      await loginEmail(gregor.page, GREGOR_ACTOR_ID, gregorEmail, gregorPassword);
+      await expect(gregor.page.getByTestId("gregor-system-admin")).toContainText(
+        "Angemeldet als Gregor · Systemadministrator",
+      );
+      await expect(gregor.page.locator("body")).not.toContainText(/Technical Admin|\bTA\b/);
+      await expect(gregor.page.getByRole("link", { name: "Geld & Rechnungen" })).toHaveCount(0);
+      await expect(gregor.page.getByRole("link", { name: "Geld" })).toHaveCount(0);
+      await gregor.page.getByRole("link", { name: "Kreile Startseite" }).click();
+      await gregor.page.waitForURL((url) => url.pathname === "/settings", { timeout: 30_000 });
+      await expect(gregor.page.getByTestId("gregor-system-admin")).toBeVisible();
+      const [gregorReadback] = await sql<{ id: string; email: string; role: string }[]>`
+        SELECT id::text, email, role
+        FROM public.app_users
+        WHERE tenant_id = ${TENANT} AND id = ${GREGOR_ACTOR_ID}::uuid
+      `;
+      expect(gregorReadback).toEqual({ id: GREGOR_ACTOR_ID, email: gregorEmail, role: "admin" });
+
       if (browserErrors.length > 0) {
         console.log(
           `PATH1_V5_P3_REQUEST_FAILURES=${JSON.stringify(requestFailures)}`,
@@ -530,7 +687,7 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
       const receipt = {
         candidateCodeShaAtRun: candidateCodeSha,
         tenant: TENANT,
-        actors: { rolf: ROLF_ACTOR_ID, phillip: PHILLIP_ACTOR_ID },
+        actors: { rolf: ROLF_ACTOR_ID, phillip: PHILLIP_ACTOR_ID, gregor: GREGOR_ACTOR_ID },
         synthetic: true,
         order: {
           id: stored.order_id,
@@ -544,7 +701,11 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
           "Orders -> Auftrag -> Kunde -> Auftrag -> zurück",
           "Deep-Link -> Liste",
           "Suche -> V8/V2",
+          "Rolf -> Geld & Rechnungen -> Accounting-minimal",
+          "Gregor -> E-Mail-Login -> Einstellungen -> Start -> Einstellungen",
+          "55 retired/quarantined routes -> 404; Galvanik blackbox -> 200",
         ],
+        retiredRouteResults,
         captures,
       };
       mkdirSync(OUTPUT_DIR, { recursive: true });

@@ -348,6 +348,40 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(value.updateQuote).toHaveBeenCalledWith(expect.objectContaining({ quoteId: QUOTE_ID, expectedVersion: 1, dueDate: "2026-10-22" }));
   });
 
+  it("shows exactly one honest empty state for an empty open-KV read", async () => {
+    const value = ports({
+      listOpenQuotes: vi.fn().mockResolvedValue({ code: "OK", quotes: [] }),
+    });
+    render(<GlobalCreateFlow ports={value} />);
+
+    openFlow();
+    fireEvent.click(screen.getByRole("button", { name: /Offene KVs bearbeiten/ }));
+
+    expect(await screen.findByText("Keine offenen KVs")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Keine offenen KVs");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ausgang ungeklärt")).not.toBeInTheDocument();
+  });
+
+  it("shows an open-KV read failure without a simultaneous green empty state or visible technical ID", async () => {
+    const value = ports({
+      listOpenQuotes: vi.fn().mockResolvedValue({
+        code: "UNAVAILABLE",
+        message: "Der aktuelle Stand konnte nicht sicher geladen werden.",
+      }),
+    });
+    render(<GlobalCreateFlow ports={value} />);
+
+    openFlow();
+    fireEvent.click(screen.getByRole("button", { name: /Offene KVs bearbeiten/ }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Stand noch nicht geklärt");
+    expect(alert).toHaveTextContent("Der aktuelle Stand konnte nicht sicher geladen werden.");
+    expect(screen.queryByText("Keine offenen KVs")).not.toBeInTheDocument();
+    expect(screen.queryByText("offene-kvs")).not.toBeInTheDocument();
+  });
+
   it("clears an award date when editing, switching or resuming a KV", async () => {
     const otherQuote = quote("draft", {
       quoteId: OTHER_QUOTE_ID,

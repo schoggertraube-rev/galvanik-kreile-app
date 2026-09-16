@@ -17,9 +17,28 @@ import {
   resolvePinLoginCandidate,
 } from "@/lib/server/pinLoginHandle";
 import { recordUserLastSeenForLogin } from "@/lib/server/userLastSeen";
+import { getProductIdentity } from "@/lib/auth/authorizationContract";
 
 export async function getAuthorizationSnapshotAction(): Promise<AuthorizationResult> {
-  return await resolveAuthorization();
+  const result = await resolveAuthorization();
+  if (!result.ok) return result;
+
+  const identity = getProductIdentity(result.data.userId);
+  if (!identity) {
+    return {
+      ok: false,
+      reason: "AUTHORIZATION_UNAVAILABLE",
+      message: "AUTH_ERROR: Kein eindeutiges Produktprofil konfiguriert",
+    };
+  }
+
+  return {
+    ok: true,
+    data: {
+      ...result.data,
+      displayName: identity.name,
+    },
+  };
 }
 
 export async function getRoleAction(): Promise<string | null> {

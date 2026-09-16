@@ -155,7 +155,7 @@ owner_v5_p3_core_surfaces_search_execution_20260916:
   lane_0_contract: AUTHORIZED_MODULE_READ_PORTS_ONLY; STRUCTURED_APP_FACTS; METERED_COST_0; SOURCES_RELATIONSHIPS_DATA_STAND_AND_DEEPLINKS; NO_AI_INTERNET_PROVIDER_OR_SECOND_BUSINESS_TRUTH
   identity_contract: VISIBLE_PRODUCT_IDENTITIES_ONLY_ROLF_MEISTER_PHILLIP_WERKSTATT_GREGOR_SYSTEMADMIN; CAPABILITY_AND_TENANT_FAIL_CLOSED; NO_AUTH_SESSION_ROLE_MIGRATION
   hard_limits: NO_TABLE_MIGRATION_RLS_POLICY_RUNTIME_DEPENDENCY_ACCOUNTING_ANALYSIS_PROVIDER_OCR_M365_MOLLIE_BANK_CALENDAR_OR_PERSISTENT_ASSISTANT_THREADS
-  audit_repair: CROSS_FIELD_SEARCH_PROOF; PORTALED_SEARCH_FOCUS; EXPLICIT_TRUNCATION_COVERAGE; SHAREABLE_V8_V2_HREFS; CANDIDATE_REGISTRY_TRUTH; BLOCKING_SEARCH_REAL_DB_AND_P3_BROWSER_CI; CANONICAL_F1_1_PAYMENT_EMPTY_STATE; SHA_BOUND_BROWSER_RECEIPT; REAL_GREGOR_SYSTEM_ENTRY; LEGACY_SEARCH_ACTION_CANONICAL_DELEGATE
+  audit_repair: CROSS_FIELD_SEARCH_PROOF; PORTALED_SEARCH_FOCUS; EXPLICIT_TRUNCATION_COVERAGE; SHAREABLE_V8_V2_HREFS; CANDIDATE_REGISTRY_TRUTH; BLOCKING_SEARCH_REAL_DB_AND_P3_BROWSER_CI; CANONICAL_F1_1_PAYMENT_EMPTY_STATE; SHA_BOUND_BROWSER_RECEIPT; EXACT_ACTOR_BOUND_GREGOR_SYSTEM_ENTRY; LEGACY_SEARCH_ACTION_CANONICAL_DELEGATE; CANONICAL_ROUTE_DISPOSITION_WITH_55_RETIRED_PAGES_FAIL_CLOSED; CANONICAL_GALVANIK_BLACKBOX_DRILLDOWN_RETAINED; EXCLUSIVE_OPEN_QUOTE_LOADING_EMPTY_DATA_ERROR_UNKNOWN_STATES; CAPABILITY_BOUND_ACCOUNTING_MINIMAL_NAVIGATION; PRODUCT_LANGUAGE_WITHOUT_READBACK_JARGON
   next_gate: PRODUCT_CODE_SHA_THEN_SHA_BOUND_BROWSER_EVIDENCE_HEAD_REMOTE_CI_PREVIEW_AND_INDEPENDENT_CLOSURE_REVIEW
 
 # ── F1.2 Entscheidungsgrundlage (bindend, ersetzt Altstand) ───────
@@ -611,6 +611,16 @@ path1_ui_convergence_allowlist:
   - src/app/settings/SettingsAppAdapter.tsx
   - src/app/settings/__tests__/SettingsAppAdapter.test.tsx
   - src/app/__tests__/f0W2cB2s.test.ts
+  - src/lib/server/authBootstrap.ts
+  - src/lib/server/__tests__/authBootstrap.test.ts
+  - src/lib/server/__tests__/authorization.test.ts
+  - src/components/layout/__tests__/TargetNavigation.p3.test.tsx
+  - src/modules/orders/__tests__/OrderSurfaces.v8.test.tsx
+  - src/app/archive/__tests__/w4ArchiveOrdersReadStates.test.tsx
+  - src/app/feedback/[token]/__tests__/w2cB2m6.feedbackToken.failClosed.test.tsx
+  - src/app/items/__tests__/w2cB2m5b.inventoryMovement.failClosed.test.ts
+  - src/app/marketing/__tests__/w2cMarketingTruth.failClosed.test.ts
+  - src/app/print-queue/__tests__/f0W2cPrintQueue.unavailable.test.tsx
   - src/modules/fundament/fundament.manifest.json
   - src/modules/fundament/public.ts
   - src/modules/fundament/ui/SystemAdminView.tsx
@@ -688,6 +698,22 @@ path1_ui_convergence_allowlist:
   - src/app/actions/customers.actions.ts
   - src/app/api/__tests__/quarantine.test.ts
   - src/app/buchhaltung/zahlung/page.tsx
+  - src/app/buchhaltung/ausgaben/page.tsx
+  - src/app/buchhaltung/belege/[id]/page.tsx
+  - src/app/buchhaltung/belege/neu/page.tsx
+  - src/app/buchhaltung/belege/page.tsx
+  - src/app/buchhaltung/bwa/page.tsx
+  - src/app/buchhaltung/einstellungen/page.tsx
+  - src/app/buchhaltung/export/page.tsx
+  - src/app/buchhaltung/fristen/page.tsx
+  - src/app/buchhaltung/kosten/[id]/page.tsx
+  - src/app/buchhaltung/kosten/neu/page.tsx
+  - src/app/buchhaltung/kosten/page.tsx
+  - src/app/buchhaltung/kraftstoff/page.tsx
+  - src/app/buchhaltung/periodenabschluss/page.tsx
+  - src/app/buchhaltung/rechnungen/[id]/page.tsx
+  - src/app/buchhaltung/rechnungen/neu/page.tsx
+  - src/app/buchhaltung/steuerprofil/page.tsx
   - src/app/cockpit/components/EngpassKachel.tsx
   - src/app/customers/[id]/__tests__/w2cB2m5f.customerDetailPrivacy.failClosed.test.ts
   - src/app/customers/[id]/actions.ts

@@ -1,3 +1,5 @@
+import { getProductIdentity } from "./authorizationContract";
+
 export type StartUserDto = {
   loginHandle: string;
   identity: "rolf" | "phillip";
@@ -62,4 +64,3 @@ export function toAdminUserDto(user: AdminUserDto): AdminUserDto {
     language: user.language,
   };
 }
-import { getProductIdentity } from "./authorizationContract";

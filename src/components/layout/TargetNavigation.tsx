@@ -20,7 +20,7 @@ function current(pathname: string, href: string): boolean {
 export function TargetNavigation() {
   const pathname = usePathname();
   const { role } = usePermissions();
-  const invoices = role === "buero" || role === "meister" || role === "admin";
+  const invoices = role === "buero" || role === "meister";
   const settings = role === "admin" || role === "developer";
   return (
     <aside className={styles.sidebar}>

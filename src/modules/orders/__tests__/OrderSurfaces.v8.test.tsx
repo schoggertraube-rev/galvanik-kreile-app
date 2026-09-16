@@ -31,6 +31,13 @@ describe("Orders V8 one-surface truth", () => {
     expect(onChange).toHaveBeenCalledWith("Stahl");
   });
 
+  it("describes an empty list in user language without implementation jargon", () => {
+    render(<OrdersView state={{ kind: "data", orders: [] }} query={{ value: "", onChange: vi.fn() }} onOpenOrder={vi.fn()} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Noch keine Aufträge erfasst");
+    expect(screen.getByRole("status")).toHaveTextContent("sicher gespeichert");
+    expect(screen.getByRole("status")).not.toHaveTextContent(/Readback|kanonisch|tenantgebunden/i);
+  });
+
   it("renders the same complete V8 card and customer cross-link", () => {
     const openCustomer = vi.fn();
     render(<OrderCardView actions={actions} onClose={vi.fn()} onOpenCustomer={openCustomer} state={{ kind: "data", card }} />);

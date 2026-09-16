@@ -52,24 +52,27 @@ describe("F0 W2C active route quarantine", () => {
 
 describe("F0 W2C active client containment", () => {
   it("removes browser upload and public-URL operations while keeping honest disabled controls", () => {
-    const sources = [
-      "src/app/buchhaltung/belege/neu/page.tsx",
+    expect(existsSync(resolve(process.cwd(), "src/app/buchhaltung/belege/neu/page.tsx"))).toBe(false);
+    const uiSources = [
       "src/components/erfassung/ScanFlow/ScanUpload.tsx",
       "src/components/erfassung/shared/ItemPhotoUploader.tsx",
       "src/components/intake/CameraCapture.tsx",
+    ].map((file) => readFileSync(resolve(process.cwd(), file), "utf8"));
+    const serviceSources = [
       "src/lib/services/intakeService.ts",
       "src/lib/services/photoService.ts",
     ].map((file) => readFileSync(resolve(process.cwd(), file), "utf8"));
+    const sources = [...uiSources, ...serviceSources];
 
     for (const source of sources) {
       expect(source).not.toMatch(/getPublicUrl|\.storage\.from\(|\.upload\(|functions\.invoke|type="file"/);
     }
-    for (const source of sources.slice(0, 4)) {
+    for (const source of uiSources) {
       expect(source).toMatch(/disabled|nicht verfügbar/i);
       expect(source).not.toMatch(/addEvent|processImage|createPaymentIntent|emailProvider\.send/);
     }
-    expect(sources[0]).toContain("disabled");
-    expect(sources[0]).toContain("nicht verfügbar");
+    expect(uiSources[0]).toContain("disabled");
+    expect(uiSources[0]).toContain("nicht verfügbar");
   });
 
   it("removes obsolete order/customer form and payment shells instead of retaining dead controls", () => {

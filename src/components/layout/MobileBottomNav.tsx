@@ -11,7 +11,7 @@ export function MobileBottomNav() {
   const pathname = usePathname();
   const { role } = usePermissions();
   const [open, setOpen] = useState(false);
-  const invoices = role === "buero" || role === "meister" || role === "admin";
+  const invoices = role === "buero" || role === "meister";
   const settings = role === "admin" || role === "developer";
   const link = (href: string, label: string, Icon: typeof Home) => <Link href={href} prefetch={false} aria-current={href === "/" ? pathname === "/" ? "page" : undefined : pathname.startsWith(href) ? "page" : undefined}><Icon aria-hidden="true" /><span>{label}</span></Link>;
 
