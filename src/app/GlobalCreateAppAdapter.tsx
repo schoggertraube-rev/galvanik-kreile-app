@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { logout } from "@/app/actions/auth";
 import { createCustomerAction, getCustomersDb, readCustomerCreateReceiptAction } from "@/app/actions/customers.actions";
-import { convertQuoteToOrderAction, createQuoteAction, readQuoteAction, readQuoteCreateReceiptAction, readQuoteConversionReceiptAction } from "@/app/actions/quotes.actions";
+import { convertQuoteToOrderAction, createQuoteAction, listOpenQuotesAction, readQuoteAction, readQuoteCreateReceiptAction, readQuoteConversionReceiptAction, readQuoteUpdateReceiptAction, updateQuoteAction } from "@/app/actions/quotes.actions";
 import { createOrderIntakeAction, getOrderIntakeReceiptAction } from "@/app/warendurchlauf/actions";
 import {
   GlobalCreateFlow,
@@ -12,13 +12,14 @@ import {
   type GlobalCreateCustomerResult,
   type GlobalCreateQuoteReadResult,
   type GlobalCreateQuoteResult,
+  type GlobalCreateOpenQuotesResult,
   type GlobalCreateDirectIntakeResult,
   type DirectIntakeInput,
 } from "@/components/layout/GlobalCreateFlow";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { isAppRole } from "@/lib/auth/authorizationContract";
 import { useOverlayStore } from "@/lib/overlayStore";
-import type { ConvertQuoteInput, CreateQuoteInput } from "@/modules/quotes/public";
+import type { ConvertQuoteInput, CreateQuoteInput, UpdateQuoteInput } from "@/modules/quotes/public";
 
 type CreateCustomerInput = Parameters<typeof createCustomerAction>[0];
 
@@ -100,11 +101,17 @@ export function GlobalCreateAppAdapter() {
           } };
         },
         createQuote: async (input: CreateQuoteInput): Promise<GlobalCreateQuoteResult> => createQuoteAction(input),
+        updateQuote: async (input: UpdateQuoteInput): Promise<GlobalCreateQuoteResult> => updateQuoteAction(input),
         readQuoteCreateReceipt: async (input: CreateQuoteInput): Promise<GlobalCreateQuoteResult> => {
           const result = await readQuoteCreateReceiptAction(input);
           return result.code === "OK" ? { ...result, replayed: true } : result;
         },
         readQuote: async (input: { quoteId: string }): Promise<GlobalCreateQuoteReadResult> => readQuoteAction(input),
+        listOpenQuotes: async (): Promise<GlobalCreateOpenQuotesResult> => listOpenQuotesAction(),
+        readQuoteUpdateReceipt: async (input: UpdateQuoteInput): Promise<GlobalCreateQuoteResult> => {
+          const result = await readQuoteUpdateReceiptAction(input);
+          return result.code === "OK" ? { ...result, replayed: true } : result;
+        },
         convertQuote: async (input: ConvertQuoteInput): Promise<GlobalCreateConversionResult> => convertQuoteToOrderAction(input),
         readQuoteConversionReceipt: async (input: { quoteId: string; clientEventId: string }): Promise<GlobalCreateConversionResult> => {
           const result = await readQuoteConversionReceiptAction(input);

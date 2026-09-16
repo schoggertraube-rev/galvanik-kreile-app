@@ -13,28 +13,41 @@
     "@/modules/quotes/public#QuotePosition",
     "@/modules/quotes/public#QuotePositionInput",
     "@/modules/quotes/public#QuoteReadback",
+    "@/modules/quotes/public#QuoteUpdateReceipt",
     "@/modules/quotes/public#ReadQuoteConversionReceiptResult",
     "@/modules/quotes/public#ReadQuoteCreateReceiptResult",
+    "@/modules/quotes/public#ReadQuoteUpdateReceiptResult",
     "@/modules/quotes/public#ReadQuoteResult",
+    "@/modules/quotes/public#UpdateQuoteInput",
+    "@/modules/quotes/public#UpdateQuoteResult",
+    "@/modules/quotes/public#ListOpenQuotesResult",
     "@/modules/quotes/server-public#ConvertQuoteInput",
     "@/modules/quotes/server-public#CreateQuoteInput",
     "@/modules/quotes/server-public#QuoteCommandCapabilities",
     "@/modules/quotes/server-public#QuoteCommandContext",
     "@/modules/quotes/server-public#ReadQuoteCreateReceiptResult",
+    "@/modules/quotes/server-public#ReadQuoteUpdateReceiptResult",
+    "@/modules/quotes/server-public#UpdateQuoteInput",
     "@/modules/quotes/server-public#createQuoteCommand",
     "@/modules/quotes/server-public#prepareQuoteConversionCommand",
+    "@/modules/quotes/server-public#listOpenQuotesCommand",
     "@/modules/quotes/server-public#readQuoteCommand",
     "@/modules/quotes/server-public#readQuoteCreateReceiptCommand",
-    "@/modules/quotes/server-public#readQuoteConversionReceiptCommand"
+    "@/modules/quotes/server-public#readQuoteUpdateReceiptCommand",
+    "@/modules/quotes/server-public#readQuoteConversionReceiptCommand",
+    "@/modules/quotes/server-public#updateQuoteCommand"
   ],
-  "capabilities": ["quotes:create", "quotes:read", "quotes:convert-to-order"],
-  "migrations": ["20260914110000_path1_quote_persistence_contract.sql"],
+  "capabilities": ["quotes:create", "quotes:read", "quotes:update", "quotes:convert-to-order"],
+  "migrations": ["20260914110000_path1_quote_persistence_contract.sql", "20260916090000_path1_quote_product_lifecycle.sql"],
   "viewsFunctions": [
     "private.create_quote_v1",
     "private.prepare_quote_conversion_v1",
+    "private.update_quote_v1",
     "private.v_quote_conversion_receipts_v1",
     "private.v_quote_create_receipts_v1",
-    "private.v_quotes_v1"
+    "private.v_quotes_v1",
+    "private.v_open_quotes_v1",
+    "private.v_quote_update_receipts_v1"
   ],
   "ownsTables": [
     "private.quote_conversion_receipts",
@@ -42,10 +55,11 @@
     "private.quote_create_receipts",
     "private.quote_number_counters",
     "private.quote_positions",
+    "private.quote_update_receipts",
     "private.quotes"
   ],
   "storagePurposes": [],
-  "events": { "emits": ["QUOTE_AWARDED_V1", "QUOTE_CREATED_V1"], "consumes": ["ORDER_INTAKE_CREATED_V1"] },
+  "events": { "emits": ["QUOTE_AWARDED_V1", "QUOTE_CREATED_V1", "QUOTE_UPDATED_V1"], "consumes": ["ORDER_INTAKE_CREATED_V1"] },
   "config": {},
   "dependencies": ["orders", "customers"]
 }

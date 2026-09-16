@@ -6,12 +6,16 @@ import { createOrderIntake } from "@/lib/server/commands/orderIntakeCommand";
 import { readOrderIntakeReceipt } from "@/lib/server/orderIntakeRead";
 import {
   createQuoteCommand,
+  listOpenQuotesCommand,
   prepareQuoteConversionCommand,
   readQuoteCommand,
   readQuoteCreateReceiptCommand,
   readQuoteConversionReceiptCommand,
+  readQuoteUpdateReceiptCommand,
+  updateQuoteCommand,
   type ConvertQuoteInput,
   type CreateQuoteInput,
+  type UpdateQuoteInput,
   type QuoteCommandContext,
 } from "@/modules/quotes/server-public";
 
@@ -22,6 +26,7 @@ function quoteCommandContext(authorization: { tenantId: string; userId: string; 
     capabilities: {
       canCreateQuote: authorization.permissions.includes("perm_data_orders"),
       canReadQuote: authorization.permissions.includes("perm_view_leitstand"),
+      canUpdateQuote: authorization.permissions.includes("perm_data_orders"),
       canConvertQuote: authorization.permissions.includes("perm_data_orders"),
     },
   };
@@ -64,6 +69,36 @@ export async function readQuoteAction(input: { quoteId: string }) {
   return readQuoteCommand(quoteCommandContext(authorization.data), input);
 }
 
+export async function listOpenQuotesAction() {
+  noStore();
+  let authorization;
+  try {
+    authorization = await resolveAuthorization();
+  } catch {
+    return { code: "UNAVAILABLE" as const, message: "Offene KVs konnten nicht sicher gelesen werden." };
+  }
+  const failure = authorizationFailure(authorization);
+  if (failure || !authorization.ok) return failure!;
+  return listOpenQuotesCommand(quoteCommandContext(authorization.data));
+}
+
+export async function updateQuoteAction(input: UpdateQuoteInput) {
+  let authorization;
+  try {
+    authorization = await resolveAuthorization();
+  } catch {
+    return { code: "UNAVAILABLE" as const, message: "KV konnte nicht sicher aktualisiert werden." };
+  }
+  const failure = authorizationFailure(authorization);
+  if (failure || !authorization.ok) return failure!;
+  const result = await updateQuoteCommand(quoteCommandContext(authorization.data), input);
+  if (result.code === "OK") {
+    revalidatePath("/customers");
+    revalidatePath(`/customers/${result.quote.customerId}`);
+  }
+  return result;
+}
+
 /** Read-only recovery for an interrupted KV create; it never starts a command. */
 export async function readQuoteCreateReceiptAction(input: CreateQuoteInput) {
   noStore();
@@ -76,6 +111,20 @@ export async function readQuoteCreateReceiptAction(input: CreateQuoteInput) {
   const failure = authorizationFailure(authorization);
   if (failure || !authorization.ok) return failure!;
   return readQuoteCreateReceiptCommand(quoteCommandContext(authorization.data), input);
+}
+
+/** Read-only recovery for an interrupted KV edit; it never starts a command. */
+export async function readQuoteUpdateReceiptAction(input: UpdateQuoteInput) {
+  noStore();
+  let authorization;
+  try {
+    authorization = await resolveAuthorization();
+  } catch {
+    return { code: "UNAVAILABLE" as const, message: "Der gespeicherte KV-Stand konnte nicht sicher gelesen werden." };
+  }
+  const failure = authorizationFailure(authorization);
+  if (failure || !authorization.ok) return failure!;
+  return readQuoteUpdateReceiptCommand(quoteCommandContext(authorization.data), input);
 }
 
 /** Read-only recovery for an interrupted award. It verifies both receipts. */

@@ -225,16 +225,38 @@ test.describe("PATH1 V5 globales Plus – realer Kunde zu KV zu F1.1-Auftrag", (
       const quoteReceipt = await receiptValues(desktop.page.getByRole("group", { name: "KV – technische Details für Support" }));
       expect(quoteReceipt).toHaveLength(3);
 
+      await desktop.page.getByRole("button", { name: "KV bearbeiten" }).click();
+      await expect(desktop.page.getByRole("heading", { name: "KV bearbeiten" })).toBeVisible();
+      await desktop.page.getByLabel("Gewünschter Termin").fill("2026-10-18");
+      await desktop.page.getByLabel("Hinweis zum KV").fill(`SYNTHETISCHER V5 KV UPDATE ${suffix}`);
+      await desktop.page.getByRole("button", { name: "KV sichern" }).click();
+      await expect(desktop.page.getByText("Stand 2")).toBeVisible();
+
       await desktop.page.getByRole("button", { name: "Anlegen schließen" }).click();
       await desktop.page.reload();
       await openCreate(desktop.page);
       await desktop.page.getByRole("button", { name: /Gespeicherten KV fortsetzen/ }).click();
-      await expect(desktop.page.getByText(/gespeicherte KV wurde erneut geprüft/)).toBeVisible();
+      await expect(desktop.page.getByText(/KV ist sicher gespeichert und kann weiterbearbeitet werden/)).toBeVisible();
+      await expect(desktop.page.locator("body")).not.toContainText(/echten Datenstand zurücklesen|Aus der Datenbank zurücklesen|persistenten KV/i);
 
+      const confirmedDate = desktop.page.getByLabel("Zugesagter Termin für den Auftrag");
+      const awardButton = desktop.page.getByRole("button", { name: /Zuschlag bestätigen/ });
+      await expect(confirmedDate).toBeFocused();
+      await expect(confirmedDate).toHaveAttribute("aria-invalid", "true");
+      await expect(awardButton).toBeDisabled();
+      await desktop.page.setViewportSize({ width: 1914, height: 917 });
+      await confirmedDate.scrollIntoViewIfNeeded();
+      captures.push(await capture(desktop.page, "v5-award-date-desktop-1914x917.png", "award-date-required-disabled"));
+      await desktop.page.setViewportSize({ width: 768, height: 1024 });
+      await confirmedDate.scrollIntoViewIfNeeded();
+      captures.push(await capture(desktop.page, "v5-award-date-tablet-768x1024.png", "award-date-required-disabled"));
       await desktop.page.setViewportSize({ width: 390, height: 844 });
-      captures.push(await capture(desktop.page, "v5-kv-readback-mobile-390x844.png", "quote-reload-readback"));
-      await desktop.page.getByLabel("Zusagter Termin für den Auftrag").fill("2026-10-20");
-      await desktop.page.getByRole("button", { name: /Zuschlag bestätigen/ }).click();
+      await confirmedDate.fill("2026-10-20");
+      await expect(confirmedDate).toHaveAttribute("aria-invalid", "false");
+      await expect(awardButton).toBeEnabled();
+      await awardButton.scrollIntoViewIfNeeded();
+      captures.push(await capture(desktop.page, "v5-award-date-mobile-390x844.png", "award-date-valid-enabled"));
+      await awardButton.click();
       const orderHeading = desktop.page.getByRole("heading", { name: /^Auftrag A-\d{4}-\d+ angelegt$/ });
       await expect(orderHeading).toBeVisible();
       const orderNumber = (await orderHeading.textContent())!.replace(/^Auftrag /, "").replace(/ angelegt$/, "").trim();
@@ -255,6 +277,8 @@ test.describe("PATH1 V5 globales Plus – realer Kunde zu KV zu F1.1-Auftrag", (
         quotes: number;
         quote_create_events: number;
         quote_award_events: number;
+        quote_update_events: number;
+        quote_update_receipts: number;
         conversion_receipts: number;
         orders: number;
         intake_events: number;
@@ -264,11 +288,13 @@ test.describe("PATH1 V5 globales Plus – realer Kunde zu KV zu F1.1-Auftrag", (
           (SELECT count(*)::integer FROM private.quotes WHERE tenant_id = ${TENANT} AND quote_number = ${quoteNumber}) AS quotes,
           (SELECT count(*)::integer FROM public.events event JOIN private.quotes quote ON quote.tenant_id = event.tenant_id AND quote.id::text = event.payload->>'quoteId' WHERE event.tenant_id = ${TENANT} AND event.event_type = 'QUOTE_CREATED_V1' AND quote.quote_number = ${quoteNumber}) AS quote_create_events,
           (SELECT count(*)::integer FROM public.events event JOIN private.quotes quote ON quote.tenant_id = event.tenant_id AND quote.id::text = event.payload->>'quoteId' WHERE event.tenant_id = ${TENANT} AND event.event_type = 'QUOTE_AWARDED_V1' AND quote.quote_number = ${quoteNumber}) AS quote_award_events,
+          (SELECT count(*)::integer FROM public.events event JOIN private.quotes quote ON quote.tenant_id = event.tenant_id AND quote.id::text = event.payload->>'quoteId' WHERE event.tenant_id = ${TENANT} AND event.event_type = 'QUOTE_UPDATED_V1' AND quote.quote_number = ${quoteNumber}) AS quote_update_events,
+          (SELECT count(*)::integer FROM private.quote_update_receipts receipt JOIN private.quotes quote ON quote.tenant_id = receipt.tenant_id AND quote.id = receipt.quote_id WHERE quote.tenant_id = ${TENANT} AND quote.quote_number = ${quoteNumber}) AS quote_update_receipts,
           (SELECT count(*)::integer FROM private.quote_conversion_receipts receipt JOIN private.quotes quote ON quote.tenant_id = receipt.tenant_id AND quote.id = receipt.quote_id WHERE quote.tenant_id = ${TENANT} AND quote.quote_number = ${quoteNumber}) AS conversion_receipts,
           (SELECT count(*)::integer FROM public.orders WHERE tenant_id = ${TENANT} AND order_number = ${orderNumber}) AS orders,
           (SELECT count(*)::integer FROM public.events event JOIN public.orders orders ON orders.tenant_id = event.tenant_id AND orders.id = event.order_id WHERE event.tenant_id = ${TENANT} AND event.event_type = 'ORDER_INTAKE_CREATED_V1' AND orders.order_number = ${orderNumber}) AS intake_events
       `;
-      expect(integrity).toEqual({ customers: 1, quotes: 1, quote_create_events: 1, quote_award_events: 1, conversion_receipts: 1, orders: 1, intake_events: 1 });
+      expect(integrity).toEqual({ customers: 1, quotes: 1, quote_create_events: 1, quote_award_events: 1, quote_update_events: 1, quote_update_receipts: 1, conversion_receipts: 1, orders: 1, intake_events: 1 });
 
       const phillip = await newContext(browser, { width: 390, height: 844 });
       contexts.push(phillip.context);

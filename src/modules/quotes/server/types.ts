@@ -1,6 +1,7 @@
 export type QuoteCommandCapabilities = {
   canCreateQuote: boolean;
   canReadQuote: boolean;
+  canUpdateQuote: boolean;
   canConvertQuote: boolean;
 };
 
@@ -35,6 +36,15 @@ export type ConvertQuoteInput = {
   confirmedOrderDueDate: string;
 };
 
+export type UpdateQuoteInput = {
+  quoteId: string;
+  clientEventId: string;
+  expectedVersion: number;
+  dueDate: string;
+  note: string | null;
+  positions: QuotePositionInput[];
+};
+
 export type QuotePosition = QuotePositionInput & {
   id: string;
   position: number;
@@ -48,7 +58,7 @@ export type QuoteReadback = {
   customerNumber: string | null;
   customerDisplayName: string;
   status: "draft" | "converted";
-  version: 1 | 2;
+  version: number;
   currency: "EUR";
   dueDate: string;
   note: string | null;
@@ -57,8 +67,21 @@ export type QuoteReadback = {
   actorId: string;
   actorDisplayName: string;
   createdAt: string;
+  updatedAt: string;
   convertedAt: string | null;
   positions: QuotePosition[];
+};
+
+export type QuoteUpdateReceipt = {
+  receiptId: string;
+  eventId: string;
+  quoteId: string;
+  actorId: string;
+  clientEventId: string;
+  correlationId: string;
+  recordedAt: string;
+  expectedVersion: number;
+  aggregateVersion: number;
 };
 
 export type QuoteCreateReceipt = {
@@ -84,7 +107,7 @@ export type QuoteConversionReceipt = {
   clientEventId: string;
   correlationId: string;
   recordedAt: string;
-  aggregateVersion: 2;
+  aggregateVersion: number;
 };
 
 export type QuoteCommandFailure = {
@@ -100,8 +123,20 @@ export type ReadQuoteResult =
   | { code: "OK"; quote: QuoteReadback }
   | QuoteCommandFailure;
 
+export type UpdateQuoteResult =
+  | { code: "OK"; quote: QuoteReadback; receipt: QuoteUpdateReceipt; replayed: boolean }
+  | QuoteCommandFailure;
+
+export type ListOpenQuotesResult =
+  | { code: "OK"; quotes: QuoteReadback[] }
+  | QuoteCommandFailure;
+
 export type ReadQuoteCreateReceiptResult =
   | { code: "OK"; quote: QuoteReadback; receipt: QuoteCreateReceipt }
+  | QuoteCommandFailure;
+
+export type ReadQuoteUpdateReceiptResult =
+  | { code: "OK"; quote: QuoteReadback; receipt: QuoteUpdateReceipt }
   | QuoteCommandFailure;
 
 export type QuoteOrderInput = {
