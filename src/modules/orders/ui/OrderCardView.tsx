@@ -132,9 +132,9 @@ export function OrderCardView({
   return (
     <article className={styles.orderCardV8} data-testid="order-card-v8">
       <header className={styles.cardHeader}>
-        <button type="button" className={styles.back} onClick={onClose}>
+        <button type="button" className={styles.back} onClick={onClose} aria-label="Zurück">
           <ArrowLeft />
-          Zurück
+          <span>Zurück</span>
         </button>
         <div className={styles.identityBlock}>
           <p>{card.orderNumber}</p>

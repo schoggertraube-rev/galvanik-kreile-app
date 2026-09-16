@@ -1426,12 +1426,19 @@
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/search.actions.ts",
       "exported_functions": [
-        "globalSearch"
+        "searchTenantAction"
       ],
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Global search action. Supabase full-text, no independent E2E evidence.",
-      "visible": false,
-      "reachable": false
+      "classification": "REAL_VERIFIED",
+      "evidence": {
+        "mission": "PATH1_UI_CONVERGENCE_V5_P3_CORE_SURFACES_SEARCH",
+        "role": "Deterministic Lane-0 search over tenant-bound Orders and Customers read ports with V8/V2 deep-links and backstack.",
+        "environment": "FRESH_SUPABASE_LOOPBACK_ONLY",
+        "evidence_path": "docs/evidence/path1/PATH1_UI_CONVERGENCE_V5_P3_CORE_SURFACES_SEARCH.md",
+        "browser_receipt": "docs/evidence/path1/artifacts/p3-core-surfaces-search/p3-browser-receipt.json",
+        "browser_receipt_sha256": "5FDC58C4F92324AFAB84DA6C2164970B619849D264908D6DBC4244E82F48E3E4"
+      },
+      "visible": true,
+      "reachable": true
     },
     {
       "stable_id": "server-actions.start",

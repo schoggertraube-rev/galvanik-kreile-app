@@ -13,7 +13,7 @@ export function MobileBottomNav() {
   const [open, setOpen] = useState(false);
   const invoices = role === "buero" || role === "meister" || role === "admin";
   const settings = role === "admin" || role === "developer";
-  const link = (href: string, label: string, Icon: typeof Home) => <Link href={href} aria-current={href === "/" ? pathname === "/" ? "page" : undefined : pathname.startsWith(href) ? "page" : undefined}><Icon aria-hidden="true" /><span>{label}</span></Link>;
+  const link = (href: string, label: string, Icon: typeof Home) => <Link href={href} prefetch={false} aria-current={href === "/" ? pathname === "/" ? "page" : undefined : pathname.startsWith(href) ? "page" : undefined}><Icon aria-hidden="true" /><span>{label}</span></Link>;
 
   return (
     <>
@@ -24,7 +24,7 @@ export function MobileBottomNav() {
         {invoices ? link("/buchhaltung/rechnungen", "Geld", ReceiptText) : null}
         <button type="button" onClick={() => setOpen(true)} aria-expanded={open}><Menu aria-hidden="true" /><span>Mehr</span></button>
       </nav>
-      {open ? <div className={styles.moreBackdrop} onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}><section className={styles.moreSheet} role="dialog" aria-modal="true" aria-label="Weitere Kernbereiche"><button type="button" className={styles.moreClose} onClick={() => setOpen(false)} aria-label="Schließen"><X /></button><Link href="/warendurchlauf" onClick={() => setOpen(false)}><PackageCheck />Werkstatt</Link>{settings ? <Link href="/settings" onClick={() => setOpen(false)}><Settings />Einstellungen</Link> : null}</section></div> : null}
+      {open ? <div className={styles.moreBackdrop} onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}><section className={styles.moreSheet} role="dialog" aria-modal="true" aria-label="Weitere Kernbereiche"><button type="button" className={styles.moreClose} onClick={() => setOpen(false)} aria-label="Schließen"><X /></button><Link href="/warendurchlauf" prefetch={false} onClick={() => setOpen(false)}><PackageCheck />Werkstatt</Link>{settings ? <Link href="/settings" prefetch={false} onClick={() => setOpen(false)}><Settings />Einstellungen</Link> : null}</section></div> : null}
     </>
   );
 }

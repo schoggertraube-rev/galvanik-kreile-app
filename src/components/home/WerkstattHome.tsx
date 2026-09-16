@@ -83,6 +83,7 @@ export async function loadWerkstattHome(
         greetingName: authorization.displayName,
         canCreateOrder: true,
         kpis: kpis.data,
+        loadedAt: new Date().toISOString(),
       }),
     };
   } catch {

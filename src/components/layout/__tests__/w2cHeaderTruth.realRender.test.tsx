@@ -37,6 +37,9 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: boundary.routerReplace }),
 }));
 vi.mock("@/app/actions/auth", () => ({ logout: boundary.logout }));
+vi.mock("@/components/layout/GlobalSearch", () => ({
+  GlobalSearch: () => null,
+}));
 vi.mock("@/components/layout/RealtimeSyncManager", () => ({
   useRealtimeStatus: () => boundary.realtime,
 }));

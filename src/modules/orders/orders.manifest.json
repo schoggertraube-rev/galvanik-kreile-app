@@ -21,10 +21,13 @@
     "@/modules/orders/public#OrderStationAttachmentPanelProps",
     "@/modules/orders/public#OrderStationAttachmentPorts",
     "@/modules/orders/public#OrdersListItem",
+    "@/modules/orders/public#OrdersHomeProjection",
+    "@/modules/orders/public#OrdersHomeSource",
     "@/modules/orders/public#OrdersQueryPort",
     "@/modules/orders/public#OrdersView",
     "@/modules/orders/public#OrdersViewState",
     "@/modules/orders/public#Urgency",
+    "@/modules/orders/public#buildOrdersHomeProjection",
     "@/modules/orders/public#getUrgency",
     "@/modules/orders/public#isOrderLifecycleStatus"
   ],

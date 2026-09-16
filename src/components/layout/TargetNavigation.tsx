@@ -25,9 +25,9 @@ export function TargetNavigation() {
   return (
     <aside className={styles.sidebar}>
       <nav aria-label="Hauptnavigation">
-        {CORE.map(({ href, label, icon: Icon }) => <Link key={href} href={href} aria-current={current(pathname, href) ? "page" : undefined}><Icon aria-hidden="true" /><span>{label}</span></Link>)}
-        {invoices ? <Link href="/buchhaltung/rechnungen" aria-current={pathname.startsWith("/buchhaltung/rechnungen") ? "page" : undefined}><ReceiptText aria-hidden="true" /><span>Geld &amp; Rechnungen</span></Link> : null}
-        {settings ? <Link href="/settings" aria-current={pathname.startsWith("/settings") ? "page" : undefined}><Settings aria-hidden="true" /><span>Einstellungen</span></Link> : null}
+        {CORE.map(({ href, label, icon: Icon }) => <Link key={href} href={href} prefetch={false} aria-current={current(pathname, href) ? "page" : undefined}><Icon aria-hidden="true" /><span>{label}</span></Link>)}
+        {invoices ? <Link href="/buchhaltung/rechnungen" prefetch={false} aria-current={pathname.startsWith("/buchhaltung/rechnungen") ? "page" : undefined}><ReceiptText aria-hidden="true" /><span>Geld &amp; Rechnungen</span></Link> : null}
+        {settings ? <Link href="/settings" prefetch={false} aria-current={pathname.startsWith("/settings") ? "page" : undefined}><Settings aria-hidden="true" /><span>Einstellungen</span></Link> : null}
       </nav>
     </aside>
   );

@@ -1,131 +1,63 @@
-import { readFile } from 'node:fs/promises'
-import { fireEvent, render, screen } from '@testing-library/react'
-import ts from 'typescript'
-import { describe, expect, it, vi } from 'vitest'
-import { GlobalSearch } from '../GlobalSearch'
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const sourcePath = 'src/components/layout/GlobalSearch.tsx'
+const ports = vi.hoisted(() => ({ search: vi.fn(), openOrder: vi.fn(), openCustomer: vi.fn() }));
 
-function walk(node: ts.Node, visit: (current: ts.Node) => void) {
-  visit(node)
-  node.forEachChild((child) => walk(child, visit))
-}
+vi.mock("@/app/actions/search.actions", () => ({ searchTenantAction: ports.search }));
+vi.mock("@/lib/overlayStore", () => ({
+  useOverlayStore: (selector: (state: { openOrder: typeof ports.openOrder; openCustomer: typeof ports.openCustomer }) => unknown) => selector({ openOrder: ports.openOrder, openCustomer: ports.openCustomer }),
+}));
 
-describe('W2C GlobalSearch fail-closed', () => {
-  it('renders the real FoundationUnavailable contract only while open', () => {
-    const onOpenChange = vi.fn()
-    const { rerender } = render(<GlobalSearch onOpenChange={onOpenChange} open={false} />)
+import { GlobalSearch } from "../GlobalSearch";
 
-    expect(screen.queryByRole('dialog')).toBeNull()
+beforeEach(() => { vi.useFakeTimers(); vi.clearAllMocks(); });
+afterEach(() => vi.useRealTimers());
 
-    rerender(<GlobalSearch onOpenChange={onOpenChange} open />)
+describe("W2C GlobalSearch real Lane-0 contract", () => {
+  it("renders only while open and contains no unavailable shell", () => {
+    const { rerender } = render(<GlobalSearch onOpenChange={vi.fn()} open={false} />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    rerender(<GlobalSearch onOpenChange={vi.fn()} open />);
+    expect(screen.getByRole("dialog", { name: "Kunden und Aufträge" })).toHaveAttribute("aria-modal", "true");
+    expect(screen.queryByText("NOT_AVAILABLE")).not.toBeInTheDocument();
+    expect(screen.queryByText(/nicht verfügbar/i)).not.toBeInTheDocument();
+  });
 
-    expect(screen.getByRole('dialog', { name: 'Globale Suche ist nicht verfügbar' })).toHaveAttribute('aria-modal', 'true')
-    expect(screen.getByText('NOT_AVAILABLE')).toBeInTheDocument()
-    expect(screen.getByText('Operative Daten sind noch nicht verfügbar')).toBeInTheDocument()
-    expect(screen.getByText('Für diesen Bereich ist noch keine kanonische, quellgestützte operative Datenbasis verfügbar.')).toBeInTheDocument()
-  })
+  it("opens the same V8/V2 overlay truth for order and customer hits", async () => {
+    ports.search.mockResolvedValueOnce({
+      code: "OK", query: "A-42", checkedSources: ["Auftragsbestand", "Kundenstamm"], checkedAt: "2026-09-16T08:15:00.000Z",
+      hits: [{ type: "ORDER", id: "order-1", title: "Auftrag", subtitle: "A-42", status: "angenommen", matchField: "orderNumber", source: "Auftragsbestand", matchLabel: "Auftragsnummer", matchValue: "A-42", context: "A-42 · Kunde", actionLabel: "Auftragskarte öffnen" }],
+    });
+    const { rerender } = render(<GlobalSearch onOpenChange={vi.fn()} open />);
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "A-42" } });
+    await act(() => vi.runAllTimersAsync());
+    fireEvent.click(screen.getByRole("option", { name: /Auftrag/ }));
+    expect(ports.openOrder).toHaveBeenCalledWith("order-1");
 
-  it('closes with its explicit control and Escape, and toggles with Ctrl/Cmd+K', () => {
-    const onOpenChange = vi.fn()
-    const { rerender } = render(<GlobalSearch onOpenChange={onOpenChange} open />)
+    ports.search.mockResolvedValueOnce({
+      code: "OK", query: "Kunde", checkedSources: ["Auftragsbestand", "Kundenstamm"], checkedAt: "2026-09-16T08:16:00.000Z",
+      hits: [{ type: "CUSTOMER", id: "customer-1", title: "Muster GmbH", subtitle: "K-1", status: "business", matchField: "companyName", source: "Kundenstamm", matchLabel: "Firma", matchValue: "Muster GmbH", context: "Muster GmbH · K-1", actionLabel: "Kundenkarte öffnen" }],
+    });
+    rerender(<GlobalSearch onOpenChange={vi.fn()} open />);
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "Kunde" } });
+    await act(() => vi.runAllTimersAsync());
+    fireEvent.click(screen.getByRole("option", { name: /Muster GmbH/ }));
+    expect(ports.openCustomer).toHaveBeenCalledWith("customer-1");
+  });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Globale Suche schließen' }))
-    const escape = new KeyboardEvent('keydown', { cancelable: true, key: 'Escape' })
-    const ctrlK = new KeyboardEvent('keydown', { cancelable: true, ctrlKey: true, key: 'k' })
-    const cmdK = new KeyboardEvent('keydown', { cancelable: true, key: 'k', metaKey: true })
-    document.dispatchEvent(escape)
-    document.dispatchEvent(ctrlK)
-    document.dispatchEvent(cmdK)
+  it("keeps denial and port failure fail-closed without partial results", async () => {
+    ports.search.mockResolvedValueOnce({ code: "FORBIDDEN", message: "Diese Suche ist für die aktuelle Sitzung nicht freigegeben." });
+    const { rerender } = render(<GlobalSearch onOpenChange={vi.fn()} open />);
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "intern" } });
+    await act(() => vi.runAllTimersAsync());
+    expect(screen.getByTestId("search-dialog")).toHaveAttribute("data-state", "denial");
+    expect(screen.queryByRole("option")).not.toBeInTheDocument();
 
-    expect(onOpenChange).toHaveBeenNthCalledWith(1, false)
-    expect(onOpenChange).toHaveBeenNthCalledWith(2, false)
-    expect(onOpenChange).toHaveBeenNthCalledWith(3, false)
-    expect(onOpenChange).toHaveBeenNthCalledWith(4, false)
-    expect(escape.defaultPrevented).toBe(true)
-    expect(ctrlK.defaultPrevented).toBe(true)
-    expect(cmdK.defaultPrevented).toBe(true)
-
-    rerender(<GlobalSearch onOpenChange={onOpenChange} open={false} />)
-    const closedCtrlK = new KeyboardEvent('keydown', { cancelable: true, ctrlKey: true, key: 'k' })
-    document.dispatchEvent(closedCtrlK)
-    expect(closedCtrlK.defaultPrevented).toBe(true)
-    expect(onOpenChange).toHaveBeenLastCalledWith(true)
-  })
-
-  it('closes on its backdrop but not from a dialog interaction', () => {
-    const onOpenChange = vi.fn()
-    render(<GlobalSearch onOpenChange={onOpenChange} open />)
-
-    const dialog = screen.getByRole('dialog')
-    fireEvent.mouseDown(dialog)
-    expect(onOpenChange).not.toHaveBeenCalled()
-
-    fireEvent.mouseDown(dialog.parentElement as HTMLElement)
-    expect(onOpenChange).toHaveBeenCalledOnce()
-    expect(onOpenChange).toHaveBeenCalledWith(false)
-  })
-
-  it('keeps the client module to the two safe runtime imports and no unsafe syntax', async () => {
-    const source = await readFile(sourcePath, 'utf8')
-    const program = ts.createSourceFile(sourcePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
-    const imports = program.statements.filter(ts.isImportDeclaration)
-
-    expect(imports).toHaveLength(2)
-    expect(imports.map((statement) => (statement.moduleSpecifier as ts.StringLiteral).text)).toEqual([
-      'react',
-      '@/components/foundation/FoundationUnavailable',
-    ])
-    expect(imports[0].importClause?.namedBindings && ts.isNamedImports(imports[0].importClause.namedBindings)
-      ? imports[0].importClause.namedBindings.elements.map((element) => element.name.text)
-      : []).toEqual(['useEffect'])
-    expect(imports[1].importClause?.namedBindings && ts.isNamedImports(imports[1].importClause.namedBindings)
-      ? imports[1].importClause.namedBindings.elements.map((element) => element.name.text)
-      : []).toEqual(['FoundationUnavailable'])
-
-    const forbiddenIdentifiers = new Set([
-      'Link',
-      'useRouter',
-      'useState',
-      'useRef',
-      'globalSearch',
-      'useGlobalSearch',
-      'findActions',
-      'buildFallbackSuggestion',
-      'SEARCH_ACTIONS',
-      'addRecentSearch',
-      'useOrderModal',
-      'useCustomerOverlay',
-      'useErfassung',
-      'motion',
-      'fetch',
-      'setTimeout',
-      'clearTimeout',
-    ])
-    const encounteredForbiddenIdentifiers: string[] = []
-    const calledIdentifiers: string[] = []
-    const foundationUnavailableElements: ts.JsxSelfClosingElement[] = []
-
-    walk(program, (node) => {
-      if (ts.isIdentifier(node) && forbiddenIdentifiers.has(node.text)) {
-        encounteredForbiddenIdentifiers.push(node.text)
-      }
-      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
-        calledIdentifiers.push(node.expression.text)
-      }
-      if (ts.isJsxSelfClosingElement(node) && ts.isIdentifier(node.tagName) && node.tagName.text === 'FoundationUnavailable') {
-        foundationUnavailableElements.push(node)
-      }
-    })
-
-    expect(encounteredForbiddenIdentifiers).toEqual([])
-    expect(calledIdentifiers).not.toEqual(expect.arrayContaining(['fetch', 'setTimeout', 'clearTimeout', 'globalSearch', 'useGlobalSearch']))
-    expect(foundationUnavailableElements).toHaveLength(1)
-    const transpiled = ts.transpileModule(source, {
-      compilerOptions: { jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2017 },
-      fileName: sourcePath,
-      reportDiagnostics: true,
-    })
-    expect(transpiled.diagnostics ?? []).toEqual([])
-  })
-})
+    ports.search.mockResolvedValueOnce({ code: "UNAVAILABLE", message: "Die internen Bestände konnten nicht sicher durchsucht werden." });
+    rerender(<GlobalSearch onOpenChange={vi.fn()} open />);
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "Fehler" } });
+    await act(() => vi.runAllTimersAsync());
+    expect(screen.getByTestId("search-dialog")).toHaveAttribute("data-state", "error");
+    expect(screen.queryByRole("option")).not.toBeInTheDocument();
+  });
+});

@@ -113,6 +113,7 @@ export default async function WarendurchlaufIndex() {
       canCreateOrder,
       greetingName: authorization.data.displayName ?? null,
       kpis: kpiResult.data,
+      loadedAt: new Date().toISOString(),
     }),
   });
 }

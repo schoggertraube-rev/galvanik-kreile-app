@@ -1,8 +1,8 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: 4a5f03043ef86854052bc93d0b50d14f952f7884
-branch: path1/v5-p2-quote-product-20260916
+base_sha: 70ae0989b7f76a247c34582badc2de3324e27851
+branch: path1/v5-p3-core-surfaces-search-20260916
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
 # ── M0 Konsolidierungsstand ───────────────────────────────────────
@@ -37,8 +37,8 @@ delivery_order:
   - F1.6_REALER_PILOT
 
 active_package: PATH1_UI_CONVERGENCE
-active_package_status: V5_P2_VERSIONED_QUOTE_PRODUCT_LIFECYCLE_LOCAL_GATES_REAL_DB_AND_BROWSER_PASS_EXACT_SHA_CI_PREVIEW_AND_INDEPENDENT_REVIEW_PENDING_NO_UI_PASS
-next_gate_after_active_package: COMMIT_PUSH_DRAFT_PR_EXACT_SHA_CI_PREVIEW_AND_SINGLE_INDEPENDENT_READ_ONLY_REVIEW
+active_package_status: V5_P3_CORE_SURFACES_AND_LANE_0_SEARCH_LOCAL_GATES_REAL_DB_BROWSER_PASS_DRAFT_PR_EXACT_SHA_CI_PREVIEW_PENDING_NO_UI_PASS
+next_gate_after_active_package: P3_COMMIT_PUSH_DRAFT_PR_EXACT_SHA_CI_PREVIEW_THEN_SINGLE_INDEPENDENT_REVIEW
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
@@ -122,7 +122,7 @@ path1_provider_platform_policy: APPROX_MAX_FIVE_PLATFORMS; SUPABASE_DATA_AUTH_ST
 path1_document_intelligence_policy: CHEAP_FIRST; ORIGINAL_PRIVATE_FIRST; UNTRUSTED_CONTENT; HUMAN_CONFIRMATION; ONE_SAFE_COMMAND_RECEIPT_READBACK
 path1_search_intelligence_policy: RLS_BEFORE_RETRIEVAL; STRUCTURED_FIRST; AUTHORIZED_PUBLIC_READ_PORTS_ONLY; DB_VIEWS_TRUTH; INDEX_RENEWABLE_PROJECTION; NO_MODEL_MUTATION
 path1_provider_activation_status: NONE_ACTIVATED_BY_THIS_WORK_UNIT
-path1_ui_convergence_next_product_build: V5_P2_VERSIONED_QUOTE_PRODUCT_LIFECYCLE
+path1_ui_convergence_next_product_build: V5_P3_ORDERS_V8_CUSTOMERS_V2_HOMES_AND_LANE_0_SEARCH
 path1_ui_convergence_v5_visible_build: GLOBAL_PLUS -> CUSTOMER_RECEIPT_READBACK -> QUOTE_RECEIPT_RELOAD_READBACK -> EXACTLY_ONE_EXISTING_F1_1_ORDER_RECEIPT_READBACK
 path1_ui_convergence_v5_visible_build_status: LOCAL_REAL_DB_AND_BROWSER_PASS_EXACT_SHA_CI_PREVIEW_AND_INDEPENDENT_REVIEW_PENDING_NO_PARTIAL_UI_PASS
 path1_ui_convergence_v5_002: VISIBLE_PRODUCT_IDENTITIES_ROLF_MEISTER_PHILLIP_WERKSTATT_GREGOR_SYSTEMADMIN; UNIQUE_PROFILE_FAIL_CLOSED; ROLF_CAPABILITY_BASED_CUSTOMER_KV_ORDER_AND_F1_1_INTAKE; NO_TECHNICAL_ROLE_OR_TEST_PERSONA_UI
@@ -138,7 +138,7 @@ owner_v5_recovery_execution_20260915:
   p4_after_recovery: ORIGINAL_FIRST_OCR_M365_AFTER_VISIBLE_A_TO_D_CHEAP_FIRST_FACT_LEDGER_HUMAN_CONFIRM_NO_IMPLEMENTATION_NOW
 
 owner_v5_p2_quote_product_execution_20260916:
-  status: TECHNICAL_PRODUCT_SLICE_NO_UI_PASS_UNTIL_COMPLETE_A_TO_D_GATE
+  status: DELIVERED_PR_95_MERGE_4c8f76160a1304e59d4859cb2203561f8e64a257_AND_POST_MERGE_HARDENING_PR_96_MERGE_70ae0989b7f76a247c34582badc2de3324e27851_NO_TOTAL_UI_PASS
   base_sha: 4a5f03043ef86854052bc93d0b50d14f952f7884
   branch: path1/v5-p2-quote-product-20260916
   execution: SERVER_RESUMABLE_TENANT_ISOLATED_QUOTE_DRAFTS_OPEN_LIST_EDIT_VERSION_CONFLICT_FAIL_CLOSED; ATOMIC_IDEMPOTENT_AWARD_TO_ONE_EXISTING_F1_1_ORDER; ONE_VISIBLE_GLOBAL_CREATE_ENGINE
@@ -146,6 +146,16 @@ owner_v5_p2_quote_product_execution_20260916:
   send_status: BLOCKED_NO_M365_RECEIPT_NO_FAKE_SEND_ACTION
   environment: FRESH_SUPABASE_LOOPBACK_ONLY_NO_REMOTE_MIGRATION_NO_RLS_OR_POLICY_CHANGE
   next_product_after_p2: P3_ORDERS_V8_CUSTOMERS_V2_HOMES_SEARCH_STATUS
+
+owner_v5_p3_core_surfaces_search_execution_20260916:
+  status: LOCAL_CONTRACT_REAL_DB_BROWSER_MATRIX_PASS_EXACT_SHA_CI_PREVIEW_PENDING_NO_UI_PASS
+  base_sha: 70ae0989b7f76a247c34582badc2de3324e27851
+  branch: path1/v5-p3-core-surfaces-search-20260916
+  execution: ORDERS_V8_AND_CUSTOMERS_V2_ONE_CARD_TRUTH_WITH_DEEPLINK_BACKSTACK; ROLF_AND_PHILLIP_REAL_PUBLIC_PROJECTIONS; DETERMINISTIC_LANE_0_SEARCH_STATUS_ON_TARGET_SHELL
+  lane_0_contract: AUTHORIZED_MODULE_READ_PORTS_ONLY; STRUCTURED_APP_FACTS; METERED_COST_0; SOURCES_RELATIONSHIPS_DATA_STAND_AND_DEEPLINKS; NO_AI_INTERNET_PROVIDER_OR_SECOND_BUSINESS_TRUTH
+  identity_contract: VISIBLE_PRODUCT_IDENTITIES_ONLY_ROLF_MEISTER_PHILLIP_WERKSTATT_GREGOR_SYSTEMADMIN; CAPABILITY_AND_TENANT_FAIL_CLOSED; NO_AUTH_SESSION_ROLE_MIGRATION
+  hard_limits: NO_TABLE_MIGRATION_RLS_POLICY_RUNTIME_DEPENDENCY_ACCOUNTING_ANALYSIS_PROVIDER_OCR_M365_MOLLIE_BANK_CALENDAR_OR_PERSISTENT_ASSISTANT_THREADS
+  next_gate: COMMIT_PUSH_DRAFT_PR_EXACT_SHA_CI_PREVIEW_THEN_SINGLE_INDEPENDENT_REVIEW
 
 # ── F1.2 Entscheidungsgrundlage (bindend, ersetzt Altstand) ───────
 # D-F12-001A (ersetzt D-F12-001): F1.2 = genau EIN Uebergang
@@ -577,6 +587,22 @@ path1_ui_convergence_allowlist:
   - src/modules/orders/**
   - src/modules/customers/**
   - src/modules/suche/**
+  # V5 P3: reale V8/V2-Oberflaechen, oeffentliche Home-Projektionen und
+  # deterministische Lane-0-Suche. Keine KI-/Provider-/Kostenaktivierung.
+  - src/app/actions/search.actions.ts
+  - src/app/actions/__tests__/w2cB2m4c.externalProvider.failClosed.test.ts
+  - src/components/layout/GlobalSearch.tsx
+  - src/components/layout/TargetHeader.tsx
+  - src/components/layout/__tests__/f0W2cGlobalSearch.unavailable.test.tsx
+  - src/components/home/RolfHome.tsx
+  - src/components/home/RolfHomeClient.tsx
+  - src/components/home/RolfHome.module.css
+  - src/components/home/__tests__/RolfHome.realRender.test.tsx
+  - src/app/__tests__/w2cB2m5u.homeDueTruth.realRender.test.tsx
+  - src/test/search_tenant.integration.test.ts
+  - src/test/path1_p3_deeplinks.test.tsx
+  - e2e/path1-ui-convergence-v5-p3.real.spec.ts
+  - docs/evidence/path1/PATH1_UI_CONVERGENCE_V5_P3_CORE_SURFACES_SEARCH.md
   # Nach Link-/Importinventar physisch entfallende oder nicht-rendernde Pages
   - src/app/analyse/page.tsx
   - src/app/archive/page.tsx

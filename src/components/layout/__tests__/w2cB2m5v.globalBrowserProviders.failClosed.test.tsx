@@ -1,11 +1,11 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const boundary = vi.hoisted(() => ({
   floatingParkedCall: vi.fn(),
-  getAuthorizationSnapshotAction: vi.fn(),
+  permissions: { loading: false, role: "buero", status: "authenticated" },
   parkedCallProvider: vi.fn(),
   pathname: { value: "/start" },
   realtimeSyncProvider: vi.fn(),
@@ -14,11 +14,8 @@ const boundary = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({
   usePathname: () => boundary.pathname.value,
 }));
-vi.mock("@/app/actions/auth.actions", () => ({
-  getAuthorizationSnapshotAction: boundary.getAuthorizationSnapshotAction,
-}));
 vi.mock("@/lib/auth/PermissionsContext", () => ({
-  usePermissions: () => ({ role: "buero" }),
+  usePermissions: () => boundary.permissions,
 }));
 vi.mock("@/components/layout/TargetHeader", () => ({
   TargetHeader: () => <div data-testid="target-header-marker" />,
@@ -78,7 +75,9 @@ function expectRemovedBrowserProvidersAbsent() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  boundary.getAuthorizationSnapshotAction.mockResolvedValue({ ok: true });
+  boundary.permissions.loading = false;
+  boundary.permissions.role = "buero";
+  boundary.permissions.status = "authenticated";
 });
 
 afterEach(() => {
@@ -97,11 +96,10 @@ describe("W2C-B2M5V global browser provider containment", () => {
     expect(screen.queryByTestId("target-navigation-marker")).not.toBeInTheDocument();
     expect(screen.queryByTestId("mobile-bottom-nav-marker")).not.toBeInTheDocument();
     expect(screen.queryByTestId("session-warning-marker")).not.toBeInTheDocument();
-    expect(boundary.getAuthorizationSnapshotAction).not.toHaveBeenCalled();
     expectRemovedBrowserProvidersAbsent();
   });
 
-  it("keeps the authenticated shell UI while removed browser providers stay inert", async () => {
+  it("keeps the authenticated shell UI while removed browser providers stay inert", () => {
     renderShell("/orders");
 
     expect(screen.getByTestId("children-marker")).toBeInTheDocument();
@@ -110,9 +108,13 @@ describe("W2C-B2M5V global browser provider containment", () => {
     expect(screen.getByTestId("mobile-bottom-nav-marker")).toBeInTheDocument();
     expect(screen.getByTestId("session-warning-marker")).toHaveAttribute("data-show", "false");
     expect(screen.getByTestId("entity-overlay-stack-marker")).toBeInTheDocument();
-    await waitFor(() => expect(boundary.getAuthorizationSnapshotAction).toHaveBeenCalledTimes(1));
-    await act(async () => Promise.resolve());
     expectRemovedBrowserProvidersAbsent();
+  });
+
+  it("uses the single permission bootstrap truth for the session warning", () => {
+    boundary.permissions.status = "error";
+    renderShell("/orders");
+    expect(screen.getByTestId("session-warning-marker")).toHaveAttribute("data-show", "true");
   });
 
   it("removes unsafe global providers and composes the single app-side entity stack", () => {

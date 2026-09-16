@@ -59,8 +59,10 @@ describe("W2C-B2M4C external provider fail-closed", () => {
 
     expect(globalSearch).not.toContain("GlobalSearchAIResult");
     expect(globalSearch).not.toContain("askGlobalAiAction");
-    expect(globalSearch).toContain("FoundationUnavailable");
-    expect(globalSearch).not.toContain("globalSearch");
+    expect(globalSearch).toContain("searchTenantAction");
+    expect(globalSearch).toContain("@/modules/suche/public");
+    expect(globalSearch).not.toContain("FoundationUnavailable");
+    expect(globalSearch).not.toContain("askGlobalAiAction");
     expect(globalSearch).not.toContain("useGlobalSearch");
     expect(customerWizard).not.toContain("ai-enrichment.actions");
     expect(customerWizard).not.toContain("handleExtractFreetext");

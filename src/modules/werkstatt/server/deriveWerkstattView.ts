@@ -114,8 +114,13 @@ export function buildWerkstattData(
     canCreateOrder: boolean;
     greetingName: string | null;
     kpis: WerkstattKpiSnapshot;
+    loadedAt: string;
   },
 ): WerkstattData {
+  const loadedAt = new Date(input.loadedAt);
+  if (Number.isNaN(loadedAt.getTime()) || loadedAt.toISOString() !== input.loadedAt) {
+    throw new Error("WERKSTATT_DATA_STAND_INVALID");
+  }
   const wareneingang = input.wareneingang.map(toPhillipOrderCard);
   const galvanik = input.galvanik.map(toPhillipOrderCard);
   const combined = [...galvanik, ...wareneingang];
@@ -136,7 +141,16 @@ export function buildWerkstattData(
       return dueA - dueB;
     });
 
+  const first = held[0];
   return {
+    source: "Auftragsbestand",
+    loadedAt: input.loadedAt,
+    dominant: first ? {
+      orderId: first.id,
+      reason: first.heldGroup === "crit"
+        ? `Persistierter Auftragsstatus: ${first.statusText || first.status}`
+        : `${first.dueLabel}: ${first.dueValue}`,
+    } : null,
     greetingName: input.greetingName,
     dringendCount: held.filter((order) => order.heldGroup === "crit").length,
     weitereCount: held.filter((order) => order.heldGroup === "soon").length,

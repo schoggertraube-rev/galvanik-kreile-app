@@ -1,0 +1,144 @@
+{
+  "candidateHeadAtRun": "WORKTREE_BEFORE_COMMIT",
+  "tenant": "galvanik-kreile",
+  "actors": {
+    "rolf": "11111111-1111-4111-8111-111111111111",
+    "phillip": "22222222-2222-4222-8222-222222222222"
+  },
+  "synthetic": true,
+  "order": {
+    "id": "75961edd-176c-48f0-b8c2-dfe67b48a0d1",
+    "orderNumber": "A-2026-0001",
+    "customerId": "73cdde50-87f0-4fe2-a1f1-3f2dc822fe8d",
+    "promisedDate": "2026-10-23",
+    "exactlyOne": 1
+  },
+  "paths": [
+    "Rolf -> Direktaufnahme -> Auftrag",
+    "Orders -> Auftrag -> Kunde -> Auftrag -> zurück",
+    "Deep-Link -> Liste",
+    "Suche -> V8/V2"
+  ],
+  "captures": [
+    {
+      "file": "p3-rolf-home-desktop-1914x917.png",
+      "sha256": "ae23aafd8bdfd603ed0e499119fb668d7670a82bfd2508ab5005f6b4da8204b0",
+      "viewport": "1914x917",
+      "state": "rolf-home-data"
+    },
+    {
+      "file": "p3-order-v8-desktop-1914x917.png",
+      "sha256": "36a09cb82d6b68985552c44c518d39be08a47c33262f33b0b818fe9fd7661695",
+      "viewport": "1914x917",
+      "state": "order-v8-overlay"
+    },
+    {
+      "file": "p3-customer-v2-desktop-1914x917.png",
+      "sha256": "7074e2742c2d4d66bffeb31f829b267c82da4594bb3868501aa178fb2b567c8c",
+      "viewport": "1914x917",
+      "state": "customer-v2-overlay"
+    },
+    {
+      "file": "p3-search-desktop-1914x917.png",
+      "sha256": "539d501cb80fc8018b7bfed0da6a2535b6bd9fdaba3281e6c5fe74e968958259",
+      "viewport": "1914x917",
+      "state": "search-real-hit"
+    },
+    {
+      "file": "p3-rolf-home-tablet-landscape-1220x880.png",
+      "sha256": "ff37960723fa44b1b435f22ba8131c24160e2fefee1313a788973a232a52d2be",
+      "viewport": "1220x880",
+      "state": "rolf-home-data"
+    },
+    {
+      "file": "p3-order-v8-tablet-landscape-1220x880.png",
+      "sha256": "97af85649672fdce654148985d6e72e0c7a8c6333594ea079f56a9d0355f1d78",
+      "viewport": "1220x880",
+      "state": "order-v8-overlay"
+    },
+    {
+      "file": "p3-customer-v2-tablet-landscape-1220x880.png",
+      "sha256": "65ad0161b537b8ecd9e8ae6e7d9b477eb33868d39376cb8695dd5942727b71f0",
+      "viewport": "1220x880",
+      "state": "customer-v2-overlay"
+    },
+    {
+      "file": "p3-search-tablet-landscape-1220x880.png",
+      "sha256": "fcb661368acfbf825f8b79089a266e1479300331d85937d9369855736518979d",
+      "viewport": "1220x880",
+      "state": "search-real-hit"
+    },
+    {
+      "file": "p3-rolf-home-tablet-portrait-768x1024.png",
+      "sha256": "cc1dc37f418b61ad194a80d3a44940b698f222e78877283fe791f717648a1b4c",
+      "viewport": "768x1024",
+      "state": "rolf-home-data"
+    },
+    {
+      "file": "p3-order-v8-tablet-portrait-768x1024.png",
+      "sha256": "9b1d1c8abad3c674f69008eb1d8f6c2d3b86eed7aca7bb3ccb4c5d602b07165c",
+      "viewport": "768x1024",
+      "state": "order-v8-overlay"
+    },
+    {
+      "file": "p3-customer-v2-tablet-portrait-768x1024.png",
+      "sha256": "64306fc984ea4e9613b87aaa5d66915db5db63d45e7c003c5d2bab4acbd6b80b",
+      "viewport": "768x1024",
+      "state": "customer-v2-overlay"
+    },
+    {
+      "file": "p3-search-tablet-portrait-768x1024.png",
+      "sha256": "d203726a8f0c83ba21682b6703521c102939b338e824d51342bd76a9cc006f29",
+      "viewport": "768x1024",
+      "state": "search-real-hit"
+    },
+    {
+      "file": "p3-rolf-home-mobile-390x844.png",
+      "sha256": "5f71b685ffb2f468688773f96b373f0a9f3b06e0958387f24d364ccd3bde260f",
+      "viewport": "390x844",
+      "state": "rolf-home-data"
+    },
+    {
+      "file": "p3-order-v8-mobile-390x844.png",
+      "sha256": "510a9f6a63968c6488c8474e25cdc84faba30db71eaed486ecd60a482c69c649",
+      "viewport": "390x844",
+      "state": "order-v8-overlay"
+    },
+    {
+      "file": "p3-customer-v2-mobile-390x844.png",
+      "sha256": "034013fcc45ecb2769522bf408dd05c79ef55dcbff26ad6c8d5600f4c0b9f5e9",
+      "viewport": "390x844",
+      "state": "customer-v2-overlay"
+    },
+    {
+      "file": "p3-search-mobile-390x844.png",
+      "sha256": "5ccecb3778476e0471322d078d1ada71379e51690abe902ad044e757885bde1a",
+      "viewport": "390x844",
+      "state": "search-real-hit"
+    },
+    {
+      "file": "p3-phillip-home-desktop-1914x917.png",
+      "sha256": "4218734ff853724b2daeb693ffddb2f3278a7b46075d3fbd4b8b66a2ebded24b",
+      "viewport": "1914x917",
+      "state": "phillip-home-data"
+    },
+    {
+      "file": "p3-phillip-home-tablet-landscape-1220x880.png",
+      "sha256": "810123b34a52b0774bbaf48ff113d0ab1f4fbf6509fabae5f0d583f953d470a1",
+      "viewport": "1220x880",
+      "state": "phillip-home-data"
+    },
+    {
+      "file": "p3-phillip-home-tablet-portrait-768x1024.png",
+      "sha256": "b835a47892055d60b94cb8ff47fcb20d20707cc08db46078aec699f4ccfbbf8c",
+      "viewport": "768x1024",
+      "state": "phillip-home-data"
+    },
+    {
+      "file": "p3-phillip-home-mobile-390x844.png",
+      "sha256": "d9a5c9d8692849aade60b2889426c03100768733b8544884050a8be73888279c",
+      "viewport": "390x844",
+      "state": "phillip-home-data"
+    }
+  ]
+}
