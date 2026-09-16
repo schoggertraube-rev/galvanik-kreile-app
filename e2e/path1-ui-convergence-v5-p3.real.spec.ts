@@ -34,6 +34,11 @@ const VIEWPORTS = [
 ] as const;
 
 const RETIRED_ROUTE_MATRIX = [
+  "/admin/analytics",
+  "/admin/devices",
+  "/admin/import",
+  "/admin/testanalyse",
+  "/admin/testanalyse/live",
   "/analyse",
   "/archive",
   "/baeder",
@@ -290,6 +295,23 @@ async function openSearch(page: Page, query: string) {
   return dialog;
 }
 
+async function returnToWorkshopHub(page: Page) {
+  const directLink = page.locator('a[href="/warendurchlauf"]:visible');
+  if ((await directLink.count()) > 0) {
+    await directLink.first().click();
+  } else {
+    await page.getByRole("button", { name: "Mehr", exact: true }).click();
+    await page
+      .getByRole("dialog", { name: "Weitere Kernbereiche" })
+      .getByRole("link", { name: "Werkstatt", exact: true })
+      .click();
+  }
+  await page.waitForURL((url) => url.pathname === "/warendurchlauf");
+  await expect(
+    page.getByRole("heading", { name: "Werkstatt", exact: true }),
+  ).toBeVisible();
+}
+
 test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
   test.use({
     baseURL: P3_TEST_ORIGIN,
@@ -312,7 +334,7 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
     expect(process.env.KREILE_PHILLIP_APP_USER_ID).toBe(PHILLIP_ACTOR_ID);
     expect(process.env.KREILE_GREGOR_APP_USER_ID).toBe(GREGOR_ACTOR_ID);
     expect(apiUrl).toMatch(/^http:\/\/(?:127\.0\.0\.1|localhost):\d+$/);
-    expect(RETIRED_ROUTE_MATRIX).toHaveLength(55);
+    expect(RETIRED_ROUTE_MATRIX).toHaveLength(60);
 
     const suffix = `${Date.now()}-${process.pid}`;
     const rolfPin = "4186";
@@ -385,6 +407,106 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
         rolf.page.getByRole("heading", { name: "Guten Tag, Rolf" }),
       ).toBeVisible();
 
+      for (const viewport of VIEWPORTS) {
+        await rolf.page.setViewportSize({
+          width: viewport.width,
+          height: viewport.height,
+        });
+        await rolf.page.goto("/warendurchlauf", { waitUntil: "networkidle" });
+        await expect(
+          rolf.page.getByRole("heading", { name: "Werkstatt", exact: true }),
+        ).toBeVisible();
+        await expect(
+          rolf.page.getByRole("heading", { name: "Noch keine Daten erfasst" }),
+        ).toBeVisible();
+        await expect(
+          rolf.page.getByText(
+            "Sobald Aufträge im Wareneingang oder in der Galvanik liegen, erscheinen sie hier.",
+          ),
+        ).toBeVisible();
+        const hubIntake = rolf.page.getByRole("button", {
+          name: "Neuer Eingang",
+          exact: true,
+        });
+        await expect(hubIntake).toBeVisible();
+        await expect(
+          rolf.page.getByRole("button", { name: "Ware raus", exact: true }),
+        ).toBeVisible();
+        await expect(rolf.page.locator("body")).not.toContainText(
+          /NOT_AVAILABLE|Mock|Quelle: Auftragsbestand/,
+        );
+        await hubIntake.scrollIntoViewIfNeeded();
+        await expectFullyInsideViewport(rolf.page, hubIntake);
+        captures.push(
+          await capture(
+            rolf.page,
+            `p3-workshop-hub-${viewport.name}-${viewport.width}x${viewport.height}.png`,
+            "workshop-hub-real",
+          ),
+        );
+        await hubIntake.click();
+        const hubCreateDialog = rolf.page.getByRole("dialog", {
+          name: "Neuer Eingang",
+        });
+        await expect(hubCreateDialog).toBeVisible();
+        await expect(hubCreateDialog.getByLabel("Firma / Name")).toBeFocused();
+        await hubCreateDialog
+          .getByRole("button", { name: "Anlegen schließen", exact: true })
+          .click();
+        await expect(hubCreateDialog).toHaveCount(0);
+
+        await rolf.page.goto("/warendurchlauf/wareneingang", {
+          waitUntil: "networkidle",
+        });
+        await expect(
+          rolf.page.getByText("Neue Annahme erfassen"),
+        ).toBeVisible();
+        await expect(rolf.page.locator("body")).not.toContainText(
+          "NOT_AVAILABLE",
+        );
+        const stationIntake = rolf.page.getByTestId(
+          "wareneingang-create-order",
+        );
+        await stationIntake.scrollIntoViewIfNeeded();
+        await expectFullyInsideViewport(rolf.page, stationIntake);
+        captures.push(
+          await capture(
+            rolf.page,
+            `p3-wareneingang-${viewport.name}-${viewport.width}x${viewport.height}.png`,
+            "wareneingang-real",
+          ),
+        );
+        await stationIntake.click();
+        const stationCreateDialog = rolf.page.getByRole("dialog", {
+          name: "Neuer Eingang",
+        });
+        await expect(stationCreateDialog).toBeVisible();
+        await expect(
+          stationCreateDialog.getByLabel("Firma / Name"),
+        ).toBeFocused();
+        await stationCreateDialog
+          .getByRole("button", { name: "Anlegen schließen", exact: true })
+          .click();
+        await expect(stationCreateDialog).toHaveCount(0);
+
+        if (viewport.name === "desktop") {
+          const redirectResponse = await rolf.page.goto("/warendurchlauf/neu", {
+            waitUntil: "domcontentloaded",
+          });
+          expect(redirectResponse?.status()).toBe(200);
+          await rolf.page.waitForURL(
+            (url) => url.pathname === "/warendurchlauf/wareneingang",
+          );
+          await expect(
+            rolf.page.getByTestId("wareneingang-create-order"),
+          ).toBeVisible();
+        }
+        await returnToWorkshopHub(rolf.page);
+      }
+
+      await rolf.page.setViewportSize({ width: 1914, height: 917 });
+      await rolf.page.goto("/", { waitUntil: "networkidle" });
+
       await rolf.page.getByRole("button", { name: "Neuer Eingang" }).click();
       await expect(
         rolf.page.getByRole("heading", { name: "Neuer Eingang" }),
@@ -422,6 +544,32 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
       expect(stored?.count).toBe(1);
       if (!stored?.order_id || !stored.customer_id)
         throw new Error("PATH1_P3_ORDER_READBACK_MISSING");
+
+      await rolf.page.goto("/warendurchlauf/wareneingang", {
+        waitUntil: "networkidle",
+      });
+      await expect(
+        rolf.page.getByText(orderNumber, { exact: false }),
+      ).toBeVisible();
+      await rolf.page.reload({ waitUntil: "networkidle" });
+      await expect(
+        rolf.page.getByText(orderNumber, { exact: false }),
+      ).toBeVisible();
+      await returnToWorkshopHub(rolf.page);
+      const populatedWorkshopHub = rolf.page.getByRole("region", {
+        name: "Werkstatt",
+      });
+      await expect(
+        populatedWorkshopHub.getByText("Quelle: Auftragsbestand"),
+      ).toBeVisible();
+      await expect(populatedWorkshopHub.getByRole("status")).toContainText(
+        "Werkstatt läuft rund",
+      );
+      await expect(
+        populatedWorkshopHub.getByRole("heading", {
+          name: "Noch keine Daten erfasst",
+        }),
+      ).toHaveCount(0);
 
       await rolf.page.goto("/", { waitUntil: "networkidle" });
       await rolf.page
@@ -481,7 +629,7 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
             `${retiredRoute} must resolve through Next's unmatched-route 404`,
           ).toBe(404);
           await expect(retiredRoutePage.locator("body")).not.toContainText(
-            /NOT_AVAILABLE|Liquidität Stabil|145 Belege|62 Rechnungen|1240 Zeitbuchungen|Google-API|Scan & KI-Erfassung/i,
+            /NOT_AVAILABLE|Liquidität Stabil|145 Belege|62 Rechnungen|1240 Zeitbuchungen|Google-API|Scan & KI-Erfassung|App-Nutzung \/ Analytics|Testanalyse \(Testpilot\)/i,
           );
         }
       } finally {
@@ -742,6 +890,15 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
       await expect(
         gregor.page.getByTestId("gregor-system-admin"),
       ).toContainText("Angemeldet als Gregor · Systemadministrator");
+      for (const retiredAdminHref of [
+        "/admin/analytics",
+        "/admin/testanalyse",
+        "/kvp",
+      ]) {
+        await expect(
+          gregor.page.locator(`a[href="${retiredAdminHref}"]`),
+        ).toHaveCount(0);
+      }
       await expect(gregor.page.locator("body")).not.toContainText(
         /Technical Admin|\bTA\b/,
       );
@@ -803,8 +960,10 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
           "Deep-Link -> Liste",
           "Suche -> V8/V2",
           "Rolf -> Geld & Rechnungen -> Accounting-minimal",
+          "Rolf -> Werkstatt-Hub -> Wareneingang -> eine Erfassung -> Werkstatt-Hub",
+          "/warendurchlauf/neu -> /warendurchlauf/wareneingang",
           "Gregor -> E-Mail-Login -> Einstellungen -> Start -> Einstellungen",
-          "55 retired/quarantined routes -> 404; Galvanik blackbox -> 200",
+          "60 retired/quarantined routes -> 404; Galvanik blackbox -> 200",
         ],
         retiredRouteResults,
         captures,

@@ -17,28 +17,8 @@
     "status": "TRANSITIONAL_BOOTSTRAP_SHRINK_ONLY",
     "entries": [
       {
-        "path": "src/app/admin/analytics/page.tsx",
-        "sha256": "953213F05249C22C2E761CF2942D225308AAF84F21F57F5AE76130BE9C02CE8E"
-      },
-      {
-        "path": "src/app/admin/devices/page.tsx",
-        "sha256": "851840575CED51768CA455769BA18C9873AA2CDA3D8BC84618CD392149C23441"
-      },
-      {
-        "path": "src/app/admin/import/page.tsx",
-        "sha256": "B7885BE68F96E7B7A7B34441B11999F90966D165B62285D13A5A904A69626E3F"
-      },
-      {
         "path": "src/app/admin/layout.tsx",
         "sha256": "988510BE531D9C4A4B1ED4295AC74FE74498F04895E2BECF6E3B844DA5B1652B"
-      },
-      {
-        "path": "src/app/admin/testanalyse/live/page.tsx",
-        "sha256": "1D84BD965251B8A13820D6DB5C838FCD6D804AD991B9B52821DC85F29C851DF3"
-      },
-      {
-        "path": "src/app/admin/testanalyse/page.tsx",
-        "sha256": "40D5A0E11504AA692809A01463797CC2266E63EBF2F0F6B76473ECCDD51687F4"
       },
       {
         "path": "src/app/buchhaltung/rechnungen/loading.tsx",

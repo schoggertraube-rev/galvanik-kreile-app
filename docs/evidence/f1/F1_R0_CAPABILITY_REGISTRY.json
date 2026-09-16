@@ -6,13 +6,13 @@
   "tenant": "galvanik-kreile",
   "note": "Machine-readable capability inventory based on snapshot_sha; the immutable review SHA is recorded separately when the candidate is frozen. Every page route, API route, Server Action group, KPI definition, and provider connection must carry exactly one of: REAL_VERIFIED | REAL_PENDING_SECRET | PENDING_CONTRACT | TEST_ONLY | LEGACY_REMOVE",
   "summary": {
-    "page_routes": 18,
+    "page_routes": 13,
     "api_routes": 19,
     "server_action_groups": 51,
     "kpi_definitions": 7,
     "provider_connections": 16,
     "nav_links_without_page": 3,
-    "total": 114
+    "total": 109
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -39,56 +39,6 @@
       "reachable": true,
       "classification": "PENDING_CONTRACT",
       "open_reason": "Root redirects to /warendurchlauf (F1-R0: demo HomeDashboard removed). No standalone root capability until after F1.2."
-    },
-    {
-      "stable_id": "page.admin.analytics",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/admin/analytics/page.tsx",
-      "route": "/admin/analytics",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Developer analytics cockpit. Fabricated fallback data and demo timeline removed in F1-R0; getDeveloperCockpitStats returns only real tracking events (empty when none present). Pending real analytics contract."
-    },
-    {
-      "stable_id": "page.admin.devices",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/admin/devices/page.tsx",
-      "route": "/admin/devices",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Devices admin page. Hardcoded device list removed in F1-R0; now returns NOT_CONFIGURED. Pending real device-management data source."
-    },
-    {
-      "stable_id": "page.admin.import",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/admin/import/page.tsx",
-      "route": "/admin/import",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Import admin page. Local simulation removed in F1-R0; now returns NOT_CONFIGURED. Pending real server-side import pipeline."
-    },
-    {
-      "stable_id": "page.admin.testanalyse.live",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/admin/testanalyse/live/page.tsx",
-      "route": "/admin/testanalyse/live",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Former production test-tool route is detached and fail-closed with FoundationUnavailable. No operational contract exists."
-    },
-    {
-      "stable_id": "page.admin.testanalyse",
-      "kind": "PAGE_ROUTE",
-      "entry_point": "src/app/admin/testanalyse/page.tsx",
-      "route": "/admin/testanalyse",
-      "visible": true,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Former production test-tool route is detached and fail-closed with FoundationUnavailable. No operational contract exists."
     },
     {
       "stable_id": "page.buchhaltung",
@@ -439,18 +389,12 @@
       "stable_id": "server-actions.auth",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/auth.ts",
-      "exported_functions": [
-        "login",
-        "logout"
-      ],
+      "exported_functions": ["login", "logout"],
       "classification": "REAL_PENDING_SECRET",
       "open_reason": "Core login/logout. Supabase Auth required. Verified structurally in F0 but not under F1 evidence frame.",
       "visible": false,
       "reachable": true,
-      "env_vars": [
-        "NEXT_PUBLIC_SUPABASE_URL",
-        "NEXT_PUBLIC_SUPABASE_ANON_KEY"
-      ]
+      "env_vars": ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"]
     },
     {
       "stable_id": "server-actions.auth-actions",
@@ -466,10 +410,7 @@
       "open_reason": "Authorization snapshot actions. Require Supabase Auth and PIN state.",
       "visible": false,
       "reachable": true,
-      "env_vars": [
-        "NEXT_PUBLIC_SUPABASE_URL",
-        "NEXT_PUBLIC_SUPABASE_ANON_KEY"
-      ]
+      "env_vars": ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"]
     },
     {
       "stable_id": "server-actions.admin",
@@ -504,41 +445,31 @@
       "open_reason": "AI enrichment via Gemini. GeminiClient throws GeminiConfigError on missing GEMINI_API_KEY (honest). Route quarantined.",
       "visible": false,
       "reachable": false,
-      "env_vars": [
-        "GEMINI_API_KEY"
-      ]
+      "env_vars": ["GEMINI_API_KEY"]
     },
     {
       "stable_id": "server-actions.ai-search",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/aiSearch.ts",
-      "exported_functions": [
-        "askGlobalAiAction"
-      ],
+      "exported_functions": ["askGlobalAiAction"],
       "classification": "REAL_PENDING_SECRET",
       "provider": "gemini",
       "open_reason": "Global AI search via Gemini. Requires GEMINI_API_KEY.",
       "visible": false,
       "reachable": false,
-      "env_vars": [
-        "GEMINI_API_KEY"
-      ]
+      "env_vars": ["GEMINI_API_KEY"]
     },
     {
       "stable_id": "server-actions.analyze-phone-note",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/analyzePhoneNote.ts",
-      "exported_functions": [
-        "analyzePhoneNoteWithAI"
-      ],
+      "exported_functions": ["analyzePhoneNoteWithAI"],
       "classification": "REAL_PENDING_SECRET",
       "provider": "gemini",
       "open_reason": "Phone note AI analysis. Requires GEMINI_API_KEY.",
       "visible": false,
       "reachable": false,
-      "env_vars": [
-        "GEMINI_API_KEY"
-      ]
+      "env_vars": ["GEMINI_API_KEY"]
     },
     {
       "stable_id": "server-actions.baths",
@@ -560,10 +491,7 @@
       "stable_id": "server-actions.company",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/company.actions.ts",
-      "exported_functions": [
-        "getCompanySettings",
-        "updateCompanySettings"
-      ],
+      "exported_functions": ["getCompanySettings", "updateCompanySettings"],
       "classification": "PENDING_CONTRACT",
       "open_reason": "Company settings CRUD. Supabase-connected but no independent E2E evidence.",
       "visible": false,
@@ -628,9 +556,7 @@
       "stable_id": "server-actions.developer-analytics",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/developerAnalytics.actions.ts",
-      "exported_functions": [
-        "getDeveloperCockpitStats"
-      ],
+      "exported_functions": ["getDeveloperCockpitStats"],
       "classification": "PENDING_CONTRACT",
       "open_reason": "getDeveloperCockpitStats — hardcoded frictionAnalysis, suggestions, and fallback numbers removed in F1-R0. Returns only real tracking events (empty when none). Pending real analytics data contract.",
       "visible": false,
@@ -721,10 +647,7 @@
       "stable_id": "server-actions.mahnung",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/mahnung.actions.ts",
-      "exported_functions": [
-        "sendeZahlungserinnerung",
-        "sendeMahnung"
-      ],
+      "exported_functions": ["sendeZahlungserinnerung", "sendeMahnung"],
       "classification": "PENDING_CONTRACT",
       "provider": "mail",
       "open_reason": "Payment reminder email actions. Email route quarantined. No verified provider contract.",
@@ -735,18 +658,13 @@
       "stable_id": "server-actions.ocr",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/ocr.actions.ts",
-      "exported_functions": [
-        "processImage",
-        "processImageWithAI"
-      ],
+      "exported_functions": ["processImage", "processImageWithAI"],
       "classification": "REAL_PENDING_SECRET",
       "provider": "gemini",
       "open_reason": "OCR via Gemini or Klippa. GeminiClient throws on missing key (honest). Requires GEMINI_API_KEY.",
       "visible": false,
       "reachable": false,
-      "env_vars": [
-        "GEMINI_API_KEY"
-      ]
+      "env_vars": ["GEMINI_API_KEY"]
     },
     {
       "stable_id": "server-actions.orders",
@@ -801,9 +719,7 @@
       "stable_id": "server-actions.goods-out",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/goodsOut.actions.ts",
-      "exported_functions": [
-        "recordGoodsOutAction"
-      ],
+      "exported_functions": ["recordGoodsOutAction"],
       "classification": "PENDING_CONTRACT",
       "open_reason": "F1.5-C tenant-bound V1/V2 goods-out command is delivered on main. F1.5-D invokes it only through the existing typed action and passed fresh local real Auth/DB/browser E2E; Exact-SHA CI and independent D acceptance remain pending.",
       "visible": false,
@@ -813,10 +729,7 @@
       "stable_id": "server-actions.pdf",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/pdf.actions.ts",
-      "exported_functions": [
-        "generateOrderLabel",
-        "generateDeliveryNote"
-      ],
+      "exported_functions": ["generateOrderLabel", "generateDeliveryNote"],
       "classification": "PENDING_CONTRACT",
       "open_reason": "PDF label/delivery note generation. No verified contract.",
       "visible": false,
@@ -869,9 +782,7 @@
       "stable_id": "server-actions.search",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/search.actions.ts",
-      "exported_functions": [
-        "searchTenantAction"
-      ],
+      "exported_functions": ["searchTenantAction"],
       "classification": "PENDING_CONTRACT",
       "open_reason": "P3 Lane-0 candidate now carries tenant-bound sources, coverage and shareable V8/V2 hrefs; independent closure review is pending.",
       "visible": true,
@@ -881,10 +792,7 @@
       "stable_id": "server-actions.start",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/start.actions.ts",
-      "exported_functions": [
-        "getFeierabendEvents",
-        "notifyAdminPinReset"
-      ],
+      "exported_functions": ["getFeierabendEvents", "notifyAdminPinReset"],
       "classification": "PENDING_CONTRACT",
       "open_reason": "Start/today page actions. Supabase-connected, no independent E2E evidence.",
       "visible": false,
@@ -950,9 +858,7 @@
       "stable_id": "server-actions.baeder",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/baeder/actions.ts",
-      "exported_functions": [
-        "getBaederListAction"
-      ],
+      "exported_functions": ["getBaederListAction"],
       "classification": "PENDING_CONTRACT",
       "open_reason": "Bath list action. Supabase-connected, no independent E2E evidence.",
       "visible": false,
@@ -992,9 +898,7 @@
       "stable_id": "server-actions.buchhaltung-search",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/buchhaltung/search-actions.ts",
-      "exported_functions": [
-        "searchBelegeByOcrTextAction"
-      ],
+      "exported_functions": ["searchBelegeByOcrTextAction"],
       "classification": "PENDING_CONTRACT",
       "open_reason": "OCR-based receipt search. Supabase-connected, no verified E2E.",
       "visible": false,
@@ -1048,9 +952,7 @@
       "stable_id": "server-actions.global-search",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/global-search-actions.ts",
-      "exported_functions": [
-        "globalSearchAction"
-      ],
+      "exported_functions": ["globalSearchAction"],
       "classification": "PENDING_CONTRACT",
       "open_reason": "Dormant compatibility export delegates only to the authenticated tenant-bound Lane-0 action; it is not a second search implementation.",
       "visible": false,
@@ -1060,9 +962,7 @@
       "stable_id": "server-actions.kontrolle",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/kontrolle/actions.ts",
-      "exported_functions": [
-        "getQsListenAction"
-      ],
+      "exported_functions": ["getQsListenAction"],
       "classification": "PENDING_CONTRACT",
       "open_reason": "Quality control list action. Supabase-connected, no independent E2E evidence.",
       "visible": false,
@@ -1072,9 +972,7 @@
       "stable_id": "server-actions.lager",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/lager/actions.ts",
-      "exported_functions": [
-        "getLagerbestandAction"
-      ],
+      "exported_functions": ["getLagerbestandAction"],
       "classification": "PENDING_CONTRACT",
       "open_reason": "Stock/inventory action. Supabase-connected, no independent E2E evidence.",
       "visible": false,
@@ -1113,9 +1011,7 @@
       "stable_id": "server-actions.marketing-attribution",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/marketing/attribution/actions.ts",
-      "exported_functions": [
-        "getAttributionData"
-      ],
+      "exported_functions": ["getAttributionData"],
       "classification": "PENDING_CONTRACT",
       "open_reason": "Marketing attribution. No verified external provider integration.",
       "visible": false,
@@ -1125,10 +1021,7 @@
       "stable_id": "server-actions.marketing-einwilligungen",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/marketing/einwilligungen/actions.ts",
-      "exported_functions": [
-        "getEinwilligungen",
-        "checkEinwilligung"
-      ],
+      "exported_functions": ["getEinwilligungen", "checkEinwilligung"],
       "classification": "PENDING_CONTRACT",
       "open_reason": "Marketing consent management. Supabase-connected, no verified E2E.",
       "visible": false,
@@ -1138,10 +1031,7 @@
       "stable_id": "server-actions.marketing-kanaele",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/marketing/kanaele/actions.ts",
-      "exported_functions": [
-        "getKanaele",
-        "updateKanalConfig"
-      ],
+      "exported_functions": ["getKanaele", "updateKanalConfig"],
       "classification": "PENDING_CONTRACT",
       "open_reason": "Marketing channel config. Supabase-connected, no verified external provider.",
       "visible": false,
@@ -1186,9 +1076,7 @@
       "stable_id": "server-actions.performance-actions",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/performance/actions.ts",
-      "exported_functions": [
-        "getPerformanceKPIsAction"
-      ],
+      "exported_functions": ["getPerformanceKPIsAction"],
       "classification": "PENDING_CONTRACT",
       "open_reason": "Performance KPI aggregation. Supabase read-models, no independent E2E evidence.",
       "visible": false,
@@ -1366,10 +1254,7 @@
       "kind": "PROVIDER_CONNECTION",
       "provider": "Supabase/Auth",
       "adapter_file": "src/lib/supabase/server.ts",
-      "env_vars": [
-        "NEXT_PUBLIC_SUPABASE_URL",
-        "NEXT_PUBLIC_SUPABASE_ANON_KEY"
-      ],
+      "env_vars": ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"],
       "classification": "REAL_VERIFIED",
       "evidence": {
         "note": "Auth/session management verified in F0 HTTP boundary tests (BF-006) and F0 RLS negative matrix.",
@@ -1383,10 +1268,7 @@
       "kind": "PROVIDER_CONNECTION",
       "provider": "Supabase/Storage",
       "adapter_file": "src/lib/server/orderStationAttachmentStorage.ts",
-      "env_vars": [
-        "NEXT_PUBLIC_SUPABASE_URL",
-        "SUPABASE_SERVICE_ROLE_KEY"
-      ],
+      "env_vars": ["NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"],
       "classification": "REAL_VERIFIED",
       "evidence": {
         "note": "Object storage verified in F0 BF-007 Storage HTTP negative matrix (S1-S12) and F1.1 photo upload.",
@@ -1409,18 +1291,14 @@
       "open_reason": "LEGACY_QUARANTINE_SUPERSEDED by D-ARCH-012/D-AI-001. The adapter remains inventory-only, invisible and unreachable; a secret must not activate it and there is no runtime fallback.",
       "visible": false,
       "reachable": false,
-      "evidence_files": [
-        "src/lib/ocr/GeminiProvider.ts"
-      ]
+      "evidence_files": ["src/lib/ocr/GeminiProvider.ts"]
     },
     {
       "stable_id": "provider.klippa",
       "kind": "PROVIDER_CONNECTION",
       "provider": "Klippa/OCR",
       "adapter_file": "src/lib/ocr/KlippaProvider.ts",
-      "env_vars": [
-        "KLIPPA_API_KEY"
-      ],
+      "env_vars": ["KLIPPA_API_KEY"],
       "classification": "LEGACY_REMOVE",
       "open_reason": "LEGACY_QUARANTINE_SUPERSEDED by D-ARCH-012/D-AI-001. The adapter and scan route remain quarantined, invisible and unreachable; a secret must not activate them.",
       "visible": false,
@@ -1436,9 +1314,7 @@
       "open_reason": "Email sending not activated. Route returns notAvailableResponse (503). Provider and credentials not configured. Required for feedback, reminders, and morning messages.",
       "visible": false,
       "reachable": false,
-      "evidence_files": [
-        "src/lib/email/emailProvider.ts"
-      ]
+      "evidence_files": ["src/lib/email/emailProvider.ts"]
     },
     {
       "stable_id": "provider.mollie",
@@ -1450,9 +1326,7 @@
       "open_reason": "Payment integration not activated. Route returns notAvailableResponse (503). Planned for F1.5 confirmed payment receipt.",
       "visible": false,
       "reachable": false,
-      "evidence_files": [
-        "src/lib/payments/paymentProvider.ts"
-      ]
+      "evidence_files": ["src/lib/payments/paymentProvider.ts"]
     },
     {
       "stable_id": "provider.banking",
@@ -1502,10 +1376,7 @@
       "stable_id": "server-actions.system-stats",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/systemStats.ts",
-      "exported_functions": [
-        "getSystemStats",
-        "runSupabaseWriteTest"
-      ],
+      "exported_functions": ["getSystemStats", "runSupabaseWriteTest"],
       "visible": false,
       "reachable": false,
       "classification": "PENDING_CONTRACT",

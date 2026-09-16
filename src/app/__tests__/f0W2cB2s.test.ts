@@ -6,6 +6,11 @@ const root = process.cwd();
 const source = (file: string) => readFileSync(resolve(root, file), "utf8");
 
 const retiredPageEntrypoints = [
+  "src/app/admin/analytics/page.tsx",
+  "src/app/admin/devices/page.tsx",
+  "src/app/admin/import/page.tsx",
+  "src/app/admin/testanalyse/live/page.tsx",
+  "src/app/admin/testanalyse/page.tsx",
   "src/app/analyse/page.tsx",
   "src/app/archive/page.tsx",
   "src/app/baeder/page.tsx",
@@ -66,12 +71,26 @@ const retiredPageEntrypoints = [
 describe("F0 W2C-B2S page truth containment", () => {
   it("keeps the complete canonical retired/quarantined route matrix sorted and unique", () => {
     expect(retiredPageEntrypoints).toEqual([...retiredPageEntrypoints].sort());
-    expect(new Set(retiredPageEntrypoints).size).toBe(retiredPageEntrypoints.length);
-    expect(retiredPageEntrypoints).toHaveLength(55);
+    expect(new Set(retiredPageEntrypoints).size).toBe(
+      retiredPageEntrypoints.length,
+    );
+    expect(retiredPageEntrypoints).toHaveLength(60);
   });
 
-  it.each(retiredPageEntrypoints)("keeps %s physically absent so direct URLs resolve to Next 404", (file) => {
-    expect(existsSync(resolve(root, file))).toBe(false);
+  it.each(retiredPageEntrypoints)(
+    "keeps %s physically absent so direct URLs resolve to Next 404",
+    (file) => {
+      expect(existsSync(resolve(root, file))).toBe(false);
+    },
+  );
+
+  it("keeps retired admin routes out of settings while retaining embedded real tools", () => {
+    const settings = source("src/app/settings/SettingsClient.tsx");
+    expect(settings).not.toMatch(
+      /href=["']\/(?:admin\/(?:analytics|testanalyse)|kvp)/,
+    );
+    expect(settings).toContain("<AdminDevicesClient />");
+    expect(settings).toContain("<DataImportCenter />");
   });
 });
 
@@ -82,7 +101,10 @@ describe("F0 W2C-B2S local provider denials", () => {
     vi.doMock("@/db", () => ({ db: { select } }));
     vi.doMock("next/cache", () => ({ revalidatePath }));
     const { getRiskOrders } = await import("@/app/actions/orders.actions");
-    await expect(getRiskOrders()).resolves.toMatchObject({ ok: false, error: "NOT_AVAILABLE" });
+    await expect(getRiskOrders()).resolves.toMatchObject({
+      ok: false,
+      error: "NOT_AVAILABLE",
+    });
     expect(select).not.toHaveBeenCalled();
     expect(revalidatePath).not.toHaveBeenCalled();
   });
@@ -93,18 +115,52 @@ describe("F0 W2C-B2S local provider denials", () => {
       source("src/lib/payments/mollieAdapter.ts"),
       source("src/lib/email/resendAdapter.ts"),
     ];
-    for (const file of [ki, mollie, resend]) expect(file).not.toMatch(/functions\.invoke|fetch\(|supabase\/client/);
+    for (const file of [ki, mollie, resend])
+      expect(file).not.toMatch(/functions\.invoke|fetch\(|supabase\/client/);
     const { MollieAdapter } = await import("@/lib/payments/mollieAdapter");
     const { ResendAdapter } = await import("@/lib/email/resendAdapter");
-    await expect(new MollieAdapter().createPaymentIntent({ amount: 1, currency: "EUR", description: "test" } as never)).resolves.toMatchObject({ success: false, error: expect.stringContaining("NOT_AVAILABLE") });
-    await expect(new ResendAdapter().send({ to: "test@example.invalid", subject: "test", html: "test" } as never)).resolves.toMatchObject({ success: false, error: expect.stringContaining("NOT_AVAILABLE") });
+    await expect(
+      new MollieAdapter().createPaymentIntent({
+        amount: 1,
+        currency: "EUR",
+        description: "test",
+      } as never),
+    ).resolves.toMatchObject({
+      success: false,
+      error: expect.stringContaining("NOT_AVAILABLE"),
+    });
+    await expect(
+      new ResendAdapter().send({
+        to: "test@example.invalid",
+        subject: "test",
+        html: "test",
+      } as never),
+    ).resolves.toMatchObject({
+      success: false,
+      error: expect.stringContaining("NOT_AVAILABLE"),
+    });
     expect(ki).toContain("isLoading: false");
     expect(ki).toContain("NOT_AVAILABLE");
   });
 });
 
-const quarantined = ["customer-enrich", "email-send", "email-webhook", "freetext-extract", "inquiry-extract", "item-photo-analyze", "kpi-insight", "mollie-create-payment", "mollie-webhook", "notes-extract", "payments-intent", "payments-webhook-mollie", "scan-analyze"];
-const exactQuarantinedSource = 'import { serve } from "https://deno.land/std@0.224.0/http/server.ts";\nimport { notAvailableResponse } from "../_shared/notAvailable.ts";\n\nserve(() => notAvailableResponse());\n';
+const quarantined = [
+  "customer-enrich",
+  "email-send",
+  "email-webhook",
+  "freetext-extract",
+  "inquiry-extract",
+  "item-photo-analyze",
+  "kpi-insight",
+  "mollie-create-payment",
+  "mollie-webhook",
+  "notes-extract",
+  "payments-intent",
+  "payments-webhook-mollie",
+  "scan-analyze",
+];
+const exactQuarantinedSource =
+  'import { serve } from "https://deno.land/std@0.224.0/http/server.ts";\nimport { notAvailableResponse } from "../_shared/notAvailable.ts";\n\nserve(() => notAvailableResponse());\n';
 const sideEffectTokens = [
   "request",
   "req",
@@ -137,12 +193,21 @@ const sideEffectTokens = [
 
 describe("F0 W2C-B2S Edge source containment", () => {
   it("keeps the exact local inventory and quarantines all thirteen named entrypoints", () => {
-    expect(readdirSync(resolve(root, "supabase/functions"), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort()).toEqual(["_shared", ...quarantined].sort());
+    expect(
+      readdirSync(resolve(root, "supabase/functions"), { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+        .sort(),
+    ).toEqual(["_shared", ...quarantined].sort());
     for (const name of quarantined) {
-      const entry = source(`supabase/functions/${name}/index.ts`).replace(/\r\n/g, "\n");
+      const entry = source(`supabase/functions/${name}/index.ts`).replace(
+        /\r\n/g,
+        "\n",
+      );
       expect(entry).toBe(exactQuarantinedSource);
       const normalizedEntry = entry.toLowerCase();
-      for (const token of sideEffectTokens) expect(normalizedEntry).not.toContain(token);
+      for (const token of sideEffectTokens)
+        expect(normalizedEntry).not.toContain(token);
     }
   });
 
