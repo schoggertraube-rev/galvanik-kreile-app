@@ -278,6 +278,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     return requestIds.current[kind];
   };
 
+  const resetAwardDateForQuoteContext = () => {
+    setConfirmedOrderDueDate("");
+  };
+
   const navigate = (next: Step) => {
     setFeedback(null);
     setCopied(false);
@@ -424,6 +428,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         setFeedback(requestFeedback(result, ports.resumeQuoteId));
         return;
       }
+      resetAwardDateForQuoteContext();
       setQuote(result.quote);
       setQuoteReceipt(null);
       setCustomer({ id: result.quote.customerId, customerNumber: result.quote.customerNumber, name: result.quote.customerDisplayName, city: null });
@@ -461,6 +466,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       deny("quote");
       return;
     }
+    resetAwardDateForQuoteContext();
     setQuote(draft);
     setQuoteReceipt(null);
     setCustomer({ id: draft.customerId, customerNumber: draft.customerNumber, name: draft.customerDisplayName, city: null });
@@ -595,6 +601,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       deny("quote");
       return;
     }
+    resetAwardDateForQuoteContext();
     setCustomer(selected);
     setQuote(null);
     setQuoteReceipt(null);

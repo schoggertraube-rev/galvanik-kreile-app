@@ -29,11 +29,13 @@ async function loginPin(page: Page, userId: string, pin: string) {
   // The dialog is rendered only by the client click handler. Its appearance
   // therefore proves hydration and the real event binding without a fixed wait.
   await expect(dialog).toBeVisible();
+  const loginNavigation = page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 30_000 });
   for (const digit of pin) {
     const key = dialog.getByRole("button", { name: digit, exact: true });
     await expect(key).toBeVisible();
     await key.click({ timeout: 10_000 });
   }
+  await loginNavigation;
   await expect.poll(async () => (await page.context().cookies()).map((cookie) => cookie.name), { timeout: 10_000 })
     .toContain("kreile_app_session");
   const signedCookie = (await page.context().cookies()).find((cookie) => cookie.name === "kreile_app_session");
@@ -60,7 +62,7 @@ async function loginPin(page: Page, userId: string, pin: string) {
     sameSite: signedCookie.sameSite,
     expires: signedCookie.expires,
   }]);
-  await page.goto("/");
+  if (new URL(page.url()).pathname !== "/") await page.goto("/");
   await page.waitForURL((url) => url.pathname === "/", { timeout: 30_000 });
 }
 
@@ -225,12 +227,27 @@ test.describe("PATH1 V5 globales Plus – realer Kunde zu KV zu F1.1-Auftrag", (
       const quoteReceipt = await receiptValues(desktop.page.getByRole("group", { name: "KV – technische Details für Support" }));
       expect(quoteReceipt).toHaveLength(3);
 
+      const awardDateBeforeEdit = desktop.page.getByLabel("Zugesagter Termin für den Auftrag");
+      const awardButtonBeforeEdit = desktop.page.getByRole("button", { name: /Zuschlag bestätigen/ });
+      await awardDateBeforeEdit.fill("2026-10-19");
+      await expect(awardButtonBeforeEdit).toBeEnabled();
       await desktop.page.getByRole("button", { name: "KV bearbeiten" }).click();
       await expect(desktop.page.getByRole("heading", { name: "KV bearbeiten" })).toBeVisible();
       await desktop.page.getByLabel("Gewünschter Termin").fill("2026-10-18");
       await desktop.page.getByLabel("Hinweis zum KV").fill(`SYNTHETISCHER V5 KV UPDATE ${suffix}`);
       await desktop.page.getByRole("button", { name: "KV sichern" }).click();
       await expect(desktop.page.getByText("Stand 2")).toBeVisible();
+
+      const awardDateAfterEdit = desktop.page.getByLabel("Zugesagter Termin für den Auftrag");
+      const awardButtonAfterEdit = desktop.page.getByRole("button", { name: /Zuschlag bestätigen/ });
+      await expect(awardDateAfterEdit).toHaveValue("");
+      await expect(awardDateAfterEdit).toHaveAttribute("aria-invalid", "true");
+      await expect(awardButtonAfterEdit).toBeDisabled();
+      await desktop.page.setViewportSize({ width: 1914, height: 917 });
+      await awardDateAfterEdit.scrollIntoViewIfNeeded();
+      captures.push(await capture(desktop.page, "v5-award-date-reset-after-edit-desktop-1914x917.png", "award-date-reset-after-edit"));
+      await awardDateAfterEdit.fill("2026-10-21");
+      await expect(awardButtonAfterEdit).toBeEnabled();
 
       await desktop.page.getByRole("button", { name: "Anlegen schließen" }).click();
       await desktop.page.reload();
@@ -242,15 +259,18 @@ test.describe("PATH1 V5 globales Plus – realer Kunde zu KV zu F1.1-Auftrag", (
       const confirmedDate = desktop.page.getByLabel("Zugesagter Termin für den Auftrag");
       const awardButton = desktop.page.getByRole("button", { name: /Zuschlag bestätigen/ });
       await expect(confirmedDate).toBeFocused();
+      await expect(confirmedDate).toHaveValue("");
       await expect(confirmedDate).toHaveAttribute("aria-invalid", "true");
       await expect(awardButton).toBeDisabled();
       await desktop.page.setViewportSize({ width: 1914, height: 917 });
       await confirmedDate.scrollIntoViewIfNeeded();
-      captures.push(await capture(desktop.page, "v5-award-date-desktop-1914x917.png", "award-date-required-disabled"));
+      captures.push(await capture(desktop.page, "v5-award-date-reset-after-resume-desktop-1914x917.png", "award-date-reset-after-resume"));
       await desktop.page.setViewportSize({ width: 768, height: 1024 });
       await confirmedDate.scrollIntoViewIfNeeded();
-      captures.push(await capture(desktop.page, "v5-award-date-tablet-768x1024.png", "award-date-required-disabled"));
+      captures.push(await capture(desktop.page, "v5-award-date-reset-after-resume-tablet-768x1024.png", "award-date-reset-after-resume"));
       await desktop.page.setViewportSize({ width: 390, height: 844 });
+      await confirmedDate.scrollIntoViewIfNeeded();
+      captures.push(await capture(desktop.page, "v5-award-date-reset-after-resume-mobile-390x844.png", "award-date-reset-after-resume"));
       await confirmedDate.fill("2026-10-20");
       await expect(confirmedDate).toHaveAttribute("aria-invalid", "false");
       await expect(awardButton).toBeEnabled();
