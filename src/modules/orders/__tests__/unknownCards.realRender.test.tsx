@@ -29,7 +29,7 @@ afterEach(() => {
 });
 
 const unavailable =
-  "NOT_AVAILABLE: Galvanik-Auftragsdaten konnten nicht geladen werden.";
+  "Die Galvanik-Aufträge konnten gerade nicht geladen werden. Bitte erneut versuchen oder die Auftragsliste öffnen.";
 
 describe("W2C-B2M5U V8 queue truth", () => {
   it("renders an unknown due state without inventing an in-plan claim", () => {
@@ -75,10 +75,27 @@ describe("W2C-B2M5U V8 queue truth", () => {
     await waitFor(() =>
       expect(screen.getByText(unavailable)).toBeInTheDocument(),
     );
+    expect(screen.queryByText(/NOT_AVAILABLE/)).not.toBeInTheDocument();
     expect(
       screen.queryByText("Noch keine Daten erfasst."),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Dringlich in Galvanik")).not.toBeInTheDocument();
+  });
+
+  it("keeps authorization details out of the denied state", async () => {
+    getGalvanikOrdersAction.mockResolvedValueOnce({
+      ok: false,
+      error: "FORBIDDEN",
+      message: "FORBIDDEN: internal authorization detail",
+    });
+    render(<GalvanikPage />);
+    expect(
+      await screen.findByText(
+        "Für diese Ansicht fehlt die Berechtigung. Bitte den Zugriff mit dem Systemadministrator klären.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/internal authorization detail/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Noch keine Daten erfasst.")).not.toBeInTheDocument();
   });
 
   it("renders the real empty state only after the read succeeds", async () => {

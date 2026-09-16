@@ -148,7 +148,7 @@ export function CustomerCardView({
           ) : (
             <>
               <h2>Kein aktiver Auftrag</h2>
-              <p>Der Kunden-Readback enthält derzeit keinen offenen Vorgang.</p>
+              <p>Für diesen Kunden ist derzeit kein offener Auftrag vorhanden.</p>
             </>
           )}
         </section>
@@ -162,7 +162,7 @@ export function CustomerCardView({
           </header>
           {active.length === 0 ? (
             <p className={styles.truthEmpty}>
-              Keine aktiven Aufträge zurückgelesen.
+              Keine aktiven Aufträge vorhanden.
             </p>
           ) : (
             <ol>

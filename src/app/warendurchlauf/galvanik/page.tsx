@@ -19,6 +19,11 @@ import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 type GalvanikBucket = "galvanik" | "finished";
 type GalvanikOrder = WarendurchlaufOrder & { statusText?: string };
 
+const GALVANIK_LOAD_ERROR =
+  "Die Galvanik-Aufträge konnten gerade nicht geladen werden. Bitte erneut versuchen oder die Auftragsliste öffnen.";
+const GALVANIK_ACCESS_DENIED =
+  "Für diese Ansicht fehlt die Berechtigung. Bitte den Zugriff mit dem Systemadministrator klären.";
+
 function sortByUrgency(orders: GalvanikOrder[]) {
   const priorityRank: Record<string, number> = {
     red: 0,
@@ -43,9 +48,8 @@ export default function GalvanikPage() {
   const [dataState, setDataState] = useState<
     "loading" | "loaded" | "denied" | "error"
   >("loading");
-  const [unavailableMessage, setUnavailableMessage] = useState(
-    "NOT_AVAILABLE: Galvanik-Auftragsdaten konnten nicht geladen werden.",
-  );
+  const [unavailableMessage, setUnavailableMessage] =
+    useState(GALVANIK_LOAD_ERROR);
   const openOrder = useOverlayStore((state) => state.openOrder);
 
   // Consistently derives galvanikOrders/finishedOrders/topUrgent from one fresh
@@ -82,19 +86,17 @@ export default function GalvanikPage() {
     setGalvanikOrders([]);
     setFinishedOrders([]);
     setTopUrgent([]);
-    setUnavailableMessage(
-      "NOT_AVAILABLE: Galvanik-Auftragsdaten konnten nicht geladen werden.",
-    );
+    setUnavailableMessage(GALVANIK_LOAD_ERROR);
     try {
       const result = await getGalvanikOrdersAction();
 
       if (!result.ok) {
-        setUnavailableMessage(result.message);
-        setDataState(
-          result.error === "AUTH_ERROR" || result.error === "FORBIDDEN"
-            ? "denied"
-            : "error",
+        const denied =
+          result.error === "AUTH_ERROR" || result.error === "FORBIDDEN";
+        setUnavailableMessage(
+          denied ? GALVANIK_ACCESS_DENIED : GALVANIK_LOAD_ERROR,
         );
+        setDataState(denied ? "denied" : "error");
         return;
       }
 
@@ -104,9 +106,7 @@ export default function GalvanikPage() {
       setGalvanikOrders([]);
       setFinishedOrders([]);
       setTopUrgent([]);
-      setUnavailableMessage(
-        "NOT_AVAILABLE: Galvanik-Auftragsdaten konnten nicht geladen werden.",
-      );
+      setUnavailableMessage(GALVANIK_LOAD_ERROR);
       setDataState("error");
     }
   }, [applyGalvanikDataset]);
@@ -164,10 +164,10 @@ export default function GalvanikPage() {
     <div className="w-full h-full font-sans antialiased text-[#1a1a1a] pb-16">
       <div className="w-full mx-auto px-5 md:px-8 lg:px-12 xl:px-16 py-6">
         {/* Titel */}
-        <div className="text-[13px] font-bold text-[#5e5850] mb-6 flex items-center gap-2">
+        <h1 className="text-[13px] font-bold text-[#5e5850] mb-6 flex items-center gap-2">
           Galvanik Bearbeitung
           <span className="flex-1 h-px bg-[#d8d0c4]" />
-        </div>
+        </h1>
         <p className="mb-4 text-sm text-[#9e9689]">
           Auftrag öffnen, Mehrarbeit je Teil erfassen und anschließend mit
           bestätigtem Beleg fertigsetzen. Ein separater Start-Klick bleibt

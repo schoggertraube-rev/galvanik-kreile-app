@@ -263,7 +263,7 @@ export function OrderCardAppAdapter({
     if (!snapshot) return;
     setFeedback({
       kind: "submitting",
-      message: "Übergabe wird geschrieben und zurückgelesen.",
+      message: "Übergabe an die Galvanik wird sicher gespeichert.",
     });
     const clientEventId = (requests.current.handoff ??= crypto.randomUUID());
     const result = await transitionWareneingangToGalvanikAction({
@@ -288,7 +288,8 @@ export function OrderCardAppAdapter({
     ) {
       setFeedback({
         kind: "error",
-        message: "Übergabe wurde nicht eindeutig zurückgelesen.",
+        message:
+          "Die Übergabe konnte nicht sicher bestätigt werden. Bitte den Auftragsstand neu laden.",
       });
       return;
     }
@@ -307,8 +308,7 @@ export function OrderCardAppAdapter({
     if (!snapshot) return;
     setFeedback({
       kind: "submitting",
-      message:
-        "Fertigstellung und Freeze werden geschrieben und zurückgelesen.",
+      message: "Fertigstellung wird sicher gespeichert.",
     });
     const clientEventId = (requests.current.freezeEvent ??=
       crypto.randomUUID());
@@ -337,7 +337,8 @@ export function OrderCardAppAdapter({
     ) {
       setFeedback({
         kind: "error",
-        message: "Fertigstellung wurde nicht eindeutig zurückgelesen.",
+        message:
+          "Die Fertigstellung konnte nicht sicher bestätigt werden. Bitte den Auftragsstand neu laden.",
       });
       return;
     }
@@ -358,7 +359,7 @@ export function OrderCardAppAdapter({
     if (!snapshot) return;
     setFeedback({
       kind: "submitting",
-      message: "Rechnung wird ausgestellt und zurückgelesen.",
+      message: "Rechnung wird sicher ausgestellt.",
     });
     const clientEventId = (requests.current.invoice ??= crypto.randomUUID());
     const result = await issueInvoiceAction({
@@ -383,7 +384,8 @@ export function OrderCardAppAdapter({
     if (!confirmed) {
       setFeedback({
         kind: "error",
-        message: "Rechnung wurde nicht eindeutig zurückgelesen.",
+        message:
+          "Die Rechnung konnte nicht sicher bestätigt werden. Bitte den Auftragsstand neu laden.",
       });
       return;
     }
@@ -404,7 +406,7 @@ export function OrderCardAppAdapter({
       if (!invoice || invoice.openAmountCents <= 0) return;
       setFeedback({
         kind: "submitting",
-        message: "Zahlung wird bestätigt und zurückgelesen.",
+        message: "Zahlung wird sicher bestätigt.",
       });
       const clientEventId = (requests.current.payment ??= crypto.randomUUID());
       const result = await confirmPaymentAction({
@@ -428,7 +430,8 @@ export function OrderCardAppAdapter({
       ) {
         setFeedback({
           kind: "error",
-          message: "Zahlung wurde nicht eindeutig zurückgelesen.",
+          message:
+            "Die Zahlung konnte nicht sicher bestätigt werden. Bitte den Zahlungsstand neu laden.",
         });
         return;
       }
@@ -440,7 +443,7 @@ export function OrderCardAppAdapter({
           eventId: result.receipt.eventId,
           receiptId: result.receipt.receiptId,
         },
-        "Zahlung wurde bestätigt und aus der Datenbank zurückgelesen.",
+        "Zahlung wurde sicher bestätigt.",
       );
     },
     [fail, load, snapshot, success],
@@ -450,7 +453,7 @@ export function OrderCardAppAdapter({
       if (!snapshot) return;
       setFeedback({
         kind: "submitting",
-        message: "Warenausgang wird gebucht und zurückgelesen.",
+        message: "Warenausgang wird sicher gebucht.",
       });
       const clientEventId = (requests.current.goodsOut ??= crypto.randomUUID());
       const result = await recordGoodsOutAction({
@@ -471,7 +474,8 @@ export function OrderCardAppAdapter({
       ) {
         setFeedback({
           kind: "error",
-          message: "Warenausgang wurde nicht eindeutig zurückgelesen.",
+          message:
+            "Der Warenausgang konnte nicht sicher bestätigt werden. Bitte den Auftragsstand neu laden.",
         });
         return;
       }
@@ -483,7 +487,7 @@ export function OrderCardAppAdapter({
           eventId: result.receipt.eventId,
           receiptId: `goods-out://${orderId}/${result.receipt.orderVersion}`,
         },
-        "Warenausgang wurde bestätigt und aus der Datenbank zurückgelesen.",
+        "Warenausgang wurde sicher bestätigt.",
       );
     },
     [fail, load, orderId, snapshot, success],
@@ -558,7 +562,7 @@ export function OrderCardAppAdapter({
         !goods
           ? "Ihre Rolle darf keinen Warenausgang buchen."
           : !goodsGate
-            ? "Das kanonische Zahlungsgate ist noch nicht erfüllt."
+            ? "Der Zahlungsstand erlaubt den Warenausgang noch nicht."
             : null,
       ),
       feedback,

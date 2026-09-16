@@ -109,8 +109,11 @@ describe("W3 Galvanik readback on the V8 card seam", () => {
     const view = render(<GalvanikPage />);
     await waitFor(() =>
       expect(screen.getByRole("status")).toHaveTextContent(
-        "Stationsliste ist nicht erlaubt.",
+        "Für diese Ansicht fehlt die Berechtigung. Bitte den Zugriff mit dem Systemadministrator klären.",
       ),
+    );
+    expect(screen.getByRole("status")).not.toHaveTextContent(
+      "Stationsliste ist nicht erlaubt.",
     );
     expect(
       screen.queryByText("Noch keine Daten erfasst."),
@@ -125,8 +128,11 @@ describe("W3 Galvanik readback on the V8 card seam", () => {
     render(<GalvanikPage />);
     await waitFor(() =>
       expect(screen.getByRole("status")).toHaveTextContent(
-        "Nicht sicher geladen.",
+        "Die Galvanik-Aufträge konnten gerade nicht geladen werden. Bitte erneut versuchen oder die Auftragsliste öffnen.",
       ),
+    );
+    expect(screen.getByRole("status")).not.toHaveTextContent(
+      "Nicht sicher geladen.",
     );
     expect(
       screen.getByText("Daten konnten nicht geladen werden"),

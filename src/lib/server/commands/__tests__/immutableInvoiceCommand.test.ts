@@ -1,4 +1,5 @@
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
+import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { resolveAuthorization, withTransaction, execute, renderToBuffer } = vi.hoisted(() => ({
@@ -28,6 +29,8 @@ const CORRELATION = "55555555-5555-4555-8555-555555555555";
 const INVOICE = "66666666-6666-4666-8666-666666666666";
 const FREEZE = "77777777-7777-4777-8777-777777777777";
 const PDF_SHA256 = "a".repeat(64);
+const ORIGINAL_PDF = Buffer.from("f1.4-original-invoice-pdf");
+const ORIGINAL_PDF_SHA256 = createHash("sha256").update(ORIGINAL_PDF).digest("hex");
 
 const validInput = {
   orderId: ORDER,
@@ -94,6 +97,33 @@ const validCancellationReceiptRow = {
   pdf_ref: `invoice://${INVOICE}/cancellation`,
   pdf_sha256: "b".repeat(64),
   cancel_reason: validCancelInput.reason,
+};
+
+const validLockedInvoice = {
+  id: INVOICE,
+  tenant_id: KREILE_TENANT_SLUG,
+  order_id: ORDER,
+  invoice_number: "R-2026-0007",
+  status: "issued",
+  aggregate_version: 1,
+  snapshot: {},
+  due_date: "2026-09-10",
+  pdf_ref: `invoice://${INVOICE}/original`,
+  pdf_sha256: ORIGINAL_PDF_SHA256,
+  pdf_content: ORIGINAL_PDF,
+  gross_amount_cents: 11_900,
+  payment_contract_version: 1,
+  payment_mode: "vorkasse",
+  payment_status: "offen",
+  payment_open_amount_cents: 11_900,
+  payment_paid_amount_cents: 0,
+  payment_currency: "EUR",
+  payment_method: null,
+  payment_paid_at: null,
+  payment_receipt_id: null,
+  payment_event_id: null,
+  payment_correlation_id: null,
+  payment_version: 0,
 };
 
 describe("createInvoice", () => {
@@ -316,5 +346,65 @@ describe("cancelInvoice", () => {
     await expect(cancelInvoice({ ...validCancelInput, reason: "Anderer zulässiger Stornogrund" })).resolves.toMatchObject({ code: "CONFLICT" });
     const sqlText = execute.mock.calls.map(([query]) => query.text).join("\n");
     expect(sqlText).not.toContain("UPDATE public.invoices");
+  });
+
+  it.each([
+    ["a one-cent partial payment", {
+      payment_status: "teilbezahlt",
+      payment_open_amount_cents: 11_899,
+      payment_paid_amount_cents: 1,
+      payment_method: "ueberweisung",
+      payment_paid_at: "2026-09-16T08:00:00.000Z",
+      payment_receipt_id: "receipt:partial",
+      payment_event_id: EVENT,
+      payment_correlation_id: CORRELATION,
+      payment_version: 1,
+    }],
+    ["a full payment", {
+      payment_status: "bezahlt",
+      payment_open_amount_cents: 0,
+      payment_paid_amount_cents: 11_900,
+      payment_method: "bar",
+      payment_paid_at: "2026-09-16T09:00:00.000Z",
+      payment_receipt_id: "receipt:paid",
+      payment_event_id: EVENT,
+      payment_correlation_id: CORRELATION,
+      payment_version: 1,
+    }],
+    ["an internally inconsistent payment state", {
+      payment_contract_version: null,
+    }],
+  ])("fails closed before PDF, event or invoice mutation for %s", async (_label, paymentDelta) => {
+    execute.mockImplementation((query: { text: string }) => {
+      if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if (query.text.includes("private.v_invoice_receipt_v1")) return Promise.resolve([]);
+      if (query.text.includes("SELECT id") && query.text.includes("FROM public.events")) {
+        return Promise.resolve([]);
+      }
+      if (query.text.includes("FOR UPDATE OF orders")) {
+        return Promise.resolve([{ id: ORDER, tenant_id: KREILE_TENANT_SLUG }]);
+      }
+      if (query.text.includes("FROM public.invoices") && query.text.includes("FOR UPDATE")) {
+        return Promise.resolve([{ ...validLockedInvoice, ...paymentDelta }]);
+      }
+      throw new Error(`unexpected SQL in paid cancellation test: ${query.text}`);
+    });
+
+    const { cancelInvoice } = await import("../immutableInvoiceCommand");
+    await expect(cancelInvoice(validCancelInput)).resolves.toEqual({
+      code: "CONFLICT",
+      message: "Die Rechnung kann nicht storniert werden, weil bereits eine Zahlung vorliegt oder der Zahlungsstand nicht eindeutig ist.",
+    });
+
+    const sqlText = execute.mock.calls.map(([query]) => query.text).join("\n");
+    expect(sqlText).toContain("payment_status");
+    expect(sqlText).toContain("payment_paid_amount_cents");
+    expect(sqlText).toContain("payment_open_amount_cents");
+    expect(sqlText).toContain("payment_version");
+    expect(sqlText).toContain("FOR UPDATE");
+    expect(sqlText).toContain("FOR UPDATE OF orders");
+    expect(sqlText).not.toContain("INSERT INTO public.events");
+    expect(sqlText).not.toContain("UPDATE public.invoices");
+    expect(renderToBuffer).not.toHaveBeenCalled();
   });
 });

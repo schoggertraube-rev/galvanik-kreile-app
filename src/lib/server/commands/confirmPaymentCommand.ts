@@ -397,7 +397,10 @@ async function readEventsByClientId(
       event_schema_version,
       aggregate_version,
       user_id::text AS actor_id,
-      to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS occurred_at,
+      -- public.events.created_at is a timestamp without time zone containing
+      -- the canonical UTC wall-clock value. Formatting it directly prevents
+      -- the database session zone from shifting a confirmed payment receipt.
+      to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS occurred_at,
       status,
       station,
       from_station,
@@ -594,7 +597,7 @@ export async function confirmPayment(input: unknown): Promise<ConfirmPaymentResu
           ${EVENT_TYPE}, 'Zahlung manuell bestätigt', ${actorId}::uuid,
           ${JSON.stringify(payload)}::jsonb, 'success', NULL, ${input.clientEventId}::uuid,
           ${EVENT_SCHEMA_VERSION}, ${correlationId}::uuid, ${paymentVersion}, NULL,
-          ${confirmedAt}::timestamptz
+          ${confirmedAt}::timestamptz AT TIME ZONE 'UTC'
         )
         RETURNING id AS event_id
       `);

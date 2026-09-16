@@ -350,6 +350,10 @@ describe("confirmPayment", () => {
     const update = queries.find((query) => queryText(query).includes("UPDATE public.invoices"));
     expect(insert).toBeDefined();
     expect(update).toBeDefined();
+    expect(insert?.text).toContain("AT TIME ZONE 'UTC'");
+    expect(queries.some((query) => (
+      queryText(query).includes("to_char(created_at,")
+    ))).toBe(true);
     const storedPayload = JSON.parse(
       insert?.values.find((value) => typeof value === "string" && value.startsWith("{")) as string,
     );

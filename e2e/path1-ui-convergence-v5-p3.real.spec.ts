@@ -118,36 +118,49 @@ async function createRealLocalAuthUser(
   });
   const body = (await response.json()) as AuthSignupResponse;
   if (!response.ok || typeof body.user?.id !== "string") {
-    throw new Error(`PATH1_P3_LOCAL_AUTH_SIGNUP_FAILED:${response.status}:${body.message ?? "invalid response"}`);
+    throw new Error(
+      `PATH1_P3_LOCAL_AUTH_SIGNUP_FAILED:${response.status}:${body.message ?? "invalid response"}`,
+    );
   }
   return body.user.id;
 }
 
 async function normalizeSignedAppSession(page: Page, actorId: string) {
-  await expect.poll(async () => {
-    const cookie = (await page.context().cookies()).find((candidate) => candidate.name === "kreile_app_session");
-    return Boolean(cookie?.httpOnly && cookie.value.length >= 64);
-  }, { timeout: 30_000 }).toBe(true);
+  await expect
+    .poll(
+      async () => {
+        const cookie = (await page.context().cookies()).find(
+          (candidate) => candidate.name === "kreile_app_session",
+        );
+        return Boolean(cookie?.httpOnly && cookie.value.length >= 64);
+      },
+      { timeout: 30_000 },
+    )
+    .toBe(true);
   const signedCookie = (await page.context().cookies()).find(
     (cookie) => cookie.name === "kreile_app_session",
   );
   if (!signedCookie) throw new Error("PATH1_P3_SIGNED_SESSION_COOKIE_MISSING");
   const token = decodeURIComponent(signedCookie.value);
   const separator = token.lastIndexOf(".");
-  if (separator <= 0) throw new Error("PATH1_P3_SIGNED_SESSION_COOKIE_MALFORMED");
+  if (separator <= 0)
+    throw new Error("PATH1_P3_SIGNED_SESSION_COOKIE_MALFORMED");
   const payload = JSON.parse(
     Buffer.from(token.slice(0, separator), "base64").toString("utf8"),
   ) as { userId?: unknown };
-  if (payload.userId !== actorId) throw new Error("PATH1_P3_SESSION_ACTOR_MISMATCH");
-  await page.context().addCookies([{
-    name: signedCookie.name,
-    value: signedCookie.value,
-    url: "http://localhost:3001",
-    httpOnly: true,
-    secure: false,
-    sameSite: signedCookie.sameSite,
-    expires: signedCookie.expires,
-  }]);
+  if (payload.userId !== actorId)
+    throw new Error("PATH1_P3_SESSION_ACTOR_MISMATCH");
+  await page.context().addCookies([
+    {
+      name: signedCookie.name,
+      value: signedCookie.value,
+      url: "http://localhost:3001",
+      httpOnly: true,
+      secure: false,
+      sameSite: signedCookie.sameSite,
+      expires: signedCookie.expires,
+    },
+  ]);
 }
 
 async function loginPin(page: Page, userId: string, pin: string) {
@@ -176,7 +189,9 @@ async function loginPin(page: Page, userId: string, pin: string) {
   // real redirect therefore returns to /start; this response proves that the
   // browser navigation has settled before its signed value is transport-normalized.
   await returnedToStart;
-  await page.waitForURL((url) => url.pathname === "/start", { timeout: 30_000 });
+  await page.waitForURL((url) => url.pathname === "/start", {
+    timeout: 30_000,
+  });
   await page.waitForLoadState("networkidle");
   await normalizeSignedAppSession(page, userId);
   if (new URL(page.url()).pathname !== "/")
@@ -185,7 +200,12 @@ async function loginPin(page: Page, userId: string, pin: string) {
   await page.waitForLoadState("networkidle");
 }
 
-async function loginEmail(page: Page, actorId: string, email: string, password: string) {
+async function loginEmail(
+  page: Page,
+  actorId: string,
+  email: string,
+  password: string,
+) {
   await page.goto("/start");
   await page.getByRole("button", { name: /Gregor/ }).click();
   const dialog = page.getByTestId("email-login-dialog");
@@ -195,7 +215,9 @@ async function loginEmail(page: Page, actorId: string, email: string, password: 
   await dialog.getByRole("button", { name: "Einloggen", exact: true }).click();
   await normalizeSignedAppSession(page, actorId);
   await page.goto("/settings", { waitUntil: "networkidle" });
-  await page.waitForURL((url) => url.pathname === "/settings", { timeout: 30_000 });
+  await page.waitForURL((url) => url.pathname === "/settings", {
+    timeout: 30_000,
+  });
 }
 
 async function capture(
@@ -305,7 +327,12 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
 
     try {
       const insertedAt = new Date(Date.now() - 5_000).toISOString();
-      await createRealLocalAuthUser(apiUrl, anonKey, gregorEmail, gregorPassword);
+      await createRealLocalAuthUser(
+        apiUrl,
+        anonKey,
+        gregorEmail,
+        gregorPassword,
+      );
       await sql`
         INSERT INTO public.app_users (id, tenant_id, email, full_name, role, pin_hash, active, created_at, updated_at)
         VALUES
@@ -388,39 +415,76 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
         throw new Error("PATH1_P3_ORDER_READBACK_MISSING");
 
       await rolf.page.goto("/", { waitUntil: "networkidle" });
-      await rolf.page.getByRole("button", { name: "Anlegen", exact: true }).click();
-      await rolf.page.getByRole("button", { name: /Offene KVs bearbeiten/ }).click();
-      const openQuotesDialog = rolf.page.getByRole("dialog", { name: "Offene KVs" });
-      await expect(openQuotesDialog.getByRole("status")).toContainText("Keine offenen KVs");
+      await rolf.page
+        .getByRole("button", { name: "Anlegen", exact: true })
+        .click();
+      await rolf.page
+        .getByRole("button", { name: /Offene KVs bearbeiten/ })
+        .click();
+      const openQuotesDialog = rolf.page.getByRole("dialog", {
+        name: "Offene KVs",
+      });
+      await expect(openQuotesDialog.getByRole("status")).toContainText(
+        "Keine offenen KVs",
+      );
       await expect(openQuotesDialog.getByRole("alert")).toHaveCount(0);
       await expect(openQuotesDialog).not.toContainText("Ausgang ungeklärt");
-      await rolf.page.getByRole("button", { name: "Anlegen schließen" }).click();
+      await rolf.page
+        .getByRole("button", { name: "Anlegen schließen" })
+        .click();
 
-      const moneyLink = rolf.page.getByRole("link", { name: "Geld & Rechnungen" });
-      await expect(moneyLink).toHaveAttribute("href", "/buchhaltung/rechnungen");
+      const moneyLink = rolf.page.getByRole("link", {
+        name: "Geld & Rechnungen",
+      });
+      await expect(moneyLink).toHaveAttribute(
+        "href",
+        "/buchhaltung/rechnungen",
+      );
       await moneyLink.click();
-      await rolf.page.waitForURL((url) => url.pathname === "/buchhaltung/rechnungen");
+      await rolf.page.waitForURL(
+        (url) => url.pathname === "/buchhaltung/rechnungen",
+      );
       await expect(
         rolf.page.getByRole("heading", { name: "Rechnungen", exact: true }),
       ).toBeVisible();
-      await expect(rolf.page.locator("body")).not.toContainText("NOT_AVAILABLE");
-      const accountingEntry = await rolf.page.goto("/buchhaltung", { waitUntil: "networkidle" });
+      await expect(rolf.page.locator("body")).not.toContainText(
+        "NOT_AVAILABLE",
+      );
+      const accountingEntry = await rolf.page.goto("/buchhaltung", {
+        waitUntil: "networkidle",
+      });
       expect(accountingEntry?.status()).toBe(200);
-      await rolf.page.waitForURL((url) => url.pathname === "/buchhaltung/rechnungen");
+      await rolf.page.waitForURL(
+        (url) => url.pathname === "/buchhaltung/rechnungen",
+      );
 
       const retiredRouteResults: Array<{ path: string; status: number }> = [];
-      for (const retiredRoute of RETIRED_ROUTE_MATRIX) {
-        const response = await rolf.page.goto(retiredRoute, { waitUntil: "domcontentloaded" });
-        const status = response?.status() ?? 0;
-        retiredRouteResults.push({ path: retiredRoute, status });
-        expect(status, `${retiredRoute} must resolve through Next's unmatched-route 404`).toBe(404);
-        await expect(rolf.page.locator("body")).not.toContainText(
-          /NOT_AVAILABLE|Liquidität Stabil|145 Belege|62 Rechnungen|1240 Zeitbuchungen|Google-API|Scan & KI-Erfassung/i,
-        );
+      const retiredRoutePage = await rolf.context.newPage();
+      try {
+        for (const retiredRoute of RETIRED_ROUTE_MATRIX) {
+          const response = await retiredRoutePage.goto(retiredRoute, {
+            waitUntil: "domcontentloaded",
+          });
+          const status = response?.status() ?? 0;
+          retiredRouteResults.push({ path: retiredRoute, status });
+          expect(
+            status,
+            `${retiredRoute} must resolve through Next's unmatched-route 404`,
+          ).toBe(404);
+          await expect(retiredRoutePage.locator("body")).not.toContainText(
+            /NOT_AVAILABLE|Liquidität Stabil|145 Belege|62 Rechnungen|1240 Zeitbuchungen|Google-API|Scan & KI-Erfassung/i,
+          );
+        }
+      } finally {
+        await retiredRoutePage.close();
       }
-      const galvanikControl = await rolf.page.goto("/warendurchlauf/galvanik", { waitUntil: "networkidle" });
+      const galvanikControl = await rolf.page.goto("/warendurchlauf/galvanik", {
+        waitUntil: "networkidle",
+      });
       expect(galvanikControl?.status()).toBe(200);
-      await expect(rolf.page.getByRole("heading", { name: /Galvanik Bearbeitung/ })).toBeVisible();
+      await expect(
+        rolf.page.getByRole("heading", { name: /Galvanik Bearbeitung/ }),
+      ).toBeVisible();
 
       for (const viewport of VIEWPORTS) {
         await rolf.page.setViewportSize({
@@ -659,22 +723,45 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
 
       const gregor = await newContext(browser);
       contexts.push(gregor.context);
-      await loginEmail(gregor.page, GREGOR_ACTOR_ID, gregorEmail, gregorPassword);
-      await expect(gregor.page.getByTestId("gregor-system-admin")).toContainText(
-        "Angemeldet als Gregor · Systemadministrator",
+      await loginEmail(
+        gregor.page,
+        GREGOR_ACTOR_ID,
+        gregorEmail,
+        gregorPassword,
       );
-      await expect(gregor.page.locator("body")).not.toContainText(/Technical Admin|\bTA\b/);
-      await expect(gregor.page.getByRole("link", { name: "Geld & Rechnungen" })).toHaveCount(0);
-      await expect(gregor.page.getByRole("link", { name: "Geld" })).toHaveCount(0);
-      await gregor.page.getByRole("link", { name: "Kreile Startseite" }).click();
-      await gregor.page.waitForURL((url) => url.pathname === "/settings", { timeout: 30_000 });
-      await expect(gregor.page.getByTestId("gregor-system-admin")).toBeVisible();
-      const [gregorReadback] = await sql<{ id: string; email: string; role: string }[]>`
+      await expect(
+        gregor.page.getByTestId("gregor-system-admin"),
+      ).toContainText("Angemeldet als Gregor · Systemadministrator");
+      await expect(gregor.page.locator("body")).not.toContainText(
+        /Technical Admin|\bTA\b/,
+      );
+      await expect(
+        gregor.page.getByRole("link", { name: "Geld & Rechnungen" }),
+      ).toHaveCount(0);
+      await expect(gregor.page.getByRole("link", { name: "Geld" })).toHaveCount(
+        0,
+      );
+      await gregor.page
+        .getByRole("link", { name: "Kreile Startseite" })
+        .click();
+      await gregor.page.waitForURL((url) => url.pathname === "/settings", {
+        timeout: 30_000,
+      });
+      await expect(
+        gregor.page.getByTestId("gregor-system-admin"),
+      ).toBeVisible();
+      const [gregorReadback] = await sql<
+        { id: string; email: string; role: string }[]
+      >`
         SELECT id::text, email, role
         FROM public.app_users
         WHERE tenant_id = ${TENANT} AND id = ${GREGOR_ACTOR_ID}::uuid
       `;
-      expect(gregorReadback).toEqual({ id: GREGOR_ACTOR_ID, email: gregorEmail, role: "admin" });
+      expect(gregorReadback).toEqual({
+        id: GREGOR_ACTOR_ID,
+        email: gregorEmail,
+        role: "admin",
+      });
 
       if (browserErrors.length > 0) {
         console.log(
@@ -687,7 +774,11 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
       const receipt = {
         candidateCodeShaAtRun: candidateCodeSha,
         tenant: TENANT,
-        actors: { rolf: ROLF_ACTOR_ID, phillip: PHILLIP_ACTOR_ID, gregor: GREGOR_ACTOR_ID },
+        actors: {
+          rolf: ROLF_ACTOR_ID,
+          phillip: PHILLIP_ACTOR_ID,
+          gregor: GREGOR_ACTOR_ID,
+        },
         synthetic: true,
         order: {
           id: stored.order_id,

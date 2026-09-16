@@ -65,14 +65,18 @@ describe("F1.4 invoice server actions", () => {
   });
 
   it("does not revalidate after a command conflict", async () => {
-    ports.cancelInvoice.mockResolvedValueOnce({ code: "CONFLICT", message: "stale" });
+    const conflict = {
+      code: "CONFLICT" as const,
+      message: "Die Rechnung kann nicht storniert werden, weil bereits eine Zahlung vorliegt oder der Zahlungsstand nicht eindeutig ist.",
+    };
+    ports.cancelInvoice.mockResolvedValueOnce(conflict);
     const { cancelInvoiceAction } = await import("../invoices.actions");
-    await cancelInvoiceAction({
+    await expect(cancelInvoiceAction({
       invoiceId: "44444444-4444-4444-8444-444444444444",
       expectedVersion: 1,
       reason: "Doppelte Berechnung vollständig storniert",
       clientEventId: "55555555-5555-4555-8555-555555555555",
-    });
+    })).resolves.toEqual(conflict);
     expect(ports.revalidatePath).not.toHaveBeenCalled();
   });
 

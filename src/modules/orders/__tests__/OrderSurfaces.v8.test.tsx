@@ -48,6 +48,20 @@ describe("Orders V8 one-surface truth", () => {
     expect(openCustomer).toHaveBeenCalledWith("customer-1");
   });
 
+  it("keeps implementation details out of the visible empty card copy", () => {
+    render(
+      <OrderCardView
+        actions={actions}
+        onClose={vi.fn()}
+        onOpenCustomer={vi.fn()}
+        state={{ kind: "data", card: { ...card, items: [], evidence: [] } }}
+      />,
+    );
+    expect(screen.getByText("Für diesen Auftrag sind noch keine Positionen erfasst.")).toBeInTheDocument();
+    expect(screen.getByText("Noch keine Dokumente oder Fotos vorhanden.")).toBeInTheDocument();
+    expect(screen.getByTestId("order-card-v8")).not.toHaveTextContent(/Readback|kanonisch|tenantgebunden/i);
+  });
+
   it.each(["denied", "error", "conflict"] as const)("keeps %s fail-closed", (kind) => {
     render(<OrderCardView actions={actions} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{ kind, message: "Sicherer Zustand" }} />);
     expect(screen.getByText("Sicherer Zustand")).toBeInTheDocument();

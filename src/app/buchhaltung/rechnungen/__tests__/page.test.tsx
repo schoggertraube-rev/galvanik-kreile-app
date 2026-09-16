@@ -129,7 +129,7 @@ describe("F1.4 immutable invoice page states", () => {
 
     await waitFor(() => expect(ports.getInvoiceCancellationReceiptAction).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(ports.getInvoiceSummariesAction).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText("Storno und Readback sind bestätigt.")).toBeVisible();
+    expect(await screen.findByText("Storno und gespeicherter Beleg sind bestätigt.")).toBeVisible();
     expect(screen.getByTestId("invoice-cancellation-pdf-R-2026-0001")).toHaveAttribute(
       "href",
       `/api/invoices/${INVOICE}/pdf?kind=cancellation`,
@@ -137,14 +137,19 @@ describe("F1.4 immutable invoice page states", () => {
   });
 
   it("surfaces a command conflict without reading a false receipt", async () => {
-    ports.cancelInvoiceAction.mockResolvedValueOnce({ code: "CONFLICT", message: "Rechnung wurde bereits verändert." });
+    ports.cancelInvoiceAction.mockResolvedValueOnce({
+      code: "CONFLICT",
+      message: "Die Rechnung kann nicht storniert werden, weil bereits eine Zahlung vorliegt oder der Zahlungsstand nicht eindeutig ist.",
+    });
     const { InvoicesClient } = await import("../InvoicesClient");
     render(<InvoicesClient initialState={{ state: "DATA", data: [issuedRow], role: "admin" }} />);
     fireEvent.change(screen.getByLabelText("Stornogrund"), {
       target: { value: "Doppelte Berechnung vollständig storniert" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Rechnung stornieren" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Rechnung wurde bereits verändert.");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Die Rechnung kann nicht storniert werden, weil bereits eine Zahlung vorliegt oder der Zahlungsstand nicht eindeutig ist.",
+    );
     expect(ports.getInvoiceCancellationReceiptAction).not.toHaveBeenCalled();
   });
 });

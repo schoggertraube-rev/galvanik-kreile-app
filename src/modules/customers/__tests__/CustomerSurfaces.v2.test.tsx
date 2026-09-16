@@ -31,6 +31,22 @@ describe("Customers V2 one-surface truth", () => {
     expect(openOrder).toHaveBeenCalledWith("order-1");
   });
 
+  it("describes an empty customer card without implementation jargon", () => {
+    render(
+      <CustomerCardView
+        state={{
+          kind: "data",
+          card: { ...card, orders: [], orderCount: 0, wareImHausCount: 0 },
+        }}
+        onClose={vi.fn()}
+        onOpenOrder={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Für diesen Kunden ist derzeit kein offener Auftrag vorhanden.")).toBeInTheDocument();
+    expect(screen.getByText("Keine aktiven Aufträge vorhanden.")).toBeInTheDocument();
+    expect(screen.getByTestId("customer-card-v2")).not.toHaveTextContent(/Readback|zurückgelesen|tenantgebunden/i);
+  });
+
   it.each(["denied", "not-found", "error", "conflict"] as const)("keeps %s fail-closed", (kind) => {
     render(<CustomerCardView state={{ kind, message: "Sicherer Zustand" }} onClose={vi.fn()} onOpenOrder={vi.fn()} />);
     expect(screen.getByText("Sicherer Zustand")).toBeInTheDocument();
