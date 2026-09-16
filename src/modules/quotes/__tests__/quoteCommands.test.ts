@@ -25,14 +25,14 @@ const intent = createHash("sha256").update(JSON.stringify(input), "utf8").digest
 const authorization = {
   tenantId: TENANT,
   userId: ACTOR,
-  capabilities: { canCreateQuote: true, canReadQuote: true, canConvertQuote: true },
+  capabilities: { canCreateQuote: true, canReadQuote: true, canUpdateQuote: true, canConvertQuote: true },
 };
 const quoteRow = {
   quote_id: QUOTE, tenant_id: TENANT, quote_number: "KV-2026-0042", customer_id: CUSTOMER,
   customer_number: "K-2026-0041", customer_display_name: "Synthetischer Kunde", status: "draft",
   version: 1, currency: "EUR", due_date: input.dueDate, note: input.note, total_net_cents: "25000",
   linked_order_id: null, created_by: ACTOR, actor_display_name: "Test Büro",
-  created_at: "2026-09-14T10:00:00.000Z", converted_at: null,
+  created_at: "2026-09-14T10:00:00.000Z", updated_at: "2026-09-14T10:00:00.000Z", converted_at: null,
   positions: [{ id: "88888888-8888-4888-8888-888888888888", position: 1, name: "Flansch", quantity: 2, material: "Stahl", surfaceRequested: "Verzinken", unitPriceCents: 12500, lineTotalCents: 25000 }],
   integrity_ok: true,
 };
@@ -84,5 +84,25 @@ describe("quotes command boundary", () => {
     execute.mockResolvedValueOnce([{ ...quoteRow, integrity_ok: false }]);
     const { readQuoteCommand } = await import("../server/quoteCommands");
     await expect(readQuoteCommand(authorization, { quoteId: QUOTE })).resolves.toMatchObject({ code: "UNAVAILABLE" });
+  });
+
+  it("updates only the expected draft revision and requires receipt plus readback", async () => {
+    const update = { quoteId: QUOTE, clientEventId: CLIENT, expectedVersion: 1, dueDate: "2026-10-20", note: "Geändert", positions: input.positions };
+    const updateIntent = createHash("sha256").update(JSON.stringify(update), "utf8").digest("hex");
+    execute.mockImplementation((query: { text: string }) => {
+      if (query.text.includes("private.update_quote_v1")) return Promise.resolve([{ result_code: "OK", result_quote_id: QUOTE, replayed: false }]);
+      if (query.text.includes("private.v_quotes_v1")) return Promise.resolve([{ ...quoteRow, version: 2, due_date: "2026-10-20", note: "Geändert", updated_at: "2026-09-16T10:01:00.000Z" }]);
+      if (query.text.includes("private.v_quote_update_receipts_v1")) return Promise.resolve([{
+        receipt_id: RECEIPT, event_id: EVENT, tenant_id: TENANT, quote_id: QUOTE, actor_id: ACTOR,
+        client_event_id: CLIENT, correlation_id: CORRELATION, intent_sha256: updateIntent, expected_version: 1,
+        aggregate_version: 2, recorded_at: "2026-09-16T10:01:00.000Z", integrity_ok: true,
+      }]);
+      throw new Error(`unexpected SQL: ${query.text}`);
+    });
+    const { updateQuoteCommand } = await import("../server/quoteCommands");
+    await expect(updateQuoteCommand(authorization, update)).resolves.toMatchObject({
+      code: "OK", quote: { version: 2, dueDate: "2026-10-20" }, receipt: { expectedVersion: 1, aggregateVersion: 2 },
+    });
+    await expect(updateQuoteCommand({ ...authorization, capabilities: { ...authorization.capabilities, canUpdateQuote: false } }, update)).resolves.toMatchObject({ code: "FORBIDDEN" });
   });
 });

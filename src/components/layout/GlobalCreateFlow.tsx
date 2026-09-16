@@ -19,6 +19,8 @@ import type {
   QuoteConversionReceipt,
   QuoteCreateReceipt,
   QuoteReadback,
+  QuoteUpdateReceipt,
+  UpdateQuoteInput,
 } from "@/modules/quotes/public";
 import styles from "./TargetShell.module.css";
 
@@ -65,11 +67,15 @@ export type GlobalCreateCustomerResult =
   | Failure;
 
 export type GlobalCreateQuoteResult =
-  | { code: "OK"; quote: QuoteReadback; receipt: QuoteCreateReceipt; replayed: boolean }
+  | { code: "OK"; quote: QuoteReadback; receipt: QuoteCreateReceipt | QuoteUpdateReceipt; replayed: boolean }
   | Failure;
 
 export type GlobalCreateQuoteReadResult =
   | { code: "OK"; quote: QuoteReadback }
+  | Failure;
+
+export type GlobalCreateOpenQuotesResult =
+  | { code: "OK"; quotes: QuoteReadback[] }
   | Failure;
 
 export type GlobalCreateConversionResult =
@@ -134,8 +140,11 @@ export type GlobalCreatePorts = {
   createCustomer: (input: CreateCustomerInput) => Promise<GlobalCreateCustomerResult>;
   readCustomerCreateReceipt: (input: CreateCustomerInput) => Promise<GlobalCreateCustomerResult | Failure>;
   createQuote: (input: CreateQuoteInput) => Promise<GlobalCreateQuoteResult>;
+  updateQuote: (input: UpdateQuoteInput) => Promise<GlobalCreateQuoteResult>;
   readQuoteCreateReceipt: (input: CreateQuoteInput) => Promise<GlobalCreateQuoteResult>;
+  readQuoteUpdateReceipt: (input: UpdateQuoteInput) => Promise<GlobalCreateQuoteResult>;
   readQuote: (input: { quoteId: string }) => Promise<GlobalCreateQuoteReadResult>;
+  listOpenQuotes: () => Promise<GlobalCreateOpenQuotesResult>;
   convertQuote: (input: ConvertQuoteInput) => Promise<GlobalCreateConversionResult>;
   readQuoteConversionReceipt: (input: { quoteId: string; clientEventId: string }) => Promise<GlobalCreateConversionResult>;
   createDirectIntake: (input: DirectIntakeInput) => Promise<GlobalCreateDirectIntakeResult>;
@@ -147,7 +156,7 @@ export type GlobalCreatePorts = {
   switchProfile: () => Promise<void>;
 };
 
-type Step = "choose" | "customer" | "customer-saved" | "customer-picker" | "quote" | "quote-saved" | "order-saved" | "direct-intake" | "denied";
+type Step = "choose" | "customer" | "customer-saved" | "customer-picker" | "quote-list" | "quote" | "quote-saved" | "order-saved" | "direct-intake" | "denied";
 type Feedback = { kind: "validation" | "conflict" | "denied" | "error" | "unclear"; message: string; requestId?: string };
 type CustomerDraft = Omit<CreateCustomerInput, "clientEventId">;
 type PositionDraft = { key: string; name: string; quantity: string; material: string; surfaceRequested: string; unitPrice: string };
@@ -195,6 +204,15 @@ function parseCents(value: string): number | null {
 function nullable(value: string): string | null {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function isValidDateInput(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year
+    && parsed.getUTCMonth() === month - 1
+    && parsed.getUTCDate() === day;
 }
 
 function requestFeedback(result: Failure, requestId: string): Feedback {
@@ -247,11 +265,13 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [directNote, setDirectNote] = useState("");
   const [directReceipt, setDirectReceipt] = useState<Extract<GlobalCreateDirectIntakeResult, { code: "OK" }> | null>(null);
   const [quote, setQuote] = useState<QuoteReadback | null>(null);
-  const [quoteReceipt, setQuoteReceipt] = useState<QuoteCreateReceipt | null>(null);
+  const [quoteReceipt, setQuoteReceipt] = useState<(QuoteCreateReceipt | QuoteUpdateReceipt) | null>(null);
+  const [openQuotes, setOpenQuotes] = useState<QuoteReadback[]>([]);
   const [conversion, setConversion] = useState<Extract<GlobalCreateConversionResult, { code: "OK" }> | null>(null);
   const requestIds = useRef({ customer: "", quote: "", conversion: "" });
   const customerRequestSeq = useRef(0);
   const dialogRef = useRef<HTMLElement>(null);
+  const confirmedOrderDueDateValid = isValidDateInput(confirmedOrderDueDate);
 
   const requestId = (kind: keyof typeof requestIds.current) => {
     if (!requestIds.current[kind]) requestIds.current[kind] = globalThis.crypto.randomUUID();
@@ -415,6 +435,47 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     }
   };
 
+  const loadOpenQuotes = async () => {
+    if (!ports.canCreateQuote) {
+      deny("quote");
+      return;
+    }
+    setBusy(true);
+    navigate("quote-list");
+    try {
+      const result = await ports.listOpenQuotes();
+      if (result.code !== "OK") {
+        setFeedback(requestFeedback(result, "offene-kvs"));
+        return;
+      }
+      setOpenQuotes(result.quotes);
+    } catch {
+      setFeedback({ kind: "error", message: "Offene KVs konnten nicht sicher gelesen werden." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const editQuote = (draft: QuoteReadback) => {
+    if (!ports.canCreateQuote || draft.status !== "draft") {
+      deny("quote");
+      return;
+    }
+    setQuote(draft);
+    setQuoteReceipt(null);
+    setCustomer({ id: draft.customerId, customerNumber: draft.customerNumber, name: draft.customerDisplayName, city: null });
+    setDueDate(draft.dueDate);
+    setQuoteNote(draft.note ?? "");
+    setPositions(draft.positions.map((position) => ({
+      key: globalThis.crypto.randomUUID(), name: position.name, quantity: String(position.quantity),
+      material: position.material ?? "", surfaceRequested: position.surfaceRequested,
+      unitPrice: (position.unitPriceCents / 100).toFixed(2).replace(".", ","),
+    })));
+    requestIds.current.quote = "";
+    requestIds.current.conversion = "";
+    navigate("quote");
+  };
+
   const submitCustomer = async (event: FormEvent) => {
     event.preventDefault();
     if (!ports.canCreateCustomer) {
@@ -460,6 +521,12 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     };
   };
 
+  const updateInputForStatus = (): UpdateQuoteInput | null => {
+    if (!quote) return null;
+    const create = quoteInputForStatus();
+    return create ? { ...create, quoteId: quote.quoteId, expectedVersion: quote.version } : null;
+  };
+
   /** This path only reads actor- and tenant-bound receipts/readbacks. */
   const checkUnclearStatus = async () => {
     if (!feedback?.requestId) return;
@@ -477,12 +544,14 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         }
         setFeedback({ kind: "unclear", message: result.code === "NOT_FOUND" ? "Es wurde noch keine Speicherung gefunden. Die Eingaben bleiben erhalten." : result.message, requestId: feedback.requestId });
       } else if (step === "quote") {
-        const input = quoteInputForStatus();
+        const input = quote ? updateInputForStatus() : quoteInputForStatus();
         if (!input) {
           setFeedback({ kind: "validation", message: "Die vorhandenen KV-Eingaben können nicht sicher geprüft werden.", requestId: feedback.requestId });
           return;
         }
-        const result = await ports.readQuoteCreateReceipt(input);
+        const result = quote
+          ? await ports.readQuoteUpdateReceipt(input as UpdateQuoteInput)
+          : await ports.readQuoteCreateReceipt(input as CreateQuoteInput);
         if (result.code === "OK") {
           setQuote(result.quote);
           setQuoteReceipt(result.receipt);
@@ -558,13 +627,15 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setBusy(true);
     setFeedback(null);
     try {
-      const result = await ports.createQuote({
+      const payload = {
         clientEventId: id,
-        customerId: customer.id,
         dueDate,
         note: nullable(quoteNote),
         positions: mapped.map((position) => ({ ...position, unitPriceCents: position.unitPriceCents! })),
-      });
+      };
+      const result = quote
+        ? await ports.updateQuote({ ...payload, quoteId: quote.quoteId, expectedVersion: quote.version })
+        : await ports.createQuote({ ...payload, customerId: customer.id });
       if (result.code !== "OK") {
         setFeedback(requestFeedback(result, id));
         return;
@@ -589,7 +660,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       deny("quote");
       return;
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(confirmedOrderDueDate)) {
+    if (!confirmedOrderDueDateValid) {
       setFeedback({ kind: "validation", message: "Bitte den zugesagten Termin für den Auftrag bestätigen." });
       return;
     }
@@ -731,7 +802,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
               ) : <span className={styles.createBadge}><Plus /></span>}
               <div>
                 <p>Kunde <span>›</span> KV / Angebot <span>›</span> Auftrag</p>
-                <h2 id="global-create-title">{step === "choose" ? "Was möchten Sie anlegen?" : step === "customer" ? "Neukunde erfassen" : step === "customer-saved" ? "Kunde gesichert" : step === "customer-picker" ? "Kunde für KV wählen" : step === "quote" ? "Kostenvoranschlag anlegen" : step === "quote-saved" ? "KV gesichert" : step === "order-saved" ? "Auftrag angelegt" : step === "direct-intake" ? "Neuer Eingang" : "Berechtigung klären"}</h2>
+                <h2 id="global-create-title">{step === "choose" ? "Was möchten Sie anlegen?" : step === "customer" ? "Neukunde erfassen" : step === "customer-saved" ? "Kunde gesichert" : step === "customer-picker" ? "Kunde für KV wählen" : step === "quote-list" ? "Offene KVs" : step === "quote" ? quote ? "KV bearbeiten" : "Kostenvoranschlag anlegen" : step === "quote-saved" ? "KV gesichert" : step === "order-saved" ? "Auftrag angelegt" : step === "direct-intake" ? "Neuer Eingang" : "Berechtigung klären"}</h2>
               </div>
               <button type="button" className={styles.createIconButton} onClick={close} disabled={busy} aria-label="Anlegen schließen"><X /></button>
             </header>
@@ -739,10 +810,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
             <div className={styles.createBody}>
               {step === "choose" ? (
                 <>
-                  <p className={styles.createLead}>Manuell erfassen und nach jedem Speichern den echten Datenstand zurücklesen.</p>
+                  <p className={styles.createLead}>Manuell erfassen und nach jedem Speichern sicher weiterarbeiten.</p>
                   {ports.resumeQuoteId ? (
                     <button type="button" className={styles.createResume} onClick={() => void resumeQuote()} disabled={busy} data-autofocus>
-                      <FileText /> <span><strong>Gespeicherten KV fortsetzen</strong><small>Aus der Datenbank zurücklesen und Zuschlag bearbeiten.</small></span>
+                      <FileText /> <span><strong>Gespeicherten KV fortsetzen</strong><small>Sicher gespeicherten KV weiterbearbeiten und den Zuschlag erfassen.</small></span>
                     </button>
                   ) : null}
                   <div className={styles.createChoiceGrid}>
@@ -750,7 +821,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                       <UserPlus /><span><strong>Kunde anlegen</strong><small>Neukunde manuell erfassen. Danach direkt einen KV anlegen.</small></span>
                     </button>
                     <button type="button" className={styles.createChoiceAlternate} onClick={() => void loadCustomers()}>
-                      <FileText /><span><strong>Auftrag / KV anlegen</strong><small>Bestehenden Kunden wählen und einen persistenten KV erfassen.</small></span>
+                      <FileText /><span><strong>Auftrag / KV anlegen</strong><small>Bestehenden Kunden wählen und einen KV sicher speichern.</small></span>
+                    </button>
+                    <button type="button" className={styles.createChoiceAlternate} onClick={() => void loadOpenQuotes()}>
+                      <FileText /><span><strong>Offene KVs bearbeiten</strong><small>Gespeicherte Entwürfe sicher wieder aufnehmen.</small></span>
                     </button>
                   </div>
                   <p className={styles.createPassive}>Hier wird ausschließlich manuell erfasst. Weitere Anbindungen sind nicht aktiv.</p>
@@ -840,6 +914,12 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 </div>
               ) : null}
 
+              {step === "quote-list" ? (
+                <section className={styles.createPanel} aria-label="Offene KVs">
+                  {openQuotes.length === 0 ? <p className={styles.createReadback}>Es gibt derzeit keine offenen KVs in diesem Datenstand.</p> : <div className={styles.createCustomerList}>{openQuotes.map((draft) => <button type="button" key={draft.quoteId} onClick={() => editQuote(draft)}><span><strong>{draft.quoteNumber} · {draft.customerDisplayName}</strong><small>Stand {draft.version} · Terminwunsch {draft.dueDate} · {euro(draft.totalNetCents)} netto</small></span><FileText /></button>)}</div>}
+                </section>
+              ) : null}
+
               {step === "quote" && customer ? (
                 <form className={styles.createForm} onSubmit={(event) => void submitQuote(event)}>
                   <div className={styles.createContext}><span>Kunde</span><strong>{customer.name} · {customer.customerNumber ?? "Kundennummer wird gelesen"}</strong></div>
@@ -872,9 +952,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                   <span className={styles.createSuccessIcon}><Check /></span>
                   <h3>{quote.quoteNumber} gesichert</h3>
                   <p>{quote.customerDisplayName} · {quote.positions.length} {quote.positions.length === 1 ? "Position" : "Positionen"} · {euro(quote.totalNetCents)} netto.</p>
-                  <div className={styles.createContext}><span>KV-Stand</span><strong>{quote.status === "draft" ? "in Vorbereitung" : "beauftragt"}</strong><span>Terminwunsch</span><strong>{quote.dueDate}</strong></div>
-                  {quoteReceipt ? <ReceiptFacts title="KV – technische Details für Support" values={[["Vorgangskennung", quoteReceipt.receiptId], ["Nachweis", quoteReceipt.eventId], ["Zeit", quoteReceipt.recordedAt]]} /> : <p className={styles.createReadback}>Der gespeicherte KV wurde erneut geprüft.</p>}
-                  {quote.status === "draft" ? <div className={styles.createAwardBlock}><label>Zusagter Termin für den Auftrag<input required type="date" value={confirmedOrderDueDate} onChange={(event) => setConfirmedOrderDueDate(event.target.value)} data-autofocus /></label><button type="button" className={styles.createAward} onClick={() => void convertQuote()} disabled={busy}>{busy ? <Loader2 className={styles.createSpinner} /> : <Check />} Zuschlag bestätigen · Auftrag anlegen</button></div> : null}
+                  <div className={styles.createContext}><span>KV-Stand</span><strong>{quote.status === "draft" ? "in Vorbereitung" : "beauftragt"}</strong><span>Bearbeitungsstand</span><strong>Stand {quote.version}</strong><span>Terminwunsch</span><strong>{quote.dueDate}</strong></div>
+                  {quoteReceipt ? <ReceiptFacts title="KV – technische Details für Support" values={[["Vorgangskennung", quoteReceipt.receiptId], ["Nachweis", quoteReceipt.eventId], ["Zeit", quoteReceipt.recordedAt]]} /> : <p className={styles.createReadback}>Der KV ist sicher gespeichert und kann weiterbearbeitet werden.</p>}
+                  {quote.status === "draft" ? <><div className={styles.createFormActions}><button type="button" onClick={() => editQuote(quote)} disabled={busy}>KV bearbeiten</button></div><div className={styles.createAwardBlock}><label htmlFor="confirmed-order-due-date">Zugesagter Termin für den Auftrag</label><input id="confirmed-order-due-date" required type="date" value={confirmedOrderDueDate} onChange={(event) => setConfirmedOrderDueDate(event.target.value)} aria-describedby="confirmed-order-due-date-help" aria-invalid={!confirmedOrderDueDateValid} data-autofocus /><p id="confirmed-order-due-date-help" className={styles.createAwardHelp}>{confirmedOrderDueDateValid ? "Der Auftrag wird mit diesem Termin angelegt." : "Bitte vor dem Zuschlag einen gültigen Auftragstermin festlegen."}</p><button type="button" className={styles.createAward} onClick={() => void convertQuote()} disabled={busy || !confirmedOrderDueDateValid}>{busy ? <Loader2 className={styles.createSpinner} /> : <Check />} Zuschlag bestätigen · Auftrag anlegen</button></div></> : null}
                 </div>
               ) : null}
 
@@ -882,7 +962,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 <div className={styles.createSuccess}>
                   <span className={styles.createSuccessIcon}><Check /></span>
                   <h3>Auftrag {conversion.orderReceipt.orderNumber} angelegt</h3>
-                  <p>Der Zuschlag ist bestätigt. Der KV ist mit genau diesem Auftrag verknüpft und beide Stände sind sicher geprüft.</p>
+                  <p>Der Zuschlag ist bestätigt. Der Auftrag wurde sicher angelegt und ist mit diesem KV verknüpft.</p>
                   <ReceiptFacts title="Auftrag – technische Details für Support" values={[["KV-Nachweis", conversion.quoteReceipt.receiptId], ["Auftragsnachweis", conversion.orderReceipt.receiptId], ["Zeit", conversion.orderReceipt.recordedAt]]} />
                   <div className={styles.createFormActions}><button type="button" onClick={reset}>Weiteren Vorgang anlegen</button><button type="button" className={styles.createPrimary} onClick={() => { setOpen(false); ports.openOrder(conversion.orderReceipt.orderId); }} data-autofocus>Auftragskarte öffnen</button></div>
                 </div>

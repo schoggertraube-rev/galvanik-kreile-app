@@ -1,8 +1,8 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: d050489c784376363f2759679db2f8d5e052d0ad
-branch: path1/ui-convergence-20260914
+base_sha: 4a5f03043ef86854052bc93d0b50d14f952f7884
+branch: path1/v5-p2-quote-product-20260916
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
 # ── M0 Konsolidierungsstand ───────────────────────────────────────
@@ -37,8 +37,8 @@ delivery_order:
   - F1.6_REALER_PILOT
 
 active_package: PATH1_UI_CONVERGENCE
-active_package_status: V5_ROLE_SESSION_SHELL_AND_MANUAL_CORE_PATH_REPAIR_CANDIDATE_LOCAL_ACCEPTANCE_PENDING_NO_UI_PASS
-next_gate_after_active_package: FRESH_SUPABASE_BROWSER_MATRIX_EXACT_SHA_CI_PREVIEW_AND_INDEPENDENT_REVIEW
+active_package_status: V5_P2_VERSIONED_QUOTE_PRODUCT_LIFECYCLE_LOCAL_GATES_REAL_DB_AND_BROWSER_PASS_EXACT_SHA_CI_PREVIEW_AND_INDEPENDENT_REVIEW_PENDING_NO_UI_PASS
+next_gate_after_active_package: COMMIT_PUSH_DRAFT_PR_EXACT_SHA_CI_PREVIEW_AND_SINGLE_INDEPENDENT_READ_ONLY_REVIEW
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
@@ -122,9 +122,9 @@ path1_provider_platform_policy: APPROX_MAX_FIVE_PLATFORMS; SUPABASE_DATA_AUTH_ST
 path1_document_intelligence_policy: CHEAP_FIRST; ORIGINAL_PRIVATE_FIRST; UNTRUSTED_CONTENT; HUMAN_CONFIRMATION; ONE_SAFE_COMMAND_RECEIPT_READBACK
 path1_search_intelligence_policy: RLS_BEFORE_RETRIEVAL; STRUCTURED_FIRST; AUTHORIZED_PUBLIC_READ_PORTS_ONLY; DB_VIEWS_TRUTH; INDEX_RENEWABLE_PROJECTION; NO_MODEL_MUTATION
 path1_provider_activation_status: NONE_ACTIVATED_BY_THIS_WORK_UNIT
-path1_ui_convergence_next_product_build: OWNER_V5_RECOVERY_EXECUTION_20260915
+path1_ui_convergence_next_product_build: V5_P2_VERSIONED_QUOTE_PRODUCT_LIFECYCLE
 path1_ui_convergence_v5_visible_build: GLOBAL_PLUS -> CUSTOMER_RECEIPT_READBACK -> QUOTE_RECEIPT_RELOAD_READBACK -> EXACTLY_ONE_EXISTING_F1_1_ORDER_RECEIPT_READBACK
-path1_ui_convergence_v5_visible_build_status: LOCAL_ACCEPTANCE_PENDING_NO_PARTIAL_UI_PASS
+path1_ui_convergence_v5_visible_build_status: LOCAL_REAL_DB_AND_BROWSER_PASS_EXACT_SHA_CI_PREVIEW_AND_INDEPENDENT_REVIEW_PENDING_NO_PARTIAL_UI_PASS
 path1_ui_convergence_v5_002: VISIBLE_PRODUCT_IDENTITIES_ROLF_MEISTER_PHILLIP_WERKSTATT_GREGOR_SYSTEMADMIN; UNIQUE_PROFILE_FAIL_CLOSED; ROLF_CAPABILITY_BASED_CUSTOMER_KV_ORDER_AND_F1_1_INTAKE; NO_TECHNICAL_ROLE_OR_TEST_PERSONA_UI
 owner_v5_recovery_execution_20260915:
   status: TECHNICAL_SLICE_NO_UI_PASS_UNTIL_COMPLETE_A_TO_D_GATE
@@ -136,6 +136,16 @@ owner_v5_recovery_execution_20260915:
   p2_after_recovery: SERVER_RESUMABLE_QUOTE_DRAFTS_OPEN_LIST_EDIT_VERSION_STATUS_PDF_M365_PORT_LATER_TECHNICAL_SLICE_NO_KV_PRODUCT_PASS
   p3_after_recovery: ORDERS_V8_CUSTOMERS_V2_INTELLIGENT_HOMES_SEARCH_STATUS_APP_FACTS_LANE_0_METERED_COST_0_AI_LATER_SOURCE_CONFIRM_COMMAND
   p4_after_recovery: ORIGINAL_FIRST_OCR_M365_AFTER_VISIBLE_A_TO_D_CHEAP_FIRST_FACT_LEDGER_HUMAN_CONFIRM_NO_IMPLEMENTATION_NOW
+
+owner_v5_p2_quote_product_execution_20260916:
+  status: TECHNICAL_PRODUCT_SLICE_NO_UI_PASS_UNTIL_COMPLETE_A_TO_D_GATE
+  base_sha: 4a5f03043ef86854052bc93d0b50d14f952f7884
+  branch: path1/v5-p2-quote-product-20260916
+  execution: SERVER_RESUMABLE_TENANT_ISOLATED_QUOTE_DRAFTS_OPEN_LIST_EDIT_VERSION_CONFLICT_FAIL_CLOSED; ATOMIC_IDEMPOTENT_AWARD_TO_ONE_EXISTING_F1_1_ORDER; ONE_VISIBLE_GLOBAL_CREATE_ENGINE
+  price_quantity_truth: QUOTE_POSITION_REVISION_AND_DB_CALCULATED_TOTAL
+  send_status: BLOCKED_NO_M365_RECEIPT_NO_FAKE_SEND_ACTION
+  environment: FRESH_SUPABASE_LOOPBACK_ONLY_NO_REMOTE_MIGRATION_NO_RLS_OR_POLICY_CHANGE
+  next_product_after_p2: P3_ORDERS_V8_CUSTOMERS_V2_HOMES_SEARCH_STATUS
 
 # ── F1.2 Entscheidungsgrundlage (bindend, ersetzt Altstand) ───────
 # D-F12-001A (ersetzt D-F12-001): F1.2 = genau EIN Uebergang
@@ -501,6 +511,19 @@ path1_ui_convergence_allowlist:
   - src/app/actions/quotes.actions.ts
   - src/test/path1_quote_to_order.integration.test.ts
   - docs/evidence/path1/PATH1_UI_CONVERGENCE_V5_WORK_UNIT_2.md
+  # V5 P2: versionierter, serverseitig fortsetzbarer KV-Entwurf
+  - supabase/migrations/20260916090000_path1_quote_product_lifecycle.sql
+  - src/modules/quotes/quotes.manifest.json
+  - src/modules/quotes/public.ts
+  - src/modules/quotes/server-public.ts
+  - src/modules/quotes/server/types.ts
+  - src/modules/quotes/server/quoteCommands.ts
+  - src/modules/quotes/server/quoteReads.ts
+  - src/modules/quotes/__tests__/quoteCommands.test.ts
+  - src/modules/quotes/__tests__/quoteReads.test.ts
+  - src/app/actions/quotes.actions.ts
+  - src/test/path1_quote_to_order.integration.test.ts
+  - docs/evidence/path1/PATH1_UI_CONVERGENCE_V5_QUOTE_PRODUCT.md
   # V5 sichtbarer Vertikalschnitt: globales Plus -> Kunde -> KV -> F1.1-Auftrag
   - src/app/GlobalCreateAppAdapter.tsx
   - src/components/layout/GlobalCreateFlow.tsx

@@ -26,6 +26,7 @@ function quote(status: "draft" | "converted" = "draft") {
     actorId: "1b3ef014-582c-445f-9fdc-e399d7aa6ef0",
     actorDisplayName: "Büro Test",
     createdAt: "2026-09-14T10:00:00.000Z",
+    updatedAt: "2026-09-14T10:00:00.000Z",
     convertedAt: status === "converted" ? "2026-09-14T10:10:00.000Z" : null,
     positions: [{
       id: "1d646e17-18ea-452c-9565-a3ef0553fbfd",
@@ -79,8 +80,21 @@ function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
         aggregateVersion: 1,
       },
     })),
+    updateQuote: vi.fn().mockImplementation(async (input) => ({
+      code: "OK",
+      replayed: false,
+      quote: { ...quote(), version: input.expectedVersion + 1, updatedAt: "2026-09-14T10:06:00.000Z" },
+      receipt: {
+        receiptId: "0d487dc1-1abe-4c46-ad0d-4d11be814657", eventId: "6809f675-ec31-44dd-b9da-6870ee7a3b13",
+        quoteId: QUOTE_ID, actorId: "1b3ef014-582c-445f-9fdc-e399d7aa6ef0", clientEventId: input.clientEventId,
+        correlationId: "9c0a2813-c5ba-41dc-afd8-80a343adbf31", recordedAt: "2026-09-14T10:06:00.000Z",
+        expectedVersion: input.expectedVersion, aggregateVersion: input.expectedVersion + 1,
+      },
+    })),
     readQuoteCreateReceipt: vi.fn().mockResolvedValue({ code: "NOT_FOUND", message: "Kein KV-Stand gefunden." }),
+    readQuoteUpdateReceipt: vi.fn().mockResolvedValue({ code: "NOT_FOUND", message: "Kein KV-Stand gefunden." }),
     readQuote: vi.fn().mockResolvedValue({ code: "OK", quote: quote() }),
+    listOpenQuotes: vi.fn().mockResolvedValue({ code: "OK", quotes: [quote()] }),
     convertQuote: vi.fn().mockImplementation(async (input) => ({
       code: "OK",
       replayed: false,
@@ -188,6 +202,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     render(<GlobalCreateFlow ports={value} />);
 
     openFlow();
+    expect(document.body).not.toHaveTextContent(/echten Datenstand zurücklesen|Aus der Datenbank zurücklesen|persistenten KV/i);
     await fillCustomer();
     expect(value.createCustomer).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("group", { name: "Kundenanlage – technische Details für Support" })).toHaveTextContent("fc8ccfbb-40cf-4050-b4ef-d2b979d9eef5");
@@ -201,8 +216,15 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(value.rememberQuote).toHaveBeenCalledWith(QUOTE_ID);
     expect(screen.getByText(/250,00\s€ netto/)).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Zusagter Termin für den Auftrag"), { target: { value: "2026-10-20" } });
-    fireEvent.click(screen.getByRole("button", { name: /Zuschlag bestätigen/ }));
+    const confirmedDate = screen.getByLabelText("Zugesagter Termin für den Auftrag");
+    const awardButton = screen.getByRole("button", { name: /Zuschlag bestätigen/ });
+    expect(document.activeElement).toBe(confirmedDate);
+    expect(confirmedDate).toHaveAttribute("aria-invalid", "true");
+    expect(awardButton).toBeDisabled();
+    fireEvent.change(confirmedDate, { target: { value: "2026-10-20" } });
+    expect(confirmedDate).toHaveAttribute("aria-invalid", "false");
+    expect(awardButton).toBeEnabled();
+    fireEvent.click(awardButton);
     await screen.findByRole("heading", { name: "Auftrag A-2026-0061 angelegt" });
     expect(value.convertQuote).toHaveBeenCalledWith(expect.objectContaining({ quoteId: QUOTE_ID, expectedVersion: 1, confirmedAward: true, confirmedOrderDueDate: "2026-10-20" }));
     expect(value.rememberQuote).toHaveBeenLastCalledWith(null);
@@ -298,13 +320,28 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.click(screen.getByRole("button", { name: /Gespeicherten KV fortsetzen/ }));
     await screen.findByRole("heading", { name: "KV-2026-0042 gesichert" });
     expect(value.readQuote).toHaveBeenCalledWith({ quoteId: QUOTE_ID });
-    expect(screen.getByText(/gespeicherte KV wurde erneut geprüft/)).toBeInTheDocument();
+    expect(screen.getByText(/KV ist sicher gespeichert und kann weiterbearbeitet werden/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Zur Auswahl" }));
     fireEvent.click(screen.getByRole("button", { name: /Auftrag \/ KV anlegen/ }));
     const search = await screen.findByLabelText("Kunde suchen");
     fireEvent.change(search, { target: { value: "Teststadt" } });
     expect(within(screen.getByRole("dialog")).getByRole("button", { name: /SYNTHETISCH Musterkunde/ })).toBeInTheDocument();
+  });
+
+  it("opens a server-listed draft, preserves its version and submits an explicit edit", async () => {
+    const value = ports();
+    render(<GlobalCreateFlow ports={value} />);
+    openFlow();
+    fireEvent.click(screen.getByRole("button", { name: /Offene KVs bearbeiten/ }));
+    await screen.findByRole("heading", { name: "Offene KVs" });
+    fireEvent.click(screen.getByRole("button", { name: /KV-2026-0042/ }));
+    await screen.findByRole("heading", { name: "KV bearbeiten" });
+    expect(screen.getByLabelText("Gewünschter Termin")).toHaveValue("2026-10-15");
+    fireEvent.change(screen.getByLabelText("Gewünschter Termin"), { target: { value: "2026-10-22" } });
+    fireEvent.click(screen.getByRole("button", { name: /KV sichern/ }));
+    await screen.findByRole("heading", { name: "KV-2026-0042 gesichert" });
+    expect(value.updateQuote).toHaveBeenCalledWith(expect.objectContaining({ quoteId: QUOTE_ID, expectedVersion: 1, dueDate: "2026-10-22" }));
   });
 
   it("keeps the KV context and offers Rolf the real customer path when the tenant is empty", async () => {
@@ -346,7 +383,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     openFlow();
     await fillCustomer();
     await fillQuote();
-    fireEvent.change(screen.getByLabelText("Zusagter Termin für den Auftrag"), { target: { value: "2026-10-20" } });
+    fireEvent.change(screen.getByLabelText("Zugesagter Termin für den Auftrag"), { target: { value: "2026-10-20" } });
     fireEvent.click(screen.getByRole("button", { name: /Zuschlag bestätigen/ }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Der KV wurde zwischenzeitlich geändert");
     expect(screen.getByRole("heading", { name: "KV-2026-0042 gesichert" })).toBeInTheDocument();

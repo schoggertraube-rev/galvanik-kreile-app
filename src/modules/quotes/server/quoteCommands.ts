@@ -13,8 +13,12 @@ import type {
   QuoteOrderInput,
   QuotePosition,
   QuoteReadback,
+  UpdateQuoteInput,
+  UpdateQuoteResult,
+  ListOpenQuotesResult,
   ReadQuoteConversionReceiptResult,
   ReadQuoteCreateReceiptResult,
+  ReadQuoteUpdateReceiptResult,
   ReadQuoteResult,
 } from "./types";
 
@@ -38,6 +42,7 @@ type QuoteRow = {
   created_by: string;
   actor_display_name: string;
   created_at: Date | string;
+  updated_at: Date | string;
   converted_at: Date | string | null;
   positions: unknown;
   integrity_ok: boolean;
@@ -61,6 +66,21 @@ type ConversionReceiptRow = CreateReceiptRow & {
   order_id: string;
   order_intake_event_id: string;
   quote_version: number;
+};
+
+type UpdateReceiptRow = {
+  receipt_id: string;
+  event_id: string;
+  tenant_id: string;
+  quote_id: string;
+  actor_id: string;
+  client_event_id: string;
+  correlation_id: string;
+  intent_sha256: string;
+  expected_version: number;
+  aggregate_version: number;
+  recorded_at: Date | string;
+  integrity_ok: boolean;
 };
 
 function plainObject(value: unknown): value is Record<string, unknown> {
@@ -120,6 +140,29 @@ function normalizeConvert(value: unknown): ConvertQuoteInput | null {
   return value as ConvertQuoteInput;
 }
 
+function normalizeUpdate(value: unknown): UpdateQuoteInput | null {
+  if (!plainObject(value) || !exactKeys(value, ["clientEventId", "dueDate", "expectedVersion", "note", "positions", "quoteId"])) return null;
+  if (typeof value.quoteId !== "string" || !UUID_PATTERN.test(value.quoteId)
+    || typeof value.clientEventId !== "string" || !UUID_PATTERN.test(value.clientEventId)
+    || typeof value.expectedVersion !== "number" || !Number.isSafeInteger(value.expectedVersion) || value.expectedVersion < 1) return null;
+  const created = normalizeCreate({
+    clientEventId: value.clientEventId,
+    customerId: "placeholder",
+    dueDate: value.dueDate,
+    note: value.note,
+    positions: value.positions,
+  });
+  if (!created) return null;
+  return {
+    quoteId: value.quoteId,
+    clientEventId: value.clientEventId,
+    expectedVersion: value.expectedVersion,
+    dueDate: created.dueDate,
+    note: created.note,
+    positions: created.positions,
+  };
+}
+
 function hashIntent(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value), "utf8").digest("hex");
 }
@@ -169,21 +212,22 @@ function parsePositions(value: unknown): QuotePosition[] | null {
 function quoteFromRow(row: QuoteRow, tenantId: string): QuoteReadback | null {
   const positions = parsePositions(row.positions);
   const createdAt = iso(row.created_at);
+  const updatedAt = iso(row.updated_at);
   const convertedAt = iso(row.converted_at);
   const dueDate = row.due_date instanceof Date ? row.due_date.toISOString().slice(0, 10) : String(row.due_date).slice(0, 10);
   const total = Number(row.total_net_cents);
   if (row.integrity_ok !== true || row.tenant_id !== tenantId || !UUID_PATTERN.test(row.quote_id)
     || !/^KV-\d{4}-\d{4,}$/.test(row.quote_number) || !positions || !validDate(dueDate)
     || !Number.isSafeInteger(total) || total !== positions.reduce((sum, item) => sum + item.lineTotalCents, 0)
-    || !createdAt || (row.converted_at !== null && !convertedAt)
-    || !["draft", "converted"].includes(row.status) || ![1, 2].includes(row.version)
+    || !createdAt || !updatedAt || (row.converted_at !== null && !convertedAt)
+    || !["draft", "converted"].includes(row.status) || !Number.isSafeInteger(row.version) || row.version < 1
     || row.currency !== "EUR" || !UUID_PATTERN.test(row.created_by)) return null;
   return {
     quoteId: row.quote_id, quoteNumber: row.quote_number, customerId: row.customer_id,
     customerNumber: row.customer_number, customerDisplayName: row.customer_display_name,
-    status: row.status as QuoteReadback["status"], version: row.version as QuoteReadback["version"], currency: "EUR",
+    status: row.status as QuoteReadback["status"], version: row.version, currency: "EUR",
     dueDate, note: row.note, totalNetCents: total, linkedOrderId: row.linked_order_id,
-    actorId: row.created_by, actorDisplayName: row.actor_display_name, createdAt, convertedAt, positions,
+    actorId: row.created_by, actorDisplayName: row.actor_display_name, createdAt, updatedAt, convertedAt, positions,
   };
 }
 
@@ -263,6 +307,68 @@ export async function readQuoteCommand(authorization: QuoteCommandContext, input
   }
 }
 
+/** Lists only the caller's tenant-bound draft aggregates. */
+export async function listOpenQuotesCommand(authorization: QuoteCommandContext): Promise<ListOpenQuotesResult> {
+  if (!authorization.capabilities.canReadQuote) return { code: "FORBIDDEN", message: "Offene KVs dürfen mit dieser Rolle nicht gelesen werden." };
+  try {
+    return await withPrivilegedTenantTransaction(authorization, async (tx) => {
+      const rows = await tx.execute<QuoteRow>(sql`SELECT * FROM private.v_open_quotes_v1 ORDER BY updated_at DESC, quote_number ASC LIMIT 100`);
+      const quotes = rows.map((row) => quoteFromRow(row, authorization.tenantId));
+      if (quotes.some((quote) => quote === null)) throw new Error("QUOTE_LIST_READBACK_INVALID");
+      return { code: "OK", quotes: quotes as QuoteReadback[] };
+    });
+  } catch (error) {
+    console.error("quote_list_open_failed", { message: diagnostic(error, "message"), details: diagnostic(error, "details"), hint: diagnostic(error, "hint") });
+    return { code: "UNAVAILABLE", message: "Offene KVs konnten nicht sicher gelesen werden." };
+  }
+}
+
+export async function updateQuoteCommand(authorization: QuoteCommandContext, input: unknown): Promise<UpdateQuoteResult> {
+  const normalized = normalizeUpdate(input);
+  if (!normalized) return { code: "VALIDATION_ERROR", message: "KV-Daten sind unvollständig oder ungültig." };
+  if (!authorization.capabilities.canUpdateQuote) return { code: "FORBIDDEN", message: "KVs dürfen mit dieser Rolle nicht bearbeitet werden." };
+  const intentSha256 = hashIntent(normalized);
+  try {
+    return await withPrivilegedTenantTransaction(authorization, async (tx) => {
+      const result = await tx.execute<{ result_code: string; result_quote_id: string | null; replayed: boolean }>(sql`
+        SELECT * FROM private.update_quote_v1(
+          ${authorization.tenantId}, ${authorization.userId}::uuid, ${normalized.clientEventId}::uuid,
+          ${normalized.quoteId}::uuid, ${normalized.expectedVersion}, ${intentSha256}, ${normalized.dueDate}::date,
+          ${normalized.note}, ${JSON.stringify(normalized.positions)}::jsonb
+        )
+      `);
+      const outcome = result.length === 1 ? result[0] : null;
+      if (!outcome || outcome.result_code !== "OK" || outcome.result_quote_id !== normalized.quoteId) {
+        if (outcome?.result_code === "CONFLICT" || outcome?.result_code === "NOT_FOUND" || outcome?.result_code === "VALIDATION_ERROR") {
+          return { code: outcome.result_code, message: outcome.result_code === "CONFLICT" ? "Der KV wurde zwischenzeitlich geändert oder diese Kennung anders verwendet." : outcome.result_code === "NOT_FOUND" ? "KV ist nicht verfügbar." : "KV-Daten sind ungültig." };
+        }
+        throw new Error("QUOTE_UPDATE_RESULT_INVALID");
+      }
+      const quote = await readQuote(tx, authorization.tenantId, normalized.quoteId);
+      const rows = await tx.execute<UpdateReceiptRow>(sql`
+        SELECT * FROM private.v_quote_update_receipts_v1
+        WHERE quote_id = ${normalized.quoteId}::uuid AND actor_id = ${authorization.userId}::uuid
+          AND client_event_id = ${normalized.clientEventId}::uuid LIMIT 2
+      `);
+      const receipt = rows.length === 1 ? rows[0] : null;
+      const recordedAt = receipt ? iso(receipt.recorded_at) : null;
+      if (!quote || !receipt || receipt.integrity_ok !== true || receipt.tenant_id !== authorization.tenantId
+        || receipt.quote_id !== normalized.quoteId || receipt.actor_id !== authorization.userId
+        || receipt.client_event_id !== normalized.clientEventId || receipt.intent_sha256 !== intentSha256
+        || receipt.expected_version !== normalized.expectedVersion || receipt.aggregate_version !== normalized.expectedVersion + 1
+        || quote.version !== receipt.aggregate_version || !recordedAt) throw new Error("QUOTE_UPDATE_READBACK_INVALID");
+      return { code: "OK", quote, replayed: outcome.replayed, receipt: {
+        receiptId: receipt.receipt_id, eventId: receipt.event_id, quoteId: receipt.quote_id, actorId: receipt.actor_id,
+        clientEventId: receipt.client_event_id, correlationId: receipt.correlation_id, recordedAt,
+        expectedVersion: receipt.expected_version, aggregateVersion: receipt.aggregate_version,
+      } };
+    });
+  } catch (error) {
+    console.error("quote_update_command_failed", { message: diagnostic(error, "message"), details: diagnostic(error, "details"), hint: diagnostic(error, "hint") });
+    return { code: "UNAVAILABLE", message: "KV konnte nicht sicher aktualisiert werden." };
+  }
+}
+
 /** Read-only recovery for an interrupted KV create using the original client event. */
 export async function readQuoteCreateReceiptCommand(
   authorization: QuoteCommandContext,
@@ -296,6 +402,45 @@ export async function readQuoteCreateReceiptCommand(
     });
   } catch (error) {
     console.error("quote_create_receipt_read_failed", { message: diagnostic(error, "message"), details: diagnostic(error, "details"), hint: diagnostic(error, "hint") });
+    return { code: "UNAVAILABLE", message: "Der gespeicherte KV-Stand konnte nicht sicher gelesen werden." };
+  }
+}
+
+/** Read-only recovery for an interrupted KV edit using its original client event. */
+export async function readQuoteUpdateReceiptCommand(
+  authorization: QuoteCommandContext,
+  input: unknown,
+): Promise<ReadQuoteUpdateReceiptResult> {
+  const normalized = normalizeUpdate(input);
+  if (!normalized) return { code: "VALIDATION_ERROR", message: "Die gespeicherte KV-Änderung kann nicht sicher geprüft werden." };
+  if (!authorization.capabilities.canReadQuote) return { code: "FORBIDDEN", message: "Der gespeicherte KV-Stand darf mit dieser Rolle nicht gelesen werden." };
+  const intentSha256 = hashIntent(normalized);
+  try {
+    return await withPrivilegedTenantTransaction(authorization, async (tx) => {
+      const rows = await tx.execute<UpdateReceiptRow>(sql`
+        SELECT * FROM private.v_quote_update_receipts_v1
+        WHERE quote_id = ${normalized.quoteId}::uuid AND actor_id = ${authorization.userId}::uuid
+          AND client_event_id = ${normalized.clientEventId}::uuid LIMIT 2
+      `);
+      if (rows.length === 0) return { code: "NOT_FOUND", message: "Zu dieser Änderung wurde noch kein sicherer KV-Stand gefunden." };
+      const receipt = rows.length === 1 ? rows[0] : null;
+      const recordedAt = receipt ? iso(receipt.recorded_at) : null;
+      if (!receipt || receipt.integrity_ok !== true || receipt.tenant_id !== authorization.tenantId
+        || receipt.quote_id !== normalized.quoteId || receipt.actor_id !== authorization.userId
+        || receipt.client_event_id !== normalized.clientEventId || receipt.intent_sha256 !== intentSha256
+        || receipt.expected_version !== normalized.expectedVersion || receipt.aggregate_version !== normalized.expectedVersion + 1 || !recordedAt) {
+        throw new Error("QUOTE_UPDATE_RECEIPT_INVALID");
+      }
+      const quote = await readQuote(tx, authorization.tenantId, normalized.quoteId);
+      if (!quote || quote.version !== receipt.aggregate_version) throw new Error("QUOTE_UPDATE_RECEIPT_READBACK_INVALID");
+      return { code: "OK", quote, receipt: {
+        receiptId: receipt.receipt_id, eventId: receipt.event_id, quoteId: receipt.quote_id, actorId: receipt.actor_id,
+        clientEventId: receipt.client_event_id, correlationId: receipt.correlation_id, recordedAt,
+        expectedVersion: receipt.expected_version, aggregateVersion: receipt.aggregate_version,
+      } };
+    });
+  } catch (error) {
+    console.error("quote_update_receipt_read_failed", { message: diagnostic(error, "message"), details: diagnostic(error, "details"), hint: diagnostic(error, "hint") });
     return { code: "UNAVAILABLE", message: "Der gespeicherte KV-Stand konnte nicht sicher gelesen werden." };
   }
 }
@@ -385,12 +530,12 @@ export async function readQuoteConversionReceiptCommand(
       const recordedAt = row ? iso(row.recorded_at) : null;
       const quote = await readQuote(tx, authorization.tenantId, input.quoteId);
       if (!row) return { code: "NOT_FOUND", message: "Beauftragungsbeleg ist nicht verfügbar." };
-      if (!quote || row.integrity_ok !== true || row.tenant_id !== authorization.tenantId || row.quote_version !== 2
+      if (!quote || row.integrity_ok !== true || row.tenant_id !== authorization.tenantId || row.quote_version !== quote.version
         || row.quote_id !== quote.quoteId || row.order_id !== quote.linkedOrderId || !recordedAt) throw new Error("QUOTE_CONVERSION_RECEIPT_INVALID");
       const receipt: QuoteConversionReceipt = {
         receiptId: row.receipt_id, eventId: row.event_id, quoteId: row.quote_id, customerId: row.customer_id,
         orderId: row.order_id, orderIntakeEventId: row.order_intake_event_id, actorId: row.actor_id,
-        clientEventId: row.client_event_id, correlationId: row.correlation_id, recordedAt, aggregateVersion: 2,
+        clientEventId: row.client_event_id, correlationId: row.correlation_id, recordedAt, aggregateVersion: row.quote_version,
       };
       return { code: "OK", receipt, quote };
     });

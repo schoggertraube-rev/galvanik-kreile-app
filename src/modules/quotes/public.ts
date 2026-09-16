@@ -9,7 +9,12 @@ export type {
   QuotePosition,
   QuotePositionInput,
   QuoteReadback,
+  QuoteUpdateReceipt,
+  UpdateQuoteInput,
+  UpdateQuoteResult,
+  ListOpenQuotesResult,
   ReadQuoteConversionReceiptResult,
   ReadQuoteCreateReceiptResult,
+  ReadQuoteUpdateReceiptResult,
   ReadQuoteResult,
 } from "./server/types";

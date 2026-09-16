@@ -121,6 +121,47 @@ describe("PATH1 quote to existing F1.1 order", () => {
     expect(counts).toEqual({ quotes: 1, positions: 2, events: 1, receipts: 1 });
   });
 
+  it("keeps a tenant-bound draft resumable, versioned and conflict-safe before award", async () => {
+    const customerId = await createCustomer("UPDATE");
+    const { createQuoteAction, convertQuoteToOrderAction, listOpenQuotesAction, readQuoteAction, updateQuoteAction } = await import("@/app/actions/quotes.actions");
+    const created = await createQuoteAction(quoteInput(customerId, "UPDATE"));
+    expect(created.code).toBe("OK");
+    if (created.code !== "OK") return;
+    const update = {
+      quoteId: created.quote.quoteId, clientEventId: randomUUID(), expectedVersion: created.quote.version,
+      dueDate: "2026-10-22", note: "SYNTHETISCHER KV UPDATE",
+      positions: [{ name: "Aktualisierter Flansch", quantity: 4, material: "Stahl", surfaceRequested: "Vernickeln", unitPriceCents: 9000 }],
+    };
+    const updated = await updateQuoteAction(update);
+    expect(updated).toMatchObject({ code: "OK", replayed: false, quote: { version: 2, dueDate: "2026-10-22", totalNetCents: 36000 }, receipt: { expectedVersion: 1, aggregateVersion: 2 } });
+    await expect(updateQuoteAction(update)).resolves.toMatchObject({ code: "OK", replayed: true, receipt: { receiptId: updated.code === "OK" ? updated.receipt.receiptId : undefined } });
+    await expect(updateQuoteAction({ ...update, note: "SYNTHETISCHER ANDERER INTENT" })).resolves.toMatchObject({ code: "CONFLICT" });
+    await expect(updateQuoteAction({ ...update, clientEventId: randomUUID(), expectedVersion: 1 })).resolves.toMatchObject({ code: "CONFLICT" });
+    await expect(readQuoteAction({ quoteId: created.quote.quoteId })).resolves.toMatchObject({ code: "OK", quote: { version: 2, positions: [expect.objectContaining({ name: "Aktualisierter Flansch", quantity: 4 })] } });
+    await expect(listOpenQuotesAction()).resolves.toMatchObject({ code: "OK", quotes: expect.arrayContaining([expect.objectContaining({ quoteId: created.quote.quoteId, version: 2 })]) });
+    const [counts] = await db<{ revisions: number; updates: number; receipts: number }[]>`
+      SELECT
+        (SELECT count(DISTINCT revision)::integer FROM private.quote_positions WHERE tenant_id = ${KREILE_TENANT_SLUG} AND quote_id = ${created.quote.quoteId}::uuid) AS revisions,
+        (SELECT count(*)::integer FROM public.events WHERE tenant_id = ${KREILE_TENANT_SLUG} AND event_type = 'QUOTE_UPDATED_V1' AND payload->>'quoteId' = ${created.quote.quoteId}) AS updates,
+        (SELECT count(*)::integer FROM private.quote_update_receipts WHERE tenant_id = ${KREILE_TENANT_SLUG} AND quote_id = ${created.quote.quoteId}::uuid) AS receipts
+    `;
+    expect(counts).toEqual({ revisions: 2, updates: 1, receipts: 1 });
+
+    const conversion = await convertQuoteToOrderAction({
+      quoteId: created.quote.quoteId,
+      clientEventId: randomUUID(),
+      expectedVersion: 2,
+      confirmedAward: true,
+      confirmedOrderDueDate: "2026-10-24",
+    });
+    expect(conversion).toMatchObject({
+      code: "OK",
+      quote: { status: "converted", version: 3 },
+      quoteReceipt: { aggregateVersion: 3 },
+      orderReceipt: { customerId },
+    });
+  });
+
   it("converts the persisted quote through F1.1 exactly once and replays both receipts", async () => {
     const customerId = await createCustomer("CONVERT");
     const { createQuoteAction, convertQuoteToOrderAction } = await import("@/app/actions/quotes.actions");
@@ -190,11 +231,11 @@ describe("PATH1 quote to existing F1.1 order", () => {
     await expect(createQuoteAction(quoteInput(customerId, "READONLY"))).resolves.toMatchObject({ code: "FORBIDDEN" });
 
     const { createQuoteCommand, readQuoteCommand } = await import("@/modules/quotes/server-public");
-    const foreign = await createQuoteCommand({ tenantId: foreignTenant, userId: users.foreign, capabilities: { canCreateQuote: true, canReadQuote: true, canConvertQuote: true } }, quoteInput(foreignCustomerId, "FOREIGN-OWN"));
+  const foreign = await createQuoteCommand({ tenantId: foreignTenant, userId: users.foreign, capabilities: { canCreateQuote: true, canReadQuote: true, canUpdateQuote: true, canConvertQuote: true } }, quoteInput(foreignCustomerId, "FOREIGN-OWN"));
     expect(foreign.code).toBe("OK");
     if (foreign.code !== "OK") return;
-    await expect(readQuoteCommand({ tenantId: KREILE_TENANT_SLUG, userId: users.buero, capabilities: { canCreateQuote: false, canReadQuote: true, canConvertQuote: false } }, { quoteId: foreign.quote.quoteId })).resolves.toMatchObject({ code: "NOT_FOUND" });
-    await expect(createQuoteCommand({ tenantId: "", userId: users.buero, capabilities: { canCreateQuote: true, canReadQuote: true, canConvertQuote: true } }, quoteInput(customerId, "EMPTY-TENANT"))).resolves.not.toMatchObject({ code: "OK" });
+    await expect(readQuoteCommand({ tenantId: KREILE_TENANT_SLUG, userId: users.buero, capabilities: { canCreateQuote: false, canReadQuote: true, canUpdateQuote: false, canConvertQuote: false } }, { quoteId: foreign.quote.quoteId })).resolves.toMatchObject({ code: "NOT_FOUND" });
+    await expect(createQuoteCommand({ tenantId: "", userId: users.buero, capabilities: { canCreateQuote: true, canReadQuote: true, canUpdateQuote: true, canConvertQuote: true } }, quoteInput(customerId, "EMPTY-TENANT"))).resolves.not.toMatchObject({ code: "OK" });
   });
 
   it("does not award when F1.1 fails and keeps events and receipts append-only", async () => {
@@ -205,7 +246,7 @@ describe("PATH1 quote to existing F1.1 order", () => {
     if (created.code !== "OK") return;
     const clientEventId = randomUUID();
     const { prepareQuoteConversionCommand } = await import("@/modules/quotes/server-public");
-    const prepared = await prepareQuoteConversionCommand({ tenantId: KREILE_TENANT_SLUG, userId: users.buero, capabilities: { canCreateQuote: true, canReadQuote: true, canConvertQuote: true } }, {
+    const prepared = await prepareQuoteConversionCommand({ tenantId: KREILE_TENANT_SLUG, userId: users.buero, capabilities: { canCreateQuote: true, canReadQuote: true, canUpdateQuote: true, canConvertQuote: true } }, {
       quoteId: created.quote.quoteId, clientEventId, expectedVersion: 1, confirmedAward: true, confirmedOrderDueDate: "2026-10-20",
     });
     expect(prepared.code).toBe("OK");

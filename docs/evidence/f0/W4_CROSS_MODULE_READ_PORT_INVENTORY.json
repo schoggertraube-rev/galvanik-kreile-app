@@ -112,8 +112,10 @@
       "private.v_customer_create_receipts_v1"
     ],
     "src/modules/quotes/server/quoteCommands.ts": [
+      "private.v_open_quotes_v1",
       "private.v_quote_conversion_receipts_v1",
       "private.v_quote_create_receipts_v1",
+      "private.v_quote_update_receipts_v1",
       "private.v_quotes_v1"
     ]
   },
@@ -235,6 +237,16 @@
       "requiredSecurityInvokerViews": [
         "private.v_quote_conversion_receipts_v1",
         "private.v_quote_create_receipts_v1",
+        "private.v_quotes_v1"
+      ],
+      "requiredLegacySource": null
+    },
+    {
+      "path": "supabase/migrations/20260916090000_path1_quote_product_lifecycle.sql",
+      "requiredSecurityInvokerViews": [
+        "private.v_open_quotes_v1",
+        "private.v_quote_conversion_receipts_v1",
+        "private.v_quote_update_receipts_v1",
         "private.v_quotes_v1"
       ],
       "requiredLegacySource": null
