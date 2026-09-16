@@ -7,9 +7,12 @@ import {
 
 const CUSTOMER_ID = "72d8c6c6-397c-4a9c-b464-d2e5595eb42a";
 const QUOTE_ID = "1c32e174-8494-46f0-9f5f-1a45f2a60bd1";
+const OTHER_QUOTE_ID = "3a6a7bc4-3edb-4fa7-bc11-81b2d164b622";
 const ORDER_ID = "b6b493d0-3e70-4a73-88eb-367106068e62";
 
-function quote(status: "draft" | "converted" = "draft") {
+type QuoteFixture = Extract<Awaited<ReturnType<GlobalCreatePorts["readQuote"]>>, { code: "OK" }>["quote"];
+
+function quote(status: "draft" | "converted" = "draft", overrides: Partial<QuoteFixture> = {}): QuoteFixture {
   return {
     quoteId: QUOTE_ID,
     quoteNumber: "KV-2026-0042",
@@ -38,6 +41,7 @@ function quote(status: "draft" | "converted" = "draft") {
       unitPriceCents: 12_500,
       lineTotalCents: 25_000,
     }],
+    ...overrides,
   };
 }
 
@@ -344,6 +348,72 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(value.updateQuote).toHaveBeenCalledWith(expect.objectContaining({ quoteId: QUOTE_ID, expectedVersion: 1, dueDate: "2026-10-22" }));
   });
 
+  it("clears an award date when editing, switching or resuming a KV", async () => {
+    const otherQuote = quote("draft", {
+      quoteId: OTHER_QUOTE_ID,
+      quoteNumber: "KV-2026-0043",
+      dueDate: "2026-11-05",
+      note: "SYNTHETISCHER ZWEITER KV",
+    });
+    const baseUpdateQuote = ports().updateQuote;
+    const updateQuote = vi.fn<GlobalCreatePorts["updateQuote"]>(async (input) => {
+      const result = await baseUpdateQuote(input);
+      if (result.code !== "OK") return result;
+      const source = input.quoteId === OTHER_QUOTE_ID ? otherQuote : quote();
+      return {
+        ...result,
+        quote: {
+          ...source,
+          version: input.expectedVersion + 1,
+          dueDate: input.dueDate,
+          note: input.note,
+          updatedAt: "2026-09-14T10:06:00.000Z",
+        },
+      };
+    });
+    const value = ports({
+      resumeQuoteId: QUOTE_ID,
+      listOpenQuotes: vi.fn().mockResolvedValue({ code: "OK", quotes: [otherQuote] }),
+      updateQuote,
+    });
+    render(<GlobalCreateFlow ports={value} />);
+
+    openFlow();
+    await fillCustomer();
+    await fillQuote();
+    fireEvent.change(screen.getByLabelText("Zugesagter Termin für den Auftrag"), { target: { value: "2026-10-20" } });
+    expect(screen.getByRole("button", { name: /Zuschlag bestätigen/ })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "KV bearbeiten" }));
+    expect(screen.queryByLabelText("Zugesagter Termin für den Auftrag")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "KV sichern" }));
+    await screen.findByRole("heading", { name: "KV-2026-0042 gesichert" });
+    expect(screen.getByLabelText("Zugesagter Termin für den Auftrag")).toHaveValue("");
+    expect(screen.getByLabelText("Zugesagter Termin für den Auftrag")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("button", { name: /Zuschlag bestätigen/ })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Zugesagter Termin für den Auftrag"), { target: { value: "2026-10-21" } });
+    fireEvent.click(screen.getByRole("button", { name: "Zur Auswahl" }));
+    fireEvent.click(screen.getByRole("button", { name: /Offene KVs bearbeiten/ }));
+    await screen.findByRole("heading", { name: "Offene KVs" });
+    fireEvent.click(screen.getByRole("button", { name: /KV-2026-0043/ }));
+    expect(screen.getByLabelText("Gewünschter Termin")).toHaveValue("2026-11-05");
+    fireEvent.click(screen.getByRole("button", { name: "KV sichern" }));
+    await screen.findByRole("heading", { name: "KV-2026-0043 gesichert" });
+    expect(updateQuote).toHaveBeenLastCalledWith(expect.objectContaining({ quoteId: OTHER_QUOTE_ID }));
+    expect(screen.getByLabelText("Zugesagter Termin für den Auftrag")).toHaveValue("");
+    expect(screen.getByRole("button", { name: /Zuschlag bestätigen/ })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Zugesagter Termin für den Auftrag"), { target: { value: "2026-11-12" } });
+    fireEvent.click(screen.getByRole("button", { name: "Zur Auswahl" }));
+    fireEvent.click(screen.getByRole("button", { name: /Gespeicherten KV fortsetzen/ }));
+    await screen.findByRole("heading", { name: "KV-2026-0042 gesichert" });
+    expect(value.readQuote).toHaveBeenCalledWith({ quoteId: QUOTE_ID });
+    expect(screen.getByLabelText("Zugesagter Termin für den Auftrag")).toHaveValue("");
+    expect(screen.getByLabelText("Zugesagter Termin für den Auftrag")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByRole("button", { name: /Zuschlag bestätigen/ })).toBeDisabled();
+  });
+
   it("keeps the KV context and offers Rolf the real customer path when the tenant is empty", async () => {
     const value = ports({ listCustomers: vi.fn().mockResolvedValue({ code: "OK", customers: [] }) });
     render(<GlobalCreateFlow ports={value} />);
@@ -387,8 +457,29 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.click(screen.getByRole("button", { name: /Zuschlag bestätigen/ }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Der KV wurde zwischenzeitlich geändert");
     expect(screen.getByRole("heading", { name: "KV-2026-0042 gesichert" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Zugesagter Termin für den Auftrag")).toHaveValue("2026-10-20");
+    expect(screen.getByRole("button", { name: /Zuschlag bestätigen/ })).toBeEnabled();
     expect(screen.queryByRole("region", { name: "F1.1-Auftragsreceipt" })).not.toBeInTheDocument();
     expect(conflictValue.openOrder).not.toHaveBeenCalled();
+  });
+
+  it("keeps the award date after an unknown conversion outcome", async () => {
+    const convertQuote = vi.fn<GlobalCreatePorts["convertQuote"]>().mockRejectedValue(new Error("network"));
+    const value = ports({ convertQuote });
+    render(<GlobalCreateFlow ports={value} />);
+
+    openFlow();
+    await fillCustomer();
+    await fillQuote();
+    const confirmedDate = screen.getByLabelText("Zugesagter Termin für den Auftrag");
+    fireEvent.change(confirmedDate, { target: { value: "2026-10-20" } });
+    fireEvent.click(screen.getByRole("button", { name: /Zuschlag bestätigen/ }));
+
+    expect(await screen.findByText("Ausgang ungeklärt", { selector: "strong" })).toBeInTheDocument();
+    expect(confirmedDate).toHaveValue("2026-10-20");
+    expect(confirmedDate).toHaveAttribute("aria-invalid", "false");
+    expect(screen.getByRole("button", { name: /Zuschlag bestätigen/ })).toBeEnabled();
+    expect(convertQuote).toHaveBeenCalledTimes(1);
   });
 
   it("moves focus into the dialog and closes it with Escape", async () => {

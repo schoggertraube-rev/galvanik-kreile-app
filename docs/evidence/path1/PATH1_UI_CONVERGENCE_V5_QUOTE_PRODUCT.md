@@ -39,6 +39,19 @@ Auswahl `Offene KVs bearbeiten` liest serverseitig gespeicherte Entwürfe,
 tenant-/actor-gebundenen Action-Port. Ein Versand-Button wird nicht gerendert:
 ohne realen M365-Receipt gibt es keinen gesendeten KV.
 
+## Post-P2-Härtung: zugesagter Termin
+
+- `confirmedOrderDueDate` bleibt ein lokaler, bewusst zu bestätigender Wert und
+  wird nicht aus dem Terminwunsch des KV abgeleitet.
+- Beim Bearbeiten des aktuellen KV, beim Wechsel zu einem anderen KV und beim
+  erneuten Öffnen eines gespeicherten KV wird der Wert geleert. Der
+  Zuschlagsbutton bleibt bis zur erneuten Eingabe eines gültigen Datums
+  deaktiviert; das Feld meldet den fehlenden Wert mit `aria-invalid=true`.
+- Ein Commandfehler, Versionskonflikt oder unklarer Ausgang löscht die Eingabe
+  nicht. Diese Rettungsleine ist im Rendervertrag separat abgesichert.
+- Die Änderung erweitert weder den Datenvertrag noch die Migration und ändert
+  nichts an der idempotenten Konvertierung in genau einen F1.1-Auftrag.
+
 ## Lokaler Nachweis
 
 - Frischer lokaler Supabase-Reset, einschließlich der P2-Migration: PASS.
@@ -46,36 +59,52 @@ ohne realen M365-Receipt gibt es keinen gesendeten KV.
   `src/test/path1_quote_to_order.integration.test.ts`, 6/6 PASS.
 - Quote-Command-, Read-Port-, GlobalCreate-Render- und Real-DB-Tests:
   4 Dateien, 23/23 PASS.
+- Post-P2-Rendervertrag:
+  `src/components/layout/__tests__/path1GlobalCreateFlow.realRender.test.tsx`,
+  12/12 PASS. Er belegt Reset bei Bearbeiten, Wechsel und Wiederöffnen sowie
+  Eingabeerhalt bei Konflikt und unklarem Ausgang.
 - Production-Browserlauf auf lokalem Production-Build und Loopback-Supabase:
   PASS. Er belegt Rolf-PIN-Login, leeren Start, direkten Eingang, Kundenanlage,
   KV-Anlage, KV-Bearbeitung auf Stand 2, Reload-Readback, Zuschlag und genau
-  einen F1.1-Auftrag. Das Zuschlagsdatum ist bei 1914x917, 768x1024 und
-  390x844 sichtbar und touch-tauglich; ohne gültiges Datum bleibt der
-  Zuschlagsbutton deaktiviert, mit Datum wird er aktiv. Die Aktion lief ohne
-  feste Wartezeit.
+  einen F1.1-Auftrag. Ein zuvor gültiges Zuschlagsdatum ist nach Bearbeiten und
+  nach Reload/Wiederöffnen leer; bei 1914x917, 768x1024 und 390x844 ist das
+  Feld sichtbar und touch-tauglich. Ohne erneute gültige Eingabe bleibt der
+  Zuschlagsbutton deaktiviert, danach wird er aktiv. Die Aktion und der
+  ereignisgebundene PIN-Login liefen ohne feste Wartezeit.
 - Receipt-Readbacks des Browserlaufs: Kundenanlage
-  `e064b451-db60-4ed4-b64e-9dffbe34ae21`, KV
-  `a37bf3a8-bf3a-45f0-bce3-9234bf72989e`, Zuschlag
-  `cbc814a7-dcfc-4d1b-a3ed-831ea6ff6c8a`; erzeugte Nummern
+  `303b1b24-2f90-462e-ae84-23d62b6239a6`, KV
+  `6bfb0c99-be6f-4fc3-8221-232585d8c0eb`, Zuschlag
+  `50e55200-f142-46d3-812d-b47d071d1f94`; erzeugte Nummern
   `KV-2026-0001` und `A-2026-0002`.
 - Browserartefakte aus der gebauten App: 1914x917
   `v5-start-identities-desktop-1914x917.png`
   (`2d4a5c903a49b233c677bce33f7213ee66eeabfdfd71d75c0cf9033a105e3d58`),
   1220x880 `v5-rolf-data-tablet-1220x880.png`
-  (`7f05d9aec9cf60e76a800522ad5b2c2a52bd9ef1bf39dd2b079f4a99ed82fa64`),
+  (`7cc4396827170664d16ce5c274823ba35106f3f6e1d816b2f161ba01b6c7b525`),
   1024x768 `v5-invoices-target-shell-1024x768.png`
   (`7eb5509db0e56a9d44fcf7092a26618b82ca8e810a107f7c575e1ff4a4d4777d`),
   768x1024 `v5-kv-form-tablet-768x1024.png`
-  (`dc4f36ba6bb6c73dc95c19a29f7df478ea97b4d22844a138275356d3da78af5d`),
-  Datumsfeld Desktop `v5-award-date-desktop-1914x917.png`
-  (`ac0b0f9068a79fc161db0f219ed5696e35780a7487ec7f2c5a5db4ae703c9dd8`),
-  Tablet `v5-award-date-tablet-768x1024.png`
-  (`f1444150534d49710734b0f3f2841e55aa0c63438592443da78a399d1a2986f3`),
-  Mobile `v5-award-date-mobile-390x844.png`
-  (`6aa38443b5fac7bcb6b506164940130ce5a119ea7a591372ceb7790006e8914f`)
+  (`9f81e516602856e1233f33c9a06d443f043bee4343b7d3da14853de20b3f3d96`),
+  Reset nach Bearbeiten Desktop
+  `v5-award-date-reset-after-edit-desktop-1914x917.png`
+  (`0483623a5ba4a9131fa02707e3055ebb6729d542166fa9929bee82d09a077a2d`),
+  Reset nach Wiederöffnen Desktop
+  `v5-award-date-reset-after-resume-desktop-1914x917.png`
+  (`177ae158048b2ec89e64dfe1688abf4396d77e35abdc0b07f969d179fb0a005d`),
+  Tablet `v5-award-date-reset-after-resume-tablet-768x1024.png`
+  (`ceb4274b68a176278e1cc8042a4568a4ad960458dd355cdc8e1a120fe0230ee2`),
+  Mobile `v5-award-date-reset-after-resume-mobile-390x844.png`
+  (`09aba9b55efe7f93f05852968b0f6e160ada9f3a91cf5409306782d73c37dbb0`),
+  erneut gültig Mobile `v5-award-date-mobile-390x844.png`
+  (`559677160219a00506498db40e2188ba9b5ff68ab4e1f5e74d0ac7c473f0b831`)
   und 390x844 `v5-order-receipts-mobile-390x844.png`
   (`b287c466f02a338ef5642dbb35ff8c40feeb19adaef1e1dae7e65650087c9451`).
   Alle Captures prueften `scrollWidth <= clientWidth`.
+- Vollständige lokale Units: 102 Dateien, 828/828 PASS. TypeScript,
+  Full-ESLint, Ratchet (0/0), Modul-Gates, Authority-Gate plus Selftest,
+  No-Fake plus Selftest, W4-Schema-/Read-Port-Gates und Build: PASS. Der
+  eingefrorene W4-Storage-/Action-/UI-Vertrag lief nach zustandsgebundener
+  lokaler Storage-Readiness auf seinem exakten 14-Migrationsstand 14/14 PASS.
 
 ## Grenzen
 
