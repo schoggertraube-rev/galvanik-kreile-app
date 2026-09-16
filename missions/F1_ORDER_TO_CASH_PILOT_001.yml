@@ -37,8 +37,8 @@ delivery_order:
   - F1.6_REALER_PILOT
 
 active_package: PATH1_UI_CONVERGENCE
-active_package_status: V5_P3_CORE_SURFACES_AND_LANE_0_SEARCH_LOCAL_GATES_REAL_DB_BROWSER_PASS_DRAFT_PR_EXACT_SHA_CI_PREVIEW_PENDING_NO_UI_PASS
-next_gate_after_active_package: P3_COMMIT_PUSH_DRAFT_PR_EXACT_SHA_CI_PREVIEW_THEN_SINGLE_INDEPENDENT_REVIEW
+active_package_status: V5_P3_EXACT_SHA_AUDIT_REPAIR_PRODUCT_AND_SHA_BOUND_EVIDENCE_CANDIDATE_PENDING_NO_UI_PASS
+next_gate_after_active_package: P3_REPAIR_PRODUCT_COMMIT_THEN_SHA_BOUND_BROWSER_EVIDENCE_COMMIT_EXACT_SHA_CI_PREVIEW_AND_INDEPENDENT_CLOSURE_REVIEW
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
@@ -148,14 +148,15 @@ owner_v5_p2_quote_product_execution_20260916:
   next_product_after_p2: P3_ORDERS_V8_CUSTOMERS_V2_HOMES_SEARCH_STATUS
 
 owner_v5_p3_core_surfaces_search_execution_20260916:
-  status: LOCAL_CONTRACT_REAL_DB_BROWSER_MATRIX_PASS_EXACT_SHA_CI_PREVIEW_PENDING_NO_UI_PASS
+  status: AUDIT_REPAIR_IN_PROGRESS_OPEN_P0_P1_UNTIL_NEW_EXACT_SHA_INDEPENDENT_CLOSURE_NO_UI_PASS
   base_sha: 70ae0989b7f76a247c34582badc2de3324e27851
   branch: path1/v5-p3-core-surfaces-search-20260916
   execution: ORDERS_V8_AND_CUSTOMERS_V2_ONE_CARD_TRUTH_WITH_DEEPLINK_BACKSTACK; ROLF_AND_PHILLIP_REAL_PUBLIC_PROJECTIONS; DETERMINISTIC_LANE_0_SEARCH_STATUS_ON_TARGET_SHELL
   lane_0_contract: AUTHORIZED_MODULE_READ_PORTS_ONLY; STRUCTURED_APP_FACTS; METERED_COST_0; SOURCES_RELATIONSHIPS_DATA_STAND_AND_DEEPLINKS; NO_AI_INTERNET_PROVIDER_OR_SECOND_BUSINESS_TRUTH
   identity_contract: VISIBLE_PRODUCT_IDENTITIES_ONLY_ROLF_MEISTER_PHILLIP_WERKSTATT_GREGOR_SYSTEMADMIN; CAPABILITY_AND_TENANT_FAIL_CLOSED; NO_AUTH_SESSION_ROLE_MIGRATION
   hard_limits: NO_TABLE_MIGRATION_RLS_POLICY_RUNTIME_DEPENDENCY_ACCOUNTING_ANALYSIS_PROVIDER_OCR_M365_MOLLIE_BANK_CALENDAR_OR_PERSISTENT_ASSISTANT_THREADS
-  next_gate: COMMIT_PUSH_DRAFT_PR_EXACT_SHA_CI_PREVIEW_THEN_SINGLE_INDEPENDENT_REVIEW
+  audit_repair: CROSS_FIELD_SEARCH_PROOF; PORTALED_SEARCH_FOCUS; EXPLICIT_TRUNCATION_COVERAGE; SHAREABLE_V8_V2_HREFS; CANDIDATE_REGISTRY_TRUTH; BLOCKING_SEARCH_REAL_DB_AND_P3_BROWSER_CI; CANONICAL_F1_1_PAYMENT_EMPTY_STATE; SHA_BOUND_BROWSER_RECEIPT; REAL_GREGOR_SYSTEM_ENTRY; LEGACY_SEARCH_ACTION_CANONICAL_DELEGATE
+  next_gate: PRODUCT_CODE_SHA_THEN_SHA_BOUND_BROWSER_EVIDENCE_HEAD_REMOTE_CI_PREVIEW_AND_INDEPENDENT_CLOSURE_REVIEW
 
 # ── F1.2 Entscheidungsgrundlage (bindend, ersetzt Altstand) ───────
 # D-F12-001A (ersetzt D-F12-001): F1.2 = genau EIN Uebergang
@@ -590,6 +591,7 @@ path1_ui_convergence_allowlist:
   # V5 P3: reale V8/V2-Oberflaechen, oeffentliche Home-Projektionen und
   # deterministische Lane-0-Suche. Keine KI-/Provider-/Kostenaktivierung.
   - src/app/actions/search.actions.ts
+  - src/app/global-search-actions.ts
   - src/app/actions/__tests__/w2cB2m4c.externalProvider.failClosed.test.ts
   - src/components/layout/GlobalSearch.tsx
   - src/components/layout/TargetHeader.tsx
@@ -603,6 +605,18 @@ path1_ui_convergence_allowlist:
   - src/test/path1_p3_deeplinks.test.tsx
   - e2e/path1-ui-convergence-v5-p3.real.spec.ts
   - docs/evidence/path1/PATH1_UI_CONVERGENCE_V5_P3_CORE_SURFACES_SEARCH.md
+  # P3 Exact-SHA Audit-Repair: reale Gregor-Komposition und kanonischer
+  # F1.1-Zahlungsleerstand; keine neue Rolle, Migration oder Datenwahrheit.
+  - src/app/settings/page.tsx
+  - src/app/settings/SettingsAppAdapter.tsx
+  - src/app/settings/__tests__/SettingsAppAdapter.test.tsx
+  - src/app/__tests__/f0W2cB2s.test.ts
+  - src/modules/fundament/fundament.manifest.json
+  - src/modules/fundament/public.ts
+  - src/modules/fundament/ui/SystemAdminView.tsx
+  - src/modules/fundament/ui/SystemAdminView.module.css
+  - src/lib/server/paymentContract.ts
+  - src/lib/server/__tests__/paymentSummaryRead.test.ts
   # Nach Link-/Importinventar physisch entfallende oder nicht-rendernde Pages
   - src/app/analyse/page.tsx
   - src/app/archive/page.tsx

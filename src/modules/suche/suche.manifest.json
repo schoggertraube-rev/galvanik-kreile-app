@@ -8,6 +8,8 @@
     "@/modules/suche/public#SEARCH_MAX_QUERY_LENGTH",
     "@/modules/suche/public#SEARCH_MIN_QUERY_LENGTH",
     "@/modules/suche/public#SearchCustomerDocument",
+    "@/modules/suche/public#SearchCustomerBatch",
+    "@/modules/suche/public#SearchCoverage",
     "@/modules/suche/public#SearchDialog",
     "@/modules/suche/public#SearchDialogProps",
     "@/modules/suche/public#SearchDialogState",

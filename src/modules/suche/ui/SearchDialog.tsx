@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
+import { createPortal } from "react-dom";
 import { Search } from "lucide-react";
 import {
   SEARCH_MIN_QUERY_LENGTH,
@@ -19,6 +20,7 @@ type PresentedResult = {
   hits: SearchHit[];
   message: string;
   checkedAt: string | null;
+  truncated: boolean;
 };
 
 function formatCheckedAt(value: string | null): string {
@@ -30,21 +32,22 @@ function stateForResult(result: SearchTenantResult): PresentedResult {
   switch (result.code) {
     case "OK":
       return result.hits.length > 0
-        ? { state: "data", hits: result.hits, message: "", checkedAt: result.checkedAt }
+        ? { state: "data", hits: result.hits, message: "", checkedAt: result.checkedAt, truncated: result.coverage.truncated }
         : {
             state: "empty",
             hits: [],
             message: `Für „${result.query}“ liegt in den internen Auftrags- und Kundendaten keine belegte Übereinstimmung vor.`,
             checkedAt: result.checkedAt,
+            truncated: false,
           };
     case "UNAUTHENTICATED":
     case "FORBIDDEN":
-      return { state: "denial", hits: [], message: result.message, checkedAt: null };
+      return { state: "denial", hits: [], message: result.message, checkedAt: null, truncated: false };
     case "CONFLICT":
-      return { state: "conflict", hits: [], message: result.message, checkedAt: null };
+      return { state: "conflict", hits: [], message: result.message, checkedAt: null, truncated: false };
     case "VALIDATION_ERROR":
     case "UNAVAILABLE":
-      return { state: "error", hits: [], message: result.message, checkedAt: null };
+      return { state: "error", hits: [], message: result.message, checkedAt: null, truncated: false };
   }
 }
 
@@ -58,6 +61,7 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [message, setMessage] = useState("");
   const [checkedAt, setCheckedAt] = useState<string | null>(null);
+  const [truncated, setTruncated] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
 
   const clearPending = useCallback(() => {
@@ -73,6 +77,7 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
     setHits([]);
     setMessage("");
     setCheckedAt(null);
+    setTruncated(false);
     setActiveIndex(-1);
   }, [clearPending]);
 
@@ -102,6 +107,7 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
     setHits([]);
     setMessage("");
     setCheckedAt(null);
+    setTruncated(false);
     setActiveIndex(-1);
     try {
       const result = await search(term);
@@ -111,6 +117,7 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
       setHits(next.hits);
       setMessage(next.message);
       setCheckedAt(next.checkedAt);
+      setTruncated(next.truncated);
       setActiveIndex(next.hits.length > 0 ? 0 : -1);
     } catch {
       if (sequence !== requestSequence.current) return;
@@ -118,6 +125,7 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
       setHits([]);
       setMessage("Die internen Bestände konnten nicht sicher durchsucht werden.");
       setCheckedAt(null);
+      setTruncated(false);
       setActiveIndex(-1);
     }
   }, [search]);
@@ -132,6 +140,7 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
       setHits([]);
       setMessage("");
       setCheckedAt(null);
+      setTruncated(false);
       setActiveIndex(-1);
       return;
     }
@@ -139,6 +148,12 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
   }, [clearPending, debounceMs, runSearch]);
 
   const select = useCallback((hit: SearchHit) => { onSelect(hit); close(); }, [close, onSelect]);
+
+  const selectLink = useCallback((event: ReactMouseEvent<HTMLAnchorElement>, hit: SearchHit) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    select(hit);
+  }, [select]);
 
   const handleInputKeyDown = useCallback((event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (state !== "data" || hits.length === 0) return;
@@ -155,12 +170,12 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
     }
   }, [activeIndex, hits, select, state]);
 
-  if (!open) return null;
+  if (!open || typeof document === "undefined") return null;
   const expanded = state === "data" && hits.length > 0;
   const activeDescendant = expanded && activeIndex >= 0 ? `${listboxId}-option-${activeIndex}` : undefined;
   const dataStand = formatCheckedAt(checkedAt);
 
-  return (
+  return createPortal(
     <div className={styles.backdrop} data-testid="search-backdrop" onMouseDown={close}>
       <section aria-labelledby="global-search-title" aria-modal="true" className={styles.dialog} data-state={state} data-testid="search-dialog" onMouseDown={(event) => event.stopPropagation()} role="dialog">
         <header className={styles.header}>
@@ -187,16 +202,18 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
           <ul aria-label="Suchtreffer" className={expanded ? styles.results : "hidden"} id={listboxId} role="listbox">
             {expanded ? hits.map((hit, index) => (
               <li key={`${hit.type}-${hit.id}`} role="presentation">
-                <button aria-selected={index === activeIndex} className={styles.resultButton} data-active={index === activeIndex} data-hit-type={hit.type} id={`${listboxId}-option-${index}`} onClick={() => select(hit)} onMouseEnter={() => setActiveIndex(index)} role="option" type="button">
+                <a aria-selected={index === activeIndex} className={styles.resultButton} data-active={index === activeIndex} data-hit-type={hit.type} href={hit.href} id={`${listboxId}-option-${index}`} onClick={(event) => selectLink(event, hit)} onMouseEnter={() => setActiveIndex(index)} role="option">
                   <span><span className={styles.resultTitle}>{hit.title}</span><span className={styles.resultSubtitle}>{hit.subtitle}</span><span className={styles.resultEvidence}><strong>{hit.source}</strong> · Treffer über {hit.matchLabel}: „{hit.matchValue}“</span><span className={styles.resultContext}>Zusammenhang: {hit.context}</span></span>
                   <span className={styles.resultAction}><span className={styles.type}>{HIT_LABEL[hit.type]}</span><span>{hit.actionLabel}</span></span>
-                </button>
+                </a>
               </li>
             )) : null}
           </ul>
+          {expanded && truncated ? <p className={styles.truncation} role="status">Weitere Treffer sind möglich. Bitte den Suchbegriff verfeinern.</p> : null}
           {expanded && dataStand ? <p className={styles.dataStand}>Interne Quellen · Abfrage {dataStand}</p> : null}
         </div>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -172,6 +172,22 @@ describe("F1.3 DB-/Command-Vertragsintegration (Session-Port isoliert; kein Real
     });
     await expect(readLiveOrderCard(foreignAuthorization, { orderId })).resolves.toMatchObject({ code: "NOT_FOUND" });
 
+    const { readOrderPaymentState } = await import("@/lib/server/paymentSummaryRead");
+    await expect(readOrderPaymentState(adminAuthorization, { orderId })).resolves.toMatchObject({
+      code: "OK",
+      data: {
+        orderId,
+        orderVersion: 1,
+        physicalStatus: "wareneingang",
+        mode: "vorkasse",
+        invoiceState: "not_issued",
+        payment: null,
+        goodsOut: null,
+        goodsOutAllowed: false,
+      },
+    });
+    await expect(readOrderPaymentState(foreignAuthorization, { orderId })).resolves.toMatchObject({ code: "FORBIDDEN" });
+
     await sql`UPDATE public.orders SET order_number = order_number || '-DRIFT' WHERE id = ${orderId}`;
     await expect(readLiveOrderCard(adminAuthorization, { orderId })).resolves.toMatchObject({ code: "UNAVAILABLE" });
     await sql`UPDATE public.orders SET order_number = ${intake.receipt.orderNumber} WHERE id = ${orderId}`;

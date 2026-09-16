@@ -24,7 +24,7 @@ const CUSTOMER: SearchCustomerDocument = {
 function ports(overrides: Partial<SearchPorts> = {}): SearchPorts {
   return {
     readOrders: vi.fn().mockResolvedValue([ORDER]),
-    searchCustomers: vi.fn().mockResolvedValue([]),
+    searchCustomers: vi.fn().mockResolvedValue({ records: [], exhaustive: true }),
     readTimestamp: () => CHECKED_AT,
     ...overrides,
   };
@@ -33,7 +33,14 @@ function ports(overrides: Partial<SearchPorts> = {}): SearchPorts {
 describe("Path-1 Lane-0 search contract", () => {
   it.each(["", " ", "x", " x "]) ("does not access ports below the minimum for %j", async (query) => {
     const boundary = ports();
-    await expect(searchTenant(query, boundary)).resolves.toEqual({ code: "OK", query: query.trim(), hits: [], checkedSources: [], checkedAt: null });
+    await expect(searchTenant(query, boundary)).resolves.toEqual({
+      code: "OK",
+      query: query.trim(),
+      hits: [],
+      checkedSources: [],
+      checkedAt: null,
+      coverage: { returnedHits: 0, matchingHitsAtLeast: 0, truncated: false },
+    });
     expect(boundary.readOrders).not.toHaveBeenCalled();
     expect(boundary.searchCustomers).not.toHaveBeenCalled();
   });
@@ -63,24 +70,57 @@ describe("Path-1 Lane-0 search contract", () => {
     ["Erika", "name", "Erika Muster"], ["GmbH", "companyName", "Muster GmbH"],
     ["K-1042", "customerNumber", "K-1042"], ["Stuttgart", "city", "Stuttgart"],
   ])("maps customer field %s without invented facts", async (query, matchField, matchValue) => {
-    const result = await searchTenant(query, ports({ readOrders: vi.fn().mockResolvedValue([]), searchCustomers: vi.fn().mockResolvedValue([CUSTOMER]) }));
+    const result = await searchTenant(query, ports({
+      readOrders: vi.fn().mockResolvedValue([]),
+      searchCustomers: vi.fn().mockResolvedValue({ records: [CUSTOMER], exhaustive: true }),
+    }));
     expect(result).toMatchObject({ code: "OK", hits: [{ type: "CUSTOMER", id: CUSTOMER.id, source: "Kundenstamm", matchField, matchValue, actionLabel: "Kundenkarte öffnen" }] });
+  });
+
+  it("proves the same cross-field customer record phrase as the SQL concat and keeps valid order hits", async () => {
+    const crossFieldCustomer = { ...CUSTOMER, companyName: "Weber GmbH", city: "Esslingen" };
+    const matchingOrder = { ...ORDER, task: "Muster Weber abstimmen" };
+    const result = await searchTenant("Muster Weber", ports({
+      readOrders: vi.fn().mockResolvedValue([matchingOrder]),
+      searchCustomers: vi.fn().mockResolvedValue({ records: [crossFieldCustomer], exhaustive: true }),
+    }));
+    expect(result).toMatchObject({
+      code: "OK",
+      hits: [
+        expect.objectContaining({ type: "ORDER", id: ORDER.id, matchField: "task", href: `/orders/${ORDER.id}` }),
+        expect.objectContaining({
+          type: "CUSTOMER",
+          id: CUSTOMER.id,
+          matchField: "customerRecord",
+          matchLabel: "Kundendatensatz",
+          matchValue: "Erika Muster Weber GmbH K-1042 Esslingen",
+          href: `/customers/${CUSTOMER.id}`,
+        }),
+      ],
+      coverage: { returnedHits: 2, matchingHitsAtLeast: 2, truncated: false },
+    });
   });
 
   it("deduplicates, sorts and caps deterministically", async () => {
     const orders = Array.from({ length: 16 }, (_, index) => ({ ...ORDER, id: `order-${index}`, title: `Treffer ${16 - index}` }));
     const customers = Array.from({ length: 16 }, (_, index) => ({ ...CUSTOMER, id: `customer-${index}`, name: `Treffer ${16 - index}`, companyName: null }));
-    const result = await searchTenant("Treffer", ports({ readOrders: vi.fn().mockResolvedValue([...orders, orders[0]]), searchCustomers: vi.fn().mockResolvedValue([...customers, customers[0]]) }));
+    const result = await searchTenant("Treffer", ports({
+      readOrders: vi.fn().mockResolvedValue([...orders, orders[0]]),
+      searchCustomers: vi.fn().mockResolvedValue({ records: [...customers, customers[0]], exhaustive: false }),
+    }));
     expect(result.code).toBe("OK");
     if (result.code !== "OK") throw new Error("unexpected result");
     expect(result.hits).toHaveLength(SEARCH_MAX_HITS);
     expect(new Set(result.hits.map((hit) => `${hit.type}-${hit.id}`)).size).toBe(SEARCH_MAX_HITS);
+    expect(result.coverage).toEqual({ returnedHits: 20, matchingHitsAtLeast: 32, truncated: true });
   });
 
   it.each(["orders", "customers", "clock"] as const)("fails the whole result closed when %s fails", async (failed) => {
     const boundary = ports({
       readOrders: failed === "orders" ? vi.fn().mockRejectedValue(new Error("private SQL")) : vi.fn().mockResolvedValue([]),
-      searchCustomers: failed === "customers" ? vi.fn().mockRejectedValue(new Error("tenant detail")) : vi.fn().mockResolvedValue([]),
+      searchCustomers: failed === "customers"
+        ? vi.fn().mockRejectedValue(new Error("tenant detail"))
+        : vi.fn().mockResolvedValue({ records: [], exhaustive: true }),
       readTimestamp: () => failed === "clock" ? "invalid" : CHECKED_AT,
     });
     const result = await searchTenant("Muster", boundary);
@@ -90,6 +130,12 @@ describe("Path-1 Lane-0 search contract", () => {
 
   it("fails closed on malformed or unproven port data", async () => {
     await expect(searchTenant("Muster", ports({ readOrders: vi.fn().mockResolvedValue([{ ...ORDER, dueDate: "18/09/2026" }]) }))).resolves.toMatchObject({ code: "UNAVAILABLE" });
-    await expect(searchTenant("nirgendwo", ports({ readOrders: vi.fn().mockResolvedValue([]), searchCustomers: vi.fn().mockResolvedValue([CUSTOMER]) }))).resolves.toMatchObject({ code: "UNAVAILABLE" });
+    await expect(searchTenant("nirgendwo", ports({
+      readOrders: vi.fn().mockResolvedValue([]),
+      searchCustomers: vi.fn().mockResolvedValue({ records: [CUSTOMER], exhaustive: true }),
+    }))).resolves.toMatchObject({ code: "UNAVAILABLE" });
+    await expect(searchTenant("Muster", ports({
+      searchCustomers: vi.fn().mockResolvedValue({ records: [CUSTOMER] }),
+    }))).resolves.toMatchObject({ code: "UNAVAILABLE" });
   });
 });

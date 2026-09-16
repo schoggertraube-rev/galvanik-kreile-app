@@ -1,8 +1,8 @@
-import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
+import { SettingsAppAdapter } from "./SettingsAppAdapter";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default function SettingsPage() {
-  return <FoundationUnavailable />;
+  return <SettingsAppAdapter />;
 }

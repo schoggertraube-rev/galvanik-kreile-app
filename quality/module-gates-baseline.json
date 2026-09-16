@@ -257,10 +257,6 @@
         "sha256": "0059B45B1B0A937B694091275518AB76A75AEC818CE9E1655A18373F58F2580E"
       },
       {
-        "path": "src/app/settings/page.tsx",
-        "sha256": "405E4D266A40D4B78C2EB8CAF8DACA26DCB47F5206AEF815944BC9950ED7E29C"
-      },
-      {
         "path": "src/app/station/layout.tsx",
         "sha256": "02F6D8657EF071EEA855113D6F068B858F577F5341BA21624D89B6574D49F41B"
       },

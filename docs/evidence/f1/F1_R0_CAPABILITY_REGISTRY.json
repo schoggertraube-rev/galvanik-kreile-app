@@ -678,7 +678,7 @@
       "visible": true,
       "reachable": true,
       "classification": "PENDING_CONTRACT",
-      "open_reason": "App settings. No verified contract."
+      "open_reason": "Gregor system-administration session surface is real in the P3 repair candidate; independent Exact-SHA closure review is still pending."
     },
     {
       "stable_id": "page.start",
@@ -1428,15 +1428,8 @@
       "exported_functions": [
         "searchTenantAction"
       ],
-      "classification": "REAL_VERIFIED",
-      "evidence": {
-        "mission": "PATH1_UI_CONVERGENCE_V5_P3_CORE_SURFACES_SEARCH",
-        "role": "Deterministic Lane-0 search over tenant-bound Orders and Customers read ports with V8/V2 deep-links and backstack.",
-        "environment": "FRESH_SUPABASE_LOOPBACK_ONLY",
-        "evidence_path": "docs/evidence/path1/PATH1_UI_CONVERGENCE_V5_P3_CORE_SURFACES_SEARCH.md",
-        "browser_receipt": "docs/evidence/path1/artifacts/p3-core-surfaces-search/p3-browser-receipt.json",
-        "browser_receipt_sha256": "5FDC58C4F92324AFAB84DA6C2164970B619849D264908D6DBC4244E82F48E3E4"
-      },
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "P3 Lane-0 candidate now carries tenant-bound sources, coverage and shareable V8/V2 hrefs; independent closure review is pending.",
       "visible": true,
       "reachable": true
     },
@@ -1615,7 +1608,7 @@
         "globalSearchAction"
       ],
       "classification": "PENDING_CONTRACT",
-      "open_reason": "Global search action delegate. Supabase-connected, no independent E2E evidence.",
+      "open_reason": "Dormant compatibility export delegates only to the authenticated tenant-bound Lane-0 action; it is not a second search implementation.",
       "visible": false,
       "reachable": false
     },

@@ -3,9 +3,11 @@
   "version": "1.0.0",
   "owner": "Path-1 Fundament (authentifizierter Produkteinstieg)",
   "publicExports": [
-    "@/modules/fundament/public#ProductStartProfile"
+    "@/modules/fundament/public#ProductStartProfile",
+    "@/modules/fundament/public#SystemAdminView",
+    "@/modules/fundament/public#SystemAdminViewProps"
   ],
-  "capabilities": [],
+  "capabilities": ["system-admin:session-status"],
   "migrations": [],
   "viewsFunctions": [],
   "ownsTables": [],

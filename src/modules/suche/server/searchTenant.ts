@@ -98,13 +98,22 @@ function customerMatchField(customer: SearchCustomerDocument, query: string): Se
   if (includesQuery(customer.companyName, query)) return "companyName";
   if (includesQuery(customer.customerNumber, query)) return "customerNumber";
   if (includesQuery(customer.city, query)) return "city";
+  if (includesQuery(customerRecordText(customer), query)) return "customerRecord";
   return null;
+}
+
+/** Mirrors Postgres concat_ws(' ', name, company_name, customer_number, city). */
+function customerRecordText(customer: SearchCustomerDocument): string {
+  return [customer.name, customer.companyName, customer.customerNumber, customer.city]
+    .filter((value): value is string => value !== null)
+    .join(" ");
 }
 
 const MATCH_LABEL: Record<SearchMatchField, string> = {
   orderNumber: "Auftragsnummer", title: "Auftrag", customerName: "Kunde", task: "Aufgabe",
   part: "Teil", material: "Material", surface: "Oberfläche", dueDate: "Termin",
   name: "Kundenname", companyName: "Firma", customerNumber: "Kundennummer", city: "Ort",
+  customerRecord: "Kundendatensatz",
 };
 
 function orderMatchValue(order: SearchOrderDocument, field: SearchMatchField, query: string): string {
@@ -126,6 +135,7 @@ function customerMatchValue(customer: SearchCustomerDocument, field: SearchMatch
   if (field === "companyName") return customer.companyName ?? "";
   if (field === "customerNumber") return customer.customerNumber ?? "";
   if (field === "city") return customer.city ?? "";
+  if (field === "customerRecord") return customerRecordText(customer);
   throw new Error("SEARCH_CUSTOMER_MATCH_UNPROVEN");
 }
 
@@ -137,6 +147,7 @@ function toOrderHit(order: SearchOrderDocument, matchField: SearchMatchField, qu
     status: order.status, matchField, source: "Auftragsbestand", matchLabel: MATCH_LABEL[matchField],
     matchValue: orderMatchValue(order, matchField, query),
     context: [order.orderNumber, order.customerName, dueDate ? `Termin ${dueDate}` : null].filter(Boolean).join(" · "),
+    href: `/orders/${encodeURIComponent(order.id)}`,
     actionLabel: "Auftragskarte öffnen",
   };
 }
@@ -148,6 +159,7 @@ function toCustomerHit(customer: SearchCustomerDocument, matchField: SearchMatch
     matchField, source: "Kundenstamm", matchLabel: MATCH_LABEL[matchField],
     matchValue: customerMatchValue(customer, matchField),
     context: [customer.companyName ?? customer.name, customer.customerNumber, customer.city].filter(Boolean).join(" · "),
+    href: `/customers/${encodeURIComponent(customer.id)}`,
     actionLabel: "Kundenkarte öffnen",
   };
 }
@@ -171,12 +183,26 @@ export async function searchTenant(query: unknown, ports: SearchPorts): Promise<
   const normalized = normalizeSearchQuery(query);
   if (normalized.code === "INVALID") return { code: "VALIDATION_ERROR", message: INVALID_QUERY_MESSAGE };
   if (normalized.code === "EMPTY") {
-    return { code: "OK", query: normalized.query, hits: [], checkedSources: [], checkedAt: null };
+    return {
+      code: "OK",
+      query: normalized.query,
+      hits: [],
+      checkedSources: [],
+      checkedAt: null,
+      coverage: { returnedHits: 0, matchingHitsAtLeast: 0, truncated: false },
+    };
   }
   try {
-    const [orders, customers] = await Promise.all([
+    const [orders, customerBatch] = await Promise.all([
       ports.readOrders(), ports.searchCustomers(normalized.query),
     ]);
+    if (
+      !customerBatch
+      || typeof customerBatch !== "object"
+      || !Array.isArray(customerBatch.records)
+      || typeof customerBatch.exhaustive !== "boolean"
+    ) throw new Error("SEARCH_CUSTOMER_BATCH_INVALID");
+    const customers = customerBatch.records;
     const checkedAt = assertTimestamp(ports.readTimestamp());
     const loweredQuery = normalizedText(normalized.query);
     const orderHits = new Map<string, SearchHit>();
@@ -192,11 +218,24 @@ export async function searchTenant(query: unknown, ports: SearchPorts): Promise<
       if (!matchField) throw new Error("SEARCH_CUSTOMER_MATCH_UNPROVEN");
       if (!customerHits.has(customer.id)) customerHits.set(customer.id, toCustomerHit(customer, matchField));
     }
-    const hits = [
+    const matchingHitsAtLeast = orderHits.size + customerHits.size;
+    const merged = [
       ...stableHits([...orderHits.values()]).slice(0, SEARCH_MAX_HITS_PER_TYPE),
       ...stableHits([...customerHits.values()]).slice(0, SEARCH_MAX_HITS_PER_TYPE),
-    ].slice(0, SEARCH_MAX_HITS);
-    return { code: "OK", query: normalized.query, hits, checkedSources: ["Auftragsbestand", "Kundenstamm"], checkedAt };
+    ];
+    const hits = merged.slice(0, SEARCH_MAX_HITS);
+    const truncated = !customerBatch.exhaustive
+      || orderHits.size > SEARCH_MAX_HITS_PER_TYPE
+      || customerHits.size > SEARCH_MAX_HITS_PER_TYPE
+      || merged.length > SEARCH_MAX_HITS;
+    return {
+      code: "OK",
+      query: normalized.query,
+      hits,
+      checkedSources: ["Auftragsbestand", "Kundenstamm"],
+      checkedAt,
+      coverage: { returnedHits: hits.length, matchingHitsAtLeast, truncated },
+    };
   } catch {
     return { code: "UNAVAILABLE", message: UNAVAILABLE_MESSAGE };
   }

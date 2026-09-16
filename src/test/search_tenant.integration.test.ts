@@ -81,7 +81,7 @@ describe("Path-1 P3 tenant search real database contract", () => {
       clientEventId: randomUUID(),
       customer: { mode: "NEW", name: `Suchkunde ${suffix}`, customerType: "business", companyName: `Nordlicht ${suffix} GmbH`, contactPerson: "Ada Suchtest", email: `ada-${suffix}@local.invalid`, phone: null, city: "Esslingen" },
       dueDate: "2026-11-19", note: "P3 Suchvertrag",
-      items: [{ name: `Pruefbolzen ${suffix}`, quantity: 2, material: `Titan ${suffix}`, surfaceRequested: `Hartchrom ${suffix}` }],
+      items: [{ name: `Pruefbolzen ${suffix} Nordlicht`, quantity: 2, material: `Titan ${suffix}`, surfaceRequested: `Hartchrom ${suffix}` }],
     }));
     expect(intake.code).toBe("OK");
     if (intake.code !== "OK") throw new Error(`P3_SEARCH_INTAKE_FAILED:${intake.code}`);
@@ -104,6 +104,16 @@ describe("Path-1 P3 tenant search real database contract", () => {
     expect(customer.code).toBe("OK");
     if (customer.code === "OK") expect(customer.hits).toContainEqual(expect.objectContaining({ id: intake.receipt.customerId, type: "CUSTOMER", matchField: "companyName" }));
 
+    const combined = await withSession(() => searchTenantAction(`${suffix} Nordlicht`));
+    expect(combined.code).toBe("OK");
+    if (combined.code === "OK") {
+      expect(combined.hits).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: intake.receipt.orderId, type: "ORDER", matchField: "part", href: `/orders/${intake.receipt.orderId}` }),
+        expect.objectContaining({ id: intake.receipt.customerId, type: "CUSTOMER", matchField: "customerRecord", href: `/customers/${intake.receipt.customerId}` }),
+      ]));
+      expect(combined.coverage.truncated).toBe(false);
+    }
+
     await expect(withRequest(null, () => searchTenantAction(intake.receipt.orderNumber))).resolves.toMatchObject({ code: "UNAUTHENTICATED" });
 
     const { readTenantOperationalOrders } = await import("@/lib/server/orderStationRead");
@@ -111,7 +121,10 @@ describe("Path-1 P3 tenant search real database contract", () => {
     const { searchTenant } = await import("@/modules/suche/public");
     const foreign = await searchTenant(intake.receipt.orderNumber, {
       readOrders: () => readTenantOperationalOrders({ tenantId: `foreign-${suffix}` }),
-      searchCustomers: (query) => searchOrderIntakeCustomers({ tenantId: `foreign-${suffix}` }, { query }),
+      searchCustomers: async (query) => ({
+        records: await searchOrderIntakeCustomers({ tenantId: `foreign-${suffix}` }, { query }),
+        exhaustive: true,
+      }),
       readTimestamp: () => new Date().toISOString(),
     });
     expect(foreign).toMatchObject({ code: "OK", hits: [] });

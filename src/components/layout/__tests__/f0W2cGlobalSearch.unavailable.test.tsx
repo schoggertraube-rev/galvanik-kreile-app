@@ -19,6 +19,7 @@ describe("W2C GlobalSearch real Lane-0 contract", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     rerender(<GlobalSearch onOpenChange={vi.fn()} open />);
     expect(screen.getByRole("dialog", { name: "Kunden und Aufträge" })).toHaveAttribute("aria-modal", "true");
+    expect(screen.getByTestId("search-backdrop").parentElement).toBe(document.body);
     expect(screen.queryByText("NOT_AVAILABLE")).not.toBeInTheDocument();
     expect(screen.queryByText(/nicht verfügbar/i)).not.toBeInTheDocument();
   });
@@ -26,23 +27,44 @@ describe("W2C GlobalSearch real Lane-0 contract", () => {
   it("opens the same V8/V2 overlay truth for order and customer hits", async () => {
     ports.search.mockResolvedValueOnce({
       code: "OK", query: "A-42", checkedSources: ["Auftragsbestand", "Kundenstamm"], checkedAt: "2026-09-16T08:15:00.000Z",
-      hits: [{ type: "ORDER", id: "order-1", title: "Auftrag", subtitle: "A-42", status: "angenommen", matchField: "orderNumber", source: "Auftragsbestand", matchLabel: "Auftragsnummer", matchValue: "A-42", context: "A-42 · Kunde", actionLabel: "Auftragskarte öffnen" }],
+      coverage: { returnedHits: 1, matchingHitsAtLeast: 1, truncated: false },
+      hits: [{ type: "ORDER", id: "order-1", title: "Auftrag", subtitle: "A-42", status: "angenommen", matchField: "orderNumber", source: "Auftragsbestand", matchLabel: "Auftragsnummer", matchValue: "A-42", context: "A-42 · Kunde", href: "/orders/order-1", actionLabel: "Auftragskarte öffnen" }],
     });
     const { rerender } = render(<GlobalSearch onOpenChange={vi.fn()} open />);
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "A-42" } });
     await act(() => vi.runAllTimersAsync());
+    expect(screen.getByRole("option", { name: /Auftrag/ })).toHaveAttribute("href", "/orders/order-1");
     fireEvent.click(screen.getByRole("option", { name: /Auftrag/ }));
     expect(ports.openOrder).toHaveBeenCalledWith("order-1");
 
     ports.search.mockResolvedValueOnce({
       code: "OK", query: "Kunde", checkedSources: ["Auftragsbestand", "Kundenstamm"], checkedAt: "2026-09-16T08:16:00.000Z",
-      hits: [{ type: "CUSTOMER", id: "customer-1", title: "Muster GmbH", subtitle: "K-1", status: "business", matchField: "companyName", source: "Kundenstamm", matchLabel: "Firma", matchValue: "Muster GmbH", context: "Muster GmbH · K-1", actionLabel: "Kundenkarte öffnen" }],
+      coverage: { returnedHits: 1, matchingHitsAtLeast: 1, truncated: false },
+      hits: [{ type: "CUSTOMER", id: "customer-1", title: "Muster GmbH", subtitle: "K-1", status: "business", matchField: "companyName", source: "Kundenstamm", matchLabel: "Firma", matchValue: "Muster GmbH", context: "Muster GmbH · K-1", href: "/customers/customer-1", actionLabel: "Kundenkarte öffnen" }],
     });
     rerender(<GlobalSearch onOpenChange={vi.fn()} open />);
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "Kunde" } });
     await act(() => vi.runAllTimersAsync());
     fireEvent.click(screen.getByRole("option", { name: /Muster GmbH/ }));
     expect(ports.openCustomer).toHaveBeenCalledWith("customer-1");
+  });
+
+  it("portals above an existing entity overlay and focuses after Ctrl+K opens it", () => {
+    const onOpenChange = vi.fn();
+    const { rerender } = render(
+      <div data-testid="entity-overlay" style={{ position: "fixed", zIndex: 500 }}>
+        <GlobalSearch onOpenChange={onOpenChange} open={false} />
+      </div>,
+    );
+    fireEvent.keyDown(document, { ctrlKey: true, key: "k" });
+    expect(onOpenChange).toHaveBeenCalledWith(true);
+    rerender(
+      <div data-testid="entity-overlay" style={{ position: "fixed", zIndex: 500 }}>
+        <GlobalSearch onOpenChange={onOpenChange} open />
+      </div>,
+    );
+    expect(screen.getByTestId("search-backdrop").parentElement).toBe(document.body);
+    expect(screen.getByRole("combobox")).toHaveFocus();
   });
 
   it("keeps denial and port failure fail-closed without partial results", async () => {

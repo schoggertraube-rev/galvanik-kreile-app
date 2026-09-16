@@ -11,6 +11,7 @@ import {
 
 const UNAVAILABLE_MESSAGE = "Die internen Bestände konnten nicht sicher durchsucht werden.";
 const DENIAL_MESSAGE = "Diese Suche ist für die aktuelle Sitzung nicht freigegeben.";
+const CUSTOMER_READ_PORT_LIMIT = 20;
 
 function diagnosticFields(error: unknown): { message?: string; details?: string; hint?: string } {
   if (!error || typeof error !== "object") return {};
@@ -58,7 +59,13 @@ export async function searchTenantAction(query: string): Promise<SearchTenantRes
     },
     searchCustomers: async (customerQuery) => {
       try {
-        return await searchOrderIntakeCustomers(authorization.data, { query: customerQuery });
+        const records = await searchOrderIntakeCustomers(authorization.data, { query: customerQuery });
+        return {
+          records,
+          // The existing read port intentionally caps at 20. Reaching that cap
+          // cannot prove completeness, so the reusable core must mark coverage.
+          exhaustive: records.length < CUSTOMER_READ_PORT_LIMIT,
+        };
       } catch (error) {
         logPortFailure("customers", error);
         throw error;

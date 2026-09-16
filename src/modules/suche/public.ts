@@ -6,6 +6,8 @@ export {
 } from "./server/types";
 export type {
   SearchCustomerDocument,
+  SearchCustomerBatch,
+  SearchCoverage,
   SearchDialogProps,
   SearchDialogState,
   SearchHit,

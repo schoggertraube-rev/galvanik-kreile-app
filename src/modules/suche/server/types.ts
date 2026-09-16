@@ -17,7 +17,8 @@ export type SearchMatchField =
   | "name"
   | "companyName"
   | "customerNumber"
-  | "city";
+  | "city"
+  | "customerRecord";
 
 export type SearchSource = "Auftragsbestand" | "Kundenstamm";
 
@@ -32,6 +33,7 @@ export type SearchHit = {
   matchLabel: string;
   matchValue: string;
   context: string;
+  href: `/orders/${string}` | `/customers/${string}`;
   actionLabel: "Auftragskarte öffnen" | "Kundenkarte öffnen";
 };
 
@@ -62,9 +64,21 @@ export type SearchCustomerDocument = {
   city: string | null;
 };
 
+export type SearchCustomerBatch = {
+  records: readonly SearchCustomerDocument[];
+  /** False only when the adapter can prove that the source returned its complete match set. */
+  exhaustive: boolean;
+};
+
+export type SearchCoverage = {
+  returnedHits: number;
+  matchingHitsAtLeast: number;
+  truncated: boolean;
+};
+
 export type SearchPorts = {
   readOrders: () => Promise<readonly SearchOrderDocument[]>;
-  searchCustomers: (query: string) => Promise<readonly SearchCustomerDocument[]>;
+  searchCustomers: (query: string) => Promise<SearchCustomerBatch>;
   readTimestamp: () => string;
 };
 
@@ -75,6 +89,7 @@ export type SearchTenantResult =
       hits: SearchHit[];
       checkedSources: SearchSource[];
       checkedAt: string | null;
+      coverage: SearchCoverage;
     }
   | { code: "UNAUTHENTICATED"; message: string }
   | { code: "FORBIDDEN"; message: string }
