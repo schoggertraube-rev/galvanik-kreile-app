@@ -52,7 +52,6 @@ import { SyncProvider } from "@/lib/offline/SyncContext";
 import { FeatureFlagProvider } from "@/lib/analytics/useFeatureFlag";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 
-import { isAdminOrDeveloper } from "@/lib/auth/permissions";
 import { getAuthBootstrapState } from "@/lib/server/authBootstrap";
 import { GlobalCreateAppAdapter } from "./GlobalCreateAppAdapter";
 
@@ -61,8 +60,10 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const isAdmin = await isAdminOrDeveloper();
   const authState = await getAuthBootstrapState();
+  const isAdmin =
+    authState.status === "authenticated" &&
+    (authState.user.role === "admin" || authState.user.role === "developer");
 
   return (
     <html

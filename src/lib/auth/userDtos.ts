@@ -1,14 +1,6 @@
-import { getProductIdentity } from "./authorizationContract";
-
 export type StartUserDto = {
   loginHandle: string;
   identity: "rolf" | "phillip";
-};
-
-export type StartUserSource = {
-  id: string;
-  fullName: string;
-  role: string;
 };
 
 export type AdminUserDto = {
@@ -31,26 +23,6 @@ export function deriveUserInitials(fullName: string): string {
   }
 
   return normalized.slice(0, 2).toUpperCase();
-}
-
-export function toStartUserDto(
-  user: StartUserSource,
-  loginHandle: string,
-): StartUserDto | null {
-  const productIdentity = getProductIdentity(user.id);
-  if (
-    !productIdentity
-    || (productIdentity.name !== "Rolf" && productIdentity.name !== "Phillip")
-    || (productIdentity.name === "Rolf" && user.role !== "meister")
-    || (productIdentity.name === "Phillip" && user.role !== "werkstatt")
-  ) {
-    return null;
-  }
-
-  return {
-    loginHandle,
-    identity: productIdentity.name === "Rolf" ? "rolf" : "phillip",
-  };
 }
 
 export function toAdminUserDto(user: AdminUserDto): AdminUserDto {

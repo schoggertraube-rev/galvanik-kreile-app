@@ -35,10 +35,10 @@ interface PermissionsContextType extends AuthState {
 function buildInitialAuthState(initial: AuthBootstrapState): AuthState {
   if (initial.status === "authenticated") {
     return {
-      role: initial.session.role,
+      role: initial.user.role,
       permissions: [],
-      name: initial.session.displayName,
-      initials: deriveInitials(initial.session.displayName),
+      name: initial.user.displayName,
+      initials: deriveInitials(initial.user.displayName),
       status: "authenticated",
       error: null,
     };

@@ -1,26 +1,35 @@
 import { redirect } from "next/navigation";
-import { resolveAuthorization } from "@/lib/server/authorization";
-import { getProductIdentity } from "@/lib/auth/authorizationContract";
+import { resolveProductActorAuthorization } from "@/lib/server/productActorReadiness";
 import { RolfHome } from "@/components/home/RolfHome";
 import { loadWerkstattHome } from "@/components/home/WerkstattHome";
 import { WerkstattAppAdapter } from "@/app/warendurchlauf/WerkstattAppAdapter";
+import { ProductActorAccessUnavailable } from "@/components/foundation/FoundationUnavailable";
 
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const authorization = await resolveAuthorization();
-  if (!authorization.ok) redirect("/start");
-
-  const { role, userId } = authorization.data;
-  const productIdentity = getProductIdentity(userId);
-  if (!productIdentity) return redirect("/start");
-  if (productIdentity.name === "Gregor" && (role === "admin" || role === "developer")) return redirect("/settings");
-  if (productIdentity.name === "Phillip" && role === "werkstatt") {
-    return <WerkstattAppAdapter view={await loadWerkstattHome(authorization.data)} />;
-  }
-  if (productIdentity.name === "Rolf" && role === "meister") {
-    return <RolfHome authorization={authorization.data} />;
+  const result = await resolveProductActorAuthorization();
+  if (!result.ok) {
+    if (result.reason === "NO_SESSION" || result.reason === "INVALID_SESSION") {
+      redirect("/start");
+    }
+    return (
+      <ProductActorAccessUnavailable
+        supportReference={result.supportReference}
+      />
+    );
   }
 
-  return redirect("/start");
+  const { actor, authorization } = result.data;
+  if (actor.key === "gregor") redirect("/settings");
+  if (actor.key === "phillip") {
+    return (
+      <WerkstattAppAdapter view={await loadWerkstattHome(authorization)} />
+    );
+  }
+  if (actor.key === "rolf") {
+    return <RolfHome authorization={authorization} />;
+  }
+
+  return <ProductActorAccessUnavailable />;
 }

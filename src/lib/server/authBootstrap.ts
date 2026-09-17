@@ -1,44 +1,53 @@
-import { readAppSession, type AppSession } from "@/lib/server/appSession";
-import { getProductIdentity } from "@/lib/auth/authorizationContract";
+import "server-only";
+
+import type {
+  AppRole,
+  ProductIdentity,
+} from "@/lib/auth/authorizationContract";
+import { resolveProductActorAuthorization } from "@/lib/server/productActorReadiness";
+
+export type AuthBootstrapUser = {
+  role: AppRole;
+  displayName: ProductIdentity["name"];
+};
 
 export type AuthBootstrapState =
-  | { status: "authenticated"; session: AppSession }
+  | { status: "authenticated"; user: AuthBootstrapUser }
   | { status: "unauthenticated" }
-  | { status: "error"; message: string };
+  | { status: "error"; message: string; supportReference?: string };
 
 /**
- * Serverseitiger Bootstrap für den kanonischen Benutzerzustand.
- * Liest ausschließlich die App-Session ohne Fallbacks auf Local Storage oder UI-Platzhalter ("?").
+ * Browser-minimaler Bootstrap. Derselbe serverseitige Chokepoint validiert
+ * Sitzung, DB-Rolle und alle drei Produktprofile; interne IDs verlassen den
+ * Server dabei nicht.
  */
 export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
-  const result = await readAppSession();
+  const result = await resolveProductActorAuthorization();
 
   if (result.ok) {
-    const identity = getProductIdentity(result.session.userId);
-    if (!identity) {
-      return {
-        status: "error",
-        message: "Sitzungsfehler: Kein eindeutiges Produktprofil konfiguriert",
-      };
-    }
     return {
       status: "authenticated",
-      session: {
-        ...result.session,
-        displayName: identity.name,
+      user: {
+        role: result.data.authorization.role,
+        displayName: result.data.actor.identity.name,
       },
     };
   }
 
-  // Bei NO_COOKIE gehen wir von unauthenticated aus.
-  if (result.reason === "NO_COOKIE") {
+  if (result.reason === "NO_SESSION") {
     return { status: "unauthenticated" };
   }
 
-  // Alle anderen Fehler (EXPIRED, MALFORMED, INVALID_SIGNATURE, INVALID_TENANT)
-  // sind echte Fehlerzustände, die der Client entsprechend verarbeiten kann.
+  if (result.reason === "INVALID_SESSION") {
+    return {
+      status: "error",
+      message: "Die Sitzung ist nicht mehr gültig. Bitte erneut anmelden.",
+    };
+  }
+
   return {
     status: "error",
-    message: `Sitzungsfehler: ${result.reason}`,
+    message: "Der Produktzugang ist momentan nicht sicher verfügbar.",
+    supportReference: result.supportReference,
   };
 }
