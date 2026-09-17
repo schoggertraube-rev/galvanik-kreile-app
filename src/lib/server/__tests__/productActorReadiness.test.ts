@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import type { Sql } from "postgres";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
+import { readConfiguredProductActorProfiles } from "../../../../scripts/quality/check-product-actor-readiness";
 import {
   evaluateProductActorReadinessFixture,
   type ProductActorConfiguration,
@@ -50,6 +52,28 @@ function evaluate(
 }
 
 describe("product actor readiness contract", () => {
+  it("binds actor UUIDs individually without the broken array serialization", async () => {
+    const calls: Array<{ text: string; values: unknown[] }> = [];
+    const sql = ((
+      strings: TemplateStringsArray,
+      ...values: unknown[]
+    ) => {
+      calls.push({ text: strings.join("?"), values });
+      return Promise.resolve([]);
+    }) as unknown as Sql;
+
+    await readConfiguredProductActorProfiles(sql, ACTORS);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].values).toEqual([
+      ACTORS.rolf,
+      ACTORS.phillip,
+      ACTORS.gregor,
+    ]);
+    expect(calls[0].text).not.toContain("ANY(");
+    expect(calls[0].text.match(/::uuid/g)).toHaveLength(3);
+  });
+
   it("fails closed when all actor bindings are missing", () => {
     expect(evaluate({ rolf: undefined, phillip: undefined, gregor: undefined }))
       .toMatchObject({ ok: false, code: "CONFIG_MISSING" });
