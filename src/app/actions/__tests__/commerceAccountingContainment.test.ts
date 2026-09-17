@@ -137,38 +137,30 @@ describe('Commerce and accounting structural containment (F0-W2C-B2M2)', () => {
     }
   });
 
-  it('removes the obsolete shipment shell and quarantines the five accounting views', async () => {
+  it('removes the obsolete shipment shell and retired export route while keeping inert clients quarantined', async () => {
     const files = [
       'app/buchhaltung/belege/BelegeClient.tsx',
       'app/buchhaltung/belege/[id]/BelegDetailClient.tsx',
       'app/buchhaltung/rechnungen/neu/RechnungForm.tsx',
       'app/buchhaltung/kosten/neu/KostenForm.tsx',
-      'app/buchhaltung/export/page.tsx',
     ];
     for (const file of files) {
       const source = await readFile(path.join(srcRoot, file), 'utf8');
       expect(source).toContain('FoundationUnavailable');
       expect(source).not.toMatch(/actions|OfflineManager|enqueue|<form\b|<button\b|<input\b|useRouter|fetch\(/i);
     }
+    expect(existsSync(path.join(srcRoot, 'app/buchhaltung/export/page.tsx'))).toBe(false);
     expect(existsSync(path.join(srcRoot, 'components/orders/variants/VersandVariant.tsx'))).toBe(false);
   });
 
-  it('renders accounting receipt routes as prop-free quarantined clients', async () => {
+  it('keeps retired accounting receipt routes non-rendering and their clients inert', async () => {
     const parentFiles = [
       'app/buchhaltung/belege/page.tsx',
       'app/buchhaltung/belege/[id]/page.tsx',
     ];
     for (const file of parentFiles) {
-      const source = await readFile(path.join(srcRoot, file), 'utf8');
-      expect(source).toContain('dynamic = "force-dynamic"');
-      expect(source).toContain('revalidate = 0');
-      expect(source).not.toMatch(/getBuchhaltungProvider|actions|searchParams|params|initialBelege|initialBeleg|BelegFilter|BelegDetail\s*\b/);
+      expect(existsSync(path.join(srcRoot, file)), file).toBe(false);
     }
-
-    const belegePage = await readFile(path.join(srcRoot, parentFiles[0]), 'utf8');
-    const detailPage = await readFile(path.join(srcRoot, parentFiles[1]), 'utf8');
-    expect(belegePage).toMatch(/return <BelegeClient\s*\/>/);
-    expect(detailPage).toMatch(/return <BelegDetailClient\s*\/>/);
 
     const clientFiles = [
       'app/buchhaltung/belege/BelegeClient.tsx',
@@ -231,23 +223,14 @@ describe('Accounting detail-read containment (F0-W2C-B2M5P)', () => {
     }
   });
 
-  it('keeps both detail pages as exact prop-free FoundationUnavailable compositions', async () => {
+  it('keeps both retired detail routes non-rendering', () => {
     const pages = [
       'app/buchhaltung/rechnungen/[id]/page.tsx',
       'app/buchhaltung/kosten/[id]/page.tsx',
     ] as const;
 
     for (const file of pages) {
-      const source = await readFile(path.join(srcRoot, file), 'utf8');
-      expect(source).toBe(
-        "import { FoundationUnavailable } from '@/components/foundation/FoundationUnavailable';\n\n" +
-          "export const dynamic = 'force-dynamic';\n" +
-          'export const revalidate = 0;\n\n' +
-          'export default function Page() {\n' +
-          '  return <FoundationUnavailable />;\n' +
-          '}\n',
-      );
-      expect(source).not.toMatch(/params|actions|Detail|Link|Feedback|Erfolg/);
+      expect(existsSync(path.join(srcRoot, file)), file).toBe(false);
     }
   });
 });

@@ -57,10 +57,7 @@ describe("W2C-B2M5D order creation quarantine", () => {
 
   it("source-locks repository and UI fail-closed boundaries", async () => {
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-    const [repository, scan] = await Promise.all([
-      readFile(path.join(root, "lib/repositories/ordersRepository.ts"), "utf8"),
-      readFile(path.join(root, "app/scan/page.tsx"), "utf8"),
-    ]);
+    const repository = await readFile(path.join(root, "lib/repositories/ordersRepository.ts"), "utf8");
     expect(repository).toContain('import { getOrdersDb, updateOrderDb } from "@/app/actions/orders.actions";');
     expect(repository).not.toContain("createOrderDb");
     expect(repository).toContain(`void data;\n    throw new Error("${message}");`);
@@ -68,7 +65,6 @@ describe("W2C-B2M5D order creation quarantine", () => {
     expect(repository).toContain("getOrdersDb()");
     expect(existsSync(path.join(root, "components/orders/NewOrderForm.tsx"))).toBe(false);
     expect(existsSync(path.join(root, "modules/orders/legacy-ui/NewOrderForm.tsx"))).toBe(false);
-    expect(scan).not.toContain("createOrderFromScan"); expect(scan).not.toContain("SuggestedItemsPanel"); expect(scan).not.toContain("handleConfirmOrder"); expect(scan).not.toContain("Kunde neu anlegen"); expect(scan).not.toContain("erfolgreich");
-    expect(scan).toContain(message); expect(scan).toContain("PageHeader"); expect(scan).toContain("CameraCapture"); expect(scan).toContain("onScanComplete={() => {}}");
+    expect(existsSync(path.join(root, "app/scan/page.tsx"))).toBe(false);
   });
 });

@@ -4,23 +4,10 @@ import Link from "next/link";
 import { useState } from "react";
 import { ArrowRight, ClipboardList, Factory, Inbox, PackageCheck, Truck, X } from "lucide-react";
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useOverlayStore } from "@/lib/overlayStore";
+import type { OrdersHomeProjection, OrdersHomeSource } from "@/modules/orders/public";
 import styles from "./RolfHome.module.css";
-
-export type RolfOrder = {
-  id: string;
-  orderNumber: string;
-  customerName: string | null;
-  title: string;
-  detail: string | null;
-  station: string;
-  status: string;
-  statusText: string;
-  risk: string;
-  dueDate: string;
-  dueLabel: string;
-  dueValue: string;
-};
 
 type RolfIdentity = {
   role: "buero" | "meister" | "readonly";
@@ -28,36 +15,12 @@ type RolfIdentity = {
 };
 
 export type RolfHomeModel =
-  | ({ kind: "data"; orders: readonly RolfOrder[] } & RolfIdentity)
-  | ({ kind: "empty" } & RolfIdentity)
+  | ({ kind: "data"; projection: OrdersHomeProjection } & RolfIdentity)
+  | ({ kind: "empty"; projection: OrdersHomeProjection } & RolfIdentity)
   | { kind: "denied"; message: string }
   | { kind: "error"; message: string };
 
-const RISK_ORDER: Readonly<Record<string, number>> = {
-  red: 0,
-  blocked: 1,
-  orange: 2,
-  yellow: 3,
-  green: 4,
-};
-
-function dueTimestamp(value: string): number {
-  const timestamp = new Date(value).getTime();
-  return Number.isFinite(timestamp) ? timestamp : Number.MAX_SAFE_INTEGER;
-}
-
-function rankedOrders(orders: readonly RolfOrder[]): readonly RolfOrder[] {
-  return [...orders]
-    .sort((left, right) => {
-      const risk = (RISK_ORDER[left.risk] ?? 5) - (RISK_ORDER[right.risk] ?? 5);
-      if (risk !== 0) return risk;
-      const due = dueTimestamp(left.dueDate) - dueTimestamp(right.dueDate);
-      return due !== 0 ? due : left.orderNumber.localeCompare(right.orderNumber, "de");
-    })
-    .slice(0, 6);
-}
-
-function riskLabel(risk: string): string {
+function riskLabel(risk: OrdersHomeSource["risk"]): string {
   if (risk === "red") return "Kritisch";
   if (risk === "blocked") return "Blockiert";
   if (risk === "orange") return "Dringend";
@@ -68,6 +31,7 @@ function riskLabel(risk: string): string {
 
 export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
   const openOrder = useOverlayStore((state) => state.openOrder);
+  const { hasPermission, loading: permissionsLoading } = usePermissions();
   const [goodsOutOpen, setGoodsOutOpen] = useState(false);
 
   if (model.kind === "denied") {
@@ -77,11 +41,12 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
     return <section className={styles.state} role="alert"><h1>Der Tagesbestand ist nicht verfügbar</h1><p>Datenstand: Es werden keine älteren Auftragsdaten angezeigt.</p><p>{model.message} Nächster Schritt: Seite erneut laden.</p></section>;
   }
 
-  const orders = model.kind === "data" ? model.orders : [];
-  const priority = rankedOrders(orders);
+  const orders = model.projection.orders;
+  const priority = model.projection.priority;
   const finished = orders.filter((order) => order.station === "fertig");
   const inProduction = orders.filter((order) => order.station === "galvanik");
   const canWrite = model.role !== "readonly";
+  const canStartOrder = canWrite && model.canCreateOrder && !permissionsLoading && hasPermission("perm_data_orders");
 
   return (
     <section className={styles.screen} aria-labelledby="rolf-title" data-testid="rolf-v8-home">
@@ -90,12 +55,13 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
           <p className={styles.eyebrow}>Der Tag</p>
           <h1 id="rolf-title">Guten Tag, Rolf</h1>
           <p>Was heute Aufmerksamkeit braucht – aus dem aktuellen Auftragsbestand.</p>
+          <p className={styles.dataStand}>Quelle: {model.projection.source} · Stand {new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(new Date(model.projection.loadedAt))}</p>
         </div>
-        <Link className={styles.primaryLink} href="/orders"><ClipboardList aria-hidden="true" />Alle Aufträge<ArrowRight aria-hidden="true" /></Link>
+        <Link className={styles.primaryLink} href="/orders" prefetch={false}><ClipboardList aria-hidden="true" />Alle Aufträge<ArrowRight aria-hidden="true" /></Link>
       </header>
 
       <nav className={styles.quick} aria-label="Schnellaktionen">
-        {canWrite && model.canCreateOrder ? (
+        {canStartOrder ? (
           <button type="button" onClick={() => requestGlobalCreate("DIRECT_INTAKE")}>
             <Inbox aria-hidden="true" /><span><strong>Neuer Eingang</strong><small>Kunde, Teile und Termin erfassen</small></span>
           </button>
@@ -105,7 +71,7 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
             <Truck aria-hidden="true" /><span><strong>Ware raus</strong><small>{finished.length} fertig gemeldet</small></span>
           </button>
         ) : null}
-        <Link href="/warendurchlauf"><Factory aria-hidden="true" /><span><strong>Werkstatt</strong><small>{inProduction.length} in der Galvanik</small></span></Link>
+        <Link href="/warendurchlauf" prefetch={false}><Factory aria-hidden="true" /><span><strong>Werkstatt</strong><small>{inProduction.length} in der Galvanik</small></span></Link>
       </nav>
 
       {model.kind === "empty" ? (
@@ -113,7 +79,7 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
           <PackageCheck aria-hidden="true" />
           <h2>Heute ist kein offener Auftrag eingegangen</h2>
           <p>Datenstand: Die mandantengebundene Auftragsprojektion ist geladen und enthält derzeit keine offenen Aufträge.</p>
-          {canWrite && model.canCreateOrder ? <button type="button" className={styles.primaryLink} onClick={() => requestGlobalCreate("DIRECT_INTAKE")}>Neuen Eingang anlegen<ArrowRight aria-hidden="true" /></button> : <Link className={styles.primaryLink} href="/orders">Aufträge öffnen<ArrowRight aria-hidden="true" /></Link>}
+          {canStartOrder ? <button type="button" className={styles.primaryLink} onClick={() => requestGlobalCreate("DIRECT_INTAKE")}>Neuen Eingang anlegen<ArrowRight aria-hidden="true" /></button> : <Link className={styles.primaryLink} href="/orders" prefetch={false}>Aufträge öffnen<ArrowRight aria-hidden="true" /></Link>}
         </div>
       ) : (
         <div className={styles.grid}>
@@ -122,6 +88,13 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
               <div><span className={styles.signal} aria-hidden="true" /> <h2 id="attention-title">Das braucht dich</h2></div>
               <span>{orders.length} offene Aufträge</span>
             </header>
+            {model.projection.dominant ? (
+              <button className={styles.dominantAction} onClick={() => openOrder(model.projection.dominant?.orderId ?? "")} type="button">
+                <span>Jetzt öffnen</span>
+                <strong>{model.projection.dominant.reason}</strong>
+                <ArrowRight aria-hidden="true" />
+              </button>
+            ) : null}
             <ol className={styles.priorityList}>
               {priority.map((order) => (
                 <li key={order.id}>
@@ -142,8 +115,8 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
             <button type="button" onClick={() => setGoodsOutOpen(true)} disabled={!canWrite}>
               <span><Truck aria-hidden="true" />Heute raus</span><strong>{finished.length}</strong><small>fertig gemeldet</small>
             </button>
-            <Link href="/warendurchlauf"><span><Factory aria-hidden="true" />Galvanik</span><strong>{inProduction.length}</strong><small>in Arbeit</small></Link>
-            <Link href="/orders"><span><ClipboardList aria-hidden="true" />Aufträge</span><strong>{orders.length}</strong><small>offen geladen</small></Link>
+            <Link href="/warendurchlauf" prefetch={false}><span><Factory aria-hidden="true" />Galvanik</span><strong>{inProduction.length}</strong><small>in Arbeit</small></Link>
+            <Link href="/orders" prefetch={false}><span><ClipboardList aria-hidden="true" />Aufträge</span><strong>{orders.length}</strong><small>offen geladen</small></Link>
           </aside>
         </div>
       )}

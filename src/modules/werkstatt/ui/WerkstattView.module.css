@@ -36,6 +36,32 @@
   flex-direction: column;
   gap: 4px;
 }
+.dataStand {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.dominantAction {
+  width: 100%;
+  min-height: 58px;
+  padding: 10px 14px;
+  border: 1px solid #c9b06d;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #fff7df;
+  color: #362d19;
+  text-align: left;
+}
+.dominantAction span {
+  font-size: 12px;
+  font-weight: 850;
+}
+.dominantAction strong {
+  font-size: 13px;
+}
 
 .eyebrow {
   font-size: 11px;

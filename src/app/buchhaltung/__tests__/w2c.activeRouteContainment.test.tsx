@@ -1,14 +1,7 @@
-import { realpathSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, realpathSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
-import { cleanup, render, screen } from '@testing-library/react';
 import ts from 'typescript';
-import { afterEach, describe, expect, it } from 'vitest';
-import AusgabenPage from '../ausgaben/page';
-import BwaPage from '../bwa/page';
-import KostenPage from '../kosten/page';
-import KraftstoffPage from '../kraftstoff/page';
-import PeriodenabschlussPage from '../periodenabschluss/page';
-import SteuerprofilPage from '../steuerprofil/page';
+import { describe, expect, it } from 'vitest';
 
 const repoRoot = resolve(process.cwd());
 const srcRoot = resolve(repoRoot, 'src');
@@ -25,16 +18,6 @@ if (parsedTsconfig.errors.length > 0) {
   throw new Error(parsedTsconfig.errors.map((error) => ts.flattenDiagnosticMessageText(error.messageText, '\n')).join('\n'));
 }
 
-const expectedSource = `import { FoundationUnavailable } from '@/components/foundation/FoundationUnavailable';
-
-export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
-export default function AccountingUnavailablePage() {
-  return <FoundationUnavailable />;
-}
-`;
-
 const accountingEntrySource = `import { AccountingEntry } from "@/modules/accounting/public";
 
 export const dynamic = 'force-dynamic';
@@ -45,13 +28,23 @@ export default function AccountingPage() {
 }
 `;
 
-const activeRoutes = [
-  ['buchhaltung/kosten/page.tsx', KostenPage],
-  ['buchhaltung/kraftstoff/page.tsx', KraftstoffPage],
-  ['buchhaltung/ausgaben/page.tsx', AusgabenPage],
-  ['buchhaltung/bwa/page.tsx', BwaPage],
-  ['buchhaltung/steuerprofil/page.tsx', SteuerprofilPage],
-  ['buchhaltung/periodenabschluss/page.tsx', PeriodenabschlussPage],
+const retiredAccountingPages = [
+  'buchhaltung/ausgaben/page.tsx',
+  'buchhaltung/belege/[id]/page.tsx',
+  'buchhaltung/belege/neu/page.tsx',
+  'buchhaltung/belege/page.tsx',
+  'buchhaltung/bwa/page.tsx',
+  'buchhaltung/einstellungen/page.tsx',
+  'buchhaltung/export/page.tsx',
+  'buchhaltung/fristen/page.tsx',
+  'buchhaltung/kosten/[id]/page.tsx',
+  'buchhaltung/kosten/neu/page.tsx',
+  'buchhaltung/kosten/page.tsx',
+  'buchhaltung/kraftstoff/page.tsx',
+  'buchhaltung/periodenabschluss/page.tsx',
+  'buchhaltung/rechnungen/[id]/page.tsx',
+  'buchhaltung/rechnungen/neu/page.tsx',
+  'buchhaltung/steuerprofil/page.tsx',
 ] as const;
 
 function canonicalExistingPath(path: string): string {
@@ -205,8 +198,6 @@ function memoryResolver(graph: Record<string, string>, entryPath: string, specif
   return graph[`${entryPath}|${specifier}`];
 }
 
-afterEach(() => cleanup());
-
 describe('W2C accounting active-route containment', () => {
   it('keeps real paths case-preserving while comparison keys follow the filesystem contract', () => {
     expect(comparisonKey('C:\\Repo\\Src\\App.tsx', true)).toBe('C:/Repo/Src/App.tsx');
@@ -278,7 +269,7 @@ describe('W2C accounting active-route containment', () => {
   });
 
   it('classifies forbidden direct and transitive dependency decisions without exclusions', () => {
-    const route = canonicalExistingPath(resolve(appRoot, 'buchhaltung/fristen/page.tsx'));
+    const route = 'mem://retired-accounting-page.tsx';
     const wrapper = 'mem://wrapper.ts';
     const control = 'mem://control.ts';
     const graph: Record<string, string> = {
@@ -335,26 +326,15 @@ describe('W2C accounting active-route containment', () => {
   });
 
   it('fails closed for nonliteral dynamic import and require in a considered dependency', () => {
-    const entryPath = canonicalExistingPath(resolve(appRoot, 'buchhaltung/fristen/page.tsx'));
+    const entryPath = resolve(appRoot, 'buchhaltung/fristen/page.tsx').replace(/\\/g, '/');
     const analysis = analyzeImports(entryPath, 'void import(specifier); require(factory());');
     expect(analysis.edges.filter((edge) => edge.unresolved).map((edge) => edge.specifier)).toEqual(['<nonliteral>', '<nonliteral>']);
   });
 
-  it('keeps each active accounting route byte-for-content fail-closed', () => {
+  it('keeps the accounting entry facade and physically removes every non-minimal page', () => {
     expect(readFileSync(join(appRoot, 'buchhaltung/page.tsx'), 'utf8').replace(/\r\n/g, '\n')).toBe(accountingEntrySource);
-    for (const [route] of activeRoutes) {
-      expect(readFileSync(join(appRoot, route), 'utf8').replace(/\r\n/g, '\n')).toBe(expectedSource);
-    }
-  });
-
-  it('renders every non-entry accounting route as the real foundation-unavailable state', () => {
-    for (const [, Page] of activeRoutes) {
-      render(<Page />);
-      expect(screen.getByText('NOT_AVAILABLE')).toBeVisible();
-      expect(screen.getByText('Operative Daten sind noch nicht verfügbar')).toBeVisible();
-      expect(screen.getByText('Für diesen Bereich ist noch keine kanonische, quellgestützte operative Datenbasis verfügbar.')).toBeVisible();
-      cleanup();
-    }
+    expect(existsSync(join(appRoot, 'buchhaltung/rechnungen/page.tsx'))).toBe(true);
+    for (const route of retiredAccountingPages) expect(existsSync(join(appRoot, route))).toBe(false);
   });
 
   it('keeps all route entries and their transitive local runtime dependencies away from unsafe targets', () => {
@@ -372,8 +352,4 @@ describe('W2C accounting active-route containment', () => {
 
   }, 15_000);
 
-  it('keeps the existing export route foundation-unavailable', () => {
-    const exportSource = readFileSync(join(appRoot, 'buchhaltung/export/page.tsx'), 'utf8').replace(/\r\n/g, '\n');
-    expect(exportSource).toBe(expectedSource.replace('AccountingUnavailablePage', 'ExportPage'));
-  });
 });

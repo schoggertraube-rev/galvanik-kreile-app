@@ -2,14 +2,9 @@
   "$comment": "S1 Naht 5 (UI-Vertrag): Altlasten mit verworfenen Stationsband-/Transport-Home-Bausteinen. Shrink-only; S4 leert die Liste. Nur ueber 'npm run quality:module-gates:update' + Review aendern.",
   "uiContract": {
     "allowedLegacyFiles": [
-      "src/app/station/layout.tsx",
-      "src/app/warendurchlauf/WarendurchlaufRouteNav.tsx",
-      "src/app/warendurchlauf/__tests__/w2cB2m5j.unavailable.realRender.test.tsx",
       "src/components/flow/WorkflowStrip.tsx",
       "src/components/layout/TabletTopFlowNav.tsx",
-      "src/components/layout/TopWorkflowBar.tsx",
-      "src/components/warendurchlauf/WarendurchlaufStationNav.tsx",
-      "src/components/warendurchlauf/__tests__/w2cB2m5u.stationNavTrend.failClosed.test.tsx"
+      "src/components/layout/TopWorkflowBar.tsx"
     ]
   },
   "entrypointContract": {
@@ -17,272 +12,20 @@
     "status": "TRANSITIONAL_BOOTSTRAP_SHRINK_ONLY",
     "entries": [
       {
-        "path": "src/app/admin/analytics/page.tsx",
-        "sha256": "953213F05249C22C2E761CF2942D225308AAF84F21F57F5AE76130BE9C02CE8E"
-      },
-      {
-        "path": "src/app/admin/devices/page.tsx",
-        "sha256": "851840575CED51768CA455769BA18C9873AA2CDA3D8BC84618CD392149C23441"
-      },
-      {
-        "path": "src/app/admin/import/page.tsx",
-        "sha256": "B7885BE68F96E7B7A7B34441B11999F90966D165B62285D13A5A904A69626E3F"
-      },
-      {
         "path": "src/app/admin/layout.tsx",
         "sha256": "988510BE531D9C4A4B1ED4295AC74FE74498F04895E2BECF6E3B844DA5B1652B"
-      },
-      {
-        "path": "src/app/admin/testanalyse/live/page.tsx",
-        "sha256": "1D84BD965251B8A13820D6DB5C838FCD6D804AD991B9B52821DC85F29C851DF3"
-      },
-      {
-        "path": "src/app/admin/testanalyse/page.tsx",
-        "sha256": "40D5A0E11504AA692809A01463797CC2266E63EBF2F0F6B76473ECCDD51687F4"
-      },
-      {
-        "path": "src/app/analyse/page.tsx",
-        "sha256": "365907F7F8327AF04ACB8092531865336B9867AF6EA54D6A59EED70B6C8AA0AB"
-      },
-      {
-        "path": "src/app/archive/page.tsx",
-        "sha256": "37666DF9D8B4ED38BF037F0996E8DE356544A12E63393A01BE08AD3C2E5EFBBA"
-      },
-      {
-        "path": "src/app/baeder/page.tsx",
-        "sha256": "2A8F9696149612D8F40DCEE8FF6E9CC9CC4AAA1278996B5FDBD6A1BAEB9502A5"
-      },
-      {
-        "path": "src/app/betrieb-kvp/page.tsx",
-        "sha256": "F7802BDA381612A3385ACFDFF2F135A81FBA394026BCADED1B806758239E115C"
-      },
-      {
-        "path": "src/app/betrieb/page.tsx",
-        "sha256": "5A47C06C25B5A74F6D8B3F181038D72D5D9071AFC15E389C23A45A59FC847F35"
-      },
-      {
-        "path": "src/app/buchhaltung/ausgaben/page.tsx",
-        "sha256": "4D9CD76B2CA96D2B78847099FD04BD30C00C3E6AD8BCCEF92F1A487042D42503"
-      },
-      {
-        "path": "src/app/buchhaltung/belege/[id]/page.tsx",
-        "sha256": "DFDDDF18AB8259A40CEA463C44FA2F1A45A5AE9768FC90A3E9D5B2F3D259B389"
-      },
-      {
-        "path": "src/app/buchhaltung/belege/neu/page.tsx",
-        "sha256": "5216110A6BF620A7CE77F9AE9D8E16190C76E7200DD79B3AD07C0AA1EE14FAAC"
-      },
-      {
-        "path": "src/app/buchhaltung/belege/page.tsx",
-        "sha256": "249E62CFEB3591BF8A79333765C582C16D8F67DE1931FF1F14FDE514711054CD"
-      },
-      {
-        "path": "src/app/buchhaltung/bwa/page.tsx",
-        "sha256": "4D9CD76B2CA96D2B78847099FD04BD30C00C3E6AD8BCCEF92F1A487042D42503"
-      },
-      {
-        "path": "src/app/buchhaltung/einstellungen/page.tsx",
-        "sha256": "5C6711D6F53153C115BE303F552BC0FF3609DC68C10EF5D43776B0069F2F6A99"
-      },
-      {
-        "path": "src/app/buchhaltung/export/page.tsx",
-        "sha256": "02DF1DA8758EEC76E3FBEA1320D91A807B2C6252B2936FDDBBCD2BF4E7733F42"
-      },
-      {
-        "path": "src/app/buchhaltung/fristen/page.tsx",
-        "sha256": "279ED0BD3E31E505CBDB1A1B21914FF8FD1D5C4360A21F35A18639B07A4E8E2D"
-      },
-      {
-        "path": "src/app/buchhaltung/kosten/[id]/page.tsx",
-        "sha256": "535C7DB5D7CA13D7F482B45E309C579D79CD7553B548FE30EC43A48947EF1F06"
-      },
-      {
-        "path": "src/app/buchhaltung/kosten/neu/page.tsx",
-        "sha256": "86157BCDA2B4375C8CE114A1919C0ED90969A21948970522EC0E357C164DB160"
-      },
-      {
-        "path": "src/app/buchhaltung/kosten/page.tsx",
-        "sha256": "4D9CD76B2CA96D2B78847099FD04BD30C00C3E6AD8BCCEF92F1A487042D42503"
-      },
-      {
-        "path": "src/app/buchhaltung/kraftstoff/page.tsx",
-        "sha256": "4D9CD76B2CA96D2B78847099FD04BD30C00C3E6AD8BCCEF92F1A487042D42503"
-      },
-      {
-        "path": "src/app/buchhaltung/periodenabschluss/page.tsx",
-        "sha256": "4D9CD76B2CA96D2B78847099FD04BD30C00C3E6AD8BCCEF92F1A487042D42503"
-      },
-      {
-        "path": "src/app/buchhaltung/rechnungen/[id]/page.tsx",
-        "sha256": "535C7DB5D7CA13D7F482B45E309C579D79CD7553B548FE30EC43A48947EF1F06"
       },
       {
         "path": "src/app/buchhaltung/rechnungen/loading.tsx",
         "sha256": "87A97386E3FF5964924403B0CEDB20011C3CA074C7A3D3C57EE2F6A0C4D3B69F"
       },
       {
-        "path": "src/app/buchhaltung/rechnungen/neu/page.tsx",
-        "sha256": "8724F7BD9FC83E02A1F6109B80B5D38CAA67E1424648131240E83F659BE2DA7C"
-      },
-      {
         "path": "src/app/buchhaltung/rechnungen/page.tsx",
         "sha256": "9EAECE968B54D022F32354A40CE3126B5722225C6949E10740A0A0AF1CAE4C07"
       },
       {
-        "path": "src/app/buchhaltung/steuerprofil/page.tsx",
-        "sha256": "4D9CD76B2CA96D2B78847099FD04BD30C00C3E6AD8BCCEF92F1A487042D42503"
-      },
-      {
-        "path": "src/app/cockpit/jahresplan/page.tsx",
-        "sha256": "FDEB5AB232B6C6EA7BE0F80A1519BA6B1A2E3B780E398F2BCA5B4542266F623C"
-      },
-      {
-        "path": "src/app/cockpit/page.tsx",
-        "sha256": "D3BF548637A9CBA2CF8810444B6CF0E9A0EB3C5471CA83F7395CB50445718B7D"
-      },
-      {
-        "path": "src/app/feedback/[token]/page.tsx",
-        "sha256": "4ECCDEB1EE5672983FCCB576F75FCA98D792C69471F721565327DA73490D7B34"
-      },
-      {
-        "path": "src/app/finanzen/page.tsx",
-        "sha256": "AB472FF07ABDEE3C875558861FBE750C6EFC9B5878B3C017BD309E07B9BB1A3D"
-      },
-      {
-        "path": "src/app/items/page.tsx",
-        "sha256": "ECBBE2548D72F149E8E0281C630721B52C1C6D16880B709870E70DB40AAE9598"
-      },
-      {
-        "path": "src/app/kalender/page.tsx",
-        "sha256": "CBA25B6CCF324A41C0393305B6219DA89B18AA565F7D34F64B3DB084E75F4514"
-      },
-      {
-        "path": "src/app/kommunikation/page.tsx",
-        "sha256": "72C2A8DD77E0AC2657A1E4FB74B470D989106C42D961278A4A52ACE5DC605078"
-      },
-      {
-        "path": "src/app/kontrolle/page.tsx",
-        "sha256": "6FD4EA8FE8878E9CA13978244D6A702B4E54910027508F4EA50BBE1032D0CACC"
-      },
-      {
-        "path": "src/app/kunden-auftraege/page.tsx",
-        "sha256": "C42B28A4D7D8C700D192346344C7104FA80028FF190D75365F0726867E0ED71C"
-      },
-      {
-        "path": "src/app/kvp/page.tsx",
-        "sha256": "BB5CD97DA8B82C6B4D2C2D31E5E91490E9B691D860AE4FA1212CF81A6EB5A2F1"
-      },
-      {
-        "path": "src/app/lager/page.tsx",
-        "sha256": "06BFFCEDB9474CD0065655A6A770A7E995D3023D6C3DD689541A42E20F4896CD"
-      },
-      {
-        "path": "src/app/lieferanten/[id]/page.tsx",
-        "sha256": "7561560FF4F0BC7A6E3135C7D74D5FD209A5F49C95D9B2996FD46E9E7B008750"
-      },
-      {
-        "path": "src/app/lieferanten/page.tsx",
-        "sha256": "0EC546EF9FD2EF2AD8EF41240AC30384B76DFA86CDF16CFA71C7DEE8F3508D3F"
-      },
-      {
-        "path": "src/app/marketing/aktion/neu/page.tsx",
-        "sha256": "FDB4A95F8B0A5A04054BC5DC4E50063D4E77B6E158762F88ED09C0B11692AA9A"
-      },
-      {
-        "path": "src/app/marketing/aktion/page.tsx",
-        "sha256": "613BF4A4BA8D3AF76C71F99DB5C189119DA1F4F3256FE950ECAE1ECB40FD0143"
-      },
-      {
-        "path": "src/app/marketing/attribution/page.tsx",
-        "sha256": "3930B1A7D3211E627742D4D70255DCA0CCF19D7B372C153F8D236F06A6A57C05"
-      },
-      {
-        "path": "src/app/marketing/einwilligungen/page.tsx",
-        "sha256": "213F292E33EF7EDFA939A873292F6FC21CF4AA556DF21A7E2BABDA5B8620DF9D"
-      },
-      {
-        "path": "src/app/marketing/kanaele/page.tsx",
-        "sha256": "A01A96077C5479D0285885F4E878308AB5124E32C8E2376802DB18C8E2B58078"
-      },
-      {
-        "path": "src/app/marketing/page.tsx",
-        "sha256": "B4F7FB803BD3DA4DF074870536450C3F516A47BC6D25C52B398487049E1C0DB2"
-      },
-      {
-        "path": "src/app/marketing/segmente/[id]/page.tsx",
-        "sha256": "C0E908531A58D362B1227FD4F1C2924F9095B87DE6E23339F28D8D926667FC93"
-      },
-      {
-        "path": "src/app/marketing/segmente/neu/page.tsx",
-        "sha256": "B0A9651DCAD67ADA7852EDD60D0CFF2BB7965E3B4CC55BF2A8F0E4309F70E486"
-      },
-      {
-        "path": "src/app/marketing/segmente/page.tsx",
-        "sha256": "55D466AFC05463F87350E38183D9D4BEF8D0FC64820608DF66A343A2760DA538"
-      },
-      {
-        "path": "src/app/performance/baeder-material/page.tsx",
-        "sha256": "221AB59CD960DE654805105B865D00B03DE872947AEB5A36344167C79559803F"
-      },
-      {
-        "path": "src/app/performance/ki-empfehlungen/page.tsx",
-        "sha256": "5DE733EC55160ADE1DB6A59B6218D96607C6E7EB4A53BE4BFB76D4B641652CC8"
-      },
-      {
-        "path": "src/app/performance/kunden-markt/page.tsx",
-        "sha256": "AED9942F5AD9E159D7BB00E079024303573429F59A4C0BC675F0F319D7BE1F93"
-      },
-      {
-        "path": "src/app/performance/page.tsx",
-        "sha256": "0D7D70290BC4DCF5B812E50A455624350A535254EC7D11CE2C4F984DC6A98C90"
-      },
-      {
-        "path": "src/app/performance/qualitaet-risiko/page.tsx",
-        "sha256": "2D52FBB06F21B665FAE6D2127CB4B75505B46023C6378145517F2C603111A5AF"
-      },
-      {
-        "path": "src/app/performance/umsatz-marge/page.tsx",
-        "sha256": "08D217EAA8C0060F791F7CF5CD163B2514AD80960A45DD0A9A6A709839E13E87"
-      },
-      {
-        "path": "src/app/performance/werkstatt-puls/page.tsx",
-        "sha256": "0DC3D4878AA8BCE331D2E84CFEDC839980C1A2C3E7927502F77F6033E28E25A6"
-      },
-      {
-        "path": "src/app/print-queue/page.tsx",
-        "sha256": "D4B121C5C1E3D97FC71995471AEE5AF9BEAF019AF866E4B9C5E09251E958B031"
-      },
-      {
-        "path": "src/app/scan/page.tsx",
-        "sha256": "0059B45B1B0A937B694091275518AB76A75AEC818CE9E1655A18373F58F2580E"
-      },
-      {
-        "path": "src/app/settings/page.tsx",
-        "sha256": "405E4D266A40D4B78C2EB8CAF8DACA26DCB47F5206AEF815944BC9950ED7E29C"
-      },
-      {
-        "path": "src/app/station/layout.tsx",
-        "sha256": "02F6D8657EF071EEA855113D6F068B858F577F5341BA21624D89B6574D49F41B"
-      },
-      {
-        "path": "src/app/status/page.tsx",
-        "sha256": "210810B8DA55F738C166DF7DFC9A11DFCB0CD05C8B015845C1D936E97B03F219"
-      },
-      {
         "path": "src/app/telefonnotiz/layout.tsx",
         "sha256": "AE8CBE00A8E35CBB102771712FFC02D0A0A9E081EE3DC0D12A4CF536720B1C7E"
-      },
-      {
-        "path": "src/app/telefonnotiz/page.tsx",
-        "sha256": "F61299EBFE2C30DAEEC75CFBE687A3937431C58EB2770A2307218309C0D6A967"
-      },
-      {
-        "path": "src/app/today/page.tsx",
-        "sha256": "01E90504FD752F0AB407665BA8BF6723AAD170A8E6CFFC40E68154A6C63F56A4"
-      },
-      {
-        "path": "src/app/warendurchlauf/layout.tsx",
-        "sha256": "E5EBF1F196F253B510F737CB7D30E0D8D7CE83B6AD31FB071E4351BCDBD4D0F4"
       },
       {
         "path": "src/app/warendurchlauf/neu/page.tsx",

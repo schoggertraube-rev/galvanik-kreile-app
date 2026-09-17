@@ -9,6 +9,8 @@ export type {
 } from "./ui/OrderStationAttachmentPanel";
 export { getUrgency } from "./domain/getUrgency";
 export type { Urgency } from "./domain/getUrgency";
+export { buildOrdersHomeProjection } from "./domain/buildOrdersHomeProjection";
+export type { OrdersHomeProjection, OrdersHomeSource } from "./domain/buildOrdersHomeProjection";
 export {
   isOrderLifecycleStatus,
   ORDER_ACCOUNTING_STATUS,

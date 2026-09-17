@@ -57,6 +57,9 @@ export type WerkstattViewPorts = {
 };
 
 export type WerkstattData = {
+  source: "Auftragsbestand";
+  loadedAt: string;
+  dominant: null | { orderId: string; reason: string };
   greetingName: string | null;
   dringendCount: number;
   weitereCount: number;

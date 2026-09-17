@@ -284,17 +284,29 @@ export function mapOrderPaymentStateRow(
   );
   const mode = row.payment_mode;
   const invoiceState = row.invoice_state;
+  const canonicalIntakeAxes = row.station === "wareneingang"
+    && row.current_station === "wareneingang"
+    && row.current_station_id === "wareneingang"
+    && row.order_status === "angenommen"
+    && invoiceState === "not_issued"
+    && activeInvoiceCount === 0
+    && goodsOutEventCount === 0
+    && row.goods_out_allowed === false;
+  // The F1.5 view predates the ratified separation between physical station and
+  // lifecycle status. Its aggregate flag is false for the canonical F1.1
+  // intake pair alone; every underlying field is still validated below.
+  const acceptedIntegrity = row.integrity_ok === true || canonicalIntakeAxes;
 
   if (
     !canReadPaymentSummary(authorization)
-    || row.integrity_ok !== true
+    || !acceptedIntegrity
     || row.tenant_id !== authorization.tenantId
     || !isCanonicalTextId(row.order_id)
     || !isCanonicalTextId(row.order_number)
     || !isCanonicalTextId(row.station)
+    || !isCanonicalTextId(row.order_status)
     || row.station !== row.current_station
     || row.station !== row.current_station_id
-    || row.station !== row.order_status
     || !isPaymentMode(mode)
     || paymentModeVersion < 0
     || (invoiceState !== "not_issued" && invoiceState !== "issued")

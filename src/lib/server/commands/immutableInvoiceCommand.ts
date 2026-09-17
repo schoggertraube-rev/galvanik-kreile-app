@@ -233,6 +233,24 @@ type LockedInvoice = {
   pdf_ref: string;
   pdf_sha256: string;
   pdf_content: Buffer | Uint8Array;
+  gross_amount_cents: number | string | null;
+  payment_contract_version: number | string | null;
+  payment_mode: string | null;
+  payment_status: string | null;
+  payment_open_amount_cents: number | string | null;
+  payment_paid_amount_cents: number | string | null;
+  payment_currency: string | null;
+  payment_method: string | null;
+  payment_paid_at: Date | string | null;
+  payment_receipt_id: string | null;
+  payment_event_id: string | null;
+  payment_correlation_id: string | null;
+  payment_version: number | string | null;
+};
+
+type LockedCancellationOrder = {
+  id: string;
+  tenant_id: string;
 };
 
 function isValidInput(input: unknown): input is CreateInvoiceInput {
@@ -311,6 +329,53 @@ function toSafeInteger(value: unknown, error: string): number {
   const parsed = typeof value === "number" ? value : Number(value);
   if (!Number.isSafeInteger(parsed)) throw new Error(error);
   return parsed;
+}
+
+/**
+ * Cancellation is legal only for the single, fully unpaid F1.5 state. The
+ * invoice row is already held FOR UPDATE when this is evaluated, so payment
+ * confirmation and cancellation can never both commit against the same
+ * version. Any legacy, partial, paid or internally inconsistent state is a
+ * business conflict, not an infrastructure fallback.
+ */
+function hasClearlyUnpaidPaymentState(invoice: LockedInvoice): boolean {
+  try {
+    const grossAmountCents = toSafeInteger(
+      invoice.gross_amount_cents,
+      "INVOICE_CANCEL_PAYMENT_GROSS_INVALID",
+    );
+    const openAmountCents = toSafeInteger(
+      invoice.payment_open_amount_cents,
+      "INVOICE_CANCEL_PAYMENT_OPEN_INVALID",
+    );
+    const paidAmountCents = toSafeInteger(
+      invoice.payment_paid_amount_cents,
+      "INVOICE_CANCEL_PAYMENT_PAID_INVALID",
+    );
+    const paymentVersion = toSafeInteger(
+      invoice.payment_version,
+      "INVOICE_CANCEL_PAYMENT_VERSION_INVALID",
+    );
+    return grossAmountCents > 0
+      && toSafeInteger(
+        invoice.payment_contract_version,
+        "INVOICE_CANCEL_PAYMENT_CONTRACT_INVALID",
+      ) === PAYMENT_CONTRACT_VERSION
+      && isPaymentMode(invoice.payment_mode)
+      && invoice.payment_status === "offen"
+      && openAmountCents === grossAmountCents
+      && paidAmountCents === 0
+      && paidAmountCents + openAmountCents === grossAmountCents
+      && invoice.payment_currency === "EUR"
+      && invoice.payment_method === null
+      && invoice.payment_paid_at === null
+      && invoice.payment_receipt_id === null
+      && invoice.payment_event_id === null
+      && invoice.payment_correlation_id === null
+      && paymentVersion === 0;
+  } catch {
+    return false;
+  }
 }
 
 function requiredText(value: unknown, error: string): string {
@@ -1176,10 +1241,38 @@ export async function cancelInvoice(input: unknown): Promise<CancelInvoiceResult
         return { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
       }
 
+      // Payment confirmation locks the order before the invoice. Cancellation
+      // uses the same order to avoid an invoice->order / order->invoice
+      // deadlock through the cancellation event's order foreign key.
+      const orderRows = await tx.execute<LockedCancellationOrder>(sql`
+        SELECT orders.id, orders.tenant_id
+        FROM public.invoices invoice
+        JOIN public.orders orders
+          ON orders.id = invoice.order_id
+         AND orders.tenant_id = invoice.tenant_id
+        WHERE invoice.id = ${input.invoiceId}::uuid
+          AND invoice.tenant_id = ${tenantId}
+          AND invoice.contract_version = 1
+        LIMIT 2
+        FOR UPDATE OF orders
+      `);
+      if (
+        orderRows.length !== 1
+        || !orderRows[0]
+        || orderRows[0].tenant_id !== tenantId
+      ) {
+        return { code: "NOT_FOUND", message: "Rechnung nicht verfügbar." };
+      }
+
       const invoiceRows = await tx.execute<LockedInvoice>(sql`
         SELECT
           id, tenant_id, order_id, invoice_number, status, aggregate_version,
-          snapshot, due_date, pdf_ref, pdf_sha256, pdf_content
+          snapshot, due_date, pdf_ref, pdf_sha256, pdf_content,
+          gross_amount_cents, payment_contract_version, payment_mode,
+          payment_status, payment_open_amount_cents, payment_paid_amount_cents,
+          payment_currency, payment_method, payment_paid_at,
+          payment_receipt_id, payment_event_id, payment_correlation_id,
+          payment_version
         FROM public.invoices
         WHERE id = ${input.invoiceId}::uuid
           AND tenant_id = ${tenantId}
@@ -1190,11 +1283,20 @@ export async function cancelInvoice(input: unknown): Promise<CancelInvoiceResult
       if (invoiceRows.length !== 1 || !invoice) {
         return { code: "NOT_FOUND", message: "Rechnung nicht verfügbar." };
       }
+      if (invoice.order_id !== orderRows[0].id) {
+        throw new Error("INVOICE_CANCEL_ORDER_INTEGRITY_INVALID");
+      }
       if (invoice.status !== "issued" || invoice.aggregate_version !== input.expectedVersion) {
         return { code: "CONFLICT", message: "Rechnung wurde bereits verändert." };
       }
       if (input.expectedVersion !== 1) {
         return { code: "CONFLICT", message: "Rechnung wurde bereits verändert." };
+      }
+      if (!hasClearlyUnpaidPaymentState(invoice)) {
+        return {
+          code: "CONFLICT",
+          message: "Die Rechnung kann nicht storniert werden, weil bereits eine Zahlung vorliegt oder der Zahlungsstand nicht eindeutig ist.",
+        };
       }
       if (
         invoice.tenant_id !== tenantId
@@ -1292,6 +1394,18 @@ export async function cancelInvoice(input: unknown): Promise<CancelInvoiceResult
           AND contract_version = 1
           AND status = 'issued'
           AND aggregate_version = ${input.expectedVersion}
+          AND payment_contract_version = ${PAYMENT_CONTRACT_VERSION}
+          AND payment_mode IN ('vorkasse', 'abholung', 'rechnung')
+          AND payment_status = 'offen'
+          AND payment_paid_amount_cents = 0
+          AND payment_open_amount_cents = gross_amount_cents
+          AND payment_currency = 'EUR'
+          AND payment_method IS NULL
+          AND payment_paid_at IS NULL
+          AND payment_receipt_id IS NULL
+          AND payment_event_id IS NULL
+          AND payment_correlation_id IS NULL
+          AND payment_version = 0
         RETURNING id
       `);
       if (updatedRows.length !== 1 || updatedRows[0]?.id !== invoice.id) {

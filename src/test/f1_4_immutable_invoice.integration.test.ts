@@ -49,10 +49,25 @@ const ISSUE_SEVEN_PERCENT_CLIENT_EVENT_ID = "14141414-1414-4141-8141-14141414141
 const CANCEL_SEVEN_PERCENT_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141411";
 const ISSUE_MISSING_TERM_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141412";
 const ISSUE_UNFINISHED_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141414";
+const ISSUE_PAYMENT_GUARD_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141415";
+const CANCEL_CORRUPT_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141416";
+const CANCEL_PARTIAL_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141417";
+const CANCEL_PAID_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141418";
+const PARTIAL_PAYMENT_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141419";
+const FULL_PAYMENT_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141420";
+const RACE_FREEZE_ID = "14141414-1414-4141-8141-141414141421";
+const RACE_FREEZE_EVENT_ID = "14141414-1414-4141-8141-141414141422";
+const RACE_FREEZE_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141423";
+const RACE_FREEZE_CORRELATION_ID = "14141414-1414-4141-8141-141414141424";
+const RACE_ISSUE_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141425";
+const RACE_CANCEL_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141426";
+const RACE_PAYMENT_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141427";
 const CUSTOMER_ID = "f14-command-customer";
 const ORDER_ID = "f14-command-order";
 const UNFINISHED_ORDER_ID = "f14-command-unfinished-order";
+const RACE_ORDER_ID = "f14-command-race-order";
 const ITEM_ID = "f14-command-item";
+const RACE_ITEM_ID = "f14-command-race-item";
 const SETTINGS_ID = "f14-command-settings";
 const FREEZE_EVENT_ID = "14141414-1414-4141-8141-141414141413";
 const ORDER_VERSION = 2;
@@ -131,16 +146,26 @@ async function assertFreshReset() {
       EXISTS (SELECT 1 FROM public.company_settings WHERE id = ${SETTINGS_ID}) AS settings_exists,
       EXISTS (SELECT 1 FROM public.customers WHERE id = ${CUSTOMER_ID}) AS customer_exists,
       EXISTS (
-        SELECT 1 FROM public.orders WHERE id IN (${ORDER_ID}, ${UNFINISHED_ORDER_ID})
+        SELECT 1 FROM public.orders WHERE id IN (${ORDER_ID}, ${UNFINISHED_ORDER_ID}, ${RACE_ORDER_ID})
       ) AS order_exists,
-      EXISTS (SELECT 1 FROM public.items WHERE id = ${ITEM_ID}) AS item_exists,
+      EXISTS (SELECT 1 FROM public.items WHERE id IN (${ITEM_ID}, ${RACE_ITEM_ID})) AS item_exists,
       EXISTS (SELECT 1 FROM private.extra_work_hourly_rates WHERE id = ${RATE_ID}::uuid) AS rate_exists,
-      EXISTS (SELECT 1 FROM private.order_freezes WHERE id = ${FREEZE_ID}::uuid) AS freeze_exists,
+      EXISTS (
+        SELECT 1 FROM private.order_freezes
+        WHERE id IN (${FREEZE_ID}::uuid, ${RACE_FREEZE_ID}::uuid)
+      ) AS freeze_exists,
       EXISTS (
         SELECT 1 FROM public.events
-        WHERE id = ${FREEZE_EVENT_ID} OR client_event_id = ${ISSUE_CLIENT_EVENT_ID}::uuid
+        WHERE id IN (${FREEZE_EVENT_ID}, ${RACE_FREEZE_EVENT_ID})
+           OR client_event_id IN (
+             ${ISSUE_CLIENT_EVENT_ID}::uuid,
+             ${ISSUE_PAYMENT_GUARD_CLIENT_EVENT_ID}::uuid,
+             ${RACE_ISSUE_CLIENT_EVENT_ID}::uuid
+           )
       ) AS event_exists,
-      EXISTS (SELECT 1 FROM public.invoices WHERE order_id = ${ORDER_ID}) AS invoice_exists,
+      EXISTS (
+        SELECT 1 FROM public.invoices WHERE order_id IN (${ORDER_ID}, ${RACE_ORDER_ID})
+      ) AS invoice_exists,
       EXISTS (
         SELECT 1 FROM private.invoice_number_sequences WHERE tenant_id = ${TENANT_ID}
       ) AS sequence_exists
@@ -205,12 +230,31 @@ async function insertPrerequisites() {
       )
     `;
     await transaction`
+      INSERT INTO public.orders (
+        id, tenant_id, order_number, customer_id, title, station,
+        current_station, current_station_id, version, status, created_at
+      ) VALUES (
+        ${RACE_ORDER_ID}, ${TENANT_ID}, 'A-F14-COMMAND-003', ${CUSTOMER_ID},
+        'F1.4 Synthetic Cancellation Race Order', 'fertig', 'fertig', 'fertig',
+        ${ORDER_VERSION}, 'fertig', now()
+      )
+    `;
+    await transaction`
       INSERT INTO public.items (
         id, tenant_id, order_id, customer_id, name, quantity,
         current_station_id, preis_netto, created_at
       ) VALUES (
         ${ITEM_ID}, ${TENANT_ID}, ${ORDER_ID}, ${CUSTOMER_ID},
         'F1.4 Synthetic Position', 1, 'fertig', 100.00, now()
+      )
+    `;
+    await transaction`
+      INSERT INTO public.items (
+        id, tenant_id, order_id, customer_id, name, quantity,
+        current_station_id, preis_netto, created_at
+      ) VALUES (
+        ${RACE_ITEM_ID}, ${TENANT_ID}, ${RACE_ORDER_ID}, ${CUSTOMER_ID},
+        'F1.4 Synthetic Race Position', 1, 'fertig', 50.00, now()
       )
     `;
     await transaction`
@@ -233,12 +277,37 @@ async function insertPrerequisites() {
       )
     `;
     await transaction`
+      INSERT INTO public.events (
+        id, tenant_id, order_id, item_id, event_type, description, user_id,
+        payload, status, station, created_at, client_event_id,
+        event_schema_version, correlation_id, aggregate_version, from_station
+      ) VALUES (
+        ${RACE_FREEZE_EVENT_ID}, ${TENANT_ID}, ${RACE_ORDER_ID}, NULL, 'ORDER_FROZEN_V1',
+        'Race order frozen from galvanik to fertig', ${USER_ID}::uuid,
+        ${transaction.json({ ...FREEZE_PAYLOAD, freezeId: RACE_FREEZE_ID })},
+        'success', 'fertig', ${FREEZE_INSTANT}::timestamptz AT TIME ZONE 'UTC',
+        ${RACE_FREEZE_CLIENT_EVENT_ID}::uuid, 1, ${RACE_FREEZE_CORRELATION_ID}::uuid,
+        ${ORDER_VERSION}, 'galvanik'
+      )
+    `;
+    await transaction`
       INSERT INTO private.order_freezes (
         id, tenant_id, order_id, event_id, hourly_rate_id,
         hourly_rate_cents, total_amount_cents, line_count, order_version,
         frozen_by, frozen_at
       ) VALUES (
         ${FREEZE_ID}::uuid, ${TENANT_ID}, ${ORDER_ID}, ${FREEZE_EVENT_ID},
+        ${RATE_ID}::uuid, 12000, 0, 0, ${ORDER_VERSION}, ${USER_ID}::uuid,
+        ${FREEZE_INSTANT}::timestamptz
+      )
+    `;
+    await transaction`
+      INSERT INTO private.order_freezes (
+        id, tenant_id, order_id, event_id, hourly_rate_id,
+        hourly_rate_cents, total_amount_cents, line_count, order_version,
+        frozen_by, frozen_at
+      ) VALUES (
+        ${RACE_FREEZE_ID}::uuid, ${TENANT_ID}, ${RACE_ORDER_ID}, ${RACE_FREEZE_EVENT_ID},
         ${RATE_ID}::uuid, 12000, 0, 0, ${ORDER_VERSION}, ${USER_ID}::uuid,
         ${FREEZE_INSTANT}::timestamptz
       )
@@ -297,6 +366,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
     setSyntheticSession();
 
     const { cancelInvoice, createInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
+    const { confirmPayment } = await import("@/lib/server/commands/confirmPaymentCommand");
     const {
       readInvoiceCancellationReceipt,
       readInvoicePdf,
@@ -1015,6 +1085,241 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
     `;
     expect(restoredTerm?.invoice_payment_term_days).toBe(originalPaymentTermDays);
 
+    // Payment truth and cancellation share the same locked invoice row. A
+    // missing payment contract, a one-cent partial payment and a full payment
+    // must all leave invoice, PDF and payment facts untouched by cancellation.
+    setSyntheticSession();
+    const paymentGuardInvoice = await createInvoice({
+      orderId: ORDER_ID,
+      expectedVersion: ORDER_VERSION,
+      clientEventId: ISSUE_PAYMENT_GUARD_CLIENT_EVENT_ID,
+    });
+    expect(paymentGuardInvoice.code).toBe("OK");
+    if (paymentGuardInvoice.code !== "OK") {
+      throw new Error(`F1_4_PAYMENT_GUARD_ISSUE_FAILED:${paymentGuardInvoice.code}`);
+    }
+
+    const readGuardState = async () => {
+      const [state] = await sql<{
+        status: string;
+        aggregate_version: number;
+        payment_contract_version: number | null;
+        payment_status: string | null;
+        payment_open_amount_cents: number | null;
+        payment_paid_amount_cents: number | null;
+        payment_version: number;
+        pdf_sha256: string;
+        cancel_event_id: string | null;
+        payment_event_id: string | null;
+        cancellation_event_count: number;
+      }[]>`
+        SELECT
+          invoice.status,
+          invoice.aggregate_version,
+          invoice.payment_contract_version,
+          invoice.payment_status,
+          invoice.payment_open_amount_cents,
+          invoice.payment_paid_amount_cents,
+          invoice.payment_version,
+          invoice.pdf_sha256,
+          invoice.cancel_event_id,
+          invoice.payment_event_id,
+          (
+            SELECT count(*)::integer
+            FROM public.events event
+            WHERE event.tenant_id = ${TENANT_ID}
+              AND event.event_type = 'INVOICE_CANCELLED_V1'
+              AND event.payload ->> 'invoiceId' = ${paymentGuardInvoice.receipt.invoiceId}
+          ) AS cancellation_event_count
+        FROM public.invoices invoice
+        WHERE invoice.id = ${paymentGuardInvoice.receipt.invoiceId}::uuid
+      `;
+      if (!state) throw new Error("F1_4_PAYMENT_GUARD_STATE_MISSING");
+      return state;
+    };
+
+    // Deliberately inject a local-only damaged legacy payment marker. The
+    // immutable trigger is disabled only for this fixture write and restored
+    // in the same finally block; production code and migrations are untouched.
+    await sql.unsafe("ALTER TABLE public.invoices DISABLE TRIGGER invoices_f14_update_guard");
+    try {
+      await sql`
+        UPDATE public.invoices
+        SET payment_contract_version = NULL
+        WHERE id = ${paymentGuardInvoice.receipt.invoiceId}::uuid
+          AND tenant_id = ${TENANT_ID}
+      `;
+    } finally {
+      await sql.unsafe("ALTER TABLE public.invoices ENABLE TRIGGER invoices_f14_update_guard");
+    }
+    const corruptState = await readGuardState();
+    setSyntheticSession();
+    await expect(cancelInvoice({
+      invoiceId: paymentGuardInvoice.receipt.invoiceId,
+      expectedVersion: 1,
+      reason: "Beschädigter Zahlungsstand darf nicht storniert werden",
+      clientEventId: CANCEL_CORRUPT_CLIENT_EVENT_ID,
+    })).resolves.toMatchObject({ code: "CONFLICT" });
+    expect(await readGuardState()).toEqual(corruptState);
+
+    await sql.unsafe("ALTER TABLE public.invoices DISABLE TRIGGER invoices_f14_update_guard");
+    try {
+      await sql`
+        UPDATE public.invoices
+        SET payment_contract_version = 1
+        WHERE id = ${paymentGuardInvoice.receipt.invoiceId}::uuid
+          AND tenant_id = ${TENANT_ID}
+      `;
+    } finally {
+      await sql.unsafe("ALTER TABLE public.invoices ENABLE TRIGGER invoices_f14_update_guard");
+    }
+
+    setSyntheticSession();
+    const oneCentPayment = await confirmPayment({
+      invoiceId: paymentGuardInvoice.receipt.invoiceId,
+      amount: 1,
+      method: "ueberweisung",
+      expectedVersion: 0,
+      clientEventId: PARTIAL_PAYMENT_CLIENT_EVENT_ID,
+    });
+    expect(oneCentPayment.code).toBe("OK");
+    if (oneCentPayment.code !== "OK") {
+      throw new Error(`F1_4_ONE_CENT_PAYMENT_FAILED:${oneCentPayment.code}`);
+    }
+    expect(oneCentPayment.receipt).toMatchObject({
+      amountCents: 1,
+      paidAmountCents: 1,
+      openAmountCents: paymentGuardInvoice.receipt.grossAmountCents - 1,
+      paymentStatus: "teilbezahlt",
+      paymentVersion: 1,
+    });
+    const partialState = await readGuardState();
+    setSyntheticSession();
+    await expect(cancelInvoice({
+      invoiceId: paymentGuardInvoice.receipt.invoiceId,
+      expectedVersion: 1,
+      reason: "Teilbezahlte Rechnung darf nicht storniert werden",
+      clientEventId: CANCEL_PARTIAL_CLIENT_EVENT_ID,
+    })).resolves.toMatchObject({ code: "CONFLICT" });
+    expect(await readGuardState()).toEqual(partialState);
+
+    setSyntheticSession();
+    const fullPayment = await confirmPayment({
+      invoiceId: paymentGuardInvoice.receipt.invoiceId,
+      amount: paymentGuardInvoice.receipt.grossAmountCents - 1,
+      method: "bar",
+      expectedVersion: 1,
+      clientEventId: FULL_PAYMENT_CLIENT_EVENT_ID,
+    });
+    expect(fullPayment.code).toBe("OK");
+    if (fullPayment.code !== "OK") {
+      throw new Error(`F1_4_FULL_PAYMENT_FAILED:${fullPayment.code}`);
+    }
+    expect(fullPayment.receipt).toMatchObject({
+      paidAmountCents: paymentGuardInvoice.receipt.grossAmountCents,
+      openAmountCents: 0,
+      paymentStatus: "bezahlt",
+      paymentVersion: 2,
+    });
+    const paidState = await readGuardState();
+    setSyntheticSession();
+    await expect(cancelInvoice({
+      invoiceId: paymentGuardInvoice.receipt.invoiceId,
+      expectedVersion: 1,
+      reason: "Bezahlte Rechnung darf nicht storniert werden",
+      clientEventId: CANCEL_PAID_CLIENT_EVENT_ID,
+    })).resolves.toMatchObject({ code: "CONFLICT" });
+    expect(await readGuardState()).toEqual(paidState);
+
+    // A separate unpaid invoice proves real row-lock serialization. Exactly
+    // one command wins; the final row can never be cancelled and paid.
+    setSyntheticSession();
+    const raceInvoice = await createInvoice({
+      orderId: RACE_ORDER_ID,
+      expectedVersion: ORDER_VERSION,
+      clientEventId: RACE_ISSUE_CLIENT_EVENT_ID,
+    });
+    expect(raceInvoice.code).toBe("OK");
+    if (raceInvoice.code !== "OK") {
+      throw new Error(`F1_4_RACE_ISSUE_FAILED:${raceInvoice.code}`);
+    }
+    setSyntheticSession();
+    const [raceCancellation, racePayment] = await Promise.all([
+      cancelInvoice({
+        invoiceId: raceInvoice.receipt.invoiceId,
+        expectedVersion: 1,
+        reason: "Paralleltest für Storno und Zahlung",
+        clientEventId: RACE_CANCEL_CLIENT_EVENT_ID,
+      }),
+      confirmPayment({
+        invoiceId: raceInvoice.receipt.invoiceId,
+        amount: 1,
+        method: "bar",
+        expectedVersion: 0,
+        clientEventId: RACE_PAYMENT_CLIENT_EVENT_ID,
+      }),
+    ]);
+    expect([raceCancellation.code, racePayment.code].sort()).toEqual(["CONFLICT", "OK"]);
+    const [raceState] = await sql<{
+      status: string;
+      payment_status: string;
+      payment_open_amount_cents: number;
+      payment_paid_amount_cents: number;
+      payment_version: number;
+      cancel_event_id: string | null;
+      payment_event_id: string | null;
+      cancellation_event_count: number;
+      payment_event_count: number;
+    }[]>`
+      SELECT
+        invoice.status,
+        invoice.payment_status,
+        invoice.payment_open_amount_cents,
+        invoice.payment_paid_amount_cents,
+        invoice.payment_version,
+        invoice.cancel_event_id,
+        invoice.payment_event_id,
+        count(*) FILTER (WHERE event.event_type = 'INVOICE_CANCELLED_V1')::integer
+          AS cancellation_event_count,
+        count(*) FILTER (WHERE event.event_type = 'PAYMENT_CONFIRMED_V1')::integer
+          AS payment_event_count
+      FROM public.invoices invoice
+      LEFT JOIN public.events event
+        ON event.tenant_id = invoice.tenant_id
+       AND event.payload ->> 'invoiceId' = invoice.id::text
+       AND event.event_type IN ('INVOICE_CANCELLED_V1', 'PAYMENT_CONFIRMED_V1')
+      WHERE invoice.id = ${raceInvoice.receipt.invoiceId}::uuid
+      GROUP BY invoice.id
+    `;
+    expect(raceState).toBeDefined();
+    if (raceCancellation.code === "OK") {
+      expect(raceState).toMatchObject({
+        status: "cancelled",
+        payment_status: "offen",
+        payment_open_amount_cents: raceInvoice.receipt.grossAmountCents,
+        payment_paid_amount_cents: 0,
+        payment_version: 0,
+        cancellation_event_count: 1,
+        payment_event_count: 0,
+      });
+      expect(raceState?.cancel_event_id).not.toBeNull();
+      expect(raceState?.payment_event_id).toBeNull();
+    } else {
+      expect(racePayment.code).toBe("OK");
+      expect(raceState).toMatchObject({
+        status: "issued",
+        payment_status: "teilbezahlt",
+        payment_open_amount_cents: raceInvoice.receipt.grossAmountCents - 1,
+        payment_paid_amount_cents: 1,
+        payment_version: 1,
+        cancellation_event_count: 0,
+        payment_event_count: 1,
+      });
+      expect(raceState?.cancel_event_id).toBeNull();
+      expect(raceState?.payment_event_id).not.toBeNull();
+    }
+    expect(!(raceState?.status === "cancelled" && raceState.payment_paid_amount_cents > 0)).toBe(true);
+
     await expect(readInvoiceReceipt(foreignAuthorization, {
       orderId: ORDER_ID,
       clientEventId: ISSUE_CLIENT_EVENT_ID,
@@ -1025,5 +1330,5 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
     })).resolves.toEqual({ code: "OK", data: null });
     await expect(readInvoicePdf(foreignAuthorization, issued.receipt.invoiceId))
       .resolves.toMatchObject({ code: "NOT_FOUND" });
-  }, 30_000);
+  }, 60_000);
 });

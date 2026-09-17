@@ -564,7 +564,7 @@ describe("W4 Galvanik handoff attachment panel", () => {
     finalize.resolve({ code: "OK", data: { receipt: done, replayed: false } });
     await waitFor(() => expect(ports.getAttachments).toHaveBeenCalledTimes(2));
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Metadaten werden erneut aus der Datenbank bestätigt",
+      "Gespeicherte Angaben werden geprüft",
     );
     expect(
       screen.queryByText(/Original sicher gespeichert/),

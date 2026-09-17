@@ -30,6 +30,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   it("1. gültige Session, aktiver Benutzer, identische Rolle", async () => {
@@ -321,6 +322,71 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
 
     const result = await getAuthorizationSnapshotAction();
     expect(result.ok).toBe(false);
+  });
+
+  it("13a. Client-Action erhält Actor-ID und zeigt Gregor statt eines technischen DB-Namens", async () => {
+    vi.stubEnv("KREILE_ROLF_APP_USER_ID", "rolf-actor");
+    vi.stubEnv("KREILE_PHILLIP_APP_USER_ID", "phillip-actor");
+    vi.stubEnv("KREILE_GREGOR_APP_USER_ID", "gregor-actor");
+    vi.spyOn(appSessionModule, "readAppSession").mockResolvedValue({
+      ok: true,
+      session: {
+        userId: "gregor-actor",
+        tenantId: KREILE_TENANT_SLUG,
+        role: "admin",
+        displayName: "Technical Admin",
+        issuedAt: Date.now(),
+        expiresAt: Date.now() + 10_000,
+      },
+    });
+    vi.mocked(db.select().from(appUsers).where).mockResolvedValue([{
+      id: "gregor-actor",
+      tenantId: KREILE_TENANT_SLUG,
+      fullName: "Technical Admin",
+      role: "admin",
+      active: true,
+      updatedAt: null,
+    }] as unknown as Array<typeof appUsers.$inferSelect>);
+
+    await expect(getAuthorizationSnapshotAction()).resolves.toMatchObject({
+      ok: true,
+      data: {
+        userId: "gregor-actor",
+        displayName: "Gregor",
+        role: "admin",
+      },
+    });
+  });
+
+  it("13b. Client-Action maskiert keinen mehrdeutig konfigurierten Actor", async () => {
+    vi.stubEnv("KREILE_ROLF_APP_USER_ID", "duplicate-actor");
+    vi.stubEnv("KREILE_PHILLIP_APP_USER_ID", "duplicate-actor");
+    vi.stubEnv("KREILE_GREGOR_APP_USER_ID", "gregor-actor");
+    vi.spyOn(appSessionModule, "readAppSession").mockResolvedValue({
+      ok: true,
+      session: {
+        userId: "duplicate-actor",
+        tenantId: KREILE_TENANT_SLUG,
+        role: "meister",
+        displayName: "Fremde Person",
+        issuedAt: Date.now(),
+        expiresAt: Date.now() + 10_000,
+      },
+    });
+    vi.mocked(db.select().from(appUsers).where).mockResolvedValue([{
+      id: "duplicate-actor",
+      tenantId: KREILE_TENANT_SLUG,
+      fullName: "Fremde Person",
+      role: "meister",
+      active: true,
+      updatedAt: null,
+    }] as unknown as Array<typeof appUsers.$inferSelect>);
+
+    await expect(getAuthorizationSnapshotAction()).resolves.toEqual({
+      ok: false,
+      reason: "AUTHORIZATION_UNAVAILABLE",
+      message: "AUTH_ERROR: Kein eindeutiges Produktprofil konfiguriert",
+    });
   });
 
   it("14. Sicherheitsänderung nach Session-Ausstellung widerruft die Sitzung", async () => {

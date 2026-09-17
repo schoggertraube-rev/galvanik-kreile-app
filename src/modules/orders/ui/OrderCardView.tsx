@@ -132,9 +132,9 @@ export function OrderCardView({
   return (
     <article className={styles.orderCardV8} data-testid="order-card-v8">
       <header className={styles.cardHeader}>
-        <button type="button" className={styles.back} onClick={onClose}>
+        <button type="button" className={styles.back} onClick={onClose} aria-label="Zurück">
           <ArrowLeft />
-          Zurück
+          <span>Zurück</span>
         </button>
         <div className={styles.identityBlock}>
           <p>{card.orderNumber}</p>
@@ -220,7 +220,7 @@ export function OrderCardView({
           </div>
           {card.items.length === 0 ? (
             <p className={styles.truthEmpty}>
-              Keine Position ist im kanonischen Readback belegt.
+              Für diesen Auftrag sind noch keine Positionen erfasst.
             </p>
           ) : (
             <ol>
@@ -311,7 +311,7 @@ export function OrderCardView({
               </ol>
             ) : (
               <p className={styles.truthEmpty}>
-                Keine Dokument- oder Fotobelege zurückgelesen.
+                Noch keine Dokumente oder Fotos vorhanden.
               </p>
             )}
           </section>
@@ -329,14 +329,17 @@ export function OrderCardView({
           >
             <strong>{actions.feedback.message}</strong>
             {actions.feedback.kind === "success" ? (
-              <small>
-                Akteur {actions.feedback.receipt.actorId} ·{" "}
-                {new Date(actions.feedback.receipt.occurredAt).toLocaleString(
-                  "de-DE",
-                )}{" "}
-                · Event {actions.feedback.receipt.eventId} · Receipt{" "}
-                {actions.feedback.receipt.receiptId}
-              </small>
+              <details>
+                <summary>Technische Details für Support</summary>
+                <small>
+                  Vorgang durch {actions.feedback.receipt.actorId} ·{" "}
+                  {new Date(
+                    actions.feedback.receipt.occurredAt,
+                  ).toLocaleString("de-DE")} · Ereignis{" "}
+                  {actions.feedback.receipt.eventId} · Beleg{" "}
+                  {actions.feedback.receipt.receiptId}
+                </small>
+              </details>
             ) : null}
             {actions.feedback.kind === "conflict" ? (
               <button type="button" onClick={() => void actions.onReload()}>

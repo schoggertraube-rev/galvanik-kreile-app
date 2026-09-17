@@ -124,7 +124,7 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
       const confirmed = refreshed.data.find((candidate) => candidate.invoiceId === row.invoiceId);
       if (!confirmed || !sameCancellationReceipt(receiptResult.data, confirmed)) {
         setPageState("ERROR");
-        setPageMessage("Storno-Readback stimmt nicht mit der Rechnungsliste überein.");
+        setPageMessage("Der gespeicherte Stornobeleg stimmt nicht mit der Rechnungsliste überein.");
         return;
       }
 
@@ -136,7 +136,7 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
         ...current,
         [row.invoiceId]: {
           kind: "success",
-          text: command.replayed ? "Storno war bereits bestätigt." : "Storno und Readback sind bestätigt.",
+          text: command.replayed ? "Storno war bereits bestätigt." : "Storno und gespeicherter Beleg sind bestätigt.",
         },
       }));
     } catch {

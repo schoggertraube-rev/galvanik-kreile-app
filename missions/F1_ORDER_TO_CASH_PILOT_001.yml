@@ -1,8 +1,8 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: 4a5f03043ef86854052bc93d0b50d14f952f7884
-branch: path1/v5-p2-quote-product-20260916
+base_sha: 70ae0989b7f76a247c34582badc2de3324e27851
+branch: path1/v5-p3-core-surfaces-search-20260916
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
 # ── M0 Konsolidierungsstand ───────────────────────────────────────
@@ -37,8 +37,8 @@ delivery_order:
   - F1.6_REALER_PILOT
 
 active_package: PATH1_UI_CONVERGENCE
-active_package_status: V5_P2_VERSIONED_QUOTE_PRODUCT_LIFECYCLE_LOCAL_GATES_REAL_DB_AND_BROWSER_PASS_EXACT_SHA_CI_PREVIEW_AND_INDEPENDENT_REVIEW_PENDING_NO_UI_PASS
-next_gate_after_active_package: COMMIT_PUSH_DRAFT_PR_EXACT_SHA_CI_PREVIEW_AND_SINGLE_INDEPENDENT_READ_ONLY_REVIEW
+active_package_status: V5_P3_EXACT_SHA_AUDIT_REPAIR_PRODUCT_AND_SHA_BOUND_EVIDENCE_CANDIDATE_PENDING_NO_UI_PASS
+next_gate_after_active_package: P3_REPAIR_PRODUCT_COMMIT_THEN_SHA_BOUND_BROWSER_EVIDENCE_COMMIT_EXACT_SHA_CI_PREVIEW_AND_INDEPENDENT_CLOSURE_REVIEW
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
@@ -122,7 +122,7 @@ path1_provider_platform_policy: APPROX_MAX_FIVE_PLATFORMS; SUPABASE_DATA_AUTH_ST
 path1_document_intelligence_policy: CHEAP_FIRST; ORIGINAL_PRIVATE_FIRST; UNTRUSTED_CONTENT; HUMAN_CONFIRMATION; ONE_SAFE_COMMAND_RECEIPT_READBACK
 path1_search_intelligence_policy: RLS_BEFORE_RETRIEVAL; STRUCTURED_FIRST; AUTHORIZED_PUBLIC_READ_PORTS_ONLY; DB_VIEWS_TRUTH; INDEX_RENEWABLE_PROJECTION; NO_MODEL_MUTATION
 path1_provider_activation_status: NONE_ACTIVATED_BY_THIS_WORK_UNIT
-path1_ui_convergence_next_product_build: V5_P2_VERSIONED_QUOTE_PRODUCT_LIFECYCLE
+path1_ui_convergence_next_product_build: V5_P3_ORDERS_V8_CUSTOMERS_V2_HOMES_AND_LANE_0_SEARCH
 path1_ui_convergence_v5_visible_build: GLOBAL_PLUS -> CUSTOMER_RECEIPT_READBACK -> QUOTE_RECEIPT_RELOAD_READBACK -> EXACTLY_ONE_EXISTING_F1_1_ORDER_RECEIPT_READBACK
 path1_ui_convergence_v5_visible_build_status: LOCAL_REAL_DB_AND_BROWSER_PASS_EXACT_SHA_CI_PREVIEW_AND_INDEPENDENT_REVIEW_PENDING_NO_PARTIAL_UI_PASS
 path1_ui_convergence_v5_002: VISIBLE_PRODUCT_IDENTITIES_ROLF_MEISTER_PHILLIP_WERKSTATT_GREGOR_SYSTEMADMIN; UNIQUE_PROFILE_FAIL_CLOSED; ROLF_CAPABILITY_BASED_CUSTOMER_KV_ORDER_AND_F1_1_INTAKE; NO_TECHNICAL_ROLE_OR_TEST_PERSONA_UI
@@ -138,7 +138,7 @@ owner_v5_recovery_execution_20260915:
   p4_after_recovery: ORIGINAL_FIRST_OCR_M365_AFTER_VISIBLE_A_TO_D_CHEAP_FIRST_FACT_LEDGER_HUMAN_CONFIRM_NO_IMPLEMENTATION_NOW
 
 owner_v5_p2_quote_product_execution_20260916:
-  status: TECHNICAL_PRODUCT_SLICE_NO_UI_PASS_UNTIL_COMPLETE_A_TO_D_GATE
+  status: DELIVERED_PR_95_MERGE_4c8f76160a1304e59d4859cb2203561f8e64a257_AND_POST_MERGE_HARDENING_PR_96_MERGE_70ae0989b7f76a247c34582badc2de3324e27851_NO_TOTAL_UI_PASS
   base_sha: 4a5f03043ef86854052bc93d0b50d14f952f7884
   branch: path1/v5-p2-quote-product-20260916
   execution: SERVER_RESUMABLE_TENANT_ISOLATED_QUOTE_DRAFTS_OPEN_LIST_EDIT_VERSION_CONFLICT_FAIL_CLOSED; ATOMIC_IDEMPOTENT_AWARD_TO_ONE_EXISTING_F1_1_ORDER; ONE_VISIBLE_GLOBAL_CREATE_ENGINE
@@ -146,6 +146,17 @@ owner_v5_p2_quote_product_execution_20260916:
   send_status: BLOCKED_NO_M365_RECEIPT_NO_FAKE_SEND_ACTION
   environment: FRESH_SUPABASE_LOOPBACK_ONLY_NO_REMOTE_MIGRATION_NO_RLS_OR_POLICY_CHANGE
   next_product_after_p2: P3_ORDERS_V8_CUSTOMERS_V2_HOMES_SEARCH_STATUS
+
+owner_v5_p3_core_surfaces_search_execution_20260916:
+  status: AUDIT_REPAIR_IN_PROGRESS_OPEN_P0_P1_UNTIL_NEW_EXACT_SHA_INDEPENDENT_CLOSURE_NO_UI_PASS
+  base_sha: 70ae0989b7f76a247c34582badc2de3324e27851
+  branch: path1/v5-p3-core-surfaces-search-20260916
+  execution: ORDERS_V8_AND_CUSTOMERS_V2_ONE_CARD_TRUTH_WITH_DEEPLINK_BACKSTACK; ROLF_AND_PHILLIP_REAL_PUBLIC_PROJECTIONS; DETERMINISTIC_LANE_0_SEARCH_STATUS_ON_TARGET_SHELL
+  lane_0_contract: AUTHORIZED_MODULE_READ_PORTS_ONLY; STRUCTURED_APP_FACTS; METERED_COST_0; SOURCES_RELATIONSHIPS_DATA_STAND_AND_DEEPLINKS; NO_AI_INTERNET_PROVIDER_OR_SECOND_BUSINESS_TRUTH
+  identity_contract: VISIBLE_PRODUCT_IDENTITIES_ONLY_ROLF_MEISTER_PHILLIP_WERKSTATT_GREGOR_SYSTEMADMIN; CAPABILITY_AND_TENANT_FAIL_CLOSED; NO_AUTH_SESSION_ROLE_MIGRATION
+  hard_limits: NO_TABLE_MIGRATION_RLS_POLICY_RUNTIME_DEPENDENCY_ACCOUNTING_ANALYSIS_PROVIDER_OCR_M365_MOLLIE_BANK_CALENDAR_OR_PERSISTENT_ASSISTANT_THREADS
+  audit_repair: CROSS_FIELD_SEARCH_PROOF; PORTALED_SEARCH_FOCUS; EXPLICIT_TRUNCATION_COVERAGE; SHAREABLE_V8_V2_HREFS; CANDIDATE_REGISTRY_TRUTH; BLOCKING_SEARCH_REAL_DB_AND_P3_BROWSER_CI; CANONICAL_F1_1_PAYMENT_EMPTY_STATE; SHA_BOUND_BROWSER_RECEIPT; EXACT_ACTOR_BOUND_GREGOR_SYSTEM_ENTRY; LEGACY_SEARCH_ACTION_CANONICAL_DELEGATE; CANONICAL_ROUTE_DISPOSITION_WITH_60_RETIRED_PAGES_FAIL_CLOSED; CANONICAL_GALVANIK_BLACKBOX_DRILLDOWN_RETAINED; EXCLUSIVE_OPEN_QUOTE_LOADING_EMPTY_DATA_ERROR_UNKNOWN_STATES; CAPABILITY_BOUND_ACCOUNTING_MINIMAL_NAVIGATION; PRODUCT_LANGUAGE_WITHOUT_READBACK_JARGON; PAYMENT_LOCKED_INVOICE_CANCELLATION_ONLY_FOR_CLEARLY_UNPAID_STATE_WITH_PARTIAL_PAID_CORRUPT_AND_CONCURRENCY_REGRESSIONS; REAL_WORKSHOP_HUB_AND_INTAKE_ROUTE_MATRIX; FIVE_UNRATIFIED_ADMIN_PAGES_REMOVED; DEAD_PARALLEL_STATION_BAND_AND_UNOWNED_STATION_LAYOUT_REMOVED_SHRINK_ONLY
+  next_gate: PRODUCT_CODE_SHA_THEN_SHA_BOUND_BROWSER_EVIDENCE_HEAD_REMOTE_CI_PREVIEW_AND_INDEPENDENT_CLOSURE_REVIEW
 
 # ── F1.2 Entscheidungsgrundlage (bindend, ersetzt Altstand) ───────
 # D-F12-001A (ersetzt D-F12-001): F1.2 = genau EIN Uebergang
@@ -539,7 +550,16 @@ path1_ui_convergence_allowlist:
   - src/app/buchhaltung/page.tsx
   - src/app/buchhaltung/rechnungen/page.tsx
   - src/app/buchhaltung/rechnungen/InvoicesClient.tsx
+  - src/app/buchhaltung/rechnungen/__tests__/page.test.tsx
   - src/app/buchhaltung/__tests__/w2c.activeRouteContainment.test.tsx
+  # P3-Abschluss-P0: Storno und Zahlungsbestätigung serialisieren auf derselben
+  # Rechnungszeile; nur der eindeutig unbezahlte Zustand darf stornieren.
+  - src/lib/server/commands/immutableInvoiceCommand.ts
+  - src/lib/server/commands/__tests__/immutableInvoiceCommand.test.ts
+  - src/lib/server/commands/confirmPaymentCommand.ts
+  - src/lib/server/commands/__tests__/confirmPaymentCommand.test.ts
+  - src/app/actions/__tests__/invoices.actions.test.ts
+  - src/test/f1_4_immutable_invoice.integration.test.ts
   # Owner-20260915: enge, manifestierte FUNDAMENT- und ACCOUNTING-minimal-
   # Fassaden fuer die beiden geaenderten App-Entrypoints; keine generische
   # Routenzuordnung und keine neue Fachfaehigkeit.
@@ -577,7 +597,52 @@ path1_ui_convergence_allowlist:
   - src/modules/orders/**
   - src/modules/customers/**
   - src/modules/suche/**
+  # V5 P3: reale V8/V2-Oberflaechen, oeffentliche Home-Projektionen und
+  # deterministische Lane-0-Suche. Keine KI-/Provider-/Kostenaktivierung.
+  - src/app/actions/search.actions.ts
+  - src/app/global-search-actions.ts
+  - src/app/actions/__tests__/w2cB2m4c.externalProvider.failClosed.test.ts
+  - src/components/layout/GlobalSearch.tsx
+  - src/components/layout/TargetHeader.tsx
+  - src/components/layout/__tests__/f0W2cGlobalSearch.unavailable.test.tsx
+  - src/components/home/RolfHome.tsx
+  - src/components/home/RolfHomeClient.tsx
+  - src/components/home/RolfHome.module.css
+  - src/components/home/__tests__/RolfHome.realRender.test.tsx
+  - src/app/__tests__/w2cB2m5u.homeDueTruth.realRender.test.tsx
+  - src/test/search_tenant.integration.test.ts
+  - src/test/path1_p3_deeplinks.test.tsx
+  - e2e/path1-ui-convergence-v5-p3.real.spec.ts
+  - docs/evidence/path1/PATH1_UI_CONVERGENCE_V5_P3_CORE_SURFACES_SEARCH.md
+  # P3 Exact-SHA Audit-Repair: reale Gregor-Komposition und kanonischer
+  # F1.1-Zahlungsleerstand; keine neue Rolle, Migration oder Datenwahrheit.
+  - src/app/settings/page.tsx
+  - src/app/settings/SettingsAppAdapter.tsx
+  - src/app/settings/SettingsClient.tsx
+  - src/app/settings/__tests__/SettingsAppAdapter.test.tsx
+  - src/app/__tests__/f0W2cB2s.test.ts
+  - src/lib/server/authBootstrap.ts
+  - src/lib/server/__tests__/authBootstrap.test.ts
+  - src/lib/server/__tests__/authorization.test.ts
+  - src/components/layout/__tests__/TargetNavigation.p3.test.tsx
+  - src/modules/orders/__tests__/OrderSurfaces.v8.test.tsx
+  - src/app/archive/__tests__/w4ArchiveOrdersReadStates.test.tsx
+  - src/app/feedback/[token]/__tests__/w2cB2m6.feedbackToken.failClosed.test.tsx
+  - src/app/items/__tests__/w2cB2m5b.inventoryMovement.failClosed.test.ts
+  - src/app/marketing/__tests__/w2cMarketingTruth.failClosed.test.ts
+  - src/app/print-queue/__tests__/f0W2cPrintQueue.unavailable.test.tsx
+  - src/modules/fundament/fundament.manifest.json
+  - src/modules/fundament/public.ts
+  - src/modules/fundament/ui/SystemAdminView.tsx
+  - src/modules/fundament/ui/SystemAdminView.module.css
+  - src/lib/server/paymentContract.ts
+  - src/lib/server/__tests__/paymentSummaryRead.test.ts
   # Nach Link-/Importinventar physisch entfallende oder nicht-rendernde Pages
+  - src/app/admin/analytics/page.tsx
+  - src/app/admin/devices/page.tsx
+  - src/app/admin/import/page.tsx
+  - src/app/admin/testanalyse/live/page.tsx
+  - src/app/admin/testanalyse/page.tsx
   - src/app/analyse/page.tsx
   - src/app/archive/page.tsx
   - src/app/baeder/page.tsx
@@ -618,6 +683,7 @@ path1_ui_convergence_allowlist:
   - src/app/scan/page.tsx
   - src/app/station/[slug]/page.tsx
   - src/app/station/[slug]/__tests__/w4StationOrdersReadStates.test.tsx
+  - src/app/station/layout.tsx
   - src/app/status/page.tsx
   - src/app/telefonnotiz/page.tsx
   - src/app/today/page.tsx
@@ -648,6 +714,22 @@ path1_ui_convergence_allowlist:
   - src/app/actions/customers.actions.ts
   - src/app/api/__tests__/quarantine.test.ts
   - src/app/buchhaltung/zahlung/page.tsx
+  - src/app/buchhaltung/ausgaben/page.tsx
+  - src/app/buchhaltung/belege/[id]/page.tsx
+  - src/app/buchhaltung/belege/neu/page.tsx
+  - src/app/buchhaltung/belege/page.tsx
+  - src/app/buchhaltung/bwa/page.tsx
+  - src/app/buchhaltung/einstellungen/page.tsx
+  - src/app/buchhaltung/export/page.tsx
+  - src/app/buchhaltung/fristen/page.tsx
+  - src/app/buchhaltung/kosten/[id]/page.tsx
+  - src/app/buchhaltung/kosten/neu/page.tsx
+  - src/app/buchhaltung/kosten/page.tsx
+  - src/app/buchhaltung/kraftstoff/page.tsx
+  - src/app/buchhaltung/periodenabschluss/page.tsx
+  - src/app/buchhaltung/rechnungen/[id]/page.tsx
+  - src/app/buchhaltung/rechnungen/neu/page.tsx
+  - src/app/buchhaltung/steuerprofil/page.tsx
   - src/app/cockpit/components/EngpassKachel.tsx
   - src/app/customers/[id]/__tests__/w2cB2m5f.customerDetailPrivacy.failClosed.test.ts
   - src/app/customers/[id]/actions.ts

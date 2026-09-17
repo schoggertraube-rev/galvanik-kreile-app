@@ -315,7 +315,7 @@ function operationLabel(operation: Operation): string {
     reserving: "Sichere Uploadfreigabe wird reserviert…",
     uploading: "Original wird hochgeladen…",
     finalizing: "Gespeichertes Original wird geprüft…",
-    readback: "Metadaten werden erneut aus der Datenbank bestätigt…",
+    readback: "Gespeicherte Angaben werden geprüft…",
     downloading: "Privater Download wird vorbereitet…",
   };
   return operation === "idle" ? "" : labels[operation];

@@ -115,6 +115,18 @@ const orderWithoutInvoiceRow = {
   goods_out_allowed: true,
 };
 
+const canonicalIntakeRow = {
+  ...orderWithoutInvoiceRow,
+  order_version: 1,
+  station: "wareneingang",
+  current_station: "wareneingang",
+  current_station_id: "wareneingang",
+  order_status: "angenommen",
+  payment_mode: "rechnung",
+  goods_out_allowed: false,
+  integrity_ok: false,
+};
+
 describe("readPaymentSummary", () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -241,6 +253,23 @@ describe("readPaymentSummary", () => {
     });
   });
 
+  it("reads the canonical F1.1 lifecycle/status pair without treating status as a station", async () => {
+    execute.mockResolvedValueOnce([canonicalIntakeRow]);
+    const { readOrderPaymentState } = await import("../paymentSummaryRead");
+    await expect(readOrderPaymentState(admin, { orderId: paidRow.order_id })).resolves.toMatchObject({
+      code: "OK",
+      data: {
+        orderVersion: 1,
+        physicalStatus: "wareneingang",
+        mode: "rechnung",
+        invoiceState: "not_issued",
+        payment: null,
+        goodsOut: null,
+        goodsOutAllowed: false,
+      },
+    });
+  });
+
   it("fails closed for invalid input, denial, missing, ambiguous or corrupt order state", async () => {
     const { readOrderPaymentState } = await import("../paymentSummaryRead");
     await expect(readOrderPaymentState(admin, { orderId: " bad " })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
@@ -252,6 +281,8 @@ describe("readPaymentSummary", () => {
     execute.mockResolvedValueOnce([orderPaidRow, orderPaidRow]);
     await expect(readOrderPaymentState(admin, { orderId: paidRow.order_id })).resolves.toMatchObject({ code: "UNAVAILABLE" });
     execute.mockResolvedValueOnce([{ ...orderPaidRow, integrity_ok: false }]);
+    await expect(readOrderPaymentState(admin, { orderId: paidRow.order_id })).resolves.toMatchObject({ code: "UNAVAILABLE" });
+    execute.mockResolvedValueOnce([{ ...canonicalIntakeRow, goods_out_allowed: true }]);
     await expect(readOrderPaymentState(admin, { orderId: paidRow.order_id })).resolves.toMatchObject({ code: "UNAVAILABLE" });
   });
 

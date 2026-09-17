@@ -31,6 +31,7 @@ function build(input: {
     canCreateOrder: true,
     greetingName: null,
     kpis: KPIS,
+    loadedAt: "2026-09-16T08:15:00.000Z",
   });
 }
 
@@ -47,6 +48,8 @@ describe("buildWerkstattData", () => {
     expect(data.dringendCount).toBe(3);
     expect(data.weitereCount).toBe(1);
     expect(data.held.map((entry) => entry.id)).toEqual(["r", "o", "b", "y"]);
+    expect(data.dominant).toEqual({ orderId: "r", reason: "Persistierter Auftragsstatus: Angenommen" });
+    expect(data).toMatchObject({ source: "Auftragsbestand", loadedAt: "2026-09-16T08:15:00.000Z" });
   });
 
   it("sorts crit before soon and by due date ascending within a group", () => {

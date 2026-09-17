@@ -77,7 +77,6 @@ describe("W2C-B1 caller containment", () => {
   const srcRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
   const callerFiles = [
     "app/warendurchlauf/galvanik/page.tsx",
-    "app/status/page.tsx",
     "app/warendurchlauf/wareneingang/page.tsx",
     "lib/offline/OfflineManager.ts",
   ];
@@ -91,13 +90,13 @@ describe("W2C-B1 caller containment", () => {
 
   it("leaves non-atomic flows visibly blocked and removes the simple start from the process port", async () => {
     const blockedFiles = await Promise.all([
-      "app/status/page.tsx",
       "lib/offline/OfflineManager.ts",
     ].map((file) => readFile(path.join(srcRoot, file), "utf8")));
 
     for (const source of blockedFiles) {
-      expect(source).toMatch(/FoundationUnavailable|NOT_AVAILABLE|disabled/);
+      expect(source).toMatch(/NOT_AVAILABLE|disabled/);
     }
+    expect(existsSync(path.join(srcRoot, "app/status/page.tsx"))).toBe(false);
     for (const file of [
       "components/orders/variants/WareneingangActive.tsx",
       "components/orders/StationStatusButton.tsx",

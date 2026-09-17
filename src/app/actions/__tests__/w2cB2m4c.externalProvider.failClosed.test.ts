@@ -11,6 +11,7 @@ const simulateScan = vi.fn();
 const checkAppAuth = vi.fn();
 const GoogleGenerativeAI = vi.fn();
 const fetchSpy = vi.fn();
+const canonicalSearch = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/search/aiAggregation", () => ({ extractZeitraum, buildDataContext }));
 vi.mock("@/lib/ai/geminiClient", () => ({ generateAiResponse, generateGeminiContentWithFallback }));
@@ -23,6 +24,7 @@ vi.mock("@/db/schema", () => ({ appUsers: {}, uiEventsTable: {} }));
 vi.mock("drizzle-orm", () => ({ and: vi.fn(), eq: vi.fn(), gte: vi.fn(), ne: vi.fn(), sql: vi.fn() }));
 vi.mock("@/lib/server/appSession", () => ({ APP_TENANT_ID: KREILE_TENANT_SLUG }));
 vi.mock("@/lib/server/pinLoginHandle", () => ({ isValidPinLoginHandle: vi.fn(), resolvePinLoginCandidate: vi.fn() }));
+vi.mock("@/app/actions/search.actions", () => ({ searchTenantAction: canonicalSearch }));
 
 const denial = "NOT_AVAILABLE: Sicherer W3-KI-/Provider-Vertrag fehlt.";
 
@@ -59,8 +61,10 @@ describe("W2C-B2M4C external provider fail-closed", () => {
 
     expect(globalSearch).not.toContain("GlobalSearchAIResult");
     expect(globalSearch).not.toContain("askGlobalAiAction");
-    expect(globalSearch).toContain("FoundationUnavailable");
-    expect(globalSearch).not.toContain("globalSearch");
+    expect(globalSearch).toContain("searchTenantAction");
+    expect(globalSearch).toContain("@/modules/suche/public");
+    expect(globalSearch).not.toContain("FoundationUnavailable");
+    expect(globalSearch).not.toContain("askGlobalAiAction");
     expect(globalSearch).not.toContain("useGlobalSearch");
     expect(customerWizard).not.toContain("ai-enrichment.actions");
     expect(customerWizard).not.toContain("handleExtractFreetext");
@@ -85,5 +89,19 @@ describe("W2C-B2M4C external provider fail-closed", () => {
     expect(startScreen).toContain("notifyAdminPinReset");
     expect(startScreen).toContain("void notifyAdminPinReset(user.loginHandle)");
     expect(startScreen).not.toContain("result.success");
+  });
+
+  it("keeps the dormant legacy action as a pure delegate to the authenticated tenant search", async () => {
+    canonicalSearch.mockResolvedValueOnce({ code: "UNAUTHENTICATED", message: "Sitzung fehlt." });
+    const [{ globalSearchAction }, source] = await Promise.all([
+      import("@/app/global-search-actions"),
+      readFile("src/app/global-search-actions.ts", "utf8"),
+    ]);
+
+    await expect(globalSearchAction("Auftrag")).resolves.toEqual({ code: "UNAUTHENTICATED", message: "Sitzung fehlt." });
+    expect(canonicalSearch).toHaveBeenCalledOnce();
+    expect(canonicalSearch).toHaveBeenCalledWith("Auftrag");
+    expect(source).toContain('from "@/app/actions/search.actions"');
+    expect(source).not.toMatch(/@\/db|schema_buchhaltung|schema["']|privilegedDb|\.select\(|\.from\(|phoneNotes|zahlung|beleg/);
   });
 });

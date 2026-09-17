@@ -178,6 +178,7 @@ export function WerkstattView({
           ) : (
             <p className={styles.lead}>Eingang prüfen, Arbeit sicher übergeben.</p>
           )}
+          {isData ? <p className={styles.dataStand}>Quelle: {view.source} · Stand {new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(new Date(view.loadedAt))}</p> : null}
         </header>
 
         {view.kind === "denied" ? (
@@ -209,6 +210,12 @@ export function WerkstattView({
         ) : null}
 
         {isData ? (
+          <>
+          {view.dominant ? (
+            <button className={styles.dominantAction} onClick={() => ports.onOpenOrder(view.dominant?.orderId ?? "")} type="button">
+              <span>Jetzt Auftrag öffnen</span><strong>{view.dominant.reason}</strong>
+            </button>
+          ) : null}
           <div className={styles.cols}>
             <section aria-labelledby="werkstatt-held-title">
               <div className={styles.sectionHead}>
@@ -260,6 +267,7 @@ export function WerkstattView({
               </div>
             </div>
           </div>
+          </>
         ) : null}
 
         {authorized ? (

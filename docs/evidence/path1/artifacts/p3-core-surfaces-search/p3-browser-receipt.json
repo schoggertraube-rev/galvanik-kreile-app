@@ -1,0 +1,445 @@
+{
+  "candidateCodeShaAtRun": "d32b07e22c236b8dc55df7f66b0e2c990d84022c",
+  "tenant": "galvanik-kreile",
+  "actors": {
+    "rolf": "11111111-1111-4111-8111-111111111111",
+    "phillip": "22222222-2222-4222-8222-222222222222",
+    "gregor": "33333333-3333-4333-8333-333333333333"
+  },
+  "synthetic": true,
+  "order": {
+    "id": "a3799da0-7b50-4eac-9045-f3b74f51d711",
+    "orderNumber": "A-2026-0002",
+    "customerId": "cc71dfa7-c6e3-43a2-817d-cc4d3cf53199",
+    "promisedDate": "2026-10-23",
+    "exactlyOne": 1
+  },
+  "paths": [
+    "Rolf -> Direktaufnahme -> Auftrag",
+    "Orders -> Auftrag -> Kunde -> Auftrag -> zurück",
+    "Deep-Link -> Liste",
+    "Suche -> V8/V2",
+    "Rolf -> Geld & Rechnungen -> Accounting-minimal",
+    "Rolf -> Werkstatt-Hub -> Wareneingang -> eine Erfassung -> Werkstatt-Hub",
+    "/warendurchlauf/neu -> /warendurchlauf/wareneingang",
+    "/station/wareneingang -> 404 without legacy station band",
+    "Gregor -> E-Mail-Login -> Einstellungen -> Start -> Einstellungen",
+    "60 retired/quarantined routes -> 404; Galvanik blackbox -> 200"
+  ],
+  "retiredRouteResults": [
+    {
+      "path": "/admin/analytics",
+      "status": 404
+    },
+    {
+      "path": "/admin/devices",
+      "status": 404
+    },
+    {
+      "path": "/admin/import",
+      "status": 404
+    },
+    {
+      "path": "/admin/testanalyse",
+      "status": 404
+    },
+    {
+      "path": "/admin/testanalyse/live",
+      "status": 404
+    },
+    {
+      "path": "/analyse",
+      "status": 404
+    },
+    {
+      "path": "/archive",
+      "status": 404
+    },
+    {
+      "path": "/baeder",
+      "status": 404
+    },
+    {
+      "path": "/betrieb",
+      "status": 404
+    },
+    {
+      "path": "/betrieb-kvp",
+      "status": 404
+    },
+    {
+      "path": "/buchhaltung/ausgaben",
+      "status": 404
+    },
+    {
+      "path": "/buchhaltung/belege",
+      "status": 404
+    },
+    {
+      "path": "/buchhaltung/belege/neu",
+      "status": 404
+    },
+    {
+      "path": "/buchhaltung/belege/synthetic-id",
+      "status": 404
+    },
+    {
+      "path": "/buchhaltung/bwa",
+      "status": 404
+    },
+    {
+      "path": "/buchhaltung/einstellungen",
+      "status": 404
+    },
+    {
+      "path": "/buchhaltung/export",
+      "status": 404
+    },
+    {
+      "path": "/buchhaltung/fristen",
+      "status": 404
+    },
+    {
+      "path": "/buchhaltung/kosten",
+      "status": 404
+    },
+    {
+      "path": "/buchhaltung/kosten/neu",
+      "status": 404
+    },
+    {
+      "path": "/buchhaltung/kosten/synthetic-id",
+      "status": 404
+    },
+    {
+      "path": "/buchhaltung/kraftstoff",
+      "status": 404
+    },
+    {
+      "path": "/buchhaltung/periodenabschluss",
+      "status": 404
+    },
+    {
+      "path": "/buchhaltung/rechnungen/neu",
+      "status": 404
+    },
+    {
+      "path": "/buchhaltung/rechnungen/synthetic-id",
+      "status": 404
+    },
+    {
+      "path": "/buchhaltung/steuerprofil",
+      "status": 404
+    },
+    {
+      "path": "/cockpit",
+      "status": 404
+    },
+    {
+      "path": "/cockpit/jahresplan",
+      "status": 404
+    },
+    {
+      "path": "/feedback/synthetic-token",
+      "status": 404
+    },
+    {
+      "path": "/finanzen",
+      "status": 404
+    },
+    {
+      "path": "/items",
+      "status": 404
+    },
+    {
+      "path": "/kalender",
+      "status": 404
+    },
+    {
+      "path": "/kommunikation",
+      "status": 404
+    },
+    {
+      "path": "/kontrolle",
+      "status": 404
+    },
+    {
+      "path": "/kunden-auftraege",
+      "status": 404
+    },
+    {
+      "path": "/kvp",
+      "status": 404
+    },
+    {
+      "path": "/lager",
+      "status": 404
+    },
+    {
+      "path": "/lieferanten",
+      "status": 404
+    },
+    {
+      "path": "/lieferanten/synthetic-id",
+      "status": 404
+    },
+    {
+      "path": "/marketing",
+      "status": 404
+    },
+    {
+      "path": "/marketing/aktion",
+      "status": 404
+    },
+    {
+      "path": "/marketing/aktion/neu",
+      "status": 404
+    },
+    {
+      "path": "/marketing/attribution",
+      "status": 404
+    },
+    {
+      "path": "/marketing/einwilligungen",
+      "status": 404
+    },
+    {
+      "path": "/marketing/kanaele",
+      "status": 404
+    },
+    {
+      "path": "/marketing/segmente",
+      "status": 404
+    },
+    {
+      "path": "/marketing/segmente/neu",
+      "status": 404
+    },
+    {
+      "path": "/marketing/segmente/synthetic-id",
+      "status": 404
+    },
+    {
+      "path": "/performance",
+      "status": 404
+    },
+    {
+      "path": "/performance/baeder-material",
+      "status": 404
+    },
+    {
+      "path": "/performance/ki-empfehlungen",
+      "status": 404
+    },
+    {
+      "path": "/performance/kunden-markt",
+      "status": 404
+    },
+    {
+      "path": "/performance/qualitaet-risiko",
+      "status": 404
+    },
+    {
+      "path": "/performance/umsatz-marge",
+      "status": 404
+    },
+    {
+      "path": "/performance/werkstatt-puls",
+      "status": 404
+    },
+    {
+      "path": "/print-queue",
+      "status": 404
+    },
+    {
+      "path": "/scan",
+      "status": 404
+    },
+    {
+      "path": "/status",
+      "status": 404
+    },
+    {
+      "path": "/telefonnotiz",
+      "status": 404
+    },
+    {
+      "path": "/today",
+      "status": 404
+    }
+  ],
+  "legacyStationRouteResult": {
+    "path": "/station/wareneingang",
+    "status": 404
+  },
+  "captures": [
+    {
+      "file": "p3-workshop-hub-desktop-1914x917.png",
+      "sha256": "f7a16f315ab364321e868fcf8fd600e01ec2c192519bc89cc6a9b933b94ea1be",
+      "viewport": "1914x917",
+      "state": "workshop-hub-real"
+    },
+    {
+      "file": "p3-wareneingang-desktop-1914x917.png",
+      "sha256": "71be341259d963fa4c6a41c39a2ded4a35f541a605bb0fa1eaf2a028a90e8aa2",
+      "viewport": "1914x917",
+      "state": "wareneingang-real"
+    },
+    {
+      "file": "p3-workshop-hub-tablet-landscape-1220x880.png",
+      "sha256": "c7ec5a17a97196afb3f9c33f2bdc20d0462c20ba6de351f308b2f3e347681f21",
+      "viewport": "1220x880",
+      "state": "workshop-hub-real"
+    },
+    {
+      "file": "p3-wareneingang-tablet-landscape-1220x880.png",
+      "sha256": "86b5595f84c63aacd7bdee64f1503710863df4f0f239099b78c4e14d81984dd1",
+      "viewport": "1220x880",
+      "state": "wareneingang-real"
+    },
+    {
+      "file": "p3-workshop-hub-tablet-portrait-768x1024.png",
+      "sha256": "2650773db2fa53600a3f3820c97f191cddc995d55a61671e2c12e38564d0bd9d",
+      "viewport": "768x1024",
+      "state": "workshop-hub-real"
+    },
+    {
+      "file": "p3-wareneingang-tablet-portrait-768x1024.png",
+      "sha256": "45f08318e65927a8f63fd47bc7555042ab707c68e7fcbeda311dfeb3d3fbf7d0",
+      "viewport": "768x1024",
+      "state": "wareneingang-real"
+    },
+    {
+      "file": "p3-workshop-hub-mobile-390x844.png",
+      "sha256": "b267d1bac0aed0d401da86c8c8ddcea9ff9ed9d294b5edec17507f84f563c0e9",
+      "viewport": "390x844",
+      "state": "workshop-hub-real"
+    },
+    {
+      "file": "p3-wareneingang-mobile-390x844.png",
+      "sha256": "4985833df6d138e57b9862ede01e0ebf143170f635e782fba389bc09af3f246c",
+      "viewport": "390x844",
+      "state": "wareneingang-real"
+    },
+    {
+      "file": "p3-rolf-home-desktop-1914x917.png",
+      "sha256": "0e847abc98236b0c4e42e4601107f47e0b3b7a171efb3ac600bb8ac640ee13f1",
+      "viewport": "1914x917",
+      "state": "rolf-home-data"
+    },
+    {
+      "file": "p3-order-v8-desktop-1914x917.png",
+      "sha256": "c5be32b0b43f3d3cc15e7d8634b02bea50676b2c1e758befef9e590d341c5fbe",
+      "viewport": "1914x917",
+      "state": "order-v8-overlay"
+    },
+    {
+      "file": "p3-customer-v2-desktop-1914x917.png",
+      "sha256": "a2b2dc520a75682594d9e80aeab861bf660e366ec4152502f69f43169c57b774",
+      "viewport": "1914x917",
+      "state": "customer-v2-overlay"
+    },
+    {
+      "file": "p3-search-desktop-1914x917.png",
+      "sha256": "fe87808b52af95b6024c7f3a6ae4cafba34542874deabd199686ff64baa61934",
+      "viewport": "1914x917",
+      "state": "search-real-hit"
+    },
+    {
+      "file": "p3-rolf-home-tablet-landscape-1220x880.png",
+      "sha256": "81f1c66c2df0ac278127f870d6decd57a0d7cf93a9e86802c7e0840553a17d96",
+      "viewport": "1220x880",
+      "state": "rolf-home-data"
+    },
+    {
+      "file": "p3-order-v8-tablet-landscape-1220x880.png",
+      "sha256": "0270c95bcb748e4fa4c0dfe958f76c0f5b1632be39122f5ea4dac78a66f70a4a",
+      "viewport": "1220x880",
+      "state": "order-v8-overlay"
+    },
+    {
+      "file": "p3-customer-v2-tablet-landscape-1220x880.png",
+      "sha256": "ea9748e661326a1abba3e6e135cfe7af787d75485784ae0dd6a31515daba6d73",
+      "viewport": "1220x880",
+      "state": "customer-v2-overlay"
+    },
+    {
+      "file": "p3-search-tablet-landscape-1220x880.png",
+      "sha256": "6d0fe1c6185f36044602b1e706ff86a4794946669a2921ba2ccab753106a5e66",
+      "viewport": "1220x880",
+      "state": "search-real-hit"
+    },
+    {
+      "file": "p3-rolf-home-tablet-portrait-768x1024.png",
+      "sha256": "be04d808426a1aa18203b449c281ccbd05441327af0a25b2a5f43e1d5f3a9f3e",
+      "viewport": "768x1024",
+      "state": "rolf-home-data"
+    },
+    {
+      "file": "p3-order-v8-tablet-portrait-768x1024.png",
+      "sha256": "acbbf27fe321a5cb08e266d9001912affb2a2036f36f51b7b55982ae98d6d823",
+      "viewport": "768x1024",
+      "state": "order-v8-overlay"
+    },
+    {
+      "file": "p3-customer-v2-tablet-portrait-768x1024.png",
+      "sha256": "f44c84f02752e20a10be889e5e62e8d2b705c0f61ad48596b526b2006398a23d",
+      "viewport": "768x1024",
+      "state": "customer-v2-overlay"
+    },
+    {
+      "file": "p3-search-tablet-portrait-768x1024.png",
+      "sha256": "7cb60fa0aa736c67971ea186a6b6eae94ed958971dce6a39859c165e87ebc568",
+      "viewport": "768x1024",
+      "state": "search-real-hit"
+    },
+    {
+      "file": "p3-rolf-home-mobile-390x844.png",
+      "sha256": "046d490620d39e82e8d8b138c007ef3fae6434126806876e1220e63334142069",
+      "viewport": "390x844",
+      "state": "rolf-home-data"
+    },
+    {
+      "file": "p3-order-v8-mobile-390x844.png",
+      "sha256": "216cfa369c236fc96711ce59d3d9fc2227ca03f66f9c3687892dd65a6ca664f5",
+      "viewport": "390x844",
+      "state": "order-v8-overlay"
+    },
+    {
+      "file": "p3-customer-v2-mobile-390x844.png",
+      "sha256": "790c9797e5350d8270cd93660c6dba127f0a6b8418d88703add2183aa58d3686",
+      "viewport": "390x844",
+      "state": "customer-v2-overlay"
+    },
+    {
+      "file": "p3-search-mobile-390x844.png",
+      "sha256": "55ccf3d08f0d71fbcf1533464c181bad816890bbfeae2fe251407b78fd2a7863",
+      "viewport": "390x844",
+      "state": "search-real-hit"
+    },
+    {
+      "file": "p3-phillip-home-desktop-1914x917.png",
+      "sha256": "bb1bc9d693c9e3dadb3dfc39f3e5ed398eced5a525d726a55a855d25bf939fab",
+      "viewport": "1914x917",
+      "state": "phillip-home-data"
+    },
+    {
+      "file": "p3-phillip-home-tablet-landscape-1220x880.png",
+      "sha256": "24056683b8018e3f2ca597a4d57d0cf34f61093733cde432f3a6e60c6c16fb11",
+      "viewport": "1220x880",
+      "state": "phillip-home-data"
+    },
+    {
+      "file": "p3-phillip-home-tablet-portrait-768x1024.png",
+      "sha256": "1e8f034107a103c7b56ed27cd03e95516b6d91ecce95a48195bd4a8380e2c114",
+      "viewport": "768x1024",
+      "state": "phillip-home-data"
+    },
+    {
+      "file": "p3-phillip-home-mobile-390x844.png",
+      "sha256": "8db0a52cb2401aee08402ed10b73678cfc880a28cf23755f429bfa0fdaa3d26d",
+      "viewport": "390x844",
+      "state": "phillip-home-data"
+    }
+  ]
+}

@@ -1,9 +1,13 @@
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import { getOperationalOrders } from "@/lib/server/operationalOrders";
 import type { OperationalOrder } from "@/lib/types/operationalOrder";
-import { RolfHomeClient, type RolfHomeModel, type RolfOrder } from "./RolfHomeClient";
+import {
+  buildOrdersHomeProjection,
+  type OrdersHomeSource,
+} from "@/modules/orders/public";
+import { RolfHomeClient, type RolfHomeModel } from "./RolfHomeClient";
 
-function toRolfOrder(order: OperationalOrder): RolfOrder {
+function toHomeSource(order: OperationalOrder): OrdersHomeSource {
   return {
     id: order.id,
     orderNumber: order.orderNumber,
@@ -34,9 +38,10 @@ export async function loadRolfHome(authorization: AuthorizationSnapshot): Promis
       role: authorization.role,
       canCreateOrder: authorization.permissions.includes("perm_data_orders"),
     } as const;
+    const projection = buildOrdersHomeProjection(orders.map(toHomeSource), new Date().toISOString());
     return orders.length === 0
-      ? { kind: "empty", ...common }
-      : { kind: "data", ...common, orders: orders.map(toRolfOrder) };
+      ? { kind: "empty", ...common, projection }
+      : { kind: "data", ...common, projection };
   } catch {
     return { kind: "error", message: "Die mandantengebundene Auftragsprojektion konnte nicht sicher geladen werden." };
   }

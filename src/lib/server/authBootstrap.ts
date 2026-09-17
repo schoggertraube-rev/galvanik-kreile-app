@@ -1,4 +1,5 @@
 import { readAppSession, type AppSession } from "@/lib/server/appSession";
+import { getProductIdentity } from "@/lib/auth/authorizationContract";
 
 export type AuthBootstrapState =
   | { status: "authenticated"; session: AppSession }
@@ -13,9 +14,19 @@ export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
   const result = await readAppSession();
 
   if (result.ok) {
+    const identity = getProductIdentity(result.session.userId);
+    if (!identity) {
+      return {
+        status: "error",
+        message: "Sitzungsfehler: Kein eindeutiges Produktprofil konfiguriert",
+      };
+    }
     return {
       status: "authenticated",
-      session: result.session,
+      session: {
+        ...result.session,
+        displayName: identity.name,
+      },
     };
   }
 
