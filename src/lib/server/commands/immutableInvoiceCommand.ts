@@ -40,7 +40,18 @@ const HEX64_PATTERN = /^[a-f0-9]{64}$/;
 const ISO_INSTANT_PATTERN = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/;
 const INVOICE_ISSUE_ROLES = ["buero", "meister", "admin"] as const;
 const INVOICE_CANCEL_ROLES = ["meister", "admin"] as const;
+const NEW_INVOICE_VAT_RATE_BASIS_POINTS = 1900;
+const NEW_CANCELLATION_REASON_MIN_LENGTH = 10;
 
+/** Write policy only. Persisted historical snapshots and receipts stay readable. */
+export function newInvoiceIssuancePolicyAllows(
+  netAmountCents: number,
+  vatRateBasisPoints: number,
+): boolean {
+  return Number.isSafeInteger(netAmountCents)
+    && netAmountCents > 0
+    && vatRateBasisPoints === NEW_INVOICE_VAT_RATE_BASIS_POINTS;
+}
 export type CreateInvoiceInput = {
   orderId: string;
   expectedVersion: number;
@@ -287,7 +298,7 @@ function isValidCancelInput(input: unknown): input is CancelInvoiceInput {
     && value.expectedVersion > 0
     && typeof value.reason === "string"
     && value.reason === value.reason.trim()
-    && value.reason.length >= 5
+    && value.reason.length >= NEW_CANCELLATION_REASON_MIN_LENGTH
     && value.reason.length <= 500;
 }
 
@@ -626,10 +637,9 @@ function prepareInvoiceContent(
   const vatAmountCents = Math.round((netAmountCents * vatRateBasisPoints) / 10000);
   const grossAmountCents = netAmountCents + vatAmountCents;
   if (
-    !Number.isSafeInteger(netAmountCents)
+    !newInvoiceIssuancePolicyAllows(netAmountCents, vatRateBasisPoints)
     || !Number.isSafeInteger(vatAmountCents)
     || !Number.isSafeInteger(grossAmountCents)
-    || netAmountCents < 0
   ) throw new Error("INVOICE_AMOUNT_UNSAFE");
 
   return {
@@ -804,7 +814,8 @@ function mapCancellationReceipt(
 
 function receiptMatchesIntent(receipt: ImmutableInvoiceReceipt, input: CreateInvoiceInput): boolean {
   return receipt.orderId === input.orderId
-    && receipt.orderVersion === input.expectedVersion;
+    && receipt.orderVersion === input.expectedVersion
+    && newInvoiceIssuancePolicyAllows(receipt.netAmountCents, receipt.vatRateBasisPoints);
 }
 
 async function readCreateInvoiceReceipts(
@@ -1007,7 +1018,11 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
 
       const paymentTermDays = toSafeInteger(source.invoice_payment_term_days, "INVOICE_PAYMENT_TERM_INVALID");
       const vatRateBasisPoints = toSafeInteger(source.invoice_vat_rate_basis_points, "INVOICE_VAT_RATE_INVALID");
-      if (paymentTermDays < 1 || paymentTermDays > 365 || ![700, 1900].includes(vatRateBasisPoints)) {
+      if (
+        paymentTermDays < 1
+        || paymentTermDays > 365
+        || vatRateBasisPoints !== NEW_INVOICE_VAT_RATE_BASIS_POINTS
+      ) {
         return { code: "VALIDATION_ERROR", message: "Stammdaten für die Rechnungsausgabe sind unvollständig." };
       }
 
@@ -1298,6 +1313,27 @@ export async function cancelInvoice(input: unknown): Promise<CancelInvoiceResult
           message: "Die Rechnung kann nicht storniert werden, weil bereits eine Zahlung vorliegt oder der Zahlungsstand nicht eindeutig ist.",
         };
       }
+      const paymentEvidenceRows = await tx.execute<{ payment_evidence_count: number | string }>(sql`
+        SELECT count(*)::integer AS payment_evidence_count
+        FROM public.events payment_event
+        WHERE payment_event.tenant_id = ${tenantId}
+          AND payment_event.order_id = ${invoice.order_id}
+          AND payment_event.event_type = 'PAYMENT_CONFIRMED_V1'
+          AND payment_event.status = 'success'
+          AND payment_event.payload->>'invoiceId' = ${invoice.id}
+      `);
+      const paymentEvidenceCount = paymentEvidenceRows.length === 1 && paymentEvidenceRows[0]
+        ? toSafeInteger(
+            paymentEvidenceRows[0].payment_evidence_count,
+            "INVOICE_CANCEL_PAYMENT_EVIDENCE_INVALID",
+          )
+        : -1;
+      if (paymentEvidenceCount !== 0) {
+        return {
+          code: "CONFLICT",
+          message: "Die Rechnung kann nicht storniert werden, weil bereits eine Zahlung vorliegt oder der Zahlungsstand nicht eindeutig ist.",
+        };
+      }
       if (
         invoice.tenant_id !== tenantId
         || !INVOICE_NUMBER_PATTERN.test(invoice.invoice_number)
@@ -1406,6 +1442,15 @@ export async function cancelInvoice(input: unknown): Promise<CancelInvoiceResult
           AND payment_event_id IS NULL
           AND payment_correlation_id IS NULL
           AND payment_version = 0
+          AND NOT EXISTS (
+            SELECT 1
+            FROM public.events payment_event
+            WHERE payment_event.tenant_id = invoices.tenant_id
+              AND payment_event.order_id = invoices.order_id
+              AND payment_event.event_type = 'PAYMENT_CONFIRMED_V1'
+              AND payment_event.status = 'success'
+              AND payment_event.payload->>'invoiceId' = invoices.id::text
+          )
         RETURNING id
       `);
       if (updatedRows.length !== 1 || updatedRows[0]?.id !== invoice.id) {

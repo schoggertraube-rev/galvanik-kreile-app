@@ -63,6 +63,7 @@ const CLIENT_EVENTS = {
   uninitialized: "15151515-1515-4151-8151-151515151526",
   forbidden: "15151515-1515-4151-8151-151515151527",
   paidOverpay: "15151515-1515-4151-8151-151515151528",
+  absent: "15151515-1515-4151-8151-151515151529",
 } as const;
 
 const sql = postgres(DATABASE_URL, { max: 2, prepare: false });
@@ -270,6 +271,11 @@ describe("F1.5 confirmPayment real command integration — AUTH_ADAPTER_SYNTHETI
     await assertFreshReset();
     await seedFixtures();
     const { confirmPayment } = await import("@/lib/server/commands/confirmPaymentCommand");
+    const { readPaymentReceipt } = await import("@/lib/server/paymentSummaryRead");
+    const {
+      readPaymentReceiptCommand,
+      recoverPaymentConfirmationCommand,
+    } = await import("@/modules/accounting/server-public");
 
     const happyPristine = await snapshot(INVOICES.happy);
     const foreignPristine = await snapshot(INVOICES.foreign);
@@ -367,6 +373,138 @@ describe("F1.5 confirmPayment real command integration — AUTH_ADAPTER_SYNTHETI
       source: "manual",
     });
     expect(partial.receipt.confirmedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+
+    setSession(USERS.buero, "buero");
+    const directPartialReceiptRead = await readPaymentReceipt({
+      tenantId: TENANT,
+      userId: USERS.buero,
+      displayName: "F1.5 Synthetic buero",
+      role: "buero",
+      permissions: ["perm_view_leitstand"],
+      active: true,
+    }, {
+      invoiceId: INVOICES.happy,
+      clientEventId: CLIENT_EVENTS.partial,
+    });
+    expect(directPartialReceiptRead).toMatchObject({ code: "OK", data: partial.receipt });
+
+    const partialReceiptRead = await readPaymentReceiptCommand({
+      invoiceId: INVOICES.happy,
+      clientEventId: CLIENT_EVENTS.partial,
+    });
+    expect(partialReceiptRead).toMatchObject({ code: "OK", data: partial.receipt });
+    if (partialReceiptRead.code !== "OK") throw new Error("F1_5_PAYMENT_RECEIPT_READ_FAILED");
+    expect(partialReceiptRead.asOf).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+
+    setSession(USERS.buero, "buero");
+    await expect(recoverPaymentConfirmationCommand({
+      kind: "payment_confirmed",
+      intentId: CLIENT_EVENTS.partial,
+      idempotencyKey: CLIENT_EVENTS.partial,
+      aggregateId: INVOICES.happy,
+      expectedVersion: 0,
+      expectedAmount: { amountCents: 4_000, currency: "EUR" },
+      expectedMethod: "bank_transfer",
+      expectedReason: null,
+    })).resolves.toMatchObject({
+      state: "resolved",
+      receipt: {
+        invoiceId: INVOICES.happy,
+        intentId: CLIENT_EVENTS.partial,
+        idempotencyKey: CLIENT_EVENTS.partial,
+      },
+    });
+
+    setSession(USERS.buero, "buero");
+    await expect(recoverPaymentConfirmationCommand({
+      kind: "payment_confirmed",
+      intentId: CLIENT_EVENTS.absent,
+      idempotencyKey: CLIENT_EVENTS.absent,
+      aggregateId: INVOICES.happy,
+      expectedVersion: 1,
+      expectedAmount: { amountCents: 6_000, currency: "EUR" },
+      expectedMethod: "cash",
+      expectedReason: null,
+    })).resolves.toMatchObject({
+      state: "not_committed",
+      retry: "same_idempotency_key_only",
+    });
+
+    setSession(USERS.buero, "buero");
+    await expect(recoverPaymentConfirmationCommand({
+      kind: "payment_confirmed",
+      intentId: CLIENT_EVENTS.partial,
+      idempotencyKey: CLIENT_EVENTS.partial,
+      aggregateId: INVOICES.happy,
+      expectedVersion: 0,
+      expectedAmount: { amountCents: 4_001, currency: "EUR" },
+      expectedMethod: "bank_transfer",
+      expectedReason: null,
+    })).resolves.toMatchObject({ state: "integrity_failure", error: { code: "IDEMPOTENCY_CONFLICT" } });
+
+    readAppSessionSpy.mockResolvedValueOnce({ ok: false, reason: "NO_COOKIE" });
+    await expect(recoverPaymentConfirmationCommand({
+      kind: "payment_confirmed",
+      intentId: CLIENT_EVENTS.partial,
+      idempotencyKey: CLIENT_EVENTS.partial,
+      aggregateId: INVOICES.happy,
+      expectedVersion: 0,
+      expectedAmount: { amountCents: 4_000, currency: "EUR" },
+      expectedMethod: "bank_transfer",
+      expectedReason: null,
+    })).resolves.toMatchObject({ state: "denied" });
+
+    setSession(USERS.buero, "buero");
+    await expect(recoverPaymentConfirmationCommand({
+      kind: "payment_confirmed",
+      intentId: CLIENT_EVENTS.foreign,
+      idempotencyKey: CLIENT_EVENTS.foreign,
+      aggregateId: INVOICES.foreign,
+      expectedVersion: 0,
+      expectedAmount: { amountCents: 1_000, currency: "EUR" },
+      expectedMethod: "bank_transfer",
+      expectedReason: null,
+    })).resolves.toMatchObject({ state: "not_committed", retry: "same_idempotency_key_only" });
+
+    await sql.unsafe("ALTER TABLE public.events DISABLE TRIGGER events_f15_payment_update_guard");
+    try {
+      await sql`
+        UPDATE public.events
+        SET payload = jsonb_set(payload, '{source}', '"bank"'::jsonb)
+        WHERE tenant_id = ${TENANT}
+          AND client_event_id = ${CLIENT_EVENTS.partial}::uuid
+          AND event_type = 'PAYMENT_CONFIRMED_V1'
+      `;
+      setSession(USERS.buero, "buero");
+      await expect(recoverPaymentConfirmationCommand({
+        kind: "payment_confirmed",
+        intentId: CLIENT_EVENTS.partial,
+        idempotencyKey: CLIENT_EVENTS.partial,
+        aggregateId: INVOICES.happy,
+        expectedVersion: 0,
+        expectedAmount: { amountCents: 4_000, currency: "EUR" },
+        expectedMethod: "bank_transfer",
+        expectedReason: null,
+      })).resolves.toMatchObject({
+        state: "unknown",
+        retry: "forbidden_until_reconciled",
+      });
+    } finally {
+      await sql`
+        UPDATE public.events
+        SET payload = jsonb_set(payload, '{source}', '"manual"'::jsonb)
+        WHERE tenant_id = ${TENANT}
+          AND client_event_id = ${CLIENT_EVENTS.partial}::uuid
+          AND event_type = 'PAYMENT_CONFIRMED_V1'
+      `;
+      await sql.unsafe("ALTER TABLE public.events ENABLE TRIGGER events_f15_payment_update_guard");
+    }
+
+    setSession(USERS.buero, "buero");
+    await expect(readPaymentReceiptCommand({
+      invoiceId: INVOICES.foreign,
+      clientEventId: CLIENT_EVENTS.foreign,
+    })).resolves.toMatchObject({ code: "OK", data: null });
 
     const partialState = await snapshot(INVOICES.happy);
     expect(partialState.invoice).toMatchObject({

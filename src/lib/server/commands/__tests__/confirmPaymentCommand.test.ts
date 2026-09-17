@@ -475,6 +475,8 @@ describe("confirmPayment", () => {
     expect(source).not.toMatch(/public\.(?:payments|zahlung)\b/);
     expect(source).not.toMatch(/mollie|bank|createClient|supabase|rpc\(/i);
     expect(actionSource).toContain('"use server"');
-    expect(actionSource).toContain("confirmPayment(input)");
+    expect(actionSource).toContain('from "@/modules/accounting/server-public"');
+    expect(actionSource).toContain("confirmPaymentCommand(input)");
+    expect(actionSource).not.toContain('from "@/lib/server/commands/confirmPaymentCommand"');
   });
 });

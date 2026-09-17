@@ -69,10 +69,10 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
   async function cancel(row: ImmutableInvoiceSummary, rawReason: string) {
     if (pendingInvoiceId) return;
     const reason = rawReason.trim();
-    if (reason.length < 5 || reason.length > 500) {
+    if (reason.length < 10 || reason.length > 500) {
       setRowMessages((current) => ({
         ...current,
-        [row.invoiceId]: { kind: "error", text: "Stornogrund muss 5 bis 500 Zeichen enthalten." },
+        [row.invoiceId]: { kind: "error", text: "Stornogrund muss 10 bis 500 Zeichen enthalten." },
       }));
       return;
     }
@@ -260,7 +260,7 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
                           name="reason"
                           value={reasons[row.invoiceId] ?? ""}
                           onChange={(event) => setReasons((current) => ({ ...current, [row.invoiceId]: event.target.value }))}
-                          minLength={5}
+                          minLength={10}
                           maxLength={500}
                           disabled={!interactive || pending}
                           className="min-h-12 flex-1 rounded-lg border border-neutral-gray-300 px-3 text-sm"

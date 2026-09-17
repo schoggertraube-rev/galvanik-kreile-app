@@ -13,6 +13,15 @@ const EVENT = "44444444-4444-4444-8444-444444444444";
 const CORRELATION = "55555555-5555-4555-8555-555555555555";
 const ACTOR = "66666666-6666-4666-8666-666666666666";
 const PDF_SHA256 = "b".repeat(64);
+const READ_AS_OF = "2026-09-17T08:15:00.000Z";
+
+function transactionPort() {
+  return {
+    execute: (query: { text?: string }) => query.text?.includes("statement_timestamp")
+      ? Promise.resolve([{ read_as_of: READ_AS_OF }])
+      : execute(query),
+  };
+}
 
 const buero = {
   tenantId: KREILE_TENANT_SLUG,
@@ -69,7 +78,7 @@ const validCancellationReceiptRow = {
 describe("readInvoiceReceipt", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    withTransaction.mockImplementation(async (_authorization, work) => work({ execute }));
+    withTransaction.mockImplementation(async (_authorization, work) => work(transactionPort()));
   });
 
   it("rejects malformed input before opening a transaction", async () => {
@@ -90,7 +99,7 @@ describe("readInvoiceReceipt", () => {
   it("uses the tenant-scoped privileged transaction port and returns null when nothing matches", async () => {
     execute.mockResolvedValueOnce([]);
     const { readInvoiceReceipt } = await import("../invoiceRead");
-    await expect(readInvoiceReceipt(buero, { orderId: ORDER, clientEventId: CLIENT })).resolves.toEqual({ code: "OK", data: null });
+    await expect(readInvoiceReceipt(buero, { orderId: ORDER, clientEventId: CLIENT })).resolves.toEqual({ code: "OK", data: null, asOf: READ_AS_OF });
     expect(withTransaction).toHaveBeenCalledWith(buero, expect.any(Function));
     expect(execute.mock.calls[0]?.[0].text).toContain("private.v_invoice_receipt_v1");
   });
@@ -100,6 +109,7 @@ describe("readInvoiceReceipt", () => {
     const { readInvoiceReceipt } = await import("../invoiceRead");
     await expect(readInvoiceReceipt(buero, { orderId: ORDER, clientEventId: CLIENT })).resolves.toEqual({
       code: "OK",
+      asOf: READ_AS_OF,
       data: {
         invoiceId: INVOICE,
         invoiceNumber: "R-2026-0009",
@@ -125,6 +135,27 @@ describe("readInvoiceReceipt", () => {
     });
   });
 
+  it("keeps historical zero-net and seven-percent rows read-only compatible", async () => {
+    execute.mockResolvedValueOnce([{
+      ...validReceiptRow,
+      net_amount_cents: 0,
+      vat_rate_basis_points: 700,
+      vat_amount_cents: 0,
+      gross_amount_cents: 0,
+    }]);
+    const { readInvoiceReceipt } = await import("../invoiceRead");
+    await expect(readInvoiceReceipt(buero, { orderId: ORDER, clientEventId: CLIENT }))
+      .resolves.toMatchObject({
+        code: "OK",
+        data: {
+          netAmountCents: 0,
+          vatRateBasisPoints: 700,
+          vatAmountCents: 0,
+          grossAmountCents: 0,
+        },
+      });
+  });
+
   it("fails closed to UNAVAILABLE on an ambiguous match, an integrity-broken row, or a database error", async () => {
     const { readInvoiceReceipt } = await import("../invoiceRead");
 
@@ -137,7 +168,7 @@ describe("readInvoiceReceipt", () => {
     execute.mockRejectedValueOnce(new Error("db down"));
     await expect(readInvoiceReceipt(buero, { orderId: ORDER, clientEventId: CLIENT })).resolves.toEqual({
       code: "UNAVAILABLE",
-      message: "Rechnungsbeleg konnte nicht sicher geladen werden.",
+      message: "Der technische Ausführungsnachweis der Rechnung konnte nicht sicher geladen werden.",
     });
   });
 });
@@ -145,7 +176,7 @@ describe("readInvoiceReceipt", () => {
 describe("readInvoicePdf", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    withTransaction.mockImplementation(async (_authorization, work) => work({ execute }));
+    withTransaction.mockImplementation(async (_authorization, work) => work(transactionPort()));
   });
 
   it("rejects a malformed invoice id before opening a transaction", async () => {
@@ -239,7 +270,7 @@ describe("readInvoicePdf", () => {
 describe("readInvoiceCancellationReceipt", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    withTransaction.mockImplementation(async (_authorization, work) => work({ execute }));
+    withTransaction.mockImplementation(async (_authorization, work) => work(transactionPort()));
   });
 
   it("returns the exact cancellation receipt and fails closed on changed integrity", async () => {
@@ -262,12 +293,90 @@ describe("readInvoiceCancellationReceipt", () => {
     await expect(readInvoiceCancellationReceipt(buero, { invoiceId: INVOICE, clientEventId: CLIENT }))
       .resolves.toMatchObject({ code: "UNAVAILABLE" });
   });
+
+  it("keeps a five-character historical cancellation reason read-only compatible", async () => {
+    execute.mockResolvedValueOnce([{ ...validCancellationReceiptRow, cancel_reason: "Alt 5" }]);
+    const { readInvoiceCancellationReceipt } = await import("../invoiceRead");
+    await expect(readInvoiceCancellationReceipt(buero, { invoiceId: INVOICE, clientEventId: CLIENT }))
+      .resolves.toMatchObject({ code: "OK", data: { reason: "Alt 5" } });
+  });
+});
+
+describe("readInvoiceCancellationState", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    withTransaction.mockImplementation(async (_authorization, work) => work(transactionPort()));
+  });
+
+  it("returns the locked cancellation facts and independent payment-evidence count", async () => {
+    execute.mockResolvedValueOnce([{
+      id: INVOICE,
+      tenant_id: KREILE_TENANT_SLUG,
+      status: "issued",
+      aggregate_version: 1,
+      gross_amount_cents: 5950,
+      payment_contract_version: 1,
+      payment_status: "offen",
+      payment_open_amount_cents: 5950,
+      payment_paid_amount_cents: 0,
+      payment_method: null,
+      payment_paid_at: null,
+      payment_receipt_id: null,
+      payment_event_id: null,
+      payment_correlation_id: null,
+      payment_version: 0,
+      payment_evidence_count: 0,
+    }]);
+    const { readInvoiceCancellationState } = await import("../invoiceRead");
+    await expect(readInvoiceCancellationState(buero, INVOICE)).resolves.toEqual({
+      code: "OK",
+      asOf: READ_AS_OF,
+      data: {
+        invoiceId: INVOICE,
+        tenantId: KREILE_TENANT_SLUG,
+        lifecycleStatus: "issued",
+        aggregateVersion: 1,
+        paymentContractVersion: 1,
+        grossAmountCents: 5950,
+        paidAmountCents: 0,
+        openAmountCents: 5950,
+        paymentStatus: "offen",
+        paymentVersion: 0,
+        paymentMethod: null,
+        paymentReceiptId: null,
+        paymentEventId: null,
+        paymentCorrelationId: null,
+        paymentPaidAt: null,
+        paymentEvidenceCount: 0,
+      },
+    });
+    expect(execute.mock.calls[0]?.[0].text).toContain("PAYMENT_CONFIRMED_V1");
+  });
+
+  it("fails closed on foreign, malformed or ambiguous cancellation facts", async () => {
+    const { readInvoiceCancellationState } = await import("../invoiceRead");
+    await expect(readInvoiceCancellationState(buero, "invalid")).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(readInvoiceCancellationState(werkstatt, INVOICE)).resolves.toMatchObject({ code: "FORBIDDEN" });
+    expect(withTransaction).not.toHaveBeenCalled();
+
+    const base = {
+      id: INVOICE, tenant_id: "foreign", status: "issued", aggregate_version: 1,
+      gross_amount_cents: 5950, payment_contract_version: 1, payment_status: "offen",
+      payment_open_amount_cents: 5950, payment_paid_amount_cents: 0, payment_method: null,
+      payment_paid_at: null, payment_receipt_id: null, payment_event_id: null,
+      payment_correlation_id: null, payment_version: 0, payment_evidence_count: 0,
+    };
+    execute.mockResolvedValueOnce([base]);
+    await expect(readInvoiceCancellationState(buero, INVOICE)).resolves.toMatchObject({ code: "UNAVAILABLE" });
+    execute.mockResolvedValueOnce([{ ...base, tenant_id: KREILE_TENANT_SLUG }, { ...base, tenant_id: KREILE_TENANT_SLUG }]);
+    await expect(readInvoiceCancellationState(buero, INVOICE)).resolves.toMatchObject({ code: "UNAVAILABLE" });
+  });
 });
 
 describe("readInvoiceSummaries", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    withTransaction.mockImplementation(async (_authorization, work) => work({ execute }));
+    withTransaction.mockImplementation(async (_authorization, work) => work(transactionPort()));
   });
 
   it("maps issued and cancelled tenant summaries without payment truth", async () => {

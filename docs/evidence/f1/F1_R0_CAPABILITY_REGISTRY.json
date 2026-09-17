@@ -620,7 +620,9 @@
         "cancelInvoiceAction",
         "getInvoiceReceiptAction",
         "getInvoiceCancellationReceiptAction",
-        "getInvoiceSummariesAction"
+        "getInvoiceSummariesAction",
+        "recoverInvoiceIssueAction",
+        "recoverInvoiceCancellationAction"
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "F1.4 immutable invoice issue, cancellation and receipt/readback candidate. Real local E2E and independent exact-SHA acceptance are pending.",
@@ -708,7 +710,9 @@
       "exported_functions": [
         "confirmPaymentAction",
         "setPaymentModeAction",
-        "getOrderPaymentStateAction"
+        "getOrderPaymentStateAction",
+        "getPaymentReceiptAction",
+        "recoverPaymentConfirmationAction"
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "F1.5-A/B/B2/C are delivered on main. The F1.5-D overlay candidate reads the tenant-bound payment/goods-out state through getOrderPaymentStateAction and passed fresh local real Auth/DB/browser E2E; Exact-SHA CI and independent acceptance remain pending.",

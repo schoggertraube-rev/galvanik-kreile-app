@@ -133,6 +133,13 @@ describe("createInvoice", () => {
     withTransaction.mockImplementation(async (_authorization, work) => work({ execute }));
   });
 
+  it("allows new issuance only for a positive net amount at 19 percent VAT", async () => {
+    const { newInvoiceIssuancePolicyAllows } = await import("../immutableInvoiceCommand");
+    expect(newInvoiceIssuancePolicyAllows(1, 1900)).toBe(true);
+    expect(newInvoiceIssuancePolicyAllows(0, 1900)).toBe(false);
+    expect(newInvoiceIssuancePolicyAllows(10_000, 700)).toBe(false);
+  });
+
   it("rejects malformed runtime input before auth or database access", async () => {
     const { createInvoice } = await import("../immutableInvoiceCommand");
     await expect(createInvoice(null)).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
@@ -287,12 +294,13 @@ describe("cancelInvoice", () => {
   it("rejects malformed input and non-cancellation roles before opening a transaction", async () => {
     const { cancelInvoice } = await import("../immutableInvoiceCommand");
     await expect(cancelInvoice({ ...validCancelInput, reason: "kurz" })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(cancelInvoice({ ...validCancelInput, reason: "123456789" })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
     await expect(cancelInvoice({ ...validCancelInput, reason: ` ${validCancelInput.reason}` })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
     await expect(cancelInvoice({ ...validCancelInput, expectedVersion: 0 })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
     expect(withTransaction).not.toHaveBeenCalled();
 
     resolveAuthorization.mockResolvedValueOnce(authorization);
-    await expect(cancelInvoice(validCancelInput)).resolves.toMatchObject({ code: "FORBIDDEN" });
+    await expect(cancelInvoice({ ...validCancelInput, reason: "1234567890" })).resolves.toMatchObject({ code: "FORBIDDEN" });
     expect(withTransaction).not.toHaveBeenCalled();
   });
 
@@ -405,6 +413,35 @@ describe("cancelInvoice", () => {
     expect(sqlText).toContain("FOR UPDATE OF orders");
     expect(sqlText).not.toContain("INSERT INTO public.events");
     expect(sqlText).not.toContain("UPDATE public.invoices");
+    expect(renderToBuffer).not.toHaveBeenCalled();
+  });
+
+  it("blocks an unpaid-looking invoice when durable payment evidence already exists", async () => {
+    execute.mockImplementation((query: { text: string }) => {
+      if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if (query.text.includes("private.v_invoice_receipt_v1")) return Promise.resolve([]);
+      if (query.text.includes("SELECT id") && query.text.includes("FROM public.events")) {
+        return Promise.resolve([]);
+      }
+      if (query.text.includes("FOR UPDATE OF orders")) {
+        return Promise.resolve([{ id: ORDER, tenant_id: KREILE_TENANT_SLUG }]);
+      }
+      if (query.text.includes("FROM public.invoices") && query.text.includes("FOR UPDATE")) {
+        return Promise.resolve([validLockedInvoice]);
+      }
+      if (query.text.includes("payment_evidence_count")) {
+        return Promise.resolve([{ payment_evidence_count: 1 }]);
+      }
+      throw new Error(`unexpected SQL in durable payment evidence test: ${query.text}`);
+    });
+
+    const { cancelInvoice } = await import("../immutableInvoiceCommand");
+    await expect(cancelInvoice(validCancelInput)).resolves.toMatchObject({ code: "CONFLICT" });
+
+    const sqlText = execute.mock.calls.map(([query]) => query.text).join("\n");
+    expect(sqlText).toContain("PAYMENT_CONFIRMED_V1");
+    expect(sqlText).not.toContain("UPDATE public.invoices");
+    expect(sqlText).not.toContain("INSERT INTO public.events");
     expect(renderToBuffer).not.toHaveBeenCalled();
   });
 });

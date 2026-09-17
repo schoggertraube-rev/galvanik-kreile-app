@@ -14,6 +14,15 @@ vi.mock("drizzle-orm", () => ({
 
 const INVOICE = "33333333-3333-4333-8333-333333333333";
 const CORRELATION = "55555555-5555-4555-8555-555555555555";
+const READ_AS_OF = "2026-09-17T08:15:00.000Z";
+
+function transactionPort() {
+  return {
+    execute: (query: { text?: string }) => query.text?.includes("statement_timestamp")
+      ? Promise.resolve([{ read_as_of: READ_AS_OF }])
+      : execute(query),
+  };
+}
 
 const admin = {
   tenantId: KREILE_TENANT_SLUG,
@@ -127,10 +136,36 @@ const canonicalIntakeRow = {
   integrity_ok: false,
 };
 
+const canonicalIntakeIssuedRow = {
+  ...orderPaidRow,
+  ...openRow,
+  order_version: 1,
+  station: "wareneingang",
+  current_station: "wareneingang",
+  current_station_id: "wareneingang",
+  order_status: "angenommen",
+  invoice_state: "issued",
+  active_invoice_count: 1,
+  payment_goods_out_allowed: false,
+  payment_integrity_ok: true,
+  payment_actor_id: null,
+  goods_out_event_count: 0,
+  goods_out_event_id: null,
+  goods_out_client_event_id: null,
+  goods_out_correlation_id: null,
+  goods_out_event_schema_version: null,
+  goods_out_order_version: null,
+  goods_out_actor_id: null,
+  goods_out_occurred_at: null,
+  goods_out_mode: null,
+  goods_out_allowed: false,
+  integrity_ok: false,
+};
+
 describe("readPaymentSummary", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    withTransaction.mockImplementation(async (_authorization, work) => work({ execute }));
+    withTransaction.mockImplementation(async (_authorization, work) => work(transactionPort()));
   });
 
   it("returns the canonical paid summary through the tenant transaction and private view", async () => {
@@ -139,6 +174,7 @@ describe("readPaymentSummary", () => {
 
     await expect(readPaymentSummary(admin)).resolves.toEqual({
       code: "OK",
+      asOf: READ_AS_OF,
       data: [{
         invoiceId: INVOICE,
         invoiceNumber: "R-2026-0009",
@@ -167,7 +203,7 @@ describe("readPaymentSummary", () => {
   it("preserves a genuine empty result and the invoice payment state", async () => {
     execute.mockResolvedValueOnce([]);
     const { readPaymentSummary } = await import("../paymentSummaryRead");
-    await expect(readPaymentSummary(buero)).resolves.toEqual({ code: "OK", data: [] });
+    await expect(readPaymentSummary(buero)).resolves.toEqual({ code: "OK", data: [], asOf: READ_AS_OF });
 
     execute.mockResolvedValueOnce([openRow]);
     await expect(readPaymentSummary(werkstatt)).resolves.toMatchObject({
@@ -270,6 +306,29 @@ describe("readPaymentSummary", () => {
     });
   });
 
+  it("keeps the canonical F1.1 lifecycle/status pair readable after a valid invoice is issued", async () => {
+    execute.mockResolvedValueOnce([canonicalIntakeIssuedRow]);
+    const { readOrderPaymentState } = await import("../paymentSummaryRead");
+    await expect(readOrderPaymentState(admin, { orderId: paidRow.order_id })).resolves.toMatchObject({
+      code: "OK",
+      data: {
+        orderVersion: 1,
+        physicalStatus: "wareneingang",
+        mode: "vorkasse",
+        invoiceState: "issued",
+        payment: {
+          status: "offen",
+          paidAmountCents: 0,
+          openAmountCents: 10000,
+          paymentVersion: 0,
+        },
+        paymentActorId: null,
+        goodsOut: null,
+        goodsOutAllowed: false,
+      },
+    });
+  });
+
   it("fails closed for invalid input, denial, missing, ambiguous or corrupt order state", async () => {
     const { readOrderPaymentState } = await import("../paymentSummaryRead");
     await expect(readOrderPaymentState(admin, { orderId: " bad " })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
@@ -299,5 +358,95 @@ describe("readPaymentSummary", () => {
     expect(result).toEqual({ code: "UNAVAILABLE", message: "Zahlungs- und Warenausgangsdaten konnten nicht sicher geladen werden." });
     expect(JSON.stringify(result)).not.toContain("internal detail");
     log.mockRestore();
+  });
+});
+
+describe("readPaymentReceipt", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    withTransaction.mockImplementation(async (_authorization, work) => work(transactionPort()));
+  });
+
+  const paymentReceiptRow = {
+    event_id: "77777777-7777-4777-8777-777777777777",
+    tenant_id: KREILE_TENANT_SLUG,
+    order_id: "order-2026-0009",
+    event_type: "PAYMENT_CONFIRMED_V1",
+    client_event_id: "88888888-8888-4888-8888-888888888888",
+    correlation_id: CORRELATION,
+    event_schema_version: 1,
+    aggregate_version: 1,
+    actor_id: admin.userId,
+    occurred_at: "2026-09-17T08:00:00.000Z",
+    status: "success",
+    station: null,
+    from_station: null,
+    payload: {
+      amountCents: 1,
+      currency: "EUR",
+      grossAmountCents: 10_000,
+      invoiceId: INVOICE,
+      method: "ueberweisung",
+      occurredAt: "2026-09-17T08:00:00.000Z",
+      openAmountCents: 9_999,
+      orderId: "order-2026-0009",
+      paidAmountCents: 1,
+      paymentMode: "vorkasse",
+      paymentStatus: "teilbezahlt",
+      paymentVersion: 1,
+      receiptId: "payment:receipt:1",
+      source: "manual",
+    },
+    invoice_id: INVOICE,
+    invoice_number: "R-2026-0009",
+    invoice_order_id: "order-2026-0009",
+    invoice_status: "issued",
+    invoice_gross_amount_cents: 10_000,
+  };
+
+  it("reads an independent persistent payment receipt bound to tenant and intent", async () => {
+    execute.mockResolvedValueOnce([paymentReceiptRow]);
+    const { readPaymentReceipt } = await import("../paymentSummaryRead");
+    await expect(readPaymentReceipt(admin, {
+      invoiceId: INVOICE,
+      clientEventId: paymentReceiptRow.client_event_id,
+    })).resolves.toMatchObject({
+      code: "OK",
+      data: {
+        invoiceId: INVOICE,
+        amountCents: 1,
+        paidAmountCents: 1,
+        openAmountCents: 9_999,
+        paymentStatus: "teilbezahlt",
+        expectedVersion: 0,
+        paymentVersion: 1,
+      },
+    });
+    expect(execute.mock.calls[0]?.[0].text).toContain("PAYMENT_CONFIRMED_V1");
+    expect(execute.mock.calls[0]?.[0].text).not.toContain("invoice.contract_version");
+    expect(execute.mock.calls[0]?.[0].values).toEqual([
+      KREILE_TENANT_SLUG,
+      paymentReceiptRow.client_event_id,
+      INVOICE,
+    ]);
+  });
+
+  it("returns empty only for a complete canonical absence and fails closed on corruption", async () => {
+    const { readPaymentReceipt } = await import("../paymentSummaryRead");
+    execute.mockResolvedValueOnce([]);
+    await expect(readPaymentReceipt(admin, {
+      invoiceId: INVOICE,
+      clientEventId: paymentReceiptRow.client_event_id,
+    })).resolves.toEqual({ code: "OK", data: null, asOf: READ_AS_OF });
+
+    execute.mockResolvedValueOnce([{ ...paymentReceiptRow, tenant_id: "foreign" }]);
+    await expect(readPaymentReceipt(admin, {
+      invoiceId: INVOICE,
+      clientEventId: paymentReceiptRow.client_event_id,
+    })).resolves.toMatchObject({ code: "UNAVAILABLE" });
+    await expect(readPaymentReceipt(readonlyUser, {
+      invoiceId: INVOICE,
+      clientEventId: paymentReceiptRow.client_event_id,
+    })).resolves.toMatchObject({ code: "FORBIDDEN" });
   });
 });

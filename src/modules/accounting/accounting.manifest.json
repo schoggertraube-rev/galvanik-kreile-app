@@ -1,16 +1,89 @@
 {
   "moduleId": "accounting",
-  "version": "1.0.0",
-  "owner": "Path-1 Accounting-minimal (Rechnungseinstieg)",
+  "version": "1.1.0",
+  "owner": "Path-1 Accounting-minimal (invoices, payments and durable receipts)",
   "publicExports": [
-    "@/modules/accounting/public#AccountingEntry"
+    "@/modules/accounting/public#ACCOUNTING_CORE_CONTRACT_VERSION",
+    "@/modules/accounting/public#AccountingEntry",
+    "@/modules/accounting/public#InvoiceCancelledReceiptV1",
+    "@/modules/accounting/public#InvoiceIssuedReceiptV1",
+    "@/modules/accounting/public#InvoiceSummaryV1",
+    "@/modules/accounting/public#PaymentConfirmedReceiptV1",
+    "@/modules/accounting/public#PaymentSummaryV1",
+    "@/modules/accounting/public#ReadEnvelopeV1",
+    "@/modules/accounting/server-public#CancelInvoiceInput",
+    "@/modules/accounting/server-public#CancelInvoiceResult",
+    "@/modules/accounting/server-public#ConfirmPaymentInput",
+    "@/modules/accounting/server-public#ConfirmPaymentResult",
+    "@/modules/accounting/server-public#CreateInvoiceInput",
+    "@/modules/accounting/server-public#CreateInvoiceResult",
+    "@/modules/accounting/server-public#InvoiceCancelledReceiptV1",
+    "@/modules/accounting/server-public#InvoiceIssuedReceiptV1",
+    "@/modules/accounting/server-public#OrderPaymentStateReadResult",
+    "@/modules/accounting/server-public#PaymentConfirmedReceiptV1",
+    "@/modules/accounting/server-public#ReadInvoiceCancellationReceiptInput",
+    "@/modules/accounting/server-public#ReadInvoiceCancellationReceiptResult",
+    "@/modules/accounting/server-public#ReadInvoiceReceiptInput",
+    "@/modules/accounting/server-public#ReadInvoiceReceiptResult",
+    "@/modules/accounting/server-public#ReadInvoiceSummariesResult",
+    "@/modules/accounting/server-public#ReadOrderPaymentStateInput",
+    "@/modules/accounting/server-public#ReadPaymentReceiptInput",
+    "@/modules/accounting/server-public#ReadPaymentReceiptResult",
+    "@/modules/accounting/server-public#RecoveryCommandDecision",
+    "@/modules/accounting/server-public#RecoveryCommandInput",
+    "@/modules/accounting/server-public#SetPaymentModeInput",
+    "@/modules/accounting/server-public#SetPaymentModeResult",
+    "@/modules/accounting/server-public#cancelInvoiceCommand",
+    "@/modules/accounting/server-public#confirmPaymentCommand",
+    "@/modules/accounting/server-public#issueInvoiceCommand",
+    "@/modules/accounting/server-public#readInvoiceCancellationReceiptCommand",
+    "@/modules/accounting/server-public#readInvoiceReceiptCommand",
+    "@/modules/accounting/server-public#readInvoiceSummariesCommand",
+    "@/modules/accounting/server-public#readOrderPaymentStateCommand",
+    "@/modules/accounting/server-public#readPaymentReceiptCommand",
+    "@/modules/accounting/server-public#recoverInvoiceCancellationCommand",
+    "@/modules/accounting/server-public#recoverInvoiceIssueCommand",
+    "@/modules/accounting/server-public#recoverPaymentConfirmationCommand",
+    "@/modules/accounting/server-public#setPaymentModeCommand"
   ],
-  "capabilities": [],
-  "migrations": [],
-  "viewsFunctions": [],
-  "ownsTables": [],
+  "capabilities": [
+    "accounting:invoice-read",
+    "accounting:invoice-issue",
+    "accounting:invoice-cancel",
+    "accounting:payment-read",
+    "accounting:payment-confirm",
+    "accounting:receipt-recovery"
+  ],
+  "migrations": [
+    "20260821152949_f1_4_immutable_invoice_contract.sql",
+    "20260905100000_f1_5_payment_goods_out_contract.sql",
+    "20260905201850_f1_5_payment_mode_intake_contract.sql",
+    "20260909170000_f1_5_payment_goods_out_v2_contract.sql"
+  ],
+  "viewsFunctions": [
+    "private.v_invoice_created_receipt_v2",
+    "private.v_invoice_receipt_v1",
+    "private.v_invoice_summary_v1",
+    "private.v_payment_summary_v1"
+  ],
+  "ownsTables": [
+    "public.invoices"
+  ],
   "storagePurposes": [],
-  "events": { "emits": [], "consumes": [] },
+  "events": {
+    "emits": [
+      "INVOICE_CANCELLED_V1",
+      "INVOICE_CREATED_V1",
+      "INVOICE_CREATED_V2",
+      "PAYMENT_CONFIRMED_V1",
+      "PAYMENT_MODE_SET_V1"
+    ],
+    "consumes": [
+      "ORDER_INTAKE_CREATED_V1"
+    ]
+  },
   "config": {},
-  "dependencies": []
+  "dependencies": [
+    "orders"
+  ]
 }

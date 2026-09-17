@@ -46,7 +46,6 @@ const CANCEL_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141407";
 const REISSUE_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141408";
 const CANCEL_REISSUE_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141409";
 const ISSUE_SEVEN_PERCENT_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141410";
-const CANCEL_SEVEN_PERCENT_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141411";
 const ISSUE_MISSING_TERM_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141412";
 const ISSUE_UNFINISHED_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141414";
 const ISSUE_PAYMENT_GUARD_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141415";
@@ -62,10 +61,22 @@ const RACE_FREEZE_CORRELATION_ID = "14141414-1414-4141-8141-141414141424";
 const RACE_ISSUE_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141425";
 const RACE_CANCEL_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141426";
 const RACE_PAYMENT_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141427";
+const CANCEL_EVIDENCE_ONLY_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141428";
+const BROWSER_FREEZE_ID = "14141414-1414-4141-8141-141414141430";
+const BROWSER_FREEZE_EVENT_ID = "14141414-1414-4141-8141-141414141431";
+const BROWSER_FREEZE_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141432";
+const BROWSER_FREEZE_CORRELATION_ID = "14141414-1414-4141-8141-141414141433";
+const BROWSER_ITEM_ID = "14141414-1414-4141-8141-141414141434";
+const BROWSER_INTAKE_EVENT_ID = "14141414-1414-4141-8141-141414141435";
+const BROWSER_INTAKE_CLIENT_EVENT_ID = "14141414-1414-4141-8141-141414141436";
+const BROWSER_INTAKE_CORRELATION_ID = "14141414-1414-4141-8141-141414141437";
+const BROWSER_INTAKE_RECEIPT_ID = "14141414-1414-4141-8141-141414141438";
+const BROWSER_INTAKE_INTENT_SHA256 = "b".repeat(64);
 const CUSTOMER_ID = "f14-command-customer";
 const ORDER_ID = "f14-command-order";
 const UNFINISHED_ORDER_ID = "f14-command-unfinished-order";
 const RACE_ORDER_ID = "f14-command-race-order";
+const BROWSER_ORDER_ID = "f14-command-browser-order";
 const ITEM_ID = "f14-command-item";
 const RACE_ITEM_ID = "f14-command-race-item";
 const SETTINGS_ID = "f14-command-settings";
@@ -146,17 +157,23 @@ async function assertFreshReset() {
       EXISTS (SELECT 1 FROM public.company_settings WHERE id = ${SETTINGS_ID}) AS settings_exists,
       EXISTS (SELECT 1 FROM public.customers WHERE id = ${CUSTOMER_ID}) AS customer_exists,
       EXISTS (
-        SELECT 1 FROM public.orders WHERE id IN (${ORDER_ID}, ${UNFINISHED_ORDER_ID}, ${RACE_ORDER_ID})
+        SELECT 1 FROM public.orders
+        WHERE id IN (${ORDER_ID}, ${UNFINISHED_ORDER_ID}, ${RACE_ORDER_ID}, ${BROWSER_ORDER_ID})
       ) AS order_exists,
-      EXISTS (SELECT 1 FROM public.items WHERE id IN (${ITEM_ID}, ${RACE_ITEM_ID})) AS item_exists,
+      EXISTS (
+        SELECT 1 FROM public.items WHERE id IN (${ITEM_ID}, ${RACE_ITEM_ID}, ${BROWSER_ITEM_ID})
+      ) AS item_exists,
       EXISTS (SELECT 1 FROM private.extra_work_hourly_rates WHERE id = ${RATE_ID}::uuid) AS rate_exists,
       EXISTS (
         SELECT 1 FROM private.order_freezes
-        WHERE id IN (${FREEZE_ID}::uuid, ${RACE_FREEZE_ID}::uuid)
+        WHERE id IN (${FREEZE_ID}::uuid, ${RACE_FREEZE_ID}::uuid, ${BROWSER_FREEZE_ID}::uuid)
       ) AS freeze_exists,
       EXISTS (
         SELECT 1 FROM public.events
-        WHERE id IN (${FREEZE_EVENT_ID}, ${RACE_FREEZE_EVENT_ID})
+        WHERE id IN (
+          ${FREEZE_EVENT_ID}, ${RACE_FREEZE_EVENT_ID}, ${BROWSER_FREEZE_EVENT_ID},
+          ${BROWSER_INTAKE_EVENT_ID}
+        )
            OR client_event_id IN (
              ${ISSUE_CLIENT_EVENT_ID}::uuid,
              ${ISSUE_PAYMENT_GUARD_CLIENT_EVENT_ID}::uuid,
@@ -217,6 +234,20 @@ async function insertPrerequisites() {
         ${ORDER_VERSION}, 'fertig', now()
       )
     `;
+    // This isolated local fixture remains deliberately untouched by the
+    // integration assertions. The production-browser contract must issue and
+    // pay its invoice through the real UI commands before proving that a paid
+    // invoice cannot be cancelled.
+    await transaction`
+      INSERT INTO public.orders (
+        id, tenant_id, order_number, customer_id, title, station,
+        current_station, current_station_id, version, status, created_at
+      ) VALUES (
+        ${BROWSER_ORDER_ID}, ${TENANT_ID}, 'A-2026-1404', ${CUSTOMER_ID},
+        'F1.4 Synthetic Browser Order', 'fertig', 'fertig', 'fertig',
+        ${ORDER_VERSION}, 'fertig', now()
+      )
+    `;
     // A separate, deliberately unfinished order. It never reaches the freeze,
     // the source view or the number allocation.
     await transaction`
@@ -251,6 +282,15 @@ async function insertPrerequisites() {
     await transaction`
       INSERT INTO public.items (
         id, tenant_id, order_id, customer_id, name, quantity,
+        current_station_id, preis_netto, material, surface_requested, created_at
+      ) VALUES (
+        ${BROWSER_ITEM_ID}, ${TENANT_ID}, ${BROWSER_ORDER_ID}, ${CUSTOMER_ID},
+        'F1.4 Synthetic Browser Position', 1, 'fertig', 75.00, 'Stahl', 'Verzinken', now()
+      )
+    `;
+    await transaction`
+      INSERT INTO public.items (
+        id, tenant_id, order_id, customer_id, name, quantity,
         current_station_id, preis_netto, created_at
       ) VALUES (
         ${RACE_ITEM_ID}, ${TENANT_ID}, ${RACE_ORDER_ID}, ${CUSTOMER_ID},
@@ -261,6 +301,41 @@ async function insertPrerequisites() {
       INSERT INTO private.extra_work_hourly_rates (
         id, tenant_id, hourly_rate_cents, version, created_by, effective_at
       ) VALUES (${RATE_ID}::uuid, ${TENANT_ID}, 12000, 1, ${USER_ID}::uuid, now())
+    `;
+    const browserItemsSnapshot = [{
+      id: BROWSER_ITEM_ID,
+      position: 1,
+      name: "F1.4 Synthetic Browser Position",
+      quantity: 1,
+      material: "Stahl",
+      surfaceRequested: "Verzinken",
+    }];
+    await transaction`
+      INSERT INTO public.events (
+        id, tenant_id, order_id, item_id, event_type, description, notes, payload,
+        status, user_id, station, client_event_id, event_schema_version,
+        correlation_id, aggregate_version, from_station, created_at
+      ) VALUES (
+        ${BROWSER_INTAKE_EVENT_ID}, ${TENANT_ID}, ${BROWSER_ORDER_ID}, NULL,
+        'ORDER_INTAKE_CREATED_V1', 'Synthetischer lokaler Browser-Auftrag angelegt', NULL,
+        ${transaction.json({ intentSha256: BROWSER_INTAKE_INTENT_SHA256 })},
+        'success', ${USER_ID}::uuid, 'wareneingang', ${BROWSER_INTAKE_CLIENT_EVENT_ID}::uuid, 1,
+        ${BROWSER_INTAKE_CORRELATION_ID}::uuid, 1, NULL, statement_timestamp() AT TIME ZONE 'UTC'
+      )
+    `;
+    await transaction`
+      INSERT INTO private.order_intake_receipts (
+        id, event_id, tenant_id, order_id, customer_id, actor_id, client_event_id,
+        correlation_id, intent_sha256, customer_mode, order_number, customer_display_name,
+        due_date, note, items_snapshot, created_at
+      ) VALUES (
+        ${BROWSER_INTAKE_RECEIPT_ID}::uuid, ${BROWSER_INTAKE_EVENT_ID}, ${TENANT_ID},
+        ${BROWSER_ORDER_ID}, ${CUSTOMER_ID}, ${USER_ID}::uuid,
+        ${BROWSER_INTAKE_CLIENT_EVENT_ID}::uuid, ${BROWSER_INTAKE_CORRELATION_ID}::uuid,
+        ${BROWSER_INTAKE_INTENT_SHA256}, 'EXISTING', 'A-2026-1404',
+        'F1.4 Synthetic Customer GmbH', '2026-10-31'::date, NULL,
+        ${transaction.json(browserItemsSnapshot)}, statement_timestamp()
+      )
     `;
     await transaction`
       INSERT INTO public.events (
@@ -273,6 +348,20 @@ async function insertPrerequisites() {
         ${transaction.json(FREEZE_PAYLOAD)},
         'success', 'fertig', ${FREEZE_INSTANT}::timestamptz AT TIME ZONE 'UTC',
         ${FREEZE_CLIENT_EVENT_ID}::uuid, 1, ${FREEZE_CORRELATION_ID}::uuid,
+        ${ORDER_VERSION}, 'galvanik'
+      )
+    `;
+    await transaction`
+      INSERT INTO public.events (
+        id, tenant_id, order_id, item_id, event_type, description, user_id,
+        payload, status, station, created_at, client_event_id,
+        event_schema_version, correlation_id, aggregate_version, from_station
+      ) VALUES (
+        ${BROWSER_FREEZE_EVENT_ID}, ${TENANT_ID}, ${BROWSER_ORDER_ID}, NULL, 'ORDER_FROZEN_V1',
+        'Browser order frozen from galvanik to fertig', ${USER_ID}::uuid,
+        ${transaction.json({ ...FREEZE_PAYLOAD, freezeId: BROWSER_FREEZE_ID })},
+        'success', 'fertig', ${FREEZE_INSTANT}::timestamptz AT TIME ZONE 'UTC',
+        ${BROWSER_FREEZE_CLIENT_EVENT_ID}::uuid, 1, ${BROWSER_FREEZE_CORRELATION_ID}::uuid,
         ${ORDER_VERSION}, 'galvanik'
       )
     `;
@@ -297,6 +386,17 @@ async function insertPrerequisites() {
         frozen_by, frozen_at
       ) VALUES (
         ${FREEZE_ID}::uuid, ${TENANT_ID}, ${ORDER_ID}, ${FREEZE_EVENT_ID},
+        ${RATE_ID}::uuid, 12000, 0, 0, ${ORDER_VERSION}, ${USER_ID}::uuid,
+        ${FREEZE_INSTANT}::timestamptz
+      )
+    `;
+    await transaction`
+      INSERT INTO private.order_freezes (
+        id, tenant_id, order_id, event_id, hourly_rate_id,
+        hourly_rate_cents, total_amount_cents, line_count, order_version,
+        frozen_by, frozen_at
+      ) VALUES (
+        ${BROWSER_FREEZE_ID}::uuid, ${TENANT_ID}, ${BROWSER_ORDER_ID}, ${BROWSER_FREEZE_EVENT_ID},
         ${RATE_ID}::uuid, 12000, 0, 0, ${ORDER_VERSION}, ${USER_ID}::uuid,
         ${FREEZE_INSTANT}::timestamptz
       )
@@ -373,6 +473,10 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
       readInvoiceReceipt,
       readInvoiceSummaries,
     } = await import("@/lib/server/invoiceRead");
+    const {
+      recoverInvoiceCancellationCommand,
+      recoverInvoiceIssueCommand,
+    } = await import("@/modules/accounting/server-public");
     const authorization: AuthorizationSnapshot = {
       userId: USER_ID,
       tenantId: TENANT_ID,
@@ -762,7 +866,45 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
       authorization,
       { orderId: ORDER_ID, clientEventId: ISSUE_CLIENT_EVENT_ID },
     );
-    expect(receiptRead).toEqual({ code: "OK", data: issued.receipt });
+    expect(receiptRead).toMatchObject({ code: "OK", data: issued.receipt });
+    if (receiptRead.code !== "OK") throw new Error("F1_4_RECEIPT_READ_FAILED");
+    expect(receiptRead.asOf).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+
+    setSyntheticSession();
+    const recoveredIssue = await recoverInvoiceIssueCommand({
+      kind: "invoice_issued",
+      intentId: ISSUE_CLIENT_EVENT_ID,
+      idempotencyKey: ISSUE_CLIENT_EVENT_ID,
+      aggregateId: ORDER_ID,
+      expectedVersion: ORDER_VERSION,
+      expectedAmount: null,
+      expectedMethod: null,
+      expectedReason: null,
+    });
+    expect(recoveredIssue).toMatchObject({
+      state: "resolved",
+      receipt: {
+        invoiceId: issued.receipt.invoiceId,
+        intentId: ISSUE_CLIENT_EVENT_ID,
+        idempotencyKey: ISSUE_CLIENT_EVENT_ID,
+      },
+    });
+
+    const absentIssueId = randomUUID();
+    setSyntheticSession();
+    await expect(recoverInvoiceIssueCommand({
+      kind: "invoice_issued",
+      intentId: absentIssueId,
+      idempotencyKey: absentIssueId,
+      aggregateId: ORDER_ID,
+      expectedVersion: ORDER_VERSION,
+      expectedAmount: null,
+      expectedMethod: null,
+      expectedReason: null,
+    })).resolves.toMatchObject({
+      state: "not_committed",
+      retry: "same_idempotency_key_only",
+    });
 
     const pdfRead = await readInvoicePdf(
       authorization,
@@ -877,7 +1019,28 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
       invoiceId: issued.receipt.invoiceId,
       clientEventId: CANCEL_CLIENT_EVENT_ID,
     });
-    expect(cancellationReceiptRead).toEqual({ code: "OK", data: cancelled.receipt });
+    expect(cancellationReceiptRead).toMatchObject({ code: "OK", data: cancelled.receipt });
+    if (cancellationReceiptRead.code !== "OK") throw new Error("F1_4_CANCEL_RECEIPT_READ_FAILED");
+    expect(cancellationReceiptRead.asOf).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+
+    setSyntheticSession();
+    await expect(recoverInvoiceCancellationCommand({
+      kind: "invoice_cancelled",
+      intentId: CANCEL_CLIENT_EVENT_ID,
+      idempotencyKey: CANCEL_CLIENT_EVENT_ID,
+      aggregateId: issued.receipt.invoiceId,
+      expectedVersion: 1,
+      expectedAmount: null,
+      expectedMethod: null,
+      expectedReason: cancelInput.reason,
+    })).resolves.toMatchObject({
+      state: "resolved",
+      receipt: {
+        invoiceId: issued.receipt.invoiceId,
+        intentId: CANCEL_CLIENT_EVENT_ID,
+        idempotencyKey: CANCEL_CLIENT_EVENT_ID,
+      },
+    });
 
     const cancellationPdfRead = await readInvoicePdf(
       authorization,
@@ -903,7 +1066,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
     await expect(readInvoiceReceipt(authorization, {
       orderId: ORDER_ID,
       clientEventId: ISSUE_CLIENT_EVENT_ID,
-    })).resolves.toEqual({ code: "OK", data: issued.receipt });
+    })).resolves.toMatchObject({ code: "OK", data: issued.receipt });
 
     setSyntheticSession();
     await expect(cancelInvoice(cancelInput)).resolves.toEqual({
@@ -977,59 +1140,32 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
       cancelled_event_count: 2,
     });
 
-    await sql`
-      UPDATE public.company_settings
-      SET invoice_vat_rate_basis_points = 700
-      WHERE tenant_id = ${TENANT_ID} AND id = ${SETTINGS_ID}
-    `;
-    setSyntheticSession();
-    const sevenPercentInvoice = await createInvoice({
-      orderId: ORDER_ID,
-      expectedVersion: ORDER_VERSION,
-      clientEventId: ISSUE_SEVEN_PERCENT_CLIENT_EVENT_ID,
-    });
-    expect(sevenPercentInvoice.code).toBe("OK");
-    if (sevenPercentInvoice.code !== "OK") {
-      throw new Error(`F1_4_SEVEN_PERCENT_ISSUE_FAILED:${sevenPercentInvoice.code}`);
+    try {
+      await sql`
+        UPDATE public.company_settings
+        SET invoice_vat_rate_basis_points = 700
+        WHERE tenant_id = ${TENANT_ID} AND id = ${SETTINGS_ID}
+      `;
+      await expectNoWrite(
+        "company_settings.invoice_vat_rate_basis_points/700",
+        MASTER_DATA_REJECTION,
+        () => createInvoice({
+          orderId: ORDER_ID,
+          expectedVersion: ORDER_VERSION,
+          clientEventId: ISSUE_SEVEN_PERCENT_CLIENT_EVENT_ID,
+        }),
+      );
+    } finally {
+      await sql`
+        UPDATE public.company_settings
+        SET invoice_vat_rate_basis_points = 1900
+        WHERE tenant_id = ${TENANT_ID} AND id = ${SETTINGS_ID}
+      `;
     }
-    expect(sevenPercentInvoice.receipt.invoiceNumber).toMatch(/^R-[0-9]{4}-0003$/);
-    const [sevenPercentStored] = await sql<{
-      net_amount_cents: number;
-      vat_rate_basis_points: number;
-      vat_amount_cents: number;
-      gross_amount_cents: number;
-    }[]>`
-      SELECT net_amount_cents, vat_rate_basis_points, vat_amount_cents, gross_amount_cents
-      FROM public.invoices
-      WHERE tenant_id = ${TENANT_ID} AND id = ${sevenPercentInvoice.receipt.invoiceId}::uuid
-    `;
-    expect(sevenPercentStored).toEqual({
-      net_amount_cents: 10000,
-      vat_rate_basis_points: 700,
-      vat_amount_cents: 700,
-      gross_amount_cents: 10700,
-    });
     await expect(mutationCounts()).resolves.toEqual({
-      invoice_count: 3,
-      created_event_count: 3,
+      invoice_count: 2,
+      created_event_count: 2,
       cancelled_event_count: 2,
-    });
-
-    setSyntheticSession();
-    const cancelledSevenPercent = await cancelInvoice({
-      invoiceId: sevenPercentInvoice.receipt.invoiceId,
-      expectedVersion: 1,
-      reason: "Zahlungsziel-Fail-closed wird geprüft",
-      clientEventId: CANCEL_SEVEN_PERCENT_CLIENT_EVENT_ID,
-    });
-    expect(cancelledSevenPercent.code).toBe("OK");
-    if (cancelledSevenPercent.code !== "OK") {
-      throw new Error(`F1_4_SEVEN_PERCENT_CANCEL_FAILED:${cancelledSevenPercent.code}`);
-    }
-    await expect(mutationCounts()).resolves.toEqual({
-      invoice_count: 3,
-      created_event_count: 3,
-      cancelled_event_count: 3,
     });
 
     // The original payment term is captured before it is broken, so the finally
@@ -1059,16 +1195,16 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
         }),
       );
       await expect(mutationCounts()).resolves.toEqual({
-        invoice_count: 3,
-        created_event_count: 3,
-        cancelled_event_count: 3,
+        invoice_count: 2,
+        created_event_count: 2,
+        cancelled_event_count: 2,
       });
       const [sequence] = await sql<{ last_number: number }[]>`
         SELECT last_number
         FROM private.invoice_number_sequences
         WHERE tenant_id = ${TENANT_ID}
       `;
-      expect(sequence?.last_number).toBe(3);
+      expect(sequence?.last_number).toBe(2);
     } finally {
       // The fixture is restored even when an assertion above failed, so the
       // tenant is never left behind with a fail-closed payment term.
@@ -1112,6 +1248,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
         cancel_event_id: string | null;
         payment_event_id: string | null;
         cancellation_event_count: number;
+        payment_event_count: number;
       }[]>`
         SELECT
           invoice.status,
@@ -1131,6 +1268,13 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
               AND event.event_type = 'INVOICE_CANCELLED_V1'
               AND event.payload ->> 'invoiceId' = ${paymentGuardInvoice.receipt.invoiceId}
           ) AS cancellation_event_count
+          ,(
+            SELECT count(*)::integer
+            FROM public.events event
+            WHERE event.tenant_id = ${TENANT_ID}
+              AND event.event_type = 'PAYMENT_CONFIRMED_V1'
+              AND event.payload ->> 'invoiceId' = ${paymentGuardInvoice.receipt.invoiceId}
+          ) AS payment_event_count
         FROM public.invoices invoice
         WHERE invoice.id = ${paymentGuardInvoice.receipt.invoiceId}::uuid
       `;
@@ -1231,6 +1375,43 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
     })).resolves.toMatchObject({ code: "CONFLICT" });
     expect(await readGuardState()).toEqual(paidState);
 
+    // Durable PAYMENT_CONFIRMED_V1 evidence remains authoritative even if a
+    // locally injected damaged aggregate is made to look unpaid again.
+    await sql.unsafe("ALTER TABLE public.invoices DISABLE TRIGGER invoices_f14_update_guard");
+    try {
+      await sql`
+        UPDATE public.invoices
+        SET payment_status = 'offen',
+            payment_open_amount_cents = gross_amount_cents,
+            payment_paid_amount_cents = 0,
+            payment_method = NULL,
+            payment_paid_at = NULL,
+            payment_receipt_id = NULL,
+            payment_event_id = NULL,
+            payment_correlation_id = NULL,
+            payment_version = 0
+        WHERE id = ${paymentGuardInvoice.receipt.invoiceId}::uuid
+          AND tenant_id = ${TENANT_ID}
+      `;
+    } finally {
+      await sql.unsafe("ALTER TABLE public.invoices ENABLE TRIGGER invoices_f14_update_guard");
+    }
+    const evidenceOnlyState = await readGuardState();
+    expect(evidenceOnlyState).toMatchObject({
+      payment_status: "offen",
+      payment_paid_amount_cents: 0,
+      payment_version: 0,
+      payment_event_count: 2,
+    });
+    setSyntheticSession();
+    await expect(cancelInvoice({
+      invoiceId: paymentGuardInvoice.receipt.invoiceId,
+      expectedVersion: 1,
+      reason: "Bestätigte Zahlung bleibt trotz beschädigtem Aggregat bindend",
+      clientEventId: CANCEL_EVIDENCE_ONLY_CLIENT_EVENT_ID,
+    })).resolves.toMatchObject({ code: "CONFLICT" });
+    expect(await readGuardState()).toEqual(evidenceOnlyState);
+
     // A separate unpaid invoice proves real row-lock serialization. Exactly
     // one command wins; the final row can never be cancelled and paid.
     setSyntheticSession();
@@ -1323,11 +1504,11 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
     await expect(readInvoiceReceipt(foreignAuthorization, {
       orderId: ORDER_ID,
       clientEventId: ISSUE_CLIENT_EVENT_ID,
-    })).resolves.toEqual({ code: "OK", data: null });
+    })).resolves.toMatchObject({ code: "OK", data: null });
     await expect(readInvoiceCancellationReceipt(foreignAuthorization, {
       invoiceId: issued.receipt.invoiceId,
       clientEventId: CANCEL_CLIENT_EVENT_ID,
-    })).resolves.toEqual({ code: "OK", data: null });
+    })).resolves.toMatchObject({ code: "OK", data: null });
     await expect(readInvoicePdf(foreignAuthorization, issued.receipt.invoiceId))
       .resolves.toMatchObject({ code: "NOT_FOUND" });
   }, 60_000);

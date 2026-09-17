@@ -82,6 +82,19 @@ afterEach(() => cleanup());
 describe("F1.4 immutable invoice page states", () => {
   beforeEach(() => vi.resetAllMocks());
 
+  it("keeps the current cancellation reason policy at 10 to 500 characters", async () => {
+    const { InvoicesClient } = await import("../InvoicesClient");
+    render(<InvoicesClient initialState={{ state: "DATA", data: [issuedRow], role: "meister" }} />);
+    const input = screen.getByLabelText("Stornogrund");
+    expect(input).toHaveAttribute("minlength", "10");
+    fireEvent.change(input, { target: { value: "123456789" } });
+    fireEvent.click(screen.getByRole("button", { name: "Rechnung stornieren" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Stornogrund muss 10 bis 500 Zeichen enthalten.",
+    );
+    expect(ports.cancelInvoiceAction).not.toHaveBeenCalled();
+  });
+
   it("renders denial and error separately from an empty list", async () => {
     const { InvoicesClient } = await import("../InvoicesClient");
     render(

@@ -16,6 +16,7 @@ import {
 import {
   confirmPaymentAction,
   getOrderPaymentStateAction,
+  recoverPaymentConfirmationAction,
 } from "@/app/actions/payments.actions";
 import {
   finalizeGalvanikHandoffAttachmentAction,
@@ -181,6 +182,7 @@ export function OrderCardAppAdapter({
     message: "",
   });
   const requests = useRef<Record<string, string>>({});
+  const paymentRetryPermission = useRef<"initial" | "permitted" | "blocked">("initial");
   const load = useCallback(
     async (preserve = false): Promise<Snapshot | null> => {
       setState({ kind: "loading" });
@@ -404,22 +406,109 @@ export function OrderCardAppAdapter({
     async (method: "bar" | "ueberweisung" | "karte") => {
       const invoice = snapshot?.payment?.payment;
       if (!invoice || invoice.openAmountCents <= 0) return;
+      if (paymentRetryPermission.current === "blocked") {
+        setFeedback({
+          kind: "error",
+          message: "Der Zahlungsstand muss vor einem weiteren Versuch geklärt werden.",
+        });
+        return;
+      }
       setFeedback({
         kind: "submitting",
         message: "Zahlung wird sicher bestätigt.",
       });
       const clientEventId = (requests.current.payment ??= crypto.randomUUID());
-      const result = await confirmPaymentAction({
-        invoiceId: invoice.invoiceId,
-        amount: invoice.openAmountCents,
-        method,
-        expectedVersion: invoice.paymentVersion,
-        clientEventId,
-      });
+      const recoverUnknownPayment = async () => {
+        try {
+          const recovery = await recoverPaymentConfirmationAction({
+            kind: "payment_confirmed",
+            intentId: clientEventId,
+            idempotencyKey: clientEventId,
+            aggregateId: invoice.invoiceId,
+            expectedVersion: invoice.paymentVersion,
+            expectedAmount: { amountCents: invoice.openAmountCents, currency: "EUR" },
+            expectedMethod: method === "bar" ? "cash" : method === "ueberweisung" ? "bank_transfer" : "card",
+            expectedReason: null,
+          });
+          if (recovery.state === "resolved") {
+            const fresh = await load(true);
+            const persisted = fresh?.payment?.payment;
+            if (
+              persisted
+              && persisted.eventId === recovery.receipt.eventId
+              && persisted.receiptId === recovery.receipt.receiptId
+              && persisted.paymentVersion === recovery.receipt.paymentVersion
+            ) {
+              paymentRetryPermission.current = "initial";
+              success(
+                "payment",
+                {
+                  actorId: recovery.receipt.actorId,
+                  occurredAt: recovery.receipt.occurredAt,
+                  eventId: recovery.receipt.eventId,
+                  receiptId: recovery.receipt.receiptId,
+                },
+                "Zahlung wurde nach der Statusprüfung sicher bestätigt.",
+              );
+              return;
+            }
+            setFeedback({
+              kind: "error",
+              message: "Der gespeicherte Zahlungsstand ist noch nicht eindeutig. Bitte nicht erneut bestätigen und den Auftrag neu laden.",
+            });
+            return;
+          }
+          if (recovery.state === "not_committed") {
+            paymentRetryPermission.current = "permitted";
+            setFeedback({
+              kind: "error",
+              message: "Es wurde keine Zahlung gespeichert. Sie können die Zahlung erneut bestätigen; dieselbe Anfragekennung bleibt erhalten.",
+            });
+            return;
+          }
+          if (recovery.state === "denied") {
+            paymentRetryPermission.current = "blocked";
+            setFeedback({
+              kind: "error",
+              message: "Der Zahlungsstand darf mit dieser Anmeldung nicht geprüft werden. Bitte neu anmelden oder die zuständige Rolle hinzuziehen.",
+            });
+            return;
+          }
+          paymentRetryPermission.current = "blocked";
+          setFeedback({
+            kind: "error",
+            message: "Der Zahlungsstand ist nicht eindeutig. Bitte nicht erneut bestätigen; zuerst muss der gespeicherte Stand geklärt werden.",
+          });
+        } catch {
+          paymentRetryPermission.current = "blocked";
+          setFeedback({
+            kind: "error",
+            message: "Der Zahlungsstand ist nicht eindeutig. Bitte nicht erneut bestätigen; zuerst muss der gespeicherte Stand geklärt werden.",
+          });
+        }
+      };
+      let result: Awaited<ReturnType<typeof confirmPaymentAction>>;
+      try {
+        result = await confirmPaymentAction({
+          invoiceId: invoice.invoiceId,
+          amount: invoice.openAmountCents,
+          method,
+          expectedVersion: invoice.paymentVersion,
+          clientEventId,
+        });
+      } catch {
+        await recoverUnknownPayment();
+        return;
+      }
       if (result.code !== "OK") {
+        if (result.code === "UNAVAILABLE") {
+          await recoverUnknownPayment();
+          return;
+        }
         await fail(result);
         return;
       }
+      paymentRetryPermission.current = "initial";
       const fresh = await load(true);
       const persisted = fresh?.payment?.payment;
       if (

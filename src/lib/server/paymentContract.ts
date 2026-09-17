@@ -288,13 +288,12 @@ export function mapOrderPaymentStateRow(
     && row.current_station === "wareneingang"
     && row.current_station_id === "wareneingang"
     && row.order_status === "angenommen"
-    && invoiceState === "not_issued"
-    && activeInvoiceCount === 0
     && goodsOutEventCount === 0
     && row.goods_out_allowed === false;
   // The F1.5 view predates the ratified separation between physical station and
   // lifecycle status. Its aggregate flag is false for the canonical F1.1
-  // intake pair alone; every underlying field is still validated below.
+  // intake pair alone, including after a canonical invoice is issued; every
+  // invoice, payment and goods-out field is still validated independently below.
   const acceptedIntegrity = row.integrity_ok === true || canonicalIntakeAxes;
 
   if (

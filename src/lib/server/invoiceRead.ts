@@ -6,7 +6,10 @@ import type {
   ImmutableInvoiceCancellationReceipt,
   ImmutableInvoiceReceipt,
 } from "@/lib/server/commands/immutableInvoiceCommand";
-import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import {
+  withPrivilegedTenantTransaction,
+  type PrivilegedTenantTransaction,
+} from "@/lib/server/privilegedDb";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const INVOICE_NUMBER_PATTERN = /^R-[0-9]{4}-[0-9]{4,}$/;
@@ -24,13 +27,38 @@ export type ReadInvoiceCancellationReceiptInput = {
 };
 
 export type ReadInvoiceReceiptResult =
-  | { code: "OK"; data: ImmutableInvoiceReceipt | null }
+  | { code: "OK"; data: ImmutableInvoiceReceipt | null; asOf: string }
   | { code: "FORBIDDEN"; message: string }
   | { code: "VALIDATION_ERROR"; message: string }
   | { code: "UNAVAILABLE"; message: string };
 
 export type ReadInvoiceCancellationReceiptResult =
-  | { code: "OK"; data: ImmutableInvoiceCancellationReceipt | null }
+  | { code: "OK"; data: ImmutableInvoiceCancellationReceipt | null; asOf: string }
+  | { code: "FORBIDDEN"; message: string }
+  | { code: "VALIDATION_ERROR"; message: string }
+  | { code: "UNAVAILABLE"; message: string };
+
+export type InvoiceCancellationState = {
+  invoiceId: string;
+  tenantId: string;
+  lifecycleStatus: "issued" | "cancelled";
+  aggregateVersion: number;
+  paymentContractVersion: 1 | null;
+  grossAmountCents: number;
+  paidAmountCents: number;
+  openAmountCents: number;
+  paymentStatus: "offen" | "teilbezahlt" | "bezahlt" | null;
+  paymentVersion: number;
+  paymentMethod: "bar" | "ueberweisung" | "karte" | null;
+  paymentReceiptId: string | null;
+  paymentEventId: string | null;
+  paymentCorrelationId: string | null;
+  paymentPaidAt: string | null;
+  paymentEvidenceCount: number;
+};
+
+export type ReadInvoiceCancellationStateResult =
+  | { code: "OK"; data: InvoiceCancellationState | null; asOf: string }
   | { code: "FORBIDDEN"; message: string }
   | { code: "VALIDATION_ERROR"; message: string }
   | { code: "UNAVAILABLE"; message: string };
@@ -79,7 +107,7 @@ export type ImmutableInvoiceSummary = {
 };
 
 export type ReadInvoiceSummariesResult =
-  | { code: "OK"; data: ImmutableInvoiceSummary[] }
+  | { code: "OK"; data: ImmutableInvoiceSummary[]; asOf: string }
   | { code: "FORBIDDEN"; message: string }
   | { code: "UNAVAILABLE"; message: string };
 
@@ -151,6 +179,25 @@ type SummaryRow = {
   integrity_ok: boolean;
 };
 
+type CancellationStateRow = {
+  id: string;
+  tenant_id: string;
+  status: string;
+  aggregate_version: number | string;
+  gross_amount_cents: number | string | null;
+  payment_contract_version: number | string | null;
+  payment_status: string | null;
+  payment_open_amount_cents: number | string | null;
+  payment_paid_amount_cents: number | string | null;
+  payment_method: string | null;
+  payment_paid_at: Date | string | null;
+  payment_receipt_id: string | null;
+  payment_event_id: string | null;
+  payment_correlation_id: string | null;
+  payment_version: number | string | null;
+  payment_evidence_count: number | string;
+};
+
 function isReceiptInput(value: unknown): value is ReadInvoiceReceiptInput {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const input = value as Record<string, unknown>;
@@ -194,6 +241,16 @@ function toIso(value: unknown): string {
   const parsed = value instanceof Date ? value : new Date(value as string);
   if (!Number.isFinite(parsed.getTime())) throw new Error("INVOICE_READ_TIME_INVALID");
   return parsed.toISOString();
+}
+
+async function readAuthoritativeAsOf(tx: PrivilegedTenantTransaction): Promise<string> {
+  const rows = await tx.execute<{ read_as_of: string }>(sql`
+    SELECT to_char(statement_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS read_as_of
+  `);
+  if (rows.length !== 1 || !rows[0]) throw new Error("INVOICE_READ_CLOCK_INVALID");
+  const asOf = toIso(rows[0].read_as_of);
+  if (asOf !== rows[0].read_as_of) throw new Error("INVOICE_READ_CLOCK_NON_CANONICAL");
+  return asOf;
 }
 
 function toDateOnly(value: unknown): string {
@@ -247,9 +304,16 @@ function mapIssueReceipt(row: ReceiptRow, authorization: AuthorizationSnapshot):
     && row.cancel_reason.length >= 5
     && row.cancel_reason.length <= 500
   );
+  const versionPairValid = (
+    row.event_type === "INVOICE_CREATED_V1"
+    && row.event_schema_version === 1
+  ) || (
+    row.event_type === "INVOICE_CREATED_V2"
+    && row.event_schema_version === 2
+  );
   if (
     !hasCommonReceiptIntegrity(row, authorization)
-    || row.event_type !== "INVOICE_CREATED_V1"
+    || !versionPairValid
     || aggregateVersion !== 1
     || !currentLifecycleValid
     || intentExpectedVersion !== orderVersion
@@ -262,12 +326,12 @@ function mapIssueReceipt(row: ReceiptRow, authorization: AuthorizationSnapshot):
     || vatAmountCents !== Math.round((netAmountCents * vatRateBasisPoints) / 10000)
   ) throw new Error("INVOICE_READ_RECEIPT_INVALID");
 
-  return {
+  const common = {
     invoiceId: row.invoice_id,
     invoiceNumber: row.invoice_number,
     orderId: row.order_id,
     orderVersion,
-    status: "issued",
+    status: "issued" as const,
     netAmountCents,
     vatRateBasisPoints,
     vatAmountCents,
@@ -281,9 +345,12 @@ function mapIssueReceipt(row: ReceiptRow, authorization: AuthorizationSnapshot):
     eventId: row.event_id,
     clientEventId: row.client_event_id,
     correlationId: row.correlation_id,
-    aggregateVersion: 1,
-    eventSchemaVersion: 1,
+    aggregateVersion: 1 as const,
+    eventSchemaVersion: row.event_schema_version,
   };
+  return row.event_schema_version === 2
+    ? { ...common, eventSchemaVersion: 2, invoiceSourceState: "after_goods_out" }
+    : { ...common, eventSchemaVersion: 1 };
 }
 
 function mapCancellationReceipt(
@@ -410,27 +477,137 @@ export async function readInvoiceReceipt(
   input: unknown,
 ): Promise<ReadInvoiceReceiptResult> {
   if (!isReceiptInput(input)) {
-    return { code: "VALIDATION_ERROR", message: "Ungültige Belegabfrage." };
+    return { code: "VALIDATION_ERROR", message: "Ungültige Abfrage des technischen Ausführungsnachweises." };
   }
   if (!canReadInvoices(authorization)) {
-    return { code: "FORBIDDEN", message: "Rechnungsbeleg ist mit dieser Rolle nicht erlaubt." };
+    return { code: "FORBIDDEN", message: "Der technische Ausführungsnachweis der Rechnung ist mit dieser Rolle nicht erlaubt." };
   }
   try {
     const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const rows = await tx.execute<ReceiptRow>(sql`
-        SELECT *
-        FROM private.v_invoice_receipt_v1
-        WHERE order_id = ${input.orderId}
-          AND client_event_id = ${input.clientEventId}
-          AND event_type = 'INVOICE_CREATED_V1'
+        SELECT receipt.*
+        FROM (
+          SELECT *
+          FROM private.v_invoice_receipt_v1
+          WHERE order_id = ${input.orderId}
+            AND client_event_id = ${input.clientEventId}
+            AND event_type = 'INVOICE_CREATED_V1'
+          UNION ALL
+          SELECT *
+          FROM private.v_invoice_created_receipt_v2
+          WHERE order_id = ${input.orderId}
+            AND client_event_id = ${input.clientEventId}
+            AND event_type = 'INVOICE_CREATED_V2'
+        ) receipt
         LIMIT 2
       `);
       if (rows.length > 1) throw new Error("INVOICE_READ_AMBIGUOUS");
-      return rows[0] ? mapIssueReceipt(rows[0], authorization) : null;
+      const data = rows[0] ? mapIssueReceipt(rows[0], authorization) : null;
+      return { data, asOf: await readAuthoritativeAsOf(tx) };
     });
-    return { code: "OK", data };
+    return { code: "OK", data: data.data, asOf: data.asOf };
   } catch {
-    return { code: "UNAVAILABLE", message: "Rechnungsbeleg konnte nicht sicher geladen werden." };
+    return { code: "UNAVAILABLE", message: "Der technische Ausführungsnachweis der Rechnung konnte nicht sicher geladen werden." };
+  }
+}
+
+export async function readInvoiceCancellationState(
+  authorization: AuthorizationSnapshot,
+  invoiceId: unknown,
+): Promise<ReadInvoiceCancellationStateResult> {
+  if (typeof invoiceId !== "string" || !UUID_PATTERN.test(invoiceId)) {
+    return { code: "VALIDATION_ERROR", message: "Ungültige Rechnungskennung." };
+  }
+  if (!canReadInvoices(authorization)) {
+    return { code: "FORBIDDEN", message: "Rechnungsstatus ist mit dieser Rolle nicht erlaubt." };
+  }
+  try {
+    const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
+      const rows = await tx.execute<CancellationStateRow>(sql`
+        SELECT
+          invoice.id,
+          invoice.tenant_id,
+          invoice.status,
+          invoice.aggregate_version,
+          invoice.gross_amount_cents,
+          invoice.payment_contract_version,
+          invoice.payment_status,
+          invoice.payment_open_amount_cents,
+          invoice.payment_paid_amount_cents,
+          invoice.payment_method,
+          invoice.payment_paid_at,
+          invoice.payment_receipt_id,
+          invoice.payment_event_id,
+          invoice.payment_correlation_id,
+          invoice.payment_version,
+          (
+            SELECT count(*)::integer
+            FROM public.events payment_event
+            WHERE payment_event.tenant_id = invoice.tenant_id
+              AND payment_event.order_id = invoice.order_id
+              AND payment_event.event_type = 'PAYMENT_CONFIRMED_V1'
+              AND payment_event.status = 'success'
+              AND payment_event.payload->>'invoiceId' = invoice.id::text
+          ) AS payment_evidence_count
+        FROM public.invoices invoice
+        WHERE invoice.id = ${invoiceId}::uuid
+          AND invoice.tenant_id = ${authorization.tenantId}
+          AND invoice.contract_version = 1
+        LIMIT 2
+      `);
+      if (rows.length === 0) return { data: null, asOf: await readAuthoritativeAsOf(tx) };
+      if (rows.length !== 1 || !rows[0]) throw new Error("INVOICE_CANCEL_STATE_AMBIGUOUS");
+      const row = rows[0];
+      const aggregateVersion = toSafeInteger(row.aggregate_version, "INVOICE_CANCEL_STATE_VERSION_INVALID");
+      const grossAmountCents = toSafeInteger(row.gross_amount_cents, "INVOICE_CANCEL_STATE_GROSS_INVALID");
+      const paymentVersion = toSafeInteger(row.payment_version, "INVOICE_CANCEL_STATE_PAYMENT_VERSION_INVALID");
+      const paidAmountCents = toSafeInteger(row.payment_paid_amount_cents, "INVOICE_CANCEL_STATE_PAID_INVALID");
+      const openAmountCents = toSafeInteger(row.payment_open_amount_cents, "INVOICE_CANCEL_STATE_OPEN_INVALID");
+      const paymentEvidenceCount = toSafeInteger(row.payment_evidence_count, "INVOICE_CANCEL_STATE_EVIDENCE_INVALID");
+      const paymentContractVersion = row.payment_contract_version === null
+        ? null
+        : toSafeInteger(row.payment_contract_version, "INVOICE_CANCEL_STATE_CONTRACT_INVALID");
+      if (
+        row.tenant_id !== authorization.tenantId
+        || (row.status !== "issued" && row.status !== "cancelled")
+        || (paymentContractVersion !== 1 && paymentContractVersion !== null)
+        || (row.payment_status !== "offen" && row.payment_status !== "teilbezahlt"
+          && row.payment_status !== "bezahlt" && row.payment_status !== null)
+        || (row.payment_method !== "bar" && row.payment_method !== "ueberweisung"
+          && row.payment_method !== "karte" && row.payment_method !== null)
+      ) throw new Error("INVOICE_CANCEL_STATE_INTEGRITY_INVALID");
+      const data = {
+        invoiceId: row.id,
+        tenantId: row.tenant_id,
+        lifecycleStatus: row.status,
+        aggregateVersion,
+        paymentContractVersion,
+        grossAmountCents,
+        paidAmountCents,
+        openAmountCents,
+        paymentStatus: row.payment_status,
+        paymentVersion,
+        paymentMethod: row.payment_method,
+        paymentReceiptId: row.payment_receipt_id,
+        paymentEventId: row.payment_event_id,
+        paymentCorrelationId: row.payment_correlation_id,
+        paymentPaidAt: row.payment_paid_at === null ? null : toIso(row.payment_paid_at),
+        paymentEvidenceCount,
+      } satisfies InvoiceCancellationState;
+      return { data, asOf: await readAuthoritativeAsOf(tx) };
+    });
+    return { code: "OK", data: data.data, asOf: data.asOf };
+  } catch (error) {
+    console.error("readInvoiceCancellationState database error", {
+      message: error instanceof Error ? error.message : null,
+      details: error && typeof error === "object" && "details" in error
+        && typeof (error as { details?: unknown }).details === "string"
+        ? (error as { details: string }).details.slice(0, 500) : null,
+      hint: error && typeof error === "object" && "hint" in error
+        && typeof (error as { hint?: unknown }).hint === "string"
+        ? (error as { hint: string }).hint.slice(0, 500) : null,
+    });
+    return { code: "UNAVAILABLE", message: "Rechnungsstatus konnte nicht sicher geladen werden." };
   }
 }
 
@@ -439,10 +616,10 @@ export async function readInvoiceCancellationReceipt(
   input: unknown,
 ): Promise<ReadInvoiceCancellationReceiptResult> {
   if (!isCancellationReceiptInput(input)) {
-    return { code: "VALIDATION_ERROR", message: "Ungültige Stornobelegabfrage." };
+    return { code: "VALIDATION_ERROR", message: "Ungültige Abfrage des technischen Ausführungsnachweises der Stornierung." };
   }
   if (!canReadInvoices(authorization)) {
-    return { code: "FORBIDDEN", message: "Stornobeleg ist mit dieser Rolle nicht erlaubt." };
+    return { code: "FORBIDDEN", message: "Der technische Ausführungsnachweis der Stornierung ist mit dieser Rolle nicht erlaubt." };
   }
   try {
     const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
@@ -455,11 +632,12 @@ export async function readInvoiceCancellationReceipt(
         LIMIT 2
       `);
       if (rows.length > 1) throw new Error("INVOICE_CANCEL_READ_AMBIGUOUS");
-      return rows[0] ? mapCancellationReceipt(rows[0], authorization) : null;
+      const data = rows[0] ? mapCancellationReceipt(rows[0], authorization) : null;
+      return { data, asOf: await readAuthoritativeAsOf(tx) };
     });
-    return { code: "OK", data };
+    return { code: "OK", data: data.data, asOf: data.asOf };
   } catch {
-    return { code: "UNAVAILABLE", message: "Stornobeleg konnte nicht sicher geladen werden." };
+    return { code: "UNAVAILABLE", message: "Der technische Ausführungsnachweis der Stornierung konnte nicht sicher geladen werden." };
   }
 }
 
@@ -477,9 +655,10 @@ export async function readInvoiceSummaries(
         ORDER BY issued_at DESC, invoice_number DESC
         LIMIT 250
       `);
-      return rows.map((row) => mapSummary(row, authorization));
+      const data = rows.map((row) => mapSummary(row, authorization));
+      return { data, asOf: await readAuthoritativeAsOf(tx) };
     });
-    return { code: "OK", data };
+    return { code: "OK", data: data.data, asOf: data.asOf };
   } catch {
     return { code: "UNAVAILABLE", message: "Rechnungsliste konnte nicht sicher geladen werden." };
   }
