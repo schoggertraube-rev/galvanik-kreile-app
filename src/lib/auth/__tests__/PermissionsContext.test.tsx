@@ -14,6 +14,16 @@ import {
   getProductIdentityByKey,
 } from "../authorizationContract";
 
+const navigation = vi.hoisted(() => ({
+  pathname: "/orders",
+  replace: vi.fn(),
+}));
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => navigation.pathname,
+  useRouter: () => ({ replace: navigation.replace }),
+}));
+
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
     auth: {
@@ -77,6 +87,7 @@ describe("identity labels and capabilities", () => {
 describe("PermissionsProvider identity consistency", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    navigation.pathname = "/orders";
     vi.mocked(getAuthorizationSnapshotAction).mockResolvedValue({
       ok: true,
       data: {
@@ -119,6 +130,7 @@ describe("PermissionsProvider identity consistency", () => {
   it("clears stale identity when the server choke point fails closed", async () => {
     vi.mocked(getAuthorizationSnapshotAction).mockResolvedValue({
       ok: false,
+      status: "error",
       message: "Der Produktzugang ist momentan nicht sicher verfügbar.",
       supportReference: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     });
@@ -137,6 +149,25 @@ describe("PermissionsProvider identity consistency", () => {
       expect(screen.getByTestId("status")).toHaveTextContent("error");
     });
     expect(screen.getByTestId("error")).not.toHaveTextContent("ACTOR_");
+  });
+
+  it("treats a missing session as signed out and returns to the login route", async () => {
+    vi.mocked(getAuthorizationSnapshotAction).mockResolvedValue({
+      ok: false,
+      status: "unauthenticated",
+    });
+
+    render(
+      <PermissionsProvider initialAuthState={initialRolf}>
+        <TestComponent />
+      </PermissionsProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("status")).toHaveTextContent("unauthenticated");
+      expect(screen.getByTestId("error")).toHaveTextContent("no-error");
+      expect(navigation.replace).toHaveBeenCalledWith("/start");
+    });
   });
 
   it("does not use local storage as a session or identity fallback", async () => {

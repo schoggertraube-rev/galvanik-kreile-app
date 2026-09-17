@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
 import { createClient } from "@/lib/supabase/client";
 import type { AuthBootstrapState } from "@/lib/server/authBootstrap";
@@ -74,6 +75,8 @@ export function PermissionsProvider({
   children: React.ReactNode;
   initialAuthState: AuthBootstrapState;
 }) {
+  const pathname = usePathname();
+  const router = useRouter();
   const [authState, setAuthState] = useState<AuthState>(() => buildInitialAuthState(initialAuthState));
   const [loading, setLoading] = useState(true);
 
@@ -96,6 +99,18 @@ export function PermissionsProvider({
           status: "authenticated",
           error: null,
         });
+      } else if (result.status === "unauthenticated") {
+        setAuthState({
+          role: null,
+          permissions: [],
+          name: "",
+          initials: "",
+          status: "unauthenticated",
+          error: null,
+        });
+        if (pathname !== "/start" && pathname !== "/login") {
+          router.replace("/start");
+        }
       } else {
         setAuthState({
           role: null,
@@ -122,7 +137,7 @@ export function PermissionsProvider({
         setLoading(false);
       }
     }
-  }, []);
+  }, [pathname, router]);
 
   useEffect(() => {
     const init = async () => { await refreshPermissions(); };

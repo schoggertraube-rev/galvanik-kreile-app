@@ -40,14 +40,17 @@ const profiles = [
   { id: ACTORS.gregor, tenantId: KREILE_TENANT_SLUG, role: "admin", active: true },
 ];
 
-function authorization(userId: string = ACTORS.rolf) {
+function authorization(
+  userId: string = ACTORS.rolf,
+  role: "meister" | "werkstatt" | "admin" = "meister",
+) {
   return {
     ok: true as const,
     data: {
       userId,
       tenantId: KREILE_TENANT_SLUG,
       displayName: "Technical DB Name",
-      role: "meister" as const,
+      role,
       permissions: ["perm_view_leitstand"] as const,
       active: true as const,
     },
@@ -115,6 +118,21 @@ describe("resolveProductActorAuthorization() choke point", () => {
     expect(logs).not.toContain(ACTORS.rolf);
   });
 
+  it("fails closed when the session role differs from the configured actor role", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    ports.resolveAuthorization.mockResolvedValue(
+      authorization(ACTORS.rolf, "werkstatt"),
+    );
+
+    await expect(resolveProductActorAuthorization()).resolves.toMatchObject({
+      ok: false,
+      reason: "SESSION_ACTOR_ROLE_MISMATCH",
+    });
+    expect(consoleError.mock.calls.flat().join(" ")).toContain(
+      "SESSION_ACTOR_ROLE_MISMATCH",
+    );
+  });
+
   it("fails closed and logs no configured values when configuration is partial", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.stubEnv("KREILE_PHILLIP_APP_USER_ID", "");
@@ -129,5 +147,17 @@ describe("resolveProductActorAuthorization() choke point", () => {
     expect(logs).toContain("CONFIG_PARTIAL");
     expect(logs).not.toContain(ACTORS.rolf);
     expect(logs).not.toContain(ACTORS.gregor);
+  });
+
+  it("fails closed without querying profiles when configuration is not a UUID", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.stubEnv("KREILE_ROLF_APP_USER_ID", "not-a-uuid");
+
+    await expect(resolveProductActorAuthorization()).resolves.toMatchObject({
+      ok: false,
+      reason: "ACTOR_READINESS_UNAVAILABLE",
+    });
+    expect(ports.dbWhere).not.toHaveBeenCalled();
+    expect(consoleError.mock.calls.flat().join(" ")).toContain("CONFIG_INVALID");
   });
 });
