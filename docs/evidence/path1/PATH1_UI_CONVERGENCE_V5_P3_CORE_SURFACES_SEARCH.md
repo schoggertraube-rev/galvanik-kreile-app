@@ -6,7 +6,7 @@ Branch: `path1/v5-p3-core-surfaces-search-20260916`
 
 Basis: `70ae0989b7f76a247c34582badc2de3324e27851`
 
-Produkt-SHA des Browserlaufs: `711bd45579424ad6049f87b25ab6fec890c8ce1a`
+Produkt-SHA des Browserlaufs: `d32b07e22c236b8dc55df7f66b0e2c990d84022c`
 
 Status: lokaler Produkt-, Fresh-DB- und Browservertrag bestanden. Exact-SHA-CI, Preview und unabhängige Closure-Prüfung stehen bis zum finalen Evidence-Commit und Push aus. Dies ist kein Gesamt-UI-PASS.
 
@@ -27,6 +27,7 @@ Status: lokaler Produkt-, Fresh-DB- und Browservertrag bestanden. Exact-SHA-CI, 
 6. Der Systemadministrator-Einstieg ist actor-identisch als Gregor sichtbar und führt in die reale Settings-Komposition. Alltags-Accounting ist capability-gebunden ausschließlich über `/buchhaltung/rechnungen` erreichbar.
 7. 60 laut Kanon entfallene oder nicht rendernde Quarantäne-Routen liefern echte 404-Antworten. Darin sind die fünf unratifizierten Standalone-Adminseiten enthalten; Geräteverwaltung und Datenimport bleiben ausschließlich als reale eingebettete Settings-Funktionen erhalten. `/warendurchlauf/galvanik` bleibt als flacher, realer Blackbox-Drilldown bestehen.
 8. `/warendurchlauf` und `/warendurchlauf/wareneingang` sind in allen vier Viewports echte, bedienbare Zieloberflächen. Beide öffnen dieselbe GlobalCreate-Erfassung mit Fokus auf dem ersten Feld. `/warendurchlauf/neu` führt in die Wareneingangsfläche; die Direktaufnahme erzeugt genau einen F1.1-Auftrag, der auf der Stationsfläche auch nach Reload gelesen wird.
+9. Das laut Architektur verworfene Stationsband ist aus der Zielkomposition entfernt. `/station/wareneingang` liefert fail-closed 404; der kanonische flache Galvanik-Blackbox-Drilldown unter `/warendurchlauf/galvanik` bleibt erhalten.
 
 ## Storno- und Zahlungswahrheit
 
@@ -39,23 +40,23 @@ Status: lokaler Produkt-, Fresh-DB- und Browservertrag bestanden. Exact-SHA-CI, 
 
 - Umgebung: ausschließlich lokaler Loopback-Stack `127.0.0.1:54321/54322`, Fresh-Reset durch alle 28 Repository-Migrationen, keine Remote-Verbindung oder Remote-Mutation.
 - Testdaten: klar synthetischer Tenant `galvanik-kreile`; Rolf-Actor `11111111-1111-4111-8111-111111111111`, Phillip-Actor `22222222-2222-4222-8222-222222222222`, Gregor-Actor `33333333-3333-4333-8333-333333333333`.
-- Reale F1.1-Aufnahme: exakt ein Auftrag `A-2026-0001`, zugesagter Termin `2026-10-23`, `exactlyOne=1`.
+- Reale F1.1-Aufnahme: exakt ein Auftrag `A-2026-0002`, zugesagter Termin `2026-10-23`, `exactlyOne=1`.
 - Klickpfade: Rolf → Direktaufnahme → Auftrag; Orders → Auftrag → Kunde → Auftrag → zurück; direkte V8-/V2-Deep-Links; Suche → V8/V2; Rolf → Geld & Rechnungen; Rolf → Werkstatt-Hub → Wareneingang → dieselbe Erfassung → Werkstatt-Hub; `/warendurchlauf/neu` → `/warendurchlauf/wareneingang`; Gregor → E-Mail-Login → Einstellungen → Start → Einstellungen; Phillip-Home.
 - Viewports: `1914x917`, `1220x880`, `768x1024`, `390x844`.
 - Alle 28 PNGs sind neu auf dem Produkt-SHA erzeugt, vollständig gerendert, nicht leer und hashgebunden. Acht zusätzliche Aufnahmen belegen Werkstatt-Hub und Wareneingang bei `1914x917`, `1220x880`, `768x1024` und `390x844`. Die gespeicherten Pixelmaße entsprechen dem zweifachen Device-Pixel-Ratio der logischen Viewports.
 - P3-Browservertrag: 1/1 PASS in 2,8 Minuten, keine feste Wartezeit, keine Dev-Overlays, strikte Fehlerliste der aktiven Zieloberflächen leer.
-- Negative Routematrix: 60/60 echte 404; die erwarteten 404-Konsoleffekte laufen auf einer getrennten authentifizierten Prüfseite und können echte Zieloberflächenfehler nicht verdecken.
+- Negative Routematrix: 60/60 echte 404 plus `/station/wareneingang` 404; die erwarteten 404-Konsoleffekte laufen auf einer getrennten authentifizierten Prüfseite und können echte Zieloberflächenfehler nicht verdecken.
 - Customer/KV→Order-Real-DB auf demselben Produktstand: 11/11 PASS; Wiederaufnahme, Version, Zuschlag und genau ein bestehender F1.1-Auftrag bleiben einschließlich Readback erhalten.
 - Receipt: `docs/evidence/path1/artifacts/p3-core-surfaces-search/p3-browser-receipt.json`
-- Receipt-SHA-256: `f8fabc21e9b91c84384f79238ff3d507adebdb2fd952f15838120b4d7e73a9b9`
+- Receipt-SHA-256: `35d7da4407132367c36ca82a39271fe066d8b23518e95395a27947a8ebf05b96`
 - Das Receipt bindet Produkt-SHA, Tenant, drei Actor-IDs, 60 Route-Ergebnisse sowie Dateiname, Zustand, Viewport und SHA-256 aller 28 Bilder.
 
 ## Lokale Abnahme
 
 | Gate | Ergebnis |
 | --- | --- |
-| Erweiterte Fokustests | PASS — Route-/Settings-Vertrag 3 Dateien, 92/92 Tests |
-| Vollständige Unit-Suite | PASS — 112 Dateien, 932/932 Tests |
+| Erweiterte Fokustests | PASS — Werkstatt-/Routenschutz 2 Dateien, 29/29 Tests |
+| Vollständige Unit-Suite | PASS — 111 Dateien, 924/924 Tests |
 | TypeScript | PASS — `tsc --noEmit --incremental false` |
 | ESLint full | PASS |
 | ESLint Ratchet | PASS — 0 Fehler, 0 Warnungen, 0 Debt-Dateien |
@@ -70,7 +71,7 @@ Status: lokaler Produkt-, Fresh-DB- und Browservertrag bestanden. Exact-SHA-CI, 
 | F1.3 Live Card + P3 Search Fresh-DB | PASS — 2 Dateien, 10/10 Tests; Treffer, Session, Fremdtenant und inkonsistenter Port |
 | Customer + KV→Order Fresh-DB | PASS — 2 Dateien, 11/11 Tests |
 | Production-Build | PASS — Next.js 16.2.12, 26 Generierungseinheiten; die fünf entfallenen Adminseiten werden nicht gebaut |
-| Diff-/Scope-Check | PASS — Produktcommit mit exakt 12 Pfaden ohne vorzeitige Evidence; Evidence separat an `711bd455…` gebunden |
+| Diff-/Scope-Check | PASS — Produktcommit mit exakt 12 Pfaden ohne vorzeitige Evidence; Evidence separat an `d32b07e2…` gebunden |
 
 ## Offene Gates und Scope-Grenzen
 
