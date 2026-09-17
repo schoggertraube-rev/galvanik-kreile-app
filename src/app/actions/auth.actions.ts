@@ -36,13 +36,24 @@ export type ClientAuthorizationResult =
         active: true;
       };
     }
-  | { ok: false; message: string; supportReference?: string };
+  | { ok: false; status: "unauthenticated" }
+  | {
+      ok: false;
+      status: "error";
+      message: string;
+      supportReference?: string;
+    };
 
 export async function getAuthorizationSnapshotAction(): Promise<ClientAuthorizationResult> {
   const result = await resolveProductActorAuthorization();
   if (!result.ok) {
+    if (result.reason === "NO_SESSION") {
+      return { ok: false, status: "unauthenticated" };
+    }
+
     return {
       ok: false,
+      status: "error",
       message: "Der Produktzugang ist momentan nicht sicher verfügbar.",
       supportReference: result.supportReference,
     };

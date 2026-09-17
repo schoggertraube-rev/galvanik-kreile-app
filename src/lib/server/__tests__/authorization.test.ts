@@ -334,8 +334,10 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
       message: "not signed in",
     });
 
-    const result = await getAuthorizationSnapshotAction();
-    expect(result.ok).toBe(false);
+    await expect(getAuthorizationSnapshotAction()).resolves.toEqual({
+      ok: false,
+      status: "unauthenticated",
+    });
   });
 
   it("13a. Client-Action zeigt Gregor ohne Actor-ID oder Tenant", async () => {
@@ -387,6 +389,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
 
     await expect(getAuthorizationSnapshotAction()).resolves.toEqual({
       ok: false,
+      status: "error",
       message: "Der Produktzugang ist momentan nicht sicher verfügbar.",
       supportReference: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     });
