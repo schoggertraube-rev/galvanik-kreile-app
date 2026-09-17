@@ -2,14 +2,9 @@
   "$comment": "S1 Naht 5 (UI-Vertrag): Altlasten mit verworfenen Stationsband-/Transport-Home-Bausteinen. Shrink-only; S4 leert die Liste. Nur ueber 'npm run quality:module-gates:update' + Review aendern.",
   "uiContract": {
     "allowedLegacyFiles": [
-      "src/app/station/layout.tsx",
-      "src/app/warendurchlauf/WarendurchlaufRouteNav.tsx",
-      "src/app/warendurchlauf/__tests__/w2cB2m5j.unavailable.realRender.test.tsx",
       "src/components/flow/WorkflowStrip.tsx",
       "src/components/layout/TabletTopFlowNav.tsx",
-      "src/components/layout/TopWorkflowBar.tsx",
-      "src/components/warendurchlauf/WarendurchlaufStationNav.tsx",
-      "src/components/warendurchlauf/__tests__/w2cB2m5u.stationNavTrend.failClosed.test.tsx"
+      "src/components/layout/TopWorkflowBar.tsx"
     ]
   },
   "entrypointContract": {
@@ -29,16 +24,8 @@
         "sha256": "9EAECE968B54D022F32354A40CE3126B5722225C6949E10740A0A0AF1CAE4C07"
       },
       {
-        "path": "src/app/station/layout.tsx",
-        "sha256": "02F6D8657EF071EEA855113D6F068B858F577F5341BA21624D89B6574D49F41B"
-      },
-      {
         "path": "src/app/telefonnotiz/layout.tsx",
         "sha256": "AE8CBE00A8E35CBB102771712FFC02D0A0A9E081EE3DC0D12A4CF536720B1C7E"
-      },
-      {
-        "path": "src/app/warendurchlauf/layout.tsx",
-        "sha256": "E5EBF1F196F253B510F737CB7D30E0D8D7CE83B6AD31FB071E4351BCDBD4D0F4"
       },
       {
         "path": "src/app/warendurchlauf/neu/page.tsx",

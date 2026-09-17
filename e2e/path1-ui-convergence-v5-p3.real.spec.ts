@@ -416,24 +416,50 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
         await expect(
           rolf.page.getByRole("heading", { name: "Werkstatt", exact: true }),
         ).toBeVisible();
-        await expect(
-          rolf.page.getByRole("heading", { name: "Noch keine Daten erfasst" }),
-        ).toBeVisible();
-        await expect(
-          rolf.page.getByText(
-            "Sobald Aufträge im Wareneingang oder in der Galvanik liegen, erscheinen sie hier.",
-          ),
-        ).toBeVisible();
+        const emptyWorkshopHeading = rolf.page.getByRole("heading", {
+          name: "Noch keine Daten erfasst",
+        });
+        const populatedWorkshopSource = rolf.page.getByText(
+          /^Quelle: Auftragsbestand · Stand /,
+        );
+        await expect
+          .poll(async () => {
+            const [emptyVisible, populatedVisible] = await Promise.all([
+              emptyWorkshopHeading.isVisible(),
+              populatedWorkshopSource.isVisible(),
+            ]);
+            if (emptyVisible === populatedVisible) return "pending-or-conflict";
+            return emptyVisible ? "empty" : "data";
+          })
+          .toMatch(/^(empty|data)$/);
+        const workshopIsEmpty = await emptyWorkshopHeading.isVisible();
+        if (workshopIsEmpty) {
+          await expect(
+            rolf.page.getByText(
+              "Sobald Aufträge im Wareneingang oder in der Galvanik liegen, erscheinen sie hier.",
+            ),
+          ).toBeVisible();
+          await expect(populatedWorkshopSource).toHaveCount(0);
+        } else {
+          await expect(populatedWorkshopSource).toBeVisible();
+          await expect(rolf.page.getByTestId("werkstatt-status")).toBeVisible();
+          await expect(rolf.page.getByTestId("werkstatt-wip-tile")).toBeVisible();
+          await expect(emptyWorkshopHeading).toHaveCount(0);
+        }
         const hubIntake = rolf.page.getByRole("button", {
           name: "Neuer Eingang",
           exact: true,
         });
         await expect(hubIntake).toBeVisible();
-        await expect(
-          rolf.page.getByRole("button", { name: "Ware raus", exact: true }),
-        ).toBeVisible();
+        await expect(hubIntake).toBeEnabled();
+        const goodsOut = rolf.page.getByRole("button", {
+          name: "Ware raus",
+          exact: true,
+        });
+        await expect(goodsOut).toBeVisible();
+        await expect(goodsOut).toBeEnabled();
         await expect(rolf.page.locator("body")).not.toContainText(
-          /NOT_AVAILABLE|Mock|Quelle: Auftragsbestand/,
+          /NOT_AVAILABLE|Mock/,
         );
         await hubIntake.scrollIntoViewIfNeeded();
         await expectFullyInsideViewport(rolf.page, hubIntake);
@@ -464,6 +490,12 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
         await expect(rolf.page.locator("body")).not.toContainText(
           "NOT_AVAILABLE",
         );
+        await expect(
+          rolf.page.locator('nav a[href="/warendurchlauf/wareneingang"]'),
+        ).toHaveCount(0);
+        await expect(
+          rolf.page.locator('nav a[href="/warendurchlauf/galvanik"]'),
+        ).toHaveCount(0);
         const stationIntake = rolf.page.getByTestId(
           "wareneingang-create-order",
         );
@@ -616,6 +648,10 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
       );
 
       const retiredRouteResults: Array<{ path: string; status: number }> = [];
+      let legacyStationRouteResult = {
+        path: "/station/wareneingang",
+        status: 0,
+      };
       const retiredRoutePage = await rolf.context.newPage();
       try {
         for (const retiredRoute of RETIRED_ROUTE_MATRIX) {
@@ -632,6 +668,18 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
             /NOT_AVAILABLE|Liquidität Stabil|145 Belege|62 Rechnungen|1240 Zeitbuchungen|Google-API|Scan & KI-Erfassung|App-Nutzung \/ Analytics|Testanalyse \(Testpilot\)/i,
           );
         }
+        const legacyStationResponse = await retiredRoutePage.goto(
+          legacyStationRouteResult.path,
+          { waitUntil: "domcontentloaded" },
+        );
+        legacyStationRouteResult = {
+          ...legacyStationRouteResult,
+          status: legacyStationResponse?.status() ?? 0,
+        };
+        expect(legacyStationRouteResult.status).toBe(404);
+        await expect(retiredRoutePage.locator("body")).not.toContainText(
+          /Stationsdaten werden geladen|WarendurchlaufStationNav|NOT_AVAILABLE/,
+        );
       } finally {
         await retiredRoutePage.close();
       }
@@ -962,10 +1010,12 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
           "Rolf -> Geld & Rechnungen -> Accounting-minimal",
           "Rolf -> Werkstatt-Hub -> Wareneingang -> eine Erfassung -> Werkstatt-Hub",
           "/warendurchlauf/neu -> /warendurchlauf/wareneingang",
+          "/station/wareneingang -> 404 without legacy station band",
           "Gregor -> E-Mail-Login -> Einstellungen -> Start -> Einstellungen",
           "60 retired/quarantined routes -> 404; Galvanik blackbox -> 200",
         ],
         retiredRouteResults,
+        legacyStationRouteResult,
         captures,
       };
       mkdirSync(OUTPUT_DIR, { recursive: true });

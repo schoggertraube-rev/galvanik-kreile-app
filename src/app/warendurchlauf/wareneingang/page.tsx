@@ -78,8 +78,8 @@ function WarendurchlaufLeitstandContent() {
     !stationListPending && stationListLoaded && !stationUnavailableMessage;
 
   return (
-    <div className="w-full h-full font-sans antialiased text-[#1a1a1a]">
-      <div className="w-full mx-auto px-5 md:px-8 lg:px-12 xl:px-16 py-6">
+    <div className="h-full w-full min-w-0 max-w-full font-sans antialiased text-[#1a1a1a]">
+      <div className="mx-auto w-full min-w-0 max-w-full px-5 py-6 md:px-8 lg:px-12 xl:px-16">
         {stationAccessDenied ? (
           /* Denial: keine Karten, kein leerer Erfolgszustand, keine Intake-Controls. */
           <div
@@ -96,7 +96,10 @@ function WarendurchlaufLeitstandContent() {
         ) : (
           <>
             {/* â”€â”€ NEUE ANNAHME ERFASSEN â”€â”€ */}
-            <div style={{ animation: "fadeUp .4s .1s ease both" }}>
+            <div
+              className="min-w-0 max-w-full"
+              style={{ animation: "fadeUp .4s .1s ease both" }}
+            >
               {/* Titel */}
               <div className="text-[13px] font-bold text-[#5e5850] mb-3 flex items-center gap-2">
                 Neue Annahme erfassen
@@ -108,7 +111,7 @@ function WarendurchlaufLeitstandContent() {
                 <button
                   data-testid="wareneingang-create-order"
                   onClick={() => requestGlobalCreate("DIRECT_INTAKE")}
-                  className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8] text-center"
+                  className="flex max-w-full min-w-0 flex-col items-center gap-3 rounded-[14px] p-6 text-center transition-all hover:-translate-y-0.5 hover:bg-[#f4f0e8] hover:shadow-md"
                   style={{
                     background: "#faf8f4",
                     border: "1.5px solid #d8d0c4",
@@ -148,7 +151,7 @@ function WarendurchlaufLeitstandContent() {
 
             {/* â”€â”€ ARBEITSLISTE WARENEINGANG â”€â”€ */}
             <div
-              className="mt-12"
+              className="mt-12 min-w-0 max-w-full"
               style={{ animation: "fadeUp .5s .2s ease both" }}
             >
               <div className="text-[15px] font-bold text-[#5e5850] mb-4 flex items-center gap-2">
@@ -196,7 +199,7 @@ function WarendurchlaufLeitstandContent() {
                     Auftrag öffnen, um Details, Verlauf und die verfügbaren
                     nächsten Schritte zu sehen.
                   </p>
-                  <div className="flex flex-col gap-2">
+                  <div className="flex min-w-0 max-w-full flex-col gap-2">
                     {stationOrders.length > 0 ? (
                       stationOrders.map((order) => (
                         <OrderQueueRow

@@ -1,5 +1,5 @@
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   cleanup,
@@ -15,6 +15,15 @@ const stationDenial =
   "Die Aufträge im Wareneingang sind gerade nicht abrufbar. Es wurde nichts verändert. Bitte prüfen Sie die Verbindung und versuchen Sie es erneut.";
 const stationThrowDenial =
   "Die Aufträge im Wareneingang sind gerade nicht abrufbar. Es wurde nichts verändert. Bitte prüfen Sie die Verbindung und versuchen Sie es erneut.";
+const discardedUiTerms = [
+  "Demo",
+  "Mock",
+  ["Station", " öffnen"].join(""),
+  ["In Galvanik", " starten"].join(""),
+  ["Als", " Nächstes"].join(""),
+  ["Theme", "Toggle"].join(""),
+];
+const discardedUiPattern = new RegExp(discardedUiTerms.join("|"), "i");
 const ports = vi.hoisted(() => ({
   resolveAuthorization: vi.fn(),
   getWareneingangOrdersAction: vi.fn(),
@@ -23,7 +32,6 @@ const ports = vi.hoisted(() => ({
   openGlobalCreate: vi.fn(),
   openOrder: vi.fn(),
   pushRoute: vi.fn(),
-  useSelectedLayoutSegment: vi.fn(),
 }));
 
 vi.mock("@/app/warendurchlauf/actions", () => ({
@@ -37,7 +45,6 @@ vi.mock("@/lib/server/authorization", () => ({
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: ports.pushRoute }),
   useSearchParams: () => new URLSearchParams(),
-  useSelectedLayoutSegment: ports.useSelectedLayoutSegment,
 }));
 vi.mock("@/components/layout/GlobalCreateFlow", () => ({
   requestGlobalCreate: ports.openGlobalCreate,
@@ -58,9 +65,6 @@ vi.mock("@/lib/overlayStore", () => ({
       : { openOrder: ports.openOrder },
 }));
 vi.mock("@/hooks/usePageView", () => ({ usePageView: vi.fn() }));
-vi.mock("@/components/warendurchlauf/WarendurchlaufStationNav", () => ({
-  WarendurchlaufStationNav: () => <nav>Legacy-Station-Navigation</nav>,
-}));
 vi.mock("lucide-react", () => ({
   Camera: () => null,
   PenLine: () => null,
@@ -124,7 +128,6 @@ beforeEach(() => {
     ok: true,
     data: { wipCount: 0, dueThisWeekCount: 0 },
   });
-  ports.useSelectedLayoutSegment.mockReturnValue(null);
 });
 
 afterEach(() => {
@@ -245,9 +248,7 @@ describe("W2C-B2M5J unavailable UI", () => {
       ports.getGalvanikOrdersAction.mock.invocationCallOrder[0],
     );
     expect(
-      screen.queryByText(
-        /Demo|Mock|Station öffnen|In Galvanik starten|Als Nächstes/i,
-      ),
+      screen.queryByText(discardedUiPattern),
     ).not.toBeInTheDocument();
   });
 
@@ -874,22 +875,50 @@ describe("W2C-B2M5J unavailable UI", () => {
       "@/modules/werkstatt/public#WerkstattViewPorts",
     );
     expect(manifestSource).toContain('"dependencies": []');
-    expect(clientSource).not.toMatch(
-      /Demo|Mock|Station öffnen|In Galvanik starten|Als Nächstes|ThemeToggle/,
-    );
+    for (const discardedTerm of discardedUiTerms) {
+      expect(clientSource).not.toContain(discardedTerm);
+    }
   });
 
-  it("hides the legacy station navigation only on the exact root segment", async () => {
-    const { WarendurchlaufRouteNav } =
-      await import("../WarendurchlaufRouteNav");
-    const view = render(<WarendurchlaufRouteNav />);
+  it("keeps the discarded station band out of every canonical workshop route", () => {
+    const repoRoot = resolve(process.cwd());
+    const workshopSource = readFileSync(
+      resolve(repoRoot, "src/app/warendurchlauf/page.tsx"),
+      "utf8",
+    );
+    const intakeSource = readFileSync(
+      resolve(repoRoot, "src/app/warendurchlauf/wareneingang/page.tsx"),
+      "utf8",
+    );
+    const discardedRouteNavPath = resolve(
+      repoRoot,
+      "src/app/warendurchlauf",
+      ["Warendurchlauf", "RouteNav.tsx"].join(""),
+    );
+    const discardedStationNavPath = resolve(
+      repoRoot,
+      "src/components/warendurchlauf",
+      ["Warendurchlauf", "StationNav.tsx"].join(""),
+    );
 
     expect(
-      screen.queryByText("Legacy-Station-Navigation"),
-    ).not.toBeInTheDocument();
-    ports.useSelectedLayoutSegment.mockReturnValue("wareneingang");
-    view.rerender(<WarendurchlaufRouteNav />);
-    expect(screen.getByText("Legacy-Station-Navigation")).toBeInTheDocument();
+      existsSync(resolve(repoRoot, "src/app/warendurchlauf/layout.tsx")),
+    ).toBe(false);
+    expect(
+      existsSync(discardedRouteNavPath),
+    ).toBe(false);
+    expect(existsSync(discardedStationNavPath)).toBe(false);
+    expect(existsSync(resolve(repoRoot, "src/app/station/layout.tsx"))).toBe(
+      false,
+    );
+    const activeRouteSources = `${workshopSource}\n${intakeSource}`;
+    expect(activeRouteSources).not.toContain(
+      ["Warendurchlauf", "RouteNav"].join(""),
+    );
+    expect(activeRouteSources).not.toContain(
+      ["Warendurchlauf", "StationNav"].join(""),
+    );
+    expect(activeRouteSources).not.toContain("/station/");
   });
 
   it("renders station denial without confirmed empty-station success while KPI tiles remain unavailable", async () => {
