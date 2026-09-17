@@ -4,17 +4,15 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const ports = vi.hoisted(() => ({
-  redirect: vi.fn(),
-  resolveAuthorization: vi.fn(),
-  getProductIdentity: vi.fn(),
+  redirect: vi.fn((path: string) => {
+    throw new Error(`REDIRECT:${path}`);
+  }),
+  resolveProductActorAuthorization: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({ redirect: ports.redirect }));
-vi.mock("@/lib/server/authorization", () => ({
-  resolveAuthorization: ports.resolveAuthorization,
-}));
-vi.mock("@/lib/auth/authorizationContract", () => ({
-  getProductIdentity: ports.getProductIdentity,
+vi.mock("@/lib/server/productActorReadiness", () => ({
+  resolveProductActorAuthorization: ports.resolveProductActorAuthorization,
 }));
 vi.mock("@/components/home/RolfHome", () => ({
   RolfHome: ({ authorization }: { authorization: { role: string } }) => (
@@ -35,78 +33,92 @@ vi.mock("@/app/warendurchlauf/WerkstattAppAdapter", () => ({
 
 import RootPage from "@/app/page";
 
-beforeEach(() => {
-  vi.clearAllMocks();
-});
+type ActorKey = "rolf" | "phillip" | "gregor";
 
+function authorizationFor(key: ActorKey, gregorRole: "admin" | "developer" = "admin") {
+  const role = key === "rolf" ? "meister" : key === "phillip" ? "werkstatt" : gregorRole;
+  const identity = key === "rolf"
+    ? { name: "Rolf" as const, responsibility: "Meister" as const, initials: "R" as const }
+    : key === "phillip"
+      ? { name: "Phillip" as const, responsibility: "Werkstatt" as const, initials: "P" as const }
+      : { name: "Gregor" as const, responsibility: "Systemadministrator" as const, initials: "G" as const };
+
+  return {
+    ok: true as const,
+    data: {
+      authorization: {
+        userId: `synthetic-${key}`,
+        tenantId: "synthetic-tenant",
+        displayName: identity.name,
+        role,
+        permissions: ["perm_view_leitstand"],
+        active: true as const,
+      },
+      actor: {
+        key,
+        actorId: `synthetic-${key}`,
+        tenantId: "synthetic-tenant",
+        role,
+        identity,
+        login: key === "gregor" ? ("email" as const) : ("pin" as const),
+      },
+    },
+  };
+}
+
+beforeEach(() => vi.clearAllMocks());
 afterEach(() => cleanup());
 
-const authorization = (role: string) => ({
-  ok: true as const,
-  data: {
-    userId: `user-${role}`,
-    tenantId: "tenant-a",
-    displayName: role,
-    role,
-    permissions: ["perm_view_leitstand"],
-    active: true as const,
-  },
-});
-
 describe("F1-R0 root route containment", () => {
-  it("renders the Rolf home only for the configured Meister actor", async () => {
-    ports.resolveAuthorization.mockResolvedValueOnce(authorization("meister"));
-    ports.getProductIdentity.mockReturnValueOnce({ name: "Rolf", responsibility: "Meister", initials: "R" });
+  it("renders Rolf through the shared actor authorization choke point", async () => {
+    ports.resolveProductActorAuthorization.mockResolvedValue(authorizationFor("rolf"));
     render(await RootPage());
     expect(screen.getByTestId("rolf-home")).toHaveTextContent("meister");
-    expect(ports.redirect).not.toHaveBeenCalled();
   });
 
-  it.each(["buero", "readonly"])("fails closed for the unconfigured technical role %s", async (role) => {
-    ports.resolveAuthorization.mockResolvedValueOnce(authorization(role));
-    ports.getProductIdentity.mockReturnValueOnce(null);
-    await RootPage();
-    expect(ports.redirect).toHaveBeenCalledWith("/start");
-  });
-
-  it("renders the Phillip home for werkstatt", async () => {
-    ports.resolveAuthorization.mockResolvedValueOnce(
-      authorization("werkstatt"),
-    );
-    ports.getProductIdentity.mockReturnValueOnce({ name: "Phillip", responsibility: "Werkstatt", initials: "P" });
+  it("renders Phillip through the same choke point", async () => {
+    ports.resolveProductActorAuthorization.mockResolvedValue(authorizationFor("phillip"));
     render(await RootPage());
     expect(screen.getByTestId("werkstatt-home")).toHaveTextContent("werkstatt");
+  });
+
+  it.each(["admin", "developer"] as const)(
+    "routes the validated Gregor %s session to settings",
+    async (role) => {
+      ports.resolveProductActorAuthorization.mockResolvedValue(
+        authorizationFor("gregor", role),
+      );
+      await expect(RootPage()).rejects.toThrow("REDIRECT:/settings");
+    },
+  );
+
+  it("redirects a missing session to start", async () => {
+    ports.resolveProductActorAuthorization.mockResolvedValue({
+      ok: false,
+      reason: "NO_SESSION",
+      message: "not signed in",
+    });
+    await expect(RootPage()).rejects.toThrow("REDIRECT:/start");
+  });
+
+  it("does not start-bounce a valid session when readiness fails", async () => {
+    ports.resolveProductActorAuthorization.mockResolvedValue({
+      ok: false,
+      reason: "ACTOR_READINESS_UNAVAILABLE",
+      message: "technical detail",
+      supportReference: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    });
+    render(await RootPage());
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Produktzugang momentan nicht verfügbar",
+    );
     expect(ports.redirect).not.toHaveBeenCalled();
   });
 
-  it.each(["admin", "developer"])("redirects %s to settings", async (role) => {
-    ports.resolveAuthorization.mockResolvedValueOnce(authorization(role));
-    ports.getProductIdentity.mockReturnValueOnce({ name: "Gregor", responsibility: "Systemadministrator", initials: "G" });
-    await RootPage();
-    expect(ports.redirect).toHaveBeenCalledWith("/settings");
-  });
-
-  it("redirects an unauthenticated request to start", async () => {
-    ports.resolveAuthorization.mockResolvedValueOnce({
-      ok: false,
-      reason: "UNAUTHENTICATED",
-    });
-    ports.redirect.mockImplementationOnce(() => {
-      throw new Error("NEXT_REDIRECT");
-    });
-    await expect(RootPage()).rejects.toThrow("NEXT_REDIRECT");
-    expect(ports.redirect).toHaveBeenCalledWith("/start");
-  });
-
-  it("contains no former demo dashboard or client-side business state", () => {
-    const source = readFileSync(
-      resolve(process.cwd(), "src/app/page.tsx"),
-      "utf8",
-    );
-    expect(source).not.toMatch(
-      /DEMO|HomeDashboard|localStorage|useState|useEffect|getOrdersDb|\/warendurchlauf["']/,
-    );
-    expect(source).toContain("resolveAuthorization");
+  it("contains no fallback identity or client-side business state", () => {
+    const source = readFileSync(resolve(process.cwd(), "src/app/page.tsx"), "utf8");
+    expect(source).not.toMatch(/DEMO|localStorage|useState|useEffect|getProductIdentity\(/);
+    expect(source).toContain("resolveProductActorAuthorization");
     expect(source).toContain("loadWerkstattHome");
     expect(source).toContain("<WerkstattAppAdapter");
     expect(source).toContain("<RolfHome");

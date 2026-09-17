@@ -7,8 +7,21 @@ import * as appSessionModule from "../appSession";
 import { db } from "@/db";
 import { appUsers } from "@/db/schema";
 import { checkAppSession, checkAppAuth } from "../authHelper";
-import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
+import {
+  getAuthorizationSnapshotAction,
+  getMyPermissionsAction,
+  getRoleAction,
+} from "@/app/actions/auth.actions";
 import { getRoleLabel, type AppRole } from "@/lib/auth/authorizationContract";
+
+const productActorPorts = vi.hoisted(() => ({
+  resolveProductActorAuthorization: vi.fn(),
+}));
+
+vi.mock("@/lib/server/productActorReadiness", () => ({
+  resolveProductActorAuthorization: productActorPorts.resolveProductActorAuthorization,
+  readProductActorReadiness: vi.fn(),
+}));
 
 vi.mock("@/db", () => {
   const mockWhere = vi.fn();
@@ -315,77 +328,83 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
   });
 
   it("13. Client-Action nutzt ausschließlich Resolver", async () => {
-    vi.spyOn(appSessionModule, "readAppSession").mockResolvedValue({
+    productActorPorts.resolveProductActorAuthorization.mockResolvedValue({
       ok: false,
-      reason: "NO_COOKIE",
+      reason: "NO_SESSION",
+      message: "not signed in",
     });
 
     const result = await getAuthorizationSnapshotAction();
     expect(result.ok).toBe(false);
   });
 
-  it("13a. Client-Action erhält Actor-ID und zeigt Gregor statt eines technischen DB-Namens", async () => {
-    vi.stubEnv("KREILE_ROLF_APP_USER_ID", "rolf-actor");
-    vi.stubEnv("KREILE_PHILLIP_APP_USER_ID", "phillip-actor");
-    vi.stubEnv("KREILE_GREGOR_APP_USER_ID", "gregor-actor");
-    vi.spyOn(appSessionModule, "readAppSession").mockResolvedValue({
-      ok: true,
-      session: {
-        userId: "gregor-actor",
-        tenantId: KREILE_TENANT_SLUG,
-        role: "admin",
-        displayName: "Technical Admin",
-        issuedAt: Date.now(),
-        expiresAt: Date.now() + 10_000,
-      },
-    });
-    vi.mocked(db.select().from(appUsers).where).mockResolvedValue([{
-      id: "gregor-actor",
-      tenantId: KREILE_TENANT_SLUG,
-      fullName: "Technical Admin",
-      role: "admin",
-      active: true,
-      updatedAt: null,
-    }] as unknown as Array<typeof appUsers.$inferSelect>);
-
-    await expect(getAuthorizationSnapshotAction()).resolves.toMatchObject({
+  it("13a. Client-Action zeigt Gregor ohne Actor-ID oder Tenant", async () => {
+    productActorPorts.resolveProductActorAuthorization.mockResolvedValue({
       ok: true,
       data: {
-        userId: "gregor-actor",
+        authorization: {
+          userId: "synthetic-gregor-id",
+          tenantId: KREILE_TENANT_SLUG,
+          displayName: "Gregor",
+          role: "admin",
+          permissions: ["perm_sys_diag"],
+          active: true,
+        },
+        actor: {
+          key: "gregor",
+          actorId: "synthetic-gregor-id",
+          tenantId: KREILE_TENANT_SLUG,
+          role: "admin",
+          identity: {
+            name: "Gregor",
+            responsibility: "Systemadministrator",
+            initials: "G",
+          },
+          login: "email",
+        },
+      },
+    });
+
+    const result = await getAuthorizationSnapshotAction();
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
         displayName: "Gregor",
         role: "admin",
       },
     });
+    expect(JSON.stringify(result)).not.toContain("synthetic-gregor-id");
+    expect(JSON.stringify(result)).not.toContain(KREILE_TENANT_SLUG);
   });
 
-  it("13b. Client-Action maskiert keinen mehrdeutig konfigurierten Actor", async () => {
-    vi.stubEnv("KREILE_ROLF_APP_USER_ID", "duplicate-actor");
-    vi.stubEnv("KREILE_PHILLIP_APP_USER_ID", "duplicate-actor");
-    vi.stubEnv("KREILE_GREGOR_APP_USER_ID", "gregor-actor");
-    vi.spyOn(appSessionModule, "readAppSession").mockResolvedValue({
-      ok: true,
-      session: {
-        userId: "duplicate-actor",
-        tenantId: KREILE_TENANT_SLUG,
-        role: "meister",
-        displayName: "Fremde Person",
-        issuedAt: Date.now(),
-        expiresAt: Date.now() + 10_000,
-      },
+  it("13b. Client-Action fails closed without exposing technical classification", async () => {
+    productActorPorts.resolveProductActorAuthorization.mockResolvedValue({
+      ok: false,
+      reason: "ACTOR_READINESS_UNAVAILABLE",
+      message: "technical detail",
+      supportReference: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     });
-    vi.mocked(db.select().from(appUsers).where).mockResolvedValue([{
-      id: "duplicate-actor",
-      tenantId: KREILE_TENANT_SLUG,
-      fullName: "Fremde Person",
-      role: "meister",
-      active: true,
-      updatedAt: null,
-    }] as unknown as Array<typeof appUsers.$inferSelect>);
 
     await expect(getAuthorizationSnapshotAction()).resolves.toEqual({
       ok: false,
-      reason: "AUTHORIZATION_UNAVAILABLE",
-      message: "AUTH_ERROR: Kein eindeutiges Produktprofil konfiguriert",
+      message: "Der Produktzugang ist momentan nicht sicher verfügbar.",
+      supportReference: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    });
+  });
+
+  it("13c. Rollen- und Berechtigungsfassaden failen ohne Namensfallback", async () => {
+    productActorPorts.resolveProductActorAuthorization.mockResolvedValue({
+      ok: false,
+      reason: "ACTOR_READINESS_UNAVAILABLE",
+      message: "technical detail",
+      supportReference: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    });
+
+    await expect(getRoleAction()).resolves.toBeNull();
+    await expect(getMyPermissionsAction()).resolves.toEqual({
+      permissions: [],
+      name: "",
+      initials: "",
     });
   });
 

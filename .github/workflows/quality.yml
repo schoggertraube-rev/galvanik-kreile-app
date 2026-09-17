@@ -76,6 +76,18 @@ jobs:
         # Baseline shrink-only), AGENTS-Verweis. Siehe ARCHITEKTUR_MODULE_PATH1.md §2/§5.
         run: node scripts/quality/check-module-gates.mjs
 
+      - name: Product actor contract and config-name preflight (synthetic; never Production evidence)
+        env:
+          KREILE_ROLF_APP_USER_ID: 11111111-1111-4111-8111-111111111111
+          KREILE_PHILLIP_APP_USER_ID: 22222222-2222-4222-8222-222222222222
+          KREILE_GREGOR_APP_USER_ID: 33333333-3333-4333-8333-333333333333
+        run: |
+          npm run quality:product-actors:selftest
+          npm run quality:product-actors:preflight
+          echo "PRODUCT_ACTOR_SYNTHETIC_COMPATIBILITY=PASS"
+          echo "PRODUCT_ACTOR_PRODUCTION_READINESS=OPEN"
+          echo "PRODUCT_ACTOR_POST_DEPLOY_EVIDENCE=OPEN"
+
       - name: Resolve diff range
         id: diff
         shell: bash
@@ -420,7 +432,7 @@ jobs:
           APP_SESSION_SECRET: f0-verify-http-tests-ci-secret-2026-08-10
         run: npm run build
 
-      - name: BF-006 start app (next start -p 3100) + readiness loop
+      - name: BF-006 start app with synthetic product actors (next start -p 3100) + readiness loop
         env:
           NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
           NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
@@ -428,6 +440,9 @@ jobs:
           SUPABASE_URL: http://127.0.0.1:54321
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           APP_SESSION_SECRET: f0-verify-http-tests-ci-secret-2026-08-10
+          KREILE_ROLF_APP_USER_ID: 00000000-f0be-4006-a000-000000000001
+          KREILE_PHILLIP_APP_USER_ID: 00000000-f0be-4006-a000-000000000003
+          KREILE_GREGOR_APP_USER_ID: 00000000-f0be-4006-a000-000000000004
         run: |
           set -euo pipefail
           if [ -d public ]; then
@@ -458,7 +473,7 @@ jobs:
             exit 1
           fi
 
-      - name: BF-006 verify HTTP tests (real login POST + session cookie + auth boundary)
+      - name: BF-006 synthetic local HTTP compatibility (real login POST + session cookie + auth boundary)
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           BASE_URL: http://127.0.0.1:3100
@@ -583,7 +598,7 @@ jobs:
       - name: Install Playwright WebKit for P3 browser contract
         run: npx playwright install --with-deps webkit
 
-      - name: P3 built target-shell browser matrix (blocking)
+      - name: P3 synthetic local built target-shell browser matrix (blocking; not Production evidence)
         shell: bash
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
@@ -680,11 +695,11 @@ jobs:
           test "$ready" -eq 1
           CI= npx playwright test e2e/path1-ui-convergence-v5-p3.real.spec.ts --project=Tablet --workers=1
 
-      - name: Upload P3 browser evidence
+      - name: Upload P3 synthetic browser compatibility evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: p3-core-surfaces-search-browser-evidence
+          name: p3-synthetic-core-surfaces-search-browser-compatibility
           if-no-files-found: warn
           path: |
             docs/evidence/path1/artifacts/p3-core-surfaces-search/*.png

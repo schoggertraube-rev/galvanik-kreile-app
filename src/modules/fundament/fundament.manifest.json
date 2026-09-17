@@ -1,18 +1,25 @@
 {
   "moduleId": "fundament",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "owner": "Path-1 Fundament (authentifizierter Produkteinstieg)",
   "publicExports": [
     "@/modules/fundament/public#ProductStartProfile",
     "@/modules/fundament/public#SystemAdminView",
     "@/modules/fundament/public#SystemAdminViewProps"
   ],
-  "capabilities": ["system-admin:session-status"],
+  "capabilities": [
+    "product-actors:fail-closed-status",
+    "system-admin:session-status"
+  ],
   "migrations": [],
   "viewsFunctions": [],
   "ownsTables": [],
   "storagePurposes": [],
   "events": { "emits": [], "consumes": [] },
-  "config": {},
+  "config": {
+    "KREILE_ROLF_APP_USER_ID": "Server-only exact AppUser binding for Rolf",
+    "KREILE_PHILLIP_APP_USER_ID": "Server-only exact AppUser binding for Phillip",
+    "KREILE_GREGOR_APP_USER_ID": "Server-only exact AppUser binding for Gregor"
+  },
   "dependencies": []
 }

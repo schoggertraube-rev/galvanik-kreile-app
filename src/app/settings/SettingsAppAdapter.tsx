@@ -1,19 +1,25 @@
 import { redirect } from "next/navigation";
-import { getProductIdentity } from "@/lib/auth/authorizationContract";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import { resolveProductActorAuthorization } from "@/lib/server/productActorReadiness";
+import { getProductIdentityByKey } from "@/lib/auth/authorizationContract";
+import { ProductActorAccessUnavailable } from "@/components/foundation/FoundationUnavailable";
 import { SystemAdminView } from "@/modules/fundament/public";
 
 /** Server-side composition seam for the separately authenticated Gregor entry. */
 export async function SettingsAppAdapter() {
-  const authorization = await resolveAuthorization();
-  if (!authorization.ok) redirect("/start");
+  const result = await resolveProductActorAuthorization();
+  if (!result.ok) {
+    if (result.reason === "NO_SESSION" || result.reason === "INVALID_SESSION") {
+      redirect("/start");
+    }
+    return (
+      <ProductActorAccessUnavailable
+        supportReference={result.supportReference}
+      />
+    );
+  }
 
-  const identity = getProductIdentity(authorization.data.userId);
-  if (
-    identity?.name !== "Gregor"
-    || identity.responsibility !== "Systemadministrator"
-    || (authorization.data.role !== "admin" && authorization.data.role !== "developer")
-  ) redirect("/");
+  if (result.data.actor.key !== "gregor") redirect("/");
+  const identity = getProductIdentityByKey("gregor");
 
   return (
     <SystemAdminView

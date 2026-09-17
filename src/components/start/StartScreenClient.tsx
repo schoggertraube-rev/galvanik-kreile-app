@@ -20,6 +20,7 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
   const profile = PRODUCT_PROFILES[user.identity];
   const [pin, setPin] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [supportReference, setSupportReference] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
 
   const enterDigit = async (digit: string) => {
@@ -27,6 +28,7 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
     const nextPin = `${pin}${digit}`;
     setPin(nextPin);
     setMessage(null);
+    setSupportReference(undefined);
     if (nextPin.length !== 4) return;
 
     setSubmitting(true);
@@ -37,6 +39,7 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
         return;
       }
       setMessage(result.message);
+      setSupportReference(result.supportReference);
     } catch {
       setMessage("Anmeldung konnte nicht sicher abgeschlossen werden.");
     }
@@ -66,7 +69,17 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
         <div className={styles.pinDots} aria-label={`${pin.length} von 4 Stellen eingegeben`}>
           {[0, 1, 2, 3].map((index) => <span key={index} data-filled={pin.length > index} />)}
         </div>
-        {message ? <p className={styles.error} role="alert">{message}</p> : null}
+        {message ? (
+          <div className={styles.error} role="alert">
+            <p>{message}</p>
+            {supportReference ? (
+              <details>
+                <summary>Supportdetails</summary>
+                <p>Referenz: <code>{supportReference}</code></p>
+              </details>
+            ) : null}
+          </div>
+        ) : null}
         <div className={styles.keypad}>
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => <button key={digit} type="button" onClick={() => void enterDigit(String(digit))} disabled={submitting}>{digit}</button>)}
           <span />
@@ -79,11 +92,27 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
   );
 }
 
-function StartContent({ users, loginUnavailable }: { users: StartUserDto[]; loginUnavailable: boolean }) {
+function StartContent({
+  users,
+  loginUnavailable,
+  supportReference,
+}: {
+  users: StartUserDto[];
+  loginUnavailable: boolean;
+  supportReference?: string;
+}) {
   const [selected, setSelected] = useState<StartUserDto | null>(null);
   const [emailLogin, setEmailLogin] = useState(false);
   const searchParams = useSearchParams();
   const serverMessage = searchParams?.get("message");
+  const serverSupportReference = searchParams?.get("support");
+  const safeServerSupportReference =
+    serverSupportReference &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      serverSupportReference,
+    )
+      ? serverSupportReference
+      : undefined;
 
   return (
     <main className={styles.screen}>
@@ -99,7 +128,20 @@ function StartContent({ users, loginUnavailable }: { users: StartUserDto[]; logi
 
       <section className={styles.loginPanel} aria-labelledby="login-title">
         <header><p>Anmelden</p><h2 id="login-title">Wer arbeitet gerade?</h2><span>Wählen Sie Ihr Produktprofil und geben Sie Ihre PIN ein.</span></header>
-        {loginUnavailable ? <div className={styles.unavailable} role="alert">PIN-Anmeldung ist momentan nicht sicher verfügbar. Bitte den Systemadministrator kontaktieren.</div> : null}
+        {loginUnavailable ? (
+          <div className={styles.unavailable} role="alert">
+            <p>
+              Anmeldung ist momentan nicht sicher verfügbar. Bitte den
+              Systemadministrator kontaktieren.
+            </p>
+            {supportReference ? (
+              <details>
+                <summary>Supportdetails</summary>
+                <p>Referenz: <code>{supportReference}</code></p>
+              </details>
+            ) : null}
+          </div>
+        ) : null}
         <div className={styles.users}>
           {(["rolf", "phillip"] as const).map((identity) => {
             const profile = PRODUCT_PROFILES[identity];
@@ -118,11 +160,26 @@ function StartContent({ users, loginUnavailable }: { users: StartUserDto[]; logi
               </button>
             );
           })}
-          <button type="button" className={styles.adminLogin} onClick={() => setEmailLogin(true)}>
+          <button
+            type="button"
+            className={styles.adminLogin}
+            onClick={() => setEmailLogin(true)}
+            disabled={loginUnavailable}
+          >
             <span className={styles.avatar}>G</span><span><strong>Gregor</strong><small>Systemadministrator · per E-Mail anmelden</small></span><LockKeyhole aria-hidden="true" />
           </button>
         </div>
-        {serverMessage ? <p className={styles.error} role="alert">{serverMessage}</p> : null}
+        {serverMessage ? (
+          <div className={styles.error} role="alert">
+            <p>{serverMessage}</p>
+            {safeServerSupportReference ? (
+              <details>
+                <summary>Supportdetails</summary>
+                <p>Referenz: <code>{safeServerSupportReference}</code></p>
+              </details>
+            ) : null}
+          </div>
+        ) : null}
         <p className={styles.adminHint}>Der Systemzugang ist erhöht und steht nur über Gregors E-Mail-Einstieg bereit.</p>
       </section>
 
@@ -132,7 +189,23 @@ function StartContent({ users, loginUnavailable }: { users: StartUserDto[]; logi
   );
 }
 
-export function StartScreenClient({ users, loginUnavailable = false }: { users: StartUserDto[]; loginUnavailable?: boolean }) {
+export function StartScreenClient({
+  users,
+  loginUnavailable = false,
+  supportReference,
+}: {
+  users: StartUserDto[];
+  loginUnavailable?: boolean;
+  supportReference?: string;
+}) {
   usePageView();
-  return <Suspense fallback={<div className={styles.loading}>Anmeldung wird geladen …</div>}><StartContent users={users} loginUnavailable={loginUnavailable} /></Suspense>;
+  return (
+    <Suspense fallback={<div className={styles.loading}>Anmeldung wird geladen …</div>}>
+      <StartContent
+        users={users}
+        loginUnavailable={loginUnavailable}
+        supportReference={supportReference}
+      />
+    </Suspense>
+  );
 }

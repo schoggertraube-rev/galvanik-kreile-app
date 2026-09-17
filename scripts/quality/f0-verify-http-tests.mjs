@@ -163,6 +163,24 @@ function loginHandleFor(userId) {
     .digest("base64url");
 }
 
+// Isolated command-authorization fixture only. This does not represent a
+// product-actor login and cannot contribute product-role or Production evidence.
+function syntheticTechnicalSessionCookie({ userId, role, displayName }) {
+  const now = Date.now();
+  const payload = JSON.stringify({
+    userId,
+    tenantId: APP_TENANT_ID,
+    role,
+    displayName,
+    issuedAt: now,
+    expiresAt: now + 12 * 60 * 60 * 1000,
+  });
+  const signature = createHmac("sha256", APP_SESSION_SECRET)
+    .update(payload)
+    .digest("hex");
+  return `${SESSION_COOKIE_NAME}=${Buffer.from(payload).toString("base64")}.${signature}`;
+}
+
 // Resolves action IDs deterministically from the Next.js manifest.
 // Returns { loginWithPin, createOrderIntakeAction } or throws FATAL.
 function resolveActionIdsFromManifest() {
@@ -769,6 +787,30 @@ async function loginAndAssert({
   return cookie;
 }
 
+async function loginRejectedAssert({
+  actionId,
+  userId,
+  pin,
+  clientReferenceManifest,
+  routeRuntime,
+}) {
+  const invocation = await invokeServerAction({
+    actionId,
+    args: [loginHandleFor(userId), pin],
+    cookieHeader: null,
+    pathname: LOGIN_ACTION_PATH,
+    clientReferenceManifest,
+    routeRuntime,
+  });
+  if (
+    invocation.result?.ok !== false ||
+    invocation.result?.message !== "Ungültige PIN oder inaktiver Benutzer." ||
+    invocation.cookie !== null
+  ) {
+    throw new Error("Nicht-Produktprofil wurde nicht fail-closed abgewiesen");
+  }
+}
+
 // Intake-/Fehlercode exakt pruefen. 503/NOT_AVAILABLE ist niemals ein PASS.
 function assertIntakeCode(result, expectedCode) {
   const code = result.code;
@@ -899,6 +941,8 @@ async function main() {
 
   const writerId = "00000000-f0be-4006-a000-000000000001";
   const readonlyId = "00000000-f0be-4006-a000-000000000002";
+  const phillipId = "00000000-f0be-4006-a000-000000000003";
+  const gregorId = "00000000-f0be-4006-a000-000000000004";
   const writerPin = "4711";
   const readonlyPin = "4712";
   let fixturesInserted = false;
@@ -960,14 +1004,16 @@ async function main() {
     // ── Setup: Test-Fixtures ────────────────────────────────────────────────────────────────
     const writerHash = bcrypt.hashSync(writerPin, 10);
     const readonlyHash = bcrypt.hashSync(readonlyPin, 10);
-    assertFreshLocalReplayDatabase([writerId, readonlyId]);
+    assertFreshLocalReplayDatabase([writerId, readonlyId, phillipId, gregorId]);
     runSql(
       `insert into public.app_users (id, tenant_id, email, full_name, role, pin_hash, active) values ` +
         `('${writerId}', '${APP_TENANT_ID}', 'f0-verify-writer@example.invalid', 'F0 Verify Writer', 'meister', '${writerHash}', true), ` +
-        `('${readonlyId}', '${APP_TENANT_ID}', 'f0-verify-readonly@example.invalid', 'F0 Verify Readonly', 'readonly', '${readonlyHash}', true)`
+        `('${readonlyId}', '${APP_TENANT_ID}', 'f0-verify-readonly@example.invalid', 'F0 Verify Readonly', 'readonly', '${readonlyHash}', true), ` +
+        `('${phillipId}', '${APP_TENANT_ID}', 'f0-verify-phillip@example.invalid', 'F0 Verify Phillip', 'werkstatt', null, true), ` +
+        `('${gregorId}', '${APP_TENANT_ID}', 'f0-verify-gregor@example.invalid', 'F0 Verify Gregor', 'admin', null, true)`
     );
     fixturesInserted = true;
-    report("SETUP", true, "app_users fixtures (writer=meister, readonly=readonly)");
+    report("SETUP", true, "synthetic local app_users product contract plus readonly command fixture");
 
     // ── V1: echter Login meister (HTTP/RSC + exakte Keys + ok + role + Cookie) ───────────────
     let writerCookie = null;
@@ -989,24 +1035,28 @@ async function main() {
       report("V1", false, `meister login: ${error.message}`);
     }
 
-    // ── V1-READONLY: echter Login readonly ──────────────────────────────────────────────────
-    let readonlyCookie = null;
+    // ── V1-NONPRODUCT: readonly is never a visible product login ─────────────────────────────
+    let readonlyCookie = syntheticTechnicalSessionCookie({
+      userId: readonlyId,
+      role: "readonly",
+      displayName: "Synthetic Readonly",
+    });
     try {
-      readonlyCookie = await loginAndAssert({
+      await loginRejectedAssert({
         actionId: loginWithPinId,
         userId: readonlyId,
         pin: readonlyPin,
-        expectedRole: "readonly",
         clientReferenceManifest: startClientReferenceManifest,
         routeRuntime: startRouteRuntime,
       });
       report(
-        "V1-READONLY",
+        "V1-NONPRODUCT",
         true,
-        "HTTP200 + text/x-component + result exakt {ok:true, role:'readonly'} + kreile_app_session"
+        "readonly PIN login fail-closed without session cookie"
       );
     } catch (error) {
-      report("V1-READONLY", false, `readonly login: ${error.message}`);
+      readonlyCookie = null;
+      report("V1-NONPRODUCT", false, `readonly login boundary: ${error.message}`);
     }
 
     // ── DB-Snapshot vor den abgewiesenen Intake-Aufrufen ─────────────────────────────────────
@@ -1093,7 +1143,7 @@ async function main() {
         report("V5", false, `V5: ${error.message}`);
       }
     } else {
-      report("V5", false, "readonly session fehlt (V1-READONLY nicht bestanden)");
+      report("V5", false, "synthetische readonly command-session fehlt");
     }
 
     // ── DB-Snapshot nach den abgewiesenen Intake-Aufrufen ────────────────────────────────────
@@ -1163,6 +1213,9 @@ async function main() {
   // ── Finaler Report: genau ein expliziter Exit nach dem finally-Block ───────────────────────
   console.log(`F0_VERIFY_HTTP_FAILURES=${failures}`);
   console.log(failures === 0 ? "F0_VERIFY_HTTP=PASS" : "F0_VERIFY_HTTP=FAIL");
+  console.log("F0_VERIFY_HTTP_EVIDENCE_SCOPE=SYNTHETIC_CI_FIXTURE");
+  console.log("PRODUCT_ACTOR_PRODUCTION_READINESS=OPEN");
+  console.log("PRODUCT_ACTOR_POST_DEPLOY_EVIDENCE=OPEN");
   process.exit(failures === 0 ? 0 : 1);
 }
 

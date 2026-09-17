@@ -7,9 +7,17 @@ import type { ProductStartProfile } from "@/modules/fundament/public";
 export function StartAppAdapter({
   users,
   loginUnavailable,
+  supportReference,
 }: {
   users: ProductStartProfile[];
   loginUnavailable: boolean;
+  supportReference?: string;
 }) {
-  return <StartScreenClient users={users} loginUnavailable={loginUnavailable} />;
+  return (
+    <StartScreenClient
+      users={users}
+      loginUnavailable={loginUnavailable}
+      supportReference={supportReference}
+    />
+  );
 }

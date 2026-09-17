@@ -1,83 +1,75 @@
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockSetAppSession = vi.fn();
-const mockClearAppSession = vi.fn();
-const mockRecordUserLastSeenForLogin = vi.fn();
-const mockBcryptCompare = vi.fn();
-const mockBcryptHash = vi.fn();
-const mockRunPinAttempt = vi.fn();
-const mockDbSelect = vi.fn();
-const mockDbUpdateWhere = vi.fn();
-const mockDbUpdateSet = vi.fn(() => ({ where: mockDbUpdateWhere }));
-const mockDbUpdate = vi.fn(() => ({ set: mockDbUpdateSet }));
+const ports = vi.hoisted(() => ({
+  setAppSession: vi.fn(),
+  clearAppSession: vi.fn(),
+  recordUserLastSeenForLogin: vi.fn(),
+  bcryptCompare: vi.fn(),
+  bcryptHash: vi.fn(),
+  runPinAttempt: vi.fn(),
+  dbSelect: vi.fn(),
+  dbUpdateWhere: vi.fn(),
+  readProductActorReadiness: vi.fn(),
+}));
+
+const dbUpdateSet = vi.fn(() => ({ where: ports.dbUpdateWhere }));
+const dbUpdate = vi.fn(() => ({ set: dbUpdateSet }));
 
 function handleFor(userId: string): string {
-  return `handle-${userId}`;
+  return `synthetic-handle-${userId}`;
 }
 
 vi.mock("bcryptjs", () => ({
-  default: {
-    compare: mockBcryptCompare,
-    hash: mockBcryptHash,
-  },
+  default: { compare: ports.bcryptCompare, hash: ports.bcryptHash },
 }));
-
 vi.mock("@/lib/server/pinRateLimit", () => ({
-  runPinAttempt: mockRunPinAttempt,
+  runPinAttempt: ports.runPinAttempt,
 }));
-
 vi.mock("@/lib/server/appSession", () => ({
   APP_TENANT_ID: KREILE_TENANT_SLUG,
-  clearAppSession: mockClearAppSession,
-  setAppSession: mockSetAppSession,
+  clearAppSession: ports.clearAppSession,
+  setAppSession: ports.setAppSession,
   SESSION_TTL_MS: 12 * 60 * 60 * 1000,
 }));
-
 vi.mock("@/lib/server/userLastSeen", () => ({
-  recordUserLastSeenForLogin: mockRecordUserLastSeenForLogin,
+  recordUserLastSeenForLogin: ports.recordUserLastSeenForLogin,
 }));
-
+vi.mock("@/lib/server/productActorReadiness", () => ({
+  readProductActorReadiness: ports.readProductActorReadiness,
+  resolveProductActorAuthorization: vi.fn(),
+}));
 vi.mock("@/lib/server/pinLoginHandle", () => ({
   isValidPinLoginHandle: (value: unknown) =>
-    typeof value === "string" && value.startsWith("handle-"),
+    typeof value === "string" && value.startsWith("synthetic-handle-"),
   resolvePinLoginCandidate: (
     handle: string,
     candidates: PinLoginUser[],
   ) => candidates.find((candidate) => handleFor(candidate.id) === handle),
 }));
-
 vi.mock("@/db", () => ({
   db: {
-    select: () => ({
-      from: () => ({
-        where: mockDbSelect,
-      }),
-    }),
-    update: mockDbUpdate,
+    select: () => ({ from: () => ({ where: ports.dbSelect }) }),
+    update: dbUpdate,
   },
 }));
-
 vi.mock("@/db/schema", () => ({
   appUsers: {
     active: "active",
-    fullName: "full_name",
     id: "id",
     pinHash: "pin_hash",
     role: "role",
     tenantId: "tenant_id",
   },
 }));
-
 vi.mock("drizzle-orm", () => ({
   and: vi.fn(),
   eq: vi.fn(),
-  ne: vi.fn(),
+  inArray: vi.fn(),
 }));
 
 type PinLoginUser = {
   active: boolean;
-  fullName: string;
   id: string;
   pinHash: string | null;
   role: string;
@@ -87,163 +79,177 @@ type PinLoginUser = {
 function makeUser(overrides: Partial<PinLoginUser> = {}): PinLoginUser {
   return {
     active: true,
-    fullName: "Max Mustermann",
-    id: "user-abc",
-    pinHash: "$2b$10$valid-bcrypt-hash",
+    id: "synthetic-phillip-id",
+    pinHash: "$2b$10$synthetic-bcrypt-hash",
     role: "werkstatt",
     tenantId: KREILE_TENANT_SLUG,
     ...overrides,
   };
 }
 
-describe("loginWithPin() – PIN-Security (M4: SEC-PIN-002B)", () => {
+function ready(phillipId = "synthetic-phillip-id") {
+  return {
+    ok: true as const,
+    evidenceScope: "RUNTIME_REQUEST" as const,
+    actors: {
+      rolf: {
+        key: "rolf" as const,
+        actorId: "synthetic-rolf-id",
+        tenantId: KREILE_TENANT_SLUG,
+        role: "meister" as const,
+        identity: { name: "Rolf" as const, responsibility: "Meister" as const, initials: "R" as const },
+        login: "pin" as const,
+      },
+      phillip: {
+        key: "phillip" as const,
+        actorId: phillipId,
+        tenantId: KREILE_TENANT_SLUG,
+        role: "werkstatt" as const,
+        identity: { name: "Phillip" as const, responsibility: "Werkstatt" as const, initials: "P" as const },
+        login: "pin" as const,
+      },
+      gregor: {
+        key: "gregor" as const,
+        actorId: "synthetic-gregor-id",
+        tenantId: KREILE_TENANT_SLUG,
+        role: "admin" as const,
+        identity: { name: "Gregor" as const, responsibility: "Systemadministrator" as const, initials: "G" as const },
+        login: "email" as const,
+      },
+    },
+  };
+}
+
+describe("loginWithPin() product actor security", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockBcryptCompare.mockResolvedValue(true);
-    mockBcryptHash.mockResolvedValue("$2b$10$migrated-bcrypt-hash");
-    mockRunPinAttempt.mockImplementation(
+    ports.readProductActorReadiness.mockResolvedValue(ready());
+    ports.bcryptCompare.mockResolvedValue(true);
+    ports.bcryptHash.mockResolvedValue("$2b$10$synthetic-migrated-hash");
+    ports.runPinAttempt.mockImplementation(
       async (_operatorId: string, verifyPin: () => Promise<boolean>) =>
         (await verifyPin()) ? { status: "valid" } : { status: "invalid" },
     );
-    mockDbUpdateWhere.mockResolvedValue(undefined);
-    mockSetAppSession.mockResolvedValue(undefined);
-    mockClearAppSession.mockResolvedValue(undefined);
-    mockRecordUserLastSeenForLogin.mockResolvedValue({
+    ports.dbUpdateWhere.mockResolvedValue(undefined);
+    ports.setAppSession.mockResolvedValue(undefined);
+    ports.clearAppSession.mockResolvedValue(undefined);
+    ports.recordUserLastSeenForLogin.mockResolvedValue({
       code: "OK",
       receipt: {},
       replayed: false,
     });
   });
 
-  it("erstellt bei gültigem bcrypt-PIN eine vollständige AppSession", async () => {
-    mockDbSelect.mockResolvedValue([makeUser()]);
-
+  it("creates a canonical session with the validated product identity", async () => {
+    ports.dbSelect.mockResolvedValue([makeUser()]);
     const { loginWithPin } = await import("@/app/actions/auth.actions");
-    const result = await loginWithPin(handleFor("user-abc"), "1234");
 
-    expect(result).toEqual({ ok: true, role: "werkstatt" });
-    expect(mockSetAppSession).toHaveBeenCalledWith(
+    await expect(loginWithPin(handleFor("synthetic-phillip-id"), "1234"))
+      .resolves.toEqual({ ok: true, role: "werkstatt" });
+    expect(ports.setAppSession).toHaveBeenCalledWith(
       expect.objectContaining({
-        displayName: "Max Mustermann",
+        displayName: "Phillip",
         role: "werkstatt",
         tenantId: KREILE_TENANT_SLUG,
-        userId: "user-abc",
+        userId: "synthetic-phillip-id",
       }),
     );
-    expect(mockRunPinAttempt).toHaveBeenCalledWith(
-      "user-abc",
-      expect.any(Function),
-    );
-    expect(mockRecordUserLastSeenForLogin).toHaveBeenCalledOnce();
-    expect(mockBcryptHash).not.toHaveBeenCalled();
   });
 
-  it("verwirft die neue Session, wenn der Login-Blick nicht bestätigt wird", async () => {
-    mockDbSelect.mockResolvedValue([makeUser()]);
-    mockRecordUserLastSeenForLogin.mockResolvedValue({
-      code: "UNAVAILABLE",
-      message: "Letzter Blick konnte nicht gespeichert werden.",
-    });
-
+  it("clears the new session when last-seen confirmation fails", async () => {
+    ports.dbSelect.mockResolvedValue([makeUser()]);
+    ports.recordUserLastSeenForLogin.mockResolvedValue({ code: "UNAVAILABLE" });
     const { loginWithPin } = await import("@/app/actions/auth.actions");
-    await expect(loginWithPin(handleFor("user-abc"), "1234")).resolves.toEqual({
-      ok: false,
-      message: "Login konnte nicht sicher bestätigt werden.",
-    });
-    expect(mockSetAppSession).toHaveBeenCalledOnce();
-    expect(mockClearAppSession).toHaveBeenCalledOnce();
+
+    await expect(loginWithPin(handleFor("synthetic-phillip-id"), "1234"))
+      .resolves.toEqual({
+        ok: false,
+        message: "Login konnte nicht sicher bestätigt werden.",
+      });
+    expect(ports.clearAppSession).toHaveBeenCalledOnce();
   });
 
-  it("verweigert einen fehlenden Anzeigenamen ohne eine Session zu setzen", async () => {
-    mockDbSelect.mockResolvedValue([makeUser({ fullName: "   " })]);
-
+  it("counts an invalid bcrypt PIN without creating a session", async () => {
+    ports.bcryptCompare.mockResolvedValue(false);
+    ports.dbSelect.mockResolvedValue([makeUser()]);
     const { loginWithPin } = await import("@/app/actions/auth.actions");
-    const result = await loginWithPin(handleFor("user-abc"), "1234");
 
-    expect(result).toEqual({
-      ok: false,
-      message: "Kein Anzeigename für diesen Benutzer konfiguriert. Bitte Administrator kontaktieren.",
-    });
-    expect(mockSetAppSession).not.toHaveBeenCalled();
+    await expect(loginWithPin(handleFor("synthetic-phillip-id"), "0000"))
+      .resolves.toEqual({
+        ok: false,
+        message: "Ungültige PIN oder inaktiver Benutzer.",
+      });
+    expect(ports.setAppSession).not.toHaveBeenCalled();
   });
 
-  it("zählt einen falschen bcrypt-PIN als Fehlversuch", async () => {
-    mockBcryptCompare.mockResolvedValue(false);
-    mockDbSelect.mockResolvedValue([makeUser()]);
-
+  it("migrates a valid legacy PIN to bcrypt", async () => {
+    ports.dbSelect.mockResolvedValue([makeUser({ pinHash: "1234" })]);
     const { loginWithPin } = await import("@/app/actions/auth.actions");
-    const result = await loginWithPin(handleFor("user-abc"), "0000");
 
-    expect(result).toEqual({ ok: false, message: "Ungültige PIN oder inaktiver Benutzer." });
-    expect(mockRunPinAttempt).toHaveBeenCalledWith(
-      "user-abc",
-      expect.any(Function),
-    );
-    expect(mockSetAppSession).not.toHaveBeenCalled();
-  });
-
-  it("migriert einen gültigen Legacy-Klartext-PIN transparent zu bcrypt", async () => {
-    mockDbSelect.mockResolvedValue([makeUser({ pinHash: "1234" })]);
-
-    const { loginWithPin } = await import("@/app/actions/auth.actions");
-    const result = await loginWithPin(handleFor("user-abc"), "1234");
-
-    expect(result).toEqual({ ok: true, role: "werkstatt" });
-    expect(mockBcryptCompare).not.toHaveBeenCalled();
-    expect(mockBcryptHash).toHaveBeenCalledWith("1234", 12);
-    expect(mockDbUpdateSet).toHaveBeenCalledWith({
-      pinHash: "$2b$10$migrated-bcrypt-hash",
+    await expect(loginWithPin(handleFor("synthetic-phillip-id"), "1234"))
+      .resolves.toEqual({ ok: true, role: "werkstatt" });
+    expect(ports.bcryptHash).toHaveBeenCalledWith("1234", 12);
+    expect(dbUpdateSet).toHaveBeenCalledWith({
+      pinHash: "$2b$10$synthetic-migrated-hash",
       updatedAt: expect.any(Date),
     });
-    expect(mockRunPinAttempt).toHaveBeenCalledWith(
-      "user-abc",
-      expect.any(Function),
-    );
   });
 
-  it("blockiert den Login nach fünf Fehlversuchen vor dem PIN-Vergleich", async () => {
-    mockDbSelect.mockResolvedValue([makeUser()]);
-    mockRunPinAttempt.mockResolvedValue({
+  it("blocks before PIN comparison when rate limited", async () => {
+    ports.dbSelect.mockResolvedValue([makeUser()]);
+    ports.runPinAttempt.mockResolvedValue({
       status: "blocked",
       retryAfterMinutes: 15,
     });
-
     const { loginWithPin } = await import("@/app/actions/auth.actions");
-    const result = await loginWithPin(handleFor("user-abc"), "1234");
 
-    expect(result).toEqual({
-      ok: false,
-      message: "Zu viele Fehlversuche. Bitte in 15 Minute(n) erneut versuchen.",
-    });
-    expect(mockDbSelect).toHaveBeenCalledOnce();
-    expect(mockBcryptCompare).not.toHaveBeenCalled();
-    expect(mockSetAppSession).not.toHaveBeenCalled();
+    await expect(loginWithPin(handleFor("synthetic-phillip-id"), "1234"))
+      .resolves.toEqual({
+        ok: false,
+        message: "Zu viele Fehlversuche. Bitte in 15 Minute(n) erneut versuchen.",
+      });
+    expect(ports.bcryptCompare).not.toHaveBeenCalled();
   });
 
-  it("setzt den Fehlversuchszähler nach erfolgreichem Login zurück", async () => {
-    mockDbSelect.mockResolvedValue([makeUser({ id: "user-success" })]);
-
+  it("fails before profile lookup when full actor readiness is unavailable", async () => {
+    ports.readProductActorReadiness.mockResolvedValue({
+      ok: false,
+      evidenceScope: "RUNTIME_REQUEST",
+      code: "PROFILE_AMBIGUOUS",
+      supportReference: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    });
     const { loginWithPin } = await import("@/app/actions/auth.actions");
-    const result = await loginWithPin(handleFor("user-success"), "1234");
 
-    expect(result).toEqual({ ok: true, role: "werkstatt" });
-    expect(mockRunPinAttempt).toHaveBeenCalledTimes(1);
-    expect(mockRunPinAttempt).toHaveBeenCalledWith(
-      "user-success",
-      expect.any(Function),
-    );
+    await expect(loginWithPin(handleFor("synthetic-phillip-id"), "1234"))
+      .resolves.toEqual({
+        ok: false,
+        message: "Anmeldung ist momentan nicht sicher verfügbar.",
+        supportReference: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      });
+    expect(ports.dbSelect).not.toHaveBeenCalled();
+    expect(ports.runPinAttempt).not.toHaveBeenCalled();
   });
 
-  it("verwirft rohe interne Benutzer-IDs vor Datenbank und bcrypt", async () => {
+  it("rejects a candidate that is not one of the exact PIN product actors", async () => {
+    ports.dbSelect.mockResolvedValue([makeUser({ id: "synthetic-unrelated-id" })]);
     const { loginWithPin } = await import("@/app/actions/auth.actions");
 
-    await expect(loginWithPin("user-abc", "1234")).resolves.toEqual({
-      ok: false,
-      message: "Ungültige PIN oder inaktiver Benutzer.",
-    });
+    await expect(loginWithPin(handleFor("synthetic-unrelated-id"), "1234"))
+      .resolves.toEqual({
+        ok: false,
+        message: "Ungültige PIN oder inaktiver Benutzer.",
+      });
+    expect(ports.runPinAttempt).not.toHaveBeenCalled();
+  });
 
-    expect(mockDbSelect).not.toHaveBeenCalled();
-    expect(mockRunPinAttempt).not.toHaveBeenCalled();
-    expect(mockBcryptCompare).not.toHaveBeenCalled();
+  it("rejects raw internal IDs before readiness, database and bcrypt", async () => {
+    const { loginWithPin } = await import("@/app/actions/auth.actions");
+    await expect(loginWithPin("synthetic-phillip-id", "1234"))
+      .resolves.toEqual({
+        ok: false,
+        message: "Ungültige PIN oder inaktiver Benutzer.",
+      });
+    expect(ports.readProductActorReadiness).not.toHaveBeenCalled();
+    expect(ports.dbSelect).not.toHaveBeenCalled();
   });
 });

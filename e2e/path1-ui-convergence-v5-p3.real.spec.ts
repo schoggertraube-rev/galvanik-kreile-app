@@ -988,11 +988,14 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
       expect(candidateCodeSha).toMatch(/^[0-9a-f]{40}$/);
       const receipt = {
         candidateCodeShaAtRun: candidateCodeSha,
+        evidenceScope: "SYNTHETIC_CI_FIXTURE",
+        productionReadiness: "OPEN",
+        postDeployEvidence: "OPEN",
         tenant: TENANT,
         actors: {
-          rolf: ROLF_ACTOR_ID,
-          phillip: PHILLIP_ACTOR_ID,
-          gregor: GREGOR_ACTOR_ID,
+          rolf: "SYNTHETIC_READY",
+          phillip: "SYNTHETIC_READY",
+          gregor: "SYNTHETIC_READY",
         },
         synthetic: true,
         order: {
