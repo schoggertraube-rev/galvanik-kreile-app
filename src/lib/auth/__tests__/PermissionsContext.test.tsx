@@ -184,4 +184,23 @@ describe("PermissionsProvider identity consistency", () => {
     expect(getSpy).not.toHaveBeenCalled();
     expect(setSpy).not.toHaveBeenCalled();
   });
+
+  it("does not re-read authorization merely because the route changes", async () => {
+    const { rerender } = render(
+      <PermissionsProvider initialAuthState={initialRolf}>
+        <TestComponent />
+      </PermissionsProvider>,
+    );
+
+    await waitFor(() => expect(getAuthorizationSnapshotAction).toHaveBeenCalledOnce());
+    navigation.pathname = "/customers";
+    rerender(
+      <PermissionsProvider initialAuthState={initialRolf}>
+        <TestComponent />
+      </PermissionsProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("authenticated"));
+    expect(getAuthorizationSnapshotAction).toHaveBeenCalledOnce();
+  });
 });

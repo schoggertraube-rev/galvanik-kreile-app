@@ -77,11 +77,18 @@ export function PermissionsProvider({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const pathnameRef = useRef(pathname);
+  const routerRef = useRef(router);
   const [authState, setAuthState] = useState<AuthState>(() => buildInitialAuthState(initialAuthState));
   const [loading, setLoading] = useState(true);
 
   // Sequence guard: discard responses from stale requests
   const refreshSeqRef = useRef(0);
+
+  useEffect(() => {
+    pathnameRef.current = pathname;
+    routerRef.current = router;
+  }, [pathname, router]);
 
   const refreshPermissions = useCallback(async () => {
     const seq = ++refreshSeqRef.current;
@@ -108,8 +115,8 @@ export function PermissionsProvider({
           status: "unauthenticated",
           error: null,
         });
-        if (pathname !== "/start" && pathname !== "/login") {
-          router.replace("/start");
+        if (pathnameRef.current !== "/start" && pathnameRef.current !== "/login") {
+          routerRef.current.replace("/start");
         }
       } else {
         setAuthState({
@@ -137,7 +144,7 @@ export function PermissionsProvider({
         setLoading(false);
       }
     }
-  }, [pathname, router]);
+  }, []);
 
   useEffect(() => {
     const init = async () => { await refreshPermissions(); };
