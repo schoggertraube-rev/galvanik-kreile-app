@@ -115,6 +115,27 @@ describe("StartPage product actor boundary", () => {
     expect(ports.login).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["desktop", 1914, 917],
+    ["mobile", 390, 844],
+  ])(
+    "keeps understandable login guidance and every product identity at the %s viewport",
+    async (_viewport, width, height) => {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+      Object.defineProperty(window, "innerHeight", { configurable: true, value: height });
+      window.dispatchEvent(new Event("resize"));
+
+      const { default: StartPage } = await import("@/app/start/page");
+      render(await StartPage());
+
+      expect(screen.getByText("Sicher anmelden · direkt zur passenden Arbeit")).toBeVisible();
+      expect(screen.getByRole("button", { name: /Rolf.*Meister.*Mit PIN anmelden/ })).toBeVisible();
+      expect(screen.getByRole("button", { name: /Phillip.*Werkstatt.*Mit PIN anmelden/ })).toBeVisible();
+      expect(screen.getByRole("button", { name: /Gregor.*Systemadministrator.*per E-Mail anmelden/ })).toBeVisible();
+      expect(document.body).not.toHaveTextContent(/tenantgebunden|rollenbasiert|Produktprofil|Systemzugang ist erhöht/i);
+    },
+  );
+
   it("disables every login path and exposes only a correlation reference on readiness failure", async () => {
     ports.readProductActorReadiness.mockResolvedValue({
       ok: false,

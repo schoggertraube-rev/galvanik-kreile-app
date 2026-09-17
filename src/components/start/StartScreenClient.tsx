@@ -122,12 +122,12 @@ function StartContent({
         </div>
         <p className={styles.brandKicker}>WerkstattCockpit</p>
         <h1>Willkommen zurück.</h1>
-        <p className={styles.brandLead}>Ein sicherer Einstieg. Danach sehen Sie genau die Arbeit, die zu Ihrem Produktprofil gehört.</p>
-        <div className={styles.trust}><ShieldCheck aria-hidden="true" /><span>Tenantgebundene Sitzung · rollenbasierte Aktionen</span></div>
+        <p className={styles.brandLead}>Ein sicherer Einstieg. Danach sehen Sie genau die Arbeit, die zu Ihnen gehört.</p>
+        <div className={styles.trust}><ShieldCheck aria-hidden="true" /><span>Sicher anmelden · direkt zur passenden Arbeit</span></div>
       </section>
 
       <section className={styles.loginPanel} aria-labelledby="login-title">
-        <header><p>Anmelden</p><h2 id="login-title">Wer arbeitet gerade?</h2><span>Wählen Sie Ihr Produktprofil und geben Sie Ihre PIN ein.</span></header>
+        <header><p>Anmelden</p><h2 id="login-title">Wer arbeitet gerade?</h2><span>Wählen Sie Ihren Namen und melden Sie sich an.</span></header>
         {loginUnavailable ? (
           <div className={styles.unavailable} role="alert">
             <p>
@@ -155,7 +155,7 @@ function StartContent({
                 disabled={!user || loginUnavailable}
               >
                 <span className={styles.avatar}>{profile.initials}</span>
-                <span><strong>{profile.name}</strong><small>{user ? `${profile.responsibility} · Mit PIN anmelden` : `${profile.responsibility} · Profil sicher nicht verfügbar`}</small></span>
+                <span><strong>{profile.name}</strong><small>{user ? `${profile.responsibility} · Mit PIN anmelden` : `${profile.responsibility} · Anmeldung momentan nicht verfügbar`}</small></span>
                 <LockKeyhole aria-hidden="true" />
               </button>
             );
@@ -180,7 +180,7 @@ function StartContent({
             ) : null}
           </div>
         ) : null}
-        <p className={styles.adminHint}>Der Systemzugang ist erhöht und steht nur über Gregors E-Mail-Einstieg bereit.</p>
+        <p className={styles.adminHint}>Gregor meldet sich als Systemadministrator per E-Mail an.</p>
       </section>
 
       {selected ? <PinDialog user={selected} onClose={() => setSelected(null)} /> : null}
