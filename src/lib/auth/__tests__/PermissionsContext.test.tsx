@@ -1,6 +1,6 @@
 process.env.DATABASE_URL = "postgres://mock:mock@localhost:5432/mock";
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
 import type { AuthBootstrapState } from "@/lib/server/authBootstrap";
@@ -202,5 +202,33 @@ describe("PermissionsProvider identity consistency", () => {
 
     await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("authenticated"));
     expect(getAuthorizationSnapshotAction).toHaveBeenCalledOnce();
+  });
+
+  it("drops an in-flight refresh silently once the document is leaving", async () => {
+    let rejectRefresh: ((error: Error) => void) | undefined;
+    vi.mocked(getAuthorizationSnapshotAction).mockImplementation(
+      () => new Promise((_, reject) => {
+        rejectRefresh = reject;
+      }),
+    );
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    render(
+      <PermissionsProvider initialAuthState={initialRolf}>
+        <TestComponent />
+      </PermissionsProvider>,
+    );
+
+    await waitFor(() => expect(getAuthorizationSnapshotAction).toHaveBeenCalledOnce());
+    fireEvent(window, new Event("pagehide"));
+    await act(async () => {
+      rejectRefresh?.(new Error("navigation cancelled the request"));
+      await Promise.resolve();
+    });
+
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(screen.getByTestId("status")).toHaveTextContent("authenticated");
+    expect(screen.getByTestId("name")).toHaveTextContent("Rolf");
+    consoleError.mockRestore();
   });
 });

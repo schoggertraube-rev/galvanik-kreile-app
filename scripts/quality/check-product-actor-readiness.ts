@@ -4,7 +4,8 @@ import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import path from "node:path";
-import postgres from "postgres";
+import { pathToFileURL } from "node:url";
+import postgres, { type Sql } from "postgres";
 import { KREILE_TENANT_SLUG } from "../../src/lib/tenant";
 import {
   PRODUCT_ACTOR_ENVIRONMENT_VARIABLES,
@@ -13,6 +14,7 @@ import {
   readProductActorConfiguration,
   validateProductActorConfiguration,
   type ProductActorProfileRow,
+  type ValidProductActorConfiguration,
 } from "../../src/lib/server/productActorReadinessCore";
 
 type GateStatus = "PASS" | "FAIL" | "OPEN";
@@ -153,6 +155,23 @@ function productionFailureReceipt(
   };
 }
 
+export async function readConfiguredProductActorProfiles(
+  sql: Sql,
+  actors: Readonly<ValidProductActorConfiguration>,
+): Promise<ProductActorProfileRow[]> {
+  return sql<ProductActorProfileRow[]>`
+    SELECT
+      id::text AS id,
+      tenant_id AS "tenantId",
+      role,
+      active
+    FROM public.app_users
+    WHERE id = ${actors.rolf}::uuid
+       OR id = ${actors.phillip}::uuid
+       OR id = ${actors.gregor}::uuid
+  `;
+}
+
 async function runProductionReadiness(): Promise<number> {
   const guardFailure = productionGuardFailure();
   if (guardFailure) {
@@ -173,15 +192,7 @@ async function runProductionReadiness(): Promise<number> {
     prepare: false,
   });
   try {
-    profiles = await sql<ProductActorProfileRow[]>`
-      SELECT
-        id::text AS id,
-        tenant_id AS "tenantId",
-        role,
-        active
-      FROM public.app_users
-      WHERE id = ANY(${sql.array(Object.values(validation.actors))}::uuid[])
-    `;
+    profiles = await readConfiguredProductActorProfiles(sql, validation.actors);
   } catch {
     emit(
       productionFailureReceipt("PROFILE_READ_UNAVAILABLE"),
@@ -291,12 +302,17 @@ async function main(): Promise<void> {
   process.exitCode = 1;
 }
 
-void main().catch(() => {
-  emit({
-    gate: "PRODUCT_ACTOR_READINESS",
-    status: "FAIL",
-    failureCode: "UNEXPECTED_GATE_FAILURE",
-    valuesRedacted: true,
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href
+) {
+  void main().catch(() => {
+    emit({
+      gate: "PRODUCT_ACTOR_READINESS",
+      status: "FAIL",
+      failureCode: "UNEXPECTED_GATE_FAILURE",
+      valuesRedacted: true,
+    });
+    process.exitCode = 1;
   });
-  process.exitCode = 1;
-});
+}
