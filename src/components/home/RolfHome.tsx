@@ -21,6 +21,7 @@ function toHomeSource(order: OperationalOrder): OrdersHomeSource {
     dueDate: order.dueDate,
     dueLabel: order.dueLabel,
     dueValue: order.dueValue,
+    createdAt: order.createdAt ?? null,
   };
 }
 
@@ -43,7 +44,7 @@ export async function loadRolfHome(authorization: AuthorizationSnapshot): Promis
       ? { kind: "empty", ...common, projection }
       : { kind: "data", ...common, projection };
   } catch {
-    return { kind: "error", message: "Die mandantengebundene Auftragsprojektion konnte nicht sicher geladen werden." };
+    return { kind: "error", message: "Die aktuellen Auftragsdaten konnten nicht sicher geladen werden." };
   }
 }
 
