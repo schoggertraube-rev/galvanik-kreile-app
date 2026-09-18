@@ -419,9 +419,9 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
         const emptyWorkshopHeading = rolf.page.getByRole("heading", {
           name: "Noch keine Daten erfasst",
         });
-        const populatedWorkshopSource = rolf.page.getByText(
-          /^Quelle: Auftragsbestand · Stand /,
-        );
+        const populatedWorkshopSource = rolf.page
+          .getByRole("main")
+          .getByText(/^Quelle: Auftragsbestand · Stand /);
         await expect
           .poll(async () => {
             const [emptyVisible, populatedVisible] = await Promise.all([
