@@ -11,7 +11,7 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CreateCustomerInput } from "@/modules/customers/public";
 import type {
   ConvertQuoteInput,
@@ -294,15 +294,12 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setStep(next);
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return;
-    const frame = window.requestAnimationFrame(() => {
-      const target = dialogRef.current?.querySelector<HTMLElement>("[data-autofocus]")
-        ?? dialogRef.current?.querySelector<HTMLElement>("input:not([disabled]), button:not([disabled])");
-      target?.focus();
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [open, step]);
+    const target = dialogRef.current?.querySelector<HTMLElement>("[data-autofocus]")
+      ?? dialogRef.current?.querySelector<HTMLElement>("input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])");
+    target?.focus();
+  }, [directCustomerMode, open, step]);
 
   const close = () => {
     if (!busy) setOpen(false);
