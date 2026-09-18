@@ -303,7 +303,14 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     });
     await screen.findByRole("heading", { name: "Neuer Eingang" });
     expect(screen.queryByText("Digitaler Wareneingang")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Neukunde" }));
+    const newCustomer = await screen.findByLabelText("Firma / Name");
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Bestehender Kunde" }),
+      ).toBeEnabled(),
+    );
+    expect(newCustomer).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Neukunde" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.change(screen.getByLabelText("Firma / Name"), { target: { value: "SYNTHETISCH Direkteingang GmbH" } });
     fireEvent.change(screen.getByLabelText("Terminwunsch"), { target: { value: "2026-10-15" } });
     fireEvent.change(screen.getByLabelText("Zugesagter Termin"), { target: { value: "2026-10-20" } });

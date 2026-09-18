@@ -79,6 +79,7 @@ export function PermissionsProvider({
   const router = useRouter();
   const pathnameRef = useRef(pathname);
   const routerRef = useRef(router);
+  const pageActiveRef = useRef(true);
   const [authState, setAuthState] = useState<AuthState>(() => buildInitialAuthState(initialAuthState));
   const [loading, setLoading] = useState(true);
 
@@ -129,8 +130,8 @@ export function PermissionsProvider({
         });
       }
     } catch (err) {
+      if (seq !== refreshSeqRef.current || !pageActiveRef.current) return;
       console.error("Failed to load permissions", err);
-      if (seq !== refreshSeqRef.current) return;
       setAuthState({
         role: null,
         permissions: [],
@@ -140,11 +141,31 @@ export function PermissionsProvider({
         error: "AUTH_ERROR: Berechtigungen nicht verfügbar",
       });
     } finally {
-      if (seq === refreshSeqRef.current) {
+      if (seq === refreshSeqRef.current && pageActiveRef.current) {
         setLoading(false);
       }
     }
   }, []);
+
+  useEffect(() => {
+    pageActiveRef.current = true;
+    const leavePage = () => {
+      pageActiveRef.current = false;
+      refreshSeqRef.current += 1;
+    };
+    const restorePage = (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      pageActiveRef.current = true;
+      void refreshPermissions();
+    };
+    window.addEventListener("pagehide", leavePage);
+    window.addEventListener("pageshow", restorePage);
+    return () => {
+      window.removeEventListener("pagehide", leavePage);
+      window.removeEventListener("pageshow", restorePage);
+      leavePage();
+    };
+  }, [refreshPermissions]);
 
   useEffect(() => {
     const init = async () => { await refreshPermissions(); };

@@ -176,7 +176,7 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
           <section className="rounded-2xl border border-neutral-gray-200 bg-white p-8 text-center" data-testid="invoice-empty-state">
             <h2 className="font-display text-xl font-semibold text-navy-900">Noch keine Rechnungen ausgestellt</h2>
             <p className="mt-2 text-sm text-text-muted">Fertiggestellte Aufträge können im Werkstattdurchlauf in Rechnung gestellt werden.</p>
-            <Link className="mt-5 inline-flex min-h-12 items-center rounded-lg bg-navy-900 px-5 text-sm font-semibold text-white" href="/warendurchlauf">
+            <Link className="mt-5 inline-flex min-h-12 items-center rounded-lg bg-navy-900 px-5 text-sm font-semibold text-white" href="/warendurchlauf" prefetch={false}>
               Zum Werkstattdurchlauf
             </Link>
           </section>
@@ -229,7 +229,7 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
                         Stornobeleg-PDF
                       </a>
                     ) : null}
-                    <Link className="inline-flex min-h-12 items-center px-2 text-sm font-semibold text-navy-900 underline" href="/warendurchlauf">
+                    <Link className="inline-flex min-h-12 items-center px-2 text-sm font-semibold text-navy-900 underline" href="/warendurchlauf" prefetch={false}>
                       Auftrag öffnen
                     </Link>
                   </div>

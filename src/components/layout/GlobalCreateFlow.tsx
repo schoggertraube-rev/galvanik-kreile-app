@@ -381,7 +381,6 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       setCustomerChoices(result.customers);
       const first = result.customers[0];
       if (first) {
-        setDirectCustomerMode("EXISTING");
         setDirectCustomerId((current) => current || first.id);
       } else {
         setDirectCustomerMode("NEW");
