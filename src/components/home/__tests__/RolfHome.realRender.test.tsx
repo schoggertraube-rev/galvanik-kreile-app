@@ -38,6 +38,7 @@ describe("Rolf V8 real public projection", () => {
   it("shows the complete daily structure from the real projection and opens the same order overlay", () => {
     render(<RolfHomeClient model={{ kind: "data", role: "meister", canCreateOrder: true, projection }} />);
     expect(screen.getByText(/Quelle: Auftragsbestand/)).toBeInTheDocument();
+    expect(screen.getByText(/Stand 16\.09\.26, 10:15/)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Das braucht dich" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Heute raus" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Neu seit gestern" })).toBeInTheDocument();

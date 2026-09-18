@@ -30,7 +30,11 @@ function riskLabel(risk: OrdersHomeSource["risk"]): string {
 }
 
 function formatTimestamp(value: string): string {
-  return new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+  return new Intl.DateTimeFormat("de-DE", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "Europe/Berlin",
+  }).format(new Date(value));
 }
 
 function CompactOrderList({
