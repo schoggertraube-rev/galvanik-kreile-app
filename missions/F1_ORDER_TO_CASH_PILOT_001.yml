@@ -1,8 +1,8 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: 70ae0989b7f76a247c34582badc2de3324e27851
-branch: path1/v5-p3-core-surfaces-search-20260916
+base_sha: 0e2216d01d22edac765ffd527fa71c50158e25d3
+branch: path1/a2-phillip-recovery-20260919
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
 # ── M0 Konsolidierungsstand ───────────────────────────────────────
@@ -37,8 +37,8 @@ delivery_order:
   - F1.6_REALER_PILOT
 
 active_package: PATH1_UI_CONVERGENCE
-active_package_status: V5_P3_EXACT_SHA_AUDIT_REPAIR_PRODUCT_AND_SHA_BOUND_EVIDENCE_CANDIDATE_PENDING_NO_UI_PASS
-next_gate_after_active_package: P3_REPAIR_PRODUCT_COMMIT_THEN_SHA_BOUND_BROWSER_EVIDENCE_COMMIT_EXACT_SHA_CI_PREVIEW_AND_INDEPENDENT_CLOSURE_REVIEW
+active_package_status: A2_PHILLIP_FIVE_PORT_RECOVERY_CANDIDATE_PENDING_TEST_REVIEW_NO_UI_PASS
+next_gate_after_active_package: A2_FOCUSED_TESTS_THEN_INDEPENDENT_CLAUDE_REVIEW_THEN_COMMIT_PR_CI_PREVIEW
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete

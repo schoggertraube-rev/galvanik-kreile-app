@@ -32,6 +32,7 @@ const ports = vi.hoisted(() => ({
   openGlobalCreate: vi.fn(),
   openOrder: vi.fn(),
   pushRoute: vi.fn(),
+  refreshRoute: vi.fn(),
 }));
 
 vi.mock("@/app/warendurchlauf/actions", () => ({
@@ -43,7 +44,7 @@ vi.mock("@/lib/server/authorization", () => ({
   resolveAuthorization: ports.resolveAuthorization,
 }));
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: ports.pushRoute }),
+  useRouter: () => ({ push: ports.pushRoute, refresh: ports.refreshRoute }),
   useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock("@/components/layout/GlobalCreateFlow", () => ({
@@ -639,6 +640,9 @@ describe("W2C-B2M5J unavailable UI", () => {
       screen.queryByTestId("werkstatt-held-ga-secret"),
     ).not.toBeInTheDocument();
     expect(
+      screen.getByText(/Zur Sicherheit werden keine Werkstattdaten/),
+    ).toBeInTheDocument();
+    expect(
       screen.queryByRole("button", { name: "Auftrag öffnen / scannen" }),
     ).not.toBeInTheDocument();
     expect(
@@ -647,6 +651,15 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(
       screen.queryByRole("navigation", { name: "Werkstattaktionen" }),
     ).not.toBeInTheDocument();
+    const retry = screen.getByRole("button", { name: "Erneut laden" });
+    expect(
+      screen.getAllByRole("button", { name: "Erneut laden" }),
+    ).toHaveLength(1);
+    fireEvent.click(retry);
+    expect(ports.refreshRoute).toHaveBeenCalledTimes(1);
+    expect(ports.openGlobalCreate).not.toHaveBeenCalled();
+    expect(ports.openOrder).not.toHaveBeenCalled();
+    expect(ports.pushRoute).not.toHaveBeenCalled();
   });
 
   it("suppresses both station payloads when the canonical KPI read fails closed", async () => {
@@ -734,6 +747,9 @@ describe("W2C-B2M5J unavailable UI", () => {
       expect(screen.queryByText(wareneingang.title)).not.toBeInTheDocument();
       expect(screen.queryByText(galvanik.title)).not.toBeInTheDocument();
       expect(
+        screen.getByText(/Zur Sicherheit werden keine Werkstattdaten/),
+      ).toBeInTheDocument();
+      expect(
         screen.queryByTestId(`werkstatt-held-${wareneingang.id}`),
       ).not.toBeInTheDocument();
       expect(
@@ -751,8 +767,15 @@ describe("W2C-B2M5J unavailable UI", () => {
       expect(
         screen.queryByRole("navigation", { name: "Werkstattaktionen" }),
       ).not.toBeInTheDocument();
+      const retry = screen.getByRole("button", { name: "Erneut laden" });
+      expect(
+        screen.getAllByRole("button", { name: "Erneut laden" }),
+      ).toHaveLength(1);
+      fireEvent.click(retry);
+      expect(ports.refreshRoute).toHaveBeenCalledTimes(1);
       expect(ports.openGlobalCreate).not.toHaveBeenCalled();
       expect(ports.openOrder).not.toHaveBeenCalled();
+      expect(ports.pushRoute).not.toHaveBeenCalled();
     },
   );
 
@@ -847,6 +870,8 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(typesSource).toContain("export type WerkstattViewPorts");
     expect(typesSource).toContain("onOpenWip: () => void;");
     expect(typesSource).toContain("onOpenGoodsOut: (orderId: string) => void;");
+    expect(typesSource).not.toContain("onRetry");
+    expect(clientSource).toContain("onRetry: () => void;");
     expect(clientSource).not.toMatch(
       /@\/components\/|@\/hooks\/|@\/lib\/overlayStore/,
     );
@@ -865,6 +890,8 @@ describe("W2C-B2M5J unavailable UI", () => {
       'onOpenWip: () => router.push("/warendurchlauf/galvanik")',
     );
     expect(adapterSource).toContain("onOpenGoodsOut: openOrder");
+    expect(adapterSource).toContain("onRetry={() => router.refresh()}");
+    expect(adapterSource).not.toMatch(/ports=\{\{[\s\S]*onRetry/);
     expect(routeSource).toContain(
       "wareneingangResult.data.map(toWerkstattSurfaceOrder)",
     );

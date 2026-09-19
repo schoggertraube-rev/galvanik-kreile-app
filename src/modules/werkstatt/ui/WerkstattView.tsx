@@ -53,9 +53,11 @@ function HeldCard({ order, onOpenOrder }: { order: WerkstattHeldCard; onOpenOrde
 export function WerkstattView({
   view,
   ports,
+  onRetry,
 }: {
   view: PhillipWerkstattViewModel;
   ports: WerkstattViewPorts;
+  onRetry: () => void;
 }) {
   const [activePicker, setActivePicker] = useState<PickerKind | null>(null);
   const [bundleFilterActive, setBundleFilterActive] = useState(false);
@@ -188,17 +190,18 @@ export function WerkstattView({
           </div>
         ) : null}
 
-        {view.kind === "error" ? (
+        {view.kind === "error" || view.kind === "conflict" ? (
           <div className={styles.statePanel} role="alert">
-            <h2>Werkstatt nicht verfügbar</h2>
+            <h2>{view.kind === "error" ? "Werkstatt nicht verfügbar" : "Werkstattkonflikt"}</h2>
             <p>{view.message}</p>
-          </div>
-        ) : null}
-
-        {view.kind === "conflict" ? (
-          <div className={styles.statePanel} role="alert">
-            <h2>Werkstattkonflikt</h2>
-            <p>{view.message}</p>
+            <p>Zur Sicherheit werden keine Werkstattdaten aus einem früheren Stand angezeigt.</p>
+            <button
+              type="button"
+              className={`${styles.actionSecondary} ${styles.touchTarget} ${styles.statePanelRetry}`}
+              onClick={onRetry}
+            >
+              Erneut laden
+            </button>
           </div>
         ) : null}
 

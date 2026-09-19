@@ -116,6 +116,15 @@
   margin: 0;
 }
 
+.statePanel p + p {
+  margin-top: 6px;
+}
+
+.statePanelRetry {
+  flex: 0 0 auto;
+  margin-top: 14px;
+}
+
 .cols {
   min-width: 0;
   min-height: 0;
