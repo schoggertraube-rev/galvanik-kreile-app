@@ -2,6 +2,7 @@ import "server-only";
 
 import type {
   AppRole,
+  PermissionKey,
   ProductIdentity,
 } from "@/lib/auth/authorizationContract";
 import { resolveProductActorAuthorization } from "@/lib/server/productActorReadiness";
@@ -9,6 +10,13 @@ import { resolveProductActorAuthorization } from "@/lib/server/productActorReadi
 export type AuthBootstrapUser = {
   role: AppRole;
   displayName: ProductIdentity["name"];
+  /**
+   * Dieselbe serverseitig aufgeloeste Faehigkeitsliste wie in
+   * `getAuthorizationSnapshotAction`. Sie ist bereits clientsichtbar und
+   * ersetzt lediglich den redundanten Mount-Nachschlag; sie ist keine
+   * zweite Berechtigungswahrheit.
+   */
+  permissions: readonly PermissionKey[];
 };
 
 export type AuthBootstrapState =
@@ -19,7 +27,8 @@ export type AuthBootstrapState =
 /**
  * Browser-minimaler Bootstrap. Derselbe serverseitige Chokepoint validiert
  * Sitzung, DB-Rolle und alle drei Produktprofile; interne IDs verlassen den
- * Server dabei nicht.
+ * Server dabei nicht. Rolle, Anzeigename und Faehigkeiten stammen aus genau
+ * einer Aufloesung und werden deshalb atomar ausgeliefert.
  */
 export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
   const result = await resolveProductActorAuthorization();
@@ -30,6 +39,8 @@ export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
       user: {
         role: result.data.authorization.role,
         displayName: result.data.actor.identity.name,
+        // Kopie: die geteilte Vertragstabelle bleibt unveraenderlich.
+        permissions: [...result.data.authorization.permissions],
       },
     };
   }

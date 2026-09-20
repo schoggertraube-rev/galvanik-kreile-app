@@ -152,6 +152,7 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    ".playwright-cli/**",
     // Standalone maintenance and local verification CLIs; none are part of the Next.js build.
     "create_migrate.js",
     "enrich.js",
