@@ -20,6 +20,24 @@ export type RolfHomeModel =
   | { kind: "denied"; message: string }
   | { kind: "error"; message: string };
 
+/**
+ * P1-Hydration (Minified React #418): der Datenstand wurde ohne `timeZone`
+ * formatiert und damit auf dem Server in der Runtime-Zone, im Browser in der
+ * Geraetezone gerendert — ein Text-Hydration-Mismatch bei jedem Laden.
+ * Europe/Berlin ist die Kalenderwahrheit des Betriebs (gleiche Bindung wie in
+ * der unveraenderlichen Rechnung); der Instant bleibt UTC, nur die Darstellung
+ * ist gebunden. Der Formatter wird bewusst je Aufruf erzeugt, damit eine
+ * Zonenregression nicht von einem beim Import eingefrorenen Formatter verdeckt
+ * wird.
+ */
+function formatBerlinDataStand(loadedAt: string): string {
+  return new Intl.DateTimeFormat("de-DE", {
+    timeZone: "Europe/Berlin",
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(loadedAt));
+}
+
 function riskLabel(risk: OrdersHomeSource["risk"]): string {
   if (risk === "red") return "Kritisch";
   if (risk === "blocked") return "Blockiert";
@@ -55,7 +73,7 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
           <p className={styles.eyebrow}>Der Tag</p>
           <h1 id="rolf-title">Guten Tag, Rolf</h1>
           <p>Was heute Aufmerksamkeit braucht – aus dem aktuellen Auftragsbestand.</p>
-          <p className={styles.dataStand}>Quelle: {model.projection.source} · Stand {new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(new Date(model.projection.loadedAt))}</p>
+          <p className={styles.dataStand}>Quelle: {model.projection.source} · Stand {formatBerlinDataStand(model.projection.loadedAt)}</p>
         </div>
         <Link className={styles.primaryLink} href="/orders" prefetch={false}><ClipboardList aria-hidden="true" />Alle Aufträge<ArrowRight aria-hidden="true" /></Link>
       </header>
