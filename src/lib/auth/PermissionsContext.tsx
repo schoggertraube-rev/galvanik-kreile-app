@@ -79,7 +79,14 @@ export function PermissionsProvider({
   const router = useRouter();
   const pathnameRef = useRef(pathname);
   const routerRef = useRef(router);
+  // Permanent latch: the document is really gone ("pagehide"). Never set by
+  // "beforeunload", because an announced navigation can still be cancelled.
   const pageActiveRef = useRef(true);
+  // Transient window: a full-document navigation was announced via
+  // "beforeunload". It only covers a request that this navigation tears down
+  // immediately, and closes again in the next event-loop task.
+  const navigationPendingRef = useRef(false);
+  const navigationPendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [authState, setAuthState] = useState<AuthState>(() => buildInitialAuthState(initialAuthState));
   const [loading, setLoading] = useState(true);
 
@@ -130,7 +137,17 @@ export function PermissionsProvider({
         });
       }
     } catch (err) {
-      if (seq !== refreshSeqRef.current || !pageActiveRef.current) return;
+      // Silence is allowed only for provably non-product causes:
+      // (1) a newer request superseded this one,
+      // (2) the document is permanently gone ("pagehide"),
+      // (3) an announced navigation tore this request down inside the still
+      //     open transient window.
+      // No error-string matching and no blanket ignore: any other rejection
+      // must stay visible and fail closed.
+      const superseded = seq !== refreshSeqRef.current;
+      const documentGone = !pageActiveRef.current;
+      const torndownByNavigation = navigationPendingRef.current;
+      if (superseded || documentGone || torndownByNavigation) return;
       console.error("Failed to load permissions", err);
       setAuthState({
         role: null,
@@ -149,19 +166,49 @@ export function PermissionsProvider({
 
   useEffect(() => {
     pageActiveRef.current = true;
+
+    const closeNavigationWindow = () => {
+      if (navigationPendingTimerRef.current !== null) {
+        clearTimeout(navigationPendingTimerRef.current);
+        navigationPendingTimerRef.current = null;
+      }
+      navigationPendingRef.current = false;
+    };
+
+    // "pagehide" is the only permanent latch: the document is really leaving,
+    // so any pending transient reset is dropped and later work is invalidated.
     const leavePage = () => {
+      closeNavigationWindow();
       pageActiveRef.current = false;
       refreshSeqRef.current += 1;
     };
+
+    // "beforeunload" only announces an attempt that the user may still cancel.
+    // It must not mark the page inactive and must not invalidate later work; it
+    // opens a narrow window that covers the request the navigation tears down
+    // synchronously and closes itself in the next event-loop task.
+    const announceNavigation = () => {
+      closeNavigationWindow();
+      navigationPendingRef.current = true;
+      navigationPendingTimerRef.current = setTimeout(() => {
+        navigationPendingTimerRef.current = null;
+        navigationPendingRef.current = false;
+      }, 0);
+    };
+
     const restorePage = (event: PageTransitionEvent) => {
       if (!event.persisted) return;
+      closeNavigationWindow();
       pageActiveRef.current = true;
       void refreshPermissions();
     };
+
     window.addEventListener("pagehide", leavePage);
+    window.addEventListener("beforeunload", announceNavigation);
     window.addEventListener("pageshow", restorePage);
     return () => {
       window.removeEventListener("pagehide", leavePage);
+      window.removeEventListener("beforeunload", announceNavigation);
       window.removeEventListener("pageshow", restorePage);
       leavePage();
     };

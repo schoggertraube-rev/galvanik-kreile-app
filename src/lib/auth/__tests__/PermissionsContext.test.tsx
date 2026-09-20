@@ -2,7 +2,10 @@ process.env.DATABASE_URL = "postgres://mock:mock@localhost:5432/mock";
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
+import {
+  getAuthorizationSnapshotAction,
+  type ClientAuthorizationResult,
+} from "@/app/actions/auth.actions";
 import type { AuthBootstrapState } from "@/lib/server/authBootstrap";
 import {
   PermissionsProvider,
@@ -39,7 +42,16 @@ vi.mock("@/app/actions/auth.actions", () => ({
 }));
 
 function TestComponent() {
-  const { status, initials, name, role, permissions, error } = usePermissions();
+  const {
+    status,
+    initials,
+    name,
+    role,
+    permissions,
+    error,
+    loading,
+    refreshPermissions,
+  } = usePermissions();
   return (
     <div>
       <span data-testid="status">{status}</span>
@@ -48,9 +60,55 @@ function TestComponent() {
       <span data-testid="role">{role}</span>
       <span data-testid="permissions">{permissions.join(",")}</span>
       <span data-testid="error">{error || "no-error"}</span>
+      <span data-testid="loading">{loading ? "pending" : "ready"}</span>
+      <button
+        type="button"
+        data-testid="refresh"
+        onClick={() => {
+          void refreshPermissions();
+        }}
+      >
+        refresh
+      </button>
     </div>
   );
 }
+
+/**
+ * Settles an in-flight authorization request inside act and drains the
+ * microtasks its catch/finally path needs. No fake timers involved: the
+ * transient window can only close on a real task boundary, which this helper
+ * deliberately never crosses.
+ */
+async function settleRefresh(trigger: () => void) {
+  await act(async () => {
+    trigger();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+/**
+ * Lets the transient "beforeunload" window close again, which is what happens
+ * when the user aborts the announced navigation and stays on the page.
+ */
+async function expireTransientNavigationWindow() {
+  await act(async () => {
+    await new Promise((resolve) => {
+      setTimeout(resolve, 1);
+    });
+  });
+}
+
+const authorizedRolf: ClientAuthorizationResult = {
+  ok: true,
+  data: {
+    displayName: "Rolf",
+    role: "meister",
+    permissions: ["perm_view_leitstand"],
+    active: true,
+  },
+};
 
 const initialRolf: AuthBootstrapState = {
   status: "authenticated",
@@ -204,7 +262,9 @@ describe("PermissionsProvider identity consistency", () => {
     expect(getAuthorizationSnapshotAction).toHaveBeenCalledOnce();
   });
 
-  it("drops an in-flight refresh silently once the document is leaving", async () => {
+  // "pagehide" is the permanent latch: the document is really gone, so the
+  // request it cancelled must never surface as a product error.
+  it("drops an in-flight refresh silently once the document is gone via pagehide", async () => {
     let rejectRefresh: ((error: Error) => void) | undefined;
     vi.mocked(getAuthorizationSnapshotAction).mockImplementation(
       () => new Promise((_, reject) => {
@@ -221,14 +281,149 @@ describe("PermissionsProvider identity consistency", () => {
 
     await waitFor(() => expect(getAuthorizationSnapshotAction).toHaveBeenCalledOnce());
     fireEvent(window, new Event("pagehide"));
-    await act(async () => {
-      rejectRefresh?.(new Error("navigation cancelled the request"));
-      await Promise.resolve();
-    });
+    await settleRefresh(() => rejectRefresh?.(new Error("document teardown cancelled the request")));
 
+    // Stays silent: a request the teardown cancelled is not a product error.
     expect(consoleError).not.toHaveBeenCalled();
+    // Does not fail open: no capability appears that the server never granted.
+    expect(screen.getByTestId("permissions")).toBeEmptyDOMElement();
+    // Keeps the established Rolf identity instead of a stale or error identity.
     expect(screen.getByTestId("status")).toHaveTextContent("authenticated");
     expect(screen.getByTestId("name")).toHaveTextContent("Rolf");
+    expect(screen.getByTestId("initials")).toHaveTextContent("R");
+    expect(screen.getByTestId("role")).toHaveTextContent("meister");
+    expect(screen.getByTestId("error")).toHaveTextContent("no-error");
+    consoleError.mockRestore();
+  });
+
+  // "beforeunload" only announces a navigation. The request it tears down
+  // immediately stays silent, but loading must still be able to end, because
+  // the page may survive an aborted navigation.
+  it("stays silent and still ends loading when beforeunload tears the request down", async () => {
+    let rejectRefresh: ((error: Error) => void) | undefined;
+    vi.mocked(getAuthorizationSnapshotAction).mockImplementation(
+      () => new Promise((_, reject) => {
+        rejectRefresh = reject;
+      }),
+    );
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    render(
+      <PermissionsProvider initialAuthState={initialRolf}>
+        <TestComponent />
+      </PermissionsProvider>,
+    );
+
+    await waitFor(() => expect(getAuthorizationSnapshotAction).toHaveBeenCalledOnce());
+    expect(screen.getByTestId("loading")).toHaveTextContent("pending");
+
+    fireEvent(window, new Event("beforeunload"));
+    await settleRefresh(() => rejectRefresh?.(new Error("navigation tore the request down")));
+
+    expect(consoleError).not.toHaveBeenCalled();
+    // The page is not latched inactive, so the UI leaves the loading state.
+    expect(screen.getByTestId("loading")).toHaveTextContent("ready");
+    // Does not fail open: no capability appears that the server never granted.
+    expect(screen.getByTestId("permissions")).toBeEmptyDOMElement();
+    expect(screen.getByTestId("status")).toHaveTextContent("authenticated");
+    expect(screen.getByTestId("name")).toHaveTextContent("Rolf");
+    expect(screen.getByTestId("initials")).toHaveTextContent("R");
+    expect(screen.getByTestId("role")).toHaveTextContent("meister");
+    expect(screen.getByTestId("error")).toHaveTextContent("no-error");
+    consoleError.mockRestore();
+  });
+
+  it("fails closed again once an aborted beforeunload window has expired", async () => {
+    let rejectRefresh: ((error: Error) => void) | undefined;
+    vi.mocked(getAuthorizationSnapshotAction)
+      .mockResolvedValueOnce(authorizedRolf)
+      .mockImplementation(
+        () => new Promise((_, reject) => {
+          rejectRefresh = reject;
+        }),
+      );
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    render(
+      <PermissionsProvider initialAuthState={initialRolf}>
+        <TestComponent />
+      </PermissionsProvider>,
+    );
+
+    // Prove a real authorized start state instead of leaning on empty defaults.
+    await waitFor(() => {
+      expect(screen.getByTestId("status")).toHaveTextContent("authenticated");
+      expect(screen.getByTestId("permissions")).toHaveTextContent("perm_view_leitstand");
+      expect(screen.getByTestId("name")).toHaveTextContent("Rolf");
+      expect(screen.getByTestId("role")).toHaveTextContent("meister");
+      expect(screen.getByTestId("loading")).toHaveTextContent("ready");
+    });
+
+    // A navigation is announced and immediately tears this request down.
+    fireEvent.click(screen.getByTestId("refresh"));
+    await waitFor(() => expect(getAuthorizationSnapshotAction).toHaveBeenCalledTimes(2));
+    fireEvent(window, new Event("beforeunload"));
+    await settleRefresh(() => rejectRefresh?.(new Error("navigation tore the request down")));
+
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(screen.getByTestId("permissions")).toHaveTextContent("perm_view_leitstand");
+    expect(screen.getByTestId("status")).toHaveTextContent("authenticated");
+
+    // The user aborted the navigation: the transient window closes again.
+    await expireTransientNavigationWindow();
+
+    fireEvent.click(screen.getByTestId("refresh"));
+    await waitFor(() => expect(getAuthorizationSnapshotAction).toHaveBeenCalledTimes(3));
+    await settleRefresh(() => rejectRefresh?.(new Error("authorization backend unreachable")));
+
+    // A genuine failure after the aborted navigation is visible and fails closed.
+    expect(consoleError).toHaveBeenCalledWith("Failed to load permissions", expect.any(Error));
+    expect(screen.getByTestId("status")).toHaveTextContent("error");
+    expect(screen.getByTestId("role")).toBeEmptyDOMElement();
+    expect(screen.getByTestId("name")).toBeEmptyDOMElement();
+    expect(screen.getByTestId("initials")).toBeEmptyDOMElement();
+    expect(screen.getByTestId("permissions")).toBeEmptyDOMElement();
+    expect(screen.getByTestId("loading")).toHaveTextContent("ready");
+    consoleError.mockRestore();
+  });
+
+  it("fails closed on a real request rejection without any lifecycle signal", async () => {
+    let rejectRefresh: ((error: Error) => void) | undefined;
+    vi.mocked(getAuthorizationSnapshotAction)
+      .mockResolvedValueOnce(authorizedRolf)
+      .mockImplementation(
+        () => new Promise((_, reject) => {
+          rejectRefresh = reject;
+        }),
+      );
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    render(
+      <PermissionsProvider initialAuthState={initialRolf}>
+        <TestComponent />
+      </PermissionsProvider>,
+    );
+
+    // Prove a real authorized start state instead of leaning on empty defaults.
+    await waitFor(() => {
+      expect(screen.getByTestId("status")).toHaveTextContent("authenticated");
+      expect(screen.getByTestId("permissions")).toHaveTextContent("perm_view_leitstand");
+      expect(screen.getByTestId("name")).toHaveTextContent("Rolf");
+      expect(screen.getByTestId("role")).toHaveTextContent("meister");
+      expect(screen.getByTestId("initials")).toHaveTextContent("R");
+    });
+
+    fireEvent.click(screen.getByTestId("refresh"));
+    await waitFor(() => expect(getAuthorizationSnapshotAction).toHaveBeenCalledTimes(2));
+    await settleRefresh(() => rejectRefresh?.(new Error("authorization backend unreachable")));
+
+    expect(consoleError).toHaveBeenCalledWith("Failed to load permissions", expect.any(Error));
+    expect(screen.getByTestId("status")).toHaveTextContent("error");
+    expect(screen.getByTestId("role")).toBeEmptyDOMElement();
+    expect(screen.getByTestId("name")).toBeEmptyDOMElement();
+    expect(screen.getByTestId("initials")).toBeEmptyDOMElement();
+    expect(screen.getByTestId("permissions")).toBeEmptyDOMElement();
+    expect(screen.getByTestId("loading")).toHaveTextContent("ready");
     consoleError.mockRestore();
   });
 });
