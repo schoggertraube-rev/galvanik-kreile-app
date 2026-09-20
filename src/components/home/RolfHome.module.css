@@ -34,6 +34,11 @@
   color: #687083 !important;
   font-size: 12px !important;
 }
+.dayLine {
+  color: #353c4e !important;
+  font-size: 15px !important;
+  font-weight: 650;
+}
 .primaryLink {
   min-height: 50px;
   padding: 0 18px;
@@ -74,6 +79,10 @@
   border-color: #1a1f2e;
   color: #fff;
 }
+.quick button:disabled {
+  cursor: not-allowed;
+  opacity: 0.64;
+}
 .quick svg {
   width: 23px;
 }
@@ -87,8 +96,9 @@
 }
 .grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 290px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 390px);
   gap: 24px;
+  align-items: start;
 }
 .sectionHeader {
   display: flex;
@@ -174,6 +184,11 @@
   text-align: left;
   box-shadow: 0 5px 18px rgb(18 22 31/0.055);
 }
+.orderCardDominant {
+  border-color: #c9b06d;
+  background: #fff7df;
+  box-shadow: 0 8px 24px rgb(111 80 13 / 0.12);
+}
 .orderCard[data-risk="red"],
 .orderCard[data-risk="blocked"] {
   border-left-color: #a92a1d;
@@ -212,50 +227,195 @@
   grid-row: 1/3;
   width: 18px;
 }
-.facts {
+.sectionEmpty {
+  min-height: 210px;
+  padding: 28px;
+  border: 1px dashed #d8d0c4;
+  border-radius: 18px;
   display: grid;
-  gap: 11px;
-}
-.facts a,
-.facts button {
-  min-height: 112px;
-  padding: 16px;
-  border: 1px solid #d8d0c4;
-  border-radius: 16px;
-  display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 4px 12px;
+  gap: 12px 16px;
   background: #fffdf8;
+}
+.sectionEmpty > svg {
+  width: 32px;
+  color: #3f7d69;
+}
+.sectionEmpty h3,
+.sectionEmpty p {
+  margin: 0;
+}
+.sectionEmpty h3 {
+  margin-bottom: 5px;
+  font-size: 16px;
+}
+.sectionEmpty p {
+  color: #596071;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.sectionEmpty a,
+.sectionEmpty button {
+  grid-column: 2;
+  width: max-content;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid #d8d0c4;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  color: #12161f;
+  font-weight: 800;
+}
+.sectionEmpty a svg,
+.sectionEmpty button svg {
+  width: 17px;
+}
+
+.dayAreas {
+  display: grid;
+  gap: 14px;
+}
+.dayArea,
+.planned {
+  padding: 14px;
+  border: 1px solid #d8d0c4;
+  border-radius: 17px;
+  background: #fffdf8;
+  box-shadow: 0 5px 18px rgb(18 22 31/0.055);
+}
+.dayAreaHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.dayAreaHeader > div,
+.planned > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.dayAreaHeader h2,
+.planned h2 {
+  margin: 0;
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 20px;
+  font-weight: 550;
+}
+.dayAreaHeader svg,
+.planned svg {
+  width: 20px;
+  color: #596071;
+}
+.dayAreaHeader > strong {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-size: 28px;
+  font-weight: 500;
+}
+.coverage {
+  margin: -5px 0 10px;
+  color: #687083;
+  font-size: 11px;
+}
+.dayAreaEmpty {
+  min-height: 0;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f6f1e8;
+  color: #596071;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.compactList {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.compactList button {
+  width: 100%;
+  min-height: 58px;
+  padding: 9px 10px;
+  border: 1px solid #e1dbd0;
+  border-radius: 11px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 3px 10px;
+  background: #fff;
   color: #12161f;
   text-align: left;
 }
-.facts button:disabled {
-  cursor: not-allowed;
-  opacity: 0.72;
+.compactList button > span {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  font-size: 12px;
 }
-.facts span {
+.compactList button > span strong {
+  font-family: var(--font-geist-mono), monospace;
+}
+.compactList button small {
+  grid-column: 1;
+  color: #687083;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.compactList button > svg {
+  grid-column: 2;
+  grid-row: 1 / 3;
+  width: 17px;
+}
+.sectionAction {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 10px;
+  padding: 0 11px;
+  border: 1px solid #d8d0c4;
+  border-radius: 11px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
+  background: #fff;
+  color: #12161f;
+  font-size: 12px;
+  font-weight: 800;
+}
+.sectionAction:disabled {
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+.sectionAction svg {
+  width: 17px;
+}
+.planned {
+  border-style: dashed;
+  box-shadow: none;
+}
+.planned span {
+  margin-left: auto;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #e8eef8;
+  color: #36547c;
   font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0.06em;
   text-transform: uppercase;
+  font-weight: 800;
 }
-.facts svg {
-  width: 19px;
-}
-.facts strong {
-  grid-row: 1/3;
-  grid-column: 2;
-  font-family: var(--font-fraunces), Georgia, serif;
-  font-size: 34px;
-  font-weight: 500;
-}
-.facts small {
+.planned p {
+  margin: 10px 0 0;
   color: #687083;
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 1.45;
 }
 .state {
   min-height: 330px;
@@ -355,8 +515,11 @@
   .grid {
     grid-template-columns: 1fr;
   }
-  .facts {
-    grid-template-columns: repeat(3, 1fr);
+  .dayAreas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .planned {
+    grid-column: 1 / -1;
   }
   .orderCard {
     grid-template-columns: 88px 110px minmax(130px, 1fr) minmax(150px, 1fr) 20px;
@@ -364,7 +527,7 @@
 }
 @media (max-width: 720px) {
   .screen {
-    padding-bottom: 84px;
+    padding-bottom: 140px;
   }
   .hero {
     align-items: stretch;
@@ -404,11 +567,25 @@
     grid-column: 2;
     grid-row: 1;
   }
-  .facts {
+  .dayAreas {
     grid-template-columns: 1fr;
   }
-  .facts a,
-  .facts button {
-    min-height: 92px;
+  .planned {
+    grid-column: auto;
+  }
+  .sectionEmpty {
+    min-height: 0;
+    padding: 20px;
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+  .sectionEmpty > svg {
+    justify-self: center;
+  }
+  .sectionEmpty a,
+  .sectionEmpty button {
+    grid-column: 1;
+    width: 100%;
+    justify-content: center;
   }
 }

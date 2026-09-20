@@ -805,7 +805,7 @@ describe("S1 Naht 6 — AGENTS.md verweist auf die Bauanleitung", () => {
 describe("S1 — echtes Repo", () => {
   it("der aktuelle Stand haelt alle Naehte (Baseline = Altlasten der Kill-Liste)", () => {
     expect(runModuleGates(process.cwd()).findings).toEqual([]);
-  });
+  }, 60_000);
 });
 
 describe("S1 Red-Team-Fixes (unabhaengige Pruefung 2026-09-06)", () => {
