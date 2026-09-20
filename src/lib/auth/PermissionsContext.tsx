@@ -33,11 +33,16 @@ interface PermissionsContextType extends AuthState {
   refreshPermissions: () => Promise<void>;
 }
 
+/**
+ * Seeds the provider atomically from the one server-side authorization the
+ * layout already resolved. Role, name, initials and capabilities come from the
+ * same snapshot, so no mount-time server action is needed to complete them.
+ */
 function buildInitialAuthState(initial: AuthBootstrapState): AuthState {
   if (initial.status === "authenticated") {
     return {
       role: initial.user.role,
-      permissions: [],
+      permissions: [...initial.user.permissions],
       name: initial.user.displayName,
       initials: deriveInitials(initial.user.displayName),
       status: "authenticated",
@@ -79,16 +84,13 @@ export function PermissionsProvider({
   const router = useRouter();
   const pathnameRef = useRef(pathname);
   const routerRef = useRef(router);
-  // Permanent latch: the document is really gone ("pagehide"). Never set by
-  // "beforeunload", because an announced navigation can still be cancelled.
+  // Permanent latch: the document is really gone ("pagehide"), so work that
+  // belongs to it must no longer reach React state.
   const pageActiveRef = useRef(true);
-  // Transient window: a full-document navigation was announced via
-  // "beforeunload". It only covers a request that this navigation tears down
-  // immediately, and closes again in the next event-loop task.
-  const navigationPendingRef = useRef(false);
-  const navigationPendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [authState, setAuthState] = useState<AuthState>(() => buildInitialAuthState(initialAuthState));
-  const [loading, setLoading] = useState(true);
+  // The bootstrap is already complete when the provider mounts, so there is
+  // nothing left to wait for. Refreshes replace the state atomically.
+  const [loading, setLoading] = useState(false);
 
   // Sequence guard: discard responses from stale requests
   const refreshSeqRef = useRef(0);
@@ -139,15 +141,10 @@ export function PermissionsProvider({
     } catch (err) {
       // Silence is allowed only for provably non-product causes:
       // (1) a newer request superseded this one,
-      // (2) the document is permanently gone ("pagehide"),
-      // (3) an announced navigation tore this request down inside the still
-      //     open transient window.
+      // (2) the document is permanently gone ("pagehide"/unmount).
       // No error-string matching and no blanket ignore: any other rejection
       // must stay visible and fail closed.
-      const superseded = seq !== refreshSeqRef.current;
-      const documentGone = !pageActiveRef.current;
-      const torndownByNavigation = navigationPendingRef.current;
-      if (superseded || documentGone || torndownByNavigation) return;
+      if (seq !== refreshSeqRef.current || !pageActiveRef.current) return;
       console.error("Failed to load permissions", err);
       setAuthState({
         role: null,
@@ -167,61 +164,38 @@ export function PermissionsProvider({
   useEffect(() => {
     pageActiveRef.current = true;
 
-    const closeNavigationWindow = () => {
-      if (navigationPendingTimerRef.current !== null) {
-        clearTimeout(navigationPendingTimerRef.current);
-        navigationPendingTimerRef.current = null;
-      }
-      navigationPendingRef.current = false;
-    };
-
-    // "pagehide" is the only permanent latch: the document is really leaving,
-    // so any pending transient reset is dropped and later work is invalidated.
+    // "pagehide" is the permanent latch: the document is really leaving, so
+    // later work of this document is invalidated.
     const leavePage = () => {
-      closeNavigationWindow();
       pageActiveRef.current = false;
       refreshSeqRef.current += 1;
     };
 
-    // "beforeunload" only announces an attempt that the user may still cancel.
-    // It must not mark the page inactive and must not invalidate later work; it
-    // opens a narrow window that covers the request the navigation tears down
-    // synchronously and closes itself in the next event-loop task.
-    const announceNavigation = () => {
-      closeNavigationWindow();
-      navigationPendingRef.current = true;
-      navigationPendingTimerRef.current = setTimeout(() => {
-        navigationPendingTimerRef.current = null;
-        navigationPendingRef.current = false;
-      }, 0);
-    };
-
+    // A bfcache restore replays a document whose bootstrap may be stale, so
+    // this is a genuine reason to re-read authorization.
     const restorePage = (event: PageTransitionEvent) => {
       if (!event.persisted) return;
-      closeNavigationWindow();
       pageActiveRef.current = true;
       void refreshPermissions();
     };
 
     window.addEventListener("pagehide", leavePage);
-    window.addEventListener("beforeunload", announceNavigation);
     window.addEventListener("pageshow", restorePage);
     return () => {
       window.removeEventListener("pagehide", leavePage);
-      window.removeEventListener("beforeunload", announceNavigation);
       window.removeEventListener("pageshow", restorePage);
       leavePage();
     };
   }, [refreshPermissions]);
 
+  // No mount-time read: the server bootstrap already carries the complete
+  // authorization. A redundant mount request would only add a server action
+  // POST to the current page that a full navigation tears down.
   useEffect(() => {
-    const init = async () => { await refreshPermissions(); };
-    init();
-
     const supabase = createClient();
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
-        refreshPermissions();
+        void refreshPermissions();
       }
     });
 
