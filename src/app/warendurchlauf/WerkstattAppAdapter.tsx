@@ -22,6 +22,7 @@ export function WerkstattAppAdapter({
   return (
     <WerkstattView
       view={view}
+      onRetry={() => router.refresh()}
       ports={{
         onOpenOrder: openOrder,
         onOpenGoodsOut: openOrder,
