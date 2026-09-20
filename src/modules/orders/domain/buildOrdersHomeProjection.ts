@@ -11,6 +11,7 @@ export type OrdersHomeSource = {
   dueDate: string;
   dueLabel: string;
   dueValue: string;
+  createdAt: string | null;
 };
 
 export type OrdersHomeProjection = {
@@ -18,6 +19,9 @@ export type OrdersHomeProjection = {
   loadedAt: string;
   orders: readonly OrdersHomeSource[];
   priority: readonly OrdersHomeSource[];
+  recent: readonly OrdersHomeSource[];
+  recentSince: string;
+  recentCoverage: "complete" | "partial";
   dominant: null | {
     orderId: string;
     reason: string;
@@ -47,13 +51,16 @@ function assertSource(order: OrdersHomeSource): void {
     !order || !order.id || !order.orderNumber || !order.title || !order.station || !order.status
     || !order.statusText || !order.risk || !order.dueDate || !order.dueLabel || !order.dueValue
   ) throw new Error("ORDERS_HOME_SOURCE_INVALID");
+  if (order.createdAt !== null && !validTimestamp(order.createdAt)) {
+    throw new Error("ORDERS_HOME_SOURCE_INVALID");
+  }
 }
 
 function dominantReason(order: OrdersHomeSource): string {
-  if (order.risk === "red") return "Persistierter Risikostatus: kritisch";
-  if (order.risk === "blocked") return "Persistierter Risikostatus: blockiert";
-  if (order.risk === "orange") return "Persistierter Risikostatus: dringend";
-  if (order.risk === "yellow") return "Persistierter Risikostatus: knapp";
+  if (order.risk === "red") return "Dieser Auftrag ist kritisch.";
+  if (order.risk === "blocked") return "Dieser Auftrag ist blockiert.";
+  if (order.risk === "orange") return "Dieser Auftrag ist dringend.";
+  if (order.risk === "yellow") return "Der Termin dieses Auftrags wird knapp.";
   return `${order.dueLabel}: ${order.dueValue}`;
 }
 
@@ -63,6 +70,8 @@ export function buildOrdersHomeProjection(
 ): OrdersHomeProjection {
   if (!Array.isArray(orders) || !validTimestamp(loadedAt)) throw new Error("ORDERS_HOME_PROJECTION_INVALID");
   orders.forEach(assertSource);
+  const loadedTimestamp = new Date(loadedAt).getTime();
+  const recentSince = new Date(loadedTimestamp - 24 * 60 * 60 * 1000).toISOString();
   const priority = [...orders]
     .sort((left, right) => {
       const risk = (RISK_ORDER[left.risk] ?? 5) - (RISK_ORDER[right.risk] ?? 5);
@@ -71,12 +80,22 @@ export function buildOrdersHomeProjection(
       return due !== 0 ? due : left.orderNumber.localeCompare(right.orderNumber, "de");
     })
     .slice(0, 6);
+  const recent = orders
+    .filter((order) => {
+      if (order.createdAt === null) return false;
+      const timestamp = new Date(order.createdAt).getTime();
+      return timestamp >= new Date(recentSince).getTime() && timestamp <= loadedTimestamp;
+    })
+    .sort((left, right) => new Date(right.createdAt ?? 0).getTime() - new Date(left.createdAt ?? 0).getTime());
   const first = priority[0];
   return {
     source: "Auftragsbestand",
     loadedAt,
     orders: [...orders],
     priority,
+    recent,
+    recentSince,
+    recentCoverage: orders.every((order) => order.createdAt !== null) ? "complete" : "partial",
     dominant: first ? { orderId: first.id, reason: dominantReason(first) } : null,
   };
 }

@@ -19,7 +19,7 @@ const gregorAuthorization = {
       tenantId: "synthetic-tenant",
       displayName: "Gregor",
       role: "admin" as const,
-      permissions: ["perm_sys_diag"] as const,
+      permissions: ["perm_sys_diag", "perm_sys_users"] as const,
       active: true as const,
     },
     actor: {
@@ -49,11 +49,46 @@ describe("getAuthBootstrapState()", () => {
 
     expect(firstLoad).toEqual({
       status: "authenticated",
-      user: { role: "admin", displayName: "Gregor" },
+      user: {
+        role: "admin",
+        displayName: "Gregor",
+        permissions: ["perm_sys_diag", "perm_sys_users"],
+      },
     });
     expect(reload).toEqual(firstLoad);
     expect(JSON.stringify(firstLoad)).not.toContain(gregorAuthorization.data.actor.actorId);
+    expect(JSON.stringify(firstLoad)).not.toContain(
+      gregorAuthorization.data.authorization.userId,
+    );
+    expect(JSON.stringify(firstLoad)).not.toContain(
+      gregorAuthorization.data.authorization.tenantId,
+    );
     expect(ports.resolveProductActorAuthorization).toHaveBeenCalledTimes(2);
+  });
+
+  // Role, display name and capabilities must come from one resolution, so the
+  // client never has to complete a half-filled identity with a second request.
+  it("delivers role, display name and capabilities from a single resolution", async () => {
+    const state = await getAuthBootstrapState();
+
+    expect(state.status).toBe("authenticated");
+    if (state.status !== "authenticated") return;
+    expect(state.user.permissions).toEqual(
+      gregorAuthorization.data.authorization.permissions,
+    );
+    expect(ports.resolveProductActorAuthorization).toHaveBeenCalledOnce();
+  });
+
+  // The shared role/permission contract table must not become mutable through
+  // the bootstrap payload.
+  it("hands out a copy instead of the shared authorization permission list", async () => {
+    const state = await getAuthBootstrapState();
+
+    expect(state.status).toBe("authenticated");
+    if (state.status !== "authenticated") return;
+    expect(state.user.permissions).not.toBe(
+      gregorAuthorization.data.authorization.permissions,
+    );
   });
 
   it("returns unauthenticated only for a missing session", async () => {
@@ -63,9 +98,10 @@ describe("getAuthBootstrapState()", () => {
       message: "not signed in",
     });
 
-    await expect(getAuthBootstrapState()).resolves.toEqual({
-      status: "unauthenticated",
-    });
+    const state = await getAuthBootstrapState();
+    expect(state).toEqual({ status: "unauthenticated" });
+    // Fails closed: no capability reaches the browser without a session.
+    expect(JSON.stringify(state)).not.toContain("perm_");
   });
 
   it("turns an invalid session into a safe, explicit error", async () => {
@@ -75,10 +111,13 @@ describe("getAuthBootstrapState()", () => {
       message: "technical detail",
     });
 
-    await expect(getAuthBootstrapState()).resolves.toEqual({
+    const state = await getAuthBootstrapState();
+    expect(state).toEqual({
       status: "error",
       message: "Die Sitzung ist nicht mehr gültig. Bitte erneut anmelden.",
     });
+    // Fails closed: no capability reaches the browser on an invalid session.
+    expect(JSON.stringify(state)).not.toContain("perm_");
   });
 
   it("fails closed with a support reference when readiness is unavailable", async () => {
@@ -97,5 +136,7 @@ describe("getAuthBootstrapState()", () => {
     });
     expect(JSON.stringify(state)).not.toContain("ACTOR_READINESS_UNAVAILABLE");
     expect(JSON.stringify(state)).not.toContain("technical detail");
+    // Fails closed: an unavailable choke point grants nothing.
+    expect(JSON.stringify(state)).not.toContain("perm_");
   });
 });
