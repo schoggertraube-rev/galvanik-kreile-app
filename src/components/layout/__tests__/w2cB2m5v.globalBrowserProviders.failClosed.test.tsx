@@ -216,7 +216,7 @@ const GEOMETRY_CASES: readonly GeometryCase[] = [
     height: 844,
     chrome: "dock",
     headerHeight: 68,
-    pagePaddingBottom: "126px", // Canonical fixed-dock/create runway; mirrors TargetShell mobile scroll contract.
+    pagePaddingBottom: "96px",
     createRightInset: 12,
     createBottomInset: 88,
     dockInlineInset: 8,
