@@ -511,4 +511,3 @@ bleibt V5; die vier Einzelmocks (Phillip V4, Rolf V8, Auftragskarte V8, Kundenka
 
 **Wesentlicher Nachteil:** Zusatzideen, die V6 ueber V5 hinaus skizziert hatte, entfallen, bis sie
 gegebenenfalls als eigene Owner-Entscheidung erneut aufgenommen werden.
-
