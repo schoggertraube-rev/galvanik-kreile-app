@@ -484,3 +484,31 @@ Fachaktionen sichtbar zu machen.
 **Wesentlicher Nachteil:** Die sichtbare Verdichtung verlangt zusätzliche
 Profil- und Rechtebeweise, damit eine technische Kompatibilitätsrolle nicht
 versehentlich als operativer oder berechtigter Produktweg erscheint.
+
+## D-UI-V5-003 â€” V5 ist die einzige Zielvorlage; V6 verworfen (Owner 2026-09-21)
+
+**Entscheidung/Wortlaut:** Die App wird 1:1 nach `docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html`
+(SHA-256 `75258FF3BD4CC212C8E989061708A29DC26EA44B851BD28E8F16E8509B0CC0AA`) gebaut â€”
+alle Seiten, alle drei Geraete (Desktop/Tablet/Handy), echte Ports, echte Datenbank,
+**kein Mock**, keine abgespeckte Version. Der zwischenzeitliche V6-Vorschlag
+(`KREILE_UI_BIBEL_V6_2026-09-20.html`, D-UI-V6-001..004) ist **verworfen**, aus dem Repo
+entfernt und wird nicht erneut gebunden oder weiterverfolgt. Einzige Ablauf-/Zwischenschritt-Referenz
+bleibt V5; die vier Einzelmocks (Phillip V4, Rolf V8, Auftragskarte V8, Kundenkarte V2) bleiben Seitenwahrheit.
+
+**Klarstellungen (in V5 bereits enthalten, hier bekraeftigt):**
+- Der V5-Weg â€žWare / Auftrag annehmen" umfasst Zahlungsmodus, Eingangsart, Positionen mit
+  Katalog-/Freitext-Auswahl und Eingangsfoto. Die aktuell deployte Alt-Version, die diese Schritte
+  weglaesst, ist ausdruecklich **kein Bauziel** â€” die App hinkt V5 hinterher und wird an V5 angeglichen.
+- **Kundenadresse** (Strasse, PLZ, Ort) wird in der Kundenanlage erfasst und real in `public.customers`
+  gespeichert (Spalten `street`, `zip_code`, `city` sind vorhanden). Adresse ist Pflicht spaetestens
+  vor Versand (`recordGoodsOut(versand)`) und vor Rechnungsausstellung.
+- **Foto** bleibt wie in V5 (keine harte Pflicht; fehlendes Eingangsfoto erzeugt einen sichtbaren Hinweis,
+  blockiert die Annahme aber nicht).
+- **Bestehender Kunde = suchen und auswaehlen ohne Neueingabe**; nur ein Neukunde wird einmalig erfasst
+  und ist danach wiederverwendbar.
+
+**Zweck:** Eine einzige, widerspruchsfreie Zielvorlage; kein paralleler V6-Pfad; Ende der Referenz-Verwirrung.
+
+**Wesentlicher Nachteil:** Zusatzideen, die V6 ueber V5 hinaus skizziert hatte, entfallen, bis sie
+gegebenenfalls als eigene Owner-Entscheidung erneut aufgenommen werden.
+
