@@ -178,18 +178,10 @@ Die ESLint-Ratsche wertete jede Änderung von `lintContractHash`/`judgeContractH
 **Entscheidung Owner (Siglinder, 2026-09-05 22:05):** „Zahlungsmodus wird bei Auftragsannahme angelegt und kann später aber geändert werden, wenn der Kunde doch per Überweisung etc. zahlen will. Aber generell eigentlich Vorkasse."
 
 **Bindende Ableitung:**
-1. `payment_mode` wird **bei der Auftragsannahme (Intake)** gesetzt. Kein NULL-Zustand im kanonischen Pfad. Die Vorbelegung regelt abschließend die Reconciliation 2026-09-20 unten (die ursprüngliche Formulierung „Default = Vorkasse" ist dadurch präzisiert, nicht gestrichen).
+1. `payment_mode` wird **bei der Auftragsannahme (Intake)** gesetzt; **Default = Vorkasse**, wenn nichts anderes gewählt wird. Kein NULL-Zustand im kanonischen Pfad.
 2. Der Modus ist **später änderbar** über einen eigenen, tenantgebundenen, auditierbaren Command (`setPaymentMode`, Rolle `buero|meister|admin`, append-only Ereignis, `expectedVersion`/`clientEventId` wie alle Commands) — z. B. Wechsel auf Rechnung/Überweisung oder Abholung.
 3. Gate-Regel je Modus bleibt D-F15-001 (Vorkasse gesperrt bis bezahlt; Abholung zahlen bei Übergabe; Rechnung kein Gate). Ein Moduswechsel nach bereits erfolgtem Warenausgang ist unzulässig (CONFLICT).
 4. Technischer Schnitt: Default-Setzung im Intake-/Rechnungs-Pfad additiv (kein F1.4-Vertragsbruch), `setPaymentMode` als Teil von F1.5/B2; `f1_5_allowlist` entsprechend erweitert. Bauvertrag F1.5 §2 „besitzt: … Modus" ist damit konkretisiert.
-
-**Reconciliation 2026-09-20 (Owner, Bauplan `KREILE_BAUPLAN_INTAKE_V6_2026-09-20.md`, Paket `PATH1_INTAKE_V6`):**
-
-- **Kundendefaults gewinnen.** Die Vorbelegung bei der Annahme kommt zuerst aus dem Kundenprofil: `default_payment_mode` und `default_handover` des gewählten Kunden (D-UI-V6-002).
-- **Sonst gilt `payment_mode=rechnung` und `handover=abholung`.** Fehlt ein Kundenstandard, sind das die Vorbelegungen; ein stiller Vorkasse-Default aus der Oberfläche entfällt. Die Owner-Neigung „generell eigentlich Vorkasse" wird damit nicht gestrichen, sondern je Kunde als Kundenstandard geführt und bleibt im Eingang jederzeit wählbar.
-- **Niemals NULL.** `payment_mode` wird im selben `orderIntakeCommand` gesetzt; ein NULL-Zustand entsteht in keinem Pfad.
-- **Spätere Änderungen laufen ausschließlich über `setPaymentMode`** (Rolle `buero|meister|admin`, append-only Ereignis, `expectedVersion`/`clientEventId`); nach erfolgtem Warenausgang bleibt der Wechsel unzulässig (CONFLICT).
-- **Alle bestehenden F1.5-Gates bleiben unverändert.** D-F15-001 und D-F15-003 gelten wörtlich weiter: Vorkasse bleibt bis zur bestätigten Zahlung gesperrt, Abholung verlangt die Kassieren-Bestätigung bei Übergabe, Rechnung erhält kein Gate (mit `ORDER_PICKED_UP_V2`, `invoiceState: not_issued`). Diese Reconciliation ändert ausschließlich die Vorbelegung, kein Gate.
 
 ## D-F15-003 — Rechnung-Warenausgang vor Rechnungserstellung (Owner 2026-09-09)
 
@@ -493,76 +485,29 @@ Fachaktionen sichtbar zu machen.
 Profil- und Rechtebeweise, damit eine technische Kompatibilitätsrolle nicht
 versehentlich als operativer oder berechtigter Produktweg erscheint.
 
-## D-UI-V6-001 — Ablaufreferenz V6 (Owner 2026-09-20)
+## D-UI-V5-003 â€” V5 ist die einzige Zielvorlage; V6 verworfen (Owner 2026-09-21)
 
-**Entscheidung/Wortlaut:** `KREILE_UI_BIBEL_V6_2026-09-20.html` mit SHA-256
-`545E3139163615AEDDF1772AAD102C0A63597897E2B667A8B79C971359A43BD0` ersetzt den
-Gesamtmock V5 als Ablauf-/Zwischenschritt-Referenz für Eingang, Kundenanlage,
-KV-Übergang, Ware raus, Suche, Einstellungen und Mehr (Touch). Die vier
-Seitenmocks (Phillip V4, Rolf V8, Auftragskarte V8, Kundenkarte V2) bleiben
-Seitenwahrheit. Die Owner-Quelle liegt im Bibelordner „design und klickpfade
-UI"; der Writer kopiert die Datei byteidentisch nach
-`docs/project/linie/ui/KREILE_UI_BIBEL_V6_2026-09-20.html`, bindet Pfad plus
-SHA-256 in `ui/CURRENT_DESIGN_REFERENCE.json` und
-`00_UI_REFERENZEN_PFADE.md` und trägt diese Entscheidung in das Register ein.
-V5 wandert nach `supersededAggregateMocks`. Demo-Daten des Mocks sind nie
-Produktdaten.
+**Entscheidung/Wortlaut:** Die App wird 1:1 nach `docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html`
+(SHA-256 `75258FF3BD4CC212C8E989061708A29DC26EA44B851BD28E8F16E8509B0CC0AA`) gebaut â€”
+alle Seiten, alle drei Geraete (Desktop/Tablet/Handy), echte Ports, echte Datenbank,
+**kein Mock**, keine abgespeckte Version. Der zwischenzeitliche V6-Vorschlag
+(`KREILE_UI_BIBEL_V6_2026-09-20.html`, D-UI-V6-001..004) ist **verworfen**, aus dem Repo
+entfernt und wird nicht erneut gebunden oder weiterverfolgt. Einzige Ablauf-/Zwischenschritt-Referenz
+bleibt V5; die vier Einzelmocks (Phillip V4, Rolf V8, Auftragskarte V8, Kundenkarte V2) bleiben Seitenwahrheit.
 
-**Zweck:** Der Weg Kunde → Eingang → KV erhält genau eine aktuelle,
-hashgebundene Ablaufwahrheit, ohne die vier unveränderten Seitenreferenzen zu
-überschreiben.
+**Klarstellungen (in V5 bereits enthalten, hier bekraeftigt):**
+- Der V5-Weg â€žWare / Auftrag annehmen" umfasst Zahlungsmodus, Eingangsart, Positionen mit
+  Katalog-/Freitext-Auswahl und Eingangsfoto. Die aktuell deployte Alt-Version, die diese Schritte
+  weglaesst, ist ausdruecklich **kein Bauziel** â€” die App hinkt V5 hinterher und wird an V5 angeglichen.
+- **Kundenadresse** (Strasse, PLZ, Ort) wird in der Kundenanlage erfasst und real in `public.customers`
+  gespeichert (Spalten `street`, `zip_code`, `city` sind vorhanden). Adresse ist Pflicht spaetestens
+  vor Versand (`recordGoodsOut(versand)`) und vor Rechnungsausstellung.
+- **Foto** bleibt wie in V5 (keine harte Pflicht; fehlendes Eingangsfoto erzeugt einen sichtbaren Hinweis,
+  blockiert die Annahme aber nicht).
+- **Bestehender Kunde = suchen und auswaehlen ohne Neueingabe**; nur ein Neukunde wird einmalig erfasst
+  und ist danach wiederverwendbar.
 
-**Wesentlicher Nachteil:** Pfad und Hash müssen vor jeder Etappe, jeder
-Browserabnahme und jedem Draft-PR erneut geprüft werden; ein Referenzwechsel
-bleibt ausschließlich eine Owner-Entscheidung mit Pfad- und Hashbindung.
+**Zweck:** Eine einzige, widerspruchsfreie Zielvorlage; kein paralleler V6-Pfad; Ende der Referenz-Verwirrung.
 
-## D-UI-V6-002 — Kundenadresse (Owner 2026-09-20)
-
-**Entscheidung/Wortlaut:** Der Kunden-Vertrag wird additiv um `street`,
-`postal_code` (Ort bleibt `city`) sowie `contact_person` (vorhanden),
-`default_handover` (`abholung|versand`), `default_payment_mode`
-(`rechnung|vorkasse|abholung`) und `notes` (Eigenheiten, Text ≤ 2000)
-erweitert. Die Remote-Migration ist vom Owner freigegeben: additiv, keine
-RLS-/Policy-Änderung, Fresh-Replay im CI Pflicht. Die Adresse ist beim Anlegen
-optional; sie wird fail-closed Pflicht vor `recordGoodsOut(versand)` und vor
-der Rechnungsausstellung.
-
-**Zweck:** Versand und Rechnung stützen sich auf belegte Kundendaten, ohne die
-telefonbegleitende Schnellanlage mit Pflichtfeldern zu blockieren.
-
-**Wesentlicher Nachteil:** Zwei bestehende Kernwege erhalten ein zusätzliches
-fail-closed Gate mit eigenem Nachweis- und Testaufwand; unvollständige
-Bestandsdaten fallen erst an diesem Gate auf und brauchen den Rückweg
-„Adresse ergänzen".
-
-## D-UI-V6-003 — Foto weich (Owner 2026-09-20)
-
-**Entscheidung/Wortlaut:** Das Eingangsfoto ist keine Pflicht. Ein Auftrag ohne
-Foto wird angelegt und erscheint bei Rolf („Der Tag") und bei Phillip
-(Werkstatt) als Kachel „Foto fehlt" mit der Primäraktion „Foto machen", bis je
-Position mindestens ein Foto mit Zweck `gesamt` vorliegt. Der Übergang
-`angenommen → galvanik` wird dadurch nicht blockiert.
-
-**Zweck:** Die Annahme bleibt in wenigen Berührungen möglich, und das fehlende
-Foto bleibt trotzdem als belegte, sichtbare Restarbeit im Kontrollblick beider
-Rollen.
-
-**Wesentlicher Nachteil:** Der Fotostand wird zu einer zusätzlich dauerhaft zu
-lesenden Read-Port-Wahrheit; die Kachel darf ausschließlich bei tatsächlich
-fehlendem Foto erscheinen und erfindet sonst Dringlichkeit.
-
-## D-UI-V6-004 — Kataloge statt Freitext (Owner 2026-09-20)
-
-**Entscheidung/Wortlaut:** Oberfläche, Material, Zustand und Eingangsart sind
-tenantgebundene Kataloge: DB-Tabellen mit Seed, `v_*`-Read-Port,
-admin-pflegbar. `surfaceRequested` und `material` speichern Katalog-Schlüssel;
-Freitext existiert nur noch als zusätzliche Notiz. Bestehende Freitextwerte
-werden nicht migriert, sondern über eine Mapping-Ansicht als „nicht zugeordnet"
-ausgewiesen — kein Datenverlust, D-RES-001.
-
-**Zweck:** Bündelung, Suche, Preisvorschlag und Auswertung arbeiten auf
-stabilen Schlüsseln statt auf uneinheitlichem Freitext.
-
-**Wesentlicher Nachteil:** Kataloge sind zusätzliche zu pflegende Stammdaten,
-und Altbestand bleibt bis zur manuellen Zuordnung sichtbar „nicht zugeordnet"
-statt still umgeschrieben zu werden.
+**Wesentlicher Nachteil:** Zusatzideen, die V6 ueber V5 hinaus skizziert hatte, entfallen, bis sie
+gegebenenfalls als eigene Owner-Entscheidung erneut aufgenommen werden.

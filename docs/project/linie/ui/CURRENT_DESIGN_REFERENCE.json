@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "current": {
-    "path": "docs/project/linie/ui/KREILE_UI_BIBEL_V6_2026-09-20.html",
-    "sha256": "545E3139163615AEDDF1772AAD102C0A63597897E2B667A8B79C971359A43BD0",
-    "approvedAt": "2026-09-20",
+    "path": "docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html",
+    "sha256": "75258FF3BD4CC212C8E989061708A29DC26EA44B851BD28E8F16E8509B0CC0AA",
+    "approvedAt": "2026-09-14",
     "role": "FLOW_AND_INTERMEDIATE_STEP_REFERENCE"
   },
   "pageTruth": [
@@ -15,8 +15,7 @@
   "supersededAggregateMocks": [
     "KREILE_GESAMTMOCK_V2",
     "KREILE_GESAMTMOCK_V3",
-    "KREILE_GESAMTMOCK_V4",
-    "KREILE_GESAMTMOCK_V5"
+    "KREILE_GESAMTMOCK_V4"
   ],
   "supersededAggregateMockStatus": "SUPERSEDED_NOT_BUILD_INPUT",
   "metadataCaveat": "An internal HTML title such as V2-MOCK is stale metadata and never product text.",
