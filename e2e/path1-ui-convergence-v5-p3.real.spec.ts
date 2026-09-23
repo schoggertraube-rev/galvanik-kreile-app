@@ -302,7 +302,7 @@ async function returnToWorkshopHub(page: Page) {
   } else {
     await page.getByRole("button", { name: "Mehr", exact: true }).click();
     await page
-      .getByRole("dialog", { name: "Weitere Kernbereiche" })
+      .getByRole("dialog", { name: "Mehr", exact: true })
       .getByRole("link", { name: "Werkstatt", exact: true })
       .click();
   }
@@ -404,7 +404,7 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
         );
       });
       await expect(
-        rolf.page.getByRole("heading", { name: "Guten Tag, Rolf" }),
+        rolf.page.getByRole("heading", { name: "Der Tag", exact: true }),
       ).toBeVisible();
 
       for (const viewport of VIEWPORTS) {
@@ -697,9 +697,9 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
           height: viewport.height,
         });
         await rolf.page.goto("/", { waitUntil: "networkidle" });
-        await expect(rolf.page.getByTestId("rolf-v8-home")).toContainText(
-          "Quelle: Auftragsbestand",
-        );
+        await expect(
+          rolf.page.getByRole("heading", { name: "Das braucht dich", exact: true }),
+        ).toBeVisible();
         await expect(rolf.page.getByTestId("rolf-v8-home")).toContainText(
           orderNumber,
         );
