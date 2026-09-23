@@ -589,3 +589,30 @@
     justify-content: center;
   }
 }
+
+/* V8 uses the shared paketdemo-v2 palette, never a page-local theme. */
+.screen {
+  color: var(--navy-900);
+}
+.primaryLink,
+.quick button:first-child {
+  background: var(--navy-900);
+}
+.quick a,
+.quick button,
+.orderCard,
+.dayArea,
+.sectionEmpty,
+.dialog {
+  background: var(--surface-card);
+}
+.quick a,
+.quick button {
+  border-color: var(--neutral-gray-300);
+  color: var(--navy-900);
+}
+.dataStand,
+.sectionHeader > span,
+.coverage {
+  color: var(--text-muted) !important;
+}

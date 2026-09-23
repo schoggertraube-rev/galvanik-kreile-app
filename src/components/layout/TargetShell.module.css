@@ -12,3 +12,13 @@
 /* The fixed mobile dock and create handle must never trap the last page section. */
 .content{overflow-x:hidden;overflow-y:auto}
 @media(max-width:1023px){.content{overscroll-behavior-y:contain;scroll-padding-bottom:calc(126px + env(safe-area-inset-bottom));touch-action:pan-y;-webkit-overflow-scrolling:touch}.page{padding-bottom:calc(126px + env(safe-area-inset-bottom))}.workshop .page{padding-bottom:0}}
+
+/* Paketdemo-v2 is the only shell palette; raw values above remain only for
+   legacy subflows that are outside package A. */
+.loginRoot,.shell,.searchButton kbd{background:var(--bg-app);color:var(--navy-900)}
+.header,.identity button,.moreSheet,.moreSheet a,.searchButton{background:var(--surface-card)}
+.header,.identity button,.moreSheet a,.searchButton{border-color:var(--neutral-gray-300)}
+.sidebar,.mobileDock{background:var(--navy-900)}
+.initials{background:var(--gold-100);color:var(--gold-600)}
+.sidebar a[aria-current=page]{box-shadow:inset 3px 0 var(--accent-orange)}
+.globalCreateButton{background:var(--accent-orange);color:var(--navy-900)}

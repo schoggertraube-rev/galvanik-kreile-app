@@ -122,12 +122,12 @@ function StartContent({
         </div>
         <p className={styles.brandKicker}>WerkstattCockpit</p>
         <h1>Willkommen zurück.</h1>
-        <p className={styles.brandLead}>Ein sicherer Einstieg. Danach sehen Sie genau die Arbeit, die zu Ihnen gehört.</p>
+        <p className={styles.brandLead}>Ein sicherer Einstieg. Danach siehst du genau die Arbeit, die zu dir gehört.</p>
         <div className={styles.trust}><ShieldCheck aria-hidden="true" /><span>Sicher anmelden · direkt zur passenden Arbeit</span></div>
       </section>
 
       <section className={styles.loginPanel} aria-labelledby="login-title">
-        <header><p>Anmelden</p><h2 id="login-title">Wer arbeitet gerade?</h2><span>Wählen Sie Ihren Namen und melden Sie sich an.</span></header>
+        <header><p>Anmelden</p><h2 id="login-title">Wer arbeitet gerade?</h2><span>Wähle deinen Namen und melde dich an.</span></header>
         {loginUnavailable ? (
           <div className={styles.unavailable} role="alert">
             <p>

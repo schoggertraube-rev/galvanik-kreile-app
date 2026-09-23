@@ -19,13 +19,34 @@ function current(pathname: string, href: string): boolean {
 
 export function TargetNavigation() {
   const pathname = usePathname();
-  const { role } = usePermissions();
-  const invoices = role === "buero" || role === "meister";
-  const settings = role === "admin" || role === "developer";
+  const permissions = usePermissions();
+  const { role } = permissions;
+  const status = permissions.status ?? (role ? "authenticated" : "unauthenticated");
+  const loading = permissions.loading ?? false;
+  const hasPermission = typeof permissions.hasPermission === "function"
+    ? permissions.hasPermission
+    : (permission: string) => {
+        if (permission === "perm_sys_diag") return role === "admin" || role === "developer";
+        if (permission === "perm_view_customers") return role === "buero" || role === "meister" || role === "readonly";
+        return permission === "perm_view_leitstand" && role !== null;
+      };
+  if (loading || status !== "authenticated" || !role) return null;
+
+  const operationalProfile = role === "buero" || role === "meister" || role === "readonly";
+  const day = operationalProfile && hasPermission("perm_view_leitstand");
+  const customers = operationalProfile && hasPermission("perm_view_customers");
+  const invoices = (role === "buero" || role === "meister") && hasPermission("perm_view_leitstand");
+  const settings = (role === "admin" || role === "developer") && hasPermission("perm_sys_diag");
+  const links = CORE.filter(({ href }) => {
+    if (href === "/customers") return customers;
+    return day;
+  });
+
+  if (links.length === 0 && !invoices && !settings) return null;
   return (
     <aside className={styles.sidebar}>
       <nav aria-label="Hauptnavigation">
-        {CORE.map(({ href, label, icon: Icon }) => <Link key={href} href={href} prefetch={false} aria-current={current(pathname, href) ? "page" : undefined}><Icon aria-hidden="true" /><span>{label}</span></Link>)}
+        {links.map(({ href, label, icon: Icon }) => <Link key={href} href={href} prefetch={false} aria-current={current(pathname, href) ? "page" : undefined}><Icon aria-hidden="true" /><span>{label}</span></Link>)}
         {invoices ? <Link href="/buchhaltung/rechnungen" prefetch={false} aria-current={pathname.startsWith("/buchhaltung/rechnungen") ? "page" : undefined}><ReceiptText aria-hidden="true" /><span>Geld &amp; Rechnungen</span></Link> : null}
         {settings ? <Link href="/settings" prefetch={false} aria-current={pathname.startsWith("/settings") ? "page" : undefined}><Settings aria-hidden="true" /><span>Einstellungen</span></Link> : null}
       </nav>

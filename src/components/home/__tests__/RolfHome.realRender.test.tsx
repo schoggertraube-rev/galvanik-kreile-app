@@ -42,7 +42,7 @@ describe("Rolf V8 real public projection", () => {
     expect(screen.getByRole("heading", { name: "Das braucht dich" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Heute raus" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Neu seit gestern" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Zahlen" })).toBeInTheDocument();
+    expect(screen.queryByText(/Geplant|kommt bald/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Dieser Auftrag ist kritisch/)).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("button", { name: /A-2026-0001/ })[0]);
     expect(ports.openOrder).toHaveBeenCalledWith("order-1");
@@ -77,24 +77,25 @@ describe("Rolf V8 real public projection", () => {
   ];
   // Zwei Laufzeitzonen, die beide von Europe/Berlin abweichen: UTC ist die
   // uebliche Serverzone, Pacific/Kiritimati (+14) erzwingt zusaetzlich einen
-  // abweichenden Kalendertag.
+  // abweichenden Kalendertag. process.env.TZ wird unter Windows nicht
+  // verlaesslich zur Laufzeit uebernommen; deshalb erzwingt der Spy die
+  // jeweilige Default-Zone nur fuer Aufrufe ohne expliziten timeZone-Vertrag.
   const foreignRuntimeZones = ["UTC", "Pacific/Kiritimati"];
-  const originalTimeZone = process.env.TZ;
+  const NativeDateTimeFormat = Intl.DateTimeFormat;
 
-  afterEach(() => {
-    if (originalTimeZone === undefined) delete process.env.TZ;
-    else process.env.TZ = originalTimeZone;
-  });
+  afterEach(() => vi.restoreAllMocks());
 
   for (const runtimeZone of foreignRuntimeZones) {
     it(`bindet den Datenstand unter Laufzeitzone ${runtimeZone} auf Europe/Berlin`, () => {
-      process.env.TZ = runtimeZone;
+      vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function DateTimeFormat(locales, options) {
+        return new NativeDateTimeFormat(locales, options?.timeZone ? options : { ...options, timeZone: runtimeZone });
+      });
 
       for (const testCase of berlinDataStandCases) {
         // Kontrolle zuerst: die Laufzeitzone ist wirklich umgestellt und wuerde
         // ohne gebundene timeZone eine andere Anzeige erzeugen. Ohne diese
         // Zusicherung koennte die Regression still unwirksam werden.
-        const runtimeZoneRendering = new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(new Date(testCase.loadedAt));
+        const runtimeZoneRendering = new NativeDateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short", timeZone: runtimeZone }).format(new Date(testCase.loadedAt));
         expect(runtimeZoneRendering).not.toBe(testCase.expected);
 
         const { unmount } = render(<RolfHomeClient model={{ kind: "data", role: "meister", canCreateOrder: true, projection: { ...projection, loadedAt: testCase.loadedAt } }} />);

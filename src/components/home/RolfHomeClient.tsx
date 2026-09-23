@@ -208,10 +208,6 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
             <Link className={styles.sectionAction} href="/orders" prefetch={false}>Auftragsbestand öffnen<ArrowRight aria-hidden="true" /></Link>
           </section>
 
-          <section className={styles.planned} aria-labelledby="numbers-title">
-            <div><ClipboardList aria-hidden="true" /><h2 id="numbers-title">Zahlen</h2><span>Geplant</span></div>
-            <p>Hier erscheinen erst dann betriebliche Kennzahlen, wenn dafür ein geprüfter Datenweg freigegeben ist.</p>
-          </section>
         </aside>
       </div>
 
