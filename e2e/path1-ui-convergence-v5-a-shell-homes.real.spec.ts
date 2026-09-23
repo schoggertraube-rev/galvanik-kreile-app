@@ -378,6 +378,8 @@ test.describe("PATH1 A3 – V5 Shell, Rollen-Homes und Navigation", () => {
       phillip.page.on("pageerror", (error) => browserErrors.push(`Phillip:${error.message}`));
       await loginPin(phillip.page, PHILLIP_ACTOR_ID, phillipPin, sessionSecret);
       await expect(phillip.page.getByRole("heading", { name: "Werkstatt", exact: true })).toBeVisible();
+      await expect(phillip.page.getByTestId("werkstatt-status")).toHaveCount(1);
+      await expect(phillip.page.getByTestId("werkstatt-status")).toBeVisible();
       await expect(phillip.page.getByRole("heading", { name: "Heute sichern" })).toBeVisible();
       await expect(phillip.page.getByTestId("werkstatt-bundle")).toBeVisible();
       await expect(phillip.page.getByTestId("werkstatt-wip-tile")).toHaveCount(1);

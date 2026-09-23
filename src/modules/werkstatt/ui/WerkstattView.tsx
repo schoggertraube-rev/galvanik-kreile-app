@@ -164,19 +164,22 @@ export function WerkstattView({
           <p className={styles.eyebrow}>Werkstatt</p>
           <h1 id="werkstatt-title" className={styles.title}>Werkstatt</h1>
           {isData ? (
-            view.dringendCount === 0 ? (
-              <p className={`${styles.lead} ${styles.leadClear}`} role="status" data-testid="werkstatt-status">
-                {view.greetingName ? `Servus ${view.greetingName}. ` : ""}
-                Werkstatt läuft rund · nichts hängt.
-              </p>
-            ) : (
-              <p className={styles.lead} data-testid="werkstatt-status">
-                {view.greetingName ? `Servus ${view.greetingName}. ` : ""}
+            <p
+              className={`${styles.lead} ${view.dringendCount === 0 ? styles.leadClear : ""}`}
+              role={view.dringendCount === 0 ? "status" : undefined}
+              data-testid="werkstatt-status"
+            >
+              {view.greetingName ? `Servus ${view.greetingName}. ` : ""}
+              {view.dringendCount === 0 ? (
+                <>Werkstatt läuft rund · nichts hängt.</>
+              ) : (
+                <>
                 <span className={styles.leadUrgent}><b>{view.dringendCount}</b> dringend</span>
                 {" · "}
                 <b>{view.weitereCount}</b> weitere
-              </p>
-            )
+                </>
+              )}
+            </p>
           ) : (
             <p className={styles.lead}>Eingang prüfen, Arbeit sicher übergeben.</p>
           )}
