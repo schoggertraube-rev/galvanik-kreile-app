@@ -278,16 +278,21 @@ async function assertMoreMenu(page: Page) {
 }
 
 async function assertRolfChrome(page: Page, viewport: (typeof VIEWPORTS)[number]) {
+  const homeIntake = page
+    .getByTestId("rolf-v8-home")
+    .getByRole("button", { name: "Neuer Eingang", exact: true });
   if (viewport.width >= 1300) {
     const sidebar = page.getByRole("navigation", { name: "Hauptnavigation", exact: true });
     await expect(sidebar).toBeVisible();
     await expect(sidebar.locator(":scope > *")).toHaveCount(8);
     await expect(page.getByRole("navigation", { name: "Mobile Hauptnavigation", exact: true })).toBeHidden();
+    await expect(homeIntake).toBeHidden();
   } else {
     const dock = page.getByRole("navigation", { name: "Mobile Hauptnavigation", exact: true });
     await expect(dock).toBeVisible();
     await expect(dock.locator(":scope > *")).toHaveCount(5);
     await expect(page.getByRole("navigation", { name: "Hauptnavigation", exact: true })).toBeHidden();
+    await expect(homeIntake).toBeVisible();
   }
 }
 

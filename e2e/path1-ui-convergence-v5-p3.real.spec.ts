@@ -446,13 +446,16 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
           await expect(rolf.page.getByTestId("werkstatt-wip-tile")).toBeVisible();
           await expect(emptyWorkshopHeading).toHaveCount(0);
         }
-        const hubIntake = rolf.page.getByRole("button", {
+        const workshopHub = rolf.page.getByRole("region", {
+          name: "Werkstatt",
+        });
+        const hubIntake = workshopHub.getByRole("button", {
           name: "Neuer Eingang",
           exact: true,
         });
         await expect(hubIntake).toBeVisible();
         await expect(hubIntake).toBeEnabled();
-        const goodsOut = rolf.page.getByRole("button", {
+        const goodsOut = workshopHub.getByRole("button", {
           name: "Ware raus",
           exact: true,
         });
@@ -539,7 +542,10 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
       await rolf.page.setViewportSize({ width: 1914, height: 917 });
       await rolf.page.goto("/", { waitUntil: "networkidle" });
 
-      await rolf.page.getByRole("button", { name: "Neuer Eingang" }).click();
+      await rolf.page
+        .getByRole("navigation", { name: "Hauptnavigation", exact: true })
+        .getByRole("button", { name: "Neuer Eingang", exact: true })
+        .click();
       await expect(
         rolf.page.getByRole("heading", { name: "Neuer Eingang" }),
       ).toBeVisible();
