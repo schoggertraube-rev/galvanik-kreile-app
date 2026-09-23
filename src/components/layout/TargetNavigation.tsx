@@ -39,7 +39,7 @@ export function TargetNavigation() {
   const hasCapability = (capability: string) =>
     permissions.permissions.includes(capability) && permissions.hasPermission(capability);
 
-  const operationalProfile = role === "buero" || role === "meister" || role === "readonly";
+  const operationalProfile = role === "buero" || role === "meister" || role === "readonly" || role === "werkstatt";
   const day = operationalProfile && hasCapability("perm_view_leitstand");
   const customers = operationalProfile && hasCapability("perm_view_customers");
   const invoices = (role === "buero" || role === "meister") && hasCapability("perm_view_leitstand");

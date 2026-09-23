@@ -6,13 +6,55 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import shellStyles from "@/components/layout/TargetShell.module.css";
 
+type ShellPermissionSnapshot = {
+  loading: boolean;
+  role: string | null;
+  status: "authenticated" | "unauthenticated" | "error";
+  error: string | null;
+  permissions: string[];
+  name: string;
+  initials: string;
+  hasPermission: (permission: string) => boolean;
+  refreshPermissions: () => Promise<void>;
+};
+
 const boundary = vi.hoisted(() => ({
   floatingParkedCall: vi.fn(),
-  permissions: { loading: false, role: "buero", status: "authenticated" },
+  permissions: {
+    loading: false,
+    role: "buero",
+    status: "authenticated",
+    error: null,
+    permissions: ["perm_view_leitstand", "perm_view_customers"],
+    name: "Rolf",
+    initials: "R",
+    hasPermission: vi.fn((permission: string) =>
+      ["perm_view_leitstand", "perm_view_customers"].includes(permission)),
+    refreshPermissions: vi.fn(async () => {}),
+  } as ShellPermissionSnapshot,
   parkedCallProvider: vi.fn(),
   pathname: { value: "/start" },
   realtimeSyncProvider: vi.fn(),
 }));
+
+function setPermissionSnapshot(role: string, permissions: string[]) {
+  const identity = role === "werkstatt"
+    ? { name: "Phillip", initials: "P" }
+    : role === "admin" || role === "developer"
+      ? { name: "Gregor", initials: "G" }
+      : { name: "Rolf", initials: "R" };
+
+  boundary.permissions = {
+    loading: false,
+    role,
+    status: "authenticated",
+    error: null,
+    permissions,
+    ...identity,
+    hasPermission: vi.fn((permission: string) => permissions.includes(permission)),
+    refreshPermissions: vi.fn(async () => {}),
+  };
+}
 
 vi.mock("next/navigation", () => ({
   usePathname: () => boundary.pathname.value,
@@ -78,9 +120,7 @@ function expectRemovedBrowserProvidersAbsent() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  boundary.permissions.loading = false;
-  boundary.permissions.role = "buero";
-  boundary.permissions.status = "authenticated";
+  setPermissionSnapshot("buero", ["perm_view_leitstand", "perm_view_customers"]);
 });
 
 afterEach(() => {
@@ -113,6 +153,25 @@ describe("W2C-B2M5V global browser provider containment", () => {
     expect(screen.getByTestId("entity-overlay-stack-marker")).toBeInTheDocument();
     expectRemovedBrowserProvidersAbsent();
   });
+
+  it.each(["meister", "werkstatt", "buero", "readonly", "admin", "developer"])(
+    "composes desktop and mobile navigation for authenticated %s",
+    (role) => {
+      const permissions = role === "admin" || role === "developer"
+        ? ["perm_sys_diag"]
+        : ["perm_view_leitstand", "perm_view_customers"];
+      setPermissionSnapshot(role, permissions);
+      const { container } = renderShell(role === "werkstatt" ? "/warendurchlauf" : "/orders");
+
+      expect(screen.getByTestId("target-navigation-marker")).toBeInTheDocument();
+      expect(screen.getByTestId("mobile-bottom-nav-marker")).toBeInTheDocument();
+      const shell = container.querySelector(`.${shellStyles.shell}`);
+      expect(shell).toBeInTheDocument();
+      expect(shell).toHaveClass(shellStyles.shell);
+      if (role === "werkstatt") expect(shell).toHaveClass(shellStyles.workshop);
+      else expect(shell).not.toHaveClass(shellStyles.workshop);
+    },
+  );
 
   it("uses the single permission bootstrap truth for the session warning", () => {
     boundary.permissions.status = "error";
@@ -187,6 +246,9 @@ interface GeometryCase {
   readonly dockInlineInset: number | null;
 }
 
+type GeometryRole = "buero" | "werkstatt";
+type GeometryMatrixCase = GeometryCase & { readonly role: GeometryRole };
+
 const GEOMETRY_CASES: readonly GeometryCase[] = [
   {
     name: "Desktop 1914x917",
@@ -223,6 +285,16 @@ const GEOMETRY_CASES: readonly GeometryCase[] = [
   },
 ];
 
+const GEOMETRY_MATRIX: readonly GeometryMatrixCase[] = GEOMETRY_CASES.flatMap((viewport) =>
+  (["buero", "werkstatt"] as const).map((role) => ({
+    ...viewport,
+    name: `${role} ${viewport.name}`,
+    role,
+    pagePaddingBottom:
+      role === "werkstatt" && viewport.chrome === "sidebar" ? "0px" : viewport.pagePaddingBottom,
+  })),
+);
+
 function resolveGeometryEngine(): BrowserType | null {
   for (const engine of [chromium, webkit]) {
     try {
@@ -241,11 +313,9 @@ function markerPattern(testId: string): RegExp {
   return new RegExp(`<div[^>]*data-testid="${testId}"[^>]*></div>`);
 }
 
-async function buildHarnessMarkup(): Promise<string> {
-  boundary.pathname.value = "/orders";
-  boundary.permissions.loading = false;
-  boundary.permissions.role = "buero";
-  boundary.permissions.status = "authenticated";
+async function buildHarnessMarkup(role: GeometryRole): Promise<string> {
+  boundary.pathname.value = role === "werkstatt" ? "/warendurchlauf" : "/orders";
+  setPermissionSnapshot(role, ["perm_view_leitstand", "perm_view_customers"]);
 
   // `vi.importActual` returns the real modules while their boundary deps (next/navigation,
   // PermissionsContext) stay mocked, so the markup below is product markup.
@@ -383,10 +453,13 @@ describe.skipIf(!geometryEngine)(
   "W2C-B2M5V tablet shell geometry — real browser layout of TargetShell.module.css",
   () => {
     let browser: Browser;
-    let harnessHtml: string;
+    let harnessHtml: Record<GeometryRole, string>;
 
     beforeAll(async () => {
-      harnessHtml = await buildHarnessMarkup();
+      harnessHtml = {
+        buero: await buildHarnessMarkup("buero"),
+        werkstatt: await buildHarnessMarkup("werkstatt"),
+      };
       const engine = geometryEngine;
       if (!engine) throw new Error("geometry engine unavailable");
       browser = await engine.launch();
@@ -396,14 +469,14 @@ describe.skipIf(!geometryEngine)(
       await browser?.close();
     });
 
-    it.each(GEOMETRY_CASES)(
+    it.each(GEOMETRY_MATRIX)(
       "$name renders the canonical chrome without a floating-action/dock overlap",
       async (viewport) => {
         const page = await browser.newPage({
           viewport: { width: viewport.width, height: viewport.height },
         });
         try {
-          await page.setContent(harnessHtml, { waitUntil: "load" });
+          await page.setContent(harnessHtml[viewport.role], { waitUntil: "load" });
           const measured = await measureShell(page);
 
           expect(measured.viewport).toEqual({ width: viewport.width, height: viewport.height });

@@ -23,10 +23,10 @@ export function KreileAppShell({ children, globalCreate }: { children: React.Rea
       <SessionWarningBanner show={sessionInvalid} />
       <TargetHeader compact={workshop} />
       <div className={styles.body}>
-        {!workshop ? <TargetNavigation /> : null}
+        <TargetNavigation />
         <main className={styles.content}><div className={styles.page}>{children}</div></main>
       </div>
-      {!workshop ? <MobileBottomNav /> : null}
+      <MobileBottomNav />
       <EntityOverlayStack />
       {globalCreate}
     </div>

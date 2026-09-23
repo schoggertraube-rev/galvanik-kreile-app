@@ -11,7 +11,9 @@
 
 /* The fixed mobile dock and create handle must never trap the last page section. */
 .content{overflow-x:hidden;overflow-y:auto}
-@media(max-width:1023px){.content{overscroll-behavior-y:contain;scroll-padding-bottom:calc(126px + env(safe-area-inset-bottom));touch-action:pan-y;-webkit-overflow-scrolling:touch}.page{padding-bottom:calc(126px + env(safe-area-inset-bottom))}.workshop .page{padding-bottom:0}}
+@media(min-width:1300px){.workshop .body{display:grid;grid-template-columns:248px minmax(0,1fr)}.workshop .page{padding-bottom:0}}
+@media(max-width:1299px){.workshop .page{padding-bottom:calc(98px + env(safe-area-inset-bottom))}}
+@media(max-width:1023px){.content{overscroll-behavior-y:contain;scroll-padding-bottom:calc(126px + env(safe-area-inset-bottom));touch-action:pan-y;-webkit-overflow-scrolling:touch}.page{padding-bottom:calc(126px + env(safe-area-inset-bottom))}.workshop .page{padding-bottom:calc(126px + env(safe-area-inset-bottom))}}
 
 /* Paketdemo-v2 is the only shell palette; raw values above remain only for
    legacy subflows that are outside package A. */
