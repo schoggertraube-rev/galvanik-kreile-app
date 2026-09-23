@@ -14,9 +14,9 @@ const GREGOR_ACTOR_ID = "33333333-3333-4333-8333-333333333333";
 const TEST_ORIGIN = process.env.A3_TEST_ORIGIN?.trim() || "https://localhost:3443";
 const OUTPUT_DIR = path.resolve(
   process.env.A3_EVIDENCE_OUTPUT_DIR?.trim() ||
-    path.join(process.cwd(), "docs/evidence/path1/artifacts/v5-a-shell-homes-nav"),
+    path.join(process.cwd(), "test-results/path1-v5-a3-shell-homes-nav/screens"),
 );
-const STAGING_DIR = path.resolve(process.cwd(), "test-results/path1-v5-a3-shell-homes-nav");
+const STAGING_DIR = path.resolve(process.cwd(), "test-results/path1-v5-a3-shell-homes-nav/staging");
 
 const VIEWPORTS = [
   { name: "desktop", width: 1914, height: 917 },
@@ -91,6 +91,8 @@ const RETIRED_ROUTES = [
 type AuthSignupResponse = { user?: { id?: string }; message?: string };
 type Capture = { file: string; sha256: string; viewport: string; state: string };
 type Readback = { orderId: string; orderNumber: string; exactlyOne: number };
+type PinInputMode = "keyboard" | "touch";
+type PinProof = { actorId: string; viewport: string; mode: PinInputMode; submits: number };
 
 function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -173,18 +175,56 @@ async function assertSignedSession(page: Page, actorId: string, sessionSecret: s
   expect(payload).toMatchObject({ userId: actorId, tenantId: TENANT });
 }
 
-async function loginPin(page: Page, actorId: string, pin: string, sessionSecret: string) {
+async function loginPin(
+  page: Page,
+  actorId: string,
+  pin: string,
+  sessionSecret: string,
+  mode: PinInputMode = "touch",
+): Promise<PinProof> {
   await page.goto("/start", { waitUntil: "networkidle" });
   await page.getByTestId(`pin-user-card-${createPinLoginHandle(actorId)}`).click();
   const dialog = page.getByTestId("pin-login-dialog");
   await expect(dialog).toBeVisible();
+  let submits = 0;
+  const countSubmit = (request: { method: () => string }) => {
+    if (request.method() === "POST") submits += 1;
+  };
+  page.on("request", countSubmit);
   const destination = page.waitForURL((url) => url.pathname === "/", { timeout: 30_000 });
-  for (const digit of pin) {
-    await dialog.getByRole("button", { name: digit, exact: true }).click();
+  if (mode === "touch") {
+    await dialog.getByRole("button", { name: pin[0], exact: true }).click();
+    await expect(dialog.getByLabel("1 von 4 Stellen eingegeben")).toBeVisible();
+    await dialog.getByRole("button", { name: "Löschen", exact: true }).click();
+    await expect(dialog.getByLabel("0 von 4 Stellen eingegeben")).toBeVisible();
+    for (const digit of pin) await dialog.getByRole("button", { name: digit, exact: true }).click();
+  } else {
+    await page.keyboard.press(pin[0]);
+    await expect(dialog.getByLabel("1 von 4 Stellen eingegeben")).toBeVisible();
+    await page.keyboard.press("Backspace");
+    await expect(dialog.getByLabel("0 von 4 Stellen eingegeben")).toBeVisible();
+    for (const digit of pin) {
+      await page.evaluate((value) => {
+        window.dispatchEvent(new KeyboardEvent("keydown", {
+          bubbles: true,
+          code: `Numpad${value}`,
+          key: "Unidentified",
+        }));
+      }, digit);
+    }
   }
   await destination;
   await page.waitForLoadState("networkidle");
+  page.off("request", countSubmit);
+  expect(submits).toBe(1);
   await assertSignedSession(page, actorId, sessionSecret);
+  const viewport = page.viewportSize();
+  return {
+    actorId,
+    viewport: `${viewport?.width ?? 0}x${viewport?.height ?? 0}`,
+    mode,
+    submits,
+  };
 }
 
 async function loginGregor(
@@ -221,9 +261,53 @@ async function capture(page: Page, file: string, state: string): Promise<Capture
   };
 }
 
-async function newContext(browser: Browser, viewport = VIEWPORTS[0]) {
+async function newContext(browser: Browser, viewport: { width: number; height: number } = VIEWPORTS[0]) {
   const context = await browser.newContext({ viewport });
   return { context, page: await context.newPage() };
+}
+
+async function assertMoreMenu(page: Page) {
+  await page.getByRole("button", { name: "Mehr öffnen", exact: true }).click();
+  const more = page.getByRole("dialog", { name: "Mehr", exact: true });
+  await expect(more).toBeVisible();
+  await expect(more.getByRole("heading", { name: "Mehr", exact: true })).toBeVisible();
+  await expect(more.getByText("Seltene Funktionen eine Ebene tiefer.")).toBeVisible();
+  for (const label of ["Infos rein", "Werkstatt", "Einstellungen", "Abmelden"])
+    await expect(more.getByText(label, { exact: true })).toBeVisible();
+  await more.getByRole("button", { name: "Schließen", exact: true }).click();
+}
+
+async function assertRolfChrome(page: Page, viewport: (typeof VIEWPORTS)[number]) {
+  if (viewport.width >= 1300) {
+    const sidebar = page.getByRole("navigation", { name: "Hauptnavigation" });
+    await expect(sidebar).toBeVisible();
+    await expect(sidebar.locator(":scope > *")).toHaveCount(8);
+    await expect(page.getByRole("navigation", { name: "Mobile Hauptnavigation" })).toBeHidden();
+  } else {
+    const dock = page.getByRole("navigation", { name: "Mobile Hauptnavigation" });
+    await expect(dock).toBeVisible();
+    await expect(dock.locator(":scope > *")).toHaveCount(5);
+    await expect(page.getByRole("navigation", { name: "Hauptnavigation" })).toBeHidden();
+  }
+}
+
+async function assertNoFloatingActionOverlap(page: Page) {
+  const overlaps = await page.evaluate(() => {
+    const create = document.querySelector<HTMLButtonElement>('button[aria-label="Anlegen"]')
+      ?? [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Anlegen");
+    if (!create) return ["Anlegen fehlt"];
+    const createRect = create.getBoundingClientRect();
+    const candidates = [...document.querySelectorAll<HTMLElement>('[data-testid="rolf-v8-home"] button, [data-testid="rolf-v8-home"] a, nav[aria-label="Mobile Hauptnavigation"]')];
+    return candidates.flatMap((candidate) => {
+      const style = getComputedStyle(candidate);
+      const rect = candidate.getBoundingClientRect();
+      if (style.display === "none" || style.visibility === "hidden" || rect.width === 0 || rect.height === 0) return [];
+      const intersects = createRect.left < rect.right && createRect.right > rect.left
+        && createRect.top < rect.bottom && createRect.bottom > rect.top;
+      return intersects ? [candidate.getAttribute("aria-label") ?? candidate.textContent?.trim() ?? candidate.tagName] : [];
+    });
+  });
+  expect(overlaps).toEqual([]);
 }
 
 function localIsoDate(offsetDays: number): string {
@@ -277,6 +361,7 @@ async function createIntake(
 
 async function clickRolfNavigation(page: Page) {
   const targets = [
+    ["Ware raus", "/orders"],
     ["Werkstatt", "/warendurchlauf"],
     ["Aufträge", "/orders"],
     ["Kunden & Kontakt", "/customers"],
@@ -287,13 +372,45 @@ async function clickRolfNavigation(page: Page) {
     await page.getByRole("link", { name, exact: true }).click();
     await page.waitForURL((url) => url.pathname === pathname);
   }
+  await page.goto("/orders", { waitUntil: "networkidle" });
+  await page.getByRole("link", { name: "Der Tag", exact: true }).click();
+  await page.waitForURL((url) => url.pathname === "/");
+  await page.getByRole("link", { name: "Einstellungen", exact: true }).click();
+  await page.waitForLoadState("networkidle");
+  expect(new URL(page.url()).pathname).toBe("/");
   await page.goto("/", { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Suche öffnen" }).click();
   await expect(page.getByRole("dialog", { name: "Kunden und Aufträge" })).toBeVisible();
   await page.getByRole("button", { name: "Suche schließen" }).click();
   await page.getByRole("button", { name: "Anlegen", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: /Was (?:möchtest du|möchten Sie) anlegen\?/i })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: /Was möchtest du anlegen\?/i })).toBeVisible();
   await page.getByRole("button", { name: "Anlegen schließen", exact: true }).click();
+}
+
+async function clickSharedMorePaths(page: Page) {
+  await page.goto("/", { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Mehr öffnen", exact: true }).click();
+  await page.getByRole("dialog", { name: "Mehr", exact: true }).getByRole("button", { name: /^Infos rein/ }).click();
+  await expect(page.getByRole("dialog", { name: /Was möchtest du anlegen\?/i })).toBeVisible();
+  await page.getByRole("button", { name: "Anlegen schließen", exact: true }).click();
+
+  await page.getByRole("button", { name: "Mehr öffnen", exact: true }).click();
+  await page.getByRole("dialog", { name: "Mehr", exact: true }).locator('a[href="/warendurchlauf"]').click();
+  await page.waitForURL((url) => url.pathname === "/warendurchlauf");
+
+  await page.goto("/", { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Mehr öffnen", exact: true }).click();
+  await page.getByRole("dialog", { name: "Mehr", exact: true }).locator('a[href="/settings"]').click();
+  await page.waitForLoadState("networkidle");
+  expect(new URL(page.url()).pathname).toBe("/");
+}
+
+async function clickSharedMoreLogout(page: Page) {
+  await page.goto("/", { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Mehr öffnen", exact: true }).click();
+  const destination = page.waitForURL((url) => url.pathname === "/start");
+  await page.getByRole("dialog", { name: "Mehr", exact: true }).getByRole("button", { name: /^Abmelden/ }).click();
+  await destination;
 }
 
 async function clickRolfMobileNavigation(page: Page) {
@@ -312,8 +429,8 @@ async function clickRolfMobileNavigation(page: Page) {
   }
   await page.goto("/", { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Mehr", exact: true }).click();
-  const more = page.getByRole("dialog", { name: "Weitere Kernbereiche" });
-  await more.getByRole("link", { name: "Werkstatt", exact: true }).click();
+  const more = page.getByRole("dialog", { name: "Mehr", exact: true });
+  await more.locator('a[href="/warendurchlauf"]').click();
   await page.waitForURL((url) => url.pathname === "/warendurchlauf");
 }
 
@@ -339,7 +456,7 @@ test.describe("PATH1 A3 – V5 Shell, Rollen-Homes und Navigation", () => {
   test.use({ baseURL: TEST_ORIGIN, ignoreHTTPSErrors: true });
 
   test("belegt die drei Rollen, responsive V5-Flächen, echte Readbacks und 404-Quarantäne", async ({ browser }) => {
-    test.setTimeout(420_000);
+    test.setTimeout(600_000);
     const databaseUrl = requiredEnv("DATABASE_URL");
     const apiUrl = requiredEnv("NEXT_PUBLIC_SUPABASE_URL");
     const anonKey = requiredEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
@@ -364,6 +481,7 @@ test.describe("PATH1 A3 – V5 Shell, Rollen-Homes und Navigation", () => {
     const sql = postgres(databaseUrl, { max: 2, prepare: false });
     const contexts: BrowserContext[] = [];
     const captures: Capture[] = [];
+    const pinProofs: PinProof[] = [];
     const browserErrors: string[] = [];
 
     try {
@@ -384,13 +502,38 @@ test.describe("PATH1 A3 – V5 Shell, Rollen-Homes und Navigation", () => {
           updated_at = excluded.updated_at
       `;
 
+      for (const viewport of VIEWPORTS) {
+        for (const actor of [
+          { id: ROLF_ACTOR_ID, pin: rolfPin, role: "rolf" as const },
+          { id: PHILLIP_ACTOR_ID, pin: phillipPin, role: "phillip" as const },
+        ]) {
+          for (const mode of ["keyboard", "touch"] as const) {
+            const proof = await newContext(browser, viewport);
+            try {
+              pinProofs.push(await loginPin(proof.page, actor.id, actor.pin, sessionSecret, mode));
+              if (actor.role === "rolf") {
+                await expect(proof.page.getByRole("heading", { name: "Der Tag", exact: true })).toBeVisible();
+                await assertRolfChrome(proof.page, viewport);
+              } else {
+                await expect(proof.page.getByRole("heading", { name: "Werkstatt", exact: true })).toBeVisible();
+                await expect(proof.page.getByRole("navigation", { name: "Hauptnavigation" })).toHaveCount(0);
+                await expect(proof.page.getByRole("navigation", { name: "Mobile Hauptnavigation" })).toHaveCount(0);
+                await expect(proof.page.getByRole("navigation", { name: "Werkstattaktionen" }).getByRole("button")).toHaveCount(5);
+              }
+            } finally {
+              await proof.context.close();
+            }
+          }
+        }
+      }
+      expect(pinProofs).toHaveLength(12);
+
       const start = await newContext(browser);
       contexts.push(start.context);
       for (const viewport of VIEWPORTS) {
         await start.page.setViewportSize(viewport);
         await start.page.goto("/start", { waitUntil: "networkidle" });
-        await expect(start.page.getByRole("heading", { name: "Wer arbeitet gerade?" })).toBeVisible();
-        await expect(start.page.getByText(/Wähle deinen Namen und melde dich an\./)).toBeVisible();
+        await expect(start.page.getByRole("heading", { name: "Persönlichen Code eingeben", exact: true })).toBeVisible();
         await expect(start.page.getByRole("button", { name: /Rolf/ })).toBeVisible();
         await expect(start.page.getByRole("button", { name: /Phillip/ })).toBeVisible();
         await expect(start.page.getByRole("button", { name: /Gregor/ })).toBeVisible();
@@ -402,7 +545,7 @@ test.describe("PATH1 A3 – V5 Shell, Rollen-Homes und Navigation", () => {
       contexts.push(rolf.context);
       rolf.page.on("pageerror", (error) => browserErrors.push(`Rolf:${error.message}`));
       await loginPin(rolf.page, ROLF_ACTOR_ID, rolfPin, sessionSecret);
-      await expect(rolf.page.getByRole("heading", { name: "Guten Tag, Rolf" })).toBeVisible();
+      await expect(rolf.page.getByRole("heading", { name: "Der Tag", exact: true })).toBeVisible();
       const readbacks = [
         await createIntake(rolf.page, sql, suffix, 1),
         await createIntake(rolf.page, sql, suffix, 2),
@@ -411,11 +554,15 @@ test.describe("PATH1 A3 – V5 Shell, Rollen-Homes und Navigation", () => {
         await rolf.page.setViewportSize(viewport);
         await rolf.page.goto("/", { waitUntil: "networkidle" });
         await expect(rolf.page.getByTestId("rolf-v8-home")).toContainText(readbacks[0].orderNumber);
-        await expect(rolf.page.locator("body")).not.toContainText(/Geplant|kommt bald/i);
+        await expect(rolf.page.locator("body")).not.toContainText(/Geplant|kommt bald|wareneingang/i);
+        await assertRolfChrome(rolf.page, viewport);
+        await assertNoFloatingActionOverlap(rolf.page);
+        await assertMoreMenu(rolf.page);
         captures.push(await capture(rolf.page, `a-rolf-${viewport.name}-${viewport.width}x${viewport.height}.png`, "rolf-v8-real-projection"));
       }
       await rolf.page.setViewportSize(VIEWPORTS[0]);
       await clickRolfNavigation(rolf.page);
+      await clickSharedMorePaths(rolf.page);
       await clickRolfMobileNavigation(rolf.page);
 
       const phillip = await newContext(browser);
@@ -432,11 +579,17 @@ test.describe("PATH1 A3 – V5 Shell, Rollen-Homes und Navigation", () => {
       for (const viewport of VIEWPORTS) {
         await phillip.page.setViewportSize(viewport);
         await phillip.page.goto("/", { waitUntil: "networkidle" });
+        await expect(phillip.page.getByRole("navigation", { name: "Hauptnavigation" })).toHaveCount(0);
+        await expect(phillip.page.getByRole("navigation", { name: "Mobile Hauptnavigation" })).toHaveCount(0);
+        await expect(phillip.page.getByRole("navigation", { name: "Werkstattaktionen" }).getByRole("button")).toHaveCount(5);
+        await expect(phillip.page.getByRole("button", { name: "Anlegen", exact: true })).toHaveCount(0);
+        await assertMoreMenu(phillip.page);
         captures.push(await capture(phillip.page, `a-phillip-${viewport.name}-${viewport.width}x${viewport.height}.png`, "phillip-v4-real-projection"));
       }
       await phillip.page.setViewportSize(VIEWPORTS[0]);
       await phillip.page.goto("/", { waitUntil: "networkidle" });
       await clickPhillipActions(phillip.page);
+      await clickSharedMoreLogout(phillip.page);
 
       const gregor = await newContext(browser);
       contexts.push(gregor.context);
@@ -470,6 +623,13 @@ test.describe("PATH1 A3 – V5 Shell, Rollen-Homes und Navigation", () => {
         synthetic: true,
         tenant: TENANT,
         actors: { rolf: "READY", phillip: "READY", gregor: "READY" },
+        acceptanceMatrix: {
+          roles: ["rolf", "phillip"],
+          viewports: VIEWPORTS.map(({ width, height }) => `${width}x${height}`),
+          pinModes: ["keyboard", "touch"],
+          pinProofs,
+          screenshotsArtifact: "path1-v5-a3-shell-homes-screens",
+        },
         commandReadbacks: readbacks,
         dRes001: "COMMAND_RECEIPT_AND_EXACTLY_ONE_READBACK",
         captures,

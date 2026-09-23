@@ -64,6 +64,7 @@ vi.mock("@/lib/auth/PermissionsContext", () => ({
 }));
 vi.mock("@/components/layout/TargetHeader", () => ({
   TargetHeader: () => <div data-testid="target-header-marker" />,
+  MoreMenu: () => null,
 }));
 vi.mock("@/components/layout/TargetNavigation", () => ({
   TargetNavigation: () => <div data-testid="target-navigation-marker" />,
@@ -154,24 +155,30 @@ describe("W2C-B2M5V global browser provider containment", () => {
     expectRemovedBrowserProvidersAbsent();
   });
 
-  it.each(["meister", "werkstatt", "buero", "readonly", "admin", "developer"])(
-    "composes desktop and mobile navigation for authenticated %s",
+  it.each(["meister", "buero"])(
+    "composes the Rolf desktop and mobile navigation for authenticated %s",
     (role) => {
-      const permissions = role === "admin" || role === "developer"
-        ? ["perm_sys_diag"]
-        : ["perm_view_leitstand", "perm_view_customers"];
-      setPermissionSnapshot(role, permissions);
-      const { container } = renderShell(role === "werkstatt" ? "/warendurchlauf" : "/orders");
+      setPermissionSnapshot(role, ["perm_view_leitstand", "perm_view_customers"]);
+      const { container } = renderShell("/orders");
 
       expect(screen.getByTestId("target-navigation-marker")).toBeInTheDocument();
       expect(screen.getByTestId("mobile-bottom-nav-marker")).toBeInTheDocument();
       const shell = container.querySelector(`.${shellStyles.shell}`);
       expect(shell).toBeInTheDocument();
       expect(shell).toHaveClass(shellStyles.shell);
-      if (role === "werkstatt") expect(shell).toHaveClass(shellStyles.workshop);
-      else expect(shell).not.toHaveClass(shellStyles.workshop);
+      expect(shell).not.toHaveClass(shellStyles.workshop);
     },
   );
+
+  it("keeps Phillip on the workshop shell without Rolf sidebar or mobile dock", () => {
+    setPermissionSnapshot("werkstatt", ["perm_view_leitstand", "perm_view_customers"]);
+    const { container } = renderShell("/warendurchlauf");
+
+    expect(screen.getByTestId("target-header-marker")).toBeInTheDocument();
+    expect(screen.queryByTestId("target-navigation-marker")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("mobile-bottom-nav-marker")).not.toBeInTheDocument();
+    expect(container.querySelector(`.${shellStyles.shell}`)).toHaveClass(shellStyles.workshop);
+  });
 
   it("uses the single permission bootstrap truth for the session warning", () => {
     boundary.permissions.status = "error";
@@ -246,7 +253,7 @@ interface GeometryCase {
   readonly dockInlineInset: number | null;
 }
 
-type GeometryRole = "buero" | "werkstatt";
+type GeometryRole = "buero";
 type GeometryMatrixCase = GeometryCase & { readonly role: GeometryRole };
 
 const GEOMETRY_CASES: readonly GeometryCase[] = [
@@ -285,15 +292,11 @@ const GEOMETRY_CASES: readonly GeometryCase[] = [
   },
 ];
 
-const GEOMETRY_MATRIX: readonly GeometryMatrixCase[] = GEOMETRY_CASES.flatMap((viewport) =>
-  (["buero", "werkstatt"] as const).map((role) => ({
-    ...viewport,
-    name: `${role} ${viewport.name}`,
-    role,
-    pagePaddingBottom:
-      role === "werkstatt" && viewport.chrome === "sidebar" ? "0px" : viewport.pagePaddingBottom,
-  })),
-);
+const GEOMETRY_MATRIX: readonly GeometryMatrixCase[] = GEOMETRY_CASES.map((viewport) => ({
+  ...viewport,
+  name: `buero ${viewport.name}`,
+  role: "buero",
+}));
 
 function resolveGeometryEngine(): BrowserType | null {
   for (const engine of [chromium, webkit]) {
@@ -314,7 +317,7 @@ function markerPattern(testId: string): RegExp {
 }
 
 async function buildHarnessMarkup(role: GeometryRole): Promise<string> {
-  boundary.pathname.value = role === "werkstatt" ? "/warendurchlauf" : "/orders";
+  boundary.pathname.value = "/orders";
   setPermissionSnapshot(role, ["perm_view_leitstand", "perm_view_customers"]);
 
   // `vi.importActual` returns the real modules while their boundary deps (next/navigation,
@@ -458,7 +461,6 @@ describe.skipIf(!geometryEngine)(
     beforeAll(async () => {
       harnessHtml = {
         buero: await buildHarnessMarkup("buero"),
-        werkstatt: await buildHarnessMarkup("werkstatt"),
       };
       const engine = geometryEngine;
       if (!engine) throw new Error("geometry engine unavailable");

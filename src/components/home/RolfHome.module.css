@@ -1,6 +1,7 @@
 .screen {
   width: min(100%, 1440px);
   margin: 0 auto;
+  padding-bottom: 84px;
   color: #12161f;
 }
 .hero {

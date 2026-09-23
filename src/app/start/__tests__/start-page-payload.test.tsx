@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -107,7 +107,9 @@ describe("StartPage product actor boundary", () => {
     expect(screen.getByText("Gregor", { exact: true })).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("pin-user-card-synthetic-rolf-handle"));
-    expect(screen.getByText("PIN eingeben", { exact: true })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Persönlichen Code eingeben", level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Löschen" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Neu" })).toBeInTheDocument();
     expect(ports.loginWithPin).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /Gregor/ }));
@@ -119,7 +121,7 @@ describe("StartPage product actor boundary", () => {
     ["desktop", 1914, 917],
     ["mobile", 390, 844],
   ])(
-    "keeps understandable login guidance and every product identity at the %s viewport",
+    "keeps the compact V5 login and every product identity at the %s viewport",
     async (_viewport, width, height) => {
       Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
       Object.defineProperty(window, "innerHeight", { configurable: true, value: height });
@@ -128,13 +130,34 @@ describe("StartPage product actor boundary", () => {
       const { default: StartPage } = await import("@/app/start/page");
       render(await StartPage());
 
-      expect(screen.getByText("Sicher anmelden · direkt zur passenden Arbeit")).toBeVisible();
-      expect(screen.getByRole("button", { name: /Rolf.*Meister.*Mit PIN anmelden/ })).toBeVisible();
-      expect(screen.getByRole("button", { name: /Phillip.*Werkstatt.*Mit PIN anmelden/ })).toBeVisible();
-      expect(screen.getByRole("button", { name: /Gregor.*Systemadministrator.*per E-Mail anmelden/ })).toBeVisible();
+      expect(screen.getByRole("heading", { name: "Persönlichen Code eingeben", level: 1 })).toBeVisible();
+      expect(screen.getByRole("button", { name: /Rolf.*Meister/ })).toBeVisible();
+      expect(screen.getByRole("button", { name: /Phillip.*Werkstatt/ })).toBeVisible();
+      expect(screen.getByRole("button", { name: /Gregor.*Systemadministrator/ })).toBeVisible();
+      expect(document.body).not.toHaveTextContent(/Willkommen zurück|Sicher anmelden|Wähle deinen Namen/i);
       expect(document.body).not.toHaveTextContent(/tenantgebunden|rollenbasiert|Produktprofil|Systemzugang ist erhöht/i);
     },
   );
+
+  it("accepts NumLock-off numpad codes, deletes with Backspace and submits exactly once after digit four", async () => {
+    ports.loginWithPin.mockReturnValue(new Promise(() => {}));
+    const { default: StartPage } = await import("@/app/start/page");
+    render(await StartPage());
+    fireEvent.click(screen.getByTestId("pin-user-card-synthetic-rolf-handle"));
+
+    fireEvent.keyDown(window, { key: "End", code: "Numpad4" });
+    expect(screen.getByLabelText("1 von 4 Stellen eingegeben")).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Backspace", code: "Backspace" });
+    expect(screen.getByLabelText("0 von 4 Stellen eingegeben")).toBeInTheDocument();
+
+    for (const digit of ["4", "1", "8", "6"]) {
+      fireEvent.keyDown(window, { key: "Unidentified", code: `Numpad${digit}` });
+    }
+    await waitFor(() => expect(ports.loginWithPin).toHaveBeenCalledTimes(1));
+    expect(ports.loginWithPin).toHaveBeenCalledWith("synthetic-rolf-handle", "4186");
+    fireEvent.keyDown(window, { key: "Unidentified", code: "Numpad9" });
+    expect(ports.loginWithPin).toHaveBeenCalledTimes(1);
+  });
 
   it("disables every login path and exposes only a correlation reference on readiness failure", async () => {
     ports.readProductActorReadiness.mockResolvedValue({
@@ -151,7 +174,7 @@ describe("StartPage product actor boundary", () => {
 
     render(element);
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Anmeldung ist momentan nicht sicher verfügbar",
+      "Anmeldung ist momentan nicht verfügbar",
     );
     expect(screen.getByText(/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Gregor/ })).toBeDisabled();

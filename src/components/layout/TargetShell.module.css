@@ -11,9 +11,7 @@
 
 /* The fixed mobile dock and create handle must never trap the last page section. */
 .content{overflow-x:hidden;overflow-y:auto}
-@media(min-width:1300px){.workshop .body{display:grid;grid-template-columns:248px minmax(0,1fr)}.workshop .page{padding-bottom:0}}
-@media(max-width:1299px){.workshop .page{padding-bottom:calc(98px + env(safe-area-inset-bottom))}}
-@media(max-width:1023px){.content{overscroll-behavior-y:contain;scroll-padding-bottom:calc(126px + env(safe-area-inset-bottom));touch-action:pan-y;-webkit-overflow-scrolling:touch}.page{padding-bottom:calc(126px + env(safe-area-inset-bottom))}.workshop .page{padding-bottom:calc(126px + env(safe-area-inset-bottom))}}
+@media(max-width:1023px){.content{overscroll-behavior-y:contain;scroll-padding-bottom:calc(126px + env(safe-area-inset-bottom));touch-action:pan-y;-webkit-overflow-scrolling:touch}.page{padding-bottom:calc(126px + env(safe-area-inset-bottom))}.workshop .page{padding-bottom:0}}
 
 /* Paketdemo-v2 is the only shell palette; raw values above remain only for
    legacy subflows that are outside package A. */
@@ -24,3 +22,27 @@
 .initials{background:var(--gold-100);color:var(--gold-600)}
 .sidebar a[aria-current=page]{box-shadow:inset 3px 0 var(--accent-orange)}
 .globalCreateButton{background:var(--accent-orange);color:var(--navy-900)}
+
+.sidebar nav > a,
+.sidebar nav > button{width:100%;min-height:50px;padding:0 14px;border:0;border-radius:13px;display:flex;align-items:center;gap:12px;background:transparent;color:#d9dce4;font:750 13px/1.2 var(--font-inter),system-ui,sans-serif;text-align:left;cursor:pointer}
+.sidebar nav > a:hover,
+.sidebar nav > button:hover,
+.sidebar nav > a[aria-current=page]{background:#2a3040;color:#fff}
+.identity .avatarButton{width:auto;min-width:56px;height:48px;padding:3px 7px 3px 3px;border-radius:999px;display:flex;align-items:center;gap:2px}
+.identity .avatarButton > svg{width:15px}
+.identity .avatarButton .initials{width:40px;height:40px}
+
+.moreBackdrop{position:fixed;inset:0;z-index:180;display:grid;place-items:center;padding:18px;background:rgb(18 22 31/.55);backdrop-filter:blur(2px)}
+.moreSheet{width:min(620px,100%);padding:22px;border-radius:20px;display:grid;gap:18px;background:var(--surface-card);box-shadow:0 30px 80px rgb(18 22 31/.3)}
+.moreHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
+.moreHeader h2{margin:0;font:500 32px/1.05 var(--font-fraunces),Georgia,serif}
+.moreHeader p{margin:6px 0 0;color:var(--text-muted);font-size:13px}
+.moreClose{width:46px;height:46px;flex:none;border:1px solid var(--neutral-gray-300);border-radius:13px;display:grid;place-items:center;background:var(--surface-card);color:var(--navy-900);cursor:pointer}
+.moreGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.moreGrid .moreTile{width:100%;min-height:88px;padding:14px;border:1px solid var(--neutral-gray-300);border-radius:14px;display:flex;align-items:center;gap:12px;background:var(--bg-app-soft);color:var(--navy-900);font:inherit;text-align:left;cursor:pointer}
+.moreGrid .moreTile > svg{width:23px;height:23px;flex:none;color:var(--accent-orange)}
+.moreGrid .moreTile > span{display:grid;gap:3px}
+.moreGrid .moreTile strong{font-size:14px}
+.moreGrid .moreTile small{color:var(--text-muted);font-size:11px}
+@media(max-width:1299px){.moreBackdrop{display:flex;align-items:flex-end}.moreSheet{width:min(620px,100%);margin:0 auto}.moreGrid .moreTile{min-height:78px}}
+@media(max-width:520px){.identity .avatarButton{min-width:48px}.identity .avatarButton > svg{display:none}.moreBackdrop{padding:8px}.moreSheet{padding:18px 14px calc(18px + env(safe-area-inset-bottom))}.moreGrid{grid-template-columns:1fr}.moreGrid .moreTile{min-height:62px}}

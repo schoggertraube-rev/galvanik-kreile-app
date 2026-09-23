@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClipboardList, Home, Menu, PackageCheck, ReceiptText, Settings, Users, X } from "lucide-react";
+import { ClipboardList, Home, Menu, ReceiptText, Users } from "lucide-react";
 import { useState } from "react";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
+import { MoreMenu } from "./TargetHeader";
 import styles from "./TargetShell.module.css";
 
 export function MobileBottomNav() {
@@ -26,30 +27,40 @@ export function MobileBottomNav() {
 
   if (!completeSnapshot) return null;
 
-  const { role } = permissions;
+  const rolfProfile = permissions.role === "meister" || permissions.role === "buero";
   const hasCapability = (capability: string) =>
     permissions.permissions.includes(capability) && permissions.hasPermission(capability);
+  const hasRolfNavigation =
+    rolfProfile &&
+    hasCapability("perm_view_leitstand") &&
+    hasCapability("perm_view_customers");
 
-  const operationalProfile = role === "buero" || role === "meister" || role === "readonly" || role === "werkstatt";
-  const day = operationalProfile && hasCapability("perm_view_leitstand");
-  const customers = operationalProfile && hasCapability("perm_view_customers");
-  const invoices = (role === "buero" || role === "meister") && hasCapability("perm_view_leitstand");
-  const workshop = day;
-  const settings = (role === "admin" || role === "developer") && hasCapability("perm_sys_diag");
-  const link = (href: string, label: string, Icon: typeof Home) => <Link href={href} prefetch={false} aria-current={href === "/" ? pathname === "/" ? "page" : undefined : pathname.startsWith(href) ? "page" : undefined}><Icon aria-hidden="true" /><span>{label}</span></Link>;
+  if (!hasRolfNavigation) return null;
 
-  if (!day && !customers && !invoices && !workshop && !settings) return null;
+  const link = (href: string, label: string, Icon: typeof Home) => (
+    <Link
+      href={href}
+      prefetch={false}
+      aria-current={href === "/" ? (pathname === "/" ? "page" : undefined) : (pathname.startsWith(href) ? "page" : undefined)}
+    >
+      <Icon aria-hidden="true" />
+      <span>{label}</span>
+    </Link>
+  );
 
   return (
     <>
       <nav className={styles.mobileDock} aria-label="Mobile Hauptnavigation">
-        {day ? link("/", "Der Tag", Home) : null}
-        {day ? link("/orders", "Aufträge", ClipboardList) : null}
-        {customers ? link("/customers", "Kunden", Users) : null}
-        {invoices ? link("/buchhaltung/rechnungen", "Geld", ReceiptText) : null}
-        <button type="button" onClick={() => setOpen(true)} aria-expanded={open}><Menu aria-hidden="true" /><span>Mehr</span></button>
+        {link("/", "Der Tag", Home)}
+        {link("/orders", "Aufträge", ClipboardList)}
+        {link("/customers", "Kunden", Users)}
+        {link("/buchhaltung/rechnungen", "Geld", ReceiptText)}
+        <button type="button" onClick={() => setOpen(true)} aria-expanded={open}>
+          <Menu aria-hidden="true" />
+          <span>Mehr</span>
+        </button>
       </nav>
-      {open ? <div className={styles.moreBackdrop} onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}><section className={styles.moreSheet} role="dialog" aria-modal="true" aria-label="Weitere Kernbereiche"><button type="button" className={styles.moreClose} onClick={() => setOpen(false)} aria-label="Schließen"><X /></button>{workshop ? <Link href="/warendurchlauf" prefetch={false} onClick={() => setOpen(false)}><PackageCheck />Werkstatt</Link> : null}{settings ? <Link href="/settings" prefetch={false} onClick={() => setOpen(false)}><Settings />Einstellungen</Link> : null}</section></div> : null}
+      <MoreMenu open={open} onClose={() => setOpen(false)} />
     </>
   );
 }

@@ -2,16 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClipboardList, Home, PackageCheck, ReceiptText, Settings, Users } from "lucide-react";
+import {
+  ClipboardList,
+  Home,
+  Inbox,
+  PackageCheck,
+  ReceiptText,
+  Settings,
+  Truck,
+  Users,
+} from "lucide-react";
+import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import styles from "./TargetShell.module.css";
-
-const CORE = [
-  { href: "/", label: "Der Tag", icon: Home },
-  { href: "/warendurchlauf", label: "Werkstatt", icon: PackageCheck },
-  { href: "/orders", label: "Aufträge", icon: ClipboardList },
-  { href: "/customers", label: "Kunden & Kontakt", icon: Users },
-] as const;
 
 function current(pathname: string, href: string): boolean {
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -35,27 +38,41 @@ export function TargetNavigation() {
 
   if (!completeSnapshot) return null;
 
-  const { role } = permissions;
+  const rolfProfile = permissions.role === "meister" || permissions.role === "buero";
   const hasCapability = (capability: string) =>
     permissions.permissions.includes(capability) && permissions.hasPermission(capability);
+  const hasRolfNavigation =
+    rolfProfile &&
+    hasCapability("perm_view_leitstand") &&
+    hasCapability("perm_view_customers");
 
-  const operationalProfile = role === "buero" || role === "meister" || role === "readonly" || role === "werkstatt";
-  const day = operationalProfile && hasCapability("perm_view_leitstand");
-  const customers = operationalProfile && hasCapability("perm_view_customers");
-  const invoices = (role === "buero" || role === "meister") && hasCapability("perm_view_leitstand");
-  const settings = (role === "admin" || role === "developer") && hasCapability("perm_sys_diag");
-  const links = CORE.filter(({ href }) => {
-    if (href === "/customers") return customers;
-    return day;
-  });
+  if (!hasRolfNavigation) return null;
 
-  if (links.length === 0 && !invoices && !settings) return null;
+  const link = (href: string, label: string, Icon: typeof Home) => (
+    <Link
+      href={href}
+      prefetch={false}
+      aria-current={current(pathname, href) ? "page" : undefined}
+    >
+      <Icon aria-hidden="true" />
+      <span>{label}</span>
+    </Link>
+  );
+
   return (
     <aside className={styles.sidebar}>
       <nav aria-label="Hauptnavigation">
-        {links.map(({ href, label, icon: Icon }) => <Link key={href} href={href} prefetch={false} aria-current={current(pathname, href) ? "page" : undefined}><Icon aria-hidden="true" /><span>{label}</span></Link>)}
-        {invoices ? <Link href="/buchhaltung/rechnungen" prefetch={false} aria-current={pathname.startsWith("/buchhaltung/rechnungen") ? "page" : undefined}><ReceiptText aria-hidden="true" /><span>Geld &amp; Rechnungen</span></Link> : null}
-        {settings ? <Link href="/settings" prefetch={false} aria-current={pathname.startsWith("/settings") ? "page" : undefined}><Settings aria-hidden="true" /><span>Einstellungen</span></Link> : null}
+        <button type="button" onClick={() => requestGlobalCreate("DIRECT_INTAKE")}>
+          <Inbox aria-hidden="true" />
+          <span>Neuer Eingang</span>
+        </button>
+        {link("/orders?station=fertig", "Ware raus", Truck)}
+        {link("/", "Der Tag", Home)}
+        {link("/warendurchlauf", "Werkstatt", PackageCheck)}
+        {link("/orders", "Aufträge", ClipboardList)}
+        {link("/customers", "Kunden & Kontakt", Users)}
+        {link("/buchhaltung/rechnungen", "Geld & Rechnungen", ReceiptText)}
+        {link("/settings", "Einstellungen", Settings)}
       </nav>
     </aside>
   );

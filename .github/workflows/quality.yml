@@ -612,6 +612,9 @@ jobs:
           KREILE_GREGOR_APP_USER_ID: 33333333-3333-4333-8333-333333333333
           P3_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           P3_TEST_ORIGIN: https://localhost:3443
+          A3_CANDIDATE_SHA: ${{ github.sha }}
+          A3_TEST_ORIGIN: https://localhost:3443
+          A3_EVIDENCE_OUTPUT_DIR: test-results/path1-v5-a3-shell-homes-nav/screens
         run: |
           set -euo pipefail
           if [ -d public ]; then
@@ -693,7 +696,10 @@ jobs:
             sleep 1
           done
           test "$ready" -eq 1
-          CI= npx playwright test e2e/path1-ui-convergence-v5-p3.real.spec.ts --project=Tablet --workers=1
+          CI= npx playwright test \
+            e2e/path1-ui-convergence-v5-p3.real.spec.ts \
+            e2e/path1-ui-convergence-v5-a-shell-homes.real.spec.ts \
+            --project=Tablet --workers=1
 
       - name: Upload P3 synthetic browser compatibility evidence
         if: always()
@@ -704,6 +710,16 @@ jobs:
           path: |
             docs/evidence/path1/artifacts/p3-core-surfaces-search/*.png
             docs/evidence/path1/artifacts/p3-core-surfaces-search/p3-browser-receipt.json
+
+      - name: Upload A3 V5 shell homes screens and Exact-SHA receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: path1-v5-a3-shell-homes-screens
+          if-no-files-found: error
+          path: |
+            test-results/path1-v5-a3-shell-homes-nav/screens/*.png
+            test-results/path1-v5-a3-shell-homes-nav/screens/a-browser-receipt.json
 
       - name: Stop isolated local Supabase
         if: always()
