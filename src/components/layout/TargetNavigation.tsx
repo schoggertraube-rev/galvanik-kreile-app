@@ -20,23 +20,30 @@ function current(pathname: string, href: string): boolean {
 export function TargetNavigation() {
   const pathname = usePathname();
   const permissions = usePermissions();
+  const completeSnapshot =
+    permissions.loading === false &&
+    permissions.status === "authenticated" &&
+    permissions.error === null &&
+    typeof permissions.role === "string" &&
+    permissions.role.length > 0 &&
+    Array.isArray(permissions.permissions) &&
+    permissions.permissions.every((permission) => typeof permission === "string") &&
+    typeof permissions.name === "string" &&
+    typeof permissions.initials === "string" &&
+    typeof permissions.hasPermission === "function" &&
+    typeof permissions.refreshPermissions === "function";
+
+  if (!completeSnapshot) return null;
+
   const { role } = permissions;
-  const status = permissions.status ?? (role ? "authenticated" : "unauthenticated");
-  const loading = permissions.loading ?? false;
-  const hasPermission = typeof permissions.hasPermission === "function"
-    ? permissions.hasPermission
-    : (permission: string) => {
-        if (permission === "perm_sys_diag") return role === "admin" || role === "developer";
-        if (permission === "perm_view_customers") return role === "buero" || role === "meister" || role === "readonly";
-        return permission === "perm_view_leitstand" && role !== null;
-      };
-  if (loading || status !== "authenticated" || !role) return null;
+  const hasCapability = (capability: string) =>
+    permissions.permissions.includes(capability) && permissions.hasPermission(capability);
 
   const operationalProfile = role === "buero" || role === "meister" || role === "readonly";
-  const day = operationalProfile && hasPermission("perm_view_leitstand");
-  const customers = operationalProfile && hasPermission("perm_view_customers");
-  const invoices = (role === "buero" || role === "meister") && hasPermission("perm_view_leitstand");
-  const settings = (role === "admin" || role === "developer") && hasPermission("perm_sys_diag");
+  const day = operationalProfile && hasCapability("perm_view_leitstand");
+  const customers = operationalProfile && hasCapability("perm_view_customers");
+  const invoices = (role === "buero" || role === "meister") && hasCapability("perm_view_leitstand");
+  const settings = (role === "admin" || role === "developer") && hasCapability("perm_sys_diag");
   const links = CORE.filter(({ href }) => {
     if (href === "/customers") return customers;
     return day;

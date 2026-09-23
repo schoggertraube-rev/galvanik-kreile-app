@@ -98,6 +98,47 @@ function requiredEnv(name: string): string {
   return value;
 }
 
+function requireSha(value: string, label: string): string {
+  const normalized = value.trim().toLowerCase();
+  if (!/^[0-9a-f]{40}$/.test(normalized)) {
+    throw new Error(`PATH1_A3_INVALID_SHA:${label}`);
+  }
+  return normalized;
+}
+
+function readCheckoutSha(): string {
+  const gitDirectory = path.resolve(process.cwd(), ".git");
+  const head = readFileSync(path.join(gitDirectory, "HEAD"), "utf8").trim();
+  if (!head.startsWith("ref: ")) return requireSha(head, "DETACHED_HEAD");
+
+  const reference = head.slice("ref: ".length).trim();
+  try {
+    return requireSha(readFileSync(path.join(gitDirectory, reference), "utf8"), reference);
+  } catch (error) {
+    const packedReferences = readFileSync(path.join(gitDirectory, "packed-refs"), "utf8");
+    const packed = packedReferences
+      .split(/\r?\n/)
+      .find((line) => !line.startsWith("#") && !line.startsWith("^") && line.endsWith(` ${reference}`));
+    if (!packed) throw error;
+    return requireSha(packed.slice(0, 40), reference);
+  }
+}
+
+function readBuildBinding() {
+  const nextDirectory = path.resolve(process.cwd(), ".next");
+  const files = ["BUILD_ID", "build-manifest.json"] as const;
+  const digest = createHash("sha256");
+  for (const file of files) {
+    digest.update(file);
+    digest.update("\0");
+    digest.update(readFileSync(path.join(nextDirectory, file)));
+    digest.update("\0");
+  }
+  const buildId = readFileSync(path.join(nextDirectory, "BUILD_ID"), "utf8").trim();
+  if (!buildId) throw new Error("PATH1_A3_BUILD_ID_MISSING");
+  return { buildId, artifactSha256: digest.digest("hex"), files };
+}
+
 async function createLocalAuthUser(apiUrl: string, anonKey: string, email: string, password: string) {
   const response = await fetch(`${apiUrl.replace(/\/$/, "")}/auth/v1/signup`, {
     method: "POST",
@@ -303,6 +344,10 @@ test.describe("PATH1 A3 – V5 Shell, Rollen-Homes und Navigation", () => {
     const apiUrl = requiredEnv("NEXT_PUBLIC_SUPABASE_URL");
     const anonKey = requiredEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
     const sessionSecret = requiredEnv("APP_SESSION_SECRET");
+    const declaredCandidateSha = requireSha(requiredEnv("A3_CANDIDATE_SHA"), "A3_CANDIDATE_SHA");
+    const checkoutSha = readCheckoutSha();
+    expect(declaredCandidateSha).toBe(checkoutSha);
+    const buildBinding = readBuildBinding();
     expect(TEST_ORIGIN).toMatch(/^https:\/\/localhost:\d+$/);
     expect(databaseUrl).toMatch(/^postgresql:\/\/postgres:postgres@127\.0\.0\.1:\d+\/postgres$/);
     expect(apiUrl).toMatch(/^http:\/\/(?:127\.0\.0\.1|localhost):\d+$/);
@@ -415,10 +460,10 @@ test.describe("PATH1 A3 – V5 Shell, Rollen-Homes und Navigation", () => {
       }
 
       expect(browserErrors).toEqual([]);
-      const candidateCodeSha = requiredEnv("A3_CANDIDATE_SHA");
-      expect(candidateCodeSha).toMatch(/^[0-9a-f]{40}$/);
       const receipt = {
-        candidateCodeShaAtRun: candidateCodeSha,
+        candidateCodeShaAtRun: checkoutSha,
+        declaredCandidateSha,
+        buildBinding,
         v5ReferenceSha256: V5_SHA256,
         evidenceScope: "SYNTHETIC_LOCAL_FIXTURE",
         productionReadiness: "OPEN",
