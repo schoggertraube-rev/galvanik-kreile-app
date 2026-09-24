@@ -54,14 +54,16 @@ function dayGreeting(hour: number): string {
 }
 
 function dayLine(orders: readonly OrdersHomeSource[], displayName: string, now = new Date()): string {
-  if (orders.length === 0) return "Heute keine offenen Aufträge.";
   const firstName = displayName.trim().split(/\s+/)[0] || "Rolf";
+  const salutation = `${dayGreeting(now.getHours())}, ${firstName}.`;
+  if (orders.length === 0) return salutation;
   const urgent = orders.filter((order) => order.risk === "red").length;
   const other = orders.length - urgent;
-  const salutation = `${dayGreeting(now.getHours())}, ${firstName}.`;
-  return urgent === 0
-    ? `${salutation} ${other} brauchen dich.`
-    : `${salutation} ${urgent} dringend · ${other} weitere brauchen dich.`;
+  if (urgent === 0) {
+    return `${salutation} ${other === 1 ? "1 braucht dich." : `${other} brauchen dich.`}`;
+  }
+  if (other === 0) return `${salutation} ${urgent} dringend.`;
+  return `${salutation} ${urgent} dringend · ${other === 1 ? "1 weiterer braucht dich." : `${other} weitere brauchen dich.`}`;
 }
 
 function CompactOrderList({

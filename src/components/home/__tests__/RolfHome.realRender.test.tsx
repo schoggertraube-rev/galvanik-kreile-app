@@ -75,9 +75,9 @@ describe("Rolf V8 real public projection", () => {
   });
 
   it.each([
-    { risks: ["red", "red", "yellow"], expected: "Guten Morgen, Rolf. 2 dringend · 1 weitere brauchen dich." },
+    { risks: ["red", "red", "yellow"], expected: "Guten Morgen, Rolf. 2 dringend · 1 weiterer braucht dich." },
     { risks: ["yellow", "orange"], expected: "Guten Morgen, Rolf. 2 brauchen dich." },
-    { risks: [], expected: "Heute keine offenen Aufträge." },
+    { risks: [], expected: "Guten Morgen, Rolf." },
   ] as const)("derives the truthful day line for %#", ({ risks, expected }) => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 8, 24, 9));
@@ -89,6 +89,7 @@ describe("Rolf V8 real public projection", () => {
     }));
     const { unmount } = render(<RolfHomeClient model={{ kind: orders.length === 0 ? "empty" : "data", role: "meister", canCreateOrder: true, projection: { ...projection, orders, priority: orders, recent: orders } }} />);
     expect(screen.getByText(expected)).toBeInTheDocument();
+    if (risks.length === 0) expect(screen.getAllByText("Heute keine offenen Aufträge.")).toHaveLength(1);
     unmount();
   });
 
@@ -106,7 +107,7 @@ describe("Rolf V8 real public projection", () => {
     expect(screen.getByRole("heading", { name: "Das braucht dich" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Heute raus" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Neu seit gestern 18:30" })).toBeInTheDocument();
-    expect(screen.getAllByText("Heute keine offenen Aufträge.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Heute keine offenen Aufträge.")).toHaveLength(1);
     expect(screen.getByText("Heute keine fertigen Aufträge.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Ware raus/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Warenausgang öffnen/ })).toBeDisabled();
