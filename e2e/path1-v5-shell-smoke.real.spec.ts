@@ -82,20 +82,25 @@ async function loginPin(page: Page, actor: (typeof ACTORS)[number], secret: stri
   await assertSignedSession(page, actor.id, secret);
 }
 
-async function capture(page: Page, actor: string, viewport: (typeof VIEWPORTS)[number]) {
+async function capture(page: Page, actor: string, viewport: (typeof VIEWPORTS)[number], pagePath?: string) {
   mkdirSync(OUTPUT_DIR, { recursive: true });
-  const file = `${actor}-${viewport.name}-${viewport.width}x${viewport.height}`;
+  const suffix = pagePath ? `-path-${pagePath === "/" ? "root" : pagePath.slice(1).replace(/\//g, "-")}` : "";
+  const file = `${actor}-${viewport.name}-${viewport.width}x${viewport.height}${suffix}`;
   await page.screenshot({ path: path.join(OUTPUT_DIR, `${file}.png`), fullPage: false });
   writeFileSync(path.join(OUTPUT_DIR, `${file}.txt`), `${await page.locator("main").innerText()}\n`, "utf8");
   return file;
 }
 
-async function assertPage(page: Page) {
+async function assertPage(page: Page, actor: string, viewport: (typeof VIEWPORTS)[number], pagePath: string, problems: string[], screens: string[]) {
   await expect(page.locator("main h1")).toBeVisible();
-  await expect(page.locator('[role="alert"]').filter({ hasText: /\S/ })).toHaveCount(0);
+  const alerts = (await page.locator('[role="alert"]').allInnerTexts()).map((text) => text.trim()).filter(Boolean);
+  if (alerts.length) {
+    problems.push(`${pagePath}:\n${alerts.join("\n")}`);
+    screens.push(await capture(page, actor, viewport, pagePath));
+  }
 }
 
-async function visitDesktopLinks(page: Page) {
+async function visitDesktopLinks(page: Page, actor: string, viewport: (typeof VIEWPORTS)[number], problems: string[], screens: string[]) {
   const navigation = page.getByRole("navigation", { name: "Hauptnavigation", exact: true });
   await expect(navigation).toBeVisible();
   const hrefs = await navigation.locator("a[href]").evaluateAll((links) => links.map((link) => link.getAttribute("href")).filter((href): href is string => Boolean(href)));
@@ -105,11 +110,11 @@ async function visitDesktopLinks(page: Page) {
     const reached = page.waitForURL((url) => url.pathname === destination, { waitUntil: "commit" });
     await page.getByRole("navigation", { name: "Hauptnavigation", exact: true }).locator(`a[href="${href}"]`).click();
     await reached;
-    await assertPage(page);
+    await assertPage(page, actor, viewport, destination, problems, screens);
   }
 }
 
-async function visitMore(page: Page) {
+async function visitMore(page: Page, actor: string, viewport: (typeof VIEWPORTS)[number], problems: string[], screens: string[]) {
   const dock = page.getByRole("navigation", { name: "Mobile Hauptnavigation", exact: true });
   await expect(dock).toBeVisible();
   await expect(dock.locator(":scope > *")).toHaveCount(5);
@@ -120,7 +125,7 @@ async function visitMore(page: Page) {
     const reached = page.waitForURL((url) => url.pathname === href, { waitUntil: "commit" });
     await more.locator(`a[href="${href}"]`).click();
     await reached;
-    await assertPage(page);
+    await assertPage(page, actor, viewport, href, problems, screens);
     await page.goto("/", { waitUntil: "domcontentloaded" });
   }
 }
@@ -139,6 +144,7 @@ test.describe("PATH1 V5 Shell Smoke", () => {
     expect(declaredSha).toBe(checkoutSha());
     const sql = postgres(databaseUrl, { max: 1, prepare: false });
     const screens: string[] = [];
+    const problems: string[] = [];
     const suffix = `${Date.now()}-${process.pid}`;
     const emailRolf = `shell-smoke-rolf-${suffix}@local.test`;
     const emailPhillip = `shell-smoke-phillip-${suffix}@local.test`;
@@ -162,14 +168,16 @@ test.describe("PATH1 V5 Shell Smoke", () => {
         try {
           const page = await context.newPage();
           await loginPin(page, actor, sessionSecret);
+          await assertPage(page, actor.key, viewport, "/", problems, screens);
           screens.push(await capture(page, actor.key, viewport));
-          if (viewport.width >= 1300) await visitDesktopLinks(page);
-          else await visitMore(page);
+          if (viewport.width >= 1300) await visitDesktopLinks(page, actor.key, viewport, problems, screens);
+          else await visitMore(page, actor.key, viewport, problems, screens);
         } finally {
           await context.close();
         }
       }
       writeFileSync(path.join(OUTPUT_DIR, "a-browser-receipt.json"), `${JSON.stringify({ candidateCodeShaAtRun: declaredSha, v5ReferenceSha256: V5_SHA256, actors: ACTORS.map(({ key }) => key), viewports: VIEWPORTS, screens }, null, 2)}\n`, "utf8");
+      expect(problems, problems.join("\n")).toEqual([]);
     } finally {
       await sql.end();
     }
