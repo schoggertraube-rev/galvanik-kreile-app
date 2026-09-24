@@ -3,9 +3,7 @@
 import { usePathname } from "next/navigation";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { SessionWarningBanner } from "./SessionWarningBanner";
-import { TargetHeader } from "./TargetHeader";
-import { TargetNavigation } from "./TargetNavigation";
-import { MobileBottomNav } from "./MobileBottomNav";
+import { MockAppFrame } from "./MockAppFrame";
 import { EntityOverlayStack } from "./EntityOverlayStack";
 import styles from "./TargetShell.module.css";
 
@@ -18,16 +16,11 @@ export function KreileAppShell({ children, globalCreate }: { children: React.Rea
   if (loginOnly) return <div className={styles.loginRoot}>{children}</div>;
 
   return (
-    <div className={styles.shell}>
+    <>
       <SessionWarningBanner show={sessionInvalid} />
-      <TargetHeader />
-      <div className={styles.body}>
-        <TargetNavigation />
-        <main className={styles.content}><div className={styles.page}>{children}</div></main>
-      </div>
-      <MobileBottomNav />
+      <MockAppFrame>{children}</MockAppFrame>
       <EntityOverlayStack />
       {globalCreate}
-    </div>
+    </>
   );
 }

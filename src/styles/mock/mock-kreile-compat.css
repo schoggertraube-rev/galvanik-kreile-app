@@ -1,0 +1,8 @@
+/* Die Owner-Mock-CSS (mock-kreile-rolf-home.css, unveraendert) verlaesst sich bei <button> auf die
+   Browser-Standardwerte. Tailwind-Preflight setzt diese global zurueck (transparent, padding 0).
+   Hier werden genau diese Standardwerte fuer den Mock-Bereich wiederhergestellt; alle Mock-Regeln
+   mit eigener Angabe sind spezifischer und gelten weiter. */
+.mock-kreile-rolf-home button {
+  background-color: ButtonFace;
+  padding: 1px 6px;
+}

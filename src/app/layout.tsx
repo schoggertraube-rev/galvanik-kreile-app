@@ -3,11 +3,13 @@ import { Suspense } from "react";
 import { Fraunces, Inter } from "next/font/google";
 import { Geist_Mono } from "next/font/google";
 import "./globals.css";
+import "../styles/mock/mock-kreile-rolf-home.css";
+import "../styles/mock/mock-kreile-compat.css";
 
 const fraunces = Fraunces({
   variable: "--font-fraunces",
   subsets: ["latin"],
-  weight: ["400", "700", "800", "900"],
+  weight: ["400", "500", "600", "700", "800", "900"],
 });
 
 const inter = Inter({
