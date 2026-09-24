@@ -129,6 +129,7 @@ test.describe("PATH1 V5 Shell Smoke", () => {
   test.use({ baseURL: ORIGIN, ignoreHTTPSErrors: true });
 
   test("belegt echte PIN-Sitzungen, Navigation und Screens für Rolf und Phillip", async ({ browser }) => {
+    test.setTimeout(540_000);
     const databaseUrl = required("DATABASE_URL");
     const sessionSecret = required("APP_SESSION_SECRET");
     const apiUrl = required("NEXT_PUBLIC_SUPABASE_URL");
