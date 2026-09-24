@@ -112,6 +112,9 @@ async function visitDesktopLinks(page: Page, actor: string, viewport: (typeof VI
     await page.getByRole("navigation", { name: "Hauptnavigation", exact: true }).locator(`[data-href="${href}"]`).click();
     await reached;
     await assertPage(page, actor, viewport, destination, problems, screens);
+    if (!screens.includes(`${actor}-${viewport.name}-${viewport.width}x${viewport.height}-path-${destination === "/" ? "root" : destination.slice(1).replace(/\//g, "-")}`)) {
+      screens.push(await capture(page, actor, viewport, destination));
+    }
   }
 }
 
