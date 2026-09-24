@@ -150,7 +150,6 @@ export function OrdersAppAdapter() {
     const needle = normalized(query);
     return state.orders.filter((order) => matchesQuery(order, needle));
   }, [query, state]);
-  const hasTaskColumn = orders.some((order) => Boolean(order.task?.trim()));
   const canCreateOrder = !permissionsLoading && hasPermission("perm_data_orders");
 
   const updateQuery = (value: string) => {
@@ -165,9 +164,7 @@ export function OrdersAppAdapter() {
           <h1 id="orders-title" style={{ margin: 0 }}>
             Aufträge
           </h1>
-          {state.kind === "data" ? (
-            <p>Suche und Filter sind nur der Einstieg. Geöffnet wird immer dieselbe Auftragskarte V8.</p>
-          ) : null}
+          <p>Suche und Filter sind nur der Einstieg. Geöffnet wird immer dieselbe Auftragskarte V8.</p>
         </div>
         {canCreateOrder ? (
           <button className="app-btn primary" type="button" onClick={() => requestGlobalCreate("DIRECT_INTAKE")}>
@@ -176,35 +173,53 @@ export function OrdersAppAdapter() {
         ) : null}
       </div>
 
+      <div className="app-toolbar">
+        <label className="app-search">
+          ⌕
+          <input
+            aria-label="Aufträge filtern"
+            onChange={(event) => updateQuery(event.target.value)}
+            placeholder="Auftrag, Kunde, Teil oder Oberfläche"
+            style={{}}
+            value={query}
+          />
+        </label>
+      </div>
+
       {state.kind === "loading" ? (
         <div className="app-list" role="status" aria-busy="true">
+          <div className="app-list-head">
+            <span>Auftrag</span>
+            <span>Ort &amp; Termin</span>
+            <span>Nächste Handlung</span>
+            <span aria-hidden="true"></span>
+          </div>
           <div className="app-row">Aufträge werden geladen.</div>
         </div>
       ) : null}
 
       {state.kind === "denied" || state.kind === "error" || state.kind === "conflict" ? (
         <div className="app-list" role={state.kind === "error" ? "alert" : "status"}>
+          <div className="app-list-head">
+            <span>Auftrag</span>
+            <span>Ort &amp; Termin</span>
+            <span>Nächste Handlung</span>
+            <span aria-hidden="true"></span>
+          </div>
           <div className="app-row">{state.message || failureMessage(state.kind)}</div>
         </div>
       ) : null}
 
       {state.kind === "data" ? (
         <>
-          <div className="app-toolbar">
-            <label className="app-search">
-              ⌕
-              <input
-                aria-label="Aufträge filtern"
-                onChange={(event) => updateQuery(event.target.value)}
-                placeholder="Auftrag, Kunde, Teil oder Oberfläche"
-                style={{}}
-                value={query}
-              />
-            </label>
-          </div>
-
           {orders.length === 0 ? (
             <div className="app-list" role="status">
+              <div className="app-list-head">
+                <span>Auftrag</span>
+                <span>Ort &amp; Termin</span>
+                <span>Nächste Handlung</span>
+                <span aria-hidden="true"></span>
+              </div>
               <div className="app-row">
                 {state.orders.length === 0 ? "Keine Aufträge." : "Keine Aufträge gefunden."}
               </div>
@@ -214,7 +229,7 @@ export function OrdersAppAdapter() {
               <div className="app-list-head">
                 <span>Auftrag</span>
                 <span>Ort &amp; Termin</span>
-                {hasTaskColumn ? <span>Nächste Handlung</span> : <span aria-hidden="true"></span>}
+                <span>Nächste Handlung</span>
                 <span aria-hidden="true"></span>
               </div>
               {orders.map((order) => {
@@ -237,7 +252,7 @@ export function OrdersAppAdapter() {
                       {location}
                       {dueValue ? <span className={`app-status ${statusClass}`.trim()}>{dueValue}</span> : null}
                     </div>
-                    {hasTaskColumn ? <div className="app-meta">{task}</div> : <span aria-hidden="true"></span>}
+                    <div className="app-meta">{task}</div>
                     <button
                       aria-label={`Auftrag ${order.orderNumber} öffnen`}
                       className="app-btn"
