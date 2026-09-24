@@ -87,7 +87,7 @@ async function newContext(browser: Browser, viewport: { width: number; height: n
 
 async function openCreate(page: Page) {
   await page.getByRole("button", { name: "Anlegen", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Was möchten Sie anlegen?" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Was möchtest du anlegen?" })).toBeVisible();
 }
 
 async function receiptValues(region: Locator) {

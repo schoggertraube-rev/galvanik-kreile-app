@@ -449,7 +449,7 @@ async function clickSharedMorePaths(page: Page) {
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Mehr öffnen", exact: true }).click();
   await page.getByRole("dialog", { name: "Mehr", exact: true }).getByRole("button", { name: /^Infos rein/ }).click();
-  await expect(page.getByRole("dialog", { name: /Was möchtest du anlegen\?/i })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Neuer Eingang", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Anlegen schließen", exact: true }).click();
 
   await page.getByRole("button", { name: "Mehr öffnen", exact: true }).click();

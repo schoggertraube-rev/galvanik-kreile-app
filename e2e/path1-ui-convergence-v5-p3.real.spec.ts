@@ -325,7 +325,7 @@ async function returnToWorkshopHub(
       .click();
     await page
       .getByRole("dialog", { name: "Mehr", exact: true })
-      .getByRole("link", { name: "Werkstatt", exact: true })
+      .locator('a[href="/warendurchlauf"]')
       .click();
   }
   await reachedWorkshop;
