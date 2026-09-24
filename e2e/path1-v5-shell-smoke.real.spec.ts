@@ -93,7 +93,7 @@ async function capture(page: Page, actor: string, viewport: (typeof VIEWPORTS)[n
 
 async function assertPage(page: Page, actor: string, viewport: (typeof VIEWPORTS)[number], pagePath: string, problems: string[], screens: string[]) {
   await expect(page.locator("main h1")).toBeVisible();
-  const alerts = (await page.locator('[role="alert"]').allInnerTexts()).map((text) => text.trim()).filter(Boolean);
+  const alerts = (await page.locator('[role="alert"]:not(#__next-route-announcer__)').allInnerTexts()).map((text) => text.trim()).filter(Boolean);
   if (alerts.length) {
     problems.push(`${pagePath}:\n${alerts.join("\n")}`);
     screens.push(await capture(page, actor, viewport, pagePath));
