@@ -433,6 +433,9 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
           })
           .toMatch(/^(empty|data)$/);
         const workshopIsEmpty = await emptyWorkshopHeading.isVisible();
+        const workshopHub = rolf.page.getByRole("region", {
+          name: "Werkstatt",
+        });
         if (workshopIsEmpty) {
           await expect(
             rolf.page.getByText(
@@ -442,13 +445,10 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
           await expect(populatedWorkshopSource).toHaveCount(0);
         } else {
           await expect(populatedWorkshopSource).toBeVisible();
-          await expect(rolf.page.getByTestId("werkstatt-status")).toBeVisible();
-          await expect(rolf.page.getByTestId("werkstatt-wip-tile")).toBeVisible();
+          await expect(workshopHub.getByTestId("werkstatt-status")).toBeVisible();
+          await expect(workshopHub.getByTestId("werkstatt-wip-tile")).toBeVisible();
           await expect(emptyWorkshopHeading).toHaveCount(0);
         }
-        const workshopHub = rolf.page.getByRole("region", {
-          name: "Werkstatt",
-        });
         const hubIntake = workshopHub.getByRole("button", {
           name: "Neuer Eingang",
           exact: true,

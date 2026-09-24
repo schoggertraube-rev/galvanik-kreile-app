@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PhillipWerkstattViewModel, WerkstattViewPorts } from "../server/types";
 import { WerkstattView } from "./WerkstattView";
@@ -30,39 +30,15 @@ const ports: WerkstattViewPorts = {
 
 afterEach(() => {
   cleanup();
-  delete (window as Window & { __kreileWerkstattViewRegistry?: unknown })
-    .__kreileWerkstattViewRegistry;
 });
 
-describe("WerkstattView projection ownership", () => {
-  it("keeps exactly one projection active while a preserved route instance is still mounted", async () => {
-    render(
-      <>
-        <WerkstattView view={view} ports={ports} onRetry={vi.fn()} />
-        <WerkstattView view={view} ports={ports} onRetry={vi.fn()} />
-      </>,
-    );
-
-    await waitFor(() => expect(screen.getAllByTestId("werkstatt-status")).toHaveLength(1));
-    expect(screen.getAllByTestId("werkstatt-wip-tile")).toHaveLength(1);
-    expect(screen.getAllByRole("navigation", { name: "Werkstattaktionen" })).toHaveLength(1);
-  });
-
-  it("takes document-wide ownership from a projection registered by another route chunk", async () => {
-    const previousOwner = Symbol("previous-route-chunk");
-    (window as Window & { __kreileWerkstattViewRegistry?: unknown })
-      .__kreileWerkstattViewRegistry = {
-        mounted: [previousOwner],
-        listeners: new Set(),
-        active: previousOwner,
-      };
-
+describe("WerkstattView projection", () => {
+  it("keeps status, WIP and actions inside the named Werkstatt region", () => {
     render(<WerkstattView view={view} ports={ports} onRetry={vi.fn()} />);
 
-    await waitFor(() => expect(screen.getAllByTestId("werkstatt-status")).toHaveLength(1));
-    const registry = (window as Window & {
-      __kreileWerkstattViewRegistry?: { active: symbol | null };
-    }).__kreileWerkstattViewRegistry;
-    expect(registry?.active).not.toBe(previousOwner);
+    const workshop = screen.getByRole("region", { name: "Werkstatt" });
+    expect(within(workshop).getByTestId("werkstatt-status")).toBeVisible();
+    expect(within(workshop).getByTestId("werkstatt-wip-tile")).toBeVisible();
+    expect(within(workshop).getByRole("navigation", { name: "Werkstattaktionen" })).toBeVisible();
   });
 });

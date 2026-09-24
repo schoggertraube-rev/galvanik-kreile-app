@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   PhillipOrderCard,
   PhillipWerkstattViewModel,
@@ -12,63 +12,6 @@ import styles from "./WerkstattView.module.css";
 const PICKER_TITLE_ID = "werkstatt-order-picker-title";
 const PICKER_DIALOG_ID = "werkstatt-order-picker";
 type PickerKind = "order" | "goods-out";
-
-type WerkstattViewOwner = symbol;
-type WerkstattViewRegistry = {
-  mounted: WerkstattViewOwner[];
-  listeners: Set<() => void>;
-  active: WerkstattViewOwner | null;
-};
-type WerkstattRegistryWindow = Window & {
-  __kreileWerkstattViewRegistry?: WerkstattViewRegistry;
-};
-
-const serverWerkstattViewRegistry: WerkstattViewRegistry = {
-  mounted: [],
-  listeners: new Set(),
-  active: null,
-};
-
-function getWerkstattViewRegistry(): WerkstattViewRegistry {
-  if (typeof window === "undefined") return serverWerkstattViewRegistry;
-  const host = window as WerkstattRegistryWindow;
-  host.__kreileWerkstattViewRegistry ??= {
-    mounted: [],
-    listeners: new Set(),
-    active: null,
-  };
-  return host.__kreileWerkstattViewRegistry;
-}
-
-function emitWerkstattViewChange() {
-  getWerkstattViewRegistry().listeners.forEach((listener) => listener());
-}
-
-function subscribeWerkstattView(listener: () => void) {
-  const registry = getWerkstattViewRegistry();
-  registry.listeners.add(listener);
-  return () => registry.listeners.delete(listener);
-}
-
-function getActiveWerkstattView() {
-  return getWerkstattViewRegistry().active;
-}
-
-function registerWerkstattView(owner: WerkstattViewOwner) {
-  const registry = getWerkstattViewRegistry();
-  registry.mounted.push(owner);
-  registry.active = owner;
-  emitWerkstattViewChange();
-
-  return () => {
-    const index = registry.mounted.lastIndexOf(owner);
-    if (index >= 0) registry.mounted.splice(index, 1);
-    if (registry.active === owner) {
-      registry.active = registry.mounted.at(-1) ?? null;
-      emitWerkstattViewChange();
-    }
-  };
-}
 
 function riskStatusClassName(risk: string): string {
   if (risk === "red" || risk === "blocked") return `${styles.statusBadge} ${styles.statusDanger}`;
@@ -122,17 +65,6 @@ export function WerkstattView({
   const pickerDialogRef = useRef<HTMLElement>(null);
   const pickerCloseRef = useRef<HTMLButtonElement>(null);
   const restoreFocusRef = useRef(false);
-  const [owner] = useState<WerkstattViewOwner>(() => Symbol("werkstatt-view"));
-  const activeOwner = useSyncExternalStore(
-    subscribeWerkstattView,
-    getActiveWerkstattView,
-    () => null,
-  );
-
-  useLayoutEffect(
-    () => registerWerkstattView(owner),
-    [owner],
-  );
 
   const isData = view.kind === "data";
   const isEmpty = view.kind === "empty";
@@ -186,8 +118,6 @@ export function WerkstattView({
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [activePicker, isPickerOpen]);
-
-  if (activeOwner !== null && activeOwner !== owner) return null;
 
   const openPicker = (event: { currentTarget: HTMLElement }, picker: PickerKind) => {
     pickerTriggerRef.current = event.currentTarget;

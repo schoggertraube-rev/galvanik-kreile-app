@@ -605,36 +605,32 @@ test.describe("PATH1 A3 – V5 Shell, Rollen-Homes und Navigation", () => {
       await expect(gregor.page.locator('a[href="/orders"], a[href="/customers"], a[href="/warendurchlauf"]')).toHaveCount(0);
 
       const retiredResults: Array<{ path: string; status: number }> = [];
-      const retiredPages = await Promise.all(
-        Array.from({ length: 4 }, () => rolf.context.newPage()),
+      const retiredWorkerCount = 6;
+      const workerResults = await Promise.all(
+        Array.from({ length: retiredWorkerCount }, async (_, workerIndex) => {
+          const results: Array<{ index: number; path: string; status: number }> = [];
+          for (
+            let routeIndex = workerIndex;
+            routeIndex < RETIRED_ROUTES.length;
+            routeIndex += retiredWorkerCount
+          ) {
+            const retiredPath = RETIRED_ROUTES[routeIndex];
+            const response = await rolf.context.request.get(
+              new URL(retiredPath, TEST_ORIGIN).toString(),
+            );
+            const status = response.status();
+            expect(status, `${retiredPath} muss ein echter 404 sein`).toBe(404);
+            results.push({ index: routeIndex, path: retiredPath, status });
+          }
+          return results;
+        }),
       );
-      try {
-        const workerResults = await Promise.all(
-          retiredPages.map(async (retiredPage, workerIndex) => {
-            const results: Array<{ index: number; path: string; status: number }> = [];
-            for (
-              let routeIndex = workerIndex;
-              routeIndex < RETIRED_ROUTES.length;
-              routeIndex += retiredPages.length
-            ) {
-              const retiredPath = RETIRED_ROUTES[routeIndex];
-              const response = await retiredPage.goto(retiredPath, { waitUntil: "domcontentloaded" });
-              const status = response?.status() ?? 0;
-              expect(status, `${retiredPath} muss ein echter 404 sein`).toBe(404);
-              results.push({ index: routeIndex, path: retiredPath, status });
-            }
-            return results;
-          }),
-        );
-        retiredResults.push(
-          ...workerResults
-            .flat()
-            .sort((left, right) => left.index - right.index)
-            .map(({ path: retiredPath, status }) => ({ path: retiredPath, status })),
-        );
-      } finally {
-        await Promise.all(retiredPages.map((retiredPage) => retiredPage.close()));
-      }
+      retiredResults.push(
+        ...workerResults
+          .flat()
+          .sort((left, right) => left.index - right.index)
+          .map(({ path: retiredPath, status }) => ({ path: retiredPath, status })),
+      );
 
       expect(browserErrors).toEqual([]);
       const receipt = {
