@@ -87,8 +87,9 @@ describe("Rolf V8 real public projection", () => {
       orderNumber: `A-2026-00${index + 1}`,
       risk,
     }));
-    render(<RolfHomeClient model={{ kind: orders.length === 0 ? "empty" : "data", role: "meister", canCreateOrder: true, projection: { ...projection, orders, priority: orders, recent: orders } }} />);
+    const { unmount } = render(<RolfHomeClient model={{ kind: orders.length === 0 ? "empty" : "data", role: "meister", canCreateOrder: true, projection: { ...projection, orders, priority: orders, recent: orders } }} />);
     expect(screen.getByText(expected)).toBeInTheDocument();
+    unmount();
   });
 
   it.each(["2026-09-16T08:15:00.000Z", "2026-01-15T23:40:00.000Z"])(

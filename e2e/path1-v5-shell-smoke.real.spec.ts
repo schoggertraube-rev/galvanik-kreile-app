@@ -122,7 +122,7 @@ test.describe("PATH1 V5 Shell Smoke", () => {
     const suffix = `${Date.now()}-${process.pid}`;
     try {
       await sql`
-        INSERT INTO public.app_users (id, tenant_id, email, full_name, role, pin_hash, active, created_at, updated_at)
+        INSERT INTO public.app_users (id, tenant_id, email, full_name, role, pin_hash, active)
         VALUES ${sql(ACTORS.map((actor) => ({ id: actor.id, tenant_id: TENANT, email: `shell-smoke-${actor.key}-${suffix}@local.test`, full_name: actor.key === "rolf" ? "Rolf" : "Phillip", role: actor.role, pin_hash: bcrypt.hashSync(actor.pin, 12), active: true })), "id", "tenant_id", "email", "full_name", "role", "pin_hash", "active")}
         ON CONFLICT (id) DO UPDATE SET email = excluded.email, full_name = excluded.full_name, role = excluded.role, pin_hash = excluded.pin_hash, active = excluded.active, updated_at = now()
       `;
