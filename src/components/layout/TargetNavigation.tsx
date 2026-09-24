@@ -39,14 +39,17 @@ export function TargetNavigation() {
   if (!completeSnapshot) return null;
 
   const rolfProfile = permissions.role === "meister" || permissions.role === "buero";
+  const supportedProfile = rolfProfile || permissions.role === "werkstatt";
   const hasCapability = (capability: string) =>
     permissions.permissions.includes(capability) && permissions.hasPermission(capability);
-  const hasRolfNavigation =
-    rolfProfile &&
+  const hasCoreNavigation =
+    supportedProfile &&
     hasCapability("perm_view_leitstand") &&
     hasCapability("perm_view_customers");
 
-  if (!hasRolfNavigation) return null;
+  if (!hasCoreNavigation) return null;
+
+  const canViewFinance = rolfProfile || hasCapability("perm_view_prices");
 
   const link = (href: string, label: string, Icon: typeof Home) => (
     <Link
@@ -71,7 +74,7 @@ export function TargetNavigation() {
         {link("/warendurchlauf", "Werkstatt", PackageCheck)}
         {link("/orders", "Aufträge", ClipboardList)}
         {link("/customers", "Kunden & Kontakt", Users)}
-        {link("/buchhaltung/rechnungen", "Geld & Rechnungen", ReceiptText)}
+        {canViewFinance ? link("/buchhaltung/rechnungen", "Geld & Rechnungen", ReceiptText) : null}
         {link("/settings", "Einstellungen", Settings)}
       </nav>
     </aside>

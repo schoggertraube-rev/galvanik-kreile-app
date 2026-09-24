@@ -13,7 +13,8 @@ describe("TargetShell mobile scroll contract", () => {
     expect(css).toMatch(
       /@media\(max-width:1023px\)\{\.content\{[^}]*scroll-padding-bottom:calc\(126px \+ env\(safe-area-inset-bottom\)\)[^}]*touch-action:pan-y[^}]*-webkit-overflow-scrolling:touch[^}]*\}\.page\{padding-bottom:calc\(126px \+ env\(safe-area-inset-bottom\)\)\}/,
     );
-    expect(css).toContain(".workshop .page{padding-bottom:0}");
+    expect(css).not.toContain(".workshop");
+    expect(css).toContain("@media(max-width:1299px)");
   });
 
   it("matches the V5 tablet and phone geometry for dock and create trigger", () => {

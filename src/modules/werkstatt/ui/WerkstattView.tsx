@@ -277,7 +277,7 @@ export function WerkstattView({
         ) : null}
 
         {authorized ? (
-          <nav className={styles.actionBar} aria-label="Werkstattaktionen">
+          <div className={styles.actionBar} role="group" aria-label="Werkstattaktionen">
             {isData ? (
               <button
                 type="button"
@@ -333,7 +333,7 @@ export function WerkstattView({
             >
               Ware raus
             </button>
-          </nav>
+          </div>
         ) : null}
 
         {authorized && isPickerOpen ? (

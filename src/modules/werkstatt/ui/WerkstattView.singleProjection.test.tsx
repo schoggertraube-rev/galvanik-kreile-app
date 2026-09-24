@@ -1,5 +1,7 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { PhillipWerkstattViewModel, WerkstattViewPorts } from "../server/types";
 import { WerkstattView } from "./WerkstattView";
 
@@ -39,6 +41,20 @@ describe("WerkstattView projection", () => {
     const workshop = screen.getByRole("region", { name: "Werkstatt" });
     expect(within(workshop).getByTestId("werkstatt-status")).toBeVisible();
     expect(within(workshop).getByTestId("werkstatt-wip-tile")).toBeVisible();
-    expect(within(workshop).getByRole("navigation", { name: "Werkstattaktionen" })).toBeVisible();
+    expect(within(workshop).getByRole("group", { name: "Werkstattaktionen" })).toBeVisible();
+    expect(within(workshop).queryByRole("navigation", { name: "Werkstattaktionen" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the action group in page flow and reserves the mobile create-button lane", () => {
+    const css = readFileSync(
+      join(process.cwd(), "src/modules/werkstatt/ui/WerkstattView.module.css"),
+      "utf8",
+    );
+
+    expect(css).toMatch(/\.actionBar\s*\{[^}]*position:\s*static;/);
+    expect(css).not.toMatch(/\.actionBar\s*\{[^}]*position:\s*(?:fixed|sticky);/);
+    expect(css).toMatch(
+      /@media \(max-width: 520px\)[\s\S]*\.actionBar\s*\{[^}]*margin-bottom:\s*96px;[\s\S]*\.actionBar > \.actionSecondary:last-child\s*\{[^}]*max-width:\s*calc\(100% - 112px\);/,
+    );
   });
 });

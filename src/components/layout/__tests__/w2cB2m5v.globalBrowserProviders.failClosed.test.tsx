@@ -104,7 +104,7 @@ import { KreileAppShell } from "@/components/layout/KreileAppShell";
 function renderShell(pathname: string) {
   boundary.pathname.value = pathname;
   return render(
-    <KreileAppShell>
+    <KreileAppShell globalCreate={<div data-testid="global-create-marker" />}>
       <div data-testid="children-marker" />
     </KreileAppShell>,
   );
@@ -140,6 +140,7 @@ describe("W2C-B2M5V global browser provider containment", () => {
     expect(screen.queryByTestId("target-navigation-marker")).not.toBeInTheDocument();
     expect(screen.queryByTestId("mobile-bottom-nav-marker")).not.toBeInTheDocument();
     expect(screen.queryByTestId("session-warning-marker")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("global-create-marker")).not.toBeInTheDocument();
     expectRemovedBrowserProvidersAbsent();
   });
 
@@ -152,33 +153,25 @@ describe("W2C-B2M5V global browser provider containment", () => {
     expect(screen.getByTestId("mobile-bottom-nav-marker")).toBeInTheDocument();
     expect(screen.getByTestId("session-warning-marker")).toHaveAttribute("data-show", "false");
     expect(screen.getByTestId("entity-overlay-stack-marker")).toBeInTheDocument();
+    expect(screen.getByTestId("global-create-marker")).toBeInTheDocument();
     expectRemovedBrowserProvidersAbsent();
   });
 
-  it.each(["meister", "buero"])(
-    "composes the Rolf desktop and mobile navigation for authenticated %s",
+  it.each(["meister", "buero", "werkstatt"])(
+    "composes the same device-driven shell for authenticated %s",
     (role) => {
       setPermissionSnapshot(role, ["perm_view_leitstand", "perm_view_customers"]);
       const { container } = renderShell("/orders");
 
+      expect(screen.getByTestId("target-header-marker")).toBeInTheDocument();
       expect(screen.getByTestId("target-navigation-marker")).toBeInTheDocument();
       expect(screen.getByTestId("mobile-bottom-nav-marker")).toBeInTheDocument();
+      expect(screen.getByTestId("global-create-marker")).toBeInTheDocument();
       const shell = container.querySelector(`.${shellStyles.shell}`);
       expect(shell).toBeInTheDocument();
-      expect(shell).toHaveClass(shellStyles.shell);
-      expect(shell).not.toHaveClass(shellStyles.workshop);
+      expect(shell).toHaveAttribute("class", shellStyles.shell);
     },
   );
-
-  it("keeps Phillip on the workshop shell without Rolf sidebar or mobile dock", () => {
-    setPermissionSnapshot("werkstatt", ["perm_view_leitstand", "perm_view_customers"]);
-    const { container } = renderShell("/warendurchlauf");
-
-    expect(screen.getByTestId("target-header-marker")).toBeInTheDocument();
-    expect(screen.queryByTestId("target-navigation-marker")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("mobile-bottom-nav-marker")).not.toBeInTheDocument();
-    expect(container.querySelector(`.${shellStyles.shell}`)).toHaveClass(shellStyles.workshop);
-  });
 
   it("uses the single permission bootstrap truth for the session warning", () => {
     boundary.permissions.status = "error";
@@ -253,7 +246,7 @@ interface GeometryCase {
   readonly dockInlineInset: number | null;
 }
 
-type GeometryRole = "buero";
+type GeometryRole = "buero" | "werkstatt";
 type GeometryMatrixCase = GeometryCase & { readonly role: GeometryRole };
 
 const GEOMETRY_CASES: readonly GeometryCase[] = [
@@ -264,8 +257,8 @@ const GEOMETRY_CASES: readonly GeometryCase[] = [
     chrome: "sidebar",
     headerHeight: 76,
     pagePaddingBottom: "46px",
-    createRightInset: 42,
-    createBottomInset: 24,
+    createRightInset: 16,
+    createBottomInset: 86,
     dockInlineInset: null,
   },
   {
@@ -275,9 +268,9 @@ const GEOMETRY_CASES: readonly GeometryCase[] = [
     chrome: "dock",
     headerHeight: 68,
     pagePaddingBottom: "98px",
-    createRightInset: 18,
-    createBottomInset: 92,
-    dockInlineInset: 12,
+    createRightInset: 16,
+    createBottomInset: 86,
+    dockInlineInset: 0,
   },
   {
     name: "Mobile 390x844",
@@ -287,16 +280,18 @@ const GEOMETRY_CASES: readonly GeometryCase[] = [
     headerHeight: 68,
     pagePaddingBottom: "126px", // Canonical fixed-dock/create runway; mirrors TargetShell mobile scroll contract.
     createRightInset: 12,
-    createBottomInset: 88,
-    dockInlineInset: 8,
+    createBottomInset: 80,
+    dockInlineInset: 0,
   },
 ];
 
-const GEOMETRY_MATRIX: readonly GeometryMatrixCase[] = GEOMETRY_CASES.map((viewport) => ({
-  ...viewport,
-  name: `buero ${viewport.name}`,
-  role: "buero",
-}));
+const GEOMETRY_MATRIX: readonly GeometryMatrixCase[] = GEOMETRY_CASES.flatMap((viewport) =>
+  (["buero", "werkstatt"] as const).map((role) => ({
+    ...viewport,
+    name: `${role} ${viewport.name}`,
+    role,
+  })),
+);
 
 function resolveGeometryEngine(): BrowserType | null {
   for (const engine of [chromium, webkit]) {
@@ -461,6 +456,7 @@ describe.skipIf(!geometryEngine)(
     beforeAll(async () => {
       harnessHtml = {
         buero: await buildHarnessMarkup("buero"),
+        werkstatt: await buildHarnessMarkup("werkstatt"),
       };
       const engine = geometryEngine;
       if (!engine) throw new Error("geometry engine unavailable");
@@ -511,10 +507,10 @@ describe.skipIf(!geometryEngine)(
             expect(measured.dock.rendered).toBe(true);
             expect(measured.dock.display).toBe("flex");
             expect(measured.dock.position).toBe("fixed");
-            expect(measured.dock.height).toBeGreaterThanOrEqual(70);
+            expect(Math.round(measured.dock.height)).toBe(66);
             expect(Math.round(measured.dock.left)).toBe(viewport.dockInlineInset);
             expect(Math.round(viewport.width - measured.dock.right)).toBe(viewport.dockInlineInset);
-            expect(Math.round(viewport.height - measured.dock.bottom)).toBe(10);
+            expect(Math.round(viewport.height - measured.dock.bottom)).toBe(0);
 
             // Scrollable page keeps a bottom runway that clears the fixed dock.
             expect(parseFloat(measured.page.paddingBottom))
@@ -527,7 +523,7 @@ describe.skipIf(!geometryEngine)(
           expect(measured.create.count).toBe(1);
           expect(measured.create.rendered).toBe(true);
           expect(measured.create.position).toBe("fixed");
-          expect(measured.create.height).toBeGreaterThanOrEqual(52);
+          expect(Math.round(measured.create.height)).toBe(38);
           expect(Math.round(viewport.width - measured.create.right)).toBe(viewport.createRightInset);
           expect(Math.round(viewport.height - measured.create.bottom)).toBe(viewport.createBottomInset);
           expect(measured.create.bottom).toBeLessThanOrEqual(viewport.height);

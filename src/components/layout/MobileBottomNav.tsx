@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClipboardList, Home, Menu, ReceiptText, Users } from "lucide-react";
+import { ClipboardList, Home, Menu, PackageCheck, ReceiptText, Users } from "lucide-react";
 import { useState } from "react";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { MoreMenu } from "./TargetHeader";
@@ -28,14 +28,17 @@ export function MobileBottomNav() {
   if (!completeSnapshot) return null;
 
   const rolfProfile = permissions.role === "meister" || permissions.role === "buero";
+  const supportedProfile = rolfProfile || permissions.role === "werkstatt";
   const hasCapability = (capability: string) =>
     permissions.permissions.includes(capability) && permissions.hasPermission(capability);
-  const hasRolfNavigation =
-    rolfProfile &&
+  const hasCoreNavigation =
+    supportedProfile &&
     hasCapability("perm_view_leitstand") &&
     hasCapability("perm_view_customers");
 
-  if (!hasRolfNavigation) return null;
+  if (!hasCoreNavigation) return null;
+
+  const canViewFinance = rolfProfile || hasCapability("perm_view_prices");
 
   const link = (href: string, label: string, Icon: typeof Home) => (
     <Link
@@ -54,7 +57,9 @@ export function MobileBottomNav() {
         {link("/", "Der Tag", Home)}
         {link("/orders", "Aufträge", ClipboardList)}
         {link("/customers", "Kunden", Users)}
-        {link("/buchhaltung/rechnungen", "Geld", ReceiptText)}
+        {canViewFinance
+          ? link("/buchhaltung/rechnungen", "Geld", ReceiptText)
+          : link("/warendurchlauf", "Werkstatt", PackageCheck)}
         <button type="button" onClick={() => setOpen(true)} aria-expanded={open}>
           <Menu aria-hidden="true" />
           <span>Mehr</span>

@@ -272,7 +272,7 @@ async function newContext(browser: Browser, viewport: { width: number; height: n
 }
 
 async function assertMoreMenu(page: Page) {
-  await page.getByRole("button", { name: "Mehr", exact: true }).click();
+  await page.getByRole("button", { name: /^Mehr(?: öffnen)?$/ }).click();
   const more = page.getByRole("dialog", { name: "Mehr", exact: true });
   await expect(more).toBeVisible();
   await expect(more.getByRole("heading", { name: "Mehr", exact: true })).toBeVisible();
@@ -282,22 +282,40 @@ async function assertMoreMenu(page: Page) {
   await more.getByRole("button", { name: "Schließen", exact: true }).click();
 }
 
-async function assertRolfChrome(page: Page, viewport: (typeof VIEWPORTS)[number]) {
-  const quickActions = page
-    .getByTestId("rolf-v8-home")
-    .getByRole("navigation", { name: "Schnellaktionen", exact: true });
+async function assertDeviceChrome(
+  page: Page,
+  viewport: (typeof VIEWPORTS)[number],
+  options: { canViewFinance: boolean; hasRolfQuickActions: boolean },
+) {
+  const sidebar = page.getByRole("navigation", { name: "Hauptnavigation", exact: true });
+  const dock = page.getByRole("navigation", { name: "Mobile Hauptnavigation", exact: true });
   if (viewport.width >= 1300) {
-    const sidebar = page.getByRole("navigation", { name: "Hauptnavigation", exact: true });
     await expect(sidebar).toBeVisible();
-    await expect(sidebar.locator(":scope > *")).toHaveCount(8);
-    await expect(page.getByRole("navigation", { name: "Mobile Hauptnavigation", exact: true })).toBeHidden();
-    await expect(quickActions).toBeHidden();
+    await expect(sidebar.locator(":scope > *")).toHaveCount(options.canViewFinance ? 8 : 7);
+    await expect(dock).toBeHidden();
+    if (options.canViewFinance) {
+      await expect(sidebar.getByRole("link", { name: "Geld & Rechnungen", exact: true })).toBeVisible();
+    } else {
+      await expect(sidebar.getByRole("link", { name: "Geld & Rechnungen", exact: true })).toHaveCount(0);
+    }
   } else {
-    const dock = page.getByRole("navigation", { name: "Mobile Hauptnavigation", exact: true });
     await expect(dock).toBeVisible();
     await expect(dock.locator(":scope > *")).toHaveCount(5);
-    await expect(page.getByRole("navigation", { name: "Hauptnavigation", exact: true })).toBeHidden();
-    await expect(quickActions).toBeVisible();
+    await expect(sidebar).toBeHidden();
+    if (options.canViewFinance) {
+      await expect(dock.getByRole("link", { name: "Geld", exact: true })).toBeVisible();
+    } else {
+      await expect(dock.getByRole("link", { name: "Geld", exact: true })).toHaveCount(0);
+      await expect(dock.getByRole("link", { name: "Werkstatt", exact: true })).toBeVisible();
+    }
+  }
+
+  if (options.hasRolfQuickActions) {
+    const quickActions = page
+      .getByTestId("rolf-v8-home")
+      .getByRole("navigation", { name: "Schnellaktionen", exact: true });
+    if (viewport.width >= 1300) await expect(quickActions).toBeHidden();
+    else await expect(quickActions).toBeVisible();
   }
 }
 
@@ -307,7 +325,7 @@ async function assertNoFloatingActionOverlap(page: Page) {
       ?? [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Anlegen");
     if (!create) return ["Anlegen fehlt"];
     const createRect = create.getBoundingClientRect();
-    const candidates = [...document.querySelectorAll<HTMLElement>('[data-testid="rolf-v8-home"] button, [data-testid="rolf-v8-home"] a, nav[aria-label="Mobile Hauptnavigation"]')];
+    const candidates = [...document.querySelectorAll<HTMLElement>('[data-testid="rolf-v8-home"] button, [data-testid="rolf-v8-home"] a, [role="group"][aria-label="Werkstattaktionen"] button, nav[aria-label="Mobile Hauptnavigation"]')];
     return candidates.flatMap((candidate) => {
       const style = getComputedStyle(candidate);
       const rect = candidate.getBoundingClientRect();
@@ -444,8 +462,36 @@ async function clickRolfMobileNavigation(page: Page) {
   await page.waitForURL((url) => url.pathname === "/warendurchlauf");
 }
 
+async function clickPhillipNavigation(page: Page) {
+  await page.setViewportSize(VIEWPORTS[0]);
+  for (const [name, pathname] of [
+    ["Werkstatt", "/warendurchlauf"],
+    ["Aufträge", "/orders"],
+    ["Kunden & Kontakt", "/customers"],
+  ] as const) {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.getByRole("navigation", { name: "Hauptnavigation", exact: true })
+      .getByRole("link", { name, exact: true })
+      .click();
+    await page.waitForURL((url) => url.pathname === pathname);
+  }
+
+  await page.setViewportSize(VIEWPORTS[2]);
+  for (const [name, pathname] of [
+    ["Aufträge", "/orders"],
+    ["Kunden", "/customers"],
+    ["Werkstatt", "/warendurchlauf"],
+  ] as const) {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await page.getByRole("navigation", { name: "Mobile Hauptnavigation", exact: true })
+      .getByRole("link", { name, exact: true })
+      .click();
+    await page.waitForURL((url) => url.pathname === pathname);
+  }
+}
+
 async function clickPhillipActions(page: Page) {
-  const bar = page.getByRole("navigation", { name: "Werkstattaktionen" });
+  const bar = page.getByRole("group", { name: "Werkstattaktionen" });
   await expect(bar.getByRole("button")).toHaveCount(5);
   for (const name of ["Auftrag öffnen / scannen", "Mehrarbeit", "Fertig melden", "Ware raus"]) {
     await bar.getByRole("button", { name, exact: true }).click();
@@ -466,7 +512,7 @@ test.describe("PATH1 A3 – V5 Shell, Rollen-Homes und Navigation", () => {
   test.use({ baseURL: TEST_ORIGIN, ignoreHTTPSErrors: true });
 
   test("belegt die drei Rollen, responsive V5-Flächen, echte Readbacks und 404-Quarantäne", async ({ browser }) => {
-    test.setTimeout(600_000);
+    test.setTimeout(540_000);
     const databaseUrl = requiredEnv("DATABASE_URL");
     const apiUrl = requiredEnv("NEXT_PUBLIC_SUPABASE_URL");
     const anonKey = requiredEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
@@ -523,12 +569,17 @@ test.describe("PATH1 A3 – V5 Shell, Rollen-Homes und Navigation", () => {
               pinProofs.push(await loginPin(proof.page, actor.id, actor.pin, sessionSecret, mode));
               if (actor.role === "rolf") {
                 await expect(proof.page.getByRole("heading", { name: "Der Tag", exact: true })).toBeVisible();
-                await assertRolfChrome(proof.page, viewport);
+                await assertDeviceChrome(proof.page, viewport, {
+                  canViewFinance: true,
+                  hasRolfQuickActions: true,
+                });
               } else {
                 await expect(proof.page.getByRole("heading", { name: "Werkstatt", exact: true })).toBeVisible();
-                await expect(proof.page.getByRole("navigation", { name: "Hauptnavigation" })).toHaveCount(0);
-                await expect(proof.page.getByRole("navigation", { name: "Mobile Hauptnavigation" })).toHaveCount(0);
-                await expect(proof.page.getByRole("navigation", { name: "Werkstattaktionen" }).getByRole("button")).toHaveCount(5);
+                await assertDeviceChrome(proof.page, viewport, {
+                  canViewFinance: false,
+                  hasRolfQuickActions: false,
+                });
+                await expect(proof.page.getByRole("group", { name: "Werkstattaktionen" }).getByRole("button")).toHaveCount(5);
               }
             } finally {
               await proof.context.close();
@@ -565,7 +616,10 @@ test.describe("PATH1 A3 – V5 Shell, Rollen-Homes und Navigation", () => {
         await rolf.page.goto("/", { waitUntil: "domcontentloaded" });
         await expect(rolf.page.getByTestId("rolf-v8-home")).toContainText(readbacks[0].orderNumber);
         await expect(rolf.page.locator("body")).not.toContainText(/Geplant|kommt bald|wareneingang/i);
-        await assertRolfChrome(rolf.page, viewport);
+        await assertDeviceChrome(rolf.page, viewport, {
+          canViewFinance: true,
+          hasRolfQuickActions: true,
+        });
         await assertNoFloatingActionOverlap(rolf.page);
         await assertMoreMenu(rolf.page);
         captures.push(await capture(rolf.page, `a-rolf-${viewport.name}-${viewport.width}x${viewport.height}.png`, "rolf-v8-real-projection"));
@@ -589,13 +643,19 @@ test.describe("PATH1 A3 – V5 Shell, Rollen-Homes und Navigation", () => {
       for (const viewport of VIEWPORTS) {
         await phillip.page.setViewportSize(viewport);
         await phillip.page.goto("/", { waitUntil: "domcontentloaded" });
-        await expect(phillip.page.getByRole("navigation", { name: "Hauptnavigation" })).toHaveCount(0);
-        await expect(phillip.page.getByRole("navigation", { name: "Mobile Hauptnavigation" })).toHaveCount(0);
-        await expect(phillip.page.getByRole("navigation", { name: "Werkstattaktionen" }).getByRole("button")).toHaveCount(5);
-        await expect(phillip.page.getByRole("button", { name: "Anlegen", exact: true })).toHaveCount(0);
+        await assertDeviceChrome(phillip.page, viewport, {
+          canViewFinance: false,
+          hasRolfQuickActions: false,
+        });
+        await expect(phillip.page.getByRole("group", { name: "Werkstattaktionen" }).getByRole("button")).toHaveCount(5);
+        await expect(phillip.page.getByRole("button", { name: "Anlegen", exact: true })).toBeVisible();
+        await assertNoFloatingActionOverlap(phillip.page);
         await assertMoreMenu(phillip.page);
         captures.push(await capture(phillip.page, `a-phillip-${viewport.name}-${viewport.width}x${viewport.height}.png`, "phillip-v4-real-projection"));
       }
+      await phillip.page.setViewportSize(VIEWPORTS[0]);
+      await phillip.page.goto("/", { waitUntil: "domcontentloaded" });
+      await clickPhillipNavigation(phillip.page);
       await phillip.page.setViewportSize(VIEWPORTS[0]);
       await phillip.page.goto("/", { waitUntil: "domcontentloaded" });
       await clickPhillipActions(phillip.page);
