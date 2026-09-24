@@ -1,22 +1,15 @@
-import styles from "./WerkstattView.module.css";
-
 export function WerkstattLoading() {
   return (
-    <section className={styles.screen} aria-labelledby="werkstatt-loading-title" aria-busy="true">
-      <div className={styles.inner}>
-        <header className={styles.hero}>
-          <p className={styles.eyebrow}>Werkstatt</p>
-          <h1 id="werkstatt-loading-title" className={styles.title}>Werkstatt</h1>
-          <p className={styles.lead}>Eingang prüfen, Arbeit sicher übergeben.</p>
-        </header>
-
-        <div className={styles.loadingPanel} role="status" aria-live="polite" data-testid="werkstatt-loading">
-          <p className={styles.loadingStatus}>Werkstattdaten werden geladen.</p>
-          <div className={styles.skeleton} aria-hidden="true" />
-          <div className={styles.skeletonWide} aria-hidden="true" />
-          <div className={styles.skeletonWide} aria-hidden="true" />
+    <div className="mock-kreile-phillip-home">
+      <div className="body scroll" role="region" aria-label="Werkstatt" aria-busy="true">
+        <h1 className="day-title" style={{ margin: 0 }}>Werkstatt</h1>
+        <div className="pri">
+          <div className="pi" role="status" aria-live="polite" data-testid="werkstatt-loading">
+            <span className="pi-dot"></span>
+            <div className="pi-main"><div className="pi-s">Werkstattdaten werden geladen.</div></div>
+          </div>
         </div>
       </div>
-    </section>
+    </div>
   );
 }

@@ -6,3 +6,26 @@
   background-color: ButtonFace;
   padding: 1px 6px;
 }
+
+.content > .mock-kreile-phillip-home,
+.tcontent > .mock-kreile-phillip-home {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  height: 100% !important;
+  overflow: hidden !important;
+  background: transparent !important;
+}
+
+.content > .mock-kreile-phillip-home > .body,
+.tcontent > .mock-kreile-phillip-home > .body {
+  min-height: 0;
+}
+
+.content > .mock-kreile-phillip-home > .actionbar,
+.tcontent > .mock-kreile-phillip-home > .actionbar {
+  position: sticky;
+  flex: none;
+  margin-top: auto;
+}

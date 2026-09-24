@@ -1,5 +1,10 @@
 "use client";
 
+// Phillip-Startseite "Werkstatt" 1:1 aus der Owner-Bauvorlage
+// (mock_extract/kreile/phillip_home). Markup/Klassen stammen aus Vorlage.jsx;
+// die Daten kommen ausschliesslich aus dem tenantgebundenen Werkstatt-Read-Model.
+// Owner G7: Nicht angebundene Vorlagen-Aktionen und -Aussagen werden nicht gerendert.
+
 import { useEffect, useRef, useState } from "react";
 import type {
   PhillipOrderCard,
@@ -7,46 +12,150 @@ import type {
   WerkstattHeldCard,
   WerkstattViewPorts,
 } from "../server/types";
-import styles from "./WerkstattView.module.css";
 
 const PICKER_TITLE_ID = "werkstatt-order-picker-title";
 const PICKER_DIALOG_ID = "werkstatt-order-picker";
+
 type PickerKind = "order" | "goods-out";
 
-function riskStatusClassName(risk: string): string {
-  if (risk === "red" || risk === "blocked") return `${styles.statusBadge} ${styles.statusDanger}`;
-  if (risk === "orange" || risk === "yellow") return `${styles.statusBadge} ${styles.statusWarning}`;
-  if (risk === "green") return `${styles.statusBadge} ${styles.statusSuccess}`;
-  return `${styles.statusBadge} ${styles.statusNeutral}`;
+function Icon({ id }: { id: string }) {
+  return (
+    <svg className="i" aria-hidden="true">
+      <use href={`#${id}`}></use>
+    </svg>
+  );
 }
 
-function HeldCard({ order, onOpenOrder }: { order: WerkstattHeldCard; onOpenOrder: (orderId: string) => void }) {
-  const customerName = order.customerName ?? "Kunde nicht hinterlegt";
+function priorityClass(order: WerkstattHeldCard): string {
+  if (order.risk === "red" || order.risk === "blocked") return "pi crit";
+  if (order.risk === "orange" || order.risk === "yellow") return "pi soon";
+  return "pi";
+}
+
+function statusClass(order: PhillipOrderCard): string {
+  const status = `${order.status} ${order.statusText}`.toLowerCase();
+  if (status.includes("fertig")) return "zust fertig";
+  if (status.includes("angenommen") || status.includes("eingang")) return "zust neu";
+  return "zust arb";
+}
+
+function displayName(name: string | null): string | null {
+  const firstName = name?.trim().split(/\s+/)[0];
+  return firstName || null;
+}
+
+function DayLine({ view }: { view: Extract<PhillipWerkstattViewModel, { kind: "data" }> }) {
+  const name = displayName(view.greetingName);
+  if (view.dringendCount === 0 && view.weitereCount === 0) {
+    return <div className="day-line" data-testid="werkstatt-status">Heute keine Termine.</div>;
+  }
+
   return (
-    <li
-      className={`${styles.heldItem} ${order.heldGroup === "crit" ? styles.heldItemCrit : styles.heldItemSoon}`}
-      data-testid={`werkstatt-held-${order.id}`}
-    >
-      <div className={styles.heldMain}>
-        <div className={styles.heldTop}>
-          <span className={styles.heldOrderNumber}>{order.orderNumber}</span>
-          <span className={riskStatusClassName(order.risk)}>{order.statusText || order.status}</span>
-        </div>
-        <p className={styles.heldCustomer}>{customerName}</p>
-        <p className={styles.heldTitle}>{order.title}</p>
-        {order.dueValue ? (
-          <p className={styles.heldDue}>{order.dueLabel || "Termin"}: {order.dueValue}</p>
-        ) : null}
+    <div className="day-line" data-testid="werkstatt-status">
+      {name ? `Servus ${name}. ` : null}
+      {view.dringendCount > 0 ? (
+        <span className="rp"><b>{view.dringendCount}</b> dringend</span>
+      ) : null}
+      {view.dringendCount > 0 && view.weitereCount > 0 ? " · " : null}
+      {view.weitereCount > 0 ? <><b>{view.weitereCount}</b> weitere</> : null}
+    </div>
+  );
+}
+
+function HeldOrders({ orders, onOpenOrder }: { orders: readonly WerkstattHeldCard[]; onOpenOrder: (orderId: string) => void }) {
+  if (orders.length === 0) {
+    return (
+      <div className="pi" role="status">
+        <span className="pi-dot"></span>
+        <div className="pi-main"><div className="pi-s">Heute keine dringenden Aufträge.</div></div>
       </div>
-      <button
-        type="button"
-        className={`${styles.heldOpenButton} ${styles.touchTarget}`}
-        aria-label={`Auftrag ${order.orderNumber} von ${customerName} öffnen`}
-        onClick={() => onOpenOrder(order.id)}
-      >
-        Auftrag öffnen
-      </button>
-    </li>
+    );
+  }
+
+  return (
+    <div className="pri" data-testid="werkstatt-held-list">
+      {orders.map((order) => (
+        <div key={order.id} className={priorityClass(order)} data-testid={`werkstatt-held-${order.id}`}>
+          <span className="pi-dot"></span>
+          <div className="pi-main">
+            <div className="pi-top">
+              <button className="pi-t" type="button" aria-label={`Auftrag ${order.orderNumber} öffnen`} onClick={() => onOpenOrder(order.id)}>
+                <span className="id">{order.orderNumber}</span>{" "}
+                {order.customerName ?? "Kunde nicht hinterlegt"} · {order.title}
+              </button>
+              <span className={statusClass(order)}>{order.statusText || order.status}</span>
+            </div>
+            {order.itemDescription ? <div className="pi-s">{order.itemDescription}</div> : null}
+            {order.dueLabel && order.dueValue ? <span className="pchip pc-red">{order.dueLabel}: {order.dueValue}</span> : null}
+            <div className="pi-a">
+              <button className="btn-do" type="button" onClick={() => onOpenOrder(order.id)}>
+                <Icon id="i-open" />
+                Auftrag öffnen
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Picker({
+  kind,
+  orders,
+  onClose,
+  onSelect,
+  onScan,
+  dialogRef,
+  closeRef,
+}: {
+  kind: PickerKind;
+  orders: readonly PhillipOrderCard[];
+  onClose: () => void;
+  onSelect: (orderId: string) => void;
+  onScan: () => void;
+  dialogRef: React.RefObject<HTMLElement | null>;
+  closeRef: React.RefObject<HTMLButtonElement | null>;
+}) {
+  const title = kind === "goods-out" ? "Ware raus" : "Auftrag öffnen";
+  const emptyText = kind === "goods-out" ? "Keine fertig gemeldete Ware zur Ausgabe vorhanden." : "Keine Aufträge vorhanden.";
+
+  return (
+    <div className="ovl open">
+      <section ref={dialogRef} id={PICKER_DIALOG_ID} className="oc" role="dialog" aria-modal="true" aria-labelledby={PICKER_TITLE_ID}>
+        <div className="oc-h">
+          <span className="oc-ic"><Icon id={kind === "goods-out" ? "i-truck" : "i-open"} /></span>
+          <div><div id={PICKER_TITLE_ID} className="oc-tt">{title}</div></div>
+          <button ref={closeRef} className="oc-x2" type="button" aria-label="Schließen" onClick={onClose}><Icon id="i-x" /></button>
+        </div>
+        <div className="oc-b">
+          {kind === "order" ? (
+            <button className="pick-s" type="button" aria-label="Nummer, Kunde oder Scan …" onClick={onScan}>
+              <Icon id="i-search" />Nummer, Kunde oder Scan …
+            </button>
+          ) : null}
+          {orders.length === 0 ? (
+            <div className="pi-s" role="status" data-testid="goods-out-picker-empty">{emptyText}</div>
+          ) : (
+            orders.map((order) => (
+              <button
+                key={order.id}
+                className="pick-row"
+                type="button"
+                data-testid={`${kind === "goods-out" ? "goods-out" : "order"}-picker-order-${order.id}`}
+                aria-label={`Auftrag ${order.orderNumber} ${kind === "goods-out" ? "für Warenausgang öffnen" : "öffnen"}`}
+                onClick={() => onSelect(order.id)}
+              >
+                <span className="id">{order.orderNumber}</span>
+                <span className="nm">{order.customerName ?? "Kunde nicht hinterlegt"} · {order.title}</span>
+                <span className={statusClass(order)}>{order.statusText || order.status}</span>
+                <span className="go"><Icon id="i-arrow" /></span>
+              </button>
+            ))
+          )}
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -62,15 +171,20 @@ export function WerkstattView({
   const [activePicker, setActivePicker] = useState<PickerKind | null>(null);
   const [bundleFilterActive, setBundleFilterActive] = useState(false);
   const pickerTriggerRef = useRef<HTMLElement | null>(null);
-  const pickerDialogRef = useRef<HTMLElement>(null);
-  const pickerCloseRef = useRef<HTMLButtonElement>(null);
+  const pickerDialogRef = useRef<HTMLElement | null>(null);
+  const pickerCloseRef = useRef<HTMLButtonElement | null>(null);
   const restoreFocusRef = useRef(false);
 
   const isData = view.kind === "data";
   const isEmpty = view.kind === "empty";
   const authorized = isData || isEmpty;
-  const canCreateOrder = authorized && view.canCreateOrder;
   const isPickerOpen = activePicker !== null;
+  const pickerOrders: readonly PhillipOrderCard[] = isData
+    ? activePicker === "goods-out" ? view.goodsOutCandidates : view.pickerOrders
+    : [];
+  const heldOrders = isData && bundleFilterActive && view.bundleSuggestion
+    ? view.bundleSuggestion.orders
+    : isData ? view.held : [];
 
   useEffect(() => {
     if (!isPickerOpen) {
@@ -82,11 +196,9 @@ export function WerkstattView({
     }
 
     pickerCloseRef.current?.focus();
-
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        event.stopPropagation();
         restoreFocusRef.current = true;
         setActivePicker(null);
         return;
@@ -102,7 +214,6 @@ export function WerkstattView({
       const first = focusable.item(0);
       const last = focusable.item(focusable.length - 1);
       const active = document.activeElement;
-
       if (!dialog.contains(active)) {
         event.preventDefault();
         (event.shiftKey ? last : first).focus();
@@ -114,15 +225,14 @@ export function WerkstattView({
         first.focus();
       }
     };
-
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [activePicker, isPickerOpen]);
+  }, [isPickerOpen]);
 
-  const openPicker = (event: { currentTarget: HTMLElement }, picker: PickerKind) => {
+  const openPicker = (event: { currentTarget: HTMLElement }, kind: PickerKind) => {
     pickerTriggerRef.current = event.currentTarget;
     restoreFocusRef.current = false;
-    setActivePicker(picker);
+    setActivePicker(kind);
   };
 
   const closePicker = () => {
@@ -146,270 +256,106 @@ export function WerkstattView({
     ports.onScanOrder();
   };
 
-  const pickerOrders: readonly PhillipOrderCard[] = isData
-    ? activePicker === "goods-out"
-      ? view.goodsOutCandidates
-      : view.pickerOrders
-    : [];
-  const heldOrders = isData
-    ? bundleFilterActive && view.bundleSuggestion
-      ? view.bundleSuggestion.orders
-      : view.held
-    : [];
+  if (!authorized) {
+    const isError = view.kind === "error" || view.kind === "conflict";
+    return (
+      <div className="mock-kreile-phillip-home">
+        <div className="body scroll" role={isError ? "alert" : "status"}>
+          <h1 className="day-title" style={{ margin: 0 }}>Werkstatt</h1>
+          <div className="mock-state">{view.message}</div>
+          {isError ? <button className="btn-later" type="button" onClick={onRetry}>Erneut laden</button> : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <section className={styles.screen} aria-labelledby="werkstatt-title">
-      <div className={styles.inner}>
-        <header className={styles.hero}>
-          <p className={styles.eyebrow}>Werkstatt</p>
-          <h1 id="werkstatt-title" className={styles.title}>Werkstatt</h1>
-          {isData ? (
-            <p
-              className={`${styles.lead} ${view.dringendCount === 0 ? styles.leadClear : ""}`}
-              role={view.dringendCount === 0 ? "status" : undefined}
-              data-testid="werkstatt-status"
-            >
-              {view.greetingName ? `Servus ${view.greetingName}. ` : ""}
-              {view.dringendCount === 0 ? (
-                <>Werkstatt läuft rund · nichts hängt.</>
-              ) : (
-                <>
-                <span className={styles.leadUrgent}><b>{view.dringendCount}</b> dringend</span>
-                {" · "}
-                <b>{view.weitereCount}</b> weitere
-                </>
-              )}
-            </p>
-          ) : (
-            <p className={styles.lead}>Eingang prüfen, Arbeit sicher übergeben.</p>
-          )}
-          {isData ? <p className={styles.dataStand}>Quelle: {view.source} · Stand {new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(new Date(view.loadedAt))}</p> : null}
-        </header>
-
-        {view.kind === "denied" ? (
-          <div className={styles.statePanel} role="status">
-            <h2>Dieser Bereich ist geschützt</h2>
-            <p>{view.message}</p>
-          </div>
-        ) : null}
-
-        {view.kind === "error" || view.kind === "conflict" ? (
-          <div className={styles.statePanel} role="alert">
-            <h2>{view.kind === "error" ? "Werkstatt nicht verfügbar" : "Werkstattkonflikt"}</h2>
-            <p>{view.message}</p>
-            <p>Zur Sicherheit werden keine Werkstattdaten aus einem früheren Stand angezeigt.</p>
-            <button
-              type="button"
-              className={`${styles.actionSecondary} ${styles.touchTarget} ${styles.statePanelRetry}`}
-              onClick={onRetry}
-            >
-              Erneut laden
-            </button>
-          </div>
-        ) : null}
-
-        {isEmpty ? (
-          <div className={styles.statePanel} role="status">
-            <h2>Noch keine Daten erfasst</h2>
-            <p>Sobald Aufträge im Wareneingang oder in der Galvanik liegen, erscheinen sie hier.</p>
-          </div>
-        ) : null}
+    <div className="mock-kreile-phillip-home">
+      <div className="body scroll">
+        <h1 id="werkstatt-title" className="day-title" style={{ margin: 0 }}>Werkstatt</h1>
+        {isData ? <DayLine view={view} /> : <div className="day-line" role="status" data-testid="werkstatt-status">Heute keine Termine.</div>}
 
         {isData ? (
-          <>
-          {view.dominant ? (
-            <button className={styles.dominantAction} onClick={() => ports.onOpenOrder(view.dominant?.orderId ?? "")} type="button">
-              <span>Jetzt Auftrag öffnen</span><strong>{view.dominant.reason}</strong>
-            </button>
-          ) : null}
-          <div className={styles.cols}>
-            <section aria-labelledby="werkstatt-held-title">
-              <div className={styles.sectionHead}>
-                <h2 id="werkstatt-held-title" className={styles.sectionTitle}>Heute sichern</h2>
-                <span className={styles.sectionHint}>nach Termin · was heute Aufmerksamkeit braucht</span>
+          <div className="cols">
+            <div>
+              <div className="sec-t">
+                <span className="sec-ic"><Icon id="i-clock" /></span>
+                Heute sichern
+                <span className="hint">nach Dringlichkeit · was heute raus/fertig muss</span>
               </div>
-              {heldOrders.length === 0 ? (
-                <p className={styles.calmNote}>Keine dringenden oder knappen Aufträge.</p>
-              ) : (
-                <ul className={styles.heldList} data-testid="werkstatt-held-list">
-                  {heldOrders.map((order) => (
-                    <HeldCard key={order.id} order={order} onOpenOrder={ports.onOpenOrder} />
-                  ))}
-                </ul>
-              )}
-            </section>
+              <HeldOrders orders={heldOrders} onOpenOrder={ports.onOpenOrder} />
+            </div>
 
-            <div className={styles.rail}>
+            <div className="rail">
               {view.bundleSuggestion ? (
-                <div className={styles.bundle} data-testid="werkstatt-bundle">
-                  <p className={styles.bundleHeading}>Bündeln heute</p>
-                  <p className={styles.bundleText}>
-                    {view.bundleSuggestion.orders.length} Aufträge mit <b>{view.bundleSuggestion.surfaceRequested}</b>
-                  </p>
-                  <button
-                    type="button"
-                    className={`${styles.bundleButton} ${styles.touchTarget}`}
-                    aria-pressed={bundleFilterActive}
-                    onClick={() => setBundleFilterActive((active) => !active)}
-                  >
-                    {bundleFilterActive ? "Alle Aufträge zeigen" : "Nur diese Aufträge zeigen"}
-                  </button>
+                <div className="bundle" data-testid="werkstatt-bundle">
+                  <div className="bundle-h"><Icon id="i-layers" />Bündeln heute</div>
+                  <div className="bundle-t">{view.bundleSuggestion.orders.length} Aufträge mit <b>{view.bundleSuggestion.surfaceRequested}</b></div>
+                  <div className="bundle-s">{view.bundleSuggestion.orders.map((order) => order.customerName).filter((name): name is string => Boolean(name)).join(" · ")}</div>
+                  <div className="bundle-a">
+                    <button className="b-soft" type="button" aria-pressed={bundleFilterActive} onClick={() => setBundleFilterActive((active) => !active)}>
+                      <Icon id="i-layers" />
+                      {bundleFilterActive ? "Alle Aufträge zeigen" : "Diese Aufträge zeigen"}
+                    </button>
+                  </div>
                 </div>
               ) : null}
 
-              <button
-                type="button"
-                className={styles.wipTile}
-                data-testid="werkstatt-wip-tile"
-                onClick={ports.onOpenWip}
-              >
-                <span className={styles.wipLabel}>In Arbeit (Galvanik)</span>
-                <span className={styles.wipCount}>{view.wipCount}</span>
+              <button className="wip" type="button" data-testid="werkstatt-wip-tile" onClick={ports.onOpenWip}>
+                <div className="wip-l"><Icon id="i-flask" />In Arbeit (Galvanik)</div>
+                <div className="wip-n">{view.wipCount}<small>Aufträge</small></div>
+                <div className="wip-go">{view.dringendCount} werden knapp · antippen <Icon id="i-arrow" /></div>
               </button>
 
-              <div className={styles.infoTile} data-testid="werkstatt-due-week-tile">
-                <p className={styles.infoLabel}>Fällig diese Woche</p>
-                <p className={styles.infoCount}>{view.dueThisWeekCount}</p>
+              <button className="tile" type="button" onClick={(event) => openPicker(event, "goods-out")}>
+                <div className="tile-r">
+                  <div className="tile-l"><span className="tile-ic"><Icon id="i-truck" /></span><span className="tile-tx">Heute raus</span></div>
+                  <span className="tile-n">{view.goodsOutCandidates.length}</span>
+                </div>
+              </button>
+
+              <div className="tile" data-testid="werkstatt-due-week-tile">
+                <div className="tile-r">
+                  <div className="tile-l"><span className="tile-ic in"><Icon id="i-clock" /></span><span className="tile-tx">Fällig diese Woche</span></div>
+                  <span className="tile-n">{view.dueThisWeekCount}</span>
+                </div>
               </div>
             </div>
           </div>
-          </>
-        ) : null}
-
-        {authorized ? (
-          <div className={styles.actionBar} role="group" aria-label="Werkstattaktionen">
-            {isData ? (
-              <button
-                type="button"
-                className={`${styles.actionPrimary} ${styles.touchTarget}`}
-                aria-haspopup="dialog"
-                aria-expanded={isPickerOpen}
-                aria-controls={PICKER_DIALOG_ID}
-                onClick={(event) => openPicker(event, "order")}
-              >
-                Auftrag öffnen / scannen
-              </button>
-            ) : null}
-            {isData ? (
-              <button
-                type="button"
-                className={`${styles.actionSecondary} ${styles.touchTarget}`}
-                aria-haspopup="dialog"
-                aria-expanded={isPickerOpen}
-                aria-controls={PICKER_DIALOG_ID}
-                onClick={(event) => openPicker(event, "order")}
-              >
-                Mehrarbeit
-              </button>
-            ) : null}
-            {isData ? (
-              <button
-                type="button"
-                className={`${styles.actionSecondary} ${styles.touchTarget}`}
-                aria-haspopup="dialog"
-                aria-expanded={isPickerOpen}
-                aria-controls={PICKER_DIALOG_ID}
-                onClick={(event) => openPicker(event, "order")}
-              >
-                Fertig melden
-              </button>
-            ) : null}
-            {canCreateOrder ? (
-              <button
-                type="button"
-                className={`${styles.actionSecondary} ${styles.touchTarget}`}
-                onClick={ports.onCreateOrder}
-              >
-                Neuer Eingang
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className={`${styles.actionSecondary} ${styles.touchTarget}`}
-              aria-haspopup="dialog"
-              aria-expanded={activePicker === "goods-out"}
-              aria-controls={PICKER_DIALOG_ID}
-              onClick={(event) => openPicker(event, "goods-out")}
-            >
-              Ware raus
-            </button>
-          </div>
-        ) : null}
-
-        {authorized && isPickerOpen ? (
-          <div className={styles.pickerBackdrop}>
-            <section
-              ref={pickerDialogRef}
-              id={PICKER_DIALOG_ID}
-              className={styles.pickerDialog}
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby={PICKER_TITLE_ID}
-            >
-              <header className={styles.pickerHeader}>
-                <div>
-                  <p className={styles.pickerKicker}>
-                    {activePicker === "goods-out" ? "Echte fertige Aufträge" : "Echte Werkstattaufträge"}
-                  </p>
-                  <h2 id={PICKER_TITLE_ID} className={styles.pickerTitle}>
-                    {activePicker === "goods-out" ? "Ware raus" : "Auftrag öffnen"}
-                  </h2>
-                </div>
-                <button
-                  ref={pickerCloseRef}
-                  type="button"
-                  className={`${styles.pickerClose} ${styles.touchTarget}`}
-                  onClick={closePicker}
-                >
-                  Schließen
-                </button>
-              </header>
-              <p className={styles.pickerIntro}>
-                {activePicker === "goods-out"
-                  ? "Nur fertig gemeldete Aufträge können sicher übergeben werden."
-                  : "Galvanik zuerst, danach Wareneingang."}
-              </p>
-              {activePicker === "order" ? (
-                <button
-                  type="button"
-                  className={`${styles.pickerScan} ${styles.touchTarget}`}
-                  onClick={scanOrder}
-                >
-                  Auftrag scannen
-                </button>
-              ) : null}
-              {pickerOrders.length === 0 ? (
-                <p className={styles.pickerIntro} role="status" data-testid="goods-out-picker-empty">
-                  Keine fertig gemeldete Ware zur Ausgabe vorhanden.
-                </p>
-              ) : (
-                <ul className={styles.pickerList}>
-                  {pickerOrders.map((order) => (
-                    <li key={order.id}>
-                      <button
-                        type="button"
-                        className={`${styles.pickerOrder} ${styles.touchTarget}`}
-                        data-testid={`${activePicker === "goods-out" ? "goods-out" : "order"}-picker-order-${order.id}`}
-                        aria-label={`Auftrag ${order.orderNumber} ${activePicker === "goods-out" ? "für Warenausgang öffnen" : "öffnen"}`}
-                        onClick={() => selectOrder(order.id)}
-                      >
-                        <span className={styles.pickerOrderCopy}>
-                          <span className={styles.pickerOrderNumber}>{order.orderNumber}</span>
-                          {order.customerName ? (
-                            <span className={styles.pickerCustomer}>{order.customerName}</span>
-                          ) : null}
-                          <span className={styles.pickerOrderTitle}>{order.title}</span>
-                        </span>
-                        <span className={styles.pickerStatus}>{order.statusText || order.status}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-          </div>
         ) : null}
       </div>
-    </section>
+
+      <div className="actionbar" role="group" aria-label="Werkstattaktionen">
+        {isData ? (
+          <button className="ab primary" type="button" aria-haspopup="dialog" aria-expanded={activePicker === "order"} aria-controls={PICKER_DIALOG_ID} onClick={(event) => openPicker(event, "order")}>
+            <Icon id="i-open" />Auftrag öffnen
+          </button>
+        ) : null}
+        {isData ? (
+          <button className="ab mid" type="button" aria-haspopup="dialog" aria-expanded={activePicker === "order"} aria-controls={PICKER_DIALOG_ID} onClick={(event) => openPicker(event, "order")}>
+            <Icon id="i-layers" />Mehrarbeit
+          </button>
+        ) : null}
+        {isData ? (
+          <button className="ab mid" type="button" aria-haspopup="dialog" aria-expanded={activePicker === "order"} aria-controls={PICKER_DIALOG_ID} onClick={(event) => openPicker(event, "order")}>
+            <Icon id="i-check" />Fertig melden
+          </button>
+        ) : null}
+        {view.canCreateOrder ? (
+          <button className={isData ? "ab norm" : "ab primary"} type="button" onClick={ports.onCreateOrder}>
+            <Icon id="i-inbox" />Neuer Eingang
+          </button>
+        ) : null}
+        {isData ? (
+          <button className="ab norm" type="button" aria-haspopup="dialog" aria-expanded={activePicker === "goods-out"} aria-controls={PICKER_DIALOG_ID} onClick={(event) => openPicker(event, "goods-out")}>
+            <Icon id="i-truck" />Ware raus
+          </button>
+        ) : null}
+      </div>
+
+      {isPickerOpen && activePicker ? (
+        <Picker kind={activePicker} orders={pickerOrders} onClose={closePicker} onSelect={selectOrder} onScan={scanOrder} dialogRef={pickerDialogRef} closeRef={pickerCloseRef} />
+      ) : null}
+    </div>
   );
 }

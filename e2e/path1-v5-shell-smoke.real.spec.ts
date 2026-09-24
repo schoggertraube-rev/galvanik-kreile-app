@@ -20,6 +20,23 @@ const ACTORS = [
   { key: "phillip", id: "22222222-2222-4222-8222-222222222222", pin: "7315", role: "werkstatt" },
 ] as const;
 const GREGOR_ACTOR_ID = "33333333-3333-4333-8333-333333333333";
+const NAVIGATION_TIMEOUT = 30_000;
+
+function renderedPathFor(requestedPath: string): string {
+  // Settings is intentionally restricted to Gregor and redirects the two
+  // smoke actors to their role-aware start page.
+  if (requestedPath === "/settings") return "/";
+  return requestedPath;
+}
+
+function expectedHeading(actor: string, pagePath: string): string {
+  if (pagePath === "/") return actor === "phillip" ? "Werkstatt" : "Der Tag";
+  if (pagePath === "/warendurchlauf") return "Werkstatt";
+  if (pagePath === "/orders") return "Aufträge";
+  if (pagePath === "/customers") return "Kunden";
+  if (pagePath === "/buchhaltung/rechnungen") return "Rechnungen";
+  throw new Error(`PATH1_V5_SHELL_SMOKE_HEADING_MISSING:${pagePath}`);
+}
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -92,12 +109,32 @@ async function capture(page: Page, actor: string, viewport: (typeof VIEWPORTS)[n
 }
 
 async function assertPage(page: Page, actor: string, viewport: (typeof VIEWPORTS)[number], pagePath: string, problems: string[], screens: string[]) {
-  await expect(page.locator("main h1")).toBeVisible();
+  await expect(page.getByRole("main").getByRole("heading", { name: expectedHeading(actor, pagePath), exact: true })).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
   const alerts = (await page.locator('[role="alert"]:not(#__next-route-announcer__)').allInnerTexts()).map((text) => text.trim()).filter(Boolean);
   if (alerts.length) {
     problems.push(`${pagePath}:\n${alerts.join("\n")}`);
     screens.push(await capture(page, actor, viewport, pagePath));
   }
+}
+
+async function navigateAndWaitForContent(page: Page, actor: string, target: ReturnType<Page["locator"]>, href: string): Promise<string> {
+  const requestedPath = new URL(href, ORIGIN).pathname;
+  const renderedPath = renderedPathFor(requestedPath);
+
+  if (new URL(page.url()).pathname === requestedPath) {
+    await target.click({ timeout: NAVIGATION_TIMEOUT });
+    await expect(page).toHaveURL((url) => url.pathname === requestedPath, { timeout: NAVIGATION_TIMEOUT });
+  } else {
+    const reached = page.waitForURL((url) => url.pathname === requestedPath, { waitUntil: "commit", timeout: NAVIGATION_TIMEOUT });
+    await target.click({ timeout: NAVIGATION_TIMEOUT });
+    await reached;
+  }
+
+  if (renderedPath !== requestedPath) {
+    await expect.poll(() => new URL(page.url()).pathname, { timeout: NAVIGATION_TIMEOUT }).toBe(renderedPath);
+  }
+  await expect(page.getByRole("main").getByRole("heading", { name: expectedHeading(actor, renderedPath), exact: true })).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
+  return renderedPath;
 }
 
 async function visitDesktopLinks(page: Page, actor: string, viewport: (typeof VIEWPORTS)[number], problems: string[], screens: string[]) {
@@ -107,13 +144,11 @@ async function visitDesktopLinks(page: Page, actor: string, viewport: (typeof VI
   expect(hrefs.length).toBeGreaterThan(0);
   for (const href of hrefs) {
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    const destination = new URL(href, ORIGIN).pathname;
-    const reached = page.waitForURL((url) => url.pathname === destination, { waitUntil: "commit" });
-    await page.getByRole("navigation", { name: "Hauptnavigation", exact: true }).locator(`[data-href="${href}"]`).click();
-    await reached;
-    await assertPage(page, actor, viewport, destination, problems, screens);
-    if (!screens.includes(`${actor}-${viewport.name}-${viewport.width}x${viewport.height}-path-${destination === "/" ? "root" : destination.slice(1).replace(/\//g, "-")}`)) {
-      screens.push(await capture(page, actor, viewport, destination));
+    const target = page.getByRole("navigation", { name: "Hauptnavigation", exact: true }).locator(`[data-href="${href}"]`);
+    const renderedPath = await navigateAndWaitForContent(page, actor, target, href);
+    await assertPage(page, actor, viewport, renderedPath, problems, screens);
+    if (!screens.includes(`${actor}-${viewport.name}-${viewport.width}x${viewport.height}-path-${renderedPath === "/" ? "root" : renderedPath.slice(1).replace(/\//g, "-")}`)) {
+      screens.push(await capture(page, actor, viewport, renderedPath));
     }
   }
 }
@@ -123,14 +158,13 @@ async function visitMore(page: Page, actor: string, viewport: (typeof VIEWPORTS)
   await expect(dock).toBeVisible();
   await expect(dock.locator(":scope > *")).toHaveCount(5);
   for (const href of ["/warendurchlauf", "/settings"]) {
-    await dock.getByRole("button", { name: "Mehr", exact: true }).click();
+    await dock.getByRole("button", { name: "Mehr", exact: true }).click({ timeout: NAVIGATION_TIMEOUT });
     const more = page.getByRole("dialog", { name: "Mehr", exact: true });
     await expect(more).toBeVisible();
-    const reached = page.waitForURL((url) => url.pathname === href, { waitUntil: "commit" });
-    await more.locator(`a[href="${href}"]`).click();
-    await reached;
-    await assertPage(page, actor, viewport, href, problems, screens);
+    const renderedPath = await navigateAndWaitForContent(page, actor, more.locator(`a[href="${href}"]`), href);
+    await assertPage(page, actor, viewport, renderedPath, problems, screens);
     await page.goto("/", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("main").getByRole("heading", { name: expectedHeading(actor, "/"), exact: true })).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
   }
 }
 
