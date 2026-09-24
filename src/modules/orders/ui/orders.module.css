@@ -8,6 +8,7 @@
   font-weight: 900;
   letter-spacing: 0.15em;
   text-transform: uppercase;
+}
 .cardState {
   min-height: 320px;
   padding: 34px;
@@ -20,6 +21,7 @@
   gap: 9px;
   background: #fffdf8;
   text-align: center;
+}
 .cardState h1,
 .cardState p {
   margin: 0;
