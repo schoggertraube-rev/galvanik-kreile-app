@@ -108,9 +108,15 @@ async function visitDesktopLinks(page: Page, actor: string, viewport: (typeof VI
   for (const href of hrefs) {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     const destination = new URL(href, ORIGIN).pathname;
-    const reached = page.waitForURL((url) => url.pathname === destination, { waitUntil: "commit" });
-    await page.getByRole("navigation", { name: "Hauptnavigation", exact: true }).locator(`[data-href="${href}"]`).click();
-    await reached;
+    const target = page.getByRole("navigation", { name: "Hauptnavigation", exact: true }).locator(`[data-href="${href}"]`);
+    if (new URL(page.url()).pathname === destination) {
+      await target.click();
+      await expect(page).toHaveURL((url) => url.pathname === destination);
+    } else {
+      const reached = page.waitForURL((url) => url.pathname === destination, { waitUntil: "commit" });
+      await target.click();
+      await reached;
+    }
     await assertPage(page, actor, viewport, destination, problems, screens);
     if (!screens.includes(`${actor}-${viewport.name}-${viewport.width}x${viewport.height}-path-${destination === "/" ? "root" : destination.slice(1).replace(/\//g, "-")}`)) {
       screens.push(await capture(page, actor, viewport, destination));
