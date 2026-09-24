@@ -350,8 +350,19 @@ async function createIntake(
   suffix: string,
   index: number,
 ): Promise<Readback> {
-  await page.getByRole("button", { name: "Neuer Eingang", exact: true }).first().click();
-  await expect(page.getByRole("heading", { name: "Neuer Eingang", exact: true })).toBeVisible();
+  const intakeTrigger = page
+    .getByRole("navigation", { name: "Hauptnavigation", exact: true })
+    .getByRole("button", { name: "Neuer Eingang", exact: true });
+  await expect(intakeTrigger).toBeVisible();
+  await intakeTrigger.click();
+  const intakeDialog = page.getByRole("dialog", {
+    name: "Neuer Eingang",
+    exact: true,
+  });
+  await expect(intakeDialog).toBeVisible();
+  await expect(
+    intakeDialog.getByRole("heading", { name: "Neuer Eingang", exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Neukunde", exact: true }).click();
   await page.getByLabel("Firma / Name").fill(`SYNTHETISCH A3 Kunde ${index} ${suffix}`);
   await page.getByLabel("Terminwunsch").fill(localIsoDate(0));
@@ -500,7 +511,14 @@ async function clickPhillipActions(page: Page) {
     await dialog.getByRole("button", { name: "Schließen", exact: true }).click();
   }
   await bar.getByRole("button", { name: "Neuer Eingang", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Neuer Eingang", exact: true })).toBeVisible();
+  const intakeDialog = page.getByRole("dialog", {
+    name: "Neuer Eingang",
+    exact: true,
+  });
+  await expect(intakeDialog).toBeVisible();
+  await expect(
+    intakeDialog.getByRole("heading", { name: "Neuer Eingang", exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Anlegen schließen", exact: true }).click();
   await page.getByTestId("werkstatt-bundle").getByRole("button").click();
   await expect(page.getByTestId("werkstatt-bundle").getByRole("button")).toHaveAttribute("aria-pressed", "true");

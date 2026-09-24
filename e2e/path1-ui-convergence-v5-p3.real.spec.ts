@@ -304,16 +304,26 @@ async function openSearch(page: Page, query: string) {
 
 async function returnToWorkshopHub(page: Page) {
   const directLink = page.locator('a[href="/warendurchlauf"]:visible');
+  const reachedWorkshop = page.waitForURL(
+    (url) => url.pathname === "/warendurchlauf",
+    { timeout: 15_000 },
+  );
   if ((await directLink.count()) > 0) {
     await directLink.first().click();
   } else {
-    await page.getByRole("button", { name: "Mehr", exact: true }).click();
+    await page
+      .getByRole("navigation", {
+        name: "Mobile Hauptnavigation",
+        exact: true,
+      })
+      .getByRole("button", { name: "Mehr", exact: true })
+      .click();
     await page
       .getByRole("dialog", { name: "Mehr", exact: true })
       .getByRole("link", { name: "Werkstatt", exact: true })
       .click();
   }
-  await page.waitForURL((url) => url.pathname === "/warendurchlauf");
+  await reachedWorkshop;
   await expect(
     page.getByRole("heading", { name: "Werkstatt", exact: true }),
   ).toBeVisible();
