@@ -44,7 +44,9 @@ describe("Rolf V8 real public projection", () => {
     expect(screen.queryByText(/Geplant|kommt bald/i)).not.toBeInTheDocument();
     expect(screen.getByText("In Galvanik · Fällig: 18.09.2026")).toBeInTheDocument();
     expect(screen.queryByText(/Dieser Auftrag ist kritisch|Quelle:|Stand /)).not.toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole("button", { name: /A-2026-0001/ })[0]);
+    const priorityAction = screen.getAllByRole("button", { name: "Auftrag A-2026-0001 öffnen" })[0];
+    expect(priorityAction.closest("article")).not.toBeNull();
+    fireEvent.click(priorityAction);
     expect(ports.openOrder).toHaveBeenCalledWith("order-1");
   });
 

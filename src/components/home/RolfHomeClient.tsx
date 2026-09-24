@@ -57,15 +57,22 @@ function CompactOrderList({
   return (
     <ul className={styles.compactList}>
       {orders.slice(0, 3).map((order) => (
-        <li key={order.id}>
-          <button type="button" onClick={() => onOpen(order.id)}>
+        <li key={order.id} className={styles.compactListRow}>
+          <button
+            type="button"
+            className={styles.compactListOpen}
+            aria-label={`Auftrag ${order.orderNumber} öffnen`}
+            onClick={() => onOpen(order.id)}
+          >
+            <ArrowRight aria-hidden="true" />
+          </button>
+          <span className={styles.compactListCopy}>
             <span>
               <strong>{order.orderNumber}</strong>
               {order.customerName ?? "Kunde nicht hinterlegt"}
             </span>
             <small>{order.detail ?? order.title}</small>
-            <ArrowRight aria-hidden="true" />
-          </button>
+          </span>
         </li>
       ))}
     </ul>
@@ -143,19 +150,24 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
             <ol className={styles.priorityList}>
               {priority.map((order, index) => (
                 <li key={order.id}>
-                  <button
-                    type="button"
+                  <article
                     className={`${styles.orderCard} ${index === 0 ? styles.orderCardDominant : ""}`}
                     data-risk={order.risk}
-                    onClick={() => openOrder(order.id)}
                   >
                     <span className={styles.risk}>{riskLabel(order.risk)}</span>
                     <span className={styles.orderNumber}>{order.orderNumber}</span>
                     <strong>{order.customerName ?? "Kunde nicht hinterlegt"}</strong>
                     <span>{order.detail ?? order.title}</span>
                     <small>{statusLabel(order)} · {order.dueLabel}: {order.dueValue}</small>
-                    <ArrowRight aria-hidden="true" />
-                  </button>
+                    <button
+                      type="button"
+                      className={styles.orderCardOpen}
+                      aria-label={`Auftrag ${order.orderNumber} öffnen`}
+                      onClick={() => openOrder(order.id)}
+                    >
+                      <ArrowRight aria-hidden="true" />
+                    </button>
+                  </article>
                 </li>
               ))}
             </ol>

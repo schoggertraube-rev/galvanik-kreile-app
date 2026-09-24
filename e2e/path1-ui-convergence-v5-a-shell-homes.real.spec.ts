@@ -267,7 +267,7 @@ async function newContext(browser: Browser, viewport: { width: number; height: n
 }
 
 async function assertMoreMenu(page: Page) {
-  await page.getByRole("button", { name: "Mehr öffnen", exact: true }).click();
+  await page.getByRole("button", { name: "Mehr", exact: true }).click();
   const more = page.getByRole("dialog", { name: "Mehr", exact: true });
   await expect(more).toBeVisible();
   await expect(more.getByRole("heading", { name: "Mehr", exact: true })).toBeVisible();
@@ -433,7 +433,7 @@ async function clickRolfMobileNavigation(page: Page) {
     await page.waitForURL((url) => url.pathname === pathname);
   }
   await page.goto("/", { waitUntil: "networkidle" });
-  await page.getByRole("button", { name: "Mehr", exact: true }).click();
+  await page.getByRole("button", { name: "Mehr öffnen", exact: true }).click();
   const more = page.getByRole("dialog", { name: "Mehr", exact: true });
   await more.locator('a[href="/warendurchlauf"]').click();
   await page.waitForURL((url) => url.pathname === "/warendurchlauf");

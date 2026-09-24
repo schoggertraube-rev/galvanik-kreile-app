@@ -658,23 +658,43 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
         path: "/station/wareneingang",
         status: 0,
       };
-      const retiredRoutePage = await rolf.context.newPage();
-      try {
-        for (const retiredRoute of RETIRED_ROUTE_MATRIX) {
-          const response = await retiredRoutePage.goto(retiredRoute, {
-            waitUntil: "domcontentloaded",
-          });
-          const status = response?.status() ?? 0;
-          retiredRouteResults.push({ path: retiredRoute, status });
-          expect(
-            status,
-            `${retiredRoute} must resolve through Next's unmatched-route 404`,
-          ).toBe(404);
-          await expect(retiredRoutePage.locator("body")).not.toContainText(
-            /NOT_AVAILABLE|Liquidität Stabil|145 Belege|62 Rechnungen|1240 Zeitbuchungen|Google-API|Scan & KI-Erfassung|App-Nutzung \/ Analytics|Testanalyse \(Testpilot\)/i,
-          );
+      const retiredRoutePartitions: Array<Array<{ index: number; path: string }>> = [[], [], []];
+      RETIRED_ROUTE_MATRIX.forEach((retiredRoute, index) => {
+        retiredRoutePartitions[index % retiredRoutePartitions.length].push({ index, path: retiredRoute });
+      });
+      const partitionResults = await Promise.all(retiredRoutePartitions.map(async (partition) => {
+        const retiredRoutePage = await rolf.context.newPage();
+        try {
+          const results: Array<{ index: number; path: string; status: number }> = [];
+          for (const retiredRoute of partition) {
+            const response = await retiredRoutePage.goto(retiredRoute.path, {
+              waitUntil: "domcontentloaded",
+            });
+            const status = response?.status() ?? 0;
+            expect(
+              status,
+              `${retiredRoute.path} must resolve through Next's unmatched-route 404`,
+            ).toBe(404);
+            await expect(retiredRoutePage.locator("body")).not.toContainText(
+              /NOT_AVAILABLE|Liquidität Stabil|145 Belege|62 Rechnungen|1240 Zeitbuchungen|Google-API|Scan & KI-Erfassung|App-Nutzung \/ Analytics|Testanalyse \(Testpilot\)/i,
+            );
+            results.push({ ...retiredRoute, status });
+          }
+          return results;
+        } finally {
+          await retiredRoutePage.close();
         }
-        const legacyStationResponse = await retiredRoutePage.goto(
+      }));
+      retiredRouteResults.push(
+        ...partitionResults
+          .flat()
+          .sort((left, right) => left.index - right.index)
+          .map(({ path: retiredPath, status }) => ({ path: retiredPath, status })),
+      );
+
+      const legacyStationPage = await rolf.context.newPage();
+      try {
+        const legacyStationResponse = await legacyStationPage.goto(
           legacyStationRouteResult.path,
           { waitUntil: "domcontentloaded" },
         );
@@ -683,11 +703,11 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
           status: legacyStationResponse?.status() ?? 0,
         };
         expect(legacyStationRouteResult.status).toBe(404);
-        await expect(retiredRoutePage.locator("body")).not.toContainText(
+        await expect(legacyStationPage.locator("body")).not.toContainText(
           /Stationsdaten werden geladen|WarendurchlaufStationNav|NOT_AVAILABLE/,
         );
       } finally {
-        await retiredRoutePage.close();
+        await legacyStationPage.close();
       }
       const galvanikControl = await rolf.page.goto("/warendurchlauf/galvanik", {
         waitUntil: "networkidle",
