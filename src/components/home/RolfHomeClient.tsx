@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { ArrowRight, Inbox, Truck, X } from "lucide-react";
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
@@ -128,7 +127,7 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
   const canStartOrder = canWrite && model.canCreateOrder && !permissionsLoading && hasPermission("perm_data_orders");
 
   return (
-    <section className={styles.screen} aria-labelledby="rolf-title" data-testid="rolf-v8-home">
+    <section className={styles.screen} aria-labelledby="rolf-title" data-testid="rolf-v5-home">
       <header className={styles.hero}>
         <div>
           <h1 id="rolf-title">Der Tag</h1>
@@ -152,7 +151,7 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
       <div className={styles.grid}>
         <section className={styles.attention} aria-labelledby="attention-title">
           <header className={styles.sectionHeader}>
-            <div><span className={styles.signal} aria-hidden="true" /><h2 id="attention-title">Das braucht dich</h2></div>
+            <div><span className={styles.signal} aria-hidden="true" /><span id="attention-title" className={styles.sectionTitle}>Das braucht dich</span></div>
             <span>{openOrdersLabel(orders.length)}</span>
           </header>
 
@@ -160,7 +159,7 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
             <p className={styles.sectionEmpty} role="status">Heute keine offenen Aufträge.</p>
           ) : (
             <ol className={styles.priorityList}>
-              {priority.map((order, index) => (
+              {priority.slice(0, 4).map((order, index) => (
                 <li key={order.id}>
                   <article
                     className={`${styles.orderCard} ${index === 0 ? styles.orderCardDominant : ""}`}
@@ -189,7 +188,7 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
         <aside className={styles.dayAreas} aria-label="Weitere Tagesbereiche">
           <section className={styles.dayArea} aria-labelledby="today-out-title">
             <header className={styles.dayAreaHeader}>
-              <div><Truck aria-hidden="true" /><h2 id="today-out-title">Heute raus</h2></div>
+              <div><Truck aria-hidden="true" /><span id="today-out-title" className={styles.dayAreaTitle}>Heute raus</span></div>
               <strong>{finished.length}</strong>
             </header>
             {finished.length === 0 ? (
@@ -204,7 +203,7 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
 
           <section className={styles.dayArea} aria-labelledby="recent-title">
             <header className={styles.dayAreaHeader}>
-              <div><Inbox aria-hidden="true" /><h2 id="recent-title">Neu seit gestern 18:30</h2></div>
+              <div><Inbox aria-hidden="true" /><span id="recent-title" className={styles.dayAreaTitle}>Neu seit gestern 18:30</span></div>
               <strong>{recent.length}</strong>
             </header>
             {recent.length === 0 ? (
@@ -212,7 +211,6 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
             ) : (
               <CompactOrderList orders={recent} onOpen={openOrder} />
             )}
-            <Link className={styles.sectionAction} href="/orders" prefetch={false}>Auftragsbestand öffnen<ArrowRight aria-hidden="true" /></Link>
           </section>
         </aside>
       </div>

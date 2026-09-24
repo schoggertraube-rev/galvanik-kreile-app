@@ -65,16 +65,21 @@ export function TargetNavigation() {
   return (
     <aside className={styles.sidebar}>
       <nav aria-label="Hauptnavigation">
+        <span className={styles.navLabel}>Schnellaktionen</span>
         <button type="button" onClick={() => requestGlobalCreate("DIRECT_INTAKE")}>
           <Inbox aria-hidden="true" />
           <span>Neuer Eingang</span>
         </button>
         {link("/orders?station=fertig", "Ware raus", Truck)}
+        <span className={styles.navDivider} aria-hidden="true" />
+        <span className={styles.navLabel}>Bereiche</span>
         {link("/", "Der Tag", Home)}
         {link("/warendurchlauf", "Werkstatt", PackageCheck)}
         {link("/orders", "Aufträge", ClipboardList)}
         {link("/customers", "Kunden & Kontakt", Users)}
         {canViewFinance ? link("/buchhaltung/rechnungen", "Geld & Rechnungen", ReceiptText) : null}
+        <span className={`${styles.navDivider} ${styles.navBottom}`} aria-hidden="true" />
+        <span className={styles.navLabel}>Weiteres</span>
         {link("/settings", "Einstellungen", Settings)}
       </nav>
     </aside>

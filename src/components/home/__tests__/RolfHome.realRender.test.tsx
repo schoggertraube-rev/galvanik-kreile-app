@@ -39,9 +39,10 @@ describe("Rolf V8 real public projection", () => {
   it("shows the complete daily structure from the real projection and opens the same order overlay", () => {
     render(<RolfHomeClient model={{ kind: "data", role: "meister", canCreateOrder: true, projection }} />);
     expect(screen.getByRole("heading", { name: "Der Tag" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Das braucht dich" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Heute raus" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Neu seit gestern 18:30" })).toBeInTheDocument();
+    expect(screen.getByText("Das braucht dich")).toBeInTheDocument();
+    expect(screen.getByText("Heute raus")).toBeInTheDocument();
+    expect(screen.getByText("Neu seit gestern 18:30")).toBeInTheDocument();
+    expect(screen.getAllByRole("heading")).toHaveLength(1);
     expect(screen.queryByText(/Geplant|kommt bald/i)).not.toBeInTheDocument();
     expect(screen.getByText("In Galvanik · Fällig: 18.09.2026")).toBeInTheDocument();
     expect(screen.queryByText(/Dieser Auftrag ist kritisch|Quelle:|Stand /)).not.toBeInTheDocument();
@@ -104,9 +105,10 @@ describe("Rolf V8 real public projection", () => {
   it("renders honest empty, denied and error states", () => {
     const empty = { ...projection, orders: [], priority: [], recent: [], dominant: null } satisfies OrdersHomeProjection;
     const { rerender } = render(<RolfHomeClient model={{ kind: "empty", role: "meister", canCreateOrder: true, projection: empty }} />);
-    expect(screen.getByRole("heading", { name: "Das braucht dich" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Heute raus" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Neu seit gestern 18:30" })).toBeInTheDocument();
+    expect(screen.getByText("Das braucht dich")).toBeInTheDocument();
+    expect(screen.getByText("Heute raus")).toBeInTheDocument();
+    expect(screen.getByText("Neu seit gestern 18:30")).toBeInTheDocument();
+    expect(screen.getAllByRole("heading")).toHaveLength(1);
     expect(screen.getAllByText("Heute keine offenen Aufträge.")).toHaveLength(1);
     expect(screen.getByText("Heute keine fertigen Aufträge.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Ware raus/ })).toBeDisabled();
