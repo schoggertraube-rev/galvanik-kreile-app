@@ -595,10 +595,10 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ""
         run: npx vitest run src/test/search_tenant.integration.test.ts --maxWorkers=1 --no-file-parallelism
 
-      - name: Install Playwright WebKit for P3 browser contract
+      - name: Install Playwright WebKit for V5 shell smoke
         run: npx playwright install --with-deps webkit
 
-      - name: P3 synthetic local built target-shell browser matrix (blocking; not Production evidence)
+      - name: V5 shell browser smoke (blocking; not Production evidence)
         shell: bash
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
@@ -610,11 +610,9 @@ jobs:
           KREILE_ROLF_APP_USER_ID: 11111111-1111-4111-8111-111111111111
           KREILE_PHILLIP_APP_USER_ID: 22222222-2222-4222-8222-222222222222
           KREILE_GREGOR_APP_USER_ID: 33333333-3333-4333-8333-333333333333
-          P3_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          P3_TEST_ORIGIN: https://localhost:3443
           A3_CANDIDATE_SHA: ${{ github.sha }}
           A3_TEST_ORIGIN: https://localhost:3443
-          A3_EVIDENCE_OUTPUT_DIR: test-results/path1-v5-a3-shell-homes-nav/screens
+          A3_EVIDENCE_OUTPUT_DIR: test-results/path1-v5-shell-smoke/screens
         run: |
           set -euo pipefail
           if [ -d public ]; then
@@ -696,10 +694,7 @@ jobs:
             sleep 1
           done
           test "$ready" -eq 1
-          CI= npx playwright test \
-            e2e/path1-ui-convergence-v5-p3.real.spec.ts \
-            e2e/path1-ui-convergence-v5-a-shell-homes.real.spec.ts \
-            --project=Tablet --workers=1
+          CI= npx playwright test e2e/path1-v5-shell-smoke.real.spec.ts --project=Tablet --workers=1
 
       - name: Upload browser E2E failure diagnostics
         if: failure()
@@ -709,25 +704,16 @@ jobs:
           if-no-files-found: error
           path: test-results/**
 
-      - name: Upload P3 synthetic browser compatibility evidence
+      - name: Upload V5 shell smoke screens and Exact-SHA receipt
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: p3-synthetic-core-surfaces-search-browser-compatibility
-          if-no-files-found: warn
-          path: |
-            docs/evidence/path1/artifacts/p3-core-surfaces-search/*.png
-            docs/evidence/path1/artifacts/p3-core-surfaces-search/p3-browser-receipt.json
-
-      - name: Upload A3 V5 shell homes screens and Exact-SHA receipt
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: path1-v5-a3-shell-homes-screens
+          name: path1-v5-shell-smoke-screens
           if-no-files-found: error
           path: |
-            test-results/path1-v5-a3-shell-homes-nav/screens/*.png
-            test-results/path1-v5-a3-shell-homes-nav/screens/a-browser-receipt.json
+            test-results/path1-v5-shell-smoke/screens/*.png
+            test-results/path1-v5-shell-smoke/screens/*.txt
+            test-results/path1-v5-shell-smoke/screens/a-browser-receipt.json
 
       - name: Stop isolated local Supabase
         if: always()

@@ -12,6 +12,7 @@ vi.mock("@/components/layout/GlobalCreateFlow", () => ({ requestGlobalCreate: po
 vi.mock("@/lib/auth/PermissionsContext", () => ({
   usePermissions: () => ({
     loading: ports.permissions.loading,
+    name: "Rolf Meister",
     hasPermission: (permission: string) => permission === "perm_data_orders" && ports.permissions.canCreateOrder,
   }),
 }));
@@ -68,7 +69,27 @@ describe("Rolf V8 real public projection", () => {
     ports.permissions.canCreateOrder = true;
   });
 
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it.each([
+    { risks: ["red", "red", "yellow"], expected: "Guten Morgen, Rolf. 2 dringend · 1 weitere brauchen dich." },
+    { risks: ["yellow", "orange"], expected: "Guten Morgen, Rolf. 2 brauchen dich." },
+    { risks: [], expected: "Heute keine offenen Aufträge." },
+  ] as const)("derives the truthful day line for %#", ({ risks, expected }) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 8, 24, 9));
+    const orders = risks.map((risk, index) => ({
+      ...projection.orders[0],
+      id: `order-${index + 1}`,
+      orderNumber: `A-2026-00${index + 1}`,
+      risk,
+    }));
+    render(<RolfHomeClient model={{ kind: orders.length === 0 ? "empty" : "data", role: "meister", canCreateOrder: true, projection: { ...projection, orders, priority: orders, recent: orders } }} />);
+    expect(screen.getByText(expected)).toBeInTheDocument();
+  });
 
   it.each(["2026-09-16T08:15:00.000Z", "2026-01-15T23:40:00.000Z"])(
     "keeps technical source timestamps out of the compact home for %s",

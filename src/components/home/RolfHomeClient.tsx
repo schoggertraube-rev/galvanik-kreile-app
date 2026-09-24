@@ -47,6 +47,23 @@ function openOrdersLabel(count: number): string {
   return count === 1 ? "1 offener Auftrag" : `${count} offene Aufträge`;
 }
 
+function dayGreeting(hour: number): string {
+  if (hour < 12) return "Guten Morgen";
+  if (hour < 18) return "Guten Tag";
+  return "Guten Abend";
+}
+
+function dayLine(orders: readonly OrdersHomeSource[], displayName: string, now = new Date()): string {
+  if (orders.length === 0) return "Heute keine offenen Aufträge.";
+  const firstName = displayName.trim().split(/\s+/)[0] || "Rolf";
+  const urgent = orders.filter((order) => order.risk === "red").length;
+  const other = orders.length - urgent;
+  const salutation = `${dayGreeting(now.getHours())}, ${firstName}.`;
+  return urgent === 0
+    ? `${salutation} ${other} brauchen dich.`
+    : `${salutation} ${urgent} dringend · ${other} weitere brauchen dich.`;
+}
+
 function CompactOrderList({
   orders,
   onOpen,
@@ -81,7 +98,7 @@ function CompactOrderList({
 
 export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
   const openOrder = useOverlayStore((state) => state.openOrder);
-  const { hasPermission, loading: permissionsLoading } = usePermissions();
+  const { hasPermission, loading: permissionsLoading, name } = usePermissions();
   const [goodsOutOpen, setGoodsOutOpen] = useState(false);
 
   if (model.kind === "denied") {
@@ -105,7 +122,6 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
   const priority = model.projection.priority;
   const finished = orders.filter((order) => order.station === "fertig");
   const recent = model.projection.recent;
-  const urgentCount = orders.filter((order) => ["red", "blocked", "orange"].includes(order.risk)).length;
   const canWrite = model.role !== "readonly";
   const canStartOrder = canWrite && model.canCreateOrder && !permissionsLoading && hasPermission("perm_data_orders");
 
@@ -114,13 +130,7 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
       <header className={styles.hero}>
         <div>
           <h1 id="rolf-title">Der Tag</h1>
-          <p className={styles.dayLine}>
-            {orders.length === 0
-              ? "Heute keine offenen Aufträge."
-              : urgentCount === 0
-                ? "Alle dringenden Punkte erledigt — nichts Kritisches offen."
-                : `${urgentCount} dringend · ${orders.length - urgentCount} weitere brauchen dich.`}
-          </p>
+          <p className={styles.dayLine}>{dayLine(orders, name)}</p>
         </div>
       </header>
 
