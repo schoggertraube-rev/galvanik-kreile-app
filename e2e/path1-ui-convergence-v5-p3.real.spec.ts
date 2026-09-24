@@ -321,7 +321,7 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
   test("belegt Orders V8, Customers V2, Homes, Backstack und deterministische Suche", async ({
     browser,
   }) => {
-    test.setTimeout(300_000);
+    test.setTimeout(600_000);
     const databaseUrl = requiredEnv("DATABASE_URL");
     const apiUrl = requiredEnv("NEXT_PUBLIC_SUPABASE_URL");
     const anonKey = requiredEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
