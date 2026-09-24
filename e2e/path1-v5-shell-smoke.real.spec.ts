@@ -86,7 +86,7 @@ async function capture(page: Page, actor: string, viewport: (typeof VIEWPORTS)[n
   mkdirSync(OUTPUT_DIR, { recursive: true });
   const suffix = pagePath ? `-path-${pagePath === "/" ? "root" : pagePath.slice(1).replace(/\//g, "-")}` : "";
   const file = `${actor}-${viewport.name}-${viewport.width}x${viewport.height}${suffix}`;
-  await page.screenshot({ path: path.join(OUTPUT_DIR, `${file}.png`), fullPage: false });
+  await page.screenshot({ path: path.join(OUTPUT_DIR, `${file}.png`), fullPage: false, animations: "disabled" });
   writeFileSync(path.join(OUTPUT_DIR, `${file}.txt`), `${await page.locator("main").innerText()}\n`, "utf8");
   return file;
 }
