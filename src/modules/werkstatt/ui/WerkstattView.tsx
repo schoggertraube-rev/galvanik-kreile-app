@@ -14,34 +14,57 @@ const PICKER_DIALOG_ID = "werkstatt-order-picker";
 type PickerKind = "order" | "goods-out";
 
 type WerkstattViewOwner = symbol;
+type WerkstattViewRegistry = {
+  mounted: WerkstattViewOwner[];
+  listeners: Set<() => void>;
+  active: WerkstattViewOwner | null;
+};
+type WerkstattRegistryWindow = Window & {
+  __kreileWerkstattViewRegistry?: WerkstattViewRegistry;
+};
 
-const mountedWerkstattViews: WerkstattViewOwner[] = [];
-const werkstattViewListeners = new Set<() => void>();
-let activeWerkstattView: WerkstattViewOwner | null = null;
+const serverWerkstattViewRegistry: WerkstattViewRegistry = {
+  mounted: [],
+  listeners: new Set(),
+  active: null,
+};
+
+function getWerkstattViewRegistry(): WerkstattViewRegistry {
+  if (typeof window === "undefined") return serverWerkstattViewRegistry;
+  const host = window as WerkstattRegistryWindow;
+  host.__kreileWerkstattViewRegistry ??= {
+    mounted: [],
+    listeners: new Set(),
+    active: null,
+  };
+  return host.__kreileWerkstattViewRegistry;
+}
 
 function emitWerkstattViewChange() {
-  werkstattViewListeners.forEach((listener) => listener());
+  getWerkstattViewRegistry().listeners.forEach((listener) => listener());
 }
 
 function subscribeWerkstattView(listener: () => void) {
-  werkstattViewListeners.add(listener);
-  return () => werkstattViewListeners.delete(listener);
+  const registry = getWerkstattViewRegistry();
+  registry.listeners.add(listener);
+  return () => registry.listeners.delete(listener);
 }
 
 function getActiveWerkstattView() {
-  return activeWerkstattView;
+  return getWerkstattViewRegistry().active;
 }
 
 function registerWerkstattView(owner: WerkstattViewOwner) {
-  mountedWerkstattViews.push(owner);
-  activeWerkstattView = owner;
+  const registry = getWerkstattViewRegistry();
+  registry.mounted.push(owner);
+  registry.active = owner;
   emitWerkstattViewChange();
 
   return () => {
-    const index = mountedWerkstattViews.lastIndexOf(owner);
-    if (index >= 0) mountedWerkstattViews.splice(index, 1);
-    if (activeWerkstattView === owner) {
-      activeWerkstattView = mountedWerkstattViews.at(-1) ?? null;
+    const index = registry.mounted.lastIndexOf(owner);
+    if (index >= 0) registry.mounted.splice(index, 1);
+    if (registry.active === owner) {
+      registry.active = registry.mounted.at(-1) ?? null;
       emitWerkstattViewChange();
     }
   };
