@@ -91,9 +91,19 @@ describe("W4 orders read states", () => {
     const row = await findOrderRow();
     expect(row).toHaveTextContent("A-100 · Kreile GmbH");
     expect(row).toHaveTextContent("Welle · Zink");
+    expect(row).not.toHaveTextContent("Welle verzinken");
     fireEvent.change(screen.getByRole("textbox", { name: "Aufträge filtern" }), { target: { value: "nicht-vorhanden" } });
     expect(await screen.findByText("Keine Aufträge gefunden.")).toBeInTheDocument();
     expect(screen.queryByText("Keine Aufträge.")).not.toBeInTheDocument();
+  });
+
+  it("opens the selected order with its ID", async () => {
+    ports.getOrdersDb.mockResolvedValue({ ok: true, data: [order("order-42", "A-100")] });
+    render(<OrdersPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Auftrag A-100 öffnen" }));
+
+    expect(ports.openOrder).toHaveBeenCalledWith("order-42");
   });
 
   it("clears stale values when a sync reload returns non-ok", async () => {

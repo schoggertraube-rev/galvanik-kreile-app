@@ -233,7 +233,6 @@ export function OrdersAppAdapter() {
                 <span aria-hidden="true"></span>
               </div>
               {orders.map((order) => {
-                const task = order.task?.trim();
                 const dueValue = order.dueValue?.trim();
                 const location = order.station.trim() || order.statusText.trim();
                 const detail = detailText(order);
@@ -252,7 +251,7 @@ export function OrdersAppAdapter() {
                       {location}
                       {dueValue ? <span className={`app-status ${statusClass}`.trim()}>{dueValue}</span> : null}
                     </div>
-                    <div className="app-meta">{task}</div>
+                    <div className="app-meta"></div>
                     <button
                       aria-label={`Auftrag ${order.orderNumber} öffnen`}
                       className="app-btn"
