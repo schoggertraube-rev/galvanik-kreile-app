@@ -60,11 +60,11 @@ export function MoreMenu({ open, onClose }: { open: boolean; onClose: () => void
             <Inbox aria-hidden="true" />
             <span><strong>Infos rein</strong><small>Kunde oder Auftrag erfassen</small></span>
           </button>
-          <Link className={styles.moreTile} href="/warendurchlauf" prefetch={false} onClick={onClose}>
+          <Link className={styles.moreTile} href="/warendurchlauf" prefetch={false} onNavigate={onClose}>
             <PackageCheck aria-hidden="true" />
             <span><strong>Werkstatt</strong><small>Arbeit und Übergaben öffnen</small></span>
           </Link>
-          <Link className={styles.moreTile} href="/settings" prefetch={false} onClick={onClose}>
+          <Link className={styles.moreTile} href="/settings" prefetch={false} onNavigate={onClose}>
             <Settings aria-hidden="true" />
             <span><strong>Einstellungen</strong><small>Profil und Anwendung</small></span>
           </Link>

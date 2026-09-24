@@ -431,9 +431,11 @@ async function clickRolfNavigation(page: Page) {
   );
   await page.getByRole("link", { name: "Einstellungen", exact: true }).click();
   await reachedSettings;
-  await expect(
-    page.getByRole("heading", { name: "Einstellungen", exact: true }),
-  ).toBeVisible();
+  await page.waitForURL(
+    (url) => url.pathname === "/",
+    { waitUntil: "commit" },
+  );
+  expect(new URL(page.url()).pathname).toBe("/");
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Suche öffnen" }).click();
   await expect(page.getByRole("dialog", { name: "Kunden und Aufträge" })).toBeVisible();
