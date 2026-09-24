@@ -19,11 +19,28 @@ const ACTORS = [
   { key: "rolf", id: "11111111-1111-4111-8111-111111111111", pin: "4186", role: "meister" },
   { key: "phillip", id: "22222222-2222-4222-8222-222222222222", pin: "7315", role: "werkstatt" },
 ] as const;
+const GREGOR_ACTOR_ID = "33333333-3333-4333-8333-333333333333";
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`PATH1_V5_SHELL_SMOKE_ENV_MISSING:${name}`);
   return value;
+}
+
+async function createLocalAuthUser(apiUrl: string, anonKey: string, email: string, password: string) {
+  const response = await fetch(`${apiUrl.replace(/\/$/, "")}/auth/v1/signup`, {
+    method: "POST",
+    headers: {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email, password }),
+  });
+  const body = (await response.json()) as { user?: { id?: string }; message?: string };
+  if (!response.ok || typeof body.user?.id !== "string") {
+    throw new Error(`PATH1_V5_SHELL_SMOKE_AUTH_SIGNUP_FAILED:${response.status}:${body.message ?? "invalid response"}`);
+  }
 }
 
 function checkoutSha(): string {
@@ -114,6 +131,8 @@ test.describe("PATH1 V5 Shell Smoke", () => {
   test("belegt echte PIN-Sitzungen, Navigation und Screens für Rolf und Phillip", async ({ browser }) => {
     const databaseUrl = required("DATABASE_URL");
     const sessionSecret = required("APP_SESSION_SECRET");
+    const apiUrl = required("NEXT_PUBLIC_SUPABASE_URL");
+    const anonKey = required("NEXT_PUBLIC_SUPABASE_ANON_KEY");
     const declaredSha = required("A3_CANDIDATE_SHA").toLowerCase();
     expect(declaredSha).toMatch(/^[0-9a-f]{40}$/);
     expect(declaredSha).toBe(checkoutSha());
@@ -122,15 +141,20 @@ test.describe("PATH1 V5 Shell Smoke", () => {
     const suffix = `${Date.now()}-${process.pid}`;
     const emailRolf = `shell-smoke-rolf-${suffix}@local.test`;
     const emailPhillip = `shell-smoke-phillip-${suffix}@local.test`;
+    const gregorEmail = `a3-gregor-${suffix}@local.test`;
+    const gregorPassword = `A3-Gregor-${suffix}!`;
     const hashRolf = await bcrypt.hash(ACTORS[0].pin, 12);
     const hashPhillip = await bcrypt.hash(ACTORS[1].pin, 12);
     try {
+      await createLocalAuthUser(apiUrl, anonKey, gregorEmail, gregorPassword);
+      const insertedAt = new Date(Date.now() - 5_000).toISOString();
       await sql`
-        INSERT INTO public.app_users (id, tenant_id, email, full_name, role, pin_hash, active)
+        INSERT INTO public.app_users (id, tenant_id, email, full_name, role, pin_hash, active, created_at, updated_at)
         VALUES
-          (${ACTORS[0].id}::uuid, ${TENANT}, ${emailRolf}, 'Rolf', 'meister', ${hashRolf}, true),
-          (${ACTORS[1].id}::uuid, ${TENANT}, ${emailPhillip}, 'Phillip', 'werkstatt', ${hashPhillip}, true)
-        ON CONFLICT (id) DO UPDATE SET email = excluded.email, full_name = excluded.full_name, role = excluded.role, pin_hash = excluded.pin_hash, active = excluded.active, updated_at = now()
+          (${ACTORS[0].id}::uuid, ${TENANT}, ${emailRolf}, 'Rolf', 'meister', ${hashRolf}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz),
+          (${ACTORS[1].id}::uuid, ${TENANT}, ${emailPhillip}, 'Phillip', 'werkstatt', ${hashPhillip}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz),
+          (${GREGOR_ACTOR_ID}::uuid, ${TENANT}, ${gregorEmail}, 'Gregor', 'admin', null, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz)
+        ON CONFLICT (id) DO UPDATE SET email = excluded.email, full_name = excluded.full_name, role = excluded.role, pin_hash = excluded.pin_hash, active = excluded.active, updated_at = excluded.updated_at
       `;
       for (const actor of ACTORS) for (const viewport of VIEWPORTS) {
         const context = await browser.newContext({ viewport });
