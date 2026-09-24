@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type {
   PhillipOrderCard,
   PhillipWerkstattViewModel,
@@ -12,6 +12,40 @@ import styles from "./WerkstattView.module.css";
 const PICKER_TITLE_ID = "werkstatt-order-picker-title";
 const PICKER_DIALOG_ID = "werkstatt-order-picker";
 type PickerKind = "order" | "goods-out";
+
+type WerkstattViewOwner = symbol;
+
+const mountedWerkstattViews: WerkstattViewOwner[] = [];
+const werkstattViewListeners = new Set<() => void>();
+let activeWerkstattView: WerkstattViewOwner | null = null;
+
+function emitWerkstattViewChange() {
+  werkstattViewListeners.forEach((listener) => listener());
+}
+
+function subscribeWerkstattView(listener: () => void) {
+  werkstattViewListeners.add(listener);
+  return () => werkstattViewListeners.delete(listener);
+}
+
+function getActiveWerkstattView() {
+  return activeWerkstattView;
+}
+
+function registerWerkstattView(owner: WerkstattViewOwner) {
+  mountedWerkstattViews.push(owner);
+  activeWerkstattView = owner;
+  emitWerkstattViewChange();
+
+  return () => {
+    const index = mountedWerkstattViews.lastIndexOf(owner);
+    if (index >= 0) mountedWerkstattViews.splice(index, 1);
+    if (activeWerkstattView === owner) {
+      activeWerkstattView = mountedWerkstattViews.at(-1) ?? null;
+      emitWerkstattViewChange();
+    }
+  };
+}
 
 function riskStatusClassName(risk: string): string {
   if (risk === "red" || risk === "blocked") return `${styles.statusBadge} ${styles.statusDanger}`;
@@ -65,6 +99,17 @@ export function WerkstattView({
   const pickerDialogRef = useRef<HTMLElement>(null);
   const pickerCloseRef = useRef<HTMLButtonElement>(null);
   const restoreFocusRef = useRef(false);
+  const [owner] = useState<WerkstattViewOwner>(() => Symbol("werkstatt-view"));
+  const activeOwner = useSyncExternalStore(
+    subscribeWerkstattView,
+    getActiveWerkstattView,
+    () => null,
+  );
+
+  useLayoutEffect(
+    () => registerWerkstattView(owner),
+    [owner],
+  );
 
   const isData = view.kind === "data";
   const isEmpty = view.kind === "empty";
@@ -118,6 +163,8 @@ export function WerkstattView({
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [activePicker, isPickerOpen]);
+
+  if (activeOwner !== null && activeOwner !== owner) return null;
 
   const openPicker = (event: { currentTarget: HTMLElement }, picker: PickerKind) => {
     pickerTriggerRef.current = event.currentTarget;
