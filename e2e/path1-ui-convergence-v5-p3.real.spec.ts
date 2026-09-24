@@ -308,7 +308,7 @@ async function returnToWorkshopHub(
 ) {
   const reachedWorkshop = page.waitForURL(
     (url) => url.pathname === "/warendurchlauf",
-    { timeout: 15_000 },
+    { timeout: 15_000, waitUntil: "commit" },
   );
   if (viewport.width >= 1300) {
     await page

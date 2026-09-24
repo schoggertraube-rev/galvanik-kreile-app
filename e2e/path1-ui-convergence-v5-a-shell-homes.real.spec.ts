@@ -425,9 +425,15 @@ async function clickRolfNavigation(page: Page) {
   await page.goto("/orders", { waitUntil: "domcontentloaded" });
   await page.getByRole("link", { name: "Der Tag", exact: true }).click();
   await page.waitForURL((url) => url.pathname === "/");
+  const reachedSettings = page.waitForURL(
+    (url) => url.pathname === "/settings",
+    { waitUntil: "commit" },
+  );
   await page.getByRole("link", { name: "Einstellungen", exact: true }).click();
-  await page.waitForLoadState("domcontentloaded");
-  expect(new URL(page.url()).pathname).toBe("/");
+  await reachedSettings;
+  await expect(
+    page.getByRole("heading", { name: "Einstellungen", exact: true }),
+  ).toBeVisible();
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Suche öffnen" }).click();
   await expect(page.getByRole("dialog", { name: "Kunden und Aufträge" })).toBeVisible();
