@@ -103,12 +103,13 @@ async function assertPage(page: Page, actor: string, viewport: (typeof VIEWPORTS
 async function visitDesktopLinks(page: Page, actor: string, viewport: (typeof VIEWPORTS)[number], problems: string[], screens: string[]) {
   const navigation = page.getByRole("navigation", { name: "Hauptnavigation", exact: true });
   await expect(navigation).toBeVisible();
-  const hrefs = await navigation.locator("a[href]").evaluateAll((links) => links.map((link) => link.getAttribute("href")).filter((href): href is string => Boolean(href)));
+  const hrefs = await navigation.locator("[data-href]").evaluateAll((items) => items.map((item) => item.getAttribute("data-href")).filter((href): href is string => Boolean(href)));
+  expect(hrefs.length).toBeGreaterThan(0);
   for (const href of hrefs) {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     const destination = new URL(href, ORIGIN).pathname;
     const reached = page.waitForURL((url) => url.pathname === destination, { waitUntil: "commit" });
-    await page.getByRole("navigation", { name: "Hauptnavigation", exact: true }).locator(`a[href="${href}"]`).click();
+    await page.getByRole("navigation", { name: "Hauptnavigation", exact: true }).locator(`[data-href="${href}"]`).click();
     await reached;
     await assertPage(page, actor, viewport, destination, problems, screens);
   }

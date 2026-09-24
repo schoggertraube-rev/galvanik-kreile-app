@@ -1,12 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { ArrowRight, Inbox, Truck, X } from "lucide-react";
+// Rolf-Startseite "Der Tag" 1:1 aus der Owner-Mock-Bauvorlage (mock_extract/kreile/rolf_home, rolf_home_tablet).
+// Markup/Klassen aus Vorlage.jsx, Optik nur aus mock-kreile-rolf-home.css. Daten: echte OrdersHomeProjection.
+// Owner G7: Elemente ohne echte Datenquelle/Aktion (Kuemmern, an Phillip, Spaeter, Erledigt-Bedingungen,
+// Zaehler-Chips) sind weggelassen.
+
+import { useRouter } from "next/navigation";
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
+import { useMockFrameMode } from "@/components/layout/MockFrameMode";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useOverlayStore } from "@/lib/overlayStore";
 import type { OrdersHomeProjection, OrdersHomeSource } from "@/modules/orders/public";
-import styles from "./RolfHome.module.css";
 
 type RolfIdentity = {
   role: "buero" | "meister" | "readonly";
@@ -19,102 +23,101 @@ export type RolfHomeModel =
   | { kind: "denied"; message: string }
   | { kind: "error"; message: string };
 
-function riskLabel(risk: OrdersHomeSource["risk"]): string {
-  if (risk === "red") return "Kritisch";
-  if (risk === "blocked") return "Blockiert";
-  if (risk === "orange") return "Dringend";
-  if (risk === "yellow") return "Knapp";
-  if (risk === "green") return "im Plan";
-  return "Ohne Risikowert";
-}
+const STATUS_LABELS: Record<string, string> = {
+  angenommen: "Angenommen",
+  wareneingang: "Angenommen",
+  galvanik: "In Galvanik",
+  fertig: "Fertig",
+  raus: "Raus / abgeholt",
+  abgeholt: "Raus / abgeholt",
+  versendet: "Raus / abgeholt",
+};
 
-function statusLabel(order: OrdersHomeSource): string {
-  const labels: Record<string, string> = {
-    angenommen: "Angenommen",
-    wareneingang: "Angenommen",
-    galvanik: "In Galvanik",
-    fertig: "Fertig",
-    raus: "Raus / abgeholt",
-    abgeholt: "Raus / abgeholt",
-    versendet: "Raus / abgeholt",
-  };
+export function statusLabel(order: OrdersHomeSource): string {
   const status = order.statusText?.trim() || order.status;
-  return labels[status.toLowerCase()] ?? labels[order.station.toLowerCase()] ?? "Status nicht hinterlegt";
+  return STATUS_LABELS[status.toLowerCase()] ?? STATUS_LABELS[order.station.toLowerCase()] ?? "Status nicht hinterlegt";
 }
 
-function openOrdersLabel(count: number): string {
-  return count === 1 ? "1 offener Auftrag" : `${count} offene Aufträge`;
-}
-
-function dayGreeting(hour: number): string {
+export function dayGreeting(hour: number): string {
   if (hour < 12) return "Guten Morgen";
   if (hour < 18) return "Guten Tag";
   return "Guten Abend";
 }
 
-function dayLine(orders: readonly OrdersHomeSource[], displayName: string, now = new Date()): string {
-  const firstName = displayName.trim().split(/\s+/)[0] || "Rolf";
-  const salutation = `${dayGreeting(now.getHours())}, ${firstName}.`;
-  if (orders.length === 0) return salutation;
-  const urgent = orders.filter((order) => order.risk === "red").length;
-  const other = orders.length - urgent;
-  if (urgent === 0) {
-    return `${salutation} ${other === 1 ? "1 braucht dich." : `${other} brauchen dich.`}`;
-  }
-  if (other === 0) return `${salutation} ${urgent} dringend.`;
-  return `${salutation} ${urgent} dringend · ${other === 1 ? "1 weiterer braucht dich." : `${other} weitere brauchen dich.`}`;
+function berlinHour(now: Date): number {
+  const hour = new Intl.DateTimeFormat("de-DE", { timeZone: "Europe/Berlin", hour: "numeric", hourCycle: "h23" })
+    .formatToParts(now).find((part) => part.type === "hour")?.value;
+  return Number(hour ?? now.getHours());
 }
 
-function CompactOrderList({
-  orders,
-  onOpen,
-}: {
-  orders: readonly OrdersHomeSource[];
-  onOpen: (orderId: string) => void;
-}) {
+export type DayLine = { salutation: string; urgent: number; other: number };
+
+export function dayLineParts(orders: readonly OrdersHomeSource[], displayName: string, now = new Date()): DayLine {
+  const firstName = displayName.trim().split(/\s+/)[0] || "Rolf";
+  const urgent = orders.filter((order) => order.risk === "red" || order.risk === "blocked").length;
+  return { salutation: `${dayGreeting(berlinHour(now))}, ${firstName}.`, urgent, other: orders.length - urgent };
+}
+
+function DayLineView({ line }: { line: DayLine }) {
+  const { salutation, urgent, other } = line;
+  const otherText = other === 1 ? "weiterer braucht dich." : "weitere brauchen dich.";
+  if (urgent === 0 && other === 0) return <div className="day-line">{salutation} Heute ist nichts offen.</div>;
+  if (urgent === 0) return <div className="day-line">{salutation} <b>{other}</b> {other === 1 ? "braucht dich." : "brauchen dich."}</div>;
   return (
-    <ul className={styles.compactList}>
-      {orders.slice(0, 3).map((order) => (
-        <li key={order.id} className={styles.compactListRow}>
-          <button
-            type="button"
-            className={styles.compactListOpen}
-            aria-label={`Auftrag ${order.orderNumber} öffnen`}
-            onClick={() => onOpen(order.id)}
-          >
-            <ArrowRight aria-hidden="true" />
-          </button>
-          <span className={styles.compactListCopy}>
-            <span>
-              <strong>{order.orderNumber}</strong>
-              {order.customerName ?? "Kunde nicht hinterlegt"}
-            </span>
-            <small>{order.detail ?? order.title}</small>
-          </span>
-        </li>
-      ))}
-    </ul>
+    <div className="day-line">
+      {salutation}{" "}
+      <span className="rp"><b>{urgent}</b> dringend</span>
+      {other > 0 ? <>{" "}·{" "}<b>{other}</b> {otherText}</> : "."}
+    </div>
   );
 }
 
-export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
+function Icon({ id }: { id: string }) {
+  return (
+    <svg className="i" aria-hidden="true">
+      <use href={`#${id}`}></use>
+    </svg>
+  );
+}
+
+function priorityClass(order: OrdersHomeSource, index: number): string {
+  if (order.risk === "red" || order.risk === "blocked") return index === 0 ? "pi crit hero" : "pi crit";
+  if (order.risk === "orange" || order.risk === "yellow") return "pi soon";
+  return "pi";
+}
+
+function OrderRows({ orders, onOpen }: { orders: readonly OrdersHomeSource[]; onOpen: (id: string) => void }) {
+  return (
+    <>
+      {orders.slice(0, 3).map((order) => (
+        <button key={order.id} className="row" type="button" aria-label={`Auftrag ${order.orderNumber} öffnen`} onClick={() => onOpen(order.id)}>
+          <span className={`row-dot ${order.station === "fertig" ? "g" : "i"}`}></span>
+          <div className="row-main">
+            <div className="row-t">
+              <span className="id">{order.orderNumber}</span>{" "}{order.customerName ?? "Kunde nicht hinterlegt"} · {order.detail ?? order.title}
+            </div>
+            <div className="row-s">{statusLabel(order)} · {order.dueLabel}: {order.dueValue}</div>
+          </div>
+        </button>
+      ))}
+    </>
+  );
+}
+
+export function RolfHomeClient({ model, now }: { model: RolfHomeModel; now?: Date }) {
   const openOrder = useOverlayStore((state) => state.openOrder);
   const { hasPermission, loading: permissionsLoading, name } = usePermissions();
-  const [goodsOutOpen, setGoodsOutOpen] = useState(false);
+  const router = useRouter();
+  const mode = useMockFrameMode();
+  const titleClass = mode === "tablet" ? "day-title sm" : "day-title";
 
-  if (model.kind === "denied") {
+  if (model.kind === "denied" || model.kind === "error") {
     return (
-      <section className={styles.state} role="status">
-        <h1>Der Tag</h1>
-        <p>Du kannst den Tagesbestand nicht öffnen.</p>
-      </section>
-    );
-  }
-  if (model.kind === "error") {
-    return (
-      <section className={styles.state} role="alert">
-        <h1>Der Tag</h1>
-        <p>Der Tagesbestand ist gerade nicht verfügbar.</p>
+      <section data-testid="rolf-v5-home" role={model.kind === "error" ? "alert" : "status"}>
+        <h1 className={titleClass} style={{ margin: 0 }}>Der Tag</h1>
+        <div className="day-line">
+          {model.kind === "denied" ? "Du kannst den Tagesbestand nicht öffnen." : "Der Tagesbestand ist gerade nicht verfügbar."}
+        </div>
       </section>
     );
   }
@@ -125,106 +128,91 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel }) {
   const recent = model.projection.recent;
   const canWrite = model.role !== "readonly";
   const canStartOrder = canWrite && model.canCreateOrder && !permissionsLoading && hasPermission("perm_data_orders");
+  const goodsOut = () => router.push("/orders?station=fertig");
 
   return (
-    <section className={styles.screen} aria-labelledby="rolf-title" data-testid="rolf-v5-home">
-      <header className={styles.hero}>
-        <div>
-          <h1 id="rolf-title">Der Tag</h1>
-          <p className={styles.dayLine}>{dayLine(orders, name)}</p>
-        </div>
-      </header>
+    <section aria-labelledby="rolf-title" data-testid="rolf-v5-home">
+      <h1 id="rolf-title" className={titleClass} style={{ margin: 0 }}>Der Tag</h1>
+      <DayLineView line={dayLineParts(orders, name, now)} />
 
-      <nav className={styles.quick} aria-label="Schnellaktionen">
-        {canStartOrder ? (
-          <button type="button" onClick={() => requestGlobalCreate("DIRECT_INTAKE")}>
-            <Inbox aria-hidden="true" /><span><strong>Neuer Eingang</strong><small>Kunde, Teile und Termin</small></span>
-          </button>
-        ) : null}
-        {canWrite ? (
-          <button type="button" onClick={() => setGoodsOutOpen(true)} disabled={finished.length === 0}>
-            <Truck aria-hidden="true" /><span><strong>Ware raus</strong><small>{finished.length === 1 ? "1 Auftrag fertig" : `${finished.length} Aufträge fertig`}</small></span>
-          </button>
-        ) : null}
-      </nav>
-
-      <div className={styles.grid}>
-        <section className={styles.attention} aria-labelledby="attention-title">
-          <header className={styles.sectionHeader}>
-            <div><span className={styles.signal} aria-hidden="true" /><span id="attention-title" className={styles.sectionTitle}>Das braucht dich</span></div>
-            <span>{openOrdersLabel(orders.length)}</span>
-          </header>
-
-          {priority.length === 0 ? (
-            <p className={styles.sectionEmpty} role="status">Heute keine offenen Aufträge.</p>
-          ) : (
-            <ol className={styles.priorityList}>
-              {priority.slice(0, 4).map((order, index) => (
-                <li key={order.id}>
-                  <article
-                    className={`${styles.orderCard} ${index === 0 ? styles.orderCardDominant : ""}`}
-                    data-risk={order.risk}
-                  >
-                    <span className={styles.risk}>{riskLabel(order.risk)}</span>
-                    <span className={styles.orderNumber}>{order.orderNumber}</span>
-                    <strong>{order.customerName ?? "Kunde nicht hinterlegt"}</strong>
-                    <span>{order.detail ?? order.title}</span>
-                    <small>{statusLabel(order)} · {order.dueLabel}: {order.dueValue}</small>
-                    <button
-                      type="button"
-                      className={styles.orderCardOpen}
-                      aria-label={`Auftrag ${order.orderNumber} öffnen`}
-                      onClick={() => openOrder(order.id)}
-                    >
-                      <ArrowRight aria-hidden="true" />
-                    </button>
-                  </article>
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
-
-        <aside className={styles.dayAreas} aria-label="Weitere Tagesbereiche">
-          <section className={styles.dayArea} aria-labelledby="today-out-title">
-            <header className={styles.dayAreaHeader}>
-              <div><Truck aria-hidden="true" /><span id="today-out-title" className={styles.dayAreaTitle}>Heute raus</span></div>
-              <strong>{finished.length}</strong>
-            </header>
-            {finished.length === 0 ? (
-              <p className={styles.dayAreaEmpty}>Heute keine fertigen Aufträge.</p>
-            ) : (
-              <CompactOrderList orders={finished} onOpen={openOrder} />
-            )}
-            <button type="button" className={styles.sectionAction} onClick={() => setGoodsOutOpen(true)} disabled={!canWrite || finished.length === 0}>
-              Warenausgang öffnen<ArrowRight aria-hidden="true" />
+      {mode === "tablet" && (canStartOrder || canWrite) ? (
+        <div className="qbar">
+          {canStartOrder ? (
+            <button className="qa primary" type="button" onClick={() => requestGlobalCreate("DIRECT_INTAKE")}>
+              <Icon id="i-inbox" />
+              Neuer Eingang
             </button>
-          </section>
-
-          <section className={styles.dayArea} aria-labelledby="recent-title">
-            <header className={styles.dayAreaHeader}>
-              <div><Inbox aria-hidden="true" /><span id="recent-title" className={styles.dayAreaTitle}>Neu seit gestern 18:30</span></div>
-              <strong>{recent.length}</strong>
-            </header>
-            {recent.length === 0 ? (
-              <p className={styles.dayAreaEmpty}>Seit gestern keine neuen Aufträge.</p>
-            ) : (
-              <CompactOrderList orders={recent} onOpen={openOrder} />
-            )}
-          </section>
-        </aside>
-      </div>
-
-      {goodsOutOpen ? (
-        <div className={styles.backdrop} onMouseDown={(event) => { if (event.target === event.currentTarget) setGoodsOutOpen(false); }}>
-          <section className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="goods-out-title">
-            <header><div><p>Fertig gemeldete Aufträge</p><h2 id="goods-out-title">Ware raus</h2></div><button type="button" onClick={() => setGoodsOutOpen(false)} aria-label="Schließen"><X /></button></header>
-            {finished.length === 0 ? <p role="status">Keine fertig gemeldete Ware.</p> : (
-              <ul>{finished.map((order) => <li key={order.id}><button type="button" onClick={() => { setGoodsOutOpen(false); openOrder(order.id); }}><span><strong>{order.orderNumber}</strong>{order.customerName ?? "Kunde nicht hinterlegt"}</span><span>{order.dueLabel}: {order.dueValue}</span></button></li>)}</ul>
-            )}
-          </section>
+          ) : null}
+          {canWrite ? (
+            <button className="qa" type="button" onClick={goodsOut}>
+              <Icon id="i-truck" />
+              Ware raus
+              {finished.length > 0 ? <span className="qn">{finished.length}</span> : null}
+            </button>
+          ) : null}
         </div>
       ) : null}
+
+      <div className="pri-h">
+        <div className="pri-t">
+          <span className="pri-ic"><Icon id="i-alert" /></span>
+          Das braucht dich
+        </div>
+      </div>
+      <div className="pri">
+        {priority.length === 0 ? (
+          <div className="pi" role="status">
+            <span className="pi-dot"></span>
+            <div className="pi-main"><div className="pi-s">Heute keine offenen Aufträge.</div></div>
+          </div>
+        ) : (
+          priority.slice(0, 4).map((order, index) => (
+            <div key={order.id} className={priorityClass(order, index)} data-risk={order.risk}>
+              <span className="pi-dot"></span>
+              <div className="pi-main">
+                <button className="pi-t" type="button" aria-label={`Auftrag ${order.orderNumber} öffnen`} onClick={() => openOrder(order.id)}>
+                  <span className="id">{order.orderNumber}</span>{" "}
+                  {order.customerName ?? "Kunde nicht hinterlegt"} — {order.detail ?? order.title}
+                </button>
+                <div className="pi-s">{statusLabel(order)} · {order.dueLabel}: {order.dueValue}</div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="grid-2">
+        <div className="field out">
+          <div className="field-h">
+            <div className="field-t">
+              <span className="field-ic"><Icon id="i-truck" /></span>
+              Heute raus
+            </div>
+            <div className="field-n">{finished.length}</div>
+          </div>
+          <div className="field-b">
+            {finished.length === 0 ? <div className="row"><div className="row-main"><div className="row-s">Heute keine fertigen Aufträge.</div></div></div> : <OrderRows orders={finished} onOpen={openOrder} />}
+          </div>
+          {canWrite ? (
+            <button className="field-foot" type="button" onClick={goodsOut}>
+              Warenausgang öffnen{" "}
+              <Icon id="i-arrow" />
+            </button>
+          ) : null}
+        </div>
+        <div className="field">
+          <div className="field-h">
+            <div className="field-t">
+              <span className="field-ic" style={{ background: "var(--info-bg)", color: "var(--info-fg)" }}><Icon id="i-inbox" /></span>
+              Neu seit gestern 18:30
+            </div>
+            <div className="field-n">{recent.length}</div>
+          </div>
+          <div className="field-b">
+            {recent.length === 0 ? <div className="row"><div className="row-main"><div className="row-s">Seit gestern keine neuen Aufträge.</div></div></div> : <OrderRows orders={recent} onOpen={openOrder} />}
+          </div>
+        </div>
+      </div>
     </section>
   );
 }

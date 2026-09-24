@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDown, Inbox, LogOut, PackageCheck, Settings, X } from "lucide-react";
+import { Inbox, LogOut, PackageCheck, Settings, X } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { logout } from "@/app/actions/auth";
@@ -50,25 +50,5 @@ export function MoreMenu({ open, onClose }: { open: boolean; onClose: () => void
         </div>
       </section>
     </div>
-  );
-}
-
-export function TargetHeader({ compact = false }: { compact?: boolean }) {
-  const { initials } = usePermissions();
-  const [moreOpen, setMoreOpen] = useState(false);
-
-  return (
-    <header className={`${styles.header} ${compact ? styles.compactHeader : ""}`}>
-      <Link href="/" prefetch={false} className={styles.brand} aria-label="Kreile Startseite">
-        <span className={styles.logoMark} aria-hidden="true">GK</span>
-        <span className={styles.brandCopy}><strong>KREILE</strong><small>▸ Der Tag</small></span>
-      </Link>
-      <div className={styles.headerActions}>
-        <button type="button" className={styles.avatarButton} onClick={() => setMoreOpen(true)} aria-expanded={moreOpen} aria-label="Mehr öffnen">
-          <span className={styles.initials} aria-hidden="true">{initials || "K"}</span><ChevronDown aria-hidden="true" />
-        </button>
-      </div>
-      <MoreMenu open={moreOpen} onClose={() => setMoreOpen(false)} />
-    </header>
   );
 }
