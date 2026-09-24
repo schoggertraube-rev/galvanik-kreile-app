@@ -4,6 +4,7 @@ import { Fraunces, Inter } from "next/font/google";
 import { Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "../styles/mock/mock-kreile-rolf-home.css";
+import "../styles/mock/mock-kreile-phillip-home.css";
 import "../styles/mock/mock-kreile-compat.css";
 
 const fraunces = Fraunces({

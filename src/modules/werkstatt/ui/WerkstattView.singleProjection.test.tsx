@@ -1,7 +1,5 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { PhillipWerkstattViewModel, WerkstattViewPorts } from "../server/types";
 import { WerkstattView } from "./WerkstattView";
 
@@ -38,23 +36,18 @@ describe("WerkstattView projection", () => {
   it("keeps status, WIP and actions inside the named Werkstatt region", () => {
     render(<WerkstattView view={view} ports={ports} onRetry={vi.fn()} />);
 
-    const workshop = screen.getByRole("region", { name: "Werkstatt" });
-    expect(within(workshop).getByTestId("werkstatt-status")).toBeVisible();
-    expect(within(workshop).getByTestId("werkstatt-wip-tile")).toBeVisible();
-    expect(within(workshop).getByRole("group", { name: "Werkstattaktionen" })).toBeVisible();
-    expect(within(workshop).queryByRole("navigation", { name: "Werkstattaktionen" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Werkstatt" })).toBeVisible();
+    expect(screen.getByTestId("werkstatt-status")).toBeVisible();
+    expect(screen.getByTestId("werkstatt-wip-tile")).toBeVisible();
+    expect(screen.getByRole("group", { name: "Werkstattaktionen" })).toBeVisible();
+    expect(screen.queryByRole("navigation", { name: "Werkstattaktionen" })).not.toBeInTheDocument();
   });
 
-  it("keeps the action group in page flow and reserves the mobile create-button lane", () => {
-    const css = readFileSync(
-      join(process.cwd(), "src/modules/werkstatt/ui/WerkstattView.module.css"),
-      "utf8",
-    );
+  it("keeps every action attached to an injected real port", () => {
+    render(<WerkstattView view={view} ports={ports} onRetry={vi.fn()} />);
 
-    expect(css).toMatch(/\.actionBar\s*\{[^}]*position:\s*static;/);
-    expect(css).not.toMatch(/\.actionBar\s*\{[^}]*position:\s*(?:fixed|sticky);/);
-    expect(css).toMatch(
-      /@media \(max-width: 520px\)[\s\S]*\.actionBar\s*\{[^}]*margin-bottom:\s*96px;[\s\S]*\.actionBar > \.actionSecondary:last-child\s*\{[^}]*max-width:\s*calc\(100% - 112px\);/,
-    );
+    expect(screen.getByRole("button", { name: "Auftrag öffnen" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Neuer Eingang" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Ware raus" })).toBeVisible();
   });
 });

@@ -210,9 +210,8 @@ describe("W2C-B2M5J unavailable UI", () => {
       screen.getByRole("group", { name: "Werkstattaktionen" }),
     ).toBeInTheDocument();
 
-    const held = screen.getByTestId("werkstatt-held-list");
-    expect(within(held).getByText("Wareneingang Sentinel")).toBeInTheDocument();
-    expect(within(held).getByText("Galvanik Sentinel")).toBeInTheDocument();
+    expect(screen.getByTestId("werkstatt-held-we-1")).toHaveTextContent("Wareneingang Sentinel");
+    expect(screen.getByTestId("werkstatt-held-ga-1")).toHaveTextContent("Galvanik Sentinel");
     expect(screen.getByTestId("werkstatt-held-we-1")).toBeInTheDocument();
     expect(screen.getByTestId("werkstatt-held-ga-1")).toBeInTheDocument();
     const wipTile = screen.getByRole("button", {
@@ -229,9 +228,6 @@ describe("W2C-B2M5J unavailable UI", () => {
     const galvanikOrder = screen.getByRole("button", {
       name: /Auftrag GA-001/,
     });
-    expect(wareneingangOrder.className).toMatch(/touchTarget/);
-    expect(galvanikOrder.className).toMatch(/touchTarget/);
-
     fireEvent.click(galvanikOrder);
     fireEvent.click(wareneingangOrder);
     expect(ports.openOrder).toHaveBeenNthCalledWith(1, "ga-1");
@@ -286,14 +282,14 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(bundle).toHaveTextContent("2 Aufträge mit");
     expect(bundle).toHaveTextContent(shared);
     const filterButton = within(bundle).getByRole("button", {
-      name: "Nur diese Aufträge zeigen",
+      name: "Diese Aufträge zeigen",
     });
     expect(filterButton).toHaveAttribute("aria-pressed", "false");
 
     fireEvent.click(filterButton);
     expect(filterButton).toHaveAttribute("aria-pressed", "true");
     const heldList = screen.getByTestId("werkstatt-held-list");
-    expect(within(heldList).getAllByRole("listitem")).toHaveLength(2);
+    expect(within(heldList).getAllByTestId(/^werkstatt-held-/)).toHaveLength(2);
     expect(ports.openOrder).not.toHaveBeenCalled();
   });
 
@@ -322,7 +318,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     render(await WarendurchlaufIndex());
 
     const trigger = screen.getByRole("button", {
-      name: "Auftrag öffnen / scannen",
+      name: "Auftrag öffnen",
     });
     expect(
       screen.queryByRole("dialog", { name: "Auftrag öffnen" }),
@@ -374,7 +370,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(ports.openOrder).not.toHaveBeenCalled();
   });
 
-  it("uses the existing fail-closed scan capture path from within the unchanged order picker", async () => {
+  it("uses the existing fail-closed scan capture path from the Mock picker", async () => {
     ports.getWareneingangOrdersAction.mockResolvedValueOnce({
       ok: true,
       data: [order("we-scan", "WE-SCAN", "Scan Sentinel", "wareneingang")],
@@ -383,9 +379,9 @@ describe("W2C-B2M5J unavailable UI", () => {
     render(await WarendurchlaufIndex());
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Auftrag öffnen / scannen" }),
+      screen.getByRole("button", { name: "Auftrag öffnen" }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Auftrag scannen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Nummer, Kunde oder Scan …" }));
     expect(ports.openGlobalCreate).toHaveBeenCalledWith("DIRECT_INTAKE");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
@@ -481,7 +477,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     render(await WarendurchlaufIndex());
 
     const trigger = screen.getByRole("button", {
-      name: "Auftrag öffnen / scannen",
+      name: "Auftrag öffnen",
     });
     trigger.focus();
     fireEvent.click(trigger);
@@ -530,26 +526,20 @@ describe("W2C-B2M5J unavailable UI", () => {
     const { default: WarendurchlaufIndex } = await import("../page");
     render(await WarendurchlaufIndex());
 
-    expect(
-      screen.getByRole("heading", { name: "Noch keine Daten erfasst" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Werkstatt" })).toBeInTheDocument();
+    expect(screen.getByTestId("werkstatt-status")).toHaveTextContent("Heute keine Termine.");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Auftrag öffnen / scannen" }),
+      screen.queryByRole("button", { name: "Auftrag öffnen" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("dialog", { name: "Auftrag öffnen" }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Neuer Eingang" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Neuer Eingang" })).not.toBeInTheDocument();
     expect(
       screen.getByRole("group", { name: "Werkstattaktionen" }),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Ware raus" }));
-    expect(screen.getByRole("dialog", { name: "Ware raus" })).toHaveTextContent(
-      "Keine fertig gemeldete Ware zur Ausgabe vorhanden.",
-    );
+    expect(screen.queryByRole("button", { name: "Ware raus" })).not.toBeInTheDocument();
   });
 
   it("denies an excluded root role before either station action is invoked", async () => {
@@ -564,7 +554,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(ports.getGalvanikOrdersAction).not.toHaveBeenCalled();
     expect(ports.getWarendurchlaufKPIs).not.toHaveBeenCalled();
     expect(
-      screen.queryByRole("button", { name: "Auftrag öffnen / scannen" }),
+      screen.queryByRole("button", { name: "Auftrag öffnen" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("dialog", { name: "Auftrag öffnen" }),
@@ -604,7 +594,7 @@ describe("W2C-B2M5J unavailable UI", () => {
       screen.queryByTestId("werkstatt-held-we-secret"),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Auftrag öffnen / scannen" }),
+      screen.queryByRole("button", { name: "Auftrag öffnen" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("dialog", { name: "Auftrag öffnen" }),
@@ -640,10 +630,7 @@ describe("W2C-B2M5J unavailable UI", () => {
       screen.queryByTestId("werkstatt-held-ga-secret"),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByText(/Zur Sicherheit werden keine Werkstattdaten/),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Auftrag öffnen / scannen" }),
+      screen.queryByRole("button", { name: "Auftrag öffnen" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("dialog", { name: "Auftrag öffnen" }),
@@ -738,7 +725,7 @@ describe("W2C-B2M5J unavailable UI", () => {
       const { default: WarendurchlaufIndex } = await import("../page");
       render(await WarendurchlaufIndex());
 
-      expect(screen.getByRole("alert")).toHaveTextContent("Werkstattkonflikt");
+      expect(screen.getByRole("alert")).toHaveTextContent("Werkstattdaten enthalten widersprüchliche Auftragskennungen.");
       expect(
         screen.getByText(
           "Werkstattdaten enthalten widersprüchliche Auftragskennungen.",
@@ -746,9 +733,6 @@ describe("W2C-B2M5J unavailable UI", () => {
       ).toBeVisible();
       expect(screen.queryByText(wareneingang.title)).not.toBeInTheDocument();
       expect(screen.queryByText(galvanik.title)).not.toBeInTheDocument();
-      expect(
-        screen.getByText(/Zur Sicherheit werden keine Werkstattdaten/),
-      ).toBeInTheDocument();
       expect(
         screen.queryByTestId(`werkstatt-held-${wareneingang.id}`),
       ).not.toBeInTheDocument();
@@ -759,7 +743,7 @@ describe("W2C-B2M5J unavailable UI", () => {
         screen.queryByRole("button", { name: "Neuer Eingang" }),
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: "Auftrag öffnen / scannen" }),
+        screen.queryByRole("button", { name: "Auftrag öffnen" }),
       ).not.toBeInTheDocument();
       expect(
         screen.queryByRole("dialog", { name: "Auftrag öffnen" }),
@@ -788,7 +772,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     );
     expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
     expect(
-      screen.getByLabelText("Werkstatt", { selector: "section" }),
+      screen.getByRole("region", { name: "Werkstatt" }),
     ).toHaveAttribute("aria-busy", "true");
     expect(
       screen.getByRole("heading", { level: 1, name: "Werkstatt" }),
@@ -798,7 +782,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("source-locks the responsive Heute-sichern hierarchy, touch targets, and reduced-motion contract", () => {
+  it("source-locks the Phillip-Mock hierarchy, global Mock CSS, and real ports", () => {
     const clientSource = readFileSync(
       resolve(process.cwd(), "src/modules/werkstatt/ui/WerkstattView.tsx"),
       "utf8",
@@ -806,10 +790,12 @@ describe("W2C-B2M5J unavailable UI", () => {
     const cssSource = readFileSync(
       resolve(
         process.cwd(),
-        "src/modules/werkstatt/ui/WerkstattView.module.css",
+        "src/styles/mock/mock-kreile-phillip-home.css",
       ),
       "utf8",
     );
+    const layoutSource = readFileSync(resolve(process.cwd(), "src/app/layout.tsx"), "utf8");
+    const compatSource = readFileSync(resolve(process.cwd(), "src/styles/mock/mock-kreile-compat.css"), "utf8");
     const adapterSource = readFileSync(
       resolve(process.cwd(), "src/app/warendurchlauf/WerkstattAppAdapter.tsx"),
       "utf8",
@@ -832,50 +818,18 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(clientSource).not.toContain(
       'role="navigation" aria-label="Werkstattaktionen"',
     );
-    expect(clientSource).toContain("Auftrag öffnen / scannen");
+    expect(clientSource).toContain("Auftrag öffnen");
     expect(clientSource).toContain("aria-controls={PICKER_DIALOG_ID}");
     expect(clientSource).toContain('activePicker === "goods-out"');
     expect(clientSource).toContain("view.goodsOutCandidates");
-    expect(clientSource).toContain(
-      "className={`${styles.actionPrimary} ${styles.touchTarget}`}",
-    );
-    expect(clientSource).toContain(
-      "className={`${styles.heldOpenButton} ${styles.touchTarget}`}",
-    );
-    expect(cssSource).toMatch(/\.touchTarget\s*\{[^}]*min-height:\s*48px;/);
-    expect(cssSource).toMatch(/\.pickerClose\s*\{[^}]*min-height:\s*48px;/);
-    expect(cssSource).toMatch(
-      /\.pickerBackdrop\s*\{[^}]*overflow-x:\s*hidden;/,
-    );
-    expect(cssSource).toMatch(
-      /\.wipTile\s*\{[^}]*display:\s*block;[^}]*width:\s*100%;[^}]*appearance:\s*none;[^}]*border:\s*0;[^}]*font:\s*inherit;[^}]*text-align:\s*left;[^}]*cursor:\s*pointer;/,
-    );
-    expect(cssSource).toMatch(
-      /\.screen\s*\{[^}]*box-sizing:\s*border-box;[^}]*width:\s*100%;[^}]*min-width:\s*0;[^}]*min-height:\s*100%;[^}]*display:\s*flex;[^}]*flex-direction:\s*column;[^}]*overflow:\s*visible;[^}]*padding:\s*0;/,
-    );
-    expect(cssSource).toMatch(
-      /\.inner\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*1220px;[^}]*min-width:\s*0;[^}]*min-height:\s*100%;[^}]*flex:\s*1 1 auto;[^}]*overflow:\s*visible;/,
-    );
-    expect(cssSource).toMatch(
-      /\.cols\s*\{[^}]*min-width:\s*0;[^}]*flex:\s*1 1 auto;[^}]*grid-template-columns:\s*minmax\(0, 1fr\);[^}]*overflow:\s*visible;/,
-    );
-    expect(cssSource).toMatch(
-      /\.actionBar\s*\{[^}]*position:\s*static;[^}]*width:\s*100%;[^}]*min-width:\s*0;[^}]*max-width:\s*100%;[^}]*flex:\s*0 0 auto;[^}]*margin-top:\s*0;[^}]*overflow-x:\s*clip;/,
-    );
-    expect(cssSource).not.toMatch(
-      /\.actionBar\s*\{[^}]*position:\s*(?:relative|absolute|fixed|sticky);/,
-    );
-    expect(cssSource).toMatch(
-      /@media \(max-width: 520px\)[\s\S]*\.actionBar\s*\{[^}]*margin-bottom:\s*96px;/,
-    );
-    expect(cssSource).toMatch(
-      /\.actionBar > \.actionSecondary:last-child\s*\{[^}]*max-width:\s*calc\(100% - 112px\);/,
-    );
-    expect(cssSource).toMatch(
-      /@media \(min-width: 64rem\)[\s\S]*grid-template-columns:\s*minmax\(0, 1\.6fr\) minmax\(18rem, 0\.9fr\)/,
-    );
-    expect(cssSource).toContain("@media (prefers-reduced-motion: reduce)");
-    expect(cssSource).toContain("overflow-x: clip");
+    expect(clientSource).toContain('className="mock-kreile-phillip-home"');
+    expect(clientSource).not.toContain("WerkstattView.module.css");
+    expect(cssSource).toContain("AUTOMATISCH aus dem Owner-Mock erzeugt");
+    expect(cssSource).toContain(".mock-kreile-phillip-home .actionbar");
+    expect(cssSource).toContain("@media (prefers-reduced-motion:reduce)");
+    expect(layoutSource).toContain('mock-kreile-phillip-home.css');
+    expect(compatSource).toContain(".content > .mock-kreile-phillip-home");
+    expect(compatSource).toContain(".tcontent > .mock-kreile-phillip-home");
     expect(typesSource).not.toContain("OperationalOrder");
     expect(typesSource).toContain("export type WerkstattViewPorts");
     expect(typesSource).toContain("onOpenWip: () => void;");

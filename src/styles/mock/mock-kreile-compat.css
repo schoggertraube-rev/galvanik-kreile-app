@@ -6,3 +6,10 @@
   background-color: ButtonFace;
   padding: 1px 6px;
 }
+
+.content > .mock-kreile-phillip-home,
+.tcontent > .mock-kreile-phillip-home {
+  height: auto !important;
+  overflow: visible !important;
+  background: transparent !important;
+}
