@@ -10,8 +10,20 @@ test.describe("Kreile auth boundary", () => {
       page.getByRole("button", { name: /Gregor.*Systemadministrator/ }),
     ).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: "Wer arbeitet gerade?" }),
+      page.getByRole("heading", { name: "Persönlichen Code eingeben" }),
     ).toBeVisible();
+    const unavailableAlert = page.getByRole("alert").filter({
+      hasText: "Anmeldung ist momentan nicht verfügbar.",
+    });
+    await expect(unavailableAlert).toHaveCount(1);
+    await expect(unavailableAlert).toBeVisible();
+    await expect(page.getByRole("button", { name: /Rolf.*Meister/ })).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: /Phillip.*Werkstatt/ }),
+    ).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: /Gregor.*Systemadministrator/ }),
+    ).toBeDisabled();
     await expect(page.locator("body")).not.toContainText(/Auftrag\s+[A-Z]-?\d+/i);
     await expect(
       page.getByRole("button", { name: "Tablet Test-Login (Werkstatt)" }),

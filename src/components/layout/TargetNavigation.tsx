@@ -2,16 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClipboardList, Home, PackageCheck, ReceiptText, Settings, Users } from "lucide-react";
+import {
+  ClipboardList,
+  Home,
+  Inbox,
+  PackageCheck,
+  ReceiptText,
+  Settings,
+  Truck,
+  Users,
+} from "lucide-react";
+import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import styles from "./TargetShell.module.css";
-
-const CORE = [
-  { href: "/", label: "Der Tag", icon: Home },
-  { href: "/warendurchlauf", label: "Werkstatt", icon: PackageCheck },
-  { href: "/orders", label: "Aufträge", icon: ClipboardList },
-  { href: "/customers", label: "Kunden & Kontakt", icon: Users },
-] as const;
 
 function current(pathname: string, href: string): boolean {
   return href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -19,15 +22,60 @@ function current(pathname: string, href: string): boolean {
 
 export function TargetNavigation() {
   const pathname = usePathname();
-  const { role } = usePermissions();
-  const invoices = role === "buero" || role === "meister";
-  const settings = role === "admin" || role === "developer";
+  const permissions = usePermissions();
+  const completeSnapshot =
+    permissions.loading === false &&
+    permissions.status === "authenticated" &&
+    permissions.error === null &&
+    typeof permissions.role === "string" &&
+    permissions.role.length > 0 &&
+    Array.isArray(permissions.permissions) &&
+    permissions.permissions.every((permission) => typeof permission === "string") &&
+    typeof permissions.name === "string" &&
+    typeof permissions.initials === "string" &&
+    typeof permissions.hasPermission === "function" &&
+    typeof permissions.refreshPermissions === "function";
+
+  if (!completeSnapshot) return null;
+
+  const rolfProfile = permissions.role === "meister" || permissions.role === "buero";
+  const supportedProfile = rolfProfile || permissions.role === "werkstatt";
+  const hasCapability = (capability: string) =>
+    permissions.permissions.includes(capability) && permissions.hasPermission(capability);
+  const hasCoreNavigation =
+    supportedProfile &&
+    hasCapability("perm_view_leitstand") &&
+    hasCapability("perm_view_customers");
+
+  if (!hasCoreNavigation) return null;
+
+  const canViewFinance = rolfProfile || hasCapability("perm_view_prices");
+
+  const link = (href: string, label: string, Icon: typeof Home) => (
+    <Link
+      href={href}
+      prefetch={false}
+      aria-current={current(pathname, href) ? "page" : undefined}
+    >
+      <Icon aria-hidden="true" />
+      <span>{label}</span>
+    </Link>
+  );
+
   return (
     <aside className={styles.sidebar}>
       <nav aria-label="Hauptnavigation">
-        {CORE.map(({ href, label, icon: Icon }) => <Link key={href} href={href} prefetch={false} aria-current={current(pathname, href) ? "page" : undefined}><Icon aria-hidden="true" /><span>{label}</span></Link>)}
-        {invoices ? <Link href="/buchhaltung/rechnungen" prefetch={false} aria-current={pathname.startsWith("/buchhaltung/rechnungen") ? "page" : undefined}><ReceiptText aria-hidden="true" /><span>Geld &amp; Rechnungen</span></Link> : null}
-        {settings ? <Link href="/settings" prefetch={false} aria-current={pathname.startsWith("/settings") ? "page" : undefined}><Settings aria-hidden="true" /><span>Einstellungen</span></Link> : null}
+        <button type="button" onClick={() => requestGlobalCreate("DIRECT_INTAKE")}>
+          <Inbox aria-hidden="true" />
+          <span>Neuer Eingang</span>
+        </button>
+        {link("/orders?station=fertig", "Ware raus", Truck)}
+        {link("/", "Der Tag", Home)}
+        {link("/warendurchlauf", "Werkstatt", PackageCheck)}
+        {link("/orders", "Aufträge", ClipboardList)}
+        {link("/customers", "Kunden & Kontakt", Users)}
+        {canViewFinance ? link("/buchhaltung/rechnungen", "Geld & Rechnungen", ReceiptText) : null}
+        {link("/settings", "Einstellungen", Settings)}
       </nav>
     </aside>
   );

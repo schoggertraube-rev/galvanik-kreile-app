@@ -1,6 +1,7 @@
 .screen {
   width: min(100%, 1440px);
   margin: 0 auto;
+  padding-bottom: 84px;
   color: #12161f;
 }
 .hero {
@@ -54,7 +55,7 @@
   width: 19px;
 }
 .quick {
-  display: flex;
+  display: none;
   gap: 12px;
   flex-wrap: wrap;
   margin-bottom: 28px;
@@ -176,12 +177,11 @@
   border-left: 5px solid #8c93a3;
   border-radius: 16px;
   display: grid;
-  grid-template-columns: 88px 118px minmax(145px, 1fr) minmax(155px, 1fr) 22px;
+  grid-template-columns: 88px 118px minmax(145px, 1fr) minmax(155px, 1fr) 44px;
   align-items: center;
   gap: 8px 14px;
   background: #fffdf8;
   color: #12161f;
-  text-align: left;
   box-shadow: 0 5px 18px rgb(18 22 31/0.055);
 }
 .orderCardDominant {
@@ -222,9 +222,24 @@
   font-size: 12px;
   font-weight: 650;
 }
-.orderCard > svg {
+.orderCardOpen {
   grid-column: 5;
   grid-row: 1/3;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: #12161f;
+  cursor: pointer;
+}
+.orderCardOpen:hover {
+  background: #f6f1e8;
+}
+.orderCardOpen svg {
   width: 18px;
 }
 .sectionEmpty {
@@ -339,43 +354,62 @@
   padding: 0;
   list-style: none;
 }
-.compactList button {
+.compactListRow {
   width: 100%;
   min-height: 58px;
   padding: 9px 10px;
   border: 1px solid #e1dbd0;
   border-radius: 11px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 44px minmax(0, 1fr);
   align-items: center;
   gap: 3px 10px;
   background: #fff;
   color: #12161f;
-  text-align: left;
 }
-.compactList button > span {
+.compactListOpen {
+  grid-column: 1;
+  grid-row: 1;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: #f6f1e8;
+  color: #12161f;
+  cursor: pointer;
+}
+.compactListOpen:hover {
+  background: #eee6d8;
+}
+.compactListOpen svg {
+  width: 17px;
+}
+.compactListCopy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.compactListCopy > span {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
   font-size: 12px;
 }
-.compactList button > span strong {
+.compactListCopy > span strong {
   font-family: var(--font-geist-mono), monospace;
 }
-.compactList button small {
-  grid-column: 1;
+.compactListCopy small {
   color: #687083;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.compactList button > svg {
-  grid-column: 2;
-  grid-row: 1 / 3;
-  width: 17px;
-}
 .sectionAction {
-  width: 100%;
+  width: max-content;
+  max-width: 100%;
   min-height: 44px;
   margin-top: 10px;
   padding: 0 11px;
@@ -522,7 +556,23 @@
     grid-column: 1 / -1;
   }
   .orderCard {
-    grid-template-columns: 88px 110px minmax(130px, 1fr) minmax(150px, 1fr) 20px;
+    grid-template-columns: 88px 110px minmax(130px, 1fr) minmax(150px, 1fr) 44px;
+  }
+}
+@media (max-width: 1299px) {
+  .quick {
+    display: flex;
+  }
+  .grid {
+    grid-template-columns: 1fr;
+  }
+  .dayAreas {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .orderCardOpen {
+    grid-column: 1;
+    grid-row: 2;
+    justify-self: start;
   }
 }
 @media (max-width: 720px) {
@@ -556,16 +606,17 @@
   }
   .orderCard {
     min-height: 154px;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: auto minmax(0, 1fr);
   }
   .orderCard strong,
   .orderCard > span:not(.risk, .orderNumber),
   .orderCard small {
     grid-column: 1/-1;
   }
-  .orderCard > svg {
+  .orderCardOpen {
     grid-column: 2;
     grid-row: 1;
+    justify-self: start;
   }
   .dayAreas {
     grid-template-columns: 1fr;
@@ -588,4 +639,31 @@
     width: 100%;
     justify-content: center;
   }
+}
+
+/* V8 uses the shared paketdemo-v2 palette, never a page-local theme. */
+.screen {
+  color: var(--navy-900);
+}
+.primaryLink,
+.quick button:first-child {
+  background: var(--navy-900);
+}
+.quick a,
+.quick button,
+.orderCard,
+.dayArea,
+.sectionEmpty,
+.dialog {
+  background: var(--surface-card);
+}
+.quick a,
+.quick button {
+  border-color: var(--neutral-gray-300);
+  color: var(--navy-900);
+}
+.dataStand,
+.sectionHeader > span,
+.coverage {
+  color: var(--text-muted) !important;
 }

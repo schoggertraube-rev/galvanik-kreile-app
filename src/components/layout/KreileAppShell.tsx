@@ -11,22 +11,21 @@ import styles from "./TargetShell.module.css";
 
 export function KreileAppShell({ children, globalCreate }: { children: React.ReactNode; globalCreate?: React.ReactNode }) {
   const pathname = usePathname();
-  const { loading, role, status } = usePermissions();
+  const { loading, status } = usePermissions();
   const loginOnly = pathname === "/start" || pathname === "/login";
-  const workshop = role === "werkstatt";
   const sessionInvalid = !loading && status !== "authenticated";
 
   if (loginOnly) return <div className={styles.loginRoot}>{children}</div>;
 
   return (
-    <div className={`${styles.shell} ${workshop ? styles.workshop : ""}`}>
+    <div className={styles.shell}>
       <SessionWarningBanner show={sessionInvalid} />
-      <TargetHeader compact={workshop} />
+      <TargetHeader />
       <div className={styles.body}>
-        {!workshop ? <TargetNavigation /> : null}
+        <TargetNavigation />
         <main className={styles.content}><div className={styles.page}>{children}</div></main>
       </div>
-      {!workshop ? <MobileBottomNav /> : null}
+      <MobileBottomNav />
       <EntityOverlayStack />
       {globalCreate}
     </div>

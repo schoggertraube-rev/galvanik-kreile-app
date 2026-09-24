@@ -207,7 +207,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(status).toHaveTextContent("1 dringend");
     expect(status).toHaveTextContent("1 weitere");
     expect(
-      screen.getByRole("navigation", { name: "Werkstattaktionen" }),
+      screen.getByRole("group", { name: "Werkstattaktionen" }),
     ).toBeInTheDocument();
 
     const held = screen.getByTestId("werkstatt-held-list");
@@ -544,7 +544,7 @@ describe("W2C-B2M5J unavailable UI", () => {
       screen.queryByRole("button", { name: "Neuer Eingang" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("navigation", { name: "Werkstattaktionen" }),
+      screen.getByRole("group", { name: "Werkstattaktionen" }),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Ware raus" }));
     expect(screen.getByRole("dialog", { name: "Ware raus" })).toHaveTextContent(
@@ -573,7 +573,7 @@ describe("W2C-B2M5J unavailable UI", () => {
       screen.queryByRole("button", { name: "Neuer Eingang" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("navigation", { name: "Werkstattaktionen" }),
+      screen.queryByRole("group", { name: "Werkstattaktionen" }),
     ).not.toBeInTheDocument();
   });
 
@@ -649,7 +649,7 @@ describe("W2C-B2M5J unavailable UI", () => {
       screen.queryByRole("dialog", { name: "Auftrag öffnen" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("navigation", { name: "Werkstattaktionen" }),
+      screen.queryByRole("group", { name: "Werkstattaktionen" }),
     ).not.toBeInTheDocument();
     const retry = screen.getByRole("button", { name: "Erneut laden" });
     expect(
@@ -686,7 +686,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(/KPI Sentinel/)).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("navigation", { name: "Werkstattaktionen" }),
+      screen.queryByRole("group", { name: "Werkstattaktionen" }),
     ).not.toBeInTheDocument();
   });
 
@@ -765,7 +765,7 @@ describe("W2C-B2M5J unavailable UI", () => {
         screen.queryByRole("dialog", { name: "Auftrag öffnen" }),
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("navigation", { name: "Werkstattaktionen" }),
+      screen.queryByRole("group", { name: "Werkstattaktionen" }),
       ).not.toBeInTheDocument();
       const retry = screen.getByRole("button", { name: "Erneut laden" });
       expect(
@@ -828,6 +828,10 @@ describe("W2C-B2M5J unavailable UI", () => {
     );
 
     expect(clientSource).toContain('data-testid="werkstatt-held-list"');
+    expect(clientSource).toContain('role="group" aria-label="Werkstattaktionen"');
+    expect(clientSource).not.toContain(
+      'role="navigation" aria-label="Werkstattaktionen"',
+    );
     expect(clientSource).toContain("Auftrag öffnen / scannen");
     expect(clientSource).toContain("aria-controls={PICKER_DIALOG_ID}");
     expect(clientSource).toContain('activePicker === "goods-out"');
@@ -847,19 +851,25 @@ describe("W2C-B2M5J unavailable UI", () => {
       /\.wipTile\s*\{[^}]*display:\s*block;[^}]*width:\s*100%;[^}]*appearance:\s*none;[^}]*border:\s*0;[^}]*font:\s*inherit;[^}]*text-align:\s*left;[^}]*cursor:\s*pointer;/,
     );
     expect(cssSource).toMatch(
-      /\.screen\s*\{[^}]*box-sizing:\s*border-box;[^}]*width:\s*100%;[^}]*min-width:\s*0;[^}]*height:\s*100%;[^}]*min-height:\s*0;[^}]*display:\s*flex;[^}]*flex-direction:\s*column;[^}]*overflow:\s*hidden;[^}]*padding:\s*20px 16px 0;/,
+      /\.screen\s*\{[^}]*box-sizing:\s*border-box;[^}]*width:\s*100%;[^}]*min-width:\s*0;[^}]*min-height:\s*100%;[^}]*display:\s*flex;[^}]*flex-direction:\s*column;[^}]*overflow:\s*visible;[^}]*padding:\s*0;/,
     );
     expect(cssSource).toMatch(
-      /\.inner\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*1220px;[^}]*min-width:\s*0;[^}]*height:\s*100%;[^}]*min-height:\s*0;[^}]*flex:\s*1 1 auto;[^}]*overflow:\s*hidden;/,
+      /\.inner\s*\{[^}]*width:\s*100%;[^}]*max-width:\s*1220px;[^}]*min-width:\s*0;[^}]*min-height:\s*100%;[^}]*flex:\s*1 1 auto;[^}]*overflow:\s*visible;/,
     );
     expect(cssSource).toMatch(
-      /\.cols\s*\{[^}]*min-width:\s*0;[^}]*min-height:\s*0;[^}]*flex:\s*1 1 auto;[^}]*overflow-y:\s*auto;[^}]*overflow-x:\s*hidden;/,
+      /\.cols\s*\{[^}]*min-width:\s*0;[^}]*flex:\s*1 1 auto;[^}]*grid-template-columns:\s*minmax\(0, 1fr\);[^}]*overflow:\s*visible;/,
     );
     expect(cssSource).toMatch(
-      /\.actionBar\s*\{[^}]*position:\s*sticky;[^}]*bottom:\s*0;[^}]*width:\s*100%;[^}]*min-width:\s*0;[^}]*max-width:\s*100%;[^}]*flex:\s*0 0 auto;[^}]*margin-top:\s*auto;[^}]*overflow-x:\s*clip;/,
+      /\.actionBar\s*\{[^}]*position:\s*static;[^}]*width:\s*100%;[^}]*min-width:\s*0;[^}]*max-width:\s*100%;[^}]*flex:\s*0 0 auto;[^}]*margin-top:\s*0;[^}]*overflow-x:\s*clip;/,
     );
     expect(cssSource).not.toMatch(
-      /\.actionBar\s*\{[^}]*position:\s*(?:relative|absolute|fixed);/,
+      /\.actionBar\s*\{[^}]*position:\s*(?:relative|absolute|fixed|sticky);/,
+    );
+    expect(cssSource).toMatch(
+      /@media \(max-width: 520px\)[\s\S]*\.actionBar\s*\{[^}]*margin-bottom:\s*96px;/,
+    );
+    expect(cssSource).toMatch(
+      /\.actionBar > \.actionSecondary:last-child\s*\{[^}]*max-width:\s*calc\(100% - 112px\);/,
     );
     expect(cssSource).toMatch(
       /@media \(min-width: 64rem\)[\s\S]*grid-template-columns:\s*minmax\(0, 1\.6fr\) minmax\(18rem, 0\.9fr\)/,

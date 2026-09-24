@@ -1,25 +1,18 @@
 "use client";
 
 import { login } from "@/app/actions/auth";
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 
 export function EmailLoginDialog({ onClose }: { onClose: () => void }) {
   const [isPending, startTransition] = useTransition();
-  const [errorMsg] = useState("");
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     startTransition(async () => {
-      // Direct call to the server action
-      try {
-        await login(formData);
-      } catch {
-        // If redirect happens it throws an error in nextjs, which is normal
-        // but if it doesn't redirect, maybe we can catch a standard error?
-        // Actually, the server action does `redirect('/start?message=...')` on error.
-        // So we will just handle it. 
-      }
+      // The server action owns both success and failure redirects. Do not
+      // swallow its redirect signal or an unexpected transport failure.
+      await login(formData);
     });
   };
 
@@ -31,7 +24,7 @@ export function EmailLoginDialog({ onClose }: { onClose: () => void }) {
             <p className="font-bold text-navy-900 text-sm">System Login</p>
             <p className="text-[10px] text-text-muted uppercase tracking-wider">Mit E-Mail anmelden</p>
           </div>
-          <button onClick={onClose} className="text-text-muted hover:text-navy-900 text-2xl leading-none cursor-pointer">×</button>
+          <button type="button" aria-label="Schließen" onClick={onClose} className="text-text-muted hover:text-navy-900 text-2xl leading-none cursor-pointer">×</button>
         </div>
 
         <div className="p-6">
@@ -56,16 +49,13 @@ export function EmailLoginDialog({ onClose }: { onClose: () => void }) {
                 className="w-full bg-bg-app border border-neutral-gray-100 text-navy-900 px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-gold-600 focus:border-transparent transition-all"
               />
             </div>
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={isPending}
               className="w-full bg-navy-900 hover:bg-navy-700 text-white font-bold py-3.5 rounded-xl transition-all cursor-pointer disabled:opacity-50"
             >
               {isPending ? "Lädt..." : "Einloggen"}
             </button>
-            {errorMsg && (
-              <p className="text-sm text-danger-red text-center font-bold bg-danger-red/10 p-2 rounded-lg">{errorMsg}</p>
-            )}
           </form>
         </div>
       </div>
