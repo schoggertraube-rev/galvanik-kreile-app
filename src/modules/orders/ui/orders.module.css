@@ -1,19 +1,6 @@
-.listScreen,
 .orderCardV8 {
   color: #12161f;
 }
-.listScreen {
-  max-width: 1240px;
-  margin: 0 auto;
-}
-.listHero {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 20px;
-  margin-bottom: 22px;
-}
-.listHero p,
 .sectionTitle p {
   margin: 0 0 4px;
   color: #9b281d;
@@ -21,106 +8,6 @@
   font-weight: 900;
   letter-spacing: 0.15em;
   text-transform: uppercase;
-}
-.listHero h1 {
-  margin: 0;
-  font:
-    500 clamp(38px, 5vw, 64px)/1 var(--font-fraunces),
-    Georgia,
-    serif;
-}
-.listHero span {
-  display: block;
-  margin-top: 8px;
-  color: #687083;
-  font-size: 13px;
-}
-.listHero > strong {
-  font:
-    500 50px/1 var(--font-fraunces),
-    Georgia,
-    serif;
-}
-.filter {
-  height: 54px;
-  padding: 0 16px;
-  border: 1px solid #d8d0c4;
-  border-radius: 15px;
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  background: #fffdf8;
-}
-.filter svg {
-  width: 20px;
-  color: #687083;
-}
-.filter input {
-  width: 100%;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  font-size: 15px;
-}
-.orderList {
-  display: grid;
-  gap: 10px;
-  margin: 18px 0 0;
-  padding: 0;
-  list-style: none;
-}
-.orderList button {
-  width: 100%;
-  min-height: 84px;
-  padding: 13px 16px;
-  border: 1px solid #d8d0c4;
-  border-radius: 15px;
-  display: grid;
-  grid-template-columns: 5px minmax(0, 1fr) 170px 22px;
-  align-items: center;
-  gap: 14px;
-  background: #fffdf8;
-  text-align: left;
-}
-.listRisk {
-  height: 48px;
-  border-radius: 4px;
-  background: #8c93a3;
-}
-.listRisk[data-risk="red"],
-.listRisk[data-risk="blocked"] {
-  background: #a92a1d;
-}
-.listRisk[data-risk="orange"],
-.listRisk[data-risk="yellow"] {
-  background: #d39a2f;
-}
-.orderList button > span:nth-child(2),
-.orderList button > span:nth-child(3) {
-  display: grid;
-  gap: 3px;
-}
-.orderList small {
-  color: #687083;
-  font-size: 11px;
-}
-.orderList strong {
-  font-size: 15px;
-}
-.orderList em {
-  overflow: hidden;
-  color: #4d5567;
-  font-size: 12px;
-  font-style: normal;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.orderList b {
-  font-size: 12px;
-  text-transform: capitalize;
-}
-.empty,
-.state,
 .cardState {
   min-height: 320px;
   padding: 34px;
@@ -133,18 +20,9 @@
   gap: 9px;
   background: #fffdf8;
   text-align: center;
-}
-.empty h2,
-.empty p,
-.state h1,
-.state p,
 .cardState h1,
 .cardState p {
   margin: 0;
-}
-.empty svg {
-  width: 34px;
-  color: #3f7d69;
 }
 .cardState > button {
   min-height: 48px;
@@ -553,15 +431,6 @@
   text-align: center;
 }
 @media (max-width: 740px) {
-  .listHero {
-    align-items: flex-start;
-  }
-  .orderList button {
-    grid-template-columns: 5px 1fr 22px;
-  }
-  .orderList button > span:nth-child(3) {
-    grid-column: 2;
-  }
   .orderCardV8 {
     width: 100vw;
     height: 100dvh;

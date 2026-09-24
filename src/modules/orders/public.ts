@@ -1,4 +1,3 @@
-export { OrdersView } from "./ui/OrdersView";
 export { OrderCardView } from "./ui/OrderCardView";
 export { OrderQueueRow } from "./ui/OrderQueueRow";
 export type { OrderQueueRowModel } from "./ui/OrderQueueRow";
@@ -29,6 +28,4 @@ export type {
   OrderCardPaymentContext,
   OrderCardState,
   OrdersListItem,
-  OrdersQueryPort,
-  OrdersViewState,
 } from "./server/types";
