@@ -812,7 +812,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   return (
     <>
       {ports.showPrimaryTrigger !== false ? <button type="button" className={styles.globalCreateButton} onClick={() => setOpen(true)} aria-haspopup="dialog" aria-expanded={open}>
-        <Plus aria-hidden="true" /> <span>Anlegen</span>
+        <span className={styles.globalCreatePlus} aria-hidden="true">＋</span><span>Anlegen</span>
       </button> : null}
       {open ? (
         <div className={styles.createOverlay} onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>

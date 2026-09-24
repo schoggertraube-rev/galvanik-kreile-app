@@ -701,6 +701,14 @@ jobs:
             e2e/path1-ui-convergence-v5-a-shell-homes.real.spec.ts \
             --project=Tablet --workers=1
 
+      - name: Upload browser E2E failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure
+          if-no-files-found: error
+          path: test-results/**
+
       - name: Upload P3 synthetic browser compatibility evidence
         if: always()
         uses: actions/upload-artifact@v4
