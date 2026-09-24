@@ -182,7 +182,7 @@ async function loginPin(
   sessionSecret: string,
   mode: PinInputMode = "touch",
 ): Promise<PinProof> {
-  await page.goto("/start", { waitUntil: "networkidle" });
+  await page.goto("/start", { waitUntil: "domcontentloaded" });
   await page.getByTestId(`pin-user-card-${createPinLoginHandle(actorId)}`).click();
   const dialog = page.getByTestId("pin-login-dialog");
   await expect(dialog).toBeVisible();
@@ -214,7 +214,12 @@ async function loginPin(
     }
   }
   await destination;
-  await page.waitForLoadState("networkidle");
+  await expect(
+    page.getByRole("heading", {
+      name: actorId === ROLF_ACTOR_ID ? "Der Tag" : "Werkstatt",
+      exact: true,
+    }),
+  ).toBeVisible();
   page.off("request", countSubmit);
   expect(submits).toBe(1);
   await assertSignedSession(page, actorId, sessionSecret);
@@ -233,7 +238,7 @@ async function loginGregor(
   password: string,
   sessionSecret: string,
 ) {
-  await page.goto("/start", { waitUntil: "networkidle" });
+  await page.goto("/start", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: /Gregor/ }).click();
   const dialog = page.getByTestId("email-login-dialog");
   await dialog.locator("#email").fill(email);
@@ -241,7 +246,7 @@ async function loginGregor(
   const destination = page.waitForURL((url) => url.pathname === "/settings", { timeout: 30_000 });
   await dialog.getByRole("button", { name: "Einloggen", exact: true }).click();
   await destination;
-  await page.waitForLoadState("networkidle");
+  await expect(page.getByTestId("gregor-system-admin")).toBeVisible();
   await assertSignedSession(page, GREGOR_ACTOR_ID, sessionSecret);
 }
 
@@ -359,7 +364,7 @@ async function createIntake(
   expect(stored?.count).toBe(1);
   if (!stored?.order_id) throw new Error("PATH1_A3_ORDER_READBACK_MISSING");
   await page.getByRole("button", { name: "Anlegen schließen", exact: true }).click();
-  await page.reload({ waitUntil: "networkidle" });
+  await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("rolf-v8-home")).toContainText(orderNumber);
   return { orderId: stored.order_id, orderNumber, exactlyOne: stored.count };
 }
@@ -373,17 +378,17 @@ async function clickRolfNavigation(page: Page) {
     ["Geld & Rechnungen", "/buchhaltung/rechnungen"],
   ] as const;
   for (const [name, pathname] of targets) {
-    await page.goto("/", { waitUntil: "networkidle" });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
     await page.getByRole("link", { name, exact: true }).click();
     await page.waitForURL((url) => url.pathname === pathname);
   }
-  await page.goto("/orders", { waitUntil: "networkidle" });
+  await page.goto("/orders", { waitUntil: "domcontentloaded" });
   await page.getByRole("link", { name: "Der Tag", exact: true }).click();
   await page.waitForURL((url) => url.pathname === "/");
   await page.getByRole("link", { name: "Einstellungen", exact: true }).click();
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
   expect(new URL(page.url()).pathname).toBe("/");
-  await page.goto("/", { waitUntil: "networkidle" });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Suche öffnen" }).click();
   await expect(page.getByRole("dialog", { name: "Kunden und Aufträge" })).toBeVisible();
   await page.getByRole("button", { name: "Suche schließen" }).click();
@@ -393,7 +398,7 @@ async function clickRolfNavigation(page: Page) {
 }
 
 async function clickSharedMorePaths(page: Page) {
-  await page.goto("/", { waitUntil: "networkidle" });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Mehr öffnen", exact: true }).click();
   await page.getByRole("dialog", { name: "Mehr", exact: true }).getByRole("button", { name: /^Infos rein/ }).click();
   await expect(page.getByRole("dialog", { name: /Was möchtest du anlegen\?/i })).toBeVisible();
@@ -403,15 +408,15 @@ async function clickSharedMorePaths(page: Page) {
   await page.getByRole("dialog", { name: "Mehr", exact: true }).locator('a[href="/warendurchlauf"]').click();
   await page.waitForURL((url) => url.pathname === "/warendurchlauf");
 
-  await page.goto("/", { waitUntil: "networkidle" });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Mehr öffnen", exact: true }).click();
   await page.getByRole("dialog", { name: "Mehr", exact: true }).locator('a[href="/settings"]').click();
-  await page.waitForLoadState("networkidle");
+  await page.waitForLoadState("domcontentloaded");
   expect(new URL(page.url()).pathname).toBe("/");
 }
 
 async function clickSharedMoreLogout(page: Page) {
-  await page.goto("/", { waitUntil: "networkidle" });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Mehr öffnen", exact: true }).click();
   const destination = page.waitForURL((url) => url.pathname === "/start");
   await page.getByRole("dialog", { name: "Mehr", exact: true }).getByRole("button", { name: /^Abmelden/ }).click();
@@ -426,13 +431,13 @@ async function clickRolfMobileNavigation(page: Page) {
     ["Geld", "/buchhaltung/rechnungen"],
   ] as const;
   for (const [name, pathname] of targets) {
-    await page.goto("/", { waitUntil: "networkidle" });
+    await page.goto("/", { waitUntil: "domcontentloaded" });
     await page.getByRole("navigation", { name: "Mobile Hauptnavigation" })
       .getByRole("link", { name, exact: true })
       .click();
     await page.waitForURL((url) => url.pathname === pathname);
   }
-  await page.goto("/", { waitUntil: "networkidle" });
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByRole("button", { name: "Mehr öffnen", exact: true }).click();
   const more = page.getByRole("dialog", { name: "Mehr", exact: true });
   await more.locator('a[href="/warendurchlauf"]').click();
@@ -537,7 +542,7 @@ test.describe("PATH1 A3 – V5 Shell, Rollen-Homes und Navigation", () => {
       contexts.push(start.context);
       for (const viewport of VIEWPORTS) {
         await start.page.setViewportSize(viewport);
-        await start.page.goto("/start", { waitUntil: "networkidle" });
+        await start.page.goto("/start", { waitUntil: "domcontentloaded" });
         await expect(start.page.getByRole("heading", { name: "Persönlichen Code eingeben", exact: true })).toBeVisible();
         await expect(start.page.getByRole("button", { name: /Rolf/ })).toBeVisible();
         await expect(start.page.getByRole("button", { name: /Phillip/ })).toBeVisible();
@@ -557,7 +562,7 @@ test.describe("PATH1 A3 – V5 Shell, Rollen-Homes und Navigation", () => {
       ];
       for (const viewport of VIEWPORTS) {
         await rolf.page.setViewportSize(viewport);
-        await rolf.page.goto("/", { waitUntil: "networkidle" });
+        await rolf.page.goto("/", { waitUntil: "domcontentloaded" });
         await expect(rolf.page.getByTestId("rolf-v8-home")).toContainText(readbacks[0].orderNumber);
         await expect(rolf.page.locator("body")).not.toContainText(/Geplant|kommt bald|wareneingang/i);
         await assertRolfChrome(rolf.page, viewport);
@@ -583,7 +588,7 @@ test.describe("PATH1 A3 – V5 Shell, Rollen-Homes und Navigation", () => {
       await expect(phillip.page.locator("body")).not.toContainText(/Geld|Stationsband/i);
       for (const viewport of VIEWPORTS) {
         await phillip.page.setViewportSize(viewport);
-        await phillip.page.goto("/", { waitUntil: "networkidle" });
+        await phillip.page.goto("/", { waitUntil: "domcontentloaded" });
         await expect(phillip.page.getByRole("navigation", { name: "Hauptnavigation" })).toHaveCount(0);
         await expect(phillip.page.getByRole("navigation", { name: "Mobile Hauptnavigation" })).toHaveCount(0);
         await expect(phillip.page.getByRole("navigation", { name: "Werkstattaktionen" }).getByRole("button")).toHaveCount(5);
@@ -592,7 +597,7 @@ test.describe("PATH1 A3 – V5 Shell, Rollen-Homes und Navigation", () => {
         captures.push(await capture(phillip.page, `a-phillip-${viewport.name}-${viewport.width}x${viewport.height}.png`, "phillip-v4-real-projection"));
       }
       await phillip.page.setViewportSize(VIEWPORTS[0]);
-      await phillip.page.goto("/", { waitUntil: "networkidle" });
+      await phillip.page.goto("/", { waitUntil: "domcontentloaded" });
       await clickPhillipActions(phillip.page);
       await clickSharedMoreLogout(phillip.page);
 
@@ -600,7 +605,7 @@ test.describe("PATH1 A3 – V5 Shell, Rollen-Homes und Navigation", () => {
       contexts.push(gregor.context);
       await loginGregor(gregor.page, gregorEmail, gregorPassword, sessionSecret);
       await expect(gregor.page.getByTestId("gregor-system-admin")).toBeVisible();
-      await gregor.page.goto("/", { waitUntil: "networkidle" });
+      await gregor.page.goto("/", { waitUntil: "domcontentloaded" });
       await gregor.page.waitForURL((url) => url.pathname === "/settings");
       await expect(gregor.page.locator('a[href="/orders"], a[href="/customers"], a[href="/warendurchlauf"]')).toHaveCount(0);
 

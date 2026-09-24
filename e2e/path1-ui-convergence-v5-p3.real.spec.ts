@@ -193,10 +193,16 @@ async function loginPin(
   for (const digit of pin)
     await dialog.getByRole("button", { name: digit, exact: true }).click();
   await reachedHome;
-  await page.waitForLoadState("networkidle");
+  const homeHeading = userId === ROLF_ACTOR_ID ? "Der Tag" : "Werkstatt";
+  await expect(
+    page.getByRole("heading", { name: homeHeading, exact: true }),
+  ).toBeVisible();
   await assertSignedAppSession(page, userId, sessionSecret);
-  await page.reload({ waitUntil: "networkidle" });
+  await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForURL((url) => url.pathname === "/", { timeout: 30_000 });
+  await expect(
+    page.getByRole("heading", { name: homeHeading, exact: true }),
+  ).toBeVisible();
   await assertSignedAppSession(page, userId, sessionSecret);
 }
 
@@ -221,12 +227,13 @@ async function loginEmail(
   );
   await dialog.getByRole("button", { name: "Einloggen", exact: true }).click();
   await reachedSettings;
-  await page.waitForLoadState("networkidle");
+  await expect(page.getByTestId("gregor-system-admin")).toBeVisible();
   await assertSignedAppSession(page, actorId, sessionSecret);
-  await page.reload({ waitUntil: "networkidle" });
+  await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForURL((url) => url.pathname === "/settings", {
     timeout: 30_000,
   });
+  await expect(page.getByTestId("gregor-system-admin")).toBeVisible();
   await assertSignedAppSession(page, actorId, sessionSecret);
 }
 
@@ -412,7 +419,7 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
           width: viewport.width,
           height: viewport.height,
         });
-        await rolf.page.goto("/warendurchlauf", { waitUntil: "networkidle" });
+        await rolf.page.goto("/warendurchlauf", { waitUntil: "domcontentloaded" });
         await expect(
           rolf.page.getByRole("heading", { name: "Werkstatt", exact: true }),
         ).toBeVisible();
@@ -485,7 +492,7 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
         await expect(hubCreateDialog).toHaveCount(0);
 
         await rolf.page.goto("/warendurchlauf/wareneingang", {
-          waitUntil: "networkidle",
+          waitUntil: "domcontentloaded",
         });
         await expect(
           rolf.page.getByText("Neue Annahme erfassen"),
@@ -540,7 +547,7 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
       }
 
       await rolf.page.setViewportSize({ width: 1914, height: 917 });
-      await rolf.page.goto("/", { waitUntil: "networkidle" });
+      await rolf.page.goto("/", { waitUntil: "domcontentloaded" });
 
       await rolf.page
         .getByRole("navigation", { name: "Hauptnavigation", exact: true })
@@ -584,12 +591,12 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
         throw new Error("PATH1_P3_ORDER_READBACK_MISSING");
 
       await rolf.page.goto("/warendurchlauf/wareneingang", {
-        waitUntil: "networkidle",
+        waitUntil: "domcontentloaded",
       });
       await expect(
         rolf.page.getByText(orderNumber, { exact: false }),
       ).toBeVisible();
-      await rolf.page.reload({ waitUntil: "networkidle" });
+      await rolf.page.reload({ waitUntil: "domcontentloaded" });
       await expect(
         rolf.page.getByText(orderNumber, { exact: false }),
       ).toBeVisible();
@@ -609,7 +616,7 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
         }),
       ).toHaveCount(0);
 
-      await rolf.page.goto("/", { waitUntil: "networkidle" });
+      await rolf.page.goto("/", { waitUntil: "domcontentloaded" });
       await rolf.page
         .getByRole("button", { name: "Anlegen", exact: true })
         .click();
@@ -646,7 +653,7 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
         "NOT_AVAILABLE",
       );
       const accountingEntry = await rolf.page.goto("/buchhaltung", {
-        waitUntil: "networkidle",
+        waitUntil: "domcontentloaded",
       });
       expect(accountingEntry?.status()).toBe(200);
       await rolf.page.waitForURL(
@@ -663,27 +670,23 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
         retiredRoutePartitions[index % retiredRoutePartitions.length].push({ index, path: retiredRoute });
       });
       const partitionResults = await Promise.all(retiredRoutePartitions.map(async (partition) => {
-        const retiredRoutePage = await rolf.context.newPage();
-        try {
-          const results: Array<{ index: number; path: string; status: number }> = [];
-          for (const retiredRoute of partition) {
-            const response = await retiredRoutePage.goto(retiredRoute.path, {
-              waitUntil: "domcontentloaded",
-            });
-            const status = response?.status() ?? 0;
-            expect(
-              status,
-              `${retiredRoute.path} must resolve through Next's unmatched-route 404`,
-            ).toBe(404);
-            await expect(retiredRoutePage.locator("body")).not.toContainText(
+        const results: Array<{ index: number; path: string; status: number }> = [];
+        for (const retiredRoute of partition) {
+          const response = await rolf.context.request.get(
+            new URL(retiredRoute.path, P3_TEST_ORIGIN).toString(),
+          );
+          const status = response.status();
+          const body = await response.text();
+          expect(
+            status,
+            `${retiredRoute.path} must resolve through Next's unmatched-route 404`,
+          ).toBe(404);
+          expect(body).not.toMatch(
               /NOT_AVAILABLE|Liquidität Stabil|145 Belege|62 Rechnungen|1240 Zeitbuchungen|Google-API|Scan & KI-Erfassung|App-Nutzung \/ Analytics|Testanalyse \(Testpilot\)/i,
             );
-            results.push({ ...retiredRoute, status });
-          }
-          return results;
-        } finally {
-          await retiredRoutePage.close();
+          results.push({ ...retiredRoute, status });
         }
+        return results;
       }));
       retiredRouteResults.push(
         ...partitionResults
@@ -692,25 +695,19 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
           .map(({ path: retiredPath, status }) => ({ path: retiredPath, status })),
       );
 
-      const legacyStationPage = await rolf.context.newPage();
-      try {
-        const legacyStationResponse = await legacyStationPage.goto(
-          legacyStationRouteResult.path,
-          { waitUntil: "domcontentloaded" },
-        );
-        legacyStationRouteResult = {
-          ...legacyStationRouteResult,
-          status: legacyStationResponse?.status() ?? 0,
-        };
-        expect(legacyStationRouteResult.status).toBe(404);
-        await expect(legacyStationPage.locator("body")).not.toContainText(
-          /Stationsdaten werden geladen|WarendurchlaufStationNav|NOT_AVAILABLE/,
-        );
-      } finally {
-        await legacyStationPage.close();
-      }
+      const legacyStationResponse = await rolf.context.request.get(
+        new URL(legacyStationRouteResult.path, P3_TEST_ORIGIN).toString(),
+      );
+      legacyStationRouteResult = {
+        ...legacyStationRouteResult,
+        status: legacyStationResponse.status(),
+      };
+      expect(legacyStationRouteResult.status).toBe(404);
+      expect(await legacyStationResponse.text()).not.toMatch(
+        /Stationsdaten werden geladen|WarendurchlaufStationNav|NOT_AVAILABLE/,
+      );
       const galvanikControl = await rolf.page.goto("/warendurchlauf/galvanik", {
-        waitUntil: "networkidle",
+        waitUntil: "domcontentloaded",
       });
       expect(galvanikControl?.status()).toBe(200);
       await expect(
@@ -722,7 +719,7 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
           width: viewport.width,
           height: viewport.height,
         });
-        await rolf.page.goto("/", { waitUntil: "networkidle" });
+        await rolf.page.goto("/", { waitUntil: "domcontentloaded" });
         await expect(
           rolf.page.getByRole("heading", { name: "Das braucht dich", exact: true }),
         ).toBeVisible();
@@ -740,7 +737,7 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
           ),
         );
 
-        await rolf.page.goto("/orders", { waitUntil: "networkidle" });
+        await rolf.page.goto("/orders", { waitUntil: "domcontentloaded" });
         await expect(
           rolf.page.getByRole("heading", { name: "Aufträge" }),
         ).toBeVisible();
@@ -866,7 +863,7 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
       }
 
       await rolf.page.goto(`/orders/${stored.order_id}`, {
-        waitUntil: "networkidle",
+        waitUntil: "domcontentloaded",
       });
       await expect(rolf.page.getByTestId("order-card-v8")).toContainText(
         orderNumber,
@@ -876,7 +873,7 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
         .getByRole("button", { name: /Zurück/ })
         .click();
       await rolf.page.waitForURL((url) => url.pathname === "/orders");
-      await rolf.page.waitForLoadState("networkidle");
+      await rolf.page.waitForLoadState("domcontentloaded");
       await expect(
         rolf.page.getByRole("heading", { name: "Aufträge" }),
       ).toBeVisible();
@@ -884,7 +881,7 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
         rolf.page.getByRole("button", { name: "Anlegen", exact: true }),
       ).toBeVisible();
       await rolf.page.goto(`/customers/${stored.customer_id}`, {
-        waitUntil: "networkidle",
+        waitUntil: "domcontentloaded",
       });
       await expect(rolf.page.getByTestId("customer-card-v2")).toContainText(
         customerName,
@@ -894,7 +891,7 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
         .getByRole("button", { name: /Zurück/ })
         .click();
       await rolf.page.waitForURL((url) => url.pathname === "/customers");
-      await rolf.page.waitForLoadState("networkidle");
+      await rolf.page.waitForLoadState("domcontentloaded");
       await expect(
         rolf.page.getByRole("heading", { name: "Kunden" }),
       ).toBeVisible();
