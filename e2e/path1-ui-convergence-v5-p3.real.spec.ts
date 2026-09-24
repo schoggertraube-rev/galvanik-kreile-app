@@ -302,14 +302,19 @@ async function openSearch(page: Page, query: string) {
   return dialog;
 }
 
-async function returnToWorkshopHub(page: Page) {
-  const directLink = page.locator('a[href="/warendurchlauf"]:visible');
+async function returnToWorkshopHub(
+  page: Page,
+  viewport: (typeof VIEWPORTS)[number],
+) {
   const reachedWorkshop = page.waitForURL(
     (url) => url.pathname === "/warendurchlauf",
     { timeout: 15_000 },
   );
-  if ((await directLink.count()) > 0) {
-    await directLink.first().click();
+  if (viewport.width >= 1300) {
+    await page
+      .getByRole("navigation", { name: "Hauptnavigation", exact: true })
+      .getByRole("link", { name: "Werkstatt", exact: true })
+      .click();
   } else {
     await page
       .getByRole("navigation", {
@@ -553,7 +558,7 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
             rolf.page.getByTestId("wareneingang-create-order"),
           ).toBeVisible();
         }
-        await returnToWorkshopHub(rolf.page);
+        await returnToWorkshopHub(rolf.page, viewport);
       }
 
       await rolf.page.setViewportSize({ width: 1914, height: 917 });
@@ -610,7 +615,7 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
       await expect(
         rolf.page.getByText(orderNumber, { exact: false }),
       ).toBeVisible();
-      await returnToWorkshopHub(rolf.page);
+      await returnToWorkshopHub(rolf.page, VIEWPORTS[0]);
       const populatedWorkshopHub = rolf.page.getByRole("region", {
         name: "Werkstatt",
       });

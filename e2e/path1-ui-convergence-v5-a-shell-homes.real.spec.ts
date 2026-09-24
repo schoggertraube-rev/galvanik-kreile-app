@@ -271,8 +271,19 @@ async function newContext(browser: Browser, viewport: { width: number; height: n
   return { context, page: await context.newPage() };
 }
 
-async function assertMoreMenu(page: Page) {
-  await page.getByRole("button", { name: /^Mehr(?: öffnen)?$/ }).click();
+async function assertMoreMenu(
+  page: Page,
+  viewport: (typeof VIEWPORTS)[number],
+) {
+  const moreTrigger = viewport.width >= 1300
+    ? page.getByRole("button", { name: "Mehr öffnen", exact: true })
+    : page
+      .getByRole("navigation", {
+        name: "Mobile Hauptnavigation",
+        exact: true,
+      })
+      .getByRole("button", { name: "Mehr", exact: true });
+  await moreTrigger.click();
   const more = page.getByRole("dialog", { name: "Mehr", exact: true });
   await expect(more).toBeVisible();
   await expect(more.getByRole("heading", { name: "Mehr", exact: true })).toBeVisible();
@@ -639,7 +650,7 @@ test.describe("PATH1 A3 – V5 Shell, Rollen-Homes und Navigation", () => {
           hasRolfQuickActions: true,
         });
         await assertNoFloatingActionOverlap(rolf.page);
-        await assertMoreMenu(rolf.page);
+        await assertMoreMenu(rolf.page, viewport);
         captures.push(await capture(rolf.page, `a-rolf-${viewport.name}-${viewport.width}x${viewport.height}.png`, "rolf-v8-real-projection"));
       }
       await rolf.page.setViewportSize(VIEWPORTS[0]);
@@ -668,7 +679,7 @@ test.describe("PATH1 A3 – V5 Shell, Rollen-Homes und Navigation", () => {
         await expect(phillip.page.getByRole("group", { name: "Werkstattaktionen" }).getByRole("button")).toHaveCount(5);
         await expect(phillip.page.getByRole("button", { name: "Anlegen", exact: true })).toBeVisible();
         await assertNoFloatingActionOverlap(phillip.page);
-        await assertMoreMenu(phillip.page);
+        await assertMoreMenu(phillip.page, viewport);
         captures.push(await capture(phillip.page, `a-phillip-${viewport.name}-${viewport.width}x${viewport.height}.png`, "phillip-v4-real-projection"));
       }
       await phillip.page.setViewportSize(VIEWPORTS[0]);
