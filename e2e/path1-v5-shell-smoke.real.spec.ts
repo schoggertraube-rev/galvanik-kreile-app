@@ -100,11 +100,19 @@ async function loginPin(page: Page, actor: (typeof ACTORS)[number], secret: stri
 }
 
 async function capture(page: Page, actor: string, viewport: (typeof VIEWPORTS)[number], pagePath?: string) {
-  const loading = page.locator('[role="status"][aria-busy="true"], text=/werden geladen/i');
-  await expect.poll(async () => loading.evaluateAll((nodes) => nodes.filter((node) => {
+  const visibleCount = (nodes: readonly Element[]) => nodes.filter((node) => {
     const style = window.getComputedStyle(node);
     return style.visibility !== "hidden" && style.display !== "none" && node.getClientRects().length > 0;
-  }).length), { timeout: NAVIGATION_TIMEOUT }).toBe(0);
+  }).length;
+  const busyStatus = page.locator('[role="status"][aria-busy="true"]');
+  const loadingText = page.getByText(/werden geladen/i);
+  await expect.poll(async () => {
+    const [busyCount, textCount] = await Promise.all([
+      busyStatus.evaluateAll(visibleCount),
+      loadingText.evaluateAll(visibleCount),
+    ]);
+    return busyCount + textCount;
+  }, { timeout: NAVIGATION_TIMEOUT }).toBe(0);
   mkdirSync(OUTPUT_DIR, { recursive: true });
   const suffix = pagePath ? `-path-${pagePath === "/" ? "root" : pagePath.slice(1).replace(/\//g, "-")}` : "";
   const file = `${actor}-${viewport.name}-${viewport.width}x${viewport.height}${suffix}`;
