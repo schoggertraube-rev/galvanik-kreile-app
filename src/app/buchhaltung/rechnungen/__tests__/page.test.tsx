@@ -8,15 +8,13 @@ const ports = vi.hoisted(() => ({
 }));
 
 vi.mock("@/app/actions/invoices.actions", () => ports);
-vi.mock("@/components/ui/Breadcrumb", () => ({ Breadcrumb: () => <nav aria-label="Breadcrumb" /> }));
-vi.mock("@/components/ui/BackButton", () => ({ BackButton: () => <a href="/buchhaltung">Buchhaltung</a> }));
 
 const INVOICE = "11111111-1111-4111-8111-111111111111";
 const ORDER = "22222222-2222-4222-8222-222222222222";
 const ACTOR = "33333333-3333-4333-8333-333333333333";
 const EVENT = "44444444-4444-4444-8444-444444444444";
 const CLIENT = "55555555-5555-4555-8555-555555555555";
-const CORRELATION = "66666666-6666-4666-8666-666666666666";
+const CORRELATION = "66666666-6666-4666-8666-866666666666";
 const ORIGINAL_HASH = "a".repeat(64);
 const CANCELLATION_HASH = "b".repeat(64);
 
@@ -84,9 +82,7 @@ describe("F1.4 immutable invoice page states", () => {
 
   it("renders denial and error separately from an empty list", async () => {
     const { InvoicesClient } = await import("../InvoicesClient");
-    render(
-      <InvoicesClient initialState={{ state: "DENIAL", message: "Nicht erlaubt", role: null }} />,
-    );
+    render(<InvoicesClient initialState={{ state: "DENIAL", message: "Nicht erlaubt", role: null }} />);
     expect(screen.getByRole("alert")).toHaveTextContent("Nicht erlaubt");
     expect(screen.queryByTestId("invoice-empty-state")).not.toBeInTheDocument();
 
@@ -99,19 +95,18 @@ describe("F1.4 immutable invoice page states", () => {
   it("renders the real empty state without fabricated metrics", async () => {
     const { InvoicesClient } = await import("../InvoicesClient");
     render(<InvoicesClient initialState={{ state: "EMPTY", data: [], role: "buero" }} />);
-    expect(screen.getByTestId("invoice-empty-state")).toHaveTextContent("Noch keine Rechnungen ausgestellt");
+    expect(screen.getByTestId("invoice-empty-state")).toHaveTextContent("Keine Rechnungen ausgestellt.");
     expect(screen.queryByText(/offene posten|bezahlt|mahnung/i)).not.toBeInTheDocument();
   });
 
-  it("shows immutable data and keeps cancellation unavailable to buero", async () => {
+  it("opens the actual invoice document from the mock row", async () => {
     const { InvoicesClient } = await import("../InvoicesClient");
     render(<InvoicesClient initialState={{ state: "DATA", data: [issuedRow], role: "buero" }} />);
-    expect(screen.getByText("R-2026-0001")).toBeVisible();
-    expect(screen.getByText("Synthetischer Testkunde · Auftrag A-2026-0001")).toBeVisible();
-    expect(screen.getByTestId("invoice-original-pdf-R-2026-0001")).toHaveAttribute(
-      "href",
-      `/api/invoices/${INVOICE}/pdf?kind=original`,
-    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Rechnung R-2026-0001 öffnen" }));
+    const document = await screen.findByTestId("invoice-document-R-2026-0001");
+    expect(document).toHaveTextContent("Original-PDF öffnen");
+    expect(document).toHaveAttribute("href", `/api/invoices/${INVOICE}/pdf?kind=original`);
     expect(screen.queryByRole("button", { name: "Rechnung stornieren" })).not.toBeInTheDocument();
   });
 
@@ -122,15 +117,14 @@ describe("F1.4 immutable invoice page states", () => {
     const { InvoicesClient } = await import("../InvoicesClient");
     render(<InvoicesClient initialState={{ state: "DATA", data: [issuedRow], role: "meister" }} />);
 
-    fireEvent.change(screen.getByLabelText("Stornogrund"), {
-      target: { value: cancellationReceipt.reason },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Rechnung R-2026-0001 öffnen" }));
+    fireEvent.change(await screen.findByLabelText("Stornogrund"), { target: { value: cancellationReceipt.reason } });
     fireEvent.click(screen.getByRole("button", { name: "Rechnung stornieren" }));
 
     await waitFor(() => expect(ports.getInvoiceCancellationReceiptAction).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(ports.getInvoiceSummariesAction).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("Storno und gespeicherter Beleg sind bestätigt.")).toBeVisible();
-    expect(screen.getByTestId("invoice-cancellation-pdf-R-2026-0001")).toHaveAttribute(
+    expect(screen.getByTestId("invoice-document-R-2026-0001")).toHaveAttribute(
       "href",
       `/api/invoices/${INVOICE}/pdf?kind=cancellation`,
     );
@@ -143,7 +137,8 @@ describe("F1.4 immutable invoice page states", () => {
     });
     const { InvoicesClient } = await import("../InvoicesClient");
     render(<InvoicesClient initialState={{ state: "DATA", data: [issuedRow], role: "admin" }} />);
-    fireEvent.change(screen.getByLabelText("Stornogrund"), {
+    fireEvent.click(screen.getByRole("button", { name: "Rechnung R-2026-0001 öffnen" }));
+    fireEvent.change(await screen.findByLabelText("Stornogrund"), {
       target: { value: "Doppelte Berechnung vollständig storniert" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Rechnung stornieren" }));
