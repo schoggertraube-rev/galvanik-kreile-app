@@ -1,4 +1,3 @@
-export { CustomersView } from "./ui/CustomersView";
 export { CustomerCardView } from "./ui/CustomerCardView";
 export type {
   CreateCustomerInput,
