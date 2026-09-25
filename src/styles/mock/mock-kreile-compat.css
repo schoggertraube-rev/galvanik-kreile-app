@@ -29,3 +29,8 @@
   flex: none;
   margin-top: auto;
 }
+
+.content > .mock-kreile-rolf-accounting,
+.tcontent > .mock-kreile-rolf-accounting {
+  min-height: 100%;
+}

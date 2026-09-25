@@ -156,7 +156,7 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
   }
 
   return (
-    <div className="mock-kreile-rolf-accounting" data-testid="immutable-invoice-page" style={{ minHeight: "100%" }}>
+    <div className="mock-kreile-rolf-accounting" data-testid="immutable-invoice-page">
       <div className="app-page">
         <div className="app-head">
           <div>
