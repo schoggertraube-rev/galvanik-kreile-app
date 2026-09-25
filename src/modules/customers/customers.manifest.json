@@ -11,7 +11,6 @@
     "@/modules/customers/public#CustomerCreateCommandResult",
     "@/modules/customers/public#CustomerCreateReceipt",
     "@/modules/customers/public#ReadCustomerCreateReceiptResult",
-    "@/modules/customers/public#CustomersView",
     "@/modules/customers/public#CustomersViewState",
     "@/modules/customers/server-public#CreateCustomerInput",
     "@/modules/customers/server-public#CustomerCommandCapabilities",

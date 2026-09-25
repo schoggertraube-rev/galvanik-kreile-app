@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { CustomerCardView, CustomersView, type CustomerCardModel } from "../public";
+import { CustomerCardView, type CustomerCardModel } from "../public";
 
 const card: CustomerCardModel = {
   id: "customer-1", customerNumber: "K-1042", name: "Erika Muster", companyName: "Muster GmbH", type: "business",
@@ -10,18 +10,7 @@ const card: CustomerCardModel = {
   orders: [{ id: "order-1", orderNumber: "A-2026-0042", title: "Geländer", station: "galvanik", status: "angenommen", dueAt: "2026-09-20", version: 1 }],
 };
 
-describe("Customers V2 one-surface truth", () => {
-  it("renders list loading, empty and data states and opens the selected customer", () => {
-    const open = vi.fn();
-    const { rerender } = render(<CustomersView state={{ kind: "loading" }} onOpenCustomer={open} />);
-    expect(screen.getByText("Kunden werden geladen")).toBeInTheDocument();
-    rerender(<CustomersView state={{ kind: "data", customers: [] }} onOpenCustomer={open} />);
-    expect(screen.getByRole("status")).toHaveTextContent("Kein belegter Kunde");
-    rerender(<CustomersView state={{ kind: "data", customers: [{ id: "customer-1", customerNumber: "K-1042", name: "Muster GmbH", type: "business", city: "Stuttgart" }] }} onOpenCustomer={open} />);
-    fireEvent.click(screen.getByRole("button", { name: /Muster GmbH/ }));
-    expect(open).toHaveBeenCalledWith("customer-1");
-  });
-
+describe("Customer card V2", () => {
   it("renders V2 contact context and opens its real active order", () => {
     const openOrder = vi.fn();
     render(<CustomerCardView state={{ kind: "data", card }} onClose={vi.fn()} onOpenOrder={openOrder} />);
