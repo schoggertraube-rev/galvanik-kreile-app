@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import Link from "next/link";
 import { useHydrated } from "@/hooks/useHydrated";
 import {
   cancelInvoiceAction,
@@ -19,14 +18,6 @@ export type InvoicePageInitialState =
   | { state: "ERROR" | "DENIAL"; message: string; role: AppRole | null };
 
 type InvoicePageState = InvoicePageInitialState["state"] | "LOADING";
-
-function formatMoney(cents: number): string {
-  return (cents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
-}
-
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat("de-DE").format(new Date(value));
-}
 
 function sameCancellationReceipt(
   receipt: ImmutableInvoiceCancellationReceipt,
@@ -46,6 +37,19 @@ function sameCancellationReceipt(
     && row.cancellationPdfSha256 === receipt.cancellationPdfSha256;
 }
 
+function statusLabel(status: ImmutableInvoiceSummary["status"]): string {
+  return status === "issued" ? "Ausgestellt" : "Storniert";
+}
+
+function documentLabel(row: ImmutableInvoiceSummary): string {
+  return row.status === "issued" ? "Original-PDF öffnen" : "Stornobeleg öffnen";
+}
+
+function documentHref(row: ImmutableInvoiceSummary): string {
+  const kind = row.status === "issued" ? "original" : "cancellation";
+  return `/api/invoices/${row.invoiceId}/pdf?kind=${kind}`;
+}
+
 export function InvoicesClient({ initialState }: { initialState: InvoicePageInitialState }) {
   const [rows, setRows] = useState(
     initialState.state === "DATA" || initialState.state === "EMPTY" ? initialState.data : [],
@@ -54,12 +58,14 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
   const [pageMessage, setPageMessage] = useState(
     initialState.state === "ERROR" || initialState.state === "DENIAL" ? initialState.message : null,
   );
+  const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [pendingInvoiceId, setPendingInvoiceId] = useState<string | null>(null);
   const [rowMessages, setRowMessages] = useState<Record<string, { kind: "success" | "error"; text: string }>>({});
   const requestIds = useRef<Record<string, string>>({});
   const canCancel = initialState.role === "meister" || initialState.role === "admin";
   const interactive = useHydrated();
+  const openRow = openInvoiceId ? rows.find((row) => row.invoiceId === openInvoiceId) ?? null : null;
 
   function stableClientEventId(invoiceId: string): string {
     requestIds.current[invoiceId] ??= globalThis.crypto.randomUUID();
@@ -150,144 +156,109 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
   }
 
   return (
-    <main className="min-h-screen bg-bg-app-soft px-4 pb-24 pt-4 sm:px-6 xl:px-8" data-testid="immutable-invoice-page">
-      <div className="mx-auto max-w-6xl">
-        <header className="mb-8 mt-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted">Geld &amp; Rechnungen</p>
-          <h1 className="mt-2 font-display text-3xl font-bold text-navy-900">Rechnungen</h1>
-          <p className="mt-2 max-w-2xl text-sm text-text-muted">
-            Ausgestellte Rechnungen bleiben unverändert. Korrekturen erfolgen ausschließlich durch Storno und Neuausstellung.
-          </p>
-        </header>
+    <div className="mock-kreile-rolf-accounting" data-testid="immutable-invoice-page">
+      <div className="app-page">
+        <div className="app-head">
+          <div>
+            <h1 style={{ margin: 0 }}>Geld &amp; Rechnungen</h1>
+          </div>
+        </div>
 
         {pageState === "LOADING" ? (
-          <div className="rounded-2xl border border-neutral-gray-200 bg-white p-6" role="status">
-            Rechnungsliste wird bestätigt…
-          </div>
+          <div className="app-note" role="status">Rechnungsliste wird bestätigt.</div>
         ) : null}
 
         {pageState === "ERROR" || pageState === "DENIAL" ? (
-          <div className="rounded-2xl border border-error-red/30 bg-white p-6 text-sm text-error-red" role="alert">
-            {pageMessage}
-          </div>
+          <div className="app-note" role="alert">{pageMessage}</div>
         ) : null}
 
-        {pageState === "EMPTY" ? (
-          <section className="rounded-2xl border border-neutral-gray-200 bg-white p-8 text-center" data-testid="invoice-empty-state">
-            <h2 className="font-display text-xl font-semibold text-navy-900">Noch keine Rechnungen ausgestellt</h2>
-            <p className="mt-2 text-sm text-text-muted">Fertiggestellte Aufträge können im Werkstattdurchlauf in Rechnung gestellt werden.</p>
-            <Link className="mt-5 inline-flex min-h-12 items-center rounded-lg bg-navy-900 px-5 text-sm font-semibold text-white" href="/warendurchlauf" prefetch={false}>
-              Zum Werkstattdurchlauf
-            </Link>
-          </section>
-        ) : null}
+        {pageState === "DATA" || pageState === "EMPTY" ? (
+          <>
+            <div className="app-list" aria-label="Unveränderliche Rechnungen">
+              <div className="app-list-head">
+                <span>Rechnung / Auftrag</span>
+                <span>Status</span>
+                <span>Nächste Handlung</span>
+                <span></span>
+              </div>
+              {pageState === "EMPTY" ? (
+                <div className="app-row" data-testid="invoice-empty-state" role="status">
+                  <div className="app-main"><span>Keine Rechnungen ausgestellt.</span></div>
+                  <div></div>
+                  <div></div>
+                  <span></span>
+                </div>
+              ) : rows.map((row) => (
+                <div className="app-row" data-testid={`invoice-row-${row.invoiceNumber}`} key={row.invoiceId}>
+                  <div className="app-main">
+                    <b>{row.invoiceNumber}</b>
+                    <span>{row.customerName} · Auftrag {row.orderNumber}</span>
+                  </div>
+                  <div className="app-meta">
+                    <span className="app-status">{statusLabel(row.status)}</span>
+                  </div>
+                  <div className="app-meta">{documentLabel(row)}</div>
+                  <button
+                    aria-expanded={openInvoiceId === row.invoiceId}
+                    aria-label={`Rechnung ${row.invoiceNumber} öffnen`}
+                    className="app-btn"
+                    onClick={() => setOpenInvoiceId((current) => current === row.invoiceId ? null : row.invoiceId)}
+                    type="button"
+                  >
+                    Öffnen →
+                  </button>
+                </div>
+              ))}
+            </div>
 
-        {pageState === "DATA" ? (
-          <section className="space-y-4" aria-label="Unveränderliche Rechnungen">
-            {rows.map((row) => {
-              const rowMessage = rowMessages[row.invoiceId];
-              const pending = pendingInvoiceId === row.invoiceId;
-              return (
-                <article
-                  className="rounded-2xl border border-neutral-gray-200 bg-white p-5 shadow-sm"
-                  data-testid={`invoice-row-${row.invoiceNumber}`}
-                  key={row.invoiceId}
+            {openRow ? (
+              <div className="app-note" data-testid={`invoice-open-${openRow.invoiceNumber}`}>
+                <a
+                  className="app-btn"
+                  data-testid={`invoice-document-${openRow.invoiceNumber}`}
+                  href={documentHref(openRow)}
+                  rel="noopener noreferrer"
+                  target="_blank"
                 >
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="font-display text-xl font-semibold text-navy-900">{row.invoiceNumber}</h2>
-                        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.status === "issued" ? "bg-success-green/10 text-success-green" : "bg-neutral-gray-100 text-text-muted"}`}>
-                          {row.status === "issued" ? "Ausgestellt" : "Storniert"}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-sm text-text-muted">{row.customerName} · Auftrag {row.orderNumber}</p>
-                      <p className="mt-1 text-xs text-text-muted">
-                        Leistung {formatDate(row.serviceDate)} · Ausgabe {formatDate(row.issuedAt)} · Version {row.aggregateVersion}
-                      </p>
-                    </div>
-                    <div className="text-left lg:text-right">
-                      <p className="font-display text-2xl font-bold text-navy-900">{formatMoney(row.grossAmountCents)}</p>
-                      <p className="text-xs text-text-muted">inkl. {(row.vatRateBasisPoints / 100).toLocaleString("de-DE")} % USt</p>
-                    </div>
-                  </div>
+                  {documentLabel(openRow)}
+                </a>
 
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <a
-                      className="inline-flex min-h-12 items-center rounded-lg border border-navy-900 px-4 text-sm font-semibold text-navy-900"
-                      href={`/api/invoices/${row.invoiceId}/pdf?kind=original`}
-                      data-testid={`invoice-original-pdf-${row.invoiceNumber}`}
-                    >
-                      Original-PDF
-                    </a>
-                    {row.status === "cancelled" ? (
-                      <a
-                        className="inline-flex min-h-12 items-center rounded-lg border border-navy-900 px-4 text-sm font-semibold text-navy-900"
-                        href={`/api/invoices/${row.invoiceId}/pdf?kind=cancellation`}
-                        data-testid={`invoice-cancellation-pdf-${row.invoiceNumber}`}
-                      >
-                        Stornobeleg-PDF
-                      </a>
-                    ) : null}
-                    <Link className="inline-flex min-h-12 items-center px-2 text-sm font-semibold text-navy-900 underline" href="/warendurchlauf" prefetch={false}>
-                      Auftrag öffnen
-                    </Link>
-                  </div>
+                {openRow.status === "issued" && canCancel ? (
+                  <form
+                    noValidate
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      const formData = new FormData(event.currentTarget);
+                      void cancel(openRow, String(formData.get("reason") ?? ""));
+                    }}
+                  >
+                    <label htmlFor={`cancel-reason-${openRow.invoiceId}`}>Stornogrund</label>
+                    <input
+                      id={`cancel-reason-${openRow.invoiceId}`}
+                      maxLength={500}
+                      minLength={5}
+                      name="reason"
+                      onChange={(event) => setReasons((current) => ({ ...current, [openRow.invoiceId]: event.target.value }))}
+                      placeholder="Grund der vollständigen Stornierung"
+                      value={reasons[openRow.invoiceId] ?? ""}
+                      disabled={!interactive || pendingInvoiceId === openRow.invoiceId}
+                    />
+                    <button disabled={!interactive || pendingInvoiceId === openRow.invoiceId} type="submit">
+                      {pendingInvoiceId === openRow.invoiceId ? "Storno wird bestätigt…" : "Rechnung stornieren"}
+                    </button>
+                  </form>
+                ) : null}
 
-                  {row.status === "cancelled" ? (
-                    <div className="mt-4 rounded-xl bg-neutral-gray-50 p-4 text-sm text-text-muted">
-                      <strong className="text-navy-900">Stornogrund:</strong> {row.cancelReason}
-                    </div>
-                  ) : null}
-
-                  {row.status === "issued" && canCancel ? (
-                    <div className="mt-5 border-t border-neutral-gray-200 pt-4">
-                      <label className="block text-sm font-semibold text-navy-900" htmlFor={`cancel-reason-${row.invoiceId}`}>
-                        Stornogrund
-                      </label>
-                      <form
-                        noValidate
-                        onSubmit={(event) => {
-                          event.preventDefault();
-                          const formData = new FormData(event.currentTarget);
-                          const rawReason = String(formData.get("reason") ?? "");
-                          void cancel(row, rawReason);
-                        }}
-                        className="mt-2 flex flex-col gap-3 sm:flex-row"
-                      >
-                        <input
-                          id={`cancel-reason-${row.invoiceId}`}
-                          name="reason"
-                          value={reasons[row.invoiceId] ?? ""}
-                          onChange={(event) => setReasons((current) => ({ ...current, [row.invoiceId]: event.target.value }))}
-                          minLength={5}
-                          maxLength={500}
-                          disabled={!interactive || pending}
-                          className="min-h-12 flex-1 rounded-lg border border-neutral-gray-300 px-3 text-sm"
-                          placeholder="Grund der vollständigen Stornierung"
-                        />
-                        <button
-                          type="submit"
-                          disabled={!interactive || pending}
-                          className="min-h-12 rounded-lg bg-navy-900 px-5 text-sm font-semibold text-white disabled:opacity-50"
-                        >
-                          {pending ? "Storno wird bestätigt…" : "Rechnung stornieren"}
-                        </button>
-                      </form>
-                    </div>
-                  ) : null}
-
-                  {rowMessage ? (
-                    <p className={`mt-3 text-sm ${rowMessage.kind === "error" ? "text-error-red" : "text-success-green"}`} role={rowMessage.kind === "error" ? "alert" : "status"}>
-                      {rowMessage.text}
-                    </p>
-                  ) : null}
-                </article>
-              );
-            })}
-          </section>
+                {rowMessages[openRow.invoiceId] ? (
+                  <p role={rowMessages[openRow.invoiceId].kind === "error" ? "alert" : "status"}>
+                    {rowMessages[openRow.invoiceId].text}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </>
         ) : null}
       </div>
-    </main>
+    </div>
   );
 }
