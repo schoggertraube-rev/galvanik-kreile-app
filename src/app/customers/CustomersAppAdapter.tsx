@@ -1,20 +1,11 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import { getCustomersDb } from "@/app/actions/customers.actions";
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useOverlayStore } from "@/lib/overlayStore";
 import type { CustomerListItem, CustomersViewState } from "@/modules/customers/public";
-
-function subscribeViewport(onChange: () => void) {
-  window.addEventListener("resize", onChange);
-  return () => window.removeEventListener("resize", onChange);
-}
-
-function isCompactViewport() {
-  return window.innerWidth <= 899;
-}
 
 function normalize(value: string) {
   return value.trim().toLocaleLowerCase("de");
@@ -27,7 +18,6 @@ function matchesFilter(customer: CustomerListItem, query: string) {
 export function CustomersAppAdapter() {
   const openCustomer = useOverlayStore((state) => state.openCustomer);
   const { hasPermission, loading: permissionsLoading } = usePermissions();
-  const compact = useSyncExternalStore(subscribeViewport, isCompactViewport, () => false);
   const [state, setState] = useState<CustomersViewState>({ kind: "loading" });
   const [filterDraft, setFilterDraft] = useState("");
   const [filter, setFilter] = useState("");
@@ -88,6 +78,7 @@ export function CustomersAppAdapter() {
       <div className="app-head">
         <div>
           <h1 style={{ margin: 0 }}>Kunden & Kontakt</h1>
+          <p>Kontakte, Eigenheiten, Aufträge und Dokumente bleiben in derselben Kundenkarte V2.</p>
         </div>
         {canCreateOrder ? (
           <button className="app-btn primary" type="button" onClick={() => requestGlobalCreate("DIRECT_INTAKE")}>
@@ -101,7 +92,7 @@ export function CustomersAppAdapter() {
             ⌕
             <input
               data-list-filter=""
-              placeholder="Name, Kundennummer oder Ort"
+              placeholder="Name, Ort, Auftrag oder Stichwort"
               value={filterDraft}
               onChange={(event) => setFilterDraft(event.target.value)}
               onKeyDown={(event) => {
@@ -119,8 +110,8 @@ export function CustomersAppAdapter() {
           <>
             <div className="app-list-head">
               <span>Kunde</span>
-              <span></span>
-              <span></span>
+              <span>Aufträge</span>
+              <span>Letzter Kontext</span>
               <span></span>
             </div>
             {customers.map((customer) => (
@@ -133,8 +124,8 @@ export function CustomersAppAdapter() {
                   <b>{customer.name}</b>
                   <span>{[customer.customerNumber, customer.type, customer.city].filter(Boolean).join(" · ")}</span>
                 </div>
-                {!compact ? <span aria-hidden="true"></span> : null}
-                {!compact ? <span aria-hidden="true"></span> : null}
+                <div className="app-meta"></div>
+                <div className="app-meta">Kundenakte mit Aufträgen, Notizen und Dokumenten</div>
                 <button className="app-btn" type="button" onClick={() => openCustomer(customer.id)}>
                   Karte öffnen →
                 </button>
