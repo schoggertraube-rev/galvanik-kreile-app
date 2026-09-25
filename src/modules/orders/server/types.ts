@@ -10,14 +10,6 @@ export type OrdersListItem = {
   surface: string | null;
   risk: string;
 };
-export type OrdersViewState =
-  | { kind: "loading" }
-  | { kind: "denied" | "error" | "conflict"; message: string }
-  | { kind: "data"; orders: OrdersListItem[] };
-export type OrdersQueryPort = {
-  value: string;
-  onChange: (value: string) => void;
-};
 export type OrderCardExtraWork = {
   lineId: string;
   name: string;

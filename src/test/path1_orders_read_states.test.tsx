@@ -5,28 +5,13 @@ import type { OperationalOrder } from "@/lib/types/operationalOrder";
 
 const ports = vi.hoisted(() => ({
   getOrdersDb: vi.fn(),
-  routerPush: vi.fn(),
-  openShortcut: vi.fn(),
   openOrder: vi.fn(),
 }));
 
-vi.mock("next/navigation", () => {
-  const router = { push: ports.routerPush };
-  const searchParams = new URLSearchParams();
-  return {
-    useSearchParams: () => searchParams,
-    useRouter: () => router,
-  };
-});
 vi.mock("@/app/actions/orders.actions", () => ({ getOrdersDb: ports.getOrdersDb }));
-vi.mock("@/app/warendurchlauf/actions", () => ({}));
-vi.mock("@/lib/supabase/client", () => ({ supabase: {} }));
-vi.mock("@/hooks/usePageView", () => ({ usePageView: vi.fn() }));
-vi.mock("@/lib/tracking/tracking", () => ({ trackUiEvent: vi.fn() }));
-vi.mock("@/components/ui/Breadcrumb", () => ({ Breadcrumb: () => <div /> }));
-vi.mock("@/components/ui/BackButton", () => ({ BackButton: () => <div /> }));
-vi.mock("@/components/ui/AppShortcutContext", () => ({
-  useAppShortcut: () => ({ openShortcut: ports.openShortcut }),
+vi.mock("@/components/layout/GlobalCreateFlow", () => ({ requestGlobalCreate: vi.fn() }));
+vi.mock("@/lib/auth/PermissionsContext", () => ({
+  usePermissions: () => ({ hasPermission: () => false, loading: false }),
 }));
 vi.mock("@/lib/overlayStore", () => ({
   useOverlayStore: (selector: (state: { openOrder: typeof ports.openOrder }) => unknown) =>
@@ -63,14 +48,20 @@ beforeEach(() => {
 
 afterEach(() => cleanup());
 
+async function findOrderRow(orderNumber = "A-100"): Promise<HTMLElement> {
+  const button = await screen.findByRole("button", { name: `Auftrag ${orderNumber} öffnen` });
+  const row = button.closest(".app-row");
+  if (!(row instanceof HTMLElement)) throw new Error("Auftragszeile fehlt");
+  return row;
+}
+
 describe("W4 orders read states", () => {
   it("shows loading without a false zero or empty claim", () => {
     ports.getOrdersDb.mockReturnValue(new Promise(() => undefined));
     render(<OrdersPage />);
 
-    expect(screen.getByRole("status")).toHaveTextContent("Aufträge werden geladen");
-    expect(screen.queryByText(/Aufträge gefunden/)).not.toBeInTheDocument();
-    expect(screen.queryByText("Noch keine Aufträge erfasst")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Aufträge werden geladen.");
+    expect(screen.queryByText("Keine Aufträge.")).not.toBeInTheDocument();
   });
 
   it("shows unavailable without presenting failure as an empty list", async () => {
@@ -81,35 +72,41 @@ describe("W4 orders read states", () => {
     });
     render(<OrdersPage />);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Aufträge nicht verfügbar",
-    );
-    expect(screen.queryByText("Noch keine Aufträge erfasst")).not.toBeInTheDocument();
-    expect(screen.queryByText(/0 Aufträge gefunden/)).not.toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("neutral");
+    expect(screen.queryByText("Keine Aufträge.")).not.toBeInTheDocument();
   });
 
   it("shows true loaded-empty only after a successful empty read", async () => {
     ports.getOrdersDb.mockResolvedValue({ ok: true, data: [] });
     render(<OrdersPage />);
 
-    expect(await screen.findByText("Noch keine Aufträge erfasst")).toBeInTheDocument();
-    expect(screen.getByLabelText("0 Aufträge")).toBeInTheDocument();
+    expect(await screen.findByText("Keine Aufträge.")).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
   });
 
   it("renders loaded data and labels a filter miss without denying the underlying orders", async () => {
     ports.getOrdersDb.mockResolvedValue({ ok: true, data: [order()] });
     render(<OrdersPage />);
 
-    expect(await screen.findByText("A-100")).toBeInTheDocument();
-    expect(screen.getByText("Kreile GmbH")).toBeInTheDocument();
-    expect(screen.getByText("Welle")).toBeInTheDocument();
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "nicht-vorhanden" } });
-    expect(await screen.findByText("Kein belegter Auftrag passt zu diesem Filter.")).toBeInTheDocument();
-    expect(screen.queryByText("Noch keine Aufträge erfasst")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("0 Aufträge")).toBeInTheDocument();
+    const row = await findOrderRow();
+    expect(row).toHaveTextContent("A-100 · Kreile GmbH");
+    expect(row).toHaveTextContent("Welle · Zink");
+    expect(row).not.toHaveTextContent("Welle verzinken");
+    fireEvent.change(screen.getByRole("textbox", { name: "Aufträge filtern" }), { target: { value: "nicht-vorhanden" } });
+    expect(await screen.findByText("Keine Aufträge gefunden.")).toBeInTheDocument();
+    expect(screen.queryByText("Keine Aufträge.")).not.toBeInTheDocument();
   });
 
-  it("clears stale values and metrics when a sync reload returns non-ok", async () => {
+  it("opens the selected order with its ID", async () => {
+    ports.getOrdersDb.mockResolvedValue({ ok: true, data: [order("order-42", "A-100")] });
+    render(<OrdersPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Auftrag A-100 öffnen" }));
+
+    expect(ports.openOrder).toHaveBeenCalledWith("order-42");
+  });
+
+  it("clears stale values when a sync reload returns non-ok", async () => {
     let finishReload!: (value: {
       ok: false;
       error: "DB_ERROR";
@@ -121,40 +118,30 @@ describe("W4 orders read states", () => {
         finishReload = resolve;
       }));
     render(<OrdersPage />);
-    expect(await screen.findByText("A-100")).toBeInTheDocument();
-    expect(screen.getByLabelText("1 Aufträge")).toBeInTheDocument();
+    await findOrderRow();
 
     fireEvent(window, new Event("kreile-sync-orders"));
     await waitFor(() => {
-      expect(screen.getByRole("status")).toHaveTextContent("Aufträge werden geladen");
+      expect(screen.getByRole("status")).toHaveTextContent("Aufträge werden geladen.");
     });
-    expect(screen.queryByText("A-100")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("1 Aufträge")).not.toBeInTheDocument();
-    expect(screen.queryByText("Noch keine Aufträge erfasst")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Auftrag A-100 öffnen" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Keine Aufträge.")).not.toBeInTheDocument();
 
     finishReload({ ok: false, error: "DB_ERROR", message: "neutral" });
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Aufträge nicht verfügbar",
-    );
-    expect(screen.queryByText("A-100")).not.toBeInTheDocument();
-    expect(screen.queryByText(/Aufträge gefunden/)).not.toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("neutral");
+    expect(screen.queryByRole("button", { name: "Auftrag A-100 öffnen" })).not.toBeInTheDocument();
   });
 
   it("clears stale values and shows unavailable when a sync reload rejects", async () => {
     ports.getOrdersDb
       .mockResolvedValueOnce({ ok: true, data: [order()] })
       .mockRejectedValueOnce(new Error("offline"));
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     render(<OrdersPage />);
-    expect(await screen.findByText("A-100")).toBeInTheDocument();
+    await findOrderRow();
 
     fireEvent(window, new Event("kreile-sync-orders"));
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Aufträge nicht verfügbar",
-    );
-    expect(screen.queryByText("A-100")).not.toBeInTheDocument();
-    expect(screen.queryByText(/Aufträge gefunden/)).not.toBeInTheDocument();
-    expect(screen.queryByText("Noch keine Aufträge erfasst")).not.toBeInTheDocument();
-    errorSpy.mockRestore();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Aufträge konnten nicht sicher geladen werden.");
+    expect(screen.queryByRole("button", { name: "Auftrag A-100 öffnen" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Keine Aufträge.")).not.toBeInTheDocument();
   });
 });
