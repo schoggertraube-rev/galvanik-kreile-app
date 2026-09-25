@@ -15,6 +15,23 @@ function matchesFilter(customer: CustomerListItem, query: string) {
   return normalize([customer.customerNumber, customer.name, customer.type, customer.city ?? ""].join(" ")).includes(normalize(query));
 }
 
+function customerNumberLabel(customerNumber: string) {
+  const value = customerNumber.trim();
+  return /^(?:[0-9a-f]{8}|[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i.test(value) ? null : value || null;
+}
+
+function customerTypeLabel(type: string) {
+  const labels: Record<string, string> = {
+    private: "Privatkunde",
+    business: "Gewerbekunde",
+    institution: "Institution",
+    Privatkunde: "Privatkunde",
+    Geschäftskunde: "Gewerbekunde",
+    Institution: "Institution",
+  };
+  return labels[type] ?? null;
+}
+
 export function CustomersAppAdapter() {
   const openCustomer = useOverlayStore((state) => state.openCustomer);
   const { hasPermission, loading: permissionsLoading } = usePermissions();
@@ -122,7 +139,7 @@ export function CustomersAppAdapter() {
               >
                 <div className="app-main">
                   <b>{customer.name}</b>
-                  <span>{[customer.customerNumber, customer.type, customer.city].filter(Boolean).join(" · ")}</span>
+                  <span>{[customerNumberLabel(customer.customerNumber), customerTypeLabel(customer.type), customer.city].filter(Boolean).join(" · ")}</span>
                 </div>
                 <div className="app-meta"></div>
                 <div className="app-meta">Kundenakte mit Aufträgen, Notizen und Dokumenten</div>
