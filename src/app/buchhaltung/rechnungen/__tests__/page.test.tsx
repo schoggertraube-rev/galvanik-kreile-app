@@ -96,6 +96,9 @@ describe("F1.4 immutable invoice page states", () => {
     const { InvoicesClient } = await import("../InvoicesClient");
     render(<InvoicesClient initialState={{ state: "EMPTY", data: [], role: "buero" }} />);
     expect(screen.getByTestId("invoice-empty-state")).toHaveTextContent("Keine Rechnungen ausgestellt.");
+    expect(screen.getByText("Rechnung / Auftrag")).toBeVisible();
+    expect(screen.getByText("Status")).toBeVisible();
+    expect(screen.getByText("Nächste Handlung")).toBeVisible();
     expect(screen.queryByText(/offene posten|bezahlt|mahnung/i)).not.toBeInTheDocument();
   });
 
@@ -103,6 +106,9 @@ describe("F1.4 immutable invoice page states", () => {
     const { InvoicesClient } = await import("../InvoicesClient");
     render(<InvoicesClient initialState={{ state: "DATA", data: [issuedRow], role: "buero" }} />);
 
+    expect(screen.getByTestId("invoice-row-R-2026-0001")).toHaveTextContent(
+      "Synthetischer Testkunde · Auftrag A-2026-0001",
+    );
     fireEvent.click(screen.getByRole("button", { name: "Rechnung R-2026-0001 öffnen" }));
     const document = await screen.findByTestId("invoice-document-R-2026-0001");
     expect(document).toHaveTextContent("Original-PDF öffnen");

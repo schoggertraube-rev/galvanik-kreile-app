@@ -172,11 +172,7 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
           <div className="app-note" role="alert">{pageMessage}</div>
         ) : null}
 
-        {pageState === "EMPTY" ? (
-          <div className="app-note" data-testid="invoice-empty-state" role="status">Keine Rechnungen ausgestellt.</div>
-        ) : null}
-
-        {pageState === "DATA" ? (
+        {pageState === "DATA" || pageState === "EMPTY" ? (
           <>
             <div className="app-list" aria-label="Unveränderliche Rechnungen">
               <div className="app-list-head">
@@ -185,11 +181,18 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
                 <span>Nächste Handlung</span>
                 <span></span>
               </div>
-              {rows.map((row) => (
+              {pageState === "EMPTY" ? (
+                <div className="app-row" data-testid="invoice-empty-state" role="status">
+                  <div className="app-main"><span>Keine Rechnungen ausgestellt.</span></div>
+                  <div></div>
+                  <div></div>
+                  <span></span>
+                </div>
+              ) : rows.map((row) => (
                 <div className="app-row" data-testid={`invoice-row-${row.invoiceNumber}`} key={row.invoiceId}>
                   <div className="app-main">
-                    <b>{row.invoiceNumber} · {row.customerName}</b>
-                    <span>{row.orderNumber}</span>
+                    <b>{row.invoiceNumber}</b>
+                    <span>{row.customerName} · Auftrag {row.orderNumber}</span>
                   </div>
                   <div className="app-meta">
                     <span className="app-status">{statusLabel(row.status)}</span>
