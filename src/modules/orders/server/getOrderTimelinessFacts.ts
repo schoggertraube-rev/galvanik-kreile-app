@@ -34,13 +34,17 @@ import {
  * Der Tenant kommt ausschliesslich aus der Session; es gibt keinen
  * tenantId-Parameter und damit keine Client-Autorisierung.
  *
- * Readvertrag entschieden (Review PR #115 Runde 2): dieser Port liest
- * ausschliesslich ueber die im Modul-Manifest deklarierten `private.v_*`-Views
- * `private.v_order_timeliness_orders_v1` und
- * `private.v_order_timeliness_pickup_events_v1`
+ * Readvertrag entschieden (Review PR #115 Runde 2/3): dieser Port liest
+ * ausschliesslich ueber die im Modul-Manifest deklarierten `public.v_*`-Views
+ * `public.v_order_timeliness_orders_v1` und
+ * `public.v_order_timeliness_pickup_events_v1`
  * (supabase/migrations/20260927120000_b2_order_timeliness_read_contract.sql) statt
  * ueber Drizzle-Tabellenobjekte. Damit laeuft der Zugriff sichtbar durch Naht 4
- * (ARCHITEKTUR_MODULE_PATH1.md) und ist vom S1-Gate pruefbar.
+ * (ARCHITEKTUR_MODULE_PATH1.md) und ist vom S1-Gate pruefbar. Das Schema ist
+ * public, weil `ownsTables` leer ist: beide Views lesen Fremdfakten aus
+ * public.orders/public.events, und Fremdfakten laufen nach Naht 4 ueber
+ * public.v_*. Die Views bleiben trotzdem gehaertet (REVOKE ALL gegen PUBLIC,
+ * anon, authenticated; SELECT nur fuer service_role; security_invoker = true).
  *
  * Die Eigentumsfrage an den beiden Basistabellen bleibt davon unberuehrt und
  * offen (Q-G04-008, _MODULDOSSIERS/G04_AUFTRAEGE/08_OFFENE_FRAGEN.md, Optionen
@@ -166,7 +170,7 @@ async function readFacts(
       to_char(contract.due_date, 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS due_date,
       to_char(contract.completed_date AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
         AS completed_date
-    FROM private.v_order_timeliness_orders_v1 contract
+    FROM public.v_order_timeliness_orders_v1 contract
     WHERE contract.tenant_id = ${tenantId}
       AND contract.due_date >= (${range.from})::date
       AND contract.due_date < ((${range.to})::date + 1)
@@ -198,7 +202,7 @@ async function readFacts(
         contract.payload_invoice_state,
         contract.payload_gate_allowed,
         to_char(contract.created_at, 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at
-      FROM private.v_order_timeliness_pickup_events_v1 contract
+      FROM public.v_order_timeliness_pickup_events_v1 contract
       WHERE contract.tenant_id = ${tenantId}
         AND contract.order_id IN (${orderIdList})
         AND contract.event_type IN (${eventTypeList})

@@ -186,6 +186,27 @@ owner_v5_p3_core_surfaces_search_execution_20260916:
 # Leitplanke: Stationsstatus ist Ortswahrheit, nie Zeitwahrheit — aus
 #   Uebergangs-Zeitstempeln wird niemals Arbeitszeit/Abrechnung abgeleitet.
 
+# ── Out-of-band Wartungspakete (kurze Paketbranches direkt von main, ──
+# ── ausserhalb delivery_order; Arbeitsmodell siehe AGENTS.md) ─────────
+# Beide Dossiers (_MODULDOSSIERS/G07, _MODULDOSSIERS/G04) sind in KEINER
+# nach D-GOV-001 autoritativen Quelle verankert (weder hier noch in
+# MODULKARTE_KANON.md/00_ABC_INDEX.md/CURRENT_STATE.md) — offener
+# Governance-Fund, PL/Owner muss Zuordnung klaeren oder Ausnahme dokumentieren.
+out_of_band_packages:
+  kr_b1_storno_p0:
+    dossier: _MODULDOSSIERS/G07_GELD_RECHNUNGEN/
+    branch: claude/kr-b1-storno-p0
+    base: main
+    status: PR_114_REVIEW_ROUND_5_TECHNICALLY_PROPOSED_PASS_NOT_MERGED_GOVERNANCE_OSCILLATION_ON_CI_WIRING
+    scope: K-G07-004 DB-Guard Storno-Payment-Gate als zweite Schicht (Migration + Test)
+  kr_b2_auftrag_zeitpunkte:
+    dossier: _MODULDOSSIERS/G04_AUFTRAEGE/
+    branch: claude/kr-b2-auftrag-zeitpunkte
+    base: claude/kr-b1-storno-p0 # NICHT main; git diff main...HEAD enthaelt B1s 5 Dateien mit
+    base_note: Branch-Stacking auf B1s noch nicht gemergten Tip; vor main-Merge entweder B1 zuerst mergen und B2 rebasen, oder PL entscheidet Reihenfolge explizit
+    status: PR_115_REVIEW_ROUND_3_IN_PROGRESS
+    scope: G04 Termintreue-Lesevertrag getOrderTimelinessFacts (fertig/abgeholt-Zeitpunkte); Storno bewusst NICHT gebaut (Q-G04-002 offen, BLOCKED_PRODUCT_DECISION)
+
 rules:
   single_writer: true
   max_read_only_reviewers: 1

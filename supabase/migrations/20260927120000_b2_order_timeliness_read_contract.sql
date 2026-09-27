@@ -5,13 +5,17 @@
 -- v_*-Views laufen. Diese Migration stellt genau zwei Lesevertraege bereit; das
 -- Modul-Manifest src/modules/orders/orders.manifest.json deklariert sie in viewsFunctions.
 --
--- Schema private, nicht public: der einzige im Dossier vorgesehene Fremdkonsument (M02,
--- _MODULDOSSIERS/G04_AUFTRAEGE/04_SCHNITTSTELLEN_DATEN.md Z.14) hat Status SPEZ, existiert
--- nicht im Code und wuerde den Port server-public#getOrderTimelinessFacts konsumieren, nicht
--- die View. Eine public-View wuerde die Leserschaft ohne Gegenwert auf jedes Modul
--- verbreitern. Naht 4 verlangt fuer private.v_* exklusiven Ein-Modul-Besitz: genau ein
--- Manifest (orders) deklariert diese beiden Referenzen. Precedent ist
--- private.v_goods_out_ui_state_v1 / private.v_payment_summary_v1.
+-- Schema public, nicht private (Review PR #115 Runde 3, P1-1): Naht 4 entscheidet die
+-- Schemawahl allein nach Tabellen-Eigentum, nicht nach der Existenz eines Fremdkonsumenten.
+-- src/modules/orders/orders.manifest.json hat `ownsTables: []`, und beide Views lesen
+-- public.orders beziehungsweise public.events. Das sind damit Fremdfakten, und Fremdfakten
+-- laufen nach der Naht-4-Regel zwingend ueber public.v_*; private.v_* setzt exklusiven
+-- Ein-Modul-Besitz der Basistabellen voraus, den dieses Modul nicht hat. Precedent ist
+-- public.v_werkstatt_kpis_v1, das dieselbe Haertung traegt.
+-- Die Haertung bleibt trotz public-Schema unveraendert wirksam, weil REVOKE ALL gegen
+-- PUBLIC, anon und authenticated hier explizit gesetzt ist und nur service_role SELECT
+-- erhaelt: public ist ein Namensraum, keine Freigabe. security_invoker = true bleibt
+-- ebenfalls unveraendert.
 --
 -- Bewusst KEINE Aggregation und KEIN Join der beiden Views (kein MIN, kein DISTINCT ON):
 -- die Anomalie "mehr als ein ORDER_PICKED_UP_V2 je Auftrag" wird in
@@ -40,7 +44,7 @@
 -- Die jsonb_typeof-Huellen halten die Projektion ausnahmefrei: ein Feld mit falschem
 -- JSON-Typ kommt als NULL an und ist damit ungueltig, statt die View zu sprengen.
 
-CREATE VIEW private.v_order_timeliness_orders_v1
+CREATE VIEW public.v_order_timeliness_orders_v1
 WITH (security_invoker = true)
 AS
 SELECT
@@ -55,13 +59,13 @@ FROM public.orders orders
 WHERE nullif(btrim(current_setting('app.tenant_id', true)), '') IS NOT NULL
   AND orders.tenant_id = nullif(btrim(current_setting('app.tenant_id', true)), '');
 
-COMMENT ON VIEW private.v_order_timeliness_orders_v1 IS
+COMMENT ON VIEW public.v_order_timeliness_orders_v1 IS
   'G04 Termintreue-Readvertrag v1: tenantgebundene Auftragszeilen (bestaetigter Termin, Fertigzeit, Lebenszyklusstatus, Aggregatversion) ohne Aggregation und ohne Historisierung; completed_date ist immer der aktuelle Wert.';
 
-REVOKE ALL ON TABLE private.v_order_timeliness_orders_v1 FROM PUBLIC, anon, authenticated;
-GRANT SELECT ON TABLE private.v_order_timeliness_orders_v1 TO service_role;
+REVOKE ALL ON TABLE public.v_order_timeliness_orders_v1 FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON TABLE public.v_order_timeliness_orders_v1 TO service_role;
 
-CREATE VIEW private.v_order_timeliness_pickup_events_v1
+CREATE VIEW public.v_order_timeliness_pickup_events_v1
 WITH (security_invoker = true)
 AS
 SELECT
@@ -100,8 +104,8 @@ WHERE nullif(btrim(current_setting('app.tenant_id', true)), '') IS NOT NULL
   AND events.tenant_id = nullif(btrim(current_setting('app.tenant_id', true)), '')
   AND events.event_type IN ('ORDER_PICKED_UP_V1', 'ORDER_PICKED_UP_V2');
 
-COMMENT ON VIEW private.v_order_timeliness_pickup_events_v1 IS
+COMMENT ON VIEW public.v_order_timeliness_pickup_events_v1 IS
   'G04 Termintreue-Readvertrag v1: tenantgebundene Abholereignisse (ORDER_PICKED_UP_V1/V2) mit Provenienzfeldern und den fuenf geprueften payload-Skalaren; keine Aggregation, kein rohes payload, damit keine Finanzfelder aus dem V1-Payload den Vertrag verlassen.';
 
-REVOKE ALL ON TABLE private.v_order_timeliness_pickup_events_v1 FROM PUBLIC, anon, authenticated;
-GRANT SELECT ON TABLE private.v_order_timeliness_pickup_events_v1 TO service_role;
+REVOKE ALL ON TABLE public.v_order_timeliness_pickup_events_v1 FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON TABLE public.v_order_timeliness_pickup_events_v1 TO service_role;
