@@ -1,7 +1,6 @@
 import "server-only";
 
-import { and, eq, gte, inArray, lt } from "drizzle-orm";
-import { events, orders } from "@/db/schema";
+import { sql } from "drizzle-orm";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import {
   withPrivilegedTenantTransaction,
@@ -28,26 +27,34 @@ import {
  *
  * Annahme zum `range`-Parameter (im Dossier nur als SPEZ markiert): `from` und
  * `to` sind Kalendertage `YYYY-MM-DD` in UTC, beide Grenzen inklusiv, und das
- * Fenster filtert `orders.due_date` — den bestaetigten Auftragstermin und damit
- * die Bezugsgroesse der Termintreue. Auftraege ohne bestaetigten Termin liegen
- * in keinem Fenster und erscheinen deshalb nicht in der Auswertung.
+ * Fenster filtert den bestaetigten Auftragstermin und damit die Bezugsgroesse der
+ * Termintreue. Auftraege ohne bestaetigten Termin liegen in keinem Fenster und
+ * erscheinen deshalb nicht in der Auswertung.
  *
  * Der Tenant kommt ausschliesslich aus der Session; es gibt keinen
  * tenantId-Parameter und damit keine Client-Autorisierung.
  *
- * Benannte Schnittkante (Naht 4): dieser Port liest `public.orders` und
- * `public.events` direkt ueber Drizzle-Tabellenobjekte. Diese Zugriffsform
- * erkennt `scripts/quality/check-module-gates.mjs` bewusst nicht (dort als
- * Design-Grenze dokumentiert), deshalb wird die Kante hier explizit benannt
- * statt stillschweigend genutzt: `public.events` ist cross-modular und darf
- * niemandem exklusiv gehoeren, und `public.orders` wird heute ausschliesslich
+ * Readvertrag entschieden (Review PR #115 Runde 2): dieser Port liest
+ * ausschliesslich ueber die im Modul-Manifest deklarierten `private.v_*`-Views
+ * `private.v_order_timeliness_orders_v1` und
+ * `private.v_order_timeliness_pickup_events_v1`
+ * (supabase/migrations/20260927120000_b2_order_timeliness_read_contract.sql) statt
+ * ueber Drizzle-Tabellenobjekte. Damit laeuft der Zugriff sichtbar durch Naht 4
+ * (ARCHITEKTUR_MODULE_PATH1.md) und ist vom S1-Gate pruefbar.
+ *
+ * Die Eigentumsfrage an den beiden Basistabellen bleibt davon unberuehrt und
+ * offen (Q-G04-008, _MODULDOSSIERS/G04_AUFTRAEGE/08_OFFENE_FRAGEN.md, Optionen
+ * A/B/C; Owner PL/Architektur): die Ereignistabelle ist cross-modular und darf
+ * niemandem exklusiv gehoeren, und die Auftragstabelle wird heute ausschliesslich
  * ausserhalb dieses Moduls geschrieben (`src/lib/server/commands/*` sowie
- * `src/lib/server/operationalOrders.ts`).
- * Zielbild ist entweder eine deklarierte `public.v_*`-View oder ein
- * neues, nicht exklusives Manifestfeld. Das ist eine offene PL-Entscheidung
- * (Q-G04-008, _MODULDOSSIERS/G04_AUFTRAEGE/08_OFFENE_FRAGEN.md); bis dahin
- * bleibt `ownsTables` im Modul-Manifest leer, weil dieses Feld Exklusivitaet
- * behaupten wuerde, die es nicht gibt.
+ * `src/lib/server/operationalOrders.ts`). `ownsTables` bleibt im Modul-Manifest
+ * deshalb bewusst leer: das Feld wuerde Exklusivitaet behaupten, die es nicht gibt.
+ * Entschieden ist nur der Readvertrag-Mechanismus, nicht das Eigentum.
+ *
+ * Defense in Depth: die Views filtern selbst fail-closed ueber die
+ * Transaktions-GUC `app.tenant_id`, und dieser Port setzt seinen expliziten
+ * Tenant-, Fenster- und Auftragsfilter zusaetzlich davor. Die Domaene prueft die
+ * Tenantbindung jeder Zeile danach ein drittes Mal.
  */
 export type OrderTimelinessFactsResult =
   | { code: "OK"; data: OrderTimelinessFacts }
@@ -75,11 +82,68 @@ function logDatabaseFailure(error: unknown): void {
   });
 }
 
-/** Exklusive Obergrenze des Fensters: Kalendertag `to` zaehlt vollstaendig mit. */
-function exclusiveUpperBound(to: string): Date {
-  const bound = new Date(`${to}T00:00:00.000Z`);
-  bound.setUTCDate(bound.getUTCDate() + 1);
-  return bound;
+/** Vertragszeile der Auftrags-View, snake_case wie in SQL. */
+type OrderContractRow = {
+  id: string;
+  tenant_id: string | null;
+  order_number: string;
+  status: string;
+  version: number | null;
+  due_date: string | null;
+  completed_date: string | null;
+};
+
+/** Vertragszeile der Abholereignis-View, snake_case wie in SQL. */
+type PickupEventContractRow = {
+  event_id: string;
+  order_id: string;
+  tenant_id: string | null;
+  event_type: string;
+  status: string | null;
+  station: string | null;
+  from_station: string | null;
+  event_schema_version: number | null;
+  aggregate_version: number | null;
+  payload_order_id: string | null;
+  payload_mode: string | null;
+  payload_payment_mode: string | null;
+  payload_invoice_state: string | null;
+  payload_gate_allowed: boolean | null;
+  created_at: string | null;
+};
+
+function toOrderRow(row: OrderContractRow): OrderTimelinessOrderRow {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    orderNumber: row.order_number,
+    status: row.status,
+    version: row.version,
+    dueDate: row.due_date,
+    completedDate: row.completed_date,
+  };
+}
+
+function toPickupEventRow(row: PickupEventContractRow): OrderTimelinessPickupEventRow {
+  return {
+    // Ereigniskennung ist Teil der Provenienz des Fakts
+    // (OrderTimelinessEventProvenance.eventId, F-G04-007), nicht optional.
+    eventId: row.event_id,
+    orderId: row.order_id,
+    tenantId: row.tenant_id,
+    eventType: row.event_type,
+    status: row.status,
+    station: row.station,
+    fromStation: row.from_station,
+    eventSchemaVersion: row.event_schema_version,
+    aggregateVersion: row.aggregate_version,
+    payloadOrderId: row.payload_order_id,
+    payloadMode: row.payload_mode,
+    payloadPaymentMode: row.payload_payment_mode,
+    payloadInvoiceState: row.payload_invoice_state,
+    payloadGateAllowed: row.payload_gate_allowed,
+    createdAt: row.created_at,
+  };
 }
 
 async function readFacts(
@@ -87,52 +151,66 @@ async function readFacts(
   tenantId: string,
   range: OrderTimelinessRange,
 ): Promise<OrderTimelinessFacts> {
-  const orderRows: OrderTimelinessOrderRow[] = await tx
-    .select({
-      id: orders.id,
-      tenantId: orders.tenantId,
-      orderNumber: orders.orderNumber,
-      status: orders.status,
-      version: orders.version,
-      dueDate: orders.dueDate,
-      completedDate: orders.completedDate,
-    })
-    .from(orders)
-    .where(and(
-      eq(orders.tenantId, tenantId),
-      gte(orders.dueDate, new Date(`${range.from}T00:00:00.000Z`)),
-      lt(orders.dueDate, exclusiveUpperBound(range.to)),
-    ));
+  // Zeitstempel werden ausdruecklich als UTC-ISO-Text projiziert. Roh-SQL liefert
+  // ueber den postgres-js-Treiber unkonvertierte Zeitstempeltexte; ein
+  // `timestamp without time zone` wuerde sonst als Lokalzeit und ein
+  // `timestamp with time zone` als Text mit zweistelligem Offset gelesen. Die
+  // Projektion aendert keinen Wert, sie macht die Ablesung eindeutig.
+  const orderRows = await tx.execute<OrderContractRow>(sql`
+    SELECT
+      contract.id,
+      contract.tenant_id,
+      contract.order_number,
+      contract.status,
+      contract.version,
+      to_char(contract.due_date, 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS due_date,
+      to_char(contract.completed_date AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+        AS completed_date
+    FROM private.v_order_timeliness_orders_v1 contract
+    WHERE contract.tenant_id = ${tenantId}
+      AND contract.due_date >= (${range.from})::date
+      AND contract.due_date < ((${range.to})::date + 1)
+  `);
 
-  const orderIds = orderRows.map((row) => row.id);
-  const pickupEvents: OrderTimelinessPickupEventRow[] = orderIds.length === 0 ? [] : await tx
-    .select({
-      // Ereigniskennung ist Teil der Provenienz des Fakts
-      // (OrderTimelinessEventProvenance.eventId, F-G04-007), nicht optional.
-      eventId: events.id,
-      orderId: events.orderId,
-      tenantId: events.tenantId,
-      eventType: events.eventType,
-      status: events.status,
-      station: events.station,
-      fromStation: events.fromStation,
-      eventSchemaVersion: events.eventSchemaVersion,
-      aggregateVersion: events.aggregateVersion,
-      payload: events.payload,
-      createdAt: events.createdAt,
-    })
-    .from(events)
-    .where(and(
-      eq(events.tenantId, tenantId),
-      inArray(events.orderId, orderIds),
-      inArray(events.eventType, [...ORDER_PICKUP_EVENT_TYPES]),
-    ));
+  const orders = orderRows.map(toOrderRow);
+  const orderIds = orders.map((row) => row.id);
+  let pickupEvents: OrderTimelinessPickupEventRow[] = [];
+  if (orderIds.length > 0) {
+    const orderIdList = sql.join(orderIds.map((id) => sql`${id}`), sql`, `);
+    const eventTypeList = sql.join(
+      ORDER_PICKUP_EVENT_TYPES.map((eventType) => sql`${eventType}`),
+      sql`, `,
+    );
+    const eventRows = await tx.execute<PickupEventContractRow>(sql`
+      SELECT
+        contract.event_id,
+        contract.order_id,
+        contract.tenant_id,
+        contract.event_type,
+        contract.status,
+        contract.station,
+        contract.from_station,
+        contract.event_schema_version,
+        contract.aggregate_version,
+        contract.payload_order_id,
+        contract.payload_mode,
+        contract.payload_payment_mode,
+        contract.payload_invoice_state,
+        contract.payload_gate_allowed,
+        to_char(contract.created_at, 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at
+      FROM private.v_order_timeliness_pickup_events_v1 contract
+      WHERE contract.tenant_id = ${tenantId}
+        AND contract.order_id IN (${orderIdList})
+        AND contract.event_type IN (${eventTypeList})
+    `);
+    pickupEvents = eventRows.map(toPickupEventRow);
+  }
 
   return buildOrderTimelinessFacts({
     tenantId,
     range,
     generatedAt: new Date(),
-    orders: orderRows,
+    orders,
     pickupEvents,
   });
 }

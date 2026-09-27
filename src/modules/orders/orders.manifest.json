@@ -1,6 +1,6 @@
 {
   "moduleId": "orders",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "owner": "Path-1 Orders (Auftragskarte V8)",
   "publicExports": [
     "@/modules/orders/public#ORDER_ACCOUNTING_STATUS",
@@ -39,11 +39,17 @@
     "@/modules/orders/server-public#getOrderTimelinessFacts"
   ],
   "capabilities": [],
-  "migrations": [],
-  "viewsFunctions": [],
+  "migrations": ["20260927120000_b2_order_timeliness_read_contract.sql"],
+  "viewsFunctions": [
+    "private.v_order_timeliness_orders_v1",
+    "private.v_order_timeliness_pickup_events_v1"
+  ],
   "ownsTables": [],
   "storagePurposes": [],
-  "events": { "emits": [], "consumes": [] },
+  "events": {
+    "emits": [],
+    "consumes": ["ORDER_PICKED_UP_V1", "ORDER_PICKED_UP_V2"]
+  },
   "config": {},
   "dependencies": []
 }

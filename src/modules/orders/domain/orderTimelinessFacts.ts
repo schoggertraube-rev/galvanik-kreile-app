@@ -176,7 +176,17 @@ export type OrderTimelinessOrderRow = {
   completedDate: Date | string | null;
 };
 
-/** Abhol-Ereigniszeile, wie der Port sie tenantgebunden liest. */
+/**
+ * Abhol-Ereigniszeile, wie der Port sie tenantgebunden liest.
+ *
+ * Der Readvertrag reicht das rohe `events.payload` bewusst NICHT durch: ein
+ * `ORDER_PICKED_UP_V1`-Payload traegt `paymentStatus` und `openAmountCents`, also
+ * Finanzfakten, die an anderer Stelle hinter einer Finanzgatterung liegen. Der
+ * Vertrag projiziert deshalb genau die fuenf Skalarfelder, die ein Abholereignis
+ * belastbar machen. Ein Feld mit falschem JSON-Typ kommt als `null` an und macht
+ * das Ereignis damit ungueltig — dasselbe Ergebnis wie vorher bei einem
+ * unbrauchbaren Payload-Objekt.
+ */
 export type OrderTimelinessPickupEventRow = {
   eventId: string;
   orderId: string;
@@ -187,7 +197,11 @@ export type OrderTimelinessPickupEventRow = {
   fromStation: string | null;
   eventSchemaVersion: number | null;
   aggregateVersion: number | null;
-  payload: unknown;
+  payloadOrderId: string | null;
+  payloadMode: string | null;
+  payloadPaymentMode: string | null;
+  payloadInvoiceState: string | null;
+  payloadGateAllowed: boolean | null;
   createdAt: Date | string | null;
 };
 
@@ -287,8 +301,6 @@ export function isValidPickupEventV2(
   tenantId: string,
   orderId: string,
 ): row is ValidPickupEventV2Row {
-  if (!row.payload || typeof row.payload !== "object" || Array.isArray(row.payload)) return false;
-  const payload = row.payload as Record<string, unknown>;
   return row.eventType === ORDER_PICKUP_EVENT_TYPE_V2
     && typeof row.eventId === "string"
     && row.eventId.length > 0
@@ -301,11 +313,11 @@ export function isValidPickupEventV2(
     && typeof row.aggregateVersion === "number"
     && Number.isSafeInteger(row.aggregateVersion)
     && row.aggregateVersion > 0
-    && payload.orderId === orderId
-    && payload.gateAllowed === true
-    && payload.paymentMode === "rechnung"
-    && payload.invoiceState === "not_issued"
-    && isPickupMode(payload.mode)
+    && row.payloadOrderId === orderId
+    && row.payloadGateAllowed === true
+    && row.payloadPaymentMode === "rechnung"
+    && row.payloadInvoiceState === "not_issued"
+    && isPickupMode(row.payloadMode)
     && toIsoInstant(row.createdAt) !== null;
 }
 

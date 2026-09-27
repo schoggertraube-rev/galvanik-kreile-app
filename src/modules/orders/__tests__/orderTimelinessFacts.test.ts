@@ -30,9 +30,13 @@ function orderRow(overrides: Partial<OrderTimelinessOrderRow> = {}): OrderTimeli
   };
 }
 
+/**
+ * Der Readvertrag projiziert aus `events.payload` nur die fuenf geprueften
+ * Skalarfelder; das rohe jsonb verlaesst die Datenbank nicht. Die Fixture spiegelt
+ * genau diese Vertragsform.
+ */
 function pickupEventV2(
   overrides: Partial<OrderTimelinessPickupEventRow> = {},
-  payloadOverrides: Record<string, unknown> = {},
 ): OrderTimelinessPickupEventRow {
   return {
     eventId: "event-1",
@@ -44,15 +48,11 @@ function pickupEventV2(
     fromStation: "fertig",
     eventSchemaVersion: 2,
     aggregateVersion: 4,
-    payload: {
-      orderId: ORDER_ID,
-      mode: "abholung",
-      orderVersion: 4,
-      paymentMode: "rechnung",
-      invoiceState: "not_issued",
-      gateAllowed: true,
-      ...payloadOverrides,
-    },
+    payloadOrderId: ORDER_ID,
+    payloadMode: "abholung",
+    payloadPaymentMode: "rechnung",
+    payloadInvoiceState: "not_issued",
+    payloadGateAllowed: true,
     createdAt: new Date("2026-09-16T11:15:00.000Z"),
     ...overrides,
   };
@@ -189,7 +189,7 @@ describe("G04 getOrderTimelinessFacts — pickedUpAt", () => {
         eventId: "event-2",
         aggregateVersion: 5,
         createdAt: new Date("2026-09-17T07:05:00.000Z"),
-      }, { orderVersion: 5 }),
+      }),
     ];
     const fact = buildSingleFact(orderRow({ status: "abgeholt" }), duplicated);
     expect(fact.pickedUpAt).toEqual({
@@ -211,10 +211,18 @@ describe("G04 getOrderTimelinessFacts — pickedUpAt", () => {
       pickupEventV2({ eventSchemaVersion: 1 }),
       pickupEventV2({ aggregateVersion: 0 }),
       pickupEventV2({ createdAt: null }),
-      pickupEventV2({}, { gateAllowed: false }),
-      pickupEventV2({}, { invoiceState: "issued" }),
-      pickupEventV2({}, { mode: "unbekannt" }),
-      pickupEventV2({ payload: null }),
+      pickupEventV2({ payloadGateAllowed: false }),
+      pickupEventV2({ payloadInvoiceState: "issued" }),
+      pickupEventV2({ payloadMode: "unbekannt" }),
+      // Payload-Projektion vollstaendig unbelegt: entspricht dem frueheren
+      // Fall eines unbrauchbaren jsonb-Payloads.
+      pickupEventV2({
+        payloadOrderId: null,
+        payloadMode: null,
+        payloadPaymentMode: null,
+        payloadInvoiceState: null,
+        payloadGateAllowed: null,
+      }),
     ]) {
       const fact = buildSingleFact(orderRow(), [broken]);
       expect(fact.pickedUpAt).toEqual({
