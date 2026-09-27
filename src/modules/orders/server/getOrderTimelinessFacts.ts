@@ -34,6 +34,20 @@ import {
  *
  * Der Tenant kommt ausschliesslich aus der Session; es gibt keinen
  * tenantId-Parameter und damit keine Client-Autorisierung.
+ *
+ * Benannte Schnittkante (Naht 4): dieser Port liest `public.orders` und
+ * `public.events` direkt ueber Drizzle-Tabellenobjekte. Diese Zugriffsform
+ * erkennt `scripts/quality/check-module-gates.mjs` bewusst nicht (dort als
+ * Design-Grenze dokumentiert), deshalb wird die Kante hier explizit benannt
+ * statt stillschweigend genutzt: `public.events` ist cross-modular und darf
+ * niemandem exklusiv gehoeren, und `public.orders` wird heute ausschliesslich
+ * ausserhalb dieses Moduls geschrieben (`src/lib/server/commands/*` sowie
+ * `src/lib/server/operationalOrders.ts`).
+ * Zielbild ist entweder eine deklarierte `public.v_*`-View oder ein
+ * neues, nicht exklusives Manifestfeld. Das ist eine offene PL-Entscheidung
+ * (Q-G04-008, _MODULDOSSIERS/G04_AUFTRAEGE/08_OFFENE_FRAGEN.md); bis dahin
+ * bleibt `ownsTables` im Modul-Manifest leer, weil dieses Feld Exklusivitaet
+ * behaupten wuerde, die es nicht gibt.
  */
 export type OrderTimelinessFactsResult =
   | { code: "OK"; data: OrderTimelinessFacts }
@@ -79,6 +93,7 @@ async function readFacts(
       tenantId: orders.tenantId,
       orderNumber: orders.orderNumber,
       status: orders.status,
+      version: orders.version,
       dueDate: orders.dueDate,
       completedDate: orders.completedDate,
     })
@@ -92,6 +107,9 @@ async function readFacts(
   const orderIds = orderRows.map((row) => row.id);
   const pickupEvents: OrderTimelinessPickupEventRow[] = orderIds.length === 0 ? [] : await tx
     .select({
+      // Ereigniskennung ist Teil der Provenienz des Fakts
+      // (OrderTimelinessEventProvenance.eventId, F-G04-007), nicht optional.
+      eventId: events.id,
       orderId: events.orderId,
       tenantId: events.tenantId,
       eventType: events.eventType,

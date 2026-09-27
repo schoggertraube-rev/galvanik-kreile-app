@@ -12,6 +12,11 @@
  *  - Z.51  `ORDER_CANCELLED_V1` FEHLT; nicht implementieren -> `cancellationClass`
  *          bleibt bis Q-G04-002 immer `null` mit Missing-Reason.
  *
+ * _MODULDOSSIERS/G04_AUFTRAEGE/02_FUNKTIONEN_ABLAEUFE.md Z.99 (F-G04-007) fordert
+ * ein versioniertes Fakt mit Provenienz: `schemaVersion` (Form des Read-DTOs),
+ * `orderVersion` (Aggregatversion der gelesenen Auftragszeile) und je belegtem
+ * Zeitpunkt ein diskriminiertes `provenance`-Objekt (Spalte oder Ereignis).
+ *
  * Diese Datei ist bewusst frei von Datenbank- und Serverabhaengigkeiten: die
  * gesamte Ableitungs-, Missing-Reason- und Anomalielogik ist dadurch als echte
  * Funktionslogik testbar. Der serverseitige Port liegt in
@@ -33,8 +38,17 @@ export const ORDER_PICKUP_EVENT_TYPES = [
   ORDER_PICKUP_EVENT_TYPE_V2,
 ] as const;
 
-const PICKUP_EVENT_SCHEMA_VERSION_V2 = 2;
+const PICKUP_EVENT_SCHEMA_VERSION_V2 = 2 as const;
 const PICKUP_MODES = ["versand", "abholung"] as const;
+
+/**
+ * Schemaversion des KPI-Fakts (F-G04-007: "Versioniertes `OrderTimelinessFact`
+ * mit Provenienz der Zeitpunkte; read-only"). Sie beschreibt die Form des
+ * Read-DTOs, nicht den Stand des Auftrags: `orderVersion` traegt die
+ * Aggregatversion der gelesenen Auftragszeile. Jede nicht rueckwaerts-
+ * kompatible Feldaenderung erhoeht diese Zahl und das Modul-Manifest.
+ */
+export const ORDER_TIMELINESS_FACT_SCHEMA_VERSION = 1 as const;
 
 /** Genau ein Grund pro fehlendem Wert; Strings sind Teil des M02-Vertrags. */
 export const ORDER_TIMELINESS_MISSING_REASON = {
@@ -81,9 +95,43 @@ export type OrderTimelinessConsistency =
  */
 export type OrderCancellationClass = never;
 
+/**
+ * Provenienz eines belegten Zeitpunkts: die exakte Herkunft, aus der der Wert
+ * stammt. Die Union ist nach `kind` diskriminiert, damit ein Spaltenwert nie
+ * als Ereignisbeleg gelesen werden kann und umgekehrt.
+ */
+export type OrderTimelinessColumnProvenance = {
+  kind: "column";
+  relation: "public.orders";
+  column: "due_date" | "completed_date";
+};
+
+export type OrderTimelinessEventProvenance = {
+  kind: "event";
+  relation: "public.events";
+  eventId: string;
+  eventType: typeof ORDER_PICKUP_EVENT_TYPE_V2;
+  eventSchemaVersion: typeof PICKUP_EVENT_SCHEMA_VERSION_V2;
+  aggregateVersion: number;
+};
+
+export type OrderTimelinessProvenance =
+  | OrderTimelinessColumnProvenance
+  | OrderTimelinessEventProvenance;
+
 export type OrderTimelinessValue<T> =
-  | { value: T; source: OrderTimelinessSource; missingReason: null }
-  | { value: null; source: null; missingReason: OrderTimelinessMissingReason };
+  | {
+      value: T;
+      source: OrderTimelinessSource;
+      provenance: OrderTimelinessProvenance;
+      missingReason: null;
+    }
+  | {
+      value: null;
+      source: null;
+      provenance: null;
+      missingReason: OrderTimelinessMissingReason;
+    };
 
 /** Auswertungsfenster, Kalendertage in UTC, beide Grenzen inklusiv. */
 export type OrderTimelinessRange = {
@@ -92,8 +140,12 @@ export type OrderTimelinessRange = {
 };
 
 export type OrderTimelinessFact = {
+  /** Form des Read-DTOs, nicht der Stand des Auftrags. */
+  schemaVersion: typeof ORDER_TIMELINESS_FACT_SCHEMA_VERSION;
   orderId: string;
   orderNumber: string;
+  /** Aggregatversion der gelesenen Auftragszeile (`orders.version`). */
+  orderVersion: number;
   lifecycleStatus: string;
   /** Bestaetigter Auftragstermin als UTC-Kalendertag (`YYYY-MM-DD`). */
   promisedDate: OrderTimelinessValue<string>;
@@ -106,6 +158,8 @@ export type OrderTimelinessFact = {
 };
 
 export type OrderTimelinessFacts = {
+  /** Form des Read-DTOs; identisch mit der Version jedes einzelnen Fakts. */
+  schemaVersion: typeof ORDER_TIMELINESS_FACT_SCHEMA_VERSION;
   range: OrderTimelinessRange;
   generatedAt: string;
   facts: readonly OrderTimelinessFact[];
@@ -117,12 +171,14 @@ export type OrderTimelinessOrderRow = {
   tenantId: string | null;
   orderNumber: string;
   status: string;
+  version: number | null;
   dueDate: Date | string | null;
   completedDate: Date | string | null;
 };
 
 /** Abhol-Ereigniszeile, wie der Port sie tenantgebunden liest. */
 export type OrderTimelinessPickupEventRow = {
+  eventId: string;
   orderId: string;
   tenantId: string | null;
   eventType: string;
@@ -186,19 +242,21 @@ export function isOrderTimelinessRange(value: unknown): value is OrderTimeliness
 function present(
   value: string,
   source: OrderTimelinessSource,
+  provenance: OrderTimelinessProvenance,
 ): OrderTimelinessValue<string> {
-  return { value, source, missingReason: null };
+  return { value, source, provenance, missingReason: null };
 }
 
 /** Die fehlende Variante ist fuer jedes `OrderTimelinessValue<T>` gueltig. */
 type OrderTimelinessMissingValue = {
   value: null;
   source: null;
+  provenance: null;
   missingReason: OrderTimelinessMissingReason;
 };
 
 function missing(missingReason: OrderTimelinessMissingReason): OrderTimelinessMissingValue {
-  return { value: null, source: null, missingReason };
+  return { value: null, source: null, provenance: null, missingReason };
 }
 
 function isPickupMode(value: unknown): boolean {
@@ -206,20 +264,34 @@ function isPickupMode(value: unknown): boolean {
 }
 
 /**
+ * Ein Abhol-Ereignis, das den Lesevertrag erfuellt: Ereigniskennung,
+ * Aggregatversion und Zeitstempel sind belegt und koennen als Provenienz
+ * ausgewiesen werden.
+ */
+type ValidPickupEventV2Row = OrderTimelinessPickupEventRow & {
+  eventId: string;
+  eventType: typeof ORDER_PICKUP_EVENT_TYPE_V2;
+  eventSchemaVersion: typeof PICKUP_EVENT_SCHEMA_VERSION_V2;
+  aggregateVersion: number;
+};
+
+/**
  * Lesevertrag fuer ein valides Abhol-Ereignis. Geprueft wird die Teilmenge, die
- * den Zeitpunkt belastbar macht: Tenant, Auftragsbezug, Erfolgsstatus,
- * Stationsuebergang, Ereignis-Schemaversion, Aggregatversion, Gate-Beleg und
- * Zeitstempel. Ein Ereignis, das das nicht erfuellt, wird nie als Abholzeit
- * verwendet.
+ * den Zeitpunkt belastbar macht: Ereigniskennung, Tenant, Auftragsbezug,
+ * Erfolgsstatus, Stationsuebergang, Ereignis-Schemaversion, Aggregatversion,
+ * Gate-Beleg und Zeitstempel. Ein Ereignis, das das nicht erfuellt, wird nie
+ * als Abholzeit verwendet.
  */
 export function isValidPickupEventV2(
   row: OrderTimelinessPickupEventRow,
   tenantId: string,
   orderId: string,
-): boolean {
+): row is ValidPickupEventV2Row {
   if (!row.payload || typeof row.payload !== "object" || Array.isArray(row.payload)) return false;
   const payload = row.payload as Record<string, unknown>;
   return row.eventType === ORDER_PICKUP_EVENT_TYPE_V2
+    && typeof row.eventId === "string"
+    && row.eventId.length > 0
     && row.tenantId === tenantId
     && row.orderId === orderId
     && row.status === "success"
@@ -280,14 +352,25 @@ function derivePickedUpAt(
   const occurredAt = toIsoInstant(single.createdAt);
   return occurredAt === null
     ? missing(ORDER_TIMELINESS_MISSING_REASON.INVALID_PICKUP_EVENT)
-    : present(occurredAt, ORDER_TIMELINESS_SOURCE.PICKED_UP_AT);
+    : present(occurredAt, ORDER_TIMELINESS_SOURCE.PICKED_UP_AT, {
+      kind: "event",
+      relation: "public.events",
+      eventId: single.eventId,
+      eventType: ORDER_PICKUP_EVENT_TYPE_V2,
+      eventSchemaVersion: PICKUP_EVENT_SCHEMA_VERSION_V2,
+      aggregateVersion: single.aggregateVersion,
+    });
 }
 
 function derivePromisedDate(row: OrderTimelinessOrderRow): OrderTimelinessValue<string> {
   const day = toUtcCalendarDay(row.dueDate);
   return day === null
     ? missing(ORDER_TIMELINESS_MISSING_REASON.INVALID_PROMISED_DATE)
-    : present(day, ORDER_TIMELINESS_SOURCE.PROMISED_DATE);
+    : present(day, ORDER_TIMELINESS_SOURCE.PROMISED_DATE, {
+      kind: "column",
+      relation: "public.orders",
+      column: "due_date",
+    });
 }
 
 function deriveFinishedAt(row: OrderTimelinessOrderRow): OrderTimelinessValue<string> {
@@ -297,7 +380,11 @@ function deriveFinishedAt(row: OrderTimelinessOrderRow): OrderTimelinessValue<st
   const finishedAt = toIsoInstant(row.completedDate);
   return finishedAt === null
     ? missing(ORDER_TIMELINESS_MISSING_REASON.INVALID_FINISHED_AT)
-    : present(finishedAt, ORDER_TIMELINESS_SOURCE.FINISHED_AT);
+    : present(finishedAt, ORDER_TIMELINESS_SOURCE.FINISHED_AT, {
+      kind: "column",
+      relation: "public.orders",
+      column: "completed_date",
+    });
 }
 
 function deriveConsistency(
@@ -343,11 +430,22 @@ function buildFact(
   if (typeof row.status !== "string" || row.status.length === 0) {
     throw new Error("ORDER_TIMELINESS_ORDER_INVALID");
   }
+  // Fail-closed: die Aggregatversion ist Teil der Provenienz des Fakts. Eine
+  // fehlende, unganze oder nicht positive Version wird nicht ersetzt.
+  if (
+    typeof row.version !== "number"
+    || !Number.isSafeInteger(row.version)
+    || row.version <= 0
+  ) {
+    throw new Error("ORDER_TIMELINESS_ORDER_INVALID");
+  }
   const finishedAt = deriveFinishedAt(row);
   const pickedUpAt = derivePickedUpAt(row.id, tenantId, bucket);
   return {
+    schemaVersion: ORDER_TIMELINESS_FACT_SCHEMA_VERSION,
     orderId: row.id,
     orderNumber: row.orderNumber,
+    orderVersion: row.version,
     lifecycleStatus: row.status,
     promisedDate: derivePromisedDate(row),
     finishedAt,
@@ -389,6 +487,7 @@ export function buildOrderTimelinessFacts(
     return left.orderNumber.localeCompare(right.orderNumber, "de");
   });
   return {
+    schemaVersion: ORDER_TIMELINESS_FACT_SCHEMA_VERSION,
     range: { from: input.range.from, to: input.range.to },
     generatedAt,
     facts,

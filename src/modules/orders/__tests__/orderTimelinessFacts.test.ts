@@ -23,6 +23,7 @@ function orderRow(overrides: Partial<OrderTimelinessOrderRow> = {}): OrderTimeli
     tenantId: TENANT,
     orderNumber: "A-2026-0001",
     status: "fertig",
+    version: 4,
     dueDate: new Date("2026-09-15T00:00:00.000Z"),
     completedDate: new Date("2026-09-14T09:30:00.000Z"),
     ...overrides,
@@ -34,6 +35,7 @@ function pickupEventV2(
   payloadOverrides: Record<string, unknown> = {},
 ): OrderTimelinessPickupEventRow {
   return {
+    eventId: "event-1",
     orderId: ORDER_ID,
     tenantId: TENANT,
     eventType: ORDER_PICKUP_EVENT_TYPE_V2,
@@ -100,6 +102,7 @@ describe("G04 getOrderTimelinessFacts — promisedDate", () => {
     expect(fact.promisedDate).toEqual({
       value: "2026-09-15",
       source: ORDER_TIMELINESS_SOURCE.PROMISED_DATE,
+      provenance: { kind: "column", relation: "public.orders", column: "due_date" },
       missingReason: null,
     });
   });
@@ -111,6 +114,7 @@ describe("G04 getOrderTimelinessFacts — finishedAt", () => {
     expect(fact.finishedAt).toEqual({
       value: "2026-09-14T09:30:00.000Z",
       source: ORDER_TIMELINESS_SOURCE.FINISHED_AT,
+      provenance: { kind: "column", relation: "public.orders", column: "completed_date" },
       missingReason: null,
     });
   });
@@ -133,6 +137,7 @@ describe("G04 getOrderTimelinessFacts — finishedAt", () => {
     expect(fact.finishedAt).toEqual({
       value: null,
       source: null,
+      provenance: null,
       missingReason: ORDER_TIMELINESS_MISSING_REASON.NOT_FINISHED_YET,
     });
   });
@@ -142,6 +147,7 @@ describe("G04 getOrderTimelinessFacts — finishedAt", () => {
     expect(fact.finishedAt).toEqual({
       value: null,
       source: null,
+      provenance: null,
       missingReason: ORDER_TIMELINESS_MISSING_REASON.INVALID_FINISHED_AT,
     });
   });
@@ -153,6 +159,14 @@ describe("G04 getOrderTimelinessFacts — pickedUpAt", () => {
     expect(fact.pickedUpAt).toEqual({
       value: "2026-09-16T11:15:00.000Z",
       source: ORDER_TIMELINESS_SOURCE.PICKED_UP_AT,
+      provenance: {
+        kind: "event",
+        relation: "public.events",
+        eventId: "event-1",
+        eventType: ORDER_PICKUP_EVENT_TYPE_V2,
+        eventSchemaVersion: 2,
+        aggregateVersion: 4,
+      },
       missingReason: null,
     });
     expect(fact.consistency).toEqual([]);
@@ -163,6 +177,7 @@ describe("G04 getOrderTimelinessFacts — pickedUpAt", () => {
     expect(fact.pickedUpAt).toEqual({
       value: null,
       source: null,
+      provenance: null,
       missingReason: ORDER_TIMELINESS_MISSING_REASON.NO_PICKUP_EVENT,
     });
   });
@@ -171,6 +186,7 @@ describe("G04 getOrderTimelinessFacts — pickedUpAt", () => {
     const duplicated = [
       pickupEventV2(),
       pickupEventV2({
+        eventId: "event-2",
         aggregateVersion: 5,
         createdAt: new Date("2026-09-17T07:05:00.000Z"),
       }, { orderVersion: 5 }),
@@ -179,6 +195,7 @@ describe("G04 getOrderTimelinessFacts — pickedUpAt", () => {
     expect(fact.pickedUpAt).toEqual({
       value: null,
       source: null,
+      provenance: null,
       missingReason: ORDER_TIMELINESS_MISSING_REASON.AMBIGUOUS_PICKUP_EVENTS,
     });
     expect(fact.consistency).toContain(
@@ -203,6 +220,7 @@ describe("G04 getOrderTimelinessFacts — pickedUpAt", () => {
       expect(fact.pickedUpAt).toEqual({
         value: null,
         source: null,
+        provenance: null,
         missingReason: ORDER_TIMELINESS_MISSING_REASON.INVALID_PICKUP_EVENT,
       });
     }
@@ -214,6 +232,7 @@ describe("G04 getOrderTimelinessFacts — pickedUpAt", () => {
     expect(fact.pickedUpAt).toEqual({
       value: null,
       source: null,
+      provenance: null,
       missingReason: ORDER_TIMELINESS_MISSING_REASON.PICKUP_CONTRACT_V1_ONLY,
     });
   });
@@ -238,6 +257,7 @@ describe("G04 getOrderTimelinessFacts — cancellationClass", () => {
       expect(fact.cancellationClass).toEqual({
         value: null,
         source: null,
+        provenance: null,
         missingReason: "Q-G04-002 In Klaerung",
       });
     }
