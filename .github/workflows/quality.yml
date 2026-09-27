@@ -587,6 +587,18 @@ jobs:
       - name: P3 current schema replay fresh from zero without seed (blocking)
         run: ./node_modules/.bin/supabase db reset --local --no-seed
 
+      - name: F1.4 Storno payment-gate DB guard on the current schema (blocking)
+        # T-G07-016 / K-G07-004: der Guard aus 20260926120000 existiert erst im
+        # vollstaendigen, UNGEPINNTEN Migrationsstand. Die F1.4-Bloecke oben laufen auf
+        # --version 20260909180000 und koennten diesen Nachweis nicht sehen; deshalb haengt
+        # der Test genau am Reset ohne --version. Der Test rollt seine Saat selbst zurueck,
+        # laesst also keine Daten fuer die folgenden Schritte zurueck.
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          F1_4_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          SUPABASE_SERVICE_ROLE_KEY: ""
+        run: npx vitest run src/test/f1_4_invoice_cancel_payment_guard.integration.test.ts --maxWorkers=1 --no-file-parallelism
+
       - name: P3 tenant-bound Lane-0 search integration test (blocking)
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
