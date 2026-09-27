@@ -26,7 +26,17 @@
     "@/modules/orders/public#Urgency",
     "@/modules/orders/public#buildOrdersHomeProjection",
     "@/modules/orders/public#getUrgency",
-    "@/modules/orders/public#isOrderLifecycleStatus"
+    "@/modules/orders/public#isOrderLifecycleStatus",
+    "@/modules/orders/server-public#OrderCancellationClass",
+    "@/modules/orders/server-public#OrderTimelinessConsistency",
+    "@/modules/orders/server-public#OrderTimelinessFact",
+    "@/modules/orders/server-public#OrderTimelinessFacts",
+    "@/modules/orders/server-public#OrderTimelinessFactsResult",
+    "@/modules/orders/server-public#OrderTimelinessMissingReason",
+    "@/modules/orders/server-public#OrderTimelinessRange",
+    "@/modules/orders/server-public#OrderTimelinessSource",
+    "@/modules/orders/server-public#OrderTimelinessValue",
+    "@/modules/orders/server-public#getOrderTimelinessFacts"
   ],
   "capabilities": [],
   "migrations": [],
