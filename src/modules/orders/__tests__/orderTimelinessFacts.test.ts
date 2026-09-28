@@ -26,6 +26,9 @@ function orderRow(overrides: Partial<OrderTimelinessOrderRow> = {}): OrderTimeli
     version: 4,
     dueDate: new Date("2026-09-15T00:00:00.000Z"),
     completedDate: new Date("2026-09-14T09:30:00.000Z"),
+    // Voreinstellung ohne Legacy-Termin: das ist der Normalfall in
+    // public.orders und erzeugt keinen Konsistenzhinweis.
+    promisedDateLegacyClass: "nur_due_date",
     ...overrides,
   };
 }
@@ -52,6 +55,37 @@ function pickupEventV2(
     payloadMode: "abholung",
     payloadPaymentMode: "rechnung",
     payloadInvoiceState: "not_issued",
+    payloadGateAllowed: true,
+    createdAt: new Date("2026-09-16T11:15:00.000Z"),
+    ...overrides,
+  };
+}
+
+/**
+ * Ein vertragsgueltiges ORDER_PICKED_UP_V1-Ereignis. V1 ist kein Altschema,
+ * sondern der heute aktive Zweig von recordGoodsOutCommand fuer "Rechnung bereits
+ * gestellt"; die Felder folgen events_order_picked_up_v1_contract_chk
+ * (supabase/migrations/20260905100000_f1_5_payment_goods_out_contract.sql):
+ * event_schema_version = 1, und der Payload ist auf genau sieben Schluessel
+ * festgeschrieben — `invoiceState` ist keiner davon, die View liefert dort NULL.
+ */
+function pickupEventV1(
+  overrides: Partial<OrderTimelinessPickupEventRow> = {},
+): OrderTimelinessPickupEventRow {
+  return {
+    eventId: "event-v1",
+    orderId: ORDER_ID,
+    tenantId: TENANT,
+    eventType: ORDER_PICKUP_EVENT_TYPE_V1,
+    status: "success",
+    station: "abgeholt",
+    fromStation: "fertig",
+    eventSchemaVersion: 1,
+    aggregateVersion: 4,
+    payloadOrderId: ORDER_ID,
+    payloadMode: "abholung",
+    payloadPaymentMode: "rechnung",
+    payloadInvoiceState: null,
     payloadGateAllowed: true,
     createdAt: new Date("2026-09-16T11:15:00.000Z"),
     ...overrides,
@@ -235,14 +269,174 @@ describe("G04 getOrderTimelinessFacts — pickedUpAt", () => {
   });
 
   it("names the V1 pickup contract instead of claiming there was no pickup", () => {
-    const v1 = pickupEventV2({ eventType: ORDER_PICKUP_EVENT_TYPE_V1, eventSchemaVersion: 1 });
-    const fact = buildSingleFact(orderRow({ status: "abgeholt" }), [v1]);
+    // Unveraendertes Verhalten fuer den Fall "genau ein GUELTIGES V1, kein V2":
+    // benannter Altvertrag, weiterhin kein Wert
+    // (_MODULDOSSIERS/G04_AUFTRAEGE/04_SCHNITTSTELLEN_DATEN.md §Soll-Ist Punkt 3,
+    // T-G04-021 — ein valides V1 belegt pickedUpAt NICHT).
+    const fact = buildSingleFact(orderRow({ status: "abgeholt" }), [pickupEventV1()]);
     expect(fact.pickedUpAt).toEqual({
       value: null,
       source: null,
       provenance: null,
       missingReason: ORDER_TIMELINESS_MISSING_REASON.PICKUP_CONTRACT_V1_ONLY,
     });
+  });
+
+  it("calls a structurally broken V1 invalid instead of a valid legacy contract", () => {
+    // Ohne eine eigene V1-Gueltigkeitspruefung war JEDES V1-Ereignis
+    // PICKUP_CONTRACT_V1_ONLY — also als gueltiger Altvertrag ausgewiesen, auch
+    // wenn es seinen eigenen DB-Check verletzt. Jede Zeile hier bricht genau eine
+    // Bedingung aus events_order_picked_up_v1_contract_chk.
+    for (const broken of [
+      pickupEventV1({ status: "error" }),
+      pickupEventV1({ station: "fertig" }),
+      pickupEventV1({ fromStation: "galvanik" }),
+      pickupEventV1({ eventSchemaVersion: 2 }),
+      pickupEventV1({ eventSchemaVersion: null }),
+      pickupEventV1({ aggregateVersion: 0 }),
+      pickupEventV1({ aggregateVersion: null }),
+      pickupEventV1({ eventId: "" }),
+      pickupEventV1({ payloadOrderId: "order-other" }),
+      pickupEventV1({ payloadOrderId: null }),
+      pickupEventV1({ payloadGateAllowed: false }),
+      pickupEventV1({ payloadGateAllowed: null }),
+      pickupEventV1({ payloadPaymentMode: "barzahlung" }),
+      pickupEventV1({ payloadPaymentMode: null }),
+      pickupEventV1({ payloadMode: "unbekannt" }),
+      pickupEventV1({ payloadMode: null }),
+      pickupEventV1({ createdAt: null }),
+      // Ein V1 MIT invoiceState ist ein falsch getyptes V2: der V1-Check
+      // schreibt den Payload auf genau sieben Schluessel fest, invoiceState ist
+      // keiner davon.
+      pickupEventV1({ payloadInvoiceState: "not_issued" }),
+    ]) {
+      const fact = buildSingleFact(orderRow({ status: "abgeholt" }), [broken]);
+      expect({
+        broken: JSON.stringify(broken),
+        pickedUpAt: fact.pickedUpAt,
+      }).toEqual({
+        broken: JSON.stringify(broken),
+        pickedUpAt: {
+          value: null,
+          source: null,
+          provenance: null,
+          missingReason: ORDER_TIMELINESS_MISSING_REASON.INVALID_PICKUP_EVENT,
+        },
+      });
+    }
+  });
+
+  it("does not gate V1 validity on the finance fields the read contract omits", () => {
+    // Gegenprobe zum Test darueber: paymentStatus und openAmountCents sind aus
+    // der View entfernt (Finanzgatterung) und duerfen die Gueltigkeit eines
+    // ZEITPUNKTS nicht bestimmen. Alle drei laut DB-Check erlaubten Zahlarten
+    // bleiben deshalb gueltige V1-Ereignisse.
+    for (const paymentMode of ["vorkasse", "abholung", "rechnung"]) {
+      const fact = buildSingleFact(
+        orderRow({ status: "abgeholt" }),
+        [pickupEventV1({ payloadPaymentMode: paymentMode })],
+      );
+      expect({ paymentMode, missingReason: fact.pickedUpAt.missingReason }).toEqual({
+        paymentMode,
+        missingReason: ORDER_TIMELINESS_MISSING_REASON.PICKUP_CONTRACT_V1_ONLY,
+      });
+    }
+  });
+
+  it("reports a mixed valid V1 and V2 as ambiguous instead of silently dropping the V1", () => {
+    // V1 und V2 sind gleichrangige, heute beide aktive Ausgaenge desselben
+    // Commands. Vorher gewann das V2 stillschweigend, obwohl zwei V2 korrekt als
+    // Anomalie gelten — derselbe Widerspruch, nur unsichtbar.
+    const fact = buildSingleFact(
+      orderRow({ status: "abgeholt" }),
+      [pickupEventV1(), pickupEventV2()],
+    );
+    expect(fact.pickedUpAt).toEqual({
+      value: null,
+      source: null,
+      provenance: null,
+      missingReason: ORDER_TIMELINESS_MISSING_REASON.AMBIGUOUS_PICKUP_EVENTS,
+    });
+  });
+
+  it("reports two valid V1 events as ambiguous although no unique index blocks them", () => {
+    // events_goods_out_order_version_v2_uidx deckt nur V2 ab; fuer V1 existiert
+    // kein Unique-Index. Ein zweites V1 war deshalb unsichtbar.
+    const fact = buildSingleFact(orderRow({ status: "abgeholt" }), [
+      pickupEventV1(),
+      pickupEventV1({
+        eventId: "event-v1-zwei",
+        aggregateVersion: 5,
+        createdAt: new Date("2026-09-17T07:05:00.000Z"),
+      }),
+    ]);
+    expect(fact.pickedUpAt).toEqual({
+      value: null,
+      source: null,
+      provenance: null,
+      missingReason: ORDER_TIMELINESS_MISSING_REASON.AMBIGUOUS_PICKUP_EVENTS,
+    });
+  });
+
+  it("keeps the V2 value when the accompanying V1 is broken and cannot be counted", () => {
+    // Abgrenzung: nur GUELTIGE Ereignisse zaehlen fuer die Mehrdeutigkeit. Ein
+    // kaputtes V1 neben einem heilen V2 darf den belegten Zeitpunkt nicht
+    // entwerten.
+    const fact = buildSingleFact(
+      orderRow({ status: "abgeholt" }),
+      [pickupEventV1({ status: "error" }), pickupEventV2()],
+    );
+    expect(fact.pickedUpAt.value).toBe("2026-09-16T11:15:00.000Z");
+    expect(fact.pickedUpAt.missingReason).toBeNull();
+  });
+});
+
+describe("G04 getOrderTimelinessFacts — Legacy-Terminfeld promised_due_date", () => {
+  it("flags a conflicting legacy date without changing the promised date", () => {
+    // F-G04-007 / A-G04-008: der Widerspruch wird AUSGEWIESEN. K-G04-008: keine
+    // automatische Wahl — promisedDate bleibt unveraendert aus orders.due_date.
+    const fact = buildSingleFact(orderRow({ promisedDateLegacyClass: "widerspruechlich" }));
+    expect(fact.consistency).toContain(
+      ORDER_TIMELINESS_CONSISTENCY.PROMISED_DATE_LEGACY_CONFLICT,
+    );
+    expect(fact.promisedDate).toEqual({
+      value: "2026-09-15",
+      source: ORDER_TIMELINESS_SOURCE.PROMISED_DATE,
+      provenance: { kind: "column", relation: "public.orders", column: "due_date" },
+      missingReason: null,
+    });
+  });
+
+  it("flags a legacy-only date and still refuses to read it as the promised date", () => {
+    const fact = buildSingleFact(orderRow({
+      promisedDateLegacyClass: "nur_promised",
+      dueDate: null,
+    }));
+    expect(fact.consistency).toContain(
+      ORDER_TIMELINESS_CONSISTENCY.PROMISED_DATE_ONLY_LEGACY,
+    );
+    // Kein Ersatzwert aus dem Legacy-Feld: der bestaetigte Termin bleibt leer.
+    expect(fact.promisedDate).toEqual({
+      value: null,
+      source: null,
+      provenance: null,
+      missingReason: ORDER_TIMELINESS_MISSING_REASON.INVALID_PROMISED_DATE,
+    });
+  });
+
+  it("stays silent when both dates agree or no legacy date exists", () => {
+    for (const legacyClass of ["gleich", "nur_due_date"]) {
+      const fact = buildSingleFact(orderRow({ promisedDateLegacyClass: legacyClass }));
+      expect({ legacyClass, consistency: fact.consistency })
+        .toEqual({ legacyClass, consistency: [] });
+    }
+  });
+
+  it("fails closed on a legacy class the read contract never declared", () => {
+    for (const legacyClass of ["unbekannt", "", "GLEICH", null]) {
+      expect(() => buildSingleFact(orderRow({ promisedDateLegacyClass: legacyClass })))
+        .toThrow("ORDER_TIMELINESS_LEGACY_CLASS_INVALID");
+    }
   });
 });
 

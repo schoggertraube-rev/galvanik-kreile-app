@@ -65,6 +65,9 @@ const ORDERS_VIEW_COLUMNS = [
   "due_date",
   "id",
   "order_number",
+  // Read-only Diagnose des Legacy-Terminfelds, angehaengt in
+  // supabase/migrations/20260928090000_b2_order_timeliness_legacy_class.sql.
+  "promised_date_legacy_class",
   "status",
   "tenant_id",
   "version",
@@ -185,6 +188,9 @@ const DELETABLE = {
   aTo: label("a-to"),
   aToEnd: label("a-to-end"),
   aAfter: label("a-after"),
+  aLegacyConflict: label("a-legacy-conflict"),
+  aLegacyEqual: label("a-legacy-equal"),
+  aLegacyOnly: label("a-legacy-only"),
   bInWindow: label("b-in-window"),
 };
 /** Auftraege mit append-only Abhol-Ereignis; bleiben in der Datenbank. */
@@ -208,9 +214,28 @@ const ORDER_NUMBERS = {
   aTo: `A-OTF-5-TO-${suffix}`,
   aToEnd: `A-OTF-6-TOEND-${suffix}`,
   aAfter: `A-OTF-7-AFTER-${suffix}`,
+  aLegacyConflict: `A-OTF-8-LEGCONF-${suffix}`,
+  aLegacyEqual: `A-OTF-9-LEGEQ-${suffix}`,
+  aLegacyOnly: `A-OTF-10-LEGONLY-${suffix}`,
   bPickedUp: `B-OTF-1-PICKED-${suffix}`,
   bInWindow: `B-OTF-2-IN-${suffix}`,
 };
+
+/**
+ * Legacy-Terminfeld-Fixture (P1-2). Die drei Faelle sind so gewaehlt, dass sie die
+ * fail-closed Zonenregel der View wirklich treffen:
+ *  - CONFLICT: Kalendertag weicht in BEIDEN geprueften Zonen ab (UTC und
+ *    Europe/Berlin), ist also unter jeder Zonenwahl ein Widerspruch.
+ *  - EQUAL: Mittagswert, damit UTC-Tag und Berlin-Tag identisch bleiben.
+ *  - ONLY: kein `due_date`; klassifiziert als `nur_promised`. Dieser Fall ist ueber
+ *    den Port strukturell unerreichbar, weil dessen Fenster `due_date >= from`
+ *    filtert — er wird deshalb direkt auf der View geprueft.
+ */
+const A_LEGACY_CONFLICT_DUE_AT = "2026-07-17T00:00:00Z";
+const A_LEGACY_CONFLICT_PROMISED_AT = "2026-07-14T12:00:00Z";
+const A_LEGACY_EQUAL_DUE_AT = "2026-07-13T00:00:00Z";
+const A_LEGACY_EQUAL_PROMISED_AT = "2026-07-13T12:00:00Z";
+const A_LEGACY_ONLY_PROMISED_AT = "2026-07-12T12:00:00Z";
 
 /** Erwartete Zeitpunkte; exakt die Werte, die die Fixtures schreiben. */
 const A_PICKED_UP_COMPLETED_AT = "2026-07-15T09:00:00.000Z";
@@ -276,8 +301,42 @@ type OrderFixture = {
   tenantId: string;
   customerId: string;
   orderNumber: string;
-  /** timestamp ohne Zone, wie public.orders.due_date. */
-  dueDate: string;
+  /**
+   * Zielspalte `public.orders.due_date` ist `timestamp without time zone` — das
+   * beschreibt aber nur den SPALTENTYP, nicht die Parameterbindung. Genau da lag
+   * der Zeitzonen-Fixture-Bug: bei `${wert}::timestamp` leitet Postgres fuer den
+   * Parameter die OID 1114 (`timestamp`) ab, und der `postgres`-Treiber
+   * serialisiert diese OID ueber `new Date(x).toISOString()`. Ein String OHNE
+   * Zonensuffix wird von `new Date(...)` in der PROZESS-Lokalzeit gelesen, unter
+   * `TZ=Europe/Berlin` also um -2h verschoben in die Datenbank geschrieben — und
+   * damit teils auf den Vortag. Der Lesevertrag war nie betroffen, nur diese
+   * Fixture.
+   *
+   * Deshalb zwei Massnahmen zusammen, und beide sind noetig:
+   *  1. Jeder Wert hier traegt ein `Z`-Suffix, ist also als UTC-Instant eindeutig.
+   *  2. `insertOrder` bindet ihn als `::text::timestamptz AT TIME ZONE 'UTC'`.
+   *     Damit ist die Parameter-OID 25 (`text`) und der Date-Serializer des
+   *     Treibers kann strukturell nicht mehr greifen — die Zonenrechnung
+   *     passiert vollstaendig in Postgres, unabhaengig von `TZ` des Prozesses.
+   * Dasselbe Muster nutzen `intake_date` und die Ereignis-Zeitstempel unten.
+   */
+  dueDate: string | null;
+  /**
+   * Legacy-Terminfeld `public.orders.promised_due_date` (timestamptz). Bewusst
+   * ein PFLICHTFELD dieser Fixture: der Readvertrag klassifiziert es seit
+   * 20260928090000, ein stilles Weglassen wuerde die Klasse verstecken.
+   *
+   * Bindung `::text::timestamptz` — Massnahme 1 aus `dueDate` (Z-Suffix) plus
+   * Massnahme 2 (Parameter-OID 25, damit der Date-Serializer des Treibers nicht
+   * greift), ABER OHNE `AT TIME ZONE 'UTC'`: die Zielspalte ist hier
+   * `timestamp WITH time zone`. `AT TIME ZONE 'UTC'` liefert ein
+   * `timestamp WITHOUT time zone`; dessen Zuweisungs-Cast zurueck nach
+   * timestamptz wuerde die SESSION-`TimeZone` verwenden und damit genau die
+   * Zonenabhaengigkeit neu einbauen, die hier entfernt werden soll. Bei
+   * `due_date`/`intake_date` ist `AT TIME ZONE 'UTC'` korrekt, weil dort
+   * `timestamp WITHOUT time zone` der Spaltentyp und damit Endtyp ist.
+   */
+  promisedDueDate: string | null;
   /** timestamptz, wie public.orders.completed_date. */
   completedDate: string | null;
   status: string;
@@ -290,13 +349,15 @@ async function insertOrder(fixture: OrderFixture) {
   await fixtureSql`
     INSERT INTO public.orders (
       id, tenant_id, order_number, customer_id, title, station, current_station,
-      current_station_id, status, version, source, intake_date, due_date, completed_date
+      current_station_id, status, version, source, intake_date, due_date,
+      promised_due_date, completed_date
     ) VALUES (
       ${fixture.id}, ${fixture.tenantId}, ${fixture.orderNumber}, ${fixture.customerId},
       'Termintreue Fixture Auftrag', ${fixture.status}, ${fixture.status},
       ${fixture.status}, ${fixture.status}, ${fixture.version}, 'manual',
       ${INTAKE_AT}::timestamptz AT TIME ZONE 'UTC',
-      ${fixture.dueDate}::timestamp, ${fixture.completedDate}::timestamptz
+      ${fixture.dueDate}::text::timestamptz AT TIME ZONE 'UTC',
+      ${fixture.promisedDueDate}::text::timestamptz, ${fixture.completedDate}::timestamptz
     )
   `;
 }
@@ -393,12 +454,16 @@ beforeAll(async () => {
   await seedTenant(TENANT_A, USER_A, CUSTOMER_A, label("user-a"));
   await seedTenant(TENANT_B, USER_B, CUSTOMER_B, label("user-b"));
 
+  // Jeder dueDate-Wert traegt ein `Z`: die Fixture schreibt UTC-Instants, und
+  // `insertOrder` bindet sie als text, damit kein Treiber-Date-Serializer und
+  // damit keine Prozess-Zeitzone mehr dazwischenkommt (siehe OrderFixture.dueDate).
   const plainA = (id: string, orderNumber: string, dueDate: string): OrderFixture => ({
     id,
     tenantId: TENANT_A,
     customerId: CUSTOMER_A,
     orderNumber,
     dueDate,
+    promisedDueDate: null,
     completedDate: null,
     status: "galvanik",
     version: 1,
@@ -406,11 +471,32 @@ beforeAll(async () => {
 
   // Bereichsgrenzen: ein Tag vor `from`, exakt `from`, exakt `to`, spaeter Tag
   // von `to` und ein Tag nach `to`.
-  await insertOrder(plainA(DELETABLE.aBefore, ORDER_NUMBERS.aBefore, `${DAY_BEFORE_FROM}T00:00:00`));
-  await insertOrder(plainA(DELETABLE.aFrom, ORDER_NUMBERS.aFrom, "2026-07-10T00:00:00"));
-  await insertOrder(plainA(DELETABLE.aTo, ORDER_NUMBERS.aTo, "2026-07-20T00:00:00"));
-  await insertOrder(plainA(DELETABLE.aToEnd, ORDER_NUMBERS.aToEnd, "2026-07-20T23:30:00"));
-  await insertOrder(plainA(DELETABLE.aAfter, ORDER_NUMBERS.aAfter, `${DAY_AFTER_TO}T00:00:00`));
+  await insertOrder(plainA(DELETABLE.aBefore, ORDER_NUMBERS.aBefore, `${DAY_BEFORE_FROM}T00:00:00Z`));
+  await insertOrder(plainA(DELETABLE.aFrom, ORDER_NUMBERS.aFrom, "2026-07-10T00:00:00Z"));
+  await insertOrder(plainA(DELETABLE.aTo, ORDER_NUMBERS.aTo, "2026-07-20T00:00:00Z"));
+  await insertOrder(plainA(DELETABLE.aToEnd, ORDER_NUMBERS.aToEnd, "2026-07-20T23:30:00Z"));
+  await insertOrder(plainA(DELETABLE.aAfter, ORDER_NUMBERS.aAfter, `${DAY_AFTER_TO}T00:00:00Z`));
+
+  // Legacy-Terminfeld: die drei Klassen, die der Readvertrag unterscheidet.
+  await insertOrder({
+    ...plainA(DELETABLE.aLegacyConflict, ORDER_NUMBERS.aLegacyConflict, A_LEGACY_CONFLICT_DUE_AT),
+    promisedDueDate: A_LEGACY_CONFLICT_PROMISED_AT,
+  });
+  await insertOrder({
+    ...plainA(DELETABLE.aLegacyEqual, ORDER_NUMBERS.aLegacyEqual, A_LEGACY_EQUAL_DUE_AT),
+    promisedDueDate: A_LEGACY_EQUAL_PROMISED_AT,
+  });
+  await insertOrder({
+    id: DELETABLE.aLegacyOnly,
+    tenantId: TENANT_A,
+    customerId: CUSTOMER_A,
+    orderNumber: ORDER_NUMBERS.aLegacyOnly,
+    dueDate: null,
+    promisedDueDate: A_LEGACY_ONLY_PROMISED_AT,
+    completedDate: null,
+    status: "galvanik",
+    version: 1,
+  });
 
   await seedPickedUpOrder({
     order: {
@@ -418,7 +504,8 @@ beforeAll(async () => {
       tenantId: TENANT_A,
       customerId: CUSTOMER_A,
       orderNumber: ORDER_NUMBERS.aPickedUp,
-      dueDate: "2026-07-15T00:00:00",
+      dueDate: "2026-07-15T00:00:00Z",
+      promisedDueDate: null,
       completedDate: A_PICKED_UP_COMPLETED_AT,
       status: "abgeholt",
       version: A_PICKED_UP_VERSION,
@@ -434,7 +521,8 @@ beforeAll(async () => {
       tenantId: TENANT_A,
       customerId: CUSTOMER_A,
       orderNumber: ORDER_NUMBERS.aV1Only,
-      dueDate: "2026-07-16T00:00:00",
+      dueDate: "2026-07-16T00:00:00Z",
+      promisedDueDate: null,
       completedDate: A_V1_COMPLETED_AT,
       status: "fertig",
       version: A_V1_VERSION,
@@ -449,7 +537,8 @@ beforeAll(async () => {
     tenantId: TENANT_B,
     customerId: CUSTOMER_B,
     orderNumber: ORDER_NUMBERS.bInWindow,
-    dueDate: "2026-07-11T00:00:00",
+    dueDate: "2026-07-11T00:00:00Z",
+    promisedDueDate: null,
     completedDate: null,
     status: "galvanik",
     version: 1,
@@ -461,7 +550,8 @@ beforeAll(async () => {
       tenantId: TENANT_B,
       customerId: CUSTOMER_B,
       orderNumber: ORDER_NUMBERS.bPickedUp,
-      dueDate: "2026-07-15T00:00:00",
+      dueDate: "2026-07-15T00:00:00Z",
+      promisedDueDate: null,
       completedDate: B_PICKED_UP_COMPLETED_AT,
       status: "abgeholt",
       version: B_PICKED_UP_VERSION,
@@ -737,6 +827,75 @@ describe("getOrderTimelinessFacts Storno bleibt ungebaut (Q-G04-002)", () => {
         });
       }
     }
+  });
+});
+
+describe("getOrderTimelinessFacts Legacy-Terminfeld promised_due_date", () => {
+  it("weist den Legacy-Konflikt aus und laesst promisedDate weiter aus due_date kommen", async () => {
+    // F-G04-007 (Fehlerfall "Legacy-Terminfelder widersprechen sich"), A-G04-008
+    // ("Abweichungen zum Legacy-Feld werden vor Migration als Konflikt
+    // ausgewiesen" UND "Alle G04-Reads verwenden due_date"), K-G04-008
+    // ("read-only Diagnose ... keine automatische Wahl"). Der Konflikt wird also
+    // GEMELDET, aber nicht entschieden: es gibt keinen zweiten Wert, keine
+    // Missing-Reason auf promisedDate und keine Uebernahme des Legacy-Werts.
+    const facts = await readFacts(TENANT_A, RANGE);
+    const conflicting = facts.facts.find((fact) => fact.orderId === DELETABLE.aLegacyConflict);
+    expect(conflicting).toBeDefined();
+    expect(conflicting?.consistency).toContain("promised_date_legacy_conflict");
+    expect(conflicting?.promisedDate).toEqual({
+      // 2026-07-17 aus due_date, NICHT 2026-07-14 aus promised_due_date.
+      value: A_LEGACY_CONFLICT_DUE_AT.slice(0, 10),
+      source: "orders.due_date",
+      provenance: { kind: "column", relation: "public.orders", column: "due_date" },
+      missingReason: null,
+    });
+
+    // Gegenprobe gegen einen leeren Beweis: der uebereinstimmende Auftrag traegt
+    // denselben Hinweis NICHT, obwohl auch er ein Legacy-Datum hat.
+    const equal = facts.facts.find((fact) => fact.orderId === DELETABLE.aLegacyEqual);
+    expect(equal).toBeDefined();
+    expect(equal?.consistency).not.toContain("promised_date_legacy_conflict");
+    expect(equal?.promisedDate.value).toBe(A_LEGACY_EQUAL_DUE_AT.slice(0, 10));
+
+    // Und die Auftraege ohne Legacy-Datum bleiben ebenfalls hinweisfrei.
+    const plain = facts.facts.find((fact) => fact.orderId === DELETABLE.aFrom);
+    expect(plain?.consistency).toEqual([]);
+  });
+
+  it("klassifiziert alle drei Legacy-Faelle in der View selbst", async () => {
+    // Die Klasse entsteht in SQL (20260928090000), nicht in TypeScript. Der Fall
+    // `nur_promised` ist ueber den Port strukturell unerreichbar, weil dessen
+    // Fenster `due_date >= from` filtert — er wird deshalb hier bewiesen.
+    const rows = await fixtureSql.begin(async (tx) => {
+      await tx`SELECT set_config('app.tenant_id', ${TENANT_A}, true)`;
+      return tx<{ id: string; promised_date_legacy_class: string }[]>`
+        SELECT contract.id, contract.promised_date_legacy_class
+        FROM public.v_order_timeliness_orders_v1 contract
+        WHERE contract.id = ANY(${[
+          DELETABLE.aLegacyConflict,
+          DELETABLE.aLegacyEqual,
+          DELETABLE.aLegacyOnly,
+          DELETABLE.aFrom,
+        ]})
+      `;
+    });
+    const classById = new Map(rows.map((row) => [row.id, row.promised_date_legacy_class]));
+    expect({
+      conflict: classById.get(DELETABLE.aLegacyConflict) ?? null,
+      equal: classById.get(DELETABLE.aLegacyEqual) ?? null,
+      onlyLegacy: classById.get(DELETABLE.aLegacyOnly) ?? null,
+      noLegacy: classById.get(DELETABLE.aFrom) ?? null,
+    }).toEqual({
+      conflict: "widerspruechlich",
+      equal: "gleich",
+      onlyLegacy: "nur_promised",
+      noLegacy: "nur_due_date",
+    });
+
+    // Der `nur_promised`-Auftrag ist wirklich nur wegen des fehlenden due_date
+    // aus dem Port heraus und nicht wegen des Tenantfilters.
+    const facts = await readFacts(TENANT_A, RANGE);
+    expect(facts.facts.map((fact) => fact.orderId)).not.toContain(DELETABLE.aLegacyOnly);
   });
 });
 

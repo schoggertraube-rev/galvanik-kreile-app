@@ -38,8 +38,38 @@ export const ORDER_PICKUP_EVENT_TYPES = [
   ORDER_PICKUP_EVENT_TYPE_V2,
 ] as const;
 
+const PICKUP_EVENT_SCHEMA_VERSION_V1 = 1 as const;
 const PICKUP_EVENT_SCHEMA_VERSION_V2 = 2 as const;
 const PICKUP_MODES = ["versand", "abholung"] as const;
+
+/**
+ * Zahlarten, die ein ORDER_PICKED_UP_V1-Payload tragen darf. Bewusst NICHT das
+ * V2-Literal `"rechnung"`: events_order_picked_up_v1_contract_chk
+ * (supabase/migrations/20260905100000_f1_5_payment_goods_out_contract.sql)
+ * erlaubt fuer V1 ausdruecklich alle drei Werte
+ * (`payload->>'paymentMode' IN ('vorkasse', 'abholung', 'rechnung')`), waehrend
+ * private.validate_f15_v2_event_insert fuer V2 auf 'rechnung' festlegt.
+ */
+const PICKUP_PAYMENT_MODES_V1 = ["vorkasse", "abholung", "rechnung"] as const;
+
+/**
+ * Klassifikation des Legacy-Terminfelds `public.orders.promised_due_date`
+ * gegenueber der einzigen schreibbaren Terminwahrheit `public.orders.due_date`
+ * (A-G04-008: "Alle G04-Reads verwenden due_date"). Die Werte entstehen als
+ * Spalte `promised_date_legacy_class` in
+ * `v_order_timeliness_orders_v1` und sind read-only Diagnose
+ * (K-G04-008: "read-only Diagnose ... keine automatische Wahl").
+ */
+const ORDER_PROMISED_DATE_LEGACY_CLASS = {
+  /** Kein Legacy-Wert vorhanden; nichts zu melden. */
+  DUE_DATE_ONLY: "nur_due_date",
+  /** Nur das Legacy-Feld ist gesetzt, `due_date` fehlt. */
+  PROMISED_ONLY: "nur_promised",
+  /** Beide gesetzt und in allen geprueften Zonen derselbe Kalendertag. */
+  EQUAL: "gleich",
+  /** Beide gesetzt, aber nicht derselbe Kalendertag (F-G04-007-Fehlerfall). */
+  CONFLICTING: "widerspruechlich",
+} as const;
 
 /**
  * Schemaversion des KPI-Fakts (F-G04-007: "Versioniertes `OrderTimelinessFact`
@@ -83,6 +113,17 @@ export const ORDER_TIMELINESS_CONSISTENCY = {
   PICKED_UP_STATUS_WITHOUT_PICKUP_EVENT: "picked_up_status_without_pickup_event",
   PICKUP_EVENT_WITHOUT_COMPLETED_DATE: "pickup_event_without_completed_date",
   PICKUP_BEFORE_FINISH: "pickup_before_finish",
+  /**
+   * Legacy-Terminfeld `orders.promised_due_date` widerspricht dem bestaetigten
+   * Termin `orders.due_date` (F-G04-007 Fehlerfall "Legacy-Terminfelder
+   * widersprechen sich"; A-G04-008 "Abweichungen zum Legacy-Feld werden vor
+   * Migration als Konflikt ausgewiesen"). Reiner Hinweis: K-G04-008 verlangt
+   * "read-only Diagnose ... keine automatische Wahl", `promisedDate` bleibt
+   * deshalb unveraendert aus `due_date` belegt.
+   */
+  PROMISED_DATE_LEGACY_CONFLICT: "promised_date_legacy_conflict",
+  /** Nur das Legacy-Feld traegt einen Termin, `orders.due_date` ist leer. */
+  PROMISED_DATE_ONLY_LEGACY: "promised_date_only_legacy",
 } as const;
 
 export type OrderTimelinessConsistency =
@@ -174,6 +215,15 @@ export type OrderTimelinessOrderRow = {
   version: number | null;
   dueDate: Date | string | null;
   completedDate: Date | string | null;
+  /**
+   * Read-only Diagnose des Legacy-Terminfelds, berechnet in
+   * `v_order_timeliness_orders_v1` als
+   * `promised_date_legacy_class`. `string | null` spiegelt die nullbare
+   * SQL-Spalte, genau wie `version: number | null`; die Domaene laesst
+   * fail-closed nur die vier deklarierten Klassen durch und wirft sonst
+   * (`ORDER_TIMELINESS_LEGACY_CLASS_INVALID`).
+   */
+  promisedDateLegacyClass: string | null;
 };
 
 /**
@@ -321,6 +371,67 @@ export function isValidPickupEventV2(
     && toIsoInstant(row.createdAt) !== null;
 }
 
+/**
+ * Ein ORDER_PICKED_UP_V1-Ereignis, das seinen eigenen Schreibvertrag erfuellt.
+ * Die Typverengung sagt NICHT, dass daraus ein Abholzeitpunkt wird — sie sagt,
+ * dass das Ereignis strukturell heil ist.
+ */
+type ValidPickupEventV1Row = OrderTimelinessPickupEventRow & {
+  eventId: string;
+  eventType: typeof ORDER_PICKUP_EVENT_TYPE_V1;
+  eventSchemaVersion: typeof PICKUP_EVENT_SCHEMA_VERSION_V1;
+  aggregateVersion: number;
+};
+
+/**
+ * Lesevertrag fuer ein strukturell gueltiges ORDER_PICKED_UP_V1-Ereignis.
+ *
+ * V1 ist KEIN Altschema: src/lib/server/commands/recordGoodsOutCommand.ts
+ * schreibt V1 fuer "Rechnung bereits gestellt" und V2 fuer "Rechnung noch nicht
+ * gestellt" — beide Zweige sind heute aktiv. Ohne diese Pruefung waere ein
+ * strukturell KAPUTTES V1 nicht von einem heilen zu unterscheiden und wuerde
+ * faelschlich als `PICKUP_CONTRACT_V1_ONLY` (also als gueltiger, nur nicht
+ * verwendbarer Vertrag) statt als `INVALID_PICKUP_EVENT` gemeldet.
+ *
+ * Geprueft wird exakt die Teilmenge von
+ * `events_order_picked_up_v1_contract_chk`
+ * (supabase/migrations/20260905100000_f1_5_payment_goods_out_contract.sql), die
+ * der Readvertrag ueberhaupt projiziert. Bewusst NICHT geprueft werden
+ * `paymentStatus` und `openAmountCents`: die View laesst sie aus
+ * (Finanzgatterung, siehe 20260927120000), und Finanzfakten duerfen die
+ * Gueltigkeit eines ZEITPUNKTS nicht gattern.
+ *
+ * `payloadInvoiceState === null` ist eine positive Abgrenzung, keine Laxheit:
+ * der V1-Check schreibt den Payload per `payload = jsonb_build_object(...)` auf
+ * genau sieben Schluessel fest, `invoiceState` ist keiner davon. Ein V1-Ereignis
+ * MIT invoiceState waere ein falsch getyptes V2.
+ */
+export function isValidPickupEventV1(
+  row: OrderTimelinessPickupEventRow,
+  tenantId: string,
+  orderId: string,
+): row is ValidPickupEventV1Row {
+  return row.eventType === ORDER_PICKUP_EVENT_TYPE_V1
+    && typeof row.eventId === "string"
+    && row.eventId.length > 0
+    && row.tenantId === tenantId
+    && row.orderId === orderId
+    && row.status === "success"
+    && row.fromStation === ORDER_LIFECYCLE_STATUS.FERTIG
+    && row.station === ORDER_LIFECYCLE_STATUS.ABGEHOLT
+    && row.eventSchemaVersion === PICKUP_EVENT_SCHEMA_VERSION_V1
+    && typeof row.aggregateVersion === "number"
+    && Number.isSafeInteger(row.aggregateVersion)
+    && row.aggregateVersion > 0
+    && row.payloadOrderId === orderId
+    && row.payloadGateAllowed === true
+    && typeof row.payloadPaymentMode === "string"
+    && (PICKUP_PAYMENT_MODES_V1 as readonly string[]).includes(row.payloadPaymentMode)
+    && row.payloadInvoiceState === null
+    && isPickupMode(row.payloadMode)
+    && toIsoInstant(row.createdAt) !== null;
+}
+
 type PickupEventsByOrder = Map<string, {
   v1: OrderTimelinessPickupEventRow[];
   v2: OrderTimelinessPickupEventRow[];
@@ -344,34 +455,60 @@ function groupPickupEvents(
   return grouped;
 }
 
+/**
+ * Abholzeitpunkt aus genau einem validen V2-Ereignis
+ * (_MODULDOSSIERS/G04_AUFTRAEGE/04_SCHNITTSTELLEN_DATEN.md §Soll-Ist Punkt 3,
+ * Abnahmetest T-G04-021). V1 und V2 sind gleichrangige, heute beide aktive
+ * Ausgaenge desselben Commands, aber nur V2 belegt einen Wert; ein valides V1
+ * bleibt read-only Diagnose (`PICKUP_CONTRACT_V1_ONLY`).
+ *
+ * Deshalb wird zuerst partitioniert und danach GEZAEHLT: ohne eine eigene
+ * V1-Gueltigkeitspruefung waere (i) ein kaputtes V1 nicht von einem heilen zu
+ * unterscheiden, (ii) der gemischte Fall V1+V2 ein stilles Ignorieren des V1 und
+ * (iii) ein zweites V1 unsichtbar — fuer V1 existiert kein Unique-Index, nur
+ * events_goods_out_order_version_v2_uidx deckt V2 ab.
+ */
 function derivePickedUpAt(
   orderId: string,
   tenantId: string,
   bucket: { v1: OrderTimelinessPickupEventRow[]; v2: OrderTimelinessPickupEventRow[] } | undefined,
 ): OrderTimelinessValue<string> {
-  const v2 = bucket?.v2 ?? [];
-  // Datenanomalie: mehr als ein V2-Ereignis. Nie das erste oder letzte waehlen.
-  if (v2.length > 1) return missing(ORDER_TIMELINESS_MISSING_REASON.AMBIGUOUS_PICKUP_EVENTS);
-  const single = v2[0];
-  if (!single) {
-    return (bucket?.v1.length ?? 0) > 0
-      ? missing(ORDER_TIMELINESS_MISSING_REASON.PICKUP_CONTRACT_V1_ONLY)
-      : missing(ORDER_TIMELINESS_MISSING_REASON.NO_PICKUP_EVENT);
+  const rawV1 = bucket?.v1 ?? [];
+  const rawV2 = bucket?.v2 ?? [];
+  const validV1 = rawV1.filter((row) => isValidPickupEventV1(row, tenantId, orderId));
+  const validV2 = rawV2.filter((row) => isValidPickupEventV2(row, tenantId, orderId));
+
+  // Datenanomalie: mehr als ein gueltiges Abholereignis, egal in welcher
+  // Vertragsversion. Nie das erste oder letzte waehlen.
+  if (validV1.length + validV2.length > 1) {
+    return missing(ORDER_TIMELINESS_MISSING_REASON.AMBIGUOUS_PICKUP_EVENTS);
   }
-  if (!isValidPickupEventV2(single, tenantId, orderId)) {
+
+  const single = validV2[0];
+  if (single) {
+    const occurredAt = toIsoInstant(single.createdAt);
+    return occurredAt === null
+      ? missing(ORDER_TIMELINESS_MISSING_REASON.INVALID_PICKUP_EVENT)
+      : present(occurredAt, ORDER_TIMELINESS_SOURCE.PICKED_UP_AT, {
+        kind: "event",
+        relation: "public.events",
+        eventId: single.eventId,
+        eventType: ORDER_PICKUP_EVENT_TYPE_V2,
+        eventSchemaVersion: PICKUP_EVENT_SCHEMA_VERSION_V2,
+        aggregateVersion: single.aggregateVersion,
+      });
+  }
+
+  // Genau ein gueltiges V1 und kein gueltiges V2: benannter Altvertrag, kein
+  // Wert. Der Grund greift ab hier nur noch fuer ein WIRKLICH gueltiges V1.
+  if (validV1.length === 1) {
+    return missing(ORDER_TIMELINESS_MISSING_REASON.PICKUP_CONTRACT_V1_ONLY);
+  }
+  // Ereignisse vorhanden, aber keines haelt seinen Vertrag.
+  if (rawV1.length + rawV2.length > 0) {
     return missing(ORDER_TIMELINESS_MISSING_REASON.INVALID_PICKUP_EVENT);
   }
-  const occurredAt = toIsoInstant(single.createdAt);
-  return occurredAt === null
-    ? missing(ORDER_TIMELINESS_MISSING_REASON.INVALID_PICKUP_EVENT)
-    : present(occurredAt, ORDER_TIMELINESS_SOURCE.PICKED_UP_AT, {
-      kind: "event",
-      relation: "public.events",
-      eventId: single.eventId,
-      eventType: ORDER_PICKUP_EVENT_TYPE_V2,
-      eventSchemaVersion: PICKUP_EVENT_SCHEMA_VERSION_V2,
-      aggregateVersion: single.aggregateVersion,
-    });
+  return missing(ORDER_TIMELINESS_MISSING_REASON.NO_PICKUP_EVENT);
 }
 
 function derivePromisedDate(row: OrderTimelinessOrderRow): OrderTimelinessValue<string> {
@@ -397,6 +534,32 @@ function deriveFinishedAt(row: OrderTimelinessOrderRow): OrderTimelinessValue<st
       relation: "public.orders",
       column: "completed_date",
     });
+}
+
+/**
+ * Read-only Diagnose des Legacy-Terminfelds. Gibt genau einen Hinweis oder
+ * keinen zurueck und trifft NIE eine Wahl zwischen den beiden Feldern
+ * (K-G04-008). Ein unbekannter Klassenwert wird fail-closed abgelehnt, analog zu
+ * `ORDER_TIMELINESS_EVENT_TYPE_UNEXPECTED`: eine nicht deklarierte Klasse hiesse,
+ * die View liefert etwas anderes als der Vertrag behauptet, und ein stiller
+ * "kein Hinweis" wuerde genau den Konflikt verstecken, den A-G04-008 ausweisen
+ * will. Dasselbe gilt fuer `null`/`undefined` — die Spalte kann keinen der vier
+ * Werte verfehlen, also ist ein fehlender Wert ein Vertragsbruch.
+ */
+function derivePromisedDateLegacyHint(
+  row: OrderTimelinessOrderRow,
+): OrderTimelinessConsistency | null {
+  switch (row.promisedDateLegacyClass) {
+    case ORDER_PROMISED_DATE_LEGACY_CLASS.DUE_DATE_ONLY:
+    case ORDER_PROMISED_DATE_LEGACY_CLASS.EQUAL:
+      return null;
+    case ORDER_PROMISED_DATE_LEGACY_CLASS.PROMISED_ONLY:
+      return ORDER_TIMELINESS_CONSISTENCY.PROMISED_DATE_ONLY_LEGACY;
+    case ORDER_PROMISED_DATE_LEGACY_CLASS.CONFLICTING:
+      return ORDER_TIMELINESS_CONSISTENCY.PROMISED_DATE_LEGACY_CONFLICT;
+    default:
+      throw new Error("ORDER_TIMELINESS_LEGACY_CLASS_INVALID");
+  }
 }
 
 function deriveConsistency(
@@ -426,6 +589,8 @@ function deriveConsistency(
   ) {
     hints.push(ORDER_TIMELINESS_CONSISTENCY.PICKUP_BEFORE_FINISH);
   }
+  const legacyHint = derivePromisedDateLegacyHint(row);
+  if (legacyHint !== null) hints.push(legacyHint);
   return hints;
 }
 

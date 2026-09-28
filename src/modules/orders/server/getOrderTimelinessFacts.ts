@@ -95,6 +95,13 @@ type OrderContractRow = {
   version: number | null;
   due_date: string | null;
   completed_date: string | null;
+  /**
+   * Read-only Diagnose des Legacy-Terminfelds `orders.promised_due_date`
+   * (supabase/migrations/20260928090000_b2_order_timeliness_legacy_class.sql).
+   * Reiner Klassentext, KEIN zweiter Datumswert: A-G04-008 haelt `due_date` als
+   * einzige Terminwahrheit fest, K-G04-008 verbietet eine automatische Wahl.
+   */
+  promised_date_legacy_class: string | null;
 };
 
 /** Vertragszeile der Abholereignis-View, snake_case wie in SQL. */
@@ -125,6 +132,7 @@ function toOrderRow(row: OrderContractRow): OrderTimelinessOrderRow {
     version: row.version,
     dueDate: row.due_date,
     completedDate: row.completed_date,
+    promisedDateLegacyClass: row.promised_date_legacy_class,
   };
 }
 
@@ -169,7 +177,8 @@ async function readFacts(
       contract.version,
       to_char(contract.due_date, 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS due_date,
       to_char(contract.completed_date AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
-        AS completed_date
+        AS completed_date,
+      contract.promised_date_legacy_class
     FROM public.v_order_timeliness_orders_v1 contract
     WHERE contract.tenant_id = ${tenantId}
       AND contract.due_date >= (${range.from})::date
