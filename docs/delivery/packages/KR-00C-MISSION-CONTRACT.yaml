@@ -1,0 +1,165 @@
+schema_version: 1
+package_id: KR-00C-MISSION-CONTRACT
+project: GALVANIK_KREILE_WERKSTATTCockpit
+state: WRITING_COMPLETE_PENDING_COMMIT_GATES_AND_EXACT_SHA_REVIEW
+queue_parent_sha: 51055c7b2c4fed504cece4e6804d87037973b79f
+base_sha: 51055c7b2c4fed504cece4e6804d87037973b79f
+origin_main_sha: 21a23567d51e4805f065ce9ae8c59bdc5faf9fa9
+target_sha: PENDING_AFTER_LOCAL_VERIFICATION
+branch: codex/kr-00c-mission-contract
+goal: >-
+  Den aktiven Missionsvertrag auf genau einen realen Parent, ein aktives Paket
+  und ein naechstes Gate reduzieren, den alten A2-Aktivstand ausschliesslich
+  als Historie erhalten und Writer-, Implementierungsreviewer- und
+  Fachgate-Rollen ohne Produkt- oder Lieferbehauptung trennen.
+active_mission_file: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+dod_spec_approved_by:
+  authority: OWNER_CURRENT_TASK
+  date: 2026-09-28
+  instruction: >-
+    Den redteam-geprueften Plan paketweise umsetzen; jedes Folgepaket bindet
+    den exakten geprueften Parent und bleibt bis zum realen Merge Kandidat.
+execution_actors:
+  writer: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  implementation_reviewer: CLAUDE_OPUS_NEW_READ_ONLY_SESSION_AFTER_EXACT_SHA
+  specialist_gate_reviewers: GITHUB_ACTIONS_REQUIRED_CHECK_RUNNERS_AFTER_PUSH
+  kreile_pl_session: 01a0ce4b-1843-7361-9ffc-47933f9ecdde
+  authorized_future_merge_actor: 01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  merge_limit: NO_MAIN_MERGE_UNTIL_EXPLICIT_PRODUCTION_EFFECT_AUTHORITY
+dependency:
+  package: KR-00D-ALTINVENTAR
+  candidate_sha: 51055c7b2c4fed504cece4e6804d87037973b79f
+  status: REVIEWED_CANDIDATE_PENDING_MAIN_BASE_CI_AND_EXTERNAL_MERGE_GATE
+  review_result: PASS_TARGETED_DELTA_NO_OPEN_P0_P1_P2
+  review_evidence: ../_MODULDOSSIERS/00_PROJEKT/KR-00D_CLAUDE_REVIEW_2026-09-28.md
+  review_evidence_sha256: 95ED3C80C87FAABD1B4E1720E790B5BCA7FE97B40C7C8904E341F4391CCC7BDA
+dossier_and_decision_ids:
+  - BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL_SECTION_3_2
+  - BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL_SECTION_4_KR_00C
+  - D-GOV-001
+  - D-GOV-002
+source_locks:
+  - source: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+    repo_commit: 51055c7b2c4fed504cece4e6804d87037973b79f
+    sha256: 72E90B7351B2F9872C7F77A99646682B49F0F05B4D7E3C2B43ECA1FA30B5883A
+  - source: AGENTS.md
+    repo_commit: 51055c7b2c4fed504cece4e6804d87037973b79f
+    sha256: 7A5FBDBEAF295747AE8B1A648CE5D31FCE32D36B69064823AA63DB564DE0477D
+  - source: BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: EAEDDEF68C16BE403C6D05AD6F63234D4ACF75A762895F50008E07A59A782DC3
+  - source: BUILD_EXECUTION_LEDGER_2026-09-28.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: ED2BB5209DAB670C2F5B8468BED31794900521653996C91845FD5973A1F3FDD4
+  - source: KR-00D_CLAUDE_REVIEW_2026-09-28.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: 95ED3C80C87FAABD1B4E1720E790B5BCA7FE97B40C7C8904E341F4391CCC7BDA
+repo_allowlist:
+  - docs/delivery/packages/KR-00C-MISSION-CONTRACT.yaml
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+forbidden:
+  - src/**
+  - supabase/**
+  - package.json
+  - package-lock.json
+  - .github/**
+  - docs/project/**
+  - product_code_or_runtime_behavior
+  - auth_rls_roles_or_session_behavior
+  - provider_or_runtime_configuration
+  - remote_database_or_production_mutation
+  - pull_request_or_merge_to_main
+follow_up_packages:
+  - KR-00E-DELIVERY-CONTRACT
+  - KR-00G-DOCS-IMPORT
+new_objects_authority: NONE
+migration_status: NONE
+invariants:
+  data_truth: NOT_APPLICABLE_GOVERNANCE_ONLY
+  tenant_and_rls: NOT_APPLICABLE_NO_DATA_OR_POLICY_CHANGE
+  roles_and_commands: NOT_APPLICABLE_NO_PRODUCT_ROLE_OR_COMMAND_CHANGE
+  receipt_and_readback: EXACT_PARENT_RECEIPT_HASH_AND_EXACT_SHA_GIT_READBACK
+  reload_and_race: NOT_APPLICABLE_NO_RUNTIME_STATE
+  error_behavior: FAIL_CLOSED_ON_PARENT_SCOPE_OR_REVIEW_BINDING_MISMATCH
+  rollback: ABANDON_CANDIDATE_BEFORE_DESCENDANTS_NO_DESTRUCTIVE_REWRITE
+visible_capabilities:
+  registry_changes: NONE
+  quality_no_fake_production: REQUIRED_DEFENSIVE_GATE
+review_contract:
+  broad_claude_reviews: 1
+  max_correction_rounds: 1
+  delta_review_after_correction: true
+  reviewer_must_differ_from_writer: true
+  specialist_gate_reviewers_are_not_implementation_reviewers: true
+acceptance:
+  - id: KR00C-A1
+    statement: Mission bindet genau Parent 51055c7b, Branch KR-00C und ein aktives Paket mit einem naechsten Gate.
+    evidence: >-
+      rg -n "^(base_sha|branch|active_package|active_package_status|next_gate_after_active_package):"
+      missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - id: KR00C-A2
+    statement: Der fruehere A2-Aktivstand aus origin/main ist mit Base, Branch, Status und Gate nur noch als Historie markiert.
+    evidence: >-
+      rg -n "superseded_active_package_history|A2_PHILLIP|path1/a2-phillip-recovery"
+      missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - id: KR00C-A3
+    statement: Der entfernte MISSION_TEMPLATE-Verweis ist nicht mehr Teil des aktiven Missionsvertrags und die Datei existiert nicht.
+    evidence: >-
+      rg -n "MISSION_TEMPLATE" missions/F1_ORDER_TO_CASH_PILOT_001.yml;
+      Test-Path missions/MISSION_TEMPLATE.yml
+  - id: KR00C-A4
+    statement: Ein Writer, ein getrennter Implementierungsreviewer, getrennte Fachgatepruefer und maximal eine Korrektur sind maschinenlesbar gebunden.
+    evidence: >-
+      rg -n "single_writer|max_implementation_reviewers|max_correction_rounds|specialist_gate_reviewers"
+      missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - id: KR00C-A5
+    statement: Genau zwei Governance-Pfade und keine Produkt-, Daten-, Provider-, Workflow- oder Runtimeaenderung.
+    evidence: git diff --name-only 51055c7b2c4fed504cece4e6804d87037973b79f..HEAD
+  - id: KR00C-A6
+    statement: Der KR-00D-Parent bleibt exakter Remote-Freeze und wird nicht als main-geliefert behauptet.
+    evidence: >-
+      git ls-remote --heads origin refs/heads/codex/kr-00d-altinventar;
+      Get-FileHash ../_MODULDOSSIERS/00_PROJEKT/KR-00D_CLAUDE_REVIEW_2026-09-28.md
+local_gates:
+  - npm run quality:authority-gate:selftest
+  - npm run quality:authority-gate
+  - npm run quality:module-gates
+  - npm run quality:no-fake-production
+  - npm run lint:ratchet
+  - git diff --check
+  - npm run verify:precommit
+local_gate_evidence:
+  yaml_parse: PASS_BOTH_PACKAGE_AND_MISSION
+  parent_branch_and_active_package_readback: PASS
+  historical_a2_readback: PASS
+  mission_template_absence: PASS
+  reviewer_separation_readback: PASS
+  authority_gate_selftest: PASS_NEGATIVE_CASES_27_OF_27
+  authority_gate: PASS_TRUTH_TYPES_7_UI_REFERENCES_4
+  module_gates: PASS
+  no_fake_production: PASS
+  git_diff_check: PASS
+  precommit_typescript_staged_lint_unit: PENDING_AT_COMMIT
+  lint_ratchet: PENDING_ON_EXACT_SHA
+  github_required_checks: PENDING_AFTER_PUSH_OR_REAL_MERGE_WINDOW
+required_checks_after_push:
+  - quality
+  - agentur-gate
+  - Fresh Supabase replay
+non_required_but_must_pass:
+  - ratchet
+evidence_mode: CI_FULL
+evidence_mode_status: BRANCH_CI_THEN_FULL_REQUIRED_CHECKS_AT_REAL_MERGE_WINDOW
+resource_profile:
+  mode: SERIAL_NO_PARALLEL_BUILD_OR_TEST_WRITERS
+  heavy_profile: NONE
+  available_ram_mb_preflight: 5928
+  shell_probe_seconds_preflight: 0.025
+  git_status_seconds_preflight: 0.188
+  expected_runtime_minutes: 25
+  cleanup_receipt: NO_CHILD_PROCESS_REMAINS_AND_WORKTREE_CLEAN
+findings: []
+split_or_follow_up_decision: >-
+  Offene P0/P1 nach der erlaubten Korrektur fuehren zu HALT_AND_REPLAN;
+  der Normalweg fuehrt genau zu KR-00E-DELIVERY-CONTRACT.
+next_allowed_package: KR-00C-EXACT-SHA-CLAUDE-REVIEW
