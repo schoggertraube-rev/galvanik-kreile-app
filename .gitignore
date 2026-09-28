@@ -15,6 +15,11 @@
 
 # next.js
 /.next/
+# Geschwister-Build-Ausgaben von Warmup-/Stop-Gate-Werkzeugen (.next.stopgate-bak,
+# .next.green-warm, ...) sind Build-Artefakte wie /.next/ selbst: nie Repo-Inhalt.
+# Ohne dieses Muster landen Webpack-Cache-Packs im Diff und loesen Quality-Gates
+# (z.B. Forbidden patterns) auf kompilierten Strings statt auf Quellcode aus.
+/.next.*/
 /out/
 
 # production

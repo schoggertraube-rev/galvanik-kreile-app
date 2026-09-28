@@ -587,6 +587,20 @@ jobs:
       - name: P3 current schema replay fresh from zero without seed (blocking)
         run: ./node_modules/.bin/supabase db reset --local --no-seed
 
+      - name: B2 G04 Termintreue read-contract integration test on the current schema (blocking)
+        # Die beiden Views public.v_order_timeliness_orders_v1 und
+        # public.v_order_timeliness_pickup_events_v1 entstehen erst in
+        # 20260927120000 und sind damit nur im vollstaendigen, UNGEPINNTEN
+        # Migrationsstand vorhanden; deshalb haengt der Nachweis genau an diesem
+        # Reset ohne --version. Abhol-Ereignisse sind GoBD-append-only, der Test
+        # laesst die drei Auftraege MIT Ereignis also bewusst stehen und traegt
+        # dafuer einen Laufsuffix je Fixture.
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          ORDER_TIMELINESS_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          SUPABASE_SERVICE_ROLE_KEY: ""
+        run: npx vitest run src/test/b2_order_timeliness_read_contract.integration.test.ts --maxWorkers=1 --no-file-parallelism
+
       - name: F1.4 Storno payment-gate DB guard on the current schema (blocking)
         # T-G07-016 / K-G07-004: der Guard aus 20260926120000 existiert erst im
         # vollstaendigen, UNGEPINNTEN Migrationsstand. Die F1.4-Bloecke oben laufen auf
