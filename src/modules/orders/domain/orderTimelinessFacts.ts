@@ -65,7 +65,13 @@ const ORDER_PROMISED_DATE_LEGACY_CLASS = {
   DUE_DATE_ONLY: "nur_due_date",
   /** Nur das Legacy-Feld ist gesetzt, `due_date` fehlt. */
   PROMISED_ONLY: "nur_promised",
-  /** Beide gesetzt und in allen geprueften Zonen derselbe Kalendertag. */
+  /**
+   * Beide gesetzt und derselbe Kalendertag in Europe/Berlin — der einzigen
+   * kanonischen Zone (_MODULDOSSIERS/G04_AUFTRAEGE/02_FUNKTIONEN_ABLAEUFE.md:69
+   * "Zeitzone Europe/Berlin"). Nicht mehr "in allen geprueften Zonen": die
+   * frueher doppelt (UTC und Berlin) gepruefte Regel hat Termine als
+   * widerspruechlich gemeldet, die in der kanonischen Zone derselbe Tag sind.
+   */
   EQUAL: "gleich",
   /** Beide gesetzt, aber nicht derselbe Kalendertag (F-G04-007-Fehlerfall). */
   CONFLICTING: "widerspruechlich",
@@ -174,7 +180,7 @@ export type OrderTimelinessValue<T> =
       missingReason: OrderTimelinessMissingReason;
     };
 
-/** Auswertungsfenster, Kalendertage in UTC, beide Grenzen inklusiv. */
+/** Auswertungsfenster, Kalendertage in Europe/Berlin, beide Grenzen inklusiv. */
 export type OrderTimelinessRange = {
   from: string;
   to: string;
@@ -188,7 +194,12 @@ export type OrderTimelinessFact = {
   /** Aggregatversion der gelesenen Auftragszeile (`orders.version`). */
   orderVersion: number;
   lifecycleStatus: string;
-  /** Bestaetigter Auftragstermin als UTC-Kalendertag (`YYYY-MM-DD`). */
+  /**
+   * Bestaetigter Auftragstermin als Europe/Berlin-Kalendertag (`YYYY-MM-DD`),
+   * der einzigen kanonischen Zone. `orders.due_date` ist
+   * `timestamp without time zone`, traegt den Tag also schon zonenlos; es wird
+   * deshalb nichts umgerechnet, nur der Tag abgelesen.
+   */
   promisedDate: OrderTimelinessValue<string>;
   /** Fertig-Zeitpunkt als UTC-Instant, aktueller Wert aus `completed_date`. */
   finishedAt: OrderTimelinessValue<string>;
@@ -280,6 +291,17 @@ function toIsoInstant(value: Date | string | null | undefined): string | null {
   return toInstant(value)?.toISOString() ?? null;
 }
 
+/**
+ * Liest den Kalendertag ab. Der Name sagt UTC, weil hier wirklich der UTC-Tag
+ * des normalisierten Instants gelesen wird — fuer den einzigen Aufrufer
+ * (`derivePromisedDate` auf `orders.due_date`) ist das dennoch der
+ * Europe/Berlin-Kalendertag und keine Umrechnung: die Spalte ist
+ * `timestamp without time zone`, der Port projiziert sie mit einem literalen
+ * `Z`-Suffix, und `toInstant` liest sie deshalb unverschoben. Was hier
+ * herauskommt, ist damit exakt der gespeicherte Tag. Die Umbenennung dieser
+ * Funktion ist eine reine Namenskorrektur und bleibt bewusst ausserhalb dieses
+ * Pakets (Kommentar-Scope).
+ */
 function toUtcCalendarDay(value: Date | string | null | undefined): string | null {
   return toIsoInstant(value)?.slice(0, 10) ?? null;
 }

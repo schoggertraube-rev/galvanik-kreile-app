@@ -41,7 +41,8 @@
   "capabilities": [],
   "migrations": [
     "20260927120000_b2_order_timeliness_read_contract.sql",
-    "20260928090000_b2_order_timeliness_legacy_class.sql"
+    "20260928090000_b2_order_timeliness_legacy_class.sql",
+    "20260928110000_b2_order_timeliness_berlin_zone.sql"
   ],
   "viewsFunctions": [
     "public.v_order_timeliness_orders_v1",

@@ -191,6 +191,7 @@ const DELETABLE = {
   aLegacyConflict: label("a-legacy-conflict"),
   aLegacyEqual: label("a-legacy-equal"),
   aLegacyOnly: label("a-legacy-only"),
+  aLegacyDstEqual: label("a-legacy-dst-equal"),
   bInWindow: label("b-in-window"),
 };
 /** Auftraege mit append-only Abhol-Ereignis; bleiben in der Datenbank. */
@@ -217,25 +218,34 @@ const ORDER_NUMBERS = {
   aLegacyConflict: `A-OTF-8-LEGCONF-${suffix}`,
   aLegacyEqual: `A-OTF-9-LEGEQ-${suffix}`,
   aLegacyOnly: `A-OTF-10-LEGONLY-${suffix}`,
+  aLegacyDstEqual: `A-OTF-11-LEGDST-${suffix}`,
   bPickedUp: `B-OTF-1-PICKED-${suffix}`,
   bInWindow: `B-OTF-2-IN-${suffix}`,
 };
 
 /**
- * Legacy-Terminfeld-Fixture (P1-2). Die drei Faelle sind so gewaehlt, dass sie die
- * fail-closed Zonenregel der View wirklich treffen:
- *  - CONFLICT: Kalendertag weicht in BEIDEN geprueften Zonen ab (UTC und
- *    Europe/Berlin), ist also unter jeder Zonenwahl ein Widerspruch.
+ * Legacy-Terminfeld-Fixture (P1-2). Die vier Faelle sind so gewaehlt, dass sie die
+ * Zonenregel der View wirklich treffen:
+ *  - CONFLICT: Kalendertag weicht in JEDER Zone ab (UTC wie Europe/Berlin), ist
+ *    also unter jeder Zonenwahl ein Widerspruch.
  *  - EQUAL: Mittagswert, damit UTC-Tag und Berlin-Tag identisch bleiben.
  *  - ONLY: kein `due_date`; klassifiziert als `nur_promised`. Dieser Fall ist ueber
  *    den Port strukturell unerreichbar, weil dessen Fenster `due_date >= from`
  *    filtert — er wird deshalb direkt auf der View geprueft.
+ *  - DST_EQUAL: der Grenzfall, an dem die Zonenwahl das Ergebnis KIPPT (P1-A,
+ *    20260928110000). 22:30Z im Juli ist in Europe/Berlin (Sommerzeit, UTC+2)
+ *    schon 00:30 des Folgetags, also derselbe Kalendertag wie `due_date`, in UTC
+ *    aber der Vortag. Nur dieser Fall unterscheidet die kanonische
+ *    Berlin-Regel von der frueheren UTC-und-Berlin-Doppelpruefung: die haette hier
+ *    faelschlich 'widerspruechlich' gemeldet.
  */
 const A_LEGACY_CONFLICT_DUE_AT = "2026-07-17T00:00:00Z";
 const A_LEGACY_CONFLICT_PROMISED_AT = "2026-07-14T12:00:00Z";
 const A_LEGACY_EQUAL_DUE_AT = "2026-07-13T00:00:00Z";
 const A_LEGACY_EQUAL_PROMISED_AT = "2026-07-13T12:00:00Z";
 const A_LEGACY_ONLY_PROMISED_AT = "2026-07-12T12:00:00Z";
+const A_LEGACY_DST_EQUAL_DUE_AT = "2026-07-15T00:00:00Z";
+const A_LEGACY_DST_EQUAL_PROMISED_AT = "2026-07-14T22:30:00Z";
 
 /** Erwartete Zeitpunkte; exakt die Werte, die die Fixtures schreiben. */
 const A_PICKED_UP_COMPLETED_AT = "2026-07-15T09:00:00.000Z";
@@ -485,6 +495,10 @@ beforeAll(async () => {
   await insertOrder({
     ...plainA(DELETABLE.aLegacyEqual, ORDER_NUMBERS.aLegacyEqual, A_LEGACY_EQUAL_DUE_AT),
     promisedDueDate: A_LEGACY_EQUAL_PROMISED_AT,
+  });
+  await insertOrder({
+    ...plainA(DELETABLE.aLegacyDstEqual, ORDER_NUMBERS.aLegacyDstEqual, A_LEGACY_DST_EQUAL_DUE_AT),
+    promisedDueDate: A_LEGACY_DST_EQUAL_PROMISED_AT,
   });
   await insertOrder({
     id: DELETABLE.aLegacyOnly,
@@ -896,6 +910,63 @@ describe("getOrderTimelinessFacts Legacy-Terminfeld promised_due_date", () => {
     // aus dem Port heraus und nicht wegen des Tenantfilters.
     const facts = await readFacts(TENANT_A, RANGE);
     expect(facts.facts.map((fact) => fact.orderId)).not.toContain(DELETABLE.aLegacyOnly);
+  });
+
+  it("klassifiziert den Sommerzeit-Grenzfall nach Europe/Berlin als 'gleich'", async () => {
+    // P1-A, supabase/migrations/20260928110000_b2_order_timeliness_berlin_zone.sql.
+    // Europe/Berlin ist die einzige kanonische Zone fuer Kalendertage
+    // (_MODULDOSSIERS/G04_AUFTRAEGE/02_FUNKTIONEN_ABLAEUFE.md:69; Praezedenzen
+    // 20260908101500_werkstatt_kpi_view.sql:45 und
+    // 20260821152949_f1_4_immutable_invoice_contract.sql:207). Dieser Auftrag ist
+    // der einzige Fixture-Fall, an dem die Zonenwahl das Ergebnis KIPPT: die
+    // frueher zusaetzlich gepruefte UTC-Bedingung haette hier 'widerspruechlich'
+    // gemeldet, obwohl beide Felder denselben Berliner Kalendertag tragen.
+    const [row] = await fixtureSql.begin(async (tx) => {
+      await tx`SELECT set_config('app.tenant_id', ${TENANT_A}, true)`;
+      return tx<{
+        promised_date_legacy_class: string;
+        due_day: string;
+        promised_day_berlin: string;
+        promised_day_utc: string;
+      }[]>`
+        SELECT
+          contract.promised_date_legacy_class,
+          to_char(contract.due_date::date, 'YYYY-MM-DD') AS due_day,
+          to_char((raw.promised_due_date AT TIME ZONE 'Europe/Berlin')::date, 'YYYY-MM-DD')
+            AS promised_day_berlin,
+          to_char((raw.promised_due_date AT TIME ZONE 'UTC')::date, 'YYYY-MM-DD')
+            AS promised_day_utc
+        FROM public.v_order_timeliness_orders_v1 contract
+        JOIN public.orders raw ON raw.id = contract.id
+        WHERE contract.id = ${DELETABLE.aLegacyDstEqual}
+      `;
+    });
+
+    // Ein Beweis in einem: die Klasse ist 'gleich', UND der Fall ist wirklich
+    // zonenabhaengig — der Berliner Tag stimmt mit due_date ueberein, der
+    // UTC-Tag nicht. Ohne diese Gegenprobe koennte der Fixture-Wert unbemerkt zu
+    // einem trivial gleichen Mittagswert verrutschen und der Test waere leer.
+    expect(row).toEqual({
+      promised_date_legacy_class: "gleich",
+      due_day: A_LEGACY_DST_EQUAL_DUE_AT.slice(0, 10),
+      promised_day_berlin: A_LEGACY_DST_EQUAL_DUE_AT.slice(0, 10),
+      promised_day_utc: A_LEGACY_DST_EQUAL_PROMISED_AT.slice(0, 10),
+    });
+    expect(row.promised_day_utc).not.toBe(row.due_day);
+
+    // Und ueber den Port: kein Konflikthinweis, und der bestaetigte Termin kommt
+    // weiter unveraendert aus due_date (A-G04-008, K-G04-008).
+    const facts = await readFacts(TENANT_A, RANGE);
+    const dstEqual = facts.facts.find((fact) => fact.orderId === DELETABLE.aLegacyDstEqual);
+    expect(dstEqual).toBeDefined();
+    expect(dstEqual?.consistency).not.toContain("promised_date_legacy_conflict");
+    expect(dstEqual?.consistency).toEqual([]);
+    expect(dstEqual?.promisedDate).toEqual({
+      value: A_LEGACY_DST_EQUAL_DUE_AT.slice(0, 10),
+      source: "orders.due_date",
+      provenance: { kind: "column", relation: "public.orders", column: "due_date" },
+      missingReason: null,
+    });
   });
 });
 

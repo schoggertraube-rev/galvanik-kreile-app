@@ -26,10 +26,27 @@ import {
  * tenantgebundene Lesen und die Fehlerabbildung.
  *
  * Annahme zum `range`-Parameter (im Dossier nur als SPEZ markiert): `from` und
- * `to` sind Kalendertage `YYYY-MM-DD` in UTC, beide Grenzen inklusiv, und das
- * Fenster filtert den bestaetigten Auftragstermin und damit die Bezugsgroesse der
- * Termintreue. Auftraege ohne bestaetigten Termin liegen in keinem Fenster und
- * erscheinen deshalb nicht in der Auswertung.
+ * `to` sind Kalendertage `YYYY-MM-DD` in Europe/Berlin, beide Grenzen inklusiv,
+ * und das Fenster filtert den bestaetigten Auftragstermin und damit die
+ * Bezugsgroesse der Termintreue. Auftraege ohne bestaetigten Termin liegen in
+ * keinem Fenster und erscheinen deshalb nicht in der Auswertung.
+ *
+ * Europe/Berlin ist die einzige kanonische Zone fuer Kalendertage
+ * (_MODULDOSSIERS/G04_AUFTRAEGE/02_FUNKTIONEN_ABLAEUFE.md:69 "Zeitzone
+ * Europe/Berlin"; Praezedenzen
+ * supabase/migrations/20260908101500_werkstatt_kpi_view.sql:45 und
+ * supabase/migrations/20260821152949_f1_4_immutable_invoice_contract.sql:207).
+ * Der Fenstervergleich unten braucht dafuer KEINE Zonenumrechnung und bekommt
+ * auch keine: `orders.due_date` ist `timestamp without time zone`, also bereits
+ * ein zonenlos notierter Kalendertag, und wird deshalb nur nach `date`
+ * verglichen. Ein `AT TIME ZONE` waere hier der Fehler, nicht die Korrektur —
+ * es wuerde den zonenlosen Wert erst als Instant interpretieren und den Tag
+ * damit verschieben. Zonenumrechnung braucht nur das Legacy-Feld
+ * `promised_due_date` (timestamptz), und die passiert in SQL in der View
+ * (supabase/migrations/20260928110000_b2_order_timeliness_berlin_zone.sql).
+ *
+ * Nicht betroffen ist `completed_date`: das ist ein UTC-Instant und keine
+ * Kalendertagsfrage, die Projektion unten bleibt deshalb `AT TIME ZONE 'UTC'`.
  *
  * Der Tenant kommt ausschliesslich aus der Session; es gibt keinen
  * tenantId-Parameter und damit keine Client-Autorisierung.
