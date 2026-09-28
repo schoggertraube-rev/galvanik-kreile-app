@@ -2,7 +2,7 @@
 
 # Dokumentenautorität
 
-Stand: 2026-09-10 — D-GOV-001
+Stand: 2026-09-28 — D-GOV-001 + D-GOV-002
 
 ## Zweck
 
@@ -20,7 +20,7 @@ Diese Datei ist ein Wegweiser, keine zweite Steuerungsquelle. Die maschinenlesba
 | auf `main` belegter Lieferstand | `docs/project/CURRENT_STATE.md` |
 | UI-Wahrheit | die in `docs/project/linie/00_UI_REFERENZEN_PFADE.md` explizit gelisteten neuesten Referenzen |
 
-Evidence beweist nur einen konkreten Stand. `00_JETZT`, `00_ABC` und `00_BIBEL` sind Pointer/Kurzansichten. Konflikt innerhalb einer Wahrheitsart bedeutet `BLOCKED_GOVERNANCE_CONFLICT`; Dateiname, Alter und Kommentar lösen ihn nicht auf. Abweichende Rangfolgen im erhaltenen historischen Text darunter sind durch D-GOV-001 supersediert.
+Evidence beweist nur einen konkreten Stand. `00_JETZT` und `00_ABC` sind Pointer/Kurzansichten; die externe `00_BIBEL` ist Owner-Eingabe und Historie. Konflikt innerhalb einer Wahrheitsart bedeutet `BLOCKED_GOVERNANCE_CONFLICT`; Dateiname, Alter und Kommentar lösen ihn nicht auf. Abweichende Rangfolgen im erhaltenen historischen Text darunter sind durch D-GOV-001 und D-GOV-002 supersediert.
 
 ## Autoritaetsbereiche
 
@@ -51,17 +51,22 @@ Diese Ebenen koennen voneinander abweichen. Dann gewinnt nicht still eine andere
 
 ### Owner-Beschlusslinie
 
-- `docs/project/linie/` enthält das master-first gepflegte Produktentscheidungsregister sowie
-  klassifizierte Repo-Referenzen und Derivate (Index `00_BIBEL_INDEX.md`; Repo-Hashes in
-  `docs/project/linie/README.md`). Ausschließlich das Register muss zur externen Master-Fassung
-  byte-identisch sein.
-- `KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md` ist die einzige Autorität für
-  Produktentscheidungen. Bauverträge, Leitplanken und frühere Mandate sind ausschließlich
+- `docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md` ist nach
+  D-GOV-002 die einzige operative Produktentscheidungsquelle für Writer, Reviewer, CI und
+  Lieferclaims. `docs/project/linie/` enthält daneben klassifizierte Repo-Referenzen und
+  Derivate (Index `00_BIBEL_INDEX.md`; Repo-Hashes in `docs/project/linie/README.md`).
+- Die externe `00_BIBEL` bleibt erhaltende Owner-Eingabe- und Historienquelle. Ein externer
+  Eintrag wird erst ausführbar, nachdem Quelle und Hash erfasst, der Inhalt widerspruchsfrei
+  in das Repo-Register übernommen, geprüft und nach `main` geliefert wurde. Eine
+  Byte-Identitäts- oder External-master-first-Pflicht besteht nicht mehr.
+- Bauverträge, Leitplanken und frühere Mandate sind ausschließlich
   `REFERENCE_ONLY_NON_EXECUTABLE`; bestätigte Regeln daraus gelten erst nach Aufnahme in die
   jeweils zuständige D-GOV-001-Quelle.
 - `00_AUTONOMER_BETRIEB_LEITPLANKEN.md` ist ausdrücklich supersedierte Referenz und besitzt
   keinen Vorrang vor Root-`AGENTS.md`, Mission oder Entscheidungsregister.
-- Owner = Siglinder. Der externe `00_BIBEL`-Master wird vor einer Registeränderung aktualisiert und die Repo-Kopie byte-identisch nachgezogen. Eine Abweichung ist `BLOCKED_GOVERNANCE_CONFLICT`, keine Erlaubnis zur stillen Auswahl. CI und Git können ausschließlich die Repo-Kopie prüfen.
+- Owner = Siglinder. Ein Konflikt zwischen externer Eingabe und Repo-Register ist
+  `BLOCKED_GOVERNANCE_CONFLICT`, bis er im Repo-Register entschieden und nach `main`
+  geliefert ist; die externe Fassung darf nicht still als Bauinput gewählt werden.
 
 ### Produktsteuerung und Erhalt
 
@@ -85,7 +90,9 @@ Folgende Inhalte dürfen Ideen, Historie oder Detailwissen liefern, aber keine a
 - lokale oder entfernte Branches, PRs und Worktrees,
 - nicht versionierte Planungs-, Agentur- oder Governance-Dateien.
 
-Bestätigte Inhalte daraus werden in `MASTERPLAN.md`, `CURRENT_STATE.md` oder `NON_LOSS_REGISTER.md` übernommen. Erst dann sind sie Teil der kanonischen Steuerung.
+Bestätigte Inhalte daraus werden je Wahrheitsart in das Produktentscheidungsregister,
+`MASTERPLAN.md`, `CURRENT_STATE.md` oder `NON_LOSS_REGISTER.md` übernommen. Erst dann sind
+sie Teil der kanonischen Steuerung.
 
 ## Bekannte stale oder konfliktträchtige Quellen
 
@@ -102,6 +109,8 @@ Die folgenden lokalen Quellen wurden als potenziell veraltet oder widersprüchli
 - lokale `tools/`- und `qg01_*`-Artefakte,
 - ältere Agentur-/Control-Plane-Masterpläne,
 - ältere Übergaben, deren Branch-/Deployment-Angaben nicht mehr mit `main` übereinstimmen.
+- die extern erhaltenen Entscheidungen `D-UI-V6-001` bis `D-UI-V6-004`; sie sind nach
+  D-GOV-002 `REJECTED_SUPERSEDED`, während repo-intern D-UI-V5-003 gilt.
 
 Diese Dateien werden nicht automatisch gelöscht. Sie werden erst nach Snapshot, Inhaltsprüfung und ausdrücklicher Freigabe archiviert oder entfernt.
 

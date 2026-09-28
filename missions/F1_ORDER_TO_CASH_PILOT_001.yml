@@ -1,9 +1,20 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: 0e2216d01d22edac765ffd527fa71c50158e25d3
-branch: path1/a2-phillip-recovery-20260919
+base_sha: 21a23567d51e4805f065ce9ae8c59bdc5faf9fa9
+branch: codex/kr-00b0-governance-bootstrap
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
+
+execution_program_20260928:
+  authority: OWNER_CURRENT_TASK_AND_D_GOV_002
+  status: ACTIVE_SERIAL_ALTSTAND_FIRST
+  plan: _MODULDOSSIERS/00_PROJEKT/BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
+  order: KR_00B0_GOVERNANCE -> KR_00B_TRUTH_SYNC -> KR_00D_ALTINVENTAR -> SMALL_CURRENT_MAIN_REBUILDS -> PRODUCT_PACKAGES -> PILOT -> LIVE_GATE
+  old_pr_disposition: PR_84_AND_PR_113_TO_PR_115_INVENTORY_THEN_REBUILD_OR_SUPERSEDE_NO_DIRECT_STACK_MERGE
+  product_truth: REPO_DECISION_REGISTER_ONLY_V5_D_UI_V5_003_V6_REJECTED
+  review_rule: ONE_BROAD_CLAUDE_REVIEW_MAX_ONE_CORRECTION_TARGETED_DELTA_REVIEW
+  merge_rule: REQUIRED_CHECKS_EXACT_SHA_CLEAN_TREE_AND_SEPARATE_PRODUCTION_EFFECT_AUTHORITY
+  production_rule: NO_PRODUCTION_WITHOUT_SEPARATE_EXPLICIT_OWNER_AUTHORITY
 
 # ── M0 Konsolidierungsstand ───────────────────────────────────────
 m0_phase_3_status: COMPLETE
@@ -36,9 +47,9 @@ delivery_order:
   - F1.5_BESTAETIGTER_ZAHLUNGSEINGANG
   - F1.6_REALER_PILOT
 
-active_package: PATH1_UI_CONVERGENCE
-active_package_status: A2_PHILLIP_FIVE_PORT_RECOVERY_CANDIDATE_PENDING_TEST_REVIEW_NO_UI_PASS
-next_gate_after_active_package: A2_FOCUSED_TESTS_THEN_INDEPENDENT_CLAUDE_REVIEW_THEN_COMMIT_PR_CI_PREVIEW
+active_package: KR-00B0-GOVERNANCE-BOOTSTRAP
+active_package_status: WRITING
+next_gate_after_active_package: LOCAL_GOVERNANCE_GATES_THEN_ONE_INDEPENDENT_CLAUDE_REVIEW
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
@@ -189,7 +200,7 @@ owner_v5_p3_core_surfaces_search_execution_20260916:
 rules:
   single_writer: true
   max_read_only_reviewers: 1
-  max_repair_loops_per_gate: 2
+  max_repair_loops_per_gate: 1
   f0_worktree_frozen: true
   protected_checkout_untouched: true
   no_parallel_architecture: true

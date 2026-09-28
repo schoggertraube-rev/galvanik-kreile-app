@@ -511,3 +511,47 @@ bleibt V5; die vier Einzelmocks (Phillip V4, Rolf V8, Auftragskarte V8, Kundenka
 
 **Wesentlicher Nachteil:** Zusatzideen, die V6 ueber V5 hinaus skizziert hatte, entfallen, bis sie
 gegebenenfalls als eigene Owner-Entscheidung erneut aufgenommen werden.
+
+## D-GOV-002 — Operative Entscheidungsquelle und serieller Altbestand-zuerst-Bau (Owner 2026-09-28)
+
+**Entscheidung/Wortlaut:** Das auf `origin/main` geführte
+`docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md` ist die
+einzige operative Produktentscheidungsquelle für Writer, Reviewer, CI und
+Lieferclaims. Die externe `00_BIBEL` ist eine erhaltende Owner-Eingabe- und
+Historienquelle. Ein externer Eintrag wird erst ausführbar, nachdem er
+widerspruchsfrei in das Repo-Register übernommen, geprüft und nach `main`
+geliefert wurde. Die frühere Pflicht „externer Master zuerst und anschließend
+byte-identisch“ ist damit supersediert; stattdessen werden externe Quelle,
+Hash, Disposition und Repo-Übernahme nachvollziehbar gebunden.
+
+Die in der externen `00_BIBEL` erhaltenen Einträge `D-UI-V6-001` bis
+`D-UI-V6-004` bleiben Historie, sind aber `REJECTED_SUPERSEDED` und kein
+Bauinput. Operativ gilt die jüngere Repo-Entscheidung `D-UI-V5-003`: V5 ist
+die einzige Zielvorlage, V6 ist verworfen. Kein V6-Datenobjekt, keine
+V6-Migration und kein V6-UI-Pfad darf aus der externen Historie aktiviert
+werden.
+
+Vor neuer Produktarbeit wird der gesamte aufgelaufene Bestand aus PR #84 und
+#113 bis #115 pfadweise inventarisiert. Verwertbarer, auf `main` fehlender
+Inhalt wird ausschließlich als kleines frisches Paket auf dem jeweils
+aktuellen `main` gebaut, einmal unabhängig breit geprüft, höchstens einmal
+korrigiert und nach Exact-SHA-Gates integriert. Unbrauchbare oder bereits
+supersedierte Teile erhalten Archivref, Inhaltsledger und begründete
+Disposition. Gestapelte Altbranches werden nicht direkt in die Hauptlinie
+übernommen.
+
+GitHub-Erreichbarkeit hebt kein Gate auf. Ein Merge nach `main` bleibt an
+Required Checks, Exact-SHA-Ratifikation, sauberen Arbeitsbaum und den
+Production-Grenzpunkt gebunden: Weil `main` nach belegtem Projektstand
+automatisch Vercel Production auslöst, ist vor dem ersten tatsächlichen Merge
+die ausdrückliche Freigabe dieser Folge oder ein autorisierter Weg ohne
+Production-Auslösung erforderlich.
+
+**Zweck:** Eine einzige ausführbare Linie ersetzt konkurrierende externe und
+repo-interne Masterbehauptungen. Altbestand wird einmal verlustfrei bereinigt,
+bevor die kleine serielle Paketfolge bis Pilot und Livegang beginnt.
+
+**Wesentlicher Nachteil:** Externe Ownernotizen benötigen einen zusätzlichen
+Repo-Sync und Merge, bevor sie ausführbar sind; Main-Merges können wegen der
+automatischen Production-Folge trotz technischer Mergefähigkeit an einem
+separaten Sicherheitsgate warten.
