@@ -16,16 +16,25 @@ execution_program_20260928:
   merge_rule: REQUIRED_CHECKS_EXACT_SHA_CLEAN_TREE_AND_SEPARATE_PRODUCTION_EFFECT_AUTHORITY
   production_rule: NO_PRODUCTION_WITHOUT_SEPARATE_EXPLICIT_OWNER_AUTHORITY
   origin_main_reference: 21a23567d51e4805f065ce9ae8c59bdc5faf9fa9
-  queue_parent: KR-00B0-GOVERNANCE-BOOTSTRAP@037f2fd65635c646e895da0002b25e7740f9f4a2
-  queue_parent_status: CI_VERIFIED_AWAITING_EXTERNAL_MERGE_GATE
+  queue_parent: KR-00B-TRUTH-SYNC@26eab1196f20f1e9f80e6a740afa31247434ebf4
+  queue_parent_status: REVIEWED_CANDIDATE_PENDING_MAIN_BASE_CI_AND_EXTERNAL_MERGE_GATE
+  queue_parent_review:
+    model: claude-opus-5
+    session_id: 243682ee-34f0-4a2e-aa5a-bfe620689990
+    correction_rounds: 1
+    delta_review_result: PASS_DELTA_NO_OPEN_P0_P1_P2
+    evidence: _MODULDOSSIERS/00_PROJEKT/KR-00B_CLAUDE_REVIEW_2026-09-28.md
+    evidence_sha256: 0DFB902087036A31519B39BB3433320A0437AA7E6A12CA7D4CC12DD834C6A48F
   queue_rule: EXACT_PARENT_ONE_WRITER_ONE_REVIEWER_NO_DELIVERY_CLAIM_REVERIFY_AFTER_EACH_REAL_MAIN_MERGE
   kreile_pl_session: 01a0ce4b-1843-7361-9ffc-47933f9ecdde
   build_coordinator_and_future_merge_actor: 01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
   current_state_drift: RESOLVED_IN_KR_00D_CANDIDATE_MAIN_REFERENCE_21A23567_NO_DELIVERY_CLAIM
   current_package: KR-00D-ALTINVENTAR
   current_package_parent: 26eab1196f20f1e9f80e6a740afa31247434ebf4
-  current_package_status: QUEUED_CANDIDATE
+  current_package_status: CORRECTED_ONCE_PENDING_TARGETED_DELTA_REVIEW
   current_package_remote_freeze: PENDING_AFTER_COMMIT_AND_LOCAL_GATES
+  current_package_broad_review: CLAUDE_OPUS_5_SESSION_FDE5A065_FAIL_OPEN_P1_1_P1_2_P2_1
+  current_package_correction_rounds: 1_OF_1
   archive_refs: archive/pr-84-9845e91e|archive/pr-113-e477e6b2|archive/pr-114-0d3bacc6|archive/pr-115-71dbc815
   automations_disabled: 9_OF_9
 
@@ -61,8 +70,8 @@ delivery_order:
   - F1.6_REALER_PILOT
 
 active_package: KR-00D-ALTINVENTAR
-active_package_status: QUEUED_CANDIDATE
-next_gate_after_active_package: INDEPENDENT_EXACT_SHA_CLAUDE_REVIEW
+active_package_status: CORRECTED_ONCE_PENDING_TARGETED_DELTA_REVIEW
+next_gate_after_active_package: TARGETED_DELTA_REVIEW_OF_KR00D_R1_P1_1_P1_2_P2_1
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
