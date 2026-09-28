@@ -1,7 +1,7 @@
 schema_version: 1
 package_id: KR-00B-TRUTH-SYNC
 project: GALVANIK_KREILE_WERKSTATTCockpit
-state: LOCAL_VERIFIED
+state: CORRECTED_ONCE_PENDING_TARGETED_DELTA_REVIEW
 origin_main_sha: 21a23567d51e4805f065ce9ae8c59bdc5faf9fa9
 queue_parent_sha: 037f2fd65635c646e895da0002b25e7740f9f4a2
 base_sha: 037f2fd65635c646e895da0002b25e7740f9f4a2
@@ -38,7 +38,7 @@ source_locks:
     status: FINAL_AFTER_ONE_OPUS_REDTEAM__OWNER_EXECUTION_AMENDMENT_2026-09-28
   - source: external_session_control_after_sync
     location: ../AGENTS.md
-    sha256: 69C628BE6D3706D66E11FA1265EA9C24B05E43A26EE959137915C483D66BD0B6
+    sha256: D5FC6CEEA1472C614D6D86E18504DB7D7EDEC2DB5DAED6CC494B8FE8AC3B22B2
     status: EXTERNAL_SESSION_CONTROL_CORRECTED_NOT_PRODUCT_TRUTH
 repo_allowlist:
   - docs/delivery/packages/KR-00B-TRUTH-SYNC.yaml
@@ -113,7 +113,7 @@ local_gate_evidence:
   module_gates: PASS
   no_fake_production: PASS
   oe_disposition_rows: PASS_33_OF_33
-  payment_term_readback: PASS_NET_30_ONLY_IN_EXPLICIT_SUPERSESSION_TEXT
+  payment_term_readback: PASS_AUTHORITATIVE_SOURCES_ONLY__STALE_NET_30_REMAINS_IN_HISTORICAL_NON_AUTHORITATIVE_PL_BRIEFING_2026_09_05_L20
   module_map_readback: PASS_M01_M02_M03_LATER_AND_ANALYSIS_MENU_AFTER_BINDING
   actor_readback: PASS_PL_AND_BUILD_COORDINATOR_BOUND
   external_stale_marker_readback: PASS_NONE
@@ -128,4 +128,25 @@ non_required_but_must_pass:
 production_effect: NONE_BEFORE_MAIN_MERGE
 next_packages:
   - KR-00D-ALTINVENTAR
-findings: []
+findings:
+  - id: KR00B-R1-P1-1
+    severity: P1
+    status: CORRECTED_ONCE
+    statement: >-
+      CURRENT_STATE.md belegt noch main@13240de2 und ist damit stale gegen
+      origin/main@21a23567; die vorwaertsgerichtete Aufloesung ist im
+      Altinventar-Paket KR-00D gebunden, ohne CURRENT_STATE ausserhalb dieser
+      Allowlist zu veraendern.
+  - id: KR00B-R1-P2-1
+    severity: P2
+    status: CORRECTED_ONCE
+    statement: >-
+      Der Payment-Term-Readback ist auf autoritative Quellen begrenzt und
+      benennt die weiterhin erhaltene historische Netto-30-Aussage ehrlich.
+  - id: KR00B-R1-P2-2
+    severity: P2
+    status: CORRECTED_ONCE
+    statement: >-
+      BLOCKED_CAPABILITY_ADAPTER_MISSING ist in der externen Sitzungssteuerung
+      als Unterlabel von BLOCKED_EXTERNAL_PERMISSION abgebildet und erweitert
+      die Repository-Abschlussstatus nicht.

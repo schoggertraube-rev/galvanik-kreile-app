@@ -21,6 +21,7 @@ execution_program_20260928:
   queue_rule: EXACT_PARENT_ONE_WRITER_ONE_REVIEWER_NO_DELIVERY_CLAIM_REVERIFY_AFTER_EACH_REAL_MAIN_MERGE
   kreile_pl_session: 01a0ce4b-1843-7361-9ffc-47933f9ecdde
   build_coordinator_and_future_merge_actor: 01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  current_state_drift: CURRENT_STATE_AT_13240DE2_STALE_VS_ORIGIN_MAIN_21A23567_RESOLUTION_SCHEDULED_IN_KR_00D_ALTINVENTAR
 
 # ── M0 Konsolidierungsstand ───────────────────────────────────────
 m0_phase_3_status: COMPLETE
@@ -54,8 +55,8 @@ delivery_order:
   - F1.6_REALER_PILOT
 
 active_package: KR-00B-TRUTH-SYNC
-active_package_status: LOCAL_VERIFIED
-next_gate_after_active_package: ONE_INDEPENDENT_CLAUDE_REVIEW
+active_package_status: CORRECTED_ONCE_PENDING_TARGETED_DELTA_REVIEW
+next_gate_after_active_package: TARGETED_DELTA_REVIEW_OF_KR00B_R1_P1_1_P2_1_P2_2
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
