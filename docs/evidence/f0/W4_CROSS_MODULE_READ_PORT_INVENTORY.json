@@ -111,10 +111,6 @@
     "src/modules/customers/server/createCustomerCommand.ts": [
       "private.v_customer_create_receipts_v1"
     ],
-    "src/modules/orders/server/getOrderTimelinessFacts.ts": [
-      "public.v_order_timeliness_orders_v1",
-      "public.v_order_timeliness_pickup_events_v1"
-    ],
     "src/modules/quotes/server/quoteCommands.ts": [
       "private.v_open_quotes_v1",
       "private.v_quote_conversion_receipts_v1",
@@ -252,14 +248,6 @@
         "private.v_quote_conversion_receipts_v1",
         "private.v_quote_update_receipts_v1",
         "private.v_quotes_v1"
-      ],
-      "requiredLegacySource": null
-    },
-    {
-      "path": "supabase/migrations/20260927120000_b2_order_timeliness_read_contract.sql",
-      "requiredSecurityInvokerViews": [
-        "public.v_order_timeliness_orders_v1",
-        "public.v_order_timeliness_pickup_events_v1"
       ],
       "requiredLegacySource": null
     }
