@@ -1,8 +1,8 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: 21a23567d51e4805f065ce9ae8c59bdc5faf9fa9
-branch: codex/kr-00b0-governance-bootstrap
+base_sha: 037f2fd65635c646e895da0002b25e7740f9f4a2
+branch: codex/kr-00b-truth-sync
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
 execution_program_20260928:
@@ -15,6 +15,12 @@ execution_program_20260928:
   review_rule: ONE_BROAD_CLAUDE_REVIEW_MAX_ONE_CORRECTION_TARGETED_DELTA_REVIEW
   merge_rule: REQUIRED_CHECKS_EXACT_SHA_CLEAN_TREE_AND_SEPARATE_PRODUCTION_EFFECT_AUTHORITY
   production_rule: NO_PRODUCTION_WITHOUT_SEPARATE_EXPLICIT_OWNER_AUTHORITY
+  origin_main_reference: 21a23567d51e4805f065ce9ae8c59bdc5faf9fa9
+  queue_parent: KR-00B0-GOVERNANCE-BOOTSTRAP@037f2fd65635c646e895da0002b25e7740f9f4a2
+  queue_parent_status: CI_VERIFIED_AWAITING_EXTERNAL_MERGE_GATE
+  queue_rule: EXACT_PARENT_ONE_WRITER_ONE_REVIEWER_NO_DELIVERY_CLAIM_REVERIFY_AFTER_EACH_REAL_MAIN_MERGE
+  kreile_pl_session: 01a0ce4b-1843-7361-9ffc-47933f9ecdde
+  build_coordinator_and_future_merge_actor: 01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
 
 # ── M0 Konsolidierungsstand ───────────────────────────────────────
 m0_phase_3_status: COMPLETE
@@ -47,9 +53,9 @@ delivery_order:
   - F1.5_BESTAETIGTER_ZAHLUNGSEINGANG
   - F1.6_REALER_PILOT
 
-active_package: KR-00B0-GOVERNANCE-BOOTSTRAP
-active_package_status: AWAITING_INDEPENDENT_REVIEW
-next_gate_after_active_package: LOCAL_GOVERNANCE_GATES_THEN_ONE_INDEPENDENT_CLAUDE_REVIEW
+active_package: KR-00B-TRUTH-SYNC
+active_package_status: LOCAL_VERIFIED
+next_gate_after_active_package: ONE_INDEPENDENT_CLAUDE_REVIEW
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
@@ -76,7 +82,7 @@ f1_5_roles_rule: NO_GENERIC_PERM_FINANCE # M3 §1: enges Gate je Uebergang
 # Owner-Entscheidung 2026-09-05 (beantwortet Bauvertrag §9):
 f1_5_adapter_order: BANK_RECONCILIATION_FIRST_THEN_MOLLIE # Adapter 1 = Bank-Abgleich (eigener Bauvertrag nach F1.5-Merge), Adapter 2 = Mollie
 f1_5_partial_payment: ALLOWED
-f1_5_skonto: RATIFIED_2_PERCENT_WITHIN_10_DAYS_NET_30 # Register #5; keine offene Produktentscheidung
+f1_5_skonto: RATIFIED_2_PERCENT_WITHIN_10_DAYS_FOR_AUTHORIZED_TARGET_INVOICE_THEN_NET_14 # D-GOV-003/OE-2609-11; alte Netto-30-Aussage supersediert
 f1_5_not_in_scope: MAHNWESEN; DATEV_EXPORT; E_RECHNUNG_VERSAND; BUCHHALTUNGSMODUL; CAMT_MT940_IMPORT(Adapter-1); MOLLIE(Adapter-2)
 f1_5_legacy_quarantine: src/lib/payments/mollieAdapter.ts; src/lib/payments/paymentProvider.ts; src/app/buchhaltung/zahlung/page.tsx; FinanzenDashboardClient.tsx # nicht reaktivieren, nicht loeschen (D-ARCH-008)
 f1_5_units: A_DATA_READPORT -> B_CONFIRM_PAYMENT+B2_PAYMENT_MODE_INTAKE -> C_GOODS_OUT_GATE -> D_UI -> D1_WERKSTATT_GOODS_OUT_ENTRY; T_SUPABASE_CLI_PIN
