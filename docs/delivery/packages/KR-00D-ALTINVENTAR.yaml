@@ -1,0 +1,75 @@
+schema_version: 1
+package_id: KR-00D-ALTINVENTAR
+project: GALVANIK_KREILE_WERKSTATTCockpit
+state: QUEUED_CANDIDATE
+queue_parent_sha: 26eab1196f20f1e9f80e6a740afa31247434ebf4
+base_sha: 26eab1196f20f1e9f80e6a740afa31247434ebf4
+origin_main_sha: 21a23567d51e4805f065ce9ae8c59bdc5faf9fa9
+target_sha: PENDING_AFTER_LOCAL_VERIFICATION
+branch: codex/kr-00d-altinventar
+goal: >-
+  PR 84, 113, 114 und 115 frisch und vollstaendig inventarisieren,
+  unveraenderliche Remote-Archivrefs setzen und ihre Restanteile ohne
+  Liefer-, Merge- oder Productionbehauptung genau den Folgepaketen zuordnen.
+active_mission_file: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+source_locks:
+  - source: origin/main
+    sha: 21a23567d51e4805f065ce9ae8c59bdc5faf9fa9
+  - source: KR-00B-TRUTH-SYNC
+    sha: 26eab1196f20f1e9f80e6a740afa31247434ebf4
+  - source: BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: EAEDDEF68C16BE403C6D05AD6F63234D4ACF75A762895F50008E07A59A782DC3
+  - source: BUILD_EXECUTION_LEDGER_2026-09-28.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: 78764C47ECC19BE53EDA20C3BBC91F8D0EF48BE872BEDB411C2E7C13AF84D63F
+  - source: KR-00B_CLAUDE_REVIEW_2026-09-28.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: 0DFB902087036A31519B39BB3433320A0437AA7E6A12CA7D4CC12DD834C6A48F
+repo_allowlist:
+  - docs/delivery/packages/KR-00D-ALTINVENTAR.yaml
+  - docs/project/ALT_PR_INVENTORY_2026-09-28.json
+  - docs/project/BRANCH_ARCHIVE_RECEIPTS.json
+  - docs/project/CURRENT_STATE.md
+  - docs/project/NON_LOSS_REGISTER.md
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+forbidden:
+  - src/**
+  - supabase/**
+  - package.json
+  - package-lock.json
+  - .github/**
+  - product_code_or_runtime_behavior
+  - auth_rls_roles_or_session_behavior
+  - provider_or_runtime_configuration
+  - remote_database_or_production_mutation
+  - merge_to_main
+new_objects_authority: NONE
+migration_status: NONE
+review_contract:
+  broad_claude_reviews: 1
+  max_correction_rounds: 1
+  delta_review_after_correction: true
+  reviewer_must_differ_from_writer: true
+production_effect: NONE_BEFORE_MAIN_MERGE
+archive_refs:
+  - archive/pr-84-9845e91e=9845e91e3003e81ff9f8b5b28bf8882dd12bf0d7
+  - archive/pr-113-e477e6b2=e477e6b2314d5a97575a32dc35ca0d16b55625d7
+  - archive/pr-114-0d3bacc6=0d3bacc6d929eb8f6102200fba0681c7335025c2
+  - archive/pr-115-71dbc815=71dbc8151b30a3aa964d5cd4ea3562b1f1c03647
+acceptance:
+  - id: KR00D-A1
+    statement: Vier Live-Heads, PR-Zustaende und Checks sind frisch belegt.
+  - id: KR00D-A2
+    statement: Vier Remote-Archivrefs existieren exakt auf den vier Head-SHAs.
+  - id: KR00D-A3
+    statement: Commit- und Dateiinventare sind vollstaendig, deterministisch und maschinenlesbar; ihre Hashes stimmen mit den Receipts.
+  - id: KR00D-A4
+    statement: Jede Quelle besitzt genau eine ehrliche Disposition und benannte Folgepakete; kein direkter Stack- oder Wholesale-Merge.
+  - id: KR00D-A5
+    statement: CURRENT_STATE nennt den realen main-SHA, ohne Kandidaten als Lieferung umzudeuten.
+  - id: KR00D-A6
+    statement: Exakt sechs Repo-Pfade und keine Produkt-, Daten- oder Provideraenderung.
+  - id: KR00D-A7
+    statement: Parent, Remote-Freeze, Manifest und Mission bilden eine lineare Kandidatenkette; alle neun Alt-Automatiken bleiben deaktiviert.
+next_allowed_package: KR-00D-INDEPENDENT-EXACT-SHA-CLAUDE-REVIEW
