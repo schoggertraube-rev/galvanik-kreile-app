@@ -1,0 +1,484 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://galvanik-kreile.local/contracts/PACKAGE_MANIFEST_SCHEMA_V2.json",
+  "title": "Kreile package manifest contract V2",
+  "description": "Immutable package contract. The active execution state remains exclusively in missions/F1_ORDER_TO_CASH_PILOT_001.yml; closure of an exact commit is recorded in an external Exact-SHA closure receipt.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "package_id",
+    "project",
+    "state",
+    "execution_state_source",
+    "queue_parent_sha",
+    "base_sha",
+    "origin_main_sha",
+    "target_sha",
+    "branch",
+    "goal",
+    "active_mission_file",
+    "dod_spec_approved_by",
+    "execution_actors",
+    "dependency",
+    "dossier_and_decision_ids",
+    "source_locks",
+    "repo_allowlist",
+    "forbidden",
+    "scope_budget",
+    "follow_up_packages",
+    "new_objects_authority",
+    "migration_status",
+    "invariants",
+    "visible_capabilities",
+    "review_contract",
+    "acceptance",
+    "local_gates",
+    "required_checks_after_push",
+    "non_required_but_must_pass",
+    "gate_mapping_contract",
+    "findings_ledger_contract",
+    "closure_receipt_contract",
+    "evidence_mode",
+    "resource_profile",
+    "findings",
+    "split_or_follow_up_decision",
+    "next_allowed_package"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 2
+    },
+    "package_id": {
+      "type": "string",
+      "pattern": "^KR-[0-9]{2}[A-Z0-9-]*$"
+    },
+    "project": {
+      "const": "GALVANIK_KREILE_WERKSTATTCockpit"
+    },
+    "state": {
+      "description": "State at contract issuance only; never the live execution state.",
+      "const": "CONTRACT_READY"
+    },
+    "execution_state_source": {
+      "const": "missions/F1_ORDER_TO_CASH_PILOT_001.yml"
+    },
+    "queue_parent_sha": {
+      "$ref": "#/definitions/sha"
+    },
+    "base_sha": {
+      "$ref": "#/definitions/sha"
+    },
+    "origin_main_sha": {
+      "$ref": "#/definitions/sha"
+    },
+    "target_sha": {
+      "$ref": "#/definitions/sha_or_pending"
+    },
+    "branch": {
+      "type": "string",
+      "pattern": "^codex/kr-[a-z0-9-]+$"
+    },
+    "goal": {
+      "type": "string",
+      "minLength": 40
+    },
+    "active_mission_file": {
+      "const": "missions/F1_ORDER_TO_CASH_PILOT_001.yml"
+    },
+    "dod_spec_approved_by": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authority", "date", "instruction"],
+      "properties": {
+        "authority": {
+          "type": "string",
+          "minLength": 1
+        },
+        "date": {
+          "type": "string",
+          "format": "date"
+        },
+        "instruction": {
+          "type": "string",
+          "minLength": 20
+        }
+      }
+    },
+    "execution_actors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "writer",
+        "implementation_reviewer",
+        "specialist_gate_reviewers",
+        "authorized_future_merge_actor",
+        "merge_limit"
+      ],
+      "properties": {
+        "writer": {
+          "type": "string",
+          "minLength": 1
+        },
+        "implementation_reviewer": {
+          "type": "string",
+          "minLength": 1
+        },
+        "specialist_gate_reviewers": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kreile_pl_session": {
+          "type": "string",
+          "minLength": 1
+        },
+        "authorized_future_merge_actor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "merge_limit": {
+          "const": "NO_MAIN_MERGE_UNTIL_EXPLICIT_PRODUCTION_EFFECT_AUTHORITY"
+        }
+      }
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "package",
+        "candidate_sha",
+        "status",
+        "review_result",
+        "review_evidence",
+        "review_evidence_sha256"
+      ],
+      "properties": {
+        "package": {
+          "type": "string",
+          "minLength": 1
+        },
+        "candidate_sha": {
+          "$ref": "#/definitions/sha"
+        },
+        "status": {
+          "const": "REVIEWED_CANDIDATE_PENDING_MAIN_BASE_CI_AND_EXTERNAL_MERGE_GATE"
+        },
+        "review_result": {
+          "type": "string",
+          "pattern": "^PASS"
+        },
+        "review_evidence": {
+          "type": "string",
+          "minLength": 1
+        },
+        "review_evidence_sha256": {
+          "$ref": "#/definitions/sha256"
+        }
+      }
+    },
+    "dossier_and_decision_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "source_locks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/definitions/source_lock"
+      }
+    },
+    "repo_allowlist": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/definitions/repo_path"
+      }
+    },
+    "forbidden": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "scope_budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_product_files",
+        "max_handwritten_product_lines",
+        "max_new_migrations",
+        "planned_product_files",
+        "planned_governance_files"
+      ],
+      "properties": {
+        "max_product_files": {
+          "const": 8
+        },
+        "max_handwritten_product_lines": {
+          "const": 800
+        },
+        "max_new_migrations": {
+          "const": 1
+        },
+        "planned_product_files": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8
+        },
+        "planned_governance_files": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "follow_up_packages": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^KR-"
+      }
+    },
+    "new_objects_authority": {
+      "type": "string",
+      "minLength": 1
+    },
+    "migration_status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "invariants": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "data_truth",
+        "tenant_and_rls",
+        "roles_and_commands",
+        "receipt_and_readback",
+        "reload_and_race",
+        "error_behavior",
+        "rollback"
+      ],
+      "properties": {
+        "data_truth": { "type": "string", "minLength": 1 },
+        "tenant_and_rls": { "type": "string", "minLength": 1 },
+        "roles_and_commands": { "type": "string", "minLength": 1 },
+        "receipt_and_readback": { "type": "string", "minLength": 1 },
+        "reload_and_race": { "type": "string", "minLength": 1 },
+        "error_behavior": { "type": "string", "minLength": 1 },
+        "rollback": { "type": "string", "minLength": 1 }
+      }
+    },
+    "visible_capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["registry_changes", "quality_no_fake_production"],
+      "properties": {
+        "registry_changes": { "type": "string", "minLength": 1 },
+        "quality_no_fake_production": { "type": "string", "minLength": 1 }
+      }
+    },
+    "review_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "broad_claude_reviews",
+        "max_correction_rounds",
+        "delta_review_after_correction",
+        "reviewer_must_differ_from_writer",
+        "specialist_gate_reviewers_are_not_implementation_reviewers"
+      ],
+      "properties": {
+        "broad_claude_reviews": { "const": 1 },
+        "max_correction_rounds": { "const": 1 },
+        "delta_review_after_correction": { "const": true },
+        "reviewer_must_differ_from_writer": { "const": true },
+        "specialist_gate_reviewers_are_not_implementation_reviewers": { "const": true }
+      }
+    },
+    "acceptance": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "statement", "evidence"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "statement": { "type": "string", "minLength": 10 },
+          "evidence": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "local_gates": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "local_gate_evidence": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    },
+    "required_checks_after_push": {
+      "type": "array",
+      "minItems": 3,
+      "uniqueItems": true,
+      "items": {
+        "enum": ["quality", "agentur-gate", "Fresh Supabase replay"]
+      }
+    },
+    "non_required_but_must_pass": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": ["ratchet"]
+      }
+    },
+    "gate_mapping_contract": {
+      "const": "docs/delivery/GATE_MAPPING_V1.yaml"
+    },
+    "findings_ledger_contract": {
+      "const": "docs/delivery/FINDINGS_LEDGER_SCHEMA_V1.json"
+    },
+    "closure_receipt_contract": {
+      "const": "docs/delivery/EXACT_SHA_CLOSURE_RECEIPT_SCHEMA_V1.json"
+    },
+    "evidence_mode": {
+      "enum": ["LOCAL_OUTAGE", "CI_FULL"]
+    },
+    "evidence_mode_status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "resource_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "heavy_profile",
+        "available_ram_mb_preflight",
+        "shell_probe_seconds_preflight",
+        "git_status_seconds_preflight",
+        "expected_runtime_minutes",
+        "cleanup_receipt"
+      ],
+      "properties": {
+        "mode": {
+          "const": "SERIAL_NO_PARALLEL_BUILD_OR_TEST_WRITERS"
+        },
+        "heavy_profile": {
+          "enum": ["NONE", "DB_ONLY", "DB_PLUS_ONE_BROWSER"]
+        },
+        "available_ram_mb_preflight": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "shell_probe_seconds_preflight": {
+          "type": "number",
+          "minimum": 0
+        },
+        "git_status_seconds_preflight": {
+          "type": "number",
+          "minimum": 0
+        },
+        "expected_runtime_minutes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cleanup_receipt": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/finding"
+      }
+    },
+    "split_or_follow_up_decision": {
+      "type": "string",
+      "minLength": 20
+    },
+    "next_allowed_package": {
+      "type": "string",
+      "minLength": 1
+    },
+    "package_specific": {
+      "type": "object",
+      "description": "Domain-specific contract terms remain nested here so the core delivery contract stays closed.",
+      "additionalProperties": true
+    }
+  },
+  "definitions": {
+    "sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9A-F]{64}$"
+    },
+    "sha_or_pending": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|PENDING_AFTER_LOCAL_VERIFICATION)$"
+    },
+    "repo_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![A-Za-z]:)(?!/)(?!.*\\\\)[^\\u0000]+$"
+    },
+    "source_lock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "sha256"],
+      "properties": {
+        "source": { "type": "string", "minLength": 1 },
+        "location": { "type": "string", "minLength": 1 },
+        "repo_commit": { "$ref": "#/definitions/sha" },
+        "sha256": { "$ref": "#/definitions/sha256" },
+        "status": { "type": "string", "minLength": 1 }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "severity", "status", "summary", "evidence"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "severity": { "enum": ["P0", "P1", "P2"] },
+        "status": {
+          "enum": [
+            "OPEN",
+            "FIXED",
+            "DEFERRED_WITH_PACKAGE",
+            "ACCEPTED_RISK_WITH_OWNER",
+            "NOT_APPLICABLE_WITH_EVIDENCE"
+          ]
+        },
+        "summary": { "type": "string", "minLength": 1 },
+        "evidence": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "follow_up_package": { "type": ["string", "null"] },
+        "fix_sha": {
+          "anyOf": [
+            { "$ref": "#/definitions/sha" },
+            { "type": "null" }
+          ]
+        }
+      }
+    }
+  }
+}

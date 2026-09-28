@@ -1,0 +1,190 @@
+schema_version: 2
+package_id: KR-00E-DELIVERY-CONTRACT
+project: GALVANIK_KREILE_WERKSTATTCockpit
+state: CONTRACT_READY
+execution_state_source: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+queue_parent_sha: 8660dcfe30b2cefbfe330e9908d03f855f7558e9
+base_sha: 8660dcfe30b2cefbfe330e9908d03f855f7558e9
+origin_main_sha: 21a23567d51e4805f065ce9ae8c59bdc5faf9fa9
+target_sha: PENDING_AFTER_LOCAL_VERIFICATION
+branch: codex/kr-00e-delivery-contract
+goal: >-
+  Einen einzigen maschinenlesbaren Liefervertrag fuer alle folgenden Kreile-
+  Pakete festlegen: unveraenderlicher Paketauftrag, getrennte aktive Mission,
+  genau ein P0/P1/P2-Findings-Ledger, externer Exact-SHA-Abschlussreceipt und
+  ehrliche Gateabbildung ohne Main-, Required-Check- oder Productionclaim.
+active_mission_file: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+dod_spec_approved_by:
+  authority: OWNER_CURRENT_TASK
+  date: "2026-09-29"
+  instruction: >-
+    Den redteam-geprueften Plan Paket fuer Paket umsetzen; bei gesperrtem
+    Merge jeden exakten Kandidaten sauber ablegen und nur auf dem vollstaendig
+    geprueften Parent seriell fortsetzen.
+execution_actors:
+  writer: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  implementation_reviewer: CLAUDE_OPUS_NEW_READ_ONLY_SESSION_AFTER_EXACT_SHA
+  specialist_gate_reviewers: GITHUB_ACTIONS_REQUIRED_CHECK_RUNNERS_AFTER_PUSH
+  kreile_pl_session: 01a0ce4b-1843-7361-9ffc-47933f9ecdde
+  authorized_future_merge_actor: 01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  merge_limit: NO_MAIN_MERGE_UNTIL_EXPLICIT_PRODUCTION_EFFECT_AUTHORITY
+dependency:
+  package: KR-00C-MISSION-CONTRACT
+  candidate_sha: 8660dcfe30b2cefbfe330e9908d03f855f7558e9
+  status: REVIEWED_CANDIDATE_PENDING_MAIN_BASE_CI_AND_EXTERNAL_MERGE_GATE
+  review_result: PASS_EXACT_SHA_NO_OPEN_P0_P1_P2
+  review_evidence: ../_MODULDOSSIERS/00_PROJEKT/KR-00C_CLAUDE_REVIEW_2026-09-29.md
+  review_evidence_sha256: C331D4EB1892303828B0800EA03FE5519616DFB6DBAA941158D21452B430EBD1
+dossier_and_decision_ids:
+  - BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL_SECTION_3_1
+  - BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL_SECTION_3_2
+  - BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL_SECTION_3_3
+  - BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL_SECTION_4_KR_00E
+  - D-GOV-001
+  - D-GOV-002
+source_locks:
+  - source: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+    repo_commit: 8660dcfe30b2cefbfe330e9908d03f855f7558e9
+    sha256: 5C7591190DAC3F9026FA4A374C12AC819C143E33DD31765F4664BAE0727951C7
+  - source: AGENTS.md
+    repo_commit: 8660dcfe30b2cefbfe330e9908d03f855f7558e9
+    sha256: 7A5FBDBEAF295747AE8B1A648CE5D31FCE32D36B69064823AA63DB564DE0477D
+  - source: BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: EAEDDEF68C16BE403C6D05AD6F63234D4ACF75A762895F50008E07A59A782DC3
+  - source: BUILD_EXECUTION_LEDGER_2026-09-28.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: D94BD49365ACEBE19693B0B36319872ADDAF37E986C0B7AB8894F315807A2DE2
+  - source: KR-00C_CLAUDE_REVIEW_2026-09-29.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: C331D4EB1892303828B0800EA03FE5519616DFB6DBAA941158D21452B430EBD1
+    status: PASS_EXACT_SHA_NO_OPEN_P0_P1_P2
+repo_allowlist:
+  - docs/delivery/packages/KR-00E-DELIVERY-CONTRACT.yaml
+  - docs/delivery/packages/PACKAGE_MANIFEST_SCHEMA_V2.json
+  - docs/delivery/FINDINGS_LEDGER_SCHEMA_V1.json
+  - docs/delivery/EXACT_SHA_CLOSURE_RECEIPT_SCHEMA_V1.json
+  - docs/delivery/GATE_MAPPING_V1.yaml
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+forbidden:
+  - src/**
+  - supabase/**
+  - package.json
+  - package-lock.json
+  - .github/**
+  - quality/**
+  - scripts/**
+  - docs/project/**
+  - product_code_or_runtime_behavior
+  - auth_rls_roles_or_session_behavior
+  - provider_or_runtime_configuration
+  - remote_database_or_production_mutation
+  - pull_request_or_merge_to_main
+scope_budget:
+  max_product_files: 8
+  max_handwritten_product_lines: 800
+  max_new_migrations: 1
+  planned_product_files: 0
+  planned_governance_files: 6
+follow_up_packages:
+  - KR-00G-DOCS-IMPORT
+  - KR-00F-ROLLING-MANIFESTS
+new_objects_authority: OWNER_RATIFIED_GOVERNANCE_CONTRACT_FILES_ONLY
+migration_status: NONE
+invariants:
+  data_truth: NOT_APPLICABLE_GOVERNANCE_ONLY
+  tenant_and_rls: NOT_APPLICABLE_NO_DATA_OR_POLICY_CHANGE
+  roles_and_commands: NOT_APPLICABLE_NO_PRODUCT_ROLE_OR_COMMAND_CHANGE
+  receipt_and_readback: EXACT_PARENT_REMOTE_SHA_REVIEW_RECEIPT_HASH_AND_SCHEMA_NEGATIVE_TESTS
+  reload_and_race: NOT_APPLICABLE_NO_RUNTIME_STATE
+  error_behavior: FAIL_CLOSED_ON_SCHEMA_PARENT_ALLOWLIST_GATE_OR_DELIVERY_TRUTH_MISMATCH
+  rollback: ABANDON_CANDIDATE_BEFORE_DESCENDANTS_NO_DESTRUCTIVE_REWRITE
+visible_capabilities:
+  registry_changes: NONE
+  quality_no_fake_production: REQUIRED_DEFENSIVE_GATE
+review_contract:
+  broad_claude_reviews: 1
+  max_correction_rounds: 1
+  delta_review_after_correction: true
+  reviewer_must_differ_from_writer: true
+  specialist_gate_reviewers_are_not_implementation_reviewers: true
+acceptance:
+  - id: KR00E-A1
+    statement: Das V2-Manifestschema kompiliert und validiert dieses Manifest mit geschlossener Kernstruktur und explizitem Erweiterungscontainer.
+    evidence: AJV_COMPILE_AND_VALIDATE_KR_00E_MANIFEST
+  - id: KR00E-A2
+    statement: Das Findings-Schema erzwingt genau eine breite Review, hoechstens eine Korrektur und eine gezielte Delta-Pruefung nur nach Korrektur.
+    evidence: AJV_FINDINGS_POSITIVE_AND_NEGATIVE_MUTATION_TESTS
+  - id: KR00E-A3
+    statement: Der Exact-SHA-Receipt trennt Kandidat, Main-Lieferung und Productionwirkung und verweigert einen Kandidaten mit Main-Claim.
+    evidence: AJV_CLOSURE_POSITIVE_AND_FALSE_MAIN_CLAIM_NEGATIVE_TESTS
+  - id: KR00E-A4
+    statement: Die Gateabbildung unterscheidet lokale, Branch-, Main-Basis-, Preview-, Merge- und Post-Merge-Nachweise ohne unbewiesenen Required-Check-Claim.
+    evidence: YAML_GATE_MAP_READBACK_AND_WORKFLOW_TRIGGER_COMPARISON
+  - id: KR00E-A5
+    statement: Die Mission bindet exakt KR-00E auf Parent 8660dcfe und klassifiziert die drei alten owner_v5-Ausfuehrungsbloecke als historische Nicht-Aktivitaet.
+    evidence: MISSION_ACTIVE_POINTER_AND_HISTORICAL_CLASSIFICATION_READBACK
+  - id: KR00E-A6
+    statement: Der Diff umfasst genau sechs erlaubte Governance-Pfade und keinerlei Produkt-, Daten-, Provider-, Workflow- oder Runtimeaenderung.
+    evidence: git diff --name-only 8660dcfe30b2cefbfe330e9908d03f855f7558e9..HEAD
+  - id: KR00E-A7
+    statement: Der KR-00C-Parent bleibt exakter Remote-Freeze mit unveraendertem Review-Receipt und ohne Main- oder Productionclaim.
+    evidence: REMOTE_PARENT_AND_REVIEW_RECEIPT_SHA256_READBACK
+local_gates:
+  - AJV_SCHEMA_COMPILE_MANIFEST_FINDINGS_AND_CLOSURE
+  - AJV_POSITIVE_AND_NEGATIVE_CONTRACT_TESTS
+  - YAML_PARSE_MANIFEST_MISSION_AND_GATE_MAPPING
+  - npm run quality:authority-gate:selftest
+  - npm run quality:authority-gate
+  - npm run quality:module-gates
+  - npm run quality:no-fake-production
+  - npm run lint:ratchet
+  - git diff --check
+  - npm run verify:precommit
+local_gate_evidence:
+  schema_compile_and_contract_mutations: PASS_3_SCHEMAS_AND_3_NEGATIVE_MUTATIONS
+  yaml_parse_and_mission_readback: PASS
+  parent_remote_and_receipt_readback: PASS_PREFLIGHT
+  authority_gate_selftest: PASS_NEGATIVE_CASES_27_OF_27
+  authority_gate: PASS_TRUTH_TYPES_7_UI_REFERENCES_4
+  module_gates: PASS
+  no_fake_production: PASS_REACHABLE_MOCKS_0_UNREGISTERED_VISIBLE_0
+  git_diff_check: PASS
+  precommit_typescript_staged_lint_unit: PENDING_AT_COMMIT
+  lint_ratchet: PENDING_ON_EXACT_SHA
+  github_required_checks: PENDING_REAL_MAIN_BASE_MERGE_WINDOW
+required_checks_after_push:
+  - quality
+  - agentur-gate
+  - Fresh Supabase replay
+non_required_but_must_pass:
+  - ratchet
+gate_mapping_contract: docs/delivery/GATE_MAPPING_V1.yaml
+findings_ledger_contract: docs/delivery/FINDINGS_LEDGER_SCHEMA_V1.json
+closure_receipt_contract: docs/delivery/EXACT_SHA_CLOSURE_RECEIPT_SCHEMA_V1.json
+evidence_mode: CI_FULL
+evidence_mode_status: BRANCH_AGENTUR_GATE_THEN_FULL_REQUIRED_CHECKS_AT_REAL_MAIN_BASE_WINDOW
+resource_profile:
+  mode: SERIAL_NO_PARALLEL_BUILD_OR_TEST_WRITERS
+  heavy_profile: NONE
+  available_ram_mb_preflight: 5912
+  shell_probe_seconds_preflight: 0.497
+  git_status_seconds_preflight: 0.157
+  expected_runtime_minutes: 30
+  cleanup_receipt: NO_PROJECT_CHILD_PROCESS_REMAINS_AND_WORKTREE_CLEAN
+findings: []
+split_or_follow_up_decision: >-
+  Offene P0/P1 nach der erlaubten Korrektur fuehren zu HALT_AND_REPLAN;
+  der Normalweg fuehrt genau zu KR-00G-DOCS-IMPORT.
+next_allowed_package: KR-00E-EXACT-SHA-CLAUDE-REVIEW
+package_specific:
+  contract_files:
+    manifest_schema: docs/delivery/packages/PACKAGE_MANIFEST_SCHEMA_V2.json
+    findings_schema: docs/delivery/FINDINGS_LEDGER_SCHEMA_V1.json
+    closure_schema: docs/delivery/EXACT_SHA_CLOSURE_RECEIPT_SCHEMA_V1.json
+    gate_mapping: docs/delivery/GATE_MAPPING_V1.yaml
+  legacy_manifest_policy: V1_FILES_REMAIN_IMMUTABLE_HISTORY_NEW_PACKAGES_USE_V2
+  receipt_location_policy: >-
+    Exact-SHA-Abschlussreceipts liegen ausserhalb des Kandidatencommits im
+    kanonischen Projektdossier, weil ein Commit seinen eigenen SHA und seinen
+    nachgelagerten Review nicht selbst wahrheitsgemaess enthalten kann.
