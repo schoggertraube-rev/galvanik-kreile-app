@@ -34,11 +34,11 @@ execution_program_20260928:
   current_state_drift: RESOLVED_IN_KR_00D_CANDIDATE_MAIN_REFERENCE_21A23567_NO_DELIVERY_CLAIM
   current_package: KR-00E-DELIVERY-CONTRACT
   current_package_parent: 8660dcfe30b2cefbfe330e9908d03f855f7558e9
-  current_package_status: WRITING_COMPLETE_PENDING_COMMIT_GATES_AND_EXACT_SHA_REVIEW
-  current_package_remote_freeze: PENDING_AFTER_COMMIT_LOCAL_GATES_AND_PUSH
-  current_package_broad_review: NOT_STARTED
-  current_package_correction_rounds: 0_OF_1
-  current_package_fast_gates: SCHEMA_YAML_AUTHORITY_MODULE_NO_FAKE_AND_DIFF_CHECK_PASS
+  current_package_status: CORRECTED_ONCE_PENDING_COMMIT_GATES_AND_TARGETED_DELTA_REVIEW
+  current_package_remote_freeze: INITIAL_CANDIDATE_63d592e7_REMOTE_REVIEWED_FAIL_OPEN_FINDINGS_CORRECTION_PENDING_FREEZE
+  current_package_broad_review: FAIL_OPEN_FINDINGS_SESSION_570b7ae3-ba27-4b55-8f38-2778ef39f402
+  current_package_correction_rounds: 1_OF_1_WRITTEN
+  current_package_fast_gates: CORRECTION_SCHEMA_YAML_AUTHORITY_MODULE_NO_FAKE_AND_DIFF_CHECK_PASS
   review_roles:
     writer: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
     implementation_reviewer: CLAUDE_OPUS_NEW_READ_ONLY_SESSION_AFTER_EXACT_SHA
@@ -87,8 +87,8 @@ delivery_order:
   - F1.6_REALER_PILOT
 
 active_package: KR-00E-DELIVERY-CONTRACT
-active_package_status: WRITING_COMPLETE_PENDING_COMMIT_GATES_AND_EXACT_SHA_REVIEW
-next_gate_after_active_package: PRECOMMIT_PUSH_EXACT_SHA_GATES_THEN_ONE_BROAD_CLAUDE_REVIEW
+active_package_status: CORRECTED_ONCE_PENDING_COMMIT_GATES_AND_TARGETED_DELTA_REVIEW
+next_gate_after_active_package: PRECOMMIT_PUSH_EXACT_SHA_GATES_THEN_TARGETED_DELTA_REVIEW
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete

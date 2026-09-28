@@ -182,8 +182,24 @@ blocked_transitions:
 gate_catalog:
   MANIFEST_SCHEMA:
     stage: CONTRACT_READY
-    command_or_evidence: AJV_VALIDATION_OF_YAML_PARSED_MANIFEST
+    command_or_evidence: AJV_DATA_TRUE_VALIDATION_OF_YAML_PARSED_MANIFEST
     exact_sha_required: false
+  FUNCTIONAL_SLICE_PASS:
+    stage: PACKAGE_SPECIFIC
+    command_or_evidence: MANIFEST_APPLICABILITY_PLUS_FUNCTIONAL_ACCEPTANCE_EVIDENCE
+    exact_sha_required: true
+  DATA_TRUTH_PASS:
+    stage: PACKAGE_SPECIFIC
+    command_or_evidence: MANIFEST_APPLICABILITY_PLUS_DATA_TRUTH_EVIDENCE
+    exact_sha_required: true
+  UI_REFERENCE_PASS:
+    stage: PACKAGE_SPECIFIC
+    command_or_evidence: MANIFEST_APPLICABILITY_PLUS_UI_REFERENCE_EVIDENCE
+    exact_sha_required: true
+  OWNER_UX_PASS:
+    stage: PACKAGE_SPECIFIC
+    command_or_evidence: MANIFEST_APPLICABILITY_PLUS_OWNER_UX_EVIDENCE
+    exact_sha_required: true
   AUTHORITY_SELFTEST:
     stage: LOCAL_VERIFIED
     command_or_evidence: npm run quality:authority-gate:selftest

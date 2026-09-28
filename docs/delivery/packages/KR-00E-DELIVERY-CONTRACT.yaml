@@ -43,19 +43,26 @@ dossier_and_decision_ids:
   - D-GOV-001
   - D-GOV-002
 source_locks:
-  - source: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - kind: REPO_FILE
+    source: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+    location: REPO
     repo_commit: 8660dcfe30b2cefbfe330e9908d03f855f7558e9
     sha256: 5C7591190DAC3F9026FA4A374C12AC819C143E33DD31765F4664BAE0727951C7
-  - source: AGENTS.md
+  - kind: REPO_FILE
+    source: AGENTS.md
+    location: REPO
     repo_commit: 8660dcfe30b2cefbfe330e9908d03f855f7558e9
     sha256: 7A5FBDBEAF295747AE8B1A648CE5D31FCE32D36B69064823AA63DB564DE0477D
-  - source: BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
+  - kind: EXTERNAL_FILE
+    source: BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
     location: ../_MODULDOSSIERS/00_PROJEKT
     sha256: EAEDDEF68C16BE403C6D05AD6F63234D4ACF75A762895F50008E07A59A782DC3
-  - source: BUILD_EXECUTION_LEDGER_2026-09-28.md
+  - kind: EXTERNAL_FILE
+    source: BUILD_EXECUTION_LEDGER_2026-09-28.md
     location: ../_MODULDOSSIERS/00_PROJEKT
     sha256: D94BD49365ACEBE19693B0B36319872ADDAF37E986C0B7AB8894F315807A2DE2
-  - source: KR-00C_CLAUDE_REVIEW_2026-09-29.md
+  - kind: EXTERNAL_FILE
+    source: KR-00C_CLAUDE_REVIEW_2026-09-29.md
     location: ../_MODULDOSSIERS/00_PROJEKT
     sha256: C331D4EB1892303828B0800EA03FE5519616DFB6DBAA941158D21452B430EBD1
     status: PASS_EXACT_SHA_NO_OPEN_P0_P1_P2
@@ -89,8 +96,13 @@ scope_budget:
 follow_up_packages:
   - KR-00G-DOCS-IMPORT
   - KR-00F-ROLLING-MANIFESTS
-new_objects_authority: OWNER_RATIFIED_GOVERNANCE_CONTRACT_FILES_ONLY
+new_objects_authority: NONE
 migration_status: NONE
+applicable_register_gates:
+  FUNCTIONAL_SLICE_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+  DATA_TRUTH_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+  UI_REFERENCE_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+  OWNER_UX_PASS: NOT_APPLICABLE_WITH_EVIDENCE
 invariants:
   data_truth: NOT_APPLICABLE_GOVERNANCE_ONLY
   tenant_and_rls: NOT_APPLICABLE_NO_DATA_OR_POLICY_CHANGE
@@ -131,7 +143,7 @@ acceptance:
     statement: Der KR-00C-Parent bleibt exakter Remote-Freeze mit unveraendertem Review-Receipt und ohne Main- oder Productionclaim.
     evidence: REMOTE_PARENT_AND_REVIEW_RECEIPT_SHA256_READBACK
 local_gates:
-  - AJV_SCHEMA_COMPILE_MANIFEST_FINDINGS_AND_CLOSURE
+  - AJV_DATA_TRUE_SCHEMA_COMPILE_MANIFEST_FINDINGS_AND_CLOSURE
   - AJV_POSITIVE_AND_NEGATIVE_CONTRACT_TESTS
   - YAML_PARSE_MANIFEST_MISSION_AND_GATE_MAPPING
   - npm run quality:authority-gate:selftest
@@ -142,7 +154,7 @@ local_gates:
   - git diff --check
   - npm run verify:precommit
 local_gate_evidence:
-  schema_compile_and_contract_mutations: PASS_3_SCHEMAS_AND_3_NEGATIVE_MUTATIONS
+  schema_compile_and_contract_mutations: PASS_3_SCHEMAS_AJV_DATA_TRUE_AND_11_NEGATIVE_MUTATIONS
   yaml_parse_and_mission_readback: PASS
   parent_remote_and_receipt_readback: PASS_PREFLIGHT
   authority_gate_selftest: PASS_NEGATIVE_CASES_27_OF_27

@@ -29,6 +29,7 @@
     "follow_up_packages",
     "new_objects_authority",
     "migration_status",
+    "applicable_register_gates",
     "invariants",
     "visible_capabilities",
     "review_contract",
@@ -51,7 +52,7 @@
     },
     "package_id": {
       "type": "string",
-      "pattern": "^KR-[0-9]{2}[A-Z0-9-]*$"
+      "pattern": "^KR-[0-9]{2}[A-Za-z0-9-]*$"
     },
     "project": {
       "const": "GALVANIK_KREILE_WERKSTATTCockpit"
@@ -77,7 +78,7 @@
     },
     "branch": {
       "type": "string",
-      "pattern": "^codex/kr-[a-z0-9-]+$"
+      "pattern": "^(?:codex|claude)/kr-[a-z0-9-]+$"
     },
     "goal": {
       "type": "string",
@@ -243,6 +244,7 @@
     "follow_up_packages": {
       "type": "array",
       "minItems": 1,
+      "maxItems": 2,
       "uniqueItems": true,
       "items": {
         "type": "string",
@@ -250,12 +252,26 @@
       }
     },
     "new_objects_authority": {
-      "type": "string",
-      "minLength": 1
+      "enum": ["NONE", "DELEGATED_RATIFIED_CONTRACT", "OWNER_GATE"]
     },
     "migration_status": {
-      "type": "string",
-      "minLength": 1
+      "enum": ["NONE", "LOCAL_FILE_ONLY", "DISPOSABLE_REPLAY_ONLY", "REMOTE_AUTHORIZED"]
+    },
+    "applicable_register_gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "FUNCTIONAL_SLICE_PASS",
+        "DATA_TRUTH_PASS",
+        "UI_REFERENCE_PASS",
+        "OWNER_UX_PASS"
+      ],
+      "properties": {
+        "FUNCTIONAL_SLICE_PASS": { "$ref": "#/definitions/register_gate_applicability" },
+        "DATA_TRUTH_PASS": { "$ref": "#/definitions/register_gate_applicability" },
+        "UI_REFERENCE_PASS": { "$ref": "#/definitions/register_gate_applicability" },
+        "OWNER_UX_PASS": { "$ref": "#/definitions/register_gate_applicability" }
+      }
     },
     "invariants": {
       "type": "object",
@@ -420,6 +436,12 @@
     "package_specific": {
       "type": "object",
       "description": "Domain-specific contract terms remain nested here so the core delivery contract stays closed.",
+      "propertyNames": {
+        "allOf": [
+          { "pattern": "^[a-z][a-z0-9_]*$" },
+          { "not": { "pattern": "(?:state|status|delivery|delivered|main|merge|production|active_package)" } }
+        ]
+      },
       "additionalProperties": true
     }
   },
@@ -444,14 +466,37 @@
     "source_lock": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["source", "sha256"],
+      "required": ["kind", "source", "location", "sha256"],
       "properties": {
+        "kind": { "enum": ["REPO_FILE", "EXTERNAL_FILE"] },
         "source": { "type": "string", "minLength": 1 },
         "location": { "type": "string", "minLength": 1 },
         "repo_commit": { "$ref": "#/definitions/sha" },
         "sha256": { "$ref": "#/definitions/sha256" },
         "status": { "type": "string", "minLength": 1 }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "kind": { "const": "REPO_FILE" } }
+          },
+          "then": {
+            "required": ["repo_commit"],
+            "properties": { "location": { "const": "REPO" } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "EXTERNAL_FILE" } }
+          },
+          "then": {
+            "not": { "required": ["repo_commit"] }
+          }
+        }
+      ]
+    },
+    "register_gate_applicability": {
+      "enum": ["REQUIRED", "NOT_APPLICABLE_WITH_EVIDENCE"]
     },
     "finding": {
       "type": "object",

@@ -3,6 +3,7 @@
   "$id": "https://galvanik-kreile.local/contracts/EXACT_SHA_CLOSURE_RECEIPT_SCHEMA_V1.json",
   "title": "Kreile Exact-SHA closure receipt V1",
   "description": "External receipt for an immutable commit. It may close a reviewed candidate or a main delivery, but it may never turn branch evidence into a main or Production claim.",
+  "$comment": "This contract requires Ajv with the $data option enabled so remote and gate SHAs are equal to candidate.candidate_sha.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -45,7 +46,12 @@
         "tree_sha": { "$ref": "#/definitions/sha" },
         "branch": { "type": "string", "minLength": 1 },
         "remote_ref": { "type": "string", "minLength": 1 },
-        "remote_sha": { "$ref": "#/definitions/sha" }
+        "remote_sha": {
+          "allOf": [
+            { "$ref": "#/definitions/sha" },
+            { "const": { "$data": "/candidate/candidate_sha" } }
+          ]
+        }
       }
     },
     "identity_checks": {
@@ -130,13 +136,14 @@
     "findings_ledger": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["path", "sha256", "open_p0", "open_p1", "open_p2", "decision"],
+      "required": ["path", "sha256", "open_p0", "open_p1", "open_p2", "open_p3", "decision"],
       "properties": {
         "path": { "type": "string", "minLength": 1 },
         "sha256": { "$ref": "#/definitions/sha256" },
         "open_p0": { "const": 0 },
         "open_p1": { "const": 0 },
         "open_p2": { "const": 0 },
+        "open_p3": { "const": 0 },
         "decision": { "const": "FREEZE_AS_REVIEWED_CANDIDATE" }
       }
     },
@@ -244,7 +251,12 @@
       "properties": {
         "gate_id": { "type": "string", "minLength": 1 },
         "status": { "enum": ["PASS", "NOT_APPLICABLE_WITH_EVIDENCE"] },
-        "candidate_sha": { "$ref": "#/definitions/sha" },
+        "candidate_sha": {
+          "allOf": [
+            { "$ref": "#/definitions/sha" },
+            { "const": { "$data": "/candidate/candidate_sha" } }
+          ]
+        },
         "run_id": { "type": ["string", "null"] },
         "started_at": { "type": "string", "format": "date-time" },
         "ended_at": { "type": "string", "format": "date-time" },
