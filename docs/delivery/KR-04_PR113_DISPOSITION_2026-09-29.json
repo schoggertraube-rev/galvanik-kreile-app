@@ -85,11 +85,7 @@
     "target": "src/app/buchhaltung/rechnungen/RechnungenClient.tsx",
     "scope": "src/**/*.{ts,tsx}",
     "runtime_importers": [],
-    "declaration_only": true,
-    "non_runtime_hits_excluded": [
-      "recovered_getAnalysisProps.txt",
-      "scripts/quality/check-delivery-contracts.mjs"
-    ]
+    "declaration_only": true
   },
   "summary": {
     "path_count": 7,

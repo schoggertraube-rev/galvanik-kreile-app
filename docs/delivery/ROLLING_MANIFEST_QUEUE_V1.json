@@ -8,15 +8,15 @@
   },
   "execution_state_source": "missions/F1_ORDER_TO_CASH_PILOT_001.yml",
   "parent_candidate": {
-    "package_id": "KR-01R-GOVERNANCE-RECONTRACT",
-    "candidate_sha": "da8c352d91a694d9c72551a245805386bbf7efdc",
-    "tree_sha": "ec8ef1c9f38ee8ef671ead7a15b78c93181b66a7",
-    "remote_ref": "origin/codex/kr-01r-governance-recontract",
+    "package_id": "KR-04-PR113-DISPOSITION",
+    "candidate_sha": "421180cf84f51b736b93730aa2822d20da8b9e7d",
+    "tree_sha": "3addc229de487877c0e8a053bacc84288746ca6c",
+    "remote_ref": "origin/codex/kr-04-pr113-disposition",
     "review_result": "PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN_QUEUED_CANDIDATE",
-    "review_receipt": "../_MODULDOSSIERS/00_PROJEKT/KR-01R_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md",
-    "review_receipt_sha256": "8EAE4D31D1A1AD910A412503276680B8CEBC0B65DE16B8CF3F744A127E06E00E",
-    "closure_receipt": "../_MODULDOSSIERS/00_PROJEKT/KR-01R_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md",
-    "closure_receipt_sha256": "8EAE4D31D1A1AD910A412503276680B8CEBC0B65DE16B8CF3F744A127E06E00E"
+    "review_receipt": "../_MODULDOSSIERS/00_PROJEKT/KR-04_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md",
+    "review_receipt_sha256": "052BAE8C94D64844143AB75CEF64E9BB11F92EE2A307F5FD8DF3F4BFFA484529",
+    "closure_receipt": "../_MODULDOSSIERS/00_PROJEKT/KR-04_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md",
+    "closure_receipt_sha256": "052BAE8C94D64844143AB75CEF64E9BB11F92EE2A307F5FD8DF3F4BFFA484529"
   },
   "issuance_policy": {
     "one_materialized_contract_at_a_time": true,
@@ -32,14 +32,6 @@
   "initial_horizon": [
     {
       "order": 1,
-      "package_id": "KR-04R-PR113-DEAD-UI-REMOVAL",
-      "scope": "PRODUCT_CLEANUP",
-      "predecessor": "KR-04-PR113-DISPOSITION",
-      "classification": "ORDER_POINTER_NOT_AN_EXECUTABLE_MANIFEST",
-      "issue_when": "PREDECESSOR_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED"
-    },
-    {
-      "order": 2,
       "package_id": "KR-02-B1-P0-CANCEL",
       "scope": "B1",
       "predecessor": "KR-04R-PR113-DEAD-UI-REMOVAL",
@@ -47,20 +39,28 @@
       "issue_when": "PREDECESSOR_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED"
     },
     {
-      "order": 3,
+      "order": 2,
       "package_id": "KR-03A-DELIVERY-ADHERENCE-DOMAIN",
       "scope": "B2A",
       "predecessor": "KR-02-B1-P0-CANCEL",
       "classification": "ORDER_POINTER_NOT_AN_EXECUTABLE_MANIFEST",
       "issue_when": "PREDECESSOR_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED"
+    },
+    {
+      "order": 3,
+      "package_id": "KR-03B1-FINAL-DB-READ-CONTRACT",
+      "scope": "B2B1",
+      "predecessor": "KR-03A-DELIVERY-ADHERENCE-DOMAIN",
+      "classification": "ORDER_POINTER_NOT_AN_EXECUTABLE_MANIFEST",
+      "issue_when": "PREDECESSOR_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED"
     }
   ],
   "next_contract_blueprint": {
-    "package_id": "KR-04R-PR113-DEAD-UI-REMOVAL",
-    "predecessor": "KR-04-PR113-DISPOSITION",
-    "planned_path": "docs/delivery/packages/KR-04R-PR113-DEAD-UI-REMOVAL.yaml",
+    "package_id": "KR-02-B1-P0-CANCEL",
+    "predecessor": "KR-04R-PR113-DEAD-UI-REMOVAL",
+    "planned_path": "docs/delivery/packages/KR-02-B1-P0-CANCEL.yaml",
     "classification": "POINTER_ONLY_NON_EXECUTABLE_UNTIL_ISSUED",
-    "issue_when": "KR_04_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED"
+    "issue_when": "KR_04R_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED"
   },
   "materialized_future_contracts": [],
   "after_initial_horizon_rule": "ISSUE_ONLY_THE_NEXT_DEPENDENT_PACKAGE_FROM_THE_AUTHORITY_PLAN_AFTER_PREDECESSOR_CLOSURE"
