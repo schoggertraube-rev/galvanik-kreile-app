@@ -1,0 +1,46 @@
+<!-- STATUS: REFERENCE_ONLY_NON_EXECUTABLE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
+# 07 — Abnahme und Tests
+
+Die Tabelle ist der Bauvertrag für die Abnahme. Vorhandene Hashes beziehen sich auf die geprüften Dateien in `origin/main@21a23567d51e4805f065ce9ae8c59bdc5faf9fa9`; sie sind kein Nachweis, dass neue Soll-Anforderungen bereits umgesetzt sind.
+
+| T-ID | Anforderung | Given/When/Then | Gate (Smoke/E2E/Owner-UX) | Beleg (Test/Hash) |
+|---|---|---|---|---|
+| T-G07-001 | A-G07-001 | Given aktiver G07-Weg, when Import-/SQL-Inventar läuft, then kein Runtime-Zugriff nutzt `payments`, `zahlung` oder `ausgangsrechnung` als Wahrheit. | Smoke | FEHLT — neuer Architektur-/Import-Negativtest; F15A-Kommentar als Quelle |
+| T-G07-002 | A-G07-002 | Given fertiger und unfertiger Auftrag, when Rechnung ausgestellt wird, then nur der valide Freeze schreibt genau eine Rechnung; jeder Vorabfehler mutiert nichts. | E2E | `src/test/f1_4_immutable_invoice.integration.test.ts` SHA `72F07365A684`; `...contract.integration.test.ts` SHA `E605D27E6AF3` |
+| T-G07-003 | A-G07-003 | Given parallele valide Ausgaben und ein absichtlicher Vorabfehler, when Commands laufen, then `R-JJJJ-NNNN` ist eindeutig/lückenlos und der Fehler verbraucht keine Nummer. | E2E | `e2e/f1-4-immutable-invoice.real.spec.ts` SHA `801480738CB9`; F1.4 Integrationtests |
+| T-G07-004 | A-G07-004, A-G07-019 | Given ausgestellte Rechnung, when Update/Delete/Neu-Ausstellung versucht wird, then Original bleibt unverändert und nur Storno plus neue Nummer ist möglich. | E2E | F1.4 Contract/Integration wie T-G07-002; F1.4-Migration SHA `BE493C63FD88` |
+| T-G07-005 | A-G07-005 | Given vollständige synthetische Stammdaten, when PDF erzeugt wird, then echter Parser findet alle freigegebenen §14-Angaben und Byte-Hash entspricht DB. | E2E | `e2e/f1-4-immutable-invoice.real.spec.ts` SHA `801480738CB9`; PDF-Route-Test in `09` |
+| T-G07-006 | A-G07-006 | Given 700 und 1900 Basispunkte, when Kreile-Rechnung erzeugt wird, then 700 wird server- und DB-seitig abgewiesen und 1900 korrekt gerundet. | E2E | FEHLT — neuer Command-/Fresh-DB-Negativtest; bestehende Migration erlaubt beide Werte |
+| T-G07-007 | A-G07-007, A-G07-008 | Given Abholung, Versand und Kunde mit/ohne Freigabe, when Modus gesetzt/manipuliert wird, then nur bar/Karte, Vorkasse oder freigeschaltete Zielrechnung ist möglich. | E2E | FEHLT — nach Q-G07-003; vorhandener `f1_5_set_payment_mode.integration.test.ts` SHA `6F938D89390C` deckt nur freie Modi |
+| T-G07-008 | A-G07-009 | Given freigeschaltete Zielrechnung und andere Modi, when PDF/Read-Model entsteht, then 2 Prozent/10 Tage und 14 Tage erscheinen nur im ersten Fall. | E2E | FEHLT — nach Q-G07-004/Q-G07-006 |
+| T-G07-009 | A-G07-010, A-G07-011 | Given offene Rechnung, when Teil- und Restzahlung bestätigt werden, then Status/Restbetrag/Actor/Methode/Version stimmen nach Reload und Überzahlung scheitert. | E2E | `src/test/f1_5_confirm_payment.integration.test.ts` SHA `250E61477F7E`; Command-Unit-Test in `09` |
+| T-G07-010 | A-G07-016 | Given Command endet clientseitig unklar, when dieselbe `clientEventId` erneut gesendet wird, then exakt dasselbe Receipt kommt; anderes Intent liefert Konflikt. | E2E | F1.4/F1.5 Integrationtests; `f1_5_payment_goods_out_contract.integration.test.ts` SHA `6370C704E97C` |
+| T-G07-011 | A-G07-012 | Given Vorkasse offen/teilbezahlt/bezahlt, when `recordGoodsOut` läuft, then erste zwei Fälle blockieren und nur bezahlt genau einmal ausgibt. | E2E | `src/test/f1_5_goods_out.integration.test.ts` SHA `3DA0011CF6B4`; E2E SHA `1DF5D84D9552` |
+| T-G07-012 | A-G07-013 | Given Abholung ohne, mit Bar- und mit Kartenbestätigung, when Ausgang bestätigt wird, then ohne Zahlung blockiert und die zwei bestätigten Wege bestehen. | E2E | Teilweise vorhandene F1.5-Tests; FEHLT für OE-2609-07-spezifische Methoden-/UI-Matrix |
+| T-G07-013 | A-G07-014 | Given freigeschaltete Zielrechnung ohne Rechnung, when Ware raus und danach Rechnung erstellt wird, then V2-Events sind korrekt und enthalten keine erfundene Zahlung. | E2E | F1.5 V2/Integration: `3DA0011CF6B4`, `6370C704E97C`; FEHLT für Kundenfreigabe |
+| T-G07-014 | A-G07-015 | Given vorhandener Warenausgang, when Zahlungsmodus geändert wird, then Server und Fresh-DB-Vertrag blockieren ohne Mutation. | E2E | `f1_5_set_payment_mode.integration.test.ts` SHA `6F938D89390C`; Command-Unit-Test in `09` |
+| T-G07-015 | A-G07-017, A-G07-018 | Given offen konsistente, teilbezahlte, bezahlte und inkonsistente Rechnung, when App-Storno läuft, then nur offen konsistent besteht. | E2E | `f1_4_immutable_invoice.integration.test.ts` SHA `72F07365A684`; Command-Unit-Test; App-P0 gebaut |
+| T-G07-016 | A-G07-018 | Given direkte DB-Session mit heutigem Storno-Gate, when teil-/vollbezahlte oder inkonsistente Rechnung auf `cancelled` gesetzt wird, then Trigger blockiert jeden Fall ohne Mutation. | E2E | FEHLT — P0-Fresh-DB-Test und Trigger-Erweiterung OP-06 |
+| T-G07-017 | A-G07-020 | Given Navigation und Direkt-URL `/buchhaltung/rechnungen/neu`, when geprüft, then kein sichtbarer Produktweg und kein FoundationUnavailable-Formular existiert; Erstellung kommt nur aus G04. | Smoke | FEHLT — Plan T-13; aktueller Stub SHA `C0C11E4669AD` |
+| T-G07-018 | A-G07-021 | Given Daten/lädt/leer/Fehler/gesperrt, when `/buchhaltung/rechnungen` gerendert wird, then nur echte Daten und exakt die Texte aus `02` erscheinen. | Smoke | `src/app/buchhaltung/rechnungen/__tests__/page.test.tsx` (Kandidat geändert, nicht Lieferbeleg); neuer DS-Test erforderlich |
+| T-G07-019 | A-G07-022 | Given sechs reale Kreile-Logins plus persönliche Admin-Sperre, when G07 und Commands geöffnet werden, then alle ungesperrten Personen dürfen, gesperrte Person bleibt serverseitig denied. | E2E | FEHLT — G01-Personenrechte; heutige Seite ist rolleneng |
+| T-G07-020 | A-G07-023 | Given jeder K-G07-001…010-Fall, when Konflikt entsteht/gelöst wird, then genau eine zuständige Rolf-/Phillip-Projektion erscheint/verschwindet. | E2E | FEHLT — G09-Naht |
+| T-G07-021 | A-G07-024 | Given freigegebene Golden Files einschließlich Storno/Skonto, when Ausgangs-CSV/DATEV erzeugt wird, then Hash/Inhalt sind deterministisch und Steuerberater-Import besteht. | E2E | FEHLT — Q-G07-002; heutige Exporte betreffen Eingangsbelege |
+| T-G07-022 | A-G07-025 | Given valide Rechnung und Storno, when ZUGFeRD erzeugt wird, then externer Validator, PDF-Einbettung, XML/PDF-Snapshotvergleich und Hash-Reload bestehen. | E2E | FEHLT — Q-G07-001; Live-Pflicht |
+| T-G07-023 | A-G07-026, A-G07-030 | Given M01 nicht angebunden, when Terminal-Element geklickt/URL versucht wird, then keine Navigation/Mutation und exakt `Kartenterminal — In Aufbau`; manueller Weg bleibt real. | Smoke | FEHLT — neuer UI-Negativtest; OE-2609-12 |
+| T-G07-024 | A-G07-027 | Given G07-Bundle und Routen, when geprüft, then Mahnung, Bank, Gutschrift und Eingangsbeleg besitzen keine G07-Funktion oder Route. | Smoke | FEHLT — neuer Scope-/Importtest; `mahnung.actions.ts` ist nur NOT_AVAILABLE-Evidenz |
+| T-G07-025 | A-G07-028 | Given V5 und Kreile-DS, when Screen bei 1440×900, 1220×880 und 390×844 aufgenommen wird, then Hierarchie, 48-px-Touch, sieben Zustände und keine Mock-CSS-Übernahme bestehen. | Owner-UX | FEHLT — Designphase 1 + Screenshots + Side-by-side-Review |
+| T-G07-026 | A-G07-029, A-G07-031 | Given Kernpaket und Kreile-HostAdapter, when Literal-/Import-/Tenant-Negativtest läuft, then Kern enthält keine Kreile-Literale und fremde Tenant-/Ressourcenwerte scheitern. | Smoke | FEHLT — neuer HostAdapter-/Isolationstest |
+| T-G07-027 | A-G07-030 | Given alle gesperrten Elemente, when Tastatur, Touch und Direkt-URL geprüft werden, then sie sind gedämpft, nicht fokussierbar/klickbar, haben keinen Route-Erfolg und zeigen den festgelegten Status. | E2E | FEHLT — nach Designphase 1 |
+| T-G07-028 | A-G07-032 | Given ein fehlendes Owner-/Steuerberater-/P0-/Provider-/E2E-Gate, when Promotion geprüft wird, then `LIVE = NO_GO`; nur vollständiger Gate-Satz kann weitergegeben werden. | Smoke | FEHLT — Release-Gate; Owner-Freigabe extern |
+| T-G07-029 | A-G07-033 | Given Rechnung/Buchungsbeleg vor acht Jahren, nach acht Jahren mit Ablaufhemmung und danach ohne Hemmung, when Policy/Vorschlag/Freigabe geprüft werden, then nie vorzeitig oder still geändert wird, bis zur Wirkung Originalbytes unverändert bleiben und nur nach Admin-Freigabe Personenbezug verschwindet, während Geschäftszahlen und Audit-Receipt erhalten bleiben. | E2E | FEHLT — Q-G07-009; Fristwerte und Originalbehandlung vor Live durch Steuerberater/Datenschutz bestätigen |
+
+## Pflicht-Gatekette für den späteren Bau
+
+1. Statische Modul-/Import-/Shadow-Truth-Prüfung.
+2. TypeScript, Lint und bestehende Unit-/Integrationstests.
+3. Fresh-Supabase-Replay mit F1.4/F1.5 plus neuen additiven Migrationen.
+4. P0-Negativtests für Storno, Tenant, Rollen/Fähigkeiten, Idempotenz und parallele Commands.
+5. Reale Browserkette Desktop/Tablet/Handy mit synthetischen, klar markierten Testdaten.
+6. Externe ZUGFeRD-Validierung, Steuerberater-Golden-File für Ausgangs-Export sowie Steuerberater-/Datenschutz-Bestätigung der Aufbewahrungswerte.
+7. Unabhängiger read-only Review und Owner-UX; erst danach mögliches Transfer-/Live-Gate.

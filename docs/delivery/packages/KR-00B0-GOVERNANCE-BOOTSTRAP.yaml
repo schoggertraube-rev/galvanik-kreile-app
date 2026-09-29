@@ -1,0 +1,105 @@
+schema_version: 1
+package_id: KR-00B0-GOVERNANCE-BOOTSTRAP
+project: GALVANIK_KREILE_WERKSTATTCockpit
+state: REVIEW_CANDIDATE_WITH_LINT_RUNTIME_FINDING
+base_sha: 21a23567d51e4805f065ce9ae8c59bdc5faf9fa9
+target_sha: PENDING_AFTER_LOCAL_VERIFICATION
+branch: codex/kr-00b0-governance-bootstrap
+goal: >-
+  Genau eine operative Produktentscheidungsquelle festlegen und die aktive
+  Ausfuehrung auf den seriellen Altbestand-zuerst-Mergezug binden.
+active_mission_file: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+dod_spec_approved_by:
+  authority: OWNER_CURRENT_TASK
+  date: 2026-09-28
+  instruction: >-
+    Kreile wie Lerninsel planen und umsetzen; zuerst den gesamten aufgelaufenen
+    Bestand sauber integrieren oder verlustfrei superseden; danach kleine
+    serielle Pakete bis Livegang.
+source_locks:
+  - source: origin/main
+    sha: 21a23567d51e4805f065ce9ae8c59bdc5faf9fa9
+  - source: BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
+    location: _MODULDOSSIERS/00_PROJEKT
+    status: FINAL_AFTER_ONE_OPUS_REDTEAM__OWNER_EXECUTION_AMENDMENT_2026-09-28
+  - source: external_owner_register
+    location: 00_BIBEL/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md
+    sha256_after_d_gov_002: 55EB869E98D00DB5C24CA3085F56B049494A6FDDCD8F358AE3FC9217459FC95C
+    synchronized_block_sha256: 44B18A152D9074DE20EFF6EAB2E90C2B48414477618503F2472A62E401C29846
+    status: OWNER_INPUT_D_GOV_002_RECORDED
+repo_allowlist:
+  - docs/delivery/packages/KR-00B0-GOVERNANCE-BOOTSTRAP.yaml
+  - docs/project/DOCUMENT_AUTHORITY.md
+  - docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+external_owner_input_allowlist:
+  - 00_BIBEL/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md
+forbidden:
+  - src/**
+  - supabase/**
+  - package.json
+  - package-lock.json
+  - provider_or_runtime_configuration
+  - remote_database_or_production_mutation
+  - merge_to_main
+new_objects_authority: OWNER_RATIFIED_GOVERNANCE_ONLY
+migration_status: NONE
+review_contract:
+  broad_claude_reviews: 1
+  max_correction_rounds: 1
+  delta_review_after_correction: true
+  reviewer_must_differ_from_writer: true
+acceptance:
+  - id: KR00B0-A1
+    statement: >-
+      Die externe 00_BIBEL dokumentiert zuerst, dass das Repo-Register die
+      operative Produktentscheidungsquelle ist und externe Notizen nur
+      ratifizierbare Eingaben sind.
+    evidence: EXTERNAL_REGISTER_DIFF_AND_SHA256
+  - id: KR00B0-A2
+    statement: >-
+      Repo-Register und Dokumentenautoritaet enthalten denselben neuen
+      D-GOV-002-Vertrag ohne Produkt-, Provider-, Daten- oder Runtimeaenderung.
+    evidence: EXACT_TEXT_MATCH_AND_AUTHORITY_GATE
+  - id: KR00B0-A3
+    statement: >-
+      Die Mission benennt genau dieses Paket auf aktuellem main als einzige
+      aktive Ausfuehrung und begrenzt die Reparatur auf eine Runde.
+    evidence: MISSION_KEY_READBACK
+  - id: KR00B0-A4
+    statement: Der Diff bleibt exakt innerhalb der Repo-Allowlist.
+    evidence: GIT_DIFF_NAME_ONLY_AND_DIFF_CHECK
+local_gates:
+  - npm run quality:authority-gate:selftest
+  - npm run quality:authority-gate
+  - npm run quality:module-gates
+  - npm run quality:no-fake-production
+  - npm run lint:ratchet
+  - git diff --check
+local_gate_evidence:
+  authority_gate_selftest: PASS_NEGATIVE_CASES_27_OF_27
+  authority_gate: PASS_TRUTH_TYPES_7_UI_REFERENCES_4
+  module_gates: PASS
+  no_fake_production: PASS
+  git_diff_check: PASS
+  allowlist_gate: PASS
+  lint_ratchet: LOCAL_RUNTIME_TIMEOUT_AFTER_120S_AND_CONTROLLED_300S_RETRY_NO_DIAGNOSTIC_OUTPUT_DEFER_EXACT_GATE_TO_CI
+required_checks_after_push:
+  - quality
+  - agentur-gate
+  - Fresh Supabase replay
+non_required_but_must_pass:
+  - ratchet
+production_effect: NONE_BEFORE_MAIN_MERGE
+next_packages:
+  - KR-00B-TRUTH-SYNC
+  - KR-00D-ALTINVENTAR
+findings:
+  - id: KR00B0-F1
+    severity: PROCESS
+    status: OPEN_UNTIL_REMOTE_CI
+    statement: >-
+      Der unveraenderte Vollrepo-Lint-Ratchet lieferte lokal weder PASS noch
+      Fehlerdiagnose und wurde nach 120 Sekunden sowie genau einem
+      kontrollierten 300-Sekunden-Lauf beendet. Keine dritte lokale
+      Wiederholung; der identische Remote-Gate muss am Exact-SHA entscheiden.

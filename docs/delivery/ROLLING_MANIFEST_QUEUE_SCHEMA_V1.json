@@ -1,0 +1,170 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://galvanik-kreile.local/contracts/ROLLING_MANIFEST_QUEUE_SCHEMA_V1.json",
+  "title": "Kreile rolling package queue policy V1",
+  "description": "Closed policy for issuing exactly one package manifest at a time. Entries are non-executable pointers; live execution truth remains exclusively in the mission file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract_id",
+    "authority",
+    "execution_state_source",
+    "parent_candidate",
+    "issuance_policy",
+    "initial_horizon",
+    "next_contract_blueprint",
+    "materialized_future_contracts",
+    "after_initial_horizon_rule"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "contract_id": { "const": "KREILE_ROLLING_MANIFEST_QUEUE_V1" },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan_path", "plan_section", "plan_sha256"],
+      "properties": {
+        "plan_path": { "const": "docs/project/BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md" },
+        "plan_section": { "const": "4_KR_00F_ROLLENDE_MANIFESTE" },
+        "plan_sha256": { "$ref": "#/definitions/sha256" }
+      }
+    },
+    "execution_state_source": { "const": "missions/F1_ORDER_TO_CASH_PILOT_001.yml" },
+    "parent_candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "package_id",
+        "candidate_sha",
+        "tree_sha",
+        "remote_ref",
+        "review_result",
+        "review_receipt",
+        "review_receipt_sha256",
+        "closure_receipt",
+        "closure_receipt_sha256"
+      ],
+      "properties": {
+        "package_id": { "const": "KR-00F-ROLLING-MANIFESTS" },
+        "candidate_sha": { "$ref": "#/definitions/sha" },
+        "tree_sha": { "$ref": "#/definitions/sha" },
+        "remote_ref": { "const": "origin/codex/kr-00f-rolling-manifests" },
+        "review_result": { "const": "PASS_EXACT_SHA_NO_OPEN_P0_P1_P2" },
+        "review_receipt": { "const": "../_MODULDOSSIERS/00_PROJEKT/KR-00F_CLAUDE_REVIEW_2026-09-29.md" },
+        "review_receipt_sha256": { "$ref": "#/definitions/sha256" },
+        "closure_receipt": { "const": "../_MODULDOSSIERS/00_PROJEKT/KR-00F_EXACT_SHA_CLOSURE_2026-09-29.json" },
+        "closure_receipt_sha256": { "$ref": "#/definitions/sha256" }
+      }
+    },
+    "issuance_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "one_materialized_contract_at_a_time",
+        "max_materialized_future_contracts",
+        "exact_reviewed_parent_required",
+        "remote_identity_required",
+        "candidate_chain_when_merge_unavailable",
+        "candidate_is_not_main_delivery",
+        "rebase_and_reverify_after_real_main_change",
+        "halt_on_open_p0_p1_after_one_correction",
+        "no_periodic_build_automation"
+      ],
+      "properties": {
+        "one_materialized_contract_at_a_time": { "const": true },
+        "max_materialized_future_contracts": { "const": 0 },
+        "exact_reviewed_parent_required": { "const": true },
+        "remote_identity_required": { "const": true },
+        "candidate_chain_when_merge_unavailable": { "const": true },
+        "candidate_is_not_main_delivery": { "const": true },
+        "rebase_and_reverify_after_real_main_change": { "const": true },
+        "halt_on_open_p0_p1_after_one_correction": { "const": true },
+        "no_periodic_build_automation": { "const": true }
+      }
+    },
+    "initial_horizon": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": [
+        {
+          "allOf": [
+            { "$ref": "#/definitions/package_pointer" },
+            {
+              "properties": {
+                "order": { "const": 1 },
+                "package_id": { "const": "KR-04-PR113-DISPOSITION" },
+                "scope": { "const": "GOVERNANCE" },
+                "predecessor": { "const": "KR-01-GOVERNANCE-MERGE" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/definitions/package_pointer" },
+            {
+              "properties": {
+                "order": { "const": 2 },
+                "package_id": { "const": "KR-02-B1-P0-CANCEL" },
+                "scope": { "const": "B1" },
+                "predecessor": { "const": "KR-04-PR113-DISPOSITION" }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/definitions/package_pointer" },
+            {
+              "properties": {
+                "order": { "const": 3 },
+                "package_id": { "const": "KR-03A-DELIVERY-ADHERENCE-DOMAIN" },
+                "scope": { "const": "B2A" },
+                "predecessor": { "const": "KR-02-B1-P0-CANCEL" }
+              }
+            }
+          ]
+        }
+      ],
+      "additionalItems": false
+    },
+    "next_contract_blueprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["package_id", "predecessor", "planned_path", "classification", "issue_when"],
+      "properties": {
+        "package_id": { "const": "KR-04-PR113-DISPOSITION" },
+        "predecessor": { "const": "KR-01-GOVERNANCE-MERGE" },
+        "planned_path": { "const": "docs/delivery/packages/KR-04-PR113-DISPOSITION.yaml" },
+        "classification": { "const": "POINTER_ONLY_NON_EXECUTABLE_UNTIL_ISSUED" },
+        "issue_when": { "const": "KR_01_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED" }
+      }
+    },
+    "materialized_future_contracts": {
+      "type": "array",
+      "maxItems": 0
+    },
+    "after_initial_horizon_rule": {
+      "const": "ISSUE_ONLY_THE_NEXT_DEPENDENT_PACKAGE_FROM_THE_AUTHORITY_PLAN_AFTER_PREDECESSOR_CLOSURE"
+    }
+  },
+  "definitions": {
+    "sha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "sha256": { "type": "string", "pattern": "^[0-9A-F]{64}$" },
+    "package_pointer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["order", "package_id", "scope", "predecessor", "classification", "issue_when"],
+      "properties": {
+        "order": { "type": "integer", "minimum": 1 },
+        "package_id": { "type": "string", "pattern": "^KR-" },
+        "scope": { "enum": ["GOVERNANCE", "B1", "B2A"] },
+        "predecessor": { "type": "string", "pattern": "^KR-" },
+        "classification": { "const": "ORDER_POINTER_NOT_AN_EXECUTABLE_MANIFEST" },
+        "issue_when": { "const": "PREDECESSOR_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED" }
+      }
+    }
+  }
+}

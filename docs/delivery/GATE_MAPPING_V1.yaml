@@ -1,0 +1,288 @@
+schema_version: 1
+contract_id: KREILE_DELIVERY_GATE_MAPPING_V1
+authority:
+  source: _MODULDOSSIERS/00_PROJEKT/BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
+  sections:
+    - "3.1 Zustandsmaschine und Registergates"
+    - "3.3 Genau eine Review- und Korrekturrunde"
+    - "3.4 Branch-, PR- und Merge-Regel"
+  active_execution_source: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  delivered_main_source: docs/project/CURRENT_STATE.md
+truth_rules:
+  manifest_role: IMMUTABLE_PACKAGE_CONTRACT_NOT_LIVE_STATUS
+  rolling_queue_role: NON_EXECUTABLE_ORDER_POINTERS_NOT_LIVE_STATUS
+  mission_role: ONLY_ACTIVE_EXECUTION_STATE
+  findings_role: ONE_LEDGER_PER_EXACT_CANDIDATE_SHA
+  closure_receipt_role: EXTERNAL_EXACT_SHA_CLOSURE_EVIDENCE
+  branch_evidence_is_main_delivery: false
+  local_sha_is_main_delivery: false
+  pull_request_is_main_delivery: false
+  preview_is_main_delivery: false
+  main_merge_is_production_safe_without_separate_authority: false
+rolling_manifest_policy:
+  contract: docs/delivery/ROLLING_MANIFEST_QUEUE_V1.json
+  schema: docs/delivery/ROLLING_MANIFEST_QUEUE_SCHEMA_V1.json
+  materialized_future_contracts: 0
+  one_materialized_contract_at_a_time: true
+  exact_reviewed_parent_required: true
+  remote_identity_required: true
+  candidate_chain_when_merge_unavailable: true
+  candidate_is_not_main_delivery: true
+  rebase_and_reverify_after_real_main_change: true
+  halt_on_open_p0_p1_after_one_correction: true
+  no_periodic_build_automation: true
+  initial_pointer_order:
+    - KR-04-PR113-DISPOSITION
+    - KR-02-B1-P0-CANCEL
+    - KR-03A-DELIVERY-ADHERENCE-DOMAIN
+workflow_facts_at_contract_parent:
+  parent_sha: eb78a91cb4fa235cee77c9277519d2c08dc4135b
+  agentur_gate:
+    workflow: .github/workflows/agentur-gate.yml
+    branch_push_runs: true
+    pull_request_to_main_runs: true
+    evidences: BRANCH_EXACT_SHA_GATE_ONLY_UNTIL_MAIN_PROTECTION_RECEIPT
+  quality:
+    workflow: .github/workflows/quality.yml
+    branch_push_runs: false
+    pull_request_to_main_runs: true
+    main_push_runs: true
+  fresh_supabase_replay:
+    workflow: .github/workflows/quality.yml
+    branch_push_runs: false
+    pull_request_to_main_runs: true
+    main_push_runs: true
+  ratchet:
+    workflow: .github/workflows/eslint-ratchet.yml
+    branch_push_runs: false
+    pull_request_target_to_main_runs: true
+    required_status_claim: NOT_REQUIRED_BY_PROTECTION_MUST_PASS
+    candidate_workflow_change_effect: AFTER_MAIN_DELIVERY_ONLY_BASE_WORKFLOW_JUDGES_CURRENT_PR
+required_check_truth:
+  planned_required_names:
+    - quality
+    - agentur-gate
+    - Fresh Supabase replay
+  planned_non_required_but_must_pass:
+    - ratchet
+  actual_required_names:
+    - quality
+    - agentur-gate
+    - Fresh Supabase replay
+  actual_non_required_but_must_pass:
+    - ratchet
+  branch_protection_receipt: docs/delivery/KR-01_BRANCH_PROTECTION_AND_OPERATING_RECEIPT_2026-09-29.json
+  active_ruleset_bypass_actors: 0
+  current_user_can_bypass: never
+  prohibition: DO_NOT_CLAIM_REQUIRED_FROM_WORKFLOW_NAME_OR_OLD_DOCUMENTATION
+states:
+  CONTRACT_READY:
+    owner: PACKAGE_MANIFEST
+    requires:
+      - manifest_exists_before_writer
+      - manifest_validates_against_PACKAGE_MANIFEST_SCHEMA_V2
+      - exact_parent_and_source_locks_match
+      - allowlist_and_forbidden_paths_are_explicit
+    next:
+      - PREFLIGHT_PASS
+  PREFLIGHT_PASS:
+    owner: ACTIVE_MISSION
+    requires:
+      - correct_root_branch_parent_and_clean_tree
+      - no_project_writer_or_test_process
+      - available_memory_and_shell_git_probes_within_calibrated_bounds
+      - no_branch_collision
+    next:
+      - WRITING
+      - BLOCKED
+  WRITING:
+    owner: ACTIVE_MISSION
+    requires:
+      - exactly_one_writer
+      - changes_within_manifest_allowlist
+      - no_parallel_build_or_test_writer
+    next:
+      - LOCAL_VERIFIED
+      - BLOCKED
+  LOCAL_VERIFIED:
+    owner: ACTIVE_MISSION
+    requires:
+      - manifest_specific_acceptance_pass
+      - local_gate_set_pass
+      - exact_allowlist_and_diff_check_pass
+      - commit_and_clean_tree
+    next:
+      - CLAUDE_REVIEWED
+      - BLOCKED
+  CLAUDE_REVIEWED:
+    owner: FINDINGS_LEDGER
+    requires:
+      - exactly_one_full_diff_review_on_exact_remote_sha
+      - reviewer_differs_from_writer
+      - all_p0_p1_p2_reported_together
+    next:
+      - CORRECTED_ONCE_OR_NOT_NEEDED
+      - BLOCKED
+  CORRECTED_ONCE_OR_NOT_NEEDED:
+    owner: FINDINGS_LEDGER
+    requires:
+      - correction_rounds_between_zero_and_one
+      - every_p2_has_explicit_disposition
+    next:
+      - DELTA_REVIEWED
+      - BLOCKED
+  DELTA_REVIEWED:
+    owner: FINDINGS_LEDGER
+    requires:
+      - targeted_review_only_if_correction_occurred
+      - named_findings_and_whole_diff_guards_pass
+      - open_p0_p1_p2_equal_zero
+    next:
+      - MERGE_READY_PENDING_CI
+      - BLOCKED
+  MERGE_READY_PENDING_CI:
+    owner: EXACT_SHA_CLOSURE_RECEIPT
+    requires:
+      - reviewed_candidate_remote_sha_exact
+      - clean_tree_and_process_cleanup
+      - no_main_or_delivery_claim
+    next:
+      - CI_VERIFIED
+      - BLOCKED
+  CI_VERIFIED:
+    owner: EXACT_SHA_CLOSURE_RECEIPT
+    requires:
+      - pull_request_or_equivalent_main_base_checks_on_exact_candidate_sha
+      - quality_pass
+      - agentur_gate_pass
+      - Fresh_Supabase_replay_pass
+      - ratchet_pass
+      - actual_branch_protection_receipt_if_required_status_is_claimed
+    next:
+      - OWNER_PREVIEWED
+      - BLOCKED
+  OWNER_PREVIEWED:
+    owner: EXACT_SHA_CLOSURE_RECEIPT
+    requires:
+      - applicable_preview_or_owner_acceptance_evidence
+      - no_preview_equals_delivery_claim
+    next:
+      - RATIFIED
+      - BLOCKED
+  RATIFIED:
+    owner: EXACT_SHA_CLOSURE_RECEIPT
+    requires:
+      - all_applicable_specialist_gates_pass
+      - no_open_p0_p1
+      - explicit_production_effect_authority_before_main_merge
+    next:
+      - MAIN_DELIVERED
+      - BLOCKED
+  MAIN_DELIVERED:
+    owner: docs/project/CURRENT_STATE.md
+    requires:
+      - merge_performed_by_authorized_actor
+      - exact_merge_sha_contains_candidate
+      - post_merge_checks_pass
+      - active_mission_and_current_state_synchronized
+    next:
+      - RELEASE_EVIDENCE
+  RELEASE_EVIDENCE:
+    owner: docs/project/CURRENT_STATE.md
+    requires:
+      - release_or_non_release_effect_recorded_truthfully
+      - rollback_and_operational_receipts_if_applicable
+blocked_transitions:
+  BLOCKED_TO_SPLIT:
+    use_when: PACKAGE_EXCEEDS_SCOPE_OR_HAS_SEPARABLE_FAILURES
+    output: NEW_SMALLER_MANIFESTS_WITH_EXACT_PARENT
+  BLOCKED_TO_RECONTRACT:
+    use_when: CONTRACT_IS_INTERNALLY_UNSATISFIABLE_OR_GOVERNANCE_CONFLICT_EXISTS
+    output: REVISED_OWNER_OR_PL_APPROVED_CONTRACT
+  BLOCKED_TO_EXTERNAL_OWNER_GATE:
+    use_when: NEW_PRODUCT_STRUCTURE_PERMISSION_PROVIDER_COST_OR_PRODUCTION_AUTHORITY_IS_REQUIRED
+    output: ONE_PRECISE_DECISION_AND_NON_DEPENDENT_WORK_CONTINUES_IF_AVAILABLE
+  BLOCKED_TO_ABANDON_AS_SUPERSEDED:
+    use_when: CANDIDATE_IS_NOT_REUSABLE_OR_HAS_BEEN_REPLACED
+    output: ARCHIVE_REF_AND_NON_LOSS_LEDGER
+gate_catalog:
+  MANIFEST_SCHEMA:
+    stage: CONTRACT_READY
+    command_or_evidence: AJV_DATA_TRUE_VALIDATION_OF_YAML_PARSED_MANIFEST
+    exact_sha_required: false
+  FUNCTIONAL_SLICE_PASS:
+    stage: LOCAL_VERIFIED
+    command_or_evidence: MANIFEST_REGISTER_GATE_EVIDENCE_FUNCTIONAL_SLICE_WITH_ACCEPTANCE_OR_INVARIANT_REF
+    exact_sha_required: true
+  DATA_TRUTH_PASS:
+    stage: LOCAL_VERIFIED
+    command_or_evidence: MANIFEST_REGISTER_GATE_EVIDENCE_DATA_TRUTH_WITH_ACCEPTANCE_OR_INVARIANT_REF
+    exact_sha_required: true
+  UI_REFERENCE_PASS:
+    stage: OWNER_PREVIEWED
+    command_or_evidence: MANIFEST_REGISTER_GATE_EVIDENCE_UI_REFERENCE_WITH_ACCEPTANCE_GATE_OR_INVARIANT_REF
+    exact_sha_required: true
+  OWNER_UX_PASS:
+    stage: OWNER_PREVIEWED
+    command_or_evidence: MANIFEST_REGISTER_GATE_EVIDENCE_OWNER_UX_WITH_ACCEPTANCE_GATE_OR_INVARIANT_REF
+    exact_sha_required: true
+  ROLLING_MANIFEST_POLICY:
+    stage: CONTRACT_READY
+    command_or_evidence: AJV_VALIDATION_OF_QUEUE_POLICY_AND_ZERO_MATERIALIZED_FUTURE_CONTRACTS
+    exact_sha_required: false
+  AUTHORITY_SELFTEST:
+    stage: LOCAL_VERIFIED
+    command_or_evidence: npm run quality:authority-gate:selftest
+    exact_sha_required: true
+  AUTHORITY_GATE:
+    stage: LOCAL_VERIFIED
+    command_or_evidence: npm run quality:authority-gate
+    exact_sha_required: true
+  MODULE_GATES:
+    stage: LOCAL_VERIFIED
+    command_or_evidence: npm run quality:module-gates
+    exact_sha_required: true
+  NO_FAKE_PRODUCTION:
+    stage: LOCAL_VERIFIED
+    command_or_evidence: npm run quality:no-fake-production
+    exact_sha_required: true
+  PRECOMMIT:
+    stage: LOCAL_VERIFIED
+    command_or_evidence: npm run verify:precommit
+    exact_sha_required: true
+  LINT_RATCHET:
+    stage: LOCAL_VERIFIED_AND_CI_VERIFIED
+    command_or_evidence: npm run lint:ratchet_AND_REMOTE_RATCHET
+    exact_sha_required: true
+  DIFF_CHECK:
+    stage: LOCAL_VERIFIED
+    command_or_evidence: git diff --check
+    exact_sha_required: true
+  AGENTUR_BRANCH_GATE:
+    stage: LOCAL_VERIFIED
+    command_or_evidence: GITHUB_AGENTUR_GATE_BRANCH_RUN
+    exact_sha_required: true
+    delivery_effect: NONE
+  CLAUDE_IMPLEMENTATION_REVIEW:
+    stage: CLAUDE_REVIEWED
+    command_or_evidence: ONE_READ_ONLY_FULL_DIFF_REVIEW_ON_REMOTE_EXACT_SHA
+    exact_sha_required: true
+  REQUIRED_MAIN_BASE_CHECKS:
+    stage: CI_VERIFIED
+    command_or_evidence: quality_AGENTUR_GATE_FRESH_SUPABASE_REPLAY_AND_RATCHET_ON_EXACT_SHA
+    exact_sha_required: true
+  PREVIEW_OR_OWNER_ACCEPTANCE:
+    stage: OWNER_PREVIEWED
+    command_or_evidence: PACKAGE_SPECIFIC_PREVIEW_OR_NOT_APPLICABLE_RECEIPT
+    exact_sha_required: true
+  MAIN_MERGE:
+    stage: MAIN_DELIVERED
+    command_or_evidence: AUTHORIZED_MERGE_PLUS_POST_MERGE_CHECKS
+    exact_sha_required: true
+    production_effect_gate: SEPARATE_EXPLICIT_OWNER_AUTHORITY_REQUIRED
+cleanup_contract:
+  worktree_clean: required
+  project_writer_processes: none
+  review_process_tree: clear
+  temporary_build_directories: restored
+  legacy_automations: remain_disabled

@@ -88,3 +88,7 @@ jobs:
             --root "$GITHUB_WORKSPACE/candidate" \
             --base-baseline "$GITHUB_WORKSPACE/ratchet-base/quality/module-gates-baseline.json" \
             --schema "$GITHUB_WORKSPACE/ratchet-base/docs/architecture/MODULE_MANIFEST.schema.json"
+
+      - name: Enforce protected delivery contracts and rolling queue
+        working-directory: ratchet-base
+        run: node scripts/quality/check-delivery-contracts.mjs --root "$GITHUB_WORKSPACE/candidate"

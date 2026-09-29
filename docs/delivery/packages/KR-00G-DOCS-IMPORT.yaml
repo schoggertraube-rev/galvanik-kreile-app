@@ -1,0 +1,211 @@
+schema_version: 2
+package_id: KR-00G-DOCS-IMPORT
+project: GALVANIK_KREILE_WERKSTATTCockpit
+state: CONTRACT_READY
+execution_state_source: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+queue_parent_sha: 2e66ebf928221e44acec0ee0efa34b881af18198
+base_sha: 2e66ebf928221e44acec0ee0efa34b881af18198
+origin_main_sha: 21a23567d51e4805f065ce9ae8c59bdc5faf9fa9
+target_sha: PENDING_AFTER_LOCAL_VERIFICATION
+branch: codex/kr-00g-docs-import
+goal: >-
+  Die 17 geprueften Moduldossiers sowie Plan, offene Punkte und Pruefbericht
+  kontrolliert als nicht ausfuehrbare Referenz in das Repository uebernehmen,
+  jede Quelle bytegenau sperren und jede importierte Markdown-Datei so
+  klassifizieren, dass sie niemals mit der aktiven Mission konkurriert.
+active_mission_file: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+dod_spec_approved_by:
+  authority: OWNER_CURRENT_TASK
+  date: "2026-09-29"
+  instruction: >-
+    Den redteam-geprueften Plan Paket fuer Paket seriell umsetzen und bei
+    gesperrtem Merge jeden exakten Kandidaten geprueft ablegen.
+execution_actors:
+  writer: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  implementation_reviewer: CLAUDE_OPUS_NEW_READ_ONLY_SESSION_AFTER_EXACT_SHA
+  specialist_gate_reviewers: GITHUB_ACTIONS_REQUIRED_CHECK_RUNNERS_AFTER_PUSH
+  kreile_pl_session: 01a0ce4b-1843-7361-9ffc-47933f9ecdde
+  authorized_future_merge_actor: 01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  merge_limit: NO_MAIN_MERGE_UNTIL_EXPLICIT_PRODUCTION_EFFECT_AUTHORITY
+dependency:
+  package: KR-00E-DELIVERY-CONTRACT
+  candidate_sha: 2e66ebf928221e44acec0ee0efa34b881af18198
+  status: REVIEWED_CANDIDATE_PENDING_MAIN_BASE_CI_AND_EXTERNAL_MERGE_GATE
+  review_result: PASS_TARGETED_DELTA_NO_OPEN_P0_P1_P2
+  review_evidence: ../_MODULDOSSIERS/00_PROJEKT/KR-00E_CLAUDE_REVIEW_2026-09-29.md
+  review_evidence_sha256: 30E9B1BDAF0C834D0E0E3EB2133CFA7CFC338CDF583B3DD61125965D5F7BFCF2
+dossier_and_decision_ids:
+  - BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL_SECTION_4_KR_00G
+  - D-GOV-001
+  - D-GOV-002
+source_locks:
+  - kind: REPO_FILE
+    source: AGENTS.md
+    location: REPO
+    repo_commit: 2e66ebf928221e44acec0ee0efa34b881af18198
+    sha256: 7A5FBDBEAF295747AE8B1A648CE5D31FCE32D36B69064823AA63DB564DE0477D
+  - kind: REPO_FILE
+    source: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+    location: REPO
+    repo_commit: 2e66ebf928221e44acec0ee0efa34b881af18198
+    sha256: A45BD408B627017E27714A3529A2F1981BF7F2005633B2B5D3084202D80C9FF2
+  - kind: EXTERNAL_FILE
+    source: 00_ANLEITUNG_MODULDOSSIER.md
+    location: ../_MODULDOSSIERS
+    sha256: 893D264A026A23D5095D2FA02840B40F413CA525A83FFD91B1B1B24C7295E0B5
+  - kind: EXTERNAL_FILE
+    source: BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: EAEDDEF68C16BE403C6D05AD6F63234D4ACF75A762895F50008E07A59A782DC3
+  - kind: EXTERNAL_FILE
+    source: 00_OFFENE_PUNKTE_KREILE.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: DD4EB47449B671DD6FC3FE74915AE9AA913CB4A45968CB556908525D72D311C1
+  - kind: EXTERNAL_FILE
+    source: PRUEFUNG_DOSSIERS_2026-09-26.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: 155FA866DDC8CEB802D2DB474AC6FF590A8BE3AD2B4C4718AAB8543CEC420791
+  - kind: EXTERNAL_FILE
+    source: KR-00E_CLAUDE_REVIEW_2026-09-29.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: 30E9B1BDAF0C834D0E0E3EB2133CFA7CFC338CDF583B3DD61125965D5F7BFCF2
+    status: PASS_TARGETED_DELTA_NO_OPEN_P0_P1_P2
+  - kind: EXTERNAL_FILE
+    source: KR-00E_EXACT_SHA_CLOSURE_2026-09-29.json
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: 1457D2481D75EE5378BB32E7A15CA320F3280177164DB5F39EE3804744FF1D96
+    status: VALIDATED_EXACT_SHA_CLOSURE
+repo_allowlist:
+  - .gitattributes
+  - docs/module/**
+  - docs/project/BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
+  - docs/project/00_OFFENE_PUNKTE_KREILE_2026-09-26.md
+  - docs/project/PRUEFUNG_DOSSIERS_2026-09-26.md
+  - docs/project/KR-00G_SOURCE_LOCKS_2026-09-29.md
+  - docs/delivery/packages/KR-00G-DOCS-IMPORT.yaml
+  - quality/authoritative-sources.json
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+forbidden:
+  - src/**
+  - supabase/**
+  - package.json
+  - package-lock.json
+  - .github/**
+  - scripts/**
+  - product_code_or_runtime_behavior
+  - auth_rls_roles_or_session_behavior
+  - provider_or_runtime_configuration
+  - remote_database_or_production_mutation
+  - pull_request_or_merge_to_main
+scope_budget:
+  max_product_files: 8
+  max_handwritten_product_lines: 800
+  max_new_migrations: 1
+  planned_product_files: 0
+  planned_governance_files: 230
+follow_up_packages:
+  - KR-00F-ROLLING-MANIFESTS
+new_objects_authority: NONE
+migration_status: NONE
+applicable_register_gates:
+  FUNCTIONAL_SLICE_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+  DATA_TRUTH_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+  UI_REFERENCE_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+  OWNER_UX_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+invariants:
+  data_truth: NO_DATA_MODEL_OR_RUNTIME_DATA_CHANGE_REFERENCE_DOCUMENTS_ONLY
+  tenant_and_rls: NOT_APPLICABLE_NO_DATA_POLICY_OR_REMOTE_CHANGE
+  roles_and_commands: NOT_APPLICABLE_NO_PRODUCT_ROLE_COMMAND_OR_SESSION_CHANGE
+  receipt_and_readback: SOURCE_SHA_NORMALIZED_BODY_SHA_IMPORTED_SHA_AND_CLASSIFICATION_FOR_EACH_DOCUMENT
+  reload_and_race: NOT_APPLICABLE_NO_RUNTIME_STATE
+  error_behavior: FAIL_CLOSED_ON_COUNT_HASH_BANNER_CLASSIFICATION_OR_ACTIVE_KEY_MISMATCH
+  rollback: ABANDON_CANDIDATE_BEFORE_DESCENDANTS_NO_DESTRUCTIVE_REWRITE
+visible_capabilities:
+  registry_changes: NONE
+  quality_no_fake_production: REQUIRED_DEFENSIVE_GATE
+review_contract:
+  broad_claude_reviews: 1
+  max_correction_rounds: 1
+  delta_review_after_correction: true
+  reviewer_must_differ_from_writer: true
+  specialist_gate_reviewers_are_not_implementation_reviewers: true
+acceptance:
+  - id: KR00G-A1
+    statement: Exakt 225 Quellen werden importiert, darunter 17 Dossiers mit je 12 Kerndateien und genau einem ausgewaehlten Abschlussbericht sowie vier Projektdateien.
+    evidence: SOURCE_LOCK_RECOMPUTE_COUNT_225_DOSSIERS_17_CORE_204_REPORTS_17_PROJECT_4
+  - id: KR00G-A2
+    statement: Jede importierte Markdown-Datei und das Source-Lock-Dokument beginnt mit dem exakten Referenzbanner und ist genau einmal zentral klassifiziert.
+    evidence: BANNER_AND_DOCUMENT_CLASSIFICATION_READBACK_226_OF_226
+  - id: KR00G-A3
+    statement: Fuer jede Quelle stimmen Quellhash, normalisierter Bodyhash und voller Importhash; nur das dokumentierte UTF-8-BOM der offenen Punkte wird entfernt.
+    evidence: SOURCE_LOCK_BYTE_RECOMPUTE_225_OF_225_ONE_DOCUMENTED_BOM
+  - id: KR00G-A4
+    statement: Kein Import enthaelt einen aktiven Missionsschluessel am Zeilenanfang und der Authority-Gate-Selftest sowie der Authority-Gate laufen gruen.
+    evidence: ACTIVE_KEY_NEGATIVE_SCAN_AND_AUTHORITY_GATES
+  - id: KR00G-A5
+    statement: Der Diff bleibt auf Dokumentimport, enge Git-Attribute fuer bytegetreue Referenzen, eine Klassifizierungsliste, ein Paketmanifest und den aktiven Missionszeiger begrenzt und enthaelt keinen Produktcode.
+    evidence: EXACT_PARENT_DIFF_ALLOWLIST_AND_NO_PRODUCT_PATHS
+  - id: KR00G-A6
+    statement: Der Parent ist der remote eingefrorene und gezielt durch Claude Opus bestandene KR-00E-Kandidat ohne Main- oder Productionclaim.
+    evidence: KR_00E_REMOTE_HEAD_REVIEW_AND_CLOSURE_HASH_READBACK
+local_gates:
+  - POWERSHELL_SOURCE_LOCK_RECOMPUTE_225_OF_225
+  - BANNER_CLASSIFICATION_AND_ACTIVE_KEY_SCAN
+  - AJV_DATA_TRUE_SCHEMA_COMPILE_AND_VALIDATE_KR_00G_MANIFEST
+  - YAML_PARSE_MANIFEST_AND_MISSION
+  - npm run quality:authority-gate:selftest
+  - npm run quality:authority-gate
+  - npm run quality:module-gates
+  - npm run quality:no-fake-production
+  - npm run lint:ratchet
+  - git diff --check
+  - npm run verify:precommit
+local_gate_evidence:
+  source_lock_recompute: PASS_225_OF_225_SOURCE_BODY_AND_IMPORT_HASHES_SOURCE_SET_330AB28A
+  banner_classification_and_active_key_scan: PASS_226_OF_226_CLASSIFIED_ZERO_ACTIVE_KEYS_ONE_DOCUMENTED_BOM
+  manifest_schema_and_yaml_parse: PASS_AJV_V2_DATA_TRUE_AND_MISSION_READBACK
+  authority_gate_selftest: PASS_NEGATIVE_CASES_27_OF_27
+  authority_gate: PASS_TRUTH_TYPES_7_UI_REFERENCES_4
+  module_gates: PASS
+  no_fake_production: PASS_REACHABLE_MOCKS_0_UNREGISTERED_VISIBLE_0
+  git_diff_check: PASS
+  precommit_typescript_staged_lint_unit: PENDING_AT_COMMIT
+  lint_ratchet: PASS_0_ERRORS_0_WARNINGS_0_APPLICABLE_FILES
+  github_required_checks: PENDING_REAL_MAIN_BASE_MERGE_WINDOW
+required_checks_after_push:
+  - quality
+  - agentur-gate
+  - Fresh Supabase replay
+non_required_but_must_pass:
+  - ratchet
+gate_mapping_contract: docs/delivery/GATE_MAPPING_V1.yaml
+findings_ledger_contract: docs/delivery/FINDINGS_LEDGER_SCHEMA_V1.json
+closure_receipt_contract: docs/delivery/EXACT_SHA_CLOSURE_RECEIPT_SCHEMA_V1.json
+evidence_mode: CI_FULL
+evidence_mode_status: BRANCH_AGENTUR_GATE_THEN_FULL_REQUIRED_CHECKS_AT_REAL_MAIN_BASE_WINDOW
+resource_profile:
+  mode: SERIAL_NO_PARALLEL_BUILD_OR_TEST_WRITERS
+  heavy_profile: NONE
+  available_ram_mb_preflight: 5827
+  shell_probe_seconds_preflight: 0.004
+  git_status_seconds_preflight: 0.241
+  expected_runtime_minutes: 35
+  cleanup_receipt: NO_PROJECT_CHILD_PROCESS_REMAINS_AND_WORKTREE_CLEAN
+findings: []
+split_or_follow_up_decision: >-
+  Offene P0/P1 nach der erlaubten Korrektur fuehren zu HALT_AND_REPLAN;
+  der Normalweg fuehrt genau zu KR-00F-ROLLING-MANIFESTS.
+next_allowed_package: KR-00G-EXACT-SHA-CLAUDE-REVIEW
+package_specific:
+  source_lock_index: docs/project/KR-00G_SOURCE_LOCKS_2026-09-29.md
+  source_set_sha256: 330AB28A395E3DC72559D7F4854048FBD08761ABD2995D013785173C1AB7CCA8
+  source_file_count: 225
+  dossier_count: 17
+  authority_classification_count: 226
+  reference_banner: "<!-- STATUS: REFERENCE_ONLY_NON_EXECUTABLE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->"
+  bom_normalization: ONLY_00_PROJEKT_00_OFFENE_PUNKTE_KREILE_MD_UTF8_BOM_REMOVED
+  register_gate_evidence:
+    functional_slice: NOT_APPLICABLE_DOCUMENT_IMPORT_NO_RUNTIME_FUNCTION
+    data_truth: NOT_APPLICABLE_DOCUMENT_IMPORT_NO_DATA_OR_SCHEMA_CHANGE
+    ui_reference: NOT_APPLICABLE_DOCUMENT_IMPORT_NO_RENDERED_UI_CHANGE
+    owner_ux: NOT_APPLICABLE_DOCUMENT_IMPORT_NO_USER_VISIBLE_PRODUCT_CHANGE
