@@ -32,11 +32,11 @@ rolling_manifest_policy:
   halt_on_open_p0_p1_after_one_correction: true
   no_periodic_build_automation: true
   initial_pointer_order:
-    - KR-02-B1-P0-CANCEL
     - KR-03A-DELIVERY-ADHERENCE-DOMAIN
     - KR-03B1-FINAL-DB-READ-CONTRACT
+    - KR-03B2-AUTHORIZED-SERVER-PORT
 workflow_facts_at_contract_parent:
-  parent_sha: 421180cf84f51b736b93730aa2822d20da8b9e7d
+  parent_sha: e1459026e1df6b035417672e553911c057c82fa7
   agentur_gate:
     workflow: .github/workflows/agentur-gate.yml
     branch_push_runs: true

@@ -46,14 +46,14 @@
         "closure_receipt_sha256"
       ],
       "properties": {
-        "package_id": { "const": "KR-04-PR113-DISPOSITION" },
+        "package_id": { "const": "KR-04R-PR113-DEAD-UI-REMOVAL" },
         "candidate_sha": { "$ref": "#/definitions/sha" },
         "tree_sha": { "$ref": "#/definitions/sha" },
-        "remote_ref": { "const": "origin/codex/kr-04-pr113-disposition" },
+        "remote_ref": { "const": "origin/codex/kr-04r-pr113-dead-ui-removal" },
         "review_result": { "const": "PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN_QUEUED_CANDIDATE" },
-        "review_receipt": { "const": "../_MODULDOSSIERS/00_PROJEKT/KR-04_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md" },
+        "review_receipt": { "const": "../_MODULDOSSIERS/00_PROJEKT/KR-04R_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md" },
         "review_receipt_sha256": { "$ref": "#/definitions/sha256" },
-        "closure_receipt": { "const": "../_MODULDOSSIERS/00_PROJEKT/KR-04_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md" },
+        "closure_receipt": { "const": "../_MODULDOSSIERS/00_PROJEKT/KR-04R_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md" },
         "closure_receipt_sha256": { "$ref": "#/definitions/sha256" }
       }
     },
@@ -94,9 +94,9 @@
             {
               "properties": {
                 "order": { "const": 1 },
-                "package_id": { "const": "KR-02-B1-P0-CANCEL" },
-                "scope": { "const": "B1" },
-                "predecessor": { "const": "KR-04R-PR113-DEAD-UI-REMOVAL" }
+                "package_id": { "const": "KR-03A-DELIVERY-ADHERENCE-DOMAIN" },
+                "scope": { "const": "B2A" },
+                "predecessor": { "const": "KR-02R-B1-P0-CANCEL" }
               }
             }
           ]
@@ -107,9 +107,9 @@
             {
               "properties": {
                 "order": { "const": 2 },
-                "package_id": { "const": "KR-03A-DELIVERY-ADHERENCE-DOMAIN" },
-                "scope": { "const": "B2A" },
-                "predecessor": { "const": "KR-02-B1-P0-CANCEL" }
+                "package_id": { "const": "KR-03B1-FINAL-DB-READ-CONTRACT" },
+                "scope": { "const": "B2B1" },
+                "predecessor": { "const": "KR-03A-DELIVERY-ADHERENCE-DOMAIN" }
               }
             }
           ]
@@ -120,9 +120,9 @@
             {
               "properties": {
                 "order": { "const": 3 },
-                "package_id": { "const": "KR-03B1-FINAL-DB-READ-CONTRACT" },
-                "scope": { "const": "B2B1" },
-                "predecessor": { "const": "KR-03A-DELIVERY-ADHERENCE-DOMAIN" }
+                "package_id": { "const": "KR-03B2-AUTHORIZED-SERVER-PORT" },
+                "scope": { "const": "B2B2" },
+                "predecessor": { "const": "KR-03B1-FINAL-DB-READ-CONTRACT" }
               }
             }
           ]
@@ -135,11 +135,11 @@
       "additionalProperties": false,
       "required": ["package_id", "predecessor", "planned_path", "classification", "issue_when"],
       "properties": {
-        "package_id": { "const": "KR-02-B1-P0-CANCEL" },
-        "predecessor": { "const": "KR-04R-PR113-DEAD-UI-REMOVAL" },
-        "planned_path": { "const": "docs/delivery/packages/KR-02-B1-P0-CANCEL.yaml" },
+        "package_id": { "const": "KR-03A-DELIVERY-ADHERENCE-DOMAIN" },
+        "predecessor": { "const": "KR-02R-B1-P0-CANCEL" },
+        "planned_path": { "const": "docs/delivery/packages/KR-03A-DELIVERY-ADHERENCE-DOMAIN.yaml" },
         "classification": { "const": "POINTER_ONLY_NON_EXECUTABLE_UNTIL_ISSUED" },
-        "issue_when": { "const": "KR_04R_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED" }
+        "issue_when": { "const": "KR_02R_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED" }
       }
     },
     "materialized_future_contracts": {
@@ -160,7 +160,7 @@
       "properties": {
         "order": { "type": "integer", "minimum": 1 },
         "package_id": { "type": "string", "pattern": "^KR-" },
-        "scope": { "enum": ["GOVERNANCE", "PRODUCT_CLEANUP", "B1", "B2A", "B2B1"] },
+        "scope": { "enum": ["GOVERNANCE", "PRODUCT_CLEANUP", "B1", "B2A", "B2B1", "B2B2"] },
         "predecessor": { "type": "string", "pattern": "^KR-" },
         "classification": { "const": "ORDER_POINTER_NOT_AN_EXECUTABLE_MANIFEST" },
         "issue_when": { "const": "PREDECESSOR_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED" }
