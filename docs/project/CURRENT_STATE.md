@@ -1,9 +1,13 @@
 # CURRENT_STATE — Galvanik-Kreile WerkstattCockpit
 
-**Lieferstand 2026-09-10: `main@13240de2a5ca9e9cfae4f8c72552443dac1d7630`.** Diese Datei
+**Lieferstand 2026-09-28: `main@21a23567d51e4805f065ce9ae8c59bdc5faf9fa9`.** Diese Datei
 beschreibt ausschließlich auf `main` belegte Lieferungen. Aktives Paket, Branch, Base, Kandidatenstatus
 und nächstes Gate stehen ausschließlich in `missions/F1_ORDER_TO_CASH_PILOT_001.yml`. Die
 ausführlichen F0-Tabellen darunter sind ein datierter historischer Snapshot.
+
+Die Alt-PRs #84, #113, #114 und #115 sowie ihre `archive/pr-*`-Refs sind Kandidaten- und
+Verlustschutzquellen, keine auf `main` gelieferte Produktwahrheit. Ihre aktuelle Disposition steht im
+NON_LOSS_REGISTER; maschinenlesbare Live-Fakten stehen in `ALT_PR_INVENTORY_2026-09-28.json`.
 
 ## Auf main belegte Lieferwahrheit
 

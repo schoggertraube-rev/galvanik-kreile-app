@@ -2,6 +2,18 @@
 
 # NON_LOSS_REGISTER
 
+## Aktuelle Alt-PR-Disposition 2026-09-28
+
+| PR | Exakter Head / Archivref | Disposition | Folgepaket |
+|---|---|---|---|
+| #84 | `9845e91e3003e81ff9f8b5b28bf8882dd12bf0d7` / `archive/pr-84-9845e91e` | geschlossen, ungemergt, vollständig archiviert; nur Vergleichsquelle, kein Header-/Overlay-Wholesale-Merge | `KR-05` |
+| #113 | `e477e6b2314d5a97575a32dc35ca0d16b55625d7` / `archive/pr-113-e477e6b2` | vorerst offen und archiviert; pfadweise Restnutzenentscheidung, Mock-CSS/-Copy nicht direkt mergen | `KR-04` |
+| #114 | `0d3bacc6d929eb8f6102200fba0681c7335025c2` / `archive/pr-114-0d3bacc6` | offener Kandidat; noch kein PASS- oder Main-Claim | `KR-02` (breite Exact-SHA-Review, höchstens eine Korrektur, frische Required Checks) |
+| #115 | `71dbc8151b30a3aa964d5cd4ea3562b1f1c03647` / `archive/pr-115-71dbc815` | offen und archiviert; kein direkter Stack-Merge; Schließung erst als getrennte koordinierte Aktion nach bestandenem KR-00D-Review | `KR-03a`, `KR-03b-1`, `KR-03b-2` |
+
+Archivrefs sind ausschließlich Verlustschutz. Keiner dieser PRs oder refs ist dadurch auf `main`
+geliefert oder für Production freigegeben. Bestehende Salvage-Einträge darunter bleiben erhalten.
+
 > **Ausführungsgrenze D-GOV-001 (2026-09-10):** Ausschließlich
 > `missions/F1_ORDER_TO_CASH_PILOT_001.yml` die Reihenfolge M0 -> F1-R0 -> F1.2 bis F1.6.
 > Aeltere Zeilen mit `ACTIVE`, offene PR-Listen und Worktree-Angaben unten sind bewahrte Historie

@@ -1,0 +1,243 @@
+schema_version: 2
+package_id: KR-00F-ROLLING-MANIFESTS
+project: GALVANIK_KREILE_WERKSTATTCockpit
+state: CONTRACT_READY
+execution_state_source: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+manifest_profile: ROLLING_V2
+queue_parent_sha: 124636759930a2eb5b8c26e68cc93acf21ac7eb4
+base_sha: 124636759930a2eb5b8c26e68cc93acf21ac7eb4
+origin_main_sha: 21a23567d51e4805f065ce9ae8c59bdc5faf9fa9
+target_sha: PENDING_AFTER_LOCAL_VERIFICATION
+branch: codex/kr-00f-rolling-manifests
+goal: >-
+  Den redteam-geprueften Bauplan als fail-closed rollende Paketkette
+  ausfuehrbar machen: genau ein materieller Vertrag zur Zeit, nur ein
+  nicht ausfuehrbarer Zeiger auf das naechste Paket und kein Vorrat, der
+  durch neue Kandidaten- oder Main-SHAs veraltet.
+active_mission_file: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+dod_spec_approved_by:
+  authority: OWNER_CURRENT_TASK
+  date: "2026-09-29"
+  instruction: >-
+    Den vereinbarten Plan seriell Paket fuer Paket umsetzen; wenn ein Merge
+    nicht zulaessig ist, den exakten Kandidaten sauber ablegen, weiterbauen
+    und niemals Kandidat mit Main-Lieferung verwechseln.
+execution_actors:
+  writer: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  implementation_reviewer: CLAUDE_OPUS_NEW_READ_ONLY_SESSION_AFTER_EXACT_SHA
+  specialist_gate_reviewers: GITHUB_ACTIONS_REQUIRED_CHECK_RUNNERS_AFTER_PUSH
+  kreile_pl_session: 01a0ce4b-1843-7361-9ffc-47933f9ecdde
+  authorized_future_merge_actor: 01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  merge_limit: NO_MAIN_MERGE_UNTIL_EXPLICIT_PRODUCTION_EFFECT_AUTHORITY
+dependency:
+  package: KR-00G-DOCS-IMPORT
+  candidate_sha: 124636759930a2eb5b8c26e68cc93acf21ac7eb4
+  status: REVIEWED_CANDIDATE_PENDING_MAIN_BASE_CI_AND_EXTERNAL_MERGE_GATE
+  review_result: PASS_EXACT_SHA_NO_OPEN_P0_P1_P2
+  review_evidence: ../_MODULDOSSIERS/00_PROJEKT/KR-00G_CLAUDE_REVIEW_2026-09-29.md
+  review_evidence_sha256: 70762550997571E009DF7E718228F8A275AB09CE8682CF28F06D02C087A7F4AC
+dossier_and_decision_ids:
+  - BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL_SECTION_4_KR_00F
+  - D-GOV-001
+  - D-GOV-002
+source_locks:
+  - kind: REPO_FILE
+    source: AGENTS.md
+    location: REPO
+    repo_commit: 124636759930a2eb5b8c26e68cc93acf21ac7eb4
+    sha256: 7A5FBDBEAF295747AE8B1A648CE5D31FCE32D36B69064823AA63DB564DE0477D
+  - kind: REPO_FILE
+    source: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+    location: REPO
+    repo_commit: 124636759930a2eb5b8c26e68cc93acf21ac7eb4
+    sha256: 0FAD6383F1A7667BDFBAE5BDA9ADB29943CD82479FA0CE9C723490E6304261A9
+  - kind: REPO_FILE
+    source: docs/delivery/packages/PACKAGE_MANIFEST_SCHEMA_V2.json
+    location: REPO
+    repo_commit: 124636759930a2eb5b8c26e68cc93acf21ac7eb4
+    sha256: 279FE4138E72BFF72279CE8270C9910FA3643D01E6FBDBD1DAC029D55380A357
+  - kind: REPO_FILE
+    source: docs/delivery/GATE_MAPPING_V1.yaml
+    location: REPO
+    repo_commit: 124636759930a2eb5b8c26e68cc93acf21ac7eb4
+    sha256: 45283DFD5815B4871034AAE591BA928D52E28AC87CFA13C97BCCC7E498E6EEC8
+  - kind: REPO_FILE
+    source: docs/project/BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
+    location: REPO
+    repo_commit: 124636759930a2eb5b8c26e68cc93acf21ac7eb4
+    sha256: F9C165871EDD24E5CA3EC826C24A791BB34CB6C32244C424FBB87543B6E73E8A
+  - kind: REPO_FILE
+    source: docs/project/KR-00G_SOURCE_LOCKS_2026-09-29.md
+    location: REPO
+    repo_commit: 124636759930a2eb5b8c26e68cc93acf21ac7eb4
+    sha256: 51B727E92A26A675DE7BE14AAB2EF44710EE141ECC09123C7C2D6D9CE83D4A91
+  - kind: EXTERNAL_FILE
+    source: KR-00G_CLAUDE_REVIEW_2026-09-29.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: 70762550997571E009DF7E718228F8A275AB09CE8682CF28F06D02C087A7F4AC
+    status: PASS_EXACT_SHA_NO_OPEN_P0_P1_P2
+  - kind: EXTERNAL_FILE
+    source: KR-00G_EXACT_SHA_CLOSURE_2026-09-29.json
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: D1BEA6A139225F37435CF5D1BEFC3612A858A5DC391B7B321E56448C0932E2E4
+    status: VALIDATED_REVIEWED_CANDIDATE_CLOSURE
+repo_allowlist:
+  - docs/delivery/packages/PACKAGE_MANIFEST_SCHEMA_V2.json
+  - docs/delivery/GATE_MAPPING_V1.yaml
+  - docs/delivery/ROLLING_MANIFEST_QUEUE_SCHEMA_V1.json
+  - docs/delivery/ROLLING_MANIFEST_QUEUE_V1.json
+  - docs/delivery/packages/KR-00F-ROLLING-MANIFESTS.yaml
+  - scripts/quality/check-module-gates.mjs
+  - src/test/s1_module_gates.test.ts
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+forbidden:
+  - src/app/**
+  - src/components/**
+  - src/modules/**
+  - supabase/**
+  - package.json
+  - package-lock.json
+  - .github/**
+  - product_code_or_runtime_behavior
+  - auth_rls_roles_or_session_behavior
+  - provider_or_runtime_configuration
+  - remote_database_or_production_mutation
+  - pull_request_or_merge_to_main
+scope_budget:
+  max_product_files: 8
+  max_handwritten_product_lines: 800
+  max_new_migrations: 1
+  planned_product_files: 0
+  planned_governance_files: 8
+follow_up_packages:
+  - KR-01-GOVERNANCE-MERGE
+new_objects_authority: NONE
+migration_status: NONE
+applicable_register_gates:
+  FUNCTIONAL_SLICE_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+  DATA_TRUTH_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+  UI_REFERENCE_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+  OWNER_UX_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+register_gate_evidence:
+  FUNCTIONAL_SLICE_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: LOCAL_VERIFIED
+    evidence_ref: acceptance:KR00F-A6
+  DATA_TRUTH_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: LOCAL_VERIFIED
+    evidence_ref: invariant:data_truth
+  UI_REFERENCE_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: OWNER_PREVIEWED
+    evidence_ref: acceptance:KR00F-A6
+  OWNER_UX_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: OWNER_PREVIEWED
+    evidence_ref: acceptance:KR00F-A6
+invariants:
+  data_truth: NO_DATA_MODEL_SCHEMA_MIGRATION_OR_RUNTIME_DATA_CHANGE
+  tenant_and_rls: NOT_APPLICABLE_NO_DATA_ACCESS_OR_REMOTE_CHANGE
+  roles_and_commands: NOT_APPLICABLE_NO_PRODUCT_ROLE_COMMAND_OR_SESSION_CHANGE
+  receipt_and_readback: EXACT_PARENT_REVIEW_AND_CLOSURE_HASHES_PLUS_SCHEMA_QUEUE_AND_GATE_READBACK
+  reload_and_race: ONE_MATERIALIZED_CONTRACT_PREVENTS_CONCURRENT_OR_STALE_EXECUTION
+  error_behavior: FAIL_CLOSED_ON_SCHEMA_QUEUE_PARENT_ATTRIBUTE_OR_MISSION_MISMATCH
+  rollback: ABANDON_CANDIDATE_BEFORE_DESCENDANTS_NO_DESTRUCTIVE_REWRITE
+visible_capabilities:
+  registry_changes: NONE
+  quality_no_fake_production: REQUIRED_DEFENSIVE_GATE
+review_contract:
+  broad_claude_reviews: 1
+  max_correction_rounds: 1
+  delta_review_after_correction: true
+  reviewer_must_differ_from_writer: true
+  specialist_gate_reviewers_are_not_implementation_reviewers: true
+acceptance:
+  - id: KR00F-A1
+    statement: Das V2-Schema verlangt fuer jedes neue Paket das Rolling-Profil und strukturierte Evidenz fuer alle vier Registergates, waehrend KR-00E und KR-00G weiter byteunveraendert validieren.
+    evidence: AJV_DATA_TRUE_BACKWARD_COMPATIBILITY_AND_NEGATIVE_CASE_MATRIX
+  - id: KR00F-A2
+    statement: Verschachtelte konkurrierende Wahrheitsfelder sind in package_specific rekursiv verboten und koennen nicht mehr unter Unterobjekten oder Arrays versteckt werden.
+    evidence: AJV_RECURSIVE_FORBIDDEN_KEY_NEGATIVE_CASES
+  - id: KR00F-A3
+    statement: Functional und Data sind fest an LOCAL_VERIFIED, UI Reference und Owner UX fest an OWNER_PREVIEWED gebunden und jede Nichtanwendbarkeit traegt einen strukturierten Evidenzzeiger.
+    evidence: SCHEMA_AND_GATE_MAPPING_STAGE_READBACK
+  - id: KR00F-A4
+    statement: Die rollende Queue enthaelt nur die geordnete Anfangsreichweite Governance, B1 und B2a als nicht ausfuehrbare Zeiger und exakt null vorproduzierte Zukunftsmanifeste.
+    evidence: AJV_QUEUE_SCHEMA_VALIDATION_AND_ZERO_FUTURE_CONTRACTS
+  - id: KR00F-A5
+    statement: Die KR-00G-Importausnahme ist fail-closed an den Source-Lock gebunden; jede neue oder fehlende Datei unter docs/module sowie unvollstaendige Git-Attribute machen das Module-Gate rot.
+    evidence: TARGETED_MODULE_GATE_TESTS_AND_REAL_REPOSITORY_PASS
+  - id: KR00F-A6
+    statement: Das Paket aendert weder Produktfunktion noch Datenmodell, sichtbare UI, Rollen, Provider oder Production und erhebt keinen Main-Lieferclaim.
+    evidence: EXACT_PARENT_DIFF_ALLOWLIST_AND_NO_PRODUCT_PATHS
+  - id: KR00F-A7
+    statement: Die aktive Mission zeigt exklusiv auf KR-00F und bindet den remote identischen, durch Claude Opus bestandenen KR-00G-Kandidaten als exakten Parent.
+    evidence: MISSION_PARENT_BRANCH_PACKAGE_AND_EXTERNAL_RECEIPT_READBACK
+local_gates:
+  - AJV_DATA_TRUE_SCHEMA_COMPILE_AND_VALIDATE_ALL_V2_MANIFESTS
+  - AJV_RECURSIVE_FORBIDDEN_KEY_NEGATIVE_CASES
+  - AJV_QUEUE_SCHEMA_VALIDATE
+  - YAML_PARSE_GATE_MAPPING_MANIFEST_AND_MISSION
+  - npx vitest run src/test/s1_module_gates.test.ts
+  - npm run quality:authority-gate:selftest
+  - npm run quality:authority-gate
+  - npm run quality:module-gates
+  - npm run quality:no-fake-production
+  - npm run lint:ratchet
+  - git diff --check
+  - npm run verify:precommit
+local_gate_evidence:
+  manifest_schema_and_backward_compatibility: PASS_V2_MANIFESTS_3_OF_3_AND_LEGACY_KR_00E_KR_00G_UNCHANGED
+  recursive_forbidden_key_negative_matrix: PASS_NESTED_STATUS_WRONG_STAGE_AND_APPLICABILITY_MISMATCH_FAIL_CLOSED
+  queue_schema: PASS_EXACT_THREE_POINTER_HORIZON_AND_ZERO_FUTURE_CONTRACTS_NEGATIVE_CASE
+  module_reference_attribute_guard: PASS_TARGETED_54_OF_54_AND_REAL_REPOSITORY
+  authority_gate_selftest: PASS_NEGATIVE_CASES_27_OF_27
+  authority_gate: PASS_TRUTH_TYPES_7_UI_REFERENCES_4
+  module_gates: PASS
+  no_fake_production: PASS_REACHABLE_MOCKS_0_UNREGISTERED_VISIBLE_0
+  lint_ratchet: PASS_0_ERRORS_0_WARNINGS
+  git_diff_check: PASS
+  precommit_typescript_staged_lint_unit: PASS_TYPESCRIPT_LINT_2_FILES_UNIT_116_FILES_970_TESTS
+  github_required_checks: PENDING_REAL_MAIN_BASE_MERGE_WINDOW
+required_checks_after_push:
+  - quality
+  - agentur-gate
+  - Fresh Supabase replay
+non_required_but_must_pass:
+  - ratchet
+gate_mapping_contract: docs/delivery/GATE_MAPPING_V1.yaml
+findings_ledger_contract: docs/delivery/FINDINGS_LEDGER_SCHEMA_V1.json
+closure_receipt_contract: docs/delivery/EXACT_SHA_CLOSURE_RECEIPT_SCHEMA_V1.json
+evidence_mode: CI_FULL
+evidence_mode_status: BRANCH_AGENTUR_GATE_THEN_FULL_REQUIRED_CHECKS_AT_REAL_MAIN_BASE_WINDOW
+resource_profile:
+  mode: SERIAL_NO_PARALLEL_BUILD_OR_TEST_WRITERS
+  heavy_profile: NONE
+  available_ram_mb_preflight: 4876
+  shell_probe_seconds_preflight: 0.003
+  git_status_seconds_preflight: 0.217
+  expected_runtime_minutes: 35
+  cleanup_receipt: NO_PROJECT_CHILD_PROCESS_REMAINS_AND_WORKTREE_CLEAN
+findings: []
+split_or_follow_up_decision: >-
+  Offene P0/P1 nach der einen erlaubten Korrektur fuehren zu HALT_AND_REPLAN;
+  der bestandene Normalweg stellt danach nur KR-01-GOVERNANCE-MERGE aus.
+next_allowed_package: KR-00F-EXACT-SHA-CLAUDE-REVIEW
+package_specific:
+  rolling_policy_contract: docs/delivery/ROLLING_MANIFEST_QUEUE_V1.json
+  queue_schema_contract: docs/delivery/ROLLING_MANIFEST_QUEUE_SCHEMA_V1.json
+  initial_horizon:
+    - package: KR-01-GOVERNANCE-MERGE
+      scope: GOVERNANCE
+    - package: KR-02-B1-P0-CANCEL
+      scope: B1
+    - package: KR-03A-DELIVERY-ADHERENCE-DOMAIN
+      scope: B2A
+  materialized_future_contracts: 0
+  p3_closure:
+    nested_truth_key_ban: REQUIRED_AND_TESTED
+    concrete_register_gate_stages: REQUIRED_AND_TESTED
+    structured_na_evidence: REQUIRED_AND_TESTED
+    imported_reference_attribute_guard: REQUIRED_AND_TESTED
+    mission_advance: REQUIRED_AND_TESTED
