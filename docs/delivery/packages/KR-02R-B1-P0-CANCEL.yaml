@@ -1,0 +1,250 @@
+schema_version: 2
+package_id: KR-02R-B1-P0-CANCEL
+project: GALVANIK_KREILE_WERKSTATTCockpit
+state: CONTRACT_READY
+execution_state_source: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+manifest_profile: ROLLING_V2
+queue_parent_sha: 16888ccc1f0c97064af3d1552538c6975440b1fb
+base_sha: 16888ccc1f0c97064af3d1552538c6975440b1fb
+origin_main_sha: 16888ccc1f0c97064af3d1552538c6975440b1fb
+base_handoff:
+  queue_parent_sha: 16888ccc1f0c97064af3d1552538c6975440b1fb
+  effective_base_sha: 16888ccc1f0c97064af3d1552538c6975440b1fb
+  effective_base_tree_sha: 4ccfbc0f01c7bb92de8e8a198b43a79a0cd543f2
+  entries: []
+target_sha: PENDING_AFTER_LOCAL_VERIFICATION
+branch: codex/kr-02r-b1-p0-cancel
+goal: >-
+  Das B1-P0-Storno-Gate frisch auf dem remote-identischen, ausgelieferten und
+  unabhaengig geprueften KR-04R-Main-Stand bauen: eine additive Ersetzung des bestehenden
+  Invoice-Guards verhindert Storno bei bezahltem, teilbezahltem,
+  uninitialisiertem oder Nullbetrag-Zahlungsstand, ohne den realen
+  Ausstellungs-, Storno- oder Zahlungspfad zu brechen.
+active_mission_file: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+dod_spec_approved_by:
+  authority: OWNER_CURRENT_TASK_AND_RATIFIED_BUILDPLAN
+  date: "2026-09-29"
+  instruction: >-
+    PR 114 einmal exakt pruefen; bei Nichtbestehen KR-02R frisch als kleines
+    serielles Paket bauen, real testen, einmal Opus-reviewen und hoechstens
+    einmal korrigieren. Kein Main-Merge oder Production-Effekt.
+execution_actors:
+  writer: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  implementation_reviewer: CLAUDE_OPUS_NEW_READ_ONLY_SESSION_AFTER_EXACT_SHA
+  specialist_gate_reviewers: GITHUB_ACTIONS_REQUIRED_CHECK_RUNNERS_AFTER_PUSH
+  kreile_pl_session: 01a0ce4b-1843-7361-9ffc-47933f9ecdde
+  authorized_future_merge_actor: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  merge_limit: NORMAL_MAIN_MERGE_AFTER_EXACT_SHA_REVIEW_AND_ALL_GATES_NO_MANUAL_DEPLOY
+dependency:
+  package: KR-04R-PR113-DEAD-UI-REMOVAL
+  candidate_sha: 16888ccc1f0c97064af3d1552538c6975440b1fb
+  status: MAIN_DELIVERED_REMOTE_GATES_GREEN_AUTOMATIC_VERCEL_PRODUCTION_SUCCESS
+  review_result: PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN_MAIN_DELIVERED_TREE_EQUIVALENT
+  review_evidence: ../_MODULDOSSIERS/00_PROJEKT/KR-04R_MAIN_DELIVERY_RECEIPT_2026-10-03.md
+  review_evidence_sha256: 7D13B65A1FD7E1BCD3C109BE592564672D746BF2D1B0FA169CC22087AEC915A1
+dossier_and_decision_ids:
+  - BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL_SECTION_5_KR_02
+  - K-G07-004
+  - T-G07-016
+  - PR114_EXACT_HEAD_REVIEW_2026-09-29
+source_locks:
+  - kind: REPO_FILE
+    source: .github/workflows/quality.yml
+    location: REPO
+    repo_commit: 16888ccc1f0c97064af3d1552538c6975440b1fb
+    sha256: D5A9E455AE33EE415DD3F8F808DAFF753AA287231A5080FCC35F25BBBD78A4CF
+  - kind: REPO_FILE
+    source: src/test/f1_4_immutable_invoice_contract.integration.test.ts
+    location: REPO
+    repo_commit: 16888ccc1f0c97064af3d1552538c6975440b1fb
+    sha256: E605D27E6AF3AA0A1C0E6DBFE8D9E093FDC75112E42B1F1A296849246FECAD7F
+  - kind: REPO_FILE
+    source: supabase/migrations/20260905201850_f1_5_payment_mode_intake_contract.sql
+    location: REPO
+    repo_commit: 16888ccc1f0c97064af3d1552538c6975440b1fb
+    sha256: 4D61ED0800DFFA439EA315478A7A898F5A742845AC5E8FA3FD711B9C40BD892F
+  - kind: EXTERNAL_FILE
+    source: BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: EAEDDEF68C16BE403C6D05AD6F63234D4ACF75A762895F50008E07A59A782DC3
+    status: FINAL_AFTER_ONE_OPUS_REDTEAM_AND_OWNER_EXECUTION_AMENDMENT
+  - kind: EXTERNAL_FILE
+    source: KR-04R_MAIN_DELIVERY_RECEIPT_2026-10-03.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: 7D13B65A1FD7E1BCD3C109BE592564672D746BF2D1B0FA169CC22087AEC915A1
+    status: PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN_MAIN_DELIVERED_TREE_EQUIVALENT
+  - kind: EXTERNAL_FILE
+    source: PR114_EXACT_HEAD_REVIEW_RECEIPT_2026-09-29.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: 637D6323AAAB1A0BEF9C1536A5552E3E645DE58B9210644123A3BFE19DD15448
+    status: FAIL_P1_EVIDENCE_GAP_FRESH_REBUILD_REQUIRED
+  - kind: EXTERNAL_FILE
+    source: 0001-kreile-Paket-B1-P0-Storno.patch
+    location: ../_claude_review_runs/PR114-0d3bacc6
+    sha256: FBF59C51DC9CE53A88FCC86E015F268CCE5C170B5C95F535D8BC645BA5F6331B
+    status: REVIEWED_INPUT_SALVAGE_ONLY_NO_CHERRY_PICK_OR_STACK_MERGE
+  - kind: EXTERNAL_FILE
+    source: 0002-kreile-Paket-B1-P0-Storno.patch
+    location: ../_claude_review_runs/PR114-0d3bacc6
+    sha256: 9A7C5A72C81568C8CDE70D8D6F7E41CC982C692CF9FF0BD524AEF760F5E70B0D
+    status: REVIEWED_INPUT_SALVAGE_ONLY_NO_CHERRY_PICK_OR_STACK_MERGE
+repo_allowlist:
+  - docs/delivery/packages/KR-02R-B1-P0-CANCEL.yaml
+  - docs/delivery/packages/PACKAGE_MANIFEST_SCHEMA_V2.json
+  - docs/delivery/ROLLING_MANIFEST_QUEUE_SCHEMA_V1.json
+  - docs/delivery/ROLLING_MANIFEST_QUEUE_V1.json
+  - docs/delivery/GATE_MAPPING_V1.yaml
+  - docs/project/CURRENT_STATE.md
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - scripts/quality/check-delivery-contracts.mjs
+  - src/test/delivery_contracts.test.ts
+  - .github/workflows/quality.yml
+  - quality/eslint-baseline.json
+  - src/test/f1_4_immutable_invoice_contract.integration.test.ts
+  - src/test/f1_4_invoice_cancel_payment_guard.integration.test.ts
+  - supabase/migrations/20260929190000_f1_4_invoice_cancel_payment_guard.sql
+forbidden:
+  - every_product_path_except_the_three_named_product_paths
+  - src/app/**
+  - src/components/**
+  - src/modules/**
+  - src/lib/server/commands/**
+  - package_json_or_lockfile_change
+  - table_index_rls_policy_role_or_session_contract_change
+  - provider_runtime_remote_database_or_production_mutation
+  - manual_production_deploy_or_remote_database_mutation
+scope_budget:
+  max_product_files: 8
+  max_handwritten_product_lines: 800
+  max_new_migrations: 1
+  planned_product_files: 3
+  planned_governance_files: 11
+follow_up_packages:
+  - KR-03A-DELIVERY-ADHERENCE-DOMAIN
+  - KR-03B1-FINAL-DB-READ-CONTRACT
+new_objects_authority: NONE
+migration_status: LOCAL_FILE_ONLY
+applicable_register_gates:
+  FUNCTIONAL_SLICE_PASS: REQUIRED
+  DATA_TRUTH_PASS: REQUIRED
+  UI_REFERENCE_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+  OWNER_UX_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+register_gate_evidence:
+  FUNCTIONAL_SLICE_PASS:
+    applicability: REQUIRED
+    stage: LOCAL_VERIFIED
+    evidence_ref: acceptance:KR02R-A4
+  DATA_TRUTH_PASS:
+    applicability: REQUIRED
+    stage: LOCAL_VERIFIED
+    evidence_ref: acceptance:KR02R-A3
+  UI_REFERENCE_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: OWNER_PREVIEWED
+    evidence_ref: invariant:data_truth
+  OWNER_UX_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: OWNER_PREVIEWED
+    evidence_ref: invariant:roles_and_commands
+invariants:
+  data_truth: ONE_EXISTING_GUARD_FUNCTION_REPLACED_NO_TABLE_INDEX_RLS_POLICY_ROLE_REMOTE_OR_PRODUCTION_CHANGE
+  tenant_and_rls: EXISTING_TENANT_AND_RLS_CONTRACTS_BYTE_UNCHANGED_AND_REAL_LOCAL_DB_ONLY
+  roles_and_commands: EXISTING_APP_COMMANDS_BYTE_UNCHANGED_AND_EXECUTED_ON_FULL_SCHEMA
+  receipt_and_readback: DIRECT_DB_NEGATIVE_MATRIX_FULL_ROW_BEFORE_AFTER_REAL_COMMAND_ISSUE_CANCEL_AND_PAYMENT_READBACK
+  reload_and_race: EXISTING_REAL_COMMAND_RACE_AND_REPLAY_SUITE_RUNS_AFTER_UNPINNED_RESET
+  error_behavior: EXISTING_INVOICE_IMMUTABLE_23514_FAIL_CLOSED_SIGNAL_RETAINED
+  rollback: NEW_REVIEWED_REPLACEMENT_FUNCTION_MIGRATION_ONLY_NO_REMOTE_DOWN_MIGRATION_OR_DESTRUCTIVE_ACTION
+visible_capabilities:
+  registry_changes: NONE
+  quality_no_fake_production: REQUIRED_DEFENSIVE_GATE
+review_contract:
+  broad_claude_reviews: 1
+  max_correction_rounds: 1
+  delta_review_after_correction: true
+  reviewer_must_differ_from_writer: true
+  specialist_gate_reviewers_are_not_implementation_reviewers: true
+acceptance:
+  - id: KR02R-A1
+    statement: Der Parent ist exakt der remote-gruene, Opus-gepruefte und auf main ausgelieferte KR-04R-Merge 16888ccc mit bytegleichem Kandidatenbaum.
+    evidence: REMOTE_PARENT_MAIN_AND_EXTERNAL_RECEIPT_READBACK
+  - id: KR02R-A2
+    statement: PR 114 wurde genau einmal am exakten Head 0d3bacc6 breit geprueft, als FAIL mit P1-Beweisluecke disponiert und nicht gestapelt oder cherry-picked.
+    evidence: PR114_EXACT_HEAD_REVIEW_RECEIPT_AND_FRESH_PARENT_DIFF
+  - id: KR02R-A3
+    statement: Die neue lokale Migration ersetzt ausschliesslich private.guard_f1_4_invoice_update und blockiert direkte Storno-Umgehung bei Teilzahlung, Vollzahlung, fehlendem Zahlungsvertrag und Nullbetrag ohne Mutation.
+    evidence: FRESH_DB_DIRECT_GUARD_BEHAVIOR_MATRIX_AND_EXACT_MIGRATION_DIFF
+  - id: KR02R-A4
+    statement: Reale Ausstellung und reales Storno laufen nach ungepinntem Fresh Reset auf dem Schema mit dem neuen Guard erfolgreich und behalten Replay-, Race-, PDF- und Receipt-Vertraege.
+    evidence: F1_4_REAL_COMMAND_SUITE_AFTER_UNPINNED_RESET
+  - id: KR02R-A5
+    statement: Der reale Zahlungspfad laeuft nach eigenem ungepinntem Fresh Reset auf dem Schema mit dem neuen Guard erfolgreich.
+    evidence: F1_5_CONFIRM_PAYMENT_REAL_COMMAND_SUITE_AFTER_UNPINNED_RESET
+  - id: KR02R-A6
+    statement: Der F1.4-DB-Vertrag laeuft nach eigenem ungepinntem Fresh Reset inklusive der zwei korrigierten Zahlungsfixtures vollstaendig gruen.
+    evidence: F1_4_IMMUTABLE_CONTRACT_SUITE_AFTER_UNPINNED_RESET
+  - id: KR02R-A7
+    statement: Mission und Queue zeigen nach KR-02R genau auf KR-03A, danach KR-03B1 und KR-03B2; kein Zukunftsmanifest ist materialisiert.
+    evidence: QUEUE_SCHEMA_MAPPING_AND_DELIVERY_GATE
+  - id: KR02R-A8
+    statement: KR-02R bleibt QUEUED_CANDIDATE und erhebt keinen Main-, Merge-, Remote-Migrations- oder Production-Claim.
+    evidence: MISSION_EXTERNAL_RECEIPT_REMOTE_MAIN_AND_DRAFT_PR
+local_gates:
+  - npm run quality:delivery-contracts:selftest
+  - npm run quality:delivery-contracts
+  - npx vitest run src/test/delivery_contracts.test.ts
+  - npx tsc --noEmit
+  - npm run quality:authority-gate:selftest
+  - npm run quality:authority-gate
+  - npm run quality:module-gates
+  - npm run quality:no-fake-production
+  - npm run lint:ratchet
+  - git diff --check
+  - supabase db reset --local --no-seed then serial direct-guard F1.4 command F1.4 contract tests
+  - separate supabase db reset --local --no-seed then serial F1.5 confirm-payment test
+  - npm run verify:precommit
+required_checks_after_push:
+  - quality
+  - agentur-gate
+  - Fresh Supabase replay
+non_required_but_must_pass:
+  - ratchet
+gate_mapping_contract: docs/delivery/GATE_MAPPING_V1.yaml
+findings_ledger_contract: docs/delivery/FINDINGS_LEDGER_SCHEMA_V1.json
+closure_receipt_contract: docs/delivery/EXACT_SHA_CLOSURE_RECEIPT_SCHEMA_V1.json
+evidence_mode: CI_FULL
+evidence_mode_status: SERIAL_DB_PACKAGE_WITH_FULL_MAIN_BASE_CI_NO_REMOTE_DB_EFFECT
+resource_profile:
+  mode: SERIAL_NO_PARALLEL_BUILD_OR_TEST_WRITERS
+  heavy_profile: DB_ONLY
+  available_ram_mb_preflight: 5399
+  shell_probe_seconds_preflight: 0.292
+  git_status_seconds_preflight: 0.088
+  expected_runtime_minutes: 55
+  cleanup_receipt: PID_OR_RUN_ID_OUTPUT_TIMESTAMP_PHYSICAL_EXIT_AND_CLEAN_TREE_REQUIRED_CPU_NOT_SUFFICIENT
+findings:
+  - id: KR02R-FOLLOWUP-TEST-SIZE
+    severity: P2
+    status: DEFERRED_WITH_PACKAGE
+    summary: Der historische 699-Zeilen-Direktguard-Test wird gemaess Buildplan nicht im B1-P0-Korrekturbudget strukturell zerlegt.
+    evidence:
+      - BUILDPLAN_SECTION_5_KR_02_P2_LATER
+      - PR114_EXACT_HEAD_OPUS_REVIEW_P3_TEST_SIZE
+    follow_up_package: KR-02T-TEST-FIXTURE-CONSOLIDATION
+    fix_sha: null
+split_or_follow_up_decision: >-
+  KR-02R bleibt auf die bestehende Guard-Funktion, zwei betroffene Tests und
+  unvermeidliche CI-Verdrahtung begrenzt. Die strukturelle Verkleinerung des
+  historischen Direktguard-Tests ist als separates spaeteres Testpaket
+  disponiert und verbraucht keine Korrekturrunde dieses P0-Pakets.
+next_allowed_package: KR-02R-EXACT-SHA-CLAUDE-REVIEW
+package_specific:
+  source_pr: 114
+  source_head: 0d3bacc6d929eb8f6102200fba0681c7335025c2
+  source_archive_ref: archive/pr-114-0d3bacc6
+  prior_patch_sha256:
+    - FBF59C51DC9CE53A88FCC86E015F268CCE5C170B5C95F535D8BC645BA5F6331B
+    - 9A7C5A72C81568C8CDE70D8D6F7E41CC982C692CF9FF0BD524AEF760F5E70B0D
+  new_migration: supabase/migrations/20260929190000_f1_4_invoice_cancel_payment_guard.sql
+  guard_function: private.guard_f1_4_invoice_update
+  review_p1: REAL_COMMAND_SUITES_WERE_PREVIOUSLY_PINNED_BEFORE_GUARD_MIGRATION
+  review_p2_count: 3

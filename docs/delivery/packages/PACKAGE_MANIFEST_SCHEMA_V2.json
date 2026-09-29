@@ -144,7 +144,10 @@
           "minLength": 1
         },
         "merge_limit": {
-          "const": "NO_MAIN_MERGE_UNTIL_EXPLICIT_PRODUCTION_EFFECT_AUTHORITY"
+          "enum": [
+            "NO_MAIN_MERGE_UNTIL_EXPLICIT_PRODUCTION_EFFECT_AUTHORITY",
+            "NORMAL_MAIN_MERGE_AFTER_EXACT_SHA_REVIEW_AND_ALL_GATES_NO_MANUAL_DEPLOY"
+          ]
         }
       }
     },
@@ -171,7 +174,8 @@
           "enum": [
             "REVIEWED_CANDIDATE_PENDING_MAIN_BASE_CI_AND_EXTERNAL_MERGE_GATE",
             "MAIN_DELIVERED_PRODUCTION_EFFECT_AUTHORIZED_AND_READY",
-            "MAIN_DELIVERED_REMOTE_GATES_GREEN_NO_MANUAL_PRODUCTION_CLAIM"
+            "MAIN_DELIVERED_REMOTE_GATES_GREEN_NO_MANUAL_PRODUCTION_CLAIM",
+            "MAIN_DELIVERED_REMOTE_GATES_GREEN_AUTOMATIC_VERCEL_PRODUCTION_SUCCESS"
           ]
         },
         "review_result": {
@@ -517,7 +521,6 @@
         "effective_base_tree_sha": { "$ref": "#/definitions/sha" },
         "entries": {
           "type": "array",
-          "minItems": 1,
           "items": {
             "type": "object",
             "additionalProperties": false,

@@ -35,8 +35,8 @@ export const DELIVERY_PATHS = Object.freeze({
 });
 
 export const ACTIVE_MANIFEST_BINDING = Object.freeze({
-  path: "docs/delivery/packages/KR-04R-PR113-DEAD-UI-REMOVAL.yaml",
-  packageId: "KR-04R-PR113-DEAD-UI-REMOVAL",
+  path: "docs/delivery/packages/KR-02R-B1-P0-CANCEL.yaml",
+  packageId: "KR-02R-B1-P0-CANCEL",
 });
 
 const PR113_DISPOSITION_PACKAGE_ID = "KR-04-PR113-DISPOSITION";
@@ -118,7 +118,7 @@ const EFFECTIVE_REQUIRED_CHECKS = Object.freeze([
   "Fresh Supabase replay",
 ]);
 const NON_REQUIRED_BUT_MUST_PASS = Object.freeze(["ratchet"]);
-const REVIEWED_QUEUE_PARENT_SHA = "3fa208858ece10235394800a3a6ff48aae49568b";
+const REVIEWED_QUEUE_PARENT_SHA = "16888ccc1f0c97064af3d1552538c6975440b1fb";
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 
 function toPosix(value) {
@@ -845,8 +845,14 @@ function checkRollingConsistency(root, queue, mapping, mission, manifests, findi
   }
 
   const lastEntry = entries.at(-1);
-  if (
-    entries.length === 0 ||
+  if (entries.length === 0) {
+    if (
+      canonicalHandoff?.queue_parent_sha !== canonicalHandoff?.effective_base_sha ||
+      queue.parent_candidate?.tree_sha !== canonicalHandoff?.effective_base_tree_sha
+    ) {
+      findings.push("[delivery] Leerer Handoff ist nur bei identischem Queue-Parent und effektiver Base zulaessig");
+    }
+  } else if (
     lastEntry?.merge_sha !== canonicalHandoff?.effective_base_sha ||
     lastEntry?.tree_sha !== canonicalHandoff?.effective_base_tree_sha
   ) {
@@ -1045,16 +1051,16 @@ export function runSelftest(root = process.cwd()) {
   runCase("effective-base-handoff-drift", (fixture) => {
     const abs = path.join(fixture, DELIVERY_PATHS.queue);
     const value = JSON.parse(readFileSync(abs, "utf8"));
-    value.effective_base_handoff.effective_base_sha = value.effective_base_handoff.queue_parent_sha;
+    value.effective_base_handoff.effective_base_sha = "0000000000000000000000000000000000000001";
     writeFileSync(abs, `${JSON.stringify(value, null, 2)}\n`);
   }, "Effective-Base-Handoff-Drift");
 
   runCase("effective-base-handoff-chain-break", (fixture) => {
     const abs = path.join(fixture, DELIVERY_PATHS.queue);
     const value = JSON.parse(readFileSync(abs, "utf8"));
-    value.effective_base_handoff.entries[0].parent_sha = "0000000000000000000000000000000000000001";
+    value.effective_base_handoff.queue_parent_sha = "0000000000000000000000000000000000000001";
     writeFileSync(abs, `${JSON.stringify(value, null, 2)}\n`);
-  }, "Handoff-Kette ist vor Eintrag 1 unterbrochen");
+  }, "Queue-Parent stimmt nicht mit dem Ausgang der Handoff-Kette ueberein");
 
   runCase("receipt-bypass", (fixture) => {
     const abs = path.join(fixture, DELIVERY_PATHS.operatingReceipt);
