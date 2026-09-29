@@ -8,15 +8,15 @@
   },
   "execution_state_source": "missions/F1_ORDER_TO_CASH_PILOT_001.yml",
   "parent_candidate": {
-    "package_id": "KR-02R-B1-P0-CANCEL",
-    "candidate_sha": "b657b63ce734207b9ab37a97f2d772aca3e3b249",
-    "tree_sha": "29242ad64b8316e65b9dc49eaf63e379195929af",
-    "remote_ref": "origin/codex/kr-02r-b1-p0-cancel",
+    "package_id": "KR-03A-DELIVERY-ADHERENCE-DOMAIN",
+    "candidate_sha": "2ddd19791e704e463de9b0c1eb665bfea557e36a",
+    "tree_sha": "cc5ba7ac36d34228ea5d2fc46a23ee689a1c6e9d",
+    "remote_ref": "origin/codex/kr-03a-delivery-adherence-domain",
     "review_result": "PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN_QUEUED_CANDIDATE",
-    "review_receipt": "../_MODULDOSSIERS/00_PROJEKT/KR-02R_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md",
-    "review_receipt_sha256": "742CC8D5CB66E892BF681F63AA0086930AE93A7088208F69B0CC9633B3F4F667",
-    "closure_receipt": "../_MODULDOSSIERS/00_PROJEKT/KR-02R_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md",
-    "closure_receipt_sha256": "742CC8D5CB66E892BF681F63AA0086930AE93A7088208F69B0CC9633B3F4F667"
+    "review_receipt": "../_MODULDOSSIERS/00_PROJEKT/KR-03A_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md",
+    "review_receipt_sha256": "E86559D48ED49F510E5D849EC6E47E05E3DDCDA62D1BD5571EE2AACF68997BC1",
+    "closure_receipt": "../_MODULDOSSIERS/00_PROJEKT/KR-03A_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md",
+    "closure_receipt_sha256": "E86559D48ED49F510E5D849EC6E47E05E3DDCDA62D1BD5571EE2AACF68997BC1"
   },
   "issuance_policy": {
     "one_materialized_contract_at_a_time": true,
@@ -32,14 +32,6 @@
   "initial_horizon": [
     {
       "order": 1,
-      "package_id": "KR-03B1-FINAL-DB-READ-CONTRACT",
-      "scope": "B2B1",
-      "predecessor": "KR-03A-DELIVERY-ADHERENCE-DOMAIN",
-      "classification": "ORDER_POINTER_NOT_AN_EXECUTABLE_MANIFEST",
-      "issue_when": "PREDECESSOR_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED"
-    },
-    {
-      "order": 2,
       "package_id": "KR-03B2-AUTHORIZED-SERVER-PORT",
       "scope": "B2B2",
       "predecessor": "KR-03B1-FINAL-DB-READ-CONTRACT",
@@ -48,11 +40,11 @@
     }
   ],
   "next_contract_blueprint": {
-    "package_id": "KR-03B1-FINAL-DB-READ-CONTRACT",
-    "predecessor": "KR-03A-DELIVERY-ADHERENCE-DOMAIN",
-    "planned_path": "docs/delivery/packages/KR-03B1-FINAL-DB-READ-CONTRACT.yaml",
+    "package_id": "KR-03B2-AUTHORIZED-SERVER-PORT",
+    "predecessor": "KR-03B1-FINAL-DB-READ-CONTRACT",
+    "planned_path": "docs/delivery/packages/KR-03B2-AUTHORIZED-SERVER-PORT.yaml",
     "classification": "POINTER_ONLY_NON_EXECUTABLE_UNTIL_ISSUED",
-    "issue_when": "KR_03A_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED"
+    "issue_when": "KR_03B1_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED"
   },
   "materialized_future_contracts": [],
   "after_initial_horizon_rule": "ISSUE_ONLY_THE_NEXT_DEPENDENT_PACKAGE_FROM_THE_AUTHORITY_PLAN_AFTER_PREDECESSOR_CLOSURE"

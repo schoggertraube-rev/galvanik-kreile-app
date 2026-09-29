@@ -34,7 +34,7 @@ afterEach(() => {
   for (const root of temps.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-describe("KR-03A delivery governance gate", () => {
+describe("KR-03B1 delivery governance gate", () => {
   it("accepts the complete current contract set", () => {
     expect(checkDeliveryContracts(process.cwd())).toEqual({ ok: true, findings: [] });
   });
@@ -87,7 +87,7 @@ describe("KR-03A delivery governance gate", () => {
     const root = fixture();
     const rel = ACTIVE_MANIFEST_BINDING.path;
     const source = readFileSync(path.join(root, rel), "utf8").replace(
-      "evidence_ref: acceptance:KR03A-A2",
+      "evidence_ref: acceptance:KR03B1-A2",
       "evidence_ref: acceptance:DOES-NOT-EXIST",
     );
     writeFileSync(path.join(root, rel), source);
@@ -167,7 +167,7 @@ describe("KR-03A delivery governance gate", () => {
     const manifestPath = path.join(root, ACTIVE_MANIFEST_BINDING.path);
     writeFileSync(
       manifestPath,
-      readFileSync(manifestPath, "utf8").replace("planned_governance_files: 8", "planned_governance_files: 7"),
+      readFileSync(manifestPath, "utf8").replace("planned_governance_files: 9", "planned_governance_files: 8"),
     );
     expect(checkDeliveryContracts(root).findings).toContainEqual(
       expect.stringContaining("nicht fuer jeden Allowlist-Pfad exakt eine geplante Datei"),

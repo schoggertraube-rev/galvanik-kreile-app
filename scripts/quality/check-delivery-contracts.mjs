@@ -34,8 +34,8 @@ export const DELIVERY_PATHS = Object.freeze({
 });
 
 export const ACTIVE_MANIFEST_BINDING = Object.freeze({
-  path: "docs/delivery/packages/KR-03A-DELIVERY-ADHERENCE-DOMAIN.yaml",
-  packageId: "KR-03A-DELIVERY-ADHERENCE-DOMAIN",
+  path: "docs/delivery/packages/KR-03B1-FINAL-DB-READ-CONTRACT.yaml",
+  packageId: "KR-03B1-FINAL-DB-READ-CONTRACT",
 });
 
 const PR113_DISPOSITION_PACKAGE_ID = "KR-04-PR113-DISPOSITION";
@@ -616,7 +616,7 @@ function checkRollingConsistency(root, queue, mapping, mission, manifests, findi
     findings.push("[delivery] workflow_facts_at_contract_parent.parent_sha stimmt nicht mit mission.base_sha ueberein");
   }
 
-  const queueOrder = (queue.initial_horizon ?? []).map((entry) => entry.package_id);
+  const queueOrder = (queue.initial_horizon ?? []).map((entry) => entry?.package_id ?? "<invalid>");
   const mappingOrder = mapped.initial_pointer_order ?? [];
   if (JSON.stringify(queueOrder) !== JSON.stringify(mappingOrder)) {
     findings.push(`[delivery] Rolling-Policy-Drift: Queue-Reihenfolge ${queueOrder.join(" -> ")} != Mapping ${mappingOrder.join(" -> ")}`);
@@ -797,7 +797,7 @@ export function runSelftest(root = process.cwd()) {
   runCase("queue-order", (fixture) => {
     const abs = path.join(fixture, DELIVERY_PATHS.queue);
     const value = JSON.parse(readFileSync(abs, "utf8"));
-    [value.initial_horizon[0], value.initial_horizon[1]] = [value.initial_horizon[1], value.initial_horizon[0]];
+    value.initial_horizon[0].order = 2;
     writeFileSync(abs, `${JSON.stringify(value, null, 2)}\n`);
   }, "should be equal to constant");
 

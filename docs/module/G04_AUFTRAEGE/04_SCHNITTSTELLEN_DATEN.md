@@ -48,7 +48,7 @@ Alle Verträge werden über `src/modules/orders/public.ts` für browser-/domain-
 | `ORDER_FROZEN_V1` | `galvanik → fertig` | Freeze-Snapshot, `completedAt`, Version, IDs | G04 | GEBAUT |
 | `ORDER_FREEZE_CORRECTED_V1` | Freeze korrigiert | Referenz auf Freeze, Pflichtgrund, Akteur, neue Version | G04 | GEBAUT |
 | `ORDER_SCHEDULE_CHANGED_V1` | bestätigter oder Abholtermin geändert | kind, old/new date, Pflichtgrund, old/new version, IDs | G04 | SPEZ |
-| `ORDER_PICKED_UP_V2` | Ware abgeholt | Zahlungs-/Gate-Referenz, `occurredAt`, Version, IDs | G04 mit G07-Gate | GEBAUT |
+| `ORDER_PICKED_UP_V1` / `ORDER_PICKED_UP_V2` | Ware abgeholt | Gleichwertige aktive Zeitquelle; jeweilige Zahlungs-/Gate-Referenz, `occurredAt`, Version, IDs | G04 mit G07-Gate | GEBAUT |
 | `ORDER_CANCELLED_V1` | Auftrag storniert | FEHLT → Q-G04-002 | G04 | FEHLT; nicht implementieren |
 
 Alle Ereignisse tragen Tenant, Aggregate-ID, Schema-Version, `clientEventId`, `correlationId`, Aggregate-Version und UTC-Zeitpunkt. Sie sind append-only; Korrekturen erzeugen Gegenereignisse statt Updates der Historie.
@@ -96,7 +96,7 @@ Alle Ereignisse tragen Tenant, Aggregate-ID, Schema-Version, `clientEventId`, `c
 
 1. `orders.due_date` ist für neue G04-Arbeit der bestätigte Auftragstermin. `promised_due_date` wird nicht parallel beschrieben. Vor einer späteren Bereinigung muss ein read-only Abgleich `gleich / nur due_date / nur promised / widersprüchlich` liefern; widersprüchliche Zeilen werden nicht automatisch migriert.
 2. `pickup_due_date` ist eine additive Spalte auf `public.orders`; Historie liegt in `events`. Keine neue Tabelle und keine Remote-Migration in diesem Auftrag.
-3. Fertig-Zeitpunkt ist `completed_date` aus dem Freeze; Abholzeitpunkt kommt aus genau einem validen `ORDER_PICKED_UP_V2`-Ereignis. Kein „updated_at“ als Ersatz.
+3. Fertig-Zeitpunkt ist `completed_date` aus dem Freeze; Abholzeitpunkt kommt aus genau einem validen `ORDER_PICKED_UP_V1`- oder `ORDER_PICKED_UP_V2`-Ereignis. Beide Versionen sind aktive, gleichwertige Zeitquellen; kein `updated_at` als Ersatz.
 4. Storno-Felder/Event bleiben bis Q-G04-002 ungebaut und UI-seitig `In Klärung`.
 5. Dokumente, Zahlung und Kundenstamm werden nicht gespiegelt; G04 hält nur stabile Referenzen und fachlich nötige Snapshots.
 
