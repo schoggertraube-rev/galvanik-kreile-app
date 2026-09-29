@@ -8,15 +8,15 @@
   },
   "execution_state_source": "missions/F1_ORDER_TO_CASH_PILOT_001.yml",
   "parent_candidate": {
-    "package_id": "KR-03B2-AUTHORIZED-SERVER-PORT",
-    "candidate_sha": "ecb4ad9508186880d15993ac2b568e3f5c5ae801",
-    "tree_sha": "0f1e552a6f27732d714e5dd5d5a1643f27339e70",
-    "remote_ref": "origin/codex/kr-03b2-authorized-server-port",
+    "package_id": "KR-05-PR84-SEARCH-RECONCILIATION",
+    "candidate_sha": "f3bded923ddf20ceb07922929b97f2e7c41dfa32",
+    "tree_sha": "9666eb231ac720a4ddb3dc38c636317bf60b30a1",
+    "remote_ref": "origin/codex/kr-05-pr84-search-reconciliation",
     "review_result": "PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN_QUEUED_CANDIDATE",
-    "review_receipt": "../_MODULDOSSIERS/00_PROJEKT/KR-03B2_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md",
-    "review_receipt_sha256": "72C7E9D6C64DCBA17D19151622257658FB0688B0284CFAE97079143084E396EC",
-    "closure_receipt": "../_MODULDOSSIERS/00_PROJEKT/KR-03B2_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md",
-    "closure_receipt_sha256": "72C7E9D6C64DCBA17D19151622257658FB0688B0284CFAE97079143084E396EC"
+    "review_receipt": "../_MODULDOSSIERS/00_PROJEKT/KR-05_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-30.md",
+    "review_receipt_sha256": "CB4316921C8A6D4A1EFE7C9E319A055DADB0E8A247F6CA489E8EF26C0709B16F",
+    "closure_receipt": "../_MODULDOSSIERS/00_PROJEKT/KR-05_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-30.md",
+    "closure_receipt_sha256": "CB4316921C8A6D4A1EFE7C9E319A055DADB0E8A247F6CA489E8EF26C0709B16F"
   },
   "issuance_policy": {
     "one_materialized_contract_at_a_time": true,
@@ -32,19 +32,19 @@
   "initial_horizon": [
     {
       "order": 1,
-      "package_id": "KR-10A-UI-TRUTH-BINDING",
-      "scope": "GOVERNANCE",
-      "predecessor": "KR-05-PR84-SEARCH-RECONCILIATION",
+      "package_id": "KR-10B-DESIGN-SYSTEM-IMPORT",
+      "scope": "PRODUCT_FOUNDATION",
+      "predecessor": "KR-10A-UI-TRUTH-BINDING",
       "classification": "ORDER_POINTER_NOT_AN_EXECUTABLE_MANIFEST",
       "issue_when": "PREDECESSOR_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED"
     }
   ],
   "next_contract_blueprint": {
-    "package_id": "KR-10A-UI-TRUTH-BINDING",
-    "predecessor": "KR-05-PR84-SEARCH-RECONCILIATION",
-    "planned_path": "docs/delivery/packages/KR-10A-UI-TRUTH-BINDING.yaml",
+    "package_id": "KR-10B-DESIGN-SYSTEM-IMPORT",
+    "predecessor": "KR-10A-UI-TRUTH-BINDING",
+    "planned_path": "docs/delivery/packages/KR-10B-DESIGN-SYSTEM-IMPORT.yaml",
     "classification": "POINTER_ONLY_NON_EXECUTABLE_UNTIL_ISSUED",
-    "issue_when": "KR_05_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED"
+    "issue_when": "KR_10A_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED"
   },
   "materialized_future_contracts": [],
   "after_initial_horizon_rule": "ISSUE_ONLY_THE_NEXT_DEPENDENT_PACKAGE_FROM_THE_AUTHORITY_PLAN_AFTER_PREDECESSOR_CLOSURE"

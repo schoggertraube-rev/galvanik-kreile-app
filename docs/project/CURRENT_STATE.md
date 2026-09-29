@@ -18,6 +18,14 @@ indirekte View-Traceability wird nicht als temporaerer interner Vertrag kopiert,
 oeffentlichen KR-30A-Portumbau erhalten. Das ergibt null gueltige PR-84-Produktreste und keinen
 KR-05R-Auftrag. Dieser Kandidatenvermerk aendert den oben genannten `main`-Lieferstand nicht.
 
+Der KR-05-Kandidat `f3bded923ddf20ceb07922929b97f2e7c41dfa32` ist auf seinem
+Remote-Branch mit Quality, Fresh Supabase replay, Agentur-Gate und Ratchet gruen
+und durch eine unabhaengige Opus-Pruefung ohne offene P0/P1/P2 abgeschlossen.
+Er bleibt dennoch ein Kandidat und ist nicht auf `main` geliefert. Das darauf
+serielle Paket `KR-10A-UI-TRUTH-BINDING` bindet ausschliesslich die bereits
+freigegebene UI-Wahrheit; weder dieser Branch noch die Designsystemquelle sind
+dadurch sichtbare Produktlieferung, Merge oder Production.
+
 Seit dem letzten Produktstand wurde ausschliesslich der Governance-Bootstrap
 `KR-01A-AUTHORITY-PIN-BOOTSTRAP` ueber PR #119 geliefert. Sein Kandidat
 `fa73666b2d6ab1f41bf8f8576f41a04e7e38ac72` ist Vorfahr des Merge-Commits

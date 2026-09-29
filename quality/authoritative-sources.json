@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "truthTypes": [
     { "id": "project_rules", "source": "AGENTS.md" },
     { "id": "product_decisions", "source": "docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md" },
@@ -15,6 +15,26 @@
     "docs/project/linie/ui/KREILE_AUFTRAGSKARTE_MACHART_V8_2026-08-19.html",
     "docs/project/linie/ui/KREILE_KUNDENKARTE_MACHART_V2_2026-08-19.html"
   ],
+  "uiDesignSystem": {
+    "id": "KREILE_DESIGN_SYSTEM_V1_1",
+    "version": "1.1",
+    "role": "TOKEN_AND_COMPONENT_TRUTH",
+    "source": "../_DESIGN_VERBINDLICH/designsystem_v1_1",
+    "manifest": "../_DESIGN_VERBINDLICH/designsystem_v1_1/SHA256SUMS.txt",
+    "manifestSha256": "71B0CB01F484BEEF042CFD04D31F951D2DB2D441C427F8212F35A8D41A8041E5",
+    "manifestEntryCount": 55,
+    "approval": "../_DESIGN_VERBINDLICH/FREIGABE_DS_V1.txt",
+    "approvalSha256": "D8D95F8E48CDB02C5A4F7BB8A4C07F2658EA32D1B7753A912BBA91C97013FC25",
+    "review": "../_DESIGN_VERBINDLICH/PRUEFUNG_DESIGN_V1_1_2026-09-27.md",
+    "reviewSha256": "D6435C10D6F24699FEB97B408DD4BB8F6C59ED7C374B1627F5D720CF66245257",
+    "imported": false,
+    "importPackage": "KR-10B-DESIGN-SYSTEM-IMPORT",
+    "target": "ui",
+    "precedence": {
+      "layoutAndFlow": "CANONICAL_HTML_PAGE_REFERENCES",
+      "tokensAndComponents": "DESIGN_SYSTEM_V1_1"
+    }
+  },
   "documentClassifications": [
     { "path": "docs/project/DOCUMENT_AUTHORITY.md", "status": "REFERENCE_ONLY_NON_EXECUTABLE" },
     { "path": "docs/project/MASTERPLAN.md", "status": "REFERENCE_ONLY_NON_EXECUTABLE" },

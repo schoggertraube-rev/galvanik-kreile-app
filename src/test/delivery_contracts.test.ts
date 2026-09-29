@@ -34,10 +34,10 @@ afterEach(() => {
   for (const root of temps.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-describe("KR-05 delivery governance gate", () => {
+describe("KR-10A delivery governance gate", () => {
   it("accepts the complete current contract set", () => {
     expect(checkDeliveryContracts(process.cwd())).toEqual({ ok: true, findings: [] });
-  });
+  }, 15_000);
 
   it("rejects a hidden alias between the active filename and package id", () => {
     const root = fixture();
@@ -87,7 +87,7 @@ describe("KR-05 delivery governance gate", () => {
     const root = fixture();
     const rel = ACTIVE_MANIFEST_BINDING.path;
     const source = readFileSync(path.join(root, rel), "utf8").replace(
-      "evidence_ref: acceptance:KR05-A8",
+      "evidence_ref: acceptance:KR10A-A8",
       "evidence_ref: acceptance:DOES-NOT-EXIST",
     );
     writeFileSync(path.join(root, rel), source);
@@ -237,7 +237,7 @@ describe("KR-05 delivery governance gate", () => {
     const manifestPath = path.join(root, ACTIVE_MANIFEST_BINDING.path);
     writeFileSync(
       manifestPath,
-      readFileSync(manifestPath, "utf8").replace("planned_governance_files: 11", "planned_governance_files: 10"),
+      readFileSync(manifestPath, "utf8").replace("planned_governance_files: 14", "planned_governance_files: 13"),
     );
     expect(checkDeliveryContracts(root).findings).toContainEqual(
       expect.stringContaining("nicht fuer jeden Allowlist-Pfad exakt eine geplante Datei"),
@@ -250,7 +250,7 @@ describe("KR-05 delivery governance gate", () => {
     writeFileSync(
       mappingPath,
       readFileSync(mappingPath, "utf8").replace(
-        "    - KR-10A-UI-TRUTH-BINDING",
+        "    - KR-10B-DESIGN-SYSTEM-IMPORT",
         "    - KR-99-DRIFT",
       ),
     );

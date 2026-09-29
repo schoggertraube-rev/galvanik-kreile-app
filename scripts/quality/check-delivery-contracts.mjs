@@ -35,8 +35,8 @@ export const DELIVERY_PATHS = Object.freeze({
 });
 
 export const ACTIVE_MANIFEST_BINDING = Object.freeze({
-  path: "docs/delivery/packages/KR-05-PR84-SEARCH-RECONCILIATION.yaml",
-  packageId: "KR-05-PR84-SEARCH-RECONCILIATION",
+  path: "docs/delivery/packages/KR-10A-UI-TRUTH-BINDING.yaml",
+  packageId: "KR-10A-UI-TRUTH-BINDING",
 });
 
 const PR113_DISPOSITION_PACKAGE_ID = "KR-04-PR113-DISPOSITION";
@@ -779,7 +779,7 @@ function checkPr84Reconciliation(root, reconciliation, findings) {
     findings.push("[delivery] PR84-Reconciliation hat falsche Schema- oder Vertragskennung");
   }
   if (reconciliation.package_id !== PR84_RECONCILIATION_PACKAGE_ID) {
-    findings.push("[delivery] PR84-Reconciliation ist nicht an das aktive KR-05-Paket gebunden");
+    findings.push("[delivery] PR84-Reconciliation ist nicht an das eingefrorene KR-05-Paket gebunden");
   }
   if (reconciliation.parent_candidate_sha !== "ecb4ad9508186880d15993ac2b568e3f5c5ae801") {
     findings.push("[delivery] PR84-Reconciliation hat nicht den geprueften KR-03B2-Parent");

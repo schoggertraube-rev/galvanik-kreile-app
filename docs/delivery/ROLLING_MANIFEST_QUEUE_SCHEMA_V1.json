@@ -46,14 +46,14 @@
         "closure_receipt_sha256"
       ],
       "properties": {
-        "package_id": { "const": "KR-03B2-AUTHORIZED-SERVER-PORT" },
+        "package_id": { "const": "KR-05-PR84-SEARCH-RECONCILIATION" },
         "candidate_sha": { "$ref": "#/definitions/sha" },
         "tree_sha": { "$ref": "#/definitions/sha" },
-        "remote_ref": { "const": "origin/codex/kr-03b2-authorized-server-port" },
+        "remote_ref": { "const": "origin/codex/kr-05-pr84-search-reconciliation" },
         "review_result": { "const": "PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN_QUEUED_CANDIDATE" },
-        "review_receipt": { "const": "../_MODULDOSSIERS/00_PROJEKT/KR-03B2_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md" },
+        "review_receipt": { "const": "../_MODULDOSSIERS/00_PROJEKT/KR-05_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-30.md" },
         "review_receipt_sha256": { "$ref": "#/definitions/sha256" },
-        "closure_receipt": { "const": "../_MODULDOSSIERS/00_PROJEKT/KR-03B2_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md" },
+        "closure_receipt": { "const": "../_MODULDOSSIERS/00_PROJEKT/KR-05_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-30.md" },
         "closure_receipt_sha256": { "$ref": "#/definitions/sha256" }
       }
     },
@@ -94,9 +94,9 @@
             {
               "properties": {
                 "order": { "const": 1 },
-                "package_id": { "const": "KR-10A-UI-TRUTH-BINDING" },
-                "scope": { "const": "GOVERNANCE" },
-                "predecessor": { "const": "KR-05-PR84-SEARCH-RECONCILIATION" }
+                "package_id": { "const": "KR-10B-DESIGN-SYSTEM-IMPORT" },
+                "scope": { "const": "PRODUCT_FOUNDATION" },
+                "predecessor": { "const": "KR-10A-UI-TRUTH-BINDING" }
               }
             }
           ]
@@ -109,11 +109,11 @@
       "additionalProperties": false,
       "required": ["package_id", "predecessor", "planned_path", "classification", "issue_when"],
       "properties": {
-        "package_id": { "const": "KR-10A-UI-TRUTH-BINDING" },
-        "predecessor": { "const": "KR-05-PR84-SEARCH-RECONCILIATION" },
-        "planned_path": { "const": "docs/delivery/packages/KR-10A-UI-TRUTH-BINDING.yaml" },
+        "package_id": { "const": "KR-10B-DESIGN-SYSTEM-IMPORT" },
+        "predecessor": { "const": "KR-10A-UI-TRUTH-BINDING" },
+        "planned_path": { "const": "docs/delivery/packages/KR-10B-DESIGN-SYSTEM-IMPORT.yaml" },
         "classification": { "const": "POINTER_ONLY_NON_EXECUTABLE_UNTIL_ISSUED" },
-        "issue_when": { "const": "KR_05_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED" }
+        "issue_when": { "const": "KR_10A_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED" }
       }
     },
     "materialized_future_contracts": {
@@ -134,7 +134,7 @@
       "properties": {
         "order": { "type": "integer", "minimum": 1 },
         "package_id": { "type": "string", "pattern": "^KR-" },
-        "scope": { "enum": ["GOVERNANCE", "PRODUCT_CLEANUP", "B1", "B2A", "B2B1", "B2B2"] },
+        "scope": { "enum": ["GOVERNANCE", "PRODUCT_FOUNDATION", "PRODUCT_CLEANUP", "B1", "B2A", "B2B1", "B2B2"] },
         "predecessor": { "type": "string", "pattern": "^KR-" },
         "classification": { "const": "ORDER_POINTER_NOT_AN_EXECUTABLE_MANIFEST" },
         "issue_when": { "const": "PREDECESSOR_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED" }
