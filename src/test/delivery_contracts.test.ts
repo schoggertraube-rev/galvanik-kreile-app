@@ -34,19 +34,19 @@ afterEach(() => {
   for (const root of temps.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-describe("KR-01R delivery governance gate", () => {
+describe("KR-04 delivery governance gate", () => {
   it("accepts the complete current contract set", () => {
     expect(checkDeliveryContracts(process.cwd())).toEqual({ ok: true, findings: [] });
   });
 
-  it("rejects a hidden alias between the retained KR-01 filename and the KR-01R package id", () => {
+  it("rejects a hidden alias between the active filename and package id", () => {
     const root = fixture();
     const manifestPath = path.join(root, ACTIVE_MANIFEST_BINDING.path);
     writeFileSync(
       manifestPath,
       readFileSync(manifestPath, "utf8").replace(
         `package_id: ${ACTIVE_MANIFEST_BINDING.packageId}`,
-        "package_id: KR-01R-HIDDEN-ALIAS",
+        "package_id: KR-04-HIDDEN-ALIAS",
       ),
     );
     const missionPath = path.join(root, DELIVERY_PATHS.mission);
@@ -54,7 +54,7 @@ describe("KR-01R delivery governance gate", () => {
       missionPath,
       readFileSync(missionPath, "utf8").replaceAll(
         ACTIVE_MANIFEST_BINDING.packageId,
-        "KR-01R-HIDDEN-ALIAS",
+        "KR-04-HIDDEN-ALIAS",
       ),
     );
     expect(checkDeliveryContracts(root).findings).toContainEqual(
@@ -87,11 +87,21 @@ describe("KR-01R delivery governance gate", () => {
     const root = fixture();
     const rel = ACTIVE_MANIFEST_BINDING.path;
     const source = readFileSync(path.join(root, rel), "utf8").replace(
-      "evidence_ref: acceptance:KR01-A8",
+      "evidence_ref: acceptance:KR04-A7",
       "evidence_ref: acceptance:DOES-NOT-EXIST",
     );
     writeFileSync(path.join(root, rel), source);
     expect(checkDeliveryContracts(root).findings).toContainEqual(expect.stringContaining("loest nicht im eigenen Manifest auf"));
+  });
+
+  it("rejects drift in any PR #113 path disposition", () => {
+    const root = fixture();
+    const disposition = json(root, DELIVERY_PATHS.pr113Disposition) as {
+      path_decisions: Array<{ decision: string }>;
+    };
+    disposition.path_decisions[0].decision = "UNSAFE_DIRECT_IMPORT";
+    writeJson(root, DELIVERY_PATHS.pr113Disposition, disposition);
+    expect(checkDeliveryContracts(root).findings).toContainEqual(expect.stringContaining("Disposition fuer"));
   });
 
   it("rejects queue and gate-mapping drift", () => {

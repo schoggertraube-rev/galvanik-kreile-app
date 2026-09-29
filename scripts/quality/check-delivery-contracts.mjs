@@ -1,5 +1,5 @@
-// Delivery-Governance-Gate (KR-01R): prueft Paketmanifeste, rollende Queue,
-// Evidenzzeiger und das Betriebsreceipt als eine fail-closed Wahrheit.
+// Delivery-Governance-Gate: prueft Paketmanifeste, rollende Queue,
+// Evidenzzeiger, Alt-PR-Dispositionen und das Betriebsreceipt als eine fail-closed Wahrheit.
 // Keine Netzwerkzugriffe und keine Mutation des geprueften Baums.
 
 import {
@@ -26,13 +26,55 @@ export const DELIVERY_PATHS = Object.freeze({
   queueSchema: "docs/delivery/ROLLING_MANIFEST_QUEUE_SCHEMA_V1.json",
   mapping: "docs/delivery/GATE_MAPPING_V1.yaml",
   mission: "missions/F1_ORDER_TO_CASH_PILOT_001.yml",
+  pr113Disposition: "docs/delivery/KR-04_PR113_DISPOSITION_2026-09-29.json",
   operatingReceipt: "docs/delivery/KR-01_BRANCH_PROTECTION_AND_OPERATING_RECEIPT_2026-09-29.json",
   operatingReceiptSchema: "docs/delivery/KR-01_BRANCH_PROTECTION_AND_OPERATING_RECEIPT_SCHEMA_V1.json",
 });
 
 export const ACTIVE_MANIFEST_BINDING = Object.freeze({
-  path: "docs/delivery/packages/KR-01-GOVERNANCE-MERGE.yaml",
-  packageId: "KR-01R-GOVERNANCE-RECONTRACT",
+  path: "docs/delivery/packages/KR-04-PR113-DISPOSITION.yaml",
+  packageId: "KR-04-PR113-DISPOSITION",
+});
+
+const PR113_PATH_DECISIONS = Object.freeze({
+  "e2e/path1-v5-shell-smoke.real.spec.ts": "DEFER_TO_KR20_FRESH_DESIGN_SYSTEM_REBUILD",
+  "src/app/buchhaltung/rechnungen/InvoicesClient.tsx": "DEFER_TO_KR20_FRESH_DESIGN_SYSTEM_REBUILD",
+  "src/app/buchhaltung/rechnungen/RechnungenClient.tsx": "SALVAGE_AS_KR04R_FRESH_DELETE",
+  "src/app/buchhaltung/rechnungen/__tests__/page.test.tsx": "DEFER_TO_KR20_FRESH_DESIGN_SYSTEM_REBUILD",
+  "src/app/layout.tsx": "REJECT_MOCK_CSS_INTEGRATION",
+  "src/styles/mock/mock-kreile-compat.css": "REJECT_MOCK_CSS_INTEGRATION",
+  "src/styles/mock/mock-kreile-rolf-accounting.css": "REJECT_MOCK_CSS_INTEGRATION",
+});
+
+const PR113_PATH_BLOBS = Object.freeze({
+  "e2e/path1-v5-shell-smoke.real.spec.ts": Object.freeze({
+    parent: "0bec1fe7f62bc7f1af8a411f4f80fe7e8a1b9108",
+    pr: "85f75d67d4e18a97f1c563c9f033c466294cd6c1",
+  }),
+  "src/app/buchhaltung/rechnungen/InvoicesClient.tsx": Object.freeze({
+    parent: "dc343081d706b15c068d09366dd566fd14991ca4",
+    pr: "0157e44ec6bb2b792309753d0d9b2fa8389cb114",
+  }),
+  "src/app/buchhaltung/rechnungen/RechnungenClient.tsx": Object.freeze({
+    parent: "18594debbed3e6565bb63166d6adbc7aa9579745",
+    pr: null,
+  }),
+  "src/app/buchhaltung/rechnungen/__tests__/page.test.tsx": Object.freeze({
+    parent: "b1868e792a4a9bec76e36ca7e97dc2a372c6c2a8",
+    pr: "f352cad5cf6628d4a440aa2eaffc6dd2454c9454",
+  }),
+  "src/app/layout.tsx": Object.freeze({
+    parent: "320e95d4694b60412ae7d63650bd81032212db8f",
+    pr: "b3d37599a5a218b04b524e57711c480c0ee9e27c",
+  }),
+  "src/styles/mock/mock-kreile-compat.css": Object.freeze({
+    parent: "74bcb53a10b184a4881a76b6d2e174af03a8e652",
+    pr: "3837617d774c188e24ed73eadc8b7753a8b3aeab",
+  }),
+  "src/styles/mock/mock-kreile-rolf-accounting.css": Object.freeze({
+    parent: null,
+    pr: "036b36a73525135e3144b4b2d45711f4c0a62f66",
+  }),
 });
 
 export const LEGACY_MANIFEST_BINDINGS = Object.freeze({
@@ -150,6 +192,28 @@ function manifestFiles(root) {
     .filter((entry) => entry.isFile() && entry.name.endsWith(".yaml"))
     .map((entry) => toPosix(path.join(DELIVERY_PATHS.manifestDir, entry.name)))
     .sort();
+}
+
+function sourceRuntimeReferences(root, needle, excludedRel) {
+  const sourceRoot = path.join(root, "src");
+  if (!existsSync(sourceRoot)) return [];
+  const pending = [sourceRoot];
+  const matches = [];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const absolute = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        pending.push(absolute);
+        continue;
+      }
+      if (!entry.isFile() || !/\.(?:ts|tsx)$/.test(entry.name)) continue;
+      const rel = toPosix(path.relative(root, absolute));
+      if (rel === excludedRel) continue;
+      if (readFileSync(absolute, "utf8").includes(needle)) matches.push(rel);
+    }
+  }
+  return matches.sort();
 }
 
 function gateTargets(manifest) {
@@ -311,6 +375,102 @@ function checkOperatingTruth(receipt, mapping, findings) {
   }
 }
 
+function checkPr113Disposition(root, disposition, findings) {
+  if (!disposition) return;
+  if (disposition.schema_version !== 1 || disposition.contract_id !== "KR-04_PR113_DISPOSITION_2026-09-29") {
+    findings.push("[delivery] PR113-Disposition hat falsche Schema- oder Vertragskennung");
+  }
+  if (disposition.package_id !== ACTIVE_MANIFEST_BINDING.packageId) {
+    findings.push("[delivery] PR113-Disposition ist nicht an das aktive Paket gebunden");
+  }
+  if (disposition.parent_candidate_sha !== "da8c352d91a694d9c72551a245805386bbf7efdc") {
+    findings.push("[delivery] PR113-Disposition hat nicht den geprueften KR-01R-Parent");
+  }
+  if (disposition.origin_main_sha_at_disposition !== "fa1a989fa5844305e6a8200832ed43e2fc230751") {
+    findings.push("[delivery] PR113-Disposition hat nicht den belegten origin/main-Stand");
+  }
+
+  const pr = disposition.pull_request ?? {};
+  const exactPrFacts = {
+    number: 113,
+    url: "https://github.com/schoggertraube-rev/galvanik-kreile-app/pull/113",
+    base_ref: "main",
+    base_sha: "21a23567d51e4805f065ce9ae8c59bdc5faf9fa9",
+    head_ref: "path1/v2-k4-geld",
+    head_sha: "e477e6b2314d5a97575a32dc35ca0d16b55625d7",
+    tree_sha: "7455453281a84fd9bb0a351fd7063ef4994dda4c",
+    archive_ref: "archive/pr-113-e477e6b2",
+    archive_head_sha: "e477e6b2314d5a97575a32dc35ca0d16b55625d7",
+    state_before_closure: "OPEN_DRAFT",
+    state_after_closure: "CLOSED_UNMERGED",
+    merged: false,
+    source_branch_preserved: true,
+    archive_ref_preserved: true,
+    closed_at: "2026-09-29T15:11:38Z",
+  };
+  for (const [key, expected] of Object.entries(exactPrFacts)) {
+    if (pr[key] !== expected) findings.push(`[delivery] PR113-Disposition pull_request.${key} weicht vom belegten Wert ab`);
+  }
+  if (!/^https:\/\/github\.com\/schoggertraube-rev\/galvanik-kreile-app\/pull\/113#issuecomment-\d+$/.test(pr.closure_comment_url ?? "")) {
+    findings.push("[delivery] PR113-Disposition enthaelt keinen gueltigen Wahrheitskommentar-Link");
+  }
+
+  const decisions = Array.isArray(disposition.path_decisions) ? disposition.path_decisions : [];
+  if (decisions.length !== 7) findings.push(`[delivery] PR113-Disposition muss exakt 7 Pfadentscheidungen enthalten, gefunden ${decisions.length}`);
+  const seen = new Set();
+  for (const entry of decisions) {
+    const rel = entry?.path;
+    if (typeof rel !== "string" || !(rel in PR113_PATH_DECISIONS)) {
+      findings.push(`[delivery] PR113-Disposition enthaelt unerwarteten Pfad '${String(rel)}'`);
+      continue;
+    }
+    if (seen.has(rel)) findings.push(`[delivery] PR113-Disposition enthaelt Pfad '${rel}' mehrfach`);
+    seen.add(rel);
+    if (entry.decision !== PR113_PATH_DECISIONS[rel]) {
+      findings.push(`[delivery] Disposition fuer '${rel}' ist '${String(entry.decision)}' statt '${PR113_PATH_DECISIONS[rel]}'`);
+    }
+    const blobs = PR113_PATH_BLOBS[rel];
+    if (entry.parent_blob_sha !== blobs.parent || entry.pr_blob_sha !== blobs.pr) {
+      findings.push(`[delivery] PR113-Disposition Blobbindung fuer '${rel}' stimmt nicht`);
+    }
+    if (typeof entry.reason !== "string" || entry.reason.trim().length < 20) {
+      findings.push(`[delivery] PR113-Disposition fuer '${rel}' braucht eine nachvollziehbare Begruendung`);
+    }
+  }
+  for (const rel of Object.keys(PR113_PATH_DECISIONS)) {
+    if (!seen.has(rel)) findings.push(`[delivery] PR113-Disposition fuer '${rel}' fehlt`);
+  }
+
+  const decisionValues = decisions.map((entry) => entry?.decision);
+  const expectedSummary = {
+    path_count: 7,
+    salvage_paths: decisionValues.filter((value) => value === "SALVAGE_AS_KR04R_FRESH_DELETE").length,
+    deferred_design_paths: decisionValues.filter((value) => value === "DEFER_TO_KR20_FRESH_DESIGN_SYSTEM_REBUILD").length,
+    rejected_mock_paths: decisionValues.filter((value) => value === "REJECT_MOCK_CSS_INTEGRATION").length,
+    direct_import_paths: 0,
+    product_files_changed_by_kr04: 0,
+  };
+  for (const [key, expected] of Object.entries(expectedSummary)) {
+    if (disposition.summary?.[key] !== expected) {
+      findings.push(`[delivery] PR113-Disposition summary.${key} muss ${expected} sein`);
+    }
+  }
+
+  const importTarget = "src/app/buchhaltung/rechnungen/RechnungenClient.tsx";
+  const actualRuntimeImporters = sourceRuntimeReferences(root, "RechnungenClient", importTarget);
+  if (disposition.import_scan?.target !== importTarget || disposition.import_scan?.declaration_only !== true) {
+    findings.push("[delivery] PR113-Disposition Importscan ist nicht an die tote Altkomponente gebunden");
+  }
+  if (!sameStringSet(disposition.import_scan?.runtime_importers, actualRuntimeImporters) || actualRuntimeImporters.length !== 0) {
+    findings.push(`[delivery] PR113-Disposition Runtime-Importer muessen leer sein, gefunden ${actualRuntimeImporters.join(", ") || "keine"}`);
+  }
+
+  const truth = disposition.delivery_truth ?? {};
+  for (const key of ["main_delivered", "merge_performed", "production_authorized", "production_performed"]) {
+    if (truth[key] !== false) findings.push(`[delivery] PR113-Disposition delivery_truth.${key} muss false sein`);
+  }
+}
+
 function checkRollingConsistency(root, queue, mapping, mission, manifests, findings) {
   if (!queue || !mapping || !mission) return;
   const policy = queue.issuance_policy ?? {};
@@ -355,7 +515,7 @@ function checkRollingConsistency(root, queue, mapping, mission, manifests, findi
   if (active.length !== 1) findings.push(`[delivery] Mission active_package '${String(activeId)}' muss genau ein Manifest treffen`);
   if (active.length === 1) {
     if (active[0].rel !== ACTIVE_MANIFEST_BINDING.path || activeId !== ACTIVE_MANIFEST_BINDING.packageId) {
-      findings.push("[delivery] KR-01R-Aktivmanifest stimmt nicht mit der expliziten Dateiname-/Paket-ID-Bindung ueberein");
+      findings.push("[delivery] Aktivmanifest stimmt nicht mit der expliziten Dateiname-/Paket-ID-Bindung ueberein");
     }
     if (active[0].value.schema_version !== 2) findings.push("[delivery] Mission active_package muss ein validiertes V2-Manifest sein");
     if (active[0].value.base_sha !== mission.base_sha) findings.push("[delivery] Mission base_sha stimmt nicht mit aktivem Manifest ueberein");
@@ -392,10 +552,12 @@ export function checkDeliveryContracts(root = process.cwd()) {
   const mapping = readYaml(root, DELIVERY_PATHS.mapping, findings);
   const mission = readYaml(root, DELIVERY_PATHS.mission, findings);
   const receipt = readJson(root, DELIVERY_PATHS.operatingReceipt, findings);
+  const pr113Disposition = readJson(root, DELIVERY_PATHS.pr113Disposition, findings);
   validateWith(validateQueue, queue, DELIVERY_PATHS.queue, findings);
   validateWith(validateReceipt, receipt, DELIVERY_PATHS.operatingReceipt, findings);
   checkRollingConsistency(root, queue, mapping, mission, manifests, findings);
   checkOperatingTruth(receipt, mapping, findings);
+  checkPr113Disposition(root, pr113Disposition, findings);
 
   return { ok: findings.length === 0, findings: findings.sort() };
 }
@@ -457,6 +619,13 @@ export function runSelftest(root = process.cwd()) {
       value.register_gate_evidence.FUNCTIONAL_SLICE_PASS.evidence_ref = "acceptance:DOES-NOT-EXIST";
     });
   }, "loest nicht im eigenen Manifest auf");
+
+  runCase("pr113-path-disposition", (fixture) => {
+    const abs = path.join(fixture, DELIVERY_PATHS.pr113Disposition);
+    const value = JSON.parse(readFileSync(abs, "utf8"));
+    value.path_decisions[0].decision = "UNSAFE_DIRECT_IMPORT";
+    writeFileSync(abs, `${JSON.stringify(value, null, 2)}\n`);
+  }, "Disposition fuer");
 
   runCase("queue-order", (fixture) => {
     const abs = path.join(fixture, DELIVERY_PATHS.queue);
@@ -528,7 +697,7 @@ if (isMain) {
   } else {
     const result = checkDeliveryContracts(options.root);
     if (result.ok) {
-      console.log("delivery-contracts: PASS (Manifeste, Evidenzzeiger, Legacy-Bindung, Queue, Mapping, Betriebsreceipt)");
+      console.log("delivery-contracts: PASS (Manifeste, Evidenzzeiger, Legacy-Bindung, Alt-PR-Disposition, Queue, Mapping, Betriebsreceipt)");
     } else {
       console.error(`delivery-contracts: ${result.findings.length} Verstoss/Verstoesse`);
       for (const finding of result.findings) console.error(`  ${finding}`);

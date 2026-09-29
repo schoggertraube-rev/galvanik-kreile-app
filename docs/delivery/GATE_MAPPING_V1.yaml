@@ -32,7 +32,7 @@ rolling_manifest_policy:
   halt_on_open_p0_p1_after_one_correction: true
   no_periodic_build_automation: true
   initial_pointer_order:
-    - KR-04-PR113-DISPOSITION
+    - KR-04R-PR113-DEAD-UI-REMOVAL
     - KR-02-B1-P0-CANCEL
     - KR-03A-DELIVERY-ADHERENCE-DOMAIN
 workflow_facts_at_contract_parent:
