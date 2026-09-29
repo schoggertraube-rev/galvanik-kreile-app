@@ -117,12 +117,12 @@ repo_allowlist:
   - quality/eslint-baseline.json
   - quality/authoritative-sources.json
   - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - package-lock.json
 forbidden:
   - src/app/**
   - src/components/**
   - src/modules/**
   - supabase/**
-  - package-lock.json
   - product_code_or_runtime_behavior
   - auth_rls_roles_or_session_behavior
   - provider_or_runtime_configuration
@@ -133,7 +133,7 @@ scope_budget:
   max_handwritten_product_lines: 800
   max_new_migrations: 1
   planned_product_files: 0
-  planned_governance_files: 261
+  planned_governance_files: 262
 follow_up_packages:
   - KR-04-PR113-DISPOSITION
 new_objects_authority: DELEGATED_RATIFIED_CONTRACT
