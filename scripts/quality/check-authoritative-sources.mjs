@@ -30,6 +30,7 @@ const UI_REFERENCE_CONTRACT = Object.freeze([
   "docs/project/linie/ui/KREILE_AUFTRAGSKARTE_MACHART_V8_2026-08-19.html",
   "docs/project/linie/ui/KREILE_KUNDENKARTE_MACHART_V2_2026-08-19.html",
 ]);
+const UI_CONTEXT_REFERENCE = "docs/project/linie/ui/00_UI_REFERENZ_KANONISCH.md";
 const UI_DESIGN_SYSTEM_CONTRACT = Object.freeze({
   id: "KREILE_DESIGN_SYSTEM_V1_1",
   version: "1.1",
@@ -67,7 +68,7 @@ const REQUIRED_CLASSIFICATIONS = Object.freeze([
   "docs/project/linie/00_JETZT_UND_LEITPLANKEN.md",
   "docs/project/linie/00_ABC_INDEX.md",
   "docs/project/linie/00_BIBEL_INDEX.md",
-  "docs/project/linie/ui/00_UI_REFERENZ_KANONISCH.md",
+  UI_CONTEXT_REFERENCE,
 ]);
 const BANNER_EXEMPTIONS = new Set(["audit_results.md", "CLAUDE.md", "README.md"]);
 const ALLOWED_DOCUMENT_STATUS = new Set(["HISTORICAL_NON_AUTHORITATIVE", "REFERENCE_ONLY_NON_EXECUTABLE"]);
@@ -326,6 +327,18 @@ function checkAuthorityRepositoryAgainstContract(root, configRel, designContract
       if (!content.includes(token)) errors.push(`UI_DESIGN_SYSTEM_${kind}_CONTRACT:${token}`);
     }
   }
+  const uiContext = read(root, UI_CONTEXT_REFERENCE);
+  for (const token of [
+    "NO_OWN_TOKEN_OR_COMPONENT_TRUTH",
+    designContract.source,
+    "TOKENS_COMPONENTS_FROM_DESIGN_SYSTEM_V1_1",
+    "LAYOUT_FLOW_FROM_CANONICAL_REFERENCES",
+  ]) {
+    if (!uiContext.includes(token)) errors.push(`UI_DESIGN_SYSTEM_CONTEXT_CONTRACT:${token}`);
+  }
+  if (/^\s*(?:[-*]\s*)?Tokens\s*:/imu.test(uiContext)) {
+    errors.push("UI_DESIGN_SYSTEM_CONTEXT_TOKEN_SHADOW");
+  }
 
   const missionPath = TRUTH_SOURCE_CONTRACT.active_execution;
   const mission = read(root, missionPath);
@@ -555,9 +568,10 @@ function writeFixture(root, calendarState = "legacy") {
     ["docs/project/linie/00_JETZT_UND_LEITPLANKEN.md", "Now"],
     ["docs/project/linie/00_ABC_INDEX.md", "ABC"],
     ["docs/project/linie/00_BIBEL_INDEX.md", "Bible"],
-    ["docs/project/linie/ui/00_UI_REFERENZ_KANONISCH.md", "UI manifest"],
+    [UI_CONTEXT_REFERENCE, "UI manifest"],
   ];
   for (const [rel, title] of classified) files[rel] = banner("REFERENCE_ONLY_NON_EXECUTABLE", title);
+  files[UI_CONTEXT_REFERENCE] += `${designContract.source}\nNO_OWN_TOKEN_OR_COMPONENT_TRUTH\nTOKENS_COMPONENTS_FROM_DESIGN_SYSTEM_V1_1\nLAYOUT_FLOW_FROM_CANONICAL_REFERENCES\n`;
   for (const rel of UI_REFERENCE_CONTRACT) files[rel] = "<!doctype html>\n";
   for (const [rel, content] of Object.entries(files)) {
     mkdirSync(path.dirname(absolute(root, rel)), { recursive: true });
@@ -595,6 +609,7 @@ export function runAuthoritySelftest() {
     ["design-target-premature", (root) => { mkdirSync(absolute(root, "ui"), { recursive: true }); }, "UI_DESIGN_SYSTEM_IMPORT_PREMATURE"],
     ["design-index-asymmetric", (root) => { const p = absolute(root, TRUTH_SOURCE_CONTRACT.ui_truth); writeFileSync(p, readFileSync(p, "utf8").replace("TOKEN_AND_COMPONENT_TRUTH", "UNBOUND_COMPONENTS"), "utf8"); }, "UI_DESIGN_SYSTEM_INDEX_CONTRACT"],
     ["design-decision-asymmetric", (root) => { const p = absolute(root, TRUTH_SOURCE_CONTRACT.product_decisions); writeFileSync(p, readFileSync(p, "utf8").replace("NOT_IMPORTED_UNTIL_KR_10B", "UNBOUND_IMPORT"), "utf8"); }, "UI_DESIGN_SYSTEM_DECISION_CONTRACT"],
+    ["design-context-token-shadow", (root) => { const p = absolute(root, UI_CONTEXT_REFERENCE); writeFileSync(p, `${readFileSync(p, "utf8")}Tokens: shadow truth\n`, "utf8"); }, "UI_DESIGN_SYSTEM_CONTEXT_TOKEN_SHADOW"],
     ["design-manifest-entry-missing", (root) => { const c = JSON.parse(readFileSync(absolute(root, DEFAULT_CONFIG), "utf8")); const p = absolute(root, c.uiDesignSystem.manifestLock); const rows = readFileSync(p, "utf8").trimEnd().split(/\r?\n/); writeFileSync(p, `${rows.slice(0, -1).join("\n")}\n`, "utf8"); }, "UI_DESIGN_SYSTEM_MANIFEST_ENTRY_COUNT"],
     ["design-external-source-partial", (root) => { const c = JSON.parse(readFileSync(absolute(root, DEFAULT_CONFIG), "utf8")); rmSync(absolute(root, c.uiDesignSystem.approval)); }, "UI_DESIGN_SYSTEM_EXTERNAL_SOURCE_PARTIAL"],
     ["missing-banner", (root) => { const p = absolute(root, "docs/project/DOCUMENT_AUTHORITY.md"); writeFileSync(p, "# no banner\n", "utf8"); }, "DOCUMENT_BANNER_MISSING"],

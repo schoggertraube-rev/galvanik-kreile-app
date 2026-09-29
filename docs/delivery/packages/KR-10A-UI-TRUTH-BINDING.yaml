@@ -87,6 +87,7 @@ repo_allowlist:
   - docs/project/NON_LOSS_REGISTER.md
   - docs/project/linie/00_UI_REFERENZEN_PFADE.md
   - docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md
+  - docs/project/linie/ui/00_UI_REFERENZ_KANONISCH.md
   - docs/project/linie/ui/DESIGN_SYSTEM_V1_1_SHA256SUMS.txt
   - missions/F1_ORDER_TO_CASH_PILOT_001.yml
   - quality/authoritative-sources.json
@@ -111,7 +112,7 @@ scope_budget:
   max_handwritten_product_lines: 800
   max_new_migrations: 1
   planned_product_files: 0
-  planned_governance_files: 15
+  planned_governance_files: 16
 follow_up_packages:
   - KR-10B-DESIGN-SYSTEM-IMPORT
 new_objects_authority: DELEGATED_RATIFIED_CONTRACT
@@ -170,7 +171,7 @@ acceptance:
     evidence: UI_REFERENCE_CONTRACT_INDEX_REGISTER_AND_SCOPE
   - id: KR10A-A5
     statement: Bei Konflikt gewinnt die Seitenreferenz fuer Layout und Flow, V1.1 fuer Token und Komponente.
-    evidence: CLOSED_PRECEDENCE_CONTRACT_AND_NEGATIVE_TEST
+    evidence: CLOSED_PRECEDENCE_CONTRACT_CONTEXT_SHADOW_GUARD_AND_NEGATIVE_TEST
   - id: KR10A-A6
     statement: Der Designsystemimport und das Zielverzeichnis ui bleiben bis KR-10B physisch unmaterialisiert.
     evidence: IMPORT_FALSE_TARGET_ABSENCE_AND_NEGATIVE_TEST
