@@ -34,8 +34,8 @@ export const DELIVERY_PATHS = Object.freeze({
 });
 
 export const ACTIVE_MANIFEST_BINDING = Object.freeze({
-  path: "docs/delivery/packages/KR-02R-B1-P0-CANCEL.yaml",
-  packageId: "KR-02R-B1-P0-CANCEL",
+  path: "docs/delivery/packages/KR-03A-DELIVERY-ADHERENCE-DOMAIN.yaml",
+  packageId: "KR-03A-DELIVERY-ADHERENCE-DOMAIN",
 });
 
 const PR113_DISPOSITION_PACKAGE_ID = "KR-04-PR113-DISPOSITION";
