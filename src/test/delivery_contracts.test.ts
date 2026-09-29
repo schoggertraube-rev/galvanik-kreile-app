@@ -237,7 +237,7 @@ describe("KR-10A delivery governance gate", () => {
     const manifestPath = path.join(root, ACTIVE_MANIFEST_BINDING.path);
     writeFileSync(
       manifestPath,
-      readFileSync(manifestPath, "utf8").replace("planned_governance_files: 14", "planned_governance_files: 13"),
+      readFileSync(manifestPath, "utf8").replace("planned_governance_files: 15", "planned_governance_files: 14"),
     );
     expect(checkDeliveryContracts(root).findings).toContainEqual(
       expect.stringContaining("nicht fuer jeden Allowlist-Pfad exakt eine geplante Datei"),

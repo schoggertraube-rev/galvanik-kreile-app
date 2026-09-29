@@ -36,6 +36,7 @@ const UI_DESIGN_SYSTEM_CONTRACT = Object.freeze({
   role: "TOKEN_AND_COMPONENT_TRUTH",
   source: "../_DESIGN_VERBINDLICH/designsystem_v1_1",
   manifest: "../_DESIGN_VERBINDLICH/designsystem_v1_1/SHA256SUMS.txt",
+  manifestLock: "docs/project/linie/ui/DESIGN_SYSTEM_V1_1_SHA256SUMS.txt",
   manifestSha256: "71B0CB01F484BEEF042CFD04D31F951D2DB2D441C427F8212F35A8D41A8041E5",
   manifestEntryCount: 55,
   approval: "../_DESIGN_VERBINDLICH/FREIGABE_DS_V1.txt",
@@ -52,8 +53,8 @@ const UI_DESIGN_SYSTEM_CONTRACT = Object.freeze({
 });
 const DESIGN_SYSTEM_KEYS = Object.freeze([
   "approval", "approvalSha256", "id", "importPackage", "imported", "manifest",
-  "manifestEntryCount", "manifestSha256", "precedence", "review", "reviewSha256",
-  "role", "source", "target", "version",
+  "manifestEntryCount", "manifestLock", "manifestSha256", "precedence", "review",
+  "reviewSha256", "role", "source", "target", "version",
 ]);
 const DESIGN_PRECEDENCE_KEYS = Object.freeze(["layoutAndFlow", "tokensAndComponents"]);
 const REQUIRED_DECISIONS = Object.freeze(["D-GOV-001", "D-ARCH-011", "D-UI-CORE-001", "D-UI-CORE-002", "D-UI-CORE-003"]);
@@ -101,6 +102,20 @@ const absolute = (root, rel) => path.resolve(root, rel);
 const exists = (root, rel) => typeof rel === "string" && existsSync(absolute(root, rel));
 const read = (root, rel) => readFileSync(absolute(root, rel), "utf8");
 const sha256File = (root, rel) => createHash("sha256").update(readFileSync(absolute(root, rel))).digest("hex").toUpperCase();
+
+function designExternalSourceState(root, design) {
+  const required = [design.source, design.manifest, design.approval, design.review];
+  const present = required.filter((rel) => exists(root, rel)).length;
+  return {
+    mode: present === 0
+      ? "LOCK_ONLY_EXTERNAL_NOT_IN_CHECKOUT"
+      : present === required.length
+        ? "PHYSICAL_VERIFIED"
+        : "PARTIAL_INVALID",
+    present,
+    total: required.length,
+  };
+}
 
 function parseJson(root, rel, errors, code) {
   if (!exists(root, rel)) {
@@ -203,7 +218,7 @@ function checkAuthorityRepositoryAgainstContract(root, configRel, designContract
   if (!design || !sameSet(Object.keys(design), DESIGN_SYSTEM_KEYS)) {
     errors.push(`UI_DESIGN_SYSTEM_SCHEMA:${Object.keys(design ?? {}).sort().join(",")}`);
   } else {
-    for (const key of ["id", "version", "source", "manifest", "approval", "review", "importPackage", "target"]) {
+    for (const key of ["id", "version", "source", "manifest", "manifestLock", "approval", "review", "importPackage", "target"]) {
       if (design[key] !== designContract[key]) errors.push(`UI_DESIGN_SYSTEM_${key.replace(/([A-Z])/g, "_$1").toUpperCase()}_CONTRACT`);
     }
     if (design.role !== designContract.role) errors.push("UI_DESIGN_SYSTEM_ROLE_CONTRACT");
@@ -218,18 +233,15 @@ function checkAuthorityRepositoryAgainstContract(root, configRel, designContract
     }
     if (design.imported !== false || exists(root, design.target)) errors.push("UI_DESIGN_SYSTEM_IMPORT_PREMATURE");
 
-    for (const [kind, rel, expectedHash] of [
-      ["MANIFEST", design.manifest, design.manifestSha256],
-      ["APPROVAL", design.approval, design.approvalSha256],
-      ["REVIEW", design.review, design.reviewSha256],
-    ]) {
-      if (!exists(root, rel)) errors.push(`UI_DESIGN_SYSTEM_${kind}_MISSING:${rel}`);
-      else if (sha256File(root, rel) !== expectedHash) errors.push(`UI_DESIGN_SYSTEM_${kind}_HASH_MISMATCH:${rel}`);
-    }
-    if (!exists(root, design.source)) {
-      errors.push(`UI_DESIGN_SYSTEM_SOURCE_MISSING:${design.source}`);
-    } else if (exists(root, design.manifest)) {
-      const manifestRows = read(root, design.manifest).split(/\r?\n/)
+    let manifestRows = [];
+    const safeManifestEntries = [];
+    if (!exists(root, design.manifestLock)) {
+      errors.push(`UI_DESIGN_SYSTEM_MANIFEST_LOCK_MISSING:${design.manifestLock}`);
+    } else {
+      if (sha256File(root, design.manifestLock) !== design.manifestSha256) {
+        errors.push(`UI_DESIGN_SYSTEM_MANIFEST_LOCK_HASH_MISMATCH:${design.manifestLock}`);
+      }
+      manifestRows = read(root, design.manifestLock).split(/\r?\n/)
         .map((line) => line.match(/^([0-9A-F]{64})\s{2}(.+)$/))
         .filter(Boolean)
         .map((match) => ({ hash: match[1], rel: posix(match[2]) }));
@@ -241,10 +253,26 @@ function checkAuthorityRepositoryAgainstContract(root, configRel, designContract
         const relative = path.relative(sourceRoot, candidate);
         if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
           errors.push(`UI_DESIGN_SYSTEM_MANIFEST_PATH_ESCAPE:${entry.rel}`);
-        } else if (!existsSync(candidate)) {
+        } else safeManifestEntries.push({ ...entry, candidate });
+      }
+    }
+
+    const externalState = designExternalSourceState(root, design);
+    if (externalState.mode === "PARTIAL_INVALID") {
+      errors.push(`UI_DESIGN_SYSTEM_EXTERNAL_SOURCE_PARTIAL:${externalState.present}/${externalState.total}`);
+    } else if (externalState.mode === "PHYSICAL_VERIFIED") {
+      for (const [kind, rel, expectedHash] of [
+        ["MANIFEST", design.manifest, design.manifestSha256],
+        ["APPROVAL", design.approval, design.approvalSha256],
+        ["REVIEW", design.review, design.reviewSha256],
+      ]) {
+        if (sha256File(root, rel) !== expectedHash) errors.push(`UI_DESIGN_SYSTEM_${kind}_HASH_MISMATCH:${rel}`);
+      }
+      for (const entry of safeManifestEntries) {
+        if (!existsSync(entry.candidate)) {
           errors.push(`UI_DESIGN_SYSTEM_ENTRY_MISSING:${entry.rel}`);
         } else {
-          const actual = createHash("sha256").update(readFileSync(candidate)).digest("hex").toUpperCase();
+          const actual = createHash("sha256").update(readFileSync(entry.candidate)).digest("hex").toUpperCase();
           if (actual !== entry.hash) errors.push(`UI_DESIGN_SYSTEM_ENTRY_HASH_MISMATCH:${entry.rel}`);
         }
       }
@@ -283,6 +311,7 @@ function checkAuthorityRepositoryAgainstContract(root, configRel, designContract
   }
   const designTruthTokens = [
     designContract.source,
+    designContract.manifestLock,
     designContract.manifestSha256,
     designContract.approvalSha256,
     designContract.reviewSha256,
@@ -437,9 +466,12 @@ function writeDesignFixture(root) {
   }
   const manifest = `${rows.join("\n")}\n`;
   const manifestRel = `${source}/SHA256SUMS.txt`;
+  const manifestLockRel = "docs/project/linie/ui/DESIGN_SYSTEM_V1_1_SHA256SUMS.txt";
   const approvalRel = "fixture-design-approval.txt";
   const reviewRel = "fixture-design-review.md";
   writeFileSync(absolute(root, manifestRel), manifest, "utf8");
+  mkdirSync(path.dirname(absolute(root, manifestLockRel)), { recursive: true });
+  writeFileSync(absolute(root, manifestLockRel), manifest, "utf8");
   writeFileSync(absolute(root, approvalRel), "fixture approval\n", "utf8");
   writeFileSync(absolute(root, reviewRel), "# fixture review\n", "utf8");
   return {
@@ -448,6 +480,7 @@ function writeDesignFixture(root) {
     role: "TOKEN_AND_COMPONENT_TRUTH",
     source,
     manifest: manifestRel,
+    manifestLock: manifestLockRel,
     manifestSha256: sha256File(root, manifestRel),
     manifestEntryCount: 55,
     approval: approvalRel,
@@ -467,6 +500,7 @@ function writeDesignFixture(root) {
 function designTruthFixtureText(contract) {
   return [
     contract.source,
+    contract.manifestLock,
     contract.manifestSha256,
     contract.approvalSha256,
     contract.reviewSha256,
@@ -561,7 +595,8 @@ export function runAuthoritySelftest() {
     ["design-target-premature", (root) => { mkdirSync(absolute(root, "ui"), { recursive: true }); }, "UI_DESIGN_SYSTEM_IMPORT_PREMATURE"],
     ["design-index-asymmetric", (root) => { const p = absolute(root, TRUTH_SOURCE_CONTRACT.ui_truth); writeFileSync(p, readFileSync(p, "utf8").replace("TOKEN_AND_COMPONENT_TRUTH", "UNBOUND_COMPONENTS"), "utf8"); }, "UI_DESIGN_SYSTEM_INDEX_CONTRACT"],
     ["design-decision-asymmetric", (root) => { const p = absolute(root, TRUTH_SOURCE_CONTRACT.product_decisions); writeFileSync(p, readFileSync(p, "utf8").replace("NOT_IMPORTED_UNTIL_KR_10B", "UNBOUND_IMPORT"), "utf8"); }, "UI_DESIGN_SYSTEM_DECISION_CONTRACT"],
-    ["design-manifest-entry-missing", (root) => { const c = JSON.parse(readFileSync(absolute(root, DEFAULT_CONFIG), "utf8")); const p = absolute(root, c.uiDesignSystem.manifest); const rows = readFileSync(p, "utf8").trimEnd().split(/\r?\n/); writeFileSync(p, `${rows.slice(0, -1).join("\n")}\n`, "utf8"); }, "UI_DESIGN_SYSTEM_MANIFEST_ENTRY_COUNT"],
+    ["design-manifest-entry-missing", (root) => { const c = JSON.parse(readFileSync(absolute(root, DEFAULT_CONFIG), "utf8")); const p = absolute(root, c.uiDesignSystem.manifestLock); const rows = readFileSync(p, "utf8").trimEnd().split(/\r?\n/); writeFileSync(p, `${rows.slice(0, -1).join("\n")}\n`, "utf8"); }, "UI_DESIGN_SYSTEM_MANIFEST_ENTRY_COUNT"],
+    ["design-external-source-partial", (root) => { const c = JSON.parse(readFileSync(absolute(root, DEFAULT_CONFIG), "utf8")); rmSync(absolute(root, c.uiDesignSystem.approval)); }, "UI_DESIGN_SYSTEM_EXTERNAL_SOURCE_PARTIAL"],
     ["missing-banner", (root) => { const p = absolute(root, "docs/project/DOCUMENT_AUTHORITY.md"); writeFileSync(p, "# no banner\n", "utf8"); }, "DOCUMENT_BANNER_MISSING"],
     ["banner-self-weaken", (root) => { const p = absolute(root, DEFAULT_CONFIG); const c = JSON.parse(readFileSync(p, "utf8")); c.documentClassifications[0].bannerRequired = false; writeFileSync(p, JSON.stringify(c), "utf8"); }, "DOCUMENT_CLASSIFICATION_SCHEMA"],
     ["nested-authority-claim", (root) => { const p = absolute(root, "docs/project/deep/claim.md"); mkdirSync(path.dirname(p), { recursive: true }); writeFileSync(p, "# DIE EINZIGE GÜLTIGE UI-WAHRHEIT\n", "utf8"); }, "UNCLASSIFIED_COMPETING_AUTHORITY"],
@@ -581,13 +616,22 @@ export function runAuthoritySelftest() {
     ["calendar-provider-matrix-activated", (root) => { const p = absolute(root, CALENDAR_TRANSITION_CONTRACT.matrix); writeFileSync(p, readFileSync(p, "utf8").replace("| PENDING | CalendarPort", "| REAL | CalendarPort"), "utf8"); }, "ACTIVE_CALENDAR_PROVIDER_MATRIX_CLAIM"],
     ["candidate-checker-weakened", (root) => { const p = absolute(root, "scripts/quality/check-authoritative-sources.mjs"); mkdirSync(path.dirname(p), { recursive: true }); writeFileSync(p, "process.exit(0)\n", "utf8"); const c = absolute(root, DEFAULT_CONFIG); const value = JSON.parse(readFileSync(c, "utf8")); value.shadowTruth = true; writeFileSync(c, JSON.stringify(value), "utf8"); }, "AUTHORITY_CONFIG_CLOSED_SCHEMA"],
   ];
-  const validStates = ["legacy", "target"];
-  for (const calendarState of validStates) {
+  const validStates = [
+    { calendarState: "legacy", externalMode: "physical" },
+    { calendarState: "target", externalMode: "physical" },
+    { calendarState: "legacy", externalMode: "lock-only" },
+  ];
+  for (const { calendarState, externalMode } of validStates) {
     const root = mkdtempSync(path.join(os.tmpdir(), `authority-gate-${calendarState}-`));
     try {
       const designContract = writeFixture(root, calendarState);
+      if (externalMode === "lock-only") {
+        rmSync(absolute(root, designContract.source), { recursive: true, force: true });
+        rmSync(absolute(root, designContract.approval), { force: true });
+        rmSync(absolute(root, designContract.review), { force: true });
+      }
       const errors = checkAuthorityRepositoryAgainstContract(root, DEFAULT_CONFIG, designContract);
-      if (errors.length > 0) throw new Error(`selftest valid ${calendarState} fixture failed: ${errors.join(" | ")}`);
+      if (errors.length > 0) throw new Error(`selftest valid ${calendarState}/${externalMode} fixture failed: ${errors.join(" | ")}`);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -641,7 +685,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       for (const error of errors) console.error(`- ${error}`);
       process.exitCode = 1;
     } else {
-      console.log(`AUTHORITY_GATE=PASS truth_types=${Object.keys(TRUTH_SOURCE_CONTRACT).length} ui_references=${UI_REFERENCE_CONTRACT.length} ui_design_system=${UI_DESIGN_SYSTEM_CONTRACT.id} manifest_entries=${UI_DESIGN_SYSTEM_CONTRACT.manifestEntryCount}`);
+      const externalState = designExternalSourceState(args.root, UI_DESIGN_SYSTEM_CONTRACT);
+      console.log(`AUTHORITY_GATE=PASS truth_types=${Object.keys(TRUTH_SOURCE_CONTRACT).length} ui_references=${UI_REFERENCE_CONTRACT.length} ui_design_system=${UI_DESIGN_SYSTEM_CONTRACT.id} manifest_entries=${UI_DESIGN_SYSTEM_CONTRACT.manifestEntryCount} external_source=${externalState.mode}`);
     }
   }
 }

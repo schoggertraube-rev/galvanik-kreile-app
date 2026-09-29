@@ -21,6 +21,7 @@
     "role": "TOKEN_AND_COMPONENT_TRUTH",
     "source": "../_DESIGN_VERBINDLICH/designsystem_v1_1",
     "manifest": "../_DESIGN_VERBINDLICH/designsystem_v1_1/SHA256SUMS.txt",
+    "manifestLock": "docs/project/linie/ui/DESIGN_SYSTEM_V1_1_SHA256SUMS.txt",
     "manifestSha256": "71B0CB01F484BEEF042CFD04D31F951D2DB2D441C427F8212F35A8D41A8041E5",
     "manifestEntryCount": 55,
     "approval": "../_DESIGN_VERBINDLICH/FREIGABE_DS_V1.txt",

@@ -38,6 +38,12 @@ Die freigegebene Quelle
 
 - `SHA256SUMS.txt`: 55 Eintraege, SHA-256
   `71B0CB01F484BEEF042CFD04D31F951D2DB2D441C427F8212F35A8D41A8041E5`.
+- Der bytegleiche Repository-Lock
+  `docs/project/linie/ui/DESIGN_SYSTEM_V1_1_SHA256SUMS.txt` traegt denselben
+  SHA-256 und macht die Quellenbindung auch in CI ohne den externen
+  Schwesterordner pruefbar. Ist die externe Quelle lokal vorhanden, muss sie
+  vollstaendig vorliegen und wird fuer alle 55 Pfade physisch nachgespielt;
+  ein nur teilweise vorhandenes externes Quellenbuendel ist unzulaessig.
 - `../_DESIGN_VERBINDLICH/FREIGABE_DS_V1.txt`: SHA-256
   `D8D95F8E48CDB02C5A4F7BB8A4C07F2658EA32D1B7753A912BBA91C97013FC25`.
 - `../_DESIGN_VERBINDLICH/PRUEFUNG_DESIGN_V1_1_2026-09-27.md`: SHA-256

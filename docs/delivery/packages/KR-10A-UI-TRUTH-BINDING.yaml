@@ -87,6 +87,7 @@ repo_allowlist:
   - docs/project/NON_LOSS_REGISTER.md
   - docs/project/linie/00_UI_REFERENZEN_PFADE.md
   - docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md
+  - docs/project/linie/ui/DESIGN_SYSTEM_V1_1_SHA256SUMS.txt
   - missions/F1_ORDER_TO_CASH_PILOT_001.yml
   - quality/authoritative-sources.json
   - scripts/quality/check-authoritative-sources.mjs
@@ -110,7 +111,7 @@ scope_budget:
   max_handwritten_product_lines: 800
   max_new_migrations: 1
   planned_product_files: 0
-  planned_governance_files: 14
+  planned_governance_files: 15
 follow_up_packages:
   - KR-10B-DESIGN-SYSTEM-IMPORT
 new_objects_authority: DELEGATED_RATIFIED_CONTRACT
@@ -141,9 +142,9 @@ invariants:
   data_truth: NO_DATA_MODEL_SCHEMA_MIGRATION_RUNTIME_DATA_OR_PRODUCT_CHANGE
   tenant_and_rls: NOT_APPLICABLE_NO_DATA_ACCESS_RLS_OR_REMOTE_CHANGE
   roles_and_commands: NOT_APPLICABLE_NO_PRODUCT_ROLE_COMMAND_OR_SESSION_CHANGE
-  receipt_and_readback: EXTERNAL_APPROVAL_REVIEW_MANIFEST_AND_ALL_FIFTY_FIVE_FILE_HASHES_READ_BACK
+  receipt_and_readback: REPOSITORY_MANIFEST_LOCK_ALWAYS_READ_BACK_EXTERNAL_APPROVAL_REVIEW_AND_ALL_FIFTY_FIVE_FILES_PHYSICALLY_READ_BACK_WHEN_SOURCE_BUNDLE_IS_PRESENT
   reload_and_race: ONE_MATERIALIZED_CONTRACT_ONE_SERIAL_WRITER_THEN_ONE_READ_ONLY_REVIEWER
-  error_behavior: FAIL_CLOSED_ON_SOURCE_HASH_ENTRY_COUNT_ROLE_PRECEDENCE_INDEX_REGISTER_OR_IMPORT_DRIFT
+  error_behavior: FAIL_CLOSED_ON_LOCK_SOURCE_HASH_ENTRY_COUNT_PARTIAL_EXTERNAL_BUNDLE_ROLE_PRECEDENCE_INDEX_REGISTER_OR_IMPORT_DRIFT
   rollback: ABANDON_UNMERGED_CANDIDATE_WITHOUT_PRODUCT_OR_PRODUCTION_EFFECT
 visible_capabilities:
   registry_changes: NONE
@@ -159,8 +160,8 @@ acceptance:
     statement: Designsystem V1.1 ist exakt als Token- und Komponentenwahrheit gebunden.
     evidence: CONFIG_REGISTER_INDEX_AND_EXACT_SOURCE_PATH
   - id: KR10A-A2
-    statement: Alle 55 Manifestpfade existieren und stimmen mit ihren SHA-256-Werten ueberein.
-    evidence: AUTHORITY_GATE_PHYSICAL_MANIFEST_REPLAY
+    statement: Der unveraenderliche Repository-Lock bindet alle 55 Manifestpfade; bei vorhandenem externem Quellenbuendel existieren alle 55 Dateien und stimmen mit ihren SHA-256-Werten ueberein.
+    evidence: AUTHORITY_GATE_REPOSITORY_LOCK_AND_LOCAL_PHYSICAL_MANIFEST_REPLAY
   - id: KR10A-A3
     statement: Owner-Freigabe und PL-Pruefung sind durch exakte SHA-256-Werte gebunden.
     evidence: APPROVAL_AND_REVIEW_HASH_READBACK
@@ -207,7 +208,7 @@ gate_mapping_contract: docs/delivery/GATE_MAPPING_V1.yaml
 findings_ledger_contract: docs/delivery/FINDINGS_LEDGER_SCHEMA_V1.json
 closure_receipt_contract: docs/delivery/EXACT_SHA_CLOSURE_RECEIPT_SCHEMA_V1.json
 evidence_mode: CI_FULL
-evidence_mode_status: EXTERNAL_DESIGN_SOURCE_PRESENT_AND_HASH_VERIFIED_REMOTE_MAIN_BASE_CHECKS_STILL_REQUIRED
+evidence_mode_status: REPOSITORY_MANIFEST_LOCK_ALWAYS_VERIFIED_EXTERNAL_SOURCE_PHYSICALLY_VERIFIED_WHEN_PRESENT_REMOTE_MAIN_BASE_CHECKS_STILL_REQUIRED
 resource_profile:
   mode: SERIAL_NO_PARALLEL_BUILD_OR_TEST_WRITERS
   heavy_profile: NONE
@@ -226,6 +227,7 @@ package_specific:
   design_system_id: KREILE_DESIGN_SYSTEM_V1_1
   design_system_version: "1.1"
   source_path: ../_DESIGN_VERBINDLICH/designsystem_v1_1
+  manifest_lock_path: docs/project/linie/ui/DESIGN_SYSTEM_V1_1_SHA256SUMS.txt
   manifest_sha256: 71B0CB01F484BEEF042CFD04D31F951D2DB2D441C427F8212F35A8D41A8041E5
   expected_external_file_count: 55
   approval_sha256: D8D95F8E48CDB02C5A4F7BB8A4C07F2658EA32D1B7753A912BBA91C97013FC25
