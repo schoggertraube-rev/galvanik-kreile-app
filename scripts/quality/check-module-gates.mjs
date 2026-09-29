@@ -19,6 +19,9 @@
 //         quality/module-gates-baseline.json (shrink-only, gegen Basis-Baseline geprueft;
 //         S4 leert sie).
 // Naht 6  AGENTS.md verweist auf ARCHITEKTUR_MODULE_PATH1.md.
+// Naht 7  Die breite KR-00G-Git-Attribut-Ausnahme fuer docs/module/** darf nur
+//         die 225 source-gelockten Referenzimporte treffen. Neue oder fehlende
+//         Dateien sowie unvollstaendige Attribute = FAIL.
 //
 // Aufruf:  node scripts/quality/check-module-gates.mjs [--root <dir>]
 //            [--base-baseline <quality/module-gates-baseline.json der Basis>]
@@ -39,6 +42,15 @@ export const BASELINE_PATH = "quality/module-gates-baseline.json";
 export const SCHEMA_PATH = "docs/architecture/MODULE_MANIFEST.schema.json";
 export const MODULES_DIR = "src/modules";
 export const AGENTS_REQUIRED_REFERENCE = "ARCHITEKTUR_MODULE_PATH1.md";
+export const KR00G_SOURCE_LOCK_PATH = "docs/project/KR-00G_SOURCE_LOCKS_2026-09-29.md";
+export const KR00G_EXPECTED_SOURCE_COUNT = 225;
+export const KR00G_EXPECTED_MODULE_COUNT = 222;
+export const KR00G_REFERENCE_ATTRIBUTE_LINES = [
+  "docs/module/** -text -whitespace",
+  "docs/project/BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md -text -whitespace",
+  "docs/project/00_OFFENE_PUNKTE_KREILE_2026-09-26.md -text -whitespace",
+  "docs/project/PRUEFUNG_DOSSIERS_2026-09-26.md -text -whitespace",
+];
 
 // Naht 5 — verworfen laut docs/project/linie/ui/00_UI_REFERENZ_KANONISCH.md + MODULKARTE_KANON.md
 export const FORBIDDEN_UI_IDENTIFIERS = [
@@ -974,6 +986,75 @@ function gateAgents(root, findings) {
   }
 }
 
+// â”€â”€ Naht 7: KR-00G Referenzimporte bleiben exakt source-gelockt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+function parseKr00gLockedTargets(source, findings) {
+  const targets = new Set();
+  for (const line of source.split(/\r?\n/)) {
+    if (!line.startsWith("|")) continue;
+    const cells = line.split("|").slice(1, -1).map((cell) => cell.trim());
+    const target = cells[1];
+    if (!target?.startsWith("docs/")) continue;
+    if (targets.has(target)) findings.push(`[naht7] ${KR00G_SOURCE_LOCK_PATH}: doppeltes Repo-Ziel '${target}'`);
+    targets.add(target);
+  }
+  return targets;
+}
+
+function gateKr00gReferenceAttributes(root, findings) {
+  const lockAbs = path.join(root, KR00G_SOURCE_LOCK_PATH);
+  const attributesAbs = path.join(root, ".gitattributes");
+  const attributes = existsSync(attributesAbs) ? readFileSync(attributesAbs, "utf8") : "";
+  const hasKr00gAttribute = KR00G_REFERENCE_ATTRIBUTE_LINES.some((line) => attributes.split(/\r?\n/).includes(line));
+
+  // Vor KR-00G existieren weder Source-Lock noch Ausnahme. Sobald eine Seite
+  // vorhanden ist, ist der Vertrag beidseitig und fail-closed.
+  if (!existsSync(lockAbs) && !hasKr00gAttribute) return;
+  if (!existsSync(lockAbs)) {
+    findings.push(`[naht7] ${KR00G_SOURCE_LOCK_PATH}: fehlt trotz KR-00G-Attributausnahme`);
+    return;
+  }
+  if (!existsSync(attributesAbs)) {
+    findings.push("[naht7] .gitattributes: fehlt trotz KR-00G-Source-Lock");
+    return;
+  }
+
+  const lockedTargets = parseKr00gLockedTargets(readFileSync(lockAbs, "utf8"), findings);
+  const moduleTargets = new Set([...lockedTargets].filter((target) => target.startsWith("docs/module/")));
+  const projectTargets = new Set([...lockedTargets].filter((target) => target.startsWith("docs/project/")));
+  if (lockedTargets.size !== KR00G_EXPECTED_SOURCE_COUNT) {
+    findings.push(`[naht7] ${KR00G_SOURCE_LOCK_PATH}: ${lockedTargets.size} eindeutige Ziele, erwartet ${KR00G_EXPECTED_SOURCE_COUNT}`);
+  }
+  if (moduleTargets.size !== KR00G_EXPECTED_MODULE_COUNT) {
+    findings.push(`[naht7] ${KR00G_SOURCE_LOCK_PATH}: ${moduleTargets.size} docs/module-Ziele, erwartet ${KR00G_EXPECTED_MODULE_COUNT}`);
+  }
+
+  const expectedProjectTargets = new Set(KR00G_REFERENCE_ATTRIBUTE_LINES.slice(1).map((line) => line.split(" ")[0]));
+  for (const target of expectedProjectTargets) {
+    if (!projectTargets.has(target)) findings.push(`[naht7] ${KR00G_SOURCE_LOCK_PATH}: Attributziel '${target}' ist nicht source-gelockt`);
+  }
+  for (const target of projectTargets) {
+    if (!expectedProjectTargets.has(target)) findings.push(`[naht7] ${KR00G_SOURCE_LOCK_PATH}: unerwartetes docs/project-Ziel '${target}'`);
+  }
+
+  const attributeLines = attributes.split(/\r?\n/);
+  for (const expected of KR00G_REFERENCE_ATTRIBUTE_LINES) {
+    const count = attributeLines.filter((line) => line === expected).length;
+    if (count !== 1) findings.push(`[naht7] .gitattributes: '${expected}' exakt einmal erwartet, gefunden ${count}`);
+  }
+
+  const moduleFiles = new Set(walk(root, "docs/module", [], new Set(), findings));
+  for (const file of moduleFiles) {
+    if (!moduleTargets.has(file)) findings.push(`[naht7] ${file}: von docs/module/** erfasst, aber nicht im KR-00G-Source-Lock`);
+  }
+  for (const target of moduleTargets) {
+    if (!moduleFiles.has(target)) findings.push(`[naht7] ${target}: source-gelockter KR-00G-Import fehlt`);
+  }
+  for (const target of projectTargets) {
+    if (!existsSync(path.join(root, target))) findings.push(`[naht7] ${target}: source-gelockter KR-00G-Projektimport fehlt`);
+  }
+}
+
 // ── Orchestrierung ───────────────────────────────────────────────────────────
 
 function readBaseline(absPath, findings) {
@@ -1009,6 +1090,7 @@ export function runModuleGates(root, { baseBaselinePath = null, schemaPath = nul
   gateData(root, findings, manifests);
   gateUi(root, findings, baseline, baseBaseline);
   gateAgents(root, findings);
+  gateKr00gReferenceAttributes(root, findings);
   if (existsSync(path.join(root, "quality/authoritative-sources.json"))) {
     for (const finding of checkAuthorityRepository(root)) findings.push(`[authority] ${finding}`);
   } else if (existsSync(path.join(root, "package.json"))) {
@@ -1058,7 +1140,7 @@ if (isMain) {
   }
   const result = runModuleGates(opts.root, { baseBaselinePath: opts.baseBaselinePath, schemaPath: opts.schemaPath });
   if (result.ok) {
-    console.log("module-gates: alle Naehte halten (Manifest, Fassade, v_*-Daten, UI-Vertrag, AGENTS, Authority).");
+    console.log("module-gates: alle Naehte halten (Manifest, Fassade, v_*-Daten, UI-Vertrag, AGENTS, KR-00G-Source-Lock, Authority).");
   } else {
     console.error(`module-gates: ${result.findings.length} Verstoss/Verstoesse`);
     for (const f of result.findings) console.error("  " + f);

@@ -64,6 +64,9 @@
     "execution_state_source": {
       "const": "missions/F1_ORDER_TO_CASH_PILOT_001.yml"
     },
+    "manifest_profile": {
+      "const": "ROLLING_V2"
+    },
     "queue_parent_sha": {
       "$ref": "#/definitions/sha"
     },
@@ -273,6 +276,22 @@
         "OWNER_UX_PASS": { "$ref": "#/definitions/register_gate_applicability" }
       }
     },
+    "register_gate_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "FUNCTIONAL_SLICE_PASS",
+        "DATA_TRUTH_PASS",
+        "UI_REFERENCE_PASS",
+        "OWNER_UX_PASS"
+      ],
+      "properties": {
+        "FUNCTIONAL_SLICE_PASS": { "$ref": "#/definitions/functional_slice_gate_evidence" },
+        "DATA_TRUTH_PASS": { "$ref": "#/definitions/data_truth_gate_evidence" },
+        "UI_REFERENCE_PASS": { "$ref": "#/definitions/ui_reference_gate_evidence" },
+        "OWNER_UX_PASS": { "$ref": "#/definitions/owner_ux_gate_evidence" }
+      }
+    },
     "invariants": {
       "type": "object",
       "additionalProperties": false,
@@ -442,9 +461,32 @@
           { "not": { "pattern": "(?:state|status|delivery|delivered|main|merge|production|active_package)" } }
         ]
       },
-      "additionalProperties": true
+      "additionalProperties": { "$ref": "#/definitions/package_specific_value" }
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "required": ["package_id"],
+        "properties": {
+          "package_id": {
+            "not": {
+              "enum": [
+                "KR-00E-DELIVERY-CONTRACT",
+                "KR-00G-DOCS-IMPORT"
+              ]
+            }
+          }
+        }
+      },
+      "then": {
+        "required": ["manifest_profile", "register_gate_evidence"],
+        "properties": {
+          "manifest_profile": { "const": "ROLLING_V2" }
+        }
+      }
+    }
+  ],
   "definitions": {
     "sha": {
       "type": "string",
@@ -497,6 +539,85 @@
     },
     "register_gate_applicability": {
       "enum": ["REQUIRED", "NOT_APPLICABLE_WITH_EVIDENCE"]
+    },
+    "register_gate_evidence_base": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["applicability", "stage", "evidence_ref"],
+      "properties": {
+        "applicability": { "$ref": "#/definitions/register_gate_applicability" },
+        "stage": { "enum": ["LOCAL_VERIFIED", "OWNER_PREVIEWED"] },
+        "evidence_ref": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?:acceptance|gate|invariant|receipt):[A-Za-z0-9_.:/-]+$"
+        }
+      }
+    },
+    "functional_slice_gate_evidence": {
+      "allOf": [
+        { "$ref": "#/definitions/register_gate_evidence_base" },
+        {
+          "properties": {
+            "applicability": { "const": { "$data": "/applicable_register_gates/FUNCTIONAL_SLICE_PASS" } },
+            "stage": { "const": "LOCAL_VERIFIED" }
+          }
+        }
+      ]
+    },
+    "data_truth_gate_evidence": {
+      "allOf": [
+        { "$ref": "#/definitions/register_gate_evidence_base" },
+        {
+          "properties": {
+            "applicability": { "const": { "$data": "/applicable_register_gates/DATA_TRUTH_PASS" } },
+            "stage": { "const": "LOCAL_VERIFIED" }
+          }
+        }
+      ]
+    },
+    "ui_reference_gate_evidence": {
+      "allOf": [
+        { "$ref": "#/definitions/register_gate_evidence_base" },
+        {
+          "properties": {
+            "applicability": { "const": { "$data": "/applicable_register_gates/UI_REFERENCE_PASS" } },
+            "stage": { "const": "OWNER_PREVIEWED" }
+          }
+        }
+      ]
+    },
+    "owner_ux_gate_evidence": {
+      "allOf": [
+        { "$ref": "#/definitions/register_gate_evidence_base" },
+        {
+          "properties": {
+            "applicability": { "const": { "$data": "/applicable_register_gates/OWNER_UX_PASS" } },
+            "stage": { "const": "OWNER_PREVIEWED" }
+          }
+        }
+      ]
+    },
+    "package_specific_value": {
+      "anyOf": [
+        {
+          "type": "object",
+          "propertyNames": {
+            "allOf": [
+              { "pattern": "^[a-z][a-z0-9_]*$" },
+              { "not": { "pattern": "(?:state|status|delivery|delivered|main|merge|production|active_package)" } }
+            ]
+          },
+          "additionalProperties": { "$ref": "#/definitions/package_specific_value" }
+        },
+        {
+          "type": "array",
+          "items": { "$ref": "#/definitions/package_specific_value" }
+        },
+        {
+          "type": ["string", "number", "boolean", "null"]
+        }
+      ]
     },
     "finding": {
       "type": "object",

@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "contract_id": "KREILE_ROLLING_MANIFEST_QUEUE_V1",
+  "authority": {
+    "plan_path": "docs/project/BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md",
+    "plan_section": "4_KR_00F_ROLLENDE_MANIFESTE",
+    "plan_sha256": "F9C165871EDD24E5CA3EC826C24A791BB34CB6C32244C424FBB87543B6E73E8A"
+  },
+  "execution_state_source": "missions/F1_ORDER_TO_CASH_PILOT_001.yml",
+  "parent_candidate": {
+    "package_id": "KR-00G-DOCS-IMPORT",
+    "candidate_sha": "124636759930a2eb5b8c26e68cc93acf21ac7eb4",
+    "tree_sha": "6d3a21ca27af1a36a79b281209f86aeb5ebae332",
+    "remote_ref": "origin/codex/kr-00g-docs-import",
+    "review_result": "PASS_EXACT_SHA_NO_OPEN_P0_P1_P2",
+    "review_receipt": "../_MODULDOSSIERS/00_PROJEKT/KR-00G_CLAUDE_REVIEW_2026-09-29.md",
+    "review_receipt_sha256": "70762550997571E009DF7E718228F8A275AB09CE8682CF28F06D02C087A7F4AC",
+    "closure_receipt": "../_MODULDOSSIERS/00_PROJEKT/KR-00G_EXACT_SHA_CLOSURE_2026-09-29.json",
+    "closure_receipt_sha256": "D1BEA6A139225F37435CF5D1BEFC3612A858A5DC391B7B321E56448C0932E2E4"
+  },
+  "issuance_policy": {
+    "one_materialized_contract_at_a_time": true,
+    "max_materialized_future_contracts": 0,
+    "exact_reviewed_parent_required": true,
+    "remote_identity_required": true,
+    "candidate_chain_when_merge_unavailable": true,
+    "candidate_is_not_main_delivery": true,
+    "rebase_and_reverify_after_real_main_change": true,
+    "halt_on_open_p0_p1_after_one_correction": true,
+    "no_periodic_build_automation": true
+  },
+  "initial_horizon": [
+    {
+      "order": 1,
+      "package_id": "KR-01-GOVERNANCE-MERGE",
+      "scope": "GOVERNANCE",
+      "predecessor": "KR-00F-ROLLING-MANIFESTS",
+      "classification": "ORDER_POINTER_NOT_AN_EXECUTABLE_MANIFEST",
+      "issue_when": "PREDECESSOR_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED"
+    },
+    {
+      "order": 2,
+      "package_id": "KR-02-B1-P0-CANCEL",
+      "scope": "B1",
+      "predecessor": "KR-01-GOVERNANCE-MERGE",
+      "classification": "ORDER_POINTER_NOT_AN_EXECUTABLE_MANIFEST",
+      "issue_when": "PREDECESSOR_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED"
+    },
+    {
+      "order": 3,
+      "package_id": "KR-03A-DELIVERY-ADHERENCE-DOMAIN",
+      "scope": "B2A",
+      "predecessor": "KR-02-B1-P0-CANCEL",
+      "classification": "ORDER_POINTER_NOT_AN_EXECUTABLE_MANIFEST",
+      "issue_when": "PREDECESSOR_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED"
+    }
+  ],
+  "next_contract_blueprint": {
+    "package_id": "KR-01-GOVERNANCE-MERGE",
+    "predecessor": "KR-00F-ROLLING-MANIFESTS",
+    "planned_path": "docs/delivery/packages/KR-01-GOVERNANCE-MERGE.yaml",
+    "classification": "POINTER_ONLY_NON_EXECUTABLE_UNTIL_ISSUED",
+    "issue_when": "KR_00F_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED"
+  },
+  "materialized_future_contracts": [],
+  "after_initial_horizon_rule": "ISSUE_ONLY_THE_NEXT_DEPENDENT_PACKAGE_FROM_THE_AUTHORITY_PLAN_AFTER_PREDECESSOR_CLOSURE"
+}

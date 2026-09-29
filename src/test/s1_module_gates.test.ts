@@ -10,6 +10,9 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   BASELINE_PATH,
+  KR00G_EXPECTED_MODULE_COUNT,
+  KR00G_REFERENCE_ATTRIBUTE_LINES,
+  KR00G_SOURCE_LOCK_PATH,
   SCHEMA_PATH,
   bootstrapEntrypointBaseline,
   collectUnownedEntrypoints,
@@ -99,6 +102,32 @@ function seedLegacyEntrypoint(files: Record<string, string> = {}): string {
   });
   bootstrapEntrypointBaseline(root);
   return root;
+}
+
+function kr00gReferenceFixture(): Record<string, string> {
+  const files: Record<string, string> = {};
+  const rows: string[] = [];
+  const hash = "A".repeat(64);
+  for (let i = 0; i < KR00G_EXPECTED_MODULE_COUNT; i++) {
+    const target = `docs/module/reference-${String(i).padStart(3, "0")}.md`;
+    files[target] = `reference ${i}\n`;
+    rows.push(`| source-${i}.md | ${target} | ${hash} | ${hash} | ${hash} | NONE |`);
+  }
+  for (const line of KR00G_REFERENCE_ATTRIBUTE_LINES.slice(1)) {
+    const target = line.split(" ")[0];
+    files[target] = `project reference ${target}\n`;
+    rows.push(`| source-${path.basename(target)} | ${target} | ${hash} | ${hash} | ${hash} | NONE |`);
+  }
+  files[KR00G_SOURCE_LOCK_PATH] = [
+    "# KR-00G Source Locks",
+    "",
+    "| Quelle | Repo-Ziel | Source SHA256 | Normalized Body SHA256 | Imported SHA256 | Normalisierung |",
+    "|---|---|---|---|---|---|",
+    ...rows,
+    "",
+  ].join("\n");
+  files[".gitattributes"] = `${KR00G_REFERENCE_ATTRIBUTE_LINES.join("\n")}\n`;
+  return files;
 }
 
 describe("S1 Naht 1 — Manifest je Modul + Ablage", () => {
@@ -799,6 +828,26 @@ describe("S1 Naht 6 — AGENTS.md verweist auf die Bauanleitung", () => {
   it("fehlender Verweis = FAIL", () => {
     const root = repo({ "AGENTS.md": "nichts\n" });
     expect(findingsOf(root)).toEqual([expect.stringContaining("[naht6] AGENTS.md: Verweis auf ARCHITEKTUR_MODULE_PATH1.md fehlt")]);
+  });
+});
+
+describe("S1 Naht 7 — KR-00G-Referenzattribute bleiben source-gelockt", () => {
+  it("akzeptiert exakt die 225 gelockten Importziele und vier engen Attributzeilen", () => {
+    expect(findingsOf(repo(kr00gReferenceFixture()))).toEqual([]);
+  });
+
+  it("weist jede spaetere Datei unter der breiten docs/module-Ausnahme ab", () => {
+    const root = repo({ ...kr00gReferenceFixture(), "docs/module/unlocked.md": "not locked\n" });
+    expect(findingsOf(root)).toContainEqual(expect.stringContaining("docs/module/unlocked.md: von docs/module/** erfasst, aber nicht im KR-00G-Source-Lock"));
+  });
+
+  it("weist fehlende gelockte Dateien und unvollstaendige Attribute ab", () => {
+    const files = kr00gReferenceFixture();
+    delete files["docs/module/reference-000.md"];
+    files[".gitattributes"] = `${KR00G_REFERENCE_ATTRIBUTE_LINES.slice(0, -1).join("\n")}\n`;
+    const f = findingsOf(repo(files));
+    expect(f).toContainEqual(expect.stringContaining("docs/module/reference-000.md: source-gelockter KR-00G-Import fehlt"));
+    expect(f).toContainEqual(expect.stringContaining(`${KR00G_REFERENCE_ATTRIBUTE_LINES.at(-1)}' exakt einmal erwartet, gefunden 0`));
   });
 });
 

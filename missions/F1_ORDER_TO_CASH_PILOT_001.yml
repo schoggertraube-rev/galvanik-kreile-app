@@ -1,8 +1,8 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: 2e66ebf928221e44acec0ee0efa34b881af18198
-branch: codex/kr-00g-docs-import
+base_sha: 124636759930a2eb5b8c26e68cc93acf21ac7eb4
+branch: codex/kr-00f-rolling-manifests
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
 execution_program_20260928:
@@ -16,29 +16,29 @@ execution_program_20260928:
   merge_rule: REQUIRED_CHECKS_EXACT_SHA_CLEAN_TREE_AND_SEPARATE_PRODUCTION_EFFECT_AUTHORITY
   production_rule: NO_PRODUCTION_WITHOUT_SEPARATE_EXPLICIT_OWNER_AUTHORITY
   origin_main_reference: 21a23567d51e4805f065ce9ae8c59bdc5faf9fa9
-  queue_parent: KR-00E-DELIVERY-CONTRACT@2e66ebf928221e44acec0ee0efa34b881af18198
+  queue_parent: KR-00G-DOCS-IMPORT@124636759930a2eb5b8c26e68cc93acf21ac7eb4
   queue_parent_status: REVIEWED_CANDIDATE_PENDING_MAIN_BASE_CI_AND_EXTERNAL_MERGE_GATE
   queue_parent_review:
     model: claude-opus-5
-    broad_session_id: 570b7ae3-ba27-4b55-8f38-2778ef39f402
-    delta_session_id: 052151cb-9d89-406d-a5d5-8430b9c02a3d
-    correction_rounds: 1
-    delta_review_result: PASS_TARGETED_DELTA_NO_OPEN_P0_P1_P2
-    evidence: _MODULDOSSIERS/00_PROJEKT/KR-00E_CLAUDE_REVIEW_2026-09-29.md
-    evidence_sha256: 30E9B1BDAF0C834D0E0E3EB2133CFA7CFC338CDF583B3DD61125965D5F7BFCF2
-    github_agentur_gate_run: 36497543020
-    remote_head: 2e66ebf928221e44acec0ee0efa34b881af18198
+    broad_session_id: 3ea02cf8-9e73-4b95-a543-3d13e2ba9cee
+    delta_session_id: NOT_NEEDED_ZERO_CORRECTIONS
+    correction_rounds: 0
+    delta_review_result: NOT_REQUIRED_BROAD_PASS_NO_OPEN_P0_P1_P2
+    evidence: _MODULDOSSIERS/00_PROJEKT/KR-00G_CLAUDE_REVIEW_2026-09-29.md
+    evidence_sha256: 70762550997571E009DF7E718228F8A275AB09CE8682CF28F06D02C087A7F4AC
+    github_agentur_gate_run: 36503449647
+    remote_head: 124636759930a2eb5b8c26e68cc93acf21ac7eb4
   queue_rule: EXACT_PARENT_ONE_WRITER_ONE_REVIEWER_NO_DELIVERY_CLAIM_REVERIFY_AFTER_EACH_REAL_MAIN_MERGE
   kreile_pl_session: 01a0ce4b-1843-7361-9ffc-47933f9ecdde
   build_coordinator_and_future_merge_actor: 01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
   current_state_drift: RESOLVED_IN_KR_00D_CANDIDATE_MAIN_REFERENCE_21A23567_NO_DELIVERY_CLAIM
-  current_package: KR-00G-DOCS-IMPORT
-  current_package_parent: 2e66ebf928221e44acec0ee0efa34b881af18198
-  current_package_status: FAST_GATES_PASS_PENDING_COMMIT_AND_EXACT_SHA_REVIEW
-  current_package_remote_freeze: NOT_YET_COMMITTED
-  current_package_broad_review: PENDING_AFTER_EXACT_SHA
-  current_package_correction_rounds: 0_OF_1
-  current_package_fast_gates: SOURCE_LOCK_225_BANNER_CLASSIFICATION_226_SCHEMA_AUTHORITY_SELFTEST_AUTHORITY_MODULE_NO_FAKE_DIFF_AND_RATCHET_PASS
+  current_package: KR-00F-ROLLING-MANIFESTS
+  current_package_parent: 124636759930a2eb5b8c26e68cc93acf21ac7eb4
+  current_package_status: CANDIDATE_LIFECYCLE_IN_PROGRESS
+  current_package_remote_freeze: RECORDED_ONLY_IN_EXTERNAL_EXACT_SHA_CLOSURE_AFTER_REVIEW
+  current_package_broad_review: RECORDED_ONLY_IN_EXTERNAL_CLAUDE_RECEIPT_AFTER_EXACT_SHA
+  current_package_correction_rounds: UP_TO_1_RECORDED_EXTERNALLY
+  current_package_fast_gates: SCHEMA_QUEUE_NEGATIVE_AUTHORITY_MODULE_NO_FAKE_RATCHET_TYPESCRIPT_LINT_AND_UNIT_970_PASS
   review_roles:
     writer: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
     implementation_reviewer: CLAUDE_OPUS_NEW_READ_ONLY_SESSION_AFTER_EXACT_SHA
@@ -86,9 +86,9 @@ delivery_order:
   - F1.5_BESTAETIGTER_ZAHLUNGSEINGANG
   - F1.6_REALER_PILOT
 
-active_package: KR-00G-DOCS-IMPORT
-active_package_status: FAST_GATES_PASS_PENDING_COMMIT_AND_EXACT_SHA_REVIEW
-next_gate_after_active_package: PRECOMMIT_COMMIT_PUSH_BRANCH_GATES_THEN_ONE_BROAD_CLAUDE_REVIEW
+active_package: KR-00F-ROLLING-MANIFESTS
+active_package_status: CANDIDATE_LIFECYCLE_IN_PROGRESS
+next_gate_after_active_package: EXACT_REMOTE_IDENTITY_BRANCH_GATE_AND_ONE_BROAD_CLAUDE_REVIEW_THEN_EXTERNAL_CLOSURE
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
