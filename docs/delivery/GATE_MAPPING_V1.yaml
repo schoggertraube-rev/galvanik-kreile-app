@@ -25,9 +25,11 @@ rolling_manifest_policy:
   materialized_future_contracts: 0
   one_materialized_contract_at_a_time: true
   exact_reviewed_parent_required: true
+  remote_identity_required: true
   candidate_chain_when_merge_unavailable: true
   candidate_is_not_main_delivery: true
   rebase_and_reverify_after_real_main_change: true
+  halt_on_open_p0_p1_after_one_correction: true
   no_periodic_build_automation: true
   initial_pointer_order:
     - KR-04-PR113-DISPOSITION
@@ -55,6 +57,7 @@ workflow_facts_at_contract_parent:
     branch_push_runs: false
     pull_request_target_to_main_runs: true
     required_status_claim: NOT_REQUIRED_BY_PROTECTION_MUST_PASS
+    candidate_workflow_change_effect: AFTER_MAIN_DELIVERY_ONLY_BASE_WORKFLOW_JUDGES_CURRENT_PR
 required_check_truth:
   planned_required_names:
     - quality

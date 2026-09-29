@@ -41,12 +41,49 @@ export const LEGACY_MANIFEST_BINDINGS = Object.freeze({
   }),
 });
 
+export const LEGACY_V1_MANIFEST_BINDINGS = Object.freeze({
+  "docs/delivery/packages/KR-00B0-GOVERNANCE-BOOTSTRAP.yaml": Object.freeze({
+    packageId: "KR-00B0-GOVERNANCE-BOOTSTRAP",
+    sha256: "BF9F68BC6221F97E4F66EFCEB49F684D63043EB949DCE8C504783A0A11A497F3",
+  }),
+  "docs/delivery/packages/KR-00B-TRUTH-SYNC.yaml": Object.freeze({
+    packageId: "KR-00B-TRUTH-SYNC",
+    sha256: "1DBECF8492166D73F9FBC77926D5E3386F060B7AAF6573B4A920534D752C39D4",
+  }),
+  "docs/delivery/packages/KR-00C-MISSION-CONTRACT.yaml": Object.freeze({
+    packageId: "KR-00C-MISSION-CONTRACT",
+    sha256: "EBEED806859CA9DAFA836D7D1E39C5C9CE1221BAF8ED9DC0185B9447C5B4809C",
+  }),
+  "docs/delivery/packages/KR-00D-ALTINVENTAR.yaml": Object.freeze({
+    packageId: "KR-00D-ALTINVENTAR",
+    sha256: "B410F710DCD3B5F6CBF0B6F57B0359FD36C5CC7579BB479CD9E1132930C6B651",
+  }),
+});
+
+const EFFECTIVE_REQUIRED_CHECKS = Object.freeze([
+  "quality",
+  "agentur-gate",
+  "Fresh Supabase replay",
+]);
+const NON_REQUIRED_BUT_MUST_PASS = Object.freeze(["ratchet"]);
+
 function toPosix(value) {
   return value.replaceAll("\\", "/");
 }
 
 function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex").toUpperCase();
+}
+
+function normalizedStringSet(value) {
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) return null;
+  return [...new Set(value)].sort();
+}
+
+function sameStringSet(left, right) {
+  const normalizedLeft = normalizedStringSet(left);
+  const normalizedRight = normalizedStringSet(right);
+  return normalizedLeft !== null && normalizedRight !== null && JSON.stringify(normalizedLeft) === JSON.stringify(normalizedRight);
 }
 
 function readJson(root, rel, findings, label = rel) {
@@ -175,6 +212,100 @@ function checkLegacyBindings(root, manifests, findings) {
   }
 }
 
+function checkLegacyV1Bindings(root, manifests, findings) {
+  const v1Manifests = manifests.filter(({ value }) => value?.schema_version === 1);
+  const knownPaths = new Set(Object.keys(LEGACY_V1_MANIFEST_BINDINGS));
+
+  for (const { rel } of v1Manifests) {
+    if (!knownPaths.has(rel)) {
+      findings.push(`[delivery] ${rel}: ungebundenes V1-Manifest ist nicht erlaubt`);
+    }
+  }
+
+  for (const [rel, binding] of Object.entries(LEGACY_V1_MANIFEST_BINDINGS)) {
+    const matches = v1Manifests.filter((entry) => entry.rel === rel);
+    if (matches.length !== 1) {
+      findings.push(`[delivery] ${rel}: eingefrorenes V1-Manifest fehlt oder ist nicht eindeutig`);
+      continue;
+    }
+    if (matches[0].value?.package_id !== binding.packageId) {
+      findings.push(`[delivery] ${rel}: V1-package_id '${String(matches[0].value?.package_id)}', erwartet '${binding.packageId}'`);
+    }
+    const actual = sha256(readFileSync(path.join(root, rel)));
+    if (actual !== binding.sha256) {
+      findings.push(`[delivery] ${rel}: V1-Legacy-Hash ${actual}, erwartet ${binding.sha256}`);
+    }
+  }
+}
+
+function checkOperatingTruth(receipt, mapping, findings) {
+  if (!receipt || !mapping) return;
+  const truth = receipt.delivery_truth ?? {};
+  for (const key of ["main_delivered", "merge_performed", "production_authorized"]) {
+    if (truth[key] !== false) findings.push(`[delivery] Betriebsreceipt delivery_truth.${key} muss false sein`);
+  }
+
+  const classicChecks = receipt.classic_protection?.required_checks ?? [];
+  const rulesetChecks = receipt.active_ruleset?.required_checks ?? [];
+  const effectiveChecks = receipt.effective_required_checks ?? [];
+  const derivedEffectiveChecks = [...new Set([...classicChecks, ...rulesetChecks])];
+  if (!sameStringSet(effectiveChecks, EFFECTIVE_REQUIRED_CHECKS)) {
+    findings.push("[delivery] Betriebsreceipt effective_required_checks weicht von der geschuetzten Sollmenge ab");
+  }
+  if (!sameStringSet(effectiveChecks, derivedEffectiveChecks)) {
+    findings.push("[delivery] Betriebsreceipt effective_required_checks entspricht nicht Classic ∪ Ruleset");
+  }
+  if (receipt.classic_protection?.enforce_admins !== true) {
+    findings.push("[delivery] Betriebsreceipt classic_protection.enforce_admins muss true sein");
+  }
+  if (receipt.active_ruleset?.enforcement !== "active") {
+    findings.push("[delivery] Betriebsreceipt active_ruleset.enforcement muss active sein");
+  }
+  if (!Array.isArray(receipt.active_ruleset?.bypass_actors) || receipt.active_ruleset.bypass_actors.length !== 0) {
+    findings.push("[delivery] Betriebsreceipt active_ruleset.bypass_actors muss leer sein");
+  }
+  if (receipt.active_ruleset?.current_user_can_bypass !== "never") {
+    findings.push("[delivery] Betriebsreceipt active_ruleset.current_user_can_bypass muss never sein");
+  }
+  if (receipt.ratchet?.required !== false || receipt.ratchet?.must_pass !== true) {
+    findings.push("[delivery] Betriebsreceipt ratchet muss NOT_REQUIRED_BUT_MUST_PASS bleiben");
+  }
+
+  const mapped = mapping.required_check_truth ?? {};
+  if (!sameStringSet(mapped.actual_required_names, effectiveChecks)) {
+    findings.push("[delivery] required_check_truth.actual_required_names stimmt nicht mit dem Betriebsreceipt ueberein");
+  }
+  if (!sameStringSet(mapped.actual_non_required_but_must_pass, NON_REQUIRED_BUT_MUST_PASS)) {
+    findings.push("[delivery] required_check_truth.actual_non_required_but_must_pass muss exakt ratchet enthalten");
+  }
+  if (mapped.active_ruleset_bypass_actors !== receipt.active_ruleset?.bypass_actors?.length) {
+    findings.push("[delivery] required_check_truth.active_ruleset_bypass_actors stimmt nicht mit dem Betriebsreceipt ueberein");
+  }
+  if (mapped.current_user_can_bypass !== receipt.active_ruleset?.current_user_can_bypass) {
+    findings.push("[delivery] required_check_truth.current_user_can_bypass stimmt nicht mit dem Betriebsreceipt ueberein");
+  }
+  if (mapped.branch_protection_receipt !== DELIVERY_PATHS.operatingReceipt) {
+    findings.push("[delivery] required_check_truth.branch_protection_receipt zeigt nicht auf das kanonische Betriebsreceipt");
+  }
+
+  const calibration = receipt.resource_calibration ?? {};
+  const samples = Array.isArray(calibration.samples) ? calibration.samples : [];
+  if (samples.length > 0) {
+    const minRam = Math.min(...samples.map((sample) => sample.available_ram_mb));
+    const maxShell = Math.max(...samples.map((sample) => sample.shell_probe_seconds));
+    const maxGit = Math.max(...samples.map((sample) => sample.git_probe_seconds));
+    if (calibration.observed_min_available_ram_mb !== minRam) {
+      findings.push("[delivery] resource_calibration.observed_min_available_ram_mb ist nicht aus samples abgeleitet");
+    }
+    if (calibration.observed_max_shell_probe_seconds !== maxShell) {
+      findings.push("[delivery] resource_calibration.observed_max_shell_probe_seconds ist nicht aus samples abgeleitet");
+    }
+    if (calibration.observed_max_git_probe_seconds !== maxGit) {
+      findings.push("[delivery] resource_calibration.observed_max_git_probe_seconds ist nicht aus samples abgeleitet");
+    }
+  }
+}
+
 function checkRollingConsistency(root, queue, mapping, mission, manifests, findings) {
   if (!queue || !mapping || !mission) return;
   const policy = queue.issuance_policy ?? {};
@@ -182,9 +313,11 @@ function checkRollingConsistency(root, queue, mapping, mission, manifests, findi
   const pairs = [
     ["one_materialized_contract_at_a_time", "one_materialized_contract_at_a_time"],
     ["exact_reviewed_parent_required", "exact_reviewed_parent_required"],
+    ["remote_identity_required", "remote_identity_required"],
     ["candidate_chain_when_merge_unavailable", "candidate_chain_when_merge_unavailable"],
     ["candidate_is_not_main_delivery", "candidate_is_not_main_delivery"],
     ["rebase_and_reverify_after_real_main_change", "rebase_and_reverify_after_real_main_change"],
+    ["halt_on_open_p0_p1_after_one_correction", "halt_on_open_p0_p1_after_one_correction"],
     ["no_periodic_build_automation", "no_periodic_build_automation"],
   ];
   for (const [queueKey, mappingKey] of pairs) {
@@ -216,6 +349,7 @@ function checkRollingConsistency(root, queue, mapping, mission, manifests, findi
   const active = manifests.filter(({ value }) => value?.package_id === activeId);
   if (active.length !== 1) findings.push(`[delivery] Mission active_package '${String(activeId)}' muss genau ein Manifest treffen`);
   if (active.length === 1) {
+    if (active[0].value.schema_version !== 2) findings.push("[delivery] Mission active_package muss ein validiertes V2-Manifest sein");
     if (active[0].value.base_sha !== mission.base_sha) findings.push("[delivery] Mission base_sha stimmt nicht mit aktivem Manifest ueberein");
     if (active[0].value.branch !== mission.branch) findings.push("[delivery] Mission branch stimmt nicht mit aktivem Manifest ueberein");
     if (active[0].value.queue_parent_sha !== queue.parent_candidate?.candidate_sha) {
@@ -236,8 +370,6 @@ export function checkDeliveryContracts(root = process.cwd()) {
 
   const manifests = manifestFiles(root).map((rel) => ({ rel, value: readYaml(root, rel, findings) }));
   for (const { rel, value } of manifests) {
-    // KR-00B0/B/C/D sind historische V1-Vertraege aus der Bootstrap-Phase.
-    // Sie bleiben parsebar, werden aber nicht nachtraeglich als V2 umgedeutet.
     if (value?.schema_version === 2) {
       validateWith(validateManifest, value, rel, findings);
       resolveEvidenceRefs(value, rel, findings);
@@ -246,6 +378,7 @@ export function checkDeliveryContracts(root = process.cwd()) {
     }
   }
   checkLegacyBindings(root, manifests, findings);
+  checkLegacyV1Bindings(root, manifests, findings);
 
   const queue = readJson(root, DELIVERY_PATHS.queue, findings);
   const mapping = readYaml(root, DELIVERY_PATHS.mapping, findings);
@@ -254,6 +387,7 @@ export function checkDeliveryContracts(root = process.cwd()) {
   validateWith(validateQueue, queue, DELIVERY_PATHS.queue, findings);
   validateWith(validateReceipt, receipt, DELIVERY_PATHS.operatingReceipt, findings);
   checkRollingConsistency(root, queue, mapping, mission, manifests, findings);
+  checkOperatingTruth(receipt, mapping, findings);
 
   return { ok: findings.length === 0, findings: findings.sort() };
 }
@@ -298,6 +432,18 @@ export function runSelftest(root = process.cwd()) {
     );
   }, "Legacy-Ausnahme ist nur");
 
+  runCase("legacy-v1-clone", (fixture) => {
+    cpSync(
+      path.join(fixture, "docs/delivery/packages/KR-00B0-GOVERNANCE-BOOTSTRAP.yaml"),
+      path.join(fixture, DELIVERY_PATHS.manifestDir, "FAKE-V1.yaml"),
+    );
+  }, "ungebundenes V1-Manifest");
+
+  runCase("legacy-v1-hash", (fixture) => {
+    const abs = path.join(fixture, "docs/delivery/packages/KR-00B-TRUTH-SYNC.yaml");
+    writeFileSync(abs, `${readFileSync(abs, "utf8")}\n# drift\n`);
+  }, "V1-Legacy-Hash");
+
   runCase("unknown-evidence", (fixture) => {
     mutateYaml(path.join(fixture, DELIVERY_PATHS.manifestDir, "KR-01-GOVERNANCE-MERGE.yaml"), (value) => {
       value.register_gate_evidence.FUNCTIONAL_SLICE_PASS.evidence_ref = "acceptance:DOES-NOT-EXIST";
@@ -322,7 +468,35 @@ export function runSelftest(root = process.cwd()) {
     const value = JSON.parse(readFileSync(abs, "utf8"));
     value.active_ruleset.bypass_actors.push("admin");
     writeFileSync(abs, `${JSON.stringify(value, null, 2)}\n`);
-  }, "should NOT have more than 0 items");
+  }, "active_ruleset.bypass_actors muss leer sein");
+
+  runCase("receipt-schema-self-weakening", (fixture) => {
+    const schemaAbs = path.join(fixture, DELIVERY_PATHS.operatingReceiptSchema);
+    const schema = JSON.parse(readFileSync(schemaAbs, "utf8"));
+    schema.properties.delivery_truth.properties.main_delivered.const = true;
+    writeFileSync(schemaAbs, `${JSON.stringify(schema, null, 2)}\n`);
+    const receiptAbs = path.join(fixture, DELIVERY_PATHS.operatingReceipt);
+    const receipt = JSON.parse(readFileSync(receiptAbs, "utf8"));
+    receipt.delivery_truth.main_delivered = true;
+    writeFileSync(receiptAbs, `${JSON.stringify(receipt, null, 2)}\n`);
+  }, "delivery_truth.main_delivered muss false sein");
+
+  runCase("required-check-mapping-drift", (fixture) => {
+    mutateYaml(path.join(fixture, DELIVERY_PATHS.mapping), (value) => {
+      value.required_check_truth.actual_required_names = ["quality"];
+    });
+  }, "actual_required_names stimmt nicht");
+
+  runCase("resource-derived-drift", (fixture) => {
+    const schemaAbs = path.join(fixture, DELIVERY_PATHS.operatingReceiptSchema);
+    const schema = JSON.parse(readFileSync(schemaAbs, "utf8"));
+    schema.properties.resource_calibration.properties.observed_min_available_ram_mb.const = 9999;
+    writeFileSync(schemaAbs, `${JSON.stringify(schema, null, 2)}\n`);
+    const receiptAbs = path.join(fixture, DELIVERY_PATHS.operatingReceipt);
+    const receipt = JSON.parse(readFileSync(receiptAbs, "utf8"));
+    receipt.resource_calibration.observed_min_available_ram_mb = 9999;
+    writeFileSync(receiptAbs, `${JSON.stringify(receipt, null, 2)}\n`);
+  }, "observed_min_available_ram_mb ist nicht aus samples abgeleitet");
 
   return cases;
 }

@@ -236,6 +236,21 @@ split_or_follow_up_decision: >-
   KR-04-PR113-DISPOSITION aus; kein Produktpaket wird vorgezogen.
 next_allowed_package: KR-01-EXACT-SHA-CLAUDE-REVIEW
 package_specific:
+  kr00f_p3_closure_map:
+    - finding_id: KR00F-P3-01
+      acceptance_id: KR01-A3
+    - finding_id: KR00F-P3-02
+      acceptance_id: KR01-A4
+    - finding_id: KR00F-P3-03
+      acceptance_id: KR01-A5
+    - finding_id: KR00F-P3-04
+      acceptance_id: KR01-A5
+    - finding_id: KR00F-P3-05
+      acceptance_id: KR01-A6
+    - finding_id: KR00F-P3-06
+      acceptance_id: KR01-A6
+    - finding_id: KR00F-P3-07
+      acceptance_id: KR01-A7
   branch_protection_required_contexts:
     - quality
     - agentur-gate

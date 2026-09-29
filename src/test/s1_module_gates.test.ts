@@ -861,6 +861,17 @@ describe("S1 Naht 7 — KR-00G-Referenzattribute bleiben source-gelockt", () => 
     expect(f).toContainEqual(expect.stringContaining("nicht genehmigte breitere KR-00G-Attributregel 'docs/** -text'"));
   });
 
+  it.each(["* -text -whitespace", "docs/**/*.md -text"])(
+    "weist die tatsaechlich treffende Attributregel %s ab",
+    (rule) => {
+      const files = kr00gReferenceFixture();
+      files[".gitattributes"] += `${rule}\n`;
+      expect(findingsOf(repo(files))).toContainEqual(
+        expect.stringContaining(`nicht genehmigte breitere KR-00G-Attributregel '${rule}'`),
+      );
+    },
+  );
+
   it("weist doppelte Source-Lock-Ziele ab", () => {
     const files = kr00gReferenceFixture();
     const hash = "A".repeat(64);

@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   DELIVERY_PATHS,
   LEGACY_MANIFEST_BINDINGS,
+  LEGACY_V1_MANIFEST_BINDINGS,
   checkDeliveryContracts,
 } from "../../scripts/quality/check-delivery-contracts.mjs";
 
@@ -46,6 +47,18 @@ describe("KR-01 delivery governance gate", () => {
     expect(checkDeliveryContracts(root).findings).toContainEqual(expect.stringContaining("Legacy-Ausnahme ist nur"));
   });
 
+  it("rejects every V1 manifest outside the four frozen path-and-hash bindings", () => {
+    const root = fixture();
+    const legacyPath = Object.keys(LEGACY_V1_MANIFEST_BINDINGS)[0]!;
+    cpSync(
+      path.join(root, legacyPath),
+      path.join(root, DELIVERY_PATHS.manifestDir, "FAKE-V1.yaml"),
+    );
+    expect(checkDeliveryContracts(root).findings).toContainEqual(
+      expect.stringContaining("ungebundenes V1-Manifest"),
+    );
+  });
+
   it("rejects a structured evidence reference that does not resolve", () => {
     const root = fixture();
     const rel = `${DELIVERY_PATHS.manifestDir}/KR-01-GOVERNANCE-MERGE.yaml`;
@@ -71,5 +84,22 @@ describe("KR-01 delivery governance gate", () => {
     receipt.active_ruleset.bypass_actors.push("admin");
     writeJson(root, DELIVERY_PATHS.operatingReceipt, receipt);
     expect(checkDeliveryContracts(root).findings).toContainEqual(expect.stringContaining("should NOT have more than 0 items"));
+  });
+
+  it("keeps false delivery truth in script code even if candidate schema and receipt collude", () => {
+    const root = fixture();
+    const schema = json(root, DELIVERY_PATHS.operatingReceiptSchema) as {
+      properties: { delivery_truth: { properties: { main_delivered: { const: boolean } } } };
+    };
+    schema.properties.delivery_truth.properties.main_delivered.const = true;
+    writeJson(root, DELIVERY_PATHS.operatingReceiptSchema, schema);
+    const receipt = json(root, DELIVERY_PATHS.operatingReceipt) as {
+      delivery_truth: { main_delivered: boolean };
+    };
+    receipt.delivery_truth.main_delivered = true;
+    writeJson(root, DELIVERY_PATHS.operatingReceipt, receipt);
+    expect(checkDeliveryContracts(root).findings).toContainEqual(
+      expect.stringContaining("delivery_truth.main_delivered muss false sein"),
+    );
   });
 });

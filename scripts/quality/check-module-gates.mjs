@@ -1001,6 +1001,73 @@ function parseKr00gLockedTargets(source, findings) {
   return targets;
 }
 
+function gitAttributePatternRegex(pattern) {
+  if (typeof pattern !== "string" || pattern.length === 0 || pattern.endsWith("/")) return null;
+  let normalized = pattern.startsWith("/") ? pattern.slice(1) : pattern;
+  const anchored = normalized.includes("/");
+  let source = anchored ? "^" : "(?:^|/)";
+
+  for (let index = 0; index < normalized.length; index++) {
+    const char = normalized[index];
+    if (char === "\\") {
+      if (index + 1 >= normalized.length) return null;
+      source += normalized[++index].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      continue;
+    }
+    if (char === "*") {
+      if (normalized[index + 1] === "*") {
+        const atSegmentStart = index === 0 || normalized[index - 1] === "/";
+        const followedBySlash = normalized[index + 2] === "/";
+        if (atSegmentStart && followedBySlash) {
+          source += "(?:.*/)?";
+          index += 2;
+        } else {
+          source += ".*";
+          index += 1;
+        }
+      } else {
+        source += "[^/]*";
+      }
+      continue;
+    }
+    if (char === "?") {
+      source += "[^/]";
+      continue;
+    }
+    if (char === "[") {
+      const end = normalized.indexOf("]", index + 1);
+      if (end === -1) return null;
+      let content = normalized.slice(index + 1, end);
+      if (content.startsWith("!")) content = `^${content.slice(1)}`;
+      source += `[${content.replaceAll("\\", "\\\\")}]`;
+      index = end;
+      continue;
+    }
+    source += char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+  return new RegExp(`${source}$`);
+}
+
+function parseGitAttributeLine(trimmed) {
+  if (!trimmed.startsWith('"')) {
+    const [pattern, ...attributes] = trimmed.split(/\s+/);
+    return { pattern, attributes, valid: Boolean(pattern) };
+  }
+  let end = 1;
+  while (end < trimmed.length) {
+    if (trimmed[end] === '"' && trimmed[end - 1] !== "\\") break;
+    end++;
+  }
+  if (end >= trimmed.length) return { pattern: "", attributes: [], valid: false };
+  try {
+    const pattern = JSON.parse(trimmed.slice(0, end + 1));
+    const attributes = trimmed.slice(end + 1).trim().split(/\s+/).filter(Boolean);
+    return { pattern, attributes, valid: typeof pattern === "string" };
+  } catch {
+    return { pattern: "", attributes: [], valid: false };
+  }
+}
+
 function gateKr00gReferenceAttributes(root, findings) {
   const lockAbs = path.join(root, KR00G_SOURCE_LOCK_PATH);
   const attributesAbs = path.join(root, ".gitattributes");
@@ -1046,10 +1113,17 @@ function gateKr00gReferenceAttributes(root, findings) {
   for (const line of attributeLines) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#") || approvedAttributeLines.has(trimmed)) continue;
-    const [pattern, ...attributesForPattern] = trimmed.split(/\s+/);
-    const removesTextHandling = attributesForPattern.includes("-text") || attributesForPattern.includes("-whitespace");
-    const canCoverImportedDocs = pattern === "docs/**" || pattern === "docs/*" || pattern.startsWith("docs/module");
-    if (removesTextHandling && canCoverImportedDocs) {
+    const parsed = parseGitAttributeLine(trimmed);
+    const removesTextHandling = parsed.attributes.some((attribute) =>
+      ["-text", "-whitespace", "text=false"].includes(attribute),
+    );
+    if (!removesTextHandling) continue;
+    const matcher = parsed.valid ? gitAttributePatternRegex(parsed.pattern) : null;
+    if (!matcher) {
+      findings.push(`[naht7] .gitattributes: nicht pruefbare KR-00G-Attributregel '${trimmed}'`);
+      continue;
+    }
+    if ([...lockedTargets].some((target) => matcher.test(target))) {
       findings.push(`[naht7] .gitattributes: nicht genehmigte breitere KR-00G-Attributregel '${trimmed}'`);
     }
   }
