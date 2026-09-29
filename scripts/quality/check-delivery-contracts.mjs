@@ -34,8 +34,8 @@ export const DELIVERY_PATHS = Object.freeze({
 });
 
 export const ACTIVE_MANIFEST_BINDING = Object.freeze({
-  path: "docs/delivery/packages/KR-03B1-FINAL-DB-READ-CONTRACT.yaml",
-  packageId: "KR-03B1-FINAL-DB-READ-CONTRACT",
+  path: "docs/delivery/packages/KR-03B2-AUTHORIZED-SERVER-PORT.yaml",
+  packageId: "KR-03B2-AUTHORIZED-SERVER-PORT",
 });
 
 const PR113_DISPOSITION_PACKAGE_ID = "KR-04-PR113-DISPOSITION";

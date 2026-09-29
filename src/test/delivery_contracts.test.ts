@@ -34,7 +34,7 @@ afterEach(() => {
   for (const root of temps.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-describe("KR-03B1 delivery governance gate", () => {
+describe("KR-03B2 delivery governance gate", () => {
   it("accepts the complete current contract set", () => {
     expect(checkDeliveryContracts(process.cwd())).toEqual({ ok: true, findings: [] });
   });
@@ -87,7 +87,7 @@ describe("KR-03B1 delivery governance gate", () => {
     const root = fixture();
     const rel = ACTIVE_MANIFEST_BINDING.path;
     const source = readFileSync(path.join(root, rel), "utf8").replace(
-      "evidence_ref: acceptance:KR03B1-A2",
+      "evidence_ref: acceptance:KR03B2-A2",
       "evidence_ref: acceptance:DOES-NOT-EXIST",
     );
     writeFileSync(path.join(root, rel), source);
@@ -167,19 +167,26 @@ describe("KR-03B1 delivery governance gate", () => {
     const manifestPath = path.join(root, ACTIVE_MANIFEST_BINDING.path);
     writeFileSync(
       manifestPath,
-      readFileSync(manifestPath, "utf8").replace("planned_governance_files: 9", "planned_governance_files: 8"),
+      readFileSync(manifestPath, "utf8").replace("planned_governance_files: 8", "planned_governance_files: 7"),
     );
     expect(checkDeliveryContracts(root).findings).toContainEqual(
       expect.stringContaining("nicht fuer jeden Allowlist-Pfad exakt eine geplante Datei"),
     );
   });
 
-  it("rejects queue and gate-mapping drift", () => {
+  it("rejects direct queue and gate-mapping order drift", () => {
     const root = fixture();
-    const queue = json(root, DELIVERY_PATHS.queue) as { issuance_policy: { candidate_is_not_main_delivery: boolean } };
-    queue.issuance_policy.candidate_is_not_main_delivery = false;
-    writeJson(root, DELIVERY_PATHS.queue, queue);
-    expect(checkDeliveryContracts(root).findings).toContainEqual(expect.stringContaining("Rolling-Policy-Drift"));
+    const mappingPath = path.join(root, DELIVERY_PATHS.mapping);
+    writeFileSync(
+      mappingPath,
+      readFileSync(mappingPath, "utf8").replace(
+        "    - KR-05-PR84-SEARCH-RECONCILIATION",
+        "    - KR-99-DRIFT",
+      ),
+    );
+    expect(checkDeliveryContracts(root).findings).toContainEqual(
+      expect.stringContaining("Rolling-Policy-Drift: Queue-Reihenfolge"),
+    );
   });
 
   it("rejects any branch-protection bypass actor", () => {

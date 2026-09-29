@@ -46,14 +46,14 @@
         "closure_receipt_sha256"
       ],
       "properties": {
-        "package_id": { "const": "KR-03A-DELIVERY-ADHERENCE-DOMAIN" },
+        "package_id": { "const": "KR-03B1-FINAL-DB-READ-CONTRACT" },
         "candidate_sha": { "$ref": "#/definitions/sha" },
         "tree_sha": { "$ref": "#/definitions/sha" },
-        "remote_ref": { "const": "origin/codex/kr-03a-delivery-adherence-domain" },
+        "remote_ref": { "const": "origin/codex/kr-03b1-final-db-read-contract" },
         "review_result": { "const": "PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN_QUEUED_CANDIDATE" },
-        "review_receipt": { "const": "../_MODULDOSSIERS/00_PROJEKT/KR-03A_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md" },
+        "review_receipt": { "const": "../_MODULDOSSIERS/00_PROJEKT/KR-03B1_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md" },
         "review_receipt_sha256": { "$ref": "#/definitions/sha256" },
-        "closure_receipt": { "const": "../_MODULDOSSIERS/00_PROJEKT/KR-03A_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md" },
+        "closure_receipt": { "const": "../_MODULDOSSIERS/00_PROJEKT/KR-03B1_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md" },
         "closure_receipt_sha256": { "$ref": "#/definitions/sha256" }
       }
     },
@@ -94,9 +94,9 @@
             {
               "properties": {
                 "order": { "const": 1 },
-                "package_id": { "const": "KR-03B2-AUTHORIZED-SERVER-PORT" },
-                "scope": { "const": "B2B2" },
-                "predecessor": { "const": "KR-03B1-FINAL-DB-READ-CONTRACT" }
+                "package_id": { "const": "KR-05-PR84-SEARCH-RECONCILIATION" },
+                "scope": { "const": "PRODUCT_CLEANUP" },
+                "predecessor": { "const": "KR-03B2-AUTHORIZED-SERVER-PORT" }
               }
             }
           ]
@@ -109,11 +109,11 @@
       "additionalProperties": false,
       "required": ["package_id", "predecessor", "planned_path", "classification", "issue_when"],
       "properties": {
-        "package_id": { "const": "KR-03B2-AUTHORIZED-SERVER-PORT" },
-        "predecessor": { "const": "KR-03B1-FINAL-DB-READ-CONTRACT" },
-        "planned_path": { "const": "docs/delivery/packages/KR-03B2-AUTHORIZED-SERVER-PORT.yaml" },
+        "package_id": { "const": "KR-05-PR84-SEARCH-RECONCILIATION" },
+        "predecessor": { "const": "KR-03B2-AUTHORIZED-SERVER-PORT" },
+        "planned_path": { "const": "docs/delivery/packages/KR-05-PR84-SEARCH-RECONCILIATION.yaml" },
         "classification": { "const": "POINTER_ONLY_NON_EXECUTABLE_UNTIL_ISSUED" },
-        "issue_when": { "const": "KR_03B1_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED" }
+        "issue_when": { "const": "KR_03B2_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED" }
       }
     },
     "materialized_future_contracts": {
