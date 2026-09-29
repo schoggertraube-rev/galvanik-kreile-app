@@ -34,7 +34,7 @@ afterEach(() => {
   for (const root of temps.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-describe("KR-03B2 delivery governance gate", () => {
+describe("KR-05 delivery governance gate", () => {
   it("accepts the complete current contract set", () => {
     expect(checkDeliveryContracts(process.cwd())).toEqual({ ok: true, findings: [] });
   });
@@ -87,7 +87,7 @@ describe("KR-03B2 delivery governance gate", () => {
     const root = fixture();
     const rel = ACTIVE_MANIFEST_BINDING.path;
     const source = readFileSync(path.join(root, rel), "utf8").replace(
-      "evidence_ref: acceptance:KR03B2-A2",
+      "evidence_ref: acceptance:KR05-A8",
       "evidence_ref: acceptance:DOES-NOT-EXIST",
     );
     writeFileSync(path.join(root, rel), source);
@@ -162,12 +162,82 @@ describe("KR-03B2 delivery governance gate", () => {
     );
   });
 
+  it("rejects drift in any PR #84 path reconciliation", () => {
+    const root = fixture();
+    const reconciliation = json(root, DELIVERY_PATHS.pr84Reconciliation) as {
+      path_decisions: Array<{ decision: string }>;
+    };
+    reconciliation.path_decisions[0]!.decision = "UNSAFE_DIRECT_IMPORT";
+    writeJson(root, DELIVERY_PATHS.pr84Reconciliation, reconciliation);
+    expect(checkDeliveryContracts(root).findings).toContainEqual(
+      expect.stringContaining("PR84-Reconciliation fuer"),
+    );
+  });
+
+  it("rejects a missing PR #84 path reconciliation", () => {
+    const root = fixture();
+    const reconciliation = json(root, DELIVERY_PATHS.pr84Reconciliation) as {
+      path_decisions: Array<Record<string, unknown>>;
+    };
+    reconciliation.path_decisions.pop();
+    writeJson(root, DELIVERY_PATHS.pr84Reconciliation, reconciliation);
+    expect(checkDeliveryContracts(root).findings).toContainEqual(
+      expect.stringContaining("muss exakt 32 Pfadentscheidungen enthalten"),
+    );
+  });
+
+  it("rejects PR #84 blob drift", () => {
+    const root = fixture();
+    const reconciliation = json(root, DELIVERY_PATHS.pr84Reconciliation) as {
+      path_decisions: Array<{ current_blob_sha: string }>;
+    };
+    reconciliation.path_decisions[0]!.current_blob_sha = "0000000000000000000000000000000000000000";
+    writeJson(root, DELIVERY_PATHS.pr84Reconciliation, reconciliation);
+    expect(checkDeliveryContracts(root).findings).toContainEqual(
+      expect.stringContaining("PR84-Reconciliation Blobbindung fuer"),
+    );
+  });
+
+  it("rejects an invented valid PR #84 product remainder", () => {
+    const root = fixture();
+    const reconciliation = json(root, DELIVERY_PATHS.pr84Reconciliation) as {
+      summary: { valid_missing_product_paths: number };
+    };
+    reconciliation.summary.valid_missing_product_paths = 1;
+    writeJson(root, DELIVERY_PATHS.pr84Reconciliation, reconciliation);
+    expect(checkDeliveryContracts(root).findings).toContainEqual(
+      expect.stringContaining("summary.valid_missing_product_paths muss 0 sein"),
+    );
+  });
+
+  it("rejects a PR #84 delivery claim", () => {
+    const root = fixture();
+    const reconciliation = json(root, DELIVERY_PATHS.pr84Reconciliation) as {
+      delivery_truth: { main_delivered: boolean };
+    };
+    reconciliation.delivery_truth.main_delivered = true;
+    writeJson(root, DELIVERY_PATHS.pr84Reconciliation, reconciliation);
+    expect(checkDeliveryContracts(root).findings).toContainEqual(
+      expect.stringContaining("PR84-Reconciliation delivery_truth.main_delivered muss false sein"),
+    );
+  });
+
+  it("rejects a production importer of the old PR #84 header", () => {
+    const root = fixture();
+    const probePath = path.join(root, "src/probe.ts");
+    mkdirSync(path.dirname(probePath), { recursive: true });
+    writeFileSync(probePath, 'import "./components/layout/KreileHeader";\n');
+    expect(checkDeliveryContracts(root).findings).toContainEqual(
+      expect.stringContaining("alter Header muss importerlos bleiben"),
+    );
+  });
+
   it("rejects a manifest whose planned file counts do not cover the exact allowlist", () => {
     const root = fixture();
     const manifestPath = path.join(root, ACTIVE_MANIFEST_BINDING.path);
     writeFileSync(
       manifestPath,
-      readFileSync(manifestPath, "utf8").replace("planned_governance_files: 8", "planned_governance_files: 7"),
+      readFileSync(manifestPath, "utf8").replace("planned_governance_files: 11", "planned_governance_files: 10"),
     );
     expect(checkDeliveryContracts(root).findings).toContainEqual(
       expect.stringContaining("nicht fuer jeden Allowlist-Pfad exakt eine geplante Datei"),
@@ -180,7 +250,7 @@ describe("KR-03B2 delivery governance gate", () => {
     writeFileSync(
       mappingPath,
       readFileSync(mappingPath, "utf8").replace(
-        "    - KR-05-PR84-SEARCH-RECONCILIATION",
+        "    - KR-10A-UI-TRUTH-BINDING",
         "    - KR-99-DRIFT",
       ),
     );

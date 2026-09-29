@@ -32,9 +32,9 @@ rolling_manifest_policy:
   halt_on_open_p0_p1_after_one_correction: true
   no_periodic_build_automation: true
   initial_pointer_order:
-    - KR-05-PR84-SEARCH-RECONCILIATION
+    - KR-10A-UI-TRUTH-BINDING
 workflow_facts_at_contract_parent:
-  parent_sha: b1ca8392de7fc6171b45efa1d07c966c8c0dbfdc
+  parent_sha: ecb4ad9508186880d15993ac2b568e3f5c5ae801
   agentur_gate:
     workflow: .github/workflows/agentur-gate.yml
     branch_push_runs: true

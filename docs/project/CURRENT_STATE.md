@@ -11,6 +11,12 @@ NON_LOSS_REGISTER. `ALT_PR_INVENTORY_2026-09-28.json` ist der unveraenderte Stic
 28.09.2026 und keine Live-Statusquelle. Die aktuelle maschinenlesbare Delta-Entscheidung fuer PR #113
 steht in `docs/delivery/KR-04_PR113_DISPOSITION_2026-09-29.json`: PR #113 ist ungemergt geschlossen,
 Quellbranch und Archivref bleiben erhalten, und kein Produktpfad daraus wurde durch KR-04 geliefert.
+Der Kandidatenvertrag `docs/delivery/KR-05_PR84_SEARCH_RECONCILIATION_2026-09-29.json`
+entscheidet zusaetzlich alle 32 PR-84-Pfade gegen den aktuellen Kandidaten: 18 sind durch staerkere
+aktuelle Pfade ersetzt, 11 gehoeren zur alten Shell/Evidenz, zwei sind leere Platzhalter und eine
+indirekte View-Traceability wird nicht als temporaerer interner Vertrag kopiert, sondern fuer den
+oeffentlichen KR-30A-Portumbau erhalten. Das ergibt null gueltige PR-84-Produktreste und keinen
+KR-05R-Auftrag. Dieser Kandidatenvermerk aendert den oben genannten `main`-Lieferstand nicht.
 
 Seit dem letzten Produktstand wurde ausschliesslich der Governance-Bootstrap
 `KR-01A-AUTHORITY-PIN-BOOTSTRAP` ueber PR #119 geliefert. Sein Kandidat

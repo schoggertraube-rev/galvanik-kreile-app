@@ -29,16 +29,18 @@ export const DELIVERY_PATHS = Object.freeze({
   mapping: "docs/delivery/GATE_MAPPING_V1.yaml",
   mission: "missions/F1_ORDER_TO_CASH_PILOT_001.yml",
   pr113Disposition: "docs/delivery/KR-04_PR113_DISPOSITION_2026-09-29.json",
+  pr84Reconciliation: "docs/delivery/KR-05_PR84_SEARCH_RECONCILIATION_2026-09-29.json",
   operatingReceipt: "docs/delivery/KR-01_BRANCH_PROTECTION_AND_OPERATING_RECEIPT_2026-09-29.json",
   operatingReceiptSchema: "docs/delivery/KR-01_BRANCH_PROTECTION_AND_OPERATING_RECEIPT_SCHEMA_V1.json",
 });
 
 export const ACTIVE_MANIFEST_BINDING = Object.freeze({
-  path: "docs/delivery/packages/KR-03B2-AUTHORIZED-SERVER-PORT.yaml",
-  packageId: "KR-03B2-AUTHORIZED-SERVER-PORT",
+  path: "docs/delivery/packages/KR-05-PR84-SEARCH-RECONCILIATION.yaml",
+  packageId: "KR-05-PR84-SEARCH-RECONCILIATION",
 });
 
 const PR113_DISPOSITION_PACKAGE_ID = "KR-04-PR113-DISPOSITION";
+const PR84_RECONCILIATION_PACKAGE_ID = "KR-05-PR84-SEARCH-RECONCILIATION";
 
 const PR113_PATH_DECISIONS = Object.freeze({
   "e2e/path1-v5-shell-smoke.real.spec.ts": "DEFER_TO_KR20_FRESH_DESIGN_SYSTEM_REBUILD",
@@ -78,6 +80,168 @@ const PR113_PATH_BLOBS = Object.freeze({
   "src/styles/mock/mock-kreile-rolf-accounting.css": Object.freeze({
     parent: null,
     pr: "036b36a73525135e3144b4b2d45711f4c0a62f66",
+  }),
+});
+
+const PR84_PATH_EXPECTATIONS = Object.freeze({
+  ".github/workflows/quality.yml": Object.freeze({
+    decision: "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+    base: "c3ebae3e241de14884691cbea705078d3559a143",
+    pr: "4672d04ebd5879640d9c0e24823e94a5202d8fa2",
+    current: "38ed7ce9a84f68539c25c1b2699d2a59453a1883",
+  }),
+  "docs/evidence/f0/W4_CROSS_MODULE_READ_PORT_INVENTORY.json": Object.freeze({
+    decision: "DEFER_TO_KR30A_PUBLIC_PORT_RECONTRACT",
+    base: "acee292568691faa90969ac23b5b0c4f0e2bd16f",
+    pr: "6b429f293ced4dbaf54dfb685faec0539193f835",
+    current: "2058015850810b4ff232e6b78eb06206ef612958",
+  }),
+  "docs/evidence/f1/F1_6_SEARCH_MODULE_E2E_EVIDENCE.md": Object.freeze({
+    decision: "STALE_EVIDENCE_OR_OLD_SHELL", base: null,
+    pr: "7786104c5ad60be609a8ae6843f326e4c3dadc14", current: null,
+  }),
+  "docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json": Object.freeze({
+    decision: "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+    base: "9efed006a931e5a321484459cb8ea4c892ae0efd",
+    pr: "ba4d318f5710baf25c985e0e10a139ad7d5bd819",
+    current: "f7c5a90375b37d13b27a816da5c84333678be845",
+  }),
+  "docs/evidence/f1/artifacts/search/search-desktop-customer-1440x900.png": Object.freeze({
+    decision: "STALE_EVIDENCE_OR_OLD_SHELL", base: null,
+    pr: "0d5757c0697cac682205ee02cd8ae38c05b62a23", current: null,
+  }),
+  "docs/evidence/f1/artifacts/search/search-desktop-empty-1440x900.png": Object.freeze({
+    decision: "STALE_EVIDENCE_OR_OLD_SHELL", base: null,
+    pr: "0fd783dade31a1c9b98419742389d9144b70107e", current: null,
+  }),
+  "docs/evidence/f1/artifacts/search/search-desktop-order-1440x900.png": Object.freeze({
+    decision: "STALE_EVIDENCE_OR_OLD_SHELL", base: null,
+    pr: "2d664494cb19347b284209426175f72ca789129a", current: null,
+  }),
+  "docs/evidence/f1/artifacts/search/search-real-browser-receipt.json": Object.freeze({
+    decision: "STALE_EVIDENCE_OR_OLD_SHELL", base: null,
+    pr: "49354280f4b2003c45fc758ae578b235746769b3", current: null,
+  }),
+  "docs/evidence/f1/artifacts/search/search-real-browser-receipt.sha256": Object.freeze({
+    decision: "STALE_EVIDENCE_OR_OLD_SHELL", base: null,
+    pr: "6c9191e9cb4abf9d7081dbf6eace99d216af0d41", current: null,
+  }),
+  "docs/evidence/f1/artifacts/search/search-tablet-1220x880.png": Object.freeze({
+    decision: "STALE_EVIDENCE_OR_OLD_SHELL", base: null,
+    pr: "3239a32fba7fac15e6768ba25597ecce7b816506", current: null,
+  }),
+  "docs/evidence/f1/artifacts/search/search-tablet-denial-1220x880.png": Object.freeze({
+    decision: "STALE_EVIDENCE_OR_OLD_SHELL", base: null,
+    pr: "3da576d125a62bcd6f7666a6b1d119a23336d755", current: null,
+  }),
+  "docs/evidence/f1/artifacts/search/search-tablet-error-1220x880.png": Object.freeze({
+    decision: "STALE_EVIDENCE_OR_OLD_SHELL", base: null,
+    pr: "d181469393aaf6853630588bcceb9fa482080b3c", current: null,
+  }),
+  "e2e/search.real.spec.ts": Object.freeze({
+    decision: "STALE_EVIDENCE_OR_OLD_SHELL", base: null,
+    pr: "db7c17433156805dfdbd69874cd3b6fe4cebcb45", current: null,
+  }),
+  "missions/F1_ORDER_TO_CASH_PILOT_001.yml": Object.freeze({
+    decision: "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+    base: "50a8a5ef643f74cc61713c080643ee6664e1c668",
+    pr: "f3bfb7aeaa3fef9b2247267b2b6ac5436f995a35",
+    current: "34fb530ab91d9597ca97dd137c25f35efb76cbe8",
+  }),
+  "quality/eslint-baseline.json": Object.freeze({
+    decision: "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+    base: "f3bf70f51dc3ff0d6cbcdd026c5186b948905c18",
+    pr: "d830654dbbc1027cc3e3d54d624b02021905e007",
+    current: "86d4c9660ed0f6ce34bf165820b643a4eb8bbce8",
+  }),
+  "src/app/actions/__tests__/w2cB2m4c.externalProvider.failClosed.test.ts": Object.freeze({
+    decision: "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+    base: "031088e69dd60e53880384c439ee1266c50093ba",
+    pr: "90a05332a3c772cc1449d3e2f0da0340a3b5e6ad",
+    current: "608855f95afb7dc72a15cf304e600112b5acc7cb",
+  }),
+  "src/app/actions/search.actions.ts": Object.freeze({
+    decision: "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+    base: "2dc980260a41463eb12041040e1b4ea52a6809fe",
+    pr: "b2d322ead19d834b0fe9e56130e64e38ff7188dc",
+    current: "8e81c629f4ffb2d01726b9b56c477c4473e5e779",
+  }),
+  "src/components/layout/GlobalSearch.tsx": Object.freeze({
+    decision: "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+    base: "8f20906b304fe2565c4fb9bb3cc09025ce0bf2b4",
+    pr: "b65c4d0ffc1fb1b56cc5889432374e25e578bf0b",
+    current: "64d84153242fed0d53c413889f8278a1e1468ffe",
+  }),
+  "src/components/layout/KreileHeader.tsx": Object.freeze({
+    decision: "STALE_EVIDENCE_OR_OLD_SHELL",
+    base: "58ebc45c3fb6a99865cc13d9724da2cfa9d21cbb",
+    pr: "9a223d12b3b91d39a4a60c807f8635ec32964bb0",
+    current: "58ebc45c3fb6a99865cc13d9724da2cfa9d21cbb",
+  }),
+  "src/components/layout/__tests__/f0W2cGlobalSearch.unavailable.test.tsx": Object.freeze({
+    decision: "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+    base: "43fcbde620058bc69f8f467b35a82f1d59169911",
+    pr: "41138157b10c24d723ceb38200c566bdb503e441",
+    current: "691bac12ddf9bb1e36084aa63071e59f595ce1ce",
+  }),
+  "src/components/layout/__tests__/w2cHeaderTruth.realRender.test.tsx": Object.freeze({
+    decision: "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+    base: "56f6e27ee6f0abfe1ecaa3eceed32c5b7e7d773a",
+    pr: "fbe974e4259e190f46c45bb4c566385c5c4656d2",
+    current: "16870ebbe2e77890aa180d1712a1a5346e016778",
+  }),
+  "src/modules/suche/__tests__/SearchDialog.test.tsx": Object.freeze({
+    decision: "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER", base: null,
+    pr: "4c04313641d9611b388a4e50899057fb0b73a15c",
+    current: "b8fc008c7fac15bbfe3c7905613fb4605c101413",
+  }),
+  "src/modules/suche/__tests__/searchTenant.test.ts": Object.freeze({
+    decision: "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER", base: null,
+    pr: "eebdae04ea328e96ac6e633f7732db0c826c140b",
+    current: "38a4559d5e5b43d1225334ba0d4cfc1464584422",
+  }),
+  "src/modules/suche/api/README.md": Object.freeze({
+    decision: "EMPTY_PLACEHOLDER_NO_SALVAGE", base: null,
+    pr: "6b728bedcfb5625b105a7a9aa81f66bcb031a2b6", current: null,
+  }),
+  "src/modules/suche/db/README.md": Object.freeze({
+    decision: "EMPTY_PLACEHOLDER_NO_SALVAGE", base: null,
+    pr: "16fd8efb61627164a378504abcfcaed8171ef5d5", current: null,
+  }),
+  "src/modules/suche/public.ts": Object.freeze({
+    decision: "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER", base: null,
+    pr: "8765797e9cca354ce6874dc07352a40612cae9e1",
+    current: "8e57fdec74bcdf9063227a9e848b67f234d938f1",
+  }),
+  "src/modules/suche/server/searchTenant.ts": Object.freeze({
+    decision: "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER", base: null,
+    pr: "26e3b43c43de163b5abc011f84fc43b4a0423dab",
+    current: "ba89946d9580db847391169345a5c37ef432dfac",
+  }),
+  "src/modules/suche/server/types.ts": Object.freeze({
+    decision: "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER", base: null,
+    pr: "072b457d838f593a305d18651a3b47cac090151f",
+    current: "eb0a2e91044cfea6a9e63e7fac4592a4eba29401",
+  }),
+  "src/modules/suche/suche.manifest.json": Object.freeze({
+    decision: "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER", base: null,
+    pr: "bf2e4a8ac06a84e2dde0f56a8860849c4437a70e",
+    current: "adb1cff389093c8a8ff809010f327edd09f3ab59",
+  }),
+  "src/modules/suche/ui/SearchDialog.module.css": Object.freeze({
+    decision: "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER", base: null,
+    pr: "a5be0e3a5939674ee971216d6b15d6d527048006",
+    current: "e0cb56e3bbc5f1867b9dff454dbcdf088b1d5666",
+  }),
+  "src/modules/suche/ui/SearchDialog.tsx": Object.freeze({
+    decision: "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER", base: null,
+    pr: "aa6fc2cde2c7f8159f56f159af4fab50eb1948cd",
+    current: "43cefa443ae551c9d6ea66f11d5c9940db63763d",
+  }),
+  "src/test/search_tenant.integration.test.ts": Object.freeze({
+    decision: "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER", base: null,
+    pr: "07b8c81b4940cfd3da16d540533e052e4897f242",
+    current: "071e42fe3246a6ea92be05b91923478bcc1a6749",
   }),
 });
 
@@ -590,6 +754,187 @@ function checkPr113Disposition(root, disposition, findings) {
   }
 }
 
+function checkPr84Reconciliation(root, reconciliation, findings) {
+  if (!reconciliation) return;
+  checkExactKeys(
+    reconciliation,
+    [
+      "schema_version",
+      "contract_id",
+      "package_id",
+      "recorded_at",
+      "parent_candidate_sha",
+      "origin_main_sha_at_reconciliation",
+      "pull_request",
+      "comparison_context",
+      "path_decisions",
+      "runtime_import_scan",
+      "summary",
+      "delivery_truth",
+    ],
+    "PR84-Reconciliation",
+    findings,
+  );
+  if (reconciliation.schema_version !== 1 || reconciliation.contract_id !== "KR-05_PR84_SEARCH_RECONCILIATION_2026-09-29") {
+    findings.push("[delivery] PR84-Reconciliation hat falsche Schema- oder Vertragskennung");
+  }
+  if (reconciliation.package_id !== PR84_RECONCILIATION_PACKAGE_ID) {
+    findings.push("[delivery] PR84-Reconciliation ist nicht an das aktive KR-05-Paket gebunden");
+  }
+  if (reconciliation.parent_candidate_sha !== "ecb4ad9508186880d15993ac2b568e3f5c5ae801") {
+    findings.push("[delivery] PR84-Reconciliation hat nicht den geprueften KR-03B2-Parent");
+  }
+  if (reconciliation.origin_main_sha_at_reconciliation !== "fa1a989fa5844305e6a8200832ed43e2fc230751") {
+    findings.push("[delivery] PR84-Reconciliation hat nicht den belegten origin/main-Stand");
+  }
+
+  const pr = reconciliation.pull_request ?? {};
+  checkExactKeys(
+    pr,
+    [
+      "number", "url", "base_ref", "base_sha", "head_ref", "head_sha", "tree_sha",
+      "archive_ref", "archive_head_sha", "state", "merged", "source_branch_available", "archive_ref_preserved",
+    ],
+    "PR84-Reconciliation pull_request",
+    findings,
+  );
+  const exactPrFacts = {
+    number: 84,
+    url: "https://github.com/schoggertraube-rev/galvanik-kreile-app/pull/84",
+    base_ref: "main",
+    base_sha: "13240de2a5ca9e9cfae4f8c72552443dac1d7630",
+    head_ref: "path1/suche-real-modular-20260910",
+    head_sha: "9845e91e3003e81ff9f8b5b28bf8882dd12bf0d7",
+    tree_sha: "afdc6b0ec3bdf4c6a18dbb7766dbf03e4d2430bd",
+    archive_ref: "archive/pr-84-9845e91e",
+    archive_head_sha: "9845e91e3003e81ff9f8b5b28bf8882dd12bf0d7",
+    state: "CLOSED_DRAFT_UNMERGED",
+    merged: false,
+    source_branch_available: false,
+    archive_ref_preserved: true,
+  };
+  for (const [key, expected] of Object.entries(exactPrFacts)) {
+    if (pr[key] !== expected) findings.push(`[delivery] PR84-Reconciliation pull_request.${key} weicht vom belegten Wert ab`);
+  }
+
+  const context = reconciliation.comparison_context ?? {};
+  checkExactKeys(
+    context,
+    ["current_candidate_sha", "current_tree_sha", "current_search_provenance_commits", "target_contract_sources"],
+    "PR84-Reconciliation comparison_context",
+    findings,
+  );
+  if (context.current_candidate_sha !== "ecb4ad9508186880d15993ac2b568e3f5c5ae801"
+      || context.current_tree_sha !== "0f1e552a6f27732d714e5dd5d5a1643f27339e70") {
+    findings.push("[delivery] PR84-Reconciliation ist nicht an Kandidat und Tree von KR-03B2 gebunden");
+  }
+  if (!sameStringSet(context.current_search_provenance_commits, [
+    "c7e4877db7620a886ddc783a48c0daf3b8c2d4c3",
+    "2771eeb689ca3b7a0175a9a973204d12af323100",
+  ])) {
+    findings.push("[delivery] PR84-Reconciliation Suchprovenienz ist unvollstaendig");
+  }
+  if (!sameStringSet(context.target_contract_sources, [
+    "docs/module/G08_SUCHE/00_STECKBRIEF.md",
+    "docs/module/G08_SUCHE/04_SCHNITTSTELLEN_DATEN.md",
+    "docs/module/G08_SUCHE/07_ABNAHME_TESTS.md",
+    "docs/module/G08_SUCHE/11_IST_CODE_UMBAU.md",
+  ])) {
+    findings.push("[delivery] PR84-Reconciliation Zielvertragsquellen sind unvollstaendig");
+  }
+
+  const decisions = Array.isArray(reconciliation.path_decisions) ? reconciliation.path_decisions : [];
+  const expectedPaths = Object.keys(PR84_PATH_EXPECTATIONS);
+  if (decisions.length !== expectedPaths.length) {
+    findings.push(`[delivery] PR84-Reconciliation muss exakt ${expectedPaths.length} Pfadentscheidungen enthalten, gefunden ${decisions.length}`);
+  }
+  const seen = new Set();
+  for (const entry of decisions) {
+    checkExactKeys(
+      entry,
+      ["path", "base_blob_sha", "pr_blob_sha", "current_blob_sha", "decision", "reason", "follow_up_package", "fragment"],
+      `PR84-Reconciliation path_decisions[${seen.size}]`,
+      findings,
+    );
+    const rel = entry?.path;
+    if (typeof rel !== "string" || !(rel in PR84_PATH_EXPECTATIONS)) {
+      findings.push(`[delivery] PR84-Reconciliation enthaelt unerwarteten Pfad '${String(rel)}'`);
+      continue;
+    }
+    if (seen.has(rel)) findings.push(`[delivery] PR84-Reconciliation enthaelt Pfad '${rel}' mehrfach`);
+    seen.add(rel);
+    const expected = PR84_PATH_EXPECTATIONS[rel];
+    if (entry.decision !== expected.decision) {
+      findings.push(`[delivery] PR84-Reconciliation fuer '${rel}' ist '${String(entry.decision)}' statt '${expected.decision}'`);
+    }
+    if (entry.base_blob_sha !== expected.base || entry.pr_blob_sha !== expected.pr || entry.current_blob_sha !== expected.current) {
+      findings.push(`[delivery] PR84-Reconciliation Blobbindung fuer '${rel}' stimmt nicht`);
+    }
+    if (typeof entry.reason !== "string" || entry.reason.trim().length < 20) {
+      findings.push(`[delivery] PR84-Reconciliation fuer '${rel}' braucht eine nachvollziehbare Begruendung`);
+    }
+    if (expected.decision === "DEFER_TO_KR30A_PUBLIC_PORT_RECONTRACT") {
+      if (entry.follow_up_package !== "KR-30A-SEARCH-CONTRACT"
+          || entry.fragment !== "readPorts[src/app/actions/search.actions.ts]") {
+        findings.push("[delivery] PR84-Reconciliation Read-Port-Fragment ist nicht exakt an KR-30A gebunden");
+      }
+    }
+  }
+  for (const rel of expectedPaths) {
+    if (!seen.has(rel)) findings.push(`[delivery] PR84-Reconciliation fuer '${rel}' fehlt`);
+  }
+
+  const decisionValues = decisions.map((entry) => entry?.decision);
+  const expectedSummary = {
+    path_count: 32,
+    superseded_paths: decisionValues.filter((value) => value === "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER").length,
+    stale_evidence_or_old_shell_paths: decisionValues.filter((value) => value === "STALE_EVIDENCE_OR_OLD_SHELL").length,
+    empty_placeholder_paths: decisionValues.filter((value) => value === "EMPTY_PLACEHOLDER_NO_SALVAGE").length,
+    deferred_public_port_paths: decisionValues.filter((value) => value === "DEFER_TO_KR30A_PUBLIC_PORT_RECONTRACT").length,
+    valid_missing_product_paths: 0,
+    direct_import_paths: 0,
+    product_files_changed_by_kr05: 0,
+  };
+  checkExactKeys(reconciliation.summary, Object.keys(expectedSummary), "PR84-Reconciliation summary", findings);
+  for (const [key, expected] of Object.entries(expectedSummary)) {
+    if (reconciliation.summary?.[key] !== expected) {
+      findings.push(`[delivery] PR84-Reconciliation summary.${key} muss ${expected} sein`);
+    }
+  }
+  if (decisionValues.some((value) => typeof value === "string" && value.includes("VALID_MISSING"))) {
+    findings.push("[delivery] PR84-Reconciliation darf keinen unbelegten gueltigen PR-84-Produktrest behaupten");
+  }
+
+  const importTarget = "src/components/layout/KreileHeader.tsx";
+  checkExactKeys(
+    reconciliation.runtime_import_scan,
+    ["target", "scope", "runtime_importers", "declaration_only"],
+    "PR84-Reconciliation runtime_import_scan",
+    findings,
+  );
+  const actualRuntimeImporters = sourceRuntimeImporters(root, importTarget, importTarget)
+    .filter((rel) => !rel.includes("/__tests__/") && !/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(rel));
+  if (reconciliation.runtime_import_scan?.target !== importTarget
+      || reconciliation.runtime_import_scan?.declaration_only !== true) {
+    findings.push("[delivery] PR84-Reconciliation Runtime-Importscan ist nicht an den alten Header gebunden");
+  }
+  if (!sameStringSet(reconciliation.runtime_import_scan?.runtime_importers, actualRuntimeImporters)
+      || actualRuntimeImporters.length !== 0) {
+    findings.push(`[delivery] PR84-Reconciliation alter Header muss importerlos bleiben, gefunden ${actualRuntimeImporters.join(", ") || "keine"}`);
+  }
+
+  const truth = reconciliation.delivery_truth ?? {};
+  checkExactKeys(
+    truth,
+    ["main_delivered", "merge_performed", "production_authorized", "production_performed"],
+    "PR84-Reconciliation delivery_truth",
+    findings,
+  );
+  for (const key of ["main_delivered", "merge_performed", "production_authorized", "production_performed"]) {
+    if (truth[key] !== false) findings.push(`[delivery] PR84-Reconciliation delivery_truth.${key} muss false sein`);
+  }
+}
+
 function checkRollingConsistency(root, queue, mapping, mission, manifests, findings) {
   if (!queue || !mapping || !mission) return;
   const policy = queue.issuance_policy ?? {};
@@ -680,11 +1025,13 @@ export function checkDeliveryContracts(root = process.cwd()) {
   const mission = readYaml(root, DELIVERY_PATHS.mission, findings);
   const receipt = readJson(root, DELIVERY_PATHS.operatingReceipt, findings);
   const pr113Disposition = readJson(root, DELIVERY_PATHS.pr113Disposition, findings);
+  const pr84Reconciliation = readJson(root, DELIVERY_PATHS.pr84Reconciliation, findings);
   validateWith(validateQueue, queue, DELIVERY_PATHS.queue, findings);
   validateWith(validateReceipt, receipt, DELIVERY_PATHS.operatingReceipt, findings);
   checkRollingConsistency(root, queue, mapping, mission, manifests, findings);
   checkOperatingTruth(receipt, mapping, findings);
   checkPr113Disposition(root, pr113Disposition, findings);
+  checkPr84Reconciliation(root, pr84Reconciliation, findings);
 
   return { ok: findings.length === 0, findings: findings.sort() };
 }
@@ -788,6 +1135,54 @@ export function runSelftest(root = process.cwd()) {
     writeFileSync(abs, 'import "./app/buchhaltung/rechnungen/RechnungenClient";\n');
   }, "Runtime-Importer muessen leer sein");
 
+  runCase("pr84-path-reconciliation", (fixture) => {
+    const abs = path.join(fixture, DELIVERY_PATHS.pr84Reconciliation);
+    const value = JSON.parse(readFileSync(abs, "utf8"));
+    value.path_decisions[0].decision = "UNSAFE_DIRECT_IMPORT";
+    writeFileSync(abs, `${JSON.stringify(value, null, 2)}\n`);
+  }, "PR84-Reconciliation fuer");
+
+  runCase("pr84-missing-path", (fixture) => {
+    const abs = path.join(fixture, DELIVERY_PATHS.pr84Reconciliation);
+    const value = JSON.parse(readFileSync(abs, "utf8"));
+    value.path_decisions.pop();
+    writeFileSync(abs, `${JSON.stringify(value, null, 2)}\n`);
+  }, "muss exakt 32 Pfadentscheidungen enthalten");
+
+  runCase("pr84-blob-drift", (fixture) => {
+    const abs = path.join(fixture, DELIVERY_PATHS.pr84Reconciliation);
+    const value = JSON.parse(readFileSync(abs, "utf8"));
+    value.path_decisions[0].current_blob_sha = "0000000000000000000000000000000000000000";
+    writeFileSync(abs, `${JSON.stringify(value, null, 2)}\n`);
+  }, "PR84-Reconciliation Blobbindung fuer");
+
+  runCase("pr84-false-valid-missing", (fixture) => {
+    const abs = path.join(fixture, DELIVERY_PATHS.pr84Reconciliation);
+    const value = JSON.parse(readFileSync(abs, "utf8"));
+    value.summary.valid_missing_product_paths = 1;
+    writeFileSync(abs, `${JSON.stringify(value, null, 2)}\n`);
+  }, "summary.valid_missing_product_paths muss 0 sein");
+
+  runCase("pr84-delivery-claim", (fixture) => {
+    const abs = path.join(fixture, DELIVERY_PATHS.pr84Reconciliation);
+    const value = JSON.parse(readFileSync(abs, "utf8"));
+    value.delivery_truth.main_delivered = true;
+    writeFileSync(abs, `${JSON.stringify(value, null, 2)}\n`);
+  }, "PR84-Reconciliation delivery_truth.main_delivered muss false sein");
+
+  runCase("pr84-unknown-key", (fixture) => {
+    const abs = path.join(fixture, DELIVERY_PATHS.pr84Reconciliation);
+    const value = JSON.parse(readFileSync(abs, "utf8"));
+    value.hidden_claim = true;
+    writeFileSync(abs, `${JSON.stringify(value, null, 2)}\n`);
+  }, "PR84-Reconciliation enthaelt unerwarteten Key 'hidden_claim'");
+
+  runCase("pr84-runtime-header-importer", (fixture) => {
+    const abs = path.join(fixture, "src/probe.ts");
+    mkdirSync(path.dirname(abs), { recursive: true });
+    writeFileSync(abs, 'import "./components/layout/KreileHeader";\n');
+  }, "alter Header muss importerlos bleiben");
+
   runCase("active-manifest-file-count", (fixture) => {
     mutateYaml(path.join(fixture, ACTIVE_MANIFEST_BINDING.path), (value) => {
       value.scope_budget.planned_governance_files -= 1;
@@ -864,7 +1259,7 @@ if (isMain) {
   } else {
     const result = checkDeliveryContracts(options.root);
     if (result.ok) {
-      console.log("delivery-contracts: PASS (Manifeste, Evidenzzeiger, Legacy-Bindung, Alt-PR-Disposition, Queue, Mapping, Betriebsreceipt)");
+      console.log("delivery-contracts: PASS (Manifeste, Evidenzzeiger, Legacy-Bindung, Alt-PR-Dispositionen, Queue, Mapping, Betriebsreceipt)");
     } else {
       console.error(`delivery-contracts: ${result.findings.length} Verstoss/Verstoesse`);
       for (const finding of result.findings) console.error(`  ${finding}`);
