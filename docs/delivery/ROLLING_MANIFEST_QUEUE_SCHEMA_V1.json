@@ -46,14 +46,14 @@
         "closure_receipt_sha256"
       ],
       "properties": {
-        "package_id": { "const": "KR-00G-DOCS-IMPORT" },
+        "package_id": { "const": "KR-00F-ROLLING-MANIFESTS" },
         "candidate_sha": { "$ref": "#/definitions/sha" },
         "tree_sha": { "$ref": "#/definitions/sha" },
-        "remote_ref": { "const": "origin/codex/kr-00g-docs-import" },
+        "remote_ref": { "const": "origin/codex/kr-00f-rolling-manifests" },
         "review_result": { "const": "PASS_EXACT_SHA_NO_OPEN_P0_P1_P2" },
-        "review_receipt": { "const": "../_MODULDOSSIERS/00_PROJEKT/KR-00G_CLAUDE_REVIEW_2026-09-29.md" },
+        "review_receipt": { "const": "../_MODULDOSSIERS/00_PROJEKT/KR-00F_CLAUDE_REVIEW_2026-09-29.md" },
         "review_receipt_sha256": { "$ref": "#/definitions/sha256" },
-        "closure_receipt": { "const": "../_MODULDOSSIERS/00_PROJEKT/KR-00G_EXACT_SHA_CLOSURE_2026-09-29.json" },
+        "closure_receipt": { "const": "../_MODULDOSSIERS/00_PROJEKT/KR-00F_EXACT_SHA_CLOSURE_2026-09-29.json" },
         "closure_receipt_sha256": { "$ref": "#/definitions/sha256" }
       }
     },
@@ -94,9 +94,9 @@
             {
               "properties": {
                 "order": { "const": 1 },
-                "package_id": { "const": "KR-01-GOVERNANCE-MERGE" },
+                "package_id": { "const": "KR-04-PR113-DISPOSITION" },
                 "scope": { "const": "GOVERNANCE" },
-                "predecessor": { "const": "KR-00F-ROLLING-MANIFESTS" }
+                "predecessor": { "const": "KR-01-GOVERNANCE-MERGE" }
               }
             }
           ]
@@ -109,7 +109,7 @@
                 "order": { "const": 2 },
                 "package_id": { "const": "KR-02-B1-P0-CANCEL" },
                 "scope": { "const": "B1" },
-                "predecessor": { "const": "KR-01-GOVERNANCE-MERGE" }
+                "predecessor": { "const": "KR-04-PR113-DISPOSITION" }
               }
             }
           ]
@@ -135,11 +135,11 @@
       "additionalProperties": false,
       "required": ["package_id", "predecessor", "planned_path", "classification", "issue_when"],
       "properties": {
-        "package_id": { "const": "KR-01-GOVERNANCE-MERGE" },
-        "predecessor": { "const": "KR-00F-ROLLING-MANIFESTS" },
-        "planned_path": { "const": "docs/delivery/packages/KR-01-GOVERNANCE-MERGE.yaml" },
+        "package_id": { "const": "KR-04-PR113-DISPOSITION" },
+        "predecessor": { "const": "KR-01-GOVERNANCE-MERGE" },
+        "planned_path": { "const": "docs/delivery/packages/KR-04-PR113-DISPOSITION.yaml" },
         "classification": { "const": "POINTER_ONLY_NON_EXECUTABLE_UNTIL_ISSUED" },
-        "issue_when": { "const": "KR_00F_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED" }
+        "issue_when": { "const": "KR_01_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED" }
       }
     },
     "materialized_future_contracts": {

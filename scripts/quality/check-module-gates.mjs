@@ -101,12 +101,12 @@ function toPosix(p) {
 }
 // Symlinks (Red-Team P0): werden verfolgt, muessen aber innerhalb <root> bleiben —
 // sonst Befund (Dateien ausserhalb waeren fuer das Gate unsichtbar). Schleifenschutz via Realpath.
-function walk(root, relDir, out, seen = new Set(), findings = null) {
+function walk(root, relDir, out, seen = new Set(), findings = null, skipDirs = SKIP_DIRS) {
   const abs = path.join(root, relDir);
   if (!existsSync(abs)) return out;
   const rootReal = realpathSync(root);
   for (const entry of readdirSync(abs, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-    if (SKIP_DIRS.has(entry.name)) continue;
+    if (skipDirs.has(entry.name)) continue;
     const rel = toPosix(path.join(relDir, entry.name));
     const entryAbs = path.join(abs, entry.name);
     let isDir = entry.isDirectory();
@@ -129,7 +129,7 @@ function walk(root, relDir, out, seen = new Set(), findings = null) {
       isDir = st.isDirectory();
       isFile = st.isFile();
     }
-    if (isDir) walk(root, rel, out, seen, findings);
+    if (isDir) walk(root, rel, out, seen, findings, skipDirs);
     else if (isFile) out.push(rel);
   }
   return out;
@@ -1038,12 +1038,25 @@ function gateKr00gReferenceAttributes(root, findings) {
   }
 
   const attributeLines = attributes.split(/\r?\n/);
+  const approvedAttributeLines = new Set(KR00G_REFERENCE_ATTRIBUTE_LINES);
   for (const expected of KR00G_REFERENCE_ATTRIBUTE_LINES) {
     const count = attributeLines.filter((line) => line === expected).length;
     if (count !== 1) findings.push(`[naht7] .gitattributes: '${expected}' exakt einmal erwartet, gefunden ${count}`);
   }
+  for (const line of attributeLines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#") || approvedAttributeLines.has(trimmed)) continue;
+    const [pattern, ...attributesForPattern] = trimmed.split(/\s+/);
+    const removesTextHandling = attributesForPattern.includes("-text") || attributesForPattern.includes("-whitespace");
+    const canCoverImportedDocs = pattern === "docs/**" || pattern === "docs/*" || pattern.startsWith("docs/module");
+    if (removesTextHandling && canCoverImportedDocs) {
+      findings.push(`[naht7] .gitattributes: nicht genehmigte breitere KR-00G-Attributregel '${trimmed}'`);
+    }
+  }
 
-  const moduleFiles = new Set(walk(root, "docs/module", [], new Set(), findings));
+  // Unter dem Importpfad darf auch ein spaeter angelegtes Verzeichnis namens
+  // node_modules nicht unsichtbar werden. Nur .git bleibt als Repo-Metadaten ausgenommen.
+  const moduleFiles = new Set(walk(root, "docs/module", [], new Set(), findings, new Set([".git"])));
   for (const file of moduleFiles) {
     if (!moduleTargets.has(file)) findings.push(`[naht7] ${file}: von docs/module/** erfasst, aber nicht im KR-00G-Source-Lock`);
   }

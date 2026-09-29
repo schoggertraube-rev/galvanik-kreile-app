@@ -849,6 +849,46 @@ describe("S1 Naht 7 — KR-00G-Referenzattribute bleiben source-gelockt", () => 
     expect(f).toContainEqual(expect.stringContaining("docs/module/reference-000.md: source-gelockter KR-00G-Import fehlt"));
     expect(f).toContainEqual(expect.stringContaining(`${KR00G_REFERENCE_ATTRIBUTE_LINES.at(-1)}' exakt einmal erwartet, gefunden 0`));
   });
+
+  it("scannt auch node_modules unter docs/module und verbietet breitere Attributregeln", () => {
+    const files: Record<string, string> = {
+      ...kr00gReferenceFixture(),
+      "docs/module/node_modules/hidden.md": "must not be hidden\n",
+    };
+    files[".gitattributes"] += "docs/** -text\n";
+    const f = findingsOf(repo(files));
+    expect(f).toContainEqual(expect.stringContaining("docs/module/node_modules/hidden.md: von docs/module/** erfasst"));
+    expect(f).toContainEqual(expect.stringContaining("nicht genehmigte breitere KR-00G-Attributregel 'docs/** -text'"));
+  });
+
+  it("weist doppelte Source-Lock-Ziele ab", () => {
+    const files = kr00gReferenceFixture();
+    const hash = "A".repeat(64);
+    files[KR00G_SOURCE_LOCK_PATH] += `| duplicate.md | docs/module/reference-000.md | ${hash} | ${hash} | ${hash} | NONE |\n`;
+    expect(findingsOf(repo(files))).toContainEqual(expect.stringContaining("doppeltes Repo-Ziel 'docs/module/reference-000.md'"));
+  });
+
+  it("weist Zaehldrift auch dann ab, wenn Datei und Lockzeile gemeinsam fehlen", () => {
+    const files = kr00gReferenceFixture();
+    delete files["docs/module/reference-000.md"];
+    files[KR00G_SOURCE_LOCK_PATH] = files[KR00G_SOURCE_LOCK_PATH]
+      .split("\n")
+      .filter((line) => !line.includes("| docs/module/reference-000.md |"))
+      .join("\n");
+    const f = findingsOf(repo(files));
+    expect(f).toContainEqual(expect.stringContaining("224 eindeutige Ziele, erwartet 225"));
+    expect(f).toContainEqual(expect.stringContaining("221 docs/module-Ziele, erwartet 222"));
+  });
+
+  it("weist jedes unerwartete docs/project-Ziel ab", () => {
+    const files: Record<string, string> = {
+      ...kr00gReferenceFixture(),
+      "docs/project/unexpected.md": "unexpected\n",
+    };
+    const hash = "A".repeat(64);
+    files[KR00G_SOURCE_LOCK_PATH] += `| unexpected-source.md | docs/project/unexpected.md | ${hash} | ${hash} | ${hash} | NONE |\n`;
+    expect(findingsOf(repo(files))).toContainEqual(expect.stringContaining("unerwartetes docs/project-Ziel 'docs/project/unexpected.md'"));
+  });
 });
 
 describe("S1 — echtes Repo", () => {

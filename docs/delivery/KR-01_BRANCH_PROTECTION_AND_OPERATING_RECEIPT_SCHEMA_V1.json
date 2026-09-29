@@ -1,0 +1,174 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://galvanik-kreile.local/contracts/KR-01_BRANCH_PROTECTION_AND_OPERATING_RECEIPT_SCHEMA_V1.json",
+  "title": "Kreile KR-01 branch protection and operating receipt V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "observed_at",
+    "repository",
+    "classic_protection",
+    "active_ruleset",
+    "effective_required_checks",
+    "ratchet",
+    "resource_calibration",
+    "process_contract",
+    "delivery_truth"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "receipt_id": { "const": "KR-01-BRANCH-PROTECTION-AND-OPERATING-20260929" },
+    "observed_at": { "type": "string", "format": "date-time" },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "name", "default_branch", "classic_query", "ruleset_query"],
+      "properties": {
+        "owner": { "const": "schoggertraube-rev" },
+        "name": { "const": "galvanik-kreile-app" },
+        "default_branch": { "const": "main" },
+        "classic_query": { "const": "repos/schoggertraube-rev/galvanik-kreile-app/branches/main/protection" },
+        "ruleset_query": { "const": "repos/schoggertraube-rev/galvanik-kreile-app/rulesets/20208063" }
+      }
+    },
+    "classic_protection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strict", "required_checks", "enforce_admins", "required_conversation_resolution", "allow_force_pushes", "allow_deletions"],
+      "properties": {
+        "strict": { "const": true },
+        "required_checks": { "$ref": "#/definitions/classic_checks" },
+        "enforce_admins": { "const": true },
+        "required_conversation_resolution": { "const": true },
+        "allow_force_pushes": { "const": false },
+        "allow_deletions": { "const": false }
+      }
+    },
+    "active_ruleset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "enforcement", "target", "include", "required_checks", "bypass_actors", "current_user_can_bypass"],
+      "properties": {
+        "id": { "const": 20208063 },
+        "name": { "const": "main-protection" },
+        "enforcement": { "const": "active" },
+        "target": { "const": "branch" },
+        "include": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "items": { "const": "~DEFAULT_BRANCH" }
+        },
+        "required_checks": { "$ref": "#/definitions/effective_checks" },
+        "bypass_actors": { "type": "array", "maxItems": 0 },
+        "current_user_can_bypass": { "const": "never" }
+      }
+    },
+    "effective_required_checks": { "$ref": "#/definitions/effective_checks" },
+    "ratchet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "must_pass", "workflow", "trigger"],
+      "properties": {
+        "required": { "const": false },
+        "must_pass": { "const": true },
+        "workflow": { "const": ".github/workflows/eslint-ratchet.yml" },
+        "trigger": { "const": "pull_request_target_to_main" }
+      }
+    },
+    "resource_calibration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["samples", "observed_min_available_ram_mb", "observed_max_shell_probe_seconds", "observed_max_git_probe_seconds", "thresholds", "heavy_profile"],
+      "properties": {
+        "samples": {
+          "type": "array",
+          "minItems": 5,
+          "maxItems": 5,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["at", "available_ram_mb", "shell_probe_seconds", "git_probe_seconds"],
+            "properties": {
+              "at": { "type": "string", "format": "date-time" },
+              "available_ram_mb": { "type": "integer", "minimum": 1 },
+              "shell_probe_seconds": { "type": "number", "minimum": 0 },
+              "git_probe_seconds": { "type": "number", "minimum": 0 }
+            }
+          }
+        },
+        "observed_min_available_ram_mb": { "const": 6171 },
+        "observed_max_shell_probe_seconds": { "const": 0.507 },
+        "observed_max_git_probe_seconds": { "const": 0.19 },
+        "thresholds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["minimum_available_ram_mb", "maximum_shell_probe_seconds", "maximum_git_probe_seconds"],
+          "properties": {
+            "minimum_available_ram_mb": { "const": 4096 },
+            "maximum_shell_probe_seconds": { "const": 2 },
+            "maximum_git_probe_seconds": { "const": 3 }
+          }
+        },
+        "heavy_profile": { "const": "NONE" }
+      }
+    },
+    "process_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["automations_disabled", "project_processes_at_preflight", "liveness_requires", "cpu_only_is_liveness"],
+      "properties": {
+        "automations_disabled": { "const": "9_OF_9" },
+        "project_processes_at_preflight": { "const": 0 },
+        "liveness_requires": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["pid_or_run_id", "started_at", "last_material_output_at", "physical_process_or_exit", "progress_since_previous_observation", "next_evidence"]
+          }
+        },
+        "cpu_only_is_liveness": { "const": false }
+      }
+    },
+    "delivery_truth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["main_delivered", "main_sha", "merge_performed", "production_authorized"],
+      "properties": {
+        "main_delivered": { "const": false },
+        "main_sha": { "const": "21a23567d51e4805f065ce9ae8c59bdc5faf9fa9" },
+        "merge_performed": { "const": false },
+        "production_authorized": { "const": false }
+      }
+    }
+  },
+  "definitions": {
+    "classic_checks": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "allOf": [
+        { "contains": { "const": "quality" } },
+        { "contains": { "const": "agentur-gate" } }
+      ],
+      "items": { "enum": ["quality", "agentur-gate"] }
+    },
+    "effective_checks": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "allOf": [
+        { "contains": { "const": "quality" } },
+        { "contains": { "const": "agentur-gate" } },
+        { "contains": { "const": "Fresh Supabase replay" } }
+      ],
+      "items": { "enum": ["quality", "agentur-gate", "Fresh Supabase replay"] }
+    }
+  }
+}

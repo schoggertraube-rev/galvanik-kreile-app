@@ -24,16 +24,17 @@ rolling_manifest_policy:
   schema: docs/delivery/ROLLING_MANIFEST_QUEUE_SCHEMA_V1.json
   materialized_future_contracts: 0
   one_materialized_contract_at_a_time: true
-  exact_reviewed_remote_parent_required: true
+  exact_reviewed_parent_required: true
   candidate_chain_when_merge_unavailable: true
   candidate_is_not_main_delivery: true
   rebase_and_reverify_after_real_main_change: true
+  no_periodic_build_automation: true
   initial_pointer_order:
-    - KR-01-GOVERNANCE-MERGE
+    - KR-04-PR113-DISPOSITION
     - KR-02-B1-P0-CANCEL
     - KR-03A-DELIVERY-ADHERENCE-DOMAIN
 workflow_facts_at_contract_parent:
-  parent_sha: 8660dcfe30b2cefbfe330e9908d03f855f7558e9
+  parent_sha: eb78a91cb4fa235cee77c9277519d2c08dc4135b
   agentur_gate:
     workflow: .github/workflows/agentur-gate.yml
     branch_push_runs: true
@@ -53,7 +54,7 @@ workflow_facts_at_contract_parent:
     workflow: .github/workflows/eslint-ratchet.yml
     branch_push_runs: false
     pull_request_target_to_main_runs: true
-    required_status_claim: PENDING_KR_01_BRANCH_PROTECTION_RECEIPT
+    required_status_claim: NOT_REQUIRED_BY_PROTECTION_MUST_PASS
 required_check_truth:
   planned_required_names:
     - quality
@@ -61,7 +62,15 @@ required_check_truth:
     - Fresh Supabase replay
   planned_non_required_but_must_pass:
     - ratchet
-  actual_branch_protection_status: UNKNOWN_UNTIL_KR_01_REMOTE_RECEIPT
+  actual_required_names:
+    - quality
+    - agentur-gate
+    - Fresh Supabase replay
+  actual_non_required_but_must_pass:
+    - ratchet
+  branch_protection_receipt: docs/delivery/KR-01_BRANCH_PROTECTION_AND_OPERATING_RECEIPT_2026-09-29.json
+  active_ruleset_bypass_actors: 0
+  current_user_can_bypass: never
   prohibition: DO_NOT_CLAIM_REQUIRED_FROM_WORKFLOW_NAME_OR_OLD_DOCUMENTATION
 states:
   CONTRACT_READY:
