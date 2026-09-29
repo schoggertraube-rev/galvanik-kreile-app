@@ -65,15 +65,40 @@ jobs:
         working-directory: ratchet-base
         env:
           AUTHORITY_CHECKER_SHA256: 05d07eeb62e61049ccb1bbcd33b1742a9e53b56c5401bf7b0a3600e4399e80fb
-          AUTHORITY_SCHEMA_SHA256: 798139c41576c5b6652774ae2268a63286fdd43d7e4d71dcf4732e50f9c1194a
+          AUTHORITY_SCHEMA_SHA256_CURRENT: 798139c41576c5b6652774ae2268a63286fdd43d7e4d71dcf4732e50f9c1194a
+          AUTHORITY_SCHEMA_SHA256_NEXT: 322018e732ee86ecdd4a0320255b8bd216d7d2281302dff8b149dfbd3a80dbba
         run: |
+          set -euo pipefail
+
           # Bootstrap the new contract with reviewed content hashes. This workflow is
           # itself bound by the protected base ratchet above; after merge the same
           # checker becomes the protected base executable for subsequent candidates.
           checker="$GITHUB_WORKSPACE/candidate/scripts/quality/check-authoritative-sources.mjs"
           schema="$GITHUB_WORKSPACE/candidate/quality/authoritative-sources.json"
           test "$(sha256sum "$checker" | cut -d' ' -f1)" = "$AUTHORITY_CHECKER_SHA256"
-          test "$(sha256sum "$schema" | cut -d' ' -f1)" = "$AUTHORITY_SCHEMA_SHA256"
+
+          for variable_name in AUTHORITY_SCHEMA_SHA256_CURRENT AUTHORITY_SCHEMA_SHA256_NEXT; do
+            variable_value="${!variable_name:-}"
+            if ! [[ "$variable_value" =~ ^[0-9a-f]{64}$ ]]; then
+              echo "::error::${variable_name} must be a lowercase 64-character SHA-256 value"
+              exit 1
+            fi
+          done
+
+          if [ "$AUTHORITY_SCHEMA_SHA256_CURRENT" = "$AUTHORITY_SCHEMA_SHA256_NEXT" ]; then
+            echo "::error::Authority schema transition pins must be distinct"
+            exit 1
+          fi
+
+          schema_sha256="$(sha256sum "$schema" | cut -d' ' -f1)"
+          if [ "$schema_sha256" = "$AUTHORITY_SCHEMA_SHA256_CURRENT" ] || \
+             [ "$schema_sha256" = "$AUTHORITY_SCHEMA_SHA256_NEXT" ]; then
+            :
+          else
+            echo "::error::Candidate authority schema is not one of the reviewed transition hashes"
+            exit 1
+          fi
+
           node "$checker" --selftest
           node "$checker" \
             --root "$GITHUB_WORKSPACE/candidate" --check
