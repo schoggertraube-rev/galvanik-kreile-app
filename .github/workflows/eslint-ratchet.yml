@@ -64,20 +64,26 @@ jobs:
       - name: Enforce D-GOV-001 authority contract on candidate
         working-directory: ratchet-base
         env:
-          AUTHORITY_CHECKER_SHA256: 05d07eeb62e61049ccb1bbcd33b1742a9e53b56c5401bf7b0a3600e4399e80fb
+          AUTHORITY_CHECKER_SHA256_CURRENT: 05d07eeb62e61049ccb1bbcd33b1742a9e53b56c5401bf7b0a3600e4399e80fb
+          AUTHORITY_CHECKER_SHA256_NEXT: b3934c8b84e4f04eb6cd412a9b7e303d4b44921d36375a2341ba6091a5681752
           AUTHORITY_SCHEMA_SHA256_CURRENT: 798139c41576c5b6652774ae2268a63286fdd43d7e4d71dcf4732e50f9c1194a
-          AUTHORITY_SCHEMA_SHA256_NEXT: 322018e732ee86ecdd4a0320255b8bd216d7d2281302dff8b149dfbd3a80dbba
+          AUTHORITY_SCHEMA_SHA256_QUEUED: 322018e732ee86ecdd4a0320255b8bd216d7d2281302dff8b149dfbd3a80dbba
+          AUTHORITY_SCHEMA_SHA256_NEXT: fc04eaae60c118e51ae66182b687dbf15b80cd726bfce3a81d08ba25d4d1d788
         run: |
           set -euo pipefail
 
-          # Bootstrap the new contract with reviewed content hashes. This workflow is
-          # itself bound by the protected base ratchet above; after merge the same
-          # checker becomes the protected base executable for subsequent candidates.
+          # Finite transition for the already reviewed KR-10A authority contract.
+          # After KR-10A reaches main, a separate cleanup package must collapse these
+          # sets back to the final checker and schema hashes only.
           checker="$GITHUB_WORKSPACE/candidate/scripts/quality/check-authoritative-sources.mjs"
           schema="$GITHUB_WORKSPACE/candidate/quality/authoritative-sources.json"
-          test "$(sha256sum "$checker" | cut -d' ' -f1)" = "$AUTHORITY_CHECKER_SHA256"
 
-          for variable_name in AUTHORITY_SCHEMA_SHA256_CURRENT AUTHORITY_SCHEMA_SHA256_NEXT; do
+          for variable_name in \
+            AUTHORITY_CHECKER_SHA256_CURRENT \
+            AUTHORITY_CHECKER_SHA256_NEXT \
+            AUTHORITY_SCHEMA_SHA256_CURRENT \
+            AUTHORITY_SCHEMA_SHA256_QUEUED \
+            AUTHORITY_SCHEMA_SHA256_NEXT; do
             variable_value="${!variable_name:-}"
             if ! [[ "$variable_value" =~ ^[0-9a-f]{64}$ ]]; then
               echo "::error::${variable_name} must be a lowercase 64-character SHA-256 value"
@@ -85,17 +91,30 @@ jobs:
             fi
           done
 
-          if [ "$AUTHORITY_SCHEMA_SHA256_CURRENT" = "$AUTHORITY_SCHEMA_SHA256_NEXT" ]; then
+          if [ "$AUTHORITY_CHECKER_SHA256_CURRENT" = "$AUTHORITY_CHECKER_SHA256_NEXT" ]; then
+            echo "::error::Authority checker transition pins must be distinct"
+            exit 1
+          fi
+
+          if [ "$AUTHORITY_SCHEMA_SHA256_CURRENT" = "$AUTHORITY_SCHEMA_SHA256_QUEUED" ] || \
+             [ "$AUTHORITY_SCHEMA_SHA256_CURRENT" = "$AUTHORITY_SCHEMA_SHA256_NEXT" ] || \
+             [ "$AUTHORITY_SCHEMA_SHA256_QUEUED" = "$AUTHORITY_SCHEMA_SHA256_NEXT" ]; then
             echo "::error::Authority schema transition pins must be distinct"
             exit 1
           fi
 
+          checker_sha256="$(sha256sum "$checker" | cut -d' ' -f1)"
           schema_sha256="$(sha256sum "$schema" | cut -d' ' -f1)"
-          if [ "$schema_sha256" = "$AUTHORITY_SCHEMA_SHA256_CURRENT" ] || \
-             [ "$schema_sha256" = "$AUTHORITY_SCHEMA_SHA256_NEXT" ]; then
+
+          if [ "$checker_sha256" = "$AUTHORITY_CHECKER_SHA256_CURRENT" ] && \
+             { [ "$schema_sha256" = "$AUTHORITY_SCHEMA_SHA256_CURRENT" ] || \
+               [ "$schema_sha256" = "$AUTHORITY_SCHEMA_SHA256_QUEUED" ]; }; then
+            :
+          elif [ "$checker_sha256" = "$AUTHORITY_CHECKER_SHA256_NEXT" ] && \
+               [ "$schema_sha256" = "$AUTHORITY_SCHEMA_SHA256_NEXT" ]; then
             :
           else
-            echo "::error::Candidate authority schema is not one of the reviewed transition hashes"
+            echo "::error::Candidate authority checker/schema pair is not a reviewed transition state"
             exit 1
           fi
 
