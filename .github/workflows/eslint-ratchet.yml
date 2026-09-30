@@ -78,6 +78,16 @@ jobs:
           checker="$GITHUB_WORKSPACE/candidate/scripts/quality/check-authoritative-sources.mjs"
           schema="$GITHUB_WORKSPACE/candidate/quality/authoritative-sources.json"
 
+          # `sha256sum` follows symlinks while Node resolves an ESM main module to
+          # its real path. Reject both end-point and parent-path symlinks so the
+          # hashed checker is necessarily the checker whose main guard executes.
+          for guarded in "$checker" "$schema"; do
+            if [ ! -f "$guarded" ] || [ "$(readlink -f "$guarded")" != "$guarded" ]; then
+              echo "::error::${guarded} must be a real regular file at the expected candidate path"
+              exit 1
+            fi
+          done
+
           for variable_name in \
             AUTHORITY_CHECKER_SHA256_CURRENT \
             AUTHORITY_CHECKER_SHA256_NEXT \
