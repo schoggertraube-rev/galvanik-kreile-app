@@ -1,0 +1,239 @@
+schema_version: 2
+package_id: KR-10A-UI-TRUTH-BINDING
+project: GALVANIK_KREILE_WERKSTATTCockpit
+state: CONTRACT_READY
+execution_state_source: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+manifest_profile: ROLLING_V2
+queue_parent_sha: f3bded923ddf20ceb07922929b97f2e7c41dfa32
+base_sha: f3bded923ddf20ceb07922929b97f2e7c41dfa32
+origin_main_sha: fa1a989fa5844305e6a8200832ed43e2fc230751
+target_sha: PENDING_AFTER_LOCAL_VERIFICATION
+branch: codex/kr-10a-ui-truth-binding
+goal: >-
+  Das freigegebene Designsystem V1.1 exakt als Token- und
+  Komponentenwahrheit binden, die kanonischen HTML-Referenzen als Seiten-
+  und Flowwahrheit erhalten und den Konfliktvorrang fail-closed pruefen,
+  ohne Designsystemdateien zu importieren oder Produktverhalten zu aendern.
+active_mission_file: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+dod_spec_approved_by:
+  authority: OWNER_CURRENT_TASK_AND_RATIFIED_BUILDPLAN
+  date: "2026-09-29"
+  instruction: >-
+    Den redteam-geprueften Kreile-Plan seriell umsetzen; KR-10A bindet nur
+    die UI-Wahrheit, KR-10B importiert danach separat das Designsystem.
+execution_actors:
+  writer: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  implementation_reviewer: CLAUDE_OPUS_NEW_READ_ONLY_SESSION_AFTER_EXACT_SHA
+  specialist_gate_reviewers: GITHUB_ACTIONS_REQUIRED_CHECK_RUNNERS_AFTER_PUSH
+  kreile_pl_session: 01a0ce4b-1843-7361-9ffc-47933f9ecdde
+  authorized_future_merge_actor: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  merge_limit: NO_MAIN_MERGE_UNTIL_EXPLICIT_PRODUCTION_EFFECT_AUTHORITY
+dependency:
+  package: KR-05-PR84-SEARCH-RECONCILIATION
+  candidate_sha: f3bded923ddf20ceb07922929b97f2e7c41dfa32
+  status: REVIEWED_CANDIDATE_PENDING_MAIN_BASE_CI_AND_EXTERNAL_MERGE_GATE
+  review_result: PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN
+  review_evidence: ../_MODULDOSSIERS/00_PROJEKT/KR-05_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-30.md
+  review_evidence_sha256: CB4316921C8A6D4A1EFE7C9E319A055DADB0E8A247F6CA489E8EF26C0709B16F
+dossier_and_decision_ids:
+  - BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL_SECTION_6_KR_10A
+  - D-GOV-001
+  - D-UI-CORE-001
+  - D-UI-CORE-002
+  - D-UI-CORE-003
+  - OE-2609-03
+source_locks:
+  - kind: REPO_FILE
+    source: docs/project/BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
+    location: REPO
+    repo_commit: f3bded923ddf20ceb07922929b97f2e7c41dfa32
+    sha256: F9C165871EDD24E5CA3EC826C24A791BB34CB6C32244C424FBB87543B6E73E8A
+  - kind: REPO_FILE
+    source: docs/project/linie/00_UI_REFERENZEN_PFADE.md
+    location: REPO
+    repo_commit: f3bded923ddf20ceb07922929b97f2e7c41dfa32
+    sha256: 5B36CF1841A695403092DBC86A3EA1E89613AED66ECED1FC3CAFE178EE8AE2C2
+  - kind: REPO_FILE
+    source: docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md
+    location: REPO
+    repo_commit: f3bded923ddf20ceb07922929b97f2e7c41dfa32
+    sha256: 5B5C4A19C6299D3A6706C852661754632526E5ABB24D6A6C9EA9CBF60589B00C
+  - kind: EXTERNAL_FILE
+    source: SHA256SUMS.txt
+    location: ../_DESIGN_VERBINDLICH/designsystem_v1_1
+    sha256: 71B0CB01F484BEEF042CFD04D31F951D2DB2D441C427F8212F35A8D41A8041E5
+    status: FIFTY_FIVE_OF_FIFTY_FIVE_SOURCE_FILES_VERIFIED
+  - kind: EXTERNAL_FILE
+    source: FREIGABE_DS_V1.txt
+    location: ../_DESIGN_VERBINDLICH
+    sha256: D8D95F8E48CDB02C5A4F7BB8A4C07F2658EA32D1B7753A912BBA91C97013FC25
+    status: OWNER_APPROVED_2026_09_27
+  - kind: EXTERNAL_FILE
+    source: PRUEFUNG_DESIGN_V1_1_2026-09-27.md
+    location: ../_DESIGN_VERBINDLICH
+    sha256: D6435C10D6F24699FEB97B408DD4BB8F6C59ED7C374B1627F5D720CF66245257
+    status: PL_CHECK_PASSED
+  - kind: EXTERNAL_FILE
+    source: KR-05_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-30.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: CB4316921C8A6D4A1EFE7C9E319A055DADB0E8A247F6CA489E8EF26C0709B16F
+    status: PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN
+repo_allowlist:
+  - docs/delivery/packages/KR-10A-UI-TRUTH-BINDING.yaml
+  - docs/delivery/ROLLING_MANIFEST_QUEUE_SCHEMA_V1.json
+  - docs/delivery/ROLLING_MANIFEST_QUEUE_V1.json
+  - docs/delivery/GATE_MAPPING_V1.yaml
+  - docs/project/CURRENT_STATE.md
+  - docs/project/NON_LOSS_REGISTER.md
+  - docs/project/linie/00_UI_REFERENZEN_PFADE.md
+  - docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md
+  - docs/project/linie/ui/00_UI_REFERENZ_KANONISCH.md
+  - docs/project/linie/ui/DESIGN_SYSTEM_V1_1_SHA256SUMS.txt
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - quality/authoritative-sources.json
+  - scripts/quality/check-authoritative-sources.mjs
+  - scripts/quality/check-delivery-contracts.mjs
+  - src/test/authority_gate.test.ts
+  - src/test/delivery_contracts.test.ts
+forbidden:
+  - ui/**
+  - src/app/**
+  - src/components/**
+  - src/modules/**
+  - supabase/**
+  - design_system_import_or_runtime_wiring
+  - product_code_or_visible_runtime_behavior
+  - auth_rls_roles_or_session_behavior
+  - provider_or_runtime_configuration
+  - remote_database_or_production_mutation
+  - main_merge_or_production_deploy
+scope_budget:
+  max_product_files: 8
+  max_handwritten_product_lines: 800
+  max_new_migrations: 1
+  planned_product_files: 0
+  planned_governance_files: 16
+follow_up_packages:
+  - KR-10B-DESIGN-SYSTEM-IMPORT
+new_objects_authority: DELEGATED_RATIFIED_CONTRACT
+migration_status: NONE
+applicable_register_gates:
+  FUNCTIONAL_SLICE_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+  DATA_TRUTH_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+  UI_REFERENCE_PASS: REQUIRED
+  OWNER_UX_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+register_gate_evidence:
+  FUNCTIONAL_SLICE_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: LOCAL_VERIFIED
+    evidence_ref: acceptance:KR10A-A8
+  DATA_TRUTH_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: LOCAL_VERIFIED
+    evidence_ref: invariant:data_truth
+  UI_REFERENCE_PASS:
+    applicability: REQUIRED
+    stage: OWNER_PREVIEWED
+    evidence_ref: acceptance:KR10A-A3
+  OWNER_UX_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: OWNER_PREVIEWED
+    evidence_ref: acceptance:KR10A-A8
+invariants:
+  data_truth: NO_DATA_MODEL_SCHEMA_MIGRATION_RUNTIME_DATA_OR_PRODUCT_CHANGE
+  tenant_and_rls: NOT_APPLICABLE_NO_DATA_ACCESS_RLS_OR_REMOTE_CHANGE
+  roles_and_commands: NOT_APPLICABLE_NO_PRODUCT_ROLE_COMMAND_OR_SESSION_CHANGE
+  receipt_and_readback: REPOSITORY_MANIFEST_LOCK_ALWAYS_READ_BACK_EXTERNAL_APPROVAL_REVIEW_AND_ALL_FIFTY_FIVE_FILES_PHYSICALLY_READ_BACK_WHEN_SOURCE_BUNDLE_IS_PRESENT
+  reload_and_race: ONE_MATERIALIZED_CONTRACT_ONE_SERIAL_WRITER_THEN_ONE_READ_ONLY_REVIEWER
+  error_behavior: FAIL_CLOSED_ON_LOCK_SOURCE_HASH_ENTRY_COUNT_PARTIAL_EXTERNAL_BUNDLE_ROLE_PRECEDENCE_INDEX_REGISTER_OR_IMPORT_DRIFT
+  rollback: ABANDON_UNMERGED_CANDIDATE_WITHOUT_PRODUCT_OR_PRODUCTION_EFFECT
+visible_capabilities:
+  registry_changes: NONE
+  quality_no_fake_production: REQUIRED_DEFENSIVE_GATE
+review_contract:
+  broad_claude_reviews: 1
+  max_correction_rounds: 1
+  delta_review_after_correction: true
+  reviewer_must_differ_from_writer: true
+  specialist_gate_reviewers_are_not_implementation_reviewers: true
+acceptance:
+  - id: KR10A-A1
+    statement: Designsystem V1.1 ist exakt als Token- und Komponentenwahrheit gebunden.
+    evidence: CONFIG_REGISTER_INDEX_AND_EXACT_SOURCE_PATH
+  - id: KR10A-A2
+    statement: Der unveraenderliche Repository-Lock bindet alle 55 Manifestpfade; bei vorhandenem externem Quellenbuendel existieren alle 55 Dateien und stimmen mit ihren SHA-256-Werten ueberein.
+    evidence: AUTHORITY_GATE_REPOSITORY_LOCK_AND_LOCAL_PHYSICAL_MANIFEST_REPLAY
+  - id: KR10A-A3
+    statement: Owner-Freigabe und PL-Pruefung sind durch exakte SHA-256-Werte gebunden.
+    evidence: APPROVAL_AND_REVIEW_HASH_READBACK
+  - id: KR10A-A4
+    statement: Die vier kanonischen HTML-Dateien bleiben Seiten- und Flowwahrheit.
+    evidence: UI_REFERENCE_CONTRACT_INDEX_REGISTER_AND_SCOPE
+  - id: KR10A-A5
+    statement: Bei Konflikt gewinnt die Seitenreferenz fuer Layout und Flow, V1.1 fuer Token und Komponente.
+    evidence: CLOSED_PRECEDENCE_CONTRACT_CONTEXT_SHADOW_GUARD_AND_NEGATIVE_TEST
+  - id: KR10A-A6
+    statement: Der Designsystemimport und das Zielverzeichnis ui bleiben bis KR-10B physisch unmaterialisiert.
+    evidence: IMPORT_FALSE_TARGET_ABSENCE_AND_NEGATIVE_TEST
+  - id: KR10A-A7
+    statement: Designsystem V1 und V2 erhalten keinen autoritativen oder stillen Fallbackstatus.
+    evidence: EXACT_V1_1_SOURCE_CONTRACT
+  - id: KR10A-A8
+    statement: Dieses Paket veraendert keine Produktdatei, sichtbare UI, Datenwahrheit, Rolle, Session, Provider- oder Production-Konfiguration.
+    evidence: EXACT_PARENT_DIFF_ALLOWLIST_AND_NO_PRODUCT_PATHS
+  - id: KR10A-A9
+    statement: Mission und rollende Queue zeigen nach KR-10A genau auf KR-10B und materialisieren dessen Manifest noch nicht.
+    evidence: DELIVERY_CONTRACT_GATE_AND_QUEUE_NEGATIVE_TESTS
+  - id: KR10A-A10
+    statement: Der Kandidat bleibt QUEUED_CANDIDATE und erhebt keinen Main- oder Production-Lieferclaim.
+    evidence: MISSION_CURRENT_STATE_AND_DELIVERY_TRUTH_FALSE
+local_gates:
+  - npm run quality:authority-gate:selftest
+  - npm run quality:authority-gate
+  - npx vitest run src/test/authority_gate.test.ts
+  - npm run quality:delivery-contracts:selftest
+  - npm run quality:delivery-contracts
+  - npx vitest run src/test/delivery_contracts.test.ts
+  - npm run quality:module-gates
+  - npm run quality:no-fake-production
+  - npm run lint:ratchet
+  - git diff --check
+  - npm run verify:precommit
+required_checks_after_push:
+  - quality
+  - agentur-gate
+  - Fresh Supabase replay
+non_required_but_must_pass:
+  - ratchet
+gate_mapping_contract: docs/delivery/GATE_MAPPING_V1.yaml
+findings_ledger_contract: docs/delivery/FINDINGS_LEDGER_SCHEMA_V1.json
+closure_receipt_contract: docs/delivery/EXACT_SHA_CLOSURE_RECEIPT_SCHEMA_V1.json
+evidence_mode: CI_FULL
+evidence_mode_status: REPOSITORY_MANIFEST_LOCK_ALWAYS_VERIFIED_EXTERNAL_SOURCE_PHYSICALLY_VERIFIED_WHEN_PRESENT_REMOTE_MAIN_BASE_CHECKS_STILL_REQUIRED
+resource_profile:
+  mode: SERIAL_NO_PARALLEL_BUILD_OR_TEST_WRITERS
+  heavy_profile: NONE
+  available_ram_mb_preflight: 5616
+  shell_probe_seconds_preflight: 0.003
+  git_status_seconds_preflight: 0.161
+  expected_runtime_minutes: 30
+  cleanup_receipt: PID_OR_RUN_ID_OUTPUT_TIMESTAMP_PHYSICAL_EXIT_AND_CLEAN_TREE_REQUIRED_CPU_NOT_SUFFICIENT
+findings: []
+split_or_follow_up_decision: >-
+  KR-10A endet nach exakter Quellenbindung und Gatepruefung. Erst der danach
+  auszustellende Vertrag KR-10B darf die 55 freigegebenen Dateien importieren,
+  Auflagen umsetzen und Produktverdrahtung pruefen.
+next_allowed_package: KR-10A-EXACT-SHA-CLAUDE-REVIEW
+package_specific:
+  design_system_id: KREILE_DESIGN_SYSTEM_V1_1
+  design_system_version: "1.1"
+  source_path: ../_DESIGN_VERBINDLICH/designsystem_v1_1
+  manifest_lock_path: docs/project/linie/ui/DESIGN_SYSTEM_V1_1_SHA256SUMS.txt
+  manifest_sha256: 71B0CB01F484BEEF042CFD04D31F951D2DB2D441C427F8212F35A8D41A8041E5
+  expected_external_file_count: 55
+  approval_sha256: D8D95F8E48CDB02C5A4F7BB8A4C07F2658EA32D1B7753A912BBA91C97013FC25
+  review_sha256: D6435C10D6F24699FEB97B408DD4BB8F6C59ED7C374B1627F5D720CF66245257
+  page_reference_count: 4
+  import_package: KR-10B-DESIGN-SYSTEM-IMPORT
+  import_target: ui
+  product_files_changed: 0

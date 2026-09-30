@@ -1,9 +1,37 @@
 # CURRENT_STATE — Galvanik-Kreile WerkstattCockpit
 
-**Lieferstand 2026-09-10: `main@13240de2a5ca9e9cfae4f8c72552443dac1d7630`.** Diese Datei
+**Lieferstand 2026-09-29: `main@fa1a989fa5844305e6a8200832ed43e2fc230751`.** Diese Datei
 beschreibt ausschließlich auf `main` belegte Lieferungen. Aktives Paket, Branch, Base, Kandidatenstatus
 und nächstes Gate stehen ausschließlich in `missions/F1_ORDER_TO_CASH_PILOT_001.yml`. Die
 ausführlichen F0-Tabellen darunter sind ein datierter historischer Snapshot.
+
+Die Alt-PRs #84, #113, #114 und #115 sowie ihre `archive/pr-*`-Refs sind Kandidaten- und
+Verlustschutzquellen, keine auf `main` gelieferte Produktwahrheit. Ihre aktuelle Disposition steht im
+NON_LOSS_REGISTER. `ALT_PR_INVENTORY_2026-09-28.json` ist der unveraenderte Stichtags-Snapshot vom
+28.09.2026 und keine Live-Statusquelle. Die aktuelle maschinenlesbare Delta-Entscheidung fuer PR #113
+steht in `docs/delivery/KR-04_PR113_DISPOSITION_2026-09-29.json`: PR #113 ist ungemergt geschlossen,
+Quellbranch und Archivref bleiben erhalten, und kein Produktpfad daraus wurde durch KR-04 geliefert.
+Der Kandidatenvertrag `docs/delivery/KR-05_PR84_SEARCH_RECONCILIATION_2026-09-29.json`
+entscheidet zusaetzlich alle 32 PR-84-Pfade gegen den aktuellen Kandidaten: 18 sind durch staerkere
+aktuelle Pfade ersetzt, 11 gehoeren zur alten Shell/Evidenz, zwei sind leere Platzhalter und eine
+indirekte View-Traceability wird nicht als temporaerer interner Vertrag kopiert, sondern fuer den
+oeffentlichen KR-30A-Portumbau erhalten. Das ergibt null gueltige PR-84-Produktreste und keinen
+KR-05R-Auftrag. Dieser Kandidatenvermerk aendert den oben genannten `main`-Lieferstand nicht.
+
+Der KR-05-Kandidat `f3bded923ddf20ceb07922929b97f2e7c41dfa32` ist auf seinem
+Remote-Branch mit Quality, Fresh Supabase replay, Agentur-Gate und Ratchet gruen
+und durch eine unabhaengige Opus-Pruefung ohne offene P0/P1/P2 abgeschlossen.
+Er bleibt dennoch ein Kandidat und ist nicht auf `main` geliefert. Das darauf
+serielle Paket `KR-10A-UI-TRUTH-BINDING` bindet ausschliesslich die bereits
+freigegebene UI-Wahrheit; weder dieser Branch noch die Designsystemquelle sind
+dadurch sichtbare Produktlieferung, Merge oder Production.
+
+Seit dem letzten Produktstand wurde ausschliesslich der Governance-Bootstrap
+`KR-01A-AUTHORITY-PIN-BOOTSTRAP` ueber PR #119 geliefert. Sein Kandidat
+`fa73666b2d6ab1f41bf8f8576f41a04e7e38ac72` ist Vorfahr des Merge-Commits
+`fa1a989fa5844305e6a8200832ed43e2fc230751`; Quality, Fresh Supabase replay,
+Agentur-Gate und der fuer genau diesen Merge autorisierte automatische Vercel-Lauf waren gruen.
+Es gab dadurch keine Produkt-, Datenbank-, RLS- oder Echtdatenaenderung.
 
 ## Auf main belegte Lieferwahrheit
 
@@ -31,6 +59,7 @@ keinen Kandidaten als geliefert vorweg.
 
 | Wahrheit | Stand |
 |---|---|
+| KR-01A Governance-Bootstrap | PR #119 als Merge-Commit `fa1a989fa5844305e6a8200832ed43e2fc230751` integriert; Post-Merge-Checks und der fuer diesen Merge autorisierte automatische Vercel-Lauf gruen; keine Produkt- oder Remote-Datenmutation |
 | M1-Integration | PR #61 am eingefrorenen Head `75bdaf8458aef3606ede50b393a0b06fa0fbe9f3` als Merge-Commit `6b4d482bae9f2797bb5171c8cdf4b817cb1b549d` nach `main` integriert |
 | F0/W4 | unabhaengig `PASS`; Pruefpaket `d16363dee8e38bf64dbb31ed135a93972d91b6f1`, Produktkandidat `e3138f9286775bf6e79c0b5b1845ff72a0230b62` |
 | F1.1 Digitaler Wareneingang | unabhaengig `PASS`; Evidence-SHA `228316b7674d3363a9ab62d97b41500bd1409395` |

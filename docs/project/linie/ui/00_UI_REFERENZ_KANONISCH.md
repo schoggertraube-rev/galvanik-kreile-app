@@ -23,4 +23,10 @@ MUSS: Held „Heute sichern" (Aufträge nach Fälligkeit, je Karte Aktion) · pr
 Jeder Kreile-UI-PR wird gegen genau diese Referenzen geprüft. Enthält die Startseite ein Stationsband/Transport-Home oder fehlt „Heute sichern" + Aktionsleiste → REVIEW_VERDICT: FAIL (mit Datei:Zeile). Grün in der CI ist NICHT genug; Designtreue ist Teil der Abnahme.
 
 ## Designsystem
-Tokens: Navy/Cream/Brand-Verlauf, Fraunces (Serif) + Inter, Touch 48px. Ein Designsystem, kein Fork. Referenz-HTMLs oben sind maßgeblich.
+`NO_OWN_TOKEN_OR_COMPONENT_TRUTH`: Dieses ergaenzende Dokument definiert
+keine Tokens oder Komponenten. Ausschliessliche Token- und
+Komponentenwahrheit ist nach D-UI-CORE-003
+`../_DESIGN_VERBINDLICH/designsystem_v1_1`; es gilt
+`TOKENS_COMPONENTS_FROM_DESIGN_SYSTEM_V1_1`. Die oben gelisteten HTML-Dateien
+bleiben ausschliesslich Seiten- und Flowreferenzen; fuer sie gilt
+`LAYOUT_FLOW_FROM_CANONICAL_REFERENCES`.

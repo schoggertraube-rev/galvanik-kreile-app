@@ -1,0 +1,270 @@
+schema_version: 2
+package_id: KR-03A-DELIVERY-ADHERENCE-DOMAIN
+project: GALVANIK_KREILE_WERKSTATTCockpit
+state: CONTRACT_READY
+execution_state_source: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+manifest_profile: ROLLING_V2
+queue_parent_sha: b657b63ce734207b9ab37a97f2d772aca3e3b249
+base_sha: b657b63ce734207b9ab37a97f2d772aca3e3b249
+origin_main_sha: fa1a989fa5844305e6a8200832ed43e2fc230751
+target_sha: PENDING_AFTER_LOCAL_VERIFICATION
+branch: codex/kr-03a-delivery-adherence-domain
+goal: >-
+  Die reine G04-Termintreue-Domaene frisch auf dem remote-identischen,
+  unabhaengig geprueften KR-02R-Kandidaten bauen: bestaetigter Termin und
+  Fertig-Instant bleiben kanonische Fakten; genau ein valides
+  ORDER_PICKED_UP_V1 oder ORDER_PICKED_UP_V2 liefert gleichwertig den
+  Abhol-Instant. Fehlende, ungueltige oder mehrere gueltige Ereignisse sowie
+  die noch nicht ratifizierte Storno-Klassifikation bleiben fail-closed mit
+  benanntem Missing-Grund. Keine DB, kein Port und kein Workflow.
+active_mission_file: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+dod_spec_approved_by:
+  authority: OWNER_CURRENT_TASK_AND_RATIFIED_BUILDPLAN
+  date: "2026-09-29"
+  instruction: >-
+    KR-03A als erstes der drei frischen, seriellen B2-Ersatzpakete bauen.
+    Reine Termintreue-Domaene mit Unitmatrix V1, V2, invalid, mehrfach,
+    Storno/Missing und DST; genau eine Opus-Review und hoechstens eine
+    Korrekturrunde. Kein Main-Merge oder Production-Effekt.
+execution_actors:
+  writer: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  implementation_reviewer: CLAUDE_OPUS_NEW_READ_ONLY_SESSION_AFTER_EXACT_SHA
+  specialist_gate_reviewers: GITHUB_ACTIONS_REQUIRED_CHECK_RUNNERS_AFTER_PUSH
+  kreile_pl_session: 01a0ce4b-1843-7361-9ffc-47933f9ecdde
+  authorized_future_merge_actor: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  merge_limit: NO_MAIN_MERGE_UNTIL_EXPLICIT_PRODUCTION_EFFECT_AUTHORITY
+dependency:
+  package: KR-02R-B1-P0-CANCEL
+  candidate_sha: b657b63ce734207b9ab37a97f2d772aca3e3b249
+  status: REVIEWED_CANDIDATE_PENDING_MAIN_BASE_CI_AND_EXTERNAL_MERGE_GATE
+  review_result: PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN_QUEUED_CANDIDATE
+  review_evidence: ../_MODULDOSSIERS/00_PROJEKT/KR-02R_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md
+  review_evidence_sha256: 742CC8D5CB66E892BF681F63AA0086930AE93A7088208F69B0CC9633B3F4F667
+dossier_and_decision_ids:
+  - BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL_SECTION_5_KR_03A
+  - OE-2609-21
+  - A-G04-008
+  - A-G04-017
+  - A-G04-018
+  - A-G04-022
+  - A-G04-023
+  - F-G04-007
+  - PR115_ARCHIVE_DISPOSITION_2026-09-29
+source_locks:
+  - kind: REPO_FILE
+    source: docs/project/BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
+    location: REPO
+    repo_commit: b657b63ce734207b9ab37a97f2d772aca3e3b249
+    sha256: F9C165871EDD24E5CA3EC826C24A791BB34CB6C32244C424FBB87543B6E73E8A
+  - kind: REPO_FILE
+    source: docs/module/G04_AUFTRAEGE/01_ANFORDERUNGSKATALOG.md
+    location: REPO
+    repo_commit: b657b63ce734207b9ab37a97f2d772aca3e3b249
+    sha256: 5E3F0858F0A6A64C21927EFAF2B00F50FE91E3E84D2C9ABD5E3C24F9F09E7A6D
+  - kind: REPO_FILE
+    source: docs/module/G04_AUFTRAEGE/02_FUNKTIONEN_ABLAEUFE.md
+    location: REPO
+    repo_commit: b657b63ce734207b9ab37a97f2d772aca3e3b249
+    sha256: E13CCA45060E698FEA6E0ADCE43BC7377EE4F0466D3D45E4990B0EB33231EA79
+  - kind: REPO_FILE
+    source: docs/module/G04_AUFTRAEGE/04_SCHNITTSTELLEN_DATEN.md
+    location: REPO
+    repo_commit: b657b63ce734207b9ab37a97f2d772aca3e3b249
+    sha256: 6E62AD2A45B9DA5BDE7CE8E7C309CE25D6AFB9710C6F68C24B45B75945889963
+  - kind: REPO_FILE
+    source: src/lib/server/commands/recordGoodsOutCommand.ts
+    location: REPO
+    repo_commit: b657b63ce734207b9ab37a97f2d772aca3e3b249
+    sha256: C9D55BBB2DD33C9062221A35D0B8771E7E14B9409FF1E55E6533F3A3A25EFDD5
+  - kind: REPO_FILE
+    source: src/modules/orders/domain/orderLifecycleContract.ts
+    location: REPO
+    repo_commit: b657b63ce734207b9ab37a97f2d772aca3e3b249
+    sha256: 392C0259D5F9B011E440ABFA910B2E880A98CA3992B7B767CC60ED3227098254
+  - kind: REPO_FILE
+    source: supabase/migrations/20260905100000_f1_5_payment_goods_out_contract.sql
+    location: REPO
+    repo_commit: b657b63ce734207b9ab37a97f2d772aca3e3b249
+    sha256: 04AAF5F4DC3DB65366BA055467107868BA0266D929EFFE16A01AF99E4D6D208C
+  - kind: REPO_FILE
+    source: supabase/migrations/20260909170000_f1_5_payment_goods_out_v2_contract.sql
+    location: REPO
+    repo_commit: b657b63ce734207b9ab37a97f2d772aca3e3b249
+    sha256: C0C123B3A1F09B57D91F5789CED44F871A73C97DC2FCB7D31831D6E20C7BB0FF
+  - kind: EXTERNAL_FILE
+    source: BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: EAEDDEF68C16BE403C6D05AD6F63234D4ACF75A762895F50008E07A59A782DC3
+    status: FINAL_AFTER_ONE_OPUS_REDTEAM_AND_OWNER_EXECUTION_AMENDMENT
+  - kind: EXTERNAL_FILE
+    source: BAUANALYSE_LOESUNGEN_2026-09-28.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: 16A170DB5DCFD96D2A165BA538536ADF1777FAD4F4271AD310B6548AE3AAF25F
+    status: V1_AND_V2_ACTIVE_EXACTLY_ONE_VALID_EVENT_RULE
+  - kind: EXTERNAL_FILE
+    source: KR-02R_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: 742CC8D5CB66E892BF681F63AA0086930AE93A7088208F69B0CC9633B3F4F667
+    status: PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN
+repo_allowlist:
+  - docs/delivery/packages/KR-03A-DELIVERY-ADHERENCE-DOMAIN.yaml
+  - docs/delivery/ROLLING_MANIFEST_QUEUE_SCHEMA_V1.json
+  - docs/delivery/ROLLING_MANIFEST_QUEUE_V1.json
+  - docs/delivery/GATE_MAPPING_V1.yaml
+  - docs/project/NON_LOSS_REGISTER.md
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - scripts/quality/check-delivery-contracts.mjs
+  - src/test/delivery_contracts.test.ts
+  - src/modules/orders/domain/orderTimelinessFacts.ts
+  - src/modules/orders/__tests__/orderTimelinessFacts.test.ts
+forbidden:
+  - every_product_path_except_the_two_named_product_paths
+  - .github/workflows/**
+  - quality/eslint-baseline.json
+  - supabase/migrations/**
+  - src/modules/orders/server/**
+  - src/modules/orders/server-public.ts
+  - src/modules/orders/public.ts
+  - src/modules/orders/orders.manifest.json
+  - src/app/**
+  - src/components/**
+  - package_json_or_lockfile_change
+  - table_view_function_index_rls_policy_role_session_or_auth_change
+  - provider_runtime_remote_database_or_production_mutation
+  - main_merge_or_production_deploy
+scope_budget:
+  max_product_files: 8
+  max_handwritten_product_lines: 800
+  max_new_migrations: 1
+  planned_product_files: 2
+  planned_governance_files: 8
+follow_up_packages:
+  - KR-03B1-FINAL-DB-READ-CONTRACT
+  - KR-03B2-AUTHORIZED-SERVER-PORT
+new_objects_authority: NONE
+migration_status: NONE
+applicable_register_gates:
+  FUNCTIONAL_SLICE_PASS: REQUIRED
+  DATA_TRUTH_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+  UI_REFERENCE_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+  OWNER_UX_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+register_gate_evidence:
+  FUNCTIONAL_SLICE_PASS:
+    applicability: REQUIRED
+    stage: LOCAL_VERIFIED
+    evidence_ref: acceptance:KR03A-A2
+  DATA_TRUTH_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: LOCAL_VERIFIED
+    evidence_ref: invariant:tenant_and_rls
+  UI_REFERENCE_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: OWNER_PREVIEWED
+    evidence_ref: invariant:roles_and_commands
+  OWNER_UX_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: OWNER_PREVIEWED
+    evidence_ref: invariant:roles_and_commands
+invariants:
+  data_truth: >-
+    orders.due_date ist der einzige bestaetigte Kalendertag; completed_date und
+    genau ein valides ORDER_PICKED_UP_V1 oder V2 liefern offsetgebundene
+    Instants. promised_due_date und rohe V1-Finanzfelder sind ausgeschlossen.
+  tenant_and_rls: >-
+    Die reine Domaenenfunktion fuehrt keine DB- oder RLS-Operation aus und
+    verwirft fremde Tenant- oder Auftragszuordnungen fail-closed.
+  roles_and_commands: NO_ROLE_COMMAND_AUTH_SESSION_SERVER_PORT_UI_OR_VISIBLE_CAPABILITY_CHANGE
+  receipt_and_readback: >-
+    Ein valides Abholereignis liefert events.created_at samt Event-ID,
+    Eventtyp, Schemaversion und Aggregatversion als Provenienz.
+  reload_and_race: >-
+    Die Ableitung ist rein und deterministisch; mehr als ein valides V1/V2-
+    Ereignis bleibt unabhaengig von Reihenfolge oder Wiederholung mehrdeutig.
+  error_behavior: >-
+    Fehlende, ungueltige oder mehrere valide Abholereignisse sowie die nicht
+    ratifizierte Stornoklassifikation liefern jeweils einen benannten
+    Missing-Grund; fremde Zuordnungen und unbekannte Eventtypen werfen.
+  rollback: >-
+    Nur die zwei neuen Domaenen-/Unitdateien und die Paketsteuerung werden
+    zurueckgenommen; keine persistierte oder externe Wahrheit ist betroffen.
+visible_capabilities:
+  registry_changes: NONE
+  quality_no_fake_production: REQUIRED_DEFENSIVE_GATE
+review_contract:
+  broad_claude_reviews: 1
+  max_correction_rounds: 1
+  delta_review_after_correction: true
+  reviewer_must_differ_from_writer: true
+  specialist_gate_reviewers_are_not_implementation_reviewers: true
+acceptance:
+  - id: KR03A-A1
+    statement: Der Parent ist exakt der remote-gruene und Opus-gepruefte KR-02R-Kandidat b657b63c; origin/main bleibt separat fa1a989f.
+    evidence: REMOTE_PARENT_MAIN_AND_EXTERNAL_RECEIPT_READBACK
+  - id: KR03A-A2
+    statement: Genau ein valides ORDER_PICKED_UP_V1 oder ORDER_PICKED_UP_V2 liefert gleichwertig events.created_at mit Ereignistyp und Aggregatversion als Provenienz.
+    evidence: FOCUSED_UNIT_MATRIX_V1_AND_V2_POSITIVE
+  - id: KR03A-A3
+    statement: Kein Ereignis, nur ungueltige Ereignisse und mehr als ein gueltiges V1/V2-Ereignis liefern jeweils benannte Missing-Gruende; fremde Tenant- oder Auftragszuordnung wird fail-closed abgewiesen.
+    evidence: FOCUSED_UNIT_MATRIX_MISSING_INVALID_MULTIPLE_AND_TENANT
+  - id: KR03A-A4
+    statement: Der bestaetigte Termin wird ausschliesslich als strikter due_date-Kalendertag gelesen; Fertig- und Abholzeiten verlangen explizite Offsets und bleiben an beiden Europe-Berlin-DST-Uebergaengen eindeutige UTC-Instants.
+    evidence: FOCUSED_UNIT_MATRIX_DATE_AND_DST
+  - id: KR03A-A5
+    statement: Solange kein ratifizierter Auftragsstornovertrag existiert, bleibt cancellationClass unveraendert null mit benanntem Missing-Grund und kann nicht aus Status oder Text geraten werden.
+    evidence: FOCUSED_UNIT_MATRIX_CANCELLATION_MISSING
+  - id: KR03A-A6
+    statement: Das Paket enthaelt keine Migration, keinen Server-Port, keine Workflow-, Modulmanifest-, Public-Export-, UI-, Provider-, Auth-, Remote- oder Production-Aenderung.
+    evidence: EXACT_ALLOWLIST_DIFF_AND_FORBIDDEN_PATH_GATE
+  - id: KR03A-A7
+    statement: PR 115 ist am archivierten Head 71dbc815 geschlossen und pfadweise auf KR-03A, KR-03B1 und KR-03B2 disponiert; Queue und Mission zeigen nach KR-03A nur auf KR-03B1 und KR-03B2.
+    evidence: PR115_ARCHIVE_CLOSE_NON_LOSS_QUEUE_SCHEMA_MAPPING_AND_DELIVERY_GATE
+  - id: KR03A-A8
+    statement: KR-03A bleibt QUEUED_CANDIDATE und erhebt keinen Main-, Merge-, Remote-Migrations- oder Production-Claim.
+    evidence: MISSION_EXTERNAL_RECEIPT_REMOTE_MAIN_AND_DRAFT_PR
+local_gates:
+  - npm run quality:delivery-contracts:selftest
+  - npm run quality:delivery-contracts
+  - npx vitest run src/test/delivery_contracts.test.ts src/modules/orders/__tests__/orderTimelinessFacts.test.ts
+  - npx tsc --noEmit
+  - npx eslint src/modules/orders/domain/orderTimelinessFacts.ts src/modules/orders/__tests__/orderTimelinessFacts.test.ts scripts/quality/check-delivery-contracts.mjs src/test/delivery_contracts.test.ts
+  - npm run quality:authority-gate:selftest
+  - npm run quality:authority-gate
+  - npm run quality:module-gates
+  - npm run quality:no-fake-production
+  - npm run lint:ratchet
+  - git diff --check
+  - npm run verify:precommit
+required_checks_after_push:
+  - quality
+  - agentur-gate
+  - Fresh Supabase replay
+non_required_but_must_pass:
+  - ratchet
+gate_mapping_contract: docs/delivery/GATE_MAPPING_V1.yaml
+findings_ledger_contract: docs/delivery/FINDINGS_LEDGER_SCHEMA_V1.json
+closure_receipt_contract: docs/delivery/EXACT_SHA_CLOSURE_RECEIPT_SCHEMA_V1.json
+evidence_mode: CI_FULL
+evidence_mode_status: PURE_DOMAIN_PACKAGE_FULL_MAIN_BASE_CI_NO_REMOTE_DB_EFFECT
+resource_profile:
+  mode: SERIAL_NO_PARALLEL_BUILD_OR_TEST_WRITERS
+  heavy_profile: NONE
+  available_ram_mb_preflight: 5896
+  shell_probe_seconds_preflight: 0.095
+  git_status_seconds_preflight: 0.104
+  expected_runtime_minutes: 35
+  cleanup_receipt: PID_OR_RUN_ID_OUTPUT_TIMESTAMP_PHYSICAL_EXIT_AND_CLEAN_TREE_REQUIRED_CPU_NOT_SUFFICIENT
+findings: []
+split_or_follow_up_decision: >-
+  KR-03A bleibt strikt auf reine, serverfreie Faktenableitung und ihre Unitmatrix
+  begrenzt. Finale DB-Views gehoeren ausschliesslich in KR-03B1; Server-Port,
+  Public-Fassade, Modulmanifest und Fresh-DB-Integration ausschliesslich in
+  KR-03B2.
+next_allowed_package: KR-03A-EXACT-SHA-CLAUDE-REVIEW
+package_specific:
+  source_pr: 115
+  source_head: 71dbc8151b30a3aa964d5cd4ea3562b1f1c03647
+  source_archive_ref: archive/pr-115-71dbc815
+  source_pr_disposition: CLOSED_UNMERGED_FRESH_THREE_PACKAGE_REBUILD
+  historical_defect: VALID_V1_WAS_CLASSIFIED_AS_MISSING_INSTEAD_OF_SUPPLYING_CREATED_AT
+  fact_module: src/modules/orders/domain/orderTimelinessFacts.ts
+  unit_test: src/modules/orders/__tests__/orderTimelinessFacts.test.ts

@@ -38,3 +38,9 @@ supabase/migrations/20260805180624_production_schema_baseline.sql -whitespace
 supabase/migrations/20260806120200_prod_faithful_app_functions.sql -whitespace
 supabase/migrations/20260807090000_f0_05_rls_contract_hardening.sql -whitespace
 supabase/migrations/20260807090100_f0_06_storage_view_hardening.sql -whitespace
+
+# KR-00G: externe Referenzdokumente bytegetreu speichern; Markdown-Hardbreaks sind Quellinhalt
+docs/module/** -text -whitespace
+docs/project/BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md -text -whitespace
+docs/project/00_OFFENE_PUNKTE_KREILE_2026-09-26.md -text -whitespace
+docs/project/PRUEFUNG_DOSSIERS_2026-09-26.md -text -whitespace

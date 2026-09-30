@@ -1,0 +1,152 @@
+schema_version: 1
+package_id: KR-00B-TRUTH-SYNC
+project: GALVANIK_KREILE_WERKSTATTCockpit
+state: CORRECTED_ONCE_PENDING_TARGETED_DELTA_REVIEW
+origin_main_sha: 21a23567d51e4805f065ce9ae8c59bdc5faf9fa9
+queue_parent_sha: 037f2fd65635c646e895da0002b25e7740f9f4a2
+base_sha: 037f2fd65635c646e895da0002b25e7740f9f4a2
+target_sha: PENDING_AFTER_LOCAL_VERIFICATION
+branch: codex/kr-00b-truth-sync
+goal: >-
+  Die am 25. und 26. September dokumentierten Owner-Eingaben einmalig gegen
+  die kanonischen Wahrheitsarten disponieren, die daraus aktiven
+  Produktentscheidungen additiv ratifizieren und die stale externe
+  Sitzungssteuerung an den realen Ein-Worktree-Paketprozess anpassen.
+active_mission_file: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+dod_spec_approved_by:
+  authority: OWNER_CURRENT_TASK
+  date: 2026-09-28
+  instruction: >-
+    Den redteam-geprueften Plan paketweise umsetzen; bei externer Mergegrenze
+    einen exakten Kandidaten einfrieren und seriell auf dessen SHA fortsetzen.
+execution_actors:
+  kreile_pl_session: 01a0ce4b-1843-7361-9ffc-47933f9ecdde
+  build_coordinator_and_authorized_future_merge_actor: 01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  merge_limit: NO_MAIN_MERGE_UNTIL_EXPLICIT_PRODUCTION_EFFECT_AUTHORITY
+source_locks:
+  - source: origin/main
+    sha: 21a23567d51e4805f065ce9ae8c59bdc5faf9fa9
+  - source: KR-00B0-GOVERNANCE-BOOTSTRAP
+    sha: 037f2fd65635c646e895da0002b25e7740f9f4a2
+    status: CI_VERIFIED_AWAITING_EXTERNAL_MERGE_GATE
+  - source: OWNER_ENTSCHEIDUNGEN_2026-09-25_26.md
+    location: _MODULDOSSIERS/00_PROJEKT
+    sha256: 02578C1AE676522C459DBE31ECFCA082F57DB25235946229D86758B0FF86EC34
+    status: OWNER_INPUT_TO_CLASSIFY
+  - source: BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
+    location: _MODULDOSSIERS/00_PROJEKT
+    status: FINAL_AFTER_ONE_OPUS_REDTEAM__OWNER_EXECUTION_AMENDMENT_2026-09-28
+  - source: external_session_control_after_sync
+    location: ../AGENTS.md
+    sha256: D5FC6CEEA1472C614D6D86E18504DB7D7EDEC2DB5DAED6CC494B8FE8AC3B22B2
+    status: EXTERNAL_SESSION_CONTROL_CORRECTED_NOT_PRODUCT_TRUTH
+repo_allowlist:
+  - docs/delivery/packages/KR-00B-TRUTH-SYNC.yaml
+  - docs/project/DOCUMENT_AUTHORITY.md
+  - docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md
+  - docs/project/linie/MODULKARTE_KANON.md
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+external_session_control_allowlist:
+  - ../AGENTS.md
+forbidden:
+  - src/**
+  - supabase/**
+  - package.json
+  - package-lock.json
+  - .github/**
+  - provider_or_runtime_configuration
+  - remote_database_or_production_mutation
+  - merge_to_main
+new_objects_authority: OWNER_RATIFIED_GOVERNANCE_ONLY
+migration_status: NONE
+review_contract:
+  broad_claude_reviews: 1
+  max_correction_rounds: 1
+  delta_review_after_correction: true
+  reviewer_must_differ_from_writer: true
+acceptance:
+  - id: KR00B-A1
+    statement: >-
+      OE-2609-01 bis OE-2609-33 besitzen jeweils genau eine nachvollziehbare
+      Disposition und aktivieren keine externe Notiz still als zweite Wahrheit.
+    evidence: DECISION_REGISTER_DISPOSITION_TABLE
+  - id: KR00B-A2
+    statement: >-
+      Analyse und Buchhaltung bleiben spaetere Fachmodule; alte Routen bleiben
+      entfernbar, waehrend die spaeteren Module und der Analyse-Menuepunkt
+      ausdruecklich erhalten sind.
+    evidence: DECISION_REGISTER_AND_MODULE_MAP_READBACK
+  - id: KR00B-A3
+    statement: >-
+      Rechnung auf Ziel verwendet 14 Tage und optional zwei Prozent Skonto bei
+      Zahlung binnen zehn Tagen; die alte Netto-30-Aussage ist supersediert.
+    evidence: DECISION_REGISTER_AND_MISSION_READBACK
+  - id: KR00B-A4
+    statement: >-
+      Additive Tabellen und Views innerhalb eines ratifizierten Vertrags, die
+      DoD-Freigabe und der spaetere Merge-Akteur sind konkret gebunden, ohne
+      Remote-Migration oder Productionfreigabe.
+    evidence: ACTOR_AND_AUTHORITY_READBACK
+  - id: KR00B-A5
+    statement: >-
+      PR 86, 95, 96 und 110 bis 112 haben einen belegten GitHub- und
+      Hauptlinienstatus; Unbekanntes wird nicht als Lieferung ausgegeben.
+    evidence: PR_MAIN_ANCESTRY_TABLE
+  - id: KR00B-A6
+    statement: >-
+      Die externe AGENTS.md bezeichnet sich als nachgeordnete
+      Sitzungssteuerung und verbietet den real autorisierten Paketbranch nicht
+      mehr aufgrund des historischen feature/capture-auth-tenant-Zustands.
+    evidence: EXTERNAL_AGENTS_READBACK
+  - id: KR00B-A7
+    statement: Der Diff bleibt exakt innerhalb der Repo- und External-Allowlist.
+    evidence: GIT_DIFF_NAME_ONLY_AND_EXTERNAL_HASH
+local_gates:
+  - npm run quality:authority-gate:selftest
+  - npm run quality:authority-gate
+  - npm run quality:module-gates
+  - npm run quality:no-fake-production
+  - git diff --check
+local_gate_evidence:
+  authority_gate_selftest: PASS_NEGATIVE_CASES_27_OF_27
+  authority_gate: PASS_TRUTH_TYPES_7_UI_REFERENCES_4
+  module_gates: PASS
+  no_fake_production: PASS
+  oe_disposition_rows: PASS_33_OF_33
+  payment_term_readback: PASS_AUTHORITATIVE_SOURCES_ONLY__STALE_NET_30_REMAINS_IN_HISTORICAL_NON_AUTHORITATIVE_PL_BRIEFING_2026_09_05_L20
+  module_map_readback: PASS_M01_M02_M03_LATER_AND_ANALYSIS_MENU_AFTER_BINDING
+  actor_readback: PASS_PL_AND_BUILD_COORDINATOR_BOUND
+  external_stale_marker_readback: PASS_NONE
+  yaml_parse: PASS_MANIFEST_AND_MISSION
+  git_diff_check: PASS
+required_checks_after_push:
+  - quality
+  - agentur-gate
+  - Fresh Supabase replay
+non_required_but_must_pass:
+  - ratchet
+production_effect: NONE_BEFORE_MAIN_MERGE
+next_packages:
+  - KR-00D-ALTINVENTAR
+findings:
+  - id: KR00B-R1-P1-1
+    severity: P1
+    status: CORRECTED_ONCE
+    statement: >-
+      CURRENT_STATE.md belegt noch main@13240de2 und ist damit stale gegen
+      origin/main@21a23567; die vorwaertsgerichtete Aufloesung ist im
+      Altinventar-Paket KR-00D gebunden, ohne CURRENT_STATE ausserhalb dieser
+      Allowlist zu veraendern.
+  - id: KR00B-R1-P2-1
+    severity: P2
+    status: CORRECTED_ONCE
+    statement: >-
+      Der Payment-Term-Readback ist auf autoritative Quellen begrenzt und
+      benennt die weiterhin erhaltene historische Netto-30-Aussage ehrlich.
+  - id: KR00B-R1-P2-2
+    severity: P2
+    status: CORRECTED_ONCE
+    statement: >-
+      BLOCKED_CAPABILITY_ADAPTER_MISSING ist in der externen Sitzungssteuerung
+      als Unterlabel von BLOCKED_EXTERNAL_PERMISSION abgebildet und erweitert
+      die Repository-Abschlussstatus nicht.

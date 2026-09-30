@@ -19,6 +19,9 @@
 //         quality/module-gates-baseline.json (shrink-only, gegen Basis-Baseline geprueft;
 //         S4 leert sie).
 // Naht 6  AGENTS.md verweist auf ARCHITEKTUR_MODULE_PATH1.md.
+// Naht 7  Die breite KR-00G-Git-Attribut-Ausnahme fuer docs/module/** darf nur
+//         die 225 source-gelockten Referenzimporte treffen. Neue oder fehlende
+//         Dateien sowie unvollstaendige Attribute = FAIL.
 //
 // Aufruf:  node scripts/quality/check-module-gates.mjs [--root <dir>]
 //            [--base-baseline <quality/module-gates-baseline.json der Basis>]
@@ -39,6 +42,15 @@ export const BASELINE_PATH = "quality/module-gates-baseline.json";
 export const SCHEMA_PATH = "docs/architecture/MODULE_MANIFEST.schema.json";
 export const MODULES_DIR = "src/modules";
 export const AGENTS_REQUIRED_REFERENCE = "ARCHITEKTUR_MODULE_PATH1.md";
+export const KR00G_SOURCE_LOCK_PATH = "docs/project/KR-00G_SOURCE_LOCKS_2026-09-29.md";
+export const KR00G_EXPECTED_SOURCE_COUNT = 225;
+export const KR00G_EXPECTED_MODULE_COUNT = 222;
+export const KR00G_REFERENCE_ATTRIBUTE_LINES = [
+  "docs/module/** -text -whitespace",
+  "docs/project/BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md -text -whitespace",
+  "docs/project/00_OFFENE_PUNKTE_KREILE_2026-09-26.md -text -whitespace",
+  "docs/project/PRUEFUNG_DOSSIERS_2026-09-26.md -text -whitespace",
+];
 
 // Naht 5 — verworfen laut docs/project/linie/ui/00_UI_REFERENZ_KANONISCH.md + MODULKARTE_KANON.md
 export const FORBIDDEN_UI_IDENTIFIERS = [
@@ -89,12 +101,12 @@ function toPosix(p) {
 }
 // Symlinks (Red-Team P0): werden verfolgt, muessen aber innerhalb <root> bleiben —
 // sonst Befund (Dateien ausserhalb waeren fuer das Gate unsichtbar). Schleifenschutz via Realpath.
-function walk(root, relDir, out, seen = new Set(), findings = null) {
+function walk(root, relDir, out, seen = new Set(), findings = null, skipDirs = SKIP_DIRS) {
   const abs = path.join(root, relDir);
   if (!existsSync(abs)) return out;
   const rootReal = realpathSync(root);
   for (const entry of readdirSync(abs, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-    if (SKIP_DIRS.has(entry.name)) continue;
+    if (skipDirs.has(entry.name)) continue;
     const rel = toPosix(path.join(relDir, entry.name));
     const entryAbs = path.join(abs, entry.name);
     let isDir = entry.isDirectory();
@@ -117,7 +129,7 @@ function walk(root, relDir, out, seen = new Set(), findings = null) {
       isDir = st.isDirectory();
       isFile = st.isFile();
     }
-    if (isDir) walk(root, rel, out, seen, findings);
+    if (isDir) walk(root, rel, out, seen, findings, skipDirs);
     else if (isFile) out.push(rel);
   }
   return out;
@@ -974,6 +986,162 @@ function gateAgents(root, findings) {
   }
 }
 
+// â”€â”€ Naht 7: KR-00G Referenzimporte bleiben exakt source-gelockt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+function parseKr00gLockedTargets(source, findings) {
+  const targets = new Set();
+  for (const line of source.split(/\r?\n/)) {
+    if (!line.startsWith("|")) continue;
+    const cells = line.split("|").slice(1, -1).map((cell) => cell.trim());
+    const target = cells[1];
+    if (!target?.startsWith("docs/")) continue;
+    if (targets.has(target)) findings.push(`[naht7] ${KR00G_SOURCE_LOCK_PATH}: doppeltes Repo-Ziel '${target}'`);
+    targets.add(target);
+  }
+  return targets;
+}
+
+function gitAttributePatternRegex(pattern) {
+  if (typeof pattern !== "string" || pattern.length === 0 || pattern.endsWith("/")) return null;
+  let normalized = pattern.startsWith("/") ? pattern.slice(1) : pattern;
+  const anchored = normalized.includes("/");
+  let source = anchored ? "^" : "(?:^|/)";
+
+  for (let index = 0; index < normalized.length; index++) {
+    const char = normalized[index];
+    if (char === "\\") {
+      if (index + 1 >= normalized.length) return null;
+      source += normalized[++index].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      continue;
+    }
+    if (char === "*") {
+      if (normalized[index + 1] === "*") {
+        const atSegmentStart = index === 0 || normalized[index - 1] === "/";
+        const followedBySlash = normalized[index + 2] === "/";
+        if (atSegmentStart && followedBySlash) {
+          source += "(?:.*/)?";
+          index += 2;
+        } else {
+          source += ".*";
+          index += 1;
+        }
+      } else {
+        source += "[^/]*";
+      }
+      continue;
+    }
+    if (char === "?") {
+      source += "[^/]";
+      continue;
+    }
+    if (char === "[") {
+      const end = normalized.indexOf("]", index + 1);
+      if (end === -1) return null;
+      let content = normalized.slice(index + 1, end);
+      if (content.startsWith("!")) content = `^${content.slice(1)}`;
+      source += `[${content.replaceAll("\\", "\\\\")}]`;
+      index = end;
+      continue;
+    }
+    source += char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+  return new RegExp(`${source}$`);
+}
+
+function parseGitAttributeLine(trimmed) {
+  if (!trimmed.startsWith('"')) {
+    const [pattern, ...attributes] = trimmed.split(/\s+/);
+    return { pattern, attributes, valid: Boolean(pattern) };
+  }
+  let end = 1;
+  while (end < trimmed.length) {
+    if (trimmed[end] === '"' && trimmed[end - 1] !== "\\") break;
+    end++;
+  }
+  if (end >= trimmed.length) return { pattern: "", attributes: [], valid: false };
+  try {
+    const pattern = JSON.parse(trimmed.slice(0, end + 1));
+    const attributes = trimmed.slice(end + 1).trim().split(/\s+/).filter(Boolean);
+    return { pattern, attributes, valid: typeof pattern === "string" };
+  } catch {
+    return { pattern: "", attributes: [], valid: false };
+  }
+}
+
+function gateKr00gReferenceAttributes(root, findings) {
+  const lockAbs = path.join(root, KR00G_SOURCE_LOCK_PATH);
+  const attributesAbs = path.join(root, ".gitattributes");
+  const attributes = existsSync(attributesAbs) ? readFileSync(attributesAbs, "utf8") : "";
+  const hasKr00gAttribute = KR00G_REFERENCE_ATTRIBUTE_LINES.some((line) => attributes.split(/\r?\n/).includes(line));
+
+  // Vor KR-00G existieren weder Source-Lock noch Ausnahme. Sobald eine Seite
+  // vorhanden ist, ist der Vertrag beidseitig und fail-closed.
+  if (!existsSync(lockAbs) && !hasKr00gAttribute) return;
+  if (!existsSync(lockAbs)) {
+    findings.push(`[naht7] ${KR00G_SOURCE_LOCK_PATH}: fehlt trotz KR-00G-Attributausnahme`);
+    return;
+  }
+  if (!existsSync(attributesAbs)) {
+    findings.push("[naht7] .gitattributes: fehlt trotz KR-00G-Source-Lock");
+    return;
+  }
+
+  const lockedTargets = parseKr00gLockedTargets(readFileSync(lockAbs, "utf8"), findings);
+  const moduleTargets = new Set([...lockedTargets].filter((target) => target.startsWith("docs/module/")));
+  const projectTargets = new Set([...lockedTargets].filter((target) => target.startsWith("docs/project/")));
+  if (lockedTargets.size !== KR00G_EXPECTED_SOURCE_COUNT) {
+    findings.push(`[naht7] ${KR00G_SOURCE_LOCK_PATH}: ${lockedTargets.size} eindeutige Ziele, erwartet ${KR00G_EXPECTED_SOURCE_COUNT}`);
+  }
+  if (moduleTargets.size !== KR00G_EXPECTED_MODULE_COUNT) {
+    findings.push(`[naht7] ${KR00G_SOURCE_LOCK_PATH}: ${moduleTargets.size} docs/module-Ziele, erwartet ${KR00G_EXPECTED_MODULE_COUNT}`);
+  }
+
+  const expectedProjectTargets = new Set(KR00G_REFERENCE_ATTRIBUTE_LINES.slice(1).map((line) => line.split(" ")[0]));
+  for (const target of expectedProjectTargets) {
+    if (!projectTargets.has(target)) findings.push(`[naht7] ${KR00G_SOURCE_LOCK_PATH}: Attributziel '${target}' ist nicht source-gelockt`);
+  }
+  for (const target of projectTargets) {
+    if (!expectedProjectTargets.has(target)) findings.push(`[naht7] ${KR00G_SOURCE_LOCK_PATH}: unerwartetes docs/project-Ziel '${target}'`);
+  }
+
+  const attributeLines = attributes.split(/\r?\n/);
+  const approvedAttributeLines = new Set(KR00G_REFERENCE_ATTRIBUTE_LINES);
+  for (const expected of KR00G_REFERENCE_ATTRIBUTE_LINES) {
+    const count = attributeLines.filter((line) => line === expected).length;
+    if (count !== 1) findings.push(`[naht7] .gitattributes: '${expected}' exakt einmal erwartet, gefunden ${count}`);
+  }
+  for (const line of attributeLines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#") || approvedAttributeLines.has(trimmed)) continue;
+    const parsed = parseGitAttributeLine(trimmed);
+    const removesTextHandling = parsed.attributes.some((attribute) =>
+      ["-text", "-whitespace", "text=false"].includes(attribute),
+    );
+    if (!removesTextHandling) continue;
+    const matcher = parsed.valid ? gitAttributePatternRegex(parsed.pattern) : null;
+    if (!matcher) {
+      findings.push(`[naht7] .gitattributes: nicht pruefbare KR-00G-Attributregel '${trimmed}'`);
+      continue;
+    }
+    if ([...lockedTargets].some((target) => matcher.test(target))) {
+      findings.push(`[naht7] .gitattributes: nicht genehmigte breitere KR-00G-Attributregel '${trimmed}'`);
+    }
+  }
+
+  // Unter dem Importpfad darf auch ein spaeter angelegtes Verzeichnis namens
+  // node_modules nicht unsichtbar werden. Nur .git bleibt als Repo-Metadaten ausgenommen.
+  const moduleFiles = new Set(walk(root, "docs/module", [], new Set(), findings, new Set([".git"])));
+  for (const file of moduleFiles) {
+    if (!moduleTargets.has(file)) findings.push(`[naht7] ${file}: von docs/module/** erfasst, aber nicht im KR-00G-Source-Lock`);
+  }
+  for (const target of moduleTargets) {
+    if (!moduleFiles.has(target)) findings.push(`[naht7] ${target}: source-gelockter KR-00G-Import fehlt`);
+  }
+  for (const target of projectTargets) {
+    if (!existsSync(path.join(root, target))) findings.push(`[naht7] ${target}: source-gelockter KR-00G-Projektimport fehlt`);
+  }
+}
+
 // ── Orchestrierung ───────────────────────────────────────────────────────────
 
 function readBaseline(absPath, findings) {
@@ -1009,6 +1177,7 @@ export function runModuleGates(root, { baseBaselinePath = null, schemaPath = nul
   gateData(root, findings, manifests);
   gateUi(root, findings, baseline, baseBaseline);
   gateAgents(root, findings);
+  gateKr00gReferenceAttributes(root, findings);
   if (existsSync(path.join(root, "quality/authoritative-sources.json"))) {
     for (const finding of checkAuthorityRepository(root)) findings.push(`[authority] ${finding}`);
   } else if (existsSync(path.join(root, "package.json"))) {
@@ -1058,7 +1227,7 @@ if (isMain) {
   }
   const result = runModuleGates(opts.root, { baseBaselinePath: opts.baseBaselinePath, schemaPath: opts.schemaPath });
   if (result.ok) {
-    console.log("module-gates: alle Naehte halten (Manifest, Fassade, v_*-Daten, UI-Vertrag, AGENTS, Authority).");
+    console.log("module-gates: alle Naehte halten (Manifest, Fassade, v_*-Daten, UI-Vertrag, AGENTS, KR-00G-Source-Lock, Authority).");
   } else {
     console.error(`module-gates: ${result.findings.length} Verstoss/Verstoesse`);
     for (const f of result.findings) console.error("  " + f);
