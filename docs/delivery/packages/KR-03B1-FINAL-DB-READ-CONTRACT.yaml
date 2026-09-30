@@ -1,0 +1,293 @@
+schema_version: 2
+package_id: KR-03B1-FINAL-DB-READ-CONTRACT
+project: GALVANIK_KREILE_WERKSTATTCockpit
+state: CONTRACT_READY
+execution_state_source: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+manifest_profile: ROLLING_V2
+queue_parent_sha: 2ddd19791e704e463de9b0c1eb665bfea557e36a
+base_sha: 2ddd19791e704e463de9b0c1eb665bfea557e36a
+origin_main_sha: fa1a989fa5844305e6a8200832ed43e2fc230751
+target_sha: PENDING_AFTER_LOCAL_VERIFICATION
+branch: codex/kr-03b1-final-db-read-contract
+goal: >-
+  Den finalen G04-Datenbank-Lesevertrag frisch auf dem remote-identischen,
+  unabhaengig geprueften KR-03A-Kandidaten bauen: genau zwei gehaertete,
+  tenantgebundene public.v_*-Views liefern die kanonischen Auftragsfakten und
+  jede V1/V2-Abholereigniszeile genau einmal. due_date bleibt alleinige
+  Terminwahrheit; promised_due_date wird nur als Berlin-basierte
+  Konfliktklasse ohne zweiten Datumswert exponiert. Kein Server-Port.
+active_mission_file: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+dod_spec_approved_by:
+  authority: OWNER_CURRENT_TASK_AND_RATIFIED_BUILDPLAN
+  date: "2026-09-29"
+  instruction: >-
+    KR-03B1 nach abgeschlossenem KR-03A seriell bauen, mit genau einer neuen
+    finalen Migration, fokussiertem Fresh-DB-Nachweis, einer Opus-Review und
+    hoechstens einer Korrekturrunde. Kein Main-Merge oder Production-Effekt.
+execution_actors:
+  writer: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  implementation_reviewer: CLAUDE_OPUS_NEW_READ_ONLY_SESSION_AFTER_EXACT_SHA
+  specialist_gate_reviewers: GITHUB_ACTIONS_REQUIRED_CHECK_RUNNERS_AFTER_PUSH
+  kreile_pl_session: 01a0ce4b-1843-7361-9ffc-47933f9ecdde
+  authorized_future_merge_actor: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  merge_limit: NO_MAIN_MERGE_UNTIL_EXPLICIT_PRODUCTION_EFFECT_AUTHORITY
+dependency:
+  package: KR-03A-DELIVERY-ADHERENCE-DOMAIN
+  candidate_sha: 2ddd19791e704e463de9b0c1eb665bfea557e36a
+  status: REVIEWED_CANDIDATE_PENDING_MAIN_BASE_CI_AND_EXTERNAL_MERGE_GATE
+  review_result: PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN_QUEUED_CANDIDATE
+  review_evidence: ../_MODULDOSSIERS/00_PROJEKT/KR-03A_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md
+  review_evidence_sha256: E86559D48ED49F510E5D849EC6E47E05E3DDCDA62D1BD5571EE2AACF68997BC1
+dossier_and_decision_ids:
+  - BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL_SECTION_5_KR_03B1
+  - D-QA-001
+  - OE-2609-21
+  - A-G04-008
+  - A-G04-017
+  - A-G04-018
+  - A-G04-022
+  - F-G04-007
+  - K-G04-008
+  - PR115_ARCHIVE_DISPOSITION_2026-09-29
+  - KR03A_OPUS_P3_2_4_5
+source_locks:
+  - kind: REPO_FILE
+    source: docs/project/BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
+    location: REPO
+    repo_commit: 2ddd19791e704e463de9b0c1eb665bfea557e36a
+    sha256: F9C165871EDD24E5CA3EC826C24A791BB34CB6C32244C424FBB87543B6E73E8A
+  - kind: REPO_FILE
+    source: docs/module/G04_AUFTRAEGE/01_ANFORDERUNGSKATALOG.md
+    location: REPO
+    repo_commit: 2ddd19791e704e463de9b0c1eb665bfea557e36a
+    sha256: 5E3F0858F0A6A64C21927EFAF2B00F50FE91E3E84D2C9ABD5E3C24F9F09E7A6D
+  - kind: REPO_FILE
+    source: docs/module/G04_AUFTRAEGE/04_SCHNITTSTELLEN_DATEN.md
+    location: REPO
+    repo_commit: 2ddd19791e704e463de9b0c1eb665bfea557e36a
+    sha256: 6E62AD2A45B9DA5BDE7CE8E7C309CE25D6AFB9710C6F68C24B45B75945889963
+  - kind: REPO_FILE
+    source: src/modules/orders/domain/orderTimelinessFacts.ts
+    location: REPO
+    repo_commit: 2ddd19791e704e463de9b0c1eb665bfea557e36a
+    sha256: 1950AEF3176160904771ACE1B99BC366166E6F106C5D54F341BA7F0A01B0A547
+  - kind: REPO_FILE
+    source: supabase/migrations/20260905100000_f1_5_payment_goods_out_contract.sql
+    location: REPO
+    repo_commit: 2ddd19791e704e463de9b0c1eb665bfea557e36a
+    sha256: 04AAF5F4DC3DB65366BA055467107868BA0266D929EFFE16A01AF99E4D6D208C
+  - kind: REPO_FILE
+    source: supabase/migrations/20260909170000_f1_5_payment_goods_out_v2_contract.sql
+    location: REPO
+    repo_commit: 2ddd19791e704e463de9b0c1eb665bfea557e36a
+    sha256: C0C123B3A1F09B57D91F5789CED44F871A73C97DC2FCB7D31831D6E20C7BB0FF
+  - kind: REPO_FILE
+    source: .github/workflows/quality.yml
+    location: REPO
+    repo_commit: 2ddd19791e704e463de9b0c1eb665bfea557e36a
+    sha256: 2A3CFAE08D6761A32D1F1D07CB5F34B09DE483EE90AD6014FAD89DD421A8E857
+  - kind: REPO_FILE
+    source: quality/eslint-baseline.json
+    location: REPO
+    repo_commit: 2ddd19791e704e463de9b0c1eb665bfea557e36a
+    sha256: 2F1125BA24FF1322756BC0071B398ED0BE95FE0A6D7BE3768AA72C935860357B
+  - kind: REPO_FILE
+    source: docs/delivery/packages/KR-03A-DELIVERY-ADHERENCE-DOMAIN.yaml
+    location: REPO
+    repo_commit: 2ddd19791e704e463de9b0c1eb665bfea557e36a
+    sha256: 9A2245D03909CEB7084E4225491C04A1427CB8E34B0ED907B97A5487307EACA5
+  - kind: EXTERNAL_FILE
+    source: BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: EAEDDEF68C16BE403C6D05AD6F63234D4ACF75A762895F50008E07A59A782DC3
+    status: FINAL_AFTER_ONE_OPUS_REDTEAM_AND_OWNER_EXECUTION_AMENDMENT
+  - kind: EXTERNAL_FILE
+    source: BAUANALYSE_LOESUNGEN_2026-09-28.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: 16A170DB5DCFD96D2A165BA538536ADF1777FAD4F4271AD310B6548AE3AAF25F
+    status: V1_AND_V2_ACTIVE_EXACTLY_ONE_VALID_EVENT_RULE
+  - kind: EXTERNAL_FILE
+    source: KR-03A_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: E86559D48ED49F510E5D849EC6E47E05E3DDCDA62D1BD5571EE2AACF68997BC1
+    status: PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN
+repo_allowlist:
+  - .github/workflows/quality.yml
+  - quality/eslint-baseline.json
+  - docs/delivery/packages/KR-03B1-FINAL-DB-READ-CONTRACT.yaml
+  - docs/delivery/ROLLING_MANIFEST_QUEUE_SCHEMA_V1.json
+  - docs/delivery/ROLLING_MANIFEST_QUEUE_V1.json
+  - docs/delivery/GATE_MAPPING_V1.yaml
+  - docs/project/NON_LOSS_REGISTER.md
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - scripts/quality/check-delivery-contracts.mjs
+  - src/test/delivery_contracts.test.ts
+  - supabase/migrations/20260929200000_g04_order_timeliness_read_contract.sql
+  - src/test/g04_order_timeliness_read_contract.integration.test.ts
+  - docs/module/G04_AUFTRAEGE/01_ANFORDERUNGSKATALOG.md
+  - docs/module/G04_AUFTRAEGE/04_SCHNITTSTELLEN_DATEN.md
+forbidden:
+  - every_product_path_except_the_five_named_product_paths
+  - every_supabase_migration_except_20260929200000_g04_order_timeliness_read_contract_sql
+  - every_quality_baseline_change_except_the_D_QA_001_judge_hash_refresh
+  - src/modules/orders/domain/**
+  - src/modules/orders/server/**
+  - src/modules/orders/server-public.ts
+  - src/modules/orders/public.ts
+  - src/modules/orders/orders.manifest.json
+  - src/app/**
+  - src/components/**
+  - package_json_or_lockfile_change
+  - table_function_index_rls_policy_role_session_auth_or_write_path_change
+  - provider_runtime_remote_database_or_production_mutation
+  - main_merge_or_production_deploy
+scope_budget:
+  max_product_files: 8
+  max_handwritten_product_lines: 800
+  max_new_migrations: 1
+  planned_product_files: 5
+  planned_governance_files: 9
+follow_up_packages:
+  - KR-03B2-AUTHORIZED-SERVER-PORT
+new_objects_authority: DELEGATED_RATIFIED_CONTRACT
+migration_status: LOCAL_FILE_ONLY
+applicable_register_gates:
+  FUNCTIONAL_SLICE_PASS: REQUIRED
+  DATA_TRUTH_PASS: REQUIRED
+  UI_REFERENCE_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+  OWNER_UX_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+register_gate_evidence:
+  FUNCTIONAL_SLICE_PASS:
+    applicability: REQUIRED
+    stage: LOCAL_VERIFIED
+    evidence_ref: acceptance:KR03B1-A2
+  DATA_TRUTH_PASS:
+    applicability: REQUIRED
+    stage: LOCAL_VERIFIED
+    evidence_ref: acceptance:KR03B1-A3
+  UI_REFERENCE_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: OWNER_PREVIEWED
+    evidence_ref: invariant:roles_and_commands
+  OWNER_UX_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: OWNER_PREVIEWED
+    evidence_ref: invariant:roles_and_commands
+invariants:
+  data_truth: >-
+    orders.due_date bleibt die einzige bestaetigte Terminwahrheit.
+    promised_due_date verlaesst den Vertrag nicht als Datumswert, sondern nur
+    als read-only Diagnoseklasse nach dem Europe-Berlin-Kalendertag.
+  tenant_and_rls: >-
+    Beide security-invoker Views liefern ohne nichtleere app.tenant_id-GUC
+    null Zeilen, filtern exakt auf denselben Tenant und aendern keine
+    bestehende RLS- oder Policy-Regel.
+  roles_and_commands: NO_ROLE_COMMAND_AUTH_SESSION_SERVER_PORT_UI_OR_VISIBLE_CAPABILITY_CHANGE
+  receipt_and_readback: >-
+    Die Ereignis-View liefert event_id, Typ, Schema- und Aggregatversion sowie
+    created_at und die fuer die V1/V2-Validierung benoetigten nicht-rohen
+    Skalare; rohe Payload- und Finanzfelder bleiben ausgeschlossen.
+  reload_and_race: >-
+    Die Ereignisprojektion liest jede passende Basistabellenzeile direkt und
+    genau einmal, ohne Join, Aggregation, MIN oder DISTINCT ON; Mehrfachereignisse
+    bleiben fuer die fail-closed Domaene sichtbar.
+  error_behavior: >-
+    Fehlende oder leere Tenant-GUC liefert ein leeres Resultset. Ein falscher
+    JSON-Typ wird als NULL projiziert und kann die View nicht sprengen; die
+    Domaene klassifiziert ihn spaeter als ungueltig.
+  rollback: >-
+    Die eine additive Migration kann vor Remote-Ausfuehrung durch Entfernen
+    der lokalen Datei verworfen werden; es gibt keinen Remote- oder
+    Production-Effekt und keine Datenumschreibung.
+visible_capabilities:
+  registry_changes: NONE
+  quality_no_fake_production: REQUIRED_DEFENSIVE_GATE
+review_contract:
+  broad_claude_reviews: 1
+  max_correction_rounds: 1
+  delta_review_after_correction: true
+  reviewer_must_differ_from_writer: true
+  specialist_gate_reviewers_are_not_implementation_reviewers: true
+acceptance:
+  - id: KR03B1-A1
+    statement: Der Parent ist exakt der remote-gruene und Opus-gepruefte KR-03A-Kandidat 2ddd1979; origin/main bleibt separat fa1a989f.
+    evidence: REMOTE_PARENT_MAIN_AND_EXTERNAL_RECEIPT_READBACK
+  - id: KR03B1-A2
+    statement: Genau zwei public.v_order_timeliness_*-Views sind security_invoker, ohne Tenant-GUC leer, tenantisoliert und nur fuer service_role lesbar.
+    evidence: FRESH_DB_CATALOG_PRIVILEGE_AND_TENANT_MATRIX
+  - id: KR03B1-A3
+    statement: due_date bleibt der einzige Terminwert; promised_due_date wird nur als gleich, nur_due_date, nur_promised oder widerspruechlich nach Europe/Berlin klassifiziert, einschliesslich beider NULL als gleich.
+    evidence: FRESH_DB_LEGACY_CLASS_MATRIX_AND_BERLIN_EDGE
+  - id: KR03B1-A4
+    statement: Jede passende V1/V2-Basisereigniszeile erscheint anhand ihrer event_id genau einmal, ohne Join oder Aggregation; raw payload, paymentStatus und openAmountCents werden nicht exponiert.
+    evidence: FRESH_DB_V1_V2_DIRECT_PROJECTION_AND_COLUMN_CONTRACT
+  - id: KR03B1-A5
+    statement: Die neue Migration spielt auf einer frischen lokalen Supabase-Datenbank durch und ihr fokussierter Integrationstest laeuft im blockierenden Fresh-Supabase-CI-Job.
+    evidence: LOCAL_FRESH_REPLAY_FOCUSED_VITEST_AND_MAIN_BASE_CI
+  - id: KR03B1-A6
+    statement: Das kanonische G04-Dossier beschreibt V1 und V2 als gleichwertige aktive Abholereignisse und keinen V2-only-Vertrag mehr.
+    evidence: DOSSIER_EXACT_TEXT_AND_DELIVERY_DIFF
+  - id: KR03B1-A7
+    statement: Das Paket enthaelt keinen Server-Port, keine Public-Fassade, keine Modulmanifest-, Tabellen-, Funktions-, Index-, RLS-, Policy-, UI-, Provider-, Auth-, Remote- oder Production-Aenderung.
+    evidence: EXACT_ALLOWLIST_DIFF_AND_FORBIDDEN_PATH_GATE
+  - id: KR03B1-A8
+    statement: KR-03B1 bleibt QUEUED_CANDIDATE und erhebt keinen Main-, Merge-, Remote-Migrations- oder Production-Claim.
+    evidence: MISSION_EXTERNAL_RECEIPT_REMOTE_MAIN_AND_DRAFT_PR
+  - id: KR03B1-A9
+    statement: Die blockierende Fresh-Supabase-Testeinbindung migriert den geschuetzten D-QA-001-Pruefvertrag sichtbar; die ESLint-Baseline aendert dabei ausschliesslich den judgeContractHash und weder Fehlerschuld noch lintContractHash.
+    evidence: EXACT_BASELINE_DIFF_LINT_RATCHET_AND_PROTECTED_BASE_COMPARISON
+local_gates:
+  - npm run quality:delivery-contracts:selftest
+  - npm run quality:delivery-contracts
+  - npx vitest run src/test/delivery_contracts.test.ts
+  - npx supabase db reset --local --no-seed
+  - npx vitest run src/test/g04_order_timeliness_read_contract.integration.test.ts --maxWorkers=1 --no-file-parallelism
+  - npx tsc --noEmit
+  - npx eslint src/test/g04_order_timeliness_read_contract.integration.test.ts scripts/quality/check-delivery-contracts.mjs src/test/delivery_contracts.test.ts
+  - npm run quality:authority-gate:selftest
+  - npm run quality:authority-gate
+  - npm run quality:module-gates
+  - npm run quality:no-fake-production
+  - npm run lint:ratchet
+  - git diff --check
+  - npm run verify:precommit
+required_checks_after_push:
+  - quality
+  - agentur-gate
+  - Fresh Supabase replay
+non_required_but_must_pass:
+  - ratchet
+gate_mapping_contract: docs/delivery/GATE_MAPPING_V1.yaml
+findings_ledger_contract: docs/delivery/FINDINGS_LEDGER_SCHEMA_V1.json
+closure_receipt_contract: docs/delivery/EXACT_SHA_CLOSURE_RECEIPT_SCHEMA_V1.json
+evidence_mode: CI_FULL
+evidence_mode_status: DATABASE_CONTRACT_PACKAGE_REQUIRES_FRESH_LOCAL_AND_MAIN_BASE_REPLAY_NO_REMOTE_DB_EFFECT
+resource_profile:
+  mode: SERIAL_NO_PARALLEL_BUILD_OR_TEST_WRITERS
+  heavy_profile: DB_ONLY
+  available_ram_mb_preflight: 5786
+  shell_probe_seconds_preflight: 0.088
+  git_status_seconds_preflight: 0.139
+  expected_runtime_minutes: 45
+  cleanup_receipt: PID_OR_RUN_ID_OUTPUT_TIMESTAMP_PHYSICAL_EXIT_AND_CLEAN_TREE_REQUIRED_CPU_NOT_SUFFICIENT
+findings: []
+split_or_follow_up_decision: >-
+  KR-03B1 bleibt strikt auf die finale Datenbank-Leseprojektion, ihre
+  Dossierkorrektur und den Fresh-DB-Nachweis begrenzt. Server-Port,
+  Public-Fassade, Modulmanifest und die Domain-zu-DB-Mappingmatrix gehoeren
+  ausschliesslich in KR-03B2.
+next_allowed_package: KR-03B1-EXACT-SHA-CLAUDE-REVIEW
+package_specific:
+  ratchet_contract_migration: JUDGE_HASH_ONLY_NO_ESLINT_DEBT_OR_LINT_CONTRACT_CHANGE
+  source_pr: 115
+  source_head: 71dbc8151b30a3aa964d5cd4ea3562b1f1c03647
+  source_archive_ref: origin/archive/pr-115-71dbc815
+  source_pr_disposition: CLOSED_UNMERGED_COMPARISON_ONLY_NO_FILE_IMPORT
+  read_contract_views:
+    - public.v_order_timeliness_orders_v1
+    - public.v_order_timeliness_pickup_events_v1
+  migration_file: supabase/migrations/20260929200000_g04_order_timeliness_read_contract.sql
+  canonical_calendar_zone: Europe/Berlin
+  event_versions:
+    - ORDER_PICKED_UP_V1
+    - ORDER_PICKED_UP_V2

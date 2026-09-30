@@ -1,0 +1,278 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://galvanik-kreile.local/contracts/FINDINGS_LEDGER_SCHEMA_V1.json",
+  "title": "Kreile P0/P1/P2 findings ledger V1",
+  "description": "One immutable review ledger per exact candidate SHA. A second broad implementation review is forbidden; a correction may be followed only by a targeted delta review of the listed findings and whole-diff guards.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "ledger_id",
+    "package_id",
+    "candidate_sha",
+    "broad_review",
+    "correction_rounds",
+    "findings",
+    "counts",
+    "decision",
+    "next_package"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "ledger_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "package_id": {
+      "type": "string",
+      "pattern": "^KR-"
+    },
+    "candidate_sha": {
+      "$ref": "#/definitions/sha"
+    },
+    "broad_review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "model",
+        "session_id",
+        "started_at",
+        "ended_at",
+        "exit_code",
+        "scope",
+        "result"
+      ],
+      "properties": {
+        "run_id": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 },
+        "session_id": { "type": "string", "minLength": 1 },
+        "started_at": { "type": "string", "format": "date-time" },
+        "ended_at": { "type": "string", "format": "date-time" },
+        "exit_code": { "const": 0 },
+        "scope": { "const": "FULL_DIFF_EXACT_SHA" },
+        "result": {
+          "enum": [
+            "PASS_EXACT_SHA_NO_OPEN_P0_P1_P2",
+            "FAIL_OPEN_FINDINGS"
+          ]
+        }
+      }
+    },
+    "correction_rounds": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "delta_review": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "model",
+        "session_id",
+        "started_at",
+        "ended_at",
+        "exit_code",
+        "scope",
+        "result"
+      ],
+      "properties": {
+        "run_id": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 },
+        "session_id": { "type": "string", "minLength": 1 },
+        "started_at": { "type": "string", "format": "date-time" },
+        "ended_at": { "type": "string", "format": "date-time" },
+        "exit_code": { "const": 0 },
+        "scope": { "const": "NAMED_FINDINGS_PLUS_WHOLE_DIFF_GUARDS" },
+        "result": {
+          "const": "PASS_TARGETED_DELTA_NO_OPEN_P0_P1_P2"
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/finding"
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["p0", "p1", "p2", "p3", "open_p0", "open_p1", "open_p2", "open_p3"],
+      "properties": {
+        "p0": { "type": "integer", "minimum": 0 },
+        "p1": { "type": "integer", "minimum": 0 },
+        "p2": { "type": "integer", "minimum": 0 },
+        "p3": { "type": "integer", "minimum": 0 },
+        "open_p0": { "type": "integer", "minimum": 0 },
+        "open_p1": { "type": "integer", "minimum": 0 },
+        "open_p2": { "type": "integer", "minimum": 0 },
+        "open_p3": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "decision": {
+      "enum": [
+        "FREEZE_AS_REVIEWED_CANDIDATE",
+        "SPLIT",
+        "RECONTRACT",
+        "EXTERNAL_OWNER_GATE",
+        "ABANDON_AS_SUPERSEDED"
+      ]
+    },
+    "next_package": {
+      "type": ["string", "null"]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "correction_rounds": { "const": 0 }
+        }
+      },
+      "then": {
+        "properties": {
+          "delta_review": { "type": "null" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "correction_rounds": { "const": 1 }
+        }
+      },
+      "then": {
+        "required": ["delta_review"],
+        "properties": {
+          "delta_review": { "type": "object" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "decision": { "const": "FREEZE_AS_REVIEWED_CANDIDATE" }
+        }
+      },
+      "then": {
+        "properties": {
+          "findings": {
+            "items": {
+              "properties": {
+                "status": { "not": { "const": "OPEN" } }
+              }
+            }
+          },
+          "counts": {
+            "properties": {
+              "open_p0": { "const": 0 },
+              "open_p1": { "const": 0 },
+              "open_p2": { "const": 0 },
+              "open_p3": { "const": 0 }
+            }
+          }
+        },
+        "anyOf": [
+          {
+            "properties": {
+              "correction_rounds": { "const": 0 },
+              "broad_review": {
+                "properties": {
+                  "result": { "const": "PASS_EXACT_SHA_NO_OPEN_P0_P1_P2" }
+                }
+              }
+            }
+          },
+          {
+            "properties": {
+              "correction_rounds": { "const": 1 },
+              "delta_review": {
+                "type": "object",
+                "properties": {
+                  "result": { "const": "PASS_TARGETED_DELTA_NO_OPEN_P0_P1_P2" }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "definitions": {
+    "sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "severity",
+        "title",
+        "evidence",
+        "status",
+        "disposition_reason",
+        "fix_sha",
+        "follow_up_package"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "severity": { "enum": ["P0", "P1", "P2", "P3"] },
+        "title": { "type": "string", "minLength": 1 },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "status": {
+          "enum": [
+            "OPEN",
+            "FIXED",
+            "DEFERRED_WITH_PACKAGE",
+            "ACCEPTED_RISK_WITH_OWNER",
+            "NOT_APPLICABLE_WITH_EVIDENCE"
+          ]
+        },
+        "disposition_reason": { "type": "string", "minLength": 1 },
+        "fix_sha": {
+          "anyOf": [
+            { "$ref": "#/definitions/sha" },
+            { "type": "null" }
+          ]
+        },
+        "follow_up_package": { "type": ["string", "null"] }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": { "const": "DEFERRED_WITH_PACKAGE" }
+            }
+          },
+          "then": {
+            "properties": {
+              "follow_up_package": { "type": "string", "pattern": "^KR-" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": { "const": "FIXED" }
+            }
+          },
+          "then": {
+            "properties": {
+              "fix_sha": { "$ref": "#/definitions/sha" }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

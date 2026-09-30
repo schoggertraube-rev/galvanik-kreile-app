@@ -1,0 +1,381 @@
+{
+  "schema_version": 1,
+  "contract_id": "KR-05_PR84_SEARCH_RECONCILIATION_2026-09-29",
+  "package_id": "KR-05-PR84-SEARCH-RECONCILIATION",
+  "recorded_at": "2026-09-29T21:30:31Z",
+  "parent_candidate_sha": "ecb4ad9508186880d15993ac2b568e3f5c5ae801",
+  "origin_main_sha_at_reconciliation": "fa1a989fa5844305e6a8200832ed43e2fc230751",
+  "pull_request": {
+    "number": 84,
+    "url": "https://github.com/schoggertraube-rev/galvanik-kreile-app/pull/84",
+    "base_ref": "main",
+    "base_sha": "13240de2a5ca9e9cfae4f8c72552443dac1d7630",
+    "head_ref": "path1/suche-real-modular-20260910",
+    "head_sha": "9845e91e3003e81ff9f8b5b28bf8882dd12bf0d7",
+    "tree_sha": "afdc6b0ec3bdf4c6a18dbb7766dbf03e4d2430bd",
+    "archive_ref": "archive/pr-84-9845e91e",
+    "archive_head_sha": "9845e91e3003e81ff9f8b5b28bf8882dd12bf0d7",
+    "state": "CLOSED_DRAFT_UNMERGED",
+    "merged": false,
+    "source_branch_available": false,
+    "archive_ref_preserved": true
+  },
+  "comparison_context": {
+    "current_candidate_sha": "ecb4ad9508186880d15993ac2b568e3f5c5ae801",
+    "current_tree_sha": "0f1e552a6f27732d714e5dd5d5a1643f27339e70",
+    "current_search_provenance_commits": [
+      "c7e4877db7620a886ddc783a48c0daf3b8c2d4c3",
+      "2771eeb689ca3b7a0175a9a973204d12af323100"
+    ],
+    "target_contract_sources": [
+      "docs/module/G08_SUCHE/00_STECKBRIEF.md",
+      "docs/module/G08_SUCHE/04_SCHNITTSTELLEN_DATEN.md",
+      "docs/module/G08_SUCHE/07_ABNAHME_TESTS.md",
+      "docs/module/G08_SUCHE/11_IST_CODE_UMBAU.md"
+    ]
+  },
+  "path_decisions": [
+    {
+      "path": ".github/workflows/quality.yml",
+      "base_blob_sha": "c3ebae3e241de14884691cbea705078d3559a143",
+      "pr_blob_sha": "4672d04ebd5879640d9c0e24823e94a5202d8fa2",
+      "current_blob_sha": "38ed7ce9a84f68539c25c1b2699d2a59453a1883",
+      "decision": "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+      "reason": "Die aktuelle Quality-Pipeline enthaelt die spaeteren Governance-, Fresh-Replay- und Produktgates; der alte Workflow wird nicht zurueckkopiert.",
+      "follow_up_package": null,
+      "fragment": null
+    },
+    {
+      "path": "docs/evidence/f0/W4_CROSS_MODULE_READ_PORT_INVENTORY.json",
+      "base_blob_sha": "acee292568691faa90969ac23b5b0c4f0e2bd16f",
+      "pr_blob_sha": "6b429f293ced4dbaf54dfb685faec0539193f835",
+      "current_blob_sha": "2058015850810b4ff232e6b78eb06206ef612958",
+      "decision": "DEFER_TO_KR30A_PUBLIC_PORT_RECONTRACT",
+      "reason": "Der PR-Fragment deklariert den temporaeren App-Adapter indirekt gegen zwei DB-Views. G08 A-G08-020 verlangt stattdessen oeffentliche Orders-/Customers-Fassaden; der Fragmentwert bleibt fuer deren frischen Vertrag erhalten und wird nicht als alter interner Portvertrag reaktiviert.",
+      "follow_up_package": "KR-30A-SEARCH-CONTRACT",
+      "fragment": "readPorts[src/app/actions/search.actions.ts]"
+    },
+    {
+      "path": "docs/evidence/f1/F1_6_SEARCH_MODULE_E2E_EVIDENCE.md",
+      "base_blob_sha": null,
+      "pr_blob_sha": "7786104c5ad60be609a8ae6843f326e4c3dadc14",
+      "current_blob_sha": null,
+      "decision": "STALE_EVIDENCE_OR_OLD_SHELL",
+      "reason": "Der Beleg gilt fuer die nicht akzeptierte alte Shell und kann die spaeter geforderte Full-Route-Abnahme auf der Ziel-Shell nicht ersetzen.",
+      "follow_up_package": "KR-30C-SEARCH-TARGET-SHELL",
+      "fragment": null
+    },
+    {
+      "path": "docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json",
+      "base_blob_sha": "9efed006a931e5a321484459cb8ea4c892ae0efd",
+      "pr_blob_sha": "ba4d318f5710baf25c985e0e10a139ad7d5bd819",
+      "current_blob_sha": "f7c5a90375b37d13b27a816da5c84333678be845",
+      "decision": "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+      "reason": "Das aktuelle Registry-Objekt beschreibt den spaeteren P3-Kandidaten mit Quellen, Coverage und Ziel-Links; der alte Eintrag ist ueberholt.",
+      "follow_up_package": null,
+      "fragment": null
+    },
+    {
+      "path": "docs/evidence/f1/artifacts/search/search-desktop-customer-1440x900.png",
+      "base_blob_sha": null,
+      "pr_blob_sha": "0d5757c0697cac682205ee02cd8ae38c05b62a23",
+      "current_blob_sha": null,
+      "decision": "STALE_EVIDENCE_OR_OLD_SHELL",
+      "reason": "Der Screenshot zeigt die verworfene alte Shell und ist kein visueller Zielbeleg.",
+      "follow_up_package": "KR-30C-SEARCH-TARGET-SHELL",
+      "fragment": null
+    },
+    {
+      "path": "docs/evidence/f1/artifacts/search/search-desktop-empty-1440x900.png",
+      "base_blob_sha": null,
+      "pr_blob_sha": "0fd783dade31a1c9b98419742389d9144b70107e",
+      "current_blob_sha": null,
+      "decision": "STALE_EVIDENCE_OR_OLD_SHELL",
+      "reason": "Der Screenshot zeigt den alten Leerzustand ausserhalb der kanonischen Ziel-Shell.",
+      "follow_up_package": "KR-30C-SEARCH-TARGET-SHELL",
+      "fragment": null
+    },
+    {
+      "path": "docs/evidence/f1/artifacts/search/search-desktop-order-1440x900.png",
+      "base_blob_sha": null,
+      "pr_blob_sha": "2d664494cb19347b284209426175f72ca789129a",
+      "current_blob_sha": null,
+      "decision": "STALE_EVIDENCE_OR_OLD_SHELL",
+      "reason": "Der Screenshot belegt nur die alte Header-/Overlay-Komposition und nicht die Zielkarte.",
+      "follow_up_package": "KR-30C-SEARCH-TARGET-SHELL",
+      "fragment": null
+    },
+    {
+      "path": "docs/evidence/f1/artifacts/search/search-real-browser-receipt.json",
+      "base_blob_sha": null,
+      "pr_blob_sha": "49354280f4b2003c45fc758ae578b235746769b3",
+      "current_blob_sha": null,
+      "decision": "STALE_EVIDENCE_OR_OLD_SHELL",
+      "reason": "Das Browserreceipt ist an einen supersedierten SHA und eine nicht akzeptierte Shell gebunden.",
+      "follow_up_package": "KR-30C-SEARCH-TARGET-SHELL",
+      "fragment": null
+    },
+    {
+      "path": "docs/evidence/f1/artifacts/search/search-real-browser-receipt.sha256",
+      "base_blob_sha": null,
+      "pr_blob_sha": "6c9191e9cb4abf9d7081dbf6eace99d216af0d41",
+      "current_blob_sha": null,
+      "decision": "STALE_EVIDENCE_OR_OLD_SHELL",
+      "reason": "Der Hash gehoert ausschliesslich zum supersedierten Browserreceipt und ist kein aktueller Abnahmebeleg.",
+      "follow_up_package": "KR-30C-SEARCH-TARGET-SHELL",
+      "fragment": null
+    },
+    {
+      "path": "docs/evidence/f1/artifacts/search/search-tablet-1220x880.png",
+      "base_blob_sha": null,
+      "pr_blob_sha": "3239a32fba7fac15e6768ba25597ecce7b816506",
+      "current_blob_sha": null,
+      "decision": "STALE_EVIDENCE_OR_OLD_SHELL",
+      "reason": "Der Tablet-Screenshot zeigt nicht die spaeter verbindliche Ziel-Shell und wird nicht uebernommen.",
+      "follow_up_package": "KR-30C-SEARCH-TARGET-SHELL",
+      "fragment": null
+    },
+    {
+      "path": "docs/evidence/f1/artifacts/search/search-tablet-denial-1220x880.png",
+      "base_blob_sha": null,
+      "pr_blob_sha": "3da576d125a62bcd6f7666a6b1d119a23336d755",
+      "current_blob_sha": null,
+      "decision": "STALE_EVIDENCE_OR_OLD_SHELL",
+      "reason": "Der Denial-Screenshot ist an die alte UI-Komposition gebunden und muss spaeter neu abgenommen werden.",
+      "follow_up_package": "KR-30C-SEARCH-TARGET-SHELL",
+      "fragment": null
+    },
+    {
+      "path": "docs/evidence/f1/artifacts/search/search-tablet-error-1220x880.png",
+      "base_blob_sha": null,
+      "pr_blob_sha": "d181469393aaf6853630588bcceb9fa482080b3c",
+      "current_blob_sha": null,
+      "decision": "STALE_EVIDENCE_OR_OLD_SHELL",
+      "reason": "Der Fehler-Screenshot ist kein Ziel-Shell-Nachweis und wird spaeter frisch erzeugt.",
+      "follow_up_package": "KR-30C-SEARCH-TARGET-SHELL",
+      "fragment": null
+    },
+    {
+      "path": "e2e/search.real.spec.ts",
+      "base_blob_sha": null,
+      "pr_blob_sha": "db7c17433156805dfdbd69874cd3b6fe4cebcb45",
+      "current_blob_sha": null,
+      "decision": "STALE_EVIDENCE_OR_OLD_SHELL",
+      "reason": "Der E2E-Test adressiert alte Header-/Overlay-Ziele und wird erst gegen die kanonische Full Route neu geschrieben.",
+      "follow_up_package": "KR-30C-SEARCH-TARGET-SHELL",
+      "fragment": null
+    },
+    {
+      "path": "missions/F1_ORDER_TO_CASH_PILOT_001.yml",
+      "base_blob_sha": "50a8a5ef643f74cc61713c080643ee6664e1c668",
+      "pr_blob_sha": "f3bfb7aeaa3fef9b2247267b2b6ac5436f995a35",
+      "current_blob_sha": "34fb530ab91d9597ca97dd137c25f35efb76cbe8",
+      "decision": "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+      "reason": "Die aktuelle Mission enthaelt den ratifizierten seriellen Buildplan und die exakte Kandidatenkette; der PR-84-Missionsstand ist historisch.",
+      "follow_up_package": null,
+      "fragment": null
+    },
+    {
+      "path": "quality/eslint-baseline.json",
+      "base_blob_sha": "f3bf70f51dc3ff0d6cbcdd026c5186b948905c18",
+      "pr_blob_sha": "d830654dbbc1027cc3e3d54d624b02021905e007",
+      "current_blob_sha": "86d4c9660ed0f6ce34bf165820b643a4eb8bbce8",
+      "decision": "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+      "reason": "Die aktuelle Baseline gehoert zum heutigen Quellbaum und darf nicht durch den alten PR-Stand ersetzt werden.",
+      "follow_up_package": null,
+      "fragment": null
+    },
+    {
+      "path": "src/app/actions/__tests__/w2cB2m4c.externalProvider.failClosed.test.ts",
+      "base_blob_sha": "031088e69dd60e53880384c439ee1266c50093ba",
+      "pr_blob_sha": "90a05332a3c772cc1449d3e2f0da0340a3b5e6ad",
+      "current_blob_sha": "608855f95afb7dc72a15cf304e600112b5acc7cb",
+      "decision": "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+      "reason": "Der aktuelle Architekturtest prueft den spaeteren fail-closed Suchpfad und die heutige Providergrenze.",
+      "follow_up_package": null,
+      "fragment": null
+    },
+    {
+      "path": "src/app/actions/search.actions.ts",
+      "base_blob_sha": "2dc980260a41463eb12041040e1b4ea52a6809fe",
+      "pr_blob_sha": "b2d322ead19d834b0fe9e56130e64e38ff7188dc",
+      "current_blob_sha": "8e81c629f4ffb2d01726b9b56c477c4473e5e779",
+      "decision": "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+      "reason": "Der aktuelle Adapter ergaenzt echte Capability-Pruefung, Coverage, Zeitstempel und fail-closed Portdiagnose; der alte Gesamtblob wird nicht uebernommen.",
+      "follow_up_package": null,
+      "fragment": null
+    },
+    {
+      "path": "src/components/layout/GlobalSearch.tsx",
+      "base_blob_sha": "8f20906b304fe2565c4fb9bb3cc09025ce0bf2b4",
+      "pr_blob_sha": "b65c4d0ffc1fb1b56cc5889432374e25e578bf0b",
+      "current_blob_sha": "64d84153242fed0d53c413889f8278a1e1468ffe",
+      "decision": "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+      "reason": "Der aktuelle Adapter navigiert ueber reale Ziel-Links; die alte Overlay-Kopplung aus PR 84 ist nicht kanonisch.",
+      "follow_up_package": null,
+      "fragment": null
+    },
+    {
+      "path": "src/components/layout/KreileHeader.tsx",
+      "base_blob_sha": "58ebc45c3fb6a99865cc13d9724da2cfa9d21cbb",
+      "pr_blob_sha": "9a223d12b3b91d39a4a60c807f8635ec32964bb0",
+      "current_blob_sha": "58ebc45c3fb6a99865cc13d9724da2cfa9d21cbb",
+      "decision": "STALE_EVIDENCE_OR_OLD_SHELL",
+      "reason": "KreileHeader ist laut G08-Umbauplan kein Integrationsziel und hat im aktuellen Runtime-Baum keinen Importer.",
+      "follow_up_package": "KR-30C-SEARCH-TARGET-SHELL",
+      "fragment": null
+    },
+    {
+      "path": "src/components/layout/__tests__/f0W2cGlobalSearch.unavailable.test.tsx",
+      "base_blob_sha": "43fcbde620058bc69f8f467b35a82f1d59169911",
+      "pr_blob_sha": "41138157b10c24d723ceb38200c566bdb503e441",
+      "current_blob_sha": "691bac12ddf9bb1e36084aa63071e59f595ce1ce",
+      "decision": "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+      "reason": "Der aktuelle Test folgt dem heutigen sicheren GlobalSearch-Adapter und ersetzt den alten Shell-Test.",
+      "follow_up_package": null,
+      "fragment": null
+    },
+    {
+      "path": "src/components/layout/__tests__/w2cHeaderTruth.realRender.test.tsx",
+      "base_blob_sha": "56f6e27ee6f0abfe1ecaa3eceed32c5b7e7d773a",
+      "pr_blob_sha": "fbe974e4259e190f46c45bb4c566385c5c4656d2",
+      "current_blob_sha": "16870ebbe2e77890aa180d1712a1a5346e016778",
+      "decision": "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+      "reason": "Der heutige Wahrheits-Test deckt den spaeteren Adapterstand ab; die PR-84-Headerkomposition bleibt verworfen.",
+      "follow_up_package": null,
+      "fragment": null
+    },
+    {
+      "path": "src/modules/suche/__tests__/SearchDialog.test.tsx",
+      "base_blob_sha": null,
+      "pr_blob_sha": "4c04313641d9611b388a4e50899057fb0b73a15c",
+      "current_blob_sha": "b8fc008c7fac15bbfe3c7905613fb4605c101413",
+      "decision": "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+      "reason": "Der aktuelle Dialogtest deckt Portal, Coverage, Quellenzeit und reale href-Ziele ueber den PR-84-Stand hinaus ab.",
+      "follow_up_package": null,
+      "fragment": null
+    },
+    {
+      "path": "src/modules/suche/__tests__/searchTenant.test.ts",
+      "base_blob_sha": null,
+      "pr_blob_sha": "eebdae04ea328e96ac6e633f7732db0c826c140b",
+      "current_blob_sha": "38a4559d5e5b43d1225334ba0d4cfc1464584422",
+      "decision": "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+      "reason": "Der aktuelle Kerntest deckt Cross-Field-Kundensuche, Kappung, Coverage, Zeitvalidierung und fail-closed Resultate zusaetzlich ab.",
+      "follow_up_package": null,
+      "fragment": null
+    },
+    {
+      "path": "src/modules/suche/api/README.md",
+      "base_blob_sha": null,
+      "pr_blob_sha": "6b728bedcfb5625b105a7a9aa81f66bcb031a2b6",
+      "current_blob_sha": null,
+      "decision": "EMPTY_PLACEHOLDER_NO_SALVAGE",
+      "reason": "Die Datei enthaelt keinen API-Vertrag und erzeugt nur eine leere Verzeichnisattrappe.",
+      "follow_up_package": null,
+      "fragment": null
+    },
+    {
+      "path": "src/modules/suche/db/README.md",
+      "base_blob_sha": null,
+      "pr_blob_sha": "16fd8efb61627164a378504abcfcaed8171ef5d5",
+      "current_blob_sha": null,
+      "decision": "EMPTY_PLACEHOLDER_NO_SALVAGE",
+      "reason": "G08 besitzt keine Datenbankwahrheit; der leere Platzhalter wird nicht rekonstruiert.",
+      "follow_up_package": null,
+      "fragment": null
+    },
+    {
+      "path": "src/modules/suche/public.ts",
+      "base_blob_sha": null,
+      "pr_blob_sha": "8765797e9cca354ce6874dc07352a40612cae9e1",
+      "current_blob_sha": "8e57fdec74bcdf9063227a9e848b67f234d938f1",
+      "decision": "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+      "reason": "Die aktuelle Fassade exportiert den spaeteren Suchvertrag und ersetzt den PR-84-Blob vollstaendig.",
+      "follow_up_package": null,
+      "fragment": null
+    },
+    {
+      "path": "src/modules/suche/server/searchTenant.ts",
+      "base_blob_sha": null,
+      "pr_blob_sha": "26e3b43c43de163b5abc011f84fc43b4a0423dab",
+      "current_blob_sha": "ba89946d9580db847391169345a5c37ef432dfac",
+      "decision": "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+      "reason": "Der aktuelle Kern validiert mehr Felder, Cross-Field-Phrasen, Coverage und Zeitstempel und bleibt fail-closed.",
+      "follow_up_package": null,
+      "fragment": null
+    },
+    {
+      "path": "src/modules/suche/server/types.ts",
+      "base_blob_sha": null,
+      "pr_blob_sha": "072b457d838f593a305d18651a3b47cac090151f",
+      "current_blob_sha": "eb0a2e91044cfea6a9e63e7fac4592a4eba29401",
+      "decision": "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+      "reason": "Der aktuelle Typvertrag fuehrt Quellen, Coverage, hrefs und checkedAt zusaetzlich und ersetzt die alte geschlossene Form.",
+      "follow_up_package": null,
+      "fragment": null
+    },
+    {
+      "path": "src/modules/suche/suche.manifest.json",
+      "base_blob_sha": null,
+      "pr_blob_sha": "bf2e4a8ac06a84e2dde0f56a8860849c4437a70e",
+      "current_blob_sha": "adb1cff389093c8a8ff809010f327edd09f3ab59",
+      "decision": "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+      "reason": "Das aktuelle Modulmanifest entspricht dem spaeteren Modul- und Importvertrag und wird nicht zurueckgesetzt.",
+      "follow_up_package": null,
+      "fragment": null
+    },
+    {
+      "path": "src/modules/suche/ui/SearchDialog.module.css",
+      "base_blob_sha": null,
+      "pr_blob_sha": "a5be0e3a5939674ee971216d6b15d6d527048006",
+      "current_blob_sha": "e0cb56e3bbc5f1867b9dff454dbcdf088b1d5666",
+      "decision": "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+      "reason": "Das aktuelle Stylesheet gehoert zum spaeteren Dialogstand; finale Designsystemabnahme bleibt trotzdem dem Ziel-Shell-Paket vorbehalten.",
+      "follow_up_package": null,
+      "fragment": null
+    },
+    {
+      "path": "src/modules/suche/ui/SearchDialog.tsx",
+      "base_blob_sha": null,
+      "pr_blob_sha": "aa6fc2cde2c7f8159f56f159af4fab50eb1948cd",
+      "current_blob_sha": "43cefa443ae551c9d6ea66f11d5c9940db63763d",
+      "decision": "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+      "reason": "Der aktuelle Dialog rendert Provenienz, Coverage, Datenzeit und reale Ziele; der PR-84-Dialog wird nicht kopiert.",
+      "follow_up_package": null,
+      "fragment": null
+    },
+    {
+      "path": "src/test/search_tenant.integration.test.ts",
+      "base_blob_sha": null,
+      "pr_blob_sha": "07b8c81b4940cfd3da16d540533e052e4897f242",
+      "current_blob_sha": "071e42fe3246a6ea92be05b91923478bcc1a6749",
+      "decision": "SUPERSEDED_BY_CURRENT_EXACT_OR_STRONGER",
+      "reason": "Der aktuelle Integrationstest prueft den spaeteren Suchvertrag samt Capability- und Coverage-Wahrheit gegen reale Ports.",
+      "follow_up_package": null,
+      "fragment": null
+    }
+  ],
+  "runtime_import_scan": {
+    "target": "src/components/layout/KreileHeader.tsx",
+    "scope": "src/**/*.{ts,tsx}",
+    "runtime_importers": [],
+    "declaration_only": true
+  },
+  "summary": {
+    "path_count": 32,
+    "superseded_paths": 18,
+    "stale_evidence_or_old_shell_paths": 11,
+    "empty_placeholder_paths": 2,
+    "deferred_public_port_paths": 1,
+    "valid_missing_product_paths": 0,
+    "direct_import_paths": 0,
+    "product_files_changed_by_kr05": 0
+  },
+  "delivery_truth": {
+    "main_delivered": false,
+    "merge_performed": false,
+    "production_authorized": false,
+    "production_performed": false
+  }
+}

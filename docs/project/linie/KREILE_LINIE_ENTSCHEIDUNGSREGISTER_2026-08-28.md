@@ -69,7 +69,7 @@ Rolf V8 · Phillip V4 · Auftragskarte MACHART_V8 · Kundenkarte MACHART_V2. HTM
 - **#2 [ENTSCHIEDEN 2026-09-06, Owner — an Ist-Code angeglichen]** — **B1 Zwei Nummernkreise.** Auftragsnummer `A-JJJJ-NNNN` = sichtbare Identität, vergeben bei Auftragsanlage (Wareneingang), `public.orders.order_number` (NOT NULL, UNIQUE). Rechnungsnummer `R-JJJJ-NNNN` = eigener, lückenloser Kreis, vergeben erst bei `createInvoice` (Auftrag = fertig), `private.allocate_invoice_number`. Beide koexistieren; die interne Event-ID bleibt rein technisch. **Das ist der Ist-Code — reine Doku-Korrektur, keine Code-Änderung.** (Der frühere Registertext „eine Nummer = Rechnungsnummer bei Annahme" war die erste Owner-Formulierung, widersprach dem Code, ist ersetzt.)
 - **#3 [ENTSCHIEDEN 2026-09-06 — Regel steht, vgl. #1-FINAL]** — **B2 Katalog-ID-Klassifikation:** Die Gruppierung im Rechnungs-Snapshot folgt der **echten Produktsemantik der Preisliste**, nicht willkürlich: fachlich zusammengehörende Positionen = `coupled` (eine Gruppe), sonst `isolated`. Das ist keine freie Owner-Wahl — die konkrete Klassifikation je Position (z. B. Pos. 42) wird bei der Umsetzung **gegen den echten Katalog belegt** (Beleg-Pflicht), nicht geraten.
 - **#4 [ENTSCHIEDEN 2026-09-06, Owner — an Ist-Code angeglichen]** — **B3 Vergabezeitpunkte getrennt:** `A-…` bei Annahme (Auftragsanlage), `R-…` erst bei `createInvoice`. GoBD-Lückenlosigkeit gilt **nur für den Rechnungskreis** (an `createInvoice` gebunden) — nie berechnete Aufträge erzeugen keine Lücke, weil sie nie eine `R-`Nummer ziehen. F1.4-Bauvertrag bleibt unverändert gültig. Build-Check (kein Owner-Thema, S1): ob `order_number` schon serverseitig sequenziell (`A-JJJJ-NNNN`) allokiert wird; falls clientseitig gesetzt, kleines `allocate_order_number` ergänzen, damit Mocks (`A-2026-0042`) stimmen.
-- **#5 [ENTSCHIEDEN 2026-09-06, Owner]** — **Skonto = JA, Satz = 2 % bei Zahlung ≤ 10 Tage, sonst netto 30 Tage** („wie in jeder Firma", Standard). Prozentsatz und Frist sind ein Konfig-Parameter — jederzeit per Owner-Wort änderbar, keine Architekturfrage.
+- **#5 [HISTORISCH; FRIST DURCH D-GOV-003 SUPERSEDIERT]** — Der am 06.09. festgehaltene Skontosatz von 2 % bei Zahlung innerhalb 10 Tagen bleibt nur fuer eine freigegebene Zielrechnung erhalten. Die damalige Aussage „sonst netto 30 Tage“ ist verworfen; operativ gelten 14 Tage nach D-GOV-003/OE-2609-11.
 - **#6 [ENTSCHIEDEN 2026-09-06, Owner]** — **Galvanik statt Bäder.** Galvanik = EINE Blackbox-Stufe (angenommen→galvanik→fertig→abgeholt); `baeder`-Route entfällt (löschen); kein Stations-/Bäder-Innenleben. „Badpflege" (einziger Bäder-Kontext) ist derzeit NICHT im Scope; falls gewünscht, eigenes Modul per neuer Owner-Entscheidung.
 - **#7 [ENTSCHIEDEN 2026-09-06, Owner]** — **Genau EINE Startseite pro Login, personalisiert.** Keine drei konkurrierenden Start-Routen: today/start/cockpit werden auf eine konsolidiert, die anderen entfallen. Jede Rolle sieht nach Login IHRE personalisierte Startseite; das linke Menü ist für alle frei klickbar. Admin: App-Einstellungen als Startseite. Festgenagelt.
 - **#8 [ENTSCHIEDEN 2026-09-06, Owner]** — **Kill-Liste freigegeben:** die ENTFÄLLT-Routen der Modulkarte, die reiner Mock / nicht verwertbar sind, werden gelöscht (S2). `archive` und `feedback` vorher kurz auf Verwertbarkeit prüfen; wenn reiner Mock, ebenfalls löschen. „Sauber = weg, was man nicht verwerten kann."
@@ -136,15 +136,25 @@ Dies konkretisiert die Fachfragen B1 (Eventreihenfolge) und B2 (Katalog-ID-Klass
 
 ---
 
-## D-ARCH-009 — Modulkarte / Scope-Kanon (Owner-Ratifizierung 2026-09-06)
+## D-ARCH-009 — Modulkarte / Scope-Kanon (Owner-Ratifizierung 2026-09-06; Fachmodulliste durch D-GOV-003 präzisiert)
 
 Die Owner-Modulmindmap „Baustruktur Mini-USP" (Stand 15.08.2026) wird ratifiziert als verbindlicher Modul- und Scope-Kanon: `docs/project/linie/MODULKARTE_KANON.md`. Roter Faden INFOS REIN → KARTE → SUCHEN → RAUS; wenige, vollständige Module.
 
 **KANON (einzige Module):** Fundament (gebaut), Suchleiste (F1.6, muss aus 00_BIBEL\_parallel herein), Intake (F1.1), Orders/Auftragskarte (F1.2/1.3), Customers/Kundenkarte (F1.3), Kalender (F1.6), Accounting-minimal (F1.4/1.5).
 **QUARANTÄNE (nur Vertrag):** OCR, Galvanik-Innenleben, F2-Büro, DHL/Mollie/Mahnwesen.
-**ENTFÄLLT (löschen):** Analyse/KPI-Cockpit, eigenständiges Buchhaltungs-Modul, Zeiterfassung, Teilfertigung, Kundenportal, eigenes Kalender-Produkt, Galvanik-Stufentracking, E-Mail/OCR/Bank-Eigenbau, Marketing.
+**HISTORISCHE ENTFÄLLT-LISTE:** Die hier ursprünglich genannten
+Analyse-/KPI- und Buchhaltungs-Altimplementierungen bleiben löschbar, aber M01
+Buchhaltung, M02 Analyse und M03 Unternehmensführung sind nach D-GOV-003
+spätere Fachmodule. Weiterhin ohne eigenes Kernmodul bleiben Zeiterfassung,
+Teilfertigung, Kundenportal, ein zweites Kalender-Produkt,
+Galvanik-Stufentracking, E-Mail/OCR/Bank-Eigenbau und Marketing.
 
-**Folge:** „4 Mocks vs. 36 Routen" ist KEIN Baubarkeits-Problem — ~30 Routen sind ENTFÄLLT/QUARANTÄNE. Die Vorlagen reichen für die beabsichtigte App. Arbeit = Subtraktion + Path-1-Nähte + Suchleiste. `buchhaltung` (54 Dateien) auf Accounting-minimal trimmen. AMBIG (lager/lieferanten/items/telefonnotiz) = Owner-Entscheid vor Löschung, nicht raten.
+**Folge:** „4 Mocks vs. 36 Routen" ist KEIN Baubarkeits-Problem — zahlreiche
+Alt-Routen sind ENTFÄLLT/QUARANTÄNE. Der Grundappstamm bleibt Subtraktion +
+Path-1-Nähte + Suchleiste; `buchhaltung` wird bis M01 auf Accounting-minimal
+getrimmt. M01 bis M07 werden später seriell angebunden. AMBIG
+(lager/lieferanten/items/telefonnotiz) = Owner-Entscheid vor Löschung, nicht
+raten.
 
 **Nicht mehr fragen:** Was ein Modul ist, was es gibt, was entfällt.
 
@@ -250,6 +260,53 @@ Das eine kanonische Programm `PATH1_UI_CONVERGENCE` verbindet exakt die vier fre
 **Zweck:** Rollen, Einstiege, Navigation, Karten und Routendisposition sind ohne Alias, Übergangsscreen oder Interpretationsspielraum festgelegt; die sichtbare Gesamt-App kann nur über echte Full-Route-Belege freigegeben werden.
 
 **Wesentlicher Nachteil:** Der Umbau beginnt mit Shell und Routensubtraktion, bevor bereits entwickelte Kandidaten integriert werden; dadurch wird die Suchoberfläche später bewusst erneut abgenommen, statt die verworfene Shell zu konservieren.
+
+## D-UI-CORE-003 — Geteilte UI-Wahrheit: Seitenfluss und Designsystem V1.1 (Owner 2026-09-28)
+
+**Entscheidung/Wortlaut:** Die UI-Wahrheit wird ohne konkurrierende Quelle in
+zwei disjunkte Zustaendigkeiten gebunden. Die vier kanonischen HTML-Dateien
+`KREILE_STARTSEITE_PHILLIP_V4_2026-08-20.html`,
+`KREILE_STARTSEITE_ROLF_V8_2026-08-20.html`,
+`KREILE_AUFTRAGSKARTE_MACHART_V8_2026-08-19.html` und
+`KREILE_KUNDENKARTE_MACHART_V2_2026-08-19.html` bleiben gemeinsam mit dem
+bereits hashgebundenen V5-Ablaufpointer die `PAGE_AND_FLOW_TRUTH`. Fuer
+Layout, Seitenaufbau, Informationshierarchie, Nutzerfluss und responsive
+Anordnung gilt `LAYOUT_FLOW_FROM_CANONICAL_REFERENCES`.
+
+Das am 27.09.2026 freigegebene Designsystem V1.1 unter
+`../_DESIGN_VERBINDLICH/designsystem_v1_1` ist ausschliesslich die
+`TOKEN_AND_COMPONENT_TRUTH`; fuer Tokens und Komponenten gilt
+`TOKENS_COMPONENTS_FROM_DESIGN_SYSTEM_V1_1`. Sein Manifest
+`SHA256SUMS.txt` enthaelt 55 Eintraege und hat SHA-256
+`71B0CB01F484BEEF042CFD04D31F951D2DB2D441C427F8212F35A8D41A8041E5`.
+Der bytegleiche Repository-Lock
+`docs/project/linie/ui/DESIGN_SYSTEM_V1_1_SHA256SUMS.txt` bindet dieses
+Manifest auch in CI ohne den externen Schwesterordner. Ist die externe Quelle
+vorhanden, muss ihr Quellenbuendel vollstaendig sein und alle 55 Pfade werden
+physisch gegen den Lock geprueft; ein Teilbestand schlaegt fail-closed fehl.
+Die Freigabe `../_DESIGN_VERBINDLICH/FREIGABE_DS_V1.txt` ist an SHA-256
+`D8D95F8E48CDB02C5A4F7BB8A4C07F2658EA32D1B7753A912BBA91C97013FC25`,
+die Pruefung `../_DESIGN_VERBINDLICH/PRUEFUNG_DESIGN_V1_1_2026-09-27.md`
+an SHA-256
+`D6435C10D6F24699FEB97B408DD4BB8F6C59ED7C374B1627F5D720CF66245257`
+gebunden. `designsystem_v1` und `designsystem_v2` sind kein Bauinput.
+
+**Konfliktvorrang:** Bei einer Kollision gewinnt die kanonische Seiten-/Flow-
+Referenz fuer Layout und Ablauf; Designsystem V1.1 gewinnt fuer Token und
+Komponente. Keine Seite erzeugt eine zweite Tokenwahrheit und keine
+Designsystem-Komponente aendert still einen freigegebenen Seitenfluss.
+
+**Paketgrenze:** `KR-10A` bindet und prueft nur diese Wahrheit. Es gilt
+`NOT_IMPORTED_UNTIL_KR_10B`: kein CSS-/TSX-Import, keine Layoutverdrahtung und
+keine sichtbare Produktveraenderung. Erst `KR-10B-DESIGN-SYSTEM-IMPORT`
+importiert nach `02_app/ui` und erfuellt dabei die freigegebenen Auflagen.
+
+**Zweck:** Folgepakete koennen Seitenaufbau und Gestaltungsbausteine
+deterministisch kombinieren, ohne Designversionen, Alt-Mocks oder Kommentare
+als stillen Vorrang auszulegen.
+
+**Wesentlicher Nachteil:** Der Import ist bewusst ein separates Folgepaket;
+dadurch entsteht nach dieser Bindung noch keine sichtbare UI-Aenderung.
 
 ## D-UI-V5-001 — Ablaufkanon V5, Alltagspersonen, Global-Plus und persistentes KV (Owner 2026-09-14)
 
@@ -511,3 +568,144 @@ bleibt V5; die vier Einzelmocks (Phillip V4, Rolf V8, Auftragskarte V8, Kundenka
 
 **Wesentlicher Nachteil:** Zusatzideen, die V6 ueber V5 hinaus skizziert hatte, entfallen, bis sie
 gegebenenfalls als eigene Owner-Entscheidung erneut aufgenommen werden.
+
+## D-GOV-002 — Operative Entscheidungsquelle und serieller Altbestand-zuerst-Bau (Owner 2026-09-28)
+
+**Entscheidung/Wortlaut:** Das auf `origin/main` geführte
+`docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md` ist die
+einzige operative Produktentscheidungsquelle für Writer, Reviewer, CI und
+Lieferclaims. Die externe `00_BIBEL` ist eine erhaltende Owner-Eingabe- und
+Historienquelle. Ein externer Eintrag wird erst ausführbar, nachdem er
+widerspruchsfrei in das Repo-Register übernommen, geprüft und nach `main`
+geliefert wurde. Die frühere Pflicht „externer Master zuerst und anschließend
+byte-identisch“ ist damit supersediert; stattdessen werden externe Quelle,
+Hash, Disposition und Repo-Übernahme nachvollziehbar gebunden.
+
+Die in der externen `00_BIBEL` erhaltenen Einträge `D-UI-V6-001` bis
+`D-UI-V6-004` bleiben Historie, sind aber `REJECTED_SUPERSEDED` und kein
+Bauinput. Operativ gilt die jüngere Repo-Entscheidung `D-UI-V5-003`: V5 ist
+die einzige Zielvorlage, V6 ist verworfen. Kein V6-Datenobjekt, keine
+V6-Migration und kein V6-UI-Pfad darf aus der externen Historie aktiviert
+werden.
+
+Vor neuer Produktarbeit wird der gesamte aufgelaufene Bestand aus PR #84 und
+#113 bis #115 pfadweise inventarisiert. Verwertbarer, auf `main` fehlender
+Inhalt wird ausschließlich als kleines frisches Paket auf dem jeweils
+aktuellen `main` gebaut, einmal unabhängig breit geprüft, höchstens einmal
+korrigiert und nach Exact-SHA-Gates integriert. Unbrauchbare oder bereits
+supersedierte Teile erhalten Archivref, Inhaltsledger und begründete
+Disposition. Gestapelte Altbranches werden nicht direkt in die Hauptlinie
+übernommen.
+
+GitHub-Erreichbarkeit hebt kein Gate auf. Ein Merge nach `main` bleibt an
+Required Checks, Exact-SHA-Ratifikation, sauberen Arbeitsbaum und den
+Production-Grenzpunkt gebunden: Weil `main` nach belegtem Projektstand
+automatisch Vercel Production auslöst, ist vor dem ersten tatsächlichen Merge
+die ausdrückliche Freigabe dieser Folge oder ein autorisierter Weg ohne
+Production-Auslösung erforderlich.
+
+**Zweck:** Eine einzige ausführbare Linie ersetzt konkurrierende externe und
+repo-interne Masterbehauptungen. Altbestand wird einmal verlustfrei bereinigt,
+bevor die kleine serielle Paketfolge bis Pilot und Livegang beginnt.
+
+**Wesentlicher Nachteil:** Externe Ownernotizen benötigen einen zusätzlichen
+Repo-Sync und Merge, bevor sie ausführbar sind; Main-Merges können wegen der
+automatischen Production-Folge trotz technischer Mergefähigkeit an einem
+separaten Sicherheitsgate warten.
+
+## D-GOV-003 — Owner-Eingaben 25./26.09., Paketakteure und Kandidatenwarteschlange (Owner 2026-09-28)
+
+**Entscheidung/Wortlaut:** Die extern dokumentierten Eingaben OE-2609-01 bis
+OE-2609-33 sind mit dem Source-Lock
+`02578C1AE676522C459DBE31ECFCA082F57DB25235946229D86758B0FF86EC34`
+einmalig gegen die kanonischen Wahrheitsarten disponiert. Die folgende Tabelle
+ist die operative Einordnung; die externe Datei bleibt Eingabe und Historie.
+`RATIFIED` aktiviert die benannte Entscheidung, `MAPPED` bindet sie an einen
+bereits ratifizierten Vertrag oder ein spaeteres Paket, `REFERENCE_ONLY`
+bewahrt nur den historischen Nachweis, und `SUPERSEDED_PARTIAL` verwirft nur
+den ausdruecklich benannten alten Ausfuehrungsteil.
+
+| Eingabe | Disposition | Operative Bindung |
+|---|---|---|
+| OE-2609-01 | `MAPPED` | D-GOV-001/D-GOV-002: genau eine Quelle je Wahrheitsart. |
+| OE-2609-02 | `MAPPED` | Sichtbare Personen Rolf, Phillip und Gregor; technische Rollen bleiben serverseitig. |
+| OE-2609-03 | `MAPPED` | Designsystem V1.1 wird in `KR-10a`/`KR-10b` gebunden; kein Import vor Hash- und Authority-Gate. |
+| OE-2609-04 | `MAPPED` | Nicht angebundene sichtbare Capability nur als ehrlich gesperrtes Element, niemals als tote Route oder Fake-Erfolg. |
+| OE-2609-05 | `RATIFIED` | M01 bis M07 bleiben spaetere Module; alte Routenumsetzungen duerfen entfallen, die Fachmodule nicht. |
+| OE-2609-06 | `MAPPED` | Einziger Arbeitsort `02_app`; Buildplan und Designfundament bestimmen die Reihenfolge. |
+| OE-2609-07 | `RATIFIED` | Abholung bar oder Karte, sonst Vorkasse; Zielrechnung nur nach Kundenfreigabe. |
+| OE-2609-08 | `REFERENCE_ONLY` | Historischer Git-Ausfall ist beendet; aktuelle Mergegrenzen folgen D-GOV-002/003. |
+| OE-2609-09 | `RATIFIED` | Zielmodell: Standardzugriff fuer jede Person, personenspezifische Sperre/Erweiterung durch Admin; bis `KR-23a/b` bleibt die bestehende Durchsetzung fail-closed. |
+| OE-2609-10 | `MAPPED` | Konflikt-/Sperrvertrag `KR-25a/b`; keine autonome Entscheidung. |
+| OE-2609-11 | `RATIFIED` | Zielrechnung je freigegebenem Kunden: 14 Tage; 2 Prozent Skonto nur bei Zahlung innerhalb 10 Tagen. Die fruehere Netto-30-Aussage ist supersediert. |
+| OE-2609-12 | `MAPPED` | Terminal nur ueber spaeteren ratifizierten PaymentAdapter und Owner-Gate; bis dahin kein Providerclaim. |
+| OE-2609-13 | `MAPPED` | Termin- und Konfliktumfang in `KR-24`/`KR-25`; Quellen werden nicht erneut als Ownerfrage gestellt. |
+| OE-2609-14 | `RATIFIED` | ZUGFeRD gehoert vor Live in den Grundstamm; Profil/Version und Steuerfachabnahme bleiben `OG-KR-09`. |
+| OE-2609-15 | `SUPERSEDED_PARTIAL` | Einheitliche Dossiers und app-neutrale Kerne bleiben; parallele Writer auf diesem Rechner sind durch den seriellen Buildplan ersetzt. |
+| OE-2609-16 | `REFERENCE_ONLY` | Modul-Mindmap ist Quellenmaterial, keine zweite Scope-Wahrheit. |
+| OE-2609-17 | `MAPPED` | Off-Repo-Modulkernvorlauf bleibt bis `OG-KR-07` pausiert; Repo-Adoption ist seriell. |
+| OE-2609-18 | `MAPPED` | Kreile-eigenes M365-Bueropostfach und Minimalrechte erst nach `OG-KR-01`. |
+| OE-2609-19 | `MAPPED` | Kalendervertraege `KR-32` bis `KR-37`; Kalender ist Hintergrundnaht, kein zweites Kernprodukt. |
+| OE-2609-20 | `MAPPED` | Retention/Anonymisierung `KR-31`/`KR-51`; Werte brauchen Steuer-/Datenschutzgate. |
+| OE-2609-21 | `RATIFIED` | Erste Analysekennzahl ist Termintreue auf dem B2-Vertrag. |
+| OE-2609-22 | `RATIFIED` | Analyse erhaelt nach realer Anbindung einen eigenen Menuepunkt; Startseiten zeigen daraus nur dringenden Handlungsbedarf. |
+| OE-2609-23 | `MAPPED` | Termintreue plus 30-Tage-Liquiditaet als spaeteres Fuehrungsziel nach M01/M02; kein erfundener Wert. |
+| OE-2609-24 | `MAPPED` | Liquiditaet startet mit bestaetigten manuellen Quellen; Bankintegration bleibt Provider-Gate. |
+| OE-2609-25 | `MAPPED` | Productionressourcen gehoeren Kreile; Dev bleibt synthetisch; Anlage/Vertraege/Kosten nur am Gate. |
+| OE-2609-26 | `MAPPED` | Startseitenreihenfolge in `KR-12`/`KR-13`; keine KPI-Kachel ohne reale Quelle. |
+| OE-2609-27 | `MAPPED` | Designprioritaet und Verdichtung werden in den UI-Gates `KR-15`/`KR-22` geprueft. |
+| OE-2609-28 | `SUPERSEDED_PARTIAL` | Hintergrundpakete bleiben vor UI zulaessig; parallele automatische Kette ist durch einen seriellen Writer ersetzt. |
+| OE-2609-29 | `RATIFIED` | Tagesueberblick ist der Zeitstrahl „Heute & Woche“ mit bestehenden abgesicherten Aktionen. |
+| OE-2609-30 | `MAPPED` | Neutrale Flaechentokens sind Bestandteil des gehashten Designsystems V1.1. |
+| OE-2609-31 | `MAPPED` | Handlungsbedarf-/Bedienvertrag wird in `KR-10` bis `KR-15` umgesetzt; Pflichtfoto bleibt eigenes Gate. |
+| OE-2609-32 | `SUPERSEDED_PARTIAL` | Trennung Writer/Reviewer bleibt; Waechter, Stundencheck und automatische Claude-Kette bleiben deaktiviert. |
+| OE-2609-33 | `SUPERSEDED_PARTIAL` | Fehler werden im Paketprozess behoben; alte Retry-/Entscheider-Automatik ist durch eine Review-, eine Korrektur- und Split-Regel ersetzt. |
+
+### Konkrete Wahrheitskorrekturen
+
+1. `PAYMENT_TERM_DAYS=14`. Bei einer ausdruecklich freigegebenen Zielrechnung
+   gilt optional `SKONTO_PERCENT=2` bei Zahlung innerhalb
+   `SKONTO_DAYS=10`; danach bleibt die Rechnung bis Tag 14 ohne Skonto
+   faellig. Jede fruehere Aussage „sonst netto 30 Tage“ ist supersediert.
+2. Analyse/KPI (M02), Buchhaltung (M01) und Unternehmensfuehrung (M03) sind
+   spaetere Module, nicht gestrichene Produktteile. Alte, nicht kanonische
+   Routen koennen weiterhin entfernt werden. Der Analyse-Menuepunkt erscheint
+   erst nach realer M02-Anbindung; vorher gibt es keine tote oder ausgegraute
+   Route.
+3. Additive Tabellen oder Views innerhalb eines bereits ratifizierten
+   Fachvertrags duerfen durch den gebundenen Kreile-PL
+   `01a0ce4b-1843-7361-9ffc-47933f9ecdde` paketiert werden. Neue
+   Fachobjekte ausserhalb eines ratifizierten Vertrags bleiben Owner-Gate.
+4. DoD-Spezifikationen und Paketbildung fuer diesen Buildzug sind an die
+   aktuelle Owner-Anweisung und den Buildkoordinator
+   `01a0b8b7-f1ab-7b72-9f87-1feb350e3b95` gebunden. Derselbe Task ist der
+   vorgesehene Merge-Akteur, aber erst nach vollstaendigen Exact-SHA-Gates und
+   ausdruecklicher Freigabe des automatischen Production-Effekts.
+
+### Belegter Hauptlinienstatus frueherer PRs
+
+| PR | GitHub-Status | Head | Merge-/Hauptlinienbeleg |
+|---|---|---|---|
+| #86 | `CLOSED_UNMERGED` | `42aec32ba3d85d6d12bc78984886d22b5abd7aab` | Kein Merge-Commit; kein Lieferclaim. |
+| #95 | `MERGED` | `a78a632be1d1592aad4c28a4c44ebf670b7e8948` | Merge `4c8f76160a1304e59d4859cb2203561f8e64a257` ist Vorfahr von `origin/main@21a23567`. |
+| #96 | `MERGED` | `de47b6c2a9978b7bbad7847a14afbca4285fc118` | Merge `70ae0989b7f76a247c34582badc2de3324e27851` ist Vorfahr von `origin/main@21a23567`. |
+| #110 | `MERGED` | `5df80fb9b7a84f29fb665f766306baa7a9dd0886` | Merge `c95b7fea0598105498c3dbf4ab9902344856e5d6` ist Vorfahr von `origin/main@21a23567`. |
+| #111 | `MERGED` | `863accbba4e54e442fb2d5268721a43c0a7fa678` | Merge `d9861e28b0a2427bc8c50c3ab2837cfe4d44ecc9` ist Vorfahr von `origin/main@21a23567`. |
+| #112 | `MERGED` | `5a114bb558b32745d7864495f066a8a35e42dc5b` | Merge `21a23567d51e4805f065ce9ae8c59bdc5faf9fa9` ist aktuelles `origin/main`. |
+
+### Serielle Kandidatenwarteschlange
+
+Ist ein Paket auf Exact-SHA vollstaendig geprueft und ausschliesslich durch
+eine externe Mergegrenze blockiert, darf genau ein Folgepaket auf diesem
+unveraenderlichen Parent-SHA beginnen. Branch, Parent, Review-Receipt, Gates
+und Reihenfolge werden festgehalten. Diese Kandidaten sind keine Lieferung.
+Nach Freigabe werden sie einzeln in derselben Reihenfolge nach `main` gebracht;
+nach jedem realen Merge laufen die anwendbaren Hauptliniengates erneut.
+
+**Zweck:** Alle bereits beantworteten Ownerfragen werden einmal in die
+kanonische Linie ueberfuehrt, ohne die alte automatische Kette oder eine zweite
+Produktwahrheit wiederzubeleben.
+
+**Wesentlicher Nachteil:** Bei einer laengeren Mergegrenze entsteht eine
+streng geordnete Kandidatenkette. Jeder nachgelagerte Kandidat muss nach den
+tatsaechlichen Vorgaenger-Merges erneut gegen `main` bestaetigt werden.
