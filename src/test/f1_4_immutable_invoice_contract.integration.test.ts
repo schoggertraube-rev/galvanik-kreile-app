@@ -883,7 +883,10 @@ describe("F1.4 immutable invoice database contract", () => {
             net_amount_cents, vat_rate_basis_points, vat_amount_cents,
             gross_amount_cents, service_date, payment_term_days,
             order_version, aggregate_version, client_event_id, correlation_id, issue_event_id,
-            issued_at, issued_by, pdf_ref, pdf_sha256, pdf_content
+            issued_at, issued_by, pdf_ref, pdf_sha256, pdf_content,
+            payment_contract_version, payment_mode, payment_status,
+            payment_open_amount_cents, payment_paid_amount_cents,
+            payment_currency, payment_version
           ) VALUES (
             ${invoiceId}::uuid, ${tenantId}, ${customerId}, ${orderId},
             ${numberRow?.invoice_number}, 119.00, 'issued', ${dueDate}::date,
@@ -891,7 +894,8 @@ describe("F1.4 immutable invoice database contract", () => {
             10000, 1900, 1900, 11900, ${serviceDate}::date, 14,
             2, 1, ${issueClientEventId}::uuid, ${issueCorrelationId}::uuid,
             ${issueEventId}, ${issuedAt}::timestamptz, ${userId}::uuid,
-            ${`invoice://${invoiceId}/original`}, ${originalPdfSha256}, ${originalPdf}
+            ${`invoice://${invoiceId}/original`}, ${originalPdfSha256}, ${originalPdf},
+            1, 'vorkasse', 'offen', 11900, 0, 'EUR', 0
           )
         `;
 
@@ -1369,7 +1373,10 @@ describe("F1.4 immutable invoice database contract", () => {
               net_amount_cents, vat_rate_basis_points, vat_amount_cents,
               gross_amount_cents, service_date, payment_term_days,
               order_version, aggregate_version, client_event_id, correlation_id,
-              issue_event_id, issued_at, issued_by, pdf_ref, pdf_sha256, pdf_content
+              issue_event_id, issued_at, issued_by, pdf_ref, pdf_sha256, pdf_content,
+              payment_contract_version, payment_mode, payment_status,
+              payment_open_amount_cents, payment_paid_amount_cents,
+              payment_currency, payment_version
             ) VALUES (
               ${receiptCase.invoiceId}::uuid, ${tenantId}, ${receiptCase.customerId},
               ${receiptCase.orderId}, ${receiptCase.invoiceNumber}, 119.00, 'issued',
@@ -1378,7 +1385,8 @@ describe("F1.4 immutable invoice database contract", () => {
               10000, 1900, 1900, 11900, ${serviceDate}::date, 14, 2, 1,
               ${receiptCase.issueClientEventId}::uuid, ${receiptCase.issueCorrelationId}::uuid,
               ${receiptCase.issueEventId}, ${issuedAt}::timestamptz, ${userId}::uuid,
-              ${`invoice://${receiptCase.invoiceId}/original`}, ${pdfSha256}, ${receiptCase.pdf}
+              ${`invoice://${receiptCase.invoiceId}/original`}, ${pdfSha256}, ${receiptCase.pdf},
+              1, 'vorkasse', 'offen', 11900, 0, 'EUR', 0
             )
           `;
           return pdfSha256;

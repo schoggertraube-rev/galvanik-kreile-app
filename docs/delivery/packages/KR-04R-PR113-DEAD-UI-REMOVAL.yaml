@@ -1,0 +1,222 @@
+schema_version: 2
+package_id: KR-04R-PR113-DEAD-UI-REMOVAL
+project: GALVANIK_KREILE_WERKSTATTCockpit
+state: CONTRACT_READY
+execution_state_source: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+manifest_profile: ROLLING_V2
+queue_parent_sha: 421180cf84f51b736b93730aa2822d20da8b9e7d
+base_sha: 421180cf84f51b736b93730aa2822d20da8b9e7d
+origin_main_sha: fa1a989fa5844305e6a8200832ed43e2fc230751
+target_sha: PENDING_AFTER_LOCAL_VERIFICATION
+branch: codex/kr-04r-pr113-dead-ui-removal
+goal: >-
+  Die nach Import-, Link- und Routennachweis unreferenzierte parallele
+  RechnungenClient-Altkomponente als einzigen belegten Restnutzen aus PR 113
+  frisch entfernen und die paketbezogenen P3-Schutzluecken aus KR-04
+  schliessen, ohne Route, sichtbare UI, Daten-, Rollen-, Session-, Provider-
+  oder Production-Verhalten zu veraendern.
+active_mission_file: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+dod_spec_approved_by:
+  authority: OWNER_CURRENT_TASK_AND_RATIFIED_BUILDPLAN
+  date: "2026-09-29"
+  instruction: >-
+    Den redteam-geprueften Plan seriell Paket fuer Paket weiter umsetzen;
+    belegten Restnutzen aus PR 113 als kleines frisches KR-04R-Paket bauen,
+    pruefen und separat reviewen.
+execution_actors:
+  writer: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  implementation_reviewer: CLAUDE_OPUS_NEW_READ_ONLY_SESSION_AFTER_EXACT_SHA
+  specialist_gate_reviewers: GITHUB_ACTIONS_REQUIRED_CHECK_RUNNERS_AFTER_PUSH
+  kreile_pl_session: 01a0ce4b-1843-7361-9ffc-47933f9ecdde
+  authorized_future_merge_actor: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  merge_limit: NO_MAIN_MERGE_UNTIL_EXPLICIT_PRODUCTION_EFFECT_AUTHORITY
+dependency:
+  package: KR-04-PR113-DISPOSITION
+  candidate_sha: 421180cf84f51b736b93730aa2822d20da8b9e7d
+  status: REVIEWED_CANDIDATE_PENDING_MAIN_BASE_CI_AND_EXTERNAL_MERGE_GATE
+  review_result: PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN
+  review_evidence: ../_MODULDOSSIERS/00_PROJEKT/KR-04_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md
+  review_evidence_sha256: 052BAE8C94D64844143AB75CEF64E9BB11F92EE2A307F5FD8DF3F4BFFA484529
+dossier_and_decision_ids:
+  - BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL_SECTION_5_KR_04R
+  - D-GOV-001
+  - D-GOV-002
+  - D-UI-V5-003
+  - G07_11_IST_CODE_UMBAU_RECHNUNGENCLIENT_UEBERHOLT
+source_locks:
+  - kind: REPO_FILE
+    source: docs/delivery/packages/KR-04-PR113-DISPOSITION.yaml
+    location: REPO
+    repo_commit: 421180cf84f51b736b93730aa2822d20da8b9e7d
+    sha256: 61DC5EDB3C0DDAA672A9A243E6871AEA8870BF03A5B580B0F995F52E4F09656F
+  - kind: REPO_FILE
+    source: docs/delivery/KR-04_PR113_DISPOSITION_2026-09-29.json
+    location: REPO
+    repo_commit: 421180cf84f51b736b93730aa2822d20da8b9e7d
+    sha256: 41FF445D6423A1A30DF0A231AB675E4E6DB60AB60245E582A907F90768918697
+  - kind: REPO_FILE
+    source: docs/module/G07_GELD_RECHNUNGEN/11_IST_CODE_UMBAU.md
+    location: REPO
+    repo_commit: 421180cf84f51b736b93730aa2822d20da8b9e7d
+    sha256: 8C5F758D21CD69331B2FBECA9D11B2FE08184393A595C53733EF7AB3AA17AFC5
+  - kind: REPO_FILE
+    source: src/app/buchhaltung/rechnungen/RechnungenClient.tsx
+    location: REPO
+    repo_commit: 421180cf84f51b736b93730aa2822d20da8b9e7d
+    sha256: 4EAA5F9325D5C45077EC5F2D4CBD4663959B2A64F9C4785DD97E6735C68AA3CB
+  - kind: REPO_FILE
+    source: src/app/buchhaltung/rechnungen/page.tsx
+    location: REPO
+    repo_commit: 421180cf84f51b736b93730aa2822d20da8b9e7d
+    sha256: 9EAECE968B54D022F32354A40CE3126B5722225C6949E10740A0A0AF1CAE4C07
+  - kind: EXTERNAL_FILE
+    source: KR-04_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: 052BAE8C94D64844143AB75CEF64E9BB11F92EE2A307F5FD8DF3F4BFFA484529
+    status: PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN
+  - kind: EXTERNAL_FILE
+    source: BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: EAEDDEF68C16BE403C6D05AD6F63234D4ACF75A762895F50008E07A59A782DC3
+    status: FINAL_AFTER_ONE_OPUS_REDTEAM_AND_OWNER_EXECUTION_AMENDMENT
+repo_allowlist:
+  - docs/delivery/packages/KR-04R-PR113-DEAD-UI-REMOVAL.yaml
+  - docs/delivery/KR-04_PR113_DISPOSITION_2026-09-29.json
+  - docs/delivery/ROLLING_MANIFEST_QUEUE_SCHEMA_V1.json
+  - docs/delivery/ROLLING_MANIFEST_QUEUE_V1.json
+  - docs/delivery/GATE_MAPPING_V1.yaml
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - scripts/quality/check-delivery-contracts.mjs
+  - src/test/delivery_contracts.test.ts
+  - src/app/buchhaltung/rechnungen/RechnungenClient.tsx
+forbidden:
+  - every_product_path_except_src/app/buchhaltung/rechnungen/RechnungenClient.tsx
+  - src/components/**
+  - src/modules/**
+  - supabase/**
+  - route_page_layout_loading_or_visible_ui_change
+  - auth_rls_roles_or_session_behavior
+  - provider_or_runtime_configuration
+  - remote_database_or_production_mutation
+  - main_merge_or_production_deploy
+scope_budget:
+  max_product_files: 8
+  max_handwritten_product_lines: 800
+  max_new_migrations: 1
+  planned_product_files: 1
+  planned_governance_files: 8
+follow_up_packages:
+  - KR-02-B1-P0-CANCEL
+new_objects_authority: NONE
+migration_status: NONE
+applicable_register_gates:
+  FUNCTIONAL_SLICE_PASS: REQUIRED
+  DATA_TRUTH_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+  UI_REFERENCE_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+  OWNER_UX_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+register_gate_evidence:
+  FUNCTIONAL_SLICE_PASS:
+    applicability: REQUIRED
+    stage: LOCAL_VERIFIED
+    evidence_ref: acceptance:KR04R-A4
+  DATA_TRUTH_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: LOCAL_VERIFIED
+    evidence_ref: invariant:data_truth
+  UI_REFERENCE_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: OWNER_PREVIEWED
+    evidence_ref: acceptance:KR04R-A4
+  OWNER_UX_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: OWNER_PREVIEWED
+    evidence_ref: acceptance:KR04R-A6
+invariants:
+  data_truth: NO_DATA_MODEL_SCHEMA_MIGRATION_RUNTIME_DATA_OR_REMOTE_CHANGE
+  tenant_and_rls: NOT_APPLICABLE_NO_DATA_ACCESS_OR_REMOTE_CHANGE
+  roles_and_commands: NOT_APPLICABLE_NO_ROLE_COMMAND_OR_SESSION_CHANGE
+  receipt_and_readback: EXACT_PARENT_BLOB_ARCHIVE_BLOBS_ZERO_IMPORTERS_ROUTE_AND_COMPONENT_READBACK
+  reload_and_race: ONE_MATERIALIZED_CONTRACT_ONE_SERIAL_WRITER_THEN_ONE_READ_ONLY_REVIEWER
+  error_behavior: FAIL_CLOSED_ON_UNKNOWN_LEDGER_KEYS_MISSING_OR_DUPLICATE_PATH_BLOB_DRIFT_IMPORTER_OR_DELIVERY_CLAIM
+  rollback: RESTORE_EXACT_PARENT_BLOB_IN_A_NEW_REVIEWED_CANDIDATE_WITHOUT_REMOTE_OR_PRODUCTION_EFFECT
+visible_capabilities:
+  registry_changes: NONE
+  quality_no_fake_production: REQUIRED_DEFENSIVE_GATE
+review_contract:
+  broad_claude_reviews: 1
+  max_correction_rounds: 1
+  delta_review_after_correction: true
+  reviewer_must_differ_from_writer: true
+  specialist_gate_reviewers_are_not_implementation_reviewers: true
+acceptance:
+  - id: KR04R-A1
+    statement: Der Parent ist exakt der remote gruene und Opus-gepruefte KR-04-Kandidat 421180cf; origin/main bleibt separat fa1a989f.
+    evidence: REMOTE_PARENT_MAIN_AND_EXTERNAL_RECEIPT_READBACK
+  - id: KR04R-A2
+    statement: Die sieben Blob-Identitaeten aus PR 113 werden einmal direkt gegen Parent und Archivref gelesen und im externen Closure-Receipt festgehalten.
+    evidence: GIT_LS_TREE_AND_CAT_FILE_READ_ONLY_RECEIPT
+  - id: KR04R-A3
+    statement: RechnungenClient.tsx besitzt vor der Entfernung keinen TypeScript- oder TSX-Importer und ist keine Next.js-Routendatei.
+    evidence: IMPORT_FORM_SCAN_ROUTE_READBACK_AND_NEXT_PROJECT_STRUCTURE_DOC
+  - id: KR04R-A4
+    statement: Genau RechnungenClient.tsx ist entfernt; page.tsx und InvoicesClient.tsx bleiben bytegleich und die Rechnungsroute baut und testet gruen.
+    evidence: EXACT_PARENT_DIFF_SOURCE_LOCKS_TYPESCRIPT_FOCUSED_TESTS_AND_BUILD
+  - id: KR04R-A5
+    statement: Die KR-04-Disposition ist gegen unbekannte Keys, fehlende, doppelte oder umdisponierte Pfade, Blob-Drift, Lieferclaim und echte Importformen fail-closed abgesichert.
+    evidence: DELIVERY_CONTRACT_NEGATIVE_SELFTESTS_AND_VITEST_MATRIX
+  - id: KR04R-A6
+    statement: Das Paket aendert keine sichtbare UI, Route, Datenwahrheit, Rolle, Session, Provider-, Remote- oder Production-Konfiguration.
+    evidence: EXACT_PARENT_ALLOWLIST_DIFF_AND_NO_FAKE_GATE
+  - id: KR04R-A7
+    statement: Mission und Queue zeigen nach KR-04R genau auf KR-02, danach KR-03A und KR-03B1; kein Zukunftsmanifest ist materialisiert.
+    evidence: QUEUE_SCHEMA_MAPPING_AND_DELIVERY_GATE
+  - id: KR04R-A8
+    statement: KR-04R bleibt QUEUED_CANDIDATE und erhebt keinen Main-, Merge- oder Production-Claim.
+    evidence: MISSION_EXTERNAL_RECEIPT_REMOTE_MAIN_AND_DRAFT_PR
+local_gates:
+  - npm run quality:delivery-contracts:selftest
+  - npm run quality:delivery-contracts
+  - npx vitest run src/test/delivery_contracts.test.ts src/app/buchhaltung/rechnungen/__tests__/page.test.tsx
+  - npx tsc --noEmit
+  - npm run quality:authority-gate:selftest
+  - npm run quality:authority-gate
+  - npm run quality:module-gates
+  - npm run quality:no-fake-production
+  - npm run lint:ratchet
+  - git diff --check
+  - npm run verify:precommit
+required_checks_after_push:
+  - quality
+  - agentur-gate
+  - Fresh Supabase replay
+non_required_but_must_pass:
+  - ratchet
+gate_mapping_contract: docs/delivery/GATE_MAPPING_V1.yaml
+findings_ledger_contract: docs/delivery/FINDINGS_LEDGER_SCHEMA_V1.json
+closure_receipt_contract: docs/delivery/EXACT_SHA_CLOSURE_RECEIPT_SCHEMA_V1.json
+evidence_mode: CI_FULL
+evidence_mode_status: SERIAL_PRODUCT_CLEANUP_WITH_FULL_MAIN_BASE_CI
+resource_profile:
+  mode: SERIAL_NO_PARALLEL_BUILD_OR_TEST_WRITERS
+  heavy_profile: NONE
+  available_ram_mb_preflight: 5665
+  shell_probe_seconds_preflight: 0.013
+  git_status_seconds_preflight: 0.089
+  expected_runtime_minutes: 30
+  cleanup_receipt: PID_OR_RUN_ID_OUTPUT_TIMESTAMP_PHYSICAL_EXIT_AND_CLEAN_TREE_REQUIRED_CPU_NOT_SUFFICIENT
+findings: []
+split_or_follow_up_decision: >-
+  KR-04R entfernt exakt einen toten Produktpfad und haertet nur dessen bereits
+  eingefuehrte Dispositionskontrolle. KR-02 bleibt ein getrenntes Folgepaket
+  mit eigener Produkt-, Review- und CI-Kette.
+next_allowed_package: KR-04R-EXACT-SHA-CLAUDE-REVIEW
+package_specific:
+  target_file: src/app/buchhaltung/rechnungen/RechnungenClient.tsx
+  expected_parent_blob: 18594debbed3e6565bb63166d6adbc7aa9579745
+  route_file: src/app/buchhaltung/rechnungen/page.tsx
+  route_parent_blob: b153d9ccd6f7ba3d51ececd96066908f19659b8c
+  consumer_component: src/app/buchhaltung/rechnungen/InvoicesClient.tsx
+  source_pr: 113
+  source_pr_head: e477e6b2314d5a97575a32dc35ca0d16b55625d7
+  source_pr_archive_ref: archive/pr-113-e477e6b2
+  prior_review_p3_count: 7

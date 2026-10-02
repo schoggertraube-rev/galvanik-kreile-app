@@ -1,0 +1,253 @@
+schema_version: 2
+package_id: KR-05-PR84-SEARCH-RECONCILIATION
+project: GALVANIK_KREILE_WERKSTATTCockpit
+state: CONTRACT_READY
+execution_state_source: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+manifest_profile: ROLLING_V2
+queue_parent_sha: ecb4ad9508186880d15993ac2b568e3f5c5ae801
+base_sha: ecb4ad9508186880d15993ac2b568e3f5c5ae801
+origin_main_sha: fa1a989fa5844305e6a8200832ed43e2fc230751
+target_sha: PENDING_AFTER_LOCAL_VERIFICATION
+branch: codex/kr-05-pr84-search-reconciliation
+goal: >-
+  Pull Request 84 gegen den aktuellen, bereits staerkeren Suchkern, die
+  kanonischen G08-Vertraege und die noch nicht gelieferte Ziel-Shell
+  vollstaendig pfadweise abgleichen, ohne alte Header-, Overlay-, Evidenz-
+  oder Produktdateien zu uebernehmen und ohne einen Lieferclaim zu erzeugen.
+active_mission_file: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+dod_spec_approved_by:
+  authority: OWNER_CURRENT_TASK_AND_RATIFIED_BUILDPLAN
+  date: "2026-09-29"
+  instruction: >-
+    Den redteam-geprueften Plan seriell umsetzen, PR 84 vollstaendig
+    disponieren und nur einen wirklich gueltigen fehlenden Anteil frisch bauen.
+execution_actors:
+  writer: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  implementation_reviewer: CLAUDE_OPUS_NEW_READ_ONLY_SESSION_AFTER_EXACT_SHA
+  specialist_gate_reviewers: GITHUB_ACTIONS_REQUIRED_CHECK_RUNNERS_AFTER_PUSH
+  kreile_pl_session: 01a0ce4b-1843-7361-9ffc-47933f9ecdde
+  authorized_future_merge_actor: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  merge_limit: NO_MAIN_MERGE_UNTIL_EXPLICIT_PRODUCTION_EFFECT_AUTHORITY
+dependency:
+  package: KR-03B2-AUTHORIZED-SERVER-PORT
+  candidate_sha: ecb4ad9508186880d15993ac2b568e3f5c5ae801
+  status: REVIEWED_CANDIDATE_PENDING_MAIN_BASE_CI_AND_EXTERNAL_MERGE_GATE
+  review_result: PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN
+  review_evidence: ../_MODULDOSSIERS/00_PROJEKT/KR-03B2_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md
+  review_evidence_sha256: 72C7E9D6C64DCBA17D19151622257658FB0688B0284CFAE97079143084E396EC
+dossier_and_decision_ids:
+  - BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL_SECTION_5_KR_05
+  - D-GOV-001
+  - D-GOV-002
+  - D-UI-CORE-001
+  - D-UI-CORE-002
+  - A-G08-020
+source_locks:
+  - kind: REPO_FILE
+    source: docs/project/BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
+    location: REPO
+    repo_commit: ecb4ad9508186880d15993ac2b568e3f5c5ae801
+    sha256: F9C165871EDD24E5CA3EC826C24A791BB34CB6C32244C424FBB87543B6E73E8A
+  - kind: REPO_FILE
+    source: docs/project/ALT_PR_INVENTORY_2026-09-28.json
+    location: REPO
+    repo_commit: ecb4ad9508186880d15993ac2b568e3f5c5ae801
+    sha256: 137CC476614FD79C48FCD80792E8A4044839DD724B5A71D402AEF11E20724C5F
+  - kind: REPO_FILE
+    source: docs/project/BRANCH_ARCHIVE_RECEIPTS.json
+    location: REPO
+    repo_commit: ecb4ad9508186880d15993ac2b568e3f5c5ae801
+    sha256: 861FC65A0BABC116286958187BCE4FFCF621B06D86DE23B3A12BDF2D5AA8C7E7
+  - kind: REPO_FILE
+    source: docs/module/G08_SUCHE/00_STECKBRIEF.md
+    location: REPO
+    repo_commit: ecb4ad9508186880d15993ac2b568e3f5c5ae801
+    sha256: 7B33E2251C7ED1A80A0164F8352116D0236AE9AF6CFC860F83603DFABA489DB8
+  - kind: REPO_FILE
+    source: docs/module/G08_SUCHE/04_SCHNITTSTELLEN_DATEN.md
+    location: REPO
+    repo_commit: ecb4ad9508186880d15993ac2b568e3f5c5ae801
+    sha256: 872AF6D0F0D305FBF5A3DCEC1909F8DD7197F9FD8A03DBA2FC29550B4D7A949A
+  - kind: REPO_FILE
+    source: docs/module/G08_SUCHE/07_ABNAHME_TESTS.md
+    location: REPO
+    repo_commit: ecb4ad9508186880d15993ac2b568e3f5c5ae801
+    sha256: ADB42A5CF2D49A14270DB3A22BE9C29C1BBE4722424A1B361D32F38BD70C54A7
+  - kind: REPO_FILE
+    source: docs/module/G08_SUCHE/11_IST_CODE_UMBAU.md
+    location: REPO
+    repo_commit: ecb4ad9508186880d15993ac2b568e3f5c5ae801
+    sha256: 04B016C98D5A0D6E109F6F837124C2336C9B54D8908B7F252BA4FC64C0F97398
+  - kind: REPO_FILE
+    source: docs/evidence/f0/W4_CROSS_MODULE_READ_PORT_INVENTORY.json
+    location: REPO
+    repo_commit: ecb4ad9508186880d15993ac2b568e3f5c5ae801
+    sha256: 6C0C086564D57347FC33642A2E9F6FAEE65EC21BD18113005EF996DC8BD83108
+  - kind: REPO_FILE
+    source: docs/evidence/path1/PATH1_UI_CONVERGENCE_V5_P3_CORE_SURFACES_SEARCH.md
+    location: REPO
+    repo_commit: ecb4ad9508186880d15993ac2b568e3f5c5ae801
+    sha256: 2DE8C4CF9FE229AFCFC83A1E467FB663648B21E1F97F937D1F4010A6EB20F485
+  - kind: EXTERNAL_FILE
+    source: KR-03B2_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: 72C7E9D6C64DCBA17D19151622257658FB0688B0284CFAE97079143084E396EC
+    status: PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN
+  - kind: EXTERNAL_FILE
+    source: BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: EAEDDEF68C16BE403C6D05AD6F63234D4ACF75A762895F50008E07A59A782DC3
+    status: FINAL_AFTER_ONE_OPUS_REDTEAM_AND_OWNER_EXECUTION_AMENDMENT
+repo_allowlist:
+  - docs/delivery/packages/KR-05-PR84-SEARCH-RECONCILIATION.yaml
+  - docs/delivery/KR-05_PR84_SEARCH_RECONCILIATION_2026-09-29.json
+  - docs/delivery/ROLLING_MANIFEST_QUEUE_SCHEMA_V1.json
+  - docs/delivery/ROLLING_MANIFEST_QUEUE_V1.json
+  - docs/delivery/GATE_MAPPING_V1.yaml
+  - docs/project/CURRENT_STATE.md
+  - docs/project/NON_LOSS_REGISTER.md
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - scripts/quality/check-delivery-contracts.mjs
+  - src/test/delivery_contracts.test.ts
+  - quality/eslint-baseline.json
+forbidden:
+  - src/app/**
+  - src/components/**
+  - src/modules/**
+  - supabase/**
+  - product_code_or_runtime_behavior
+  - auth_rls_roles_or_session_behavior
+  - provider_or_runtime_configuration
+  - remote_database_or_production_mutation
+  - main_merge_or_production_deploy
+scope_budget:
+  max_product_files: 8
+  max_handwritten_product_lines: 800
+  max_new_migrations: 1
+  planned_product_files: 0
+  planned_governance_files: 11
+follow_up_packages:
+  - KR-10A-UI-TRUTH-BINDING
+  - KR-30A-SEARCH-CONTRACT
+new_objects_authority: DELEGATED_RATIFIED_CONTRACT
+migration_status: NONE
+applicable_register_gates:
+  FUNCTIONAL_SLICE_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+  DATA_TRUTH_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+  UI_REFERENCE_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+  OWNER_UX_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+register_gate_evidence:
+  FUNCTIONAL_SLICE_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: LOCAL_VERIFIED
+    evidence_ref: acceptance:KR05-A8
+  DATA_TRUTH_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: LOCAL_VERIFIED
+    evidence_ref: invariant:data_truth
+  UI_REFERENCE_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: OWNER_PREVIEWED
+    evidence_ref: acceptance:KR05-A4
+  OWNER_UX_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: OWNER_PREVIEWED
+    evidence_ref: acceptance:KR05-A8
+invariants:
+  data_truth: NO_DATA_MODEL_SCHEMA_MIGRATION_RUNTIME_DATA_OR_PRODUCT_CHANGE
+  tenant_and_rls: NOT_APPLICABLE_NO_DATA_ACCESS_OR_REMOTE_CHANGE
+  roles_and_commands: NOT_APPLICABLE_NO_PRODUCT_ROLE_COMMAND_OR_SESSION_CHANGE
+  receipt_and_readback: PR84_HEAD_ARCHIVE_REF_THIRTY_TWO_PATH_LEDGER_AND_CURRENT_PROVENANCE_READBACK
+  reload_and_race: ONE_MATERIALIZED_CONTRACT_ONE_SERIAL_WRITER_THEN_ONE_READ_ONLY_REVIEWER
+  error_behavior: FAIL_CLOSED_ON_ARCHIVE_HEAD_PATH_COUNT_BLOB_DISPOSITION_OR_QUEUE_DRIFT
+  rollback: ABANDON_UNMERGED_CANDIDATE_WITHOUT_PRODUCT_OR_PRODUCTION_EFFECT
+visible_capabilities:
+  registry_changes: NONE
+  quality_no_fake_production: REQUIRED_DEFENSIVE_GATE
+review_contract:
+  broad_claude_reviews: 1
+  max_correction_rounds: 1
+  delta_review_after_correction: true
+  reviewer_must_differ_from_writer: true
+  specialist_gate_reviewers_are_not_implementation_reviewers: true
+acceptance:
+  - id: KR05-A1
+    statement: Pull Request 84 bleibt ueber den exakten Archivref auf Head 9845e91e verlustfrei erhalten.
+    evidence: ARCHIVE_REF_AND_GITHUB_HEAD_READBACK
+  - id: KR05-A2
+    statement: Alle 32 Pfade aus Pull Request 84 besitzen genau eine blobgebundene und maschinengepruefte Disposition.
+    evidence: MACHINE_READABLE_PATH_LEDGER_AND_NEGATIVE_TESTS
+  - id: KR05-A3
+    statement: Achtzehn PR-Pfade sind durch aktuelle, staerkere Such-, Test- oder Governancepfade ersetzt und werden nicht kopiert.
+    evidence: CURRENT_BLOB_PROVENANCE_C7E4877D_AND_2771EEB6
+  - id: KR05-A4
+    statement: Elf alte Shell-, Header-, Browser- oder Screenshotpfade werden nicht als Ziel-Shell- oder UI-Beleg uebernommen.
+    evidence: G08_TARGET_SHELL_CONTRACT_AND_RUNTIME_IMPORT_SCAN
+  - id: KR05-A5
+    statement: Zwei leere README-Platzhalter erzeugen weder Produktwert noch einen Folgeauftrag.
+    evidence: EXACT_PR_BLOB_CONTENT_AND_PATH_LEDGER
+  - id: KR05-A6
+    statement: Die alte indirekte View-Zuordnung wird nicht als temporaerer interner Vertrag reaktiviert, sondern bleibt fuer den oeffentlichen KR-30A-Host-Port-Umbau erhalten.
+    evidence: G08_A_G08_020_AND_PATH_FRAGMENT_LEDGER
+  - id: KR05-A7
+    statement: Es existiert kein gueltiger fehlender PR-84-Produktanteil; deshalb wird KR-05R nicht ausgestellt.
+    evidence: THIRTY_TWO_OF_THIRTY_TWO_SUMMARY_VALID_MISSING_ZERO
+  - id: KR05-A8
+    statement: Dieses Paket veraendert keine Produktdatei, Datenwahrheit, UI, Rolle, Session, Provider- oder Production-Konfiguration.
+    evidence: EXACT_PARENT_DIFF_ALLOWLIST_AND_NO_PRODUCT_PATHS
+  - id: KR05-A9
+    statement: Mission und rollende Queue zeigen nach KR-05 genau auf KR-10A; KR-30A bleibt nur ein spaeterer gebundener Fachumbaupunkt.
+    evidence: DELIVERY_CONTRACT_GATE_AND_QUEUE_NEGATIVE_TESTS
+  - id: KR05-A10
+    statement: Der Kandidat bleibt QUEUED_CANDIDATE und erhebt keinen Main- oder Production-Lieferclaim.
+    evidence: MISSION_CURRENT_STATE_AND_DELIVERY_TRUTH_FALSE
+local_gates:
+  - npm run quality:delivery-contracts:selftest
+  - npm run quality:delivery-contracts
+  - npx vitest run src/test/delivery_contracts.test.ts
+  - npx vitest run src/modules/suche/__tests__/searchTenant.test.ts src/modules/suche/__tests__/SearchDialog.test.tsx
+  - node scripts/quality/check-w4-cross-module-read-ports.mjs
+  - npm run quality:authority-gate:selftest
+  - npm run quality:authority-gate
+  - npm run quality:module-gates
+  - npm run quality:no-fake-production
+  - npm run lint:ratchet
+  - git diff --check
+  - npm run verify:precommit
+required_checks_after_push:
+  - quality
+  - agentur-gate
+  - Fresh Supabase replay
+non_required_but_must_pass:
+  - ratchet
+gate_mapping_contract: docs/delivery/GATE_MAPPING_V1.yaml
+findings_ledger_contract: docs/delivery/FINDINGS_LEDGER_SCHEMA_V1.json
+closure_receipt_contract: docs/delivery/EXACT_SHA_CLOSURE_RECEIPT_SCHEMA_V1.json
+evidence_mode: CI_FULL
+evidence_mode_status: LOCAL_RESOURCE_PREFLIGHT_PASS_SERIAL_GOVERNANCE_GATES_ALLOWED
+resource_profile:
+  mode: SERIAL_NO_PARALLEL_BUILD_OR_TEST_WRITERS
+  heavy_profile: NONE
+  available_ram_mb_preflight: 5604
+  shell_probe_seconds_preflight: 0.003
+  git_status_seconds_preflight: 0.161
+  expected_runtime_minutes: 30
+  cleanup_receipt: PID_OR_RUN_ID_OUTPUT_TIMESTAMP_PHYSICAL_EXIT_AND_CLEAN_TREE_REQUIRED_CPU_NOT_SUFFICIENT
+findings: []
+split_or_follow_up_decision: >-
+  KR-05 schliesst nur den belegten PR-84-Abgleich. Kein Altpfad ist als
+  KR-05R-Produktrest gueltig; KR-10A folgt sofort. Die nicht zu kopierende
+  interne View-Traceability bleibt ausdruecklich an KR-30A gebunden.
+next_allowed_package: KR-05-EXACT-SHA-CLAUDE-REVIEW
+package_specific:
+  source_pr: 84
+  source_head: 9845e91e3003e81ff9f8b5b28bf8882dd12bf0d7
+  archive_ref: archive/pr-84-9845e91e
+  expected_path_count: 32
+  superseded_paths: 18
+  stale_paths: 11
+  empty_paths: 2
+  deferred_public_port_paths: 1
+  valid_missing_paths: 0
+  deferred_contract_package: KR-30A-SEARCH-CONTRACT
+  next_build_package: KR-10A-UI-TRUTH-BINDING

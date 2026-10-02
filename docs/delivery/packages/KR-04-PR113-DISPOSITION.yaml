@@ -1,0 +1,232 @@
+schema_version: 2
+package_id: KR-04-PR113-DISPOSITION
+project: GALVANIK_KREILE_WERKSTATTCockpit
+state: CONTRACT_READY
+execution_state_source: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+manifest_profile: ROLLING_V2
+queue_parent_sha: da8c352d91a694d9c72551a245805386bbf7efdc
+base_sha: da8c352d91a694d9c72551a245805386bbf7efdc
+origin_main_sha: fa1a989fa5844305e6a8200832ed43e2fc230751
+target_sha: PENDING_AFTER_LOCAL_VERIFICATION
+branch: codex/kr-04-pr113-disposition
+goal: >-
+  Pull Request 113 verlustfrei und pfadweise disponieren, den vorhandenen
+  Archivref verifizieren, die verworfene Mock-UI nicht uebernehmen, den einen
+  belegten Restnutzen an KR-04R binden und den alten Pull Request ungemergt
+  schliessen, ohne Produkt-, Daten-, Provider- oder Production-Aenderung.
+active_mission_file: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+dod_spec_approved_by:
+  authority: OWNER_CURRENT_TASK_AND_RATIFIED_BUILDPLAN
+  date: "2026-09-29"
+  instruction: >-
+    Den redteam-geprueften Plan seriell weiter umsetzen; Alt-PR 113
+    verlustfrei archivieren, pfadweise entscheiden und nicht direkt mergen.
+execution_actors:
+  writer: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  implementation_reviewer: CLAUDE_OPUS_NEW_READ_ONLY_SESSION_AFTER_EXACT_SHA
+  specialist_gate_reviewers: GITHUB_ACTIONS_REQUIRED_CHECK_RUNNERS_AFTER_PUSH
+  kreile_pl_session: 01a0ce4b-1843-7361-9ffc-47933f9ecdde
+  authorized_future_merge_actor: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  merge_limit: NO_MAIN_MERGE_UNTIL_EXPLICIT_PRODUCTION_EFFECT_AUTHORITY
+dependency:
+  package: KR-01R-GOVERNANCE-RECONTRACT
+  candidate_sha: da8c352d91a694d9c72551a245805386bbf7efdc
+  status: REVIEWED_CANDIDATE_PENDING_MAIN_BASE_CI_AND_EXTERNAL_MERGE_GATE
+  review_result: PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN
+  review_evidence: ../_MODULDOSSIERS/00_PROJEKT/KR-01R_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md
+  review_evidence_sha256: 8EAE4D31D1A1AD910A412503276680B8CEBC0B65DE16B8CF3F744A127E06E00E
+dossier_and_decision_ids:
+  - BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL_SECTION_5_KR_04
+  - D-GOV-001
+  - D-GOV-002
+  - D-UI-V5-003
+  - OE-2609-03
+source_locks:
+  - kind: REPO_FILE
+    source: docs/delivery/packages/KR-01-GOVERNANCE-MERGE.yaml
+    location: REPO
+    repo_commit: da8c352d91a694d9c72551a245805386bbf7efdc
+    sha256: 3FBB7843E2D0D6F13AE01610908292DB9ED842A19A0461F3142398D7883A0B5B
+  - kind: REPO_FILE
+    source: docs/project/ALT_PR_INVENTORY_2026-09-28.json
+    location: REPO
+    repo_commit: da8c352d91a694d9c72551a245805386bbf7efdc
+    sha256: 137CC476614FD79C48FCD80792E8A4044839DD724B5A71D402AEF11E20724C5F
+  - kind: REPO_FILE
+    source: docs/project/BRANCH_ARCHIVE_RECEIPTS.json
+    location: REPO
+    repo_commit: da8c352d91a694d9c72551a245805386bbf7efdc
+    sha256: 861FC65A0BABC116286958187BCE4FFCF621B06D86DE23B3A12BDF2D5AA8C7E7
+  - kind: REPO_FILE
+    source: docs/module/G07_GELD_RECHNUNGEN/03_OPTIKVORLAGE.md
+    location: REPO
+    repo_commit: da8c352d91a694d9c72551a245805386bbf7efdc
+    sha256: E40577144D9149D83514765BAC495FF4D7C8B52A1452BB5A1A0AE2F1242CEE07
+  - kind: REPO_FILE
+    source: docs/module/G07_GELD_RECHNUNGEN/11_IST_CODE_UMBAU.md
+    location: REPO
+    repo_commit: da8c352d91a694d9c72551a245805386bbf7efdc
+    sha256: 8C5F758D21CD69331B2FBECA9D11B2FE08184393A595C53733EF7AB3AA17AFC5
+  - kind: EXTERNAL_FILE
+    source: KR-01R_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: 8EAE4D31D1A1AD910A412503276680B8CEBC0B65DE16B8CF3F744A127E06E00E
+    status: PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN
+  - kind: EXTERNAL_FILE
+    source: BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: EAEDDEF68C16BE403C6D05AD6F63234D4ACF75A762895F50008E07A59A782DC3
+    status: FINAL_AFTER_ONE_OPUS_REDTEAM_AND_OWNER_EXECUTION_AMENDMENT
+repo_allowlist:
+  - docs/delivery/packages/KR-04-PR113-DISPOSITION.yaml
+  - docs/delivery/KR-04_PR113_DISPOSITION_2026-09-29.json
+  - docs/delivery/ROLLING_MANIFEST_QUEUE_SCHEMA_V1.json
+  - docs/delivery/ROLLING_MANIFEST_QUEUE_V1.json
+  - docs/delivery/GATE_MAPPING_V1.yaml
+  - docs/project/CURRENT_STATE.md
+  - docs/project/NON_LOSS_REGISTER.md
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - scripts/quality/check-delivery-contracts.mjs
+  - src/test/delivery_contracts.test.ts
+  - quality/eslint-baseline.json
+forbidden:
+  - src/app/**
+  - src/components/**
+  - src/modules/**
+  - supabase/**
+  - product_code_or_runtime_behavior
+  - auth_rls_roles_or_session_behavior
+  - provider_or_runtime_configuration
+  - remote_database_or_production_mutation
+  - main_merge_or_production_deploy
+scope_budget:
+  max_product_files: 8
+  max_handwritten_product_lines: 800
+  max_new_migrations: 1
+  planned_product_files: 0
+  planned_governance_files: 11
+follow_up_packages:
+  - KR-04R-PR113-DEAD-UI-REMOVAL
+  - KR-02-B1-P0-CANCEL
+new_objects_authority: DELEGATED_RATIFIED_CONTRACT
+migration_status: NONE
+applicable_register_gates:
+  FUNCTIONAL_SLICE_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+  DATA_TRUTH_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+  UI_REFERENCE_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+  OWNER_UX_PASS: NOT_APPLICABLE_WITH_EVIDENCE
+register_gate_evidence:
+  FUNCTIONAL_SLICE_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: LOCAL_VERIFIED
+    evidence_ref: acceptance:KR04-A7
+  DATA_TRUTH_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: LOCAL_VERIFIED
+    evidence_ref: invariant:data_truth
+  UI_REFERENCE_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: OWNER_PREVIEWED
+    evidence_ref: acceptance:KR04-A4
+  OWNER_UX_PASS:
+    applicability: NOT_APPLICABLE_WITH_EVIDENCE
+    stage: OWNER_PREVIEWED
+    evidence_ref: acceptance:KR04-A7
+invariants:
+  data_truth: NO_DATA_MODEL_SCHEMA_MIGRATION_RUNTIME_DATA_OR_PRODUCT_CHANGE
+  tenant_and_rls: NOT_APPLICABLE_NO_DATA_ACCESS_OR_REMOTE_CHANGE
+  roles_and_commands: NOT_APPLICABLE_NO_PRODUCT_ROLE_COMMAND_OR_SESSION_CHANGE
+  receipt_and_readback: PR113_HEAD_ARCHIVE_REF_PATH_LEDGER_COMMENT_AND_CLOSE_READBACK
+  reload_and_race: ONE_MATERIALIZED_CONTRACT_ONE_SERIAL_WRITER_THEN_ONE_READ_ONLY_REVIEWER
+  error_behavior: FAIL_CLOSED_ON_ARCHIVE_HEAD_PATH_COUNT_DISPOSITION_OR_QUEUE_DRIFT
+  rollback: REOPEN_PR113_AND_ABANDON_UNMERGED_CANDIDATE_WITHOUT_PRODUCT_OR_PRODUCTION_EFFECT
+visible_capabilities:
+  registry_changes: NONE
+  quality_no_fake_production: REQUIRED_DEFENSIVE_GATE
+review_contract:
+  broad_claude_reviews: 1
+  max_correction_rounds: 1
+  delta_review_after_correction: true
+  reviewer_must_differ_from_writer: true
+  specialist_gate_reviewers_are_not_implementation_reviewers: true
+acceptance:
+  - id: KR04-A1
+    statement: Pull Request 113 bleibt ueber den exakten Archivref auf Head e477e6b2 verlustfrei erhalten.
+    evidence: ARCHIVE_REF_AND_GITHUB_HEAD_READBACK
+  - id: KR04-A2
+    statement: Alle sieben Pfade aus Pull Request 113 besitzen genau eine nachvollziehbare Disposition.
+    evidence: MACHINE_READABLE_PATH_LEDGER_AND_NEGATIVE_TEST
+  - id: KR04-A3
+    statement: Kein Mock-CSS, keine Mock-Copy und keine alte UI-Komposition wird direkt uebernommen.
+    evidence: EXACT_PARENT_DIFF_WITH_ZERO_PRODUCT_PATHS
+  - id: KR04-A4
+    statement: V5-Semantik bleibt fuer KR-20 erhalten, aber nur als Designsystem-Neubau und nicht als Altbranch-Salvage.
+    evidence: G07_OPTIKVORLAGE_AND_PATH_LEDGER
+  - id: KR04-A5
+    statement: Die unreferenzierte parallele RechnungenClient-Komponente ist als einziger Restnutzen an KR-04R gebunden.
+    evidence: REPOSITORY_IMPORT_SCAN_AND_PATH_LEDGER
+  - id: KR04-A6
+    statement: Pull Request 113 ist mit Wahrheitskommentar ungemergt geschlossen und sein Quellbranch bleibt erhalten.
+    evidence: GITHUB_COMMENT_CLOSE_AND_BRANCH_READBACK
+  - id: KR04-A7
+    statement: Dieses Paket veraendert keine Produktdatei, Datenwahrheit, UI, Rolle, Session, Provider- oder Production-Konfiguration.
+    evidence: EXACT_PARENT_DIFF_ALLOWLIST_AND_NO_PRODUCT_PATHS
+  - id: KR04-A8
+    statement: Mission und rollende Queue zeigen nach KR-04 genau auf KR-04R und danach KR-02.
+    evidence: DELIVERY_CONTRACT_GATE_AND_QUEUE_NEGATIVE_TESTS
+  - id: KR04-A9
+    statement: Der Kandidat bleibt QUEUED_CANDIDATE und erhebt keinen Main- oder Production-Lieferclaim.
+    evidence: MISSION_CURRENT_STATE_AND_EXTERNAL_CLOSURE_RECEIPT
+local_gates:
+  - npm run quality:delivery-contracts:selftest
+  - npm run quality:delivery-contracts
+  - npx vitest run src/test/delivery_contracts.test.ts
+  - npm run quality:authority-gate:selftest
+  - npm run quality:authority-gate
+  - npm run quality:module-gates
+  - npm run quality:no-fake-production
+  - npm run lint:ratchet
+  - git diff --check
+  - npm run verify:precommit
+required_checks_after_push:
+  - quality
+  - agentur-gate
+  - Fresh Supabase replay
+non_required_but_must_pass:
+  - ratchet
+gate_mapping_contract: docs/delivery/GATE_MAPPING_V1.yaml
+findings_ledger_contract: docs/delivery/FINDINGS_LEDGER_SCHEMA_V1.json
+closure_receipt_contract: docs/delivery/EXACT_SHA_CLOSURE_RECEIPT_SCHEMA_V1.json
+evidence_mode: CI_FULL
+evidence_mode_status: LOCAL_RESOURCE_PREFLIGHT_PASS_SERIAL_GOVERNANCE_GATES_ALLOWED
+resource_profile:
+  mode: SERIAL_NO_PARALLEL_BUILD_OR_TEST_WRITERS
+  heavy_profile: NONE
+  available_ram_mb_preflight: 5516
+  shell_probe_seconds_preflight: 0.018
+  git_status_seconds_preflight: 0.155
+  expected_runtime_minutes: 30
+  cleanup_receipt: PID_OR_RUN_ID_OUTPUT_TIMESTAMP_PHYSICAL_EXIT_AND_CLEAN_TREE_REQUIRED_CPU_NOT_SUFFICIENT
+findings:
+  - id: KR04-P2-01
+    severity: P2
+    status: DEFERRED_WITH_PACKAGE
+    summary: Die unreferenzierte alte RechnungenClient-Komponente bleibt bis zum kleinen Folgepaket physisch vorhanden.
+    evidence:
+      - rg_import_scan_zero_consumers_except_declaration_and_archives
+      - docs/module/G07_GELD_RECHNUNGEN/11_IST_CODE_UMBAU.md
+    follow_up_package: KR-04R-PR113-DEAD-UI-REMOVAL
+    fix_sha: null
+split_or_follow_up_decision: >-
+  KR-04 schliesst nur die Disposition. Genau der belegte tote UI-Pfad wird in
+  KR-04R frisch auf diesem reviewed Kandidaten entfernt; alle uebrigen sechs
+  Altbranch-Aenderungen werden nicht uebernommen und KR-02 folgt erst danach.
+next_allowed_package: KR-04-EXACT-SHA-CLAUDE-REVIEW
+package_specific:
+  source_pr: 113
+  source_head: e477e6b2314d5a97575a32dc35ca0d16b55625d7
+  archive_ref: archive/pr-113-e477e6b2
+  expected_path_count: 7
+  retained_source_branch: path1/v2-k4-geld
+  salvage_package: KR-04R-PR113-DEAD-UI-REMOVAL
+  deferred_design_package: KR-20

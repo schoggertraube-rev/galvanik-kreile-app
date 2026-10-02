@@ -261,6 +261,53 @@ Das eine kanonische Programm `PATH1_UI_CONVERGENCE` verbindet exakt die vier fre
 
 **Wesentlicher Nachteil:** Der Umbau beginnt mit Shell und Routensubtraktion, bevor bereits entwickelte Kandidaten integriert werden; dadurch wird die Suchoberfläche später bewusst erneut abgenommen, statt die verworfene Shell zu konservieren.
 
+## D-UI-CORE-003 — Geteilte UI-Wahrheit: Seitenfluss und Designsystem V1.1 (Owner 2026-09-28)
+
+**Entscheidung/Wortlaut:** Die UI-Wahrheit wird ohne konkurrierende Quelle in
+zwei disjunkte Zustaendigkeiten gebunden. Die vier kanonischen HTML-Dateien
+`KREILE_STARTSEITE_PHILLIP_V4_2026-08-20.html`,
+`KREILE_STARTSEITE_ROLF_V8_2026-08-20.html`,
+`KREILE_AUFTRAGSKARTE_MACHART_V8_2026-08-19.html` und
+`KREILE_KUNDENKARTE_MACHART_V2_2026-08-19.html` bleiben gemeinsam mit dem
+bereits hashgebundenen V5-Ablaufpointer die `PAGE_AND_FLOW_TRUTH`. Fuer
+Layout, Seitenaufbau, Informationshierarchie, Nutzerfluss und responsive
+Anordnung gilt `LAYOUT_FLOW_FROM_CANONICAL_REFERENCES`.
+
+Das am 27.09.2026 freigegebene Designsystem V1.1 unter
+`../_DESIGN_VERBINDLICH/designsystem_v1_1` ist ausschliesslich die
+`TOKEN_AND_COMPONENT_TRUTH`; fuer Tokens und Komponenten gilt
+`TOKENS_COMPONENTS_FROM_DESIGN_SYSTEM_V1_1`. Sein Manifest
+`SHA256SUMS.txt` enthaelt 55 Eintraege und hat SHA-256
+`71B0CB01F484BEEF042CFD04D31F951D2DB2D441C427F8212F35A8D41A8041E5`.
+Der bytegleiche Repository-Lock
+`docs/project/linie/ui/DESIGN_SYSTEM_V1_1_SHA256SUMS.txt` bindet dieses
+Manifest auch in CI ohne den externen Schwesterordner. Ist die externe Quelle
+vorhanden, muss ihr Quellenbuendel vollstaendig sein und alle 55 Pfade werden
+physisch gegen den Lock geprueft; ein Teilbestand schlaegt fail-closed fehl.
+Die Freigabe `../_DESIGN_VERBINDLICH/FREIGABE_DS_V1.txt` ist an SHA-256
+`D8D95F8E48CDB02C5A4F7BB8A4C07F2658EA32D1B7753A912BBA91C97013FC25`,
+die Pruefung `../_DESIGN_VERBINDLICH/PRUEFUNG_DESIGN_V1_1_2026-09-27.md`
+an SHA-256
+`D6435C10D6F24699FEB97B408DD4BB8F6C59ED7C374B1627F5D720CF66245257`
+gebunden. `designsystem_v1` und `designsystem_v2` sind kein Bauinput.
+
+**Konfliktvorrang:** Bei einer Kollision gewinnt die kanonische Seiten-/Flow-
+Referenz fuer Layout und Ablauf; Designsystem V1.1 gewinnt fuer Token und
+Komponente. Keine Seite erzeugt eine zweite Tokenwahrheit und keine
+Designsystem-Komponente aendert still einen freigegebenen Seitenfluss.
+
+**Paketgrenze:** `KR-10A` bindet und prueft nur diese Wahrheit. Es gilt
+`NOT_IMPORTED_UNTIL_KR_10B`: kein CSS-/TSX-Import, keine Layoutverdrahtung und
+keine sichtbare Produktveraenderung. Erst `KR-10B-DESIGN-SYSTEM-IMPORT`
+importiert nach `02_app/ui` und erfuellt dabei die freigegebenen Auflagen.
+
+**Zweck:** Folgepakete koennen Seitenaufbau und Gestaltungsbausteine
+deterministisch kombinieren, ohne Designversionen, Alt-Mocks oder Kommentare
+als stillen Vorrang auszulegen.
+
+**Wesentlicher Nachteil:** Der Import ist bewusst ein separates Folgepaket;
+dadurch entsteht nach dieser Bindung noch keine sichtbare UI-Aenderung.
+
 ## D-UI-V5-001 — Ablaufkanon V5, Alltagspersonen, Global-Plus und persistentes KV (Owner 2026-09-14)
 
 **Entscheidung/Wortlaut:** `docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html`

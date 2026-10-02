@@ -7,6 +7,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { createHash } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -29,7 +30,35 @@ const UI_REFERENCE_CONTRACT = Object.freeze([
   "docs/project/linie/ui/KREILE_AUFTRAGSKARTE_MACHART_V8_2026-08-19.html",
   "docs/project/linie/ui/KREILE_KUNDENKARTE_MACHART_V2_2026-08-19.html",
 ]);
-const REQUIRED_DECISIONS = Object.freeze(["D-GOV-001", "D-ARCH-011", "D-UI-CORE-001", "D-UI-CORE-002"]);
+const UI_CONTEXT_REFERENCE = "docs/project/linie/ui/00_UI_REFERENZ_KANONISCH.md";
+const UI_DESIGN_SYSTEM_CONTRACT = Object.freeze({
+  id: "KREILE_DESIGN_SYSTEM_V1_1",
+  version: "1.1",
+  role: "TOKEN_AND_COMPONENT_TRUTH",
+  source: "../_DESIGN_VERBINDLICH/designsystem_v1_1",
+  manifest: "../_DESIGN_VERBINDLICH/designsystem_v1_1/SHA256SUMS.txt",
+  manifestLock: "docs/project/linie/ui/DESIGN_SYSTEM_V1_1_SHA256SUMS.txt",
+  manifestSha256: "71B0CB01F484BEEF042CFD04D31F951D2DB2D441C427F8212F35A8D41A8041E5",
+  manifestEntryCount: 55,
+  approval: "../_DESIGN_VERBINDLICH/FREIGABE_DS_V1.txt",
+  approvalSha256: "D8D95F8E48CDB02C5A4F7BB8A4C07F2658EA32D1B7753A912BBA91C97013FC25",
+  review: "../_DESIGN_VERBINDLICH/PRUEFUNG_DESIGN_V1_1_2026-09-27.md",
+  reviewSha256: "D6435C10D6F24699FEB97B408DD4BB8F6C59ED7C374B1627F5D720CF66245257",
+  imported: false,
+  importPackage: "KR-10B-DESIGN-SYSTEM-IMPORT",
+  target: "ui",
+  precedence: Object.freeze({
+    layoutAndFlow: "CANONICAL_HTML_PAGE_REFERENCES",
+    tokensAndComponents: "DESIGN_SYSTEM_V1_1",
+  }),
+});
+const DESIGN_SYSTEM_KEYS = Object.freeze([
+  "approval", "approvalSha256", "id", "importPackage", "imported", "manifest",
+  "manifestEntryCount", "manifestLock", "manifestSha256", "precedence", "review",
+  "reviewSha256", "role", "source", "target", "version",
+]);
+const DESIGN_PRECEDENCE_KEYS = Object.freeze(["layoutAndFlow", "tokensAndComponents"]);
+const REQUIRED_DECISIONS = Object.freeze(["D-GOV-001", "D-ARCH-011", "D-UI-CORE-001", "D-UI-CORE-002", "D-UI-CORE-003"]);
 const REQUIRED_CLASSIFICATIONS = Object.freeze([
   "docs/project/DOCUMENT_AUTHORITY.md",
   "docs/project/MASTERPLAN.md",
@@ -39,7 +68,7 @@ const REQUIRED_CLASSIFICATIONS = Object.freeze([
   "docs/project/linie/00_JETZT_UND_LEITPLANKEN.md",
   "docs/project/linie/00_ABC_INDEX.md",
   "docs/project/linie/00_BIBEL_INDEX.md",
-  "docs/project/linie/ui/00_UI_REFERENZ_KANONISCH.md",
+  UI_CONTEXT_REFERENCE,
 ]);
 const BANNER_EXEMPTIONS = new Set(["audit_results.md", "CLAUDE.md", "README.md"]);
 const ALLOWED_DOCUMENT_STATUS = new Set(["HISTORICAL_NON_AUTHORITATIVE", "REFERENCE_ONLY_NON_EXECUTABLE"]);
@@ -66,13 +95,28 @@ const REQUIRED_MODULE_IDS = Object.freeze([
   "module.calendar",
   "module.accounting-minimal",
 ]);
-const CONFIG_KEYS = Object.freeze(["schemaVersion", "truthTypes", "uiReferences", "documentClassifications"]);
+const CONFIG_KEYS = Object.freeze(["schemaVersion", "truthTypes", "uiReferences", "uiDesignSystem", "documentClassifications"]);
 const AUTHORITY_CLAIM = /(?:EINZIGE(?:\s+GÜLTIGE)?\s+(?:UI-)?WAHRHEIT|HÖCHSTE\s+PRIORITÄT|SCHLÄGT\s+ALLES|VORRANGAUTORITÄT)/iu;
 
 const posix = (value) => value.replaceAll("\\", "/");
 const absolute = (root, rel) => path.resolve(root, rel);
 const exists = (root, rel) => typeof rel === "string" && existsSync(absolute(root, rel));
 const read = (root, rel) => readFileSync(absolute(root, rel), "utf8");
+const sha256File = (root, rel) => createHash("sha256").update(readFileSync(absolute(root, rel))).digest("hex").toUpperCase();
+
+function designExternalSourceState(root, design) {
+  const required = [design.source, design.manifest, design.approval, design.review];
+  const present = required.filter((rel) => exists(root, rel)).length;
+  return {
+    mode: present === 0
+      ? "LOCK_ONLY_EXTERNAL_NOT_IN_CHECKOUT"
+      : present === required.length
+        ? "PHYSICAL_VERIFIED"
+        : "PARTIAL_INVALID",
+    present,
+    total: required.length,
+  };
+}
 
 function parseJson(root, rel, errors, code) {
   if (!exists(root, rel)) {
@@ -136,12 +180,12 @@ function checkBanner(root, item, errors) {
   if (first !== expected) errors.push(`DOCUMENT_BANNER_MISSING:${item.path}`);
 }
 
-export function checkAuthorityRepository(root = process.cwd(), configRel = DEFAULT_CONFIG) {
+function checkAuthorityRepositoryAgainstContract(root, configRel, designContract) {
   const errors = [];
   const config = parseJson(root, configRel, errors, "AUTHORITY_CONFIG");
   if (!config) return errors;
 
-  if (config.schemaVersion !== 2) errors.push("AUTHORITY_CONFIG_SCHEMA_VERSION");
+  if (config.schemaVersion !== 3) errors.push("AUTHORITY_CONFIG_SCHEMA_VERSION");
   const configKeys = Object.keys(config).sort();
   if (!sameSet(configKeys, CONFIG_KEYS)) errors.push(`AUTHORITY_CONFIG_CLOSED_SCHEMA:${configKeys.join(",")}`);
 
@@ -170,6 +214,71 @@ export function checkAuthorityRepository(root = process.cwd(), configRel = DEFAU
   if (!sameSet(configuredRefs, UI_REFERENCE_CONTRACT)) errors.push("UI_REFERENCE_CONFIG_CONTRACT");
   if (new Set(configuredRefs).size !== configuredRefs.length) errors.push("UI_REFERENCE_CONFIG_DUPLICATE");
   for (const rel of UI_REFERENCE_CONTRACT) if (!exists(root, rel)) errors.push(`UI_REFERENCE_PATH_MISSING:${rel}`);
+
+  const design = config.uiDesignSystem;
+  if (!design || !sameSet(Object.keys(design), DESIGN_SYSTEM_KEYS)) {
+    errors.push(`UI_DESIGN_SYSTEM_SCHEMA:${Object.keys(design ?? {}).sort().join(",")}`);
+  } else {
+    for (const key of ["id", "version", "source", "manifest", "manifestLock", "approval", "review", "importPackage", "target"]) {
+      if (design[key] !== designContract[key]) errors.push(`UI_DESIGN_SYSTEM_${key.replace(/([A-Z])/g, "_$1").toUpperCase()}_CONTRACT`);
+    }
+    if (design.role !== designContract.role) errors.push("UI_DESIGN_SYSTEM_ROLE_CONTRACT");
+    if (design.manifestSha256 !== designContract.manifestSha256) errors.push("UI_DESIGN_SYSTEM_MANIFEST_HASH_CONTRACT");
+    if (design.manifestEntryCount !== designContract.manifestEntryCount) errors.push("UI_DESIGN_SYSTEM_MANIFEST_COUNT_CONTRACT");
+    if (design.approvalSha256 !== designContract.approvalSha256) errors.push("UI_DESIGN_SYSTEM_APPROVAL_HASH_CONTRACT");
+    if (design.reviewSha256 !== designContract.reviewSha256) errors.push("UI_DESIGN_SYSTEM_REVIEW_HASH_CONTRACT");
+    if (!design.precedence || !sameSet(Object.keys(design.precedence), DESIGN_PRECEDENCE_KEYS)
+        || design.precedence.layoutAndFlow !== designContract.precedence.layoutAndFlow
+        || design.precedence.tokensAndComponents !== designContract.precedence.tokensAndComponents) {
+      errors.push("UI_DESIGN_SYSTEM_PRECEDENCE_CONTRACT");
+    }
+    if (design.imported !== false || exists(root, design.target)) errors.push("UI_DESIGN_SYSTEM_IMPORT_PREMATURE");
+
+    let manifestRows = [];
+    const safeManifestEntries = [];
+    if (!exists(root, design.manifestLock)) {
+      errors.push(`UI_DESIGN_SYSTEM_MANIFEST_LOCK_MISSING:${design.manifestLock}`);
+    } else {
+      if (sha256File(root, design.manifestLock) !== design.manifestSha256) {
+        errors.push(`UI_DESIGN_SYSTEM_MANIFEST_LOCK_HASH_MISMATCH:${design.manifestLock}`);
+      }
+      manifestRows = read(root, design.manifestLock).split(/\r?\n/)
+        .map((line) => line.match(/^([0-9A-F]{64})\s{2}(.+)$/))
+        .filter(Boolean)
+        .map((match) => ({ hash: match[1], rel: posix(match[2]) }));
+      if (manifestRows.length !== design.manifestEntryCount) errors.push(`UI_DESIGN_SYSTEM_MANIFEST_ENTRY_COUNT:${manifestRows.length}`);
+      if (new Set(manifestRows.map((entry) => entry.rel)).size !== manifestRows.length) errors.push("UI_DESIGN_SYSTEM_MANIFEST_DUPLICATE_PATH");
+      const sourceRoot = absolute(root, design.source);
+      for (const entry of manifestRows) {
+        const candidate = path.resolve(sourceRoot, entry.rel);
+        const relative = path.relative(sourceRoot, candidate);
+        if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+          errors.push(`UI_DESIGN_SYSTEM_MANIFEST_PATH_ESCAPE:${entry.rel}`);
+        } else safeManifestEntries.push({ ...entry, candidate });
+      }
+    }
+
+    const externalState = designExternalSourceState(root, design);
+    if (externalState.mode === "PARTIAL_INVALID") {
+      errors.push(`UI_DESIGN_SYSTEM_EXTERNAL_SOURCE_PARTIAL:${externalState.present}/${externalState.total}`);
+    } else if (externalState.mode === "PHYSICAL_VERIFIED") {
+      for (const [kind, rel, expectedHash] of [
+        ["MANIFEST", design.manifest, design.manifestSha256],
+        ["APPROVAL", design.approval, design.approvalSha256],
+        ["REVIEW", design.review, design.reviewSha256],
+      ]) {
+        if (sha256File(root, rel) !== expectedHash) errors.push(`UI_DESIGN_SYSTEM_${kind}_HASH_MISMATCH:${rel}`);
+      }
+      for (const entry of safeManifestEntries) {
+        if (!existsSync(entry.candidate)) {
+          errors.push(`UI_DESIGN_SYSTEM_ENTRY_MISSING:${entry.rel}`);
+        } else {
+          const actual = createHash("sha256").update(readFileSync(entry.candidate)).digest("hex").toUpperCase();
+          if (actual !== entry.hash) errors.push(`UI_DESIGN_SYSTEM_ENTRY_HASH_MISMATCH:${entry.rel}`);
+        }
+      }
+    }
+  }
 
   const classifications = Array.isArray(config.documentClassifications) ? config.documentClassifications : [];
   if (classifications.length === 0) errors.push("DOCUMENT_CLASSIFICATIONS_EMPTY");
@@ -200,6 +309,35 @@ export function checkAuthorityRepository(root = process.cwd(), configRel = DEFAU
   const expectedUiNames = UI_REFERENCE_CONTRACT.map((rel) => path.basename(rel));
   for (const [kind, rel] of [["DECISION", decisionPath], ["SCOPE", TRUTH_SOURCE_CONTRACT.scope_modules]]) {
     if (!sameSet(uiNames(read(root, rel)), expectedUiNames)) errors.push(`UI_REFERENCE_${kind}_CONTRACT`);
+  }
+  const designTruthTokens = [
+    designContract.source,
+    designContract.manifestLock,
+    designContract.manifestSha256,
+    designContract.approvalSha256,
+    designContract.reviewSha256,
+    "TOKEN_AND_COMPONENT_TRUTH",
+    "PAGE_AND_FLOW_TRUTH",
+    "LAYOUT_FLOW_FROM_CANONICAL_REFERENCES",
+    "TOKENS_COMPONENTS_FROM_DESIGN_SYSTEM_V1_1",
+    "NOT_IMPORTED_UNTIL_KR_10B",
+  ];
+  for (const [kind, content] of [["INDEX", uiIndex], ["DECISION", decision]]) {
+    for (const token of designTruthTokens) {
+      if (!content.includes(token)) errors.push(`UI_DESIGN_SYSTEM_${kind}_CONTRACT:${token}`);
+    }
+  }
+  const uiContext = read(root, UI_CONTEXT_REFERENCE);
+  for (const token of [
+    "NO_OWN_TOKEN_OR_COMPONENT_TRUTH",
+    designContract.source,
+    "TOKENS_COMPONENTS_FROM_DESIGN_SYSTEM_V1_1",
+    "LAYOUT_FLOW_FROM_CANONICAL_REFERENCES",
+  ]) {
+    if (!uiContext.includes(token)) errors.push(`UI_DESIGN_SYSTEM_CONTEXT_CONTRACT:${token}`);
+  }
+  if (/^\s*(?:[-*]\s*)?Tokens\s*:/imu.test(uiContext)) {
+    errors.push("UI_DESIGN_SYSTEM_CONTEXT_TOKEN_SHADOW");
   }
 
   const missionPath = TRUTH_SOURCE_CONTRACT.active_execution;
@@ -322,16 +460,83 @@ export function checkAuthorityRepository(root = process.cwd(), configRel = DEFAU
   return errors;
 }
 
+export function checkAuthorityRepository(root = process.cwd(), configRel = DEFAULT_CONFIG) {
+  return checkAuthorityRepositoryAgainstContract(root, configRel, UI_DESIGN_SYSTEM_CONTRACT);
+}
+
+function writeDesignFixture(root) {
+  const source = "fixture-designsystem-v1_1";
+  const sourceRoot = absolute(root, source);
+  mkdirSync(sourceRoot, { recursive: true });
+  const rows = [];
+  for (let index = 1; index <= 55; index += 1) {
+    const rel = `fixture/component-${String(index).padStart(2, "0")}.txt`;
+    const content = `design-fixture-${index}\n`;
+    const target = path.join(sourceRoot, rel);
+    mkdirSync(path.dirname(target), { recursive: true });
+    writeFileSync(target, content, "utf8");
+    rows.push(`${createHash("sha256").update(content).digest("hex").toUpperCase()}  ${rel}`);
+  }
+  const manifest = `${rows.join("\n")}\n`;
+  const manifestRel = `${source}/SHA256SUMS.txt`;
+  const manifestLockRel = "docs/project/linie/ui/DESIGN_SYSTEM_V1_1_SHA256SUMS.txt";
+  const approvalRel = "fixture-design-approval.txt";
+  const reviewRel = "fixture-design-review.md";
+  writeFileSync(absolute(root, manifestRel), manifest, "utf8");
+  mkdirSync(path.dirname(absolute(root, manifestLockRel)), { recursive: true });
+  writeFileSync(absolute(root, manifestLockRel), manifest, "utf8");
+  writeFileSync(absolute(root, approvalRel), "fixture approval\n", "utf8");
+  writeFileSync(absolute(root, reviewRel), "# fixture review\n", "utf8");
+  return {
+    id: "KREILE_DESIGN_SYSTEM_V1_1",
+    version: "1.1",
+    role: "TOKEN_AND_COMPONENT_TRUTH",
+    source,
+    manifest: manifestRel,
+    manifestLock: manifestLockRel,
+    manifestSha256: sha256File(root, manifestRel),
+    manifestEntryCount: 55,
+    approval: approvalRel,
+    approvalSha256: sha256File(root, approvalRel),
+    review: reviewRel,
+    reviewSha256: sha256File(root, reviewRel),
+    imported: false,
+    importPackage: "KR-10B-DESIGN-SYSTEM-IMPORT",
+    target: "ui",
+    precedence: {
+      layoutAndFlow: "CANONICAL_HTML_PAGE_REFERENCES",
+      tokensAndComponents: "DESIGN_SYSTEM_V1_1",
+    },
+  };
+}
+
+function designTruthFixtureText(contract) {
+  return [
+    contract.source,
+    contract.manifestLock,
+    contract.manifestSha256,
+    contract.approvalSha256,
+    contract.reviewSha256,
+    "TOKEN_AND_COMPONENT_TRUTH",
+    "PAGE_AND_FLOW_TRUTH",
+    "LAYOUT_FLOW_FROM_CANONICAL_REFERENCES",
+    "TOKENS_COMPONENTS_FROM_DESIGN_SYSTEM_V1_1",
+    "NOT_IMPORTED_UNTIL_KR_10B",
+  ].join("\n");
+}
+
 function writeFixture(root, calendarState = "legacy") {
+  const designContract = writeDesignFixture(root);
+  const designTruth = designTruthFixtureText(designContract);
   const banner = (status, title) => `<!-- STATUS: ${status} | CANONICAL_ENTRY: ${STANDARD_ENTRY} -->\n# ${title}\n`;
   const files = {
     "AGENTS.md": "# Rules\n",
-    "docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md": `## D-GOV-001 — one\n## D-ARCH-011 — provider\n## D-UI-CORE-001 — route\n## D-UI-CORE-002 — PATH1_UI_CONVERGENCE\nvollständig als Lieferbasis verworfen; kein UX-Lieferfortschritt\n${UI_REFERENCE_CONTRACT.map((rel) => `\`${path.basename(rel)}\``).join("\n")}\n`,
+    "docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md": `## D-GOV-001 — one\n## D-ARCH-011 — provider\n## D-UI-CORE-001 — route\n## D-UI-CORE-002 — PATH1_UI_CONVERGENCE\n## D-UI-CORE-003 — design truth\nvollständig als Lieferbasis verworfen; kein UX-Lieferfortschritt\n${UI_REFERENCE_CONTRACT.map((rel) => `\`${path.basename(rel)}\``).join("\n")}\n${designTruth}\n`,
     "docs/project/linie/MODULKARTE_KANON.md": `PATH1_UI_CONVERGENCE\nvollständig als Lieferbasis verworfen; kein UX-Lieferfortschritt\n${UI_REFERENCE_CONTRACT.map((rel) => `\`${path.basename(rel)}\``).join("\n")}\n`,
     "docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md": "PATH1_UI_CONVERGENCE\nvollständig als Lieferbasis verworfen; kein UX-Lieferfortschritt\n",
     "missions/F1_ORDER_TO_CASH_PILOT_001.yml": `mission_id: F1\nstatus: active\nbranch: gov\nbase_sha: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nactive_package: GOV\nnext_gate_after_active_package: REVIEW\nnext_product_priority: ${NEXT_PRODUCT_PROGRAM}\npath1_s5_search_status: CANDIDATE_PR_84_NOT_ACCEPTED_NOT_MERGED\npath1_calendar_status: NOT_STARTED_BLOCKED_EXTERNAL_PERMISSION\nf1_6_status: NOT_STARTED\n`,
     "docs/project/CURRENT_STATE.md": "# Current main@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nOWNER_UX_FAIL / NOT_DELIVERED\nFULLY_REJECTED_AS_DELIVERY_BASE\nkein Zielscreen-PASS\n",
-    "docs/project/linie/00_UI_REFERENZEN_PFADE.md": `# UI truth\n${UI_REFERENCE_CONTRACT.map((rel) => `- \`${path.basename(rel)}\``).join("\n")}\n`,
+    "docs/project/linie/00_UI_REFERENZEN_PFADE.md": `# UI truth\n${UI_REFERENCE_CONTRACT.map((rel) => `- \`${path.basename(rel)}\``).join("\n")}\n${designTruth}\n`,
     "docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json": JSON.stringify({ capabilities: [
       { stable_id: "page.real", kind: "PAGE_ROUTE", visible: true },
     ] }),
@@ -363,24 +568,27 @@ function writeFixture(root, calendarState = "legacy") {
     ["docs/project/linie/00_JETZT_UND_LEITPLANKEN.md", "Now"],
     ["docs/project/linie/00_ABC_INDEX.md", "ABC"],
     ["docs/project/linie/00_BIBEL_INDEX.md", "Bible"],
-    ["docs/project/linie/ui/00_UI_REFERENZ_KANONISCH.md", "UI manifest"],
+    [UI_CONTEXT_REFERENCE, "UI manifest"],
   ];
   for (const [rel, title] of classified) files[rel] = banner("REFERENCE_ONLY_NON_EXECUTABLE", title);
+  files[UI_CONTEXT_REFERENCE] += `${designContract.source}\nNO_OWN_TOKEN_OR_COMPONENT_TRUTH\nTOKENS_COMPONENTS_FROM_DESIGN_SYSTEM_V1_1\nLAYOUT_FLOW_FROM_CANONICAL_REFERENCES\n`;
   for (const rel of UI_REFERENCE_CONTRACT) files[rel] = "<!doctype html>\n";
   for (const [rel, content] of Object.entries(files)) {
     mkdirSync(path.dirname(absolute(root, rel)), { recursive: true });
     writeFileSync(absolute(root, rel), content, "utf8");
   }
   const config = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     truthTypes: Object.entries(TRUTH_SOURCE_CONTRACT).map(([id, source]) => ({ id, source })),
     uiReferences: [...UI_REFERENCE_CONTRACT],
+    uiDesignSystem: designContract,
     documentClassifications: [
       ...REQUIRED_CLASSIFICATIONS.map((rel) => ({ path: rel, status: "REFERENCE_ONLY_NON_EXECUTABLE" })),
     ],
   };
   mkdirSync(absolute(root, "quality"), { recursive: true });
   writeFileSync(absolute(root, DEFAULT_CONFIG), `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  return designContract;
 }
 
 export function runAuthoritySelftest() {
@@ -394,6 +602,16 @@ export function runAuthoritySelftest() {
     ["ui-index-asymmetric", (root) => { const p = absolute(root, TRUTH_SOURCE_CONTRACT.ui_truth); writeFileSync(p, readFileSync(p, "utf8").replace("08-19.html", "08-18.html"), "utf8"); }, "UI_REFERENCE_INDEX_CONTRACT"],
     ["ui-decision-asymmetric", (root) => { const p = absolute(root, TRUTH_SOURCE_CONTRACT.product_decisions); writeFileSync(p, readFileSync(p, "utf8").replace("08-19.html", "08-18.html"), "utf8"); }, "UI_REFERENCE_DECISION_CONTRACT"],
     ["ui-scope-asymmetric", (root) => { const p = absolute(root, TRUTH_SOURCE_CONTRACT.scope_modules); writeFileSync(p, readFileSync(p, "utf8").replace("08-19.html", "08-18.html"), "utf8"); }, "UI_REFERENCE_SCOPE_CONTRACT"],
+    ["design-role-drift", (root) => { const p = absolute(root, DEFAULT_CONFIG); const c = JSON.parse(readFileSync(p, "utf8")); c.uiDesignSystem.role = "PAGE_AND_FLOW_TRUTH"; writeFileSync(p, JSON.stringify(c), "utf8"); }, "UI_DESIGN_SYSTEM_ROLE_CONTRACT"],
+    ["design-manifest-hash-drift", (root) => { const p = absolute(root, DEFAULT_CONFIG); const c = JSON.parse(readFileSync(p, "utf8")); c.uiDesignSystem.manifestSha256 = "0".repeat(64); writeFileSync(p, JSON.stringify(c), "utf8"); }, "UI_DESIGN_SYSTEM_MANIFEST_HASH_CONTRACT"],
+    ["design-precedence-swapped", (root) => { const p = absolute(root, DEFAULT_CONFIG); const c = JSON.parse(readFileSync(p, "utf8")); c.uiDesignSystem.precedence.layoutAndFlow = "DESIGN_SYSTEM_V1_1"; writeFileSync(p, JSON.stringify(c), "utf8"); }, "UI_DESIGN_SYSTEM_PRECEDENCE_CONTRACT"],
+    ["design-import-claim-premature", (root) => { const p = absolute(root, DEFAULT_CONFIG); const c = JSON.parse(readFileSync(p, "utf8")); c.uiDesignSystem.imported = true; writeFileSync(p, JSON.stringify(c), "utf8"); }, "UI_DESIGN_SYSTEM_IMPORT_PREMATURE"],
+    ["design-target-premature", (root) => { mkdirSync(absolute(root, "ui"), { recursive: true }); }, "UI_DESIGN_SYSTEM_IMPORT_PREMATURE"],
+    ["design-index-asymmetric", (root) => { const p = absolute(root, TRUTH_SOURCE_CONTRACT.ui_truth); writeFileSync(p, readFileSync(p, "utf8").replace("TOKEN_AND_COMPONENT_TRUTH", "UNBOUND_COMPONENTS"), "utf8"); }, "UI_DESIGN_SYSTEM_INDEX_CONTRACT"],
+    ["design-decision-asymmetric", (root) => { const p = absolute(root, TRUTH_SOURCE_CONTRACT.product_decisions); writeFileSync(p, readFileSync(p, "utf8").replace("NOT_IMPORTED_UNTIL_KR_10B", "UNBOUND_IMPORT"), "utf8"); }, "UI_DESIGN_SYSTEM_DECISION_CONTRACT"],
+    ["design-context-token-shadow", (root) => { const p = absolute(root, UI_CONTEXT_REFERENCE); writeFileSync(p, `${readFileSync(p, "utf8")}Tokens: shadow truth\n`, "utf8"); }, "UI_DESIGN_SYSTEM_CONTEXT_TOKEN_SHADOW"],
+    ["design-manifest-entry-missing", (root) => { const c = JSON.parse(readFileSync(absolute(root, DEFAULT_CONFIG), "utf8")); const p = absolute(root, c.uiDesignSystem.manifestLock); const rows = readFileSync(p, "utf8").trimEnd().split(/\r?\n/); writeFileSync(p, `${rows.slice(0, -1).join("\n")}\n`, "utf8"); }, "UI_DESIGN_SYSTEM_MANIFEST_ENTRY_COUNT"],
+    ["design-external-source-partial", (root) => { const c = JSON.parse(readFileSync(absolute(root, DEFAULT_CONFIG), "utf8")); rmSync(absolute(root, c.uiDesignSystem.approval)); }, "UI_DESIGN_SYSTEM_EXTERNAL_SOURCE_PARTIAL"],
     ["missing-banner", (root) => { const p = absolute(root, "docs/project/DOCUMENT_AUTHORITY.md"); writeFileSync(p, "# no banner\n", "utf8"); }, "DOCUMENT_BANNER_MISSING"],
     ["banner-self-weaken", (root) => { const p = absolute(root, DEFAULT_CONFIG); const c = JSON.parse(readFileSync(p, "utf8")); c.documentClassifications[0].bannerRequired = false; writeFileSync(p, JSON.stringify(c), "utf8"); }, "DOCUMENT_CLASSIFICATION_SCHEMA"],
     ["nested-authority-claim", (root) => { const p = absolute(root, "docs/project/deep/claim.md"); mkdirSync(path.dirname(p), { recursive: true }); writeFileSync(p, "# DIE EINZIGE GÜLTIGE UI-WAHRHEIT\n", "utf8"); }, "UNCLASSIFIED_COMPETING_AUTHORITY"],
@@ -413,13 +631,22 @@ export function runAuthoritySelftest() {
     ["calendar-provider-matrix-activated", (root) => { const p = absolute(root, CALENDAR_TRANSITION_CONTRACT.matrix); writeFileSync(p, readFileSync(p, "utf8").replace("| PENDING | CalendarPort", "| REAL | CalendarPort"), "utf8"); }, "ACTIVE_CALENDAR_PROVIDER_MATRIX_CLAIM"],
     ["candidate-checker-weakened", (root) => { const p = absolute(root, "scripts/quality/check-authoritative-sources.mjs"); mkdirSync(path.dirname(p), { recursive: true }); writeFileSync(p, "process.exit(0)\n", "utf8"); const c = absolute(root, DEFAULT_CONFIG); const value = JSON.parse(readFileSync(c, "utf8")); value.shadowTruth = true; writeFileSync(c, JSON.stringify(value), "utf8"); }, "AUTHORITY_CONFIG_CLOSED_SCHEMA"],
   ];
-  const validStates = ["legacy", "target"];
-  for (const calendarState of validStates) {
+  const validStates = [
+    { calendarState: "legacy", externalMode: "physical" },
+    { calendarState: "target", externalMode: "physical" },
+    { calendarState: "legacy", externalMode: "lock-only" },
+  ];
+  for (const { calendarState, externalMode } of validStates) {
     const root = mkdtempSync(path.join(os.tmpdir(), `authority-gate-${calendarState}-`));
     try {
-      writeFixture(root, calendarState);
-      const errors = checkAuthorityRepository(root);
-      if (errors.length > 0) throw new Error(`selftest valid ${calendarState} fixture failed: ${errors.join(" | ")}`);
+      const designContract = writeFixture(root, calendarState);
+      if (externalMode === "lock-only") {
+        rmSync(absolute(root, designContract.source), { recursive: true, force: true });
+        rmSync(absolute(root, designContract.approval), { force: true });
+        rmSync(absolute(root, designContract.review), { force: true });
+      }
+      const errors = checkAuthorityRepositoryAgainstContract(root, DEFAULT_CONFIG, designContract);
+      if (errors.length > 0) throw new Error(`selftest valid ${calendarState}/${externalMode} fixture failed: ${errors.join(" | ")}`);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -428,11 +655,11 @@ export function runAuthoritySelftest() {
   for (const [name, mutate, expected] of cases) {
     const root = mkdtempSync(path.join(os.tmpdir(), "authority-gate-"));
     try {
-      writeFixture(root);
-      const clean = checkAuthorityRepository(root);
+      const designContract = writeFixture(root);
+      const clean = checkAuthorityRepositoryAgainstContract(root, DEFAULT_CONFIG, designContract);
       if (clean.length > 0) throw new Error(`selftest ${name} invalid clean fixture: ${clean.join(" | ")}`);
       mutate(root);
-      const errors = checkAuthorityRepository(root);
+      const errors = checkAuthorityRepositoryAgainstContract(root, DEFAULT_CONFIG, designContract);
       if (!errors.some((entry) => entry.includes(expected))) throw new Error(`selftest ${name} expected ${expected}, got: ${errors.join(" | ")}`);
       passed += 1;
     } finally {
@@ -473,7 +700,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       for (const error of errors) console.error(`- ${error}`);
       process.exitCode = 1;
     } else {
-      console.log(`AUTHORITY_GATE=PASS truth_types=${Object.keys(TRUTH_SOURCE_CONTRACT).length} ui_references=${UI_REFERENCE_CONTRACT.length}`);
+      const externalState = designExternalSourceState(args.root, UI_DESIGN_SYSTEM_CONTRACT);
+      console.log(`AUTHORITY_GATE=PASS truth_types=${Object.keys(TRUTH_SOURCE_CONTRACT).length} ui_references=${UI_REFERENCE_CONTRACT.length} ui_design_system=${UI_DESIGN_SYSTEM_CONTRACT.id} manifest_entries=${UI_DESIGN_SYSTEM_CONTRACT.manifestEntryCount} external_source=${externalState.mode}`);
     }
   }
 }
