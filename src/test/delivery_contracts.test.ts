@@ -10,6 +10,7 @@ import {
   LEGACY_MANIFEST_BINDINGS,
   LEGACY_V1_MANIFEST_BINDINGS,
   checkDeliveryContracts,
+  trustedCommitFacts,
   validateTrustedHandoff,
 } from "../../scripts/quality/check-delivery-contracts.mjs";
 
@@ -204,6 +205,10 @@ describe("KR-04 delivery governance gate", () => {
         },
       ),
     ).toContainEqual(expect.stringContaining("Geschuetzter Git-Graph konnte nicht geprueft werden"));
+  });
+
+  it("rejects option-shaped commit input before invoking Git", () => {
+    expect(() => trustedCommitFacts(process.cwd(), "--help")).toThrow("ungueltiger Trusted-Commit-SHA");
   });
 
   it("rejects any branch-protection bypass actor", () => {

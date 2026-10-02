@@ -160,10 +160,13 @@ function handoffSignature(value) {
   });
 }
 
-function trustedCommitFacts(repo, sha) {
+export function trustedCommitFacts(repo, sha) {
+  if (!SHA_PATTERN.test(sha)) {
+    throw new Error("ungueltiger Trusted-Commit-SHA");
+  }
   const output = execFileSync(
     "git",
-    ["-C", repo, "show", "-s", "--format=%H%n%P%n%T", sha],
+    ["-C", repo, "show", "-s", "--format=%H%n%P%n%T", "--end-of-options", sha],
     { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
   )
     .trim()
