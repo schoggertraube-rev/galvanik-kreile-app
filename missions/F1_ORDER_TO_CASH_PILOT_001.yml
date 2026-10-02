@@ -1,8 +1,8 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: fa1a989fa5844305e6a8200832ed43e2fc230751
-branch: codex/kr-01r-governance-recontract
+base_sha: ecb4ad9508186880d15993ac2b568e3f5c5ae801
+branch: codex/kr-05-pr84-search-reconciliation
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
 execution_program_20260928:
@@ -16,29 +16,43 @@ execution_program_20260928:
   merge_rule: REQUIRED_CHECKS_EXACT_SHA_CLEAN_TREE_AND_SEPARATE_PRODUCTION_EFFECT_AUTHORITY
   production_rule: NO_PRODUCTION_WITHOUT_SEPARATE_EXPLICIT_OWNER_AUTHORITY
   origin_main_reference: fa1a989fa5844305e6a8200832ed43e2fc230751
-  queue_parent: KR-01A-AUTHORITY-PIN-BOOTSTRAP@fa1a989fa5844305e6a8200832ed43e2fc230751
-  queue_parent_status: MAIN_DELIVERED_PRODUCTION_EFFECT_AUTHORIZED_AND_READY
+  queue_parent: KR-03B2-AUTHORIZED-SERVER-PORT@ecb4ad9508186880d15993ac2b568e3f5c5ae801
+  queue_parent_status: REVIEWED_REMOTE_GREEN_QUEUED_CANDIDATE_NOT_MAIN_DELIVERED
   queue_parent_review:
     model: claude-opus-5
-    broad_session_id: d7bfe3c2-eb59-4653-b7ae-978ceb7d9670
-    delta_session_id: NOT_NEEDED_ZERO_CORRECTIONS
+    broad_session_id: db370413-9cb1-459b-82da-0009d3100c7f
+    delta_session_id: NOT_APPLICABLE_NO_CORRECTION
     correction_rounds: 0
-    delta_review_result: NOT_REQUIRED_BROAD_PASS_NO_OPEN_P0_P1_P2
-    evidence: _MODULDOSSIERS/00_PROJEKT/KR-01A_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md
-    evidence_sha256: BB45E2F8E992DD8EBB5A0C2BD8F44B7E13391A77F9395C3A2234E94885269856
-    github_agentur_gate_run: 36545860035
-    remote_head: fa1a989fa5844305e6a8200832ed43e2fc230751
+    delta_review_result: NOT_APPLICABLE_BROAD_REVIEW_PASS_NO_OPEN_P0_P1_P2
+    evidence: _MODULDOSSIERS/00_PROJEKT/KR-03B2_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md
+    evidence_sha256: 72C7E9D6C64DCBA17D19151622257658FB0688B0284CFAE97079143084E396EC
+    github_fresh_replay_job: 109614953386
+    remote_head: ecb4ad9508186880d15993ac2b568e3f5c5ae801
   queue_rule: EXACT_PARENT_ONE_WRITER_ONE_REVIEWER_NO_DELIVERY_CLAIM_REVERIFY_AFTER_EACH_REAL_MAIN_MERGE
   kreile_pl_session: 01a0ce4b-1843-7361-9ffc-47933f9ecdde
   build_coordinator_and_future_merge_actor: 01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
-  current_state_drift: KR_01A_MAIN_DELIVERED_KR_01R_RECONTRACT_ACTIVE_NO_CURRENT_PACKAGE_DELIVERY_CLAIM
-  current_package: KR-01R-GOVERNANCE-RECONTRACT
-  current_package_parent: fa1a989fa5844305e6a8200832ed43e2fc230751
-  current_package_status: LOCAL_VERIFIED_PENDING_EXACT_SHA_REVIEW
-  current_package_remote_freeze: RECORDED_ONLY_IN_EXTERNAL_EXACT_SHA_CLOSURE_AFTER_REVIEW
-  current_package_broad_review: RECORDED_ONLY_IN_EXTERNAL_CLAUDE_RECEIPT_AFTER_EXACT_SHA
-  current_package_correction_rounds: UP_TO_1_RECORDED_EXTERNALLY
-  current_package_fast_gates: RECORDED_ONLY_IN_EXTERNAL_EXACT_SHA_CLOSURE_AFTER_GATE_RUNS
+  current_state_drift: MAIN_REMAINS_FA1A989F_KR_03B2_REMOTE_REVIEWED_CANDIDATE_NOT_MAIN_DELIVERED_KR_05_LOCAL_VERIFIED_PENDING_COMMIT_PUSH_CI_AND_REVIEW_NO_CURRENT_PACKAGE_DELIVERY_CLAIM
+  current_package: KR-05-PR84-SEARCH-RECONCILIATION
+  current_package_parent: ecb4ad9508186880d15993ac2b568e3f5c5ae801
+  current_package_status: LOCAL_VERIFIED_PENDING_COMMIT_PUSH_CI_AND_OPUS_REVIEW
+  current_package_remote_freeze: PENDING_COMMIT_AND_PUSH
+  current_package_broad_review: PENDING_EXACT_REMOTE_SHA_AFTER_LOCAL_VERIFICATION
+  current_package_correction_rounds: 0_OF_MAX_1
+  current_package_fast_gates: PASS_DELIVERY_SELFTEST_25_OF_25_DELIVERY_TESTS_23_OF_23_SEARCH_29_OF_29_W4_10_NEGATIVE_TYPESCRIPT_AUTHORITY_MODULE_NO_FAKE_RATCHET_PRECOMMIT_1034_OF_1034
+  current_package_local_db_gate: NOT_APPLICABLE_GOVERNANCE_ONLY_NO_PRODUCT_DATA_OR_MIGRATION_CHANGE_REMOTE_FRESH_REPLAY_STILL_REQUIRED
+  historical_pr84_disposition: CLOSED_UNMERGED_ARCHIVED_RECONCILIATION_32_PATHS_ZERO_VALID_MISSING_PRODUCT_PATHS_INTERNAL_VIEW_TRACEABILITY_DEFERRED_TO_KR_30A
+  historical_pr84_head: 9845e91e3003e81ff9f8b5b28bf8882dd12bf0d7
+  historical_pr84_archive_ref: archive/pr-84-9845e91e
+  historical_pr114_review: FAIL_P1_REAL_COMMAND_SUITES_PINNED_BEFORE_GUARD_MIGRATION_REBUILT_AS_KR_02R_PASS
+  historical_pr114_head: 0d3bacc6d929eb8f6102200fba0681c7335025c2
+  historical_pr114_archive_ref: archive/pr-114-0d3bacc6
+  historical_pr115_disposition: CLOSED_UNMERGED_ARCHIVED_FRESH_REBUILD_SPLIT_KR_03A_KR_03B1_KR_03B2
+  historical_pr115_head: 71dbc8151b30a3aa964d5cd4ea3562b1f1c03647
+  historical_pr115_archive_ref: archive/pr-115-71dbc815
+  historical_pr113_disposition: CLOSED_UNMERGED_SEVEN_OF_SEVEN_PATHS_DECIDED_ZERO_DIRECT_IMPORTS
+  historical_pr113_head: e477e6b2314d5a97575a32dc35ca0d16b55625d7
+  historical_pr113_archive_ref: archive/pr-113-e477e6b2
+  historical_pr113_closure_comment: https://github.com/schoggertraube-rev/galvanik-kreile-app/pull/113#issuecomment-5893046381
   review_roles:
     writer: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
     implementation_reviewer: CLAUDE_OPUS_NEW_READ_ONLY_SESSION_AFTER_EXACT_SHA
@@ -86,9 +100,9 @@ delivery_order:
   - F1.5_BESTAETIGTER_ZAHLUNGSEINGANG
   - F1.6_REALER_PILOT
 
-active_package: KR-01R-GOVERNANCE-RECONTRACT
-active_package_status: LOCAL_VERIFIED_PENDING_EXACT_SHA_REVIEW
-next_gate_after_active_package: EXACT_REMOTE_IDENTITY_BRANCH_GATE_AND_ONE_BROAD_CLAUDE_REVIEW_THEN_EXTERNAL_CLOSURE
+active_package: KR-05-PR84-SEARCH-RECONCILIATION
+active_package_status: LOCAL_VERIFIED_PENDING_COMMIT_PUSH_CI_AND_OPUS_REVIEW
+next_gate_after_active_package: EXACT_ALLOWLIST_READBACK_THEN_COMMIT_PUSH_MAIN_BASE_CI_AND_ONE_BROAD_CLAUDE_OPUS_REVIEW
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
@@ -127,7 +141,7 @@ f1_6_pilot_readiness: BLOCKED_PATH1_UI_CONVERGENCE_SEARCH_ACCEPTANCE_AND_CALENDA
 f1_6_required_before_start: PATH1_UI_CONVERGENCE; SEARCH_MODULE_REAL_MODULAR_ON_TARGET_SHELL; CALENDAR_REAL_MODULAR
 path1_s5_search_status: CANDIDATE_PR_84_NOT_ACCEPTED_NOT_MERGED
 path1_s5_search_exact_sha: 9845e91e3003e81ff9f8b5b28bf8882dd12bf0d7
-path1_s5_search_merge_gate: BLOCKED_UNTIL_PATH1_UI_CONVERGENCE_A_B_C_AND_FULL_ROUTE_REACCEPTANCE
+path1_s5_search_merge_gate: NO_DIRECT_PR84_MERGE_KR05_PATHWISE_DISPOSITION_THEN_FRESH_KR30A_TO_KR30C_SEARCH_BUILD_AND_FULL_ROUTE_REACCEPTANCE
 path1_calendar_status: NOT_STARTED_BLOCKED_EXTERNAL_PERMISSION
 path1_calendar_target_provider: MICROSOFT_365_GRAPH_DELEGATED_NAMED_OFFICE_USER
 authority_provider_governance_status: DELIVERED_PR_85_MERGE_330aaf7717b489ae68b62801610e2ebcb27a7b11

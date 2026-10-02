@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -34,19 +34,19 @@ afterEach(() => {
   for (const root of temps.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-describe("KR-01R delivery governance gate", () => {
+describe("KR-05 delivery governance gate", () => {
   it("accepts the complete current contract set", () => {
     expect(checkDeliveryContracts(process.cwd())).toEqual({ ok: true, findings: [] });
   });
 
-  it("rejects a hidden alias between the retained KR-01 filename and the KR-01R package id", () => {
+  it("rejects a hidden alias between the active filename and package id", () => {
     const root = fixture();
     const manifestPath = path.join(root, ACTIVE_MANIFEST_BINDING.path);
     writeFileSync(
       manifestPath,
       readFileSync(manifestPath, "utf8").replace(
         `package_id: ${ACTIVE_MANIFEST_BINDING.packageId}`,
-        "package_id: KR-01R-HIDDEN-ALIAS",
+        "package_id: KR-04-HIDDEN-ALIAS",
       ),
     );
     const missionPath = path.join(root, DELIVERY_PATHS.mission);
@@ -54,7 +54,7 @@ describe("KR-01R delivery governance gate", () => {
       missionPath,
       readFileSync(missionPath, "utf8").replaceAll(
         ACTIVE_MANIFEST_BINDING.packageId,
-        "KR-01R-HIDDEN-ALIAS",
+        "KR-04-HIDDEN-ALIAS",
       ),
     );
     expect(checkDeliveryContracts(root).findings).toContainEqual(
@@ -87,19 +87,176 @@ describe("KR-01R delivery governance gate", () => {
     const root = fixture();
     const rel = ACTIVE_MANIFEST_BINDING.path;
     const source = readFileSync(path.join(root, rel), "utf8").replace(
-      "evidence_ref: acceptance:KR01-A8",
+      "evidence_ref: acceptance:KR05-A8",
       "evidence_ref: acceptance:DOES-NOT-EXIST",
     );
     writeFileSync(path.join(root, rel), source);
     expect(checkDeliveryContracts(root).findings).toContainEqual(expect.stringContaining("loest nicht im eigenen Manifest auf"));
   });
 
-  it("rejects queue and gate-mapping drift", () => {
+  it("rejects drift in any PR #113 path disposition", () => {
     const root = fixture();
-    const queue = json(root, DELIVERY_PATHS.queue) as { issuance_policy: { candidate_is_not_main_delivery: boolean } };
-    queue.issuance_policy.candidate_is_not_main_delivery = false;
-    writeJson(root, DELIVERY_PATHS.queue, queue);
-    expect(checkDeliveryContracts(root).findings).toContainEqual(expect.stringContaining("Rolling-Policy-Drift"));
+    const disposition = json(root, DELIVERY_PATHS.pr113Disposition) as {
+      path_decisions: Array<{ decision: string }>;
+    };
+    disposition.path_decisions[0].decision = "UNSAFE_DIRECT_IMPORT";
+    writeJson(root, DELIVERY_PATHS.pr113Disposition, disposition);
+    expect(checkDeliveryContracts(root).findings).toContainEqual(expect.stringContaining("Disposition fuer"));
+  });
+
+  it("rejects a missing PR #113 path disposition", () => {
+    const root = fixture();
+    const disposition = json(root, DELIVERY_PATHS.pr113Disposition) as {
+      path_decisions: Array<Record<string, unknown>>;
+    };
+    disposition.path_decisions.pop();
+    writeJson(root, DELIVERY_PATHS.pr113Disposition, disposition);
+    expect(checkDeliveryContracts(root).findings).toContainEqual(
+      expect.stringContaining("muss exakt 7 Pfadentscheidungen enthalten"),
+    );
+  });
+
+  it("rejects PR #113 blob drift", () => {
+    const root = fixture();
+    const disposition = json(root, DELIVERY_PATHS.pr113Disposition) as {
+      path_decisions: Array<{ parent_blob_sha: string }>;
+    };
+    disposition.path_decisions[0]!.parent_blob_sha = "0000000000000000000000000000000000000000";
+    writeJson(root, DELIVERY_PATHS.pr113Disposition, disposition);
+    expect(checkDeliveryContracts(root).findings).toContainEqual(expect.stringContaining("Blobbindung fuer"));
+  });
+
+  it("rejects a PR #113 delivery claim", () => {
+    const root = fixture();
+    const disposition = json(root, DELIVERY_PATHS.pr113Disposition) as {
+      delivery_truth: { main_delivered: boolean };
+    };
+    disposition.delivery_truth.main_delivered = true;
+    writeJson(root, DELIVERY_PATHS.pr113Disposition, disposition);
+    expect(checkDeliveryContracts(root).findings).toContainEqual(
+      expect.stringContaining("delivery_truth.main_delivered muss false sein"),
+    );
+  });
+
+  it("rejects unknown PR #113 disposition fields", () => {
+    const root = fixture();
+    const disposition = json(root, DELIVERY_PATHS.pr113Disposition);
+    disposition.hidden_claim = true;
+    writeJson(root, DELIVERY_PATHS.pr113Disposition, disposition);
+    expect(checkDeliveryContracts(root).findings).toContainEqual(
+      expect.stringContaining("enthaelt unerwarteten Key 'hidden_claim'"),
+    );
+  });
+
+  it.each([
+    ["static", 'import "./app/buchhaltung/rechnungen/RechnungenClient";'],
+    ["dynamic", 'void import("@/app/buchhaltung/rechnungen/RechnungenClient");'],
+    ["CommonJS", 'require("./app/buchhaltung/rechnungen/RechnungenClient");'],
+  ])("rejects a real %s importer of the dead component", (_kind, source) => {
+    const root = fixture();
+    const probePath = path.join(root, "src/probe.ts");
+    mkdirSync(path.dirname(probePath), { recursive: true });
+    writeFileSync(probePath, `${source}\n`);
+    expect(checkDeliveryContracts(root).findings).toContainEqual(
+      expect.stringContaining("Runtime-Importer muessen leer sein, gefunden src/probe.ts"),
+    );
+  });
+
+  it("rejects drift in any PR #84 path reconciliation", () => {
+    const root = fixture();
+    const reconciliation = json(root, DELIVERY_PATHS.pr84Reconciliation) as {
+      path_decisions: Array<{ decision: string }>;
+    };
+    reconciliation.path_decisions[0]!.decision = "UNSAFE_DIRECT_IMPORT";
+    writeJson(root, DELIVERY_PATHS.pr84Reconciliation, reconciliation);
+    expect(checkDeliveryContracts(root).findings).toContainEqual(
+      expect.stringContaining("PR84-Reconciliation fuer"),
+    );
+  });
+
+  it("rejects a missing PR #84 path reconciliation", () => {
+    const root = fixture();
+    const reconciliation = json(root, DELIVERY_PATHS.pr84Reconciliation) as {
+      path_decisions: Array<Record<string, unknown>>;
+    };
+    reconciliation.path_decisions.pop();
+    writeJson(root, DELIVERY_PATHS.pr84Reconciliation, reconciliation);
+    expect(checkDeliveryContracts(root).findings).toContainEqual(
+      expect.stringContaining("muss exakt 32 Pfadentscheidungen enthalten"),
+    );
+  });
+
+  it("rejects PR #84 blob drift", () => {
+    const root = fixture();
+    const reconciliation = json(root, DELIVERY_PATHS.pr84Reconciliation) as {
+      path_decisions: Array<{ current_blob_sha: string }>;
+    };
+    reconciliation.path_decisions[0]!.current_blob_sha = "0000000000000000000000000000000000000000";
+    writeJson(root, DELIVERY_PATHS.pr84Reconciliation, reconciliation);
+    expect(checkDeliveryContracts(root).findings).toContainEqual(
+      expect.stringContaining("PR84-Reconciliation Blobbindung fuer"),
+    );
+  });
+
+  it("rejects an invented valid PR #84 product remainder", () => {
+    const root = fixture();
+    const reconciliation = json(root, DELIVERY_PATHS.pr84Reconciliation) as {
+      summary: { valid_missing_product_paths: number };
+    };
+    reconciliation.summary.valid_missing_product_paths = 1;
+    writeJson(root, DELIVERY_PATHS.pr84Reconciliation, reconciliation);
+    expect(checkDeliveryContracts(root).findings).toContainEqual(
+      expect.stringContaining("summary.valid_missing_product_paths muss 0 sein"),
+    );
+  });
+
+  it("rejects a PR #84 delivery claim", () => {
+    const root = fixture();
+    const reconciliation = json(root, DELIVERY_PATHS.pr84Reconciliation) as {
+      delivery_truth: { main_delivered: boolean };
+    };
+    reconciliation.delivery_truth.main_delivered = true;
+    writeJson(root, DELIVERY_PATHS.pr84Reconciliation, reconciliation);
+    expect(checkDeliveryContracts(root).findings).toContainEqual(
+      expect.stringContaining("PR84-Reconciliation delivery_truth.main_delivered muss false sein"),
+    );
+  });
+
+  it("rejects a production importer of the old PR #84 header", () => {
+    const root = fixture();
+    const probePath = path.join(root, "src/probe.ts");
+    mkdirSync(path.dirname(probePath), { recursive: true });
+    writeFileSync(probePath, 'import "./components/layout/KreileHeader";\n');
+    expect(checkDeliveryContracts(root).findings).toContainEqual(
+      expect.stringContaining("alter Header muss importerlos bleiben"),
+    );
+  });
+
+  it("rejects a manifest whose planned file counts do not cover the exact allowlist", () => {
+    const root = fixture();
+    const manifestPath = path.join(root, ACTIVE_MANIFEST_BINDING.path);
+    writeFileSync(
+      manifestPath,
+      readFileSync(manifestPath, "utf8").replace("planned_governance_files: 11", "planned_governance_files: 10"),
+    );
+    expect(checkDeliveryContracts(root).findings).toContainEqual(
+      expect.stringContaining("nicht fuer jeden Allowlist-Pfad exakt eine geplante Datei"),
+    );
+  });
+
+  it("rejects direct queue and gate-mapping order drift", () => {
+    const root = fixture();
+    const mappingPath = path.join(root, DELIVERY_PATHS.mapping);
+    writeFileSync(
+      mappingPath,
+      readFileSync(mappingPath, "utf8").replace(
+        "    - KR-10A-UI-TRUTH-BINDING",
+        "    - KR-99-DRIFT",
+      ),
+    );
+    expect(checkDeliveryContracts(root).findings).toContainEqual(
+      expect.stringContaining("Rolling-Policy-Drift: Queue-Reihenfolge"),
+    );
   });
 
   it("rejects any branch-protection bypass actor", () => {
