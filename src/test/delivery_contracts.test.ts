@@ -124,6 +124,65 @@ describe("KR-04 delivery governance gate", () => {
     );
   });
 
+  it("rejects a broken protected handoff parent chain", () => {
+    const root = fixture();
+    const queue = json(root, DELIVERY_PATHS.queue) as {
+      effective_base_handoff: {
+        queue_parent_sha: string;
+        entries: Array<{ parent_sha: string }>;
+      };
+    };
+    queue.effective_base_handoff.entries[1]!.parent_sha = queue.effective_base_handoff.queue_parent_sha;
+    writeJson(root, DELIVERY_PATHS.queue, queue);
+    expect(checkDeliveryContracts(root).findings).toContainEqual(
+      expect.stringContaining("Handoff-Kette ist vor Eintrag 2 unterbrochen"),
+    );
+  });
+
+  it("binds the effective base and every handoff merge to a trusted local Git graph", () => {
+    const previous = {
+      required: process.env.DELIVERY_REQUIRE_TRUSTED_BASE,
+      base: process.env.DELIVERY_TRUSTED_BASE_SHA,
+      repo: process.env.DELIVERY_TRUSTED_REPO,
+    };
+    process.env.DELIVERY_REQUIRE_TRUSTED_BASE = "true";
+    process.env.DELIVERY_TRUSTED_BASE_SHA = "bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5";
+    process.env.DELIVERY_TRUSTED_REPO = process.cwd();
+    try {
+      expect(checkDeliveryContracts(process.cwd())).toEqual({ ok: true, findings: [] });
+    } finally {
+      if (previous.required === undefined) delete process.env.DELIVERY_REQUIRE_TRUSTED_BASE;
+      else process.env.DELIVERY_REQUIRE_TRUSTED_BASE = previous.required;
+      if (previous.base === undefined) delete process.env.DELIVERY_TRUSTED_BASE_SHA;
+      else process.env.DELIVERY_TRUSTED_BASE_SHA = previous.base;
+      if (previous.repo === undefined) delete process.env.DELIVERY_TRUSTED_REPO;
+      else process.env.DELIVERY_TRUSTED_REPO = previous.repo;
+    }
+  });
+
+  it("rejects a candidate base that differs from the protected Git checkout", () => {
+    const previous = {
+      required: process.env.DELIVERY_REQUIRE_TRUSTED_BASE,
+      base: process.env.DELIVERY_TRUSTED_BASE_SHA,
+      repo: process.env.DELIVERY_TRUSTED_REPO,
+    };
+    process.env.DELIVERY_REQUIRE_TRUSTED_BASE = "true";
+    process.env.DELIVERY_TRUSTED_BASE_SHA = "47bc0e58990b1bff545111c990a715d4f72f5f37";
+    process.env.DELIVERY_TRUSTED_REPO = process.cwd();
+    try {
+      expect(checkDeliveryContracts(process.cwd()).findings).toContainEqual(
+        expect.stringContaining("Effective Base stimmt nicht mit dem geschuetzten Git-Checkout ueberein"),
+      );
+    } finally {
+      if (previous.required === undefined) delete process.env.DELIVERY_REQUIRE_TRUSTED_BASE;
+      else process.env.DELIVERY_REQUIRE_TRUSTED_BASE = previous.required;
+      if (previous.base === undefined) delete process.env.DELIVERY_TRUSTED_BASE_SHA;
+      else process.env.DELIVERY_TRUSTED_BASE_SHA = previous.base;
+      if (previous.repo === undefined) delete process.env.DELIVERY_TRUSTED_REPO;
+      else process.env.DELIVERY_TRUSTED_REPO = previous.repo;
+    }
+  });
+
   it("rejects any branch-protection bypass actor", () => {
     const root = fixture();
     const receipt = json(root, DELIVERY_PATHS.operatingReceipt) as { active_ruleset: { bypass_actors: string[] } };

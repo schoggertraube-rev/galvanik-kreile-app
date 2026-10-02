@@ -44,6 +44,7 @@ workflow_facts_at_contract_parent:
     effective_base_tree_sha: 34e45157e821f847bd8f3d98735b3f93a8e53a89
     entries:
       - pr: 131
+        parent_sha: 0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9
         candidate_sha: bfc6e5737f9bc0b3e268dff535a8dc1a78053234
         merge_sha: 47bc0e58990b1bff545111c990a715d4f72f5f37
         tree_sha: 7cfd13f319bb4b936ce09de44ab6ca5fa255e5ce
@@ -53,6 +54,7 @@ workflow_facts_at_contract_parent:
         post_main_quality_run: 37015031007
         vercel_status: SUCCESS
       - pr: 132
+        parent_sha: 47bc0e58990b1bff545111c990a715d4f72f5f37
         candidate_sha: e3ce9259bde35cbef843ec88628fb1faa53051b7
         merge_sha: bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5
         tree_sha: 34e45157e821f847bd8f3d98735b3f93a8e53a89

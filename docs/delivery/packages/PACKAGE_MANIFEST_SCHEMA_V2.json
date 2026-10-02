@@ -523,6 +523,7 @@
             "additionalProperties": false,
             "required": [
               "pr",
+              "parent_sha",
               "candidate_sha",
               "merge_sha",
               "tree_sha",
@@ -534,6 +535,7 @@
             ],
             "properties": {
               "pr": { "type": "integer", "minimum": 1 },
+              "parent_sha": { "$ref": "#/definitions/sha" },
               "candidate_sha": { "$ref": "#/definitions/sha" },
               "merge_sha": { "$ref": "#/definitions/sha" },
               "tree_sha": { "$ref": "#/definitions/sha" },

@@ -11,6 +11,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -113,35 +114,8 @@ const EFFECTIVE_REQUIRED_CHECKS = Object.freeze([
   "Fresh Supabase replay",
 ]);
 const NON_REQUIRED_BUT_MUST_PASS = Object.freeze(["ratchet"]);
-const EFFECTIVE_BASE_HANDOFF = Object.freeze({
-  queue_parent_sha: "0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9",
-  effective_base_sha: "bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5",
-  effective_base_tree_sha: "34e45157e821f847bd8f3d98735b3f93a8e53a89",
-  entries: Object.freeze([
-    Object.freeze({
-      pr: 131,
-      candidate_sha: "bfc6e5737f9bc0b3e268dff535a8dc1a78053234",
-      merge_sha: "47bc0e58990b1bff545111c990a715d4f72f5f37",
-      tree_sha: "7cfd13f319bb4b936ce09de44ab6ca5fa255e5ce",
-      scope: "PROTECTED_CI_GOVERNANCE_ONLY",
-      review_result: "PASS_NO_OPEN_P0_P1_P2_P3",
-      post_main_agentur_gate_run: 37015030926,
-      post_main_quality_run: 37015031007,
-      vercel_status: "SUCCESS",
-    }),
-    Object.freeze({
-      pr: 132,
-      candidate_sha: "e3ce9259bde35cbef843ec88628fb1faa53051b7",
-      merge_sha: "bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5",
-      tree_sha: "34e45157e821f847bd8f3d98735b3f93a8e53a89",
-      scope: "PROTECTED_CI_GOVERNANCE_ONLY",
-      review_result: "PASS_NO_OPEN_P0_P1_P2_P3",
-      post_main_agentur_gate_run: 37019871795,
-      post_main_quality_run: 37019872078,
-      vercel_status: "SUCCESS",
-    }),
-  ]),
-});
+const REVIEWED_QUEUE_PARENT_SHA = "0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9";
+const SHA_PATTERN = /^[0-9a-f]{40}$/;
 
 function toPosix(value) {
   return value.replaceAll("\\", "/");
@@ -167,6 +141,7 @@ function handoffSignature(value) {
   const entries = Array.isArray(value.entries)
     ? value.entries.map((entry) => ({
         pr: entry?.pr,
+        parent_sha: entry?.parent_sha,
         candidate_sha: entry?.candidate_sha,
         merge_sha: entry?.merge_sha,
         tree_sha: entry?.tree_sha,
@@ -183,6 +158,57 @@ function handoffSignature(value) {
     effective_base_tree_sha: value.effective_base_tree_sha,
     entries,
   });
+}
+
+function trustedCommitFacts(repo, sha) {
+  const output = execFileSync(
+    "git",
+    ["-C", repo, "show", "-s", "--format=%H%n%P%n%T", sha],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+  )
+    .trim()
+    .split(/\r?\n/);
+  return {
+    sha: output[0] ?? "",
+    parents: (output[1] ?? "").split(" ").filter(Boolean),
+    tree: output[2] ?? "",
+  };
+}
+
+function checkTrustedHandoff(handoff, findings) {
+  const required = process.env.DELIVERY_REQUIRE_TRUSTED_BASE === "true";
+  const trustedBaseSha = process.env.DELIVERY_TRUSTED_BASE_SHA;
+  const trustedRepo = process.env.DELIVERY_TRUSTED_REPO;
+  if (!required && trustedBaseSha === undefined && trustedRepo === undefined) return;
+  if (!SHA_PATTERN.test(trustedBaseSha ?? "") || !trustedRepo) {
+    findings.push("[delivery] Geschuetzter Base-Kontext ist unvollstaendig oder ungueltig");
+    return;
+  }
+
+  try {
+    const base = trustedCommitFacts(trustedRepo, trustedBaseSha);
+    if (base.sha !== trustedBaseSha) {
+      findings.push("[delivery] Geschuetzter Base-SHA ist im Trusted-Repository nicht aufloesbar");
+      return;
+    }
+    if (handoff?.effective_base_sha !== base.sha || handoff?.effective_base_tree_sha !== base.tree) {
+      findings.push("[delivery] Effective Base stimmt nicht mit dem geschuetzten Git-Checkout ueberein");
+    }
+
+    for (const [index, entry] of (handoff?.entries ?? []).entries()) {
+      const commit = trustedCommitFacts(trustedRepo, entry.merge_sha);
+      const expectedParents = [entry.parent_sha, entry.candidate_sha];
+      if (
+        commit.sha !== entry.merge_sha ||
+        commit.tree !== entry.tree_sha ||
+        JSON.stringify(commit.parents) !== JSON.stringify(expectedParents)
+      ) {
+        findings.push(`[delivery] Handoff-Eintrag ${index + 1} stimmt nicht mit dem geschuetzten Git-Graph ueberein`);
+      }
+    }
+  } catch (error) {
+    findings.push(`[delivery] Geschuetzter Git-Graph konnte nicht geprueft werden (${error.message})`);
+  }
 }
 
 function readJson(root, rel, findings, label = rel) {
@@ -577,7 +603,8 @@ function checkRollingConsistency(root, queue, mapping, mission, manifests, findi
     }
   }
 
-  const expectedHandoff = handoffSignature(EFFECTIVE_BASE_HANDOFF);
+  const canonicalHandoff = queue.effective_base_handoff;
+  const expectedHandoff = handoffSignature(canonicalHandoff);
   const handoffCopies = [
     ["manifest", active[0]?.value?.base_handoff],
     ["queue", queue.effective_base_handoff],
@@ -589,28 +616,77 @@ function checkRollingConsistency(root, queue, mapping, mission, manifests, findi
       findings.push(`[delivery] Effective-Base-Handoff-Drift: ${label} stimmt nicht mit der geprueften Handoff-Kette ueberein`);
     }
   }
-  if (queue.parent_candidate?.candidate_sha !== EFFECTIVE_BASE_HANDOFF.queue_parent_sha) {
+  if (
+    queue.parent_candidate?.candidate_sha !== REVIEWED_QUEUE_PARENT_SHA ||
+    canonicalHandoff?.queue_parent_sha !== REVIEWED_QUEUE_PARENT_SHA
+  ) {
     findings.push("[delivery] Queue-Parent stimmt nicht mit dem Ausgang der Handoff-Kette ueberein");
   }
-  if (active[0]?.value?.base_sha !== EFFECTIVE_BASE_HANDOFF.effective_base_sha) {
+
+  const entries = Array.isArray(canonicalHandoff?.entries) ? canonicalHandoff.entries : [];
+  let expectedParent = canonicalHandoff?.queue_parent_sha;
+  const seenPrs = new Set();
+  const seenCandidates = new Set();
+  const seenMerges = new Set();
+  for (const [index, entry] of entries.entries()) {
+    const criticalShapeIsValid =
+      Number.isInteger(entry?.pr) &&
+      entry.pr > 0 &&
+      SHA_PATTERN.test(entry?.parent_sha ?? "") &&
+      SHA_PATTERN.test(entry?.candidate_sha ?? "") &&
+      SHA_PATTERN.test(entry?.merge_sha ?? "") &&
+      SHA_PATTERN.test(entry?.tree_sha ?? "") &&
+      entry?.scope === "PROTECTED_CI_GOVERNANCE_ONLY" &&
+      entry?.review_result === "PASS_NO_OPEN_P0_P1_P2_P3" &&
+      Number.isInteger(entry?.post_main_agentur_gate_run) &&
+      entry.post_main_agentur_gate_run > 0 &&
+      Number.isInteger(entry?.post_main_quality_run) &&
+      entry.post_main_quality_run > 0 &&
+      entry?.vercel_status === "SUCCESS";
+    if (!criticalShapeIsValid) {
+      findings.push(`[delivery] Handoff-Eintrag ${index + 1} hat keine fail-closed PASS-Struktur`);
+    }
+    if (entry?.parent_sha !== expectedParent) {
+      findings.push(`[delivery] Handoff-Kette ist vor Eintrag ${index + 1} unterbrochen`);
+    }
+    if (seenPrs.has(entry?.pr) || seenCandidates.has(entry?.candidate_sha) || seenMerges.has(entry?.merge_sha)) {
+      findings.push(`[delivery] Handoff-Eintrag ${index + 1} verwendet PR oder SHA doppelt`);
+    }
+    seenPrs.add(entry?.pr);
+    seenCandidates.add(entry?.candidate_sha);
+    seenMerges.add(entry?.merge_sha);
+    expectedParent = entry?.merge_sha;
+  }
+
+  const lastEntry = entries.at(-1);
+  if (
+    entries.length === 0 ||
+    lastEntry?.merge_sha !== canonicalHandoff?.effective_base_sha ||
+    lastEntry?.tree_sha !== canonicalHandoff?.effective_base_tree_sha
+  ) {
+    findings.push("[delivery] Letzter Handoff-Eintrag ist nicht die deklarierte effektive Base");
+  }
+  checkTrustedHandoff(canonicalHandoff, findings);
+
+  if (active[0]?.value?.base_sha !== canonicalHandoff?.effective_base_sha) {
     findings.push("[delivery] Manifest base_sha stimmt nicht mit der effektiven Base ueberein");
   }
-  if (active[0]?.value?.origin_main_sha !== EFFECTIVE_BASE_HANDOFF.effective_base_sha) {
+  if (active[0]?.value?.origin_main_sha !== canonicalHandoff?.effective_base_sha) {
     findings.push("[delivery] Manifest origin_main_sha stimmt nicht mit der effektiven Base ueberein");
   }
-  if (mission.base_sha !== EFFECTIVE_BASE_HANDOFF.effective_base_sha) {
+  if (mission.base_sha !== canonicalHandoff?.effective_base_sha) {
     findings.push("[delivery] Mission base_sha stimmt nicht mit der effektiven Base ueberein");
   }
-  if (mission.execution_program_20260928?.origin_main_reference !== EFFECTIVE_BASE_HANDOFF.effective_base_sha) {
+  if (mission.execution_program_20260928?.origin_main_reference !== canonicalHandoff?.effective_base_sha) {
     findings.push("[delivery] Mission origin_main_reference stimmt nicht mit der effektiven Base ueberein");
   }
-  if (mission.execution_program_20260928?.current_package_parent !== EFFECTIVE_BASE_HANDOFF.effective_base_sha) {
+  if (mission.execution_program_20260928?.current_package_parent !== canonicalHandoff?.effective_base_sha) {
     findings.push("[delivery] Mission current_package_parent stimmt nicht mit der effektiven Base ueberein");
   }
-  if (mapping.workflow_facts_at_contract_parent?.parent_sha !== EFFECTIVE_BASE_HANDOFF.effective_base_sha) {
+  if (mapping.workflow_facts_at_contract_parent?.parent_sha !== canonicalHandoff?.effective_base_sha) {
     findings.push("[delivery] Gate-Mapping parent_sha stimmt nicht mit der effektiven Base ueberein");
   }
-  if (mapping.workflow_facts_at_contract_parent?.queue_parent_sha !== EFFECTIVE_BASE_HANDOFF.queue_parent_sha) {
+  if (mapping.workflow_facts_at_contract_parent?.queue_parent_sha !== canonicalHandoff?.queue_parent_sha) {
     findings.push("[delivery] Gate-Mapping queue_parent_sha stimmt nicht mit dem Queue-Parent ueberein");
   }
 }
@@ -735,6 +811,13 @@ export function runSelftest(root = process.cwd()) {
     value.effective_base_handoff.effective_base_sha = value.effective_base_handoff.queue_parent_sha;
     writeFileSync(abs, `${JSON.stringify(value, null, 2)}\n`);
   }, "Effective-Base-Handoff-Drift");
+
+  runCase("effective-base-handoff-chain-break", (fixture) => {
+    const abs = path.join(fixture, DELIVERY_PATHS.queue);
+    const value = JSON.parse(readFileSync(abs, "utf8"));
+    value.effective_base_handoff.entries[1].parent_sha = value.effective_base_handoff.queue_parent_sha;
+    writeFileSync(abs, `${JSON.stringify(value, null, 2)}\n`);
+  }, "Handoff-Kette ist vor Eintrag 2 unterbrochen");
 
   runCase("receipt-bypass", (fixture) => {
     const abs = path.join(fixture, DELIVERY_PATHS.operatingReceipt);
