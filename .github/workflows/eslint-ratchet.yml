@@ -99,4 +99,19 @@ jobs:
 
       - name: Enforce protected delivery contracts and rolling queue
         working-directory: ratchet-base
-        run: node scripts/quality/check-delivery-contracts.mjs --root "$GITHUB_WORKSPACE/candidate"
+        env:
+          # Exact reviewed KR-04 checker bytes. This permits the one planned
+          # KR-01R -> KR-04 handoff without ever executing arbitrary PR code.
+          KR04_DELIVERY_CHECKER_SHA256: "19f3255cb80ab6e2b8e759690a18d0dc3a4c01e1dcdf77d62e72a1bfcec391cc"
+        run: |
+          set -euo pipefail
+          protected_checker="$GITHUB_WORKSPACE/ratchet-base/scripts/quality/check-delivery-contracts.mjs"
+          candidate_checker="$GITHUB_WORKSPACE/candidate/scripts/quality/check-delivery-contracts.mjs"
+          protected_sha="$(sha256sum "$protected_checker" | cut -d' ' -f1)"
+          candidate_sha="$(sha256sum "$candidate_checker" | cut -d' ' -f1)"
+          if [[ "$candidate_sha" != "$protected_sha" && "$candidate_sha" != "$KR04_DELIVERY_CHECKER_SHA256" ]]; then
+            echo "Delivery checker hash is neither protected main nor the exact KR-04 handoff: $candidate_sha" >&2
+            exit 1
+          fi
+          node "$candidate_checker" --selftest
+          node "$candidate_checker" --root "$GITHUB_WORKSPACE/candidate"
