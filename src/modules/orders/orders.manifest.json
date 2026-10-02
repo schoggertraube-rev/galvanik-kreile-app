@@ -1,6 +1,6 @@
 {
   "moduleId": "orders",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "owner": "Path-1 Orders (Auftragskarte V8)",
   "publicExports": [
     "@/modules/orders/public#ORDER_ACCOUNTING_STATUS",
@@ -26,14 +26,26 @@
     "@/modules/orders/public#Urgency",
     "@/modules/orders/public#buildOrdersHomeProjection",
     "@/modules/orders/public#getUrgency",
-    "@/modules/orders/public#isOrderLifecycleStatus"
+    "@/modules/orders/public#isOrderLifecycleStatus",
+    "@/modules/orders/server-public#OrderTimelinessConsistency",
+    "@/modules/orders/server-public#OrderTimelinessFact",
+    "@/modules/orders/server-public#OrderTimelinessFacts",
+    "@/modules/orders/server-public#OrderTimelinessFactsResult",
+    "@/modules/orders/server-public#OrderTimelinessMissingReason",
+    "@/modules/orders/server-public#OrderTimelinessRange",
+    "@/modules/orders/server-public#OrderTimelinessSource",
+    "@/modules/orders/server-public#OrderTimelinessValue",
+    "@/modules/orders/server-public#getOrderTimelinessFacts"
   ],
   "capabilities": [],
-  "migrations": [],
-  "viewsFunctions": [],
+  "migrations": ["20260929200000_g04_order_timeliness_read_contract.sql"],
+  "viewsFunctions": [
+    "public.v_order_timeliness_orders_v1",
+    "public.v_order_timeliness_pickup_events_v1"
+  ],
   "ownsTables": [],
   "storagePurposes": [],
-  "events": { "emits": [], "consumes": [] },
+  "events": { "emits": [], "consumes": ["ORDER_PICKED_UP_V1", "ORDER_PICKED_UP_V2"] },
   "config": {},
   "dependencies": []
 }

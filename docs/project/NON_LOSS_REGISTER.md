@@ -2,14 +2,14 @@
 
 # NON_LOSS_REGISTER
 
-## Aktuelle Alt-PR-Disposition 2026-09-28
+## Aktuelle Alt-PR-Disposition 2026-09-29
 
 | PR | Exakter Head / Archivref | Disposition | Folgepaket |
 |---|---|---|---|
 | #84 | `9845e91e3003e81ff9f8b5b28bf8882dd12bf0d7` / `archive/pr-84-9845e91e` | geschlossen, ungemergt, vollständig archiviert; nur Vergleichsquelle, kein Header-/Overlay-Wholesale-Merge | `KR-05` |
-| #113 | `e477e6b2314d5a97575a32dc35ca0d16b55625d7` / `archive/pr-113-e477e6b2` | vorerst offen und archiviert; pfadweise Restnutzenentscheidung, Mock-CSS/-Copy nicht direkt mergen | `KR-04` |
-| #114 | `0d3bacc6d929eb8f6102200fba0681c7335025c2` / `archive/pr-114-0d3bacc6` | offener Kandidat; noch kein PASS- oder Main-Claim | `KR-02` (breite Exact-SHA-Review, höchstens eine Korrektur, frische Required Checks) |
-| #115 | `71dbc8151b30a3aa964d5cd4ea3562b1f1c03647` / `archive/pr-115-71dbc815` | offen und archiviert; kein direkter Stack-Merge; Schließung erst als getrennte koordinierte Aktion nach bestandenem KR-00D-Review | `KR-03a`, `KR-03b-1`, `KR-03b-2` |
+| #113 | `e477e6b2314d5a97575a32dc35ca0d16b55625d7` / `archive/pr-113-e477e6b2` | am 29.09.2026 mit Wahrheitskommentar geschlossen, ungemergt und ueber Quellbranch plus Archivref erhalten; 3 Designpfade an frischen KR-20-Neubau verwiesen, 3 Mock-CSS-Integrationen verworfen, keine Altbranch-Datei direkt uebernommen | `KR-04R` soll als einzigen belegten Restnutzen die unreferenzierte `RechnungenClient.tsx` frisch auf dem geprueften Parent entfernen |
+| #114 | `0d3bacc6d929eb8f6102200fba0681c7335025c2` / `archive/pr-114-0d3bacc6` | am 29.09.2026 geschlossen und ungemergt; der fehlerhafte Altstand bleibt nur als Vergleichsquelle archiviert, waehrend der frische Ersatz KR-02R auf PR #123 exakt geprueft und remote-gruen ist; kein Main-Claim | `KR-02R` auf `b657b63ce734207b9ab37a97f2d772aca3e3b249` / PR #123 |
+| #115 | `71dbc8151b30a3aa964d5cd4ea3562b1f1c03647` / `archive/pr-115-71dbc815` | am 29.09.2026 geschlossen und ungemergt; kein direkter Stack-Merge. KR-03A ist auf `2ddd19791e704e463de9b0c1eb665bfea557e36a` remote-gruen und Opus-geprueft abgeschlossen; finale DB-Lesewahrheit und autorisierter Server-Port werden als KR-03B1 und KR-03B2 frisch und seriell gebaut | `KR-03B1`, danach `KR-03B2` |
 
 Archivrefs sind ausschließlich Verlustschutz. Keiner dieser PRs oder refs ist dadurch auf `main`
 geliefert oder für Production freigegeben. Bestehende Salvage-Einträge darunter bleiben erhalten.
