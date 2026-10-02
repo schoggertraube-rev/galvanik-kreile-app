@@ -168,6 +168,17 @@ describe("KR-04 delivery governance gate", () => {
           tree: "34e45157e821f847bd8f3d98735b3f93a8e53a89",
         },
       ],
+      [
+        "b58efdf546c05750d09f80adfbdd68d12ee9e3e5",
+        {
+          sha: "b58efdf546c05750d09f80adfbdd68d12ee9e3e5",
+          parents: [
+            "bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5",
+            "db29c6ff6c3724907f3a105763c127739f3da2f5",
+          ],
+          tree: "6b2e49719b785adf8b49e27a105d2beba521fb9c",
+        },
+      ],
     ]);
     const readFacts = (sha: string) => {
       const value = facts.get(sha);
@@ -177,7 +188,7 @@ describe("KR-04 delivery governance gate", () => {
     expect(
       validateTrustedHandoff(
         queue.effective_base_handoff,
-        "bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5",
+        "b58efdf546c05750d09f80adfbdd68d12ee9e3e5",
         readFacts,
       ),
     ).toEqual([]);
@@ -199,7 +210,7 @@ describe("KR-04 delivery governance gate", () => {
     expect(
       validateTrustedHandoff(
         queue.effective_base_handoff,
-        "bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5",
+        "b58efdf546c05750d09f80adfbdd68d12ee9e3e5",
         () => {
           throw new Error("synthetic trusted graph unavailable");
         },
