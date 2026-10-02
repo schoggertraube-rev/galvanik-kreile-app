@@ -5,8 +5,31 @@ state: CONTRACT_READY
 execution_state_source: missions/F1_ORDER_TO_CASH_PILOT_001.yml
 manifest_profile: ROLLING_V2
 queue_parent_sha: 0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9
-base_sha: 0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9
-origin_main_sha: 0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9
+base_sha: bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5
+origin_main_sha: bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5
+base_handoff:
+  queue_parent_sha: 0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9
+  effective_base_sha: bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5
+  effective_base_tree_sha: 34e45157e821f847bd8f3d98735b3f93a8e53a89
+  entries:
+    - pr: 131
+      candidate_sha: bfc6e5737f9bc0b3e268dff535a8dc1a78053234
+      merge_sha: 47bc0e58990b1bff545111c990a715d4f72f5f37
+      tree_sha: 7cfd13f319bb4b936ce09de44ab6ca5fa255e5ce
+      scope: PROTECTED_CI_GOVERNANCE_ONLY
+      review_result: PASS_NO_OPEN_P0_P1_P2_P3
+      post_main_agentur_gate_run: 37015030926
+      post_main_quality_run: 37015031007
+      vercel_status: SUCCESS
+    - pr: 132
+      candidate_sha: e3ce9259bde35cbef843ec88628fb1faa53051b7
+      merge_sha: bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5
+      tree_sha: 34e45157e821f847bd8f3d98735b3f93a8e53a89
+      scope: PROTECTED_CI_GOVERNANCE_ONLY
+      review_result: PASS_NO_OPEN_P0_P1_P2_P3
+      post_main_agentur_gate_run: 37019871795
+      post_main_quality_run: 37019872078
+      vercel_status: SUCCESS
 target_sha: PENDING_AFTER_LOCAL_VERIFICATION
 branch: codex/kr-04-pr113-disposition
 goal: >-
@@ -222,6 +245,16 @@ findings:
       - rg_import_scan_zero_consumers_except_declaration_and_archives
       - docs/module/G07_GELD_RECHNUNGEN/11_IST_CODE_UMBAU.md
     follow_up_package: KR-04R-PR113-DEAD-UI-REMOVAL
+    fix_sha: null
+  - id: KR04-P2-02
+    severity: P2
+    status: FIXED
+    summary: Die Base- und Parent-Locks waren nach den geschuetzten CI-Handoffs noch an den historischen Queue-Parent gebunden.
+    evidence:
+      - base_handoff_exact_queue_parent_and_effective_base_chain
+      - post_main_runs_37015030926_37015031007_37019871795_37019872078_green
+      - current_main_bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5_tree_34e45157e821f847bd8f3d98735b3f93a8e53a89
+    follow_up_package: null
     fix_sha: null
 split_or_follow_up_decision: >-
   KR-04 schliesst nur die Disposition. Genau der belegte tote UI-Pfad wird in

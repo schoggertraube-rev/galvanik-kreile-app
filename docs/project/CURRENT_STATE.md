@@ -1,6 +1,6 @@
 # CURRENT_STATE — Galvanik-Kreile WerkstattCockpit
 
-**Lieferstand 2026-10-02: `main@0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9`.** Diese Datei
+**Lieferstand 2026-10-02: `main@bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5`.** Diese Datei
 beschreibt ausschließlich auf `main` belegte Lieferungen. Aktives Paket, Branch, Base, Kandidatenstatus
 und nächstes Gate stehen ausschließlich in `missions/F1_ORDER_TO_CASH_PILOT_001.yml`. Die
 ausführlichen F0-Tabellen darunter sind ein datierter historischer Snapshot.
@@ -13,8 +13,9 @@ steht in `docs/delivery/KR-04_PR113_DISPOSITION_2026-09-29.json`: PR #113 ist un
 Quellbranch und Archivref bleiben erhalten, und kein Produktpfad daraus wurde durch KR-04 geliefert.
 
 Seit dem letzten Produktstand wurden ausschliesslich die Governance-Pakete
-`KR-01A-AUTHORITY-PIN-BOOTSTRAP` ueber PR #119 und
-`KR-01R-GOVERNANCE-RECONTRACT` ueber PR #120 geliefert. Der KR-01A-Kandidat
+`KR-01A-AUTHORITY-PIN-BOOTSTRAP` ueber PR #119,
+`KR-01R-GOVERNANCE-RECONTRACT` ueber PR #120 sowie die geschuetzten
+KR-01R-nach-KR-04-CI-Handoffs ueber PR #131 und PR #132 geliefert. Der KR-01A-Kandidat
 `fa73666b2d6ab1f41bf8f8576f41a04e7e38ac72` ist Vorfahr des Merge-Commits
 `fa1a989fa5844305e6a8200832ed43e2fc230751`. Der reviewte KR-01R-Kandidat
 `da8c352d91a694d9c72551a245805386bbf7efdc` ist zweiter Parent des Merge-Commits
@@ -22,7 +23,20 @@ Seit dem letzten Produktstand wurden ausschliesslich die Governance-Pakete
 Tree `ec8ef1c9f38ee8ef671ead7a15b78c93181b66a7`. Die Post-Merge-Runs
 `36998034213` und `36998034309` sowie der automatische Vercel-Commitstatus waren
 gruen. Daraus wird keine manuelle Production-Autorisierung abgeleitet. Es gab
-durch beide Pakete keine Produkt-, Datenbank-, RLS- oder Echtdatenaenderung.
+durch diese Governance-Pakete keine Produkt-, Datenbank-, RLS- oder Echtdatenaenderung.
+
+PR #131 band den vorab geprueften KR-04-Checker fail-closed an den geschuetzten
+`pull_request_target`-Pfad; Kandidat `bfc6e5737f9bc0b3e268dff535a8dc1a78053234`
+wurde als `47bc0e58990b1bff545111c990a715d4f72f5f37` mit identischem Tree
+`7cfd13f319bb4b936ce09de44ab6ca5fa255e5ce` integriert. PR #132 band dessen
+Selftest explizit an den Kandidaten-Root; Kandidat
+`e3ce9259bde35cbef843ec88628fb1faa53051b7` wurde als
+`bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5` mit identischem Tree
+`34e45157e821f847bd8f3d98735b3f93a8e53a89` integriert. Die Post-Merge-Runs
+`37015030926`/`37015031007` und `37019871795`/`37019872078` sowie beide
+Vercel-Commitstatus waren gruen. Beide Handoffs hatten unabhaengige Reviews ohne
+offene P0/P1/P2/P3 und veraenderten keine Produkt-, Datenbank-, Provider- oder
+Berechtigungswahrheit.
 
 ## Auf main belegte Lieferwahrheit
 
@@ -50,6 +64,7 @@ keinen Kandidaten als geliefert vorweg.
 
 | Wahrheit | Stand |
 |---|---|
+| KR-01R -> KR-04 geschuetzter CI-Handoff | PR #131 und #132 als Merge-Commits `47bc0e58990b1bff545111c990a715d4f72f5f37` und `bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5` integriert; Trees jeweils kandidatenidentisch; Reviews und Post-Merge-Gates gruen; keine Produkt- oder Remote-Datenmutation |
 | KR-01R Governance-Recontract | PR #120, Kandidat `da8c352d91a694d9c72551a245805386bbf7efdc`, als Merge-Commit `0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9` integriert; Tree bytegleich; Post-Merge-Gates gruen; keine Produkt- oder Remote-Datenmutation; kein manueller Production-Claim |
 | KR-01A Governance-Bootstrap | PR #119 als Merge-Commit `fa1a989fa5844305e6a8200832ed43e2fc230751` integriert; Post-Merge-Checks und der fuer diesen Merge autorisierte automatische Vercel-Lauf gruen; keine Produkt- oder Remote-Datenmutation |
 | M1-Integration | PR #61 am eingefrorenen Head `75bdaf8458aef3606ede50b393a0b06fa0fbe9f3` als Merge-Commit `6b4d482bae9f2797bb5171c8cdf4b817cb1b549d` nach `main` integriert |

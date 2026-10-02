@@ -112,6 +112,18 @@ describe("KR-04 delivery governance gate", () => {
     expect(checkDeliveryContracts(root).findings).toContainEqual(expect.stringContaining("Rolling-Policy-Drift"));
   });
 
+  it("rejects drift between the reviewed queue parent and the effective main handoff base", () => {
+    const root = fixture();
+    const queue = json(root, DELIVERY_PATHS.queue) as {
+      effective_base_handoff: { queue_parent_sha: string; effective_base_sha: string };
+    };
+    queue.effective_base_handoff.effective_base_sha = queue.effective_base_handoff.queue_parent_sha;
+    writeJson(root, DELIVERY_PATHS.queue, queue);
+    expect(checkDeliveryContracts(root).findings).toContainEqual(
+      expect.stringContaining("Effective-Base-Handoff-Drift"),
+    );
+  });
+
   it("rejects any branch-protection bypass actor", () => {
     const root = fixture();
     const receipt = json(root, DELIVERY_PATHS.operatingReceipt) as { active_ruleset: { bypass_actors: string[] } };

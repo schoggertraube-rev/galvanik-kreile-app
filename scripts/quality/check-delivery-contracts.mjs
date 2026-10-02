@@ -113,6 +113,35 @@ const EFFECTIVE_REQUIRED_CHECKS = Object.freeze([
   "Fresh Supabase replay",
 ]);
 const NON_REQUIRED_BUT_MUST_PASS = Object.freeze(["ratchet"]);
+const EFFECTIVE_BASE_HANDOFF = Object.freeze({
+  queue_parent_sha: "0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9",
+  effective_base_sha: "bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5",
+  effective_base_tree_sha: "34e45157e821f847bd8f3d98735b3f93a8e53a89",
+  entries: Object.freeze([
+    Object.freeze({
+      pr: 131,
+      candidate_sha: "bfc6e5737f9bc0b3e268dff535a8dc1a78053234",
+      merge_sha: "47bc0e58990b1bff545111c990a715d4f72f5f37",
+      tree_sha: "7cfd13f319bb4b936ce09de44ab6ca5fa255e5ce",
+      scope: "PROTECTED_CI_GOVERNANCE_ONLY",
+      review_result: "PASS_NO_OPEN_P0_P1_P2_P3",
+      post_main_agentur_gate_run: 37015030926,
+      post_main_quality_run: 37015031007,
+      vercel_status: "SUCCESS",
+    }),
+    Object.freeze({
+      pr: 132,
+      candidate_sha: "e3ce9259bde35cbef843ec88628fb1faa53051b7",
+      merge_sha: "bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5",
+      tree_sha: "34e45157e821f847bd8f3d98735b3f93a8e53a89",
+      scope: "PROTECTED_CI_GOVERNANCE_ONLY",
+      review_result: "PASS_NO_OPEN_P0_P1_P2_P3",
+      post_main_agentur_gate_run: 37019871795,
+      post_main_quality_run: 37019872078,
+      vercel_status: "SUCCESS",
+    }),
+  ]),
+});
 
 function toPosix(value) {
   return value.replaceAll("\\", "/");
@@ -131,6 +160,29 @@ function sameStringSet(left, right) {
   const normalizedLeft = normalizedStringSet(left);
   const normalizedRight = normalizedStringSet(right);
   return normalizedLeft !== null && normalizedRight !== null && JSON.stringify(normalizedLeft) === JSON.stringify(normalizedRight);
+}
+
+function handoffSignature(value) {
+  if (!value || typeof value !== "object") return null;
+  const entries = Array.isArray(value.entries)
+    ? value.entries.map((entry) => ({
+        pr: entry?.pr,
+        candidate_sha: entry?.candidate_sha,
+        merge_sha: entry?.merge_sha,
+        tree_sha: entry?.tree_sha,
+        scope: entry?.scope,
+        review_result: entry?.review_result,
+        post_main_agentur_gate_run: entry?.post_main_agentur_gate_run,
+        post_main_quality_run: entry?.post_main_quality_run,
+        vercel_status: entry?.vercel_status,
+      }))
+    : null;
+  return JSON.stringify({
+    queue_parent_sha: value.queue_parent_sha,
+    effective_base_sha: value.effective_base_sha,
+    effective_base_tree_sha: value.effective_base_tree_sha,
+    entries,
+  });
 }
 
 function readJson(root, rel, findings, label = rel) {
@@ -524,6 +576,43 @@ function checkRollingConsistency(root, queue, mapping, mission, manifests, findi
       findings.push("[delivery] Aktives Manifest ist nicht an den Queue-Parent gebunden");
     }
   }
+
+  const expectedHandoff = handoffSignature(EFFECTIVE_BASE_HANDOFF);
+  const handoffCopies = [
+    ["manifest", active[0]?.value?.base_handoff],
+    ["queue", queue.effective_base_handoff],
+    ["mission", mission.execution_program_20260928?.effective_base_handoff],
+    ["mapping", mapping.workflow_facts_at_contract_parent?.base_handoff],
+  ];
+  for (const [label, value] of handoffCopies) {
+    if (handoffSignature(value) !== expectedHandoff) {
+      findings.push(`[delivery] Effective-Base-Handoff-Drift: ${label} stimmt nicht mit der geprueften Handoff-Kette ueberein`);
+    }
+  }
+  if (queue.parent_candidate?.candidate_sha !== EFFECTIVE_BASE_HANDOFF.queue_parent_sha) {
+    findings.push("[delivery] Queue-Parent stimmt nicht mit dem Ausgang der Handoff-Kette ueberein");
+  }
+  if (active[0]?.value?.base_sha !== EFFECTIVE_BASE_HANDOFF.effective_base_sha) {
+    findings.push("[delivery] Manifest base_sha stimmt nicht mit der effektiven Base ueberein");
+  }
+  if (active[0]?.value?.origin_main_sha !== EFFECTIVE_BASE_HANDOFF.effective_base_sha) {
+    findings.push("[delivery] Manifest origin_main_sha stimmt nicht mit der effektiven Base ueberein");
+  }
+  if (mission.base_sha !== EFFECTIVE_BASE_HANDOFF.effective_base_sha) {
+    findings.push("[delivery] Mission base_sha stimmt nicht mit der effektiven Base ueberein");
+  }
+  if (mission.execution_program_20260928?.origin_main_reference !== EFFECTIVE_BASE_HANDOFF.effective_base_sha) {
+    findings.push("[delivery] Mission origin_main_reference stimmt nicht mit der effektiven Base ueberein");
+  }
+  if (mission.execution_program_20260928?.current_package_parent !== EFFECTIVE_BASE_HANDOFF.effective_base_sha) {
+    findings.push("[delivery] Mission current_package_parent stimmt nicht mit der effektiven Base ueberein");
+  }
+  if (mapping.workflow_facts_at_contract_parent?.parent_sha !== EFFECTIVE_BASE_HANDOFF.effective_base_sha) {
+    findings.push("[delivery] Gate-Mapping parent_sha stimmt nicht mit der effektiven Base ueberein");
+  }
+  if (mapping.workflow_facts_at_contract_parent?.queue_parent_sha !== EFFECTIVE_BASE_HANDOFF.queue_parent_sha) {
+    findings.push("[delivery] Gate-Mapping queue_parent_sha stimmt nicht mit dem Queue-Parent ueberein");
+  }
 }
 
 export function checkDeliveryContracts(root = process.cwd()) {
@@ -639,6 +728,13 @@ export function runSelftest(root = process.cwd()) {
       value.rolling_manifest_policy.candidate_is_not_main_delivery = false;
     });
   }, "Rolling-Policy-Drift");
+
+  runCase("effective-base-handoff-drift", (fixture) => {
+    const abs = path.join(fixture, DELIVERY_PATHS.queue);
+    const value = JSON.parse(readFileSync(abs, "utf8"));
+    value.effective_base_handoff.effective_base_sha = value.effective_base_handoff.queue_parent_sha;
+    writeFileSync(abs, `${JSON.stringify(value, null, 2)}\n`);
+  }, "Effective-Base-Handoff-Drift");
 
   runCase("receipt-bypass", (fixture) => {
     const abs = path.join(fixture, DELIVERY_PATHS.operatingReceipt);

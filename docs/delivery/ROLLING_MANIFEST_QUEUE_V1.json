@@ -18,6 +18,35 @@
     "closure_receipt": "../_MODULDOSSIERS/00_PROJEKT/KR-01R_MAIN_DELIVERY_RECEIPT_2026-10-02.md",
     "closure_receipt_sha256": "0093A3FA7DA0287FB25808CC9184DAC3153DE0D2B3B6026D3825E32F49FAF120"
   },
+  "effective_base_handoff": {
+    "queue_parent_sha": "0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9",
+    "effective_base_sha": "bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5",
+    "effective_base_tree_sha": "34e45157e821f847bd8f3d98735b3f93a8e53a89",
+    "entries": [
+      {
+        "pr": 131,
+        "candidate_sha": "bfc6e5737f9bc0b3e268dff535a8dc1a78053234",
+        "merge_sha": "47bc0e58990b1bff545111c990a715d4f72f5f37",
+        "tree_sha": "7cfd13f319bb4b936ce09de44ab6ca5fa255e5ce",
+        "scope": "PROTECTED_CI_GOVERNANCE_ONLY",
+        "review_result": "PASS_NO_OPEN_P0_P1_P2_P3",
+        "post_main_agentur_gate_run": 37015030926,
+        "post_main_quality_run": 37015031007,
+        "vercel_status": "SUCCESS"
+      },
+      {
+        "pr": 132,
+        "candidate_sha": "e3ce9259bde35cbef843ec88628fb1faa53051b7",
+        "merge_sha": "bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5",
+        "tree_sha": "34e45157e821f847bd8f3d98735b3f93a8e53a89",
+        "scope": "PROTECTED_CI_GOVERNANCE_ONLY",
+        "review_result": "PASS_NO_OPEN_P0_P1_P2_P3",
+        "post_main_agentur_gate_run": 37019871795,
+        "post_main_quality_run": 37019872078,
+        "vercel_status": "SUCCESS"
+      }
+    ]
+  },
   "issuance_policy": {
     "one_materialized_contract_at_a_time": true,
     "max_materialized_future_contracts": 0,

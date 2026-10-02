@@ -76,6 +76,9 @@
     "origin_main_sha": {
       "$ref": "#/definitions/sha"
     },
+    "base_handoff": {
+      "$ref": "#/definitions/base_handoff"
+    },
     "target_sha": {
       "$ref": "#/definitions/sha_or_pending"
     },
@@ -503,6 +506,46 @@
     "sha_or_pending": {
       "type": "string",
       "pattern": "^(?:[0-9a-f]{40}|PENDING_AFTER_LOCAL_VERIFICATION)$"
+    },
+    "base_handoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["queue_parent_sha", "effective_base_sha", "effective_base_tree_sha", "entries"],
+      "properties": {
+        "queue_parent_sha": { "$ref": "#/definitions/sha" },
+        "effective_base_sha": { "$ref": "#/definitions/sha" },
+        "effective_base_tree_sha": { "$ref": "#/definitions/sha" },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "pr",
+              "candidate_sha",
+              "merge_sha",
+              "tree_sha",
+              "scope",
+              "review_result",
+              "post_main_agentur_gate_run",
+              "post_main_quality_run",
+              "vercel_status"
+            ],
+            "properties": {
+              "pr": { "type": "integer", "minimum": 1 },
+              "candidate_sha": { "$ref": "#/definitions/sha" },
+              "merge_sha": { "$ref": "#/definitions/sha" },
+              "tree_sha": { "$ref": "#/definitions/sha" },
+              "scope": { "const": "PROTECTED_CI_GOVERNANCE_ONLY" },
+              "review_result": { "type": "string", "pattern": "^PASS" },
+              "post_main_agentur_gate_run": { "type": "integer", "minimum": 1 },
+              "post_main_quality_run": { "type": "integer", "minimum": 1 },
+              "vercel_status": { "const": "SUCCESS" }
+            }
+          }
+        }
+      }
     },
     "repo_path": {
       "type": "string",
