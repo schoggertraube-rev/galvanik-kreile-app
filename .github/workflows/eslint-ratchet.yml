@@ -124,5 +124,5 @@ jobs:
             echo "Isolated delivery checker copy changed bytes: $isolated_sha" >&2
             exit 1
           fi
-          node "$isolated_dir/check-delivery-contracts.mjs" --selftest
+          node "$isolated_dir/check-delivery-contracts.mjs" --selftest --root "$GITHUB_WORKSPACE/candidate"
           node "$isolated_dir/check-delivery-contracts.mjs" --root "$GITHUB_WORKSPACE/candidate"
