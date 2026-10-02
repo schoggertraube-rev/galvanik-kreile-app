@@ -107,11 +107,22 @@ jobs:
           set -euo pipefail
           protected_checker="$GITHUB_WORKSPACE/ratchet-base/scripts/quality/check-delivery-contracts.mjs"
           candidate_checker="$GITHUB_WORKSPACE/candidate/scripts/quality/check-delivery-contracts.mjs"
+          test -f "$candidate_checker"
+          test ! -L "$candidate_checker"
           protected_sha="$(sha256sum "$protected_checker" | cut -d' ' -f1)"
           candidate_sha="$(sha256sum "$candidate_checker" | cut -d' ' -f1)"
           if [[ "$candidate_sha" != "$protected_sha" && "$candidate_sha" != "$KR04_DELIVERY_CHECKER_SHA256" ]]; then
             echo "Delivery checker hash is neither protected main nor the exact KR-04 handoff: $candidate_sha" >&2
             exit 1
           fi
-          node "$candidate_checker" --selftest
-          node "$candidate_checker" --root "$GITHUB_WORKSPACE/candidate"
+          isolated_dir="$(mktemp -d "$RUNNER_TEMP/kreile-delivery-checker.XXXXXX")"
+          trap 'rm -rf "$isolated_dir"' EXIT
+          install -m 0444 "$candidate_checker" "$isolated_dir/check-delivery-contracts.mjs"
+          ln -s "$GITHUB_WORKSPACE/ratchet-base/node_modules" "$isolated_dir/node_modules"
+          isolated_sha="$(sha256sum "$isolated_dir/check-delivery-contracts.mjs" | cut -d' ' -f1)"
+          if [[ "$isolated_sha" != "$candidate_sha" ]]; then
+            echo "Isolated delivery checker copy changed bytes: $isolated_sha" >&2
+            exit 1
+          fi
+          node "$isolated_dir/check-delivery-contracts.mjs" --selftest
+          node "$isolated_dir/check-delivery-contracts.mjs" --root "$GITHUB_WORKSPACE/candidate"
