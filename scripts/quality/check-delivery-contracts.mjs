@@ -175,28 +175,20 @@ function trustedCommitFacts(repo, sha) {
   };
 }
 
-function checkTrustedHandoff(handoff, findings) {
-  const required = process.env.DELIVERY_REQUIRE_TRUSTED_BASE === "true";
-  const trustedBaseSha = process.env.DELIVERY_TRUSTED_BASE_SHA;
-  const trustedRepo = process.env.DELIVERY_TRUSTED_REPO;
-  if (!required && trustedBaseSha === undefined && trustedRepo === undefined) return;
-  if (!SHA_PATTERN.test(trustedBaseSha ?? "") || !trustedRepo) {
-    findings.push("[delivery] Geschuetzter Base-Kontext ist unvollstaendig oder ungueltig");
-    return;
-  }
-
+export function validateTrustedHandoff(handoff, trustedBaseSha, readCommitFacts) {
+  const findings = [];
   try {
-    const base = trustedCommitFacts(trustedRepo, trustedBaseSha);
+    const base = readCommitFacts(trustedBaseSha);
     if (base.sha !== trustedBaseSha) {
       findings.push("[delivery] Geschuetzter Base-SHA ist im Trusted-Repository nicht aufloesbar");
-      return;
+      return findings;
     }
     if (handoff?.effective_base_sha !== base.sha || handoff?.effective_base_tree_sha !== base.tree) {
       findings.push("[delivery] Effective Base stimmt nicht mit dem geschuetzten Git-Checkout ueberein");
     }
 
     for (const [index, entry] of (handoff?.entries ?? []).entries()) {
-      const commit = trustedCommitFacts(trustedRepo, entry.merge_sha);
+      const commit = readCommitFacts(entry.merge_sha);
       const expectedParents = [entry.parent_sha, entry.candidate_sha];
       if (
         commit.sha !== entry.merge_sha ||
@@ -209,6 +201,21 @@ function checkTrustedHandoff(handoff, findings) {
   } catch (error) {
     findings.push(`[delivery] Geschuetzter Git-Graph konnte nicht geprueft werden (${error.message})`);
   }
+  return findings;
+}
+
+function checkTrustedHandoff(handoff, findings) {
+  const required = process.env.DELIVERY_REQUIRE_TRUSTED_BASE === "true";
+  const trustedBaseSha = process.env.DELIVERY_TRUSTED_BASE_SHA;
+  const trustedRepo = process.env.DELIVERY_TRUSTED_REPO;
+  if (!required && trustedBaseSha === undefined && trustedRepo === undefined) return;
+  if (!SHA_PATTERN.test(trustedBaseSha ?? "") || !trustedRepo) {
+    findings.push("[delivery] Geschuetzter Base-Kontext ist unvollstaendig oder ungueltig");
+    return;
+  }
+  findings.push(
+    ...validateTrustedHandoff(handoff, trustedBaseSha, (sha) => trustedCommitFacts(trustedRepo, sha)),
+  );
 }
 
 function readJson(root, rel, findings, label = rel) {

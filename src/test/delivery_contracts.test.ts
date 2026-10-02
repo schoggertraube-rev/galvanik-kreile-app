@@ -10,6 +10,7 @@ import {
   LEGACY_MANIFEST_BINDINGS,
   LEGACY_V1_MANIFEST_BINDINGS,
   checkDeliveryContracts,
+  validateTrustedHandoff,
 } from "../../scripts/quality/check-delivery-contracts.mjs";
 
 const temps: string[] = [];
@@ -139,48 +140,70 @@ describe("KR-04 delivery governance gate", () => {
     );
   });
 
-  it("binds the effective base and every handoff merge to a trusted local Git graph", () => {
-    const previous = {
-      required: process.env.DELIVERY_REQUIRE_TRUSTED_BASE,
-      base: process.env.DELIVERY_TRUSTED_BASE_SHA,
-      repo: process.env.DELIVERY_TRUSTED_REPO,
+  it("binds the effective base and every handoff merge to trusted commit facts", () => {
+    const queue = json(process.cwd(), DELIVERY_PATHS.queue) as {
+      effective_base_handoff: Record<string, unknown>;
     };
-    process.env.DELIVERY_REQUIRE_TRUSTED_BASE = "true";
-    process.env.DELIVERY_TRUSTED_BASE_SHA = "bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5";
-    process.env.DELIVERY_TRUSTED_REPO = process.cwd();
-    try {
-      expect(checkDeliveryContracts(process.cwd())).toEqual({ ok: true, findings: [] });
-    } finally {
-      if (previous.required === undefined) delete process.env.DELIVERY_REQUIRE_TRUSTED_BASE;
-      else process.env.DELIVERY_REQUIRE_TRUSTED_BASE = previous.required;
-      if (previous.base === undefined) delete process.env.DELIVERY_TRUSTED_BASE_SHA;
-      else process.env.DELIVERY_TRUSTED_BASE_SHA = previous.base;
-      if (previous.repo === undefined) delete process.env.DELIVERY_TRUSTED_REPO;
-      else process.env.DELIVERY_TRUSTED_REPO = previous.repo;
-    }
+    const facts = new Map([
+      [
+        "47bc0e58990b1bff545111c990a715d4f72f5f37",
+        {
+          sha: "47bc0e58990b1bff545111c990a715d4f72f5f37",
+          parents: [
+            "0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9",
+            "bfc6e5737f9bc0b3e268dff535a8dc1a78053234",
+          ],
+          tree: "7cfd13f319bb4b936ce09de44ab6ca5fa255e5ce",
+        },
+      ],
+      [
+        "bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5",
+        {
+          sha: "bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5",
+          parents: [
+            "47bc0e58990b1bff545111c990a715d4f72f5f37",
+            "e3ce9259bde35cbef843ec88628fb1faa53051b7",
+          ],
+          tree: "34e45157e821f847bd8f3d98735b3f93a8e53a89",
+        },
+      ],
+    ]);
+    const readFacts = (sha: string) => {
+      const value = facts.get(sha);
+      if (!value) throw new Error(`synthetic commit fact missing: ${sha}`);
+      return value;
+    };
+    expect(
+      validateTrustedHandoff(
+        queue.effective_base_handoff,
+        "bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5",
+        readFacts,
+      ),
+    ).toEqual([]);
+    expect(
+      validateTrustedHandoff(
+        queue.effective_base_handoff,
+        "47bc0e58990b1bff545111c990a715d4f72f5f37",
+        readFacts,
+      ),
+    ).toContainEqual(
+      expect.stringContaining("Effective Base stimmt nicht mit dem geschuetzten Git-Checkout ueberein"),
+    );
   });
 
-  it("rejects a candidate base that differs from the protected Git checkout", () => {
-    const previous = {
-      required: process.env.DELIVERY_REQUIRE_TRUSTED_BASE,
-      base: process.env.DELIVERY_TRUSTED_BASE_SHA,
-      repo: process.env.DELIVERY_TRUSTED_REPO,
+  it("fails closed when the trusted Git graph cannot resolve the declared base", () => {
+    const queue = json(process.cwd(), DELIVERY_PATHS.queue) as {
+      effective_base_handoff: Record<string, unknown>;
     };
-    process.env.DELIVERY_REQUIRE_TRUSTED_BASE = "true";
-    process.env.DELIVERY_TRUSTED_BASE_SHA = "47bc0e58990b1bff545111c990a715d4f72f5f37";
-    process.env.DELIVERY_TRUSTED_REPO = process.cwd();
-    try {
-      expect(checkDeliveryContracts(process.cwd()).findings).toContainEqual(
-        expect.stringContaining("Effective Base stimmt nicht mit dem geschuetzten Git-Checkout ueberein"),
-      );
-    } finally {
-      if (previous.required === undefined) delete process.env.DELIVERY_REQUIRE_TRUSTED_BASE;
-      else process.env.DELIVERY_REQUIRE_TRUSTED_BASE = previous.required;
-      if (previous.base === undefined) delete process.env.DELIVERY_TRUSTED_BASE_SHA;
-      else process.env.DELIVERY_TRUSTED_BASE_SHA = previous.base;
-      if (previous.repo === undefined) delete process.env.DELIVERY_TRUSTED_REPO;
-      else process.env.DELIVERY_TRUSTED_REPO = previous.repo;
-    }
+    expect(
+      validateTrustedHandoff(
+        queue.effective_base_handoff,
+        "bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5",
+        () => {
+          throw new Error("synthetic trusted graph unavailable");
+        },
+      ),
+    ).toContainEqual(expect.stringContaining("Geschuetzter Git-Graph konnte nicht geprueft werden"));
   });
 
   it("rejects any branch-protection bypass actor", () => {
