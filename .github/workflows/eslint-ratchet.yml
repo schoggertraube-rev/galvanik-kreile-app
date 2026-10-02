@@ -18,6 +18,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: ratchet-base
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Checkout candidate without credentials
@@ -100,9 +101,12 @@ jobs:
       - name: Enforce protected delivery contracts and rolling queue
         working-directory: ratchet-base
         env:
-          # Exact reviewed KR-04 checker bytes. This permits the one planned
-          # KR-01R -> KR-04 handoff without ever executing arbitrary PR code.
-          KR04_DELIVERY_CHECKER_SHA256: "19f3255cb80ab6e2b8e759690a18d0dc3a4c01e1dcdf77d62e72a1bfcec391cc"
+          # Exact reviewed KR-04 checker bytes. The stable checker validates
+          # future handoffs against the protected base's complete Git graph.
+          KR04_DELIVERY_CHECKER_SHA256: "983fa8ea482665b5355320038d0a6779fa1d1402428287c758ef18035bc09282"
+          DELIVERY_REQUIRE_TRUSTED_BASE: "true"
+          DELIVERY_TRUSTED_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          DELIVERY_TRUSTED_REPO: ${{ github.workspace }}/ratchet-base
         run: |
           set -euo pipefail
           protected_checker="$GITHUB_WORKSPACE/ratchet-base/scripts/quality/check-delivery-contracts.mjs"
