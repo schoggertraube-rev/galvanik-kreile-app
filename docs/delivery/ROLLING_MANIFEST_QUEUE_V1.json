@@ -9,14 +9,14 @@
   "execution_state_source": "missions/F1_ORDER_TO_CASH_PILOT_001.yml",
   "parent_candidate": {
     "package_id": "KR-01R-GOVERNANCE-RECONTRACT",
-    "candidate_sha": "da8c352d91a694d9c72551a245805386bbf7efdc",
+    "candidate_sha": "0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9",
     "tree_sha": "ec8ef1c9f38ee8ef671ead7a15b78c93181b66a7",
-    "remote_ref": "origin/codex/kr-01r-governance-recontract",
-    "review_result": "PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN_QUEUED_CANDIDATE",
+    "remote_ref": "origin/main",
+    "review_result": "PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN_MAIN_DELIVERED_TREE_EQUIVALENT",
     "review_receipt": "../_MODULDOSSIERS/00_PROJEKT/KR-01R_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md",
     "review_receipt_sha256": "8EAE4D31D1A1AD910A412503276680B8CEBC0B65DE16B8CF3F744A127E06E00E",
-    "closure_receipt": "../_MODULDOSSIERS/00_PROJEKT/KR-01R_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md",
-    "closure_receipt_sha256": "8EAE4D31D1A1AD910A412503276680B8CEBC0B65DE16B8CF3F744A127E06E00E"
+    "closure_receipt": "../_MODULDOSSIERS/00_PROJEKT/KR-01R_MAIN_DELIVERY_RECEIPT_2026-10-02.md",
+    "closure_receipt_sha256": "0093A3FA7DA0287FB25808CC9184DAC3153DE0D2B3B6026D3825E32F49FAF120"
   },
   "issuance_policy": {
     "one_materialized_contract_at_a_time": true,

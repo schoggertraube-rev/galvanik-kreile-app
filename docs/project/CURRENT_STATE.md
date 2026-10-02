@@ -1,6 +1,6 @@
 # CURRENT_STATE — Galvanik-Kreile WerkstattCockpit
 
-**Lieferstand 2026-09-29: `main@fa1a989fa5844305e6a8200832ed43e2fc230751`.** Diese Datei
+**Lieferstand 2026-10-02: `main@0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9`.** Diese Datei
 beschreibt ausschließlich auf `main` belegte Lieferungen. Aktives Paket, Branch, Base, Kandidatenstatus
 und nächstes Gate stehen ausschließlich in `missions/F1_ORDER_TO_CASH_PILOT_001.yml`. Die
 ausführlichen F0-Tabellen darunter sind ein datierter historischer Snapshot.
@@ -12,12 +12,17 @@ NON_LOSS_REGISTER. `ALT_PR_INVENTORY_2026-09-28.json` ist der unveraenderte Stic
 steht in `docs/delivery/KR-04_PR113_DISPOSITION_2026-09-29.json`: PR #113 ist ungemergt geschlossen,
 Quellbranch und Archivref bleiben erhalten, und kein Produktpfad daraus wurde durch KR-04 geliefert.
 
-Seit dem letzten Produktstand wurde ausschliesslich der Governance-Bootstrap
-`KR-01A-AUTHORITY-PIN-BOOTSTRAP` ueber PR #119 geliefert. Sein Kandidat
+Seit dem letzten Produktstand wurden ausschliesslich die Governance-Pakete
+`KR-01A-AUTHORITY-PIN-BOOTSTRAP` ueber PR #119 und
+`KR-01R-GOVERNANCE-RECONTRACT` ueber PR #120 geliefert. Der KR-01A-Kandidat
 `fa73666b2d6ab1f41bf8f8576f41a04e7e38ac72` ist Vorfahr des Merge-Commits
-`fa1a989fa5844305e6a8200832ed43e2fc230751`; Quality, Fresh Supabase replay,
-Agentur-Gate und der fuer genau diesen Merge autorisierte automatische Vercel-Lauf waren gruen.
-Es gab dadurch keine Produkt-, Datenbank-, RLS- oder Echtdatenaenderung.
+`fa1a989fa5844305e6a8200832ed43e2fc230751`. Der reviewte KR-01R-Kandidat
+`da8c352d91a694d9c72551a245805386bbf7efdc` ist zweiter Parent des Merge-Commits
+`0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9`; Kandidat und Merge haben denselben
+Tree `ec8ef1c9f38ee8ef671ead7a15b78c93181b66a7`. Die Post-Merge-Runs
+`36998034213` und `36998034309` sowie der automatische Vercel-Commitstatus waren
+gruen. Daraus wird keine manuelle Production-Autorisierung abgeleitet. Es gab
+durch beide Pakete keine Produkt-, Datenbank-, RLS- oder Echtdatenaenderung.
 
 ## Auf main belegte Lieferwahrheit
 
@@ -45,6 +50,7 @@ keinen Kandidaten als geliefert vorweg.
 
 | Wahrheit | Stand |
 |---|---|
+| KR-01R Governance-Recontract | PR #120, Kandidat `da8c352d91a694d9c72551a245805386bbf7efdc`, als Merge-Commit `0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9` integriert; Tree bytegleich; Post-Merge-Gates gruen; keine Produkt- oder Remote-Datenmutation; kein manueller Production-Claim |
 | KR-01A Governance-Bootstrap | PR #119 als Merge-Commit `fa1a989fa5844305e6a8200832ed43e2fc230751` integriert; Post-Merge-Checks und der fuer diesen Merge autorisierte automatische Vercel-Lauf gruen; keine Produkt- oder Remote-Datenmutation |
 | M1-Integration | PR #61 am eingefrorenen Head `75bdaf8458aef3606ede50b393a0b06fa0fbe9f3` als Merge-Commit `6b4d482bae9f2797bb5171c8cdf4b817cb1b549d` nach `main` integriert |
 | F0/W4 | unabhaengig `PASS`; Pruefpaket `d16363dee8e38bf64dbb31ed135a93972d91b6f1`, Produktkandidat `e3138f9286775bf6e79c0b5b1845ff72a0230b62` |

@@ -36,7 +36,7 @@ rolling_manifest_policy:
     - KR-02-B1-P0-CANCEL
     - KR-03A-DELIVERY-ADHERENCE-DOMAIN
 workflow_facts_at_contract_parent:
-  parent_sha: fa1a989fa5844305e6a8200832ed43e2fc230751
+  parent_sha: 0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9
   agentur_gate:
     workflow: .github/workflows/agentur-gate.yml
     branch_push_runs: true
