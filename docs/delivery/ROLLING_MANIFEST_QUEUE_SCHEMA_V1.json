@@ -46,14 +46,14 @@
         "closure_receipt_sha256"
       ],
       "properties": {
-        "package_id": { "const": "KR-01A-AUTHORITY-PIN-BOOTSTRAP" },
+        "package_id": { "const": "KR-02R-B1-P0-CANCEL" },
         "candidate_sha": { "$ref": "#/definitions/sha" },
         "tree_sha": { "$ref": "#/definitions/sha" },
-        "remote_ref": { "const": "origin/main" },
-        "review_result": { "const": "PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN_MAIN_DELIVERED" },
-        "review_receipt": { "const": "../_MODULDOSSIERS/00_PROJEKT/KR-01A_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md" },
+        "remote_ref": { "const": "origin/codex/kr-02r-b1-p0-cancel" },
+        "review_result": { "const": "PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN_QUEUED_CANDIDATE" },
+        "review_receipt": { "const": "../_MODULDOSSIERS/00_PROJEKT/KR-02R_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md" },
         "review_receipt_sha256": { "$ref": "#/definitions/sha256" },
-        "closure_receipt": { "const": "../_MODULDOSSIERS/00_PROJEKT/KR-01A_MAIN_DELIVERY_RECEIPT_2026-09-29.md" },
+        "closure_receipt": { "const": "../_MODULDOSSIERS/00_PROJEKT/KR-02R_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md" },
         "closure_receipt_sha256": { "$ref": "#/definitions/sha256" }
       }
     },
@@ -85,8 +85,8 @@
     },
     "initial_horizon": {
       "type": "array",
-      "minItems": 3,
-      "maxItems": 3,
+      "minItems": 2,
+      "maxItems": 2,
       "items": [
         {
           "allOf": [
@@ -94,9 +94,9 @@
             {
               "properties": {
                 "order": { "const": 1 },
-                "package_id": { "const": "KR-04-PR113-DISPOSITION" },
-                "scope": { "const": "GOVERNANCE" },
-                "predecessor": { "const": "KR-01R-GOVERNANCE-RECONTRACT" }
+                "package_id": { "const": "KR-03B1-FINAL-DB-READ-CONTRACT" },
+                "scope": { "const": "B2B1" },
+                "predecessor": { "const": "KR-03A-DELIVERY-ADHERENCE-DOMAIN" }
               }
             }
           ]
@@ -107,22 +107,9 @@
             {
               "properties": {
                 "order": { "const": 2 },
-                "package_id": { "const": "KR-02-B1-P0-CANCEL" },
-                "scope": { "const": "B1" },
-                "predecessor": { "const": "KR-04-PR113-DISPOSITION" }
-              }
-            }
-          ]
-        },
-        {
-          "allOf": [
-            { "$ref": "#/definitions/package_pointer" },
-            {
-              "properties": {
-                "order": { "const": 3 },
-                "package_id": { "const": "KR-03A-DELIVERY-ADHERENCE-DOMAIN" },
-                "scope": { "const": "B2A" },
-                "predecessor": { "const": "KR-02-B1-P0-CANCEL" }
+                "package_id": { "const": "KR-03B2-AUTHORIZED-SERVER-PORT" },
+                "scope": { "const": "B2B2" },
+                "predecessor": { "const": "KR-03B1-FINAL-DB-READ-CONTRACT" }
               }
             }
           ]
@@ -135,11 +122,11 @@
       "additionalProperties": false,
       "required": ["package_id", "predecessor", "planned_path", "classification", "issue_when"],
       "properties": {
-        "package_id": { "const": "KR-04-PR113-DISPOSITION" },
-        "predecessor": { "const": "KR-01R-GOVERNANCE-RECONTRACT" },
-        "planned_path": { "const": "docs/delivery/packages/KR-04-PR113-DISPOSITION.yaml" },
+        "package_id": { "const": "KR-03B1-FINAL-DB-READ-CONTRACT" },
+        "predecessor": { "const": "KR-03A-DELIVERY-ADHERENCE-DOMAIN" },
+        "planned_path": { "const": "docs/delivery/packages/KR-03B1-FINAL-DB-READ-CONTRACT.yaml" },
         "classification": { "const": "POINTER_ONLY_NON_EXECUTABLE_UNTIL_ISSUED" },
-        "issue_when": { "const": "KR_01R_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED" }
+        "issue_when": { "const": "KR_03A_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED" }
       }
     },
     "materialized_future_contracts": {
@@ -160,7 +147,7 @@
       "properties": {
         "order": { "type": "integer", "minimum": 1 },
         "package_id": { "type": "string", "pattern": "^KR-" },
-        "scope": { "enum": ["GOVERNANCE", "B1", "B2A"] },
+        "scope": { "enum": ["GOVERNANCE", "PRODUCT_CLEANUP", "B1", "B2A", "B2B1", "B2B2"] },
         "predecessor": { "type": "string", "pattern": "^KR-" },
         "classification": { "const": "ORDER_POINTER_NOT_AN_EXECUTABLE_MANIFEST" },
         "issue_when": { "const": "PREDECESSOR_REMOTE_EXACT_SHA_REVIEWED_AND_CLOSED" }

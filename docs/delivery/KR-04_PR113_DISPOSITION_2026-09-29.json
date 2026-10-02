@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "contract_id": "KR-04_PR113_DISPOSITION_2026-09-29",
+  "package_id": "KR-04-PR113-DISPOSITION",
+  "recorded_at": "2026-09-29T15:11:38Z",
+  "parent_candidate_sha": "da8c352d91a694d9c72551a245805386bbf7efdc",
+  "origin_main_sha_at_disposition": "fa1a989fa5844305e6a8200832ed43e2fc230751",
+  "pull_request": {
+    "number": 113,
+    "url": "https://github.com/schoggertraube-rev/galvanik-kreile-app/pull/113",
+    "base_ref": "main",
+    "base_sha": "21a23567d51e4805f065ce9ae8c59bdc5faf9fa9",
+    "head_ref": "path1/v2-k4-geld",
+    "head_sha": "e477e6b2314d5a97575a32dc35ca0d16b55625d7",
+    "tree_sha": "7455453281a84fd9bb0a351fd7063ef4994dda4c",
+    "archive_ref": "archive/pr-113-e477e6b2",
+    "archive_head_sha": "e477e6b2314d5a97575a32dc35ca0d16b55625d7",
+    "state_before_closure": "OPEN_DRAFT",
+    "state_after_closure": "CLOSED_UNMERGED",
+    "merged": false,
+    "source_branch_preserved": true,
+    "archive_ref_preserved": true,
+    "closure_comment_url": "https://github.com/schoggertraube-rev/galvanik-kreile-app/pull/113#issuecomment-5893046381",
+    "closed_at": "2026-09-29T15:11:38Z"
+  },
+  "path_decisions": [
+    {
+      "path": "e2e/path1-v5-shell-smoke.real.spec.ts",
+      "parent_blob_sha": "0bec1fe7f62bc7f1af8a411f4f80fe7e8a1b9108",
+      "pr_blob_sha": "85f75d67d4e18a97f1c563c9f033c466294cd6c1",
+      "decision": "DEFER_TO_KR20_FRESH_DESIGN_SYSTEM_REBUILD",
+      "reason": "Der Smoke-Test prueft die verworfene Mock-CSS-Komposition und wird erst gegen den frischen Designsystem-Neubau neu geschrieben.",
+      "follow_up_package": "KR-20"
+    },
+    {
+      "path": "src/app/buchhaltung/rechnungen/InvoicesClient.tsx",
+      "parent_blob_sha": "dc343081d706b15c068d09366dd566fd14991ca4",
+      "pr_blob_sha": "0157e44ec6bb2b792309753d0d9b2fa8389cb114",
+      "decision": "DEFER_TO_KR20_FRESH_DESIGN_SYSTEM_REBUILD",
+      "reason": "Die reale Daten- und Befehlslogik bleibt im aktuellen Client; die V5-Semantik wird spaeter frisch im Designsystem umgesetzt.",
+      "follow_up_package": "KR-20"
+    },
+    {
+      "path": "src/app/buchhaltung/rechnungen/RechnungenClient.tsx",
+      "parent_blob_sha": "18594debbed3e6565bb63166d6adbc7aa9579745",
+      "pr_blob_sha": null,
+      "decision": "SALVAGE_AS_KR04R_FRESH_DELETE",
+      "reason": "Die parallele Altkomponente hat keinen Runtime-Importer; ihre Entfernung wird als eigenes Kleinstpaket frisch auf dem geprueften Parent gebaut.",
+      "follow_up_package": "KR-04R-PR113-DEAD-UI-REMOVAL"
+    },
+    {
+      "path": "src/app/buchhaltung/rechnungen/__tests__/page.test.tsx",
+      "parent_blob_sha": "b1868e792a4a9bec76e36ca7e97dc2a372c6c2a8",
+      "pr_blob_sha": "f352cad5cf6628d4a440aa2eaffc6dd2454c9454",
+      "decision": "DEFER_TO_KR20_FRESH_DESIGN_SYSTEM_REBUILD",
+      "reason": "Der Test folgt der verworfenen UI-Variante und wird erst zusammen mit dem frischen Designsystem-Vertrag erneuert.",
+      "follow_up_package": "KR-20"
+    },
+    {
+      "path": "src/app/layout.tsx",
+      "parent_blob_sha": "320e95d4694b60412ae7d63650bd81032212db8f",
+      "pr_blob_sha": "b3d37599a5a218b04b524e57711c480c0ee9e27c",
+      "decision": "REJECT_MOCK_CSS_INTEGRATION",
+      "reason": "Ein globaler Import der Mock-CSS wuerde die nicht kanonische Darstellungswahrheit in die App einbauen.",
+      "follow_up_package": null
+    },
+    {
+      "path": "src/styles/mock/mock-kreile-compat.css",
+      "parent_blob_sha": "74bcb53a10b184a4881a76b6d2e174af03a8e652",
+      "pr_blob_sha": "3837617d774c188e24ed73eadc8b7753a8b3aeab",
+      "decision": "REJECT_MOCK_CSS_INTEGRATION",
+      "reason": "Die Kompatibilitaetsregeln sind Mock-Material und keine Lieferbasis fuer das kanonische Designsystem.",
+      "follow_up_package": null
+    },
+    {
+      "path": "src/styles/mock/mock-kreile-rolf-accounting.css",
+      "parent_blob_sha": null,
+      "pr_blob_sha": "036b36a73525135e3144b4b2d45711f4c0a62f66",
+      "decision": "REJECT_MOCK_CSS_INTEGRATION",
+      "reason": "Die neue Datei ist eine Mock-spezifische Parallelgestaltung und wird nicht in den Produktpfad uebernommen.",
+      "follow_up_package": null
+    }
+  ],
+  "import_scan": {
+    "target": "src/app/buchhaltung/rechnungen/RechnungenClient.tsx",
+    "scope": "src/**/*.{ts,tsx}",
+    "runtime_importers": [],
+    "declaration_only": true
+  },
+  "summary": {
+    "path_count": 7,
+    "salvage_paths": 1,
+    "deferred_design_paths": 3,
+    "rejected_mock_paths": 3,
+    "direct_import_paths": 0,
+    "product_files_changed_by_kr04": 0
+  },
+  "delivery_truth": {
+    "main_delivered": false,
+    "merge_performed": false,
+    "production_authorized": false,
+    "production_performed": false
+  }
+}
