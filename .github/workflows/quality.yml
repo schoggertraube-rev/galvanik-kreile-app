@@ -589,7 +589,55 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ""
         run: npx vitest run src/test/f1_3_live_card.integration.test.ts --maxWorkers=1 --no-file-parallelism
 
-      - name: P3 current schema replay fresh from zero without seed (blocking)
+      - name: KR-02R current schema replay fresh from zero without seed (blocking)
+        # The B1 guard exists only on the complete, unpinned migration chain.
+        # Every command suite below therefore runs after this point, never on
+        # the older 20260909180000 candidate used by the compatibility block.
+        run: ./node_modules/.bin/supabase db reset --local --no-seed
+
+      - name: KR-03B1 final G04 DB read-contract integration (blocking)
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          G04_TIMELINESS_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          SUPABASE_SERVICE_ROLE_KEY: ""
+        run: npx vitest run src/test/g04_order_timeliness_read_contract.integration.test.ts --maxWorkers=1 --no-file-parallelism
+
+      - name: F1.4 direct Storno payment-gate behavior on current schema (blocking)
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          F1_4_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          SUPABASE_SERVICE_ROLE_KEY: ""
+        run: npx vitest run src/test/f1_4_invoice_cancel_payment_guard.integration.test.ts --maxWorkers=1 --no-file-parallelism
+
+      - name: F1.4 real issue and cancel commands on current schema (blocking)
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          F1_4_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          SUPABASE_SERVICE_ROLE_KEY: ""
+        run: npx vitest run src/test/f1_4_immutable_invoice.integration.test.ts --maxWorkers=1 --no-file-parallelism
+
+      - name: KR-02R reset before F1.4 database contract (blocking)
+        # The real command suite intentionally persists its readback fixtures.
+        run: ./node_modules/.bin/supabase db reset --local --no-seed
+
+      - name: F1.4 immutable database contract on current schema (blocking)
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          F1_4_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          SUPABASE_SERVICE_ROLE_KEY: ""
+        run: npx vitest run src/test/f1_4_immutable_invoice_contract.integration.test.ts --maxWorkers=1 --no-file-parallelism
+
+      - name: KR-02R reset before F1.5 payment command (blocking)
+        run: ./node_modules/.bin/supabase db reset --local --no-seed
+
+      - name: F1.5 real confirm-payment command on current schema (blocking)
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          F1_5_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          SUPABASE_SERVICE_ROLE_KEY: ""
+        run: npx vitest run src/test/f1_5_confirm_payment.integration.test.ts --maxWorkers=1 --no-file-parallelism
+
+      - name: P3 current schema replay for isolated Lane-0 search (blocking)
         run: ./node_modules/.bin/supabase db reset --local --no-seed
 
       - name: P3 tenant-bound Lane-0 search integration test (blocking)

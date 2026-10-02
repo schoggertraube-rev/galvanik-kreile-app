@@ -1,8 +1,8 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: fa1a989fa5844305e6a8200832ed43e2fc230751
-branch: codex/kr-01r-governance-recontract
+base_sha: 2ddd19791e704e463de9b0c1eb665bfea557e36a
+branch: codex/kr-03b1-final-db-read-contract
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
 execution_program_20260928:
@@ -16,29 +16,40 @@ execution_program_20260928:
   merge_rule: REQUIRED_CHECKS_EXACT_SHA_CLEAN_TREE_AND_SEPARATE_PRODUCTION_EFFECT_AUTHORITY
   production_rule: NO_PRODUCTION_WITHOUT_SEPARATE_EXPLICIT_OWNER_AUTHORITY
   origin_main_reference: fa1a989fa5844305e6a8200832ed43e2fc230751
-  queue_parent: KR-01A-AUTHORITY-PIN-BOOTSTRAP@fa1a989fa5844305e6a8200832ed43e2fc230751
-  queue_parent_status: MAIN_DELIVERED_PRODUCTION_EFFECT_AUTHORIZED_AND_READY
+  queue_parent: KR-03A-DELIVERY-ADHERENCE-DOMAIN@2ddd19791e704e463de9b0c1eb665bfea557e36a
+  queue_parent_status: REVIEWED_REMOTE_GREEN_QUEUED_CANDIDATE_NOT_MAIN_DELIVERED
   queue_parent_review:
     model: claude-opus-5
-    broad_session_id: d7bfe3c2-eb59-4653-b7ae-978ceb7d9670
-    delta_session_id: NOT_NEEDED_ZERO_CORRECTIONS
+    broad_session_id: ca73901c-2f06-486b-acc4-d786e91741ba
+    delta_session_id: NOT_APPLICABLE_NO_CORRECTION
     correction_rounds: 0
-    delta_review_result: NOT_REQUIRED_BROAD_PASS_NO_OPEN_P0_P1_P2
-    evidence: _MODULDOSSIERS/00_PROJEKT/KR-01A_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md
-    evidence_sha256: BB45E2F8E992DD8EBB5A0C2BD8F44B7E13391A77F9395C3A2234E94885269856
-    github_agentur_gate_run: 36545860035
-    remote_head: fa1a989fa5844305e6a8200832ed43e2fc230751
+    delta_review_result: NOT_APPLICABLE_BROAD_REVIEW_PASS_NO_OPEN_P0_P1_P2
+    evidence: _MODULDOSSIERS/00_PROJEKT/KR-03A_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md
+    evidence_sha256: E86559D48ED49F510E5D849EC6E47E05E3DDCDA62D1BD5571EE2AACF68997BC1
+    github_fresh_replay_job: 109560117365
+    remote_head: 2ddd19791e704e463de9b0c1eb665bfea557e36a
   queue_rule: EXACT_PARENT_ONE_WRITER_ONE_REVIEWER_NO_DELIVERY_CLAIM_REVERIFY_AFTER_EACH_REAL_MAIN_MERGE
   kreile_pl_session: 01a0ce4b-1843-7361-9ffc-47933f9ecdde
   build_coordinator_and_future_merge_actor: 01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
-  current_state_drift: KR_01A_MAIN_DELIVERED_KR_01R_RECONTRACT_ACTIVE_NO_CURRENT_PACKAGE_DELIVERY_CLAIM
-  current_package: KR-01R-GOVERNANCE-RECONTRACT
-  current_package_parent: fa1a989fa5844305e6a8200832ed43e2fc230751
-  current_package_status: LOCAL_VERIFIED_PENDING_EXACT_SHA_REVIEW
-  current_package_remote_freeze: RECORDED_ONLY_IN_EXTERNAL_EXACT_SHA_CLOSURE_AFTER_REVIEW
-  current_package_broad_review: RECORDED_ONLY_IN_EXTERNAL_CLAUDE_RECEIPT_AFTER_EXACT_SHA
-  current_package_correction_rounds: UP_TO_1_RECORDED_EXTERNALLY
-  current_package_fast_gates: RECORDED_ONLY_IN_EXTERNAL_EXACT_SHA_CLOSURE_AFTER_GATE_RUNS
+  current_state_drift: KR_03A_REMOTE_REVIEWED_CANDIDATE_NOT_MAIN_DELIVERED_KR_03B1_LOCAL_VERIFIED_PENDING_EXACT_SHA_REMOTE_GATES_AND_REVIEW_NO_CURRENT_PACKAGE_DELIVERY_CLAIM
+  current_package: KR-03B1-FINAL-DB-READ-CONTRACT
+  current_package_parent: 2ddd19791e704e463de9b0c1eb665bfea557e36a
+  current_package_status: LOCAL_VERIFIED_PENDING_COMMIT_PUSH_CI_AND_OPUS_REVIEW
+  current_package_remote_freeze: PENDING_COMMIT_AND_PUSH
+  current_package_broad_review: PENDING_EXACT_REMOTE_SHA_AFTER_LOCAL_VERIFICATION
+  current_package_correction_rounds: 0_OF_MAX_1
+  current_package_fast_gates: PASS_DELIVERY_18_OF_18_AND_17_OF_17_TYPESCRIPT_ESLINT_AUTHORITY_MODULE_NO_FAKE_RATCHET_BASE_COMPARISON_PRECOMMIT_1021_OF_1021
+  current_package_local_db_gate: PASS_FRESH_LOCAL_RESET_ALL_MIGRATIONS_AND_FOCUSED_G04_INTEGRATION_2_OF_2_PHYSICAL_EXIT_0_DOCKER_STOPPED
+  historical_pr114_review: FAIL_P1_REAL_COMMAND_SUITES_PINNED_BEFORE_GUARD_MIGRATION_REBUILT_AS_KR_02R_PASS
+  historical_pr114_head: 0d3bacc6d929eb8f6102200fba0681c7335025c2
+  historical_pr114_archive_ref: archive/pr-114-0d3bacc6
+  historical_pr115_disposition: CLOSED_UNMERGED_ARCHIVED_FRESH_REBUILD_SPLIT_KR_03A_KR_03B1_KR_03B2
+  historical_pr115_head: 71dbc8151b30a3aa964d5cd4ea3562b1f1c03647
+  historical_pr115_archive_ref: archive/pr-115-71dbc815
+  historical_pr113_disposition: CLOSED_UNMERGED_SEVEN_OF_SEVEN_PATHS_DECIDED_ZERO_DIRECT_IMPORTS
+  historical_pr113_head: e477e6b2314d5a97575a32dc35ca0d16b55625d7
+  historical_pr113_archive_ref: archive/pr-113-e477e6b2
+  historical_pr113_closure_comment: https://github.com/schoggertraube-rev/galvanik-kreile-app/pull/113#issuecomment-5893046381
   review_roles:
     writer: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
     implementation_reviewer: CLAUDE_OPUS_NEW_READ_ONLY_SESSION_AFTER_EXACT_SHA
@@ -86,9 +97,9 @@ delivery_order:
   - F1.5_BESTAETIGTER_ZAHLUNGSEINGANG
   - F1.6_REALER_PILOT
 
-active_package: KR-01R-GOVERNANCE-RECONTRACT
-active_package_status: LOCAL_VERIFIED_PENDING_EXACT_SHA_REVIEW
-next_gate_after_active_package: EXACT_REMOTE_IDENTITY_BRANCH_GATE_AND_ONE_BROAD_CLAUDE_REVIEW_THEN_EXTERNAL_CLOSURE
+active_package: KR-03B1-FINAL-DB-READ-CONTRACT
+active_package_status: LOCAL_VERIFIED_PENDING_COMMIT_PUSH_CI_AND_OPUS_REVIEW
+next_gate_after_active_package: EXACT_ALLOWLIST_READBACK_THEN_COMMIT_PUSH_MAIN_BASE_CI_AND_ONE_BROAD_CLAUDE_OPUS_REVIEW
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
