@@ -1,0 +1,160 @@
+schema_version: 1
+package_id: KR-00D-ALTINVENTAR
+project: GALVANIK_KREILE_WERKSTATTCockpit
+state: CORRECTED_ONCE_PENDING_TARGETED_DELTA_REVIEW
+queue_parent_sha: 26eab1196f20f1e9f80e6a740afa31247434ebf4
+base_sha: 26eab1196f20f1e9f80e6a740afa31247434ebf4
+origin_main_sha: 21a23567d51e4805f065ce9ae8c59bdc5faf9fa9
+target_sha: PENDING_AFTER_LOCAL_VERIFICATION
+branch: codex/kr-00d-altinventar
+goal: >-
+  PR 84, 113, 114 und 115 frisch und vollstaendig inventarisieren,
+  unveraenderliche Remote-Archivrefs setzen und ihre Restanteile ohne
+  Liefer-, Merge- oder Productionbehauptung genau den Folgepaketen zuordnen.
+active_mission_file: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+dod_spec_approved_by:
+  authority: OWNER_CURRENT_TASK
+  date: 2026-09-28
+  instruction: >-
+    Den redteam-geprueften Plan paketweise umsetzen; bei externer Mergegrenze
+    einen exakten Kandidaten einfrieren und seriell auf dessen SHA fortsetzen.
+execution_actors:
+  kreile_pl_session: 01a0ce4b-1843-7361-9ffc-47933f9ecdde
+  build_coordinator_and_authorized_future_merge_actor: 01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  merge_limit: NO_MAIN_MERGE_UNTIL_EXPLICIT_PRODUCTION_EFFECT_AUTHORITY
+queue_parent_review:
+  package: KR-00B-TRUTH-SYNC
+  candidate_sha: 26eab1196f20f1e9f80e6a740afa31247434ebf4
+  model: claude-opus-5
+  session_id: 243682ee-34f0-4a2e-aa5a-bfe620689990
+  correction_rounds: 1
+  delta_review_result: PASS_DELTA_NO_OPEN_P0_P1_P2
+  evidence: ../_MODULDOSSIERS/00_PROJEKT/KR-00B_CLAUDE_REVIEW_2026-09-28.md
+  evidence_sha256: 0DFB902087036A31519B39BB3433320A0437AA7E6A12CA7D4CC12DD834C6A48F
+source_locks:
+  - source: origin/main
+    sha: 21a23567d51e4805f065ce9ae8c59bdc5faf9fa9
+  - source: KR-00B-TRUTH-SYNC
+    sha: 26eab1196f20f1e9f80e6a740afa31247434ebf4
+  - source: BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: EAEDDEF68C16BE403C6D05AD6F63234D4ACF75A762895F50008E07A59A782DC3
+  - source: BUILD_EXECUTION_LEDGER_2026-09-28.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: 78764C47ECC19BE53EDA20C3BBC91F8D0EF48BE872BEDB411C2E7C13AF84D63F
+  - source: KR-00B_CLAUDE_REVIEW_2026-09-28.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: 0DFB902087036A31519B39BB3433320A0437AA7E6A12CA7D4CC12DD834C6A48F
+    status: PASS_DELTA_NO_OPEN_P0_P1_P2
+repo_allowlist:
+  - docs/delivery/packages/KR-00D-ALTINVENTAR.yaml
+  - docs/project/ALT_PR_INVENTORY_2026-09-28.json
+  - docs/project/BRANCH_ARCHIVE_RECEIPTS.json
+  - docs/project/CURRENT_STATE.md
+  - docs/project/NON_LOSS_REGISTER.md
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+forbidden:
+  - src/**
+  - supabase/**
+  - package.json
+  - package-lock.json
+  - .github/**
+  - product_code_or_runtime_behavior
+  - auth_rls_roles_or_session_behavior
+  - provider_or_runtime_configuration
+  - remote_database_or_production_mutation
+  - merge_to_main
+new_objects_authority: NONE
+migration_status: NONE
+review_contract:
+  broad_claude_reviews: 1
+  max_correction_rounds: 1
+  delta_review_after_correction: true
+  reviewer_must_differ_from_writer: true
+broad_review_receipt:
+  model: claude-opus-5
+  session_id: fde5a065-b978-4402-b839-4e931f5f2b86
+  started_at: 2026-09-28T23:25:11+02:00
+  ended_at: 2026-09-28T23:33:05+02:00
+  exit_code: 0
+  result: FAIL_OPEN_FINDINGS
+  findings: KR00D-R1-P1-1|KR00D-R1-P1-2|KR00D-R1-P2-1
+production_effect: NONE_BEFORE_MAIN_MERGE
+archive_refs:
+  - archive/pr-84-9845e91e=9845e91e3003e81ff9f8b5b28bf8882dd12bf0d7
+  - archive/pr-113-e477e6b2=e477e6b2314d5a97575a32dc35ca0d16b55625d7
+  - archive/pr-114-0d3bacc6=0d3bacc6d929eb8f6102200fba0681c7335025c2
+  - archive/pr-115-71dbc815=71dbc8151b30a3aa964d5cd4ea3562b1f1c03647
+acceptance:
+  - id: KR00D-A1
+    statement: Vier Live-Heads, PR-Zustaende und Checks sind frisch belegt.
+    evidence: ALT_PR_INVENTORY_LIVE_READBACK
+  - id: KR00D-A2
+    statement: Vier Remote-Archivrefs existieren exakt auf den vier Head-SHAs.
+    evidence: BRANCH_ARCHIVE_RECEIPTS_AND_LS_REMOTE
+  - id: KR00D-A3
+    statement: Commit- und Dateiinventare sind vollstaendig, deterministisch und maschinenlesbar; ihre Hashes stimmen mit den Receipts.
+    evidence: INVENTORY_RECEIPT_DIGEST_TREE_COUNT_READBACK
+  - id: KR00D-A4
+    statement: Jede Quelle besitzt genau eine ehrliche Disposition und benannte Folgepakete; kein direkter Stack- oder Wholesale-Merge.
+    evidence: NON_LOSS_REGISTER_DISPOSITION_READBACK
+  - id: KR00D-A5
+    statement: CURRENT_STATE nennt den realen main-SHA, ohne Kandidaten als Lieferung umzudeuten.
+    evidence: CURRENT_STATE_MAIN_AND_DELIVERY_CLAIM_READBACK
+  - id: KR00D-A6
+    statement: Exakt sechs Repo-Pfade und keine Produkt-, Daten- oder Provideraenderung.
+    evidence: GIT_DIFF_ALLOWLIST_AND_FORBIDDEN_PATH_READBACK
+  - id: KR00D-A7
+    statement: Parent, Remote-Freeze, Manifest und Mission bilden eine lineare Kandidatenkette; alle neun Alt-Automatiken bleiben deaktiviert.
+    evidence: PARENT_REMOTE_MISSION_MANIFEST_AND_AUTOMATION_READBACK
+local_gates:
+  - npm run quality:authority-gate:selftest
+  - npm run quality:authority-gate
+  - npm run quality:module-gates
+  - npm run quality:no-fake-production
+  - npm run lint:ratchet
+  - git diff --check
+  - npm run verify:precommit
+local_gate_evidence:
+  authority_gate_selftest: PASS_NEGATIVE_CASES_27_OF_27
+  authority_gate: PASS_TRUTH_TYPES_7_UI_REFERENCES_4
+  module_gates: PASS
+  no_fake_production: PASS
+  lint_ratchet: PASS_0_ERRORS_0_WARNINGS
+  git_diff_check: PASS
+  typescript: PASS
+  staged_lint: PASS_NO_STAGED_JS_TS
+  unit_tests: PASS_116_OF_116_FILES_967_OF_967_TESTS
+  json_yaml_parse: PASS
+  archive_refs: PASS_4_OF_4_REMOTE_EXACT_HEADS
+  receipt_hashes: PASS_4_OF_4_AND_TOP_LEVEL_INVENTORY_HASH
+required_checks_after_push:
+  - quality
+  - agentur-gate
+  - Fresh Supabase replay
+non_required_but_must_pass:
+  - ratchet
+resource_profile:
+  mode: SERIAL_NO_PARALLEL_BUILD_OR_TEST_WRITERS
+  expected_runtime_minutes: 30
+  cleanup_receipt: NO_CHILD_PROCESS_REMAINS_AND_GENERATED_BUILD_BACKUPS_RESTORED
+findings:
+  - id: KR00D-R1-P1-1
+    severity: P1
+    status: CORRECTED_ONCE_PENDING_TARGETED_DELTA_REVIEW
+    statement: >-
+      Die Mission bindet KR-00B-TRUTH-SYNC@26eab119 als einzigen direkten
+      Queue-Parent; der historische KR-00B0-Parent bleibt nur in der Kettenhistorie.
+  - id: KR00D-R1-P1-2
+    severity: P1
+    status: CORRECTED_ONCE_PENDING_TARGETED_DELTA_REVIEW
+    statement: >-
+      Die abgeschlossene KR-00B-Delta-Pruefung ist mit Modell, Session,
+      Ergebnis, Receipt-Pfad und Receipt-Hash im Manifest und in der Mission gebunden.
+  - id: KR00D-R1-P2-1
+    severity: P2
+    status: CORRECTED_ONCE_PENDING_TARGETED_DELTA_REVIEW
+    statement: >-
+      DoD-Autoritaet, Akteure, Akzeptanznachweise, lokale Gates, Required
+      Checks, Ressourcenprofil und Findings-Ledger sind vollstaendig abgebildet.
+next_allowed_package: KR-00D-TARGETED-DELTA-REVIEW

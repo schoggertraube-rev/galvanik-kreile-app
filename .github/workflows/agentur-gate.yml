@@ -35,6 +35,11 @@ jobs:
             echo "mojibake script absent on this branch, skipping"
           fi
 
+      - name: Check delivery contracts and rolling queue
+        run: |
+          npm run quality:delivery-contracts:selftest
+          npm run quality:delivery-contracts
+
       - name: Type-check
         run: npx tsc --noEmit
 

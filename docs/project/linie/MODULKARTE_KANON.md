@@ -75,14 +75,32 @@ einen Big-Bang und ändert keine bestehende Rollen-, Auth- oder Schreibwahrheit.
 - F2 Büro-Automatisierung: E-Mail an Kunde/KV/Auftrag verknüpfen (Provider-API) und „Büro-Arbeitsvorrat". Das persistente KV und seine atomare Umwandlung in F1.1 sind seit D-UI-V5-001 kanonischer Kern und keine Quarantäne mehr.
 - Anschluss an Ereignisse: DHL/Versand („abgeholt/versendet"), Mollie/Bank-Abgleich („bezahlt"), Mahnwesen („offener Betrag").
 
-## ENTFÄLLT BEWUSST — kein Modul, auch keine Mini-Version, wird GELÖSCHT
-Analyse/KPI-Cockpit · eigenständiges Buchhaltungs-Modul (über Accounting-minimal hinaus) · Zeiterfassung · Teilfertigung · Kundenportal · eigenes Kalender-Produkt · Galvanik-Stufentracking · E-Mail-/OCR-/Bank-Eigenbau · Marketing.
+## SPÄTERE FACHMODULE — nicht als Alt-Route aktivieren
+
+D-GOV-003 supersediert die frühere Aussage, Analyse/KPI und Buchhaltung würden
+als Fachmodule entfallen. M01 Buchhaltung, M02 Analyse und M03
+Unternehmensführung bleiben hinten angestellt und werden erst nach
+Grundappstamm und ihren jeweiligen Datenverträgen seriell angebunden. M02
+erhält dann einen eigenen Menüpunkt; vorher gibt es weder eine produktive noch
+eine ausgegraute Analyse-Route. Alte Implementierungen unter `analyse`,
+`cockpit`, `performance`, `finanzen` oder breiten `buchhaltung`-Routen sind
+dadurch nicht rehabilitiert und dürfen nach Link-/Importnachweis weiterhin
+entfernt werden.
+
+Weiterhin ohne eigenes Kernmodul bleiben Zeiterfassung, Teilfertigung,
+Kundenportal, ein zweites Kalender-Produkt, Galvanik-Stufentracking sowie
+E-Mail-/OCR-/Bank-Eigenbau und Marketing. Externe Fähigkeiten laufen nur über
+die ratifizierten Ports und Provider-Gates.
 
 ## ROUTEN-ZUORDNUNG (`src/app/*`, Stand 36 Routen) — für S2-Löschung
-- **KANON (behalten → in `src/modules/` überführen):** orders, customers, quotes/KV, kalender, buchhaltung→**auf Accounting-minimal (rechnungen) trimmen**, erfassung/intake (+ warendurchlauf/neu als Intake), api, actions, admin, settings. Werkstatt-Home aus `warendurchlauf` NUR als Orders-Sicht (Phillip V4), Stationsband gelöscht.
+- **KANON (behalten → in `src/modules/` überführen):** orders, customers, quotes/KV, kalender, buchhaltung→**bis M01 auf Accounting-minimal (rechnungen) trimmen**, erfassung/intake (+ warendurchlauf/neu als Intake), api, actions, admin, settings. Werkstatt-Home aus `warendurchlauf` NUR als Orders-Sicht (Phillip V4), Stationsband gelöscht.
 - **QUARANTÄNE (stehen lassen, eingefroren, nur Vertrag):** scan (OCR), station/[slug]+galvanik-Innenleben, kommunikation (F2). Eine alte Quotes-Page ohne den neuen persistenten KV-Vertrag ist kein Produktpfad.
-- **ENTFÄLLT → LÖSCHEN:** analyse, cockpit, kontrolle, performance, status (alle KPI/Cockpit), marketing, baeder (Galvanik-Stufen), betrieb, betrieb-kvp, kvp, today+start (konkurrierende Homes → Werkstatt/Der Tag), finanzen (06., Leiche), kunden-auftraege (06., Dublette→customers), print-queue, feedback, archive(prüfen).
+- **ALTROUTE ENTFÄLLT → nach Link-/Importprüfung LÖSCHEN:** analyse, cockpit, kontrolle, performance, status und finanzen (keine davon ist M01/M02/M03), marketing, baeder (Galvanik-Stufen), betrieb, betrieb-kvp, kvp, today+start (konkurrierende Homes → Werkstatt/Der Tag), kunden-auftraege (06., Dublette→customers), print-queue, feedback, archive(prüfen).
 - **AMBIG — Owner-entschieden 2026-09-06 (Register §7 #9):** `items` (Katalog/Preis) **BEHALTEN** → gehört zu Orders/Accounting (Preis-/Rechnungsdaten, vgl. B2); `telefonnotiz` **kein eigenes Modul** → Teil von Customers/Intake; `lager` **LÖSCHEN**; `lieferanten` **LÖSCHEN**.
 
 ## Warum das die „alte-App-Falle" schließt
-Der scheinbare Widerspruch „4 Mocks vs. 36 Routen" ist keiner: die App SOLL ~6 Module sein; ~30 Routen sind genau das oben als ENTFÄLLT/QUARANTÄNE Benannte. Die Vorlagen sind für die beabsichtigte App ausreichend. Die Arbeit ist Subtraktion + 5 Nähte (siehe Path 1) + Suchleiste hereinholen — kein neues Screen-Bauen.
+Der scheinbare Widerspruch „4 Mocks vs. 36 Routen" ist keiner: Der
+Grundappstamm nutzt wenige kanonische Routen; spätere Fachmodule werden erst
+nach ihren Verträgen angebunden. Die zahlreichen Alt-Routen sind deshalb kein
+Scopebeleg. Die Arbeit am Grundstamm bleibt Subtraktion + 5 Nähte (siehe Path
+1) + Suchleiste; M01 bis M07 folgen danach in der ratifizierten Reihenfolge.

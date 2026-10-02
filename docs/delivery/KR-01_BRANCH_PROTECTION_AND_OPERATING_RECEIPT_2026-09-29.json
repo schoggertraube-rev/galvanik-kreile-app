@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "receipt_id": "KR-01R-BRANCH-PROTECTION-AND-OPERATING-20260929",
+  "observed_at": "2026-09-29T11:56:49.2583604+02:00",
+  "repository": {
+    "owner": "schoggertraube-rev",
+    "name": "galvanik-kreile-app",
+    "default_branch": "main",
+    "classic_query": "repos/schoggertraube-rev/galvanik-kreile-app/branches/main/protection",
+    "ruleset_query": "repos/schoggertraube-rev/galvanik-kreile-app/rulesets/20208063"
+  },
+  "classic_protection": {
+    "strict": true,
+    "required_checks": ["agentur-gate", "quality"],
+    "enforce_admins": true,
+    "required_conversation_resolution": true,
+    "allow_force_pushes": false,
+    "allow_deletions": false
+  },
+  "active_ruleset": {
+    "id": 20208063,
+    "name": "main-protection",
+    "enforcement": "active",
+    "target": "branch",
+    "include": ["~DEFAULT_BRANCH"],
+    "required_checks": ["quality", "agentur-gate", "Fresh Supabase replay"],
+    "bypass_actors": [],
+    "current_user_can_bypass": "never"
+  },
+  "effective_required_checks": ["quality", "agentur-gate", "Fresh Supabase replay"],
+  "ratchet": {
+    "required": false,
+    "must_pass": true,
+    "workflow": ".github/workflows/eslint-ratchet.yml",
+    "trigger": "pull_request_target_to_main"
+  },
+  "resource_calibration": {
+    "samples": [
+      { "at": "2026-09-29T11:56:46.1135197+02:00", "available_ram_mb": 6026, "shell_probe_seconds": 0.427, "git_probe_seconds": 0.119 },
+      { "at": "2026-09-29T11:56:46.8762913+02:00", "available_ram_mb": 6067, "shell_probe_seconds": 0.322, "git_probe_seconds": 0.091 },
+      { "at": "2026-09-29T11:56:47.6855322+02:00", "available_ram_mb": 6033, "shell_probe_seconds": 0.379, "git_probe_seconds": 0.097 },
+      { "at": "2026-09-29T11:56:48.5253833+02:00", "available_ram_mb": 6031, "shell_probe_seconds": 0.393, "git_probe_seconds": 0.124 },
+      { "at": "2026-09-29T11:56:49.2583604+02:00", "available_ram_mb": 6071, "shell_probe_seconds": 0.331, "git_probe_seconds": 0.089 }
+    ],
+    "observed_min_available_ram_mb": 6026,
+    "observed_max_shell_probe_seconds": 0.427,
+    "observed_max_git_probe_seconds": 0.124,
+    "thresholds": {
+      "minimum_available_ram_mb": 4096,
+      "maximum_shell_probe_seconds": 2,
+      "maximum_git_probe_seconds": 3
+    },
+    "heavy_profile": "NONE"
+  },
+  "process_contract": {
+    "automations_disabled": "9_OF_9",
+    "project_processes_at_preflight": 0,
+    "liveness_requires": [
+      "pid_or_run_id",
+      "started_at",
+      "last_material_output_at",
+      "physical_process_or_exit",
+      "progress_since_previous_observation",
+      "next_evidence"
+    ],
+    "cpu_only_is_liveness": false
+  },
+  "delivery_truth": {
+    "main_delivered": false,
+    "main_sha": "fa1a989fa5844305e6a8200832ed43e2fc230751",
+    "merge_performed": false,
+    "production_authorized": false
+  }
+}

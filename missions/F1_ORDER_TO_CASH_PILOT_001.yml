@@ -1,9 +1,59 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: 0e2216d01d22edac765ffd527fa71c50158e25d3
-branch: path1/a2-phillip-recovery-20260919
+base_sha: fa1a989fa5844305e6a8200832ed43e2fc230751
+branch: codex/kr-01r-governance-recontract
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
+
+execution_program_20260928:
+  authority: OWNER_CURRENT_TASK_AND_D_GOV_002
+  status: ACTIVE_SERIAL_ALTSTAND_FIRST
+  plan: _MODULDOSSIERS/00_PROJEKT/BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
+  order: KR_00B0_GOVERNANCE -> KR_00B_TRUTH_SYNC -> KR_00D_ALTINVENTAR -> KR_00C_MISSION_CONTRACT -> KR_00E_DELIVERY_CONTRACT -> KR_00G_DOCS_IMPORT -> KR_00F_ROLLING_MANIFESTS -> KR_01R_GOVERNANCE_RECONTRACT -> KR_04_PR113_DISPOSITION -> SMALL_CURRENT_MAIN_REBUILDS -> PRODUCT_PACKAGES -> PILOT -> LIVE_GATE
+  old_pr_disposition: PR_84_AND_PR_113_TO_PR_115_INVENTORY_THEN_REBUILD_OR_SUPERSEDE_NO_DIRECT_STACK_MERGE
+  product_truth: REPO_DECISION_REGISTER_ONLY_V5_D_UI_V5_003_V6_REJECTED
+  review_rule: ONE_BROAD_CLAUDE_REVIEW_MAX_ONE_CORRECTION_TARGETED_DELTA_REVIEW
+  merge_rule: REQUIRED_CHECKS_EXACT_SHA_CLEAN_TREE_AND_SEPARATE_PRODUCTION_EFFECT_AUTHORITY
+  production_rule: NO_PRODUCTION_WITHOUT_SEPARATE_EXPLICIT_OWNER_AUTHORITY
+  origin_main_reference: fa1a989fa5844305e6a8200832ed43e2fc230751
+  queue_parent: KR-01A-AUTHORITY-PIN-BOOTSTRAP@fa1a989fa5844305e6a8200832ed43e2fc230751
+  queue_parent_status: MAIN_DELIVERED_PRODUCTION_EFFECT_AUTHORIZED_AND_READY
+  queue_parent_review:
+    model: claude-opus-5
+    broad_session_id: d7bfe3c2-eb59-4653-b7ae-978ceb7d9670
+    delta_session_id: NOT_NEEDED_ZERO_CORRECTIONS
+    correction_rounds: 0
+    delta_review_result: NOT_REQUIRED_BROAD_PASS_NO_OPEN_P0_P1_P2
+    evidence: _MODULDOSSIERS/00_PROJEKT/KR-01A_IMPLEMENTATION_REVIEW_RECEIPT_2026-09-29.md
+    evidence_sha256: BB45E2F8E992DD8EBB5A0C2BD8F44B7E13391A77F9395C3A2234E94885269856
+    github_agentur_gate_run: 36545860035
+    remote_head: fa1a989fa5844305e6a8200832ed43e2fc230751
+  queue_rule: EXACT_PARENT_ONE_WRITER_ONE_REVIEWER_NO_DELIVERY_CLAIM_REVERIFY_AFTER_EACH_REAL_MAIN_MERGE
+  kreile_pl_session: 01a0ce4b-1843-7361-9ffc-47933f9ecdde
+  build_coordinator_and_future_merge_actor: 01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  current_state_drift: KR_01A_MAIN_DELIVERED_KR_01R_RECONTRACT_ACTIVE_NO_CURRENT_PACKAGE_DELIVERY_CLAIM
+  current_package: KR-01R-GOVERNANCE-RECONTRACT
+  current_package_parent: fa1a989fa5844305e6a8200832ed43e2fc230751
+  current_package_status: LOCAL_VERIFIED_PENDING_EXACT_SHA_REVIEW
+  current_package_remote_freeze: RECORDED_ONLY_IN_EXTERNAL_EXACT_SHA_CLOSURE_AFTER_REVIEW
+  current_package_broad_review: RECORDED_ONLY_IN_EXTERNAL_CLAUDE_RECEIPT_AFTER_EXACT_SHA
+  current_package_correction_rounds: UP_TO_1_RECORDED_EXTERNALLY
+  current_package_fast_gates: RECORDED_ONLY_IN_EXTERNAL_EXACT_SHA_CLOSURE_AFTER_GATE_RUNS
+  review_roles:
+    writer: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+    implementation_reviewer: CLAUDE_OPUS_NEW_READ_ONLY_SESSION_AFTER_EXACT_SHA
+    specialist_gate_reviewers: GITHUB_ACTIONS_REQUIRED_CHECK_RUNNERS_AFTER_PUSH
+    separation: WRITER_NE_IMPLEMENTATION_REVIEWER_AND_SPECIALIST_GATES_NE_IMPLEMENTATION_REVIEW
+  superseded_active_package_history:
+    source: origin/main@fa1a989fa5844305e6a8200832ed43e2fc230751
+    package: PATH1_UI_CONVERGENCE
+    base_sha: 0e2216d01d22edac765ffd527fa71c50158e25d3
+    branch: path1/a2-phillip-recovery-20260919
+    status: A2_PHILLIP_FIVE_PORT_RECOVERY_CANDIDATE_PENDING_TEST_REVIEW_NO_UI_PASS
+    next_gate: A2_FOCUSED_TESTS_THEN_INDEPENDENT_CLAUDE_REVIEW_THEN_COMMIT_PR_CI_PREVIEW
+    classification: HISTORICAL_SUPERSEDED_ACTIVE_POINTER_NOT_CURRENT_NOT_DELIVERED
+  archive_refs: archive/pr-84-9845e91e|archive/pr-113-e477e6b2|archive/pr-114-0d3bacc6|archive/pr-115-71dbc815
+  automations_disabled: 9_OF_9
 
 # ── M0 Konsolidierungsstand ───────────────────────────────────────
 m0_phase_3_status: COMPLETE
@@ -36,9 +86,9 @@ delivery_order:
   - F1.5_BESTAETIGTER_ZAHLUNGSEINGANG
   - F1.6_REALER_PILOT
 
-active_package: PATH1_UI_CONVERGENCE
-active_package_status: A2_PHILLIP_FIVE_PORT_RECOVERY_CANDIDATE_PENDING_TEST_REVIEW_NO_UI_PASS
-next_gate_after_active_package: A2_FOCUSED_TESTS_THEN_INDEPENDENT_CLAUDE_REVIEW_THEN_COMMIT_PR_CI_PREVIEW
+active_package: KR-01R-GOVERNANCE-RECONTRACT
+active_package_status: LOCAL_VERIFIED_PENDING_EXACT_SHA_REVIEW
+next_gate_after_active_package: EXACT_REMOTE_IDENTITY_BRANCH_GATE_AND_ONE_BROAD_CLAUDE_REVIEW_THEN_EXTERNAL_CLOSURE
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
@@ -65,7 +115,7 @@ f1_5_roles_rule: NO_GENERIC_PERM_FINANCE # M3 §1: enges Gate je Uebergang
 # Owner-Entscheidung 2026-09-05 (beantwortet Bauvertrag §9):
 f1_5_adapter_order: BANK_RECONCILIATION_FIRST_THEN_MOLLIE # Adapter 1 = Bank-Abgleich (eigener Bauvertrag nach F1.5-Merge), Adapter 2 = Mollie
 f1_5_partial_payment: ALLOWED
-f1_5_skonto: RATIFIED_2_PERCENT_WITHIN_10_DAYS_NET_30 # Register #5; keine offene Produktentscheidung
+f1_5_skonto: RATIFIED_2_PERCENT_WITHIN_10_DAYS_FOR_AUTHORIZED_TARGET_INVOICE_THEN_NET_14 # D-GOV-003/OE-2609-11; alte Netto-30-Aussage supersediert
 f1_5_not_in_scope: MAHNWESEN; DATEV_EXPORT; E_RECHNUNG_VERSAND; BUCHHALTUNGSMODUL; CAMT_MT940_IMPORT(Adapter-1); MOLLIE(Adapter-2)
 f1_5_legacy_quarantine: src/lib/payments/mollieAdapter.ts; src/lib/payments/paymentProvider.ts; src/app/buchhaltung/zahlung/page.tsx; FinanzenDashboardClient.tsx # nicht reaktivieren, nicht loeschen (D-ARCH-008)
 f1_5_units: A_DATA_READPORT -> B_CONFIRM_PAYMENT+B2_PAYMENT_MODE_INTAKE -> C_GOODS_OUT_GATE -> D_UI -> D1_WERKSTATT_GOODS_OUT_ENTRY; T_SUPABASE_CLI_PIN
@@ -127,6 +177,7 @@ path1_ui_convergence_v5_visible_build: GLOBAL_PLUS -> CUSTOMER_RECEIPT_READBACK 
 path1_ui_convergence_v5_visible_build_status: LOCAL_REAL_DB_AND_BROWSER_PASS_EXACT_SHA_CI_PREVIEW_AND_INDEPENDENT_REVIEW_PENDING_NO_PARTIAL_UI_PASS
 path1_ui_convergence_v5_002: VISIBLE_PRODUCT_IDENTITIES_ROLF_MEISTER_PHILLIP_WERKSTATT_GREGOR_SYSTEMADMIN; UNIQUE_PROFILE_FAIL_CLOSED; ROLF_CAPABILITY_BASED_CUSTOMER_KV_ORDER_AND_F1_1_INTAKE; NO_TECHNICAL_ROLE_OR_TEST_PERSONA_UI
 owner_v5_recovery_execution_20260915:
+  classification: HISTORICAL_SUPERSEDED_EXECUTION_NOT_CURRENT_NOT_DELIVERED
   status: TECHNICAL_SLICE_NO_UI_PASS_UNTIL_COMPLETE_A_TO_D_GATE
   execution: ONE_VISIBLE_V5_CAPTURE_DIRECT_F1_1_INTAKE_AND_CUSTOMER_TO_KV_TO_ONE_ORDER; P0_STATUS_READBACK_WITHOUT_MUTATION_AND_EXPLICIT_RETRY; P0_QUOTE_WISH_DATE_SEPARATE_FROM_CONFIRMED_ORDER_DATE; P0_PRODUCT_LANGUAGE; P1_ROLES_SHELL_AND_CORE_PATHS; P1_EQUIVALENT_PRIVACY_DENIAL_LOADING_ERROR_DEEPLINK_PROOFS
   visible_product_identities: ROLF_MEISTER; PHILLIP_WERKSTATT; GREGOR_SYSTEMADMIN
@@ -138,6 +189,7 @@ owner_v5_recovery_execution_20260915:
   p4_after_recovery: ORIGINAL_FIRST_OCR_M365_AFTER_VISIBLE_A_TO_D_CHEAP_FIRST_FACT_LEDGER_HUMAN_CONFIRM_NO_IMPLEMENTATION_NOW
 
 owner_v5_p2_quote_product_execution_20260916:
+  classification: HISTORICAL_DELIVERED_CONTEXT_NOT_CURRENT_EXECUTION
   status: DELIVERED_PR_95_MERGE_4c8f76160a1304e59d4859cb2203561f8e64a257_AND_POST_MERGE_HARDENING_PR_96_MERGE_70ae0989b7f76a247c34582badc2de3324e27851_NO_TOTAL_UI_PASS
   base_sha: 4a5f03043ef86854052bc93d0b50d14f952f7884
   branch: path1/v5-p2-quote-product-20260916
@@ -148,6 +200,7 @@ owner_v5_p2_quote_product_execution_20260916:
   next_product_after_p2: P3_ORDERS_V8_CUSTOMERS_V2_HOMES_SEARCH_STATUS
 
 owner_v5_p3_core_surfaces_search_execution_20260916:
+  classification: HISTORICAL_SUPERSEDED_EXECUTION_NOT_CURRENT_NOT_DELIVERED
   status: P3_ROLF_HOME_HYDRATION_RECOVERY_CANDIDATE_PENDING_INDEPENDENT_REVIEW_EXACT_SHA_CI_NO_UI_PASS
   base_sha: 0e2216d01d22edac765ffd527fa71c50158e25d3
   parent_sha: 9291fd8a8e390ca8f18c1d0772651b392eedd337
@@ -189,7 +242,10 @@ owner_v5_p3_core_surfaces_search_execution_20260916:
 rules:
   single_writer: true
   max_read_only_reviewers: 1
-  max_repair_loops_per_gate: 2
+  max_implementation_reviewers: 1
+  max_correction_rounds_per_package: 1
+  max_repair_loops_per_gate: 1
+  specialist_gate_reviewers_separate_from_implementation_reviewer: true
   f0_worktree_frozen: true
   protected_checkout_untouched: true
   no_parallel_architecture: true
@@ -1046,7 +1102,6 @@ r0_allowlist:
   - docs/project/DOCUMENT_AUTHORITY.md
   # R0-D: stale active-path deletions
   - docs/project/MISSION_QUEUE.md
-  - missions/MISSION_TEMPLATE.yml
   - .codex/skills/kreile-build-repair/SKILL.md
   - KREILE_CLAUDE_COWORK_MASCHINERIE/**
   - Agentur für App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/**
