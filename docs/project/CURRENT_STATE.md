@@ -1,6 +1,6 @@
 # CURRENT_STATE — Galvanik-Kreile WerkstattCockpit
 
-**Lieferstand 2026-10-02: `main@b58efdf546c05750d09f80adfbdd68d12ee9e3e5`.** Diese Datei
+**Lieferstand 2026-10-03: `main@4ca3abe7e0c44075b0cb30804ba56d85f683d7cf`.** Diese Datei
 beschreibt ausschließlich auf `main` belegte Lieferungen. Aktives Paket, Branch, Base, Kandidatenstatus
 und nächstes Gate stehen ausschließlich in `missions/F1_ORDER_TO_CASH_PILOT_001.yml`. Die
 ausführlichen F0-Tabellen darunter sind ein datierter historischer Snapshot.
@@ -12,18 +12,37 @@ NON_LOSS_REGISTER. `ALT_PR_INVENTORY_2026-09-28.json` ist der unveraenderte Stic
 steht in `docs/delivery/KR-04_PR113_DISPOSITION_2026-09-29.json`: PR #113 ist ungemergt geschlossen,
 Quellbranch und Archivref bleiben erhalten, und kein Produktpfad daraus wurde durch KR-04 geliefert.
 
-Seit dem letzten Produktstand wurden ausschliesslich die Governance-Pakete
-`KR-01A-AUTHORITY-PIN-BOOTSTRAP` ueber PR #119,
-`KR-01R-GOVERNANCE-RECONTRACT` ueber PR #120 sowie die geschuetzten
-KR-01R-nach-KR-04-CI-Handoffs ueber PR #131, PR #132 und PR #133 geliefert. Der KR-01A-Kandidat
-`fa73666b2d6ab1f41bf8f8576f41a04e7e38ac72` ist Vorfahr des Merge-Commits
-`fa1a989fa5844305e6a8200832ed43e2fc230751`. Der reviewte KR-01R-Kandidat
-`da8c352d91a694d9c72551a245805386bbf7efdc` ist zweiter Parent des Merge-Commits
-`0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9`; Kandidat und Merge haben denselben
-Tree `ec8ef1c9f38ee8ef671ead7a15b78c93181b66a7`. Die Post-Merge-Runs
-`36998034213` und `36998034309` sowie der automatische Vercel-Commitstatus waren
-gruen. Daraus wird keine manuelle Production-Autorisierung abgeleitet. Es gab
-durch diese Governance-Pakete keine Produkt-, Datenbank-, RLS- oder Echtdatenaenderung.
+Nach dem Governance-Stand `b58efdf546c05750d09f80adfbdd68d12ee9e3e5` wurden die
+PR-113-Disposition ueber PR #121, drei geschuetzte CI-Handoffs ueber PR #134,
+PR #135 und PR #136 sowie das kleine Produktbereinigungspaket KR-04R ueber
+PR #122 geliefert. Der exakt gepruefte KR-04R-Kandidat
+`b0b55353143fc50eda7f3833270ff4cfd1402e2f` wurde normal als
+`16888ccc1f0c97064af3d1552538c6975440b1fb` integriert; Kandidat und Merge haben
+denselben Tree `4ccfbc0f01c7bb92de8e8a198b43a79a0cd543f2`. Post-Merge waren Agentur-Gate
+`37105376211`, Quality und Fresh Supabase Replay `37105376179` sowie das
+automatische Vercel-Production-Deployment erfolgreich. KR-04R entfernte genau
+die nachweislich unreferenzierte Altkomponente `RechnungenClient.tsx`; es gab
+keine Remote-Datenbank-, RLS-, Rollen-, Session-, Provider- oder Echtdatenmutation.
+
+PR #137 lieferte danach ausschliesslich die vorab unabhaengig gepruefte
+KR-02R-Checker-Vorautorisierung. Kandidat `5e02605d23f4b65bd69e16509fbd9debcd4de7ae`
+wurde normal als `a56b5c8845efb5814a970cf739b7fab82217ce28` integriert. Agentur-Gate
+`37114643293`, Quality und Fresh Supabase Replay `37114643272` sowie das
+automatische Vercel-Production-Deployment waren erfolgreich. Der Nutzer
+autorisierte fuer genau diesen selbstblockierenden Alt-Handoff einmalig den
+normalen Merge trotz des nicht verpflichtenden Ratchet-Fehlers; kein
+Admin-Bypass, manueller Deploy oder Remote-Datenbankeingriff erfolgte.
+
+PR #139 lieferte anschliessend ausschliesslich die vorab unabhaengig gepruefte
+KR-22R-Checker-Vorautorisierung. Kandidat `00c43bd7c0995d7ab9b680623c98e5df215bbd72`
+wurde normal als `4ca3abe7e0c44075b0cb30804ba56d85f683d7cf` integriert; dessen Tree ist
+`2d2b99613f86f892a135c0de9c0c080fd93d5f81`. Agentur-Gate `37139924548`,
+Quality und Fresh Supabase Replay `37139924541` sowie das automatische
+Vercel-Production-Deployment waren erfolgreich. Der Nutzer autorisierte genau
+diesen normalen Merge trotz des dokumentierten nicht verpflichtenden
+Ratchet-Fehlers. Es gab keinen Admin-Bypass, keinen manuellen Deploy und keine
+Produkt-, Remote-Datenbank-, RLS-, Rollen-, Session-, Provider- oder
+Echtdatenmutation.
 
 PR #131 band den vorab geprueften KR-04-Checker fail-closed an den geschuetzten
 `pull_request_target`-Pfad; Kandidat `bfc6e5737f9bc0b3e268dff535a8dc1a78053234`
@@ -68,6 +87,10 @@ keinen Kandidaten als geliefert vorweg.
 
 | Wahrheit | Stand |
 |---|---|
+| KR-22R geschuetzter Checker-Handoff | PR #139, Kandidat `00c43bd7c0995d7ab9b680623c98e5df215bbd72`, als Merge-Commit `4ca3abe7e0c44075b0cb30804ba56d85f683d7cf` integriert; Tree `2d2b99613f86f892a135c0de9c0c080fd93d5f81`; Sonnet und Opus ohne offene P0/P1/P2/P3; einmalige dokumentierte Owner-Ausnahme fuer den nicht verpflichtenden Ratchet-Fehler; Post-Merge-Gates und automatisches Vercel-Production-Deployment gruen; keine Produkt- oder Remote-Datenmutation |
+| KR-02R geschuetzter Checker-Handoff | PR #137, Kandidat `5e02605d23f4b65bd69e16509fbd9debcd4de7ae`, als Merge-Commit `a56b5c8845efb5814a970cf739b7fab82217ce28` integriert; Opus P0/P1/P2/P3 = 0; einmalige dokumentierte Owner-Ausnahme fuer den selbstblockierenden Alt-Handoff; Post-Merge-Gates und automatisches Vercel-Production-Deployment gruen; keine Produkt- oder Remote-Datenmutation |
+| KR-04R Produktbereinigung | PR #122, Kandidat `b0b55353143fc50eda7f3833270ff4cfd1402e2f`, als Merge-Commit `16888ccc1f0c97064af3d1552538c6975440b1fb` integriert; Tree `4ccfbc0f01c7bb92de8e8a198b43a79a0cd543f2` bytegleich; P0/P1/P2 = 0; Post-Merge-Gates und automatisches Vercel-Production-Deployment gruen; keine Remote-Datenmutation |
+| KR-04 und geschuetzter CI-Handoff | PR #121 als `3fa208858ece10235394800a3a6ff48aae49568b` sowie PR #134, #135 und #136 als `31da55b5fe04db9d3744d842297f904e28fc26a7`, `ffa597937987d7abb7779a9d63303445e1ec92fc` und `53a5d52becc08394780583e4c3756b2d414311a6` integriert; Reviews, Post-Merge-Gates und automatische Deployments gruen; keine Produkt- oder Remote-Datenmutation durch die drei Handoffs |
 | KR-01R -> KR-04 geschuetzter CI-Handoff | PR #131, #132 und #133 als Merge-Commits `47bc0e58990b1bff545111c990a715d4f72f5f37`, `bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5` und `b58efdf546c05750d09f80adfbdd68d12ee9e3e5` integriert; Trees jeweils kandidatenidentisch; Reviews und Post-Merge-Gates gruen; keine Produkt- oder Remote-Datenmutation |
 | KR-01R Governance-Recontract | PR #120, Kandidat `da8c352d91a694d9c72551a245805386bbf7efdc`, als Merge-Commit `0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9` integriert; Tree bytegleich; Post-Merge-Gates gruen; keine Produkt- oder Remote-Datenmutation; kein manueller Production-Claim |
 | KR-01A Governance-Bootstrap | PR #119 als Merge-Commit `fa1a989fa5844305e6a8200832ed43e2fc230751` integriert; Post-Merge-Checks und der fuer diesen Merge autorisierte automatische Vercel-Lauf gruen; keine Produkt- oder Remote-Datenmutation |

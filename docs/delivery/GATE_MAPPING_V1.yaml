@@ -32,46 +32,36 @@ rolling_manifest_policy:
   halt_on_open_p0_p1_after_one_correction: true
   no_periodic_build_automation: true
   initial_pointer_order:
-    - KR-02-B1-P0-CANCEL
+    - KR-02R-B1-P0-CANCEL
     - KR-03A-DELIVERY-ADHERENCE-DOMAIN
     - KR-03B1-FINAL-DB-READ-CONTRACT
 workflow_facts_at_contract_parent:
-  parent_sha: 53a5d52becc08394780583e4c3756b2d414311a6
-  queue_parent_sha: 3fa208858ece10235394800a3a6ff48aae49568b
+  parent_sha: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+  queue_parent_sha: 16888ccc1f0c97064af3d1552538c6975440b1fb
   base_handoff:
-    queue_parent_sha: 3fa208858ece10235394800a3a6ff48aae49568b
-    effective_base_sha: 53a5d52becc08394780583e4c3756b2d414311a6
-    effective_base_tree_sha: 986b5552d662f11bacf2fe4e36f00d8e2ed7d9c1
+    queue_parent_sha: 16888ccc1f0c97064af3d1552538c6975440b1fb
+    effective_base_sha: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+    effective_base_tree_sha: 2d2b99613f86f892a135c0de9c0c080fd93d5f81
     entries:
-      - pr: 134
-        parent_sha: 3fa208858ece10235394800a3a6ff48aae49568b
-        candidate_sha: dd983936a5a9931df54ecac3c4578bfe3915b2b3
-        merge_sha: 31da55b5fe04db9d3744d842297f904e28fc26a7
-        tree_sha: 271aef304f448b42bc07ca680dbb601ad5a09aa5
+      - pr: 137
+        parent_sha: 16888ccc1f0c97064af3d1552538c6975440b1fb
+        candidate_sha: 5e02605d23f4b65bd69e16509fbd9debcd4de7ae
+        merge_sha: a56b5c8845efb5814a970cf739b7fab82217ce28
+        tree_sha: 5f6cd3a6958a169df32c935999f8db0eb1ddb440
         scope: PROTECTED_CI_GOVERNANCE_ONLY
         review_result: PASS_NO_OPEN_P0_P1_P2_P3
-        post_main_agentur_gate_run: 37091513177
-        post_main_quality_run: 37091513176
+        post_main_agentur_gate_run: 37114643293
+        post_main_quality_run: 37114643272
         vercel_status: SUCCESS
-      - pr: 135
-        parent_sha: 31da55b5fe04db9d3744d842297f904e28fc26a7
-        candidate_sha: 02dc063b2ed0731a658c5ed69af3a58b71fdaa9d
-        merge_sha: ffa597937987d7abb7779a9d63303445e1ec92fc
-        tree_sha: 6570c9a58e9b144c573b0e3d2932d7fd6031a8f3
+      - pr: 139
+        parent_sha: a56b5c8845efb5814a970cf739b7fab82217ce28
+        candidate_sha: 00c43bd7c0995d7ab9b680623c98e5df215bbd72
+        merge_sha: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+        tree_sha: 2d2b99613f86f892a135c0de9c0c080fd93d5f81
         scope: PROTECTED_CI_GOVERNANCE_ONLY
         review_result: PASS_NO_OPEN_P0_P1_P2_P3
-        post_main_agentur_gate_run: 37098854930
-        post_main_quality_run: 37098854962
-        vercel_status: SUCCESS
-      - pr: 136
-        parent_sha: ffa597937987d7abb7779a9d63303445e1ec92fc
-        candidate_sha: 737e2af5261b06ea0bd74408995f4b732fb301b1
-        merge_sha: 53a5d52becc08394780583e4c3756b2d414311a6
-        tree_sha: 986b5552d662f11bacf2fe4e36f00d8e2ed7d9c1
-        scope: PROTECTED_CI_GOVERNANCE_ONLY
-        review_result: PASS_NO_OPEN_P0_P1_P2_P3
-        post_main_agentur_gate_run: 37103144989
-        post_main_quality_run: 37103145021
+        post_main_agentur_gate_run: 37139924548
+        post_main_quality_run: 37139924541
         vercel_status: SUCCESS
   agentur_gate:
     workflow: .github/workflows/agentur-gate.yml
@@ -115,7 +105,7 @@ states:
   CONTRACT_READY:
     owner: PACKAGE_MANIFEST
     requires:
-      - manifest_exists_before_writer
+      - manifest_exists_before_writer_or_explicit_one_time_owner_recovery_exception
       - manifest_validates_against_PACKAGE_MANIFEST_SCHEMA_V2
       - exact_parent_and_source_locks_match
       - allowlist_and_forbidden_paths_are_explicit
@@ -228,6 +218,16 @@ states:
     requires:
       - release_or_non_release_effect_recorded_truthfully
       - rollback_and_operational_receipts_if_applicable
+contract_evidence_semantics:
+  register_gate_stage_is_required_closure_target_not_current_attainment: true
+  live_attainment_source: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  exact_sha_attainment_source: docs/delivery/EXACT_SHA_CLOSURE_RECEIPT_SCHEMA_V1.json
+  owner_preview_claim_requires_exact_rebased_sha_receipt: true
+  one_time_recovery_exception:
+    package: KR-22R-DESKTOP-READ-RECOVERY
+    authority: OWNER_CURRENT_TASK_2026-10-03
+    reason: DIRECT_OWNER_RECOVERY_ORDER_PRECEDED_STALE_DELIVERY_CONTRACT_RECONCILIATION
+    no_future_package_precedent: true
 blocked_transitions:
   BLOCKED_TO_SPLIT:
     use_when: PACKAGE_EXCEEDS_SCOPE_OR_HAS_SEPARABLE_FAILURES
@@ -256,11 +256,11 @@ gate_catalog:
     exact_sha_required: true
   UI_REFERENCE_PASS:
     stage: OWNER_PREVIEWED
-    command_or_evidence: MANIFEST_REGISTER_GATE_EVIDENCE_UI_REFERENCE_WITH_ACCEPTANCE_GATE_OR_INVARIANT_REF
+    command_or_evidence: REQUIRED_CLOSURE_TARGET_ONLY_THEN_EXACT_SHA_OWNER_PREVIEW_RECEIPT
     exact_sha_required: true
   OWNER_UX_PASS:
     stage: OWNER_PREVIEWED
-    command_or_evidence: MANIFEST_REGISTER_GATE_EVIDENCE_OWNER_UX_WITH_ACCEPTANCE_GATE_OR_INVARIANT_REF
+    command_or_evidence: REQUIRED_CLOSURE_TARGET_ONLY_THEN_EXACT_SHA_OWNER_ACCEPTANCE_RECEIPT
     exact_sha_required: true
   ROLLING_MANIFEST_POLICY:
     stage: CONTRACT_READY

@@ -1,0 +1,364 @@
+schema_version: 2
+package_id: KR-22R-DESKTOP-READ-RECOVERY
+project: GALVANIK_KREILE_WERKSTATTCockpit
+state: CONTRACT_READY
+execution_state_source: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+manifest_profile: ROLLING_V2
+queue_parent_sha: 16888ccc1f0c97064af3d1552538c6975440b1fb
+base_sha: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+origin_main_sha: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+base_handoff:
+  queue_parent_sha: 16888ccc1f0c97064af3d1552538c6975440b1fb
+  effective_base_sha: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+  effective_base_tree_sha: 2d2b99613f86f892a135c0de9c0c080fd93d5f81
+  entries:
+    - pr: 137
+      parent_sha: 16888ccc1f0c97064af3d1552538c6975440b1fb
+      candidate_sha: 5e02605d23f4b65bd69e16509fbd9debcd4de7ae
+      merge_sha: a56b5c8845efb5814a970cf739b7fab82217ce28
+      tree_sha: 5f6cd3a6958a169df32c935999f8db0eb1ddb440
+      scope: PROTECTED_CI_GOVERNANCE_ONLY
+      review_result: PASS_NO_OPEN_P0_P1_P2_P3
+      post_main_agentur_gate_run: 37114643293
+      post_main_quality_run: 37114643272
+      vercel_status: SUCCESS
+    - pr: 139
+      parent_sha: a56b5c8845efb5814a970cf739b7fab82217ce28
+      candidate_sha: 00c43bd7c0995d7ab9b680623c98e5df215bbd72
+      merge_sha: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+      tree_sha: 2d2b99613f86f892a135c0de9c0c080fd93d5f81
+      scope: PROTECTED_CI_GOVERNANCE_ONLY
+      review_result: PASS_NO_OPEN_P0_P1_P2_P3
+      post_main_agentur_gate_run: 37139924548
+      post_main_quality_run: 37139924541
+      vercel_status: SUCCESS
+target_sha: PENDING_AFTER_LOCAL_VERIFICATION
+branch: codex/kr-performance-desktop-recovery-20261003
+goal: >-
+  Den direkt gemeldeten Desktop- und Lesepfadfehler als ein enges Recovery-Paket
+  beheben: Windows-Desktop bei 125 Prozent Skalierung bleibt Desktop, Touch-Tablets
+  bleiben Tablet, Kunden- und Auftragsdetails nutzen den Desktopplatz, der
+  Kunden-Lesepfad wertet die bestehende Autorisierung nur einmal aus und die
+  Vercel Functions laufen in der Region der bestehenden EU-Datenbank. Das Paket
+  behauptet weder eine behobene Login-Latenz noch einen p95-Wert.
+active_mission_file: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+dod_spec_approved_by:
+  authority: OWNER_CURRENT_TASK_AND_RATIFIED_BUILDPLAN
+  date: "2026-10-03"
+  instruction: >-
+    Die gemeldeten Login-, Geschwindigkeits- und Desktopdarstellungsprobleme
+    untersuchen, real im Browser pruefen, mit genau einem Writer umsetzen,
+    unabhaengig durch Claude reviewen und erst nach sauberer Paketfolge liefern.
+execution_actors:
+  writer: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  implementation_reviewer: CLAUDE_OPUS_OR_SONNET_READ_ONLY_EXACT_SHA
+  specialist_gate_reviewers: GITHUB_ACTIONS_REQUIRED_CHECK_RUNNERS_AFTER_PUSH
+  kreile_pl_session: 01a0ce4b-1843-7361-9ffc-47933f9ecdde
+  authorized_future_merge_actor: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
+  merge_limit: NO_MAIN_MERGE_UNTIL_EXPLICIT_PRODUCTION_EFFECT_AUTHORITY
+dependency:
+  package: KR-04R-PR113-DEAD-UI-REMOVAL
+  candidate_sha: 16888ccc1f0c97064af3d1552538c6975440b1fb
+  status: MAIN_DELIVERED_REMOTE_GATES_GREEN_NO_MANUAL_PRODUCTION_CLAIM
+  review_result: PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN_MAIN_DELIVERED_TREE_EQUIVALENT
+  review_evidence: ../_MODULDOSSIERS/00_PROJEKT/KR-04R_MAIN_DELIVERY_RECEIPT_2026-10-03.md
+  review_evidence_sha256: 7D13B65A1FD7E1BCD3C109BE592564672D746BF2D1B0FA169CC22087AEC915A1
+dossier_and_decision_ids:
+  - BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL_PHASE_A_KR_15
+  - BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL_PHASE_B_KR_22
+  - D-UI-V5-003
+  - OWNER_DIRECT_DESKTOP_LOGIN_LATENCY_REPORT_2026-10-03
+source_locks:
+  - kind: REPO_FILE
+    source: docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md
+    location: REPO
+    repo_commit: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+    sha256: 7421775EA5E56432DF703533CF3130AC4B9DE14A1DF2DC182AF2C4A76B3A8AFB
+  - kind: REPO_FILE
+    source: e2e/path1-v5-shell-smoke.real.spec.ts
+    location: REPO
+    repo_commit: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+    sha256: 1BC41632F060B7870158C6D6EF8E1C0B922D656F56A73EDF2AA116C6F1FF389A
+  - kind: REPO_FILE
+    source: src/app/actions/customers.actions.ts
+    location: REPO
+    repo_commit: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+    sha256: 09E90F661B9403446593B80195AF66B5177AC4E1B531A5E51EBD98C17006FDA9
+  - kind: REPO_FILE
+    source: src/components/layout/MockAppFrame.tsx
+    location: REPO
+    repo_commit: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+    sha256: 6D15D475D261673B04C1E8C68A23209A797365E6BEA611D088159F06A1F572BC
+  - kind: REPO_FILE
+    source: src/components/layout/MockFrameMode.ts
+    location: REPO
+    repo_commit: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+    sha256: 82996D2E7501ADFA63A7A1DF0869CE42144C3ADF7D76591B5DF2E0CC8B8E2922
+  - kind: REPO_FILE
+    source: src/modules/customers/ui/customers.module.css
+    location: REPO
+    repo_commit: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+    sha256: E5A61D7920D2D01E59E8F239F786DB4B47216534FF332BE786778ACC15424082
+  - kind: REPO_FILE
+    source: src/modules/orders/ui/orders.module.css
+    location: REPO
+    repo_commit: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+    sha256: B1A10ED5B60D87A745D8BFBDAA9F56339E84255D4E4314ED80F746F57159E524
+  - kind: REPO_FILE
+    source: scripts/quality/check-delivery-contracts.mjs
+    location: REPO
+    repo_commit: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+    sha256: 9281D67E944B28553030090097D29D4AC3B8F204C396A056A3D66461EBF5471C
+  - kind: EXTERNAL_FILE
+    source: BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: EAEDDEF68C16BE403C6D05AD6F63234D4ACF75A762895F50008E07A59A782DC3
+    status: FINAL_AFTER_ONE_OPUS_REDTEAM_AND_OWNER_EXECUTION_AMENDMENT
+  - kind: EXTERNAL_FILE
+    source: KR-04R_MAIN_DELIVERY_RECEIPT_2026-10-03.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: 7D13B65A1FD7E1BCD3C109BE592564672D746BF2D1B0FA169CC22087AEC915A1
+    status: PASS_EXACT_SHA_NO_OPEN_P0_P1_P2_REMOTE_GATES_GREEN_MAIN_DELIVERED_TREE_EQUIVALENT
+  - kind: EXTERNAL_FILE
+    source: KR-02R_CHECKER_PREAUTH_MAIN_DELIVERY_RECEIPT_2026-10-03.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: E88716D6277359988E7714D6649038DFF0196BD1A1D367D3F69EFCF201CF4C85
+    status: PASS_NO_OPEN_P0_P1_P2_P3_OWNER_EXCEPTION_DOCUMENTED_POST_MAIN_GATES_AND_VERCEL_SUCCESS
+  - kind: EXTERNAL_FILE
+    source: KR-22R_CHECKER_PREAUTH_MAIN_DELIVERY_RECEIPT_2026-10-03.md
+    location: ../_MODULDOSSIERS/00_PROJEKT
+    sha256: 2728B70260E8BB632769F07B81EEDE65BF07D241F2045FC3F4E28B15508A772F
+    status: PASS_NO_OPEN_P0_P1_P2_P3_OWNER_EXCEPTION_DOCUMENTED_POST_MAIN_GATES_AND_VERCEL_SUCCESS
+repo_allowlist:
+  - docs/delivery/packages/KR-22R-DESKTOP-READ-RECOVERY.yaml
+  - docs/delivery/ROLLING_MANIFEST_QUEUE_SCHEMA_V1.json
+  - docs/delivery/ROLLING_MANIFEST_QUEUE_V1.json
+  - docs/delivery/GATE_MAPPING_V1.yaml
+  - docs/project/CURRENT_STATE.md
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - scripts/quality/check-delivery-contracts.mjs
+  - src/test/delivery_contracts.test.ts
+  - docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md
+  - e2e/path1-v5-shell-smoke.real.spec.ts
+  - src/app/actions/customers.actions.ts
+  - src/components/layout/MockAppFrame.tsx
+  - src/components/layout/MockFrameMode.ts
+  - src/components/layout/__tests__/MockAppFrame.frameMode.test.ts
+  - src/modules/customers/ui/customers.module.css
+  - src/modules/orders/ui/orders.module.css
+  - vercel.json
+forbidden:
+  - every_product_path_except_the_eight_named_product_test_runtime_paths_and_one_architecture_path
+  - supabase/**
+  - package_json_or_lockfile_change
+  - table_index_rls_policy_role_or_session_contract_change
+  - auth_weakening_client_tenant_or_second_data_truth
+  - provider_or_runtime_change_except_exact_vercel_function_region_fra1
+  - remote_database_or_echtdata_mutation
+  - manual_production_deploy
+  - main_merge_without_separate_explicit_owner_authority
+scope_budget:
+  max_product_files: 8
+  max_handwritten_product_lines: 800
+  max_new_migrations: 1
+  planned_product_files: 8
+  planned_governance_files: 9
+follow_up_packages:
+  - KR-02R-B1-P0-CANCEL
+  - KR-03A-DELIVERY-ADHERENCE-DOMAIN
+new_objects_authority: NONE
+migration_status: NONE
+applicable_register_gates:
+  FUNCTIONAL_SLICE_PASS: REQUIRED
+  DATA_TRUTH_PASS: REQUIRED
+  UI_REFERENCE_PASS: REQUIRED
+  OWNER_UX_PASS: REQUIRED
+register_gate_evidence:
+  FUNCTIONAL_SLICE_PASS:
+    applicability: REQUIRED
+    stage: LOCAL_VERIFIED
+    evidence_ref: acceptance:KR22R-A6
+  DATA_TRUTH_PASS:
+    applicability: REQUIRED
+    stage: LOCAL_VERIFIED
+    evidence_ref: acceptance:KR22R-A4
+  UI_REFERENCE_PASS:
+    applicability: REQUIRED
+    stage: OWNER_PREVIEWED
+    evidence_ref: acceptance:KR22R-A3
+  OWNER_UX_PASS:
+    applicability: REQUIRED
+    stage: OWNER_PREVIEWED
+    evidence_ref: acceptance:KR22R-A2
+invariants:
+  data_truth: EXISTING_SERVER_AUTHORIZATION_RESULT_AND_SERVER_TENANT_ONLY_NO_MODEL_SCHEMA_OR_REMOTE_DATA_CHANGE
+  tenant_and_rls: ONE_EXISTING_CHECK_APP_AUTHORIZATION_RESULT_REUSED_NO_CLIENT_TENANT_OR_RLS_CHANGE
+  roles_and_commands: EXISTING_ROLE_COMMAND_AND_SESSION_CONTRACTS_BYTE_UNCHANGED
+  receipt_and_readback: REAL_BROWSER_DESKTOP_TABLET_MOBILE_FRAME_AND_CUSTOMER_ORDER_READBACK_WITHOUT_SYNTHETIC_PRODUCT_CLAIM
+  reload_and_race: SERIAL_WRITER_ONE_BROWSER_PROFILE_AT_A_TIME_AND_FRESH_EXACT_SHA_GATES
+  error_behavior: AUTHORIZATION_AND_DB_READ_ERRORS_REMAIN_FAIL_CLOSED_AND_VISIBLE
+  rollback: REVERT_ONLY_THE_REVIEWED_CANDIDATE_BEFORE_MAIN_NO_REMOTE_OR_DESTRUCTIVE_ACTION
+visible_capabilities:
+  registry_changes: NONE
+  quality_no_fake_production: REQUIRED_DEFENSIVE_GATE
+review_contract:
+  broad_claude_reviews: 1
+  max_correction_rounds: 1
+  delta_review_after_correction: true
+  reviewer_must_differ_from_writer: true
+  specialist_gate_reviewers_are_not_implementation_reviewers: true
+acceptance:
+  - id: KR22R-A1
+    statement: Der Queue-Parent bleibt exakt der gelieferte KR-04R-Merge 16888ccc. Die geschuetzten Handoffs #137 und #139 sind lueckenlos angehaengt; Base, Tree sowie alle Repo-Source-Locks sind auf #139-Merge 4ca3abe7 neu gebunden. Erst dieser rebaste Stand ist Kandidat fuer das frische Exact-SHA-Review.
+    evidence: REMOTE_PARENT_MAIN_TRUSTED_GRAPH_AND_EXTERNAL_RECEIPTS
+  - id: KR22R-A2
+    statement: Ein Fine-Pointer-Desktop ab 1024 CSS-Pixeln bleibt auch bei Windows-Skalierung im Desktop-Frame; ein Touch-Tablet derselben Breitenklasse bleibt Tablet und Mobile bleibt Mobile.
+    evidence: PURE_CLASSIFIER_UNIT_MATRIX_AND_REAL_BROWSER_DEVICE_MATRIX
+  - id: KR22R-A3
+    statement: Kunden- und Auftragsdetails nutzen auf dem gemeldeten skalierten Desktop die kompakte Desktopbreite und -hoehe, ohne die Touch-Tablet- oder Mobile-Darstellung umzudefinieren.
+    evidence: REAL_BROWSER_1182X720_DPR_1_25_FINE_POINTER_SCREENSHOT_AND_DIMENSION_READBACK
+  - id: KR22R-A4
+    statement: Kundenliste und Kundendetail werten checkAppAuthorization genau einmal aus und verwenden nur den daraus serverseitig ermittelten Tenant; Rollen-, Session- und RLS-Vertraege bleiben unveraendert.
+    evidence: EXACT_DIFF_TYPESCRIPT_UNIT_TESTS_AND_INDEPENDENT_SECURITY_REVIEW
+  - id: KR22R-A5
+    statement: Vercel Functions sind ausschliesslich auf fra1 festgelegt, passend zur bestehenden Datenbankregion eu-central-1; kein Provider, Secret oder Remote-Datensatz wird angelegt oder mutiert.
+    evidence: EXACT_VERCEL_CONFIG_DIFF_BUILD_AND_PREVIEW_STATUS
+  - id: KR22R-A6
+    statement: TypeScript, Lint, vollstaendige Unit-Suite, Produktionsbuild und die Browsermatrix fuer 1914-Desktop, 1182-Windows-Desktop, 1220-Touch-Tablet und 390-Mobile sind am Kandidaten gruen.
+    evidence: LOCAL_GATE_RECEIPT_EXACT_SHA_AND_REMOTE_CI
+  - id: KR22R-A7
+    statement: Das Paket aendert genau acht Produkt-, Test- oder Runtimepfade und eine Architekturzeile, keine Migration, Tabelle, Policy, Rolle, Session, Abhaengigkeit, Remote-Datenbank oder Echtdaten.
+    evidence: EXACT_PARENT_ALLOWLIST_DIFF_AND_NO_FAKE_GATE
+  - id: KR22R-A8
+    statement: Mission und Queue zeigen danach auf KR-02R, KR-03A und KR-03B1; kein weiteres Zukunftsmanifest ist materialisiert.
+    evidence: QUEUE_SCHEMA_MAPPING_AND_DELIVERY_GATE
+  - id: KR22R-A9
+    statement: Der Kandidat ist keine Main-Lieferung und kein Production-Claim; ein normaler Main-Merge bleibt bis zu einer getrennten expliziten Owner-Autorisierung gesperrt.
+    evidence: MISSION_REMOTE_MAIN_DRAFT_PR_AND_EXPLICIT_MERGE_GATE
+  - id: KR22R-A10
+    statement: OWNER_PREVIEWED ist im Manifest ausschliesslich die geforderte Abschlussstufe, kein aktueller Erreichungsclaim; die reale Owner-Sichtung bleibt bis zum exakten rebasten Preview und einer separaten Receipt ausstehend.
+    evidence: GATE_MAPPING_TARGET_SEMANTICS_MISSION_AND_EXACT_SHA_RECEIPT
+  - id: KR22R-A11
+    statement: Die neue Checker-Vorautorisierung ersetzt den alten KR-02R-Hash 265e8a28 vollstaendig durch den nach der Korrektur reviewten Hash; gleichzeitige Alt- und Neuautorisierung ist verboten.
+    evidence: MISSION_EXACT_CHECKER_HASH_AND_WORKFLOW_REPLACE_NOT_APPEND_RULE
+  - id: KR22R-A12
+    statement: Die Vertragsausgabe ist eine einmalige Recovery nach dem direkten Owner-Bauauftrag; sie behauptet nicht, vor dem Writer existiert zu haben. Nach dem Rebase folgt ein frisches Exact-SHA-Review, und jeder neue P0, P1 oder P2 stoppt ohne weitere automatische Produktkorrektur.
+    evidence: OWNER_CURRENT_TASK_GATE_MAPPING_AND_MISSION_RECOVERY_EXCEPTION
+  - id: KR22R-A13
+    statement: Login- und belastbare p95-Latenz bleiben ausdruecklich offen und werden in KR-22P beobachtbar gemessen; die Einzelmessungen dieses Pakets sind nur Diagnosewerte.
+    evidence: FINDING_KR22R_FOLLOWUP_LATENCY_P95_AND_MISSION_DEFERRED_ROUTING
+local_gates:
+  - npm run quality:delivery-contracts:selftest
+  - npm run quality:delivery-contracts
+  - npx vitest run src/test/delivery_contracts.test.ts src/components/layout/__tests__/MockAppFrame.frameMode.test.ts
+  - npx tsc --noEmit
+  - npm run quality:authority-gate:selftest
+  - npm run quality:authority-gate
+  - npm run quality:module-gates
+  - npm run quality:no-fake-production
+  - npm run lint:ratchet
+  - npm test -- --run
+  - npm run build
+  - npx playwright test e2e/path1-v5-shell-smoke.real.spec.ts --project=Tablet
+  - git diff --check
+  - npm run verify:precommit
+required_checks_after_push:
+  - quality
+  - agentur-gate
+  - Fresh Supabase replay
+non_required_but_must_pass:
+  - ratchet
+gate_mapping_contract: docs/delivery/GATE_MAPPING_V1.yaml
+findings_ledger_contract: docs/delivery/FINDINGS_LEDGER_SCHEMA_V1.json
+closure_receipt_contract: docs/delivery/EXACT_SHA_CLOSURE_RECEIPT_SCHEMA_V1.json
+evidence_mode: CI_FULL
+evidence_mode_status: SERIAL_UI_AND_READ_PATH_RECOVERY_WITH_ONE_REAL_BROWSER_PROFILE_AND_NO_REMOTE_MUTATION
+resource_profile:
+  mode: SERIAL_NO_PARALLEL_BUILD_OR_TEST_WRITERS
+  heavy_profile: DB_PLUS_ONE_BROWSER
+  available_ram_mb_preflight: 4633
+  shell_probe_seconds_preflight: 0.002
+  git_status_seconds_preflight: 0.083
+  expected_runtime_minutes: 45
+  cleanup_receipt: PID_OR_RUN_ID_OUTPUT_TIMESTAMP_PHYSICAL_EXIT_AND_CLEAN_TREE_REQUIRED_CPU_NOT_SUFFICIENT
+findings:
+  - id: KR22R-FOLLOWUP-LATENCY-P95
+    severity: P2
+    status: DEFERRED_WITH_PACKAGE
+    summary: Die reale Browserprobe belegt einzelne erfolgreiche Laufzeiten fuer Kunden und Auftrag, aber weder die gemeldete Login-Latenz noch eine belastbare p95-Serie unter Produktionslast.
+    evidence:
+      - REAL_BROWSER_SINGLE_RUN_TIMINGS_NO_P95_CLAIM
+      - DUPLICATE_AUTH_REMOVAL_AND_EU_FUNCTION_REGION_EXACT_DIFF
+      - LOGIN_LATENCY_NOT_CLAIMED_AS_FIXED
+    follow_up_package: KR-22P-OBSERVED-LATENCY-BUDGET
+    fix_sha: null
+split_or_follow_up_decision: >-
+  KR-22R bleibt auf den gemeldeten Desktop-Frame, die zwei Detailoberflaechen,
+  den bestehenden Kunden-Lesepfad und die Vercel-Funktionsregion begrenzt.
+  Login-Latenz und eine belastbare p95-Messreihe sind im Missions-Backlog als
+  separates Observability-Paket KR-22P gefuehrt und kein erfundener
+  Leistungsclaim dieses Recovery-Pakets.
+next_allowed_package: KR-02R-B1-P0-CANCEL
+package_specific:
+  owner_report_date: "2026-10-03"
+  governance_branch: codex/kr-22r-desktop-read-governance-20261003
+  next_gate: LOCAL_GATES_THEN_FRESH_FULL_EXACT_SHA_REVIEW_BEFORE_GOVERNANCE_PR
+  contract_issuance:
+    timing: RETROACTIVE_RECOVERY_AFTER_DIRECT_OWNER_BUILD_ORDER
+    authority: OWNER_CURRENT_TASK_2026-10-03
+    writer_preceded_manifest: true
+    reason: STALE_MAIN_DELIVERY_POINTER_BLOCKED_THE_ALREADY_ORDERED_RECOVERY
+    scope_lock: EXACT_PRODUCT_CANDIDATE_D6E4A9A4_ONLY
+    post_rebase_rule: FRESH_FULL_EXACT_SHA_REVIEW_THEN_HALT_ON_ANY_NEW_P0_P1_P2
+    correction_budget: PRODUCT_CORRECTION_ONE_OF_ONE_ALREADY_USED
+  preauthorization_rebind:
+    checker_sha256: 3B92CA7E7D839FD22AF699DF71012EA4D9C243A917449707C4FC3AC9926E2A27
+    replaces_checker_sha256: 265E8A28AEAED9764ECD89A918E9E7965C0B4F68C73F99D315D9BDE4C3944262
+    workflow_rule: REPLACE_OLD_KR02R_HASH_NEVER_APPEND_BOTH
+    sequence:
+      - PREAUTHORIZE_EXACT_CORRECTED_CHECKER_ONLY_AFTER_TARGETED_DELTA_PASS
+      - REBASE_GOVERNANCE_BRANCH_ONTO_THE_AUTHORIZED_HANDOFF
+      - APPEND_HANDOFF_AND_REBIND_BASE_TREE_AND_REPO_SOURCE_LOCKS
+      - RERUN_LOCAL_GATES_AND_EXACT_SHA_REVIEW_BEFORE_GOVERNANCE_PR
+      - REBASE_PRODUCT_PR_138_ONLY_AFTER_GOVERNANCE_MAIN
+    final_contract_rule: IMMUTABLE_ONLY_AFTER_REBIND_AND_GOVERNANCE_ISSUANCE
+    completed_handoff:
+      pr: 139
+      candidate_sha: 00c43bd7c0995d7ab9b680623c98e5df215bbd72
+      integrated_sha: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+      tree_sha: 2d2b99613f86f892a135c0de9c0c080fd93d5f81
+      receipt: KR-22R_CHECKER_PREAUTH_MAIN_DELIVERY_RECEIPT_2026-10-03.md
+      receipt_sha256: 2728B70260E8BB632769F07B81EEDE65BF07D241F2045FC3F4E28B15508A772F
+      agentur_gate_run: 37139924548
+      quality_gate_run: 37139924541
+      vercel_result: SUCCESS
+  register_gate_semantics:
+    stage_meaning: REQUIRED_CLOSURE_TARGET_NOT_CURRENT_ATTAINMENT
+    ui_reference_attainment: WRITER_BROWSER_VERIFIED_OWNER_PREVIEW_PENDING_EXACT_REBASED_SHA
+    owner_ux_attainment: PENDING_EXACT_REBASED_SHA_OWNER_PREVIEW
+    receipt_rule: ONLY_EXACT_SHA_CLOSURE_RECEIPT_MAY_CLAIM_ATTAINMENT
+  migration_budget_effective: 0
+  migration_budget_note: SCHEMA_MAXIMUM_ONE_IS_NOT_AUTHORITY_AND_FORBIDDEN_PLUS_MIGRATION_NONE_CONTROL
+  deferred_observability:
+    package: KR-22P-OBSERVED-LATENCY-BUDGET
+    scope: LOGIN_CUSTOMER_LIST_CUSTOMER_DETAIL_AND_ORDER_DETAIL_P95
+    routing: MISSION_BACKLOG_BEFORE_LIVE_GATE_WITHOUT_CURRENT_QUEUE_REORDER_CLAIM
+  governance_broad_review:
+    model: claude-opus-5-5
+    session: 4800ee8c-c384-4989-afb9-100383d3cf81
+    candidate: 623002bc46cb975e3f9fcc05c857be37ce269378
+    result: FAIL_SIX_P2_ONE_CORRECTION_REQUIRED
+  current_candidate_before_governance_rebase: d6e4a9a494dd93d328c24ef4352210d10584a446
+  current_candidate_tree_before_governance_rebase: 3e426af6ac851b3489159ed97324e61d432a3141
+  draft_pr: 138
+  scaled_desktop_css_viewport: 1182x720
+  scaled_desktop_device_pixel_ratio: 1.25
+  scaled_desktop_pointer: fine
+  touch_tablet_css_viewport: 1220x900
+  function_region: fra1
+  database_region: eu-central-1
+  observed_single_run_ms:
+    customers_list: 1646
+    customer_detail: 885
+    order_detail: 1398
+  performance_claim_limit: SINGLE_RUN_DIAGNOSTIC_ONLY_NOT_P95_NOT_PRODUCTION_LOAD
