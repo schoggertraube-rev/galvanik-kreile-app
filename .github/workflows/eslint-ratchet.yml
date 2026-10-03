@@ -106,6 +106,10 @@ jobs:
           # This narrow preauthorization permits only that byte-identical
           # successor; the protected base still validates the complete Git graph.
           KR04R_DELIVERY_CHECKER_SHA256: "9281d67e944b28553030090097d29d4ac3b8f204c396a056a3d66461ebf5471c"
+          # Exact correction-final KR-02R checker bytes after the independent
+          # Opus review. This is a byte allowlist only; all contracts and the
+          # trusted Git graph remain validated by the protected base workflow.
+          KR02R_DELIVERY_CHECKER_SHA256: "265e8a28aeaed9764ecd89a918e9e7965c0b4f68c73f99d315d9bde4c3944262"
           DELIVERY_REQUIRE_TRUSTED_BASE: "true"
           DELIVERY_TRUSTED_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           DELIVERY_TRUSTED_REPO: ${{ github.workspace }}/ratchet-base
@@ -117,8 +121,8 @@ jobs:
           test ! -L "$candidate_checker"
           protected_sha="$(sha256sum "$protected_checker" | cut -d' ' -f1)"
           candidate_sha="$(sha256sum "$candidate_checker" | cut -d' ' -f1)"
-          if [[ "$candidate_sha" != "$protected_sha" && "$candidate_sha" != "$KR04R_DELIVERY_CHECKER_SHA256" ]]; then
-            echo "Delivery checker hash is neither protected main nor the exact KR-04R handoff: $candidate_sha" >&2
+          if [[ "$candidate_sha" != "$protected_sha" && "$candidate_sha" != "$KR04R_DELIVERY_CHECKER_SHA256" && "$candidate_sha" != "$KR02R_DELIVERY_CHECKER_SHA256" ]]; then
+            echo "Delivery checker hash is neither protected main nor an exact preauthorized handoff: $candidate_sha" >&2
             exit 1
           fi
           isolated_dir="$(mktemp -d "$RUNNER_TEMP/kreile-delivery-checker.XXXXXX")"
