@@ -1,8 +1,8 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: 53a5d52becc08394780583e4c3756b2d414311a6
-branch: codex/kr-04r-pr113-dead-ui-removal
+base_sha: 16888ccc1f0c97064af3d1552538c6975440b1fb
+branch: codex/kr-02r-b1-p0-cancel
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
 execution_program_20260928:
@@ -13,73 +13,47 @@ execution_program_20260928:
   old_pr_disposition: PR_84_AND_PR_113_TO_PR_115_INVENTORY_THEN_REBUILD_OR_SUPERSEDE_NO_DIRECT_STACK_MERGE
   product_truth: REPO_DECISION_REGISTER_ONLY_V5_D_UI_V5_003_V6_REJECTED
   review_rule: ONE_BROAD_CLAUDE_REVIEW_MAX_ONE_CORRECTION_TARGETED_DELTA_REVIEW
-  merge_rule: REQUIRED_CHECKS_EXACT_SHA_CLEAN_TREE_AND_SEPARATE_PRODUCTION_EFFECT_AUTHORITY
-  production_rule: NO_PRODUCTION_WITHOUT_SEPARATE_EXPLICIT_OWNER_AUTHORITY
-  origin_main_reference: 53a5d52becc08394780583e4c3756b2d414311a6
-  queue_parent: KR-04-PR113-DISPOSITION@3fa208858ece10235394800a3a6ff48aae49568b
-  queue_parent_status: MAIN_DELIVERED_TREE_EQUIVALENT_REMOTE_GATES_GREEN_VERCEL_PRODUCTION_READY_NO_MANUAL_REMOTE_MUTATION
+  merge_rule: REQUIRED_CHECKS_EXACT_SHA_CLEAN_TREE_NORMAL_MAIN_MERGE_ONLY
+  production_rule: AUTOMATIC_VERCEL_PRODUCTION_FROM_NORMAL_MAIN_MERGE_AUTHORIZED_NO_MANUAL_DEPLOY
+  origin_main_reference: 16888ccc1f0c97064af3d1552538c6975440b1fb
+  queue_parent: KR-04R-PR113-DEAD-UI-REMOVAL@16888ccc1f0c97064af3d1552538c6975440b1fb
+  queue_parent_status: MAIN_DELIVERED_TREE_EQUIVALENT_REMOTE_GATES_GREEN_VERCEL_PRODUCTION_SUCCESS_NO_MANUAL_REMOTE_MUTATION
   queue_parent_review:
     model: claude-opus-5
-    broad_session_id: e67e9231-7188-45d5-a4b6-d5473d2c24c2
-    delta_session_id: NOT_APPLICABLE_NO_CORRECTION
-    correction_rounds: 0
-    delta_review_result: NOT_APPLICABLE_BROAD_REVIEW_NO_OPEN_P0_P1_P2
-    evidence: _MODULDOSSIERS/00_PROJEKT/KR-04_EXACT_SHA_CLOSURE_RECEIPT_2026-10-03.md
-    evidence_sha256: 41894A53694251B3B952C0D33DA2E2B5FA570470F2149ECB67AAF46866303D44
-    reviewed_candidate: 61f2ebef3876aecf2b36deb944e3a097c026a846
-    github_agentur_gate_run: 37086838945
-    github_quality_run: 37086838800
-    remote_head: 3fa208858ece10235394800a3a6ff48aae49568b
+    broad_session_id: 5f66b9d6-fcea-4db4-bb01-a9103bf7e154
+    delta_session_id: 5f66b9d6-fcea-4db4-bb01-a9103bf7e154
+    correction_rounds: 1
+    delta_review_result: PASS_EXACT_SHA_NO_OPEN_P0_P1_P2
+    evidence: _MODULDOSSIERS/00_PROJEKT/KR-04R_MAIN_DELIVERY_RECEIPT_2026-10-03.md
+    evidence_sha256: 7D13B65A1FD7E1BCD3C109BE592564672D746BF2D1B0FA169CC22087AEC915A1
+    reviewed_candidate: b0b55353143fc50eda7f3833270ff4cfd1402e2f
+    github_agentur_gate_run: 37105376211
+    github_quality_run: 37105376179
+    remote_head: 16888ccc1f0c97064af3d1552538c6975440b1fb
   effective_base_handoff:
-    queue_parent_sha: 3fa208858ece10235394800a3a6ff48aae49568b
-    effective_base_sha: 53a5d52becc08394780583e4c3756b2d414311a6
-    effective_base_tree_sha: 986b5552d662f11bacf2fe4e36f00d8e2ed7d9c1
-    entries:
-      - pr: 134
-        parent_sha: 3fa208858ece10235394800a3a6ff48aae49568b
-        candidate_sha: dd983936a5a9931df54ecac3c4578bfe3915b2b3
-        merge_sha: 31da55b5fe04db9d3744d842297f904e28fc26a7
-        tree_sha: 271aef304f448b42bc07ca680dbb601ad5a09aa5
-        scope: PROTECTED_CI_GOVERNANCE_ONLY
-        review_result: PASS_NO_OPEN_P0_P1_P2_P3
-        post_main_agentur_gate_run: 37091513177
-        post_main_quality_run: 37091513176
-        vercel_status: SUCCESS
-      - pr: 135
-        parent_sha: 31da55b5fe04db9d3744d842297f904e28fc26a7
-        candidate_sha: 02dc063b2ed0731a658c5ed69af3a58b71fdaa9d
-        merge_sha: ffa597937987d7abb7779a9d63303445e1ec92fc
-        tree_sha: 6570c9a58e9b144c573b0e3d2932d7fd6031a8f3
-        scope: PROTECTED_CI_GOVERNANCE_ONLY
-        review_result: PASS_NO_OPEN_P0_P1_P2_P3
-        post_main_agentur_gate_run: 37098854930
-        post_main_quality_run: 37098854962
-        vercel_status: SUCCESS
-      - pr: 136
-        parent_sha: ffa597937987d7abb7779a9d63303445e1ec92fc
-        candidate_sha: 737e2af5261b06ea0bd74408995f4b732fb301b1
-        merge_sha: 53a5d52becc08394780583e4c3756b2d414311a6
-        tree_sha: 986b5552d662f11bacf2fe4e36f00d8e2ed7d9c1
-        scope: PROTECTED_CI_GOVERNANCE_ONLY
-        review_result: PASS_NO_OPEN_P0_P1_P2_P3
-        post_main_agentur_gate_run: 37103144989
-        post_main_quality_run: 37103145021
-        vercel_status: SUCCESS
+    queue_parent_sha: 16888ccc1f0c97064af3d1552538c6975440b1fb
+    effective_base_sha: 16888ccc1f0c97064af3d1552538c6975440b1fb
+    effective_base_tree_sha: 4ccfbc0f01c7bb92de8e8a198b43a79a0cd543f2
+    entries: []
   queue_rule: EXACT_PARENT_ONE_WRITER_ONE_REVIEWER_NO_DELIVERY_CLAIM_REVERIFY_AFTER_EACH_REAL_MAIN_MERGE
   kreile_pl_session: 01a0ce4b-1843-7361-9ffc-47933f9ecdde
   build_coordinator_and_future_merge_actor: 01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
-  current_state_drift: KR_04_AND_CHECKER_PREAUTH_MAIN_DELIVERED_KR_04R_REBUILT_FROM_ACTUAL_MAIN_NO_CURRENT_PACKAGE_DELIVERY_CLAIM
-  current_package: KR-04R-PR113-DEAD-UI-REMOVAL
-  current_package_parent: 53a5d52becc08394780583e4c3756b2d414311a6
-  current_package_status: CORRECTION_ROUND_1_REBASED_FULL_LOCAL_GATES_PASS_PENDING_EXACT_SHA_TARGETED_DELTA_REVIEW
-  current_package_remote_freeze: REVIEWED_FAIL_SHA_7394A931_PRIOR_CORRECTED_SHA_C38E2234_SUPERSEDED_BY_MAIN_53A5_REBASE_PENDING_FORCE_WITH_LEASE_TO_PR122
-  current_package_broad_review: FAIL_SESSION_5F66B9D6_FCEA_4DB4_BB01_A9103BF7E154_EXACT_SHA_7394A93117A1BF143F67C479CB7561D6BB16E8ED
-  current_package_correction_rounds: 1_OF_MAX_1_FINAL_IMPLEMENTATION_NO_FURTHER_IMPLEMENTATION_ROUND
-  current_package_fast_gates: REBASED_MAIN_53A5_DELIVERY_SELFTEST_21_OF_21_CONTRACT_PASS_FOCUSED_23_OF_23_TSC_PASS_AUTHORITY_SELFTEST_27_OF_27_AUTHORITY_PASS_MODULE_PASS_NO_FAKE_PASS_LINT_RATCHET_0_ERRORS_0_WARNINGS_DIFF_CHECK_PASS_FINAL_CHECKER_SHA256_9281D67E944B28553030090097D29D4AC3B8F204C396A056A3D66461EBF5471C
-  current_package_pr113_disposition: CLOSED_UNMERGED_SEVEN_OF_SEVEN_PATHS_DECIDED_ZERO_DIRECT_IMPORTS
-  current_package_pr113_head: e477e6b2314d5a97575a32dc35ca0d16b55625d7
-  current_package_pr113_archive_ref: archive/pr-113-e477e6b2
-  current_package_pr113_closure_comment: https://github.com/schoggertraube-rev/galvanik-kreile-app/pull/113#issuecomment-5893046381
+  current_state_drift: CURRENT_STATE_SYNC_INCLUDED_KR_04R_MAIN_DELIVERED_KR_02R_NO_CURRENT_PACKAGE_DELIVERY_CLAIM
+  current_package: KR-02R-B1-P0-CANCEL
+  current_package_parent: 16888ccc1f0c97064af3d1552538c6975440b1fb
+  current_package_status: FULL_LOCAL_LIGHT_GATES_PASS_PENDING_REMOTE_IDENTITY_TARGETED_DELTA_REVIEW_AND_REQUIRED_REMOTE_CI
+  current_package_remote_freeze: PR_123_OLD_SHA_B657B63C_SUPERSEDED_PENDING_FORCE_WITH_LEASE_AFTER_REVERIFY
+  current_package_broad_review: PASS_OLD_SHA_SESSION_FB7A2EB5_E579_4562_A376_1740B17A3093_TARGETED_DELTA_REQUIRED_FOR_REBASED_SHA
+  current_package_correction_rounds: 1_OF_MAX_1_REBASE_ADAPTATION_NO_FURTHER_IMPLEMENTATION_ROUND
+  current_package_fast_gates: PASS_DELIVERY_SELFTEST_21_OF_21_CONTRACT_PASS_FOCUSED_23_OF_23_TSC_PASS_AUTHORITY_SELFTEST_27_OF_27_AUTHORITY_PASS_MODULE_PASS_NO_FAKE_PASS_LINT_RATCHET_0_ERRORS_0_WARNINGS_DIFF_CHECK_PASS_PRECOMMIT_117_FILES_999_TESTS
+  current_package_local_db_gate: NO_PASS_CLAIM_FULL_STACK_START_ABORTED_AND_CLEANLY_STOPPED_AT_1048_MB_FREE_RAM_REMOTE_FRESH_REPLAY_REQUIRED
+  current_package_pr114_review: FAIL_P1_REAL_COMMAND_SUITES_PINNED_BEFORE_GUARD_MIGRATION_FRESH_REBUILD_REQUIRED
+  current_package_pr114_head: 0d3bacc6d929eb8f6102200fba0681c7335025c2
+  current_package_pr114_archive_ref: archive/pr-114-0d3bacc6
+  historical_pr113_disposition: CLOSED_UNMERGED_SEVEN_OF_SEVEN_PATHS_DECIDED_ZERO_DIRECT_IMPORTS
+  historical_pr113_head: e477e6b2314d5a97575a32dc35ca0d16b55625d7
+  historical_pr113_archive_ref: archive/pr-113-e477e6b2
+  historical_pr113_closure_comment: https://github.com/schoggertraube-rev/galvanik-kreile-app/pull/113#issuecomment-5893046381
   review_roles:
     writer: CODEX_BUILD_COORDINATOR_01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
     implementation_reviewer: CLAUDE_OPUS_NEW_READ_ONLY_SESSION_AFTER_EXACT_SHA
@@ -127,9 +101,9 @@ delivery_order:
   - F1.5_BESTAETIGTER_ZAHLUNGSEINGANG
   - F1.6_REALER_PILOT
 
-active_package: KR-04R-PR113-DEAD-UI-REMOVAL
-active_package_status: CORRECTION_ROUND_1_FINAL_CHECKER_LOCAL_GATES_PASS_PENDING_PROTECTED_HASH_HANDOFF
-next_gate_after_active_package: COMMIT_LOCAL_CORRECTION_THEN_PROTECTED_FINAL_HASH_HANDOFF_REBASE_REVERIFY_AND_TARGETED_DELTA_REVIEW
+active_package: KR-02R-B1-P0-CANCEL
+active_package_status: FULL_LOCAL_LIGHT_GATES_PASS_PENDING_REMOTE_IDENTITY_TARGETED_DELTA_REVIEW_AND_REQUIRED_REMOTE_CI
+next_gate_after_active_package: AMEND_FORCE_WITH_LEASE_PR123_TARGETED_OPUS_DELTA_AND_REQUIRED_REMOTE_GATES
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
