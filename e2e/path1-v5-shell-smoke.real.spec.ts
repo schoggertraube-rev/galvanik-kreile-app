@@ -235,9 +235,11 @@ test.describe("PATH1 V5 Shell Smoke", () => {
           if (viewport.shell === "desktop") {
             expect(pointer.fine).toBe(true);
             expect(pointer.hover).toBe(true);
+            await expect(page.locator(".mock-kreile-rolf-home .frame.desktop")).toBeVisible();
+            await expect(page.getByRole("navigation", { name: "Mobile Hauptnavigation", exact: true })).toHaveCount(0);
             await visitDesktopLinks(page, actor.key, viewport, problems, screens);
           } else {
-            expect(pointer.coarse).toBe(true);
+            await expect(page.locator(".mock-kreile-rolf-home .frame.tablet")).toBeVisible();
             await visitMore(page, actor.key, viewport, problems, screens);
           }
           expect(pointer.dpr).toBe(viewport.deviceScaleFactor);
