@@ -1,6 +1,6 @@
 # CURRENT_STATE — Galvanik-Kreile WerkstattCockpit
 
-**Lieferstand 2026-10-03: `main@a56b5c8845efb5814a970cf739b7fab82217ce28`.** Diese Datei
+**Lieferstand 2026-10-03: `main@4ca3abe7e0c44075b0cb30804ba56d85f683d7cf`.** Diese Datei
 beschreibt ausschließlich auf `main` belegte Lieferungen. Aktives Paket, Branch, Base, Kandidatenstatus
 und nächstes Gate stehen ausschließlich in `missions/F1_ORDER_TO_CASH_PILOT_001.yml`. Die
 ausführlichen F0-Tabellen darunter sind ein datierter historischer Snapshot.
@@ -32,6 +32,17 @@ automatische Vercel-Production-Deployment waren erfolgreich. Der Nutzer
 autorisierte fuer genau diesen selbstblockierenden Alt-Handoff einmalig den
 normalen Merge trotz des nicht verpflichtenden Ratchet-Fehlers; kein
 Admin-Bypass, manueller Deploy oder Remote-Datenbankeingriff erfolgte.
+
+PR #139 lieferte anschliessend ausschliesslich die vorab unabhaengig gepruefte
+KR-22R-Checker-Vorautorisierung. Kandidat `00c43bd7c0995d7ab9b680623c98e5df215bbd72`
+wurde normal als `4ca3abe7e0c44075b0cb30804ba56d85f683d7cf` integriert; dessen Tree ist
+`2d2b99613f86f892a135c0de9c0c080fd93d5f81`. Agentur-Gate `37139924548`,
+Quality und Fresh Supabase Replay `37139924541` sowie das automatische
+Vercel-Production-Deployment waren erfolgreich. Der Nutzer autorisierte genau
+diesen normalen Merge trotz des dokumentierten nicht verpflichtenden
+Ratchet-Fehlers. Es gab keinen Admin-Bypass, keinen manuellen Deploy und keine
+Produkt-, Remote-Datenbank-, RLS-, Rollen-, Session-, Provider- oder
+Echtdatenmutation.
 
 PR #131 band den vorab geprueften KR-04-Checker fail-closed an den geschuetzten
 `pull_request_target`-Pfad; Kandidat `bfc6e5737f9bc0b3e268dff535a8dc1a78053234`
@@ -76,6 +87,7 @@ keinen Kandidaten als geliefert vorweg.
 
 | Wahrheit | Stand |
 |---|---|
+| KR-22R geschuetzter Checker-Handoff | PR #139, Kandidat `00c43bd7c0995d7ab9b680623c98e5df215bbd72`, als Merge-Commit `4ca3abe7e0c44075b0cb30804ba56d85f683d7cf` integriert; Tree `2d2b99613f86f892a135c0de9c0c080fd93d5f81`; Sonnet und Opus ohne offene P0/P1/P2/P3; einmalige dokumentierte Owner-Ausnahme fuer den nicht verpflichtenden Ratchet-Fehler; Post-Merge-Gates und automatisches Vercel-Production-Deployment gruen; keine Produkt- oder Remote-Datenmutation |
 | KR-02R geschuetzter Checker-Handoff | PR #137, Kandidat `5e02605d23f4b65bd69e16509fbd9debcd4de7ae`, als Merge-Commit `a56b5c8845efb5814a970cf739b7fab82217ce28` integriert; Opus P0/P1/P2/P3 = 0; einmalige dokumentierte Owner-Ausnahme fuer den selbstblockierenden Alt-Handoff; Post-Merge-Gates und automatisches Vercel-Production-Deployment gruen; keine Produkt- oder Remote-Datenmutation |
 | KR-04R Produktbereinigung | PR #122, Kandidat `b0b55353143fc50eda7f3833270ff4cfd1402e2f`, als Merge-Commit `16888ccc1f0c97064af3d1552538c6975440b1fb` integriert; Tree `4ccfbc0f01c7bb92de8e8a198b43a79a0cd543f2` bytegleich; P0/P1/P2 = 0; Post-Merge-Gates und automatisches Vercel-Production-Deployment gruen; keine Remote-Datenmutation |
 | KR-04 und geschuetzter CI-Handoff | PR #121 als `3fa208858ece10235394800a3a6ff48aae49568b` sowie PR #134, #135 und #136 als `31da55b5fe04db9d3744d842297f904e28fc26a7`, `ffa597937987d7abb7779a9d63303445e1ec92fc` und `53a5d52becc08394780583e4c3756b2d414311a6` integriert; Reviews, Post-Merge-Gates und automatische Deployments gruen; keine Produkt- oder Remote-Datenmutation durch die drei Handoffs |
