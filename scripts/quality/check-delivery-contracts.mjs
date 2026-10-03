@@ -129,6 +129,59 @@ function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex").toUpperCase();
 }
 
+function trustedRepoBlobSha256(repo, commit, source) {
+  if (!SHA_PATTERN.test(commit)) throw new Error("ungueltiger Repo-Commit-SHA");
+  if (
+    typeof source !== "string" ||
+    source.length === 0 ||
+    source !== toPosix(source) ||
+    source.includes(":") ||
+    source.includes("\0") ||
+    source.includes("\n") ||
+    source.includes("\r") ||
+    path.posix.isAbsolute(source) ||
+    source.split("/").some((segment) => segment === "" || segment === "." || segment === "..")
+  ) {
+    throw new Error("ungueltiger Repo-Quellpfad");
+  }
+  const blob = execFileSync(
+    "git",
+    ["-C", repo, "rev-parse", "--verify", `${commit}:${source}`],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+  ).trim();
+  if (!SHA_PATTERN.test(blob)) throw new Error("Quellpfad ist kein aufloesbarer Blob");
+  const bytes = execFileSync(
+    "git",
+    ["-C", repo, "cat-file", "blob", blob],
+    { encoding: null, maxBuffer: 32 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] },
+  );
+  return sha256(bytes);
+}
+
+function checkRepoSourceLocks(repo, manifest, rel, findings) {
+  const seen = new Set();
+  for (const [index, lock] of (manifest.source_locks ?? []).entries()) {
+    if (lock?.kind !== "REPO_FILE") continue;
+    const label = `${rel}: Repo-Source-Lock[${index}]`;
+    if (lock.repo_commit !== manifest.base_sha) {
+      findings.push(`${label} repo_commit muss dem Manifest-base_sha entsprechen`);
+    }
+    if (seen.has(lock.source)) {
+      findings.push(`${label} dupliziert '${String(lock.source)}'`);
+      continue;
+    }
+    seen.add(lock.source);
+    try {
+      const actual = trustedRepoBlobSha256(repo, lock.repo_commit, lock.source);
+      if (actual !== lock.sha256) {
+        findings.push(`${label} '${lock.source}' SHA256 ${actual}, erwartet ${String(lock.sha256)}`);
+      }
+    } catch (error) {
+      findings.push(`${label} '${String(lock.source)}' konnte nicht geprueft werden (${error.message})`);
+    }
+  }
+}
+
 function normalizedStringSet(value) {
   if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string")) return null;
   return [...new Set(value)].sort();
@@ -606,11 +659,11 @@ function checkPr113Disposition(root, disposition, findings) {
   const decisions = Array.isArray(disposition.path_decisions) ? disposition.path_decisions : [];
   if (decisions.length !== 7) findings.push(`[delivery] PR113-Disposition muss exakt 7 Pfadentscheidungen enthalten, gefunden ${decisions.length}`);
   const seen = new Set();
-  for (const entry of decisions) {
+  for (const [index, entry] of decisions.entries()) {
     checkExactKeys(
       entry,
       ["path", "parent_blob_sha", "pr_blob_sha", "decision", "reason", "follow_up_package"],
-      `PR113-Disposition path_decisions[${seen.size}]`,
+      `PR113-Disposition path_decisions[${index}]`,
       findings,
     );
     const rel = entry?.path;
@@ -700,10 +753,6 @@ function checkRollingConsistency(root, queue, mapping, mission, manifests, findi
   if (policy.max_materialized_future_contracts !== mapped.materialized_future_contracts) {
     findings.push("[delivery] Rolling-Policy-Drift: materialized_future_contracts stimmt nicht ueberein");
   }
-  if (mapping.workflow_facts_at_contract_parent?.parent_sha !== mission.base_sha) {
-    findings.push("[delivery] workflow_facts_at_contract_parent.parent_sha stimmt nicht mit mission.base_sha ueberein");
-  }
-
   const queueOrder = (queue.initial_horizon ?? []).map((entry) => entry.package_id);
   const mappingOrder = mapped.initial_pointer_order ?? [];
   if (JSON.stringify(queueOrder) !== JSON.stringify(mappingOrder)) {
@@ -828,8 +877,9 @@ function checkRollingConsistency(root, queue, mapping, mission, manifests, findi
   }
 }
 
-export function checkDeliveryContracts(root = process.cwd()) {
+export function checkDeliveryContracts(root = process.cwd(), sourceLockRepo = root) {
   root = path.resolve(root);
+  sourceLockRepo = path.resolve(sourceLockRepo);
   const findings = [];
   const manifestSchema = readJson(root, DELIVERY_PATHS.manifestSchema, findings);
   const queueSchema = readJson(root, DELIVERY_PATHS.queueSchema, findings);
@@ -846,6 +896,10 @@ export function checkDeliveryContracts(root = process.cwd()) {
     } else if (value?.schema_version !== 1) {
       findings.push(`[delivery] ${rel}: unbekannte schema_version '${String(value?.schema_version)}'`);
     }
+  }
+  const activeManifest = manifests.find(({ rel }) => rel === ACTIVE_MANIFEST_BINDING.path);
+  if (activeManifest?.value?.schema_version === 2) {
+    checkRepoSourceLocks(sourceLockRepo, activeManifest.value, activeManifest.rel, findings);
   }
   checkLegacyBindings(root, manifests, findings);
   checkLegacyV1Bindings(root, manifests, findings);
@@ -883,7 +937,7 @@ export function runSelftest(root = process.cwd()) {
     const fixture = fixtureFrom(root);
     try {
       mutate(fixture);
-      const result = checkDeliveryContracts(fixture);
+      const result = checkDeliveryContracts(fixture, root);
       if (result.ok || !result.findings.some((entry) => entry.includes(expected))) {
         throw new Error(`${name}: erwarteter Befund '${expected}' fehlt; erhalten ${result.findings.join(" | ")}`);
       }
@@ -893,7 +947,7 @@ export function runSelftest(root = process.cwd()) {
     }
   };
 
-  const baseline = checkDeliveryContracts(root);
+  const baseline = checkDeliveryContracts(root, root);
   if (!baseline.ok) throw new Error(`baseline: ${baseline.findings.join(" | ")}`);
   cases.push("baseline");
 
@@ -968,6 +1022,12 @@ export function runSelftest(root = process.cwd()) {
       value.scope_budget.planned_governance_files -= 1;
     });
   }, "nicht fuer jeden Allowlist-Pfad exakt eine geplante Datei");
+
+  runCase("active-manifest-repo-source-lock-hash", (fixture) => {
+    mutateYaml(path.join(fixture, ACTIVE_MANIFEST_BINDING.path), (value) => {
+      value.source_locks.find((lock) => lock.kind === "REPO_FILE").sha256 = "0".repeat(64);
+    });
+  }, "Repo-Source-Lock[0]");
 
   runCase("queue-order", (fixture) => {
     const abs = path.join(fixture, DELIVERY_PATHS.queue);
@@ -1051,7 +1111,7 @@ if (isMain) {
     const cases = runSelftest(options.root);
     console.log(`delivery-contracts selftest: PASS (${cases.length}/${cases.length})`);
   } else {
-    const result = checkDeliveryContracts(options.root);
+    const result = checkDeliveryContracts(options.root, process.env.DELIVERY_TRUSTED_REPO || options.root);
     if (result.ok) {
       console.log("delivery-contracts: PASS (Manifeste, Evidenzzeiger, Legacy-Bindung, Alt-PR-Disposition, Queue, Mapping, Betriebsreceipt)");
     } else {

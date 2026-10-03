@@ -32,13 +32,17 @@ function writeJson(root: string, rel: string, value: unknown): void {
   writeFileSync(path.join(root, rel), `${JSON.stringify(value, null, 2)}\n`);
 }
 
+function check(root: string) {
+  return checkDeliveryContracts(root, process.cwd());
+}
+
 afterEach(() => {
   for (const root of temps.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
 describe("KR-04R delivery governance gate", () => {
   it("accepts the complete current contract set", () => {
-    expect(checkDeliveryContracts(process.cwd())).toEqual({ ok: true, findings: [] });
+    expect(check(process.cwd())).toEqual({ ok: true, findings: [] });
   });
 
   it("rejects a hidden alias between the active filename and package id", () => {
@@ -59,7 +63,7 @@ describe("KR-04R delivery governance gate", () => {
         "KR-04-HIDDEN-ALIAS",
       ),
     );
-    expect(checkDeliveryContracts(root).findings).toContainEqual(
+    expect(check(root).findings).toContainEqual(
       expect.stringContaining("expliziten Dateiname-/Paket-ID-Bindung"),
     );
   });
@@ -70,7 +74,7 @@ describe("KR-04R delivery governance gate", () => {
       path.join(root, LEGACY_MANIFEST_BINDINGS["KR-00E-DELIVERY-CONTRACT"].path),
       path.join(root, DELIVERY_PATHS.manifestDir, "FAKE-LEGACY.yaml"),
     );
-    expect(checkDeliveryContracts(root).findings).toContainEqual(expect.stringContaining("Legacy-Ausnahme ist nur"));
+    expect(check(root).findings).toContainEqual(expect.stringContaining("Legacy-Ausnahme ist nur"));
   });
 
   it("rejects every V1 manifest outside the four frozen path-and-hash bindings", () => {
@@ -80,7 +84,7 @@ describe("KR-04R delivery governance gate", () => {
       path.join(root, legacyPath),
       path.join(root, DELIVERY_PATHS.manifestDir, "FAKE-V1.yaml"),
     );
-    expect(checkDeliveryContracts(root).findings).toContainEqual(
+    expect(check(root).findings).toContainEqual(
       expect.stringContaining("ungebundenes V1-Manifest"),
     );
   });
@@ -93,7 +97,7 @@ describe("KR-04R delivery governance gate", () => {
       "evidence_ref: acceptance:DOES-NOT-EXIST",
     );
     writeFileSync(path.join(root, rel), source);
-    expect(checkDeliveryContracts(root).findings).toContainEqual(expect.stringContaining("loest nicht im eigenen Manifest auf"));
+    expect(check(root).findings).toContainEqual(expect.stringContaining("loest nicht im eigenen Manifest auf"));
   });
 
   it("rejects drift in any PR #113 path disposition", () => {
@@ -103,7 +107,7 @@ describe("KR-04R delivery governance gate", () => {
     };
     disposition.path_decisions[0].decision = "UNSAFE_DIRECT_IMPORT";
     writeJson(root, DELIVERY_PATHS.pr113Disposition, disposition);
-    expect(checkDeliveryContracts(root).findings).toContainEqual(expect.stringContaining("Disposition fuer"));
+    expect(check(root).findings).toContainEqual(expect.stringContaining("Disposition fuer"));
   });
 
   it("rejects a missing PR #113 path disposition", () => {
@@ -113,7 +117,7 @@ describe("KR-04R delivery governance gate", () => {
     };
     disposition.path_decisions.pop();
     writeJson(root, DELIVERY_PATHS.pr113Disposition, disposition);
-    expect(checkDeliveryContracts(root).findings).toContainEqual(
+    expect(check(root).findings).toContainEqual(
       expect.stringContaining("muss exakt 7 Pfadentscheidungen enthalten"),
     );
   });
@@ -125,7 +129,7 @@ describe("KR-04R delivery governance gate", () => {
     };
     disposition.path_decisions[0]!.parent_blob_sha = "0000000000000000000000000000000000000000";
     writeJson(root, DELIVERY_PATHS.pr113Disposition, disposition);
-    expect(checkDeliveryContracts(root).findings).toContainEqual(expect.stringContaining("Blobbindung fuer"));
+    expect(check(root).findings).toContainEqual(expect.stringContaining("Blobbindung fuer"));
   });
 
   it("rejects a PR #113 delivery claim", () => {
@@ -135,7 +139,7 @@ describe("KR-04R delivery governance gate", () => {
     };
     disposition.delivery_truth.main_delivered = true;
     writeJson(root, DELIVERY_PATHS.pr113Disposition, disposition);
-    expect(checkDeliveryContracts(root).findings).toContainEqual(
+    expect(check(root).findings).toContainEqual(
       expect.stringContaining("delivery_truth.main_delivered muss false sein"),
     );
   });
@@ -145,7 +149,7 @@ describe("KR-04R delivery governance gate", () => {
     const disposition = json(root, DELIVERY_PATHS.pr113Disposition);
     disposition.hidden_claim = true;
     writeJson(root, DELIVERY_PATHS.pr113Disposition, disposition);
-    expect(checkDeliveryContracts(root).findings).toContainEqual(
+    expect(check(root).findings).toContainEqual(
       expect.stringContaining("enthaelt unerwarteten Key 'hidden_claim'"),
     );
   });
@@ -159,7 +163,7 @@ describe("KR-04R delivery governance gate", () => {
     const probePath = path.join(root, "src/probe.ts");
     mkdirSync(path.dirname(probePath), { recursive: true });
     writeFileSync(probePath, `${source}\n`);
-    expect(checkDeliveryContracts(root).findings).toContainEqual(
+    expect(check(root).findings).toContainEqual(
       expect.stringContaining("Runtime-Importer muessen leer sein, gefunden src/probe.ts"),
     );
   });
@@ -171,9 +175,24 @@ describe("KR-04R delivery governance gate", () => {
       manifestPath,
       readFileSync(manifestPath, "utf8").replace("planned_governance_files: 8", "planned_governance_files: 7"),
     );
-    expect(checkDeliveryContracts(root).findings).toContainEqual(
+    expect(check(root).findings).toContainEqual(
       expect.stringContaining("nicht fuer jeden Allowlist-Pfad exakt eine geplante Datei"),
     );
+  });
+
+  it("rejects a repo source lock whose declared parent hash does not match Git", () => {
+    const root = fixture();
+    const manifestPath = path.join(root, ACTIVE_MANIFEST_BINDING.path);
+    const manifest = readFileSync(manifestPath, "utf8");
+    const firstRepoSourceHash = manifest.match(
+      /source_locks:[\s\S]*?kind: REPO_FILE[\s\S]*?sha256: ([A-F0-9]{64})/,
+    )?.[1];
+    expect(firstRepoSourceHash).toBeDefined();
+    writeFileSync(
+      manifestPath,
+      manifest.replace(firstRepoSourceHash!, "0".repeat(64)),
+    );
+    expect(check(root).findings).toContainEqual(expect.stringContaining("Repo-Source-Lock[0]"));
   });
 
   it("rejects queue and gate-mapping drift", () => {
@@ -181,7 +200,7 @@ describe("KR-04R delivery governance gate", () => {
     const queue = json(root, DELIVERY_PATHS.queue) as { issuance_policy: { candidate_is_not_main_delivery: boolean } };
     queue.issuance_policy.candidate_is_not_main_delivery = false;
     writeJson(root, DELIVERY_PATHS.queue, queue);
-    expect(checkDeliveryContracts(root).findings).toContainEqual(expect.stringContaining("Rolling-Policy-Drift"));
+    expect(check(root).findings).toContainEqual(expect.stringContaining("Rolling-Policy-Drift"));
   });
 
   it("rejects drift between the reviewed queue parent and the effective main handoff base", () => {
@@ -191,7 +210,7 @@ describe("KR-04R delivery governance gate", () => {
     };
     queue.effective_base_handoff.effective_base_sha = queue.effective_base_handoff.queue_parent_sha;
     writeJson(root, DELIVERY_PATHS.queue, queue);
-    expect(checkDeliveryContracts(root).findings).toContainEqual(
+    expect(check(root).findings).toContainEqual(
       expect.stringContaining("Effective-Base-Handoff-Drift"),
     );
   });
@@ -206,7 +225,7 @@ describe("KR-04R delivery governance gate", () => {
     };
     queue.effective_base_handoff.entries[0]!.parent_sha = "0000000000000000000000000000000000000001";
     writeJson(root, DELIVERY_PATHS.queue, queue);
-    expect(checkDeliveryContracts(root).findings).toContainEqual(
+    expect(check(root).findings).toContainEqual(
       expect.stringContaining("Handoff-Kette ist vor Eintrag 1 unterbrochen"),
     );
   });
@@ -282,6 +301,17 @@ describe("KR-04R delivery governance gate", () => {
           tree: "6570c9a58e9b144c573b0e3d2932d7fd6031a8f3",
         },
       ],
+      [
+        "53a5d52becc08394780583e4c3756b2d414311a6",
+        {
+          sha: "53a5d52becc08394780583e4c3756b2d414311a6",
+          parents: [
+            "ffa597937987d7abb7779a9d63303445e1ec92fc",
+            "737e2af5261b06ea0bd74408995f4b732fb301b1",
+          ],
+          tree: "986b5552d662f11bacf2fe4e36f00d8e2ed7d9c1",
+        },
+      ],
     ]);
     const readFacts = (sha: string) => {
       const value = facts.get(sha);
@@ -291,7 +321,7 @@ describe("KR-04R delivery governance gate", () => {
     expect(
       validateTrustedHandoff(
         queue.effective_base_handoff,
-        "ffa597937987d7abb7779a9d63303445e1ec92fc",
+        "53a5d52becc08394780583e4c3756b2d414311a6",
         readFacts,
       ),
     ).toEqual([]);
@@ -313,7 +343,7 @@ describe("KR-04R delivery governance gate", () => {
     expect(
       validateTrustedHandoff(
         queue.effective_base_handoff,
-        "ffa597937987d7abb7779a9d63303445e1ec92fc",
+        "53a5d52becc08394780583e4c3756b2d414311a6",
         () => {
           throw new Error("synthetic trusted graph unavailable");
         },
@@ -330,7 +360,7 @@ describe("KR-04R delivery governance gate", () => {
     const receipt = json(root, DELIVERY_PATHS.operatingReceipt) as { active_ruleset: { bypass_actors: string[] } };
     receipt.active_ruleset.bypass_actors.push("admin");
     writeJson(root, DELIVERY_PATHS.operatingReceipt, receipt);
-    expect(checkDeliveryContracts(root).findings).toContainEqual(expect.stringContaining("should NOT have more than 0 items"));
+    expect(check(root).findings).toContainEqual(expect.stringContaining("should NOT have more than 0 items"));
   });
 
   it("keeps false delivery truth in script code even if candidate schema and receipt collude", () => {
@@ -345,7 +375,7 @@ describe("KR-04R delivery governance gate", () => {
     };
     receipt.delivery_truth.main_delivered = true;
     writeJson(root, DELIVERY_PATHS.operatingReceipt, receipt);
-    expect(checkDeliveryContracts(root).findings).toContainEqual(
+    expect(check(root).findings).toContainEqual(
       expect.stringContaining("delivery_truth.main_delivered muss false sein"),
     );
   });

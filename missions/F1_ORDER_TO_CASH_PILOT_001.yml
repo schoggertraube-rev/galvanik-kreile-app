@@ -1,7 +1,7 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: ffa597937987d7abb7779a9d63303445e1ec92fc
+base_sha: 53a5d52becc08394780583e4c3756b2d414311a6
 branch: codex/kr-04r-pr113-dead-ui-removal
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
@@ -15,7 +15,7 @@ execution_program_20260928:
   review_rule: ONE_BROAD_CLAUDE_REVIEW_MAX_ONE_CORRECTION_TARGETED_DELTA_REVIEW
   merge_rule: REQUIRED_CHECKS_EXACT_SHA_CLEAN_TREE_AND_SEPARATE_PRODUCTION_EFFECT_AUTHORITY
   production_rule: NO_PRODUCTION_WITHOUT_SEPARATE_EXPLICIT_OWNER_AUTHORITY
-  origin_main_reference: ffa597937987d7abb7779a9d63303445e1ec92fc
+  origin_main_reference: 53a5d52becc08394780583e4c3756b2d414311a6
   queue_parent: KR-04-PR113-DISPOSITION@3fa208858ece10235394800a3a6ff48aae49568b
   queue_parent_status: MAIN_DELIVERED_TREE_EQUIVALENT_REMOTE_GATES_GREEN_VERCEL_PRODUCTION_READY_NO_MANUAL_REMOTE_MUTATION
   queue_parent_review:
@@ -32,8 +32,8 @@ execution_program_20260928:
     remote_head: 3fa208858ece10235394800a3a6ff48aae49568b
   effective_base_handoff:
     queue_parent_sha: 3fa208858ece10235394800a3a6ff48aae49568b
-    effective_base_sha: ffa597937987d7abb7779a9d63303445e1ec92fc
-    effective_base_tree_sha: 6570c9a58e9b144c573b0e3d2932d7fd6031a8f3
+    effective_base_sha: 53a5d52becc08394780583e4c3756b2d414311a6
+    effective_base_tree_sha: 986b5552d662f11bacf2fe4e36f00d8e2ed7d9c1
     entries:
       - pr: 134
         parent_sha: 3fa208858ece10235394800a3a6ff48aae49568b
@@ -55,17 +55,27 @@ execution_program_20260928:
         post_main_agentur_gate_run: 37098854930
         post_main_quality_run: 37098854962
         vercel_status: SUCCESS
+      - pr: 136
+        parent_sha: ffa597937987d7abb7779a9d63303445e1ec92fc
+        candidate_sha: 737e2af5261b06ea0bd74408995f4b732fb301b1
+        merge_sha: 53a5d52becc08394780583e4c3756b2d414311a6
+        tree_sha: 986b5552d662f11bacf2fe4e36f00d8e2ed7d9c1
+        scope: PROTECTED_CI_GOVERNANCE_ONLY
+        review_result: PASS_NO_OPEN_P0_P1_P2_P3
+        post_main_agentur_gate_run: 37103144989
+        post_main_quality_run: 37103145021
+        vercel_status: SUCCESS
   queue_rule: EXACT_PARENT_ONE_WRITER_ONE_REVIEWER_NO_DELIVERY_CLAIM_REVERIFY_AFTER_EACH_REAL_MAIN_MERGE
   kreile_pl_session: 01a0ce4b-1843-7361-9ffc-47933f9ecdde
   build_coordinator_and_future_merge_actor: 01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
   current_state_drift: KR_04_AND_CHECKER_PREAUTH_MAIN_DELIVERED_KR_04R_REBUILT_FROM_ACTUAL_MAIN_NO_CURRENT_PACKAGE_DELIVERY_CLAIM
   current_package: KR-04R-PR113-DEAD-UI-REMOVAL
-  current_package_parent: ffa597937987d7abb7779a9d63303445e1ec92fc
-  current_package_status: LOCAL_GATES_PASS_READY_FOR_EXACT_CANDIDATE_COMMIT
-  current_package_remote_freeze: PENDING_EXACT_COMMIT_AND_FORCE_WITH_LEASE_TO_EXISTING_PR122_BRANCH
-  current_package_broad_review: PENDING_EXACT_REMOTE_SHA_AFTER_FINAL_LOCAL_VERIFICATION
-  current_package_correction_rounds: 0_OF_MAX_1
-  current_package_fast_gates: PASS_DELIVERY_SELFTEST_20_OF_20_CONTRACT_GATE_FOCUSED_27_TESTS_TSC_AUTHORITY_SELFTEST_27_OF_27_AUTHORITY_MODULE_NO_FAKE_LINT_DIFF_AND_PRECOMMIT_117_FILES_998_TESTS_CURRENT_CHECKER_SHA256_22F63F3689D006B278EC42E101B7E8D340CD03D5181F17157485369082E3D929
+  current_package_parent: 53a5d52becc08394780583e4c3756b2d414311a6
+  current_package_status: CORRECTION_ROUND_1_REBASED_FULL_LOCAL_GATES_PASS_PENDING_EXACT_SHA_TARGETED_DELTA_REVIEW
+  current_package_remote_freeze: REVIEWED_FAIL_SHA_7394A931_PRIOR_CORRECTED_SHA_C38E2234_SUPERSEDED_BY_MAIN_53A5_REBASE_PENDING_FORCE_WITH_LEASE_TO_PR122
+  current_package_broad_review: FAIL_SESSION_5F66B9D6_FCEA_4DB4_BB01_A9103BF7E154_EXACT_SHA_7394A93117A1BF143F67C479CB7561D6BB16E8ED
+  current_package_correction_rounds: 1_OF_MAX_1_FINAL_IMPLEMENTATION_NO_FURTHER_IMPLEMENTATION_ROUND
+  current_package_fast_gates: REBASED_MAIN_53A5_DELIVERY_SELFTEST_21_OF_21_CONTRACT_PASS_FOCUSED_23_OF_23_TSC_PASS_AUTHORITY_SELFTEST_27_OF_27_AUTHORITY_PASS_MODULE_PASS_NO_FAKE_PASS_LINT_RATCHET_0_ERRORS_0_WARNINGS_DIFF_CHECK_PASS_FINAL_CHECKER_SHA256_9281D67E944B28553030090097D29D4AC3B8F204C396A056A3D66461EBF5471C
   current_package_pr113_disposition: CLOSED_UNMERGED_SEVEN_OF_SEVEN_PATHS_DECIDED_ZERO_DIRECT_IMPORTS
   current_package_pr113_head: e477e6b2314d5a97575a32dc35ca0d16b55625d7
   current_package_pr113_archive_ref: archive/pr-113-e477e6b2
@@ -118,8 +128,8 @@ delivery_order:
   - F1.6_REALER_PILOT
 
 active_package: KR-04R-PR113-DEAD-UI-REMOVAL
-active_package_status: LOCAL_GATES_PASS_READY_FOR_EXACT_CANDIDATE_COMMIT
-next_gate_after_active_package: EXACT_COMMIT_PUSH_THEN_ONE_BROAD_CLAUDE_OPUS_REVIEW
+active_package_status: CORRECTION_ROUND_1_FINAL_CHECKER_LOCAL_GATES_PASS_PENDING_PROTECTED_HASH_HANDOFF
+next_gate_after_active_package: COMMIT_LOCAL_CORRECTION_THEN_PROTECTED_FINAL_HASH_HANDOFF_REBASE_REVERIFY_AND_TARGETED_DELTA_REVIEW
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
