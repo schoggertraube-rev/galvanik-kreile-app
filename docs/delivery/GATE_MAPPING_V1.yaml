@@ -32,57 +32,17 @@ rolling_manifest_policy:
   halt_on_open_p0_p1_after_one_correction: true
   no_periodic_build_automation: true
   initial_pointer_order:
-    - KR-04R-PR113-DEAD-UI-REMOVAL
     - KR-02-B1-P0-CANCEL
     - KR-03A-DELIVERY-ADHERENCE-DOMAIN
+    - KR-03B1-FINAL-DB-READ-CONTRACT
 workflow_facts_at_contract_parent:
-  parent_sha: ffa597937987d7abb7779a9d63303445e1ec92fc
-  queue_parent_sha: 0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9
+  parent_sha: 53a5d52becc08394780583e4c3756b2d414311a6
+  queue_parent_sha: 3fa208858ece10235394800a3a6ff48aae49568b
   base_handoff:
-    queue_parent_sha: 0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9
-    effective_base_sha: ffa597937987d7abb7779a9d63303445e1ec92fc
-    effective_base_tree_sha: 6570c9a58e9b144c573b0e3d2932d7fd6031a8f3
+    queue_parent_sha: 3fa208858ece10235394800a3a6ff48aae49568b
+    effective_base_sha: 53a5d52becc08394780583e4c3756b2d414311a6
+    effective_base_tree_sha: 986b5552d662f11bacf2fe4e36f00d8e2ed7d9c1
     entries:
-      - pr: 131
-        parent_sha: 0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9
-        candidate_sha: bfc6e5737f9bc0b3e268dff535a8dc1a78053234
-        merge_sha: 47bc0e58990b1bff545111c990a715d4f72f5f37
-        tree_sha: 7cfd13f319bb4b936ce09de44ab6ca5fa255e5ce
-        scope: PROTECTED_CI_GOVERNANCE_ONLY
-        review_result: PASS_NO_OPEN_P0_P1_P2_P3
-        post_main_agentur_gate_run: 37015030926
-        post_main_quality_run: 37015031007
-        vercel_status: SUCCESS
-      - pr: 132
-        parent_sha: 47bc0e58990b1bff545111c990a715d4f72f5f37
-        candidate_sha: e3ce9259bde35cbef843ec88628fb1faa53051b7
-        merge_sha: bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5
-        tree_sha: 34e45157e821f847bd8f3d98735b3f93a8e53a89
-        scope: PROTECTED_CI_GOVERNANCE_ONLY
-        review_result: PASS_NO_OPEN_P0_P1_P2_P3
-        post_main_agentur_gate_run: 37019871795
-        post_main_quality_run: 37019872078
-        vercel_status: SUCCESS
-      - pr: 133
-        parent_sha: bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5
-        candidate_sha: db29c6ff6c3724907f3a105763c127739f3da2f5
-        merge_sha: b58efdf546c05750d09f80adfbdd68d12ee9e3e5
-        tree_sha: 6b2e49719b785adf8b49e27a105d2beba521fb9c
-        scope: PROTECTED_CI_GOVERNANCE_ONLY
-        review_result: PASS_NO_OPEN_P0_P1_P2_P3
-        post_main_agentur_gate_run: 37036316786
-        post_main_quality_run: 37036316848
-        vercel_status: SUCCESS
-      - pr: 121
-        parent_sha: b58efdf546c05750d09f80adfbdd68d12ee9e3e5
-        candidate_sha: 61f2ebef3876aecf2b36deb944e3a097c026a846
-        merge_sha: 3fa208858ece10235394800a3a6ff48aae49568b
-        tree_sha: 07e961e97199e66c5e3b854566341b625ce7dfea
-        scope: PROTECTED_CI_GOVERNANCE_ONLY
-        review_result: PASS_NO_OPEN_P0_P1_P2_P3
-        post_main_agentur_gate_run: 37086838945
-        post_main_quality_run: 37086838800
-        vercel_status: SUCCESS
       - pr: 134
         parent_sha: 3fa208858ece10235394800a3a6ff48aae49568b
         candidate_sha: dd983936a5a9931df54ecac3c4578bfe3915b2b3
@@ -102,6 +62,16 @@ workflow_facts_at_contract_parent:
         review_result: PASS_NO_OPEN_P0_P1_P2_P3
         post_main_agentur_gate_run: 37098854930
         post_main_quality_run: 37098854962
+        vercel_status: SUCCESS
+      - pr: 136
+        parent_sha: ffa597937987d7abb7779a9d63303445e1ec92fc
+        candidate_sha: 737e2af5261b06ea0bd74408995f4b732fb301b1
+        merge_sha: 53a5d52becc08394780583e4c3756b2d414311a6
+        tree_sha: 986b5552d662f11bacf2fe4e36f00d8e2ed7d9c1
+        scope: PROTECTED_CI_GOVERNANCE_ONLY
+        review_result: PASS_NO_OPEN_P0_P1_P2_P3
+        post_main_agentur_gate_run: 37103144989
+        post_main_quality_run: 37103145021
         vercel_status: SUCCESS
   agentur_gate:
     workflow: .github/workflows/agentur-gate.yml

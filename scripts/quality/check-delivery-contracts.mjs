@@ -6,6 +6,7 @@ import {
   cpSync,
   existsSync,
   mkdtempSync,
+  mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
@@ -18,6 +19,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import Ajv from "ajv";
+import ts from "typescript";
 import yaml from "js-yaml";
 
 export const DELIVERY_PATHS = Object.freeze({
@@ -33,9 +35,11 @@ export const DELIVERY_PATHS = Object.freeze({
 });
 
 export const ACTIVE_MANIFEST_BINDING = Object.freeze({
-  path: "docs/delivery/packages/KR-04-PR113-DISPOSITION.yaml",
-  packageId: "KR-04-PR113-DISPOSITION",
+  path: "docs/delivery/packages/KR-04R-PR113-DEAD-UI-REMOVAL.yaml",
+  packageId: "KR-04R-PR113-DEAD-UI-REMOVAL",
 });
+
+const PR113_DISPOSITION_PACKAGE_ID = "KR-04-PR113-DISPOSITION";
 
 const PR113_PATH_DECISIONS = Object.freeze({
   "e2e/path1-v5-shell-smoke.real.spec.ts": "DEFER_TO_KR20_FRESH_DESIGN_SYSTEM_REBUILD",
@@ -114,7 +118,7 @@ const EFFECTIVE_REQUIRED_CHECKS = Object.freeze([
   "Fresh Supabase replay",
 ]);
 const NON_REQUIRED_BUT_MUST_PASS = Object.freeze(["ratchet"]);
-const REVIEWED_QUEUE_PARENT_SHA = "0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9";
+const REVIEWED_QUEUE_PARENT_SHA = "3fa208858ece10235394800a3a6ff48aae49568b";
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 
 function toPosix(value) {
@@ -123,6 +127,59 @@ function toPosix(value) {
 
 function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex").toUpperCase();
+}
+
+function trustedRepoBlobSha256(repo, commit, source) {
+  if (!SHA_PATTERN.test(commit)) throw new Error("ungueltiger Repo-Commit-SHA");
+  if (
+    typeof source !== "string" ||
+    source.length === 0 ||
+    source !== toPosix(source) ||
+    source.includes(":") ||
+    source.includes("\0") ||
+    source.includes("\n") ||
+    source.includes("\r") ||
+    path.posix.isAbsolute(source) ||
+    source.split("/").some((segment) => segment === "" || segment === "." || segment === "..")
+  ) {
+    throw new Error("ungueltiger Repo-Quellpfad");
+  }
+  const blob = execFileSync(
+    "git",
+    ["-C", repo, "rev-parse", "--verify", `${commit}:${source}`],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+  ).trim();
+  if (!SHA_PATTERN.test(blob)) throw new Error("Quellpfad ist kein aufloesbarer Blob");
+  const bytes = execFileSync(
+    "git",
+    ["-C", repo, "cat-file", "blob", blob],
+    { encoding: null, maxBuffer: 32 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] },
+  );
+  return sha256(bytes);
+}
+
+function checkRepoSourceLocks(repo, manifest, rel, findings) {
+  const seen = new Set();
+  for (const [index, lock] of (manifest.source_locks ?? []).entries()) {
+    if (lock?.kind !== "REPO_FILE") continue;
+    const label = `${rel}: Repo-Source-Lock[${index}]`;
+    if (lock.repo_commit !== manifest.base_sha) {
+      findings.push(`${label} repo_commit muss dem Manifest-base_sha entsprechen`);
+    }
+    if (seen.has(lock.source)) {
+      findings.push(`${label} dupliziert '${String(lock.source)}'`);
+      continue;
+    }
+    seen.add(lock.source);
+    try {
+      const actual = trustedRepoBlobSha256(repo, lock.repo_commit, lock.source);
+      if (actual !== lock.sha256) {
+        findings.push(`${label} '${lock.source}' SHA256 ${actual}, erwartet ${String(lock.sha256)}`);
+      }
+    } catch (error) {
+      findings.push(`${label} '${String(lock.source)}' konnte nicht geprueft werden (${error.message})`);
+    }
+  }
 }
 
 function normalizedStringSet(value) {
@@ -221,6 +278,22 @@ function checkTrustedHandoff(handoff, findings) {
   );
 }
 
+function checkExactKeys(value, expectedKeys, label, findings) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    findings.push(`[delivery] ${label} muss ein Objekt sein`);
+    return;
+  }
+  const expected = new Set(expectedKeys);
+  for (const key of expectedKeys) {
+    if (!Object.prototype.hasOwnProperty.call(value, key)) {
+      findings.push(`[delivery] ${label} fehlt Pflicht-Key '${key}'`);
+    }
+  }
+  for (const key of Object.keys(value)) {
+    if (!expected.has(key)) findings.push(`[delivery] ${label} enthaelt unerwarteten Key '${key}'`);
+  }
+}
+
 function readJson(root, rel, findings, label = rel) {
   const abs = path.join(root, rel);
   if (!existsSync(abs)) {
@@ -282,7 +355,43 @@ function manifestFiles(root) {
     .sort();
 }
 
-function sourceRuntimeReferences(root, needle, excludedRel) {
+function importedSpecifiers(source, fileName) {
+  const kind = fileName.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+  const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, kind);
+  const specifiers = new Set();
+  const addStringLiteral = (node) => {
+    if (node && ts.isStringLiteralLike(node)) specifiers.add(node.text);
+  };
+  const visit = (node) => {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+      addStringLiteral(node.moduleSpecifier);
+    } else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
+      addStringLiteral(node.moduleReference.expression);
+    } else if (ts.isCallExpression(node) && node.arguments.length === 1) {
+      const isDynamicImport = node.expression.kind === ts.SyntaxKind.ImportKeyword;
+      const isRequire = ts.isIdentifier(node.expression) && node.expression.text === "require";
+      if (isDynamicImport || isRequire) addStringLiteral(node.arguments[0]);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return [...specifiers];
+}
+
+function importTargetsFile(root, importerRel, specifier, targetRel) {
+  let candidate;
+  if (specifier.startsWith("@/")) {
+    candidate = path.resolve(root, "src", specifier.slice(2));
+  } else if (specifier.startsWith(".")) {
+    candidate = path.resolve(root, path.dirname(importerRel), specifier);
+  } else {
+    return false;
+  }
+  const withoutScriptExtension = (value) => value.replace(/\.(?:[cm]?[jt]sx?)$/i, "");
+  return withoutScriptExtension(candidate) === withoutScriptExtension(path.resolve(root, targetRel));
+}
+
+function sourceRuntimeImporters(root, targetRel, excludedRel) {
   const sourceRoot = path.join(root, "src");
   if (!existsSync(sourceRoot)) return [];
   const pending = [sourceRoot];
@@ -298,7 +407,10 @@ function sourceRuntimeReferences(root, needle, excludedRel) {
       if (!entry.isFile() || !/\.(?:ts|tsx)$/.test(entry.name)) continue;
       const rel = toPosix(path.relative(root, absolute));
       if (rel === excludedRel) continue;
-      if (readFileSync(absolute, "utf8").includes(needle)) matches.push(rel);
+      const source = readFileSync(absolute, "utf8");
+      if (importedSpecifiers(source, rel).some((specifier) => importTargetsFile(root, rel, specifier, targetRel))) {
+        matches.push(rel);
+      }
     }
   }
   return matches.sort();
@@ -465,11 +577,29 @@ function checkOperatingTruth(receipt, mapping, findings) {
 
 function checkPr113Disposition(root, disposition, findings) {
   if (!disposition) return;
+  checkExactKeys(
+    disposition,
+    [
+      "schema_version",
+      "contract_id",
+      "package_id",
+      "recorded_at",
+      "parent_candidate_sha",
+      "origin_main_sha_at_disposition",
+      "pull_request",
+      "path_decisions",
+      "import_scan",
+      "summary",
+      "delivery_truth",
+    ],
+    "PR113-Disposition",
+    findings,
+  );
   if (disposition.schema_version !== 1 || disposition.contract_id !== "KR-04_PR113_DISPOSITION_2026-09-29") {
     findings.push("[delivery] PR113-Disposition hat falsche Schema- oder Vertragskennung");
   }
-  if (disposition.package_id !== ACTIVE_MANIFEST_BINDING.packageId) {
-    findings.push("[delivery] PR113-Disposition ist nicht an das aktive Paket gebunden");
+  if (disposition.package_id !== PR113_DISPOSITION_PACKAGE_ID) {
+    findings.push("[delivery] PR113-Disposition ist nicht an das historische KR-04-Paket gebunden");
   }
   if (disposition.parent_candidate_sha !== "da8c352d91a694d9c72551a245805386bbf7efdc") {
     findings.push("[delivery] PR113-Disposition hat nicht den geprueften KR-01R-Parent");
@@ -479,6 +609,29 @@ function checkPr113Disposition(root, disposition, findings) {
   }
 
   const pr = disposition.pull_request ?? {};
+  checkExactKeys(
+    pr,
+    [
+      "number",
+      "url",
+      "base_ref",
+      "base_sha",
+      "head_ref",
+      "head_sha",
+      "tree_sha",
+      "archive_ref",
+      "archive_head_sha",
+      "state_before_closure",
+      "state_after_closure",
+      "merged",
+      "source_branch_preserved",
+      "archive_ref_preserved",
+      "closure_comment_url",
+      "closed_at",
+    ],
+    "PR113-Disposition pull_request",
+    findings,
+  );
   const exactPrFacts = {
     number: 113,
     url: "https://github.com/schoggertraube-rev/galvanik-kreile-app/pull/113",
@@ -506,7 +659,13 @@ function checkPr113Disposition(root, disposition, findings) {
   const decisions = Array.isArray(disposition.path_decisions) ? disposition.path_decisions : [];
   if (decisions.length !== 7) findings.push(`[delivery] PR113-Disposition muss exakt 7 Pfadentscheidungen enthalten, gefunden ${decisions.length}`);
   const seen = new Set();
-  for (const entry of decisions) {
+  for (const [index, entry] of decisions.entries()) {
+    checkExactKeys(
+      entry,
+      ["path", "parent_blob_sha", "pr_blob_sha", "decision", "reason", "follow_up_package"],
+      `PR113-Disposition path_decisions[${index}]`,
+      findings,
+    );
     const rel = entry?.path;
     if (typeof rel !== "string" || !(rel in PR113_PATH_DECISIONS)) {
       findings.push(`[delivery] PR113-Disposition enthaelt unerwarteten Pfad '${String(rel)}'`);
@@ -538,6 +697,7 @@ function checkPr113Disposition(root, disposition, findings) {
     direct_import_paths: 0,
     product_files_changed_by_kr04: 0,
   };
+  checkExactKeys(disposition.summary, Object.keys(expectedSummary), "PR113-Disposition summary", findings);
   for (const [key, expected] of Object.entries(expectedSummary)) {
     if (disposition.summary?.[key] !== expected) {
       findings.push(`[delivery] PR113-Disposition summary.${key} muss ${expected} sein`);
@@ -545,7 +705,13 @@ function checkPr113Disposition(root, disposition, findings) {
   }
 
   const importTarget = "src/app/buchhaltung/rechnungen/RechnungenClient.tsx";
-  const actualRuntimeImporters = sourceRuntimeReferences(root, "RechnungenClient", importTarget);
+  checkExactKeys(
+    disposition.import_scan,
+    ["target", "scope", "runtime_importers", "declaration_only"],
+    "PR113-Disposition import_scan",
+    findings,
+  );
+  const actualRuntimeImporters = sourceRuntimeImporters(root, importTarget, importTarget);
   if (disposition.import_scan?.target !== importTarget || disposition.import_scan?.declaration_only !== true) {
     findings.push("[delivery] PR113-Disposition Importscan ist nicht an die tote Altkomponente gebunden");
   }
@@ -554,6 +720,12 @@ function checkPr113Disposition(root, disposition, findings) {
   }
 
   const truth = disposition.delivery_truth ?? {};
+  checkExactKeys(
+    truth,
+    ["main_delivered", "merge_performed", "production_authorized", "production_performed"],
+    "PR113-Disposition delivery_truth",
+    findings,
+  );
   for (const key of ["main_delivered", "merge_performed", "production_authorized", "production_performed"]) {
     if (truth[key] !== false) findings.push(`[delivery] PR113-Disposition delivery_truth.${key} muss false sein`);
   }
@@ -581,7 +753,6 @@ function checkRollingConsistency(root, queue, mapping, mission, manifests, findi
   if (policy.max_materialized_future_contracts !== mapped.materialized_future_contracts) {
     findings.push("[delivery] Rolling-Policy-Drift: materialized_future_contracts stimmt nicht ueberein");
   }
-
   const queueOrder = (queue.initial_horizon ?? []).map((entry) => entry.package_id);
   const mappingOrder = mapped.initial_pointer_order ?? [];
   if (JSON.stringify(queueOrder) !== JSON.stringify(mappingOrder)) {
@@ -610,6 +781,11 @@ function checkRollingConsistency(root, queue, mapping, mission, manifests, findi
     if (active[0].value.branch !== mission.branch) findings.push("[delivery] Mission branch stimmt nicht mit aktivem Manifest ueberein");
     if (active[0].value.queue_parent_sha !== queue.parent_candidate?.candidate_sha) {
       findings.push("[delivery] Aktives Manifest ist nicht an den Queue-Parent gebunden");
+    }
+    const budget = active[0].value.scope_budget ?? {};
+    const allowlist = Array.isArray(active[0].value.repo_allowlist) ? active[0].value.repo_allowlist : [];
+    if (budget.planned_product_files + budget.planned_governance_files !== allowlist.length) {
+      findings.push("[delivery] Aktives Manifest weist nicht fuer jeden Allowlist-Pfad exakt eine geplante Datei aus");
     }
   }
 
@@ -701,8 +877,9 @@ function checkRollingConsistency(root, queue, mapping, mission, manifests, findi
   }
 }
 
-export function checkDeliveryContracts(root = process.cwd()) {
+export function checkDeliveryContracts(root = process.cwd(), sourceLockRepo = root) {
   root = path.resolve(root);
+  sourceLockRepo = path.resolve(sourceLockRepo);
   const findings = [];
   const manifestSchema = readJson(root, DELIVERY_PATHS.manifestSchema, findings);
   const queueSchema = readJson(root, DELIVERY_PATHS.queueSchema, findings);
@@ -719,6 +896,10 @@ export function checkDeliveryContracts(root = process.cwd()) {
     } else if (value?.schema_version !== 1) {
       findings.push(`[delivery] ${rel}: unbekannte schema_version '${String(value?.schema_version)}'`);
     }
+  }
+  const activeManifest = manifests.find(({ rel }) => rel === ACTIVE_MANIFEST_BINDING.path);
+  if (activeManifest?.value?.schema_version === 2) {
+    checkRepoSourceLocks(sourceLockRepo, activeManifest.value, activeManifest.rel, findings);
   }
   checkLegacyBindings(root, manifests, findings);
   checkLegacyV1Bindings(root, manifests, findings);
@@ -756,7 +937,7 @@ export function runSelftest(root = process.cwd()) {
     const fixture = fixtureFrom(root);
     try {
       mutate(fixture);
-      const result = checkDeliveryContracts(fixture);
+      const result = checkDeliveryContracts(fixture, root);
       if (result.ok || !result.findings.some((entry) => entry.includes(expected))) {
         throw new Error(`${name}: erwarteter Befund '${expected}' fehlt; erhalten ${result.findings.join(" | ")}`);
       }
@@ -766,7 +947,7 @@ export function runSelftest(root = process.cwd()) {
     }
   };
 
-  const baseline = checkDeliveryContracts(root);
+  const baseline = checkDeliveryContracts(root, root);
   if (!baseline.ok) throw new Error(`baseline: ${baseline.findings.join(" | ")}`);
   cases.push("baseline");
 
@@ -802,6 +983,52 @@ export function runSelftest(root = process.cwd()) {
     writeFileSync(abs, `${JSON.stringify(value, null, 2)}\n`);
   }, "Disposition fuer");
 
+  runCase("pr113-missing-path", (fixture) => {
+    const abs = path.join(fixture, DELIVERY_PATHS.pr113Disposition);
+    const value = JSON.parse(readFileSync(abs, "utf8"));
+    value.path_decisions.pop();
+    writeFileSync(abs, `${JSON.stringify(value, null, 2)}\n`);
+  }, "muss exakt 7 Pfadentscheidungen enthalten");
+
+  runCase("pr113-blob-drift", (fixture) => {
+    const abs = path.join(fixture, DELIVERY_PATHS.pr113Disposition);
+    const value = JSON.parse(readFileSync(abs, "utf8"));
+    value.path_decisions[0].parent_blob_sha = "0000000000000000000000000000000000000000";
+    writeFileSync(abs, `${JSON.stringify(value, null, 2)}\n`);
+  }, "Blobbindung fuer");
+
+  runCase("pr113-delivery-claim", (fixture) => {
+    const abs = path.join(fixture, DELIVERY_PATHS.pr113Disposition);
+    const value = JSON.parse(readFileSync(abs, "utf8"));
+    value.delivery_truth.main_delivered = true;
+    writeFileSync(abs, `${JSON.stringify(value, null, 2)}\n`);
+  }, "delivery_truth.main_delivered muss false sein");
+
+  runCase("pr113-unknown-key", (fixture) => {
+    const abs = path.join(fixture, DELIVERY_PATHS.pr113Disposition);
+    const value = JSON.parse(readFileSync(abs, "utf8"));
+    value.hidden_claim = true;
+    writeFileSync(abs, `${JSON.stringify(value, null, 2)}\n`);
+  }, "enthaelt unerwarteten Key 'hidden_claim'");
+
+  runCase("pr113-runtime-importer", (fixture) => {
+    const abs = path.join(fixture, "src/probe.ts");
+    mkdirSync(path.dirname(abs), { recursive: true });
+    writeFileSync(abs, 'import "./app/buchhaltung/rechnungen/RechnungenClient";\n');
+  }, "Runtime-Importer muessen leer sein");
+
+  runCase("active-manifest-file-count", (fixture) => {
+    mutateYaml(path.join(fixture, ACTIVE_MANIFEST_BINDING.path), (value) => {
+      value.scope_budget.planned_governance_files -= 1;
+    });
+  }, "nicht fuer jeden Allowlist-Pfad exakt eine geplante Datei");
+
+  runCase("active-manifest-repo-source-lock-hash", (fixture) => {
+    mutateYaml(path.join(fixture, ACTIVE_MANIFEST_BINDING.path), (value) => {
+      value.source_locks.find((lock) => lock.kind === "REPO_FILE").sha256 = "0".repeat(64);
+    });
+  }, "Repo-Source-Lock[0]");
+
   runCase("queue-order", (fixture) => {
     const abs = path.join(fixture, DELIVERY_PATHS.queue);
     const value = JSON.parse(readFileSync(abs, "utf8"));
@@ -825,9 +1052,9 @@ export function runSelftest(root = process.cwd()) {
   runCase("effective-base-handoff-chain-break", (fixture) => {
     const abs = path.join(fixture, DELIVERY_PATHS.queue);
     const value = JSON.parse(readFileSync(abs, "utf8"));
-    value.effective_base_handoff.entries[1].parent_sha = value.effective_base_handoff.queue_parent_sha;
+    value.effective_base_handoff.entries[0].parent_sha = "0000000000000000000000000000000000000001";
     writeFileSync(abs, `${JSON.stringify(value, null, 2)}\n`);
-  }, "Handoff-Kette ist vor Eintrag 2 unterbrochen");
+  }, "Handoff-Kette ist vor Eintrag 1 unterbrochen");
 
   runCase("receipt-bypass", (fixture) => {
     const abs = path.join(fixture, DELIVERY_PATHS.operatingReceipt);
@@ -884,7 +1111,7 @@ if (isMain) {
     const cases = runSelftest(options.root);
     console.log(`delivery-contracts selftest: PASS (${cases.length}/${cases.length})`);
   } else {
-    const result = checkDeliveryContracts(options.root);
+    const result = checkDeliveryContracts(options.root, process.env.DELIVERY_TRUSTED_REPO || options.root);
     if (result.ok) {
       console.log("delivery-contracts: PASS (Manifeste, Evidenzzeiger, Legacy-Bindung, Alt-PR-Disposition, Queue, Mapping, Betriebsreceipt)");
     } else {
