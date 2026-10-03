@@ -40,7 +40,7 @@ afterEach(() => {
   for (const root of temps.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-describe("KR-04R delivery governance gate", () => {
+describe("KR-22R delivery governance gate", () => {
   it("accepts the complete current contract set", () => {
     expect(check(process.cwd())).toEqual({ ok: true, findings: [] });
   });
@@ -93,7 +93,7 @@ describe("KR-04R delivery governance gate", () => {
     const root = fixture();
     const rel = ACTIVE_MANIFEST_BINDING.path;
     const source = readFileSync(path.join(root, rel), "utf8").replace(
-      "evidence_ref: acceptance:KR04R-A4",
+      "evidence_ref: acceptance:KR22R-A4",
       "evidence_ref: acceptance:DOES-NOT-EXIST",
     );
     writeFileSync(path.join(root, rel), source);
@@ -173,7 +173,7 @@ describe("KR-04R delivery governance gate", () => {
     const manifestPath = path.join(root, ACTIVE_MANIFEST_BINDING.path);
     writeFileSync(
       manifestPath,
-      readFileSync(manifestPath, "utf8").replace("planned_governance_files: 8", "planned_governance_files: 7"),
+      readFileSync(manifestPath, "utf8").replace("planned_governance_files: 9", "planned_governance_files: 8"),
     );
     expect(check(root).findings).toContainEqual(
       expect.stringContaining("nicht fuer jeden Allowlist-Pfad exakt eine geplante Datei"),
@@ -208,7 +208,7 @@ describe("KR-04R delivery governance gate", () => {
     const queue = json(root, DELIVERY_PATHS.queue) as {
       effective_base_handoff: { queue_parent_sha: string; effective_base_sha: string };
     };
-    queue.effective_base_handoff.effective_base_sha = queue.effective_base_handoff.queue_parent_sha;
+    queue.effective_base_handoff.effective_base_sha = "0000000000000000000000000000000000000001";
     writeJson(root, DELIVERY_PATHS.queue, queue);
     expect(check(root).findings).toContainEqual(
       expect.stringContaining("Effective-Base-Handoff-Drift"),
@@ -230,86 +230,43 @@ describe("KR-04R delivery governance gate", () => {
     );
   });
 
-  it("binds the effective base and every handoff merge to trusted commit facts", () => {
+  it("rejects a queue-parent reset that is not the reviewed predecessor", () => {
+    const root = fixture();
+    const queue = json(root, DELIVERY_PATHS.queue) as {
+      effective_base_handoff: { queue_parent_sha: string };
+    };
+    queue.effective_base_handoff.queue_parent_sha = "0000000000000000000000000000000000000001";
+    writeJson(root, DELIVERY_PATHS.queue, queue);
+    expect(check(root).findings).toContainEqual(
+      expect.stringContaining("Queue-Parent stimmt nicht mit dem Ausgang der Handoff-Kette ueberein"),
+    );
+  });
+
+  it("binds the effective base and governance handoff to trusted commit facts", () => {
     const queue = json(process.cwd(), DELIVERY_PATHS.queue) as {
       effective_base_handoff: Record<string, unknown>;
     };
     const facts = new Map([
       [
-        "47bc0e58990b1bff545111c990a715d4f72f5f37",
+        "16888ccc1f0c97064af3d1552538c6975440b1fb",
         {
-          sha: "47bc0e58990b1bff545111c990a715d4f72f5f37",
+          sha: "16888ccc1f0c97064af3d1552538c6975440b1fb",
           parents: [
-            "0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9",
-            "bfc6e5737f9bc0b3e268dff535a8dc1a78053234",
+            "53a5d52becc08394780583e4c3756b2d414311a6",
+            "b0b55353143fc50eda7f3833270ff4cfd1402e2f",
           ],
-          tree: "7cfd13f319bb4b936ce09de44ab6ca5fa255e5ce",
+          tree: "4ccfbc0f01c7bb92de8e8a198b43a79a0cd543f2",
         },
       ],
       [
-        "bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5",
+        "a56b5c8845efb5814a970cf739b7fab82217ce28",
         {
-          sha: "bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5",
+          sha: "a56b5c8845efb5814a970cf739b7fab82217ce28",
           parents: [
-            "47bc0e58990b1bff545111c990a715d4f72f5f37",
-            "e3ce9259bde35cbef843ec88628fb1faa53051b7",
+            "16888ccc1f0c97064af3d1552538c6975440b1fb",
+            "5e02605d23f4b65bd69e16509fbd9debcd4de7ae",
           ],
-          tree: "34e45157e821f847bd8f3d98735b3f93a8e53a89",
-        },
-      ],
-      [
-        "b58efdf546c05750d09f80adfbdd68d12ee9e3e5",
-        {
-          sha: "b58efdf546c05750d09f80adfbdd68d12ee9e3e5",
-          parents: [
-            "bc85ccc6b9e84a21947bcc1e648b847ef2d78ac5",
-            "db29c6ff6c3724907f3a105763c127739f3da2f5",
-          ],
-          tree: "6b2e49719b785adf8b49e27a105d2beba521fb9c",
-        },
-      ],
-      [
-        "3fa208858ece10235394800a3a6ff48aae49568b",
-        {
-          sha: "3fa208858ece10235394800a3a6ff48aae49568b",
-          parents: [
-            "b58efdf546c05750d09f80adfbdd68d12ee9e3e5",
-            "61f2ebef3876aecf2b36deb944e3a097c026a846",
-          ],
-          tree: "07e961e97199e66c5e3b854566341b625ce7dfea",
-        },
-      ],
-      [
-        "31da55b5fe04db9d3744d842297f904e28fc26a7",
-        {
-          sha: "31da55b5fe04db9d3744d842297f904e28fc26a7",
-          parents: [
-            "3fa208858ece10235394800a3a6ff48aae49568b",
-            "dd983936a5a9931df54ecac3c4578bfe3915b2b3",
-          ],
-          tree: "271aef304f448b42bc07ca680dbb601ad5a09aa5",
-        },
-      ],
-      [
-        "ffa597937987d7abb7779a9d63303445e1ec92fc",
-        {
-          sha: "ffa597937987d7abb7779a9d63303445e1ec92fc",
-          parents: [
-            "31da55b5fe04db9d3744d842297f904e28fc26a7",
-            "02dc063b2ed0731a658c5ed69af3a58b71fdaa9d",
-          ],
-          tree: "6570c9a58e9b144c573b0e3d2932d7fd6031a8f3",
-        },
-      ],
-      [
-        "53a5d52becc08394780583e4c3756b2d414311a6",
-        {
-          sha: "53a5d52becc08394780583e4c3756b2d414311a6",
-          parents: [
-            "ffa597937987d7abb7779a9d63303445e1ec92fc",
-            "737e2af5261b06ea0bd74408995f4b732fb301b1",
-          ],
-          tree: "986b5552d662f11bacf2fe4e36f00d8e2ed7d9c1",
+          tree: "5f6cd3a6958a169df32c935999f8db0eb1ddb440",
         },
       ],
     ]);
@@ -321,14 +278,14 @@ describe("KR-04R delivery governance gate", () => {
     expect(
       validateTrustedHandoff(
         queue.effective_base_handoff,
-        "53a5d52becc08394780583e4c3756b2d414311a6",
+        "a56b5c8845efb5814a970cf739b7fab82217ce28",
         readFacts,
       ),
     ).toEqual([]);
     expect(
       validateTrustedHandoff(
         queue.effective_base_handoff,
-        "47bc0e58990b1bff545111c990a715d4f72f5f37",
+        "16888ccc1f0c97064af3d1552538c6975440b1fb",
         readFacts,
       ),
     ).toContainEqual(
@@ -343,7 +300,7 @@ describe("KR-04R delivery governance gate", () => {
     expect(
       validateTrustedHandoff(
         queue.effective_base_handoff,
-        "53a5d52becc08394780583e4c3756b2d414311a6",
+        "a56b5c8845efb5814a970cf739b7fab82217ce28",
         () => {
           throw new Error("synthetic trusted graph unavailable");
         },

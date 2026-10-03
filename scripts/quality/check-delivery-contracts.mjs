@@ -35,8 +35,8 @@ export const DELIVERY_PATHS = Object.freeze({
 });
 
 export const ACTIVE_MANIFEST_BINDING = Object.freeze({
-  path: "docs/delivery/packages/KR-04R-PR113-DEAD-UI-REMOVAL.yaml",
-  packageId: "KR-04R-PR113-DEAD-UI-REMOVAL",
+  path: "docs/delivery/packages/KR-22R-DESKTOP-READ-RECOVERY.yaml",
+  packageId: "KR-22R-DESKTOP-READ-RECOVERY",
 });
 
 const PR113_DISPOSITION_PACKAGE_ID = "KR-04-PR113-DISPOSITION";
@@ -118,7 +118,7 @@ const EFFECTIVE_REQUIRED_CHECKS = Object.freeze([
   "Fresh Supabase replay",
 ]);
 const NON_REQUIRED_BUT_MUST_PASS = Object.freeze(["ratchet"]);
-const REVIEWED_QUEUE_PARENT_SHA = "3fa208858ece10235394800a3a6ff48aae49568b";
+const REVIEWED_QUEUE_PARENT_SHA = "16888ccc1f0c97064af3d1552538c6975440b1fb";
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
 
 function toPosix(value) {
@@ -1045,7 +1045,7 @@ export function runSelftest(root = process.cwd()) {
   runCase("effective-base-handoff-drift", (fixture) => {
     const abs = path.join(fixture, DELIVERY_PATHS.queue);
     const value = JSON.parse(readFileSync(abs, "utf8"));
-    value.effective_base_handoff.effective_base_sha = value.effective_base_handoff.queue_parent_sha;
+    value.effective_base_handoff.effective_base_sha = "0000000000000000000000000000000000000001";
     writeFileSync(abs, `${JSON.stringify(value, null, 2)}\n`);
   }, "Effective-Base-Handoff-Drift");
 
@@ -1055,6 +1055,13 @@ export function runSelftest(root = process.cwd()) {
     value.effective_base_handoff.entries[0].parent_sha = "0000000000000000000000000000000000000001";
     writeFileSync(abs, `${JSON.stringify(value, null, 2)}\n`);
   }, "Handoff-Kette ist vor Eintrag 1 unterbrochen");
+
+  runCase("queue-parent-reset", (fixture) => {
+    const abs = path.join(fixture, DELIVERY_PATHS.queue);
+    const value = JSON.parse(readFileSync(abs, "utf8"));
+    value.effective_base_handoff.queue_parent_sha = "0000000000000000000000000000000000000001";
+    writeFileSync(abs, `${JSON.stringify(value, null, 2)}\n`);
+  }, "Queue-Parent stimmt nicht mit dem Ausgang der Handoff-Kette ueberein");
 
   runCase("receipt-bypass", (fixture) => {
     const abs = path.join(fixture, DELIVERY_PATHS.operatingReceipt);
