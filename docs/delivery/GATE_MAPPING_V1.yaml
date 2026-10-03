@@ -36,12 +36,12 @@ rolling_manifest_policy:
     - KR-02-B1-P0-CANCEL
     - KR-03A-DELIVERY-ADHERENCE-DOMAIN
 workflow_facts_at_contract_parent:
-  parent_sha: b58efdf546c05750d09f80adfbdd68d12ee9e3e5
+  parent_sha: 3fa208858ece10235394800a3a6ff48aae49568b
   queue_parent_sha: 0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9
   base_handoff:
     queue_parent_sha: 0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9
-    effective_base_sha: b58efdf546c05750d09f80adfbdd68d12ee9e3e5
-    effective_base_tree_sha: 6b2e49719b785adf8b49e27a105d2beba521fb9c
+    effective_base_sha: 3fa208858ece10235394800a3a6ff48aae49568b
+    effective_base_tree_sha: 07e961e97199e66c5e3b854566341b625ce7dfea
     entries:
       - pr: 131
         parent_sha: 0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9
@@ -72,6 +72,16 @@ workflow_facts_at_contract_parent:
         review_result: PASS_NO_OPEN_P0_P1_P2_P3
         post_main_agentur_gate_run: 37036316786
         post_main_quality_run: 37036316848
+        vercel_status: SUCCESS
+      - pr: 121
+        parent_sha: b58efdf546c05750d09f80adfbdd68d12ee9e3e5
+        candidate_sha: 61f2ebef3876aecf2b36deb944e3a097c026a846
+        merge_sha: 3fa208858ece10235394800a3a6ff48aae49568b
+        tree_sha: 07e961e97199e66c5e3b854566341b625ce7dfea
+        scope: PROTECTED_CI_GOVERNANCE_ONLY
+        review_result: PASS_NO_OPEN_P0_P1_P2_P3
+        post_main_agentur_gate_run: 37086838945
+        post_main_quality_run: 37086838800
         vercel_status: SUCCESS
   agentur_gate:
     workflow: .github/workflows/agentur-gate.yml

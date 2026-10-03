@@ -5,12 +5,12 @@ state: CONTRACT_READY
 execution_state_source: missions/F1_ORDER_TO_CASH_PILOT_001.yml
 manifest_profile: ROLLING_V2
 queue_parent_sha: 0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9
-base_sha: b58efdf546c05750d09f80adfbdd68d12ee9e3e5
-origin_main_sha: b58efdf546c05750d09f80adfbdd68d12ee9e3e5
+base_sha: 3fa208858ece10235394800a3a6ff48aae49568b
+origin_main_sha: 3fa208858ece10235394800a3a6ff48aae49568b
 base_handoff:
   queue_parent_sha: 0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9
-  effective_base_sha: b58efdf546c05750d09f80adfbdd68d12ee9e3e5
-  effective_base_tree_sha: 6b2e49719b785adf8b49e27a105d2beba521fb9c
+  effective_base_sha: 3fa208858ece10235394800a3a6ff48aae49568b
+  effective_base_tree_sha: 07e961e97199e66c5e3b854566341b625ce7dfea
   entries:
     - pr: 131
       parent_sha: 0d5dd46bd8484ba3a5b7a97a762cd148b8bafff9
@@ -41,6 +41,16 @@ base_handoff:
       review_result: PASS_NO_OPEN_P0_P1_P2_P3
       post_main_agentur_gate_run: 37036316786
       post_main_quality_run: 37036316848
+      vercel_status: SUCCESS
+    - pr: 121
+      parent_sha: b58efdf546c05750d09f80adfbdd68d12ee9e3e5
+      candidate_sha: 61f2ebef3876aecf2b36deb944e3a097c026a846
+      merge_sha: 3fa208858ece10235394800a3a6ff48aae49568b
+      tree_sha: 07e961e97199e66c5e3b854566341b625ce7dfea
+      scope: PROTECTED_CI_GOVERNANCE_ONLY
+      review_result: PASS_NO_OPEN_P0_P1_P2_P3
+      post_main_agentur_gate_run: 37086838945
+      post_main_quality_run: 37086838800
       vercel_status: SUCCESS
 target_sha: PENDING_AFTER_LOCAL_VERIFICATION
 branch: codex/kr-04-pr113-disposition
@@ -265,7 +275,7 @@ findings:
     evidence:
       - base_handoff_exact_queue_parent_and_effective_base_chain
       - post_main_runs_37015030926_37015031007_37019871795_37019872078_green
-      - current_main_b58efdf546c05750d09f80adfbdd68d12ee9e3e5_tree_6b2e49719b785adf8b49e27a105d2beba521fb9c
+      - current_main_3fa208858ece10235394800a3a6ff48aae49568b_tree_07e961e97199e66c5e3b854566341b625ce7dfea
     follow_up_package: null
     fix_sha: null
 split_or_follow_up_decision: >-
