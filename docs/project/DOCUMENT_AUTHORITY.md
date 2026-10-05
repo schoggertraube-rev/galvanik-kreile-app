@@ -142,6 +142,16 @@ Vor jeder Mission:
    nicht einsehbare externe Checkouts als `UNKNOWN_EXTERNAL` markieren.
 6. keine alte Datei als Begründung nutzen, wenn sie dem kanonischen Stand widerspricht.
 
+## Statische Ratchet-Grenze nach PR #143
+
+Der geschützte Base-Workflow nutzt für nachfolgende Kandidaten ausschließlich
+`scripts/quality/check-ratchet-boundary.mjs` mit der strikten Policy und dem
+Schema unter `quality/`. Er prüft Base-/Kandidatenidentität, Ancestry sowie die
+rohen Git-Blobs des gesamten `.github/workflows`- und `docs/delivery`-Baums und
+der explizit benannten Vertragsdateien; Kandidatencode wird niemals ausgeführt.
+Die statische Grenze ist ein Prüfvertrag, keine neue Produktwahrheit und kein
+Merge-, Deploy- oder Delivery-Claim für ein Folgepaket.
+
 ## Pflege
 
 - `CURRENT_STATE.md` wird nach jedem Merge/Production-Schritt aktualisiert, wenn sich der reale Zustand ändert.

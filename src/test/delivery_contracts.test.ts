@@ -246,83 +246,22 @@ describe("KR-22R delivery governance gate", () => {
     const queue = json(process.cwd(), DELIVERY_PATHS.queue) as {
       effective_base_handoff: Record<string, unknown>;
     };
-    const facts = new Map([
-      [
-        "16888ccc1f0c97064af3d1552538c6975440b1fb",
-        {
-          sha: "16888ccc1f0c97064af3d1552538c6975440b1fb",
-          parents: [
-            "53a5d52becc08394780583e4c3756b2d414311a6",
-            "b0b55353143fc50eda7f3833270ff4cfd1402e2f",
-          ],
-          tree: "4ccfbc0f01c7bb92de8e8a198b43a79a0cd543f2",
-        },
-      ],
-      [
-        "a56b5c8845efb5814a970cf739b7fab82217ce28",
-        {
-          sha: "a56b5c8845efb5814a970cf739b7fab82217ce28",
-          parents: [
-            "16888ccc1f0c97064af3d1552538c6975440b1fb",
-            "5e02605d23f4b65bd69e16509fbd9debcd4de7ae",
-          ],
-          tree: "5f6cd3a6958a169df32c935999f8db0eb1ddb440",
-        },
-      ],
-      [
-        "4ca3abe7e0c44075b0cb30804ba56d85f683d7cf",
-        {
-          sha: "4ca3abe7e0c44075b0cb30804ba56d85f683d7cf",
-          parents: [
-            "a56b5c8845efb5814a970cf739b7fab82217ce28",
-            "00c43bd7c0995d7ab9b680623c98e5df215bbd72",
-          ],
-          tree: "2d2b99613f86f892a135c0de9c0c080fd93d5f81",
-        },
-      ],
-      [
-        "427d51c6d372fc4e6e29646a16f74b79c6508fb7",
-        {
-          sha: "427d51c6d372fc4e6e29646a16f74b79c6508fb7",
-          parents: [
-            "4ca3abe7e0c44075b0cb30804ba56d85f683d7cf",
-            "ec2f84bcefacc9292169d9841df2691e0e0ffbc4",
-          ],
-          tree: "b1927a7641ef49fe38be89dd3e109e6b09960443",
-        },
-      ],
-      [
-        "0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f",
-        {
-          sha: "0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f",
-          parents: [
-            "427d51c6d372fc4e6e29646a16f74b79c6508fb7",
-            "7bd261f879097991e7725f479236c68448af193d",
-          ],
-          tree: "1ceff359a5b48a808a67304bd702e4db37fe1178",
-        },
-      ],
-    ]);
-    const readFacts = (sha: string) => {
-      const value = facts.get(sha);
-      if (!value) throw new Error(`synthetic commit fact missing: ${sha}`);
-      return value;
-    };
+    const readFacts = (sha: string) => trustedCommitFacts(process.cwd(), sha);
     expect(
       validateTrustedHandoff(
         queue.effective_base_handoff,
-        "0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f",
+        "b617e12fcb028eeb18e06a413874a558cee27cad",
         readFacts,
       ),
     ).toEqual([]);
     expect(
       validateTrustedHandoff(
         queue.effective_base_handoff,
-        "16888ccc1f0c97064af3d1552538c6975440b1fb",
+        "0000000000000000000000000000000000000000",
         readFacts,
       ),
     ).toContainEqual(
-      expect.stringContaining("Effective Base stimmt nicht mit dem geschuetzten Git-Checkout ueberein"),
+      expect.stringContaining("Geschuetzter Git-Graph konnte nicht geprueft werden"),
     );
   });
 
@@ -333,7 +272,7 @@ describe("KR-22R delivery governance gate", () => {
     expect(
       validateTrustedHandoff(
         queue.effective_base_handoff,
-        "4ca3abe7e0c44075b0cb30804ba56d85f683d7cf",
+        "b617e12fcb028eeb18e06a413874a558cee27cad",
         () => {
           throw new Error("synthetic trusted graph unavailable");
         },

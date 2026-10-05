@@ -1,8 +1,8 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: 0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f
-branch: codex/kr-performance-desktop-recovery-20261003
+base_sha: b617e12fcb028eeb18e06a413874a558cee27cad
+branch: codex/kr-a1-static-ratchet-boundary-20261005
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
 execution_program_20260928:
@@ -15,7 +15,7 @@ execution_program_20260928:
   review_rule: ONE_BROAD_CLAUDE_REVIEW_MAX_ONE_CORRECTION_TARGETED_DELTA_REVIEW
   merge_rule: REQUIRED_CHECKS_EXACT_SHA_CLEAN_TREE_AND_SEPARATE_PRODUCTION_EFFECT_AUTHORITY
   production_rule: NO_PRODUCTION_WITHOUT_SEPARATE_EXPLICIT_OWNER_AUTHORITY
-  origin_main_reference: 0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f
+  origin_main_reference: b617e12fcb028eeb18e06a413874a558cee27cad
   queue_parent: KR-04R-PR113-DEAD-UI-REMOVAL@16888ccc1f0c97064af3d1552538c6975440b1fb
   queue_parent_status: MAIN_DELIVERED_TREE_EQUIVALENT_REMOTE_GATES_GREEN_VERCEL_PRODUCTION_SUCCESS_NO_MANUAL_REMOTE_MUTATION
   queue_parent_review:
@@ -34,8 +34,8 @@ execution_program_20260928:
     remote_head: 16888ccc1f0c97064af3d1552538c6975440b1fb
   effective_base_handoff:
     queue_parent_sha: 16888ccc1f0c97064af3d1552538c6975440b1fb
-    effective_base_sha: 0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f
-    effective_base_tree_sha: 1ceff359a5b48a808a67304bd702e4db37fe1178
+    effective_base_sha: b617e12fcb028eeb18e06a413874a558cee27cad
+    effective_base_tree_sha: b87a4079ef4aa92e5ac28dd19d356e0f599cb13f
     entries:
       - pr: 137
         parent_sha: 16888ccc1f0c97064af3d1552538c6975440b1fb
@@ -77,6 +77,16 @@ execution_program_20260928:
         post_main_agentur_gate_run: 37301985630
         post_main_quality_run: 37301985602
         vercel_status: SUCCESS
+      - pr: 143
+        parent_sha: 0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f
+        candidate_sha: eca0d5d4d6f831cd52031b943b1d9ef4516ad5a9
+        merge_sha: b617e12fcb028eeb18e06a413874a558cee27cad
+        tree_sha: b87a4079ef4aa92e5ac28dd19d356e0f599cb13f
+        scope: PROTECTED_CI_GOVERNANCE_ONLY
+        review_result: PASS_NO_OPEN_P0_P1_P2_P3
+        post_main_agentur_gate_run: 37354822484
+        post_main_quality_run: 37354822516
+        vercel_status: SUCCESS
   effective_base_handoff_exception_receipt:
     pr: 139
     exception: ONE_TIME_NORMAL_MERGE_DESPITE_NON_REQUIRED_RATCHET_FAILURE_NO_ADMIN_BYPASS
@@ -86,17 +96,17 @@ execution_program_20260928:
   queue_rule: EXACT_PARENT_ONE_WRITER_ONE_REVIEWER_NO_DELIVERY_CLAIM_REVERIFY_AFTER_EACH_REAL_MAIN_MERGE
   kreile_pl_session: 01a0ce4b-1843-7361-9ffc-47933f9ecdde
   build_coordinator_and_future_merge_actor: 01a0b8b7-f1ab-7b72-9f87-1feb350e3b95
-  current_state_drift: CURRENT_STATE_SYNC_INCLUDES_KR_04R_AND_PROTECTED_HANDOFFS_PR_137_PR_139_ONLY_PR_140_PR_141_MAIN_DELIVERED_CURRENT_STATE_SYNC_PENDING_KR_22R_PRODUCT_NOT_DELIVERED
+  current_state_drift: CURRENT_STATE_SYNC_INCLUDES_KR_04R_AND_PROTECTED_HANDOFFS_PR_137_PR_139_PR_140_PR_141_PR_143_MAIN_DELIVERED_KR_A1_STATIC_BOUNDARY_PENDING_OWN_EXACT_SHA_REVIEW_NO_PRODUCT_OR_A1_MAIN_CLAIM
   current_package: KR-22R-DESKTOP-READ-RECOVERY
-  current_package_parent: 0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f
-  current_package_status: GOVERNANCE_REBASED_AND_REBOUND_TO_PR_141_MAIN_PENDING_LOCAL_GATES_AND_FRESH_EXACT_SHA_REVIEW_NO_PRODUCT_OR_CURRENT_PACKAGE_MAIN_CLAIM
+  current_package_parent: b617e12fcb028eeb18e06a413874a558cee27cad
+  current_package_status: A1_STATIC_RATCHET_BOUNDARY_ON_PR_143_MAIN_PENDING_LOCAL_GATES_AND_FRESH_EXACT_SHA_REVIEW_NO_PRODUCT_OR_A1_MAIN_CLAIM
   current_package_remote_freeze: PR_138_HEAD_D6E4A9A4_PRODUCT_GATES_GREEN_EXCEPT_STALE_DELIVERY_RATCHET_PENDING_GOVERNANCE_ISSUANCE_REBASE
   current_package_broad_review: OPUS_FOUND_WRONG_ACTIVE_UI_PATH_ONE_CORRECTION_APPLIED_SONNET_TARGETED_PASS_NO_OPEN_P0_P1
   current_package_correction_rounds: 1_OF_MAX_1_APPLIED_NO_FURTHER_PRODUCT_CORRECTION_ROUND
   current_package_fast_gates: PRODUCT_HEAD_D6E4A9A4_TSC_PASS_LINT_PASS_1006_OF_1006_TESTS_PASS_BUILD_PASS_BROWSER_MATRIX_PASS_QUALITY_PASS_BOTH_AGENTUR_PASS_FRESH_SUPABASE_PASS_VERCEL_PREVIEW_PASS_RATCHET_BLOCKED_ONLY_BY_STALE_DELIVERY_STATE
   current_package_browser_evidence: WINDOWS_125_PERCENT_1182X720_DPR_1_25_FINE_POINTER_DESKTOP_FRAME_CUSTOMER_MODAL_960X664_ORDER_MODAL_1020X664_NO_ALERTS_SINGLE_RUN_LIST_1646MS_CUSTOMER_885MS_ORDER_1398MS_NO_P95_CLAIM
-  current_package_governance_bootstrap: PREAUTH_PR_139_MAIN_DELIVERED_REBIND_GOVERNANCE_TO_4CA3_THEN_LOCAL_GATES_FRESH_EXACT_SHA_REVIEW_DRAFT_PR_SEPARATE_MERGE_AUTHORITY_THEN_PRODUCT_REBASE
-  governance_issuance_branch: codex/kr-22r-desktop-read-governance-20261003
+  current_package_governance_bootstrap: PR_143_MAIN_DELIVERED_STATIC_BOUNDARY_REPLACES_DYNAMIC_PREAUTHORIZATIONS_LOCAL_GATES_FRESH_EXACT_SHA_REVIEW_DRAFT_PR_SEPARATE_MERGE_AUTHORITY_THEN_PRODUCT_REBASE
+  governance_issuance_branch: codex/kr-a1-static-ratchet-boundary-20261005
   contract_timing_exception: ONE_TIME_OWNER_DIRECT_RECOVERY_ORDER_PRODUCT_D6E4_PRECEDED_STALE_MANIFEST_RECONCILIATION_NO_BEFORE_WRITER_CLAIM
   corrected_checker_preauthorization:
     checker_sha256: 3B92CA7E7D839FD22AF699DF71012EA4D9C243A917449707C4FC3AC9926E2A27

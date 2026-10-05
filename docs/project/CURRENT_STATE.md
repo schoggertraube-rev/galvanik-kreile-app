@@ -1,9 +1,24 @@
 # CURRENT_STATE — Galvanik-Kreile WerkstattCockpit
 
-**Lieferstand 2026-10-03: `main@4ca3abe7e0c44075b0cb30804ba56d85f683d7cf`.** Diese Datei
+**Lieferstand 2026-10-05: `main@b617e12fcb028eeb18e06a413874a558cee27cad`.** Diese Datei
 beschreibt ausschließlich auf `main` belegte Lieferungen. Aktives Paket, Branch, Base, Kandidatenstatus
 und nächstes Gate stehen ausschließlich in `missions/F1_ORDER_TO_CASH_PILOT_001.yml`. Die
 ausführlichen F0-Tabellen darunter sind ein datierter historischer Snapshot.
+
+PR #143 lieferte den letzten geschützten Governance-Handoff: Kandidat
+`eca0d5d4d6f831cd52031b943b1d9ef4516ad5a9` wurde mit Parent
+`0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f` als
+`b617e12fcb028eeb18e06a413874a558cee27cad` integriert; der Main-Tree ist
+`b87a4079ef4aa92e5ac28dd19d356e0f599cb13f`. Der Scope war
+`PROTECTED_CI_GOVERNANCE_ONLY`, das Review lautete `PASS_NO_OPEN_P0_P1_P2_P3`,
+Agentur-Gate `37354822484`, Quality `37354822516` und das automatische Vercel-
+Ergebnis `SUCCESS`.
+
+Der statische Ratchet-Folgepfad sperrt danach im geschützten Base-Workflow die
+Governance-Bäume und benannten Vertragsdateien per rohem Git-Blobvergleich;
+Kandidatencode wird dabei nie ausgeführt. Diese Beschreibung ist kein A1-
+Merge-, Deploy- oder Produktlieferclaim: ein Folgepaket braucht weiterhin seine
+eigene Exact-SHA-Prüfung, Draft-PR, unabhängige Review und getrennte Autorität.
 
 Die Alt-PRs #84, #113, #114 und #115 sowie ihre `archive/pr-*`-Refs sind Kandidaten- und
 Verlustschutzquellen, keine auf `main` gelieferte Produktwahrheit. Ihre aktuelle Disposition steht im

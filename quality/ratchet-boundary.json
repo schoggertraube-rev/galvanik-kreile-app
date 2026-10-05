@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "contract_id": "KREILE_STATIC_RATCHET_BOUNDARY_V1",
+  "candidate_execution": "NEVER_EXECUTE_CANDIDATE",
+  "protected_trees": [
+    ".github/workflows",
+    "docs/delivery"
+  ],
+  "protected_paths": [
+    "missions/F1_ORDER_TO_CASH_PILOT_001.yml",
+    "docs/project/CURRENT_STATE.md",
+    "docs/project/DOCUMENT_AUTHORITY.md",
+    "scripts/quality/check-delivery-contracts.mjs",
+    "scripts/quality/check-ratchet-boundary.mjs",
+    "quality/ratchet-boundary.json",
+    "quality/ratchet-boundary.schema.json",
+    "src/test/delivery_contracts.test.ts"
+  ]
+}
