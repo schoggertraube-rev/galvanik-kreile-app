@@ -5,20 +5,26 @@ beschreibt ausschließlich auf `main` belegte Lieferungen. Aktives Paket, Branch
 und nächstes Gate stehen ausschließlich in `missions/F1_ORDER_TO_CASH_PILOT_001.yml`. Die
 ausführlichen F0-Tabellen darunter sind ein datierter historischer Snapshot.
 
-PR #143 lieferte den letzten geschützten Governance-Handoff: Kandidat
-`eca0d5d4d6f831cd52031b943b1d9ef4516ad5a9` wurde mit Parent
-`0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f` als
+Nach PR #139 folgten drei geschützte Governance-Handoffs. PR #140 gab den
+KR-22R-Paketvertrag samt dem vorab autorisierten Checker aus: Kandidat
+`ec2f84bcefacc9292169d9841df2691e0e0ffbc4` wurde mit Parent
+`4ca3abe7e0c44075b0cb30804ba56d85f683d7cf` als
+`427d51c6d372fc4e6e29646a16f74b79c6508fb7` mit Tree
+`b1927a7641ef49fe38be89dd3e109e6b09960443` integriert (Agentur-Gate `37159780478`,
+Quality `37159780381`). PR #141 ergänzte ausschließlich eine exakte
+Recovery-Checker-Vorautorisierung im geschützten Workflow und band KR-22R an
+diesen Merge: Kandidat `7bd261f879097991e7725f479236c68448af193d` wurde als
+`0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f` mit Tree
+`1ceff359a5b48a808a67304bd702e4db37fe1178` integriert (Agentur-Gate `37301985630`,
+Quality `37301985602`). PR #143 band KR-22R an diesen Merge: Kandidat
+`eca0d5d4d6f831cd52031b943b1d9ef4516ad5a9` wurde als
 `b617e12fcb028eeb18e06a413874a558cee27cad` integriert; der Main-Tree ist
-`b87a4079ef4aa92e5ac28dd19d356e0f599cb13f`. Der Scope war
-`PROTECTED_CI_GOVERNANCE_ONLY`, das Review lautete `PASS_NO_OPEN_P0_P1_P2_P3`,
-Agentur-Gate `37354822484`, Quality `37354822516` und das automatische Vercel-
-Ergebnis `SUCCESS`.
-
-Der statische Ratchet-Folgepfad sperrt danach im geschützten Base-Workflow die
-Governance-Bäume und benannten Vertragsdateien per rohem Git-Blobvergleich;
-Kandidatencode wird dabei nie ausgeführt. Diese Beschreibung ist kein A1-
-Merge-, Deploy- oder Produktlieferclaim: ein Folgepaket braucht weiterhin seine
-eigene Exact-SHA-Prüfung, Draft-PR, unabhängige Review und getrennte Autorität.
+`b87a4079ef4aa92e5ac28dd19d356e0f599cb13f` (Agentur-Gate `37354822484`, Quality
+`37354822516`). Alle drei hatten den Scope `PROTECTED_CI_GOVERNANCE_ONLY` und das
+Review `PASS_NO_OPEN_P0_P1_P2_P3`; die Post-Merge-Runs und die automatischen
+Vercel-Commitstatus der drei Merge-Commits waren erfolgreich. Keiner der drei
+Handoffs lieferte Produktcode oder eine Remote-Datenbank-, RLS-, Provider- oder
+Echtdatenmutation; das KR-22R-Produkt (PR #138) ist nicht auf `main` geliefert.
 
 Die Alt-PRs #84, #113, #114 und #115 sowie ihre `archive/pr-*`-Refs sind Kandidaten- und
 Verlustschutzquellen, keine auf `main` gelieferte Produktwahrheit. Ihre aktuelle Disposition steht im
@@ -102,6 +108,7 @@ keinen Kandidaten als geliefert vorweg.
 
 | Wahrheit | Stand |
 |---|---|
+| KR-22R Vertragsausgabe und geschuetzte Rebinds | PR #140, #141 und #143 als Merge-Commits `427d51c6d372fc4e6e29646a16f74b79c6508fb7`, `0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f` und `b617e12fcb028eeb18e06a413874a558cee27cad` integriert; Scope jeweils `PROTECTED_CI_GOVERNANCE_ONLY`, Reviews ohne offene P0/P1/P2/P3, Post-Merge-Gates und automatische Vercel-Commitstatus gruen; keine Produkt- oder Remote-Datenmutation; KR-22R-Produkt (PR #138) nicht geliefert |
 | KR-22R geschuetzter Checker-Handoff | PR #139, Kandidat `00c43bd7c0995d7ab9b680623c98e5df215bbd72`, als Merge-Commit `4ca3abe7e0c44075b0cb30804ba56d85f683d7cf` integriert; Tree `2d2b99613f86f892a135c0de9c0c080fd93d5f81`; Sonnet und Opus ohne offene P0/P1/P2/P3; einmalige dokumentierte Owner-Ausnahme fuer den nicht verpflichtenden Ratchet-Fehler; Post-Merge-Gates und automatisches Vercel-Production-Deployment gruen; keine Produkt- oder Remote-Datenmutation |
 | KR-02R geschuetzter Checker-Handoff | PR #137, Kandidat `5e02605d23f4b65bd69e16509fbd9debcd4de7ae`, als Merge-Commit `a56b5c8845efb5814a970cf739b7fab82217ce28` integriert; Opus P0/P1/P2/P3 = 0; einmalige dokumentierte Owner-Ausnahme fuer den selbstblockierenden Alt-Handoff; Post-Merge-Gates und automatisches Vercel-Production-Deployment gruen; keine Produkt- oder Remote-Datenmutation |
 | KR-04R Produktbereinigung | PR #122, Kandidat `b0b55353143fc50eda7f3833270ff4cfd1402e2f`, als Merge-Commit `16888ccc1f0c97064af3d1552538c6975440b1fb` integriert; Tree `4ccfbc0f01c7bb92de8e8a198b43a79a0cd543f2` bytegleich; P0/P1/P2 = 0; Post-Merge-Gates und automatisches Vercel-Production-Deployment gruen; keine Remote-Datenmutation |

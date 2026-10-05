@@ -63,7 +63,7 @@ base_handoff:
       post_main_quality_run: 37354822516
       vercel_status: SUCCESS
 target_sha: PENDING_AFTER_LOCAL_VERIFICATION
-branch: codex/kr-a1-static-ratchet-boundary-20261005
+branch: codex/kr-performance-desktop-recovery-20261003
 goal: >-
   Den direkt gemeldeten Desktop- und Lesepfadfehler als ein enges Recovery-Paket
   beheben: Windows-Desktop bei 125 Prozent Skalierung bleibt Desktop, Touch-Tablets
@@ -239,7 +239,7 @@ review_contract:
   specialist_gate_reviewers_are_not_implementation_reviewers: true
 acceptance:
   - id: KR22R-A1
-    statement: Der Queue-Parent bleibt exakt der gelieferte KR-04R-Merge 16888ccc. Die geschuetzten Handoffs #137, #139, #140 und #141 sind lueckenlos angehaengt; Base, Tree sowie alle Repo-Source-Locks sind auf #141-Merge 0486ff2f neu gebunden. Erst dieser rebaste Stand ist Kandidat fuer das frische Exact-SHA-Review.
+    statement: Der Queue-Parent bleibt exakt der gelieferte KR-04R-Merge 16888ccc. Die geschuetzten Handoffs #137, #139, #140, #141 und #143 sind lueckenlos angehaengt; Base, Tree sowie alle Repo-Source-Locks sind auf #143-Merge b617e12f neu gebunden. Erst dieser rebaste Stand ist Kandidat fuer das frische Exact-SHA-Review.
     evidence: REMOTE_PARENT_MAIN_TRUSTED_GRAPH_AND_EXTERNAL_RECEIPTS
   - id: KR22R-A2
     statement: Ein Fine-Pointer-Desktop ab 1024 CSS-Pixeln bleibt auch bei Windows-Skalierung im Desktop-Frame; ein Touch-Tablet derselben Breitenklasse bleibt Tablet und Mobile bleibt Mobile.
@@ -353,15 +353,15 @@ package_specific:
       - REBASE_PRODUCT_PR_138_ONLY_AFTER_GOVERNANCE_MAIN
     final_contract_rule: IMMUTABLE_ONLY_AFTER_REBIND_AND_GOVERNANCE_ISSUANCE
     completed_handoff:
-      pr: 141
-      parent_sha: 427d51c6d372fc4e6e29646a16f74b79c6508fb7
-      candidate_sha: 7bd261f879097991e7725f479236c68448af193d
-      integrated_sha: 0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f
-      tree_sha: 1ceff359a5b48a808a67304bd702e4db37fe1178
-      agentur_gate_run: 37301985630
-      quality_gate_run: 37301985602
-      fresh_supabase_replay_run: 37301985602
-      ratchet_run: 37300101252
+      pr: 143
+      parent_sha: 0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f
+      candidate_sha: eca0d5d4d6f831cd52031b943b1d9ef4516ad5a9
+      integrated_sha: b617e12fcb028eeb18e06a413874a558cee27cad
+      tree_sha: b87a4079ef4aa92e5ac28dd19d356e0f599cb13f
+      agentur_gate_run: 37354822484
+      quality_gate_run: 37354822516
+      fresh_supabase_replay_run: 37354822516
+      ratchet_run: 37354810896
       vercel_result: SUCCESS
   register_gate_semantics:
     stage_meaning: REQUIRED_CLOSURE_TARGET_NOT_CURRENT_ATTAINMENT

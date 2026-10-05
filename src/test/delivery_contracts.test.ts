@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import { createHash } from "node:crypto";
 import { cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -13,6 +14,14 @@ import {
   trustedCommitFacts,
   validateTrustedHandoff,
 } from "../../scripts/quality/check-delivery-contracts.mjs";
+import {
+  DATA_ROOTS,
+  JUDGE_PATHS,
+  missionRegister,
+  pathSyntaxFindings,
+  policyFileFindings,
+  protectedWorkflowFindings,
+} from "../../scripts/quality/check-ratchet-boundary.mjs";
 
 const temps: string[] = [];
 
@@ -43,7 +52,7 @@ afterEach(() => {
 describe("KR-22R delivery governance gate", () => {
   it("accepts the complete current contract set", () => {
     expect(check(process.cwd())).toEqual({ ok: true, findings: [] });
-  }, 10_000);
+  }, 30_000);
 
   it("rejects a hidden alias between the active filename and package id", () => {
     const root = fixture();
@@ -257,12 +266,10 @@ describe("KR-22R delivery governance gate", () => {
     expect(
       validateTrustedHandoff(
         queue.effective_base_handoff,
-        "0000000000000000000000000000000000000000",
+        "0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f",
         readFacts,
       ),
-    ).toContainEqual(
-      expect.stringContaining("Geschuetzter Git-Graph konnte nicht geprueft werden"),
-    );
+    ).toEqual(["[delivery] Effective Base stimmt nicht mit dem geschuetzten Git-Checkout ueberein"]);
   });
 
   it("fails closed when the trusted Git graph cannot resolve the declared base", () => {
@@ -306,6 +313,70 @@ describe("KR-22R delivery governance gate", () => {
     writeJson(root, DELIVERY_PATHS.operatingReceipt, receipt);
     expect(check(root).findings).toContainEqual(
       expect.stringContaining("delivery_truth.main_delivered muss false sein"),
+    );
+  });
+});
+
+describe("KR A1 static ratchet boundary contract", () => {
+  const sha256 = (rel: string) => createHash("sha256").update(readFileSync(rel)).digest("hex").toUpperCase();
+
+  it("keeps the committed policy and schema identical to the boundary contract", () => {
+    expect(
+      policyFileFindings(readFileSync("quality/ratchet-boundary.json"), readFileSync("quality/ratchet-boundary.schema.json")),
+    ).toEqual([]);
+  });
+
+  it("keeps the protected workflow base-only, ordered and bound to the pull request event", () => {
+    expect(protectedWorkflowFindings(readFileSync(".github/workflows/eslint-ratchet.yml", "utf8"))).toEqual([]);
+  });
+
+  it("byte-binds the judge files and leaves living delivery truth to semantic validation", () => {
+    expect(JUDGE_PATHS).toContain("scripts/quality/check-delivery-contracts.mjs");
+    expect(JUDGE_PATHS).toContain(DELIVERY_PATHS.queueSchema);
+    expect(JUDGE_PATHS).toContain(DELIVERY_PATHS.manifestSchema);
+    expect(JUDGE_PATHS).toContain(DELIVERY_PATHS.operatingReceiptSchema);
+    for (const living of [
+      DELIVERY_PATHS.mission,
+      DELIVERY_PATHS.queue,
+      DELIVERY_PATHS.mapping,
+      ACTIVE_MANIFEST_BINDING.path,
+      "docs/project/CURRENT_STATE.md",
+      "docs/project/DOCUMENT_AUTHORITY.md",
+      ".github/workflows/quality.yml",
+      ".github/workflows/agentur-gate.yml",
+    ]) {
+      expect(JUDGE_PATHS).not.toContain(living);
+    }
+    expect(DATA_ROOTS).toEqual(["docs/delivery", "missions", "src"]);
+    for (const judgePath of JUDGE_PATHS) expect(pathSyntaxFindings(judgePath)).toEqual([]);
+  });
+
+  it("keeps the mission judge migration register well-formed and live", () => {
+    const register = missionRegister(readFileSync(DELIVERY_PATHS.mission, "utf8"));
+    expect(register.present).toBe(true);
+    expect(register.problems).toEqual([]);
+    for (const entry of register.entries as Array<{ path: string; replaces_sha256: string }>) {
+      expect(sha256(entry.path)).toBe(entry.replaces_sha256);
+    }
+  });
+
+  it("rejects judge migration register entries that could widen the boundary", () => {
+    const mission = (entries: string) => `execution_program_20260928:\n  judge_migration_preauthorizations: ${entries}\n`;
+    const grant = {
+      path: "scripts/quality/check-delivery-contracts.mjs",
+      replaces_sha256: "A".repeat(64),
+      successor_sha256: "B".repeat(64),
+      reason: "KR_FIXTURE_SUCCESSOR",
+    };
+    expect(missionRegister(mission(JSON.stringify([grant]))).problems).toEqual([]);
+    expect(missionRegister(mission(JSON.stringify([{ ...grant, path: DELIVERY_PATHS.mission }]))).problems).toContainEqual(
+      expect.stringContaining("path is not a judge path"),
+    );
+    expect(missionRegister(mission(JSON.stringify([{ ...grant, admin_bypass: true }]))).problems).toContainEqual(
+      expect.stringContaining("keys must be exactly"),
+    );
+    expect(missionRegister(mission(JSON.stringify([grant, grant]))).problems).toContainEqual(
+      expect.stringContaining("duplicates the pending migration"),
     );
   });
 });

@@ -113,7 +113,7 @@ workflow_facts_at_contract_parent:
     branch_push_runs: false
     pull_request_target_to_main_runs: true
     required_status_claim: NOT_REQUIRED_BY_PROTECTION_MUST_PASS
-    candidate_workflow_change_effect: STATIC_PROTECTED_BASE_BOUNDARY_READS_RAW_GIT_BLOBS_AND_NEVER_EXECUTES_CANDIDATE
+    candidate_workflow_change_effect: AFTER_MAIN_DELIVERY_ONLY_BASE_WORKFLOW_JUDGES_CURRENT_PR
 required_check_truth:
   planned_required_names:
     - quality
@@ -131,6 +131,24 @@ required_check_truth:
   active_ruleset_bypass_actors: 0
   current_user_can_bypass: never
   prohibition: DO_NOT_CLAIM_REQUIRED_FROM_WORKFLOW_NAME_OR_OLD_DOCUMENTATION
+static_ratchet_boundary:
+  authority: D-QA-001
+  contract: quality/ratchet-boundary.json
+  effective_from: KR_A1_MAIN_DELIVERY_BECAUSE_PULL_REQUEST_TARGET_RUNS_THE_BASE_WORKFLOW
+  byte_bound_paths: JUDGE_PATHS_LISTED_IN_THE_CONTRACT_ONLY
+  living_truth: MISSION_CURRENT_STATE_DOCUMENT_AUTHORITY_QUEUE_MANIFESTS_GATE_MAPPING_AND_OTHER_WORKFLOWS_NOT_BYTE_FROZEN
+  semantic_validation: PROTECTED_DELIVERY_JUDGE_ON_CANDIDATE_DATA_PLUS_BASE_PINNED_AUTHORITY_GATE_PLUS_BASE_MODULE_GATES
+  pr113_import_invariant: ENFORCED_BY_THE_PROTECTED_DELIVERY_JUDGE_OVER_CANDIDATE_SRC
+  candidate_identity: SAME_REPOSITORY_AND_MUST_DESCEND_FROM_THE_EVENT_BASE_SHA_EVEN_WITH_RULESET_STRICT_FALSE
+  judge_migration:
+    register: missions/F1_ORDER_TO_CASH_PILOT_001.yml#execution_program_20260928.judge_migration_preauthorizations
+    phase_1: ANNOUNCE_EXACT_SUCCESSOR_SHA256_WITH_UNCHANGED_JUDGE_BYTES_AS_NORMAL_PACKAGE_TO_MAIN_DELIVERED
+    phase_2: INSTALL_EXACTLY_THE_ANNOUNCED_BYTES_REMOVE_THE_CONSUMED_ENTRY_PREAUTHORIZED_SUCCESSOR_IS_THE_DELIVERY_JUDGE
+    ci_verified: RATCHET_PASS_REMAINS_REQUIRED_AND_NORMALLY_GREEN_IN_BOTH_PHASES
+    main_delivered: MISSION_AND_CURRENT_STATE_SYNC_REMAIN_NORMAL_LIVING_UPDATES
+    fail_closed: UNANNOUNCED_OR_OTHER_JUDGE_BYTES_MODE_TYPE_OR_DELETION_AND_STALE_MALFORMED_OR_CONSUMED_ENTRIES
+    new_owner_decision: NOT_REQUIRED_SEPARATE_MERGE_AUTHORITY_PER_PHASE_REMAINS
+    admin_bypass: NONE
 states:
   CONTRACT_READY:
     owner: PACKAGE_MANIFEST
@@ -319,6 +337,10 @@ gate_catalog:
   LINT_RATCHET:
     stage: LOCAL_VERIFIED_AND_CI_VERIFIED
     command_or_evidence: npm run lint:ratchet_AND_REMOTE_RATCHET
+    exact_sha_required: true
+  RATCHET_BOUNDARY:
+    stage: LOCAL_VERIFIED_AND_CI_VERIFIED
+    command_or_evidence: node scripts/quality/check-ratchet-boundary.mjs --selftest_AND_REMOTE_RATCHET_BOUNDARY_AND_DELIVERY_JUDGE
     exact_sha_required: true
   DIFF_CHECK:
     stage: LOCAL_VERIFIED

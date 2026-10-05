@@ -142,15 +142,47 @@ Vor jeder Mission:
    nicht einsehbare externe Checkouts als `UNKNOWN_EXTERNAL` markieren.
 6. keine alte Datei als Begründung nutzen, wenn sie dem kanonischen Stand widerspricht.
 
-## Statische Ratchet-Grenze nach PR #143
+## Geschützte Ratchet-Grenze (KR A1)
 
-Der geschützte Base-Workflow nutzt für nachfolgende Kandidaten ausschließlich
-`scripts/quality/check-ratchet-boundary.mjs` mit der strikten Policy und dem
-Schema unter `quality/`. Er prüft Base-/Kandidatenidentität, Ancestry sowie die
-rohen Git-Blobs des gesamten `.github/workflows`- und `docs/delivery`-Baums und
-der explizit benannten Vertragsdateien; Kandidatencode wird niemals ausgeführt.
-Die statische Grenze ist ein Prüfvertrag, keine neue Produktwahrheit und kein
-Merge-, Deploy- oder Delivery-Claim für ein Folgepaket.
+Dieser Prüfvertrag wirkt erst, wenn KR A1 auf `main` geliefert ist, weil
+`pull_request_target` immer den Base-Workflow ausführt; bis dahin prüft der
+Workflow von `main` mit dem bisherigen Delivery-Checker-Handoff. Danach gilt im
+geschützten Check `ratchet` nach D-QA-001 (normal grün und bindend):
+
+1. Byte-gebunden sind nur die Richterdateien aus `quality/ratchet-boundary.json`:
+   geschützter Workflow, Grenzskript, Policy und Schema, Delivery-Checker und die
+   fünf Vertragsschemas unter `docs/delivery`. Mission, `CURRENT_STATE.md`, diese
+   Datei, Queue, Paketmanifeste, `GATE_MAPPING_V1.yaml` und alle übrigen
+   Workflows sind lebende Wahrheit und werden nicht byte-gesperrt.
+2. Lebende Wahrheit wird inhaltlich geprüft: der Delivery-Richter validiert
+   Mission, Queue, Manifeste, Gate-Mapping, die Handoff-Kette gegen den
+   geschützten Git-Graph und die PR113-Importinvariante über `src/` als
+   Kandidatendaten; das Authority-Gate prüft Mission, `CURRENT_STATE.md` und
+   diese Datei; die Modulgates laufen als Base-Skript.
+3. Ausführung je Schritt: Grenze und Modulgates führen nur Base-Code aus. Der
+   Delivery-Schritt führt nur die von der Grenze aus dem verifizierten Git-Blob
+   ausgegebenen Richter-Bytes aus, also basisgleiche Bytes oder einen exakt
+   vorab autorisierten Nachfolger. Das Authority-Gate führt die Kandidatendatei
+   erst nach beiden Base-gepinnten SHA-256-Prüfungen aus. Der letzte Schritt lädt
+   für die ESLint-Konsistenz die `eslint.config.mjs` des Kandidaten; deshalb läuft
+   danach kein geschütztes Urteil mehr. Der Job als Ganzes führt also
+   Kandidatendateien aus, die Grenze selbst nicht.
+4. Kandidaten müssen aus demselben Repository stammen und vom Event-Base-SHA
+   abstammen, auch wenn das Ruleset `strict=false` hat. Pfade sind ASCII ohne
+   Traversal-, `.git`-, Case- oder Trailing-Dot-Aliase; Symlinks und Gitlinks sind
+   unzulässig.
+5. Eine Richteränderung ist eine sichtbare Zwei-Phasen-Migration ohne neue
+   Owner-Entscheidung und ohne Bypass. Phase 1 trägt Pfad, SHA-256 der ersetzten
+   und der Nachfolger-Bytes sowie einen Grund unter
+   `execution_program_20260928.judge_migration_preauthorizations` in der Mission
+   ein und durchläuft unverändert Review, `CI_VERIFIED`, getrennte
+   Merge-Autorität und `MAIN_DELIVERED`. Phase 2 installiert genau diese Bytes und
+   entfernt den verbrauchten Eintrag; ihr Delivery-Richter ist der autorisierte
+   Nachfolger. Jede andere Byte-, Modus-, Typ- oder Löschänderung einer
+   Richterdatei sowie jeder veraltete Registereintrag bleibt rot.
+
+Die Grenze ist ein Prüfvertrag, keine Produktwahrheit und kein Merge-, Deploy-
+oder Liefer-Claim.
 
 ## Pflege
 
