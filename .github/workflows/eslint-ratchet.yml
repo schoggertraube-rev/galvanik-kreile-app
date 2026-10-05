@@ -110,6 +110,7 @@ jobs:
           # Opus broad review and Sonnet delta review. This is a byte allowlist
           # only; contracts and the trusted Git graph stay base-workflow checked.
           KR22R_DELIVERY_CHECKER_SHA256: "3b92ca7e7d839fd22af699df71012ea4d9c243a917449707c4fc3ac9926e2a27"
+          KR22R_RECOVERY_DELIVERY_CHECKER_SHA256: "2ab91ae1fcb15bd9986edd166e86240b39509210454aa3d48146e1720500f11e"
           DELIVERY_REQUIRE_TRUSTED_BASE: "true"
           DELIVERY_TRUSTED_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           DELIVERY_TRUSTED_REPO: ${{ github.workspace }}/ratchet-base
@@ -121,7 +122,7 @@ jobs:
           test ! -L "$candidate_checker"
           protected_sha="$(sha256sum "$protected_checker" | cut -d' ' -f1)"
           candidate_sha="$(sha256sum "$candidate_checker" | cut -d' ' -f1)"
-          if [[ "$candidate_sha" != "$protected_sha" && "$candidate_sha" != "$KR04R_DELIVERY_CHECKER_SHA256" && "$candidate_sha" != "$KR22R_DELIVERY_CHECKER_SHA256" ]]; then
+          if [[ "$candidate_sha" != "$protected_sha" && "$candidate_sha" != "$KR04R_DELIVERY_CHECKER_SHA256" && "$candidate_sha" != "$KR22R_DELIVERY_CHECKER_SHA256" && "$candidate_sha" != "$KR22R_RECOVERY_DELIVERY_CHECKER_SHA256" ]]; then
             echo "Delivery checker hash is neither protected main nor an exact preauthorized handoff: $candidate_sha" >&2
             exit 1
           fi

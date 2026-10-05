@@ -5,12 +5,12 @@ state: CONTRACT_READY
 execution_state_source: missions/F1_ORDER_TO_CASH_PILOT_001.yml
 manifest_profile: ROLLING_V2
 queue_parent_sha: 16888ccc1f0c97064af3d1552538c6975440b1fb
-base_sha: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
-origin_main_sha: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+base_sha: 427d51c6d372fc4e6e29646a16f74b79c6508fb7
+origin_main_sha: 427d51c6d372fc4e6e29646a16f74b79c6508fb7
 base_handoff:
   queue_parent_sha: 16888ccc1f0c97064af3d1552538c6975440b1fb
-  effective_base_sha: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
-  effective_base_tree_sha: 2d2b99613f86f892a135c0de9c0c080fd93d5f81
+  effective_base_sha: 427d51c6d372fc4e6e29646a16f74b79c6508fb7
+  effective_base_tree_sha: b1927a7641ef49fe38be89dd3e109e6b09960443
   entries:
     - pr: 137
       parent_sha: 16888ccc1f0c97064af3d1552538c6975440b1fb
@@ -31,6 +31,16 @@ base_handoff:
       review_result: PASS_NO_OPEN_P0_P1_P2_P3
       post_main_agentur_gate_run: 37139924548
       post_main_quality_run: 37139924541
+      vercel_status: SUCCESS
+    - pr: 140
+      parent_sha: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+      candidate_sha: ec2f84bcefacc9292169d9841df2691e0e0ffbc4
+      merge_sha: 427d51c6d372fc4e6e29646a16f74b79c6508fb7
+      tree_sha: b1927a7641ef49fe38be89dd3e109e6b09960443
+      scope: PROTECTED_CI_GOVERNANCE_ONLY
+      review_result: PASS_NO_OPEN_P0_P1_P2_P3
+      post_main_agentur_gate_run: 37159780478
+      post_main_quality_run: 37159780381
       vercel_status: SUCCESS
 target_sha: PENDING_AFTER_LOCAL_VERIFICATION
 branch: codex/kr-performance-desktop-recovery-20261003
@@ -72,43 +82,43 @@ source_locks:
   - kind: REPO_FILE
     source: docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md
     location: REPO
-    repo_commit: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+    repo_commit: 427d51c6d372fc4e6e29646a16f74b79c6508fb7
     sha256: 7421775EA5E56432DF703533CF3130AC4B9DE14A1DF2DC182AF2C4A76B3A8AFB
   - kind: REPO_FILE
     source: e2e/path1-v5-shell-smoke.real.spec.ts
     location: REPO
-    repo_commit: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+    repo_commit: 427d51c6d372fc4e6e29646a16f74b79c6508fb7
     sha256: 1BC41632F060B7870158C6D6EF8E1C0B922D656F56A73EDF2AA116C6F1FF389A
   - kind: REPO_FILE
     source: src/app/actions/customers.actions.ts
     location: REPO
-    repo_commit: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+    repo_commit: 427d51c6d372fc4e6e29646a16f74b79c6508fb7
     sha256: 09E90F661B9403446593B80195AF66B5177AC4E1B531A5E51EBD98C17006FDA9
   - kind: REPO_FILE
     source: src/components/layout/MockAppFrame.tsx
     location: REPO
-    repo_commit: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+    repo_commit: 427d51c6d372fc4e6e29646a16f74b79c6508fb7
     sha256: 6D15D475D261673B04C1E8C68A23209A797365E6BEA611D088159F06A1F572BC
   - kind: REPO_FILE
     source: src/components/layout/MockFrameMode.ts
     location: REPO
-    repo_commit: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+    repo_commit: 427d51c6d372fc4e6e29646a16f74b79c6508fb7
     sha256: 82996D2E7501ADFA63A7A1DF0869CE42144C3ADF7D76591B5DF2E0CC8B8E2922
   - kind: REPO_FILE
     source: src/modules/customers/ui/customers.module.css
     location: REPO
-    repo_commit: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+    repo_commit: 427d51c6d372fc4e6e29646a16f74b79c6508fb7
     sha256: E5A61D7920D2D01E59E8F239F786DB4B47216534FF332BE786778ACC15424082
   - kind: REPO_FILE
     source: src/modules/orders/ui/orders.module.css
     location: REPO
-    repo_commit: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+    repo_commit: 427d51c6d372fc4e6e29646a16f74b79c6508fb7
     sha256: B1A10ED5B60D87A745D8BFBDAA9F56339E84255D4E4314ED80F746F57159E524
   - kind: REPO_FILE
     source: scripts/quality/check-delivery-contracts.mjs
     location: REPO
-    repo_commit: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
-    sha256: 9281D67E944B28553030090097D29D4AC3B8F204C396A056A3D66461EBF5471C
+    repo_commit: 427d51c6d372fc4e6e29646a16f74b79c6508fb7
+    sha256: 3B92CA7E7D839FD22AF699DF71012EA4D9C243A917449707C4FC3AC9926E2A27
   - kind: EXTERNAL_FILE
     source: BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
     location: ../_MODULDOSSIERS/00_PROJEKT
@@ -209,7 +219,7 @@ review_contract:
   specialist_gate_reviewers_are_not_implementation_reviewers: true
 acceptance:
   - id: KR22R-A1
-    statement: Der Queue-Parent bleibt exakt der gelieferte KR-04R-Merge 16888ccc. Die geschuetzten Handoffs #137 und #139 sind lueckenlos angehaengt; Base, Tree sowie alle Repo-Source-Locks sind auf #139-Merge 4ca3abe7 neu gebunden. Erst dieser rebaste Stand ist Kandidat fuer das frische Exact-SHA-Review.
+    statement: Der Queue-Parent bleibt exakt der gelieferte KR-04R-Merge 16888ccc. Die geschuetzten Handoffs #137, #139 und #140 sind lueckenlos angehaengt; Base, Tree sowie alle Repo-Source-Locks sind auf #140-Merge 427d51c6 neu gebunden. Erst dieser rebaste Stand ist Kandidat fuer das frische Exact-SHA-Review.
     evidence: REMOTE_PARENT_MAIN_TRUSTED_GRAPH_AND_EXTERNAL_RECEIPTS
   - id: KR22R-A2
     statement: Ein Fine-Pointer-Desktop ab 1024 CSS-Pixeln bleibt auch bei Windows-Skalierung im Desktop-Frame; ein Touch-Tablet derselben Breitenklasse bleibt Tablet und Mobile bleibt Mobile.
@@ -323,14 +333,15 @@ package_specific:
       - REBASE_PRODUCT_PR_138_ONLY_AFTER_GOVERNANCE_MAIN
     final_contract_rule: IMMUTABLE_ONLY_AFTER_REBIND_AND_GOVERNANCE_ISSUANCE
     completed_handoff:
-      pr: 139
-      candidate_sha: 00c43bd7c0995d7ab9b680623c98e5df215bbd72
-      integrated_sha: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
-      tree_sha: 2d2b99613f86f892a135c0de9c0c080fd93d5f81
-      receipt: KR-22R_CHECKER_PREAUTH_MAIN_DELIVERY_RECEIPT_2026-10-03.md
-      receipt_sha256: 2728B70260E8BB632769F07B81EEDE65BF07D241F2045FC3F4E28B15508A772F
-      agentur_gate_run: 37139924548
-      quality_gate_run: 37139924541
+      pr: 140
+      parent_sha: 4ca3abe7e0c44075b0cb30804ba56d85f683d7cf
+      candidate_sha: ec2f84bcefacc9292169d9841df2691e0e0ffbc4
+      integrated_sha: 427d51c6d372fc4e6e29646a16f74b79c6508fb7
+      tree_sha: b1927a7641ef49fe38be89dd3e109e6b09960443
+      agentur_gate_run: 37159780478
+      quality_gate_run: 37159780381
+      fresh_supabase_replay_run: 37159780381
+      ratchet_run: 37159777290
       vercel_result: SUCCESS
   register_gate_semantics:
     stage_meaning: REQUIRED_CLOSURE_TARGET_NOT_CURRENT_ATTAINMENT
