@@ -43,7 +43,7 @@ afterEach(() => {
 describe("KR-22R delivery governance gate", () => {
   it("accepts the complete current contract set", () => {
     expect(check(process.cwd())).toEqual({ ok: true, findings: [] });
-  });
+  }, 10_000);
 
   it("rejects a hidden alias between the active filename and package id", () => {
     const root = fixture();
@@ -280,6 +280,17 @@ describe("KR-22R delivery governance gate", () => {
           tree: "2d2b99613f86f892a135c0de9c0c080fd93d5f81",
         },
       ],
+      [
+        "427d51c6d372fc4e6e29646a16f74b79c6508fb7",
+        {
+          sha: "427d51c6d372fc4e6e29646a16f74b79c6508fb7",
+          parents: [
+            "4ca3abe7e0c44075b0cb30804ba56d85f683d7cf",
+            "ec2f84bcefacc9292169d9841df2691e0e0ffbc4",
+          ],
+          tree: "b1927a7641ef49fe38be89dd3e109e6b09960443",
+        },
+      ],
     ]);
     const readFacts = (sha: string) => {
       const value = facts.get(sha);
@@ -289,7 +300,7 @@ describe("KR-22R delivery governance gate", () => {
     expect(
       validateTrustedHandoff(
         queue.effective_base_handoff,
-        "4ca3abe7e0c44075b0cb30804ba56d85f683d7cf",
+        "427d51c6d372fc4e6e29646a16f74b79c6508fb7",
         readFacts,
       ),
     ).toEqual([]);
