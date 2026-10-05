@@ -291,6 +291,17 @@ describe("KR-22R delivery governance gate", () => {
           tree: "b1927a7641ef49fe38be89dd3e109e6b09960443",
         },
       ],
+      [
+        "0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f",
+        {
+          sha: "0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f",
+          parents: [
+            "427d51c6d372fc4e6e29646a16f74b79c6508fb7",
+            "7bd261f879097991e7725f479236c68448af193d",
+          ],
+          tree: "1ceff359a5b48a808a67304bd702e4db37fe1178",
+        },
+      ],
     ]);
     const readFacts = (sha: string) => {
       const value = facts.get(sha);
@@ -300,7 +311,7 @@ describe("KR-22R delivery governance gate", () => {
     expect(
       validateTrustedHandoff(
         queue.effective_base_handoff,
-        "427d51c6d372fc4e6e29646a16f74b79c6508fb7",
+        "0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f",
         readFacts,
       ),
     ).toEqual([]);
