@@ -50,14 +50,27 @@ Pflichtbelege sind echte Klickpfade in einem isolierten Real-/Test-Tenant, klar 
 - `ENTFÄLLT` wird nach Link-/Importprüfung physisch entfernt. `QUARANTÄNE` besitzt keine rendernde Page und kein Navziel; direkte URL-Aufrufe enden fail-closed/404. Ein Placeholder, `NOT_AVAILABLE` oder „kommt bald“ ist kein Ersatz.
 - Search PR #84 bleibt ein nicht integrierter Kernkandidat. Integration in Header und Overlays sowie Full-Route-Abnahme erfolgen erst nach Shell, Orders und Customers auf der neuen Basis.
 
-### Ablauf-/Zwischenschritt-Kanon — D-UI-V5-001
+### UI-Quellenordnung — D-UI-DS-001
 
-`ui/CURRENT_DESIGN_REFERENCE.json` bindet genau eine aktuelle Ablaufreferenz
-mit Pfad und SHA-256. V5 ergänzt die vier unveränderten Seitenreferenzen um
-deren zusammenhängenden Ablauf und darf sie nicht überschreiben. Vor jeder
-internen Etappe, Browserabnahme und jedem Draft-PR wird der gebundene Hash
+Quellenordnung nach D-UI-DS-001 (maßgeblich: `00_UI_REFERENZEN_PFADE.md`):
+Tokens und Komponenten kommen ausschließlich aus dem Designsystem V1.1, Seite,
+Layout und Ablauf ausschließlich aus den vier gebundenen Seitenreferenzen. Die
+Aggregat-Mocks V2 bis V5 sind historisch und kein Bauinput;
+`ui/CURRENT_DESIGN_REFERENCE.json` bleibt nur Herkunftsnachweis. Vor jeder
+internen Etappe, Browserabnahme und jedem Draft-PR werden die gebundenen Hashes
 erneut geprüft; ein Delta wird dokumentiert. Versionsnummer, Dateidatum und
 HTML-Titel besitzen keine Auswahlwirkung.
+
+### Historie — D-UI-V5-001/002/003 und V5-Gesamtmock
+
+D-UI-V5-001, D-UI-V5-002, D-UI-V5-003 und der V5-Gesamtmock sind durch D-UI-DS-001 vollständig supersediert und nicht ausführbar; kein Bauinput.
+
+Der frühere V5-Ablaufkanon ist nur als Entscheidungsherkunft erhalten. Er ist weder
+Ablauf-, Layout-, Token- noch Komponenteninput und wird nicht ausgeführt.
+
+Herkunft Sichtbare Identität und Kernwege: D-UI-V5-002.
+
+### Globales Plus und KV-Modul
 
 Das globale Plus ist App-Komposition: Es führt auf jeder Kernseite in höchstens
 zwei Klicks zur manuellen Eingabe für Customer oder Auftrag/KV und importiert
@@ -67,7 +80,7 @@ F1.1-Intake-Port und erzeugt atomar/idempotent genau einen verknüpften Auftrag.
 Nicht verbundene KI-, OCR- oder Providerzwecke bleiben unsichtbar oder rein
 passiv bezeichnet, niemals ausführbarer Scheinweg.
 
-### Sichtbare Identität und Kernwege — D-UI-V5-002
+### Sichtbare Identität und Kernwege
 
 Die sichtbare Produktidentität ist eine enge App-/Identity-Adapterprojektion:
 Rolf steht für Meister, Phillip für Werkstatt und Gregor für den erhöhten

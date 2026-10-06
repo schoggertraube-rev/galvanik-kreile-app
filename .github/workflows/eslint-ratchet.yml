@@ -53,15 +53,51 @@ jobs:
         working-directory: ratchet-base
         run: npm ci --ignore-scripts
 
-      - name: Enforce protected repository ratchet
+      - name: Enforce protected static ratchet boundary
+        # Base code only (KR A1, D-QA-001): compares base and candidate Git objects,
+        # byte-binds the judge files listed in quality/ratchet-boundary.json, binds the
+        # candidate data roots to their Git blobs and emits the verified delivery judge.
         working-directory: ratchet-base
+        env:
+          RATCHET_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          RATCHET_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+          RATCHET_REPOSITORY: ${{ github.repository }}
+          RATCHET_BASE_REPOSITORY: ${{ github.event.pull_request.base.repo.full_name }}
+          RATCHET_CANDIDATE_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
-          test ! -e "$GITHUB_WORKSPACE/candidate/node_modules"
-          ln -s "$GITHUB_WORKSPACE/ratchet-base/node_modules" "$GITHUB_WORKSPACE/candidate/node_modules"
-          node --import tsx scripts/quality/check-eslint-ratchet.ts \
-            --root "$GITHUB_WORKSPACE/candidate" \
-            --config "$GITHUB_WORKSPACE/ratchet-base/eslint.config.mjs" \
-            --base-baseline "$GITHUB_WORKSPACE/ratchet-base/quality/eslint-baseline.json"
+          set -euo pipefail
+          node scripts/quality/check-ratchet-boundary.mjs --selftest
+          node scripts/quality/check-ratchet-boundary.mjs \
+            --base-root "$GITHUB_WORKSPACE/ratchet-base" \
+            --candidate-root "$GITHUB_WORKSPACE/candidate" \
+            --base-sha "$RATCHET_BASE_SHA" \
+            --candidate-sha "$RATCHET_CANDIDATE_SHA" \
+            --repository "$RATCHET_REPOSITORY" \
+            --base-repository "$RATCHET_BASE_REPOSITORY" \
+            --candidate-repository "$RATCHET_CANDIDATE_REPOSITORY" \
+            --delivery-judge-out "$RUNNER_TEMP/kreile-delivery-judge/check-delivery-contracts.mjs"
+
+      - name: Enforce protected delivery contracts on candidate data
+        # Runs only the judge bytes emitted by the boundary: byte-identical to the base
+        # checker or an exact base-preauthorized successor. Living Mission, queue,
+        # manifests, gate mapping, handoff graph and the PR113 import invariant are
+        # validated as candidate data against the trusted base Git graph.
+        working-directory: ratchet-base
+        env:
+          GIT_NO_REPLACE_OBJECTS: "1"
+          DELIVERY_REQUIRE_TRUSTED_BASE: "true"
+          DELIVERY_TRUSTED_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          DELIVERY_TRUSTED_REPO: ${{ github.workspace }}/ratchet-base
+        run: |
+          set -euo pipefail
+          judge_dir="$RUNNER_TEMP/kreile-delivery-judge"
+          test -f "$judge_dir/check-delivery-contracts.mjs"
+          test ! -L "$judge_dir/check-delivery-contracts.mjs"
+          test ! -e "$judge_dir/node_modules"
+          ln -s "$GITHUB_WORKSPACE/ratchet-base/node_modules" "$judge_dir/node_modules"
+          sha256sum "$judge_dir/check-delivery-contracts.mjs"
+          node "$judge_dir/check-delivery-contracts.mjs" --selftest --root "$GITHUB_WORKSPACE/candidate"
+          node "$judge_dir/check-delivery-contracts.mjs" --root "$GITHUB_WORKSPACE/candidate"
 
       - name: Enforce D-GOV-001 authority contract on candidate
         working-directory: ratchet-base
@@ -71,7 +107,8 @@ jobs:
         run: |
           set -euo pipefail
           # KR-01R closes the temporary KR-01A transition. The protected base
-          # workflow now accepts exactly the ratified authority schema and checker.
+          # workflow now accepts exactly the ratified authority schema and checker;
+          # the candidate copy runs only after both base-pinned SHA-256 checks.
           checker="$GITHUB_WORKSPACE/candidate/scripts/quality/check-authoritative-sources.mjs"
           schema="$GITHUB_WORKSPACE/candidate/quality/authoritative-sources.json"
           checker_sha="$(sha256sum "$checker" | cut -d' ' -f1)"
@@ -99,41 +136,15 @@ jobs:
             --base-baseline "$GITHUB_WORKSPACE/ratchet-base/quality/module-gates-baseline.json" \
             --schema "$GITHUB_WORKSPACE/ratchet-base/docs/architecture/MODULE_MANIFEST.schema.json"
 
-      - name: Enforce protected delivery contracts and rolling queue
+      - name: Enforce protected repository ratchet
+        # Last step: the consistency snapshot loads the candidate eslint.config.mjs,
+        # so no protected verdict may run after candidate code. Debt is judged with
+        # the base config and base baseline (D-QA-001).
         working-directory: ratchet-base
-        env:
-          # Exact correction-final KR-04R checker bytes after the broad review.
-          # This narrow preauthorization permits only that byte-identical
-          # successor; the protected base still validates the complete Git graph.
-          KR04R_DELIVERY_CHECKER_SHA256: "9281d67e944b28553030090097d29d4ac3b8f204c396a056a3d66461ebf5471c"
-          # Exact correction-final KR-22R checker bytes after the independent
-          # Opus broad review and Sonnet delta review. This is a byte allowlist
-          # only; contracts and the trusted Git graph stay base-workflow checked.
-          KR22R_DELIVERY_CHECKER_SHA256: "3b92ca7e7d839fd22af699df71012ea4d9c243a917449707c4fc3ac9926e2a27"
-          KR22R_RECOVERY_DELIVERY_CHECKER_SHA256: "2ab91ae1fcb15bd9986edd166e86240b39509210454aa3d48146e1720500f11e"
-          DELIVERY_REQUIRE_TRUSTED_BASE: "true"
-          DELIVERY_TRUSTED_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          DELIVERY_TRUSTED_REPO: ${{ github.workspace }}/ratchet-base
         run: |
-          set -euo pipefail
-          protected_checker="$GITHUB_WORKSPACE/ratchet-base/scripts/quality/check-delivery-contracts.mjs"
-          candidate_checker="$GITHUB_WORKSPACE/candidate/scripts/quality/check-delivery-contracts.mjs"
-          test -f "$candidate_checker"
-          test ! -L "$candidate_checker"
-          protected_sha="$(sha256sum "$protected_checker" | cut -d' ' -f1)"
-          candidate_sha="$(sha256sum "$candidate_checker" | cut -d' ' -f1)"
-          if [[ "$candidate_sha" != "$protected_sha" && "$candidate_sha" != "$KR04R_DELIVERY_CHECKER_SHA256" && "$candidate_sha" != "$KR22R_DELIVERY_CHECKER_SHA256" && "$candidate_sha" != "$KR22R_RECOVERY_DELIVERY_CHECKER_SHA256" ]]; then
-            echo "Delivery checker hash is neither protected main nor an exact preauthorized handoff: $candidate_sha" >&2
-            exit 1
-          fi
-          isolated_dir="$(mktemp -d "$RUNNER_TEMP/kreile-delivery-checker.XXXXXX")"
-          trap 'rm -rf "$isolated_dir"' EXIT
-          install -m 0444 "$candidate_checker" "$isolated_dir/check-delivery-contracts.mjs"
-          ln -s "$GITHUB_WORKSPACE/ratchet-base/node_modules" "$isolated_dir/node_modules"
-          isolated_sha="$(sha256sum "$isolated_dir/check-delivery-contracts.mjs" | cut -d' ' -f1)"
-          if [[ "$isolated_sha" != "$candidate_sha" ]]; then
-            echo "Isolated delivery checker copy changed bytes: $isolated_sha" >&2
-            exit 1
-          fi
-          node "$isolated_dir/check-delivery-contracts.mjs" --selftest --root "$GITHUB_WORKSPACE/candidate"
-          node "$isolated_dir/check-delivery-contracts.mjs" --root "$GITHUB_WORKSPACE/candidate"
+          test ! -e "$GITHUB_WORKSPACE/candidate/node_modules"
+          ln -s "$GITHUB_WORKSPACE/ratchet-base/node_modules" "$GITHUB_WORKSPACE/candidate/node_modules"
+          node --import tsx scripts/quality/check-eslint-ratchet.ts \
+            --root "$GITHUB_WORKSPACE/candidate" \
+            --config "$GITHUB_WORKSPACE/ratchet-base/eslint.config.mjs" \
+            --base-baseline "$GITHUB_WORKSPACE/ratchet-base/quality/eslint-baseline.json"

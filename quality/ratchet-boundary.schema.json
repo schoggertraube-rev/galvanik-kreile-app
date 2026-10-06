@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Kreile static ratchet boundary policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract_id",
+    "authority",
+    "judge_paths",
+    "data_roots",
+    "path_hygiene",
+    "identity",
+    "delivery_judge",
+    "judge_migration",
+    "step_execution"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "contract_id": {
+      "const": "KREILE_STATIC_RATCHET_BOUNDARY_V1"
+    },
+    "authority": {
+      "const": "D-QA-001"
+    },
+    "judge_paths": {
+      "const": [
+        ".github/workflows/eslint-ratchet.yml",
+        "docs/delivery/EXACT_SHA_CLOSURE_RECEIPT_SCHEMA_V1.json",
+        "docs/delivery/FINDINGS_LEDGER_SCHEMA_V1.json",
+        "docs/delivery/KR-01_BRANCH_PROTECTION_AND_OPERATING_RECEIPT_SCHEMA_V1.json",
+        "docs/delivery/ROLLING_MANIFEST_QUEUE_SCHEMA_V1.json",
+        "docs/delivery/packages/PACKAGE_MANIFEST_SCHEMA_V2.json",
+        "quality/ratchet-boundary.json",
+        "quality/ratchet-boundary.schema.json",
+        "scripts/quality/check-delivery-contracts.mjs",
+        "scripts/quality/check-ratchet-boundary.mjs"
+      ]
+    },
+    "data_roots": {
+      "const": [
+        "docs/delivery",
+        "missions",
+        "src"
+      ]
+    },
+    "path_hygiene": {
+      "const": "ASCII_ONLY_NO_RESERVED_CHARACTERS_TRAVERSAL_DOT_GIT_CASE_OR_TRAILING_DOT_ALIASES_SYMLINKS_OR_GITLINKS"
+    },
+    "identity": {
+      "const": "SAME_REPOSITORY_EXACT_EVENT_BASE_AND_HEAD_SHA_CANDIDATE_DESCENDS_FROM_EVENT_BASE"
+    },
+    "delivery_judge": {
+      "const": {
+        "path": "scripts/quality/check-delivery-contracts.mjs",
+        "source": "VERIFIED_CANDIDATE_GIT_BLOB_BASE_IDENTICAL_OR_EXACT_BASE_PREAUTHORIZED_SUCCESSOR"
+      }
+    },
+    "judge_migration": {
+      "const": {
+        "mode": "TWO_PHASE_BASE_PREAUTHORIZED_EXACT_SHA256",
+        "register_path": "missions/F1_ORDER_TO_CASH_PILOT_001.yml",
+        "register_key": "execution_program_20260928.judge_migration_preauthorizations",
+        "entry_keys": [
+          "path",
+          "replaces_sha256",
+          "successor_sha256",
+          "reason"
+        ],
+        "register_entries": "LIVE_ONLY_REPLACES_SHA256_EQUALS_CURRENT_CANDIDATE_BYTES"
+      }
+    },
+    "step_execution": {
+      "const": {
+        "boundary": "PROTECTED_BASE_CODE_ONLY",
+        "delivery": "EMITTED_DELIVERY_JUDGE_ON_CANDIDATE_DATA",
+        "authority": "CANDIDATE_FILE_ONLY_AFTER_BASE_PINNED_SHA256_MATCH",
+        "module_gates": "PROTECTED_BASE_CODE_ONLY",
+        "eslint_ratchet": "LAST_STEP_LOADS_CANDIDATE_ESLINT_CONFIG"
+      }
+    }
+  }
+}

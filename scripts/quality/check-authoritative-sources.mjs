@@ -29,7 +29,22 @@ const UI_REFERENCE_CONTRACT = Object.freeze([
   "docs/project/linie/ui/KREILE_AUFTRAGSKARTE_MACHART_V8_2026-08-19.html",
   "docs/project/linie/ui/KREILE_KUNDENKARTE_MACHART_V2_2026-08-19.html",
 ]);
-const REQUIRED_DECISIONS = Object.freeze(["D-GOV-001", "D-ARCH-011", "D-UI-CORE-001", "D-UI-CORE-002"]);
+const DESIGN_SYSTEM_DECISION = "D-UI-DS-001";
+const DESIGN_SYSTEM_CONTRACT = Object.freeze({
+  id: "designsystem_v1_1",
+  version: "1.1",
+  role: "TOKEN_AND_COMPONENT_TRUTH",
+  manifestFile: "SHA256SUMS.txt",
+  manifestSha256: "71b0cb01f484beef042cfd04d31f951d2db2d441c427f8212f35a8d41a8041e5",
+  manifestEntryCount: 55,
+  pageReferenceRole: "PAGE_LAYOUT_FLOW_TRUTH",
+  pageReferenceCount: UI_REFERENCE_CONTRACT.length,
+  conflictPageLayoutFlow: "PAGE_REFERENCES",
+  conflictTokensComponents: "DESIGNSYSTEM_V1_1",
+  aggregateMockRole: "NOT_BUILD_INPUT",
+  importStatus: "NOT_IMPORTED_BEFORE_KR_10B",
+});
+const REQUIRED_DECISIONS = Object.freeze(["D-GOV-001", "D-ARCH-011", "D-UI-CORE-001", "D-UI-CORE-002", "D-UI-V5-003", DESIGN_SYSTEM_DECISION]);
 const REQUIRED_CLASSIFICATIONS = Object.freeze([
   "docs/project/DOCUMENT_AUTHORITY.md",
   "docs/project/MASTERPLAN.md",
@@ -66,7 +81,7 @@ const REQUIRED_MODULE_IDS = Object.freeze([
   "module.calendar",
   "module.accounting-minimal",
 ]);
-const CONFIG_KEYS = Object.freeze(["schemaVersion", "truthTypes", "uiReferences", "documentClassifications"]);
+const CONFIG_KEYS = Object.freeze(["schemaVersion", "truthTypes", "uiReferences", "designSystem", "documentClassifications"]);
 const AUTHORITY_CLAIM = /(?:EINZIGE(?:\s+GÜLTIGE)?\s+(?:UI-)?WAHRHEIT|HÖCHSTE\s+PRIORITÄT|SCHLÄGT\s+ALLES|VORRANGAUTORITÄT)/iu;
 
 const posix = (value) => value.replaceAll("\\", "/");
@@ -104,6 +119,126 @@ function sameSet(left, right) {
 
 function uiNames(text) {
   return [...new Set([...text.matchAll(/KREILE_(?:STARTSEITE_(?:PHILLIP_V4|ROLF_V8)|AUFTRAGSKARTE_MACHART_V8|KUNDENKARTE_MACHART_V2)_2026-08-\d{2}\.html/g)].map((match) => match[0]))];
+}
+
+const DESIGN_POINTER = "docs/project/linie/ui/CURRENT_DESIGN_REFERENCE.json";
+const DESIGN_POINTER_STATUS = "PROVENANCE_POINTER_D-UI-DS-001";
+const HISTORICAL_MOCK_STATUS = "SUPERSEDED_BY_D-UI-DS-001_NOT_BUILD_INPUT";
+const HISTORICAL_MOCK_NAMES = Object.freeze(["KREILE_GESAMTMOCK_V2", "KREILE_GESAMTMOCK_V3", "KREILE_GESAMTMOCK_V4", "KREILE_GESAMTMOCK_V5"]);
+const DESIGN_POINTER_SYSTEM_KEYS = Object.freeze(["id", "version", "manifestSha256", "importStatus"]);
+const LEGACY_ALWAYS = /KREILE_GESAMTMOCK_V[2-5]|D-UI-V5-00[12]|(?<![A-Za-z0-9])V5(?![A-Za-z0-9])/g;
+const LEGACY_BARE = /(?<![A-Za-z0-9])V[2-4](?![A-Za-z0-9])/g;
+const LEGACY_DESIGN_CONTEXT = /MOCK|DESIGN|FLOW|ABLAUF|HTML|BUILD|REFERENCE|REFERENZ|UI_|_UI\b/i;
+// In aktivem Text sind V5-Bezuege nur zusammen mit dem neutralen Klassifikationssatz zulaessig.
+const LEGACY_PROVENANCE = [
+  /D-UI-V5-001, D-UI-V5-002, D-UI-V5-003 und der V5-Gesamtmock sind durch D-UI-DS-001 vollständig supersediert und nicht ausführbar; kein Bauinput\./g,
+  /(?:V[2-5]_)+V[2-5]_(?:HISTORICAL|SUPERSEDED)/g,
+  /Aggregat-Mocks V2 bis V5 sind historisch und kein Bauinput/g,
+];
+// Kommentare in YAML werden nur auf ausdrueckliche Ablauf-Referenz-Behauptungen geprueft.
+const LEGACY_COMMENT_CLAIM = /(?:kanonische[rn]?|aktive[rn]?)\s+(?:Ablauf|Flow)|Ablauf-?referenz|Flow-?Referenz/i;
+const LEGACY_PAGE_NAMES = /phillip[-_ ]?v4|kundenkarte(?:[-_ ]machart)?[-_ ]?v2|customers?(?:_card)?_v2/gi;
+// Historie wird nur abschnittsgenau maskiert: Markdown ueber eine Ueberschrift, die mit dem Historienmarker beginnt,
+// YAML ueber ein direktes Kind `classification:` des Top-Level-Blocks. Ein Teilwort maskiert nie.
+const HISTORICAL_HEADING_START = /^(?:Historie|Historisch|Superseded|Nicht ausführbare Historie)\b/iu;
+const HISTORICAL_HEADING_WORD = /historisch|historical|superseded|supersediert/iu;
+const HISTORICAL_BLOCK_CLASSIFICATION = /^ {2}classification:\s*(?:HISTORICAL|SUPERSEDED)/;
+
+function historicalLineMask(lines, yaml, kind) {
+  const mask = new Array(lines.length).fill(false);
+  const findings = [];
+  if (yaml) {
+    let start = 0;
+    const flush = (end) => {
+      const block = lines.slice(start, end);
+      if (block.some((line) => HISTORICAL_BLOCK_CLASSIFICATION.test(line))) for (let i = start; i < end; i += 1) mask[i] = true;
+    };
+    lines.forEach((line, index) => {
+      if (/^[A-Za-z0-9_]+:/.test(line)) {
+        flush(index);
+        start = index;
+      }
+    });
+    flush(lines.length);
+    return { mask, findings };
+  }
+  let level = null;
+  lines.forEach((line, index) => {
+    const heading = /^(#{1,6})\s+(.+)$/.exec(line);
+    if (heading) {
+      if (level !== null && heading[1].length <= level) level = null;
+      const explicit = HISTORICAL_HEADING_START.test(heading[2]);
+      if (!explicit && HISTORICAL_HEADING_WORD.test(heading[2])) {
+        findings.push(`ACTIVE_LEGACY_DESIGN_BUILD_REFERENCE:${kind}:${index + 1}:AMBIGUOUS_HISTORICAL_HEADING`);
+      }
+      if (level === null && explicit) level = heading[1].length;
+    }
+    mask[index] = level !== null;
+  });
+  return { mask, findings };
+}
+
+export function findActiveLegacyDesignBuildReferences(text, kind = "text") {
+  const yaml = kind === "mission";
+  const lines = String(text).split(/\r?\n/);
+  const { mask, findings: headingFindings } = historicalLineMask(lines, yaml, kind);
+  const findings = [...headingFindings];
+  lines.forEach((line, index) => {
+    if (mask[index]) return;
+    if (yaml && /^\s*#/.test(line)) {
+      if (LEGACY_COMMENT_CLAIM.test(line)) findings.push(`ACTIVE_LEGACY_DESIGN_BUILD_REFERENCE:${kind}:${index + 1}:COMMENT_FLOW_REFERENCE`);
+      return;
+    }
+    if (yaml && /^\s*-\s+[\w./\\-]+\s*$/.test(line)) return;
+    let rest = line;
+    for (const pattern of LEGACY_PROVENANCE) rest = rest.replace(pattern, " ");
+    rest = rest.replace(LEGACY_PAGE_NAMES, " ");
+    const tokens = [...rest.matchAll(LEGACY_ALWAYS)].map((match) => match[0]);
+    if (!yaml || LEGACY_DESIGN_CONTEXT.test(rest)) tokens.push(...[...rest.matchAll(LEGACY_BARE)].map((match) => match[0]));
+    for (const token of tokens) findings.push(`ACTIVE_LEGACY_DESIGN_BUILD_REFERENCE:${kind}:${index + 1}:${token}`);
+  });
+  return findings;
+}
+
+function checkDesignPointer(root, errors) {
+  const pointer = parseJson(root, DESIGN_POINTER, errors, "DESIGN_POINTER");
+  if (!pointer) return;
+  if ("current" in pointer) errors.push("DESIGN_POINTER_ACTIVE_CURRENT");
+  if (pointer.status !== DESIGN_POINTER_STATUS) errors.push("DESIGN_POINTER_STATUS");
+  const system = pointer.designSystem;
+  if (!system || typeof system !== "object" || Array.isArray(system) || !sameSet(Object.keys(system), DESIGN_POINTER_SYSTEM_KEYS)
+    || DESIGN_POINTER_SYSTEM_KEYS.some((key) => system[key] !== DESIGN_SYSTEM_CONTRACT[key])) {
+    errors.push("DESIGN_POINTER_DESIGN_SYSTEM");
+  }
+  if (!Array.isArray(pointer.pageTruth) || !sameSet(pointer.pageTruth.map(posix), UI_REFERENCE_CONTRACT)) errors.push("DESIGN_POINTER_PAGE_TRUTH");
+  const mocks = Array.isArray(pointer.historicalAggregateMocks) ? pointer.historicalAggregateMocks : [];
+  if (!sameSet(mocks.map((item) => item?.name), HISTORICAL_MOCK_NAMES)) errors.push("DESIGN_POINTER_HISTORICAL_MOCK_SET");
+  for (const item of mocks) {
+    if (item?.status !== HISTORICAL_MOCK_STATUS) errors.push(`DESIGN_POINTER_HISTORICAL_MOCK:${item?.name ?? "UNKNOWN"}`);
+  }
+}
+
+function designSystemBlock() {
+  return ["```text", ...Object.entries(DESIGN_SYSTEM_CONTRACT).map(([key, value]) => `DESIGNSYSTEM_CONTRACT.${key}=${value}`), "```"].join("\n");
+}
+
+function designSystemLines(text) {
+  return [...text.matchAll(/^DESIGNSYSTEM_CONTRACT\.([A-Za-z0-9]+)=(.*?)\s*$/gm)].map((match) => `${match[1]}=${match[2]}`);
+}
+
+function checkDesignSystemText(kind, text, errors) {
+  const expected = Object.entries(DESIGN_SYSTEM_CONTRACT).map(([key, value]) => `${key}=${value}`);
+  const actual = designSystemLines(text);
+  if (actual.length !== expected.length || !sameSet(actual, expected) || new Set(actual).size !== actual.length) {
+    errors.push(`DESIGN_SYSTEM_${kind}_CONTRACT`);
+  }
+}
+
+function stringValues(value, found = []) {
+  if (typeof value === "string") found.push(value);
+  else if (Array.isArray(value)) for (const item of value) stringValues(item, found);
+  else if (value && typeof value === "object") for (const item of Object.values(value)) stringValues(item, found);
+  return found;
 }
 
 function markdownFiles(root) {
@@ -171,6 +306,20 @@ export function checkAuthorityRepository(root = process.cwd(), configRel = DEFAU
   if (new Set(configuredRefs).size !== configuredRefs.length) errors.push("UI_REFERENCE_CONFIG_DUPLICATE");
   for (const rel of UI_REFERENCE_CONTRACT) if (!exists(root, rel)) errors.push(`UI_REFERENCE_PATH_MISSING:${rel}`);
 
+  const designSystem = config.designSystem;
+  if (!designSystem || typeof designSystem !== "object" || Array.isArray(designSystem)) {
+    errors.push("DESIGN_SYSTEM_CONFIG_MISSING");
+  } else {
+    const keys = Object.keys(designSystem);
+    if (!sameSet(keys, Object.keys(DESIGN_SYSTEM_CONTRACT))) errors.push(`DESIGN_SYSTEM_CONFIG_CLOSED_SCHEMA:${keys.join(",")}`);
+    for (const [key, value] of Object.entries(DESIGN_SYSTEM_CONTRACT)) {
+      if (designSystem[key] !== value) errors.push(`DESIGN_SYSTEM_CONFIG_VALUE:${key}`);
+    }
+  }
+  for (const value of stringValues(config)) {
+    if (path.win32.isAbsolute(value) || path.posix.isAbsolute(value)) errors.push(`AUTHORITY_CONFIG_ABSOLUTE_PATH:${value}`);
+  }
+
   const classifications = Array.isArray(config.documentClassifications) ? config.documentClassifications : [];
   if (classifications.length === 0) errors.push("DOCUMENT_CLASSIFICATIONS_EMPTY");
   const classifiedPaths = classifications.map((item) => item?.path).filter(Boolean);
@@ -192,7 +341,17 @@ export function checkAuthorityRepository(root = process.cwd(), configRel = DEFAU
     if (count !== 1) errors.push(`REQUIRED_DECISION_COUNT:${id}:${count}`);
   }
 
+  const decisionDates = [...decision.matchAll(/^##\s+(D-[A-Z0-9-]+)\b.*?\(Owner (\d{4}-\d{2}-\d{2})\)\s*$/gm)]
+    .map((match) => ({ id: match[1], date: match[2] }));
+  const designDecisionDate = decisionDates.find((item) => item.id === DESIGN_SYSTEM_DECISION)?.date;
+  if (!designDecisionDate) errors.push(`DESIGN_SYSTEM_DECISION_DATE_MISSING:${DESIGN_SYSTEM_DECISION}`);
+  else if (decisionDates.some((item) => item.id !== DESIGN_SYSTEM_DECISION && item.date >= designDecisionDate)) {
+    errors.push(`DESIGN_SYSTEM_DECISION_NOT_NEWEST:${DESIGN_SYSTEM_DECISION}`);
+  }
+  checkDesignSystemText("DECISION", decision, errors);
+
   const uiIndex = read(root, TRUTH_SOURCE_CONTRACT.ui_truth);
+  checkDesignSystemText("INDEX", uiIndex, errors);
   const indexedRefs = [...uiIndex.matchAll(/^- `([^`]+\.html)`/gm)]
     .map((match) => posix(path.join("docs/project/linie/ui", match[1])));
   if (!sameSet(indexedRefs, UI_REFERENCE_CONTRACT)) errors.push("UI_REFERENCE_INDEX_CONTRACT");
@@ -231,7 +390,12 @@ export function checkAuthorityRepository(root = process.cwd(), configRel = DEFAU
     }
   }
 
-  const forbiddenExecutionKeys = /^(?:branch|base_sha|active_package|next_gate_after_active_package):\s*/m;
+  checkDesignPointer(root, errors);
+  for (const [kind, content] of [["mission", mission], ["scope", scope], ["architecture", architecture]]) {
+    errors.push(...findActiveLegacyDesignBuildReferences(content, kind));
+  }
+
+  const forbiddenExecutionKeys =/^(?:branch|base_sha|active_package|next_gate_after_active_package):\s*/m;
   for (const item of classifications) {
     if (exists(root, item?.path) && forbiddenExecutionKeys.test(read(root, item.path))) errors.push(`CLASSIFIED_DOCUMENT_ACTIVE_EXECUTION:${item.path}`);
   }
@@ -326,12 +490,19 @@ function writeFixture(root, calendarState = "legacy") {
   const banner = (status, title) => `<!-- STATUS: ${status} | CANONICAL_ENTRY: ${STANDARD_ENTRY} -->\n# ${title}\n`;
   const files = {
     "AGENTS.md": "# Rules\n",
-    "docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md": `## D-GOV-001 — one\n## D-ARCH-011 — provider\n## D-UI-CORE-001 — route\n## D-UI-CORE-002 — PATH1_UI_CONVERGENCE\nvollständig als Lieferbasis verworfen; kein UX-Lieferfortschritt\n${UI_REFERENCE_CONTRACT.map((rel) => `\`${path.basename(rel)}\``).join("\n")}\n`,
+    "docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md": `## D-GOV-001 — one\n## D-ARCH-011 — provider\n## D-UI-CORE-001 — route\n## D-UI-CORE-002 — PATH1_UI_CONVERGENCE\nvollständig als Lieferbasis verworfen; kein UX-Lieferfortschritt\n## D-UI-V5-003 — old (Owner 2026-09-21)\n## ${DESIGN_SYSTEM_DECISION} — design system order (Owner 2026-10-06)\n${designSystemBlock()}\n${UI_REFERENCE_CONTRACT.map((rel) => `\`${path.basename(rel)}\``).join("\n")}\n`,
     "docs/project/linie/MODULKARTE_KANON.md": `PATH1_UI_CONVERGENCE\nvollständig als Lieferbasis verworfen; kein UX-Lieferfortschritt\n${UI_REFERENCE_CONTRACT.map((rel) => `\`${path.basename(rel)}\``).join("\n")}\n`,
-    "docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md": "PATH1_UI_CONVERGENCE\nvollständig als Lieferbasis verworfen; kein UX-Lieferfortschritt\n",
-    "missions/F1_ORDER_TO_CASH_PILOT_001.yml": `mission_id: F1\nstatus: active\nbranch: gov\nbase_sha: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nactive_package: GOV\nnext_gate_after_active_package: REVIEW\nnext_product_priority: ${NEXT_PRODUCT_PROGRAM}\npath1_s5_search_status: CANDIDATE_PR_84_NOT_ACCEPTED_NOT_MERGED\npath1_calendar_status: NOT_STARTED_BLOCKED_EXTERNAL_PERMISSION\nf1_6_status: NOT_STARTED\n`,
+    "docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md": "PATH1_UI_CONVERGENCE\nvollständig als Lieferbasis verworfen; kein UX-Lieferfortschritt\n### Historie — D-UI-V5-001 — durch D-UI-DS-001 supersediert, nicht ausführbar\nAggregat-Mocks V2 bis V5 sind historisch; Phillip V4 und Kundenkarte V2 bleiben Seitenwahrheit.\n### Globales Plus\nKein Bauinput aus Aggregat-Mocks.\n",
+    "docs/project/linie/ui/CURRENT_DESIGN_REFERENCE.json": `${JSON.stringify({
+      schemaVersion: 1,
+      status: DESIGN_POINTER_STATUS,
+      designSystem: Object.fromEntries(DESIGN_POINTER_SYSTEM_KEYS.map((key) => [key, DESIGN_SYSTEM_CONTRACT[key]])),
+      pageTruth: [...UI_REFERENCE_CONTRACT],
+      historicalAggregateMocks: HISTORICAL_MOCK_NAMES.map((name) => ({ name, status: HISTORICAL_MOCK_STATUS })),
+    }, null, 2)}\n`,
+    "missions/F1_ORDER_TO_CASH_PILOT_001.yml": `mission_id: F1\nstatus: active\nbranch: gov\nbase_sha: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nactive_package: GOV\nnext_gate_after_active_package: REVIEW\nnext_product_priority: ${NEXT_PRODUCT_PROGRAM}\npath1_s5_search_status: CANDIDATE_PR_84_NOT_ACCEPTED_NOT_MERGED\npath1_calendar_status: NOT_STARTED_BLOCKED_EXTERNAL_PERMISSION\nf1_6_status: NOT_STARTED\nexecution_program_20260928:\n  product_truth: REPO_DECISION_REGISTER_ONLY_D_UI_DS_001_V1_1_PLUS_FOUR_PAGES_V2_V5_HISTORICAL_V6_REJECTED\npath1_ui_convergence_next_product_build: NONE_UNTIL_KR_PERF_LOGIN_01_R2\nhistorical_v5_ui_bindings_superseded_by_d_ui_ds_001:\n  classification: SUPERSEDED_NOT_EXECUTABLE_NOT_BUILD_INPUT\n  path1_ui_convergence_flow_reference: docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html\n`,
     "docs/project/CURRENT_STATE.md": "# Current main@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nOWNER_UX_FAIL / NOT_DELIVERED\nFULLY_REJECTED_AS_DELIVERY_BASE\nkein Zielscreen-PASS\n",
-    "docs/project/linie/00_UI_REFERENZEN_PFADE.md": `# UI truth\n${UI_REFERENCE_CONTRACT.map((rel) => `- \`${path.basename(rel)}\``).join("\n")}\n`,
+    "docs/project/linie/00_UI_REFERENZEN_PFADE.md": `# UI truth\n${UI_REFERENCE_CONTRACT.map((rel) => `- \`${path.basename(rel)}\``).join("\n")}\n${designSystemBlock()}\n`,
     "docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json": JSON.stringify({ capabilities: [
       { stable_id: "page.real", kind: "PAGE_ROUTE", visible: true },
     ] }),
@@ -375,6 +546,7 @@ function writeFixture(root, calendarState = "legacy") {
     schemaVersion: 2,
     truthTypes: Object.entries(TRUTH_SOURCE_CONTRACT).map(([id, source]) => ({ id, source })),
     uiReferences: [...UI_REFERENCE_CONTRACT],
+    designSystem: { ...DESIGN_SYSTEM_CONTRACT },
     documentClassifications: [
       ...REQUIRED_CLASSIFICATIONS.map((rel) => ({ path: rel, status: "REFERENCE_ONLY_NON_EXECUTABLE" })),
     ],
@@ -384,7 +556,66 @@ function writeFixture(root, calendarState = "legacy") {
 }
 
 export function runAuthoritySelftest() {
+  const editConfig = (edit) => (root) => {
+    const p = absolute(root, DEFAULT_CONFIG);
+    const c = JSON.parse(readFileSync(p, "utf8"));
+    edit(c);
+    writeFileSync(p, JSON.stringify(c), "utf8");
+  };
+  const editText = (rel, edit) => (root) => {
+    const p = absolute(root, rel);
+    writeFileSync(p, edit(readFileSync(p, "utf8")), "utf8");
+  };
+  const sha = DESIGN_SYSTEM_CONTRACT.manifestSha256;
+  const designCases = [
+    ["design-wrong-version", editConfig((c) => { c.designSystem.version = "1.2"; }), "DESIGN_SYSTEM_CONFIG_VALUE:version"],
+    ["design-wrong-id", editConfig((c) => { c.designSystem.id = "designsystem_unbound"; }), "DESIGN_SYSTEM_CONFIG_VALUE:id"],
+    ["design-wrong-role", editConfig((c) => { c.designSystem.role = "PAGE_LAYOUT_FLOW_TRUTH"; }), "DESIGN_SYSTEM_CONFIG_VALUE:role"],
+    ["design-wrong-manifest-sha", editConfig((c) => { c.designSystem.manifestSha256 = sha.replace(/^7/, "8"); }), "DESIGN_SYSTEM_CONFIG_VALUE:manifestSha256"],
+    ["design-wrong-file-count", editConfig((c) => { c.designSystem.manifestEntryCount = 54; }), "DESIGN_SYSTEM_CONFIG_VALUE:manifestEntryCount"],
+    ["design-wrong-precedence", editConfig((c) => { c.designSystem.conflictTokensComponents = "PAGE_REFERENCES"; }), "DESIGN_SYSTEM_CONFIG_VALUE:conflictTokensComponents"],
+    ["design-wrong-page-precedence", editConfig((c) => { c.designSystem.conflictPageLayoutFlow = "DESIGNSYSTEM_V1_1"; }), "DESIGN_SYSTEM_CONFIG_VALUE:conflictPageLayoutFlow"],
+    ["design-aggregate-mock-promoted", editConfig((c) => { c.designSystem.aggregateMockRole = "BUILD_INPUT"; }), "DESIGN_SYSTEM_CONFIG_VALUE:aggregateMockRole"],
+    ["design-premature-import", editConfig((c) => { c.designSystem.importStatus = "IMPORTED"; }), "DESIGN_SYSTEM_CONFIG_VALUE:importStatus"],
+    ["design-extra-source-key", editConfig((c) => { c.designSystem.extraSource = "docs/project/linie/ui/other.html"; }), "DESIGN_SYSTEM_CONFIG_CLOSED_SCHEMA"],
+    ["design-absolute-path", editConfig((c) => { c.designSystem.manifestFile = "C:\\Users\\x\\designsystem_v1_1\\SHA256SUMS.txt"; }), "AUTHORITY_CONFIG_ABSOLUTE_PATH"],
+    ["design-binding-removed", editConfig((c) => { delete c.designSystem; }), "DESIGN_SYSTEM_CONFIG_MISSING"],
+    ["extra-ui-source-config", editConfig((c) => { c.uiReferences.push("docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html"); }), "UI_REFERENCE_CONFIG_CONTRACT"],
+    ["extra-ui-source-index", editText(TRUTH_SOURCE_CONTRACT.ui_truth, (t) => `${t}- \`KREILE_GESAMTMOCK_V5_2026-09-14.html\`\n`), "UI_REFERENCE_INDEX_CONTRACT"],
+    ["design-register-binding-removed", editText(TRUTH_SOURCE_CONTRACT.product_decisions, (t) => t.replace(/^DESIGNSYSTEM_CONTRACT\..*\n/gm, "")), "DESIGN_SYSTEM_DECISION_CONTRACT"],
+    ["design-register-wrong-sha", editText(TRUTH_SOURCE_CONTRACT.product_decisions, (t) => t.replace(sha, sha.replace(/^7/, "8"))), "DESIGN_SYSTEM_DECISION_CONTRACT"],
+    ["design-register-wrong-count", editText(TRUTH_SOURCE_CONTRACT.product_decisions, (t) => t.replace("manifestEntryCount=55", "manifestEntryCount=56")), "DESIGN_SYSTEM_DECISION_CONTRACT"],
+    ["design-register-precedence-swapped", editText(TRUTH_SOURCE_CONTRACT.product_decisions, (t) => t.replace("conflictPageLayoutFlow=PAGE_REFERENCES", "conflictPageLayoutFlow=DESIGNSYSTEM_V1_1")), "DESIGN_SYSTEM_DECISION_CONTRACT"],
+    ["design-register-not-newest", editText(TRUTH_SOURCE_CONTRACT.product_decisions, (t) => t.replace("(Owner 2026-10-06)", "(Owner 2026-09-01)")), "DESIGN_SYSTEM_DECISION_NOT_NEWEST"],
+    ["design-register-decision-removed", editText(TRUTH_SOURCE_CONTRACT.product_decisions, (t) => t.replace(`## ${DESIGN_SYSTEM_DECISION}`, "## D-UI-DS-000")), "REQUIRED_DECISION_COUNT:D-UI-DS-001"],
+    ["design-index-binding-removed", editText(TRUTH_SOURCE_CONTRACT.ui_truth, (t) => t.replace(/^DESIGNSYSTEM_CONTRACT\..*\n/gm, "")), "DESIGN_SYSTEM_INDEX_CONTRACT"],
+    ["design-index-wrong-version", editText(TRUTH_SOURCE_CONTRACT.ui_truth, (t) => t.replace("version=1.1", "version=1.2")), "DESIGN_SYSTEM_INDEX_CONTRACT"],
+    ["design-index-wrong-role", editText(TRUTH_SOURCE_CONTRACT.ui_truth, (t) => t.replace("role=TOKEN_AND_COMPONENT_TRUTH", "role=PAGE_LAYOUT_FLOW_TRUTH")), "DESIGN_SYSTEM_INDEX_CONTRACT"],
+    ["design-index-wrong-sha", editText(TRUTH_SOURCE_CONTRACT.ui_truth, (t) => t.replace(sha, sha.replace(/^7/, "8"))), "DESIGN_SYSTEM_INDEX_CONTRACT"],
+    ["design-index-wrong-count", editText(TRUTH_SOURCE_CONTRACT.ui_truth, (t) => t.replace("manifestEntryCount=55", "manifestEntryCount=54")), "DESIGN_SYSTEM_INDEX_CONTRACT"],
+    ["design-index-extra-line", editText(TRUTH_SOURCE_CONTRACT.ui_truth, (t) => `${t}DESIGNSYSTEM_CONTRACT.extraSource=somewhere\n`), "DESIGN_SYSTEM_INDEX_CONTRACT"],
+  ];
+  const editPointer = (edit) => (root) => {
+    const p = absolute(root, DESIGN_POINTER);
+    const c = JSON.parse(readFileSync(p, "utf8"));
+    edit(c);
+    writeFileSync(p, JSON.stringify(c), "utf8");
+  };
+  const appendText = (rel, addition) => editText(rel, (t) => `${t}${addition}`);
+  const v5Mock = "docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html";
+  const convergenceCases = [
+    ["pointer-current-v5", editPointer((c) => { c.current = { path: v5Mock, sha256: "75258FF3BD4CC212C8E989061708A29DC26EA44B851BD28E8F16E8509B0CC0AA", approvedAt: "2026-09-14", role: "FLOW_AND_INTERMEDIATE_STEP_REFERENCE" }; }), "DESIGN_POINTER_ACTIVE_CURRENT"],
+    ["pointer-design-system-drift", editPointer((c) => { c.designSystem.version = "1.2"; }), "DESIGN_POINTER_DESIGN_SYSTEM"],
+    ["pointer-aggregate-mock-promoted", editPointer((c) => { c.historicalAggregateMocks[3].status = "FLOW_AND_INTERMEDIATE_STEP_REFERENCE"; }), "DESIGN_POINTER_HISTORICAL_MOCK:KREILE_GESAMTMOCK_V5"],
+    ["mission-flow-reference-v5", appendText(TRUTH_SOURCE_CONTRACT.active_execution, `path1_ui_convergence_flow_reference: ${v5Mock}\n`), "ACTIVE_LEGACY_DESIGN_BUILD_REFERENCE:mission"],
+    ["mission-next-build-v5", appendText(TRUTH_SOURCE_CONTRACT.active_execution, "path1_ui_convergence_next_product_build: V5_P3_ORDERS_V8_CUSTOMERS_V2_HOMES_AND_LANE_0_SEARCH\n"), "ACTIVE_LEGACY_DESIGN_BUILD_REFERENCE:mission"],
+    ["mission-product-truth-v5", editText(TRUTH_SOURCE_CONTRACT.active_execution, (t) => t.replace("ONLY_D_UI_DS_001_V1_1_PLUS_FOUR_PAGES_V2_V5_HISTORICAL_V6_REJECTED", "ONLY_V5_D_UI_V5_003_V6_REJECTED")), "ACTIVE_LEGACY_DESIGN_BUILD_REFERENCE:mission"],
+    ["architecture-v5-supplements", appendText(TRUTH_SOURCE_CONTRACT.architecture, "V5 ergänzt die vier unveränderten Seitenreferenzen um deren zusammenhängenden Ablauf.\n"), "ACTIVE_LEGACY_DESIGN_BUILD_REFERENCE:architecture"],
+    ["scope-v5-flow", appendText(TRUTH_SOURCE_CONTRACT.scope_modules, "D-UI-V5-001 legt V5 für den Ablauf fest.\n"), "ACTIVE_LEGACY_DESIGN_BUILD_REFERENCE:scope"],
+  ];
   const cases = [
+    ...designCases,
+    ...convergenceCases,
     ["missing-section", (root) => { const p = absolute(root, DEFAULT_CONFIG); const c = JSON.parse(readFileSync(p, "utf8")); delete c.documentClassifications; writeFileSync(p, JSON.stringify(c), "utf8"); }, "AUTHORITY_CONFIG_CLOSED_SCHEMA"],
     ["empty-section", (root) => { const p = absolute(root, DEFAULT_CONFIG); const c = JSON.parse(readFileSync(p, "utf8")); c.documentClassifications = []; writeFileSync(p, JSON.stringify(c), "utf8"); }, "DOCUMENT_CLASSIFICATIONS_EMPTY"],
     ["shadow-truth", (root) => { const p = absolute(root, DEFAULT_CONFIG); const c = JSON.parse(readFileSync(p, "utf8")); c.activeExecution = { branch: "shadow" }; writeFileSync(p, JSON.stringify(c), "utf8"); }, "AUTHORITY_CONFIG_CLOSED_SCHEMA"],
@@ -439,7 +670,30 @@ export function runAuthoritySelftest() {
       rmSync(root, { recursive: true, force: true });
     }
   }
-  return { passed, total: cases.length, validStates: validStates.length };
+  const allowed = [
+    ["Phillip V4 und Kundenkarte V2 bleiben Seitenwahrheit.\n", "plan"],
+    ["### Historie — D-UI-V5-001\nV5 legte den Ablauf fest.\n### Neu\nNur vier Seiten plus V1.1.\n", "spec"],
+    ["D-UI-V5-001, D-UI-V5-002, D-UI-V5-003 und der V5-Gesamtmock sind durch D-UI-DS-001 vollständig supersediert und nicht ausführbar; kein Bauinput.\n", "scope"],
+    ["historical_v5_ui_bindings:\n  classification: SUPERSEDED_NOT_EXECUTABLE_NOT_BUILD_INPUT\n  flow_reference: KREILE_GESAMTMOCK_V5_2026-09-14.html\n", "mission"],
+  ];
+  for (const [text, kind] of allowed) {
+    const findings = findActiveLegacyDesignBuildReferences(text, kind);
+    if (findings.length > 0) throw new Error(`selftest allowed ${kind} text rejected: ${findings.join(" | ")}`);
+  }
+  const functionCases = [
+    ["function-plan-text-names-v5-active", "Der Ablauf wird aus KREILE_GESAMTMOCK_V5_2026-09-14.html übernommen; V5 ergänzt die Seiten.\n", "plan"],
+    ["function-provenance-form-active-flow", "Der Ablauf folgt seit D-UI-V5-001 dem Gesamtmock.\n", "scope"],
+    ["function-active-section-after-historical-heading", "### Historie — D-UI-V5-001\nText.\n### Aktive Regel\nAblauf aus KREILE_GESAMTMOCK_V5_2026-09-14.html.\n", "spec"],
+    ["active-heading-containing-historical-word", "### Ablauf — historischer Kanon\nAblauf aus KREILE_GESAMTMOCK_V5_2026-09-14.html.\n", "spec"],
+    ["module-provenance-parenthesis-shape", "- **QUOTES/KV — Angebot vor Auftrag** (D-UI-V5-001, historischer Entscheidungsbezeichner; kein V5-Bauinput): eigenes persistentes Objekt.\n", "scope"],
+    ["partial-d-ui-v5-classification", "D-UI-V5-001 ist für die UI-Eingabe historisch.\n", "scope"],
+    ["function-mission-comment-canonical-flow-reference", "path1_ui_convergence_allowlist:\n  # D-UI-V5-001: kanonische Ablaufreferenz und ihre autoritativen Bindungen\n  - docs/project/linie/ui/x.html\n", "mission"],
+  ];
+  for (const [name, text, kind] of functionCases) {
+    if (findActiveLegacyDesignBuildReferences(text, kind).length === 0) throw new Error(`selftest ${name} expected a legacy design build reference`);
+    passed += 1;
+  }
+  return { passed, total: cases.length + functionCases.length, validStates: validStates.length };
 }
 
 function parseArgs(argv) {
@@ -473,7 +727,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       for (const error of errors) console.error(`- ${error}`);
       process.exitCode = 1;
     } else {
-      console.log(`AUTHORITY_GATE=PASS truth_types=${Object.keys(TRUTH_SOURCE_CONTRACT).length} ui_references=${UI_REFERENCE_CONTRACT.length}`);
+      console.log(`AUTHORITY_GATE=PASS truth_types=${Object.keys(TRUTH_SOURCE_CONTRACT).length} ui_references=${UI_REFERENCE_CONTRACT.length} design_system=${DESIGN_SYSTEM_CONTRACT.id}@${DESIGN_SYSTEM_CONTRACT.version}`);
     }
   }
 }

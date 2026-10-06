@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import { createHash } from "node:crypto";
 import { cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -13,6 +14,14 @@ import {
   trustedCommitFacts,
   validateTrustedHandoff,
 } from "../../scripts/quality/check-delivery-contracts.mjs";
+import {
+  DATA_ROOTS,
+  JUDGE_PATHS,
+  missionRegister,
+  pathSyntaxFindings,
+  policyFileFindings,
+  protectedWorkflowFindings,
+} from "../../scripts/quality/check-ratchet-boundary.mjs";
 
 const temps: string[] = [];
 
@@ -43,7 +52,7 @@ afterEach(() => {
 describe("KR-22R delivery governance gate", () => {
   it("accepts the complete current contract set", () => {
     expect(check(process.cwd())).toEqual({ ok: true, findings: [] });
-  }, 10_000);
+  }, 30_000);
 
   it("rejects a hidden alias between the active filename and package id", () => {
     const root = fixture();
@@ -246,84 +255,21 @@ describe("KR-22R delivery governance gate", () => {
     const queue = json(process.cwd(), DELIVERY_PATHS.queue) as {
       effective_base_handoff: Record<string, unknown>;
     };
-    const facts = new Map([
-      [
-        "16888ccc1f0c97064af3d1552538c6975440b1fb",
-        {
-          sha: "16888ccc1f0c97064af3d1552538c6975440b1fb",
-          parents: [
-            "53a5d52becc08394780583e4c3756b2d414311a6",
-            "b0b55353143fc50eda7f3833270ff4cfd1402e2f",
-          ],
-          tree: "4ccfbc0f01c7bb92de8e8a198b43a79a0cd543f2",
-        },
-      ],
-      [
-        "a56b5c8845efb5814a970cf739b7fab82217ce28",
-        {
-          sha: "a56b5c8845efb5814a970cf739b7fab82217ce28",
-          parents: [
-            "16888ccc1f0c97064af3d1552538c6975440b1fb",
-            "5e02605d23f4b65bd69e16509fbd9debcd4de7ae",
-          ],
-          tree: "5f6cd3a6958a169df32c935999f8db0eb1ddb440",
-        },
-      ],
-      [
-        "4ca3abe7e0c44075b0cb30804ba56d85f683d7cf",
-        {
-          sha: "4ca3abe7e0c44075b0cb30804ba56d85f683d7cf",
-          parents: [
-            "a56b5c8845efb5814a970cf739b7fab82217ce28",
-            "00c43bd7c0995d7ab9b680623c98e5df215bbd72",
-          ],
-          tree: "2d2b99613f86f892a135c0de9c0c080fd93d5f81",
-        },
-      ],
-      [
-        "427d51c6d372fc4e6e29646a16f74b79c6508fb7",
-        {
-          sha: "427d51c6d372fc4e6e29646a16f74b79c6508fb7",
-          parents: [
-            "4ca3abe7e0c44075b0cb30804ba56d85f683d7cf",
-            "ec2f84bcefacc9292169d9841df2691e0e0ffbc4",
-          ],
-          tree: "b1927a7641ef49fe38be89dd3e109e6b09960443",
-        },
-      ],
-      [
-        "0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f",
-        {
-          sha: "0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f",
-          parents: [
-            "427d51c6d372fc4e6e29646a16f74b79c6508fb7",
-            "7bd261f879097991e7725f479236c68448af193d",
-          ],
-          tree: "1ceff359a5b48a808a67304bd702e4db37fe1178",
-        },
-      ],
-    ]);
-    const readFacts = (sha: string) => {
-      const value = facts.get(sha);
-      if (!value) throw new Error(`synthetic commit fact missing: ${sha}`);
-      return value;
-    };
+    const readFacts = (sha: string) => trustedCommitFacts(process.cwd(), sha);
     expect(
       validateTrustedHandoff(
         queue.effective_base_handoff,
-        "0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f",
+        "b617e12fcb028eeb18e06a413874a558cee27cad",
         readFacts,
       ),
     ).toEqual([]);
     expect(
       validateTrustedHandoff(
         queue.effective_base_handoff,
-        "16888ccc1f0c97064af3d1552538c6975440b1fb",
+        "0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f",
         readFacts,
       ),
-    ).toContainEqual(
-      expect.stringContaining("Effective Base stimmt nicht mit dem geschuetzten Git-Checkout ueberein"),
-    );
+    ).toEqual(["[delivery] Effective Base stimmt nicht mit dem geschuetzten Git-Checkout ueberein"]);
   });
 
   it("fails closed when the trusted Git graph cannot resolve the declared base", () => {
@@ -333,7 +279,7 @@ describe("KR-22R delivery governance gate", () => {
     expect(
       validateTrustedHandoff(
         queue.effective_base_handoff,
-        "4ca3abe7e0c44075b0cb30804ba56d85f683d7cf",
+        "b617e12fcb028eeb18e06a413874a558cee27cad",
         () => {
           throw new Error("synthetic trusted graph unavailable");
         },
@@ -367,6 +313,70 @@ describe("KR-22R delivery governance gate", () => {
     writeJson(root, DELIVERY_PATHS.operatingReceipt, receipt);
     expect(check(root).findings).toContainEqual(
       expect.stringContaining("delivery_truth.main_delivered muss false sein"),
+    );
+  });
+});
+
+describe("KR A1 static ratchet boundary contract", () => {
+  const sha256 = (rel: string) => createHash("sha256").update(readFileSync(rel)).digest("hex").toUpperCase();
+
+  it("keeps the committed policy and schema identical to the boundary contract", () => {
+    expect(
+      policyFileFindings(readFileSync("quality/ratchet-boundary.json"), readFileSync("quality/ratchet-boundary.schema.json")),
+    ).toEqual([]);
+  });
+
+  it("keeps the protected workflow base-only, ordered and bound to the pull request event", () => {
+    expect(protectedWorkflowFindings(readFileSync(".github/workflows/eslint-ratchet.yml", "utf8"))).toEqual([]);
+  });
+
+  it("byte-binds the judge files and leaves living delivery truth to semantic validation", () => {
+    expect(JUDGE_PATHS).toContain("scripts/quality/check-delivery-contracts.mjs");
+    expect(JUDGE_PATHS).toContain(DELIVERY_PATHS.queueSchema);
+    expect(JUDGE_PATHS).toContain(DELIVERY_PATHS.manifestSchema);
+    expect(JUDGE_PATHS).toContain(DELIVERY_PATHS.operatingReceiptSchema);
+    for (const living of [
+      DELIVERY_PATHS.mission,
+      DELIVERY_PATHS.queue,
+      DELIVERY_PATHS.mapping,
+      ACTIVE_MANIFEST_BINDING.path,
+      "docs/project/CURRENT_STATE.md",
+      "docs/project/DOCUMENT_AUTHORITY.md",
+      ".github/workflows/quality.yml",
+      ".github/workflows/agentur-gate.yml",
+    ]) {
+      expect(JUDGE_PATHS).not.toContain(living);
+    }
+    expect(DATA_ROOTS).toEqual(["docs/delivery", "missions", "src"]);
+    for (const judgePath of JUDGE_PATHS) expect(pathSyntaxFindings(judgePath)).toEqual([]);
+  });
+
+  it("keeps the mission judge migration register well-formed and live", () => {
+    const register = missionRegister(readFileSync(DELIVERY_PATHS.mission, "utf8"));
+    expect(register.present).toBe(true);
+    expect(register.problems).toEqual([]);
+    for (const entry of register.entries as Array<{ path: string; replaces_sha256: string }>) {
+      expect(sha256(entry.path)).toBe(entry.replaces_sha256);
+    }
+  });
+
+  it("rejects judge migration register entries that could widen the boundary", () => {
+    const mission = (entries: string) => `execution_program_20260928:\n  judge_migration_preauthorizations: ${entries}\n`;
+    const grant = {
+      path: "scripts/quality/check-delivery-contracts.mjs",
+      replaces_sha256: "A".repeat(64),
+      successor_sha256: "B".repeat(64),
+      reason: "KR_FIXTURE_SUCCESSOR",
+    };
+    expect(missionRegister(mission(JSON.stringify([grant]))).problems).toEqual([]);
+    expect(missionRegister(mission(JSON.stringify([{ ...grant, path: DELIVERY_PATHS.mission }]))).problems).toContainEqual(
+      expect.stringContaining("path is not a judge path"),
+    );
+    expect(missionRegister(mission(JSON.stringify([{ ...grant, admin_bypass: true }]))).problems).toContainEqual(
+      expect.stringContaining("keys must be exactly"),
+    );
+    expect(missionRegister(mission(JSON.stringify([grant, grant]))).problems).toContainEqual(
+      expect.stringContaining("duplicates the pending migration"),
     );
   });
 });

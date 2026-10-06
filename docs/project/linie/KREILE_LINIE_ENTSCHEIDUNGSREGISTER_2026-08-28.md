@@ -662,3 +662,52 @@ Produktwahrheit wiederzubeleben.
 **Wesentlicher Nachteil:** Bei einer laengeren Mergegrenze entsteht eine
 streng geordnete Kandidatenkette. Jeder nachgelagerte Kandidat muss nach den
 tatsaechlichen Vorgaenger-Merges erneut gegen `main` bestaetigt werden.
+
+## D-UI-DS-001 — Quellenordnung UI: Seitenreferenzen und Designsystem V1.1 (Owner 2026-10-06)
+
+**Entscheidung/Wortlaut:** Für die UI gilt genau diese Ordnung:
+
+1. Die vier HTML-Dateien `KREILE_STARTSEITE_PHILLIP_V4_2026-08-20.html`,
+   `KREILE_STARTSEITE_ROLF_V8_2026-08-20.html`,
+   `KREILE_AUFTRAGSKARTE_MACHART_V8_2026-08-19.html` und
+   `KREILE_KUNDENKARTE_MACHART_V2_2026-08-19.html` bestimmen Seite, Layout
+   und Flow. Sie bleiben unverändert.
+2. Das Designsystem V1.1 (`designsystem_v1_1`) bestimmt Tokens und Komponenten.
+   Seine Hashliste `SHA256SUMS.txt` hat SHA-256
+   `71b0cb01f484beef042cfd04d31f951d2db2d441c427f8212f35a8d41a8041e5` und
+   enthält 55 Datei-Einträge plus eine Kommentarzeile.
+3. Bei einem Konflikt entscheidet die Seitenreferenz über Seitenlayout und
+   Ablauf, V1.1 über Tokens und Komponenten. Versionsname, Datum,
+   Screenshot, HTML-Titel oder eine andere Mockdatei übersteuern diese Ordnung
+   nie.
+4. V2/V3/V4 und der V5-Gesamtmock sind keine alternative Token-, Komponenten-
+   oder Seitenwahrheit und kein Bauinput. Der neue Eintrag löst damit nur den
+   bisherigen Designquellenkonflikt gegenüber `D-UI-V5-001` und `D-UI-V5-003`
+   auf; diese Einträge und alle Provenienzdateien bleiben als Historie erhalten.
+5. V1.1 wird mit diesem Eintrag noch nicht nach `ui/` importiert. Der Import
+   bleibt `KR-10b` nach Hash- und Authority-Gate vorbehalten.
+
+Maschinenlesbarer Vertrag (muss exakt mit `quality/authoritative-sources.json`
+und `00_UI_REFERENZEN_PFADE.md` übereinstimmen):
+
+```text
+DESIGNSYSTEM_CONTRACT.id=designsystem_v1_1
+DESIGNSYSTEM_CONTRACT.version=1.1
+DESIGNSYSTEM_CONTRACT.role=TOKEN_AND_COMPONENT_TRUTH
+DESIGNSYSTEM_CONTRACT.manifestFile=SHA256SUMS.txt
+DESIGNSYSTEM_CONTRACT.manifestSha256=71b0cb01f484beef042cfd04d31f951d2db2d441c427f8212f35a8d41a8041e5
+DESIGNSYSTEM_CONTRACT.manifestEntryCount=55
+DESIGNSYSTEM_CONTRACT.pageReferenceRole=PAGE_LAYOUT_FLOW_TRUTH
+DESIGNSYSTEM_CONTRACT.pageReferenceCount=4
+DESIGNSYSTEM_CONTRACT.conflictPageLayoutFlow=PAGE_REFERENCES
+DESIGNSYSTEM_CONTRACT.conflictTokensComponents=DESIGNSYSTEM_V1_1
+DESIGNSYSTEM_CONTRACT.aggregateMockRole=NOT_BUILD_INPUT
+DESIGNSYSTEM_CONTRACT.importStatus=NOT_IMPORTED_BEFORE_KR_10B
+```
+
+**Zweck:** Genau eine Token-/Komponentenwahrheit und genau vier Seitenwahrheiten;
+kein Streit mehr über Versionsnamen, Datum oder Gesamtmocks.
+
+**Wesentlicher Nachteil:** Bis zum Import in `KR-10b` ist V1.1 nur gebunden und
+noch nicht sichtbar wirksam; Konflikte zwischen Seitenreferenz und V1.1 müssen
+nach der obigen Teilung entschieden werden und nicht nach Optik.
