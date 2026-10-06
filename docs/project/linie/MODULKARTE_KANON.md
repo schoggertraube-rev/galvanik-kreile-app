@@ -8,14 +8,14 @@ Quelle: Owner-Modulmindmap „Baustruktur Mini-USP" (Stand 15.08.2026), ratifizi
 - **INTAKE — Infos & Ware rein** (F1.1 gebaut): Kunde wählen/neu, 1–20 Positionen, Menge, Oberfläche, Termin(wunsch), Foto/Dokument, Auftragsnummer + Receipt + Readback. UX-Gate: telefonbegleitend schnell, keine Formularwüste.
 - **ORDERS — Auftragskarte (Herz)** (F1.2+F1.3): Lifecycle angenommen→galvanik→fertig→abgeholt (ein Command je Übergang, kein Start-Klick; „fertig" = Freeze → Abrechnung). Lebende Karte (Mockup Auftragskarte V8): Leistungsarten, Metall, Fotos/Notizen jederzeit, Termin änderbar. Karte = UI des Moduls; Fremddaten nur lesend über Ports; keine eigene Speicherung → herauslösbar. RAUS aus Mock: Benchmarks, Merge, LTV, Analyse-Widgets, Stations-Innenleben.
 - **CUSTOMERS — Kundenkarte** (F1.3): Karte (Mockup Kundenkarte V2): Stammdaten, Kontakte, Eigenheiten, aktive Aufträge + Historie (über Port), Preisabsprachen, Notizen inkl. Telefonnotiz, Fotos/Dokumente. RAUS aus Mock: Analyse-/Marketing-Tab, LTV/Marge, Risk-Level, Auto-Mails. Ports gegen echte (auch leere) Daten, nie erfundene.
-- **QUOTES/KV — Angebot vor Auftrag** (D-UI-V5-001): eigenes persistentes, tenantgebundenes Objekt mit Status, Positionen, Ereignissen und Receipts. Ein Zuschlag erzeugt atomar und idempotent über den bestehenden F1.1-Vertrag genau einen verknüpften Auftrag. Kein E-Mail-, OCR-, KI- oder Provider-Fallback.
+- **QUOTES/KV — Angebot vor Auftrag**: eigenes persistentes, tenantgebundenes Objekt mit Status, Positionen, Ereignissen und Receipts. Ein Zuschlag erzeugt atomar und idempotent über den bestehenden F1.1-Vertrag genau einen verknüpften Auftrag. Kein E-Mail-, OCR-, KI- oder Provider-Fallback.
 - **KALENDER** (Pflicht vor Pilot F1.6): Woche/Monat als Projektion aus den Terminen der Fachmodule. Zielprovider gemäß D-ARCH-011 ist Microsoft 365 über Graph hinter einem tenantneutralen `CalendarPort`; kein eigener Event-Speicher, keine Kalender-Engine und kein Google-/Demo-Fallback. Ohne reales M365-/Exchange-/Entra-Konto und Provider-E2E bleibt die Capability geschlossen.
 - **ACCOUNTING (minimal) — raus** (F1.4+F1.5): Positionen aus eingefrorener Karte; Rechnung (Nummer, Snapshot, echtes PDF); Zahlung manuell bestätigen; offener Betrag; Status OFFEN/BEZAHLT. Buttons = Anschluss-Stellen (Command+Ereignis: fertig/bezahlt/abgleich). Kleiner Export-Formatierer (CSV/DATEV, Format-Freigabe Steuerberater).
 
 ## HOME/UI (kein eigenes „Modul", sondern Sicht auf dieselben Daten)
 - Werkstatt = Phillip V4 (Kontroll-Home „Heute sichern"). „Der Tag" = Rolf V8. Referenz: `ui/`.
 - `src/modules/werkstatt/` trägt die Phillip-V4-UI; `/warendurchlauf` ist die App-Kompositionswurzel. Der `Ware raus`-Port filtert ausschließlich die kanonische Station `fertig`. Ob diese Verträge auf `main` geliefert sind und welches Paket aktiv ist, steht ausschließlich in `CURRENT_STATE.md` beziehungsweise der Mission.
-- `ui/CURRENT_DESIGN_REFERENCE.json` bindet zusätzlich genau eine aktuelle Ablauf-/Zwischenschritt-Referenz. D-UI-V5-001 legt V5 für den Ablauf fest; die vier Einzelreferenzen bleiben Seitenwahrheit. Jede Kernseite besitzt ein globales Plus mit höchstens zwei Klicks bis zur manuellen Eingabe für Kunde oder Auftrag/KV. D-UI-V5-002 bindet sichtbar ausschließlich Rolf (Meister), Phillip (Werkstatt) und Gregor (Systemadministrator); technische Rollen bleiben ausschließlich der kompatible serverseitige Auth-/Audit-Vertrag. Die Produktidentität wird aus der serverseitig festgestellten Rolle abgeleitet; fehlende oder mehrdeutige Profile bleiben geschlossen.
+- Ablauf/Layout ausschließlich aus den vier Seitenreferenzen, Tokens/Komponenten aus V1.1 (D-UI-DS-001). Jede Kernseite besitzt ein globales Plus mit höchstens zwei Klicks bis zur manuellen Eingabe für Kunde oder Auftrag/KV. Sichtbar bindet ausschließlich Rolf (Meister), Phillip (Werkstatt) und Gregor (Systemadministrator); technische Rollen bleiben ausschließlich der kompatible serverseitige Auth-/Audit-Vertrag. Die Produktidentität wird aus der serverseitig festgestellten Rolle abgeleitet; fehlende oder mehrdeutige Profile bleiben geschlossen.
 
 ### Verbindlicher Zielumfang der Path-1-UI-Konvergenz (D-UI-CORE-001/002)
 
@@ -72,7 +72,7 @@ einen Big-Bang und ändert keine bestehende Rollen-, Auth- oder Schreibwahrheit.
 ## QUARANTÄNE — später andocken, jetzt NUR als Vertrag/Anschluss-Stelle, kein Eigenbau
 - OCR (externer Provider/API, kein Eigenbau).
 - Produktions-Innenleben: interne Galvanik-Stufen (galvanik bleibt Blackbox „ganze Produktion").
-- F2 Büro-Automatisierung: E-Mail an Kunde/KV/Auftrag verknüpfen (Provider-API) und „Büro-Arbeitsvorrat". Das persistente KV und seine atomare Umwandlung in F1.1 sind seit D-UI-V5-001 kanonischer Kern und keine Quarantäne mehr.
+- F2 Büro-Automatisierung: E-Mail an Kunde/KV/Auftrag verknüpfen (Provider-API) und „Büro-Arbeitsvorrat". Das persistente KV und seine atomare Umwandlung in F1.1 sind kanonischer Kern und keine Quarantäne mehr.
 - Anschluss an Ereignisse: DHL/Versand („abgeholt/versendet"), Mollie/Bank-Abgleich („bezahlt"), Mahnwesen („offener Betrag").
 
 ## SPÄTERE FACHMODULE — nicht als Alt-Route aktivieren
@@ -104,3 +104,10 @@ Grundappstamm nutzt wenige kanonische Routen; spätere Fachmodule werden erst
 nach ihren Verträgen angebunden. Die zahlreichen Alt-Routen sind deshalb kein
 Scopebeleg. Die Arbeit am Grundstamm bleibt Subtraktion + 5 Nähte (siehe Path
 1) + Suchleiste; M01 bis M07 folgen danach in der ratifizierten Reihenfolge.
+
+## Historie — durch D-UI-DS-001 supersedierte V5-UI-Entscheidungen
+
+D-UI-V5-001, D-UI-V5-002, D-UI-V5-003 und der V5-Gesamtmock sind durch D-UI-DS-001 vollständig supersediert und nicht ausführbar; kein Bauinput.
+
+- KV-Kern und F2-Abgrenzung: Herkunft D-UI-V5-001.
+- Sichtbare Identität: Herkunft D-UI-V5-002.

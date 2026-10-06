@@ -1,10 +1,11 @@
 {
   "schemaVersion": 1,
-  "current": {
-    "path": "docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html",
-    "sha256": "75258FF3BD4CC212C8E989061708A29DC26EA44B851BD28E8F16E8509B0CC0AA",
-    "approvedAt": "2026-09-14",
-    "role": "FLOW_AND_INTERMEDIATE_STEP_REFERENCE"
+  "status": "PROVENANCE_POINTER_D-UI-DS-001",
+  "designSystem": {
+    "id": "designsystem_v1_1",
+    "version": "1.1",
+    "manifestSha256": "71b0cb01f484beef042cfd04d31f951d2db2d441c427f8212f35a8d41a8041e5",
+    "importStatus": "NOT_IMPORTED_BEFORE_KR_10B"
   },
   "pageTruth": [
     "docs/project/linie/ui/KREILE_STARTSEITE_PHILLIP_V4_2026-08-20.html",
@@ -12,12 +13,27 @@
     "docs/project/linie/ui/KREILE_AUFTRAGSKARTE_MACHART_V8_2026-08-19.html",
     "docs/project/linie/ui/KREILE_KUNDENKARTE_MACHART_V2_2026-08-19.html"
   ],
-  "supersededAggregateMocks": [
-    "KREILE_GESAMTMOCK_V2",
-    "KREILE_GESAMTMOCK_V3",
-    "KREILE_GESAMTMOCK_V4"
+  "historicalAggregateMocks": [
+    {
+      "name": "KREILE_GESAMTMOCK_V2",
+      "status": "SUPERSEDED_BY_D-UI-DS-001_NOT_BUILD_INPUT"
+    },
+    {
+      "name": "KREILE_GESAMTMOCK_V3",
+      "status": "SUPERSEDED_BY_D-UI-DS-001_NOT_BUILD_INPUT"
+    },
+    {
+      "name": "KREILE_GESAMTMOCK_V4",
+      "status": "SUPERSEDED_BY_D-UI-DS-001_NOT_BUILD_INPUT"
+    },
+    {
+      "name": "KREILE_GESAMTMOCK_V5",
+      "path": "docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html",
+      "sha256": "75258FF3BD4CC212C8E989061708A29DC26EA44B851BD28E8F16E8509B0CC0AA",
+      "approvedAt": "2026-09-14",
+      "status": "SUPERSEDED_BY_D-UI-DS-001_NOT_BUILD_INPUT"
+    }
   ],
-  "supersededAggregateMockStatus": "SUPERSEDED_NOT_BUILD_INPUT",
   "metadataCaveat": "An internal HTML title such as V2-MOCK is stale metadata and never product text.",
   "updateContract": {
     "ownerConfirmationRequired": true,

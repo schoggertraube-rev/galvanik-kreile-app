@@ -11,7 +11,7 @@ execution_program_20260928:
   plan: _MODULDOSSIERS/00_PROJEKT/BUILDPLAN_KREILE_BIS_LIVE_2026-09-28_FINAL.md
   order: KR_00B0_GOVERNANCE -> KR_00B_TRUTH_SYNC -> KR_00D_ALTINVENTAR -> KR_00C_MISSION_CONTRACT -> KR_00E_DELIVERY_CONTRACT -> KR_00G_DOCS_IMPORT -> KR_00F_ROLLING_MANIFESTS -> KR_01R_GOVERNANCE_RECONTRACT -> KR_04_PR113_DISPOSITION -> SMALL_CURRENT_MAIN_REBUILDS -> PRODUCT_PACKAGES -> PILOT -> LIVE_GATE
   old_pr_disposition: PR_84_AND_PR_113_TO_PR_115_INVENTORY_THEN_REBUILD_OR_SUPERSEDE_NO_DIRECT_STACK_MERGE
-  product_truth: REPO_DECISION_REGISTER_ONLY_V5_D_UI_V5_003_V6_REJECTED
+  product_truth: REPO_DECISION_REGISTER_ONLY_D_UI_DS_001_V1_1_PLUS_FOUR_PAGES_V2_V5_HISTORICAL_V6_REJECTED
   review_rule: ONE_BROAD_CLAUDE_REVIEW_MAX_ONE_CORRECTION_TARGETED_DELTA_REVIEW
   merge_rule: REQUIRED_CHECKS_EXACT_SHA_CLEAN_TREE_AND_SEPARATE_PRODUCTION_EFFECT_AUTHORITY
   production_rule: NO_PRODUCTION_WITHOUT_SEPARATE_EXPLICIT_OWNER_AUTHORITY
@@ -272,18 +272,24 @@ path1_ui_convergence_a_entry: /start=UNAUTHENTICATED_LOGIN_ONLY -> /=ROLE_AWARE_
 path1_ui_convergence_a_google_calendar_blocker: ACTIVE_VISIBLE_GOOGLE_PROVIDER_CLAIM_MUST_BE_REMOVED_OR_ROUTE_FAIL_CLOSED_404
 path1_ui_convergence_a_acceptance: PRODUCT_PROFILE_LOGINS_ROLF_PHILLIP_GREGOR; INTERNAL_AUTH_COMPATIBILITY_FAIL_CLOSED; FULL_ROUTE_1914x917_1220x880_390x844; ALL_VISIBLE_NAV_CLICKED; REMOVED_AND_QUARANTINED_URLS_NEGATIVE; LEGACY_BASELINE_SHRINK_ONLY; NO_P0_P1
 path1_ui_convergence_design_pointer: docs/project/linie/ui/CURRENT_DESIGN_REFERENCE.json
-path1_ui_convergence_flow_reference: docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html
-path1_ui_convergence_flow_reference_sha256: 75258FF3BD4CC212C8E989061708A29DC26EA44B851BD28E8F16E8509B0CC0AA
-path1_ui_convergence_flow_reference_role: FLOW_AND_INTERMEDIATE_STEP_REFERENCE
+path1_ui_convergence_design_truth: D_UI_DS_001_V1_1_TOKENS_COMPONENTS_FOUR_BOUND_PAGES_LAYOUT_FLOW
 path1_ui_convergence_visible_personas: ROLF_MEISTER_DESKTOP; PHILLIP_WERKSTATT_TABLET
 path1_ui_convergence_global_plus: CUSTOMER_OR_ORDER_QUOTE_MANUAL_INPUT_WITHIN_TWO_CLICKS_REAL_PORTS_ONLY
-path1_ui_convergence_v5_work_unit_1: CANON_BINDING; NARROW_NEXT_APP_COMPOSITION_GATE; TENANT_BOUND_CUSTOMER_CREATE_COMMAND
-path1_ui_convergence_v5_work_unit_2: TENANT_BOUND_QUOTE_CREATE_READBACK; ATOMIC_IDEMPOTENT_AWARD_TO_EXISTING_F1_1_ORDER; RECEIPT_AND_LINK_READBACK
-path1_ui_convergence_v5_work_unit_2_status: REMOTE_CHECKPOINT_PASS_8dbc391d484c866e8442c4168858ec2edee1b2ee_NO_UI_PASS
-path1_ui_convergence_customer_facades: CLIENT_SAFE_PUBLIC_UI_AND_TYPES; SERVER_ONLY_SERVER_PUBLIC_COMMANDS; FAIL_CLOSED_MODULE_GATE
-path1_ui_convergence_followup_scope: ONE_V5_CAPTURE_DIRECT_F1_1_INTAKE_AND_CUSTOMER_TO_KV_TO_ORDER -> RECHECK_A_C_AGAINST_V5 -> SEARCH_AND_DAILY_JOBS_ST1_ST3 -> REAL_BROWSER_MATRIX
-path1_ui_convergence_smart_capture: RATIFIED_PORT_AND_MAPPING_SEAM_PENDING_PRODUCT_INTEGRATION_HIDDEN_UNTIL_REAL_GRAPH_OCR_CONTRACT
-path1_ui_convergence_v5_delivery_claim: TECHNICAL_MILESTONE_ONLY_NO_UI_PARTIAL_PASS_DRAFT_CANDIDATE_NO_MERGE
+historical_v5_ui_bindings_superseded_by_d_ui_ds_001:
+  classification: SUPERSEDED_NOT_EXECUTABLE_NOT_BUILD_INPUT
+  path1_ui_convergence_flow_reference: docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html
+  path1_ui_convergence_flow_reference_sha256: 75258FF3BD4CC212C8E989061708A29DC26EA44B851BD28E8F16E8509B0CC0AA
+  path1_ui_convergence_flow_reference_role: FLOW_AND_INTERMEDIATE_STEP_REFERENCE
+  path1_ui_convergence_v5_work_unit_1: CANON_BINDING; NARROW_NEXT_APP_COMPOSITION_GATE; TENANT_BOUND_CUSTOMER_CREATE_COMMAND
+  path1_ui_convergence_v5_work_unit_2: TENANT_BOUND_QUOTE_CREATE_READBACK; ATOMIC_IDEMPOTENT_AWARD_TO_EXISTING_F1_1_ORDER; RECEIPT_AND_LINK_READBACK
+  path1_ui_convergence_v5_work_unit_2_status: REMOTE_CHECKPOINT_PASS_8dbc391d484c866e8442c4168858ec2edee1b2ee_NO_UI_PASS
+  path1_ui_convergence_customer_facades: CLIENT_SAFE_PUBLIC_UI_AND_TYPES; SERVER_ONLY_SERVER_PUBLIC_COMMANDS; FAIL_CLOSED_MODULE_GATE
+  path1_ui_convergence_followup_scope: ONE_V5_CAPTURE_DIRECT_F1_1_INTAKE_AND_CUSTOMER_TO_KV_TO_ORDER -> RECHECK_A_C_AGAINST_V5 -> SEARCH_AND_DAILY_JOBS_ST1_ST3 -> REAL_BROWSER_MATRIX
+  path1_ui_convergence_smart_capture: RATIFIED_PORT_AND_MAPPING_SEAM_PENDING_PRODUCT_INTEGRATION_HIDDEN_UNTIL_REAL_GRAPH_OCR_CONTRACT
+  path1_ui_convergence_v5_delivery_claim: TECHNICAL_MILESTONE_ONLY_NO_UI_PARTIAL_PASS_DRAFT_CANDIDATE_NO_MERGE
+  path1_ui_convergence_v5_visible_build: GLOBAL_PLUS -> CUSTOMER_RECEIPT_READBACK -> QUOTE_RECEIPT_RELOAD_READBACK -> EXACTLY_ONE_EXISTING_F1_1_ORDER_RECEIPT_READBACK
+  path1_ui_convergence_v5_visible_build_status: LOCAL_REAL_DB_AND_BROWSER_PASS_EXACT_SHA_CI_PREVIEW_AND_INDEPENDENT_REVIEW_PENDING_NO_PARTIAL_UI_PASS
+  path1_ui_convergence_v5_002: VISIBLE_PRODUCT_IDENTITIES_ROLF_MEISTER_PHILLIP_WERKSTATT_GREGOR_SYSTEMADMIN; UNIQUE_PROFILE_FAIL_CLOSED; ROLF_CAPABILITY_BASED_CUSTOMER_KV_ORDER_AND_F1_1_INTAKE; NO_TECHNICAL_ROLE_OR_TEST_PERSONA_UI
 path1_provider_requirement_decisions: D-ARCH-012; D-AI-001; D-AI-002; D-RES-001
 path1_ai_002_status: CANONICAL_CROSS_CUTTING_CONTRACT_ISOLATED_DEV_CAPABILITY_PARTIAL_NO_PROVIDER_ACTIVATION
 path1_res_001_status: CANONICAL_CROSS_CUTTING_ACCEPTANCE_NO_NEW_TABLE_ROUTE_MODULE_RUNTIME_AUTH_OR_WRITE_PATH
@@ -292,10 +298,7 @@ path1_provider_platform_policy: APPROX_MAX_FIVE_PLATFORMS; SUPABASE_DATA_AUTH_ST
 path1_document_intelligence_policy: CHEAP_FIRST; ORIGINAL_PRIVATE_FIRST; UNTRUSTED_CONTENT; HUMAN_CONFIRMATION; ONE_SAFE_COMMAND_RECEIPT_READBACK
 path1_search_intelligence_policy: RLS_BEFORE_RETRIEVAL; STRUCTURED_FIRST; AUTHORIZED_PUBLIC_READ_PORTS_ONLY; DB_VIEWS_TRUTH; INDEX_RENEWABLE_PROJECTION; NO_MODEL_MUTATION
 path1_provider_activation_status: NONE_ACTIVATED_BY_THIS_WORK_UNIT
-path1_ui_convergence_next_product_build: V5_P3_ORDERS_V8_CUSTOMERS_V2_HOMES_AND_LANE_0_SEARCH
-path1_ui_convergence_v5_visible_build: GLOBAL_PLUS -> CUSTOMER_RECEIPT_READBACK -> QUOTE_RECEIPT_RELOAD_READBACK -> EXACTLY_ONE_EXISTING_F1_1_ORDER_RECEIPT_READBACK
-path1_ui_convergence_v5_visible_build_status: LOCAL_REAL_DB_AND_BROWSER_PASS_EXACT_SHA_CI_PREVIEW_AND_INDEPENDENT_REVIEW_PENDING_NO_PARTIAL_UI_PASS
-path1_ui_convergence_v5_002: VISIBLE_PRODUCT_IDENTITIES_ROLF_MEISTER_PHILLIP_WERKSTATT_GREGOR_SYSTEMADMIN; UNIQUE_PROFILE_FAIL_CLOSED; ROLF_CAPABILITY_BASED_CUSTOMER_KV_ORDER_AND_F1_1_INTAKE; NO_TECHNICAL_ROLE_OR_TEST_PERSONA_UI
+path1_ui_convergence_next_product_build: NONE_UNTIL_KR_PERF_LOGIN_01_R2
 owner_v5_recovery_execution_20260915:
   classification: HISTORICAL_SUPERSEDED_EXECUTION_NOT_CURRENT_NOT_DELIVERED
   status: TECHNICAL_SLICE_NO_UI_PASS_UNTIL_COMPLETE_A_TO_D_GATE
@@ -664,6 +667,15 @@ authority_ui_transition_allowlist:
   - quality/eslint-baseline.json
   - missions/F1_ORDER_TO_CASH_PILOT_001.yml
 
+historical_path1_ui_convergence_v5_allowlist_entries:
+  classification: SUPERSEDED_NOT_EXECUTABLE_NOT_BUILD_INPUT
+  # D-UI-V5-001, D-UI-V5-002, D-UI-V5-003 und der V5-Gesamtmock sind durch D-UI-DS-001 vollständig supersediert und nicht ausführbar; kein Bauinput.
+  entries:
+    # Historische Herkunft D-UI-V5-001 (supersediert durch D-UI-DS-001, kein Bauinput): reine Pfadliste, V5-Mock nur als Pfad
+    - docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html
+    # D-UI-V5-002: sichtbare Identität, capability-basierte Kernwege und reale Rechnungsroute
+    - docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html
+
 path1_ui_convergence_allowlist:
   # Steuerung, Lieferwahrheit und paketgebundene Evidence
   - missions/F1_ORDER_TO_CASH_PILOT_001.yml
@@ -677,8 +689,6 @@ path1_ui_convergence_allowlist:
   - e2e/smoke.spec.ts
   - .github/workflows/quality.yml
   - quality/module-gates-baseline.json
-  # D-UI-V5-001: kanonische Ablaufreferenz und ihre autoritativen Bindungen
-  - docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html
   - docs/project/linie/ui/CURRENT_DESIGN_REFERENCE.json
   - docs/project/linie/00_UI_REFERENZEN_PFADE.md
   - docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md
@@ -719,7 +729,7 @@ path1_ui_convergence_allowlist:
   - src/components/erfassung/__tests__/OrderIntakePanel.test.tsx
   - e2e/path1-ui-convergence-v5-global-create.spec.ts
   - docs/evidence/path1/PATH1_UI_CONVERGENCE_V5_GLOBAL_CREATE.md
-  # D-UI-V5-002: sichtbare Identität, capability-basierte Kernwege und reale Rechnungsroute
+  # Sichtbare Identität, capability-basierte Kernwege und reale Rechnungsroute
   - src/lib/auth/authorizationContract.ts
   - src/lib/auth/userDtos.ts
   - src/lib/auth/PermissionsContext.tsx
@@ -874,7 +884,6 @@ path1_ui_convergence_allowlist:
   - docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md
   - docs/project/linie/MODULKARTE_KANON.md
   - docs/project/linie/ui/CURRENT_DESIGN_REFERENCE.json
-  - docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html
   - missions/F1_ORDER_TO_CASH_PILOT_001.yml
   - quality/module-gates-baseline.json
   - scripts/quality/check-module-gates.mjs
