@@ -15,6 +15,20 @@
     "docs/project/linie/ui/KREILE_AUFTRAGSKARTE_MACHART_V8_2026-08-19.html",
     "docs/project/linie/ui/KREILE_KUNDENKARTE_MACHART_V2_2026-08-19.html"
   ],
+  "designSystem": {
+    "id": "designsystem_v1_1",
+    "version": "1.1",
+    "role": "TOKEN_AND_COMPONENT_TRUTH",
+    "manifestFile": "SHA256SUMS.txt",
+    "manifestSha256": "71b0cb01f484beef042cfd04d31f951d2db2d441c427f8212f35a8d41a8041e5",
+    "manifestEntryCount": 55,
+    "pageReferenceRole": "PAGE_LAYOUT_FLOW_TRUTH",
+    "pageReferenceCount": 4,
+    "conflictPageLayoutFlow": "PAGE_REFERENCES",
+    "conflictTokensComponents": "DESIGNSYSTEM_V1_1",
+    "aggregateMockRole": "NOT_BUILD_INPUT",
+    "importStatus": "NOT_IMPORTED_BEFORE_KR_10B"
+  },
   "documentClassifications": [
     { "path": "docs/project/DOCUMENT_AUTHORITY.md", "status": "REFERENCE_ONLY_NON_EXECUTABLE" },
     { "path": "docs/project/MASTERPLAN.md", "status": "REFERENCE_ONLY_NON_EXECUTABLE" },

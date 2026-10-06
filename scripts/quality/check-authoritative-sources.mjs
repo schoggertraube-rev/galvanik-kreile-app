@@ -29,7 +29,22 @@ const UI_REFERENCE_CONTRACT = Object.freeze([
   "docs/project/linie/ui/KREILE_AUFTRAGSKARTE_MACHART_V8_2026-08-19.html",
   "docs/project/linie/ui/KREILE_KUNDENKARTE_MACHART_V2_2026-08-19.html",
 ]);
-const REQUIRED_DECISIONS = Object.freeze(["D-GOV-001", "D-ARCH-011", "D-UI-CORE-001", "D-UI-CORE-002"]);
+const DESIGN_SYSTEM_DECISION = "D-UI-DS-001";
+const DESIGN_SYSTEM_CONTRACT = Object.freeze({
+  id: "designsystem_v1_1",
+  version: "1.1",
+  role: "TOKEN_AND_COMPONENT_TRUTH",
+  manifestFile: "SHA256SUMS.txt",
+  manifestSha256: "71b0cb01f484beef042cfd04d31f951d2db2d441c427f8212f35a8d41a8041e5",
+  manifestEntryCount: 55,
+  pageReferenceRole: "PAGE_LAYOUT_FLOW_TRUTH",
+  pageReferenceCount: UI_REFERENCE_CONTRACT.length,
+  conflictPageLayoutFlow: "PAGE_REFERENCES",
+  conflictTokensComponents: "DESIGNSYSTEM_V1_1",
+  aggregateMockRole: "NOT_BUILD_INPUT",
+  importStatus: "NOT_IMPORTED_BEFORE_KR_10B",
+});
+const REQUIRED_DECISIONS = Object.freeze(["D-GOV-001", "D-ARCH-011", "D-UI-CORE-001", "D-UI-CORE-002", "D-UI-V5-003", DESIGN_SYSTEM_DECISION]);
 const REQUIRED_CLASSIFICATIONS = Object.freeze([
   "docs/project/DOCUMENT_AUTHORITY.md",
   "docs/project/MASTERPLAN.md",
@@ -66,7 +81,7 @@ const REQUIRED_MODULE_IDS = Object.freeze([
   "module.calendar",
   "module.accounting-minimal",
 ]);
-const CONFIG_KEYS = Object.freeze(["schemaVersion", "truthTypes", "uiReferences", "documentClassifications"]);
+const CONFIG_KEYS = Object.freeze(["schemaVersion", "truthTypes", "uiReferences", "designSystem", "documentClassifications"]);
 const AUTHORITY_CLAIM = /(?:EINZIGE(?:\s+GÜLTIGE)?\s+(?:UI-)?WAHRHEIT|HÖCHSTE\s+PRIORITÄT|SCHLÄGT\s+ALLES|VORRANGAUTORITÄT)/iu;
 
 const posix = (value) => value.replaceAll("\\", "/");
@@ -104,6 +119,29 @@ function sameSet(left, right) {
 
 function uiNames(text) {
   return [...new Set([...text.matchAll(/KREILE_(?:STARTSEITE_(?:PHILLIP_V4|ROLF_V8)|AUFTRAGSKARTE_MACHART_V8|KUNDENKARTE_MACHART_V2)_2026-08-\d{2}\.html/g)].map((match) => match[0]))];
+}
+
+function designSystemBlock() {
+  return ["```text", ...Object.entries(DESIGN_SYSTEM_CONTRACT).map(([key, value]) => `DESIGNSYSTEM_CONTRACT.${key}=${value}`), "```"].join("\n");
+}
+
+function designSystemLines(text) {
+  return [...text.matchAll(/^DESIGNSYSTEM_CONTRACT\.([A-Za-z0-9]+)=(.*?)\s*$/gm)].map((match) => `${match[1]}=${match[2]}`);
+}
+
+function checkDesignSystemText(kind, text, errors) {
+  const expected = Object.entries(DESIGN_SYSTEM_CONTRACT).map(([key, value]) => `${key}=${value}`);
+  const actual = designSystemLines(text);
+  if (actual.length !== expected.length || !sameSet(actual, expected) || new Set(actual).size !== actual.length) {
+    errors.push(`DESIGN_SYSTEM_${kind}_CONTRACT`);
+  }
+}
+
+function stringValues(value, found = []) {
+  if (typeof value === "string") found.push(value);
+  else if (Array.isArray(value)) for (const item of value) stringValues(item, found);
+  else if (value && typeof value === "object") for (const item of Object.values(value)) stringValues(item, found);
+  return found;
 }
 
 function markdownFiles(root) {
@@ -171,6 +209,20 @@ export function checkAuthorityRepository(root = process.cwd(), configRel = DEFAU
   if (new Set(configuredRefs).size !== configuredRefs.length) errors.push("UI_REFERENCE_CONFIG_DUPLICATE");
   for (const rel of UI_REFERENCE_CONTRACT) if (!exists(root, rel)) errors.push(`UI_REFERENCE_PATH_MISSING:${rel}`);
 
+  const designSystem = config.designSystem;
+  if (!designSystem || typeof designSystem !== "object" || Array.isArray(designSystem)) {
+    errors.push("DESIGN_SYSTEM_CONFIG_MISSING");
+  } else {
+    const keys = Object.keys(designSystem);
+    if (!sameSet(keys, Object.keys(DESIGN_SYSTEM_CONTRACT))) errors.push(`DESIGN_SYSTEM_CONFIG_CLOSED_SCHEMA:${keys.join(",")}`);
+    for (const [key, value] of Object.entries(DESIGN_SYSTEM_CONTRACT)) {
+      if (designSystem[key] !== value) errors.push(`DESIGN_SYSTEM_CONFIG_VALUE:${key}`);
+    }
+  }
+  for (const value of stringValues(config)) {
+    if (path.win32.isAbsolute(value) || path.posix.isAbsolute(value)) errors.push(`AUTHORITY_CONFIG_ABSOLUTE_PATH:${value}`);
+  }
+
   const classifications = Array.isArray(config.documentClassifications) ? config.documentClassifications : [];
   if (classifications.length === 0) errors.push("DOCUMENT_CLASSIFICATIONS_EMPTY");
   const classifiedPaths = classifications.map((item) => item?.path).filter(Boolean);
@@ -192,7 +244,17 @@ export function checkAuthorityRepository(root = process.cwd(), configRel = DEFAU
     if (count !== 1) errors.push(`REQUIRED_DECISION_COUNT:${id}:${count}`);
   }
 
+  const decisionDates = [...decision.matchAll(/^##\s+(D-[A-Z0-9-]+)\b.*?\(Owner (\d{4}-\d{2}-\d{2})\)\s*$/gm)]
+    .map((match) => ({ id: match[1], date: match[2] }));
+  const designDecisionDate = decisionDates.find((item) => item.id === DESIGN_SYSTEM_DECISION)?.date;
+  if (!designDecisionDate) errors.push(`DESIGN_SYSTEM_DECISION_DATE_MISSING:${DESIGN_SYSTEM_DECISION}`);
+  else if (decisionDates.some((item) => item.id !== DESIGN_SYSTEM_DECISION && item.date >= designDecisionDate)) {
+    errors.push(`DESIGN_SYSTEM_DECISION_NOT_NEWEST:${DESIGN_SYSTEM_DECISION}`);
+  }
+  checkDesignSystemText("DECISION", decision, errors);
+
   const uiIndex = read(root, TRUTH_SOURCE_CONTRACT.ui_truth);
+  checkDesignSystemText("INDEX", uiIndex, errors);
   const indexedRefs = [...uiIndex.matchAll(/^- `([^`]+\.html)`/gm)]
     .map((match) => posix(path.join("docs/project/linie/ui", match[1])));
   if (!sameSet(indexedRefs, UI_REFERENCE_CONTRACT)) errors.push("UI_REFERENCE_INDEX_CONTRACT");
@@ -326,12 +388,12 @@ function writeFixture(root, calendarState = "legacy") {
   const banner = (status, title) => `<!-- STATUS: ${status} | CANONICAL_ENTRY: ${STANDARD_ENTRY} -->\n# ${title}\n`;
   const files = {
     "AGENTS.md": "# Rules\n",
-    "docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md": `## D-GOV-001 — one\n## D-ARCH-011 — provider\n## D-UI-CORE-001 — route\n## D-UI-CORE-002 — PATH1_UI_CONVERGENCE\nvollständig als Lieferbasis verworfen; kein UX-Lieferfortschritt\n${UI_REFERENCE_CONTRACT.map((rel) => `\`${path.basename(rel)}\``).join("\n")}\n`,
+    "docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md": `## D-GOV-001 — one\n## D-ARCH-011 — provider\n## D-UI-CORE-001 — route\n## D-UI-CORE-002 — PATH1_UI_CONVERGENCE\nvollständig als Lieferbasis verworfen; kein UX-Lieferfortschritt\n## D-UI-V5-003 — old (Owner 2026-09-21)\n## ${DESIGN_SYSTEM_DECISION} — design system order (Owner 2026-10-06)\n${designSystemBlock()}\n${UI_REFERENCE_CONTRACT.map((rel) => `\`${path.basename(rel)}\``).join("\n")}\n`,
     "docs/project/linie/MODULKARTE_KANON.md": `PATH1_UI_CONVERGENCE\nvollständig als Lieferbasis verworfen; kein UX-Lieferfortschritt\n${UI_REFERENCE_CONTRACT.map((rel) => `\`${path.basename(rel)}\``).join("\n")}\n`,
     "docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md": "PATH1_UI_CONVERGENCE\nvollständig als Lieferbasis verworfen; kein UX-Lieferfortschritt\n",
     "missions/F1_ORDER_TO_CASH_PILOT_001.yml": `mission_id: F1\nstatus: active\nbranch: gov\nbase_sha: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nactive_package: GOV\nnext_gate_after_active_package: REVIEW\nnext_product_priority: ${NEXT_PRODUCT_PROGRAM}\npath1_s5_search_status: CANDIDATE_PR_84_NOT_ACCEPTED_NOT_MERGED\npath1_calendar_status: NOT_STARTED_BLOCKED_EXTERNAL_PERMISSION\nf1_6_status: NOT_STARTED\n`,
     "docs/project/CURRENT_STATE.md": "# Current main@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nOWNER_UX_FAIL / NOT_DELIVERED\nFULLY_REJECTED_AS_DELIVERY_BASE\nkein Zielscreen-PASS\n",
-    "docs/project/linie/00_UI_REFERENZEN_PFADE.md": `# UI truth\n${UI_REFERENCE_CONTRACT.map((rel) => `- \`${path.basename(rel)}\``).join("\n")}\n`,
+    "docs/project/linie/00_UI_REFERENZEN_PFADE.md": `# UI truth\n${UI_REFERENCE_CONTRACT.map((rel) => `- \`${path.basename(rel)}\``).join("\n")}\n${designSystemBlock()}\n`,
     "docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json": JSON.stringify({ capabilities: [
       { stable_id: "page.real", kind: "PAGE_ROUTE", visible: true },
     ] }),
@@ -375,6 +437,7 @@ function writeFixture(root, calendarState = "legacy") {
     schemaVersion: 2,
     truthTypes: Object.entries(TRUTH_SOURCE_CONTRACT).map(([id, source]) => ({ id, source })),
     uiReferences: [...UI_REFERENCE_CONTRACT],
+    designSystem: { ...DESIGN_SYSTEM_CONTRACT },
     documentClassifications: [
       ...REQUIRED_CLASSIFICATIONS.map((rel) => ({ path: rel, status: "REFERENCE_ONLY_NON_EXECUTABLE" })),
     ],
@@ -384,7 +447,47 @@ function writeFixture(root, calendarState = "legacy") {
 }
 
 export function runAuthoritySelftest() {
+  const editConfig = (edit) => (root) => {
+    const p = absolute(root, DEFAULT_CONFIG);
+    const c = JSON.parse(readFileSync(p, "utf8"));
+    edit(c);
+    writeFileSync(p, JSON.stringify(c), "utf8");
+  };
+  const editText = (rel, edit) => (root) => {
+    const p = absolute(root, rel);
+    writeFileSync(p, edit(readFileSync(p, "utf8")), "utf8");
+  };
+  const sha = DESIGN_SYSTEM_CONTRACT.manifestSha256;
+  const designCases = [
+    ["design-wrong-version", editConfig((c) => { c.designSystem.version = "1.2"; }), "DESIGN_SYSTEM_CONFIG_VALUE:version"],
+    ["design-wrong-id", editConfig((c) => { c.designSystem.id = "designsystem_unbound"; }), "DESIGN_SYSTEM_CONFIG_VALUE:id"],
+    ["design-wrong-role", editConfig((c) => { c.designSystem.role = "PAGE_LAYOUT_FLOW_TRUTH"; }), "DESIGN_SYSTEM_CONFIG_VALUE:role"],
+    ["design-wrong-manifest-sha", editConfig((c) => { c.designSystem.manifestSha256 = sha.replace(/^7/, "8"); }), "DESIGN_SYSTEM_CONFIG_VALUE:manifestSha256"],
+    ["design-wrong-file-count", editConfig((c) => { c.designSystem.manifestEntryCount = 54; }), "DESIGN_SYSTEM_CONFIG_VALUE:manifestEntryCount"],
+    ["design-wrong-precedence", editConfig((c) => { c.designSystem.conflictTokensComponents = "PAGE_REFERENCES"; }), "DESIGN_SYSTEM_CONFIG_VALUE:conflictTokensComponents"],
+    ["design-wrong-page-precedence", editConfig((c) => { c.designSystem.conflictPageLayoutFlow = "DESIGNSYSTEM_V1_1"; }), "DESIGN_SYSTEM_CONFIG_VALUE:conflictPageLayoutFlow"],
+    ["design-aggregate-mock-promoted", editConfig((c) => { c.designSystem.aggregateMockRole = "BUILD_INPUT"; }), "DESIGN_SYSTEM_CONFIG_VALUE:aggregateMockRole"],
+    ["design-premature-import", editConfig((c) => { c.designSystem.importStatus = "IMPORTED"; }), "DESIGN_SYSTEM_CONFIG_VALUE:importStatus"],
+    ["design-extra-source-key", editConfig((c) => { c.designSystem.extraSource = "docs/project/linie/ui/other.html"; }), "DESIGN_SYSTEM_CONFIG_CLOSED_SCHEMA"],
+    ["design-absolute-path", editConfig((c) => { c.designSystem.manifestFile = "C:\\Users\\x\\designsystem_v1_1\\SHA256SUMS.txt"; }), "AUTHORITY_CONFIG_ABSOLUTE_PATH"],
+    ["design-binding-removed", editConfig((c) => { delete c.designSystem; }), "DESIGN_SYSTEM_CONFIG_MISSING"],
+    ["extra-ui-source-config", editConfig((c) => { c.uiReferences.push("docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html"); }), "UI_REFERENCE_CONFIG_CONTRACT"],
+    ["extra-ui-source-index", editText(TRUTH_SOURCE_CONTRACT.ui_truth, (t) => `${t}- \`KREILE_GESAMTMOCK_V5_2026-09-14.html\`\n`), "UI_REFERENCE_INDEX_CONTRACT"],
+    ["design-register-binding-removed", editText(TRUTH_SOURCE_CONTRACT.product_decisions, (t) => t.replace(/^DESIGNSYSTEM_CONTRACT\..*\n/gm, "")), "DESIGN_SYSTEM_DECISION_CONTRACT"],
+    ["design-register-wrong-sha", editText(TRUTH_SOURCE_CONTRACT.product_decisions, (t) => t.replace(sha, sha.replace(/^7/, "8"))), "DESIGN_SYSTEM_DECISION_CONTRACT"],
+    ["design-register-wrong-count", editText(TRUTH_SOURCE_CONTRACT.product_decisions, (t) => t.replace("manifestEntryCount=55", "manifestEntryCount=56")), "DESIGN_SYSTEM_DECISION_CONTRACT"],
+    ["design-register-precedence-swapped", editText(TRUTH_SOURCE_CONTRACT.product_decisions, (t) => t.replace("conflictPageLayoutFlow=PAGE_REFERENCES", "conflictPageLayoutFlow=DESIGNSYSTEM_V1_1")), "DESIGN_SYSTEM_DECISION_CONTRACT"],
+    ["design-register-not-newest", editText(TRUTH_SOURCE_CONTRACT.product_decisions, (t) => t.replace("(Owner 2026-10-06)", "(Owner 2026-09-01)")), "DESIGN_SYSTEM_DECISION_NOT_NEWEST"],
+    ["design-register-decision-removed", editText(TRUTH_SOURCE_CONTRACT.product_decisions, (t) => t.replace(`## ${DESIGN_SYSTEM_DECISION}`, "## D-UI-DS-000")), "REQUIRED_DECISION_COUNT:D-UI-DS-001"],
+    ["design-index-binding-removed", editText(TRUTH_SOURCE_CONTRACT.ui_truth, (t) => t.replace(/^DESIGNSYSTEM_CONTRACT\..*\n/gm, "")), "DESIGN_SYSTEM_INDEX_CONTRACT"],
+    ["design-index-wrong-version", editText(TRUTH_SOURCE_CONTRACT.ui_truth, (t) => t.replace("version=1.1", "version=1.2")), "DESIGN_SYSTEM_INDEX_CONTRACT"],
+    ["design-index-wrong-role", editText(TRUTH_SOURCE_CONTRACT.ui_truth, (t) => t.replace("role=TOKEN_AND_COMPONENT_TRUTH", "role=PAGE_LAYOUT_FLOW_TRUTH")), "DESIGN_SYSTEM_INDEX_CONTRACT"],
+    ["design-index-wrong-sha", editText(TRUTH_SOURCE_CONTRACT.ui_truth, (t) => t.replace(sha, sha.replace(/^7/, "8"))), "DESIGN_SYSTEM_INDEX_CONTRACT"],
+    ["design-index-wrong-count", editText(TRUTH_SOURCE_CONTRACT.ui_truth, (t) => t.replace("manifestEntryCount=55", "manifestEntryCount=54")), "DESIGN_SYSTEM_INDEX_CONTRACT"],
+    ["design-index-extra-line", editText(TRUTH_SOURCE_CONTRACT.ui_truth, (t) => `${t}DESIGNSYSTEM_CONTRACT.extraSource=somewhere\n`), "DESIGN_SYSTEM_INDEX_CONTRACT"],
+  ];
   const cases = [
+    ...designCases,
     ["missing-section", (root) => { const p = absolute(root, DEFAULT_CONFIG); const c = JSON.parse(readFileSync(p, "utf8")); delete c.documentClassifications; writeFileSync(p, JSON.stringify(c), "utf8"); }, "AUTHORITY_CONFIG_CLOSED_SCHEMA"],
     ["empty-section", (root) => { const p = absolute(root, DEFAULT_CONFIG); const c = JSON.parse(readFileSync(p, "utf8")); c.documentClassifications = []; writeFileSync(p, JSON.stringify(c), "utf8"); }, "DOCUMENT_CLASSIFICATIONS_EMPTY"],
     ["shadow-truth", (root) => { const p = absolute(root, DEFAULT_CONFIG); const c = JSON.parse(readFileSync(p, "utf8")); c.activeExecution = { branch: "shadow" }; writeFileSync(p, JSON.stringify(c), "utf8"); }, "AUTHORITY_CONFIG_CLOSED_SCHEMA"],
@@ -473,7 +576,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       for (const error of errors) console.error(`- ${error}`);
       process.exitCode = 1;
     } else {
-      console.log(`AUTHORITY_GATE=PASS truth_types=${Object.keys(TRUTH_SOURCE_CONTRACT).length} ui_references=${UI_REFERENCE_CONTRACT.length}`);
+      console.log(`AUTHORITY_GATE=PASS truth_types=${Object.keys(TRUTH_SOURCE_CONTRACT).length} ui_references=${UI_REFERENCE_CONTRACT.length} design_system=${DESIGN_SYSTEM_CONTRACT.id}@${DESIGN_SYSTEM_CONTRACT.version}`);
     }
   }
 }
