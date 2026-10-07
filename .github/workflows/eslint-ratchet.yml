@@ -66,17 +66,18 @@ jobs:
       - name: Enforce D-GOV-001 authority contract on candidate
         working-directory: ratchet-base
         env:
-          AUTHORITY_CHECKER_SHA256: "05d07eeb62e61049ccb1bbcd33b1742a9e53b56c5401bf7b0a3600e4399e80fb"
+          AUTHORITY_CHECKER_SHA256_OLD: "05d07eeb62e61049ccb1bbcd33b1742a9e53b56c5401bf7b0a3600e4399e80fb"
+          AUTHORITY_CHECKER_SHA256_NEW: "0800b45c4f51f72f5971611c321494470ccff93037f7a02c16dc88f73b6e6ab4"
           AUTHORITY_SCHEMA_SHA256: "322018e732ee86ecdd4a0320255b8bd216d7d2281302dff8b149dfbd3a80dbba"
         run: |
           set -euo pipefail
-          # KR-01R closes the temporary KR-01A transition. The protected base
-          # workflow now accepts exactly the ratified authority schema and checker.
+          # KR-GOV-R3A temporarily preauthorizes exactly the protected OLD checker and
+          # reviewed NEW successor checker. R3B closes this list to NEW immediately.
           checker="$GITHUB_WORKSPACE/candidate/scripts/quality/check-authoritative-sources.mjs"
           schema="$GITHUB_WORKSPACE/candidate/quality/authoritative-sources.json"
           checker_sha="$(sha256sum "$checker" | cut -d' ' -f1)"
           schema_sha="$(sha256sum "$schema" | cut -d' ' -f1)"
-          if [[ "$checker_sha" != "$AUTHORITY_CHECKER_SHA256" ]]; then
+          if [[ "$checker_sha" != "$AUTHORITY_CHECKER_SHA256_OLD" && "$checker_sha" != "$AUTHORITY_CHECKER_SHA256_NEW" ]]; then
             echo "Authority checker hash mismatch: $checker_sha" >&2
             exit 1
           fi
