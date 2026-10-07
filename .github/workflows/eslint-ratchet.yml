@@ -119,24 +119,21 @@ jobs:
       - name: Enforce protected delivery contracts and rolling queue
         working-directory: ratchet-base
         env:
-          # KR-GOV-FIXPOINT-EXIT-B: the single preauthorized successor is the exact,
-          # independently reviewed EXIT-C checker. The protected-base checker is
-          # accepted only by direct byte equality. This value lives in the protected
-          # base workflow; nothing from the candidate selects or alters it.
-          KR_EXIT_C_SUCCESSOR_CHECKER_SHA256: "23730f27e75947fdc323ace12f7f544e22080e21edefe46af70268d09c74de67"
           DELIVERY_REQUIRE_TRUSTED_BASE: "true"
           DELIVERY_TRUSTED_BASE_SHA: ${{ steps.delivery-trust-anchor.outputs.trusted_base_sha }}
           DELIVERY_TRUSTED_REPO: ${{ github.workspace }}/ratchet-base
         run: |
           set -euo pipefail
+          # The candidate checker is accepted only when it is byte-identical to the
+          # protected-base checker. There is no exception list and no successor pin.
           protected_checker="$GITHUB_WORKSPACE/ratchet-base/scripts/quality/check-delivery-contracts.mjs"
           candidate_checker="$GITHUB_WORKSPACE/candidate/scripts/quality/check-delivery-contracts.mjs"
           test -f "$candidate_checker"
           test ! -L "$candidate_checker"
           protected_sha="$(sha256sum "$protected_checker" | cut -d' ' -f1)"
           candidate_sha="$(sha256sum "$candidate_checker" | cut -d' ' -f1)"
-          if [[ "$candidate_sha" != "$protected_sha" && "$candidate_sha" != "$KR_EXIT_C_SUCCESSOR_CHECKER_SHA256" ]]; then
-            echo "Delivery checker hash is neither protected main nor the exact reviewed EXIT-C successor: $candidate_sha" >&2
+          if [[ "$candidate_sha" != "$protected_sha" ]]; then
+            echo "Delivery checker hash is not the protected-base checker: $candidate_sha" >&2
             exit 1
           fi
           isolated_dir="$(mktemp -d "$RUNNER_TEMP/kreile-delivery-checker.XXXXXX")"
@@ -148,10 +145,5 @@ jobs:
             echo "Isolated delivery checker copy changed bytes: $isolated_sha" >&2
             exit 1
           fi
-          if [[ "$candidate_sha" == "$protected_sha" ]]; then
-            node "$isolated_dir/check-delivery-contracts.mjs" --selftest --root "$GITHUB_WORKSPACE/candidate"
-            node "$isolated_dir/check-delivery-contracts.mjs" --root "$GITHUB_WORKSPACE/candidate"
-          else
-            node "$isolated_dir/check-delivery-contracts.mjs" --selftest --root "$GITHUB_WORKSPACE/candidate" --expect-self-sha256 "$KR_EXIT_C_SUCCESSOR_CHECKER_SHA256"
-            node "$isolated_dir/check-delivery-contracts.mjs" --root "$GITHUB_WORKSPACE/candidate" --expect-self-sha256 "$KR_EXIT_C_SUCCESSOR_CHECKER_SHA256"
-          fi
+          node "$isolated_dir/check-delivery-contracts.mjs" --selftest --root "$GITHUB_WORKSPACE/candidate" --expect-self-sha256 "$protected_sha"
+          node "$isolated_dir/check-delivery-contracts.mjs" --root "$GITHUB_WORKSPACE/candidate" --expect-self-sha256 "$protected_sha"
