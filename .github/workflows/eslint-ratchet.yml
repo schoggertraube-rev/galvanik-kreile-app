@@ -99,6 +99,23 @@ jobs:
             --base-baseline "$GITHUB_WORKSPACE/ratchet-base/quality/module-gates-baseline.json" \
             --schema "$GITHUB_WORKSPACE/ratchet-base/docs/architecture/MODULE_MANIFEST.schema.json"
 
+      - name: Resolve frozen delivery trust anchor from protected base
+        id: delivery-trust-anchor
+        working-directory: ratchet-base
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # Resolver bytes come only from the protected base checkout; the
+          # candidate checkout is data and never supplies executable resolver code.
+          node "$GITHUB_WORKSPACE/ratchet-base/scripts/quality/resolve-delivery-trust-anchor.mjs" \
+            --trusted-repo "$GITHUB_WORKSPACE/ratchet-base" \
+            --candidate-repo "$GITHUB_WORKSPACE/candidate" \
+            --base-sha "$PR_BASE_SHA" \
+            --head-sha "$PR_HEAD_SHA" \
+            --github-output "$GITHUB_OUTPUT"
+
       - name: Enforce protected delivery contracts and rolling queue
         working-directory: ratchet-base
         env:
@@ -112,7 +129,7 @@ jobs:
           KR22R_DELIVERY_CHECKER_SHA256: "3b92ca7e7d839fd22af699df71012ea4d9c243a917449707c4fc3ac9926e2a27"
           KR22R_RECOVERY_DELIVERY_CHECKER_SHA256: "2ab91ae1fcb15bd9986edd166e86240b39509210454aa3d48146e1720500f11e"
           DELIVERY_REQUIRE_TRUSTED_BASE: "true"
-          DELIVERY_TRUSTED_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          DELIVERY_TRUSTED_BASE_SHA: ${{ steps.delivery-trust-anchor.outputs.trusted_base_sha }}
           DELIVERY_TRUSTED_REPO: ${{ github.workspace }}/ratchet-base
         run: |
           set -euo pipefail

@@ -1,6 +1,17 @@
 // @vitest-environment node
 
-import { cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import {
+  copyFileSync,
+  cpSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -302,6 +313,17 @@ describe("KR-22R delivery governance gate", () => {
           tree: "1ceff359a5b48a808a67304bd702e4db37fe1178",
         },
       ],
+      [
+        "b617e12fcb028eeb18e06a413874a558cee27cad",
+        {
+          sha: "b617e12fcb028eeb18e06a413874a558cee27cad",
+          parents: [
+            "0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f",
+            "eca0d5d4d6f831cd52031b943b1d9ef4516ad5a9",
+          ],
+          tree: "b87a4079ef4aa92e5ac28dd19d356e0f599cb13f",
+        },
+      ],
     ]);
     const readFacts = (sha: string) => {
       const value = facts.get(sha);
@@ -311,7 +333,7 @@ describe("KR-22R delivery governance gate", () => {
     expect(
       validateTrustedHandoff(
         queue.effective_base_handoff,
-        "0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f",
+        "b617e12fcb028eeb18e06a413874a558cee27cad",
         readFacts,
       ),
     ).toEqual([]);
@@ -368,5 +390,316 @@ describe("KR-22R delivery governance gate", () => {
     expect(check(root).findings).toContainEqual(
       expect.stringContaining("delivery_truth.main_delivered muss false sein"),
     );
+  });
+});
+
+const RESOLVER_SOURCE = path.resolve("scripts/quality/resolve-delivery-trust-anchor.mjs");
+const RESOLVER_REL = "scripts/quality/resolve-delivery-trust-anchor.mjs";
+const QUEUE_REL = "docs/delivery/ROLLING_MANIFEST_QUEUE_V1.json";
+const IDENTITY = [
+  "-c",
+  "user.name=Resolver Test",
+  "-c",
+  "user.email=resolver-test@example.invalid",
+  "-c",
+  "commit.gpgsign=false",
+  "-c",
+  "core.autocrlf=false",
+];
+
+type QueueDoc = {
+  schema_version: number;
+  effective_base_handoff: {
+    queue_parent_sha: string;
+    effective_base_sha: string;
+    effective_base_tree_sha: string;
+    entries: Array<Record<string, unknown>>;
+  };
+};
+
+type Graph = { repo: string; base: string; anchor: string; parent: string; tree: string };
+type Candidate = { repo: string; head: string };
+type CandidateKind = "merge" | "squash" | "rebase" | "stale";
+
+function git(repo: string, args: string[]): string {
+  const result = spawnSync("git", ["-C", repo, ...IDENTITY, ...args], {
+    encoding: "utf8",
+    env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_TERMINAL_PROMPT: "0" },
+  });
+  if (result.status !== 0) throw new Error(`git ${args.join(" ")} failed: ${result.stderr}`);
+  return result.stdout.trim();
+}
+
+function tempDir(prefix: string): string {
+  const dir = mkdtempSync(path.join(tmpdir(), prefix));
+  temps.push(dir);
+  return dir;
+}
+
+function commitFile(repo: string, rel: string, text: string): string {
+  writeFileSync(path.join(repo, rel), text);
+  git(repo, ["add", "--", rel]);
+  git(repo, ["commit", "-q", "-m", `change ${rel}`]);
+  return git(repo, ["rev-parse", "HEAD"]);
+}
+
+function buildTrusted(
+  shape: "linear" | "second-parent",
+  options: {
+    mutate?: (queue: QueueDoc) => void;
+    rawQueue?: (text: string) => string;
+    symlinkQueueInTree?: boolean;
+  } = {},
+): Graph {
+  const repo = tempDir("kreile-resolver-trusted-");
+  mkdirSync(path.join(repo, "docs/delivery"), { recursive: true });
+  mkdirSync(path.join(repo, "scripts/quality"), { recursive: true });
+  git(repo, ["init", "-q"]);
+  git(repo, ["symbolic-ref", "HEAD", "refs/heads/main"]);
+  const parent = commitFile(repo, "root.txt", "root\n");
+  git(repo, ["checkout", "-q", "-b", "feature"]);
+  const candidate = commitFile(repo, "feature.txt", "feature\n");
+  git(repo, ["checkout", "-q", "-b", "anchorline", parent]);
+  git(repo, ["merge", "--no-ff", "-q", "-m", "merge feature", candidate]);
+  const anchor = git(repo, ["rev-parse", "HEAD"]);
+  const tree = git(repo, ["rev-parse", "HEAD^{tree}"]);
+  if (shape === "second-parent") {
+    git(repo, ["checkout", "-q", "-b", "mainline", parent]);
+    commitFile(repo, "side.txt", "side\n");
+    git(repo, ["merge", "--no-ff", "-q", "-m", "merge anchor line", "anchorline"]);
+  }
+  const queue: QueueDoc = {
+    schema_version: 1,
+    effective_base_handoff: {
+      queue_parent_sha: parent,
+      effective_base_sha: anchor,
+      effective_base_tree_sha: tree,
+      entries: [
+        {
+          pr: 1,
+          parent_sha: parent,
+          candidate_sha: candidate,
+          merge_sha: anchor,
+          tree_sha: tree,
+          scope: "PROTECTED_CI_GOVERNANCE_ONLY",
+          review_result: "PASS_NO_OPEN_P0_P1_P2_P3",
+          post_main_agentur_gate_run: 1,
+          post_main_quality_run: 2,
+          vercel_status: "SUCCESS",
+        },
+      ],
+    },
+  };
+  options.mutate?.(queue);
+  const text = `${JSON.stringify(queue, null, 2)}\n`;
+  writeFileSync(path.join(repo, QUEUE_REL), options.rawQueue ? options.rawQueue(text) : text);
+  copyFileSync(RESOLVER_SOURCE, path.join(repo, RESOLVER_REL));
+  git(repo, ["add", "--", RESOLVER_REL]);
+  if (options.symlinkQueueInTree) {
+    const target = path.join(tempDir("kreile-resolver-link-"), "target.txt");
+    writeFileSync(target, "other-queue.json");
+    const blob = git(repo, ["hash-object", "-w", target]);
+    git(repo, ["update-index", "--add", "--cacheinfo", `120000,${blob},${QUEUE_REL}`]);
+  } else {
+    git(repo, ["add", "--", QUEUE_REL]);
+  }
+  git(repo, ["commit", "-q", "-m", "queue and resolver"]);
+  return { repo, base: git(repo, ["rev-parse", "HEAD"]), anchor, parent, tree };
+}
+
+function buildCandidate(trusted: Graph, kind: CandidateKind): Candidate {
+  const repo = tempDir("kreile-resolver-candidate-");
+  cpSync(trusted.repo, repo, { recursive: true });
+  if (kind === "squash") {
+    git(repo, ["checkout", "-q", "-b", "cand", trusted.base]);
+    commitFile(repo, "squash.txt", "squash\n");
+  } else if (kind === "merge") {
+    git(repo, ["checkout", "-q", "-b", "cand", trusted.anchor]);
+    commitFile(repo, "merge-side.txt", "side\n");
+    git(repo, ["merge", "--no-ff", "-q", "-m", "merge current base", trusted.base]);
+  } else if (kind === "rebase") {
+    git(repo, ["checkout", "-q", "-b", "cand", trusted.anchor]);
+    commitFile(repo, "rebase-1.txt", "1\n");
+    commitFile(repo, "rebase-2.txt", "2\n");
+    git(repo, ["rebase", "-q", "--onto", trusted.base, trusted.anchor]);
+  } else {
+    git(repo, ["checkout", "-q", "-b", "cand", trusted.anchor]);
+    commitFile(repo, "stale.txt", "stale\n");
+  }
+  return { repo, head: git(repo, ["rev-parse", "HEAD"]) };
+}
+
+function runResolver(
+  trusted: Graph,
+  candidate: Candidate,
+  options: { script?: string; base?: string; head?: string } = {},
+) {
+  const output = path.join(tempDir("kreile-resolver-output-"), "github-output");
+  writeFileSync(output, "");
+  const result = spawnSync(
+    process.execPath,
+    [
+      options.script ?? path.join(trusted.repo, RESOLVER_REL),
+      "--trusted-repo",
+      trusted.repo,
+      "--candidate-repo",
+      candidate.repo,
+      "--base-sha",
+      options.base ?? trusted.base,
+      "--head-sha",
+      options.head ?? candidate.head,
+      "--github-output",
+      output,
+    ],
+    { encoding: "utf8" },
+  );
+  return { status: result.status, stderr: result.stderr, output: readFileSync(output, "utf8") };
+}
+
+function expectRejected(result: ReturnType<typeof runResolver>, reason: RegExp): void {
+  expect(result.stderr).toMatch(reason);
+  expect(result.status).toBe(1);
+  expect(result.output).toBe("");
+}
+
+describe("KR-GOV-FIXPOINT-EXIT-A protected-base anchor resolver", () => {
+  it("passes its own hermetic self-test without network", () => {
+    const result = spawnSync(process.execPath, [RESOLVER_SOURCE, "--self-test"], { encoding: "utf8" });
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("RESOLVER_SELF_TEST_PASS");
+  }, 120_000);
+
+  it.each(["merge", "squash", "rebase"] as const)(
+    "resolves the frozen anchor for a %s descendant of the current base",
+    (kind) => {
+      const trusted = buildTrusted("linear");
+      const candidate = buildCandidate(trusted, kind);
+      const result = runResolver(trusted, candidate);
+      expect(result.stderr).toBe("");
+      expect(result.status).toBe(0);
+      expect(result.output).toBe(`trusted_base_sha=${trusted.anchor}\n`);
+    },
+    60_000,
+  );
+
+  it("rejects an anchor reachable only through a second-parent, requiring first-parent ancestry", () => {
+    const trusted = buildTrusted("second-parent");
+    const candidate = buildCandidate(trusted, "squash");
+    expectRejected(runResolver(trusted, candidate), /first-parent chain/);
+  }, 60_000);
+
+  it("rejects a stale candidate head that does not descend from the current base", () => {
+    const trusted = buildTrusted("linear");
+    const candidate = buildCandidate(trusted, "stale");
+    expectRejected(runResolver(trusted, candidate), /stale candidate head/);
+  }, 60_000);
+
+  it("rejects a handoff entry with a wrong parent", () => {
+    const bogus = "1".repeat(40);
+    const trusted = buildTrusted("linear", {
+      mutate: (queue) => {
+        queue.effective_base_handoff.queue_parent_sha = bogus;
+        queue.effective_base_handoff.entries[0]!.parent_sha = bogus;
+      },
+    });
+    expectRejected(runResolver(trusted, buildCandidate(trusted, "squash")), /wrong parent/);
+  }, 60_000);
+
+  it("rejects a handoff entry with a wrong tree", () => {
+    const bogus = "2".repeat(40);
+    const trusted = buildTrusted("linear", {
+      mutate: (queue) => {
+        queue.effective_base_handoff.effective_base_tree_sha = bogus;
+        queue.effective_base_handoff.entries[0]!.tree_sha = bogus;
+      },
+    });
+    expectRejected(runResolver(trusted, buildCandidate(trusted, "squash")), /wrong tree/);
+  }, 60_000);
+
+  it("rejects an altered entry whose merge commit is not a two-parent handoff merge", () => {
+    const altered = buildTrusted("linear", {
+      mutate: (queue) => {
+        const entry = queue.effective_base_handoff.entries[0]!;
+        queue.effective_base_handoff.effective_base_sha = entry.parent_sha as string;
+        entry.merge_sha = entry.parent_sha;
+      },
+    });
+    expectRejected(runResolver(altered, buildCandidate(altered, "squash")), /exactly two parents/);
+  }, 60_000);
+
+  it("rejects duplicate handoff entries", () => {
+    const trusted = buildTrusted("linear", {
+      mutate: (queue) => {
+        queue.effective_base_handoff.entries.push({ ...queue.effective_base_handoff.entries[0]! });
+      },
+    });
+    expectRejected(runResolver(trusted, buildCandidate(trusted, "squash")), /duplicate handoff entry/);
+  }, 60_000);
+
+  it("rejects a duplicate JSON key in the protected queue", () => {
+    const trusted = buildTrusted("linear", {
+      rawQueue: (text) => text.replace('"schema_version": 1,', '"schema_version": 1,\n  "schema_version": 1,'),
+    });
+    expectRejected(runResolver(trusted, buildCandidate(trusted, "squash")), /duplicate or forbidden key/);
+  }, 60_000);
+
+  it("rejects a queue stored as a symlink in the protected base tree", () => {
+    const trusted = buildTrusted("linear", { symlinkQueueInTree: true });
+    expectRejected(runResolver(trusted, buildCandidate(trusted, "squash")), /symlink forbidden for queue/);
+  }, 60_000);
+
+  it("rejects a queue symlink in the protected work tree", (context) => {
+    const trusted = buildTrusted("linear");
+    const candidate = buildCandidate(trusted, "squash");
+    const queuePath = path.join(trusted.repo, QUEUE_REL);
+    try {
+      unlinkSync(queuePath);
+      symlinkSync(path.join(candidate.repo, QUEUE_REL), queuePath);
+    } catch {
+      context.skip();
+    }
+    expectRejected(runResolver(trusted, candidate), /symlink forbidden for queue/);
+  }, 60_000);
+
+  it("never lets candidate bytes select the anchor", () => {
+    const trusted = buildTrusted("linear");
+    const candidate = buildCandidate(trusted, "squash");
+    const queue = JSON.parse(readFileSync(path.join(candidate.repo, QUEUE_REL), "utf8")) as QueueDoc;
+    queue.effective_base_handoff.effective_base_sha = trusted.base;
+    writeFileSync(path.join(candidate.repo, QUEUE_REL), `${JSON.stringify(queue, null, 2)}\n`);
+    git(candidate.repo, ["add", "--", QUEUE_REL]);
+    git(candidate.repo, ["commit", "-q", "-m", "candidate selects its own anchor"]);
+    const head = git(candidate.repo, ["rev-parse", "HEAD"]);
+    const result = runResolver(trusted, { repo: candidate.repo, head });
+    expect(result.status).toBe(0);
+    expect(result.output).toBe(`trusted_base_sha=${trusted.anchor}\n`);
+  }, 60_000);
+
+  it("refuses to run resolver bytes that live in the candidate checkout", () => {
+    const trusted = buildTrusted("linear");
+    const candidate = buildCandidate(trusted, "squash");
+    const hostile = path.join(candidate.repo, RESOLVER_REL);
+    copyFileSync(RESOLVER_SOURCE, hostile);
+    expectRejected(runResolver(trusted, candidate, { script: hostile }), /protected-base checkout only/);
+  }, 60_000);
+
+  it("rejects a candidate checkout whose HEAD is not the declared head", () => {
+    const trusted = buildTrusted("linear");
+    const candidate = buildCandidate(trusted, "squash");
+    expectRejected(
+      runResolver(trusted, candidate, { head: trusted.anchor }),
+      /candidate repository HEAD is not the PR head/,
+    );
+  }, 60_000);
+
+  it("fails closed on missing, unknown and duplicate arguments", () => {
+    const run = (args: string[]) => spawnSync(process.execPath, [RESOLVER_SOURCE, ...args], { encoding: "utf8" });
+    expect(run([])).toMatchObject({ status: 1, stderr: expect.stringContaining("missing required argument") });
+    expect(run(["--other", "x"])).toMatchObject({ status: 1, stderr: expect.stringContaining("unknown argument") });
+    expect(run(["--base-sha", "a", "--base-sha", "b"])).toMatchObject({
+      status: 1,
+      stderr: expect.stringContaining("duplicate argument"),
+    });
   });
 });

@@ -20,8 +20,8 @@
   },
   "effective_base_handoff": {
     "queue_parent_sha": "16888ccc1f0c97064af3d1552538c6975440b1fb",
-    "effective_base_sha": "0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f",
-    "effective_base_tree_sha": "1ceff359a5b48a808a67304bd702e4db37fe1178",
+    "effective_base_sha": "b617e12fcb028eeb18e06a413874a558cee27cad",
+    "effective_base_tree_sha": "b87a4079ef4aa92e5ac28dd19d356e0f599cb13f",
     "entries": [
       {
         "pr": 137,
@@ -69,6 +69,18 @@
         "review_result": "PASS_NO_OPEN_P0_P1_P2_P3",
         "post_main_agentur_gate_run": 37301985630,
         "post_main_quality_run": 37301985602,
+        "vercel_status": "SUCCESS"
+      },
+      {
+        "pr": 143,
+        "parent_sha": "0486ff2f71d921fb9284b45c9a440d6dc0fc6f0f",
+        "candidate_sha": "eca0d5d4d6f831cd52031b943b1d9ef4516ad5a9",
+        "merge_sha": "b617e12fcb028eeb18e06a413874a558cee27cad",
+        "tree_sha": "b87a4079ef4aa92e5ac28dd19d356e0f599cb13f",
+        "scope": "PROTECTED_CI_GOVERNANCE_ONLY",
+        "review_result": "PASS_NO_OPEN_P0_P1_P2_P3",
+        "post_main_agentur_gate_run": 37354822484,
+        "post_main_quality_run": 37354822516,
         "vercel_status": "SUCCESS"
       }
     ]
