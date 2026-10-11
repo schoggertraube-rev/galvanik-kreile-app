@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kreile · Katalog · Designsystem V1.1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../komponenten.css">
+<style>
+  /* Katalog-Rahmen (kein Produktteil) */
+  html,body{margin:0;background:var(--cream-300);font-family:var(--sans);color:var(--navy-900)}
+  a{color:var(--navy-700)}a:hover{color:var(--navy-900)}
+  .ka-leiste{position:sticky;top:0;z-index:100;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;padding:10px 16px;background:var(--navy-900);color:var(--cream-100);font-size:12px}
+  .ka-leiste b{font-family:var(--serif);font-size:15px;font-weight:500;letter-spacing:.04em}
+  .ka-leiste button{min-height:34px;border:1px solid var(--navy-600);background:var(--navy-800);color:var(--cream-100);border-radius:8px;padding:0 10px;font:inherit;font-weight:600;cursor:pointer}
+  .ka-leiste button[aria-pressed="true"]{background:var(--cream-50);color:var(--navy-900)}
+  .ka-leiste a{color:var(--amber);margin-left:auto}
+  .ka-buehne{padding:16px;overflow-x:auto}
+  #katalog.kr-app{height:auto;overflow:visible;margin:0 auto;padding:24px;box-shadow:var(--sh-lg)}
+  body.ka-pruef{background:var(--ground)}body.ka-pruef .ka-leiste{display:none}body.ka-pruef .ka-buehne{padding:0}body.ka-pruef #katalog{box-shadow:none}
+  .ka-sek{margin:0 0 34px}
+  .ka-sek>h2{font-family:var(--serif);font-weight:500;font-size:20px;margin:0 0 4px}
+  .ka-sek>p{margin:0 0 12px;font-size:12px;color:var(--navy-500)}
+  .ka-sek>p code{background:var(--cream-100);padding:1px 5px;border-radius:4px}
+  .ka-raster{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,var(--ka-min,360px)),1fr));gap:14px;align-items:start}
+  .ka-zelle{display:flex;flex-direction:column;gap:6px;min-width:0}
+  .ka-zelle>small{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--navy-500)}
+  .ka-reihe{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .ka-swatch{display:flex;flex-direction:column;gap:4px;font-size:10.5px;color:var(--navy-600)}
+  .ka-swatch i{display:block;height:44px;border-radius:10px;border:1px solid var(--line)}
+  .ka-rahmen{position:relative;height:var(--ka-h,520px);border:1px solid var(--cream-400);border-radius:12px;overflow:hidden;background:var(--ground)}
+  .ka-rahmen>.kr-app{height:100%}
+</style>
+</head>
+<body>
+<div class="ka-leiste" id="leiste"></div>
+<div class="ka-buehne"><div id="katalog" class="kr-app" data-geraet="desktop"></div></div>
+<script src="kr-vorschau.js"></script>
+<script>
+'use strict';
+const K=window.KR,{i,esc,btn,chip}=K;
+const P=new URLSearchParams(location.search);
+let G=P.get('geraet')||'desktop';
+if(P.has('pruef'))document.body.classList.add('ka-pruef');
+const BREITE={desktop:1914,tablet:1220,handy:390};
+const Z=[['daten','Daten'],['laedt','lädt'],['leer','leer'],['fehler','Fehler'],['gesperrt','gesperrt (Recht)'],['klaerung','In Klärung'],['aufbau','In Aufbau']];
+const zelle=(lbl,html)=>`<div class="ka-zelle"><small>${esc(lbl)}</small>${html}</div>`;
+const sek=(titel,info,inhalt,min)=>`<section class="ka-sek"><h2>${titel}</h2><p>${info}</p><div class="ka-raster" style="${min?'--ka-min:'+min:''}">${inhalt}</div></section>`;
+const zust=(fn)=>Z.map(([z,l])=>zelle(l,fn(z))).join('');
+const BSP='Beispiel';
+
+function tokens(){
+  const farben=['navy-900','navy-800','navy-700','navy-600','navy-500','navy-400','navy-300','cream-50','cream-100','cream-200','cream-300','cream-400','cream-500','amber','magenta','magenta-d','purple','orange','succ','succ-d','succ-bg','succ-fg','succ-bd','warn','warn-bg','warn-fg','warn-bd','info','info-bg','info-fg','ral','ral-bg','ral-fg','ral-bd','part-bg','part-fg','ground','ground-rail','surface','line'];
+  const sw=farben.map(f=>`<div class="ka-swatch"><i style="background:var(--${f})"></i>--${f}</div>`).join('')+`<div class="ka-swatch"><i style="background:var(--grad)"></i>--grad</div>`;
+  const schrift=`<div class="ka-zelle"><small>Fraunces · sparsam</small><div style="font-family:var(--serif);font-size:25px">Seitentitel 25</div><div style="font-family:var(--serif);font-size:22px">Kartentitel 22</div><div class="kr-id">A-2026-0000 · Nummern</div><div style="font-family:var(--serif);font-size:16px">Zahl 16 (max.)</div></div><div class="ka-zelle"><small>Inter · alles Übrige</small><div style="font-size:14px;font-weight:600">Eintragstitel 14/600</div><div style="font-size:13.5px">Fließtext 13,5</div><div style="font-size:12.5px;color:var(--navy-500)">Meta 12,5</div><div style="font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--navy-500)">Label 10,5</div></div>`;
+  const form=`<div class="ka-zelle"><small>Radien</small><div class="ka-reihe">${['xs','s','m','btn','l','eintrag','kachel','dialog'].map(r=>`<span style="width:54px;height:40px;border:1.5px solid var(--navy-400);border-radius:var(--r-${r});display:grid;place-items:center;font-size:10px">${r}</span>`).join('')}</div></div><div class="ka-zelle"><small>Schatten</small><div class="ka-reihe">${['sm','md','lg'].map(s=>`<span style="width:80px;height:48px;background:var(--surface);border-radius:12px;box-shadow:var(--sh-${s});display:grid;place-items:center;font-size:11px">--sh-${s}</span>`).join('')}</div></div><div class="ka-zelle"><small>Touch-Ziel</small><div class="ka-reihe"><span style="width:48px;height:48px;border:1.5px dashed var(--ral);border-radius:8px;display:grid;place-items:center;font-size:11px">48</span></div></div>`;
+  return `<section class="ka-sek"><h2>Tokens</h2><p>Aus <code>tokens.css</code> · Quelle V5-Gesamtmock (SHA-256 75258FF3…0CC0AA)</p><div class="ka-raster" style="--ka-min:110px">${sw}</div><div class="ka-raster" style="margin-top:14px">${schrift}${form}</div></section>`;
+}
+function buttons(){
+  return sek('Button','<code>Button.tsx</code> · primär · sekundär · gefährlich · erledigen · Marke · leise · Icon · gesperrt',zelle('Arten',`<div class="ka-reihe">${btn({text:'Primär',art:'primaer',icon:'check'})}${btn({text:'Sekundär',art:'sekundaer'})}${btn({text:'Standard'})}${btn({text:'Gefährlich',art:'gefaehrlich'})}${btn({text:'Erledigen',art:'erledigen',icon:'check'})}${btn({text:'Marke',art:'marke',icon:'plus'})}${btn({text:'Später',art:'leise'})}${btn({icon:'edit',art:'sekundaer',label:'Bearbeiten',attrs:{title:'Bearbeiten'}})}${btn({text:'Gesperrt',art:'primaer',disabled:true})}</div>`)+zelle('Globales Plus + Menü (GlobalesPlus.tsx)',`<div style="position:relative;height:150px"><button type="button" class="kr-plus" aria-label="Neu anlegen">${i('plus')}</button><div class="kr-plus-menue" style="top:56px;left:0"><button type="button" class="kr-menue-el">${i('user')}Kunde anlegen</button><button type="button" class="kr-menue-el">${i('file')}Auftrag / KV</button></div></div>`));
+}
+function chips(){
+  return sek('Tag-Chip / Status','<code>Chip.tsx</code> · Bedeutung über Farbe + Kurzlabel',zelle('Töne',`<div class="ka-reihe">${chip('neutral')}${chip('bereit','ok')}${chip('Warnung','warn')}${chip('Konflikt','rot')}${chip('Entscheidung','info')}${chip('Express','marke','flag')}${chip('Teil-Notiz','teil','msg')}${chip('Wunsch','warn')}${chip('bestätigt','ok')}${chip('verschoben','rot')}</div>`)+zelle('Punkt',`<div class="ka-reihe">${K.punkt()}${K.punkt('ok')}${K.punkt('warn')}${K.punkt('rot')}${K.punkt('info')}</div>`));
+}
+function zustaende(){
+  return sek('Zustand · Ausgrau-Element','<code>Zustand.tsx</code> (lädt · leer · Fehler · gesperrt) · <code>Ausgrau.tsx</code> (In Aufbau · In Klärung) – je eine Zeile, genau ein nächster Schritt',
+    zelle('lädt',K.zustand({art:'laedt'}))+zelle('leer',K.zustand({art:'leer',text:'Noch keine Aufträge.',aktion:{text:'Neuer Eingang',icon:'inbox'}}))+zelle('Fehler',K.zustand({art:'fehler',text:'Aufträge konnten nicht geladen werden · Stand 08:12',aktion:{text:'Erneut laden'}}))+zelle('gesperrt (Recht)',K.zustand({art:'gesperrt'}))
+    +zelle('In Aufbau · Zeile',K.ausgrau({art:'aufbau',text:'Kartenterminal',icon:'card'}))+zelle('In Klärung · Zeile',K.ausgrau({art:'klaerung',text:'Hinweis „Kontostand älter als X Tage“'}))
+    +zelle('In Aufbau · langer Text bricht um (V1.1 A3)',K.ausgrau({art:'aufbau',text:'Personalkosten aus Gehaltsplanung (nur Summen)',icon:'users'}))+zelle('In Klärung · langer Text (V1.1 A3)',K.ausgrau({art:'klaerung',text:'Bestätigung Steuerberater / Datenschutz',icon:'check'}))+zelle('In Aufbau · Knopf',K.ausgrau({art:'aufbau',text:'E-Rechnung',icon:'receipt',variante:'knopf'}))+zelle('Navigationseintrag',`<div style="background:var(--navy-800);padding:8px;border-radius:12px">${K.ausgrau({art:'aufbau',text:'Analyse',icon:'euro',variante:'nav'})}</div>`));
+}
+const HB=[
+  {art:'konflikt',id:'A-0000-0001',titel:'Beispiel: Foto fehlt, Freigabe blockiert',titelKurz:'Foto fehlt',meta:'Beispielkunde · Liefertermin 2026-10-01',aktionen:[{text:'Kümmern',kurz:'Kümmern',icon:'camera'},{text:'an Phillip',icon:'handoff',art:'sekundaer'},{text:'Später'}]},
+  {art:'warnung',id:'A-0000-0002',titel:'Beispiel: wird diese Woche knapp',titelKurz:'wird knapp',meta:'Beispielkunde · in Arbeit',aktionen:[{text:'Kunde vorwarnen',kurz:'Vorwarnen',icon:'mail'},{text:'Später'}]},
+  {art:'entscheidung',id:'A-0000-0003',titel:'Beispiel: Preisfreigabe offen',meta:'Beispielkunde · seit 2 Tagen',aktionen:[{text:'Freigeben',icon:'check'},{text:'Später'}]},
+  {art:'konflikt',von:'Rolf',id:'A-0000-0004',titel:'Beispiel: delegierte Aufgabe',meta:'Beispielkunde',aktionen:[{text:'Foto machen',kurz:'Foto',icon:'camera'},{text:'zurückgeben',icon:'back',art:'sekundaer'}]},
+  {art:'konflikt',id:'A-0000-0005',titel:'Beispiel: Status nach Aktion',meta:'Beispielkunde',status:'bei Phillip · Frist heute 11:30',statusTon:'info',statusIcon:'user'},
+  {art:'warnung',id:'A-0000-0006',titel:'Beispiel: wird gemeldet',meta:'Beispielkunde',status:'wird gemeldet …',statusTon:'laedt'},
+  {art:'konflikt',id:'A-0000-0007',titel:'Beispiel: Offline',meta:'Beispielkunde',status:'keine Verbindung · nicht gemeldet',statusTon:'rot',statusIcon:'alert'},
+  {art:'konflikt',titel:'Beispielperson abwesend 2026-10-05 bis 2026-10-09 · langer Titel bricht auf 2 Zeilen um',titelKurz:'Beispielperson abwesend ab 2026-10-05',meta:'Meta-Zeile darf als einzige kürzen: 2 Aufträge in diesem Zeitraum fällig',metaKurz:'2 Aufträge betroffen',aktionen:[{text:'Aufträge ansehen',kurz:'Ansehen',icon:'calendar',art:'primaer'},{text:'Später'}]}
+];
+function lageK(){
+  const z={konflikt:2,entscheidung:1,warnung:2};
+  return sek('Lage-Leiste','<code>Lageleiste.tsx</code> · erste Zeile jeder Startseite: Filter Konflikt · Entscheidung · Warnung (aufgeschobene zählen mit) + Firmengesundheit Termintreue · Liquidität 30 Tage (nur Zustandswort, keine Zahl) · Phillip ohne Geld',zelle('vor Anbindung M01–M03',K.lage({zaehler:z,gesund:[{t:'Termintreue',icon:'clock',st:'aufbau'},{t:'Liquidität 30 Tage',icon:'euro',st:'aufbau'}]}))+zelle('angebunden · ok / warn',K.lage({zaehler:z,gesund:[{t:'Termintreue',icon:'clock',st:'ok',s:'im Plan'},{t:'Liquidität 30 Tage',icon:'euro',st:'warn',s:'knapp'}]}))+zelle('kritisch · Filter aktiv',K.lage({zaehler:z,filter:'konflikt',gesund:[{t:'Termintreue',icon:'clock',st:'kritisch',s:'kippt'},{t:'Liquidität 30 Tage',icon:'euro',st:'ok',s:'gesichert'}]}))+zelle('Phillip (nur Termintreue)',K.lage({zaehler:{konflikt:2,entscheidung:0,warnung:2},gesund:[{t:'Termintreue',icon:'clock',st:'ok',s:'im Plan'}]})),'100%');
+}
+function handlungsbedarf(){
+  const e=HB.map((x,n)=>zelle(n===7?'langer Titel (V1.1 A3)':x.von?'von Person':x.status?'Status':x.art,K.hbEintrag(x,G))).join('');
+  const l=zust(z=>K.hbListe({eintraege:HB.slice(0,2),zustand:z,geraet:G,label:z==='daten'?'':undefined}))+zelle('aufklappbar (max. 2 · Konflikte nie eingeklappt)',K.hbListe({eintraege:HB.slice(0,5),geraet:G,max:2,offen:false}));
+  return sek('Handlungsbedarf-Eintrag','<code>Handlungsbedarf.tsx</code> · Konflikt · Warnung · Entscheidung · Aktion direkt am Eintrag · max. 2 Zeilen · nichts dringend ⇒ Block entfällt',e,'520px')+sek('Handlungsbedarf-Liste · 7 Zustände','„leer“ zeigt nur im Katalog eine Zeile; auf Startseiten entfällt der Block ganz (§6.1)',l,'520px');
+}
+function zeilen(){
+  const au=()=>K.auftragszeile({id:'A-0000-0001',kunde:'Beispielkunde',titel:'Beispielteil',meta:'Verchromen · 4 Teile · Galvanik',ton:'warn',chip:'in 3 Tagen',chipTon:'warn',pfeil:true,klick:true});
+  const ku=()=>K.kundenzeile({kuerzel:'BK',name:'Beispielkunde GmbH',meta:'00000 Beispielort · 2 aktive Aufträge',chips:[['Rechnung auf Ziel','ok']],pfeil:true,klick:true});
+  const te=()=>K.terminzeile({zeit:'14:00',art:'Abholung',id:'A-0000-0001',kunde:'Beispielkunde',klick:true})+K.terminzeile({zeit:'Do',art:'Wunsch',id:'A-0000-0002',kunde:'Beispielkunde'})+K.terminzeile({zeit:'Fr',art:'verschoben',id:'A-0000-0003',kunde:'Beispielkunde',meta:'2026-09-30 → 2026-10-07'});
+  const ab=()=>K.abwesenheitszeile({person:'Beispielperson',kuerzel:'BP',zeitraum:'2026-10-12 bis 2026-10-16',art:'Urlaub'});
+  const k=(t,ic,fn)=>zust(z=>K.kachel({titel:t,icon:ic,icTon:'info',zahl:z==='daten'?1:null,zustand:z,inhalt:fn(),zText:{leerText:'Keine Einträge.',fehlerText:'Konnte nicht geladen werden · Stand 08:12',fehlerAktion:{text:'Erneut laden'}}}));
+  return sek('Auftragszeile','<code>Auftragszeile.tsx</code> · Titel + 1 Meta · Aktion rechts',k('Aufträge','list',au))+sek('Kundenzeile','<code>Kundenzeile.tsx</code>',k('Kunden','users',ku))+sek('Terminzeile','<code>Terminzeile.tsx</code> · Terminart · Auftragsnr. · Kundenkurzname (OE-2609-19)',k('Termine','calendar',te))+sek('Abwesenheitszeile','<code>Abwesenheitszeile.tsx</code> · Quelle Outlook-Büropostfach (read-only)',k('Abwesenheiten','user',ab));
+}
+function tagesElemente(){
+  const b=zust(z=>K.buendel({zustand:z,titel:'3 Aufträge mit <b>Verzinken</b> — zusammen fahren?',meta:'A-0000-0001 · A-0000-0002 · A-0000-0003',aktion:{text:'Zink-Lauf bündeln'}}));
+  const w=zust(z=>K.wip({zustand:z,zahl:5,meta:'2 werden knapp'}));
+  return sek('Bündel-Vorschlag','<code>BuendelVorschlag.tsx</code>',b)+sek('WIP-Menge „In Arbeit“','<code>WipMenge.tsx</code> · eine ruhige Menge, Zahl max. 16px (G5)',w);
+}
+function suche(){
+  const tr=[{id:'A-0000-0001',titel:'Beispielkunde · Beispielteil',grund:'Treffer in <mark>Auftragsnummer</mark>',quelle:'Auftrag',ton:'rot'},{titel:'Beispielkunde GmbH',grund:'Treffer in <mark>Name</mark> · 00000 Beispielort',quelle:'Kunde'},{titel:'Telefonnotiz',grund:'Treffer in <mark>Notiztext</mark>',quelle:'Notiz'}];
+  const l=zust(z=>z==='daten'?`<div class="kr-treffer-liste" style="margin:0">${tr.map(K.treffer).join('')}</div>`:K.mitZustand(z,'',{titel:'Suche',leerText:'Kein Treffer für „xyz“.',leerAktion:{text:'Neuer Eingang',icon:'inbox'},fehlerText:'Suche nicht erreichbar',fehlerAktion:{text:'Erneut versuchen'}}));
+  return sek('Suche','<code>Suche.tsx</code> · Kopfleiste + Treffer mit Grund und Quelle',zelle('Kopfleiste',`<button type="button" class="kr-suche">${i('search')}<span class="kr-suche-ph">Auftrag, Kunde oder Nummer suchen</span><span class="kr-suche-kbd">Strg K</span></button>`)+zelle('Suchfeld',`<label class="kr-suchfeld">${i('search')}<input placeholder="Auftrag, Kunde, Teil, Notiz oder Dokument"></label>`),'480px')+sek('Suchtreffer · 7 Zustände','',l,'480px');
+}
+function karte(){
+  const kopf=`<header class="kr-kartenkopf" style="border:1px solid var(--line);border-radius:14px"><div class="kr-kartenkopf-l"><div class="kr-karte-nr">A-0000-0001</div><h3 class="kr-karte-titel">Beispielteil</h3><div class="kr-karte-sub">Verchromen · 4 Teile</div><div class="kr-karte-meta"><span class="kr-pill kr-pill--marke">${i('flag')}Express</span><button type="button" class="kr-pill kr-pill--kunde">${i('user')}Beispielkunde · Kundenakte ${i('arrow')}</button></div></div><div class="kr-kartenkopf-r"><button type="button" class="kr-schliessen" aria-label="Schließen">${i('x')}</button><div class="kr-termin kr-termin--dringend"><span class="kr-termin-c">in 3 Tagen</span><span class="kr-termin-d">2026-10-01 ${chip('bestätigt','ok')}</span></div></div></header>`;
+  const kette=`<div class="kr-kette-wrap" style="border:1px solid var(--line);border-radius:14px">${K.kette([{st:'erledigt',icon:'check',lbl:'angenommen',sub:'2026-09-21'},{st:'aktiv',icon:'droplet',lbl:'Galvanik'},{st:'bereit',icon:'flag',lbl:'fertig',sub:'1 von 3 Teilen',balken:1/3},{st:'gesperrt',schwelle:true,icon:'card',lbl:'Zahlung'},{st:'gesperrt',icon:'truck',lbl:'verschickt'}])}<div class="kr-schwelle-zeile"><span>${i('lock')} Vorkasse · Zahlung offen</span>${btn({text:'Zahlung prüfen',icon:'card',art:'primaer'})}</div></div>`;
+  const teil=`<div class="kr-teile"><div class="kr-teil kr-teil--fertig"><span class="kr-bild">${i('photo')}</span><div style="min-width:0"><div class="kr-zeile-t" style="font-size:14px"><span class="kr-id">T-01</span>Beispielteil${chip('fertig','ok','check')}</div><div class="kr-zeile-s">Verchromen · 1 Stück</div></div><div style="display:flex;gap:6px">${btn({text:'Foto',icon:'camera',art:'sekundaer'})}${btn({text:'fertig',icon:'check',art:'erledigen'})}</div></div><div class="kr-teil"><span class="kr-bild kr-bild--leer">${i('photooff')}</span><div style="min-width:0"><div class="kr-zeile-t" style="font-size:14px"><span class="kr-id">T-02</span>Beispielteil${chip('Foto fehlt','warn','alert')}</div><div class="kr-zeile-s">Verchromen · 2 Stück</div></div><div style="display:flex;gap:6px">${btn({text:'Foto',icon:'camera',art:'sekundaer'})}${btn({text:'fertig',icon:'check',art:'sekundaer'})}</div></div></div>`;
+  const naechste=`<div class="kr-naechste"><div class="kr-naechste-t">Foto für T-02 aufnehmen</div><div class="kr-naechste-a">${btn({text:'Foto aufnehmen',icon:'camera',art:'primaer'})}</div></div>`;
+  const rest=`<div class="kr-notiz">Beispielnotiz zum Auftrag.<div class="kr-notiz-m">${chip('Auftrag','info')} Beispielperson · 2026-09-21</div></div>`+K.fakten([['Zahlungsmodus','Vorkasse'],['Rechnung','nach Fertigmeldung']])+`<div class="kr-qa-raster">${['mail|Status-Mail','phone|Anrufen','camera|Foto +','copy|Duplizieren'].map(x=>{const [a,b]=x.split('|');return `<button type="button" class="kr-qa">${i(a)}${b}</button>`}).join('')}</div>`;
+  const vl=K.verlauf([{zeit:'heute · 08:14',text:'Status-Mail gesendet',ton:'ok',icon:'mail'},{zeit:'2026-09-21 · 09:12',text:'Angenommen',icon:'check'}]);
+  return sek('Karte / Kartenkopf','<code>Karte.tsx</code> · Kartenkopf · Zustandskette (Ort im Haus) · Zahlungsschwelle · Teil (mit Foto-Knopf, Owner 2026-09-27) · Nächste Aktion · Notiz · Fakten · Verlauf',zelle('Kartenkopf',kopf)+zelle('Zustandskette + Zahlungsschwelle',kette)+zelle('Nächste Aktion',naechste)+zelle('Teile',teil)+zelle('Notiz · Fakten · Schnellaktionen',rest)+zelle('Verlauf',vl),'560px');
+}
+function formular(){
+  const f=`<div class="kr-form">${K.feld({label:'Name / Firma',voll:true,html:K.eingabe({placeholder:'Beispielkunde GmbH'})})}${K.feld({label:'Wunschtermin',html:K.eingabe({type:'date',value:'2026-10-09'})})}${K.feld({label:'Zahlungsmodus',html:K.auswahl([['a','Bar oder Karte bei Abholung'],['b','Vorkasse'],['c','Rechnung auf Ziel (nicht freigeschaltet)',true]])})}${K.feld({label:'PLZ',fehler:'Pflicht vor Versand und Rechnung',html:K.eingabe({})})}${K.feld({label:'Gesperrt',html:K.eingabe({value:'nicht änderbar',disabled:true})})}${K.feld({label:'Befund',voll:true,html:K.textfeld({})})}</div>`;
+  return sek('Formularfelder','<code>Formular.tsx</code> · Feld · Eingabe · Auswahl · Textfeld · Checkbox · Segment · Fehler · gesperrt',zelle('Felder',f)+zelle('Checkbox · Segment · Position',`${K.check('<b>Ware, Menge und Zustand geprüft</b>',{})}${K.segment([['a','Abholung'],['b','Versand']],'a')}<div class="kr-position"><span class="kr-position-nr">1</span>${K.feld({label:'Teil',html:K.eingabe({placeholder:'Katalog oder Freitext'})})}${K.feld({label:'Menge',html:K.eingabe({type:'number',value:1})})}${K.feld({label:'Oberfläche',cls:'kr-pos-oberflaeche',html:K.auswahl(['Verchromen','Vernickeln','Verzinken'])})}${btn({icon:'x',art:'sekundaer',label:'Entfernen',attrs:{title:'Entfernen'}})}</div>`),'480px');
+}
+function dialoge(){
+  const d=`<div class="ka-rahmen" style="--ka-h:460px"><div class="kr-app" data-geraet="${G}">${K.dialog({titel:'Warenausgang · A-0000-0001',icon:'truck',inhalt:`<div class="kr-form" style="display:block">${K.fakten([['Übergabe','Abholung'],['Zahlungsmodus','Bar oder Karte bei Abholung']])}</div>${K.check('<b>Zahlung bei Übergabe erhalten</b>',{})}`,fuss:btn({text:'Auftrag ansehen'})+btn({text:'Übergabe bestätigen',icon:'check',art:'erledigen'})})}</div></div>`;
+  const t=`<div class="ka-rahmen" style="--ka-h:140px"><div class="kr-app" data-geraet="desktop">${K.toast({text:'A-0000-0001 fertig gemeldet',aktion:{text:'Korrigieren'}})}</div></div>`;
+  const pk=zust(z=>K.picker({zustand:z,optionen:[{id:'A-0000-0001',titel:'Beispielkunde · Beispielteil',meta:'Verzinken · 5 Teile',chip:'Galvanik',chipTon:'info'},{id:'A-0000-0002',titel:'Beispielkunde · Beispielteil',meta:'Vorkasse offen',chip:'gesperrt',chipTon:'rot',gesperrt:true}]}));
+  return sek('Dialog · Toast','<code>Dialog.tsx</code> · <code>Toast.tsx</code> · eine Überschrift, keine Unterzeile',zelle('Dialog',d)+zelle('Toast',t),'480px')+sek('Picker · 7 Zustände','<code>Picker.tsx</code> · Auftrag öffnen/scannen → Mehrarbeit / Fertig',pk,'480px');
+}
+function shell(){
+  const inhaltB=K.seitenKopf('Seitentitel')+K.hbListe({eintraege:HB.slice(0,2),geraet:G});
+  const inhaltW=K.seitenKopf('Werkstatt')+K.hbListe({label:'Heute sichern',eintraege:HB.slice(0,1),geraet:G});
+  const r=(h,label)=>zelle(label,`<div class="ka-rahmen" style="--ka-h:${G==='handy'?600:460}px"><div class="kr-app" data-geraet="${G}">${h}</div></div>`);
+  return sek('AppShell','<code>AppShell.tsx</code> · Desktop: Seitenleiste (Rolf V8) · Tablet/Handy: Dock „Der Tag · Aufträge · Kunden · Geld · Mehr“ · Werkstatt: Kompaktkopf + feste Navy-Aktionsleiste (nie auf Rolf-Desktop, G3/G4)',r(K.appShell({geraet:G,aktiv:'tag',badges:{tag:{n:2,rot:true}},inhalt:inhaltB,kuerzel:'RK',datum:'<b>Mo</b><br>2026-09-28'}),'Büro-Shell · '+G)+r(K.appShell({geraet:G,variante:'werkstatt',inhalt:inhaltW,kuerzel:'PK'}),'Werkstatt-Shell · '+G),G==='handy'?'100%':'800px');
+}
+function login(){
+  const l=`<div class="ka-rahmen" style="--ka-h:${G==='handy'?700:620}px"><div class="kr-app" data-geraet="${G}"><div class="kr-login"><div class="kr-login-karte"><div class="kr-login-marke"><div class="kr-marke"><span class="kr-logo">GK</span><span class="kr-marke-name">KREILE</span></div></div><div class="kr-login-pin"><h3 class="kr-login-titel">Code eingeben</h3><div class="kr-pin-punkte">${[1,1,0,0].map(x=>`<span class="kr-pin-punkt${x?' kr-pin-punkt--an':''}"></span>`).join('')}</div><div class="kr-pin-meldung">Code nicht erkannt</div><div class="kr-tastatur">${[1,2,3,4,5,6,7,8,9].map(n=>`<button type="button" class="kr-taste">${n}</button>`).join('')}<button type="button" class="kr-taste kr-taste--klein">Löschen</button><button type="button" class="kr-taste">0</button><button type="button" class="kr-taste kr-taste--klein">Neu</button></div>${btn({text:'Admin-Anmeldung per E-Mail',art:'leise'})}</div></div></div></div></div>`;
+  return sek('PIN-Eingabe (Login /start)','<code>PinEingabe.tsx</code> · ohne Slogan, ohne Wetter-/Provider-Platzhalter (D-UI-CORE-002 A)',zelle('Login',l),'100%');
+}
+function termin(){
+  const tage=[['Mo · 09-28',[['14:00','Abholung','A-0000-0001'],['','bestätigt','A-0000-0002']],1],['Di · 09-29',[['','Wunsch','A-0000-0003']]],['Mi · 09-30',[]],['Do · 10-01',[['','verschoben','A-0000-0004']]],['Fr · 10-02',[]],['Sa · 10-03',[]]].map(([t,l,h])=>`<section class="kr-tag${h?' kr-tag--heute':''}"><h3 class="kr-tag-kopf" style="margin:0"><span>${t}</span><span>${l.length||''}</span></h3><div class="kr-tag-inhalt">${l.length?l.map(x=>K.terminzeile({zeit:x[0]||'·',art:x[1],id:x[2],kunde:'Beispiel'})).join(''):'<div class="kr-zeile-s" style="padding:10px">frei</div>'}</div></section>`).join('');
+  let m=['Mo','Di','Mi','Do','Fr','Sa','So'].map(w=>`<div class="kr-monat-wt">${w}</div>`).join('')+'<div class="kr-monat-tag kr-monat-tag--leer"></div>'.repeat(3);
+  for(let d=1;d<=31;d++)m+=`<div class="kr-monat-tag${d===1?' kr-monat-tag--heute':''}"><span class="kr-monat-nr">${d}</span>${[1,2,6,9].includes(d)?chip('1 Termin','info'):''}</div>`;
+  const wz=Z.slice(1).map(([z,l])=>zelle(l,K.mitZustand(z,'',{titel:'Terminübersicht',leerText:'Keine Termine in dieser Woche.',fehlerText:'Termine konnten nicht geladen werden',fehlerAktion:{text:'Erneut laden'}}))).join('');
+  return sek('Terminübersicht Woche / Monat','<code>Terminuebersicht.tsx</code> · Ansicht innerhalb „Aufträge“, kein eigener Menüpunkt (D-UI-CORE-002, OE-2609-19) · Owner prüft hier',zelle('Woche',`<div class="kr-woche">${tage}</div>`)+zelle('Monat',`<div class="kr-monat">${m}</div>`),'100%')+`<div class="ka-raster" style="margin:-20px 0 34px">${wz}</div>`;
+}
+/* ===== V1.1 ===== */
+const V11='<span class="kr-chip kr-chip--marke" style="vertical-align:3px;margin-left:6px">V1.1</span>';
+function fokusK(){
+  const l=[HB[0],HB[2],HB[1]];
+  const st=zust(z=>K.hbListe({eintraege:l,zustand:z,geraet:G,fokus:true}));
+  const nach=zelle('nach Erledigen: nächster rückt nach (kr-fokus--neu)',K.hbListe({eintraege:[{...HB[2],fokusNeu:true},HB[1]],geraet:G,fokus:true}));
+  const gew=zelle('Tastatur j/k gewählt (nur Desktop)',K.hbEintrag({...HB[1],gewaehlt:true},G));
+  return sek('Fokuseintrag'+V11,'<code>Handlungsbedarf.tsx</code> · <code>fokus</code> · dringendster offener Punkt oben, etwas größer · genau eine Hauptaktion + „Später“ + weitere · Reihenfolge Konflikt → Entscheidung → Warnung · kein Zähler (steht in der Lage-Leiste) · max. 2 Zeilen + Aktionszeile',st+nach+gew,'520px');
+}
+function wischK(){
+  const e=HB[0];
+  const f=(r)=>`<div class="kr-wisch kr-wisch--zieh"><div class="kr-wisch-bg kr-wisch-bg--${r?'rechts':'links'}"><span>${i('check')}Kümmern</span><span>Später ${i('clock')}</span></div>${K.hbEintrag(e,G).replace('class="kr-hb-eintrag','style="transform:translateX('+(r?96:-96)+'px)" class="kr-hb-eintrag')}</div>`;
+  return sek('Wischen'+V11,'<code>Wischbar.tsx</code> · nur Touch (Tablet/Handy), nur zusätzlich zu sichtbaren Knöpfen · rechts = Hauptaktion (danach Toast „Rückgängig“) · links = Später (Zeitwahl V8 S1) · nie für Freigaben und Geld · Desktop: nicht aktiv',zelle('rechts · Hauptaktion',f(true))+zelle('links · Später',f(false)),'520px');
+}
+const PAL_T=[{id:'A-0000-0001',titel:'Beispielkunde · Beispielteil',grund:'Treffer in <mark>Auftragsnummer</mark>',quelle:'Auftrag',ton:'rot'},{titel:'Beispielkunde GmbH',grund:'Treffer in <mark>Name</mark> · 00000 Beispielort',quelle:'Kunde'}];
+const PAL_A=[['inbox','Neuer Eingang','N'],['truck','Ware raus'],['check','Fertig melden'],['layers','Mehrarbeit'],['calendar','Woche ansehen']].map(([icon,text,kbd])=>({icon,text,kbd:G==='desktop'?kbd:undefined}));
+function paletteK(){
+  const r=h=>`<div class="ka-rahmen" style="--ka-h:${G==='handy'?520:470}px;background:var(--scrim)"><div class="kr-app" data-geraet="${G}" style="background:transparent;padding:${G==='handy'?0:14}px">${h}</div></div>`;
+  const st=zust(z=>r(K.palette({wert:z==='daten'?'Beispiel':'',treffer:PAL_T,aktionen:PAL_A,sel:0,zustand:z,texte:{leerText:'Kein Treffer für „xyz“.',fehlerText:'Suche nicht erreichbar',fehlerAktion:{text:'Erneut versuchen'}}})));
+  const ph=zelle('Phillip · ohne Geld-Treffer und Geld-Aktionen',r(K.palette({treffer:PAL_T,aktionen:PAL_A})));
+  return sek('Befehlspalette „Suchen oder tun“'+V11,'<code>Befehlspalette.tsx</code> · Strg K und / (Desktop) · Kopf-Suchfeld öffnet sie · Plus-Menü bleibt · Treffer mit Grund + Quelle wie V1-Suche · nur V1-Aktionen · gesperrte Bereiche erscheinen nicht',st+ph,'480px');
+}
+function blattK(){
+  const kopf=`<div class="kr-blatt-zurueck">${btn({text:'Zurück · A-0000-0001',icon:'back',art:'leise'})}</div><header class="kr-kartenkopf"><div class="kr-kartenkopf-l"><div class="kr-karte-nr">K-0000-0001</div><h3 class="kr-karte-titel">Beispielkunde GmbH</h3><div class="kr-karte-sub">Gewerbekunde · Kunde seit 2024-03</div></div><div class="kr-kartenkopf-r"><button type="button" class="kr-schliessen" aria-label="Schließen">${i('x')}</button></div></header>`;
+  const r=(z)=>`<div class="ka-rahmen" style="--ka-h:${G==='handy'?460:380}px"><div class="kr-app" data-geraet="${G}"><div style="position:absolute;inset:0;padding:16px">${K.hbEintrag(HB[0],G)}</div><div class="kr-ebene kr-ebene--blatt" style="position:absolute"><section class="kr-dialog kr-dialog--karte" style="${G==='desktop'?'width:62%':''}"><div class="kr-streifen"></div><div class="kr-karte"><div class="kr-karte-scroll">${z==='daten'?kopf+'<div style="padding:16px">'+K.block('Aktive Aufträge',K.auftragszeile({id:'A-0000-0001',kunde:'Beispielkunde',titel:'Beispielteil',meta:'Verchromen · 4 Teile',ton:'warn',pfeil:true,karte:true}))+'</div>':'<div style="padding:16px">'+K.mitZustand(z,'',{titel:'Kundenkarte',leerText:'Karte nicht gefunden.',fehlerText:'Karte konnte nicht geladen werden',fehlerAktion:{text:'Erneut laden'}})+'</div>'}</div></div></section></div></div></div>`;
+  return sek('Seitenblatt'+V11,'<code>Seitenblatt.tsx</code> · Karten von rechts (Desktop/Tablet) bzw. von unten (Handy) · Hintergrund sichtbar · Zurück Auftrag ↔ Kunde · Inhalt/Reihenfolge exakt Auftragskarte V8 / Kundenkarte V2 · Fertig melden bleibt Dialog mit 3 Pflichtprüfungen',zust(r),'480px');
+}
+function zeitK(){
+  const g=[{titel:'Heute',zeilen:[{zeit:'heute',id:'A-0000-0001',titel:'Beispielkunde · Beispielteil',meta:'fertig · Versand',ton:'ok',aktion:{text:'Ware raus',icon:'truck'}},{zeit:'14:00',id:'A-0000-0002',titel:'Beispielkunde · Beispielteil',meta:'Abholung · bar oder Karte bei Abholung',ton:'info',aktion:{text:'Ware raus',icon:'truck'}}]},{titel:'Diese Woche',zeilen:[{zeit:'Di',id:'A-0000-0003',titel:'Beispielkunde · Beispielteil',meta:'Vorkasse offen · Versand erst nach Zahlung',ton:'rot',chip:'gesperrt',chipTon:'rot'},{zeit:'Do',id:'A-0000-0004',titel:'Beispielkunde',meta:'2026-10-01',ton:'ok',chip:'bestätigt',chipTon:'ok'}]}];
+  const st=zust(z=>K.kachel({titel:'Heute & Woche',icon:'calendar',icTon:'info',inhalt:K.zeitstrahl({jetzt:'08:12',gruppen:g,zustand:z,texte:{fehlerText:'Termine konnten nicht geladen werden · Stand 08:12',fehlerAktion:{text:'Erneut laden'}}}),fuss:z==='daten'?{text:'Woche ansehen'}:undefined,zustand:'daten'}));
+  const gp=g.map(x=>({...x,zeilen:x.zeilen.map(r=>({...r,meta:r.meta.replace(' · bar oder Karte bei Abholung','').replace('Vorkasse offen · Versand erst nach Zahlung','Freigabe fehlt · nicht rausgeben')}))}));
+  return sek('Zeitstrahl „Heute & Woche“'+V11,'<code>Zeitstrahl.tsx</code> · Owner-Umschalter in der Kundenansicht (Standard: Kacheln) · Knöpfe öffnen bestehende Abläufe (Ware raus mit allen Prüfungen, Abholung mit Zahlung) · Rolf ohne Beträge/Kassieren · Phillip ohne Geld-Info',st+zelle('Phillip-Variante',K.kachel({titel:'Heute & Woche',icon:'calendar',icTon:'info',inhalt:K.zeitstrahl({jetzt:'08:12',gruppen:gp})})),'480px');
+}
+function eingangK(){
+  const nav=`<nav class="kr-schritt-nav" aria-label="Abschnitte">${['Kunde','Positionen','Prüfung'].map((s,n)=>`<button type="button" class="${n<=1?'an':''}"${n===1?' aria-current="step"':''}><b>${n+1}</b>${s}</button>`).join('')}</nav>`;
+  const pos=`<div class="kr-position"><span class="kr-position-nr">1</span>${K.feld({label:'Teil / Bezeichnung',fehler:'Bezeichnung fehlt',html:K.eingabe({placeholder:'Katalog oder Freitext'})})}${K.feld({label:'Menge',html:K.eingabe({type:'number',value:1})})}${K.feld({label:'Oberfläche',cls:'kr-pos-oberflaeche',html:K.auswahl(['Verchromen','Vernickeln','Verzinken'])})}${btn({icon:'x',art:'sekundaer',label:'Entfernen',attrs:{title:'Entfernen'}})}</div>`;
+  return sek('Neuer Eingang · Abschnitte'+V11,'<code>Dialog.tsx</code> · <code>AbschnittNav</code> + <code>Abschnitt</code> · Desktop/Tablet auf einer Seite, Schrittleiste = Sprungmarke · Handy behält <code>SchrittNav</code> (3 Schritte) · gleicher Funktionsumfang wie V1',zelle(G==='handy'?'Handy: Schritte (V1)':'Sprungmarke + Abschnitt mit Feldfehler',`<div class="kr-stapel" style="gap:10px">${nav}${pos}${btn({text:'Position hinzufügen',icon:'plus',art:'sekundaer'})}</div>`),'520px');
+}
+function render(){
+  const el=document.getElementById('katalog');el.dataset.geraet=G;el.style.width=BREITE[G]+'px';
+  el.innerHTML=[tokens(),buttons(),chips(),zustaende(),shell(),lageK(),fokusK(),handlungsbedarf(),wischK(),paletteK(),blattK(),zeitK(),eingangK(),zeilen(),tagesElemente(),suche(),karte(),formular(),dialoge(),termin(),login()].join('');
+  document.getElementById('leiste').innerHTML=`<b>KREILE · Designsystem V1.1 · Katalog</b>${['desktop','tablet','handy'].map(g=>`<button type="button" data-g="${g}" aria-pressed="${g===G}">${g==='desktop'?'Desktop 1914':g==='tablet'?'Tablet 1220':'Handy 390'}</button>`).join('')}<span>Alle Inhalte = Beispiel</span><a href="../kundenansicht/index.html">Kundenansicht →</a>`;
+}
+document.getElementById('leiste').addEventListener('click',e=>{const b=e.target.closest('[data-g]');if(b){G=b.dataset.g;render()}});
+document.getElementById('katalog').addEventListener('click',e=>{const mb=e.target.closest('[data-hb-alle]');if(!mb)return;const kl=mb.parentElement.querySelector('[data-klapp]');const o=!kl.classList.contains('kr-klapp--offen');kl.classList.toggle('kr-klapp--offen',o);mb.setAttribute('aria-expanded',o);mb.querySelector('[data-mehr-text]').textContent=o?'weniger':kl.querySelectorAll('.kr-hb-eintrag').length+' weitere'});
+window.KAT={setG:g=>{G=g;render()}};
+render();
+</script>
+</body>
+</html>

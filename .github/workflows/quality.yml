@@ -70,10 +70,11 @@ jobs:
           npm run quality:authority-gate:selftest
           npm run quality:authority-gate
 
-      - name: Delivery contracts, rolling queue, and operating receipt (blocking)
+      - name: Single live plan and package contracts (blocking)
         run: |
           npm run quality:delivery-contracts:selftest
           npm run quality:delivery-contracts
+          npm run quality:package-scope:selftest
 
       - name: S1 module gates (Path 1 Naehte plus Authority, candidate view; protected copies run in eslint-ratchet.yml)
         # Manifest je Modul, positive Fassade (kein Tiefimport), Cross-Modul-Fakten nur
@@ -114,6 +115,13 @@ jobs:
       - name: Production migration ledger contract
         run: node scripts/check-migration-ledger.mjs --base "${{ steps.diff.outputs.base }}"
 
+      - name: Active package path and commit-role separation
+        run: >-
+          node scripts/quality/check-live-package-scope.mjs
+          --base "${{ steps.diff.outputs.base }}"
+          --head "${{ steps.diff.outputs.head }}"
+          --branch "${{ github.head_ref || github.ref_name }}"
+
       - name: F1-R0 No-fake-production gate selftest (proves rules fire, mutation-free)
         run: node scripts/quality/check-no-fake-production.mjs --selftest
 
@@ -136,6 +144,17 @@ jobs:
 
       - name: Install Playwright WebKit
         run: npx playwright install --with-deps webkit
+
+      - name: Live-line package regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t live_specs < <(find e2e -maxdepth 1 -type f -name 'kr-l*.spec.ts' -print | sort)
+          if [ "${#live_specs[@]}" -eq 0 ]; then
+            echo "No live-line package specs have been merged yet."
+            exit 0
+          fi
+          npx playwright test "${live_specs[@]}" --project=Tablet --workers=1
 
       - name: Auth boundary E2E
         run: npm run test:e2e -- e2e/smoke.spec.ts

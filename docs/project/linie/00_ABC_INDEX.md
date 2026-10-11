@@ -1,20 +1,15 @@
 <!-- STATUS: REFERENCE_ONLY_NON_EXECUTABLE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->
 
-# KREILE — DAS ABC (Navigation)
-
-Status: `REFERENCE_ONLY_NON_EXECUTABLE`
-Stand: 2026-09-10 · D-GOV-001
-
-Diese Datei ist ausschließlich die Lesekarte und besitzt keine eigene Zustands- oder Ausführungswahrheit.
+# Kreile — Lesekarte
 
 1. Regeln: `../../../AGENTS.md`
-2. Aktive Ausführung: `../../../missions/F1_ORDER_TO_CASH_PILOT_001.yml`
-3. Lieferstand auf `main`: `../../CURRENT_STATE.md`
-4. Entscheidungen: `KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md`
-5. Scope/Module: `MODULKARTE_KANON.md`
-6. Architektur/Path 1: `ARCHITEKTUR_MODULE_PATH1.md`
-7. UI: `00_UI_REFERENZEN_PFADE.md`
-8. Beispiel: `BEISPIELE_MODUL.md`
-9. Bekannte technische Fallen: `PROBLEMLOESUNGEN.md`
+2. Live-Plan: `../../../docs/delivery/KREILE_LIVE_PLAN_V1.json`
+3. Aktives Paket: `../../../missions/F1_ORDER_TO_CASH_PILOT_001.yml`
+4. Lieferstand: `../../CURRENT_STATE.md`
+5. Produktentscheidungen: `KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md`
+6. Scope: `MODULKARTE_KANON.md`
+7. Architektur: `ARCHITEKTUR_MODULE_PATH1.md`
+8. UI-Schichten: `00_UI_REFERENZEN_PFADE.md`
 
-Abnahme bleibt: grüne Gates plus Scope-, Modul- und Designtreue; Prüfer und Autor sind verschieden.
+Nur Punkte 1 bis 3 steuern den Paketlauf. Alte Plaene, Queues und Historie werden nicht
+als Arbeitsauftrag gelesen.

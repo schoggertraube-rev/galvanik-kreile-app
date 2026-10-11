@@ -1,97 +1,128 @@
-# Galvanik-Kreile WerkstattCockpit
+# Galvanik-Kreile WerkstattCockpit — verbindliche Baulinie
 
-> ⚠️ BAUANLEITUNG (ZUERST LESEN): `docs/project/linie/00_ABC_INDEX.md` navigiert zum verbindlichen ABC. Gebaut wird Path 1 nach `MODULKARTE_KANON.md`, `ARCHITEKTUR_MODULE_PATH1.md` und den explizit gelisteten UI-Referenzen. Ein Konflikt innerhalb derselben Wahrheitsart ist `BLOCKED_GOVERNANCE_CONFLICT`; keine stille Auswahl nach Dateiname, Alter oder Kommentar. Gruen in der CI ist NICHT genug — Modul-Naehte + Designtreue + Scope sind Teil der Abnahme; Pruefer ≠ Autor.
+## 1. Einziger Arbeitsort und einzige Lieferwahrheit
 
-## Projekt
+- Repository: dieses Checkout `02_app`; keine weiteren Clones oder Worktrees.
+- Lieferwahrheit: `origin/main`.
+- Vor jedem Paket: `git fetch origin`, sauberer Baum, Branch aus frischem `origin/main`.
+- Kein Merge nach `main`, Production-Effekt, Remote-Migration, RLS-/Rollen-/Session-Aenderung,
+  Echtdatenmutation oder kostenpflichtiger Dienst ohne ausdrueckliche Owner-Freigabe.
 
-- Arbeite ausschliesslich fuer das Galvanik-Kreile WerkstattCockpit.
-- Der Tenant dieser Auslieferung ist `galvanik-kreile` — aber NUR ueber `KREILE_TENANT_SLUG` aus `src/lib/tenant.ts` (S0) bzw. spaeter Injektion, NIE als Literal in Modul-Kernen (D-ARCH-007; ESLint verbietet das Literal; siehe ARCHITEKTUR_MODULE_PATH1.md Naht 3).
-- Die Modul-Naehte sind CI-erzwungen (S1): `npm run quality:module-gates` = Manifest je Modul, positive Fassade (kein Tiefimport, Fremdmodul nur `@/modules/<fach>/public`), Cross-Modul-Fakten nur ueber deklarierte `public.v_*`-Views, UI-Vertrag (kein Stationsband/Transport-Home; Altlasten-Baseline `quality/module-gates-baseline.json` shrink-only), Ablage nur im Modulordner. Laeuft in quality.yml UND geschuetzt (Basis-Skript/-Baseline/-Schema) in eslint-ratchet.yml. Beweis-Tests: `src/test/s1_module_gates.test.ts`.
-- Stack: Next.js App Router, TypeScript, Supabase, Drizzle, Recharts, Framer Motion und PWA.
-- `main` ist die einzige Lieferwahrheit.
-- Vor Next.js-Codeaenderungen die relevante Dokumentation unter `node_modules/next/dist/docs/` lesen.
+## 2. Geschlossener aktiver Kontext
 
-## Produktziel
-
-- Das WerkstattCockpit verwandelt einen papiergefuehrten, inhaberabhaengigen Handwerksbetrieb in ein transparentes, planbares und uebergabefaehiges Unternehmen.
-- Primaerer Kundennutzen: Kontrolle, Planbarkeit und unternehmerische Sicherheit.
-- Das operative Herz ist Eingang -> Produktion -> Ausgang.
-- Erfassung muss Arbeit abnehmen: Kamera, Sprache, Datei und Scan mit wenigen klaren Handlungen.
-- Die App verbindet Kunde, Auftrag, Teil, Ereignis, Kommunikation, Dokument, Rechnung, Zahlung und Ergebnis in einem nachvollziehbaren Datenkreislauf.
-- KI strukturiert, analysiert und empfiehlt, ersetzt aber weder Datenbank noch belegte Wahrheit.
-- Der Kern bleibt forkbar: bestaetigte Module muessen spaeter ohne Kreile-spezifische Interna in andere Apps uebertragbar sein.
-
-## Dokumentenautoritaet
-
-D-GOV-001 ordnet jede Wahrheitsart genau einer Quelle zu:
-
-- Projektregeln: `AGENTS.md`.
-- Produktentscheidungen: `docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md`.
-- Scope und Module: `docs/project/linie/MODULKARTE_KANON.md`.
-- Architektur: `docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md`.
-- Aktive Ausfuehrung (Paket, Branch, Base, Status, naechstes Gate): `missions/F1_ORDER_TO_CASH_PILOT_001.yml`.
-- Auf `main` belegter Lieferstand: `docs/project/CURRENT_STATE.md`.
-- UI-Wahrheit: ausschliesslich die in `docs/project/linie/00_UI_REFERENZEN_PFADE.md` gelisteten neuesten Referenzen.
-
-Evidence beweist konkrete Staende, steuert aber niemals Scope oder Baustart. `00_JETZT`, `00_ABC` und `00_BIBEL` sind nur Navigation/Kurzansicht. Die maschinenlesbare Zuordnung liegt in `quality/authoritative-sources.json`; `npm run quality:authority-gate` prueft sie fail-closed.
-
-Vor jeder Mission aus aktuellem `origin/main` lesen:
+PL, Writer und Reviewer verwenden fuer die Ausfuehrung nur:
 
 1. `AGENTS.md`
-2. `docs/project/MASTERPLAN.md`
-3. `docs/project/CURRENT_STATE.md`
-4. `docs/project/NON_LOSS_REGISTER.md`
-5. `docs/project/DOCUMENT_AUTHORITY.md`
-6. `docs/project/MODULARITY_STRATEGY.md`
-7. die freigegebene Missionsdatei oder nummerierten Akzeptanzkriterien
+2. `docs/delivery/KREILE_LIVE_PLAN_V1.json`
+3. `missions/F1_ORDER_TO_CASH_PILOT_001.yml`
+4. die `editablePaths`, `focusedSpec`, Routen und Akzeptanzsaetze des aktiven Pakets
+5. `docs/project/linie/MODULKARTE_KANON.md`
+6. `docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md`
+7. fuer visuelle Pakete ausschliesslich die in `docs/project/linie/00_UI_REFERENZEN_PFADE.md`
+   geschichteten Quellen.
 
-- Alte Masterplaene, Uebergaben, Review-Bundles, lokale Governance-Dateien und Dirty-Worktrees sind nur Quellenmaterial.
-- Sie duerfen den kanonischen Stand nicht ueberschreiben.
-- Reale Systemwahrheit kommt aus GitHub `main`, Vercel Production, Remote-Supabase und reproduzierbaren Nachweisen.
-- Widersprueche muessen benannt werden. Innerhalb derselben Wahrheitsart gilt `BLOCKED_GOVERNANCE_CONFLICT`; keine stille Prioritaetsentscheidung.
+`docs/project/history/**`, alte Paketmanifeste, Rolling Queues, externe Paketplaene,
+alte Gesamtmocks und Alt-PRs sind nicht ausfuehrbar und werden weder als Auftrag noch
+als Abnahmequelle gelesen. Fehlt eine Aussage im aktiven Paket, entscheidet der PL nur
+gewoehnliche Implementierungsdetails innerhalb bestehender Struktur. Nur eine wirklich
+neue dauerhafte Produkt-, Daten-, Provider-, Auth-/Rollen-/Session- oder Modulentscheidung
+geht mit genau einer konkreten Frage an den Owner.
 
-## Arbeitsmodell
+Diese Grenze ist nicht nur Text: `.claude/settings.json` sperrt den direkten Lesezugriff
+auf Altquellen und auf Pfade ausserhalb des Repositorys. Alte Projekt-Agenten, Skills,
+Memories und Stop-Hooks liegen ausschliesslich unter `docs/project/history/**`; im aktiven
+`.claude`-Bereich existiert nur die restriktive Settings-Datei.
 
-- Post-M0-Dauerprozess (gilt nach Merge des F1-Worktrees): Arbeit laeuft in `02_app` auf einem
-  kurzen Paketbranch von aktuellem `main`. Ablauf: Real-E2E → unabhaengiger PASS →
-  PR/CI/Merge → Branch loeschen → zurueck auf sauberes `main`. Kein neuer Worktree pro Mission.
-- Waehrend des aktuellen F1-Laufs bleibt ausschliesslich der autorisierte F1-Worktree aktiv.
-- Pro Mission gibt es genau einen Writer und genau einen unabhaengigen Reviewer.
-- Parallele Writer sind nur auf nachweislich unabhaengigen, nicht ueberlappenden Pfaden und ohne gemeinsame Migration erlaubt.
-- Der Writer trifft gewoehnliche technische Entscheidungen selbststaendig im freigegebenen Scope.
-- Es gibt hoechstens zwei automatische Reparaturschleifen.
-- Rueckfragen sind nur bei echtem externem Blocker oder Produktentscheidung erlaubt.
-- Dirty-Worktrees werden ohne ausdrueckliche Freigabe ausschliesslich read-only behandelt.
+## 3. Rollen ohne Ueberlappung
 
-## Ohne Freigabe verboten
+- PL: besitzt Laufzeiger, roten Akzeptanztest und Receipts; schreibt keinen Produktcode.
+- Writer: bei `kind: BUILD` genau einer; aendert nur `editablePaths`; darf Test, Plan,
+  Mission und Receipts nicht aendern. Bei `kind: GATE` gibt es keinen Writer und keine
+  Produktpfadaenderung.
+- Reviewer: unabhaengig von PL und Writer; prueft den exakten Kandidaten-SHA.
+- Koordinator: ueberwacht Reihenfolge, Prozessleben, Drift und Nachweise; schreibt keinen
+  Produktcode und ersetzt weder PL noch Writer.
 
-- Merge nach `main`.
-- Production-Promotion oder Production-Deploy.
-- Remote-Supabase-Migration.
-- RLS- oder Policy-Aenderung.
-- Daten- oder Dateiloeschung.
-- Aktivierung kostenpflichtiger Dienste.
+Die Commitfolge wird maschinell erzwungen: zuerst ein reiner PL-Preflight-Commit,
+danach reine Writer-Produktcommits, zuletzt reine PL-Abnahme-/Statuscommits. Kein Commit
+darf Rollen mischen.
 
-## Architekturregeln
+## 4. Paketablauf
 
-- Stabile Vertraege laufen ueber SQL-Views, TypeScript-Typen und Komponenten-Props.
-- Jede fachliche Wahrheit hat genau eine Single Source of Truth.
-- KPI-Berechnungen gehoeren in SQL-Views.
-- Keine Mockdaten, erfundenen Zahlen oder `Math.random` im Produktionspfad.
-- Keine Client-`tenantId`-Autorisierung.
-- Keine pauschale Public-RLS-Policy mit `FOR ALL` und `USING true`.
-- Keine Secrets oder PIN-Felder im Client-Payload.
-- Keine Navigation ohne ausdruecklichen Auftrag aendern.
-- Datenkette immer: Datenquelle -> View/Vertrag -> Query/Action -> Komponente -> Loading/Empty/Error/Data.
-- Supabase-Fehler immer mit `message`, `details` und `hint` loggen, wenn diese Felder verfuegbar sind.
-- Originale werden vor OCR und fachlicher Zuordnung dauerhaft gesichert.
-- Kamera, Datei-Upload, Dokument-OCR und Teile-/Zustandsfoto sind getrennte Fachzwecke auf einer gemeinsamen Capture-Basis.
-- Modulgrenzen muessen ueber explizite Ports/Provider, Typen und Props verlaufen; keine Tiefimporte in fremde Modul-Interna.
-- Kreile-spezifische Begriffe, Tenant-Werte, Rollen, Tabellen und UI-Texte duerfen nicht in wiederverwendbare Kerne eingebrannt werden.
-- Jetzt wird nichts vorschnell extrahiert: zuerst stabilisieren, waehrenddessen Schnittkanten dokumentieren; spaeter genau einmal kontrolliert herausloesen.
+1. PL liest nur das aktive Paket und erstellt dessen `focusedSpec` plus
+   `docs/evidence/live-line/<paket>/PREFLIGHT.md`.
+   Die auslegungsfreie Projektion liefert `npm run live:package`.
+2. Bei BUILD muss der Test auf dem unveraenderten Paket-Base ausschliesslich wegen der
+   neuen Produktassertion rot sein (`ASSERTIONS_RED=PASS`). Bei GATE muss die reine
+   Abnahme auf dem Base gruen sein (`GATE_BASELINE=PASS`). Infrastruktur- oder
+   Zugriffsfehler zaehlen fuer keines von beiden.
+3. Nur bei BUILD erhaelt der Writer Paketprojektion, roten Test und `editablePaths` und
+   baut genau diesen vertikalen Nutzwert. Ergibt die Preflight-Messung, dass der noetige
+   Pfad ausserhalb liegt, stoppt der PL vor Writer-Start als Produktentscheidung.
+4. Alle Paketchecks laufen. Danach prueft der unabhaengige Reviewer exakt den Kandidaten-SHA.
+5. Es gibt hoechstens eine Produktkorrekturrunde. Ein belegter Umgebungsfehler wird vom PL
+   behoben und verbraucht diese Runde nicht. Nach `FAIL_FINAL` existiert genau ein
+   Rueckweg: eine ownerautorisierte Amendierung desselben aktiven Pakets. Paket-ID,
+   Reihenfolge und globaler Plan bleiben unveraendert; ein Ersatzpaket ist verboten.
+6. Bei `ownerView: true` werden vor Merge Preview-Link, sichtbares Delta sowie Screenshots
+   in 1914x917, 1220x880 und 390x844 vorgelegt.
+7. Erst nach ausdruecklicher Mergefreigabe darf der normale Merge nach `main` erfolgen.
+   Der automatische Production-Effekt jedes solchen Main-Merges muss Teil derselben
+   Freigabe sein; er ist noch kein Gesamt-Liveclaim. Danach werden Main-Gates und
+   Production-Status real belegt; der PL startet den im Plan
+   bereits festgelegten Nachfolger. Dafuer erstellt er den exakten Nachfolger-Branch frisch
+   aus `origin/main` und fuehrt einmal `npm run live:advance -- --apply` aus. Das Skript
+   verweigert jeden anderen Branch, einen unsauberen Baum, eine abweichende Main-Basis oder
+   einen nicht in `origin/main` enthaltenen Kandidaten.
+8. KR-L20 wird nach seinem autorisierten Main-Merge, Production-Smoke und Betriebsnachweis
+   einmal ueber `codex/kreile-live-close` und `npm run live:close -- --apply` als
+   `LIVE_COMPLETE` geschlossen. Dieser Abschluss darf keinen Produktcode aendern.
 
-## Abschluss
+## 5. Produkt- und Architekturgrenzen
 
-- Erlaubte Abschlussstatus: `PASS`, `FAIL_INTERNAL`, `BLOCKED_EXTERNAL_PERMISSION`, `BLOCKED_PRODUCT_DECISION`.
-- Kein Abschluss ohne Draft-PR, Checks, Vercel Preview und nummerierte Nachweise.
-- Ein Feature gilt nicht als produktreif, wenn der relevante Nutzer-Twin den Kernweg nicht ohne versteckte Entwicklerkenntnisse ausfuehren kann.
+- Stack: Next.js App Router, TypeScript, Supabase, Drizzle, Recharts, Framer Motion, PWA.
+- Vor Next.js-Aenderungen die passende lokale Next.js-Dokumentation unter
+  `node_modules/next/dist/docs/` lesen.
+- Tenant nur ueber `KREILE_TENANT_SLUG`; nie als Literal in Modulkernen.
+- Keine Mock-, Demo-, Fake- oder synthetische Produktfunktion. Synthetische Daten nur in
+  klar isolierten Tests.
+- Keine zweite fachliche Wahrheit, kein stiller Fallback, keine erfundenen Erfolgsclaims.
+- Datenkette: reale Quelle -> stabiler Vertrag/View -> Query/Action -> Komponente ->
+  Loading/Empty/Error/Blocked/Data.
+- Keine Client-`tenantId`-Autorisierung, keine offene Public-RLS, keine Secrets/PINs im
+  Client-Payload.
+- Modulgrenzen laufen ueber oeffentliche Ports/Fassaden; `npm run quality:module-gates`
+  bleibt bindend.
+
+## 6. UI-Wahrheit
+
+- Designsystem V1.1: Tokens, Typografie, Komponenten, Responsiveness.
+- Vier gelistete HTML-Referenzen: Seitenkomposition und Rollenlayout.
+- V5 mit gebundenem SHA: ausschliesslich Ablauf und Zwischenschritte.
+- Keine andere Design- oder Mockdatei ist Bauinput. Demodaten aus Referenzen duerfen nie
+  in Produktpfade gelangen.
+
+## 7. Pflichtchecks und Abschluss
+
+Mindestens:
+
+- `npm run quality:authority-gate:selftest`
+- `npm run quality:authority-gate`
+- `npm run quality:delivery-contracts:selftest`
+- `npm run quality:delivery-contracts`
+- `npm run quality:package-scope:selftest`
+- `npm run live:advance:selftest`
+- `npm run live:close:selftest`
+- `npm run quality:package-scope -- --base <base> --head <head> --branch <branch>`
+- `npm run quality:no-fake-production`
+- `npm run quality:module-gates`
+- `npx tsc --noEmit --incremental false`
+- `npm run lint:full`
+- `npm run test:unit`
+- `npm run build`
+- paketbezogener Browser-/E2E-Nachweis.
+
+Erlaubte Ergebniszustaende: `PASS`, `FAIL_INTERNAL`, `BLOCKED_EXTERNAL_PERMISSION`,
+`BLOCKED_PRODUCT_DECISION`. Ein beendeter oder toter Prozess ist kein Fortschritt.
+Kein Lieferclaim ohne Commit-SHA, sauberen Baum, Exact-SHA-Review, relevante gruene Gates
+und belegte Einordnung in `main`.

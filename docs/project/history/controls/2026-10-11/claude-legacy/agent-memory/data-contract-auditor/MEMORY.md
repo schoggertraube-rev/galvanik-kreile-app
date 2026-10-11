@@ -1,0 +1,4 @@
+- [G04-Dossier (extern)](reference_g04_dossier.md) — wo die verbindliche Vertragswahrheit fuer Auftraege liegt, Datei fuer Datei
+- [Q-G04-008 Manifest-Besitz offen](project_q_g04_008_manifest_ownership.md) — Tabellenbesitz im orders-Manifest ist PL-Entscheidung, kein Writer-Fix
+- [G04 Terminwahrheit: zwei offene Konflikte](project_g04_termin_wahrheit_konflikte.md) — due_date-Semantik G03 vs G04, und ob V1 den Abholzeitpunkt belegt
+- [postgres-js Zeitstempel-Falle](reference_postgres_js_timestamp_trap.md) — TZ-Verschiebungen entstehen im Schreibparameter, nicht in der Projektion

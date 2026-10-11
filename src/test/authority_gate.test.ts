@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   checkAuthorityRepository,
-  runAuthoritySelftest,
+  runSelftest,
 } from "../../scripts/quality/check-authoritative-sources.mjs";
 
 describe("D-GOV-001 authority gate", () => {
@@ -11,6 +11,6 @@ describe("D-GOV-001 authority gate", () => {
   });
 
   it("fails closed for every isolated negative contract class", () => {
-    expect(runAuthoritySelftest()).toEqual({ passed: 27, total: 27, validStates: 2 });
+    expect(runSelftest()).toBe(true);
   });
 });

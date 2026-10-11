@@ -153,6 +153,9 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     ".playwright-cli/**",
+    // Gebundene Referenzquellen und Historie sind Bauinput/Evidence, nicht Produktcode.
+    "docs/project/linie/ui/designsystem_v1_1/**",
+    "docs/project/history/**",
     // Standalone maintenance and local verification CLIs; none are part of the Next.js build.
     "create_migrate.js",
     "enrich.js",

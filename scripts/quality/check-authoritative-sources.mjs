@@ -1,479 +1,277 @@
-import {
-  existsSync,
-  mkdtempSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import os from "node:os";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
+import { pathToFileURL } from "node:url";
 
-const DEFAULT_CONFIG = "quality/authoritative-sources.json";
-const STANDARD_ENTRY = "docs/project/DOCUMENT_AUTHORITY.md";
+import { checkDeliveryRepository } from "./check-delivery-contracts.mjs";
+
+const CONFIG_PATH = "quality/authoritative-sources.json";
 const TRUTH_SOURCE_CONTRACT = Object.freeze({
   project_rules: "AGENTS.md",
   product_decisions: "docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md",
   scope_modules: "docs/project/linie/MODULKARTE_KANON.md",
   architecture: "docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md",
+  live_plan: "docs/delivery/KREILE_LIVE_PLAN_V1.json",
   active_execution: "missions/F1_ORDER_TO_CASH_PILOT_001.yml",
   delivered_main: "docs/project/CURRENT_STATE.md",
   ui_truth: "docs/project/linie/00_UI_REFERENZEN_PFADE.md",
 });
-const UI_REFERENCE_CONTRACT = Object.freeze([
+const UI_REFERENCES = Object.freeze([
   "docs/project/linie/ui/KREILE_STARTSEITE_PHILLIP_V4_2026-08-20.html",
   "docs/project/linie/ui/KREILE_STARTSEITE_ROLF_V8_2026-08-20.html",
   "docs/project/linie/ui/KREILE_AUFTRAGSKARTE_MACHART_V8_2026-08-19.html",
   "docs/project/linie/ui/KREILE_KUNDENKARTE_MACHART_V2_2026-08-19.html",
 ]);
-const REQUIRED_DECISIONS = Object.freeze(["D-GOV-001", "D-ARCH-011", "D-UI-CORE-001", "D-UI-CORE-002"]);
-const REQUIRED_CLASSIFICATIONS = Object.freeze([
+const DESIGN_SYSTEM = Object.freeze({
+  path: "docs/project/linie/ui/designsystem_v1_1",
+  manifestPath: "docs/project/linie/ui/designsystem_v1_1/SHA256SUMS.txt",
+  manifestSha256: "71B0CB01F484BEEF042CFD04D31F951D2DB2D441C427F8212F35A8D41A8041E5",
+  role: "TOKENS_TYPOGRAPHY_COMPONENTS_RESPONSIVE",
+  pageCompositionRole: "FOUR_UI_REFERENCES_ONLY",
+  flowPath: "docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html",
+  flowSha256: "75258FF3BD4CC212C8E989061708A29DC26EA44B851BD28E8F16E8509B0CC0AA",
+  flowRole: "FLOW_AND_INTERMEDIATE_STEPS_ONLY",
+});
+const REQUIRED_DECISIONS = Object.freeze([
+  "D-GOV-001",
+  "D-ARCH-011",
+  "D-UI-CORE-001",
+  "D-UI-CORE-002",
+  "D-UI-DS-001",
+  "D-GOV-004",
+]);
+const ACTIVE_ENTRY_DOCS = Object.freeze([
+  "AGENTS.md",
   "docs/project/DOCUMENT_AUTHORITY.md",
   "docs/project/MASTERPLAN.md",
-  "docs/project/NON_LOSS_REGISTER.md",
-  "docs/project/MODULARITY_STRATEGY.md",
-  "docs/project/PROVIDER_CAPABILITY_MATRIX.md",
-  "docs/project/linie/00_JETZT_UND_LEITPLANKEN.md",
   "docs/project/linie/00_ABC_INDEX.md",
   "docs/project/linie/00_BIBEL_INDEX.md",
-  "docs/project/linie/ui/00_UI_REFERENZ_KANONISCH.md",
+  "docs/project/linie/00_JETZT_UND_LEITPLANKEN.md",
 ]);
-const BANNER_EXEMPTIONS = new Set(["audit_results.md", "CLAUDE.md", "README.md"]);
-const ALLOWED_DOCUMENT_STATUS = new Set(["HISTORICAL_NON_AUTHORITATIVE", "REFERENCE_ONLY_NON_EXECUTABLE"]);
-const CALENDAR_TRANSITION_CONTRACT = Object.freeze({
-  page: "src/app/kalender/page.tsx",
-  registry: "docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json",
-  registryId: "page.kalender",
-  matrix: "docs/project/PROVIDER_CAPABILITY_MATRIX.md",
-  legacyTokens: [
-    "ACTIVE_VISIBLE_PROVIDER_DEFECT",
-    "QUARANTINE",
-    "src/app/kalender/page.tsx",
-    "PATH1_UI_CONVERGENCE_A_REMOVE_OR_404",
+const FORBIDDEN_ACTIVE_TOKENS = Object.freeze([
+  "ROLLING_MANIFEST_QUEUE_V1",
+  "KR-22R",
+  "KR-00F-ROLLING-MANIFESTS",
+  "PATH1_UI_CONVERGENCE_A",
+  "KREILE_LIVE_TRAIN_V5",
+  "kreile-package-plan.v4.proposed.json",
+]);
+const ACTIVE_SURFACE = Object.freeze({
+  rootMarkdown: ["AGENTS.md", "CLAUDE.md", "README.md"],
+  docsFiles: [],
+  projectFiles: ["CURRENT_STATE.md", "DOCUMENT_AUTHORITY.md", "MASTERPLAN.md"],
+  lineFiles: [
+    "00_ABC_INDEX.md",
+    "00_BIBEL_INDEX.md",
+    "00_JETZT_UND_LEITPLANKEN.md",
+    "00_UI_REFERENZEN_PFADE.md",
+    "ARCHITEKTUR_MODULE_PATH1.md",
+    "KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md",
+    "MODULKARTE_KANON.md",
   ],
-  targetTokens: ["REMOVED_NON_RENDERING", "M365_NOT_CONNECTED"],
+  uiFiles: [
+    "CURRENT_DESIGN_REFERENCE.json",
+    "KREILE_AUFTRAGSKARTE_MACHART_V8_2026-08-19.html",
+    "KREILE_GESAMTMOCK_V5_2026-09-14.html",
+    "KREILE_KUNDENKARTE_MACHART_V2_2026-08-19.html",
+    "KREILE_STARTSEITE_PHILLIP_V4_2026-08-20.html",
+    "KREILE_STARTSEITE_ROLF_V8_2026-08-20.html",
+  ],
 });
-const NEXT_PRODUCT_PROGRAM = "PATH1_UI_CONVERGENCE";
-const REQUIRED_MODULE_IDS = Object.freeze([
-  "module.fundament",
-  "module.suche",
-  "module.intake",
-  "module.orders",
-  "module.customers",
-  "module.calendar",
-  "module.accounting-minimal",
-]);
-const CONFIG_KEYS = Object.freeze(["schemaVersion", "truthTypes", "uiReferences", "documentClassifications"]);
-const AUTHORITY_CLAIM = /(?:EINZIGE(?:\s+GÜLTIGE)?\s+(?:UI-)?WAHRHEIT|HÖCHSTE\s+PRIORITÄT|SCHLÄGT\s+ALLES|VORRANGAUTORITÄT)/iu;
 
-const posix = (value) => value.replaceAll("\\", "/");
 const absolute = (root, rel) => path.resolve(root, rel);
-const exists = (root, rel) => typeof rel === "string" && existsSync(absolute(root, rel));
-const read = (root, rel) => readFileSync(absolute(root, rel), "utf8");
+const sorted = (values) => [...values].sort();
+const sameSet = (left, right) => {
+  const a = sorted(left);
+  const b = sorted(right);
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+};
 
-function parseJson(root, rel, errors, code) {
-  if (!exists(root, rel)) {
-    errors.push(`${code}_PATH_MISSING:${rel ?? "UNKNOWN"}`);
+function hashFile(file) {
+  return createHash("sha256").update(readFileSync(file)).digest("hex").toUpperCase();
+}
+
+function readJson(root, rel, errors, code) {
+  const file = absolute(root, rel);
+  if (!existsSync(file)) {
+    errors.push(`${code}_MISSING:${rel}`);
     return null;
   }
   try {
-    return JSON.parse(read(root, rel));
+    return JSON.parse(readFileSync(file, "utf8"));
   } catch (error) {
-    errors.push(`${code}_JSON_INVALID:${rel}:${error.message}`);
+    errors.push(`${code}_INVALID_JSON:${error.message}`);
     return null;
   }
 }
 
-function yamlScalar(text, key, errors) {
-  const matches = [...text.matchAll(new RegExp(`^${key}:\\s*(.+?)\\s*$`, "gm"))];
-  if (matches.length !== 1) {
-    errors.push(`ACTIVE_EXECUTION_KEY_COUNT:${key}:${matches.length}`);
-    return null;
-  }
-  return matches[0][1].replace(/\s+#.*$/, "").trim();
-}
-
-function sameSet(left, right) {
-  const a = [...left].sort();
-  const b = [...right].sort();
-  return a.length === b.length && a.every((value, index) => value === b[index]);
-}
-
-function uiNames(text) {
-  return [...new Set([...text.matchAll(/KREILE_(?:STARTSEITE_(?:PHILLIP_V4|ROLF_V8)|AUFTRAGSKARTE_MACHART_V8|KUNDENKARTE_MACHART_V2)_2026-08-\d{2}\.html/g)].map((match) => match[0]))];
-}
-
-function markdownFiles(root) {
-  const result = [];
-  const visit = (directory) => {
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      if (entry.name === ".git" || entry.name === ".next" || entry.name === "node_modules") continue;
-      const full = path.join(directory, entry.name);
-      if (entry.isDirectory()) visit(full);
-      else if (entry.isFile() && entry.name.toLowerCase().endsWith(".md")) result.push(posix(path.relative(root, full)));
-    }
-  };
-  visit(root);
-  return result;
-}
-
-function checkBanner(root, item, errors) {
-  if (!item || Object.keys(item).sort().join(",") !== "path,status") {
-    errors.push(`DOCUMENT_CLASSIFICATION_SCHEMA:${item?.path ?? "UNKNOWN"}`);
+function validateConfigShape(config, errors) {
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
+    errors.push("AUTHORITY_CONFIG_NOT_OBJECT");
     return;
   }
-  if (!exists(root, item.path)) {
-    errors.push(`DOCUMENT_CLASSIFICATION_PATH_MISSING:${item.path}`);
-    return;
-  }
-  if (!ALLOWED_DOCUMENT_STATUS.has(item.status)) errors.push(`DOCUMENT_CLASSIFICATION_STATUS:${item.path}`);
-  if (BANNER_EXEMPTIONS.has(item.path)) return;
-  const first = read(root, item.path).split(/\r?\n/, 1)[0];
-  const expected = `<!-- STATUS: ${item.status} | CANONICAL_ENTRY: ${STANDARD_ENTRY} -->`;
-  if (first !== expected) errors.push(`DOCUMENT_BANNER_MISSING:${item.path}`);
-}
-
-export function checkAuthorityRepository(root = process.cwd(), configRel = DEFAULT_CONFIG) {
-  const errors = [];
-  const config = parseJson(root, configRel, errors, "AUTHORITY_CONFIG");
-  if (!config) return errors;
-
-  if (config.schemaVersion !== 2) errors.push("AUTHORITY_CONFIG_SCHEMA_VERSION");
-  const configKeys = Object.keys(config).sort();
-  if (!sameSet(configKeys, CONFIG_KEYS)) errors.push(`AUTHORITY_CONFIG_CLOSED_SCHEMA:${configKeys.join(",")}`);
+  const expectedKeys = ["designSystem", "schemaVersion", "truthTypes", "uiReferences"];
+  if (!sameSet(Object.keys(config), expectedKeys)) errors.push(`AUTHORITY_CONFIG_CLOSED_SCHEMA:${Object.keys(config).sort().join(",")}`);
+  if (config.schemaVersion !== 4) errors.push("AUTHORITY_CONFIG_SCHEMA_VERSION");
 
   const truthTypes = Array.isArray(config.truthTypes) ? config.truthTypes : [];
   if (truthTypes.length !== Object.keys(TRUTH_SOURCE_CONTRACT).length) errors.push(`TRUTH_TYPE_TOTAL:${truthTypes.length}`);
   const ids = [];
   const sources = [];
   for (const entry of truthTypes) {
-    if (!entry || Object.keys(entry).sort().join(",") !== "id,source") {
+    if (!entry || !sameSet(Object.keys(entry), ["id", "source"])) {
       errors.push(`TRUTH_TYPE_SCHEMA:${entry?.id ?? "UNKNOWN"}`);
       continue;
     }
     ids.push(entry.id);
     sources.push(entry.source);
-    if (!(entry.id in TRUTH_SOURCE_CONTRACT)) errors.push(`TRUTH_TYPE_UNKNOWN:${entry.id}`);
-    else if (TRUTH_SOURCE_CONTRACT[entry.id] !== entry.source) errors.push(`TRUTH_SOURCE_CONTRACT:${entry.id}`);
-    if (!exists(root, entry.source)) errors.push(`TRUTH_SOURCE_PATH_MISSING:${entry.source}`);
-  }
-  for (const id of Object.keys(TRUTH_SOURCE_CONTRACT)) {
-    if (ids.filter((value) => value === id).length !== 1) errors.push(`TRUTH_TYPE_COUNT:${id}`);
+    if (TRUTH_SOURCE_CONTRACT[entry.id] !== entry.source) errors.push(`TRUTH_SOURCE_CONTRACT:${entry.id}`);
   }
   if (new Set(ids).size !== ids.length) errors.push("TRUTH_TYPE_DUPLICATE_ID");
   if (new Set(sources).size !== sources.length) errors.push("TRUTH_SOURCE_REUSED");
-
-  const configuredRefs = Array.isArray(config.uiReferences) ? config.uiReferences.map(posix) : [];
-  if (!sameSet(configuredRefs, UI_REFERENCE_CONTRACT)) errors.push("UI_REFERENCE_CONFIG_CONTRACT");
-  if (new Set(configuredRefs).size !== configuredRefs.length) errors.push("UI_REFERENCE_CONFIG_DUPLICATE");
-  for (const rel of UI_REFERENCE_CONTRACT) if (!exists(root, rel)) errors.push(`UI_REFERENCE_PATH_MISSING:${rel}`);
-
-  const classifications = Array.isArray(config.documentClassifications) ? config.documentClassifications : [];
-  if (classifications.length === 0) errors.push("DOCUMENT_CLASSIFICATIONS_EMPTY");
-  const classifiedPaths = classifications.map((item) => item?.path).filter(Boolean);
-  if (new Set(classifiedPaths).size !== classifiedPaths.length) errors.push("DOCUMENT_CLASSIFICATION_DUPLICATE");
-  for (const item of classifications) checkBanner(root, item, errors);
-  for (const rel of REQUIRED_CLASSIFICATIONS) {
-    if (classifiedPaths.filter((value) => value === rel).length !== 1) errors.push(`REQUIRED_DOCUMENT_CLASSIFICATION:${rel}`);
+  for (const id of Object.keys(TRUTH_SOURCE_CONTRACT)) {
+    if (ids.filter((value) => value === id).length !== 1) errors.push(`TRUTH_TYPE_COUNT:${id}`);
   }
+  if (!sameSet(config.uiReferences ?? [], UI_REFERENCES)) errors.push("UI_REFERENCE_CONFIG_CONTRACT");
+  if (JSON.stringify(config.designSystem) !== JSON.stringify(DESIGN_SYSTEM)) errors.push("DESIGN_SYSTEM_CONFIG_CONTRACT");
+}
 
+function validateDecisionAndUiTruth(root, errors) {
   const decisionPath = TRUTH_SOURCE_CONTRACT.product_decisions;
-  const decision = exists(root, decisionPath) ? read(root, decisionPath) : "";
-  const decisions = [...decision.matchAll(/^##\s+(D-[A-Z0-9-]+)\b/gm)].map((match) => match[1]);
-  for (const id of new Set(decisions)) {
-    const count = decisions.filter((value) => value === id).length;
-    if (count > 1) errors.push(`DECISION_ID_DUPLICATE:${id}`);
-  }
-  for (const id of REQUIRED_DECISIONS) {
-    const count = decisions.filter((value) => value === id).length;
-    if (count !== 1) errors.push(`REQUIRED_DECISION_COUNT:${id}:${count}`);
+  const decision = readFileSync(absolute(root, decisionPath), "utf8");
+  const ids = [...decision.matchAll(/^##\s+(D-[A-Z0-9-]+)\b/gm)].map((match) => match[1]);
+  for (const id of new Set(ids)) if (ids.filter((value) => value === id).length !== 1) errors.push(`DECISION_ID_DUPLICATE:${id}`);
+  for (const id of REQUIRED_DECISIONS) if (ids.filter((value) => value === id).length !== 1) errors.push(`REQUIRED_DECISION_COUNT:${id}`);
+
+  const uiIndex = readFileSync(absolute(root, TRUTH_SOURCE_CONTRACT.ui_truth), "utf8");
+  for (const rel of UI_REFERENCES) if (!uiIndex.includes(path.basename(rel))) errors.push(`UI_INDEX_REFERENCE_MISSING:${rel}`);
+  for (const token of [DESIGN_SYSTEM.path, DESIGN_SYSTEM.role, DESIGN_SYSTEM.flowRole, "V1.1"]) {
+    if (!uiIndex.includes(token)) errors.push(`UI_INDEX_LAYER_MISSING:${token}`);
   }
 
-  const uiIndex = read(root, TRUTH_SOURCE_CONTRACT.ui_truth);
-  const indexedRefs = [...uiIndex.matchAll(/^- `([^`]+\.html)`/gm)]
-    .map((match) => posix(path.join("docs/project/linie/ui", match[1])));
-  if (!sameSet(indexedRefs, UI_REFERENCE_CONTRACT)) errors.push("UI_REFERENCE_INDEX_CONTRACT");
-  if (new Set(indexedRefs).size !== indexedRefs.length) errors.push("UI_REFERENCE_INDEX_DUPLICATE");
-  const expectedUiNames = UI_REFERENCE_CONTRACT.map((rel) => path.basename(rel));
-  for (const [kind, rel] of [["DECISION", decisionPath], ["SCOPE", TRUTH_SOURCE_CONTRACT.scope_modules]]) {
-    if (!sameSet(uiNames(read(root, rel)), expectedUiNames)) errors.push(`UI_REFERENCE_${kind}_CONTRACT`);
+  const pointer = readJson(root, "docs/project/linie/ui/CURRENT_DESIGN_REFERENCE.json", errors, "DESIGN_POINTER");
+  if (pointer) {
+    if (pointer.designSystem?.path !== DESIGN_SYSTEM.path
+      || pointer.designSystem?.manifestPath !== DESIGN_SYSTEM.manifestPath
+      || pointer.designSystem?.manifestSha256 !== DESIGN_SYSTEM.manifestSha256
+      || pointer.designSystem?.role !== DESIGN_SYSTEM.role) errors.push("DESIGN_POINTER_SYSTEM_BINDING");
+    if (pointer.current?.path !== DESIGN_SYSTEM.flowPath
+      || pointer.current?.sha256 !== DESIGN_SYSTEM.flowSha256
+      || pointer.current?.role !== DESIGN_SYSTEM.flowRole) errors.push("DESIGN_POINTER_FLOW_BINDING");
+    if (!sameSet(pointer.pageTruth ?? [], UI_REFERENCES)) errors.push("DESIGN_POINTER_PAGE_BINDING");
   }
+}
 
-  const missionPath = TRUTH_SOURCE_CONTRACT.active_execution;
-  const mission = read(root, missionPath);
-  for (const key of ["mission_id", "status", "branch", "base_sha", "active_package", "next_gate_after_active_package"]) {
-    const value = yamlScalar(mission, key, errors);
-    if (!value || value === "none") errors.push(`ACTIVE_EXECUTION_VALUE_EMPTY:${key}`);
-  }
-  if (yamlScalar(mission, "status", errors) !== "active") errors.push("CONFIGURED_MISSION_NOT_ACTIVE");
-  if (yamlScalar(mission, "next_product_priority", errors) !== NEXT_PRODUCT_PROGRAM) errors.push("UI_PROGRAM_NOT_CANONICAL");
-  if (yamlScalar(mission, "path1_s5_search_status", errors) !== "CANDIDATE_PR_84_NOT_ACCEPTED_NOT_MERGED") errors.push("SEARCH_CANDIDATE_STATUS_DRIFT");
-  if (yamlScalar(mission, "path1_calendar_status", errors) !== "NOT_STARTED_BLOCKED_EXTERNAL_PERMISSION") errors.push("CALENDAR_START_STATUS_DRIFT");
-  if (yamlScalar(mission, "f1_6_status", errors) !== "NOT_STARTED") errors.push("F1_6_STATUS_DRIFT");
-  const activeMissions = readdirSync(absolute(root, "missions"), { withFileTypes: true })
-    .filter((entry) => entry.isFile() && /\.ya?ml$/i.test(entry.name))
-    .filter((entry) => /^status:\s*active\s*$/m.test(readFileSync(path.join(absolute(root, "missions"), entry.name), "utf8")));
-  if (activeMissions.length !== 1 || activeMissions[0]?.name !== path.basename(missionPath)) errors.push(`ACTIVE_MISSION_COUNT_OR_SOURCE:${activeMissions.length}`);
-
-  const current = read(root, TRUTH_SOURCE_CONTRACT.delivered_main);
-  for (const token of ["OWNER_UX_FAIL / NOT_DELIVERED", "FULLY_REJECTED_AS_DELIVERY_BASE", "kein Zielscreen-PASS"]) {
-    if (!current.includes(token)) errors.push(`CURRENT_STATE_UI_TRUTH_MISSING:${token}`);
-  }
-  if (!/main@[0-9a-f]{40}/.test(current.slice(0, 1000))) errors.push("CURRENT_STATE_MAIN_SHA_MISSING");
-  const scope = read(root, TRUTH_SOURCE_CONTRACT.scope_modules);
-  const architecture = read(root, TRUTH_SOURCE_CONTRACT.architecture);
-  for (const [kind, content] of [["DECISION", decision], ["SCOPE", scope], ["ARCHITECTURE", architecture]]) {
-    for (const token of ["PATH1_UI_CONVERGENCE", "vollständig als Lieferbasis verworfen", "UX-Lieferfortschritt"]) {
-      if (!content.includes(token)) errors.push(`UI_REPLACEMENT_${kind}_MISSING:${token}`);
+function validateActiveEntryDocs(root, errors) {
+  for (const rel of ACTIVE_ENTRY_DOCS) {
+    const file = absolute(root, rel);
+    if (!existsSync(file)) {
+      errors.push(`ACTIVE_ENTRY_MISSING:${rel}`);
+      continue;
     }
+    const text = readFileSync(file, "utf8");
+    if (!text.includes("docs/delivery/KREILE_LIVE_PLAN_V1.json") && !text.includes("KREILE_LIVE_PLAN_V1.json")) {
+      errors.push(`ACTIVE_ENTRY_PLAN_POINTER_MISSING:${rel}`);
+    }
+    for (const token of FORBIDDEN_ACTIVE_TOKENS) if (text.includes(token)) errors.push(`ACTIVE_ENTRY_LEGACY_TOKEN:${rel}:${token}`);
   }
+}
 
-  const forbiddenExecutionKeys = /^(?:branch|base_sha|active_package|next_gate_after_active_package):\s*/m;
-  for (const item of classifications) {
-    if (exists(root, item?.path) && forbiddenExecutionKeys.test(read(root, item.path))) errors.push(`CLASSIFIED_DOCUMENT_ACTIVE_EXECUTION:${item.path}`);
-  }
-  const knownDocs = new Set([...sources, ...classifiedPaths]);
-  for (const rel of markdownFiles(root)) {
-    if (!knownDocs.has(rel) && AUTHORITY_CLAIM.test(read(root, rel))) errors.push(`UNCLASSIFIED_COMPETING_AUTHORITY:${rel}`);
-  }
+function directFiles(root, rel, predicate = () => true) {
+  const directory = absolute(root, rel);
+  if (!existsSync(directory)) return [];
+  return readdirSync(directory, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && predicate(entry.name))
+    .map((entry) => entry.name);
+}
 
-  const registry = parseJson(root, CALENDAR_TRANSITION_CONTRACT.registry, errors, "CAPABILITY_REGISTRY");
-  const matrix = exists(root, CALENDAR_TRANSITION_CONTRACT.matrix) ? read(root, CALENDAR_TRANSITION_CONTRACT.matrix) : "";
-  const pagePresent = exists(root, CALENDAR_TRANSITION_CONTRACT.page);
-  const pageSource = pagePresent ? read(root, CALENDAR_TRANSITION_CONTRACT.page) : "";
-  const calendarCapabilities = registry?.capabilities?.filter((item) =>
-    item.stable_id === CALENDAR_TRANSITION_CONTRACT.registryId
-    || item.entry_point === CALENDAR_TRANSITION_CONTRACT.page
-    || item.adapter_file === CALENDAR_TRANSITION_CONTRACT.page
-  ) ?? [];
-  const calendarPageRows = matrix.split(/\r?\n/).filter((line) => {
-    if (!/^\| `page\./.test(line)) return false;
-    const id = line.split("|")[1]?.trim().replaceAll("`", "");
-    return id === CALENDAR_TRANSITION_CONTRACT.registryId;
-  });
-  const calendarModuleRows = matrix.split(/\r?\n/).filter((line) => /^\| `module\.calendar`/.test(line));
-  const targetMatrixTruth = CALENDAR_TRANSITION_CONTRACT.targetTokens.every((token) =>
-    calendarModuleRows.length === 1 && calendarModuleRows[0].includes(token)
-  );
-  const activeCalendarProvider = registry?.capabilities?.find((item) =>
-    item.kind === "PROVIDER_CONNECTION"
-    && /(?:google\s*calendar|google\s*kalender|microsoft\s*365|m365|calendar)/iu.test(`${item.stable_id ?? ""} ${item.provider ?? ""} ${item.entry_point ?? ""} ${item.adapter_file ?? ""}`)
-    && (item.visible === true || item.reachable === true || item.classification === "REAL_VERIFIED")
-  );
-  const calendarProviderRows = matrix.split(/\r?\n/).filter((line) =>
-    /^\| `provider\./.test(line)
-    && /(?:google\s*(?:calendar|kalender)|microsoft\s*365|m365|calendar)/iu.test(line)
-  );
-  const activeCalendarProviderRows = calendarProviderRows.filter((line) => {
-    const cells = line.split("|").slice(1, -1).map((cell) => cell.trim());
-    return cells[3] !== "PENDING" || /\b(?:ACTIVE|CONNECTED|REAL_VERIFIED)\b/iu.test(line);
-  });
-  if (calendarProviderRows.length !== 1 || !calendarProviderRows[0]?.includes("`provider.calendar-m365-graph`")) {
-    errors.push(`CALENDAR_PROVIDER_MATRIX_CONTRACT:${calendarProviderRows.length}`);
-  }
-  if (activeCalendarProvider) errors.push(`ACTIVE_CALENDAR_PROVIDER:${activeCalendarProvider.stable_id}`);
-  if (activeCalendarProviderRows.length > 0) errors.push("ACTIVE_CALENDAR_PROVIDER_MATRIX_CLAIM");
+function recursiveFileCount(root, rel) {
+  const directory = absolute(root, rel);
+  if (!existsSync(directory)) return 0;
+  return readdirSync(directory, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile()).length;
+}
 
-  const legacyState = pagePresent || calendarCapabilities.length > 0 || calendarPageRows.length > 0 || matrix.includes("ACTIVE_VISIBLE_PROVIDER_DEFECT");
-  if (legacyState) {
-    if (!pagePresent) errors.push("LEGACY_CALENDAR_PAGE_MISSING");
-    if (!/(?:Google Kalender|Google Calendar)/iu.test(pageSource)) errors.push("LEGACY_CALENDAR_SOURCE_CLAIM_NOT_DETECTED");
-    if (
-      calendarCapabilities.length !== 1
-      || calendarCapabilities[0].stable_id !== CALENDAR_TRANSITION_CONTRACT.registryId
-      || calendarCapabilities[0].entry_point !== CALENDAR_TRANSITION_CONTRACT.page
-      || calendarCapabilities[0].visible !== true
-      || calendarCapabilities[0].reachable !== true
-    ) errors.push("LEGACY_CALENDAR_REGISTRY_STATE_NOT_DETECTED");
-    for (const token of CALENDAR_TRANSITION_CONTRACT.legacyTokens) {
-      if (!calendarPageRows[0]?.includes(token)) errors.push(`LEGACY_CALENDAR_MATRIX_BLOCKER_MISSING:${token}`);
-    }
-    if (targetMatrixTruth || matrix.includes("REMOVED_NON_RENDERING") || matrix.includes("M365_NOT_CONNECTED")) {
-      errors.push("CALENDAR_TRANSITION_MIXED_LEGACY_AND_TARGET");
-    }
-  } else {
-    if (pagePresent) errors.push("REMOVED_CALENDAR_PAGE_REINTRODUCED");
-    if (calendarCapabilities.length > 0) errors.push("REMOVED_CALENDAR_REGISTRY_REINTRODUCED");
-    if (calendarPageRows.length > 0) errors.push("REMOVED_CALENDAR_MATRIX_ROUTE_REINTRODUCED");
-    for (const token of CALENDAR_TRANSITION_CONTRACT.targetTokens) {
-      if (!calendarModuleRows[0]?.includes(token)) errors.push(`REMOVED_CALENDAR_MATRIX_TRUTH_MISSING:${token}`);
-    }
-    if (/ACTIVE_VISIBLE_PROVIDER_DEFECT|Google Kalender|Google Calendar/iu.test(matrix)) {
-      errors.push("REMOVED_CALENDAR_LEGACY_CLAIM_REINTRODUCED");
-    }
-  }
-  for (const id of REQUIRED_MODULE_IDS) if (!matrix.includes(`\`${id}\``)) errors.push(`PROVIDER_MATRIX_MODULE_MISSING:${id}`);
-  const pageRows = matrix.split(/\r?\n/).filter((line) => /^\| `page\./.test(line));
-  const matrixPageIds = pageRows.map((row) => row.split("|")[1].trim().replaceAll("`", ""));
-  for (const row of pageRows) {
-    const cells = row.split("|").slice(1, -1).map((cell) => cell.trim());
-    if (cells.length !== 7 || cells.some((cell) => cell.length === 0)) errors.push(`PROVIDER_MATRIX_ROUTE_COLUMNS:${cells[0] ?? "UNKNOWN"}`);
-  }
-  for (const capability of registry?.capabilities?.filter((item) => item.kind === "PAGE_ROUTE") ?? []) {
-    const count = matrixPageIds.filter((id) => id === capability.stable_id).length;
-    if (count !== 1) errors.push(`PROVIDER_MATRIX_ROUTE_COUNT:${capability.stable_id}:${count}`);
-  }
-  for (const id of new Set(matrixPageIds)) {
-    if (!registry?.capabilities?.some((item) => item.kind === "PAGE_ROUTE" && item.stable_id === id)) errors.push(`PROVIDER_MATRIX_UNKNOWN_ROUTE:${id}`);
+function validateActiveSurface(root, errors) {
+  if (!sameSet(directFiles(root, ".", (name) => name.endsWith(".md")), ACTIVE_SURFACE.rootMarkdown)) errors.push("ACTIVE_ROOT_MARKDOWN_SURFACE");
+  if (!sameSet(directFiles(root, "docs"), ACTIVE_SURFACE.docsFiles)) errors.push("ACTIVE_DOCS_ROOT_SURFACE");
+  if (!sameSet(directFiles(root, "docs/project"), ACTIVE_SURFACE.projectFiles)) errors.push("ACTIVE_PROJECT_SURFACE");
+  if (!sameSet(directFiles(root, "docs/project/linie"), ACTIVE_SURFACE.lineFiles)) errors.push("ACTIVE_LINE_SURFACE");
+  if (!sameSet(directFiles(root, "docs/project/linie/ui"), ACTIVE_SURFACE.uiFiles)) errors.push("ACTIVE_UI_SURFACE");
+  if (recursiveFileCount(root, "docs/module") !== 0) errors.push("ACTIVE_LEGACY_MODULE_FILES");
+  if (recursiveFileCount(root, "docs/project/history/legacy-sources/2026-10-11") < 277) errors.push("LEGACY_ARCHIVE_INCOMPLETE");
+}
+
+export function checkAuthorityRepository(root = process.cwd(), configRel = CONFIG_PATH) {
+  const errors = [];
+  const config = readJson(root, configRel, errors, "AUTHORITY_CONFIG");
+  if (!config) return errors;
+  validateConfigShape(config, errors);
+  for (const source of Object.values(TRUTH_SOURCE_CONTRACT)) if (!existsSync(absolute(root, source))) errors.push(`TRUTH_SOURCE_PATH_MISSING:${source}`);
+  for (const rel of UI_REFERENCES) if (!existsSync(absolute(root, rel))) errors.push(`UI_REFERENCE_PATH_MISSING:${rel}`);
+  if (existsSync(absolute(root, DESIGN_SYSTEM.manifestPath))
+      && hashFile(absolute(root, DESIGN_SYSTEM.manifestPath)) !== DESIGN_SYSTEM.manifestSha256) errors.push("DESIGN_SYSTEM_MANIFEST_HASH");
+  validateDecisionAndUiTruth(root, errors);
+  validateActiveEntryDocs(root, errors);
+  validateActiveSurface(root, errors);
+  for (const error of checkDeliveryRepository(root)) errors.push(`DELIVERY:${error}`);
+  if (!existsSync(absolute(root, "docs/project/history/controls/2026-10-11/check-authoritative-sources.legacy-2026-10-11.mjs.txt"))) {
+    errors.push("AUTHORITY_LEGACY_ARCHIVE_MISSING");
   }
   return errors;
 }
 
-function writeFixture(root, calendarState = "legacy") {
-  const banner = (status, title) => `<!-- STATUS: ${status} | CANONICAL_ENTRY: ${STANDARD_ENTRY} -->\n# ${title}\n`;
-  const files = {
-    "AGENTS.md": "# Rules\n",
-    "docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md": `## D-GOV-001 — one\n## D-ARCH-011 — provider\n## D-UI-CORE-001 — route\n## D-UI-CORE-002 — PATH1_UI_CONVERGENCE\nvollständig als Lieferbasis verworfen; kein UX-Lieferfortschritt\n${UI_REFERENCE_CONTRACT.map((rel) => `\`${path.basename(rel)}\``).join("\n")}\n`,
-    "docs/project/linie/MODULKARTE_KANON.md": `PATH1_UI_CONVERGENCE\nvollständig als Lieferbasis verworfen; kein UX-Lieferfortschritt\n${UI_REFERENCE_CONTRACT.map((rel) => `\`${path.basename(rel)}\``).join("\n")}\n`,
-    "docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md": "PATH1_UI_CONVERGENCE\nvollständig als Lieferbasis verworfen; kein UX-Lieferfortschritt\n",
-    "missions/F1_ORDER_TO_CASH_PILOT_001.yml": `mission_id: F1\nstatus: active\nbranch: gov\nbase_sha: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nactive_package: GOV\nnext_gate_after_active_package: REVIEW\nnext_product_priority: ${NEXT_PRODUCT_PROGRAM}\npath1_s5_search_status: CANDIDATE_PR_84_NOT_ACCEPTED_NOT_MERGED\npath1_calendar_status: NOT_STARTED_BLOCKED_EXTERNAL_PERMISSION\nf1_6_status: NOT_STARTED\n`,
-    "docs/project/CURRENT_STATE.md": "# Current main@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nOWNER_UX_FAIL / NOT_DELIVERED\nFULLY_REJECTED_AS_DELIVERY_BASE\nkein Zielscreen-PASS\n",
-    "docs/project/linie/00_UI_REFERENZEN_PFADE.md": `# UI truth\n${UI_REFERENCE_CONTRACT.map((rel) => `- \`${path.basename(rel)}\``).join("\n")}\n`,
-    "docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json": JSON.stringify({ capabilities: [
-      { stable_id: "page.real", kind: "PAGE_ROUTE", visible: true },
-    ] }),
-    "docs/project/PROVIDER_CAPABILITY_MATRIX.md": `${banner("REFERENCE_ONLY_NON_EXECUTABLE", "Matrix")}${REQUIRED_MODULE_IDS.filter((id) => id !== "module.calendar").map((id) => `\`${id}\``).join("\n")}\n| \`provider.calendar-m365-graph\` | none | Microsoft 365 Graph | PENDING | CalendarPort | no account/consent/E2E | later |\n| \`page.real\` | /real | own | none | PENDING | evidence | next |\n`,
-  };
-  const registry = JSON.parse(files[CALENDAR_TRANSITION_CONTRACT.registry]);
-  if (calendarState === "legacy") {
-    registry.capabilities.push({
-      stable_id: CALENDAR_TRANSITION_CONTRACT.registryId,
-      kind: "PAGE_ROUTE",
-      entry_point: CALENDAR_TRANSITION_CONTRACT.page,
-      visible: true,
-      reachable: true,
-    });
-    files[CALENDAR_TRANSITION_CONTRACT.registry] = JSON.stringify(registry);
-    files[CALENDAR_TRANSITION_CONTRACT.page] = "Google Kalender vorbereitet\n";
-    files[CALENDAR_TRANSITION_CONTRACT.matrix] += "| `module.calendar` | ACTIVE_VISIBLE_PROVIDER_DEFECT | Microsoft 365 Graph later | PENDING | domain dates | source evidence | remove legacy route |\n";
-    files[CALENDAR_TRANSITION_CONTRACT.matrix] += `| \`${CALENDAR_TRANSITION_CONTRACT.registryId}\` | /kalender | ACTIVE_VISIBLE_PROVIDER_DEFECT at ${CALENDAR_TRANSITION_CONTRACT.page} | Google Kalender | QUARANTINE | source+registry | PATH1_UI_CONVERGENCE_A_REMOVE_OR_404 |\n`;
-  } else if (calendarState === "target") {
-    files[CALENDAR_TRANSITION_CONTRACT.matrix] += "| `module.calendar` | REMOVED_NON_RENDERING | Microsoft 365 Graph; M365_NOT_CONNECTED | PENDING | domain dates | no account/consent/E2E | later |\n";
-  } else {
-    throw new Error(`Unknown calendar fixture state: ${calendarState}`);
-  }
-  const classified = [
-    ["docs/project/DOCUMENT_AUTHORITY.md", "Authority"],
-    ["docs/project/MASTERPLAN.md", "Master"],
-    ["docs/project/NON_LOSS_REGISTER.md", "Non loss"],
-    ["docs/project/MODULARITY_STRATEGY.md", "Modularity"],
-    ["docs/project/linie/00_JETZT_UND_LEITPLANKEN.md", "Now"],
-    ["docs/project/linie/00_ABC_INDEX.md", "ABC"],
-    ["docs/project/linie/00_BIBEL_INDEX.md", "Bible"],
-    ["docs/project/linie/ui/00_UI_REFERENZ_KANONISCH.md", "UI manifest"],
-  ];
-  for (const [rel, title] of classified) files[rel] = banner("REFERENCE_ONLY_NON_EXECUTABLE", title);
-  for (const rel of UI_REFERENCE_CONTRACT) files[rel] = "<!doctype html>\n";
-  for (const [rel, content] of Object.entries(files)) {
-    mkdirSync(path.dirname(absolute(root, rel)), { recursive: true });
-    writeFileSync(absolute(root, rel), content, "utf8");
-  }
-  const config = {
-    schemaVersion: 2,
-    truthTypes: Object.entries(TRUTH_SOURCE_CONTRACT).map(([id, source]) => ({ id, source })),
-    uiReferences: [...UI_REFERENCE_CONTRACT],
-    documentClassifications: [
-      ...REQUIRED_CLASSIFICATIONS.map((rel) => ({ path: rel, status: "REFERENCE_ONLY_NON_EXECUTABLE" })),
-    ],
-  };
-  mkdirSync(absolute(root, "quality"), { recursive: true });
-  writeFileSync(absolute(root, DEFAULT_CONFIG), `${JSON.stringify(config, null, 2)}\n`, "utf8");
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
 }
 
-export function runAuthoritySelftest() {
-  const cases = [
-    ["missing-section", (root) => { const p = absolute(root, DEFAULT_CONFIG); const c = JSON.parse(readFileSync(p, "utf8")); delete c.documentClassifications; writeFileSync(p, JSON.stringify(c), "utf8"); }, "AUTHORITY_CONFIG_CLOSED_SCHEMA"],
-    ["empty-section", (root) => { const p = absolute(root, DEFAULT_CONFIG); const c = JSON.parse(readFileSync(p, "utf8")); c.documentClassifications = []; writeFileSync(p, JSON.stringify(c), "utf8"); }, "DOCUMENT_CLASSIFICATIONS_EMPTY"],
-    ["shadow-truth", (root) => { const p = absolute(root, DEFAULT_CONFIG); const c = JSON.parse(readFileSync(p, "utf8")); c.activeExecution = { branch: "shadow" }; writeFileSync(p, JSON.stringify(c), "utf8"); }, "AUTHORITY_CONFIG_CLOSED_SCHEMA"],
-    ["extra-truth-type", (root) => { const p = absolute(root, DEFAULT_CONFIG); const c = JSON.parse(readFileSync(p, "utf8")); c.truthTypes.push({ id: "shadow", source: "AGENTS.md" }); writeFileSync(p, JSON.stringify(c), "utf8"); }, "TRUTH_TYPE_UNKNOWN"],
-    ["source-relabeled", (root) => { const p = absolute(root, DEFAULT_CONFIG); const c = JSON.parse(readFileSync(p, "utf8")); c.truthTypes[0].source = "docs/project/CURRENT_STATE.md"; writeFileSync(p, JSON.stringify(c), "utf8"); }, "TRUTH_SOURCE_CONTRACT"],
-    ["ui-wrong-date", (root) => { const p = absolute(root, DEFAULT_CONFIG); const c = JSON.parse(readFileSync(p, "utf8")); c.uiReferences[2] = c.uiReferences[2].replace("08-19", "08-20"); writeFileSync(p, JSON.stringify(c), "utf8"); }, "UI_REFERENCE_CONFIG_CONTRACT"],
-    ["ui-index-asymmetric", (root) => { const p = absolute(root, TRUTH_SOURCE_CONTRACT.ui_truth); writeFileSync(p, readFileSync(p, "utf8").replace("08-19.html", "08-18.html"), "utf8"); }, "UI_REFERENCE_INDEX_CONTRACT"],
-    ["ui-decision-asymmetric", (root) => { const p = absolute(root, TRUTH_SOURCE_CONTRACT.product_decisions); writeFileSync(p, readFileSync(p, "utf8").replace("08-19.html", "08-18.html"), "utf8"); }, "UI_REFERENCE_DECISION_CONTRACT"],
-    ["ui-scope-asymmetric", (root) => { const p = absolute(root, TRUTH_SOURCE_CONTRACT.scope_modules); writeFileSync(p, readFileSync(p, "utf8").replace("08-19.html", "08-18.html"), "utf8"); }, "UI_REFERENCE_SCOPE_CONTRACT"],
-    ["missing-banner", (root) => { const p = absolute(root, "docs/project/DOCUMENT_AUTHORITY.md"); writeFileSync(p, "# no banner\n", "utf8"); }, "DOCUMENT_BANNER_MISSING"],
-    ["banner-self-weaken", (root) => { const p = absolute(root, DEFAULT_CONFIG); const c = JSON.parse(readFileSync(p, "utf8")); c.documentClassifications[0].bannerRequired = false; writeFileSync(p, JSON.stringify(c), "utf8"); }, "DOCUMENT_CLASSIFICATION_SCHEMA"],
-    ["nested-authority-claim", (root) => { const p = absolute(root, "docs/project/deep/claim.md"); mkdirSync(path.dirname(p), { recursive: true }); writeFileSync(p, "# DIE EINZIGE GÜLTIGE UI-WAHRHEIT\n", "utf8"); }, "UNCLASSIFIED_COMPETING_AUTHORITY"],
-    ["mission-inactive", (root) => { const p = absolute(root, TRUTH_SOURCE_CONTRACT.active_execution); writeFileSync(p, readFileSync(p, "utf8").replace("status: active", "status: paused"), "utf8"); }, "CONFIGURED_MISSION_NOT_ACTIVE"],
-    ["program-shadow", (root) => { const p = absolute(root, TRUTH_SOURCE_CONTRACT.active_execution); writeFileSync(p, readFileSync(p, "utf8").replace("PATH1_UI_CONVERGENCE", "PATH1_UI_CONVERGENCE_A"), "utf8"); }, "UI_PROGRAM_NOT_CANONICAL"],
-    ["duplicate-decision", (root) => { const p = absolute(root, TRUTH_SOURCE_CONTRACT.product_decisions); writeFileSync(p, `${readFileSync(p, "utf8")}## D-UI-CORE-002 — shadow\n`, "utf8"); }, "DECISION_ID_DUPLICATE"],
-    ["provider-source-masked", (root) => { const p = absolute(root, CALENDAR_TRANSITION_CONTRACT.page); writeFileSync(p, "Provider nicht konfiguriert\n", "utf8"); }, "LEGACY_CALENDAR_SOURCE_CLAIM_NOT_DETECTED"],
-    ["legacy-page-without-registry", (root) => { const p = absolute(root, CALENDAR_TRANSITION_CONTRACT.registry); const value = JSON.parse(readFileSync(p, "utf8")); value.capabilities = value.capabilities.filter((item) => item.stable_id !== CALENDAR_TRANSITION_CONTRACT.registryId); writeFileSync(p, JSON.stringify(value), "utf8"); }, "LEGACY_CALENDAR_REGISTRY_STATE_NOT_DETECTED"],
-    ["legacy-registry-without-page", (root) => { rmSync(absolute(root, CALENDAR_TRANSITION_CONTRACT.page)); }, "LEGACY_CALENDAR_PAGE_MISSING"],
-    ["legacy-page-without-matrix-truth", (root) => { const p = absolute(root, CALENDAR_TRANSITION_CONTRACT.matrix); writeFileSync(p, readFileSync(p, "utf8").replace("PATH1_UI_CONVERGENCE_A_REMOVE_OR_404", "UNBOUND"), "utf8"); }, "LEGACY_CALENDAR_MATRIX_BLOCKER_MISSING"],
-    ["legacy-mixed-with-target", (root) => { const p = absolute(root, CALENDAR_TRANSITION_CONTRACT.matrix); writeFileSync(p, `${readFileSync(p, "utf8")}REMOVED_NON_RENDERING M365_NOT_CONNECTED\n`, "utf8"); }, "CALENDAR_TRANSITION_MIXED_LEGACY_AND_TARGET"],
-    ["target-page-reintroduced", (root) => { rmSync(root, { recursive: true, force: true }); mkdirSync(root, { recursive: true }); writeFixture(root, "target"); const p = absolute(root, CALENDAR_TRANSITION_CONTRACT.page); mkdirSync(path.dirname(p), { recursive: true }); writeFileSync(p, "Google Kalender\n", "utf8"); }, "CALENDAR_TRANSITION_MIXED_LEGACY_AND_TARGET"],
-    ["target-registry-reintroduced", (root) => { rmSync(root, { recursive: true, force: true }); mkdirSync(root, { recursive: true }); writeFixture(root, "target"); const p = absolute(root, CALENDAR_TRANSITION_CONTRACT.registry); const value = JSON.parse(readFileSync(p, "utf8")); value.capabilities.push({ stable_id: CALENDAR_TRANSITION_CONTRACT.registryId, kind: "PAGE_ROUTE", entry_point: CALENDAR_TRANSITION_CONTRACT.page, visible: true, reachable: true }); writeFileSync(p, JSON.stringify(value), "utf8"); }, "CALENDAR_TRANSITION_MIXED_LEGACY_AND_TARGET"],
-    ["target-legacy-matrix-reintroduced", (root) => { rmSync(root, { recursive: true, force: true }); mkdirSync(root, { recursive: true }); writeFixture(root, "target"); const p = absolute(root, CALENDAR_TRANSITION_CONTRACT.matrix); writeFileSync(p, `${readFileSync(p, "utf8")}| \`${CALENDAR_TRANSITION_CONTRACT.registryId}\` | /kalender | ACTIVE_VISIBLE_PROVIDER_DEFECT at ${CALENDAR_TRANSITION_CONTRACT.page} | Google Kalender | QUARANTINE | source+registry | PATH1_UI_CONVERGENCE_A_REMOVE_OR_404 |\n`, "utf8"); }, "CALENDAR_TRANSITION_MIXED_LEGACY_AND_TARGET"],
-    ["target-matrix-truth-missing", (root) => { rmSync(root, { recursive: true, force: true }); mkdirSync(root, { recursive: true }); writeFixture(root, "target"); const p = absolute(root, CALENDAR_TRANSITION_CONTRACT.matrix); writeFileSync(p, readFileSync(p, "utf8").replace("M365_NOT_CONNECTED", "PENDING"), "utf8"); }, "REMOVED_CALENDAR_MATRIX_TRUTH_MISSING"],
-    ["calendar-provider-activated", (root) => { const p = absolute(root, CALENDAR_TRANSITION_CONTRACT.registry); const value = JSON.parse(readFileSync(p, "utf8")); value.capabilities.push({ stable_id: "provider.calendar", kind: "PROVIDER_CONNECTION", provider: "Microsoft 365 Calendar", reachable: true, classification: "REAL_VERIFIED" }); writeFileSync(p, JSON.stringify(value), "utf8"); }, "ACTIVE_CALENDAR_PROVIDER"],
-    ["calendar-provider-matrix-activated", (root) => { const p = absolute(root, CALENDAR_TRANSITION_CONTRACT.matrix); writeFileSync(p, readFileSync(p, "utf8").replace("| PENDING | CalendarPort", "| REAL | CalendarPort"), "utf8"); }, "ACTIVE_CALENDAR_PROVIDER_MATRIX_CLAIM"],
-    ["candidate-checker-weakened", (root) => { const p = absolute(root, "scripts/quality/check-authoritative-sources.mjs"); mkdirSync(path.dirname(p), { recursive: true }); writeFileSync(p, "process.exit(0)\n", "utf8"); const c = absolute(root, DEFAULT_CONFIG); const value = JSON.parse(readFileSync(c, "utf8")); value.shadowTruth = true; writeFileSync(c, JSON.stringify(value), "utf8"); }, "AUTHORITY_CONFIG_CLOSED_SCHEMA"],
-  ];
-  const validStates = ["legacy", "target"];
-  for (const calendarState of validStates) {
-    const root = mkdtempSync(path.join(os.tmpdir(), `authority-gate-${calendarState}-`));
-    try {
-      writeFixture(root, calendarState);
-      const errors = checkAuthorityRepository(root);
-      if (errors.length > 0) throw new Error(`selftest valid ${calendarState} fixture failed: ${errors.join(" | ")}`);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  }
-  let passed = 0;
-  for (const [name, mutate, expected] of cases) {
-    const root = mkdtempSync(path.join(os.tmpdir(), "authority-gate-"));
-    try {
-      writeFixture(root);
-      const clean = checkAuthorityRepository(root);
-      if (clean.length > 0) throw new Error(`selftest ${name} invalid clean fixture: ${clean.join(" | ")}`);
-      mutate(root);
-      const errors = checkAuthorityRepository(root);
-      if (!errors.some((entry) => entry.includes(expected))) throw new Error(`selftest ${name} expected ${expected}, got: ${errors.join(" | ")}`);
-      passed += 1;
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  }
-  return { passed, total: cases.length, validStates: validStates.length };
+function expectConfigMutation(config, mutate, code) {
+  const changed = clone(config);
+  mutate(changed);
+  const errors = [];
+  validateConfigShape(changed, errors);
+  if (!errors.some((error) => error.startsWith(code))) throw new Error(`selftest did not fail closed: ${code}; got ${errors.join(" | ")}`);
+}
+
+export function runSelftest(root = process.cwd()) {
+  const config = JSON.parse(readFileSync(absolute(root, CONFIG_PATH), "utf8"));
+  const errors = [];
+  validateConfigShape(config, errors);
+  if (errors.length > 0) throw new Error(`selftest baseline invalid: ${errors.join(" | ")}`);
+  expectConfigMutation(config, (value) => { value.truthTypes.push({ id: "shadow", source: "shadow.md" }); }, "TRUTH_TYPE_TOTAL");
+  expectConfigMutation(config, (value) => { value.truthTypes[0].source = "docs/project/CURRENT_STATE.md"; }, "TRUTH_SOURCE_CONTRACT");
+  expectConfigMutation(config, (value) => { value.designSystem.role = "PAGE_COMPOSITION"; }, "DESIGN_SYSTEM_CONFIG_CONTRACT");
+  expectConfigMutation(config, (value) => { value.uiReferences.pop(); }, "UI_REFERENCE_CONFIG_CONTRACT");
+  expectConfigMutation(config, (value) => { value.schemaVersion = 2; }, "AUTHORITY_CONFIG_SCHEMA_VERSION");
+  return true;
 }
 
 function parseArgs(argv) {
-  let root = process.cwd();
-  let config = DEFAULT_CONFIG;
-  let selftest = false;
+  const args = { root: process.cwd(), config: CONFIG_PATH, selftest: false };
   for (let index = 0; index < argv.length; index += 1) {
-    const token = argv[index];
-    if (token === "--selftest") selftest = true;
-    else if (token === "--check") continue;
-    else if (token === "--root" || token === "--config") {
-      const value = argv[index + 1];
-      if (!value) throw new Error(`${token} requires a value`);
-      if (token === "--root") root = value;
-      else config = value;
-      index += 1;
-    } else throw new Error(`Unknown argument: ${token}`);
+    const value = argv[index];
+    if (value === "--root") args.root = path.resolve(argv[++index]);
+    else if (value === "--config") args.config = argv[++index];
+    else if (value === "--selftest") args.selftest = true;
+    else if (value !== "--check") throw new Error(`Unknown argument: ${value}`);
   }
-  return { root: path.resolve(root), config, selftest };
+  return args;
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.selftest) {
-    const result = runAuthoritySelftest();
-    console.log(`AUTHORITY_GATE_SELFTEST=PASS valid_states=${result.validStates} negative_cases=${result.passed}/${result.total}`);
-  } else {
-    const errors = checkAuthorityRepository(args.root, args.config);
-    if (errors.length > 0) {
-      console.error("AUTHORITY_GATE=FAIL");
-      for (const error of errors) console.error(`- ${error}`);
-      process.exitCode = 1;
-    } else {
-      console.log(`AUTHORITY_GATE=PASS truth_types=${Object.keys(TRUTH_SOURCE_CONTRACT).length} ui_references=${UI_REFERENCE_CONTRACT.length}`);
-    }
+    runSelftest(args.root);
+    console.log("AUTHORITY_GATE_SELFTEST=PASS");
+    return;
   }
+  const errors = checkAuthorityRepository(args.root, args.config);
+  if (errors.length > 0) {
+    errors.forEach((error) => console.error(error));
+    process.exitCode = 1;
+    return;
+  }
+  console.log(`AUTHORITY_GATE=PASS truth_types=${Object.keys(TRUTH_SOURCE_CONTRACT).length} ui_references=${UI_REFERENCES.length} design=V1.1`);
 }
+
+if (import.meta.url === pathToFileURL(path.resolve(process.argv[1] ?? "")).href) await main();
