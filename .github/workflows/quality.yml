@@ -159,7 +159,10 @@ jobs:
             echo "No changed TS/TSX files to lint."
             exit 0
           fi
-          npx eslint --max-warnings 0 "${files[@]}"
+          # Bound design/reference sources under docs/ are intentionally ignored by the
+          # repository config. Do not turn that intentional ignore into a warning, while
+          # every non-ignored changed source file still has a zero-warning budget.
+          npx eslint --max-warnings 0 --no-warn-ignored "${files[@]}"
 
       - name: Repository ESLint ratchet (judge = BASE eslint config, D-QA-001)
         # Debt is measured with the BASE revision's eslint.config.mjs, so a PR cannot lower
