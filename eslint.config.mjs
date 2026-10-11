@@ -47,10 +47,22 @@ const modulesServerConsumerFacadePattern = {
   message: "Serverkonsumenten duerfen Module nur ueber public oder server-public verwenden; die fail-closed Verbraucherpruefung liegt im S1-Modul-Gate.",
 };
 
+const nonExecutableReferencePattern = {
+  group: [
+    "**/docs/project/history/**",
+    "**/docs/project/linie/ui/designsystem_v1_1/**",
+  ],
+  message: "Produktcode darf bytegebundene Referenzen oder Historienquellen nicht importieren.",
+};
+
 function boundaryRule(forbidden, message) {
   return {
     "no-restricted-imports": ["error", {
-      patterns: [...forbidden.map(group => ({ group: [group], message })), modulesFacadePattern],
+      patterns: [
+        ...forbidden.map(group => ({ group: [group], message })),
+        modulesFacadePattern,
+        nonExecutableReferencePattern,
+      ],
     }],
   };
 }
@@ -75,7 +87,12 @@ const eslintConfig = defineConfig([
   // ── S1 Naht 2 fuer alle src-Dateien ohne eigene Domaenen-Regel ──
   {
     files: ["src/**/*.ts", "src/**/*.tsx"],
-    rules: { "no-restricted-imports": ["error", { patterns: [modulesFacadePattern] }] },
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        { patterns: [modulesFacadePattern, nonExecutableReferencePattern] },
+      ],
+    },
   },
   // STAGE_1_PIN_ONLY: Dieser Override pinnt ausschliesslich den kuenftigen ESLint-Vertrag.
   // Der geschuetzte S1-Modul-Checker bleibt bis zur atomaren Folgestufe absichtlich
@@ -83,7 +100,12 @@ const eslintConfig = defineConfig([
   // Client/AppAdapter und alle sonstigen src-Dateien behalten ebenfalls public-only.
   {
     files: ["src/app/actions/*.actions.ts", "src/test/**/*.integration.test.ts"],
-    rules: { "no-restricted-imports": ["error", { patterns: [modulesServerConsumerFacadePattern] }] },
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        { patterns: [modulesServerConsumerFacadePattern, nonExecutableReferencePattern] },
+      ],
+    },
   },
   // ── Domain isolation: auth must not depend on business domains ──
   {

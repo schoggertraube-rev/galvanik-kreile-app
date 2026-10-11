@@ -38,10 +38,15 @@ Alle sechs Befunde sind geschlossen. Die korrigierte Kandidatenfassung bestand:
 - No-Fake-Production und alle Modulgrenzen,
 - 63 Modulregressionen,
 - TypeScript und vollstaendiges ESLint,
-- 118 Unit-Testdateien mit 983 Tests,
+- 119 Unit-Testdateien mit 986 Tests,
 - den Next.js-Produktionsbuild mit 26 generierten Seiten.
 
 Der Paket-Scope-Selbsttest fuehrt die drei neu geschlossenen Wege in echten temporaeren
 Git-Repositories aus: Preflight-Block-Amendierung, GATE->BUILD-Amendierung und
 Post-Live-Produkt-Hotfix bei weiterhin gesperrter Live-Steuerung. Es wurde keine zweite
 Reviewrunde eroeffnet und kein Produktcode geaendert.
+
+Die abschliessende CI-Korrektur trennt ausserdem die bytegebundene V1.1-Quelle und das
+Historienarchiv vom ausfuehrbaren Produktgraphen. Der Ratchet erfasst jede dort ignorierte
+Code-Referenz mit ihrem Inhalts-Hash, erlaubt keine spaetere Mutation und ein eigener
+Negativtest belegt, dass Produktcode diese Referenzpfade nicht importieren kann.

@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "eslintVersion": "9.39.4",
-  "lintContractHash": "d807fa2937ac6edbc83d85d3ee024927e52e0c26004fabcc31f7675b28fd3229",
-  "judgeContractHash": "5b6028525db052d13550c459b30fddfbf56b2273d9696def54846d0fa053dfa9",
+  "lintContractHash": "24daffa12e948b5c4ab00f6bcd43855fb4bd025b7e4fd7fc2157971d0e0fbb45",
+  "judgeContractHash": "12f91483d603fcc3ef1f62f76ae106d8cfb1240e9d6e0b4a5329b87148488e5e",
   "totals": {
     "filesWithIssues": 0,
     "errors": 0,
@@ -13,6 +13,154 @@
     {
       "file": "create_migrate.js",
       "contentHash": "67601e6562394c2ba3cf229f25b759dc3a1ba4b0f825855a1ebc5a7570749de8"
+    },
+    {
+      "file": "docs/project/history/controls/2026-10-11/claude-legacy/hooks/guard-destructive.mjs",
+      "contentHash": "15f411170aa24eac8529ebe9372e8bf514b4c12853a03861933b24c9846e1c5d"
+    },
+    {
+      "file": "docs/project/history/controls/2026-10-11/scripts-legacy/check-f0-independent-review-package.mjs",
+      "contentHash": "575fe4c62d2bd64c6250aadc1d5e8e30e6835b4526527b036efc223f2a9d46c9"
+    },
+    {
+      "file": "docs/project/history/controls/2026-10-11/scripts-legacy/resolve-delivery-trust-anchor.mjs",
+      "contentHash": "120fb02e1810f1cdb3d3b2170f542e14125710cbb3e4c47d03d0be690ed566b4"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/Abwesenheitszeile.tsx",
+      "contentHash": "f7ff260d290273c8ecb75b0cfd0f328bd5259f461ac9b310d49f83799da934e7"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/AppShell.tsx",
+      "contentHash": "7e4da715c01566856b49a694acf11f49a201e1ce0373bafa90dd1133492d3656"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/Auftragszeile.tsx",
+      "contentHash": "2fae8130d9e244628717e75b074e5f8e1b644613222c3449015cdb2a2eb4399b"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/Ausgrau.tsx",
+      "contentHash": "d8c1627eab8fcc7aed9d8e99773d0e7beb0a1a588b79553eca0f214dcc610069"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/Befehlspalette.tsx",
+      "contentHash": "50fac8dad8581a212d41ed7847276b6172058ccd2af9520b9ad7e839b2c11e2e"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/BuendelVorschlag.tsx",
+      "contentHash": "34451e1a538d000dff02732400eb4d90e348334fd5bb128782bc2958ab03f46a"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/Button.tsx",
+      "contentHash": "98b4dafd1115e6f5962b9163703c7dda1064279c304cf451871e48dc690a5810"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/Chip.tsx",
+      "contentHash": "5b6a3aebe8215f4f821d98ffb9b8d447f54d961f1bfaf35645b27b9a1e8272e3"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/Dialog.tsx",
+      "contentHash": "fe5d8a2d444ed537b34736ec9e205c8a5cacb11ad2331a9dbfe38c9f1e6eafde"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/Formular.tsx",
+      "contentHash": "eb8b3f262aa21d8d5e33900dcfba39a2ab660747874eccba10a33f69c9615a52"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/GlobalesPlus.tsx",
+      "contentHash": "288caf58014ccfd2d45ca4b9e98b70d30cda0920d3dfa4b057d9ffbc7a1a6e1d"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/Handlungsbedarf.tsx",
+      "contentHash": "b8d85baa9ef90b754cec34111c425c66f7f53ea908a5d3047c2c3b0c9ad71a00"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/Icon.tsx",
+      "contentHash": "8a5ea6bf088a6004e9cbc1428826f57363fd735f5772b8aa8051d598b7a8c17a"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/Kachel.tsx",
+      "contentHash": "9c49abc54e8b1e36524b5674081e57262d44572fb9086d3cfc8edcfe51a1cb3c"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/Karte.tsx",
+      "contentHash": "a34a34cfcf87a4be701dffd4c12025fce3006132509af1a80dc88e54a229a3cf"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/Kundenzeile.tsx",
+      "contentHash": "2f39da08746ef43e03bae19dfab5d1ea130ee88cd2d85c21f067d8c2205d9655"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/Lageleiste.tsx",
+      "contentHash": "965e84530176787eacddad625604e30a0ad747ba03bb70b771dd87a9b41d63a2"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/Picker.tsx",
+      "contentHash": "bc793a4b4902c84b991af8359855f74df29389cd795ca01103fa68ec7921355e"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/PinEingabe.tsx",
+      "contentHash": "02c2152d1767a50bd0eac766ed175bbfdb4af1a8dc1ed5fb490463cba867becb"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/Seitenblatt.tsx",
+      "contentHash": "38d6f6b652dfd3e2ee34b55665b758ee7817b393a21854e0095d28d0c96cd194"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/Suche.tsx",
+      "contentHash": "5093517df15f240035767fb282d6f0c2a7f1abff5adcc9654aba471f794026a4"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/Terminuebersicht.tsx",
+      "contentHash": "617bb88589375c78033d5b06f32c21e6573548872fbec11872324049917df3b5"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/Terminzeile.tsx",
+      "contentHash": "50ce26bf86f8ea8343e1e9df4658f424de0b0fc58d6a25368b3cea5c5b4badfc"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/Toast.tsx",
+      "contentHash": "b7c7bd639e351156f22bb2d32ed43385aa59a09a0ff44b5d04a8471e59c28e5c"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/WipMenge.tsx",
+      "contentHash": "09f84d046a9182101d46cf032cf5136fcc86921a96b5d8d398084d5f02fafcc0"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/Wischbar.tsx",
+      "contentHash": "186b1aac7ddbea03746c4b784767aae04830fb195ab743d42e9c1f9683af05f1"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/Zeile.tsx",
+      "contentHash": "0c2eb66e4e50d179e4bff352fce1989ad6586edfe4978b2a9af24ac11cf9285a"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/Zeitstrahl.tsx",
+      "contentHash": "684da3915db1109122b4e4542f178107c174a8213aa3f5076cee4ec0a6708ffe"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/Zustand.tsx",
+      "contentHash": "6995c99c15d9a85135a793577a93b270b404b50a324984a82f3c286b58c0850a"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/haptik.ts",
+      "contentHash": "4857db79d9fea83d2c2816b909b2c6a46d2637df3e57615d0753e715737b57a7"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/index.ts",
+      "contentHash": "d3373c790b76fe425da3b83072787fca0ff7336586fa7a4b7a6083be916a21be"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/tastatur.ts",
+      "contentHash": "1e3c7387f332efd3aae610fd83b8eb6a8ea5effca5c9eeac381a84c0bb93c1b8"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/components/typen.ts",
+      "contentHash": "f31705475969a29f6c5f5fde7f0dd12aed88d62f41a5ab5f863401d3c2d80f0a"
+    },
+    {
+      "file": "docs/project/linie/ui/designsystem_v1_1/katalog/kr-vorschau.js",
+      "contentHash": "6f61d027d195ef50b44d49b7edaad80cf92525e2f216bb4a8f0a890a5f7bd67e"
     },
     {
       "file": "enrich.js",

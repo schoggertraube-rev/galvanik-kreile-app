@@ -64,3 +64,10 @@ Produkt-, Sicherheits- oder Build-Gates: `quality`, `agentur-gate` und Fresh-Sup
 muessen gruen sein. Vor dem normalen Merge muss der Owner einmal explizit bestaetigen,
 dass er genau diesen erwarteten Ratchet-Fehler fuer die Aktivierung akzeptiert. Danach
 schuetzen die neuen Pins wieder jeden Folgekandidaten.
+
+Die interne `quality`-Spur bleibt dabei vollstaendig gruen: Nur das nicht ausfuehrbare,
+bytegebundene V1.1-Quellpaket und das gesperrte Historienarchiv sind vom Produkt-Lint
+ausgenommen. Jede dort liegende Code-Referenz ist im Ratchet mit Inhalts-Hash erfasst;
+spaetere Aenderungen bleiben verboten. Produktcode darf beide Baeume per ESLint-Vertrag
+nicht importieren. Fuer alle Runtime-, Test- und Steuerpfade gilt weiterhin das
+Null-Fehler-/Null-Warnungen-Budget.

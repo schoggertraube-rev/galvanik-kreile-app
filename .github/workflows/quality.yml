@@ -200,8 +200,14 @@ jobs:
 
           export default [
             ...canonicalConfig,
-            // the untracked judge copy itself is not part of the measured tree
-            { ignores: ["eslint.config.ratchet-base.mjs"] },
+            // The judge copy is untracked. The other two trees are closed, non-runtime
+            // evidence: immutable history and the byte-bound V1.1 source package. Their
+            // individual content hashes remain frozen in the candidate ratchet baseline.
+            { ignores: [
+              "eslint.config.ratchet-base.mjs",
+              "docs/project/history/**",
+              "docs/project/linie/ui/designsystem_v1_1/**",
+            ] },
           ];
           EOF
 
