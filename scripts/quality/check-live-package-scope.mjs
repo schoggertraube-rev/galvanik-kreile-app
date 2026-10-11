@@ -34,6 +34,7 @@ const ACTIVATION_ALLOWLIST = Object.freeze([
   "quality/authoritative-sources.json",
   "scripts/quality/check-authoritative-sources.mjs",
   "scripts/quality/check-delivery-contracts.mjs",
+  "scripts/quality/check-f0-doc-truth.mjs",
   "scripts/quality/check-live-package-scope.mjs",
   "scripts/quality/eslint-ratchet-core.ts",
   "scripts/quality/select-live-regression-specs.mjs",
