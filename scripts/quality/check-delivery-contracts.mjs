@@ -58,6 +58,7 @@ const PROTECTED_WRITER_PATHS = Object.freeze([
   "scripts/quality/check-authoritative-sources.mjs",
   "scripts/quality/check-delivery-contracts.mjs",
   "scripts/quality/check-live-package-scope.mjs",
+  "scripts/quality/select-live-regression-specs.mjs",
   "scripts/quality/check-module-gates.mjs",
   "scripts/show-active-live-package.mjs",
   "scripts/advance-live-package.mjs",
@@ -122,6 +123,7 @@ const EXPECTED_TRANSITIONS = Object.freeze([
   "READY_TO_MERGE->DONE",
   "BLOCKED_EXTERNAL->RESUME_PHASE",
   "BLOCKED_PRODUCT_DECISION->RESUME_PHASE",
+  "BLOCKED_PRODUCT_DECISION->PREFLIGHT_WITH_OWNER_AMENDMENT",
   "FAIL_FINAL->PREFLIGHT_WITH_OWNER_AMENDMENT",
 ]);
 
@@ -286,6 +288,9 @@ function validatePlanShape(plan, errors) {
   if (!sameSet(rules.packageKinds ?? [], ["BUILD", "GATE"])) errors.push("PLAN_PACKAGE_KINDS");
   if (rules.planMutationAfterActivation !== "OWNER_AUTHORIZED_SAME_PACKAGE_AMENDMENT_ONLY") errors.push("PLAN_MUTATION_RULE");
   if (rules.amendmentLane !== "SAME_PACKAGE_ID_NO_TOPOLOGY_CHANGE_OWNER_RECEIPT_AND_BASE_PLAN_HASH_REQUIRED") errors.push("PLAN_AMENDMENT_LANE");
+  if (rules.amendmentRecovery !== "FAIL_FINAL_OR_BLOCKED_PRODUCT_DECISION_AT_PREFLIGHT_ONE_SPEC_REWRITE_IN_AMENDMENT_COMMIT_GATE_TO_BUILD_ONLY") {
+    errors.push("PLAN_AMENDMENT_RECOVERY");
+  }
   if (rules.focusedSpecOwner !== "PL_ONLY_WRITER_FORBIDDEN") errors.push("PLAN_SPEC_OWNER");
   if (rules.missionStateOwner !== "PL_ONLY_WRITER_FORBIDDEN") errors.push("PLAN_MISSION_OWNER");
   if (rules.deliveredStateOwner !== "PL_ONLY_WRITER_FORBIDDEN") errors.push("PLAN_DELIVERED_STATE_OWNER");
@@ -297,6 +302,10 @@ function validatePlanShape(plan, errors) {
   if (rules.claudeActiveSurface !== "SETTINGS_ONLY_NO_AUTO_AGENT_NO_HOOKS_NO_PROJECT_SKILLS") errors.push("PLAN_CLAUDE_ACTIVE_SURFACE");
   if (rules.legacySourceAccess !== "DENIED_BY_PROJECT_SETTINGS_AND_EXCLUDED_FROM_ACTIVE_CONTEXT") errors.push("PLAN_LEGACY_ACCESS_RULE");
   if (rules.packageScopeEnforcement !== "PROTECTED_BASE_CHECKER_PLUS_COMMIT_ROLE_SEPARATION") errors.push("PLAN_SCOPE_ENFORCEMENT");
+  if (rules.regressionLane !== "MERGED_BUILD_SPECS_WITHOUT_EXTERNAL_PREREQUISITE_RUN_ON_FRESH_LOCAL_SUPABASE_EXTERNAL_AND_GATE_USE_BOUND_RECEIPTS_NO_SKIP_FIXME") {
+    errors.push("PLAN_REGRESSION_LANE");
+  }
+  if (rules.postLiveRepository !== "NORMAL_NON_CONTROL_HOTFIXES_ALLOWED_AFTER_LIVE_COMPLETE") errors.push("PLAN_POST_LIVE_REPOSITORY");
   if (rules.successorActivation !== "ATOMIC_REPO_LOCAL_ADVANCE_AFTER_CANDIDATE_IS_ANCESTOR_OF_ORIGIN_MAIN") errors.push("PLAN_SUCCESSOR_ACTIVATION");
   if (rules.activationBranchReuse !== "FORBIDDEN_AFTER_INITIAL_ORIGIN_MAIN_MOVES") errors.push("PLAN_ACTIVATION_REUSE");
   if (rules.finalClosure !== "KR_L20_READY_ON_MAIN_THEN_OWNER_AUTHORIZED_PRODUCTION_SMOKE_AND_LIVE_CLOSE_BRANCH") errors.push("PLAN_FINAL_CLOSURE");
@@ -416,14 +425,10 @@ function validateClaudeSettings(root, errors) {
   if (permissions.defaultMode !== "default") errors.push("CLAUDE_DEFAULT_MODE");
   if (permissions.disableBypassPermissionsMode !== "disable") errors.push("CLAUDE_BYPASS_MODE");
   if (permissions.blockReadsOutsideWorkingDirectories !== true) errors.push("CLAUDE_OUTSIDE_READS");
-  const deny = new Set(Array.isArray(permissions.deny) ? permissions.deny : []);
-  for (const rule of [
-    "Read(/docs/project/history/**)",
-    "Read(/docs/delivery/packages/**)",
-    "Read(/docs/delivery/ROLLING_MANIFEST_QUEUE_V1.json)",
-    "Read(/docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md)",
-  ]) {
-    if (!deny.has(rule)) errors.push(`CLAUDE_LEGACY_READ_NOT_DENIED:${rule}`);
+  const deny = Array.isArray(permissions.deny) ? permissions.deny : [];
+  if (!sameSet(deny, ["Read(/docs/project/history/**)"])) errors.push("CLAUDE_DENY_SURFACE");
+  if (deny.includes("Read(/docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md)")) {
+    errors.push("CLAUDE_CANONICAL_DECISION_REGISTER_DENIED");
   }
   const activeClaudeFiles = walkFiles(absolute(root, ".claude"));
   if (!sameSet(activeClaudeFiles, ["settings.json"])) {
@@ -546,8 +551,11 @@ export function runSelftest(root = process.cwd()) {
   expectMutation(plan, (value) => { value.packages[5].predecessor = "KR-L01"; }, "PLAN_PACKAGE_CHAIN");
   expectMutation(plan, (value) => { value.productRepository.root = "C:\\shadow"; }, "PLAN_ABSOLUTE_ROOT_FORBIDDEN");
   expectMutation(plan, (value) => { value.operatingRules.maxCorrectionRounds = 2; }, "PLAN_CORRECTION_ROUNDS");
+  expectMutation(plan, (value) => { value.operatingRules.amendmentRecovery = "FAIL_FINAL_ONLY"; }, "PLAN_AMENDMENT_RECOVERY");
   expectMutation(plan, (value) => { value.operatingRules.legacySourceAccess = "PROMPT_ONLY"; }, "PLAN_LEGACY_ACCESS_RULE");
   expectMutation(plan, (value) => { value.operatingRules.packageScopeEnforcement = "DOCUMENT_ONLY"; }, "PLAN_SCOPE_ENFORCEMENT");
+  expectMutation(plan, (value) => { value.operatingRules.regressionLane = "ALL_SPECS_ON_DUMMY_BACKEND"; }, "PLAN_REGRESSION_LANE");
+  expectMutation(plan, (value) => { value.operatingRules.postLiveRepository = "LOCKED_FOREVER"; }, "PLAN_POST_LIVE_REPOSITORY");
   expectMutation(plan, (value) => { value.operatingRules.successorActivation = "MANUAL_FREE_TEXT"; }, "PLAN_SUCCESSOR_ACTIVATION");
   expectMutation(plan, (value) => { value.packages[0].editablePaths.push("missions/**"); }, "PLAN_PACKAGE_CONTROL_PATH");
   expectMutation(plan, (value) => { value.packages[0].editablePaths.push("src/app/**"); }, "PLAN_PACKAGE_EDIT_PATH_OVERBROAD");

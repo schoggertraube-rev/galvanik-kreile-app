@@ -34,7 +34,10 @@ const ACTIVATION_ALLOWLIST = Object.freeze([
   "scripts/quality/check-authoritative-sources.mjs",
   "scripts/quality/check-delivery-contracts.mjs",
   "scripts/quality/check-live-package-scope.mjs",
+  "scripts/quality/select-live-regression-specs.mjs",
   "scripts/quality/check-module-gates.mjs",
+  "scripts/quality/resolve-delivery-trust-anchor.mjs",
+  "scripts/quality/check-f0-independent-review-package.mjs",
   "scripts/show-active-live-package.mjs",
   "scripts/advance-live-package.mjs",
   "scripts/close-live-line.mjs",
@@ -42,8 +45,8 @@ const ACTIVATION_ALLOWLIST = Object.freeze([
   "src/test/authority_gate.test.ts",
   "src/test/live_package_scope.test.ts",
   "src/test/s1_module_gates.test.ts",
-  "missions/F1_ORDER_TO_CASH_PILOT_001.yml",
-  "docs/delivery/KREILE_LIVE_PLAN_V1.json",
+  "missions/**",
+  "docs/delivery/**",
   "docs/project/DOCUMENT_AUTHORITY.md",
   "docs/project/MASTERPLAN.md",
   "docs/project/CURRENT_STATE.md",
@@ -64,6 +67,32 @@ const ACTIVATION_ALLOWLIST = Object.freeze([
   "docs/project/*.json",
   "docs/project/linie/*.md",
   "docs/project/linie/ui/00_UI_REFERENZ_KANONISCH.md",
+]);
+const POST_LIVE_CONTROL_PATTERNS = Object.freeze([
+  ".claude/**",
+  ".github/workflows/**",
+  ".gitattributes",
+  "AGENTS.md",
+  "CLAUDE.md",
+  "package.json",
+  "quality/authoritative-sources.json",
+  "docs/delivery/**",
+  "docs/evidence/live-line/**",
+  "docs/project/CURRENT_STATE.md",
+  "docs/project/DOCUMENT_AUTHORITY.md",
+  "docs/project/MASTERPLAN.md",
+  "docs/project/linie/00_UI_REFERENZEN_PFADE.md",
+  "docs/project/linie/ui/CURRENT_DESIGN_REFERENCE.json",
+  "docs/project/linie/ui/designsystem_v1_1/**",
+  "missions/**",
+  "e2e/kr-l*.spec.ts",
+  "scripts/advance-live-package.mjs",
+  "scripts/close-live-line.mjs",
+  "scripts/show-active-live-package.mjs",
+  "scripts/quality/check-authoritative-sources.mjs",
+  "scripts/quality/check-delivery-contracts.mjs",
+  "scripts/quality/check-live-package-scope.mjs",
+  "scripts/quality/select-live-regression-specs.mjs",
 ]);
 
 const posix = (value) => value.replaceAll("\\", "/");
@@ -144,11 +173,14 @@ function checkActivation(files, baseSha, plan) {
 
 function checkAmendment(root, base, commits, files, plan, mission, item) {
   const errors = [];
-  if (!files.includes(PLAN_PATH)) return { errors, patterns: [] };
   const amendmentFiles = files.filter((rel) => AMENDMENT_PATTERN.test(rel));
+  if (!files.includes(PLAN_PATH)) {
+    if (amendmentFiles.length > 0) errors.push("AMENDMENT_PLAN_MISSING");
+    return { errors, patterns: amendmentFiles, commit: null };
+  }
   if (amendmentFiles.length !== 1) {
     errors.push(`AMENDMENT_RECEIPT_COUNT:${amendmentFiles.length}`);
-    return { errors, patterns: [PLAN_PATH, "docs/delivery/amendments/*.json"] };
+    return { errors, patterns: [PLAN_PATH, "docs/delivery/amendments/*.json"], commit: null };
   }
   let baseRaw;
   let basePlan;
@@ -157,23 +189,27 @@ function checkAmendment(root, base, commits, files, plan, mission, item) {
     basePlan = JSON.parse(baseRaw);
   } catch {
     errors.push("AMENDMENT_BASE_PLAN_UNREADABLE");
-    return { errors, patterns: [PLAN_PATH, amendmentFiles[0]] };
+    return { errors, patterns: [PLAN_PATH, amendmentFiles[0]], commit: null };
   }
   const before = basePlan.packages?.find((entry) => entry.id === item.id);
   const after = plan.packages?.find((entry) => entry.id === item.id);
   if (!before || !after) errors.push("AMENDMENT_ACTIVE_PACKAGE_MISSING");
-  const allowed = new Set(["editablePaths", "maxEditablePaths", "scopeOut", "acceptance", "externalPrerequisite"]);
+  const allowed = new Set(["kind", "editablePaths", "maxEditablePaths", "scopeOut", "acceptance", "externalPrerequisite"]);
   const beforeStable = JSON.parse(JSON.stringify(basePlan));
   const afterStable = JSON.parse(JSON.stringify(plan));
   const beforeIndex = beforeStable.packages.findIndex((entry) => entry.id === item.id);
   const afterIndex = afterStable.packages.findIndex((entry) => entry.id === item.id);
+  let changedFields = [];
   if (beforeIndex !== afterIndex || beforeIndex < 0) {
     errors.push("AMENDMENT_TOPOLOGY");
   } else {
-    const changedFields = Object.keys({ ...before, ...after }).filter(
+    changedFields = Object.keys({ ...before, ...after }).filter(
       (key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]),
     );
     for (const key of changedFields) if (!allowed.has(key)) errors.push(`AMENDMENT_FIELD_FORBIDDEN:${key}`);
+    if (changedFields.includes("kind") && !(before.kind === "GATE" && after.kind === "BUILD")) {
+      errors.push(`AMENDMENT_KIND_TRANSITION:${before.kind}->${after.kind}`);
+    }
     beforeStable.packages[beforeIndex] = afterStable.packages[afterIndex];
     if (JSON.stringify(beforeStable) !== JSON.stringify(afterStable)) errors.push("AMENDMENT_OUTSIDE_ACTIVE_PACKAGE");
     let receipt;
@@ -195,16 +231,49 @@ function checkAmendment(root, base, commits, files, plan, mission, item) {
       if (Number.isNaN(Date.parse(receipt.requestedAt ?? ""))) errors.push("AMENDMENT_TIMESTAMP");
     }
   }
-  const sawFinalFailure = commits.some((commit) => {
+
+  const amendmentCommits = commits.filter((commit) => {
+    const paths = commitFiles(root, commit);
+    return paths.includes(PLAN_PATH) || paths.includes(amendmentFiles[0]);
+  });
+  const amendmentCommit = amendmentCommits.length === 1 ? amendmentCommits[0] : null;
+  if (!amendmentCommit) {
+    errors.push(`AMENDMENT_COMMIT_COUNT:${amendmentCommits.length}`);
+  } else {
+    const amendmentPaths = commitFiles(root, amendmentCommit);
+    for (const required of [PLAN_PATH, amendmentFiles[0], MISSION_PATH, item.focusedSpec, `docs/evidence/live-line/${item.id.toLowerCase()}/PREFLIGHT.md`]) {
+      if (!amendmentPaths.includes(required)) errors.push(`AMENDMENT_COMMIT_FILE_MISSING:${required}`);
+    }
+  }
+
+  const amendmentIndex = amendmentCommit ? commits.indexOf(amendmentCommit) : commits.length;
+  const recoveryEvidence = commits.slice(0, amendmentIndex).some((commit) => {
     try {
-      return parseMission(gitFile(root, commit, MISSION_PATH)).phase === "FAIL_FINAL";
+      const prior = parseMission(gitFile(root, commit, MISSION_PATH));
+      return prior.phase === "FAIL_FINAL"
+        || (prior.phase === "BLOCKED_PRODUCT_DECISION" && prior.resume_phase === "PREFLIGHT");
     } catch {
       return false;
     }
   });
-  if (!sawFinalFailure) errors.push("AMENDMENT_FAIL_FINAL_EVIDENCE_MISSING");
+  if (!recoveryEvidence) errors.push("AMENDMENT_RECOVERY_EVIDENCE_MISSING");
+  if (amendmentCommit) {
+    try {
+      const atAmendment = parseMission(gitFile(root, amendmentCommit, MISSION_PATH));
+      const expectedWriterCount = after?.kind === "BUILD" ? "1" : "0";
+      const expectedScope = after?.kind === "BUILD" ? "ACTIVE_PACKAGE_EDITABLE_PATHS_ONLY" : "NO_WRITER_GATE";
+      if (atAmendment.phase !== "PREFLIGHT" || atAmendment.attempt !== "1"
+          || atAmendment.candidate_sha !== "none" || atAmendment.resume_phase !== "none"
+          || atAmendment.block_reason !== "none" || atAmendment.writer_count !== expectedWriterCount
+          || atAmendment.writer_scope_source !== expectedScope) {
+        errors.push("AMENDMENT_MISSION_NOT_RESET_TO_PREFLIGHT");
+      }
+    } catch {
+      errors.push("AMENDMENT_MISSION_UNREADABLE");
+    }
+  }
   if (mission.attempt !== "1") errors.push("AMENDMENT_ATTEMPT_NOT_ONE");
-  return { errors, patterns: [PLAN_PATH, amendmentFiles[0]] };
+  return { errors, patterns: [PLAN_PATH, amendmentFiles[0]], commit: amendmentCommit };
 }
 
 function validatePreflight(root, item, evidenceRoot, baseSha, required, errors) {
@@ -302,7 +371,9 @@ function checkPackage(root, branch, base, baseSha, head, files, plan, mission) {
     if (firstFiles.some((rel) => !covered(rel, firstCommitPatterns))) errors.push(`PACKAGE_FIRST_COMMIT_CONTROL_SCOPE:${packageId}`);
     for (const [index, commit] of commits.entries()) {
       const paths = commitFiles(root, commit);
-      if (index > 0 && paths.includes(item.focusedSpec)) errors.push(`PACKAGE_SPEC_CHANGED_AFTER_PREFLIGHT:${packageId}:${commit}`);
+      if (index > 0 && paths.includes(item.focusedSpec) && commit !== amendment.commit) {
+        errors.push(`PACKAGE_SPEC_CHANGED_AFTER_PREFLIGHT:${packageId}:${commit}`);
+      }
       const hasControl = paths.some((rel) => covered(rel, [...controlPatterns, ...amendment.patterns]));
       const hasProduct = paths.some((rel) => covered(rel, productPatterns));
       if (hasControl && hasProduct) errors.push(`PACKAGE_COMMIT_ROLE_MIX:${packageId}:${commit}`);
@@ -379,6 +450,15 @@ function checkClosure(root, baseSha, files, mission) {
 export function checkLivePackageScope({ root, base, head, branch }) {
   const files = changedFiles(root, base, head);
   if (branch === "main") return [];
+  try {
+    const baseMission = parseMission(gitFile(root, base, MISSION_PATH));
+    if (baseMission.phase === "DONE" && baseMission.next_gate_after_active_package === "LIVE_COMPLETE") {
+      const protectedChanges = files.filter((rel) => covered(rel, POST_LIVE_CONTROL_PATTERNS));
+      return protectedChanges.map((rel) => `POST_LIVE_CONTROL_MUTATION:${rel}`);
+    }
+  } catch {
+    // Before activation or in an isolated selftest, the normal package rules remain authoritative.
+  }
   const baseSha = resolved(root, base);
   const plan = JSON.parse(readFileSync(path.join(root, PLAN_PATH), "utf8"));
   const mission = parseMission(readFileSync(path.join(root, MISSION_PATH), "utf8"));
@@ -535,6 +615,16 @@ function selftestAmendment(fixture, plan, item) {
   const amended = JSON.parse(JSON.stringify(plan));
   amended.packages[0].acceptance = [...amended.packages[0].acceptance, "owner-authorized selftest clarification"];
   write(fixture, PLAN_PATH, JSON.stringify(amended, null, 2));
+  write(fixture, item.focusedSpec, "// owner-authorized amended focused spec selftest\n");
+  write(fixture, `docs/evidence/live-line/${item.id.toLowerCase()}/PREFLIGHT.md`, [
+    `PACKAGE=${item.id}`,
+    "ASSERTIONS_RED=PASS",
+    `BASE_SHA=${base}`,
+    "RED_RUN_ID=selftest-red-amended-001",
+    "RED_EXIT_NONZERO=PASS",
+    "RED_FAILURE_ASSERTION=amended expected product assertion",
+    "",
+  ].join("\n"));
   const baseRaw = gitFile(fixture, base, PLAN_PATH);
   write(fixture, "docs/delivery/amendments/KR-AMEND-0001.json", `${JSON.stringify({
     activePackage: item.id,
@@ -551,6 +641,126 @@ function selftestAmendment(fixture, plan, item) {
     next_gate_after_active_package: "PL_CREATES_ASSERTIONS_RED_SPEC",
   }));
   commit(fixture, "owner-authorized same-package amendment");
+  return { base, branch, head: git(fixture, ["rev-parse", "HEAD"]) };
+}
+
+function selftestBlockedPreflightAmendment(fixture, plan, item) {
+  write(fixture, PLAN_PATH, JSON.stringify(plan, null, 2));
+  const baseMission = missionFixture(plan, item);
+  write(fixture, MISSION_PATH, baseMission);
+  commit(fixture, "base");
+  const base = git(fixture, ["rev-parse", "HEAD"]);
+  const branch = `codex/kreile-${item.id.toLowerCase()}`;
+  git(fixture, ["checkout", "-qb", branch]);
+  write(fixture, item.focusedSpec, "// blocked preflight focused spec selftest\n");
+  write(fixture, `docs/evidence/live-line/${item.id.toLowerCase()}/PREFLIGHT.md`, [
+    `PACKAGE=${item.id}`,
+    "ASSERTIONS_RED=PASS",
+    `BASE_SHA=${base}`,
+    "RED_RUN_ID=selftest-red-blocked-001",
+    "RED_EXIT_NONZERO=PASS",
+    "RED_FAILURE_ASSERTION=required path is outside package scope",
+    "",
+  ].join("\n"));
+  write(fixture, MISSION_PATH, setMission(baseMission, {
+    phase: "BLOCKED_PRODUCT_DECISION",
+    block_reason: "required_path_outside_scope",
+    resume_phase: "PREFLIGHT",
+    next_gate_after_active_package: "OWNER_DECISION",
+  }));
+  commit(fixture, "PL blocks before writer start");
+
+  const amended = JSON.parse(JSON.stringify(plan));
+  amended.packages[0].acceptance = [...amended.packages[0].acceptance, "owner-authorized blocked-preflight clarification"];
+  write(fixture, PLAN_PATH, JSON.stringify(amended, null, 2));
+  write(fixture, item.focusedSpec, "// owner-authorized blocked-preflight spec rewrite\n");
+  write(fixture, `docs/evidence/live-line/${item.id.toLowerCase()}/PREFLIGHT.md`, [
+    `PACKAGE=${item.id}`,
+    "ASSERTIONS_RED=PASS",
+    `BASE_SHA=${base}`,
+    "RED_RUN_ID=selftest-red-blocked-amended-001",
+    "RED_EXIT_NONZERO=PASS",
+    "RED_FAILURE_ASSERTION=amended required product assertion",
+    "",
+  ].join("\n"));
+  const baseRaw = gitFile(fixture, base, PLAN_PATH);
+  write(fixture, "docs/delivery/amendments/KR-AMEND-0001.json", `${JSON.stringify({
+    activePackage: item.id,
+    authorizedBy: "OWNER_EXPLICIT_CURRENT_TASK",
+    basePlanSha256: hash(baseRaw),
+    changedFields: ["acceptance"],
+    reason: "Selftest proves blocked preflight can resume without a replacement package.",
+    requestedAt: "2026-10-11T00:03:00.000Z",
+  }, null, 2)}\n`);
+  write(fixture, MISSION_PATH, setMission(baseMission, {
+    phase: "PREFLIGHT",
+    attempt: "1",
+    candidate_sha: "none",
+    next_gate_after_active_package: "PL_CREATES_ASSERTIONS_RED_SPEC",
+  }));
+  commit(fixture, "owner-authorized blocked-preflight amendment");
+  return { base, branch, head: git(fixture, ["rev-parse", "HEAD"]) };
+}
+
+function selftestGateToBuildAmendment(fixture, plan, item) {
+  write(fixture, PLAN_PATH, JSON.stringify(plan, null, 2));
+  const baseMission = missionFixture(plan, item);
+  write(fixture, MISSION_PATH, baseMission);
+  commit(fixture, "base");
+  const base = git(fixture, ["rev-parse", "HEAD"]);
+  const branch = `codex/kreile-${item.id.toLowerCase()}`;
+  git(fixture, ["checkout", "-qb", branch]);
+  write(fixture, item.focusedSpec, "// gate focused spec selftest\n");
+  write(fixture, `docs/evidence/live-line/${item.id.toLowerCase()}/PREFLIGHT.md`, `PACKAGE=${item.id}\nGATE_BASELINE=PASS\nBASE_SHA=${base}\n`);
+  write(fixture, MISSION_PATH, setMission(baseMission, {
+    phase: "REVIEW",
+    candidate_sha: base,
+    next_gate_after_active_package: "INDEPENDENT_EXACT_SHA_REVIEW",
+  }));
+  commit(fixture, "PL gate preflight");
+  write(fixture, MISSION_PATH, setMission(baseMission, {
+    phase: "FAIL_FINAL",
+    attempt: "1",
+    candidate_sha: base,
+    next_gate_after_active_package: "OWNER_REPLANS_SAME_PACKAGE",
+  }));
+  commit(fixture, "PL gate final failure");
+
+  const amended = JSON.parse(JSON.stringify(plan));
+  const index = amended.packages.findIndex((entry) => entry.id === item.id);
+  amended.packages[index].kind = "BUILD";
+  amended.packages[index].editablePaths = ["src/app/live-gate-repair.tsx"];
+  amended.packages[index].maxEditablePaths = 1;
+  amended.packages[index].acceptance = [...amended.packages[index].acceptance, "owner-authorized bounded gate repair"];
+  write(fixture, PLAN_PATH, JSON.stringify(amended, null, 2));
+  write(fixture, item.focusedSpec, "// owner-authorized gate-to-build spec rewrite\n");
+  write(fixture, `docs/evidence/live-line/${item.id.toLowerCase()}/PREFLIGHT.md`, [
+    `PACKAGE=${item.id}`,
+    "ASSERTIONS_RED=PASS",
+    `BASE_SHA=${base}`,
+    "RED_RUN_ID=selftest-gate-to-build-001",
+    "RED_EXIT_NONZERO=PASS",
+    "RED_FAILURE_ASSERTION=bounded gate repair assertion",
+    "",
+  ].join("\n"));
+  const baseRaw = gitFile(fixture, base, PLAN_PATH);
+  write(fixture, "docs/delivery/amendments/KR-AMEND-0001.json", `${JSON.stringify({
+    activePackage: item.id,
+    authorizedBy: "OWNER_EXPLICIT_CURRENT_TASK",
+    basePlanSha256: hash(baseRaw),
+    changedFields: ["acceptance", "editablePaths", "kind", "maxEditablePaths"],
+    reason: "Selftest proves one failed gate can become one bounded build without a new package.",
+    requestedAt: "2026-10-11T00:04:00.000Z",
+  }, null, 2)}\n`);
+  write(fixture, MISSION_PATH, setMission(baseMission, {
+    phase: "PREFLIGHT",
+    attempt: "1",
+    candidate_sha: "none",
+    writer_count: "1",
+    writer_scope_source: "ACTIVE_PACKAGE_EDITABLE_PATHS_ONLY",
+    next_gate_after_active_package: "PL_CREATES_ASSERTIONS_RED_SPEC",
+  }));
+  commit(fixture, "owner-authorized gate-to-build amendment");
   return { base, branch, head: git(fixture, ["rev-parse", "HEAD"]) };
 }
 
@@ -609,6 +819,42 @@ export function runSelftest(root = process.cwd()) {
     rmSync(amendmentFixture, { recursive: true, force: true });
   }
 
+  const blockedAmendmentFixture = mkdtempSync(path.join(tmpdir(), "kreile-live-blocked-amendment-"));
+  try {
+    git(blockedAmendmentFixture, ["init", "-q"]);
+    git(blockedAmendmentFixture, ["config", "user.email", "blocked-amendment-selftest@example.invalid"]);
+    git(blockedAmendmentFixture, ["config", "user.name", "Blocked Amendment Selftest"]);
+    git(blockedAmendmentFixture, ["config", "commit.gpgsign", "false"]);
+    const amendment = selftestBlockedPreflightAmendment(blockedAmendmentFixture, plan, plan.packages[0]);
+    const validAmendment = checkLivePackageScope({
+      root: blockedAmendmentFixture,
+      base: amendment.base,
+      head: amendment.head,
+      branch: amendment.branch,
+    });
+    if (validAmendment.length > 0) throw new Error(`valid blocked-preflight amendment rejected: ${validAmendment.join(" | ")}`);
+  } finally {
+    rmSync(blockedAmendmentFixture, { recursive: true, force: true });
+  }
+
+  const gateAmendmentFixture = mkdtempSync(path.join(tmpdir(), "kreile-live-gate-amendment-"));
+  try {
+    git(gateAmendmentFixture, ["init", "-q"]);
+    git(gateAmendmentFixture, ["config", "user.email", "gate-amendment-selftest@example.invalid"]);
+    git(gateAmendmentFixture, ["config", "user.name", "Gate Amendment Selftest"]);
+    git(gateAmendmentFixture, ["config", "commit.gpgsign", "false"]);
+    const amendment = selftestGateToBuildAmendment(gateAmendmentFixture, plan, plan.packages[16]);
+    const validAmendment = checkLivePackageScope({
+      root: gateAmendmentFixture,
+      base: amendment.base,
+      head: amendment.head,
+      branch: amendment.branch,
+    });
+    if (validAmendment.length > 0) throw new Error(`valid gate-to-build amendment rejected: ${validAmendment.join(" | ")}`);
+  } finally {
+    rmSync(gateAmendmentFixture, { recursive: true, force: true });
+  }
+
   const closeFixture = mkdtempSync(path.join(tmpdir(), "kreile-live-close-"));
   try {
     git(closeFixture, ["init", "-q"]);
@@ -645,6 +891,23 @@ export function runSelftest(root = process.cwd()) {
     const head = git(closeFixture, ["rev-parse", "HEAD"]);
     const validClose = checkLivePackageScope({ root: closeFixture, base, head, branch: CLOSE_BRANCH });
     if (validClose.length > 0) throw new Error(`valid close rejected: ${validClose.join(" | ")}`);
+
+    git(closeFixture, ["checkout", "-qb", "hotfix/post-live-product"]);
+    write(closeFixture, "src/app/post-live-health.tsx", "export const postLiveHealth = true;\n");
+    commit(closeFixture, "normal post-live product hotfix");
+    const hotfixHead = git(closeFixture, ["rev-parse", "HEAD"]);
+    const validHotfix = checkLivePackageScope({ root: closeFixture, base: head, head: hotfixHead, branch: "hotfix/post-live-product" });
+    if (validHotfix.length > 0) throw new Error(`valid post-live product hotfix rejected: ${validHotfix.join(" | ")}`);
+
+    git(closeFixture, ["checkout", "-q", head]);
+    git(closeFixture, ["checkout", "-qb", "hotfix/post-live-control"]);
+    write(closeFixture, "AGENTS.md", "unauthorized live-line control mutation\n");
+    commit(closeFixture, "mutate post-live control");
+    const controlHead = git(closeFixture, ["rev-parse", "HEAD"]);
+    const invalidControl = checkLivePackageScope({ root: closeFixture, base: head, head: controlHead, branch: "hotfix/post-live-control" });
+    if (!invalidControl.includes("POST_LIVE_CONTROL_MUTATION:AGENTS.md")) {
+      throw new Error(`post-live control mutation not rejected: ${invalidControl.join(" | ")}`);
+    }
   } finally {
     rmSync(closeFixture, { recursive: true, force: true });
   }

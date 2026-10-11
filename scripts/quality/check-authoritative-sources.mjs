@@ -7,6 +7,8 @@ import { pathToFileURL } from "node:url";
 import { checkDeliveryRepository } from "./check-delivery-contracts.mjs";
 
 const CONFIG_PATH = "quality/authoritative-sources.json";
+const AUTHORITY_CHECKER_PATH = "scripts/quality/check-authoritative-sources.mjs";
+const RATCHET_WORKFLOW_PATH = ".github/workflows/eslint-ratchet.yml";
 const TRUTH_SOURCE_CONTRACT = Object.freeze({
   project_rules: "AGENTS.md",
   product_decisions: "docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md",
@@ -90,6 +92,19 @@ const sameSet = (left, right) => {
 
 function hashFile(file) {
   return createHash("sha256").update(readFileSync(file)).digest("hex").toUpperCase();
+}
+
+export function checkAuthorityHashPins({ checkerBytes, schemaBytes, workflowText }) {
+  const errors = [];
+  const checkerPin = workflowText.match(/AUTHORITY_CHECKER_SHA256:\s*["']([0-9a-f]{64})["']/i)?.[1];
+  const schemaPin = workflowText.match(/AUTHORITY_SCHEMA_SHA256:\s*["']([0-9a-f]{64})["']/i)?.[1];
+  if (!checkerPin) errors.push("AUTHORITY_CHECKER_PIN_MISSING");
+  if (!schemaPin) errors.push("AUTHORITY_SCHEMA_PIN_MISSING");
+  const checkerHash = createHash("sha256").update(checkerBytes).digest("hex");
+  const schemaHash = createHash("sha256").update(schemaBytes).digest("hex");
+  if (checkerPin && checkerPin.toLowerCase() !== checkerHash) errors.push(`AUTHORITY_CHECKER_PIN_MISMATCH:${checkerHash}`);
+  if (schemaPin && schemaPin.toLowerCase() !== schemaHash) errors.push(`AUTHORITY_SCHEMA_PIN_MISMATCH:${schemaHash}`);
+  return errors;
 }
 
 function readJson(root, rel, errors, code) {
@@ -192,12 +207,54 @@ function recursiveFileCount(root, rel) {
   return readdirSync(directory, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile()).length;
 }
 
+function recursiveFiles(root, rel) {
+  const directory = absolute(root, rel);
+  if (!existsSync(directory)) return [];
+  const files = [];
+  const visit = (current) => {
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) visit(full);
+      else if (entry.isFile()) files.push(path.relative(directory, full).replaceAll("\\", "/"));
+    }
+  };
+  visit(directory);
+  return files.sort();
+}
+
+function validateAuthorityPins(root, errors) {
+  const files = [AUTHORITY_CHECKER_PATH, CONFIG_PATH, RATCHET_WORKFLOW_PATH];
+  for (const rel of files) {
+    if (!existsSync(absolute(root, rel))) errors.push(`AUTHORITY_PIN_SOURCE_MISSING:${rel}`);
+  }
+  if (files.some((rel) => !existsSync(absolute(root, rel)))) return;
+  errors.push(...checkAuthorityHashPins({
+    checkerBytes: readFileSync(absolute(root, AUTHORITY_CHECKER_PATH)),
+    schemaBytes: readFileSync(absolute(root, CONFIG_PATH)),
+    workflowText: readFileSync(absolute(root, RATCHET_WORKFLOW_PATH), "utf8"),
+  }));
+}
+
 function validateActiveSurface(root, errors) {
   if (!sameSet(directFiles(root, ".", (name) => name.endsWith(".md")), ACTIVE_SURFACE.rootMarkdown)) errors.push("ACTIVE_ROOT_MARKDOWN_SURFACE");
   if (!sameSet(directFiles(root, "docs"), ACTIVE_SURFACE.docsFiles)) errors.push("ACTIVE_DOCS_ROOT_SURFACE");
   if (!sameSet(directFiles(root, "docs/project"), ACTIVE_SURFACE.projectFiles)) errors.push("ACTIVE_PROJECT_SURFACE");
   if (!sameSet(directFiles(root, "docs/project/linie"), ACTIVE_SURFACE.lineFiles)) errors.push("ACTIVE_LINE_SURFACE");
   if (!sameSet(directFiles(root, "docs/project/linie/ui"), ACTIVE_SURFACE.uiFiles)) errors.push("ACTIVE_UI_SURFACE");
+  const deliveryFiles = recursiveFiles(root, "docs/delivery");
+  for (const rel of deliveryFiles) {
+    if (rel !== "KREILE_LIVE_PLAN_V1.json" && !/^amendments\/KR-AMEND-\d{4}\.json$/.test(rel)) {
+      errors.push(`ACTIVE_DELIVERY_SURFACE:${rel}`);
+    }
+  }
+  if (!deliveryFiles.includes("KREILE_LIVE_PLAN_V1.json")) errors.push("ACTIVE_DELIVERY_PLAN_MISSING");
+  if (!sameSet(recursiveFiles(root, "missions"), ["F1_ORDER_TO_CASH_PILOT_001.yml"])) errors.push("ACTIVE_MISSION_SURFACE");
+  for (const rel of [
+    "scripts/quality/resolve-delivery-trust-anchor.mjs",
+    "scripts/quality/check-f0-independent-review-package.mjs",
+  ]) {
+    if (existsSync(absolute(root, rel))) errors.push(`ACTIVE_LEGACY_CONTROL_SCRIPT:${rel}`);
+  }
   if (recursiveFileCount(root, "docs/module") !== 0) errors.push("ACTIVE_LEGACY_MODULE_FILES");
   if (recursiveFileCount(root, "docs/project/history/legacy-sources/2026-10-11") < 277) errors.push("LEGACY_ARCHIVE_INCOMPLETE");
 }
@@ -214,6 +271,7 @@ export function checkAuthorityRepository(root = process.cwd(), configRel = CONFI
   validateDecisionAndUiTruth(root, errors);
   validateActiveEntryDocs(root, errors);
   validateActiveSurface(root, errors);
+  validateAuthorityPins(root, errors);
   for (const error of checkDeliveryRepository(root)) errors.push(`DELIVERY:${error}`);
   if (!existsSync(absolute(root, "docs/project/history/controls/2026-10-11/check-authoritative-sources.legacy-2026-10-11.mjs.txt"))) {
     errors.push("AUTHORITY_LEGACY_ARCHIVE_MISSING");

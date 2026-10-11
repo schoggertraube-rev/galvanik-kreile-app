@@ -54,8 +54,17 @@ Preview, Production und Remote-Datenbank bleiben getrennte, real zu belegende Wa
 
 Jeder Main-Merge und sein automatischer Production-Effekt werden einzeln vom Owner
 freigegeben. Erst der belegte Abschluss von KR-L20 darf die Gesamtapp als live bezeichnen.
-Nach einem final gescheiterten Paket gibt es keinen Nebenplan: nur eine ownerautorisierte
-Amendierung desselben Pakets darf dessen Scope korrigieren.
+Nach einem final gescheiterten Paket oder einer im Preflight erkannten echten
+Produktentscheidung gibt es keinen Nebenplan: nur eine ownerautorisierte Amendierung
+desselben Pakets darf dessen Scope korrigieren. Sie darf den fokussierten Test genau
+einmal ersetzen. Falls ein reines GATE einen realen Produktmangel belegt, darf genau
+dieses Paket einmal zu einem eng begrenzten BUILD werden; ID und Reihenfolge bleiben fest.
+
+Gemergte BUILD-Tests ohne externe Voraussetzung laufen dauerhaft gegen die frische lokale
+Supabase-Replay-Umgebung. Externe BUILDs und GATEs bleiben receiptgebunden; kein Pakettest
+darf mit `skip` oder `fixme` stillgelegt werden. Nach `LIVE_COMPLETE` bleibt das Repository
+fuer normale Produkt-Hotfixes offen, waehrend Plan, Mission und Live-Steuerung geschuetzt
+bleiben.
 
 ## Owner-Beruehrung
 

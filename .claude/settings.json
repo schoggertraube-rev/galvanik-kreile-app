@@ -4,11 +4,6 @@
     "defaultMode": "default",
     "disableBypassPermissionsMode": "disable",
     "blockReadsOutsideWorkingDirectories": true,
-    "deny": [
-      "Read(/docs/project/history/**)",
-      "Read(/docs/delivery/packages/**)",
-      "Read(/docs/delivery/ROLLING_MANIFEST_QUEUE_V1.json)",
-      "Read(/docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md)"
-    ]
+    "deny": ["Read(/docs/project/history/**)"]
   }
 }

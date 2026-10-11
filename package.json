@@ -29,6 +29,8 @@
     "quality:delivery-contracts:selftest": "node scripts/quality/check-delivery-contracts.mjs --selftest",
     "quality:package-scope": "node scripts/quality/check-live-package-scope.mjs",
     "quality:package-scope:selftest": "node scripts/quality/check-live-package-scope.mjs --selftest",
+    "quality:live-regression": "node scripts/quality/select-live-regression-specs.mjs --check",
+    "quality:live-regression:selftest": "node scripts/quality/select-live-regression-specs.mjs --selftest",
     "live:package": "node scripts/show-active-live-package.mjs",
     "live:advance": "node scripts/advance-live-package.mjs",
     "live:advance:selftest": "node scripts/advance-live-package.mjs --selftest",

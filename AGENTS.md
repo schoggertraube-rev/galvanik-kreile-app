@@ -18,7 +18,8 @@ PL, Writer und Reviewer verwenden fuer die Ausfuehrung nur:
 4. die `editablePaths`, `focusedSpec`, Routen und Akzeptanzsaetze des aktiven Pakets
 5. `docs/project/linie/MODULKARTE_KANON.md`
 6. `docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md`
-7. fuer visuelle Pakete ausschliesslich die in `docs/project/linie/00_UI_REFERENZEN_PFADE.md`
+7. `docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md`
+8. fuer visuelle Pakete ausschliesslich die in `docs/project/linie/00_UI_REFERENZEN_PFADE.md`
    geschichteten Quellen.
 
 `docs/project/history/**`, alte Paketmanifeste, Rolling Queues, externe Paketplaene,
@@ -62,8 +63,12 @@ darf Rollen mischen.
 4. Alle Paketchecks laufen. Danach prueft der unabhaengige Reviewer exakt den Kandidaten-SHA.
 5. Es gibt hoechstens eine Produktkorrekturrunde. Ein belegter Umgebungsfehler wird vom PL
    behoben und verbraucht diese Runde nicht. Nach `FAIL_FINAL` existiert genau ein
-   Rueckweg: eine ownerautorisierte Amendierung desselben aktiven Pakets. Paket-ID,
-   Reihenfolge und globaler Plan bleiben unveraendert; ein Ersatzpaket ist verboten.
+   Rueckweg: eine ownerautorisierte Amendierung desselben aktiven Pakets. Sie ist auch
+   nach `BLOCKED_PRODUCT_DECISION` im Preflight zulaessig. Der Amendierungscommit darf
+   den fokussierten Test genau einmal neu schreiben; ein gescheitertes GATE darf darin
+   genau einmal zu einem eng begrenzten BUILD mit expliziten `editablePaths` werden.
+   Paket-ID, Reihenfolge und globaler Plan bleiben unveraendert; ein Ersatzpaket ist
+   verboten.
 6. Bei `ownerView: true` werden vor Merge Preview-Link, sichtbares Delta sowie Screenshots
    in 1914x917, 1220x880 und 390x844 vorgelegt.
 7. Erst nach ausdruecklicher Mergefreigabe darf der normale Merge nach `main` erfolgen.
@@ -121,6 +126,12 @@ Mindestens:
 - `npm run test:unit`
 - `npm run build`
 - paketbezogener Browser-/E2E-Nachweis.
+
+Dauerregressionen laufen nur fuer gemergte BUILD-Pakete ohne externe Voraussetzung auf
+der frischen lokalen Supabase-Replay-Umgebung. Externe BUILDs und GATEs werden ueber ihre
+gebundenen Receipts abgenommen. `skip` und `fixme` sind in keinem `kr-l*.spec.ts` erlaubt.
+Nach `LIVE_COMPLETE` duerfen normale Produkt-Hotfixes weiterlaufen; die Live-Steuerung
+selbst bleibt gegen beiläufige Aenderungen gesperrt.
 
 Erlaubte Ergebniszustaende: `PASS`, `FAIL_INTERNAL`, `BLOCKED_EXTERNAL_PERMISSION`,
 `BLOCKED_PRODUCT_DECISION`. Ein beendeter oder toter Prozess ist kein Fortschritt.
