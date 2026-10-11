@@ -70,10 +70,13 @@ jobs:
           npm run quality:authority-gate:selftest
           npm run quality:authority-gate
 
-      - name: Delivery contracts, rolling queue, and operating receipt (blocking)
+      - name: Single live plan and package contracts (blocking)
         run: |
           npm run quality:delivery-contracts:selftest
           npm run quality:delivery-contracts
+          npm run quality:package-scope:selftest
+          npm run quality:live-regression:selftest
+          npm run quality:live-regression
 
       - name: S1 module gates (Path 1 Naehte plus Authority, candidate view; protected copies run in eslint-ratchet.yml)
         # Manifest je Modul, positive Fassade (kein Tiefimport), Cross-Modul-Fakten nur
@@ -114,6 +117,13 @@ jobs:
       - name: Production migration ledger contract
         run: node scripts/check-migration-ledger.mjs --base "${{ steps.diff.outputs.base }}"
 
+      - name: Active package path and commit-role separation
+        run: >-
+          node scripts/quality/check-live-package-scope.mjs
+          --base "${{ steps.diff.outputs.base }}"
+          --head "${{ steps.diff.outputs.head }}"
+          --branch "${{ github.head_ref || github.ref_name }}"
+
       - name: F1-R0 No-fake-production gate selftest (proves rules fire, mutation-free)
         run: node scripts/quality/check-no-fake-production.mjs --selftest
 
@@ -149,7 +159,10 @@ jobs:
             echo "No changed TS/TSX files to lint."
             exit 0
           fi
-          npx eslint --max-warnings 0 "${files[@]}"
+          # Bound design/reference sources under docs/ are intentionally ignored by the
+          # repository config. Do not turn that intentional ignore into a warning, while
+          # every non-ignored changed source file still has a zero-warning budget.
+          npx eslint --max-warnings 0 --no-warn-ignored "${files[@]}"
 
       - name: Repository ESLint ratchet (judge = BASE eslint config, D-QA-001)
         # Debt is measured with the BASE revision's eslint.config.mjs, so a PR cannot lower
@@ -187,8 +200,14 @@ jobs:
 
           export default [
             ...canonicalConfig,
-            // the untracked judge copy itself is not part of the measured tree
-            { ignores: ["eslint.config.ratchet-base.mjs"] },
+            // The judge copy is untracked. The other two trees are closed, non-runtime
+            // evidence: immutable history and the byte-bound V1.1 source package. Their
+            // individual content hashes remain frozen in the candidate ratchet baseline.
+            { ignores: [
+              "eslint.config.ratchet-base.mjs",
+              "docs/project/history/**",
+              "docs/project/linie/ui/designsystem_v1_1/**",
+            ] },
           ];
           EOF
 
@@ -700,6 +719,12 @@ jobs:
           done
           test "$ready" -eq 1
           CI= npx playwright test e2e/path1-v5-shell-smoke.real.spec.ts --project=Tablet --workers=1
+          mapfile -t live_specs < <(node scripts/quality/select-live-regression-specs.mjs --list)
+          if [ "${#live_specs[@]}" -eq 0 ]; then
+            echo "No locally replayable live-line BUILD specs have been merged yet."
+          else
+            CI= npx playwright test "${live_specs[@]}" --project=Tablet --workers=1
+          fi
 
       - name: Upload browser E2E failure diagnostics
         if: failure()

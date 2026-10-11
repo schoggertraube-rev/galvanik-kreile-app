@@ -10,6 +10,9 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   BASELINE_PATH,
+  LEGACY_ARCHIVE_ATTRIBUTE_LINE,
+  LEGACY_ARCHIVE_MIN_FILES,
+  LEGACY_ARCHIVE_ROOT,
   KR00G_EXPECTED_MODULE_COUNT,
   KR00G_REFERENCE_ATTRIBUTE_LINES,
   KR00G_SOURCE_LOCK_PATH,
@@ -127,6 +130,17 @@ function kr00gReferenceFixture(): Record<string, string> {
     "",
   ].join("\n");
   files[".gitattributes"] = `${KR00G_REFERENCE_ATTRIBUTE_LINES.join("\n")}\n`;
+  return files;
+}
+
+function liveArchiveFixture(): Record<string, string> {
+  const files: Record<string, string> = {
+    "docs/delivery/KREILE_LIVE_PLAN_V1.json": "{}\n",
+    ".gitattributes": `${LEGACY_ARCHIVE_ATTRIBUTE_LINE}\n`,
+  };
+  for (let index = 0; index < LEGACY_ARCHIVE_MIN_FILES; index++) {
+    files[`${LEGACY_ARCHIVE_ROOT}/fixture-${String(index).padStart(3, "0")}.md`] = `archive ${index}\n`;
+  }
   return files;
 }
 
@@ -899,6 +913,26 @@ describe("S1 Naht 7 — KR-00G-Referenzattribute bleiben source-gelockt", () => 
     const hash = "A".repeat(64);
     files[KR00G_SOURCE_LOCK_PATH] += `| unexpected-source.md | docs/project/unexpected.md | ${hash} | ${hash} | ${hash} | NONE |\n`;
     expect(findingsOf(repo(files))).toContainEqual(expect.stringContaining("unerwartetes docs/project-Ziel 'docs/project/unexpected.md'"));
+  });
+});
+
+describe("S1 Naht 7 — aktive Live-Linie isoliert Altquellen physisch", () => {
+  it("akzeptiert den vollstaendigen Archivbaum mit genau einer engen Attributregel", () => {
+    expect(findingsOf(repo(liveArchiveFixture()))).toEqual([]);
+  });
+
+  it("weist jede Altquelle im aktiven docs/module-Baum ab", () => {
+    const root = repo({ ...liveArchiveFixture(), "docs/module/reintroduced.md": "legacy\n" });
+    expect(findingsOf(root)).toContainEqual(expect.stringContaining("Altquelle im aktiven docs/module-Baum"));
+  });
+
+  it("weist ein unvollstaendiges Archiv und eine fehlende Archivregel ab", () => {
+    const files = liveArchiveFixture();
+    delete files[`${LEGACY_ARCHIVE_ROOT}/fixture-000.md`];
+    files[".gitattributes"] = "";
+    const findings = findingsOf(repo(files));
+    expect(findings).toContainEqual(expect.stringContaining("mindestens"));
+    expect(findings).toContainEqual(expect.stringContaining("exakt einmal erwartet, gefunden 0"));
   });
 });
 

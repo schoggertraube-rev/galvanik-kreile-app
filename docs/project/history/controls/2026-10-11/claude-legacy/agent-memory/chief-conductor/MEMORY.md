@@ -1,0 +1,14 @@
+- [Stop-Gate Bash-Lock-Regel](feedback_stop_gate_rules.md) — Stop-Gate erfordert manuellen Proof wenn Bash locked ist
+- [PATH1 Ratchet-Deadlock](project_path1_ratchet_deadlock.md) — Authority-Gate-Bootstrap-Deadlock + CI-Required-Fails blockieren PATH1_UI_CONVERGENCE (2026-09-13)
+- [Sole-Writer/Verifier-Konflikt](feedback_sole_writer_verifier_conflict.md) — Prompt "sei alleiniger Writer+Verifier" verletzt AGENTS.md, immer an build-engineer+qa-test-verifier delegieren
+- [OS-ACL-Blocker 02_app](project_a2_phillip_retry_env_blockers.md) — .env.local DENY, missions/ UND docs/project/linie/ verbieten Dateianlage (2026-09-21)
+- [P3 Browser-Matrix Recovery](project_p3_webkit_loopback_env_blockers.md) — H1 Proxy + H2 beforeunload falsifiziert; Suppression in PermissionsContext ist strukturell unwirksam (2026-09-20)
+- [tsx userInfo ENOMEM Blocker](project_tsx_userinfo_enomem_blocker.md) — os.userInfo ENOMEM killt tsx-Loader, alle `node --import tsx` Quality-Skripte unausfuehrbar (2026-09-20)
+- [B1 P0-Storno Paket](project_b1_storno_p0_package.md) — DB-Guard K-G07-004 codeseitig ok, aber CI-Wiring-Bug (Schema-Pin) blockiert Nachweis, Scope-Frage an Owner (2026-09-26)
+- [Ratchet Judge-Contract-Refresh](feedback_ratchet_judge_contract_refresh.md) — quality.yml-Aenderung bricht lint:ratchet; Baseline-Refresh nur wenn Diff auf judgeContractHash beschraenkt
+- [CI Schema-Pin-Muster](feedback_ci_schema_pin_pattern.md) — versionsgepinnter `supabase db reset` macht neue Migrationen fuer ihre eigenen CI-Tests unsichtbar, auch wenn Testdatei ergaenzt wird
+- [B2 Auftrag-Zeitpunkte Paket](project_b2_auftrag_zeitpunkte_package.md) — G04 verbietet Storno selbst, KPI-Abnehmer geloescht, B2 sitzt bytegleich auf unentschiedenem B1-Tip (2026-09-27)
+- [Gemeldete Gate-Fehler verifizieren](feedback_verify_reported_gate_failures.md) — gepasteter ROT-Report kann selbst falsch/templated sein, vor Delegation gegenpruefen
+- [Non-interaktiv: npx/npm gesperrt](feedback_noninteractive_exec_block.md) — vitest/tsc/lint approval-blocked; vor Delegation proben, sonst BLOCKED ohne Commit
+- [Verifier braucht Workflow-Kontext](feedback_verifier_needs_workflow_context.md) — uncommitted im Worktree ist bei diesem Runner-Modell erwarteter Abgabezustand, kein FAIL
+- [Pre-Commit-Hook Laufzeit](feedback_precommit_hook_runtime.md) — Hook = tsc+voller vitest ~585s; commit mit timeout im Hintergrund, nicht vorschnell als Hang werten

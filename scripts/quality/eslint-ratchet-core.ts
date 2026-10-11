@@ -56,6 +56,19 @@ export type RatchetSnapshot = {
   ignoredCodeFiles: IgnoredCodeFile[];
 };
 
+// These two trees contain immutable, non-runtime evidence: the byte-bound V1.1 source
+// package and retired controls. They may be ignored by ESLint only because every ignored
+// file is content-hashed in the ratchet baseline. Runtime/product paths are never covered.
+export const PINNED_NON_EXECUTABLE_CODE_PREFIXES = Object.freeze([
+  "docs/project/history/",
+  "docs/project/linie/ui/designsystem_v1_1/",
+]);
+
+export function isPinnedNonExecutableCodeReference(file: string): boolean {
+  const normalized = file.replaceAll("\\", "/");
+  return PINNED_NON_EXECUTABLE_CODE_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+}
+
 type IssueWithoutCount = Omit<RatchetIssue, "count">;
 
 export type SnapshotDifference = {
@@ -438,8 +451,9 @@ export function compareSnapshots(
  * Base comparison. `judge` is the snapshot of the candidate tree linted with the BASE
  * config (apples to apples with `base`); it defaults to the candidate baseline itself.
  * Debt totals / per-rule counts are taken from `judge`; the ignored-code inventory is
- * taken from the candidate baseline (the candidate's own config decides what it ignores,
- * and that must not grow relative to the base).
+ * taken from the candidate baseline (the candidate's own config decides what it ignores).
+ * It may grow only inside the two closed non-runtime evidence trees above. Every such file
+ * is content-hashed, so later mutation remains a violation.
  */
 export function baselineRegressions(
   candidate: RatchetSnapshot,
@@ -463,7 +477,9 @@ export function baselineRegressions(
   for (const ignored of candidate.ignoredCodeFiles) {
     const baseHash = baseIgnored.get(ignored.file);
     if (baseHash === undefined) {
-      violations.push(`${ignored.file}: newly tracked code is ignored by ESLint`);
+      if (!isPinnedNonExecutableCodeReference(ignored.file)) {
+        violations.push(`${ignored.file}: newly tracked code is ignored by ESLint`);
+      }
     } else if (baseHash !== ignored.contentHash) {
       violations.push(`${ignored.file}: tracked ESLint-ignored code changed`);
     }

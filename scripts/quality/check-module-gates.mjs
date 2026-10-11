@@ -51,6 +51,11 @@ export const KR00G_REFERENCE_ATTRIBUTE_LINES = [
   "docs/project/00_OFFENE_PUNKTE_KREILE_2026-09-26.md -text -whitespace",
   "docs/project/PRUEFUNG_DOSSIERS_2026-09-26.md -text -whitespace",
 ];
+export const LEGACY_ARCHIVE_ROOT = "docs/project/history/legacy-sources/2026-10-11";
+export const LEGACY_ARCHIVE_MIN_FILES = 277;
+export const LEGACY_ARCHIVE_ATTRIBUTE_LINE =
+  "docs/project/history/legacy-sources/2026-10-11/** -text -whitespace";
+const LIVE_PLAN_PATH = "docs/delivery/KREILE_LIVE_PLAN_V1.json";
 
 // Naht 5 — verworfen laut docs/project/linie/ui/00_UI_REFERENZ_KANONISCH.md + MODULKARTE_KANON.md
 export const FORBIDDEN_UI_IDENTIFIERS = [
@@ -1069,6 +1074,31 @@ function parseGitAttributeLine(trimmed) {
 }
 
 function gateKr00gReferenceAttributes(root, findings) {
+  // Die aktivierte Live-Linie ersetzt den alten Import-Lock durch physische
+  // Archivisolation. Der Legacy-Zweig darunter bleibt nur fuer historische
+  // Testfixtures ohne Liveplan erhalten und kann im Produkt-Repository nicht greifen.
+  if (existsSync(path.join(root, LIVE_PLAN_PATH))) {
+    const activeLegacyFiles = walk(root, "docs/module", [], new Set(), findings, new Set([".git"]));
+    for (const file of activeLegacyFiles) findings.push(`[naht7] ${file}: Altquelle im aktiven docs/module-Baum`);
+    const archiveFiles = walk(root, LEGACY_ARCHIVE_ROOT, [], new Set(), findings, new Set([".git"]));
+    if (archiveFiles.length < LEGACY_ARCHIVE_MIN_FILES) {
+      findings.push(`[naht7] ${LEGACY_ARCHIVE_ROOT}: ${archiveFiles.length} Dateien, mindestens ${LEGACY_ARCHIVE_MIN_FILES} erwartet`);
+    }
+    const attributesAbs = path.join(root, ".gitattributes");
+    if (!existsSync(attributesAbs)) {
+      findings.push("[naht7] .gitattributes fehlt");
+      return;
+    }
+    const lines = readFileSync(attributesAbs, "utf8").split(/\r?\n/);
+    const archiveCount = lines.filter((line) => line === LEGACY_ARCHIVE_ATTRIBUTE_LINE).length;
+    if (archiveCount !== 1) {
+      findings.push(`[naht7] .gitattributes: '${LEGACY_ARCHIVE_ATTRIBUTE_LINE}' exakt einmal erwartet, gefunden ${archiveCount}`);
+    }
+    for (const forbidden of KR00G_REFERENCE_ATTRIBUTE_LINES) {
+      if (lines.includes(forbidden)) findings.push(`[naht7] .gitattributes: alte aktive Ausnahme bleibt: '${forbidden}'`);
+    }
+    return;
+  }
   const lockAbs = path.join(root, KR00G_SOURCE_LOCK_PATH);
   const attributesAbs = path.join(root, ".gitattributes");
   const attributes = existsSync(attributesAbs) ? readFileSync(attributesAbs, "utf8") : "";
@@ -1227,7 +1257,7 @@ if (isMain) {
   }
   const result = runModuleGates(opts.root, { baseBaselinePath: opts.baseBaselinePath, schemaPath: opts.schemaPath });
   if (result.ok) {
-    console.log("module-gates: alle Naehte halten (Manifest, Fassade, v_*-Daten, UI-Vertrag, AGENTS, KR-00G-Source-Lock, Authority).");
+    console.log("module-gates: alle Naehte halten (Manifest, Fassade, v_*-Daten, UI-Vertrag, AGENTS, Altquellen-Archiv, Authority).");
   } else {
     console.error(`module-gates: ${result.findings.length} Verstoss/Verstoesse`);
     for (const f of result.findings) console.error("  " + f);

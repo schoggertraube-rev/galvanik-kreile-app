@@ -66,18 +66,16 @@ jobs:
       - name: Enforce D-GOV-001 authority contract on candidate
         working-directory: ratchet-base
         env:
-          AUTHORITY_CHECKER_SHA256_OLD: "05d07eeb62e61049ccb1bbcd33b1742a9e53b56c5401bf7b0a3600e4399e80fb"
-          AUTHORITY_CHECKER_SHA256_NEW: "0800b45c4f51f72f5971611c321494470ccff93037f7a02c16dc88f73b6e6ab4"
-          AUTHORITY_SCHEMA_SHA256: "322018e732ee86ecdd4a0320255b8bd216d7d2281302dff8b149dfbd3a80dbba"
+          AUTHORITY_CHECKER_SHA256: "55520375606550e6c4f398684002c5ec9840043b665277fed5cc15bb00dd02a0"
+          AUTHORITY_SCHEMA_SHA256: "ba8128732076c97b177823717e9b88bd10e1a6edfa1ca6c01ca792d7a5dcf088"
         run: |
           set -euo pipefail
-          # KR-GOV-R3A temporarily preauthorizes exactly the protected OLD checker and
-          # reviewed NEW successor checker. R3B closes this list to NEW immediately.
+          # Exactly one authority checker and one schema are accepted.
           checker="$GITHUB_WORKSPACE/candidate/scripts/quality/check-authoritative-sources.mjs"
           schema="$GITHUB_WORKSPACE/candidate/quality/authoritative-sources.json"
           checker_sha="$(sha256sum "$checker" | cut -d' ' -f1)"
           schema_sha="$(sha256sum "$schema" | cut -d' ' -f1)"
-          if [[ "$checker_sha" != "$AUTHORITY_CHECKER_SHA256_OLD" && "$checker_sha" != "$AUTHORITY_CHECKER_SHA256_NEW" ]]; then
+          if [[ "$checker_sha" != "$AUTHORITY_CHECKER_SHA256" ]]; then
             echo "Authority checker hash mismatch: $checker_sha" >&2
             exit 1
           fi
@@ -100,33 +98,11 @@ jobs:
             --base-baseline "$GITHUB_WORKSPACE/ratchet-base/quality/module-gates-baseline.json" \
             --schema "$GITHUB_WORKSPACE/ratchet-base/docs/architecture/MODULE_MANIFEST.schema.json"
 
-      - name: Resolve frozen delivery trust anchor from protected base
-        id: delivery-trust-anchor
+      - name: Enforce protected single live-plan contract
         working-directory: ratchet-base
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          # Resolver bytes come only from the protected base checkout; the
-          # candidate checkout is data and never supplies executable resolver code.
-          node "$GITHUB_WORKSPACE/ratchet-base/scripts/quality/resolve-delivery-trust-anchor.mjs" \
-            --trusted-repo "$GITHUB_WORKSPACE/ratchet-base" \
-            --candidate-repo "$GITHUB_WORKSPACE/candidate" \
-            --base-sha "$PR_BASE_SHA" \
-            --head-sha "$PR_HEAD_SHA" \
-            --github-output "$GITHUB_OUTPUT"
-
-      - name: Enforce protected delivery contracts and rolling queue
-        working-directory: ratchet-base
-        env:
-          DELIVERY_REQUIRE_TRUSTED_BASE: "true"
-          DELIVERY_TRUSTED_BASE_SHA: ${{ steps.delivery-trust-anchor.outputs.trusted_base_sha }}
-          DELIVERY_TRUSTED_REPO: ${{ github.workspace }}/ratchet-base
-        run: |
-          set -euo pipefail
-          # The candidate checker is accepted only when it is byte-identical to the
-          # protected-base checker. There is no exception list and no successor pin.
+          # Candidate governance code must be byte-identical to protected main.
           protected_checker="$GITHUB_WORKSPACE/ratchet-base/scripts/quality/check-delivery-contracts.mjs"
           candidate_checker="$GITHUB_WORKSPACE/candidate/scripts/quality/check-delivery-contracts.mjs"
           test -f "$candidate_checker"
@@ -148,3 +124,28 @@ jobs:
           fi
           node "$isolated_dir/check-delivery-contracts.mjs" --selftest --root "$GITHUB_WORKSPACE/candidate" --expect-self-sha256 "$protected_sha"
           node "$isolated_dir/check-delivery-contracts.mjs" --root "$GITHUB_WORKSPACE/candidate" --expect-self-sha256 "$protected_sha"
+
+      - name: Enforce protected active-package scope and commit roles
+        working-directory: ratchet-base
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          protected_checker="$GITHUB_WORKSPACE/ratchet-base/scripts/quality/check-live-package-scope.mjs"
+          candidate_checker="$GITHUB_WORKSPACE/candidate/scripts/quality/check-live-package-scope.mjs"
+          test -f "$candidate_checker"
+          test ! -L "$candidate_checker"
+          protected_sha="$(sha256sum "$protected_checker" | cut -d' ' -f1)"
+          candidate_sha="$(sha256sum "$candidate_checker" | cut -d' ' -f1)"
+          if [[ "$candidate_sha" != "$protected_sha" ]]; then
+            echo "Package-scope checker is not the protected-base checker: $candidate_sha" >&2
+            exit 1
+          fi
+          node "$protected_checker" --selftest --root "$GITHUB_WORKSPACE/candidate"
+          node "$protected_checker" \
+            --root "$GITHUB_WORKSPACE/candidate" \
+            --base "$PR_BASE_SHA" \
+            --head "$PR_HEAD_SHA" \
+            --branch "$PR_HEAD_REF"

@@ -21,7 +21,6 @@ const read = (p) => readFileSync(p, "utf8");
 
 const CANONICAL = [
   "docs/project/CURRENT_STATE.md",
-  "docs/project/NON_LOSS_REGISTER.md",
   "docs/evidence/f0/F0_FINAL_REPORT.md",
   "docs/evidence/f0/F0_HANDOFF.json",
   "docs/evidence/f0/F0_CLOSEOUT.md",
@@ -161,13 +160,10 @@ function runGate() {
       fail.push(`FINAL_STATUS mismatch: report=${m[1]} handoff=${handoff.FINAL_STATUS}`);
   } catch { fail.push("F0_FINAL_REPORT.md: unreadable"); }
 
-  // NON_LOSS guard: register must carry the 2026-08-10 supersession header that marks
-  // foundation rows as history (BF-005 recheck finding).
-  try {
-    const nl = read("docs/project/NON_LOSS_REGISTER.md");
-    if (!/Nachtrag 2026-08-10 \(massgeblich fuer Fundament-Stati\)/.test(nl))
-      fail.push("NON_LOSS_REGISTER.md: missing supersession header for foundation states");
-  } catch { fail.push("NON_LOSS_REGISTER.md unreadable"); }
+  // The former NON_LOSS_REGISTER is retired evidence under docs/project/history/**.
+  // Requiring it here would silently reactivate a source that the live-line authority
+  // contract deliberately removed. Current project truth is guarded by the authority gate;
+  // this checker remains responsible only for the still-active F0 evidence above.
 
   // 5) GOV-06(a): status-enum gate across all canonical docs
   for (const f of CANONICAL) {

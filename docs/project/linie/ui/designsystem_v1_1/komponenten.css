@@ -1,0 +1,615 @@
+/* Kreile-Designsystem V1.1 · komponenten.css (Basis V1 2026-09-26, Ergänzungen V1.1 2026-09-27 am Ende) · Präfix kr- · setzt tokens.css voraus
+   Machart: Rolf V8 (Shell/Handlungsbedarf/Kacheln) · Phillip V4 (Kompaktkopf/Aktionsleiste/Bündel/WIP)
+   · Auftragskarte V8 · Kundenkarte V2 · Abläufe/Dialoge V5. Gerät über [data-geraet] am .kr-app. */
+
+.kr-app,.kr-app *{box-sizing:border-box}
+.kr-app{position:relative;width:100%;height:100%;overflow:hidden;font-family:var(--sans);color:var(--navy-900);background:var(--ground);-webkit-font-smoothing:antialiased;font-size:var(--fs-text);line-height:1.4}
+:where(.kr-app) :where(button,input,select,textarea){font:inherit;color:inherit}
+:where(.kr-app) :where(button){touch-action:manipulation;cursor:pointer}
+.kr-app :focus-visible{outline:2px solid var(--fokus);outline-offset:2px}
+.kr-ebene :focus-visible{outline-color:var(--fokus-dialog)}
+.kr-i{width:1em;height:1em;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;vertical-align:-.14em;flex:none}
+.kr-streifen{height:var(--streifen);background:var(--grad);flex:none}
+.kr-scroll{overflow-y:auto;scrollbar-width:none}.kr-scroll::-webkit-scrollbar{display:none}
+.kr-id{font-family:var(--serif);font-weight:500;color:var(--navy-700)}
+.kr-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* ===== Button ===== */
+.kr-btn{min-height:var(--touch);padding:0 16px;border:1px solid var(--rand);border-radius:var(--r-btn);background:var(--surface);color:var(--navy-800);font-size:13px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap;transition:background .15s,border-color .15s}
+.kr-btn:hover{background:var(--cream-100)}
+.kr-btn .kr-i{font-size:16px}
+.kr-btn--primaer{background:var(--navy-800);border-color:var(--navy-800);color:#fff;box-shadow:var(--sh-primaer)}.kr-btn--primaer:hover{background:var(--navy-700)}
+.kr-btn--erledigen{background:var(--succ);border-color:var(--succ);color:#fff;box-shadow:var(--sh-erledigen)}.kr-btn--erledigen:hover{background:var(--succ-d)}
+.kr-btn--gefaehrlich{background:var(--ral);border-color:var(--ral);color:#fff}.kr-btn--gefaehrlich:hover{background:var(--ral-fg)}
+.kr-btn--marke{background:var(--grad);border:0;color:#fff;box-shadow:var(--sh-marke)}
+.kr-btn--sekundaer{border:1.5px solid var(--rand)}
+.kr-btn--leise{background:transparent;color:var(--navy-500);font-weight:500}
+.kr-btn--icon{width:var(--touch);padding:0}
+.kr-btn--block{width:100%}
+.kr-btn:disabled,.kr-btn[aria-disabled="true"]{opacity:.42;cursor:not-allowed;box-shadow:none}
+
+/* ===== Chip / Status ===== */
+.kr-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:var(--r-voll);font-size:var(--fs-mini);font-weight:700;line-height:1.3;white-space:nowrap;background:#ECEAE5;color:var(--navy-600)}
+.kr-chip .kr-i{font-size:12px}
+.kr-chip--ok{background:var(--succ-bg);color:var(--succ-fg)}
+.kr-chip--warn{background:var(--warn-bg);color:var(--warn-fg)}
+.kr-chip--rot{background:var(--ral-bg);color:var(--ral-fg)}
+.kr-chip--info{background:var(--info-bg);color:var(--info-fg)}
+.kr-chip--marke{background:var(--magenta);color:#fff}
+.kr-chip--teil{background:var(--part-bg);color:var(--part-fg)}
+.kr-chip--dunkel{background:var(--navy-800);color:#fff}
+.kr-punkt{width:10px;height:10px;border-radius:50%;flex:none;background:var(--navy-300)}
+.kr-punkt--ok{background:var(--succ)}.kr-punkt--warn{background:var(--warn)}.kr-punkt--rot{background:var(--ral);box-shadow:0 0 0 4px rgba(175,43,30,.14)}.kr-punkt--info{background:var(--info)}
+
+/* ===== Zustand (lädt · leer · Fehler · gesperrt) – eine Zeile ===== */
+.kr-zustand{display:flex;align-items:center;gap:12px;min-height:var(--touch);padding:8px 10px 8px 14px;border-radius:var(--r-l);background:var(--surface);border:1px solid var(--line);font-size:13px;color:var(--navy-600)}
+.kr-zustand>.kr-i{font-size:16px;color:var(--navy-400)}
+.kr-zustand-text{flex:1;min-width:0}
+.kr-zustand--fehler{background:var(--ral-bg);border-color:var(--ral-bd);color:var(--ral-fg)}.kr-zustand--fehler>.kr-i{color:var(--ral)}
+.kr-zustand--gesperrt{background:var(--cream-100);color:var(--navy-500)}
+.kr-zustand--laedt{color:var(--navy-500)}
+.kr-drehen{width:14px;height:14px;border-radius:50%;border:2px solid var(--cream-400);border-top-color:var(--navy-500);animation:kr-drehen .7s linear infinite;flex:none}
+.kr-skelett{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--cream-200),var(--cream-100),var(--cream-200));background-size:200% 100%;animation:kr-schimmer 1.2s linear infinite}
+@keyframes kr-drehen{to{transform:rotate(360deg)}}
+@keyframes kr-schimmer{to{background-position:-200% 0}}
+
+/* ===== Ausgrau-Element (OE-2609-04) – eine Zeile, nicht klickbar ===== */
+.kr-ausgrau{display:flex;align-items:center;gap:10px;min-height:40px;padding:6px 12px;border-radius:var(--r-m);font-size:12.5px;color:var(--navy-400);pointer-events:none;user-select:none}
+.kr-ausgrau .kr-i{font-size:15px}
+.kr-ausgrau-text{flex:1;min-width:0;text-wrap:pretty;line-height:1.3} /* V1.1 A3 */
+.kr-ausgrau-tag{white-space:nowrap;font-size:9.5px;letter-spacing:.04em;text-transform:uppercase;font-weight:700;border-radius:var(--r-voll);padding:3px 9px;flex:none}
+.kr-ausgrau--aufbau{border:1px dashed var(--cream-500);background:repeating-linear-gradient(135deg,transparent 0 9px,rgba(139,115,85,.05) 9px 18px)}
+.kr-ausgrau--aufbau .kr-ausgrau-tag{white-space:nowrap;background:var(--info-bg);color:var(--info-fg)}
+.kr-ausgrau--klaerung{border:1px dotted var(--warn-bd);background:var(--cream-100)}
+.kr-ausgrau--klaerung .kr-ausgrau-tag{white-space:nowrap;background:var(--warn-bg);color:var(--warn-fg)}
+.kr-ausgrau--nav{color:var(--navy-400);border-color:var(--navy-600);background:transparent}
+.kr-ausgrau--knopf{display:inline-flex;min-height:var(--touch);border-radius:var(--r-btn)}
+
+/* ===== App-Shell · Desktop (Rolf V8) ===== */
+.kr-shell{display:grid;grid-template-columns:var(--seitenleiste) minmax(0,1fr);grid-template-rows:var(--kopf) minmax(0,1fr);height:calc(100% - var(--streifen))}
+.kr-kopf{grid-column:1/3;display:flex;align-items:center;gap:14px;padding:0 20px;border-bottom:1px solid var(--line);background:var(--surface);height:var(--kopf);flex:none}
+.kr-marke{display:flex;align-items:center;gap:11px;flex:none;background:none;border:0;padding:0}
+.kr-shell .kr-marke{width:198px}
+.kr-logo{width:38px;height:38px;border-radius:10px;background:var(--navy-800);color:var(--cream-50);font-family:var(--serif);font-size:15px;display:grid;place-items:center;letter-spacing:.5px;flex:none}
+.kr-marke-name{font-family:var(--serif);font-size:16px;letter-spacing:1.5px;color:var(--navy-800)}
+.kr-suche{flex:1;min-width:0;height:44px;background:var(--flaeche);border:1.5px solid var(--rand);border-radius:var(--r-btn);display:flex;align-items:center;gap:11px;padding:0 15px;box-shadow:var(--sh-sm);text-align:left}
+.kr-suche>.kr-i{font-size:18px;color:var(--navy-500)}
+.kr-suche-ph{flex:1;font-size:14px;color:var(--navy-400);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kr-suche-kbd{white-space:nowrap;font-size:11px;color:var(--navy-400);border:1px solid var(--cream-400);border-radius:6px;padding:2px 7px;background:var(--surface)}
+.kr-datum{font-size:12px;color:var(--navy-500);text-align:right;line-height:1.35;flex:none;white-space:nowrap}.kr-datum b{color:var(--navy-800);font-weight:600}
+.kr-avatar{width:var(--touch);height:var(--touch);border-radius:50%;background:var(--navy-800);color:#fff;display:grid;place-items:center;font-size:13px;font-weight:700;flex:none;border:0}
+.kr-plus{width:var(--touch);height:var(--touch);border-radius:50%;background:var(--grad);color:#fff;border:0;display:grid;place-items:center;font-size:22px;box-shadow:var(--sh-marke);flex:none}
+.kr-plus-menue{position:absolute;z-index:40;min-width:240px;background:var(--surface);border:1px solid var(--rand);border-radius:var(--r-l);box-shadow:var(--sh-lg);padding:6px;display:flex;flex-direction:column;gap:2px}
+.kr-menue-el{min-height:var(--touch);display:flex;align-items:center;gap:10px;padding:0 12px;border:0;border-radius:var(--r-s);background:transparent;font-size:13.5px;font-weight:600;color:var(--navy-800);text-align:left}
+.kr-menue-el:hover{background:var(--cream-100)}.kr-menue-el .kr-i{font-size:18px;color:var(--navy-500)}
+
+.kr-seitenleiste{background:var(--navy-800);padding:14px 12px;display:flex;flex-direction:column;gap:4px;overflow-y:auto}
+.kr-nav{white-space:nowrap;display:flex;align-items:center;gap:11px;min-height:var(--touch);border-radius:10px;padding:0 13px;font-size:13.5px;font-weight:500;color:var(--cream-200);border:1px solid transparent;background:transparent;text-align:left;width:100%}
+.kr-nav .kr-i{font-size:18px;color:var(--navy-300)}
+.kr-nav:hover{background:var(--navy-700);color:#fff}
+.kr-nav--aktiv,.kr-nav--aktiv:hover{background:var(--cream-50);color:var(--navy-900);font-weight:600;box-shadow:inset 0 0 0 2px var(--amber)}
+.kr-nav--aktiv .kr-i{color:var(--navy-800)}
+.kr-nav--schnell{background:var(--navy-700);color:#fff;border-color:var(--navy-600)}.kr-nav--schnell .kr-i{color:var(--amber)}
+.kr-nav-badge{margin-left:auto;background:var(--navy-600);color:var(--cream-100);border-radius:var(--r-voll);min-width:20px;height:20px;padding:0 6px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.kr-nav-badge--rot{background:var(--ral);color:#fff}
+.kr-nav-trenner{height:1px;background:var(--navy-600);margin:9px 8px}
+.kr-nav-unten{margin-top:auto}
+.kr-inhalt{background:var(--ground);overflow-y:auto;padding:18px 22px 24px;min-width:0;scrollbar-width:none}
+.kr-inhalt::-webkit-scrollbar{display:none}
+
+/* ===== App-Shell · Tablet/Handy (Rolf-Dock) ===== */
+.kr-tshell{display:flex;flex-direction:column;height:calc(100% - var(--streifen));position:relative}
+.kr-tshell>.kr-kopf{height:var(--kopf-touch);padding:0 14px;gap:10px}
+.kr-tshell .kr-logo{width:36px;height:36px;font-size:13px}
+.kr-tshell .kr-suche{height:var(--touch)} /* V1.1 A1 */
+.kr-tshell .kr-marke{min-width:var(--touch);min-height:var(--touch);justify-content:center} /* V1.1 A1: Logo-Knopf 48 */
+.kr-tshell>.kr-inhalt{flex:1;padding:14px 14px calc(var(--dock) + 16px)}
+.kr-dock{position:absolute;left:0;right:0;bottom:0;height:var(--dock);background:var(--navy-800);display:flex;align-items:stretch;padding:7px 8px;gap:2px;box-shadow:var(--sh-leiste);z-index:6}
+.kr-dock-el{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border-radius:12px;color:var(--cream-200);font-size:10.5px;font-weight:600;border:0;background:transparent;position:relative;min-width:0}
+.kr-dock-el .kr-i{font-size:20px;color:var(--navy-300)}
+.kr-dock-el--aktiv{background:var(--cream-50);color:var(--navy-900);box-shadow:inset 0 0 0 2px var(--amber)}.kr-dock-el--aktiv .kr-i{color:var(--navy-800)}
+.kr-dock-badge{position:absolute;top:3px;right:calc(50% - 24px);background:var(--ral);color:#fff;border-radius:var(--r-voll);min-width:17px;height:17px;padding:0 4px;font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.kr-schnellleiste{display:flex;gap:8px;margin:0 0 12px}
+.kr-schnellleiste .kr-btn{flex:1}
+
+/* ===== App-Shell · Werkstatt (Phillip V4) ===== */
+.kr-wshell>.kr-kopf{height:var(--kopf-werkstatt);padding:0 18px}
+.kr-wshell>.kr-inhalt{flex:1;padding:18px 20px calc(var(--aktionsleiste) + 18px)}
+.kr-aktionsleiste{position:absolute;left:0;right:0;bottom:0;height:var(--aktionsleiste);background:var(--navy-800);display:flex;align-items:center;gap:10px;padding:0 16px;box-shadow:var(--sh-leiste);z-index:8}
+.kr-aktion{flex:1;height:56px;border-radius:13px;display:flex;align-items:center;justify-content:center;gap:9px;font-size:13.5px;font-weight:600;background:var(--navy-700);color:var(--cream-100);border:1px solid var(--navy-600);padding:0 14px;white-space:nowrap;min-width:0}
+.kr-aktion .kr-i{font-size:19px;color:var(--cream-200)}
+.kr-aktion--primaer{flex:1.5;background:var(--grad);border-color:transparent;color:#fff;font-weight:700;box-shadow:var(--sh-marke)}.kr-aktion--primaer .kr-i{color:#fff}
+.kr-aktion--ruhig{background:transparent}
+
+/* ===== Seite ===== */
+.kr-seite-kopf{display:flex;align-items:center;gap:12px;margin:0 0 14px;flex-wrap:wrap}
+.kr-seite-titel{font-family:var(--serif);font-size:var(--fs-seite);font-weight:500;letter-spacing:-.3px;margin:0;line-height:1.15;flex:1;min-width:0}
+.kr-seite-werkzeug{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.kr-stapel{display:flex;flex-direction:column;gap:14px}
+.kr-raster{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,340px),1fr));gap:14px;align-items:start}
+.kr-spalten{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:16px;align-items:start}
+
+/* ===== Handlungsbedarf (Konflikt · Warnung · Entscheidung) ===== */
+.kr-hb{display:flex;flex-direction:column;gap:8px}
+.kr-hb-label{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--navy-800);margin:0 0 2px}
+.kr-hb-label .kr-i{font-size:15px;color:var(--warn-fg)}
+.kr-hb-eintrag{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:center;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--rand);border-radius:var(--r-eintrag);padding:10px 12px 10px 14px;box-shadow:var(--sh-sm)}
+.kr-hb-eintrag--konflikt{border-left-color:var(--ral);}
+.kr-hb-eintrag--warnung{border-left-color:var(--warn)}
+.kr-hb-eintrag--entscheidung{border-left-color:var(--info);}
+.kr-hb-eintrag--konflikt .kr-punkt{background:var(--ral);box-shadow:0 0 0 4px rgba(175,43,30,.14)}
+.kr-hb-eintrag--warnung .kr-punkt{background:var(--warn)}
+.kr-hb-eintrag--entscheidung .kr-punkt{background:var(--info)}
+.kr-hb-main{min-width:0}
+.kr-hb-titel{font-size:14px;font-weight:600;line-height:1.35;text-wrap:pretty;overflow-wrap:break-word} /* V1.1 A3: Titel bricht um (max. 2 Zeilen durch kurze Texte), nie „…“ */
+.kr-hb-titel .kr-id{margin-right:8px}
+.kr-hb-meta{font-size:12.5px;color:var(--navy-500);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:22px}
+.kr-hb-meta .kr-chip{margin-right:8px;vertical-align:1px}
+.kr-hb-aktionen{display:flex;gap:7px;align-items:center;flex:none}
+.kr-hb-status{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--navy-500);font-weight:500}
+.kr-hb-status--rot{color:var(--ral-fg);font-weight:600}
+.kr-hb-status--info{color:var(--info-fg)}
+.kr-hb-mehr{font-size:14px;font-weight:600;color:var(--navy-800);background:var(--surface);border:1.5px solid var(--rand);border-radius:var(--r-eintrag);min-height:56px;box-shadow:var(--sh-sm)}
+.kr-hb-mehr .kr-i{font-size:20px}
+.kr-hb-mehr:hover{background:var(--flaeche)}
+
+/* ===== Kachel (Tagesüberblick) – Höhe = Inhalt ===== */
+.kr-kachel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-kachel);box-shadow:var(--sh-sm);display:flex;flex-direction:column;overflow:hidden}
+.kr-kachel-kopf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);min-height:var(--touch)}
+.kr-kachel-titel{display:flex;align-items:center;gap:10px;font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--navy-800);margin:0}
+.kr-kachel-ic{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font-size:15px;background:var(--navy-700);color:#fff;flex:none}
+.kr-kachel-ic--ok{background:var(--succ)}.kr-kachel-ic--info{background:var(--info-bg);color:var(--info-fg)}.kr-kachel-ic--warn{background:var(--warn);}
+.kr-kachel-zahl{font-family:var(--serif);font-size:var(--fs-zahl);color:var(--navy-700)}
+.kr-kachel-inhalt{padding:4px 6px;display:flex;flex-direction:column}
+.kr-kachel-inhalt>.kr-zustand,.kr-kachel-inhalt>.kr-ausgrau{margin:4px}
+.kr-kachel-fuss{min-height:var(--touch);padding:0 15px;border:0;border-top:1px solid var(--line);font-size:12.5px;color:var(--navy-600);font-weight:600;display:flex;align-items:center;gap:6px;background:transparent;width:100%;text-align:left}
+.kr-kachel-fuss:hover{background:var(--cream-50)}
+
+/* ===== Zeile (Auftrag · Kunde · Termin · Abwesenheit) – max. 2 Zeilen, Aktion rechts ===== */
+.kr-zeile{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:11px;align-items:center;padding:8px 10px;border-radius:11px;min-height:var(--touch);background:transparent;border:0;width:100%;text-align:left}
+button.kr-zeile:hover,.kr-zeile--klick:hover{background:var(--cream-100)}
+.kr-zeile--karte{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-l);box-shadow:var(--sh-sm);padding:9px 12px}
+.kr-zeile-main{min-width:0}
+.kr-zeile-t{font-size:13px;font-weight:600;color:var(--navy-900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kr-zeile-t .kr-id{margin-right:7px}
+.kr-zeile-t .kr-chip{margin-left:7px;vertical-align:1px}
+.kr-zeile-t .kr-id{font-size:12.5px}
+.kr-zeile-s{font-size:11.5px;color:var(--navy-500);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kr-zeile-seite{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--navy-500);white-space:nowrap}
+.kr-zeit{font-family:var(--serif);font-size:13px;color:var(--navy-700);min-width:44px;text-align:center}
+.kr-av{width:32px;height:32px;border-radius:50%;background:var(--info-bg);color:var(--info-fg);display:grid;place-items:center;font-size:11px;font-weight:700;flex:none}
+
+/* ===== Bündel-Vorschlag / WIP-Menge (Phillip V4) ===== */
+.kr-buendel{border-radius:15px;padding:12px 14px;grid-template-rows:auto;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--amber);box-shadow:var(--sh-sm);display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center}
+.kr-buendel>.kr-i{font-size:18px;color:var(--warn-fg);align-self:start;margin-top:2px}
+.kr-buendel-t{font-size:14px;font-weight:600;line-height:1.35}
+.kr-buendel-s{font-size:11.5px;color:var(--navy-500);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kr-wip{border-radius:15px;padding:12px 14px;background:var(--navy-800);color:#fff;box-shadow:var(--sh-md);display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;border:0;width:100%;text-align:left;min-height:var(--touch)}
+.kr-wip>.kr-i{font-size:18px;color:var(--amber)}
+.kr-wip-t{font-size:14px;font-weight:600}
+.kr-wip-zahl{font-family:var(--serif);font-size:var(--fs-zahl);font-weight:500;margin-left:4px}
+.kr-wip-s{font-size:11.5px;color:var(--cream-300);margin-top:2px}
+.kr-wip-go{color:var(--cream-200);font-size:16px}
+
+/* ===== Suche ===== */
+.kr-suchfeld{height:50px;border:1.5px solid var(--rand);border-radius:var(--r-l);background:var(--surface);display:flex;align-items:center;gap:10px;padding:0 14px}
+.kr-suchfeld>.kr-i{font-size:19px;color:var(--navy-500)}
+.kr-suchfeld input{flex:1;border:0;outline:0;background:transparent;font-size:14px;min-width:0}
+.kr-treffer-liste{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.kr-treffer{width:100%;min-height:60px;border:1px solid var(--line);border-radius:var(--r-l);background:var(--surface);display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:11px;align-items:center;padding:9px 12px;text-align:left}
+.kr-treffer:hover{background:var(--cream-50);box-shadow:var(--sh-sm)}
+.kr-treffer-t{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kr-treffer-grund{font-size:11.5px;color:var(--navy-500);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kr-treffer-grund mark{background:var(--warn-bg);color:var(--warn-fg);border-radius:3px;padding:0 2px}
+
+/* ===== Karte (Auftragskarte V8 / Kundenkarte V2) ===== */
+.kr-karte{display:flex;flex-direction:column;background:var(--surface);height:100%;overflow:hidden;position:relative}
+.kr-karte-scroll{flex:1;overflow-y:auto;scrollbar-width:none}.kr-karte-scroll::-webkit-scrollbar{display:none}
+.kr-kartenkopf{padding:18px 24px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:18px;align-items:flex-start;background:var(--surface)}
+.kr-kartenkopf-l{flex:1;min-width:0}
+.kr-karte-nr{font-family:var(--serif);font-size:13px;color:var(--navy-500)}
+.kr-karte-titel{font-family:var(--serif);font-size:28px;font-weight:500;line-height:1.08;margin:4px 0 0;letter-spacing:-.3px}
+.kr-karte-sub{font-size:13.5px;color:var(--navy-500);margin-top:5px}
+.kr-karte-meta{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-top:12px}
+.kr-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:var(--r-voll);font-size:12px;font-weight:600;line-height:1;border:0;background:var(--succ-bg);color:var(--succ-fg)}
+.kr-pill--marke{background:var(--magenta);color:#fff}
+.kr-pill--kunde{background:var(--navy-800);color:#fff;min-height:36px;padding:0 13px;font-weight:500}
+.kr-pill--leise{background:#ECEAE5;color:var(--navy-600)}
+.kr-kartenkopf-r{display:flex;flex-direction:column;align-items:flex-end;gap:10px;flex:none}
+.kr-schliessen{width:var(--touch);height:var(--touch);border-radius:50%;border:1px solid var(--cream-400);background:var(--surface);color:var(--navy-500);display:grid;place-items:center;font-size:18px;flex:none;box-shadow:var(--sh-sm)}
+.kr-termin{border:1px solid var(--rand);border-radius:14px;padding:10px 14px;min-width:180px;display:flex;flex-direction:column;align-items:flex-end;gap:2px;background:var(--surface);box-shadow:var(--sh-sm)}
+.kr-termin-c{font-family:var(--serif);font-size:20px;line-height:1.1}
+.kr-termin-d{font-size:12px;color:var(--navy-500);display:flex;gap:6px;align-items:center}
+.kr-termin--dringend{background:var(--ral-bg);border-color:var(--ral)}.kr-termin--dringend .kr-termin-c{color:var(--ral)}.kr-termin--dringend .kr-termin-d{color:var(--ral-fg)}
+.kr-kette-wrap{border-bottom:1px solid var(--line);padding:12px 20px 14px;background:var(--surface)}
+.kr-kette{display:flex}
+.kr-schritt{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;padding:4px 3px;text-align:center;border-radius:12px;border:0;background:transparent;min-height:var(--touch)}
+.kr-kette>*:not(:first-child)::before{content:"";position:absolute;top:24px;right:50%;left:-50%;height:2px;background:var(--cream-400);z-index:0}
+.kr-schritt--erledigt::before,.kr-schritt--aktiv::before{background:var(--succ)!important}
+.kr-schritt-dot{position:relative;z-index:1;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-size:18px;background:var(--cream-100);border:1.5px dashed var(--cream-400);color:var(--navy-300)}
+.kr-schritt--erledigt .kr-schritt-dot{background:var(--succ);border:0;color:#fff}
+.kr-schritt--aktiv .kr-schritt-dot{background:var(--magenta);border:0;color:#fff;box-shadow:0 0 0 4px rgba(194,24,91,.18)}
+.kr-schritt--bereit .kr-schritt-dot{background:var(--surface);border:2px solid var(--succ);color:var(--succ)}
+.kr-schritt--gesperrt .kr-schritt-dot{border-color:var(--warn);color:var(--warn);background:var(--warn-bg)}
+.kr-schritt-lbl{font-size:12px;font-weight:600;color:var(--navy-800)}
+.kr-schritt--aktiv .kr-schritt-lbl{color:var(--magenta)}.kr-schritt--warten .kr-schritt-lbl{color:var(--navy-400);font-weight:500}.kr-schritt--gesperrt .kr-schritt-lbl{color:var(--warn-fg)}
+.kr-schritt-st{white-space:nowrap;font-size:10.5px;color:var(--navy-400)}
+.kr-schwelle .kr-schritt-dot{border-radius:11px;border:1.5px solid var(--warn);background:var(--warn-bg);color:var(--warn-fg);border-style:solid}
+.kr-schwelle--frei .kr-schritt-dot{border-color:var(--succ);background:var(--succ-bg);color:var(--succ-fg)}
+.kr-schwelle-zeile{margin-top:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:var(--warn-bg);border:1px solid var(--warn-bd);border-radius:12px;padding:6px 6px 6px 14px;font-size:12.5px;color:var(--warn-fg);font-weight:600}
+.kr-schwelle-zeile--frei{background:var(--succ-bg);border-color:var(--succ-bd);color:var(--succ-fg)}
+.kr-karte-koerper{display:grid;grid-template-columns:minmax(0,1.62fr) minmax(0,1fr)}
+.kr-karte-haupt{padding:6px 22px 22px;background:var(--surface);border-right:1px solid var(--line);min-width:0}
+.kr-karte-rail{padding:6px 20px 22px;background:var(--flaeche);min-width:0}
+.kr-block{padding:16px 0;border-top:1px solid var(--line)}
+.kr-block:first-child{border-top:0}
+.kr-block-label{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:0 0 10px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--navy-800);font-weight:700}
+.kr-block-label .kr-btn{text-transform:none;letter-spacing:0;min-height:36px;font-size:12px}
+.kr-naechste{border-radius:16px;padding:14px 16px;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--magenta);box-shadow:var(--sh-sm);display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center}
+.kr-naechste-t{font-family:var(--serif);font-size:19px;line-height:1.2}
+.kr-naechste-a{display:flex;gap:8px;flex-wrap:wrap}
+.kr-teile{display:flex;flex-direction:column;gap:8px}
+.kr-teil{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:8px 10px 8px 12px;box-shadow:var(--sh-sm)}
+.kr-teil--fertig{border-left:4px solid var(--succ)}
+.kr-bild{width:44px;height:44px;border-radius:10px;display:grid;place-items:center;font-size:19px;color:rgba(255,255,255,.92);background:linear-gradient(135deg,#B89F7A,#8E7355);border:0}
+.kr-bild--leer{background:var(--cream-200);color:var(--navy-300);border:1px solid var(--cream-400)}
+.kr-notiz{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--navy-700);border-radius:12px;padding:10px 14px;box-shadow:var(--sh-sm);font-size:13.5px;line-height:1.45}
+.kr-notiz-m{font-size:11px;color:var(--navy-400);margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.kr-docs{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.kr-doc{display:inline-flex;align-items:center;gap:7px;min-height:var(--touch);padding:0 13px;border-radius:10px;background:var(--surface);border:1px solid var(--line);font-size:12px;font-weight:500;color:var(--navy-700)}
+.kr-qa-raster{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.kr-qa{min-height:60px;background:var(--surface);border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:var(--navy-800);box-shadow:var(--sh-sm);font-size:11.5px;font-weight:500}
+.kr-qa .kr-i{font-size:19px;color:var(--navy-600)}
+.kr-qa--primaer{background:var(--navy-800);color:#fff;border-color:var(--navy-800)}.kr-qa--primaer .kr-i{color:var(--amber)}
+.kr-verlauf{display:flex;flex-direction:column}
+.kr-verlauf-el{display:grid;grid-template-columns:28px minmax(0,1fr);gap:11px;padding:7px 0;position:relative}
+.kr-verlauf-el:not(:last-child)::after{content:"";position:absolute;left:13px;top:32px;bottom:-3px;width:1px;background:var(--cream-400)}
+.kr-verlauf-d{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:14px;background:var(--surface);color:var(--navy-500);border:1px solid var(--cream-400);position:relative;z-index:1}
+.kr-verlauf-d--ok{background:var(--succ);color:#fff;border:0}.kr-verlauf-d--warn{background:var(--warn);color:#fff;border:0}
+.kr-verlauf-z{font-size:10.5px;color:var(--navy-400)}.kr-verlauf-t{font-size:12.5px;font-weight:500;color:var(--navy-800);line-height:1.35}
+.kr-fakten{display:flex;flex-direction:column}
+.kr-fakt{display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:40px;padding:6px 0;border-bottom:1px solid var(--cream-300);font-size:12.5px}
+.kr-fakt:last-child{border-bottom:0}.kr-fakt>span:first-child{color:var(--navy-500)}.kr-fakt>b{text-align:right;font-weight:600}
+.kr-kartenfuss{display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:10px 20px;border-top:1px solid var(--line);background:var(--surface);flex:none}
+.kr-kartendock{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;padding:8px 10px 10px;border-top:1px solid var(--cream-400);background:var(--surface);box-shadow:0 -6px 20px rgba(26,31,46,.12);flex:none}
+.kr-kartendock .kr-qa{min-height:56px;box-shadow:none;border-color:transparent;background:transparent;font-size:10.5px}
+.kr-kartendock .kr-qa--erledigen{background:var(--succ);color:#fff}.kr-kartendock .kr-qa--erledigen .kr-i{color:#fff}
+
+/* ===== Formular ===== */
+.kr-feld{display:flex;flex-direction:column;gap:5px;min-width:0}
+.kr-feld-label{color:var(--navy-500);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.kr-eingabe,.kr-auswahl,.kr-textfeld{width:100%;min-height:var(--touch);border:1px solid var(--rand);border-radius:10px;background:var(--surface);color:var(--navy-900);padding:0 12px;font-size:13.5px}
+.kr-textfeld{min-height:88px;padding:10px 12px;resize:vertical;line-height:1.45}
+.kr-auswahl{-webkit-appearance:none;appearance:none;padding-right:40px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234B5366' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;background-size:15px}
+.kr-eingabe:hover,.kr-auswahl:hover{border-color:var(--cream-500)}
+.kr-eingabe:focus,.kr-auswahl:focus,.kr-textfeld:focus{outline:2px solid var(--fokus);outline-offset:1px;border-color:var(--fokus)}
+.kr-eingabe:disabled,.kr-auswahl:disabled{background:var(--cream-100);color:var(--navy-400)}
+.kr-feld--fehler .kr-eingabe,.kr-feld--fehler .kr-auswahl{border-color:var(--ral)}
+.kr-feld-fehler{font-size:11.5px;color:var(--ral-fg);font-weight:600}
+.kr-check{display:flex;align-items:center;gap:10px;min-height:var(--touch);padding:8px 12px;border:1px solid var(--line);border-radius:11px;background:var(--surface);font-size:13px;cursor:pointer}
+.kr-check input{width:22px;height:22px;accent-color:var(--succ);flex:none}
+.kr-check:hover{border-color:var(--cream-500);background:var(--cream-50)}
+.kr-segment{display:inline-flex;background:#ECEAE5;border-radius:var(--r-btn);padding:3px;gap:2px}
+.kr-segment button{min-height:42px;padding:0 14px;border:0;border-radius:9px;background:transparent;font-size:12.5px;font-weight:600;color:var(--navy-600)}
+.kr-segment button[aria-pressed="true"]{background:var(--surface);color:var(--navy-900);box-shadow:var(--sh-sm)}
+.kr-segment button:disabled{opacity:.42;cursor:not-allowed}
+.kr-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;background:var(--flaeche);border:1px solid var(--line);border-radius:14px;padding:14px}
+.kr-form--3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.kr-form .kr-voll{grid-column:1/-1}
+.kr-position{display:grid;grid-template-columns:36px minmax(0,1.4fr) 90px minmax(0,1fr) var(--touch);gap:8px;align-items:end;padding:10px;border:1px solid var(--line);border-radius:12px;background:var(--flaeche)}
+.kr-position-nr{width:34px;height:34px;border-radius:9px;background:var(--navy-800);color:#fff;display:grid;place-items:center;font-size:11px;font-weight:700;margin-bottom:7px}
+
+/* ===== Dialog / Picker / Toast ===== */
+.kr-ebene{position:absolute;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:16px;background:var(--scrim)}
+.kr-dialog{position:relative;width:min(760px,100%);max-height:100%;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line);border-radius:var(--r-dialog);background:var(--surface);box-shadow:var(--sh-lg)}
+.kr-dialog--breit{width:min(980px,100%)}.kr-dialog--schmal{width:min(560px,100%)}
+.kr-dialog--karte{width:min(1180px,100%);height:100%;max-height:820px}
+.kr-dialog-kopf{display:flex;align-items:center;gap:12px;padding:12px 14px 12px 18px;border-bottom:1px solid var(--line)}
+.kr-dialog-ic{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;flex:none;background:var(--navy-800);color:#fff;font-size:17px}
+.kr-dialog-titel{font-family:var(--serif);font-size:20px;font-weight:500;line-height:1.2;margin:0;flex:1;min-width:0}
+.kr-dialog-inhalt{padding:16px 18px;overflow:auto;background:var(--surface);display:flex;flex-direction:column;gap:10px}
+.kr-dialog-fuss{display:flex;align-items:center;justify-content:flex-end;gap:9px;padding:10px 14px;border-top:1px solid var(--line);background:var(--surface)}
+.kr-dialog-fuss .kr-fuss-links{margin-right:auto}
+.kr-schritte{display:flex;gap:6px}.kr-schritte span{height:5px;flex:1;border-radius:99px;background:var(--cream-300)}.kr-schritte span.an{background:var(--navy-700)}
+.kr-hinweis{display:flex;align-items:center;gap:9px;padding:9px 12px;border:1px solid var(--cream-300);border-radius:11px;background:var(--cream-100);color:var(--navy-600);font-size:12.5px}
+.kr-hinweis--warn{background:var(--warn-bg);border-color:var(--warn-bd);color:var(--warn-fg)}
+.kr-hinweis--ok{background:var(--succ-bg);border-color:var(--succ-bd);color:var(--succ-fg)}
+.kr-picker-werkzeug{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:9px}
+.kr-wahl-liste{display:flex;flex-direction:column;gap:8px}
+.kr-wahl{width:100%;min-height:60px;border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:8px 12px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;text-align:left}
+.kr-wahl:hover{background:var(--cream-50);border-color:var(--cream-500)}
+.kr-wahl:disabled{cursor:not-allowed;background:var(--cream-100)}
+.kr-toast{position:absolute;left:50%;bottom:calc(var(--dock) + 26px);z-index:60;transform:translateX(-50%);max-width:calc(100% - 24px);display:flex;align-items:center;gap:14px;padding:8px 8px 8px 15px;border-radius:12px;background:var(--navy-900);color:#fff;font-size:13px;box-shadow:var(--sh-lg);white-space:nowrap}
+.kr-toast>.kr-i{color:#7FC48D;font-size:16px}
+.kr-toast .kr-btn{min-height:40px;background:transparent;border:0;color:var(--amber)}
+.kr-app[data-geraet="desktop"] .kr-toast{bottom:28px}
+
+/* ===== Login /start ===== */
+.kr-login{position:absolute;inset:0;display:grid;place-items:center;padding:24px;background:var(--ground)}
+.kr-login-karte{position:relative;width:min(860px,100%);display:grid;grid-template-columns:1fr 1fr;overflow:hidden;border:1px solid var(--cream-400);border-radius:var(--r-dialog);background:var(--surface);box-shadow:var(--sh-lg)}
+.kr-login-karte::before{content:"";position:absolute;inset:0 0 auto;height:3px;background:var(--grad)}
+.kr-login-marke{padding:48px;background:var(--navy-800);display:flex;align-items:flex-start}
+.kr-login-marke .kr-logo{width:48px;height:48px;border-radius:12px;background:var(--cream-50);color:var(--navy-800);font-size:18px}
+.kr-login-marke .kr-marke-name{color:var(--cream-50);font-size:22px;letter-spacing:.12em}
+.kr-login-pin{padding:40px 44px;display:flex;flex-direction:column;gap:10px}
+.kr-login-titel{font-family:var(--serif);font-size:26px;font-weight:500;margin:0 0 4px}
+.kr-pin-punkte{height:44px;display:flex;align-items:center;justify-content:center;gap:13px}
+.kr-pin-punkt{width:13px;height:13px;border-radius:50%;background:var(--cream-300);box-shadow:inset 0 0 0 1px var(--cream-400)}
+.kr-pin-punkt--an{background:var(--navy-800);box-shadow:none}
+.kr-pin-meldung{min-height:18px;text-align:center;color:var(--ral-fg);font-size:12px;font-weight:600}
+.kr-tastatur{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.kr-taste{min-height:54px;border:1px solid var(--cream-300);border-radius:12px;background:var(--cream-50);color:var(--navy-800);font-size:18px;font-weight:600}
+.kr-taste:hover{background:var(--cream-100);border-color:var(--cream-500)}
+.kr-taste--klein{font-size:12px;color:var(--navy-500)}
+
+/* ===== Terminübersicht (Ansicht in Aufträge) ===== */
+.kr-woche{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;align-items:start}
+.kr-tag{background:var(--surface);border:1px solid var(--cream-300);border-radius:14px;box-shadow:var(--sh-sm);overflow:hidden}
+.kr-tag-kopf{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);font-size:12px;font-weight:700;color:var(--navy-800)}
+.kr-tag--heute .kr-tag-kopf{background:var(--navy-800);color:#fff}
+.kr-tag-inhalt{padding:4px;display:flex;flex-direction:column}
+.kr-monat{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.kr-monat-tag{min-height:74px;background:var(--surface);border:1px solid var(--cream-300);border-radius:10px;padding:6px 7px;display:flex;flex-direction:column;gap:4px;font-size:11.5px;text-align:left}
+.kr-monat-tag--leer{background:transparent;border-color:transparent}
+.kr-monat-tag--heute{box-shadow:inset 0 0 0 2px var(--amber)}
+.kr-monat-nr{font-weight:700;color:var(--navy-700)}
+.kr-monat-wt{font-size:10.5px;font-weight:700;color:var(--navy-500);text-transform:uppercase;letter-spacing:.05em;text-align:center}
+
+/* ===== Geräte-Anpassung ===== */
+.kr-app[data-geraet="tablet"] .kr-seite-titel{font-size:23px}
+.kr-raster .kr-buendel,.kr-app[data-geraet="handy"] .kr-buendel{grid-template-columns:auto minmax(0,1fr)}
+.kr-raster .kr-buendel>.kr-btn,.kr-app[data-geraet="handy"] .kr-buendel>.kr-btn{grid-column:2;justify-self:start}
+.kr-app[data-geraet="handy"] .kr-seite-titel{font-size:var(--fs-seite-touch)}
+.kr-app[data-geraet="handy"] .kr-tshell>.kr-inhalt,.kr-app[data-geraet="handy"] .kr-wshell>.kr-inhalt{padding-left:10px;padding-right:10px;padding-top:12px}
+.kr-app[data-geraet="handy"] .kr-wshell>.kr-inhalt{padding-bottom:calc(var(--aktionsleiste-handy) + 14px)}
+.kr-app[data-geraet="handy"] .kr-kopf{gap:8px;padding:0 10px}
+.kr-app[data-geraet="handy"] .kr-marke-name{display:none}
+.kr-app[data-geraet="handy"] .kr-suche-kbd{white-space:nowrap;display:none}
+.kr-app[data-geraet="handy"] .kr-suche{padding:0 12px}
+.kr-app[data-geraet="handy"] .kr-spalten{grid-template-columns:1fr;gap:12px}
+.kr-app[data-geraet="tablet"] .kr-spalten{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr)}
+.kr-app[data-geraet="handy"] .kr-hb-eintrag{gap:10px;padding:8px 8px 8px 11px}
+.kr-app[data-geraet="handy"] .kr-hb-titel{font-size:13.5px}
+.kr-app[data-geraet="handy"] .kr-hb-meta{font-size:12px}
+.kr-app[data-geraet="handy"] .kr-hb-eintrag .kr-btn{padding:0 12px}
+.kr-app[data-geraet="handy"] .kr-hb-eintrag .kr-btn--icon{padding:0}
+.kr-app[data-geraet="handy"] .kr-hb-aktionen{gap:4px}
+.kr-app[data-geraet="handy"] .kr-aktionsleiste{height:var(--aktionsleiste-handy);gap:4px;padding:0 6px}
+.kr-app[data-geraet="handy"] .kr-aktion{height:60px;flex-direction:column;gap:3px;font-size:10.5px;padding:0 2px;white-space:normal;line-height:1.1;text-align:center}
+.kr-app[data-geraet="handy"] .kr-aktion--primaer{flex:1.2}
+.kr-app[data-geraet="handy"] .kr-toast{bottom:calc(var(--dock) + 16px)}
+.kr-app[data-geraet="handy"] .kr-ebene{padding:0;align-items:flex-end}
+.kr-app[data-geraet="handy"] .kr-dialog{width:100%;max-height:100%;border-radius:18px 18px 0 0;border-bottom:0}
+.kr-app[data-geraet="handy"] .kr-dialog--karte{height:100%;border-radius:0}
+.kr-app[data-geraet="handy"] .kr-dialog-inhalt{padding:12px}
+.kr-app[data-geraet="handy"] .kr-dialog-fuss .kr-btn{flex:1}
+.kr-app[data-geraet="handy"] .kr-form,.kr-app[data-geraet="handy"] .kr-form--3{grid-template-columns:1fr}
+.kr-app[data-geraet="handy"] .kr-position{grid-template-columns:32px minmax(0,1fr) 70px var(--touch)}
+.kr-app[data-geraet="handy"] .kr-position .kr-pos-oberflaeche{grid-column:2/4}
+.kr-app[data-geraet="handy"] .kr-woche{grid-template-columns:1fr}
+.kr-app[data-geraet="tablet"] .kr-woche{grid-template-columns:repeat(3,minmax(0,1fr))}
+.kr-app[data-geraet="handy"] .kr-monat-tag{min-height:52px;padding:4px}
+.kr-app[data-geraet="handy"] .kr-login{padding:0}
+.kr-app[data-geraet="handy"] .kr-login-karte{grid-template-columns:1fr;height:100%;border:0;border-radius:0;align-content:start}
+.kr-app[data-geraet="handy"] .kr-login-marke{padding:22px 24px}
+.kr-app[data-geraet="handy"] .kr-login-pin{padding:22px 24px}
+.kr-app:not([data-geraet="desktop"]) .kr-karte-koerper{grid-template-columns:1fr}
+.kr-app:not([data-geraet="desktop"]) .kr-karte-haupt{border-right:0;border-bottom:1px solid var(--line)}
+.kr-app[data-geraet="handy"] .kr-kartenkopf{flex-direction:column;padding:14px 14px 12px;gap:10px;position:relative}
+.kr-app[data-geraet="handy"] .kr-kartenkopf-r{width:100%;align-items:stretch}
+.kr-app[data-geraet="handy"] .kr-schliessen{position:absolute;top:10px;right:10px}
+.kr-app[data-geraet="handy"] .kr-termin{align-items:flex-start;width:100%}
+.kr-app[data-geraet="handy"] .kr-karte-titel{font-size:23px;padding-right:52px}
+.kr-app[data-geraet="handy"] .kr-karte-haupt,.kr-app[data-geraet="handy"] .kr-karte-rail{padding:4px 12px 16px}
+.kr-app[data-geraet="handy"] .kr-kette-wrap{padding:10px 6px 12px}
+.kr-app[data-geraet="handy"] .kr-schritt-dot{width:34px;height:34px;font-size:16px}
+.kr-app[data-geraet="handy"] .kr-kette>*:not(:first-child)::before{top:21px}
+.kr-app[data-geraet="handy"] .kr-schritt-lbl{font-size:10px}.kr-app[data-geraet="handy"] .kr-schritt-st{white-space:nowrap;display:none}
+.kr-app[data-geraet="handy"] .kr-naechste{grid-template-columns:1fr}
+.kr-app[data-geraet="handy"] .kr-datum{display:none}
+
+/* ===== Bewegung & Haptik (V5 pop/fade · V8 rise/removing) – nur bei neuem Inhalt, nie bei jedem Render ===== */
+@keyframes kr-rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes kr-pop{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
+@keyframes kr-fade{from{opacity:0}to{opacity:1}}
+@keyframes kr-sheet{from{opacity:.4;transform:translateY(48px)}to{opacity:1;transform:none}}
+@keyframes kr-toast{from{opacity:0;transform:translate(-50%,14px)}to{opacity:1;transform:translate(-50%,0)}}
+.kr-app[data-anim~="seite"] .kr-inhalt>*,.kr-app[data-anim~="seite"] :is(.kr-hb,.kr-raster,.kr-stapel,.kr-spalten>.kr-stapel)>*{animation:kr-rise .34s var(--ease) both}
+.kr-app[data-anim~="seite"] :is(.kr-hb,.kr-raster,.kr-stapel)>:nth-child(2){animation-delay:.04s}
+.kr-app[data-anim~="seite"] :is(.kr-hb,.kr-raster,.kr-stapel)>:nth-child(3){animation-delay:.08s}
+.kr-app[data-anim~="seite"] :is(.kr-hb,.kr-raster,.kr-stapel)>:nth-child(4){animation-delay:.12s}
+.kr-app[data-anim~="seite"] :is(.kr-hb,.kr-raster,.kr-stapel)>:nth-child(n+5){animation-delay:.16s}
+.kr-app[data-anim~="ebene"] .kr-ebene{animation:kr-fade .16s ease both}
+.kr-app[data-anim~="ebene"] :is(.kr-dialog,.kr-plus-menue){animation:kr-pop .22s var(--ease) both}
+.kr-app[data-geraet="handy"][data-anim~="ebene"] .kr-dialog{animation:kr-sheet .28s var(--ease) both}
+.kr-app[data-anim~="toast"] .kr-toast{animation:kr-toast .22s var(--ease) both}
+.kr-hb-eintrag{max-height:220px;transition:box-shadow .15s,transform .28s var(--ease),opacity .28s,max-height .28s var(--ease),padding .28s,margin .28s}
+.kr-hb-eintrag--weg{opacity:0;transform:translateX(14px);max-height:0;padding-top:0;padding-bottom:0;margin-top:-8px;border-width:0;overflow:hidden}
+.kr-hb-eintrag[data-hb]{cursor:pointer}.kr-hb-eintrag[data-hb]:hover{box-shadow:var(--sh-md)}
+:is(.kr-btn,.kr-aktion,.kr-dock-el,.kr-nav,.kr-qa,.kr-wahl,.kr-treffer,.kr-taste,.kr-plus,button.kr-zeile,.kr-kachel-fuss,.kr-wip,.kr-monat-tag,.kr-menue-el,button.kr-schritt,.kr-segment button,.kr-pill--kunde,.kr-schritt-nav button){transition:transform .12s var(--ease),background-color .15s,box-shadow .15s,border-color .15s,color .15s}
+:is(.kr-btn,.kr-aktion,.kr-dock-el,.kr-nav,.kr-qa,.kr-wahl,.kr-treffer,.kr-taste,.kr-plus,button.kr-zeile,.kr-kachel-fuss,.kr-wip,.kr-monat-tag,.kr-menue-el,button.kr-schritt,.kr-segment button,.kr-pill--kunde,.kr-schritt-nav button):active:not(:disabled){transform:scale(.97)}
+:is(.kr-zeile--karte,.kr-wahl,.kr-treffer,.kr-qa,button.kr-monat-tag):hover:not(:disabled){box-shadow:var(--sh-md);transform:translateY(-1px)}
+.kr-kachel{transition:box-shadow .2s}.kr-kachel:hover{box-shadow:var(--sh-md)}
+.kr-btn--erledigen:hover{box-shadow:0 4px 14px rgba(47,125,61,.32)}
+.kr-btn--primaer:hover{box-shadow:0 4px 14px rgba(26,31,46,.26)}
+.kr-btn--sekundaer:hover{border-color:var(--navy-400)}
+.kr-aktion:hover{background:var(--navy-600)}.kr-aktion--primaer:hover{background:var(--grad);filter:brightness(1.06)}.kr-aktion--ruhig:hover{background:var(--navy-700)}
+.kr-dock-el:hover:not(.kr-dock-el--aktiv){background:var(--navy-700)}
+.kr-plus:hover{box-shadow:0 6px 18px rgba(120,50,120,.42)}
+.kr-plus .kr-i{transition:transform .22s var(--ease)}
+.kr-app:has(.kr-plus-menue [data-a="kundeneu"]) .kr-plus .kr-i{transform:rotate(45deg)}
+.kr-kopf{position:relative;z-index:7;transition:box-shadow .2s}
+.kr-app[data-gescrollt] .kr-kopf{box-shadow:0 6px 18px rgba(26,31,46,.10)}
+.kr-kachel-fuss .kr-i{transition:transform .15s var(--ease)}.kr-kachel-fuss:hover .kr-i{transform:translateX(3px)}
+.kr-wip:hover{box-shadow:var(--sh-lg)}.kr-wip:hover .kr-wip-go{transform:translateX(3px)}.kr-wip-go{transition:transform .15s var(--ease)}
+/* Schritt-Navigation im Ablauf (klickbar zurück) */
+.kr-schritt-nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.kr-schritt-nav button{min-height:var(--touch);border:0;border-top:4px solid var(--cream-300);border-radius:2px;background:transparent;padding:6px 2px 0;font-size:12.5px;font-weight:600;color:var(--navy-400);text-align:left;display:flex;align-items:center;gap:6px}
+.kr-schritt-nav button.an{border-top-color:var(--navy-700);color:var(--navy-700)}
+.kr-schritt-nav button[aria-current="step"]{color:var(--navy-900)}
+.kr-schritt-nav button:disabled{cursor:default}
+.kr-schritt-nav b{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--cream-300);color:var(--navy-600);font-size:11px}
+.kr-schritt-nav button.an b{background:var(--navy-800);color:#fff}
+.kr-tastenfokus{outline:2px solid var(--fokus-dialog);outline-offset:2px}
+
+/* ===== Lage-Leiste: Kontrolle + Firmengesundheit immer zuerst (USP D-USP-001) ===== */
+.kr-lage{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px}
+.kr-lage-filter{display:flex;gap:6px;flex-wrap:wrap}
+.kr-lage-f{white-space:nowrap;min-height:40px;display:inline-flex;align-items:center;gap:8px;padding:0 12px 0 10px;border-radius:var(--r-voll);border:1px solid var(--rand);background:var(--surface);font-size:12.5px;font-weight:600;color:var(--navy-700)}
+.kr-lage-f .kr-punkt{width:9px;height:9px;box-shadow:none}
+.kr-lage-f b{font-family:var(--serif);font-weight:500;font-size:14px;color:var(--navy-900)}
+.kr-lage-f[aria-pressed="true"]{background:var(--navy-800);border-color:var(--navy-800);color:#fff}.kr-lage-f[aria-pressed="true"] b{color:#fff}
+.kr-lage-f:disabled{opacity:.45;cursor:default}
+.kr-lage-gesund{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
+.kr-gesund{white-space:nowrap;min-height:40px;display:inline-flex;align-items:center;gap:8px;padding:0 14px 0 10px;border-radius:var(--r-voll);font-size:12.5px;font-weight:600;border:1px solid transparent;background:var(--surface)}
+.kr-gesund .kr-i{font-size:16px}
+.kr-gesund-s{font-weight:500;color:inherit;opacity:.85}
+.kr-gesund--ok{background:var(--succ-bg);color:var(--succ-fg);border-color:var(--succ-bd)}
+.kr-gesund--warn{background:var(--warn-bg);color:var(--warn-fg);border-color:var(--warn-bd)}
+.kr-gesund--kritisch{background:var(--ral-bg);color:var(--ral-fg);border-color:var(--ral-bd)}
+.kr-gesund--aufbau{border:1px dashed var(--cream-500);color:var(--navy-400);background:repeating-linear-gradient(135deg,transparent 0 9px,rgba(139,115,85,.05) 9px 18px);pointer-events:none}
+.kr-gesund--aufbau .kr-ausgrau-tag{background:var(--info-bg);color:var(--info-fg)}
+.kr-gesund--kritisch .kr-i{animation:kr-puls 2.6s ease-in-out infinite}
+@keyframes kr-puls{0%,100%{opacity:1}50%{opacity:.45}}
+/* V1.1 A1/A2: Touch ≥ 48 · Handy: Zahl + Kurzlabel, umbrechen statt seitlich abschneiden */
+.kr-app:not([data-geraet="desktop"]) :is(.kr-lage-f,.kr-gesund){min-height:var(--touch)}
+.kr-app[data-geraet="handy"] .kr-lage{gap:6px}
+.kr-app[data-geraet="handy"] .kr-lage-filter{width:100%;gap:6px}
+.kr-app[data-geraet="handy"] .kr-lage-f{flex:1 1 auto;justify-content:center;padding:0 8px;gap:6px;font-size:12px}
+.kr-app[data-geraet="handy"] .kr-lage-gesund{margin-left:0;width:100%;gap:6px}
+.kr-app[data-geraet="handy"] .kr-gesund{flex:1 1 150px;min-width:0;padding:4px 10px;white-space:normal;line-height:1.2;flex-wrap:wrap;row-gap:3px;gap:6px}
+.kr-app[data-geraet="handy"] .kr-gesund--aufbau .kr-ausgrau-tag{margin-left:auto}
+.kr-app[data-geraet="handy"] .kr-gesund-z{display:none}
+
+/* ===== Fließendes Auf- und Zuklappen ===== */
+.kr-klapp{display:grid;grid-template-rows:0fr;transition:grid-template-rows .38s var(--ease),opacity .3s var(--ease);opacity:0}
+.kr-klapp>div{min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:8px}
+.kr-klapp--offen{grid-template-rows:1fr;opacity:1}
+.kr-hb-mehr{display:flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap}
+.kr-hb-mehr .kr-i{transition:transform .3s var(--ease)}
+.kr-hb-mehr[aria-expanded="true"] .kr-i{transform:rotate(180deg)}
+@keyframes kr-pop-zu{to{opacity:0;transform:translateY(8px) scale(.975)}}
+@keyframes kr-sheet-zu{to{opacity:0;transform:translateY(60px)}}
+@keyframes kr-fade-zu{to{opacity:0}}
+@keyframes kr-menue{from{opacity:0;transform:scale(.92) translateY(-6px)}to{opacity:1;transform:none}}
+.kr-plus-menue{transform-origin:top right}
+.kr-ebene--zu{animation:kr-fade-zu .18s ease forwards!important;pointer-events:none}
+.kr-ebene--zu :is(.kr-dialog,.kr-plus-menue){animation:kr-pop-zu .18s var(--ease) forwards!important}
+.kr-app[data-geraet="handy"] .kr-ebene--zu .kr-dialog{animation:kr-sheet-zu .22s var(--ease) forwards!important}
+.kr-app[data-anim~="ebene"] .kr-plus-menue{animation:kr-menue .2s var(--ease) both}
+.kr-app[data-anim~="ebene"] .kr-plus-menue .kr-menue-el{animation:kr-rise .26s var(--ease) both}
+.kr-plus-menue .kr-menue-el:nth-child(2){animation-delay:.03s}.kr-plus-menue .kr-menue-el:nth-child(3){animation-delay:.06s}.kr-plus-menue .kr-menue-el:nth-child(4){animation-delay:.09s}
+.kr-app[data-anim~="ebene"] .kr-dialog--karte .kr-karte{animation:kr-rise .3s var(--ease) both}
+.kr-hb-status{animation:kr-fade .25s ease both}
+/* Handlungsbedarf: Aktionsspalte ausgerichtet */
+.kr-app:not([data-geraet="handy"]) .kr-hb-aktionen>.kr-btn:first-child{min-width:196px}
+.kr-spalten .kr-hb-aktionen>.kr-btn:first-child{min-width:150px!important}
+.kr-app:not([data-geraet="handy"]) .kr-hb-aktionen>.kr-btn--leise:last-child{min-width:92px}
+.kr-app:not([data-geraet="handy"]) .kr-hb-status{min-width:296px;justify-content:flex-end}
+.kr-raster--tag{grid-template-columns:repeat(auto-fill,minmax(min(100%,420px),1fr))}
+
+@media (prefers-reduced-motion:reduce){.kr-app *{animation:none!important;transition:none!important}}
+
+/* ========================================================================
+   V1.1 (2026-09-27) · aus V2 übernommen mit Auflagen (B1–B6, C1) – Machart V1
+   ======================================================================== */
+
+/* B1 Fokuseintrag – dringendster Punkt, etwas größer: max. 2 Zeilen + Aktionszeile · Owner 2026-09-27: nur Hauptaktion + Später sichtbar, Weitere hinter „Weitere“ (keine Auswahl, kein Überlegen) */
+.kr-fokus{grid-template-columns:auto minmax(0,1fr);grid-template-areas:"p m" "a a";row-gap:10px;padding:14px 16px 12px 16px;border-left-width:5px;box-shadow:var(--sh-md)}
+.kr-fokus>.kr-punkt{grid-area:p;align-self:start;margin-top:6px}
+.kr-fokus>.kr-hb-main{grid-area:m}
+.kr-fokus .kr-hb-titel{font-size:16.5px;line-height:1.3}
+.kr-fokus .kr-hb-meta{font-size:13px}
+.kr-fokus>.kr-hb-aktionen{grid-area:a;padding-left:24px;flex-wrap:wrap}
+.kr-fokus>.kr-hb-aktionen>.kr-btn:first-child{min-width:220px;min-height:52px;font-size:14px}
+.kr-fokus>.kr-hb-aktionen>.kr-hb-status{min-width:0!important;justify-content:flex-start}
+.kr-app[data-geraet="handy"] .kr-fokus{padding:12px 12px 10px 12px}
+.kr-app[data-geraet="handy"] .kr-fokus .kr-hb-titel{font-size:15px}
+.kr-app[data-geraet="handy"] .kr-fokus>.kr-hb-aktionen{padding-left:0;flex-wrap:nowrap}
+.kr-teil-foto{min-width:var(--touch)}
+.kr-app[data-geraet="handy"] .kr-fokus>.kr-hb-aktionen>.kr-btn:first-child{flex:1;min-width:0}
+@keyframes kr-fokus-in{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:none}}
+.kr-fokus--neu{animation:kr-fokus-in .4s var(--ease) both}
+/* B4 Tastaturauswahl j/k */
+.kr-hb-eintrag--gewaehlt{box-shadow:0 0 0 2px var(--navy-700),var(--sh-md)!important}
+
+/* B5 Wischen (nur Touch, zusätzlich zu Knöpfen) */
+.kr-wisch{position:relative;border-radius:var(--r-eintrag)}
+.kr-wisch-bg{position:absolute;inset:0;border-radius:var(--r-eintrag);display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:12.5px;font-weight:700;color:#fff;opacity:0;transition:opacity .15s;pointer-events:none;background:linear-gradient(90deg,var(--succ) 0 50%,var(--navy-700) 50% 100%)}
+.kr-wisch-bg>span{display:flex;align-items:center;gap:7px}
+.kr-wisch-bg--links{background:var(--navy-700);justify-content:flex-end}.kr-wisch-bg--links>span:first-child{display:none}
+.kr-wisch-bg--rechts{background:var(--succ)}.kr-wisch-bg--rechts>span:last-child{display:none}
+.kr-wisch--zieh .kr-wisch-bg{opacity:1}
+.kr-wisch>.kr-hb-eintrag{touch-action:pan-y}
+.kr-wisch--zieh>.kr-hb-eintrag{transition:none}
+
+/* B2 Befehlspalette „Suchen oder tun“ */
+.kr-ebene--palette{align-items:flex-start;padding-top:9%}
+.kr-palette{width:min(720px,100%);max-height:100%;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--cream-300);border-radius:var(--r-dialog);background:var(--surface);box-shadow:var(--sh-lg)}
+.kr-palette-in{display:flex;align-items:center;gap:12px;min-height:60px;padding:0 10px 0 18px;border-bottom:1px solid var(--line)}
+.kr-palette-in>.kr-i{font-size:20px;color:var(--navy-500)}
+.kr-palette-in input{flex:1;border:0;outline:0;background:transparent;font-size:16px;min-width:0;min-height:var(--touch)}
+.kr-palette-liste{overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:4px;background:var(--surface);scrollbar-width:none}
+.kr-palette-gr{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--navy-500);padding:8px 8px 2px}
+.kr-palette-liste .kr-treffer[aria-selected="true"],.kr-palette-liste .kr-tun[aria-selected="true"]{box-shadow:0 0 0 2px var(--navy-700);background:var(--cream-50)}
+.kr-palette-liste .kr-treffer-liste{margin:0}
+.kr-tun{width:100%;min-height:52px;border:1px solid var(--cream-300);border-radius:var(--r-l);background:var(--surface);display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:11px;align-items:center;padding:6px 12px 6px 8px;text-align:left;font-size:13.5px;font-weight:600;color:var(--navy-900)}
+.kr-tun:hover{background:var(--cream-50)}
+.kr-tun-ic{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;background:var(--navy-800);color:#fff;font-size:17px}
+.kr-tun-kbd{font-size:11px;font-weight:500;color:var(--navy-400);border:1px solid var(--cream-400);border-radius:6px;padding:2px 7px;background:var(--surface)}
+.kr-app[data-geraet="handy"] .kr-ebene--palette{padding:0;align-items:stretch}
+.kr-app[data-geraet="handy"] .kr-palette{width:100%;border-radius:0;border:0}
+.kr-app[data-geraet="handy"] .kr-tun-kbd{display:none}
+.kr-app[data-anim~="ebene"] .kr-palette{animation:kr-pop .22s var(--ease) both}
+.kr-ebene--zu .kr-palette{animation:kr-pop-zu .18s var(--ease) forwards!important}
+
+/* B3 Seitenblatt – Karten von rechts (Desktop/Tablet) bzw. von unten (Handy), Hintergrund sichtbar */
+@keyframes kr-blatt-r{from{opacity:.5;transform:translateX(64px)}to{opacity:1;transform:none}}
+@keyframes kr-blatt-r-zu{to{opacity:0;transform:translateX(72px)}}
+.kr-ebene--blatt{justify-content:flex-end;align-items:stretch;padding:0;background:rgba(18,22,31,.32)}
+.kr-ebene--blatt>.kr-dialog--karte{width:min(1180px,calc(100% - 96px));max-height:none;height:100%;border-radius:var(--r-dialog) 0 0 var(--r-dialog);border-right:0}
+.kr-app[data-geraet="tablet"] .kr-ebene--blatt>.kr-dialog--karte{width:min(900px,calc(100% - 96px))}
+.kr-app[data-geraet="handy"] .kr-ebene--blatt{align-items:flex-end}
+.kr-app[data-geraet="handy"] .kr-ebene--blatt>.kr-dialog--karte{width:100%;height:calc(100% - 28px);border-radius:18px 18px 0 0;border-right:1px solid var(--cream-300)}
+.kr-app:not([data-geraet="handy"])[data-anim~="ebene"] .kr-ebene--blatt>.kr-dialog{animation:kr-blatt-r .3s var(--ease) both}
+.kr-app:not([data-geraet="handy"]) .kr-ebene--zu.kr-ebene--blatt>.kr-dialog{animation:kr-blatt-r-zu .2s var(--ease) forwards!important}
+.kr-blatt-zurueck{display:flex;align-items:center;gap:8px;padding:6px 14px 0}
+.kr-blatt-zurueck .kr-btn{min-height:var(--touch);font-size:12.5px}
+/* Fortschritt Teile (am Kettenschritt „fertig“, keine zweite Zahl) */
+.kr-schritt-balken{width:56px;height:4px;border-radius:2px;background:var(--cream-300);overflow:hidden}
+.kr-schritt-balken>i{display:block;height:100%;background:var(--succ);transition:width .3s var(--ease)}
+
+/* C1 Zeitstrahl „Heute & Woche“ (Umschalter, Standard = Kacheln) */
+.kr-zeitstrahl{display:flex;flex-direction:column;padding:2px 0}
+.kr-zeit-gr{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--navy-500);margin:8px 0 2px 64px}
+.kr-zeit-gr:first-child{margin-top:4px}
+.kr-zeit-el{position:relative;display:grid;grid-template-columns:44px 12px minmax(0,1fr) auto;gap:0 10px;align-items:center;min-height:var(--touch);padding:4px 8px 4px 0;border-radius:11px}
+.kr-zeit-el::before{content:"";position:absolute;left:59px;top:0;bottom:0;width:2px;background:var(--cream-300)}
+.kr-zeit-z{font-family:var(--serif);font-size:13px;color:var(--navy-700);text-align:right}
+.kr-zeit-p{width:12px;height:12px;border-radius:50%;border:2px solid var(--navy-300);background:var(--surface);position:relative;z-index:1}
+.kr-zeit-el--ok .kr-zeit-p{border-color:var(--succ);background:var(--succ)}
+.kr-zeit-el--rot .kr-zeit-p{border-color:var(--ral);background:var(--ral-bg)}
+.kr-zeit-el--info .kr-zeit-p{border-color:var(--info)}
+.kr-zeit-el--warn .kr-zeit-p{border-color:var(--warn)}
+.kr-zeit-t{min-width:0;border:0;background:transparent;text-align:left;padding:4px 0;border-radius:8px;min-height:40px;display:flex;flex-direction:column;justify-content:center}
+.kr-zeit-t:hover{background:var(--cream-100)}
+.kr-zeit-t>span:first-child{font-size:13px;font-weight:600;color:var(--navy-900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kr-zeit-t .kr-id{margin-right:7px;font-size:12.5px}
+.kr-zeit-t>small{font-size:11.5px;color:var(--navy-500);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kr-zeit-seite{display:flex;align-items:center;gap:8px}
+.kr-jetzt{display:grid;grid-template-columns:44px minmax(0,1fr);gap:0 10px;align-items:center;margin:2px 0;padding-right:8px}
+.kr-jetzt>span{text-align:right;font-family:var(--serif);font-size:12px;color:var(--magenta)}
+.kr-jetzt>i{height:2px;background:var(--magenta);border-radius:2px;position:relative;margin-left:10px}
+.kr-jetzt>i::before{content:"";position:absolute;left:-5px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--magenta)}
+.kr-raster--zeit{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)}
+.kr-app[data-geraet="handy"] .kr-raster--zeit{grid-template-columns:1fr}
+.kr-app[data-geraet="handy"] .kr-zeit-el{grid-template-columns:40px 12px minmax(0,1fr) auto;gap:0 8px}
+.kr-app[data-geraet="handy"] .kr-zeit-el::before{left:53px}
+.kr-app[data-geraet="handy"] .kr-zeit-gr{margin-left:58px}
+.kr-app[data-geraet="handy"] .kr-zeit-el .kr-btn{padding:0 12px}
+
+/* B6 Neuer Eingang auf einer Seite (Desktop/Tablet) – Abschnitte, Schrittleiste als Sprungmarke */
+.kr-eingang-nav{position:sticky;top:-16px;z-index:2;background:var(--surface);margin:-16px -18px 0;padding:10px 18px 8px;border-bottom:1px solid var(--line)}
+.kr-eingang-nav .kr-schritt-nav button:disabled{cursor:pointer}
+.kr-abschnitt{display:flex;flex-direction:column;gap:10px;scroll-margin-top:72px}
+.kr-abschnitt+.kr-abschnitt{padding-top:6px}

@@ -1,0 +1,1 @@
+- [v_* View Security Invariants](project_view_security_invariants.md) — RLS is NOT the tenant boundary on the app path; demand the `app.tenant_id` GUC guard, prefer `private.v_*`.

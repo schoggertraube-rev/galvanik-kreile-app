@@ -662,3 +662,46 @@ Produktwahrheit wiederzubeleben.
 **Wesentlicher Nachteil:** Bei einer laengeren Mergegrenze entsteht eine
 streng geordnete Kandidatenkette. Jeder nachgelagerte Kandidat muss nach den
 tatsaechlichen Vorgaenger-Merges erneut gegen `main` bestaetigt werden.
+
+## D-UI-DS-001 — Geschichtete UI-Wahrheit mit Designsystem V1.1 (Owner 2026-10-11)
+
+Fuer jeden weiteren Bau gilt genau diese konfliktfreie Schichtung:
+
+1. `docs/project/linie/ui/designsystem_v1_1/` bestimmt ausschliesslich Tokens,
+   Typografie, Komponenten und responsives Verhalten. Gebunden ist
+   `SHA256SUMS.txt@71B0CB01F484BEEF042CFD04D31F951D2DB2D441C427F8212F35A8D41A8041E5`.
+2. Die vier in `00_UI_REFERENZEN_PFADE.md` gelisteten HTML-Dateien bestimmen
+   ausschliesslich Seitenkomposition und Rollenlayout.
+3. `KREILE_GESAMTMOCK_V5_2026-09-14.html@75258FF3BD4CC212C8E989061708A29DC26EA44B851BD28E8F16E8509B0CC0AA`
+   bestimmt ausschliesslich Ablauf und Zwischenschritte.
+4. Gesamtmocks V2, V3, V4 und V6 sowie Designsystem V1 oder V2 sind kein
+   Bauinput. Demo- und synthetische Inhalte sind keine Produktdaten.
+
+Damit ist die Formulierung aus D-UI-V5-003, V5 sei alleinige Zielvorlage,
+fuer Tokens, Komponenten und Seitenkomposition ausdruecklich ersetzt. V5
+bleibt nur in seiner hier festgelegten Ablaufrolle gueltig. Keine Quelle darf
+eine andere Schicht still ueberschreiben.
+
+## D-GOV-004 — Eine serielle Live-Linie bis zum Livegang (Owner 2026-10-11)
+
+`docs/delivery/KREILE_LIVE_PLAN_V1.json` ist der einzige ausfuehrbare Plan bis
+zum kontrollierten Livegang. `missions/F1_ORDER_TO_CASH_PILOT_001.yml` ist nur
+sein kleiner Laufzeiger. Es gilt:
+
+- genau ein aktives Paket aus `KR-L01` bis `KR-L20`, ohne Integrationbranch;
+- der PL erstellt zuerst den paketgebundenen roten Akzeptanztest und besitzt
+  Test, Laufzeiger und Receipt; der Writer kann diese Dateien nicht aendern;
+- genau ein Writer darf nur die `editablePaths` des aktiven Pakets aendern;
+- der unabhaengige Reviewer prueft genau den Kandidaten-SHA;
+- hoechstens eine Korrekturrunde; ein Umgebungsfehler verbraucht sie nicht;
+- visuelle Pakete benoetigen vor Merge Link, sichtbares Delta und drei
+  Viewports; Main-Merge und Production-Folge bleiben Owner-Grenzen;
+- nach `DONE` nennt der Laufzeiger bereits den festen Nachfolger; der PL
+  startet ihn aus frischem `origin/main`, ohne neue Paket- oder Produktwahl.
+
+Die aktiven Prozessanteile von D-GOV-002, D-GOV-003, alten Rolling Queues,
+KR-00*/KR-22R und externen Paketplaenen sind dadurch ersetzt. Sie bleiben
+Historie oder Quellenmaterial, aber sind nicht mehr ausfuehrbar. Eine
+Aenderung dieser Live-Linie ist nur als konkrete, Owner-autorisierte
+Planamendierung zulaessig; gewöhnliche Implementierungsdetails werden im
+Paket selbst entschieden und erzeugen keine neue Freigabeschleife.
