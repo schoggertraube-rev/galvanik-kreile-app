@@ -11,9 +11,10 @@ const V5_SHA256 = "75258FF3BD4CC212C8E989061708A29DC26EA44B851BD28E8F16E8509B0CC
 const ORIGIN = process.env.A3_TEST_ORIGIN?.trim() || "https://localhost:3443";
 const OUTPUT_DIR = path.resolve(process.env.A3_EVIDENCE_OUTPUT_DIR?.trim() || "test-results/path1-v5-shell-smoke/screens");
 const VIEWPORTS = [
-  { name: "desktop", width: 1914, height: 917 },
-  { name: "tablet", width: 1220, height: 880 },
-  { name: "mobile", width: 390, height: 844 },
+  { name: "desktop", width: 1914, height: 917, shell: "desktop", hasTouch: false, deviceScaleFactor: 1 },
+  { name: "desktop-windows-125", width: 1182, height: 720, shell: "desktop", hasTouch: false, deviceScaleFactor: 1.25 },
+  { name: "tablet", width: 1220, height: 880, shell: "tablet", hasTouch: true, deviceScaleFactor: 1 },
+  { name: "mobile", width: 390, height: 844, shell: "tablet", hasTouch: true, deviceScaleFactor: 1 },
 ] as const;
 const ACTORS = [
   { key: "rolf", id: "11111111-1111-4111-8111-111111111111", pin: "4186", role: "meister" },
@@ -215,14 +216,33 @@ test.describe("PATH1 V5 Shell Smoke", () => {
         ON CONFLICT (id) DO UPDATE SET email = excluded.email, full_name = excluded.full_name, role = excluded.role, pin_hash = excluded.pin_hash, active = excluded.active, updated_at = excluded.updated_at
       `;
       for (const actor of ACTORS) for (const viewport of VIEWPORTS) {
-        const context = await browser.newContext({ viewport });
+        const context = await browser.newContext({
+          viewport: { width: viewport.width, height: viewport.height },
+          hasTouch: viewport.hasTouch,
+          deviceScaleFactor: viewport.deviceScaleFactor,
+        });
         try {
           const page = await context.newPage();
           await loginPin(page, actor, sessionSecret);
           await assertPage(page, actor.key, viewport, "/", problems, screens);
           screens.push(await capture(page, actor.key, viewport));
-          if (viewport.width >= 1300) await visitDesktopLinks(page, actor.key, viewport, problems, screens);
-          else await visitMore(page, actor.key, viewport, problems, screens);
+          const pointer = await page.evaluate(() => ({
+            fine: window.matchMedia("(pointer: fine)").matches,
+            coarse: window.matchMedia("(pointer: coarse)").matches,
+            hover: window.matchMedia("(hover: hover)").matches,
+            dpr: window.devicePixelRatio,
+          }));
+          if (viewport.shell === "desktop") {
+            expect(pointer.fine).toBe(true);
+            expect(pointer.hover).toBe(true);
+            await expect(page.locator(".mock-kreile-rolf-home .frame.desktop")).toBeVisible();
+            await expect(page.getByRole("navigation", { name: "Mobile Hauptnavigation", exact: true })).toHaveCount(0);
+            await visitDesktopLinks(page, actor.key, viewport, problems, screens);
+          } else {
+            await expect(page.locator(".mock-kreile-rolf-home .frame.tablet")).toBeVisible();
+            await visitMore(page, actor.key, viewport, problems, screens);
+          }
+          expect(pointer.dpr).toBe(viewport.deviceScaleFactor);
         } finally {
           await context.close();
         }

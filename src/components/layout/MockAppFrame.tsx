@@ -11,7 +11,7 @@ import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { MockIcons } from "./MockIcons";
 import { MoreMenu } from "./MoreMenu";
-import { FrameModeContext, type MockFrameMode } from "./MockFrameMode";
+import { FrameModeContext, frameClassForWidth } from "./MockFrameMode";
 
 
 function subscribe(onChange: () => void) {
@@ -21,13 +21,20 @@ function subscribe(onChange: () => void) {
 const readWidth = () => window.innerWidth;
 const serverWidth = () => 1914;
 
-/** Rahmen-Klassen wie im Mock (chooseReferenceFrame/mountOnlyReferenceFrame). */
-export function frameClassForWidth(width: number): { mode: MockFrameMode; className: string } {
-  if (width >= 1300) return { mode: "desktop", className: "frame desktop" };
-  if (width < 600) return { mode: "tablet", className: "frame tablet touch phone mock-mobile" };
-  if (width < 900) return { mode: "tablet", className: "frame tablet touch mock-portrait" };
-  return { mode: "tablet", className: "frame tablet touch" };
+const FINE_POINTER_QUERY = "(hover: hover) and (pointer: fine)";
+
+function subscribeFinePointer(onChange: () => void) {
+  const query = window.matchMedia(FINE_POINTER_QUERY);
+  query.addEventListener("change", onChange);
+  window.addEventListener("resize", onChange);
+  return () => {
+    query.removeEventListener("change", onChange);
+    window.removeEventListener("resize", onChange);
+  };
 }
+
+const readFinePointer = () => window.matchMedia(FINE_POINTER_QUERY).matches;
+const serverFinePointer = () => true;
 
 function isCurrent(pathname: string, href: string): boolean {
   const path = href.split("?")[0];
@@ -94,7 +101,12 @@ const DOCK = [
 
 export function MockAppFrame({ children }: { children: React.ReactNode }) {
   const width = useSyncExternalStore(subscribe, readWidth, serverWidth);
-  const { mode, className } = frameClassForWidth(width);
+  const finePointer = useSyncExternalStore(
+    subscribeFinePointer,
+    readFinePointer,
+    serverFinePointer,
+  );
+  const { mode, className } = frameClassForWidth(width, finePointer);
   const pathname = usePathname();
   const router = useRouter();
   const access = useNavigationAccess();

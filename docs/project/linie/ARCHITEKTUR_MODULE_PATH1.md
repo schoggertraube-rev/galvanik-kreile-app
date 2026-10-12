@@ -36,7 +36,7 @@ Nichts vom Fach liegt außerhalb. Keine Parallel-Ablage in `components/<fach>` /
 
 ## 4a. Vollständige Routenabnahme — D-UI-CORE-001
 
-Ein Innenmodul-, Komponenten- oder Fachvertrags-PASS ist kein sichtbarer Gesamtoberflächen-PASS. Jedes Path-1-UI-Teilpaket muss die vollständige authentifizierte Route mit Shell, Header, Navigation, Inhalt und Aktionsleiste belegen. Die Abnahme erfolgt side-by-side gegen die von `00_UI_REFERENZEN_PFADE.md` gelistete kanonische HTML-Referenz bei Desktop `1914x917`, Tablet `1220x880` und Mobile `390x844`.
+Ein Innenmodul-, Komponenten- oder Fachvertrags-PASS ist kein sichtbarer Gesamtoberflächen-PASS. Jedes Path-1-UI-Teilpaket muss die vollständige authentifizierte Route mit Shell, Header, Navigation, Inhalt und Aktionsleiste belegen. Die Abnahme erfolgt side-by-side gegen die von `00_UI_REFERENZEN_PFADE.md` gelistete kanonische HTML-Referenz bei Desktop `1914x917`, Tablet `1220x880` und Mobile `390x844`. Zusätzlich ist ein Windows-Desktop mit `125 %` Skalierung als Fine-Pointer-Fall bei mindestens `1182x720` CSS-Pixeln zu belegen; er darf nicht allein wegen der reduzierten CSS-Breite in die Tablet-Shell wechseln.
 
 Pflichtbelege sind echte Klickpfade in einem isolierten Real-/Test-Tenant, klar synthetische Testdaten, ehrliche Leerzustände mit sinnvoller Primäraktion sowie eine nummerierte Abweichungsliste ohne P0/P1. Alt-Shell- und Navigationsausnahmen werden paketweise shrink-only entfernt. Grüne CI, ein isolierter Modultest oder eine vorhandene Production-Route reichen allein nicht. Die konkrete A-bis-E-Reihenfolge bestimmt ausschließlich die Mission; diese Architektur definiert nur den unveränderlichen Abnahmevertrag.
 
