@@ -51,7 +51,7 @@ Starte mit `/goal Stufe 1 P1–P5 nach docs/delivery/KREILE_CODEX_BAUAUFTRAG_STU
 Branch: weiter `kreile/b1-shell` (PR #152).
 - `src/components/layout/MockAppFrame.tsx`: Label zurück auf „Kunden & Kontakt“ (V8).
 - Navigation exakt wie Bauumfang-HTML: Bereiche Der Tag, Werkstatt, Aufträge, Kunden & Kontakt, Geld & Rechnungen, Zahlen (geplant); Weiteres: Kalender (geplant bis P3), Material & Einkauf (geplant), Einstellungen.
-Abnahme: Owner loggt sich auf der Preview je Rolle ein und landet auf dem richtigen Home. Screenshots aus dem Fresh-Replay.
+Abnahme: Owner loggt sich auf der Preview je Rolle ein und landet auf dem richtigen Home. Screenshots aus dem Fresh-Replay. 
 
 ### P1 · Datenfundament · 27.10.–01.11. · IDs S01, S02, S03, A06, E02, A04 (Verlauf)
 Branch `kreile/s1-p1-daten`, abgezweigt vom aktuellen Stand `kreile/b1-shell` (PR #152 bleibt offen bis Owner-Merge; PR-Basis von P1 = `kreile/b1-shell`). Migration `..._s1_p1_datenfundament.sql`.
