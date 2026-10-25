@@ -5,6 +5,7 @@ const ports = vi.hoisted(() => ({
   create: vi.fn(), search: vi.fn(), receipt: vi.fn(), orders: vi.fn(),
   attachments: vi.fn(), reserve: vi.fn(), finalize: vi.fn(), storageFrom: vi.fn(),
   refresh: vi.fn(),
+  catalog: vi.fn(),
 }));
 
 vi.mock("@/app/warendurchlauf/actions", () => ({
@@ -17,6 +18,7 @@ vi.mock("@/app/warendurchlauf/actions", () => ({
   finalizeOrderIntakeAttachmentAction: ports.finalize,
 }));
 vi.mock("@/lib/supabase/client", () => ({ supabase: { storage: { from: ports.storageFrom } } }));
+vi.mock("@/app/actions/catalog.actions", () => ({ getActiveCatalogAction: ports.catalog }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: ports.refresh }) }));
 vi.mock("lucide-react", () => {
   const Icon = () => null;
@@ -65,7 +67,7 @@ function makeReceiptForInput(input: {
   displayName?: string | null;
   dueDate: string;
   note: string | null;
-  items: Array<{ name: string; quantity: number; material: string | null; surfaceRequested: string }>;
+  items: Array<{ catalogServiceId?:string; name:string; quantity:number; material:string|null; surfaceRequested:string; unit?:string; unitPriceCents?:number; vatRateBasisPoints?:0|700|1900 }>;
 }) {
   const mode: "EXISTING" | "NEW" = (input.customerMode || input.customer?.mode || "EXISTING") as "EXISTING" | "NEW";
   const customerId = input.customerId || input.customer?.customerId || "customer-a";
@@ -91,6 +93,10 @@ function makeReceiptForInput(input: {
       quantity: item.quantity,
       material: item.material,
       surfaceRequested: item.surfaceRequested,
+      catalogServiceId: item.catalogServiceId,
+      unit: item.unit,
+      unitPriceCents: item.unitPriceCents,
+      vatRateBasisPoints: item.vatRateBasisPoints,
     })),
     recordedAt: "2026-08-12T12:00:00.000Z",
     orderVersion: 1 as const,
@@ -174,26 +180,22 @@ function renderPanel() {
 
 async function completeExistingForm() {
   await screen.findByRole("combobox", { name: /Kunde auswählen/i });
-  fireEvent.change(screen.getByPlaceholderText("Bezeichnung *"), { target: { value: "Grundplatte" } });
+  fireEvent.change(screen.getByRole("combobox", { name: /Leistung für Teil 1/i }), { target: { value: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" } });
   fireEvent.change(screen.getByPlaceholderText("Menge *"), { target: { value: "2" } });
   fireEvent.change(screen.getByPlaceholderText("Werkstoff"), { target: { value: "Stahl" } });
-  fireEvent.change(screen.getByPlaceholderText("Oberfläche / Behandlung *"), { target: { value: "Glanzverchromen" } });
 }
 
 async function completeTwoItemForm() {
   await screen.findByRole("combobox", { name: /Kunde auswählen/i });
-  const nameInputs = screen.getAllByPlaceholderText("Bezeichnung *");
   const qtyInputs = screen.getAllByPlaceholderText("Menge *");
   const matInputs = screen.getAllByPlaceholderText("Werkstoff");
-  const surfInputs = screen.getAllByPlaceholderText("Oberfläche / Behandlung *");
-  fireEvent.change(nameInputs[0], { target: { value: "Grundplatte" } });
+  const services = screen.getAllByRole("combobox", { name: /Leistung für Teil/i });
+  fireEvent.change(services[0], { target: { value: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" } });
   fireEvent.change(qtyInputs[0], { target: { value: "2" } });
   fireEvent.change(matInputs[0], { target: { value: "Stahl" } });
-  fireEvent.change(surfInputs[0], { target: { value: "Glanzverchromen" } });
-  fireEvent.change(nameInputs[1], { target: { value: "Abdeckblech" } });
+  fireEvent.change(services[1], { target: { value: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" } });
   fireEvent.change(qtyInputs[1], { target: { value: "5" } });
   fireEvent.change(matInputs[1], { target: { value: "Alu" } });
-  fireEvent.change(surfInputs[1], { target: { value: "Eloxieren" } });
 }
 
 beforeEach(() => {
@@ -211,6 +213,10 @@ beforeEach(() => {
       canCreateCustomer: true,
     },
   });
+  ports.catalog.mockResolvedValue({ code:"OK", services:[
+    {id:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",name:"Grundplatte",surface:"Glanzverchromen",unit:"Stück",netPriceCents:1250,vatRateBasisPoints:1900,standardLeadTimeWorkingDays:5,active:true},
+    {id:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",name:"Abdeckblech",surface:"Eloxieren",unit:"Stück",netPriceCents:800,vatRateBasisPoints:1900,standardLeadTimeWorkingDays:3,active:true},
+  ]});
   // Dynamic: command receipt built from form input, stored for fresh reads
   ports.create.mockImplementation(async (input: CreateOrderIntakeInput) => {
     const { customerMode, customerId, canonicalCustomerName, displayName } = deriveCustomerFields(input.customer);
@@ -269,7 +275,7 @@ describe("F1.1 digitaler Wareneingang", () => {
     const createArg = ports.create.mock.calls[0][0];
     expect(createArg.clientEventId).toEqual(expect.any(String));
     expect(createArg.customer).toEqual({ mode: "EXISTING", customerId: "customer-a" });
-    expect(createArg.items).toEqual([{ name: "Grundplatte", quantity: 2, material: "Stahl", surfaceRequested: "Glanzverchromen" }]);
+    expect(createArg.items).toEqual([{ catalogServiceId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name:"Grundplatte", quantity:2, material:"Stahl", surfaceRequested:"Glanzverchromen", unit:"Stück", unitPriceCents:1250, vatRateBasisPoints:1900 }]);
     expect(await screen.findByRole("heading", { name: `${activeCommandReceipt!.orderNumber} bestätigt` })).toBeInTheDocument();
     expect(ports.receipt).toHaveBeenCalledWith({ orderId: activeCommandReceipt!.orderId, clientEventId: createArg.clientEventId });
     expect(ports.orders).toHaveBeenCalledTimes(1);
@@ -284,10 +290,12 @@ describe("F1.1 digitaler Wareneingang", () => {
     fireEvent.click(newCustomerButton);
     fireEvent.change(screen.getByPlaceholderText("Kundenname *"), { target: { value: "Meyer  Betrieb" } });
     fireEvent.change(screen.getByPlaceholderText("Firmenname"), { target: { value: "Meyer   GmbH" } });
-    fireEvent.change(screen.getByPlaceholderText("Bezeichnung *"), { target: { value: "Grundplatte  A" } });
+    fireEvent.change(screen.getByPlaceholderText("Straße *"), { target: { value: "Musterweg  1" } });
+    fireEvent.change(screen.getByPlaceholderText("PLZ *"), { target: { value: "12345" } });
+    fireEvent.change(screen.getByPlaceholderText("Ort *"), { target: { value: "Köln" } });
+    fireEvent.change(screen.getByRole("combobox", { name:/Leistung für Teil 1/i }), { target: { value:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" } });
     fireEvent.change(screen.getByPlaceholderText("Menge *"), { target: { value: "2" } });
     fireEvent.change(screen.getByPlaceholderText("Werkstoff"), { target: { value: "Stahl   1.4301" } });
-    fireEvent.change(screen.getByPlaceholderText(/Behandlung/), { target: { value: "Glanz  verchromen" } });
 
     ports.create.mockImplementationOnce(async (input: CreateOrderIntakeInput) => {
       if (input.customer.mode !== "NEW") throw new Error("Expected NEW customer input");
@@ -318,13 +326,22 @@ describe("F1.1 digitaler Wareneingang", () => {
       contactPerson: null,
       email: null,
       phone: null,
-      city: null,
+      street: "Musterweg 1",
+      zipCode: "12345",
+      city: "Köln",
+      country: "Deutschland",
+      paymentPreference: "rechnung_14",
+      vatId: null,
     });
     expect(createArg.items).toEqual([{
-      name: "Grundplatte A",
+      catalogServiceId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      name: "Grundplatte",
       quantity: 2,
       material: "Stahl 1.4301",
-      surfaceRequested: "Glanz verchromen",
+      surfaceRequested: "Glanzverchromen",
+      unit:"Stück",
+      unitPriceCents:1250,
+      vatRateBasisPoints:1900,
     }]);
   });
 
@@ -336,9 +353,11 @@ describe("F1.1 digitaler Wareneingang", () => {
     fireEvent.click(newCustomerButton);
     fireEvent.change(screen.getByPlaceholderText("Kundenname *"), { target: { value: "Betrieb Müller" } });
     fireEvent.change(screen.getByPlaceholderText("Firmenname"), { target: { value: "Müller & Söhne GmbH" } });
-    fireEvent.change(screen.getByPlaceholderText("Bezeichnung *"), { target: { value: "Achse" } });
+    fireEvent.change(screen.getByPlaceholderText("Straße *"), { target: { value: "Musterweg 2" } });
+    fireEvent.change(screen.getByPlaceholderText("PLZ *"), { target: { value: "12345" } });
+    fireEvent.change(screen.getByPlaceholderText("Ort *"), { target: { value: "Köln" } });
+    fireEvent.change(screen.getByRole("combobox", { name:/Leistung für Teil 1/i }), { target: { value:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" } });
     fireEvent.change(screen.getByPlaceholderText("Menge *"), { target: { value: "3" } });
-    fireEvent.change(screen.getByPlaceholderText(/Behandlung/), { target: { value: "Verzinken" } });
 
     // Mock returns: receipt displayName uses companyName, order customerName uses canonical name
     ports.create.mockImplementationOnce(async (input: CreateOrderIntakeInput) => {
@@ -370,7 +389,7 @@ describe("F1.1 digitaler Wareneingang", () => {
       contactPerson: null,
       email: null,
       phone: null,
-      city: null,
+      street:"Musterweg 2", zipCode:"12345", city:"Köln", country:"Deutschland", paymentPreference:"rechnung_14", vatId:null,
     });
     // Verify the success heading and that companyName appears in receipt detail
     expect(screen.getByRole("heading", { name: /A-2026-0042 bestätigt/ })).toBeInTheDocument();
@@ -478,8 +497,8 @@ describe("F1.1 digitaler Wareneingang", () => {
 
       await screen.findByRole("alert");
 
-      // Materially change the form: different surface
-      fireEvent.change(screen.getByPlaceholderText("Oberfläche / Behandlung *"), { target: { value: "Mattverchromen" } });
+      // Materially change the form: choose a different catalog service.
+      fireEvent.change(screen.getByRole("combobox", { name:/Leistung für Teil 1/i }), { target: { value:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" } });
 
       // Second create: dynamic mock returns receipt with new clientEventId and updated surface
       ports.create.mockImplementationOnce(async (input: CreateOrderIntakeInput) => {

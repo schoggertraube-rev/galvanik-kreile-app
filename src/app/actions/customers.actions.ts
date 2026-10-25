@@ -12,7 +12,9 @@ import { readCustomerSummary } from "@/lib/server/customerSummaryRead";
 import {
   createCustomerCommand,
   readCustomerCreateReceiptCommand,
+  updateCustomerCommercialCommand,
   type CreateCustomerInput,
+  type UpdateCustomerCommercialInput,
 } from "@/modules/customers/server-public";
 
 export async function getCustomerSummaryAction(input: { customerId: string }) {
@@ -83,6 +85,21 @@ export async function readCustomerCreateReceiptAction(input: CreateCustomerInput
     return { code: "UNAVAILABLE" as const, message: "Ein Kundenbeleg wurde gefunden, der fachliche Stand ist aber noch nicht sicher lesbar." };
   }
   return { code: "OK" as const, receipt: result.receipt, customer: readback.data };
+}
+
+export async function updateCustomerCommercialAction(input: UpdateCustomerCommercialInput) {
+  const authorization = await resolveAuthorization().catch(() => null);
+  if (!authorization || !authorization.ok) return { code: "UNAVAILABLE" as const, message: "Kundendaten konnten nicht sicher gespeichert werden." };
+  const result = await updateCustomerCommercialCommand({
+    tenantId: authorization.data.tenantId,
+    userId: authorization.data.userId,
+    capabilities: { canCreateCustomer: authorization.data.permissions.includes("perm_data_customers") },
+  }, input);
+  if (result.code !== "OK") return result;
+  const readback = await readCustomerSummary(authorization.data, { customerId: input.customerId });
+  if (readback.code !== "OK" || readback.data.street !== input.street || readback.data.paymentPreference !== input.paymentPreference) return { code: "UNAVAILABLE" as const, message: "Änderung konnte nicht frisch bestätigt werden." };
+  revalidatePath("/customers"); revalidatePath(`/customers/${input.customerId}`);
+  return { code: "OK" as const, customer: readback.data };
 }
 
 type DbCustomer = InferSelectModel<typeof customers>;

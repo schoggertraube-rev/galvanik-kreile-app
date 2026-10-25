@@ -7,6 +7,9 @@ import postgres from "postgres";
 import { createPinLoginHandle } from "../src/lib/server/pinLoginHandle";
 
 const TENANT = "galvanik-kreile";
+const ROLF_ACTOR_ID = "11111111-1111-4111-8111-111111111111";
+const PHILLIP_ACTOR_ID = "22222222-2222-4222-8222-222222222222";
+const GREGOR_ACTOR_ID = "33333333-3333-4333-8333-333333333333";
 const EVIDENCE_DIR = path.resolve(process.cwd(), "docs/evidence/f1/artifacts/f1-4");
 
 type AuthSignupResponse = { user?: { id?: string }; message?: string };
@@ -161,7 +164,7 @@ async function createRealLocalAuthUser(
 
 async function submitRealEmailLogin(page: Page, email: string, password: string) {
   await page.goto("/start");
-  await clickExactlyOne(page.getByRole("button", { name: "Administrator / E-Mail Login", exact: true }));
+  await clickExactlyOne(page.getByRole("button", { name: /Gregor.*Systemadministrator/ }));
   const dialog = page.getByTestId("email-login-dialog");
   await expectExactlyOneVisible(dialog);
   await fillExactlyOne(dialog.locator("#email"), email);
@@ -171,7 +174,7 @@ async function submitRealEmailLogin(page: Page, email: string, password: string)
 
 async function loginWithRealEmail(page: Page, email: string, password: string) {
   await submitRealEmailLogin(page, email, password);
-  await page.waitForURL((url) => url.pathname === "/warendurchlauf", { timeout: 30_000 });
+  await page.waitForURL((url) => url.pathname === "/settings", { timeout: 30_000 });
   const cookies = await page.context().cookies();
   expect(cookies.some((cookie) => cookie.name === "kreile_app_session")).toBe(true);
   expect(cookies.some((cookie) => cookie.name.startsWith("sb-") && cookie.name.includes("auth-token"))).toBe(true);
@@ -187,39 +190,48 @@ async function loginWithRealPin(page: Page, userId: string, pin: string) {
   for (const digit of pin) {
     await clickExactlyOne(dialog.getByRole("button", { name: digit, exact: true }));
   }
-  await page.waitForURL((url) => url.pathname === "/warendurchlauf", { timeout: 30_000 });
+  await page.waitForURL((url) => url.pathname === "/", { timeout: 30_000 });
   expect((await page.context().cookies()).some((cookie) => cookie.name === "kreile_app_session")).toBe(true);
 }
 
-async function createIntakeThroughRealUi(page: Page, suffix: string): Promise<string> {
+async function createIntakeThroughRealUi(page: Page, suffix: string, catalogServiceId: string): Promise<string> {
   await openRoute(page, "/warendurchlauf/wareneingang");
   const createOrderCta = page.getByTestId("wareneingang-create-order");
   await expectExactlyOneVisible(createOrderCta, { timeout: 30_000 });
   await clickExactlyOne(createOrderCta);
-  const intake = page.getByTestId("order-intake-modal");
+  const intake = page.getByRole("dialog");
   await expectExactlyOneVisible(intake);
   await expectExactlyOneVisible(intake.getByRole("heading", {
-    name: "Digitaler Wareneingang",
+    name: "Neuer Eingang",
     exact: true,
   }));
-  await clickExactlyOne(intake.getByRole("button", { name: "Neu anlegen", exact: true }));
-  await fillExactlyOne(intake.getByPlaceholder("Kundenname *", { exact: true }), "F1.4 Synthetischer Kunde");
-  await fillExactlyOne(intake.getByPlaceholder("Firmenname", { exact: true }), "F1.4 Synthetischer Kunde GmbH");
-  await fillExactlyOne(intake.getByPlaceholder("Ansprechperson", { exact: true }), "F1.4 Abnahme");
-  await fillExactlyOne(intake.getByPlaceholder("Bezeichnung *", { exact: true }), `F1.4 Prüfteil ${suffix}`);
-  await fillExactlyOne(intake.getByPlaceholder("Menge *", { exact: true }), "2");
-  await fillExactlyOne(intake.getByPlaceholder("Werkstoff", { exact: true }), "Stahl");
-  await fillExactlyOne(intake.getByPlaceholder("Oberfläche / Behandlung *", { exact: true }), "Verchromen");
-  await fillExactlyOne(intake.getByLabel("Wunschtermin *", { exact: true }), "2026-09-30");
-  await fillExactlyOne(intake.getByLabel("Interner Hinweis", { exact: true }), "F1.4 unveränderliche Rechnung");
-  await clickExactlyOne(intake.getByRole("button", { name: "Wareneingang anlegen", exact: true }));
+  await fillExactlyOne(intake.getByLabel("Firma / Name", { exact: true }), "F1.4 Synthetischer Kunde GmbH");
+  await fillExactlyOne(intake.getByLabel("Straße", { exact: true }), "Kundenweg 2");
+  await fillExactlyOne(intake.getByLabel("PLZ", { exact: true }), "70174");
+  await fillExactlyOne(intake.getByLabel("Ort", { exact: true }), "Stuttgart");
+  await fillExactlyOne(intake.getByLabel("Terminwunsch", { exact: true }), "2026-09-30");
+  await fillExactlyOne(intake.getByLabel("Zugesagter Termin", { exact: true }), "2026-09-30");
+  const catalogSelect = intake.getByLabel("Leistung", { exact: true });
+  await catalogSelect.evaluate((node) => {
+    const select = node as HTMLSelectElement;
+    const option = select.options.item(1);
+    if (!option) throw new Error("F1_4_CATALOG_OPTION_MISSING");
+    select.value = option.value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await expect(catalogSelect).toHaveValue(catalogServiceId);
+  await fillExactlyOne(intake.getByLabel("Menge", { exact: true }), "2");
+  await fillExactlyOne(intake.getByLabel("Material", { exact: true }), "Stahl");
+  await fillExactlyOne(intake.getByLabel("Hinweis", { exact: true }), "F1.4 unveränderliche Rechnung");
+  await clickExactlyOne(intake.getByRole("button", { name: /Eingang speichern/ }));
 
-  const receiptHeading = intake.getByRole("heading", { name: /^A-\d{4}-\d+ bestätigt$/ });
+  const receiptHeading = intake.getByRole("heading", { name: /^Auftrag A-\d{4}-\d+ angelegt$/ });
   await expectExactlyOneVisible(receiptHeading, { timeout: 30_000 });
   const receiptText = (await receiptHeading.textContent())?.trim() ?? "";
-  const match = /^(A-\d{4}-\d+) bestätigt$/.exec(receiptText);
+  const match = /^Auftrag (A-\d{4}-\d+) angelegt$/.exec(receiptText);
   if (!match) throw new Error(`F1_4_INTAKE_RECEIPT_INVALID:${receiptText}`);
-  await clickExactlyOne(intake.getByRole("button", { name: "Schließen", exact: true }));
+  await page.keyboard.press("Escape");
+  await expect(intake).toHaveCount(0);
   return match[1];
 }
 
@@ -281,7 +293,7 @@ async function readPdf(page: Page, href: string) {
 
 test.describe("F1.4 unveränderliche Rechnung – realer Abnahmepfad", () => {
   test("belegt Freeze-Quelle, Ausgabe, Konflikt, Rollen, Storno, Originaltreue und Neuausstellung", async ({ browser }) => {
-    test.setTimeout(420_000);
+    test.setTimeout(600_000);
     mkdirSync(EVIDENCE_DIR, { recursive: true });
 
     const apiUrl = requiredEnv("NEXT_PUBLIC_SUPABASE_URL");
@@ -303,12 +315,11 @@ test.describe("F1.4 unveränderliche Rechnung – realer Abnahmepfad", () => {
     const readonlyEmail = `f1-4-readonly-${suffix}@local.test`;
     const foreignEmail = `f1-4-foreign-${suffix}@local.test`;
     const adminPassword = `F1.4-Admin-${suffix}!`;
-    const officePassword = `F1.4-Office-${suffix}!`;
-    const readonlyPassword = `F1.4-Readonly-${suffix}!`;
     const foreignPassword = `F1.4-Foreign-${suffix}!`;
     const officePin = "4173";
     const readonlyPin = "8259";
     const rateId = randomUUID();
+    const catalogServiceId = randomUUID();
     const cancelReason = "Doppelte Berechnung vollständig storniert";
     const contexts: BrowserContext[] = [];
     const sql = postgres(databaseUrl, { max: 2, prepare: false });
@@ -326,10 +337,11 @@ test.describe("F1.4 unveränderliche Rechnung – realer Abnahmepfad", () => {
       `;
       expect(initialState).toEqual({ settings_count: 0, invoice_count: 0, order_count: 0 });
 
-      const adminId = await createRealLocalAuthUser(apiUrl, anonKey, adminEmail, adminPassword);
-      const officeId = await createRealLocalAuthUser(apiUrl, anonKey, officeEmail, officePassword);
-      const readonlyId = await createRealLocalAuthUser(apiUrl, anonKey, readonlyEmail, readonlyPassword);
+      await createRealLocalAuthUser(apiUrl, anonKey, adminEmail, adminPassword);
       const foreignId = await createRealLocalAuthUser(apiUrl, anonKey, foreignEmail, foreignPassword);
+      const adminId = GREGOR_ACTOR_ID;
+      const officeId = ROLF_ACTOR_ID;
+      const readonlyId = PHILLIP_ACTOR_ID;
       const officePinHash = await bcrypt.hash(officePin, 12);
       const readonlyPinHash = await bcrypt.hash(readonlyPin, 12);
 
@@ -337,9 +349,9 @@ test.describe("F1.4 unveränderliche Rechnung – realer Abnahmepfad", () => {
         await transaction`
           INSERT INTO public.app_users (id, tenant_id, email, full_name, role, pin_hash, active)
           VALUES
-            (${adminId}::uuid, ${TENANT}, ${adminEmail}, 'F1.4 E2E Admin', 'admin', NULL, true),
-            (${officeId}::uuid, ${TENANT}, ${officeEmail}, 'F1.4 E2E Büro', 'buero', ${officePinHash}, true),
-            (${readonlyId}::uuid, ${TENANT}, ${readonlyEmail}, 'F1.4 E2E Readonly', 'readonly', ${readonlyPinHash}, true),
+            (${adminId}::uuid, ${TENANT}, ${adminEmail}, 'Gregor', 'admin', NULL, true),
+            (${officeId}::uuid, ${TENANT}, ${officeEmail}, 'Rolf', 'meister', ${officePinHash}, true),
+            (${readonlyId}::uuid, ${TENANT}, ${readonlyEmail}, 'Phillip', 'werkstatt', ${readonlyPinHash}, true),
             (${foreignId}::uuid, ${foreignTenant}, ${foreignEmail}, 'F1.4 E2E Foreign', 'admin', NULL, true)
         `;
         await transaction`
@@ -359,6 +371,15 @@ test.describe("F1.4 unveränderliche Rechnung – realer Abnahmepfad", () => {
             id, tenant_id, hourly_rate_cents, version, created_by, effective_at
           ) VALUES (${rateId}::uuid, ${TENANT}, 12000, 1, ${adminId}::uuid, now())
         `;
+        await transaction`
+          INSERT INTO public.catalog_services (
+            id, tenant_id, name, surface, unit, net_price_cents,
+            vat_rate_basis_points, standard_lead_time_working_days, active
+          ) VALUES (
+            ${catalogServiceId}::uuid, ${TENANT}, ${`F1.4 Prüfteil ${suffix}`},
+            'Verchromen', 'Stück', 5000, 1900, 5, true
+          )
+        `;
       });
 
       const adminContext = await browser.newContext({
@@ -374,7 +395,7 @@ test.describe("F1.4 unveränderliche Rechnung – realer Abnahmepfad", () => {
       });
       await expectRealInvoiceEmptyState(adminPage);
 
-      const orderNumber = await createIntakeThroughRealUi(adminPage, suffix);
+      const orderNumber = await createIntakeThroughRealUi(adminPage, suffix, catalogServiceId);
       const createdOrder = await readOrder(sql, orderNumber);
       expect(createdOrder).toMatchObject({
         station: "wareneingang",
@@ -386,22 +407,35 @@ test.describe("F1.4 unveränderliche Rechnung – realer Abnahmepfad", () => {
       const orderId = createdOrder.id;
       const customerId = createdOrder.customer_id;
 
-      await sql.begin(async (transaction) => {
-        await transaction`
-          UPDATE public.customers
-          SET company_name = 'F1.4 Synthetischer Kunde GmbH',
-              street = 'Kundenweg 2',
-              zip_code = '70174',
-              city = 'Stuttgart',
-              country = 'Deutschland',
-              updated_at = now()
-          WHERE tenant_id = ${TENANT} AND id = ${customerId}
-        `;
-        await transaction`
-          UPDATE public.items
-          SET preis_netto = 50.00
-          WHERE tenant_id = ${TENANT} AND order_id = ${orderId}
-        `;
+      const [intakeReadback] = await sql<{
+        street: string;
+        zip_code: string;
+        city: string;
+        country: string;
+        payment_preference: string;
+        catalog_service_id: string;
+        preis_netto: string;
+        vat_rate_basis_points: number;
+        promised_due_date: string;
+      }[]>`
+        SELECT c.street, c.zip_code, c.city, c.country, c.payment_preference,
+               i.catalog_service_id, i.preis_netto::text, i.vat_rate_basis_points,
+               o.promised_due_date::text
+        FROM public.orders o
+        JOIN public.customers c ON c.id = o.customer_id AND c.tenant_id = o.tenant_id
+        JOIN public.items i ON i.order_id = o.id AND i.tenant_id = o.tenant_id
+        WHERE o.tenant_id = ${TENANT} AND o.id = ${orderId}
+      `;
+      expect(intakeReadback).toEqual({
+        street: "Kundenweg 2",
+        zip_code: "70174",
+        city: "Stuttgart",
+        country: "Deutschland",
+        payment_preference: "rechnung_14",
+        catalog_service_id: catalogServiceId,
+        preis_netto: "50.00",
+        vat_rate_basis_points: 1900,
+        promised_due_date: "2026-09-30",
       });
 
       await openRoute(adminPage, "/warendurchlauf/wareneingang");

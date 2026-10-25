@@ -6,6 +6,7 @@ import { logout } from "@/app/actions/auth";
 import { createCustomerAction, getCustomersDb, readCustomerCreateReceiptAction } from "@/app/actions/customers.actions";
 import { convertQuoteToOrderAction, createQuoteAction, listOpenQuotesAction, readQuoteAction, readQuoteCreateReceiptAction, readQuoteConversionReceiptAction, readQuoteUpdateReceiptAction, updateQuoteAction } from "@/app/actions/quotes.actions";
 import { createOrderIntakeAction, getOrderIntakeReceiptAction } from "@/app/warendurchlauf/actions";
+import { getActiveCatalogAction } from "@/app/actions/catalog.actions";
 import {
   GlobalCreateFlow,
   type GlobalCreateConversionResult,
@@ -78,6 +79,10 @@ export function GlobalCreateAppAdapter() {
               city: customer.city ?? null,
             })),
           };
+        },
+        listCatalog: async () => {
+          const result = await getActiveCatalogAction();
+          return result.code === "OK" ? result : { code: result.code === "FORBIDDEN" ? "DENIED" as const : "UNAVAILABLE" as const, message: result.message };
         },
         createCustomer: async (input: CreateCustomerInput): Promise<GlobalCreateCustomerResult> => {
           const result = await createCustomerAction(input);

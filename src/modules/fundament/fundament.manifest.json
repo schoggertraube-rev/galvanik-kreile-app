@@ -5,15 +5,24 @@
   "publicExports": [
     "@/modules/fundament/public#ProductStartProfile",
     "@/modules/fundament/public#SystemAdminView",
-    "@/modules/fundament/public#SystemAdminViewProps"
+    "@/modules/fundament/public#SystemAdminViewProps",
+    "@/modules/fundament/public#CompanySettingsInput",
+    "@/modules/fundament/public#ManagedUser",
+    "@/modules/fundament/public#UpdateManagedUserInput",
+    "@/modules/fundament/public#SystemSettingsSnapshot",
+    "@/modules/fundament/server-public#SystemSettingsContext",
+    "@/modules/fundament/server-public#readSystemSettings",
+    "@/modules/fundament/server-public#updateCompanySettings",
+    "@/modules/fundament/server-public#updateManagedUser"
   ],
   "capabilities": [
     "product-actors:fail-closed-status",
-    "system-admin:session-status"
+    "system-admin:session-status",
+    "system-admin:settings-manage"
   ],
-  "migrations": [],
+  "migrations": ["20261025182920_s1_p1_datenfundament.sql"],
   "viewsFunctions": [],
-  "ownsTables": [],
+  "ownsTables": ["public.app_users", "public.company_settings"],
   "storagePurposes": [],
   "events": { "emits": [], "consumes": [] },
   "config": {

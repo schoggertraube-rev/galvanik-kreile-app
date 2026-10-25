@@ -112,13 +112,16 @@ function parseItems(value: unknown): OrderIntakeReceiptItem[] | null {
   if (!Array.isArray(value) || value.length < 1 || value.length > 20) return null;
   return value.map((candidate, index) => {
     if (!plainObject(candidate) || !exactKeys(candidate, [
-      "id", "material", "name", "position", "quantity", "surfaceRequested",
+      "catalogServiceId", "id", "material", "name", "position", "quantity", "surfaceRequested", "unit", "unitPriceCents", "vatRateBasisPoints",
     ])) throw new Error("ORDER_INTAKE_RECEIPT_INVALID");
     if (
       typeof candidate.id !== "string" || !UUID_PATTERN.test(candidate.id) || candidate.position !== index + 1 ||
       !trimmed(candidate.name, 2, 160) || typeof candidate.quantity !== "number" ||
       !Number.isSafeInteger(candidate.quantity) || candidate.quantity < 1 || candidate.quantity > 1_000_000 ||
-      !optionalTrimmed(candidate.material, 120) || !trimmed(candidate.surfaceRequested, 2, 160)
+      typeof candidate.catalogServiceId !== "string" || !UUID_PATTERN.test(candidate.catalogServiceId) ||
+      !optionalTrimmed(candidate.material, 120) || !trimmed(candidate.surfaceRequested, 2, 160) || !trimmed(candidate.unit, 1, 40) ||
+      typeof candidate.unitPriceCents !== "number" || !Number.isSafeInteger(candidate.unitPriceCents) || candidate.unitPriceCents < 0 ||
+      typeof candidate.vatRateBasisPoints !== "number" || ![0,700,1900].includes(candidate.vatRateBasisPoints)
     ) throw new Error("ORDER_INTAKE_RECEIPT_INVALID");
     return {
       id: candidate.id,
@@ -127,6 +130,10 @@ function parseItems(value: unknown): OrderIntakeReceiptItem[] | null {
       quantity: candidate.quantity,
       material: candidate.material,
       surfaceRequested: candidate.surfaceRequested,
+      catalogServiceId: candidate.catalogServiceId,
+      unit: candidate.unit,
+      unitPriceCents: candidate.unitPriceCents,
+      vatRateBasisPoints: candidate.vatRateBasisPoints as 0|700|1900,
     };
   });
 }

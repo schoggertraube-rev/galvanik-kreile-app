@@ -14,10 +14,14 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export type OrderIntakeItemInput = {
+  catalogServiceId?: string;
   name: string;
   quantity: number;
   material: string | null;
   surfaceRequested: string;
+  unit?: string;
+  unitPriceCents?: number;
+  vatRateBasisPoints?: 0 | 700 | 1900;
 };
 
 export type OrderIntakeCustomerInput =
@@ -30,7 +34,12 @@ export type OrderIntakeCustomerInput =
       contactPerson: string | null;
       email: string | null;
       phone: string | null;
+      street?: string;
+      zipCode?: string;
       city: string | null;
+      country?: string;
+      paymentPreference?: string;
+      vatId?: string | null;
     };
 
 export type CreateOrderIntakeInput = {
@@ -41,7 +50,7 @@ export type CreateOrderIntakeInput = {
   items: OrderIntakeItemInput[];
 };
 
-export type OrderIntakeReceiptItem = OrderIntakeItemInput & {
+export type OrderIntakeReceiptItem = Required<Omit<OrderIntakeItemInput, "material">> & Pick<OrderIntakeItemInput, "material"> & {
   id: string;
   position: number;
 };
@@ -75,7 +84,9 @@ export type OrderIntakeCommandResult =
   | { code: "VALIDATION_ERROR"; message: string }
   | { code: "UNAVAILABLE"; message: string };
 
-type NormalizedInput = CreateOrderIntakeInput;
+type NormalizedItem = Required<Omit<OrderIntakeItemInput, "material">> & Pick<OrderIntakeItemInput, "material">;
+type NormalizedCustomer = Extract<OrderIntakeCustomerInput, {mode:"EXISTING"}> | (Extract<OrderIntakeCustomerInput, {mode:"NEW"}> & {street:string;zipCode:string;city:string;country:string;paymentPreference:string;vatId:string|null});
+type NormalizedInput = Omit<CreateOrderIntakeInput, "customer"|"items"> & { customer: NormalizedCustomer; items: NormalizedItem[] };
 
 type ExistingReceiptRow = {
   receipt_id: string;
@@ -150,24 +161,36 @@ function normalizeInput(input: unknown): NormalizedInput | null {
   const note = normalizedOptionalText(input.note, 2000);
   if (note === undefined) return null;
 
-  const items: OrderIntakeItemInput[] = [];
+  const items: NormalizedItem[] = [];
   for (const candidate of input.items) {
-    if (!plainObject(candidate) || !exactKeys(candidate, ["material", "name", "quantity", "surfaceRequested"])) {
+    if (!plainObject(candidate) || !exactKeys(candidate, [
+      "catalogServiceId", "material", "name", "quantity", "surfaceRequested", "unit", "unitPriceCents", "vatRateBasisPoints",
+    ])) {
       return null;
     }
     const name = normalizedText(candidate.name, 2, 160);
     const surfaceRequested = normalizedText(candidate.surfaceRequested, 2, 160);
     const material = normalizedOptionalText(candidate.material, 120);
+    const unit = normalizedText(candidate.unit, 1, 40);
     if (
-      !name || !surfaceRequested || material === undefined ||
+      typeof candidate.catalogServiceId !== "string" || !UUID_PATTERN.test(candidate.catalogServiceId) ||
+      !name || !surfaceRequested || material === undefined || !unit ||
       typeof candidate.quantity !== "number" || !Number.isSafeInteger(candidate.quantity) ||
-      candidate.quantity < 1 || candidate.quantity > 1_000_000
+      candidate.quantity < 1 || candidate.quantity > 1_000_000 ||
+      typeof candidate.unitPriceCents !== "number" || !Number.isSafeInteger(candidate.unitPriceCents) ||
+      candidate.unitPriceCents < 0 || candidate.unitPriceCents > 999_999_999 ||
+      !([0, 700, 1900] as const).includes(candidate.vatRateBasisPoints as never)
     ) return null;
-    items.push({ name, quantity: candidate.quantity, material, surfaceRequested });
+    items.push({
+      catalogServiceId: candidate.catalogServiceId,
+      name, quantity: candidate.quantity, material, surfaceRequested, unit,
+      unitPriceCents: candidate.unitPriceCents,
+      vatRateBasisPoints: candidate.vatRateBasisPoints as 0 | 700 | 1900,
+    });
   }
 
   if (!plainObject(input.customer) || typeof input.customer.mode !== "string") return null;
-  let customer: OrderIntakeCustomerInput;
+  let customer: NormalizedCustomer;
   if (input.customer.mode === "EXISTING") {
     if (!exactKeys(input.customer, ["customerId", "mode"])) return null;
     const customerId = normalizedText(input.customer.customerId, 1, 128);
@@ -175,17 +198,24 @@ function normalizeInput(input: unknown): NormalizedInput | null {
     customer = { mode: "EXISTING", customerId };
   } else if (input.customer.mode === "NEW") {
     if (!exactKeys(input.customer, [
-      "city", "companyName", "contactPerson", "customerType", "email", "mode", "name", "phone",
+      "city", "companyName", "contactPerson", "country", "customerType", "email", "mode", "name",
+      "paymentPreference", "phone", "street", "vatId", "zipCode",
     ])) return null;
     const name = normalizedText(input.customer.name, 2, 160);
     const companyName = normalizedOptionalText(input.customer.companyName, 160, 2);
     const contactPerson = normalizedOptionalText(input.customer.contactPerson, 160);
     const email = normalizedOptionalText(input.customer.email, 254);
     const phone = normalizedOptionalText(input.customer.phone, 80);
-    const city = normalizedOptionalText(input.customer.city, 120);
+    const street = normalizedText(input.customer.street, 2, 160);
+    const zipCode = normalizedText(input.customer.zipCode, 2, 20);
+    const city = normalizedText(input.customer.city, 1, 120);
+    const country = normalizedText(input.customer.country, 2, 120);
+    const vatId = normalizedOptionalText(input.customer.vatId, 40, 4);
     if (
       !name || companyName === undefined || contactPerson === undefined || email === undefined ||
-      phone === undefined || city === undefined ||
+      phone === undefined || !street || !zipCode || !city || !country || vatId === undefined ||
+      typeof input.customer.paymentPreference !== "string" ||
+      !(/^(?:rechnung_[1-9][0-9]{0,2}|vorkasse|bar)$/.test(input.customer.paymentPreference)) ||
       !["business", "privat", "institution"].includes(String(input.customer.customerType)) ||
       (email !== null && !EMAIL_PATTERN.test(email))
     ) return null;
@@ -197,7 +227,9 @@ function normalizeInput(input: unknown): NormalizedInput | null {
       contactPerson,
       email,
       phone,
-      city,
+      street, zipCode, city, country,
+      paymentPreference: input.customer.paymentPreference,
+      vatId,
     };
   } else {
     return null;
@@ -230,16 +262,22 @@ function parseReceiptItems(value: unknown): OrderIntakeReceiptItem[] | null {
   const parsed: OrderIntakeReceiptItem[] = [];
   for (let index = 0; index < value.length; index += 1) {
     const item = value[index];
-    if (!plainObject(item) || !exactKeys(item, ["id", "material", "name", "position", "quantity", "surfaceRequested"])) {
+    if (!plainObject(item) || !exactKeys(item, [
+      "catalogServiceId", "id", "material", "name", "position", "quantity", "surfaceRequested", "unit", "unitPriceCents", "vatRateBasisPoints",
+    ])) {
       return null;
     }
     if (
       typeof item.id !== "string" || !UUID_PATTERN.test(item.id) ||
+      typeof item.catalogServiceId !== "string" || !UUID_PATTERN.test(item.catalogServiceId) ||
       item.position !== index + 1 ||
       typeof item.name !== "string" || !normalizedText(item.name, 2, 160) ||
       typeof item.quantity !== "number" || !Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.quantity > 1_000_000 ||
       (item.material !== null && (typeof item.material !== "string" || !normalizedText(item.material, 1, 120))) ||
-      typeof item.surfaceRequested !== "string" || !normalizedText(item.surfaceRequested, 2, 160)
+      typeof item.surfaceRequested !== "string" || !normalizedText(item.surfaceRequested, 2, 160) ||
+      typeof item.unit !== "string" || !normalizedText(item.unit, 1, 40) ||
+      typeof item.unitPriceCents !== "number" || !Number.isSafeInteger(item.unitPriceCents) || item.unitPriceCents < 0 ||
+      !([0, 700, 1900] as const).includes(item.vatRateBasisPoints as never)
     ) return null;
     parsed.push({
       id: item.id,
@@ -248,6 +286,10 @@ function parseReceiptItems(value: unknown): OrderIntakeReceiptItem[] | null {
       quantity: item.quantity,
       material: item.material as string | null,
       surfaceRequested: item.surfaceRequested,
+      catalogServiceId: item.catalogServiceId,
+      unit: item.unit,
+      unitPriceCents: item.unitPriceCents,
+      vatRateBasisPoints: item.vatRateBasisPoints as 0 | 700 | 1900,
     });
   }
   return parsed;
@@ -331,10 +373,12 @@ async function resolveCustomer(
   const rows = await tx.execute<CustomerRow>(sql`
     INSERT INTO public.customers (
       id, tenant_id, customer_number, name, type, company_name,
-      contact_person, email, phone, city, source, source_ref, created_at, updated_at
+      contact_person, email, phone, street, zip_code, city, country, payment_preference, vat_id,
+      source, source_ref, created_at, updated_at
     ) VALUES (
       ${id}, ${tenantId}, NULL, ${customer.name}, ${customer.customerType}, ${customer.companyName},
-      ${customer.contactPerson}, ${customer.email}, ${customer.phone}, ${customer.city},
+      ${customer.contactPerson}, ${customer.email}, ${customer.phone}, ${customer.street}, ${customer.zipCode},
+      ${customer.city}, ${customer.country}, ${customer.paymentPreference}, ${customer.vatId},
       'F1_ORDER_INTAKE', ${id}, statement_timestamp() AT TIME ZONE 'UTC', statement_timestamp() AT TIME ZONE 'UTC'
     )
     RETURNING id, tenant_id, name, company_name
@@ -423,6 +467,26 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
         throw new Error("ORDER_INTAKE_CUSTOMER_INSERT_FAILED");
       }
 
+      for (const item of normalized.items) {
+        const services = await tx.execute<{
+          id: string; name: string; surface: string; unit: string;
+          net_price_cents: number; vat_rate_basis_points: number;
+        }>(sql`
+          SELECT id, name, surface, unit, net_price_cents, vat_rate_basis_points
+          FROM public.catalog_services
+          WHERE id = ${item.catalogServiceId}::uuid
+            AND tenant_id = ${expected.tenantId}
+            AND active = true
+          FOR SHARE
+        `);
+        const service = services.length === 1 ? services[0] : null;
+        if (!service || service.name !== item.name || service.surface !== item.surfaceRequested
+          || service.unit !== item.unit || service.net_price_cents !== item.unitPriceCents
+          || service.vat_rate_basis_points !== item.vatRateBasisPoints) {
+          return { code: "VALIDATION_ERROR", message: "Leistung oder Preis ist nicht mehr aktuell." };
+        }
+      }
+
       const orderId = randomUUID();
       const eventId = randomUUID();
       const correlationId = randomUUID();
@@ -449,11 +513,11 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
         INSERT INTO public.orders (
           id, tenant_id, order_number, customer_id, title, task, station,
           current_station, current_station_id, version, status, risk, priority_computed,
-          intake_date, due_date, source, source_ref, freetext_original, created_at
+          intake_date, due_date, promised_due_date, source, source_ref, freetext_original, created_at
         ) VALUES (
           ${orderId}, ${expected.tenantId}, ${orderNumber}, ${customer.id}, ${title}, ${task}, ${STATION},
           ${STATION}, ${STATION}, 1, ${ORDER_LIFECYCLE_STATUS.ANGENOMMEN}, 'green', 'green',
-          statement_timestamp() AT TIME ZONE 'UTC', ${normalized.dueDate}::date,
+          statement_timestamp() AT TIME ZONE 'UTC', ${normalized.dueDate}::date, ${normalized.dueDate}::date,
           'F1_ORDER_INTAKE', ${normalized.clientEventId}, ${normalized.note}, statement_timestamp() AT TIME ZONE 'UTC'
         )
         RETURNING id, tenant_id, order_number, version, payment_mode, payment_mode_version
@@ -470,10 +534,13 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
         const insertedItems = await tx.execute<{ id: string; tenant_id: string; order_id: string; customer_id: string }>(sql`
           INSERT INTO public.items (
             id, tenant_id, order_id, customer_id, name, quantity, current_station_id,
-            material, surface_requested, internal_notes, created_at
+            material, surface_requested, catalog_service_id, unit, preis_netto, vat_rate_basis_points,
+            internal_notes, created_at
           ) VALUES (
             ${item.id}, ${expected.tenantId}, ${orderId}, ${customer.id}, ${item.name}, ${item.quantity}, ${STATION},
-            ${item.material}, ${item.surfaceRequested}, ${normalized.note}, statement_timestamp() AT TIME ZONE 'UTC'
+            ${item.material}, ${item.surfaceRequested}, ${item.catalogServiceId}, ${item.unit},
+            ${(item.unitPriceCents / 100).toFixed(2)}, ${item.vatRateBasisPoints},
+            ${normalized.note}, statement_timestamp() AT TIME ZONE 'UTC'
           )
           RETURNING id, tenant_id, order_id, customer_id
         `);

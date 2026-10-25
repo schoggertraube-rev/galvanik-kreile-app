@@ -52,6 +52,7 @@ function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
     roleLabel: "Rolf",
     resumeQuoteId: null,
     listCustomers: vi.fn().mockResolvedValue({ code: "OK", customers: [{ id: CUSTOMER_ID, customerNumber: "K-2026-0042", name: "SYNTHETISCH Musterkunde GmbH", city: "Teststadt" }] }),
+    listCatalog: vi.fn().mockResolvedValue({ code:"OK", services:[{id:"88888888-8888-4888-8888-888888888888",name:"Synthetischer Flansch",surface:"Verzinken",unit:"Stück",netPriceCents:12500,vatRateBasisPoints:1900,standardLeadTimeWorkingDays:5,active:true}] }),
     createCustomer: vi.fn().mockImplementation(async (input) => ({
       code: "OK",
       replayed: false,
@@ -174,13 +175,19 @@ function openFlow() {
   fireEvent.click(screen.getByRole("button", { name: "Anlegen" }));
 }
 
+function fillRequiredCustomerAddress() {
+  fireEvent.change(screen.getByLabelText("Straße"), { target: { value: "Testweg 1" } });
+  fireEvent.change(screen.getByLabelText("PLZ"), { target: { value: "12345" } });
+  fireEvent.change(screen.getByLabelText("Ort"), { target: { value: "Teststadt" } });
+}
+
 async function fillCustomer() {
   fireEvent.click(screen.getByRole("button", { name: /Kunde anlegen/ }));
   fireEvent.change(screen.getByLabelText("Firma / Name"), { target: { value: "SYNTHETISCH Musterkunde GmbH" } });
   fireEvent.change(screen.getByLabelText("Firmenname"), { target: { value: "SYNTHETISCH Musterkunde GmbH" } });
   fireEvent.change(screen.getByLabelText("Ansprechpartner"), { target: { value: "Testperson" } });
   fireEvent.change(screen.getByLabelText("E-Mail"), { target: { value: "kunde@example.invalid" } });
-  fireEvent.change(screen.getByLabelText("Ort"), { target: { value: "Teststadt" } });
+  fillRequiredCustomerAddress();
   fireEvent.click(screen.getByRole("button", { name: /Neukunde speichern/ }));
   await screen.findByRole("heading", { name: /SYNTHETISCH Musterkunde GmbH · K-2026-0042/ });
 }
@@ -252,6 +259,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     openFlow();
     fireEvent.click(screen.getByRole("button", { name: /Kunde anlegen/ }));
     fireEvent.change(screen.getByLabelText("Firma / Name"), { target: { value: "SYNTHETISCH Bleibt erhalten" } });
+    fillRequiredCustomerAddress();
     fireEvent.click(screen.getByRole("button", { name: /Neukunde speichern/ }));
     expect(await screen.findByText("Ausgang ungeklärt", { selector: "strong" })).toBeInTheDocument();
     expect(screen.getByLabelText("Firma / Name")).toHaveValue("SYNTHETISCH Bleibt erhalten");
@@ -269,6 +277,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     openFlow();
     fireEvent.click(screen.getByRole("button", { name: /Kunde anlegen/ }));
     fireEvent.change(screen.getByLabelText("Firma / Name"), { target: { value: "SYNTHETISCH offen" } });
+    fillRequiredCustomerAddress();
     fireEvent.click(screen.getByRole("button", { name: /Neukunde speichern/ }));
     await screen.findByText("Ausgang ungeklärt", { selector: "strong" });
     fireEvent.click(screen.getByRole("button", { name: "Status mit gleicher Kennung prüfen" }));
@@ -312,10 +321,10 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(newCustomer).toHaveFocus();
     expect(screen.getByRole("button", { name: "Neukunde" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.change(screen.getByLabelText("Firma / Name"), { target: { value: "SYNTHETISCH Direkteingang GmbH" } });
+    fillRequiredCustomerAddress();
     fireEvent.change(screen.getByLabelText("Terminwunsch"), { target: { value: "2026-10-15" } });
     fireEvent.change(screen.getByLabelText("Zugesagter Termin"), { target: { value: "2026-10-20" } });
-    fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "Synthetisches Teil" } });
-    fireEvent.change(screen.getByLabelText("Oberfläche"), { target: { value: "Verzinken" } });
+    fireEvent.change(screen.getByLabelText("Leistung"), { target: { value: "88888888-8888-4888-8888-888888888888" } });
     fireEvent.click(screen.getByRole("button", { name: "Eingang speichern" }));
     await screen.findByRole("heading", { name: "Auftrag A-2026-0061 angelegt" });
     expect(value.createDirectIntake).toHaveBeenCalledWith(expect.objectContaining({ dueDate: "2026-10-20" }));
@@ -483,6 +492,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     openFlow();
     fireEvent.click(screen.getByRole("button", { name: /Kunde anlegen/ }));
     fireEvent.change(screen.getByLabelText("Firma / Name"), { target: { value: "SYNTHETISCH Eingabe bleibt" } });
+    fillRequiredCustomerAddress();
     fireEvent.click(screen.getByRole("button", { name: /Neukunde speichern/ }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Kundendaten sind nicht vollständig");
     expect(screen.getByLabelText("Firma / Name")).toHaveValue("SYNTHETISCH Eingabe bleibt");

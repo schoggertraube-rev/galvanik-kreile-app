@@ -1,0 +1,20 @@
+{
+  "moduleId": "katalog",
+  "version": "1.0.0",
+  "owner": "Verkaufsstufe 1 Leistungskatalog",
+  "publicExports": [
+    "@/modules/katalog/public#CatalogService",
+    "@/modules/katalog/public#SaveCatalogServiceInput",
+    "@/modules/katalog/server-public#CatalogCommandContext",
+    "@/modules/katalog/server-public#listCatalogServices",
+    "@/modules/katalog/server-public#saveCatalogService"
+  ],
+  "capabilities": ["catalog:read", "catalog:manage"],
+  "migrations": ["20261025182920_s1_p1_datenfundament.sql"],
+  "viewsFunctions": [],
+  "ownsTables": ["public.catalog_services"],
+  "storagePurposes": [],
+  "events": { "emits": [], "consumes": [] },
+  "config": {},
+  "dependencies": []
+}

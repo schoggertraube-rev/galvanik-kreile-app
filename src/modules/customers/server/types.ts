@@ -1,7 +1,7 @@
 export type CustomerListItem={id:string;customerNumber:string;name:string;type:string;city:string|null};
 export type CustomersViewState={kind:"loading"}|{kind:"denied"|"error"|"conflict";message:string}|{kind:"data";customers:CustomerListItem[]};
 export type CustomerOrderItem={id:string;orderNumber:string;title:string;station:string;status:string;dueAt:string|null;version:number};
-export type CustomerCardModel={id:string;customerNumber:string|null;name:string;companyName:string|null;type:string;contactPerson:string|null;email:string|null;phone:string|null;address:string|null;zipCode:string|null;city:string|null;country:string|null;classification:string|null;notes:string|null;tags:string[];createdAt:string;updatedAt:string;orderCount:number;wareImHausCount:number;orders:CustomerOrderItem[]};
+export type CustomerCardModel={id:string;customerNumber:string|null;name:string;companyName:string|null;type:string;contactPerson:string|null;email:string|null;phone:string|null;address:string|null;zipCode:string|null;city:string|null;country:string|null;paymentPreference?:string;vatId?:string|null;classification:string|null;notes:string|null;tags:string[];createdAt:string;updatedAt:string;orderCount:number;wareImHausCount:number;orders:CustomerOrderItem[]};
 export type CustomerCardState={kind:"loading"}|{kind:"denied"|"not-found"|"error"|"conflict";message:string}|{kind:"data";card:CustomerCardModel};
 
 export type CreateCustomerInput = {
@@ -12,7 +12,12 @@ export type CreateCustomerInput = {
   contactPerson: string | null;
   email: string | null;
   phone: string | null;
+  street?: string;
+  zipCode?: string;
   city: string | null;
+  country?: string;
+  paymentPreference?: string;
+  vatId?: string | null;
 };
 
 export type CustomerCommandCapabilities = {
@@ -39,7 +44,12 @@ export type CustomerCreateReceipt = {
   contactPerson: string | null;
   email: string | null;
   phone: string | null;
-  city: string | null;
+  street: string;
+  zipCode: string;
+  city: string;
+  country: string;
+  paymentPreference: string;
+  vatId: string | null;
   recordedAt: string;
   aggregateVersion: 1;
 };
@@ -51,3 +61,8 @@ export type CustomerCreateCommandResult =
 export type ReadCustomerCreateReceiptResult =
   | { code: "OK"; receipt: CustomerCreateReceipt }
   | { code: "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_ERROR" | "UNAVAILABLE"; message: string };
+
+export type UpdateCustomerCommercialInput = {
+  clientEventId: string; customerId: string; street: string; zipCode: string; city: string;
+  country: string; paymentPreference: string; vatId: string | null;
+};

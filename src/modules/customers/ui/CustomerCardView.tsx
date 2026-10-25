@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -9,7 +10,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import type { CustomerCardState } from "../server/types";
+import type { CustomerCardState, UpdateCustomerCommercialInput } from "../server/types";
 import styles from "./customers.module.css";
 function due(value: string | null) {
   if (!value) return "Kein Termin";
@@ -22,11 +23,14 @@ export function CustomerCardView({
   state,
   onOpenOrder,
   onClose,
+  onSaveCommercial,
 }: {
   state: CustomerCardState;
   onOpenOrder: (id: string) => void;
   onClose: () => void;
+  onSaveCommercial?: (input: UpdateCustomerCommercialInput) => Promise<{ok:true}|{ok:false;message:string}>;
 }) {
+  const [saveMessage, setSaveMessage] = useState("");
   if (state.kind === "loading")
     return (
       <article className={styles.cardState} aria-busy="true">
@@ -224,6 +228,26 @@ export function CustomerCardView({
                 <dd>{new Date(card.updatedAt).toLocaleString("de-DE")}</dd>
               </div>
             </dl>
+            <form className={styles.commercialForm} onSubmit={(event) => {
+              event.preventDefault(); const form = new FormData(event.currentTarget);
+              if (!onSaveCommercial) return;
+              void onSaveCommercial({
+                clientEventId: crypto.randomUUID(), customerId: card.id,
+                street: String(form.get("street") ?? ""), zipCode: String(form.get("zipCode") ?? ""),
+                city: String(form.get("city") ?? ""), country: String(form.get("country") ?? ""),
+                paymentPreference: String(form.get("paymentPreference") ?? ""),
+                vatId: String(form.get("vatId") ?? "").trim() || null,
+              }).then((result) => setSaveMessage(result.ok ? "Stammdaten gespeichert." : result.message));
+            }}>
+              <label>Straße<input name="street" required defaultValue={card.address ?? ""} /></label>
+              <label>PLZ<input name="zipCode" required defaultValue={card.zipCode ?? ""} /></label>
+              <label>Ort<input name="city" required defaultValue={card.city ?? ""} /></label>
+              <label>Land<input name="country" required defaultValue={card.country ?? ""} /></label>
+              <label>Zahlungsbedingung<select name="paymentPreference" defaultValue={card.paymentPreference ?? "rechnung_14"}><option value="rechnung_14">Rechnung 14 Tage</option><option value="rechnung_30">Rechnung 30 Tage</option><option value="vorkasse">Vorkasse</option><option value="bar">Bar</option></select></label>
+              <label>USt-ID<input name="vatId" defaultValue={card.vatId ?? ""} /></label>
+              <button type="submit">Stammdaten speichern</button>
+              {saveMessage ? <p role="status">{saveMessage}</p> : null}
+            </form>
           </section>
         </div>
         {history.length ? (

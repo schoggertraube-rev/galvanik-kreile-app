@@ -13,12 +13,14 @@ import {
   searchOrderIntakeCustomersAction,
 } from "@/app/warendurchlauf/actions";
 import { supabase } from "@/lib/supabase/client";
+import { getActiveCatalogAction } from "@/app/actions/catalog.actions";
 import type {
   CreateOrderIntakeInput,
   OrderIntakeReceipt,
 } from "@/lib/server/commands/orderIntakeCommand";
 import type { OrderIntakeCustomerOption } from "@/lib/server/orderIntakeRead";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
+import type { CatalogService } from "@/modules/katalog/public";
 
 const MAX_FILE_BYTES = 12 * 1024 * 1024;
 const MIME_EXTENSION = {
@@ -27,7 +29,7 @@ const MIME_EXTENSION = {
   "image/webp": "webp",
 } as const;
 
-type DraftItem = { key: string; name: string; quantity: string; material: string; surfaceRequested: string };
+type DraftItem = { key: string; catalogServiceId: string; name: string; quantity: string; material: string; surfaceRequested: string; unit: string; unitPriceCents: number; vatRateBasisPoints: 0|700|1900 };
 type PanelState = "loading" | "data" | "empty" | "denied" | "error" | "submitting" | "confirming" | "conflict" | "success";
 
 function canCustomerLoadCommit(state: PanelState): boolean {
@@ -35,7 +37,7 @@ function canCustomerLoadCommit(state: PanelState): boolean {
 }
 
 function newDraftItem(): DraftItem {
-  return { key: crypto.randomUUID(), name: "", quantity: "1", material: "", surfaceRequested: "" };
+  return { key: crypto.randomUUID(), catalogServiceId: "", name: "", quantity: "1", material: "", surfaceRequested: "", unit: "", unitPriceCents: 0, vatRateBasisPoints: 1900 };
 }
 
 function todayInBerlin(): string {
@@ -59,7 +61,11 @@ function sameReceiptItem(
     && left.name === right.name
     && left.quantity === right.quantity
     && left.material === right.material
-    && left.surfaceRequested === right.surfaceRequested;
+    && left.surfaceRequested === right.surfaceRequested
+    && left.catalogServiceId === right.catalogServiceId
+    && left.unit === right.unit
+    && left.unitPriceCents === right.unitPriceCents
+    && left.vatRateBasisPoints === right.vatRateBasisPoints;
 }
 
 function sameReceipt(left: OrderIntakeReceipt, right: OrderIntakeReceipt): boolean {
@@ -107,7 +113,11 @@ function receiptMatchesSubmission(
       && item.name === sent.name
       && item.quantity === sent.quantity
       && item.material === sent.material
-      && item.surfaceRequested === sent.surfaceRequested;
+      && item.surfaceRequested === sent.surfaceRequested
+      && item.catalogServiceId === sent.catalogServiceId
+      && item.unit === sent.unit
+      && item.unitPriceCents === sent.unitPriceCents
+      && item.vatRateBasisPoints === sent.vatRateBasisPoints;
   });
 }
 
@@ -146,10 +156,12 @@ export function OrderIntakePanel({
   const [query, setQuery] = useState("");
   const [customers, setCustomers] = useState<OrderIntakeCustomerOption[]>([]);
   const [canCreateCustomer, setCanCreateCustomer] = useState(false);
+  const [catalog, setCatalog] = useState<CatalogService[]>([]);
   const [customerMode, setCustomerMode] = useState<"EXISTING" | "NEW">("EXISTING");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [newCustomer, setNewCustomer] = useState({
-    name: "", customerType: "business" as const, companyName: "", contactPerson: "", email: "", phone: "", city: "",
+    name: "", customerType: "business" as const, companyName: "", contactPerson: "", email: "", phone: "",
+    street: "", zipCode: "", city: "", country: "Deutschland", paymentPreference: "rechnung_14", vatId: "",
   });
   const [items, setItems] = useState<DraftItem[]>([newDraftItem()]);
   const [dueDate, setDueDate] = useState(todayInBerlin());
@@ -185,12 +197,23 @@ export function OrderIntakePanel({
     return () => window.clearTimeout(timer);
   }, [loadCustomers, query]);
 
+  useEffect(() => {
+    void getActiveCatalogAction().then((result) => {
+      if (result.code === "OK") setCatalog(result.services);
+      else { setMessage(result.message); setPanelState("error"); }
+    });
+  }, [setPanelState]);
+
   const formValid = useMemo(() => {
     const customerValid = customerMode === "EXISTING"
       ? selectedCustomerId.length > 0
-      : newCustomer.name.trim().length >= 2 && (!newCustomer.email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newCustomer.email.trim()));
+      : newCustomer.name.trim().length >= 2 && newCustomer.street.trim().length >= 2 && newCustomer.zipCode.trim().length >= 2
+        && newCustomer.city.trim().length >= 1 && newCustomer.country.trim().length >= 2
+        && /^(?:rechnung_[1-9][0-9]{0,2}|vorkasse|bar)$/.test(newCustomer.paymentPreference)
+        && (!newCustomer.email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newCustomer.email.trim()));
     return customerValid && /^\d{4}-\d{2}-\d{2}$/.test(dueDate) && items.length >= 1 && items.length <= 20
-      && items.every((item) => item.name.trim().length >= 2 && item.surfaceRequested.trim().length >= 2
+      && items.every((item) => UUID_RE.test(item.catalogServiceId) && item.name.trim().length >= 2 && item.surfaceRequested.trim().length >= 2 && item.unit.trim().length >= 1
+        && Number.isSafeInteger(item.unitPriceCents) && item.unitPriceCents >= 0
         && Number.isSafeInteger(Number(item.quantity)) && Number(item.quantity) >= 1 && Number(item.quantity) <= 1_000_000);
   }, [customerMode, dueDate, items, newCustomer, selectedCustomerId]);
 
@@ -232,15 +255,24 @@ export function OrderIntakePanel({
             contactPerson: normalizeOptionalText(newCustomer.contactPerson),
             email: normalizeOptionalText(newCustomer.email),
             phone: normalizeOptionalText(newCustomer.phone),
-            city: normalizeOptionalText(newCustomer.city),
+            street: normalizeText(newCustomer.street),
+            zipCode: normalizeText(newCustomer.zipCode),
+            city: normalizeText(newCustomer.city),
+            country: normalizeText(newCustomer.country),
+            paymentPreference: newCustomer.paymentPreference,
+            vatId: normalizeOptionalText(newCustomer.vatId),
           },
       dueDate,
       note: normalizeOptionalText(note),
       items: items.map((item) => ({
+        catalogServiceId: item.catalogServiceId,
         name: normalizeText(item.name),
         quantity: Number(item.quantity),
         material: normalizeOptionalText(item.material),
         surfaceRequested: normalizeText(item.surfaceRequested),
+        unit: normalizeText(item.unit),
+        unitPriceCents: item.unitPriceCents,
+        vatRateBasisPoints: item.vatRateBasisPoints,
       })),
     };
     const currentHash = canonicalFormHash(formPayload);
@@ -461,17 +493,22 @@ export function OrderIntakePanel({
           <input value={newCustomer.contactPerson} onChange={(event) => setNewCustomer((value) => ({ ...value, contactPerson: event.target.value }))} placeholder="Ansprechperson" className="min-h-11 rounded-lg border px-3" />
           <input type="email" value={newCustomer.email} onChange={(event) => setNewCustomer((value) => ({ ...value, email: event.target.value }))} placeholder="E-Mail" className="min-h-11 rounded-lg border px-3" />
           <input value={newCustomer.phone} onChange={(event) => setNewCustomer((value) => ({ ...value, phone: event.target.value }))} placeholder="Telefon" className="min-h-11 rounded-lg border px-3" />
-          <input value={newCustomer.city} onChange={(event) => setNewCustomer((value) => ({ ...value, city: event.target.value }))} placeholder="Ort" className="min-h-11 rounded-lg border px-3 sm:col-span-2" />
+          <input required value={newCustomer.street} onChange={(event) => setNewCustomer((value) => ({ ...value, street: event.target.value }))} placeholder="Straße *" className="min-h-11 rounded-lg border px-3" />
+          <input required value={newCustomer.zipCode} onChange={(event) => setNewCustomer((value) => ({ ...value, zipCode: event.target.value }))} placeholder="PLZ *" className="min-h-11 rounded-lg border px-3" />
+          <input required value={newCustomer.city} onChange={(event) => setNewCustomer((value) => ({ ...value, city: event.target.value }))} placeholder="Ort *" className="min-h-11 rounded-lg border px-3" />
+          <input required value={newCustomer.country} onChange={(event) => setNewCustomer((value) => ({ ...value, country: event.target.value }))} placeholder="Land *" className="min-h-11 rounded-lg border px-3" />
+          <select value={newCustomer.paymentPreference} onChange={(event) => setNewCustomer((value) => ({ ...value, paymentPreference: event.target.value }))} className="min-h-11 rounded-lg border px-3"><option value="rechnung_14">Rechnung 14 Tage</option><option value="rechnung_30">Rechnung 30 Tage</option><option value="vorkasse">Vorkasse</option><option value="bar">Bar</option></select>
+          <input value={newCustomer.vatId} onChange={(event) => setNewCustomer((value) => ({ ...value, vatId: event.target.value }))} placeholder="USt-ID (optional)" className="min-h-11 rounded-lg border px-3" />
         </div>}
       </fieldset>
 
       <fieldset className="space-y-3"><div className="flex items-center justify-between"><legend className="font-semibold">2. Teile</legend><button type="button" disabled={items.length >= 20} onClick={() => setItems((value) => [...value, newDraftItem()])} className="inline-flex min-h-11 items-center gap-1 rounded-lg border px-3 text-sm"><Plus className="h-4 w-4" />Teil</button></div>
         {items.map((item, index) => <div key={item.key} className="grid gap-3 rounded-xl border border-slate-200 p-4 sm:grid-cols-12">
           <p className="font-semibold sm:col-span-12">Teil {index + 1}</p>
-          <input required value={item.name} onChange={(event) => updateItem(item.key, "name", event.target.value)} placeholder="Bezeichnung *" className="min-h-11 rounded-lg border px-3 sm:col-span-4" />
+          <select required aria-label={`Leistung für Teil ${index + 1}`} value={item.catalogServiceId} onChange={(event) => { const service = catalog.find((candidate) => candidate.id === event.target.value); if (service) setItems((current) => current.map((candidate) => candidate.key === item.key ? { ...candidate, catalogServiceId: service.id, name: service.name, surfaceRequested: service.surface, unit: service.unit, unitPriceCents: service.netPriceCents, vatRateBasisPoints: service.vatRateBasisPoints } : candidate)); }} className="min-h-11 rounded-lg border px-3 sm:col-span-4"><option value="">Leistung wählen *</option>{catalog.map((service) => <option key={service.id} value={service.id}>{service.name} · {service.surface} · {(service.netPriceCents/100).toLocaleString("de-DE",{style:"currency",currency:"EUR"})}/{service.unit}</option>)}</select>
           <input required inputMode="numeric" value={item.quantity} onChange={(event) => updateItem(item.key, "quantity", event.target.value)} placeholder="Menge *" className="min-h-11 rounded-lg border px-3 sm:col-span-2" />
           <input value={item.material} onChange={(event) => updateItem(item.key, "material", event.target.value)} placeholder="Werkstoff" className="min-h-11 rounded-lg border px-3 sm:col-span-2" />
-          <input required value={item.surfaceRequested} onChange={(event) => updateItem(item.key, "surfaceRequested", event.target.value)} placeholder="Oberfläche / Behandlung *" className="min-h-11 rounded-lg border px-3 sm:col-span-3" />
+          <input readOnly value={item.surfaceRequested} placeholder="Oberfläche / Behandlung" className="min-h-11 rounded-lg border px-3 sm:col-span-3" />
           <button type="button" aria-label={`Teil ${index + 1} entfernen`} disabled={items.length === 1} onClick={() => setItems((value) => value.filter((candidate) => candidate.key !== item.key))} className="min-h-11 rounded-lg border px-3 disabled:opacity-40 sm:col-span-1"><Trash2 className="mx-auto h-4 w-4" /></button>
         </div>)}
       </fieldset>

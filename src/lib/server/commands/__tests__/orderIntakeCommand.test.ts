@@ -23,12 +23,13 @@ const EVENT = "44444444-4444-4444-8444-444444444444";
 const CORRELATION = "55555555-5555-4555-8555-555555555555";
 const ITEM = "66666666-6666-4666-8666-666666666666";
 const RECEIPT = "77777777-7777-4777-8777-777777777777";
+const SERVICE = "88888888-8888-4888-8888-888888888888";
 const input = {
   clientEventId: CLIENT,
   customer: { mode: "EXISTING" as const, customerId: CUSTOMER },
   dueDate: "2026-08-30",
   note: "Eilige Annahme",
-  items: [{ name: "Grundplatte", quantity: 2, material: "Stahl", surfaceRequested: "Glanzverchromen" }],
+  items: [{ catalogServiceId:SERVICE, name:"Grundplatte", quantity:2, material:"Stahl", surfaceRequested:"Glanzverchromen", unit:"Stück", unitPriceCents:1250, vatRateBasisPoints:1900 as const }],
 };
 const intentSha256 = createHash("sha256").update(JSON.stringify({
   clientEventId: CLIENT,
@@ -98,7 +99,7 @@ describe("createOrderIntake", () => {
     resolveAuthorization.mockResolvedValueOnce({ ...authorization, data: { ...authorization.data, permissions: ["perm_data_orders"] } });
     await expect(createOrderIntake({
       ...input,
-      customer: { mode: "NEW", name: "Neu", customerType: "business", companyName: null, contactPerson: null, email: null, phone: null, city: null },
+      customer: { mode:"NEW", name:"Neu", customerType:"business", companyName:null, contactPerson:null, email:null, phone:null, street:"Testweg 1", zipCode:"12345", city:"Berlin", country:"Deutschland", paymentPreference:"rechnung_14", vatId:null },
     })).resolves.toMatchObject({ code: "FORBIDDEN" });
     expect(withTransaction).not.toHaveBeenCalled();
   });
@@ -109,6 +110,7 @@ describe("createOrderIntake", () => {
       if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
       if (query.text.includes("FROM private.order_intake_receipts") && !query.text.includes("v_order")) return Promise.resolve([]);
       if (query.text.includes("FROM public.customers")) return Promise.resolve([{ id: CUSTOMER, tenant_id: KREILE_TENANT_SLUG, name: "Kunde A", company_name: null }]);
+      if (query.text.includes("FROM public.catalog_services")) return Promise.resolve([{ id:SERVICE, name:"Grundplatte", surface:"Glanzverchromen", unit:"Stück", net_price_cents:1250, vat_rate_basis_points:1900 }]);
       if (query.text.includes("next_number")) return Promise.resolve([{ current_year: 2026, next_number: 42 }]);
       if (query.text.includes("INSERT INTO public.orders")) {
         created.orderId = String(query.values[0]);

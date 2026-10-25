@@ -6,6 +6,7 @@ const ports = vi.hoisted(() => ({
   redirect: vi.fn((path: string) => {
     throw new Error(`REDIRECT:${path}`);
   }),
+  readSettings: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -13,6 +14,7 @@ vi.mock("@/lib/server/productActorReadiness", () => ({
   resolveProductActorAuthorization: ports.resolveProductActorAuthorization,
 }));
 vi.mock("next/navigation", () => ({ redirect: ports.redirect }));
+vi.mock("@/app/actions/settings.actions", () => ({ readSettingsAction: ports.readSettings }));
 
 import { SettingsAppAdapter } from "../SettingsAppAdapter";
 
@@ -57,14 +59,13 @@ describe("Gregor system administration composition", () => {
     ports.resolveProductActorAuthorization.mockResolvedValue(
       authorizationFor("gregor"),
     );
+    ports.readSettings.mockResolvedValue({ code:"OK", snapshot:{ company:{companyName:"Galvanik Kreile",street:"Testweg 1",zip:"12345",city:"Berlin",country:"Deutschland",taxId:"DE123456789",iban:"DE001234",bic:"TESTDEFF",bankName:"Testbank",paymentTermDays:14,logoUrl:"/logo.png"}, users:[], numberRanges:[] }, services:[] });
   });
 
   it("renders only the validated Gregor product actor", async () => {
     render(await SettingsAppAdapter());
-    expect(screen.getByTestId("gregor-system-admin")).toHaveTextContent(
-      "Angemeldet als Gregor · Systemadministrator",
-    );
-    expect(screen.getByText("Sitzung serverseitig bestätigt")).toBeInTheDocument();
+    expect(screen.getByTestId("gregor-system-admin")).toHaveTextContent("Firmendaten, Leistungen und bestehende Zugänge");
+    expect(screen.getByRole("button", { name:"Firmendaten" })).toBeInTheDocument();
   });
 
   it("redirects only missing or invalid sessions to start", async () => {

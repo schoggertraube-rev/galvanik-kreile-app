@@ -30,6 +30,8 @@ export type CustomerSummary = {
   zipCode: string | null;
   city: string | null;
   country: string | null;
+  paymentPreference: string;
+  vatId: string | null;
   classification: string | null;
   internalNotes: string | null;
   tags: string[];
@@ -63,6 +65,8 @@ type SummaryRow = {
   zip_code: string | null;
   city: string | null;
   country: string | null;
+  payment_preference: string | null;
+  vat_id: string | null;
   classification: string | null;
   internal_notes: string | null;
   tags: unknown;
@@ -168,6 +172,8 @@ function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot): Cust
     zipCode: row.zip_code,
     city: row.city,
     country: row.country,
+    paymentPreference: row.payment_preference ?? "rechnung_14",
+    vatId: row.vat_id,
     classification: row.classification,
     internalNotes: row.internal_notes,
     tags: mapTags(row.tags),

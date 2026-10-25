@@ -28,6 +28,11 @@ const input = {
   email: "synthetisch@example.invalid",
   name: "Synthetischer Kunde",
   phone: "+49 000 12345",
+  street: "Testweg 1",
+  zipCode: "12345",
+  country: "Deutschland",
+  paymentPreference: "rechnung_14",
+  vatId: "DE123456789",
 };
 const intentSha256 = createHash("sha256").update(JSON.stringify(input), "utf8").digest("hex");
 const authorization = { tenantId: TENANT, userId: ACTOR, capabilities: { canCreateCustomer: true } };
@@ -48,6 +53,11 @@ const receiptRow = {
   email: input.email,
   phone: input.phone,
   city: input.city,
+  street: input.street,
+  zip_code: input.zipCode,
+  country: input.country,
+  payment_preference: input.paymentPreference,
+  vat_id: input.vatId,
   recorded_at: "2026-09-14T10:00:00.000Z",
   integrity_ok: true,
 };

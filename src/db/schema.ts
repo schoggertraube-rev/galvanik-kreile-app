@@ -65,6 +65,7 @@ export const customers = pgTable("customers", {
   creditRating: text("credit_rating"),
   shippingPreference: text("shipping_preference").default('abholung'),
   paymentPreference: text("payment_preference").default('rechnung_14'),
+  vatId: text("vat_id"),
   classification: text("classification").default('B'),
   internalNotes: text("internal_notes"),
   marketingOptOut: boolean("marketing_opt_out").default(false),
@@ -156,6 +157,10 @@ export const items = pgTable("items", {
   currentStationId: varchar("current_station_id", { length: 100 }).default("wareneingang"),
   material: text("material"),
   surfaceRequested: text("surface_requested"),
+  catalogServiceId: uuid("catalog_service_id"),
+  unit: text("unit"),
+  preisNetto: numeric("preis_netto", { precision: 10, scale: 2 }),
+  vatRateBasisPoints: integer("vat_rate_basis_points"),
   photoIds: jsonb("photo_ids").$type<string[]>(),
   photo: text("photo"),
   repairTypes: text("repair_types").array().default([]),
@@ -370,6 +375,8 @@ export const companySettingsTable = pgTable("company_settings", {
   bic: text("bic").default(""),
   bankName: text("bank_name").default(""),
   taxId: text("tax_id").default(""),
+  invoiceVatRateBasisPoints: integer("invoice_vat_rate_basis_points").default(1900).notNull(),
+  invoicePaymentTermDays: integer("invoice_payment_term_days"),
   logoUrl: text("logo_url").default("/logo.png"),
   emailGreeting: text("email_greeting").default("Sehr geehrte Damen und Herren,"),
   emailPickupInfo: text("email_pickup_info").default("Ihr Auftrag ist fertig und kann abgeholt werden."),
@@ -378,6 +385,20 @@ export const companySettingsTable = pgTable("company_settings", {
   emailFooter: text("email_footer").default("Mit freundlichen Gruessen, Ihr Team von Galvanik Kreile"),
   emailAdditionalNotes: text("email_additional_notes").default(""),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const catalogServices = pgTable("catalog_services", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  name: text("name").notNull(),
+  surface: text("surface").notNull(),
+  unit: text("unit").notNull(),
+  netPriceCents: integer("net_price_cents").notNull(),
+  vatRateBasisPoints: integer("vat_rate_basis_points").notNull().default(1900),
+  standardLeadTimeWorkingDays: integer("standard_lead_time_working_days").notNull(),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const phoneNotes = pgTable("phone_notes", {

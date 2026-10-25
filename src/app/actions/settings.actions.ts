@@ -1,0 +1,51 @@
+"use server";
+
+import { revalidatePath, unstable_noStore as noStore } from "next/cache";
+import { resolveProductActorAuthorization } from "@/lib/server/productActorReadiness";
+import { readSystemSettings, updateCompanySettings, updateManagedUser } from "@/modules/fundament/server-public";
+import { listCatalogServices, saveCatalogService } from "@/modules/katalog/server-public";
+import type { CompanySettingsInput, UpdateManagedUserInput } from "@/modules/fundament/public";
+import type { SaveCatalogServiceInput } from "@/modules/katalog/public";
+
+async function adminContext() {
+  const result = await resolveProductActorAuthorization();
+  if (!result.ok || result.data.actor.key !== "gregor") return null;
+  return { tenantId: result.data.authorization.tenantId, actorId: result.data.authorization.userId, canManage: true };
+}
+
+export async function readSettingsAction() {
+  noStore();
+  const context = await adminContext();
+  if (!context) return { code: "FORBIDDEN" as const, message: "Einstellungen sind nur für den Systemadministrator verfügbar." };
+  const [settings, catalog] = await Promise.all([
+    readSystemSettings(context),
+    listCatalogServices({ tenantId: context.tenantId, canRead: true, canManage: true }, true),
+  ]);
+  if (settings.code !== "OK") return settings;
+  if (catalog.code !== "OK") return catalog;
+  return { code: "OK" as const, snapshot: settings.snapshot, services: catalog.services };
+}
+
+export async function saveCompanySettingsAction(input: CompanySettingsInput) {
+  const context = await adminContext();
+  if (!context) return { code: "FORBIDDEN" as const, message: "Firmendaten dürfen nicht geändert werden." };
+  const result = await updateCompanySettings(context, input);
+  if (result.code === "OK") revalidatePath("/settings");
+  return result;
+}
+
+export async function saveManagedUserAction(input: UpdateManagedUserInput) {
+  const context = await adminContext();
+  if (!context) return { code: "FORBIDDEN" as const, message: "Nutzer dürfen nicht geändert werden." };
+  const result = await updateManagedUser(context, input);
+  if (result.code === "OK") revalidatePath("/settings");
+  return result;
+}
+
+export async function saveCatalogServiceAction(input: SaveCatalogServiceInput) {
+  const context = await adminContext();
+  if (!context) return { code: "FORBIDDEN" as const, message: "Leistungen dürfen nicht geändert werden." };
+  const result = await saveCatalogService({ tenantId: context.tenantId, canRead: true, canManage: true }, input);
+  if (result.code === "OK") revalidatePath("/settings");
+  return result;
+}

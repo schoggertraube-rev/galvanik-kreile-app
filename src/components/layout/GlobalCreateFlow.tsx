@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { FormEvent, KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CreateCustomerInput } from "@/modules/customers/public";
+import type { CatalogService } from "@/modules/katalog/public";
 import type {
   ConvertQuoteInput,
   CreateQuoteInput,
@@ -102,10 +103,10 @@ export type DirectIntakeInput = {
   clientEventId: string;
   customer:
     | { mode: "EXISTING"; customerId: string }
-    | { mode: "NEW"; name: string; customerType: "business" | "privat" | "institution"; companyName: string | null; contactPerson: string | null; email: string | null; phone: string | null; city: string | null };
+    | ({ mode: "NEW" } & Omit<CreateCustomerInput, "clientEventId">);
   dueDate: string;
   note: string | null;
-  items: Array<{ name: string; quantity: number; material: string | null; surfaceRequested: string }>;
+  items: Array<{ catalogServiceId:string; name:string; quantity:number; material:string|null; surfaceRequested:string; unit:string; unitPriceCents:number; vatRateBasisPoints:0|700|1900 }>;
 };
 
 export type GlobalCreateDirectIntakeResult =
@@ -137,6 +138,7 @@ export type GlobalCreatePorts = {
     | { code: "OK"; customers: GlobalCreateCustomerChoice[] }
     | { code: "DENIED" | "UNAVAILABLE"; message: string }
   >;
+  listCatalog?: () => Promise<{ code:"OK"; services:CatalogService[] }|{ code:"DENIED"|"UNAVAILABLE"; message:string }>;
   createCustomer: (input: CreateCustomerInput) => Promise<GlobalCreateCustomerResult>;
   readCustomerCreateReceipt: (input: CreateCustomerInput) => Promise<GlobalCreateCustomerResult | Failure>;
   createQuote: (input: CreateQuoteInput) => Promise<GlobalCreateQuoteResult>;
@@ -162,9 +164,9 @@ type OpenQuotesState =
   | { kind: "idle" | "loading" | "empty" }
   | { kind: "data"; quotes: QuoteReadback[] }
   | { kind: "denied" | "error" | "unknown"; message: string; requestId?: string };
-type CustomerDraft = Omit<CreateCustomerInput, "clientEventId">;
+type CustomerDraft = Omit<CreateCustomerInput, "clientEventId"|"street"|"zipCode"|"city"|"country"|"paymentPreference"|"vatId"> & {street:string;zipCode:string;city:string;country:string;paymentPreference:string;vatId:string|null};
 type PositionDraft = { key: string; name: string; quantity: string; material: string; surfaceRequested: string; unitPrice: string };
-type IntakePositionDraft = Omit<PositionDraft, "unitPrice">;
+type IntakePositionDraft = { key:string; catalogServiceId:string; name:string; quantity:string; material:string; surfaceRequested:string; unit:string; unitPriceCents:number; vatRateBasisPoints:0|700|1900 };
 
 const EMPTY_CUSTOMER: CustomerDraft = {
   name: "",
@@ -173,7 +175,12 @@ const EMPTY_CUSTOMER: CustomerDraft = {
   contactPerson: null,
   email: null,
   phone: null,
-  city: null,
+  street: "",
+  zipCode: "",
+  city: "",
+  country: "Deutschland",
+  paymentPreference: "rechnung_14",
+  vatId: null,
 };
 
 const newPosition = (): PositionDraft => ({
@@ -191,6 +198,10 @@ const newIntakePosition = (): IntakePositionDraft => ({
   quantity: "1",
   material: "",
   surfaceRequested: "",
+  catalogServiceId: "",
+  unit: "",
+  unitPriceCents: 0,
+  vatRateBasisPoints: 1900,
 });
 
 function euro(cents: number) {
@@ -264,6 +275,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [directCustomer, setDirectCustomer] = useState<CustomerDraft>(EMPTY_CUSTOMER);
   const [directCustomerId, setDirectCustomerId] = useState("");
   const [directItems, setDirectItems] = useState<IntakePositionDraft[]>(() => [newIntakePosition()]);
+  const [catalogServices, setCatalogServices] = useState<CatalogService[]>([]);
   const [directWishDate, setDirectWishDate] = useState("");
   const [directConfirmedDate, setDirectConfirmedDate] = useState("");
   const [directNote, setDirectNote] = useState("");
@@ -369,12 +381,20 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setCustomerLoad("loading");
     const seq = ++customerRequestSeq.current;
     try {
-      const result = await ports.listCustomers();
+      const [result, catalog] = await Promise.all([
+        ports.listCustomers(),
+        ports.listCatalog?.() ?? Promise.resolve({ code:"UNAVAILABLE" as const, message:"Leistungskatalog ist nicht angebunden." }),
+      ]);
       if (seq !== customerRequestSeq.current) return;
       if (result.code !== "OK") {
         setFeedback({ kind: result.code === "DENIED" ? "denied" : "error", message: result.message });
         return;
       }
+      if (catalog.code !== "OK") {
+        setFeedback({ kind: catalog.code === "DENIED" ? "denied" : "error", message: catalog.message });
+        return;
+      }
+      setCatalogServices(catalog.services);
       setCustomerChoices(result.customers);
       const first = result.customers[0];
       if (first) {
@@ -720,11 +740,11 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       return;
     }
     const validDates = /^\d{4}-\d{2}-\d{2}$/.test(directWishDate) && /^\d{4}-\d{2}-\d{2}$/.test(directConfirmedDate);
-    const items = directItems.map((item) => ({ name: item.name.trim(), quantity: Number(item.quantity), material: nullable(item.material), surfaceRequested: item.surfaceRequested.trim() }));
+    const items = directItems.map((item) => ({ catalogServiceId:item.catalogServiceId, name:item.name.trim(), quantity:Number(item.quantity), material:nullable(item.material), surfaceRequested:item.surfaceRequested.trim(), unit:item.unit, unitPriceCents:item.unitPriceCents, vatRateBasisPoints:item.vatRateBasisPoints }));
     const validCustomer = directCustomerMode === "EXISTING"
       ? directCustomerId.length > 0
-      : directCustomer.name.trim().length >= 2;
-    if (!validCustomer || !validDates || items.length < 1 || items.length > 20 || items.some((item) => item.name.length < 2 || item.surfaceRequested.length < 2 || !Number.isSafeInteger(item.quantity) || item.quantity < 1)) {
+      : directCustomer.name.trim().length >= 2 && directCustomer.street.length >= 2 && directCustomer.zipCode.length >= 2 && directCustomer.city.length >= 1 && directCustomer.country.length >= 2;
+    if (!validCustomer || !validDates || items.length < 1 || items.length > 20 || items.some((item) => !item.catalogServiceId || item.name.length < 2 || item.surfaceRequested.length < 2 || !Number.isSafeInteger(item.quantity) || item.quantity < 1)) {
       setFeedback({ kind: "validation", message: "Bitte Kunde, mindestens eine Position, Terminwunsch und zugesagten Termin vollständig angeben." });
       return;
     }
@@ -735,7 +755,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       clientEventId: id,
       customer: directCustomerMode === "EXISTING"
         ? { mode: "EXISTING", customerId: directCustomerId }
-        : { mode: "NEW", name: directCustomer.name.trim(), customerType: directCustomer.customerType, companyName: directCustomer.companyName, contactPerson: directCustomer.contactPerson, email: directCustomer.email, phone: directCustomer.phone, city: directCustomer.city },
+        : { mode: "NEW", ...directCustomer, name: directCustomer.name.trim() },
       // The existing F1.1 contract persists the confirmed commitment, never the non-binding wish.
       dueDate: directConfirmedDate,
       note: nullable(directNote),
@@ -870,7 +890,11 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                   </div>
                   {directCustomerMode === "NEW" ? <div className={styles.createFormGrid}>
                     <label className={styles.createFieldWide}>Firma / Name<input data-autofocus required minLength={2} value={directCustomer.name} onChange={(event) => setDirectCustomer((current) => ({ ...current, name: event.target.value }))} /></label>
-                    <label>Ort<input value={directCustomer.city ?? ""} onChange={(event) => setDirectCustomer((current) => ({ ...current, city: nullable(event.target.value) }))} /></label>
+                    <label>Straße<input required value={directCustomer.street} onChange={(event) => setDirectCustomer((current) => ({ ...current, street: event.target.value }))} /></label>
+                    <label>PLZ<input required value={directCustomer.zipCode} onChange={(event) => setDirectCustomer((current) => ({ ...current, zipCode: event.target.value }))} /></label>
+                    <label>Ort<input required value={directCustomer.city} onChange={(event) => setDirectCustomer((current) => ({ ...current, city: event.target.value }))} /></label>
+                    <label>Land<input required value={directCustomer.country} onChange={(event) => setDirectCustomer((current) => ({ ...current, country: event.target.value }))} /></label>
+                    <label>Zahlung<select value={directCustomer.paymentPreference} onChange={(event) => setDirectCustomer((current) => ({ ...current, paymentPreference: event.target.value }))}><option value="rechnung_14">Rechnung 14 Tage</option><option value="rechnung_30">Rechnung 30 Tage</option><option value="vorkasse">Vorkasse</option><option value="bar">Bar</option></select></label>
                     <label>Telefon<input value={directCustomer.phone ?? ""} onChange={(event) => setDirectCustomer((current) => ({ ...current, phone: nullable(event.target.value) }))} /></label>
                   </div> : <label className={styles.createFieldWide}>Kunde<select value={directCustomerId} onChange={(event) => setDirectCustomerId(event.target.value)}>{customerChoices.map((entry) => <option key={entry.id} value={entry.id}>{entry.customerNumber ?? ""} {entry.name}</option>)}</select></label>}
                   <div className={styles.createFormGrid}>
@@ -879,10 +903,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                     <label className={styles.createFieldWide}>Hinweis<input value={directNote} onChange={(event) => setDirectNote(event.target.value)} /></label>
                   </div>
                   {directItems.map((item, index) => <fieldset className={styles.createPosition} key={item.key}><legend>Position {index + 1}</legend><div className={styles.createFormGrid}>
-                    <label>Teil / Bezeichnung<input required minLength={2} value={item.name} onChange={(event) => updateDirectItem(item.key, "name", event.target.value)} /></label>
+                    <label>Leistung<select required value={item.catalogServiceId} onChange={(event) => { const service=catalogServices.find((candidate)=>candidate.id===event.target.value); if(service)setDirectItems((current)=>current.map((candidate)=>candidate.key===item.key?{...candidate,catalogServiceId:service.id,name:service.name,surfaceRequested:service.surface,unit:service.unit,unitPriceCents:service.netPriceCents,vatRateBasisPoints:service.vatRateBasisPoints}:candidate)); }}><option value="">Bitte wählen</option>{catalogServices.map((service)=><option key={service.id} value={service.id}>{service.name} · {service.surface} · {euro(service.netPriceCents)}/{service.unit}</option>)}</select></label>
                     <label>Menge<input type="number" min="1" value={item.quantity} onChange={(event) => updateDirectItem(item.key, "quantity", event.target.value)} /></label>
                     <label>Material<input value={item.material} onChange={(event) => updateDirectItem(item.key, "material", event.target.value)} /></label>
-                    <label>Oberfläche<input required minLength={2} value={item.surfaceRequested} onChange={(event) => updateDirectItem(item.key, "surfaceRequested", event.target.value)} /></label>
+                    <label>Oberfläche<input readOnly value={item.surfaceRequested} /></label>
                   </div>{directItems.length > 1 ? <button type="button" onClick={() => setDirectItems((current) => current.filter((entry) => entry.key !== item.key))}>Position entfernen</button> : null}</fieldset>)}
                   <div className={styles.createFormActions}><button type="button" onClick={() => setDirectItems((current) => current.length >= 20 ? current : [...current, newIntakePosition()])} disabled={directItems.length >= 20}>Position hinzufügen</button><button type="submit" className={styles.createPrimary} disabled={busy}>{busy ? <Loader2 className={styles.createSpinner} /> : <Check />} Eingang speichern</button></div>
                 </form>
@@ -906,7 +930,12 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                     <label>Ansprechpartner<input value={customerDraft.contactPerson ?? ""} onChange={(event) => setCustomerField("contactPerson", nullable(event.target.value))} /></label>
                     <label>Telefon<input value={customerDraft.phone ?? ""} onChange={(event) => setCustomerField("phone", nullable(event.target.value))} /></label>
                     <label>E-Mail<input type="email" value={customerDraft.email ?? ""} onChange={(event) => setCustomerField("email", nullable(event.target.value))} /></label>
-                    <label>Ort<input value={customerDraft.city ?? ""} onChange={(event) => setCustomerField("city", nullable(event.target.value))} /></label>
+                    <label>Straße<input required value={customerDraft.street} onChange={(event) => setCustomerField("street", event.target.value)} /></label>
+                    <label>PLZ<input required value={customerDraft.zipCode} onChange={(event) => setCustomerField("zipCode", event.target.value)} /></label>
+                    <label>Ort<input required value={customerDraft.city} onChange={(event) => setCustomerField("city", event.target.value)} /></label>
+                    <label>Land<input required value={customerDraft.country} onChange={(event) => setCustomerField("country", event.target.value)} /></label>
+                    <label>Zahlung<select value={customerDraft.paymentPreference} onChange={(event) => setCustomerField("paymentPreference", event.target.value)}><option value="rechnung_14">Rechnung 14 Tage</option><option value="rechnung_30">Rechnung 30 Tage</option><option value="vorkasse">Vorkasse</option><option value="bar">Bar</option></select></label>
+                    <label>USt-ID<input value={customerDraft.vatId ?? ""} onChange={(event) => setCustomerField("vatId", nullable(event.target.value))} /></label>
                   </div>
                   <div className={styles.createFormActions}><button type="button" onClick={() => navigate("choose")}>Zurück</button><button type="submit" className={styles.createPrimary} disabled={busy}>{busy ? <Loader2 className={styles.createSpinner} /> : <Check />} Neukunde speichern</button></div>
                 </form>

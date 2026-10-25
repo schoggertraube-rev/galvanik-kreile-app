@@ -516,3 +516,4 @@
     padding-inline: 7px;
   }
 }
+.commercialForm{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}.commercialForm label{display:grid;gap:4px;font-size:.82rem;font-weight:700}.commercialForm input,.commercialForm select{min-height:42px;border:1px solid #cbd2dc;border-radius:8px;padding:8px}.commercialForm button{min-height:42px;border:0;border-radius:8px;background:#14253f;color:white;font-weight:700}.commercialForm p{margin:0;align-self:center}@media(max-width:640px){.commercialForm{grid-template-columns:1fr}}
