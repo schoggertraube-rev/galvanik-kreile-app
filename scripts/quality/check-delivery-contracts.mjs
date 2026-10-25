@@ -10,6 +10,7 @@ import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const PLAN_PATH = "docs/delivery/KREILE_LIVE_PLAN_V1.json";
+const SALES_STAGE_PLAN_PATH = "docs/delivery/KREILE_VERKAUFSSTUFE_1.md";
 const MISSION_PATH = "missions/F1_ORDER_TO_CASH_PILOT_001.yml";
 const CLAUDE_SETTINGS_PATH = ".claude/settings.json";
 const EXPECTED_PLAN_KEYS = [
@@ -506,8 +507,72 @@ function validateMission(root, plan, errors) {
   }
 }
 
+function validateSalesStageRepository(root, errors) {
+  const planFile = absolute(root, SALES_STAGE_PLAN_PATH);
+  const missionFile = absolute(root, MISSION_PATH);
+  if (!existsSync(planFile)) {
+    errors.push(`SALES_STAGE_PLAN_MISSING:${SALES_STAGE_PLAN_PATH}`);
+    return;
+  }
+  if (!existsSync(missionFile)) {
+    errors.push(`MISSION_MISSING:${MISSION_PATH}`);
+    return;
+  }
+
+  const planText = readFileSync(planFile, "utf8");
+  for (const token of [
+    "OWNER_AUTHORIZED",
+    "Siglinder, 25.10.2026",
+    "KREILE_LIVE_PLAN_V1.json",
+    "D-GOV-004",
+    "kreile/b1-shell",
+    "AENDERUNGEN_B1.md",
+    "OWNER_EXPLICIT_AUTHORITY_ONLY",
+  ]) {
+    if (!planText.includes(token)) errors.push(`SALES_STAGE_PLAN_TOKEN:${token}`);
+  }
+
+  const missionErrors = [];
+  const mission = parseMission(readFileSync(missionFile, "utf8"), missionErrors);
+  errors.push(...missionErrors);
+  const expectedKeys = [
+    "schema_version", "mission_id", "status", "authorized_by", "authorized_at",
+    "plan_path", "supersedes", "active_block", "phase", "branch", "base_ref",
+    "started_from_sha", "desktop_due_at", "tablet_mobile_due_at", "handoff_path",
+    "next_block", "writer_count", "reviewer", "merge_rule", "production_rule",
+    "cost_rule",
+  ];
+  if (!sameSet(Object.keys(mission), expectedKeys)) {
+    errors.push(`MISSION_CLOSED_SCHEMA:${Object.keys(mission).sort().join(",")}`);
+  }
+  if (mission.schema_version !== "2" || mission.mission_id !== "KREILE-VERKAUFSSTUFE-1"
+      || mission.status !== "active") errors.push("MISSION_IDENTITY");
+  if (mission.plan_path !== SALES_STAGE_PLAN_PATH
+      || mission.supersedes !== "docs/delivery/KREILE_LIVE_PLAN_V1.json;D-GOV-004") {
+    errors.push("MISSION_PLAN_BINDING");
+  }
+  if (mission.active_block !== "B1" || mission.phase !== "WRITING" || mission.branch !== "kreile/b1-shell") {
+    errors.push("MISSION_ACTIVE_BLOCK");
+  }
+  if (mission.base_ref !== "origin/main" || !isSha(mission.started_from_sha)) errors.push("MISSION_BASE_REF");
+  if (mission.writer_count !== "1" || mission.reviewer !== "INDEPENDENT_EXACT_SHA") errors.push("MISSION_REVIEW_SEPARATION");
+  if (mission.handoff_path !== "docs/delivery/AENDERUNGEN_B1.md" || mission.next_block !== "B2") {
+    errors.push("MISSION_HANDOFF");
+  }
+  for (const key of ["merge_rule", "production_rule", "cost_rule"]) {
+    if (mission[key] !== "OWNER_EXPLICIT_AUTHORITY_ONLY") errors.push(`MISSION_OWNER_RULE:${key}`);
+  }
+  validateClaudeSettings(root, errors);
+}
+
 export function checkDeliveryRepository(root = process.cwd()) {
   const errors = [];
+  const missionFile = absolute(root, MISSION_PATH);
+  if (existsSync(missionFile)
+      && /^mission_id:\s*KREILE-VERKAUFSSTUFE-1\s*$/m.test(readFileSync(missionFile, "utf8"))) {
+    validateSalesStageRepository(root, errors);
+    return errors;
+  }
   const plan = readJson(root, PLAN_PATH, errors, "PLAN");
   if (!plan) return errors;
   validatePlanShape(plan, errors);
@@ -592,9 +657,13 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  const plan = JSON.parse(readFileSync(absolute(args.root, PLAN_PATH), "utf8"));
   const mission = parseMission(readFileSync(absolute(args.root, MISSION_PATH), "utf8"), []);
-  console.log(`KREILE_LIVE_DELIVERY_CONTRACT=PASS packages=${plan.packages.length} active=${mission.active_package} phase=${mission.phase}`);
+  if (mission.mission_id === "KREILE-VERKAUFSSTUFE-1") {
+    console.log(`KREILE_SALES_STAGE_DELIVERY_CONTRACT=PASS active=${mission.active_block} phase=${mission.phase}`);
+  } else {
+    const plan = JSON.parse(readFileSync(absolute(args.root, PLAN_PATH), "utf8"));
+    console.log(`KREILE_LIVE_DELIVERY_CONTRACT=PASS packages=${plan.packages.length} active=${mission.active_package} phase=${mission.phase}`);
+  }
 }
 
 if (import.meta.url === pathToFileURL(path.resolve(process.argv[1] ?? "")).href) {

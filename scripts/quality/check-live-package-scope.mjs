@@ -98,6 +98,23 @@ const POST_LIVE_CONTROL_PATTERNS = Object.freeze([
   "scripts/quality/check-live-package-scope.mjs",
   "scripts/quality/select-live-regression-specs.mjs",
 ]);
+const SALES_STAGE_B1_BRANCH = "kreile/b1-shell";
+const SALES_STAGE_B1_ALLOWLIST = Object.freeze([
+  ".github/workflows/eslint-ratchet.yml",
+  "AGENTS.md",
+  "quality/authoritative-sources.json",
+  "missions/F1_ORDER_TO_CASH_PILOT_001.yml",
+  "docs/delivery/KREILE_VERKAUFSSTUFE_1.md",
+  "docs/delivery/AENDERUNGEN_B1.md",
+  "scripts/quality/check-authoritative-sources.mjs",
+  "scripts/quality/check-delivery-contracts.mjs",
+  "scripts/quality/check-live-package-scope.mjs",
+  "src/app/**",
+  "src/components/**",
+  "src/modules/werkstatt/**",
+  "src/test/**",
+  "e2e/**",
+]);
 
 const posix = (value) => value.replaceAll("\\", "/");
 const isSha = (value) => /^[0-9a-f]{40}$/i.test(value ?? "");
@@ -454,6 +471,21 @@ function checkClosure(root, baseSha, files, mission) {
 export function checkLivePackageScope({ root, base, head, branch }) {
   const files = changedFiles(root, base, head);
   if (branch === "main") return [];
+  const candidateMission = parseMission(readFileSync(path.join(root, MISSION_PATH), "utf8"));
+  if (candidateMission.mission_id === "KREILE-VERKAUFSSTUFE-1") {
+    const errors = [];
+    if (branch !== SALES_STAGE_B1_BRANCH) errors.push(`SALES_STAGE_BRANCH_INVALID:${branch}`);
+    if (candidateMission.active_block !== "B1" || candidateMission.branch !== SALES_STAGE_B1_BRANCH) {
+      errors.push("SALES_STAGE_MISSION_MISMATCH");
+    }
+    for (const rel of files) {
+      if (!covered(rel, SALES_STAGE_B1_ALLOWLIST)) errors.push(`SALES_STAGE_B1_SCOPE:${rel}`);
+    }
+    if (files.some((rel) => rel.startsWith("supabase/migrations/") || rel.startsWith("src/db/"))) {
+      errors.push("SALES_STAGE_B1_DATA_MODEL_FORBIDDEN");
+    }
+    return errors;
+  }
   try {
     const baseMission = parseMission(gitFile(root, base, MISSION_PATH));
     if (baseMission.phase === "DONE" && baseMission.next_gate_after_active_package === "LIVE_COMPLETE") {

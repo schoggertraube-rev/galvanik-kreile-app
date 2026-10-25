@@ -14,7 +14,7 @@ const TRUTH_SOURCE_CONTRACT = Object.freeze({
   product_decisions: "docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md",
   scope_modules: "docs/project/linie/MODULKARTE_KANON.md",
   architecture: "docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md",
-  live_plan: "docs/delivery/KREILE_LIVE_PLAN_V1.json",
+  live_plan: "docs/delivery/KREILE_VERKAUFSSTUFE_1.md",
   active_execution: "missions/F1_ORDER_TO_CASH_PILOT_001.yml",
   delivered_main: "docs/project/CURRENT_STATE.md",
   ui_truth: "docs/project/linie/00_UI_REFERENZEN_PFADE.md",
@@ -186,7 +186,7 @@ function validateActiveEntryDocs(root, errors) {
       continue;
     }
     const text = readFileSync(file, "utf8");
-    if (!text.includes("docs/delivery/KREILE_LIVE_PLAN_V1.json") && !text.includes("KREILE_LIVE_PLAN_V1.json")) {
+    if (rel === "AGENTS.md" && !text.includes("docs/delivery/KREILE_VERKAUFSSTUFE_1.md")) {
       errors.push(`ACTIVE_ENTRY_PLAN_POINTER_MISSING:${rel}`);
     }
     for (const token of FORBIDDEN_ACTIVE_TOKENS) if (text.includes(token)) errors.push(`ACTIVE_ENTRY_LEGACY_TOKEN:${rel}:${token}`);
@@ -243,11 +243,12 @@ function validateActiveSurface(root, errors) {
   if (!sameSet(directFiles(root, "docs/project/linie/ui"), ACTIVE_SURFACE.uiFiles)) errors.push("ACTIVE_UI_SURFACE");
   const deliveryFiles = recursiveFiles(root, "docs/delivery");
   for (const rel of deliveryFiles) {
-    if (rel !== "KREILE_LIVE_PLAN_V1.json" && !/^amendments\/KR-AMEND-\d{4}\.json$/.test(rel)) {
+    if (!["KREILE_LIVE_PLAN_V1.json", "KREILE_VERKAUFSSTUFE_1.md", "AENDERUNGEN_B1.md"].includes(rel)
+        && !/^amendments\/KR-AMEND-\d{4}\.json$/.test(rel)) {
       errors.push(`ACTIVE_DELIVERY_SURFACE:${rel}`);
     }
   }
-  if (!deliveryFiles.includes("KREILE_LIVE_PLAN_V1.json")) errors.push("ACTIVE_DELIVERY_PLAN_MISSING");
+  if (!deliveryFiles.includes("KREILE_VERKAUFSSTUFE_1.md")) errors.push("ACTIVE_DELIVERY_PLAN_MISSING");
   if (!sameSet(recursiveFiles(root, "missions"), ["F1_ORDER_TO_CASH_PILOT_001.yml"])) errors.push("ACTIVE_MISSION_SURFACE");
   for (const rel of [
     "scripts/quality/resolve-delivery-trust-anchor.mjs",
