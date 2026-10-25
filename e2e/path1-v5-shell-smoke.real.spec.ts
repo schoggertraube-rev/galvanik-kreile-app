@@ -221,8 +221,14 @@ test.describe("PATH1 V5 Shell Smoke", () => {
           await loginPin(page, actor, sessionSecret);
           await assertPage(page, actor.key, viewport, "/", problems, screens);
           screens.push(await capture(page, actor.key, viewport));
-          if (viewport.width >= 1300) await visitDesktopLinks(page, actor.key, viewport, problems, screens);
-          else await visitMore(page, actor.key, viewport, problems, screens);
+          if (actor.key === "phillip") {
+            await expect(page.getByRole("navigation", { name: "Hauptnavigation", exact: true })).toHaveCount(0);
+            await expect(page.getByRole("navigation", { name: "Mobile Hauptnavigation", exact: true })).toHaveCount(0);
+          } else if (viewport.width >= 1300) {
+            await visitDesktopLinks(page, actor.key, viewport, problems, screens);
+          } else {
+            await visitMore(page, actor.key, viewport, problems, screens);
+          }
         } finally {
           await context.close();
         }

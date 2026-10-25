@@ -13,7 +13,9 @@ export function MoreMenu({ open, onClose }: { open: boolean; onClose: () => void
   const router = useRouter();
   const { role, status } = usePermissions();
   const [busy, setBusy] = useState(false);
-  const supportedProfile = status === "authenticated" && (role === "meister" || role === "buero" || role === "werkstatt");
+  const elevated = role === "admin" || role === "developer";
+  const settingsVisible = elevated || role === "meister" || role === "buero";
+  const supportedProfile = status === "authenticated" && (elevated || role === "meister" || role === "buero" || role === "werkstatt");
 
   if (!open || !supportedProfile) return null;
 
@@ -41,9 +43,11 @@ export function MoreMenu({ open, onClose }: { open: boolean; onClose: () => void
           <Link className={styles.moreTile} href="/warendurchlauf" prefetch={false} onNavigate={onClose}>
             <PackageCheck aria-hidden="true" /><strong>Werkstatt</strong>
           </Link>
-          <Link className={styles.moreTile} href="/settings" prefetch={false} onNavigate={onClose}>
-            <Settings aria-hidden="true" /><strong>Einstellungen</strong>
-          </Link>
+          {settingsVisible ? (
+            <Link className={styles.moreTile} href="/settings" prefetch={false} onNavigate={onClose}>
+              <Settings aria-hidden="true" /><strong>Einstellungen</strong>
+            </Link>
+          ) : null}
           <button type="button" className={styles.moreTile} onClick={() => void signOut()} disabled={busy}>
             <LogOut aria-hidden="true" /><strong>Abmelden</strong>
           </button>

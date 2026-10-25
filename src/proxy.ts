@@ -8,6 +8,36 @@ import {
 
 const LEGACY_AUTH_COOKIES = ['bypass-auth', 'kreile_role'] as const
 
+const SALES_STAGE_ONE_ROUTES = [
+  '/start',
+  '/auth',
+  '/warendurchlauf',
+  '/orders',
+  '/customers',
+  '/buchhaltung/rechnungen',
+  '/settings',
+] as const
+
+export function isSalesStageOneRoute(pathname: string): boolean {
+  if (pathname === '/' || pathname.startsWith('/_next/')) return true
+  return SALES_STAGE_ONE_ROUTES.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`),
+  )
+}
+
+function salesStageNotFound(): NextResponse {
+  return new NextResponse(
+    '<!doctype html><html lang="de"><head><meta charset="utf-8"><title>404 – Nicht gefunden</title></head><body><main><h1>404</h1><p>Diese Seite gehört nicht zu Verkaufsstufe 1.</p></main></body></html>',
+    {
+      status: 404,
+      headers: {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'no-store',
+      },
+    },
+  )
+}
+
 function expireCookie(
   response: NextResponse,
   request: NextRequest,
@@ -44,6 +74,12 @@ function withAuthCookieCleanup(
 }
 
 export async function proxy(request: NextRequest) {
+  const isApiRoute = request.nextUrl.pathname.startsWith('/api/')
+
+  if (!isApiRoute && !isSalesStageOneRoute(request.nextUrl.pathname)) {
+    return salesStageNotFound()
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   })
@@ -114,8 +150,6 @@ export async function proxy(request: NextRequest) {
       // The signed app session remains authoritative when refresh is unavailable.
     }
   }
-
-  const isApiRoute = request.nextUrl.pathname.startsWith('/api/')
 
   if (isApiRoute && !hasValidAppSession) {
     return withAuthCookieCleanup(

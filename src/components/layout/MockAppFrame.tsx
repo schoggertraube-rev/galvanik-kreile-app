@@ -1,9 +1,8 @@
 "use client";
 
-// App-Rahmen 1:1 aus der Owner-Mock-Bauvorlage (00_BIBEL/mock_extract/kreile/rolf_home + rolf_home_tablet).
-// Markup und Klassen stammen unveraendert aus Vorlage.jsx; die Optik kommt ausschliesslich aus
-// src/styles/mock/mock-kreile-rolf-home.css (Original-CSS, gescoped). Eigene Styles: keine.
-// Navigation richtet sich nach dem Geraet (Owner G3), nicht nach der Rolle.
+// Verkaufsstufe-1-Rahmen auf Basis der gebundenen Rolf-V8- und Phillip-V4-Vorlagen.
+// Die Rolle entscheidet, ob die Desktop-Seitennavigation oder der kompakte
+// Werkstatt-Rahmen sichtbar ist. Die Daten- und Berechtigungswahrheit bleibt unveraendert.
 
 import { useState, useSyncExternalStore } from "react";
 import { usePathname, useRouter } from "next/navigation";
@@ -51,13 +50,21 @@ function useNavigationAccess() {
     typeof permissions.role === "string" &&
     Array.isArray(permissions.permissions) &&
     typeof permissions.hasPermission === "function";
-  if (!complete) return { visible: false, finance: false, initials: "" };
+  if (!complete) return { visible: false, finance: false, settings: false, workshop: false, initials: "" };
   const rolfProfile = permissions.role === "meister" || permissions.role === "buero";
-  const supported = rolfProfile || permissions.role === "werkstatt";
+  const workshop = permissions.role === "werkstatt";
+  const elevated = permissions.role === "admin" || permissions.role === "developer";
+  const supported = rolfProfile || workshop || elevated;
   const has = (capability: string) =>
     permissions.permissions.includes(capability) && permissions.hasPermission(capability);
-  const visible = supported && has("perm_view_leitstand") && has("perm_view_customers");
-  return { visible, finance: rolfProfile || has("perm_view_prices"), initials: permissions.initials || "" };
+  const visible = elevated || (supported && has("perm_view_leitstand") && has("perm_view_customers"));
+  return {
+    visible,
+    finance: elevated || rolfProfile || has("perm_view_prices"),
+    settings: elevated || rolfProfile,
+    workshop,
+    initials: permissions.initials || "",
+  };
 }
 
 function subscribeClock(onChange: () => void) {
@@ -81,7 +88,7 @@ const AREAS = [
   { href: "/", label: "Der Tag", icon: "i-sun", home: true },
   { href: "/warendurchlauf", label: "Werkstatt", icon: "i-flask" },
   { href: "/orders", label: "Aufträge", icon: "i-list" },
-  { href: "/customers", label: "Kunden & Kontakt", icon: "i-users" },
+  { href: "/customers", label: "Kunden", icon: "i-users" },
   { href: "/buchhaltung/rechnungen", label: "Geld & Rechnungen", icon: "i-euro", finance: true },
 ] as const;
 
@@ -119,7 +126,7 @@ export function MockAppFrame({ children }: { children: React.ReactNode }) {
       <div style={{ height: "100dvh" }}>
         <div className="mock-kreile-rolf-home" style={{ "--serif": "var(--font-fraunces), Georgia, serif", "--sans": "var(--font-inter), system-ui, -apple-system, \"Segoe UI\", sans-serif" } as React.CSSProperties}>
           <MockIcons />
-          {mode === "desktop" ? (
+          {mode === "desktop" && !access.workshop ? (
             <div className={className}>
               <div className="stripe"></div>
               <div className="shell">
@@ -168,13 +175,17 @@ export function MockAppFrame({ children }: { children: React.ReactNode }) {
                           </button>
                         );
                       })}
-                      <div className="nav-bottom nav-div"></div>
-                      <div className="nav-label">Weiteres</div>
-                      <button type="button" data-href="/settings" aria-current={isCurrent(pathname, "/settings") ? "page" : undefined}
-                        className={`nav${isCurrent(pathname, "/settings") ? " active" : ""}`} onClick={() => go("/settings")}>
-                        <Icon id="i-settings" />
-                        <span className="lbl">Einstellungen</span>
-                      </button>
+                      {access.settings ? (
+                        <>
+                          <div className="nav-bottom nav-div"></div>
+                          <div className="nav-label">Weiteres</div>
+                          <button type="button" data-href="/settings" aria-current={isCurrent(pathname, "/settings") ? "page" : undefined}
+                            className={`nav${isCurrent(pathname, "/settings") ? " active" : ""}`} onClick={() => go("/settings")}>
+                            <Icon id="i-settings" />
+                            <span className="lbl">Einstellungen</span>
+                          </button>
+                        </>
+                      ) : null}
                     </>
                   ) : null}
                 </nav>
@@ -187,12 +198,18 @@ export function MockAppFrame({ children }: { children: React.ReactNode }) {
               <div className="tshell">
                 <div className="ttop">
                   <button className="logo" type="button" aria-label="Kreile Startseite" onClick={() => go("/")}>GK</button>
+                  {access.workshop ? (
+                    <button className="brand" type="button" aria-label="Werkstatt Startseite" onClick={() => go("/")}>
+                      <span className="brand-name">KREILE</span>
+                      <span className="brand-home">Werkstatt</span>
+                    </button>
+                  ) : null}
                   {/* Suchfeld bewusst weggelassen: Suche nicht angebunden (Owner G7). */}
                   <span style={{ marginLeft: "auto" }} />
                   {avatar}
                 </div>
                 <main className="tcontent scroll">{children}</main>
-                {access.visible ? (
+                {access.visible && !access.workshop ? (
                   <nav className="dock" aria-label="Mobile Hauptnavigation">
                     {DOCK.map((item) => {
                       const active = isCurrent(pathname, item.href);
