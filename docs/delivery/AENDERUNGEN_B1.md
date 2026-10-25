@@ -1,6 +1,6 @@
 # Änderungen B1 – Shell und Rollen-Home
 
-Stand: 25.10.2026, 14:17 Uhr (Europe/Berlin)  
+Stand: 25.10.2026, 14:17 Uhr (Europe/Berlin)
 Draft-PR: <https://github.com/schoggertraube-rev/galvanik-kreile-app/pull/152>
 
 ## 1. Preview-URL und exakter SHA
