@@ -1,6 +1,6 @@
 # Änderungen B1 – Shell und Rollen-Home
 
-Stand: 25.10.2026, 14:13 Uhr (Europe/Berlin)  
+Stand: 25.10.2026, 14:17 Uhr (Europe/Berlin)  
 Draft-PR: <https://github.com/schoggertraube-rev/galvanik-kreile-app/pull/152>
 
 ## 1. Preview-URL und exakter SHA
@@ -49,7 +49,6 @@ Es wurden keine Zugangsdaten erfunden, keine PINs aus synthetischen Tests als Pr
 - Vollständiger Preview-Login je Rolle einschließlich Screenshots: Zugangsdaten fehlen; **In Klärung**.
 - Remote-CI vollständig grün: Der alte geschützte Ratchet aus `origin/main` verweigert die ownerautorisierte Vertragsmigration. Meldung: `The ratchet implementation or invocation drifted; a protected judge-contract migration is required.` Dieser erste Rebaseline-PR benötigt eine einmalige Owner-Ausnahme beim Merge; danach ist die neue Linie regulär geschützt.
 - Der GitHub-Quality-Job traf nach grünen Gates, TypeScript, Voll-Lint und 1001 Unit-Tests einen CI-spezifischen Turbopack-Fehler bei `next/font/google` (`Can't resolve '@vercel/turbopack-next/internal/font/google/font'`). Derselbe Produktions-Build ist lokal und bei Vercel grün. Keine unbelegte Erfolgsmeldung: GitHub Quality bleibt am Kandidaten rot.
-- Der separate Fresh-Supabase-Replay war zum Zeitpunkt dieser Übergabe noch aktiv. Alle bis 14:13 Uhr abgeschlossenen Replay-Schritte waren grün; ein laufender Job gilt nicht als bestanden.
 - Die genaue Liste der in B4 zulässigen ausgegrauten Anschluss-Stellen ist **In Klärung** und wurde in B1 nicht vorweggenommen.
 
 ## 6. CI-Status am SHA
@@ -62,7 +61,7 @@ SHA: `317f2c92e2c25253c23662cc65724799fc347a55`
 | Agentur-Gate (2 Läufe) | `SUCCESS` | Remote grün. |
 | GitHub Quality | `FAILURE` | Build-Schritt: CI-Turbopack/Google-Font-Auflösung; alle vorherigen Schritte einschließlich 1001 Unit-Tests grün. |
 | ESLint Ratchet | `FAILURE` | Erwarteter geschützter Vertragsmigrationsblocker beim ersten Rebaseline-PR. |
-| Fresh Supabase replay | `IN_PROGRESS` | Kein Erfolgsclaim vor Abschluss. |
+| Fresh Supabase replay | `SUCCESS` | Vollständiger isolierter Replay einschließlich echter Session-Kette, Datenbankintegration und V5-Shell-Browser-Smoke am Produkt-SHA grün. |
 
 Lokal am Produktkandidaten:
 
@@ -81,4 +80,3 @@ Lokal am Produktkandidaten:
 
 - Unabhängiger Exact-SHA-Review: noch offen; wegen der Owner-Regel „ein Writer, keine zweite Session“ nicht selbst ersetzt.
 - Merge, Production-Effekt und Kosten: nicht freigegeben und nicht ausgeführt.
-
