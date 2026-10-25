@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ports = vi.hoisted(() => ({
@@ -66,6 +66,14 @@ describe("Gregor system administration composition", () => {
     render(await SettingsAppAdapter());
     expect(screen.getByTestId("gregor-system-admin")).toHaveTextContent("Firmendaten, Leistungen und bestehende Zugänge");
     expect(screen.getByRole("button", { name:"Firmendaten" })).toBeInTheDocument();
+  });
+
+  it("shows new-user creation as planned and limits stage one to the three existing actors", async () => {
+    render(await SettingsAppAdapter());
+    fireEvent.click(screen.getByRole("button", { name: "Nutzer & Rollen" }));
+    expect(screen.getByLabelText("Nutzer anlegen geplant")).toHaveTextContent("geplant");
+    expect(screen.getByLabelText("Nutzer anlegen geplant")).toHaveTextContent("Rolf, Phillip und Gregor");
+    expect(screen.queryByText(/In Klärung/)).not.toBeInTheDocument();
   });
 
   it("redirects only missing or invalid sessions to start", async () => {
