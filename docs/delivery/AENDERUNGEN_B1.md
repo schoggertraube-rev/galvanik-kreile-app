@@ -1,82 +1,79 @@
-# Änderungen B1 – Shell und Rollen-Home
+# Änderungen B1 / P0 – Bauquellen und Navigation
 
-Stand: 25.10.2026, 14:17 Uhr (Europe/Berlin)
+Stand: 25.10.2026
+Branch: `kreile/b1-shell`
 Draft-PR: <https://github.com/schoggertraube-rev/galvanik-kreile-app/pull/152>
 
 ## 1. Preview-URL und exakter SHA
 
-- Preview: <https://galvanik-kreile-werksta-git-febda9-schoggertraube-revs-projects.vercel.app>
+- Preview: <https://galvanik-kreile-werkstatt-kcrkqavkz.vercel.app>
+- Stabiler Branch-Alias: <https://galvanik-kreile-werksta-git-febda9-schoggertraube-revs-projects.vercel.app>
 - Schutz: Vercel-SSO; kein öffentlicher Zugriff.
-- Exakter Produktkandidat: `317f2c92e2c25253c23662cc65724799fc347a55`
-- Nachweis am Kandidaten: Vercel-Build `SUCCESS`; `/start` hinter Vercel-Schutz `200`; `/cockpit` `404`.
-- Der spätere Übergabe-Commit ändert nur diese Datei und nicht den Produktkandidaten.
+- Exakter Produktkandidat: `4ba0be5b54d9e8752f77d7c60a88784558d4323e`
+- Vercel-Deployment: `dpl_4RBmcugq6Afb2uUV8ksmS6dSkXCf`, Ziel `preview`, Status `Ready`.
+- Ein nachfolgender Übergabe-Commit ändert nur die Abgabedokumentation, nicht den Produktkandidaten.
 
 ## 2. Testzugänge je Rolle
 
-| Rolle | Einstieg | Zugang |
+| Rolle | Soll-Zugang | Status |
 | --- | --- | --- |
-| Meister/Büro | Rolf auf `/start`, PIN-Anmeldung | **In Klärung:** kein Test-PIN im Repository oder Owner-Auftrag vorhanden. |
-| Werkstatt | Phillip auf `/start`, PIN-Anmeldung | **In Klärung:** kein Test-PIN im Repository oder Owner-Auftrag vorhanden. |
-| Admin | Gregor auf `/start`, E-Mail-Anmeldung | **In Klärung:** keine Test-E-Mail mit Passwort im Repository oder Owner-Auftrag vorhanden. |
+| Meister | Rolf, PIN-Anmeldung | **Nicht erstellt – BLOCKED_EXTERNAL_PERMISSION.** |
+| Werkstatt | Phillip, PIN-Anmeldung | **Nicht erstellt – BLOCKED_EXTERNAL_PERMISSION.** |
+| Admin | Gregor, E-Mail-Anmeldung | **Nicht erstellt – BLOCKED_EXTERNAL_PERMISSION.** |
 
-Es wurden keine Zugangsdaten erfunden, keine PINs aus synthetischen Tests als Produktzugang ausgegeben und keine Echtdaten verändert. Die Preview zeigt alle drei Zugänge als verfügbar; der vollständige Login konnte mangels Zugangsdaten nicht ausgeführt werden.
+Vor der verlangten Datenänderung wurde die Vercel-Umgebung geprüft. Für `NEXT_PUBLIC_SUPABASE_URL`, `DATABASE_URL` und `SUPABASE_SERVICE_ROLE_KEY` existiert jeweils nur ein gemeinsamer Vercel-Eintrag mit den Zielen `preview` und `production`; eine Branch-Ausnahme existiert nicht. Eine getrennte Supabase-Preview-Projekt-Ref ist damit nicht nachgewiesen. Nach Regel 10 des Bauauftrags wurden keine Nutzer, PINs, Passwörter oder sonstigen Daten angelegt oder verändert.
 
 ## 3. Neu gemacht
 
 | Was | Datei/Route | Sichtbar wo |
 | --- | --- | --- |
-| Einzige aktive Lieferlinie auf Verkaufsstufe 1 umgestellt | `docs/delivery/KREILE_VERKAUFSSTUFE_1.md`, `AGENTS.md`, `missions/F1_ORDER_TO_CASH_PILOT_001.yml` | Projektsteuerung und CI-Gates |
-| Rolf-V8-Desktop-Shell rollenabhängig gemacht | `src/components/layout/MockAppFrame.tsx` | Meister/Büro/Admin auf Desktop |
-| Navigation auf die Stufe-1-Bezeichnungen reduziert | `/`, `/warendurchlauf`, `/orders`, `/customers`, `/buchhaltung/rechnungen`, `/settings` | Rolf-V8-Seitennavigation |
-| Phillip-V4-Werkstatt-Rahmen ohne Rolf-Seitenleiste ausgeliefert | `src/components/layout/MockAppFrame.tsx` | Werkstatt auf Desktop; vorhandene Werkstatt-Aktionsleiste bleibt |
-| Admin-Zugang im Shell-Menü und Mehr-Menü korrekt unterstützt | `src/components/layout/MockAppFrame.tsx`, `src/components/layout/MoreMenu.tsx` | Admin auf Desktop/Touch |
-| Nicht-Stufe-1-Produktflächen zentral auf echten HTTP-404 begrenzt | `src/proxy.ts` | Direkte Alt-URLs, belegt mit `/cockpit` |
-| Routengrenze automatisiert geprüft | `src/test/sales_stage_one_route_gate.test.ts` | Unit-Suite |
-| Bestehenden Real-Browser-Smoke auf die Phillip-Shell ohne Hauptnavigation angepasst | `e2e/path1-v5-shell-smoke.real.spec.ts` | isolierter Browser-/Replay-Nachweis |
-| Vorhandene echte Rollen-Homes beibehalten und regressionsgeprüft | `src/app/page.tsx`, `src/components/home/RolfHome.tsx`, `src/components/home/WerkstattHome.tsx`, `src/app/settings/**` | `/` je Rolle; Admin wird nach `/settings` geleitet |
-| Vorhandene echte Daten- und Leer-/Fehlerzustände beibehalten | Home- und Werkstatt-Komponenten | Rolf- und Phillip-Home; keine HTML-Demodaten ergänzt |
+| Owner-Bauumfang als aktive HTML-Bauquelle abgelegt; gelieferter Klartext ist im Tab „Bauumfang“ zeichengetreu enthalten | `docs/delivery/KREILE_BAUUMFANG_STUFEN.html` | Projektabgabe |
+| Verbindlichen Bauauftrag Stufe 1 zeichengetreu abgelegt | `docs/delivery/KREILE_CODEX_BAUAUFTRAG_STUFE1.md` | Projektabgabe |
+| V8-Label auf „Kunden & Kontakt“ zurückgestellt | `src/components/layout/MockAppFrame.tsx`, `/customers` | Rolf-V8-Desktop-Navigation |
+| „Zahlen“ als geplanten, nicht klickbaren Anschluss ergänzt | `src/components/layout/MockAppFrame.tsx` | Bereiche |
+| „Kalender“ und „Material & Einkauf“ als geplante, nicht klickbare Anschlüsse ergänzt | `src/components/layout/MockAppFrame.tsx` | Weiteres |
+| P0-Navigation und Nicht-Klickbarkeit automatisiert geprüft | `src/components/layout/__tests__/p0SalesStageNavigation.realRender.test.tsx` | Unit-Suite |
 
-## 4. Weicht von Vorlage ab
+## 4. Weicht von Vorlage oder Bauumfang ab
 
-- Die Suche im Kopfbereich ist noch nicht angebunden und deshalb ehrlich weggelassen. Suche/Filter gehört zu B2; es gibt keine funktionslose Suchattrappe.
-- Die Rolf-V8-Navigation zeigt `Einstellungen` wie gefordert. Der Inhalt bleibt aus Sicherheitsgründen auf Admin/Developer beschränkt; Meister/Büro werden von `/settings` auf ihr Rollen-Home zurückgeführt. Eine fachliche persönliche Einstellungsfläche für Rolf ist **In Klärung**.
-- Die Preview ist durch Vercel-SSO geschützt. Sie ist gebaut und mit bestehender Vercel-Identität geprüft, aber nicht öffentlich erreichbar.
-- Ein visueller Rollen-Home-Screenshot aus der Preview fehlt, weil keine realen Testzugänge vorliegen. Loginseite und HTTP-Grenzen sind real geprüft; Rollenkomposition und Datenzustände sind durch bestehende Render-/Unit-Tests belegt.
-- Die lokale Remote-Konfiguration zeigte die Anmeldung als nicht verfügbar; die Vercel-Preview selbst zeigt Rolf, Phillip und Gregor dagegen verfügbar. Es wird daraus kein Provider- oder Produktionsclaim abgeleitet.
+- Die angelieferte Datei für den Bauumfang war Klartext und kein HTML-Dokument. Sie wurde ohne inhaltliche Ergänzungen in eine gültige HTML-Hülle mit dem Tab „Bauumfang“ gelegt; der eingebettete Text ist nach Zeilenumbruch-Normalisierung identisch.
+- Die drei Testnutzer fehlen, weil keine von Production getrennte Preview-Datenbank nachgewiesen ist. Regel 10 verlangt an dieser Stelle den Stopp vor jeder Datenmutation.
+- Rollen-Login und Rollen-Screenshots fehlen deshalb. Aus vorhandenen oder erfundenen Zugängen wurde kein Erfolgsnachweis konstruiert.
+- Die alten Authority- und Paket-Scope-Checker kennen die beiden ownerautorisierten Bauquellen nicht. P0 verbietet Änderungen an `scripts/quality/**`, `quality/**`, `AGENTS.md`, Mission und Workflows; deshalb bleiben diese Checks ehrlich rot.
 
 ## 5. Nicht geschafft und warum
 
-- Vollständiger Preview-Login je Rolle einschließlich Screenshots: Zugangsdaten fehlen; **In Klärung**.
-- Remote-CI vollständig grün: Der alte geschützte Ratchet aus `origin/main` verweigert die ownerautorisierte Vertragsmigration. Meldung: `The ratchet implementation or invocation drifted; a protected judge-contract migration is required.` Dieser erste Rebaseline-PR benötigt eine einmalige Owner-Ausnahme beim Merge; danach ist die neue Linie regulär geschützt.
-- Der GitHub-Quality-Job traf nach grünen Gates, TypeScript, Voll-Lint und 1001 Unit-Tests einen CI-spezifischen Turbopack-Fehler bei `next/font/google` (`Can't resolve '@vercel/turbopack-next/internal/font/google/font'`). Derselbe Produktions-Build ist lokal und bei Vercel grün. Keine unbelegte Erfolgsmeldung: GitHub Quality bleibt am Kandidaten rot.
-- Die genaue Liste der in B4 zulässigen ausgegrauten Anschluss-Stellen ist **In Klärung** und wurde in B1 nicht vorweggenommen.
+- Drei Testnutzer anlegen: gesperrt, weil Preview und Production dieselben Supabase-Umgebungseinträge verwenden und keine getrennte Preview-Projekt-Ref belegt ist.
+- Preview-Login je Rolle und Screenshots je Rolle: ohne zulässige Testnutzer nicht ausführbar.
+- Vollständig grüne CI: Authority-/Module-Gate, Paket-Scope und Ratchet bilden noch die vorherige Lieferquelle ab; eine Governance-Anpassung ist in P0 ausdrücklich untersagt.
+- Paket-E2E mit echten Rollen-Logins: wegen derselben fehlenden Testdatenbank-Trennung nicht ausführbar.
 
 ## 6. CI-Status am SHA
 
-SHA: `317f2c92e2c25253c23662cc65724799fc347a55`
+SHA: `4ba0be5b54d9e8752f77d7c60a88784558d4323e`
 
 | Prüfung | Status | Einordnung |
 | --- | --- | --- |
-| Vercel | `SUCCESS` | Preview real gebaut; `/start` 200 und alte Route 404 mit authentifiziertem `vercel curl` belegt. |
-| Agentur-Gate (2 Läufe) | `SUCCESS` | Remote grün. |
-| GitHub Quality | `FAILURE` | Build-Schritt: CI-Turbopack/Google-Font-Auflösung; alle vorherigen Schritte einschließlich 1001 Unit-Tests grün. |
-| ESLint Ratchet | `FAILURE` | Erwarteter geschützter Vertragsmigrationsblocker beim ersten Rebaseline-PR. |
-| Fresh Supabase replay | `SUCCESS` | Vollständiger isolierter Replay einschließlich echter Session-Kette, Datenbankintegration und V5-Shell-Browser-Smoke am Produkt-SHA grün. |
+| Vercel | `SUCCESS` | Preview real gebaut und `Ready`; kein Production-Deployment. |
+| Agentur-Gate, beide Läufe | `FAILURE` | 121 Unit-Dateien: 119 grün, 2 rot; 1000 Tests grün, 2 rot. Beide roten Tests melden ausschließlich die zwei neuen `ACTIVE_DELIVERY_SURFACE`-Dateien. Der neue P0-Test ist grün. |
+| GitHub Quality | `FAILURE` | Authority-Schritt meldet ausschließlich die zwei neuen `ACTIVE_DELIVERY_SURFACE`-Dateien. |
+| ESLint Ratchet | `FAILURE` | Geschützter Altvertrag: „ratchet implementation or invocation drifted; a protected judge-contract migration is required“. |
+| Fresh Supabase replay | `FAILURE` | Die lokale Replay-Storage-API lieferte in der BF-007-Matrix 12-mal HTTP 502; kein Produkt- oder Preview-Erfolgsclaim. |
 
 Lokal am Produktkandidaten:
 
-- `quality:authority-gate:selftest` und `quality:authority-gate`: `PASS`
-- `quality:delivery-contracts:selftest` und `quality:delivery-contracts`: `PASS`
-- `quality:package-scope:selftest` und exakter B1-Scope: `PASS`
+- P0-Navigationstest: `PASS`
+- TypeScript `npx tsc --noEmit --incremental false`: `PASS`
+- Voll-Lint `npm run lint:full`: `PASS`
+- Produktions-Build `npm run build`: `PASS`
 - `quality:no-fake-production`: `PASS`
-- `quality:module-gates`: `PASS`
-- TypeScript: `PASS`
-- Voll-Lint: `PASS`
-- Unit: `120` Testdateien, `1001` Tests, `PASS`
-- Produktions-Build: `PASS`
-- Lokaler Browser: `/start` 200 und `/cockpit` 404; Loginseite visuell geprüft.
+- Delivery-Vertrag: `PASS`
+- Authority-Gate und Module-Gate: `FAIL` ausschließlich für die zwei neuen Delivery-Dateien
+- Paket-Scope: `FAIL` ausschließlich für die zwei neuen Delivery-Dateien
+- Vollständige lokale Unit-Suite: zweimal nach zehn Minuten ohne Endstatus vom Werkzeug beendet; der Remote-Lauf am exakten SHA ist vollständig und oben ausgewiesen.
 
 ## Prüfung und Freigabe
 
-- Unabhängiger Exact-SHA-Review: noch offen; wegen der Owner-Regel „ein Writer, keine zweite Session“ nicht selbst ersetzt.
-- Merge, Production-Effekt und Kosten: nicht freigegeben und nicht ausgeführt.
+- Unabhängiger Exact-SHA-Review durch Claude: noch offen; Codex akzeptiert den eigenen Stand nicht selbst.
+- Merge nach `main`, Production, Kosten und Datenmutation: nicht freigegeben und nicht ausgeführt.
+- P1 wurde nicht begonnen.
