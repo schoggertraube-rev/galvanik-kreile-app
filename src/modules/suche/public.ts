@@ -16,6 +16,8 @@ export type {
   SearchOrderDocument,
   SearchOrderPart,
   SearchPorts,
+  SearchProvider,
+  SearchProviderBatch,
   SearchSource,
   SearchTenantResult,
 } from "./server/types";

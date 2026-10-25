@@ -13,7 +13,7 @@ import {
 } from "../server/types";
 import styles from "./SearchDialog.module.css";
 
-const HIT_LABEL: Record<SearchHit["type"], string> = { ORDER: "Auftrag", CUSTOMER: "Kunde" };
+const HIT_LABEL: Record<string, string> = { ORDER: "Auftrag", CUSTOMER: "Kunde" };
 
 type PresentedResult = {
   state: SearchDialogState;
@@ -21,6 +21,7 @@ type PresentedResult = {
   message: string;
   checkedAt: string | null;
   truncated: boolean;
+  checkedSources: string[];
 };
 
 function formatCheckedAt(value: string | null): string {
@@ -32,22 +33,23 @@ function stateForResult(result: SearchTenantResult): PresentedResult {
   switch (result.code) {
     case "OK":
       return result.hits.length > 0
-        ? { state: "data", hits: result.hits, message: "", checkedAt: result.checkedAt, truncated: result.coverage.truncated }
+        ? { state: "data", hits: result.hits, message: "", checkedAt: result.checkedAt, truncated: result.coverage.truncated, checkedSources: result.checkedSources }
         : {
             state: "empty",
             hits: [],
             message: `Für „${result.query}“ liegt in den internen Auftrags- und Kundendaten keine belegte Übereinstimmung vor.`,
             checkedAt: result.checkedAt,
             truncated: false,
+            checkedSources: result.checkedSources,
           };
     case "UNAUTHENTICATED":
     case "FORBIDDEN":
-      return { state: "denial", hits: [], message: result.message, checkedAt: null, truncated: false };
+      return { state: "denial", hits: [], message: result.message, checkedAt: null, truncated: false, checkedSources: [] };
     case "CONFLICT":
-      return { state: "conflict", hits: [], message: result.message, checkedAt: null, truncated: false };
+      return { state: "conflict", hits: [], message: result.message, checkedAt: null, truncated: false, checkedSources: [] };
     case "VALIDATION_ERROR":
     case "UNAVAILABLE":
-      return { state: "error", hits: [], message: result.message, checkedAt: null, truncated: false };
+      return { state: "error", hits: [], message: result.message, checkedAt: null, truncated: false, checkedSources: [] };
   }
 }
 
@@ -62,6 +64,7 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
   const [message, setMessage] = useState("");
   const [checkedAt, setCheckedAt] = useState<string | null>(null);
   const [truncated, setTruncated] = useState(false);
+  const [checkedSources, setCheckedSources] = useState<string[]>([]);
   const [activeIndex, setActiveIndex] = useState(-1);
 
   const clearPending = useCallback(() => {
@@ -78,6 +81,7 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
     setMessage("");
     setCheckedAt(null);
     setTruncated(false);
+    setCheckedSources([]);
     setActiveIndex(-1);
   }, [clearPending]);
 
@@ -108,6 +112,7 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
     setMessage("");
     setCheckedAt(null);
     setTruncated(false);
+    setCheckedSources([]);
     setActiveIndex(-1);
     try {
       const result = await search(term);
@@ -118,6 +123,7 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
       setMessage(next.message);
       setCheckedAt(next.checkedAt);
       setTruncated(next.truncated);
+      setCheckedSources(next.checkedSources);
       setActiveIndex(next.hits.length > 0 ? 0 : -1);
     } catch {
       if (sequence !== requestSequence.current) return;
@@ -126,6 +132,7 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
       setMessage("Die internen Bestände konnten nicht sicher durchsucht werden.");
       setCheckedAt(null);
       setTruncated(false);
+      setCheckedSources([]);
       setActiveIndex(-1);
     }
   }, [search]);
@@ -141,6 +148,7 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
       setMessage("");
       setCheckedAt(null);
       setTruncated(false);
+      setCheckedSources([]);
       setActiveIndex(-1);
       return;
     }
@@ -179,7 +187,7 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
     <div className={styles.backdrop} data-testid="search-backdrop" onMouseDown={close}>
       <section aria-labelledby="global-search-title" aria-modal="true" className={styles.dialog} data-state={state} data-testid="search-dialog" onMouseDown={(event) => event.stopPropagation()} role="dialog">
         <header className={styles.header}>
-          <div><p className={styles.eyebrow}>Schnell finden</p><h2 className={styles.title} id="global-search-title">Kunden und Aufträge</h2></div>
+          <div><p className={styles.eyebrow}>Schnell finden</p><h2 className={styles.title} id="global-search-title">Frag mich :)</h2></div>
           <button aria-label="Suche schließen" className={styles.closeButton} onClick={close} type="button">×</button>
         </header>
         <div className={styles.body}>
@@ -192,7 +200,7 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
           {state === "empty" ? (
             <div aria-live="polite" className={styles.statePanel} role="status">
               <p><strong>Prüfergebnis</strong></p><p>{message}</p>
-              <p className={styles.checked}>Interne Quellen: Auftragsbestand und Kundenstamm{dataStand ? ` · Abfrage ${dataStand}` : ""}.</p>
+              <p className={styles.checked}>Durchsucht: {checkedSources.join(", ")}{dataStand ? ` · Abfrage ${dataStand}` : ""}.</p>
               <p className={styles.alternatives}>Sicher weitersuchen mit Kundenname, Auftragsnummer, Teil oder Material, Oberfläche oder Datum.</p>
             </div>
           ) : null}
@@ -204,13 +212,13 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
               <li key={`${hit.type}-${hit.id}`} role="presentation">
                 <a aria-selected={index === activeIndex} className={styles.resultButton} data-active={index === activeIndex} data-hit-type={hit.type} href={hit.href} id={`${listboxId}-option-${index}`} onClick={(event) => selectLink(event, hit)} onMouseEnter={() => setActiveIndex(index)} role="option">
                   <span><span className={styles.resultTitle}>{hit.title}</span><span className={styles.resultSubtitle}>{hit.subtitle}</span><span className={styles.resultEvidence}><strong>{hit.source}</strong> · Treffer über {hit.matchLabel}: „{hit.matchValue}“</span><span className={styles.resultContext}>Zusammenhang: {hit.context}</span></span>
-                  <span className={styles.resultAction}><span className={styles.type}>{HIT_LABEL[hit.type]}</span><span>{hit.actionLabel}</span></span>
+                  <span className={styles.resultAction}><span className={styles.type}>{HIT_LABEL[hit.type] ?? hit.type}</span><span>{hit.actionLabel}</span></span>
                 </a>
               </li>
             )) : null}
           </ul>
           {expanded && truncated ? <p className={styles.truncation} role="status">Weitere Treffer sind möglich. Bitte den Suchbegriff verfeinern.</p> : null}
-          {expanded && dataStand ? <p className={styles.dataStand}>Interne Quellen · Abfrage {dataStand}</p> : null}
+          {expanded && dataStand ? <p className={styles.dataStand}>Durchsucht: {checkedSources.join(", ")} · Abfrage {dataStand}</p> : null}
         </div>
       </section>
     </div>,

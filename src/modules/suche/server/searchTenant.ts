@@ -168,6 +168,19 @@ function stableHits(hits: SearchHit[]): SearchHit[] {
   return hits.sort((left, right) => left.title.localeCompare(right.title, "de-DE", { sensitivity: "base" }) || left.id.localeCompare(right.id));
 }
 
+function assertProvider(provider: import("./types").SearchProvider): void {
+  if (!provider || !/^[a-z][a-z0-9-]{1,39}$/.test(provider.id) || !validRequired(provider.label)
+    || typeof provider.search !== "function") throw new Error("SEARCH_PROVIDER_INVALID");
+}
+
+function assertProviderHit(hit: SearchHit, provider: import("./types").SearchProvider): void {
+  if (!hit || !validRequired(hit.type) || !validRequired(hit.id) || !validRequired(hit.title)
+    || typeof hit.subtitle !== "string" || !validRequired(hit.status) || !validRequired(hit.matchField)
+    || hit.source !== provider.label || !validRequired(hit.matchLabel) || !validRequired(hit.matchValue)
+    || !validRequired(hit.context) || !validRequired(hit.href) || !hit.href.startsWith("/")
+    || !validRequired(hit.actionLabel)) throw new Error("SEARCH_PROVIDER_HIT_INVALID");
+}
+
 export function normalizeSearchQuery(query: unknown):
   | { code: "READY"; query: string }
   | { code: "EMPTY"; query: string }
@@ -193,8 +206,17 @@ export async function searchTenant(query: unknown, ports: SearchPorts): Promise<
     };
   }
   try {
-    const [orders, customerBatch] = await Promise.all([
-      ports.readOrders(), ports.searchCustomers(normalized.query),
+    const providers = ports.providers ?? [];
+    const providerIds = new Set<string>();
+    const providerLabels = new Set<string>(["Auftragsbestand", "Kundenstamm"]);
+    for (const provider of providers) {
+      assertProvider(provider);
+      if (providerIds.has(provider.id) || providerLabels.has(provider.label)) throw new Error("SEARCH_PROVIDER_DUPLICATE");
+      providerIds.add(provider.id);
+      providerLabels.add(provider.label);
+    }
+    const [orders, customerBatch, providerBatches] = await Promise.all([
+      ports.readOrders(), ports.searchCustomers(normalized.query), Promise.all(providers.map((provider) => provider.search(normalized.query))),
     ]);
     if (
       !customerBatch
@@ -218,21 +240,40 @@ export async function searchTenant(query: unknown, ports: SearchPorts): Promise<
       if (!matchField) throw new Error("SEARCH_CUSTOMER_MATCH_UNPROVEN");
       if (!customerHits.has(customer.id)) customerHits.set(customer.id, toCustomerHit(customer, matchField));
     }
-    const matchingHitsAtLeast = orderHits.size + customerHits.size;
+    const providerHits: SearchHit[] = [];
+    let providerMatchingHits = 0;
+    let providerTruncated = false;
+    providerBatches.forEach((batch, providerIndex) => {
+      const provider = providers[providerIndex];
+      if (!provider || !batch || typeof batch !== "object" || !Array.isArray(batch.hits)
+        || typeof batch.exhaustive !== "boolean") throw new Error("SEARCH_PROVIDER_BATCH_INVALID");
+      const unique = new Map<string, SearchHit>();
+      for (const hit of batch.hits) {
+        assertProviderHit(hit, provider);
+        const key = `${hit.type}:${hit.id}`;
+        if (!unique.has(key)) unique.set(key, hit);
+      }
+      providerMatchingHits += unique.size;
+      providerHits.push(...stableHits([...unique.values()]).slice(0, SEARCH_MAX_HITS_PER_TYPE));
+      providerTruncated ||= !batch.exhaustive || unique.size > SEARCH_MAX_HITS_PER_TYPE;
+    });
+    const matchingHitsAtLeast = orderHits.size + customerHits.size + providerMatchingHits;
     const merged = [
       ...stableHits([...orderHits.values()]).slice(0, SEARCH_MAX_HITS_PER_TYPE),
       ...stableHits([...customerHits.values()]).slice(0, SEARCH_MAX_HITS_PER_TYPE),
+      ...providerHits,
     ];
     const hits = merged.slice(0, SEARCH_MAX_HITS);
     const truncated = !customerBatch.exhaustive
       || orderHits.size > SEARCH_MAX_HITS_PER_TYPE
       || customerHits.size > SEARCH_MAX_HITS_PER_TYPE
+      || providerTruncated
       || merged.length > SEARCH_MAX_HITS;
     return {
       code: "OK",
       query: normalized.query,
       hits,
-      checkedSources: ["Auftragsbestand", "Kundenstamm"],
+      checkedSources: ["Auftragsbestand", "Kundenstamm", ...providers.map((provider) => provider.label)],
       checkedAt,
       coverage: { returnedHits: hits.length, matchingHitsAtLeast, truncated },
     };

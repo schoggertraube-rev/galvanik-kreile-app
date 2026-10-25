@@ -41,7 +41,7 @@ describe("SearchDialog", () => {
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "Unbekannt" } });
     await act(() => vi.runAllTimersAsync());
     expect(screen.getByText(/keine belegte Übereinstimmung/)).toBeInTheDocument();
-    expect(screen.getByText(/Interne Quellen: Auftragsbestand und Kundenstamm/)).toBeInTheDocument();
+    expect(screen.getByText(/Durchsucht: Auftragsbestand, Kundenstamm/)).toBeInTheDocument();
     expect(screen.getByText(/Kundenname, Auftragsnummer, Teil oder Material/)).toBeInTheDocument();
     expect(screen.queryByText(/nicht gefunden|Keine Treffer gefunden/i)).not.toBeInTheDocument();
   });

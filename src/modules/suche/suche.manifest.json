@@ -19,6 +19,8 @@
     "@/modules/suche/public#SearchOrderDocument",
     "@/modules/suche/public#SearchOrderPart",
     "@/modules/suche/public#SearchPorts",
+    "@/modules/suche/public#SearchProvider",
+    "@/modules/suche/public#SearchProviderBatch",
     "@/modules/suche/public#SearchSource",
     "@/modules/suche/public#SearchTenantResult",
     "@/modules/suche/public#normalizeSearchQuery",

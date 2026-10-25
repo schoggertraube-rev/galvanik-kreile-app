@@ -115,6 +115,39 @@ describe("Path-1 Lane-0 search contract", () => {
     expect(result.coverage).toEqual({ returnedHits: 20, matchingHitsAtLeast: 32, truncated: true });
   });
 
+  it("accepts a new module-owned provider without changing the search core or dialog", async () => {
+    const result = await searchTenant("KV-2026", ports({
+      readOrders: vi.fn().mockResolvedValue([]),
+      providers: [{
+        id: "quotes",
+        label: "Angebote",
+        search: vi.fn().mockResolvedValue({
+          exhaustive: true,
+          hits: [{
+            type: "QUOTE", id: "quote-1", title: "KV-2026-0042", subtitle: "Muster GmbH",
+            status: "draft", matchField: "quoteNumber", source: "Angebote", matchLabel: "KV-Nummer",
+            matchValue: "KV-2026-0042", context: "KV-2026-0042 · Muster GmbH",
+            href: "/customers/customer-1", actionLabel: "KV öffnen",
+          }],
+        }),
+      }],
+    }));
+    expect(result).toMatchObject({
+      code: "OK",
+      checkedSources: ["Auftragsbestand", "Kundenstamm", "Angebote"],
+      hits: [{ type: "QUOTE", id: "quote-1", source: "Angebote" }],
+      coverage: { returnedHits: 1, matchingHitsAtLeast: 1, truncated: false },
+    });
+  });
+
+  it("fails closed for duplicate, malformed or failing providers", async () => {
+    const duplicate = { id: "quotes", label: "Angebote", search: vi.fn().mockResolvedValue({ hits: [], exhaustive: true }) };
+    await expect(searchTenant("Muster", ports({ providers: [duplicate, duplicate] }))).resolves.toMatchObject({ code: "UNAVAILABLE" });
+    await expect(searchTenant("Muster", ports({ providers: [{ ...duplicate, search: vi.fn().mockRejectedValue(new Error("provider secret")) }] }))).resolves.toEqual({
+      code: "UNAVAILABLE", message: "Die internen Bestände konnten nicht sicher durchsucht werden.",
+    });
+  });
+
   it.each(["orders", "customers", "clock"] as const)("fails the whole result closed when %s fails", async (failed) => {
     const boundary = ports({
       readOrders: failed === "orders" ? vi.fn().mockRejectedValue(new Error("private SQL")) : vi.fn().mockResolvedValue([]),
