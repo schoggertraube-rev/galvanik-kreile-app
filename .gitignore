@@ -56,3 +56,6 @@ Agentur für App und Web/KREILE_COWORK_AUTONOME_IDEA_TO_LIVE_STEUERUNG.zip
 # Chat-/Agent-Artefakte (nie Repo-Inhalt) — verhindern "fremde ungetrackte Dateien"-Verwirrung
 .claude/
 Claude outputs/
+
+# Claude review handoffs are local coordination input and never repository content.
+_review/

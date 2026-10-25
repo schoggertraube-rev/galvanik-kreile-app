@@ -20,31 +20,41 @@ Prüfer: Claude (unabhängig). Du baust, du prüfst nicht selbst ab, du mergst n
 6. **Datenbank:** Alte Migrationen nie ändern. Je Paket genau eine neue Migration `supabase/migrations/<YYYYMMDDHHMMSS>_s1_<paket>_<thema>.sql`. Erst lokal auf frischem Replay grün.
 7. **Module:** Code nur in `src/modules/<modul>/` über `public.ts`/`server-public.ts`, Manifest pflegen, `npm run quality:module-gates` grün. Neues Modul nur, wenn das Paket es nennt.
 8. **Unklar = stoppen, nicht raten.** Eine Frage an den Owner mit genau einer Entscheidung, an der Stelle in der App „In Klärung“ ausgegraut. Weiterbauen am Rest.
-9. **Ein Branch je Paket** aus frischem `origin/main` bzw. dem freigegebenen Vorgänger, Name `kreile/s1-<paket>`. Draft-PR, nicht mergen.
-10. **Preview-Daten:** Vor jeder Datenänderung belegen, dass die Vercel-Preview NICHT auf die Produktions-Datenbank zeigt (Projekt-Ref nennen). Sonst stoppen.
+9. **Ein Branch je Paket**, Name `kreile/s1-<paket>`, abgezweigt vom Branch des vorigen Pakets (gestapelt, PR-Basis = voriger Branch). Draft-PR, nie mergen. Gemergt wird nur vom Owner, nachdem er die Preview gesehen hat.
+10. **Daten:** Keine Daten in der Live-Datenbank anlegen, ändern oder löschen. Eigene Prüfungen nur im Fresh-Replay.
 
 ## 1. Abgabe je Paket (Pflicht, Datei `docs/delivery/ABGABE_<paket>.md`)
 
 1. Preview-URL und exakter SHA
-2. Zugänge je Rolle (Testnutzer, nur Test-Datenbank)
+2. Welche Rolle was auf der Preview sieht (ohne PINs)
 3. Tabelle: ID · gebaut ja/teilweise/nein · Route · Datei · Test
 4. Abweichungen von Vorlage/Bauumfang, je Zeile ehrlich
 5. Checks am SHA: `npx tsc --noEmit`, `npm run lint:full`, `npm run test:unit`, `npm run build`, `npm run quality:module-gates`, Paket-E2E unter `e2e/`
 6. Screenshots 1914×917, 1220×880, 390×844 je neuer Seite
 
-## 2. Pakete in dieser Reihenfolge
+## 1a. Zugänge
 
-Jedes Paket startet erst, wenn der Owner das vorige nach Claude-Prüfung freigegeben hat.
+Nutzer Rolf, Phillip und Gregor existieren bereits in der App (Login zeigt sie). Keine neuen Nutzer, keine Testnutzer, kein zweites Datenbankprojekt. Die PINs kennt der Owner; sie gehören nie ins Repo oder in Abgaben. Für eigene Prüfungen nutzt du Fresh-Replay und Tests.
+
+## 1b. Dauerlauf: so arbeitest du ohne Pause
+
+Starte mit `/goal Stufe 1 P1–P5 nach docs/delivery/KREILE_CODEX_BAUAUFTRAG_STUFE1.md`.
+1. Paket bauen → Abgabe-Datei → Draft-PR aktualisieren → sofort das nächste Paket beginnen. Nicht auf den Owner warten.
+2. Vor jedem neuen Paket `_review/REVIEW_<paket>.md` lesen (Ordner `_review/` im Repo-Stamm, in `.gitignore` eintragen, nie committen; schreibt nur Claude). Steht dort FAIL: zuerst genau diese Punkte im betroffenen Branch beheben, dann weiter.
+3. Blockiert etwas (Zugang, Schlüssel, Owner-Entscheidung): Eintrag in `docs/delivery/OWNER_TODO.md` mit genau einem Schritt für den Owner und deiner Empfehlung. Dann mit allen nicht blockierten IDs weiterbauen.
+4. Am Ende jeder Abgabe der Abschnitt „Nächster Schritt“: was du als Nächstes baust und was der Owner tun muss (oder „nichts“).
+5. Du stoppst nur bei: Feature-Stopp 29.11., FAIL im Review zweimal am selben Punkt, oder Konflikt mit §3.
+
+## 2. Pakete in dieser Reihenfolge
 
 ### P0 · B1-Korrektur · bis Mo 26.10.
 Branch: weiter `kreile/b1-shell` (PR #152).
 - `src/components/layout/MockAppFrame.tsx`: Label zurück auf „Kunden & Kontakt“ (V8).
 - Navigation exakt wie Bauumfang-HTML: Bereiche Der Tag, Werkstatt, Aufträge, Kunden & Kontakt, Geld & Rechnungen, Zahlen (geplant); Weiteres: Kalender (geplant bis P3), Material & Einkauf (geplant), Einstellungen.
-- Drei Testnutzer Rolf (meister), Phillip (werkstatt), Gregor (admin) in der Test-Datenbank, Zugänge in `AENDERUNGEN_B1.md`.
-Abnahme: Login je Rolle auf der Preview landet auf dem richtigen Home; Screenshot je Rolle.
+Abnahme: Owner loggt sich auf der Preview je Rolle ein und landet auf dem richtigen Home. Screenshots aus dem Fresh-Replay.
 
 ### P1 · Datenfundament · 27.10.–01.11. · IDs S01, S02, S03, A06, E02, A04 (Verlauf)
-Branch `kreile/s1-p1-daten`. Migration `..._s1_p1_datenfundament.sql`.
+Branch `kreile/s1-p1-daten`, abgezweigt vom aktuellen Stand `kreile/b1-shell` (PR #152 bleibt offen bis Owner-Merge; PR-Basis von P1 = `kreile/b1-shell`). Migration `..._s1_p1_datenfundament.sql`.
 - **S01 Firmendaten:** Tabelle `public.company_settings` existiert (Quelle des Rechnungsabsenders in `supabase/migrations/20260821152949_f1_4_immutable_invoice_contract.sql`). Nur Pflege-UI unter `/settings` (Admin) bauen: Name, Straße, PLZ, Ort, Land, USt-ID/Steuernummer, IBAN, BIC, Bank, Zahlungsziel, Logo. Nummernkreise anzeigen, nicht änderbar.
 - **S02 Leistungskatalog:** neues Modul `src/modules/katalog/` (Aufbau wie `src/modules/quotes/`). Tabelle Leistungen: Bezeichnung, Oberfläche, Einheit, Nettopreis, Steuersatz, Standard-Durchlaufzeit in Arbeitstagen, aktiv. Pflege unter `/settings`. Lesen über `public.ts` für quotes, orders, invoice.
 - **S03 Nutzer & Rollen:** Admin legt Nutzer an, vergibt Rolle, setzt PIN, sperrt. Vorhandene Auth unter `src/app/settings/` nutzen, keine neue Auth.
