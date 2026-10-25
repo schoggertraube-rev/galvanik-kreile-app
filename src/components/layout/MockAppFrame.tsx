@@ -88,8 +88,17 @@ const AREAS = [
   { href: "/", label: "Der Tag", icon: "i-sun", home: true },
   { href: "/warendurchlauf", label: "Werkstatt", icon: "i-flask" },
   { href: "/orders", label: "Aufträge", icon: "i-list" },
-  { href: "/customers", label: "Kunden", icon: "i-users" },
+  { href: "/customers", label: "Kunden & Kontakt", icon: "i-users" },
   { href: "/buchhaltung/rechnungen", label: "Geld & Rechnungen", icon: "i-euro", finance: true },
+] as const;
+
+const PLANNED_AREAS = [
+  { label: "Zahlen", icon: "i-chart" },
+] as const;
+
+const PLANNED_MORE = [
+  { label: "Kalender", icon: "i-calendar" },
+  { label: "Material & Einkauf", icon: "i-box" },
 ] as const;
 
 const DOCK = [
@@ -175,10 +184,24 @@ export function MockAppFrame({ children }: { children: React.ReactNode }) {
                           </button>
                         );
                       })}
+                      {PLANNED_AREAS.map((area) => (
+                        <button key={area.label} type="button" className="nav planned" aria-disabled="true" disabled>
+                          <Icon id={area.icon} />
+                          <span className="lbl">{area.label}</span>
+                          <span className="soon">geplant</span>
+                        </button>
+                      ))}
                       {access.settings ? (
                         <>
                           <div className="nav-bottom nav-div"></div>
                           <div className="nav-label">Weiteres</div>
+                          {PLANNED_MORE.map((area) => (
+                            <button key={area.label} type="button" className="nav planned" aria-disabled="true" disabled>
+                              <Icon id={area.icon} />
+                              <span className="lbl">{area.label}</span>
+                              <span className="soon">geplant</span>
+                            </button>
+                          ))}
                           <button type="button" data-href="/settings" aria-current={isCurrent(pathname, "/settings") ? "page" : undefined}
                             className={`nav${isCurrent(pathname, "/settings") ? " active" : ""}`} onClick={() => go("/settings")}>
                             <Icon id="i-settings" />
