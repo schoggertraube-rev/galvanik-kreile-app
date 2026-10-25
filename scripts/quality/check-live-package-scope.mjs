@@ -112,6 +112,7 @@ const SALES_STAGE_B1_ALLOWLIST = Object.freeze([
   "src/app/**",
   "src/components/**",
   "src/modules/werkstatt/**",
+  "src/proxy.ts",
   "src/test/**",
   "e2e/**",
 ]);
