@@ -209,7 +209,22 @@ async function fillQuote() {
   await screen.findByRole("heading", { name: "KV-2026-0042 gesichert" });
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+});
 afterEach(() => cleanup());
 
 describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
@@ -338,39 +353,32 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     });
     await screen.findByRole("heading", { name: "Neuer Eingang" });
     expect(screen.queryByText("Digitaler Wareneingang")).not.toBeInTheDocument();
-    const newCustomer = await screen.findByLabelText("Firma / Name");
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Bestehender Kunde" }),
-      ).toBeEnabled(),
-    );
-    expect(newCustomer).toHaveFocus();
+    const customerSelect = await screen.findByRole("combobox", { name: "Kunde" });
+    expect(customerSelect).toHaveValue("");
+    fireEvent.change(customerSelect, { target: { value: "NEW" } });
+    const newCustomer = screen.getByLabelText("Name / Firma");
+    await waitFor(() => expect(newCustomer).toHaveFocus());
     expect(newCustomer).toHaveValue("");
-    expect(screen.getByRole("button", { name: "Neukunde" })).toHaveAttribute("aria-pressed", "true");
-    fireEvent.change(screen.getByLabelText("Firma / Name"), { target: { value: "SYNTHETISCH Direkteingang GmbH" } });
-    fireEvent.change(screen.getByLabelText("Ansprechpartner"), { target: { value: "Testperson" } });
-    fireEvent.change(screen.getByLabelText("E-Mail"), { target: { value: "direkteingang@example.invalid" } });
+    fireEvent.change(newCustomer, { target: { value: "SYNTHETISCH Direkteingang GmbH" } });
     fillRequiredCustomerAddress();
-    fireEvent.change(screen.getByLabelText("Terminwunsch"), { target: { value: "2026-10-15" } });
-    fireEvent.change(screen.getByLabelText("Zugesagter Termin"), { target: { value: "2026-10-20" } });
-    fireEvent.click(screen.getByRole("button", { name: "Weiter zu Positionen" }));
-    await screen.findByRole("group", { name: "Position 1" });
+    fireEvent.change(screen.getByLabelText("Wunschtermin"), { target: { value: "2026-10-20" } });
     fireEvent.change(screen.getByLabelText("Leistung"), { target: { value: "88888888-8888-4888-8888-888888888888" } });
-    fireEvent.click(screen.getByRole("button", { name: "Weiter zur Prüfung" }));
-    fireEvent.click(screen.getByRole("button", { name: "Eingang speichern" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Ware, Menge und Zustand/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Wareneingang buchen" }));
     await screen.findByRole("heading", { name: "Auftrag A-2026-0061 angelegt" });
     expect(value.createDirectIntake).toHaveBeenCalledWith(expect.objectContaining({ dueDate: "2026-10-20" }));
     expect(value.readDirectIntakeReceipt).toHaveBeenCalledTimes(1);
     expect(value.refresh).toHaveBeenCalledTimes(1);
   });
 
-  it("opens the three-step intake directly from the primary action", async () => {
+  it("opens the desktop one-page intake directly from the primary action", async () => {
     render(<GlobalCreateFlow ports={ports()} />);
 
     openFlow();
 
     await screen.findByRole("heading", { name: "Neuer Eingang" });
-    expect(screen.getByRole("button", { name: /1\/3 · Kunde & Vereinbarung/ })).toHaveAttribute("aria-current", "step");
+    expect(screen.getByRole("navigation", { name: "Abschnitte" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /1Kunde/ })).toHaveAttribute("aria-current", "step");
     expect(screen.queryByRole("heading", { name: "Was möchtest du anlegen?" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Offene KVs bearbeiten/ })).not.toBeInTheDocument();
   });
@@ -388,12 +396,13 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     render(<GlobalCreateFlow ports={value} />);
 
     openFlow();
-    fireEvent.change(await screen.findByLabelText("Firma / Name"), { target: { value: "SYNTHETISCH Direkteingang Retry GmbH" } });
-    fireEvent.change(screen.getByLabelText("Firmenname"), { target: { value: "SYNTHETISCH Direkteingang Retry GmbH" } });
+    fireEvent.change(await screen.findByRole("combobox", { name: "Kunde" }), { target: { value: "NEW" } });
+    fireEvent.change(screen.getByLabelText("Name / Firma"), { target: { value: "SYNTHETISCH Direkteingang Retry GmbH" } });
     fillRequiredCustomerAddress();
-    fireEvent.change(screen.getByLabelText("Terminwunsch"), { target: { value: "2026-10-15" } });
-    fireEvent.change(screen.getByLabelText("Zugesagter Termin"), { target: { value: "2026-10-20" } });
-    fireEvent.click(screen.getByRole("button", { name: "Weiter zu Positionen" }));
+    fireEvent.change(screen.getByLabelText("Wunschtermin"), { target: { value: "2026-10-20" } });
+    fireEvent.change(screen.getByLabelText("Leistung"), { target: { value: "88888888-8888-4888-8888-888888888888" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /Ware, Menge und Zustand/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Wareneingang buchen" }));
 
     await screen.findByText("Ausgang ungeklärt", { selector: "strong" });
     const statusButton = screen.getByRole("button", { name: "Status mit gleicher Kennung prüfen" });
@@ -405,7 +414,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.click(screen.getByRole("button", { name: "Erneut senden vorbereiten" }));
     fireEvent.click(screen.getByRole("button", { name: "Ja, jetzt erneut senden" }));
 
-    await screen.findByRole("group", { name: "Position 1" });
+    await waitFor(() => expect(createCustomer).toHaveBeenCalledTimes(2));
     expect(createCustomer).toHaveBeenCalledTimes(2);
     expect(createCustomer.mock.calls[1][0].clientEventId).toBe(createCustomer.mock.calls[0][0].clientEventId);
   });
@@ -500,9 +509,11 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
   it("moves focus into the dialog and closes it with Escape", async () => {
     render(<GlobalCreateFlow ports={ports()} />);
     openFlow();
-    await waitFor(() => expect(screen.getByLabelText("Firma / Name")).toHaveFocus());
+    const customerSelect = await screen.findByRole("combobox", { name: "Kunde" });
+    fireEvent.change(customerSelect, { target: { value: "NEW" } });
+    await waitFor(() => expect(screen.getByLabelText("Name / Firma")).toHaveFocus());
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
 });

@@ -10,9 +10,25 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
-import { FormEvent, KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { CreateCustomerInput, UpdateCustomerCommercialInput } from "@/modules/customers/public";
 import type { CatalogService } from "@/modules/katalog/public";
+import {
+  Abschnitt,
+  AbschnittNav,
+  Auswahl,
+  Button as KrButton,
+  Checkbox,
+  Dialog as KrDialog,
+  Eingabe,
+  Fakten,
+  Feld,
+  FormRaster,
+  Hinweis,
+  SchrittNav,
+  Segment,
+  Textfeld,
+} from "@/ui/kr";
 import type {
   ConvertQuoteInput,
   CreateQuoteInput,
@@ -214,6 +230,30 @@ function CustomerFields({ value, onChange, autofocus = false, requireOrderData =
   </div>;
 }
 
+function IntakeCustomerFields({ value, onChange, onlyMissing }: { value: CustomerDraft; onChange: (value: CustomerDraft) => void; onlyMissing: boolean }) {
+  const set = <K extends keyof CustomerDraft>(key: K, next: CustomerDraft[K]) => onChange({ ...value, [key]: next });
+  const missing = (value: string | null | undefined) => !value?.trim();
+  const show = (value: string | null | undefined) => !onlyMissing || missing(value);
+  const setName = (name: string) => onChange({
+    ...value,
+    name,
+    companyName: value.customerType === "privat" ? null : nullable(name),
+  });
+  return <>
+    <FormRaster>
+      {show(value.name) ? <Feld label="Name / Firma" voll><Eingabe data-autofocus required minLength={2} value={value.name} onChange={(event) => setName(event.target.value)} /></Feld> : null}
+      {show(value.contactPerson) ? <Feld label="Ansprechpartner"><Eingabe required value={value.contactPerson ?? ""} onChange={(event) => set("contactPerson", nullable(event.target.value))} /></Feld> : null}
+      {show(value.phone) ? <Feld label="Telefon"><Eingabe required type="tel" value={value.phone ?? ""} onChange={(event) => set("phone", nullable(event.target.value))} /></Feld> : null}
+      {show(value.email) ? <Feld label="E-Mail"><Eingabe required type="email" value={value.email ?? ""} onChange={(event) => set("email", nullable(event.target.value))} /></Feld> : null}
+      {show(value.street) ? <Feld label="Straße"><Eingabe required value={value.street} onChange={(event) => set("street", event.target.value)} /></Feld> : null}
+      {show(value.zipCode) ? <Feld label="PLZ"><Eingabe required value={value.zipCode} onChange={(event) => set("zipCode", event.target.value)} /></Feld> : null}
+      {show(value.city) ? <Feld label="Ort"><Eingabe required value={value.city} onChange={(event) => set("city", event.target.value)} /></Feld> : null}
+      {show(value.country) ? <Feld label="Land"><Eingabe required value={value.country} onChange={(event) => set("country", event.target.value)} /></Feld> : null}
+    </FormRaster>
+    {!onlyMissing ? <details><summary>USt-ID (optional)</summary><Feld label="USt-ID"><Eingabe value={value.vatId ?? ""} onChange={(event) => set("vatId", nullable(event.target.value))} /></Feld></details> : null}
+  </>;
+}
+
 const EMPTY_CUSTOMER: CustomerDraft = {
   name: "",
   customerType: "business",
@@ -228,6 +268,20 @@ const EMPTY_CUSTOMER: CustomerDraft = {
   paymentPreference: "rechnung_14",
   vatId: null,
 };
+
+const HANDY_QUERY = "(max-width: 699px)";
+const subscribeHandy = (notify: () => void) => {
+  if (typeof window.matchMedia !== "function") return () => undefined;
+  const query = window.matchMedia(HANDY_QUERY);
+  query.addEventListener("change", notify);
+  return () => query.removeEventListener("change", notify);
+};
+const readHandy = () => typeof window.matchMedia === "function" && window.matchMedia(HANDY_QUERY).matches;
+const readHandyServer = () => false;
+
+function useHandy(): boolean {
+  return useSyncExternalStore(subscribeHandy, readHandy, readHandyServer);
+}
 
 function customerChoiceToDraft(customer: GlobalCreateCustomerChoice): CustomerDraft {
   return {
@@ -335,8 +389,12 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [dueDate, setDueDate] = useState("");
   const [quoteNote, setQuoteNote] = useState("");
   const [confirmedOrderDueDate, setConfirmedOrderDueDate] = useState("");
-  const [directCustomerMode, setDirectCustomerMode] = useState<"EXISTING" | "NEW">("NEW");
+  const [directCustomerMode, setDirectCustomerMode] = useState<"NONE" | "EXISTING" | "NEW">("NONE");
   const [intakeStep, setIntakeStep] = useState<1 | 2 | 3>(1);
+  const [intakeKind, setIntakeKind] = useState<"ORDER" | "QUOTE">("ORDER");
+  const [intakeHandover, setIntakeHandover] = useState<"PICKUP" | "SHIPPING">("PICKUP");
+  const [intakeSource, setIntakeSource] = useState<"personal" | "shipping" | "pickup">("personal");
+  const [intakeChecked, setIntakeChecked] = useState(false);
   const [directCustomer, setDirectCustomer] = useState<CustomerDraft>(EMPTY_CUSTOMER);
   const [directCustomerId, setDirectCustomerId] = useState("");
   const [directItems, setDirectItems] = useState<IntakePositionDraft[]>(() => [newIntakePosition()]);
@@ -354,6 +412,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const dialogRef = useRef<HTMLElement>(null);
   const confirmedOrderDueDateValid = isValidDateInput(confirmedOrderDueDate);
   const customerCompleteForOrder = completeOrderCustomer(customerDraft);
+  const isHandy = useHandy();
 
   const requestId = (kind: keyof typeof requestIds.current) => {
     if (!requestIds.current[kind]) requestIds.current[kind] = globalThis.crypto.randomUUID();
@@ -374,8 +433,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
   useLayoutEffect(() => {
     if (!open) return;
-    const target = dialogRef.current?.querySelector<HTMLElement>("[data-autofocus]")
-      ?? dialogRef.current?.querySelector<HTMLElement>("input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])");
+    const root = dialogRef.current ?? document.querySelector<HTMLElement>("[role='dialog']");
+    const target = root?.querySelector<HTMLElement>("[data-autofocus]")
+      ?? root?.querySelector<HTMLElement>("input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])");
     target?.focus();
   }, [directCustomerMode, open, step]);
 
@@ -473,7 +533,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       }
       setCatalogServices(catalog.services);
       setCustomerChoices(result.customers);
-      setDirectCustomerMode("NEW");
+      setDirectCustomerMode("NONE");
       setDirectCustomerId("");
       setDirectCustomer(EMPTY_CUSTOMER);
       setCustomerLoad(result.customers.length ? "ready" : "empty");
@@ -891,10 +951,14 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setDirectItems((current) => current.map((item) => item.key === key ? { ...item, [field]: value } : item));
   };
 
-  const advanceIntakeCustomer = async () => {
+  const advanceIntakeCustomer = async (): Promise<string | null> => {
+    if (directCustomerMode === "NONE") {
+      setFeedback({ kind: "validation", message: "Bitte einen bestehenden Kunden oder ‚Neukunde anlegen‘ auswählen." });
+      return null;
+    }
     if (!completeOrderCustomer(directCustomer)) {
       setFeedback({ kind: "validation", message: "Für den Auftrag fehlen Name/Firma, Ansprechpartner, Telefon, E-Mail, vollständige Anschrift oder Zahlungsbedingung." });
-      return;
+      return null;
     }
     setBusy(true);
     setFeedback(null);
@@ -904,7 +968,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         const created = await ports.createCustomer({ ...directCustomer, clientEventId });
         if (created.code !== "OK") {
           setFeedback(requestFeedback(created, clientEventId));
-          return;
+          return null;
         }
         const choice: GlobalCreateCustomerChoice = {
           id: created.customer.id, customerNumber: created.customer.customerNumber, ...directCustomer,
@@ -913,37 +977,41 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         setDirectCustomerId(choice.id);
         setDirectCustomerMode("EXISTING");
         setCustomerChoices((current) => [choice, ...current.filter((entry) => entry.id !== choice.id)]);
+        setIntakeStep(2);
+        return choice.id;
       } else {
         if (!directCustomerId) {
           setFeedback({ kind: "validation", message: "Bitte einen Kunden auswählen." });
-          return;
+          return null;
         }
         if (!ports.updateCustomer) {
           setFeedback({ kind: "error", message: "Die Kundenaktualisierung ist derzeit nicht verfügbar." });
-          return;
+          return null;
         }
         const updated = await ports.updateCustomer({
           clientEventId: globalThis.crypto.randomUUID(), customerId: directCustomerId, ...directCustomer,
         });
         if (updated.code !== "OK") {
           setFeedback(requestFeedback(updated, directCustomerId));
-          return;
+          return null;
         }
         setCustomerChoices((current) => current.map((entry) => entry.id === directCustomerId ? { ...entry, ...directCustomer, city: directCustomer.city } : entry));
+        setIntakeStep(2);
+        return directCustomerId;
       }
-      setIntakeStep(2);
     } catch {
       setFeedback({
         kind: "unclear",
         message: "Der Kundenstand konnte nicht sicher bestätigt werden. Es wurde noch kein Auftrag angelegt.",
         requestId: requestId("directCustomer"),
       });
+      return null;
     } finally {
       setBusy(false);
     }
   };
 
-  const submitDirectIntake = async (event: FormEvent) => {
+  const submitDirectIntake = async (event: FormEvent, customerId = directCustomerId) => {
     event.preventDefault();
     if (!ports.canCreateQuote) {
       deny("quote");
@@ -951,7 +1019,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     }
     const validDates = /^\d{4}-\d{2}-\d{2}$/.test(directWishDate) && /^\d{4}-\d{2}-\d{2}$/.test(directConfirmedDate);
     const items = directItems.map((item) => ({ catalogServiceId:item.catalogServiceId, name:item.name.trim(), quantity:Number(item.quantity), material:nullable(item.material), surfaceRequested:item.surfaceRequested.trim(), unit:item.unit, unitPriceCents:item.unitPriceCents, vatRateBasisPoints:item.vatRateBasisPoints }));
-    const validCustomer = directCustomerId.length > 0 && completeOrderCustomer(directCustomer);
+    const validCustomer = customerId.length > 0 && completeOrderCustomer(directCustomer);
     if (!validCustomer || !validDates || items.length < 1 || items.length > 20 || items.some((item) => !item.catalogServiceId || item.name.length < 2 || item.surfaceRequested.length < 2 || !Number.isSafeInteger(item.quantity) || item.quantity < 1)) {
       setFeedback({ kind: "validation", message: "Bitte Kunde, mindestens eine Position, Terminwunsch und zugesagten Termin vollständig angeben." });
       return;
@@ -961,7 +1029,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setFeedback(null);
     const input: DirectIntakeInput = {
       clientEventId: id,
-      customer: { mode: "EXISTING", customerId: directCustomerId },
+      customer: { mode: "EXISTING", customerId },
       // The existing F1.1 contract persists the confirmed commitment, never the non-binding wish.
       dueDate: directConfirmedDate,
       note: nullable(directNote),
@@ -985,6 +1053,50 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     } finally {
       setBusy(false);
     }
+  };
+
+  const submitDirectQuote = async (customerId: string) => {
+    const positions = directItems.map((item) => ({
+      name: item.name.trim(),
+      quantity: Number(item.quantity),
+      material: nullable(item.material),
+      surfaceRequested: item.surfaceRequested.trim(),
+      unitPriceCents: item.unitPriceCents,
+    }));
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(directWishDate) || positions.some((item) => item.name.length < 2 || !Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.surfaceRequested.length < 2)) {
+      setFeedback({ kind: "validation", message: "Bitte Wunschtermin und alle Positionen vollständig angeben." });
+      return;
+    }
+    const clientEventId = requestId("quote");
+    setBusy(true);
+    setFeedback(null);
+    try {
+      const result = await ports.createQuote({ clientEventId, customerId, dueDate: directWishDate, note: nullable(directNote), positions });
+      if (result.code !== "OK") {
+        setFeedback(requestFeedback(result, clientEventId));
+        return;
+      }
+      setQuote(result.quote);
+      setQuoteReceipt(result.receipt);
+      ports.rememberQuote(result.quote.quoteId);
+      navigate("quote-saved");
+    } catch {
+      setFeedback({ kind: "unclear", message: "Der KV-Ausgang ist ungeklärt. Nicht erneut anlegen; zuerst den Status prüfen.", requestId: clientEventId });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitIntakePage = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!intakeChecked) {
+      setFeedback({ kind: "validation", message: "Bitte Ware, Menge und Zustand gemeinsam prüfen und bestätigen." });
+      return;
+    }
+    const customerId = await advanceIntakeCustomer();
+    if (!customerId) return;
+    if (intakeKind === "QUOTE") await submitDirectQuote(customerId);
+    else await submitDirectIntake(event, customerId);
   };
 
   const copyRequestId = async () => {
@@ -1037,13 +1149,17 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setQuoteReceipt(null);
     setConversion(null);
     setDirectReceipt(null);
-    setDirectCustomerMode("NEW");
     setDirectCustomer(EMPTY_CUSTOMER);
     setDirectCustomerId("");
+    setDirectCustomerMode("NONE");
     setDirectItems([newIntakePosition()]);
     setDirectWishDate("");
     setDirectConfirmedDate("");
     setDirectNote("");
+    setIntakeKind("ORDER");
+    setIntakeHandover("PICKUP");
+    setIntakeSource("personal");
+    setIntakeChecked(false);
     requestIds.current = { customer: "", quote: "", conversion: "", directCustomer: "" };
     setIntakeStep(1);
   };
@@ -1053,7 +1169,119 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       {ports.showPrimaryTrigger !== false ? <button type="button" className={styles.globalCreateButton} onClick={() => { reset(); void loadDirectIntake(); }} aria-label="Anlegen" aria-haspopup="dialog" aria-expanded={open}>
         <span className={styles.globalCreatePlus} aria-hidden="true">＋</span><span>Anlegen</span>
       </button> : null}
-      {open ? (
+      {open && step === "direct-intake" ? (
+        <KrDialog
+          titel={intakeKind === "QUOTE" ? "Neuer Eingang · KV" : "Neuer Eingang"}
+          icon="inbox"
+          groesse="breit"
+          onSchliessen={close}
+          fuss={directReceipt ? undefined : isHandy ? (
+            <>
+              {intakeStep > 1 ? <KrButton text="Zurück" onClick={() => setIntakeStep((intakeStep - 1) as 1 | 2)} /> : <KrButton text="Abbrechen" onClick={close} />}
+              {intakeStep === 1 ? <KrButton art="primaer" icon="arrow" text="Positionen" disabled={busy} onClick={() => void advanceIntakeCustomer()} /> : null}
+              {intakeStep === 2 ? <KrButton art="primaer" icon="arrow" text="Belege & Prüfung" onClick={() => {
+                if (directItems.every((item) => item.catalogServiceId && Number(item.quantity) > 0)) { setFeedback(null); setIntakeStep(3); }
+                else setFeedback({ kind: "validation", message: "Bitte jede Position vollständig aus dem Leistungskatalog wählen." });
+              }} /> : null}
+              {intakeStep === 3 ? <KrButton form="kr-neuer-eingang" type="submit" art="erledigen" icon="check" text={intakeKind === "QUOTE" ? "KV anlegen" : "Wareneingang buchen"} disabled={busy || !intakeChecked} /> : null}
+            </>
+          ) : (
+            <><KrButton text="Abbrechen" onClick={close} /><KrButton form="kr-neuer-eingang" type="submit" art="erledigen" icon="check" text={intakeKind === "QUOTE" ? "KV anlegen" : "Wareneingang buchen"} disabled={busy || !intakeChecked} /></>
+          )}
+        >
+          {directReceipt ? (
+            <section className={styles.createSuccess}>
+              <h3>Auftrag {directReceipt.receipt.orderNumber} angelegt</h3>
+              <p>Der neue Eingang ist gespeichert und im Arbeitsbestand erneut bestätigt.</p>
+              <KrButton art="primaer" text="Auftragskarte öffnen" onClick={() => ports.openOrder(directReceipt.receipt.orderId)} />
+            </section>
+          ) : (
+            <form id="kr-neuer-eingang" className="kr-stapel" onSubmit={(event) => void submitIntakePage(event)}>
+              {isHandy ? <SchrittNav schritte={["Kunde", "Positionen", "Prüfung"]} aktuell={intakeStep - 1} erreicht={intakeStep - 1} onSchritt={(index) => setIntakeStep((index + 1) as 1 | 2 | 3)} /> : <AbschnittNav abschnitte={["Kunde", "Positionen", "Prüfung"]} aktuell={intakeStep - 1} onAbschnitt={(index) => {
+                setIntakeStep((index + 1) as 1 | 2 | 3);
+                document.querySelector(`[data-abschnitt="${index}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }} />}
+
+              {(!isHandy || intakeStep === 1) ? <Abschnitt nr={0} label="Kunde">
+                <FormRaster>
+                  <Feld label="Art" voll><Segment label="Art" wert={intakeKind} optionen={[{ wert: "ORDER", text: "Auftrag" }, { wert: "QUOTE", text: "KV" }]} onWert={setIntakeKind} /></Feld>
+                  <Feld label="Kunde" voll>
+                    <Auswahl
+                      data-intake-customer
+                      value={directCustomerMode === "NEW" ? "NEW" : directCustomerId}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setFeedback(null);
+                        if (!value) { setDirectCustomerMode("NONE"); setDirectCustomerId(""); setDirectCustomer(EMPTY_CUSTOMER); return; }
+                        if (value === "NEW") { setDirectCustomerMode("NEW"); setDirectCustomerId(""); setDirectCustomer({ ...EMPTY_CUSTOMER, paymentPreference: intakeHandover === "PICKUP" ? "bar" : "vorkasse" }); return; }
+                        const selected = customerChoices.find((entry) => entry.id === value);
+                        if (selected) { setDirectCustomerMode("EXISTING"); setDirectCustomerId(selected.id); setDirectCustomer(customerChoiceToDraft(selected)); }
+                      }}
+                      optionen={[
+                        { wert: "", text: customerLoad === "loading" ? "Kunden werden geladen …" : "Bitte auswählen" },
+                        ...customerChoices.map((entry) => ({ wert: entry.id, text: `${entry.name} · ${entry.customerNumber ?? "ohne Kundennummer"}` })),
+                        { wert: "NEW", text: "Neukunde anlegen" },
+                      ]}
+                    />
+                  </Feld>
+                </FormRaster>
+                {directCustomerMode === "NEW" ? <IntakeCustomerFields value={directCustomer} onChange={setDirectCustomer} onlyMissing={false} /> : null}
+                {directCustomerMode === "EXISTING" && !completeOrderCustomer(directCustomer) ? <>
+                  <Hinweis ton="warn">Für diesen Kunden fehlen noch Pflichtdaten.</Hinweis>
+                  <IntakeCustomerFields value={directCustomer} onChange={setDirectCustomer} onlyMissing />
+                </> : null}
+                <FormRaster>
+                  <Feld label="Wunschtermin"><Eingabe type="date" required value={directWishDate} onChange={(event) => { setDirectWishDate(event.target.value); setDirectConfirmedDate(event.target.value); }} /></Feld>
+                  <Feld label="Übergabe"><Segment label="Übergabe" wert={intakeHandover} optionen={[{ wert: "PICKUP", text: "Abholung" }, { wert: "SHIPPING", text: "Versand" }]} onWert={(value) => { setIntakeHandover(value); setDirectCustomer((current) => ({ ...current, paymentPreference: value === "PICKUP" ? "bar" : "vorkasse" })); }} /></Feld>
+                  <Feld label="Zahlungsmodus">
+                    <Auswahl value={directCustomer.paymentPreference} onChange={(event) => setDirectCustomer((current) => ({ ...current, paymentPreference: event.target.value }))} optionen={[
+                      intakeHandover === "PICKUP" ? { wert: "bar", text: "Bar oder Karte bei Abholung" } : { wert: "vorkasse", text: "Vorkasse" },
+                      { wert: "rechnung_14", text: /^rechnung_/.test(directCustomer.paymentPreference) && directCustomerMode === "EXISTING" ? "Rechnung auf Ziel" : "Rechnung auf Ziel (nicht freigeschaltet)", gesperrt: !(directCustomerMode === "EXISTING" && /^rechnung_/.test(directCustomer.paymentPreference)) },
+                    ]} />
+                  </Feld>
+                  <Feld label="Eingangsart"><Auswahl value={intakeSource} onChange={(event) => setIntakeSource(event.target.value as typeof intakeSource)} optionen={[{ wert: "personal", text: "persönlich angeliefert" }, { wert: "shipping", text: "Versand eingegangen" }, { wert: "pickup", text: "Abholung durch Kreile" }]} /></Feld>
+                </FormRaster>
+              </Abschnitt> : null}
+
+              {(!isHandy || intakeStep === 2) ? <Abschnitt nr={1} label="Positionen">
+                <div className="kr-stapel">
+                  {directItems.map((item, index) => <div className="kr-position" key={item.key}>
+                    <span className="kr-position-nr">{index + 1}</span>
+                    <Feld label="Leistung"><Auswahl required value={item.catalogServiceId} onChange={(event) => { const service = catalogServices.find((candidate) => candidate.id === event.target.value); if (service) setDirectItems((current) => current.map((candidate) => candidate.key === item.key ? { ...candidate, catalogServiceId: service.id, name: service.name, surfaceRequested: service.surface, unit: service.unit, unitPriceCents: service.netPriceCents, vatRateBasisPoints: service.vatRateBasisPoints } : candidate)); }} optionen={[{ wert: "", text: "Bitte wählen" }, ...catalogServices.map((service) => ({ wert: service.id, text: service.name }))]} /></Feld>
+                    <Feld label="Menge"><Eingabe type="number" min="1" value={item.quantity} onChange={(event) => updateDirectItem(item.key, "quantity", event.target.value)} /></Feld>
+                    <Feld label="Oberfläche" className="kr-pos-oberflaeche"><Eingabe readOnly value={item.surfaceRequested} /></Feld>
+                    <KrButton art="sekundaer" icon="x" label="Position entfernen" disabled={directItems.length === 1} onClick={() => setDirectItems((current) => current.filter((entry) => entry.key !== item.key))} />
+                  </div>)}
+                </div>
+                <KrButton art="sekundaer" icon="plus" text="Position hinzufügen" disabled={directItems.length >= 20} onClick={() => setDirectItems((current) => [...current, newIntakePosition()])} />
+              </Abschnitt> : null}
+
+              {(!isHandy || intakeStep === 3) ? <Abschnitt nr={2} label="Prüfung">
+                <Hinweis ton="warn">Eingangsfoto fehlt</Hinweis>
+                <Feld label="Hinweis / Belege" voll><Textfeld rows={3} value={directNote} onChange={(event) => setDirectNote(event.target.value)} /></Feld>
+                <FormRaster>
+                  <Fakten zeilen={[
+                    { k: "Art", v: intakeKind === "QUOTE" ? "KV" : "Auftrag" },
+                    { k: "Kunde", v: directCustomerMode === "NONE" ? "Nicht gewählt" : directCustomer.name || "Neukunde" },
+                    { k: "Positionen", v: String(directItems.length) },
+                    { k: "Wunschtermin", v: directWishDate || "Nicht angegeben" },
+                    { k: "Übergabe", v: intakeHandover === "PICKUP" ? "Abholung" : "Versand" },
+                  ]} />
+                </FormRaster>
+                <Checkbox checked={intakeChecked} onChange={setIntakeChecked}><b>Ware, Menge und Zustand gemeinsam geprüft</b></Checkbox>
+              </Abschnitt> : null}
+
+              {feedback ? <>
+                <Hinweis ton={feedback.kind === "validation" ? "warn" : undefined}><span><strong>{feedback.kind === "unclear" ? "Ausgang ungeklärt" : "Eingabe prüfen"}</strong><br />{feedback.message}</span></Hinweis>
+                {feedback.kind === "unclear" ? <div className="kr-stapel">
+                  <KrButton art="sekundaer" text="Status mit gleicher Kennung prüfen" onClick={() => void checkUnclearStatus()} disabled={busy} />
+                  {statusChecked ? <KrButton text={retryConfirmed ? "Ja, jetzt erneut senden" : "Erneut senden vorbereiten"} onClick={retryAfterStatusCheck} disabled={busy} /> : null}
+                </div> : null}
+              </> : null}
+            </form>
+          )}
+        </KrDialog>
+      ) : open ? (
         <div className={styles.createOverlay} onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
           <section ref={dialogRef} className={styles.createDialog} role="dialog" aria-modal="true" aria-labelledby="global-create-title" onKeyDown={handleDialogKey}>
             <header className={styles.createHeader}>
