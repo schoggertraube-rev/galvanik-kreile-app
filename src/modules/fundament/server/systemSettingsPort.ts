@@ -11,6 +11,12 @@ const ROLES = ["admin", "meister", "buero", "werkstatt"] as const;
 export type SystemSettingsContext = { tenantId: string; actorId: string; canManage: boolean };
 type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null };
 type UserRow = { id: string; email: string; full_name: string; role: string; active: boolean };
+type HourlyRateRow = { id: string; hourly_rate_cents: number; version: number };
+
+const EMPTY_COMPANY: CompanySettingsInput = {
+  companyName: "", street: "", zip: "", city: "", country: "Deutschland", taxId: "",
+  iban: "", bic: "", bankName: "", paymentTermDays: 14, logoUrl: "/logo.png",
+};
 
 function text(value: unknown, min: number, max: number): string | null {
   if (typeof value !== "string") return null;
@@ -23,17 +29,22 @@ export async function readSystemSettings(context: SystemSettingsContext) {
   try {
     const snapshot = await withPrivilegedTenantTransaction(context, async (tx): Promise<SystemSettingsSnapshot> => {
       const companies = await tx.execute<CompanyRow>(sql`SELECT company_name, street, zip, city, country, tax_id, iban, bic, bank_name, invoice_payment_term_days, logo_url FROM public.company_settings WHERE tenant_id = ${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
-      if (companies.length !== 1 || !companies[0]) throw new Error("COMPANY_SETTINGS_AMBIGUOUS");
+      if (companies.length > 1) throw new Error("COMPANY_SETTINGS_AMBIGUOUS");
       const users = await tx.execute<UserRow>(sql`SELECT id, email, full_name, role, active FROM public.app_users WHERE tenant_id = ${context.tenantId} ORDER BY full_name, id`);
       const featureRows = await tx.execute<TenantFeatureRow>(sql`SELECT feature_id, enabled FROM public.tenant_features WHERE tenant = ${context.tenantId} ORDER BY feature_id`);
+      const rateRows = await tx.execute<HourlyRateRow>(sql`SELECT id::text AS id, hourly_rate_cents, version FROM private.extra_work_hourly_rates WHERE tenant_id = ${context.tenantId} ORDER BY version DESC LIMIT 2`);
+      if (rateRows.length > 1 && rateRows[0]?.version === rateRows[1]?.version) throw new Error("HOURLY_RATE_AMBIGUOUS");
       const company = companies[0];
       return {
-        company: {
+        company: company ? {
           companyName: company.company_name, street: company.street ?? "", zip: company.zip ?? "",
           city: company.city ?? "", country: company.country ?? "", taxId: company.tax_id ?? "",
           iban: company.iban ?? "", bic: company.bic ?? "", bankName: company.bank_name ?? "",
           paymentTermDays: company.invoice_payment_term_days ?? 14, logoUrl: company.logo_url ?? "",
-        },
+        } : EMPTY_COMPANY,
+        extraWorkHourlyRate: rateRows[0]
+          ? { rateId: rateRows[0].id, hourlyRateCents: rateRows[0].hourly_rate_cents, version: rateRows[0].version }
+          : { rateId: null, hourlyRateCents: null, version: 0 },
         users: users.map((user): ManagedUser => ({ id: user.id, email: user.email, fullName: user.full_name, role: user.role, active: user.active })),
         numberRanges: [
           { label: "Kunden", pattern: "K-JJJJ-fortlaufend" },
@@ -64,7 +75,13 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
   if (Object.values(normalized).some((field) => field === "") || !Number.isSafeInteger(normalized.paymentTermDays) || normalized.paymentTermDays < 1 || normalized.paymentTermDays > 365) return { code: "VALIDATION_ERROR" as const, message: "Alle Firmendaten einschließlich Zahlungsziel sind erforderlich." };
   try {
     await withPrivilegedTenantTransaction(context, async (tx) => {
-      const rows = await tx.execute<{ id: string }>(sql`UPDATE public.company_settings SET company_name=${normalized.companyName}, street=${normalized.street}, zip=${normalized.zip}, city=${normalized.city}, country=${normalized.country}, tax_id=${normalized.taxId}, iban=${normalized.iban}, bic=${normalized.bic}, bank_name=${normalized.bankName}, invoice_payment_term_days=${normalized.paymentTermDays}, logo_url=${normalized.logoUrl}, updated_at=statement_timestamp() WHERE tenant_id=${context.tenantId} RETURNING id`);
+      const rows = await tx.execute<{ id: string }>(sql`
+        INSERT INTO public.company_settings (id, tenant_id, company_name, street, zip, city, country, tax_id, iban, bic, bank_name, invoice_payment_term_days, logo_url, updated_at)
+        VALUES (${`company:${context.tenantId}`}, ${context.tenantId}, ${normalized.companyName}, ${normalized.street}, ${normalized.zip}, ${normalized.city}, ${normalized.country}, ${normalized.taxId}, ${normalized.iban}, ${normalized.bic}, ${normalized.bankName}, ${normalized.paymentTermDays}, ${normalized.logoUrl}, statement_timestamp())
+        ON CONFLICT (id) DO UPDATE SET company_name=EXCLUDED.company_name, street=EXCLUDED.street, zip=EXCLUDED.zip, city=EXCLUDED.city, country=EXCLUDED.country, tax_id=EXCLUDED.tax_id, iban=EXCLUDED.iban, bic=EXCLUDED.bic, bank_name=EXCLUDED.bank_name, invoice_payment_term_days=EXCLUDED.invoice_payment_term_days, logo_url=EXCLUDED.logo_url, updated_at=statement_timestamp()
+        WHERE company_settings.tenant_id=${context.tenantId}
+        RETURNING id
+      `);
       if (rows.length !== 1) throw new Error("COMPANY_SETTINGS_WRITE_AMBIGUOUS");
     });
     return { code: "OK" as const };

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { saveCatalogServiceAction, saveCompanySettingsAction, saveManagedUserAction, saveSalesStageFeatureAction } from "@/app/actions/settings.actions";
+import { setExtraWorkHourlyRateAction } from "@/app/actions/orders.actions";
 import { SALES_STAGE_FEATURES, type CompanySettingsInput, type SalesStageFeatureId, type SystemSettingsSnapshot } from "@/modules/fundament/public";
 import type { CatalogService } from "@/modules/katalog/public";
 import styles from "./settings.module.css";
@@ -16,6 +17,8 @@ export function SettingsAdminClient({ initialSnapshot, initialServices }: { init
   const [draft, setDraft] = useState(emptyService());
   const [users, setUsers] = useState(initialSnapshot.users);
   const [features, setFeatures] = useState(initialSnapshot.features);
+  const [hourlyRate, setHourlyRate] = useState(initialSnapshot.extraWorkHourlyRate);
+  const [hourlyRateEuro, setHourlyRateEuro] = useState(initialSnapshot.extraWorkHourlyRate.hourlyRateCents === null ? "" : (initialSnapshot.extraWorkHourlyRate.hourlyRateCents / 100).toFixed(2).replace(".", ","));
   const [pins, setPins] = useState<Record<string, string>>(Object.create(null));
   const [message, setMessage] = useState("");
   const [pending, startTransition] = useTransition();
@@ -23,6 +26,29 @@ export function SettingsAdminClient({ initialSnapshot, initialServices }: { init
 
   function run(task: () => Promise<{ code: string; message?: string }>, success: string) {
     startTransition(() => void task().then((result) => setMessage(result.code === "OK" ? success : result.message ?? "Speichern fehlgeschlagen.")));
+  }
+
+  function saveHourlyRate() {
+    const value = Number(hourlyRateEuro.replace(",", "."));
+    const hourlyRateCents = Math.round(value * 100);
+    if (!Number.isFinite(value) || hourlyRateCents < 1 || hourlyRateCents > 1_000_000) {
+      setMessage("Bitte einen gültigen Stundensatz zwischen 0,01 € und 10.000 € eingeben.");
+      return;
+    }
+    startTransition(() => void setExtraWorkHourlyRateAction({
+      rateId: crypto.randomUUID(),
+      expectedVersion: hourlyRate.version,
+      hourlyRateCents,
+      clientEventId: crypto.randomUUID(),
+    }).then((result) => {
+      if (result.code !== "OK") {
+        setMessage(result.message);
+        return;
+      }
+      setHourlyRate({ rateId: result.receipt.rateId, hourlyRateCents: result.receipt.hourlyRateCents, version: result.receipt.aggregateVersion });
+      setHourlyRateEuro((result.receipt.hourlyRateCents / 100).toFixed(2).replace(".", ","));
+      setMessage("Stundensatz Mehrarbeit gespeichert.");
+    }));
   }
 
   return <main className={styles.page} data-testid="gregor-system-admin">
@@ -39,6 +65,8 @@ export function SettingsAdminClient({ initialSnapshot, initialServices }: { init
       {field("companyName", "Firmenname")}{field("street", "Straße")}{field("zip", "PLZ")}{field("city", "Ort")}{field("country", "Land")}
       {field("taxId", "USt-ID / Steuernummer")}{field("iban", "IBAN")}{field("bic", "BIC")}{field("bankName", "Bank")}{field("paymentTermDays", "Zahlungsziel in Tagen", "number")}{field("logoUrl", "Logo-Pfad")}
     </div><button disabled={pending} onClick={() => run(() => saveCompanySettingsAction(company), "Firmendaten gespeichert.")}>Firmendaten speichern</button>
+      <h3>Mehrarbeit</h3><div className={styles.grid}><label>Stundensatz Mehrarbeit (€/h)<input inputMode="decimal" value={hourlyRateEuro} onChange={(event) => setHourlyRateEuro(event.target.value)} placeholder="z. B. 85,00" /></label></div>
+      <button disabled={pending} onClick={saveHourlyRate}>Stundensatz speichern</button>
       <h3>Nummernkreise (systemverwaltet)</h3><dl className={styles.ranges}>{initialSnapshot.numberRanges.map((range) => <div key={range.label}><dt>{range.label}</dt><dd>{range.pattern}</dd></div>)}</dl>
     </section> : null}
 

@@ -6,6 +6,10 @@ export function MockIcons() {
       <path d="M12 3l1.8 4.9L18.7 9.7 13.8 11.5 12 16.4 10.2 11.5 5.3 9.7 10.2 7.9z"></path>
       <path d="M18.5 15.5l.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9-1.9-.7 1.9-.7z"></path>
     </symbol>
+    <symbol id="i-search" viewBox="0 0 24 24">
+      <circle cx="11" cy="11" r="7"></circle>
+      <path d="M16.2 16.2L21 21"></path>
+    </symbol>
     <symbol id="i-inbox" viewBox="0 0 24 24">
       <path d="M4 13l2.5 5h11L20 13"></path>
       <path d="M4 13V5h16v8"></path>

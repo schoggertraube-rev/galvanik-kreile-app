@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MockAppFrame } from "@/components/layout/MockAppFrame";
 
@@ -10,6 +10,7 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/components/layout/GlobalCreateFlow", () => ({ requestGlobalCreate: vi.fn() }));
 vi.mock("@/components/layout/MoreMenu", () => ({ MoreMenu: () => null }));
+vi.mock("@/components/layout/GlobalSearch", () => ({ GlobalSearch: ({ open }: { open: boolean }) => open ? <div role="dialog" aria-label="Globale Suche" /> : null }));
 vi.mock("@/app/actions/settings.actions", () => ({
   readSalesStageFeaturesAction: vi.fn(async () => ({ code: "OK", features: [] })),
 }));
@@ -45,5 +46,11 @@ describe("P0 Verkaufsstufe-1-Navigation", () => {
       expect(planned).toHaveClass("nav", "planned");
       expect(planned).not.toHaveAttribute("data-href");
     });
+  });
+
+  it("opens the real global search entry from the active shell", () => {
+    render(<MockAppFrame><div>Inhalt</div></MockAppFrame>);
+    fireEvent.click(screen.getByRole("button", { name: "Globale Suche öffnen" }));
+    expect(screen.getByRole("dialog", { name: "Globale Suche" })).toBeInTheDocument();
   });
 });

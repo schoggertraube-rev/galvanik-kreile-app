@@ -10,6 +10,7 @@ import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { MockIcons } from "./MockIcons";
 import { MoreMenu } from "./MoreMenu";
+import { GlobalSearch } from "./GlobalSearch";
 import { FrameModeContext, type MockFrameMode } from "./MockFrameMode";
 import { useSalesStageFeatures } from "./SalesStageFeatureContext";
 
@@ -118,6 +119,7 @@ export function MockAppFrame({ children }: { children: React.ReactNode }) {
   const stageFeatures = useSalesStageFeatures();
   const clock = useBerlinClock();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const go = (href: string) => router.push(href);
 
   const avatar = (
@@ -149,7 +151,7 @@ export function MockAppFrame({ children }: { children: React.ReactNode }) {
                       <div className="brand-home">▸ Der Tag</div>
                     </div>
                   </button>
-                  {/* Suchfeld bewusst weggelassen: Suche nicht angebunden (Owner G7). */}
+                  {access.visible ? <button className="search" type="button" aria-label="Globale Suche öffnen" onClick={() => setSearchOpen(true)}><Icon id="i-search" /><span className="ph">Kunde, Auftrag, KV oder Rechnung suchen</span><span className="kbd">Strg K</span></button> : null}
                   <div className="tb-date" style={{ marginLeft: "auto" }}>
                     {clock ? (
                       <>
@@ -229,8 +231,7 @@ export function MockAppFrame({ children }: { children: React.ReactNode }) {
                       <span className="brand-home">Werkstatt</span>
                     </button>
                   ) : null}
-                  {/* Suchfeld bewusst weggelassen: Suche nicht angebunden (Owner G7). */}
-                  <span style={{ marginLeft: "auto" }} />
+                  {access.visible ? <button className="search" type="button" aria-label="Globale Suche öffnen" onClick={() => setSearchOpen(true)}><Icon id="i-search" /><span className="ph">Suchen</span></button> : <span style={{ marginLeft: "auto" }} />}
                   {avatar}
                 </div>
                 <main className="tcontent scroll">{children}</main>
@@ -258,6 +259,7 @@ export function MockAppFrame({ children }: { children: React.ReactNode }) {
         </div>
       </div>
       <MoreMenu open={moreOpen} onClose={() => setMoreOpen(false)} />
+      <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
     </FrameModeContext.Provider>
   );
 }

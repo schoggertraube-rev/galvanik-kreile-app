@@ -253,8 +253,8 @@ async function resolveAdminAuthorization(): Promise<
         : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." },
     };
   }
-  if (authorization.data.role !== "admin") {
-    return { ok: false, result: { code: "FORBIDDEN", message: "Mehrarbeit-Stammdaten dürfen nur Admins ändern." } };
+  if (!["meister", "admin", "developer"].includes(authorization.data.role)) {
+    return { ok: false, result: { code: "FORBIDDEN", message: "Mehrarbeit-Stammdaten dürfen mit dieser Rolle nicht geändert werden." } };
   }
   return { ok: true, data: authorization as Awaited<ReturnType<typeof resolveAuthorization>> & { ok: true } };
 }

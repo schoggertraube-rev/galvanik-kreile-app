@@ -22,6 +22,7 @@ vi.mock("@/app/actions/settings.actions", () => ({
   saveCompanySettingsAction: vi.fn(),
   saveManagedUserAction: vi.fn(),
 }));
+vi.mock("@/app/actions/orders.actions", () => ({ setExtraWorkHourlyRateAction: vi.fn() }));
 
 import { SettingsAppAdapter } from "../SettingsAppAdapter";
 
@@ -45,13 +46,14 @@ describe("Gregor system administration composition", () => {
     ports.resolveAuthorization.mockResolvedValue(
       authorizationFor("admin"),
     );
-    ports.readSettings.mockResolvedValue({ code:"OK", snapshot:{ company:{companyName:"Galvanik Kreile",street:"Testweg 1",zip:"12345",city:"Berlin",country:"Deutschland",taxId:"DE123456789",iban:"DE001234",bic:"TESTDEFF",bankName:"Testbank",paymentTermDays:14,logoUrl:"/logo.png"}, users:[], numberRanges:[], features:[{id:"S01",enabled:true},{id:"Z01",enabled:false}] }, services:[] });
+    ports.readSettings.mockResolvedValue({ code:"OK", snapshot:{ company:{companyName:"Galvanik Kreile",street:"Testweg 1",zip:"12345",city:"Berlin",country:"Deutschland",taxId:"DE123456789",iban:"DE001234",bic:"TESTDEFF",bankName:"Testbank",paymentTermDays:14,logoUrl:"/logo.png"}, extraWorkHourlyRate:{rateId:null,hourlyRateCents:null,version:0}, users:[], numberRanges:[], features:[{id:"S01",enabled:true},{id:"Z01",enabled:false}] }, services:[] });
   });
 
   it("renders settings for an admin role", async () => {
     render(await SettingsAppAdapter());
     expect(screen.getByTestId("gregor-system-admin")).toHaveTextContent("Firmendaten, Leistungen und bestehende Zugänge");
     expect(screen.getByRole("button", { name:"Firmendaten" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Stundensatz Mehrarbeit (€/h)")).toBeInTheDocument();
   });
 
   it.each(["meister", "developer"] as const)("renders settings for the %s role", async (role) => {

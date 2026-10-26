@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { OrderCardView, type OrderCardActionPorts, type OrderCardModel } from "../public";
 
@@ -65,6 +65,16 @@ describe("Orders V8 one-surface truth", () => {
     fireEvent.change(reason, { target: { value: "Material verspätet" } });
     fireEvent.submit(screen.getByRole("button", { name: "Termin mit Grund speichern" }).closest("form")!);
     expect(onChangeDueDate).toHaveBeenCalledWith("2026-09-24", "Material verspätet");
+  });
+
+  it("requires an explicit payment method before confirming money received", async () => {
+    const onConfirmPayment = vi.fn();
+    render(<OrderCardView actions={{ ...actions, payment: { visible: true, enabled: true, reason: null }, onConfirmPayment }} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{ kind: "data", card }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Zahlung bestätigen" }));
+    expect(screen.getByRole("dialog", { name: "Zahlart wählen und bestätigen" })).toBeInTheDocument();
+    expect(onConfirmPayment).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Barzahlung bestätigen" }));
+    await waitFor(() => expect(onConfirmPayment).toHaveBeenCalledWith("bar"));
   });
 
   it.each(["denied", "error", "conflict"] as const)("keeps %s fail-closed", (kind) => {

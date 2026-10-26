@@ -13,6 +13,7 @@ export type ManagedUser = { id: string; email: string; fullName: string; role: s
 export type UpdateManagedUserInput = { userId: string; role: "admin" | "meister" | "buero" | "werkstatt"; active: boolean; pin: string | null };
 export type SystemSettingsSnapshot = {
   company: CompanySettingsInput;
+  extraWorkHourlyRate: { rateId: string | null; hourlyRateCents: number | null; version: number };
   users: ManagedUser[];
   numberRanges: Array<{ label: string; pattern: string }>;
   features: import("./featureCatalog").SalesStageFeature[];

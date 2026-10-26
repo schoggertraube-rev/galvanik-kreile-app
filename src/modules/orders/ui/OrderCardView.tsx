@@ -1,5 +1,5 @@
 "use client";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   CalendarClock,
@@ -100,6 +100,7 @@ export function OrderCardView({
   onOpenCustomer: (id: string) => void;
   onClose: () => void;
 }) {
+  const [paymentOpen, setPaymentOpen] = useState(false);
   if (state.kind === "loading")
     return (
       <article className={styles.cardState} aria-busy="true">
@@ -136,7 +137,7 @@ export function OrderCardView({
     if (station === "galvanik" && actions.handoff.visible && actions.handoff.enabled) return void actions.onHandoff();
     if (station === "fertig" && actions.freeze.visible && actions.freeze.enabled) return void actions.onFreeze();
     if (station === "zahlung" && actions.invoice.visible && actions.invoice.enabled) return void actions.onIssueInvoice();
-    if (station === "zahlung" && actions.payment.visible && actions.payment.enabled) return void actions.onConfirmPayment("ueberweisung");
+    if (station === "zahlung" && actions.payment.visible && actions.payment.enabled) return setPaymentOpen(true);
     if (station === "abgeholt" && actions.goodsOut.visible && actions.goodsOut.enabled) return void actions.onRecordGoodsOut("abholung");
   };
   const realActions = [
@@ -147,6 +148,10 @@ export function OrderCardView({
     actions.payment.visible,
     actions.goodsOut.visible,
   ].filter(Boolean).length;
+  const confirmPayment = async (method: "bar" | "ueberweisung" | "karte") => {
+    await actions.onConfirmPayment(method);
+    setPaymentOpen(false);
+  };
   return (
     <article className={styles.orderCardV8} data-testid="order-card-v8">
       <header className={styles.cardHeader}>
@@ -436,6 +441,19 @@ export function OrderCardView({
           </section>
         ) : null}
       </div>
+      {paymentOpen ? (
+        <div className={styles.paymentOverlay} onMouseDown={(event) => { if (event.target === event.currentTarget) setPaymentOpen(false); }}>
+          <section className={styles.paymentDialog} role="dialog" aria-modal="true" aria-labelledby="payment-dialog-title">
+            <header><div><small>Zahlungseingang</small><h2 id="payment-dialog-title">Zahlart wählen und bestätigen</h2></div><button type="button" aria-label="Zahlung schließen" onClick={() => setPaymentOpen(false)}><X /></button></header>
+            <p>Erst die tatsächlich erhaltene Zahlart wählen. Danach wird der Geldeingang verbindlich gespeichert.</p>
+            <div>
+              <button type="button" onClick={() => void confirmPayment("bar")}>Barzahlung bestätigen</button>
+              <button type="button" onClick={() => void confirmPayment("ueberweisung")}>Überweisung bestätigen</button>
+              <button type="button" onClick={() => void confirmPayment("karte")}>Kartenzahlung bestätigen</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
       {realActions > 0 ? (
         <footer className={styles.actionDock} aria-label="Auftragsaktionen">
           {actions.handoff.visible ? (
@@ -470,7 +488,7 @@ export function OrderCardView({
               label="Zahlung bestätigen"
               enabled={actions.payment.enabled}
               reason={actions.payment.reason}
-              onClick={() => void actions.onConfirmPayment("ueberweisung")}
+              onClick={() => setPaymentOpen(true)}
               icon={WalletCards}
             />
           ) : null}
