@@ -21,7 +21,7 @@ import type {
 } from "../server/types";
 import styles from "./orders.module.css";
 
-const STATIONS = ["angenommen", "galvanik", "fertig", "abgeholt"] as const;
+const STATIONS = ["angenommen", "galvanik", "fertig", "zahlung", "abgeholt"] as const;
 function money(cents: number | null) {
   return cents === null
     ? null
@@ -40,6 +40,18 @@ function dueLabel(value: string | null) {
         year: "numeric",
       })
     : "Termin nicht lesbar";
+}
+function dueStatus(value: string | null) {
+  if (!value) return { relative: "Kein Termin belegt", overdue: false };
+  const target = new Date(`${value.slice(0, 10)}T12:00:00`);
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  if (!Number.isFinite(target.getTime())) return { relative: "Termin nicht lesbar", overdue: false };
+  const days = Math.round((target.getTime() - today.getTime()) / 86_400_000);
+  if (days < 0) return { relative: `${Math.abs(days)} ${Math.abs(days) === 1 ? "Tag" : "Tage"} überfällig`, overdue: true };
+  if (days === 0) return { relative: "Heute fällig", overdue: false };
+  if (days === 1) return { relative: "Morgen fällig", overdue: false };
+  return { relative: `In ${days} Tagen`, overdue: false };
 }
 function nextStep(card: OrderCardModel, actions: OrderCardActionPorts) {
   if (actions.handoff.visible) return "Übergabe an die Galvanik";
@@ -117,11 +129,16 @@ export function OrderCardView({
       </article>
     );
   const card = state.card;
-  const current = Math.max(
-    0,
-    STATIONS.indexOf(card.station as (typeof STATIONS)[number]),
-  );
   const payment = card.payment.kind === "available" ? card.payment.value : null;
+  const current = card.station === "abgeholt" ? 4 : payment?.status === "bezahlt" ? 3 : Math.max(0, STATIONS.indexOf(card.station as (typeof STATIONS)[number]));
+  const deadline = dueStatus(card.dueAt);
+  const advanceFromChain = (station: (typeof STATIONS)[number]) => {
+    if (station === "galvanik" && actions.handoff.visible && actions.handoff.enabled) return void actions.onHandoff();
+    if (station === "fertig" && actions.freeze.visible && actions.freeze.enabled) return void actions.onFreeze();
+    if (station === "zahlung" && actions.invoice.visible && actions.invoice.enabled) return void actions.onIssueInvoice();
+    if (station === "zahlung" && actions.payment.visible && actions.payment.enabled) return void actions.onConfirmPayment("ueberweisung");
+    if (station === "abgeholt" && actions.goodsOut.visible && actions.goodsOut.enabled) return void actions.onRecordGoodsOut("abholung");
+  };
   const realActions = [
     actions.handoff.visible,
     actions.evidence.visible,
@@ -145,9 +162,10 @@ export function OrderCardView({
             <ChevronRight />
           </button>
         </div>
-        <div className={styles.due}>
+        <div className={styles.due} data-overdue={deadline.overdue}>
           <small>Liefertermin</small>
-          <strong>{dueLabel(card.dueAt)}</strong>
+          <strong>{deadline.relative}</strong>
+          <small>{dueLabel(card.dueAt)}</small>
           <span data-station={card.station}>{card.station}</span>
         </div>
         <button
@@ -172,8 +190,10 @@ export function OrderCardView({
                 data-done={index <= current}
                 data-current={index === current}
               >
-                <span>{index < current ? <Check /> : index + 1}</span>
-                <b>{station}</b>
+                <button type="button" onClick={() => advanceFromChain(station)} disabled={index !== current + 1} aria-label={`${station} als nächsten Schritt ausführen`}>
+                  <span>{index < current ? <Check /> : index + 1}</span>
+                  <b>{station === "abgeholt" ? "abgeholt / verschickt" : station}</b>
+                </button>
               </li>
             ))}
           </ol>

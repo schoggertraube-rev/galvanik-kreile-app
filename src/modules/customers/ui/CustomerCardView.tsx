@@ -7,6 +7,7 @@ import {
   CalendarClock,
   MapPin,
   Phone,
+  Plus,
   UserRound,
   X,
 } from "lucide-react";
@@ -24,11 +25,13 @@ export function CustomerCardView({
   onOpenOrder,
   onClose,
   onSaveCommercial,
+  onNewOrder,
 }: {
   state: CustomerCardState;
   onOpenOrder: (id: string) => void;
   onClose: () => void;
   onSaveCommercial?: (input: UpdateCustomerCommercialInput) => Promise<{ok:true}|{ok:false;message:string}>;
+  onNewOrder?: () => void;
 }) {
   const [saveMessage, setSaveMessage] = useState("");
   if (state.kind === "loading")
@@ -281,6 +284,7 @@ export function CustomerCardView({
         ) : null}
       </div>
       <footer className={styles.quickDock} aria-label="Kundenaktionen">
+        {onNewOrder ? <button type="button" onClick={onNewOrder}><Plus />Neuer Auftrag</button> : null}
         <a
           href={card.phone ? `tel:${card.phone}` : undefined}
           aria-disabled={!card.phone}

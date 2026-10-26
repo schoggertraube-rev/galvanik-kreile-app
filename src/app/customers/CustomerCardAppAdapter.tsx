@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getCustomerSummaryAction, updateCustomerCommercialAction } from "@/app/actions/customers.actions";
 import { CustomerCardView, type CustomerCardModel, type CustomerCardState, type UpdateCustomerCommercialInput } from "@/modules/customers/public";
 import { useOverlayStore } from "@/lib/overlayStore";
+import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 
 type CustomerSummaryData = Extract<Awaited<ReturnType<typeof getCustomerSummaryAction>>, { code: "OK" }>["data"];
 function toCard(c: CustomerSummaryData): CustomerCardModel {
@@ -32,5 +33,5 @@ export function CustomerCardAppAdapter({customerId,onOpenOrder,onClose,fallbackH
     setState({kind:"data",card:toCard(result.customer)}); return {ok:true as const};
   };
   const close=onClose??(fallbackHref?()=>router.replace(fallbackHref):storeClose);
-  return <CustomerCardView state={state} onOpenOrder={onOpenOrder??storeOrder} onClose={close} onSaveCommercial={save}/>;
+  return <CustomerCardView state={state} onOpenOrder={onOpenOrder??storeOrder} onClose={close} onSaveCommercial={save} onNewOrder={() => { close(); requestGlobalCreate("DIRECT_INTAKE"); }}/>;
 }
