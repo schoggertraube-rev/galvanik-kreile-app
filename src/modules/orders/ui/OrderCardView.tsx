@@ -2,6 +2,7 @@
 import type { ReactNode } from "react";
 import {
   ArrowLeft,
+  CalendarClock,
   Check,
   ChevronRight,
   FileText,
@@ -212,6 +213,71 @@ export function OrderCardView({
           <p>
             Auftragsversion {card.version} · Zustand {card.status}
           </p>
+        </section>
+        <section className={styles.dueHistory} aria-labelledby="due-history-title">
+          <div className={styles.sectionTitle}>
+            <p>Termintreue</p>
+            <h2 id="due-history-title">Liefertermin und Verlauf</h2>
+          </div>
+          {actions.dueDate.visible ? (
+            <form
+              className={styles.dueEditor}
+              onSubmit={(event) => {
+                event.preventDefault();
+                const form = new FormData(event.currentTarget);
+                void actions.onChangeDueDate(
+                  String(form.get("dueDate") ?? ""),
+                  String(form.get("reason") ?? ""),
+                );
+              }}
+            >
+              <label>
+                Neuer Liefertermin
+                <input
+                  type="date"
+                  name="dueDate"
+                  defaultValue={card.dueAt?.slice(0, 10) ?? ""}
+                  required
+                />
+              </label>
+              <label>
+                Grund der Änderung
+                <textarea
+                  name="reason"
+                  minLength={3}
+                  maxLength={500}
+                  required
+                  placeholder="Warum ändert sich der zugesagte Termin?"
+                />
+              </label>
+              <button type="submit" disabled={!actions.dueDate.enabled}>
+                <CalendarClock />
+                Termin mit Grund speichern
+              </button>
+              {!actions.dueDate.enabled && actions.dueDate.reason ? (
+                <small>{actions.dueDate.reason}</small>
+              ) : null}
+            </form>
+          ) : null}
+          {card.dueDateChanges.length ? (
+            <ol className={styles.dueChangeList}>
+              {card.dueDateChanges.map((change) => (
+                <li key={change.eventId}>
+                  <CalendarClock />
+                  <span>
+                    <strong>{dueLabel(change.changedTo)}</strong>
+                    <small>{change.reason}</small>
+                  </span>
+                  <span>
+                    <strong>{change.changedBy}</strong>
+                    <small>{new Date(change.changedAt).toLocaleString("de-DE")}</small>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className={styles.truthEmpty}>Noch keine Terminänderung gespeichert.</p>
+          )}
         </section>
         <section className={styles.parts} aria-labelledby="parts-title">
           <div className={styles.sectionTitle}>

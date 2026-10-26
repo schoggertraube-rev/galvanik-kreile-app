@@ -47,6 +47,14 @@ export type LiveOrderCard = {
   intakeAt: string;
   assignment: OrderTaskAssignmentState | null;
   assignmentOptions: OrderTaskAssigneeOption[];
+  dueDateChanges: Array<{
+    eventId: string;
+    changedTo: string;
+    reason: string;
+    changedAt: string;
+    changedBy: string;
+    aggregateVersion: number;
+  }>;
   items: OrderCardItem[];
   freeze: null | {
     freezeId: string;
@@ -188,6 +196,19 @@ type CatalogRow = {
   version: number;
   updated_at: Date | string;
   integrity_ok: boolean;
+};
+
+type DueDateChangeRow = {
+  event_id: string;
+  tenant_id: string;
+  order_id: string;
+  changed_to: string;
+  reason: string;
+  changed_at: Date | string;
+  changed_by: string;
+  actor_id: string;
+  aggregate_version: number;
+  event_schema_version: number;
 };
 
 function validId(value: unknown): value is string {
@@ -354,6 +375,35 @@ function mapAssigneeOption(row: AssigneeOptionRow, tenantId: string): OrderTaskA
   return { userId: row.user_id, fullName: row.full_name, role: row.role };
 }
 
+function mapDueDateChange(row: DueDateChangeRow, tenantId: string, orderId: string) {
+  if (
+    row.tenant_id !== tenantId
+    || row.order_id !== orderId
+    || !UUID_PATTERN.test(row.event_id)
+    || !UUID_PATTERN.test(row.actor_id)
+    || row.event_schema_version !== 1
+    || typeof row.changed_to !== "string"
+    || !/^\d{4}-\d{2}-\d{2}$/.test(row.changed_to)
+    || typeof row.reason !== "string"
+    || row.reason !== row.reason.trim()
+    || row.reason.length < 3
+    || row.reason.length > 500
+    || typeof row.changed_by !== "string"
+    || row.changed_by !== row.changed_by.trim()
+    || row.changed_by.length < 1
+    || !Number.isSafeInteger(row.aggregate_version)
+    || row.aggregate_version < 1
+  ) throw new Error("ORDER_CARD_DUE_DATE_CHANGE_INVALID");
+  return {
+    eventId: row.event_id,
+    changedTo: row.changed_to,
+    reason: row.reason,
+    changedAt: toIso(row.changed_at),
+    changedBy: row.changed_by,
+    aggregateVersion: row.aggregate_version,
+  };
+}
+
 function canView(authorization: AuthorizationSnapshot): boolean {
   return authorization.permissions.includes("perm_view_leitstand");
 }
@@ -441,6 +491,23 @@ export async function readLiveOrderCard(
           `)).map((row) => mapAssigneeOption(row, authorization.tenantId))
         : [];
 
+      const dueDateChanges = (await tx.execute<DueDateChangeRow>(sql`
+        SELECT event.id AS event_id, event.tenant_id, event.order_id,
+               event.payload ->> 'promisedDueDate' AS changed_to,
+               event.notes AS reason, event.created_at AS changed_at,
+               coalesce(nullif(btrim(actor.full_name), ''), event.user_id::text) AS changed_by,
+               event.user_id::text AS actor_id, event.aggregate_version,
+               event.event_schema_version
+        FROM public.events event
+        LEFT JOIN public.app_users actor
+          ON actor.tenant_id = event.tenant_id AND actor.id = event.user_id
+        WHERE event.tenant_id = ${authorization.tenantId}
+          AND event.order_id = ${input.orderId}
+          AND event.event_type = 'ORDER_PROMISED_DUE_DATE_CHANGED_V1'
+        ORDER BY event.created_at DESC, event.id DESC
+        LIMIT 50
+      `)).map((row) => mapDueDateChange(row, authorization.tenantId, queue.id));
+
       const extraRows = await tx.execute<ExtraWorkRow>(sql`
         SELECT tenant_id, order_id, item_id, line_id::text AS line_id,
                catalog_position_id::text AS catalog_position_id,
@@ -515,6 +582,7 @@ export async function readLiveOrderCard(
         intakeAt: toIso(queue.intake_date ?? queue.created_at),
         assignment,
         assignmentOptions,
+        dueDateChanges,
         items,
         freeze: mappedFreeze,
       } satisfies LiveOrderCard;

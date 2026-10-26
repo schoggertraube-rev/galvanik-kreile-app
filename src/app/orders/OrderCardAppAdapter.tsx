@@ -7,6 +7,7 @@ import {
 } from "@/app/actions/invoices.actions";
 import { recordGoodsOutAction } from "@/app/actions/goodsOut.actions";
 import {
+  changeOrderPromisedDueDateAction,
   freezeOrderAction,
   getExtraWorkMasterDataAction,
   getLiveOrderCardAction,
@@ -122,6 +123,7 @@ function mapCard(
     dueAt: card.dueAt,
     intakeAt: card.intakeAt,
     assignedTo: card.assignment?.assignedToName ?? null,
+    dueDateChanges: card.dueDateChanges,
     items: card.items.map((item) => ({
       id: item.id,
       position: item.position,
@@ -245,7 +247,7 @@ export function OrderCardAppAdapter({
   const success = useCallback(
     (
       kind:
-        "handoff" | "evidence" | "freeze" | "invoice" | "payment" | "goods-out",
+        "handoff" | "evidence" | "freeze" | "invoice" | "payment" | "goods-out" | "due-date",
       receipt: {
         actorId: string;
         occurredAt: string;
@@ -259,6 +261,48 @@ export function OrderCardAppAdapter({
     },
     [],
   );
+  const onChangeDueDate = useCallback(async (dueDate: string, reason: string) => {
+    if (!snapshot) return;
+    setFeedback({
+      kind: "submitting",
+      message: "Liefertermin und Grund werden sicher gespeichert.",
+    });
+    const clientEventId = (requests.current.dueDate ??= crypto.randomUUID());
+    const result = await changeOrderPromisedDueDateAction({
+      orderId,
+      expectedVersion: snapshot.card.version,
+      dueDate,
+      reason,
+      clientEventId,
+    });
+    if (result.code !== "OK") {
+      await fail(result);
+      return;
+    }
+    const fresh = await load(true);
+    if (
+      fresh?.card.version !== result.receipt.aggregateVersion
+      || fresh.card.dueAt?.slice(0, 10) !== result.receipt.dueDate
+      || fresh.card.dueDateChanges[0]?.eventId !== result.receipt.eventId
+    ) {
+      setFeedback({
+        kind: "error",
+        message: "Die Terminänderung konnte nicht sicher bestätigt werden. Bitte neu laden.",
+      });
+      return;
+    }
+    delete requests.current.dueDate;
+    success(
+      "due-date",
+      {
+        actorId: result.receipt.actorId,
+        occurredAt: result.receipt.occurredAt,
+        eventId: result.receipt.eventId,
+        receiptId: `due-date://${orderId}/${result.receipt.aggregateVersion}`,
+      },
+      "Liefertermin und Grund wurden gespeichert.",
+    );
+  }, [fail, load, orderId, snapshot, success]);
   const onHandoff = useCallback(async () => {
     if (!snapshot) return;
     setFeedback({
@@ -514,6 +558,7 @@ export function OrderCardAppAdapter({
     const finance = role === "buero" || role === "meister" || role === "admin";
     const goods =
       role === "werkstatt" || role === "meister" || role === "admin";
+    const editDueDate = role === "buero" || role === "meister" || role === "admin";
     const invoiceAfter =
       payment?.mode === "rechnung" &&
       payment.invoiceState === "not_issued" &&
@@ -527,6 +572,11 @@ export function OrderCardAppAdapter({
     const goodsGate =
       payment?.mode === "rechnung" || payment?.payment?.status === "bezahlt";
     return {
+      dueDate: availability(
+        Boolean(card) && card?.station !== "abgeholt",
+        editDueDate,
+        editDueDate ? null : "Ihre Rolle darf den Liefertermin nicht ändern.",
+      ),
       handoff: availability(
         card?.station === "angenommen",
         operate,
@@ -566,6 +616,7 @@ export function OrderCardAppAdapter({
             : null,
       ),
       feedback,
+      onChangeDueDate,
       onHandoff,
       onFreeze,
       onIssueInvoice,
@@ -579,6 +630,7 @@ export function OrderCardAppAdapter({
     feedback,
     load,
     onConfirmPayment,
+    onChangeDueDate,
     onFreeze,
     onHandoff,
     onIssueInvoice,

@@ -50,7 +50,7 @@ export type OrderCardPaymentContext =
   | { kind: "available"; value: OrderCardPayment }
   | { kind: "restricted" | "unavailable"; message: string };
 export type OrderCardActionReceipt = {
-  kind: "handoff" | "evidence" | "freeze" | "invoice" | "payment" | "goods-out";
+  kind: "handoff" | "evidence" | "freeze" | "invoice" | "payment" | "goods-out" | "due-date";
   actorId: string;
   occurredAt: string;
   eventId: string;
@@ -66,6 +66,7 @@ export type OrderCardActionAvailability = {
   reason: string | null;
 };
 export type OrderCardActionPorts = {
+  dueDate: OrderCardActionAvailability;
   handoff: OrderCardActionAvailability;
   evidence: OrderCardActionAvailability;
   freeze: OrderCardActionAvailability;
@@ -73,6 +74,7 @@ export type OrderCardActionPorts = {
   payment: OrderCardActionAvailability;
   goodsOut: OrderCardActionAvailability;
   feedback: OrderCardActionFeedback;
+  onChangeDueDate: (dueDate: string, reason: string) => void | Promise<void>;
   onHandoff: () => void | Promise<void>;
   onFreeze: () => void | Promise<void>;
   onIssueInvoice: () => void | Promise<void>;
@@ -95,6 +97,14 @@ export type OrderCardModel = {
   dueAt: string | null;
   intakeAt: string;
   assignedTo: string | null;
+  dueDateChanges: Array<{
+    eventId: string;
+    changedTo: string;
+    reason: string;
+    changedAt: string;
+    changedBy: string;
+    aggregateVersion: number;
+  }>;
   items: OrderCardItem[];
   evidence: OrderCardEvidence[];
   frozenAt: string | null;

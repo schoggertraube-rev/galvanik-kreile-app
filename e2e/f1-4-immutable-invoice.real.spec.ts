@@ -122,8 +122,13 @@ async function screenshot(page: Page, filename: string) {
 // Erzeugt bewusst keine zusaetzlichen Screenshots oder Dateien.
 async function expectRealInvoiceEmptyState(page: Page) {
   await openRoute(page, "/buchhaltung/rechnungen");
+  const invoicePage = page.getByTestId("immutable-invoice-page");
+  await expectExactlyOneVisible(invoicePage, { timeout: 30_000 });
   const emptyState = page.getByTestId("invoice-empty-state");
-  await expectExactlyOneVisible(emptyState, { timeout: 30_000 });
+  if (await emptyState.count() !== 1) {
+    throw new Error(`F1_4_INVOICE_EMPTY_STATE_MISSING:${(await invoicePage.innerText({ timeout: 5_000 })).trim()}`);
+  }
+  await expectExactlyOneVisible(emptyState);
   await expectExactlyOneVisible(
     emptyState.getByRole("heading", { name: "Noch keine Rechnungen ausgestellt", exact: true }),
   );
@@ -211,15 +216,19 @@ async function createIntakeThroughRealUi(page: Page, suffix: string, catalogServ
   await fillExactlyOne(intake.getByLabel("Ort", { exact: true }), "Stuttgart");
   await fillExactlyOne(intake.getByLabel("Terminwunsch", { exact: true }), "2026-09-30");
   await fillExactlyOne(intake.getByLabel("Zugesagter Termin", { exact: true }), "2026-09-30");
-  const catalogSelect = intake.getByLabel("Leistung", { exact: true });
-  await catalogSelect.evaluate((node) => {
-    const select = node as HTMLSelectElement;
-    const option = select.options.item(1);
-    if (!option) throw new Error("F1_4_CATALOG_OPTION_MISSING");
-    select.value = option.value;
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-  await expect(catalogSelect).toHaveValue(catalogServiceId);
+  const catalogSelect = intake.locator("label").filter({ hasText: /^Leistung/ }).locator("select");
+  await expectExactlyOneVisible(catalogSelect);
+  const catalogOption = catalogSelect.locator(`option[value="${catalogServiceId}"]`);
+  try {
+    await expect(catalogOption).toHaveCount(1, { timeout: 30_000 });
+  } catch {
+    const optionValues = await catalogSelect.locator("option").evaluateAll((options) => (
+      options.map((option) => (option as HTMLOptionElement).value)
+    ));
+    throw new Error(`F1_4_CATALOG_OPTION_MISSING:${catalogServiceId}:${optionValues.join(",")}:${(await intake.innerText({ timeout: 5_000 })).trim()}`);
+  }
+  await catalogSelect.selectOption(catalogServiceId, { timeout: 10_000 });
+  await expect(catalogSelect).toHaveValue(catalogServiceId, { timeout: 10_000 });
   await fillExactlyOne(intake.getByLabel("Menge", { exact: true }), "2");
   await fillExactlyOne(intake.getByLabel("Material", { exact: true }), "Stahl");
   await fillExactlyOne(intake.getByLabel("Hinweis", { exact: true }), "F1.4 unveränderliche Rechnung");
@@ -230,7 +239,7 @@ async function createIntakeThroughRealUi(page: Page, suffix: string, catalogServ
   const receiptText = (await receiptHeading.textContent())?.trim() ?? "";
   const match = /^Auftrag (A-\d{4}-\d+) angelegt$/.exec(receiptText);
   if (!match) throw new Error(`F1_4_INTAKE_RECEIPT_INVALID:${receiptText}`);
-  await page.keyboard.press("Escape");
+  await clickExactlyOne(intake.getByRole("button", { name: "Anlegen schließen", exact: true }));
   await expect(intake).toHaveCount(0);
   return match[1];
 }
@@ -420,7 +429,7 @@ test.describe("F1.4 unveränderliche Rechnung – realer Abnahmepfad", () => {
       }[]>`
         SELECT c.street, c.zip_code, c.city, c.country, c.payment_preference,
                i.catalog_service_id, i.preis_netto::text, i.vat_rate_basis_points,
-               o.promised_due_date::text
+               o.promised_due_date::date::text
         FROM public.orders o
         JOIN public.customers c ON c.id = o.customer_id AND c.tenant_id = o.tenant_id
         JOIN public.items i ON i.order_id = o.id AND i.tenant_id = o.tenant_id

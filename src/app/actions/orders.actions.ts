@@ -39,6 +39,10 @@ import type {
   OrderTaskAssignmentResult,
 } from "@/lib/server/commands/orderTaskAssignmentCommand";
 import type {
+  ChangeOrderPromisedDueDateInput,
+  ChangeOrderPromisedDueDateResult,
+} from "@/lib/server/commands/orderPromiseCommand";
+import type {
   ExtraWorkMasterData,
   LiveOrderCard,
   OrderCardReadResult,
@@ -100,6 +104,15 @@ export async function handBackOrderTaskAction(
     "@/lib/server/commands/orderTaskAssignmentCommand"
   );
   return handBackOrderTask(input);
+}
+
+export async function changeOrderPromisedDueDateAction(
+  input: ChangeOrderPromisedDueDateInput,
+): Promise<ChangeOrderPromisedDueDateResult> {
+  const { changeOrderPromisedDueDate } = await import(
+    "@/lib/server/commands/orderPromiseCommand"
+  );
+  return changeOrderPromisedDueDate(input);
 }
 
 export async function configureExtraWorkCatalogPositionAction(

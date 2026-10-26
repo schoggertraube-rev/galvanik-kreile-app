@@ -145,6 +145,7 @@
 }
 .lifecycle,
 .next,
+.dueHistory,
 .parts,
 .detailGrid > section {
   padding: 18px;
@@ -259,6 +260,92 @@
   margin: 0;
   color: #5c6372;
   font-size: 11px;
+}
+.dueEditor {
+  display: grid;
+  grid-template-columns: minmax(180px, .7fr) minmax(260px, 1.3fr) auto;
+  gap: var(--space-3);
+  align-items: end;
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  border: 1px solid var(--neutral-gray-100);
+  border-radius: var(--radius-md);
+  background: var(--bg-app-soft);
+}
+.dueEditor label {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--navy-700);
+  font-size: 11px;
+  font-weight: 800;
+}
+.dueEditor input,
+.dueEditor textarea {
+  min-height: 48px;
+  border: 1px solid var(--neutral-gray-300);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  padding: 10px;
+}
+.dueEditor textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+.dueEditor button {
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--navy-900);
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  background: var(--navy-900);
+  color: var(--surface-card);
+  font-weight: 750;
+}
+.dueEditor button:disabled {
+  opacity: .55;
+}
+.dueEditor button svg {
+  width: 18px;
+}
+.dueEditor > small {
+  grid-column: 1 / -1;
+  color: var(--danger-red);
+}
+.dueChangeList {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.dueChangeList li {
+  min-height: 58px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--neutral-gray-100);
+  border-radius: var(--radius-sm);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  background: var(--surface-card);
+}
+.dueChangeList li > svg {
+  width: 18px;
+  color: var(--gold-600);
+}
+.dueChangeList li > span {
+  display: grid;
+  gap: 2px;
+}
+.dueChangeList li > span:last-child {
+  text-align: right;
+}
+.dueChangeList small {
+  color: var(--text-muted);
+  font-size: 10px;
 }
 .parts > ol {
   display: grid;
@@ -460,6 +547,16 @@
   }
   .detailGrid {
     grid-template-columns: 1fr;
+  }
+  .dueEditor {
+    grid-template-columns: 1fr;
+  }
+  .dueChangeList li {
+    grid-template-columns: auto 1fr;
+  }
+  .dueChangeList li > span:last-child {
+    grid-column: 2;
+    text-align: left;
   }
   .cardScroll {
     padding: 12px;
