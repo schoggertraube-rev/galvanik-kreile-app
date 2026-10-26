@@ -18,7 +18,11 @@ export type SearchMatchField =
   | "companyName"
   | "customerNumber"
   | "city"
-  | "customerRecord";
+  | "customerRecord"
+  | "quoteNumber"
+  | "invoiceNumber"
+  | "note"
+  | "position";
 
 export type SearchSource = "Auftragsbestand" | "Kundenstamm" | (string & {});
 

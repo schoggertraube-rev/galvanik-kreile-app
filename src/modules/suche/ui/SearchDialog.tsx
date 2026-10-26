@@ -13,7 +13,7 @@ import {
 } from "../server/types";
 import styles from "./SearchDialog.module.css";
 
-const HIT_LABEL: Record<string, string> = { ORDER: "Auftrag", CUSTOMER: "Kunde" };
+const HIT_LABEL: Record<string, string> = { ORDER: "Auftrag", CUSTOMER: "Kunde", QUOTE: "KV", INVOICE: "Rechnung" };
 
 type PresentedResult = {
   state: SearchDialogState;

@@ -8,6 +8,9 @@ import {
   searchTenant,
   type SearchTenantResult,
 } from "@/modules/suche/public";
+import { listOpenQuotesCommand, type QuoteCommandContext } from "@/modules/quotes/server-public";
+import { readInvoiceSummaries } from "@/lib/server/invoiceRead";
+import { buildSearchProviders } from "./search.providers";
 
 const UNAVAILABLE_MESSAGE = "Die internen Bestände konnten nicht sicher durchsucht werden.";
 const DENIAL_MESSAGE = "Diese Suche ist für die aktuelle Sitzung nicht freigegeben.";
@@ -71,6 +74,19 @@ export async function searchTenantAction(query: string): Promise<SearchTenantRes
         throw error;
       }
     },
+    providers: buildSearchProviders(authorization.data, {
+      readQuotes: () => listOpenQuotesCommand({
+        tenantId: authorization.data.tenantId,
+        userId: authorization.data.userId,
+        capabilities: {
+          canCreateQuote: false,
+          canReadQuote: authorization.data.permissions.includes("perm_view_leitstand"),
+          canUpdateQuote: false,
+          canConvertQuote: false,
+        },
+      } satisfies QuoteCommandContext),
+      readInvoices: () => readInvoiceSummaries(authorization.data),
+    }),
     readTimestamp: () => new Date().toISOString(),
   });
 }

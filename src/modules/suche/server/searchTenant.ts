@@ -113,7 +113,8 @@ const MATCH_LABEL: Record<SearchMatchField, string> = {
   orderNumber: "Auftragsnummer", title: "Auftrag", customerName: "Kunde", task: "Aufgabe",
   part: "Teil", material: "Material", surface: "Oberfläche", dueDate: "Termin",
   name: "Kundenname", companyName: "Firma", customerNumber: "Kundennummer", city: "Ort",
-  customerRecord: "Kundendatensatz",
+  customerRecord: "Kundendatensatz", quoteNumber: "KV-Nummer", invoiceNumber: "Rechnungsnummer",
+  note: "Notiz", position: "Position",
 };
 
 function orderMatchValue(order: SearchOrderDocument, field: SearchMatchField, query: string): string {

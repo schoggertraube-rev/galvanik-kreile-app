@@ -1,11 +1,12 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const ports = vi.hoisted(() => ({ search: vi.fn(), openOrder: vi.fn(), openCustomer: vi.fn() }));
+const ports = vi.hoisted(() => ({ search: vi.fn(), openOrder: vi.fn(), openCustomer: vi.fn(), openInvoice: vi.fn(), push: vi.fn() }));
 
 vi.mock("@/app/actions/search.actions", () => ({ searchTenantAction: ports.search }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: ports.push }) }));
 vi.mock("@/lib/overlayStore", () => ({
-  useOverlayStore: (selector: (state: { openOrder: typeof ports.openOrder; openCustomer: typeof ports.openCustomer }) => unknown) => selector({ openOrder: ports.openOrder, openCustomer: ports.openCustomer }),
+  useOverlayStore: (selector: (state: { openOrder: typeof ports.openOrder; openCustomer: typeof ports.openCustomer; openInvoice: typeof ports.openInvoice }) => unknown) => selector({ openOrder: ports.openOrder, openCustomer: ports.openCustomer, openInvoice: ports.openInvoice }),
 }));
 
 import { GlobalSearch } from "../GlobalSearch";
