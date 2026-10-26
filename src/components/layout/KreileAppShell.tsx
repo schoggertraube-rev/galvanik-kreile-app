@@ -104,8 +104,9 @@ export function KreileAppShell({ children, globalCreate }: { children: React.Rea
   return (
     <>
       <SessionWarningBanner show={sessionInvalid} />
-      <KrApp geraet={device}>
-        <AppShell
+      <div style={{ height: "100dvh" }}>
+        <KrApp geraet={device}>
+          <AppShell
           geraet={device}
           variante={workshop ? "werkstatt" : "buero"}
           aktiv={areaForPath(pathname)}
@@ -128,10 +129,11 @@ export function KreileAppShell({ children, globalCreate }: { children: React.Rea
           onMehrarbeit={() => router.push("/warendurchlauf")}
           onFertigMelden={() => router.push("/warendurchlauf")}
           ebene={overlay}
-        >
-          {children}
-        </AppShell>
-      </KrApp>
+          >
+            {children}
+          </AppShell>
+        </KrApp>
+      </div>
       <EntityOverlayStack />
       {globalCreate}
     </>
