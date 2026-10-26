@@ -198,3 +198,29 @@ export async function getDomainAttachmentOriginal(authorization: AuthorizationSn
     return { code: "UNAVAILABLE" as const, message: "Datei konnte nicht sicher geöffnet werden." };
   }
 }
+
+export async function importDomainAttachmentBytes(authorization: AuthorizationSnapshot, input: {
+  targetType: AttachmentTarget; targetId: string; sourceKey: string; mimeType: AttachmentMime; bytes: Uint8Array;
+}): Promise<DomainAttachmentResult<{ receipt: DomainAttachmentReceipt; replayed: boolean }>> {
+  if (typeof input.sourceKey !== "string" || input.sourceKey.length < 1 || input.sourceKey.length > 4096 || !validMime(input.mimeType)
+    || !(input.bytes instanceof Uint8Array) || input.bytes.byteLength < 1 || input.bytes.byteLength > MAX_FILE_BYTES) {
+    return { code: "VALIDATION_ERROR", message: "Importierte Datei ist ungültig." };
+  }
+  const digest = createHash("sha256").update(input.bytes).digest("hex");
+  const key = createHash("sha256").update(`${authorization.tenantId}:${input.sourceKey}`).digest("hex");
+  const clientRequestId = `${key.slice(0,8)}-${key.slice(8,12)}-5${key.slice(13,16)}-a${key.slice(17,20)}-${key.slice(20,32)}`;
+  const reserved = await reserveDomainAttachment(authorization, {
+    targetType: input.targetType, targetId: input.targetId, clientRequestId, mimeType: input.mimeType,
+    fileBytes: input.bytes.byteLength, contentSha256: digest,
+  });
+  if (reserved.code !== "OK") return reserved;
+  if (reserved.data.receipt.state === "FINALIZED") return { code: "OK", data: { receipt: reserved.data.receipt, replayed: true } };
+  if (!reserved.data.upload) return { code: "UNAVAILABLE", message: "Private Ablage konnte nicht vorbereitet werden." };
+  try {
+    const storage = await import("@/lib/server/domainAttachmentStorage");
+    await storage.storeDomainAttachmentBytes(reserved.data.upload.path, input.bytes, input.mimeType);
+  } catch {
+    return { code: "UNAVAILABLE", message: "Mailanhang konnte nicht privat gespeichert werden." };
+  }
+  return finalizeDomainAttachment(authorization, { attachmentId: reserved.data.receipt.attachmentId, fileBytes: input.bytes.byteLength, contentSha256: digest });
+}

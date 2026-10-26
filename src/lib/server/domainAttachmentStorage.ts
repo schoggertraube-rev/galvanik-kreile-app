@@ -70,3 +70,15 @@ export async function createDomainAttachmentDownloadUrl(path: string, downloadNa
   if (result.error || typeof result.data?.signedUrl !== "string" || !result.data.signedUrl.trim()) fail(result.error, false);
   return { downloadUrl: result.data.signedUrl, expiresInSeconds: 60 as const };
 }
+
+export async function storeDomainAttachmentBytes(path: string, bytes: Uint8Array, mimeType: string) {
+  assertPath(path);
+  if (bytes.byteLength < 1 || bytes.byteLength > MAX_FILE_BYTES) throw new DomainAttachmentStorageError("INVALID");
+  const upload = await createAdminClient().storage.from(BUCKET_ID).upload(path, bytes, { contentType: mimeType, upsert: false });
+  if (upload.error) {
+    const existing = await readStableDomainAttachment(path, { fileBytes: bytes.byteLength, mimeType });
+    if (existing.bytes.byteLength !== bytes.byteLength) throw new DomainAttachmentStorageError("MISMATCH");
+    return;
+  }
+  await readStableDomainAttachment(path, { fileBytes: bytes.byteLength, mimeType });
+}

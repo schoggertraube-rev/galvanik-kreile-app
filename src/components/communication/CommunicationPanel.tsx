@@ -69,7 +69,9 @@ export function CommunicationPanel({ targetType, targetId }: Target) {
     setFeedback("");
     const result = await attachOutlookMailAction({ targetType, targetId, graphMessageId: mail.id });
     setBusyId(null);
-    setFeedback(result.code === "OK" ? "Mail ist am Vorgang abgelegt." : result.message);
+    setFeedback(result.code === "OK"
+      ? ["Mail ist am Vorgang abgelegt.", result.data.attachmentsImported ? `${result.data.attachmentsImported} Anhang/Anhänge wurden privat gespeichert.` : "", result.data.attachmentsSkipped ? `${result.data.attachmentsSkipped} nicht unterstützte/inline Anhänge wurden nicht übernommen.` : "", result.data.attachmentWarning ?? ""].filter(Boolean).join(" ")
+      : result.message);
   };
 
   if (state === "loading") return <section className={styles.panel} aria-busy="true"><Loader2 className={styles.spin} /><span>E-Mail-Verbindung wird geprüft.</span></section>;

@@ -7,18 +7,20 @@ import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {
   listMicrosoftGraphInbox,
   readMicrosoftGraphConfigurationStatus,
+  readMicrosoftGraphAttachments,
   readMicrosoftGraphMessage,
   sendMicrosoftGraphMail,
   type GraphInboxMessage,
   type GraphMailAttachment,
 } from "@/lib/server/microsoftGraph";
+import { importDomainAttachmentBytes } from "@/lib/server/domainAttachment";
 
 type TargetType = "CUSTOMER" | "ORDER";
 type Result<T> = { code: "OK"; data: T } | { code: "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_ERROR" | "CONFLICT" | "IN_KLAERUNG" | "UNAVAILABLE"; message: string };
 type Target = { customerId: string; orderId: string | null; email: string; label: string };
 type ThreadRow = { id: string; customer_id: string | null; order_id: string | null; status: string | null; created_at: Date | string | null };
 
-export type CommunicationReceipt = { threadId: string; messageId: string | null; customerId: string; orderId: string | null; recordedAt: string; replayed: boolean };
+export type CommunicationReceipt = { threadId: string; messageId: string | null; customerId: string; orderId: string | null; recordedAt: string; replayed: boolean; attachmentsImported?: number; attachmentsSkipped?: number; attachmentWarning?: string };
 
 function canRead(auth: AuthorizationSnapshot) {
   return auth.permissions.includes("perm_view_customers");
@@ -75,9 +77,11 @@ export async function attachInboxMessage(
   if (!target) return { code: "NOT_FOUND", message: "Kunde oder Auftrag ist nicht verfügbar." };
   const graph = await readMicrosoftGraphMessage(input.graphMessageId);
   if (graph.code !== "OK") return graph;
+  const graphAttachments = graph.data.hasAttachments ? await readMicrosoftGraphAttachments(input.graphMessageId) : { code: "OK" as const, data: { attachments: [], skipped: 0 } };
+  if (graphAttachments.code !== "OK") return graphAttachments;
   const source = `MS_GRAPH_IN:${graph.data.id}`;
   try {
-    return await withPrivilegedTenantTransaction(auth, async (tx) => {
+    const stored = await withPrivilegedTenantTransaction(auth, async (tx) => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${auth.tenantId}:${source}`}, 0))`);
       const existing = await tx.execute<ThreadRow>(sql`
         SELECT id, customer_id, order_id, status, created_at FROM public.communication_threads
@@ -106,6 +110,24 @@ export async function attachInboxMessage(
       if (messages.length !== 1 || messages[0]?.id !== messageId) throw new Error("COMMUNICATION_MESSAGE_INSERT_FAILED");
       return { code: "OK" as const, data: { threadId, messageId, customerId: target.customerId, orderId: target.orderId, recordedAt: iso(threads[0].created_at), replayed: false } };
     });
+    if (stored.code !== "OK") return stored;
+    let imported = 0;
+    for (const attachment of graphAttachments.data.attachments) {
+      const saved = await importDomainAttachmentBytes(auth, {
+        targetType: input.targetType, targetId: input.targetId,
+        sourceKey: `MS_GRAPH:${graph.data.id}:${attachment.id}`,
+        mimeType: attachment.contentType,
+        bytes: attachment.bytes,
+      });
+      if (saved.code === "OK") imported += 1;
+    }
+    const failed = graphAttachments.data.attachments.length - imported;
+    return { code: "OK", data: {
+      ...stored.data,
+      attachmentsImported: imported,
+      attachmentsSkipped: graphAttachments.data.skipped,
+      ...(failed > 0 ? { attachmentWarning: `${failed} unterstützte Mailanhänge konnten nicht sicher gespeichert werden.` } : {}),
+    } };
   } catch {
     return { code: "UNAVAILABLE", message: "Die Mail konnte nicht sicher am Vorgang abgelegt werden." };
   }

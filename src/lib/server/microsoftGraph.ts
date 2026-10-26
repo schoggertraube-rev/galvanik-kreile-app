@@ -40,6 +40,12 @@ export type GraphMailAttachment = {
   contentType: "application/pdf";
   bytes: Uint8Array;
 };
+export type GraphInboxAttachment = {
+  id: string;
+  filename: string;
+  contentType: "application/pdf" | "image/jpeg" | "image/png" | "image/webp";
+  bytes: Uint8Array;
+};
 
 type GraphResult<T> =
   | { code: "OK"; data: T }
@@ -216,5 +222,42 @@ export async function sendMicrosoftGraphMail(
     return { code: "OK", data: { accepted: true } };
   } catch {
     return { code: "UNAVAILABLE", message: "Die E-Mail konnte nicht sicher an Microsoft 365 übergeben werden." };
+  }
+}
+
+export async function readMicrosoftGraphAttachments(
+  messageId: string,
+  env: Environment = process.env,
+  fetchPort: FetchPort = fetch,
+): Promise<GraphResult<{ attachments: GraphInboxAttachment[]; skipped: number }>> {
+  const config = readConfig(env);
+  if (!config) return { code: "IN_KLAERUNG", message: "Microsoft 365 ist noch nicht für die Preview verbunden." };
+  if (!messageId || messageId.length > 1024) return { code: "UNAVAILABLE", message: "Die Mailkennung ist ungültig." };
+  try {
+    const token = await accessToken(config, fetchPort);
+    const response = await graphGetMessage(config, token, `messages/${encodeURIComponent(messageId)}/attachments`, fetchPort);
+    if (!response.ok) throw new Error(`GRAPH_ATTACHMENTS_${response.status}`);
+    const payload = await response.json() as { value?: unknown };
+    if (!Array.isArray(payload.value)) throw new Error("GRAPH_ATTACHMENTS_INVALID");
+    const attachments: GraphInboxAttachment[] = [];
+    let skipped = 0;
+    let total = 0;
+    for (const entry of payload.value.slice(0, 20)) {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) { skipped += 1; continue; }
+      const row = entry as Record<string, unknown>;
+      const contentType = clean(row.contentType, 100);
+      const encoded = typeof row.contentBytes === "string" ? row.contentBytes : "";
+      const allowed = contentType === "application/pdf" || contentType === "image/jpeg" || contentType === "image/png" || contentType === "image/webp";
+      if (row.isInline === true || !allowed || !encoded || typeof row.id !== "string") { skipped += 1; continue; }
+      const bytes = new Uint8Array(Buffer.from(encoded, "base64"));
+      const size = typeof row.size === "number" ? row.size : bytes.byteLength;
+      total += bytes.byteLength;
+      if (bytes.byteLength < 1 || bytes.byteLength > 20 * 1024 * 1024 || total > 40 * 1024 * 1024 || size !== bytes.byteLength) { skipped += 1; continue; }
+      attachments.push({ id: row.id, filename: clean(row.name, 120) || `Mailanhang-${attachments.length + 1}`, contentType, bytes });
+    }
+    skipped += Math.max(0, payload.value.length - 20);
+    return { code: "OK", data: { attachments, skipped } };
+  } catch {
+    return { code: "UNAVAILABLE", message: "Die Mailanhänge sind momentan nicht sicher erreichbar." };
   }
 }

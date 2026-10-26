@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   listMicrosoftGraphInbox,
+  readMicrosoftGraphAttachments,
   readMicrosoftGraphConfigurationStatus,
   sendMicrosoftGraphMail,
 } from "../microsoftGraph";
@@ -50,5 +51,21 @@ describe("Microsoft Graph port", () => {
     expect(result).toEqual({ code: "OK", data: { accepted: true } });
     const request = JSON.parse(String(fetchPort.mock.calls[1]?.[1]?.body));
     expect(request.message.attachments[0]).toMatchObject({ name: "K-2026-0001.pdf", contentType: "application/pdf", contentBytes: "JVBERg==" });
+  });
+
+  it("reads supported non-inline inbox attachments and skips the rest", async () => {
+    const fetchPort = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "a".repeat(30) }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ value: [
+        { id: "a-1", name: "Anfrage.pdf", contentType: "application/pdf", contentBytes: "JVBERg==", size: 4, isInline: false },
+        { id: "a-2", name: "Signatur.png", contentType: "image/png", contentBytes: "AQID", size: 3, isInline: true },
+        { id: "a-3", name: "Dokument.docx", contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", contentBytes: "AQID", size: 3, isInline: false },
+      ] }), { status: 200 }));
+    const result = await readMicrosoftGraphAttachments("message-1", env, fetchPort);
+    expect(result.code).toBe("OK");
+    if (result.code !== "OK") return;
+    expect(result.data.attachments).toHaveLength(1);
+    expect(result.data.attachments[0]).toMatchObject({ id: "a-1", filename: "Anfrage.pdf", contentType: "application/pdf" });
+    expect(result.data.skipped).toBe(2);
   });
 });
