@@ -185,7 +185,7 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
 
   return createPortal(
     <div className={styles.backdrop} data-testid="search-backdrop" onMouseDown={close}>
-      <section aria-labelledby="global-search-title" aria-modal="true" className={styles.dialog} data-state={state} data-testid="search-dialog" onMouseDown={(event) => event.stopPropagation()} role="dialog">
+      <section aria-label="Frag mich :)" aria-modal="true" className={styles.dialog} data-state={state} data-testid="search-dialog" onMouseDown={(event) => event.stopPropagation()} role="dialog">
         <header className={styles.header}>
           <div><p className={styles.eyebrow}>Schnell finden</p><h2 className={styles.title} id="global-search-title">Frag mich :)</h2></div>
           <button aria-label="Suche schließen" className={styles.closeButton} onClick={close} type="button">×</button>

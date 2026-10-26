@@ -18,7 +18,7 @@ describe("W2C GlobalSearch real Lane-0 contract", () => {
     const { rerender } = render(<GlobalSearch onOpenChange={vi.fn()} open={false} />);
     expect(screen.queryByRole("dialog")).toBeNull();
     rerender(<GlobalSearch onOpenChange={vi.fn()} open />);
-    expect(screen.getByRole("dialog", { name: "Kunden und Aufträge" })).toHaveAttribute("aria-modal", "true");
+    expect(screen.getByRole("dialog", { name: "Frag mich :)" })).toHaveAttribute("aria-modal", "true");
     expect(screen.getByTestId("search-backdrop").parentElement).toBe(document.body);
     expect(screen.queryByText("NOT_AVAILABLE")).not.toBeInTheDocument();
     expect(screen.queryByText(/nicht verfügbar/i)).not.toBeInTheDocument();
