@@ -11,7 +11,6 @@ const ROLES = ["admin", "meister", "buero", "werkstatt"] as const;
 export type SystemSettingsContext = { tenantId: string; actorId: string; canManage: boolean };
 type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null };
 type UserRow = { id: string; email: string; full_name: string; role: string; active: boolean };
-type HourlyRateRow = { id: string; hourly_rate_cents: number; version: number };
 
 const EMPTY_COMPANY: CompanySettingsInput = {
   companyName: "", street: "", zip: "", city: "", country: "Deutschland", taxId: "",
@@ -27,13 +26,11 @@ function text(value: unknown, min: number, max: number): string | null {
 export async function readSystemSettings(context: SystemSettingsContext) {
   if (!context.canManage) return { code: "FORBIDDEN" as const, message: "Einstellungen sind nicht erlaubt." };
   try {
-    const snapshot = await withPrivilegedTenantTransaction(context, async (tx): Promise<SystemSettingsSnapshot> => {
+    const snapshot = await withPrivilegedTenantTransaction(context, async (tx): Promise<Omit<SystemSettingsSnapshot, "extraWorkHourlyRate">> => {
       const companies = await tx.execute<CompanyRow>(sql`SELECT company_name, street, zip, city, country, tax_id, iban, bic, bank_name, invoice_payment_term_days, logo_url FROM public.company_settings WHERE tenant_id = ${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
       if (companies.length > 1) throw new Error("COMPANY_SETTINGS_AMBIGUOUS");
       const users = await tx.execute<UserRow>(sql`SELECT id, email, full_name, role, active FROM public.app_users WHERE tenant_id = ${context.tenantId} ORDER BY full_name, id`);
       const featureRows = await tx.execute<TenantFeatureRow>(sql`SELECT feature_id, enabled FROM public.tenant_features WHERE tenant = ${context.tenantId} ORDER BY feature_id`);
-      const rateRows = await tx.execute<HourlyRateRow>(sql`SELECT id::text AS id, hourly_rate_cents, version FROM private.extra_work_hourly_rates WHERE tenant_id = ${context.tenantId} ORDER BY version DESC LIMIT 2`);
-      if (rateRows.length > 1 && rateRows[0]?.version === rateRows[1]?.version) throw new Error("HOURLY_RATE_AMBIGUOUS");
       const company = companies[0];
       return {
         company: company ? {
@@ -42,9 +39,6 @@ export async function readSystemSettings(context: SystemSettingsContext) {
           iban: company.iban ?? "", bic: company.bic ?? "", bankName: company.bank_name ?? "",
           paymentTermDays: company.invoice_payment_term_days ?? 14, logoUrl: company.logo_url ?? "",
         } : EMPTY_COMPANY,
-        extraWorkHourlyRate: rateRows[0]
-          ? { rateId: rateRows[0].id, hourlyRateCents: rateRows[0].hourly_rate_cents, version: rateRows[0].version }
-          : { rateId: null, hourlyRateCents: null, version: 0 },
         users: users.map((user): ManagedUser => ({ id: user.id, email: user.email, fullName: user.full_name, role: user.role, active: user.active })),
         numberRanges: [
           { label: "Kunden", pattern: "K-JJJJ-fortlaufend" },

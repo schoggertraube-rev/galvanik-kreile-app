@@ -29,14 +29,12 @@ describe("system settings port", () => {
         id: "22222222-2222-4222-8222-222222222222", email: "phillip@example.invalid",
         full_name: "Phillip", role: "werkstatt", active: true,
       }])
-      .mockResolvedValueOnce(SALES_STAGE_FEATURES.map((feature) => ({ feature_id: feature.id, enabled: feature.defaultEnabled })))
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce(SALES_STAGE_FEATURES.map((feature) => ({ feature_id: feature.id, enabled: feature.defaultEnabled })));
     const { readSystemSettings } = await import("../server/systemSettingsPort");
     await expect(readSystemSettings(context)).resolves.toMatchObject({
       code: "OK",
       snapshot: {
         company: { companyName: "Galvanik Kreile", paymentTermDays: 14 },
-        extraWorkHourlyRate: { rateId: null, hourlyRateCents: null, version: 0 },
         users: [{ fullName: "Phillip", role: "werkstatt", active: true }],
         features: expect.arrayContaining([{ id: "S01", enabled: true }, { id: "Z01", enabled: false }]),
       },
@@ -47,8 +45,7 @@ describe("system settings port", () => {
     execute
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce(SALES_STAGE_FEATURES.map((feature) => ({ feature_id: feature.id, enabled: feature.defaultEnabled })))
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce(SALES_STAGE_FEATURES.map((feature) => ({ feature_id: feature.id, enabled: feature.defaultEnabled })));
     const { readSystemSettings } = await import("../server/systemSettingsPort");
     await expect(readSystemSettings(context)).resolves.toMatchObject({
       code: "OK",

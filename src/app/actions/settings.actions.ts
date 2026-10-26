@@ -20,13 +20,15 @@ export async function readSettingsAction() {
   noStore();
   const context = await adminContext();
   if (!context) return { code: "FORBIDDEN" as const, message: "Einstellungen sind mit dieser Rolle nicht verfügbar." };
-  const [settings, catalog] = await Promise.all([
+  const [settings, catalog, hourlyRate] = await Promise.all([
     readSystemSettings(context),
     listCatalogServices({ tenantId: context.tenantId, canRead: true, canManage: true }, true),
+    import("@/lib/server/commands/extraWorkAdminCommand").then(({ readExtraWorkHourlyRate }) => readExtraWorkHourlyRate()),
   ]);
   if (settings.code !== "OK") return settings;
   if (catalog.code !== "OK") return catalog;
-  return { code: "OK" as const, snapshot: settings.snapshot, services: catalog.services };
+  if (hourlyRate.code !== "OK") return hourlyRate;
+  return { code: "OK" as const, snapshot: { ...settings.snapshot, extraWorkHourlyRate: hourlyRate.rate }, services: catalog.services };
 }
 
 export async function readSalesStageFeaturesAction() {
