@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "../../docs/project/linie/ui/designsystem_v1_1/tokens.css";
+@import "../../docs/project/linie/ui/designsystem_v1_1/komponenten.css";
 @import "../styles/tokens.css";
 @import "../styles/ci-tokens.css";
 @import "tw-animate-css";

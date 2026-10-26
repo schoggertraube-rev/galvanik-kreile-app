@@ -149,7 +149,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  background: repeating-linear-gradient(135deg, transparent 0 9px, var(--bg-app-soft) 9px 18px);
+  background: var(--flaeche);
   color: var(--text-muted);
   pointer-events: none;
 }
