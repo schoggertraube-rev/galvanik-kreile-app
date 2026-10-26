@@ -14,11 +14,7 @@ export async function SettingsAppAdapter() {
     if (result.reason === "NO_SESSION" || result.reason === "INVALID_SESSION") {
       redirect("/start");
     }
-    return (
-      <ProductActorAccessUnavailable
-        supportReference={result.supportReference}
-      />
-    );
+    return <ProductActorAccessUnavailable />;
   }
 
   if (!SETTINGS_ROLES.has(result.data.role)) redirect("/");

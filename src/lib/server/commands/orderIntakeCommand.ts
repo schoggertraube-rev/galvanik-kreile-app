@@ -8,10 +8,9 @@ import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 
 const EVENT_TYPE = "ORDER_INTAKE_CREATED_V1";
 const EVENT_SCHEMA_VERSION = 1 as const;
-const STATION = "wareneingang" as const;
+const STATION = "angenommen" as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export type OrderIntakeItemInput = {
   catalogServiceId?: string;
@@ -27,19 +26,10 @@ export type OrderIntakeItemInput = {
 export type OrderIntakeCustomerInput =
   | { mode: "EXISTING"; customerId: string }
   | {
-      mode: "NEW";
-      name: string;
-      customerType: "business" | "privat" | "institution";
-      companyName: string | null;
-      contactPerson: string | null;
-      email: string | null;
-      phone: string | null;
-      street?: string;
-      zipCode?: string;
-      city: string | null;
-      country?: string;
-      paymentPreference?: string;
-      vatId?: string | null;
+      mode: "NEW"; name: string; customerType: "business" | "privat" | "institution";
+      companyName: string | null; contactPerson: string | null; email: string | null;
+      phone: string | null; street?: string; zipCode?: string; city: string | null;
+      country?: string; paymentPreference?: string; vatId?: string | null;
     };
 
 export type CreateOrderIntakeInput = {
@@ -85,7 +75,7 @@ export type OrderIntakeCommandResult =
   | { code: "UNAVAILABLE"; message: string };
 
 type NormalizedItem = Required<Omit<OrderIntakeItemInput, "material">> & Pick<OrderIntakeItemInput, "material">;
-type NormalizedCustomer = Extract<OrderIntakeCustomerInput, {mode:"EXISTING"}> | (Extract<OrderIntakeCustomerInput, {mode:"NEW"}> & {street:string;zipCode:string;city:string;country:string;paymentPreference:string;vatId:string|null});
+type NormalizedCustomer = Extract<OrderIntakeCustomerInput, { mode: "EXISTING" }>;
 type NormalizedInput = Omit<CreateOrderIntakeInput, "customer"|"items"> & { customer: NormalizedCustomer; items: NormalizedItem[] };
 
 type ExistingReceiptRow = {
@@ -116,6 +106,15 @@ type CustomerRow = {
   tenant_id: string;
   name: string;
   company_name: string | null;
+  customer_number: string | null;
+  contact_person: string | null;
+  email: string | null;
+  phone: string | null;
+  street: string | null;
+  zip_code: string | null;
+  city: string | null;
+  country: string | null;
+  payment_preference: string | null;
 };
 
 type CountRow = { next_number: number | string; current_year: number | string };
@@ -189,51 +188,10 @@ function normalizeInput(input: unknown): NormalizedInput | null {
     });
   }
 
-  if (!plainObject(input.customer) || typeof input.customer.mode !== "string") return null;
-  let customer: NormalizedCustomer;
-  if (input.customer.mode === "EXISTING") {
-    if (!exactKeys(input.customer, ["customerId", "mode"])) return null;
-    const customerId = normalizedText(input.customer.customerId, 1, 128);
-    if (!customerId) return null;
-    customer = { mode: "EXISTING", customerId };
-  } else if (input.customer.mode === "NEW") {
-    if (!exactKeys(input.customer, [
-      "city", "companyName", "contactPerson", "country", "customerType", "email", "mode", "name",
-      "paymentPreference", "phone", "street", "vatId", "zipCode",
-    ])) return null;
-    const name = normalizedText(input.customer.name, 2, 160);
-    const companyName = normalizedOptionalText(input.customer.companyName, 160, 2);
-    const contactPerson = normalizedOptionalText(input.customer.contactPerson, 160);
-    const email = normalizedOptionalText(input.customer.email, 254);
-    const phone = normalizedOptionalText(input.customer.phone, 80);
-    const street = normalizedText(input.customer.street, 2, 160);
-    const zipCode = normalizedText(input.customer.zipCode, 2, 20);
-    const city = normalizedText(input.customer.city, 1, 120);
-    const country = normalizedText(input.customer.country, 2, 120);
-    const vatId = normalizedOptionalText(input.customer.vatId, 40, 4);
-    if (
-      !name || companyName === undefined || contactPerson === undefined || email === undefined ||
-      phone === undefined || !street || !zipCode || !city || !country || vatId === undefined ||
-      typeof input.customer.paymentPreference !== "string" ||
-      !(/^(?:rechnung_[1-9][0-9]{0,2}|vorkasse|bar)$/.test(input.customer.paymentPreference)) ||
-      !["business", "privat", "institution"].includes(String(input.customer.customerType)) ||
-      (email !== null && !EMAIL_PATTERN.test(email))
-    ) return null;
-    customer = {
-      mode: "NEW",
-      name,
-      customerType: input.customer.customerType as "business" | "privat" | "institution",
-      companyName,
-      contactPerson,
-      email,
-      phone,
-      street, zipCode, city, country,
-      paymentPreference: input.customer.paymentPreference,
-      vatId,
-    };
-  } else {
-    return null;
-  }
+  if (!plainObject(input.customer) || !exactKeys(input.customer, ["customerId", "mode"]) || input.customer.mode !== "EXISTING") return null;
+  const customerId = normalizedText(input.customer.customerId, 1, 128);
+  if (!customerId) return null;
+  const customer: NormalizedCustomer = { mode: "EXISTING", customerId };
 
   return { clientEventId: input.clientEventId, customer, dueDate: input.dueDate, note, items };
 }
@@ -357,33 +315,19 @@ async function readReceipt(
 async function resolveCustomer(
   tx: PrivilegedTenantTransaction,
   tenantId: string,
-  customer: OrderIntakeCustomerInput,
+  customer: NormalizedCustomer,
 ): Promise<CustomerRow | null> {
-  if (customer.mode === "EXISTING") {
-    const rows = await tx.execute<CustomerRow>(sql`
-      SELECT id, tenant_id, name, company_name
-      FROM public.customers
-      WHERE id = ${customer.customerId}
-        AND tenant_id = ${tenantId}
-      FOR SHARE
-    `);
-    return rows.length === 1 && rows[0] ? rows[0] : null;
-  }
-  const id = randomUUID();
   const rows = await tx.execute<CustomerRow>(sql`
-    INSERT INTO public.customers (
-      id, tenant_id, customer_number, name, type, company_name,
-      contact_person, email, phone, street, zip_code, city, country, payment_preference, vat_id,
-      source, source_ref, created_at, updated_at
-    ) VALUES (
-      ${id}, ${tenantId}, NULL, ${customer.name}, ${customer.customerType}, ${customer.companyName},
-      ${customer.contactPerson}, ${customer.email}, ${customer.phone}, ${customer.street}, ${customer.zipCode},
-      ${customer.city}, ${customer.country}, ${customer.paymentPreference}, ${customer.vatId},
-      'F1_ORDER_INTAKE', ${id}, statement_timestamp() AT TIME ZONE 'UTC', statement_timestamp() AT TIME ZONE 'UTC'
-    )
-    RETURNING id, tenant_id, name, company_name
+    SELECT id, tenant_id, customer_number, name, company_name, contact_person, email, phone,
+      street, zip_code, city, country, payment_preference
+    FROM public.customers
+    WHERE id = ${customer.customerId} AND tenant_id = ${tenantId}
+    FOR SHARE
   `);
-  return rows.length === 1 && rows[0] ? rows[0] : null;
+  const row = rows.length === 1 ? rows[0] : null;
+  if (!row || !row.customer_number || !row.contact_person || !row.email || !row.phone || !row.street ||
+    !row.zip_code || !row.city || !row.country || !row.payment_preference) return null;
+  return row;
 }
 
 async function allocateOrderNumber(tx: PrivilegedTenantTransaction): Promise<string> {
@@ -423,10 +367,6 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
   if (!authorization.data.permissions.includes("perm_data_orders")) {
     return { code: "FORBIDDEN", message: "Aufträge dürfen mit dieser Rolle nicht angelegt werden." };
   }
-  if (normalized.customer.mode === "NEW" && !authorization.data.permissions.includes("perm_data_customers")) {
-    return { code: "FORBIDDEN", message: "Neue Kunden dürfen mit dieser Rolle nicht angelegt werden." };
-  }
-
   const expected = {
     tenantId: authorization.data.tenantId,
     actorId: authorization.data.userId,
@@ -461,10 +401,7 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
 
       const customer = await resolveCustomer(tx, expected.tenantId, normalized.customer);
       if (!customer || customer.tenant_id !== expected.tenantId) {
-        if (normalized.customer.mode === "EXISTING") {
-          return { code: "NOT_FOUND", message: "Kunde ist nicht verfügbar." };
-        }
-        throw new Error("ORDER_INTAKE_CUSTOMER_INSERT_FAILED");
+        return { code: "VALIDATION_ERROR", message: "Der Kunde ist für einen Auftrag noch nicht vollständig." };
       }
 
       for (const item of normalized.items) {

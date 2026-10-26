@@ -66,7 +66,7 @@ export type OrderCardActionAvailability = {
   reason: string | null;
 };
 export type OrderCardActionPorts = {
-  dueDate: OrderCardActionAvailability;
+  dueDate?: OrderCardActionAvailability;
   handoff: OrderCardActionAvailability;
   evidence: OrderCardActionAvailability;
   freeze: OrderCardActionAvailability;
@@ -74,7 +74,7 @@ export type OrderCardActionPorts = {
   payment: OrderCardActionAvailability;
   goodsOut: OrderCardActionAvailability;
   feedback: OrderCardActionFeedback;
-  onChangeDueDate: (dueDate: string, reason: string) => void | Promise<void>;
+  onChangeDueDate?: (dueDate: string, reason: string) => void | Promise<void>;
   onHandoff: () => void | Promise<void>;
   onFreeze: () => void | Promise<void>;
   onIssueInvoice: () => void | Promise<void>;
@@ -97,7 +97,7 @@ export type OrderCardModel = {
   dueAt: string | null;
   intakeAt: string;
   assignedTo: string | null;
-  dueDateChanges: Array<{
+  dueDateChanges?: Array<{
     eventId: string;
     changedTo: string;
     reason: string;

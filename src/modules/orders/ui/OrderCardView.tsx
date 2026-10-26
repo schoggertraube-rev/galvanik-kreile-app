@@ -219,13 +219,13 @@ export function OrderCardView({
             <p>Termintreue</p>
             <h2 id="due-history-title">Liefertermin und Verlauf</h2>
           </div>
-          {actions.dueDate.visible ? (
+          {actions.dueDate?.visible && actions.onChangeDueDate ? (
             <form
               className={styles.dueEditor}
               onSubmit={(event) => {
                 event.preventDefault();
                 const form = new FormData(event.currentTarget);
-                void actions.onChangeDueDate(
+                 void actions.onChangeDueDate?.(
                   String(form.get("dueDate") ?? ""),
                   String(form.get("reason") ?? ""),
                 );
@@ -250,16 +250,16 @@ export function OrderCardView({
                   placeholder="Warum ändert sich der zugesagte Termin?"
                 />
               </label>
-              <button type="submit" disabled={!actions.dueDate.enabled}>
+              <button type="submit" disabled={!actions.dueDate?.enabled}>
                 <CalendarClock />
                 Termin mit Grund speichern
               </button>
-              {!actions.dueDate.enabled && actions.dueDate.reason ? (
+              {!actions.dueDate?.enabled && actions.dueDate?.reason ? (
                 <small>{actions.dueDate.reason}</small>
               ) : null}
             </form>
           ) : null}
-          {card.dueDateChanges.length ? (
+          {card.dueDateChanges?.length ? (
             <ol className={styles.dueChangeList}>
               {card.dueDateChanges.map((change) => (
                 <li key={change.eventId}>

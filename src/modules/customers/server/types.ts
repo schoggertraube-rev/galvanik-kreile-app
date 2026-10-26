@@ -63,6 +63,8 @@ export type ReadCustomerCreateReceiptResult =
   | { code: "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_ERROR" | "UNAVAILABLE"; message: string };
 
 export type UpdateCustomerCommercialInput = {
-  clientEventId: string; customerId: string; street: string; zipCode: string; city: string;
-  country: string; paymentPreference: string; vatId: string | null;
+  clientEventId: string; customerId: string; name: string; companyName: string | null;
+  contactPerson: string | null; email: string | null; phone: string | null;
+  street: string; zipCode: string; city: string; country: string;
+  paymentPreference: string; vatId: string | null;
 };

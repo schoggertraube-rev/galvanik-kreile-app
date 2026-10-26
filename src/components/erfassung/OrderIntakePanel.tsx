@@ -103,7 +103,7 @@ function receiptMatchesSubmission(
   if (rec.dueDate !== input.dueDate) return false;
   if (rec.note !== input.note) return false;
   if (rec.orderVersion !== 1) return false;
-  if (rec.station !== "wareneingang") return false;
+  if (rec.station !== "angenommen") return false;
   if (rec.status !== ORDER_LIFECYCLE_STATUS.ANGENOMMEN) return false;
   if (rec.items.length !== input.items.length) return false;
   return rec.items.every((item, index) => {

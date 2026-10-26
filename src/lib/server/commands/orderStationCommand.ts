@@ -5,7 +5,7 @@ import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 
-const SOURCE_STATION = "wareneingang";
+const SOURCE_STATION = "angenommen";
 const TARGET_STATION = "galvanik";
 const EVENT_TYPE = "ORDER_STATION_MOVED_V1";
 const CORRECTION_EVENT_TYPE = "ORDER_STATION_CORRECTED_V1";
@@ -407,7 +407,7 @@ export async function transitionWareneingangToGalvanik(
           ${updatedOrder.id},
           NULL,
           ${EVENT_TYPE},
-          'Order handed from wareneingang to galvanik',
+          'Order handed from angenommen to galvanik',
           'success',
           ${authorization.data.userId},
           ${TARGET_STATION},

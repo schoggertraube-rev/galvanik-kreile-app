@@ -233,12 +233,21 @@ export function CustomerCardView({
               if (!onSaveCommercial) return;
               void onSaveCommercial({
                 clientEventId: crypto.randomUUID(), customerId: card.id,
+                name: String(form.get("name") ?? ""), companyName: String(form.get("companyName") ?? "").trim() || null,
+                contactPerson: String(form.get("contactPerson") ?? "").trim() || null,
+                email: String(form.get("email") ?? "").trim() || null,
+                phone: String(form.get("phone") ?? "").trim() || null,
                 street: String(form.get("street") ?? ""), zipCode: String(form.get("zipCode") ?? ""),
                 city: String(form.get("city") ?? ""), country: String(form.get("country") ?? ""),
                 paymentPreference: String(form.get("paymentPreference") ?? ""),
                 vatId: String(form.get("vatId") ?? "").trim() || null,
               }).then((result) => setSaveMessage(result.ok ? "Stammdaten gespeichert." : result.message));
             }}>
+              <label>Name / Firma<input name="name" required defaultValue={card.name} /></label>
+              <label>Firmenname<input name="companyName" defaultValue={card.companyName ?? ""} /></label>
+              <label>Ansprechpartner<input name="contactPerson" required defaultValue={card.contactPerson ?? ""} /></label>
+              <label>Telefon<input name="phone" required defaultValue={card.phone ?? ""} /></label>
+              <label>E-Mail<input name="email" type="email" required defaultValue={card.email ?? ""} /></label>
               <label>Straße<input name="street" required defaultValue={card.address ?? ""} /></label>
               <label>PLZ<input name="zipCode" required defaultValue={card.zipCode ?? ""} /></label>
               <label>Ort<input name="city" required defaultValue={card.city ?? ""} /></label>

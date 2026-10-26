@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { logout } from "@/app/actions/auth";
-import { createCustomerAction, getCustomersDb, readCustomerCreateReceiptAction } from "@/app/actions/customers.actions";
+import { createCustomerAction, getCustomersDb, readCustomerCreateReceiptAction, updateCustomerCommercialAction } from "@/app/actions/customers.actions";
 import { convertQuoteToOrderAction, createQuoteAction, listOpenQuotesAction, readQuoteAction, readQuoteCreateReceiptAction, readQuoteConversionReceiptAction, readQuoteUpdateReceiptAction, updateQuoteAction } from "@/app/actions/quotes.actions";
 import { createOrderIntakeAction, getOrderIntakeReceiptAction } from "@/app/warendurchlauf/actions";
 import { getActiveCatalogAction } from "@/app/actions/catalog.actions";
@@ -76,7 +76,17 @@ export function GlobalCreateAppAdapter() {
               id: customer.id,
               customerNumber: customer.customerNumber ?? null,
               name: customer.name,
+              customerType: customer.type === "institution" || customer.type === "Institution" ? "institution" as const : customer.type === "private" || customer.type === "Privatkunde" ? "privat" as const : "business" as const,
+              companyName: customer.companyName ?? null,
+              contactPerson: customer.contactPerson ?? null,
+              email: customer.email ?? null,
+              phone: customer.phone ?? null,
+              street: customer.street ?? "",
+              zipCode: customer.zipCode ?? "",
               city: customer.city ?? null,
+              country: customer.country ?? "",
+              paymentPreference: customer.paymentPreference ?? "rechnung_14",
+              vatId: customer.vatId ?? null,
             })),
           };
         },
@@ -98,6 +108,7 @@ export function GlobalCreateAppAdapter() {
             },
           };
         },
+        updateCustomer: async (input) => updateCustomerCommercialAction(input),
         readCustomerCreateReceipt: async (input: CreateCustomerInput): Promise<GlobalCreateCustomerResult> => {
           const result = await readCustomerCreateReceiptAction(input);
           if (result.code !== "OK") return result;

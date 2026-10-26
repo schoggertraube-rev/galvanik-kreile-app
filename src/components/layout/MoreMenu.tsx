@@ -38,7 +38,7 @@ export function MoreMenu({ open, onClose }: { open: boolean; onClose: () => void
         </header>
         <div className={styles.moreGrid}>
           <button type="button" className={styles.moreTile} onClick={() => { onClose(); requestGlobalCreate("DIRECT_INTAKE"); }}>
-            <Inbox aria-hidden="true" /><strong>Infos rein</strong>
+            <Inbox aria-hidden="true" /><strong>Neuer Eingang</strong>
           </button>
           <Link className={styles.moreTile} href="/warendurchlauf" prefetch={false} onNavigate={onClose}>
             <PackageCheck aria-hidden="true" /><strong>Werkstatt</strong>

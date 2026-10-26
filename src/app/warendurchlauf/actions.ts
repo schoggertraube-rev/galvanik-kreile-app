@@ -68,7 +68,7 @@ export async function getStationReadyOrders(stationId: string): Promise<Warendur
   return { ok: false, error: "NOT_AVAILABLE", message: "NOT_AVAILABLE: Generische Stationslisten sind nicht verfügbar." };
 }
 
-async function getFixedStationOrders(station: "wareneingang" | "galvanik"): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
+async function getFixedStationOrders(station: "angenommen" | "galvanik"): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
   noStore();
   let authorization;
   try {
@@ -96,7 +96,7 @@ async function getFixedStationOrders(station: "wareneingang" | "galvanik"): Prom
 }
 
 export async function getWareneingangOrdersAction(): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
-  return getFixedStationOrders("wareneingang");
+  return getFixedStationOrders("angenommen");
 }
 
 export async function getGalvanikOrdersAction(): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
