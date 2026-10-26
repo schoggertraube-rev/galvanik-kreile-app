@@ -1,65 +1,65 @@
-# Abgabe P2 – erster sichtbarer Stand
+# Abgabe P2 – Tagesstand
 
-Stand: 26.10.2026, 16:52 Uhr (Europe/Berlin)
+Stand: 26.10.2026, 17:28 Uhr (Europe/Berlin)
 
 ## Kandidat
 
 - Branch: `kreile/s1-p2-eingang`
-- Exakter Produkt-SHA: `2256d9b1b7d748c46c861edbb7af7336b6b43dc1`
+- Aktueller Produkt-SHA: `e828459fc4eb255194ddaf89528657f1d60c6f73`
+- Letzter nachweislich fertiger Preview-SHA: `f289c98d978736d3f06e5cf9d6d161b297520e87`
+- Klickbare Preview: <https://galvanik-kreile-werkstatt-bdnyrkhre.vercel.app> (`Ready`, Preview)
+- Aktuelles Deployment für `e828459f`: <https://galvanik-kreile-werkstatt-4lc7lwaoj.vercel.app> (`Building` um 17:28 Uhr; noch kein Erfolgsclaim)
 - Pull Request: <https://github.com/schoggertraube-rev/galvanik-kreile-app/pull/154> (Draft, nicht gemergt)
-- Preview: <https://galvanik-kreile-werkstatt-iij4008sb.vercel.app>
-- Vercel-Deployment: `dpl_6k4gz5WWsFjkhHZ8myWSVdJD9whD`, Status `Ready`, Funktionen in `fra1`
-- Datenbank: Entwicklungsprojekt `syhaigjhsbpjmtnggqka`; Repository und Remote stehen auf Migration `20261026190000_s1_p2_feature_switch.sql`. Kein Reset, keine Löschung und keine Änderung an einer Produktionsdatenbank.
+- Datenbank: Entwicklungsprojekt `syhaigjhsbpjmtnggqka`; Repository und Remote bis Migration `20261026190000_s1_p2_feature_switch.sql`. P2 fügt keine Migration hinzu.
 
 ## Umfang
 
 | ID | Stand | Sichtbar / Nachweis |
 |---|---|---|
-| S04 Stufen-Schalter | gebaut | `/settings` → „Stufen-Schalter“; Stufe 1 standardmäßig an, Stufen 2–4 aus |
-| A08 Anbieter-Register | teilweise | Sichtbarer Sucheinstieg und Strg K in der aktiven Shell; Kunden, Aufträge, offene KVs und Rechnungen sind real angebunden |
-| A07 Angebot/KV | nein | noch kein Katalog-/PDF-/Zuschlagsausbau in P2 |
-| E03 Foto/Dokument | nein | noch nicht an Kunde und Auftrag angebunden |
-| E04 OCR | nein | kein belegter Azure-Zugang; keine simulierte Erkennung |
-| E05 Outlook-Mail rein | nein | kein belegter Graph-Zugang; keine simulierte Mailquelle |
-| R02 Mail raus | nein | kein belegter Graph-Zugang; kein Versandclaim |
+| S04 Stufen-Schalter | gebaut | `/settings` → „Stufen-Schalter“; Stufe 1 an, Stufen 2–4 aus |
+| A07 Angebot/KV | gebaut | Anlegen → KV: echte Katalogleistungen, gespeicherter KV, PDF, Zuschlag mit bestätigtem Liefertermin |
+| E03 Foto/Dokument | gebaut | Kunden- und Auftragskarte: privater Upload, sicherer Download, echte leere/Fehlerzustände |
+| E04 Dokument lesen | gebaut, Zugang offen | Dokument „Auslesen“ → Vorschläge mit Seite, Polygon und Sicherheit; keine Vorauswahl; Übernahme erst nach Auswahl. Ohne Azure-Werte „In Klärung“ |
+| E05 Outlook-Mail rein | gebaut, Zugang offen | Kunden-/Auftragskarte: Outlook-Eingang, Mail am Vorgang ablegen, aus Mail Kunden- oder KV-Dialog öffnen. Ohne Graph-Werte „In Klärung“ |
+| R02 Mail raus | gebaut, Zugang offen | Mail an die beim Kunden gespeicherte Adresse, optional mit echtem KV-PDF; lokale Vorgangskopie erst nach Graph-Annahme. Rechnung/Lieferschein folgen mit deren P4-Dokumenten |
+| A08 Anbieter-Register | gebaut | Kunden, Aufträge, Angebote, Rechnungen, Dokumente, Mails und Termine sind als unabhängige Anbieter registriert |
 
-## Gebaut
+## Neu gemacht
 
-- `public.tenant_features` ist tenantgebunden, per RLS abgesichert und enthält alle IDs des Bauumfangs.
-- Rolf (`meister`), Gregor (`admin`) und `developer` dürfen die Stufen-Schalter rollenbasiert pflegen.
-- Die ausgegrauten V8-Anschlussstellen „Zahlen“ und „Material & Einkauf“ lesen den Schalter fail-closed. Sie bleiben ohne gebaute Zielroute deaktiviert und werden nicht als fertige Funktion ausgegeben.
-- Die Suche besitzt ein validiertes, erweiterbares Anbieter-Register. Fehlerhafte oder ausfallende Anbieter liefern keine Teilwahrheit.
-- Die Suchoberfläche zeigt „Durchsucht: …“ ausschließlich für echte, im jeweiligen Aufruf ausgeführte Quellen. Aktuell sind Kundenstamm, Auftragsbestand, offene Angebote und – rollenabhängig – Rechnungen angebunden.
-- Rolf erreicht `/settings` auch dann, wenn noch keine Firmendatenzeile gespeichert ist. Das Formular zeigt dann einen ehrlichen leeren Entwurf; erst bewusstes Speichern legt den Datensatz an.
-- Der Stundensatz für Mehrarbeit ist in den Firmeneinstellungen pflegbar. Eine Zahlung wird erst nach Auswahl von Bar, Überweisung oder Karte gebucht; das Antippen der Ortskette bucht nicht mehr still als Überweisung.
+- KV-Positionen stammen aus dem aktiven Leistungskatalog; Oberfläche, Einheit und Nettopreis sind daraus schreibgeschützt übernommen.
+- KV-PDF wird aus gespeicherten Firmen-, Kunden- und KV-Daten erzeugt. Ein Zuschlag erzeugt genau einen Auftrag und verlangt einen bestätigten Auftragstermin.
+- Dokumente/Fotos liegen privat im bestehenden `scans`-Bucket. Dateityp, Größe, Signatur und SHA-256 werden vor Finalisierung geprüft.
+- Graph-Zugang nutzt ausschließlich serverseitige Client-Credentials. Ausgehende Mails werden gegen Doppelversand gesperrt; ein unklarer Ausgang wird nicht still wiederholt.
+- Azure-Ergebnisse werden als Vorschläge mit Fundstelle und Konfidenz gespeichert. Kein Vorschlag ist standardmäßig ausgewählt.
+- Die Suche liest Dokumente, lokale Mailkopien und Termine tenantgebunden aus den vorhandenen Tabellen. Die Suchleiste selbst brauchte keine Änderung.
 
-## Abweichungen und offene Belege
+## Abweichungen / nicht geschafft
 
-- P2 ist noch nicht vollständig. A07, E03, E04, E05 und R02 sowie die A08-Anbieter für Dokumente, Mails und Termine sind offen. Der Angebotsanbieter umfasst derzeit den real vorhandenen offenen KV-Bestand.
-- Die Standard-Schalter der Stufe 1 stehen gemäß Owner-Entscheid auf „An“, auch wenn das zugehörige P2–P5-Paket noch nicht abgenommen ist. Ein Schalter allein macht keine Funktion fertig.
-- Der Rolf-Zugang wurde ausschließlich flüchtig im geschützten Browserlauf verwendet und weder im Repository noch in der Abgabe gespeichert.
-- Am exakten SHA wurden gemessen: `/start` bis Rollenauswahl 0,456 s, Rolf-Login bis Rollen-Home 0,992 s, Klick auf Einstellungen bis sichtbare Seite 0,264 s. Alle drei Messungen liegen unter 2 s.
-- Authentifizierte Screenshots für Rollen-Home und Stufen-Schalter in 1914×917, 1220×880 und 390×844, Such-Leerzustand, realen Treffer und geöffnete Zielkarte liegen lokal unter `output/playwright/p2-2256d9b1/rolf/`.
-- Der Rolf-Weg wurde am exakten SHA vollständig geklickt: Login, Einstellungen, R06 aktivieren, R06 deaktivieren, Reload mit R06 = Aus, Strg K, Suche ohne Treffer sowie Suche nach einem vorhandenen Namen mit zwei realen Treffern und geöffneter Auftragskarte. Alle Prüfpunkte sind `PASS`; keine Teständerung blieb aktiv.
-- Der lokale Commit-Hook überschritt das Werkzeugzeitfenster, ohne einen Abschluss auszugeben. Der exakte SHA wurde danach durch GitHub vollständig geprüft.
+- Microsoft Graph und Azure sind im Produkt vollständig fail-closed angebunden, aber am aktuellen Preview-SHA noch nicht mit realen Providerwerten belegt. Daher kein Claim für echten Versand, echten Inbox-Inhalt oder echte OCR-Antwort.
+- Eingehende Graph-Mailanhänge werden im aktuellen Stand nur sichtbar als „Mit Anhang“ markiert; die Binärdateien werden noch nicht in den privaten Ablageort kopiert.
+- R02 unterstützt im P2-Stand das vorhandene KV-PDF. Rechnung und Lieferschein werden erst mit den kanonischen P4-Dokumenten auswählbar.
+- Der vollständige lokale Commit-Hook überschritt sein Werkzeugzeitfenster. Gezielte Tests, TypeScript, Lint und Modulgrenzen sind grün; der Gesamtlauf erfolgt in GitHub CI.
+- Die nicht von Codex stammende Änderung an `_review/DEZEMBER_LISTE.md` blieb ungestaged und unverändert.
 
-## Prüfstand am exakten SHA
+## Prüfung am Produkt-SHA
 
-- Gezielter Prüfstand: 85/85 Tests grün, einschließlich realer Modulgrenzen; TypeScript grün.
-- GitHub `agentur-gate` am exakten Produkt-SHA ist grün; TypeScript, Delivery-Verträge und 1.025/1.025 Unit-Tests bestanden.
-- Vercel: `Ready`; Funktionen in `fra1`.
+- TypeScript: grün.
+- Gezielte Tests: Graph 3/3, Azure 3/3, P2-Suche 33/33 sowie betroffene UI-/Flow-Tests grün.
+- ESLint der geänderten Dateien: grün.
+- `quality:module-gates`: grün.
 - `git diff --check`: grün.
-- Entwicklungsdatenbank: Migrationen lokal/remote identisch bis `20261026190000`.
-- Kein Merge nach `main`, kein Production-Deployment.
+- GitHub `agentur-gate` und Vercel für `e828459f`: um 17:28 Uhr noch laufend.
+- Kein Merge nach `main`, kein Production-Deployment, keine Kostenaktivierung und keine Remote-Datenmutation durch diese P2-Produktcommits.
+- Der Preview-Anmeldecode wurde nur flüchtig verwendet und nirgends gespeichert.
 
 ## Owner-Abnahme (5 Minuten)
 
-1. Preview öffnen und als **Rolf** anmelden – erwartet: Rollen-Home erscheint, `/settings` ist erreichbar.
-2. **Einstellungen → Stufen-Schalter** öffnen – erwartet: Stufe 1 steht auf „An“, Stufen 2–4 auf „Aus“.
-3. Einen Schalter der Stufe 2 kurz aktivieren, speichern und wieder deaktivieren – erwartet: beide Änderungen werden bestätigt und nach Neuladen korrekt gelesen.
-4. Die globale Suche öffnen und nach einem vorhandenen Kunden, Auftrag, offenen KV oder einer Rechnung suchen – erwartet: Treffer öffnen die echte Zielansicht; „Durchsucht“ nennt nur die tatsächlich abgefragten Quellen.
-5. Nach einem unbekannten Begriff suchen – erwartet: ehrlicher Leerzustand, keine erfundenen Treffer und kein Claim zu noch nicht angebundenen Quellen.
+1. Preview als Rolf öffnen, einen Kunden und dessen Kundenkarte wählen – erwartet: „Fotos & Dokumente“ und „E-Mail am Vorgang“ sind sichtbar; fehlende Providerwerte zeigen ehrlich „In Klärung“.
+2. Ein kleines PDF oder Foto hochladen und danach „Öffnen“ wählen – erwartet: privater Upload wird gelistet und über einen kurzlebigen Download geöffnet.
+3. Anlegen → „Auftrag / KV anlegen“, Kunde und Katalogleistung wählen, KV sichern und „KV als PDF“ öffnen – erwartet: echtes PDF mit gespeicherten Daten.
+4. Beim gesicherten KV einen Auftragstermin setzen und Zuschlag bestätigen – erwartet: genau ein Auftrag öffnet sich mit diesem Termin.
+5. Globale Suche öffnen – erwartet: „Durchsucht“ nennt Kunden, Aufträge, Angebote, Rechnungen, Dokumente, Mails und Termine; Treffer öffnen ihren realen Kunden-/Auftragsbezug.
 
 ## Nächster Schritt
 
-A08 erhält als Nächstes den Dokumentanbieter und später die realen Mail-/Termin-Anbieter. Parallel folgen A07 und E03. E04, E05 und R02 werden erst mit belegtem Azure-/Graph-Zugang verbunden; der Bau läuft bis dahin an den unabhängigen P2-Teilen weiter.
+Aktuelles Deployment und CI bis zum exakten SHA belegen, danach E05-Mailanhänge in den privaten Ablageort übernehmen und die realen Preview-Verbindungen für Graph/Azure prüfen. Anschließend P2-Review am eingefrorenen Kandidaten-SHA; kein Merge ohne Owner-Freigabe.
