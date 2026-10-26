@@ -65,8 +65,9 @@ describe("P2 module search providers", () => {
     const providers = buildSearchProviders(authorization, {
       readQuotes: vi.fn().mockResolvedValue({ code: "OK", quotes: [quote] }),
       readInvoices: vi.fn().mockResolvedValue({ code: "OK", data: [invoice] }),
+      readAuxiliary: vi.fn().mockResolvedValue({ documents: [], mails: [], appointments: [], exhaustive: true }),
     });
-    expect(providers.map((provider) => provider.label)).toEqual(["Angebote", "Rechnungen"]);
+    expect(providers.map((provider) => provider.label)).toEqual(["Angebote", "Rechnungen", "Dokumente", "Mails", "Termine"]);
     await expect(providers[0]?.search("KV-2026")).resolves.toMatchObject({ hits: [{ type: "QUOTE", id: quote.quoteId, source: "Angebote" }], exhaustive: true });
     await expect(providers[1]?.search("R-2026")).resolves.toMatchObject({ hits: [{ type: "INVOICE", id: invoice.invoiceId, source: "Rechnungen" }], exhaustive: true });
   });
@@ -76,8 +77,9 @@ describe("P2 module search providers", () => {
     const providers = buildSearchProviders({ ...authorization, role: "werkstatt" }, {
       readQuotes: vi.fn().mockResolvedValue({ code: "UNAVAILABLE", message: "nicht lesbar" }),
       readInvoices,
+      readAuxiliary: vi.fn().mockResolvedValue({ documents: [], mails: [], appointments: [], exhaustive: true }),
     });
-    expect(providers.map((provider) => provider.label)).toEqual(["Angebote"]);
+    expect(providers.map((provider) => provider.label)).toEqual(["Angebote", "Dokumente", "Mails", "Termine"]);
     await expect(providers[0]?.search("KV")).rejects.toThrow("SEARCH_QUOTES_UNAVAILABLE");
     expect(readInvoices).not.toHaveBeenCalled();
   });

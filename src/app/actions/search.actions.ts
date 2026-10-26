@@ -10,6 +10,7 @@ import {
 } from "@/modules/suche/public";
 import { listOpenQuotesCommand, type QuoteCommandContext } from "@/modules/quotes/server-public";
 import { readInvoiceSummaries } from "@/lib/server/invoiceRead";
+import { readAuxiliarySearchRecords } from "@/lib/server/searchAuxiliaryRead";
 import { buildSearchProviders } from "./search.providers";
 
 const UNAVAILABLE_MESSAGE = "Die internen Bestände konnten nicht sicher durchsucht werden.";
@@ -86,6 +87,7 @@ export async function searchTenantAction(query: string): Promise<SearchTenantRes
         },
       } satisfies QuoteCommandContext),
       readInvoices: () => readInvoiceSummaries(authorization.data),
+      readAuxiliary: () => readAuxiliarySearchRecords(authorization.data),
     }),
     readTimestamp: () => new Date().toISOString(),
   });

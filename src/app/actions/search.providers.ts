@@ -4,10 +4,12 @@ import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type { ImmutableInvoiceSummary, ReadInvoiceSummariesResult } from "@/lib/server/invoiceRead";
 import type { ListOpenQuotesResult, QuoteReadback } from "@/modules/quotes/public";
 import type { SearchHit, SearchMatchField, SearchProvider } from "@/modules/suche/public";
+import type { AuxiliarySearchRecords } from "@/lib/server/searchAuxiliaryRead";
 
 type SearchProviderReads = {
   readQuotes: () => Promise<ListOpenQuotesResult>;
   readInvoices: () => Promise<ReadInvoiceSummariesResult>;
+  readAuxiliary: () => Promise<AuxiliarySearchRecords>;
 };
 
 const normalized = (value: string) => value.trim().toLocaleLowerCase("de-DE");
@@ -93,6 +95,40 @@ export function buildSearchProviders(authorization: AuthorizationSnapshot, reads
         if (result.code !== "OK") throw new Error("SEARCH_INVOICES_UNAVAILABLE");
         const lowered = normalized(query);
         return { hits: result.data.map((invoice) => invoiceHit(invoice, lowered)).filter((hit): hit is SearchHit => hit !== null), exhaustive: result.data.length < 250 };
+      },
+    });
+  }
+  if (authorization.permissions.includes("perm_view_leitstand")) {
+    let auxiliaryPromise: Promise<AuxiliarySearchRecords> | null = null;
+    const auxiliary = () => auxiliaryPromise ??= reads.readAuxiliary();
+    providers.push({
+      id: "documents", label: "Dokumente", search: async (query) => {
+        const batch = await auxiliary(); const lowered = normalized(query);
+        return { exhaustive: batch.exhaustive, hits: batch.documents.filter((row) => contains(row.customerName, lowered) || contains(row.orderNumber, lowered) || contains(row.content, lowered) || contains(row.mimeType, lowered)).map((row) => ({
+          type:"DOCUMENT", id:row.id, title:row.mimeType === "application/pdf" ? "PDF-Dokument" : "Foto / Dokument", subtitle:[row.customerName,row.orderNumber].filter(Boolean).join(" · "), status:row.status,
+          matchField:"note", source:"Dokumente", matchLabel:"Dokumentinhalt", matchValue:contains(row.content, lowered) ? query : contains(row.orderNumber, lowered) ? row.orderNumber ?? "" : row.customerName,
+          context:[row.customerName,row.orderNumber,new Date(row.recordedAt).toLocaleDateString("de-DE")].filter(Boolean).join(" · "), href:row.orderId ? `/orders/${encodeURIComponent(row.orderId)}` : `/customers/${encodeURIComponent(row.customerId)}`, actionLabel:"Ablage öffnen",
+        })) };
+      },
+    });
+    providers.push({
+      id: "mails", label: "Mails", search: async (query) => {
+        const batch = await auxiliary(); const lowered = normalized(query);
+        return { exhaustive: batch.exhaustive, hits: batch.mails.filter((row) => contains(row.subject, lowered) || contains(row.body, lowered) || contains(row.customerName, lowered) || contains(row.orderNumber, lowered)).map((row) => ({
+          type:"MAIL", id:row.id, title:row.subject, subtitle:[row.customerName,row.orderNumber].filter(Boolean).join(" · "), status:row.status,
+          matchField:contains(row.subject, lowered) ? "title" : "note", source:"Mails", matchLabel:contains(row.subject, lowered) ? "Betreff" : "Mailinhalt", matchValue:contains(row.subject, lowered) ? row.subject : query,
+          context:[row.customerName,row.direction,new Date(row.recordedAt).toLocaleDateString("de-DE")].join(" · "), href:row.orderId ? `/orders/${encodeURIComponent(row.orderId)}` : `/customers/${encodeURIComponent(row.customerId)}`, actionLabel:"Vorgang zur Mail öffnen",
+        })) };
+      },
+    });
+    providers.push({
+      id: "appointments", label: "Termine", search: async (query) => {
+        const batch = await auxiliary(); const lowered = normalized(query);
+        return { exhaustive: batch.exhaustive, hits: batch.appointments.filter((row) => contains(row.title, lowered) || contains(row.customerName, lowered) || contains(row.orderNumber, lowered) || contains(row.startsAt, lowered)).map((row) => ({
+          type:"APPOINTMENT", id:row.id, title:row.title, subtitle:[row.customerName,row.orderNumber,new Date(row.startsAt).toLocaleString("de-DE")].filter(Boolean).join(" · "), status:row.status,
+          matchField:contains(row.startsAt, lowered) ? "dueDate" : "title", source:"Termine", matchLabel:contains(row.startsAt, lowered) ? "Termin" : "Titel", matchValue:contains(row.startsAt, lowered) ? row.startsAt : row.title,
+          context:[row.eventType,row.customerName,row.orderNumber].filter(Boolean).join(" · "), href:row.orderId ? `/orders/${encodeURIComponent(row.orderId)}` : row.customerId ? `/customers/${encodeURIComponent(row.customerId)}` : "/", actionLabel:"Bezug öffnen",
+        })) };
       },
     });
   }
