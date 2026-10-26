@@ -1,14 +1,14 @@
 # Abgabe P2 – Tagesstand
 
-Stand: 26.10.2026, 17:28 Uhr (Europe/Berlin)
+Stand: 26.10.2026, 17:32 Uhr (Europe/Berlin)
 
 ## Kandidat
 
 - Branch: `kreile/s1-p2-eingang`
-- Aktueller Produkt-SHA: `e828459fc4eb255194ddaf89528657f1d60c6f73`
-- Letzter nachweislich fertiger Preview-SHA: `f289c98d978736d3f06e5cf9d6d161b297520e87`
-- Klickbare Preview: <https://galvanik-kreile-werkstatt-bdnyrkhre.vercel.app> (`Ready`, Preview)
-- Aktuelles Deployment für `e828459f`: <https://galvanik-kreile-werkstatt-4lc7lwaoj.vercel.app> (`Building` um 17:28 Uhr; noch kein Erfolgsclaim)
+- Aktueller Produkt-SHA: `5cb2d56e4eeb17d02681ab9ae78848855dfed127`
+- Letzter nachweislich fertiger Preview-SHA: `e828459fc4eb255194ddaf89528657f1d60c6f73`
+- Klickbare Preview: <https://galvanik-kreile-werkstatt-4lc7lwaoj.vercel.app> (`Ready`, Preview)
+- Aktuelles Deployment für `5cb2d56e`: <https://galvanik-kreile-werkstatt-qmqi196nn.vercel.app> (`Building` um 17:32 Uhr; noch kein Erfolgsclaim)
 - Pull Request: <https://github.com/schoggertraube-rev/galvanik-kreile-app/pull/154> (Draft, nicht gemergt)
 - Datenbank: Entwicklungsprojekt `syhaigjhsbpjmtnggqka`; Repository und Remote bis Migration `20261026190000_s1_p2_feature_switch.sql`. P2 fügt keine Migration hinzu.
 
@@ -20,7 +20,7 @@ Stand: 26.10.2026, 17:28 Uhr (Europe/Berlin)
 | A07 Angebot/KV | gebaut | Anlegen → KV: echte Katalogleistungen, gespeicherter KV, PDF, Zuschlag mit bestätigtem Liefertermin |
 | E03 Foto/Dokument | gebaut | Kunden- und Auftragskarte: privater Upload, sicherer Download, echte leere/Fehlerzustände |
 | E04 Dokument lesen | gebaut, Zugang offen | Dokument „Auslesen“ → Vorschläge mit Seite, Polygon und Sicherheit; keine Vorauswahl; Übernahme erst nach Auswahl. Ohne Azure-Werte „In Klärung“ |
-| E05 Outlook-Mail rein | gebaut, Zugang offen | Kunden-/Auftragskarte: Outlook-Eingang, Mail am Vorgang ablegen, aus Mail Kunden- oder KV-Dialog öffnen. Ohne Graph-Werte „In Klärung“ |
+| E05 Outlook-Mail rein | gebaut, Zugang offen | Kunden-/Auftragskarte: Outlook-Eingang, Mail und unterstützte Datei-Anhänge privat am Vorgang ablegen, aus Mail Kunden- oder KV-Dialog öffnen. Ohne Graph-Werte „In Klärung“ |
 | R02 Mail raus | gebaut, Zugang offen | Mail an die beim Kunden gespeicherte Adresse, optional mit echtem KV-PDF; lokale Vorgangskopie erst nach Graph-Annahme. Rechnung/Lieferschein folgen mit deren P4-Dokumenten |
 | A08 Anbieter-Register | gebaut | Kunden, Aufträge, Angebote, Rechnungen, Dokumente, Mails und Termine sind als unabhängige Anbieter registriert |
 
@@ -30,13 +30,13 @@ Stand: 26.10.2026, 17:28 Uhr (Europe/Berlin)
 - KV-PDF wird aus gespeicherten Firmen-, Kunden- und KV-Daten erzeugt. Ein Zuschlag erzeugt genau einen Auftrag und verlangt einen bestätigten Auftragstermin.
 - Dokumente/Fotos liegen privat im bestehenden `scans`-Bucket. Dateityp, Größe, Signatur und SHA-256 werden vor Finalisierung geprüft.
 - Graph-Zugang nutzt ausschließlich serverseitige Client-Credentials. Ausgehende Mails werden gegen Doppelversand gesperrt; ein unklarer Ausgang wird nicht still wiederholt.
+- PDF-, JPG-, PNG- und WebP-Anhänge eingehender Outlook-Mails werden mit stabiler Quellkennung, Größen-/Hashprüfung und ohne öffentliche Ablage in den bestehenden privaten Dokumentweg übernommen. Inline- und nicht unterstützte Formate werden sichtbar ausgelassen.
 - Azure-Ergebnisse werden als Vorschläge mit Fundstelle und Konfidenz gespeichert. Kein Vorschlag ist standardmäßig ausgewählt.
 - Die Suche liest Dokumente, lokale Mailkopien und Termine tenantgebunden aus den vorhandenen Tabellen. Die Suchleiste selbst brauchte keine Änderung.
 
 ## Abweichungen / nicht geschafft
 
 - Microsoft Graph und Azure sind im Produkt vollständig fail-closed angebunden, aber am aktuellen Preview-SHA noch nicht mit realen Providerwerten belegt. Daher kein Claim für echten Versand, echten Inbox-Inhalt oder echte OCR-Antwort.
-- Eingehende Graph-Mailanhänge werden im aktuellen Stand nur sichtbar als „Mit Anhang“ markiert; die Binärdateien werden noch nicht in den privaten Ablageort kopiert.
 - R02 unterstützt im P2-Stand das vorhandene KV-PDF. Rechnung und Lieferschein werden erst mit den kanonischen P4-Dokumenten auswählbar.
 - Der vollständige lokale Commit-Hook überschritt sein Werkzeugzeitfenster. Gezielte Tests, TypeScript, Lint und Modulgrenzen sind grün; der Gesamtlauf erfolgt in GitHub CI.
 - Die nicht von Codex stammende Änderung an `_review/DEZEMBER_LISTE.md` blieb ungestaged und unverändert.
@@ -48,7 +48,7 @@ Stand: 26.10.2026, 17:28 Uhr (Europe/Berlin)
 - ESLint der geänderten Dateien: grün.
 - `quality:module-gates`: grün.
 - `git diff --check`: grün.
-- GitHub `agentur-gate` und Vercel für `e828459f`: um 17:28 Uhr noch laufend.
+- Vercel für `e828459f`: `Ready`. GitHub `agentur-gate` und Vercel für `5cb2d56e`: um 17:32 Uhr noch laufend.
 - Kein Merge nach `main`, kein Production-Deployment, keine Kostenaktivierung und keine Remote-Datenmutation durch diese P2-Produktcommits.
 - Der Preview-Anmeldecode wurde nur flüchtig verwendet und nirgends gespeichert.
 
@@ -62,4 +62,4 @@ Stand: 26.10.2026, 17:28 Uhr (Europe/Berlin)
 
 ## Nächster Schritt
 
-Aktuelles Deployment und CI bis zum exakten SHA belegen, danach E05-Mailanhänge in den privaten Ablageort übernehmen und die realen Preview-Verbindungen für Graph/Azure prüfen. Anschließend P2-Review am eingefrorenen Kandidaten-SHA; kein Merge ohne Owner-Freigabe.
+Aktuelles Deployment und CI bis zum exakten SHA belegen und die realen Preview-Verbindungen für Graph/Azure prüfen. Anschließend P2-Review am eingefrorenen Kandidaten-SHA; kein Merge ohne Owner-Freigabe.
