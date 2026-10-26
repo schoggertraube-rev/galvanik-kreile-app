@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ArrowLeft,
   Check,
   ClipboardCopy,
   FileText,
@@ -1032,16 +1031,14 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
   return (
     <>
-      {ports.showPrimaryTrigger !== false ? <button type="button" className={styles.globalCreateButton} onClick={() => { reset(); setOpen(true); }} aria-label="Anlegen" aria-haspopup="dialog" aria-expanded={open}>
+      {ports.showPrimaryTrigger !== false ? <button type="button" className={styles.globalCreateButton} onClick={() => { reset(); void loadDirectIntake(); }} aria-label="Anlegen" aria-haspopup="dialog" aria-expanded={open}>
         <span className={styles.globalCreatePlus} aria-hidden="true">＋</span><span>Anlegen</span>
       </button> : null}
       {open ? (
         <div className={styles.createOverlay} onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
           <section ref={dialogRef} className={styles.createDialog} role="dialog" aria-modal="true" aria-labelledby="global-create-title" onKeyDown={handleDialogKey}>
             <header className={styles.createHeader}>
-              {step !== "choose" && step !== "order-saved" ? (
-                <button type="button" className={styles.createIconButton} onClick={() => navigate("choose")} aria-label="Zur Auswahl"><ArrowLeft /></button>
-              ) : <span className={styles.createBadge}><Plus /></span>}
+              <span className={styles.createBadge}><Plus /></span>
               <div>
                 <p>Kunde <span>›</span> KV / Angebot <span>›</span> Auftrag</p>
                 <h2 id="global-create-title">{step === "choose" ? "Was möchtest du anlegen?" : step === "customer" ? "Neukunde erfassen" : step === "customer-saved" ? "Kunde gesichert" : step === "customer-picker" ? "Kunde für KV wählen" : step === "quote-list" ? "Offene KVs" : step === "quote" ? quote ? "KV bearbeiten" : "Kostenvoranschlag anlegen" : step === "quote-saved" ? "KV gesichert" : step === "order-saved" ? "Auftrag angelegt" : step === "direct-intake" ? "Neuer Eingang" : "Berechtigung klären"}</h2>
@@ -1079,7 +1076,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                   <h3>Auftrag {directReceipt.receipt.orderNumber} angelegt</h3>
                   <p>Der neue Eingang ist gespeichert und im Arbeitsbestand erneut bestätigt.</p>
                   <p>Terminwunsch: {directWishDate} · Zugesagter Termin: {directReceipt.receipt.dueDate}</p>
-                  <div className={styles.createFormActions}><button type="button" onClick={reset}>Weiteren Eingang anlegen</button><button type="button" className={styles.createPrimary} onClick={() => ports.openOrder(directReceipt.receipt.orderId)}>Auftragskarte öffnen</button></div>
+                  <div className={styles.createFormActions}><button type="button" onClick={() => { reset(); void loadDirectIntake(); }}>Weiteren Eingang anlegen</button><button type="button" className={styles.createPrimary} onClick={() => ports.openOrder(directReceipt.receipt.orderId)}>Auftragskarte öffnen</button></div>
                   <ReceiptFacts title="Neuer Eingang – technische Details für Support" values={[["Anfragekennung", directReceipt.receipt.clientEventId], ["Bestätigung", directReceipt.receipt.receiptId]]} />
                 </section>
               ) : (
@@ -1120,7 +1117,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 <form className={styles.createForm} onSubmit={(event) => void submitCustomer(event)}>
                   <p className={styles.createLead}>Name und Telefon genügen für einen Interessenten. Fehlende Auftragsdaten werden sichtbar markiert und vor dem ersten Auftrag direkt ergänzt.</p>
                   <CustomerFields value={customerDraft} onChange={setCustomerDraft} autofocus requireOrderData={false} />
-                  <div className={styles.createFormActions}><button type="button" onClick={() => navigate("choose")}>Zurück</button><button type="submit" className={styles.createPrimary} disabled={busy}>{busy ? <Loader2 className={styles.createSpinner} /> : <Check />} Neukunde speichern</button></div>
+                  <div className={styles.createFormActions}><button type="button" onClick={close}>Abbrechen</button><button type="submit" className={styles.createPrimary} disabled={busy}>{busy ? <Loader2 className={styles.createSpinner} /> : <Check />} Neukunde speichern</button></div>
                 </form>
               ) : null}
 
@@ -1202,7 +1199,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                   <h3>Auftrag {conversion.orderReceipt.orderNumber} angelegt</h3>
                   <p>Der Zuschlag ist bestätigt. Der Auftrag wurde sicher angelegt und ist mit diesem KV verknüpft.</p>
                   <ReceiptFacts title="Auftrag – technische Details für Support" values={[["KV-Nachweis", conversion.quoteReceipt.receiptId], ["Auftragsnachweis", conversion.orderReceipt.receiptId], ["Zeit", conversion.orderReceipt.recordedAt]]} />
-                  <div className={styles.createFormActions}><button type="button" onClick={reset}>Weiteren Vorgang anlegen</button><button type="button" className={styles.createPrimary} onClick={() => { setOpen(false); ports.openOrder(conversion.orderReceipt.orderId); }} data-autofocus>Auftragskarte öffnen</button></div>
+                  <div className={styles.createFormActions}><button type="button" onClick={() => { reset(); void loadDirectIntake(); }}>Weiteren Eingang anlegen</button><button type="button" className={styles.createPrimary} onClick={() => { setOpen(false); ports.openOrder(conversion.orderReceipt.orderId); }} data-autofocus>Auftragskarte öffnen</button></div>
                 </div>
               ) : null}
 

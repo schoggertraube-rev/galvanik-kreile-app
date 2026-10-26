@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   GlobalCreateFlow,
@@ -7,7 +7,6 @@ import {
 
 const CUSTOMER_ID = "72d8c6c6-397c-4a9c-b464-d2e5595eb42a";
 const QUOTE_ID = "1c32e174-8494-46f0-9f5f-1a45f2a60bd1";
-const OTHER_QUOTE_ID = "3a6a7bc4-3edb-4fa7-bc11-81b2d164b622";
 const ORDER_ID = "b6b493d0-3e70-4a73-88eb-367106068e62";
 
 type QuoteFixture = Extract<Awaited<ReturnType<GlobalCreatePorts["readQuote"]>>, { code: "OK" }>["quote"];
@@ -175,6 +174,12 @@ function openFlow() {
   fireEvent.click(screen.getByRole("button", { name: "Anlegen" }));
 }
 
+async function openIntent(intent: "CUSTOMER" | "QUOTE") {
+  await act(async () => {
+    window.dispatchEvent(new CustomEvent("path1:global-create-open", { detail: intent }));
+  });
+}
+
 function fillRequiredCustomerAddress() {
   fireEvent.change(screen.getByLabelText("Ansprechpartner"), { target: { value: "Testperson" } });
   fireEvent.change(screen.getByLabelText("E-Mail"), { target: { value: "kunde@example.invalid" } });
@@ -185,7 +190,6 @@ function fillRequiredCustomerAddress() {
 }
 
 async function fillCustomer() {
-  fireEvent.click(screen.getByRole("button", { name: /Kunde anlegen/ }));
   fireEvent.change(screen.getByLabelText("Firma / Name"), { target: { value: "SYNTHETISCH Musterkunde GmbH" } });
   fireEvent.change(screen.getByLabelText("Firmenname"), { target: { value: "SYNTHETISCH Musterkunde GmbH" } });
   fireEvent.change(screen.getByLabelText("Ansprechpartner"), { target: { value: "Testperson" } });
@@ -213,7 +217,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     const value = ports();
     render(<GlobalCreateFlow ports={value} />);
 
-    openFlow();
+    await openIntent("CUSTOMER");
     expect(document.body).not.toHaveTextContent(/echten Datenstand zurücklesen|Aus der Datenbank zurücklesen|persistenten KV/i);
     await fillCustomer();
     expect(value.createCustomer).toHaveBeenCalledTimes(1);
@@ -250,8 +254,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     const value = ports();
     render(<GlobalCreateFlow ports={value} />);
 
-    openFlow();
-    fireEvent.click(screen.getByRole("button", { name: /Kunde anlegen/ }));
+    await openIntent("CUSTOMER");
     fireEvent.change(screen.getByLabelText("Firma / Name"), { target: { value: "SYNTHETISCH Interessent" } });
     fireEvent.change(screen.getByLabelText("Telefon"), { target: { value: "+49 221 998877" } });
     fireEvent.click(screen.getByRole("button", { name: /Neukunde speichern/ }));
@@ -282,8 +285,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     const value = ports({ createCustomer, readCustomerCreateReceipt });
     render(<GlobalCreateFlow ports={value} />);
 
-    openFlow();
-    fireEvent.click(screen.getByRole("button", { name: /Kunde anlegen/ }));
+    await openIntent("CUSTOMER");
     fireEvent.change(screen.getByLabelText("Firma / Name"), { target: { value: "SYNTHETISCH Bleibt erhalten" } });
     fillRequiredCustomerAddress();
     fireEvent.click(screen.getByRole("button", { name: /Neukunde speichern/ }));
@@ -300,8 +302,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     const createCustomer = vi.fn<GlobalCreatePorts["createCustomer"]>().mockRejectedValue(new Error("network"));
     const value = ports({ createCustomer, readCustomerCreateReceipt: vi.fn().mockResolvedValue({ code: "NOT_FOUND", message: "Kein Kundenstand gefunden." }) });
     render(<GlobalCreateFlow ports={value} />);
-    openFlow();
-    fireEvent.click(screen.getByRole("button", { name: /Kunde anlegen/ }));
+    await openIntent("CUSTOMER");
     fireEvent.change(screen.getByLabelText("Firma / Name"), { target: { value: "SYNTHETISCH offen" } });
     fillRequiredCustomerAddress();
     fireEvent.click(screen.getByRole("button", { name: /Neukunde speichern/ }));
@@ -319,8 +320,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     const value = ports({ canCreateCustomer: false, canCreateQuote: false, roleLabel: "Phillip" });
     render(<GlobalCreateFlow ports={value} />);
 
-    openFlow();
-    fireEvent.click(screen.getByRole("button", { name: /Kunde anlegen/ }));
+    await openIntent("CUSTOMER");
     expect(screen.getByRole("alert")).toHaveTextContent("Rolf ist für diesen Vorgang zuständig");
     fireEvent.click(screen.getByRole("button", { name: "Zum sicheren Profilwechsel" }));
     await waitFor(() => expect(value.switchProfile).toHaveBeenCalledTimes(1));
@@ -363,103 +363,22 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(value.refresh).toHaveBeenCalledTimes(1);
   });
 
-  it("loads only real customer choices and resumes a persisted quote after reload", async () => {
-    const value = ports({ resumeQuoteId: QUOTE_ID });
-    render(<GlobalCreateFlow ports={value} />);
+  it("opens the three-step intake directly from the primary action", async () => {
+    render(<GlobalCreateFlow ports={ports()} />);
+
     openFlow();
 
-    fireEvent.click(screen.getByRole("button", { name: /Gespeicherten KV fortsetzen/ }));
-    await screen.findByRole("heading", { name: "KV-2026-0042 gesichert" });
-    expect(value.readQuote).toHaveBeenCalledWith({ quoteId: QUOTE_ID });
-    expect(screen.getByText(/KV ist sicher gespeichert und kann weiterbearbeitet werden/)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Zur Auswahl" }));
-    fireEvent.click(screen.getByRole("button", { name: /Auftrag \/ KV anlegen/ }));
-    const search = await screen.findByLabelText("Kunde suchen");
-    fireEvent.change(search, { target: { value: "Teststadt" } });
-    expect(within(screen.getByRole("dialog")).getByRole("button", { name: /SYNTHETISCH Musterkunde/ })).toBeInTheDocument();
+    await screen.findByRole("heading", { name: "Neuer Eingang" });
+    expect(screen.getByRole("button", { name: /1\/3 · Kunde & Vereinbarung/ })).toHaveAttribute("aria-current", "step");
+    expect(screen.queryByRole("heading", { name: "Was möchtest du anlegen?" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Offene KVs bearbeiten/ })).not.toBeInTheDocument();
   });
 
-  it("opens a server-listed draft, preserves its version and submits an explicit edit", async () => {
+  it("clears an award date when editing a KV", async () => {
     const value = ports();
     render(<GlobalCreateFlow ports={value} />);
-    openFlow();
-    fireEvent.click(screen.getByRole("button", { name: /Offene KVs bearbeiten/ }));
-    await screen.findByRole("heading", { name: "Offene KVs" });
-    fireEvent.click(screen.getByRole("button", { name: /KV-2026-0042/ }));
-    await screen.findByRole("heading", { name: "KV bearbeiten" });
-    expect(screen.getByLabelText("Gewünschter Termin")).toHaveValue("2026-10-15");
-    fireEvent.change(screen.getByLabelText("Gewünschter Termin"), { target: { value: "2026-10-22" } });
-    fireEvent.click(screen.getByRole("button", { name: /KV sichern/ }));
-    await screen.findByRole("heading", { name: "KV-2026-0042 gesichert" });
-    expect(value.updateQuote).toHaveBeenCalledWith(expect.objectContaining({ quoteId: QUOTE_ID, expectedVersion: 1, dueDate: "2026-10-22" }));
-  });
 
-  it("shows exactly one honest empty state for an empty open-KV read", async () => {
-    const value = ports({
-      listOpenQuotes: vi.fn().mockResolvedValue({ code: "OK", quotes: [] }),
-    });
-    render(<GlobalCreateFlow ports={value} />);
-
-    openFlow();
-    fireEvent.click(screen.getByRole("button", { name: /Offene KVs bearbeiten/ }));
-
-    expect(await screen.findByText("Keine offenen KVs")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Keine offenen KVs");
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(screen.queryByText("Ausgang ungeklärt")).not.toBeInTheDocument();
-  });
-
-  it("shows an open-KV read failure without a simultaneous green empty state or visible technical ID", async () => {
-    const value = ports({
-      listOpenQuotes: vi.fn().mockResolvedValue({
-        code: "UNAVAILABLE",
-        message: "Der aktuelle Stand konnte nicht sicher geladen werden.",
-      }),
-    });
-    render(<GlobalCreateFlow ports={value} />);
-
-    openFlow();
-    fireEvent.click(screen.getByRole("button", { name: /Offene KVs bearbeiten/ }));
-
-    const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("Stand noch nicht geklärt");
-    expect(alert).toHaveTextContent("Der aktuelle Stand konnte nicht sicher geladen werden.");
-    expect(screen.queryByText("Keine offenen KVs")).not.toBeInTheDocument();
-    expect(screen.queryByText("offene-kvs")).not.toBeInTheDocument();
-  });
-
-  it("clears an award date when editing, switching or resuming a KV", async () => {
-    const otherQuote = quote("draft", {
-      quoteId: OTHER_QUOTE_ID,
-      quoteNumber: "KV-2026-0043",
-      dueDate: "2026-11-05",
-      note: "SYNTHETISCHER ZWEITER KV",
-    });
-    const baseUpdateQuote = ports().updateQuote;
-    const updateQuote = vi.fn<GlobalCreatePorts["updateQuote"]>(async (input) => {
-      const result = await baseUpdateQuote(input);
-      if (result.code !== "OK") return result;
-      const source = input.quoteId === OTHER_QUOTE_ID ? otherQuote : quote();
-      return {
-        ...result,
-        quote: {
-          ...source,
-          version: input.expectedVersion + 1,
-          dueDate: input.dueDate,
-          note: input.note,
-          updatedAt: "2026-09-14T10:06:00.000Z",
-        },
-      };
-    });
-    const value = ports({
-      resumeQuoteId: QUOTE_ID,
-      listOpenQuotes: vi.fn().mockResolvedValue({ code: "OK", quotes: [otherQuote] }),
-      updateQuote,
-    });
-    render(<GlobalCreateFlow ports={value} />);
-
-    openFlow();
+    await openIntent("CUSTOMER");
     await fillCustomer();
     await fillQuote();
     fireEvent.change(screen.getByLabelText("Zugesagter Termin für den Auftrag"), { target: { value: "2026-10-20" } });
@@ -473,34 +392,13 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(screen.getByLabelText("Zugesagter Termin für den Auftrag")).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByRole("button", { name: /Zuschlag bestätigen/ })).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText("Zugesagter Termin für den Auftrag"), { target: { value: "2026-10-21" } });
-    fireEvent.click(screen.getByRole("button", { name: "Zur Auswahl" }));
-    fireEvent.click(screen.getByRole("button", { name: /Offene KVs bearbeiten/ }));
-    await screen.findByRole("heading", { name: "Offene KVs" });
-    fireEvent.click(screen.getByRole("button", { name: /KV-2026-0043/ }));
-    expect(screen.getByLabelText("Gewünschter Termin")).toHaveValue("2026-11-05");
-    fireEvent.click(screen.getByRole("button", { name: "KV sichern" }));
-    await screen.findByRole("heading", { name: "KV-2026-0043 gesichert" });
-    expect(updateQuote).toHaveBeenLastCalledWith(expect.objectContaining({ quoteId: OTHER_QUOTE_ID }));
-    expect(screen.getByLabelText("Zugesagter Termin für den Auftrag")).toHaveValue("");
-    expect(screen.getByRole("button", { name: /Zuschlag bestätigen/ })).toBeDisabled();
-
-    fireEvent.change(screen.getByLabelText("Zugesagter Termin für den Auftrag"), { target: { value: "2026-11-12" } });
-    fireEvent.click(screen.getByRole("button", { name: "Zur Auswahl" }));
-    fireEvent.click(screen.getByRole("button", { name: /Gespeicherten KV fortsetzen/ }));
-    await screen.findByRole("heading", { name: "KV-2026-0042 gesichert" });
-    expect(value.readQuote).toHaveBeenCalledWith({ quoteId: QUOTE_ID });
-    expect(screen.getByLabelText("Zugesagter Termin für den Auftrag")).toHaveValue("");
-    expect(screen.getByLabelText("Zugesagter Termin für den Auftrag")).toHaveAttribute("aria-invalid", "true");
-    expect(screen.getByRole("button", { name: /Zuschlag bestätigen/ })).toBeDisabled();
   });
 
   it("keeps the KV context and offers Rolf the real customer path when the tenant is empty", async () => {
     const value = ports({ listCustomers: vi.fn().mockResolvedValue({ code: "OK", customers: [] }) });
     render(<GlobalCreateFlow ports={value} />);
 
-    openFlow();
-    fireEvent.click(screen.getByRole("button", { name: /Auftrag \/ KV anlegen/ }));
+    await openIntent("QUOTE");
     expect(await screen.findByText("Noch kein belegter Kunde")).toBeInTheDocument();
     expect(screen.getByText(/Kundenstamm ist geladen/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Kunde anlegen" }));
@@ -520,8 +418,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     const validationValue = ports({ createCustomer });
     const { unmount } = render(<GlobalCreateFlow ports={validationValue} />);
 
-    openFlow();
-    fireEvent.click(screen.getByRole("button", { name: /Kunde anlegen/ }));
+    await openIntent("CUSTOMER");
     fireEvent.change(screen.getByLabelText("Firma / Name"), { target: { value: "SYNTHETISCH Eingabe bleibt" } });
     fillRequiredCustomerAddress();
     fireEvent.click(screen.getByRole("button", { name: /Neukunde speichern/ }));
@@ -532,7 +429,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     unmount();
     const conflictValue = ports({ convertQuote });
     render(<GlobalCreateFlow ports={conflictValue} />);
-    openFlow();
+    await openIntent("CUSTOMER");
     await fillCustomer();
     await fillQuote();
     fireEvent.change(screen.getByLabelText("Zugesagter Termin für den Auftrag"), { target: { value: "2026-10-20" } });
@@ -550,7 +447,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     const value = ports({ convertQuote });
     render(<GlobalCreateFlow ports={value} />);
 
-    openFlow();
+    await openIntent("CUSTOMER");
     await fillCustomer();
     await fillQuote();
     const confirmedDate = screen.getByLabelText("Zugesagter Termin für den Auftrag");
@@ -567,7 +464,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
   it("moves focus into the dialog and closes it with Escape", async () => {
     render(<GlobalCreateFlow ports={ports()} />);
     openFlow();
-    await waitFor(() => expect(screen.getByRole("button", { name: /Kunde anlegen/ })).toHaveFocus());
+    await waitFor(() => expect(screen.getByLabelText("Firma / Name")).toHaveFocus());
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
