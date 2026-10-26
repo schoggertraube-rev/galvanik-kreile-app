@@ -63,6 +63,17 @@ export function CustomerCardView({
       </article>
     );
   const card = state.card;
+  const missingForOrder = [
+    !card.name.trim() ? "Name/Firma" : null,
+    !card.contactPerson?.trim() ? "Ansprechpartner" : null,
+    !card.phone?.trim() ? "Telefon" : null,
+    !card.email?.trim() ? "E-Mail" : null,
+    !card.address?.trim() ? "Straße" : null,
+    !card.zipCode?.trim() ? "PLZ" : null,
+    !card.city?.trim() ? "Ort" : null,
+    !card.country?.trim() ? "Land" : null,
+    !card.paymentPreference?.trim() ? "Zahlungsbedingung" : null,
+  ].filter((value): value is string => Boolean(value));
   const active = card.orders.filter((order) => order.station !== "abgeholt");
   const history = card.orders.filter((order) => order.station === "abgeholt");
   const next = active.slice().sort((a, b) => {
@@ -96,6 +107,7 @@ export function CustomerCardView({
       </header>
       <div className={styles.cardScroll}>
         <section className={styles.contact} aria-label="Kontakt">
+          {missingForOrder.length ? <p className={styles.incomplete} role="status"><strong>Unvollständig für Auftrag</strong><span>Fehlt: {missingForOrder.join(", ")}</span></p> : null}
           <div>
             <UserRound />
             <span>

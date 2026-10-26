@@ -232,6 +232,18 @@
   gap: 8px;
   background: var(--surface);
 }
+.incomplete {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--warn-bd);
+  border-left: 4px solid var(--warn);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: var(--space-1);
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
 .contact > a,
 .contact > div {
   min-height: 60px;
