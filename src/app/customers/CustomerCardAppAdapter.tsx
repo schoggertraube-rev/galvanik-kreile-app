@@ -7,6 +7,7 @@ import { CustomerCardView, type CustomerCardModel, type CustomerCardState, type 
 import { useOverlayStore } from "@/lib/overlayStore";
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { DomainAttachmentPanel } from "@/components/attachments/DomainAttachmentPanel";
+import { CommunicationPanel } from "@/components/communication/CommunicationPanel";
 
 type CustomerSummaryData = Extract<Awaited<ReturnType<typeof getCustomerSummaryAction>>, { code: "OK" }>["data"];
 function toCard(c: CustomerSummaryData): CustomerCardModel {
@@ -34,5 +35,5 @@ export function CustomerCardAppAdapter({customerId,onOpenOrder,onClose,fallbackH
     setState({kind:"data",card:toCard(result.customer)}); return {ok:true as const};
   };
   const close=onClose??(fallbackHref?()=>router.replace(fallbackHref):storeClose);
-  return <CustomerCardView state={state} onOpenOrder={onOpenOrder??storeOrder} onClose={close} onSaveCommercial={save} onNewOrder={() => { close(); requestGlobalCreate("DIRECT_INTAKE"); }} documentsPanel={state.kind === "data" ? <DomainAttachmentPanel targetType="CUSTOMER" targetId={state.card.id} /> : null}/>;
+  return <CustomerCardView state={state} onOpenOrder={onOpenOrder??storeOrder} onClose={close} onSaveCommercial={save} onNewOrder={() => { close(); requestGlobalCreate("DIRECT_INTAKE"); }} documentsPanel={state.kind === "data" ? <><DomainAttachmentPanel targetType="CUSTOMER" targetId={state.card.id} /><CommunicationPanel targetType="CUSTOMER" targetId={state.card.id} /></> : null}/>;
 }

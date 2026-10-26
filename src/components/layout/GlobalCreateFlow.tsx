@@ -26,10 +26,14 @@ import type {
 import styles from "./TargetShell.module.css";
 
 export type GlobalCreateIntent = "CUSTOMER" | "QUOTE" | "DIRECT_INTAKE";
+export type GlobalCreateRequest = {
+  intent: GlobalCreateIntent;
+  prefill?: { name?: string; email?: string; customerQuery?: string; note?: string };
+};
 export const GLOBAL_CREATE_OPEN_EVENT = "path1:global-create-open";
 
-export function requestGlobalCreate(intent: GlobalCreateIntent): void {
-  window.dispatchEvent(new CustomEvent<GlobalCreateIntent>(GLOBAL_CREATE_OPEN_EVENT, { detail: intent }));
+export function requestGlobalCreate(request: GlobalCreateIntent | GlobalCreateRequest): void {
+  window.dispatchEvent(new CustomEvent<GlobalCreateIntent | GlobalCreateRequest>(GLOBAL_CREATE_OPEN_EVENT, { detail: request }));
 }
 
 type FailureCode =
@@ -476,14 +480,19 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     }
   };
 
-  const openWithIntent = (intent: GlobalCreateIntent) => {
+  const openWithIntent = (request: GlobalCreateIntent | GlobalCreateRequest) => {
+    const intent = typeof request === "string" ? request : request.intent;
+    const prefill = typeof request === "string" ? undefined : request.prefill;
     setOpen(true);
     if (intent === "CUSTOMER") {
+      if (prefill) setCustomerDraft({ ...EMPTY_CUSTOMER, name: prefill.name?.trim() ?? "", email: prefill.email?.trim().toLowerCase() ?? null });
       if (ports.canCreateCustomer) navigate("customer");
       else deny("customer");
       return;
     }
     if (intent === "QUOTE") {
+      if (prefill?.customerQuery) setCustomerQuery(prefill.customerQuery);
+      if (prefill?.note) setQuoteNote(prefill.note);
       void loadCustomers();
       return;
     }
@@ -496,8 +505,12 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
   useEffect(() => {
     const handler = (event: Event) => {
-      const intent = event instanceof CustomEvent ? event.detail : null;
-      if (intent === "CUSTOMER" || intent === "QUOTE" || intent === "DIRECT_INTAKE") openWithIntent(intent);
+      const request = event instanceof CustomEvent ? event.detail as unknown : null;
+      if (request === "CUSTOMER" || request === "QUOTE" || request === "DIRECT_INTAKE") openWithIntent(request);
+      else if (request && typeof request === "object" && "intent" in request) {
+        const typed = request as GlobalCreateRequest;
+        if (typed.intent === "CUSTOMER" || typed.intent === "QUOTE" || typed.intent === "DIRECT_INTAKE") openWithIntent(typed);
+      }
     };
     window.addEventListener(GLOBAL_CREATE_OPEN_EVENT, handler);
     return () => window.removeEventListener(GLOBAL_CREATE_OPEN_EVENT, handler);

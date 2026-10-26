@@ -27,6 +27,7 @@ import {
 } from "@/app/warendurchlauf/actions";
 import { uploadSignedOrderAttachment } from "@/app/warendurchlauf/galvanik/GalvanikHandoffAttachmentAppAdapter";
 import { DomainAttachmentPanel } from "@/components/attachments/DomainAttachmentPanel";
+import { CommunicationPanel } from "@/components/communication/CommunicationPanel";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useOverlayStore } from "@/lib/overlayStore";
 import type {
@@ -658,7 +659,7 @@ export function OrderCardAppAdapter({
           />
         ) : null
       }
-      documentsPanel={state.kind === "data" ? <DomainAttachmentPanel targetType="ORDER" targetId={state.card.id} /> : null}
+      documentsPanel={state.kind === "data" ? <><DomainAttachmentPanel targetType="ORDER" targetId={state.card.id} /><CommunicationPanel targetType="ORDER" targetId={state.card.id} /></> : null}
       onOpenCustomer={onOpenCustomer ?? storeCustomer}
       onClose={close}
     />
