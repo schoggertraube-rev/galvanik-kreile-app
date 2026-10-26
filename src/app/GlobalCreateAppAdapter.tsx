@@ -57,7 +57,7 @@ export function GlobalCreateAppAdapter() {
       ports={{
         canCreateCustomer,
         canCreateQuote,
-        showPrimaryTrigger: canCreateCustomer || canCreateQuote,
+        showPrimaryTrigger: false,
         roleLabel,
         resumeQuoteId,
         listCustomers: async () => {
