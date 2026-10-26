@@ -1,14 +1,13 @@
 # Abgabe P2 – Tagesstand
 
-Stand: 26.10.2026, 17:32 Uhr (Europe/Berlin)
+Stand: 26.10.2026, 17:40 Uhr (Europe/Berlin)
 
 ## Kandidat
 
 - Branch: `kreile/s1-p2-eingang`
 - Aktueller Produkt-SHA: `5cb2d56e4eeb17d02681ab9ae78848855dfed127`
-- Letzter nachweislich fertiger Preview-SHA: `e828459fc4eb255194ddaf89528657f1d60c6f73`
-- Klickbare Preview: <https://galvanik-kreile-werkstatt-4lc7lwaoj.vercel.app> (`Ready`, Preview)
-- Aktuelles Deployment für `5cb2d56e`: <https://galvanik-kreile-werkstatt-qmqi196nn.vercel.app> (`Building` um 17:32 Uhr; noch kein Erfolgsclaim)
+- Nachweislich fertiger Preview-SHA: `5cb2d56e4eeb17d02681ab9ae78848855dfed127`
+- Klickbare Preview: <https://galvanik-kreile-werkstatt-qmqi196nn.vercel.app> (`Ready`, Preview, Region `fra1`)
 - Pull Request: <https://github.com/schoggertraube-rev/galvanik-kreile-app/pull/154> (Draft, nicht gemergt)
 - Datenbank: Entwicklungsprojekt `syhaigjhsbpjmtnggqka`; Repository und Remote bis Migration `20261026190000_s1_p2_feature_switch.sql`. P2 fügt keine Migration hinzu.
 
@@ -49,7 +48,10 @@ Stand: 26.10.2026, 17:32 Uhr (Europe/Berlin)
 - ESLint der geänderten Dateien: grün.
 - `quality:module-gates`: grün.
 - `git diff --check`: grün.
-- Vercel für `e828459f`: `Ready`. GitHub `agentur-gate` und Vercel für `5cb2d56e`: um 17:32 Uhr noch laufend.
+- Vercel für den Produkt-SHA `5cb2d56e`: `Ready`; Functions wurden in `fra1` gebaut.
+- Geschützte Browserprüfung auf genau dieser Preview: Rolf-Anmeldung, Rollen-Home in 1914×917, 1220×880 und 390×844, Kundenliste und reale Kundenkarte funktionieren. Die Kundenkarte zeigt „Fotos & Dokumente“, den ehrlichen leeren Zustand, „Dokument lesen · In Klärung“ und Microsoft 365 „In Klärung“. Es wurde dabei nichts hochgeladen oder fachlich verändert.
+- Lokaler Bildnachweis: `output/playwright/p2-5cb2d56e/rolf/`.
+- PR-Head `830217d905335886eda103391a16268ca084bbea`: GitHub `agentur-gate`, Vercel und Vercel Preview Comments grün; PR ist weiterhin Draft und mergefähig.
 - Kein Merge nach `main`, kein Production-Deployment, keine Kostenaktivierung und keine Remote-Datenmutation durch diese P2-Produktcommits.
 - Der Preview-Anmeldecode wurde nur flüchtig verwendet und nirgends gespeichert.
 
@@ -63,4 +65,4 @@ Stand: 26.10.2026, 17:32 Uhr (Europe/Berlin)
 
 ## Nächster Schritt
 
-Aktuelles Deployment und CI bis zum exakten SHA belegen und die realen Preview-Verbindungen für Graph/Azure prüfen. Anschließend P2-Review am eingefrorenen Kandidaten-SHA; kein Merge ohne Owner-Freigabe.
+Die sechs freigegebenen Preview-Verbindungen für Graph/Azure bleiben bis zur Owner-Bereitstellung ehrlich „In Klärung“. Anschließend P2-Review am eingefrorenen Kandidaten-SHA; kein Merge ohne Owner-Freigabe.
