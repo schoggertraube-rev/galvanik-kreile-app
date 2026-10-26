@@ -1,9 +1,13 @@
 "use server";
 
+import { renderToBuffer } from "@react-pdf/renderer";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
+import { createQuotePdfDocument } from "@/lib/pdf/QuoteDocument";
 import { resolveAuthorization } from "@/lib/server/authorization";
+import { readCustomerSummary } from "@/lib/server/customerSummaryRead";
 import { createOrderIntake } from "@/lib/server/commands/orderIntakeCommand";
 import { readOrderIntakeReceipt } from "@/lib/server/orderIntakeRead";
+import { readCompanyDocumentSettings } from "@/modules/fundament/server-public";
 import {
   createQuoteCommand,
   listOpenQuotesCommand,
@@ -192,4 +196,40 @@ export async function convertQuoteToOrderAction(input: ConvertQuoteInput) {
     orderReceipt: order.receipt,
     replayed: prepared.replayed && order.replayed,
   };
+}
+
+export async function readQuotePdfAction(input: { quoteId: string }) {
+  noStore();
+  let authorization;
+  try {
+    authorization = await resolveAuthorization();
+  } catch {
+    return { code: "UNAVAILABLE" as const, message: "KV-PDF ist derzeit nicht verfügbar." };
+  }
+  const failure = authorizationFailure(authorization);
+  if (failure || !authorization.ok) return failure!;
+
+  const quoteResult = await readQuoteCommand(quoteCommandContext(authorization.data), input);
+  if (quoteResult.code !== "OK") return quoteResult;
+  const [customerResult, companyResult] = await Promise.all([
+    readCustomerSummary(authorization.data, { customerId: quoteResult.quote.customerId }),
+    readCompanyDocumentSettings({
+      tenantId: authorization.data.tenantId,
+      actorId: authorization.data.userId,
+      canRead: authorization.data.permissions.includes("perm_view_leitstand"),
+    }),
+  ]);
+  if (customerResult.code !== "OK") return customerResult;
+  if (companyResult.code !== "OK") return companyResult;
+
+  try {
+    const pdf = await renderToBuffer(createQuotePdfDocument({
+      company: companyResult.company,
+      customer: customerResult.data,
+      quote: quoteResult.quote,
+    }));
+    return { code: "OK" as const, pdf, quoteNumber: quoteResult.quote.quoteNumber };
+  } catch {
+    return { code: "UNAVAILABLE" as const, message: "KV-PDF konnte nicht sicher erstellt werden." };
+  }
 }

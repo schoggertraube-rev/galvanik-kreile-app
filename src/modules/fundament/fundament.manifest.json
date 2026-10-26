@@ -18,6 +18,7 @@
     "@/modules/fundament/public#SalesStageFeatureId",
     "@/modules/fundament/server-public#SystemSettingsContext",
     "@/modules/fundament/server-public#readSystemSettings",
+    "@/modules/fundament/server-public#readCompanyDocumentSettings",
     "@/modules/fundament/server-public#updateCompanySettings",
     "@/modules/fundament/server-public#updateManagedUser",
     "@/modules/fundament/server-public#TenantFeatureContext",

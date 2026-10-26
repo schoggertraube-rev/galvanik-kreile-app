@@ -197,10 +197,8 @@ async function fillCustomer() {
 
 async function fillQuote() {
   fireEvent.click(screen.getByRole("button", { name: /KV \/ Angebot anlegen/ }));
-  fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "Synthetischer Flansch" } });
+  fireEvent.change(await screen.findByLabelText("Leistung"), { target: { value: "88888888-8888-4888-8888-888888888888" } });
   fireEvent.change(screen.getByLabelText("Material"), { target: { value: "Stahl" } });
-  fireEvent.change(screen.getByLabelText("Oberfläche"), { target: { value: "Verzinken" } });
-  fireEvent.change(screen.getByLabelText("Netto je Stück"), { target: { value: "125,00" } });
   fireEvent.change(screen.getByLabelText("Gewünschter Termin"), { target: { value: "2026-10-15" } });
   fireEvent.change(screen.getByLabelText("Hinweis zum KV"), { target: { value: "SYNTHETISCHER KV" } });
   fireEvent.click(screen.getByRole("button", { name: /KV sichern/ }));
@@ -229,6 +227,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     }));
     expect(value.rememberQuote).toHaveBeenCalledWith(QUOTE_ID);
     expect(screen.getByText(/250,00\s€ netto/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "KV als PDF" })).toHaveAttribute("href", `/api/documents/${QUOTE_ID}/quote-pdf`);
 
     const confirmedDate = screen.getByLabelText("Zugesagter Termin für den Auftrag");
     const awardButton = screen.getByRole("button", { name: /Zuschlag bestätigen/ });

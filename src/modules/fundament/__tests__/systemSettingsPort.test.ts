@@ -64,6 +64,23 @@ describe("system settings port", () => {
     expect(execute.mock.calls[0]?.[0].text).toContain("ON CONFLICT");
   });
 
+  it("reads complete company data for a tenant-bound document and fails closed when it is missing", async () => {
+    execute.mockResolvedValueOnce([{
+      company_name: "Galvanik Kreile", street: "Testweg 1", zip: "12345", city: "Teststadt",
+      country: "Deutschland", tax_id: "DE123456789", iban: "DE0012345678", bic: "TESTDEFF",
+      bank_name: "Testbank", invoice_payment_term_days: 14, logo_url: "/logo.png",
+    }]);
+    const { readCompanyDocumentSettings } = await import("../server/systemSettingsPort");
+    await expect(readCompanyDocumentSettings({ ...context, canRead: true })).resolves.toMatchObject({
+      code: "OK",
+      company: { companyName: "Galvanik Kreile", paymentTermDays: 14 },
+    });
+
+    execute.mockResolvedValueOnce([]);
+    await expect(readCompanyDocumentSettings({ ...context, canRead: true })).resolves.toMatchObject({ code: "UNAVAILABLE" });
+    await expect(readCompanyDocumentSettings({ ...context, canRead: false })).resolves.toMatchObject({ code: "FORBIDDEN" });
+  });
+
   it("fails closed before database access for non-admin and incomplete input", async () => {
     const { readSystemSettings, updateCompanySettings, updateManagedUser } = await import("../server/systemSettingsPort");
     await expect(readSystemSettings({ ...context, canManage: false })).resolves.toMatchObject({ code: "FORBIDDEN" });

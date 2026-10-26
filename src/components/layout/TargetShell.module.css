@@ -9,6 +9,8 @@
 
 .headerActions{display:flex;align-items:center;gap:10px}.searchButton{min-height:46px;padding:0 13px;border:1px solid var(--rand);border-radius:13px;display:flex;align-items:center;gap:8px;background:var(--surface);color:var(--navy-700);font-weight:750;cursor:pointer}.searchButton svg{width:18px}.searchButton kbd{padding:3px 6px;border:1px solid var(--rand);border-radius:6px;background:var(--ground);color:var(--navy-400);font:700 10px/1 var(--font-inter),system-ui}.searchButton:focus-visible{outline:3px solid var(--magenta);outline-offset:3px}@media(max-width:700px){.searchButton span,.searchButton kbd{display:none}.searchButton{width:44px;padding:0;justify-content:center}}@media(max-width:520px){.headerActions{gap:6px}.brand{width:118px}}
 
+.createDownload{min-height:48px;padding:0 16px;border:1px solid var(--cream-500);border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:var(--surface);color:var(--navy-700);font-weight:750}.createDownload:focus-visible{outline:3px solid var(--magenta);outline-offset:3px}
+
 /* The fixed mobile dock and create handle must never trap the last page section. */
 .content{overflow-x:hidden;overflow-y:auto}
 @media(max-width:1023px){.content{overscroll-behavior-y:contain;scroll-padding-bottom:calc(126px + env(safe-area-inset-bottom));touch-action:pan-y;-webkit-overflow-scrolling:touch}.page{padding-bottom:calc(126px + env(safe-area-inset-bottom))}}

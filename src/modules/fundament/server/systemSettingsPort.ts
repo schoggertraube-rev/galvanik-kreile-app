@@ -9,6 +9,7 @@ import { mapTenantFeatureRows, type TenantFeatureRow } from "./tenantFeaturePort
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const ROLES = ["admin", "meister", "buero", "werkstatt"] as const;
 export type SystemSettingsContext = { tenantId: string; actorId: string; canManage: boolean };
+export type CompanyDocumentContext = { tenantId: string; actorId: string; canRead: boolean };
 type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null };
 type UserRow = { id: string; email: string; full_name: string; role: string; active: boolean };
 
@@ -51,6 +52,37 @@ export async function readSystemSettings(context: SystemSettingsContext) {
     return { code: "OK" as const, snapshot };
   } catch {
     return { code: "UNAVAILABLE" as const, message: "Einstellungen konnten nicht sicher geladen werden." };
+  }
+}
+
+export async function readCompanyDocumentSettings(context: CompanyDocumentContext) {
+  if (!context.canRead) return { code: "FORBIDDEN" as const, message: "Firmendaten sind nicht erlaubt." };
+  try {
+    const company = await withPrivilegedTenantTransaction(context, async (tx) => {
+      const rows = await tx.execute<CompanyRow>(sql`SELECT company_name, street, zip, city, country, tax_id, iban, bic, bank_name, invoice_payment_term_days, logo_url FROM public.company_settings WHERE tenant_id = ${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
+      if (rows.length !== 1) throw new Error("COMPANY_DOCUMENT_SETTINGS_MISSING_OR_AMBIGUOUS");
+      const row = rows[0];
+      const mapped: CompanySettingsInput = {
+        companyName: row.company_name,
+        street: row.street ?? "",
+        zip: row.zip ?? "",
+        city: row.city ?? "",
+        country: row.country ?? "",
+        taxId: row.tax_id ?? "",
+        iban: row.iban ?? "",
+        bic: row.bic ?? "",
+        bankName: row.bank_name ?? "",
+        paymentTermDays: row.invoice_payment_term_days ?? 0,
+        logoUrl: row.logo_url ?? "",
+      };
+      if (Object.values(mapped).some((field) => field === "") || !Number.isSafeInteger(mapped.paymentTermDays) || mapped.paymentTermDays < 1) {
+        throw new Error("COMPANY_DOCUMENT_SETTINGS_INCOMPLETE");
+      }
+      return mapped;
+    });
+    return { code: "OK" as const, company };
+  } catch {
+    return { code: "UNAVAILABLE" as const, message: "Firmendaten für den KV sind noch nicht vollständig gepflegt." };
   }
 }
 

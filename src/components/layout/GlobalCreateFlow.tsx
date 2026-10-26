@@ -174,7 +174,16 @@ type OpenQuotesState =
   | { kind: "data"; quotes: QuoteReadback[] }
   | { kind: "denied" | "error" | "unknown"; message: string; requestId?: string };
 type CustomerDraft = Omit<CreateCustomerInput, "clientEventId"|"street"|"zipCode"|"city"|"country"|"paymentPreference"|"vatId"> & {street:string;zipCode:string;city:string;country:string;paymentPreference:string;vatId:string|null};
-type PositionDraft = { key: string; name: string; quantity: string; material: string; surfaceRequested: string; unitPrice: string };
+type PositionDraft = {
+  key: string;
+  catalogServiceId: string;
+  name: string;
+  quantity: string;
+  material: string;
+  surfaceRequested: string;
+  unit: string;
+  unitPriceCents: number | null;
+};
 type IntakePositionDraft = { key:string; catalogServiceId:string; name:string; quantity:string; material:string; surfaceRequested:string; unit:string; unitPriceCents:number; vatRateBasisPoints:0|700|1900 };
 
 function CustomerFields({ value, onChange, autofocus = false, requireOrderData = true }: { value: CustomerDraft; onChange: (value: CustomerDraft) => void; autofocus?: boolean; requireOrderData?: boolean }) {
@@ -236,11 +245,13 @@ function completeOrderCustomer(customer: CustomerDraft): boolean {
 
 const newPosition = (): PositionDraft => ({
   key: globalThis.crypto.randomUUID(),
+  catalogServiceId: "",
   name: "",
   quantity: "1",
   material: "",
   surfaceRequested: "",
-  unitPrice: "",
+  unit: "",
+  unitPriceCents: null,
 });
 
 const newIntakePosition = (): IntakePositionDraft => ({
@@ -257,14 +268,6 @@ const newIntakePosition = (): IntakePositionDraft => ({
 
 function euro(cents: number) {
   return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(cents / 100);
-}
-
-function parseCents(value: string): number | null {
-  const normalized = value.trim();
-  if (!/^\d{1,7}(?:[.,]\d{1,2})?$/.test(normalized)) return null;
-  const [whole, decimal = ""] = normalized.replace(",", ".").split(".");
-  const cents = Number(whole) * 100 + Number(decimal.padEnd(2, "0"));
-  return Number.isSafeInteger(cents) && cents <= 999_999_999 ? cents : null;
 }
 
 function nullable(value: string): string | null {
@@ -409,13 +412,22 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setCustomerLoad("loading");
     const seq = ++customerRequestSeq.current;
     try {
-      const result = await ports.listCustomers();
+      const [result, catalog] = await Promise.all([
+        ports.listCustomers(),
+        ports.listCatalog?.() ?? Promise.resolve({ code: "UNAVAILABLE" as const, message: "Leistungskatalog ist nicht angebunden." }),
+      ]);
       if (seq !== customerRequestSeq.current) return;
       if (result.code !== "OK") {
         setCustomerLoad("error");
         setFeedback({ kind: result.code === "DENIED" ? "denied" : "error", message: result.message });
         return;
       }
+      if (catalog.code !== "OK") {
+        setCustomerLoad("error");
+        setFeedback({ kind: catalog.code === "DENIED" ? "denied" : "error", message: catalog.message });
+        return;
+      }
+      setCatalogServices(catalog.services);
       setCustomerChoices(result.customers);
       setCustomerLoad(result.customers.length > 0 ? "ready" : "empty");
     } catch {
@@ -499,11 +511,19 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setBusy(true);
     setFeedback(null);
     try {
-      const result = await ports.readQuote({ quoteId: ports.resumeQuoteId });
+      const [result, catalog] = await Promise.all([
+        ports.readQuote({ quoteId: ports.resumeQuoteId }),
+        ports.listCatalog?.() ?? Promise.resolve({ code: "UNAVAILABLE" as const, message: "Leistungskatalog ist nicht angebunden." }),
+      ]);
       if (result.code !== "OK") {
         setFeedback(requestFeedback(result, ports.resumeQuoteId));
         return;
       }
+      if (catalog.code !== "OK") {
+        setFeedback({ kind: catalog.code === "DENIED" ? "denied" : "error", message: catalog.message });
+        return;
+      }
+      setCatalogServices(catalog.services);
       resetAwardDateForQuoteContext();
       setQuote(result.quote);
       setQuoteReceipt(null);
@@ -525,7 +545,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setOpenQuotesState({ kind: "loading" });
     navigate("quote-list");
     try {
-      const result = await ports.listOpenQuotes();
+      const [result, catalog] = await Promise.all([
+        ports.listOpenQuotes(),
+        ports.listCatalog?.() ?? Promise.resolve({ code: "UNAVAILABLE" as const, message: "Leistungskatalog ist nicht angebunden." }),
+      ]);
       if (result.code !== "OK") {
         setOpenQuotesState({
           kind: result.code === "UNAUTHENTICATED" || result.code === "FORBIDDEN"
@@ -537,6 +560,11 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         });
         return;
       }
+      if (catalog.code !== "OK") {
+        setOpenQuotesState({ kind: catalog.code === "DENIED" ? "denied" : "error", message: catalog.message });
+        return;
+      }
+      setCatalogServices(catalog.services);
       setOpenQuotesState(result.quotes.length === 0
         ? { kind: "empty" }
         : { kind: "data", quotes: result.quotes });
@@ -561,11 +589,21 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setCustomer({ id: draft.customerId, customerNumber: draft.customerNumber, name: draft.customerDisplayName, city: null });
     setDueDate(draft.dueDate);
     setQuoteNote(draft.note ?? "");
-    setPositions(draft.positions.map((position) => ({
-      key: globalThis.crypto.randomUUID(), name: position.name, quantity: String(position.quantity),
-      material: position.material ?? "", surfaceRequested: position.surfaceRequested,
-      unitPrice: (position.unitPriceCents / 100).toFixed(2).replace(".", ","),
-    })));
+    setPositions(draft.positions.map((position) => {
+      const service = catalogServices.find((candidate) => candidate.name === position.name
+        && candidate.surface === position.surfaceRequested
+        && candidate.netPriceCents === position.unitPriceCents);
+      return {
+        key: globalThis.crypto.randomUUID(),
+        catalogServiceId: service?.id ?? "",
+        name: position.name,
+        quantity: String(position.quantity),
+        material: position.material ?? "",
+        surfaceRequested: position.surfaceRequested,
+        unit: service?.unit ?? "",
+        unitPriceCents: position.unitPriceCents,
+      };
+    }));
     requestIds.current.quote = "";
     requestIds.current.conversion = "";
     navigate("quote");
@@ -607,9 +645,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     if (!customer) return null;
     const mapped = positions.map((position) => ({
       name: position.name.trim(), quantity: Number(position.quantity), material: nullable(position.material),
-      surfaceRequested: position.surfaceRequested.trim(), unitPriceCents: parseCents(position.unitPrice),
+      surfaceRequested: position.surfaceRequested.trim(), unitPriceCents: position.unitPriceCents,
     }));
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate) || mapped.some((position) => position.unitPriceCents === null)) return null;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dueDate) || positions.some((position) => !position.catalogServiceId)
+      || mapped.some((position) => position.unitPriceCents === null)) return null;
     return {
       clientEventId: requestId("quote"), customerId: customer.id, dueDate, note: nullable(quoteNote),
       positions: mapped.map((position) => ({ ...position, unitPriceCents: position.unitPriceCents! })),
@@ -685,9 +724,32 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     else if (step === "quote-saved") void convertQuote();
   };
 
-  const startQuote = (selected: GlobalCreateCustomerChoice) => {
+  const startQuote = async (selected: GlobalCreateCustomerChoice) => {
     if (!ports.canCreateQuote) {
       deny("quote");
+      return;
+    }
+    let services = catalogServices;
+    if (services.length === 0) {
+      setBusy(true);
+      setFeedback(null);
+      try {
+        const catalog = await (ports.listCatalog?.() ?? Promise.resolve({ code: "UNAVAILABLE" as const, message: "Leistungskatalog ist nicht angebunden." }));
+        if (catalog.code !== "OK") {
+          setFeedback({ kind: catalog.code === "DENIED" ? "denied" : "error", message: catalog.message });
+          return;
+        }
+        services = catalog.services;
+        setCatalogServices(services);
+      } catch {
+        setFeedback({ kind: "error", message: "Der Leistungskatalog konnte nicht sicher gelesen werden." });
+        return;
+      } finally {
+        setBusy(false);
+      }
+    }
+    if (services.length === 0) {
+      setFeedback({ kind: "validation", message: "Im Leistungskatalog ist noch keine aktive Leistung gepflegt." });
       return;
     }
     resetAwardDateForQuoteContext();
@@ -712,9 +774,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       quantity: Number(position.quantity),
       material: nullable(position.material),
       surfaceRequested: position.surfaceRequested.trim(),
-      unitPriceCents: parseCents(position.unitPrice),
+      unitPriceCents: position.unitPriceCents,
     }));
-    if (!dueDate || mapped.some((position) => position.name.length < 2
+    if (!dueDate || positions.some((position) => !position.catalogServiceId) || mapped.some((position) => position.name.length < 2
       || !Number.isSafeInteger(position.quantity) || position.quantity < 1
       || position.surfaceRequested.length < 2 || position.unitPriceCents === null)) {
       setFeedback({ kind: "validation", message: "Termin und alle Positionen brauchen Bezeichnung, Menge, Oberfläche und einen gültigen Netto-Stückpreis." });
@@ -897,8 +959,24 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     return customerChoices.filter((entry) => `${entry.customerNumber ?? ""} ${entry.name} ${entry.city ?? ""}`.toLocaleLowerCase("de-DE").includes(query));
   }, [customerChoices, customerQuery]);
 
-  const setPosition = (key: string, field: keyof Omit<PositionDraft, "key">, value: string) => {
+  const setPosition = (key: string, field: "quantity" | "material", value: string) => {
     setPositions((current) => current.map((position) => position.key === key ? { ...position, [field]: value } : position));
+  };
+
+  const selectQuoteService = (key: string, serviceId: string) => {
+    const service = catalogServices.find((candidate) => candidate.id === serviceId);
+    setPositions((current) => current.map((position) => position.key === key
+      ? service
+        ? {
+            ...position,
+            catalogServiceId: service.id,
+            name: service.name,
+            surfaceRequested: service.surface,
+            unit: service.unit,
+            unitPriceCents: service.netPriceCents,
+          }
+        : { ...newPosition(), key: position.key, quantity: position.quantity, material: position.material }
+      : position));
   };
 
   const reset = () => {
@@ -1027,7 +1105,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                   <p>{customerCompleteForOrder ? "Der Kunde ist vollständig gespeichert und im aktuellen Datenstand wiedergefunden." : "Der Interessent ist gespeichert und als unvollständig für einen Auftrag markiert."}</p>
                   <ReceiptFacts title="Kundenanlage – technische Details für Support" values={[["Vorgangskennung", customerReceipt.receiptId], ["Nachweis", customerReceipt.eventId], ["Zeit", customerReceipt.recordedAt]]} />
                   <div className={styles.createChoiceGrid}>
-                    {customerCompleteForOrder ? <button type="button" onClick={() => startQuote(customer)} data-autofocus><FileText /><span><strong>KV / Angebot anlegen</strong><small>Mit diesem vollständigen Kunden weiterarbeiten.</small></span></button> : null}
+                    {customerCompleteForOrder ? <button type="button" onClick={() => void startQuote(customer)} data-autofocus><FileText /><span><strong>KV / Angebot anlegen</strong><small>Mit diesem vollständigen Kunden weiterarbeiten.</small></span></button> : null}
                     <button type="button" className={styles.createChoiceAlternate} onClick={() => { setOpen(false); ports.openCustomer(customer.id); }} data-autofocus={!customerCompleteForOrder || undefined}><UserPlus /><span><strong>{customerCompleteForOrder ? "Kundenkarte öffnen" : "Stammdaten vervollständigen"}</strong><small>{customerCompleteForOrder ? "Gespeicherten Stammdatensatz prüfen." : "Die Kundenkarte zeigt alle noch fehlenden Auftragsdaten."}</small></span></button>
                   </div>
                 </div>
@@ -1039,7 +1117,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                   {customerLoad === "loading" ? <p className={styles.createLoading} role="status"><Loader2 className={styles.createSpinner} /> Kundenstamm wird sicher gelesen …</p> : null}
                   {customerLoad === "empty" ? <div className={styles.createEmpty}><h3>Noch kein belegter Kunde</h3><p>Datenstand: Der Kundenstamm ist geladen und enthält keinen passenden Kunden. Nächster Schritt: Kunde anlegen.</p>{ports.canCreateCustomer ? <button type="button" onClick={() => navigate("customer")}>Kunde anlegen</button> : null}</div> : null}
                   {customerLoad === "ready" && filteredCustomers.length === 0 ? <div className={styles.createEmpty}><h3>Keine belegte Übereinstimmung</h3><p>Der geladene Kundenstamm wurde nach Name, Kundennummer und Ort geprüft.</p></div> : null}
-                  <div className={styles.createCustomerList}>{filteredCustomers.map((entry) => <button type="button" key={entry.id} onClick={() => startQuote(entry)}><span><strong>{entry.name}</strong><small>{entry.customerNumber ?? "ohne Kundennummer"}{entry.city ? ` · ${entry.city}` : ""}</small></span><FileText /></button>)}</div>
+                  <div className={styles.createCustomerList}>{filteredCustomers.map((entry) => <button type="button" key={entry.id} onClick={() => void startQuote(entry)}><span><strong>{entry.name}</strong><small>{entry.customerNumber ?? "ohne Kundennummer"}{entry.city ? ` · ${entry.city}` : ""}</small></span><FileText /></button>)}</div>
                 </div>
               ) : null}
 
@@ -1060,11 +1138,12 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                     {positions.map((position, index) => (
                       <fieldset key={position.key} className={styles.createPosition}>
                         <legend>Position {index + 1}</legend>
-                        <label className={styles.createFieldWide}>Teil / Bezeichnung<input data-autofocus={index === 0 || undefined} required value={position.name} onChange={(event) => setPosition(position.key, "name", event.target.value)} /></label>
+                        <label className={styles.createFieldWide}>Leistung<select data-autofocus={index === 0 || undefined} required value={position.catalogServiceId} onChange={(event) => selectQuoteService(position.key, event.target.value)}><option value="">Bitte aus dem Katalog wählen</option>{catalogServices.map((service) => <option key={service.id} value={service.id}>{service.name} · {service.surface} · {euro(service.netPriceCents)}/{service.unit}</option>)}</select></label>
                         <label>Menge<input required inputMode="numeric" type="number" min="1" max="1000000" value={position.quantity} onChange={(event) => setPosition(position.key, "quantity", event.target.value)} /></label>
                         <label>Material<input value={position.material} onChange={(event) => setPosition(position.key, "material", event.target.value)} /></label>
-                        <label>Oberfläche<input required value={position.surfaceRequested} onChange={(event) => setPosition(position.key, "surfaceRequested", event.target.value)} /></label>
-                        <label>Netto je Stück<input required inputMode="decimal" value={position.unitPrice} onChange={(event) => setPosition(position.key, "unitPrice", event.target.value)} placeholder="0,00" /></label>
+                        <label>Oberfläche<input readOnly value={position.surfaceRequested} /></label>
+                        <label>Einheit<input readOnly value={position.unit} /></label>
+                        <label>Preis netto<input readOnly value={position.unitPriceCents === null ? "" : euro(position.unitPriceCents)} /></label>
                         {positions.length > 1 ? <button type="button" className={styles.createRemove} onClick={() => setPositions((current) => current.filter((entry) => entry.key !== position.key))} aria-label={`Position ${index + 1} entfernen`}><Trash2 /></button> : null}
                       </fieldset>
                     ))}
@@ -1086,7 +1165,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                   <p>{quote.customerDisplayName} · {quote.positions.length} {quote.positions.length === 1 ? "Position" : "Positionen"} · {euro(quote.totalNetCents)} netto.</p>
                   <div className={styles.createContext}><span>KV-Stand</span><strong>{quote.status === "draft" ? "in Vorbereitung" : "beauftragt"}</strong><span>Bearbeitungsstand</span><strong>Stand {quote.version}</strong><span>Terminwunsch</span><strong>{quote.dueDate}</strong></div>
                   {quoteReceipt ? <ReceiptFacts title="KV – technische Details für Support" values={[["Vorgangskennung", quoteReceipt.receiptId], ["Nachweis", quoteReceipt.eventId], ["Zeit", quoteReceipt.recordedAt]]} /> : <p className={styles.createReadback}>Der KV ist sicher gespeichert und kann weiterbearbeitet werden.</p>}
-                  {quote.status === "draft" ? <><div className={styles.createFormActions}><button type="button" onClick={() => editQuote(quote)} disabled={busy}>KV bearbeiten</button></div><div className={styles.createAwardBlock}><label htmlFor="confirmed-order-due-date">Zugesagter Termin für den Auftrag</label><input id="confirmed-order-due-date" required type="date" value={confirmedOrderDueDate} onChange={(event) => setConfirmedOrderDueDate(event.target.value)} aria-describedby="confirmed-order-due-date-help" aria-invalid={!confirmedOrderDueDateValid} data-autofocus /><p id="confirmed-order-due-date-help" className={styles.createAwardHelp}>{confirmedOrderDueDateValid ? "Der Auftrag wird mit diesem Termin angelegt." : "Bitte vor dem Zuschlag einen gültigen Auftragstermin festlegen."}</p><button type="button" className={styles.createAward} onClick={() => void convertQuote()} disabled={busy || !confirmedOrderDueDateValid}>{busy ? <Loader2 className={styles.createSpinner} /> : <Check />} Zuschlag bestätigen · Auftrag anlegen</button></div></> : null}
+                  <div className={styles.createFormActions}><a className={styles.createDownload} href={`/api/documents/${encodeURIComponent(quote.quoteId)}/quote-pdf`} target="_blank" rel="noreferrer">KV als PDF</a>{quote.status === "draft" ? <button type="button" onClick={() => editQuote(quote)} disabled={busy}>KV bearbeiten</button> : null}</div>
+                  {quote.status === "draft" ? <div className={styles.createAwardBlock}><label htmlFor="confirmed-order-due-date">Zugesagter Termin für den Auftrag</label><input id="confirmed-order-due-date" required type="date" value={confirmedOrderDueDate} onChange={(event) => setConfirmedOrderDueDate(event.target.value)} aria-describedby="confirmed-order-due-date-help" aria-invalid={!confirmedOrderDueDateValid} data-autofocus /><p id="confirmed-order-due-date-help" className={styles.createAwardHelp}>{confirmedOrderDueDateValid ? "Der Auftrag wird mit diesem Termin angelegt." : "Bitte vor dem Zuschlag einen gültigen Auftragstermin festlegen."}</p><button type="button" className={styles.createAward} onClick={() => void convertQuote()} disabled={busy || !confirmedOrderDueDateValid}>{busy ? <Loader2 className={styles.createSpinner} /> : <Check />} Zuschlag bestätigen · Auftrag anlegen</button></div> : null}
                 </div>
               ) : null}
 
