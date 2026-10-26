@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -26,12 +26,14 @@ export function CustomerCardView({
   onClose,
   onSaveCommercial,
   onNewOrder,
+  documentsPanel,
 }: {
   state: CustomerCardState;
   onOpenOrder: (id: string) => void;
   onClose: () => void;
   onSaveCommercial?: (input: UpdateCustomerCommercialInput) => Promise<{ok:true}|{ok:false;message:string}>;
   onNewOrder?: () => void;
+  documentsPanel?: ReactNode;
 }) {
   const [saveMessage, setSaveMessage] = useState("");
   if (state.kind === "loading")
@@ -203,6 +205,7 @@ export function CustomerCardView({
             </ol>
           )}
         </section>
+        {documentsPanel}
         <div className={styles.detailGrid}>
           <section>
             <header>

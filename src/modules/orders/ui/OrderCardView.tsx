@@ -91,12 +91,14 @@ export function OrderCardView({
   state,
   actions,
   attachmentPanel,
+  documentsPanel,
   onOpenCustomer,
   onClose,
 }: {
   state: OrderCardState;
   actions: OrderCardActionPorts;
   attachmentPanel?: ReactNode;
+  documentsPanel?: ReactNode;
   onOpenCustomer: (id: string) => void;
   onClose: () => void;
 }) {
@@ -405,6 +407,7 @@ export function OrderCardView({
                 Noch keine Dokumente oder Fotos vorhanden.
               </p>
             )}
+            {documentsPanel}
           </section>
         </div>
         {actions.feedback.kind !== "idle" ? (
