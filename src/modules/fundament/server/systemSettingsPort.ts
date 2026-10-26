@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { sql } from "drizzle-orm";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import type { CompanySettingsInput, ManagedUser, SystemSettingsSnapshot, UpdateManagedUserInput } from "../public";
+import { mapTenantFeatureRows, type TenantFeatureRow } from "./tenantFeaturePort";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const ROLES = ["admin", "meister", "buero", "werkstatt"] as const;
@@ -24,6 +25,7 @@ export async function readSystemSettings(context: SystemSettingsContext) {
       const companies = await tx.execute<CompanyRow>(sql`SELECT company_name, street, zip, city, country, tax_id, iban, bic, bank_name, invoice_payment_term_days, logo_url FROM public.company_settings WHERE tenant_id = ${context.tenantId} ORDER BY updated_at DESC LIMIT 2`);
       if (companies.length !== 1 || !companies[0]) throw new Error("COMPANY_SETTINGS_AMBIGUOUS");
       const users = await tx.execute<UserRow>(sql`SELECT id, email, full_name, role, active FROM public.app_users WHERE tenant_id = ${context.tenantId} ORDER BY full_name, id`);
+      const featureRows = await tx.execute<TenantFeatureRow>(sql`SELECT feature_id, enabled FROM public.tenant_features WHERE tenant = ${context.tenantId} ORDER BY feature_id`);
       const company = companies[0];
       return {
         company: {
@@ -38,6 +40,7 @@ export async function readSystemSettings(context: SystemSettingsContext) {
           { label: "Aufträge", pattern: "A-JJJJ-fortlaufend" },
           { label: "Rechnungen", pattern: "RE-JJJJ-fortlaufend" },
         ],
+        features: mapTenantFeatureRows(featureRows),
       };
     });
     return { code: "OK" as const, snapshot };

@@ -11,6 +11,7 @@ import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { MockIcons } from "./MockIcons";
 import { MoreMenu } from "./MoreMenu";
 import { FrameModeContext, type MockFrameMode } from "./MockFrameMode";
+import { useSalesStageFeatures } from "./SalesStageFeatureContext";
 
 
 function subscribe(onChange: () => void) {
@@ -93,12 +94,12 @@ const AREAS = [
 ] as const;
 
 const PLANNED_AREAS = [
-  { label: "Zahlen", icon: "i-chart" },
+  { label: "Zahlen", icon: "i-chart", featureId: "Z01" },
 ] as const;
 
 const PLANNED_MORE = [
   { label: "Kalender", icon: "i-calendar" },
-  { label: "Material & Einkauf", icon: "i-box" },
+  { label: "Material & Einkauf", icon: "i-box", featureId: "W02" },
 ] as const;
 
 const DOCK = [
@@ -114,6 +115,7 @@ export function MockAppFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const access = useNavigationAccess();
+  const stageFeatures = useSalesStageFeatures();
   const clock = useBerlinClock();
   const [moreOpen, setMoreOpen] = useState(false);
   const go = (href: string) => router.push(href);
@@ -185,10 +187,10 @@ export function MockAppFrame({ children }: { children: React.ReactNode }) {
                         );
                       })}
                       {PLANNED_AREAS.map((area) => (
-                        <button key={area.label} type="button" className="nav planned" aria-disabled="true" disabled>
+                        <button key={area.label} type="button" className="nav planned" aria-disabled="true" disabled data-feature-enabled={stageFeatures.isFeatureEnabled(area.featureId)}>
                           <Icon id={area.icon} />
                           <span className="lbl">{area.label}</span>
-                          <span className="soon">geplant</span>
+                          <span className="soon">{stageFeatures.isFeatureEnabled(area.featureId) ? "aktiv" : "geplant"}</span>
                         </button>
                       ))}
                       {access.settings ? (
@@ -196,10 +198,10 @@ export function MockAppFrame({ children }: { children: React.ReactNode }) {
                           <div className="nav-bottom nav-div"></div>
                           <div className="nav-label">Weiteres</div>
                           {PLANNED_MORE.map((area) => (
-                            <button key={area.label} type="button" className="nav planned" aria-disabled="true" disabled>
+                            <button key={area.label} type="button" className="nav planned" aria-disabled="true" disabled data-feature-enabled={"featureId" in area ? stageFeatures.isFeatureEnabled(area.featureId) : undefined}>
                               <Icon id={area.icon} />
                               <span className="lbl">{area.label}</span>
-                              <span className="soon">geplant</span>
+                              <span className="soon">{"featureId" in area && stageFeatures.isFeatureEnabled(area.featureId) ? "aktiv" : "geplant"}</span>
                             </button>
                           ))}
                           <button type="button" data-href="/settings" aria-current={isCurrent(pathname, "/settings") ? "page" : undefined}

@@ -2,9 +2,10 @@
 
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization } from "@/lib/server/authorization";
-import { readSystemSettings, updateCompanySettings, updateManagedUser } from "@/modules/fundament/server-public";
+import { readSystemSettings, readTenantFeatures, setTenantFeature, updateCompanySettings, updateManagedUser } from "@/modules/fundament/server-public";
 import { listCatalogServices, saveCatalogService } from "@/modules/katalog/server-public";
 import type { CompanySettingsInput, UpdateManagedUserInput } from "@/modules/fundament/public";
+import type { SalesStageFeatureId } from "@/modules/fundament/public";
 import type { SaveCatalogServiceInput } from "@/modules/katalog/public";
 
 async function adminContext() {
@@ -26,6 +27,21 @@ export async function readSettingsAction() {
   if (settings.code !== "OK") return settings;
   if (catalog.code !== "OK") return catalog;
   return { code: "OK" as const, snapshot: settings.snapshot, services: catalog.services };
+}
+
+export async function readSalesStageFeaturesAction() {
+  noStore();
+  const context = await adminContext();
+  if (!context) return { code: "FORBIDDEN" as const, message: "Stufen-Schalter sind mit dieser Rolle nicht verfügbar." };
+  return readTenantFeatures(context);
+}
+
+export async function saveSalesStageFeatureAction(input: { featureId: SalesStageFeatureId; enabled: boolean }) {
+  const context = await adminContext();
+  if (!context) return { code: "FORBIDDEN" as const, message: "Stufen-Schalter dürfen mit dieser Rolle nicht geändert werden." };
+  const result = await setTenantFeature(context, input);
+  if (result.code === "OK") revalidatePath("/", "layout");
+  return result;
 }
 
 export async function saveCompanySettingsAction(input: CompanySettingsInput) {

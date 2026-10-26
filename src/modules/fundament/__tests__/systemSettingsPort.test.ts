@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
+import { SALES_STAGE_FEATURES } from "../featureCatalog";
 
 const { execute, withTransaction, hash } = vi.hoisted(() => ({ execute: vi.fn(), withTransaction: vi.fn(), hash: vi.fn() }));
 
@@ -27,13 +28,15 @@ describe("system settings port", () => {
       .mockResolvedValueOnce([{
         id: "22222222-2222-4222-8222-222222222222", email: "phillip@example.invalid",
         full_name: "Phillip", role: "werkstatt", active: true,
-      }]);
+      }])
+      .mockResolvedValueOnce(SALES_STAGE_FEATURES.map((feature) => ({ feature_id: feature.id, enabled: feature.defaultEnabled })));
     const { readSystemSettings } = await import("../server/systemSettingsPort");
     await expect(readSystemSettings(context)).resolves.toMatchObject({
       code: "OK",
       snapshot: {
         company: { companyName: "Galvanik Kreile", paymentTermDays: 14 },
         users: [{ fullName: "Phillip", role: "werkstatt", active: true }],
+        features: expect.arrayContaining([{ id: "S01", enabled: true }, { id: "Z01", enabled: false }]),
       },
     });
   });

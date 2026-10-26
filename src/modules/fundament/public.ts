@@ -2,6 +2,8 @@
 export type { StartUserDto as ProductStartProfile } from "@/lib/auth/userDtos";
 export { SystemAdminView } from "./ui/SystemAdminView";
 export type { SystemAdminViewProps } from "./ui/SystemAdminView";
+export { SALES_STAGE_FEATURES, isFeatureEnabled } from "./featureCatalog";
+export type { SalesStage, SalesStageFeature, SalesStageFeatureDefinition, SalesStageFeatureId } from "./featureCatalog";
 
 export type CompanySettingsInput = {
   companyName: string; street: string; zip: string; city: string; country: string;
@@ -13,4 +15,5 @@ export type SystemSettingsSnapshot = {
   company: CompanySettingsInput;
   users: ManagedUser[];
   numberRanges: Array<{ label: string; pattern: string }>;
+  features: import("./featureCatalog").SalesStageFeature[];
 };

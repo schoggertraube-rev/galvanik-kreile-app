@@ -7,6 +7,7 @@ const ports = vi.hoisted(() => ({
     throw new Error(`REDIRECT:${path}`);
   }),
   readSettings: vi.fn(),
+  saveFeature: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -14,7 +15,13 @@ vi.mock("@/lib/server/authorization", () => ({
   resolveAuthorization: ports.resolveAuthorization,
 }));
 vi.mock("next/navigation", () => ({ redirect: ports.redirect }));
-vi.mock("@/app/actions/settings.actions", () => ({ readSettingsAction: ports.readSettings }));
+vi.mock("@/app/actions/settings.actions", () => ({
+  readSettingsAction: ports.readSettings,
+  saveSalesStageFeatureAction: ports.saveFeature,
+  saveCatalogServiceAction: vi.fn(),
+  saveCompanySettingsAction: vi.fn(),
+  saveManagedUserAction: vi.fn(),
+}));
 
 import { SettingsAppAdapter } from "../SettingsAppAdapter";
 
@@ -38,7 +45,7 @@ describe("Gregor system administration composition", () => {
     ports.resolveAuthorization.mockResolvedValue(
       authorizationFor("admin"),
     );
-    ports.readSettings.mockResolvedValue({ code:"OK", snapshot:{ company:{companyName:"Galvanik Kreile",street:"Testweg 1",zip:"12345",city:"Berlin",country:"Deutschland",taxId:"DE123456789",iban:"DE001234",bic:"TESTDEFF",bankName:"Testbank",paymentTermDays:14,logoUrl:"/logo.png"}, users:[], numberRanges:[] }, services:[] });
+    ports.readSettings.mockResolvedValue({ code:"OK", snapshot:{ company:{companyName:"Galvanik Kreile",street:"Testweg 1",zip:"12345",city:"Berlin",country:"Deutschland",taxId:"DE123456789",iban:"DE001234",bic:"TESTDEFF",bankName:"Testbank",paymentTermDays:14,logoUrl:"/logo.png"}, users:[], numberRanges:[], features:[{id:"S01",enabled:true},{id:"Z01",enabled:false}] }, services:[] });
   });
 
   it("renders settings for an admin role", async () => {
@@ -59,6 +66,15 @@ describe("Gregor system administration composition", () => {
     expect(screen.getByLabelText("Nutzer anlegen geplant")).toHaveTextContent("geplant");
     expect(screen.getByLabelText("Nutzer anlegen geplant")).toHaveTextContent("Rolf, Phillip und Gregor");
     expect(screen.queryByText(/In Klärung/)).not.toBeInTheDocument();
+  });
+
+  it("shows tenant-backed stage switches with stage one on and later stages off", async () => {
+    render(await SettingsAppAdapter());
+    fireEvent.click(screen.getByRole("button", { name: "Stufen-Schalter" }));
+    expect(screen.getByText(/S01/)).toBeInTheDocument();
+    expect(screen.getByText(/Z01/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/S01/)).toBeChecked();
+    expect(screen.getByLabelText(/Z01/)).not.toBeChecked();
   });
 
   it("redirects only missing or invalid sessions to start", async () => {

@@ -10,6 +10,9 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/components/layout/GlobalCreateFlow", () => ({ requestGlobalCreate: vi.fn() }));
 vi.mock("@/components/layout/MoreMenu", () => ({ MoreMenu: () => null }));
+vi.mock("@/app/actions/settings.actions", () => ({
+  readSalesStageFeaturesAction: vi.fn(async () => ({ code: "OK", features: [] })),
+}));
 vi.mock("@/lib/auth/PermissionsContext", () => ({
   usePermissions: () => ({
     error: null,

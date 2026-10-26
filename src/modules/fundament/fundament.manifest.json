@@ -10,19 +10,29 @@
     "@/modules/fundament/public#ManagedUser",
     "@/modules/fundament/public#UpdateManagedUserInput",
     "@/modules/fundament/public#SystemSettingsSnapshot",
+    "@/modules/fundament/public#SALES_STAGE_FEATURES",
+    "@/modules/fundament/public#isFeatureEnabled",
+    "@/modules/fundament/public#SalesStage",
+    "@/modules/fundament/public#SalesStageFeature",
+    "@/modules/fundament/public#SalesStageFeatureDefinition",
+    "@/modules/fundament/public#SalesStageFeatureId",
     "@/modules/fundament/server-public#SystemSettingsContext",
     "@/modules/fundament/server-public#readSystemSettings",
     "@/modules/fundament/server-public#updateCompanySettings",
-    "@/modules/fundament/server-public#updateManagedUser"
+    "@/modules/fundament/server-public#updateManagedUser",
+    "@/modules/fundament/server-public#TenantFeatureContext",
+    "@/modules/fundament/server-public#isFeatureEnabled",
+    "@/modules/fundament/server-public#readTenantFeatures",
+    "@/modules/fundament/server-public#setTenantFeature"
   ],
   "capabilities": [
     "product-actors:fail-closed-status",
     "system-admin:session-status",
     "system-admin:settings-manage"
   ],
-  "migrations": ["20261025182920_s1_p1_datenfundament.sql"],
+  "migrations": ["20261025182920_s1_p1_datenfundament.sql", "20261026190000_s1_p2_feature_switch.sql"],
   "viewsFunctions": [],
-  "ownsTables": ["public.app_users", "public.company_settings"],
+  "ownsTables": ["public.app_users", "public.company_settings", "public.tenant_features"],
   "storagePurposes": [],
   "events": { "emits": [], "consumes": [] },
   "config": {
