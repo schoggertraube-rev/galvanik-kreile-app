@@ -14,7 +14,7 @@ export function MoreMenu({ open, onClose }: { open: boolean; onClose: () => void
   const { role, status } = usePermissions();
   const [busy, setBusy] = useState(false);
   const elevated = role === "admin" || role === "developer";
-  const settingsVisible = elevated || role === "meister" || role === "buero";
+  const settingsVisible = elevated || role === "meister";
   const supportedProfile = status === "authenticated" && (elevated || role === "meister" || role === "buero" || role === "werkstatt");
 
   if (!open || !supportedProfile) return null;

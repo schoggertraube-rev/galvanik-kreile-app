@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ports = vi.hoisted(() => ({
-  resolveProductActorAuthorization: vi.fn(),
+  resolveAuthorization: vi.fn(),
   redirect: vi.fn((path: string) => {
     throw new Error(`REDIRECT:${path}`);
   }),
@@ -10,45 +10,24 @@ const ports = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/server/productActorReadiness", () => ({
-  resolveProductActorAuthorization: ports.resolveProductActorAuthorization,
+vi.mock("@/lib/server/authorization", () => ({
+  resolveAuthorization: ports.resolveAuthorization,
 }));
 vi.mock("next/navigation", () => ({ redirect: ports.redirect }));
 vi.mock("@/app/actions/settings.actions", () => ({ readSettingsAction: ports.readSettings }));
 
 import { SettingsAppAdapter } from "../SettingsAppAdapter";
 
-function authorizationFor(key: "rolf" | "gregor") {
-  const gregor = key === "gregor";
+function authorizationFor(role: "meister" | "admin" | "developer" | "buero") {
   return {
     ok: true as const,
     data: {
-      authorization: {
-        userId: gregor ? "synthetic-gregor" : "synthetic-rolf",
-        tenantId: "synthetic-tenant",
-        displayName: gregor ? "Gregor" : "Rolf",
-        role: gregor ? ("admin" as const) : ("meister" as const),
-        permissions: gregor ? ["perm_sys_diag"] : ["perm_view_leitstand"],
-        active: true as const,
-      },
-      actor: {
-        key,
-        actorId: gregor ? "synthetic-gregor" : "synthetic-rolf",
-        tenantId: "synthetic-tenant",
-        role: gregor ? ("admin" as const) : ("meister" as const),
-        identity: gregor
-          ? {
-              name: "Gregor" as const,
-              responsibility: "Systemadministrator" as const,
-              initials: "G" as const,
-            }
-          : {
-              name: "Rolf" as const,
-              responsibility: "Meister" as const,
-              initials: "R" as const,
-            },
-        login: gregor ? ("email" as const) : ("pin" as const),
-      },
+      userId: `synthetic-${role}`,
+      tenantId: "synthetic-tenant",
+      displayName: role === "meister" ? "Rolf" : "Gregor",
+      role,
+      permissions: ["perm_sys_diag"],
+      active: true as const,
     },
   };
 }
@@ -56,16 +35,22 @@ function authorizationFor(key: "rolf" | "gregor") {
 describe("Gregor system administration composition", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    ports.resolveProductActorAuthorization.mockResolvedValue(
-      authorizationFor("gregor"),
+    ports.resolveAuthorization.mockResolvedValue(
+      authorizationFor("admin"),
     );
     ports.readSettings.mockResolvedValue({ code:"OK", snapshot:{ company:{companyName:"Galvanik Kreile",street:"Testweg 1",zip:"12345",city:"Berlin",country:"Deutschland",taxId:"DE123456789",iban:"DE001234",bic:"TESTDEFF",bankName:"Testbank",paymentTermDays:14,logoUrl:"/logo.png"}, users:[], numberRanges:[] }, services:[] });
   });
 
-  it("renders only the validated Gregor product actor", async () => {
+  it("renders settings for an admin role", async () => {
     render(await SettingsAppAdapter());
     expect(screen.getByTestId("gregor-system-admin")).toHaveTextContent("Firmendaten, Leistungen und bestehende Zugänge");
     expect(screen.getByRole("button", { name:"Firmendaten" })).toBeInTheDocument();
+  });
+
+  it.each(["meister", "developer"] as const)("renders settings for the %s role", async (role) => {
+    ports.resolveAuthorization.mockResolvedValue(authorizationFor(role));
+    render(await SettingsAppAdapter());
+    expect(screen.getByRole("button", { name: "Firmendaten" })).toBeInTheDocument();
   });
 
   it("shows new-user creation as planned and limits stage one to the three existing actors", async () => {
@@ -77,7 +62,7 @@ describe("Gregor system administration composition", () => {
   });
 
   it("redirects only missing or invalid sessions to start", async () => {
-    ports.resolveProductActorAuthorization.mockResolvedValue({
+    ports.resolveAuthorization.mockResolvedValue({
       ok: false,
       reason: "NO_SESSION",
       message: "not signed in",
@@ -85,15 +70,13 @@ describe("Gregor system administration composition", () => {
     await expect(SettingsAppAdapter()).rejects.toThrow("REDIRECT:/start");
   });
 
-  it("redirects a valid non-Gregor actor to the role-aware root", async () => {
-    ports.resolveProductActorAuthorization.mockResolvedValue(
-      authorizationFor("rolf"),
-    );
+  it("redirects a valid role without settings access to the role-aware root", async () => {
+    ports.resolveAuthorization.mockResolvedValue(authorizationFor("buero"));
     await expect(SettingsAppAdapter()).rejects.toThrow("REDIRECT:/");
   });
 
   it("renders a stable fail-closed state instead of bouncing on readiness failure", async () => {
-    ports.resolveProductActorAuthorization.mockResolvedValue({
+    ports.resolveAuthorization.mockResolvedValue({
       ok: false,
       reason: "ACTOR_READINESS_UNAVAILABLE",
       message: "technical detail",

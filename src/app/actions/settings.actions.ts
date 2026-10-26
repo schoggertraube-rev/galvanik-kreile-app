@@ -1,22 +1,24 @@
 "use server";
 
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
-import { resolveProductActorAuthorization } from "@/lib/server/productActorReadiness";
+import { resolveAuthorization } from "@/lib/server/authorization";
 import { readSystemSettings, updateCompanySettings, updateManagedUser } from "@/modules/fundament/server-public";
 import { listCatalogServices, saveCatalogService } from "@/modules/katalog/server-public";
 import type { CompanySettingsInput, UpdateManagedUserInput } from "@/modules/fundament/public";
 import type { SaveCatalogServiceInput } from "@/modules/katalog/public";
 
 async function adminContext() {
-  const result = await resolveProductActorAuthorization();
-  if (!result.ok || result.data.actor.key !== "gregor") return null;
-  return { tenantId: result.data.authorization.tenantId, actorId: result.data.authorization.userId, canManage: true };
+  const result = await resolveAuthorization();
+  if (!result.ok || !(["meister", "admin", "developer"] as const).includes(
+    result.data.role as "meister" | "admin" | "developer",
+  )) return null;
+  return { tenantId: result.data.tenantId, actorId: result.data.userId, canManage: true };
 }
 
 export async function readSettingsAction() {
   noStore();
   const context = await adminContext();
-  if (!context) return { code: "FORBIDDEN" as const, message: "Einstellungen sind nur für den Systemadministrator verfügbar." };
+  if (!context) return { code: "FORBIDDEN" as const, message: "Einstellungen sind mit dieser Rolle nicht verfügbar." };
   const [settings, catalog] = await Promise.all([
     readSystemSettings(context),
     listCatalogServices({ tenantId: context.tenantId, canRead: true, canManage: true }, true),

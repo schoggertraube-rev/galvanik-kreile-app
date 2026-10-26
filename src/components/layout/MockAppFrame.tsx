@@ -61,7 +61,7 @@ function useNavigationAccess() {
   return {
     visible,
     finance: elevated || rolfProfile || has("perm_view_prices"),
-    settings: elevated || rolfProfile,
+    settings: elevated || permissions.role === "meister",
     workshop,
     initials: permissions.initials || "",
   };

@@ -1,14 +1,15 @@
 import { redirect } from "next/navigation";
-import { resolveProductActorAuthorization } from "@/lib/server/productActorReadiness";
-import { getProductIdentityByKey } from "@/lib/auth/authorizationContract";
+import { resolveAuthorization } from "@/lib/server/authorization";
 import { ProductActorAccessUnavailable } from "@/components/foundation/FoundationUnavailable";
 import { readSettingsAction } from "@/app/actions/settings.actions";
 import { SettingsAdminClient } from "./SettingsAdminClient";
 import type { SystemSettingsSnapshot } from "@/modules/fundament/public";
 
-/** Server-side composition seam for the separately authenticated Gregor entry. */
+const SETTINGS_ROLES = new Set(["meister", "admin", "developer"]);
+
+/** Server-side composition seam for role-based settings access. */
 export async function SettingsAppAdapter() {
-  const result = await resolveProductActorAuthorization();
+  const result = await resolveAuthorization();
   if (!result.ok) {
     if (result.reason === "NO_SESSION" || result.reason === "INVALID_SESSION") {
       redirect("/start");
@@ -20,8 +21,7 @@ export async function SettingsAppAdapter() {
     );
   }
 
-  if (result.data.actor.key !== "gregor") redirect("/");
-  getProductIdentityByKey("gregor");
+  if (!SETTINGS_ROLES.has(result.data.role)) redirect("/");
   const settings = await readSettingsAction();
   if (settings.code !== "OK") return <ProductActorAccessUnavailable />;
   const snapshot: SystemSettingsSnapshot = settings.snapshot;
