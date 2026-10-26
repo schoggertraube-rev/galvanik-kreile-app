@@ -100,6 +100,55 @@ describe("createCustomerCommand", () => {
     expect(statements).not.toMatch(/max\s*\(/i);
   });
 
+  it("legt einen Interessenten mit Name und Telefon über denselben nummerierten Schreibweg an", async () => {
+    const prospectInput = {
+      city: null,
+      clientEventId: CLIENT,
+      companyName: null,
+      contactPerson: null,
+      customerType: "business" as const,
+      email: null,
+      name: "Synthetischer Interessent",
+      phone: "+49 000 54321",
+      street: null,
+      zipCode: null,
+      country: null,
+      paymentPreference: null,
+      vatId: null,
+    };
+    const prospectHash = createHash("sha256").update(JSON.stringify(prospectInput), "utf8").digest("hex");
+    execute.mockImplementation((query: { text: string; values: unknown[] }) => {
+      if (query.text.includes("private.create_customer_v1")) return Promise.resolve([{ result_code: "OK", result_receipt_id: RECEIPT, replayed: false }]);
+      if (query.text.includes("private.v_customer_create_receipts_v1")) return Promise.resolve([{
+        ...receiptRow,
+        intent_sha256: prospectHash,
+        name: prospectInput.name,
+        company_name: null,
+        contact_person: null,
+        email: null,
+        phone: prospectInput.phone,
+        city: null,
+        street: null,
+        zip_code: null,
+        country: null,
+        payment_preference: null,
+        vat_id: null,
+      }]);
+      throw new Error(`unexpected SQL ${query.text}`);
+    });
+    const { createCustomerCommand } = await import("../server/createCustomerCommand");
+    await expect(createCustomerCommand(authorization, prospectInput)).resolves.toMatchObject({
+      code: "OK",
+      receipt: {
+        customerNumber: "K-2026-0042",
+        name: prospectInput.name,
+        phone: prospectInput.phone,
+        street: null,
+        paymentPreference: null,
+      },
+    });
+  });
+
   it("spielt denselben Intent exakt wieder ab und weist abweichenden Intent ohne Write ab", async () => {
     execute
       .mockResolvedValueOnce([{ result_code: "OK", result_receipt_id: RECEIPT, replayed: true }])

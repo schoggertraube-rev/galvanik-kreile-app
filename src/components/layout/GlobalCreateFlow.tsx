@@ -177,19 +177,19 @@ type CustomerDraft = Omit<CreateCustomerInput, "clientEventId"|"street"|"zipCode
 type PositionDraft = { key: string; name: string; quantity: string; material: string; surfaceRequested: string; unitPrice: string };
 type IntakePositionDraft = { key:string; catalogServiceId:string; name:string; quantity:string; material:string; surfaceRequested:string; unit:string; unitPriceCents:number; vatRateBasisPoints:0|700|1900 };
 
-function CustomerFields({ value, onChange, autofocus = false }: { value: CustomerDraft; onChange: (value: CustomerDraft) => void; autofocus?: boolean }) {
+function CustomerFields({ value, onChange, autofocus = false, requireOrderData = true }: { value: CustomerDraft; onChange: (value: CustomerDraft) => void; autofocus?: boolean; requireOrderData?: boolean }) {
   const set = <K extends keyof CustomerDraft>(key: K, next: CustomerDraft[K]) => onChange({ ...value, [key]: next });
   return <div className={styles.createFormGrid}>
     <label className={styles.createFieldWide}>Firma / Name<input data-autofocus={autofocus || undefined} required minLength={2} value={value.name} onChange={(event) => set("name", event.target.value)} /></label>
     <label>Kundentyp<select value={value.customerType} onChange={(event) => set("customerType", event.target.value as CustomerDraft["customerType"])}><option value="business">Firma</option><option value="privat">Privat</option><option value="institution">Institution</option></select></label>
     <label>Firmenname<input value={value.companyName ?? ""} onChange={(event) => set("companyName", nullable(event.target.value))} /></label>
-    <label>Ansprechpartner<input required value={value.contactPerson ?? ""} onChange={(event) => set("contactPerson", nullable(event.target.value))} /></label>
+    <label>Ansprechpartner<input required={requireOrderData} value={value.contactPerson ?? ""} onChange={(event) => set("contactPerson", nullable(event.target.value))} /></label>
     <label>Telefon<input required value={value.phone ?? ""} onChange={(event) => set("phone", nullable(event.target.value))} /></label>
-    <label>E-Mail<input required type="email" value={value.email ?? ""} onChange={(event) => set("email", nullable(event.target.value))} /></label>
-    <label>Straße<input required value={value.street} onChange={(event) => set("street", event.target.value)} /></label>
-    <label>PLZ<input required value={value.zipCode} onChange={(event) => set("zipCode", event.target.value)} /></label>
-    <label>Ort<input required value={value.city} onChange={(event) => set("city", event.target.value)} /></label>
-    <label>Land<input required value={value.country} onChange={(event) => set("country", event.target.value)} /></label>
+    <label>E-Mail<input required={requireOrderData} type="email" value={value.email ?? ""} onChange={(event) => set("email", nullable(event.target.value))} /></label>
+    <label>Straße<input required={requireOrderData} value={value.street} onChange={(event) => set("street", event.target.value)} /></label>
+    <label>PLZ<input required={requireOrderData} value={value.zipCode} onChange={(event) => set("zipCode", event.target.value)} /></label>
+    <label>Ort<input required={requireOrderData} value={value.city} onChange={(event) => set("city", event.target.value)} /></label>
+    <label>Land<input required={requireOrderData} value={value.country} onChange={(event) => set("country", event.target.value)} /></label>
     <label>Zahlung<select value={value.paymentPreference} onChange={(event) => set("paymentPreference", event.target.value)}><option value="rechnung_14">Rechnung 14 Tage</option><option value="rechnung_30">Rechnung 30 Tage</option><option value="vorkasse">Vorkasse</option><option value="bar">Bar</option></select></label>
     <label>USt-ID<input value={value.vatId ?? ""} onChange={(event) => set("vatId", nullable(event.target.value))} /></label>
   </div>;
@@ -340,6 +340,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const customerRequestSeq = useRef(0);
   const dialogRef = useRef<HTMLElement>(null);
   const confirmedOrderDueDateValid = isValidDateInput(confirmedOrderDueDate);
+  const customerCompleteForOrder = completeOrderCustomer(customerDraft);
 
   const requestId = (kind: keyof typeof requestIds.current) => {
     if (!requestIds.current[kind]) requestIds.current[kind] = globalThis.crypto.randomUUID();
@@ -1013,8 +1014,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
               {step === "customer" ? (
                 <form className={styles.createForm} onSubmit={(event) => void submitCustomer(event)}>
-                  <p className={styles.createLead}>Kundendaten gelten erst nach sicherer Speicherung und erneuter Prüfung als gespeichert.</p>
-                  <CustomerFields value={customerDraft} onChange={setCustomerDraft} autofocus />
+                  <p className={styles.createLead}>Name und Telefon genügen für einen Interessenten. Fehlende Auftragsdaten werden sichtbar markiert und vor dem ersten Auftrag direkt ergänzt.</p>
+                  <CustomerFields value={customerDraft} onChange={setCustomerDraft} autofocus requireOrderData={false} />
                   <div className={styles.createFormActions}><button type="button" onClick={() => navigate("choose")}>Zurück</button><button type="submit" className={styles.createPrimary} disabled={busy}>{busy ? <Loader2 className={styles.createSpinner} /> : <Check />} Neukunde speichern</button></div>
                 </form>
               ) : null}
@@ -1023,11 +1024,11 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 <div className={styles.createSuccess}>
                   <span className={styles.createSuccessIcon}><Check /></span>
                   <h3>{customer.name} · {customer.customerNumber}</h3>
-                  <p>Der Kunde ist gespeichert und im aktuellen Datenstand wiedergefunden.</p>
+                  <p>{customerCompleteForOrder ? "Der Kunde ist vollständig gespeichert und im aktuellen Datenstand wiedergefunden." : "Der Interessent ist gespeichert und als unvollständig für einen Auftrag markiert."}</p>
                   <ReceiptFacts title="Kundenanlage – technische Details für Support" values={[["Vorgangskennung", customerReceipt.receiptId], ["Nachweis", customerReceipt.eventId], ["Zeit", customerReceipt.recordedAt]]} />
                   <div className={styles.createChoiceGrid}>
-                    <button type="button" onClick={() => startQuote(customer)} data-autofocus><FileText /><span><strong>KV / Angebot anlegen</strong><small>Mit diesem echten Kunden weiterarbeiten.</small></span></button>
-                    <button type="button" className={styles.createChoiceAlternate} onClick={() => { setOpen(false); ports.openCustomer(customer.id); }}><UserPlus /><span><strong>Kundenkarte öffnen</strong><small>Gespeicherten Stammdatensatz prüfen.</small></span></button>
+                    {customerCompleteForOrder ? <button type="button" onClick={() => startQuote(customer)} data-autofocus><FileText /><span><strong>KV / Angebot anlegen</strong><small>Mit diesem vollständigen Kunden weiterarbeiten.</small></span></button> : null}
+                    <button type="button" className={styles.createChoiceAlternate} onClick={() => { setOpen(false); ports.openCustomer(customer.id); }} data-autofocus={!customerCompleteForOrder || undefined}><UserPlus /><span><strong>{customerCompleteForOrder ? "Kundenkarte öffnen" : "Stammdaten vervollständigen"}</strong><small>{customerCompleteForOrder ? "Gespeicherten Stammdatensatz prüfen." : "Die Kundenkarte zeigt alle noch fehlenden Auftragsdaten."}</small></span></button>
                   </div>
                 </div>
               ) : null}

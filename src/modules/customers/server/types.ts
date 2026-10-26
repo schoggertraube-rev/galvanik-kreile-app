@@ -12,11 +12,11 @@ export type CreateCustomerInput = {
   contactPerson: string | null;
   email: string | null;
   phone: string | null;
-  street?: string;
-  zipCode?: string;
+  street?: string | null;
+  zipCode?: string | null;
   city: string | null;
-  country?: string;
-  paymentPreference?: string;
+  country?: string | null;
+  paymentPreference?: string | null;
   vatId?: string | null;
 };
 
@@ -44,11 +44,11 @@ export type CustomerCreateReceipt = {
   contactPerson: string | null;
   email: string | null;
   phone: string | null;
-  street: string;
-  zipCode: string;
-  city: string;
-  country: string;
-  paymentPreference: string;
+  street: string | null;
+  zipCode: string | null;
+  city: string | null;
+  country: string | null;
+  paymentPreference: string | null;
   vatId: string | null;
   recordedAt: string;
   aggregateVersion: 1;

@@ -30,7 +30,7 @@ export type CustomerSummary = {
   zipCode: string | null;
   city: string | null;
   country: string | null;
-  paymentPreference: string;
+  paymentPreference: string | null;
   vatId: string | null;
   classification: string | null;
   internalNotes: string | null;
@@ -172,7 +172,7 @@ function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot): Cust
     zipCode: row.zip_code,
     city: row.city,
     country: row.country,
-    paymentPreference: row.payment_preference ?? "rechnung_14",
+    paymentPreference: row.payment_preference,
     vatId: row.vat_id,
     classification: row.classification,
     internalNotes: row.internal_notes,

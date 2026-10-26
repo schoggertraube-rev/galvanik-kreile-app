@@ -30,11 +30,11 @@ type ReceiptRow = {
   contact_person: string | null;
   email: string | null;
   phone: string | null;
-  city: string;
-  street: string;
-  zip_code: string;
-  country: string;
-  payment_preference: string;
+  city: string | null;
+  street: string | null;
+  zip_code: string | null;
+  country: string | null;
+  payment_preference: string | null;
   vat_id: string | null;
   recorded_at: Date | string;
   integrity_ok: boolean;
@@ -56,14 +56,16 @@ function requiredText(value: unknown, min: number, max: number): string | null {
   return normalized.length >= min && normalized.length <= max ? normalized : null;
 }
 
-function optionalText(value: unknown, min: number, max: number): string | null | undefined {
+type NormalizedCreateCustomerInput = CreateCustomerInput & {
+  street: string | null; zipCode: string | null; city: string | null; country: string | null; paymentPreference: string | null; vatId: string | null;
+};
+
+function optionalFormText(value: unknown, min: number, max: number): string | null | undefined {
   if (value === null) return null;
+  if (typeof value !== "string") return undefined;
+  if (value.trim().length === 0) return null;
   return requiredText(value, min, max) ?? undefined;
 }
-
-type NormalizedCreateCustomerInput = CreateCustomerInput & {
-  street: string; zipCode: string; city: string; country: string; paymentPreference: string; vatId: string | null;
-};
 
 function normalizeInput(value: unknown): NormalizedCreateCustomerInput | null {
   if (!isPlainObject(value) || !exactKeys(value, [
@@ -72,17 +74,19 @@ function normalizeInput(value: unknown): NormalizedCreateCustomerInput | null {
   if (typeof value.clientEventId !== "string" || !UUID_PATTERN.test(value.clientEventId)) return null;
   if (!(["business", "privat", "institution"] as const).includes(value.customerType as never)) return null;
   const name = requiredText(value.name, 2, 160);
-  const companyName = optionalText(value.companyName, 2, 160);
-  const contactPerson = optionalText(value.contactPerson, 1, 160);
-  const email = optionalText(value.email, 3, 254);
-  const phone = optionalText(value.phone, 1, 80);
-  const street = requiredText(value.street, 2, 160);
-  const zipCode = requiredText(value.zipCode, 2, 20);
-  const city = requiredText(value.city, 1, 120);
-  const country = requiredText(value.country, 2, 120);
-  const vatId = optionalText(value.vatId, 4, 40);
-  if (!name || !street || !zipCode || !city || !country || companyName === undefined || contactPerson === undefined || email === undefined || phone === undefined || vatId === undefined
-    || typeof value.paymentPreference !== "string" || !/^(?:rechnung_[1-9][0-9]{0,2}|vorkasse|bar)$/.test(value.paymentPreference)) return null;
+  const companyName = optionalFormText(value.companyName, 2, 160);
+  const contactPerson = optionalFormText(value.contactPerson, 1, 160);
+  const email = optionalFormText(value.email, 3, 254);
+  const phone = optionalFormText(value.phone, 1, 80);
+  const street = optionalFormText(value.street, 2, 160);
+  const zipCode = optionalFormText(value.zipCode, 2, 20);
+  const city = optionalFormText(value.city, 1, 120);
+  const country = optionalFormText(value.country, 2, 120);
+  const paymentPreference = optionalFormText(value.paymentPreference, 3, 24);
+  const vatId = optionalFormText(value.vatId, 4, 40);
+  if (!name || !phone || companyName === undefined || contactPerson === undefined || email === undefined || street === undefined
+    || zipCode === undefined || city === undefined || country === undefined || paymentPreference === undefined || vatId === undefined
+    || (paymentPreference !== null && !/^(?:rechnung_[1-9][0-9]{0,2}|vorkasse|bar)$/.test(paymentPreference))) return null;
   if (email !== null && !EMAIL_PATTERN.test(email)) return null;
   return {
     clientEventId: value.clientEventId,
@@ -92,7 +96,7 @@ function normalizeInput(value: unknown): NormalizedCreateCustomerInput | null {
     contactPerson,
     email,
     phone,
-    street, zipCode, city, country, paymentPreference: value.paymentPreference, vatId,
+    street, zipCode, city, country, paymentPreference, vatId,
   };
 }
 

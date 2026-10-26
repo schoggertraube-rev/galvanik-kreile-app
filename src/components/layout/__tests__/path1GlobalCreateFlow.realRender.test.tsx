@@ -247,6 +247,30 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(value.openOrder).toHaveBeenCalledWith(ORDER_ID);
   });
 
+  it("saves a prospect with name and phone and blocks the order path until master data is complete", async () => {
+    const value = ports();
+    render(<GlobalCreateFlow ports={value} />);
+
+    openFlow();
+    fireEvent.click(screen.getByRole("button", { name: /Kunde anlegen/ }));
+    fireEvent.change(screen.getByLabelText("Firma / Name"), { target: { value: "SYNTHETISCH Interessent" } });
+    fireEvent.change(screen.getByLabelText("Telefon"), { target: { value: "+49 221 998877" } });
+    fireEvent.click(screen.getByRole("button", { name: /Neukunde speichern/ }));
+
+    expect(await screen.findByText(/als unvollständig für einen Auftrag markiert/)).toBeInTheDocument();
+    expect(value.createCustomer).toHaveBeenCalledWith(expect.objectContaining({
+      name: "SYNTHETISCH Interessent",
+      phone: "+49 221 998877",
+      contactPerson: null,
+      email: null,
+      street: "",
+      zipCode: "",
+    }));
+    expect(screen.queryByRole("button", { name: /KV \/ Angebot anlegen/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Stammdaten vervollständigen/ }));
+    expect(value.openCustomer).toHaveBeenCalledWith(CUSTOMER_ID);
+  });
+
   it("checks an unclear customer result read-only and restores only a verified receipt", async () => {
     const successfulCreate = ports().createCustomer;
     let attempt = 0;
