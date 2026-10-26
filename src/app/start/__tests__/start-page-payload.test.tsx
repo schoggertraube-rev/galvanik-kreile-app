@@ -204,7 +204,7 @@ describe("StartPage product actor boundary", () => {
     const pinAuth = readFileSync(path.join(root, "src/components/start/StartScreenClient.tsx"), "utf8");
     const rootPage = readFileSync(path.join(root, "src/app/page.tsx"), "utf8");
 
-    expect(emailAuth).toContain("readProductActorReadiness");
+    expect(emailAuth).toContain("resolveLoginIdentityByEmail");
     expect(emailAuth).toContain('redirect("/settings")');
     expect(pinAuth).toContain('window.location.assign("/")');
     expect(rootPage).toContain("resolveProductActorAuthorization");

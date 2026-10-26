@@ -176,6 +176,9 @@ function openFlow() {
 }
 
 function fillRequiredCustomerAddress() {
+  fireEvent.change(screen.getByLabelText("Ansprechpartner"), { target: { value: "Testperson" } });
+  fireEvent.change(screen.getByLabelText("E-Mail"), { target: { value: "kunde@example.invalid" } });
+  fireEvent.change(screen.getByLabelText("Telefon"), { target: { value: "+49 221 123456" } });
   fireEvent.change(screen.getByLabelText("Straße"), { target: { value: "Testweg 1" } });
   fireEvent.change(screen.getByLabelText("PLZ"), { target: { value: "12345" } });
   fireEvent.change(screen.getByLabelText("Ort"), { target: { value: "Teststadt" } });
@@ -321,10 +324,15 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(newCustomer).toHaveFocus();
     expect(screen.getByRole("button", { name: "Neukunde" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.change(screen.getByLabelText("Firma / Name"), { target: { value: "SYNTHETISCH Direkteingang GmbH" } });
+    fireEvent.change(screen.getByLabelText("Ansprechpartner"), { target: { value: "Testperson" } });
+    fireEvent.change(screen.getByLabelText("E-Mail"), { target: { value: "direkteingang@example.invalid" } });
     fillRequiredCustomerAddress();
     fireEvent.change(screen.getByLabelText("Terminwunsch"), { target: { value: "2026-10-15" } });
     fireEvent.change(screen.getByLabelText("Zugesagter Termin"), { target: { value: "2026-10-20" } });
+    fireEvent.click(screen.getByRole("button", { name: "Weiter zu Positionen" }));
+    await screen.findByRole("group", { name: "Position 1" });
     fireEvent.change(screen.getByLabelText("Leistung"), { target: { value: "88888888-8888-4888-8888-888888888888" } });
+    fireEvent.click(screen.getByRole("button", { name: "Weiter zur Prüfung" }));
     fireEvent.click(screen.getByRole("button", { name: "Eingang speichern" }));
     await screen.findByRole("heading", { name: "Auftrag A-2026-0061 angelegt" });
     expect(value.createDirectIntake).toHaveBeenCalledWith(expect.objectContaining({ dueDate: "2026-10-20" }));

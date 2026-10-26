@@ -51,7 +51,7 @@ describe("W3 tenant station reads", () => {
     await expect(getWareneingangOrdersAction()).resolves.toEqual({ ok: true, data: [] });
     await expect(getGalvanikOrdersAction()).resolves.toEqual({ ok: true, data: [] });
 
-    expect(readTenantStationOrdersSpy).toHaveBeenNthCalledWith(1, authorization.data, "wareneingang");
+    expect(readTenantStationOrdersSpy).toHaveBeenNthCalledWith(1, authorization.data, "angenommen");
     expect(readTenantStationOrdersSpy).toHaveBeenNthCalledWith(2, authorization.data, "galvanik");
   });
 
@@ -65,7 +65,7 @@ describe("W3 tenant station reads", () => {
 
     await expect(getWareneingangOrdersAction()).resolves.toEqual({ ok: true, data: [] });
     await expect(getGalvanikOrdersAction()).resolves.toEqual({ ok: true, data: [] });
-    expect(readTenantStationOrdersSpy).toHaveBeenNthCalledWith(1, bueroAuthorization.data, "wareneingang");
+    expect(readTenantStationOrdersSpy).toHaveBeenNthCalledWith(1, bueroAuthorization.data, "angenommen");
     expect(readTenantStationOrdersSpy).toHaveBeenNthCalledWith(2, bueroAuthorization.data, "galvanik");
   });
 
@@ -139,7 +139,7 @@ describe("W3 tenant station reads", () => {
     const { getWareneingangOrdersAction } = await import("../actions");
 
     await expect(getWareneingangOrdersAction()).resolves.toEqual({ ok: true, data: [] });
-    expect(readTenantStationOrdersSpy).toHaveBeenCalledWith(tenantB.data, "wareneingang");
+    expect(readTenantStationOrdersSpy).toHaveBeenCalledWith(tenantB.data, "angenommen");
   });
 
   it("ignores an adversarial tenant argument and reads only the authorized tenant", async () => {
@@ -149,10 +149,10 @@ describe("W3 tenant station reads", () => {
     await expect(adversarialCall({ tenantId: "tenant-b" })).resolves.toEqual({ ok: true, data: [] });
 
     expect(readTenantStationOrdersSpy).toHaveBeenCalledTimes(1);
-    expect(readTenantStationOrdersSpy).toHaveBeenCalledWith(authorization.data, "wareneingang");
+    expect(readTenantStationOrdersSpy).toHaveBeenCalledWith(authorization.data, "angenommen");
     expect(readTenantStationOrdersSpy).not.toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: "tenant-b" }),
-      "wareneingang",
+      "angenommen",
     );
   });
 
@@ -168,7 +168,7 @@ describe("W3 tenant station reads", () => {
       eventSchemaVersion: 1,
       orderId: input.orderId,
       aggregateVersion: 2,
-      fromStation: "wareneingang",
+      fromStation: "angenommen",
       toStation: "galvanik",
       actorId: "11111111-1111-4111-8111-111111111111",
       occurredAt: "2026-08-11T15:47:32.000Z",

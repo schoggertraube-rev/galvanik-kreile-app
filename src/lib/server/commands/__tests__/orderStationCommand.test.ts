@@ -27,8 +27,8 @@ const authorization = {
   },
 };
 const validOrder = {
-  id: "order-1", tenant_id: "tenant-a", customer_id: "customer-a", station: "wareneingang",
-  current_station: "wareneingang", current_station_id: "wareneingang",
+  id: "order-1", tenant_id: "tenant-a", customer_id: "customer-a", station: "angenommen",
+  current_station: "angenommen", current_station_id: "angenommen",
   status: "angenommen", version: 1,
 };
 const CLIENT_EVENT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -48,7 +48,7 @@ const insertedReceipt = {
   correlation_id: CORRELATION_ID,
   event_schema_version: 1,
   aggregate_version: 2,
-  from_station: "wareneingang",
+  from_station: "angenommen",
   to_station: "galvanik",
   actor_id: ACTOR_ID,
   status: "success",
@@ -58,7 +58,7 @@ const insertedReceipt = {
 const validCustomer = { id: "customer-a", tenant_id: "tenant-a" };
 const validItem = {
   id: "item-1", tenant_id: "tenant-a", customer_id: "customer-a",
-  current_station_id: "wareneingang",
+  current_station_id: "angenommen",
 };
 
 describe("transitionWareneingangToGalvanik", () => {
@@ -230,7 +230,7 @@ describe("transitionWareneingangToGalvanik", () => {
         eventSchemaVersion: 1,
         orderId: "order-1",
         aggregateVersion: 2,
-        fromStation: "wareneingang",
+        fromStation: "angenommen",
         toStation: "galvanik",
         actorId: ACTOR_ID,
         occurredAt: "2026-08-11T15:47:32.000Z",
@@ -392,7 +392,7 @@ describe("correctGalvanikToWareneingang", () => {
     event_schema_version: 1,
     aggregate_version: 2,
     from_station: "galvanik",
-    to_station: "wareneingang",
+    to_station: "angenommen",
     actor_id: ACTOR_ID,
     status: "success",
     description: REASON,
@@ -412,7 +412,7 @@ describe("correctGalvanikToWareneingang", () => {
     event_schema_version: 1,
     aggregate_version: 2,
     from_station: "galvanik",
-    to_station: "wareneingang",
+    to_station: "angenommen",
     actor_id: ACTOR_ID,
     occurred_at: "2026-08-17T09:00:00.000Z",
     reason: REASON,
@@ -496,7 +496,7 @@ describe("correctGalvanikToWareneingang", () => {
 
   it("rejects orders not exactly parked at galvanik/galvanik before any write", async () => {
     executeSpy
-      .mockResolvedValueOnce([{ ...galvanikOrder, station: "wareneingang" }])
+      .mockResolvedValueOnce([{ ...galvanikOrder, station: "angenommen" }])
       .mockResolvedValueOnce([{ ...galvanikOrder, status: "fertig" }]);
     const { correctGalvanikToWareneingang } = await import("../orderStationCommand");
     await expect(correctGalvanikToWareneingang(correctionInput("order-1"))).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
@@ -524,7 +524,7 @@ describe("correctGalvanikToWareneingang", () => {
         orderId: "order-1",
         aggregateVersion: 2,
         fromStation: "galvanik",
-        toStation: "wareneingang",
+        toStation: "angenommen",
         actorId: ACTOR_ID,
         occurredAt: "2026-08-17T09:00:00.000Z",
         reason: REASON,
@@ -532,7 +532,7 @@ describe("correctGalvanikToWareneingang", () => {
       replayed: false,
     });
     expect(executeSpy.mock.calls[3][0].text).toContain("status = ?");
-    expect(executeSpy.mock.calls[3][0].values).toContain("wareneingang");
+    expect(executeSpy.mock.calls[3][0].values).toContain("angenommen");
     expect(executeSpy.mock.calls[3][0].values).toContain("angenommen");
     expect(executeSpy.mock.calls[6][0].text).toContain("private.v_order_station_correction_receipts_v1");
   });

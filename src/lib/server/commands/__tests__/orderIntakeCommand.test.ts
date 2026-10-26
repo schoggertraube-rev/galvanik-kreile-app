@@ -57,7 +57,7 @@ const receiptRow = {
   items_snapshot: itemSnapshot,
   recorded_at: "2026-08-12T12:00:00.000Z",
   current_order_version: 1,
-  current_station: "wareneingang",
+  current_station: "angenommen",
   current_status: "angenommen",
   integrity_ok: true,
 };
@@ -90,7 +90,7 @@ describe("createOrderIntake", () => {
     expect(withTransaction).not.toHaveBeenCalled();
   });
 
-  it("denies missing sessions, roles, and unauthorized new-customer creation without a transaction", async () => {
+  it("denies missing sessions and roles and rejects the retired inline-new-customer path", async () => {
     const { createOrderIntake } = await import("../orderIntakeCommand");
     resolveAuthorization.mockResolvedValueOnce({ ok: false, reason: "NO_SESSION", message: "no" });
     await expect(createOrderIntake(input)).resolves.toMatchObject({ code: "UNAUTHENTICATED" });
@@ -100,7 +100,7 @@ describe("createOrderIntake", () => {
     await expect(createOrderIntake({
       ...input,
       customer: { mode:"NEW", name:"Neu", customerType:"business", companyName:null, contactPerson:null, email:null, phone:null, street:"Testweg 1", zipCode:"12345", city:"Berlin", country:"Deutschland", paymentPreference:"rechnung_14", vatId:null },
-    })).resolves.toMatchObject({ code: "FORBIDDEN" });
+    })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
     expect(withTransaction).not.toHaveBeenCalled();
   });
 
@@ -109,7 +109,21 @@ describe("createOrderIntake", () => {
     execute.mockImplementation((query: { text: string; values: unknown[] }) => {
       if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
       if (query.text.includes("FROM private.order_intake_receipts") && !query.text.includes("v_order")) return Promise.resolve([]);
-      if (query.text.includes("FROM public.customers")) return Promise.resolve([{ id: CUSTOMER, tenant_id: KREILE_TENANT_SLUG, name: "Kunde A", company_name: null }]);
+      if (query.text.includes("FROM public.customers")) return Promise.resolve([{
+        id: CUSTOMER,
+        tenant_id: KREILE_TENANT_SLUG,
+        customer_number: "K-0042",
+        name: "Kunde A",
+        company_name: "Kunde A GmbH",
+        contact_person: "Ada Beispiel",
+        phone: "+49 221 123456",
+        email: "ada@example.test",
+        street: "Testweg 1",
+        zip_code: "50667",
+        city: "Köln",
+        country: "Deutschland",
+        payment_preference: "rechnung_14",
+      }]);
       if (query.text.includes("FROM public.catalog_services")) return Promise.resolve([{ id:SERVICE, name:"Grundplatte", surface:"Glanzverchromen", unit:"Stück", net_price_cents:1250, vat_rate_basis_points:1900 }]);
       if (query.text.includes("next_number")) return Promise.resolve([{ current_year: 2026, next_number: 42 }]);
       if (query.text.includes("INSERT INTO public.orders")) {
@@ -167,7 +181,7 @@ describe("createOrderIntake", () => {
         items: [{ ...itemSnapshot[0], id: created.itemId }],
         recordedAt: "2026-08-12T12:00:00.000Z",
         orderVersion: 1,
-        station: "wareneingang",
+        station: "angenommen",
         status: "angenommen",
       },
     });

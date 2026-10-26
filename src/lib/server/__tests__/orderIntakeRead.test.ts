@@ -38,7 +38,7 @@ const receiptRow = {
   }],
   recorded_at: "2026-08-12T12:00:00.000Z",
   current_order_version: 1,
-  current_station: "wareneingang",
+  current_station: "angenommen",
   current_status: ORDER_LIFECYCLE_STATUS.ANGENOMMEN,
   integrity_ok: true,
 };

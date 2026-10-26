@@ -87,7 +87,7 @@ describe("Gregor system administration composition", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Produktzugang momentan nicht verfügbar",
     );
-    expect(screen.getByText(/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/)).toBeInTheDocument();
+    expect(screen.queryByText(/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/)).not.toBeInTheDocument();
     expect(ports.redirect).not.toHaveBeenCalled();
   });
 });

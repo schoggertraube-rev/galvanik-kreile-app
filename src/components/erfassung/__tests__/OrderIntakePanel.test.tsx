@@ -100,7 +100,7 @@ function makeReceiptForInput(input: {
     })),
     recordedAt: "2026-08-12T12:00:00.000Z",
     orderVersion: 1 as const,
-    station: "wareneingang" as const,
+    station: "angenommen" as const,
     status: "angenommen" as const,
   };
 }
