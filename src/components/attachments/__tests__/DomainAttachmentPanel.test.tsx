@@ -7,6 +7,8 @@ vi.mock("@/app/actions/domainAttachments.actions", () => ({
   reserveDomainAttachmentAction: actions.reserve,
   finalizeDomainAttachmentAction: actions.finalize,
   getDomainAttachmentOriginalAction: actions.original,
+  getDocumentIntelligenceStatusAction: vi.fn(async () => ({ code: "IN_KLAERUNG", message: "In Klärung" })),
+  analyzeDomainAttachmentAction: vi.fn(async () => ({ code: "IN_KLAERUNG", message: "In Klärung" })),
 }));
 
 import { DomainAttachmentPanel } from "../DomainAttachmentPanel";

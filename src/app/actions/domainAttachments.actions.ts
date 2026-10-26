@@ -4,6 +4,8 @@ import { unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { finalizeDomainAttachment, getDomainAttachmentOriginal, reserveDomainAttachment } from "@/lib/server/domainAttachment";
 import { readEvidenceRecordsByTarget } from "@/lib/server/evidenceRead";
+import { analyzeDomainAttachment } from "@/lib/server/documentIntelligencePort";
+import { readAzureDocumentIntelligenceStatus } from "@/lib/server/azureDocumentIntelligence";
 
 async function authorization() {
   try {
@@ -46,4 +48,18 @@ export async function getDomainAttachmentOriginalAction(input: { attachmentId: s
   noStore();
   const auth = await authorization();
   return auth.ok ? getDomainAttachmentOriginal(auth.data, input) : { code: auth.code, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+}
+
+export async function getDocumentIntelligenceStatusAction() {
+  noStore();
+  const auth = await authorization();
+  if (!auth.ok) return { code: auth.code, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+  return readAzureDocumentIntelligenceStatus().code === "READY"
+    ? { code: "OK" as const }
+    : { code: "IN_KLAERUNG" as const, message: "Azure Document Intelligence · In Klärung." };
+}
+
+export async function analyzeDomainAttachmentAction(input: Parameters<typeof analyzeDomainAttachment>[1]) {
+  const auth = await authorization();
+  return auth.ok ? analyzeDomainAttachment(auth.data, input) : { code: auth.code, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
 }

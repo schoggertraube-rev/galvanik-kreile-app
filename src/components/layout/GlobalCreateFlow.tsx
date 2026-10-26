@@ -28,7 +28,14 @@ import styles from "./TargetShell.module.css";
 export type GlobalCreateIntent = "CUSTOMER" | "QUOTE" | "DIRECT_INTAKE";
 export type GlobalCreateRequest = {
   intent: GlobalCreateIntent;
-  prefill?: { name?: string; email?: string; customerQuery?: string; note?: string };
+  prefill?: {
+    name?: string;
+    email?: string;
+    customerQuery?: string;
+    note?: string;
+    dueDate?: string;
+    quotePositions?: Array<{ quantity?: string; material?: string }>;
+  };
 };
 export const GLOBAL_CREATE_OPEN_EVENT = "path1:global-create-open";
 
@@ -493,6 +500,12 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     if (intent === "QUOTE") {
       if (prefill?.customerQuery) setCustomerQuery(prefill.customerQuery);
       if (prefill?.note) setQuoteNote(prefill.note);
+      if (prefill?.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(prefill.dueDate)) setDueDate(prefill.dueDate);
+      if (prefill?.quotePositions?.length) setPositions(prefill.quotePositions.slice(0, 20).map((position) => ({
+        ...newPosition(),
+        quantity: /^\d+(?:[.,]\d+)?$/.test(position.quantity ?? "") ? (position.quantity ?? "1").replace(",", ".") : "1",
+        material: position.material?.slice(0, 500) ?? "",
+      })));
       void loadCustomers();
       return;
     }
