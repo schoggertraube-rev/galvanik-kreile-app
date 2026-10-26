@@ -37,6 +37,7 @@ Stand: 26.10.2026, 17:32 Uhr (Europe/Berlin)
 ## Abweichungen / nicht geschafft
 
 - Microsoft Graph und Azure sind im Produkt vollständig fail-closed angebunden, aber am aktuellen Preview-SHA noch nicht mit realen Providerwerten belegt. Daher kein Claim für echten Versand, echten Inbox-Inhalt oder echte OCR-Antwort.
+- Die reine Vercel-Namensprüfung am 26.10.2026 ergab: Keiner der sechs freigegebenen Graph-/Azure-Variablennamen ist derzeit in Preview angelegt. Es wurden keine Werte gelesen oder ausgegeben; die exakten fehlenden Namen stehen in `OWNER_TODO.md`.
 - R02 unterstützt im P2-Stand das vorhandene KV-PDF. Rechnung und Lieferschein werden erst mit den kanonischen P4-Dokumenten auswählbar.
 - Der vollständige lokale Commit-Hook überschritt sein Werkzeugzeitfenster. Gezielte Tests, TypeScript, Lint und Modulgrenzen sind grün; der Gesamtlauf erfolgt in GitHub CI.
 - Die nicht von Codex stammende Änderung an `_review/DEZEMBER_LISTE.md` blieb ungestaged und unverändert.
