@@ -473,13 +473,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       }
       setCatalogServices(catalog.services);
       setCustomerChoices(result.customers);
-      const first = result.customers[0];
-      if (first) {
-        setDirectCustomerId((current) => current || first.id);
-        setDirectCustomer(customerChoiceToDraft(first));
-      } else {
-        setDirectCustomerMode("NEW");
-      }
+      setDirectCustomerMode("NEW");
+      setDirectCustomerId("");
+      setDirectCustomer(EMPTY_CUSTOMER);
       setCustomerLoad(result.customers.length ? "ready" : "empty");
     } catch {
       if (seq === customerRequestSeq.current) setFeedback({ kind: "error", message: "Die vorhandenen Kunden konnten nicht sicher gelesen werden. Es wurde nichts angelegt." });

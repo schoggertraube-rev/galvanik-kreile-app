@@ -345,6 +345,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
       ).toBeEnabled(),
     );
     expect(newCustomer).toHaveFocus();
+    expect(newCustomer).toHaveValue("");
     expect(screen.getByRole("button", { name: "Neukunde" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.change(screen.getByLabelText("Firma / Name"), { target: { value: "SYNTHETISCH Direkteingang GmbH" } });
     fireEvent.change(screen.getByLabelText("Ansprechpartner"), { target: { value: "Testperson" } });
