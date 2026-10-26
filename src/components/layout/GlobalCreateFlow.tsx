@@ -661,6 +661,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   };
 
   const createInputForStatus = (): CreateCustomerInput => ({ ...customerDraft, clientEventId: requestId("customer") });
+  const directCustomerInputForStatus = (): CreateCustomerInput => ({ ...directCustomer, clientEventId: requestId("directCustomer") });
 
   const quoteInputForStatus = (): CreateQuoteInput | null => {
     if (!customer) return null;
@@ -689,7 +690,24 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setStatusChecked(false);
     setRetryConfirmed(false);
     try {
-      if (step === "customer") {
+      if (step === "direct-intake" && intakeStep === 1 && directCustomerMode === "NEW") {
+        const result = await ports.readCustomerCreateReceipt(directCustomerInputForStatus());
+        if (result.code === "OK") {
+          const choice: GlobalCreateCustomerChoice = {
+            id: result.customer.id,
+            customerNumber: result.customer.customerNumber,
+            ...directCustomer,
+            city: directCustomer.city,
+          };
+          setDirectCustomerId(choice.id);
+          setDirectCustomerMode("EXISTING");
+          setCustomerChoices((current) => [choice, ...current.filter((entry) => entry.id !== choice.id)]);
+          setFeedback(null);
+          setIntakeStep(2);
+          return;
+        }
+        setFeedback({ kind: "unclear", message: result.code === "NOT_FOUND" ? "Es wurde noch keine Speicherung gefunden. Die Eingaben bleiben erhalten." : result.message, requestId: feedback.requestId });
+      } else if (step === "customer") {
         const result = await ports.readCustomerCreateReceipt(createInputForStatus());
         if (result.code === "OK") {
           setCustomer({ id: result.customer.id, customerNumber: result.customer.customerNumber, name: result.customer.name, city: customerDraft.city });
@@ -741,6 +759,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       return;
     }
     if (step === "customer") void submitCustomer({ preventDefault() {} } as FormEvent);
+    else if (step === "direct-intake" && intakeStep === 1) void advanceIntakeCustomer();
     else if (step === "quote") void submitQuote({ preventDefault() {} } as FormEvent);
     else if (step === "quote-saved") void convertQuote();
   };
@@ -914,7 +933,11 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       }
       setIntakeStep(2);
     } catch {
-      setFeedback({ kind: "unclear", message: "Der Kundenstand konnte nicht sicher bestätigt werden. Es wurde noch kein Auftrag angelegt." });
+      setFeedback({
+        kind: "unclear",
+        message: "Der Kundenstand konnte nicht sicher bestätigt werden. Es wurde noch kein Auftrag angelegt.",
+        requestId: requestId("directCustomer"),
+      });
     } finally {
       setBusy(false);
     }

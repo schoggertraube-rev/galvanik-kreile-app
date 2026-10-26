@@ -375,6 +375,41 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(screen.queryByRole("button", { name: /Offene KVs bearbeiten/ })).not.toBeInTheDocument();
   });
 
+  it("checks an unclear direct customer save before retrying with the same request", async () => {
+    const successfulCreate = ports().createCustomer;
+    let attempt = 0;
+    const createCustomer = vi.fn<GlobalCreatePorts["createCustomer"]>(async (input) => {
+      attempt += 1;
+      if (attempt === 1) throw new Error("network interrupted");
+      return successfulCreate(input);
+    });
+    const readCustomerCreateReceipt = vi.fn().mockResolvedValue({ code: "NOT_FOUND", message: "Kein Kundenstand gefunden." });
+    const value = ports({ createCustomer, readCustomerCreateReceipt });
+    render(<GlobalCreateFlow ports={value} />);
+
+    openFlow();
+    fireEvent.change(await screen.findByLabelText("Firma / Name"), { target: { value: "SYNTHETISCH Direkteingang Retry GmbH" } });
+    fireEvent.change(screen.getByLabelText("Firmenname"), { target: { value: "SYNTHETISCH Direkteingang Retry GmbH" } });
+    fillRequiredCustomerAddress();
+    fireEvent.change(screen.getByLabelText("Terminwunsch"), { target: { value: "2026-10-15" } });
+    fireEvent.change(screen.getByLabelText("Zugesagter Termin"), { target: { value: "2026-10-20" } });
+    fireEvent.click(screen.getByRole("button", { name: "Weiter zu Positionen" }));
+
+    await screen.findByText("Ausgang ungeklärt", { selector: "strong" });
+    const statusButton = screen.getByRole("button", { name: "Status mit gleicher Kennung prüfen" });
+    await waitFor(() => expect(statusButton).toBeEnabled());
+    fireEvent.click(statusButton);
+    await screen.findByRole("button", { name: "Erneut senden vorbereiten" });
+    expect(readCustomerCreateReceipt).toHaveBeenCalledTimes(1);
+    expect(readCustomerCreateReceipt.mock.calls[0][0].clientEventId).toBe(createCustomer.mock.calls[0][0].clientEventId);
+    fireEvent.click(screen.getByRole("button", { name: "Erneut senden vorbereiten" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ja, jetzt erneut senden" }));
+
+    await screen.findByRole("group", { name: "Position 1" });
+    expect(createCustomer).toHaveBeenCalledTimes(2);
+    expect(createCustomer.mock.calls[1][0].clientEventId).toBe(createCustomer.mock.calls[0][0].clientEventId);
+  });
+
   it("clears an award date when editing a KV", async () => {
     const value = ports();
     render(<GlobalCreateFlow ports={value} />);
