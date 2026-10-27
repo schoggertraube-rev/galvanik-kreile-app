@@ -139,6 +139,8 @@ export type DirectIntakeInput = {
   clientEventId: string;
   customer: { mode: "EXISTING"; customerId: string };
   dueDate: string;
+  handoverMode: "pickup" | "shipping";
+  paymentMode: "vorkasse" | "abholung" | "rechnung";
   note: string | null;
   items: Array<{ catalogServiceId:string|null; name:string; quantity:number; material:string|null; surfaceRequested:string; unit:string|null; unitPriceCents:number|null; vatRateBasisPoints:0|700|1900|null }>;
 };
@@ -156,6 +158,8 @@ export type GlobalCreateDirectIntakeResult =
         correlationId: string;
         actorId: string;
         dueDate: string;
+        handoverMode: "pickup" | "shipping";
+        paymentMode: "vorkasse" | "abholung" | "rechnung";
         recordedAt: string;
       };
       replayed: boolean;
@@ -1024,7 +1028,19 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
           return null;
         }
         const updated = await ports.updateCustomer({
-          clientEventId: globalThis.crypto.randomUUID(), customerId: directCustomerId, ...directCustomer,
+          clientEventId: globalThis.crypto.randomUUID(),
+          customerId: directCustomerId,
+          name: directCustomer.name,
+          companyName: directCustomer.companyName,
+          contactPerson: directCustomer.contactPerson,
+          email: directCustomer.email,
+          phone: directCustomer.phone,
+          street: directCustomer.street,
+          zipCode: directCustomer.zipCode,
+          city: directCustomer.city,
+          country: directCustomer.country,
+          paymentPreference: directCustomer.paymentPreference,
+          vatId: directCustomer.vatId,
         });
         if (updated.code !== "OK") {
           setFeedback(requestFeedback(updated, directCustomerId));
@@ -1067,6 +1083,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       customer: { mode: "EXISTING", customerId },
       // The existing F1.1 contract persists the confirmed commitment, never the non-binding wish.
       dueDate: directConfirmedDate,
+      handoverMode: intakeHandover === "PICKUP" ? "pickup" : "shipping",
+      paymentMode: directCustomer.paymentPreference === "bar"
+        ? "abholung"
+        : /^rechnung_/.test(directCustomer.paymentPreference) ? "rechnung" : "vorkasse",
       note: nullable(directNote),
       items,
     };
@@ -1251,6 +1271,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
             <section className={styles.createSuccess}>
               <h3>Auftrag {directReceipt.receipt.orderNumber} angelegt</h3>
               <p>Der neue Eingang ist gespeichert und im Arbeitsbestand erneut bestätigt.</p>
+              <p>Übergabe: {directReceipt.receipt.handoverMode === "pickup" ? "Abholung" : "Versand"} · Zahlungsart: {directReceipt.receipt.paymentMode === "abholung" ? "Bar oder Karte bei Abholung" : directReceipt.receipt.paymentMode === "rechnung" ? "Rechnung auf Ziel" : "Vorkasse"}</p>
               <KrButton art="primaer" text="Auftragskarte öffnen" onClick={() => ports.openOrder(directReceipt.receipt.orderId)} />
             </section>
           ) : (
@@ -1326,6 +1347,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                     { k: "Positionen", v: String(directItems.length) },
                     { k: "Wunschtermin", v: directWishDate || "Nicht angegeben" },
                     { k: "Übergabe", v: intakeHandover === "PICKUP" ? "Abholung" : "Versand" },
+                    { k: "Zahlungsart", v: directCustomer.paymentPreference === "bar" ? "Bar oder Karte bei Abholung" : /^rechnung_/.test(directCustomer.paymentPreference) ? "Rechnung auf Ziel" : "Vorkasse" },
                   ]} />
                 </FormRaster>
                 <Checkbox checked={intakeChecked} onChange={setIntakeChecked}><b>Ware, Menge und Zustand gemeinsam geprüft</b></Checkbox>
@@ -1382,6 +1404,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                   <span className={styles.createSuccessIcon}><Check /></span>
                   <h3>Auftrag {directReceipt.receipt.orderNumber} angelegt</h3>
                   <p>Der neue Eingang ist gespeichert und im Arbeitsbestand erneut bestätigt.</p>
+                  <p>Übergabe: {directReceipt.receipt.handoverMode === "pickup" ? "Abholung" : "Versand"} · Zahlungsart: {directReceipt.receipt.paymentMode === "abholung" ? "Bar oder Karte bei Abholung" : directReceipt.receipt.paymentMode === "rechnung" ? "Rechnung auf Ziel" : "Vorkasse"}</p>
                   <p>Terminwunsch: {directWishDate} · Zugesagter Termin: {directReceipt.receipt.dueDate}</p>
                   <div className={styles.createFormActions}><button type="button" onClick={() => { reset(); void loadDirectIntake(); }}>Weiteren Eingang anlegen</button><button type="button" className={styles.createPrimary} onClick={() => ports.openOrder(directReceipt.receipt.orderId)}>Auftragskarte öffnen</button></div>
                   <ReceiptFacts title="Neuer Eingang – technische Details für Support" values={[["Anfragekennung", directReceipt.receipt.clientEventId], ["Bestätigung", directReceipt.receipt.receiptId]]} />

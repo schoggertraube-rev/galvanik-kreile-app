@@ -37,6 +37,8 @@ export type CreateOrderIntakeInput = {
   clientEventId: string;
   customer: OrderIntakeCustomerInput;
   dueDate: string;
+  handoverMode?: "pickup" | "shipping";
+  paymentMode?: "vorkasse" | "abholung" | "rechnung";
   note: string | null;
   items: OrderIntakeItemInput[];
 };
@@ -58,6 +60,8 @@ export type OrderIntakeReceipt = {
   correlationId: string;
   actorId: string;
   dueDate: string;
+  handoverMode: "pickup" | "shipping";
+  paymentMode: "vorkasse" | "abholung" | "rechnung";
   note: string | null;
   items: OrderIntakeReceiptItem[];
   recordedAt: string;
@@ -77,7 +81,12 @@ export type OrderIntakeCommandResult =
 
 type NormalizedItem = Required<OrderIntakeItemInput>;
 type NormalizedCustomer = Extract<OrderIntakeCustomerInput, { mode: "EXISTING" }>;
-type NormalizedInput = Omit<CreateOrderIntakeInput, "customer"|"items"> & { customer: NormalizedCustomer; items: NormalizedItem[] };
+type NormalizedInput = Omit<CreateOrderIntakeInput, "customer"|"handoverMode"|"items"|"paymentMode"> & {
+  customer: NormalizedCustomer;
+  handoverMode: "pickup" | "shipping";
+  items: NormalizedItem[];
+  paymentMode: "vorkasse" | "abholung" | "rechnung";
+};
 
 type ExistingReceiptRow = {
   receipt_id: string;
@@ -99,6 +108,8 @@ type ExistingReceiptRow = {
   current_order_version: number;
   current_station: string;
   current_status: string;
+  handover_mode: string | null;
+  payment_mode: string;
   integrity_ok: boolean;
 };
 
@@ -151,13 +162,15 @@ function validDate(value: unknown): value is string {
 }
 
 function normalizeInput(input: unknown): NormalizedInput | null {
-  if (!plainObject(input) || !exactKeys(input, ["clientEventId", "customer", "dueDate", "items", "note"])) {
+  if (!plainObject(input) || !exactKeys(input, ["clientEventId", "customer", "dueDate", "handoverMode", "items", "note", "paymentMode"])) {
     return null;
   }
   if (typeof input.clientEventId !== "string" || !UUID_PATTERN.test(input.clientEventId)) return null;
   if (!validDate(input.dueDate) || !Array.isArray(input.items) || input.items.length < 1 || input.items.length > 20) {
     return null;
   }
+  if ((input.handoverMode !== "pickup" && input.handoverMode !== "shipping")
+    || (input.paymentMode !== "vorkasse" && input.paymentMode !== "abholung" && input.paymentMode !== "rechnung")) return null;
   const note = normalizedOptionalText(input.note, 2000);
   if (note === undefined) return null;
 
@@ -199,7 +212,15 @@ function normalizeInput(input: unknown): NormalizedInput | null {
   if (!customerId) return null;
   const customer: NormalizedCustomer = { mode: "EXISTING", customerId };
 
-  return { clientEventId: input.clientEventId, customer, dueDate: input.dueDate, note, items };
+  return {
+    clientEventId: input.clientEventId,
+    customer,
+    dueDate: input.dueDate,
+    handoverMode: input.handoverMode,
+    paymentMode: input.paymentMode,
+    note,
+    items,
+  };
 }
 
 function canonicalIntent(input: NormalizedInput): string {
@@ -207,8 +228,10 @@ function canonicalIntent(input: NormalizedInput): string {
     clientEventId: input.clientEventId,
     customer: input.customer,
     dueDate: input.dueDate,
+    handoverMode: input.handoverMode,
     items: input.items,
     note: input.note,
+    paymentMode: input.paymentMode,
   });
 }
 
@@ -278,6 +301,8 @@ function toReceipt(
     !/^A-\d{4}-\d{4,}$/.test(row.order_number) || !normalizedText(row.customer_display_name, 2, 160) ||
     !dueDate || !validDate(dueDate) || (row.note !== null && !normalizedText(row.note, 1, 2000)) ||
     !items || !recordedAt || row.current_order_version !== 1 || row.current_station !== STATION ||
+    (row.handover_mode !== "pickup" && row.handover_mode !== "shipping") ||
+    (row.payment_mode !== "vorkasse" && row.payment_mode !== "abholung" && row.payment_mode !== "rechnung") ||
     row.current_status !== ORDER_LIFECYCLE_STATUS.ANGENOMMEN
   ) return null;
   return {
@@ -292,6 +317,8 @@ function toReceipt(
     correlationId: row.correlation_id,
     actorId: row.actor_id,
     dueDate,
+    handoverMode: row.handover_mode,
+    paymentMode: row.payment_mode,
     note: row.note,
     items,
     recordedAt,
@@ -458,12 +485,14 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
         INSERT INTO public.orders (
           id, tenant_id, order_number, customer_id, title, task, station,
           current_station, current_station_id, version, status, risk, priority_computed,
-          intake_date, due_date, promised_due_date, source, source_ref, freetext_original, created_at
+          intake_date, due_date, promised_due_date, source, source_ref, freetext_original,
+          handover_mode, payment_mode, payment_mode_version, created_at
         ) VALUES (
           ${orderId}, ${expected.tenantId}, ${orderNumber}, ${customer.id}, ${title}, ${task}, ${STATION},
           ${STATION}, ${STATION}, 1, ${ORDER_LIFECYCLE_STATUS.ANGENOMMEN}, 'green', 'green',
           statement_timestamp() AT TIME ZONE 'UTC', ${normalized.dueDate}::date, ${normalized.dueDate}::date,
-          'F1_ORDER_INTAKE', ${normalized.clientEventId}, ${normalized.note}, statement_timestamp() AT TIME ZONE 'UTC'
+          'F1_ORDER_INTAKE', ${normalized.clientEventId}, ${normalized.note},
+          ${normalized.handoverMode}, ${normalized.paymentMode}, 0, statement_timestamp() AT TIME ZONE 'UTC'
         )
         RETURNING id, tenant_id, order_number, version, payment_mode, payment_mode_version
       `);
@@ -471,7 +500,7 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
       if (
         insertedOrders.length !== 1 || !insertedOrder || insertedOrder.id !== orderId ||
         insertedOrder.tenant_id !== expected.tenantId || insertedOrder.order_number !== orderNumber ||
-        insertedOrder.version !== 1 || insertedOrder.payment_mode !== "vorkasse" ||
+        insertedOrder.version !== 1 || insertedOrder.payment_mode !== normalized.paymentMode ||
         insertedOrder.payment_mode_version !== 0
       ) throw new Error("ORDER_INTAKE_ORDER_INSERT_FAILED");
 
@@ -505,7 +534,11 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
         ) VALUES (
           ${eventId}, ${expected.tenantId}, ${orderId}, NULL, ${EVENT_TYPE},
           'Digitaler Wareneingang angelegt', ${normalized.note},
-          ${JSON.stringify({ intentSha256: expected.intentSha256 })}::jsonb,
+          ${JSON.stringify({
+            intentSha256: expected.intentSha256,
+            handoverMode: normalized.handoverMode,
+            paymentMode: normalized.paymentMode,
+          })}::jsonb,
           'success', ${expected.actorId}, ${EVENT_STATION}, ${expected.clientEventId}, ${EVENT_SCHEMA_VERSION},
           ${correlationId}, 1, NULL, statement_timestamp() AT TIME ZONE 'UTC'
         )

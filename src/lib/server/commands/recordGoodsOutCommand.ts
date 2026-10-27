@@ -317,7 +317,8 @@ function parseEvent(row: GoodsOutEventRow, tenantId: string): GoodsOutReceipt {
     || !actualKeys.every((key, index) => key === expectedKeys[index])
     || openAmountCents === null
     || (payload.paymentStatus !== "offen" && payload.paymentStatus !== "teilbezahlt" && payload.paymentStatus !== "bezahlt")
-    || (payload.paymentMode !== "rechnung" && (payload.paymentStatus !== "bezahlt" || openAmountCents !== 0))
+    || (payload.paymentMode !== "rechnung" && payload.paymentMode !== "abholung"
+      && (payload.paymentStatus !== "bezahlt" || openAmountCents !== 0))
   ) throw new Error("GOODS_OUT_RECEIPT_INVALID");
   return {
     ...base,

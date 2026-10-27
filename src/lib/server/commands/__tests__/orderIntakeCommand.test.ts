@@ -28,6 +28,8 @@ const input = {
   clientEventId: CLIENT,
   customer: { mode: "EXISTING" as const, customerId: CUSTOMER },
   dueDate: "2026-08-30",
+  handoverMode: "pickup" as const,
+  paymentMode: "abholung" as const,
   note: "Eilige Annahme",
   items: [{ catalogServiceId:SERVICE, name:"Grundplatte", quantity:2, material:"Stahl", surfaceRequested:"Glanzverchromen", unit:"Stück", unitPriceCents:1250, vatRateBasisPoints:1900 as const }],
 };
@@ -35,8 +37,10 @@ const intentSha256 = createHash("sha256").update(JSON.stringify({
   clientEventId: CLIENT,
   customer: input.customer,
   dueDate: input.dueDate,
+  handoverMode: input.handoverMode,
   items: input.items,
   note: input.note,
+  paymentMode: input.paymentMode,
 })).digest("hex");
 const itemSnapshot = [{ id: ITEM, position: 1, ...input.items[0] }];
 const receiptRow = {
@@ -59,6 +63,8 @@ const receiptRow = {
   current_order_version: 1,
   current_station: "angenommen",
   current_status: "angenommen",
+  handover_mode: "pickup",
+  payment_mode: "abholung",
   integrity_ok: true,
 };
 
@@ -133,7 +139,7 @@ describe("createOrderIntake", () => {
           tenant_id: KREILE_TENANT_SLUG,
           order_number: "A-2026-0042",
           version: 1,
-          payment_mode: "vorkasse",
+          payment_mode: "abholung",
           payment_mode_version: 0,
         }]);
       }
@@ -177,6 +183,8 @@ describe("createOrderIntake", () => {
         correlationId: created.correlationId,
         actorId: ACTOR,
         dueDate: "2026-08-30",
+        handoverMode: "pickup",
+        paymentMode: "abholung",
         note: "Eilige Annahme",
         items: [{ ...itemSnapshot[0], id: created.itemId }],
         recordedAt: "2026-08-12T12:00:00.000Z",
@@ -197,7 +205,9 @@ describe("createOrderIntake", () => {
     const eventInsert = execute.mock.calls
       .map(([query]) => query)
       .find((query) => query.text.includes("INSERT INTO public.events"));
-    expect(orderInsert?.text.split(") VALUES")[0]).not.toContain("payment_mode");
+    expect(orderInsert?.text.split(") VALUES")[0]).toContain("payment_mode");
+    expect(orderInsert?.values).toContain("abholung");
+    expect(orderInsert?.values).toContain("pickup");
     expect(orderInsert?.text).toContain("payment_mode_version");
     expect(eventInsert?.values).toContain("wareneingang");
     expect(sqlText).not.toMatch(/createClient|supabase|rpc\(/i);

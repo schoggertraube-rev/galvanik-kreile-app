@@ -101,7 +101,7 @@ function summary(paymentMode: "vorkasse" | "abholung" | "rechnung", status: "off
     payment_correlation_id: status === "offen" ? null : "55555555-5555-4555-8555-555555555555",
     payment_mode_version: 0,
     payment_version: status === "offen" ? 0 : 1,
-    goods_out_allowed: paymentMode === "rechnung" || status === "bezahlt",
+    goods_out_allowed: paymentMode === "rechnung" || paymentMode === "abholung" || status === "bezahlt",
     integrity_ok: true,
   };
 }
@@ -189,7 +189,7 @@ function configureSuccess(options: {
       orderReads += 1;
       return Promise.resolve(orderReads === 1
         ? [{ ...finishedOrder, payment_mode: paymentMode }]
-        : [pickedUpOrder]);
+        : [{ ...pickedUpOrder, payment_mode: paymentMode }]);
     }
     if (text.includes("FROM public.invoices")) return Promise.resolve(invoiceIssued ? [invoice] : []);
     if (text.includes("FROM private.v_payment_summary_v1")) return Promise.resolve([summary(paymentMode, paymentStatus)]);
@@ -300,8 +300,6 @@ describe("recordGoodsOut", () => {
     for (const [paymentMode, paymentStatus] of [
       ["vorkasse", "offen"],
       ["vorkasse", "teilbezahlt"],
-      ["abholung", "offen"],
-      ["abholung", "teilbezahlt"],
     ] as const) {
       execute.mockReset();
       configureSuccess({ paymentMode, paymentStatus });
@@ -310,6 +308,15 @@ describe("recordGoodsOut", () => {
         message: "Zahlung ist für den Warenausgang noch offen.",
       });
       expect(execute.mock.calls.map(([query]) => queryText(query as Query)).join("\n")).not.toContain("UPDATE public.orders");
+    }
+
+    for (const paymentStatus of ["offen", "teilbezahlt"] as const) {
+      execute.mockReset();
+      configureSuccess({ paymentMode: "abholung", paymentStatus, mode: "abholung" });
+      await expect(recordGoodsOut({ ...input, mode: "abholung" })).resolves.toMatchObject({
+        code: "OK",
+        receipt: { paymentMode: "abholung", paymentStatus },
+      });
     }
 
     execute.mockReset();

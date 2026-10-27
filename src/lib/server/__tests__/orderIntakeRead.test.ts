@@ -40,6 +40,8 @@ const receiptRow = {
   current_order_version: 1,
   current_station: "angenommen",
   current_status: ORDER_LIFECYCLE_STATUS.ANGENOMMEN,
+  handover_mode: "pickup",
+  payment_mode: "abholung",
   integrity_ok: true,
 };
 
@@ -74,6 +76,8 @@ describe("order intake read ports", () => {
       receiptId: receiptRow.receipt_id,
       orderId,
       customerId: "legacy-customer",
+      handoverMode: "pickup",
+      paymentMode: "abholung",
       items: [{ id: receiptRow.items_snapshot[0]!.id, position: 1 }],
     });
     expect(execute.mock.calls[0]?.[0].text).toContain("actor_id = ?");

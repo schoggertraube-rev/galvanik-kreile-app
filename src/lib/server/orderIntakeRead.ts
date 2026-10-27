@@ -53,6 +53,8 @@ type ReceiptRow = {
   current_order_version: number;
   current_station: string;
   current_status: string;
+  handover_mode: string | null;
+  payment_mode: string;
   integrity_ok: boolean;
 };
 
@@ -156,6 +158,8 @@ function mapReceipt(
     !/^A-\d{4}-\d{4,}$/.test(row.order_number) || !trimmed(row.customer_display_name, 2, 160) ||
     !dueDate || !DATE_PATTERN.test(dueDate) || (row.note !== null && !trimmed(row.note, 1, 2000)) ||
     Number.isNaN(recorded.getTime()) || row.current_order_version !== 1 ||
+    (row.handover_mode !== "pickup" && row.handover_mode !== "shipping") ||
+    (row.payment_mode !== "vorkasse" && row.payment_mode !== "abholung" && row.payment_mode !== "rechnung") ||
     row.current_station !== "angenommen" || row.current_status !== ORDER_LIFECYCLE_STATUS.ANGENOMMEN
   ) return null;
   const items = parseItems(row.items_snapshot);
@@ -172,6 +176,8 @@ function mapReceipt(
     correlationId: row.correlation_id,
     actorId: row.actor_id,
     dueDate,
+    handoverMode: row.handover_mode,
+    paymentMode: row.payment_mode,
     note: row.note,
     items,
     recordedAt: recorded.toISOString(),
@@ -213,7 +219,8 @@ export async function readOrderIntakeReceipt(
       SELECT receipt_id, event_id, tenant_id, order_id, customer_id, actor_id,
              client_event_id, correlation_id, customer_mode, order_number,
              customer_display_name, due_date, note, items_snapshot, recorded_at,
-             current_order_version, current_station, current_status, integrity_ok
+             current_order_version, current_station, current_status,
+             handover_mode, payment_mode, integrity_ok
       FROM private.v_order_intake_receipts_v1
       WHERE order_id = ${input.orderId}
         AND actor_id = ${authorization.userId}

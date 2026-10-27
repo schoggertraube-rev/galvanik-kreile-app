@@ -619,6 +619,8 @@ export function OrderCardAppAdapter({
       clientEventId,
       customer: { mode: "EXISTING", customerId: snapshot.card.customerId },
       dueDate: snapshot.card.dueAt.slice(0, 10),
+      handoverMode: "pickup",
+      paymentMode: snapshot.payment?.mode ?? "vorkasse",
       note: snapshot.card.note,
       items,
     });
@@ -664,7 +666,9 @@ export function OrderCardAppAdapter({
       payment?.invoiceState === "issued" &&
       Boolean(payment.payment && payment.payment.openAmountCents > 0);
     const goodsGate =
-      payment?.mode === "rechnung" || payment?.payment?.status === "bezahlt";
+      payment?.mode === "rechnung" ||
+      payment?.mode === "abholung" ||
+      payment?.payment?.status === "bezahlt";
     return {
       content: availability(Boolean(card), editContent && !card?.freeze, !editContent ? "Ihre Rolle darf Auftragsinhalte nicht ändern." : card?.freeze ? "Der Auftrag ist bereits fertig gemeldet." : null),
       itemStatus: availability(Boolean(card), canPhoto && !card?.freeze, !canPhoto ? "Ihre Rolle darf den Teilstatus nicht ändern." : card?.freeze ? "Der Auftrag ist bereits fertig gemeldet." : null),
