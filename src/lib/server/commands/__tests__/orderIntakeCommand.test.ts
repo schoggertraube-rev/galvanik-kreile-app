@@ -116,7 +116,7 @@ describe("createOrderIntake", () => {
       customer: {
         mode: "NEW" as const, name: "TEST Neu GmbH", customerType: "business" as const, companyName: "TEST Neu GmbH",
         contactPerson: "Tessa Test", email: "tessa@example.test", phone: "+49 221 123456", street: "Testweg 1",
-        zipCode: "50667", city: "Köln", country: "Deutschland", paymentPreference: "rechnung_14", vatId: null,
+        zipCode: "50667", city: "Köln", country: "Deutschland", paymentPreference: "bar", vatId: null,
       },
       items: [{ catalogServiceId: null, name: "TEST Sonderteil", quantity: 1, material: "Stahl", surfaceRequested: "Vernickeln", unit: null, unitPriceCents: null, vatRateBasisPoints: null }],
     };
@@ -128,7 +128,7 @@ describe("createOrderIntake", () => {
       if (query.text.includes("FROM public.customers")) return Promise.resolve([{
         id: CUSTOMER, tenant_id: KREILE_TENANT_SLUG, customer_number: "K-2026-0042", name: "TEST Neu GmbH", company_name: "TEST Neu GmbH",
         contact_person: "Tessa Test", phone: "+49 221 123456", email: "tessa@example.test", street: "Testweg 1",
-        zip_code: "50667", city: "Köln", country: "Deutschland", payment_preference: "rechnung_14",
+        zip_code: "50667", city: "Köln", country: "Deutschland", payment_preference: "bar",
       }]);
       if (query.text.includes("next_number")) throw new Error("stop after atomic customer creation");
       throw new Error(`unexpected SQL ${query.text}`);
@@ -139,6 +139,56 @@ describe("createOrderIntake", () => {
     expect(sqlText).toContain("private.create_customer_v1");
     expect(sqlText).toContain("private.v_customer_create_receipts_v1");
     expect(sqlText).toContain("next_number");
+  });
+
+  it("rejects invoice terms for a new customer before creating that customer", async () => {
+    const newCustomerOnTarget = {
+      ...input,
+      customer: {
+        mode: "NEW" as const, name: "TEST Ziel GmbH", customerType: "business" as const, companyName: "TEST Ziel GmbH",
+        contactPerson: "Tessa Test", email: "tessa@example.test", phone: "+49 221 123456", street: "Testweg 1",
+        zipCode: "50667", city: "Köln", country: "Deutschland", paymentPreference: "rechnung_14", vatId: null,
+      },
+      paymentMode: "rechnung" as const,
+      items: [{ catalogServiceId: null, name: "TEST Sonderteil", quantity: 1, material: "Stahl", surfaceRequested: "Vernickeln", unit: null, unitPriceCents: null, vatRateBasisPoints: null }],
+    };
+    execute.mockImplementation((query: { text: string }) => {
+      if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if (query.text.includes("FROM private.order_intake_receipts")) return Promise.resolve([]);
+      throw new Error(`unexpected SQL ${query.text}`);
+    });
+
+    const { createOrderIntake } = await import("../orderIntakeCommand");
+    await expect(createOrderIntake(newCustomerOnTarget)).resolves.toEqual({
+      code: "VALIDATION_ERROR",
+      message: "Ziel nicht freigeschaltet.",
+    });
+    expect(execute.mock.calls.map(([query]) => query.text).join("\n")).not.toContain("private.create_customer_v1");
+  });
+
+  it("rejects invoice-on-target when the existing customer is not enabled for it", async () => {
+    const unapprovedTarget = {
+      ...input,
+      paymentMode: "rechnung" as const,
+      items: [{ catalogServiceId: null, name: "TEST Sonderteil", quantity: 1, material: "Stahl", surfaceRequested: "Vernickeln", unit: null, unitPriceCents: null, vatRateBasisPoints: null }],
+    };
+    execute.mockImplementation((query: { text: string }) => {
+      if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if (query.text.includes("FROM private.order_intake_receipts")) return Promise.resolve([]);
+      if (query.text.includes("FROM public.customers")) return Promise.resolve([{
+        id: CUSTOMER, tenant_id: KREILE_TENANT_SLUG, customer_number: "K-0042", name: "Kunde A", company_name: "Kunde A GmbH",
+        contact_person: "Ada Beispiel", phone: "+49 221 123456", email: "ada@example.test", street: "Testweg 1",
+        zip_code: "50667", city: "Köln", country: "Deutschland", payment_preference: "bar",
+      }]);
+      throw new Error(`unexpected SQL ${query.text}`);
+    });
+
+    const { createOrderIntake } = await import("../orderIntakeCommand");
+    await expect(createOrderIntake(unapprovedTarget)).resolves.toEqual({
+      code: "VALIDATION_ERROR",
+      message: "Ziel nicht freigeschaltet.",
+    });
+    expect(execute.mock.calls.map(([query]) => query.text).join("\n")).not.toContain("INSERT INTO public.orders");
   });
 
   it("rejects stale catalog data before creating an inline customer", async () => {
@@ -182,7 +232,7 @@ describe("createOrderIntake", () => {
         zip_code: "50667",
         city: "Köln",
         country: "Deutschland",
-        payment_preference: "rechnung_14",
+        payment_preference: "bar",
       }]);
       if (query.text.includes("FROM public.catalog_services")) return Promise.resolve([{ id:SERVICE, name:"Grundplatte", surface:"Glanzverchromen", unit:"Stück", net_price_cents:1250, vat_rate_basis_points:1900 }]);
       if (query.text.includes("next_number")) return Promise.resolve([{ current_year: 2026, next_number: 42 }]);
@@ -278,7 +328,7 @@ describe("createOrderIntake", () => {
       if (query.text.includes("FROM public.customers")) return Promise.resolve([{
         id: CUSTOMER, tenant_id: KREILE_TENANT_SLUG, customer_number: "K-0042", name: "Kunde A", company_name: "Kunde A GmbH",
         contact_person: "Ada Beispiel", phone: "+49 221 123456", email: "ada@example.test", street: "Testweg 1",
-        zip_code: "50667", city: "Köln", country: "Deutschland", payment_preference: "rechnung_14",
+        zip_code: "50667", city: "Köln", country: "Deutschland", payment_preference: "bar",
       }]);
       if (query.text.includes("next_number")) throw new Error("stop after validation");
       throw new Error(`unexpected SQL ${query.text}`);

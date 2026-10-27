@@ -13,6 +13,7 @@ import {
 import { FormEvent, KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { CreateCustomerInput, UpdateCustomerCommercialInput } from "@/modules/customers/public";
 import type { CatalogService } from "@/modules/katalog/public";
+import { paymentModeFromPreference } from "@/lib/server/paymentContract";
 import {
   Abschnitt,
   AbschnittNav,
@@ -330,12 +331,6 @@ function completeOrderCustomer(customer: CustomerDraft): boolean {
     Boolean(customer.phone?.trim()) && Boolean(customer.email?.trim()) && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email ?? "") &&
     customer.street.trim().length >= 2 && customer.zipCode.trim().length >= 2 && customer.city.trim().length >= 1 &&
     customer.country.trim().length >= 2 && customer.paymentPreference.trim().length > 0;
-}
-
-function paymentModeFromPreference(preference: string | null | undefined): "vorkasse" | "abholung" | "rechnung" {
-  if (preference === "bar") return "abholung";
-  if (typeof preference === "string" && /^rechnung_/.test(preference)) return "rechnung";
-  return "vorkasse";
 }
 
 const newPosition = (): PositionDraft => ({
@@ -1229,9 +1224,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       // The existing F1.1 contract persists the confirmed commitment, never the non-binding wish.
       dueDate: directConfirmedDate,
       handoverMode: intakeHandover === "PICKUP" ? "pickup" : "shipping",
-      paymentMode: directCustomer.paymentPreference === "bar"
-        ? "abholung"
-        : /^rechnung_/.test(directCustomer.paymentPreference) ? "rechnung" : "vorkasse",
+      paymentMode: paymentModeFromPreference(directCustomer.paymentPreference),
       note: nullable(directNote),
       items,
     };

@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { intakePaymentContract, type PaymentMode } from "@/lib/server/paymentContract";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 
 const EVENT_TYPE = "ORDER_INTAKE_CREATED_V1";
@@ -38,7 +39,7 @@ export type CreateOrderIntakeInput = {
   customer: OrderIntakeCustomerInput;
   dueDate: string;
   handoverMode?: "pickup" | "shipping";
-  paymentMode?: "vorkasse" | "abholung" | "rechnung";
+  paymentMode?: PaymentMode;
   note: string | null;
   items: OrderIntakeItemInput[];
 };
@@ -61,7 +62,7 @@ export type OrderIntakeReceipt = {
   actorId: string;
   dueDate: string;
   handoverMode: "pickup" | "shipping";
-  paymentMode: "vorkasse" | "abholung" | "rechnung";
+  paymentMode: PaymentMode;
   note: string | null;
   items: OrderIntakeReceiptItem[];
   recordedAt: string;
@@ -85,7 +86,7 @@ type NormalizedInput = Omit<CreateOrderIntakeInput, "customer"|"handoverMode"|"i
   customer: NormalizedCustomer;
   handoverMode: "pickup" | "shipping";
   items: NormalizedItem[];
-  paymentMode: "vorkasse" | "abholung" | "rechnung";
+  paymentMode: PaymentMode;
 };
 
 type ExistingReceiptRow = {
@@ -531,11 +532,31 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
         }
       }
 
+      let paymentContract = normalized.customer.mode === "NEW"
+        ? intakePaymentContract({
+            customerMode: "NEW",
+            paymentPreference: normalized.customer.paymentPreference,
+            requestedMode: normalized.paymentMode,
+          })
+        : null;
+      if (paymentContract && !paymentContract.ok) {
+        return { code: "VALIDATION_ERROR", message: paymentContract.message };
+      }
+
       const customer = await resolveCustomer(tx, expected.tenantId, expected.actorId, normalized.customer);
       if (!customer || customer.tenant_id !== expected.tenantId) {
         if (normalized.customer.mode === "NEW") throw new Error("ORDER_INTAKE_NEW_CUSTOMER_INVALID");
         return { code: "VALIDATION_ERROR", message: "Der Kunde ist für einen Auftrag noch nicht vollständig." };
       }
+      paymentContract ??= intakePaymentContract({
+        customerMode: "EXISTING",
+        paymentPreference: customer.payment_preference,
+        requestedMode: normalized.paymentMode,
+      });
+      if (!paymentContract.ok) {
+        return { code: "VALIDATION_ERROR", message: paymentContract.message };
+      }
+      const paymentMode = paymentContract.mode;
 
       const orderId = randomUUID();
       const eventId = randomUUID();
@@ -571,7 +592,7 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
           ${STATION}, ${STATION}, 1, ${ORDER_LIFECYCLE_STATUS.ANGENOMMEN}, 'green', 'green',
           statement_timestamp() AT TIME ZONE 'UTC', ${normalized.dueDate}::date, ${normalized.dueDate}::date,
           'F1_ORDER_INTAKE', ${normalized.clientEventId}, ${normalized.note},
-          ${normalized.handoverMode}, ${normalized.paymentMode}, 0, statement_timestamp() AT TIME ZONE 'UTC'
+          ${normalized.handoverMode}, ${paymentMode}, 0, statement_timestamp() AT TIME ZONE 'UTC'
         )
         RETURNING id, tenant_id, order_number, version, payment_mode, payment_mode_version
       `);
@@ -579,7 +600,7 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
       if (
         insertedOrders.length !== 1 || !insertedOrder || insertedOrder.id !== orderId ||
         insertedOrder.tenant_id !== expected.tenantId || insertedOrder.order_number !== orderNumber ||
-        insertedOrder.version !== 1 || insertedOrder.payment_mode !== normalized.paymentMode ||
+        insertedOrder.version !== 1 || insertedOrder.payment_mode !== paymentMode ||
         insertedOrder.payment_mode_version !== 0
       ) throw new Error("ORDER_INTAKE_ORDER_INSERT_FAILED");
 
@@ -616,7 +637,7 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
           ${JSON.stringify({
             intentSha256: expected.intentSha256,
             handoverMode: normalized.handoverMode,
-            paymentMode: normalized.paymentMode,
+            paymentMode,
           })}::jsonb,
           'success', ${expected.actorId}, ${EVENT_STATION}, ${expected.clientEventId}, ${EVENT_SCHEMA_VERSION},
           ${correlationId}, 1, NULL, statement_timestamp() AT TIME ZONE 'UTC'

@@ -159,6 +159,30 @@ export function isPaymentMode(value: unknown): value is PaymentMode {
   return PAYMENT_MODES.includes(value as PaymentMode);
 }
 
+export function paymentModeFromPreference(preference: string | null | undefined): PaymentMode {
+  if (preference === "bar") return "abholung";
+  if (typeof preference === "string" && /^rechnung_[1-9][0-9]{0,2}$/.test(preference)) return "rechnung";
+  return "vorkasse";
+}
+
+export function intakePaymentContract(input: {
+  customerMode: "EXISTING" | "NEW";
+  paymentPreference: string | null | undefined;
+  requestedMode: PaymentMode;
+}): { ok: true; mode: PaymentMode } | { ok: false; message: string } {
+  const mode = paymentModeFromPreference(input.paymentPreference);
+  if (input.customerMode === "NEW" && mode === "rechnung") {
+    return { ok: false, message: "Ziel nicht freigeschaltet." };
+  }
+  if (input.requestedMode === "rechnung" && mode !== "rechnung") {
+    return { ok: false, message: "Ziel nicht freigeschaltet." };
+  }
+  if (input.requestedMode !== mode) {
+    return { ok: false, message: "Zahlungsmodus passt nicht zur hinterlegten Zahlungsbedingung." };
+  }
+  return { ok: true, mode };
+}
+
 function isPaymentStatus(value: unknown): value is PaymentStatus {
   return value === "offen" || value === "teilbezahlt" || value === "bezahlt";
 }
