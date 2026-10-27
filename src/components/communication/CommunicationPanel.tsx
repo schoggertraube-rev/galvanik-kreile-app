@@ -82,7 +82,8 @@ export function CommunicationPanel({ targetType, targetId }: Target) {
       <header><AtSign /><div><small>Microsoft 365</small><h3>E-Mail am Vorgang</h3></div></header>
       <form className={styles.compose} onSubmit={async (event) => {
         event.preventDefault();
-        const form = new FormData(event.currentTarget);
+        const formElement = event.currentTarget;
+        const form = new FormData(formElement);
         setSendBusy(true);
         setFeedback("");
         const quoteId = String(form.get("quoteId") ?? "");
@@ -96,7 +97,7 @@ export function CommunicationPanel({ targetType, targetId }: Target) {
         });
         setSendBusy(false);
         setFeedback(result.code === "OK" ? "E-Mail wurde versendet und am Vorgang gespeichert." : result.message);
-        if (result.code === "OK") event.currentTarget.reset();
+        if (result.code === "OK") formElement.reset();
       }}>
         <label>Betreff<input name="subject" required maxLength={500} /></label>
         <label>Nachricht<textarea name="body" required maxLength={20_000} /></label>
