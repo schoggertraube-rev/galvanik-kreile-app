@@ -34,8 +34,10 @@ const headers = oidc ? { "x-vercel-trusted-oidc-idp-token": oidc } : undefined;
 async function loginStorage() {
   const context = await browser.newContext({ viewport: { width: 1914, height: 917 }, extraHTTPHeaders: headers });
   const page = await context.newPage();
-  await page.goto(`${appUrl}/start`, { waitUntil: "domcontentloaded", timeout: 30_000 });
-  await page.getByRole("button", { name: /Rolf.*Meister/ }).click();
+  await page.goto(`${appUrl}/start`, { waitUntil: "networkidle", timeout: 30_000 });
+  const rolf = page.getByRole("button", { name: /Rolf.*Meister/ });
+  await rolf.waitFor();
+  await rolf.click();
   const dialog = page.getByRole("dialog", { name: /Persönlichen Code eingeben/ });
   await dialog.waitFor();
   for (const digit of pin) await dialog.getByRole("button", { name: digit, exact: true }).click();
@@ -47,6 +49,7 @@ async function loginStorage() {
 
 const storageState = await loginStorage();
 const pairs = [];
+const skipped = [];
 
 function contextOptions(viewport, authenticated = false) {
   return {
@@ -102,6 +105,7 @@ async function openAppIntake(app, state) {
   await dialog.waitFor();
   const customer = dialog.getByRole("combobox", { name: "Kunde", exact: true });
   await customer.waitFor();
+  await customer.locator("option").nth(2).waitFor({ state: "attached" });
   if (state === "neukunde") {
     await customer.selectOption({ label: "Neukunde anlegen" });
     await dialog.getByLabel("Name / Firma", { exact: true }).waitFor();
@@ -149,7 +153,15 @@ async function captureIntake(viewport, state) {
   try {
     const app = await appContext.newPage();
     const prototype = await prototypeContext.newPage();
-    await openAppIntake(app, state);
+    try {
+      await openAppIntake(app, state);
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("NO_REAL_CUSTOMER_WITH_MISSING_EMAIL")) {
+        skipped.push({ screen: `neuer-eingang-${state}`, geraet: viewport.geraet, reason: error.message });
+        return;
+      }
+      throw error;
+    }
     await openPrototypeIntake(prototype, viewport, state);
     await savePair({ viewport, name: `neuer-eingang-${state}`, title: `Neuer Eingang · ${state}`, app, prototype });
   } finally {
@@ -174,12 +186,13 @@ try {
         <figure><figcaption>App</figcaption><img src="${pair.appFile}" alt="App ${pair.title} ${pair.geraet}"></figure>
       </div>
     </section>`).join("\n");
+  const gaps = skipped.length ? `<section><h2>Offene Nachweise</h2><ul>${skipped.map((entry) => `<li>${entry.screen} · ${entry.geraet}: ${entry.reason}</li>`).join("")}</ul></section>` : "";
   const html = `<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>V1.1 Bildpaare</title><style>
     :root{font-family:Inter,system-ui,sans-serif;color:#12161f;background:#f4f2ee}body{margin:0;padding:24px}h1{margin:0 0 8px}p{margin:0 0 24px;color:#596176}section{margin:0 0 28px;padding:18px;background:#fff;border:1px solid #e4e0d8;border-radius:14px}.pair{display:grid;grid-template-columns:1fr 1fr;gap:16px}figure{margin:0;min-width:0}figcaption{margin:0 0 8px;font-weight:700}img{display:block;width:100%;height:auto;border:1px solid #d5d0c7}@media(max-width:900px){.pair{grid-template-columns:1fr}}
-  </style></head><body><h1>Oberfläche V1.1 · Bildpaare</h1><p>Links Prototyp, rechts App · gleicher Zustand · erzeugt ${new Date().toISOString()}</p>${cards}</body></html>`;
+  </style></head><body><h1>Oberfläche V1.1 · Bildpaare</h1><p>Links Prototyp, rechts App · gleicher Zustand · erzeugt ${new Date().toISOString()}</p>${gaps}${cards}</body></html>`;
   await writeFile(resolve(output, "index.html"), html, "utf8");
-  await writeFile(resolve(output, "result.json"), JSON.stringify({ appUrl, screen, pairs }, null, 2), "utf8");
-  process.stdout.write(JSON.stringify({ output: "output/v11-paare/index.html", pairs: pairs.length }));
+  await writeFile(resolve(output, "result.json"), JSON.stringify({ appUrl, screen, pairs, skipped }, null, 2), "utf8");
+  process.stdout.write(JSON.stringify({ output: "output/v11-paare/index.html", pairs: pairs.length, skipped: skipped.length }));
 } finally {
   await browser.close();
 }
