@@ -137,6 +137,24 @@ export function SettingsAdminClient({
     });
   }
 
+  function createLogin() {
+    startTransition(async () => {
+      const execution = await runServerAction(() => createManagedUserAction(newLogin), "Login anlegen");
+      if (!execution.ok) {
+        setMessage(execution.message);
+        return;
+      }
+      const result = execution.value;
+      if (result.code !== "OK") {
+        setMessage(result.message ?? "Login konnte nicht angelegt werden.");
+        return;
+      }
+      setUsers((current) => [...current, result.user]);
+      setNewLogin({ fullName: "", designation: "", template: "werkstatt", pin: "" });
+      setMessage("Login angelegt.");
+    });
+  }
+
   function updateUser(user: ManagedUser) {
     report(
       () => saveManagedUserAction({
@@ -240,7 +258,7 @@ export function SettingsAdminClient({
         <label>Bezeichnung<input data-spec-id="rechte.bezeichnung" value={newLogin.designation} onChange={(event) => setNewLogin({ ...newLogin, designation: event.target.value })} /></label>
         <label>Rechte wie<select data-spec-id="rechte.vorlage" value={newLogin.template} onChange={(event) => setNewLogin({ ...newLogin, template: event.target.value as typeof newLogin.template })}><option value="werkstatt">wie Phillip</option><option value="meister">wie Rolf</option><option value="leer">leer</option></select></label>
         <label>Code<input data-spec-id="rechte.code" type="password" inputMode="numeric" value={newLogin.pin} onChange={(event) => setNewLogin({ ...newLogin, pin: event.target.value.replace(/\D/g, "").slice(0, 4) })} /></label>
-        <button data-spec-id="rechte.login-anlegen" disabled={pending} onClick={() => report(() => createManagedUserAction(newLogin), "Login angelegt.", () => window.location.reload())}>Login anlegen</button>
+        <button data-spec-id="rechte.login-anlegen" disabled={pending} onClick={createLogin}>Login anlegen</button>
       </div>
       <div className={styles.userList}>{users.map((user) => {
         const isEditing = editingUser?.id === user.id;

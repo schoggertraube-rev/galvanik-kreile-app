@@ -273,8 +273,8 @@ export async function createManagedUser(context: SystemSettingsContext, input: u
   const pinHash = await bcrypt.hash(normalized.pin, 12);
   const shortCode = deriveShortCode(normalized.fullName);
   try {
-    const userId = await withPrivilegedTenantTransaction(context, async (tx) => {
-      const rows = await tx.execute<{ id: string }>(sql`
+    const created = await withPrivilegedTenantTransaction(context, async (tx) => {
+      const rows = await tx.execute<{ id: string; short_code: string }>(sql`
         WITH candidates AS (
           SELECT CASE
             WHEN number = 1 THEN ${shortCode}
@@ -296,7 +296,7 @@ export async function createManagedUser(context: SystemSettingsContext, input: u
         INSERT INTO public.app_users (tenant_id, email, full_name, kuerzel, bezeichnung, role, pin_hash, active, updated_at)
         SELECT ${context.tenantId}, NULL, ${normalized.fullName}, chosen.kuerzel, ${normalized.designation}, ${role}, ${pinHash}, true, statement_timestamp()
         FROM chosen
-        RETURNING id::text AS id
+        RETURNING id::text AS id, kuerzel AS short_code
       `);
       if (rows.length !== 1 || !rows[0]) throw new Error("USER_CREATE_FAILED");
       if (areas.length > 0) {
@@ -307,9 +307,23 @@ export async function createManagedUser(context: SystemSettingsContext, input: u
         `);
       }
       await tx.execute(sql`INSERT INTO public.ui_events (tenant_id, event_type, payload) VALUES (${context.tenantId}, 'login_created', jsonb_build_object('actorId', ${context.actorId}, 'userId', ${rows[0].id}, 'template', ${normalized.template}))`);
-      return rows[0].id;
+      return rows[0];
     });
-    return { code: "OK" as const, userId };
+    return {
+      code: "OK" as const,
+      user: {
+        id: created.id,
+        email: null,
+        fullName: normalized.fullName,
+        shortCode: created.short_code,
+        designation: normalized.designation,
+        role,
+        active: true,
+        areas: [...areas],
+        fixedAreas: [],
+        isCurrent: false,
+      } satisfies ManagedUser,
+    };
   } catch {
     return { code: "UNAVAILABLE" as const, message: "Login konnte nicht sicher angelegt werden. Prüfe, ob das Kürzel bereits vergeben ist." };
   }

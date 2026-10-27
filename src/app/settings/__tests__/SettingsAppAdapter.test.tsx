@@ -10,6 +10,7 @@ const ports = vi.hoisted(() => ({
   saveFeature: vi.fn(),
   changeOwnPin: vi.fn(),
   saveManagedUser: vi.fn(),
+  createManagedUser: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -23,7 +24,7 @@ vi.mock("@/app/actions/settings.actions", () => ({
   saveCatalogServiceAction: vi.fn(),
   saveCompanySettingsAction: vi.fn(),
   saveManagedUserAction: ports.saveManagedUser,
-  createManagedUserAction: vi.fn(),
+  createManagedUserAction: ports.createManagedUser,
   setManagedUserAreaAction: vi.fn(),
   changeOwnPinAction: ports.changeOwnPin,
 }));
@@ -53,6 +54,10 @@ describe("Gregor system administration composition", () => {
     );
     ports.changeOwnPin.mockResolvedValue({ code: "OK" });
     ports.saveManagedUser.mockResolvedValue({ code: "OK" });
+    ports.createManagedUser.mockResolvedValue({
+      code: "OK",
+      user: { id: "33333333-3333-4333-8333-333333333333", email: null, fullName: "Nina Neu", shortCode: "NN", designation: "Werkstatt", role: "werkstatt", active: true, areas: ["auftraege", "eingang", "kunden"], fixedAreas: [], isCurrent: false },
+    });
     ports.readSettings.mockResolvedValue({ code:"OK", snapshot:{ company:{companyName:"Galvanik Kreile",street:"Testweg 1",zip:"12345",city:"Berlin",country:"Deutschland",taxId:"DE123456789",iban:"DE001234",bic:"TESTDEFF",bankName:"Testbank",paymentTermDays:14,logoUrl:"/logo.png"}, extraWorkHourlyRate:{rateId:null,hourlyRateCents:null,version:0}, users:[], capabilities:{canManageCompany:true,canManageLogins:true,canManageSystem:true}, numberRanges:[], features:[{id:"S01",enabled:true},{id:"Z01",enabled:false}] }, services:[] });
   });
 
@@ -74,6 +79,20 @@ describe("Gregor system administration composition", () => {
     fireEvent.click(screen.getByRole("button", { name: "Logins & Rechte" }));
     expect(screen.getByRole("heading", { name: "Login anlegen" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Rechtematrix" })).toBeInTheDocument();
+  });
+
+  it("keeps Logins & Rechte open and adds a confirmed login to list and matrix", async () => {
+    render(await SettingsAppAdapter());
+    fireEvent.click(screen.getByRole("button", { name: "Logins & Rechte" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Nina Neu" } });
+    fireEvent.change(screen.getByLabelText("Bezeichnung"), { target: { value: "Werkstatt" } });
+    fireEvent.change(screen.getByLabelText("Code", { exact: true }), { target: { value: "2468" } });
+    fireEvent.click(screen.getByRole("button", { name: "Login anlegen" }));
+
+    expect(await screen.findByText("Nina Neu")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Logins & Rechte" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("Aufträge & Werkstatt für Nina Neu")).toBeChecked();
+    expect(screen.getByRole("status")).toHaveTextContent("Login angelegt.");
   });
 
   it("hides stage switches until they affect real product surfaces", async () => {
