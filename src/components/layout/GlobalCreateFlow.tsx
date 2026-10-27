@@ -133,7 +133,7 @@ export type DirectIntakeInput = {
   };
   dueDate: string;
   handoverMode: "pickup" | "shipping";
-  paymentMode: "vorkasse" | "abholung" | "rechnung";
+  paymentMode?: "vorkasse" | "abholung" | "rechnung";
   note: string | null;
   items: Array<{ catalogServiceId:string|null; name:string; quantity:number; material:string|null; surfaceRequested:string; unit:string|null; unitPriceCents:number|null; vatRateBasisPoints:0|700|1900|null }>;
 };
@@ -162,6 +162,7 @@ export type GlobalCreateDirectIntakeResult =
 export type GlobalCreatePorts = {
   canCreateCustomer: boolean;
   canCreateQuote: boolean;
+  canManageMoney: boolean;
   showPrimaryTrigger?: boolean;
   roleLabel: string;
   resumeQuoteId: string | null;
@@ -624,6 +625,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       setCustomerChoices(result.customers);
       setCustomerLoad(result.customers.length ? "ready" : "empty");
       if (draft.code === "OK" && draft.data) restoreIntakeDraft(draft.data.payload);
+      if (!ports.canManageMoney) setIntakeKind("ORDER");
       const preselected = preselectedCustomerId
         ? result.customers.find((entry) => entry.id === preselectedCustomerId)
         : undefined;
@@ -1195,7 +1197,16 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       return;
     }
     const validDates = /^\d{4}-\d{2}-\d{2}$/.test(directWishDate) && /^\d{4}-\d{2}-\d{2}$/.test(directConfirmedDate);
-    const items = directItems.map((item) => ({ catalogServiceId:item.catalogServiceId === FREE_TEXT_SERVICE ? null : item.catalogServiceId, name:item.name.trim(), quantity:Number(item.quantity), material:nullable(item.material), surfaceRequested:item.surfaceRequested.trim(), unit:item.unit, unitPriceCents:item.unitPriceCents, vatRateBasisPoints:item.vatRateBasisPoints }));
+    const items = directItems.map((item) => ({
+      catalogServiceId: item.catalogServiceId === FREE_TEXT_SERVICE ? null : item.catalogServiceId,
+      name: item.name.trim(),
+      quantity: Number(item.quantity),
+      material: nullable(item.material),
+      surfaceRequested: item.surfaceRequested.trim(),
+      unit: ports.canManageMoney ? item.unit : null,
+      unitPriceCents: ports.canManageMoney ? item.unitPriceCents : null,
+      vatRateBasisPoints: ports.canManageMoney ? item.vatRateBasisPoints : null,
+    }));
     const validCustomer = (directCustomerMode === "NEW" || customerKey.length > 0) && completeOrderCustomer(directCustomer);
     if (!validCustomer || !validDates || items.length < 1 || items.length > 20 || !directItems.every(intakePositionComplete)) {
       setFeedback({ kind: "validation", message: "Bitte Kunde, mindestens eine Position, Terminwunsch und zugesagten Termin vollständig angeben." });
@@ -1224,7 +1235,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       // The existing F1.1 contract persists the confirmed commitment, never the non-binding wish.
       dueDate: directConfirmedDate,
       handoverMode: intakeHandover === "PICKUP" ? "pickup" : "shipping",
-      paymentMode: paymentModeFromPreference(directCustomer.paymentPreference),
+      ...(ports.canManageMoney ? { paymentMode: paymentModeFromPreference(directCustomer.paymentPreference) } : {}),
       note: nullable(directNote),
       items,
     };
@@ -1450,7 +1461,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
               {(!isHandy || intakeStep === 1) ? <Abschnitt nr={0} label="Kunde">
                 <FormRaster>
-                  <Feld label="Art" voll><div data-spec-id="eingang.art"><Segment label="Art" wert={intakeKind} optionen={[{ wert: "ORDER", text: "Auftrag" }, { wert: "QUOTE", text: "KV" }]} onWert={setIntakeKind} /></div></Feld>
+                  <Feld label="Art" voll><div data-spec-id="eingang.art"><Segment label="Art" wert={intakeKind} optionen={ports.canManageMoney ? [{ wert: "ORDER", text: "Auftrag" }, { wert: "QUOTE", text: "KV" }] : [{ wert: "ORDER", text: "Auftrag" }]} onWert={setIntakeKind} /></div></Feld>
                   <Feld label="Kunde" voll>
                     <Auswahl
                       data-intake-customer
@@ -1480,13 +1491,13 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                   <Feld label="Liefertermin"><Eingabe data-spec-id="eingang.liefertermin" type="date" required value={directWishDate} onChange={(event) => { setDirectWishDate(event.target.value); setDirectConfirmedDate(event.target.value); }} /></Feld>
                   <Feld label="Termin ist"><div data-spec-id="eingang.terminstatus"><Segment label="Termin ist" wert={intakeTermStatus} optionen={[{ wert: "wish", text: "Wunsch" }, { wert: "confirmed", text: "bestätigt" }]} onWert={setIntakeTermStatus} /></div></Feld>
                   <Feld label="Übergabe"><div data-spec-id="eingang.uebergabe"><Segment label="Übergabe" wert={intakeHandover} optionen={[{ wert: "PICKUP", text: "Abholung" }, { wert: "SHIPPING", text: "Versand" }]} onWert={(value) => { setIntakeHandover(value); setDirectCustomer((current) => directCustomerMode === "EXISTING" && /^rechnung_/.test(current.paymentPreference) ? current : { ...current, paymentPreference: value === "PICKUP" ? "bar" : "vorkasse" }); }} /></div></Feld>
-                  <Feld label="Zahlungsmodus">
+                  {ports.canManageMoney ? <Feld label="Zahlungsmodus">
                     <Auswahl required data-spec-id="eingang.zahlungsmodus" value={directCustomer.paymentPreference} onChange={(event) => setDirectCustomer((current) => ({ ...current, paymentPreference: event.target.value }))} optionen={[
                       ...(directCustomer.paymentPreference ? [] : [{ wert: "", text: "Bitte auswählen" }]),
                       intakeHandover === "PICKUP" ? { wert: "bar", text: "Bar oder Karte bei Abholung" } : { wert: "vorkasse", text: "Vorkasse" },
                       { wert: "rechnung_14", text: /^rechnung_/.test(directCustomer.paymentPreference) && directCustomerMode === "EXISTING" ? "Rechnung auf Ziel" : "Rechnung auf Ziel (nicht freigeschaltet)", gesperrt: !(directCustomerMode === "EXISTING" && /^rechnung_/.test(directCustomer.paymentPreference)) },
                     ]} />
-                  </Feld>
+                  </Feld> : null}
                   <Feld label="Eingangsart"><Auswahl data-spec-id="eingang.eingangsart" value={intakeSource} onChange={(event) => setIntakeSource(event.target.value as typeof intakeSource)} optionen={[{ wert: "personal", text: "persönlich angeliefert" }, { wert: "shipping", text: "Versand eingegangen" }, { wert: "pickup", text: "Abholung durch Kreile" }, { wert: "mail", text: "Anfrage per Mail" }, { wert: "phone", text: "Anfrage per Telefon" }]} /></Feld>
                   {intakeSource === "phone" ? <Feld label="Telefonnotiz" voll><Textfeld data-spec-id="eingang.telefonnotiz" rows={3} value={directNote} onChange={(event) => setDirectNote(event.target.value)} /></Feld> : null}
                   {intakeKind === "QUOTE" ? <Feld label="KV gültig bis"><Eingabe data-spec-id="eingang.gueltig_bis" type="date" required value={quoteValidUntil} onChange={(event) => setQuoteValidUntil(event.target.value)} /></Feld> : null}
@@ -1500,7 +1511,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                     <Feld label="Teil / Bezeichnung"><Eingabe required minLength={2} list="kr-service-catalog" placeholder="Katalog oder Freitext" value={item.name} onChange={(event) => setDirectPositionName(item.key, event.target.value)} /></Feld>
                     <Feld label="Menge"><Eingabe type="number" min="1" value={item.quantity} onChange={(event) => updateDirectItem(item.key, "quantity", event.target.value)} /></Feld>
                     <Feld label="Oberfläche" className="kr-pos-oberflaeche"><Auswahl required value={item.surfaceRequested} onChange={(event) => setDirectPositionSurface(item.key, event.target.value)} optionen={[{ wert: "", text: "Bitte wählen" }, ...surfaceOptions.map((surface) => ({ wert: surface, text: surface }))]} /></Feld>
-                    {intakeKind === "QUOTE" && item.catalogServiceId === FREE_TEXT_SERVICE ? <Feld label="Preis netto (€)"><Eingabe required type="number" min="0" step="0.01" value={item.unitPriceCents === null ? "" : String(item.unitPriceCents / 100)} onChange={(event) => setDirectPositionPrice(item.key, event.target.value)} /></Feld> : null}
+                    {ports.canManageMoney && intakeKind === "QUOTE" && item.catalogServiceId === FREE_TEXT_SERVICE ? <Feld label="Preis netto (€)"><Eingabe required type="number" min="0" step="0.01" value={item.unitPriceCents === null ? "" : String(item.unitPriceCents / 100)} onChange={(event) => setDirectPositionPrice(item.key, event.target.value)} /></Feld> : null}
                     <KrButton art="sekundaer" icon="x" label="Position entfernen" disabled={directItems.length === 1} onClick={() => setDirectItems((current) => current.filter((entry) => entry.key !== item.key))} />
                   </div>)}
                 </div>
@@ -1521,7 +1532,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                     { k: "Positionen", v: String(directItems.length) },
                     { k: "Wunschtermin", v: directWishDate || "Nicht angegeben" },
                     { k: "Übergabe", v: intakeHandover === "PICKUP" ? "Abholung" : "Versand" },
-                    { k: "Zahlungsart", v: directCustomer.paymentPreference === "bar" ? "Bar oder Karte bei Abholung" : /^rechnung_/.test(directCustomer.paymentPreference) ? "Rechnung auf Ziel" : "Vorkasse" },
+                    ...(ports.canManageMoney ? [{ k: "Zahlungsart", v: directCustomer.paymentPreference === "bar" ? "Bar oder Karte bei Abholung" : /^rechnung_/.test(directCustomer.paymentPreference) ? "Rechnung auf Ziel" : "Vorkasse" }] : []),
                   ]} />
                 </FormRaster>
                 <div data-spec-id="eingang.geprueft"><Checkbox checked={intakeChecked} onChange={setIntakeChecked}><b>Ware, Menge und Zustand gemeinsam geprüft</b></Checkbox></div>
@@ -1764,7 +1775,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         onMail={(mail) => {
           setPendingMailId(mail.id);
           setIntakeSource("mail");
-          setIntakeKind("QUOTE");
+          setIntakeKind(ports.canManageMoney ? "QUOTE" : "ORDER");
           setDirectNote((current) => [`Anfrage aus Outlook: ${mail.subject}`, current].filter(Boolean).join("\n"));
           if (directCustomerMode !== "EXISTING") {
             setDirectCustomerMode("NEW");

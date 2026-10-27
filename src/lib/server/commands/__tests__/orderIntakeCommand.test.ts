@@ -76,6 +76,7 @@ const authorization = {
     displayName: "Büro",
     role: "buero" as const,
     permissions: ["perm_data_customers", "perm_data_orders", "perm_view_customers", "perm_view_leitstand"] as const,
+    areas: ["eingang", "geld"] as const,
     active: true as const,
   },
 };
@@ -108,6 +109,43 @@ describe("createOrderIntake", () => {
       customer: { mode:"NEW", name:"Neu GmbH", customerType:"business", companyName:"Neu GmbH", contactPerson:"Nina Neu", email:"nina@example.test", phone:"12345", street:"Testweg 1", zipCode:"12345", city:"Berlin", country:"Deutschland", paymentPreference:"rechnung_14", vatId:null },
     })).resolves.toMatchObject({ code: "FORBIDDEN" });
     expect(withTransaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects money inputs without the geld area and derives an omitted mode from customer data", async () => {
+    const { createOrderIntake } = await import("../orderIntakeCommand");
+    const withoutMoney = { ...authorization, data: { ...authorization.data, areas: ["eingang"] } };
+    resolveAuthorization.mockResolvedValueOnce(withoutMoney);
+    await expect(createOrderIntake(input)).resolves.toEqual({
+      code: "FORBIDDEN",
+      message: "Zahlungsmodus darf ohne Geld-Recht nicht vorgegeben werden.",
+    });
+    expect(withTransaction).not.toHaveBeenCalled();
+
+    const { paymentMode: _paymentMode, ...withoutMode } = input;
+    resolveAuthorization.mockResolvedValueOnce(withoutMoney);
+    await expect(createOrderIntake(withoutMode)).resolves.toEqual({
+      code: "FORBIDDEN",
+      message: "Preise dürfen ohne Geld-Recht nicht vorgegeben werden.",
+    });
+
+    const freeTextWithoutMoney = {
+      ...withoutMode,
+      items: [{ catalogServiceId: null, name: "TEST Sonderteil", quantity: 1, material: "Stahl", surfaceRequested: "Vernickeln", unit: null, unitPriceCents: null, vatRateBasisPoints: null }],
+    };
+    resolveAuthorization.mockResolvedValueOnce(withoutMoney);
+    execute.mockImplementation((query: { text: string }) => {
+      if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if (query.text.includes("FROM private.order_intake_receipts")) return Promise.resolve([]);
+      if (query.text.includes("FROM public.customers")) return Promise.resolve([{
+        id: CUSTOMER, tenant_id: KREILE_TENANT_SLUG, customer_number: "K-0042", name: "Kunde A", company_name: "Kunde A GmbH",
+        contact_person: "Ada Beispiel", phone: "+49 221 123456", email: "ada@example.test", street: "Testweg 1",
+        zip_code: "50667", city: "Köln", country: "Deutschland", payment_preference: "bar",
+      }]);
+      if (query.text.includes("next_number")) throw new Error("stop after payment derivation");
+      throw new Error(`unexpected SQL ${query.text}`);
+    });
+    await expect(createOrderIntake(freeTextWithoutMoney)).resolves.toMatchObject({ code: "UNAVAILABLE" });
+    expect(execute.mock.calls.map(([query]) => query.text).join("\n")).toContain("next_number");
   });
 
   it("starts customer and order creation in one transaction for a complete new customer", async () => {

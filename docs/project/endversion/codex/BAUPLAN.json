@@ -1,79 +1,69 @@
 {
  "baureife": {
   "Login": {
-   "baureif": false,
-   "darf": "nur Korrekturen aus „korrekturen“ – kein Neubau von Elementen mit Lücke",
-   "luecken": [
-    "Gegenprüfung aus Sicht des Bauenden fehlt oder hat blockierende Punkte (baustand.abschnitte[…].gegenpruefung)"
-   ]
+   "baureif": true,
+   "darf": "bauen"
+  },
+  "F0 Fundament: einstellbare Rechte": {
+   "baureif": true,
+   "darf": "bauen"
   },
   "F1 Neuer Eingang": {
    "baureif": false,
    "darf": "nur Korrekturen aus „korrekturen“ – kein Neubau von Elementen mit Lücke",
    "luecken": [
-    "Gegenprüfung aus Sicht des Bauenden fehlt oder hat blockierende Punkte (baustand.abschnitte[…].gegenpruefung)"
+    "Gegenprüfung aus Sicht des Bauenden fehlt oder hat blockierende Punkte (gegenpruefung im Abschnitt)"
    ]
   },
   "F2 Der Tag": {
-   "baureif": false,
-   "darf": "nur Korrekturen aus „korrekturen“ – kein Neubau von Elementen mit Lücke",
-   "luecken": [
-    "Gegenprüfung aus Sicht des Bauenden fehlt oder hat blockierende Punkte (baustand.abschnitte[…].gegenpruefung)"
-   ]
-  },
-  "F0 Fundament: einstellbare Rechte": {
-   "baureif": false,
-   "darf": "nur Korrekturen aus „korrekturen“ – kein Neubau von Elementen mit Lücke",
-   "luecken": [
-    "Gegenprüfung aus Sicht des Bauenden fehlt oder hat blockierende Punkte (baustand.abschnitte[…].gegenpruefung)"
-   ]
+   "baureif": true,
+   "darf": "bauen"
   },
   "F3 Auftragskarte": {
    "baureif": false,
    "darf": "nicht bauen",
    "luecken": [
-    "Gegenprüfung aus Sicht des Bauenden fehlt oder hat blockierende Punkte (baustand.abschnitte[…].gegenpruefung)"
+    "Gegenprüfung aus Sicht des Bauenden fehlt oder hat blockierende Punkte (gegenpruefung im Abschnitt)"
    ]
   },
   "F4 Werkstatt": {
    "baureif": false,
    "darf": "nicht bauen",
    "luecken": [
-    "Gegenprüfung aus Sicht des Bauenden fehlt oder hat blockierende Punkte (baustand.abschnitte[…].gegenpruefung)"
+    "Gegenprüfung aus Sicht des Bauenden fehlt oder hat blockierende Punkte (gegenpruefung im Abschnitt)"
    ]
   },
   "F5 Kunde": {
    "baureif": false,
    "darf": "nicht bauen",
    "luecken": [
-    "Gegenprüfung aus Sicht des Bauenden fehlt oder hat blockierende Punkte (baustand.abschnitte[…].gegenpruefung)"
+    "Gegenprüfung aus Sicht des Bauenden fehlt oder hat blockierende Punkte (gegenpruefung im Abschnitt)"
    ]
   },
   "F6 Geld": {
    "baureif": false,
    "darf": "nicht bauen",
    "luecken": [
-    "Gegenprüfung aus Sicht des Bauenden fehlt oder hat blockierende Punkte (baustand.abschnitte[…].gegenpruefung)"
+    "Gegenprüfung aus Sicht des Bauenden fehlt oder hat blockierende Punkte (gegenpruefung im Abschnitt)"
    ]
   },
   "F7 Einstellungen": {
    "baureif": false,
-   "darf": "nur Korrekturen aus „korrekturen“ – kein Neubau von Elementen mit Lücke",
+   "darf": "nicht bauen",
    "luecken": [
-    "Gegenprüfung aus Sicht des Bauenden fehlt oder hat blockierende Punkte (baustand.abschnitte[…].gegenpruefung)"
+    "Gegenprüfung aus Sicht des Bauenden fehlt oder hat blockierende Punkte (gegenpruefung im Abschnitt)"
    ]
   }
  },
  "bauplan": {
-  "erzeugt": "2026-10-27T21:37:46.632Z",
-  "spec_sha": "2d0e16351eb2",
+  "erzeugt": "2026-10-27T22:02:15.620Z",
+  "spec_sha": "faba82e2e3ff",
   "regel": "Nur bau-freie Abschnitte (OR-17). Ohne Inhalt (OR-13/U-202): Daten kommen vom Server; Platzhalter {auftrag} {kunde} {rechnung} {betrag} … sind Felder, keine Werte. Ziele zu Seiten außerhalb dieses Bauplans: nur verlinken, nicht bauen.",
   "reihenfolge": [
    "Login",
-   "F1 Neuer Eingang",
-   "F2 Der Tag",
    "F0 Fundament: einstellbare Rechte",
-   "F7 Einstellungen"
+   "F1 Neuer Eingang",
+   "F2 Der Tag"
   ]
  },
  "abschnitte": {
@@ -87,7 +77,134 @@
    "bauhinweise": [
     "K17",
     "K23"
-   ]
+   ],
+   "gegenpruefung": {
+    "ok": true,
+    "runden": 5,
+    "ergebnis": "Runde 5: alle Vorrunden-Punkte gelöst; 1 Blocker (Katalogleistung ohne Durchlauf) mit der vom Prüfer vorgeschlagenen Einzeiler-Regel geschlossen, keine weiteren Blocker; Wichtig/Kleinigkeiten eingearbeitet.",
+    "pruefer": "unabhängiger Agent, nur BAUPLAN.json"
+   }
+  },
+  "F0 Fundament: einstellbare Rechte": {
+   "screens": [
+    "rechte",
+    "meincode"
+   ],
+   "status": "bau-frei",
+   "reihenfolge": 2,
+   "umfang": "F#34 Rechte je Login × Bereich (Speicher, Resolver, alle Server-Gates, UI-Sichtbarkeit) · F#35 Login anlegen mit Vorlage · F#36 Login ändern · F#37 feste Rechte developer + Zugang nur mit „logins“ · F#38 eigenen Code ändern · dazu der Seitenrahmen 8 Einstellungen mit dem Reiter „Personen & Rechte“ (übrige Reiter in F7) · Umstellung ALLER bestehenden Server-Gates und Client-Sichtbarkeiten im vorhandenen Code auf Bereiche (auch in Code anderer Abschnitte – das ist Umbau, kein Neubau)",
+   "bauhinweise": [
+    "K2",
+    "K3",
+    "K4",
+    "K17",
+    "K20",
+    "K21",
+    "K22",
+    "K23",
+    "K24",
+    "K25",
+    "K28"
+   ],
+   "server_umstellung": {
+    "regel": "K21 – vollständig, nie teilweise.",
+    "abbildung_bereich_permission": {
+     "auftraege": [
+      "perm_op_status",
+      "perm_op_risk",
+      "perm_op_photos",
+      "perm_op_qa",
+      "perm_view_leitstand"
+     ],
+     "eingang": [
+      "perm_data_orders"
+     ],
+     "kunden": [
+      "perm_data_customers",
+      "perm_view_customers"
+     ],
+     "geld": [
+      "perm_data_csv",
+      "perm_view_prices"
+     ],
+     "kassieren": [
+      "perm_cash_pickup (neu)"
+     ],
+     "mails": [
+      "perm_mail (neu)"
+     ],
+     "einstellungen": [
+      "perm_company_settings (neu; ersetzt perm_sys_toggles für Firmen-Einstellungen)"
+     ],
+     "logins": [
+      "perm_sys_users"
+     ],
+     "wartung": [
+      "perm_sys_toggles",
+      "perm_sys_diag"
+     ]
+    },
+    "stellen": [
+     "Commands lib/server/commands/: orderPromiseCommand, orderStationCommand, orderExtraWorkCommand, orderFreezeCommand, orderFreezeCorrectionCommand, orderTaskAssignmentCommand, immutableInvoiceCommand, invoiceItemPriceCommand, confirmPaymentCommand, recordGoodsOutCommand, setPaymentModeCommand, extraWorkAdminCommand",
+     "Reads lib/server/: orderCardRead, orderTaskAssignmentRead, invoiceRead, paymentContract, productActorReadinessCore, todayDashboard, startUserRead",
+     "Actions: app/actions/settings.actions.ts, search.providers.ts, lib/search/actionRegistry.ts, app/warendurchlauf/actions.ts, lib/auth/permissions.ts (requireAdminOrDeveloper inkl. Altrolle „inhaber“)",
+     "modules/fundament/server/systemSettingsPort.ts (ROLES, MANAGER_ROLES, Regel „letzter Manager“ → K24)",
+     "DB-View private.v_order_task_assignee_options_v1 (role IN …) → Bereich „auftraege“",
+     "Client: lib/auth/PermissionsContext.tsx, components/layout/KreileAppShell.tsx, MoreMenu.tsx, RightNav.tsx, MobileNav.tsx, app/orders/OrderCardAppAdapter.tsx, app/page.tsx, components/home/RolfHome.tsx"
+    ],
+    "pruefung": "Nach der Umstellung keine Rollenliste mehr für Berechtigungen (grep role ===/role IN/ROLE_PERMISSIONS außerhalb der Vorlagen-Tabelle = 0). Erlaubte Ausnahmen, die die Vorlage lesen: Startseite (login.start_regel), rechte.fest, tagkonfig.standard.",
+    "bereich_je_stelle": {
+     "orderPromiseCommand, orderStationCommand, orderFreezeCommand, orderFreezeCorrectionCommand, orderTaskAssignmentCommand, orderExtraWorkCommand": "auftraege",
+     "extraWorkAdminCommand (Stundensatz)": "geld UND einstellungen",
+     "immutableInvoiceCommand, invoiceItemPriceCommand, setPaymentModeCommand": "geld",
+     "confirmPaymentCommand": "geld ODER (Aufruf aus dem Warenausgang UND kassieren)",
+     "recordGoodsOutCommand": "auftraege; der Zahlungsteil (bezahlt bar/Karte): geld ODER kassieren",
+     "orderCardRead, orderTaskAssignmentRead": "auftraege (Beträge/Preise nur mit geld, sonst nicht ausliefern)",
+     "invoiceRead, paymentContract": "geld (paymentContract-Freigabestatus „Freigabe erteilt/fehlt“ ohne Betrag auch mit auftraege)",
+     "productActorReadinessCore": "je Funktion der Bereich des Ziels",
+     "todayDashboard": "je Fall/Feld das dort angegebene recht",
+     "startUserRead": "ohne Anmeldung lesbar: nur aktive Logins mit Code ODER mit E-Mail-Anmeldung, je Login Kürzel, Name und Merkmal „E-Mail-Anmeldung möglich“ – keine weiteren Daten",
+     "settings.actions: Firmendaten/Katalog": "einstellungen (Katalog-Preise zusätzlich geld)",
+     "settings.actions: Logins & Rechte": "logins",
+     "settings.actions: changeOwnPin, Liste Personen (Reiter Personen)": "angemeldet (kein Bereich)",
+     "search.providers / actionRegistry": "je Treffertyp der Bereich des Ziels (Auftrag → auftraege, Kunde → kunden, Rechnung → geld, Mail → mails)",
+     "app/warendurchlauf/actions.ts": "auftraege",
+     "lib/auth/permissions.ts requireAdminOrDeveloper": "ersetzen durch Bereichsprüfung des jeweiligen Aufrufers",
+     "DB-View private.v_order_task_assignee_options_v1": "aktive Logins mit Bereich auftraege",
+     "settings.actions: Firmendaten lesen (Kachel)": "angemeldet (kein Bereich); schreiben: einstellungen"
+    },
+    "abhaengigkeiten": "Bereiche sind unabhängig; jede Stelle prüft nur ihren Bereich. Ohne „kunden“ ist im Eingang die Kundensuche trotzdem nutzbar (eingang schließt Kundensuche und Kunde anlegen ein)."
+   },
+   "kassieren_hinweis": "F0 legt den Bereich „kassieren“ an und stellt die Serverprüfung um (geld ODER kassieren im Warenausgang); die Oberfläche (Betrag, Knopf „bezahlt“) folgt in F3 (10.1, K28).",
+   "teilseiten": {
+    "einstellungen": "In F0: Seitenrahmen und Reiter „Personen & Rechte“. Übrige Reiter nur, soweit ihr Inhalt im bestehenden Code existiert (Firma = bestehende Firmendaten, Leistungen & Preise = bestehender Katalog), sonst ausgeblendet bis F7. Lesen der Firma-Kachel (Firmenname, Nummernkreise) braucht nur Anmeldung, Schreiben braucht einstellungen; ohne einstellungen werden Bestandsformulare nur angezeigt (ohne Eingabefelder). Startreiter: Firma, wenn der Login „einstellungen“ hat, sonst „Personen & Rechte“ (diese Regel gilt auch für reiter-Vertrag). Seiten-Zustände erst ab F7. Sichtbar in F0: Firma, Leistungen & Preise (soweit im Bestand), Personen & Rechte; Zahlung und Daten & Export erst ab F7. Aus screens[einstellungen].abnahme wird in F0 nur geprüft, was den Reiter Personen & Rechte betrifft."
+   },
+   "migration_altbestand": {
+    "regel": "Einmalige Migration der bestehenden app_users (additiv, keine alte Migration ändern).",
+    "altrolle_zu_vorlage": {
+     "inhaber": "meister",
+     "admin": "meister",
+     "buero": "meister",
+     "meister": "meister",
+     "werkstatt": "werkstatt",
+     "developer": "developer",
+     "readonly": "leer",
+     "sonst": "leer + Eintrag ins Fehlerprotokoll"
+    },
+    "bereiche": "app_user_rights je Login = rechte.vorlagen[vorlage]; Vorlage developer zusätzlich rechte.fest",
+    "vorlage_speichern": "Spalte app_users.vorlage (meister|werkstatt|developer|leer), unveränderlich nach Anlage; role bleibt nur Etikett",
+    "kuerzel": "fehlt es: Regel aus formular_anlegen.kuerzel",
+    "bezeichnung": "fehlt sie: leer lassen (optional)",
+    "pruefung": "nach Migration: jeder aktive Login hat vorlage und ≥ 0 Bereiche; Logins mit Vorlage developer haben logins+wartung; jeder aktive Login mit wartung hat einen Code oder eine E-Mail – sonst Migration abbrechen mit Meldung; mindestens ein aktiver Login hat „logins“ – sonst Migration abbrechen",
+    "role": "app_users.role = Vorlage (meister|werkstatt|developer|readonly für leer); gültig nach K23",
+    "bundesland": "company_settings.bundesland (nullable, Auswahl 16 Länder) anlegen; ab F7 Pflichtauswahl in 8.1"
+   },
+   "gegenpruefung": {
+    "ok": true,
+    "runden": 5,
+    "ergebnis": "Runde 5: alle Vorrunden-Punkte gelöst; 1 Blocker (Katalogleistung ohne Durchlauf) mit der vom Prüfer vorgeschlagenen Einzeiler-Regel geschlossen, keine weiteren Blocker; Wichtig/Kleinigkeiten eingearbeitet.",
+    "pruefer": "unabhängiger Agent, nur BAUPLAN.json"
+   }
   },
   "F1 Neuer Eingang": {
    "screens": [
@@ -112,7 +229,7 @@
     "K16",
     "K27"
    ],
-   "reihenfolge": 2,
+   "reihenfolge": 3,
    "klaerungen": [
     {
      "text": "Aufruf von 3.4 ohne bestimmte Mail („Aus Mail“ im Eingang, „Aus Mail-Signatur“ in Kunde anlegen, „Mail zuordnen“ in der Suche; im Mock feste Muster-Mail). Empfehlung: ohne Mail-Argument zeigt 3.4 zuerst die nicht zugeordneten Mails (neueste oben) zur Wahl; aus einer offenen Erfassung führt die Wahl zurück in DIESELBE Erfassung (Mailtext ins Erfassen bzw. Signatur in die Kundenfelder, Anhänge in Abschnitt 4) statt einen zweiten Eingang zu öffnen.",
@@ -211,224 +328,34 @@
     "hbmehr"
    ],
    "status": "bau-frei",
-   "reihenfolge": 3,
+   "reihenfolge": 4,
    "umfang": "Der Tag nach U-206 (nur Handlungen), Felder je Person (Anpassen, F#14), Später/Wiedervorlage (F#13), Entwürfe (U-205)",
    "bauhinweise": [
     "K17",
     "K21"
-   ]
-  },
-  "F0 Fundament: einstellbare Rechte": {
-   "screens": [
-    "rechte",
-    "meincode"
    ],
-   "status": "bau-frei",
-   "reihenfolge": 4,
-   "umfang": "F#34 Rechte je Login × Bereich (Speicher, Resolver, alle Server-Gates, UI-Sichtbarkeit) · F#35 Login anlegen mit Vorlage · F#36 Login ändern · F#37 feste Rechte developer + Zugang nur mit „logins“ · F#38 eigenen Code ändern · dazu der Seitenrahmen 8 Einstellungen mit dem Reiter „Personen & Rechte“ (übrige Reiter in F7) · Umstellung ALLER bestehenden Server-Gates und Client-Sichtbarkeiten im vorhandenen Code auf Bereiche (auch in Code anderer Abschnitte – das ist Umbau, kein Neubau)",
-   "bauhinweise": [
-    "K2",
-    "K3",
-    "K4",
-    "K17",
-    "K20",
-    "K21",
-    "K22",
-    "K23",
-    "K24",
-    "K25",
-    "K28"
-   ],
-   "server_umstellung": {
-    "regel": "K21 – vollständig, nie teilweise.",
-    "abbildung_bereich_permission": {
-     "auftraege": [
-      "perm_op_status",
-      "perm_op_risk",
-      "perm_op_photos",
-      "perm_op_qa",
-      "perm_view_leitstand"
-     ],
-     "eingang": [
-      "perm_data_orders"
-     ],
-     "kunden": [
-      "perm_data_customers",
-      "perm_view_customers"
-     ],
-     "geld": [
-      "perm_data_csv",
-      "perm_view_prices"
-     ],
-     "kassieren": [
-      "(neu) perm_cash_pickup"
-     ],
-     "mails": [
-      "(neu) perm_mail"
-     ],
-     "einstellungen": [
-      "perm_sys_toggles"
-     ],
-     "logins": [
-      "perm_sys_users"
-     ],
-     "wartung": [
-      "perm_sys_toggles",
-      "perm_sys_diag"
-     ]
-    },
-    "stellen": [
-     "Commands lib/server/commands/: orderPromiseCommand, orderStationCommand, orderExtraWorkCommand, orderFreezeCommand, orderFreezeCorrectionCommand, orderTaskAssignmentCommand, immutableInvoiceCommand, invoiceItemPriceCommand, confirmPaymentCommand, recordGoodsOutCommand, setPaymentModeCommand, extraWorkAdminCommand",
-     "Reads lib/server/: orderCardRead, orderTaskAssignmentRead, invoiceRead, paymentContract, productActorReadinessCore, todayDashboard, startUserRead",
-     "Actions: app/actions/settings.actions.ts, search.providers.ts, lib/search/actionRegistry.ts, app/warendurchlauf/actions.ts, lib/auth/permissions.ts (requireAdminOrDeveloper inkl. Altrolle „inhaber“)",
-     "modules/fundament/server/systemSettingsPort.ts (ROLES, MANAGER_ROLES, Regel „letzter Manager“ → K24)",
-     "DB-View private.v_order_task_assignee_options_v1 (role IN …) → Bereich „auftraege“",
-     "Client: lib/auth/PermissionsContext.tsx, components/layout/KreileAppShell.tsx, MoreMenu.tsx, RightNav.tsx, MobileNav.tsx, app/orders/OrderCardAppAdapter.tsx, app/page.tsx, components/home/RolfHome.tsx"
-    ],
-    "pruefung": "Nach der Umstellung gibt es im Code keine Rollenliste mehr für Berechtigungen (grep nach role ===/role IN/ROLE_PERMISSIONS außerhalb der Vorlagen-Tabelle = 0 Treffer)."
-   },
-   "kassieren_hinweis": "F0 legt den Bereich „kassieren“ an (Matrix, Vorlagen, Resolver); die Bindung des Warenausgangs daran gehört zu F3 (10.1 rauspruefen, K28).",
-   "teilseiten": {
-    "einstellungen": "nur Seitenrahmen + Reiter „Personen & Rechte“; übrige Reiter gehören zu F7"
+   "gegenpruefung": {
+    "ok": true,
+    "runden": 5,
+    "ergebnis": "Runde 5: alle Vorrunden-Punkte gelöst; 1 Blocker (Katalogleistung ohne Durchlauf) mit der vom Prüfer vorgeschlagenen Einzeiler-Regel geschlossen, keine weiteren Blocker; Wichtig/Kleinigkeiten eingearbeitet.",
+    "pruefer": "unabhängiger Agent, nur BAUPLAN.json"
    }
-  },
-  "F7 Einstellungen": {
-   "screens": [
-    "einstellungen",
-    "firmendaten",
-    "katalog",
-    "leistung",
-    "stundensatz",
-    "rechte",
-    "meincode",
-    "zielfrei",
-    "datenkiste"
-   ],
-   "status": "bau-frei",
-   "reihenfolge": 9,
-   "bauhinweise": [
-    "K2",
-    "K7",
-    "K8",
-    "K19",
-    "K20",
-    "K22",
-    "K24",
-    "K25",
-    "K28"
-   ],
-   "umfang": "Einstellungen mit Reitern (Firma, Leistungen & Preise, Personen & Rechte, Zahlung, Daten & Export) nach Rechten; Firmendaten/Leistung/Stundensatz vorbelegt beim Bearbeiten, Speichern führt zurück; Logins & Rechte (F0), Mein Code, Ziel freischalten, Datenkiste",
-   "klaerungen": [
-    {
-     "text": "Rechte der Kunden-Seiten: kunden, kunde, kundebearbeiten und mail tragen in spec.json kein „recht“. Nach K2/K21 gehören sie zum Bereich „kunden“ (Status-Mail und Kunde bearbeiten über „Kunden & Kontakt“). Empfehlung: recht „kunden“ eintragen; „Neuer Auftrag“/„Kunde anlegen“ zusätzlich Bereich „eingang“.",
-     "entscheidung": "Empfehlung übernommen (Endversion-Chat, 27.10.) – gilt für den Bau, Owner kann ändern"
-    },
-    {
-     "text": "Widerspruch Recht für Mails: tagkonfig hb-Fall „Kunde vorwarnen“ verlangt recht „mails“ („Mails lesen & zuordnen“), K2 erlaubt die Status-Mail über „kunden“. Empfehlung: Senden (5.3) = Bereich „kunden“, Geld-Vorlagen zusätzlich „geld“; „mails“ nur für Posteingang/Zuordnen.",
-     "entscheidung": "Empfehlung übernommen (Endversion-Chat, 27.10.) – gilt für den Bau, Owner kann ändern"
-    },
-    {
-     "text": "Mail ohne Modus (Kundenliste „Mail“, E-Mail-Chip der Kundenkarte): der Mock setzt dann Vorlage „Status“ mit leerer Auftragsreferenz. Empfehlung: Aufruf mit {kunde} ohne Auftrag = Vorlage „frei“ ({kunde}#frei); mit Auftrag ohne Modus = „Status“.",
-     "entscheidung": "Empfehlung übernommen (Endversion-Chat, 27.10.) – gilt für den Bau, Owner kann ändern"
-    },
-    {
-     "text": "Mock-Abweichung Nächster Schritt Kundenkarte: Spec-Aktion hat arg „versand“ (Mock bezieht ihn auf den Kunden, Betreff ohne Auftrag). Im Vertrag steht {auftrag}#versand, weil der Text den Auftrag nennt. Empfehlung: in spec.json arg auf {auftrag}#versand setzen. Weitere Fälle für den Kunden (z. B. Abholung ankündigen) sind nicht spezifiziert – bis dahin nur Versand.",
-     "entscheidung": "Empfehlung übernommen (Endversion-Chat, 27.10.) – gilt für den Bau, Owner kann ändern"
-    },
-    {
-     "text": "Mock-Abweichung Buchhaltung „Erinnern“: Der Mock übergibt die Auftragsnummer ohne Modus (Vorlage Status). Laut tagkonfig.rechnungen gilt {rechnung}#erinnerung. Für Vorkasse ohne Rechnung gibt es keine passende Vorlage. Empfehlung: Vorkasse → {auftrag}#erinnerung mit Vorlage Zahlungserinnerung und Auftrag als Referenz.",
-     "entscheidung": "Empfehlung übernommen (Endversion-Chat, 27.10.) – gilt für den Bau, Owner kann ändern"
-    },
-    {
-     "text": "Vorkasse ohne Rechnung: Zahlung bestätigen mit {auftrag} landet nach Spec im Leer-Zustand „Keine offene Rechnung“ → erst Rechnung erstellen. Empfehlung bestätigen: Vor der Vorkasse-Zahlung wird eine Rechnung festgeschrieben. Alternative wäre: Die Zahlung schreibt die Rechnung im selben Schritt fest (wie K13).",
-     "entscheidung": "Empfehlung übernommen (Endversion-Chat, 27.10.) – gilt für den Bau, Owner kann ändern"
-    },
-    {
-     "text": "Ab wann steht Vorkasse unter „Geld fehlt“: ab Annahme oder erst wenn die Ware fertig ist (Mock zeigt nur fertige)? Empfehlung: ab Fertigmeldung, weil die Sperre beim Warenausgang greift (R05).",
-     "entscheidung": "Empfehlung übernommen (Endversion-Chat, 27.10.) – gilt für den Bau, Owner kann ändern"
-    },
-    {
-     "text": "Beträge der Buchhaltung (Kennzahlen, Karten, Abrechnen-Wert): netto oder brutto? Empfehlung: Rechnungen mit Rechnungsbetrag brutto, Abrechnen mit voraussichtlichem Betrag brutto; überall dieselbe Basis.",
-     "entscheidung": "Empfehlung übernommen (Endversion-Chat, 27.10.) – gilt für den Bau, Owner kann ändern"
-    },
-    {
-     "text": "Doppelungen in der Kundenkarte (U-170): „Kunde seit“ steht in Kopf und Kennzahlen. Zahlungsbedingung steht als Kopf-Chip und in den Absprachen. Der Grund „fehlende Daten“ steht in den Hinweisen und im Unvollständig-Hinweis. Der Auftragstitel trägt den Kundennamen. Im Vertrag ist jeweils nur eine Stelle vorgesehen (Kopf bzw. Unvollständig-Hinweis). Bitte bestätigen.",
-     "entscheidung": "Empfehlung übernommen (Endversion-Chat, 27.10.) – gilt für den Bau, Owner kann ändern"
-    },
-    {
-     "text": "Kennzahl „Termintreue Abholung“ (Musterzeile, Abgleich inhalt_neu) und die graue Funktion Z01 „Termintreue“ (Stufe 4) widersprechen sich. Empfehlung: in Stufe 1 nur „Aufträge gesamt · davon aktiv“, Termintreue erst mit Z01.",
-     "entscheidung": "Empfehlung übernommen (Endversion-Chat, 27.10.) – gilt für den Bau, Owner kann ändern"
-    },
-    {
-     "text": "Absprachen & Eigenheiten: Wo werden sie gepflegt (Abgleich: „nur notes/tags; Struktur fehlt“)? Empfehlung: In 5.2 eine Liste „Bezeichnung → Wert“ mit Kennzeichen „Geld“, nur mit Recht „geld“ für Geld-Einträge.",
-     "entscheidung": "Empfehlung übernommen (Endversion-Chat, 27.10.) – gilt für den Bau, Owner kann ändern"
-    },
-    {
-     "text": "Kundenliste: Sortierung innerhalb „mit Hinweis“/„ohne Hinweis“ ist nicht spezifiziert (Mock: Datenreihenfolge). Empfehlung: Name alphabetisch. Dasselbe gilt für den Leistungskatalog (Empfehlung: Bezeichnung alphabetisch). Unklar ist auch, was „Stichwort“ in der Kundensuche durchsucht (Empfehlung: Notiz und Absprachen).",
-     "entscheidung": "Empfehlung übernommen (Endversion-Chat, 27.10.) – gilt für den Bau, Owner kann ändern"
-    },
-    {
-     "text": "Kunde bearbeiten: kundebearbeiten.zustaende.erfolg („Kunde vollständig · Neuer Auftrag / Zur Kundenkarte“) doppelt kunde.zustaende.erfolg. Der Knopf „Neuer Auftrag“ hat dort kein arg. Empfehlung: Speichern schließt immer zurück auf die Karte (U-185/U-209). Der Erfolg-Banner steht auf der Kundenkarte mit „Neuer Auftrag“ → eingang {kunde}. Aufgerufen aus 8.6 („Kunde ergänzen“) führt Speichern zurück auf 8.6 statt auf eine neue Kundenkarte.",
-     "entscheidung": "Empfehlung übernommen (Endversion-Chat, 27.10.) – gilt für den Bau, Owner kann ändern"
-    },
-    {
-     "text": "Kunde bearbeiten mit arg „fehlend“: gleiches Formular. Empfehlung: Fokus auf das erste fehlende Feld.",
-     "entscheidung": "Empfehlung übernommen (Endversion-Chat, 27.10.) – gilt für den Bau, Owner kann ändern"
-    },
-    {
-     "text": "Rechnung auf Ziel freischalten: Es gibt keinen Aufruf mit {kunde} (die Feldregel nennt die Kundenkarte, dort fehlt aber der Knopf). Außerdem ist offen, wie man eine Freischaltung zurücknimmt und was ein Klick auf die Zeile in Einstellungen › Zahlung tut. Empfehlung: In der Kundenkarte am Chip Zahlungsbedingung „Ziel freischalten/ändern“ (Recht „geld“) → zielfrei {kunde}. Die Zeile in Einstellungen öffnet zielfrei {kunde} vorbelegt, dort zusätzlich „Freischaltung aufheben“.",
-     "entscheidung": "Empfehlung übernommen (Endversion-Chat, 27.10.) – gilt für den Bau, Owner kann ändern"
-    },
-    {
-     "text": "Ersteinrichtung: einstellungen.zustaende.leer „Ersteinrichtung starten“ hat kein arg. Laut firmendaten braucht es „#einrichtung“. Empfehlung: arg „einrichtung“; der Modus wird an 8.3 und 8.4 weitergereicht. Nur dann zeigen sie die Erfolg-Zustände mit „Weiter“, sonst schließt Speichern (U-209). Im Modus einrichtung ersetzt „Speichern und weiter“ den Knopf „Speichern“ (der Mock zeigt beide Hauptknöpfe, OR-05: ein Hauptknopf).",
-     "entscheidung": "Empfehlung übernommen (Endversion-Chat, 27.10.) – gilt für den Bau, Owner kann ändern"
-    },
-    {
-     "text": "Recht für Katalog und Stundensatz: Die Seiten tragen recht „geld“, der Bereich „einstellungen“ umfasst laut rechte.bereiche aber „Firmendaten, Katalog, Stundensatz“ (K2: ohne „einstellungen“ nur lesbar). Empfehlung: Sehen mit „geld“; Anlegen/Speichern mit „geld“ UND „einstellungen“.",
-     "entscheidung": "Empfehlung übernommen (Endversion-Chat, 27.10.) – gilt für den Bau, Owner kann ändern"
-    },
-    {
-     "text": "Recht der Datenkiste: Die Seite hat kein recht und ist für werkstatt erreichbar (Kachel in Daten & Export). Plus-Menü und „Datenkiste schließen“ verlangen „einstellungen“. „Prüfen und übernehmen“ legt Kunden in Menge an. Empfehlung: Seite und Übernahme mit „einstellungen“ (zusätzlich „kunden“); ohne Recht entfällt die Kachel. Dazu muss geklärt werden, was „Datenkiste schließen“ tut: Einführung beenden oder nur zurück. Empfehlung: Einführung beenden mit Rückfrage; danach ist die Datenkiste aus Plus und Kunden-Leer-Zustand verschwunden.",
-     "entscheidung": "Empfehlung übernommen (Endversion-Chat, 27.10.) – gilt für den Bau, Owner kann ändern"
-    },
-    {
-     "text": "Datenkiste „Doppelte prüfen“ führt auf „kunde“ ohne Objekt; eine Prüfansicht für Doppelte und Unvollständige fehlt (formulare.kunde nennt „Datenkiste-Prüfung“). Empfehlung: eigener Dialog je Paar mit „Zusammenführen“/„Getrennt lassen“ und KundeFormular für Unvollständige. Bis zur Entscheidung werden Doppelte nicht übernommen.",
-     "entscheidung": "Empfehlung übernommen (Endversion-Chat, 27.10.) – gilt für den Bau, Owner kann ändern"
-    },
-    {
-     "text": "Katalog: Der Erfolg-Zustand nennt „Zurück zum Eingang“, aber der Eingang hat keinen Weg in den Katalog. Empfehlung: Den Knopf nur zeigen, wenn der Katalog aus dem Eingang geöffnet wurde, sonst weglassen. Unklar ist auch, wie viele Leistungen die Kachel in Einstellungen zeigt (Empfehlung: die ersten 3 alphabetisch und „+{n} weitere“).",
-     "entscheidung": "Empfehlung übernommen (Endversion-Chat, 27.10.) – gilt für den Bau, Owner kann ändern"
-    },
-    {
-     "text": "Zahlung: Ist eine Überzahlung (Betrag > offen) erlaubt? „Ware raus“ im Erfolg-Zustand ergibt nur Sinn, wenn der Auftrag fertig und noch nicht übergeben ist. Empfehlung: Überzahlung ablehnen; „Ware raus“ nur bei fertigem, nicht übergebenem Auftrag zeigen.",
-     "entscheidung": "Empfehlung übernommen (Endversion-Chat, 27.10.) – gilt für den Bau, Owner kann ändern"
-    },
-    {
-     "text": "Einstellungen › Zugänge: Werden inaktive Logins gezeigt und wie sieht die Meta-Zeile aus (Muster: „{vorlage} · alles/ohne Geld“)? Empfehlung: alle Logins, inaktive mit Etikett „inaktiv“, Meta „{vorlage} · {x} von {n} Bereichen“ wie in 8.5.",
-     "entscheidung": "Empfehlung übernommen (Endversion-Chat, 27.10.) – gilt für den Bau, Owner kann ändern"
-    },
-    {
-     "text": "Mail: Was passiert bei einem Vorlagenwechsel nach Handänderung von Betreff/Text, und wo liegt „Entwurf behalten“ (K27 kennt nur Entwürfe für Eingang und Kunde anlegen)? Empfehlung: Bei geändertem Text vor dem Überschreiben nachfragen; Mail-Entwurf je Login am Vorgang speichern und auf Der Tag zeigen wie K27.",
-     "entscheidung": "Empfehlung übernommen (Endversion-Chat, 27.10.) – gilt für den Bau, Owner kann ändern"
-    },
-    {
-     "text": "Akte: Wohin führt ein Eintrag „Mail gesendet“? Der Mock öffnet den Mail-Dialog neu (neue Mail statt Ansicht). Empfehlung: Vorschau der gesendeten Mail (nur lesen) mit „Antworten“ → mail {objekt}#frei.",
-     "entscheidung": "Empfehlung übernommen (Endversion-Chat, 27.10.) – gilt für den Bau, Owner kann ändern"
-    }
-   ]
   }
  },
  "verhalten_appweit": {
   "regel": "Gilt für alle Seiten, Dialoge und Menüs (OR-11). Verbindlich für den Bau.",
-  "navigation": "Eine zentrale Funktion oeffne(ziel, arg) im Client öffnet jedes Ziel: Seite (typ seite) = Seitenwechsel, Dialog/Blatt/Menü = neue Ebene über der aktuellen. arg = Objekt-ID ({auftrag} A-…, {kunde} K-…, {rechnung} R-…, {mail} Mail-ID, {beleg} Beleg-ID), optional „#modus“ (z. B. {auftrag}#vorwarnung, {auftrag}#{teil}, {entwurf}). Alle Knöpfe nutzen nur diese Funktion. Ziel einer Aktion, deren Seite noch nicht nach Bauplan gebaut ist: den bestehenden Code-Pfad aufrufen, der dieses Objekt öffnet; gibt es keinen, Knopf ausblenden.",
+  "navigation": "Eine zentrale Funktion oeffne(ziel, arg) im Client öffnet jedes Ziel: Seite (typ seite) = Seitenwechsel, Dialog/Blatt/Menü = neue Ebene über der aktuellen. arg = Objekt-ID ({auftrag} A-…, {kunde} K-…, {rechnung} R-…, {mail} Mail-ID, {beleg} Beleg-ID), optional „#modus“ (z. B. {auftrag}#vorwarnung, {auftrag}#{teil}, {entwurf}). Alle Knöpfe nutzen nur diese Funktion. Ziel noch nicht nach Bauplan gebaut: siehe ziele_bestand.",
   "zurueck": "„zurueck“ schließt die oberste Ebene und zeigt die darunter unverändert (gleicher Reiter, gleiche Scrollposition, kein Neuladen der Seite). Führt eine Aktion zur darunterliegenden Ebene mit demselben Objekt, gilt sie als „zurueck“ (kein zweites Blatt).",
   "speichern": "Bearbeiten öffnet vorbelegt mit den gespeicherten Werten; Speichern schließt den Dialog und zeigt die Meldung der Aktion (Toast 4 s); bei Fehler bleibt der Dialog offen, Eingaben bleiben, Meldung am Feld (Feldfehler) bzw. oben im Dialog (Serverfehler) (U-209).",
   "rechte": "Ohne Recht ist ein Bereich/Eintrag/Knopf unsichtbar (nicht ausgegraut); dieselbe Prüfung im Server für jede Lese- und Schreibaktion (U-200, K21). `rollen` an Elementen ist nur Vorlage für Musteransichten – verbindlich ist ausschließlich `recht`.",
-  "zeit": "Alle Zeiten und Datumsgrenzen in Europe/Berlin (Sommer/Winterzeit). „Tage“ in Grundzeilen = Arbeitstage Mo–Fr. Format: Datum „Do 01.10.“, Uhrzeit „14:00“.",
+  "zeit": "Alle Zeiten und Datumsgrenzen in Europe/Berlin (Sommer/Winterzeit). „Tage“ in Grundzeilen = Arbeitstage nach arbeitstage() (werkstattregel.stufe1_regeln.arbeitstage, inkl. Feiertage); Ausnahmen: Fälligkeit/Überfälligkeit von Rechnungen in Kalendertagen. Format: Datum „Do 01.10.“, Uhrzeit „14:00“.",
   "zeilenklick": "Im Handlungsbedarf löst der Klick auf die Zeile die Hauptaktion aus; in allen anderen Listen öffnet er das Objekt der Zeile (Auftragskarte, Kundenkarte, Rechnung, Mail).",
   "tastatur": "Desktop (U-049): j/k wählt Einträge im Handlungsbedarf, Enter = Hauptaktion, s = Später, N = Neuer Eingang, / = Suche, Esc schließt die oberste Ebene – ist darin ein Formular offen (z. B. Login ändern), schließt Esc zuerst das Formular. Nicht in Eingabefeldern.",
   "geraete": "Handy < 768 px, Tablet 768–1279 px, Desktop ≥ 1280 px Breite. Zweispaltige Dialoge werden auf Tablet/Handy einspaltig, breite Tabellen scrollen waagrecht.",
-  "kennungen": "Jedes Feld und jede Aktion trägt data-spec-id=\"<screen>.<id>\"; fehlt im Bauplan eine id, ist sie die Kleinschreibung des Textes mit Bindestrichen (ohne Umlaute: ä→a …)."
+  "kennungen": "Jedes Feld und jede Aktion trägt data-spec-id=\"<screen>.<id>\"; fehlt im Bauplan eine id, ist sie die Kleinschreibung des Textes mit Bindestrichen (ohne Umlaute: ä→a …).",
+  "ziele_bestand": "Solange eine Zielseite noch nicht nach Bauplan gebaut ist, ruft der Knopf den bestehenden Code-Pfad mit demselben Objekt auf (z. B. Auftragskarte, bestehende Fertigmeldung, bestehender Warenausgang, bestehender Mail-Dialog, bestehende Zahlung). Gibt es dafür keinen Pfad, ist die Ersatzaktion „Auftrag öffnen“ (bzw. das Objekt öffnen) – nie ein Eintrag ohne Knopf.",
+  "argumente": "{auftrag} A-Nummer · {kv} Auftrag im Zustand KV (A-Nummer) · {kunde} K-Nummer · {rechnung} R-Nummer · {mail} Graph-Nachrichten-ID · {beleg} Datei-ID · {entwurf} Entwurfs-ID · {teil} Positions-ID · {oberflaeche} Oberflächen-Text",
+  "uebergang": "Ziele aus noch nicht baureifen Abschnitten (z. B. raus 10, buendel 11.1): bis dahin den bestehenden Pfad aufrufen; Korrekturen, die das neue Ziel verlangen, sind als „zurueckgestellt“ markiert und werden mit dem Abschnitt des Ziels erledigt."
  },
  "annahmen": {
   "regel": "Annahmen des Endversion-Chats zu Produktfragen, die in den Dokumenten nicht entschieden sind (Owner schlief). Gelten für den Bau, bis die Owner sie bestätigt oder ändert. Jede Annahme hat eine Empfehlungsbegründung.",
@@ -497,6 +424,18 @@
     "id": "A-11",
     "text": "Aufträge › Woche: Blättern „‹ Woche · Heute · Woche ›“.",
     "grund": "Ohne Blättern ist nur die aktuelle Woche sichtbar.",
+    "status": "Annahme – Owner bestätigt"
+   },
+   {
+    "id": "A-12",
+    "text": "Terminberechnung Stufe 1 ohne Ähnlichkeitssuche (Erfahrungswert = 1); Feiertage des Bundeslands der Firma.",
+    "grund": "U-199: „einfacher Algorithmus vorher, lernen in Stufe 4“.",
+    "status": "Annahme – Owner bestätigt"
+   },
+   {
+    "id": "A-13",
+    "text": "Bundesland der Firma für Feiertage: Einstellung, bis gesetzt nur bundeseinheitliche Feiertage.",
+    "grund": "Bundesland steht in keinem Dokument – bitte nennen (wird dann als Wert eingetragen).",
     "status": "Annahme – Owner bestätigt"
    }
   ]
@@ -1128,13 +1067,15 @@
     "label": "Beleg / Foto lesen",
     "icon": "scan",
     "ziel": "kamera",
-    "funktion": "E04"
+    "funktion": "E04",
+    "recht": "eingang"
    },
    {
     "id": "plus",
     "label": "Neu anlegen",
     "ziel": "plus",
-    "funktion": "E02"
+    "funktion": "E02",
+    "recht": "eingang"
    },
    {
     "id": "konto",
@@ -1150,7 +1091,8 @@
     "gruppe": "schnell",
     "ziel": "eingang",
     "funktion": "E02",
-    "taste": "N"
+    "taste": "N",
+    "recht": "eingang"
    },
    {
     "id": "raus",
@@ -1158,7 +1100,8 @@
     "icon": "truck",
     "gruppe": "schnell",
     "ziel": "raus",
-    "funktion": "R05"
+    "funktion": "R05",
+    "recht": "auftraege"
    },
    {
     "trenner": true
@@ -1175,21 +1118,24 @@
     "label": "Werkstatt",
     "icon": "flask",
     "ziel": "werkstatt",
-    "funktion": "A05"
+    "funktion": "A05",
+    "recht": "auftraege"
    },
    {
     "id": "auftraege",
     "label": "Aufträge",
     "icon": "list",
     "ziel": "auftraege",
-    "funktion": "A04"
+    "funktion": "A04",
+    "recht": "auftraege"
    },
    {
     "id": "kunden",
     "label": "Kunden & Kontakt",
     "icon": "users",
     "ziel": "kunden",
-    "funktion": "A06"
+    "funktion": "A06",
+    "recht": "kunden"
    },
    {
     "id": "geld",
@@ -1204,7 +1150,8 @@
     "label": "Material & Einkauf",
     "icon": "box",
     "ziel": "stufenseite",
-    "funktion": "W02"
+    "funktion": "W02",
+    "recht": "auftraege"
    },
    {
     "id": "zahlen",
@@ -1245,19 +1192,22 @@
     "id": "werkstatt",
     "label": "Werkstatt",
     "icon": "flask",
-    "ziel": "werkstatt"
+    "ziel": "werkstatt",
+    "recht": "auftraege"
    },
    {
     "id": "auftraege",
     "label": "Aufträge",
     "icon": "list",
-    "ziel": "auftraege"
+    "ziel": "auftraege",
+    "recht": "auftraege"
    },
    {
     "id": "kunden",
     "label": "Kunden",
     "icon": "users",
-    "ziel": "kunden"
+    "ziel": "kunden",
+    "recht": "kunden"
    },
    {
     "id": "mehr",
@@ -1266,7 +1216,8 @@
     "ziel": "mehr"
    }
   ],
-  "werkstatt": []
+  "werkstatt": [],
+  "regel_rechte": "Menüpunkte ohne recht (Der Tag, Einstellungen, Suche, Konto) sieht jeder angemeldete Login; die Suche zeigt nur Treffer mit Recht."
  },
  "formulare": {
   "kunde": {
@@ -1487,7 +1438,19 @@
   "formel": "Aufwandstage = aufrunden(max(Auftragswert ÷ Tagesleistung, geplanter Aufwand × Erfahrungswert ÷ 420 Min.)), mindestens 1. Spätester Start = Liefertermin − Durchlauf der Oberfläche (Katalog) − Aufwandstage. Puffer = Arbeitstage bis zum spätesten Start. Sortierung im Wareneingang: kleinster Puffer oben. Farbe: < 0 rot „Start überfällig“, 0 orange „heute starten“, 1–2 orange „starten bis …“, sonst grün.",
   "hinweis": "Stufe 1: einfacher Algorithmus (oben). Stufe 4 (Z04): lernt aus Ist-Zeiten und Mehrarbeit, Kapazitätsplanung. Mehrarbeit (4.3) und Fertigmeldung (4.4) liefern die Ist-Werte. Entscheidung U-199.",
   "auftragswert": "Auftragswert = Summe der KV-Positionen (Menge der Einzelteile × Preis). Geplanter Aufwand = Aufwand aus dem KV bei Auftragsannahme (Minuten je Position).",
-  "erfahrung": "Erfahrungswert: Verhältnis Ist ÷ Plan der letzten 10 ähnlichen Aufträge (gleiche Oberfläche, ähnliches Teil, ähnliche Menge; gleicher Kunde zählt doppelt) – Median, begrenzt auf 0,7–1,8. Ohne Vergleichsfälle = 1."
+  "erfahrung": "Erfahrungswert: Verhältnis Ist ÷ Plan der letzten 10 ähnlichen Aufträge (gleiche Oberfläche, ähnliches Teil, ähnliche Menge; gleicher Kunde zählt doppelt) – Median, begrenzt auf 0,7–1,8. Ohne Vergleichsfälle = 1.",
+  "stufe1_regeln": {
+   "erfahrungswert": "Stufe 1: Erfahrungswert = 1 (Ähnlichkeit erst Stufe 4, Z04)",
+   "durchlauf_quelle": "Standard-Durchlaufzeit der Katalogleistung (8.3); ohne Katalogleistung: durchlauf_arbeitstage je Oberfläche; „Entchromen / prüfen“ und „noch zu klären“: 3 Arbeitstage; Katalogleistung ohne gesetzten Durchlauf = wie ohne Katalogleistung (durchlauf_arbeitstage der Oberfläche, sonst 3 Arbeitstage)",
+   "mehrere_oberflaechen": "größter Durchlauf der nicht fertigen Positionen",
+   "ohne_kv_oder_plan": "Aufwandstage = aufrunden(Auftragswert ÷ Tagesleistung), ohne Auftragswert 1",
+   "werte": "Tagesleistung = gespeicherte Einstellung tagesleistung_eur (Startwert 800 per Migration, änderbar in 8.4); 420 Min. = fester Arbeitstag",
+   "arbeitstage": "Mo–Fr ohne gesetzliche Feiertage: bundeseinheitliche Feiertage immer; zusätzlich die des Bundeslands aus der Einstellung company_settings.bundesland (Auswahl der 16 Länder, anfangs leer). Ohne gesetztes Bundesland nur die bundeseinheitlichen. Eine zentrale Funktion arbeitstage(von, bis) appweit.",
+   "gestartet": "„in Galvanik gestartet“ = Station galvanik oder später",
+   "tagesleistung_quelle": "Einstellung company_settings.tagesleistung_eur (dieselbe Stelle nutzt 8.4 in F7); F2 legt sie per Migration mit dem Startwert 800 an, falls nicht vorhanden. Der Puffer rechnet immer mit dem gespeicherten Wert.",
+   "durchlauf_unbekannt": "Oberfläche ohne Eintrag in durchlauf_arbeitstage und ohne Katalogleistung: 3 Arbeitstage (wie „noch zu klären“)",
+   "ohne_preis": "Positionen ohne Preis zählen im Auftragswert mit 0"
+  }
  },
  "tagkonfig": {
   "regel": "„Anpassen“ schaltet Der Tag in den Bearbeitungsmodus: die Felder der Startseite werden sichtbar; je Feld wird der Inhalt aus einer Auswahl gewählt (nur, was die Berechtigung zulässt), Felder lassen sich hinzufügen, entfernen, verschieben (hoch/runter, andere Spalte). Handlungsbedarf ist Feld 1 und immer an. Jeder Inhalt nur einmal. Gespeichert je Person (U-182).",
@@ -1552,7 +1515,11 @@
          "text": "Fertig melden",
          "ziel": "fertig",
          "arg": "{auftrag}"
-        }
+        },
+        "varianten": [
+         "heute",
+         "ueber"
+        ]
        },
        {
         "id": "fertig_liegt",
@@ -1573,7 +1540,7 @@
         "id": "knapp",
         "art": "warnung",
         "recht": "auftraege",
-        "wann": "Auftrag noch nicht fertig, Puffer laut werkstattregel 0, 1 oder 2 Arbeitstage (Kapazität zählt in Stufe 1 nicht)",
+        "wann": "Auftrag noch nicht in Galvanik gestartet (werkstattregel.stufe1_regeln.gestartet), Puffer laut werkstattregel 0, 1 oder 2 Arbeitstage (Kapazität zählt in Stufe 1 nicht)",
         "titel": "{titel} · wird knapp",
         "grund": "{kunde} · Liefertermin {datum} · {heute starten | starten bis {datum}}",
         "sortzeit": "spätester Start",
@@ -1628,13 +1595,14 @@
           "direkt_sichtbar": true
          }
         ],
-        "kein_spaeter": true
+        "kein_spaeter": true,
+        "recht_regel": "„Weiter bearbeiten“ nur mit Recht eingang; ohne Recht nur „Löschen“"
        },
        {
         "id": "anbindung",
         "art": "warnung",
         "recht": "wartung",
-        "wann": "Anbindung (z. B. Microsoft 365) läuft in ≤ 30 Tagen ab oder ist gestört",
+        "wann": "Microsoft-365-Anbindung gestört (letzter Abruf fehlgeschlagen, aus der bestehenden Anbindungs-/Fehlerprotokoll-Tabelle) oder – falls im Bestand ein Ablaufdatum gespeichert ist – Ablauf in ≤ 30 Tagen; ohne gespeichertes Ablaufdatum nur „gestört“. Nur mit Recht wartung.",
         "titel": "{anbindung} läuft ab | {anbindung} gestört",
         "grund": "noch ca. {n} Tage | seit {Datum Uhrzeit}",
         "sortzeit": "Ablaufdatum",
@@ -1669,7 +1637,8 @@
          "ziel": "mailein",
          "arg": "{mail}"
         },
-        "sortzeit": "Eingang"
+        "sortzeit": "Eingang",
+        "id": "neu_mail"
        },
        {
         "feld": "neu",
@@ -1683,7 +1652,8 @@
          "ziel": "beleg",
          "arg": "{beleg}"
         },
-        "sortzeit": "Eingang"
+        "sortzeit": "Eingang",
+        "id": "neu_beleg"
        },
        {
         "feld": "rechnungen",
@@ -1697,7 +1667,8 @@
          "ziel": "mail",
          "arg": "{rechnung}#erinnerung"
         },
-        "sortzeit": "Fälligkeit"
+        "sortzeit": "Fälligkeit",
+        "id": "rechnungen_rechnung"
        },
        {
         "feld": "rechnungen",
@@ -1711,7 +1682,8 @@
          "ziel": "zahlung",
          "arg": "{auftrag}"
         },
-        "sortzeit": "Liefertermin"
+        "sortzeit": "Liefertermin",
+        "id": "rechnungen_vorkasse"
        },
        {
         "feld": "buendel",
@@ -1725,13 +1697,14 @@
          "ziel": "buendel",
          "arg": "{oberflaeche}"
         },
-        "sortzeit": "frühester Liefertermin"
+        "sortzeit": "frühester Liefertermin",
+        "id": "buendel"
        },
        {
         "feld": "zeitstrahl",
         "art": "entscheidung",
         "titel": "{titel} · heute raus",
-        "grund": "{kunde} · {übergabe} {uhrzeit}",
+        "grund": "{kunde} · {übergabe}",
         "recht": "auftraege",
         "aktion": {
          "id": "ware-raus",
@@ -1739,9 +1712,27 @@
          "ziel": "rauspruefen",
          "arg": "{auftrag}"
         },
-        "sortzeit": "Uhrzeit"
+        "sortzeit": "Auftragsnummer",
+        "id": "zeitstrahl"
        }
-      ]
+      ],
+      "datenfelder": {
+       "{titel}": "Auftragstitel (Kurzbezeichnung der Teile)",
+       "{station}": "Station des Auftrags (Wareneingang · Galvanik · fertig)",
+       "{übergabe}": "Abholung | Versand",
+       "Pflichtfoto": "Eingangsfoto je Position (Teil) ist Pflicht für Freigabe/Fertigmeldung (U-… Foto je Teil)",
+       "erstes Teil ohne Foto": "niedrigste Positionsnummer ohne Foto",
+       "Abhol-/Versandtermin": "Liefertermin (Datum); eine Uhrzeit gibt es in Stufe 1 nicht",
+       "KV-Status": "KV versendet = Versanddatum gesetzt; angenommen = Zuschlag erteilt; Preisfreigabe offen = versendet und nicht angenommen",
+       "Vorkasse offen": "Zahlungsmodus Vorkasse und keine bestätigte Zahlung, ab Fertigmeldung (A-07)",
+       "Anbindungen": "Microsoft-365-Anbindung (Ablaufdatum der Zustimmung/Lizenz, Störung = letzter Abruf fehlgeschlagen)"
+      },
+      "tage": "{n} Tage = Arbeitstage; „überfällig seit {n} Tagen“ ab dem Tag nach dem Liefertermin; „liegt seit {n} Tagen“ ab Liefertermin; Einzahl „1 Tag“.",
+      "weitere": "„Weitere“ (M5) bei allen Auftrags-Einträgen außer Geld-Fällen (kv_freigabe, Vorkasse offen).",
+      "bei_vorkasse": "Fertiger Auftrag mit offener Vorkasse: mit Recht geld nur unter „Geld einfordern“ (bzw. im Handlungsbedarf, wenn das Feld fehlt), nicht in „Heute fällig“; ohne Recht geld der normale Auftragsfall (z. B. fertig_liegt) mit Grund „Freigabe fehlt“.",
+      "geltungsbereich": "Die Auftragsfälle foto, start_ueberfaellig, faellig, fertig_liegt, knapp gelten nur für Aufträge mit gebuchtem Wareneingang (nicht KV, nicht storniert, nicht abgeholt/versendet). Für KV-Aufträge gilt nur kv_freigabe.",
+      "ausgeblendet": "„ausgeblendet“ = Inhalt steht nicht in der aktuellen Anordnung des Logins (auch bei der Standardanordnung). Beispiel: Vorlage meister ohne Feld Bündel → Bündel-Vorschlag erscheint im Handlungsbedarf.",
+      "schluessel": "Eintrags-Schlüssel = (fall-id, variante, objekt). Varianten: faellig:heute | faellig:ueber; sonst ohne Variante. Später endet bei jeder Änderung des Schlüssels. Weitergabe bleibt bei reinem Variantenwechsel und endet, wenn die fall-id wechselt oder kein Fall mehr besteht; fall-id und variante werden in der Aufgaben-Zuweisung mitgespeichert. Objekt bei aus_feldern: Mail-, Beleg-, Rechnungs- bzw. Auftrags-ID oder die Oberfläche (Bündel)."
      }
     }
    },
@@ -1762,7 +1753,7 @@
      "ableitung": {
       "quelle": "Aufträge, fertig gemeldet, mit Liefertermin (bzw. Abholtermin) heute, weder abgeholt noch versendet, und OHNE Fall im Handlungsbedarf (nicht fertige heute fällige stehen als Fall „faellig“ im Handlungsbedarf).",
       "je_zeile": {
-       "zeit": "Uhrzeit des Abhol-/Versandtermins, sonst „heute“",
+       "zeit": "„heute“ (eine Abhol-Uhrzeit gibt es in Stufe 1 nicht als Feld)",
        "titel": "{kunde} · {titel}",
        "grund": "fertig · {übergabe}"
       },
@@ -1808,7 +1799,8 @@
        }
       ]
      },
-     "recht_hinweis": "Mails: Recht mails · Belege: Recht eingang"
+     "recht_hinweis": "Mails: Recht mails · Belege: Recht eingang",
+     "recht_regel": "Feld wählbar mit Recht mails ODER eingang; es zeigt nur die Einträge, deren Recht der Login hat."
     }
    },
    {
@@ -1868,7 +1860,7 @@
     "recht": "geld"
    }
   ],
-  "sortierung": "In jedem Feld: Konflikt (rot) → Warnung (orange) → Entscheidung (blau); innerhalb einer Art nach `sortzeit` des Falls aufsteigend (früheste zuerst). Aufgeschobene Einträge (M4) stehen am Ende des Feldes, gedimmt, mit „bis {zeit}“.",
+  "sortierung": "In jedem Feld: Konflikt (rot) → Warnung (orange) → Entscheidung (blau); innerhalb einer Art nach `sortzeit` des Falls aufsteigend (früheste zuerst). Aufgeschobene Einträge (M4) stehen am Ende des Feldes, gedimmt, mit „bis {zeit}“. Gleichstand: Auftragsnummer aufsteigend. Anbindung gestört: Störungszeit. Vorkasse: Liefertermin. Weitergegebene Einträge beim Geber am Ende wie aufgeschobene.",
   "standard": {
    "meister": [
     {
@@ -2006,14 +1998,15 @@
      "haupt": true
     },
     {
-     "id": "email",
+     "id": "email-anmelden",
      "text": "Mit E-Mail anmelden",
      "art": "leise",
      "ziel": "zustand:email",
      "rollen": [
       "developer"
      ],
-     "recht": "wartung"
+     "recht": "wartung",
+     "bedingung": "Merkmal „E-Mail-Anmeldung möglich“ (login.email.sichtbar)"
     }
    ],
    "regeln": [
@@ -2023,7 +2016,7 @@
     "Darunter direkt 4 Punkte und Ziffernblock 1–9, 0 und Löschen (Rücktaste-Symbol); kein Begleittext („Code für …“ entfällt, U-170). Nach der 4. Ziffer automatisch anmelden, kein Anmelde-Knopf.",
     "Am Desktop sofort per Tastatur: Fokus liegt beim Öffnen auf der Code-Eingabe, ohne Klick; Ziffern tippen, Rücktaste löscht, nach der 4. Ziffer ohne Bestätigung angemeldet.",
     "Fehler: Punkte schütteln kurz und färben sich rot, Meldung unter den Punkten, Code wird geleert; die nächste Ziffer löscht die Meldung.",
-    "Nur wenn die gewählte Person das Recht „wartung“ hat: Link „Mit E-Mail anmelden“ (E-Mail + Passwort); zurück per „Mit Code anmelden“.",
+    "Nur wenn die gewählte Person das Merkmal „E-Mail-Anmeldung möglich“ hat (login.email.sichtbar): Link „Mit E-Mail anmelden“ (E-Mail + Passwort); zurück per „Mit Code anmelden“.",
     "Bausteine: ui_ergaenzung.css (ev-login …) auf Tokens aus Designsystem V1.1; Logo und Farbstreifen wie in der App."
    ],
    "zustaende": {
@@ -2034,14 +2027,10 @@
      "na": "kein Begleittext (U-170) – nur die Punkte zeigen den Stand"
     },
     "fehler": {
+     "id": "code-falsch-bitte-neu-eingeben",
      "text": "Code falsch · bitte neu eingeben",
-     "aktionen": [
-      {
-       "id": "neu-eingeben",
-       "text": "Neu eingeben",
-       "ziel": "zustand:daten"
-      }
-     ]
+     "verhalten": "Punkte rot, Code leer; die nächste Ziffer löscht die Meldung (kein Knopf)",
+     "ausweg": "Ausweg ist die nächste Ziffer bzw. eine andere Person"
     },
     "erfolg": {
      "na": "kein Zwischenschritt – nach der 4. richtigen Ziffer direkt die Startseite"
@@ -2050,9 +2039,9 @@
      "text": "E-Mail und Passwort",
      "aktionen": [
       {
-       "id": "anmelden",
        "text": "Anmelden",
-       "ziel": "start"
+       "ziel": "start",
+       "id": "email-absenden"
       },
       {
        "id": "mit-code-anmelden",
@@ -2062,6 +2051,7 @@
      ]
     },
     "gesperrt": {
+     "id": "zu-viele-versuche-bitte-n-minuten-warten",
      "wann": "bestehende Sperrlogik nach wiederholten Fehlversuchen (serverseitig, Werte unverändert übernehmen)",
      "text": "Zu viele Versuche · bitte {n} Minuten warten",
      "aktionen": [
@@ -2070,40 +2060,42 @@
        "text": "Andere Person wählen",
        "ziel": "zustand:daten"
       }
-     ]
+     ],
+     "verhalten": "Ziffernblock und Tastatur gesperrt bis Ablauf; andere Person wählbar"
     }
    },
    "nr": "0",
    "abnahme": [
-    "Gegeben aktive Logins mit Code · Wenn die Anmeldung geöffnet wird · Dann erscheinen genau diese Logins als Kreise (Kürzel + Vorname), inaktive nicht; die zuletzt auf diesem Gerät angemeldete Person ist vorausgewählt.",
+    "Gegeben aktive Logins mit Code oder mit „E-Mail-Anmeldung möglich“ · Wenn die Anmeldung geöffnet wird · Dann erscheinen genau diese Logins als Kreise (Kürzel + Vorname), inaktive nicht; die zuletzt auf diesem Gerät angemeldete Person ist vorausgewählt.",
     "Gegeben Desktop · Wenn die Seite öffnet · Dann liegt der Fokus ohne Klick auf der Code-Eingabe; Ziffern per Tastatur, Rücktaste löscht.",
-    "Gegeben eine Person ist gewählt · Wenn die 4. richtige Ziffer eingegeben wird · Dann wird ohne weiteren Knopf angemeldet und die Startseite des Logins (rollen.start) geöffnet.",
+    "Gegeben eine Person ist gewählt · Wenn die 4. richtige Ziffer eingegeben wird · Dann wird ohne weiteren Knopf angemeldet und die Startseite laut login.start_regel geöffnet.",
     "Gegeben ein falscher Code · Wenn die 4. Ziffer eingegeben wird · Dann schütteln die Punkte rot, Meldung „Code falsch · bitte neu eingeben“, Code leer; die nächste Ziffer löscht die Meldung.",
-    "Gegeben eine gewählte Person ohne Recht „wartung“ · Dann gibt es keinen Link „Mit E-Mail anmelden“; bei einer Person mit „wartung“ erscheint er; der Server lehnt E-Mail-Anmeldung ohne „wartung“ ab.",
+    "Gegeben eine gewählte Person ohne Merkmal „E-Mail-Anmeldung möglich“ (Recht wartung UND hinterlegte E-Mail) · Dann gibt es keinen Link „Mit E-Mail anmelden“; mit Merkmal erscheint er; der Server lehnt E-Mail-Anmeldung ohne das Merkmal ab.",
     "Gegeben ein neu angelegter aktiver Login · Wenn die Anmeldung neu geöffnet wird · Dann erscheint er sofort als Kreis.",
     "Gegeben ein Login mit Vorlage developer · Wenn er sich anmeldet · Dann öffnet Der Tag (bis Wartung gebaut ist), keine Umleitung nach Einstellungen.",
     "Gegeben keine Vorauswahl (neues Gerät) · Dann ist der Ziffernblock gesperrt, bis eine Person gewählt ist."
    ],
    "personen": {
-    "quelle": "aktive Logins mit gesetztem Code, je Firma",
-    "sortierung": "nach Vorname",
+    "quelle": "aktive Logins mit gesetztem Code; zusätzlich aktive Logins mit „E-Mail-Anmeldung möglich“ ohne Code (dann nur mit dem E-Mail-Link, Ziffernblock gesperrt)",
+    "sortierung": "nach Vorname, dann Name (deutsche Sortierung)",
     "vorauswahl": "die zuletzt auf diesem Gerät angemeldete Person (lokal gespeichert); ist sie inaktiv oder unbekannt: keine Vorauswahl – Ziffernblock gesperrt, bis eine Person gewählt ist",
     "je_person": [
      "Kreis mit Kürzel",
-     "Vorname"
+     "Vorname = erstes Wort von Name"
     ],
-    "fehlerhafte_zeile": "wird übersprungen; Eintrag im Fehlerprotokoll (Wartung › Fehlerprotokoll): „Login {id} übersprungen: {grund}“ (K23)"
+    "fehlerhafte_zeile": "fehlerhaft = Vorlage unbekannt oder Name leer, oder weder Code noch E-Mail-Anmeldung möglich; solche Logins werden nicht gezeigt. Ein Eintrag ins Fehlerprotokoll höchstens einmal je Login, Grund und Tag (Quelle „Anmeldeliste“, Text „Login {kürzel} übersprungen: {grund}“).",
+    "tastatur": "ohne Vorauswahl: Tab/Pfeiltasten wählen die Person, Enter bestätigt; danach Ziffern"
    },
-   "start_regel": "Startseite nach Anmeldung = rollen[vorlage].start der Rechte-Vorlage des Logins (gespeichert beim Anlegen, nicht änderbar): meister → tag, werkstatt → tag, developer → backend (Wartung), leer → tag. Solange Wartung nicht gebaut ist: developer → tag. Niemand wird nach /settings umgeleitet; / zeigt für jeden Login Der Tag.",
+   "start_regel": "In diesem Bau: meister, werkstatt, leer und developer → Der Tag (tag). Sobald Wartung (backend) gebaut ist, gilt für developer rollen.start = backend. Niemand wird nach /settings umgeleitet.",
    "email": {
-    "sichtbar": "Link „Mit E-Mail anmelden“ nur, wenn die gewählte Person das Recht „wartung“ hat (Anmeldeliste liefert je Person dieses Merkmal); Server lehnt E-Mail-Anmeldung ohne „wartung“ ab",
+    "sichtbar": "Link „Mit E-Mail anmelden“ nur, wenn bei der gewählten Person das Merkmal „E-Mail-Anmeldung möglich“ gesetzt ist (= Recht wartung UND hinterlegte E-Mail; die Adresse selbst wird vor der Anmeldung nie ausgeliefert); die eingegebene E-Mail muss zur gewählten Person gehören; Prüfung nur über den Bereich",
     "felder": [
      "E-Mail (Pflicht)",
      "Passwort (Pflicht)"
     ],
     "aktionen": [
      {
-      "id": "mit-e-mail-anmelden",
+      "id": "email-absenden",
       "text": "Anmelden",
       "ziel": "start"
      },
@@ -2232,16 +2224,19 @@
        "id": "neuer-eingang",
        "text": "Neuer Eingang",
        "icon": "inbox",
-       "ziel": "eingang"
+       "ziel": "eingang",
+       "recht": "eingang"
       },
       {
        "id": "datenkiste-offnen",
        "text": "Datenkiste öffnen",
        "ziel": "datenkiste",
        "funktion": "E01",
-       "recht": "einstellungen"
+       "recht": "einstellungen",
+       "nur_wenn": "Datenkiste (3.5) gebaut – bis F7 ausgeblendet"
       }
-     ]
+     ],
+     "zusatz": "Entwürfe, Mails und Belege werden auch dann im Handlungsbedarf gezeigt."
     },
     "teilweise": {
      "wann": "Mails (Microsoft 365) nicht erreichbar – übrige Felder laden",
@@ -2252,7 +2247,8 @@
        "text": "Erneut laden",
        "ziel": "zustand:daten"
       }
-     ]
+     ],
+     "ort": "Banner im Feld „Zuordnen“ (bzw. im Handlungsbedarf, wenn Zuordnen ausgeblendet)"
     },
     "fehler": {
      "wann": "Aufträge konnten nicht geladen werden",
@@ -2266,14 +2262,14 @@
      ]
     },
     "erfolg": {
-     "wann": "nach Später oder Weitergeben (M4/M5)",
-     "text": "{Meldung der Aktion} · Rückgängig",
+     "wann": "nach Weitergeben (M5)",
+     "text": "Bei {login} · bis {frist} · Rückgängig",
      "aktionen": [
       {
        "id": "ruckgangig",
        "text": "Rückgängig",
        "ziel": "zustand:daten",
-       "verhalten": "nimmt nur das Aufschieben bzw. Weitergeben zurück"
+       "verhalten": "nimmt nur das Weitergeben zurück"
       }
      ]
     },
@@ -2303,7 +2299,7 @@
       }
      ],
      "regeln": [
-      "höchstens 6 Felder; Handlungsbedarf ist Feld 1, nicht entfernbar",
+      "höchstens 5 Felder (so viele Inhalte gibt es); Handlungsbedarf ist Feld 1, nicht entfernbar",
       "jeder Inhalt höchstens einmal; nur Inhalte mit Recht",
       "Tablet/Handy: nur Reihenfolge änderbar, die Spalte bleibt gespeichert"
      ]
@@ -2318,12 +2314,12 @@
    "nr": "2",
    "abnahme": [
     "Gegeben Login mit Rechte-Vorlage meister ohne eigene Anordnung · Wenn Der Tag öffnet · Dann Felder laut tagkonfig.standard.meister (links Handlungsbedarf, Zuordnen; rechts Heute fällig, Geld einfordern).",
-    "Gegeben ein Auftrag mit Liefertermin heute, noch nicht fertig gemeldet · Dann steht er im Handlungsbedarf als Konflikt „{titel} · heute fällig“ mit „Fertig melden“ → Fertigmeldung genau dieses Auftrags – und NICHT in „Heute fällig“.",
-    "Gegeben ein fertig gemeldeter Auftrag mit Abholung/Versand heute · Dann steht er in „Heute fällig“ mit „Ware raus“ → Warenausgang genau dieses Auftrags; Klick auf die Zeile öffnet die Auftragskarte.",
-    "Gegeben ein abgeholter/versendeter Auftrag · Dann erscheint er nirgends auf Der Tag; ein überfälliger, nicht fertiger Auftrag steht im Handlungsbedarf als Konflikt „überfällig seit {n} Tagen“ mit „Fertig melden“.",
+    "Gegeben ein Auftrag bereits in Galvanik, Liefertermin heute, noch nicht fertig gemeldet · Dann steht er im Handlungsbedarf als Konflikt „{titel} · heute fällig“ mit „Fertig melden“ → Fertigmeldung genau dieses Auftrags – und NICHT in „Heute fällig“. (Ziel bis zum Bau seines Abschnitts: bestehender Pfad mit demselben Objekt nach ziele_bestand)",
+    "Gegeben ein fertig gemeldeter Auftrag mit Abholung/Versand heute · Dann steht er in „Heute fällig“ mit „Ware raus“ → Warenausgang genau dieses Auftrags; Klick auf die Zeile öffnet die Auftragskarte. (Ziel bis zum Bau seines Abschnitts: bestehender Pfad mit demselben Objekt nach ziele_bestand)",
+    "Gegeben ein abgeholter/versendeter Auftrag · Dann erscheint er nirgends auf Der Tag; ein überfälliger, nicht fertiger Auftrag, bereits in Galvanik, steht im Handlungsbedarf als Konflikt „überfällig seit {n} Tagen“ mit „Fertig melden“.",
     "Gegeben eine Mail ohne Zuordnung und Recht „mails“ · Wenn „Zuordnen“ · Dann öffnet Dialog 3.4 für genau diese Mail; ohne Recht „mails“ fehlt der Eintrag.",
-    "Gegeben eine überfällige Rechnung und Recht „geld“ · Dann steht sie in „Geld einfordern“ mit „Erinnern“ → Mail-Dialog Zahlungserinnerung zu genau dieser Rechnung; noch nicht fällige Rechnungen erscheinen nicht; ohne Recht „geld“ fehlt das Feld ganz.",
-    "Gegeben ein nicht fertiger Auftrag mit Puffer 0–2 Arbeitstage (werkstattregel) · Dann Handlungsbedarf Warnung „{titel} · wird knapp“ mit Grund und „Kunde vorwarnen“ → Mail-Dialog Vorwarnung zu genau diesem Auftrag; Login ohne Recht mails bekommt „Auftrag öffnen“.",
+    "Gegeben eine überfällige Rechnung und Recht „geld“ · Dann steht sie in „Geld einfordern“ mit „Erinnern“ → Mail-Dialog Zahlungserinnerung zu genau dieser Rechnung; noch nicht fällige Rechnungen erscheinen nicht; ohne Recht „geld“ fehlt das Feld ganz. (Ziel bis zum Bau seines Abschnitts: bestehender Pfad mit demselben Objekt nach ziele_bestand)",
+    "Gegeben ein noch nicht in Galvanik gestarteter Auftrag mit Puffer 0–2 Arbeitstage (werkstattregel) · Dann Handlungsbedarf Warnung „{titel} · wird knapp“ mit Grund und „Kunde vorwarnen“ → Mail-Dialog Vorwarnung zu genau diesem Auftrag; Login ohne Recht kunden bekommt „Auftrag öffnen“. (Ziel bis zum Bau seines Abschnitts: bestehender Pfad mit demselben Objekt nach ziele_bestand)",
     "Gegeben Einträge aller Arten · Dann Reihenfolge Konflikt → Warnung → Entscheidung, innerhalb nach Termin; die Zähler oben stimmen exakt mit dem Handlungsbedarf überein.",
     "Gegeben Feld „Zuordnen“ ausgeblendet über Anpassen · Dann steht der Mail-Eintrag im Handlungsbedarf, nie doppelt.",
     "Gegeben „Anpassen“ · Wenn Felder umgestellt und „Fertig“ gewählt wird · Dann ist die Anordnung je Login gespeichert (auch nach neuer Anmeldung), nur erlaubte Inhalte wählbar.",
@@ -2579,9 +2575,14 @@
           "sortierung": "wie in Logins & Rechte",
           "je_zeile": {
            "vorne": "Kürzel",
-           "titel": "{name} · {bezeichnung}",
-           "meta": "{vorlage} · {x} von {n} Bereichen",
-           "login": "Login-ID der Zeile"
+           "titel": "{name}{ · {bezeichnung}}",
+           "grund": "{vorlage-text} · {x} von {n} Bereichen",
+           "vorlage_text": {
+            "meister": "Büro",
+            "werkstatt": "Werkstatt",
+            "developer": "Entwicklung",
+            "leer": "ohne Vorlage"
+           }
           },
           "aktion": {
            "id": "mein-code",
@@ -2597,7 +2598,9 @@
            "recht": "logins",
            "regel": "nur mit Recht „logins“ (K20)"
           },
-          "nicht": "keine Rechte-Haken hier (die stehen in 8.5); keine Codes; kein „Mein Code“ in fremden Zeilen"
+          "nicht": "keine Rechte-Haken hier (die stehen in 8.5); keine Codes; kein „Mein Code“ in fremden Zeilen",
+          "lesen": "für jeden angemeldeten Login ohne Bereich lesbar: Kürzel, Name, Bezeichnung, Vorlage, Anzahl Bereiche (keine Rechte-Einzelheiten)",
+          "aktualisieren": "Beim Schließen von 8.5 werden die Zeilen neu geholt; Reiter und Scrollposition bleiben."
          }
         }
        ],
@@ -2847,321 +2850,6 @@
    ]
   },
   {
-   "id": "katalog",
-   "typ": "seite",
-   "titel": "Leistungskatalog",
-   "funktion": [
-    "S02"
-   ],
-   "quelle": [
-    "BU",
-    "AW"
-   ],
-   "rollen": [
-    "meister",
-    "developer"
-   ],
-   "eltern": "einstellungen",
-   "inhalt": [
-    {
-     "typ": "filterleiste",
-     "suche": "Leistung oder Oberfläche"
-    },
-    {
-     "typ": "kachel",
-     "titel": "Leistungen",
-     "icon": "list",
-     "daten": "vom Server (keine Musterdaten im Bauplan)",
-     "ableitung": {
-      "quelle": "Leistungen des Katalogs (S02)",
-      "filter": "filterleiste: Suche über Bezeichnung und Oberfläche",
-      "sortierung": "siehe offen (Empfehlung: Bezeichnung alphabetisch)",
-      "je_zeile": {
-       "titel": "{bezeichnung}",
-       "meta": "{preis netto} · {steuersatz} · Durchlauf {n} Arbeitstage (fehlt → „Durchlauf offen“)"
-      },
-      "aktion": {
-       "id": "zeilenklick",
-       "text": "(Zeilenklick)",
-       "ziel": "leistung",
-       "arg": "{leistung}",
-       "ergebnis": "Dialog 8.3 „Leistung bearbeiten“, alle Felder vorbelegt"
-      },
-      "nicht": "kein Löschen in Stufe 1 (nicht spezifiziert); leer → Seitenzustand „leer“"
-     }
-    }
-   ],
-   "aktionen": [
-    {
-     "id": "leistung-anlegen",
-     "text": "Leistung anlegen",
-     "icon": "plus",
-     "art": "primaer",
-     "ziel": "leistung",
-     "haupt": true,
-     "aenderung": "optik"
-    },
-    {
-     "id": "zuruck-zu-einstellungen",
-     "text": "Zurück zu Einstellungen",
-     "icon": "back",
-     "art": "leise",
-     "ziel": "einstellungen"
-    }
-   ],
-   "zustaende": {
-    "leer": {
-     "text": "Noch keine Leistung. Ein leerer Katalog sperrt nichts – Freitext geht immer.",
-     "aktionen": [
-      {
-       "id": "leistung-anlegen",
-       "text": "Leistung anlegen",
-       "ziel": "leistung",
-       "aenderung": "optik"
-      }
-     ]
-    },
-    "teilweise": {
-     "text": "Kein Treffer für „Kupfer“.",
-     "aktionen": [
-      {
-       "id": "kupfer-anlegen",
-       "text": "„Kupfer“ anlegen",
-       "ziel": "leistung"
-      }
-     ]
-    },
-    "fehler": {
-     "text": "Katalog konnte nicht geladen werden",
-     "aktionen": [
-      {
-       "id": "erneut-laden",
-       "text": "Erneut laden",
-       "ziel": "zustand:daten"
-      }
-     ]
-    },
-    "erfolg": {
-     "text": "Leistung gespeichert",
-     "aktionen": [
-      {
-       "id": "zuruck-zum-eingang",
-       "text": "Zurück zum Eingang",
-       "ziel": "eingang"
-      },
-      {
-       "id": "weitere-leistung",
-       "text": "Weitere Leistung",
-       "ziel": "leistung"
-      }
-     ]
-    }
-   },
-   "nr": "8.2",
-   "recht": "geld",
-   "abnahme": [
-    "Gegeben Login mit Recht „geld“ · Wenn „Katalog öffnen“ · Dann listet der Leistungskatalog jede Leistung mit Bezeichnung und „{preis netto} · {steuersatz} · Durchlauf {n} Arbeitstage“.",
-    "Gegeben eine Leistung · Wenn die Zeile angetippt wird · Dann öffnet 8.3 „Leistung bearbeiten“ mit allen Feldern vorbelegt; Speichern führt zurück auf den Katalog, die Zeile zeigt die neuen Werte.",
-    "Gegeben „Leistung anlegen“ · Dann öffnet 8.3 leer (Steuersatz vorbelegt laut Feld) im Titel „Leistung“.",
-    "Gegeben ein Suchtext · Dann filtert die Liste über Bezeichnung und Oberfläche; ohne Treffer „Kein Treffer für „{suche}““ mit „„{suche}“ anlegen“ → 8.3 mit Bezeichnung = Suchtext.",
-    "Gegeben ein leerer Katalog · Dann „Noch keine Leistung. Ein leerer Katalog sperrt nichts – Freitext geht immer.“ mit „Leistung anlegen“; im Eingang bleibt Freitext möglich (Q1).",
-    "Gegeben „Zurück zu Einstellungen“ · Dann Einstellungen mit aktivem Reiter „Leistungen & Preise“.",
-    "Gegeben Login ohne Recht „geld“ · Dann kein Weg zum Katalog, der Server liefert keine Preise (K4)."
-   ],
-   "aenderung_je_element": [
-    {
-     "element": "Liste + Suche",
-     "aenderung": "optik",
-     "anker": "actions/catalog.actions.ts:7",
-     "bemerkung": null
-    },
-    {
-     "element": "A Leistung anlegen",
-     "aenderung": "optik",
-     "anker": "actions/settings.actions.ts:68",
-     "bemerkung": null
-    },
-    {
-     "element": "nav",
-     "aenderung": "optik",
-     "anker": null,
-     "bemerkung": "Schließen/Abbrechen/Zurück/Erneut laden: reine Navigation"
-    }
-   ]
-  },
-  {
-   "id": "datenkiste",
-   "typ": "seite",
-   "titel": "Datenkiste",
-   "funktion": [
-    "E01"
-   ],
-   "quelle": [
-    "BU",
-    "OE"
-   ],
-   "rollen": [
-    "meister",
-    "werkstatt",
-    "developer"
-   ],
-   "eltern": "einstellungen",
-   "inhalt": [
-    {
-     "typ": "dropzone",
-     "text": "Excel, CSV, PDF, Word, Fotos, Outlook-Mails und -Kontakte hierher ziehen",
-     "aktion": {
-      "id": "dateien-wahlen",
-      "text": "Dateien wählen",
-      "icon": "upload",
-      "art": "primaer",
-      "ziel": "zustand:teilweise"
-     }
-    },
-    {
-     "typ": "kachel",
-     "titel": "Erkannt · zur Prüfung",
-     "icon": "users",
-     "daten": "vom Server (keine Musterdaten im Bauplan)",
-     "ableitung": {
-      "quelle": "Ergebnis der Erkennung über alle hochgeladenen, noch nicht übernommenen Dateien",
-      "filter": "nur Arten mit Anzahl > 0",
-      "sortierung": "Kunden → mögliche Doppelte (ton warn) → alte Rechnungen/Lieferscheine",
-      "je_zeile": {
-       "Kunden": "titel „{n} Kunden“ · meta „{k} unvollständig (fehlt markiert, nie erfunden)“ · chip „prüfen“",
-       "mögliche Doppelte": "titel „{n} mögliche Doppelte“ · meta „zusammenführen oder getrennt lassen“ · ton warn · chip „prüfen“ (Dublettenprüfung wie Kunde anlegen: Name, Telefon, E-Mail, Ort)",
-       "Altbelege": "titel „{n} alte Rechnungen/Lieferscheine“ · meta „werden Dokumente am Kunden, keine Aufträge“"
-      },
-      "aktion": {
-       "id": "prufen-und-ubernehmen-seitenaktion",
-       "text": "Prüfen und übernehmen (Seitenaktion)",
-       "ziel": "zustand:erfolg",
-       "ergebnis": "Kunden über den einen Schreibweg (createCustomerCommand) mit Kundennummer anlegen, unvollständige als „unvollständig“ markiert; Altbelege als Dokumente an den Kunden; Meldung „{n} Kunden übernommen · {k} als unvollständig markiert“"
-      },
-      "nicht": "keine Aufträge aus Altbelegen; keine erfundenen Werte; Prüfansicht für Doppelte siehe offen"
-     }
-    },
-    {
-     "typ": "hinweis",
-     "ton": "info",
-     "text": "Offen während der Einführung"
-    }
-   ],
-   "aktionen": [
-    {
-     "id": "prufen-und-ubernehmen",
-     "text": "Prüfen und übernehmen",
-     "icon": "check",
-     "art": "erledigen",
-     "ziel": "zustand:erfolg",
-     "haupt": true,
-     "aenderung": "funktion_neu"
-    },
-    {
-     "id": "datenkiste-schliessen",
-     "text": "Datenkiste schließen",
-     "art": "leise",
-     "ziel": "einstellungen",
-     "rollen": [
-      "meister",
-      "developer"
-     ],
-     "recht": "einstellungen"
-    }
-   ],
-   "zustaende": {
-    "leer": {
-     "text": "Noch nichts hochgeladen.",
-     "aktionen": [
-      {
-       "id": "dateien-wahlen",
-       "text": "Dateien wählen",
-       "ziel": "zustand:teilweise"
-      }
-     ]
-    },
-    "teilweise": {
-     "text": "Erkannt: 42 Kunden · 3 mögliche Doppelte · 7 unvollständig",
-     "aktionen": [
-      {
-       "id": "doppelte-prufen",
-       "text": "Doppelte prüfen",
-       "ziel": "kunde"
-      },
-      {
-       "id": "prufen-und-ubernehmen",
-       "text": "Prüfen und übernehmen",
-       "ziel": "zustand:erfolg",
-       "aenderung": "funktion_neu"
-      }
-     ]
-    },
-    "fehler": {
-     "text": "Datei nicht lesbar · Original bleibt gesichert",
-     "aktionen": [
-      {
-       "id": "andere-datei-wahlen",
-       "text": "Andere Datei wählen",
-       "ziel": "zustand:leer"
-      }
-     ]
-    },
-    "erfolg": {
-     "text": "39 Kunden übernommen · 7 als unvollständig markiert",
-     "aktionen": [
-      {
-       "id": "kunden-ansehen",
-       "text": "Kunden ansehen",
-       "ziel": "kunden"
-      }
-     ]
-    }
-   },
-   "nr": "3.5",
-   "abnahme": [
-    "Gegeben die Datenkiste ohne Uploads · Dann „Noch nichts hochgeladen.“ und die Ablagefläche mit „Dateien wählen“.",
-    "Gegeben Dateien der erlaubten Arten · Wenn sie hineingezogen oder gewählt werden · Dann werden die Originale gesichert und die Erkennung zeigt „Erkannt: {n} Kunden · {m} mögliche Doppelte · {k} unvollständig“ sowie die Kachel „Erkannt · zur Prüfung“ mit genau diesen Zahlen.",
-    "Gegeben erkannte Kunden mit fehlenden Angaben · Dann werden die Angaben als fehlend markiert und nie ergänzt/erfunden.",
-    "Gegeben mögliche Doppelte · Dann erscheinen sie getrennt mit „zusammenführen oder getrennt lassen“ und werden nicht ungeprüft übernommen.",
-    "Gegeben „Prüfen und übernehmen“ · Dann legt der Server die Kunden über den einen Schreibweg mit Kundennummer an, markiert unvollständige als „unvollständig“, hängt alte Rechnungen/Lieferscheine als Dokumente an den Kunden (keine Aufträge) und meldet „{n} Kunden übernommen · {k} als unvollständig markiert“ mit „Kunden ansehen“ (→ Kunden & Kontakt).",
-    "Gegeben eine nicht lesbare Datei · Dann „Datei nicht lesbar · Original bleibt gesichert“ mit „Andere Datei wählen“; andere Dateien bleiben erhalten.",
-    "Gegeben die übernommenen Altbelege · Dann stehen sie in der Kundenkarte › Akte › Fotos & Dokumente des Kunden.",
-    "Gegeben Login ohne Recht „einstellungen“ · Dann gibt es „Datenkiste schließen“ nicht."
-   ],
-   "aenderung_je_element": [
-    {
-     "element": "Dropzone/Dateien wählen",
-     "aenderung": "funktion_neu",
-     "anker": null,
-     "bemerkung": "Import-Pipeline fehlt"
-    },
-    {
-     "element": "Erkannt: Kunden/Doppelte/alte Belege",
-     "aenderung": "funktion_neu",
-     "anker": null,
-     "bemerkung": null
-    },
-    {
-     "element": "A Prüfen und übernehmen",
-     "aenderung": "funktion_neu",
-     "anker": null,
-     "bemerkung": "Bulk über createCustomerCommand"
-    },
-    {
-     "element": "A Doppelte prüfen / Kunden ansehen",
-     "aenderung": "optik",
-     "anker": "actions/customers.actions.ts:20",
-     "bemerkung": null
-    },
-    {
-     "element": "nav",
-     "aenderung": "optik",
-     "anker": null,
-     "bemerkung": "Schließen/Abbrechen/Zurück/Erneut laden: reine Navigation"
-    }
-   ]
-  },
-  {
    "id": "spaeter",
    "typ": "menue",
    "titel": "Später erinnern",
@@ -3214,9 +2902,12 @@
    "regeln": [
     "Öffnet direkt am Knopf „Später“ des Eintrags (U-194), auch am Handy erreichbar.",
     "Frist eines Eintrags = Liefertermin seines Auftrags (Ende des Tages); Einträge ohne Auftrag haben keine Frist. Eintrag mit Frist heute/vorbei: nur „heute Nachmittag“ (vor 14:00).",
-    "Gespeichert je Login mit Schlüssel (login, fall, objekt); wechselt der Eintrag den Fall (z. B. heute fällig → überfällig) oder ist der Zeitpunkt erreicht, endet das Aufschieben.",
+    "Gespeichert je Login mit Schlüssel (login, fall-id, variante, objekt – siehe ableitung.schluessel); ändert sich der Schlüssel (z. B. faellig:heute → faellig:ueber) oder ist der Zeitpunkt erreicht, endet das Aufschieben.",
     "Aufgeschobene Einträge bleiben am Ende ihres Feldes sichtbar, gedimmt, mit „bis {zeit}“, und zählen in der Lage weiter mit (U-065).",
-    "Optionen, die nicht gelten (nur_wenn/gesperrt_wenn), werden nicht angezeigt."
+    "Optionen, die nicht gelten (nur_wenn/gesperrt_wenn), werden nicht angezeigt.",
+    "Gibt es für einen Eintrag keine gültige Option, entfällt der Knopf „Später“.",
+    "Neubewertung bei jeder Serveranfrage und spätestens jede Minute im offenen Client.",
+    "Meldungen ohne „Rückgängig“; Wochentag als „Mo“…„Fr“."
    ],
    "zustaende": {
     "leer": {
@@ -3277,7 +2968,7 @@
      "ziel": "zurueck",
      "meldung": "Bei {login} · bis {frist} · Rückgängig",
      "je": "aktiver Login mit Recht „auftraege“ außer mir (je Login ein Eintrag im Menü)",
-     "verhalten": "Eintrag erscheint im Handlungsbedarf des Empfängers als Fall „weitergegeben“; bei mir bleibt er gedimmt mit „bei {login} · bis {frist}“ und zählt bei mir nicht mehr; endet, wenn der Fall erledigt ist oder „Zurückholen“"
+     "verhalten": "Eintrag erscheint im Handlungsbedarf des Empfängers als Fall „weitergegeben“; bei mir bleibt er gedimmt mit „bei {login} · bis {frist}“ und zählt bei mir nicht mehr; endet nach ableitung.schluessel oder per „Zurückholen“"
     },
     {
      "id": "auftrag-offnen",
@@ -3319,14 +3010,18 @@
    "regeln": [
     "Nur bei Einträgen zu Aufträgen und nur mit Recht „auftraege“ (keine Rollenliste, K21). Öffnet direkt am Knopf (U-194).",
     "Frist der Weitergabe = Frist des Eintrags (Liefertermin, Ende des Tages); ohne Liefertermin: „bis erledigt“.",
-    "Art des weitergegebenen Eintrags = Art des Ursprungsfalls."
+    "Art des weitergegebenen Eintrags = Art des Ursprungsfalls.",
+    "Speicher: Aufgaben-Zuweisung des Auftrags (bestehender orderTaskAssignmentCommand) mit Empfänger, Geber, Frist.",
+    "Beim Empfänger ersetzt der Fall „weitergegeben“ den Ursprungsfall (ein Eintrag); beim Geber gedimmt „bei {login}“; Dritte mit Recht „auftraege“ sehen den Ursprungsfall unverändert mit Zusatz „bei {login}“.",
+    "Der Empfänger darf weitergeben (dann wechselt der Empfänger).",
+    "Weitergabe bleibt bei reinem Variantenwechsel, endet bei Wechsel der fall-id oder wenn kein Fall mehr besteht (ableitung.schluessel)."
    ],
    "abnahme": [
     "Gegeben ein Auftrags-Eintrag und Recht „auftraege“ · Wenn „Weitere“ · Dann Menü direkt am Knopf mit je einem „an {login} geben“ für jeden anderen aktiven Login mit „auftraege“ und „Auftrag öffnen“.",
     "Gegeben Mail-, Rechnungs-, Anbindungs- oder Entwurfs-Eintrag · Dann gibt es keinen Knopf „Weitere“.",
     "Gegeben „an {login} geben“ · Dann Meldung „Bei {login} · bis {frist} · Rückgängig“; bei mir gedimmt „bei {login}“ und nicht mehr gezählt; beim Empfänger im Handlungsbedarf mit Grund „von {mir} · bis {frist}“, gezählt.",
     "Gegeben „Rückgängig“ in der Meldung oder „Zurückholen“ · Dann ist die Weitergabe aufgehoben, Eintrag wie vorher.",
-    "Gegeben der Fall ist erledigt (z. B. fertig gemeldet) · Dann verschwindet der Eintrag bei beiden."
+    "Gegeben der Fall wechselt die fall-id (z. B. faellig → fertig_liegt nach Fertigmeldung) oder entfällt · Dann endet die Weitergabe; der neue Fall erscheint normal."
    ],
    "recht": "auftraege",
    "aenderung_je_element": [
@@ -5006,516 +4701,6 @@
    ]
   },
   {
-   "id": "firmendaten",
-   "typ": "dialog",
-   "groesse": "breit",
-   "titel": "Firmendaten & Nummernkreise",
-   "icon": "file",
-   "funktion": [
-    "S01"
-   ],
-   "quelle": [
-    "BU",
-    "AW"
-   ],
-   "rollen": [
-    "meister",
-    "werkstatt",
-    "developer"
-   ],
-   "inhalt": [
-    {
-     "typ": "abschnitt",
-     "nr": 0,
-     "felder": [
-      {
-       "id": "firma",
-       "label": "Firmenname",
-       "typ": "text",
-       "pflicht": "immer",
-       "wann": "immer",
-       "vorbelegung": "Galvanik Kreile",
-       "aenderung": "optik"
-      },
-      {
-       "id": "anschrift",
-       "label": "Anschrift",
-       "typ": "textfeld",
-       "pflicht": "immer",
-       "wann": "immer"
-      },
-      {
-       "id": "steuer",
-       "label": "USt-ID oder Steuernummer",
-       "typ": "text",
-       "pflicht": "immer",
-       "wann": "immer"
-      },
-      {
-       "id": "bank",
-       "label": "Bank (IBAN, BIC)",
-       "typ": "text",
-       "pflicht": "immer",
-       "wann": "immer"
-      },
-      {
-       "id": "logo",
-       "label": "Logo",
-       "typ": "datei",
-       "pflicht": false,
-       "wann": "immer"
-      },
-      {
-       "id": "nummern",
-       "label": "Nummernkreise",
-       "typ": "fakten",
-       "pflicht": "immer",
-       "wann": "immer",
-       "vorbelegung": "A-JJJJ-NNNN Auftrag · K-JJJJ-NNNN Kunde · R-JJJJ-NNNN Rechnung (lückenlos)",
-       "aenderung": "optik"
-      }
-     ]
-    }
-   ],
-   "aktionen": [
-    {
-     "id": "speichern-und-weiter",
-     "text": "Speichern und weiter",
-     "icon": "check",
-     "art": "primaer",
-     "ziel": "leistung",
-     "haupt": true,
-     "nur_modus": "einrichtung",
-     "wann": "Ersteinrichtung (Aufruf „…#einrichtung“)"
-    },
-    {
-     "id": "speichern",
-     "text": "Speichern",
-     "icon": "check",
-     "art": "primaer",
-     "ziel": "zurueck",
-     "haupt": true,
-     "meldung": "Firmendaten gespeichert"
-    },
-    {
-     "id": "abbrechen",
-     "text": "Abbrechen",
-     "ziel": "zurueck"
-    }
-   ],
-   "zustaende": {
-    "leer": {
-     "text": "Noch keine Firmendaten · ohne sie keine Rechnung",
-     "aktionen": [
-      {
-       "id": "ausfullen",
-       "text": "Ausfüllen",
-       "ziel": "zustand:daten"
-      }
-     ]
-    },
-    "teilweise": {
-     "text": "Bank fehlt · Rechnung bis dahin gesperrt",
-     "aktionen": [
-      {
-       "id": "erganzen",
-       "text": "Ergänzen",
-       "ziel": "zustand:daten"
-      }
-     ]
-    },
-    "fehler": {
-     "text": "Nicht gespeichert · Eingaben sind noch da",
-     "aktionen": [
-      {
-       "id": "erneut",
-       "text": "Erneut",
-       "ziel": "zustand:erfolg"
-      }
-     ]
-    },
-    "erfolg": {
-     "text": "Firmendaten gespeichert",
-     "aktionen": [
-      {
-       "id": "weiter-1-leistung-anlegen",
-       "text": "Weiter: 1 Leistung anlegen",
-       "ziel": "leistung"
-      }
-     ]
-    }
-   },
-   "nr": "8.1",
-   "recht": "einstellungen",
-   "regeln": [
-    "Bearbeiten: Felder mit den gespeicherten Firmendaten vorbelegt; Speichern führt zurück. „Speichern und weiter“ nur in der Ersteinrichtung."
-   ],
-   "abnahme": [
-    "Gegeben gespeicherte Firmendaten · Wenn „Bearbeiten“ (Einstellungen › Firma) · Dann sind Firmenname, Anschrift, USt-ID/Steuernummer, Bank vorbelegt, Logo angezeigt; Nummernkreise nur als Anzeige.",
-    "Gegeben normales Bearbeiten · Dann Fuß nur „Abbrechen“ und „Speichern“; „Speichern“ schließt mit „Firmendaten gespeichert“ zurück dorthin, wo geöffnet (Einstellungen im Reiter Firma bzw. 7.1).",
-    "Gegeben Aufruf im Modus einrichtung · Dann ist „Speichern und weiter“ der Hauptknopf und führt nach dem Speichern zu 8.3 (Leistung anlegen, ebenfalls Ersteinrichtung).",
-    "Gegeben ein Pflichtfeld leer · Wenn gespeichert wird · Dann wird das Feld markiert und nicht gespeichert; fehlt nur die Bank: Hinweis „Bank fehlt · Rechnung bis dahin gesperrt“.",
-    "Gegeben fehlende Firmendaten · Wenn eine Rechnung festgeschrieben werden soll · Dann sperrt 7.1 mit Verweis hierher; nach dem Ergänzen ist Festschreiben möglich.",
-    "Gegeben Login ohne Recht „einstellungen“ · Dann gibt es keinen Weg in 8.1, der Server lehnt Änderungen ab (K2).",
-    "Gegeben ein Speicherfehler · Dann „Nicht gespeichert · Eingaben sind noch da“, Eingaben bleiben, „Erneut“."
-   ],
-   "aenderung_je_element": [
-    {
-     "element": "F firma/anschrift/steuer/bank/logo",
-     "aenderung": "optik",
-     "anker": "actions/settings.actions.ts:49",
-     "bemerkung": "CompanySettingsInput"
-    },
-    {
-     "element": "F nummern",
-     "aenderung": "optik",
-     "anker": "modules/fundament/public.ts:16",
-     "bemerkung": "numberRanges (Anzeige)"
-    },
-    {
-     "element": "A Speichern (und weiter)",
-     "aenderung": "optik",
-     "anker": "actions/settings.actions.ts:49",
-     "bemerkung": null
-    },
-    {
-     "element": "nav",
-     "aenderung": "optik",
-     "anker": null,
-     "bemerkung": "Schließen/Abbrechen/Zurück/Erneut laden: reine Navigation"
-    }
-   ]
-  },
-  {
-   "id": "leistung",
-   "typ": "dialog",
-   "titel": "Leistung",
-   "icon": "list",
-   "funktion": [
-    "S02"
-   ],
-   "quelle": [
-    "BU",
-    "AW"
-   ],
-   "rollen": [
-    "meister",
-    "developer"
-   ],
-   "inhalt": [
-    {
-     "typ": "abschnitt",
-     "nr": 0,
-     "felder": [
-      {
-       "id": "bezeichnung",
-       "label": "Bezeichnung",
-       "typ": "text",
-       "pflicht": "immer",
-       "wann": "immer",
-       "vorbelegung": "Suchtext aus Katalog",
-       "aenderung": "optik"
-      },
-      {
-       "id": "oberflaeche",
-       "label": "Oberfläche",
-       "typ": "auswahl",
-       "optionen": [
-        "Verchromen",
-        "Vernickeln",
-        "Verzinken",
-        "Entchromen / prüfen"
-       ],
-       "pflicht": "immer",
-       "wann": "immer",
-       "aenderung": "optik"
-      },
-      {
-       "id": "einheit",
-       "label": "Einheit",
-       "typ": "auswahl",
-       "optionen": [
-        "Stück",
-        "kg",
-        "dm²",
-        "Satz",
-        "Stunde"
-       ],
-       "pflicht": "immer",
-       "wann": "immer"
-      },
-      {
-       "id": "preis",
-       "label": "Preis netto (€)",
-       "typ": "betrag",
-       "pflicht": "immer",
-       "wann": "immer"
-      },
-      {
-       "id": "steuer",
-       "label": "Steuersatz",
-       "typ": "auswahl",
-       "optionen": [
-        "19 %",
-        "7 %",
-        "0 %"
-       ],
-       "pflicht": "immer",
-       "wann": "immer",
-       "vorbelegung": "19 %"
-      },
-      {
-       "id": "durchlauf",
-       "label": "Standard-Durchlaufzeit (Arbeitstage)",
-       "typ": "zahl",
-       "pflicht": "immer",
-       "wann": "immer",
-       "vorbelegung": "—",
-       "aenderung": "optik"
-      }
-     ]
-    }
-   ],
-   "aktionen": [
-    {
-     "id": "leistung-speichern",
-     "text": "Leistung speichern",
-     "icon": "check",
-     "art": "primaer",
-     "ziel": "zurueck",
-     "haupt": true,
-     "aenderung": "optik",
-     "meldung": "Leistung gespeichert"
-    },
-    {
-     "id": "abbrechen",
-     "text": "Abbrechen",
-     "ziel": "zurueck"
-    }
-   ],
-   "regeln": [
-    "Standard-Durchlaufzeit speist Termin-Ampel und Liefertermin-Vorbelegung (A02)."
-   ],
-   "zustaende": {
-    "leer": {
-     "na": "Formular"
-    },
-    "teilweise": {
-     "text": "Preis fehlt",
-     "aktionen": [
-      {
-       "id": "preis-eintragen",
-       "text": "Preis eintragen",
-       "ziel": "zustand:daten"
-      }
-     ]
-    },
-    "fehler": {
-     "text": "Nicht gespeichert · Eingaben sind noch da",
-     "aktionen": [
-      {
-       "id": "erneut",
-       "text": "Erneut",
-       "ziel": "zustand:erfolg"
-      }
-     ]
-    },
-    "erfolg": {
-     "text": "Leistung gespeichert",
-     "aktionen": [
-      {
-       "id": "weiter-stundensatz",
-       "text": "Weiter: Stundensatz",
-       "ziel": "stundensatz"
-      },
-      {
-       "id": "zum-katalog",
-       "text": "Zum Katalog",
-       "ziel": "katalog"
-      }
-     ]
-    }
-   },
-   "nr": "8.3",
-   "recht": "geld",
-   "modi": {
-    "verchromen": "Leistung bearbeiten",
-    "verzinken": "Leistung bearbeiten"
-   },
-   "abnahme": [
-    "Gegeben Aufruf aus einer Katalogzeile ({leistung}) · Dann Titel „Leistung bearbeiten“, Bezeichnung, Oberfläche, Einheit, Preis, Steuersatz, Durchlaufzeit mit den gespeicherten Werten vorbelegt.",
-    "Gegeben Aufruf über „Leistung anlegen“ · Dann Titel „Leistung“, Felder leer außer der Feld-Vorbelegung Steuersatz; aus der Katalogsuche Bezeichnung = Suchtext.",
-    "Gegeben ein fehlender Preis · Wenn gespeichert wird · Dann Hinweis „Preis fehlt“, nicht gespeichert, Fokus im Preisfeld.",
-    "Gegeben vollständige Angaben · Wenn „Leistung speichern“ · Dann schließt der Dialog mit „Leistung gespeichert“ zurück auf den Katalog (bzw. Einstellungen), die Leistung ist sofort im Eingang als Katalogleistung wählbar.",
-    "Gegeben eine geänderte Durchlaufzeit · Dann nutzen Terminampel, Liefertermin-Vorbelegung und Priorität im Wareneingang den neuen Wert (A02, werkstattregel).",
-    "Gegeben Modus einrichtung · Wenn gespeichert wird · Dann „Leistung gespeichert“ mit „Weiter: Stundensatz“ (→ 8.4) und „Zum Katalog“.",
-    "Gegeben „Abbrechen“/Esc · Dann nichts gespeichert, zurück; bei Fehler Eingaben bleiben, „Erneut“.",
-    "Gegeben Login ohne Recht „geld“ · Dann kein Weg in 8.3, der Server lehnt ab."
-   ],
-   "aenderung_je_element": [
-    {
-     "element": "F bezeichnung/einheit/preis/steuer",
-     "aenderung": "optik",
-     "anker": "actions/settings.actions.ts:68",
-     "bemerkung": null
-    },
-    {
-     "element": "F oberflaeche",
-     "aenderung": "optik",
-     "anker": "modules/katalog/public.ts:4",
-     "bemerkung": "Server Freitext"
-    },
-    {
-     "element": "F durchlauf",
-     "aenderung": "optik",
-     "anker": "modules/katalog/public.ts:8",
-     "bemerkung": "standardLeadTimeWorkingDays"
-    },
-    {
-     "element": "A Leistung speichern",
-     "aenderung": "optik",
-     "anker": "actions/settings.actions.ts:68",
-     "bemerkung": null
-    },
-    {
-     "element": "nav",
-     "aenderung": "optik",
-     "anker": null,
-     "bemerkung": "Schließen/Abbrechen/Zurück/Erneut laden: reine Navigation"
-    }
-   ]
-  },
-  {
-   "id": "stundensatz",
-   "typ": "dialog",
-   "groesse": "schmal",
-   "titel": "Stundensatz",
-   "icon": "clock",
-   "funktion": [
-    "S02"
-   ],
-   "quelle": [
-    "AW",
-    "OE"
-   ],
-   "rollen": [
-    "meister",
-    "developer"
-   ],
-   "inhalt": [
-    {
-     "typ": "abschnitt",
-     "nr": 0,
-     "felder": [
-      {
-       "id": "satz",
-       "label": "Stundensatz netto (€)",
-       "typ": "betrag",
-       "pflicht": "immer",
-       "wann": "immer",
-       "aenderung": "optik"
-      },
-      {
-       "id": "tagesleistung",
-       "label": "Tagesleistung (€ je Arbeitstag)",
-       "typ": "betrag",
-       "pflicht": "immer",
-       "wann": "immer",
-       "vorbelegung": "800 €",
-       "regel": "für die Priorität im Wareneingang (Aufwandstage = Auftragswert ÷ Tagesleistung)",
-       "aenderung": "funktion_neu"
-      }
-     ]
-    }
-   ],
-   "aktionen": [
-    {
-     "id": "speichern",
-     "text": "Speichern",
-     "icon": "check",
-     "art": "primaer",
-     "ziel": "zurueck",
-     "haupt": true,
-     "meldung": "Stundensatz gespeichert · gilt ab sofort für neue Mehrarbeit"
-    },
-    {
-     "id": "abbrechen",
-     "text": "Abbrechen",
-     "ziel": "zurueck"
-    }
-   ],
-   "zustaende": {
-    "leer": {
-     "na": "Formular"
-    },
-    "teilweise": {
-     "na": "ein Feld"
-    },
-    "fehler": {
-     "text": "Nicht gespeichert",
-     "aktionen": [
-      {
-       "id": "erneut",
-       "text": "Erneut",
-       "ziel": "zustand:erfolg"
-      }
-     ]
-    },
-    "erfolg": {
-     "text": "Ersteinrichtung fertig",
-     "aktionen": [
-      {
-       "id": "zuruck-zum-ausgangspunkt",
-       "text": "Zurück zum Ausgangspunkt",
-       "ziel": "zurueck"
-      },
-      {
-       "id": "zu-einstellungen",
-       "text": "Zu Einstellungen",
-       "ziel": "einstellungen"
-      },
-      {
-       "id": "zur-startseite",
-       "text": "Zur Startseite",
-       "ziel": "start"
-      }
-     ]
-    }
-   },
-   "nr": "8.4",
-   "recht": "geld",
-   "abnahme": [
-    "Gegeben gespeicherte Werte · Wenn „Bearbeiten“ (Einstellungen › Leistungen & Preise) · Dann sind Stundensatz netto und Tagesleistung vorbelegt.",
-    "Gegeben neue Werte · Wenn „Speichern“ · Dann schließt der Dialog mit „Stundensatz gespeichert · gilt ab sofort für neue Mehrarbeit“ zurück dorthin, wo geöffnet.",
-    "Gegeben bereits erfasste Mehrarbeit · Wenn der Satz geändert wird · Dann behält sie ihren bisherigen Preis; nur neue Mehrarbeit nutzt den neuen Satz.",
-    "Gegeben eine geänderte Tagesleistung · Dann rechnet die Priorität im Wareneingang mit Aufwandstage = Auftragswert ÷ Tagesleistung (werkstattregel).",
-    "Gegeben Aufruf aus Mehrarbeit („Stundensatz pflegen“) · Wenn gespeichert wird · Dann zurück in die Mehrarbeit desselben Auftrags, Preis jetzt vorbelegt.",
-    "Gegeben ein leeres Pflichtfeld · Dann wird nicht gespeichert, Feld markiert; bei Fehler „Nicht gespeichert“ mit „Erneut“.",
-    "Gegeben Modus einrichtung · Wenn gespeichert wird · Dann „Ersteinrichtung fertig“ mit „Zurück zum Ausgangspunkt“, „Zu Einstellungen“, „Zur Startseite“.",
-    "Gegeben Login ohne Recht „geld“ · Dann kein Weg in 8.4, der Server lehnt ab."
-   ],
-   "aenderung_je_element": [
-    {
-     "element": "F satz",
-     "aenderung": "optik",
-     "anker": "actions/orders.actions.ts:146",
-     "bemerkung": null
-    },
-    {
-     "element": "F tagesleistung",
-     "aenderung": "funktion_neu",
-     "anker": null,
-     "bemerkung": "kein Feld"
-    },
-    {
-     "element": "nav",
-     "aenderung": "optik",
-     "anker": null,
-     "bemerkung": "Schließen/Abbrechen/Zurück/Erneut laden: reine Navigation"
-    }
-   ]
-  },
-  {
    "id": "rechte",
    "typ": "dialog",
    "groesse": "breit",
@@ -5546,7 +4731,7 @@
         "name",
         "bezeichnung",
         "aktiv/inaktiv",
-        "Anzahl Bereiche „x von n Bereichen“"
+        "Anzahl Bereiche „{x} von {n} Bereichen“, n = Anzahl rechte.bereiche"
        ],
        "aktion": {
         "id": "aendern",
@@ -5576,14 +4761,14 @@
          "pflicht": "immer",
          "max": 3,
          "vorbelegung": "automatisch: Anfangsbuchstaben von Vor- und Nachname (2 Zeichen, groß); bei nur einem Wort die ersten 2 Buchstaben; änderbar",
-         "regel": "genau 2–3 Zeichen A–Z/Ä/Ö/Ü/0–9; eindeutig je Firma ohne Rücksicht auf Groß/Klein; ist das Kürzel vergeben, wird beim Vorbelegen eine Ziffer 2–9 angehängt (RK → RK2); Fehler: „Kürzel schon vergeben“"
+         "regel": "2–3 Zeichen A–Z/Ä/Ö/Ü/0–9, Eingabe wird automatisch großgeschrieben; Vorbelegung aus erstem und letztem Wort des Namens; eindeutig je Firma ohne Rücksicht auf Groß/Klein; ist die Vorbelegung vergeben, wird eine Ziffer 2–9 angehängt; sind alle vergeben, bleibt das Feld leer mit „Kürzel schon vergeben – bitte eingeben“; nach Handänderung keine automatische Änderung mehr"
         },
         {
          "id": "bezeichnung",
          "label": "Bezeichnung",
          "typ": "text",
          "pflicht": false,
-         "beispiel_hinweis": "z. B. Werkstatt"
+         "platzhalter": "Platzhaltertext im Feld: „z. B. Werkstatt“"
         },
         {
          "id": "vorlage",
@@ -5613,7 +4798,9 @@
          "haupt": true,
          "verhalten": "speichert; Formular schließt; neuer Login erscheint sofort in Liste, Matrix (mit Haken der Vorlage) und bei der Anmeldung; Reiter/Ansicht bleibt (kein Neuladen der Seite, kein Wechsel auf einen anderen Reiter); Meldung „{name} angelegt“"
         }
-       ]
+       ],
+       "identitaet": "Logins ohne E-Mail: technische Auth-Identität erzeugt der Server (K22), nie sichtbar, nie für Mail.",
+       "role": "app_users.role = gewählte Vorlage („leer“ → readonly, K23)"
       },
       "formular_aendern": {
        "felder": [
@@ -5622,7 +4809,8 @@
          "label": "Name",
          "typ": "text",
          "pflicht": "immer",
-         "vorbelegung": "gespeicherter Wert"
+         "vorbelegung": "gespeicherter Wert",
+         "regel": "2–60 Zeichen; Fehler „Name fehlt“"
         },
         {
          "id": "kuerzel",
@@ -5669,16 +4857,19 @@
          "haupt": true,
          "verhalten": "speichert nur diesen Login; Formular schließt; Zeile zeigt sofort die neuen Werte (ohne Neuladen); Meldung „{name} gespeichert“; bei Fehler bleibt das Formular mit den Eingaben offen und nennt das Feld"
         }
-       ]
+       ],
+       "sitzungen": "Deaktivieren beendet alle Sitzungen dieses Logins; Name/Kürzel/Bezeichnung ändern beendet keine Sitzung (nicht über updated_at revozieren)."
       },
       "matrix": {
        "spalten": "je Login (aktive und inaktive; inaktive grau, weiter änderbar): Kürzel-Kreis + Name, Reihenfolge wie die Liste",
        "daten": "vom Server (keine Musterdaten im Bauplan)",
        "haken": "wirkt sofort beim Antippen (Server speichert je Haken), Rückmeldung bei Fehler und Rücknahme des Hakens",
        "fest": "rechte.fest gilt für jeden Login mit Rechte-Vorlage developer: „logins“ und „wartung“ angehakt und gesperrt, Hinweis „fest – kein Aussperren“",
-       "selbst": "den eigenen Haken „logins“ kann man sich nicht entziehen; der letzte Login mit „logins“ verliert ihn nie",
+       "selbst": "den eigenen Haken „logins“ kann man sich nicht entziehen; der letzte AKTIVE Login mit „logins“ verliert ihn nie",
        "wirkung": "sofort serverseitig gespeichert; der betroffene Login sieht die Änderung bei seiner nächsten Serveranfrage (spätestens beim nächsten Seitenwechsel)",
-       "fehler": "Haken springt zurück, Meldung „Nicht gespeichert · bitte erneut“"
+       "fehler": "Haken springt zurück, Meldung „Nicht gespeichert · bitte erneut“",
+       "anzeige_gesperrt": "Haken, die nicht entzogen werden dürfen (fest, eigener „logins“, letzter „logins“), sind angehakt und gesperrt mit Hinweis beim Darüberfahren bzw. Antippen („fest – kein Aussperren“ / „eigener Zugang“ / „letzter Zugang mit Logins & Rechte“)",
+       "vorlage_werkstatt": "Vorlagen sind nur Startwerte: jeder Haken (auch „geld“) ist bei jedem Login frei setzbar, außer den gesperrten oben."
       },
       "abnahme": [
        "Liste zeigt keine Eingabefelder, nur „Ändern“ je Login.",
@@ -5688,7 +4879,8 @@
        "Bereich „Kassieren bei Abholung“ ist in der Matrix (U-208).",
        "Inaktive Logins stehen grau unten in Liste und Matrix."
       ],
-      "fehler": "Formularfehler: Formular bleibt offen mit Meldung am Feld; Matrixfehler: siehe matrix.fehler. zustaende.fehler gilt nur, wenn die Seite nicht geladen werden kann."
+      "fehler": "Formularfehler: Formular bleibt offen mit Meldung am Feld; Matrixfehler: siehe matrix.fehler. zustaende.fehler gilt nur, wenn die Seite nicht geladen werden kann.",
+      "formularwechsel": "Öffnet man ein anderes Formular mit ungespeicherten Eingaben: Rückfrage „Änderungen verwerfen?“ (Verwerfen / Weiter bearbeiten)."
      }
     }
    ],
@@ -5818,157 +5010,6 @@
      "aenderung": "optik",
      "anker": null,
      "bemerkung": null
-    },
-    {
-     "element": "nav",
-     "aenderung": "optik",
-     "anker": null,
-     "bemerkung": "Schließen/Abbrechen/Zurück/Erneut laden: reine Navigation"
-    }
-   ]
-  },
-  {
-   "id": "zielfrei",
-   "typ": "dialog",
-   "groesse": "schmal",
-   "titel": "Rechnung auf Ziel freischalten",
-   "icon": "receipt",
-   "funktion": [
-    "A06",
-    "R05"
-   ],
-   "quelle": [
-    "DS11"
-   ],
-   "rollen": [
-    "meister",
-    "developer"
-   ],
-   "inhalt": [
-    {
-     "typ": "abschnitt",
-     "nr": 0,
-     "felder": [
-      {
-       "id": "kunde",
-       "label": "Kunde",
-       "typ": "suche",
-       "pflicht": "immer",
-       "wann": "immer",
-       "aenderung": "optik",
-       "ohne_objekt": "K",
-       "regel": "Nur ohne Kunden-Aufruf; aus der Kundenkarte steht der Kunde in der Kopfzeile (U-170)."
-      },
-      {
-       "id": "ziel",
-       "label": "Zahlungsziel (Tage)",
-       "typ": "zahl",
-       "pflicht": "immer",
-       "wann": "immer",
-       "vorbelegung": "14",
-       "aenderung": "optik"
-      },
-      {
-       "id": "skonto",
-       "label": "Skonto",
-       "typ": "text",
-       "pflicht": false,
-       "wann": "immer",
-       "vorbelegung": "2 % bei Zahlung in 10 Tagen",
-       "aenderung": "funktion_neu"
-      }
-     ]
-    }
-   ],
-   "aktionen": [
-    {
-     "id": "freischalten",
-     "text": "Freischalten",
-     "icon": "check",
-     "art": "primaer",
-     "ziel": "zurueck",
-     "haupt": true,
-     "aenderung": "optik",
-     "meldung": "Rechnung auf Ziel freigeschaltet",
-     "argErben": true
-    },
-    {
-     "id": "abbrechen",
-     "text": "Abbrechen",
-     "ziel": "zurueck"
-    }
-   ],
-   "zustaende": {
-    "leer": {
-     "na": "Formular"
-    },
-    "teilweise": {
-     "text": "Kunde unvollständig · erst ergänzen",
-     "aktionen": [
-      {
-       "id": "kunde-erganzen",
-       "text": "Kunde ergänzen",
-       "ziel": "kundebearbeiten"
-      }
-     ]
-    },
-    "fehler": {
-     "text": "Nicht gespeichert",
-     "aktionen": [
-      {
-       "id": "erneut",
-       "text": "Erneut",
-       "ziel": "zustand:erfolg"
-      }
-     ]
-    },
-    "erfolg": {
-     "text": "Rechnung auf Ziel freigeschaltet · protokolliert",
-     "aktionen": [
-      {
-       "id": "fertig",
-       "text": "Fertig",
-       "ziel": "einstellungen"
-      }
-     ]
-    }
-   },
-   "nr": "8.6",
-   "recht": "geld",
-   "abnahme": [
-    "Gegeben Aufruf ohne Kunde („Kunde freischalten“ in Einstellungen › Zahlung) · Dann ist „Kunde“ ein Pflicht-Suchfeld (Name, Firma, Ansprechpartner, Telefon, E-Mail, Ort, Kundennummer).",
-    "Gegeben Aufruf mit {kunde} · Dann steht der Kunde in der Kopfzeile und es gibt KEIN Kundenfeld (U-170).",
-    "Gegeben ein noch nicht freigeschalteter Kunde · Dann Zahlungsziel und Skonto laut Feld-Vorbelegung; bei bereits freigeschaltetem Kunden die gespeicherten Werte.",
-    "Gegeben ein unvollständiger Kunde · Dann „Kunde unvollständig · erst ergänzen“ mit „Kunde ergänzen“ → 5.2 vorbelegt; Freischalten erst danach.",
-    "Gegeben Pflichtangaben · Wenn „Freischalten“ · Dann eigener Server-Command (K8), Dialog schließt mit „Rechnung auf Ziel freigeschaltet“ zurück, der Kunde steht in Einstellungen › Zahlung mit „freigeschaltet“, protokolliert.",
-    "Gegeben ein freigeschalteter Kunde · Dann ist „Rechnung auf Ziel“ in Eingang, Kunde bearbeiten und Rechnung wählbar und der Server akzeptiert sie; ohne Freischaltung lehnt der Server mit „Ziel nicht freigeschaltet“ ab (K7).",
-    "Gegeben „Abbrechen“/Esc · Dann nichts geändert, zurück; bei Fehler „Nicht gespeichert“ mit „Erneut“.",
-    "Gegeben Login ohne Recht „geld“ · Dann kein Weg in 8.6, der Server lehnt ab."
-   ],
-   "aenderung_je_element": [
-    {
-     "element": "F kunde",
-     "aenderung": "optik",
-     "anker": "actions/customers.actions.ts:140",
-     "bemerkung": null
-    },
-    {
-     "element": "F ziel (Tage)",
-     "aenderung": "optik",
-     "anker": "actions/customers.actions.ts:90",
-     "bemerkung": "rechnung_N"
-    },
-    {
-     "element": "F skonto",
-     "aenderung": "funktion_neu",
-     "anker": null,
-     "bemerkung": "kein Feld"
-    },
-    {
-     "element": "A Freischalten",
-     "aenderung": "optik",
-     "anker": "actions/customers.actions.ts:90",
-     "bemerkung": "verlangt volle Adresse (K8)"
     },
     {
      "element": "nav",
@@ -6153,7 +5194,8 @@
       {
        "id": "nochmal",
        "text": "Nochmal",
-       "ziel": "zustand:daten"
+       "ziel": "zustand:daten",
+       "verhalten": "leert beide Felder, Fokus ins erste"
       }
      ]
     },
@@ -6163,7 +5205,8 @@
       {
        "id": "erneut",
        "text": "Erneut",
-       "ziel": "zustand:daten"
+       "ziel": "zustand:daten",
+       "verhalten": "sendet erneut mit denselben Eingaben"
       }
      ]
     },
@@ -6180,6 +5223,7 @@
    ],
    "pruefreihenfolge": "1. beide Felder je 4 Ziffern (Fehler am Feld) · 2. gleich (Zustand teilweise „Codes stimmen nicht überein“). Der alte Code wird nicht abgefragt; der neue darf gleich dem alten sein.",
    "einstieg": "Einstellungen › Reiter „Personen & Rechte“ › Knopf „Mein Code“ in der eigenen Zeile (nur dort) – für jeden angemeldeten Login, auch ohne Recht „einstellungen“.",
+   "anzeige": "Eingaben verdeckt (Punkte), Ziffernblock am Tablet/Handy",
    "aenderung_je_element": [
     {
      "element": "F code_neu / code_wdh (4 Ziffern)",
@@ -6806,6 +5850,19 @@
       "Inhalt (Quelle, Filter, Sortierung, Aktion je Zeile) verbindlich aus der ableitung der Instanz",
       "Variante liste/zeilenAktion: Zeilen aus der benannten Liste, Aktion je Zeile mit deren Objekt"
      ]
+    },
+    "F2 Der Tag": {
+     "je_zeile": [
+      "Nummer (Mail/Beleg/Rechnung/Auftrag)",
+      "Titel",
+      "Grundzeile",
+      "Aktion rechts"
+     ],
+     "daten": "tagkonfig.bausteine[neu|rechnungen].block.ableitung",
+     "zeilenklick": "öffnet das Objekt (Mail → mailein {mail}, Beleg → beleg {beleg}, Rechnung → rechnung {rechnung}, Auftrag → auftrag {auftrag})",
+     "leer": "Feld zeigt „Nichts zuzuordnen“ bzw. „Kein Geld offen“",
+     "handy": "höchstens 3 Zeilen, „alle zeigen“",
+     "spaeter": "kein „Später“ in Feldern außer Handlungsbedarf"
     }
    },
    "daten": {
@@ -7097,7 +6154,7 @@
    "regeln": [
     "U-185 gleiche Auftragskarte überall, Minimalklick",
     "U-186 Kundenklammer",
-    "werkstattregel.formel (U-199, OR-12): Aufwandstage = aufrunden(max(Auftragswert ÷ Tagesleistung, geplanter Aufwand × Erfahrungswert ÷ 420 Min.)), mindestens 1; spätester Start = Liefertermin − Durchlauf der Oberfläche (Katalog, Arbeitstage) − Aufwandstage; Puffer = Arbeitstage (Mo–Fr) von heute bis spätester Start. Etikett: Puffer < 0 rot „Start überfällig“ · = 0 orange „heute starten“ · 1–2 orange „starten bis {Wochentag TT.MM.}“ · sonst grün „starten bis {Wochentag TT.MM.}“. Auftragswert = Summe KV-Positionen (Menge × Preis); geplanter Aufwand = Minuten je Position aus dem KV; Erfahrungswert = werkstattregel.erfahrung (Median Ist÷Plan der letzten 10 ähnlichen Aufträge, 0,7–1,8, ohne Vergleich 1). Stufe 4 (Z04) ersetzt die Rechnung bei gleichen Eingaben.",
+    "werkstattregel.formel (U-199, OR-12): Aufwandstage = aufrunden(max(Auftragswert ÷ Tagesleistung, geplanter Aufwand × Erfahrungswert ÷ 420 Min.)), mindestens 1; spätester Start = Liefertermin − Durchlauf der Oberfläche (Katalog, Arbeitstage) − Aufwandstage; Puffer = Arbeitstage nach arbeitstage() (werkstattregel.stufe1_regeln.arbeitstage) von heute bis spätester Start. Etikett: Puffer < 0 rot „Start überfällig“ · = 0 orange „heute starten“ · 1–2 orange „starten bis {Wochentag TT.MM.}“ · sonst grün „starten bis {Wochentag TT.MM.}“. Auftragswert = Summe KV-Positionen (Menge × Preis); geplanter Aufwand = Minuten je Position aus dem KV; Erfahrungswert = werkstattregel.erfahrung (Median Ist÷Plan der letzten 10 ähnlichen Aufträge, 0,7–1,8, ohne Vergleich 1). Stufe 4 (Z04) ersetzt die Rechnung bei gleichen Eingaben.",
     "Station des Auftrags: KV · Wareneingang (angenommen, im Regal) · In Arbeit (Galvanik) · Fertig (fertig gemeldet, noch nicht raus) · abgeholt/versendet (abgeschlossen)."
    ]
   },
@@ -7776,14 +6833,14 @@
    "regeln": [
     "U-173/U-184 jeder Auftrag genau einmal",
     "U-185 Minimalklick: Foto und Mehrarbeit direkt (bei Fertig nur Foto)",
-    "werkstattregel.formel (U-199, OR-12): Aufwandstage = aufrunden(max(Auftragswert ÷ Tagesleistung, geplanter Aufwand × Erfahrungswert ÷ 420 Min.)), mindestens 1; spätester Start = Liefertermin − Durchlauf der Oberfläche (Katalog, Arbeitstage) − Aufwandstage; Puffer = Arbeitstage (Mo–Fr) von heute bis spätester Start. Etikett: Puffer < 0 rot „Start überfällig“ · = 0 orange „heute starten“ · 1–2 orange „starten bis {Wochentag TT.MM.}“ · sonst grün „starten bis {Wochentag TT.MM.}“. Auftragswert = Summe KV-Positionen (Menge × Preis); geplanter Aufwand = Minuten je Position aus dem KV; Erfahrungswert = werkstattregel.erfahrung (Median Ist÷Plan der letzten 10 ähnlichen Aufträge, 0,7–1,8, ohne Vergleich 1). Stufe 4 (Z04) ersetzt die Rechnung bei gleichen Eingaben.",
+    "werkstattregel.formel (U-199, OR-12): Aufwandstage = aufrunden(max(Auftragswert ÷ Tagesleistung, geplanter Aufwand × Erfahrungswert ÷ 420 Min.)), mindestens 1; spätester Start = Liefertermin − Durchlauf der Oberfläche (Katalog, Arbeitstage) − Aufwandstage; Puffer = Arbeitstage nach arbeitstage() (werkstattregel.stufe1_regeln.arbeitstage) von heute bis spätester Start. Etikett: Puffer < 0 rot „Start überfällig“ · = 0 orange „heute starten“ · 1–2 orange „starten bis {Wochentag TT.MM.}“ · sonst grün „starten bis {Wochentag TT.MM.}“. Auftragswert = Summe KV-Positionen (Menge × Preis); geplanter Aufwand = Minuten je Position aus dem KV; Erfahrungswert = werkstattregel.erfahrung (Median Ist÷Plan der letzten 10 ähnlichen Aufträge, 0,7–1,8, ohne Vergleich 1). Stufe 4 (Z04) ersetzt die Rechnung bei gleichen Eingaben.",
     "Login ohne geld: „Freigabe fehlt“ statt „Vorkasse offen“"
    ]
   },
   "buendel": {
    "zweck": "Vorschlag, Aufträge gleicher Oberfläche zusammen zu fahren (X06), mit Sprung in die Bündel-Auswahl.",
    "daten": {
-    "quelle": "offene Aufträge gleicher Oberfläche (Oberflächen-Auswahl der Positionen, K11 – nicht Freitext) in Wareneingang oder In Arbeit; nicht fertig/abgeholt",
+    "quelle": "offene Aufträge gleicher Oberfläche (Oberflächen-Auswahl der Positionen, K11 – nicht Freitext) in Wareneingang oder Galvanik; nicht fertig/abgeholt",
     "filter": "Vorschlag nur, wenn mindestens 2 Aufträge dieselbe Oberfläche haben",
     "je_eintrag": [
      "Titel „{n} Aufträge mit {Oberfläche} — heute zusammen fahren?“",
@@ -7806,7 +6863,15 @@
    "regeln": [
     "tagkonfig.bausteine[buendel].block.ableitung",
     "Funktion X06 aus → grau „geplant“"
-   ]
+   ],
+   "varianten": {
+    "F2 Der Tag": {
+     "je_eintrag": "eine Zeile je Oberfläche mit ≥ 2 Aufträgen: „{n} Aufträge mit {oberflaeche} — zusammen fahren?“, Knopf „Bündeln“",
+     "daten": "tagkonfig.bausteine[buendel].block.ableitung; Aufträge mit Fall im Handlungsbedarf zählen trotzdem mit (Bündeln ist Arbeitsplanung, keine Doppelanzeige eines Eintrags)",
+     "leer": "Feld entfällt, wenn es keinen Vorschlag gibt",
+     "zeilenklick": "wie Knopf"
+    }
+   }
   },
   "picker": {
    "zweck": "Auftrag schnell wählen (Suche oder Scan) und direkt das Ziel des Modus öffnen.",
@@ -8248,7 +7313,7 @@
     },
     {
      "ausloeser": "erstes Öffnen",
-     "ergebnis": "erster sichtbarer Reiter aktiv"
+     "ergebnis": "Startreiter: Firma, wenn Recht einstellungen, sonst Personen & Rechte (abschnitte[F0].teilseiten.einstellungen)"
     }
    ],
    "rechte": "Sichtbarkeit aus denselben Bereichen wie serverseitig (K21); Einstellungen-Instanz: Firma (alle), Leistungen & Preise („geld“), Personen & Rechte (alle – „Mein Code“ geht immer, K2), Zahlung („geld“), Daten & Export (alle)",
@@ -8340,6 +7405,39 @@
    },
    "regeln": [
     "U-170: Feld entfällt, wenn das Objekt per Aufruf feststeht (ohne_objekt) – dann steht es in der Kopfzeile"
+   ]
+  },
+  "zeitstrahl": {
+   "zweck": "Feld „Heute fällig“: heute raus gehende Aufträge in Uhrzeit-Reihenfolge.",
+   "daten": {
+    "quelle": "tagkonfig.bausteine[zeitstrahl].block.ableitung",
+    "sortierung": "Auftragsnummer aufsteigend (keine Uhrzeit in Stufe 1)"
+   },
+   "je_zeile": [
+    "Uhrzeit oder „heute“",
+    "Auftragsnummer",
+    "{kunde} · {titel}",
+    "Grundzeile",
+    "Aktion rechts"
+   ],
+   "interaktion": [
+    {
+     "ausloeser": "Aktion",
+     "ergebnis": "wie ableitung.aktion"
+    },
+    {
+     "ausloeser": "Zeilenklick",
+     "ziel": "auftrag",
+     "arg": "{auftrag}"
+    }
+   ],
+   "zustaende": {
+    "leer": "Feld zeigt „Heute geht nichts raus“ (Feld bleibt stehen)"
+   },
+   "geraete": "Handy: höchstens 3 Zeilen, „alle zeigen“",
+   "regeln": [
+    "kein „Später“ in diesem Feld",
+    "Recht auftraege"
    ]
   }
  },
@@ -8484,15 +7582,6 @@
    "status": "entschieden (technisch)"
   },
   {
-   "id": "K19",
-   "screens": [
-    "rechte"
-   ],
-   "bauhinweis": "Ersetzt durch K21 (Nachtrag): Rechte je Login × Bereich, F#34.",
-   "grundlage": "U-200",
-   "status": "ersetzt durch K21"
-  },
-  {
    "id": "K20",
    "screens": [
     "rechte",
@@ -8508,7 +7597,7 @@
    "screens": [
     "alle"
    ],
-   "bauhinweis": "Rechte je Login × Bereich vollständig umstellen, nie teilweise: Tabelle app_user_rights, Resolver liefert Bereiche je Request (wirkt sofort), Abbildung Bereich → bestehende PermissionKeys, alle harten Rollenlisten in Commands/Reads/Actions/DB-View durch Bereichsprüfung ersetzen, Client-Sichtbarkeit aus denselben Bereichen. Rechte nicht über app_users.updated_at schreiben (sonst SESSION_REVOKED). Liste der Stellen und Abbildung: baustand.abschnitte[F0].server_umstellung. = F#34 (Fundament, vor F1).",
+   "bauhinweis": "Rechte je Login × Bereich vollständig umstellen, nie teilweise: Tabelle app_user_rights, Resolver liefert Bereiche je Request (wirkt sofort), Abbildung Bereich → bestehende PermissionKeys, alle harten Rollenlisten in Commands/Reads/Actions/DB-View durch Bereichsprüfung ersetzen, Client-Sichtbarkeit aus denselben Bereichen. Rechte nicht über app_users.updated_at schreiben (sonst SESSION_REVOKED). Liste der Stellen und Abbildung: abschnitte[„F0 Fundament: einstellbare Rechte“].server_umstellung (im Bauplan). = F#34 (Fundament, vor F1).",
    "grundlage": "U-200; ersetzt K19",
    "status": "entschieden (technisch)"
   },
@@ -8578,6 +7667,19 @@
    "commit": "9a314c87",
    "gebaut_gegen_spec": "84acb8bd8e8d"
   },
+  "rechte": {
+   "status": "abweichungen",
+   "commit": "32294468",
+   "gebaut_gegen_spec": "77a5af2ca4cf"
+  },
+  "meincode": {
+   "status": "abweichungen",
+   "commit": "32294468",
+   "gebaut_gegen_spec": "77a5af2ca4cf"
+  },
+  "einstellungen": {
+   "status": "offen"
+  },
   "eingang": {
    "status": "abweichungen",
    "commit": "0c6b5407",
@@ -8622,40 +7724,23 @@
    "status": "abweichungen",
    "commit": "7af94e99",
    "gebaut_gegen_spec": "84acb8bd8e8d"
-  },
-  "rechte": {
-   "status": "abweichungen",
-   "commit": "32294468",
-   "gebaut_gegen_spec": "77a5af2ca4cf"
-  },
-  "meincode": {
-   "status": "abweichungen",
-   "commit": "32294468",
-   "gebaut_gegen_spec": "77a5af2ca4cf"
-  },
-  "einstellungen": {
-   "status": "offen"
-  },
-  "firmendaten": {
-   "status": "offen"
-  },
-  "katalog": {
-   "status": "offen"
-  },
-  "leistung": {
-   "status": "offen"
-  },
-  "stundensatz": {
-   "status": "offen"
-  },
-  "zielfrei": {
-   "status": "offen"
-  },
-  "datenkiste": {
-   "status": "offen"
   }
  },
  "korrekturen": [
+  {
+   "seite": "rechte",
+   "schwere": "hoch",
+   "befund": "Logins-Liste zeigt alle Logins dauerhaft als offene Eingabefelder (Name, Kürzel, Bezeichnung, Code, Aktiv) untereinander; Spec: Anzeige-Liste, „Ändern“ öffnet ein Formular nur für diesen Login.",
+   "beleg": "src/app/settings/SettingsAdminClient.tsx:235–244",
+   "bauvorgabe": "Codex muss die Login-Liste als reine Anzeige mit Knopf „Ändern“ je Login bauen; nur ein Formular gleichzeitig, vorbelegt, „Übernehmen“/„Abbrechen“ (rechte.inhalt[0].aufbau)."
+  },
+  {
+   "seite": "rechte",
+   "schwere": "hoch",
+   "befund": "Nach „Login anlegen“ lädt die Seite neu (window.location.reload) und springt auf den Reiter Firmendaten zurück; der neue Login ist nicht zu sehen.",
+   "beleg": "SettingsAdminClient.tsx:233 + useState(tab) :54",
+   "bauvorgabe": "Codex muss nach dem Anlegen ohne Neuladen in Logins & Rechte bleiben und den neuen Login sofort in Liste und Matrix zeigen."
+  },
   {
    "seite": "eingang",
    "schwere": "hoch",
@@ -8717,21 +7802,24 @@
    "schwere": "hoch",
    "befund": "Erledigte/abgeholte/überfällige Aufträge landen in „Heute fällig“ (kein Statusfilter, dueDate <= heute).",
    "beleg": "src/lib/server/todayDashboard.ts:92–97",
-   "bauvorgabe": "Codex muss „Heute fällig“ nach tagkonfig.bausteine[zeitstrahl].block.ableitung bilden: nur Termin = heute, nicht abgeholt/versendet; überfällige in den Handlungsbedarf."
+   "bauvorgabe": "Codex muss „Heute fällig“ nach zeitstrahl.ableitung bilden (fertig gemeldet, Termin heute, nicht abgeholt/versendet, ohne HB-Fall); überfällige und nicht fertige in den Handlungsbedarf (faelle faellig/fertig_liegt).",
+   "zurueckgestellt": "Ziel-Dialog (10/10.1/11.1) gehört zu F3/F4: in F2 nur Daten/Filter/Aktionstext bauen, Ziel nach verhalten_appweit.ziele_bestand; Ziel-Umstellung mit F3/F4"
   },
   {
    "seite": "tag",
    "schwere": "hoch",
    "befund": "„Heute fällig“ hat nur „Auftrag öffnen“ statt der Handlung nach Status.",
    "beleg": "src/components/home/RolfHomeClient.tsx:59–64",
-   "bauvorgabe": "Codex muss je Zeile „Fertig melden“ (→ fertig, dieser Auftrag) bzw. „Ware raus“ (→ rauspruefen, dieser Auftrag) setzen (ableitung.aktion_nach_status)."
+   "bauvorgabe": "Codex muss „Heute fällig“ nach tagkonfig.bausteine[zeitstrahl].block.ableitung bauen: nur fertig gemeldete Aufträge mit heutigem Abhol-/Versandtermin ohne Fall im Handlungsbedarf, Aktion „Ware raus“ → rauspruefen dieses Auftrags; nicht fertige heute fällige stehen als Fall „faellig“ im Handlungsbedarf.",
+   "zurueckgestellt": "Ziel-Dialog (10/10.1/11.1) gehört zu F3/F4: in F2 nur Daten/Filter/Aktionstext bauen, Ziel nach verhalten_appweit.ziele_bestand; Ziel-Umstellung mit F3/F4"
   },
   {
    "seite": "tag",
    "schwere": "hoch",
    "befund": "Handlungsbedarf ohne Grund und ohne konkrete Handlung (nur „Auftrag öffnen“); „Kunde vorwarnen“ fehlt.",
    "beleg": "src/lib/server/todayDashboard.ts:94–97; src/components/home/RolfHomeClient.tsx:60",
-   "bauvorgabe": "Codex muss den Handlungsbedarf nach tagkonfig.bausteine[hb].block.ableitung.faelle bilden: Grund je Fall, genau eine Hauptaktion mit genau diesem Objekt."
+   "bauvorgabe": "Codex muss den Handlungsbedarf nach tagkonfig.bausteine[hb].block.ableitung.faelle bilden: Grund je Fall, genau eine Hauptaktion mit genau diesem Objekt.",
+   "zurueckgestellt": "Ziele aus F3/F4/F5/F6 (foto, auftrag, fertig, mail, zahlung): in F2 Fall/Grund/Aktionstext und Objekt bauen, Ziel bis dahin nach verhalten_appweit.ziele_bestand"
   },
   {
    "seite": "tag",
@@ -8741,25 +7829,39 @@
    "bauvorgabe": "Codex muss „Zuordnen“ mit der Mail-ID auf Dialog 3.4 für genau diese Mail führen."
   },
   {
-   "seite": "rechte",
-   "schwere": "hoch",
-   "befund": "Logins-Liste zeigt alle Logins dauerhaft als offene Eingabefelder (Name, Kürzel, Bezeichnung, Code, Aktiv) untereinander; Spec: Anzeige-Liste, „Ändern“ öffnet ein Formular nur für diesen Login.",
-   "beleg": "src/app/settings/SettingsAdminClient.tsx:235–244",
-   "bauvorgabe": "Codex muss die Login-Liste als reine Anzeige mit Knopf „Ändern“ je Login bauen; nur ein Formular gleichzeitig, vorbelegt, „Übernehmen“/„Abbrechen“ (rechte.inhalt[0].aufbau)."
-  },
-  {
-   "seite": "rechte",
-   "schwere": "hoch",
-   "befund": "Nach „Login anlegen“ lädt die Seite neu (window.location.reload) und springt auf den Reiter Firmendaten zurück; der neue Login ist nicht zu sehen.",
-   "beleg": "SettingsAdminClient.tsx:233 + useState(tab) :54",
-   "bauvorgabe": "Codex muss nach dem Anlegen ohne Neuladen in Logins & Rechte bleiben und den neuen Login sofort in Liste und Matrix zeigen."
-  },
-  {
    "seite": "login",
    "schwere": "mittel",
    "befund": "developer (developer) wird hart nach /settings geleitet; Start laut Spec = Wartung, Der Tag muss für developer erreichbar sein (K17).",
    "beleg": "src/app/page.tsx:21; src/app/actions/auth.ts:88",
-   "bauvorgabe": "Codex muss den Start aus den Login-Daten (rollen.start) lesen und / für developer als Der Tag zulassen."
+   "bauvorgabe": "Codex muss den Start nach login.start_regel setzen und / für developer als Der Tag zulassen."
+  },
+  {
+   "seite": "rechte",
+   "schwere": "mittel",
+   "befund": "Ändern verlangt eine Bezeichnung (mind. 1 Zeichen); Logins ohne Bezeichnung lassen sich nicht speichern („Name, Kürzel, Bezeichnung, Status oder Code ist ungültig“). Spec: Bezeichnung optional.",
+   "beleg": "src/modules/fundament/server/systemSettingsPort.ts:196, :260",
+   "bauvorgabe": "Codex muss Bezeichnung beim Anlegen und Ändern optional machen und Fehlermeldungen feldgenau ausgeben."
+  },
+  {
+   "seite": "rechte",
+   "schwere": "mittel",
+   "befund": "Login anlegen: Formular steht dauerhaft offen; kein Kürzel-Feld (nur automatisch). Spec: Knopf „Login anlegen“ öffnet das Formular; Kürzel automatisch vorbelegt, änderbar, max. 3 Zeichen.",
+   "beleg": "SettingsAdminClient.tsx:227–233; Edit erlaubt 8 Zeichen :239",
+   "bauvorgabe": "Codex muss „Login anlegen“ als Knopf mit aufklappendem Formular inkl. änderbarem Kürzel (max. 3) bauen; Ändern ebenfalls max. 3."
+  },
+  {
+   "seite": "rechte",
+   "schwere": "mittel",
+   "befund": "Bereich „Kassieren bei Abholung“ fehlt (U-208, nach dem Bau entschieden).",
+   "beleg": "src/lib/auth/authorizationContract.ts:18–27",
+   "bauvorgabe": "Codex muss den Bereich „kassieren“ ergänzen (Vorlagen meister/developer an, werkstatt aus) (Bindung des Warenausgangs: F3/K28)."
+  },
+  {
+   "seite": "meincode",
+   "schwere": "mittel",
+   "befund": "„Mein Code ändern“ steht als fester Block oben auf der Einstellungsseite für alle; Spec: Dialog 8.8, geöffnet über „Mein Code“ in der eigenen Zeile unter Einstellungen › Personen & Rechte.",
+   "beleg": "SettingsAdminClient.tsx:186–192",
+   "bauvorgabe": "Codex muss „Mein Code ändern“ als Dialog bauen, erreichbar über „Mein Code“ (nur in der eigenen Zeile); Speichern schließt mit Meldung „Neuer Code gespeichert“."
   },
   {
    "seite": "eingang",
@@ -8871,14 +7973,16 @@
    "schwere": "mittel",
    "befund": "„Geld einfordern“ zeigt alle offenen Rechnungen (auch nicht fällige), Vorkasse offen fehlt; Knopf heißt wie die Überschrift und öffnet nur die Rechnung.",
    "beleg": "src/lib/server/todayDashboard.ts:66–75,103; src/components/home/RolfHomeClient.tsx:59–60",
-   "bauvorgabe": "Codex muss nur überfällige Rechnungen (Erinnern → mail #erinnerung) und Vorkasse offen (Zahlung bestätigen → zahlung) zeigen."
+   "bauvorgabe": "Codex muss nur überfällige Rechnungen (Erinnern → mail #erinnerung) und Vorkasse offen (Zahlung bestätigen → zahlung) zeigen.",
+   "zurueckgestellt": "Ziele aus F3/F4/F5/F6 (foto, auftrag, fertig, mail, zahlung): in F2 Fall/Grund/Aktionstext und Objekt bauen, Ziel bis dahin nach verhalten_appweit.ziele_bestand"
   },
   {
    "seite": "tag",
    "schwere": "mittel",
    "befund": "Bündel ohne Statusfilter, Ziel /warendurchlauf?bundle=1 statt Dialog 11.1.",
    "beleg": "src/lib/server/todayDashboard.ts:105–114; src/components/home/RolfHomeClient.tsx:59",
-   "bauvorgabe": "Codex muss das Bündel nur aus Wareneingang/Galvanik bilden und Dialog 11.1 mit der Oberfläche öffnen."
+   "bauvorgabe": "Codex muss das Bündel nur aus Wareneingang/Galvanik bilden und Dialog 11.1 mit der Oberfläche öffnen.",
+   "zurueckgestellt": "Ziel-Dialog (10/10.1/11.1) gehört zu F3/F4: in F2 nur Daten/Filter/Aktionstext bauen, Ziel nach verhalten_appweit.ziele_bestand; Ziel-Umstellung mit F3/F4"
   },
   {
    "seite": "tag",
@@ -8906,35 +8010,7 @@
    "schwere": "mittel",
    "befund": "„morgen früh“ = jetzt + 24 h statt morgen 07:00; 14:00 mit festem +01:00 (Sommerzeit falsch); keine Frist-Grenze; keine Meldung, Eintrag bleibt unverändert.",
    "beleg": "src/lib/server/todayDashboard.ts:135–137; src/components/home/RolfHomeClient.tsx:63,67",
-   "bauvorgabe": "Codex muss Zeiten in Europe/Berlin rechnen (morgen 07:00, heute 14:00), heute Fälliges nur bis zur Frist aufschieben und „Aufgeschoben bis … · zählt weiter mit“ melden."
-  },
-  {
-   "seite": "rechte",
-   "schwere": "mittel",
-   "befund": "Ändern verlangt eine Bezeichnung (mind. 1 Zeichen); Logins ohne Bezeichnung lassen sich nicht speichern („Name, Kürzel, Bezeichnung, Status oder Code ist ungültig“). Spec: Bezeichnung optional.",
-   "beleg": "src/modules/fundament/server/systemSettingsPort.ts:196, :260",
-   "bauvorgabe": "Codex muss Bezeichnung beim Anlegen und Ändern optional machen und Fehlermeldungen feldgenau ausgeben."
-  },
-  {
-   "seite": "rechte",
-   "schwere": "mittel",
-   "befund": "Login anlegen: Formular steht dauerhaft offen; kein Kürzel-Feld (nur automatisch). Spec: Knopf „Login anlegen“ öffnet das Formular; Kürzel automatisch vorbelegt, änderbar, max. 3 Zeichen.",
-   "beleg": "SettingsAdminClient.tsx:227–233; Edit erlaubt 8 Zeichen :239",
-   "bauvorgabe": "Codex muss „Login anlegen“ als Knopf mit aufklappendem Formular inkl. änderbarem Kürzel (max. 3) bauen; Ändern ebenfalls max. 3."
-  },
-  {
-   "seite": "rechte",
-   "schwere": "mittel",
-   "befund": "Bereich „Kassieren bei Abholung“ fehlt (U-208, nach dem Bau entschieden).",
-   "beleg": "src/lib/auth/authorizationContract.ts:18–27",
-   "bauvorgabe": "Codex muss den Bereich „kassieren“ ergänzen (Vorlagen meister/developer an, werkstatt aus) und den Warenausgang daran binden (K28)."
-  },
-  {
-   "seite": "meincode",
-   "schwere": "mittel",
-   "befund": "„Mein Code ändern“ steht als fester Block oben auf der Einstellungsseite für alle; Spec: Dialog 8.8, geöffnet über „Mein Code“ in der eigenen Zeile unter Einstellungen › Personen & Rechte.",
-   "beleg": "SettingsAdminClient.tsx:186–192",
-   "bauvorgabe": "Codex muss „Mein Code ändern“ als Dialog bauen, erreichbar über „Mein Code“ (nur in der eigenen Zeile); Speichern schließt mit Meldung „Neuer Code gespeichert“."
+   "bauvorgabe": "Codex muss Zeiten in Europe/Berlin rechnen (nächster Arbeitstag 07:00, heute 14:00), heute Fälliges nur bis zur Frist aufschieben und „Aufgeschoben bis … · zählt weiter mit“ melden."
   },
   {
    "seite": "login",
@@ -8948,7 +8024,14 @@
    "schwere": "niedrig",
    "befund": "E-Mail-Anmeldung prüft nur die Rolle, nicht den Bereich „wartung“; übersprungene Login-Zeilen ohne Wartungshinweis (K23).",
    "beleg": "StartScreenClient.tsx:155; src/app/actions/auth.ts:59; src/lib/server/startUserRead.ts:29–36",
-   "bauvorgabe": "Codex muss zusätzlich den Bereich wartung serverseitig prüfen und übersprungene Zeilen als Wartungshinweis melden."
+   "bauvorgabe": "Codex muss statt der Rolle den Bereich wartung serverseitig prüfen und übersprungene Zeilen als Wartungshinweis melden."
+  },
+  {
+   "seite": "rechte",
+   "schwere": "niedrig",
+   "befund": "Matrix-Kopf zeigt nur das Kürzel; Spec: Kürzel + Name.",
+   "beleg": "SettingsAdminClient.tsx:246",
+   "bauvorgabe": "Codex muss im Matrix-Kopf Kürzel-Kreis und Namen zeigen."
   },
   {
    "seite": "eingang",
@@ -9025,7 +8108,8 @@
    "schwere": "niedrig",
    "befund": "Schnellknopf „Ware raus“ führt zu /orders?station=fertig statt Dialog 10; Tasten j/k/Enter/s nicht angeschlossen.",
    "beleg": "src/components/home/RolfHomeClient.tsx:77; src/components/layout/KreileAppShell.tsx:126",
-   "bauvorgabe": "Codex muss „Ware raus“ appweit auf Dialog 10 führen und die Tasten anschließen."
+   "bauvorgabe": "Codex muss „Ware raus“ appweit auf Dialog 10 führen und die Tasten anschließen.",
+   "zurueckgestellt": "Ziel-Dialog (10/10.1/11.1) gehört zu F3/F4: in F2 nur Daten/Filter/Aktionstext bauen, Ziel nach verhalten_appweit.ziele_bestand; Ziel-Umstellung mit F3/F4"
   },
   {
    "seite": "tag",
@@ -9040,13 +8124,6 @@
    "befund": "Nach dem Delegieren kein Status „bei {werkstatt} · Frist“ und kein „Rückgängig“; Delegieren still wirkungslos aus Entwurf.",
    "beleg": "src/components/home/RolfHomeClient.tsx:68",
    "bauvorgabe": "Codex muss nach dem Delegieren den Eintrag mit Status, Frist und „Rückgängig“ zeigen."
-  },
-  {
-   "seite": "rechte",
-   "schwere": "niedrig",
-   "befund": "Matrix-Kopf zeigt nur das Kürzel; Spec: Kürzel + Name.",
-   "beleg": "SettingsAdminClient.tsx:246",
-   "bauvorgabe": "Codex muss im Matrix-Kopf Kürzel-Kreis und Namen zeigen."
   }
  ],
  "bauregeln": [
@@ -9054,6 +8131,7 @@
   "Gegenprüfung vor jedem Bau (U-211): Bevor ein baureifer Abschnitt begonnen wird, schreibt Codex codex/RUECKFRAGEN_<Abschnitt>.md mit allem, was zum exakten Bau fehlt oder mehrdeutig ist (Feld, Daten, Ziel, Regel). Gibt es Rückfragen, wird nur gebaut, was ohne Rückfrage eindeutig ist; Raten ist verboten.",
   "Abnahme als Prüfliste: Jeder Prüffall unter screens[].abnahme wird in der Abgabe einzeln mit Datei:Zeile belegt (Gegeben · Wenn · Dann); keine Klicktests durch Codex (Regel 4d) – die Owner klickt nach der Abgabe genau diese Fälle.",
   "Korrekturen zuerst: Seiten mit status „abweichungen“ nach „korrekturen“ nachbessern, bevor neue Seiten gebaut werden; jede Korrektur einzeln in der Abgabe nachweisen.",
+  "Rangfolge bei Widerspruch: abschnitte[…].klaerungen > annahmen > bausteine_vertraege > Struktur der Seite (felder, aktionen, ableitung, aufbau) > Freitext (regeln, elemente). Der Endversion-Chat arbeitet Klärungen laufend in die Struktur ein; ein verbleibender Widerspruch ist eine Rückfrage (RUECKFRAGEN), kein Raten.",
   "Verbindlich ist die Struktur: Felder (pflicht, vorbelegung, recht), Aktionen (ziel, meldung, verhalten), Zustände, Regeln, aufbau.*, abnahme. Freitext in „elemente“ ist nur Erläuterung – bei Widerspruch gilt aufbau.",
   "Jede Aktion führt genau zu ihrem ziel mit dem richtigen Objekt; „zurueck“ heißt: Dialog schließen und dort weiter, wo man herkam – nie Seite neu laden, nie Reiter wechseln.",
   "Bearbeiten öffnet vorbelegt; Speichern schließt mit kurzer Meldung (U-209). Nichts doppelt anzeigen oder abfragen, was schon in der Kopfzeile steht (U-170).",
@@ -9097,6 +8175,18 @@
    "id": "protokoll",
    "nr": "12.1",
    "titel": "Fehlerprotokoll",
+   "status": "nicht im Bauumfang – nur als Ziel verlinken"
+  },
+  {
+   "id": "katalog",
+   "nr": "8.2",
+   "titel": "Leistungskatalog",
+   "status": "nicht im Bauumfang – nur als Ziel verlinken"
+  },
+  {
+   "id": "datenkiste",
+   "nr": "3.5",
+   "titel": "Datenkiste",
    "status": "nicht im Bauumfang – nur als Ziel verlinken"
   },
   {
@@ -9214,9 +8304,33 @@
    "status": "nicht im Bauumfang – nur als Ziel verlinken"
   },
   {
+   "id": "firmendaten",
+   "nr": "8.1",
+   "titel": "Firmendaten & Nummernkreise",
+   "status": "nicht im Bauumfang – nur als Ziel verlinken"
+  },
+  {
+   "id": "leistung",
+   "nr": "8.3",
+   "titel": "Leistung",
+   "status": "nicht im Bauumfang – nur als Ziel verlinken"
+  },
+  {
+   "id": "stundensatz",
+   "nr": "8.4",
+   "titel": "Stundensatz",
+   "status": "nicht im Bauumfang – nur als Ziel verlinken"
+  },
+  {
    "id": "stufen",
    "nr": "12.3",
    "titel": "Stufen & Add-ons",
+   "status": "nicht im Bauumfang – nur als Ziel verlinken"
+  },
+  {
+   "id": "zielfrei",
+   "nr": "8.6",
+   "titel": "Rechnung auf Ziel freischalten",
    "status": "nicht im Bauumfang – nur als Ziel verlinken"
   },
   {

@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   GlobalCreateFlow,
@@ -68,6 +68,7 @@ function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
   return {
     canCreateCustomer: true,
     canCreateQuote: true,
+    canManageMoney: true,
     roleLabel: "Rolf",
     resumeQuoteId: null,
     resumeQuoteConversionId: null,
@@ -526,6 +527,20 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(screen.getByRole("combobox", { name: "Zahlungsmodus" })).toHaveValue("bar");
     expect(screen.queryByRole("heading", { name: "Was möchtest du anlegen?" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Offene KVs bearbeiten/ })).not.toBeInTheDocument();
+  });
+
+  it("hides payment and quote price controls without the geld area", async () => {
+    render(<GlobalCreateFlow ports={ports({ canManageMoney: false })} />);
+
+    openFlow();
+    await screen.findByRole("heading", { name: "Neuer Eingang" });
+
+    expect(screen.queryByRole("combobox", { name: "Zahlungsmodus" })).not.toBeInTheDocument();
+    const kind = screen.getByRole("group", { name: "Art" });
+    expect(within(kind).getByText("Auftrag")).toBeInTheDocument();
+    expect(within(kind).queryByText("KV")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Preis netto (€)")).not.toBeInTheDocument();
+    expect(screen.queryByText("Preisvorschlag")).not.toBeInTheDocument();
   });
 
   it("keeps a failed inline-new intake atomic and leaves all inputs visible", async () => {

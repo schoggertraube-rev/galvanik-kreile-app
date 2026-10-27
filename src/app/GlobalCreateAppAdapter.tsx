@@ -76,6 +76,7 @@ export function GlobalCreateAppAdapter() {
       ports={{
         canCreateCustomer,
         canCreateQuote,
+        canManageMoney: hasArea("geld"),
         canUseMail: hasArea("mails"),
         showPrimaryTrigger: false,
         roleLabel,
@@ -112,6 +113,7 @@ export function GlobalCreateAppAdapter() {
           };
         },
         listCatalog: async () => {
+          if (!hasArea("geld")) return { code: "OK" as const, services: [] };
           const result = await getActiveCatalogAction();
           return result.code === "OK" ? result : { code: result.code === "FORBIDDEN" ? "DENIED" as const : "UNAVAILABLE" as const, message: result.message };
         },

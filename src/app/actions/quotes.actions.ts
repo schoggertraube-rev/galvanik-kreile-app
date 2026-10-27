@@ -23,15 +23,16 @@ import {
   type QuoteCommandContext,
 } from "@/modules/quotes/server-public";
 
-function quoteCommandContext(authorization: { tenantId: string; userId: string; permissions: readonly string[] }): QuoteCommandContext {
+function quoteCommandContext(authorization: { tenantId: string; userId: string; permissions: readonly string[]; areas?: readonly string[] }): QuoteCommandContext {
+  const canUseMoney = authorization.areas?.includes("geld") === true;
   return {
     tenantId: authorization.tenantId,
     userId: authorization.userId,
     capabilities: {
-      canCreateQuote: authorization.permissions.includes("perm_data_orders"),
-      canReadQuote: authorization.permissions.includes("perm_view_leitstand"),
-      canUpdateQuote: authorization.permissions.includes("perm_data_orders"),
-      canConvertQuote: authorization.permissions.includes("perm_data_orders"),
+      canCreateQuote: canUseMoney && authorization.permissions.includes("perm_data_orders"),
+      canReadQuote: canUseMoney && authorization.permissions.includes("perm_view_leitstand"),
+      canUpdateQuote: canUseMoney && authorization.permissions.includes("perm_data_orders"),
+      canConvertQuote: canUseMoney && authorization.permissions.includes("perm_data_orders"),
     },
   };
 }

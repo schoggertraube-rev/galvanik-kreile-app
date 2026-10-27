@@ -4,7 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import { intakePaymentContract, type PaymentMode } from "@/lib/server/paymentContract";
+import { intakePaymentContract, paymentModeFromPreference, type PaymentMode } from "@/lib/server/paymentContract";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 
 const EVENT_TYPE = "ORDER_INTAKE_CREATED_V1";
@@ -86,7 +86,7 @@ type NormalizedInput = Omit<CreateOrderIntakeInput, "customer"|"handoverMode"|"i
   customer: NormalizedCustomer;
   handoverMode: "pickup" | "shipping";
   items: NormalizedItem[];
-  paymentMode: PaymentMode;
+  paymentMode: PaymentMode | null;
 };
 
 type ExistingReceiptRow = {
@@ -187,7 +187,9 @@ function normalizeNewCustomer(value: Record<string, unknown>): Extract<Normalize
 }
 
 function normalizeInput(input: unknown): NormalizedInput | null {
-  if (!plainObject(input) || !exactKeys(input, ["clientEventId", "customer", "dueDate", "handoverMode", "items", "note", "paymentMode"])) {
+  if (!plainObject(input)) return null;
+  const hasPaymentMode = Object.hasOwn(input, "paymentMode");
+  if (!exactKeys(input, ["clientEventId", "customer", "dueDate", "handoverMode", "items", "note", ...(hasPaymentMode ? ["paymentMode"] : [])])) {
     return null;
   }
   if (typeof input.clientEventId !== "string" || !UUID_PATTERN.test(input.clientEventId)) return null;
@@ -195,7 +197,7 @@ function normalizeInput(input: unknown): NormalizedInput | null {
     return null;
   }
   if ((input.handoverMode !== "pickup" && input.handoverMode !== "shipping")
-    || (input.paymentMode !== "vorkasse" && input.paymentMode !== "abholung" && input.paymentMode !== "rechnung")) return null;
+    || (hasPaymentMode && input.paymentMode !== "vorkasse" && input.paymentMode !== "abholung" && input.paymentMode !== "rechnung")) return null;
   const note = normalizedOptionalText(input.note, 2000);
   if (note === undefined) return null;
 
@@ -247,7 +249,7 @@ function normalizeInput(input: unknown): NormalizedInput | null {
     customer,
     dueDate: input.dueDate,
     handoverMode: input.handoverMode,
-    paymentMode: input.paymentMode,
+    paymentMode: hasPaymentMode ? input.paymentMode as PaymentMode : null,
     note,
     items,
   };
@@ -479,6 +481,16 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
   if (normalized.customer.mode === "NEW" && !authorization.data.permissions.includes("perm_data_customers")) {
     return { code: "FORBIDDEN", message: "Kunden dürfen mit dieser Rolle nicht angelegt werden." };
   }
+  const canManageMoney = authorization.data.areas?.includes("geld") === true;
+  if (canManageMoney && normalized.paymentMode === null) {
+    return { code: "VALIDATION_ERROR", message: "Zahlungsmodus ist erforderlich." };
+  }
+  if (!canManageMoney && normalized.paymentMode !== null) {
+    return { code: "FORBIDDEN", message: "Zahlungsmodus darf ohne Geld-Recht nicht vorgegeben werden." };
+  }
+  if (!canManageMoney && normalized.items.some((item) => item.unitPriceCents !== null || item.vatRateBasisPoints !== null)) {
+    return { code: "FORBIDDEN", message: "Preise dürfen ohne Geld-Recht nicht vorgegeben werden." };
+  }
   const expected = {
     tenantId: authorization.data.tenantId,
     actorId: authorization.data.userId,
@@ -536,7 +548,7 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
         ? intakePaymentContract({
             customerMode: "NEW",
             paymentPreference: normalized.customer.paymentPreference,
-            requestedMode: normalized.paymentMode,
+            requestedMode: normalized.paymentMode ?? paymentModeFromPreference(normalized.customer.paymentPreference),
           })
         : null;
       if (paymentContract && !paymentContract.ok) {
@@ -551,7 +563,7 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
       paymentContract ??= intakePaymentContract({
         customerMode: "EXISTING",
         paymentPreference: customer.payment_preference,
-        requestedMode: normalized.paymentMode,
+        requestedMode: normalized.paymentMode ?? paymentModeFromPreference(customer.payment_preference),
       });
       if (!paymentContract.ok) {
         return { code: "VALIDATION_ERROR", message: paymentContract.message };
