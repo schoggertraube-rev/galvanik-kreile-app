@@ -56,7 +56,7 @@ export async function login(formData: FormData) {
   }
 
   const dbUser = identityResult.data;
-  if (dbUser.role !== "admin" && dbUser.role !== "developer") {
+  if (dbUser.role !== "developer") {
     await supabase.auth.signOut();
     const supportReference = reportProductActorOperationalFailure(
       "EMAIL_LOGIN_IDENTITY_MISMATCH",

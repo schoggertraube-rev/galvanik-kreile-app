@@ -46,7 +46,7 @@ function formData(): FormData {
   return data;
 }
 
-describe("Gregor email product login", () => {
+describe("developer email product login", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     ports.reportProductActorOperationalFailure.mockReturnValue(
@@ -70,43 +70,44 @@ describe("Gregor email product login", () => {
         tenantId: KREILE_TENANT_SLUG,
         email: "synthetic-gregor@example.invalid",
         fullName: "Technical DB Name",
-        role: "admin",
+        role: "developer",
         active: true,
       },
     });
     ports.recordUserLastSeenForLogin.mockResolvedValue({ code: "OK" });
   });
 
-  it("sets the authenticated admin identity before routing to settings", async () => {
+  it("sets the authenticated developer identity before routing to settings", async () => {
     await expect(login(formData())).rejects.toThrow("REDIRECT:/settings");
     expect(ports.setAppSession).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: GREGOR_ID,
         tenantId: KREILE_TENANT_SLUG,
-        role: "admin",
+        role: "developer",
         displayName: "Technical DB Name",
       }),
     );
     expect(ports.revalidatePath).toHaveBeenCalledWith("/", "layout");
   });
 
-  it("accepts an authenticated developer without coupling login to the other product profiles", async () => {
+  it("rejects admin even when the identity otherwise has settings access", async () => {
     ports.resolveLoginIdentityByEmail.mockResolvedValue({
       ok: true,
       data: {
         id: GREGOR_ID,
         tenantId: KREILE_TENANT_SLUG,
         email: "synthetic-gregor@example.invalid",
-        fullName: "Owner",
-        role: "developer",
+        fullName: "Admin",
+        role: "admin",
         active: true,
       },
     });
 
-    await expect(login(formData())).rejects.toThrow("REDIRECT:/settings");
-    expect(ports.setAppSession).toHaveBeenCalledWith(
-      expect.objectContaining({ role: "developer", displayName: "Owner" }),
+    await expect(login(formData())).rejects.toThrow(
+      /REDIRECT:\/start\?.*support=bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/,
     );
+    expect(ports.signOut).toHaveBeenCalledOnce();
+    expect(ports.setAppSession).not.toHaveBeenCalled();
   });
 
   it("rejects an authenticated role without settings access", async () => {

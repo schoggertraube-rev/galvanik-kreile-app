@@ -71,7 +71,11 @@ describe("StartPage product actor boundary", () => {
     expect(ports.loginWithPin).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByTestId("pin-user-card-synthetic-gregor-handle"));
-    expect(screen.getByRole("button", { name: "Mit E-Mail anmelden" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Mit E-Mail anmelden" }));
+    expect(screen.getByLabelText("E-Mail")).toBeInTheDocument();
+    expect(screen.getByLabelText("Passwort")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Mit Code anmelden" }));
+    await waitFor(() => expect(screen.getByLabelText("0 von 4 Stellen eingegeben")).toHaveFocus());
   });
 
   it.each([
