@@ -133,7 +133,7 @@ function mapDbCustomer(c: DbCustomer): Customer {
     email: c.email || undefined,
     phone: c.phone || undefined,
     paymentProfile: c.paymentProfile || undefined,
-    paymentPreference: c.paymentPreference || "rechnung_14",
+    paymentPreference: c.paymentPreference || undefined,
     vatId: c.vatId || undefined,
     approvalProfile: c.approvalProfile || undefined,
     expectationProfile: c.expectationProfile || undefined,

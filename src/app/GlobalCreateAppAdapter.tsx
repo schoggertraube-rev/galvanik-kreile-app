@@ -106,7 +106,7 @@ export function GlobalCreateAppAdapter() {
               zipCode: customer.zipCode ?? "",
               city: customer.city ?? null,
               country: customer.country ?? "",
-              paymentPreference: customer.paymentPreference ?? "rechnung_14",
+              paymentPreference: customer.paymentPreference,
               vatId: customer.vatId ?? null,
             })),
           };

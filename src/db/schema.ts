@@ -74,7 +74,7 @@ export const customers = pgTable("customers", {
   tags: jsonb("tags").default([]),
   creditRating: text("credit_rating"),
   shippingPreference: text("shipping_preference").default('abholung'),
-  paymentPreference: text("payment_preference").default('rechnung_14'),
+  paymentPreference: text("payment_preference"),
   vatId: text("vat_id"),
   classification: text("classification").default('B'),
   internalNotes: text("internal_notes"),
