@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { saveCatalogServiceAction, saveCompanySettingsAction, saveManagedUserAction, saveSalesStageFeatureAction } from "@/app/actions/settings.actions";
+import { saveCatalogServiceAction, saveCompanySettingsAction, saveManagedUserAction } from "@/app/actions/settings.actions";
 import { setExtraWorkHourlyRateAction } from "@/app/actions/orders.actions";
-import { SALES_STAGE_FEATURES, type CompanySettingsInput, type SalesStageFeatureId, type SystemSettingsSnapshot } from "@/modules/fundament/public";
+import { type CompanySettingsInput, type SystemSettingsSnapshot } from "@/modules/fundament/public";
 import type { CatalogService } from "@/modules/katalog/public";
 import styles from "./settings.module.css";
 
-type Tab = "company" | "catalog" | "users" | "features";
+type Tab = "company" | "catalog" | "users";
 const emptyService = (): CatalogService => ({ id: "", name: "", surface: "", unit: "Stück", netPriceCents: 0, vatRateBasisPoints: 1900, standardLeadTimeWorkingDays: 5, active: true });
 
 export function SettingsAdminClient({ initialSnapshot, initialServices, returnTo = null }: { initialSnapshot: SystemSettingsSnapshot; initialServices: CatalogService[]; returnTo?: string | null }) {
@@ -17,7 +17,6 @@ export function SettingsAdminClient({ initialSnapshot, initialServices, returnTo
   const [services, setServices] = useState(initialServices);
   const [draft, setDraft] = useState(emptyService());
   const [users, setUsers] = useState(initialSnapshot.users);
-  const [features, setFeatures] = useState(initialSnapshot.features);
   const [hourlyRate, setHourlyRate] = useState(initialSnapshot.extraWorkHourlyRate);
   const [hourlyRateEuro, setHourlyRateEuro] = useState(initialSnapshot.extraWorkHourlyRate.hourlyRateCents === null ? "" : (initialSnapshot.extraWorkHourlyRate.hourlyRateCents / 100).toFixed(2).replace(".", ","));
   const [pins, setPins] = useState<Record<string, string>>(Object.create(null));
@@ -85,7 +84,6 @@ export function SettingsAdminClient({ initialSnapshot, initialServices, returnTo
       <button aria-pressed={tab === "company"} onClick={() => setTab("company")}>Firmendaten</button>
       <button aria-pressed={tab === "catalog"} onClick={() => setTab("catalog")}>Leistungskatalog</button>
       <button aria-pressed={tab === "users"} onClick={() => setTab("users")}>Nutzer & Rollen</button>
-      <button aria-pressed={tab === "features"} onClick={() => setTab("features")}>Stufen-Schalter</button>
     </nav>
     {message ? <p role="status" className={styles.message}>{message}</p> : null}
 
@@ -113,6 +111,5 @@ export function SettingsAdminClient({ initialSnapshot, initialServices, returnTo
 
     {tab === "users" ? <section><h2>Bestehende Nutzer & Rollen</h2><div className={styles.planned} aria-label="Nutzer anlegen geplant"><div><strong>Nutzer anlegen</strong><span>Kommt mit einer eigenen Auth-Erweiterung. In Stufe 1 werden bestehende Zugänge gepflegt.</span></div><span className={styles.plannedTag}>geplant</span></div><div className={styles.list}>{users.map((user) => <article key={user.id}><strong>{user.fullName}</strong><span>{user.email}</span><select aria-label={`Rolle für ${user.fullName}`} value={user.role} onChange={(e) => setUsers((current) => current.map((item) => item.id === user.id ? { ...item, role: e.target.value } : item))}><option value="developer">Entwickler</option><option value="admin">Admin</option><option value="meister">Meister</option><option value="buero">Büro</option><option value="werkstatt">Werkstatt</option></select><input aria-label={`Neue PIN für ${user.fullName}`} type="password" inputMode="numeric" pattern="[0-9]{4}" minLength={4} maxLength={4} placeholder="PIN unverändert" value={pins[user.id] ?? ""} onChange={(e) => setPins({ ...pins, [user.id]: e.target.value.replace(/\D/g, "").slice(0, 4) })} /><label className={styles.check}><input aria-label={`${user.fullName} aktiv`} type="checkbox" checked={user.active} onChange={(e) => setUsers((current) => current.map((item) => item.id === user.id ? { ...item, active: e.target.checked } : item))} />Aktiv</label><button disabled={pending} onClick={() => run(() => saveManagedUserAction({ userId: user.id, role: user.role as "developer"|"admin"|"meister"|"buero"|"werkstatt", active: user.active, pin: pins[user.id] || null }), `${user.fullName} gespeichert.`)}>Speichern</button></article>)}</div></section> : null}
 
-    {tab === "features" ? <section><h2>Verkaufsstufen</h2><p>Stufe 1 ist standardmäßig aktiv. Anschlussstellen der Stufen 2 bis 4 bleiben aus, bis ihr Paket freigegeben ist.</p><div className={styles.featureList}>{([1, 2, 3, 4] as const).map((stage) => <div key={stage}><h3>Stufe {stage}</h3>{SALES_STAGE_FEATURES.filter((definition) => definition.stage === stage).map((definition) => { const feature = features.find((item) => item.id === definition.id); return <article key={definition.id}><span><strong>{definition.id}</strong> · {definition.label}</span><label className={styles.check}><input type="checkbox" aria-label={`${definition.id} ${definition.label}`} checked={feature?.enabled === true} onChange={(event) => { const enabled = event.target.checked; const featureId = definition.id as SalesStageFeatureId; run(async () => { const result = await saveSalesStageFeatureAction({ featureId, enabled }); if (result.code === "OK") setFeatures((current) => current.map((item) => item.id === featureId ? { ...item, enabled } : item)); return result; }, `${definition.id} ${enabled ? "aktiviert" : "deaktiviert"}.`); }} disabled={pending || !feature} />{feature?.enabled ? "An" : "Aus"}</label></article>; })}</div>)}</div></section> : null}
   </main>;
 }

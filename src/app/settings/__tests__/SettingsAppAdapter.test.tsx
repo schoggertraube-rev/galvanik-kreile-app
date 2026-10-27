@@ -62,21 +62,17 @@ describe("Gregor system administration composition", () => {
     expect(screen.getByRole("button", { name: "Firmendaten" })).toBeInTheDocument();
   });
 
-  it("shows new-user creation as planned and limits stage one to the three existing actors", async () => {
+  it("shows new-user creation as planned and keeps existing access maintenance available", async () => {
     render(await SettingsAppAdapter());
     fireEvent.click(screen.getByRole("button", { name: "Nutzer & Rollen" }));
     expect(screen.getByLabelText("Nutzer anlegen geplant")).toHaveTextContent("geplant");
-    expect(screen.getByLabelText("Nutzer anlegen geplant")).toHaveTextContent("Rolf, Phillip und Gregor");
+    expect(screen.getByLabelText("Nutzer anlegen geplant")).toHaveTextContent("bestehende Zugänge");
     expect(screen.queryByText(/In Klärung/)).not.toBeInTheDocument();
   });
 
-  it("shows tenant-backed stage switches with stage one on and later stages off", async () => {
+  it("hides stage switches until they affect real product surfaces", async () => {
     render(await SettingsAppAdapter());
-    fireEvent.click(screen.getByRole("button", { name: "Stufen-Schalter" }));
-    expect(screen.getByText(/S01/)).toBeInTheDocument();
-    expect(screen.getByText(/Z01/)).toBeInTheDocument();
-    expect(screen.getByLabelText(/S01/)).toBeChecked();
-    expect(screen.getByLabelText(/Z01/)).not.toBeChecked();
+    expect(screen.queryByRole("button", { name: "Stufen-Schalter" })).not.toBeInTheDocument();
   });
 
   it("redirects only missing or invalid sessions to start", async () => {

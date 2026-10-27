@@ -17,6 +17,8 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
   const [pin, setPin] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [supportReference, setSupportReference] = useState<string | undefined>();
+  const [helpMessage, setHelpMessage] = useState<string | null>(null);
+  const [helpPending, setHelpPending] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
 
@@ -93,7 +95,20 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
           <button type="button" onClick={() => void enterDigit("0")} disabled={submitting}>0</button>
           <button type="button" onClick={() => { setPin(""); setMessage(null); setSupportReference(undefined); }} disabled={submitting}>Neu</button>
         </div>
-        {message ? <button type="button" className={styles.help} onClick={() => void notifyAdminPinReset(user.loginHandle)}>Systemadministrator informieren</button> : null}
+        {message ? <button type="button" className={styles.help} disabled={helpPending} onClick={() => {
+          setHelpPending(true);
+          setHelpMessage(null);
+          void notifyAdminPinReset(user.loginHandle).then((result) => {
+            setHelpMessage(result.success
+              ? "Anfrage wurde erfasst. Der Systemadministrator wurde informiert."
+              : "Anfrage konnte nicht übermittelt werden. Bitte direkt Kontakt aufnehmen.");
+            setHelpPending(false);
+          }).catch(() => {
+            setHelpMessage("Anfrage konnte nicht übermittelt werden. Bitte direkt Kontakt aufnehmen.");
+            setHelpPending(false);
+          });
+        }}>{helpPending ? "Anfrage wird gesendet …" : "Systemadministrator informieren"}</button> : null}
+        {helpMessage ? <p role="status">{helpMessage}</p> : null}
       </section>
     </div>
   );

@@ -89,7 +89,7 @@ export function CustomersAppAdapter() {
   const customers = useMemo(() => state.kind === "data"
     ? state.customers.filter((customer) => matchesFilter(customer, query))
     : [], [query, state]);
-  const createAction = canCreate ? { text: "Kunde anlegen", icon: "plus" as const, onClick: () => requestGlobalCreate("DIRECT_INTAKE") } : undefined;
+  const createAction = canCreate ? { text: "Kunde anlegen", icon: "plus" as const, onClick: () => requestGlobalCreate("CUSTOMER") } : undefined;
 
   if (state.kind === "loading") return <section data-testid="customers-v11">
     <SeitenKopf titel="Kunden & Kontakt" />

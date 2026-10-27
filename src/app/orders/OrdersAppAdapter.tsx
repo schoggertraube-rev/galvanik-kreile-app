@@ -176,10 +176,13 @@ export function OrdersAppAdapter() {
 
   useEffect(() => {
     const stored = window.sessionStorage.getItem(KEY) ?? "";
-    const requestedView = new URLSearchParams(window.location.search).get("view");
+    const search = new URLSearchParams(window.location.search);
+    const requestedView = search.get("view");
+    const requestedFilter = search.get("station");
     queueMicrotask(() => {
       setQuery(stored);
       if (requestedView === "woche" || requestedView === "monat") setView(requestedView);
+      if (requestedFilter === "fertig" || requestedFilter === "galvanik" || requestedFilter === "angenommen") setFilter(requestedFilter);
     });
   }, []);
 
