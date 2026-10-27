@@ -189,6 +189,7 @@
 .userSummary > span { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 50%; background: var(--gold-100); color: var(--gold-600); font-weight: 800; }
 .userSummary div { display: grid; gap: var(--space-1); }
 .userSummary small { color: var(--text-muted); }
+.userSummary > button { margin-left: auto; }
 .userFields { display: grid; grid-template-columns: 1.2fr .45fr 1fr .7fr auto auto; gap: var(--space-2); align-items: end; margin-top: var(--space-3); }
 .rightsTable { overflow-x: auto; margin-top: var(--space-5); }
 .rightsTable table { width: 100%; border-collapse: collapse; }

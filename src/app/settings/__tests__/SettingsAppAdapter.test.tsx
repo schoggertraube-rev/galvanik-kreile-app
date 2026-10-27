@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ports = vi.hoisted(() => ({
@@ -129,12 +129,50 @@ describe("Gregor system administration composition", () => {
 
     render(await SettingsAppAdapter());
     fireEvent.click(screen.getByRole("button", { name: "Logins & Rechte" }));
-    fireEvent.change(screen.getAllByLabelText("Neuer Code")[1]!, { target: { value: "4321" } });
     fireEvent.click(screen.getByRole("button", { name: "Ändern" }));
+    fireEvent.change(screen.getAllByLabelText("Neuer Code")[1]!, { target: { value: "4321" } });
+    fireEvent.click(screen.getByRole("button", { name: "Übernehmen" }));
 
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Fehlercode: ACTION_REQUEST_FAILED"));
     expect(consoleError).toHaveBeenCalledWith("[ACTION_REQUEST_FAILED]", expect.any(Error));
     consoleError.mockRestore();
+  });
+
+  it("shows login data read-only and opens only one prefilled edit form", async () => {
+    ports.readSettings.mockResolvedValue({
+      code: "OK",
+      snapshot: {
+        company: { companyName: "Galvanik Kreile", street: "Testweg 1", zip: "12345", city: "Berlin", country: "Deutschland", taxId: "DE123456789", iban: "DE001234", bic: "TESTDEFF", bankName: "Testbank", paymentTermDays: 14, logoUrl: "/logo.png" },
+        extraWorkHourlyRate: { rateId: null, hourlyRateCents: null, version: 0 },
+        users: [
+          { id: "11111111-1111-4111-8111-111111111111", email: null, fullName: "Phillip", shortCode: "PH", designation: "Werkstatt", role: "werkstatt", active: true, areas: ["werkstatt"], fixedAreas: [], isCurrent: false },
+          { id: "22222222-2222-4222-8222-222222222222", email: null, fullName: "Rolf", shortCode: "RO", designation: "Meister", role: "meister", active: true, areas: ["werkstatt", "kunden"], fixedAreas: [], isCurrent: false },
+        ],
+        capabilities: { canManageCompany: true, canManageLogins: true, canManageSystem: true },
+        numberRanges: [],
+        features: [],
+      },
+      services: [],
+    });
+
+    render(await SettingsAppAdapter());
+    fireEvent.click(screen.getByRole("button", { name: "Logins & Rechte" }));
+
+    expect(screen.getAllByRole("button", { name: "Ändern" })).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "Übernehmen" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Ändern" })[0]!);
+    const phillipRow = screen.getByText("Phillip").closest("article");
+    expect(phillipRow).not.toBeNull();
+    expect(within(phillipRow!).getByLabelText("Name")).toHaveValue("Phillip");
+    expect(screen.getByRole("button", { name: "Übernehmen" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Ändern" })[1]!);
+    const rolfRow = screen.getByText("Rolf").closest("article");
+    expect(rolfRow).not.toBeNull();
+    expect(within(rolfRow!).getByLabelText("Name")).toHaveValue("Rolf");
+    expect(screen.getAllByRole("button", { name: "Übernehmen" })).toHaveLength(1);
+    fireEvent.click(within(rolfRow!).getByRole("button", { name: "Abbrechen" }));
+    expect(screen.queryByRole("button", { name: "Übernehmen" })).not.toBeInTheDocument();
   });
 
   it("renders a stable fail-closed state instead of bouncing on readiness failure", async () => {

@@ -4,7 +4,7 @@
    "baureif": false,
    "darf": "nur Korrekturen aus „korrekturen“ – kein Neubau von Elementen mit Lücke",
    "luecken": [
-    "login: „abnahme“ fehlt (mind. 3 Prüffälle: Gegeben · Wenn · Dann, ohne Musterdaten)"
+    "Gegenprüfung aus Sicht des Bauenden fehlt oder hat blockierende Punkte (baustand.abschnitte[…].gegenpruefung)"
    ]
   },
   "F1 Neuer Eingang": {
@@ -37,21 +37,14 @@
    "baureif": false,
    "darf": "nur Korrekturen aus „korrekturen“ – kein Neubau von Elementen mit Lücke",
    "luecken": [
-    "tag: Baustein „lage“ ohne Vertrag (bausteine_vertraege.lage)",
-    "tag: Baustein „schnell“ ohne Vertrag (bausteine_vertraege.schnell)",
-    "tag: Baustein „felder“ ohne Vertrag (bausteine_vertraege.felder)",
-    "tag: „abnahme“ fehlt (mind. 3 Prüffälle: Gegeben · Wenn · Dann, ohne Musterdaten)",
-    "spaeter: „abnahme“ fehlt (mind. 3 Prüffälle: Gegeben · Wenn · Dann, ohne Musterdaten)",
-    "hbmehr: „abnahme“ fehlt (mind. 3 Prüffälle: Gegeben · Wenn · Dann, ohne Musterdaten)"
+    "Gegenprüfung aus Sicht des Bauenden fehlt oder hat blockierende Punkte (baustand.abschnitte[…].gegenpruefung)"
    ]
   },
   "F0 Fundament: einstellbare Rechte": {
    "baureif": false,
    "darf": "nur Korrekturen aus „korrekturen“ – kein Neubau von Elementen mit Lücke",
    "luecken": [
-    "rechte: Baustein „loginverwaltung“ ohne Vertrag (bausteine_vertraege.loginverwaltung)",
-    "rechte: „abnahme“ fehlt (mind. 3 Prüffälle: Gegeben · Wenn · Dann, ohne Musterdaten)",
-    "meincode: „abnahme“ fehlt (mind. 3 Prüffälle: Gegeben · Wenn · Dann, ohne Musterdaten)"
+    "Gegenprüfung aus Sicht des Bauenden fehlt oder hat blockierende Punkte (baustand.abschnitte[…].gegenpruefung)"
    ]
   },
   "F3 Auftragskarte": {
@@ -161,9 +154,6 @@
     "katalog: „abnahme“ fehlt (mind. 3 Prüffälle: Gegeben · Wenn · Dann, ohne Musterdaten)",
     "leistung: „abnahme“ fehlt (mind. 3 Prüffälle: Gegeben · Wenn · Dann, ohne Musterdaten)",
     "stundensatz: „abnahme“ fehlt (mind. 3 Prüffälle: Gegeben · Wenn · Dann, ohne Musterdaten)",
-    "rechte: Baustein „loginverwaltung“ ohne Vertrag (bausteine_vertraege.loginverwaltung)",
-    "rechte: „abnahme“ fehlt (mind. 3 Prüffälle: Gegeben · Wenn · Dann, ohne Musterdaten)",
-    "meincode: „abnahme“ fehlt (mind. 3 Prüffälle: Gegeben · Wenn · Dann, ohne Musterdaten)",
     "zielfrei: „abnahme“ fehlt (mind. 3 Prüffälle: Gegeben · Wenn · Dann, ohne Musterdaten)",
     "datenkiste: Baustein „dropzone“ ohne Vertrag (bausteine_vertraege.dropzone)",
     "datenkiste: Baustein „kachel“ ohne Vertrag (bausteine_vertraege.kachel)",
@@ -173,8 +163,8 @@
   }
  },
  "bauplan": {
-  "erzeugt": "2026-10-27T21:20:53.629Z",
-  "spec_sha": "6a25817bb8bf",
+  "erzeugt": "2026-10-27T21:32:55.185Z",
+  "spec_sha": "7abb6cab6d70",
   "regel": "Nur bau-freie Abschnitte (OR-17). Ohne Inhalt (OR-13/U-202): Daten kommen vom Server; Platzhalter {auftrag} {kunde} {rechnung} {betrag} … sind Felder, keine Werte. Ziele zu Seiten außerhalb dieses Bauplans: nur verlinken, nicht bauen.",
   "reihenfolge": [
    "Login",
@@ -1679,6 +1669,14 @@
     }
    },
    "nr": "0",
+   "abnahme": [
+    "Gegeben aktive Logins mit Code · Wenn die Anmeldung geöffnet wird · Dann erscheinen genau diese Logins als Kreise (Kürzel + Vorname), inaktive nicht; die zuletzt auf diesem Gerät angemeldete Person ist vorausgewählt.",
+    "Gegeben Desktop · Wenn die Seite öffnet · Dann liegt der Fokus ohne Klick auf der Code-Eingabe; Ziffern per Tastatur, Rücktaste löscht.",
+    "Gegeben eine Person ist gewählt · Wenn die 4. richtige Ziffer eingegeben wird · Dann wird ohne weiteren Knopf angemeldet und die Startseite des Logins (rollen.start) geöffnet.",
+    "Gegeben ein falscher Code · Wenn die 4. Ziffer eingegeben wird · Dann schütteln die Punkte rot, Meldung „Code falsch · bitte neu eingeben“, Code leer; die nächste Ziffer löscht die Meldung.",
+    "Gegeben ein Login ohne Recht „wartung“ · Wenn die Anmeldung angezeigt wird · Dann gibt es keinen Link „Mit E-Mail anmelden“; der Server lehnt E-Mail-Anmeldung ohne „wartung“ ab.",
+    "Gegeben ein neu angelegter aktiver Login · Wenn die Anmeldung neu geöffnet wird · Dann erscheint er sofort als Kreis."
+   ],
    "aenderung_je_element": [
     {
      "element": "F pin",
@@ -1846,6 +1844,20 @@
     "Entwürfe des Logins stehen im Handlungsbedarf (U-205). werkstatt sieht kein Geld (Recht)."
    ],
    "nr": "2",
+   "abnahme": [
+    "Gegeben Login mit Rechte-Vorlage meister ohne eigene Anordnung · Wenn Der Tag öffnet · Dann Felder laut tagkonfig.standard.meister (links Handlungsbedarf, Zuordnen; rechts Heute fällig, Geld einfordern).",
+    "Gegeben ein Auftrag mit Liefertermin heute, noch nicht fertig gemeldet · Dann steht er in „Heute fällig“ mit „Fertig melden“ → Fertigmeldung genau dieses Auftrags – und NICHT zusätzlich im Handlungsbedarf.",
+    "Gegeben ein Auftrag fertig mit Liefertermin heute · Dann steht er in „Heute fällig“ mit „Ware raus“ → Warenausgang genau dieses Auftrags.",
+    "Gegeben ein abgeholter/versendeter Auftrag · Dann erscheint er nirgends auf Der Tag; ein überfälliger, nicht fertiger Auftrag steht im Handlungsbedarf als Konflikt „überfällig seit {n} Tagen“ mit „Fertig melden“.",
+    "Gegeben eine Mail ohne Zuordnung und Recht „mails“ · Wenn „Zuordnen“ · Dann öffnet Dialog 3.4 für genau diese Mail; ohne Recht „mails“ fehlt der Eintrag.",
+    "Gegeben eine überfällige Rechnung und Recht „geld“ · Dann steht sie in „Geld einfordern“ mit „Erinnern“ → Mail-Dialog Zahlungserinnerung zu genau dieser Rechnung; noch nicht fällige Rechnungen erscheinen nicht; ohne Recht „geld“ fehlt das Feld ganz.",
+    "Gegeben ein Termin wird knapp · Dann Handlungsbedarf „wird diese Woche knapp“ (Warnung) mit Grund und „Kunde vorwarnen“ → Mail-Dialog Vorwarnung zu genau diesem Auftrag.",
+    "Gegeben Einträge aller Arten · Dann Reihenfolge Konflikt → Warnung → Entscheidung, innerhalb nach Termin; die Zähler oben stimmen exakt mit dem Handlungsbedarf überein.",
+    "Gegeben Feld „Zuordnen“ ausgeblendet über Anpassen · Dann steht der Mail-Eintrag im Handlungsbedarf, nie doppelt.",
+    "Gegeben „Anpassen“ · Wenn Felder umgestellt und „Fertig“ gewählt wird · Dann ist die Anordnung je Login gespeichert (auch nach neuer Anmeldung), nur erlaubte Inhalte wählbar.",
+    "Gegeben ein eigener Entwurf · Dann Handlungsbedarf „Entwurf · …“ mit „Weiter bearbeiten“ und direkt sichtbarem „Löschen“; andere Logins sehen ihn nicht.",
+    "Gegeben Login developer · Wenn / aufgerufen wird · Dann öffnet Der Tag (nur Handlungsbedarf), keine Umleitung."
+   ],
    "aenderung_je_element": [
     {
      "element": "Handlungsbedarf / In Arbeit / Heute&Woche",
@@ -2519,6 +2531,13 @@
    },
    "nr": "M4",
    "anker": "Knopf „Später“ am Eintrag",
+   "abnahme": [
+    "Gegeben ein Eintrag im Handlungsbedarf · Wenn „Später“ · Dann öffnet das Menü direkt am Knopf (auch am Handy).",
+    "Gegeben „heute Nachmittag“ · Dann ist der Eintrag bis heute 14:00 Europe/Berlin zurückgestellt, Meldung „Aufgeschoben bis heute 14:00 · zählt weiter mit“, Zähler zählt ihn weiter.",
+    "Gegeben „morgen früh“ · Dann bis morgen 07:00 Europe/Berlin (auch über Sommer-/Winterzeit korrekt).",
+    "Gegeben ein heute fälliger Eintrag · Dann ist Aufschieben nur bis zu seiner Frist möglich; spätere Optionen sind gesperrt.",
+    "Gegeben Zeitpunkt erreicht · Dann steht der Eintrag wieder normal im Handlungsbedarf."
+   ],
    "aenderung_je_element": [
     {
      "element": "A heute Nachmittag / morgen früh / nach dem Termin",
@@ -2580,6 +2599,12 @@
    "anker": "Knopf „Weitere“ am Eintrag",
    "regeln": [
     "Seltenere Aktionen zum Eintrag; öffnet direkt am Knopf (U-194). „Auftrag öffnen“ öffnet den Auftrag des Eintrags."
+   ],
+   "abnahme": [
+    "Gegeben ein Auftrags-Eintrag und Login mit Delegationsrecht · Wenn „Weitere“ · Dann Menü direkt am Knopf mit „an {werkstatt-login} geben“ und „Auftrag öffnen“.",
+    "Gegeben Mail-, Rechnungs- oder Entwurfs-Eintrag · Dann gibt es keinen Knopf „Weitere“.",
+    "Gegeben „an {werkstatt-login} geben“ · Dann Meldung „Bei {login} · Frist … · Rückgängig“, der Eintrag zeigt den Status, und der Eintrag erscheint im Handlungsbedarf des Empfängers mit „von {login}“.",
+    "Gegeben „Rückgängig“ · Dann ist die Delegation aufgehoben, Eintrag wie vorher."
    ],
    "aenderung_je_element": [
     {
@@ -4757,6 +4782,16 @@
    },
    "nr": "8.5",
    "recht": "logins",
+   "abnahme": [
+    "Gegeben Login mit Recht „logins“ · Wenn Logins & Rechte geöffnet wird · Dann zeigt die Liste je Login Kürzel, Name, Bezeichnung, aktiv/inaktiv, „x von n Bereichen“ und nur den Knopf „Ändern“ – keine Eingabefelder.",
+    "Gegeben die Liste · Wenn „Ändern“ bei einem Login gewählt wird · Dann öffnet genau ein Formular, vorbelegt mit dessen Werten; „Übernehmen“ speichert nur diesen Login, schließt das Formular, die Zeile zeigt die neuen Werte ohne Neuladen.",
+    "Gegeben ein Login ohne Bezeichnung · Wenn er geändert und übernommen wird · Dann wird gespeichert (Bezeichnung optional).",
+    "Gegeben „Login anlegen“ mit Name, Vorlage, Code · Wenn „Login anlegen“ bestätigt wird · Dann bleibt man in Logins & Rechte, der neue Login steht in Liste und Matrix mit den Haken der Vorlage, Meldung „{name} angelegt“.",
+    "Gegeben die Matrix · Wenn ein Haken gesetzt/entfernt wird · Dann ist die Änderung sofort gespeichert und wirksam (Bereich beim Login sichtbar/unsichtbar, auch serverseitig); fest-Rechte sind gesperrt.",
+    "Gegeben der eigene Login bzw. der letzte aktive Login mit „logins“ · Wenn „aktiv“ abgewählt werden soll · Dann ist das nicht möglich (K24).",
+    "Gegeben Login ohne Recht „logins“ · Wenn Einstellungen geöffnet werden · Dann gibt es keinen Weg zu Logins & Rechte; der Server lehnt jede Änderung ab.",
+    "Gegeben die Matrix · Dann enthält sie alle Bereiche aus rechte.bereiche einschließlich „Kassieren bei Abholung“; Spaltenköpfe zeigen Kürzel und Name."
+   ],
    "aenderung_je_element": [
     {
      "element": "Loginliste: Name, aktiv",
@@ -5155,6 +5190,12 @@
     }
    },
    "nr": "8.8",
+   "abnahme": [
+    "Gegeben ein angemeldeter Login · Wenn unter Einstellungen › Personen & Rechte in der eigenen Zeile „Mein Code“ gewählt wird · Dann öffnet der Dialog 8.8; in fremden Zeilen gibt es den Knopf nicht.",
+    "Gegeben zwei gleiche 4-stellige Codes · Wenn „Code speichern“ · Dann schließt der Dialog mit „Neuer Code gespeichert“, die eigene Sitzung bleibt angemeldet, andere Sitzungen dieses Logins enden.",
+    "Gegeben unterschiedliche oder nicht 4-stellige Codes · Wenn „Code speichern“ · Dann bleibt der Dialog offen mit „Codes stimmen nicht überein“ bzw. „genau 4 Ziffern“; nichts gespeichert.",
+    "Gegeben der neue Code · Wenn abgemeldet und neu angemeldet wird · Dann gilt nur noch der neue Code."
+   ],
    "aenderung_je_element": [
     {
      "element": "F code_neu / code_wdh (4 Ziffern)",
@@ -5189,6 +5230,112 @@
    ]
   }
  ],
+ "bausteine_vertraege": {
+  "_regel": "Verträge je Bausteintyp (U-211): verbindlich für den Bau; gelten überall, wo der Typ vorkommt. Instanz-Angaben (ableitung, aufbau, aktionen) ergänzen bzw. präzisieren den Vertrag.",
+  "lage": {
+   "zweck": "Zähler-Leiste oben auf Der Tag: wie viele Einträge im Handlungsbedarf je Art.",
+   "daten": {
+    "quelle": "genau die Einträge, die im Feld Handlungsbedarf dieses Logins angezeigt werden (nach Rechten und Feld-Zuordnung)",
+    "je_eintrag": [
+     "Anzahl",
+     "Art (Konflikt · Warnung · Entscheidung), Einzahl bei 1"
+    ],
+    "sortierung": "Konflikt → Warnung → Entscheidung; Arten mit 0 entfallen"
+   },
+   "interaktion": [
+    {
+     "ausloeser": "Antippen eines Zählers",
+     "ergebnis": "filtert den Handlungsbedarf auf diese Art; erneutes Antippen hebt den Filter auf"
+    }
+   ],
+   "zustaende": {
+    "leer": "keine Zähler, wenn der Handlungsbedarf leer ist"
+   },
+   "regeln": [
+    "U-170 keine Doppelung: Zähler = Einträge darunter, nie mehr",
+    "U-189 Farben wie die Einträge"
+   ]
+  },
+  "schnell": {
+   "zweck": "Schnellleiste mit den zwei häufigsten Wegen, nur auf Tablet und Handy (Desktop hat sie in der Seitenleiste).",
+   "aufbau": "zwei große Knöpfe nebeneinander unter der Lage: Neuer Eingang (primär), Ware raus",
+   "interaktion": [
+    {
+     "ausloeser": "Neuer Eingang",
+     "ziel": "eingang"
+    },
+    {
+     "ausloeser": "Ware raus",
+     "ziel": "raus",
+     "ergebnis": "öffnet Dialog 10 Ware raus (nicht eine Auftragsliste)"
+    }
+   ],
+   "rechte": "Knopf nur mit dem Recht des Ziels (eingang bzw. auftraege)",
+   "geraete": "nur tablet, handy"
+  },
+  "felder": {
+   "zweck": "Arbeitsfläche von Der Tag: die Felder des Logins in zwei Spalten (Desktop) bzw. untereinander (Tablet/Handy).",
+   "daten": {
+    "quelle": "Anordnung des Logins (Feld, Spalte, Reihenfolge) aus der gespeicherten Einstellung; ohne eigene Einstellung tagkonfig.standard der Rechte-Vorlage",
+    "filter": "nur Inhalte, deren Recht der Login hat (tagkonfig.bausteine[].block.recht/rollen); Handlungsbedarf immer Feld 1"
+   },
+   "aufbau": "Desktop: links Handlungsbedarf und links zugeordnete Felder, rechts die übrigen; Tablet/Handy: eine Spalte in gespeicherter Reihenfolge",
+   "interaktion": [
+    {
+     "ausloeser": "Anpassen (Seitenkopf)",
+     "ergebnis": "Bearbeitungsmodus direkt auf der Seite: je Feld Inhalt wählen (nur erlaubte, jeder Inhalt einmal), Feld hinzufügen/entfernen, hoch/runter, andere Spalte; „Vorschlag übernehmen“ setzt den Standard der Vorlage; „Fertig“ speichert die vollständige Anordnung je Login, Meldung „Der Tag gespeichert“"
+    }
+   ],
+   "rechte": "Server lehnt beim Speichern nicht erlaubte Inhalte ab und liefert sie auch nicht aus",
+   "regeln": [
+    "U-182, U-206: jeder Eintrag genau einmal – Einträge eines ausgeblendeten Feldes stehen im Handlungsbedarf",
+    "Inhalte und ihre Ableitung: tagkonfig.bausteine[].block.ableitung"
+   ],
+   "zustaende": {
+    "leer": "„Noch keine Bereiche freigegeben“, wenn der Login keine Rechte hat (K23)"
+   }
+  },
+  "hb": {
+   "zweck": "Handlungsbedarf: alles, was die Person jetzt tun muss, jeder Eintrag mit genau einer Hauptaktion.",
+   "daten": {
+    "quelle": "siehe tagkonfig.bausteine[hb].block.ableitung.faelle (verbindlich)",
+    "sortierung": "tagkonfig.sortierung"
+   },
+   "je_eintrag": [
+    "Nummer (Auftrag/Rechnung/Mail)",
+    "Titel",
+    "Art-Etikett",
+    "Grundzeile",
+    "Hauptaktion",
+    "Später",
+    "Weitere (nur Auftrag + Delegationsrecht)"
+   ],
+   "interaktion": [
+    {
+     "ausloeser": "Hauptaktion",
+     "ergebnis": "öffnet das Ziel des Falls mit genau diesem Objekt"
+    },
+    {
+     "ausloeser": "Später",
+     "ziel": "spaeter",
+     "ergebnis": "Menü direkt am Knopf"
+    },
+    {
+     "ausloeser": "Weitere",
+     "ziel": "hbmehr",
+     "ergebnis": "Menü direkt am Knopf; nur bei Aufträgen und nur mit Recht zum Delegieren"
+    },
+    {
+     "ausloeser": "Antippen der Zeile (außerhalb der Knöpfe)",
+     "ergebnis": "wie Hauptaktion"
+    }
+   ],
+   "geraete": "Handy: höchstens 3 Einträge sichtbar, „alle zeigen“; Später auch am Handy direkt erreichbar",
+   "zustaende": {
+    "leer": "„Nichts offen“"
+   }
+  }
+ },
  "bauhinweise": [
   {
    "id": "K1",
@@ -5898,7 +6045,7 @@
  "bauregeln": [
   "Nur bauen, was unter „baureife“ baureif ist. Nicht baureife Abschnitte NICHT anfangen – auch nicht teilweise, auch nicht „nach bestem Wissen“ (U-211).",
   "Gegenprüfung vor jedem Bau (U-211): Bevor ein baureifer Abschnitt begonnen wird, schreibt Codex codex/RUECKFRAGEN_<Abschnitt>.md mit allem, was zum exakten Bau fehlt oder mehrdeutig ist (Feld, Daten, Ziel, Regel). Gibt es Rückfragen, wird nur gebaut, was ohne Rückfrage eindeutig ist; Raten ist verboten.",
-  "Abnahme als Test: Jeder Prüffall unter screens[].abnahme wird als automatischer Test umgesetzt (Gegeben · Wenn · Dann); Abgabe nur mit grünen Tests.",
+  "Abnahme als Prüfliste: Jeder Prüffall unter screens[].abnahme wird in der Abgabe einzeln mit Datei:Zeile belegt (Gegeben · Wenn · Dann); keine Klicktests durch Codex (Regel 4d) – die Owner klickt nach der Abgabe genau diese Fälle.",
   "Korrekturen zuerst: Seiten mit status „abweichungen“ nach „korrekturen“ nachbessern, bevor neue Seiten gebaut werden; jede Korrektur einzeln in der Abgabe nachweisen.",
   "Verbindlich ist die Struktur: Felder (pflicht, vorbelegung, recht), Aktionen (ziel, meldung, verhalten), Zustände, Regeln, aufbau.*, abnahme. Freitext in „elemente“ ist nur Erläuterung – bei Widerspruch gilt aufbau.",
   "Jede Aktion führt genau zu ihrem ziel mit dem richtigen Objekt; „zurueck“ heißt: Dialog schließen und dort weiter, wo man herkam – nie Seite neu laden, nie Reiter wechseln.",

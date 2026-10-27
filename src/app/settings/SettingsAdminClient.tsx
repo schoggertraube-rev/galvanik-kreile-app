@@ -62,7 +62,8 @@ export function SettingsAdminClient({
       ? ""
       : (initialSnapshot.extraWorkHourlyRate.hourlyRateCents / 100).toFixed(2).replace(".", ","),
   );
-  const [pins, setPins] = useState<Record<string, string>>(Object.create(null));
+  const [editingUser, setEditingUser] = useState<ManagedUser | null>(null);
+  const [editPin, setEditPin] = useState("");
   const [newLogin, setNewLogin] = useState({ fullName: "", designation: "", template: "werkstatt" as "werkstatt" | "meister" | "leer", pin: "" });
   const [ownCode, setOwnCode] = useState({ first: "", repeat: "" });
   const [message, setMessage] = useState("");
@@ -144,11 +145,20 @@ export function SettingsAdminClient({
         shortCode: user.shortCode,
         designation: user.designation,
         active: user.active,
-        pin: pins[user.id] || null,
+        pin: editPin || null,
       }),
       `${user.fullName} gespeichert.`,
-      () => setPins((current) => ({ ...current, [user.id]: "" })),
+      () => {
+        setUsers((current) => current.map((item) => item.id === user.id ? user : item));
+        setEditPin("");
+        setEditingUser(null);
+      },
     );
+  }
+
+  function editUser(user: ManagedUser) {
+    setEditingUser({ ...user, areas: [...user.areas], fixedAreas: [...user.fixedAreas] });
+    setEditPin("");
   }
 
   function toggleArea(userId: string, area: AccessArea, granted: boolean, isCurrent: boolean) {
@@ -232,17 +242,21 @@ export function SettingsAdminClient({
         <label>Code<input data-spec-id="rechte.code" type="password" inputMode="numeric" value={newLogin.pin} onChange={(event) => setNewLogin({ ...newLogin, pin: event.target.value.replace(/\D/g, "").slice(0, 4) })} /></label>
         <button data-spec-id="rechte.login-anlegen" disabled={pending} onClick={() => report(() => createManagedUserAction(newLogin), "Login angelegt.", () => window.location.reload())}>Login anlegen</button>
       </div>
-      <div className={styles.userList}>{users.map((user) => <article key={user.id}>
-        <div className={styles.userSummary}><span>{user.shortCode}</span><div><strong>{user.fullName}</strong><small>{user.designation} · {user.areas.length} Bereiche</small></div></div>
-        <div className={styles.userFields}>
-          <label>Name<input value={user.fullName} onChange={(event) => setUsers((current) => current.map((item) => item.id === user.id ? { ...item, fullName: event.target.value } : item))} /></label>
-          <label>Kürzel<input value={user.shortCode} maxLength={8} onChange={(event) => setUsers((current) => current.map((item) => item.id === user.id ? { ...item, shortCode: event.target.value.toUpperCase() } : item))} /></label>
-          <label>Bezeichnung<input value={user.designation} onChange={(event) => setUsers((current) => current.map((item) => item.id === user.id ? { ...item, designation: event.target.value } : item))} /></label>
-          <label>Neuer Code<input type="password" inputMode="numeric" placeholder="unverändert" value={pins[user.id] ?? ""} onChange={(event) => setPins((current) => ({ ...current, [user.id]: event.target.value.replace(/\D/g, "").slice(0, 4) }))} /></label>
-          <label className={styles.check}><input type="checkbox" checked={user.active} disabled={user.isCurrent} onChange={(event) => setUsers((current) => current.map((item) => item.id === user.id ? { ...item, active: event.target.checked } : item))} />Aktiv</label>
-          <button data-spec-id="rechte.aendern" disabled={pending} onClick={() => updateUser(user)}>Ändern</button>
-        </div>
-      </article>)}</div>
+      <div className={styles.userList}>{users.map((user) => {
+        const isEditing = editingUser?.id === user.id;
+        return <article key={user.id}>
+          <div className={styles.userSummary}><span>{user.shortCode}</span><div><strong>{user.fullName}</strong><small>{user.designation} · {user.areas.length} Bereiche</small></div><button data-spec-id="rechte.aendern" type="button" disabled={pending} onClick={() => editUser(user)}>Ändern</button></div>
+          {isEditing ? <div className={styles.userFields}>
+            <label>Name<input value={editingUser.fullName} onChange={(event) => setEditingUser({ ...editingUser, fullName: event.target.value })} /></label>
+            <label>Kürzel<input value={editingUser.shortCode} maxLength={8} onChange={(event) => setEditingUser({ ...editingUser, shortCode: event.target.value.toUpperCase() })} /></label>
+            <label>Bezeichnung<input value={editingUser.designation} onChange={(event) => setEditingUser({ ...editingUser, designation: event.target.value })} /></label>
+            <label>Neuer Code<input type="password" inputMode="numeric" placeholder="unverändert" value={editPin} onChange={(event) => setEditPin(event.target.value.replace(/\D/g, "").slice(0, 4))} /></label>
+            <label className={styles.check}><input type="checkbox" checked={editingUser.active} disabled={editingUser.isCurrent} onChange={(event) => setEditingUser({ ...editingUser, active: event.target.checked })} />Aktiv</label>
+            <button type="button" disabled={pending} onClick={() => updateUser(editingUser)}>Übernehmen</button>
+            <button type="button" disabled={pending} onClick={() => { setEditingUser(null); setEditPin(""); }}>Abbrechen</button>
+          </div> : null}
+        </article>;
+      })}</div>
       <div className={styles.rightsTable} role="region" aria-label="Rechtematrix"><table><thead><tr><th>Bereich</th>{users.map((user) => <th key={user.id}>{user.shortCode}</th>)}</tr></thead><tbody>{ACCESS_AREAS.map((area) => <tr key={area}><th><strong>{ACCESS_AREA_LABELS[area].text}</strong>{ACCESS_AREA_LABELS[area].sub ? <small>{ACCESS_AREA_LABELS[area].sub}</small> : null}</th>{users.map((user) => { const fixed = user.fixedAreas.includes(area); return <td key={user.id}><input aria-label={`${ACCESS_AREA_LABELS[area].text} für ${user.fullName}`} type="checkbox" checked={user.areas.includes(area)} disabled={pending || fixed} onChange={(event) => toggleArea(user.id, area, event.target.checked, user.isCurrent)} />{fixed ? <small>fest</small> : null}</td>; })}</tr>)}</tbody></table></div>
     </section> : null}
   </main>;
