@@ -588,13 +588,7 @@ export function OrderCardAppAdapter({
       setFeedback({ kind: "error", message: "Duplizieren benötigt einen bestätigten Liefertermin." });
       return;
     }
-    const items = snapshot.card.items.flatMap((item) => item.catalogServiceId && item.unit && item.unitPriceCents !== null && item.vatRateBasisPoints !== null
-      ? [{ catalogServiceId: item.catalogServiceId, name: item.name, quantity: item.quantity, material: item.material, surfaceRequested: item.surfaceRequested, unit: item.unit, unitPriceCents: item.unitPriceCents, vatRateBasisPoints: item.vatRateBasisPoints }]
-      : []);
-    if (items.length !== snapshot.card.items.length) {
-      setFeedback({ kind: "error", message: "Legacy-Positionen ohne Katalogleistung können nicht sicher dupliziert werden." });
-      return;
-    }
+    const items = snapshot.card.items.map((item) => ({ catalogServiceId: item.catalogServiceId ?? null, name: item.name, quantity: item.quantity, material: item.material, surfaceRequested: item.surfaceRequested, unit: item.unit ?? null, unitPriceCents: item.unitPriceCents ?? null, vatRateBasisPoints: item.vatRateBasisPoints ?? null }));
     setFeedback({ kind: "submitting", message: "Auftrag wird als neuer Eingang dupliziert." });
     const clientEventId = (requests.current.duplicate ??= crypto.randomUUID());
     const result = await createOrderIntakeAction({

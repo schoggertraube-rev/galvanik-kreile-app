@@ -140,7 +140,7 @@ export type DirectIntakeInput = {
   customer: { mode: "EXISTING"; customerId: string };
   dueDate: string;
   note: string | null;
-  items: Array<{ catalogServiceId:string; name:string; quantity:number; material:string|null; surfaceRequested:string; unit:string; unitPriceCents:number; vatRateBasisPoints:0|700|1900 }>;
+  items: Array<{ catalogServiceId:string|null; name:string; quantity:number; material:string|null; surfaceRequested:string; unit:string|null; unitPriceCents:number|null; vatRateBasisPoints:0|700|1900|null }>;
 };
 
 export type GlobalCreateDirectIntakeResult =
@@ -210,7 +210,7 @@ type PositionDraft = {
   unit: string;
   unitPriceCents: number | null;
 };
-type IntakePositionDraft = { key:string; catalogServiceId:string; name:string; quantity:string; material:string; surfaceRequested:string; unit:string; unitPriceCents:number; vatRateBasisPoints:0|700|1900 };
+type IntakePositionDraft = { key:string; catalogServiceId:string; name:string; quantity:string; material:string; surfaceRequested:string; unit:string|null; unitPriceCents:number|null; vatRateBasisPoints:0|700|1900|null };
 
 function CustomerFields({ value, onChange, autofocus = false, requireOrderData = true }: { value: CustomerDraft; onChange: (value: CustomerDraft) => void; autofocus?: boolean; requireOrderData?: boolean }) {
   const set = <K extends keyof CustomerDraft>(key: K, next: CustomerDraft[K]) => onChange({ ...value, [key]: next });
@@ -275,6 +275,8 @@ const EMPTY_INTAKE_CUSTOMER: CustomerDraft = {
 };
 
 const HANDY_QUERY = "(max-width: 699px)";
+const FREE_TEXT_SERVICE = "FREE_TEXT";
+const DEFAULT_SURFACES = ["Verchromen", "Vernickeln", "Verzinken", "Entchromen / prüfen", "noch zu klären"] as const;
 const subscribeHandy = (notify: () => void) => {
   if (typeof window.matchMedia !== "function") return () => undefined;
   const query = window.matchMedia(HANDY_QUERY);
@@ -330,9 +332,9 @@ const newIntakePosition = (): IntakePositionDraft => ({
   material: "",
   surfaceRequested: "",
   catalogServiceId: "",
-  unit: "",
-  unitPriceCents: 0,
-  vatRateBasisPoints: 1900,
+  unit: null,
+  unitPriceCents: null,
+  vatRateBasisPoints: null,
 });
 
 function euro(cents: number) {
@@ -517,6 +519,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       deny("quote");
       return;
     }
+    setDirectCustomerMode("NONE");
+    setDirectCustomerId("");
+    setDirectCustomer(EMPTY_INTAKE_CUSTOMER);
     setOpen(true);
     setIntakeStep(1);
     navigate("direct-intake");
@@ -538,9 +543,6 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       }
       setCatalogServices(catalog.services);
       setCustomerChoices(result.customers);
-      setDirectCustomerMode("NONE");
-      setDirectCustomerId("");
-      setDirectCustomer(EMPTY_INTAKE_CUSTOMER);
       setCustomerLoad(result.customers.length ? "ready" : "empty");
     } catch {
       if (seq === customerRequestSeq.current) setFeedback({ kind: "error", message: "Die vorhandenen Kunden konnten nicht sicher gelesen werden. Es wurde nichts angelegt." });
@@ -853,10 +855,6 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         setBusy(false);
       }
     }
-    if (services.length === 0) {
-      setFeedback({ kind: "validation", message: "Im Leistungskatalog ist noch keine aktive Leistung gepflegt." });
-      return;
-    }
     resetAwardDateForQuoteContext();
     setCustomer(selected);
     setQuote(null);
@@ -881,10 +879,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       surfaceRequested: position.surfaceRequested.trim(),
       unitPriceCents: position.unitPriceCents,
     }));
-    if (!dueDate || positions.some((position) => !position.catalogServiceId) || mapped.some((position) => position.name.length < 2
+    if (!dueDate || positions.some((position) => position.catalogServiceId !== FREE_TEXT_SERVICE && !position.catalogServiceId) || mapped.some((position) => position.name.length < 2
       || !Number.isSafeInteger(position.quantity) || position.quantity < 1
       || position.surfaceRequested.length < 2 || position.unitPriceCents === null)) {
-      setFeedback({ kind: "validation", message: "Termin und alle Positionen brauchen Bezeichnung, Menge, Oberfläche und einen gültigen Netto-Stückpreis." });
+      setFeedback({ kind: "validation", message: "Termin und alle KV-Positionen brauchen Bezeichnung, Menge, Oberfläche und einen Netto-Stückpreis." });
       return;
     }
     const id = requestId("quote");
@@ -956,6 +954,38 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setDirectItems((current) => current.map((item) => item.key === key ? { ...item, [field]: value } : item));
   };
 
+  const setDirectPositionName = (key: string, name: string) => {
+    const matches = catalogServices.filter((candidate) => candidate.name.localeCompare(name.trim(), "de-DE", { sensitivity: "base" }) === 0);
+    const service = matches.length === 1 ? matches[0] : null;
+    setDirectItems((current) => current.map((item) => item.key !== key ? item : service
+      ? { ...item, catalogServiceId: service.id, name: service.name, surfaceRequested: service.surface, unit: service.unit, unitPriceCents: service.netPriceCents, vatRateBasisPoints: service.vatRateBasisPoints }
+      : { ...item, catalogServiceId: FREE_TEXT_SERVICE, name, unit: null, unitPriceCents: null, vatRateBasisPoints: null }));
+  };
+
+  const setDirectPositionSurface = (key: string, surfaceRequested: string) => {
+    setDirectItems((current) => current.map((item) => {
+      if (item.key !== key) return item;
+      const service = catalogServices.find((candidate) => candidate.id === item.catalogServiceId);
+      return service?.surface === surfaceRequested
+        ? { ...item, surfaceRequested }
+        : { ...item, catalogServiceId: FREE_TEXT_SERVICE, surfaceRequested, unit: null, unitPriceCents: null, vatRateBasisPoints: null };
+    }));
+  };
+
+  const setDirectPositionPrice = (key: string, euros: string) => {
+    const parsed = Number.parseFloat(euros.replace(",", "."));
+    setDirectItems((current) => current.map((item) => item.key === key
+      ? { ...item, unitPriceCents: Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) : null, unit: item.unit ?? "Stück", vatRateBasisPoints: item.vatRateBasisPoints ?? 1900 }
+      : item));
+  };
+
+  const intakePositionComplete = (item: IntakePositionDraft) =>
+    (item.catalogServiceId === FREE_TEXT_SERVICE || item.catalogServiceId.length > 0)
+    && item.name.trim().length >= 2
+    && item.surfaceRequested.trim().length >= 2
+    && Number.isSafeInteger(Number(item.quantity))
+    && Number(item.quantity) > 0;
+
   const advanceIntakeCustomer = async (): Promise<string | null> => {
     if (directCustomerMode === "NONE") {
       setFeedback({ kind: "validation", message: "Bitte einen bestehenden Kunden oder ‚Neukunde anlegen‘ auswählen." });
@@ -1023,9 +1053,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       return;
     }
     const validDates = /^\d{4}-\d{2}-\d{2}$/.test(directWishDate) && /^\d{4}-\d{2}-\d{2}$/.test(directConfirmedDate);
-    const items = directItems.map((item) => ({ catalogServiceId:item.catalogServiceId, name:item.name.trim(), quantity:Number(item.quantity), material:nullable(item.material), surfaceRequested:item.surfaceRequested.trim(), unit:item.unit, unitPriceCents:item.unitPriceCents, vatRateBasisPoints:item.vatRateBasisPoints }));
+    const items = directItems.map((item) => ({ catalogServiceId:item.catalogServiceId === FREE_TEXT_SERVICE ? null : item.catalogServiceId, name:item.name.trim(), quantity:Number(item.quantity), material:nullable(item.material), surfaceRequested:item.surfaceRequested.trim(), unit:item.unit, unitPriceCents:item.unitPriceCents, vatRateBasisPoints:item.vatRateBasisPoints }));
     const validCustomer = customerId.length > 0 && completeOrderCustomer(directCustomer);
-    if (!validCustomer || !validDates || items.length < 1 || items.length > 20 || items.some((item) => !item.catalogServiceId || item.name.length < 2 || item.surfaceRequested.length < 2 || !Number.isSafeInteger(item.quantity) || item.quantity < 1)) {
+    if (!validCustomer || !validDates || items.length < 1 || items.length > 20 || !directItems.every(intakePositionComplete)) {
       setFeedback({ kind: "validation", message: "Bitte Kunde, mindestens eine Position, Terminwunsch und zugesagten Termin vollständig angeben." });
       return;
     }
@@ -1068,15 +1098,15 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       surfaceRequested: item.surfaceRequested.trim(),
       unitPriceCents: item.unitPriceCents,
     }));
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(directWishDate) || positions.some((item) => item.name.length < 2 || !Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.surfaceRequested.length < 2)) {
-      setFeedback({ kind: "validation", message: "Bitte Wunschtermin und alle Positionen vollständig angeben." });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(directWishDate) || positions.some((item) => item.name.length < 2 || !Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.surfaceRequested.length < 2 || item.unitPriceCents === null)) {
+      setFeedback({ kind: "validation", message: "Bitte Wunschtermin, Positionen und Netto-Preis für den KV vollständig angeben." });
       return;
     }
     const clientEventId = requestId("quote");
     setBusy(true);
     setFeedback(null);
     try {
-      const result = await ports.createQuote({ clientEventId, customerId, dueDate: directWishDate, note: nullable(directNote), positions });
+      const result = await ports.createQuote({ clientEventId, customerId, dueDate: directWishDate, note: nullable(directNote), positions: positions.map((position) => ({ ...position, unitPriceCents: position.unitPriceCents! })) });
       if (result.code !== "OK") {
         setFeedback(requestFeedback(result, clientEventId));
         return;
@@ -1120,12 +1150,18 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     return customerChoices.filter((entry) => `${entry.customerNumber ?? ""} ${entry.name} ${entry.city ?? ""}`.toLocaleLowerCase("de-DE").includes(query));
   }, [customerChoices, customerQuery]);
 
-  const setPosition = (key: string, field: "quantity" | "material", value: string) => {
+  const surfaceOptions = useMemo(() => [...new Set([
+    ...DEFAULT_SURFACES,
+    ...catalogServices.map((service) => service.surface).filter(Boolean),
+  ])], [catalogServices]);
+
+  const setPosition = (key: string, field: "name" | "quantity" | "material" | "surfaceRequested", value: string) => {
     setPositions((current) => current.map((position) => position.key === key ? { ...position, [field]: value } : position));
   };
 
-  const selectQuoteService = (key: string, serviceId: string) => {
-    const service = catalogServices.find((candidate) => candidate.id === serviceId);
+  const setQuotePositionName = (key: string, name: string) => {
+    const matches = catalogServices.filter((candidate) => candidate.name.localeCompare(name.trim(), "de-DE", { sensitivity: "base" }) === 0);
+    const service = matches.length === 1 ? matches[0] : null;
     setPositions((current) => current.map((position) => position.key === key
       ? service
         ? {
@@ -1136,7 +1172,24 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
             unit: service.unit,
             unitPriceCents: service.netPriceCents,
           }
-        : { ...newPosition(), key: position.key, quantity: position.quantity, material: position.material }
+        : { ...position, catalogServiceId: FREE_TEXT_SERVICE, name, unit: "", unitPriceCents: null }
+      : position));
+  };
+
+  const setQuotePositionSurface = (key: string, surfaceRequested: string) => {
+    setPositions((current) => current.map((position) => {
+      if (position.key !== key) return position;
+      const service = catalogServices.find((candidate) => candidate.id === position.catalogServiceId);
+      return service?.surface === surfaceRequested
+        ? { ...position, surfaceRequested }
+        : { ...position, catalogServiceId: FREE_TEXT_SERVICE, surfaceRequested, unit: "", unitPriceCents: null };
+    }));
+  };
+
+  const setQuotePositionPrice = (key: string, euros: string) => {
+    const parsed = Number.parseFloat(euros.replace(",", "."));
+    setPositions((current) => current.map((position) => position.key === key
+      ? { ...position, unitPriceCents: Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) : null }
       : position));
   };
 
@@ -1185,8 +1238,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
               {intakeStep > 1 ? <KrButton text="Zurück" onClick={() => setIntakeStep((intakeStep - 1) as 1 | 2)} /> : <KrButton text="Abbrechen" onClick={close} />}
               {intakeStep === 1 ? <KrButton art="primaer" icon="arrow" text="Positionen" disabled={busy} onClick={() => void advanceIntakeCustomer()} /> : null}
               {intakeStep === 2 ? <KrButton art="primaer" icon="arrow" text="Belege & Prüfung" onClick={() => {
-                if (directItems.every((item) => item.catalogServiceId && Number(item.quantity) > 0)) { setFeedback(null); setIntakeStep(3); }
-                else setFeedback({ kind: "validation", message: "Bitte jede Position vollständig aus dem Leistungskatalog wählen." });
+                if (directItems.every(intakePositionComplete)) { setFeedback(null); setIntakeStep(3); }
+                else setFeedback({ kind: "validation", message: "Bitte für jede Position Bezeichnung, Menge und Oberfläche angeben." });
               }} /> : null}
               {intakeStep === 3 ? <KrButton form="kr-neuer-eingang" type="submit" art="erledigen" icon="check" text={intakeKind === "QUOTE" ? "KV anlegen" : "Wareneingang buchen"} disabled={busy || !intakeChecked} /> : null}
             </>
@@ -1202,6 +1255,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
             </section>
           ) : (
             <form id="kr-neuer-eingang" className="kr-stapel" onSubmit={(event) => void submitIntakePage(event)}>
+              <datalist id="kr-service-catalog">{catalogServices.map((service) => <option key={service.id} value={service.name}>{service.surface}</option>)}</datalist>
               {isHandy ? <SchrittNav schritte={["Kunde", "Positionen", "Prüfung"]} aktuell={intakeStep - 1} erreicht={intakeStep - 1} onSchritt={(index) => setIntakeStep((index + 1) as 1 | 2 | 3)} /> : <AbschnittNav abschnitte={["Kunde", "Positionen", "Prüfung"]} aktuell={intakeStep - 1} onAbschnitt={(index) => {
                 setIntakeStep((index + 1) as 1 | 2 | 3);
                 document.querySelector(`[data-abschnitt="${index}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1252,9 +1306,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 <div className="kr-stapel">
                   {directItems.map((item, index) => <div className="kr-position" key={item.key}>
                     <span className="kr-position-nr">{index + 1}</span>
-                    <Feld label="Leistung"><Auswahl required value={item.catalogServiceId} onChange={(event) => { const service = catalogServices.find((candidate) => candidate.id === event.target.value); if (service) setDirectItems((current) => current.map((candidate) => candidate.key === item.key ? { ...candidate, catalogServiceId: service.id, name: service.name, surfaceRequested: service.surface, unit: service.unit, unitPriceCents: service.netPriceCents, vatRateBasisPoints: service.vatRateBasisPoints } : candidate)); }} optionen={[{ wert: "", text: "Bitte wählen" }, ...catalogServices.map((service) => ({ wert: service.id, text: service.name }))]} /></Feld>
+                    <Feld label="Teil / Bezeichnung"><Eingabe required minLength={2} list="kr-service-catalog" placeholder="Katalog oder Freitext" value={item.name} onChange={(event) => setDirectPositionName(item.key, event.target.value)} /></Feld>
                     <Feld label="Menge"><Eingabe type="number" min="1" value={item.quantity} onChange={(event) => updateDirectItem(item.key, "quantity", event.target.value)} /></Feld>
-                    <Feld label="Oberfläche" className="kr-pos-oberflaeche"><Eingabe readOnly value={item.surfaceRequested} /></Feld>
+                    <Feld label="Oberfläche" className="kr-pos-oberflaeche"><Auswahl required value={item.surfaceRequested} onChange={(event) => setDirectPositionSurface(item.key, event.target.value)} optionen={[{ wert: "", text: "Bitte wählen" }, ...surfaceOptions.map((surface) => ({ wert: surface, text: surface }))]} /></Feld>
+                    {intakeKind === "QUOTE" && item.catalogServiceId === FREE_TEXT_SERVICE ? <Feld label="Preis netto (€)"><Eingabe required type="number" min="0" step="0.01" value={item.unitPriceCents === null ? "" : String(item.unitPriceCents / 100)} onChange={(event) => setDirectPositionPrice(item.key, event.target.value)} /></Feld> : null}
                     <KrButton art="sekundaer" icon="x" label="Position entfernen" disabled={directItems.length === 1} onClick={() => setDirectItems((current) => current.filter((entry) => entry.key !== item.key))} />
                   </div>)}
                 </div>
@@ -1346,12 +1401,12 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                     <div className={styles.createFormActions}><button type="button" className={styles.createPrimary} onClick={() => void advanceIntakeCustomer()} disabled={busy}>{busy ? <Loader2 className={styles.createSpinner} /> : null} Weiter zu Positionen</button></div>
                   </> : null}
                   {intakeStep === 2 ? <>
-                    <p className={styles.createLead}>Leistung aus dem Katalog wählen; Oberfläche, Einheit und Preis werden verbindlich übernommen.</p>
+                    <p className={styles.createLead}>Teil aus dem Katalog übernehmen oder frei beschreiben. Die Oberfläche wird immer separat gewählt; ein Preis darf zunächst offen bleiben.</p>
                     {directItems.map((item, index) => <fieldset className={styles.createPosition} key={item.key}><legend>Position {index + 1}</legend><div className={styles.createFormGrid}>
-                      <label className={styles.createFieldWide}>Leistung<select required value={item.catalogServiceId} onChange={(event) => { const service=catalogServices.find((candidate)=>candidate.id===event.target.value); if(service)setDirectItems((current)=>current.map((candidate)=>candidate.key===item.key?{...candidate,catalogServiceId:service.id,name:service.name,surfaceRequested:service.surface,unit:service.unit,unitPriceCents:service.netPriceCents,vatRateBasisPoints:service.vatRateBasisPoints}:candidate)); }}><option value="">Bitte wählen</option>{catalogServices.map((service)=><option key={service.id} value={service.id}>{service.name} · {service.surface} · {euro(service.netPriceCents)}/{service.unit}</option>)}</select></label>
-                      <label>Menge<input type="number" min="1" value={item.quantity} onChange={(event) => updateDirectItem(item.key, "quantity", event.target.value)} /></label><label>Material<input value={item.material} onChange={(event) => updateDirectItem(item.key, "material", event.target.value)} /></label><label>Oberfläche<input readOnly value={item.surfaceRequested} /></label><label>Einheit<input readOnly value={item.unit} /></label><label>Preis netto<input readOnly value={euro(item.unitPriceCents)} /></label>
+                      <label className={styles.createFieldWide}>Teil / Bezeichnung<input required minLength={2} list="kr-service-catalog" placeholder="Katalog oder Freitext" value={item.name} onChange={(event) => setDirectPositionName(item.key, event.target.value)} /></label>
+                      <label>Menge<input type="number" min="1" value={item.quantity} onChange={(event) => updateDirectItem(item.key, "quantity", event.target.value)} /></label><label>Material<input value={item.material} onChange={(event) => updateDirectItem(item.key, "material", event.target.value)} /></label><label>Oberfläche<select required value={item.surfaceRequested} onChange={(event) => setDirectPositionSurface(item.key, event.target.value)}><option value="">Bitte wählen</option>{surfaceOptions.map((surface) => <option key={surface} value={surface}>{surface}</option>)}</select></label><label>Einheit<input readOnly value={item.unit ?? "offen"} /></label>{intakeKind === "QUOTE" && item.catalogServiceId === FREE_TEXT_SERVICE ? <label>Preis netto (€)<input required type="number" min="0" step="0.01" value={item.unitPriceCents === null ? "" : String(item.unitPriceCents / 100)} onChange={(event) => setDirectPositionPrice(item.key, event.target.value)} /></label> : <label>Preis netto<input readOnly value={item.unitPriceCents === null ? "offen" : euro(item.unitPriceCents)} /></label>}
                     </div>{directItems.length > 1 ? <button type="button" onClick={() => setDirectItems((current) => current.filter((entry) => entry.key !== item.key))}>Position entfernen</button> : null}</fieldset>)}
-                    <div className={styles.createFormActions}><button type="button" onClick={() => setDirectItems((current) => current.length >= 20 ? current : [...current, newIntakePosition()])} disabled={directItems.length >= 20}>Position hinzufügen</button><button type="button" className={styles.createPrimary} onClick={() => { if (directItems.every((item) => item.catalogServiceId && Number(item.quantity) > 0)) { setFeedback(null); setIntakeStep(3); } else setFeedback({ kind: "validation", message: "Bitte jede Position vollständig aus dem Leistungskatalog wählen." }); }}>Weiter zur Prüfung</button></div>
+                    <div className={styles.createFormActions}><button type="button" onClick={() => setDirectItems((current) => current.length >= 20 ? current : [...current, newIntakePosition()])} disabled={directItems.length >= 20}>Position hinzufügen</button><button type="button" className={styles.createPrimary} onClick={() => { if (directItems.every(intakePositionComplete)) { setFeedback(null); setIntakeStep(3); } else setFeedback({ kind: "validation", message: "Bitte für jede Position Bezeichnung, Menge und Oberfläche angeben." }); }}>Weiter zur Prüfung</button></div>
                   </> : null}
                   {intakeStep === 3 ? <><div className={styles.createContext}><span>Kunde</span><strong>{directCustomer.name}</strong><span>Termin</span><strong>{directConfirmedDate}</strong><span>Positionen</span><strong>{directItems.length}</strong></div><label className={styles.createFieldWide}>Hinweis / Belege<textarea rows={3} value={directNote} onChange={(event) => setDirectNote(event.target.value)} placeholder="Notiz; Fotos und Dokumente folgen in P2." /></label><div className={styles.createFormActions}><button type="button" onClick={() => setIntakeStep(2)}>Zurück</button><button type="submit" className={styles.createPrimary} disabled={busy}>{busy ? <Loader2 className={styles.createSpinner} /> : <Check />} Eingang speichern</button></div></> : null}
                 </form>
@@ -1413,12 +1468,12 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                     {positions.map((position, index) => (
                       <fieldset key={position.key} className={styles.createPosition}>
                         <legend>Position {index + 1}</legend>
-                        <label className={styles.createFieldWide}>Leistung<select data-autofocus={index === 0 || undefined} required value={position.catalogServiceId} onChange={(event) => selectQuoteService(position.key, event.target.value)}><option value="">Bitte aus dem Katalog wählen</option>{catalogServices.map((service) => <option key={service.id} value={service.id}>{service.name} · {service.surface} · {euro(service.netPriceCents)}/{service.unit}</option>)}</select></label>
+                        <label className={styles.createFieldWide}>Teil / Bezeichnung<input data-autofocus={index === 0 || undefined} required minLength={2} list="kr-service-catalog" placeholder="Katalog oder Freitext" value={position.name} onChange={(event) => setQuotePositionName(position.key, event.target.value)} /></label>
                         <label>Menge<input required inputMode="numeric" type="number" min="1" max="1000000" value={position.quantity} onChange={(event) => setPosition(position.key, "quantity", event.target.value)} /></label>
                         <label>Material<input value={position.material} onChange={(event) => setPosition(position.key, "material", event.target.value)} /></label>
-                        <label>Oberfläche<input readOnly value={position.surfaceRequested} /></label>
+                        <label>Oberfläche<select required value={position.surfaceRequested} onChange={(event) => setQuotePositionSurface(position.key, event.target.value)}><option value="">Bitte wählen</option>{surfaceOptions.map((surface) => <option key={surface} value={surface}>{surface}</option>)}</select></label>
                         <label>Einheit<input readOnly value={position.unit} /></label>
-                        <label>Preis netto<input readOnly value={position.unitPriceCents === null ? "" : euro(position.unitPriceCents)} /></label>
+                        <label>Preis netto (€)<input required type="number" min="0" step="0.01" readOnly={position.catalogServiceId !== FREE_TEXT_SERVICE} value={position.unitPriceCents === null ? "" : String(position.unitPriceCents / 100)} onChange={(event) => setQuotePositionPrice(position.key, event.target.value)} /></label>
                         {positions.length > 1 ? <button type="button" className={styles.createRemove} onClick={() => setPositions((current) => current.filter((entry) => entry.key !== position.key))} aria-label={`Position ${index + 1} entfernen`}><Trash2 /></button> : null}
                       </fieldset>
                     ))}

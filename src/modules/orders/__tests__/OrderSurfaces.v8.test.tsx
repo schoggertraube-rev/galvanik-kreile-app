@@ -123,6 +123,30 @@ describe("Orders V1.1 one-surface truth", () => {
     expect(onToggleItemFinished).toHaveBeenCalledWith("item-1", true);
   });
 
+  it("adds a free-text part with its own surface when no catalog service is selected", () => {
+    const onSaveContent = vi.fn();
+    render(<OrderCardView actions={{
+      ...actions,
+      content: { visible: true, enabled: true, reason: null },
+      onSaveContent,
+    }} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{ kind: "data", card: { ...card, catalog: [] } }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Teil hinzufügen" }));
+    fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "TEST Sonderteil" } });
+    fireEvent.change(screen.getByLabelText("Oberfläche"), { target: { value: "Vernickeln" } });
+    const buttons = screen.getAllByRole("button", { name: "Teil hinzufügen" });
+    fireEvent.click(buttons[buttons.length - 1]!);
+
+    expect(onSaveContent).toHaveBeenCalledWith(expect.objectContaining({
+      items: expect.arrayContaining([expect.objectContaining({
+        catalogServiceId: null,
+        name: "TEST Sonderteil",
+        surface: "Vernickeln",
+        unitPriceCents: null,
+      })]),
+    }));
+  });
+
   it.each(["denied", "error", "conflict"] as const)("keeps %s fail-closed", (kind) => {
     render(<OrderCardView actions={actions} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{ kind, message: "Sicherer Zustand" }} />);
     expect(screen.getByRole(kind === "denied" ? "status" : "alert")).toHaveTextContent("Sicherer Zustand");

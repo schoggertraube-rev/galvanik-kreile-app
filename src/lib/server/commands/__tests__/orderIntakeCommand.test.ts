@@ -194,9 +194,36 @@ describe("createOrderIntake", () => {
     const orderInsert = execute.mock.calls
       .map(([query]) => query)
       .find((query) => query.text.includes("INSERT INTO public.orders"));
+    const eventInsert = execute.mock.calls
+      .map(([query]) => query)
+      .find((query) => query.text.includes("INSERT INTO public.events"));
     expect(orderInsert?.text.split(") VALUES")[0]).not.toContain("payment_mode");
     expect(orderInsert?.text).toContain("payment_mode_version");
+    expect(eventInsert?.values).toContain("wareneingang");
     expect(sqlText).not.toMatch(/createClient|supabase|rpc\(/i);
+  });
+
+  it("accepts a free-text item without catalog or price and skips catalog validation", async () => {
+    const freeTextInput = {
+      ...input,
+      items: [{ catalogServiceId: null, name: "TEST Sonderteil", quantity: 1, material: "Stahl", surfaceRequested: "Vernickeln", unit: null, unitPriceCents: null, vatRateBasisPoints: null }],
+    };
+    execute.mockImplementation((query: { text: string }) => {
+      if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if (query.text.includes("FROM private.order_intake_receipts")) return Promise.resolve([]);
+      if (query.text.includes("FROM public.customers")) return Promise.resolve([{
+        id: CUSTOMER, tenant_id: KREILE_TENANT_SLUG, customer_number: "K-0042", name: "Kunde A", company_name: "Kunde A GmbH",
+        contact_person: "Ada Beispiel", phone: "+49 221 123456", email: "ada@example.test", street: "Testweg 1",
+        zip_code: "50667", city: "Köln", country: "Deutschland", payment_preference: "rechnung_14",
+      }]);
+      if (query.text.includes("next_number")) throw new Error("stop after validation");
+      throw new Error(`unexpected SQL ${query.text}`);
+    });
+    const { createOrderIntake } = await import("../orderIntakeCommand");
+    await expect(createOrderIntake(freeTextInput)).resolves.toMatchObject({ code: "UNAVAILABLE" });
+    const sqlText = execute.mock.calls.map(([query]) => query.text).join("\n");
+    expect(sqlText).toContain("next_number");
+    expect(sqlText).not.toContain("FROM public.catalog_services");
   });
 
   it("replays exactly one matching receipt and rejects client-event reuse without new rows", async () => {

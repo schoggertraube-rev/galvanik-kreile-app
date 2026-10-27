@@ -201,7 +201,7 @@ async function fillCustomer() {
 
 async function fillQuote() {
   fireEvent.click(screen.getByRole("button", { name: /KV \/ Angebot anlegen/ }));
-  fireEvent.change(await screen.findByLabelText("Leistung"), { target: { value: "88888888-8888-4888-8888-888888888888" } });
+  fireEvent.change(await screen.findByLabelText("Teil / Bezeichnung"), { target: { value: "Synthetischer Flansch" } });
   fireEvent.change(screen.getByLabelText("Material"), { target: { value: "Stahl" } });
   fireEvent.change(screen.getByLabelText("Gewünschter Termin"), { target: { value: "2026-10-15" } });
   fireEvent.change(screen.getByLabelText("Hinweis zum KV"), { target: { value: "SYNTHETISCHER KV" } });
@@ -362,13 +362,39 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.change(newCustomer, { target: { value: "SYNTHETISCH Direkteingang GmbH" } });
     fillRequiredCustomerAddress();
     fireEvent.change(screen.getByLabelText("Wunschtermin"), { target: { value: "2026-10-20" } });
-    fireEvent.change(screen.getByLabelText("Leistung"), { target: { value: "88888888-8888-4888-8888-888888888888" } });
+    fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "Synthetischer Flansch" } });
     fireEvent.click(screen.getByRole("checkbox", { name: /Ware, Menge und Zustand/ }));
     fireEvent.click(screen.getByRole("button", { name: "Wareneingang buchen" }));
     await screen.findByRole("heading", { name: "Auftrag A-2026-0061 angelegt" });
     expect(value.createDirectIntake).toHaveBeenCalledWith(expect.objectContaining({ dueDate: "2026-10-20" }));
     expect(value.readDirectIntakeReceipt).toHaveBeenCalledTimes(1);
     expect(value.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("books a free-text intake when the catalog is empty and keeps the price open", async () => {
+    let finishCatalog!: (value: { code: "OK"; services: [] }) => void;
+    const listCatalog = vi.fn(() => new Promise<{ code: "OK"; services: [] }>((resolve) => { finishCatalog = resolve; }));
+    const value = ports({ listCatalog });
+    render(<GlobalCreateFlow ports={value} />);
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent("path1:global-create-open", { detail: "DIRECT_INTAKE" }));
+    });
+    await screen.findByRole("heading", { name: "Neuer Eingang" });
+    fireEvent.change(screen.getByRole("combobox", { name: "Kunde" }), { target: { value: "NEW" } });
+    fireEvent.change(screen.getByLabelText("Name / Firma"), { target: { value: "TEST Freitextkunde GmbH" } });
+    await act(async () => finishCatalog({ code: "OK", services: [] }));
+    expect(screen.getByRole("combobox", { name: "Kunde" })).toHaveValue("NEW");
+    expect(screen.getByLabelText("Name / Firma")).toHaveValue("TEST Freitextkunde GmbH");
+    fillRequiredCustomerAddress();
+    fireEvent.change(screen.getByLabelText("Wunschtermin"), { target: { value: "2026-10-20" } });
+    fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "TEST Sonderteil" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Oberfläche" }), { target: { value: "Vernickeln" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /Ware, Menge und Zustand/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Wareneingang buchen" }));
+    await screen.findByRole("heading", { name: "Auftrag A-2026-0061 angelegt" });
+    expect(value.createDirectIntake).toHaveBeenCalledWith(expect.objectContaining({
+      items: [expect.objectContaining({ catalogServiceId: null, name: "TEST Sonderteil", surfaceRequested: "Vernickeln", unitPriceCents: null })],
+    }));
   });
 
   it("opens the desktop one-page intake directly from the primary action", async () => {
@@ -401,7 +427,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.change(screen.getByLabelText("Name / Firma"), { target: { value: "SYNTHETISCH Direkteingang Retry GmbH" } });
     fillRequiredCustomerAddress();
     fireEvent.change(screen.getByLabelText("Wunschtermin"), { target: { value: "2026-10-20" } });
-    fireEvent.change(screen.getByLabelText("Leistung"), { target: { value: "88888888-8888-4888-8888-888888888888" } });
+    fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "Synthetischer Flansch" } });
     fireEvent.click(screen.getByRole("checkbox", { name: /Ware, Menge und Zustand/ }));
     fireEvent.click(screen.getByRole("button", { name: "Wareneingang buchen" }));
 

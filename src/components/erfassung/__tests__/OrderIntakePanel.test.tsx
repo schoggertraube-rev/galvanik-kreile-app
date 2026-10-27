@@ -67,7 +67,7 @@ function makeReceiptForInput(input: {
   displayName?: string | null;
   dueDate: string;
   note: string | null;
-  items: Array<{ catalogServiceId?:string; name:string; quantity:number; material:string|null; surfaceRequested:string; unit?:string; unitPriceCents?:number; vatRateBasisPoints?:0|700|1900 }>;
+  items: Array<{ catalogServiceId?:string|null; name:string; quantity:number; material:string|null; surfaceRequested:string; unit?:string|null; unitPriceCents?:number|null; vatRateBasisPoints?:0|700|1900|null }>;
 }) {
   const mode: "EXISTING" | "NEW" = (input.customerMode || input.customer?.mode || "EXISTING") as "EXISTING" | "NEW";
   const customerId = input.customerId || input.customer?.customerId || "customer-a";

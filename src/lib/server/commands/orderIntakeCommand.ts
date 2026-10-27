@@ -9,18 +9,19 @@ import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 const EVENT_TYPE = "ORDER_INTAKE_CREATED_V1";
 const EVENT_SCHEMA_VERSION = 1 as const;
 const STATION = "angenommen" as const;
+const EVENT_STATION = "wareneingang" as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export type OrderIntakeItemInput = {
-  catalogServiceId?: string;
+  catalogServiceId?: string | null;
   name: string;
   quantity: number;
   material: string | null;
   surfaceRequested: string;
-  unit?: string;
-  unitPriceCents?: number;
-  vatRateBasisPoints?: 0 | 700 | 1900;
+  unit?: string | null;
+  unitPriceCents?: number | null;
+  vatRateBasisPoints?: 0 | 700 | 1900 | null;
 };
 
 export type OrderIntakeCustomerInput =
@@ -40,7 +41,7 @@ export type CreateOrderIntakeInput = {
   items: OrderIntakeItemInput[];
 };
 
-export type OrderIntakeReceiptItem = Required<Omit<OrderIntakeItemInput, "material">> & Pick<OrderIntakeItemInput, "material"> & {
+export type OrderIntakeReceiptItem = Required<OrderIntakeItemInput> & {
   id: string;
   position: number;
 };
@@ -74,7 +75,7 @@ export type OrderIntakeCommandResult =
   | { code: "VALIDATION_ERROR"; message: string }
   | { code: "UNAVAILABLE"; message: string };
 
-type NormalizedItem = Required<Omit<OrderIntakeItemInput, "material">> & Pick<OrderIntakeItemInput, "material">;
+type NormalizedItem = Required<OrderIntakeItemInput>;
 type NormalizedCustomer = Extract<OrderIntakeCustomerInput, { mode: "EXISTING" }>;
 type NormalizedInput = Omit<CreateOrderIntakeInput, "customer"|"items"> & { customer: NormalizedCustomer; items: NormalizedItem[] };
 
@@ -170,21 +171,26 @@ function normalizeInput(input: unknown): NormalizedInput | null {
     const name = normalizedText(candidate.name, 2, 160);
     const surfaceRequested = normalizedText(candidate.surfaceRequested, 2, 160);
     const material = normalizedOptionalText(candidate.material, 120);
-    const unit = normalizedText(candidate.unit, 1, 40);
+    const catalogServiceId = candidate.catalogServiceId === null ? null : normalizedText(candidate.catalogServiceId, 1, 128);
+    const unit = candidate.unit === null ? null : normalizedText(candidate.unit, 1, 40);
+    const unitPriceCents = typeof candidate.unitPriceCents === "number" ? candidate.unitPriceCents : null;
+    const vatRateBasisPoints = typeof candidate.vatRateBasisPoints === "number" ? candidate.vatRateBasisPoints : null;
+    const catalogFieldsValid = catalogServiceId !== null && UUID_PATTERN.test(catalogServiceId)
+      && unit !== null
+      && typeof unitPriceCents === "number" && Number.isSafeInteger(unitPriceCents) && unitPriceCents >= 0 && unitPriceCents <= 999_999_999
+      && ([0, 700, 1900] as const).includes(vatRateBasisPoints as never);
+    const freeTextFieldsValid = candidate.catalogServiceId === null && candidate.unit === null
+      && candidate.unitPriceCents === null && candidate.vatRateBasisPoints === null;
     if (
-      typeof candidate.catalogServiceId !== "string" || !UUID_PATTERN.test(candidate.catalogServiceId) ||
-      !name || !surfaceRequested || material === undefined || !unit ||
+      !name || !surfaceRequested || material === undefined || (!catalogFieldsValid && !freeTextFieldsValid) ||
       typeof candidate.quantity !== "number" || !Number.isSafeInteger(candidate.quantity) ||
-      candidate.quantity < 1 || candidate.quantity > 1_000_000 ||
-      typeof candidate.unitPriceCents !== "number" || !Number.isSafeInteger(candidate.unitPriceCents) ||
-      candidate.unitPriceCents < 0 || candidate.unitPriceCents > 999_999_999 ||
-      !([0, 700, 1900] as const).includes(candidate.vatRateBasisPoints as never)
+      candidate.quantity < 1 || candidate.quantity > 1_000_000
     ) return null;
     items.push({
-      catalogServiceId: candidate.catalogServiceId,
+      catalogServiceId,
       name, quantity: candidate.quantity, material, surfaceRequested, unit,
-      unitPriceCents: candidate.unitPriceCents,
-      vatRateBasisPoints: candidate.vatRateBasisPoints as 0 | 700 | 1900,
+      unitPriceCents,
+      vatRateBasisPoints: vatRateBasisPoints as 0 | 700 | 1900 | null,
     });
   }
 
@@ -227,15 +233,16 @@ function parseReceiptItems(value: unknown): OrderIntakeReceiptItem[] | null {
     }
     if (
       typeof item.id !== "string" || !UUID_PATTERN.test(item.id) ||
-      typeof item.catalogServiceId !== "string" || !UUID_PATTERN.test(item.catalogServiceId) ||
+      !(item.catalogServiceId === null || (typeof item.catalogServiceId === "string" && UUID_PATTERN.test(item.catalogServiceId))) ||
       item.position !== index + 1 ||
       typeof item.name !== "string" || !normalizedText(item.name, 2, 160) ||
       typeof item.quantity !== "number" || !Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.quantity > 1_000_000 ||
       (item.material !== null && (typeof item.material !== "string" || !normalizedText(item.material, 1, 120))) ||
       typeof item.surfaceRequested !== "string" || !normalizedText(item.surfaceRequested, 2, 160) ||
-      typeof item.unit !== "string" || !normalizedText(item.unit, 1, 40) ||
-      typeof item.unitPriceCents !== "number" || !Number.isSafeInteger(item.unitPriceCents) || item.unitPriceCents < 0 ||
-      !([0, 700, 1900] as const).includes(item.vatRateBasisPoints as never)
+      !(item.unit === null || (typeof item.unit === "string" && normalizedText(item.unit, 1, 40))) ||
+      !(item.unitPriceCents === null || (typeof item.unitPriceCents === "number" && Number.isSafeInteger(item.unitPriceCents) && item.unitPriceCents >= 0)) ||
+      !(item.vatRateBasisPoints === null || ([0, 700, 1900] as const).includes(item.vatRateBasisPoints as never)) ||
+      ((item.catalogServiceId === null) !== (item.unit === null && item.unitPriceCents === null && item.vatRateBasisPoints === null))
     ) return null;
     parsed.push({
       id: item.id,
@@ -247,7 +254,7 @@ function parseReceiptItems(value: unknown): OrderIntakeReceiptItem[] | null {
       catalogServiceId: item.catalogServiceId,
       unit: item.unit,
       unitPriceCents: item.unitPriceCents,
-      vatRateBasisPoints: item.vatRateBasisPoints as 0 | 700 | 1900,
+      vatRateBasisPoints: item.vatRateBasisPoints as 0 | 700 | 1900 | null,
     });
   }
   return parsed;
@@ -405,6 +412,7 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
       }
 
       for (const item of normalized.items) {
+        if (item.catalogServiceId === null) continue;
         const services = await tx.execute<{
           id: string; name: string; surface: string; unit: string;
           net_price_cents: number; vat_rate_basis_points: number;
@@ -475,8 +483,8 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
             internal_notes, created_at
           ) VALUES (
             ${item.id}, ${expected.tenantId}, ${orderId}, ${customer.id}, ${item.name}, ${item.quantity}, ${STATION},
-            ${item.material}, ${item.surfaceRequested}, ${item.catalogServiceId}, ${item.unit},
-            ${(item.unitPriceCents / 100).toFixed(2)}, ${item.vatRateBasisPoints},
+            ${item.material}, ${item.surfaceRequested}, ${item.catalogServiceId}::uuid, ${item.unit},
+            ${item.unitPriceCents === null ? null : (item.unitPriceCents / 100).toFixed(2)}, ${item.vatRateBasisPoints},
             ${normalized.note}, statement_timestamp() AT TIME ZONE 'UTC'
           )
           RETURNING id, tenant_id, order_id, customer_id
@@ -498,7 +506,7 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
           ${eventId}, ${expected.tenantId}, ${orderId}, NULL, ${EVENT_TYPE},
           'Digitaler Wareneingang angelegt', ${normalized.note},
           ${JSON.stringify({ intentSha256: expected.intentSha256 })}::jsonb,
-          'success', ${expected.actorId}, ${STATION}, ${expected.clientEventId}, ${EVENT_SCHEMA_VERSION},
+          'success', ${expected.actorId}, ${EVENT_STATION}, ${expected.clientEventId}, ${EVENT_SCHEMA_VERSION},
           ${correlationId}, 1, NULL, statement_timestamp() AT TIME ZONE 'UTC'
         )
         RETURNING id, tenant_id, order_id, user_id, client_event_id

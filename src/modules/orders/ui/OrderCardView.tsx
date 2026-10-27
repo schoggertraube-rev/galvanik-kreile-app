@@ -33,6 +33,7 @@ import {
 } from "@/ui/kr";
 
 const STATIONS = ["angenommen", "galvanik", "fertig", "zahlung", "abgeholt"] as const;
+const SURFACE_OPTIONS = ["Verchromen", "Vernickeln", "Verzinken", "Entchromen / prüfen", "noch zu klären"] as const;
 
 function money(cents: number | null) {
   return cents === null ? "Nicht belegt" : new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(cents / 100);
@@ -249,12 +250,22 @@ export function OrderCardView({
 function OrderItemDialog({ card, itemId, onClose, onSave }: { card: Extract<OrderCardState, { kind: "data" }>["card"]; itemId: string | "new"; onClose: () => void; onSave: (items: NonNullable<Parameters<NonNullable<OrderCardActionPorts["onSaveContent"]>>[0]>["items"]) => void }) {
   const existing = itemId === "new" ? null : card.items.find((item) => item.id === itemId) ?? null;
   const [serviceId, setServiceId] = useState(existing?.catalogServiceId ?? "");
+  const [name, setName] = useState(existing?.name ?? "");
+  const [surface, setSurface] = useState(existing?.surface ?? "");
   const service = card.catalog?.find((entry) => entry.id === serviceId);
+  const surfaces = [...new Set([...SURFACE_OPTIONS, ...(existing?.surface ? [existing.surface] : []), ...(card.catalog ?? []).map((entry) => entry.surface)])];
+  const selectName = (value: string) => {
+    const matches = (card.catalog ?? []).filter((entry) => entry.name.localeCompare(value.trim(), "de-DE", { sensitivity: "base" }) === 0);
+    const selected = matches.length === 1 ? matches[0] : null;
+    setName(value);
+    setServiceId(selected?.id ?? "");
+    if (selected) setSurface(selected.surface);
+  };
   return <Dialog titel={existing ? "Teil bearbeiten" : "Teil hinzufügen"} icon={existing ? "edit" : "plus"} groesse="schmal" onSchliessen={onClose}><form className="kr-stapel" onSubmit={(event) => {
     event.preventDefault(); const form = new FormData(event.currentTarget);
-    const base = service ? { catalogServiceId: service.id, name: service.name, surface: service.surface, unit: service.unit, unitPriceCents: service.netPriceCents, vatRateBasisPoints: service.vatRateBasisPoints } : { catalogServiceId: existing?.catalogServiceId ?? null, name: String(form.get("name") ?? ""), surface: String(form.get("surface") ?? ""), unit: existing?.unit ?? null, unitPriceCents: existing?.unitPriceCents ?? null, vatRateBasisPoints: existing?.vatRateBasisPoints ?? null };
+    const base = service ? { catalogServiceId: service.id, name: service.name, surface: service.surface, unit: service.unit, unitPriceCents: service.netPriceCents, vatRateBasisPoints: service.vatRateBasisPoints } : { catalogServiceId: null, name: String(form.get("name") ?? ""), surface: String(form.get("surface") ?? ""), unit: null, unitPriceCents: null, vatRateBasisPoints: null };
     const changed = { id: existing?.id ?? crypto.randomUUID(), ...base, quantity: Number(form.get("quantity")), material: String(form.get("material") ?? "").trim() || null };
     const current = card.items.map((item) => ({ id: item.id, catalogServiceId: item.catalogServiceId ?? null, name: item.name, quantity: item.quantity, material: item.material, surface: item.surface, unit: item.unit ?? null, unitPriceCents: item.unitPriceCents ?? null, vatRateBasisPoints: item.vatRateBasisPoints ?? null }));
     onSave(existing ? current.map((item) => item.id === existing.id ? changed : item) : [...current, changed]);
-  }}><Feld label="Leistung"><Auswahl name="service" required={!existing} value={serviceId} onChange={(event) => setServiceId(event.target.value)} optionen={[{ wert: "", text: existing ? "Bestehende Leistung" : "Bitte wählen" }, ...(card.catalog ?? []).map((entry) => ({ wert: entry.id, text: `${entry.name} · ${entry.surface}` }))]} /></Feld>{!serviceId && existing ? <><Feld label="Bezeichnung"><Eingabe name="name" defaultValue={existing.name} required minLength={2} maxLength={160} /></Feld><Feld label="Oberfläche"><Eingabe name="surface" defaultValue={existing.surface} required minLength={2} maxLength={160} /></Feld></> : null}<Feld label="Menge"><Eingabe name="quantity" type="number" min={1} max={1_000_000} defaultValue={existing?.quantity ?? 1} required /></Feld><Feld label="Material"><Eingabe name="material" defaultValue={existing?.material ?? ""} maxLength={120} /></Feld><Button art="primaer" icon="check" text={existing ? "Teil speichern" : "Teil hinzufügen"} type="submit" /></form></Dialog>;
+  }}><datalist id="kr-order-item-catalog">{(card.catalog ?? []).map((entry) => <option key={entry.id} value={entry.name}>{entry.surface}</option>)}</datalist><Feld label="Teil / Bezeichnung"><Eingabe name="name" list="kr-order-item-catalog" placeholder="Katalog oder Freitext" value={name} onChange={(event) => selectName(event.target.value)} required minLength={2} maxLength={160} /></Feld><Feld label="Oberfläche"><Auswahl name="surface" value={surface} onChange={(event) => { setSurface(event.target.value); if (service?.surface !== event.target.value) setServiceId(""); }} optionen={[{ wert: "", text: "Bitte wählen" }, ...surfaces.map((entry) => ({ wert: entry, text: entry }))]} required /></Feld><Feld label="Menge"><Eingabe name="quantity" type="number" min={1} max={1_000_000} defaultValue={existing?.quantity ?? 1} required /></Feld><Feld label="Material"><Eingabe name="material" defaultValue={existing?.material ?? ""} maxLength={120} /></Feld><Button art="primaer" icon="check" text={existing ? "Teil speichern" : "Teil hinzufügen"} type="submit" /></form></Dialog>;
 }
