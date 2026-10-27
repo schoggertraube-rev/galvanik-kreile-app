@@ -1,10 +1,9 @@
 import { StartAppAdapter } from "./StartAppAdapter";
 import type { StartUserDto } from "@/lib/auth/userDtos";
-import { createPinLoginHandle } from "@/lib/server/pinLoginHandle";
 import {
-  readProductActorReadiness,
   reportProductActorOperationalFailure,
 } from "@/lib/server/productActorReadiness";
+import { readActiveStartUsers } from "@/lib/server/startUserRead";
 
 export const dynamic = "force-dynamic";
 
@@ -14,15 +13,11 @@ export default async function StartPage() {
   let supportReference: string | undefined;
 
   try {
-    const readiness = await readProductActorReadiness();
-    if (!readiness.ok) {
+    const result = await readActiveStartUsers();
+    if (result.code !== "OK" || result.users.length === 0) {
       loginUnavailable = true;
-      supportReference = readiness.supportReference;
     } else {
-      users = (["rolf", "phillip"] as const).map((identity) => ({
-        identity,
-        loginHandle: createPinLoginHandle(readiness.actors[identity].actorId),
-      }));
+      users = result.users;
     }
   } catch {
     loginUnavailable = true;

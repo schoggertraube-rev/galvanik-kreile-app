@@ -10,7 +10,7 @@ export type CompanySettingsInput = {
   taxId: string; iban: string; bic: string; bankName: string; paymentTermDays: number; logoUrl: string;
 };
 export type ManagedUser = { id: string; email: string; fullName: string; role: string; active: boolean };
-export type UpdateManagedUserInput = { userId: string; role: "admin" | "meister" | "buero" | "werkstatt"; active: boolean; pin: string | null };
+export type UpdateManagedUserInput = { userId: string; role: "developer" | "admin" | "meister" | "buero" | "werkstatt"; active: boolean; pin: string | null };
 export type SystemSettingsSnapshot = {
   company: CompanySettingsInput;
   extraWorkHourlyRate: { rateId: string | null; hourlyRateCents: number | null; version: number };

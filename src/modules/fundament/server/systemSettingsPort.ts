@@ -7,7 +7,8 @@ import type { CompanySettingsInput, ManagedUser, SystemSettingsSnapshot, UpdateM
 import { mapTenantFeatureRows, type TenantFeatureRow } from "./tenantFeaturePort";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const ROLES = ["admin", "meister", "buero", "werkstatt"] as const;
+const ROLES = ["developer", "admin", "meister", "buero", "werkstatt"] as const;
+const MANAGER_ROLES = new Set(["developer", "admin", "meister"]);
 export type SystemSettingsContext = { tenantId: string; actorId: string; canManage: boolean };
 export type CompanyDocumentContext = { tenantId: string; actorId: string; canRead: boolean };
 type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null };
@@ -122,18 +123,42 @@ export async function updateManagedUser(context: SystemSettingsContext, input: u
   const value = input as Record<string, unknown>;
   if (Object.keys(value).sort().join(",") !== "active,pin,role,userId" || typeof value.userId !== "string" || !UUID.test(value.userId)
     || typeof value.role !== "string" || !ROLES.includes(value.role as typeof ROLES[number]) || typeof value.active !== "boolean"
-    || (value.pin !== null && (typeof value.pin !== "string" || !/^\d{4,12}$/.test(value.pin)))) return { code: "VALIDATION_ERROR" as const, message: "Rolle, Status oder PIN ist ungültig." };
+    || (value.pin !== null && (typeof value.pin !== "string" || !/^\d{4}$/.test(value.pin)))) return { code: "VALIDATION_ERROR" as const, message: "Rolle, Status oder PIN ist ungültig. Eine neue PIN hat genau 4 Ziffern." };
   const normalized = value as unknown as UpdateManagedUserInput;
   const pinHash = normalized.pin ? await bcrypt.hash(normalized.pin, 12) : null;
   try {
     await withPrivilegedTenantTransaction(context, async (tx) => {
+      const targets = await tx.execute<{ id: string; role: string; active: boolean; has_pin: boolean }>(sql`
+        SELECT id::text AS id, role, active, pin_hash IS NOT NULL AS has_pin
+        FROM public.app_users
+        WHERE id=${normalized.userId}::uuid AND tenant_id=${context.tenantId}
+        LIMIT 2
+        FOR UPDATE
+      `);
+      if (targets.length !== 1 || !targets[0]) throw new Error("USER_WRITE_NOT_FOUND");
+      const target = targets[0];
+      const counts = await tx.execute<{ active_count: number; manager_count: number }>(sql`
+        SELECT count(*) FILTER (WHERE active)::integer AS active_count,
+               count(*) FILTER (WHERE active AND role IN ('developer', 'admin', 'meister'))::integer AS manager_count
+        FROM public.app_users
+        WHERE tenant_id=${context.tenantId}
+      `);
+      if (counts.length !== 1 || !counts[0]) throw new Error("USER_COUNTS_UNAVAILABLE");
+      if (normalized.userId === context.actorId && !normalized.active) throw new Error("USER_SELF_DEACTIVATION");
+      if (target.active && !normalized.active && counts[0].active_count <= 1) throw new Error("USER_LAST_ACTIVE_DEACTIVATION");
+      if (target.active && MANAGER_ROLES.has(target.role) && (!normalized.active || !MANAGER_ROLES.has(normalized.role)) && counts[0].manager_count <= 1) throw new Error("USER_LAST_MANAGER_DEMOTION");
+      if (normalized.active && !target.has_pin && !pinHash) throw new Error("USER_ACTIVE_PIN_REQUIRED");
       const rows = pinHash
         ? await tx.execute<{ id: string }>(sql`UPDATE public.app_users SET role=${normalized.role}, active=${normalized.active}, pin_hash=${pinHash}, updated_at=statement_timestamp() WHERE id=${normalized.userId}::uuid AND tenant_id=${context.tenantId} RETURNING id`)
         : await tx.execute<{ id: string }>(sql`UPDATE public.app_users SET role=${normalized.role}, active=${normalized.active}, updated_at=statement_timestamp() WHERE id=${normalized.userId}::uuid AND tenant_id=${context.tenantId} RETURNING id`);
       if (rows.length !== 1) throw new Error("USER_WRITE_NOT_FOUND");
     });
     return { code: "OK" as const };
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message === "USER_SELF_DEACTIVATION") return { code: "CONFLICT" as const, message: "Der aktuell angemeldete Nutzer kann sich nicht selbst deaktivieren." };
+    if (error instanceof Error && error.message === "USER_LAST_ACTIVE_DEACTIVATION") return { code: "CONFLICT" as const, message: "Mindestens ein aktiver Nutzer muss erhalten bleiben." };
+    if (error instanceof Error && error.message === "USER_LAST_MANAGER_DEMOTION") return { code: "CONFLICT" as const, message: "Mindestens ein aktiver Meister, Administrator oder Entwickler muss erhalten bleiben." };
+    if (error instanceof Error && error.message === "USER_ACTIVE_PIN_REQUIRED") return { code: "VALIDATION_ERROR" as const, message: "Ein aktiver Nutzer braucht eine vierstellige PIN." };
     return { code: "UNAVAILABLE" as const, message: "Nutzer konnte nicht sicher gespeichert werden." };
   }
 }

@@ -58,7 +58,10 @@ export async function saveManagedUserAction(input: UpdateManagedUserInput) {
   const context = await adminContext();
   if (!context) return { code: "FORBIDDEN" as const, message: "Nutzer dürfen nicht geändert werden." };
   const result = await updateManagedUser(context, input);
-  if (result.code === "OK") revalidatePath("/settings");
+  if (result.code === "OK") {
+    revalidatePath("/settings");
+    revalidatePath("/start");
+  }
   return result;
 }
 

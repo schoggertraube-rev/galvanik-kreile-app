@@ -1,6 +1,9 @@
+import type { AppRole } from "@/lib/auth/authorizationContract";
+
 export type StartUserDto = {
   loginHandle: string;
-  identity: "rolf" | "phillip";
+  fullName: string;
+  role: AppRole;
 };
 
 export type AdminUserDto = {

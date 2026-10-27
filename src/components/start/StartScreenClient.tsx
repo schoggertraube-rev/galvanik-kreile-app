@@ -7,17 +7,13 @@ import { useSearchParams } from "next/navigation";
 import { usePageView } from "@/hooks/usePageView";
 import { loginWithPin } from "@/app/actions/auth.actions";
 import { notifyAdminPinReset } from "@/app/actions/start.actions";
-import { EmailLoginDialog } from "@/components/start/EmailLoginDialog";
-import type { StartUserDto } from "@/lib/auth/userDtos";
+import { deriveUserInitials, type StartUserDto } from "@/lib/auth/userDtos";
+import { getRoleLabel } from "@/lib/auth/authorizationContract";
 import styles from "./StartScreenClient.module.css";
 
-const PRODUCT_PROFILES = {
-  rolf: { name: "Rolf", responsibility: "Meister", initials: "R" },
-  phillip: { name: "Phillip", responsibility: "Werkstatt", initials: "P" },
-} as const;
-
 function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void }) {
-  const profile = PRODUCT_PROFILES[user.identity];
+  const initials = deriveUserInitials(user.fullName);
+  const responsibility = getRoleLabel(user.role);
   const [pin, setPin] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [supportReference, setSupportReference] = useState<string | undefined>();
@@ -73,8 +69,8 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
     <div className={styles.backdrop} data-testid="pin-login-dialog" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section className={styles.pinDialog} role="dialog" aria-modal="true" aria-labelledby="pin-dialog-title">
         <header>
-          <span className={styles.avatar}>{profile.initials}</span>
-          <div><p>{profile.name} · {profile.responsibility}</p><h2 id="pin-dialog-title">Persönlichen Code eingeben</h2></div>
+          <span className={styles.avatar}>{initials}</span>
+          <div><p>{user.fullName} · {responsibility}</p><h2 id="pin-dialog-title">Persönlichen Code eingeben</h2></div>
           <button type="button" aria-label="Schließen" onClick={onClose} disabled={submitting}>×</button>
         </header>
         <div className={styles.pinDots} aria-label={`${pin.length} von 4 Stellen eingegeben`}>
@@ -113,7 +109,6 @@ function StartContent({
   supportReference?: string;
 }) {
   const [selected, setSelected] = useState<StartUserDto | null>(null);
-  const [emailLogin, setEmailLogin] = useState(false);
   const searchParams = useSearchParams();
   const serverMessage = searchParams?.get("message");
   const serverSupportReference = searchParams?.get("support");
@@ -146,26 +141,17 @@ function StartContent({
           </div>
         ) : null}
         <div className={styles.users}>
-          {(["rolf", "phillip"] as const).map((identity) => {
-            const profile = PRODUCT_PROFILES[identity];
-            const user = users.find((candidate) => candidate.identity === identity);
-            return (
-              <button
-                key={identity}
-                type="button"
-                data-testid={user ? `pin-user-card-${user.loginHandle}` : `pin-profile-${identity}-unavailable`}
-                onClick={() => user && setSelected(user)}
-                disabled={!user || loginUnavailable}
-              >
-                <span className={styles.avatar}>{profile.initials}</span>
-                <span><strong>{profile.name}</strong><small>{user ? profile.responsibility : `${profile.responsibility} · Anmeldung nicht verfügbar`}</small></span>
-                <LockKeyhole aria-hidden="true" />
-              </button>
-            );
-          })}
-          <button type="button" className={styles.adminLogin} onClick={() => setEmailLogin(true)} disabled={loginUnavailable}>
-            <span className={styles.avatar}>G</span><span><strong>Gregor</strong><small>Systemadministrator</small></span><LockKeyhole aria-hidden="true" />
-          </button>
+          {users.map((user) => <button
+            key={user.loginHandle}
+            type="button"
+            data-testid={`pin-user-card-${user.loginHandle}`}
+            onClick={() => setSelected(user)}
+            disabled={loginUnavailable}
+          >
+            <span className={styles.avatar}>{deriveUserInitials(user.fullName)}</span>
+            <span><strong>{user.fullName}</strong><small>{getRoleLabel(user.role)}</small></span>
+            <LockKeyhole aria-hidden="true" />
+          </button>)}
         </div>
         {serverMessage ? (
           <div className={styles.error} role="alert">
@@ -181,7 +167,6 @@ function StartContent({
       </section>
 
       {selected ? <PinDialog user={selected} onClose={() => setSelected(null)} /> : null}
-      {emailLogin ? <EmailLoginDialog onClose={() => setEmailLogin(false)} /> : null}
     </main>
   );
 }
