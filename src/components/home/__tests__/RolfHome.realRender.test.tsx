@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OrdersHomeProjection } from "@/modules/orders/public";
 
 const ports = vi.hoisted(() => ({
@@ -14,12 +14,11 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: ports.push }) }));
 vi.mock("@/lib/auth/PermissionsContext", () => ({
   usePermissions: () => ({
     loading: ports.permissions.loading,
-    name: "Rolf Meister",
     hasPermission: (permission: string) => permission === "perm_data_orders" && ports.permissions.canCreateOrder,
   }),
 }));
 
-import { RolfHomeClient } from "../RolfHomeClient";
+import { dayLineParts, RolfHomeClient } from "../RolfHomeClient";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -28,7 +27,8 @@ beforeEach(() => {
 });
 
 const projection: OrdersHomeProjection = {
-  source: "Auftragsbestand", loadedAt: "2026-09-16T08:15:00.000Z",
+  source: "Auftragsbestand",
+  loadedAt: "2026-09-16T08:15:00.000Z",
   orders: [{ id: "order-1", orderNumber: "A-2026-0001", customerName: "Muster GmbH", title: "Auftrag", detail: "Bauteil", station: "galvanik", status: "angenommen", statusText: "In Arbeit", risk: "red", dueDate: "2026-09-18", dueLabel: "Fällig", dueValue: "18.09.2026", createdAt: "2026-09-16T07:00:00.000Z" }],
   priority: [{ id: "order-1", orderNumber: "A-2026-0001", customerName: "Muster GmbH", title: "Auftrag", detail: "Bauteil", station: "galvanik", status: "angenommen", statusText: "In Arbeit", risk: "red", dueDate: "2026-09-18", dueLabel: "Fällig", dueValue: "18.09.2026", createdAt: "2026-09-16T07:00:00.000Z" }],
   recent: [{ id: "order-1", orderNumber: "A-2026-0001", customerName: "Muster GmbH", title: "Auftrag", detail: "Bauteil", station: "galvanik", status: "angenommen", statusText: "In Arbeit", risk: "red", dueDate: "2026-09-18", dueLabel: "Fällig", dueValue: "18.09.2026", createdAt: "2026-09-16T07:00:00.000Z" }],
@@ -37,28 +37,23 @@ const projection: OrdersHomeProjection = {
   dominant: { orderId: "order-1", reason: "Dieser Auftrag ist kritisch." },
 };
 
-const dayLine = (container: HTMLElement) => container.querySelector(".day-line")?.textContent?.replace(/\s+/g, " ").trim();
-
-describe("Rolf 'Der Tag' aus der Owner-Mock-Bauvorlage mit echter Projektion", () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it("zeigt den Mock-Aufbau mit echten Daten und oeffnet den Auftrag", () => {
+describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
+  it("zeigt den V1.1-Aufbau mit echten Daten und öffnet den Auftrag", () => {
     render(<RolfHomeClient model={{ kind: "data", role: "meister", canCreateOrder: true, projection }} />);
-    expect(screen.getAllByRole("heading")).toHaveLength(1);
-    expect(screen.getByRole("heading", { name: "Der Tag" })).toHaveClass("day-title");
-    expect(screen.getByText("Das braucht dich")).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.getByTestId("rolf-v11-home")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Der Tag" })).toHaveClass("kr-seite-titel");
+    expect(screen.getByRole("region", { name: "Lage" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Handlungsbedarf" })).toBeInTheDocument();
     expect(screen.getByText("Heute raus")).toBeInTheDocument();
-    expect(screen.getByText("Neu seit gestern 18:30")).toBeInTheDocument();
-    const open = screen.getAllByRole("button", { name: "Auftrag A-2026-0001 öffnen" })[0];
-    expect(open).toHaveClass("pi-t");
-    expect(open.closest(".pi")).toHaveClass("crit");
+    expect(screen.getByText("Neu seit gestern")).toBeInTheDocument();
+    const open = screen.getByRole("button", { name: "Auftrag öffnen" });
+    expect(open.closest(".kr-hb-eintrag")).toHaveClass("kr-hb-eintrag--konflikt", "kr-fokus");
     fireEvent.click(open);
     expect(ports.openOrder).toHaveBeenCalledWith("order-1");
   });
 
-  it("zeigt keine Aktionen ohne echte Anbindung (Owner G7)", () => {
+  it("zeigt keine Aktionen ohne echte Anbindung", () => {
     render(<RolfHomeClient model={{ kind: "data", role: "meister", canCreateOrder: true, projection }} />);
     for (const name of [/Kümmern/, /an Phillip/, /Später/, /Erinnerung/, /Freigeben/]) {
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
@@ -66,30 +61,26 @@ describe("Rolf 'Der Tag' aus der Owner-Mock-Bauvorlage mit echter Projektion", (
     expect(screen.queryByText(/erledigt, sobald/)).not.toBeInTheDocument();
   });
 
-  it("fuehrt readonly ohne Warenausgang-Aktion", () => {
+  it("führt readonly ohne Warenausgang-Aktion", () => {
     render(<RolfHomeClient model={{ kind: "data", role: "readonly", canCreateOrder: false, projection }} />);
-    expect(screen.queryByRole("button", { name: /Warenausgang öffnen/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Ware raus öffnen/ })).not.toBeInTheDocument();
   });
 
   it.each([
-    { risks: ["red", "red", "yellow"], expected: "Guten Morgen, Rolf. 2 dringend · 1 weiterer braucht dich." },
-    { risks: ["yellow", "orange"], expected: "Guten Morgen, Rolf. 2 brauchen dich." },
-    { risks: ["red"], expected: "Guten Morgen, Rolf. 1 dringend." },
-    { risks: [], expected: "Guten Morgen, Rolf. Heute ist nichts offen." },
-  ] as const)("leitet die ehrliche Tageszeile ab (%#)", ({ risks, expected }) => {
+    { risks: ["red", "red", "yellow"], expected: { salutation: "Guten Morgen, Rolf.", urgent: 2, other: 1 } },
+    { risks: ["yellow", "orange"], expected: { salutation: "Guten Morgen, Rolf.", urgent: 0, other: 2 } },
+    { risks: ["red"], expected: { salutation: "Guten Morgen, Rolf.", urgent: 1, other: 0 } },
+    { risks: [], expected: { salutation: "Guten Morgen, Rolf.", urgent: 0, other: 0 } },
+  ] as const)("leitet die Tageslage weiterhin ehrlich ab (%#)", ({ risks, expected }) => {
     const orders = risks.map((risk, index) => ({ ...projection.orders[0], id: `order-${index + 1}`, orderNumber: `A-2026-00${index + 1}`, risk }));
-    const { container } = render(
-      <RolfHomeClient now={new Date("2026-09-24T07:00:00.000Z")} model={{ kind: orders.length === 0 ? "empty" : "data", role: "meister", canCreateOrder: true, projection: { ...projection, orders, priority: orders, recent: orders } }} />,
-    );
-    expect(dayLine(container)).toBe(expected);
+    expect(dayLineParts(orders, "Rolf Meister", new Date("2026-09-24T07:00:00.000Z"))).toEqual(expected);
   });
 
-  it("zeigt ehrliche Leer-, Verweigert- und Fehlerzustaende", () => {
+  it("zeigt ehrliche Leer-, Verweigert- und Fehlerzustände", () => {
     const empty = { ...projection, orders: [], priority: [], recent: [], dominant: null } satisfies OrdersHomeProjection;
     const { rerender } = render(<RolfHomeClient model={{ kind: "empty", role: "meister", canCreateOrder: true, projection: empty }} />);
-    expect(screen.getByText("Heute keine offenen Aufträge.")).toBeInTheDocument();
-    expect(screen.getByText("Heute keine fertigen Aufträge.")).toBeInTheDocument();
-    expect(screen.getByText("Seit gestern keine neuen Aufträge.")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Noch keine Aufträge erfasst.");
+    expect(screen.getByRole("button", { name: "Neuer Eingang" })).toBeInTheDocument();
     rerender(<RolfHomeClient model={{ kind: "denied", message: "Nicht freigegeben." }} />);
     expect(screen.getByRole("status")).toHaveTextContent("Tagesbestand nicht öffnen");
     rerender(<RolfHomeClient model={{ kind: "error", message: "Lesefehler." }} />);

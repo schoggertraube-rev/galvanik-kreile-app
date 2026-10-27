@@ -24,7 +24,7 @@ const prototypePath = resolve("docs/project/linie/ui/designsystem_v1_1/kundenans
 
 if (!appUrl) throw new Error("APP_URL_MISSING: --app-url oder KREILE_PREVIEW_URL setzen");
 if (!/^\d{4}$/.test(pin ?? "")) throw new Error("PREVIEW_PIN_MISSING: KREILE_PREVIEW_PIN nur für diesen Lauf setzen");
-if (!["shell-plus", "neuer-eingang", "completed"].includes(screen)) throw new Error(`SCREEN_NOT_IMPLEMENTED: ${screen}`);
+if (!["shell-plus", "neuer-eingang", "der-tag", "completed"].includes(screen)) throw new Error(`SCREEN_NOT_IMPLEMENTED: ${screen}`);
 delete process.env.KREILE_PREVIEW_PIN;
 
 await mkdir(output, { recursive: true });
@@ -91,6 +91,24 @@ async function captureShell(viewport) {
     await prototype.locator(".kr-plus").click();
     await prototype.locator(".kr-plus-menue").waitFor();
     await savePair({ viewport, name: "shell-plus", title: "Shell + Plus", app, prototype });
+  } finally {
+    await appContext.close();
+    await prototypeContext.close();
+  }
+}
+
+async function captureDay(viewport) {
+  const appContext = await browser.newContext(contextOptions(viewport, true));
+  const prototypeContext = await browser.newContext(contextOptions(viewport));
+  try {
+    const app = await appContext.newPage();
+    const prototype = await prototypeContext.newPage();
+    await app.goto(`${appUrl}/`, { waitUntil: "networkidle", timeout: 30_000 });
+    await app.locator(`.kr-app[data-geraet="${viewport.geraet}"]`).waitFor();
+    await app.getByRole("heading", { name: "Der Tag", exact: true }).waitFor();
+    await prototype.goto(prototypeUrl(viewport, "tag"), { waitUntil: "load" });
+    await prototype.getByRole("heading", { name: "Der Tag", exact: true }).waitFor();
+    await savePair({ viewport, name: "der-tag", title: "Der Tag", app, prototype });
   } finally {
     await appContext.close();
     await prototypeContext.close();
@@ -173,6 +191,7 @@ async function captureIntake(viewport, state) {
 try {
   for (const viewport of VIEWPORTS) {
     if (screen === "shell-plus" || screen === "completed") await captureShell(viewport);
+    if (screen === "der-tag" || screen === "completed") await captureDay(viewport);
     if (screen === "neuer-eingang" || screen === "completed") {
       for (const state of INTAKE_STATES) await captureIntake(viewport, state);
     }
