@@ -7,18 +7,16 @@ import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useOverlayStore } from "@/lib/overlayStore";
 import type { OrdersHomeProjection, OrdersHomeSource } from "@/modules/orders/public";
 import {
-  Auftragszeile,
   Button,
   HandlungsListe,
   Kachel,
   Lageleiste,
   SeitenKopf,
-  Terminzeile,
+  Zeitstrahl,
   Zeile,
   Zustand,
   type Geraet,
   type HandlungsArt,
-  type Terminart,
 } from "@/ui/kr";
 
 type RolfIdentity = {
@@ -90,12 +88,12 @@ function rowTone(order: OrdersHomeSource): "ok" | "warn" | "rot" | "info" {
   return order.station === "fertig" ? "ok" : "info";
 }
 
-function appointmentType(order: OrdersHomeSource): Terminart {
-  const label = order.dueLabel.toLocaleLowerCase("de-DE");
-  if (label.includes("wunsch")) return "Wunsch";
-  if (label.includes("verschob")) return "verschoben";
-  if (label.includes("abholung")) return "Abholung";
-  return "bestätigt";
+function berlinDateKey(value: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value));
+}
+
+function berlinTime(value: string): string {
+  return new Intl.DateTimeFormat("de-DE", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(value));
 }
 
 export function RolfHomeClient({ model }: { model: RolfHomeModel; now?: Date }) {
@@ -113,7 +111,6 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel; now?: Date }) 
   }
 
   const { orders, priority, recent } = model.projection;
-  const finished = orders.filter((order) => order.station === "fertig");
   const canWrite = model.role !== "readonly";
   const canStartOrder = canWrite && model.canCreateOrder && !permissionsLoading && hasPermission("perm_data_orders");
   const filteredPriority = filter === "alle" ? priority : priority.filter((order) => actionType(order) === filter);
@@ -122,6 +119,7 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel; now?: Date }) 
     return sum;
   }, { konflikt: 0, entscheidung: 0, warnung: 0 });
   const goodsOut = () => router.push("/orders?station=fertig");
+  const today = berlinDateKey(model.projection.loadedAt);
 
   if (model.kind === "empty") {
     return <section data-testid="rolf-v11-home">
@@ -146,6 +144,20 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel; now?: Date }) 
     }],
     onOeffnen: () => openOrder(order.id),
   }));
+  const timelineRows = orders.slice(0, 8).map((order) => ({
+    group: order.station === "fertig" || order.dueDate === today ? "heute" : "woche",
+    row: {
+      key: order.id,
+      zeit: order.station === "fertig" ? "heute" : order.dueLabel,
+      id: order.orderNumber,
+      titel: `${order.customerName ?? "Kunde"} · ${order.detail ?? order.title}`,
+      meta: order.station === "fertig" ? statusLabel(order) : `${statusLabel(order)} · ${order.dueValue}`,
+      ton: rowTone(order),
+      chip: order.station === "fertig" ? undefined : { text: statusLabel(order), ton: rowTone(order) },
+      aktion: order.station === "fertig" && canWrite ? { text: "Ware raus", icon: "truck" as const, onClick: goodsOut } : undefined,
+      onOeffnen: () => openOrder(order.id),
+    },
+  }));
 
   return <section data-testid="rolf-v11-home">
     <SeitenKopf titel="Der Tag" />
@@ -156,12 +168,12 @@ export function RolfHomeClient({ model }: { model: RolfHomeModel; now?: Date }) 
         {canStartOrder ? <Button art="primaer" icon="inbox" text="Neuer Eingang" onClick={() => requestGlobalCreate("DIRECT_INTAKE")} /> : null}
         {canWrite ? <Button icon="truck" text="Ware raus" onClick={goodsOut} /> : null}
       </div> : null}
-      <div className="kr-raster kr-raster--tag">
-        <Kachel titel="Termine" icon="calendar" iconTon="info" zustand={orders.length ? "daten" : "leer"} texte={{ leerText: "Keine Termine im Auftragsbestand." }} fuss={{ text: "Woche ansehen", onClick: () => router.push("/orders") }}>
-          {orders.slice(0, 4).map((order) => <Terminzeile key={order.id} zeit={order.dueLabel} art={appointmentType(order)} auftragNr={order.orderNumber} kundeKurz={order.customerName ?? "Kunde"} meta={order.dueValue} onOeffnen={() => openOrder(order.id)} />)}
-        </Kachel>
-        <Kachel titel="Heute raus" icon="truck" iconTon="ok" zahl={finished.length} zustand={finished.length ? "daten" : "leer"} texte={{ leerText: "Heute keine fertigen Aufträge." }} fuss={canWrite ? { text: "Ware raus öffnen", onClick: goodsOut } : undefined}>
-          {finished.slice(0, 3).map((order) => <Auftragszeile key={order.id} id={order.orderNumber} kundeKurz={order.customerName ?? "Kunde"} titel={order.detail ?? order.title} meta={statusLabel(order)} ton={rowTone(order)} onOeffnen={() => openOrder(order.id)} />)}
+      <div className="kr-raster kr-raster--zeit">
+        <Kachel titel="Heute & Woche" icon="calendar" iconTon="info" fuss={{ text: "Woche ansehen", onClick: () => router.push("/orders") }}>
+          <Zeitstrahl jetzt={berlinTime(model.projection.loadedAt)} gruppen={[
+            { key: "heute", titel: "Heute", zeilen: timelineRows.filter((entry) => entry.group === "heute").map((entry) => entry.row) },
+            { key: "woche", titel: "Diese Woche", zeilen: timelineRows.filter((entry) => entry.group === "woche").map((entry) => entry.row) },
+          ]} />
         </Kachel>
         <div className="kr-stapel">
           <Kachel titel="Neu seit gestern" icon="inbox" iconTon="info" zahl={recent.length} zustand={recent.length ? "daten" : "leer"} texte={{ leerText: "Seit gestern keine neuen Aufträge." }}>

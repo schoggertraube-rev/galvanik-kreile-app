@@ -45,7 +45,8 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     expect(screen.getByRole("heading", { name: "Der Tag" })).toHaveClass("kr-seite-titel");
     expect(screen.getByRole("region", { name: "Lage" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Handlungsbedarf" })).toBeInTheDocument();
-    expect(screen.getByText("Heute raus")).toBeInTheDocument();
+    expect(screen.getByText("Heute & Woche")).toBeInTheDocument();
+    expect(screen.getByText("Diese Woche")).toBeInTheDocument();
     expect(screen.getByText("Neu seit gestern")).toBeInTheDocument();
     const open = screen.getByRole("button", { name: "Auftrag öffnen" });
     expect(open.closest(".kr-hb-eintrag")).toHaveClass("kr-hb-eintrag--konflikt", "kr-fokus");
