@@ -170,6 +170,7 @@ export const items = pgTable("items", {
   currentStationId: varchar("current_station_id", { length: 100 }).default("angenommen"),
   material: text("material"),
   surfaceRequested: text("surface_requested"),
+  executionRequested: text("execution_requested").notNull().default("offen"),
   catalogServiceId: uuid("catalog_service_id"),
   unit: text("unit"),
   preisNetto: numeric("preis_netto", { precision: 10, scale: 2 }),

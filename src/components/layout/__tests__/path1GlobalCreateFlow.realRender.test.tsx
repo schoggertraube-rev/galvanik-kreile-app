@@ -585,11 +585,20 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.change(screen.getByLabelText("Liefertermin"), { target: { value: "2026-10-20" } });
     fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "TEST Sonderteil" } });
     fireEvent.change(screen.getByRole("combobox", { name: "Oberfläche" }), { target: { value: "Vernickeln" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Ausführung" }), { target: { value: "matt" } });
+    fireEvent.change(screen.getByLabelText("Material"), { target: { value: "Stahl 1.4301" } });
     fireEvent.click(screen.getByRole("checkbox", { name: /Ware, Menge und Zustand/ }));
     fireEvent.click(screen.getByRole("button", { name: "Wareneingang buchen" }));
     await screen.findByRole("heading", { name: "Auftrag A-2026-0061 angelegt" });
     expect(value.createDirectIntake).toHaveBeenCalledWith(expect.objectContaining({
-      items: [expect.objectContaining({ catalogServiceId: null, name: "TEST Sonderteil", surfaceRequested: "Vernickeln", unitPriceCents: null })],
+      items: [expect.objectContaining({
+        catalogServiceId: null,
+        name: "TEST Sonderteil",
+        material: "Stahl 1.4301",
+        surfaceRequested: "Vernickeln",
+        executionRequested: "matt",
+        unitPriceCents: null,
+      })],
     }));
   });
 

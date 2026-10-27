@@ -3,11 +3,12 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
-import type { OrderIntakeReceipt, OrderIntakeReceiptItem } from "@/lib/server/commands/orderIntakeCommand";
+import type { OrderIntakeExecutionRequested, OrderIntakeReceipt, OrderIntakeReceiptItem } from "@/lib/server/commands/orderIntakeCommand";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const EXECUTION_REQUESTED_VALUES: readonly OrderIntakeExecutionRequested[] = ["hochglanz", "glaenzend", "matt", "gelb_passiviert", "blau_passiviert", "offen"];
 
 export type OrderIntakeCustomerSearchInput = { query: string };
 export type OrderIntakeReceiptReadInput = { orderId: string; clientEventId: string };
@@ -141,15 +142,18 @@ function mapCustomer(row: CustomerRow, tenantId: string): OrderIntakeCustomerOpt
 function parseItems(value: unknown): OrderIntakeReceiptItem[] | null {
   if (!Array.isArray(value) || value.length < 1 || value.length > 20) return null;
   return value.map((candidate, index) => {
+    const hasExecutionRequested = plainObject(candidate) && Object.hasOwn(candidate, "executionRequested");
     if (!plainObject(candidate) || !exactKeys(candidate, [
-      "catalogServiceId", "id", "material", "name", "position", "quantity", "surfaceRequested", "unit", "unitPriceCents", "vatRateBasisPoints",
+      "catalogServiceId", ...(hasExecutionRequested ? ["executionRequested"] : []), "id", "material", "name", "position", "quantity", "surfaceRequested", "unit", "unitPriceCents", "vatRateBasisPoints",
     ])) throw new Error("ORDER_INTAKE_RECEIPT_INVALID");
+    const executionRequested = hasExecutionRequested ? candidate.executionRequested : "offen";
     if (
       typeof candidate.id !== "string" || !UUID_PATTERN.test(candidate.id) || candidate.position !== index + 1 ||
       !trimmed(candidate.name, 2, 160) || typeof candidate.quantity !== "number" ||
       !Number.isSafeInteger(candidate.quantity) || candidate.quantity < 1 || candidate.quantity > 1_000_000 ||
       !(candidate.catalogServiceId === null || (typeof candidate.catalogServiceId === "string" && UUID_PATTERN.test(candidate.catalogServiceId))) ||
       !optionalTrimmed(candidate.material, 120) || !trimmed(candidate.surfaceRequested, 2, 160) ||
+      typeof executionRequested !== "string" || !EXECUTION_REQUESTED_VALUES.includes(executionRequested as OrderIntakeExecutionRequested) ||
       !(candidate.unit === null || trimmed(candidate.unit, 1, 40)) ||
       !(candidate.unitPriceCents === null || (typeof candidate.unitPriceCents === "number" && Number.isSafeInteger(candidate.unitPriceCents) && candidate.unitPriceCents >= 0)) ||
       !(candidate.vatRateBasisPoints === null || (typeof candidate.vatRateBasisPoints === "number" && [0,700,1900].includes(candidate.vatRateBasisPoints))) ||
@@ -162,6 +166,7 @@ function parseItems(value: unknown): OrderIntakeReceiptItem[] | null {
       quantity: candidate.quantity,
       material: candidate.material,
       surfaceRequested: candidate.surfaceRequested,
+      executionRequested: executionRequested as OrderIntakeExecutionRequested,
       catalogServiceId: candidate.catalogServiceId,
       unit: candidate.unit,
       unitPriceCents: candidate.unitPriceCents,

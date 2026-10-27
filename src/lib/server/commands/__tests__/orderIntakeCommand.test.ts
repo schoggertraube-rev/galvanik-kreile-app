@@ -31,7 +31,7 @@ const input = {
   handoverMode: "pickup" as const,
   paymentMode: "abholung" as const,
   note: "Eilige Annahme",
-  items: [{ catalogServiceId:SERVICE, name:"Grundplatte", quantity:2, material:"Stahl", surfaceRequested:"Glanzverchromen", unit:"Stück", unitPriceCents:1250, vatRateBasisPoints:1900 as const }],
+  items: [{ catalogServiceId:SERVICE, name:"Grundplatte", quantity:2, material:"Stahl", surfaceRequested:"Glanzverchromen", executionRequested:"hochglanz" as const, unit:"Stück", unitPriceCents:1250, vatRateBasisPoints:1900 as const }],
 };
 const intentSha256 = createHash("sha256").update(JSON.stringify({
   clientEventId: CLIENT,
@@ -93,6 +93,10 @@ describe("createOrderIntake", () => {
     await expect(createOrderIntake({ ...input, tenantId: "foreign" })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
     await expect(createOrderIntake({ ...input, items: [] })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
     await expect(createOrderIntake({ ...input, dueDate: "2026-02-30" })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(createOrderIntake({
+      ...input,
+      items: [{ ...input.items[0], executionRequested: "poliert" }],
+    })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
     expect(resolveAuthorization).not.toHaveBeenCalled();
     expect(withTransaction).not.toHaveBeenCalled();
   });
@@ -384,6 +388,7 @@ describe("createOrderIntake", () => {
     const sqlText = execute.mock.calls.map(([query]) => query.text).join("\n");
     expect(sqlText).toContain("INSERT INTO public.orders");
     expect(sqlText).toContain("INSERT INTO public.items");
+    expect(sqlText).toContain("execution_requested");
     expect(sqlText).toContain("INSERT INTO public.events");
     expect(sqlText).toContain("INSERT INTO private.order_intake_receipts");
     expect(sqlText).toContain("private.v_order_intake_receipts_v1");

@@ -135,7 +135,7 @@ export type DirectIntakeInput = {
   handoverMode: "pickup" | "shipping";
   paymentMode?: "vorkasse" | "abholung" | "rechnung";
   note: string | null;
-  items: Array<{ catalogServiceId:string|null; name:string; quantity:number; material:string|null; surfaceRequested:string; unit:string|null; unitPriceCents:number|null; vatRateBasisPoints:0|700|1900|null }>;
+  items: Array<{ catalogServiceId:string|null; name:string; quantity:number; material:string|null; surfaceRequested:string; executionRequested:"hochglanz"|"glaenzend"|"matt"|"gelb_passiviert"|"blau_passiviert"|"offen"; unit:string|null; unitPriceCents:number|null; vatRateBasisPoints:0|700|1900|null }>;
 };
 
 export type GlobalCreateDirectIntakeResult =
@@ -221,7 +221,8 @@ type PositionDraft = {
   unit: string;
   unitPriceCents: number | null;
 };
-type IntakePositionDraft = { key:string; catalogServiceId:string; name:string; quantity:string; material:string; surfaceRequested:string; unit:string|null; unitPriceCents:number|null; vatRateBasisPoints:0|700|1900|null };
+type IntakeExecution = "hochglanz" | "glaenzend" | "matt" | "gelb_passiviert" | "blau_passiviert" | "offen";
+type IntakePositionDraft = { key:string; catalogServiceId:string; name:string; quantity:string; material:string; surfaceRequested:string; executionRequested:IntakeExecution; unit:string|null; unitPriceCents:number|null; vatRateBasisPoints:0|700|1900|null };
 
 function record(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -318,6 +319,14 @@ const EMPTY_INTAKE_CUSTOMER: CustomerDraft = {
 const HANDY_QUERY = "(max-width: 699px)";
 const FREE_TEXT_SERVICE = "FREE_TEXT";
 const DEFAULT_SURFACES = ["Verchromen", "Vernickeln", "Verzinken", "Entchromen / prüfen", "noch zu klären"] as const;
+const EXECUTION_OPTIONS: Array<{ wert: IntakeExecution; text: string }> = [
+  { wert: "hochglanz", text: "Hochglanz" },
+  { wert: "glaenzend", text: "glänzend" },
+  { wert: "matt", text: "matt" },
+  { wert: "gelb_passiviert", text: "gelb passiviert" },
+  { wert: "blau_passiviert", text: "blau passiviert" },
+  { wert: "offen", text: "noch zu klären" },
+];
 const subscribeHandy = (notify: () => void) => {
   if (typeof window.matchMedia !== "function") return () => undefined;
   const query = window.matchMedia(HANDY_QUERY);
@@ -372,6 +381,7 @@ const newIntakePosition = (): IntakePositionDraft => ({
   quantity: "1",
   material: "",
   surfaceRequested: "",
+  executionRequested: "offen",
   catalogServiceId: "",
   unit: null,
   unitPriceCents: null,
@@ -610,7 +620,14 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     if (["personal", "shipping", "pickup", "mail", "phone"].includes(String(payload.intakeSource))) setIntakeSource(payload.intakeSource as typeof intakeSource);
     if (payload.intakeTermStatus === "wish" || payload.intakeTermStatus === "confirmed") setIntakeTermStatus(payload.intakeTermStatus);
     if (typeof payload.intakeChecked === "boolean") setIntakeChecked(payload.intakeChecked);
-    if (Array.isArray(payload.items) && payload.items.length >= 1 && payload.items.length <= 20 && payload.items.every(record)) setDirectItems(payload.items as IntakePositionDraft[]);
+    if (Array.isArray(payload.items) && payload.items.length >= 1 && payload.items.length <= 20 && payload.items.every(record)) {
+      setDirectItems((payload.items as Array<Record<string, unknown>>).map((item) => ({
+        ...(item as IntakePositionDraft),
+        executionRequested: EXECUTION_OPTIONS.some((option) => option.wert === item.executionRequested)
+          ? item.executionRequested as IntakeExecution
+          : "offen",
+      })));
+    }
     if (typeof payload.wishDate === "string") setDirectWishDate(payload.wishDate);
     if (typeof payload.confirmedDate === "string") setDirectConfirmedDate(payload.confirmedDate);
     if (typeof payload.validUntil === "string") setQuoteValidUntil(payload.validUntil);
@@ -1346,6 +1363,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       quantity: Number(item.quantity),
       material: nullable(item.material),
       surfaceRequested: item.surfaceRequested.trim(),
+      executionRequested: item.executionRequested,
       unit: ports.canManageMoney ? item.unit : null,
       unitPriceCents: ports.canManageMoney ? item.unitPriceCents : null,
       vatRateBasisPoints: ports.canManageMoney ? item.vatRateBasisPoints : null,
@@ -1675,6 +1693,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                     <Feld label="Teil / Bezeichnung"><Eingabe required minLength={2} list="kr-service-catalog" placeholder="Katalog oder Freitext" value={item.name} onChange={(event) => setDirectPositionName(item.key, event.target.value)} /></Feld>
                     <Feld label="Menge"><Eingabe type="number" min="1" value={item.quantity} onChange={(event) => updateDirectItem(item.key, "quantity", event.target.value)} /></Feld>
                     <Feld label="Oberfläche" className="kr-pos-oberflaeche"><Auswahl required value={item.surfaceRequested} onChange={(event) => setDirectPositionSurface(item.key, event.target.value)} optionen={[{ wert: "", text: "Bitte wählen" }, ...surfaceOptions.map((surface) => ({ wert: surface, text: surface }))]} /></Feld>
+                    <Feld label="Ausführung"><Auswahl data-spec-id="eingang.position.ausfuehrung" value={item.executionRequested} onChange={(event) => updateDirectItem(item.key, "executionRequested", event.target.value)} optionen={EXECUTION_OPTIONS} /></Feld>
+                    <Feld label="Material"><Eingabe data-spec-id="eingang.position.material" maxLength={120} value={item.material} onChange={(event) => updateDirectItem(item.key, "material", event.target.value)} /></Feld>
                     {ports.canManageMoney && intakeKind === "QUOTE" && item.catalogServiceId === FREE_TEXT_SERVICE ? <Feld label="Preis netto (€)"><Eingabe required type="number" min="0" step="0.01" value={item.unitPriceCents === null ? "" : String(item.unitPriceCents / 100)} onChange={(event) => setDirectPositionPrice(item.key, event.target.value)} /></Feld> : null}
                     <KrButton art="sekundaer" icon="x" label="Position entfernen" disabled={directItems.length === 1} onClick={() => setDirectItems((current) => current.filter((entry) => entry.key !== item.key))} />
                   </div>)}
@@ -1776,7 +1796,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                     <p className={styles.createLead}>Teil aus dem Katalog übernehmen oder frei beschreiben. Die Oberfläche wird immer separat gewählt; ein Preis darf zunächst offen bleiben.</p>
                     {directItems.map((item, index) => <fieldset className={styles.createPosition} key={item.key}><legend>Position {index + 1}</legend><div className={styles.createFormGrid}>
                       <label className={styles.createFieldWide}>Teil / Bezeichnung<input required minLength={2} list="kr-service-catalog" placeholder="Katalog oder Freitext" value={item.name} onChange={(event) => setDirectPositionName(item.key, event.target.value)} /></label>
-                      <label>Menge<input type="number" min="1" value={item.quantity} onChange={(event) => updateDirectItem(item.key, "quantity", event.target.value)} /></label><label>Material<input value={item.material} onChange={(event) => updateDirectItem(item.key, "material", event.target.value)} /></label><label>Oberfläche<select required value={item.surfaceRequested} onChange={(event) => setDirectPositionSurface(item.key, event.target.value)}><option value="">Bitte wählen</option>{surfaceOptions.map((surface) => <option key={surface} value={surface}>{surface}</option>)}</select></label><label>Einheit<input readOnly value={item.unit ?? "offen"} /></label>{intakeKind === "QUOTE" && item.catalogServiceId === FREE_TEXT_SERVICE ? <label>Preis netto (€)<input required type="number" min="0" step="0.01" value={item.unitPriceCents === null ? "" : String(item.unitPriceCents / 100)} onChange={(event) => setDirectPositionPrice(item.key, event.target.value)} /></label> : <label>Preis netto<input readOnly value={item.unitPriceCents === null ? "offen" : euro(item.unitPriceCents)} /></label>}
+                      <label>Menge<input type="number" min="1" value={item.quantity} onChange={(event) => updateDirectItem(item.key, "quantity", event.target.value)} /></label><label>Material<input maxLength={120} value={item.material} onChange={(event) => updateDirectItem(item.key, "material", event.target.value)} /></label><label>Oberfläche<select required value={item.surfaceRequested} onChange={(event) => setDirectPositionSurface(item.key, event.target.value)}><option value="">Bitte wählen</option>{surfaceOptions.map((surface) => <option key={surface} value={surface}>{surface}</option>)}</select></label><label>Ausführung<select value={item.executionRequested} onChange={(event) => updateDirectItem(item.key, "executionRequested", event.target.value)}>{EXECUTION_OPTIONS.map((option) => <option key={option.wert} value={option.wert}>{option.text}</option>)}</select></label><label>Einheit<input readOnly value={item.unit ?? "offen"} /></label>{intakeKind === "QUOTE" && item.catalogServiceId === FREE_TEXT_SERVICE ? <label>Preis netto (€)<input required type="number" min="0" step="0.01" value={item.unitPriceCents === null ? "" : String(item.unitPriceCents / 100)} onChange={(event) => setDirectPositionPrice(item.key, event.target.value)} /></label> : <label>Preis netto<input readOnly value={item.unitPriceCents === null ? "offen" : euro(item.unitPriceCents)} /></label>}
                     </div>{directItems.length > 1 ? <button type="button" onClick={() => setDirectItems((current) => current.filter((entry) => entry.key !== item.key))}>Position entfernen</button> : null}</fieldset>)}
                     <div className={styles.createFormActions}><button type="button" onClick={() => setDirectItems((current) => current.length >= 20 ? current : [...current, newIntakePosition()])} disabled={directItems.length >= 20}>Position hinzufügen</button><button type="button" className={styles.createPrimary} onClick={() => { if (directItems.every(intakePositionComplete)) { setFeedback(null); setIntakeStep(3); } else setFeedback({ kind: "validation", message: "Bitte für jede Position Bezeichnung, Menge und Oberfläche angeben." }); }}>Weiter zur Prüfung</button></div>
                   </> : null}

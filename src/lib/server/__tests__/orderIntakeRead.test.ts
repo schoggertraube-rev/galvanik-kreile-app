@@ -31,6 +31,7 @@ const receiptRow = {
     quantity: 2,
     material: "Stahl",
     surfaceRequested: "Verchromen",
+    executionRequested: "hochglanz",
     catalogServiceId:"88888888-8888-4888-8888-888888888888",
     unit:"Stück",
     unitPriceCents:1250,
@@ -82,7 +83,7 @@ describe("order intake read ports", () => {
       customerId: "legacy-customer",
       handoverMode: "pickup",
       paymentMode: "abholung",
-      items: [{ id: receiptRow.items_snapshot[0]!.id, position: 1 }],
+      items: [{ id: receiptRow.items_snapshot[0]!.id, position: 1, executionRequested: "hochglanz" }],
     });
     expect(execute.mock.calls[0]?.[0].text).toContain("actor_id = ?");
     expect(execute.mock.calls[0]?.[0].text).toContain("client_event_id = ?");

@@ -13,6 +13,9 @@ const STATION = "angenommen" as const;
 const EVENT_STATION = "wareneingang" as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const EXECUTION_REQUESTED_VALUES = ["hochglanz", "glaenzend", "matt", "gelb_passiviert", "blau_passiviert", "offen"] as const;
+
+export type OrderIntakeExecutionRequested = typeof EXECUTION_REQUESTED_VALUES[number];
 
 export type OrderIntakeItemInput = {
   catalogServiceId?: string | null;
@@ -20,6 +23,7 @@ export type OrderIntakeItemInput = {
   quantity: number;
   material: string | null;
   surfaceRequested: string;
+  executionRequested?: OrderIntakeExecutionRequested;
   unit?: string | null;
   unitPriceCents?: number | null;
   vatRateBasisPoints?: 0 | 700 | 1900 | null;
@@ -203,14 +207,19 @@ function normalizeInput(input: unknown): NormalizedInput | null {
 
   const items: NormalizedItem[] = [];
   for (const candidate of input.items) {
+    const hasExecutionRequested = plainObject(candidate) && Object.hasOwn(candidate, "executionRequested");
     if (!plainObject(candidate) || !exactKeys(candidate, [
-      "catalogServiceId", "material", "name", "quantity", "surfaceRequested", "unit", "unitPriceCents", "vatRateBasisPoints",
+      "catalogServiceId", ...(hasExecutionRequested ? ["executionRequested"] : []), "material", "name", "quantity", "surfaceRequested", "unit", "unitPriceCents", "vatRateBasisPoints",
     ])) {
       return null;
     }
     const name = normalizedText(candidate.name, 2, 160);
     const surfaceRequested = normalizedText(candidate.surfaceRequested, 2, 160);
     const material = normalizedOptionalText(candidate.material, 120);
+    const executionRequested = hasExecutionRequested && typeof candidate.executionRequested === "string"
+      && EXECUTION_REQUESTED_VALUES.includes(candidate.executionRequested as OrderIntakeExecutionRequested)
+      ? candidate.executionRequested as OrderIntakeExecutionRequested
+      : hasExecutionRequested ? null : "offen";
     const catalogServiceId = candidate.catalogServiceId === null ? null : normalizedText(candidate.catalogServiceId, 1, 128);
     const unit = candidate.unit === null ? null : normalizedText(candidate.unit, 1, 40);
     const unitPriceCents = typeof candidate.unitPriceCents === "number" ? candidate.unitPriceCents : null;
@@ -222,13 +231,13 @@ function normalizeInput(input: unknown): NormalizedInput | null {
     const freeTextFieldsValid = candidate.catalogServiceId === null && candidate.unit === null
       && candidate.unitPriceCents === null && candidate.vatRateBasisPoints === null;
     if (
-      !name || !surfaceRequested || material === undefined || (!catalogFieldsValid && !freeTextFieldsValid) ||
+      !name || !surfaceRequested || material === undefined || !executionRequested || (!catalogFieldsValid && !freeTextFieldsValid) ||
       typeof candidate.quantity !== "number" || !Number.isSafeInteger(candidate.quantity) ||
       candidate.quantity < 1 || candidate.quantity > 1_000_000
     ) return null;
     items.push({
       catalogServiceId,
-      name, quantity: candidate.quantity, material, surfaceRequested, unit,
+      name, quantity: candidate.quantity, material, surfaceRequested, executionRequested, unit,
       unitPriceCents,
       vatRateBasisPoints: vatRateBasisPoints as 0 | 700 | 1900 | null,
     });
@@ -281,11 +290,13 @@ function parseReceiptItems(value: unknown): OrderIntakeReceiptItem[] | null {
   const parsed: OrderIntakeReceiptItem[] = [];
   for (let index = 0; index < value.length; index += 1) {
     const item = value[index];
+    const hasExecutionRequested = plainObject(item) && Object.hasOwn(item, "executionRequested");
     if (!plainObject(item) || !exactKeys(item, [
-      "catalogServiceId", "id", "material", "name", "position", "quantity", "surfaceRequested", "unit", "unitPriceCents", "vatRateBasisPoints",
+      "catalogServiceId", ...(hasExecutionRequested ? ["executionRequested"] : []), "id", "material", "name", "position", "quantity", "surfaceRequested", "unit", "unitPriceCents", "vatRateBasisPoints",
     ])) {
       return null;
     }
+    const executionRequested = hasExecutionRequested ? item.executionRequested : "offen";
     if (
       typeof item.id !== "string" || !UUID_PATTERN.test(item.id) ||
       !(item.catalogServiceId === null || (typeof item.catalogServiceId === "string" && UUID_PATTERN.test(item.catalogServiceId))) ||
@@ -294,6 +305,7 @@ function parseReceiptItems(value: unknown): OrderIntakeReceiptItem[] | null {
       typeof item.quantity !== "number" || !Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.quantity > 1_000_000 ||
       (item.material !== null && (typeof item.material !== "string" || !normalizedText(item.material, 1, 120))) ||
       typeof item.surfaceRequested !== "string" || !normalizedText(item.surfaceRequested, 2, 160) ||
+      typeof executionRequested !== "string" || !EXECUTION_REQUESTED_VALUES.includes(executionRequested as OrderIntakeExecutionRequested) ||
       !(item.unit === null || (typeof item.unit === "string" && normalizedText(item.unit, 1, 40))) ||
       !(item.unitPriceCents === null || (typeof item.unitPriceCents === "number" && Number.isSafeInteger(item.unitPriceCents) && item.unitPriceCents >= 0)) ||
       !(item.vatRateBasisPoints === null || ([0, 700, 1900] as const).includes(item.vatRateBasisPoints as never)) ||
@@ -306,6 +318,7 @@ function parseReceiptItems(value: unknown): OrderIntakeReceiptItem[] | null {
       quantity: item.quantity,
       material: item.material as string | null,
       surfaceRequested: item.surfaceRequested,
+      executionRequested: executionRequested as OrderIntakeExecutionRequested,
       catalogServiceId: item.catalogServiceId,
       unit: item.unit,
       unitPriceCents: item.unitPriceCents,
@@ -622,11 +635,11 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
         const insertedItems = await tx.execute<{ id: string; tenant_id: string; order_id: string; customer_id: string }>(sql`
           INSERT INTO public.items (
             id, tenant_id, order_id, customer_id, name, quantity, current_station_id,
-            material, surface_requested, catalog_service_id, unit, preis_netto, vat_rate_basis_points,
+            material, surface_requested, execution_requested, catalog_service_id, unit, preis_netto, vat_rate_basis_points,
             internal_notes, created_at
           ) VALUES (
             ${item.id}, ${expected.tenantId}, ${orderId}, ${customer.id}, ${item.name}, ${item.quantity}, ${STATION},
-            ${item.material}, ${item.surfaceRequested}, ${item.catalogServiceId}::uuid, ${item.unit},
+            ${item.material}, ${item.surfaceRequested}, ${item.executionRequested}, ${item.catalogServiceId}::uuid, ${item.unit},
             ${item.unitPriceCents === null ? null : (item.unitPriceCents / 100).toFixed(2)}, ${item.vatRateBasisPoints},
             ${normalized.note}, statement_timestamp() AT TIME ZONE 'UTC'
           )
