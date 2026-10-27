@@ -229,6 +229,52 @@ describe("createOrderIntake", () => {
     expect(execute.mock.calls.map(([query]) => query.text).join("\n")).not.toContain("INSERT INTO public.orders");
   });
 
+  it("accepts an order payment mode that differs from the customer's enabled invoice terms", async () => {
+    execute.mockImplementation((query: { text: string }) => {
+      if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if (query.text.includes("FROM private.order_intake_receipts")) return Promise.resolve([]);
+      if (query.text.includes("FROM public.customers")) return Promise.resolve([{
+        id: CUSTOMER, tenant_id: KREILE_TENANT_SLUG, customer_number: "K-0042", name: "Kunde A", company_name: "Kunde A GmbH",
+        contact_person: "Ada Beispiel", phone: "+49 221 123456", email: "ada@example.test", street: "Testweg 1",
+        zip_code: "50667", city: "Köln", country: "Deutschland", payment_preference: "rechnung_14",
+      }]);
+      if (query.text.includes("next_number")) throw new Error("stop after independent payment mode");
+      throw new Error(`unexpected SQL ${query.text}`);
+    });
+
+    const { createOrderIntake } = await import("../orderIntakeCommand");
+    await expect(createOrderIntake({
+      ...input,
+      paymentMode: "vorkasse",
+      items: [{ catalogServiceId: null, name: "TEST Sonderteil", quantity: 1, material: "Stahl", surfaceRequested: "Vernickeln", unit: null, unitPriceCents: null, vatRateBasisPoints: null }],
+    })).resolves.toMatchObject({ code: "UNAVAILABLE" });
+    expect(execute.mock.calls.map(([query]) => query.text).join("\n")).toContain("next_number");
+  });
+
+  it("rejects bar or card payment when the order is shipped", async () => {
+    execute.mockImplementation((query: { text: string }) => {
+      if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if (query.text.includes("FROM private.order_intake_receipts")) return Promise.resolve([]);
+      if (query.text.includes("FROM public.customers")) return Promise.resolve([{
+        id: CUSTOMER, tenant_id: KREILE_TENANT_SLUG, customer_number: "K-0042", name: "Kunde A", company_name: "Kunde A GmbH",
+        contact_person: "Ada Beispiel", phone: "+49 221 123456", email: "ada@example.test", street: "Testweg 1",
+        zip_code: "50667", city: "Köln", country: "Deutschland", payment_preference: "bar",
+      }]);
+      throw new Error(`unexpected SQL ${query.text}`);
+    });
+
+    const { createOrderIntake } = await import("../orderIntakeCommand");
+    await expect(createOrderIntake({
+      ...input,
+      handoverMode: "shipping",
+      items: [{ catalogServiceId: null, name: "TEST Sonderteil", quantity: 1, material: "Stahl", surfaceRequested: "Vernickeln", unit: null, unitPriceCents: null, vatRateBasisPoints: null }],
+    })).resolves.toEqual({
+      code: "VALIDATION_ERROR",
+      message: "Bar oder Karte nur bei Abholung.",
+    });
+    expect(execute.mock.calls.map(([query]) => query.text).join("\n")).not.toContain("INSERT INTO public.orders");
+  });
+
   it("rejects stale catalog data before creating an inline customer", async () => {
     const newCustomerInput = {
       ...input,

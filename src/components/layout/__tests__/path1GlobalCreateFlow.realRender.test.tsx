@@ -398,11 +398,66 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     await waitFor(() => expect(customerSelect.querySelector(`option[value="${CUSTOMER_ID}"]`)).not.toBeNull());
     fireEvent.change(customerSelect, { target: { value: CUSTOMER_ID } });
     const paymentMode = screen.getByRole("combobox", { name: "Zahlungsmodus" });
-    expect(paymentMode).toHaveValue("");
+    expect(paymentMode).toHaveValue("abholung");
     expect(screen.getByRole("option", { name: /Rechnung auf Ziel \(nicht freigeschaltet\)/ })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Versand" }));
     expect(paymentMode).toHaveValue("vorkasse");
-    expect(screen.getByRole("option", { name: "Vorkasse" })).toBeInTheDocument();
+    expect(within(paymentMode).getByRole("option", { name: "Vorkasse" })).toBeInTheDocument();
+    expect(within(paymentMode).getByRole("option", { name: /Bar oder Karte bei Abholung \(nur bei Abholung\)/ })).toBeDisabled();
+  });
+
+  it("keeps the customer payment terms unchanged when handover and order payment mode change", async () => {
+    const updateCustomer = vi.fn().mockResolvedValue({ code: "OK" });
+    const customer = {
+      id: CUSTOMER_ID,
+      customerNumber: "K-2026-0042",
+      name: "SYNTHETISCH Zielkunde GmbH",
+      customerType: "business" as const,
+      companyName: "SYNTHETISCH Zielkunde GmbH",
+      contactPerson: "Testperson",
+      email: "zielkunde@example.invalid",
+      phone: "+49 221 123456",
+      street: "Testweg 1",
+      zipCode: "12345",
+      city: "Teststadt",
+      country: "Deutschland",
+      paymentPreference: "rechnung_14",
+      vatId: null,
+    };
+    const value = ports({
+      listCustomers: vi.fn().mockResolvedValue({ code: "OK", customers: [customer] }),
+      updateCustomer,
+    });
+    vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    render(<GlobalCreateFlow ports={value} />);
+
+    openFlow();
+    const customerSelect = await screen.findByRole("combobox", { name: "Kunde" });
+    fireEvent.change(customerSelect, { target: { value: CUSTOMER_ID } });
+    const paymentMode = screen.getByRole("combobox", { name: "Zahlungsmodus" });
+    expect(paymentMode).toHaveValue("rechnung");
+    expect(screen.getByRole("option", { name: "Rechnung auf Ziel" })).toBeEnabled();
+
+    const handover = screen.getByRole("group", { name: "Übergabe" });
+    const [pickup, shipping] = within(handover).getAllByRole("button");
+    fireEvent.click(shipping);
+    expect(paymentMode).toHaveValue("rechnung");
+    fireEvent.change(paymentMode, { target: { value: "vorkasse" } });
+    fireEvent.click(pickup);
+    expect(paymentMode).toHaveValue("vorkasse");
+
+    fireEvent.click(screen.getByRole("button", { name: "Positionen" }));
+    await screen.findByLabelText("Teil / Bezeichnung");
+    expect(updateCustomer).not.toHaveBeenCalled();
   });
 
   it("checks an unclear customer result read-only and restores only a verified receipt", async () => {
@@ -524,7 +579,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     await screen.findByRole("heading", { name: "Neuer Eingang" });
     expect(screen.getByRole("navigation", { name: "Abschnitte" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /1Kunde/ })).toHaveAttribute("aria-current", "step");
-    expect(screen.getByRole("combobox", { name: "Zahlungsmodus" })).toHaveValue("bar");
+    expect(screen.getByRole("combobox", { name: "Zahlungsmodus" })).toHaveValue("abholung");
     expect(screen.queryByRole("heading", { name: "Was möchtest du anlegen?" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Offene KVs bearbeiten/ })).not.toBeInTheDocument();
   });

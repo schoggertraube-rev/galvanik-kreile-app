@@ -159,26 +159,31 @@ export function isPaymentMode(value: unknown): value is PaymentMode {
   return PAYMENT_MODES.includes(value as PaymentMode);
 }
 
-export function paymentModeFromPreference(preference: string | null | undefined): PaymentMode {
-  if (preference === "bar") return "abholung";
+export function paymentModeFromPreference(
+  preference: string | null | undefined,
+  handoverMode: "pickup" | "shipping" = "shipping",
+): PaymentMode {
+  if (preference === "bar") return handoverMode === "pickup" ? "abholung" : "vorkasse";
   if (typeof preference === "string" && /^rechnung_[1-9][0-9]{0,2}$/.test(preference)) return "rechnung";
-  return "vorkasse";
+  return handoverMode === "pickup" && !preference ? "abholung" : "vorkasse";
 }
 
 export function intakePaymentContract(input: {
   customerMode: "EXISTING" | "NEW";
   paymentPreference: string | null | undefined;
-  requestedMode: PaymentMode;
+  handoverMode: "pickup" | "shipping";
+  requestedMode?: PaymentMode;
 }): { ok: true; mode: PaymentMode } | { ok: false; message: string } {
-  const mode = paymentModeFromPreference(input.paymentPreference);
-  if (input.customerMode === "NEW" && mode === "rechnung") {
+  const mode = input.requestedMode
+    ?? paymentModeFromPreference(input.paymentPreference, input.handoverMode);
+  const targetEnabled = input.customerMode === "EXISTING"
+    && typeof input.paymentPreference === "string"
+    && /^rechnung_[1-9][0-9]{0,2}$/.test(input.paymentPreference);
+  if (mode === "rechnung" && !targetEnabled) {
     return { ok: false, message: "Ziel nicht freigeschaltet." };
   }
-  if (input.requestedMode === "rechnung" && mode !== "rechnung") {
-    return { ok: false, message: "Ziel nicht freigeschaltet." };
-  }
-  if (input.requestedMode !== mode) {
-    return { ok: false, message: "Zahlungsmodus passt nicht zur hinterlegten Zahlungsbedingung." };
+  if (mode === "abholung" && input.handoverMode === "shipping") {
+    return { ok: false, message: "Bar oder Karte nur bei Abholung." };
   }
   return { ok: true, mode };
 }

@@ -4,7 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import { intakePaymentContract, paymentModeFromPreference, type PaymentMode } from "@/lib/server/paymentContract";
+import { intakePaymentContract, type PaymentMode } from "@/lib/server/paymentContract";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 
 const EVENT_TYPE = "ORDER_INTAKE_CREATED_V1";
@@ -437,7 +437,7 @@ async function resolveCustomer(
   `);
   const row = rows.length === 1 ? rows[0] : null;
   if (!row || !row.customer_number || !row.contact_person || !row.email || !row.phone || !row.street ||
-    !row.zip_code || !row.city || !row.country || !row.payment_preference) return null;
+    !row.zip_code || !row.city || !row.country) return null;
   return row;
 }
 
@@ -548,7 +548,8 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
         ? intakePaymentContract({
             customerMode: "NEW",
             paymentPreference: normalized.customer.paymentPreference,
-            requestedMode: normalized.paymentMode ?? paymentModeFromPreference(normalized.customer.paymentPreference),
+            handoverMode: normalized.handoverMode,
+            requestedMode: normalized.paymentMode ?? undefined,
           })
         : null;
       if (paymentContract && !paymentContract.ok) {
@@ -563,7 +564,8 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
       paymentContract ??= intakePaymentContract({
         customerMode: "EXISTING",
         paymentPreference: customer.payment_preference,
-        requestedMode: normalized.paymentMode ?? paymentModeFromPreference(customer.payment_preference),
+        handoverMode: normalized.handoverMode,
+        requestedMode: normalized.paymentMode ?? undefined,
       });
       if (!paymentContract.ok) {
         return { code: "VALIDATION_ERROR", message: paymentContract.message };

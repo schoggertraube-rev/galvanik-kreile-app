@@ -13,7 +13,7 @@ import {
 import { FormEvent, KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { CreateCustomerInput, UpdateCustomerCommercialInput } from "@/modules/customers/public";
 import type { CatalogService } from "@/modules/katalog/public";
-import { paymentModeFromPreference } from "@/lib/server/paymentContract";
+import { paymentModeFromPreference, type PaymentMode } from "@/lib/server/paymentContract";
 import {
   Abschnitt,
   AbschnittNav,
@@ -250,7 +250,19 @@ function CustomerFields({ value, onChange, autofocus = false, requireOrderData =
   </div>;
 }
 
-function IntakeCustomerFields({ value, onChange, onlyMissing }: { value: CustomerDraft; onChange: (value: CustomerDraft) => void; onlyMissing: boolean }) {
+function IntakeCustomerFields({
+  value,
+  onChange,
+  onlyMissing,
+  showPayment,
+  onPaymentChange,
+}: {
+  value: CustomerDraft;
+  onChange: (value: CustomerDraft) => void;
+  onlyMissing: boolean;
+  showPayment: boolean;
+  onPaymentChange: (value: string) => void;
+}) {
   const set = <K extends keyof CustomerDraft>(key: K, next: CustomerDraft[K]) => onChange({ ...value, [key]: next });
   const missing = (value: string | null | undefined) => !value?.trim();
   const show = (value: string | null | undefined) => !onlyMissing || missing(value);
@@ -269,6 +281,11 @@ function IntakeCustomerFields({ value, onChange, onlyMissing }: { value: Custome
       {show(value.zipCode) ? <Feld label="PLZ"><Eingabe required value={value.zipCode} onChange={(event) => set("zipCode", event.target.value)} /></Feld> : null}
       {show(value.city) ? <Feld label="Ort"><Eingabe required value={value.city} onChange={(event) => set("city", event.target.value)} /></Feld> : null}
       {show(value.country) ? <Feld label="Land"><Eingabe required value={value.country} onChange={(event) => set("country", event.target.value)} /></Feld> : null}
+      {showPayment && show(value.paymentPreference) ? <Feld label="Zahlungsbedingung"><Auswahl required value={value.paymentPreference} onChange={(event) => onPaymentChange(event.target.value)} optionen={[
+        { wert: "", text: "Bitte auswählen" },
+        { wert: "vorkasse", text: "Vorkasse" },
+        { wert: "bar", text: "Bar oder Karte bei Abholung" },
+      ]} /></Feld> : null}
     </FormRaster>
     {!onlyMissing ? <details><summary>USt-ID (optional)</summary><Feld label="USt-ID"><Eingabe value={value.vatId ?? ""} onChange={(event) => set("vatId", nullable(event.target.value))} /></Feld></details> : null}
   </>;
@@ -327,11 +344,11 @@ function customerChoiceToDraft(customer: GlobalCreateCustomerChoice): CustomerDr
   };
 }
 
-function completeOrderCustomer(customer: CustomerDraft): boolean {
+function completeOrderCustomer(customer: CustomerDraft, requirePaymentPreference = true): boolean {
   return customer.name.trim().length >= 2 && Boolean(customer.contactPerson?.trim()) &&
     Boolean(customer.phone?.trim()) && Boolean(customer.email?.trim()) && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email ?? "") &&
     customer.street.trim().length >= 2 && customer.zipCode.trim().length >= 2 && customer.city.trim().length >= 1 &&
-    customer.country.trim().length >= 2 && customer.paymentPreference.trim().length > 0;
+    customer.country.trim().length >= 2 && (!requirePaymentPreference || customer.paymentPreference.trim().length > 0);
 }
 
 const newPosition = (): PositionDraft => ({
@@ -429,6 +446,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [intakeChecked, setIntakeChecked] = useState(false);
   const [directCustomer, setDirectCustomer] = useState<CustomerDraft>(EMPTY_INTAKE_CUSTOMER);
   const [directCustomerId, setDirectCustomerId] = useState("");
+  const [intakePaymentMode, setIntakePaymentMode] = useState<PaymentMode>("abholung");
+  const [intakePaymentModeTouched, setIntakePaymentModeTouched] = useState(false);
+  const [intakeCustomerPaymentTouched, setIntakeCustomerPaymentTouched] = useState(false);
   const [directItems, setDirectItems] = useState<IntakePositionDraft[]>(() => [newIntakePosition()]);
   const [catalogServices, setCatalogServices] = useState<CatalogService[]>([]);
   const [directWishDate, setDirectWishDate] = useState("");
@@ -489,6 +509,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     customerMode: directCustomerMode,
     customerId: directCustomerId,
     customer: directCustomer,
+    paymentMode: intakePaymentMode,
+    paymentModeTouched: intakePaymentModeTouched,
+    customerPaymentTouched: intakeCustomerPaymentTouched,
     intakeKind,
     intakeHandover,
     intakeSource,
@@ -544,6 +567,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     if (typeof payload.customerId === "string") setDirectCustomerId(payload.customerId);
     const restoredCustomer = payload.customer;
     if (record(restoredCustomer)) setDirectCustomer((current) => ({ ...current, ...restoredCustomer } as CustomerDraft));
+    if (payload.paymentMode === "vorkasse" || payload.paymentMode === "abholung" || payload.paymentMode === "rechnung") setIntakePaymentMode(payload.paymentMode);
+    if (typeof payload.paymentModeTouched === "boolean") setIntakePaymentModeTouched(payload.paymentModeTouched);
+    if (typeof payload.customerPaymentTouched === "boolean") setIntakeCustomerPaymentTouched(payload.customerPaymentTouched);
     if (payload.intakeKind === "ORDER" || payload.intakeKind === "QUOTE") setIntakeKind(payload.intakeKind);
     if (payload.intakeHandover === "PICKUP" || payload.intakeHandover === "SHIPPING") setIntakeHandover(payload.intakeHandover);
     if (["personal", "shipping", "pickup", "mail", "phone"].includes(String(payload.intakeSource))) setIntakeSource(payload.intakeSource as typeof intakeSource);
@@ -601,6 +627,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setDirectCustomerMode("NONE");
     setDirectCustomerId("");
     setDirectCustomer(EMPTY_INTAKE_CUSTOMER);
+    setIntakePaymentMode("abholung");
+    setIntakePaymentModeTouched(false);
+    setIntakeCustomerPaymentTouched(false);
     setOpen(true);
     setIntakeStep(1);
     navigate("direct-intake");
@@ -631,8 +660,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         : undefined;
       if (preselected) {
         setDirectCustomerId(preselected.id);
-        setDirectCustomer(customerChoiceToDraft(preselected));
+        const draftCustomer = customerChoiceToDraft(preselected);
+        setDirectCustomer(draftCustomer);
         setDirectCustomerMode("EXISTING");
+        setIntakePaymentMode(paymentModeFromPreference(draftCustomer.paymentPreference, "pickup"));
       }
     } catch {
       if (seq === customerRequestSeq.current) setFeedback({ kind: "error", message: "Die vorhandenen Kunden konnten nicht sicher gelesen werden. Es wurde nichts angelegt." });
@@ -1114,12 +1145,65 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     && Number.isSafeInteger(Number(item.quantity))
     && Number(item.quantity) > 0;
 
+  const selectIntakeCustomer = (mode: "NONE" | "EXISTING" | "NEW", selected?: GlobalCreateCustomerChoice) => {
+    const handoverMode = intakeHandover === "PICKUP" ? "pickup" : "shipping";
+    setFeedback(null);
+    setIntakePaymentModeTouched(false);
+    setIntakeCustomerPaymentTouched(false);
+    if (mode === "NONE") {
+      setDirectCustomerMode("NONE");
+      setDirectCustomerId("");
+      setDirectCustomer(EMPTY_INTAKE_CUSTOMER);
+      setIntakePaymentMode(paymentModeFromPreference(null, handoverMode));
+      return;
+    }
+    if (mode === "NEW") {
+      const paymentPreference = handoverMode === "pickup" ? "bar" : "vorkasse";
+      setDirectCustomerMode("NEW");
+      setDirectCustomerId("");
+      setDirectCustomer({ ...EMPTY_CUSTOMER, paymentPreference });
+      setIntakePaymentMode(paymentModeFromPreference(paymentPreference, handoverMode));
+      return;
+    }
+    if (!selected) return;
+    const draft = customerChoiceToDraft(selected);
+    setDirectCustomerMode("EXISTING");
+    setDirectCustomerId(selected.id);
+    setDirectCustomer(draft);
+    setIntakePaymentMode(paymentModeFromPreference(draft.paymentPreference, handoverMode));
+  };
+
+  const changeIntakeHandover = (value: "PICKUP" | "SHIPPING") => {
+    const handoverMode = value === "PICKUP" ? "pickup" : "shipping";
+    setIntakeHandover(value);
+    if (directCustomerMode === "NEW" && !intakeCustomerPaymentTouched) {
+      const paymentPreference = handoverMode === "pickup" ? "bar" : "vorkasse";
+      setDirectCustomer((current) => ({ ...current, paymentPreference }));
+      if (!intakePaymentModeTouched) setIntakePaymentMode(paymentModeFromPreference(paymentPreference, handoverMode));
+      return;
+    }
+    if (!intakePaymentModeTouched || (value === "SHIPPING" && intakePaymentMode === "abholung")) {
+      setIntakePaymentMode(paymentModeFromPreference(directCustomer.paymentPreference, handoverMode));
+    }
+  };
+
+  const changeIntakeCustomerPayment = (paymentPreference: string) => {
+    setIntakeCustomerPaymentTouched(true);
+    setDirectCustomer((current) => ({ ...current, paymentPreference }));
+    if (!intakePaymentModeTouched) {
+      setIntakePaymentMode(paymentModeFromPreference(
+        paymentPreference,
+        intakeHandover === "PICKUP" ? "pickup" : "shipping",
+      ));
+    }
+  };
+
   const advanceIntakeCustomer = async (): Promise<string | null> => {
     if (directCustomerMode === "NONE") {
       setFeedback({ kind: "validation", message: "Bitte einen bestehenden Kunden oder ‚Neukunde anlegen‘ auswählen." });
       return null;
     }
-    if (!completeOrderCustomer(directCustomer)) {
+    if (!completeOrderCustomer(directCustomer, ports.canManageMoney)) {
       setFeedback({ kind: "validation", message: "Für den Auftrag fehlen Name/Firma, Ansprechpartner, Telefon, E-Mail, vollständige Anschrift oder Zahlungsbedingung." });
       return null;
     }
@@ -1133,6 +1217,14 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         if (!directCustomerId) {
           setFeedback({ kind: "validation", message: "Bitte einen Kunden auswählen." });
           return null;
+        }
+        const selected = customerChoices.find((entry) => entry.id === directCustomerId);
+        const needsInlineUpdate = selected
+          ? !completeOrderCustomer(customerChoiceToDraft(selected), ports.canManageMoney)
+          : true;
+        if (!needsInlineUpdate) {
+          setIntakeStep(2);
+          return directCustomerId;
         }
         if (!ports.updateCustomer) {
           setFeedback({ kind: "error", message: "Die Kundenaktualisierung ist derzeit nicht verfügbar." });
@@ -1207,7 +1299,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       unitPriceCents: ports.canManageMoney ? item.unitPriceCents : null,
       vatRateBasisPoints: ports.canManageMoney ? item.vatRateBasisPoints : null,
     }));
-    const validCustomer = (directCustomerMode === "NEW" || customerKey.length > 0) && completeOrderCustomer(directCustomer);
+    const validCustomer = (directCustomerMode === "NEW" || customerKey.length > 0)
+      && completeOrderCustomer(directCustomer, ports.canManageMoney);
     if (!validCustomer || !validDates || items.length < 1 || items.length > 20 || !directItems.every(intakePositionComplete)) {
       setFeedback({ kind: "validation", message: "Bitte Kunde, mindestens eine Position, Terminwunsch und zugesagten Termin vollständig angeben." });
       return;
@@ -1235,7 +1328,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       // The existing F1.1 contract persists the confirmed commitment, never the non-binding wish.
       dueDate: directConfirmedDate,
       handoverMode: intakeHandover === "PICKUP" ? "pickup" : "shipping",
-      ...(ports.canManageMoney ? { paymentMode: paymentModeFromPreference(directCustomer.paymentPreference) } : {}),
+      ...(ports.canManageMoney ? { paymentMode: intakePaymentMode } : {}),
       note: nullable(directNote),
       items,
     };
@@ -1394,6 +1487,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setDirectCustomer(EMPTY_INTAKE_CUSTOMER);
     setDirectCustomerId("");
     setDirectCustomerMode("NONE");
+    setIntakePaymentMode("abholung");
+    setIntakePaymentModeTouched(false);
+    setIntakeCustomerPaymentTouched(false);
     setDirectItems([newIntakePosition()]);
     setDirectWishDate("");
     setDirectConfirmedDate("");
@@ -1468,11 +1564,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                       value={directCustomerMode === "NEW" ? "NEW" : directCustomerId}
                       onChange={(event) => {
                         const value = event.target.value;
-                        setFeedback(null);
-                        if (!value) { setDirectCustomerMode("NONE"); setDirectCustomerId(""); setDirectCustomer(EMPTY_INTAKE_CUSTOMER); return; }
-                        if (value === "NEW") { setDirectCustomerMode("NEW"); setDirectCustomerId(""); setDirectCustomer({ ...EMPTY_CUSTOMER, paymentPreference: intakeHandover === "PICKUP" ? "bar" : "vorkasse" }); return; }
+                        if (!value) { selectIntakeCustomer("NONE"); return; }
+                        if (value === "NEW") { selectIntakeCustomer("NEW"); return; }
                         const selected = customerChoices.find((entry) => entry.id === value);
-                        if (selected) { setDirectCustomerMode("EXISTING"); setDirectCustomerId(selected.id); setDirectCustomer(customerChoiceToDraft(selected)); }
+                        if (selected) selectIntakeCustomer("EXISTING", selected);
                       }}
                       optionen={[
                         { wert: "", text: customerLoad === "loading" ? "Kunden werden geladen …" : "Bitte auswählen" },
@@ -1482,20 +1577,20 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                     />
                   </Feld>
                 </FormRaster>
-                {directCustomerMode === "NEW" ? <IntakeCustomerFields value={directCustomer} onChange={setDirectCustomer} onlyMissing={false} /> : null}
-                {directCustomerMode === "EXISTING" && !completeOrderCustomer(directCustomer) ? <>
+                {directCustomerMode === "NEW" ? <IntakeCustomerFields value={directCustomer} onChange={setDirectCustomer} onlyMissing={false} showPayment={ports.canManageMoney} onPaymentChange={changeIntakeCustomerPayment} /> : null}
+                {directCustomerMode === "EXISTING" && !completeOrderCustomer(directCustomer, ports.canManageMoney) ? <>
                   <Hinweis ton="warn">Für diesen Kunden fehlen noch Pflichtdaten.</Hinweis>
-                  <IntakeCustomerFields value={directCustomer} onChange={setDirectCustomer} onlyMissing />
+                  <IntakeCustomerFields value={directCustomer} onChange={setDirectCustomer} onlyMissing showPayment={ports.canManageMoney} onPaymentChange={changeIntakeCustomerPayment} />
                 </> : null}
                 <FormRaster>
                   <Feld label="Liefertermin"><Eingabe data-spec-id="eingang.liefertermin" type="date" required value={directWishDate} onChange={(event) => { setDirectWishDate(event.target.value); setDirectConfirmedDate(event.target.value); }} /></Feld>
                   <Feld label="Termin ist"><div data-spec-id="eingang.terminstatus"><Segment label="Termin ist" wert={intakeTermStatus} optionen={[{ wert: "wish", text: "Wunsch" }, { wert: "confirmed", text: "bestätigt" }]} onWert={setIntakeTermStatus} /></div></Feld>
-                  <Feld label="Übergabe"><div data-spec-id="eingang.uebergabe"><Segment label="Übergabe" wert={intakeHandover} optionen={[{ wert: "PICKUP", text: "Abholung" }, { wert: "SHIPPING", text: "Versand" }]} onWert={(value) => { setIntakeHandover(value); setDirectCustomer((current) => directCustomerMode === "EXISTING" && /^rechnung_/.test(current.paymentPreference) ? current : { ...current, paymentPreference: value === "PICKUP" ? "bar" : "vorkasse" }); }} /></div></Feld>
+                  <Feld label="Übergabe"><div data-spec-id="eingang.uebergabe"><Segment label="Übergabe" wert={intakeHandover} optionen={[{ wert: "PICKUP", text: "Abholung" }, { wert: "SHIPPING", text: "Versand" }]} onWert={changeIntakeHandover} /></div></Feld>
                   {ports.canManageMoney ? <Feld label="Zahlungsmodus">
-                    <Auswahl required data-spec-id="eingang.zahlungsmodus" value={directCustomer.paymentPreference} onChange={(event) => setDirectCustomer((current) => ({ ...current, paymentPreference: event.target.value }))} optionen={[
-                      ...(directCustomer.paymentPreference ? [] : [{ wert: "", text: "Bitte auswählen" }]),
-                      intakeHandover === "PICKUP" ? { wert: "bar", text: "Bar oder Karte bei Abholung" } : { wert: "vorkasse", text: "Vorkasse" },
-                      { wert: "rechnung_14", text: /^rechnung_/.test(directCustomer.paymentPreference) && directCustomerMode === "EXISTING" ? "Rechnung auf Ziel" : "Rechnung auf Ziel (nicht freigeschaltet)", gesperrt: !(directCustomerMode === "EXISTING" && /^rechnung_/.test(directCustomer.paymentPreference)) },
+                    <Auswahl required data-spec-id="eingang.zahlungsmodus" value={intakePaymentMode} onChange={(event) => { setIntakePaymentMode(event.target.value as PaymentMode); setIntakePaymentModeTouched(true); }} optionen={[
+                      { wert: "vorkasse", text: "Vorkasse" },
+                      { wert: "abholung", text: intakeHandover === "PICKUP" ? "Bar oder Karte bei Abholung" : "Bar oder Karte bei Abholung (nur bei Abholung)", gesperrt: intakeHandover === "SHIPPING" },
+                      { wert: "rechnung", text: directCustomerMode === "EXISTING" && /^rechnung_/.test(directCustomer.paymentPreference) ? "Rechnung auf Ziel" : "Rechnung auf Ziel (nicht freigeschaltet)", gesperrt: !(directCustomerMode === "EXISTING" && /^rechnung_/.test(directCustomer.paymentPreference)) },
                     ]} />
                   </Feld> : null}
                   <Feld label="Eingangsart"><Auswahl data-spec-id="eingang.eingangsart" value={intakeSource} onChange={(event) => setIntakeSource(event.target.value as typeof intakeSource)} optionen={[{ wert: "personal", text: "persönlich angeliefert" }, { wert: "shipping", text: "Versand eingegangen" }, { wert: "pickup", text: "Abholung durch Kreile" }, { wert: "mail", text: "Anfrage per Mail" }, { wert: "phone", text: "Anfrage per Telefon" }]} /></Feld>
@@ -1532,7 +1627,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                     { k: "Positionen", v: String(directItems.length) },
                     { k: "Wunschtermin", v: directWishDate || "Nicht angegeben" },
                     { k: "Übergabe", v: intakeHandover === "PICKUP" ? "Abholung" : "Versand" },
-                    ...(ports.canManageMoney ? [{ k: "Zahlungsart", v: directCustomer.paymentPreference === "bar" ? "Bar oder Karte bei Abholung" : /^rechnung_/.test(directCustomer.paymentPreference) ? "Rechnung auf Ziel" : "Vorkasse" }] : []),
+                    ...(ports.canManageMoney ? [{ k: "Zahlungsart", v: intakePaymentMode === "abholung" ? "Bar oder Karte bei Abholung" : intakePaymentMode === "rechnung" ? "Rechnung auf Ziel" : "Vorkasse" }] : []),
                   ]} />
                 </FormRaster>
                 <div data-spec-id="eingang.geprueft"><Checkbox checked={intakeChecked} onChange={setIntakeChecked}><b>Ware, Menge und Zustand gemeinsam geprüft</b></Checkbox></div>
