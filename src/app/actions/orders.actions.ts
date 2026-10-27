@@ -57,6 +57,20 @@ import type { EvidenceReadRecord } from "@/lib/server/evidenceRead";
 // DTO Typen (zur Vereinfachung)
 export type OrderResponse = OperationalOrder;
 
+export type OrderRegisterFilter = "ALL" | "ORDER" | "QUOTE";
+
+export type OrderRegisterEntry = {
+  kind: "ORDER" | "QUOTE";
+  id: string;
+  reference: string;
+  customerId: string;
+  customerName: string;
+  title: string;
+  dueDate: string;
+  status: string;
+  changedAt: string | null;
+};
+
 export async function transitionWareneingangToGalvanikAction(
   input: OrderStationCommandInput,
 ): Promise<OrderStationCommandResult> {
@@ -356,6 +370,100 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
       ok: false,
       error: "DB_ERROR",
       message: "Auftragsdaten konnten nicht sicher geladen werden.",
+    };
+  }
+}
+
+/**
+ * F3 register read: one tenant-bound source for the order list and its KV
+ * filter. The UI can select either aggregate without joining client results or
+ * resolving authorization twice.
+ */
+export async function getOrderRegisterDb(
+  input: { filter: OrderRegisterFilter } = { filter: "ALL" },
+): Promise<ActionResult<OrderRegisterEntry[]>> {
+  noStore();
+  if (
+    !input
+    || typeof input !== "object"
+    || Object.keys(input).length !== 1
+    || !["ALL", "ORDER", "QUOTE"].includes(input.filter)
+  ) {
+    return {
+      ok: false,
+      error: "VALIDATION_ERROR",
+      message: "Auftragsfilter ist ungültig.",
+    };
+  }
+
+  const authorization = await resolveOperationalReadAuthorization();
+  if (!authorization.ok) return authorization;
+
+  try {
+    const readOrders = input.filter !== "QUOTE";
+    const readQuotes = input.filter !== "ORDER";
+    const [orderRows, quoteResult] = await Promise.all([
+      readOrders
+        ? import("@/lib/server/operationalOrders").then(({ getOperationalOrders }) => getOperationalOrders(authorization.data))
+        : Promise.resolve([]),
+      readQuotes
+        ? import("@/modules/quotes/server-public").then(({ listOpenQuotesCommand }) => listOpenQuotesCommand({
+          tenantId: authorization.data.tenantId,
+          userId: authorization.data.userId,
+          capabilities: {
+            canCreateQuote: false,
+            canReadQuote: true,
+            canUpdateQuote: false,
+            canConvertQuote: false,
+          },
+        }))
+        : Promise.resolve({ code: "OK" as const, quotes: [] }),
+    ]);
+
+    if (quoteResult.code !== "OK") {
+      return {
+        ok: false,
+        error: quoteResult.code === "FORBIDDEN" ? "FORBIDDEN" : "DB_ERROR",
+        message: "Aufträge und KVs konnten nicht gemeinsam sicher geladen werden.",
+      };
+    }
+
+    const entries: OrderRegisterEntry[] = [
+      ...orderRows.map((order) => ({
+        kind: "ORDER" as const,
+        id: order.id,
+        reference: order.orderNumber,
+        customerId: order.customerId,
+        customerName: order.customerName ?? "",
+        title: order.title,
+        dueDate: order.dueDate,
+        status: order.status,
+        changedAt: order.createdAt ?? null,
+      })),
+      ...quoteResult.quotes.map((quote) => ({
+        kind: "QUOTE" as const,
+        id: quote.quoteId,
+        reference: quote.quoteNumber,
+        customerId: quote.customerId,
+        customerName: quote.customerDisplayName,
+        title: quote.positions[0]?.name ?? quote.quoteNumber,
+        dueDate: quote.dueDate,
+        status: quote.status,
+        changedAt: quote.updatedAt,
+      })),
+    ];
+
+    entries.sort((left, right) => {
+      const timeOrder = (right.changedAt ?? "").localeCompare(left.changedAt ?? "");
+      return timeOrder || left.reference.localeCompare(right.reference, "de");
+    });
+    return { ok: true, data: entries };
+  } catch (error: unknown) {
+    console.error("[ORDER_REGISTER_READ_ERROR]", error);
+    return {
+      ok: false,
+      error: "DB_ERROR",
+      message: "Aufträge und KVs konnten nicht gemeinsam sicher geladen werden.",
     };
   }
 }
