@@ -1,5 +1,8 @@
 # Galvanik-Kreile WerkstattCockpit — verbindliche Baulinie
 
+Bis auf Widerruf des Owners steuert `_review/AKTUELLE_ANWEISUNG.md` (Warteschlange)
+Reihenfolge, Branch, Nachweis und Abgabe. Bei Widerspruch gilt sie vor Abschnitt 1, 4 und 7.
+
 ## 1. Einziger Arbeitsort und einzige Lieferwahrheit
 
 - Repository: dieses Checkout `02_app`; keine weiteren Clones oder Worktrees.
