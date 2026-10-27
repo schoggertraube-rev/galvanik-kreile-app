@@ -25,7 +25,7 @@ const prototypePath = resolve("docs/project/linie/ui/designsystem_v1_1/kundenans
 
 if (!appUrl) throw new Error("APP_URL_MISSING: --app-url oder KREILE_PREVIEW_URL setzen");
 if (!/^\d{4}$/.test(pin ?? "")) throw new Error("PREVIEW_PIN_MISSING: KREILE_PREVIEW_PIN nur für diesen Lauf setzen");
-if (!["shell-plus", "neuer-eingang", "der-tag", "auftragskarte", "werkstatt", "auftraege", "completed"].includes(screen)) throw new Error(`SCREEN_NOT_IMPLEMENTED: ${screen}`);
+if (!["shell-plus", "neuer-eingang", "der-tag", "auftragskarte", "werkstatt", "auftraege", "kunden", "kundenkarte", "completed"].includes(screen)) throw new Error(`SCREEN_NOT_IMPLEMENTED: ${screen}`);
 delete process.env.KREILE_PREVIEW_PIN;
 
 await mkdir(output, { recursive: true });
@@ -186,6 +186,45 @@ async function captureOrders(viewport) {
   }
 }
 
+async function captureCustomers(viewport) {
+  const appContext = await browser.newContext(contextOptions(viewport, true));
+  const prototypeContext = await browser.newContext(contextOptions(viewport));
+  try {
+    const app = await appContext.newPage();
+    const prototype = await prototypeContext.newPage();
+    await app.goto(`${appUrl}/customers`, { waitUntil: "networkidle", timeout: 30_000 });
+    await app.locator(`.kr-app[data-geraet="${viewport.geraet}"]`).waitFor();
+    await app.getByRole("heading", { name: "Kunden & Kontakt", exact: true }).waitFor();
+    await prototype.goto(prototypeUrl(viewport, "kunden"), { waitUntil: "load" });
+    await prototype.getByRole("heading", { name: "Kunden & Kontakt", exact: true }).waitFor();
+    await savePair({ viewport, name: "kunden", title: "Kunden", app, prototype });
+  } finally {
+    await appContext.close();
+    await prototypeContext.close();
+  }
+}
+
+async function captureCustomerCard(viewport) {
+  const appContext = await browser.newContext(contextOptions(viewport, true));
+  const prototypeContext = await browser.newContext(contextOptions(viewport));
+  try {
+    const app = await appContext.newPage();
+    const prototype = await prototypeContext.newPage();
+    await app.goto(`${appUrl}/customers`, { waitUntil: "networkidle", timeout: 30_000 });
+    await app.locator(`.kr-app[data-geraet="${viewport.geraet}"]`).waitFor();
+    const customerRow = app.locator('[data-testid="customers-v11"] button.kr-zeile').first();
+    await customerRow.waitFor({ timeout: 30_000 });
+    await customerRow.click();
+    await app.getByRole("dialog", { name: /Kundenkarte/ }).waitFor({ timeout: 30_000 });
+    await prototype.goto(prototypeUrl(viewport, "kunde"), { waitUntil: "load" });
+    await prototype.getByRole("dialog", { name: /Kundenkarte/ }).waitFor();
+    await savePair({ viewport, name: "kundenkarte", title: "Kundenkarte", app, prototype });
+  } finally {
+    await appContext.close();
+    await prototypeContext.close();
+  }
+}
+
 async function openAppIntake(app, state) {
   await app.goto(`${appUrl}/`, { waitUntil: "networkidle", timeout: 30_000 });
   await app.getByRole("button", { name: "Neu anlegen", exact: true }).click();
@@ -266,6 +305,8 @@ try {
     if (screen === "auftragskarte" || screen === "completed") await captureOrderCard(viewport);
     if (screen === "werkstatt" || screen === "completed") await captureWorkshop(viewport);
     if (screen === "auftraege" || screen === "completed") await captureOrders(viewport);
+    if (screen === "kunden" || screen === "completed") await captureCustomers(viewport);
+    if (screen === "kundenkarte" || screen === "completed") await captureCustomerCard(viewport);
     if (screen === "neuer-eingang" || screen === "completed") {
       for (const state of INTAKE_STATES) await captureIntake(viewport, state);
     }

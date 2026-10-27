@@ -14,7 +14,7 @@ describe("Customer card V2", () => {
   it("renders V2 contact context and opens its real active order", () => {
     const openOrder = vi.fn();
     render(<CustomerCardView state={{ kind: "data", card }} onClose={vi.fn()} onOpenOrder={openOrder} />);
-    expect(screen.getByTestId("customer-card-v2")).toHaveTextContent("Muster GmbH");
+    expect(screen.getByRole("dialog", { name: "Kundenkarte K-1042" })).toHaveTextContent("Muster GmbH");
     expect(screen.getByText("Rückruf vormittags")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /A-2026-0042/ }));
     expect(openOrder).toHaveBeenCalledWith("order-1");
@@ -31,14 +31,13 @@ describe("Customer card V2", () => {
         onOpenOrder={vi.fn()}
       />,
     );
-    expect(screen.getByText("Für diesen Kunden ist derzeit kein offener Auftrag vorhanden.")).toBeInTheDocument();
-    expect(screen.getByText("Keine aktiven Aufträge vorhanden.")).toBeInTheDocument();
-    expect(screen.getByTestId("customer-card-v2")).not.toHaveTextContent(/Readback|zurückgelesen|tenantgebunden/i);
+    expect(screen.getByText("Keine aktiven Aufträge.")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Kundenkarte K-1042" })).not.toHaveTextContent(/Readback|zurückgelesen|tenantgebunden/i);
   });
 
   it.each(["denied", "not-found", "error", "conflict"] as const)("keeps %s fail-closed", (kind) => {
     render(<CustomerCardView state={{ kind, message: "Sicherer Zustand" }} onClose={vi.fn()} onOpenOrder={vi.fn()} />);
     expect(screen.getByText("Sicherer Zustand")).toBeInTheDocument();
-    expect(screen.queryByTestId("customer-card-v2")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Kundenkarte K-1042" })).not.toBeInTheDocument();
   });
 });

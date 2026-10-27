@@ -46,7 +46,7 @@ describe("CustomersAppAdapter", () => {
     ports.getCustomersDb.mockResolvedValue({ ok: true, data: [] });
     render(<CustomersAppAdapter />);
 
-    expect(await screen.findByText("Keine Kunden.")).toBeInTheDocument();
+    expect(await screen.findByText("Noch keine Kunden.")).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
   });
 
@@ -55,7 +55,7 @@ describe("CustomersAppAdapter", () => {
     render(<CustomersAppAdapter />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Kundenstamm konnte nicht sicher geladen werden.");
-    expect(screen.queryByText("Keine Kunden.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Noch keine Kunden.")).not.toBeInTheDocument();
   });
 
   it("renders the real customer label without internal identifiers or raw types", async () => {
@@ -65,7 +65,7 @@ describe("CustomersAppAdapter", () => {
     });
     render(<CustomersAppAdapter />);
 
-    const row = (await screen.findByText("Kreile Fahrzeugtechnik")).closest(".app-row");
+    const row = (await screen.findByText("Kreile Fahrzeugtechnik")).closest(".kr-zeile");
     if (!(row instanceof HTMLElement)) throw new Error("Kundenzeile fehlt");
     expect(row).toHaveTextContent("K-2026-0018 · Gewerbekunde · Esslingen");
     expect(screen.queryByText("business")).not.toBeInTheDocument();
@@ -77,7 +77,7 @@ describe("CustomersAppAdapter", () => {
     ports.getCustomersDb.mockResolvedValue({ ok: true, data: [selected] });
     render(<CustomersAppAdapter />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Karte öffnen →" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Kreile Fahrzeugtechnik/ }));
 
     expect(ports.openCustomer).toHaveBeenCalledWith(selected.id);
   });

@@ -1,25 +1,79 @@
 "use client";
-import { type ReactNode, useState } from "react";
-import {
-  ArrowLeft,
-  ArrowRight,
-  AtSign,
-  CalendarClock,
-  MapPin,
-  Phone,
-  Plus,
-  UserRound,
-  X,
-} from "lucide-react";
+
+import { type ReactNode, useState, useSyncExternalStore } from "react";
 import type { CustomerCardState, UpdateCustomerCommercialInput } from "../server/types";
-import styles from "./customers.module.css";
+import {
+  Auftragszeile,
+  Button,
+  Chip,
+  Dialog,
+  Eingabe,
+  Fakten,
+  Feld,
+  FormRaster,
+  Hinweis,
+  Karte,
+  KartenBlock,
+  Kartenkopf,
+  NaechsteAktion,
+  Notiz,
+  Schnellaktionen,
+  Seitenblatt,
+  Zustand,
+  Verlauf,
+  type Geraet,
+  type SchnellAktion,
+} from "@/ui/kr";
+
 function due(value: string | null) {
   if (!value) return "Kein Termin";
   const date = new Date(value);
   return Number.isFinite(date.getTime())
-    ? date.toLocaleDateString("de-DE")
+    ? date.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })
     : "Termin nicht lesbar";
 }
+
+function moment(value: string) {
+  const date = new Date(value);
+  return Number.isFinite(date.getTime())
+    ? date.toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })
+    : "Zeitpunkt nicht lesbar";
+}
+
+function readDevice(): Geraet {
+  if (window.innerWidth <= 699) return "handy";
+  if (window.innerWidth <= 1399 && window.matchMedia?.("(pointer: coarse)").matches) return "tablet";
+  return "desktop";
+}
+
+function subscribeDevice(onChange: () => void) {
+  const coarse = window.matchMedia?.("(pointer: coarse)");
+  window.addEventListener("resize", onChange);
+  coarse?.addEventListener("change", onChange);
+  return () => {
+    window.removeEventListener("resize", onChange);
+    coarse?.removeEventListener("change", onChange);
+  };
+}
+
+const readServerDevice = (): Geraet => "desktop";
+
+function customerType(type: string) {
+  if (type === "business" || type === "Geschäftskunde") return "Gewerbekunde";
+  if (type === "private" || type === "privat" || type === "Privatkunde") return "Privatkunde";
+  return type || "Kundentyp nicht hinterlegt";
+}
+
+function isClosedStation(station: string) {
+  return ["abgeholt", "versendet", "raus"].includes(station);
+}
+
+function stateKind(state: Exclude<CustomerCardState, { kind: "data" }>) {
+  if (state.kind === "loading") return "laedt" as const;
+  if (state.kind === "denied") return "gesperrt" as const;
+  return "fehler" as const;
+}
+
 export function CustomerCardView({
   state,
   onOpenOrder,
@@ -31,39 +85,25 @@ export function CustomerCardView({
   state: CustomerCardState;
   onOpenOrder: (id: string) => void;
   onClose: () => void;
-  onSaveCommercial?: (input: UpdateCustomerCommercialInput) => Promise<{ok:true}|{ok:false;message:string}>;
+  onSaveCommercial?: (input: UpdateCustomerCommercialInput) => Promise<{ ok: true } | { ok: false; message: string }>;
   onNewOrder?: () => void;
   documentsPanel?: ReactNode;
 }) {
+  const device = useSyncExternalStore(subscribeDevice, readDevice, readServerDevice);
+  const [editOpen, setEditOpen] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
-  if (state.kind === "loading")
-    return (
-      <article className={styles.cardState} aria-busy="true">
-        <h1>Kundenkarte wird geladen</h1>
-      </article>
-    );
-  if (state.kind !== "data")
-    return (
-      <article
-        className={styles.cardState}
-        role={state.kind === "error" ? "alert" : "status"}
-      >
-        <button type="button" onClick={onClose}>
-          <ArrowLeft />
-          Zurück
-        </button>
-        <h1>
-          {state.kind === "not-found"
-            ? "Kunde nicht vorhanden"
-            : state.kind === "denied"
-              ? "Kundenkarte nicht freigegeben"
-              : state.kind === "conflict"
-                ? "Kundenstand nicht eindeutig"
-                : "Kundenkarte nicht verfügbar"}
-        </h1>
-        <p>{state.message}</p>
-      </article>
-    );
+
+  if (state.kind !== "data") {
+    const text = state.kind === "loading" ? "Kundenkarte wird geladen." : state.message;
+    const art = stateKind(state);
+    return <Seitenblatt
+      titel="Kundenkarte"
+      onSchliessen={onClose}
+      zustand={art}
+      texte={art === "laedt" ? { laedtText: text } : art === "gesperrt" ? { gesperrtText: text } : { fehlerText: text }}
+    >{null}</Seitenblatt>;
+  }
+
   const card = state.card;
   const missingForOrder = [
     !card.name.trim() ? "Name/Firma" : null,
@@ -76,251 +116,142 @@ export function CustomerCardView({
     !card.country?.trim() ? "Land" : null,
     !card.paymentPreference?.trim() ? "Zahlungsbedingung" : null,
   ].filter((value): value is string => Boolean(value));
-  const active = card.orders.filter((order) => order.station !== "abgeholt");
-  const history = card.orders.filter((order) => order.station === "abgeholt");
+  const active = card.orders.filter((order) => !isClosedStation(order.station));
+  const history = card.orders.filter((order) => isClosedStation(order.station));
   const next = active.slice().sort((a, b) => {
     const at = a.dueAt ? new Date(a.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
     const bt = b.dueAt ? new Date(b.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
     return at - bt;
   })[0];
-  return (
-    <article className={styles.customerCardV2} data-testid="customer-card-v2">
-      <header className={styles.cardHeader}>
-        <button type="button" className={styles.back} onClick={onClose} aria-label="Zurück">
-          <ArrowLeft />
-          <span>Zurück</span>
-        </button>
-        <span className={styles.avatar}>
-          {card.name.slice(0, 2).toUpperCase()}
-        </span>
-        <div className={styles.identityBlock}>
-          <p>{card.customerNumber ?? "Ohne Kundennummer"}</p>
-          <h1>{card.companyName ?? card.name}</h1>
-          <span>{card.companyName ? card.name : card.type}</span>
-        </div>
-        <button
-          type="button"
-          className={styles.close}
-          onClick={onClose}
-          aria-label="Schließen"
-        >
-          <X />
-        </button>
-      </header>
-      <div className={styles.cardScroll}>
-        <section className={styles.contact} aria-label="Kontakt">
-          {missingForOrder.length ? <p className={styles.incomplete} role="status"><strong>Unvollständig für Auftrag</strong><span>Fehlt: {missingForOrder.join(", ")}</span></p> : null}
-          <div>
-            <UserRound />
-            <span>
-              <small>Ansprechperson</small>
-              <strong>{card.contactPerson ?? "Nicht hinterlegt"}</strong>
-            </span>
-          </div>
-          {card.phone ? (
-            <a href={`tel:${card.phone}`}>
-              <Phone />
-              <span>
-                <small>Telefon</small>
-                <strong>{card.phone}</strong>
-              </span>
-            </a>
-          ) : null}
-          {card.email ? (
-            <a href={`mailto:${card.email}`}>
-              <AtSign />
-              <span>
-                <small>E-Mail</small>
-                <strong>{card.email}</strong>
-              </span>
-            </a>
-          ) : null}
-          <div>
-            <MapPin />
-            <span>
-              <small>Adresse</small>
-              <strong>
-                {[
-                  card.address,
-                  [card.zipCode, card.city].filter(Boolean).join(" "),
-                  card.country,
-                ]
-                  .filter(Boolean)
-                  .join(", ") || "Nicht hinterlegt"}
-              </strong>
-            </span>
-          </div>
-        </section>
-        <section className={styles.next}>
-          <small>Nächster belegter Handlungsbedarf</small>
-          {next ? (
-            <>
-              <h2>
-                {next.orderNumber} · {next.title}
-              </h2>
-              <p>
-                {next.station} · Termin {due(next.dueAt)}
-              </p>
-              <button type="button" onClick={() => onOpenOrder(next.id)}>
-                Auftragskarte öffnen
-                <ArrowRight />
-              </button>
-            </>
-          ) : (
-            <>
-              <h2>Kein aktiver Auftrag</h2>
-              <p>Für diesen Kunden ist derzeit kein offener Auftrag vorhanden.</p>
-            </>
-          )}
-        </section>
-        <section className={styles.orders}>
-          <header>
-            <div>
-              <p>Aufträge</p>
-              <h2>Aktiv im Haus</h2>
-            </div>
-            <strong>{active.length}</strong>
-          </header>
-          {active.length === 0 ? (
-            <p className={styles.truthEmpty}>
-              Keine aktiven Aufträge vorhanden.
-            </p>
-          ) : (
-            <ol>
-              {active.map((order) => (
-                <li key={order.id}>
-                  <button type="button" onClick={() => onOpenOrder(order.id)}>
-                    <span>
-                      <small>{order.orderNumber}</small>
-                      <strong>{order.title}</strong>
-                    </span>
-                    <span>
-                      <b>{order.station}</b>
-                      <small>{due(order.dueAt)}</small>
-                    </span>
-                    <ArrowRight />
-                  </button>
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
-        {documentsPanel}
-        <div className={styles.detailGrid}>
-          <section>
-            <header>
-              <p>Kundenkontext</p>
-              <h2>Notizen & Eigenheiten</h2>
-            </header>
-            <p className={styles.truthEmpty}>
-              {card.notes ?? "Keine interne Kundennotiz hinterlegt."}
-            </p>
-            {card.tags.length ? (
-              <ul className={styles.tags}>
-                {card.tags.map((tag) => (
-                  <li key={tag}>{tag}</li>
-                ))}
-              </ul>
-            ) : null}
-          </section>
-          <section>
-            <header>
-              <p>Stammdaten</p>
-              <h2>Verlässliche Fakten</h2>
-            </header>
-            <dl>
-              <div>
-                <dt>Klassifikation</dt>
-                <dd>{card.classification ?? "Nicht hinterlegt"}</dd>
-              </div>
-              <div>
-                <dt>Aufträge gesamt</dt>
-                <dd>{card.orderCount}</dd>
-              </div>
-              <div>
-                <dt>Ware im Haus</dt>
-                <dd>{card.wareImHausCount}</dd>
-              </div>
-              <div>
-                <dt>Aktualisiert</dt>
-                <dd>{new Date(card.updatedAt).toLocaleString("de-DE")}</dd>
-              </div>
-            </dl>
-            <form className={styles.commercialForm} onSubmit={(event) => {
-              event.preventDefault(); const form = new FormData(event.currentTarget);
-              if (!onSaveCommercial) return;
-              void onSaveCommercial({
-                clientEventId: crypto.randomUUID(), customerId: card.id,
-                name: String(form.get("name") ?? ""), companyName: String(form.get("companyName") ?? "").trim() || null,
-                contactPerson: String(form.get("contactPerson") ?? "").trim() || null,
-                email: String(form.get("email") ?? "").trim() || null,
-                phone: String(form.get("phone") ?? "").trim() || null,
-                street: String(form.get("street") ?? ""), zipCode: String(form.get("zipCode") ?? ""),
-                city: String(form.get("city") ?? ""), country: String(form.get("country") ?? ""),
-                paymentPreference: String(form.get("paymentPreference") ?? ""),
-                vatId: String(form.get("vatId") ?? "").trim() || null,
-              }).then((result) => setSaveMessage(result.ok ? "Stammdaten gespeichert." : result.message));
-            }}>
-              <label>Name / Firma<input name="name" required defaultValue={card.name} /></label>
-              <label>Firmenname<input name="companyName" defaultValue={card.companyName ?? ""} /></label>
-              <label>Ansprechpartner<input name="contactPerson" required defaultValue={card.contactPerson ?? ""} /></label>
-              <label>Telefon<input name="phone" required defaultValue={card.phone ?? ""} /></label>
-              <label>E-Mail<input name="email" type="email" required defaultValue={card.email ?? ""} /></label>
-              <label>Straße<input name="street" required defaultValue={card.address ?? ""} /></label>
-              <label>PLZ<input name="zipCode" required defaultValue={card.zipCode ?? ""} /></label>
-              <label>Ort<input name="city" required defaultValue={card.city ?? ""} /></label>
-              <label>Land<input name="country" required defaultValue={card.country ?? ""} /></label>
-              <label>Zahlungsbedingung<select name="paymentPreference" defaultValue={card.paymentPreference ?? "rechnung_14"}><option value="rechnung_14">Rechnung 14 Tage</option><option value="rechnung_30">Rechnung 30 Tage</option><option value="vorkasse">Vorkasse</option><option value="bar">Bar</option></select></label>
-              <label>USt-ID<input name="vatId" defaultValue={card.vatId ?? ""} /></label>
-              <button type="submit">Stammdaten speichern</button>
-              {saveMessage ? <p role="status">{saveMessage}</p> : null}
-            </form>
-          </section>
-        </div>
-        {history.length ? (
-          <section className={styles.history}>
-            <header>
-              <p>Historie</p>
-              <h2>Abgeschlossene Aufträge</h2>
-            </header>
-            <ol>
-              {history.map((order) => (
-                <li key={order.id}>
-                  <button type="button" onClick={() => onOpenOrder(order.id)}>
-                    <span>
-                      {order.orderNumber} · {order.title}
-                    </span>
-                    <ArrowRight />
-                  </button>
-                </li>
-              ))}
-            </ol>
-          </section>
-        ) : null}
-      </div>
-      <footer className={styles.quickDock} aria-label="Kundenaktionen">
-        {onNewOrder ? <button type="button" onClick={onNewOrder}><Plus />Neuer Auftrag</button> : null}
-        <a
-          href={card.phone ? `tel:${card.phone}` : undefined}
-          aria-disabled={!card.phone}
-        >
-          <Phone />
-          Anrufen
-        </a>
-        <a
-          href={card.email ? `mailto:${card.email}` : undefined}
-          aria-disabled={!card.email}
-        >
-          <AtSign />
-          E-Mail
-        </a>
-        {active[0] ? (
-          <button type="button" onClick={() => onOpenOrder(active[0].id)}>
-            <CalendarClock />
-            Aktiver Auftrag
-          </button>
-        ) : null}
-      </footer>
-    </article>
-  );
+
+  const openPhone = () => { if (card.phone) window.location.assign(`tel:${card.phone}`); };
+  const openMail = () => { if (card.email) window.location.assign(`mailto:${card.email}`); };
+  const quickActions: SchnellAktion[] = [
+    ...(onNewOrder ? [{ key: "order", text: "Neuer Auftrag", icon: "plus" as const, primaer: true, onClick: onNewOrder }] : []),
+    ...(card.phone ? [{ key: "phone", text: "Anrufen", icon: "phone" as const, onClick: openPhone }] : []),
+    ...(card.email ? [{ key: "mail", text: "E-Mail", icon: "mail" as const, onClick: openMail }] : []),
+    ...(onSaveCommercial ? [{ key: "edit", text: "Bearbeiten", icon: "edit" as const, onClick: () => setEditOpen(true) }] : []),
+  ];
+
+  const head = <Kartenkopf
+    nummer={card.customerNumber ?? "Ohne Kundennummer"}
+    titel={card.companyName ?? card.name}
+    sub={`${customerType(card.type)} · Kunde seit ${new Date(card.createdAt).toLocaleDateString("de-DE")}`}
+    meta={<>
+      {card.city ? <Chip text={card.city} icon="box" /> : null}
+      {card.contactPerson ? <Chip text={card.contactPerson} icon="user" ton="info" /> : null}
+      {card.phone ? <Button art="leise" icon="phone" text={card.phone} onClick={openPhone} /> : null}
+      {card.email ? <Button art="leise" icon="mail" text={card.email} onClick={openMail} /> : null}
+      {card.paymentPreference?.startsWith("rechnung") ? <Chip text="Rechnung auf Ziel" ton="ok" icon="receipt" /> : null}
+    </>}
+    onSchliessen={onClose}
+  />;
+
+  const main = <>
+    {missingForOrder.length ? <KartenBlock><Hinweis ton="warn">Unvollständig für Auftrag · fehlt: {missingForOrder.join(", ")}</Hinweis></KartenBlock> : null}
+    {next ? <KartenBlock><NaechsteAktion
+      titel={`${next.orderNumber} · ${next.title} · Termin ${due(next.dueAt)}`}
+      aktionen={<Button art="primaer" icon="open" text="Auftragskarte öffnen" onClick={() => onOpenOrder(next.id)} />}
+    /></KartenBlock> : null}
+    <KartenBlock
+      label="Aktive Aufträge"
+      rechts={onNewOrder ? <Button art="leise" icon="plus" text="Neuer Auftrag" onClick={onNewOrder} /> : undefined}
+    >
+      {active.length ? <div className="kr-stapel" style={{ gap: 8 }}>{active.map((order) => <Auftragszeile
+        key={order.id}
+        id={order.orderNumber}
+        kundeKurz=""
+        titel={order.title}
+        meta={`${order.station} · Termin ${due(order.dueAt)}`}
+        ton="info"
+        status={{ text: order.status, ton: isClosedStation(order.station) ? "ok" : "info" }}
+        karte
+        onOeffnen={() => onOpenOrder(order.id)}
+      />)}</div> : <Zustand art="leer" text="Keine aktiven Aufträge." aktion={onNewOrder ? { text: "Neuer Auftrag", icon: "plus", onClick: onNewOrder } : undefined} />}
+    </KartenBlock>
+    <KartenBlock label="Notizen & Telefonnotizen">
+      {card.notes ? <Notiz text={card.notes} bezug={<Chip text="Kundennotiz" ton="teil" icon="phone" />} autor={`aktualisiert ${moment(card.updatedAt)}`} /> : <Zustand art="leer" text="Keine interne Kundennotiz hinterlegt." />}
+      {card.tags.length ? <div className="kr-docs" style={{ marginTop: 8 }}>{card.tags.map((tag) => <Chip key={tag} text={tag} />)}</div> : null}
+    </KartenBlock>
+    <KartenBlock label="Stammdaten" rechts={onSaveCommercial ? <Button art="leise" icon="edit" text="Bearbeiten" onClick={() => setEditOpen(true)} /> : undefined}>
+      <Fakten zeilen={[
+        { k: "Ansprechpartner", v: card.contactPerson ?? "Nicht hinterlegt" },
+        { k: "Telefon", v: card.phone ?? "Nicht hinterlegt" },
+        { k: "E-Mail", v: card.email ?? "Nicht hinterlegt" },
+        { k: "Anschrift", v: [card.address, [card.zipCode, card.city].filter(Boolean).join(" "), card.country].filter(Boolean).join(", ") || "Nicht hinterlegt" },
+        { k: "Zahlungsbedingung", v: card.paymentPreference ?? "Nicht hinterlegt" },
+        { k: "USt-ID", v: card.vatId ?? "Nicht hinterlegt" },
+      ]} />
+    </KartenBlock>
+    <KartenBlock label="Fotos & Dokumente">{documentsPanel ?? <Zustand art="leer" text="Noch keine Dokumente vorhanden." />}</KartenBlock>
+    {history.length ? <KartenBlock label="Abgeschlossene Aufträge"><div className="kr-stapel" style={{ gap: 8 }}>{history.map((order) => <Auftragszeile
+      key={order.id}
+      id={order.orderNumber}
+      kundeKurz=""
+      titel={order.title}
+      meta={`${order.station} · ${due(order.dueAt)}`}
+      ton="ok"
+      status={{ text: order.status, ton: "ok" }}
+      onOeffnen={() => onOpenOrder(order.id)}
+    />)}</div></KartenBlock> : null}
+  </>;
+
+  const rail = <>
+    {device === "desktop" && quickActions.length ? <KartenBlock><Schnellaktionen aktionen={quickActions} als="raster" /></KartenBlock> : null}
+    <KartenBlock label="Kundenstand"><Fakten zeilen={[
+      { k: "Aufträge gesamt", v: card.orderCount },
+      { k: "Ware im Haus", v: card.wareImHausCount },
+      { k: "Klassifikation", v: card.classification ?? "Nicht hinterlegt" },
+    ]} /></KartenBlock>
+    <KartenBlock label="Kontaktverlauf"><Verlauf eintraege={[
+      { key: "updated", zeit: moment(card.updatedAt), text: "Kundenstand aktualisiert", icon: "edit", ton: "ok" },
+      { key: "created", zeit: moment(card.createdAt), text: "Kunde angelegt", icon: "user" },
+    ]} /></KartenBlock>
+  </>;
+  const footer = device === "desktop"
+    ? <footer className="kr-kartenfuss"><Button text="Schließen" onClick={onClose} /></footer>
+    : quickActions.length ? <Schnellaktionen aktionen={quickActions} als="dock" /> : undefined;
+
+  return <>
+    <Seitenblatt titel={`Kundenkarte ${card.customerNumber ?? card.name}`} onSchliessen={onClose}>
+      <Karte kopf={head} haupt={main} rail={rail} fuss={footer} />
+    </Seitenblatt>
+    {editOpen && onSaveCommercial ? <Dialog titel="Kundendaten bearbeiten" icon="edit" groesse="breit" onSchliessen={() => setEditOpen(false)}>
+      <form className="kr-stapel" onSubmit={(event) => {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
+        const visibleName = String(form.get("name") ?? "").trim();
+        void onSaveCommercial({
+          clientEventId: crypto.randomUUID(), customerId: card.id,
+          name: card.companyName ? card.name : visibleName,
+          companyName: card.companyName ? visibleName : null,
+          contactPerson: String(form.get("contactPerson") ?? "").trim() || null,
+          email: String(form.get("email") ?? "").trim() || null,
+          phone: String(form.get("phone") ?? "").trim() || null,
+          street: String(form.get("street") ?? ""), zipCode: String(form.get("zipCode") ?? ""),
+          city: String(form.get("city") ?? ""), country: String(form.get("country") ?? ""),
+          paymentPreference: String(form.get("paymentPreference") ?? ""),
+          vatId: String(form.get("vatId") ?? "").trim() || null,
+        }).then((result) => {
+          setSaveMessage(result.ok ? "Stammdaten gespeichert." : result.message);
+          if (result.ok) setEditOpen(false);
+        });
+      }}>
+        <FormRaster>
+          <Feld label="Name / Firma"><Eingabe name="name" required defaultValue={card.companyName ?? card.name} /></Feld>
+          <Feld label="Ansprechpartner"><Eingabe name="contactPerson" required defaultValue={card.contactPerson ?? ""} /></Feld>
+          <Feld label="Telefon"><Eingabe name="phone" required defaultValue={card.phone ?? ""} /></Feld>
+          <Feld label="E-Mail"><Eingabe name="email" type="email" required defaultValue={card.email ?? ""} /></Feld>
+          <Feld label="Straße"><Eingabe name="street" required defaultValue={card.address ?? ""} /></Feld>
+          <Feld label="PLZ"><Eingabe name="zipCode" required defaultValue={card.zipCode ?? ""} /></Feld>
+          <Feld label="Ort"><Eingabe name="city" required defaultValue={card.city ?? ""} /></Feld>
+          <Feld label="Land"><Eingabe name="country" required defaultValue={card.country ?? "Deutschland"} /></Feld>
+          <Feld label="Zahlungsbedingung"><select className="kr-auswahl" name="paymentPreference" defaultValue={card.paymentPreference ?? "rechnung_14"}><option value="rechnung_14">Rechnung 14 Tage</option><option value="rechnung_30">Rechnung 30 Tage</option><option value="vorkasse">Vorkasse</option><option value="bar">Bar</option></select></Feld>
+          <Feld label="USt-ID"><Eingabe name="vatId" defaultValue={card.vatId ?? ""} /></Feld>
+        </FormRaster>
+        {saveMessage ? <p role="status">{saveMessage}</p> : null}
+        <Button art="primaer" icon="check" text="Stammdaten speichern" type="submit" />
+      </form>
+    </Dialog> : null}
+  </>;
 }
