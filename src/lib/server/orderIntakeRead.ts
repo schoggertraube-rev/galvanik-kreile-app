@@ -18,7 +18,15 @@ export type OrderIntakeCustomerOption = {
   name: string;
   companyName: string | null;
   customerType: string;
+  contactPerson: string | null;
+  phone: string | null;
+  email: string | null;
+  street: string | null;
+  zipCode: string | null;
   city: string | null;
+  country: string | null;
+  paymentPreference: string | null;
+  vatId: string | null;
   ordersCount: number;
 };
 
@@ -29,7 +37,15 @@ type CustomerRow = {
   name: string;
   company_name: string | null;
   customer_type: string;
+  contact_person: string | null;
+  phone: string | null;
+  email: string | null;
+  street: string | null;
+  zip_code: string | null;
   city: string | null;
+  country: string | null;
+  payment_preference: string | null;
+  vat_id: string | null;
   orders_count: number | string;
   integrity_ok: boolean;
 };
@@ -97,7 +113,11 @@ function mapCustomer(row: CustomerRow, tenantId: string): OrderIntakeCustomerOpt
     row.tenant_id !== tenantId || row.integrity_ok !== true || !trimmed(row.id, 1, 128) ||
     !optionalTrimmed(row.customer_number, 50) || !trimmed(row.name, 2, 160) ||
     !optionalTrimmed(row.company_name, 160) || !trimmed(row.customer_type, 1, 50) ||
-    !optionalTrimmed(row.city, 120) || ordersCount === null
+    !optionalTrimmed(row.contact_person, 160) || !optionalTrimmed(row.phone, 80) ||
+    !optionalTrimmed(row.email, 254) || !optionalTrimmed(row.street, 160) ||
+    !optionalTrimmed(row.zip_code, 20) || !optionalTrimmed(row.city, 120) ||
+    !optionalTrimmed(row.country, 120) || !optionalTrimmed(row.payment_preference, 24) ||
+    !optionalTrimmed(row.vat_id, 40) || ordersCount === null
   ) return null;
   return {
     id: row.id,
@@ -105,7 +125,15 @@ function mapCustomer(row: CustomerRow, tenantId: string): OrderIntakeCustomerOpt
     name: row.name,
     companyName: row.company_name,
     customerType: row.customer_type,
+    contactPerson: row.contact_person,
+    phone: row.phone,
+    email: row.email,
+    street: row.street,
+    zipCode: row.zip_code,
     city: row.city,
+    country: row.country,
+    paymentPreference: row.payment_preference,
+    vatId: row.vat_id,
     ordersCount,
   };
 }
@@ -195,11 +223,12 @@ export async function searchOrderIntakeCustomers(
   return withPrivilegedTenantTransaction(authorization, async (tx) => {
     const rows = await tx.execute<CustomerRow>(sql`
       SELECT id, tenant_id, customer_number, name, company_name, customer_type,
-             city, orders_count, integrity_ok
+             contact_person, phone, email, street, zip_code, city, country,
+             payment_preference, vat_id, orders_count, integrity_ok
       FROM private.v_order_intake_customers_v1
       WHERE ${input.query} = '' OR strpos(search_text, lower(${input.query})) > 0
       ORDER BY orders_count DESC, lower(coalesce(company_name, name)), id
-      LIMIT 20
+      LIMIT 10
     `);
     return rows.map((row) => {
       const customer = mapCustomer(row, authorization.tenantId);

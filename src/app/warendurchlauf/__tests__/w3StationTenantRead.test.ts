@@ -30,6 +30,7 @@ const authorization = {
     displayName: "Readonly",
     role: "readonly" as const,
     permissions: ["perm_view_leitstand", "perm_data_orders", "perm_view_customers"] as const,
+    areas: ["auftraege", "eingang", "kunden"] as const,
     active: true as const,
   },
 };

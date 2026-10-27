@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { logout } from "@/app/actions/auth";
 import { createCustomerAction, getCustomersDb, readCustomerCreateReceiptAction, updateCustomerCommercialAction, updateCustomerNoteAction } from "@/app/actions/customers.actions";
 import { convertQuoteToOrderAction, createQuoteAction, listOpenQuotesAction, readQuoteAction, readQuoteCreateReceiptAction, readQuoteConversionReceiptAction, readQuoteUpdateReceiptAction, updateQuoteAction } from "@/app/actions/quotes.actions";
-import { createOrderIntakeAction, getOrderIntakeReceiptAction } from "@/app/warendurchlauf/actions";
+import { createOrderIntakeAction, getOrderIntakeReceiptAction, searchOrderIntakeCustomersAction } from "@/app/warendurchlauf/actions";
 import { getActiveCatalogAction } from "@/app/actions/catalog.actions";
 import { attachIntakeDraftAttachmentAction } from "@/app/actions/domainAttachments.actions";
 import { attachOutlookMailAction } from "@/app/actions/communications.actions";
@@ -109,6 +109,34 @@ export function GlobalCreateAppAdapter() {
               country: customer.country ?? "",
               paymentPreference: customer.paymentPreference,
               vatId: customer.vatId ?? null,
+            })),
+          };
+        },
+        searchIntakeCustomers: async (query) => {
+          const result = await searchOrderIntakeCustomersAction({ query });
+          if (!result.ok) {
+            return {
+              code: result.error === "FORBIDDEN" || result.error === "AUTH_ERROR" ? "DENIED" as const : "UNAVAILABLE" as const,
+              message: result.message,
+            };
+          }
+          return {
+            code: "OK" as const,
+            customers: result.data.customers.map((customer) => ({
+              id: customer.id,
+              customerNumber: customer.customerNumber,
+              name: customer.name,
+              customerType: customer.customerType === "institution" ? "institution" as const : customer.customerType === "privat" || customer.customerType === "private" ? "privat" as const : "business" as const,
+              companyName: customer.companyName,
+              contactPerson: customer.contactPerson,
+              email: customer.email,
+              phone: customer.phone,
+              street: customer.street ?? "",
+              zipCode: customer.zipCode ?? "",
+              city: customer.city,
+              country: customer.country ?? "",
+              paymentPreference: customer.paymentPreference ?? undefined,
+              vatId: customer.vatId,
             })),
           };
         },

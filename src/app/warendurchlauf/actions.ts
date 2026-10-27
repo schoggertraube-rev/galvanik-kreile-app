@@ -194,7 +194,7 @@ export async function searchOrderIntakeCustomersAction(
   }
   if (
     !authorization.data.permissions.includes("perm_data_orders") ||
-    !authorization.data.permissions.includes("perm_view_customers")
+    authorization.data.areas?.includes("eingang") !== true
   ) {
     return { ok: false, error: "FORBIDDEN", message: "Wareneingang ist mit dieser Rolle nicht erlaubt." };
   }

@@ -169,6 +169,10 @@ export type GlobalCreatePorts = {
   resumeQuoteConversionId: string | null;
   listCustomers: () => Promise<
     | { code: "OK"; customers: GlobalCreateCustomerChoice[] }
+      | { code: "DENIED" | "UNAVAILABLE"; message: string }
+  >;
+  searchIntakeCustomers: (query: string) => Promise<
+    | { code: "OK"; customers: GlobalCreateCustomerChoice[] }
     | { code: "DENIED" | "UNAVAILABLE"; message: string }
   >;
   listCatalog?: () => Promise<{ code:"OK"; services:CatalogService[] }|{ code:"DENIED"|"UNAVAILABLE"; message:string }>;
@@ -446,6 +450,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [intakeChecked, setIntakeChecked] = useState(false);
   const [directCustomer, setDirectCustomer] = useState<CustomerDraft>(EMPTY_INTAKE_CUSTOMER);
   const [directCustomerId, setDirectCustomerId] = useState("");
+  const [intakeCustomerQuery, setIntakeCustomerQuery] = useState("");
+  const [intakeCustomerResults, setIntakeCustomerResults] = useState<GlobalCreateCustomerChoice[]>([]);
+  const [intakeCustomerSearchState, setIntakeCustomerSearchState] = useState<"idle" | "loading" | "ready" | "empty" | "error">("idle");
   const [intakePaymentMode, setIntakePaymentMode] = useState<PaymentMode>("abholung");
   const [intakePaymentModeTouched, setIntakePaymentModeTouched] = useState(false);
   const [intakeCustomerPaymentTouched, setIntakeCustomerPaymentTouched] = useState(false);
@@ -465,6 +472,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [conversion, setConversion] = useState<Extract<GlobalCreateConversionResult, { code: "OK" }> | null>(null);
   const requestIds = useRef({ customer: "", quote: "", conversion: "", directCustomer: "" });
   const customerRequestSeq = useRef(0);
+  const intakeCustomerSearchSeq = useRef(0);
   const dialogRef = useRef<HTMLElement>(null);
   const confirmedOrderDueDateValid = isValidDateInput(confirmedOrderDueDate);
   const customerCompleteForOrder = completeOrderCustomer(customerDraft);
@@ -494,6 +502,33 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       ?? root?.querySelector<HTMLElement>("input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])");
     target?.focus();
   }, [directCustomerMode, open, step]);
+
+  useEffect(() => {
+    if (!open || step !== "direct-intake" || directCustomerMode !== "NONE") return;
+    const query = intakeCustomerQuery.trim();
+    if (query.length < 2) return;
+    const sequence = ++intakeCustomerSearchSeq.current;
+    const timer = window.setTimeout(() => {
+      setIntakeCustomerSearchState("loading");
+      void ports.searchIntakeCustomers(query).then((result) => {
+        if (sequence !== intakeCustomerSearchSeq.current) return;
+        if (result.code !== "OK") {
+          setIntakeCustomerResults([]);
+          setIntakeCustomerSearchState("error");
+          setFeedback({ kind: result.code === "DENIED" ? "denied" : "error", message: result.message });
+          return;
+        }
+        setIntakeCustomerResults(result.customers.slice(0, 10));
+        setIntakeCustomerSearchState(result.customers.length > 0 ? "ready" : "empty");
+      }).catch(() => {
+        if (sequence !== intakeCustomerSearchSeq.current) return;
+        setIntakeCustomerResults([]);
+        setIntakeCustomerSearchState("error");
+        setFeedback({ kind: "error", message: "Die Kundensuche ist derzeit nicht verfügbar." });
+      });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [directCustomerMode, intakeCustomerQuery, open, ports, step]);
 
   const closeNow = () => {
     if (!busy) {
@@ -627,6 +662,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setDirectCustomerMode("NONE");
     setDirectCustomerId("");
     setDirectCustomer(EMPTY_INTAKE_CUSTOMER);
+    setIntakeCustomerQuery("");
+    setIntakeCustomerResults([]);
+    setIntakeCustomerSearchState("idle");
     setIntakePaymentMode("abholung");
     setIntakePaymentModeTouched(false);
     setIntakeCustomerPaymentTouched(false);
@@ -637,7 +675,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     const seq = ++customerRequestSeq.current;
     try {
       const [result, catalog, draft] = await Promise.all([
-        ports.listCustomers(),
+        preselectedCustomerId
+          ? ports.listCustomers()
+          : Promise.resolve({ code: "OK" as const, customers: [] }),
         ports.listCatalog?.() ?? Promise.resolve({ code:"UNAVAILABLE" as const, message:"Leistungskatalog ist nicht angebunden." }),
         ports.readIntakeDraft(),
       ]);
@@ -1154,14 +1194,22 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       setDirectCustomerMode("NONE");
       setDirectCustomerId("");
       setDirectCustomer(EMPTY_INTAKE_CUSTOMER);
+      setIntakeCustomerResults([]);
       setIntakePaymentMode(paymentModeFromPreference(null, handoverMode));
       return;
     }
     if (mode === "NEW") {
       const paymentPreference = handoverMode === "pickup" ? "bar" : "vorkasse";
+      const name = intakeCustomerQuery.trim();
       setDirectCustomerMode("NEW");
       setDirectCustomerId("");
-      setDirectCustomer({ ...EMPTY_CUSTOMER, paymentPreference });
+      setDirectCustomer({
+        ...EMPTY_CUSTOMER,
+        name,
+        companyName: name || null,
+        paymentPreference,
+      });
+      setIntakeCustomerResults([]);
       setIntakePaymentMode(paymentModeFromPreference(paymentPreference, handoverMode));
       return;
     }
@@ -1170,6 +1218,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setDirectCustomerMode("EXISTING");
     setDirectCustomerId(selected.id);
     setDirectCustomer(draft);
+    setCustomerChoices((current) => [selected, ...current.filter((entry) => entry.id !== selected.id)]);
+    setIntakeCustomerQuery(selected.companyName ?? selected.name);
+    setIntakeCustomerResults([]);
     setIntakePaymentMode(paymentModeFromPreference(draft.paymentPreference, handoverMode));
   };
 
@@ -1487,6 +1538,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setDirectCustomer(EMPTY_INTAKE_CUSTOMER);
     setDirectCustomerId("");
     setDirectCustomerMode("NONE");
+    setIntakeCustomerQuery("");
+    setIntakeCustomerResults([]);
+    setIntakeCustomerSearchState("idle");
     setIntakePaymentMode("abholung");
     setIntakePaymentModeTouched(false);
     setIntakeCustomerPaymentTouched(false);
@@ -1558,23 +1612,38 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
               {(!isHandy || intakeStep === 1) ? <Abschnitt nr={0} label="Kunde">
                 <FormRaster>
                   <Feld label="Art" voll><div data-spec-id="eingang.art"><Segment label="Art" wert={intakeKind} optionen={ports.canManageMoney ? [{ wert: "ORDER", text: "Auftrag" }, { wert: "QUOTE", text: "KV" }] : [{ wert: "ORDER", text: "Auftrag" }]} onWert={setIntakeKind} /></div></Feld>
-                  <Feld label="Kunde" voll>
-                    <Auswahl
-                      data-intake-customer
-                      value={directCustomerMode === "NEW" ? "NEW" : directCustomerId}
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        if (!value) { selectIntakeCustomer("NONE"); return; }
-                        if (value === "NEW") { selectIntakeCustomer("NEW"); return; }
-                        const selected = customerChoices.find((entry) => entry.id === value);
-                        if (selected) selectIntakeCustomer("EXISTING", selected);
-                      }}
-                      optionen={[
-                        { wert: "", text: customerLoad === "loading" ? "Kunden werden geladen …" : "Bitte auswählen" },
-                        ...customerChoices.map((entry) => ({ wert: entry.id, text: `${entry.name} · ${entry.customerNumber ?? "ohne Kundennummer"}` })),
-                        { wert: "NEW", text: "Neukunde anlegen" },
-                      ]}
-                    />
+                  <Feld label={directCustomerMode === "NONE" ? "Kunde suchen" : "Kunde"} voll>
+                    {directCustomerMode === "NONE" ? <div className="kr-stapel">
+                      <Eingabe
+                        data-intake-customer-search
+                        data-autofocus
+                        aria-label="Kunde suchen"
+                        value={intakeCustomerQuery}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setIntakeCustomerQuery(value);
+                          setFeedback(null);
+                          if (value.trim().length < 2) {
+                            setIntakeCustomerResults([]);
+                            setIntakeCustomerSearchState("idle");
+                          }
+                        }}
+                        placeholder="Name, Firma, Ansprechpartner, Telefon, E-Mail, Ort oder Kundennummer"
+                      />
+                      {intakeCustomerSearchState === "loading" ? <p aria-live="polite">Kunden werden gesucht …</p> : null}
+                      {intakeCustomerSearchState === "empty" ? <Hinweis>Kein Kunde gefunden.</Hinweis> : null}
+                      {intakeCustomerResults.length > 0 ? <div className={styles.createCustomerList} aria-label="Kundentreffer">
+                        {intakeCustomerResults.map((entry) => <button type="button" key={entry.id} onClick={() => selectIntakeCustomer("EXISTING", entry)}>
+                          <span><strong>{entry.companyName ?? entry.name}</strong><small>{entry.customerNumber ?? "ohne Kundennummer"} · {entry.contactPerson ?? "kein Ansprechpartner"} · {entry.city ?? "ohne Ort"}</small></span>
+                          <small>Auswählen</small>
+                        </button>)}
+                      </div> : null}
+                      {intakeCustomerResults.length > 0 ? <Hinweis ton="warn">Möglicher Doppelter vorhanden – bitte Treffer prüfen.</Hinweis> : null}
+                      <KrButton art="sekundaer" icon="plus" text={intakeCustomerQuery.trim() ? `„${intakeCustomerQuery.trim()}“ als Neukunde anlegen` : "Neukunde anlegen"} onClick={() => selectIntakeCustomer("NEW")} />
+                    </div> : <div className="kr-stapel">
+                      <Fakten zeilen={[{ k: "Name / Firma", v: directCustomer.companyName ?? directCustomer.name }, { k: "Kundennummer", v: customerChoices.find((entry) => entry.id === directCustomerId)?.customerNumber ?? "wird beim Speichern vergeben" }]} />
+                      <KrButton art="sekundaer" text="Anderer Kunde" onClick={() => selectIntakeCustomer("NONE")} />
+                    </div>}
                   </Feld>
                 </FormRaster>
                 {directCustomerMode === "NEW" ? <IntakeCustomerFields value={directCustomer} onChange={setDirectCustomer} onlyMissing={false} showPayment={ports.canManageMoney} onPaymentChange={changeIntakeCustomerPayment} /> : null}
