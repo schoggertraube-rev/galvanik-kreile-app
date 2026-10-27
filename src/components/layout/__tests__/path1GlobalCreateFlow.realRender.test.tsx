@@ -379,6 +379,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     await screen.findByRole("heading", { name: "Neuer Eingang" });
     expect(screen.getByRole("navigation", { name: "Abschnitte" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /1Kunde/ })).toHaveAttribute("aria-current", "step");
+    expect(screen.getByRole("combobox", { name: "Zahlungsmodus" })).toHaveValue("bar");
     expect(screen.queryByRole("heading", { name: "Was möchtest du anlegen?" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Offene KVs bearbeiten/ })).not.toBeInTheDocument();
   });

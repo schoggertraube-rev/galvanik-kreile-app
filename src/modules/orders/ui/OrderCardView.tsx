@@ -88,6 +88,12 @@ function actionStatus(index: number, current: number): SchrittStatus {
   return "warten";
 }
 
+function paymentModeLabel(mode: "vorkasse" | "abholung" | "rechnung"): string {
+  if (mode === "vorkasse") return "Vorkasse";
+  if (mode === "abholung") return "Abholung";
+  return "Rechnung";
+}
+
 export function OrderCardView({
   state,
   actions,
@@ -205,7 +211,7 @@ export function OrderCardView({
       { key: "zahlung", label: "Zahlung", icon: "card", status: paymentFree ? "erledigt" : actions.payment.enabled ? "bereit" : "gesperrt", schwelle: true, frei: paymentFree, onClick: actions.payment.visible && actions.payment.enabled ? () => setPaymentOpen(true) : undefined },
       { key: "abgeholt", label: payment?.goodsOut?.mode === "versand" ? "verschickt" : "abgeholt", icon: "truck", status: card.station === "abgeholt" ? "erledigt" : actions.goodsOut.enabled ? "bereit" : "gesperrt", onClick: actions.goodsOut.visible && actions.goodsOut.enabled ? () => invokeStation("abgeholt") : undefined },
     ]} />
-    {!paymentFree && payment ? <ZahlungsSchwelle text={`${payment.mode} · ${payment.invoiceState === "issued" ? payment.status ?? "offen" : "Rechnung noch nicht ausgestellt"}`} aktion={actions.payment.visible && actions.payment.enabled ? <Button art="primaer" icon="card" text="Zahlung prüfen" onClick={() => setPaymentOpen(true)} /> : undefined} /> : null}
+    {!paymentFree && payment ? <ZahlungsSchwelle text={`${paymentModeLabel(payment.mode)} · ${payment.invoiceState === "issued" ? payment.status ?? "offen" : "Rechnung noch nicht ausgestellt"}`} aktion={actions.payment.visible && actions.payment.enabled ? <Button art="primaer" icon="card" text="Zahlung prüfen" onClick={() => setPaymentOpen(true)} /> : undefined} /> : null}
   </>;
 
   const main = <>
@@ -220,7 +226,7 @@ export function OrderCardView({
       {card.evidence.length ? <div className="kr-docs">{card.evidence.map((entry) => <span className="kr-doc" key={entry.key}>{entry.source} · {entry.state}</span>)}</div> : <Zustand art="leer" text="Noch keine Dokumente oder Fotos vorhanden." />}
       {documentsPanel}
     </KartenBlock>
-    {card.payment.kind === "available" ? <KartenBlock label="Rechnung"><Fakten zeilen={[{ k: "Zahlungsmodus", v: payment?.mode ?? "Nicht belegt" }, { k: "Rechnung", v: payment?.invoiceState === "issued" ? payment.status ?? "offen" : "noch nicht ausgestellt" }, { k: "Offen", v: money(payment?.openAmountCents ?? null), warn: Boolean(payment?.openAmountCents) }]} /></KartenBlock> : <KartenBlock label="Rechnung"><Zustand art={card.payment.kind === "restricted" ? "gesperrt" : "fehler"} text={card.payment.message} /></KartenBlock>}
+    {card.payment.kind === "available" ? <KartenBlock label="Rechnung"><Fakten zeilen={[{ k: "Zahlungsmodus", v: payment ? paymentModeLabel(payment.mode) : "Nicht belegt" }, { k: "Rechnung", v: payment?.invoiceState === "issued" ? payment.status ?? "offen" : "noch nicht ausgestellt" }, { k: "Offen", v: money(payment?.openAmountCents ?? null), warn: Boolean(payment?.openAmountCents) }]} /></KartenBlock> : <KartenBlock label="Rechnung"><Zustand art={card.payment.kind === "restricted" ? "gesperrt" : "fehler"} text={card.payment.message} /></KartenBlock>}
     {actions.feedback.kind !== "idle" ? actions.feedback.kind === "submitting" ? <Zustand art="laedt" text={actions.feedback.message} /> : <Hinweis ton={actions.feedback.kind === "success" ? "ok" : "warn"}>{actions.feedback.message}{actions.feedback.kind === "conflict" ? <Button art="sekundaer" icon="refresh" text="Neu laden" onClick={() => void actions.onReload()} /> : null}</Hinweis> : null}
     {notice ? <Hinweis ton="warn">{notice}</Hinweis> : null}
   </>;

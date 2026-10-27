@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OrdersHomeProjection } from "@/modules/orders/public";
 
@@ -44,6 +44,7 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     expect(screen.getByTestId("rolf-v11-home")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Der Tag" })).toHaveClass("kr-seite-titel");
     expect(screen.getByRole("region", { name: "Lage" })).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Lage" })).getByText("Konflikt")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Handlungsbedarf" })).toBeInTheDocument();
     expect(screen.getByText("Heute & Woche")).toBeInTheDocument();
     expect(screen.getByText("Diese Woche")).toBeInTheDocument();

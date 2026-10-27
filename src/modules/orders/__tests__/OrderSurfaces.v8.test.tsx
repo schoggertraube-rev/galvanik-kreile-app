@@ -50,6 +50,7 @@ describe("Orders V1.1 one-surface truth", () => {
     expect(screen.getByText("Teile")).toBeInTheDocument();
     expect(screen.getAllByText("angenommen").length).toBeGreaterThan(0);
     expect(screen.getByText("Galvanik")).toBeInTheDocument();
+    expect(screen.getByText(/Vorkasse · Rechnung noch nicht ausgestellt/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Muster GmbH/ }));
     expect(openCustomer).toHaveBeenCalledWith("customer-1");
   });

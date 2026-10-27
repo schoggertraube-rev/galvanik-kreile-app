@@ -269,6 +269,11 @@ const EMPTY_CUSTOMER: CustomerDraft = {
   vatId: null,
 };
 
+const EMPTY_INTAKE_CUSTOMER: CustomerDraft = {
+  ...EMPTY_CUSTOMER,
+  paymentPreference: "bar",
+};
+
 const HANDY_QUERY = "(max-width: 699px)";
 const subscribeHandy = (notify: () => void) => {
   if (typeof window.matchMedia !== "function") return () => undefined;
@@ -395,7 +400,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [intakeHandover, setIntakeHandover] = useState<"PICKUP" | "SHIPPING">("PICKUP");
   const [intakeSource, setIntakeSource] = useState<"personal" | "shipping" | "pickup">("personal");
   const [intakeChecked, setIntakeChecked] = useState(false);
-  const [directCustomer, setDirectCustomer] = useState<CustomerDraft>(EMPTY_CUSTOMER);
+  const [directCustomer, setDirectCustomer] = useState<CustomerDraft>(EMPTY_INTAKE_CUSTOMER);
   const [directCustomerId, setDirectCustomerId] = useState("");
   const [directItems, setDirectItems] = useState<IntakePositionDraft[]>(() => [newIntakePosition()]);
   const [catalogServices, setCatalogServices] = useState<CatalogService[]>([]);
@@ -535,7 +540,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       setCustomerChoices(result.customers);
       setDirectCustomerMode("NONE");
       setDirectCustomerId("");
-      setDirectCustomer(EMPTY_CUSTOMER);
+      setDirectCustomer(EMPTY_INTAKE_CUSTOMER);
       setCustomerLoad(result.customers.length ? "ready" : "empty");
     } catch {
       if (seq === customerRequestSeq.current) setFeedback({ kind: "error", message: "Die vorhandenen Kunden konnten nicht sicher gelesen werden. Es wurde nichts angelegt." });
@@ -1149,7 +1154,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setQuoteReceipt(null);
     setConversion(null);
     setDirectReceipt(null);
-    setDirectCustomer(EMPTY_CUSTOMER);
+    setDirectCustomer(EMPTY_INTAKE_CUSTOMER);
     setDirectCustomerId("");
     setDirectCustomerMode("NONE");
     setDirectItems([newIntakePosition()]);
@@ -1212,7 +1217,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                       onChange={(event) => {
                         const value = event.target.value;
                         setFeedback(null);
-                        if (!value) { setDirectCustomerMode("NONE"); setDirectCustomerId(""); setDirectCustomer(EMPTY_CUSTOMER); return; }
+                        if (!value) { setDirectCustomerMode("NONE"); setDirectCustomerId(""); setDirectCustomer(EMPTY_INTAKE_CUSTOMER); return; }
                         if (value === "NEW") { setDirectCustomerMode("NEW"); setDirectCustomerId(""); setDirectCustomer({ ...EMPTY_CUSTOMER, paymentPreference: intakeHandover === "PICKUP" ? "bar" : "vorkasse" }); return; }
                         const selected = customerChoices.find((entry) => entry.id === value);
                         if (selected) { setDirectCustomerMode("EXISTING"); setDirectCustomerId(selected.id); setDirectCustomer(customerChoiceToDraft(selected)); }
@@ -1332,7 +1337,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                   {intakeStep === 1 ? <>
                     <p className={styles.createLead}>Kunde wählen oder neu anlegen. Fehlende Pflichtdaten werden hier ergänzt, bevor ein Auftrag entstehen kann.</p>
                     <div className={styles.createInlineChoices} role="group" aria-label="Kunde für neuen Eingang">
-                      <button type="button" aria-pressed={directCustomerMode === "NEW"} onClick={() => { setDirectCustomerMode("NEW"); setDirectCustomer(EMPTY_CUSTOMER); setDirectCustomerId(""); }}>Neukunde</button>
+                      <button type="button" aria-pressed={directCustomerMode === "NEW"} onClick={() => { setDirectCustomerMode("NEW"); setDirectCustomer(EMPTY_INTAKE_CUSTOMER); setDirectCustomerId(""); }}>Neukunde</button>
                       <button type="button" aria-pressed={directCustomerMode === "EXISTING"} onClick={() => { const first = customerChoices[0]; if (first) { setDirectCustomerMode("EXISTING"); setDirectCustomerId(first.id); setDirectCustomer(customerChoiceToDraft(first)); } }} disabled={customerChoices.length === 0}>Bestehender Kunde</button>
                     </div>
                     {directCustomerMode === "EXISTING" ? <label className={styles.createFieldWide}>Kunde<select value={directCustomerId} onChange={(event) => { const selected = customerChoices.find((entry) => entry.id === event.target.value); if (selected) { setDirectCustomerId(selected.id); setDirectCustomer(customerChoiceToDraft(selected)); } }}>{customerChoices.map((entry) => <option key={entry.id} value={entry.id}>{entry.customerNumber ?? "ohne Nummer"} · {entry.name}</option>)}</select></label> : null}
