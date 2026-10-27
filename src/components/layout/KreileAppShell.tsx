@@ -132,9 +132,9 @@ export function KreileAppShell({ children, globalCreate }: { children: React.Rea
           >
             {children}
           </AppShell>
+          <EntityOverlayStack />
         </KrApp>
       </div>
-      <EntityOverlayStack />
       {globalCreate}
     </>
   );

@@ -10,6 +10,8 @@ import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
 const MAX_ID_LENGTH = 128;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const LEGACY_ITEM_KEYS = ["id", "position", "name", "quantity", "material", "surfaceRequested"] as const;
+const CURRENT_ITEM_KEYS = ["catalogServiceId", "id", "material", "name", "position", "quantity", "surfaceRequested", "unit", "unitPriceCents", "vatRateBasisPoints"] as const;
 
 export type OrderCardExtraWork = {
   lineId: string;
@@ -241,12 +243,12 @@ function toSafeInteger(value: unknown, error: string): number {
   return parsed;
 }
 
-function mapIntakeItems(value: unknown): OrderCardItem[] {
+export function mapOrderCardIntakeItems(value: unknown): OrderCardItem[] {
   if (!Array.isArray(value) || value.length < 1 || value.length > 20) {
     throw new Error("ORDER_CARD_INTAKE_ITEMS_INVALID");
   }
   const items = value.map((entry) => {
-    if (!hasExactKeys(entry, ["id", "position", "name", "quantity", "material", "surfaceRequested"])) {
+    if (!hasExactKeys(entry, LEGACY_ITEM_KEYS) && !hasExactKeys(entry, CURRENT_ITEM_KEYS)) {
       throw new Error("ORDER_CARD_INTAKE_ITEM_SHAPE_INVALID");
     }
     const position = toSafeInteger(entry.position, "ORDER_CARD_ITEM_POSITION_INVALID");
@@ -465,7 +467,7 @@ export async function readLiveOrderCard(
         || intake.current_status !== queue.status
         || intake.integrity_ok !== true
       ) throw new Error("ORDER_CARD_INTAKE_RECEIPT_INVALID");
-      const items = mapIntakeItems(intake.items_snapshot);
+      const items = mapOrderCardIntakeItems(intake.items_snapshot);
 
       const assignmentRows = await tx.execute<AssignmentRow>(sql`
         SELECT id::text AS id, tenant_id, order_id,

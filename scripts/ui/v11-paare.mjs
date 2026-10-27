@@ -121,10 +121,22 @@ async function captureOrderCard(viewport) {
   try {
     const app = await appContext.newPage();
     const prototype = await prototypeContext.newPage();
+    const actionResponses = [];
+    app.on("response", async (response) => {
+      if (response.request().method() !== "POST") return;
+      actionResponses.push({ status: response.status(), body: (await response.text().catch(() => "")).slice(0, 400) });
+    });
     await app.goto(`${appUrl}/`, { waitUntil: "networkidle", timeout: 30_000 });
     await app.locator(`.kr-app[data-geraet="${viewport.geraet}"]`).waitFor();
     await app.locator(".kr-hb-eintrag .kr-btn").first().click();
-    await app.getByRole("dialog", { name: /Auftragskarte A-/ }).waitFor({ timeout: 30_000 });
+    const loadingCard = app.getByRole("dialog", { name: "Auftragskarte", exact: true });
+    await loadingCard.waitFor({ timeout: 10_000 });
+    try {
+      await app.getByRole("dialog", { name: /Auftragskarte A-/ }).waitFor({ timeout: 30_000 });
+    } catch (error) {
+      const cardText = await app.locator(".kr-dialog--karte").innerText().catch(() => "Seitenblatt fehlt");
+      throw new Error(`ORDER_CARD_NOT_READY: ${cardText.replace(/\s+/g, " ").slice(0, 500)} · ACTIONS ${JSON.stringify(actionResponses)}`, { cause: error });
+    }
     await prototype.goto(prototypeUrl(viewport, "auftrag"), { waitUntil: "load" });
     await prototype.getByRole("dialog", { name: /Auftragskarte A-/ }).waitFor();
     await savePair({ viewport, name: "auftragskarte", title: "Auftragskarte", app, prototype });
