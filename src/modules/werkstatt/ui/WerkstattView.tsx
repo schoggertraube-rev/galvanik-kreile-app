@@ -1,11 +1,21 @@
 "use client";
 
-// Phillip-Startseite "Werkstatt" 1:1 aus der Owner-Bauvorlage
-// (mock_extract/kreile/phillip_home). Markup/Klassen stammen aus Vorlage.jsx;
-// die Daten kommen ausschliesslich aus dem tenantgebundenen Werkstatt-Read-Model.
-// Owner G7: Nicht angebundene Vorlagen-Aktionen und -Aussagen werden nicht gerendert.
-
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  Auftragszeile,
+  BuendelVorschlag,
+  Button,
+  Dialog,
+  HandlungsEintrag,
+  Kachel,
+  Lageleiste,
+  SeitenKopf,
+  WipMenge,
+  Zeile,
+  Zustand,
+  type Geraet,
+  type HandlungsArt,
+} from "@/ui/kr";
 import type {
   PhillipOrderCard,
   PhillipWerkstattViewModel,
@@ -13,90 +23,105 @@ import type {
   WerkstattViewPorts,
 } from "../server/types";
 
-const PICKER_TITLE_ID = "werkstatt-order-picker-title";
 const PICKER_DIALOG_ID = "werkstatt-order-picker";
-
 type PickerKind = "order" | "goods-out";
 
-function Icon({ id }: { id: string }) {
-  return (
-    <svg className="i" aria-hidden="true">
-      <use href={`#${id}`}></use>
-    </svg>
-  );
+function readDevice(): Geraet {
+  if (window.innerWidth <= 699) return "handy";
+  if (
+    window.innerWidth <= 1399 &&
+    window.matchMedia?.("(pointer: coarse)").matches
+  )
+    return "tablet";
+  return "desktop";
 }
 
-function priorityClass(order: WerkstattHeldCard): string {
-  if (order.risk === "red" || order.risk === "blocked") return "pi crit";
-  if (order.risk === "orange" || order.risk === "yellow") return "pi soon";
-  return "pi";
+function subscribeDevice(onChange: () => void) {
+  window.addEventListener("resize", onChange);
+  return () => window.removeEventListener("resize", onChange);
 }
 
-function statusClass(order: PhillipOrderCard): string {
-  const status = `${order.status} ${order.statusText}`.toLowerCase();
-  if (status.includes("fertig")) return "zust fertig";
-  if (status.includes("angenommen") || status.includes("eingang")) return "zust neu";
-  return "zust arb";
+function actionType(order: WerkstattHeldCard): HandlungsArt {
+  return order.heldGroup === "crit" ? "konflikt" : "warnung";
+}
+
+function rowTone(order: PhillipOrderCard): "ok" | "warn" | "rot" | "info" {
+  if (order.risk === "red" || order.risk === "blocked") return "rot";
+  if (order.risk === "orange" || order.risk === "yellow") return "warn";
+  return order.station === "fertig" ? "ok" : "info";
+}
+
+function customerTitle(order: PhillipOrderCard): string {
+  const customer = order.customerName?.trim() || "Kunde nicht hinterlegt";
+  return customer.localeCompare(order.title.trim(), "de", {
+    sensitivity: "base",
+  }) === 0
+    ? customer
+    : `${customer} — ${order.title}`;
+}
+
+function shortOrderTitle(order: PhillipOrderCard): string {
+  const customer = order.customerName?.trim();
+  return customer &&
+    customer.localeCompare(order.title.trim(), "de", {
+      sensitivity: "base",
+    }) === 0
+    ? order.itemDescription?.trim() || "Auftrag"
+    : order.title;
 }
 
 function displayName(name: string | null): string | null {
-  const firstName = name?.trim().split(/\s+/)[0];
-  return firstName || null;
+  return name?.trim().split(/\s+/)[0] || null;
 }
 
-function DayLine({ view }: { view: Extract<PhillipWerkstattViewModel, { kind: "data" }> }) {
+function weekday(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Termin";
+  return new Intl.DateTimeFormat("de-DE", {
+    timeZone: "Europe/Berlin",
+    weekday: "short",
+  }).format(date);
+}
+
+function startOfBerlinWeek(value: string): number | null {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Berlin",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const year = Number(parts.find((part) => part.type === "year")?.value);
+  const month = Number(parts.find((part) => part.type === "month")?.value);
+  const day = Number(parts.find((part) => part.type === "day")?.value);
+  const utc = Date.UTC(year, month - 1, day);
+  const weekdayIndex = new Date(utc).getUTCDay() || 7;
+  return utc - (weekdayIndex - 1) * 86_400_000;
+}
+
+function isDueThisWeek(order: PhillipOrderCard, loadedAt: string): boolean {
+  const currentWeek = startOfBerlinWeek(loadedAt);
+  const dueWeek = startOfBerlinWeek(order.dueDate);
+  return currentWeek !== null && dueWeek === currentWeek;
+}
+
+function DayStatus({
+  view,
+}: {
+  view: Extract<PhillipWerkstattViewModel, { kind: "data" }>;
+}) {
   const name = displayName(view.greetingName);
-  if (view.dringendCount === 0 && view.weitereCount === 0) {
-    return <div className="day-line" data-testid="werkstatt-status">Heute keine Termine.</div>;
-  }
-
   return (
-    <div className="day-line" data-testid="werkstatt-status">
-      {name ? `Servus ${name}. ` : null}
-      {view.dringendCount > 0 ? (
-        <span className="rp"><b>{view.dringendCount}</b> dringend</span>
-      ) : null}
-      {view.dringendCount > 0 && view.weitereCount > 0 ? " · " : null}
-      {view.weitereCount > 0 ? <><b>{view.weitereCount}</b> weitere</> : null}
-    </div>
-  );
-}
-
-function HeldOrders({ orders, onOpenOrder }: { orders: readonly WerkstattHeldCard[]; onOpenOrder: (orderId: string) => void }) {
-  if (orders.length === 0) {
-    return (
-      <div className="pi" role="status">
-        <span className="pi-dot"></span>
-        <div className="pi-main"><div className="pi-s">Heute keine dringenden Aufträge.</div></div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="pri" data-testid="werkstatt-held-list">
-      {orders.map((order) => (
-        <div key={order.id} className={priorityClass(order)} data-testid={`werkstatt-held-${order.id}`}>
-          <span className="pi-dot"></span>
-          <div className="pi-main">
-            <div className="pi-top">
-              <button className="pi-t" type="button" aria-label={`Auftrag ${order.orderNumber} öffnen`} onClick={() => onOpenOrder(order.id)}>
-                <span className="id">{order.orderNumber}</span>{" "}
-                {order.customerName ?? "Kunde nicht hinterlegt"} · {order.title}
-              </button>
-              <span className={statusClass(order)}>{order.statusText || order.status}</span>
-            </div>
-            {order.itemDescription ? <div className="pi-s">{order.itemDescription}</div> : null}
-            {order.dueLabel && order.dueValue ? <span className="pchip pc-red">{order.dueLabel}: {order.dueValue}</span> : null}
-            <div className="pi-a">
-              <button className="btn-do" type="button" onClick={() => onOpenOrder(order.id)}>
-                <Icon id="i-open" />
-                Auftrag öffnen
-              </button>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
+    <span className="kr-sr" data-testid="werkstatt-status">
+      {name ? `Servus ${name}. ` : ""}
+      {view.dringendCount > 0 ? `${view.dringendCount} dringend` : ""}
+      {view.dringendCount > 0 && view.weitereCount > 0 ? " · " : ""}
+      {view.weitereCount > 0 ? `${view.weitereCount} weitere` : ""}
+      {view.dringendCount === 0 && view.weitereCount === 0
+        ? "Heute keine Termine."
+        : ""}
+    </span>
   );
 }
 
@@ -106,56 +131,64 @@ function Picker({
   onClose,
   onSelect,
   onScan,
-  dialogRef,
-  closeRef,
 }: {
   kind: PickerKind;
   orders: readonly PhillipOrderCard[];
   onClose: () => void;
   onSelect: (orderId: string) => void;
   onScan: () => void;
-  dialogRef: React.RefObject<HTMLElement | null>;
-  closeRef: React.RefObject<HTMLButtonElement | null>;
 }) {
   const title = kind === "goods-out" ? "Ware raus" : "Auftrag öffnen";
-  const emptyText = kind === "goods-out" ? "Keine fertig gemeldete Ware zur Ausgabe vorhanden." : "Keine Aufträge vorhanden.";
+  const emptyText =
+    kind === "goods-out"
+      ? "Keine fertig gemeldete Ware zur Ausgabe vorhanden."
+      : "Keine Aufträge vorhanden.";
 
   return (
-    <div className="ovl open">
-      <section ref={dialogRef} id={PICKER_DIALOG_ID} className="oc" role="dialog" aria-modal="true" aria-labelledby={PICKER_TITLE_ID}>
-        <div className="oc-h">
-          <span className="oc-ic"><Icon id={kind === "goods-out" ? "i-truck" : "i-open"} /></span>
-          <div><div id={PICKER_TITLE_ID} className="oc-tt">{title}</div></div>
-          <button ref={closeRef} className="oc-x2" type="button" aria-label="Schließen" onClick={onClose}><Icon id="i-x" /></button>
-        </div>
-        <div className="oc-b">
-          {kind === "order" ? (
-            <button className="pick-s" type="button" aria-label="Nummer, Kunde oder Scan …" onClick={onScan}>
-              <Icon id="i-search" />Nummer, Kunde oder Scan …
-            </button>
-          ) : null}
-          {orders.length === 0 ? (
-            <div className="pi-s" role="status" data-testid="goods-out-picker-empty">{emptyText}</div>
-          ) : (
-            orders.map((order) => (
-              <button
-                key={order.id}
-                className="pick-row"
-                type="button"
-                data-testid={`${kind === "goods-out" ? "goods-out" : "order"}-picker-order-${order.id}`}
-                aria-label={`Auftrag ${order.orderNumber} ${kind === "goods-out" ? "für Warenausgang öffnen" : "öffnen"}`}
-                onClick={() => onSelect(order.id)}
-              >
-                <span className="id">{order.orderNumber}</span>
-                <span className="nm">{order.customerName ?? "Kunde nicht hinterlegt"} · {order.title}</span>
-                <span className={statusClass(order)}>{order.statusText || order.status}</span>
-                <span className="go"><Icon id="i-arrow" /></span>
-              </button>
-            ))
-          )}
-        </div>
-      </section>
-    </div>
+    <Dialog
+      titel={title}
+      icon={kind === "goods-out" ? "truck" : "open"}
+      onSchliessen={onClose}
+    >
+      <div className="kr-stapel" id={PICKER_DIALOG_ID}>
+        {kind === "order" ? (
+          <Button
+            art="sekundaer"
+            icon="scan"
+            text="Nummer, Kunde oder Scan …"
+            block
+            onClick={onScan}
+          />
+        ) : null}
+        {orders.length === 0 ? (
+          <div data-testid={kind === "goods-out" ? "goods-out-picker-empty" : "order-picker-empty"}>
+            <Zustand art="leer" text={emptyText} />
+          </div>
+        ) : (
+          orders.map((order) => (
+            <div
+              key={order.id}
+              data-testid={`${kind === "goods-out" ? "goods-out" : "order"}-picker-order-${order.id}`}
+            >
+              <Auftragszeile
+                id={order.orderNumber}
+                kundeKurz={order.customerName ?? "Kunde nicht hinterlegt"}
+                titel={shortOrderTitle(order)}
+                meta={
+                  (order.itemDescription ?? order.statusText) || order.status
+                }
+                ton={rowTone(order)}
+                status={{
+                  text: order.statusText || order.status,
+                  ton: rowTone(order),
+                }}
+                onOeffnen={() => onSelect(order.id)}
+              />
+            </div>
+          ))
+        )}
+      </div>
+    </Dialog>
   );
 }
 
@@ -168,88 +201,77 @@ export function WerkstattView({
   ports: WerkstattViewPorts;
   onRetry: () => void;
 }) {
+  const device = useSyncExternalStore(
+    subscribeDevice,
+    readDevice,
+    () => "desktop" as const,
+  );
   const [activePicker, setActivePicker] = useState<PickerKind | null>(null);
   const [bundleFilterActive, setBundleFilterActive] = useState(false);
+  const [filter, setFilter] = useState<HandlungsArt | "alle">("alle");
   const pickerTriggerRef = useRef<HTMLElement | null>(null);
-  const pickerDialogRef = useRef<HTMLElement | null>(null);
-  const pickerCloseRef = useRef<HTMLButtonElement | null>(null);
   const restoreFocusRef = useRef(false);
 
   const isData = view.kind === "data";
   const isEmpty = view.kind === "empty";
   const authorized = isData || isEmpty;
-  const isPickerOpen = activePicker !== null;
   const pickerOrders: readonly PhillipOrderCard[] = isData
-    ? activePicker === "goods-out" ? view.goodsOutCandidates : view.pickerOrders
+    ? activePicker === "goods-out"
+      ? view.goodsOutCandidates
+      : view.pickerOrders
     : [];
-  const heldOrders = isData && bundleFilterActive && view.bundleSuggestion
-    ? view.bundleSuggestion.orders
-    : isData ? view.held : [];
 
   useEffect(() => {
-    if (!isPickerOpen) {
-      if (restoreFocusRef.current) {
-        restoreFocusRef.current = false;
-        pickerTriggerRef.current?.focus();
-      }
+    if (activePicker === null && restoreFocusRef.current) {
+      restoreFocusRef.current = false;
+      pickerTriggerRef.current?.focus();
       return;
     }
+    if (activePicker === null) return;
 
-    pickerCloseRef.current?.focus();
+    const title = activePicker === "goods-out" ? "Ware raus" : "Auftrag öffnen";
+    const dialog = document.querySelector<HTMLElement>(`[role="dialog"][aria-label="${title}"]`);
+    const focusable = () => dialog?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    focusable()?.item(0)?.focus();
+
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        restoreFocusRef.current = true;
-        setActivePicker(null);
-        return;
-      }
       if (event.key !== "Tab") return;
-
-      const dialog = pickerDialogRef.current;
-      if (!dialog) return;
-      const focusable = dialog.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      );
-      if (focusable.length === 0) return;
-      const first = focusable.item(0);
-      const last = focusable.item(focusable.length - 1);
-      const active = document.activeElement;
-      if (!dialog.contains(active)) {
-        event.preventDefault();
-        (event.shiftKey ? last : first).focus();
-      } else if (event.shiftKey && active === first) {
+      const controls = focusable();
+      if (!controls?.length) return;
+      const first = controls.item(0);
+      const last = controls.item(controls.length - 1);
+      if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last.focus();
-      } else if (!event.shiftKey && active === last) {
+      } else if (!event.shiftKey && document.activeElement === last) {
         event.preventDefault();
         first.focus();
       }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isPickerOpen]);
+  }, [activePicker]);
 
-  const openPicker = (event: { currentTarget: HTMLElement }, kind: PickerKind) => {
+  const openPicker = (
+    event: { currentTarget: HTMLElement },
+    kind: PickerKind,
+  ) => {
     pickerTriggerRef.current = event.currentTarget;
     restoreFocusRef.current = false;
     setActivePicker(kind);
   };
-
   const closePicker = () => {
     restoreFocusRef.current = true;
     setActivePicker(null);
   };
-
   const selectOrder = (orderId: string) => {
     restoreFocusRef.current = false;
     setActivePicker(null);
-    if (activePicker === "goods-out") {
-      ports.onOpenGoodsOut(orderId);
-      return;
-    }
-    ports.onOpenOrder(orderId);
+    if (activePicker === "goods-out") ports.onOpenGoodsOut(orderId);
+    else ports.onOpenOrder(orderId);
   };
-
   const scanOrder = () => {
     restoreFocusRef.current = false;
     setActivePicker(null);
@@ -257,105 +279,261 @@ export function WerkstattView({
   };
 
   if (!authorized) {
-    const isError = view.kind === "error" || view.kind === "conflict";
     return (
-      <div className="mock-kreile-phillip-home">
-        <div className="body scroll" role={isError ? "alert" : "status"}>
-          <h1 className="day-title" style={{ margin: 0 }}>Werkstatt</h1>
-          <div className="mock-state">{view.message}</div>
-          {isError ? <button className="btn-later" type="button" onClick={onRetry}>Erneut laden</button> : null}
-        </div>
-      </div>
+      <section data-testid="werkstatt-v11">
+        <SeitenKopf titel="Werkstatt" />
+        <Zustand
+          art={
+            view.kind === "error" || view.kind === "conflict"
+              ? "fehler"
+              : "gesperrt"
+          }
+          text={view.message}
+          aktion={
+            view.kind === "error" || view.kind === "conflict"
+              ? { text: "Erneut laden", onClick: onRetry }
+              : undefined
+          }
+        />
+      </section>
     );
   }
 
+  if (isEmpty) {
+    return (
+      <section data-testid="werkstatt-v11">
+        <SeitenKopf titel="Werkstatt" />
+        <span className="kr-sr" data-testid="werkstatt-status">
+          Heute keine Termine.
+        </span>
+        <Zustand
+          art="leer"
+          text="Keine laufenden Aufträge."
+          aktion={
+            view.canCreateOrder
+              ? {
+                  text: "Neuer Eingang",
+                  icon: "inbox",
+                  onClick: ports.onCreateOrder,
+                }
+              : undefined
+          }
+        />
+        <div className="kr-sr" role="group" aria-label="Werkstattaktionen" />
+      </section>
+    );
+  }
+
+  const baseHeld =
+    bundleFilterActive && view.bundleSuggestion
+      ? view.bundleSuggestion.orders
+      : view.held;
+  const held =
+    filter === "alle"
+      ? baseHeld
+      : baseHeld.filter((order) => actionType(order) === filter);
+  const counts = view.held.reduce<Record<HandlungsArt, number>>(
+    (sum, order) => {
+      sum[actionType(order)] += 1;
+      return sum;
+    },
+    { konflikt: 0, entscheidung: 0, warnung: 0 },
+  );
+  const dueOrders = view.pickerOrders
+    .filter((order) => isDueThisWeek(order, view.loadedAt))
+    .slice(0, 3);
+  const tightWip = view.pickerOrders.filter(
+    (order) =>
+      order.station === "galvanik" &&
+      ["red", "orange", "yellow", "blocked"].includes(order.risk),
+  ).length;
+
+  const heldList = (
+    <section className="kr-hb" aria-label="Handlungsbedarf">
+      <h2 className="kr-hb-label">Heute sichern</h2>
+      <div data-testid="werkstatt-held-list">
+        {held.length === 0 ? (
+          <Zustand art="leer" text="Heute keine dringenden Aufträge." />
+        ) : (
+          held.map((order, index) => (
+            <div
+              key={order.id}
+              data-testid={`werkstatt-held-${order.id}`}
+              style={{ display: "contents" }}
+            >
+              <HandlungsEintrag
+                art={actionType(order)}
+                id={order.orderNumber}
+                titel={customerTitle(order)}
+                titelKurz={shortOrderTitle(order)}
+                meta={`${order.statusText || order.status} · ${order.dueLabel}: ${order.dueValue}`}
+                aktionen={[
+                  {
+                    text: "Auftrag öffnen",
+                    kurz: "Öffnen",
+                    icon: "open",
+                    art: "primaer",
+                    onClick: () => ports.onOpenOrder(order.id),
+                  },
+                ]}
+                geraet={device}
+                fokus={index === 0}
+                onOeffnen={() => ports.onOpenOrder(order.id)}
+              />
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  );
+
   return (
-    <div className="mock-kreile-phillip-home">
-      <div className="body scroll">
-        <h1 id="werkstatt-title" className="day-title" style={{ margin: 0 }}>Werkstatt</h1>
-        {isData ? <DayLine view={view} /> : <div className="day-line" role="status" data-testid="werkstatt-status">Heute keine Termine.</div>}
-
-        {isData ? (
-          <div className="cols">
-            <div>
-              <div className="sec-t">
-                <span className="sec-ic"><Icon id="i-clock" /></span>
-                Heute sichern
-                <span className="hint">nach Dringlichkeit · was heute raus/fertig muss</span>
-              </div>
-              <HeldOrders orders={heldOrders} onOpenOrder={ports.onOpenOrder} />
+    <section data-testid="werkstatt-v11">
+      <SeitenKopf titel="Werkstatt" />
+      <DayStatus view={view} />
+      <Lageleiste
+        zaehler={counts}
+        filter={filter}
+        onFilter={setFilter}
+        gesund={[
+          {
+            key: "termintreue",
+            titel: "Termintreue",
+            icon: "clock",
+            status:
+              view.dringendCount > 0
+                ? "kritisch"
+                : view.weitereCount > 0
+                  ? "warn"
+                  : "ok",
+            zustand:
+              view.dringendCount > 0
+                ? "unter Druck"
+                : view.weitereCount > 0
+                  ? "beobachten"
+                  : "im Plan",
+          },
+        ]}
+      />
+      <div className="kr-spalten">
+        {heldList}
+        <div className="kr-stapel">
+          <Kachel
+            titel="Heute raus"
+            icon="truck"
+            iconTon="ok"
+            zahl={view.goodsOutCandidates.length}
+            zustand={view.goodsOutCandidates.length ? "daten" : "leer"}
+            texte={{ leerText: "Heute ist keine Ware ausgabebereit." }}
+          >
+            {view.goodsOutCandidates.slice(0, 3).map((order) => (
+              <Auftragszeile
+                key={order.id}
+                id={order.orderNumber}
+                kundeKurz={order.customerName ?? "Kunde"}
+                titel={shortOrderTitle(order)}
+                meta={order.itemDescription ?? "Ausgabebereit"}
+                ton="ok"
+                status={{ text: "bereit", ton: "ok" }}
+                onOeffnen={() => ports.onOpenGoodsOut(order.id)}
+              />
+            ))}
+          </Kachel>
+          <Kachel
+            titel="Fällig diese Woche"
+            icon="clock"
+            iconTon="info"
+            zahl={view.dueThisWeekCount}
+            zustand={view.dueThisWeekCount ? "daten" : "leer"}
+            texte={{ leerText: "Diese Woche sind keine Aufträge fällig." }}
+          >
+            {dueOrders.map((order) => (
+              <Zeile
+                key={order.id}
+                vorne={
+                  <span className="kr-zeit">{weekday(order.dueDate)}</span>
+                }
+                id={order.orderNumber}
+                titel={order.customerName ?? shortOrderTitle(order)}
+                meta={shortOrderTitle(order)}
+                seite={<span>{order.dueValue}</span>}
+                onClick={() => ports.onOpenOrder(order.id)}
+              />
+            ))}
+          </Kachel>
+          {view.bundleSuggestion ? (
+            <div data-testid="werkstatt-bundle">
+              <BuendelVorschlag
+                titel={
+                  <>
+                    {view.bundleSuggestion.orders.length} Aufträge mit{" "}
+                    <b>{view.bundleSuggestion.surfaceRequested}</b> — heute
+                    zusammen fahren?
+                  </>
+                }
+                meta={view.bundleSuggestion.orders
+                  .map((order) => order.orderNumber)
+                  .join(" · ")}
+                aktion={{
+                  text: bundleFilterActive
+                    ? "Alle Aufträge zeigen"
+                    : device === "handy"
+                      ? "Bündeln"
+                      : "Diese Aufträge zeigen",
+                  onClick: () => setBundleFilterActive((active) => !active),
+                }}
+              />
             </div>
-
-            <div className="rail">
-              {view.bundleSuggestion ? (
-                <div className="bundle" data-testid="werkstatt-bundle">
-                  <div className="bundle-h"><Icon id="i-layers" />Bündeln heute</div>
-                  <div className="bundle-t">{view.bundleSuggestion.orders.length} Aufträge mit <b>{view.bundleSuggestion.surfaceRequested}</b></div>
-                  <div className="bundle-s">{view.bundleSuggestion.orders.map((order) => order.customerName).filter((name): name is string => Boolean(name)).join(" · ")}</div>
-                  <div className="bundle-a">
-                    <button className="b-soft" type="button" aria-pressed={bundleFilterActive} onClick={() => setBundleFilterActive((active) => !active)}>
-                      <Icon id="i-layers" />
-                      {bundleFilterActive ? "Alle Aufträge zeigen" : "Diese Aufträge zeigen"}
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-
-              <button className="wip" type="button" data-testid="werkstatt-wip-tile" onClick={ports.onOpenWip}>
-                <div className="wip-l"><Icon id="i-flask" />In Arbeit (Galvanik)</div>
-                <div className="wip-n">{view.wipCount}<small>Aufträge</small></div>
-                <div className="wip-go">{view.dringendCount} werden knapp · antippen <Icon id="i-arrow" /></div>
-              </button>
-
-              <button className="tile" type="button" onClick={(event) => openPicker(event, "goods-out")}>
-                <div className="tile-r">
-                  <div className="tile-l"><span className="tile-ic"><Icon id="i-truck" /></span><span className="tile-tx">Heute raus</span></div>
-                  <span className="tile-n">{view.goodsOutCandidates.length}</span>
-                </div>
-              </button>
-
-              <div className="tile" data-testid="werkstatt-due-week-tile">
-                <div className="tile-r">
-                  <div className="tile-l"><span className="tile-ic in"><Icon id="i-clock" /></span><span className="tile-tx">Fällig diese Woche</span></div>
-                  <span className="tile-n">{view.dueThisWeekCount}</span>
-                </div>
-              </div>
-            </div>
+          ) : null}
+          <div data-testid="werkstatt-wip-tile">
+            <WipMenge
+              anzahl={view.wipCount}
+              meta={`${tightWip} werden knapp`}
+              onOeffnen={ports.onOpenWip}
+            />
           </div>
-        ) : null}
+        </div>
       </div>
 
-      <div className="actionbar" role="group" aria-label="Werkstattaktionen">
-        {isData ? (
-          <button className="ab primary" type="button" aria-haspopup="dialog" aria-expanded={activePicker === "order"} aria-controls={PICKER_DIALOG_ID} onClick={(event) => openPicker(event, "order")}>
-            <Icon id="i-open" />Auftrag öffnen
-          </button>
-        ) : null}
-        {isData ? (
-          <button className="ab mid" type="button" aria-haspopup="dialog" aria-expanded={activePicker === "order"} aria-controls={PICKER_DIALOG_ID} onClick={(event) => openPicker(event, "order")}>
-            <Icon id="i-layers" />Mehrarbeit
-          </button>
-        ) : null}
-        {isData ? (
-          <button className="ab mid" type="button" aria-haspopup="dialog" aria-expanded={activePicker === "order"} aria-controls={PICKER_DIALOG_ID} onClick={(event) => openPicker(event, "order")}>
-            <Icon id="i-check" />Fertig melden
-          </button>
-        ) : null}
+      <div className="kr-sr" role="group" aria-label="Werkstattaktionen">
+        <button
+          type="button"
+          aria-controls={PICKER_DIALOG_ID}
+          aria-expanded={activePicker === "order"}
+          onClick={(event) => openPicker(event, "order")}
+        >
+          Auftrag öffnen
+        </button>
+        <button type="button" onClick={(event) => openPicker(event, "order")}>
+          Mehrarbeit
+        </button>
+        <button type="button" onClick={(event) => openPicker(event, "order")}>
+          Fertig melden
+        </button>
         {view.canCreateOrder ? (
-          <button className={isData ? "ab norm" : "ab primary"} type="button" onClick={ports.onCreateOrder}>
-            <Icon id="i-inbox" />Neuer Eingang
+          <button type="button" onClick={ports.onCreateOrder}>
+            Neuer Eingang
           </button>
         ) : null}
-        {isData ? (
-          <button className="ab norm" type="button" aria-haspopup="dialog" aria-expanded={activePicker === "goods-out"} aria-controls={PICKER_DIALOG_ID} onClick={(event) => openPicker(event, "goods-out")}>
-            <Icon id="i-truck" />Ware raus
-          </button>
-        ) : null}
+        <button
+          type="button"
+          aria-controls={PICKER_DIALOG_ID}
+          aria-expanded={activePicker === "goods-out"}
+          onClick={(event) => openPicker(event, "goods-out")}
+        >
+          Ware raus
+        </button>
       </div>
 
-      {isPickerOpen && activePicker ? (
-        <Picker kind={activePicker} orders={pickerOrders} onClose={closePicker} onSelect={selectOrder} onScan={scanOrder} dialogRef={pickerDialogRef} closeRef={pickerCloseRef} />
+      {activePicker ? (
+        <Picker
+          kind={activePicker}
+          orders={pickerOrders}
+          onClose={closePicker}
+          onSelect={selectOrder}
+          onScan={scanOrder}
+        />
       ) : null}
-    </div>
+    </section>
   );
 }
