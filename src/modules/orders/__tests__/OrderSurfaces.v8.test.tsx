@@ -39,6 +39,7 @@ const card: OrderCardModel = {
   frozenAt: null,
   totalAmountCents: null,
   payment: { kind: "available", value: { mode: "vorkasse", invoiceState: "not_issued", status: null, openAmountCents: null, goodsOutAllowed: false, goodsOut: null } },
+  catalog: [{ id: "11111111-1111-4111-8111-111111111111", name: "Vernickeln", surface: "Nickel", unit: "Stück", netPriceCents: 1200, vatRateBasisPoints: 1900 }],
 };
 
 describe("Orders V1.1 one-surface truth", () => {
@@ -83,6 +84,42 @@ describe("Orders V1.1 one-surface truth", () => {
     fireEvent.click(screen.getByRole("button", { name: "Bar" }));
     fireEvent.click(screen.getByRole("button", { name: "Zahlung bestätigen" }));
     await waitFor(() => expect(onConfirmPayment).toHaveBeenCalledWith("bar"));
+  });
+
+  it("exposes the V1.1 action rail and persists note, item and part-state changes through ports", async () => {
+    const onSaveContent = vi.fn();
+    const onToggleItemFinished = vi.fn();
+    const onOpenStatusMail = vi.fn();
+    const onCallCustomer = vi.fn();
+    const onOpenPhoto = vi.fn();
+    render(<OrderCardView actions={{
+      ...actions,
+      content: { visible: true, enabled: true, reason: null },
+      itemStatus: { visible: true, enabled: true, reason: null },
+      contact: { visible: true, enabled: true, reason: null },
+      photo: { visible: true, enabled: true, reason: null },
+      onSaveContent, onToggleItemFinished, onOpenStatusMail, onCallCustomer, onOpenPhoto,
+    }} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{ kind: "data", card: { ...card, customerPhone: "+49 711 123" } }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Status-Mail" }));
+    fireEvent.click(screen.getByRole("button", { name: "Anrufen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Foto +" }));
+    expect(onOpenStatusMail).toHaveBeenCalledOnce();
+    expect(onCallCustomer).toHaveBeenCalledOnce();
+    expect(onOpenPhoto).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByRole("button", { name: "Teil bearbeiten" }));
+    fireEvent.change(screen.getByLabelText("Menge"), { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Teil speichern" }));
+    expect(onSaveContent).toHaveBeenCalledWith(expect.objectContaining({ items: [expect.objectContaining({ id: "item-1", quantity: 3 })] }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Notiz" }));
+    fireEvent.change(screen.getByLabelText("Notiz"), { target: { value: "Neue Auftragsnotiz" } });
+    fireEvent.click(screen.getByRole("button", { name: "Notiz speichern" }));
+    expect(onSaveContent).toHaveBeenLastCalledWith(expect.objectContaining({ note: "Neue Auftragsnotiz" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "fertig" }));
+    expect(onToggleItemFinished).toHaveBeenCalledWith("item-1", true);
   });
 
   it.each(["denied", "error", "conflict"] as const)("keeps %s fail-closed", (kind) => {

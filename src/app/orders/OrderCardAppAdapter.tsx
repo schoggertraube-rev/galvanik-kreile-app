@@ -6,12 +6,15 @@ import {
   getInvoiceReceiptAction,
 } from "@/app/actions/invoices.actions";
 import { recordGoodsOutAction } from "@/app/actions/goodsOut.actions";
+import { getActiveCatalogAction } from "@/app/actions/catalog.actions";
 import {
+  changeOrderContentAction,
   changeOrderPromisedDueDateAction,
   freezeOrderAction,
   getExtraWorkMasterDataAction,
   getLiveOrderCardAction,
   getOrderFrozenReceiptAction,
+  setOrderItemFinishedAction,
   transitionWareneingangToGalvanikAction,
 } from "@/app/actions/orders.actions";
 import {
@@ -24,10 +27,12 @@ import {
   getGalvanikHandoffAttachmentsAction,
   getOrderStationReceiptAction,
   reserveGalvanikHandoffAttachmentAction,
+  createOrderIntakeAction,
 } from "@/app/warendurchlauf/actions";
 import { uploadSignedOrderAttachment } from "@/app/warendurchlauf/galvanik/GalvanikHandoffAttachmentAppAdapter";
 import { DomainAttachmentPanel } from "@/components/attachments/DomainAttachmentPanel";
 import { CommunicationPanel } from "@/components/communication/CommunicationPanel";
+import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useOverlayStore } from "@/lib/overlayStore";
 import type {
@@ -36,6 +41,7 @@ import type {
 } from "@/lib/server/orderCardRead";
 import type { EvidenceReadRecord } from "@/lib/server/evidenceRead";
 import type { OrderPaymentState } from "@/lib/server/paymentContract";
+import type { CatalogService } from "@/modules/katalog/public";
 import {
   OrderCardView,
   OrderStationAttachmentPanel,
@@ -51,6 +57,7 @@ type Snapshot = {
   card: LiveOrderCard;
   master: ExtraWorkMasterData | null;
   payment: OrderPaymentState | null;
+  catalog: CatalogService[];
 };
 function failure(result: {
   code: string;
@@ -111,6 +118,7 @@ function mapCard(
   card: LiveOrderCard,
   evidence: EvidenceReadRecord[],
   payment: OrderCardPaymentContext,
+  catalog: CatalogService[],
 ): OrderCardModel {
   return {
     id: card.id,
@@ -118,6 +126,7 @@ function mapCard(
     orderNumber: card.orderNumber,
     customerId: card.customerId,
     customerName: card.customerName,
+    customerPhone: card.customerPhone,
     title: card.title,
     note: card.note,
     station: card.station,
@@ -133,6 +142,11 @@ function mapCard(
       quantity: item.quantity,
       material: item.material,
       surface: item.surfaceRequested,
+      catalogServiceId: item.catalogServiceId,
+      unit: item.unit,
+      unitPriceCents: item.unitPriceCents,
+      vatRateBasisPoints: item.vatRateBasisPoints,
+      finished: item.finished,
       extraWork: item.extraWork.map((line) => ({
         lineId: line.lineId,
         name: line.catalogPositionName,
@@ -153,6 +167,7 @@ function mapCard(
     frozenAt: card.freeze?.frozenAt ?? null,
     totalAmountCents: card.freeze?.totalAmountCents ?? null,
     payment,
+    catalog,
   };
 }
 function availability(
@@ -197,9 +212,10 @@ export function OrderCardAppAdapter({
           return null;
         }
         const card = result.data.card;
-        const [masterResult, paymentResult] = await Promise.all([
+        const [masterResult, paymentResult, catalogResult] = await Promise.all([
           getExtraWorkMasterDataAction(),
           getOrderPaymentStateAction({ orderId }),
+          getActiveCatalogAction(),
         ]);
         const context = paymentContext(paymentResult, card);
         if ("conflict" in context) {
@@ -211,11 +227,12 @@ export function OrderCardAppAdapter({
           card,
           master: masterResult.code === "OK" ? masterResult.data : null,
           payment: paymentResult.code === "OK" ? paymentResult.data : null,
+          catalog: catalogResult.code === "OK" ? catalogResult.services : [],
         };
         setSnapshot(next);
         setState({
           kind: "data",
-          card: mapCard(card, result.data.evidence, context),
+          card: mapCard(card, result.data.evidence, context, next.catalog),
         });
         return next;
       } catch {
@@ -249,7 +266,7 @@ export function OrderCardAppAdapter({
   const success = useCallback(
     (
       kind:
-        "handoff" | "evidence" | "freeze" | "invoice" | "payment" | "goods-out" | "due-date",
+        "handoff" | "evidence" | "freeze" | "invoice" | "payment" | "goods-out" | "due-date" | "content" | "item-finished" | "duplicate",
       receipt: {
         actorId: string;
         occurredAt: string;
@@ -538,6 +555,60 @@ export function OrderCardAppAdapter({
     },
     [fail, load, orderId, snapshot, success],
   );
+  const onSaveContent = useCallback(async (input: Parameters<NonNullable<OrderCardActionPorts["onSaveContent"]>>[0]) => {
+    if (!snapshot) return;
+    setFeedback({ kind: "submitting", message: "Auftragsinhalt wird sicher gespeichert." });
+    const clientEventId = (requests.current.content ??= crypto.randomUUID());
+    const result = await changeOrderContentAction({ orderId, expectedVersion: snapshot.card.version, clientEventId, ...input });
+    if (result.code !== "OK") { await fail(result); return; }
+    const fresh = await load(true);
+    if (fresh?.card.version !== result.receipt.aggregateVersion) {
+      setFeedback({ kind: "error", message: "Die Änderung konnte nicht sicher bestätigt werden. Bitte neu laden." });
+      return;
+    }
+    delete requests.current.content;
+    success("content", { ...result.receipt, receiptId: `order-content://${orderId}/${result.receipt.aggregateVersion}` }, "Auftragsinhalt wurde gespeichert.");
+  }, [fail, load, orderId, snapshot, success]);
+  const onToggleItemFinished = useCallback(async (itemId: string, finished: boolean) => {
+    if (!snapshot) return;
+    setFeedback({ kind: "submitting", message: finished ? "Teil wird fertig gemeldet." : "Teil wird wieder geöffnet." });
+    const key = `item:${itemId}:${finished}`;
+    const clientEventId = (requests.current[key] ??= crypto.randomUUID());
+    const result = await setOrderItemFinishedAction({ orderId, itemId, expectedVersion: snapshot.card.version, clientEventId, finished });
+    if (result.code !== "OK") { await fail(result); return; }
+    const fresh = await load(true);
+    if (fresh?.card.version !== result.receipt.aggregateVersion) {
+      setFeedback({ kind: "error", message: "Der Teilstatus konnte nicht sicher bestätigt werden. Bitte neu laden." });
+      return;
+    }
+    delete requests.current[key];
+    success("item-finished", { ...result.receipt, receiptId: `order-item://${itemId}/${result.receipt.aggregateVersion}` }, finished ? "Teil ist fertig." : "Teil ist wieder offen.");
+  }, [fail, load, orderId, snapshot, success]);
+  const onDuplicate = useCallback(async () => {
+    if (!snapshot?.card.dueAt) {
+      setFeedback({ kind: "error", message: "Duplizieren benötigt einen bestätigten Liefertermin." });
+      return;
+    }
+    const items = snapshot.card.items.flatMap((item) => item.catalogServiceId && item.unit && item.unitPriceCents !== null && item.vatRateBasisPoints !== null
+      ? [{ catalogServiceId: item.catalogServiceId, name: item.name, quantity: item.quantity, material: item.material, surfaceRequested: item.surfaceRequested, unit: item.unit, unitPriceCents: item.unitPriceCents, vatRateBasisPoints: item.vatRateBasisPoints }]
+      : []);
+    if (items.length !== snapshot.card.items.length) {
+      setFeedback({ kind: "error", message: "Legacy-Positionen ohne Katalogleistung können nicht sicher dupliziert werden." });
+      return;
+    }
+    setFeedback({ kind: "submitting", message: "Auftrag wird als neuer Eingang dupliziert." });
+    const clientEventId = (requests.current.duplicate ??= crypto.randomUUID());
+    const result = await createOrderIntakeAction({
+      clientEventId,
+      customer: { mode: "EXISTING", customerId: snapshot.card.customerId },
+      dueDate: snapshot.card.dueAt.slice(0, 10),
+      note: snapshot.card.note,
+      items,
+    });
+    if (result.code !== "OK") { await fail(result); return; }
+    delete requests.current.duplicate;
+    success("duplicate", { actorId: result.receipt.actorId, occurredAt: result.receipt.recordedAt, eventId: result.receipt.eventId, receiptId: result.receipt.receiptId }, `Auftrag wurde als ${result.receipt.orderNumber} dupliziert.`);
+  }, [fail, snapshot, success]);
   const attachmentPorts = useMemo<OrderStationAttachmentPorts>(
     () => ({
       read: getGalvanikHandoffAttachmentsAction,
@@ -561,6 +632,8 @@ export function OrderCardAppAdapter({
     const goods =
       role === "werkstatt" || role === "meister" || role === "admin";
     const editDueDate = role === "buero" || role === "meister" || role === "admin";
+    const editContent = role === "buero" || role === "meister" || role === "admin" || role === "developer";
+    const canPhoto = operate || role === "developer";
     const invoiceAfter =
       payment?.mode === "rechnung" &&
       payment.invoiceState === "not_issued" &&
@@ -574,6 +647,10 @@ export function OrderCardAppAdapter({
     const goodsGate =
       payment?.mode === "rechnung" || payment?.payment?.status === "bezahlt";
     return {
+      content: availability(Boolean(card), editContent && !card?.freeze, !editContent ? "Ihre Rolle darf Auftragsinhalte nicht ändern." : card?.freeze ? "Der Auftrag ist bereits fertig gemeldet." : null),
+      itemStatus: availability(Boolean(card), canPhoto && !card?.freeze, !canPhoto ? "Ihre Rolle darf den Teilstatus nicht ändern." : card?.freeze ? "Der Auftrag ist bereits fertig gemeldet." : null),
+      contact: availability(Boolean(card?.customerPhone), Boolean(card?.customerPhone), card?.customerPhone ? null : "Keine Telefonnummer hinterlegt."),
+      photo: availability(Boolean(card), canPhoto, canPhoto ? null : "Ihre Rolle darf keine Fotos oder Dokumente hinzufügen."),
       dueDate: availability(
         Boolean(card) && card?.station !== "abgeholt",
         editDueDate,
@@ -618,6 +695,14 @@ export function OrderCardAppAdapter({
             : null,
       ),
       feedback,
+      onSaveContent,
+      onToggleItemFinished,
+      onOpenStatusMail: () => document.getElementById(`order-communication-${orderId}`)?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      onCallCustomer: () => { if (card?.customerPhone) window.location.href = `tel:${card.customerPhone}`; },
+      onOpenPhoto: () => document.getElementById(`order-documents-${orderId}`)?.querySelector<HTMLInputElement>('input[type="file"]')?.click(),
+      onOpenDocument: () => document.getElementById(`order-documents-${orderId}`)?.querySelector<HTMLInputElement>('input[type="file"]')?.click(),
+      onOpenQuote: () => { if (card) requestGlobalCreate({ intent: "QUOTE", prefill: { customerQuery: card.customerName } }); },
+      onDuplicate,
       onChangeDueDate,
       onHandoff,
       onFreeze,
@@ -633,10 +718,14 @@ export function OrderCardAppAdapter({
     load,
     onConfirmPayment,
     onChangeDueDate,
+    onDuplicate,
     onFreeze,
     onHandoff,
     onIssueInvoice,
     onRecordGoodsOut,
+    onSaveContent,
+    onToggleItemFinished,
+    orderId,
     role,
     snapshot,
   ]);
@@ -659,7 +748,7 @@ export function OrderCardAppAdapter({
           />
         ) : null
       }
-      documentsPanel={state.kind === "data" ? <><DomainAttachmentPanel targetType="ORDER" targetId={state.card.id} /><CommunicationPanel targetType="ORDER" targetId={state.card.id} /></> : null}
+      documentsPanel={state.kind === "data" ? <><div id={`order-documents-${state.card.id}`}><DomainAttachmentPanel targetType="ORDER" targetId={state.card.id} /></div><div id={`order-communication-${state.card.id}`}><CommunicationPanel targetType="ORDER" targetId={state.card.id} /></div></> : null}
       onOpenCustomer={onOpenCustomer ?? storeCustomer}
       onClose={close}
     />

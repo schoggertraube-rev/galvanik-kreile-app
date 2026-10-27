@@ -6,6 +6,7 @@ import {
   Button,
   Chip,
   Dialog,
+  Auswahl,
   Eingabe,
   Fakten,
   Feld,
@@ -106,6 +107,10 @@ export function OrderCardView({
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"" | "bar" | "ueberweisung" | "karte">("");
   const [dueOpen, setDueOpen] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [itemOpen, setItemOpen] = useState<string | "new" | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [notice, setNotice] = useState("");
 
   if (state.kind !== "data") {
     const loading = state.kind === "loading";
@@ -127,6 +132,19 @@ export function OrderCardView({
   const current = card.station === "abgeholt" ? 4 : payment?.status === "bezahlt" ? 3 : Math.max(0, STATIONS.indexOf(card.station as (typeof STATIONS)[number]));
   const deadline = dueStatus(card.dueAt);
   const paymentFree = payment?.status === "bezahlt" || payment?.mode === "rechnung";
+  const contentEnabled = Boolean(actions.content?.enabled && actions.onSaveContent);
+  const contentItems = card.items.map((item) => ({
+    id: item.id,
+    catalogServiceId: item.catalogServiceId ?? null,
+    name: item.name,
+    quantity: item.quantity,
+    material: item.material,
+    surface: item.surface,
+    unit: item.unit ?? null,
+    unitPriceCents: item.unitPriceCents ?? null,
+    vatRateBasisPoints: item.vatRateBasisPoints ?? null,
+  }));
+  const unavailable = (reason: string | null | undefined) => setNotice(reason ?? "Diese Aktion ist derzeit nicht verfügbar.");
 
   const invokeStation = (station: (typeof STATIONS)[number]) => {
     if (station === "galvanik" && actions.handoff.enabled) void actions.onHandoff();
@@ -154,6 +172,12 @@ export function OrderCardView({
   if (actions.invoice.visible && actions.invoice.enabled) quickActions.push({ key: "invoice", text: "Rechnung", icon: "receipt", onClick: () => void actions.onIssueInvoice() });
   if (actions.payment.visible && actions.payment.enabled) quickActions.push({ key: "payment", text: "Zahlung", icon: "card", onClick: () => setPaymentOpen(true) });
   if (actions.goodsOut.visible && actions.goodsOut.enabled) quickActions.push({ key: "goods", text: "Ware raus", icon: "truck", primaer: true, onClick: () => void actions.onRecordGoodsOut("abholung") });
+  quickActions.push(
+    { key: "status-mail", text: "Status-Mail", icon: "mail", onClick: () => actions.onOpenStatusMail ? actions.onOpenStatusMail() : unavailable("Status-Mail ist derzeit nicht verfügbar.") },
+    { key: "call", text: "Anrufen", icon: "phone", onClick: () => actions.contact?.enabled && actions.onCallCustomer ? actions.onCallCustomer() : unavailable(actions.contact?.reason) },
+    { key: "photo", text: "Foto +", icon: "camera", onClick: () => actions.photo?.enabled && actions.onOpenPhoto ? actions.onOpenPhoto() : unavailable(actions.photo?.reason) },
+    { key: "more", text: "Mehr", icon: "more", onClick: () => setMoreOpen(true) },
+  );
 
   const history = [
     ...card.dueDateChanges?.map((change) => ({ key: change.eventId, zeit: formatMoment(change.changedAt), text: `Liefertermin geändert · ${dueLabel(change.changedTo)} · ${change.reason} · ${change.changedBy}`, icon: "calendar" as IconName, ton: "warn" as const })) ?? [],
@@ -186,18 +210,19 @@ export function OrderCardView({
 
   const main = <>
     {next ? <KartenBlock><NaechsteAktion titel={next.title} aktionen={<Button art={actions.freeze.visible ? "erledigen" : "primaer"} icon={next.icon} text={next.text} disabled={(actions.handoff.visible && !actions.handoff.enabled) || (actions.freeze.visible && !actions.freeze.enabled) || (actions.invoice.visible && !actions.invoice.enabled) || (actions.payment.visible && !actions.payment.enabled) || (actions.goodsOut.visible && !actions.goodsOut.enabled)} onClick={next.onClick} />} /></KartenBlock> : null}
-    <KartenBlock label="Teile">
-      <div className="kr-teile">{card.items.map((item) => <Teil key={item.id} nr={`Pos. ${item.position}`} name={item.name} meta={`${item.surface} · ${item.quantity} Stück · ${item.material ?? "Material nicht hinterlegt"}${item.extraWork.length ? ` · ${item.extraWork.length} Mehrarbeit` : ""}`} fertig={current >= 2} fotoFehlt={!card.evidence.some((entry) => entry.itemIds.includes(item.id))} geraet={device} />)}</div>
+    <KartenBlock label="Teile" rechts={<Button art="leise" icon="plus" text="Teil hinzufügen" disabled={!contentEnabled || card.items.length >= 20} onClick={() => contentEnabled ? setItemOpen("new") : unavailable(actions.content?.reason)} />}>
+      <div className="kr-teile">{card.items.map((item) => <Teil key={item.id} nr={`Pos. ${item.position}`} name={item.name} meta={`${item.surface} · ${item.quantity} Stück · ${item.material ?? "Material nicht hinterlegt"}${item.extraWork.length ? ` · ${item.extraWork.length} Mehrarbeit` : ""}`} fertig={Boolean(item.finished) || current >= 2} fotoFehlt={!card.evidence.some((entry) => entry.itemIds.includes(item.id))} geraet={device} onFoto={() => actions.photo?.enabled && actions.onOpenPhoto ? actions.onOpenPhoto() : unavailable(actions.photo?.reason)} aktionen={<><Button art={item.finished ? "erledigen" : "sekundaer"} icon="check" text={device === "handy" ? undefined : "fertig"} label={`Teil ${item.finished ? "wieder öffnen" : "fertig melden"}`} disabled={!actions.onToggleItemFinished || !actions.itemStatus?.enabled || current >= 2} onClick={() => void actions.onToggleItemFinished?.(item.id, !item.finished)} /><Button art="sekundaer" icon="edit" label="Teil bearbeiten" disabled={!contentEnabled} onClick={() => contentEnabled ? setItemOpen(item.id) : unavailable(actions.content?.reason)} /></>} />)}</div>
       {card.items.length === 0 ? <Zustand art="leer" text="Für diesen Auftrag sind noch keine Positionen erfasst." /> : null}
       {actions.evidence.visible && attachmentPanel ? <div className="kr-stapel">{attachmentPanel}</div> : null}
     </KartenBlock>
-    <KartenBlock label="Notizen"><Notiz text={card.note ?? "Keine Auftragsnotiz hinterlegt."} bezug={<Chip text="Auftrag" ton="info" />} autor={card.assignedTo ?? "Nicht zugewiesen"} /></KartenBlock>
+    <KartenBlock label="Notizen" rechts={<Button art="leise" icon={card.note ? "edit" : "plus"} text="Notiz" disabled={!contentEnabled} onClick={() => contentEnabled ? setNoteOpen(true) : unavailable(actions.content?.reason)} />}><Notiz text={card.note ?? "Keine Auftragsnotiz hinterlegt."} bezug={<Chip text="Auftrag" ton="info" />} autor={card.assignedTo ?? "Nicht zugewiesen"} /></KartenBlock>
     <KartenBlock label="Fotos & Dokumente">
       {card.evidence.length ? <div className="kr-docs">{card.evidence.map((entry) => <span className="kr-doc" key={entry.key}>{entry.source} · {entry.state}</span>)}</div> : <Zustand art="leer" text="Noch keine Dokumente oder Fotos vorhanden." />}
       {documentsPanel}
     </KartenBlock>
     {card.payment.kind === "available" ? <KartenBlock label="Rechnung"><Fakten zeilen={[{ k: "Zahlungsmodus", v: payment?.mode ?? "Nicht belegt" }, { k: "Rechnung", v: payment?.invoiceState === "issued" ? payment.status ?? "offen" : "noch nicht ausgestellt" }, { k: "Offen", v: money(payment?.openAmountCents ?? null), warn: Boolean(payment?.openAmountCents) }]} /></KartenBlock> : <KartenBlock label="Rechnung"><Zustand art={card.payment.kind === "restricted" ? "gesperrt" : "fehler"} text={card.payment.message} /></KartenBlock>}
     {actions.feedback.kind !== "idle" ? actions.feedback.kind === "submitting" ? <Zustand art="laedt" text={actions.feedback.message} /> : <Hinweis ton={actions.feedback.kind === "success" ? "ok" : "warn"}>{actions.feedback.message}{actions.feedback.kind === "conflict" ? <Button art="sekundaer" icon="refresh" text="Neu laden" onClick={() => void actions.onReload()} /> : null}</Hinweis> : null}
+    {notice ? <Hinweis ton="warn">{notice}</Hinweis> : null}
   </>;
 
   const rail = <>{device === "desktop" && quickActions.length ? <KartenBlock><Schnellaktionen aktionen={quickActions} als="raster" /></KartenBlock> : null}<KartenBlock label="Verlauf"><Verlauf eintraege={history} /></KartenBlock></>;
@@ -209,5 +234,21 @@ export function OrderCardView({
     </Seitenblatt>
     {paymentOpen ? <Dialog titel="Zahlung bestätigen" icon="card" groesse="schmal" onSchliessen={() => setPaymentOpen(false)} fuss={<><Button text="Abbrechen" onClick={() => setPaymentOpen(false)} /><Button art="primaer" icon="check" text="Zahlung bestätigen" disabled={!paymentMethod} onClick={() => { if (!paymentMethod) return; void actions.onConfirmPayment(paymentMethod); setPaymentOpen(false); }} /></>}><Segment label="Zahlart" wert={paymentMethod} onWert={setPaymentMethod} optionen={[{ wert: "bar", text: "Bar" }, { wert: "ueberweisung", text: "Überweisung" }, { wert: "karte", text: "Karte" }]} /></Dialog> : null}
     {dueOpen ? <Dialog titel="Liefertermin ändern" icon="calendar" groesse="schmal" onSchliessen={() => setDueOpen(false)}><form className="kr-stapel" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void actions.onChangeDueDate?.(String(form.get("dueDate") ?? ""), String(form.get("reason") ?? "")); setDueOpen(false); }}><Feld label="Neuer Liefertermin"><Eingabe type="date" name="dueDate" defaultValue={card.dueAt?.slice(0, 10) ?? ""} required /></Feld><Feld label="Grund der Änderung"><Textfeld name="reason" minLength={3} maxLength={500} required /></Feld><Button art="primaer" icon="calendar" text="Termin mit Grund speichern" type="submit" /></form></Dialog> : null}
+    {noteOpen ? <Dialog titel="Auftragsnotiz bearbeiten" icon="edit" groesse="schmal" onSchliessen={() => setNoteOpen(false)}><form className="kr-stapel" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const value = String(form.get("note") ?? "").trim(); void actions.onSaveContent?.({ note: value || null, items: contentItems }); setNoteOpen(false); }}><Feld label="Notiz"><Textfeld name="note" defaultValue={card.note ?? ""} maxLength={2000} /></Feld><Button art="primaer" icon="check" text="Notiz speichern" type="submit" /></form></Dialog> : null}
+    {itemOpen ? <OrderItemDialog card={card} itemId={itemOpen} onClose={() => setItemOpen(null)} onSave={(items) => { void actions.onSaveContent?.({ note: card.note, items }); setItemOpen(null); }} /> : null}
+    {moreOpen ? <Dialog titel="Mehr zum Auftrag" icon="more" groesse="schmal" onSchliessen={() => setMoreOpen(false)}><div className="kr-stapel"><Button art="sekundaer" icon="file" text="KV anlegen" onClick={() => { actions.onOpenQuote?.(); setMoreOpen(false); }} /><Button art="sekundaer" icon="copy" text="Duplizieren" onClick={() => { void actions.onDuplicate?.(); setMoreOpen(false); }} /><Button art="sekundaer" icon="upload" text="Dokument hinzufügen" onClick={() => { actions.onOpenDocument?.(); setMoreOpen(false); }} /></div></Dialog> : null}
   </>;
+}
+
+function OrderItemDialog({ card, itemId, onClose, onSave }: { card: Extract<OrderCardState, { kind: "data" }>["card"]; itemId: string | "new"; onClose: () => void; onSave: (items: NonNullable<Parameters<NonNullable<OrderCardActionPorts["onSaveContent"]>>[0]>["items"]) => void }) {
+  const existing = itemId === "new" ? null : card.items.find((item) => item.id === itemId) ?? null;
+  const [serviceId, setServiceId] = useState(existing?.catalogServiceId ?? "");
+  const service = card.catalog?.find((entry) => entry.id === serviceId);
+  return <Dialog titel={existing ? "Teil bearbeiten" : "Teil hinzufügen"} icon={existing ? "edit" : "plus"} groesse="schmal" onSchliessen={onClose}><form className="kr-stapel" onSubmit={(event) => {
+    event.preventDefault(); const form = new FormData(event.currentTarget);
+    const base = service ? { catalogServiceId: service.id, name: service.name, surface: service.surface, unit: service.unit, unitPriceCents: service.netPriceCents, vatRateBasisPoints: service.vatRateBasisPoints } : { catalogServiceId: existing?.catalogServiceId ?? null, name: String(form.get("name") ?? ""), surface: String(form.get("surface") ?? ""), unit: existing?.unit ?? null, unitPriceCents: existing?.unitPriceCents ?? null, vatRateBasisPoints: existing?.vatRateBasisPoints ?? null };
+    const changed = { id: existing?.id ?? crypto.randomUUID(), ...base, quantity: Number(form.get("quantity")), material: String(form.get("material") ?? "").trim() || null };
+    const current = card.items.map((item) => ({ id: item.id, catalogServiceId: item.catalogServiceId ?? null, name: item.name, quantity: item.quantity, material: item.material, surface: item.surface, unit: item.unit ?? null, unitPriceCents: item.unitPriceCents ?? null, vatRateBasisPoints: item.vatRateBasisPoints ?? null }));
+    onSave(existing ? current.map((item) => item.id === existing.id ? changed : item) : [...current, changed]);
+  }}><Feld label="Leistung"><Auswahl name="service" required={!existing} value={serviceId} onChange={(event) => setServiceId(event.target.value)} optionen={[{ wert: "", text: existing ? "Bestehende Leistung" : "Bitte wählen" }, ...(card.catalog ?? []).map((entry) => ({ wert: entry.id, text: `${entry.name} · ${entry.surface}` }))]} /></Feld>{!serviceId && existing ? <><Feld label="Bezeichnung"><Eingabe name="name" defaultValue={existing.name} required minLength={2} maxLength={160} /></Feld><Feld label="Oberfläche"><Eingabe name="surface" defaultValue={existing.surface} required minLength={2} maxLength={160} /></Feld></> : null}<Feld label="Menge"><Eingabe name="quantity" type="number" min={1} max={1_000_000} defaultValue={existing?.quantity ?? 1} required /></Feld><Feld label="Material"><Eingabe name="material" defaultValue={existing?.material ?? ""} maxLength={120} /></Feld><Button art="primaer" icon="check" text={existing ? "Teil speichern" : "Teil hinzufügen"} type="submit" /></form></Dialog>;
 }

@@ -43,6 +43,11 @@ import type {
   ChangeOrderPromisedDueDateResult,
 } from "@/lib/server/commands/orderPromiseCommand";
 import type {
+  ChangeOrderContentInput,
+  OrderContentResult,
+  SetOrderItemFinishedInput,
+} from "@/lib/server/commands/orderContentCommand";
+import type {
   ExtraWorkMasterData,
   LiveOrderCard,
   OrderCardReadResult,
@@ -113,6 +118,20 @@ export async function changeOrderPromisedDueDateAction(
     "@/lib/server/commands/orderPromiseCommand"
   );
   return changeOrderPromisedDueDate(input);
+}
+
+export async function changeOrderContentAction(
+  input: ChangeOrderContentInput,
+): Promise<OrderContentResult> {
+  const { changeOrderContent } = await import("@/lib/server/commands/orderContentCommand");
+  return changeOrderContent(input);
+}
+
+export async function setOrderItemFinishedAction(
+  input: SetOrderItemFinishedInput,
+): Promise<OrderContentResult> {
+  const { setOrderItemFinished } = await import("@/lib/server/commands/orderContentCommand");
+  return setOrderItemFinished(input);
 }
 
 export async function configureExtraWorkCatalogPositionAction(

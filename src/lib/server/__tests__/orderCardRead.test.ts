@@ -15,7 +15,7 @@ const base = {
 
 describe("order card intake snapshot contract", () => {
   it("reads the persisted legacy item shape", () => {
-    expect(mapOrderCardIntakeItems([base])).toEqual([{ ...base, extraWork: [] }]);
+    expect(mapOrderCardIntakeItems([base])).toEqual([{ ...base, catalogServiceId: null, unit: null, unitPriceCents: null, vatRateBasisPoints: null, finished: false, extraWork: [] }]);
   });
 
   it("reads the current catalog and pricing item shape without creating a second card model", () => {
@@ -25,7 +25,7 @@ describe("order card intake snapshot contract", () => {
       unit: "Stück",
       unitPriceCents: 1250,
       vatRateBasisPoints: 1900,
-    }])).toEqual([{ ...base, extraWork: [] }]);
+    }])).toEqual([{ ...base, catalogServiceId: "77777777-7777-4777-8777-777777777777", unit: "Stück", unitPriceCents: 1250, vatRateBasisPoints: 1900, finished: false, extraWork: [] }]);
   });
 
   it("rejects unversioned mixed shapes", () => {
