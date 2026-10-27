@@ -44,6 +44,7 @@ export type GlobalCreateIntent = "CUSTOMER" | "QUOTE" | "DIRECT_INTAKE";
 export type GlobalCreateRequest = {
   intent: GlobalCreateIntent;
   prefill?: {
+    customerId?: string;
     name?: string;
     email?: string;
     customerQuery?: string;
@@ -528,7 +529,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     }
   };
 
-  const loadDirectIntake = async () => {
+  const loadDirectIntake = async (preselectedCustomerId?: string) => {
     if (!ports.canCreateQuote) {
       deny("quote");
       return;
@@ -558,6 +559,14 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       setCatalogServices(catalog.services);
       setCustomerChoices(result.customers);
       setCustomerLoad(result.customers.length ? "ready" : "empty");
+      const preselected = preselectedCustomerId
+        ? result.customers.find((entry) => entry.id === preselectedCustomerId)
+        : undefined;
+      if (preselected) {
+        setDirectCustomerId(preselected.id);
+        setDirectCustomer(customerChoiceToDraft(preselected));
+        setDirectCustomerMode("EXISTING");
+      }
     } catch {
       if (seq === customerRequestSeq.current) setFeedback({ kind: "error", message: "Die vorhandenen Kunden konnten nicht sicher gelesen werden. Es wurde nichts angelegt." });
     }
@@ -589,7 +598,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       deny("quote");
       return;
     }
-    void loadDirectIntake();
+    void loadDirectIntake(prefill?.customerId);
   };
 
   useEffect(() => {

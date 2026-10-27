@@ -97,7 +97,7 @@ export async function updateCustomerCommercialAction(input: UpdateCustomerCommer
   }, input);
   if (result.code !== "OK") return result;
   const readback = await readCustomerSummary(authorization.data, { customerId: input.customerId });
-  if (readback.code !== "OK" || readback.data.name !== input.name || readback.data.contactPerson !== input.contactPerson ||
+  if (readback.code !== "OK" || !readback.data.customerNumber || readback.data.name !== input.name || readback.data.contactPerson !== input.contactPerson ||
     readback.data.email !== input.email || readback.data.phone !== input.phone || readback.data.street !== input.street ||
     readback.data.paymentPreference !== input.paymentPreference) return { code: "UNAVAILABLE" as const, message: "Änderung konnte nicht frisch bestätigt werden." };
   revalidatePath("/customers"); revalidatePath(`/customers/${input.customerId}`);
