@@ -141,6 +141,29 @@ describe("createOrderIntake", () => {
     expect(sqlText).toContain("next_number");
   });
 
+  it("rejects stale catalog data before creating an inline customer", async () => {
+    const newCustomerInput = {
+      ...input,
+      customer: {
+        mode: "NEW" as const, name: "TEST Kein Waisenkunde GmbH", customerType: "business" as const, companyName: "TEST Kein Waisenkunde GmbH",
+        contactPerson: "Tessa Test", email: "tessa@example.test", phone: "+49 221 123456", street: "Testweg 1",
+        zipCode: "50667", city: "Köln", country: "Deutschland", paymentPreference: "vorkasse", vatId: null,
+      },
+    };
+    execute.mockImplementation((query: { text: string }) => {
+      if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if (query.text.includes("FROM private.order_intake_receipts")) return Promise.resolve([]);
+      if (query.text.includes("FROM public.catalog_services")) return Promise.resolve([]);
+      throw new Error(`unexpected SQL ${query.text}`);
+    });
+
+    const { createOrderIntake } = await import("../orderIntakeCommand");
+    await expect(createOrderIntake(newCustomerInput)).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
+    const sqlText = execute.mock.calls.map(([query]) => query.text).join("\n");
+    expect(sqlText).toContain("FROM public.catalog_services");
+    expect(sqlText).not.toContain("private.create_customer_v1");
+  });
+
   it("creates customer-bound order, item, immutable event and receipt before returning exact fresh readback", async () => {
     const created = { orderId: "", eventId: "", correlationId: "", itemId: "", receiptId: "" };
     execute.mockImplementation((query: { text: string; values: unknown[] }) => {

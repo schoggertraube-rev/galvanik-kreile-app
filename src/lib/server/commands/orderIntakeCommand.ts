@@ -510,11 +510,6 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
         return { code: "OK", receipt, replayed: true };
       }
 
-      const customer = await resolveCustomer(tx, expected.tenantId, expected.actorId, normalized.customer);
-      if (!customer || customer.tenant_id !== expected.tenantId) {
-        return { code: "VALIDATION_ERROR", message: "Der Kunde ist für einen Auftrag noch nicht vollständig." };
-      }
-
       for (const item of normalized.items) {
         if (item.catalogServiceId === null) continue;
         const services = await tx.execute<{
@@ -536,6 +531,12 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
         }
       }
 
+      const customer = await resolveCustomer(tx, expected.tenantId, expected.actorId, normalized.customer);
+      if (!customer || customer.tenant_id !== expected.tenantId) {
+        if (normalized.customer.mode === "NEW") throw new Error("ORDER_INTAKE_NEW_CUSTOMER_INVALID");
+        return { code: "VALIDATION_ERROR", message: "Der Kunde ist für einen Auftrag noch nicht vollständig." };
+      }
+
       const orderId = randomUUID();
       const eventId = randomUUID();
       const correlationId = randomUUID();
@@ -543,6 +544,7 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
       const customerDisplayName = normalizedText(customer.company_name, 2, 160)
         ?? normalizedText(customer.name, 2, 160);
       if (!customerDisplayName) {
+        if (normalized.customer.mode === "NEW") throw new Error("ORDER_INTAKE_NEW_CUSTOMER_DISPLAY_INVALID");
         return { code: "VALIDATION_ERROR", message: "Kundenzuordnung ist ungültig." };
       }
       const items: OrderIntakeReceiptItem[] = normalized.items.map((item, index) => ({
