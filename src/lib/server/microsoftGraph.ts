@@ -52,6 +52,35 @@ type GraphResult<T> =
   | { code: "IN_KLAERUNG"; message: string }
   | { code: "UNAVAILABLE"; message: string };
 
+class GraphProviderError extends Error {
+  constructor(readonly safeCode: string) {
+    super(safeCode);
+  }
+}
+
+function safeProviderCode(payload: unknown): string {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return "UNKNOWN";
+  const error = (payload as Record<string, unknown>).error;
+  const code = typeof error === "string"
+    ? error
+    : error && typeof error === "object" && !Array.isArray(error)
+      ? (error as Record<string, unknown>).code
+      : null;
+  return typeof code === "string" && /^[A-Za-z0-9_.-]{1,120}$/.test(code) ? code : "UNKNOWN";
+}
+
+async function providerFailure(response: Response, operation: string): Promise<never> {
+  const payload = await response.clone().json().catch(() => null);
+  throw new GraphProviderError(`${operation}_${response.status}_${safeProviderCode(payload)}`);
+}
+
+function unavailable(message: string, error: unknown): GraphResult<never> {
+  return {
+    code: "UNAVAILABLE",
+    message: error instanceof GraphProviderError ? `${message} Fehlercode: ${error.safeCode}.` : message,
+  };
+}
+
 function value(env: Environment, name: (typeof REQUIRED_ENV)[number]) {
   const result = env[name]?.trim();
   return result ? result : null;
@@ -89,7 +118,7 @@ async function accessToken(config: GraphConfig, fetchPort: FetchPort): Promise<s
       cache: "no-store",
     },
   );
-  if (!response.ok) throw new Error(`GRAPH_TOKEN_${response.status}`);
+  if (!response.ok) await providerFailure(response, "GRAPH_TOKEN");
   const payload = (await response.json()) as { access_token?: unknown };
   if (typeof payload.access_token !== "string" || payload.access_token.length < 20) {
     throw new Error("GRAPH_TOKEN_INVALID");
@@ -159,12 +188,12 @@ export async function listMicrosoftGraphInbox(
       "$select": "id,internetMessageId,subject,from,receivedDateTime,bodyPreview,body,hasAttachments",
     });
     const response = await graphGetMessage(config, token, `mailFolders/inbox/messages?${query}`, fetchPort);
-    if (!response.ok) throw new Error(`GRAPH_INBOX_${response.status}`);
+    if (!response.ok) await providerFailure(response, "GRAPH_INBOX");
     const payload = (await response.json()) as { value?: unknown };
     if (!Array.isArray(payload.value)) throw new Error("GRAPH_INBOX_INVALID");
     return { code: "OK", data: payload.value.map(parseMessage).filter((item): item is GraphInboxMessage => item !== null) };
-  } catch {
-    return { code: "UNAVAILABLE", message: "Der Outlook-Posteingang ist momentan nicht sicher erreichbar." };
+  } catch (error) {
+    return unavailable("Der Outlook-Posteingang ist momentan nicht sicher erreichbar.", error);
   }
 }
 
@@ -180,12 +209,12 @@ export async function readMicrosoftGraphMessage(
     const token = await accessToken(config, fetchPort);
     const query = new URLSearchParams({ "$select": "id,internetMessageId,subject,from,receivedDateTime,bodyPreview,body,hasAttachments" });
     const response = await graphGetMessage(config, token, `messages/${encodeURIComponent(messageId)}?${query}`, fetchPort);
-    if (!response.ok) throw new Error(`GRAPH_MESSAGE_${response.status}`);
+    if (!response.ok) await providerFailure(response, "GRAPH_MESSAGE");
     const message = parseMessage(await response.json());
     if (!message || message.id !== messageId) throw new Error("GRAPH_MESSAGE_INVALID");
     return { code: "OK", data: message };
-  } catch {
-    return { code: "UNAVAILABLE", message: "Die Outlook-Mail ist momentan nicht sicher erreichbar." };
+  } catch (error) {
+    return unavailable("Die Outlook-Mail ist momentan nicht sicher erreichbar.", error);
   }
 }
 
@@ -218,10 +247,10 @@ export async function sendMicrosoftGraphMail(
       }),
       cache: "no-store",
     });
-    if (response.status !== 202) throw new Error(`GRAPH_SEND_${response.status}`);
+    if (response.status !== 202) await providerFailure(response, "GRAPH_SEND");
     return { code: "OK", data: { accepted: true } };
-  } catch {
-    return { code: "UNAVAILABLE", message: "Die E-Mail konnte nicht sicher an Microsoft 365 übergeben werden." };
+  } catch (error) {
+    return unavailable("Die E-Mail konnte nicht sicher an Microsoft 365 übergeben werden.", error);
   }
 }
 
@@ -236,7 +265,7 @@ export async function readMicrosoftGraphAttachments(
   try {
     const token = await accessToken(config, fetchPort);
     const response = await graphGetMessage(config, token, `messages/${encodeURIComponent(messageId)}/attachments`, fetchPort);
-    if (!response.ok) throw new Error(`GRAPH_ATTACHMENTS_${response.status}`);
+    if (!response.ok) await providerFailure(response, "GRAPH_ATTACHMENTS");
     const payload = await response.json() as { value?: unknown };
     if (!Array.isArray(payload.value)) throw new Error("GRAPH_ATTACHMENTS_INVALID");
     const attachments: GraphInboxAttachment[] = [];
@@ -257,7 +286,7 @@ export async function readMicrosoftGraphAttachments(
     }
     skipped += Math.max(0, payload.value.length - 20);
     return { code: "OK", data: { attachments, skipped } };
-  } catch {
-    return { code: "UNAVAILABLE", message: "Die Mailanhänge sind momentan nicht sicher erreichbar." };
+  } catch (error) {
+    return unavailable("Die Mailanhänge sind momentan nicht sicher erreichbar.", error);
   }
 }

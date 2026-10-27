@@ -40,6 +40,29 @@ describe("Microsoft Graph port", () => {
     expect(fetchPort.mock.calls[1]?.[1]?.headers).toMatchObject({ prefer: 'outlook.body-content-type="text"' });
   });
 
+  it("reports only the safe provider code when Graph authentication fails", async () => {
+    const fetchPort = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({
+      error: "invalid_client",
+      error_description: "Secret and tenant details must never reach the UI",
+    }), { status: 401 }));
+    await expect(listMicrosoftGraphInbox(env, fetchPort)).resolves.toEqual({
+      code: "UNAVAILABLE",
+      message: "Der Outlook-Posteingang ist momentan nicht sicher erreichbar. Fehlercode: GRAPH_TOKEN_401_invalid_client.",
+    });
+  });
+
+  it("reports a safe Graph API code without response details", async () => {
+    const fetchPort = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "a".repeat(30) }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        error: { code: "ErrorAccessDenied", message: "Mailbox details must never reach the UI" },
+      }), { status: 403 }));
+    await expect(listMicrosoftGraphInbox(env, fetchPort)).resolves.toEqual({
+      code: "UNAVAILABLE",
+      message: "Der Outlook-Posteingang ist momentan nicht sicher erreichbar. Fehlercode: GRAPH_INBOX_403_ErrorAccessDenied.",
+    });
+  });
+
   it("sends a PDF attachment only after Graph accepts it", async () => {
     const fetchPort = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "a".repeat(30) }), { status: 200 }))
