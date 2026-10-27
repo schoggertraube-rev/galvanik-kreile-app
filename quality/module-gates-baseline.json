@@ -20,10 +20,6 @@
         "sha256": "87A97386E3FF5964924403B0CEDB20011C3CA074C7A3D3C57EE2F6A0C4D3B69F"
       },
       {
-        "path": "src/app/buchhaltung/rechnungen/page.tsx",
-        "sha256": "9EAECE968B54D022F32354A40CE3126B5722225C6949E10740A0A0AF1CAE4C07"
-      },
-      {
         "path": "src/app/telefonnotiz/layout.tsx",
         "sha256": "AE8CBE00A8E35CBB102771712FFC02D0A0A9E081EE3DC0D12A4CF536720B1C7E"
       },

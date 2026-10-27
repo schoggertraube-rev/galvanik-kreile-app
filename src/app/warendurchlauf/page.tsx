@@ -95,7 +95,8 @@ export default async function WarendurchlaufIndex() {
     });
   }
 
-  const canCreateOrder = authorization.data.permissions.includes("perm_data_orders");
+  const canCreateOrder = authorization.data.role !== "developer"
+    && authorization.data.permissions.includes("perm_data_orders");
 
   if (hasDuplicateCanonicalOrder([...wareneingangResult.data, ...galvanikResult.data])) {
     return render({ kind: "conflict", message: CONFLICT_MESSAGE });

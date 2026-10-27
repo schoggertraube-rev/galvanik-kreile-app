@@ -101,11 +101,8 @@ describe("transitionWareneingangToGalvanik", () => {
     expect(withTransactionSpy).not.toHaveBeenCalled();
   });
 
-  it("keeps readonly and developer snapshots out of the command transaction (D-F12-003: exact role gate)", async () => {
+  it("keeps missing permissions and the developer role out of the command transaction", async () => {
     const { transitionWareneingangToGalvanik } = await import("../orderStationCommand");
-    // developer intentionally holds perm_op_status generically but must still be
-    // forbidden here: the gate is an explicit role allowlist, never the generic
-    // permission.
     for (const [role, permissions] of [
       ["readonly", ["perm_view_leitstand"]],
       ["developer", ["perm_op_status"]],
@@ -119,15 +116,13 @@ describe("transitionWareneingangToGalvanik", () => {
     expect(withTransactionSpy).not.toHaveBeenCalled();
   });
 
-  it("allows exactly buero, werkstatt, meister, and admin without requiring generic perm_op_status", async () => {
+  it("allows employees with perm_op_status", async () => {
     const { transitionWareneingangToGalvanik } = await import("../orderStationCommand");
-    // buero intentionally lacks perm_op_status in the generic role/permission table
-    // (D-F12-003) yet must still pass this explicit role gate.
     for (const role of ["buero", "werkstatt", "meister", "admin"] as const) {
       withTransactionSpy.mockClear();
       resolveAuthorizationSpy.mockResolvedValueOnce({
         ...authorization,
-        data: { ...authorization.data, role, permissions: ["perm_view_leitstand"] },
+        data: { ...authorization.data, role, permissions: ["perm_op_status"] },
       });
       const result = await transitionWareneingangToGalvanik(commandInput("order-1"));
       expect(result.code).not.toBe("FORBIDDEN");
@@ -355,9 +350,8 @@ describe("transitionWareneingangToGalvanik", () => {
     // missing or mismatched readback.
     expect(source).toContain("private.v_order_station_correction_receipts_v1");
     expect(source).toContain("ORDER_STATION_CORRECTION_RECEIPT_READBACK_INVALID");
-    // D-F12-003: exact role allowlist, never the generic perm_op_status permission.
-    expect(source).toContain("ORDER_STATION_FORWARD_ROLES");
-    expect(source).not.toContain("perm_op_status");
+    expect(source).toContain('role === "developer"');
+    expect(source).toContain('permissions.includes("perm_op_status")');
     const customerLock = source.match(/SELECT id, tenant_id\s+FROM public\.customers[\s\S]+?FOR SHARE/)?.[0] ?? "";
     expect(customerLock).toContain("WHERE id = ${order.customer_id}");
     expect(customerLock).toContain("AND tenant_id = ${authorization.data.tenantId}");
@@ -459,7 +453,7 @@ describe("correctGalvanikToWareneingang", () => {
     ).resolves.toMatchObject({ code: "OK", receipt: { reason: REASON } });
   });
 
-  it("keeps readonly and developer out of the correction transaction, allows the four forward roles", async () => {
+  it("keeps missing permissions and developer out of correction, and allows permitted employees", async () => {
     const { correctGalvanikToWareneingang } = await import("../orderStationCommand");
     for (const [role, permissions] of [
       ["readonly", ["perm_view_leitstand"]],
@@ -477,7 +471,7 @@ describe("correctGalvanikToWareneingang", () => {
       withTransactionSpy.mockClear();
       resolveAuthorizationSpy.mockResolvedValueOnce({
         ...authorization,
-        data: { ...authorization.data, role, permissions: ["perm_view_leitstand"] },
+        data: { ...authorization.data, role, permissions: ["perm_op_status"] },
       });
       const result = await correctGalvanikToWareneingang(correctionInput("order-1"));
       expect(result.code).not.toBe("FORBIDDEN");

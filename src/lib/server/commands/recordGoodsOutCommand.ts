@@ -350,10 +350,13 @@ function orderMatchesReceipt(order: LockedOrder, receipt: GoodsOutReceipt, tenan
 }
 
 function paymentAuthorization(authorization: AuthorizationSnapshot): AuthorizationSnapshot {
-  // The command role is narrower than the shared read-port role. Every allowed
-  // goods-out role already owns the established read permission; this explicit
-  // snapshot keeps the canonical row mapper as the integrity boundary.
-  return authorization;
+  // Goods-out needs the canonical payment integrity mapper to evaluate its
+  // payment gate. That internal read does not grant the actor a finance UI or
+  // a finance mutation; the command itself remains guarded by perm_op_status.
+  return {
+    ...authorization,
+    permissions: [...new Set([...authorization.permissions, "perm_view_prices" as const])],
+  };
 }
 
 export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResult> {
@@ -374,6 +377,7 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
   }
   if (
     authorization.data.tenantId !== KREILE_TENANT_SLUG
+    || authorization.data.role === "developer"
     || !authorization.data.permissions.includes("perm_op_status")
   ) {
     return { code: "FORBIDDEN", message: "Warenausgang ist mit dieser Rolle nicht erlaubt." };

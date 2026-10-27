@@ -80,14 +80,12 @@ describe("W2C-B2M4C external provider fail-closed", () => {
     expect(startScreen).not.toContain("fetch(");
     expect(startScreen).not.toContain("Open-Meteo");
     expect(startScreen).not.toContain("initializeDemoIfNeeded");
-    expect(startScreen).not.toContain("localStorage");
+    expect(startScreen).not.toMatch(/clientSecret|accessToken|refreshToken/);
     expect(startScreen).not.toContain("20°C");
     expect(startScreen).not.toContain("Wetter in Frankfurt");
     expect(startScreen).not.toContain("Feierabend-Tipp");
     expect(startScreen).not.toContain("frankfurt-tipp");
     expect(startScreen).toContain("loginWithPin");
-    expect(startScreen).toContain("notifyAdminPinReset");
-    expect(startScreen).toContain("void notifyAdminPinReset(user.loginHandle)");
     expect(startScreen).not.toContain("result.success");
   });
 

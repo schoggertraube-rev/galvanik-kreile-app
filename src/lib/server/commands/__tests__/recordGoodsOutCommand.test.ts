@@ -36,7 +36,7 @@ const authorization = {
     tenantId: KREILE_TENANT_SLUG,
     displayName: "Werkstatt",
     role: "werkstatt" as const,
-    permissions: ["perm_view_leitstand"] as const,
+    permissions: ["perm_op_status"] as const,
     active: true as const,
   },
 };
@@ -229,14 +229,17 @@ describe("recordGoodsOut", () => {
     expect(withTransaction).not.toHaveBeenCalled();
   });
 
-  it("allows exactly werkstatt, meister and admin and fails closed for session, tenant and other roles", async () => {
+  it("allows permitted employees and fails closed for session, tenant, missing permission, and developer", async () => {
     const { recordGoodsOut } = await import("../recordGoodsOutCommand");
     resolveAuthorization.mockResolvedValueOnce({ ok: false, reason: "NO_SESSION", message: "none" });
     await expect(recordGoodsOut(input)).resolves.toMatchObject({ code: "UNAUTHENTICATED" });
     resolveAuthorization.mockResolvedValueOnce({ ok: false, reason: "AUTHORIZATION_UNAVAILABLE", message: "down" });
     await expect(recordGoodsOut(input)).resolves.toMatchObject({ code: "UNAVAILABLE" });
-    for (const role of ["buero", "readonly", "developer"] as const) {
-      resolveAuthorization.mockResolvedValueOnce({ ...authorization, data: { ...authorization.data, role } });
+    for (const [role, permissions] of [
+      ["readonly", ["perm_view_leitstand"]],
+      ["developer", ["perm_op_status"]],
+    ] as const) {
+      resolveAuthorization.mockResolvedValueOnce({ ...authorization, data: { ...authorization.data, role, permissions } });
       await expect(recordGoodsOut(input)).resolves.toMatchObject({ code: "FORBIDDEN" });
     }
     resolveAuthorization.mockResolvedValueOnce({ ...authorization, data: { ...authorization.data, tenantId: "foreign" } });
@@ -249,9 +252,9 @@ describe("recordGoodsOut", () => {
       if (text.includes("FROM public.orders")) return Promise.resolve([]);
       throw new Error(`Unexpected SQL: ${text}`);
     });
-    for (const role of ["werkstatt", "meister", "admin"] as const) {
+    for (const role of ["buero", "werkstatt", "meister", "admin"] as const) {
       resolveAuthorization.mockResolvedValueOnce({ ...authorization, data: { ...authorization.data, role } });
-      await expect(recordGoodsOut({ ...input, clientEventId: `${CLIENT_EVENT.slice(0, -1)}${role === "werkstatt" ? "1" : role === "meister" ? "2" : "3"}` }))
+      await expect(recordGoodsOut({ ...input, clientEventId: `${CLIENT_EVENT.slice(0, -1)}${role === "buero" ? "1" : role === "werkstatt" ? "2" : role === "meister" ? "3" : "4"}` }))
         .resolves.toMatchObject({ code: "NOT_FOUND" });
     }
   });

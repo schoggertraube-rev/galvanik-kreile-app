@@ -50,7 +50,7 @@ const authorization = {
     tenantId: KREILE_TENANT_SLUG,
     displayName: "Büro",
     role: "buero" as const,
-    permissions: ["perm_data_orders"] as const,
+    permissions: ["perm_view_prices"] as const,
     active: true as const,
   },
 };
@@ -215,17 +215,20 @@ describe("confirmPayment", () => {
       data: { ...authorization.data, tenantId: "foreign" },
     });
     await expect(confirmPayment(input)).resolves.toMatchObject({ code: "FORBIDDEN" });
-    for (const role of ["werkstatt", "readonly", "developer"] as const) {
+    for (const [role, permissions] of [
+      ["readonly", []],
+      ["developer", ["perm_view_prices"]],
+    ] as const) {
       resolveAuthorization.mockResolvedValueOnce({
         ...authorization,
-        data: { ...authorization.data, role },
+        data: { ...authorization.data, role, permissions },
       });
       await expect(confirmPayment(input)).resolves.toMatchObject({ code: "FORBIDDEN" });
     }
     expect(withTransaction).not.toHaveBeenCalled();
   });
 
-  it("allows exactly buero, meister, and admin without a generic finance permission", async () => {
+  it("allows employees with the finance permission", async () => {
     const { confirmPayment } = await import("../confirmPaymentCommand");
     execute.mockImplementation((query: Query) => {
       const text = queryText(query);
@@ -234,17 +237,17 @@ describe("confirmPayment", () => {
       if (text.includes("FOR UPDATE OF orders")) return Promise.resolve([]);
       throw new Error(`Unexpected SQL: ${text}`);
     });
-    for (const role of ["buero", "meister", "admin"] as const) {
+    for (const role of ["buero", "werkstatt", "meister", "admin"] as const) {
       resolveAuthorization.mockResolvedValueOnce({
         ...authorization,
-        data: { ...authorization.data, role, permissions: [] },
+        data: { ...authorization.data, role, permissions: ["perm_view_prices"] },
       });
       await expect(confirmPayment({
         ...input,
-        clientEventId: `${CLIENT_EVENT.slice(0, -1)}${role === "buero" ? "1" : role === "meister" ? "2" : "3"}`,
+        clientEventId: `${CLIENT_EVENT.slice(0, -1)}${role === "buero" ? "1" : role === "werkstatt" ? "2" : role === "meister" ? "3" : "4"}`,
       })).resolves.toEqual({ code: "NOT_FOUND", message: "Rechnung nicht verfügbar." });
     }
-    expect(withTransaction).toHaveBeenCalledTimes(3);
+    expect(withTransaction).toHaveBeenCalledTimes(4);
   });
 
   it("makes missing and foreign invoices indistinguishable and performs no write", async () => {

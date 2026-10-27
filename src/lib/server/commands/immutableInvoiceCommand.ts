@@ -899,7 +899,10 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
       ? { code: "UNAVAILABLE", message: "Rechnung konnte nicht sicher ausgestellt werden." }
       : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
-  if (!authorization.data.permissions.includes("perm_view_prices")) {
+  if (
+    authorization.data.role === "developer"
+    || !authorization.data.permissions.includes("perm_view_prices")
+  ) {
     return { code: "FORBIDDEN", message: "Geld, Preise & Buchhaltung ist nicht freigegeben." };
   }
 
@@ -1191,7 +1194,10 @@ export async function cancelInvoice(input: unknown): Promise<CancelInvoiceResult
       ? { code: "UNAVAILABLE", message: "Rechnung konnte nicht sicher storniert werden." }
       : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
-  if (!authorization.data.permissions.includes("perm_view_prices")) {
+  if (
+    authorization.data.role === "developer"
+    || !authorization.data.permissions.includes("perm_view_prices")
+  ) {
     return { code: "FORBIDDEN", message: "Geld, Preise & Buchhaltung ist nicht freigegeben." };
   }
 

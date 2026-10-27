@@ -486,6 +486,7 @@ export async function confirmPayment(input: unknown): Promise<ConfirmPaymentResu
   }
   if (
     authorization.data.tenantId !== KREILE_TENANT_SLUG
+    || authorization.data.role === "developer"
     || !authorization.data.permissions.includes("perm_view_prices")
   ) {
     return { code: "FORBIDDEN", message: "Zahlungsbestätigung ist mit dieser Rolle nicht erlaubt." };

@@ -551,17 +551,17 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(screen.queryByRole("button", { name: "Ware raus" })).not.toBeInTheDocument();
   });
 
-  it("denies an excluded root role before either station action is invoked", async () => {
+  it("allows developer insight but suppresses the employee intake action", async () => {
     ports.resolveAuthorization.mockResolvedValueOnce(
       allowedAuthorization("developer"),
     );
     const { default: WarendurchlaufIndex } = await import("../page");
     render(await WarendurchlaufIndex());
 
-    expect(screen.getByText("Zugriff nicht erlaubt.")).toBeInTheDocument();
-    expect(ports.getWareneingangOrdersAction).not.toHaveBeenCalled();
-    expect(ports.getGalvanikOrdersAction).not.toHaveBeenCalled();
-    expect(ports.getWarendurchlaufKPIs).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { level: 1, name: "Werkstatt" })).toBeInTheDocument();
+    expect(ports.getWareneingangOrdersAction).toHaveBeenCalledTimes(1);
+    expect(ports.getGalvanikOrdersAction).toHaveBeenCalledTimes(1);
+    expect(ports.getWarendurchlaufKPIs).toHaveBeenCalledTimes(1);
     expect(
       screen.queryByRole("button", { name: "Auftrag öffnen" }),
     ).not.toBeInTheDocument();
@@ -571,9 +571,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(
       screen.queryByRole("button", { name: "Neuer Eingang" }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("group", { name: "Werkstattaktionen" }),
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Werkstattaktionen" })).toBeInTheDocument();
   });
 
   it("suppresses a successful Wareneingang payload when Galvanik denies the atomic root read", async () => {

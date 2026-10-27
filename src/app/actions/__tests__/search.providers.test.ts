@@ -9,7 +9,7 @@ const authorization: AuthorizationSnapshot = {
   tenantId: "kreile",
   displayName: "Gregor",
   role: "admin",
-  permissions: ["perm_view_leitstand"],
+  permissions: ["perm_view_leitstand", "perm_view_prices"],
   active: true,
 };
 
@@ -74,7 +74,7 @@ describe("P2 module search providers", () => {
 
   it("omits invoice reads for workshop roles and fails closed on source errors", async () => {
     const readInvoices = vi.fn();
-    const providers = buildSearchProviders({ ...authorization, role: "werkstatt" }, {
+    const providers = buildSearchProviders({ ...authorization, role: "werkstatt", permissions: ["perm_view_leitstand"] }, {
       readQuotes: vi.fn().mockResolvedValue({ code: "UNAVAILABLE", message: "nicht lesbar" }),
       readInvoices,
       readAuxiliary: vi.fn().mockResolvedValue({ documents: [], mails: [], appointments: [], exhaustive: true }),
