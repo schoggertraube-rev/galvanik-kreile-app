@@ -22,30 +22,11 @@ export type ActionResult<T> =
       details?: unknown;
     };
 
-const READ_ROLES = [
-  "admin",
-  "developer",
-  "inhaber",
-  "meister",
-  "mitarbeiter",
-  "werkstatt",
-  "buero",
-  "office",
-  "quality",
-  "readonly",
-];
-
-const WRITE_ROLES = [
-  "admin",
-  "developer",
-  "inhaber",
-  "meister",
-  "mitarbeiter",
-  "werkstatt",
-  "buero",
-  "office",
-  "quality",
-];
+const WRITE_PERMISSIONS = new Set([
+  "perm_sys_toggles", "perm_sys_diag", "perm_sys_users", "perm_data_csv",
+  "perm_data_customers", "perm_data_orders", "perm_op_status", "perm_op_risk",
+  "perm_op_photos", "perm_op_qa",
+]);
 
 const SESSION_ERROR_MESSAGES: Record<
   Exclude<SessionReadResult, { ok: true }>["reason"],
@@ -111,10 +92,10 @@ export async function checkAppAuthorization(
     };
   }
 
-  const roleLower = result.data.role.toLowerCase();
-  const allowedRoles = mode === "write" ? WRITE_ROLES : READ_ROLES;
-
-  if (!allowedRoles.includes(roleLower)) {
+  const permitted = mode === "write"
+    ? result.data.permissions.some((permission) => WRITE_PERMISSIONS.has(permission))
+    : result.data.permissions.length > 0;
+  if (!permitted) {
     return {
       ok: false,
       error: "FORBIDDEN",

@@ -3,12 +3,14 @@ import type { AppRole } from "@/lib/auth/authorizationContract";
 export type StartUserDto = {
   loginHandle: string;
   fullName: string;
+  shortCode: string;
+  designation: string;
   role: AppRole;
 };
 
 export type AdminUserDto = {
   id: string;
-  email: string;
+  email: string | null;
   fullName: string;
   role: string;
   active: boolean;

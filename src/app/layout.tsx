@@ -66,7 +66,7 @@ export default async function RootLayout({
   const authState = await getAuthBootstrapState();
   const isAdmin =
     authState.status === "authenticated" &&
-    (authState.user.role === "admin" || authState.user.role === "developer");
+    authState.user.permissions.includes("perm_sys_diag");
 
   return (
     <html

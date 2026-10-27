@@ -86,7 +86,7 @@ export function buildSearchProviders(authorization: AuthorizationSnapshot, reads
       },
     });
   }
-  if (["buero", "meister", "admin"].includes(authorization.role)) {
+  if (authorization.permissions.includes("perm_view_prices")) {
     providers.push({
       id: "invoices",
       label: "Rechnungen",

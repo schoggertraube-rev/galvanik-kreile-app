@@ -17,6 +17,8 @@ export async function readActiveStartUsers(): Promise<
       .select({
         id: appUsers.id,
         fullName: appUsers.fullName,
+        shortCode: appUsers.shortCode,
+        designation: appUsers.designation,
         role: appUsers.role,
         pinHash: appUsers.pinHash,
       })
@@ -24,15 +26,22 @@ export async function readActiveStartUsers(): Promise<
       .where(and(eq(appUsers.tenantId, KREILE_TENANT_SLUG), eq(appUsers.active, true)))
       .orderBy(appUsers.fullName, appUsers.id);
 
-    if (rows.some((row) => !row.fullName.trim() || !isAppRole(row.role) || !row.pinHash)) {
-      return { code: "UNAVAILABLE" };
-    }
+    const validRows = rows.filter((row) =>
+      row.fullName.trim()
+      && row.shortCode?.trim()
+      && row.designation?.trim()
+      && isAppRole(row.role)
+      && row.pinHash,
+    );
+    if (validRows.length === 0) return { code: "UNAVAILABLE" };
 
     return {
       code: "OK",
-      users: rows.map((row) => ({
+      users: validRows.map((row) => ({
         loginHandle: createPinLoginHandle(row.id),
         fullName: row.fullName,
+        shortCode: row.shortCode!,
+        designation: row.designation!,
         role: row.role as StartUserDto["role"],
       })),
     };

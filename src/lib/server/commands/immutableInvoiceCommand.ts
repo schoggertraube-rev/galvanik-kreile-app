@@ -38,8 +38,6 @@ const INVOICE_NUMBER_PATTERN = /^R-[0-9]{4}-[0-9]{4,}$/;
 const HEX64_PATTERN = /^[a-f0-9]{64}$/;
 /** Canonical UTC instant, exactly as `to_char(... 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')` emits it. */
 const ISO_INSTANT_PATTERN = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/;
-const INVOICE_ISSUE_ROLES = ["buero", "meister", "admin"] as const;
-const INVOICE_CANCEL_ROLES = ["meister", "admin"] as const;
 
 export type CreateInvoiceInput = {
   orderId: string;
@@ -901,8 +899,8 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
       ? { code: "UNAVAILABLE", message: "Rechnung konnte nicht sicher ausgestellt werden." }
       : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
-  if (!INVOICE_ISSUE_ROLES.includes(authorization.data.role as (typeof INVOICE_ISSUE_ROLES)[number])) {
-    return { code: "FORBIDDEN", message: "Rechnungsausgabe ist mit dieser Rolle nicht erlaubt." };
+  if (!authorization.data.permissions.includes("perm_view_prices")) {
+    return { code: "FORBIDDEN", message: "Geld, Preise & Buchhaltung ist nicht freigegeben." };
   }
 
   const tenantId = authorization.data.tenantId;
@@ -1193,8 +1191,8 @@ export async function cancelInvoice(input: unknown): Promise<CancelInvoiceResult
       ? { code: "UNAVAILABLE", message: "Rechnung konnte nicht sicher storniert werden." }
       : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
-  if (!INVOICE_CANCEL_ROLES.includes(authorization.data.role as (typeof INVOICE_CANCEL_ROLES)[number])) {
-    return { code: "FORBIDDEN", message: "Rechnungsstorno ist mit dieser Rolle nicht erlaubt." };
+  if (!authorization.data.permissions.includes("perm_view_prices")) {
+    return { code: "FORBIDDEN", message: "Geld, Preise & Buchhaltung ist nicht freigegeben." };
   }
 
   const tenantId = authorization.data.tenantId;

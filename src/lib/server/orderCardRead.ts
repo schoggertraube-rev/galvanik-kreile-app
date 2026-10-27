@@ -446,7 +446,6 @@ function mapAssigneeOption(row: AssigneeOptionRow, tenantId: string): OrderTaskA
     || !UUID_PATTERN.test(row.user_id)
     || row.full_name !== row.full_name.trim()
     || row.full_name.length < 1
-    || !["buero", "werkstatt", "meister", "admin"].includes(row.role)
   ) throw new Error("ORDER_CARD_ASSIGNMENT_OPTION_INVALID");
   return { userId: row.user_id, fullName: row.full_name, role: row.role };
 }
@@ -612,7 +611,7 @@ export async function readLiveOrderCard(
         ? mapAssignment(assignmentRows[0], authorization)
         : null;
 
-      const assignmentOptions = ["meister", "admin"].includes(authorization.role)
+      const assignmentOptions = authorization.permissions.includes("perm_op_status")
         ? (await tx.execute<AssigneeOptionRow>(sql`
             SELECT tenant_id, user_id::text AS user_id, full_name, role, active, integrity_ok
             FROM private.v_order_task_assignee_options_v1

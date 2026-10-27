@@ -194,7 +194,7 @@ export function OrderCardAppAdapter({
   const router = useRouter();
   const storeCustomer = useOverlayStore((s) => s.openCustomer);
   const storeClose = useOverlayStore((s) => s.pop);
-  const { role } = usePermissions();
+  const { hasPermission } = usePermissions();
   const [state, setState] = useState<OrderCardState>({ kind: "loading" });
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [feedback, setFeedback] = useState<OrderCardActionFeedback>({
@@ -642,17 +642,12 @@ export function OrderCardAppAdapter({
   const actions = useMemo<OrderCardActionPorts>(() => {
     const card = snapshot?.card;
     const payment = snapshot?.payment;
-    const operate =
-      role === "buero" ||
-      role === "werkstatt" ||
-      role === "meister" ||
-      role === "admin";
-    const finance = role === "buero" || role === "meister" || role === "admin";
-    const goods =
-      role === "werkstatt" || role === "meister" || role === "admin";
-    const editDueDate = role === "buero" || role === "meister" || role === "admin";
-    const editContent = role === "buero" || role === "meister" || role === "admin" || role === "developer";
-    const canPhoto = operate || role === "developer";
+    const operate = hasPermission("perm_op_status");
+    const finance = hasPermission("perm_view_prices");
+    const goods = operate;
+    const editDueDate = operate;
+    const editContent = operate;
+    const canPhoto = hasPermission("perm_op_photos");
     const invoiceAfter =
       payment?.mode === "rechnung" &&
       payment.invoiceState === "not_issued" &&
@@ -749,7 +744,7 @@ export function OrderCardAppAdapter({
     onSaveContent,
     onToggleItemFinished,
     orderId,
-    role,
+    hasPermission,
     snapshot,
   ]);
   const close =

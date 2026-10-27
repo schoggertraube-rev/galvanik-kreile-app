@@ -2,116 +2,20 @@
 
 import Image from "next/image";
 import { Suspense, useEffect, useEffectEvent, useRef, useState } from "react";
-import { LockKeyhole } from "lucide-react";
+import { Delete } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { usePageView } from "@/hooks/usePageView";
 import { loginWithPin } from "@/app/actions/auth.actions";
-import { notifyAdminPinReset } from "@/app/actions/start.actions";
-import { deriveUserInitials, type StartUserDto } from "@/lib/auth/userDtos";
-import { getRoleLabel } from "@/lib/auth/authorizationContract";
+import { usePageView } from "@/hooks/usePageView";
+import type { StartUserDto } from "@/lib/auth/userDtos";
+import { EmailLoginDialog } from "./EmailLoginDialog";
 import styles from "./StartScreenClient.module.css";
 
-function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void }) {
-  const initials = deriveUserInitials(user.fullName);
-  const responsibility = getRoleLabel(user.role);
-  const [pin, setPin] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
-  const [supportReference, setSupportReference] = useState<string | undefined>();
-  const [helpMessage, setHelpMessage] = useState<string | null>(null);
-  const [helpPending, setHelpPending] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const submittingRef = useRef(false);
+const LAST_LOGIN_KEY = "kreile:last-login-handle";
 
-  const enterDigit = async (digit: string) => {
-    if (submittingRef.current || pin.length >= 4) return;
-    const nextPin = `${pin}${digit}`;
-    setPin(nextPin);
-    setMessage(null);
-    setSupportReference(undefined);
-    if (nextPin.length !== 4) return;
-
-    submittingRef.current = true;
-    setSubmitting(true);
-    try {
-      const result = await loginWithPin(user.loginHandle, nextPin);
-      if (result.ok) {
-        window.location.assign("/");
-        return;
-      }
-      setMessage(result.message);
-      setSupportReference(result.supportReference);
-    } catch {
-      setMessage("Anmeldung konnte nicht sicher abgeschlossen werden.");
-    }
-    setPin("");
-    submittingRef.current = false;
-    setSubmitting(false);
-  };
-
-  const onDigit = useEffectEvent((digit: string) => void enterDigit(digit));
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const numpadDigit = /^Numpad([0-9])$/.exec(event.code)?.[1];
-      const digit = /^[0-9]$/.test(event.key) ? event.key : numpadDigit;
-      if (digit) {
-        event.preventDefault();
-        onDigit(digit);
-      }
-      if (event.key === "Backspace") {
-        event.preventDefault();
-        setPin((value) => value.slice(0, -1));
-      }
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
-
-  return (
-    <div className={styles.backdrop} data-testid="pin-login-dialog" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className={styles.pinDialog} role="dialog" aria-modal="true" aria-labelledby="pin-dialog-title">
-        <header>
-          <span className={styles.avatar}>{initials}</span>
-          <div><p>{user.fullName} · {responsibility}</p><h2 id="pin-dialog-title">Persönlichen Code eingeben</h2></div>
-          <button type="button" aria-label="Schließen" onClick={onClose} disabled={submitting}>×</button>
-        </header>
-        <div className={styles.pinDots} aria-label={`${pin.length} von 4 Stellen eingegeben`}>
-          {[0, 1, 2, 3].map((index) => <span key={index} data-filled={pin.length > index} />)}
-        </div>
-        {message ? (
-          <div className={styles.error} role="alert">
-            <p>{message}</p>
-            {supportReference ? (
-              <details>
-                <summary>Supportdetails</summary>
-                <p>Referenz: <code>{supportReference}</code></p>
-              </details>
-            ) : null}
-          </div>
-        ) : null}
-        <div className={styles.keypad}>
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => <button key={digit} type="button" onClick={() => void enterDigit(String(digit))} disabled={submitting}>{digit}</button>)}
-          <button type="button" onClick={() => setPin((value) => value.slice(0, -1))} disabled={submitting}>Löschen</button>
-          <button type="button" onClick={() => void enterDigit("0")} disabled={submitting}>0</button>
-          <button type="button" onClick={() => { setPin(""); setMessage(null); setSupportReference(undefined); }} disabled={submitting}>Neu</button>
-        </div>
-        {message ? <button type="button" className={styles.help} disabled={helpPending} onClick={() => {
-          setHelpPending(true);
-          setHelpMessage(null);
-          void notifyAdminPinReset(user.loginHandle).then(({ success }) => {
-            setHelpMessage(success
-              ? "Anfrage wurde erfasst. Der Systemadministrator wurde informiert."
-              : "Anfrage konnte nicht übermittelt werden. Bitte direkt Kontakt aufnehmen.");
-            setHelpPending(false);
-          }).catch(() => {
-            setHelpMessage("Anfrage konnte nicht übermittelt werden. Bitte direkt Kontakt aufnehmen.");
-            setHelpPending(false);
-          });
-        }}>{helpPending ? "Anfrage wird gesendet …" : "Systemadministrator informieren"}</button> : null}
-        {helpMessage ? <p role="status">{helpMessage}</p> : null}
-      </section>
-    </div>
-  );
+function greeting(hour: number) {
+  if (hour <= 10) return "Guten Morgen";
+  if (hour <= 17) return "Guten Tag";
+  return "Guten Abend";
 }
 
 function StartContent({
@@ -123,67 +27,101 @@ function StartContent({
   loginUnavailable: boolean;
   supportReference?: string;
 }) {
-  const [selected, setSelected] = useState<StartUserDto | null>(null);
+  const [selectedHandle, setSelectedHandle] = useState(users[0]?.loginHandle ?? "");
+  const [pin, setPin] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+  const [shaking, setShaking] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
+  const submittingRef = useRef(false);
   const searchParams = useSearchParams();
+  const selected = users.find((user) => user.loginHandle === selectedHandle) ?? users[0];
   const serverMessage = searchParams?.get("message");
-  const serverSupportReference = searchParams?.get("support");
-  const safeServerSupportReference =
-    serverSupportReference &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(serverSupportReference)
-      ? serverSupportReference
-      : undefined;
+  const safeSupportReference = (searchParams?.get("support") ?? supportReference)?.match(/^[0-9a-f-]{36}$/i)?.[0];
 
-  return (
-    <main className={styles.screen}>
-      <section className={styles.brandPanel} aria-label="Galvanik Kreile">
-        <div className={styles.brandMark}>
-          <Image src="/assets/logo/kreile-wordmark-skyline.svg" alt="Galvanik Kreile" width={560} height={220} priority unoptimized />
-        </div>
-        <p className={styles.brandKicker}>WerkstattCockpit</p>
-      </section>
+  useEffect(() => {
+    const remembered = window.localStorage.getItem(LAST_LOGIN_KEY);
+    if (!remembered || !users.some((user) => user.loginHandle === remembered)) return;
+    const frame = window.requestAnimationFrame(() => setSelectedHandle(remembered));
+    return () => window.cancelAnimationFrame(frame);
+  }, [users]);
 
-      <section className={styles.loginPanel} aria-labelledby="login-title">
-        <header><h1 id="login-title">Persönlichen Code eingeben</h1></header>
-        {loginUnavailable ? (
-          <div className={styles.unavailable} role="alert">
-            <p>Anmeldung ist momentan nicht verfügbar. Bitte den Systemadministrator kontaktieren.</p>
-            {supportReference ? (
-              <details>
-                <summary>Supportdetails</summary>
-                <p>Referenz: <code>{supportReference}</code></p>
-              </details>
-            ) : null}
-          </div>
-        ) : null}
-        <div className={styles.users}>
-          {users.map((user) => <button
-            key={user.loginHandle}
-            type="button"
-            data-testid={`pin-user-card-${user.loginHandle}`}
-            onClick={() => setSelected(user)}
-            disabled={loginUnavailable}
-          >
-            <span className={styles.avatar}>{deriveUserInitials(user.fullName)}</span>
-            <span><strong>{user.fullName}</strong><small>{getRoleLabel(user.role)}</small></span>
-            <LockKeyhole aria-hidden="true" />
-          </button>)}
-        </div>
-        {serverMessage ? (
-          <div className={styles.error} role="alert">
-            <p>{serverMessage}</p>
-            {safeServerSupportReference ? (
-              <details>
-                <summary>Supportdetails</summary>
-                <p>Referenz: <code>{safeServerSupportReference}</code></p>
-              </details>
-            ) : null}
-          </div>
-        ) : null}
-      </section>
+  async function enterDigit(digit: string) {
+    if (!selected || loginUnavailable || submittingRef.current || pin.length >= 4) return;
+    if (message) setMessage(null);
+    const nextPin = `${pin}${digit}`;
+    setPin(nextPin);
+    if (nextPin.length !== 4) return;
+    submittingRef.current = true;
+    try {
+      const result = await loginWithPin(selected.loginHandle, nextPin);
+      if (result.ok) {
+        window.localStorage.setItem(LAST_LOGIN_KEY, selected.loginHandle);
+        window.location.assign("/");
+        return;
+      }
+      setMessage(result.message);
+    } catch {
+      setMessage("Anmeldung konnte nicht sicher abgeschlossen werden.");
+    }
+    setPin("");
+    setShaking(true);
+    window.setTimeout(() => setShaking(false), 420);
+    submittingRef.current = false;
+  }
 
-      {selected ? <PinDialog user={selected} onClose={() => setSelected(null)} /> : null}
-    </main>
-  );
+  const onDigit = useEffectEvent((digit: string) => void enterDigit(digit));
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const digit = /^[0-9]$/.test(event.key) ? event.key : /^Numpad([0-9])$/.exec(event.code)?.[1];
+      if (digit) {
+        event.preventDefault();
+        onDigit(digit);
+      } else if (event.key === "Backspace") {
+        event.preventDefault();
+        setPin((value) => value.slice(0, -1));
+        setMessage(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  function selectUser(loginHandle: string) {
+    setSelectedHandle(loginHandle);
+    setPin("");
+    setMessage(null);
+  }
+
+  return <main className={styles.screen}>
+    <div className={styles.stripe} aria-hidden="true" />
+    <section className={styles.loginPanel} aria-labelledby="login-title">
+      <Image className={styles.logo} src="/assets/logo/kreile-wordmark-skyline.svg" alt="Galvanik Kreile" width={260} height={102} priority unoptimized />
+      <h1 id="login-title">{greeting(new Date().getHours())}</h1>
+      {loginUnavailable ? <div className={styles.error} role="alert"><p>Anmeldung ist momentan nicht verfügbar.</p>{safeSupportReference ? <small>Referenz: {safeSupportReference}</small> : null}</div> : null}
+      <div className={styles.users} aria-label="Person auswählen">
+        {users.map((user) => <button
+          key={user.loginHandle}
+          type="button"
+          data-testid={`pin-user-card-${user.loginHandle}`}
+          aria-pressed={selected?.loginHandle === user.loginHandle}
+          onClick={() => selectUser(user.loginHandle)}
+          disabled={loginUnavailable}
+        ><span>{user.shortCode}</span><small>{user.fullName.split(/\s+/)[0]}</small></button>)}
+      </div>
+      <div className={`${styles.pinDots} ${shaking ? styles.shake : ""}`} data-error={Boolean(message)} data-spec-id="login.pin" aria-label={`${pin.length} von 4 Stellen eingegeben`}>
+        {[0, 1, 2, 3].map((index) => <span key={index} data-filled={pin.length > index} />)}
+      </div>
+      {message || serverMessage ? <p className={styles.errorText} role="alert">{message ?? serverMessage}</p> : <span className={styles.errorSpace} aria-hidden="true" />}
+      <div className={styles.keypad} data-spec-id="login.anmelden">
+        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => <button key={digit} type="button" disabled={loginUnavailable} onClick={() => void enterDigit(String(digit))}>{digit}</button>)}
+        <span aria-hidden="true" />
+        <button type="button" disabled={loginUnavailable} onClick={() => void enterDigit("0")}>0</button>
+        <button type="button" disabled={loginUnavailable} aria-label="Löschen" onClick={() => { setPin((value) => value.slice(0, -1)); setMessage(null); }}><Delete aria-hidden="true" /></button>
+      </div>
+      {selected?.role === "developer" ? <button className={styles.emailLink} data-spec-id="login.email" type="button" onClick={() => setEmailOpen(true)}>Mit E-Mail anmelden</button> : null}
+    </section>
+    {emailOpen ? <EmailLoginDialog onClose={() => setEmailOpen(false)} /> : null}
+  </main>;
 }
 
 export function StartScreenClient({
@@ -196,9 +134,5 @@ export function StartScreenClient({
   supportReference?: string;
 }) {
   usePageView();
-  return (
-    <Suspense fallback={<div className={styles.loading}>Anmeldung wird geladen …</div>}>
-      <StartContent users={users} loginUnavailable={loginUnavailable} supportReference={supportReference} />
-    </Suspense>
-  );
+  return <Suspense fallback={<div className={styles.loading}>Anmeldung wird geladen …</div>}><StartContent users={users} loginUnavailable={loginUnavailable} supportReference={supportReference} /></Suspense>;
 }

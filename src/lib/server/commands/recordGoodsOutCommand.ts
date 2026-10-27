@@ -22,7 +22,6 @@ const EVENT_TYPE_V1 = "ORDER_PICKED_UP_V1" as const;
 const EVENT_TYPE_V2 = "ORDER_PICKED_UP_V2" as const;
 const SOURCE_STATION = ORDER_LIFECYCLE_STATUS.FERTIG;
 const TARGET_STATION = ORDER_LIFECYCLE_STATUS.ABGEHOLT;
-const GOODS_OUT_ROLES = ["werkstatt", "meister", "admin"] as const;
 const GOODS_OUT_MODES = ["versand", "abholung"] as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -375,7 +374,7 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
   }
   if (
     authorization.data.tenantId !== KREILE_TENANT_SLUG
-    || !GOODS_OUT_ROLES.includes(authorization.data.role as (typeof GOODS_OUT_ROLES)[number])
+    || !authorization.data.permissions.includes("perm_op_status")
   ) {
     return { code: "FORBIDDEN", message: "Warenausgang ist mit dieser Rolle nicht erlaubt." };
   }

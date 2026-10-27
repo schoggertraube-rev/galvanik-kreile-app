@@ -6,7 +6,6 @@ import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const ALLOWED_ROLES = ["buero", "meister", "admin", "developer"] as const;
 
 export type SetInvoiceItemPricesInput = {
   orderId: string;
@@ -114,9 +113,8 @@ export async function setInvoiceItemPrices(inputValue: unknown): Promise<SetInvo
       : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
   if (
-    !ALLOWED_ROLES.includes(authorization.data.role as (typeof ALLOWED_ROLES)[number])
-    || !authorization.data.permissions.includes("perm_data_orders")
-  ) return { code: "FORBIDDEN", message: "Diese Rolle darf keine Rechnungspreise festlegen." };
+    !authorization.data.permissions.includes("perm_view_prices")
+  ) return { code: "FORBIDDEN", message: "Geld, Preise & Buchhaltung ist nicht freigegeben." };
 
   const hash = requestHash(input);
   try {

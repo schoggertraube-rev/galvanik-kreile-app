@@ -27,7 +27,8 @@ describe("system settings port", () => {
       }])
       .mockResolvedValueOnce([{
         id: "22222222-2222-4222-8222-222222222222", email: "phillip@example.invalid",
-        full_name: "Phillip", role: "werkstatt", active: true,
+        full_name: "Phillip", kuerzel: "P", bezeichnung: "Werkstatt", role: "werkstatt", active: true,
+        areas: ["auftraege", "eingang", "kunden"],
       }])
       .mockResolvedValueOnce(SALES_STAGE_FEATURES.map((feature) => ({ feature_id: feature.id, enabled: feature.defaultEnabled })));
     const { readSystemSettings } = await import("../server/systemSettingsPort");
@@ -97,16 +98,17 @@ describe("system settings port", () => {
         active: true,
         has_pin: true,
       }])
-      .mockResolvedValueOnce([{ active_count: 3, manager_count: 2 }])
       .mockResolvedValueOnce([{ id: "22222222-2222-4222-8222-222222222222" }]);
     const { updateManagedUser } = await import("../server/systemSettingsPort");
     await expect(updateManagedUser(context, {
       userId: "22222222-2222-4222-8222-222222222222",
-      role: "werkstatt",
+      fullName: "Phillip Kreile",
+      shortCode: "PK",
+      designation: "Werkstatt",
       active: true,
       pin: "0000",
     })).resolves.toEqual({ code: "OK" });
     expect(hash).toHaveBeenCalledWith("0000", 12);
-    expect(execute.mock.calls[2]?.[0].text).toContain("tenant_id");
+    expect(execute.mock.calls[1]?.[0].text).toContain("tenant_id");
   });
 });

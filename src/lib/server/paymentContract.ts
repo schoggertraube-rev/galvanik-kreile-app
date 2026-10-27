@@ -122,20 +122,13 @@ export type OrderPaymentStateRow = {
   integrity_ok: boolean;
 };
 
-export const PAYMENT_SUMMARY_READ_ROLES = ["buero", "werkstatt", "meister", "admin"] as const;
-
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const INVOICE_NUMBER_PATTERN = /^R-[0-9]{4}-[0-9]{4,}$/;
-
-function isPaymentReadRole(value: AuthorizationSnapshot["role"]): boolean {
-  return PAYMENT_SUMMARY_READ_ROLES.includes(value as (typeof PAYMENT_SUMMARY_READ_ROLES)[number]);
-}
 
 export function canReadPaymentSummary(authorization: AuthorizationSnapshot): boolean {
   return authorization.active === true
     && authorization.tenantId === KREILE_TENANT_SLUG
-    && isPaymentReadRole(authorization.role)
-    && authorization.permissions.includes("perm_view_leitstand");
+    && authorization.permissions.includes("perm_view_prices");
 }
 
 function isCanonicalTextId(value: unknown): value is string {

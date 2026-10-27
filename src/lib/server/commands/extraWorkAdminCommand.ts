@@ -259,8 +259,8 @@ async function resolveAdminAuthorization(): Promise<
         : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." },
     };
   }
-  if (!["meister", "admin", "developer"].includes(authorization.data.role)) {
-    return { ok: false, result: { code: "FORBIDDEN", message: "Mehrarbeit-Stammdaten dürfen mit dieser Rolle nicht geändert werden." } };
+  if (!authorization.data.areas?.includes("einstellungen")) {
+    return { ok: false, result: { code: "FORBIDDEN", message: "Firmen-Einstellungen sind nicht freigegeben." } };
   }
   return { ok: true, data: authorization as Awaited<ReturnType<typeof resolveAuthorization>> & { ok: true } };
 }

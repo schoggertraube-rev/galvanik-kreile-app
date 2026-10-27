@@ -5,7 +5,6 @@ import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
 const EVENT_TYPE = "ORDER_PROMISED_DUE_DATE_CHANGED_V1" as const;
-const EDIT_ROLES = ["buero", "meister", "admin"] as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -145,8 +144,8 @@ export async function changeOrderPromisedDueDate(
       ? { code: "UNAVAILABLE", message: "Liefertermin kann derzeit nicht geändert werden." }
       : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
-  if (!EDIT_ROLES.includes(authorization.data.role as (typeof EDIT_ROLES)[number])) {
-    return { code: "FORBIDDEN", message: "Diese Rolle darf den Liefertermin nicht ändern." };
+  if (!authorization.data.permissions.includes("perm_op_status")) {
+    return { code: "FORBIDDEN", message: "Der Bereich Aufträge & Werkstatt ist nicht freigegeben." };
   }
 
   try {

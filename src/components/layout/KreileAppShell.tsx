@@ -76,15 +76,14 @@ export function KreileAppShell({ children, globalCreate }: { children: React.Rea
   if (loginOnly) return <div className={styles.loginRoot}>{children}</div>;
 
   const role = permissions.role?.toLowerCase() ?? "";
-  const elevated = role === "admin" || role === "developer";
   const workshop = role === "werkstatt";
-  const canUseShell = permissions.status === "authenticated" &&
-    (elevated || workshop || role === "meister" || role === "buero");
+  const canUseShell = permissions.status === "authenticated";
   const canCreate = permissions.hasPermission("perm_data_customers") || permissions.hasPermission("perm_data_orders");
   const hidden: Bereich[] = [];
-  if (!elevated && role !== "meister") hidden.push("einstellungen");
-  if (!elevated && role !== "meister" && role !== "buero" && !permissions.hasPermission("perm_view_prices")) hidden.push("geld");
-  if (!canUseShell) hidden.push("werkstatt", "auftraege", "kunden", "geld", "einstellungen");
+  if (!permissions.hasPermission("perm_view_leitstand")) hidden.push("werkstatt", "auftraege");
+  if (!permissions.hasPermission("perm_view_customers")) hidden.push("kunden");
+  if (!permissions.hasPermission("perm_view_prices")) hidden.push("geld");
+  if (!permissions.hasPermission("perm_sys_toggles") && !permissions.hasPermission("perm_sys_users") && !permissions.hasPermission("perm_sys_diag")) hidden.push("einstellungen");
 
   const go = (target: Bereich | "mehr") => {
     if (target === "mehr") {
@@ -123,11 +122,11 @@ export function KreileAppShell({ children, globalCreate }: { children: React.Rea
           onNav={go}
           onStart={() => router.push("/")}
           onKonto={() => setMoreOpen(true)}
-          onNeuerEingang={() => requestGlobalCreate("DIRECT_INTAKE")}
-          onWareRaus={() => router.push("/orders?station=fertig")}
-          onAuftragOeffnen={() => router.push("/orders")}
-          onMehrarbeit={() => router.push("/warendurchlauf")}
-          onFertigMelden={() => router.push("/warendurchlauf")}
+          onNeuerEingang={permissions.hasPermission("perm_data_orders") ? () => requestGlobalCreate("DIRECT_INTAKE") : undefined}
+          onWareRaus={permissions.hasPermission("perm_op_status") ? () => router.push("/orders?station=fertig") : undefined}
+          onAuftragOeffnen={permissions.hasPermission("perm_view_leitstand") ? () => router.push("/orders") : undefined}
+          onMehrarbeit={permissions.hasPermission("perm_op_status") ? () => router.push("/warendurchlauf") : undefined}
+          onFertigMelden={permissions.hasPermission("perm_op_status") ? () => router.push("/warendurchlauf") : undefined}
           ebene={overlay}
           >
             {children}

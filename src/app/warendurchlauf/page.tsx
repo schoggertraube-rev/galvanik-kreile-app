@@ -66,7 +66,7 @@ export default async function WarendurchlaufIndex() {
     });
   }
 
-  if (!["buero", "werkstatt", "meister", "admin"].includes(authorization.data.role)) {
+  if (!authorization.data.permissions.includes("perm_view_leitstand")) {
     return render({ kind: "denied", message: DENIAL_MESSAGE });
   }
 

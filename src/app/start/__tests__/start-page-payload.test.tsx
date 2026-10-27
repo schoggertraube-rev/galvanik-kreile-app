@@ -30,11 +30,12 @@ vi.mock("@/app/actions/start.actions", () => ({
 vi.mock("@/app/actions/auth.actions", () => ({
   loginWithPin: ports.loginWithPin,
 }));
+vi.mock("@/app/actions/auth", () => ({ login: vi.fn() }));
 
 const activeUsers = [
-  { loginHandle: "synthetic-rolf-handle", fullName: "Rolf", role: "meister" as const },
-  { loginHandle: "synthetic-phillip-handle", fullName: "Phillip", role: "werkstatt" as const },
-  { loginHandle: "synthetic-gregor-handle", fullName: "Gregor", role: "developer" as const },
+  { loginHandle: "synthetic-rolf-handle", fullName: "Rolf", shortCode: "R", designation: "Meister", role: "meister" as const },
+  { loginHandle: "synthetic-phillip-handle", fullName: "Phillip", shortCode: "P", designation: "Werkstatt", role: "werkstatt" as const },
+  { loginHandle: "synthetic-gregor-handle", fullName: "Gregor", shortCode: "G", designation: "Wartung", role: "developer" as const },
 ];
 
 afterEach(() => cleanup());
@@ -65,13 +66,12 @@ describe("StartPage product actor boundary", () => {
     expect(screen.getByText("Gregor", { exact: true })).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("pin-user-card-synthetic-rolf-handle"));
-    expect(screen.getByRole("heading", { name: "Persönlichen Code eingeben", level: 2 })).toBeInTheDocument();
+    expect(screen.getByLabelText("0 von 4 Stellen eingegeben")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Löschen" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Neu" })).toBeInTheDocument();
     expect(ports.loginWithPin).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: /Gregor/ }));
-    expect(screen.getByRole("heading", { name: "Persönlichen Code eingeben", level: 2 })).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("pin-user-card-synthetic-gregor-handle"));
+    expect(screen.getByRole("button", { name: "Mit E-Mail anmelden" })).toBeInTheDocument();
   });
 
   it.each([
@@ -87,10 +87,10 @@ describe("StartPage product actor boundary", () => {
       const { default: StartPage } = await import("@/app/start/page");
       render(await StartPage());
 
-      expect(screen.getByRole("heading", { name: "Persönlichen Code eingeben", level: 1 })).toBeVisible();
-      expect(screen.getByRole("button", { name: /Rolf.*Meister/ })).toBeVisible();
-      expect(screen.getByRole("button", { name: /Phillip.*Werkstatt/ })).toBeVisible();
-      expect(screen.getByRole("button", { name: /Gregor.*Entwickler/ })).toBeVisible();
+      expect(screen.getByRole("heading", { name: /Guten (Morgen|Tag|Abend)/, level: 1 })).toBeVisible();
+      expect(screen.getByTestId("pin-user-card-synthetic-rolf-handle")).toBeVisible();
+      expect(screen.getByTestId("pin-user-card-synthetic-phillip-handle")).toBeVisible();
+      expect(screen.getByTestId("pin-user-card-synthetic-gregor-handle")).toBeVisible();
       expect(document.body).not.toHaveTextContent(/Willkommen zurück|Sicher anmelden|Wähle deinen Namen/i);
       expect(document.body).not.toHaveTextContent(/tenantgebunden|rollenbasiert|Produktprofil|Systemzugang ist erhöht/i);
     },
@@ -128,7 +128,7 @@ describe("StartPage product actor boundary", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Anmeldung ist momentan nicht verfügbar",
     );
-    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    expect(screen.getAllByRole("button").every((button) => button.hasAttribute("disabled"))).toBe(true);
   });
 
   it("fails closed and records a safe operational reference on an unexpected read error", async () => {

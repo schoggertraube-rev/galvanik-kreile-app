@@ -15,6 +15,58 @@ export type PermissionKey =
   | "perm_view_customers"
   | "perm_view_prices";
 
+export const ACCESS_AREAS = [
+  "auftraege",
+  "eingang",
+  "kunden",
+  "geld",
+  "mails",
+  "einstellungen",
+  "logins",
+  "wartung",
+] as const;
+
+export type AccessArea = typeof ACCESS_AREAS[number];
+
+export const ACCESS_AREA_LABELS: Record<AccessArea, { text: string; sub?: string }> = {
+  auftraege: { text: "Aufträge & Werkstatt", sub: "sehen, Fertig melden, Mehrarbeit, Fotos" },
+  eingang: { text: "Neuer Eingang & Kunde anlegen" },
+  kunden: { text: "Kunden & Kontakt" },
+  geld: { text: "Geld, Preise & Buchhaltung", sub: "Beträge, Rechnungen, Zahlungen, Preise, Zahlungsbedingungen" },
+  mails: { text: "Mails lesen & zuordnen" },
+  einstellungen: { text: "Firmen-Einstellungen", sub: "Firmendaten, Katalog, Stundensatz" },
+  logins: { text: "Logins & Rechte verwalten" },
+  wartung: { text: "Wartung, Stufen & Anbindungen" },
+};
+
+export const ROLE_ACCESS_AREA_TEMPLATES: Record<AppRole, readonly AccessArea[]> = {
+  developer: ACCESS_AREAS,
+  admin: ACCESS_AREAS,
+  meister: ["auftraege", "eingang", "kunden", "geld", "mails", "einstellungen"],
+  buero: ["auftraege", "eingang", "kunden", "geld", "mails", "einstellungen"],
+  werkstatt: ["auftraege", "eingang", "kunden"],
+  readonly: [],
+};
+
+const ACCESS_AREA_PERMISSIONS: Record<AccessArea, readonly PermissionKey[]> = {
+  auftraege: ["perm_op_status", "perm_op_risk", "perm_op_photos", "perm_op_qa", "perm_view_leitstand"],
+  eingang: ["perm_data_orders"],
+  kunden: ["perm_data_customers", "perm_view_customers"],
+  geld: ["perm_data_csv", "perm_view_prices"],
+  mails: [],
+  einstellungen: ["perm_sys_toggles"],
+  logins: ["perm_sys_users"],
+  wartung: ["perm_sys_toggles", "perm_sys_diag"],
+};
+
+export function isAccessArea(value: unknown): value is AccessArea {
+  return typeof value === "string" && (ACCESS_AREAS as readonly string[]).includes(value);
+}
+
+export function getPermissionsForAreas(areas: readonly AccessArea[]): readonly PermissionKey[] {
+  return [...new Set(areas.flatMap((area) => ACCESS_AREA_PERMISSIONS[area]))];
+}
+
 export type ProductIdentityKey = "rolf" | "phillip" | "gregor";
 
 /** Product labels are separate from the authenticated actor and role contract. */

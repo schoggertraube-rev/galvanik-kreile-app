@@ -20,7 +20,6 @@ const EVENT_SCHEMA_VERSION = 1 as const;
 const PAYMENT_CONTRACT_VERSION = 1 as const;
 const PAYMENT_CURRENCY = "EUR" as const;
 const PAYMENT_SOURCE = "manual" as const;
-const PAYMENT_ROLES = ["buero", "meister", "admin"] as const;
 const MAX_INT4 = 2_147_483_647;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const INVOICE_NUMBER_PATTERN = /^R-[0-9]{4}-[0-9]{4,}$/;
@@ -487,7 +486,7 @@ export async function confirmPayment(input: unknown): Promise<ConfirmPaymentResu
   }
   if (
     authorization.data.tenantId !== KREILE_TENANT_SLUG
-    || !PAYMENT_ROLES.includes(authorization.data.role as (typeof PAYMENT_ROLES)[number])
+    || !authorization.data.permissions.includes("perm_view_prices")
   ) {
     return { code: "FORBIDDEN", message: "Zahlungsbestätigung ist mit dieser Rolle nicht erlaubt." };
   }

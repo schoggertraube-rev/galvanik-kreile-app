@@ -12,21 +12,19 @@ export default async function InvoicesPage() {
     initialState = {
       state: "ERROR",
       message: "Rechnungsliste konnte nicht sicher geladen werden.",
-      role: null,
+      canCancel: false,
     };
   } else if (!authorization.ok) {
     initialState = {
       state: "DENIAL",
       message: "Sitzung oder Berechtigung ist nicht verfügbar.",
-      role: null,
+      canCancel: false,
     };
-  } else if (!(["buero", "meister", "admin"] as const).includes(
-    authorization.data.role as "buero" | "meister" | "admin",
-  )) {
+  } else if (!authorization.data.permissions.includes("perm_view_prices")) {
     initialState = {
       state: "DENIAL",
-      message: "Rechnungsliste ist mit dieser Rolle nicht erlaubt.",
-      role: authorization.data.role,
+      message: "Rechnungsliste ist für diesen Login nicht freigegeben.",
+      canCancel: false,
     };
   } else {
     const result = await readInvoiceSummaries(authorization.data);
@@ -34,13 +32,13 @@ export default async function InvoicesPage() {
       initialState = {
         state: result.data.length === 0 ? "EMPTY" : "DATA",
         data: result.data,
-        role: authorization.data.role as "buero" | "meister" | "admin",
+        canCancel: authorization.data.permissions.includes("perm_view_prices"),
       };
     } else {
       initialState = {
         state: result.code === "FORBIDDEN" ? "DENIAL" : "ERROR",
         message: result.message,
-        role: authorization.data.role,
+        canCancel: false,
       };
     }
   }

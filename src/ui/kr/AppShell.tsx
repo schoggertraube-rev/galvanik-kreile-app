@@ -13,7 +13,7 @@ export interface AppShellProps {
   ausgeblendet?: Bereich[]; badges?: Partial<Record<Bereich, { n: number; rot?: boolean }>>;
   suche: ReactNode; plus: ReactNode;
   onNav: (b: Bereich | 'mehr') => void; onStart: () => void; onKonto: () => void;
-  onNeuerEingang: () => void; onWareRaus: () => void;
+  onNeuerEingang?: () => void; onWareRaus?: () => void;
   /** nur variante=werkstatt */ onAuftragOeffnen?: () => void; onMehrarbeit?: () => void; onFertigMelden?: () => void;
   ebene?: ReactNode; children: ReactNode;
 }
@@ -45,7 +45,7 @@ export function AppShell(p: AppShellProps) {
       ['Mehrarbeit', 'Mehrarbeit', 'layers', p.onMehrarbeit, 'kr-aktion'], ['Fertig melden', 'Fertig', 'check', p.onFertigMelden, 'kr-aktion'],
       ['Neuer Eingang', 'Eingang', 'inbox', p.onNeuerEingang, 'kr-aktion kr-aktion--ruhig'], ['Ware raus', 'Raus', 'truck', p.onWareRaus, 'kr-aktion kr-aktion--ruhig']];
     return (<><div className="kr-streifen" /><div className="kr-tshell kr-wshell">{kopf}<main className="kr-inhalt">{p.children}</main>
-      <nav className="kr-aktionsleiste" aria-label="Werkstatt-Aktionen">{A.map(([t, k, ic, f, c]) => <button key={t} type="button" className={c} onClick={f}><Icon name={ic} />{handy ? k : t}</button>)}</nav></div>{p.ebene}</>);
+      <nav className="kr-aktionsleiste" aria-label="Werkstatt-Aktionen">{A.filter(([, , , f]) => Boolean(f)).map(([t, k, ic, f, c]) => <button key={t} type="button" className={c} onClick={f}><Icon name={ic} />{handy ? k : t}</button>)}</nav></div>{p.ebene}</>);
   }
   if (p.geraet === 'desktop') {
     const nav = (n: NavEintrag) => { const b = p.badges?.[n.id]; return (
@@ -53,8 +53,8 @@ export function AppShell(p: AppShellProps) {
         <Icon name={n.icon} /><span>{n.text}</span>{b && <span className={cx('kr-nav-badge', b.rot && 'kr-nav-badge--rot')}>{b.n}</span>}</button>); };
     return (<><div className="kr-streifen" /><div className="kr-shell">{kopf}
       <nav className="kr-seitenleiste kr-scroll" aria-label="Hauptnavigation">
-        <button type="button" className="kr-nav kr-nav--schnell" onClick={p.onNeuerEingang}><Icon name="inbox" /><span>Neuer Eingang</span></button>
-        <button type="button" className="kr-nav kr-nav--schnell" onClick={p.onWareRaus}><Icon name="truck" /><span>Ware raus</span></button>
+        {p.onNeuerEingang && <button type="button" className="kr-nav kr-nav--schnell" onClick={p.onNeuerEingang}><Icon name="inbox" /><span>Neuer Eingang</span></button>}
+        {p.onWareRaus && <button type="button" className="kr-nav kr-nav--schnell" onClick={p.onWareRaus}><Icon name="truck" /><span>Ware raus</span></button>}
         <div className="kr-nav-trenner" />
         {NAV.filter(n => !aus.includes(n.id)).map(nav)}
         <div className="kr-nav-trenner kr-nav-unten" />

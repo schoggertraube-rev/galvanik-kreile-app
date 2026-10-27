@@ -12,11 +12,9 @@ import type { AppRole } from "@/lib/auth/authorizationContract";
 import type { ImmutableInvoiceCancellationReceipt } from "@/lib/server/commands/immutableInvoiceCommand";
 import type { ImmutableInvoiceSummary } from "@/lib/server/invoiceRead";
 
-type InvoiceReaderRole = Extract<AppRole, "buero" | "meister" | "admin">;
-
 export type InvoicePageInitialState =
-  | { state: "DATA" | "EMPTY"; data: ImmutableInvoiceSummary[]; role: InvoiceReaderRole }
-  | { state: "ERROR" | "DENIAL"; message: string; role: AppRole | null };
+  | { state: "DATA" | "EMPTY"; data: ImmutableInvoiceSummary[]; canCancel?: boolean; role?: AppRole | null }
+  | { state: "ERROR" | "DENIAL"; message: string; canCancel?: false; role?: AppRole | null };
 
 type InvoicePageState = InvoicePageInitialState["state"] | "LOADING";
 
@@ -58,7 +56,7 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
   const [pendingInvoiceId, setPendingInvoiceId] = useState<string | null>(null);
   const [rowMessages, setRowMessages] = useState<Record<string, { kind: "success" | "error"; text: string }>>({});
   const requestIds = useRef<Record<string, string>>({});
-  const canCancel = initialState.role === "meister" || initialState.role === "admin";
+  const canCancel = initialState.canCancel ?? (initialState.role === "meister" || initialState.role === "admin");
   const interactive = useHydrated();
 
   function stableClientEventId(invoiceId: string): string {

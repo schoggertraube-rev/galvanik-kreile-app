@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, integer, jsonb, uuid, varchar, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, integer, jsonb, uuid, varchar, numeric, primaryKey } from "drizzle-orm/pg-core";
 import { createId } from "@paralleldrive/cuid2";
 
 // Helper for CUID primary keys
@@ -8,8 +8,10 @@ const cuidPrimaryKey = (name: string) => text(name).primaryKey().$defaultFn(() =
 export const appUsers = pgTable("app_users", {
   id: uuid("id").primaryKey().defaultRandom(), // matches Supabase auth.users.id
   tenantId: text("tenant_id").notNull(),
-  email: text("email").notNull(),
+  email: text("email"),
   fullName: text("full_name").notNull(),
+  shortCode: varchar("kuerzel", { length: 8 }),
+  designation: text("bezeichnung"),
   role: varchar("role", { length: 50 }).notNull().default("werkstatt"), // developer, admin, meister, buero, werkstatt, readonly
   location: text("location"),
   language: text("language").default("de"),
@@ -22,6 +24,14 @@ export const appUsers = pgTable("app_users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const appUserRights = pgTable("app_user_rights", {
+  tenantId: text("tenant_id").notNull(),
+  userId: uuid("user_id").notNull().references(() => appUsers.id, { onDelete: "cascade" }),
+  area: text("bereich").notNull(),
+  grantedBy: uuid("granted_by").references(() => appUsers.id, { onDelete: "set null" }),
+  grantedAt: timestamp("granted_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [primaryKey({ columns: [table.tenantId, table.userId, table.area] })]);
 
 export const pinRateLimits = pgTable("pin_rate_limits", {
   operatorId: uuid("operator_id")

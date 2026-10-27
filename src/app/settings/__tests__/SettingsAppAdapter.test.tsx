@@ -21,6 +21,9 @@ vi.mock("@/app/actions/settings.actions", () => ({
   saveCatalogServiceAction: vi.fn(),
   saveCompanySettingsAction: vi.fn(),
   saveManagedUserAction: vi.fn(),
+  createManagedUserAction: vi.fn(),
+  setManagedUserAreaAction: vi.fn(),
+  changeOwnPinAction: vi.fn(),
 }));
 vi.mock("@/app/actions/orders.actions", () => ({ setExtraWorkHourlyRateAction: vi.fn() }));
 
@@ -46,7 +49,7 @@ describe("Gregor system administration composition", () => {
     ports.resolveAuthorization.mockResolvedValue(
       authorizationFor("admin"),
     );
-    ports.readSettings.mockResolvedValue({ code:"OK", snapshot:{ company:{companyName:"Galvanik Kreile",street:"Testweg 1",zip:"12345",city:"Berlin",country:"Deutschland",taxId:"DE123456789",iban:"DE001234",bic:"TESTDEFF",bankName:"Testbank",paymentTermDays:14,logoUrl:"/logo.png"}, extraWorkHourlyRate:{rateId:null,hourlyRateCents:null,version:0}, users:[], numberRanges:[], features:[{id:"S01",enabled:true},{id:"Z01",enabled:false}] }, services:[] });
+    ports.readSettings.mockResolvedValue({ code:"OK", snapshot:{ company:{companyName:"Galvanik Kreile",street:"Testweg 1",zip:"12345",city:"Berlin",country:"Deutschland",taxId:"DE123456789",iban:"DE001234",bic:"TESTDEFF",bankName:"Testbank",paymentTermDays:14,logoUrl:"/logo.png"}, extraWorkHourlyRate:{rateId:null,hourlyRateCents:null,version:0}, users:[], capabilities:{canManageCompany:true,canManageLogins:true,canManageSystem:true}, numberRanges:[], features:[{id:"S01",enabled:true},{id:"Z01",enabled:false}] }, services:[] });
   });
 
   it("renders settings for an admin role", async () => {
@@ -62,12 +65,11 @@ describe("Gregor system administration composition", () => {
     expect(screen.getByRole("button", { name: "Firmendaten" })).toBeInTheDocument();
   });
 
-  it("shows new-user creation as planned and keeps existing access maintenance available", async () => {
+  it("shows real new-user creation and the rights matrix", async () => {
     render(await SettingsAppAdapter());
-    fireEvent.click(screen.getByRole("button", { name: "Nutzer & Rollen" }));
-    expect(screen.getByLabelText("Nutzer anlegen geplant")).toHaveTextContent("geplant");
-    expect(screen.getByLabelText("Nutzer anlegen geplant")).toHaveTextContent("bestehende Zugänge");
-    expect(screen.queryByText(/In Klärung/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Logins & Rechte" }));
+    expect(screen.getByRole("heading", { name: "Login anlegen" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Rechtematrix" })).toBeInTheDocument();
   });
 
   it("hides stage switches until they affect real product surfaces", async () => {
@@ -84,9 +86,11 @@ describe("Gregor system administration composition", () => {
     await expect(SettingsAppAdapter()).rejects.toThrow("REDIRECT:/start");
   });
 
-  it("redirects a valid role without settings access to the role-aware root", async () => {
+  it("lets every valid login change its own code", async () => {
     ports.resolveAuthorization.mockResolvedValue(authorizationFor("buero"));
-    await expect(SettingsAppAdapter()).rejects.toThrow("REDIRECT:/");
+    ports.readSettings.mockResolvedValue({ code:"OK", snapshot:{ company:{companyName:"",street:"",zip:"",city:"",country:"",taxId:"",iban:"",bic:"",bankName:"",paymentTermDays:0,logoUrl:""}, extraWorkHourlyRate:{rateId:null,hourlyRateCents:null,version:0}, users:[], capabilities:{canManageCompany:false,canManageLogins:false,canManageSystem:false}, numberRanges:[], features:[] }, services:[] });
+    render(await SettingsAppAdapter());
+    expect(screen.getByRole("heading", { name: "Mein Code ändern" })).toBeInTheDocument();
   });
 
   it("renders a stable fail-closed state instead of bouncing on readiness failure", async () => {

@@ -10,8 +10,6 @@ import {
 const ASSIGNED_EVENT = "ORDER_TASK_ASSIGNED_V1" as const;
 const HANDED_BACK_EVENT = "ORDER_TASK_HANDED_BACK_V1" as const;
 const EVENT_SCHEMA_VERSION = 1 as const;
-const ASSIGN_ROLES = ["meister", "admin"] as const;
-const ASSIGNEE_ROLES = ["buero", "werkstatt", "meister", "admin"] as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 export type AssignOrderTaskInput = {
@@ -230,7 +228,7 @@ export async function assignOrderTask(input: AssignOrderTaskInput): Promise<Orde
       ? { code: "UNAVAILABLE", message: "Zuweisung ist derzeit nicht verfügbar." }
       : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
-  if (!ASSIGN_ROLES.includes(authorization.data.role as (typeof ASSIGN_ROLES)[number])) {
+  if (!authorization.data.permissions.includes("perm_op_status")) {
     return { code: "FORBIDDEN", message: "Zuweisung ist mit dieser Rolle nicht erlaubt." };
   }
 
@@ -284,6 +282,12 @@ export async function assignOrderTask(input: AssignOrderTaskInput): Promise<Orde
         FROM public.app_users
         WHERE tenant_id = ${authorization.data.tenantId}
           AND id = ${input.assigneeUserId}::uuid
+          AND EXISTS (
+            SELECT 1 FROM public.app_user_rights rights
+            WHERE rights.tenant_id=public.app_users.tenant_id
+              AND rights.user_id=public.app_users.id
+              AND rights.bereich='auftraege'
+          )
         FOR SHARE
       `);
       const assignee = assigneeRows[0];
@@ -291,7 +295,6 @@ export async function assignOrderTask(input: AssignOrderTaskInput): Promise<Orde
         assigneeRows.length !== 1
         || !assignee
         || assignee.active !== true
-        || !ASSIGNEE_ROLES.includes(assignee.role as (typeof ASSIGNEE_ROLES)[number])
       ) {
         return { code: "VALIDATION_ERROR", message: "Zielperson ist nicht zuweisbar." };
       }

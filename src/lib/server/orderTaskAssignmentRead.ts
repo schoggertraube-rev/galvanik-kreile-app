@@ -156,7 +156,6 @@ function mapOption(row: OptionRow, tenantId: string): OrderTaskAssigneeOption {
     || !UUID_PATTERN.test(row.user_id)
     || row.full_name !== row.full_name.trim()
     || row.full_name.length < 1
-    || !["buero", "werkstatt", "meister", "admin"].includes(row.role)
   ) throw new Error("ORDER_TASK_OPTION_INVALID");
   return { userId: row.user_id, fullName: row.full_name, role: row.role };
 }
@@ -243,7 +242,7 @@ export async function readOrderTaskAssignment(
 export async function readOrderTaskAssigneeOptions(
   authorization: AuthorizationSnapshot,
 ): Promise<OrderTaskAssignmentReadResult<OrderTaskAssigneeOption[]>> {
-  if (!canView(authorization) || !["meister", "admin"].includes(authorization.role)) {
+  if (!canView(authorization) || !authorization.permissions.includes("perm_op_status")) {
     return { code: "FORBIDDEN", message: "Zuweisungsziele sind nicht erlaubt." };
   }
   try {
