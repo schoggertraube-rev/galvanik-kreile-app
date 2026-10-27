@@ -9,6 +9,7 @@ export type GlobalCreateRequest = {
     customerQuery?: string;
     note?: string;
     dueDate?: string;
+    sourceMode?: "camera" | "document" | "mail";
     quotePositions?: Array<{ quantity?: string; material?: string }>;
   };
 };

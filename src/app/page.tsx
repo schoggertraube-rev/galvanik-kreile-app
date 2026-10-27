@@ -1,8 +1,6 @@
 import { redirect } from "next/navigation";
 import { resolveAuthorization } from "@/lib/server/authorization";
-import { RolfHome } from "@/components/home/RolfHome";
-import { loadWerkstattHome } from "@/components/home/WerkstattHome";
-import { WerkstattAppAdapter } from "@/app/warendurchlauf/WerkstattAppAdapter";
+import { HomeAppAdapter } from "@/app/HomeAppAdapter";
 import { ProductActorAccessUnavailable } from "@/components/foundation/FoundationUnavailable";
 
 export const dynamic = "force-dynamic";
@@ -21,13 +19,8 @@ export default async function HomePage() {
 
   const authorization = result.data;
   if (authorization.role === "admin" || authorization.role === "developer") redirect("/settings");
-  if (authorization.role === "werkstatt") {
-    return (
-      <WerkstattAppAdapter view={await loadWerkstattHome(authorization)} />
-    );
-  }
-  if (authorization.role === "meister" || authorization.role === "buero" || authorization.role === "readonly") {
-    return <RolfHome authorization={authorization} />;
+  if (authorization.role === "werkstatt" || authorization.role === "meister" || authorization.role === "buero" || authorization.role === "readonly") {
+    return <HomeAppAdapter authorization={authorization} />;
   }
 
   return <ProductActorAccessUnavailable />;

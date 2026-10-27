@@ -8,11 +8,11 @@
   "summary": {
     "page_routes": 13,
     "api_routes": 20,
-    "server_action_groups": 56,
+    "server_action_groups": 57,
     "kpi_definitions": 7,
     "provider_connections": 16,
     "nav_links_without_page": 3,
-    "total": 115
+    "total": 116
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -622,6 +622,19 @@
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "Stufe 1 P1 exposes tenant-bound administration for company settings, catalog services, and existing users. Package acceptance remains pending.",
+      "visible": false,
+      "reachable": true
+    },
+    {
+      "stable_id": "server-actions.today",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/today.actions.ts",
+      "exported_functions": [
+        "saveTodayPreferencesAction",
+        "saveTodayReminderAction"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "F2 tenant- and login-bound Der-Tag field preferences and reminders. Owner verification remains pending.",
       "visible": false,
       "reachable": true
     },

@@ -4,13 +4,15 @@ import type { OrdersHomeProjection } from "@/modules/orders/public";
 
 const ports = vi.hoisted(() => ({
   openOrder: vi.fn(),
+  openInvoice: vi.fn(),
   requestCreate: vi.fn(),
   push: vi.fn(),
+  refresh: vi.fn(),
   permissions: { loading: false, canCreateOrder: true },
 }));
-vi.mock("@/lib/overlayStore", () => ({ useOverlayStore: (selector: (state: { openOrder: typeof ports.openOrder }) => unknown) => selector({ openOrder: ports.openOrder }) }));
+vi.mock("@/lib/overlayStore", () => ({ useOverlayStore: (selector: (state: { openOrder: typeof ports.openOrder; openInvoice: typeof ports.openInvoice }) => unknown) => selector({ openOrder: ports.openOrder, openInvoice: ports.openInvoice }) }));
 vi.mock("@/components/layout/GlobalCreateFlow", () => ({ requestGlobalCreate: ports.requestCreate }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: ports.push }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: ports.push, refresh: ports.refresh }) }));
 vi.mock("@/lib/auth/PermissionsContext", () => ({
   usePermissions: () => ({
     loading: ports.permissions.loading,
@@ -19,6 +21,13 @@ vi.mock("@/lib/auth/PermissionsContext", () => ({
 }));
 
 import { dayLineParts, RolfHomeClient } from "../RolfHomeClient";
+
+const actionPorts = {
+  savePreferences: vi.fn().mockResolvedValue({ code: "OK" }),
+  saveReminder: vi.fn().mockResolvedValue({ code: "OK" }),
+  discardDraft: vi.fn().mockResolvedValue({ code: "OK" }),
+  assignOrder: vi.fn().mockResolvedValue({ code: "OK" }),
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -37,18 +46,23 @@ const projection: OrdersHomeProjection = {
   dominant: { orderId: "order-1", reason: "Dieser Auftrag ist kritisch." },
 };
 
+const dashboard = {
+  items: [{ key: "order:order-1", field: "today" as const, kind: "order" as const, title: "A-2026-0001 · Muster GmbH", meta: "Bauteil · heute", urgency: "conflict" as const, orderId: "order-1", orderVersion: 1, dueDate: "2026-09-18" }],
+  visibleFields: ["today", "assign", "money", "bundle"] as const,
+  phillipUserId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  outlookMessage: null,
+};
+
 describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
   it("zeigt den V1.1-Aufbau mit echten Daten und öffnet den Auftrag", () => {
-    render(<RolfHomeClient model={{ kind: "data", role: "meister", canCreateOrder: true, projection }} />);
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canDelegate: true, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields] }, projection }} />);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByTestId("rolf-v11-home")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Der Tag" })).toHaveClass("kr-seite-titel");
     expect(screen.getByRole("region", { name: "Lage" })).toBeInTheDocument();
     expect(within(screen.getByRole("region", { name: "Lage" })).getByText("Konflikt")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Handlungsbedarf" })).toBeInTheDocument();
-    expect(screen.getByText("Heute & Woche")).toBeInTheDocument();
-    expect(screen.getByText("Diese Woche")).toBeInTheDocument();
-    expect(screen.getByText("Neu seit gestern")).toBeInTheDocument();
+    expect(screen.getByText("Heute fällig")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Später" })).toBeInTheDocument();
     const open = screen.getByRole("button", { name: "Auftrag öffnen" });
     expect(open.closest(".kr-hb-eintrag")).toHaveClass("kr-hb-eintrag--konflikt", "kr-fokus");
     fireEvent.click(open);
@@ -56,15 +70,14 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
   });
 
   it("zeigt keine Aktionen ohne echte Anbindung", () => {
-    render(<RolfHomeClient model={{ kind: "data", role: "meister", canCreateOrder: true, projection }} />);
-    for (const name of [/Kümmern/, /an Phillip/, /Später/, /Erinnerung/, /Freigeben/]) {
-      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
-    }
-    expect(screen.queryByText(/erledigt, sobald/)).not.toBeInTheDocument();
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canDelegate: true, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields] }, projection }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Später" }));
+    expect(screen.getByRole("heading", { name: "Später erinnern" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "morgen früh" })).toBeInTheDocument();
   });
 
   it("führt readonly ohne Warenausgang-Aktion", () => {
-    render(<RolfHomeClient model={{ kind: "data", role: "readonly", canCreateOrder: false, projection }} />);
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "readonly", canCreateOrder: false, canDelegate: false, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields] }, projection }} />);
     expect(screen.queryByRole("button", { name: /Ware raus öffnen/ })).not.toBeInTheDocument();
   });
 
@@ -80,12 +93,13 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
 
   it("zeigt ehrliche Leer-, Verweigert- und Fehlerzustände", () => {
     const empty = { ...projection, orders: [], priority: [], recent: [], dominant: null } satisfies OrdersHomeProjection;
-    const { rerender } = render(<RolfHomeClient model={{ kind: "empty", role: "meister", canCreateOrder: true, projection: empty }} />);
-    expect(screen.getByRole("status")).toHaveTextContent("Noch keine Aufträge erfasst.");
+    const emptyDashboard = { ...dashboard, items: [], visibleFields: [...dashboard.visibleFields] };
+    const { rerender } = render(<RolfHomeClient ports={actionPorts} model={{ kind: "empty", role: "meister", canCreateOrder: true, canDelegate: true, dashboard: emptyDashboard, projection: empty }} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Noch keine Handlungen für dich.");
     expect(screen.getByRole("button", { name: "Neuer Eingang" })).toBeInTheDocument();
-    rerender(<RolfHomeClient model={{ kind: "denied", message: "Nicht freigegeben." }} />);
+    rerender(<RolfHomeClient ports={actionPorts} model={{ kind: "denied", message: "Nicht freigegeben." }} />);
     expect(screen.getByRole("status")).toHaveTextContent("Tagesbestand nicht öffnen");
-    rerender(<RolfHomeClient model={{ kind: "error", message: "Lesefehler." }} />);
+    rerender(<RolfHomeClient ports={actionPorts} model={{ kind: "error", message: "Lesefehler." }} />);
     expect(screen.getByRole("alert")).toHaveTextContent("gerade nicht verfügbar");
   });
 });

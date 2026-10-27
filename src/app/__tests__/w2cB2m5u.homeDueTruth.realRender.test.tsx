@@ -14,20 +14,9 @@ vi.mock("next/navigation", () => ({ redirect: ports.redirect }));
 vi.mock("@/lib/server/authorization", () => ({
   resolveAuthorization: ports.resolveAuthorization,
 }));
-vi.mock("@/components/home/RolfHome", () => ({
-  RolfHome: ({ authorization }: { authorization: { role: string } }) => (
-    <div data-testid="rolf-home">{authorization.role}</div>
-  ),
-}));
-vi.mock("@/components/home/WerkstattHome", () => ({
-  loadWerkstattHome: vi.fn(async (authorization: { role: string }) => ({
-    kind: "data" as const,
-    role: authorization.role,
-  })),
-}));
-vi.mock("@/app/warendurchlauf/WerkstattAppAdapter", () => ({
-  WerkstattAppAdapter: ({ view }: { view: { role: string } }) => (
-    <div data-testid="werkstatt-home">{view.role}</div>
+vi.mock("@/app/HomeAppAdapter", () => ({
+  HomeAppAdapter: ({ authorization }: { authorization: { role: string } }) => (
+    <div data-testid="today-home">{authorization.role}</div>
   ),
 }));
 
@@ -59,13 +48,13 @@ describe("F1-R0 root route containment", () => {
   it("renders Rolf through the shared actor authorization choke point", async () => {
     ports.resolveAuthorization.mockResolvedValue(authorizationFor("rolf"));
     render(await RootPage());
-    expect(screen.getByTestId("rolf-home")).toHaveTextContent("meister");
+    expect(screen.getByTestId("today-home")).toHaveTextContent("meister");
   });
 
   it("renders Phillip through the same choke point", async () => {
     ports.resolveAuthorization.mockResolvedValue(authorizationFor("phillip"));
     render(await RootPage());
-    expect(screen.getByTestId("werkstatt-home")).toHaveTextContent("werkstatt");
+    expect(screen.getByTestId("today-home")).toHaveTextContent("werkstatt");
   });
 
   it.each(["admin", "developer"] as const)(
@@ -103,10 +92,11 @@ describe("F1-R0 root route containment", () => {
 
   it("contains no fallback identity or client-side business state", () => {
     const source = readFileSync(resolve(process.cwd(), "src/app/page.tsx"), "utf8");
+    const adapter = readFileSync(resolve(process.cwd(), "src/app/HomeAppAdapter.tsx"), "utf8");
     expect(source).not.toMatch(/DEMO|localStorage|useState|useEffect|getProductIdentity\(/);
     expect(source).toContain("resolveAuthorization");
-    expect(source).toContain("loadWerkstattHome");
-    expect(source).toContain("<WerkstattAppAdapter");
-    expect(source).toContain("<RolfHome");
+    expect(source).toContain("<HomeAppAdapter");
+    expect(adapter).toContain("@/modules/orders/public");
+    expect(adapter).toContain("<RolfHome");
   });
 });

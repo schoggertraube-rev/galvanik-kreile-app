@@ -1,11 +1,15 @@
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import { getOperationalOrders } from "@/lib/server/operationalOrders";
+import { readTodayDashboard } from "@/lib/server/todayDashboard";
 import type { OperationalOrder } from "@/lib/types/operationalOrder";
 import {
   buildOrdersHomeProjection,
   type OrdersHomeSource,
 } from "@/modules/orders/public";
 import { RolfHomeClient, type RolfHomeModel } from "./RolfHomeClient";
+import { saveTodayPreferencesAction, saveTodayReminderAction } from "@/app/actions/today.actions";
+import { discardIntakeDraftAction } from "@/app/actions/intakeDraft.actions";
+import { assignOrderTaskAction } from "@/app/actions/orders.actions";
 
 function toHomeSource(order: OperationalOrder): OrdersHomeSource {
   return {
@@ -26,7 +30,7 @@ function toHomeSource(order: OperationalOrder): OrdersHomeSource {
 }
 
 export async function loadRolfHome(authorization: AuthorizationSnapshot): Promise<RolfHomeModel> {
-  if (authorization.role !== "buero" && authorization.role !== "meister" && authorization.role !== "readonly") {
+  if (authorization.role !== "buero" && authorization.role !== "meister" && authorization.role !== "readonly" && authorization.role !== "werkstatt") {
     return { kind: "denied", message: "Diese Rollen-Startseite ist nicht freigegeben." };
   }
   if (!authorization.permissions.includes("perm_view_leitstand")) {
@@ -34,10 +38,12 @@ export async function loadRolfHome(authorization: AuthorizationSnapshot): Promis
   }
 
   try {
-    const orders = await getOperationalOrders(authorization);
+    const [orders, dashboard] = await Promise.all([getOperationalOrders(authorization), readTodayDashboard(authorization)]);
     const common = {
       role: authorization.role,
       canCreateOrder: authorization.permissions.includes("perm_data_orders"),
+      canDelegate: authorization.role === "meister" || authorization.role === "buero",
+      dashboard,
     } as const;
     const projection = buildOrdersHomeProjection(orders.map(toHomeSource), new Date().toISOString());
     return orders.length === 0
@@ -49,5 +55,10 @@ export async function loadRolfHome(authorization: AuthorizationSnapshot): Promis
 }
 
 export async function RolfHome({ authorization }: { authorization: AuthorizationSnapshot }) {
-  return <RolfHomeClient model={await loadRolfHome(authorization)} />;
+  return <RolfHomeClient model={await loadRolfHome(authorization)} ports={{
+    savePreferences: saveTodayPreferencesAction,
+    saveReminder: saveTodayReminderAction,
+    discardDraft: discardIntakeDraftAction,
+    assignOrder: assignOrderTaskAction,
+  }} />;
 }

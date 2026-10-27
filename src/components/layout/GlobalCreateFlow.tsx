@@ -647,6 +647,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       if (prefill?.customerQuery) setCustomerQuery(prefill.customerQuery);
       if (prefill?.note) setQuoteNote(prefill.note);
       if (prefill?.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(prefill.dueDate)) setDueDate(prefill.dueDate);
+      if (prefill?.sourceMode) setSourceMode(prefill.sourceMode);
       if (prefill?.quotePositions?.length) setPositions(prefill.quotePositions.slice(0, 20).map((position) => ({
         ...newPosition(),
         quantity: /^\d+(?:[.,]\d+)?$/.test(position.quantity ?? "") ? (position.quantity ?? "1").replace(",", ".") : "1",
