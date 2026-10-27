@@ -5,9 +5,9 @@ Stand: 27.10.2026, Abschnitt I/J aus `_review/AKTUELLE_ANWEISUNG.md`
 ## Kandidat
 
 - Branch: `kreile/s1-p2-eingang`
-- Exakter geprüfter Produkt-SHA: `417438c6399ae2ea607c445510ecde51b7156498`
-- Preview: <https://galvanik-kreile-werkstatt-675c0g6rc.vercel.app>
-- Vercel-Deployment: `dpl_J8mpHxyH99rnXgV52AchabT7G1dE`, Status `Ready`, Functions-Region `fra1`
+- Exakter geprüfter Produkt-SHA: `263aa72b282a51d8e9b5bc04421acc47554f5ab6`
+- Preview: <https://galvanik-kreile-werkstatt-csquq7hyq.vercel.app>
+- Vercel-Deployment: `dpl_95C2zWtu8Kkd8QuCvdDMQy5qo7jH`, Status `READY`, Functions-Region `fra1`
 - Pull Request: <https://github.com/schoggertraube-rev/galvanik-kreile-app/pull/154> (Draft, nicht gemergt)
 - CI am Produkt-SHA: `agentur-gate`, Vercel und Vercel Preview Comments grün
 - [Lokale Paar-Seite](../../output/v11-paare/index.html): 33/33 App-/Prototyp-Paare, 0 ausgelassen; erzeugt gegen exakt die oben genannte Preview
@@ -21,7 +21,7 @@ Die Paar-Seite ist ein generiertes, durch `/output/` bewusst von Git ausgeschlos
 | 1 | Shell + Globales Plus | gebaut; V1.1-Shell und ein gemeinsamer Eingang | `fa45f432` |
 | 2 | Neuer Eingang | gebaut; Desktop/Tablet als Seite, Handy in drei Schritten; drei gebundene Zustände | `52d499db` |
 | 3 | Der Tag | gebaut; echte Tagesdaten, ehrliche Leer- und Fehlerzustände | `66c8ab3c` |
-| 4 | Auftragskarte | gebaut; V1.1-Seitenblatt mit bestehender Fachlogik | `b083476b` |
+| 4 | Auftragskarte | gebaut; V1.1-Seitenblatt mit Schnellaktionen, Teilbearbeitung, Teilanlage und bearbeitbarer Notiz auf den bestehenden Rechte- und Schreibwegen | `b083476b`, Korrektur `8f883513`, Modulnaht `263aa72b` |
 | 5 | Werkstatt | gebaut; V1.1-Komposition mit echten Aufträgen | `118ee680` |
 | 6 | Aufträge | gebaut; V1.1-Liste, Woche und Monat an echte Ansicht gebunden | `1a8c5c79` |
 | 7 | Kunden und Kundenkarte | gebaut; reale Kontaktdaten, aktive Auftragszahlen und Aktionen | `d8ab263f`, Korrektur `417438c6` |
@@ -45,11 +45,12 @@ Die Paar-Seite enthält für 1914×917, 1220×880 und 390×844 jeweils:
 - Kundenkarte
 - Befehlspalette
 
-Der letzte vollständige Lauf endete mit `pairs: 33` und `skipped: 0`. Die Kundenliste wurde danach visuell in allen drei Größen kontrolliert; sie zeigt die tenantgebunden ermittelten aktiven Auftragszahlen.
+Der letzte vollständige Lauf gegen die oben gebundene Preview endete mit `pairs: 33` und `skipped: 0`. Die Auftragskarte zeigt in allen drei Größen die Schnellaktionen, die Teilaktionen, `Teil hinzufügen` und die bearbeitbare Notiz.
 
 ## Prüfung
 
-- Vollständiger Pre-Commit-Lauf am Produkt-SHA: 133/133 Testdateien und 1046/1046 Tests grün.
+- GitHub-CI am Produkt-SHA: 134/134 Testdateien und 1049/1049 Tests grün; TypeScript, Mojibake- und Delivery-Checks ebenfalls grün.
+- Gezielt lokal geprüft: 63/63 Modulnaht-Tests, `quality:module-gates`, TypeScript und ESLint grün.
 - Vercel-Preview am exakten Produkt-SHA: `Ready` in `fra1`.
 - GitHub-Checks am exakten Produkt-SHA: vollständig grün.
 - Geschützter Preview-Klickweg und Bildpaarlauf: 33/33, ohne ausgelassenen Zustand.
@@ -74,7 +75,7 @@ Nein, offen ausgewiesen: `supabase migration list --linked` zeigt alle Migration
 
 1. Preview als Rolf öffnen. Erwartet: `Der Tag` in der V1.1-Shell mit neutraler Fläche, weißen Karten und Globalem Plus.
 2. Globales Plus und danach `Neuer Eingang` in der Seitenleiste öffnen. Erwartet: beide öffnen denselben Eingang; Desktop/Tablet als gegliederte Seite, Handy als Drei-Schritt-Fluss.
-3. Einen vorhandenen Auftrag über `Aufträge` und `Werkstatt` öffnen. Erwartet: V1.1-Liste und Auftragskarte, echte Daten und keine Demo-Fakten.
+3. Einen vorhandenen Auftrag über `Aufträge` und `Werkstatt` öffnen. Erwartet: V1.1-Liste und Auftragskarte mit `Status-Mail`, `Anrufen`, `Foto`, `Mehr`, den drei Teilaktionen, `Teil hinzufügen` und bearbeitbarer Notiz; alles nur gemäß den realen Rechten verfügbar.
 4. `Kunden` öffnen und Sabrina Schmidt wählen. Erwartet: echte aktive Auftragszahl in der Liste und V1.1-Kundenkarte mit Kontakt und Schnellaktionen.
 5. Die Kopfsuche öffnen und mindestens zwei Zeichen eingeben. Erwartet: V1.1-Befehlspalette mit erlaubten Aktionen und realen Treffern; keine statischen Demo-Treffer.
 
