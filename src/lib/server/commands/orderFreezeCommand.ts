@@ -361,10 +361,11 @@ export async function freezeOrder(input: FreezeOrderInput): Promise<FreezeOrderR
       if (itemRows.some((item) =>
         item.tenant_id !== authorization.data.tenantId
         || item.customer_id !== order.customer_id
-        || item.current_station_id !== SOURCE_STATION
+        || (item.current_station_id !== SOURCE_STATION && item.current_station_id !== TARGET_STATION)
       )) {
         return { code: "VALIDATION_ERROR", message: "Auftragsteile sind nicht fertigsetzbar." };
       }
+      const pendingItemCount = itemRows.filter((item) => item.current_station_id === SOURCE_STATION).length;
 
       const rateRows = await tx.execute<RateRow>(sql`
         SELECT id::text AS id, tenant_id, hourly_rate_cents, version
@@ -456,7 +457,7 @@ export async function freezeOrder(input: FreezeOrderInput): Promise<FreezeOrderR
             AND current_station_id = ${SOURCE_STATION}
           RETURNING id
         `);
-        if (updatedItems.length !== itemRows.length) throw new Error("ORDER_FROZEN_ITEM_UPDATE_MISMATCH");
+        if (updatedItems.length !== pendingItemCount) throw new Error("ORDER_FROZEN_ITEM_UPDATE_MISMATCH");
       }
 
       const eventRows = await tx.execute<{ event_id: string; occurred_at: Date | string }>(sql`
