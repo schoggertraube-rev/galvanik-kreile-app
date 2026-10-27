@@ -60,3 +60,22 @@
 .createInlineChoices button[aria-current="step"],.createInlineChoices button[aria-pressed="true"]{border-color:var(--rand);background:var(--surface);color:var(--navy-900);box-shadow:var(--sh-sm)}
 .createInlineChoices button:disabled{color:var(--navy-300);cursor:not-allowed;opacity:.62}
 @media(max-width:700px){.createInlineChoices{grid-template-columns:1fr}.createInlineChoices button{min-height:46px}}
+.f1HiddenFile { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }
+.f1Camera { position: relative; min-block-size: 26rem; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--navy-800); display: grid; place-items: center; }
+.f1Camera video { inline-size: 100%; max-block-size: 62vh; object-fit: contain; }
+.f1Camera span { position: absolute; inset-block-end: 16px; padding: 8px 16px; border-radius: 999px; background: var(--navy-800); color: var(--surface); }
+.f1DocumentEmpty { min-block-size: 18rem; display: grid; place-items: center; gap: 12px; border: 1px dashed var(--line); border-radius: 16px; }
+.f1DocumentEmpty svg { inline-size: 3rem; block-size: 3rem; color: var(--navy-300); }
+.f1DocumentGrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 16px; }
+.f1DocumentGrid > section { padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.f1Suggestion { display: flex; gap: 12px; align-items: flex-start; min-block-size: 3rem; padding-block: 8px; }
+.f1Suggestion span { display: grid; gap: 4px; }
+.f1Suggestion em { font-style: normal; }
+.f1Suggestion small { color: var(--navy-300); }
+.f1MailList { display: grid; gap: 16px; }
+.f1MailList article { padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.f1MailList header { display: flex; gap: 12px; align-items: center; }
+.f1MailList header div { display: grid; }
+.f1MailActions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.f1MailActions select { min-block-size: 3rem; padding-inline: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--navy-800); }
+@media (max-width: 760px) { .f1DocumentGrid { grid-template-columns: 1fr; } .f1Camera { min-block-size: 18rem; } }

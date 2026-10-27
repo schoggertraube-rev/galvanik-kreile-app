@@ -13,6 +13,7 @@ import {
   createCustomerCommand,
   readCustomerCreateReceiptCommand,
   updateCustomerCommercialCommand,
+  updateCustomerNoteCommand,
   type CreateCustomerInput,
   type UpdateCustomerCommercialInput,
 } from "@/modules/customers/server-public";
@@ -102,6 +103,21 @@ export async function updateCustomerCommercialAction(input: UpdateCustomerCommer
     readback.data.paymentPreference !== input.paymentPreference) return { code: "UNAVAILABLE" as const, message: "Änderung konnte nicht frisch bestätigt werden." };
   revalidatePath("/customers"); revalidatePath(`/customers/${input.customerId}`);
   return { code: "OK" as const, customer: readback.data };
+}
+
+export async function updateCustomerNoteAction(input: { clientEventId: string; customerId: string; note: string }) {
+  const authorization = await resolveAuthorization().catch(() => null);
+  if (!authorization || !authorization.ok) return { code: "UNAVAILABLE" as const, message: "Kundennotiz konnte nicht sicher gespeichert werden." };
+  const result = await updateCustomerNoteCommand({
+    tenantId: authorization.data.tenantId,
+    userId: authorization.data.userId,
+    capabilities: { canCreateCustomer: authorization.data.permissions.includes("perm_data_customers") },
+  }, input);
+  if (result.code !== "OK") return result;
+  const readback = await readCustomerSummary(authorization.data, { customerId: input.customerId });
+  if (readback.code !== "OK" || (readback.data.internalNotes ?? "") !== input.note) return { code: "UNAVAILABLE" as const, message: "Kundennotiz wurde geschrieben, aber noch nicht sicher zurückgelesen." };
+  revalidatePath("/customers"); revalidatePath(`/customers/${input.customerId}`);
+  return { code: "OK" as const };
 }
 
 type DbCustomer = InferSelectModel<typeof customers>;

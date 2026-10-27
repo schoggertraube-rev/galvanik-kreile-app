@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useOverlayStore } from "@/lib/overlayStore";
 import { SearchDialog, type SearchHit } from "@/modules/suche/public";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
-import { requestGlobalCreate } from "./GlobalCreateFlow";
+import { requestGlobalCreate } from "./globalCreateRequest";
 
 type GlobalSearchProps = {
   open: boolean;

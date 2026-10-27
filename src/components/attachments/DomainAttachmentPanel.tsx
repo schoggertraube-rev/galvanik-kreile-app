@@ -10,7 +10,7 @@ import {
   getDomainAttachmentsAction,
   reserveDomainAttachmentAction,
 } from "@/app/actions/domainAttachments.actions";
-import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
+import { requestGlobalCreate } from "@/components/layout/globalCreateRequest";
 import styles from "./DomainAttachmentPanel.module.css";
 
 const ACCEPTED = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
@@ -132,7 +132,7 @@ export function DomainAttachmentPanel({ targetType, targetId }: { targetType: "C
     const material = chosen.find((item) => item.field === "MATERIAL")?.value;
     const dueDate = chosen.find((item) => item.field === "DUE_DATE")?.value;
     requestGlobalCreate({ intent: "QUOTE", prefill: {
-      customerQuery: result.customerName,
+      customerQuery: result.customerName ?? undefined,
       note: `Bestätigte Dokumentvorschläge:\n${chosen.map(line).join("\n")}`,
       dueDate: dueDate && /^\d{4}-\d{2}-\d{2}$/.test(dueDate) ? dueDate : undefined,
       quotePositions: quantity || material ? [{ quantity, material }] : undefined,

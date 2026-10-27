@@ -7,12 +7,12 @@
   "note": "Machine-readable capability inventory based on snapshot_sha; the immutable review SHA is recorded separately when the candidate is frozen. Every page route, API route, Server Action group, KPI definition, and provider connection must carry exactly one of: REAL_VERIFIED | REAL_PENDING_SECRET | PENDING_CONTRACT | TEST_ONLY | LEGACY_REMOVE",
   "summary": {
     "page_routes": 13,
-    "api_routes": 19,
-    "server_action_groups": 53,
+    "api_routes": 20,
+    "server_action_groups": 56,
     "kpi_definitions": 7,
     "provider_connections": 16,
     "nav_links_without_page": 3,
-    "total": 111
+    "total": 115
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -314,6 +314,16 @@
       "open_reason": "F1.4 stored original/cancellation PDF download candidate. Real local E2E and independent exact-SHA acceptance are pending."
     },
     {
+      "stable_id": "api.documents.document-id.quote-pdf",
+      "kind": "API_ROUTE",
+      "entry_point": "src/app/api/documents/[documentId]/quote-pdf/route.ts",
+      "route": "/api/documents/[documentId]/quote-pdf",
+      "visible": false,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Tenant-bound quote PDF download. Owner verification remains pending."
+    },
+    {
       "stable_id": "api.ocr-process",
       "kind": "API_ROUTE",
       "entry_point": "src/app/api/ocr-process/route.ts",
@@ -532,6 +542,7 @@
         "readCustomerCreateReceiptAction",
         "getCustomerSummaryAction",
         "updateCustomerCommercialAction",
+        "updateCustomerNoteAction",
         "getCustomersDb",
         "getCustomerByIdDb",
         "createCustomerDb",
@@ -545,13 +556,68 @@
       "reachable": true
     },
     {
+      "stable_id": "server-actions.communications",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/communications.actions.ts",
+      "exported_functions": [
+        "getMicrosoftGraphStatusAction",
+        "listOutlookInboxAction",
+        "attachOutlookMailAction",
+        "sendCustomerMailAction"
+      ],
+      "classification": "REAL_PENDING_SECRET",
+      "open_reason": "Tenant-bound Microsoft Graph mail port. Preview activation is externally blocked by invalid_client and remains In Klärung.",
+      "visible": false,
+      "reachable": true,
+      "provider": "microsoft-graph",
+      "env_vars": ["MS_GRAPH_TENANT_ID", "MS_GRAPH_CLIENT_ID", "MS_GRAPH_CLIENT_SECRET", "MS_GRAPH_MAILBOX"]
+    },
+    {
+      "stable_id": "server-actions.domain-attachments",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/domainAttachments.actions.ts",
+      "exported_functions": [
+        "reserveDomainAttachmentAction",
+        "finalizeDomainAttachmentAction",
+        "attachIntakeDraftAttachmentAction",
+        "getDomainAttachmentsAction",
+        "getDomainAttachmentOriginalAction",
+        "getDocumentIntelligenceStatusAction",
+        "analyzeDomainAttachmentAction"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Tenant-bound attachment upload and Azure Document Intelligence analysis. Owner verification remains pending.",
+      "visible": false,
+      "reachable": true,
+      "provider": "supabase-storage"
+    },
+    {
+      "stable_id": "server-actions.intake-drafts",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/intakeDraft.actions.ts",
+      "exported_functions": [
+        "readIntakeDraftAction",
+        "saveIntakeDraftAction",
+        "discardIntakeDraftAction"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Per-user tenant-bound intake draft persistence. Owner verification remains pending.",
+      "visible": false,
+      "reachable": true
+    },
+    {
       "stable_id": "server-actions.settings",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/settings.actions.ts",
       "exported_functions": [
         "readSettingsAction",
+        "readSalesStageFeaturesAction",
+        "saveSalesStageFeatureAction",
         "saveCompanySettingsAction",
         "saveManagedUserAction",
+        "createManagedUserAction",
+        "setManagedUserAreaAction",
+        "changeOwnPinAction",
         "saveCatalogServiceAction"
       ],
       "classification": "PENDING_CONTRACT",
@@ -571,6 +637,7 @@
         "readQuoteCreateReceiptAction",
         "readQuoteConversionReceiptAction",
         "readQuoteUpdateReceiptAction",
+        "readQuotePdfAction",
         "updateQuoteAction"
       ],
       "classification": "PENDING_CONTRACT",
@@ -643,6 +710,7 @@
       "entry_point": "src/app/actions/invoices.actions.ts",
       "exported_functions": [
         "issueInvoiceAction",
+        "setInvoiceItemPricesAction",
         "cancelInvoiceAction",
         "getInvoiceReceiptAction",
         "getInvoiceCancellationReceiptAction",
@@ -704,6 +772,9 @@
         "reopenFrozenOrderAction",
         "assignOrderTaskAction",
         "handBackOrderTaskAction",
+        "changeOrderPromisedDueDateAction",
+        "changeOrderContentAction",
+        "setOrderItemFinishedAction",
         "configureExtraWorkCatalogPositionAction",
         "setExtraWorkHourlyRateAction",
         "getLiveOrderCardAction",

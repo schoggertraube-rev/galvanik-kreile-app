@@ -38,26 +38,12 @@ import type {
   QuoteUpdateReceipt,
   UpdateQuoteInput,
 } from "@/modules/quotes/public";
+import { F1SourceDialogs, type F1SourceMode } from "./F1SourceDialogs";
+import { GLOBAL_CREATE_OPEN_EVENT, type GlobalCreateIntent, type GlobalCreateRequest } from "./globalCreateRequest";
 import styles from "./TargetShell.module.css";
 
-export type GlobalCreateIntent = "CUSTOMER" | "QUOTE" | "DIRECT_INTAKE";
-export type GlobalCreateRequest = {
-  intent: GlobalCreateIntent;
-  prefill?: {
-    customerId?: string;
-    name?: string;
-    email?: string;
-    customerQuery?: string;
-    note?: string;
-    dueDate?: string;
-    quotePositions?: Array<{ quantity?: string; material?: string }>;
-  };
-};
-export const GLOBAL_CREATE_OPEN_EVENT = "path1:global-create-open";
-
-export function requestGlobalCreate(request: GlobalCreateIntent | GlobalCreateRequest): void {
-  window.dispatchEvent(new CustomEvent<GlobalCreateIntent | GlobalCreateRequest>(GLOBAL_CREATE_OPEN_EVENT, { detail: request }));
-}
+export { requestGlobalCreate } from "./globalCreateRequest";
+export type { GlobalCreateIntent, GlobalCreateRequest } from "./globalCreateRequest";
 
 type FailureCode =
   | "FORBIDDEN"
@@ -65,6 +51,7 @@ type FailureCode =
   | "NOT_FOUND"
   | "CONFLICT"
   | "VALIDATION_ERROR"
+  | "IN_KLAERUNG"
   | "UNAVAILABLE";
 
 type Failure = { code: FailureCode; message: string };
@@ -138,7 +125,11 @@ export type GlobalCreateConversionResult =
 
 export type DirectIntakeInput = {
   clientEventId: string;
-  customer: { mode: "EXISTING"; customerId: string };
+  customer: { mode: "EXISTING"; customerId: string } | {
+    mode: "NEW"; name: string; customerType: "business" | "privat" | "institution";
+    companyName: string | null; contactPerson: string | null; email: string | null; phone: string | null;
+    street: string; zipCode: string; city: string | null; country: string; paymentPreference: string; vatId: string | null;
+  };
   dueDate: string;
   handoverMode: "pickup" | "shipping";
   paymentMode: "vorkasse" | "abholung" | "rechnung";
@@ -180,6 +171,7 @@ export type GlobalCreatePorts = {
   >;
   listCatalog?: () => Promise<{ code:"OK"; services:CatalogService[] }|{ code:"DENIED"|"UNAVAILABLE"; message:string }>;
   createCustomer: (input: CreateCustomerInput) => Promise<GlobalCreateCustomerResult>;
+  saveCustomerNote: (input: { clientEventId: string; customerId: string; note: string }) => Promise<{ code: "OK" } | Failure>;
   updateCustomer?: (input: UpdateCustomerCommercialInput) => Promise<{ code: "OK" } | Failure>;
   readCustomerCreateReceipt: (input: CreateCustomerInput) => Promise<GlobalCreateCustomerResult | Failure>;
   createQuote: (input: CreateQuoteInput) => Promise<GlobalCreateQuoteResult>;
@@ -192,6 +184,12 @@ export type GlobalCreatePorts = {
   readQuoteConversionReceipt: (input: { quoteId: string; clientEventId: string }) => Promise<GlobalCreateConversionResult>;
   createDirectIntake: (input: DirectIntakeInput) => Promise<GlobalCreateDirectIntakeResult>;
   readDirectIntakeReceipt: (input: { orderId: string; clientEventId: string }) => Promise<GlobalCreateDirectIntakeResult>;
+  readIntakeDraft: () => Promise<{ code: "OK"; data: { payload: Record<string, unknown>; updatedAt: string } | null } | Failure>;
+  saveIntakeDraft: (payload: Record<string, unknown>) => Promise<{ code: "OK"; data: { updatedAt: string } } | Failure>;
+  discardIntakeDraft: () => Promise<{ code: "OK"; data: { discarded: boolean } } | Failure>;
+  attachIntakeAttachment: (input: { attachmentId: string; orderId: string }) => Promise<{ code: "OK" } | Failure>;
+  attachIntakeMail: (input: { graphMessageId: string; orderId: string }) => Promise<{ code: "OK" } | Failure>;
+  canUseMail: boolean;
   rememberQuote: (quoteId: string | null) => void;
   rememberQuoteConversion: (quoteId: string, clientEventId: string) => void;
   openCustomer: (customerId: string) => void;
@@ -219,21 +217,25 @@ type PositionDraft = {
 };
 type IntakePositionDraft = { key:string; catalogServiceId:string; name:string; quantity:string; material:string; surfaceRequested:string; unit:string|null; unitPriceCents:number|null; vatRateBasisPoints:0|700|1900|null };
 
+function record(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function CustomerFields({ value, onChange, autofocus = false, requireOrderData = true }: { value: CustomerDraft; onChange: (value: CustomerDraft) => void; autofocus?: boolean; requireOrderData?: boolean }) {
   const set = <K extends keyof CustomerDraft>(key: K, next: CustomerDraft[K]) => onChange({ ...value, [key]: next });
   return <div className={styles.createFormGrid}>
-    <label className={styles.createFieldWide}>Firma / Name<input data-autofocus={autofocus || undefined} required minLength={2} value={value.name} onChange={(event) => set("name", event.target.value)} /></label>
-    <label>Kundentyp<select value={value.customerType} onChange={(event) => set("customerType", event.target.value as CustomerDraft["customerType"])}><option value="business">Firma</option><option value="privat">Privat</option><option value="institution">Institution</option></select></label>
+    <label className={styles.createFieldWide}>Firma / Name<input data-spec-id="kundeneu.name" data-autofocus={autofocus || undefined} required minLength={2} value={value.name} onChange={(event) => set("name", event.target.value)} /></label>
+    <label>Kundentyp<select data-spec-id="kundeneu.kundentyp" value={value.customerType} onChange={(event) => set("customerType", event.target.value as CustomerDraft["customerType"])}><option value="business">Firma</option><option value="privat">Privat</option><option value="institution">Institution</option></select></label>
     <label>Firmenname<input value={value.companyName ?? ""} onChange={(event) => set("companyName", nullable(event.target.value))} /></label>
-    <label>Ansprechpartner<input required={requireOrderData} value={value.contactPerson ?? ""} onChange={(event) => set("contactPerson", nullable(event.target.value))} /></label>
-    <label>Telefon<input required value={value.phone ?? ""} onChange={(event) => set("phone", nullable(event.target.value))} /></label>
-    <label>E-Mail<input required={requireOrderData} type="email" value={value.email ?? ""} onChange={(event) => set("email", nullable(event.target.value))} /></label>
-    <label>Straße<input required={requireOrderData} value={value.street} onChange={(event) => set("street", event.target.value)} /></label>
-    <label>PLZ<input required={requireOrderData} value={value.zipCode} onChange={(event) => set("zipCode", event.target.value)} /></label>
-    <label>Ort<input required={requireOrderData} value={value.city} onChange={(event) => set("city", event.target.value)} /></label>
-    <label>Land<input required={requireOrderData} value={value.country} onChange={(event) => set("country", event.target.value)} /></label>
-    <label>Zahlung<select value={value.paymentPreference} onChange={(event) => set("paymentPreference", event.target.value)}><option value="rechnung_14">Rechnung 14 Tage</option><option value="rechnung_30">Rechnung 30 Tage</option><option value="vorkasse">Vorkasse</option><option value="bar">Bar</option></select></label>
-    <label>USt-ID<input value={value.vatId ?? ""} onChange={(event) => set("vatId", nullable(event.target.value))} /></label>
+    <label>Ansprechpartner<input data-spec-id="kundeneu.ansprechpartner" required={requireOrderData} value={value.contactPerson ?? ""} onChange={(event) => set("contactPerson", nullable(event.target.value))} /></label>
+    <label>Telefon<input data-spec-id="kundeneu.telefon" required value={value.phone ?? ""} onChange={(event) => set("phone", nullable(event.target.value))} /></label>
+    <label>E-Mail<input data-spec-id="kundeneu.email" required={requireOrderData} type="email" value={value.email ?? ""} onChange={(event) => set("email", nullable(event.target.value))} /></label>
+    <label>Straße<input data-spec-id="kundeneu.strasse" required={requireOrderData} value={value.street} onChange={(event) => set("street", event.target.value)} /></label>
+    <label>PLZ<input data-spec-id="kundeneu.plz" required={requireOrderData} value={value.zipCode} onChange={(event) => set("zipCode", event.target.value)} /></label>
+    <label>Ort<input data-spec-id="kundeneu.ort" required={requireOrderData} value={value.city} onChange={(event) => set("city", event.target.value)} /></label>
+    <label>Land<input data-spec-id="kundeneu.land" required={requireOrderData} value={value.country} onChange={(event) => set("country", event.target.value)} /></label>
+    <label>Zahlung<select data-spec-id="kundeneu.zahlungsbedingung" value={value.paymentPreference} onChange={(event) => set("paymentPreference", event.target.value)}><option value="rechnung_14">Rechnung 14 Tage</option><option value="rechnung_30">Rechnung 30 Tage</option><option value="vorkasse">Vorkasse</option><option value="bar">Bar</option></select></label>
+    <label>USt-ID<input data-spec-id="kundeneu.ustid" value={value.vatId ?? ""} onChange={(event) => set("vatId", nullable(event.target.value))} /></label>
   </div>;
 }
 
@@ -400,6 +402,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [retryConfirmed, setRetryConfirmed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [customerDraft, setCustomerDraft] = useState<CustomerDraft>(EMPTY_CUSTOMER);
+  const [customerNote, setCustomerNote] = useState("");
   const [customer, setCustomer] = useState<GlobalCreateCustomerChoice | null>(null);
   const [customerReceipt, setCustomerReceipt] = useState<Extract<GlobalCreateCustomerResult, { code: "OK" }>["receipt"] | null>(null);
   const [customerQuery, setCustomerQuery] = useState("");
@@ -415,7 +418,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [intakeStep, setIntakeStep] = useState<1 | 2 | 3>(1);
   const [intakeKind, setIntakeKind] = useState<"ORDER" | "QUOTE">("ORDER");
   const [intakeHandover, setIntakeHandover] = useState<"PICKUP" | "SHIPPING">("PICKUP");
-  const [intakeSource, setIntakeSource] = useState<"personal" | "shipping" | "pickup">("personal");
+  const [intakeSource, setIntakeSource] = useState<"personal" | "shipping" | "pickup" | "mail" | "phone">("personal");
+  const [intakeTermStatus, setIntakeTermStatus] = useState<"wish" | "confirmed">("wish");
+  const [quoteValidUntil, setQuoteValidUntil] = useState("");
   const [intakeChecked, setIntakeChecked] = useState(false);
   const [directCustomer, setDirectCustomer] = useState<CustomerDraft>(EMPTY_INTAKE_CUSTOMER);
   const [directCustomerId, setDirectCustomerId] = useState("");
@@ -424,6 +429,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [directWishDate, setDirectWishDate] = useState("");
   const [directConfirmedDate, setDirectConfirmedDate] = useState("");
   const [directNote, setDirectNote] = useState("");
+  const [sourceMode, setSourceMode] = useState<F1SourceMode | null>(null);
+  const [draftPrompt, setDraftPrompt] = useState(false);
+  const [pendingAttachmentIds, setPendingAttachmentIds] = useState<string[]>([]);
+  const [pendingMailId, setPendingMailId] = useState<string | null>(null);
   const [directReceipt, setDirectReceipt] = useState<Extract<GlobalCreateDirectIntakeResult, { code: "OK" }> | null>(null);
   const [quote, setQuote] = useState<QuoteReadback | null>(null);
   const [quoteReceipt, setQuoteReceipt] = useState<(QuoteCreateReceipt | QuoteUpdateReceipt) | null>(null);
@@ -461,14 +470,43 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     target?.focus();
   }, [directCustomerMode, open, step]);
 
-  const close = () => {
-    if (!busy) setOpen(false);
+  const closeNow = () => {
+    if (!busy) {
+      setDraftPrompt(false);
+      setSourceMode(null);
+      setOpen(false);
+    }
+  };
+
+  const intakeDraftPayload = (): Record<string, unknown> => ({
+    version: 1,
+    kind: "INTAKE",
+    customerMode: directCustomerMode,
+    customerId: directCustomerId,
+    customer: directCustomer,
+    intakeKind,
+    intakeHandover,
+    intakeSource,
+    intakeTermStatus,
+    intakeChecked,
+    items: directItems,
+    wishDate: directWishDate,
+    confirmedDate: directConfirmedDate,
+    validUntil: quoteValidUntil,
+    note: directNote,
+    attachmentIds: pendingAttachmentIds,
+    graphMessageId: pendingMailId,
+  });
+
+  const requestClose = () => {
+    if (!busy && !directReceipt) setDraftPrompt(true);
+    else closeNow();
   };
 
   const handleDialogKey = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
-      close();
+      requestClose();
       return;
     }
     if (event.key !== "Tab" || !dialogRef.current) return;
@@ -493,6 +531,27 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         : `Das Profil ${ports.roleLabel} darf keinen KV oder Auftrag anlegen. Rolf ist für diesen Vorgang zuständig.`,
     });
     setStep("denied");
+  };
+
+  const restoreIntakeDraft = (payload: Record<string, unknown>) => {
+    if (payload.version !== 1 || payload.kind !== "INTAKE") return;
+    if (payload.customerMode === "NONE" || payload.customerMode === "EXISTING" || payload.customerMode === "NEW") setDirectCustomerMode(payload.customerMode);
+    if (typeof payload.customerId === "string") setDirectCustomerId(payload.customerId);
+    const restoredCustomer = payload.customer;
+    if (record(restoredCustomer)) setDirectCustomer((current) => ({ ...current, ...restoredCustomer } as CustomerDraft));
+    if (payload.intakeKind === "ORDER" || payload.intakeKind === "QUOTE") setIntakeKind(payload.intakeKind);
+    if (payload.intakeHandover === "PICKUP" || payload.intakeHandover === "SHIPPING") setIntakeHandover(payload.intakeHandover);
+    if (["personal", "shipping", "pickup", "mail", "phone"].includes(String(payload.intakeSource))) setIntakeSource(payload.intakeSource as typeof intakeSource);
+    if (payload.intakeTermStatus === "wish" || payload.intakeTermStatus === "confirmed") setIntakeTermStatus(payload.intakeTermStatus);
+    if (typeof payload.intakeChecked === "boolean") setIntakeChecked(payload.intakeChecked);
+    if (Array.isArray(payload.items) && payload.items.length >= 1 && payload.items.length <= 20 && payload.items.every(record)) setDirectItems(payload.items as IntakePositionDraft[]);
+    if (typeof payload.wishDate === "string") setDirectWishDate(payload.wishDate);
+    if (typeof payload.confirmedDate === "string") setDirectConfirmedDate(payload.confirmedDate);
+    if (typeof payload.validUntil === "string") setQuoteValidUntil(payload.validUntil);
+    if (typeof payload.note === "string") setDirectNote(payload.note);
+    if (Array.isArray(payload.attachmentIds)) setPendingAttachmentIds(payload.attachmentIds.filter((id): id is string => typeof id === "string"));
+    if (typeof payload.graphMessageId === "string") setPendingMailId(payload.graphMessageId);
+    setFeedback({ kind: "error", message: "Gespeicherter Entwurf dieses Logins wurde wieder aufgenommen." });
   };
 
   const loadCustomers = async () => {
@@ -543,9 +602,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setCustomerLoad("loading");
     const seq = ++customerRequestSeq.current;
     try {
-      const [result, catalog] = await Promise.all([
+      const [result, catalog, draft] = await Promise.all([
         ports.listCustomers(),
         ports.listCatalog?.() ?? Promise.resolve({ code:"UNAVAILABLE" as const, message:"Leistungskatalog ist nicht angebunden." }),
+        ports.readIntakeDraft(),
       ]);
       if (seq !== customerRequestSeq.current) return;
       if (result.code !== "OK") {
@@ -559,6 +619,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       setCatalogServices(catalog.services);
       setCustomerChoices(result.customers);
       setCustomerLoad(result.customers.length ? "ready" : "empty");
+      if (draft.code === "OK" && draft.data) restoreIntakeDraft(draft.data.payload);
       const preselected = preselectedCustomerId
         ? result.customers.find((entry) => entry.id === preselectedCustomerId)
         : undefined;
@@ -756,6 +817,13 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       }
       setCustomer({ id: result.customer.id, customerNumber: result.customer.customerNumber, name: result.customer.name, city: customerDraft.city });
       setCustomerReceipt(result.receipt);
+      if (customerNote.trim()) {
+        const noteResult = await ports.saveCustomerNote({ clientEventId: globalThis.crypto.randomUUID(), customerId: result.customer.id, note: customerNote.trim() });
+        if (noteResult.code !== "OK") {
+          setFeedback({ kind: "error", message: `Kunde ist gespeichert; die Notiz bleibt In Klärung. ${noteResult.message}` });
+          return;
+        }
+      }
       navigate("customer-saved");
     } catch {
       setFeedback({
@@ -1052,21 +1120,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setFeedback(null);
     try {
       if (directCustomerMode === "NEW") {
-        const clientEventId = requestId("directCustomer");
-        const created = await ports.createCustomer({ ...directCustomer, clientEventId });
-        if (created.code !== "OK") {
-          setFeedback(requestFeedback(created, clientEventId));
-          return null;
-        }
-        const choice: GlobalCreateCustomerChoice = {
-          id: created.customer.id, customerNumber: created.customer.customerNumber, ...directCustomer,
-          city: directCustomer.city,
-        };
-        setDirectCustomerId(choice.id);
-        setDirectCustomerMode("EXISTING");
-        setCustomerChoices((current) => [choice, ...current.filter((entry) => entry.id !== choice.id)]);
         setIntakeStep(2);
-        return choice.id;
+        return "NEW";
       } else {
         if (!directCustomerId) {
           setFeedback({ kind: "validation", message: "Bitte einen Kunden auswählen." });
@@ -1111,7 +1166,24 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     }
   };
 
-  const submitDirectIntake = async (event: FormEvent, customerId = directCustomerId) => {
+  const createDirectCustomerOnly = async (): Promise<string | null> => {
+    const clientEventId = requestId("directCustomer");
+    const created = await ports.createCustomer({ ...directCustomer, clientEventId });
+    if (created.code !== "OK") {
+      setFeedback(requestFeedback(created, clientEventId));
+      return null;
+    }
+    const choice: GlobalCreateCustomerChoice = {
+      id: created.customer.id, customerNumber: created.customer.customerNumber, ...directCustomer,
+      city: directCustomer.city,
+    };
+    setDirectCustomerId(choice.id);
+    setDirectCustomerMode("EXISTING");
+    setCustomerChoices((current) => [choice, ...current.filter((entry) => entry.id !== choice.id)]);
+    return choice.id;
+  };
+
+  const submitDirectIntake = async (event: FormEvent, customerKey = directCustomerId) => {
     event.preventDefault();
     if (!ports.canCreateQuote) {
       deny("quote");
@@ -1119,7 +1191,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     }
     const validDates = /^\d{4}-\d{2}-\d{2}$/.test(directWishDate) && /^\d{4}-\d{2}-\d{2}$/.test(directConfirmedDate);
     const items = directItems.map((item) => ({ catalogServiceId:item.catalogServiceId === FREE_TEXT_SERVICE ? null : item.catalogServiceId, name:item.name.trim(), quantity:Number(item.quantity), material:nullable(item.material), surfaceRequested:item.surfaceRequested.trim(), unit:item.unit, unitPriceCents:item.unitPriceCents, vatRateBasisPoints:item.vatRateBasisPoints }));
-    const validCustomer = customerId.length > 0 && completeOrderCustomer(directCustomer);
+    const validCustomer = (directCustomerMode === "NEW" || customerKey.length > 0) && completeOrderCustomer(directCustomer);
     if (!validCustomer || !validDates || items.length < 1 || items.length > 20 || !directItems.every(intakePositionComplete)) {
       setFeedback({ kind: "validation", message: "Bitte Kunde, mindestens eine Position, Terminwunsch und zugesagten Termin vollständig angeben." });
       return;
@@ -1129,7 +1201,21 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setFeedback(null);
     const input: DirectIntakeInput = {
       clientEventId: id,
-      customer: { mode: "EXISTING", customerId },
+      customer: directCustomerMode === "NEW" ? {
+        mode: "NEW",
+        name: directCustomer.name,
+        customerType: directCustomer.customerType,
+        companyName: directCustomer.companyName,
+        contactPerson: directCustomer.contactPerson,
+        email: directCustomer.email,
+        phone: directCustomer.phone,
+        street: directCustomer.street,
+        zipCode: directCustomer.zipCode,
+        city: directCustomer.city,
+        country: directCustomer.country,
+        paymentPreference: directCustomer.paymentPreference,
+        vatId: directCustomer.vatId,
+      } : { mode: "EXISTING", customerId: customerKey },
       // The existing F1.1 contract persists the confirmed commitment, never the non-binding wish.
       dueDate: directConfirmedDate,
       handoverMode: intakeHandover === "PICKUP" ? "pickup" : "shipping",
@@ -1151,6 +1237,12 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         return;
       }
       setDirectReceipt(readback);
+      const attachmentResults = await Promise.all(pendingAttachmentIds.map((attachmentId) => ports.attachIntakeAttachment({ attachmentId, orderId: created.receipt.orderId })));
+      const mailResult = pendingMailId ? await ports.attachIntakeMail({ graphMessageId: pendingMailId, orderId: created.receipt.orderId }) : null;
+      await ports.discardIntakeDraft();
+      if (attachmentResults.some((result) => result.code !== "OK") || (mailResult && mailResult.code !== "OK")) {
+        setFeedback({ kind: "error", message: "Auftrag ist gespeichert. Mindestens ein Beleg oder eine Mail ist noch nicht sicher zugeordnet und bleibt In Klärung." });
+      }
       ports.refresh();
     } catch {
       setFeedback({ kind: "unclear", message: "Der Ausgang ist ungeklärt. Es wurde keine zweite Anlage ausgelöst.", requestId: id });
@@ -1167,15 +1259,16 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       surfaceRequested: item.surfaceRequested.trim(),
       unitPriceCents: item.unitPriceCents,
     }));
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(directWishDate) || positions.some((item) => item.name.length < 2 || !Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.surfaceRequested.length < 2 || item.unitPriceCents === null)) {
-      setFeedback({ kind: "validation", message: "Bitte Wunschtermin, Positionen und Netto-Preis für den KV vollständig angeben." });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(directWishDate) || !/^\d{4}-\d{2}-\d{2}$/.test(quoteValidUntil) || positions.some((item) => item.name.length < 2 || !Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.surfaceRequested.length < 2 || item.unitPriceCents === null)) {
+      setFeedback({ kind: "validation", message: "Bitte Liefertermin, Gültigkeit, Positionen und Netto-Preis für den KV vollständig angeben." });
       return;
     }
     const clientEventId = requestId("quote");
     setBusy(true);
     setFeedback(null);
     try {
-      const result = await ports.createQuote({ clientEventId, customerId, dueDate: directWishDate, note: nullable(directNote), positions: positions.map((position) => ({ ...position, unitPriceCents: position.unitPriceCents! })) });
+      const quoteNoteWithValidity = [`KV gültig bis: ${quoteValidUntil}`, directNote.trim()].filter(Boolean).join("\n");
+      const result = await ports.createQuote({ clientEventId, customerId, dueDate: directWishDate, note: quoteNoteWithValidity, positions: positions.map((position) => ({ ...position, unitPriceCents: position.unitPriceCents! })) });
       if (result.code !== "OK") {
         setFeedback(requestFeedback(result, clientEventId));
         return;
@@ -1201,7 +1294,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     }
     const customerId = await advanceIntakeCustomer();
     if (!customerId) return;
-    if (intakeKind === "QUOTE") await submitDirectQuote(customerId);
+    if (intakeKind === "QUOTE") {
+      const quoteCustomerId = customerId === "NEW" ? await createDirectCustomerOnly() : customerId;
+      if (quoteCustomerId) await submitDirectQuote(quoteCustomerId);
+    }
     else await submitDirectIntake(event, customerId);
   };
 
@@ -1268,6 +1364,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setStep("choose");
     setFeedback(null);
     setCustomerDraft(EMPTY_CUSTOMER);
+    setCustomerNote("");
     setCustomer(null);
     setCustomerReceipt(null);
     setPositions([newPosition()]);
@@ -1290,7 +1387,13 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setIntakeKind("ORDER");
     setIntakeHandover("PICKUP");
     setIntakeSource("personal");
+    setIntakeTermStatus("wish");
+    setQuoteValidUntil("");
     setIntakeChecked(false);
+    setSourceMode(null);
+    setDraftPrompt(false);
+    setPendingAttachmentIds([]);
+    setPendingMailId(null);
     requestIds.current = { customer: "", quote: "", conversion: "", directCustomer: "" };
     setIntakeStep(1);
   };
@@ -1302,22 +1405,23 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       </button> : null}
       {open && step === "direct-intake" ? (
         <KrDialog
+          key={draftPrompt ? "intake-with-draft-prompt" : "intake"}
           titel={intakeKind === "QUOTE" ? "Neuer Eingang · KV" : "Neuer Eingang"}
           icon="inbox"
           groesse="breit"
-          onSchliessen={close}
+          onSchliessen={requestClose}
           fuss={directReceipt ? undefined : isHandy ? (
             <>
-              {intakeStep > 1 ? <KrButton text="Zurück" onClick={() => setIntakeStep((intakeStep - 1) as 1 | 2)} /> : <KrButton text="Abbrechen" onClick={close} />}
+              {intakeStep > 1 ? <KrButton text="Zurück" onClick={() => setIntakeStep((intakeStep - 1) as 1 | 2)} /> : <KrButton data-spec-id="eingang.abbrechen" text="Abbrechen" onClick={requestClose} />}
               {intakeStep === 1 ? <KrButton art="primaer" icon="arrow" text="Positionen" disabled={busy} onClick={() => void advanceIntakeCustomer()} /> : null}
               {intakeStep === 2 ? <KrButton art="primaer" icon="arrow" text="Belege & Prüfung" onClick={() => {
                 if (directItems.every(intakePositionComplete)) { setFeedback(null); setIntakeStep(3); }
                 else setFeedback({ kind: "validation", message: "Bitte für jede Position Bezeichnung, Menge und Oberfläche angeben." });
               }} /> : null}
-              {intakeStep === 3 ? <KrButton form="kr-neuer-eingang" type="submit" art="erledigen" icon="check" text={intakeKind === "QUOTE" ? "KV anlegen" : "Wareneingang buchen"} disabled={busy || !intakeChecked} /> : null}
+              {intakeStep === 3 ? <KrButton data-spec-id="eingang.buchen" form="kr-neuer-eingang" type="submit" art="erledigen" icon="check" text={intakeKind === "QUOTE" ? "KV anlegen" : "Wareneingang buchen"} disabled={busy || !intakeChecked} /> : null}
             </>
           ) : (
-            <><KrButton text="Abbrechen" onClick={close} /><KrButton form="kr-neuer-eingang" type="submit" art="erledigen" icon="check" text={intakeKind === "QUOTE" ? "KV anlegen" : "Wareneingang buchen"} disabled={busy || !intakeChecked} /></>
+            <><KrButton data-spec-id="eingang.abbrechen" text="Abbrechen" onClick={requestClose} /><KrButton data-spec-id="eingang.buchen" form="kr-neuer-eingang" type="submit" art="erledigen" icon="check" text={intakeKind === "QUOTE" ? "KV anlegen" : "Wareneingang buchen"} disabled={busy || !intakeChecked} /></>
           )}
         >
           {directReceipt ? (
@@ -1330,6 +1434,11 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
           ) : (
             <form id="kr-neuer-eingang" className="kr-stapel" onSubmit={(event) => void submitIntakePage(event)}>
               {ports.resumeQuoteId ? <Hinweis><KrButton art="sekundaer" icon="arrow" text="Gespeicherten KV fortsetzen" disabled={busy} onClick={() => void resumeQuote()} /></Hinweis> : null}
+              <div className={styles.createInlineChoices} aria-label="Erfassen">
+                <KrButton icon="camera" text="Zettel, Etikett, Karte" onClick={() => setSourceMode("camera")} />
+                <KrButton icon="upload" text="Datei lesen" onClick={() => setSourceMode("document")} />
+                {ports.canUseMail ? <KrButton icon="mail" text="Aus Mail" onClick={() => setSourceMode("mail")} /> : null}
+              </div>
               <datalist id="kr-service-catalog">{catalogServices.map((service) => <option key={service.id} value={service.name}>{service.surface}</option>)}</datalist>
               {isHandy ? <SchrittNav schritte={["Kunde", "Positionen", "Prüfung"]} aktuell={intakeStep - 1} erreicht={intakeStep - 1} onSchritt={(index) => setIntakeStep((index + 1) as 1 | 2 | 3)} /> : <AbschnittNav abschnitte={["Kunde", "Positionen", "Prüfung"]} aktuell={intakeStep - 1} onAbschnitt={(index) => {
                 setIntakeStep((index + 1) as 1 | 2 | 3);
@@ -1338,7 +1447,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
               {(!isHandy || intakeStep === 1) ? <Abschnitt nr={0} label="Kunde">
                 <FormRaster>
-                  <Feld label="Art" voll><Segment label="Art" wert={intakeKind} optionen={[{ wert: "ORDER", text: "Auftrag" }, { wert: "QUOTE", text: "KV" }]} onWert={setIntakeKind} /></Feld>
+                  <Feld label="Art" voll><div data-spec-id="eingang.art"><Segment label="Art" wert={intakeKind} optionen={[{ wert: "ORDER", text: "Auftrag" }, { wert: "QUOTE", text: "KV" }]} onWert={setIntakeKind} /></div></Feld>
                   <Feld label="Kunde" voll>
                     <Auswahl
                       data-intake-customer
@@ -1365,15 +1474,18 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                   <IntakeCustomerFields value={directCustomer} onChange={setDirectCustomer} onlyMissing />
                 </> : null}
                 <FormRaster>
-                  <Feld label="Wunschtermin"><Eingabe type="date" required value={directWishDate} onChange={(event) => { setDirectWishDate(event.target.value); setDirectConfirmedDate(event.target.value); }} /></Feld>
-                  <Feld label="Übergabe"><Segment label="Übergabe" wert={intakeHandover} optionen={[{ wert: "PICKUP", text: "Abholung" }, { wert: "SHIPPING", text: "Versand" }]} onWert={(value) => { setIntakeHandover(value); setDirectCustomer((current) => ({ ...current, paymentPreference: value === "PICKUP" ? "bar" : "vorkasse" })); }} /></Feld>
+                  <Feld label="Liefertermin"><Eingabe data-spec-id="eingang.liefertermin" type="date" required value={directWishDate} onChange={(event) => { setDirectWishDate(event.target.value); setDirectConfirmedDate(event.target.value); }} /></Feld>
+                  <Feld label="Termin ist"><div data-spec-id="eingang.terminstatus"><Segment label="Termin ist" wert={intakeTermStatus} optionen={[{ wert: "wish", text: "Wunsch" }, { wert: "confirmed", text: "bestätigt" }]} onWert={setIntakeTermStatus} /></div></Feld>
+                  <Feld label="Übergabe"><div data-spec-id="eingang.uebergabe"><Segment label="Übergabe" wert={intakeHandover} optionen={[{ wert: "PICKUP", text: "Abholung" }, { wert: "SHIPPING", text: "Versand" }]} onWert={(value) => { setIntakeHandover(value); setDirectCustomer((current) => ({ ...current, paymentPreference: value === "PICKUP" ? "bar" : "vorkasse" })); }} /></div></Feld>
                   <Feld label="Zahlungsmodus">
-                    <Auswahl value={directCustomer.paymentPreference} onChange={(event) => setDirectCustomer((current) => ({ ...current, paymentPreference: event.target.value }))} optionen={[
+                    <Auswahl data-spec-id="eingang.zahlungsmodus" value={directCustomer.paymentPreference} onChange={(event) => setDirectCustomer((current) => ({ ...current, paymentPreference: event.target.value }))} optionen={[
                       intakeHandover === "PICKUP" ? { wert: "bar", text: "Bar oder Karte bei Abholung" } : { wert: "vorkasse", text: "Vorkasse" },
                       { wert: "rechnung_14", text: /^rechnung_/.test(directCustomer.paymentPreference) && directCustomerMode === "EXISTING" ? "Rechnung auf Ziel" : "Rechnung auf Ziel (nicht freigeschaltet)", gesperrt: !(directCustomerMode === "EXISTING" && /^rechnung_/.test(directCustomer.paymentPreference)) },
                     ]} />
                   </Feld>
-                  <Feld label="Eingangsart"><Auswahl value={intakeSource} onChange={(event) => setIntakeSource(event.target.value as typeof intakeSource)} optionen={[{ wert: "personal", text: "persönlich angeliefert" }, { wert: "shipping", text: "Versand eingegangen" }, { wert: "pickup", text: "Abholung durch Kreile" }]} /></Feld>
+                  <Feld label="Eingangsart"><Auswahl data-spec-id="eingang.eingangsart" value={intakeSource} onChange={(event) => setIntakeSource(event.target.value as typeof intakeSource)} optionen={[{ wert: "personal", text: "persönlich angeliefert" }, { wert: "shipping", text: "Versand eingegangen" }, { wert: "pickup", text: "Abholung durch Kreile" }, { wert: "mail", text: "Anfrage per Mail" }, { wert: "phone", text: "Anfrage per Telefon" }]} /></Feld>
+                  {intakeSource === "phone" ? <Feld label="Telefonnotiz" voll><Textfeld data-spec-id="eingang.telefonnotiz" rows={3} value={directNote} onChange={(event) => setDirectNote(event.target.value)} /></Feld> : null}
+                  {intakeKind === "QUOTE" ? <Feld label="KV gültig bis"><Eingabe data-spec-id="eingang.gueltig_bis" type="date" required value={quoteValidUntil} onChange={(event) => setQuoteValidUntil(event.target.value)} /></Feld> : null}
                 </FormRaster>
               </Abschnitt> : null}
 
@@ -1393,6 +1505,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
               {(!isHandy || intakeStep === 3) ? <Abschnitt nr={2} label="Prüfung">
                 <Hinweis ton="warn">Eingangsfoto fehlt</Hinweis>
+                <div className={styles.createInlineChoices}>
+                  <KrButton data-spec-id="eingang.eingangsfoto" icon="camera" text="Eingangsfoto" onClick={() => setSourceMode("camera")} />
+                  <KrButton data-spec-id="eingang.dokument" icon="upload" text="Dokument hinzufügen" onClick={() => setSourceMode("document")} />
+                </div>
                 <Feld label="Hinweis / Belege" voll><Textfeld rows={3} value={directNote} onChange={(event) => setDirectNote(event.target.value)} /></Feld>
                 <FormRaster>
                   <Fakten zeilen={[
@@ -1404,7 +1520,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                     { k: "Zahlungsart", v: directCustomer.paymentPreference === "bar" ? "Bar oder Karte bei Abholung" : /^rechnung_/.test(directCustomer.paymentPreference) ? "Rechnung auf Ziel" : "Vorkasse" },
                   ]} />
                 </FormRaster>
-                <Checkbox checked={intakeChecked} onChange={setIntakeChecked}><b>Ware, Menge und Zustand gemeinsam geprüft</b></Checkbox>
+                <div data-spec-id="eingang.geprueft"><Checkbox checked={intakeChecked} onChange={setIntakeChecked}><b>Ware, Menge und Zustand gemeinsam geprüft</b></Checkbox></div>
               </Abschnitt> : null}
 
               {feedback ? <>
@@ -1418,7 +1534,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
           )}
         </KrDialog>
       ) : open ? (
-        <div className={styles.createOverlay} onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
+        <div className={styles.createOverlay} onMouseDown={(event) => { if (event.target === event.currentTarget) closeNow(); }}>
           <section ref={dialogRef} className={styles.createDialog} role="dialog" aria-modal="true" aria-labelledby="global-create-title" onKeyDown={handleDialogKey}>
             <header className={styles.createHeader}>
               <span className={styles.createBadge}><Plus /></span>
@@ -1426,7 +1542,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 <p>Kunde <span>›</span> KV / Angebot <span>›</span> Auftrag</p>
                 <h2 id="global-create-title">{step === "choose" ? "Was möchtest du anlegen?" : step === "customer" ? "Neukunde erfassen" : step === "customer-saved" ? "Kunde gesichert" : step === "customer-picker" ? "Kunde für KV wählen" : step === "quote-list" ? "Offene KVs" : step === "quote" ? quote ? "KV bearbeiten" : "Kostenvoranschlag anlegen" : step === "quote-saved" ? "KV gesichert" : step === "order-saved" ? "Auftrag angelegt" : step === "direct-intake" ? "Neuer Eingang" : "Berechtigung klären"}</h2>
               </div>
-              <button type="button" className={styles.createIconButton} onClick={close} disabled={busy} aria-label="Anlegen schließen"><X /></button>
+              <button type="button" className={styles.createIconButton} onClick={closeNow} disabled={busy} aria-label="Anlegen schließen"><X /></button>
             </header>
 
             <div className={styles.createBody}>
@@ -1501,7 +1617,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 <form className={styles.createForm} onSubmit={(event) => void submitCustomer(event)}>
                   <p className={styles.createLead}>Name und Telefon genügen für einen Interessenten. Fehlende Auftragsdaten werden sichtbar markiert und vor dem ersten Auftrag direkt ergänzt.</p>
                   <CustomerFields value={customerDraft} onChange={setCustomerDraft} autofocus requireOrderData={false} />
-                  <div className={styles.createFormActions}><button type="button" onClick={close}>Abbrechen</button><button type="submit" className={styles.createPrimary} disabled={busy}>{busy ? <Loader2 className={styles.createSpinner} /> : <Check />} Neukunde speichern</button></div>
+                  <label className={styles.createFieldWide}>Notiz<textarea data-spec-id="kundeneu.notiz" rows={3} maxLength={2000} value={customerNote} onChange={(event) => setCustomerNote(event.target.value)} /></label>
+                  <div className={styles.createFormActions}><button type="button" data-spec-id="kundeneu.abbrechen" onClick={closeNow}>Abbrechen</button><button type="submit" data-spec-id="kundeneu.kunde-speichern" className={styles.createPrimary} disabled={busy}>{busy ? <Loader2 className={styles.createSpinner} /> : <Check />} Neukunde speichern</button></div>
                 </form>
               ) : null}
 
@@ -1617,6 +1734,66 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
           </section>
         </div>
       ) : null}
+      {open && sourceMode ? <F1SourceDialogs
+        mode={sourceMode}
+        canUseMail={ports.canUseMail}
+        customerId={directCustomerMode === "EXISTING" ? directCustomerId : null}
+        onClose={() => setSourceMode(null)}
+        onMode={setSourceMode}
+        onAttachment={(attachmentId) => setPendingAttachmentIds((current) => current.includes(attachmentId) ? current : [...current, attachmentId])}
+        onDocument={(suggestions) => {
+          const due = suggestions.find((item) => item.field === "DUE_DATE")?.value;
+          const quantity = suggestions.find((item) => item.field === "QUANTITY")?.value;
+          const material = suggestions.find((item) => item.field === "MATERIAL")?.value;
+          const customerName = suggestions.find((item) => item.field === "CUSTOMER_NAME")?.value;
+          if (due && /^\d{4}-\d{2}-\d{2}$/.test(due)) { setDirectWishDate(due); setDirectConfirmedDate(due); }
+          if (customerName && directCustomerMode !== "EXISTING") {
+            setDirectCustomerMode("NEW");
+            setDirectCustomer((current) => ({ ...current, name: customerName }));
+          }
+          if (quantity || material) setDirectItems((current) => current.map((item, index) => index === 0 ? {
+            ...item,
+            quantity: quantity && /^\d+$/.test(quantity) ? quantity : item.quantity,
+            material: material ?? item.material,
+          } : item));
+        }}
+        onMail={(mail) => {
+          setPendingMailId(mail.id);
+          setIntakeSource("mail");
+          setIntakeKind("QUOTE");
+          setDirectNote((current) => [`Anfrage aus Outlook: ${mail.subject}`, current].filter(Boolean).join("\n"));
+          if (directCustomerMode !== "EXISTING") {
+            setDirectCustomerMode("NEW");
+            setDirectCustomer((current) => ({ ...current, name: mail.senderName || mail.senderAddress, email: mail.senderAddress }));
+          }
+        }}
+        onNewCustomer={(mail) => {
+          setDirectCustomerMode("NEW");
+          setDirectCustomerId("");
+          setDirectCustomer((current) => ({ ...current, name: mail.senderName || mail.senderAddress, email: mail.senderAddress }));
+          setPendingMailId(mail.id);
+          setIntakeSource("mail");
+        }}
+      /> : null}
+      {open && draftPrompt ? <KrDialog titel="Entwurf behalten?" icon="file" groesse="schmal" onSchliessen={() => setDraftPrompt(false)} fuss={<>
+        <KrButton data-spec-id="entwurf.verwerfen" text="Verwerfen" onClick={() => void (async () => {
+          setBusy(true);
+          const result = await ports.discardIntakeDraft();
+          setBusy(false);
+          if (result.code === "OK") closeNow();
+          else setFeedback(requestFeedback(result, "draft-discard"));
+        })()} disabled={busy} />
+        <KrButton data-spec-id="entwurf.entwurf-behalten" art="sekundaer" icon="check" text="Entwurf behalten" onClick={() => void (async () => {
+          setBusy(true);
+          const result = await ports.saveIntakeDraft(intakeDraftPayload());
+          setBusy(false);
+          if (result.code === "OK") closeNow();
+          else setFeedback(requestFeedback(result, "draft-save"));
+        })()} disabled={busy} />
+        <KrButton data-spec-id="entwurf.weiter-bearbeiten" art="primaer" text="Weiter bearbeiten" onClick={() => setDraftPrompt(false)} disabled={busy} />
+      </>}>
+        <p>Der Entwurf steht danach auf „Der Tag“ dieses Logins – dort weiterbearbeiten oder verwerfen.</p>
+      </KrDialog> : null}
     </>
   );
 }

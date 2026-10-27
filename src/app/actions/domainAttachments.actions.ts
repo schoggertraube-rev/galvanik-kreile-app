@@ -2,7 +2,7 @@
 
 import { unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization } from "@/lib/server/authorization";
-import { finalizeDomainAttachment, getDomainAttachmentOriginal, reserveDomainAttachment } from "@/lib/server/domainAttachment";
+import { attachIntakeDraftAttachment, finalizeDomainAttachment, getDomainAttachmentOriginal, reserveDomainAttachment } from "@/lib/server/domainAttachment";
 import { readEvidenceRecordsByTarget } from "@/lib/server/evidenceRead";
 import { analyzeDomainAttachment } from "@/lib/server/documentIntelligencePort";
 import { readAzureDocumentIntelligenceStatus } from "@/lib/server/azureDocumentIntelligence";
@@ -25,6 +25,11 @@ export async function reserveDomainAttachmentAction(input: Parameters<typeof res
 export async function finalizeDomainAttachmentAction(input: Parameters<typeof finalizeDomainAttachment>[1]) {
   const auth = await authorization();
   return auth.ok ? finalizeDomainAttachment(auth.data, input) : { code: auth.code, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+}
+
+export async function attachIntakeDraftAttachmentAction(input: Parameters<typeof attachIntakeDraftAttachment>[1]) {
+  const auth = await authorization();
+  return auth.ok ? attachIntakeDraftAttachment(auth.data, input) : { code: auth.code, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
 }
 
 export async function getDomainAttachmentsAction(input: { targetType: "CUSTOMER" | "ORDER"; targetId: string }) {

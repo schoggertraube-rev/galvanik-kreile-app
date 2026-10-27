@@ -80,7 +80,7 @@ export type OrderIntakeCommandResult =
   | { code: "UNAVAILABLE"; message: string };
 
 type NormalizedItem = Required<OrderIntakeItemInput>;
-type NormalizedCustomer = Extract<OrderIntakeCustomerInput, { mode: "EXISTING" }>;
+type NormalizedCustomer = OrderIntakeCustomerInput;
 type NormalizedInput = Omit<CreateOrderIntakeInput, "customer"|"handoverMode"|"items"|"paymentMode"> & {
   customer: NormalizedCustomer;
   handoverMode: "pickup" | "shipping";
@@ -161,6 +161,30 @@ function validDate(value: unknown): value is string {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
+function normalizeNewCustomer(value: Record<string, unknown>): Extract<NormalizedCustomer, { mode: "NEW" }> | null {
+  if (!exactKeys(value, [
+    "city", "companyName", "contactPerson", "country", "customerType", "email", "mode", "name",
+    "paymentPreference", "phone", "street", "vatId", "zipCode",
+  ]) || value.mode !== "NEW" || !(value.customerType === "business" || value.customerType === "privat" || value.customerType === "institution")) return null;
+  const name = normalizedText(value.name, 2, 160);
+  const companyName = normalizedOptionalText(value.companyName, 160, 2);
+  const contactPerson = normalizedText(value.contactPerson, 1, 160);
+  const email = normalizedText(value.email, 3, 254);
+  const phone = normalizedText(value.phone, 1, 80);
+  const street = normalizedText(value.street, 2, 160);
+  const zipCode = normalizedText(value.zipCode, 2, 20);
+  const city = normalizedText(value.city, 1, 120);
+  const country = normalizedText(value.country, 2, 120);
+  const paymentPreference = normalizedText(value.paymentPreference, 3, 24);
+  const vatId = normalizedOptionalText(value.vatId, 40, 4);
+  if (!name || companyName === undefined || !contactPerson || !email || !/^\S+@\S+\.\S+$/.test(email) || !phone || !street || !zipCode || !city || !country
+    || !paymentPreference || !/^(?:rechnung_[1-9][0-9]{0,2}|vorkasse|bar)$/.test(paymentPreference) || vatId === undefined) return null;
+  return {
+    mode: "NEW", name, customerType: value.customerType, companyName, contactPerson, email, phone,
+    street, zipCode, city, country, paymentPreference, vatId,
+  };
+}
+
 function normalizeInput(input: unknown): NormalizedInput | null {
   if (!plainObject(input) || !exactKeys(input, ["clientEventId", "customer", "dueDate", "handoverMode", "items", "note", "paymentMode"])) {
     return null;
@@ -207,10 +231,15 @@ function normalizeInput(input: unknown): NormalizedInput | null {
     });
   }
 
-  if (!plainObject(input.customer) || !exactKeys(input.customer, ["customerId", "mode"]) || input.customer.mode !== "EXISTING") return null;
-  const customerId = normalizedText(input.customer.customerId, 1, 128);
-  if (!customerId) return null;
-  const customer: NormalizedCustomer = { mode: "EXISTING", customerId };
+  if (!plainObject(input.customer)) return null;
+  let customer: NormalizedCustomer | null = null;
+  if (input.customer.mode === "EXISTING" && exactKeys(input.customer, ["customerId", "mode"])) {
+    const customerId = normalizedText(input.customer.customerId, 1, 128);
+    if (customerId) customer = { mode: "EXISTING", customerId };
+  } else if (input.customer.mode === "NEW") {
+    customer = normalizeNewCustomer(input.customer);
+  }
+  if (!customer) return null;
 
   return {
     clientEventId: input.clientEventId,
@@ -349,8 +378,53 @@ async function readReceipt(
 async function resolveCustomer(
   tx: PrivilegedTenantTransaction,
   tenantId: string,
+  actorId: string,
   customer: NormalizedCustomer,
 ): Promise<CustomerRow | null> {
+  if (customer.mode === "NEW") {
+    const clientEventId = randomUUID();
+    const customerIntentSha256 = createHash("sha256").update(JSON.stringify({
+      city: customer.city,
+      clientEventId,
+      companyName: customer.companyName,
+      contactPerson: customer.contactPerson,
+      customerType: customer.customerType,
+      email: customer.email,
+      name: customer.name,
+      phone: customer.phone,
+      street: customer.street,
+      zipCode: customer.zipCode,
+      country: customer.country,
+      paymentPreference: customer.paymentPreference,
+      vatId: customer.vatId,
+    }), "utf8").digest("hex");
+    const outcomes = await tx.execute<{ result_code: string; result_receipt_id: string | null }>(sql`
+      SELECT * FROM private.create_customer_v1(
+        ${tenantId}, ${actorId}::uuid, ${clientEventId}::uuid, ${customerIntentSha256},
+        ${customer.name}, ${customer.customerType}, ${customer.companyName}, ${customer.contactPerson},
+        ${customer.email}, ${customer.phone}, ${customer.street}, ${customer.zipCode}, ${customer.city},
+        ${customer.country}, ${customer.paymentPreference}, ${customer.vatId}
+      )
+    `);
+    const outcome = outcomes.length === 1 ? outcomes[0] : null;
+    if (!outcome || outcome.result_code !== "OK" || !outcome.result_receipt_id) return null;
+    const receipts = await tx.execute<{ customer_id: string }>(sql`
+      SELECT customer_id FROM private.v_customer_create_receipts_v1
+      WHERE receipt_id = ${outcome.result_receipt_id}::uuid
+        AND tenant_id = ${tenantId}
+        AND actor_id = ${actorId}::uuid
+      LIMIT 2
+    `);
+    if (receipts.length !== 1 || !receipts[0]) return null;
+    const rows = await tx.execute<CustomerRow>(sql`
+      SELECT id, tenant_id, customer_number, name, company_name, contact_person, email, phone,
+        street, zip_code, city, country, payment_preference
+      FROM public.customers
+      WHERE id = ${receipts[0].customer_id} AND tenant_id = ${tenantId}
+      FOR SHARE
+    `);
+    return rows.length === 1 ? rows[0] ?? null : null;
+  }
   const rows = await tx.execute<CustomerRow>(sql`
     SELECT id, tenant_id, customer_number, name, company_name, contact_person, email, phone,
       street, zip_code, city, country, payment_preference
@@ -401,6 +475,9 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
   if (!authorization.data.permissions.includes("perm_data_orders")) {
     return { code: "FORBIDDEN", message: "Aufträge dürfen mit dieser Rolle nicht angelegt werden." };
   }
+  if (normalized.customer.mode === "NEW" && !authorization.data.permissions.includes("perm_data_customers")) {
+    return { code: "FORBIDDEN", message: "Kunden dürfen mit dieser Rolle nicht angelegt werden." };
+  }
   const expected = {
     tenantId: authorization.data.tenantId,
     actorId: authorization.data.userId,
@@ -433,7 +510,7 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
         return { code: "OK", receipt, replayed: true };
       }
 
-      const customer = await resolveCustomer(tx, expected.tenantId, normalized.customer);
+      const customer = await resolveCustomer(tx, expected.tenantId, expected.actorId, normalized.customer);
       if (!customer || customer.tenant_id !== expected.tenantId) {
         return { code: "VALIDATION_ERROR", message: "Der Kunde ist für einen Auftrag noch nicht vollständig." };
       }

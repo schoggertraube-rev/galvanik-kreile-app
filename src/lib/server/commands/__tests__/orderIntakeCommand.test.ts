@@ -96,7 +96,7 @@ describe("createOrderIntake", () => {
     expect(withTransaction).not.toHaveBeenCalled();
   });
 
-  it("denies missing sessions and roles and rejects the retired inline-new-customer path", async () => {
+  it("denies missing sessions, order rights and inline-new customers without customer rights", async () => {
     const { createOrderIntake } = await import("../orderIntakeCommand");
     resolveAuthorization.mockResolvedValueOnce({ ok: false, reason: "NO_SESSION", message: "no" });
     await expect(createOrderIntake(input)).resolves.toMatchObject({ code: "UNAUTHENTICATED" });
@@ -105,9 +105,40 @@ describe("createOrderIntake", () => {
     resolveAuthorization.mockResolvedValueOnce({ ...authorization, data: { ...authorization.data, permissions: ["perm_data_orders"] } });
     await expect(createOrderIntake({
       ...input,
-      customer: { mode:"NEW", name:"Neu", customerType:"business", companyName:null, contactPerson:null, email:null, phone:null, street:"Testweg 1", zipCode:"12345", city:"Berlin", country:"Deutschland", paymentPreference:"rechnung_14", vatId:null },
-    })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
+      customer: { mode:"NEW", name:"Neu GmbH", customerType:"business", companyName:"Neu GmbH", contactPerson:"Nina Neu", email:"nina@example.test", phone:"12345", street:"Testweg 1", zipCode:"12345", city:"Berlin", country:"Deutschland", paymentPreference:"rechnung_14", vatId:null },
+    })).resolves.toMatchObject({ code: "FORBIDDEN" });
     expect(withTransaction).not.toHaveBeenCalled();
+  });
+
+  it("starts customer and order creation in one transaction for a complete new customer", async () => {
+    const newCustomerInput = {
+      ...input,
+      customer: {
+        mode: "NEW" as const, name: "TEST Neu GmbH", customerType: "business" as const, companyName: "TEST Neu GmbH",
+        contactPerson: "Tessa Test", email: "tessa@example.test", phone: "+49 221 123456", street: "Testweg 1",
+        zipCode: "50667", city: "Köln", country: "Deutschland", paymentPreference: "rechnung_14", vatId: null,
+      },
+      items: [{ catalogServiceId: null, name: "TEST Sonderteil", quantity: 1, material: "Stahl", surfaceRequested: "Vernickeln", unit: null, unitPriceCents: null, vatRateBasisPoints: null }],
+    };
+    execute.mockImplementation((query: { text: string; values: unknown[] }) => {
+      if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+      if (query.text.includes("FROM private.order_intake_receipts")) return Promise.resolve([]);
+      if (query.text.includes("private.create_customer_v1")) return Promise.resolve([{ result_code: "OK", result_receipt_id: RECEIPT }]);
+      if (query.text.includes("private.v_customer_create_receipts_v1")) return Promise.resolve([{ customer_id: CUSTOMER }]);
+      if (query.text.includes("FROM public.customers")) return Promise.resolve([{
+        id: CUSTOMER, tenant_id: KREILE_TENANT_SLUG, customer_number: "K-2026-0042", name: "TEST Neu GmbH", company_name: "TEST Neu GmbH",
+        contact_person: "Tessa Test", phone: "+49 221 123456", email: "tessa@example.test", street: "Testweg 1",
+        zip_code: "50667", city: "Köln", country: "Deutschland", payment_preference: "rechnung_14",
+      }]);
+      if (query.text.includes("next_number")) throw new Error("stop after atomic customer creation");
+      throw new Error(`unexpected SQL ${query.text}`);
+    });
+    const { createOrderIntake } = await import("../orderIntakeCommand");
+    await expect(createOrderIntake(newCustomerInput)).resolves.toMatchObject({ code: "UNAVAILABLE" });
+    const sqlText = execute.mock.calls.map(([query]) => query.text).join("\n");
+    expect(sqlText).toContain("private.create_customer_v1");
+    expect(sqlText).toContain("private.v_customer_create_receipts_v1");
+    expect(sqlText).toContain("next_number");
   });
 
   it("creates customer-bound order, item, immutable event and receipt before returning exact fresh readback", async () => {

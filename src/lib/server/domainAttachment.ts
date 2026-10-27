@@ -10,7 +10,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const SHA256 = /^[0-9a-f]{64}$/;
 const MIME_EXTENSION = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf" } as const;
 type AttachmentMime = keyof typeof MIME_EXTENSION;
-type AttachmentTarget = "CUSTOMER" | "ORDER";
+type AttachmentTarget = "CUSTOMER" | "ORDER" | "INTAKE_DRAFT";
 
 type ScanRow = {
   id: string; tenant_id: string; file_url: string; file_type: string | null; uploaded_by: string | null; uploaded_at: Date | string;
@@ -20,7 +20,7 @@ type ScanRow = {
 };
 
 export type DomainAttachmentReceipt = {
-  attachmentId: string; targetType: AttachmentTarget; targetId: string; customerId: string; orderId: string | null;
+  attachmentId: string; targetType: AttachmentTarget; targetId: string; customerId: string | null; orderId: string | null;
   mimeType: AttachmentMime; fileBytes: number | null; contentSha256: string | null; state: "PENDING" | "FINALIZED"; recordedAt: string;
 };
 export type ReserveDomainAttachmentInput = {
@@ -52,7 +52,8 @@ function toIso(value: Date | string) {
 }
 
 function receipt(row: ScanRow, targetType: AttachmentTarget, targetId: string): DomainAttachmentReceipt {
-  if (!UUID.test(row.id) || !validMime(row.file_type) || row.tenant_id.length === 0 || !row.linked_customer_id) throw new Error("DOMAIN_ATTACHMENT_ROW_INVALID");
+  if (!UUID.test(row.id) || !validMime(row.file_type) || row.tenant_id.length === 0
+    || (targetType !== "INTAKE_DRAFT" && !row.linked_customer_id)) throw new Error("DOMAIN_ATTACHMENT_ROW_INVALID");
   const finalized = row.status === "secured";
   if (!finalized && row.status !== "upload_reserved") throw new Error("DOMAIN_ATTACHMENT_STATE_INVALID");
   const fileBytes = row.original_size_bytes === null ? null : Number(row.original_size_bytes);
@@ -70,7 +71,9 @@ function validReserve(input: unknown): input is ReserveDomainAttachmentInput {
   if (!input || typeof input !== "object" || Array.isArray(input)) return false;
   const value = input as Record<string, unknown>;
   return Object.keys(value).sort().join(",") === "clientRequestId,contentSha256,fileBytes,mimeType,targetId,targetType"
-    && (value.targetType === "CUSTOMER" || value.targetType === "ORDER") && validTargetId(value.targetId) && typeof value.clientRequestId === "string" && UUID.test(value.clientRequestId)
+    && (value.targetType === "CUSTOMER" || value.targetType === "ORDER" || value.targetType === "INTAKE_DRAFT")
+    && validTargetId(value.targetId) && (value.targetType !== "INTAKE_DRAFT" || value.targetId === "pending")
+    && typeof value.clientRequestId === "string" && UUID.test(value.clientRequestId)
     && validMime(value.mimeType) && Number.isSafeInteger(value.fileBytes) && (value.fileBytes as number) >= 1 && (value.fileBytes as number) <= MAX_FILE_BYTES
     && typeof value.contentSha256 === "string" && SHA256.test(value.contentSha256);
 }
@@ -84,21 +87,22 @@ export async function reserveDomainAttachment(authorization: AuthorizationSnapsh
       if (existing.length > 1) throw new Error("DOMAIN_ATTACHMENT_IDEMPOTENCY_AMBIGUOUS");
       if (existing[0]) {
         const row = existing[0];
-        const intendedTarget = input.targetType === "ORDER" ? row.linked_order_id : row.linked_customer_id;
-        if (intendedTarget !== input.targetId || row.file_type !== input.mimeType || row.file_url !== `storage://scans/${path(row.id, input.mimeType)}`) {
+        const intendedTarget = input.targetType === "ORDER" ? row.linked_order_id : input.targetType === "CUSTOMER" ? row.linked_customer_id : "pending";
+        if (intendedTarget !== input.targetId || (input.targetType === "INTAKE_DRAFT" && row.uploaded_by !== authorization.userId)
+          || row.file_type !== input.mimeType || row.file_url !== `storage://scans/${path(row.id, input.mimeType)}`) {
           return { terminal: { code: "CONFLICT" as const, message: "Die Anfragekennung gehört zu einer anderen Datei." } };
         }
         return { row, replayed: true };
       }
 
-      let customerId: string;
+      let customerId: string | null = null;
       let orderId: string | null = null;
       if (input.targetType === "ORDER") {
         const rows = await tx.execute<{ id: string; customer_id: string | null }>(sql`SELECT id, customer_id FROM public.orders WHERE tenant_id=${authorization.tenantId} AND id=${input.targetId} LIMIT 2 FOR SHARE`);
         if (rows.length !== 1 || !rows[0]?.customer_id) return { terminal: { code: "NOT_FOUND" as const, message: "Auftrag nicht verfügbar." } };
         orderId = rows[0].id;
         customerId = rows[0].customer_id;
-      } else {
+      } else if (input.targetType === "CUSTOMER") {
         const rows = await tx.execute<{ id: string }>(sql`SELECT id FROM public.customers WHERE tenant_id=${authorization.tenantId} AND id=${input.targetId} LIMIT 2 FOR SHARE`);
         if (rows.length !== 1 || !rows[0]) return { terminal: { code: "NOT_FOUND" as const, message: "Kunde nicht verfügbar." } };
         customerId = rows[0].id;
@@ -149,9 +153,9 @@ export async function finalizeDomainAttachment(authorization: AuthorizationSnaps
       return rows[0] ?? null;
     });
     if (!row) return { code: "NOT_FOUND", message: "Datei nicht verfügbar." };
-    const targetType: AttachmentTarget = row.linked_order_id ? "ORDER" : "CUSTOMER";
-    const targetId = row.linked_order_id ?? row.linked_customer_id;
-    if (!targetId || !validMime(row.file_type)) return { code: "UNAVAILABLE", message: "Dateizuordnung ist nicht lesbar." };
+    const targetType: AttachmentTarget = row.linked_order_id ? "ORDER" : row.linked_customer_id ? "CUSTOMER" : "INTAKE_DRAFT";
+    const targetId = row.linked_order_id ?? row.linked_customer_id ?? row.id;
+    if ((targetType === "INTAKE_DRAFT" && row.uploaded_by !== authorization.userId) || !validMime(row.file_type)) return { code: "UNAVAILABLE", message: "Dateizuordnung ist nicht lesbar." };
     if (row.status === "secured") {
       const current = receipt(row, targetType, targetId);
       return current.fileBytes === input.fileBytes && current.contentSha256 === input.contentSha256
@@ -178,6 +182,36 @@ export async function finalizeDomainAttachment(authorization: AuthorizationSnaps
     if (error instanceof storage.DomainAttachmentStorageError && error.kind === "NOT_READY") return { code: "CONFLICT", message: "Upload ist noch nicht vollständig verfügbar." };
     if (error instanceof storage.DomainAttachmentStorageError && error.kind === "MISMATCH") return { code: "CONFLICT", message: "Upload stimmt nicht mit der ausgewählten Datei überein." };
     return { code: "UNAVAILABLE", message: "Datei konnte nicht sicher bestätigt werden." };
+  }
+}
+
+export async function attachIntakeDraftAttachment(
+  authorization: AuthorizationSnapshot,
+  input: { attachmentId: string; orderId: string },
+): Promise<DomainAttachmentResult<{ attachmentId: string; orderId: string; customerId: string }>> {
+  if (!input || Object.keys(input).sort().join(",") !== "attachmentId,orderId" || !UUID.test(input.attachmentId) || !validTargetId(input.orderId)) {
+    return { code: "VALIDATION_ERROR", message: "Dokument oder Auftrag ist ungültig." };
+  }
+  if (!canWrite(authorization)) return { code: "FORBIDDEN", message: "Dokumente und Fotos sind nicht erlaubt." };
+  try {
+    const rows = await withPrivilegedTenantTransaction(authorization, async (tx) => tx.execute<{ id: string; linked_order_id: string; linked_customer_id: string }>(sql`
+      UPDATE public.scan_uploads scan
+      SET linked_order_id = orders.id, linked_customer_id = orders.customer_id
+      FROM public.orders orders
+      WHERE scan.tenant_id = ${authorization.tenantId}
+        AND scan.id = ${input.attachmentId}
+        AND scan.uploaded_by = ${authorization.userId}
+        AND scan.linked_order_id IS NULL
+        AND scan.linked_customer_id IS NULL
+        AND scan.status IN ('secured', 'ocr_review')
+        AND orders.tenant_id = scan.tenant_id
+        AND orders.id = ${input.orderId}
+      RETURNING scan.id, scan.linked_order_id, scan.linked_customer_id
+    `));
+    if (rows.length !== 1 || !rows[0]) return { code: "NOT_FOUND", message: "Dokument oder Auftrag ist nicht verfügbar." };
+    return { code: "OK", data: { attachmentId: rows[0].id, orderId: rows[0].linked_order_id, customerId: rows[0].linked_customer_id } };
+  } catch {
+    return { code: "UNAVAILABLE", message: "Dokument konnte nicht sicher zugeordnet werden." };
   }
 }
 

@@ -3,10 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { logout } from "@/app/actions/auth";
-import { createCustomerAction, getCustomersDb, readCustomerCreateReceiptAction, updateCustomerCommercialAction } from "@/app/actions/customers.actions";
+import { createCustomerAction, getCustomersDb, readCustomerCreateReceiptAction, updateCustomerCommercialAction, updateCustomerNoteAction } from "@/app/actions/customers.actions";
 import { convertQuoteToOrderAction, createQuoteAction, listOpenQuotesAction, readQuoteAction, readQuoteCreateReceiptAction, readQuoteConversionReceiptAction, readQuoteUpdateReceiptAction, updateQuoteAction } from "@/app/actions/quotes.actions";
 import { createOrderIntakeAction, getOrderIntakeReceiptAction } from "@/app/warendurchlauf/actions";
 import { getActiveCatalogAction } from "@/app/actions/catalog.actions";
+import { attachIntakeDraftAttachmentAction } from "@/app/actions/domainAttachments.actions";
+import { attachOutlookMailAction } from "@/app/actions/communications.actions";
+import { discardIntakeDraftAction, readIntakeDraftAction, saveIntakeDraftAction } from "@/app/actions/intakeDraft.actions";
 import {
   GlobalCreateFlow,
   type GlobalCreateConversionResult,
@@ -73,6 +76,7 @@ export function GlobalCreateAppAdapter() {
       ports={{
         canCreateCustomer,
         canCreateQuote,
+        canUseMail: hasPermission("perm_data_customers") || role === "developer",
         showPrimaryTrigger: false,
         roleLabel,
         resumeQuoteId,
@@ -125,6 +129,7 @@ export function GlobalCreateAppAdapter() {
             },
           };
         },
+        saveCustomerNote: async (input) => updateCustomerNoteAction(input),
         updateCustomer: async (input) => updateCustomerCommercialAction(input),
         readCustomerCreateReceipt: async (input: CreateCustomerInput): Promise<GlobalCreateCustomerResult> => {
           const result = await readCustomerCreateReceiptAction(input);
@@ -165,6 +170,17 @@ export function GlobalCreateAppAdapter() {
           }
           if (!result.data) return { code: "NOT_FOUND", message: "Der gespeicherte Eingang wurde nicht gefunden." };
           return { code: "OK", replayed: true, receipt: result.data };
+        },
+        readIntakeDraft: async () => readIntakeDraftAction(),
+        saveIntakeDraft: async (payload) => saveIntakeDraftAction(payload),
+        discardIntakeDraft: async () => discardIntakeDraftAction(),
+        attachIntakeAttachment: async (input) => {
+          const result = await attachIntakeDraftAttachmentAction(input);
+          return result.code === "OK" ? { code: "OK" as const } : result;
+        },
+        attachIntakeMail: async ({ graphMessageId, orderId }) => {
+          const result = await attachOutlookMailAction({ targetType: "ORDER", targetId: orderId, graphMessageId });
+          return result.code === "OK" ? { code: "OK" as const } : result;
         },
         rememberQuote,
         rememberQuoteConversion,

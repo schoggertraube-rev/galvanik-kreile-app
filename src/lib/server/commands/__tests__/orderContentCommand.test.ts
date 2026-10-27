@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
 const { execute, resolveAuthorization } = vi.hoisted(() => ({ execute: vi.fn(), resolveAuthorization: vi.fn() }));
 
@@ -17,7 +18,7 @@ const clientEventId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 describe("order content command", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    resolveAuthorization.mockResolvedValue({ ok: true, data: { userId: actor, tenantId: "galvanik-kreile", role: "meister", permissions: ["perm_data_orders"], active: true, displayName: "Rolf" } });
+    resolveAuthorization.mockResolvedValue({ ok: true, data: { userId: actor, tenantId: KREILE_TENANT_SLUG, role: "meister", permissions: ["perm_data_orders"], active: true, displayName: "Rolf" } });
   });
 
   it("writes a version-bound catalog-backed content change and an event receipt", async () => {
@@ -41,7 +42,7 @@ describe("order content command", () => {
   });
 
   it("fails closed without order write permission", async () => {
-    resolveAuthorization.mockResolvedValue({ ok: true, data: { userId: actor, tenantId: "galvanik-kreile", role: "readonly", permissions: [], active: true, displayName: "Leser" } });
+    resolveAuthorization.mockResolvedValue({ ok: true, data: { userId: actor, tenantId: KREILE_TENANT_SLUG, role: "readonly", permissions: [], active: true, displayName: "Leser" } });
     await expect(setOrderItemFinished({ orderId: "order-1", itemId, expectedVersion: 1, clientEventId, finished: true })).resolves.toEqual({ code: "FORBIDDEN", message: "Diese Rolle darf den Teilstatus nicht ändern." });
     expect(execute).not.toHaveBeenCalled();
   });

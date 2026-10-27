@@ -5,6 +5,18 @@ import {
   type GlobalCreatePorts,
 } from "@/components/layout/GlobalCreateFlow";
 
+vi.mock("@/app/actions/domainAttachments.actions", () => ({
+  analyzeDomainAttachmentAction: vi.fn(),
+  finalizeDomainAttachmentAction: vi.fn(),
+  reserveDomainAttachmentAction: vi.fn(),
+}));
+vi.mock("@/app/actions/communications.actions", () => ({
+  attachOutlookMailAction: vi.fn(),
+  getMicrosoftGraphStatusAction: vi.fn(),
+  listOutlookInboxAction: vi.fn(),
+}));
+vi.mock("@/app/actions/orders.actions", () => ({ getOrdersDb: vi.fn() }));
+
 const CUSTOMER_ID = "72d8c6c6-397c-4a9c-b464-d2e5595eb42a";
 const QUOTE_ID = "1c32e174-8494-46f0-9f5f-1a45f2a60bd1";
 const ORDER_ID = "b6b493d0-3e70-4a73-88eb-367106068e62";
@@ -68,6 +80,7 @@ function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
       },
       customer: { id: CUSTOMER_ID, customerNumber: "K-2026-0042", name: input.name },
     })),
+    saveCustomerNote: vi.fn().mockResolvedValue({ code: "OK" }),
     readCustomerCreateReceipt: vi.fn().mockResolvedValue({ code: "NOT_FOUND", message: "Kein Kundenstand gefunden." }),
     createQuote: vi.fn().mockImplementation(async (input) => ({
       code: "OK",
@@ -162,6 +175,12 @@ function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
         recordedAt: "2026-09-15T10:10:00.000Z",
       },
     })),
+    canUseMail: true,
+    readIntakeDraft: vi.fn().mockResolvedValue({ code: "OK", data: null }),
+    saveIntakeDraft: vi.fn().mockResolvedValue({ code: "OK", data: { updatedAt: "2026-09-15T10:10:00.000Z" } }),
+    discardIntakeDraft: vi.fn().mockResolvedValue({ code: "OK", data: { discarded: true } }),
+    attachIntakeAttachment: vi.fn().mockResolvedValue({ code: "OK" }),
+    attachIntakeMail: vi.fn().mockResolvedValue({ code: "OK" }),
     rememberQuote: vi.fn(),
     rememberQuoteConversion: vi.fn(),
     openCustomer: vi.fn(),
@@ -371,12 +390,14 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(newCustomer).toHaveValue("");
     fireEvent.change(newCustomer, { target: { value: "SYNTHETISCH Direkteingang GmbH" } });
     fillRequiredCustomerAddress();
-    fireEvent.change(screen.getByLabelText("Wunschtermin"), { target: { value: "2026-10-20" } });
+    fireEvent.change(screen.getByLabelText("Liefertermin"), { target: { value: "2026-10-20" } });
     fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "Synthetischer Flansch" } });
     fireEvent.click(screen.getByRole("checkbox", { name: /Ware, Menge und Zustand/ }));
     fireEvent.click(screen.getByRole("button", { name: "Wareneingang buchen" }));
     await screen.findByRole("heading", { name: "Auftrag A-2026-0061 angelegt" });
     expect(value.createDirectIntake).toHaveBeenCalledWith(expect.objectContaining({ dueDate: "2026-10-20" }));
+    expect(value.createDirectIntake).toHaveBeenCalledWith(expect.objectContaining({ customer: expect.objectContaining({ mode: "NEW", name: "SYNTHETISCH Direkteingang GmbH" }) }));
+    expect(value.createCustomer).not.toHaveBeenCalled();
     expect(value.readDirectIntakeReceipt).toHaveBeenCalledTimes(1);
     expect(value.refresh).toHaveBeenCalledTimes(1);
   });
@@ -396,7 +417,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(screen.getByRole("combobox", { name: "Kunde" })).toHaveValue("NEW");
     expect(screen.getByLabelText("Name / Firma")).toHaveValue("TEST Freitextkunde GmbH");
     fillRequiredCustomerAddress();
-    fireEvent.change(screen.getByLabelText("Wunschtermin"), { target: { value: "2026-10-20" } });
+    fireEvent.change(screen.getByLabelText("Liefertermin"), { target: { value: "2026-10-20" } });
     fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "TEST Sonderteil" } });
     fireEvent.change(screen.getByRole("combobox", { name: "Oberfläche" }), { target: { value: "Vernickeln" } });
     fireEvent.click(screen.getByRole("checkbox", { name: /Ware, Menge und Zustand/ }));
@@ -420,40 +441,25 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(screen.queryByRole("button", { name: /Offene KVs bearbeiten/ })).not.toBeInTheDocument();
   });
 
-  it("checks an unclear direct customer save before retrying with the same request", async () => {
-    const successfulCreate = ports().createCustomer;
-    let attempt = 0;
-    const createCustomer = vi.fn<GlobalCreatePorts["createCustomer"]>(async (input) => {
-      attempt += 1;
-      if (attempt === 1) throw new Error("network interrupted");
-      return successfulCreate(input);
-    });
-    const readCustomerCreateReceipt = vi.fn().mockResolvedValue({ code: "NOT_FOUND", message: "Kein Kundenstand gefunden." });
-    const value = ports({ createCustomer, readCustomerCreateReceipt });
+  it("keeps a failed inline-new intake atomic and leaves all inputs visible", async () => {
+    const createDirectIntake = vi.fn<GlobalCreatePorts["createDirectIntake"]>().mockResolvedValue({ code: "UNAVAILABLE", message: "Speichern nicht verfügbar." });
+    const value = ports({ createDirectIntake });
     render(<GlobalCreateFlow ports={value} />);
 
     openFlow();
     fireEvent.change(await screen.findByRole("combobox", { name: "Kunde" }), { target: { value: "NEW" } });
     fireEvent.change(screen.getByLabelText("Name / Firma"), { target: { value: "SYNTHETISCH Direkteingang Retry GmbH" } });
     fillRequiredCustomerAddress();
-    fireEvent.change(screen.getByLabelText("Wunschtermin"), { target: { value: "2026-10-20" } });
+    fireEvent.change(screen.getByLabelText("Liefertermin"), { target: { value: "2026-10-20" } });
     fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "Synthetischer Flansch" } });
     fireEvent.click(screen.getByRole("checkbox", { name: /Ware, Menge und Zustand/ }));
     fireEvent.click(screen.getByRole("button", { name: "Wareneingang buchen" }));
 
-    await screen.findByText("Ausgang ungeklärt", { selector: "strong" });
-    const statusButton = screen.getByRole("button", { name: "Status mit gleicher Kennung prüfen" });
-    await waitFor(() => expect(statusButton).toBeEnabled());
-    fireEvent.click(statusButton);
-    await screen.findByRole("button", { name: "Erneut senden vorbereiten" });
-    expect(readCustomerCreateReceipt).toHaveBeenCalledTimes(1);
-    expect(readCustomerCreateReceipt.mock.calls[0][0].clientEventId).toBe(createCustomer.mock.calls[0][0].clientEventId);
-    fireEvent.click(screen.getByRole("button", { name: "Erneut senden vorbereiten" }));
-    fireEvent.click(screen.getByRole("button", { name: "Ja, jetzt erneut senden" }));
-
-    await waitFor(() => expect(createCustomer).toHaveBeenCalledTimes(2));
-    expect(createCustomer).toHaveBeenCalledTimes(2);
-    expect(createCustomer.mock.calls[1][0].clientEventId).toBe(createCustomer.mock.calls[0][0].clientEventId);
+    await waitFor(() => expect(createDirectIntake).toHaveBeenCalledTimes(1));
+    expect(screen.getByText(/Speichern nicht verfügbar/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Name / Firma")).toHaveValue("SYNTHETISCH Direkteingang Retry GmbH");
+    expect(createDirectIntake).toHaveBeenCalledTimes(1);
+    expect(value.createCustomer).not.toHaveBeenCalled();
   });
 
   it("clears an award date when editing a KV", async () => {
@@ -550,6 +556,12 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.change(customerSelect, { target: { value: "NEW" } });
     await waitFor(() => expect(screen.getByLabelText("Name / Firma")).toHaveFocus());
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(await screen.findByRole("heading", { name: "Entwurf behalten?" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Weiter bearbeiten" }));
+    expect(screen.getByRole("heading", { name: "Neuer Eingang" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Entwurf behalten?" })).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Schließen" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Verwerfen" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
