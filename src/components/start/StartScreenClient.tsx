@@ -98,8 +98,8 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
         {message ? <button type="button" className={styles.help} disabled={helpPending} onClick={() => {
           setHelpPending(true);
           setHelpMessage(null);
-          void notifyAdminPinReset(user.loginHandle).then((result) => {
-            setHelpMessage(result.success
+          void notifyAdminPinReset(user.loginHandle).then(({ success }) => {
+            setHelpMessage(success
               ? "Anfrage wurde erfasst. Der Systemadministrator wurde informiert."
               : "Anfrage konnte nicht übermittelt werden. Bitte direkt Kontakt aufnehmen.");
             setHelpPending(false);
