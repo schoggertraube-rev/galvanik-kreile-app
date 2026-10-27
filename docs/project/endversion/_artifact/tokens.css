@@ -1,0 +1,72 @@
+/* Kreile-Designsystem V1.1 · tokens.css (unverändert zu V1)
+   Einzige Quelle: BUNDLE/02_KREILE_GESAMTMOCK_V5_2026-09-14.html
+   SHA-256 75258FF3BD4CC212C8E989061708A29DC26EA44B851BD28E8F16E8509B0CC0AA (geprüft 2026-09-26)
+   Farbnamen wörtlich aus V5 :root. Radien/Abstände/Schriftgrößen = in V5-CSS verwendete Werte, hier nur benannt. */
+:root{
+  /* Navy – V5 :root */
+  --navy-900:#12161F;--navy-800:#1A1F2E;--navy-700:#262C3C;--navy-600:#353C4E;
+  --navy-500:#444C5F;--navy-400:#596176;--navy-300:#687083;
+  /* Cream – V5 :root */
+  --cream-50:#FBF8F2;--cream-100:#F6F0E6;--cream-200:#F1E9DC;--cream-300:#E7DCC9;
+  --cream-400:#D9CBB3;--cream-500:#C7B79A;
+  /* Akzente – V5 :root */
+  --amber:#F6A93B;--magenta:#C2185B;
+  --grad:linear-gradient(115deg,#7A3FB0 0%,#C2185B 40%,#F2643C 76%,#F6A93B 100%);
+  --succ:#2F7D3D;--succ-d:#256433;--succ-bg:#E3EDDD;--succ-fg:#245C32;--succ-bd:#A9C7A2;
+  --warn:#D9722B;--warn-bg:#FAE7D6;--warn-fg:#9C5214;--warn-bd:#ECC39C;
+  --info:#4B5366;--info-bg:#E6E8EE;--info-fg:#3A4763;
+  --ral:#AF2B1E;--ral-bg:#F7E1DC;--ral-fg:#7E1D14;--ral-bd:#E7B4AA;
+  --ground:#EFE6D6;--surface:#FFFDF9;--line:#E1D5BE;
+  /* In V5 eingebettete Seitenreferenzen (Auftragskarte V8 / Kundenkarte V2) */
+  --magenta-d:#A5124D;--purple:#7A3FB0;--orange:#F2643C;
+  --part-bg:#EBE4F3;--part-fg:#5A3E86;--ground-rail:#EADFCB;
+
+  /* Schrift – V5 */
+  --serif:"Fraunces",Georgia,serif;
+  --sans:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --fs-mini:10.5px;--fs-s:11.5px;--fs-m:12.5px;--fs-text:13.5px;--fs-l:14px;
+  --fs-zahl:16px;          /* höchstens eine Stufe über Fließtext (§6.6, G5) */
+  --fs-karte:22px;--fs-seite:25px;--fs-seite-touch:21px;
+
+  /* Schatten / Bewegung – V5 */
+  --sh-sm:0 1px 2px rgba(26,31,46,.06),0 1px 3px rgba(26,31,46,.05);
+  --sh-md:0 2px 6px rgba(26,31,46,.08),0 6px 16px rgba(26,31,46,.06);
+  --sh-lg:0 14px 40px rgba(26,31,46,.20);
+  --sh-primaer:0 2px 8px rgba(26,31,46,.18);
+  --sh-erledigen:0 2px 8px rgba(47,125,61,.24);
+  --sh-marke:0 4px 14px rgba(120,50,120,.34);
+  --sh-leiste:0 -8px 24px rgba(18,22,31,.22);
+  --scrim:rgba(18,22,31,.55);
+  --ease:cubic-bezier(.2,.7,.2,1);
+
+  /* Fokus – V5 design-fix 2026-09-14 */
+  --fokus:var(--navy-500);--fokus-dialog:var(--amber);
+
+  /* Radien (V5-Werte) */
+  --r-xs:6px;--r-s:8px;--r-m:10px;--r-btn:11px;--r-l:12px;--r-eintrag:13px;--r-kachel:16px;--r-dialog:18px;--r-voll:999px;
+  /* Abstände (V5-Werte) */
+  --a-1:4px;--a-2:6px;--a-3:8px;--a-4:10px;--a-5:12px;--a-6:14px;--a-7:16px;--a-8:18px;--a-9:20px;--a-10:24px;
+
+  /* Touch */
+  --touch:48px;
+
+  /* Shell-Maße (Rolf V8 / Phillip V4) */
+  --seitenleiste:238px;--kopf:66px;--kopf-touch:58px;--kopf-werkstatt:62px;
+  --dock:66px;--aktionsleiste:80px;--aktionsleiste-handy:74px;--streifen:3px;
+
+  /* Geräte-Referenzauflösungen (D-UI-CORE-001) – nur Dokumentation, CSS-Variablen gelten nicht in @media */
+  --ref-desktop-b:1914px;--ref-desktop-h:917px;
+  --ref-tablet-b:1220px;--ref-tablet-h:880px;
+  --ref-handy-b:390px;--ref-handy-h:844px;
+
+  /* V1.1 Owner-Runde 2026-09-27 (Chat): Flächen neutraler und ruhiger – Karten/Dialoge „aufgeräumt“.
+     Nur Flächen-/Linienwerte; Navy, Cream-Akzente, Signalfarben und Verlauf unverändert V5. Überschreibt die V5-Werte oben. */
+  --ground:#F4F2EE;--ground-rail:#EFEDE8;--surface:#FFFFFF;--line:#E4E0D8;
+  --rand:#D5D0C7;      /* Ränder von Feldern, Knöpfen, Filtern */
+  --flaeche:#F7F6F3;   /* ruhige Innenfläche (Formular, Karten-Rail, Kopf-Suche) */
+}
+/* Breakpoints (aus V5 isCaptureDevice/chooseReferenceFrame):
+   handy   : Breite ≤ 699px
+   tablet  : Breite 700–1399px mit Touch/grobem Zeiger
+   desktop : sonst
+   Die App setzt data-geraet am .kr-app; Komponenten lesen nur dieses Attribut. */

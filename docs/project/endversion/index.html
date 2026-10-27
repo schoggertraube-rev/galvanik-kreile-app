@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kreile Endversion</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../linie/ui/designsystem_v1_1/tokens.css">
+<link rel="stylesheet" href="../linie/ui/designsystem_v1_1/komponenten.css">
+<link rel="stylesheet" href="groessen_v8.css">
+<link rel="stylesheet" href="ui_ergaenzung.css">
+<style>
+/* Nur Vorschau-Rahmen (ka-/ev-), kein Produktteil */
+html,body{margin:0;background:var(--cream-300);font-family:var(--sans);color:var(--navy-900)}
+.ka-leiste{position:sticky;top:0;z-index:100;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:8px 14px;background:var(--navy-900);color:var(--cream-100);font-size:12px}
+.ka-gruppe{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.ka-gruppe>span{color:var(--cream-400);font-weight:600}
+.ka-gruppe button,.ka-gruppe select{min-height:32px;border:1px solid var(--navy-600);background:var(--navy-800);color:var(--cream-100);border-radius:8px;padding:0 9px;font:inherit;font-weight:600;cursor:pointer}
+.ka-gruppe button[aria-pressed="true"]{background:var(--cream-50);color:var(--navy-900);border-color:var(--cream-50)}
+.ka-gruppe button:disabled{opacity:.55;cursor:default}
+.ka-badge{padding:5px 10px;border-radius:999px;font-weight:700;cursor:pointer;border:0;font:inherit;font-weight:700}
+.ka-stufe{padding:4px 9px;border-radius:4px;color:#fff;font-weight:700;font-size:12px;white-space:nowrap}
+.ka-ok{background:var(--succ-bg);color:var(--succ-fg)}.ka-rot{background:var(--ral-bg);color:var(--ral-fg)}.ka-info{background:var(--info-bg);color:var(--info-fg)}
+.ka-buehne{padding:14px;display:flex;justify-content:center}
+.ka-skala{transform-origin:top left}
+#geraet{box-shadow:var(--sh-lg);border-radius:4px}
+body.ka-pruef{background:var(--ground)}body.ka-pruef .ka-leiste{display:none}body.ka-pruef .ka-buehne{padding:0;display:block}body.ka-pruef #geraet{box-shadow:none;border-radius:0}
+body.ka-pruef .kr-app *{animation:none!important;transition:none!important}
+.ev-regel{display:block;margin-top:4px;font-size:11px;line-height:1.35;color:var(--warn-fg);background:var(--warn-bg);border-radius:6px;padding:3px 7px;font-weight:500;text-transform:none;letter-spacing:0}
+.ev-spec{margin-top:16px;border:1.5px dashed var(--amber);border-radius:12px;padding:10px 14px;font-size:12px;line-height:1.45;color:var(--navy-600);background:var(--surface)}
+.ev-spec b{color:var(--navy-800)}.ev-spec ul{margin:4px 0 0 16px;padding:0}
+[data-vorschlag]{outline:2px dashed var(--amber);outline-offset:2px}
+.ev-panel{max-width:1500px;margin:16px auto;padding:0 16px 40px;font-size:13px}
+.ev-panel h2{font-family:var(--serif);font-weight:500;font-size:24px;margin:18px 0 8px}
+.ev-panel h3{font-size:14px;margin:16px 0 6px}
+.ev-karte{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.ev-tab{width:100%;border-collapse:collapse;background:var(--surface);border-radius:12px;overflow:hidden}
+.ev-tab td,.ev-tab th{border-bottom:1px solid var(--line);padding:7px 9px;vertical-align:top;text-align:left}
+.ev-tab th{background:var(--flaeche);font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--navy-500)}
+.ev-chip{display:inline-block;margin:2px 3px 2px 0;padding:2px 8px;border-radius:999px;background:var(--flaeche);border:1px solid var(--line);font-size:11.5px;cursor:pointer}
+.ev-chip--rot{background:var(--ral-bg);color:var(--ral-fg)}.ev-chip--ok{background:var(--succ-bg);color:var(--succ-fg)}
+.ev-li{margin:3px 0}.ev-li code{font-size:11px;color:var(--navy-400)}
+</style>
+</head>
+<body>
+<div class="ka-leiste" id="leiste"></div>
+<div class="ka-buehne" id="buehne"><div class="ka-skala" id="skala"><div id="geraet" class="kr-app" data-geraet="desktop" data-groesse="v8"></div></div></div>
+<div class="ev-panel" id="panel" hidden></div>
+<script src="../linie/ui/designsystem_v1_1/katalog/kr-vorschau.js"></script>
+<script src="pruefung.js"></script>
+<script src="spec.eingebettet.js"></script>
+<script>
+'use strict';
+const K = window.KR, { i, esc, btn, chip } = K;
+let SPEC = null, QUELLE = '';
+const P = new URLSearchParams(location.search);
+const S = { rolle: P.get('rolle') || 'meister', geraet: P.get('geraet') || null, stufen: new Set((P.get('stufen') || '1').split(',').map(Number)), addons: new Set((P.get('addons') || '').split(',').filter(Boolean)),
+  groesse: P.get('groesse') || 'v8', regeln: P.get('regeln') !== 'aus', ansicht: P.get('ansicht') || 'app', eingeloggt: P.get('screen') !== 'login', loginZ: 'daten', pin: '',
+  screen: null, tag: {}, felder: {}, wfilter: 'alle', afilter: 'alle', kfilter: 'alle', bfilter: 'alle', reiter: {}, erfOk: {}, wahl: {}, entwuerfe: {}, rechte: {}, bw: null, loginEdit: null, ma: { z: {}, extra: 0, info: false }, fm: { teile: {}, foto: {}, gut: {}, aus: {}, grund: {} }, seiteZ: 'daten', seiteArg: null, ansichtAuftr: 'liste', ebenen: [], toast: null, f: 1 };
+const root = document.getElementById('geraet');
+
+async function laden() {
+  const e = window.KREILE_SPEC_EINGEBETTET;
+  try {
+    const r = await fetch('spec.json', { cache: 'no-store' }); if (!r.ok) throw 0;
+    const t = await r.text(); SPEC = JSON.parse(t); QUELLE = 'spec.json';
+    if (e && crypto.subtle) { const h = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)))].map(x => x.toString(16).padStart(2, '0')).join(''); if (h !== e.sha) QUELLE += ' · Achtung: eingebettete Kopie veraltet (node werkzeuge/bauen.mjs)'; }
+  } catch (_) {
+    if (!e) { document.body.innerHTML = '<p style="padding:20px">spec.json nicht ladbar und keine eingebettete Kopie. <code>node werkzeuge/bauen.mjs</code> ausführen.</p>'; return; }
+    SPEC = e.spec; QUELLE = 'Kopie von spec.json · sha ' + e.sha.slice(0, 10);
+  }
+  const r = rolle(); S.geraet = S.geraet || r.geraet; S.screen = P.get('screen') && SC(P.get('screen')) && SC(P.get('screen')).typ === 'seite' ? P.get('screen') : r.start;
+  if (P.has('pruef')) document.body.classList.add('ka-pruef');
+  const ps = P.get('screen'); if (ps && SC(ps) && !['seite', 'login'].includes(SC(ps).typ)) S.ebenen = [{ id: ps, arg: P.get('arg') || undefined, zustand: P.get('zustand') || 'daten' }];
+  else if (P.get('zustand')) S.seiteZ = P.get('zustand');
+  render();
+}
+
+/* ===== Helfer ===== */
+const SC = id => SPEC.screens.find(s => s.id === id);
+const F = id => SPEC.funktionen.find(f => f.id === id);
+const konf = () => ({ stufen: [...S.stufen], addons: [...S.addons] });
+const an = fid => KreilePruefung.funktionAn(SPEC, fid, konf());
+const rolle = () => SPEC.rollen.find(r => r.id === S.rolle);
+/* U-200 Rechte: Haken je Login und Bereich (Gregor setzt sie in Wartung › Logins & Rechte); Rollen sind nur Vorlagen */
+function rechteSet(id) { if (!S.rechte[id]) { const r = SPEC.rollen.find(x => x.id === id) || {}; S.rechte[id] = new Set((SPEC.rechte.vorlagen[r.rechte_vorlage || id] || [])); } return S.rechte[id]; }
+const recht = (b, id = S.rolle) => rechteSet(id).has(b);
+const ohneGeld = () => !recht('geld');
+const istW = ohneGeld;
+const darf = o => { if (!o) return true; if (o.recht) return recht(o.recht); const v = (rolle() || {}).rechte_vorlage; return !o.rollen || o.rollen.includes(S.rolle) || (!!v && o.rollen.includes(v)); };
+let AKTARG = null;
+const geraetOk = o => !o.geraete || o.geraete.includes(S.geraet);
+const za = o => ({ 'data-z': o.ziel, 'data-arg': (o.argErben && AKTARG) || o.arg || undefined, 'data-m': o.meldung || undefined, 'data-n': o.schliesst || undefined, 'data-abschluss': o.abschluss ? '1' : undefined, 'data-entwurf': o.entwurf ? '1' : undefined, 'data-ew': o.entwurfWeg !== undefined ? String(o.entwurfWeg) : undefined });
+function stufeLabel(fid) { const f = F(fid); if (!f || f.stufe == null) return 'geplant'; if (f.addon) return 'Stufe ' + f.stufe + ' · Add-on ' + f.addon; return 'Stufe ' + f.stufe; }
+function geplant(text, icon, fid, variante) { return K.ausgrau({ art: 'aufbau', text, icon, variante }).replace('kr-ausgrau--aufbau', 'kr-ausgrau--geplant').replace('>In Aufbau<', '>' + esc(stufeLabel(fid)) + '<'); }
+const txt = a => (istW() && a.textWerkstatt) || a.text;
+function ab(a, o = {}) {
+  if (!a || !darf(a) || !geraetOk(a)) return '';
+  if (a.funktion && !an(a.funktion)) return geplant(a.text, a.icon, a.funktion, 'knopf');
+  const z = SC(a.ziel); if (z && !darf(z)) return '';
+  return btn({ text: txt(a), icon: a.icon, art: a.art || o.art, attrs: { ...za(a), title: a.taste ? 'Taste: ' + a.taste : undefined, 'data-vorschlag': a.status === 'vorschlag' ? '1' : undefined } });
+}
+function regelInfo(f) {
+  if (!S.regeln) return '';
+  const p = { immer: 'Pflicht', fuer_auftrag: 'Pflicht für Auftrag', bedingt: 'Pflicht: ' + (f.pflicht_wann || 'bedingt') }[f.pflicht] || 'freiwillig';
+  return `<span class="ev-regel"><b>${esc(p)}</b> · wann: ${esc(f.wann || 'immer')}${f.vorbelegung ? ' · vorbelegt: ' + esc(f.vorbelegung) : ''}${f.regel ? ' · ' + esc(f.regel) : ''}${f.status === 'vorschlag' ? ' · <i>Vorschlag ' + esc(f.freigabe || '') + '</i>' : ''}</span>`;
+}
+function regelnHtml(sc) {
+  if (!S.regeln) return '';
+  const q = (sc.quelle || []).join(' · '), fn = (sc.funktion || []).join(' · ');
+  return `<div class="ev-spec"><b>${esc(sc.id)}</b> · ${esc(sc.typ)} · Funktion ${esc(fn || '–')} · Quelle ${esc(q || '–')} · Rollen ${esc((sc.rollen || []).join(', '))}${sc.status ? ' · <b>' + esc(sc.status) + '</b>' : ''}${sc.ablauf ? '<br>' + esc(sc.ablauf) : ''}${(sc.regeln || []).length ? '<ul>' + sc.regeln.map(r => '<li>' + esc(r) + '</li>').join('') + '</ul>' : ''}</div>`;
+}
+
+/* ===== Felder ===== */
+/* U-201 Objekte: jede Ansicht wird aus dem angeklickten Auftrag / Kunden / der Rechnung gebildet */
+let OBJ = null;
+function obj(arg) { if (!arg || typeof arg !== 'string') return null; const d = SPEC.beispiel; if (/^A-/.test(arg)) return d.auftraege.find(a => a.id === arg) || d.auftraege_alt.find(a => a.id === arg) || null; if (/^K-/.test(arg)) return d.kunden.find(k => k.id === arg) || null; if (/^R-/.test(arg)) return d.rechnungen.find(r => r.id === arg) || null; return null; }
+const kundeVon = a => a && SPEC.beispiel.kunden.find(k => k.kurz === a.kunde);
+const auftragVon = o => !o ? null : /^A-/.test(o.id) ? o : o.auftrag ? obj(o.auftrag) : null;
+const teileVon = a => a.teile || [{ id: 'T-01', titel: a.titel, meta: (a.ziel || '') + (a.menge ? ' · ' + a.menge : ''), menge: parseInt(a.menge) || 1, fertig: ['fertig', 'abgeholt'].includes(a.ort), foto: true }];
+const ORTLBL = { angenommen: 'Wareneingang', galvanik: 'Galvanik', fertig: 'fertig', abgeholt: 'abgeholt', kv: 'KV' };
+const vorgaenge = kurz => { const l = SPEC.beispiel.auftraege.filter(a => a.kunde === kurz), kv = l.filter(a => a.ort === 'kv').length, n = l.length - kv; return [n ? n + (n === 1 ? ' Auftrag' : ' Aufträge') : '', kv ? kv + ' KV' : ''].filter(Boolean).join(' · ') || 'kein aktiver Auftrag'; };
+function relTermin(a) { if (a.ort === 'abgeholt') return 'abgeholt'; if (!a.termin) return a.chip || ''; const d = atZwischen(new Date(SPEC.werkstattregel.heute_beispiel), new Date(a.termin)); return d < 0 ? 'überfällig' : d === 0 ? 'heute' : d === 1 ? 'morgen' : 'in ' + d + ' Arbeitstagen'; }
+const zielOk = o => !o || !o.ziel || !SC(o.ziel) || darf(SC(o.ziel));
+function bindAuftrag(k0, A) {
+  const k = JSON.parse(JSON.stringify(k0)), KU = kundeVon(A) || {}, T = teileVon(A), istBsp = A.id === 'A-2026-0101';
+  k.kopf = { nr: A.id, titel: A.titel, sub: `${A.ziel || ''} · ${T.length} ${T.length === 1 ? 'Teil' : 'Teile'} · ${ORTLBL[A.ort] || ''}`, chips: [...(A.express ? [{ text: 'Express', ton: 'marke' }] : []), ...(KU.id ? [{ text: KU.name + ' · Kundenakte', ziel: 'kunde', arg: KU.id, icon: 'user' }] : [])] };
+  k.termin = { ...k.termin, rel: relTermin(A), datum: A.termin || '', status: A.ort === 'kv' ? 'KV' : (A.terminstatus || 'bestätigt'), ueb: A.ueb || '' };
+  const idx = { kv: 0, angenommen: 0, galvanik: 1, fertig: 2, abgeholt: 4 }[A.ort] ?? 0, vk = /Vorkasse/.test(A.zahlung || ''), nf = T.filter(t => t.fertig).length;
+  k.kette = k.kette.map((s, n) => { const st = n < idx || A.ort === 'abgeholt' ? 'erledigt' : n === idx ? 'aktiv' : n === idx + 1 && A.ort === 'galvanik' ? 'bereit' : s.lbl === 'Zahlung' && vk && idx < 4 ? 'gesperrt' : 'warten';
+    return { ...s, st, ...(s.lbl === 'angenommen' ? { sub: A.eingang || '', lbl: A.ort === 'kv' ? 'KV' : 'angenommen' } : {}), ...(s.lbl === 'fertig' ? { sub: nf + ' von ' + T.length + ' Teilen', balken: nf / T.length } : {}), ...(s.ziel && s.ziel !== 'zustand:erfolg' ? { arg: A.id } : {}) }; });
+  const foto = T.find(t => !t.foto), P = A.ort === 'angenommen' ? prio(A) : null;
+  const nae = A.ort === 'abgeholt' ? null : foto ? { text: 'Foto für ' + foto.id + ' aufnehmen', aktion: { text: 'Foto aufnehmen', icon: 'camera', art: 'primaer', ziel: 'foto', arg: A.id } }
+    : A.ort === 'kv' ? { text: 'KV prüfen und freigeben', aktion: { text: 'Freigeben → Auftrag', icon: 'check', art: 'erledigen', ziel: 'zustand:erfolg', meldung: 'KV freigegeben · Auftrag angelegt' } }
+    : A.ort === 'angenommen' ? { text: (P ? P.text[0].toUpperCase() + P.text.slice(1) : 'Starten'), aktion: { text: 'In Galvanik übergeben', icon: 'droplet', art: 'primaer', ziel: 'zustand:erfolg', meldung: A.id + ' in Galvanik' } }
+    : A.ort === 'galvanik' ? { text: 'Fertig melden, wenn alle Teile durch sind', aktion: { text: 'Fertig melden', icon: 'check', art: 'erledigen', ziel: 'fertig', arg: A.id } }
+    : { text: 'Ware raus vorbereiten', aktion: { text: 'Ware raus', icon: 'truck', art: 'primaer', ziel: 'rauspruefen', arg: A.id } };
+  k.haupt = k.haupt.flatMap(b => {
+    if (b.typ === 'naechste') return nae ? [{ ...b, ...nae }] : [];
+    if (b.typ === 'teile') return [{ ...b, zeilen: T.map(t => ({ id: t.id, titel: t.titel, meta: t.meta, fertig: t.fertig, foto: t.foto ? undefined : 'fehlt' })) }];
+    if (b.titel === 'Mehrarbeit') return [{ ...b, bloecke: [{ typ: 'text', text: A.mehrarbeit_min ? A.mehrarbeit_min + ' Min. bisher · ' + (A.mehrarbeit_text || '') : 'Keine Mehrarbeit erfasst.' }] }];
+    return [b]; });
+  k.rail = k.rail.map(b => {
+    if (b.typ === 'verknuepft') return { ...b, eintraege: [{ typ: 'kunde', titel: KU.name || A.kunde, meta: [KU.zahlung, vorgaenge(A.kunde)].filter(Boolean).join(' · '), ziel: 'kunde', arg: KU.id, geldMeta: true }, ...(istBsp ? b.eintraege.filter(e => e.typ !== 'kunde') : [])] };
+    if (b.titel === 'Geld') return { ...b, bloecke: [{ typ: 'fakten', zeilen: [['Zahlungsmodus', A.zahlung || '–'], ['Betrag lt. KV', A.wert ? eurF(A.wert) : '–'], ['Rechnung', A.ort === 'fertig' ? 'abrechenbar' : A.ort === 'abgeholt' ? 'erstellt' : 'nach Fertigmeldung']] }, ...(A.ort === 'abgeholt' ? [] : [{ typ: 'aktionen', aktionen: [{ text: 'Rechnung erstellen', icon: 'receipt', art: 'sekundaer', ziel: 'rechnung', arg: A.id }] }])] };
+    return b; });
+  return k;
+}
+function bindKunde(k0, KU) {
+  const k = JSON.parse(JSON.stringify(k0)), d = SPEC.beispiel, akt = d.auftraege.filter(a => a.kunde === KU.kurz), alt = d.auftraege_alt.filter(a => a.kunde === KU.kurz), re = d.rechnungen.filter(r => r.kunde === KU.kurz);
+  k.kopf = { nr: KU.id, titel: KU.name, sub: KU.typ + ' · Kunde seit ' + (KU.seit || '–'), chips: [{ text: KU.ort || 'Anschrift fehlt', icon: 'box' }, ...(KU.tel ? [{ text: KU.tel, icon: 'phone', ziel: 'extern:tel' }] : []), ...(KU.mail ? [{ text: KU.mail, icon: 'mail', ziel: 'mail', arg: KU.id }] : []), ...(KU.zahlung ? [{ text: KU.zahlung, icon: 'receipt', recht: 'geld' }] : [])] };
+  const vs = akt.find(a => a.ort === 'fertig' && a.ueb === 'Versand');
+  k.haupt = k.haupt.flatMap(b => {
+    if (b.typ === 'hinweis' && b.wenn === 'unvollständig') return KU.vollstaendig ? [] : [{ ...b, wenn: undefined, text: 'Unvollständig – für Auftrag fehlt: ' + (KU.fehlt || []).join(', ') }];
+    if (b.typ === 'naechste') return vs ? [{ ...b, text: 'Versand von ' + vs.id + ' ankündigen' }] : [];
+    if (b.titel === 'Aktive Aufträge') return [{ ...b, bloecke: akt.length ? [{ typ: 'zeilen', zeilen: akt.map(a => ({ id: a.id, titel: a.kunde + ' · ' + a.titel, meta: a.meta, ton: a.ton, chip: a.chip, chipWerkstatt: /Vorkasse/.test(a.chip || '') ? 'Freigabe fehlt' : undefined, ziel: 'auftrag', arg: a.id })) }] : [{ typ: 'text', text: 'Kein aktiver Auftrag' }] }];
+    if (b.titel === 'Absprachen & Eigenheiten') { const z = (KU.absprachen || []).filter(x => !(x.geld && ohneGeld())).map(x => [x.text, x.wert]); return [{ ...b, bloecke: [z.length ? { typ: 'fakten', zeilen: z } : { typ: 'text', text: 'Keine Absprachen' }] }]; }
+    return [b]; });
+  k.rail = k.rail.map(b => {
+    if (b.typ === 'fakten') return { typ: 'fakten', zeilen: [['Kunde seit', KU.seit || '–'], ['Aufträge gesamt', (akt.length + alt.length) + ' · davon ' + vorgaenge(KU.kurz) + ' offen']] };
+    if (b.titel === 'Rechnungen') return { ...b, bloecke: [re.length ? { typ: 'zeilen', zeilen: re.map(r => ({ id: r.id, titel: r.betrag, meta: 'fällig ' + r.faellig, ton: r.st === 'ueberfaellig' ? 'rot' : '', chip: r.st === 'ueberfaellig' ? 'überfällig' : 'offen', ziel: 'zahlung', arg: r.id })) } : { typ: 'text', text: 'Keine offenen Rechnungen' }] };
+    return b; });
+  return k;
+}
+/* U-195 Erfassung: WB = in einer Erfassungsseite, ERF = erkannte Angaben */
+let WB = false, ERF = null;
+const erfWert = id => ERF && ERF.felder[id] ? ERF.felder[id] : null;
+const PFL = { immer: 'Pflicht', fuer_auftrag: 'für Auftrag' };
+function feldWert(f) {
+  if (!WB) return undefined;
+  if (ERF && f.id === 'liefertermin' && S.wahl.termin === 'vorschlag') return SPEC.beispiel.terminvorschlag.vorschlag;
+  if (ERF && f.id === 'preis' && S.wahl.preis) return SPEC.beispiel.preisvorschlag.summe;
+  const e = erfWert(f.id); return e ? e.wert : '';
+}
+function feldHtml(f) {
+  if (!darf(f)) return '';
+  if (f.funktion && !an(f.funktion)) return `<div class="kr-voll">${geplant(f.label, 'lock', f.funktion)}</div>`;
+  if (f.nur_wenn && !(OBJ && OBJ[f.nur_wenn])) return '';
+  if (WB && f.zeige_wenn && !Object.entries(f.zeige_wenn).every(([k, w]) => (erfWert(k) || {}).wert === w)) return '';
+  const L = (istW() && f.label_werkstatt) || f.label, o = f.optionen || [], v = feldWert(f), wb = v !== undefined, ov = !wb && OBJ ? objWert(f) : undefined; let h;
+  const pfl = PFL[f.pflicht] ? `<span class="ev-pflicht ev-pflicht--${f.pflicht}">${PFL[f.pflicht]}</span>` : '';
+  switch (f.typ) {
+    case 'segment': h = K.segment(o.map(x => [x, x]), (wb && v) || ov || o[0]); break;
+    case 'auswahl': { const oo = ov && !o.includes(ov) ? [ov, ...o] : o; h = K.auswahl(/^keine/.test(f.vorbelegung || '') || (wb && !v) ? [['', 'bitte wählen'], ...oo.map(x => [x, x])] : oo, {}, wb ? v : (ov || '')); break; }
+    case 'textfeld': h = `<span class="ev-mitmic">${K.textfeld({ rows: 2, 'data-beispiel': f.diktat_beispiel || 'Kunde ruft zurück, Termin Freitag passt' }, wb ? v : (f.beispiel || ''))}${micKnopf()}</span>`; break;
+    case 'check': return `<div class="kr-voll">${K.check('<b>' + esc(L) + '</b>' + pfl, WB ? { 'data-pruef': f.id, checked: !!S.wahl[f.id] } : {})}${regelInfo(f)}</div>`;
+    case 'checks': h = o.map(x => K.check(esc(x), { checked: true })).join(''); break;
+    case 'suche': h = `<span class="kr-suchfeld">${i('search')}<input placeholder="${esc(L)} – Name, Firma, Telefon, Ort, Nummer"></span>`; break;
+    case 'katalog': h = K.eingabe({ placeholder: 'Katalog oder Freitext', list: 'ev-katalog', value: wb ? v : undefined }); break;
+    case 'foto': case 'datei': h = WB && S.wahl[f.id] ? chip(L + ' · gespeichert', 'ok', 'check') : btn({ text: L, icon: f.typ === 'foto' ? 'camera' : 'upload', art: 'sekundaer', attrs: WB ? { 'data-wahl': f.id, 'data-wert': '1' } : { 'data-z': 'zustand:daten', 'data-m': L + ' · Original gesichert' } }); break;
+    case 'pin': h = K.eingabe({ inputmode: 'numeric', maxlength: 4, placeholder: '••••' }); break;
+    case 'auto': h = K.eingabe({ value: 'wird automatisch vergeben', readonly: true }); break;
+    case 'fakten': h = `<div class="kr-zeile-s">${esc(f.vorbelegung || '')}</div>`; break;
+    case 'positionen': { const A = auftragVon(OBJ) || obj('A-2026-0101'), T = teileVon(A), mz = A.mehrarbeit_min || 0, ms = SC('mehrarbeit').inhalt[0].stundensatz_eur; h = K.fakten([...T.map((t, n) => ['Pos. ' + (n + 1) + ' · ' + t.titel + ' · ' + (t.meta || ''), 'lt. KV']), ...(mz ? [['Mehrarbeit · ' + mz + ' Min.', eurF(mz * ms / 60)]] : []), ['Summe netto', eurF((A.wert || 0) + mz * ms / 60)]]); break; }
+    case 'datum': h = K.eingabe({ type: 'date', value: wb ? v : SPEC.werkstattregel.heute_beispiel }); break;
+    case 'zahl': case 'betrag': h = K.eingabe({ inputmode: 'decimal', placeholder: f.typ === 'betrag' ? '0,00 €' : '', value: wb && v ? v : ov }); break;
+    default: h = K.eingabe({ type: { email: 'email', tel: 'tel' }[f.typ] || 'text', value: wb ? v : (f.beispiel || '') });
+  }
+  const e = wb && erfWert(f.id), ok = ERF && S.erfOk[ERF.id];
+  const mark = e ? `<span class="ev-erk${ok ? ' ev-erk--ok' : ''}">${i(ok ? 'check' : e.app ? 'user' : 'scan')}${e.app ? 'vorgeschlagen' : 'erkannt'} · ${esc(e.quelle)}</span>` : '';
+  const voll = ['textfeld', 'checks', 'suche', 'positionen', 'fakten'].includes(f.typ) || (!WB && (f.id === 'name' || f.id === 'quelle'));
+  return K.feld({ label: L, html: h + mark + regelInfo(f), voll, cls: e && !ok ? 'ev-feld--neu' : '' }).replace('</span>', pfl + '</span>');
+}
+function objWert(f) {
+  const R = OBJ && /^R-/.test(OBJ.id) ? OBJ : null, A = auftragVon(OBJ), KU = A ? kundeVon(A) : R ? SPEC.beispiel.kunden.find(k => k.kurz === R.kunde) : null;
+  switch (f.id) {
+    case 'betrag': return R ? R.betrag : A && A.wert ? eurF(A.wert) : undefined;
+    case 'rechnung': return R ? R.id + ' · ' + R.betrag : A ? A.id + ' · ' + (A.zahlung || '') + ' ' + (A.wert ? eurF(A.wert) : '') : undefined;
+    case 'zahlungsbedingung': return KU && KU.zahlung ? (KU.zahlung === 'Rechnung auf Ziel' ? 'Rechnung auf Ziel · 14 Tage' : KU.zahlung) : undefined;
+    case 'art': { const z = (A && A.zahlung) || (KU && KU.zahlung) || ''; return /Bar/.test(z) ? 'Bar' : 'Überweisung'; }
+  } return undefined;
+}
+const FLBL = { kunde: 'Kunde' };
+function feldLabel(id) { if (FLBL[id]) return FLBL[id]; const such = o => { if (!o || typeof o !== 'object') return; if (Array.isArray(o)) { for (const x of o) { const r = such(x); if (r) return r; } return; } if (o.id === id && o.label) return o.label; for (const v of Object.values(o)) { const r = such(v); if (r) return r; } }; return FLBL[id] = such(SPEC.formulare) || such(SPEC.screens) || id; }
+const eurF = n => n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+const AKTYP = { status: ['flag', 'Status'], mail: ['mail', 'Mail'], anruf: ['phone', 'Anruf'], notiz: ['edit', 'Notiz'], foto: ['photo', 'Foto'], dokument: ['file', 'Dokument'], rechnung: ['receipt', 'Rechnung'], zahlung: ['card', 'Zahlung'], termin: ['calendar', 'Termin'], kunde: ['user', 'Kunde'], auftrag: ['list', 'Auftrag'] };
+const datum = z => { const d = new Date(z.slice(0, 10)); return String(d.getUTCDate()).padStart(2, '0') + '.' + String(d.getUTCMonth() + 1).padStart(2, '0') + '.' + d.getUTCFullYear(); };
+function tagLabel(z) { const h = SPEC.werkstattregel.heute_beispiel, t = z.slice(0, 10); if (t === h) return 'Heute'; const g = new Date(h); g.setUTCDate(g.getUTCDate() - 1); if (t === g.toISOString().slice(0, 10)) return 'Gestern'; return t.slice(0, 4) === h.slice(0, 4) ? tag(new Date(t)) : datum(z); }
+function erfFuer(sc, ctx) { const bsp = SPEC.beispiel.erfassung[sc.id]; if (ctx.arg && /^K-/.test(ctx.arg) && sc.id === 'eingang') { const k = obj(ctx.arg); return k ? { id: 'eingang', quelle: 'Kundenkarte', text: '', felder: { kunde: { wert: k.name, id: k.id, quelle: 'aus der Kundenkarte', app: true }, ...(k.zahlung ? { zahlungsmodus: { wert: k.zahlung, quelle: 'Kundendaten ' + k.kurz, app: true } } : {}) } } : null; } return ctx.zustand === 'leer' || !bsp ? null : { ...bsp, id: sc.id }; }
+function erfWertVon(sc, ctx, id) { const E = erfFuer(sc, ctx); return E && E.felder[id] ? E.felder[id].wert : undefined; }
+function plStatus(id) { if (['geprueft', 'eingangsfoto'].includes(id)) return S.wahl[id] ? ['ok', 'gruen'] : ['fehlt', 'warn']; if (id === 'zahlungsmodus' && ohneGeld() && erfWert('kunde')) return ['ok', 'gruen']; if (id === 'liefertermin' && ERF && ERF.felder.liefertermin && !S.wahl.termin) return ['entscheiden', 'warn']; const e = erfWert(id); return e ? (S.erfOk[ERF.id] || S.wahl[id] ? ['ok', 'gruen'] : ['prüfen', 'navy']) : ['fehlt', 'warn']; }
+function pflichtFehlt(sc, ctx) { const pl = (((sc.inhalt || [])[0] || {}).rail || []).find(b => b.typ === 'pruefliste'); if (!pl) return null; const alt = ERF, altW = WB; WB = true; ERF = erfFuer(sc, ctx); const f = (pl.pflicht || []).find(x => plStatus(x[0])[1] !== 'gruen'); WB = altW; ERF = alt; return f || null; }
+const zeigeWert = (id, w) => /^\d{4}-\d\d-\d\d$/.test(w) ? tag(new Date(w)) : w;
+const FEHLT_FELD = { 'E-Mail': ['email'], 'Anschrift': ['strasse', 'plz', 'ort'], 'Zahlungsbedingung': ['zahlungsbedingung'] };
+const fehltFelder = (k, fs) => fs.filter(f => (k.fehlt || []).some(x => (FEHLT_FELD[x] || []).includes(f.id))).map(f => feldHtml({ ...f, pflicht: 'immer' })).join('');
+function kundeForm(modus, z) {
+  const fs = SPEC.formulare.kunde.felder; const teil = [feldHtml(fs[0])];
+  const ek = WB && erfWert('kunde');
+  if (ek && !['neukunde', 'teilweise'].includes(z)) {
+    const k = SPEC.beispiel.kunden.find(x => x.id === ek.id) || {}, ok = S.erfOk[ERF.id], hw = (k.hinweise || []).filter(x => !(x.geld && istW()));
+    return `<article class="ev-wkarte ev-kkarte${hw.length ? ' ev-kkarte--achtung' : ''} ev-ekunde"><span class="ev-kkreis" aria-hidden="true">${esc(k.kz || '')}${hw.length ? '<span class="ev-achtung">!</span>' : ''}</span><div class="ev-wkarte-inhalt"><div class="ev-wkarte-t">${esc(k.name)}<span class="kr-id">${esc(k.id)}</span></div><div class="ev-wkarte-m">${[k.ansprechpartner, k.ort, k.zahlung, k.vollstaendig ? 'vollständig' : 'unvollständig'].filter(Boolean).map(esc).join(' · ')}</div>${hw.length ? `<div class="ev-kgrund">${hw.map(x => esc(x.text)).join(' · ')}</div>` : ''}<span class="ev-erk${ok ? ' ev-erk--ok' : ''}">${i(ok ? 'check' : 'scan')}erkannt · ${esc(ek.quelle)}</span><div class="ev-wkarte-f"><span></span><span class="ev-wkarte-knoepfe">${btn({ text: 'Kundenkarte', icon: 'open', art: 'sekundaer', attrs: { 'data-z': 'kunde', 'data-arg': k.id } })}</span></div></div></article>${k.vollstaendig === false ? `<div class="ev-ergaenzen"><div class="ev-ma-l">Für den Auftrag ergänzen</div><div class="kr-form">${fehltFelder(k, fs)}</div></div>` : ''}<div class="kr-form" style="margin-top:12px">${feldHtml({ ...fs[0], label: 'Anderer Kunde', pflicht: false })}</div>`;
+  }
+  const neu = modus !== 'suche_dann_nur_fehlende' || z === 'neukunde';
+  if (!neu) {
+    if (z === 'teilweise') { teil.push(`<div class="kr-voll kr-hinweis kr-hinweis--warn">${i('alert')}Kunde Ost e. K. · für Auftrag fehlt: E-Mail, Zahlungsbedingung</div>`); teil.push(...fs.filter(f => ['email', 'zahlungsbedingung'].includes(f.id)).map(feldHtml)); }
+    else teil.push(`<div class="kr-voll">${K.kundenzeile({ kuerzel: 'NO', name: 'Kunde Nord GmbH · K-2026-0011', meta: 'vollständig · Rechnung auf Ziel · 20095 Hamburg', chips: [['vollständig', 'ok']] })}</div>`);
+  } else teil.push(...fs.slice(1).map(feldHtml));
+  return `<div class="kr-form">${teil.join('')}</div>`;
+}
+function posForm() {
+  const fs = SPEC.formulare.position.felder;
+  if (WB) return `<div class="kr-form ev-posform">${fs.map(feldHtml).join('')}</div><datalist id="ev-katalog"><option value="Verchromen · Stück"><option value="Verzinken · Stück"><option value="Türgriffe"></datalist>`;
+  return [1].map(n => `<div class="kr-form"><div class="kr-voll"><span class="kr-chip">Position ${n} von 1–20</span></div>${fs.map(feldHtml).join('')}</div>`).join('') + '<datalist id="ev-katalog"><option value="Verchromen · Stück"><option value="Verzinken · kg"></datalist>';
+}
+
+/* ===== Blöcke ===== */
+/* U-205 Entwürfe je Login: stehen auf „Der Tag“ zum Beenden oder Löschen */
+const entwuerfe = () => (S.entwuerfe[S.rolle] || []).map((d, n) => ({ k: 'ew' + n, art: 'entscheidung', titel: 'Entwurf · ' + d.titel, meta: d.meta, aktionen: [{ text: 'Weiter bearbeiten', icon: 'edit', ziel: d.ziel, ton: 'blau' }, { text: 'Löschen', icon: 'x', ziel: 'zustand:daten', meldung: 'Entwurf gelöscht', entwurfWeg: n }] }));
+const hbVis = q => [...(SPEC.beispiel.hb[q] || []).filter(e => !e.funktion || an(e.funktion)), ...(q === S.rolle && q !== 'developer' ? entwuerfe() : [])];
+const hbQuelle = q => q === '@rolle' ? S.rolle : q;
+/* Der Tag: Bausteine je Person (U-172) – Vorschlag = Standard, Handlungsbedarf fest */
+function tagSet() { const T = SPEC.tagkonfig; if (!S.tag[S.rolle]) S.tag[S.rolle] = new Set(T.bausteine.filter(b => b.fest || (b.empfohlen || []).includes(S.rolle)).map(b => b.id)); return S.tag[S.rolle]; }
+const tagAn = id => { const b = SPEC.tagkonfig.bausteine.find(x => x.id === id); return !b || b.fest || tagSet().has(id); };
+/* Der Tag: Felder je Person (U-182) – Inhalt je Feld wählbar, jedes Feld nach Dringlichkeit */
+function felder() { const T = SPEC.tagkonfig; if (!S.felder[S.rolle]) S.felder[S.rolle] = (T.standard[S.rolle] || T.standard[(rolle() || {}).rechte_vorlage] || T.standard.werkstatt).map(f => ({ ...f })); return S.felder[S.rolle]; }
+const BST = id => SPEC.tagkonfig.bausteine.find(b => b.id === id);
+const RANG = { rot: 0, warn: 1, info: 2, '': 2, ok: 3 };
+const nachDring = l => (l || []).map((x, n) => [x, n]).sort((a, b) => ((RANG[a[0].ton] ?? 2) - (RANG[b[0].ton] ?? 2)) || a[1] - b[1]).map(x => x[0]);
+const frei = (F, eigen) => SPEC.tagkonfig.bausteine.filter(x => !x.fest && darf(x) && (x.id === eigen || !F.some(g => g.inhalt === x.id)));
+function feldKarte(f, n, F, ctx, nr) {
+  const b = BST(f.inhalt), andere = f.spalte === 'links' ? 'rechts' : 'links';
+  const wahl = b.fest ? `<span class="ev-feld-fest">${esc(b.titel)} · immer an</span>` : `<select class="kr-auswahl ev-feld-wahl" id="feld-${n}" data-feld-inhalt="${n}" aria-label="Inhalt von Feld ${nr}">${frei(F, f.inhalt).map(x => `<option value="${x.id}"${x.id === f.inhalt ? ' selected' : ''}>${esc(x.titel)}</option>`).join('')}</select>`;
+  const w = (ic, a, lab) => btn({ icon: ic, art: 'leise', label: lab, attrs: { [a]: n, title: lab, 'data-nach': a === 'data-feld-spalte' ? andere : undefined } });
+  const werkzeug = b.fest ? '' : w('arrow', 'data-feld-spalte', andere === 'links' ? 'In die linke Spalte' : 'In die rechte Spalte') + w('chev', 'data-feld-hoch', 'Nach oben') + w('chev', 'data-feld-runter', 'Nach unten') + w('x', 'data-feld-weg', 'Feld entfernen');
+  return `<section class="ev-feld${b.fest ? ' ev-feld--fest' : ''}"><header class="ev-feld-kopf"><span class="ev-feld-nr">${nr}</span>${wahl}<span class="ev-feld-werkzeug">${werkzeug}</span></header><div class="ev-feld-vorschau" aria-hidden="true">${B(b.block, ctx)}</div></section>`;
+}
+/* Werkstatt: jeder Auftrag genau einmal (U-173) */
+function wGruppe(a) { if (a.ort === 'kv') return null; if (a.ort === 'angenommen') return 'wareneingang'; if (a.ton === 'rot') return 'dringend'; if (a.ort === 'fertig') return 'fertig'; if (a.ort === 'galvanik') return 'inarbeit'; return 'wareneingang'; }
+/* Priorität Wareneingang (U-184): spätester Start = Liefertermin − Durchlaufzeit − Aufwandstage (Wert ÷ Tagesleistung) */
+const WT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+const tag = d => `${WT[d.getUTCDay()]} ${String(d.getUTCDate()).padStart(2, '0')}.${String(d.getUTCMonth() + 1).padStart(2, '0')}.`;
+const atZurueck = (d, n) => { const x = new Date(d); while (n > 0) { x.setUTCDate(x.getUTCDate() - 1); if (x.getUTCDay() % 6) n--; } return x; };
+const atZwischen = (a, b) => { let n = 0; const x = new Date(a), s = b < a ? -1 : 1; while ((s > 0 ? x < b : x > b)) { x.setUTCDate(x.getUTCDate() + s); if (x.getUTCDay() % 6) n += s; } return n; };
+function prio(a) { const R = SPEC.werkstattregel; if (!a.termin || !R) return null; const heute = new Date(R.heute_beispiel), dl = R.durchlauf_arbeitstage[a.verfahren] || 3, auf = Math.max(1, Math.ceil((a.wert || 0) / R.tagesleistung_eur));
+  const start = atZurueck(new Date(a.termin), dl + auf), puffer = atZwischen(heute, start);
+  return { start, puffer, ton: puffer < 0 ? 'rot' : puffer <= 2 ? 'warn' : 'ok', text: puffer < 0 ? 'Start überfällig' : puffer === 0 ? 'heute starten' : 'starten bis ' + tag(start) }; }
+const DRING = { konflikt: 'dringend3', warnung: 'dringend2', entscheidung: 'dringend1' };
+const TON = { gruen: 'erledigen', blau: 'ton-blau', orange: 'dringend1', rot: 'dringend2', rotvoll: 'dringend3' };
+function zeileHtml(r) {
+  if (!darf(r)) return '';
+  if (r.aktion && r.aktion.nur_selbst) r = { ...r, aktion: r.login === S.rolle ? r.aktion : undefined };
+  if (!zielOk(r)) r = { ...r, ziel: undefined };
+  if (r.aktion && !zielOk(r.aktion)) r = { ...r, aktion: undefined };
+  if (r.funktion && !an(r.funktion)) return geplant(r.titel, 'lock', r.funktion, 'zeile');
+  const ct = (istW() && r.chipWerkstatt) || r.chip;
+  const seite = (ct ? chip(ct, ['ok', 'rot', 'warn'].includes(r.ton) ? r.ton : '') : '') + (r.aktion ? ab(r.aktion, { art: 'sekundaer' }) : '') + (r.ziel ? i('arrow') : '');
+  return K.zeile({ punkt: r.vorne ? undefined : (r.ton || ''), vorne: r.vorne ? `<span class="kr-av">${esc(r.vorne)}</span>` : undefined, id: r.id, titel: r.titel, meta: r.meta, seite, klick: !!r.ziel && !r.aktion, attrs: r.ziel ? za(r) : undefined });
+}
+function liste(q, zAkt, ziel) {
+  const d = SPEC.beispiel;
+  if (q === 'auftraege') return nachDring(d.auftraege).map(a => K.auftragszeile({ ...a, chipTon: a.ton === 'ok' ? '' : a.ton, pfeil: true, klick: true, karte: true, attrs: { 'data-z': ziel || 'auftrag', 'data-arg': a.id } })).join('');
+  if (q === 'kunden') return d.kunden.map(k => K.kundenzeile({ kuerzel: k.kz, name: k.name, meta: k.vollstaendig ? `${k.ort} · ${k.typ}` : `unvollständig – für Auftrag fehlt: ${k.fehlt.join(', ')}`, chips: [...(k.vollstaendig ? [] : [['unvollständig', 'warn']]), ...(k.ziel && !istW() ? [['Rechnung auf Ziel', 'ok']] : [])], pfeil: true, klick: true, karte: true, attrs: { 'data-z': ziel || 'kunde', 'data-arg': k.id } })).join('');
+  if (q === 'rechnungen') return [...d.rechnungen].sort((a, b) => (b.st === 'ueberfaellig') - (a.st === 'ueberfaellig')).map(r => K.zeile({ punkt: r.st === 'ueberfaellig' ? 'rot' : '', id: r.id, titel: `${r.kunde} · ${r.betrag}`, meta: r.meta, klick: !zAkt, attrs: zAkt ? undefined : { 'data-z': 'zahlung', 'data-arg': r.id }, seite: chip(r.st === 'ueberfaellig' ? 'überfällig' : 'offen', r.st === 'ueberfaellig' ? 'rot' : '') + (zAkt ? ab({ ...zAkt, arg: r.id }, { art: 'sekundaer' }) : '') })).join('');
+  return '';
+}
+function B(b, ctx) {
+  if (!b || !darf(b) || !geraetOk(b)) return '';
+  if (b.baustein && ctx.screen && ctx.screen.id === 'tag' && !tagAn(b.baustein)) return '';
+  if (b.ansicht && b.ansicht !== S.ansichtAuftr) return '';
+  if (b.wenn === 'unvollständig' && !(ctx.zustand === 'teilweise' || (obj(ctx.arg) && obj(ctx.arg).vollstaendig === false))) return '';
+  const aus = b.funktion && !an(b.funktion), alle = l => (l || []).map(x => B(x, ctx)).join('');
+  switch (b.typ) {
+    case 'raster': return `<div class="kr-raster">${alle(b.bloecke)}</div>`;
+    case 'stapel': return `<div class="kr-stapel">${alle(b.bloecke)}</div>`;
+    case 'spalten': return `<div class="kr-spalten">${alle(b.bloecke)}</div>`;
+    case 'lage': {
+      const it = hbVis(ctx.screen.id === 'werkstatt' ? 'werkstatt' : ctx.screen.id === 'backend' ? 'developer' : S.rolle === 'werkstatt' ? 'werkstatt' : 'meister'), z = { konflikt: 0, entscheidung: 0, warnung: 0 }; it.forEach(e => z[e.art]++);
+      const ge = b.gesund.filter(darf), lab = ge.filter(x => !an(x.funktion)).map(x => stufeLabel(x.funktion));
+      return K.lage({ zaehler: z, gesund: ge.map(x => ({ t: x.label, icon: x.icon, st: an(x.funktion) ? 'ok' : 'aufbau', s: 'im Plan' })) }).replace(/In Aufbau/g, () => esc(lab.shift() || 'geplant')).replace(/kr-gesund--aufbau/g, 'kr-gesund--aufbau kr-ausgrau--geplant');
+    }
+    case 'hb': {
+      const it = hbVis(hbQuelle(b.quelle)).map(e => ({ ...e, status: undefined, attrs: { ...za(e.aktionen[0]) }, mehrAttrs: { 'data-z': 'hbmehr', 'data-arg': e.id || undefined },
+        aktionen: e.aktionen.filter(darf).map((a, n) => ({ text: a.text, icon: a.icon, art: a.art || (n === 0 ? (TON[a.ton] || DRING[e.art]) : undefined), attrs: { ...za(a), 'data-vorschlag': e.status === 'vorschlag' ? '1' : undefined } })) }));
+      return K.hbListe({ eintraege: it, geraet: S.geraet, label: b.label, fokus: true, max: S.geraet !== 'desktop' ? 3 : undefined });
+    }
+    case 'schnell': return `<div class="kr-schnellleiste" style="margin:0">${b.aktionen.map(a => ab(a)).join('')}</div>`;
+    case 'zeitstrahl': {
+      if (aus) return geplant(b.titel, 'calendar', b.funktion);
+      const gr = b.gruppen.map(g => ({ titel: g.titel, zeilen: nachDring(g.zeilen).map(r => ({ ...r, meta: (istW() && r.metaWerkstatt) || r.meta, attrs: za(r), aktion: r.aktion && darf(r.aktion) ? { text: r.aktion.text, icon: r.aktion.icon, attrs: za(r.aktion) } : undefined })) }));
+      return K.kachel({ titel: b.titel, icon: 'calendar', icTon: 'info', inhalt: K.zeitstrahl({ jetzt: '08:12', gruppen: gr }), fuss: b.fuss ? { text: b.fuss.text, attrs: za(b.fuss) } : undefined });
+    }
+    case 'buendel': return aus ? geplant('Bündeln · ' + b.titel, 'layers', b.funktion) : K.buendel({ titel: esc(b.titel), aktion: { text: 'Bündeln', attrs: { 'data-z': 'buendel' } } });
+    case 'kachel': {
+      if (aus) return geplant(b.titel, b.icon, b.funktion);
+      let z = b.liste ? liste(b.liste, b.zeilenAktion) : nachDring(b.zeilen).map(zeileHtml).join(''); if (b.nachsatz) z += B(b.nachsatz, ctx);
+      return K.kachel({ titel: b.titel, icon: b.icon, icTon: 'info', inhalt: z || K.zustand({ art: 'leer' }), fuss: b.fuss && darf(b.fuss) ? { text: b.fuss.text, attrs: za(b.fuss) } : undefined });
+    }
+    case 'wip': { const g = SPEC.beispiel.auftraege.filter(a => a.ort === 'galvanik'), kn = g.filter(a => a.ton === 'rot').length; return K.wip({ zahl: b.zahl === 'auto' ? g.length : b.zahl, meta: b.meta === 'auto' ? (kn ? kn + (kn === 1 ? ' wird knapp' : ' werden knapp') : 'alle im Plan') : b.meta, attrs: za(b) }); }
+    case 'werkstattbrett': {
+      const offen = S.wfilter === 'alle' ? b.gruppen : b.gruppen.filter(g => g.id === S.wfilter);
+      const karte = (a, g, breit) => { const ak = g.aktion, pr = g.id === 'wareneingang' ? prio(a) : null;
+        const neben = (g.nebenaktionen || []).filter(x => !x.funktion || an(x.funktion)).map(x => btn({ text: breit ? x.text : '', icon: x.icon, art: 'sekundaer', label: x.text + ' · ' + a.id, attrs: { 'data-z': x.ziel, 'data-arg': a.id, title: x.text } })).join('');
+        const geld = istW() && /Vorkasse/.test(a.chip), marke = pr ? chip(pr.text, pr.ton) : a.ort === 'fertig' ? chip(geld ? 'Freigabe fehlt' : a.chip, a.ton === 'ok' ? 'ok' : a.ton) : chip('fertig bis ' + (a.termin ? tag(new Date(a.termin)) : a.chip), a.ton === 'ok' ? 'ok' : a.ton);
+        return `<article class="ev-wkarte" data-z="auftrag" data-arg="${a.id}"><span class="ev-wbild" aria-hidden="true">${i('photo')}</span><div class="ev-wkarte-inhalt"><div class="ev-wkarte-t">${esc(a.kunde)} · ${esc(a.titel)}<span class="kr-id">${esc(a.id)}</span></div><div class="ev-wkarte-m"><b>${esc(a.ziel || a.meta)}</b>${a.menge ? ' · ' + esc(a.menge) : ''}</div><div class="ev-wkarte-f">${marke}<span class="ev-wkarte-knoepfe">${neben}${btn({ text: ak.text, icon: ak.icon, art: TON[ak.ton], attrs: { 'data-z': ak.ziel, 'data-arg': a.id } })}</span></div></div></article>`; };
+      const sortiert = (l, g) => g.id === 'wareneingang' ? l.map(a => [a, prio(a)]).sort((x, y) => (x[1] ? x[1].puffer : 99) - (y[1] ? y[1].puffer : 99)).map(x => x[0]) : nachDring(l);
+      const spalte = g => { const l = sortiert(SPEC.beispiel.auftraege.filter(a => wGruppe(a) === g.id), g), an1 = S.wfilter === g.id;
+        return `<section class="ev-wspalte ev-wspalte--${g.farbe}"><button type="button" class="ev-wkopf" data-wfilter="${g.id}" aria-pressed="${an1}" title="${an1 ? 'Alle Spalten zeigen' : 'Nur ' + esc(g.titel) + ' zeigen'}">${i(g.icon)}<span>${esc(g.titel)}</span><b>${l.length}</b></button><div class="ev-wliste ev-wliste--breit">${l.length ? l.map(a => karte(a, g, true)).join('') : `<div class="ev-wleer">Keine Aufträge</div>`}</div></section>`; };
+      return `<div class="ev-wbrett${S.wfilter !== 'alle' ? ' ev-wbrett--eins' : ''}">${offen.map(spalte).join('')}</div>`;
+    }
+    case 'mehrarbeit': {
+      const A0 = auftragVon(OBJ) || obj(b.auftrag); b = { ...b, auftrag: A0.id, teile: [['ganz', 'Ganzer Auftrag'], ...teileVon(A0).map(t => [t.id, t.id + ' ' + t.titel])], bisher_min: A0.mehrarbeit_min || 0, bisher_text: A0.mehrarbeit_min ? 'bisher ' + A0.mehrarbeit_min + ' Min. (' + (A0.mehrarbeit_text || '') + ')' : 'bisher keine', kv_spielraum_min: A0.kv_spielraum_min || b.kv_spielraum_min };
+      const M = S.ma, jetzt = b.arten.reduce((n, a) => n + (M.z[a.id] || 0) * a.min, 0) + (M.extra || 0), ges = b.bisher_min + jetzt, q = ges / b.kv_spielraum_min;
+      const ton = q > 1 ? 'rot' : q >= 0.8 ? 'warn' : 'gruen', tt = { rot: ['über KV-Spielraum · Preisfreigabe bei Rolf', 'rot'], warn: ['Spielraum fast aufgebraucht', 'warn'], gruen: ['im vereinbarten Umfang', 'ok'] }[ton];
+      const liste = b.arten.filter(a => M.z[a.id]).map(a => a.text + ' ' + M.z[a.id] * a.min + ' Min.').concat(M.extra ? ['weitere ' + M.extra + ' Min.'] : []);
+      const kacheln = `<div class="ev-ma-kacheln">${b.arten.map(a => { const n = M.z[a.id] || 0; return `<div class="ev-ma-k${n ? ' ev-ma-k--an' : ''}"><button type="button" class="ev-ma-plus" data-ma="${a.id}" data-d="1" aria-label="${esc(a.text)} plus ${a.min} Minuten">${i(a.icon)}<b>${esc(a.text)}</b><span>+${a.min} Min. je Tipp</span>${n ? `<em>${n} × = ${n * a.min} Min.</em>` : ''}</button>${n ? `<button type="button" class="ev-ma-minus" data-ma="${a.id}" data-d="-1" aria-label="${esc(a.text)} zurücknehmen">−</button>` : ''}</div>`; }).join('')}</div>`;
+      const kv = b.kv_spielraum_min / b.regler_max * 100;
+      const regler = `<div class="ev-ma-regler ev-ma-regler--${ton}"><div class="ev-ma-regler-kopf"><b>+${jetzt} Min.</b><span>gesamt ${ges} von ${b.kv_spielraum_min} Min. Spielraum laut KV · ${esc(b.bisher_text)}</span>${chip(tt[0], tt[1], ton === 'gruen' ? 'check' : 'alert')}</div><input type="range" class="ev-ma-range" min="0" max="${b.regler_max}" step="5" value="${Math.min(ges, b.regler_max)}" data-maregler aria-label="Mehrarbeit gesamt in Minuten" style="--kv:${kv}%;--kv8:${kv * 0.8}%"><div class="ev-ma-skala"><span>0</span><span style="left:${kv}%">KV ${b.kv_spielraum_min} Min.</span><span>${b.regler_max} Min.</span></div>${istW() ? '' : `<div class="ev-ma-geld">${i('euro')}${eurF(jetzt * b.stundensatz_eur / 60)} netto als Rechnungsposition · ${b.stundensatz_eur} €/Std.</div>`}</div>`;
+      const km = b.kunde_mail, mail = an(km.funktion) ? `<div class="ev-info${M.info ? ' ev-info--an' : ''}">${btn({ text: M.info ? 'Kunde wird informiert' : km.text, icon: M.info ? 'check' : km.icon, art: M.info ? 'erledigen' : 'dringend1', attrs: { 'data-mainfo': '1' } })}${M.info ? `<span class="ev-info-text">Mail: „${esc(km.vorlage.replace('{auftrag}', b.auftrag).replace('{liste}', (liste.join(', ') || '–').replace(/\.$/, '')).replace('{preis}', ton === 'rot' ? 'Den Preis nennen wir Ihnen nach Freigabe.' : 'Im vereinbarten Rahmen, ohne Mehrkosten.'))}“</span>` : ''}</div>` : '';
+      const fluss = `<div class="ev-fluss">${i('send')}<span>Fließt beim Speichern an:</span>${b.fluss.filter(darf).map(f => `<span class="ev-fluss-z">${i(f.icon)}${esc(f.text)}</span>`).join('')}</div>`;
+      return `<div class="ev-ma"><div class="ev-ma-teil"><span class="ev-ma-l">Wo?</span>${K.segment(b.teile, M.teil || 'ganz', { 'data-seg': 'mateil' })}</div><div class="ev-ma-l">Was? · antippen, je Tipp feste Minuten</div>${kacheln}${regler}<div class="ev-ma-rest"><span class="ev-mitmic">${K.textfeld({ rows: 1, placeholder: 'Was war los? (optional) – sprechen statt tippen', 'data-beispiel': 'Riss am Griff gelötet' }, '')}${micKnopf()}</span>${btn({ text: 'Foto', icon: 'camera', art: 'sekundaer', attrs: { 'data-z': 'foto', 'data-arg': b.auftrag } })}</div>${mail}${fluss}</div>`;
+    }
+    case 'fertigmelden': {
+      const A0 = auftragVon(OBJ) || obj('A-2026-0101'); b = { ...b, teile: teileVon(A0).map(t => ({ id: t.id, titel: t.titel, menge: t.menge, fertig: t.fertig, foto: t.foto })) };
+      const F0 = S.fm, T = b.teile.map(t => ({ ...t, fertig: F0.teile[t.id] ?? t.fertig, foto: F0.foto[t.id] ?? t.foto, gut: F0.gut[t.id] ?? t.menge, aus: F0.aus[t.id] || 0 }));
+      const nf = T.filter(t => t.fertig).length, ff = T.filter(t => !t.foto), ok = nf === T.length && !ff.length;
+      const step = (art, id, n) => `<span class="ev-step"><button type="button" data-fmm="${art}" data-id="${id}" data-d="-1" aria-label="weniger">−</button><b>${n}</b><button type="button" data-fmm="${art}" data-id="${id}" data-d="1" aria-label="mehr">+</button></span>`;
+      const zeilen = T.map(t => `<div class="ev-fm-z${t.fertig ? ' ev-fm-z--ok' : ''}"><button type="button" class="ev-fm-haken" data-fmteil="${t.id}" aria-pressed="${t.fertig}" aria-label="${esc(t.id)} ${t.fertig ? 'fertig – antippen nimmt zurück' : 'als fertig markieren'}">${t.fertig ? i('check') + '<small>fertig</small>' : '<small>fertig?</small>'}</button><div class="ev-fm-t"><b><span class="kr-id">${esc(t.id)}</span> ${esc(t.titel)}</b><small>${t.fertig ? 'fertig' : 'offen'} · ${t.menge} Stück</small></div><div class="ev-fm-m"><span class="ev-fm-ml">gut</span>${step('gut', t.id, t.gut)}<span class="ev-fm-ml">Ausschuss</span>${step('aus', t.id, t.aus)}</div>${t.foto ? `<span class="ev-fm-foto">${i('photo')}Foto</span>` : btn({ text: 'Foto fehlt', icon: 'camera', art: 'dringend1', attrs: { 'data-fmfoto': t.id } })}${t.aus ? `<div class="ev-fm-grund">Grund: ${b.ausschuss_gruende.map(g => `<button type="button" class="ev-chipwahl" aria-pressed="${F0.grund[t.id] === g}" data-fmgrund="${t.id}" data-wert="${esc(g)}">${esc(g)}</button>`).join('')}</div>` : ''}</div>`).join('');
+      const offen = [nf < T.length ? (T.length - nf) + ' Teil' + (T.length - nf > 1 ? 'e' : '') + ' offen' : '', ff.length ? 'Foto fehlt: ' + ff.map(t => t.id).join(', ') : ''].filter(Boolean);
+      const km = b.kunde_mail, info = F0.info ?? km.standard;
+      const mail = an(km.funktion) ? `<div class="ev-info${info ? ' ev-info--an' : ''}">${btn({ text: info ? 'Kunde wird informiert' : km.text, icon: info ? 'check' : km.icon, art: info ? 'erledigen' : 'sekundaer', attrs: { 'data-fminfo': '1' } })}${info ? `<span class="ev-info-text">Mail: „${esc(km.vorlage.replace('{auftrag}', A0.id).replace('{uebergabe}', A0.ueb === 'Versand' ? 'Versand folgt, Sie erhalten die Sendungsnummer' : 'Sie können ihn ab sofort abholen'))}“</span>` : ''}</div>` : '';
+      return `<div class="ev-fm"><div class="ev-fm-stand ev-fm-stand--${ok ? 'ok' : 'warn'}"><b>${nf} von ${T.length} Teilen fertig</b><span>${ok ? 'alles da – bereit zum Melden' : esc(offen.join(' · '))}</span><div class="ev-pl-balken"><i style="width:${Math.round(nf / T.length * 100)}%"></i></div></div>${zeilen}<div class="ev-ma-rest"><span class="ev-mitmic">${K.textfeld({ rows: 1, placeholder: 'Notiz zur Fertigmeldung – sprechen statt tippen', 'data-beispiel': 'Kleinteile einzeln verpackt' }, '')}${micKnopf()}</span>${(b.schnell || []).map(a => ab(a, { art: 'sekundaer' })).join('')}</div>${mail}<div class="ev-fluss">${i('send')}<span>Fließt beim Melden an:</span>${b.fluss.filter(darf).map(f => `<span class="ev-fluss-z">${i(f.icon)}${esc(f.text)}</span>`).join('')}</div></div>`;
+    }
+    case 'buendelwahl': {
+      const l = nachDring(SPEC.beispiel.auftraege.filter(a => a.verfahren === b.oberflaeche && ['angenommen', 'galvanik'].includes(a.ort))); if (!S.bw) S.bw = new Set(l.map(a => a.id));
+      if (!l.length) return K.zustand({ art: 'leer', text: 'Keine offenen Aufträge mit ' + b.oberflaeche });
+      return `<div class="ev-bw"><div class="ev-ma-l">${l.length} offene Aufträge mit ${esc(b.oberflaeche)} · dringendste oben · ${S.bw.size} gewählt</div>${l.map(a => { const p0 = a.ort === 'angenommen' ? prio(a) : null; return `<label class="ev-bw-z${S.bw.has(a.id) ? ' ev-bw-z--an' : ''}"><input type="checkbox" class="kr-sr" data-bw="${a.id}"${S.bw.has(a.id) ? ' checked' : ''}><span class="ev-fm-haken ev-bw-haken" aria-hidden="true">${S.bw.has(a.id) ? i('check') : ''}</span><span class="ev-bw-t"><span><span class="kr-id">${a.id}</span> <b>${esc(a.kunde)} · ${esc(a.titel)}</b></span><small>${esc(a.ziel || '')} · ${esc(a.menge || '')} · ${ORTLBL[a.ort]}</small></span>${chip(p0 ? p0.text : 'fertig bis ' + tag(new Date(a.termin)), a.ton === 'rot' ? 'rot' : p0 ? p0.ton : '')}</label>`; }).join('')}</div>`;
+    }
+    case 'loginverwaltung': {
+      const R = SPEC.rechte, L = SPEC.rollen, fest = (lid, bid) => (R.fest[lid] || []).includes(bid), ed = S.loginEdit;
+      const fld = (lab, h0) => `<label class="kr-feld"><span class="kr-feld-label">${esc(lab)}</span>${h0}</label>`;
+      const form = l => `<div class="ev-login-form2" data-loginform="${l ? l.id : 'neu'}">${fld('Name', K.eingabe({ 'data-lf': 'person', value: l ? l.person : '', placeholder: 'z. B. Azubi Max' }))}${fld('Kürzel', K.eingabe({ 'data-lf': 'kuerzel', value: l ? l.kuerzel : '', maxlength: 3, placeholder: 'automatisch' }))}${fld('Bezeichnung', K.eingabe({ 'data-lf': 'titel', value: l ? l.titel : '', placeholder: 'z. B. Werkstatt' }))}${l ? '' : fld('Rechte wie', K.auswahl(R.neu_vorlagen, { 'data-lf': 'vorlage' }, 'werkstatt'))}${fld(l ? 'Code zurücksetzen (4 Ziffern)' : 'Code (4 Ziffern)', K.eingabe({ 'data-lf': 'code', inputmode: 'numeric', maxlength: 4, placeholder: '••••' }))}${l && l.id !== 'developer' ? `<div class="kr-voll">${K.check('<b>Aktiv</b> · erscheint bei der Anmeldung', { 'data-lf': 'aktiv', checked: l.aktiv !== false })}</div>` : ''}<div class="kr-voll ev-login-form2-akt">${btn({ text: 'Abbrechen', art: 'leise', attrs: { 'data-loginedit': '' } })}${btn({ text: l ? 'Übernehmen' : 'Login anlegen', icon: 'check', art: 'erledigen', attrs: { 'data-loginsave': l ? l.id : 'neu' } })}</div></div>`;
+      const karten = L.map(l => `<article class="ev-login-k${l.aktiv === false ? ' ev-login-k--aus' : ''}"><span class="ev-kkreis">${esc(l.kuerzel)}</span><div class="ev-login-k-t"><b>${esc(l.person)}</b><small>${esc(l.titel || '')} · ${l.aktiv === false ? 'inaktiv' : 'aktiv'} · ${rechteSet(l.id).size} von ${R.bereiche.length} Bereichen</small></div>${ed === l.id ? '' : btn({ text: 'Ändern', icon: 'edit', art: 'sekundaer', attrs: { 'data-loginedit': l.id } })}</article>${ed === l.id ? form(l) : ''}`).join('');
+      const matrix = `<table class="ev-rmatrix"><thead><tr><th>Bereich</th>${L.map(l => `<th><span class="kr-av">${esc(l.kuerzel)}</span>${esc(l.person)}</th>`).join('')}</tr></thead><tbody>${R.bereiche.map(bb => `<tr><th><b>${esc(bb.text)}</b>${bb.sub ? `<small>${esc(bb.sub)}</small>` : ''}</th>${L.map(l => { const f = fest(l.id, bb.id), an0 = recht(bb.id, l.id); return `<td><label class="ev-rhaken${an0 ? ' ev-rhaken--an' : ''}${f ? ' ev-rhaken--fest' : ''}" title="${f ? 'fest – kein Aussperren' : an0 ? 'erlaubt – antippen entzieht' : 'nicht erlaubt – antippen erlaubt'}"><input type="checkbox" class="kr-sr" data-rechtset="${l.id}|${bb.id}"${an0 ? ' checked' : ''}${f ? ' disabled' : ''} aria-label="${esc(l.person)}: ${esc(bb.text)}"><span>${an0 ? i('check') : ''}</span></label></td>`; }).join('')}</tr>`).join('')}</tbody></table>`;
+      return `<div class="ev-logins"><section class="ev-logins-l"><header class="ev-logins-kopf"><b>Logins</b>${ed === 'neu' ? '' : btn({ text: 'Login anlegen', icon: 'plus', art: 'ton-blau', attrs: { 'data-loginedit': 'neu' } })}</header>${ed === 'neu' ? form(null) : ''}${karten}</section><section class="ev-logins-r"><header class="ev-logins-kopf"><b>Rechte</b><span>Haken = sichtbar und erlaubt · wirkt sofort</span></header>${matrix}</section></div>`;
+    }
+    case 'kundenhinweise': {
+      const k = SPEC.beispiel.kunden.find(x => x.id === ctx.arg) || SPEC.beispiel.kunden.find(x => x.id === 'K-2026-0011');
+      const hw = (k.hinweise || []).filter(x => !(x.geld && istW())); if (!hw.length) return '';
+      return `<div class="ev-khinweise">${hw.map(x => `<div class="ev-khinweis${x.art === 'zahlung' ? ' ev-khinweis--rot' : ''}"><span class="ev-achtung ev-achtung--inline">!</span><span>${esc(x.text)}</span></div>`).join('')}</div>`;
+    }
+    case 'verknuepft': return K.block(b.titel, `<div class="ev-vk">${b.eintraege.filter(e => darf(e) && zielOk(e) && (!e.funktion || an(e.funktion)) && !(istW() && e.geld)).map(e => { if (e.geldMeta && ohneGeld()) e = { ...e, meta: vorgaenge(e.titel.replace(/^Kunde /, '').split(' ')[0]) }; const T = AKTYP[e.typ] || AKTYP.status; return `<button type="button" class="ev-vk-z"${K.at(za(e))}><span class="ev-akte-ic">${i(T[0])}</span><span><b>${esc((istW() && e.titelWerkstatt) || e.titel)}</b><small>${esc(T[1])} · ${esc(e.meta)}</small></span>${i('arrow')}</button>`; }).join('')}</div>`);
+    case 'akte': {
+      const wer = b.wer, id = ctx.arg || b.standard, O0 = obj(id) || {};
+      let ev = SPEC.beispiel.akte.filter(e => e[wer] === id && !(e.geld && istW()) && zielOk(e));
+      if (!ev.length) ev = wer === 'auftrag' ? [{ zeit: (O0.eingang || '2026-09-25') + 'T09:00', typ: 'status', text: 'Angenommen · ' + (O0.ueb || ''), wer: 'Rolf', auftrag: id }] : [{ zeit: '2026-01-15T09:00', typ: 'kunde', text: 'Kunde angelegt', wer: 'Rolf', kunde: id }];
+      ev = ev.sort((x, y) => y.zeit.localeCompare(x.zeit));
+      const kname = (SPEC.beispiel.kunden.find(k => k.id === id) || {}).kurz;
+      const auf = wer === 'kunde' ? [...SPEC.beispiel.auftraege.filter(a => a.kunde === kname), ...SPEC.beispiel.auftraege_alt.filter(a => a.kunde === kname).map(a => ({ ...a, alt: true }))] : [];
+      const R = b.reiter.filter(darf), key = 'akte_' + wer, akt = R.find(r => r.id === S.reiter[key]) || R[0];
+      const von = r => r.typen ? ev.filter(e => r.typen.includes(e.typ)) : ev, n = r => r.id === 'auftraege' ? auf.length : von(r).length;
+      const tabs = `<div class="ev-reiter ev-reiter--akte" role="tablist">${R.map(r => `<button type="button" role="tab" aria-selected="${r === akt}" data-reiter="${key}" data-wert="${r.id}">${i(r.icon)}${esc(r.titel)}<span class="ev-reiter-n">${n(r)}</span></button>`).join('')}</div>`;
+      const neu = ['verlauf', 'kontakt'].includes(akt.id) ? `<div class="ev-akte-neu"><span class="ev-mitmic">${K.textfeld({ rows: 1, placeholder: 'Notiz oder Telefonnotiz – schreiben oder sprechen', 'data-beispiel': 'Kunde ruft Freitag zurück wegen Muster' }, '')}${micKnopf()}</span>${ab(b.notiz, { art: 'sekundaer' })}${(b.aktionen || []).map(a => ab(a, { art: 'sekundaer' })).join('')}</div>` : akt.id === 'dateien' ? `<div class="ev-akte-neu ev-akte-neu--knopf">${ab(b.aktionen[0], { art: 'sekundaer' })}</div>` : '';
+      let inhalt;
+      if (akt.id === 'dateien') inhalt = `<div class="ev-dateien">${von(akt).map(e => `<button type="button" class="ev-datei" data-z="zustand:daten" data-m="Vorschau · ${esc(e.datei)}"><span class="ev-datei-bild${e.typ === 'foto' ? '' : ' ev-datei-bild--dok'}">${i(e.typ === 'foto' ? 'photo' : 'file')}</span><b>${esc(e.datei)}</b><small>${esc(datum(e.zeit))} · ${esc(e.wer)}${wer === 'kunde' && e.auftrag ? ' · ' + esc(e.auftrag) : ''}</small></button>`).join('') || '<div class="ev-wleer">Noch keine Dateien</div>'}</div>`;
+      else if (akt.id === 'auftraege') inhalt = `<div class="ev-wliste ev-wliste--breit">${auf.map(a => `<article class="ev-wkarte ev-wkarte--${a.alt ? 'gruen' : a.ton === 'rot' ? 'rot' : a.ort === 'fertig' ? 'gruen' : a.ort === 'kv' ? 'grau' : a.ort === 'angenommen' ? 'navy' : 'amber'}" data-z="auftrag" data-arg="${a.id}"><span class="ev-wbild" aria-hidden="true">${i('photo')}</span><div class="ev-wkarte-inhalt"><div class="ev-wkarte-t">${esc(a.titel)}<span class="kr-id">${esc(a.id)}</span></div><div class="ev-wkarte-m"><b>${esc(a.ziel || '')}</b>${a.menge ? ' · ' + esc(a.menge) : ''}</div><div class="ev-wkarte-f">${chip(a.alt ? a.status : a.chip || '', a.alt ? 'ok' : a.ton === 'rot' ? 'rot' : a.ton === 'ok' ? 'ok' : '')}<span class="ev-wkarte-knoepfe">${btn({ text: 'Öffnen', icon: 'open', art: 'ton-blau', attrs: { 'data-z': 'auftrag', 'data-arg': a.id } })}</span></div></div></article>`).join('')}</div>`;
+      else { let tg = ''; inhalt = `<ol class="ev-akte">${von(akt).map(e => { const T = AKTYP[e.typ] || AKTYP.status, d = tagLabel(e.zeit), kopf = d !== tg ? `<li class="ev-akte-tag">${esc(d)}</li>` : ''; tg = d;
+        const link = (wer === 'kunde' && e.auftrag ? `<button type="button" class="ev-akte-ref" data-z="auftrag" data-arg="${e.auftrag}"><span class="kr-id">${esc(e.auftrag)}</span></button>` : '') + (e.ref ? `<button type="button" class="ev-akte-ref"${K.at(za(e))}><span class="kr-id">${esc(e.ref)}</span></button>` : e.ziel ? btn({ text: 'Öffnen', art: 'leise', attrs: za(e) }) : e.datei ? btn({ text: 'Ansehen', art: 'leise', attrs: { 'data-z': 'zustand:daten', 'data-m': 'Vorschau · ' + e.datei } }) : '');
+        return kopf + `<li class="ev-akte-z${e.ton === 'ok' ? ' ev-akte-z--ok' : ''}"><span class="ev-akte-zeit">${esc(e.zeit.slice(11, 16))}</span><span class="ev-akte-ic" title="${esc(T[1])}">${i(T[0])}</span><span class="ev-akte-text"><b>${esc((istW() && e.textWerkstatt) || e.text)}</b><small>${esc(T[1])} · ${esc(e.wer)}</small></span><span class="ev-akte-link">${link}</span></li>`; }).join('') || '<li class="ev-wleer">Noch nichts</li>'}</ol>`; }
+      return `<section class="ev-aktebox"><header class="ev-akte-kopf"><b>Akte</b><span>${ev.length} Einträge · neueste oben</span></header>${tabs}${neu}${inhalt}</section>`;
+    }
+    case 'werkbank': {
+      const altWB = WB, altE = ERF, bsp = SPEC.beispiel.erfassung[ctx.screen.id];
+      WB = true; ERF = erfFuer(ctx.screen, ctx);
+      const html = `<div class="ev-werkbank"><div class="ev-wb-haupt">${alle(b.haupt)}</div><aside class="ev-wb-rail">${alle(b.rail)}</aside></div>`;
+      WB = altWB; ERF = altE; return html;
+    }
+    case 'erfassen': {
+      const bsp = SPEC.beispiel.erfassung[ctx.screen.id] || {}, ok = ERF && S.erfOk[ERF.id], n = ERF ? Object.keys(ERF.felder).length : 0;
+      const wz = (b.werkzeuge || []).map(a => ab(a, { art: 'sekundaer' })).join('') + (ERF ? '' : btn({ text: 'Angaben erkennen', icon: 'check', art: 'ton-blau', attrs: { 'data-z': 'zustand:daten' } }));
+      const chips = ERF ? Object.entries(ERF.felder).filter(([id]) => !(istW() && id === 'zahlungsmodus')).map(([id, e]) => `<span class="ev-erk-chip">${esc(feldLabel(id))} <b>${esc(zeigeWert(id, e.wert))}</b></span>`).join('') : '';
+      return `<section class="ev-erfassen"><div class="ev-erf-kopf"><b>Schnell erfassen</b><span>${ERF ? 'aus ' + esc(ERF.quelle) : 'schreiben, sprechen oder fotografieren'}</span></div><span class="ev-mitmic ev-erf-text">${K.textfeld({ rows: 3, placeholder: 'z. B. ' + (bsp.text || ''), 'data-beispiel': bsp.text || '' }, ERF ? ERF.text : '')}${micKnopf()}</span><div class="ev-erf-werkzeuge">${wz}</div>${ERF ? `<div class="ev-erkannt${ok ? ' ev-erkannt--ok' : ''}"><div class="ev-erkannt-kopf"><b>${ok ? n + ' Angaben bestätigt' : n + ' Angaben erkannt und vorausgefüllt'}</b>${ok ? chip('bestätigt', 'ok', 'check') : btn({ text: 'Alles bestätigen', icon: 'check', art: 'erledigen', attrs: { 'data-erfok': ERF.id } })}</div><div class="ev-erk-chips">${chips}</div></div>` : ''}</section>`;
+    }
+    case 'terminvorschlag': {
+      if (!ERF) return ''; const T = SPEC.beispiel.terminvorschlag, w = S.wahl.termin;
+      if (w) return `<div class="ev-vorschlag ev-vorschlag--ok">${i('check')}<b>Liefertermin ${w === 'vorschlag' ? esc(T.vorschlag_text) + ' · Vorschlag übernommen' : esc(T.wunsch_text) + ' · Wunsch gehalten, Kunde wird vorgewarnt'}</b>${btn({ text: 'Ändern', art: 'leise', attrs: { 'data-wahl': 'termin', 'data-wert': '' } })}</div>`;
+      return `<section class="ev-vorschlag ev-vorschlag--warn"><header>${i('calendar')}<b>Terminvorschlag</b>${chip(T.bewertung_text, 'warn', 'alert')}</header><div class="ev-vgl"><div><span>Wunsch</span><b>${esc(T.wunsch_text)}</b><small>${esc((erfWert('liefertermin') || {}).quelle || '')}</small></div><span class="ev-vgl-pfeil">${i('arrow')}</span><div class="ev-vgl-gut"><span>Machbar</span><b>${esc(T.vorschlag_text)}</b><small>Vorschlag der App</small></div></div><ul class="ev-gruende">${T.gruende.map(g => `<li>${i(g.icon)}<span>${esc(g.text)}</span></li>`).join('')}</ul><div class="ev-vorschlag-akt">${btn({ text: T.vorschlag_text + ' übernehmen', icon: 'check', art: 'ton-blau', attrs: { 'data-wahl': 'termin', 'data-wert': 'vorschlag' } })}${btn({ text: 'Wunsch halten · Kunde vorwarnen', icon: 'mail', art: 'dringend1', attrs: { 'data-wahl': 'termin', 'data-wert': 'wunsch' } })}</div></section>`;
+    }
+    case 'preisvorschlag': {
+      if (!ERF) return ''; const P = SPEC.beispiel.preisvorschlag;
+      if (S.wahl.preis) return `<div class="ev-vorschlag ev-vorschlag--ok">${i('check')}<b>Preis ${esc(P.vorschlag)} / ${esc(P.einheit)} · ${esc(P.summe)} netto übernommen</b>${btn({ text: 'Ändern', art: 'leise', attrs: { 'data-wahl': 'preis', 'data-wert': '' } })}</div>`;
+      return `<section class="ev-vorschlag ev-vorschlag--info"><header>${i('euro')}<b>Preisvorschlag</b><span class="ev-vorschlag-gross">${esc(P.vorschlag)} / ${esc(P.einheit)} · ${P.menge} × = ${esc(P.summe)} netto</span></header><div class="ev-vgl-liste">${P.vergleich.map(x => `<${x.ziel ? 'button type="button"' : 'div'} class="ev-vgl-z"${x.ziel ? K.at({ 'data-z': x.ziel, 'data-arg': x.arg }) : ''}><span>${esc(x.text)}</span><b>${esc(x.wert)}</b></${x.ziel ? 'button' : 'div'}>`).join('')}</div><div class="ev-vorschlag-akt"><span class="kr-zeile-s">${esc(P.grund)}</span>${btn({ text: 'Übernehmen', icon: 'check', art: 'ton-blau', attrs: { 'data-wahl': 'preis', 'data-wert': '1' } })}</div></section>`;
+    }
+    case 'dublette': return ERF ? `<section class="ev-dublette">${i('users')}<div><b>Keine Dublette</b><small>geprüft: Name, Telefon, E-Mail, Ort</small></div>${chip('frei', 'ok', 'check')}</section>` : `<section class="ev-dublette">${i('users')}<div><b>Dublettenprüfung</b><small>läuft beim Tippen: Name, Telefon, E-Mail, Ort</small></div></section>`;
+    case 'pruefliste': {
+      const ok = ERF && S.erfOk[ERF.id];
+      const st = plStatus;
+      const zeile = ([id, t, nr], warnung) => { const [s1, ton] = st(id), e = erfWert(id); return `<button type="button" class="ev-pl-z ev-pl-z--${ton}" data-sprung="${nr}">${i(ton === 'gruen' ? 'check' : ton === 'navy' ? 'scan' : 'alert')}<span>${esc(t)}<small>${e && ton !== 'warn' ? esc(zeigeWert(id, id === 'liefertermin' && S.wahl.termin === 'vorschlag' ? SPEC.beispiel.terminvorschlag.vorschlag : e.wert)) : s1 === 'entscheiden' ? 'Wunsch zu knapp – Vorschlag prüfen' : warnung ? 'fehlt · sperrt nicht' : 'fehlt'}</small></span>${chip(s1, ton === 'gruen' ? 'ok' : ton === 'navy' ? 'info' : 'warn')}</button>`; };
+      const P = (b.pflicht || []).filter(x => !(x[0] === 'zahlungsmodus' && ohneGeld())), fertig = P.filter(x => st(x[0])[1] === 'gruen').length;
+      const gr = (t, l, w) => l && l.length ? `<div class="ev-pl-gr">${esc(t)}</div>${l.map(x => zeile(x, w)).join('')}` : '';
+      return `<section class="ev-pruef"><header><b>Prüfen</b><span>${fertig} von ${P.length} Pflichtangaben</span></header><div class="ev-pl-balken"><i style="width:${Math.round(fertig / Math.max(1, P.length) * 100)}%"></i></div>${gr('Pflicht', P)}${gr('Für Aufträge', b.fuer_auftrag)}${gr('Hinweis', b.warnung, true)}${b.info ? `<div class="ev-pl-info">${i('user')}${esc(b.info)}</div>` : ''}</section>`;
+    }
+    case 'reiter': {
+      const sicht = b.reiter.filter(r => darf(r) && (r.bloecke || []).some(x => darf(x))), akt = sicht.find(r => r.id === S.reiter[b.id]) || sicht[0];
+      if (!akt) return '';
+      return `<div class="ev-reiter" role="tablist">${sicht.map(r => `<button type="button" role="tab" aria-selected="${r === akt}" data-reiter="${b.id}" data-wert="${r.id}">${i(r.icon)}${esc(r.titel)}</button>`).join('')}</div><div class="ev-reiter-inhalt" role="tabpanel">${alle(akt.bloecke)}</div>`;
+    }
+    case 'buchsumme': {
+      const z = t => parseFloat(String(t || '0').replace(/[^\d,]/g, '').replace(',', '.')) || 0, eur = n => n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+      const R = SPEC.beispiel.rechnungen, A = SPEC.beispiel.abrechnung || [], ue = R.filter(r => r.st === 'ueberfaellig'), vk = A.filter(a => a.art === 'vorkasse'), ar = A.filter(a => a.art === 'abrechnen');
+      const zelle = (l, w, s, ton) => `<div class="ev-kz${ton ? ' ev-kz--' + ton : ''}"><span class="ev-kz-l">${esc(l)}</span><b>${esc(w)}</b><span class="ev-kz-s">${esc(s)}</span></div>`;
+      return `<div class="ev-kennzahlen">${zelle('Geld fehlt', eur([...ue, ...vk].reduce((n, x) => n + z(x.betrag), 0)), ue.length + ' überfällig · ' + vk.length + ' Vorkasse', 'rot')}${zelle('Abrechnen', eur(ar.reduce((n, x) => n + z(x.betrag), 0)), ar.length + (ar.length === 1 ? ' Auftrag fertig' : ' Aufträge fertig'), 'navy')}${zelle('Offen im Zahlungsziel', eur(R.filter(r => r.st === 'offen').reduce((n, x) => n + z(x.betrag), 0)), R.filter(r => r.st === 'offen').length + ' Rechnung', '')}</div>`;
+    }
+    case 'buchliste': {
+      const R = SPEC.beispiel.rechnungen, A = SPEC.beispiel.abrechnung || [];
+      const posten = [
+        ...R.filter(r => r.st === 'ueberfaellig').map(r => ({ g: 'geldfehlt', id: r.id, titel: r.kunde + ' · ' + r.betrag, meta: 'Auftrag ' + r.auftrag + ' · fällig ' + r.faellig, grund: r.grund, status: ['überfällig', 'rot'], icon: 'receipt', arg: r.id, auftrag: r.auftrag })),
+        ...A.filter(a => a.art === 'vorkasse').map(a => ({ g: 'geldfehlt', id: a.id, titel: a.kunde + ' · ' + a.betrag, meta: a.titel + ' · ' + a.meta, grund: a.grund, status: ['Vorkasse', 'rot'], icon: 'lock', arg: a.id, auftrag: a.id })),
+        ...A.filter(a => a.art === 'abrechnen').map(a => ({ g: 'abrechnen', id: a.id, titel: a.kunde + ' · ' + a.betrag, meta: a.titel + ' · ' + a.meta, grund: '', status: ['abrechenbar', 'info'], icon: 'receipt', arg: a.id, auftrag: a.id })),
+        ...R.filter(r => r.st === 'offen').map(r => ({ g: 'offen', id: r.id, titel: r.kunde + ' · ' + r.betrag, meta: 'Auftrag ' + r.auftrag + ' · fällig ' + r.faellig, grund: '', status: ['offen', ''], icon: 'receipt', arg: r.id, auftrag: r.auftrag }))];
+      const gr = b.gruppen.filter(g => S.bfilter === 'alle' || g.id === S.bfilter);
+      const karte = (x, g) => { const neben = (g.nebenaktionen || []).filter(n => !n.funktion || an(n.funktion)).map(n => btn({ text: n.text, icon: n.icon, art: 'sekundaer', attrs: { 'data-z': n.ziel, 'data-arg': x.auftrag, title: n.text } })).join('');
+        return `<article class="ev-wkarte ev-bkarte" data-z="auftrag" data-arg="${esc(x.auftrag)}"><span class="ev-wbild ev-wbild--icon" aria-hidden="true">${i(x.icon)}</span><div class="ev-wkarte-inhalt"><div class="ev-wkarte-t">${esc(x.titel)}<span class="kr-id">${esc(x.id)}</span></div><div class="ev-wkarte-m">${esc(x.meta)}</div>${x.grund ? `<div class="ev-kgrund ev-kgrund--${g.farbe}">${esc(x.grund)}</div>` : ''}<div class="ev-wkarte-f">${chip(x.status[0], x.status[1])}<span class="ev-wkarte-knoepfe">${neben}${btn({ text: g.aktion.text, icon: g.aktion.icon, art: TON[g.aktion.ton] || 'sekundaer', attrs: { 'data-z': g.aktion.ziel, 'data-arg': x.arg } })}</span></div></div></article>`; };
+      const html = gr.map(g => { const l = posten.filter(x => x.g === g.id); if (!l.length && S.bfilter === 'alle') return '';
+        return `<section class="ev-wspalte ev-wspalte--${g.farbe}"><header class="ev-wkopf">${i(g.icon)}<span>${esc(g.titel)}</span><b>${l.length}</b></header><div class="ev-wliste ev-wliste--breit">${l.length ? l.map(x => karte(x, g)).join('') : `<div class="ev-wleer">Nichts offen</div>`}</div></section>`; }).join('');
+      return html ? `<div class="ev-wbrett">${html}</div>` : K.zustand({ art: 'leer', text: 'Nichts in dieser Auswahl' });
+    }
+    case 'ausbau': return `<section class="ev-ausbau${b.funktion && !aus ? ' ev-ausbau--an' : ''}"><div class="ev-ausbau-t">${esc(b.funktion && !aus ? b.titel.replace('mit Stufe 2', '· freigeschaltet') : b.titel)}</div><div class="ev-ausbau-l">${(b.bloecke || []).map(x => B(x, { ...ctx, imAusbau: true })).join('')}</div></section>`;
+    case 'kundenliste': {
+      const akt = SPEC.beispiel.auftraege, hw = k => (k.hinweise || []).filter(x => !(x.geld && istW()));
+      let l = SPEC.beispiel.kunden.filter(k => S.kfilter === 'alle' || (S.kfilter === 'achtung' ? hw(k).length : !k.vollstaendig));
+      l = l.map((k, n) => [k, n]).sort((a, c) => (hw(c[0]).length - hw(a[0]).length) || a[1] - c[1]).map(x => x[0]);
+      if (!l.length) return K.zustand({ art: 'leer', text: 'Keine Kunden in dieser Auswahl' });
+      return `<div class="ev-kliste">${l.map(k => { const h2 = hw(k), n = akt.filter(a => k.name.includes(a.kunde) && a.ort !== 'kv').length;
+        const neben = (b.nebenaktionen || []).filter(x => (!x.funktion || an(x.funktion)) && !(x.ziel === 'mail' && !k.mail)).map(x => btn({ text: x.text, icon: x.icon, art: 'sekundaer', attrs: { 'data-z': x.ziel, 'data-arg': x.arg === 'kunde' ? k.id : k.id, title: x.text } })).join('');
+        return `<article class="ev-wkarte ev-kkarte${h2.length ? ' ev-kkarte--achtung' : ''}" data-z="kunde" data-arg="${k.id}"><span class="ev-kkreis" aria-hidden="true">${esc(k.kz)}${h2.length ? `<span class="ev-achtung" title="Achtung">!</span>` : ''}</span><div class="ev-wkarte-inhalt"><div class="ev-wkarte-t">${esc(k.name)}<span class="kr-id">${esc(k.id)}</span></div><div class="ev-wkarte-m">${[k.ansprechpartner, k.ort || '', vorgaenge(k.kurz)].filter(Boolean).map(esc).join(' · ')}</div>${h2.length ? `<div class="ev-kgrund">${h2.map(x => `<span class="${x.art === 'zahlung' ? 'ev-kgrund--rot' : ''}">${esc(x.text)}</span>`).join(' · ')}</div>` : ''}<div class="ev-wkarte-f"><span></span><span class="ev-wkarte-knoepfe">${neben}${btn({ text: b.aktion.text, icon: b.aktion.icon, art: TON[b.aktion.ton], attrs: { 'data-z': b.aktion.ziel, 'data-arg': k.id } })}</span></div></div></article>`; }).join('')}</div>`;
+    }
+    case 'kundengruppen': {
+      const ST = { angenommen: ['wareneingang', 'Wareneingang', 'navy'], galvanik: ['inarbeit', 'In Arbeit', 'amber'], fertig: ['fertig', 'Fertig', 'gruen'], kv: ['kv', 'KV', 'grau'] };
+      const sicht = SPEC.beispiel.auftraege.filter(a => S.afilter === 'alle' || (ST[a.ort] || [])[0] === S.afilter);
+      const kunde = a => SPEC.beispiel.kunden.find(k => k.name.includes(a.kunde)) || { id: '', name: a.kunde, kz: a.kunde.slice(0, 2).toUpperCase() };
+      const rang = a => { const p = a.ort === 'angenommen' ? prio(a) : null; return p ? (p.puffer < 0 ? 0 : p.puffer <= 2 ? 1 : 3) : (RANG[a.ton] ?? 2); };
+      const gr = {}; sicht.forEach(a => { const k = kunde(a); (gr[k.id || k.name] = gr[k.id || k.name] || { k, l: [] }).l.push(a); });
+      const liste2 = Object.values(gr).map(g => ({ ...g, l: g.l.sort((x, y) => rang(x) - rang(y) || (x.termin || '').localeCompare(y.termin || '')) })).sort((x, y) => rang(x.l[0]) - rang(y.l[0]));
+      const karte = a => { const st = ST[a.ort] || ['', '', 'grau'], pr = a.ort === 'angenommen' ? prio(a) : null, farbe = a.ton === 'rot' && a.ort !== 'angenommen' ? 'rot' : st[2];
+        const geld = istW() && /Vorkasse/.test(a.chip), marke = pr ? chip(pr.text, pr.ton) : a.ort === 'kv' ? chip(a.chip, 'warn') : a.ort === 'fertig' ? chip(geld ? 'Freigabe fehlt' : a.chip, a.ton === 'ok' ? 'ok' : a.ton) : chip('fertig bis ' + (a.termin ? tag(new Date(a.termin)) : a.chip), a.ton === 'ok' ? 'ok' : a.ton);
+        const neben = ['fertig', 'kv'].includes(a.ort) ? [] : (b.nebenaktionen || []).filter(x => !x.funktion || an(x.funktion));
+        const kn = neben.map(x => btn({ text: x.text, icon: x.icon, art: 'sekundaer', label: x.text + ' · ' + a.id, attrs: { 'data-z': x.ziel, 'data-arg': a.id, title: x.text } })).join('') + btn({ text: b.aktion.text, icon: b.aktion.icon, art: TON[b.aktion.ton], attrs: { 'data-z': b.aktion.ziel, 'data-arg': a.id } });
+        return `<article class="ev-wkarte ev-wkarte--${farbe}" data-z="auftrag" data-arg="${a.id}"><span class="ev-wbild" aria-hidden="true">${i('photo')}</span><div class="ev-wkarte-inhalt"><div class="ev-wkarte-t">${esc(a.titel)}<span class="kr-id">${esc(a.id)}</span><span class="ev-status ev-status--${farbe}">${esc(st[1])}</span></div><div class="ev-wkarte-m"><b>${esc(a.ziel || a.meta)}</b>${a.menge ? ' · ' + esc(a.menge) : ''}</div><div class="ev-wkarte-f">${marke}<span class="ev-wkarte-knoepfe">${kn}</span></div></div></article>`; };
+      if (!liste2.length) return K.zustand({ art: 'leer', text: 'Keine Aufträge in dieser Auswahl' });
+      return `<div class="ev-kgruppen">${liste2.map(g => `<section class="ev-kgruppe"><span class="ev-klammer" aria-hidden="true"></span><div class="ev-kgruppe-inhalt"><header class="ev-kgruppe-kopf"><span class="kr-av">${esc(g.k.kz || '')}</span><b>${esc(g.k.name)}</b><span class="kr-id">${esc(g.k.id)}</span><span class="ev-kgruppe-n">${esc(vorgaenge(g.k.kurz || g.k.name))}</span>${g.k.id ? btn({ text: b.kopfaktion.text, icon: b.kopfaktion.icon, art: 'leise', attrs: { 'data-z': b.kopfaktion.ziel, 'data-arg': g.k.id } }) : ''}</header>${g.l.map(karte).join('')}</div></section>`).join('')}</div>`;
+    }
+    case 'auftragsgruppe': {
+      if (S.wfilter !== 'alle' && S.wfilter !== b.gruppe) return '';
+      const l = nachDring(SPEC.beispiel.auftraege.filter(a => wGruppe(a) === b.gruppe));
+      const z = l.map(a => K.auftragszeile({ ...a, chip: istW() && /Vorkasse/.test(a.chip) ? 'Freigabe fehlt' : a.chip, chipTon: a.ton === 'ok' ? 'ok' : a.ton, pfeil: true, klick: true, attrs: { 'data-z': 'auftrag', 'data-arg': a.id } })).join('');
+      return K.kachel({ titel: b.titel, icon: b.icon, icTon: b.gruppe === 'dringend' ? 'warn' : 'info', zahl: l.length, inhalt: z || K.zustand({ art: 'leer', text: 'Keine Aufträge' }) });
+    }
+    case 'tagkonfig': {
+      const T = SPEC.tagkonfig, an2 = tagSet();
+      return `<div class="kr-stapel" style="gap:8px">${T.bausteine.filter(darf).map(x => K.check(`<b>${esc(x.titel)}</b>${(x.empfohlen || []).includes(S.rolle) ? ' ' + chip('empfohlen', 'info') : ''}`, { 'data-baustein': x.id, checked: x.fest || an2.has(x.id), disabled: x.fest })).join('')}</div>${btn({ text: 'Vorschlag übernehmen', icon: 'refresh', art: 'leise', attrs: { 'data-tagvorschlag': '' } })}`;
+    }
+    case 'liste': return `<div class="kr-stapel" style="gap:8px">${liste(b.quelle, null, b.ziel)}</div>`;
+    case 'filterleiste': return `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">${b.suche ? `<span class="kr-suchfeld" style="flex:1;min-width:220px">${i('search')}<input placeholder="${esc(b.suche)}"></span>` : ''}${b.optionen ? K.segment(b.id === 'wfilter' ? b.optionen.map(([v, t]) => { const n = v === 'alle' ? SPEC.beispiel.auftraege.filter(wGruppe).length : SPEC.beispiel.auftraege.filter(a => wGruppe(a) === v).length; return [v, t + ' ' + n]; }) : b.optionen, b.id === 'wfilter' ? S.wfilter : b.id === 'afilter' ? S.afilter : b.id === 'kfilter' ? S.kfilter : b.id === 'bfilter' ? S.bfilter : b.optionen[0][0], { 'data-seg': b.id || 'filter' }) : ''}</div>`;
+    case 'woche': {
+      if (aus) return geplant('Wochenansicht', 'calendar', b.funktion);
+      const T = [['Mo', '09-28', [['14:00', 'Abholung', 'A-2026-0105', 'Mitte']]], ['Di', '09-29', [['', 'bestätigt', 'A-2026-0107', 'Süd']]], ['Mi', '09-30', []], ['Do', '10-01', [['', 'bestätigt', 'A-2026-0101', 'Nord']]], ['Fr', '10-02', [['', 'bestätigt', 'A-2026-0104', 'Ost']]], ['Sa', '10-03', []]];
+      return `<div class="kr-woche">${T.map(([w, d, t], n) => `<section class="kr-tag${n === 0 ? ' kr-tag--heute' : ''}"><h2 class="kr-tag-kopf" style="margin:0"><span>${w} · ${d}</span><span>${t.length || ''}</span></h2><div class="kr-tag-inhalt">${t.length ? t.map(x => K.terminzeile({ zeit: x[0] || '·', art: x[1], id: x[2], kunde: x[3], klick: true, attrs: { 'data-z': 'auftrag', 'data-arg': x[2] } })).join('') : '<div class="kr-zeile-s" style="padding:10px">frei</div>'}</div></section>`).join('')}</div>`;
+    }
+    case 'ausgrau': return aus ? geplant(b.text, b.icon, b.funktion) : btn({ text: ctx.imAusbau ? b.text : b.text + ' · freigeschaltet', icon: b.icon, art: 'sekundaer', attrs: { 'data-z': 'stufenseite' } });
+    case 'aktionen': return `<div style="display:flex;gap:8px;flex-wrap:wrap">${b.aktionen.map(a => ab(a, { art: 'sekundaer' })).join('')}</div>`;
+    case 'hinweis': return `<div class="kr-hinweis${b.ton === 'warn' ? ' kr-hinweis--warn' : ''}" style="flex-wrap:wrap">${i(b.ton === 'warn' ? 'alert' : 'clock')}<span style="flex:1;min-width:180px">${esc(b.text)}</span>${b.aktion ? ab(b.aktion, { art: 'primaer' }) : ''}</div>`;
+    case 'dropzone': return `<div class="kr-zustand kr-zustand--leer" style="border:1.5px dashed var(--rand);min-height:120px;flex-wrap:wrap">${i('upload')}<span class="kr-zustand-text">${esc(b.text)}</span>${ab(b.aktion)}</div>`;
+    case 'fakten': { const A = b.quelle && auftragVon(OBJ); if (A) { const vk = /Vorkasse/.test(A.zahlung || ''), off = vk && A.ton === 'rot'; return K.fakten(ohneGeld() ? [['Fertigmeldung', A.ort === 'fertig' ? 'bestätigt' : 'offen'], ['Übergabe', A.ueb], ['Freigabe', off ? 'fehlt – nicht rausgeben' : 'erteilt']] : [['Fertigmeldung', A.ort === 'fertig' ? 'bestätigt' : 'offen'], ['Übergabe', A.ueb], ['Zahlungsmodus', A.zahlung], ['Zahlungsstatus', off ? 'Vorkasse offen – nicht rausgeben' : vk ? 'bezahlt' : /Bar/.test(A.zahlung) ? 'bei Übergabe' : 'auf Rechnung']]); } return K.fakten((istW() && b.zeilenWerkstatt) || b.zeilen); }
+    case 'abschnitt': {
+      let h; if (b.formular === 'kunde') h = kundeForm(b.modus, ctx.zustand); else if (b.formular === 'position') h = posForm();
+      else h = `<div class="kr-form">${(b.felder || []).map(f => f.formular === 'kunde' ? `</div>${kundeForm(f.modus, ctx.zustand)}<div class="kr-form">` : feldHtml(f)).join('')}</div>`;
+      const kopf = b.titel ? (WB ? `<h3 class="kr-block-label ev-abs-kopf"><span class="ev-nrkreis">${b.nr}</span>${esc(b.titel)}${b.wiederholt ? `<small>${esc(b.wiederholt)} Positionen</small>` : ''}<span class="ev-abs-akt">${(b.aktionen || []).map(a => ab(a, { art: 'sekundaer' })).join('')}</span></h3>` : `<h3 class="kr-block-label">${b.nr} · ${esc(b.titel)}${b.wiederholt ? ' · ' + esc(b.wiederholt) : ''}</h3>`) : '';
+      return `<section class="kr-abschnitt" data-abschnitt="${b.nr}">${kopf}${b.vorsatz ? B(b.vorsatz, ctx) : ''}${h}${b.nachsatz ? B(b.nachsatz, ctx) : ''}${WB ? '' : (b.aktionen || []).map(a => ab(a, { art: 'sekundaer' })).join('')}</section>`;
+    }
+    case 'picker': { const m = ctx.arg || 'oeffnen', ziel = b.ziele[m]; return K.picker({ suche: b.suche, scan: false, optionen: SPEC.beispiel.auftraege.map(a => ({ id: a.id, titel: a.kunde + ' · ' + a.titel, meta: a.meta, chip: a.chip, attrs: { 'data-z': ziel, 'data-arg': a.id } })) }); }
+    case 'stufenschalter': return `<div class="kr-stapel" style="gap:6px">${SPEC.stufen.map(s => K.check(`<b>Stufe ${s.n} · ${esc(s.name)}</b>${s.status === 'annahme' ? ' <span class="ev-regel" style="display:inline">Annahme</span>' : ''}`, { 'data-stufe': s.n, checked: S.stufen.has(s.n), disabled: s.fest })).join('')}${SPEC.addons.map(a => K.check(`<b>${esc(a.name)}</b> · Stufe ${a.stufe}`, { 'data-addon': a.id, checked: S.addons.has(a.id) })).join('')}</div>`;
+    case 'naechste': return `<div class="kr-naechste"><div class="kr-naechste-t">${esc(b.text)}</div><div class="kr-naechste-a">${ab(b.aktion)}</div></div>`;
+    case 'teile': return K.block(b.titel, `<div class="kr-teile">${b.zeilen.map(t => `<div class="kr-teil${t.fertig ? ' kr-teil--fertig' : ''}"><button type="button" class="kr-bild${t.foto ? ' kr-bild--leer' : ''}" aria-label="Bild ${t.id}" data-z="zustand:daten">${i(t.foto ? 'photooff' : 'photo')}</button><div style="min-width:0"><div class="kr-zeile-t" style="font-size:14px"><span class="kr-id">${t.id}</span>${esc(t.titel)} ${t.foto ? chip('Foto fehlt', 'warn', 'alert') : t.fertig ? chip('fertig', 'ok', 'check') : ''}</div><div class="kr-zeile-s">${esc(t.meta)}</div></div><div style="display:flex;gap:6px">${b.teilAktionen.map(a => darf(a) ? btn({ text: S.geraet === 'handy' || a.icon === 'edit' ? '' : a.text, icon: a.icon, art: 'sekundaer', label: a.text + ' ' + t.id, attrs: { ...za(a), title: a.text } }) : '').join('')}</div></div>`).join('')}</div>`, b.rechts ? ab(b.rechts) : '');
+    case 'block': return aus ? geplant(b.titel, 'lock', b.funktion) : K.block(b.titel, alle(b.bloecke), b.rechts ? ab(b.rechts) : '');
+    case 'notiz': return `<div class="kr-notiz">${esc(b.text)}<div class="kr-notiz-m">${esc(b.meta || '')}</div></div>`;
+    case 'docs': return `<div class="kr-docs">${b.eintraege.map(e => e === 'Foto' ? `<span class="kr-bild">${i('photo')}</span>` : `<span class="kr-doc">${i('file')}${esc(e)}</span>`).join('')}</div>`;
+    case 'zeilen': return `<div class="kr-stapel" style="gap:8px">${b.zeilen.map(zeileHtml).join('')}</div>`;
+    case 'verlauf': return K.block(b.titel, K.verlauf(b.zeilen));
+    case 'schnellaktionen': return K.block('', `<div class="kr-qa-raster">${b.aktionen.map(a => !darf(a) ? '' : a.funktion && !an(a.funktion) ? geplant(a.text, a.icon, a.funktion, 'knopf') : `<button type="button" class="kr-qa${a.art === 'primaer' ? ' kr-qa--primaer' : ''}"${K.at(za(a))}>${i(a.icon)}${esc(a.text)}</button>`).join('')}</div>`);
+    case 'text': return `<div class="kr-zeile-s">${esc(b.text)}</div>`;
+    case 'pin': return '';
+    case 'felder': {
+      const F = felder(), edit = ctx.zustand === 'anpassen';
+      const sp = s => F.map((f, n) => [f, n]).filter(([f]) => f.spalte === s && BST(f.inhalt) && darf(BST(f.inhalt)));
+      const reihe = [...sp('links'), ...sp('rechts')].map(x => x[1]);
+      const col = s => edit ? sp(s).map(([f, n]) => feldKarte(f, n, F, ctx, reihe.indexOf(n) + 1)).join('') + `<button type="button" class="ev-feld-neu" data-feld-neu="${s}"${frei(F).length ? '' : ' disabled'}>${i('plus')}Feld hinzufügen</button>` : sp(s).map(([f]) => B(BST(f.inhalt).block, ctx)).join('');
+      return `<div class="kr-spalten${edit ? ' ev-felder--edit' : ''}"><div class="kr-stapel">${col('links')}</div><div class="kr-stapel">${col('rechts')}</div></div>${edit ? `<div>${btn({ text: 'Vorschlag übernehmen', icon: 'refresh', art: 'leise', attrs: { 'data-tagvorschlag': '' } })}</div>` : ''}`;
+    }
+    case 'kamera': return `<div class="ev-sucher"><video id="ev-video" autoplay playsinline muted></video><div class="ev-sucher-rahmen"></div><span class="ev-sucher-text" id="ev-sucher-text">Kamera wird geöffnet …</span></div>`;
+  }
+  return `<div class="ev-spec">Blocktyp „${esc(b.typ)}“ unbekannt</div>`;
+}
+/* Seitennummer (U-186): nur in der Spec-Ansicht („Regeln an“), nie im Produkt */
+const nrMarke = (sc, html) => S.regeln && sc.nr ? html.replace(/(<h[12] class="kr-(?:seite|dialog)-titel">)/, `$1<span class="ev-nr" title="Seite ${esc(sc.nr)}">${esc(sc.nr)}</span>`) : html;
+function zBanner(sc, ctx) {
+  const z = ctx.zustand; if (!z || z === 'daten') return '';
+  const d = (sc.zustaende || {})[z]; if (!d || d.na) return '';
+  const art = { leer: 'leer', fehler: 'fehler' }[z], text = (istW() && d.textWerkstatt) || d.text;
+  const ak = (d.aktionen || []).map((a, n) => ab(a, { art: n ? 'sekundaer' : 'primaer' })).join('');
+  if (art) return `<div class="kr-zustand kr-zustand--${art}" role="status" style="flex-wrap:wrap">${i(art === 'fehler' ? 'alert' : 'check')}<span class="kr-zustand-text">${esc(text)}</span><span style="display:flex;gap:8px;flex-wrap:wrap">${ak}</span></div>`;
+  return `<div class="kr-hinweis${z === 'erfolg' || z === 'anpassen' ? '' : ' kr-hinweis--warn'}" style="flex-wrap:wrap;margin-bottom:10px">${i(z === 'erfolg' ? 'checkc' : z === 'anpassen' ? 'grid' : 'alert')}<span style="flex:1;min-width:160px">${esc(text)}</span>${ak}</div>`;
+}
+
+/* ===== Karten, Overlays, Seiten ===== */
+function zurueckLeiste() { const v = S.ebenen[S.ebenen.length - 2]; if (!v || !['auftrag', 'kunde'].includes(v.id)) return ''; return `<div class="kr-blatt-zurueck">${btn({ text: 'Zurück · ' + (v.arg || SC(v.id).titel), icon: 'back', art: 'leise', attrs: { 'data-z': 'zurueck' } })}</div>`; }
+function karte(k, sc, ctx) {
+  const ist = sc.id === 'auftrag' ? 'A' : 'K', arg = ctx.arg || (ist === 'A' ? 'A-2026-0101' : 'K-2026-0011'), O = obj(arg);
+  if (!O || !arg.startsWith(ist + '-')) return K.dialog({ titel: sc.titel, icon: 'alert', groesse: 'schmal', inhalt: K.zustand({ art: 'fehler', text: (ist === 'A' ? 'Auftrag ' : 'Kunde ') + arg + ' nicht gefunden' }), fuss: btn({ text: 'Schließen', attrs: { 'data-z': 'zurueck' } }), attrs: { 'data-ebene': '' }, schliessenAttrs: { 'data-z': 'zurueck' } });
+  k = ist === 'A' ? bindAuftrag(k, O) : bindKunde(k, O); ctx = { ...ctx, arg }; AKTARG = arg;
+  const A = ist === 'A' ? O : null;
+  const kopf = { ...k.kopf };
+  const chips = (kopf.chips || []).filter(c => darf(c) && zielOk(c)).map(c => c.ziel ? `<button type="button" class="kr-pill ${c.ziel === 'kunde' ? 'kr-pill--kunde' : 'kr-pill--leise'}"${K.at(za(c))}>${c.icon ? i(c.icon) : ''}${esc(c.text)}${c.ziel === 'kunde' ? i('arrow') : ''}</button>` : `<span class="kr-pill ${c.ton === 'marke' ? 'kr-pill--marke' : 'kr-pill--leise'}">${c.icon ? i(c.icon) : ''}${esc(c.text)}</span>`).join('');
+  const t = k.termin, termin = t ? `<div class="kr-termin${!A || A.ton === 'rot' ? ' kr-termin--dringend' : ''}"><span class="kr-termin-c">${esc(A ? A.chip : t.rel)}</span><span class="kr-termin-d">${esc(t.datum)} ${chip(t.status, 'ok')}</span><span class="kr-termin-d">${i('truck')} ${esc(t.ueb)}</span></div>${ab(t.aktion)}` : '';
+  const kopfH = `<header class="kr-kartenkopf"><div class="kr-kartenkopf-l"><div class="kr-karte-nr">${S.regeln ? `<span class="ev-nr">${esc(sc.nr)}</span>` : ''}${esc(kopf.nr)}</div><h2 class="kr-karte-titel">${esc(kopf.titel)}</h2><div class="kr-karte-sub">${esc(kopf.sub)}</div><div class="kr-karte-meta">${chips}</div></div><div class="kr-kartenkopf-r"><button type="button" class="kr-schliessen" data-z="zurueck" aria-label="Schließen">${i('x')}</button>${termin}</div></header>`;
+  const kette = k.kette ? `<div class="kr-kette-wrap">${K.kette(k.kette.map(s => ({ ...s, lbl: (istW() && s.lblWerkstatt) || s.lbl, klick: !!s.ziel && darf(s), attrs: s.ziel && darf(s) ? za(s) : undefined })))}</div>` : '';
+  const haupt = (k.haupt || []).map(x => x.typ === 'naechste' ? K.block('', B(x, ctx)) : B(x, ctx)).join('');
+  const rail = (k.rail || []).map(x => B(x, ctx)).join('');
+  const fuss = S.geraet === 'desktop' ? `<footer class="kr-kartenfuss">${(sc.aktionen || []).map(a => ab(a, { art: a.ziel === 'zurueck' ? undefined : 'primaer' })).join('')}</footer>`
+    : `<nav class="kr-kartendock">${(k.dock || []).filter(darf).map(a => a.funktion && !an(a.funktion) ? '' : `<button type="button" class="kr-qa${a.art ? ' kr-qa--' + a.art : ''}"${K.at(za(a))}>${i(a.icon)}${esc(a.text)}</button>`).join('')}</nav>`;
+  return `<div class="kr-ebene kr-ebene--blatt" data-ebene><section class="kr-dialog kr-dialog--karte" role="dialog" aria-modal="true" aria-label="${esc(sc.titel)}"><div class="kr-streifen"></div><div class="kr-karte"><div class="kr-karte-scroll">${zurueckLeiste()}${kopfH}${kette}<div style="padding:0 22px">${zBanner(sc, ctx)}</div><div class="kr-karte-koerper"><div class="kr-karte-haupt">${haupt}</div><div class="kr-karte-rail">${rail}</div></div><div style="padding:0 22px 20px">${regelnHtml(sc)}</div></div>${fuss}</div></section></div>`;
+}
+function overlayHtml(e) {
+  const sc = SC(e.id), ctx = { screen: sc, arg: e.arg, zustand: e.zustand };
+  AKTARG = e.arg || null; OBJ = obj(e.arg) || (['mehrarbeit', 'fertig', 'rechnung', 'rauspruefen', 'foto', 'termin', 'teil'].includes(e.id) ? obj('A-2026-0101') : e.id === 'zahlung' ? obj('R-2026-0105') : null);
+  if (sc.typ === 'blatt') return karte(sc.inhalt[0], sc, ctx);
+  if (sc.typ === 'menue') {
+    if (sc.geraete && !sc.geraete.includes(S.geraet)) return K.dialog({ titel: sc.titel, icon: 'grid', groesse: 'schmal', inhalt: K.zustand({ art: 'leer', text: 'Gibt es nur auf Tablet und Handy (' + esc(sc.anker || '') + '). Auf dem Desktop steht alles in der Seitenleiste.' }), fuss: btn({ text: 'Schließen', attrs: { 'data-z': 'zurueck' } }), attrs: { 'data-ebene': '' }, schliessenAttrs: { 'data-z': 'zurueck' } });
+    const [W, H] = SPEC.meta.geraete[S.geraet], an0 = e.anker;
+    const pos = e.id === 'mehr' ? 'bottom:' + (SPEC.meta.dock_hoehe || 74) + 'px;right:10px' : an0 ? (an0.unten + 280 > H ? 'bottom:' + Math.round(H - an0.oben + 6) + 'px' : 'top:' + Math.round(an0.unten + 6) + 'px') + ';right:' + Math.max(8, Math.round(W - an0.rechts)) + 'px' : 'top:62px;right:72px';
+    const erb = a => a.argErben && e.arg ? { ...a, arg: e.arg } : a;
+    return `<div class="kr-ebene" data-ebene style="background:transparent"><div class="kr-plus-menue" style="${pos}" aria-label="${esc(sc.titel)}">${sc.aktionen.filter(darf).map(erb).map(a => a.funktion && !an(a.funktion) ? geplant(a.text, a.icon, a.funktion, 'zeile') : `<button type="button" class="kr-menue-el${a.ziel === 'zurueck' ? ' ev-menue-zu' : ''}"${K.at(za(a))}>${i(a.icon || 'x')}${esc(a.text)}${a.taste && S.geraet === 'desktop' ? `<span class="kr-tun-kbd">${esc(a.taste)}</span>` : ''}</button>`).join('')}</div></div>`;
+  }
+  if (sc.typ === 'palette') {
+    const p = sc.inhalt[0], tr = p.treffer.filter(t => darf(t) && zielOk(t) && (!t.funktion || an(t.funktion))).map(t => ({ ...t, attrs: za(t) })), tun = p.tun.filter(darf).map(a => ({ icon: a.icon, text: a.text, kbd: S.geraet === 'desktop' ? a.taste : undefined, attrs: za(a) }));
+    return `<div class="kr-ebene kr-ebene--palette" data-ebene>${K.palette({ treffer: tr, aktionen: tun, inAttrs: { 'data-fokus': '', 'data-beispiel': 'Griffe Ost verzinken' } }).replace(/(<label class="kr-palette-in">[\s\S]*?<input[^>]*>)/, m => m + micKnopf()).replace('data-a="zu"', 'data-z="zurueck"').replace('data-pal-liste>', 'data-pal-liste>' + zBanner(sc, ctx) + `<div class="kr-zeile-s" style="padding:6px 4px">durchsucht: ${esc(p.durchsucht.join(' · '))}</div>`)}</div>`;
+  }
+  const titel = (e.arg && sc.modi && sc.modi[e.arg]) || sc.titel;
+  const inhalt = zBanner(sc, ctx) + (sc.inhalt || []).map(b => B(b, ctx)).join('') + regelnHtml(sc);
+  const erb = a => a.argErben && e.arg ? { ...a, arg: e.arg } : a;
+  const gruen = a => ({ ...erb(a), art: a.art && a.art !== 'primaer' ? a.art : 'erledigen' }); const gateHtml = a => { if (!a.gate) return ab(gruen(a)); const f = pflichtFehlt(sc, ctx); return f ? btn({ text: (a.text_kv && (erfWertVon(sc, ctx, 'art') === 'KV') ? a.text_kv : a.text), icon: a.icon, art: 'erledigen', attrs: { 'data-sprung': f[2], 'data-m': 'Noch offen: ' + f[1] } }) : ab(gruen(a)); };
+  const fuss = (sc.aktionen || []).filter(a => !a.haupt).map(a => ab(erb(a), { art: a.ziel === 'zurueck' ? undefined : 'leise' })).join('') + (sc.aktionen || []).filter(a => a.haupt).map(gateHtml).join('');
+  const AO = auftragVon(OBJ), RO = OBJ && /^R-/.test(OBJ.id) ? OBJ : null, KO = OBJ && /^K-/.test(OBJ.id) ? OBJ : null;
+  const objKopf = sc.typ === 'dialog' && sc.groesse !== 'werkbank' && (AO || RO || KO) ? `<div class="ev-dlg-objekt"><span class="kr-id">${esc((RO || KO || AO).id)}</span><b>${esc(RO ? RO.kunde + ' · ' + RO.betrag : KO ? KO.name : AO.kunde + ' · ' + AO.titel)}</b>${AO && !RO ? `<span>${esc(AO.ziel || '')}</span>` : ''}</div>` : e.id === 'rechte' && e.arg && SPEC.rollen.find(r => r.id === e.arg) ? '' : '';
+  const abbr = (sc.aktionen || []).find(a => a.text === 'Abbrechen' && a.ziel !== 'zurueck');
+  return nrMarke(sc, K.dialog({ titel, icon: sc.icon, groesse: sc.groesse, inhalt: objKopf + inhalt, fuss, zurueck: S.ebenen.length > 1 ? { 'data-z': 'zurueck' } : undefined, attrs: { 'data-ebene': '' }, schliessenAttrs: { 'data-z': abbr ? abbr.ziel : 'zurueck' } }));
+}
+function seiteHtml() {
+  const sc = SC(S.screen), ctx = { screen: sc, zustand: S.seiteZ, arg: S.seiteArg };
+  if (!darf(sc)) return K.seitenKopf(sc.titel) + K.zustand({ art: 'gesperrt', text: 'Kein Zugriff · für diese Rolle gesperrt' }) + ab({ text: 'Zur Startseite', ziel: 'start' });
+  let wz = ''; if (sc.werkzeug) { const w = sc.werkzeug; wz = K.segment(w.optionen.map(o => [o[0], o[1] + (o[2] && !an(o[2]) ? ' · geplant' : ''), o[2] && !an(o[2])]), w.id === 'ansicht' ? S.ansichtAuftr : w.optionen[0][0], { 'data-seg': w.id }); }
+  const kopf = nrMarke(sc, K.seitenKopf(sc.titel, wz + (sc.aktionen || []).filter(a => a.ziel !== 'zustand:' + S.seiteZ).map((a, n) => ab(a, { art: n === 0 ? 'primaer' : 'sekundaer' })).join('')));
+  const zd = (sc.zustaende || {})[S.seiteZ];
+  if (['leer', 'fehler'].includes(S.seiteZ) && zd && !zd.na) return kopf + zBanner(sc, ctx) + regelnHtml(sc);
+  return kopf + zBanner(sc, ctx) + `<div class="kr-stapel">${(sc.inhalt || []).map(b => B(b, ctx)).join('')}</div>` + regelnHtml(sc);
+}
+function scanKnopf(h) { const k = ['diktat', 'scan'].map(id => SPEC.navigation.kopf.find(x => x.id === id)).filter(n => n && an(n.funktion)); if (!k.length) return h; return h.replace(/(<button type="button" class="kr-suche"[\s\S]*?<\/button>)/, m => m + k.map(n => `<button type="button" class="ev-scan" data-aktion="${n.id}" aria-label="${esc(n.label)}" title="${esc(n.label)}">${i(n.icon)}</button>`).join('')); }
+/* U-193 Diktat: Mikrofon in Suche und jedem Freitextfeld */
+const micKnopf = () => an('E06') ? `<button type="button" class="ev-mic" data-diktat aria-label="Sprechen statt tippen" title="Sprechen statt tippen">${i('mic')}</button>` : '';
+function diktat(feld, knopf) {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { if (feld.dataset.beispiel) { feld.value = feld.dataset.beispiel; feld.dispatchEvent(new Event('input', { bubbles: true })); } toast('Diktat · in der App über Azure Speech (EU) · hier ohne Mikrofon'); return; }
+  const r = new SR(); r.lang = 'de-DE'; r.interimResults = true; const vorher = feld.value ? feld.value + ' ' : '';
+  if (knopf) knopf.classList.add('ev-mic--an');
+  r.onresult = ev => { feld.value = vorher + [...ev.results].map(x => x[0].transcript).join(''); feld.dispatchEvent(new Event('input', { bubbles: true })); };
+  r.onend = () => { if (knopf) knopf.classList.remove('ev-mic--an'); }; r.onerror = () => { if (knopf) knopf.classList.remove('ev-mic--an'); toast('Kein Mikrofon freigegeben'); };
+  try { r.start(); } catch (e) {}
+}
+function shellHtml(inhalt, ebene) { return scanKnopf(shellHtml0(inhalt, ebene)); }
+function shellHtml0(inhalt, ebene) {
+  const r = rolle(), N = SPEC.navigation;
+  if (r.shell === 'werkstatt') return K.appShell({ geraet: S.geraet, variante: 'werkstatt', inhalt, kuerzel: r.kuerzel, ebene });
+  const lab = [];
+  const nav = N.buero.filter(n => n.trenner || darf(n)).map(n => { if (n.trenner) return { trenner: true, unten: n.unten }; if (n.funktion && !an(n.funktion)) { const f = F(n.funktion); lab.push(f && f.stufe ? 'Stufe ' + f.stufe : 'geplant'); return { id: n.id, text: n.label, icon: n.icon, ausgrau: 'aufbau' }; } return { id: n.id, text: n.label, icon: n.icon, gruppe: n.gruppe }; });
+  const aktiv = S.screen === 'katalog' || S.screen === 'datenkiste' ? 'einstellungen' : S.screen;
+  return K.appShell({ geraet: S.geraet, variante: 'buero', aktiv, inhalt, kuerzel: r.kuerzel, nav, dock: N.dock.filter(darf).map(n => ({ id: n.id, text: n.label, icon: n.icon })), datum: '<b>Mo</b><br>28.09.2026', ebene })
+    .replace(/In Aufbau/g, () => esc(lab.shift() || 'geplant')).replace(/kr-ausgrau--aufbau/g, 'kr-ausgrau--geplant');
+}
+function loginHtml() {
+  const sc = SC('login'), email = S.loginZ === 'email', r = rolle();
+  const std = new Date().getHours(), gruss = std < 11 ? 'Guten Morgen' : std < 18 ? 'Guten Tag' : 'Guten Abend';
+  const kopf = `<div class="ev-login-marke"><span class="ev-login-logo">GK</span><span class="ev-login-wort">Kreile</span></div><h1 class="ev-login-gruss">${gruss}</h1>`;
+  const personen = `<div class="ev-login-personen" role="radiogroup" aria-label="Person">${SPEC.rollen.filter(x => x.aktiv !== false).map(x => `<button type="button" class="ev-person${x.id === S.rolle ? ' ev-person--an' : ''}" role="radio" aria-checked="${x.id === S.rolle}" data-rolle="${x.id}"><span class="ev-person-kreis">${esc(x.kuerzel)}</span><span class="ev-person-name">${esc(x.person)}</span></button>`).join('')}</div>`;
+  const punkte = `<div class="ev-pin${S.loginZ === 'fehler' ? ' ev-pin--fehler' : ''}" aria-label="${S.pin.length} von 4 Ziffern">${[0, 1, 2, 3].map(n => `<span class="ev-pin-p${S.pin.length > n ? ' ev-pin-p--an' : ''}"></span>`).join('')}</div>`;
+  const tasten = `<div class="ev-tasten">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button type="button" class="ev-taste" data-pin="${n}">${n}</button>`).join('')}<span class="ev-taste-leer"></span><button type="button" class="ev-taste" data-pin="0">0</button><button type="button" class="ev-taste ev-taste--leise" data-pin="weg" aria-label="Letzte Ziffer löschen" title="Letzte Ziffer löschen">${K.i('back')}</button></div>`;
+  const body = email
+    ? `${kopf}<div class="ev-login-form">${K.feld({ label: 'E-Mail', html: K.eingabe({ type: 'email', id: 'login-email', autocomplete: 'username' }) })}${K.feld({ label: 'Passwort', html: K.eingabe({ type: 'password', id: 'login-passwort', autocomplete: 'current-password' }) })}${btn({ text: 'Anmelden', art: 'primaer', attrs: { 'data-z': 'start' } }).replace('class="kr-btn', 'class="kr-btn kr-btn--block')}</div><button type="button" class="ev-login-link" data-z="zustand:daten">Mit Code anmelden</button>`
+    : `${kopf}${personen}<div class="ev-login-code"><input class="kr-sr" id="login-code" inputmode="none" autocomplete="off" aria-label="Code für ${esc(r.person)}" readonly>${punkte}<div class="ev-login-meldung" role="alert">${S.loginZ === 'fehler' ? esc(sc.zustaende.fehler.text) : ''}</div></div>${tasten}${S.rolle === 'developer' ? `<button type="button" class="ev-login-link" data-z="zustand:email">Mit E-Mail anmelden</button>` : ''}`;
+  return `<div class="ev-login"><div class="kr-streifen"></div><div class="ev-login-spalte">${body}</div></div>`;
+}
+
+/* ===== Kamera (U-181): sofort öffnen; ohne Kamera → Datei wählen ===== */
+let kStrom = null;
+function kameraStart() {
+  const v = root.querySelector('#ev-video'), t = root.querySelector('#ev-sucher-text');
+  if (!v) { if (kStrom) { kStrom.getTracks().forEach(x => x.stop()); kStrom = null; } return; }
+  if (kStrom) { v.srcObject = kStrom; t.hidden = true; return; }
+  const md = navigator.mediaDevices;
+  if (!md || !md.getUserMedia) { t.textContent = 'Vorschau ohne Kamerazugriff · in der App öffnet hier die Kamera'; return; }
+  md.getUserMedia({ video: { facingMode: S.geraet === 'desktop' ? 'user' : 'environment' } }).then(st => { kStrom = st; const v2 = root.querySelector('#ev-video'); if (v2) { v2.srcObject = st; const t2 = root.querySelector('#ev-sucher-text'); if (t2) t2.hidden = true; } else st.getTracks().forEach(x => x.stop()); })
+    .catch(() => { const t2 = root.querySelector('#ev-sucher-text'); if (t2) t2.textContent = 'Vorschau ohne Kamerazugriff · in der App öffnet hier die Kamera'; });
+}
+
+/* ===== Navigation ===== */
+let toastT;
+function toast(t) { S.toast = t; clearTimeout(toastT); toastT = setTimeout(() => { S.toast = null; render(); }, 3200); }
+const oben = () => S.ebenen[S.ebenen.length - 1];
+function geh(z, arg, m, anker, opt = {}) {
+  if (!z) return;
+  if (z === 'zurueck') { for (let n = +(opt.n || 1); n > 0; n--) S.ebenen.pop(); if (m) toast(m); return render(); }
+  if (opt.abschluss) { const nb = SPEC.beispiel.nach_buchung; if (nb) { ['auftraege', 'kunden'].forEach(t => { const x = (nb[t] || []).find(o => o.id === arg); if (x && !SPEC.beispiel[t].some(o => o.id === arg)) SPEC.beispiel[t].push(x); }); } S.ebenen.pop(); const o0 = oben(); if (o0 && o0.id === z && o0.arg === arg) { if (m) toast(m); return render(); } }
+  if (z === 'start') { S.eingeloggt = true; S.loginZ = 'daten'; S.screen = rolle().start; S.ebenen = []; S.seiteZ = 'daten'; if (m) toast(m); return render(); }
+  if (z.startsWith('extern:')) { toast('Öffnet extern · ' + z.slice(7)); return render(); }
+  if (z.startsWith('zustand:')) { const v = z.slice(8); if (!S.eingeloggt) S.loginZ = v; else if (S.ebenen.length) oben().zustand = v; else S.seiteZ = v; if (m) toast(m); return render(); }
+  const sc = SC(z); if (!sc) { toast('Ziel fehlt: ' + z); return render(); }
+  if (!darf(sc)) { toast('Kein Zugriff für diese Rolle'); return render(); }
+  if (sc.typ === 'login') { S.eingeloggt = false; S.ebenen = []; S.pin = ''; S.loginZ = 'daten'; return render(); }
+  if (sc.typ === 'seite') { S.screen = z; S.ebenen = []; S.seiteZ = 'daten'; S.seiteArg = arg; if (z === 'auftraege') S.ansichtAuftr = arg === 'woche' ? 'woche' : 'liste'; if (m) toast(m); return render(); }
+  while (S.ebenen.length && ['menue', 'palette'].includes(SC(oben().id).typ)) S.ebenen.pop();
+  if (S.ebenen.length > 5) S.ebenen.shift();
+  if (['eingang', 'kundeneu'].includes(z)) { S.erfOk = {}; S.wahl = {}; }
+  if (z === 'buendel') S.bw = null;
+  if (z === 'rechte') S.loginEdit = arg && SPEC.rollen.some(r => r.id === arg) ? arg : null;
+  if (z === 'mehrarbeit') S.ma = { z: {}, extra: 0, info: false, teil: arg && /^T-/.test(arg) ? arg : 'ganz' };
+  if (z === 'fertig') S.fm = { teile: {}, foto: {}, gut: {}, aus: {}, grund: {} };
+  S.ebenen.push({ id: z, arg, zustand: 'daten', anker: sc.typ === 'menue' ? anker : undefined }); if (m) toast(m); render(); if (sc.typ === 'palette' && arg === 'diktat') { const f = root.querySelector('[data-fokus]'); if (f) diktat(f, root.querySelector('.kr-palette .ev-mic')); }
+}
+root.addEventListener('change', ev => { const rs = ev.target.closest('[data-rechtset]'); if (rs) { const [l, b] = rs.dataset.rechtset.split('|'), st = rechteSet(l); if (rs.checked) st.add(b); else st.delete(b); toast((SPEC.rollen.find(r => r.id === l) || {}).person + ': ' + (SPEC.rechte.bereiche.find(x => x.id === b) || {}).text + (rs.checked ? ' erlaubt' : ' entzogen')); return render(); }
+  const bwc = ev.target.closest('[data-bw]'); if (bwc) { if (bwc.checked) S.bw.add(bwc.dataset.bw); else S.bw.delete(bwc.dataset.bw); return render(); } const mr = ev.target.closest('[data-maregler]'); if (mr) { const b0 = SC('mehrarbeit').inhalt[0], kach = b0.arten.reduce((n, a) => n + (S.ma.z[a.id] || 0) * a.min, 0); S.ma.extra = Math.max(0, +mr.value - b0.bisher_min - kach); return render(); } const pr = ev.target.closest('[data-pruef]'); if (pr) { S.wahl[pr.dataset.pruef] = pr.checked; return render(); } const fi = ev.target.closest('[data-feld-inhalt]'); if (fi) { felder()[+fi.dataset.feldInhalt].inhalt = fi.value; return render(); } const c = ev.target.closest('[data-baustein]'); if (c) { const s = tagSet(); if (c.checked) s.add(c.dataset.baustein); else s.delete(c.dataset.baustein); render(); } });
+root.addEventListener('click', ev => {
+  const t = ev.target;
+  if (t.matches('[data-ebene]')) return geh('zurueck');
+  const rl = t.closest('[data-rolle]'); if (rl) { S.rolle = rl.dataset.rolle; S.geraet = rolle().geraet; return render(); }
+  const pn = t.closest('[data-pin]'); if (pn) { const v = pn.dataset.pin; if (S.loginZ === 'fehler') S.loginZ = 'daten'; if (v === 'weg') S.pin = S.pin.slice(0, -1); else if (v === 'neu') S.pin = ''; else if (S.pin.length < 4) S.pin += v; if (S.pin.length === 4) { S.pin = ''; return geh('start'); } return render(); }
+  const wf = t.closest('[data-wfilter]'); if (wf) { S.wfilter = S.wfilter === wf.dataset.wfilter ? 'alle' : wf.dataset.wfilter; return render(); }
+  if (t.closest('[data-tagvorschlag]')) { delete S.felder[S.rolle]; toast('Vorschlag übernommen'); return render(); }
+  const fz = t.closest('[data-feld-hoch],[data-feld-runter],[data-feld-weg],[data-feld-spalte],[data-feld-neu]');
+  if (fz) { const F = felder(), d = fz.dataset;
+    if (d.feldNeu) { const x = frei(F)[0]; if (x) F.push({ spalte: d.feldNeu, inhalt: x.id }); return render(); }
+    const n = +(d.feldHoch ?? d.feldRunter ?? d.feldWeg ?? d.feldSpalte), f = F[n];
+    if (d.feldWeg !== undefined) F.splice(n, 1);
+    else if (d.feldSpalte !== undefined) { F.splice(n, 1); f.spalte = d.nach; F.push(f); }
+    else { const st = F.map((g, m) => [g, m]).filter(([g]) => g.spalte === f.spalte && !BST(g.inhalt).fest).map(x => x[1]); const p = st.indexOf(n), q = d.feldHoch !== undefined ? st[p - 1] : st[p + 1]; if (q !== undefined) [F[n], F[q]] = [F[q], F[n]]; }
+    return render(); }
+  const rt = t.closest('[data-reiter]'); if (rt) { S.reiter[rt.dataset.reiter] = rt.dataset.wert; return render(); }
+  const seg = t.closest('.kr-segment button'); if (seg) { const p = seg.parentElement; if (seg.disabled) return; if (p.dataset.seg === 'ansicht') { S.ansichtAuftr = seg.dataset.wert; return render(); } if (p.dataset.seg === 'wfilter') { S.wfilter = seg.dataset.wert; return render(); } if (p.dataset.seg === 'afilter') { S.afilter = seg.dataset.wert; return render(); } if (p.dataset.seg === 'kfilter') { S.kfilter = seg.dataset.wert; return render(); } if (p.dataset.seg === 'bfilter') { S.bfilter = seg.dataset.wert; return render(); } if (p.dataset.seg === 'mateil') { S.ma.teil = seg.dataset.wert; return render(); } p.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === seg))); return; }
+  const nv = t.closest('[data-nav]'); if (nv) { const id = nv.dataset.nav; if (id === 'start') return geh('start'); const n = [...SPEC.navigation.buero, ...SPEC.navigation.dock].find(x => x.id === id); if (n) geh(n.ziel, n.arg); return; }
+  const ak = t.closest('[data-aktion]'); if (ak) { const id = ak.dataset.aktion; const n = [...SPEC.navigation.kopf, ...SPEC.navigation.werkstatt].find(x => x.id === id); if (n) geh(n.ziel, n.arg); return; }
+  const mk = t.closest('[data-ma]'); if (mk) { const a = mk.dataset.ma; S.ma.z[a] = Math.max(0, (S.ma.z[a] || 0) + +mk.dataset.d); return render(); }
+  if (t.closest('[data-mainfo]')) { S.ma.info = !S.ma.info; return render(); }
+  const ft = t.closest('[data-fmteil]'); if (ft) { const sc0 = SC('fertig').inhalt[0], d0 = sc0.teile.find(x => x.id === ft.dataset.fmteil); S.fm.teile[d0.id] = !(S.fm.teile[d0.id] ?? d0.fertig); return render(); }
+  const fo = t.closest('[data-fmfoto]'); if (fo) { S.fm.foto[fo.dataset.fmfoto] = true; toast('Fertigfoto ' + fo.dataset.fmfoto + ' gespeichert'); return render(); }
+  const fmm = t.closest('[data-fmm]'); if (fmm) { const d0 = SC('fertig').inhalt[0].teile.find(x => x.id === fmm.dataset.id), k = fmm.dataset.fmm, gut0 = S.fm.gut[d0.id] ?? d0.menge, aus0 = S.fm.aus[d0.id] || 0, d = +fmm.dataset.d; if (k === 'aus') { const n = Math.max(0, Math.min(d0.menge, aus0 + d)); S.fm.aus[d0.id] = n; S.fm.gut[d0.id] = Math.min(gut0, d0.menge - n); } else S.fm.gut[d0.id] = Math.max(0, Math.min(d0.menge - aus0, gut0 + d)); return render(); }
+  const fg = t.closest('[data-fmgrund]'); if (fg) { S.fm.grund[fg.dataset.fmgrund] = fg.dataset.wert; return render(); }
+  if (t.closest('[data-fminfo]')) { const km = SC('fertig').inhalt[0].kunde_mail; S.fm.info = !(S.fm.info ?? km.standard); return render(); }
+  const le = t.closest('[data-loginedit]'); if (le) { S.loginEdit = le.dataset.loginedit || null; return render(); }
+  const ls = t.closest('[data-loginsave]'); if (ls) { const f = root.querySelector('[data-loginform]'), w = k => (f.querySelector('[data-lf="' + k + '"]') || {}); const id0 = ls.dataset.loginsave, name = (w('person').value || '').trim();
+    if (!name) { toast('Name fehlt'); return; }
+    const kz = (w('kuerzel').value || name.split(/\s+/).map(x => x[0]).join('').slice(0, 2)).toUpperCase();
+    if (id0 === 'neu') { const id = 'login' + (SPEC.rollen.length + 1), v = w('vorlage').value || 'werkstatt'; SPEC.rollen.push({ id, person: name, kuerzel: kz, titel: w('titel').value || '', start: 'tag', shell: 'buero', geraet: 'desktop', login: 'pin', rechte_vorlage: v === 'leer' ? 'leer' : v }); S.rechte[id] = new Set(SPEC.rechte.vorlagen[v] || []); toast('Login ' + name + ' angelegt'); }
+    else { const l = SPEC.rollen.find(r => r.id === id0); Object.assign(l, { person: name, kuerzel: kz, titel: w('titel').value || l.titel }); if (w('aktiv').type === 'checkbox') l.aktiv = w('aktiv').checked; toast('Login ' + name + ' geändert' + (w('code').value ? ' · Code zurückgesetzt' : '')); }
+    S.loginEdit = null; return render(); }
+  const eo = t.closest('[data-erfok]'); if (eo) { S.erfOk[eo.dataset.erfok] = true; return render(); }
+  const wa = t.closest('[data-wahl]'); if (wa) { S.wahl[wa.dataset.wahl] = wa.dataset.wert || null; return render(); }
+  const sp = t.closest('[data-sprung]'); if (sp) { const a = root.querySelector('[data-abschnitt="' + sp.dataset.sprung + '"]'); if (a) a.scrollIntoView({ behavior: 'smooth', block: 'start' }); if (sp.dataset.m) { toast(sp.dataset.m); render(); const a2 = root.querySelector('[data-abschnitt="' + sp.dataset.sprung + '"]'); if (a2) a2.scrollIntoView({ block: 'start' }); } return; }
+  const dk = t.closest('[data-diktat]'); if (dk) { const f = dk.parentElement.querySelector('input,textarea'); if (f) diktat(f, dk); return; }
+  const ew = t.closest('[data-ew]'); if (ew) { (S.entwuerfe[S.rolle] || []).splice(+ew.dataset.ew, 1); }
+  const en = t.closest('[data-entwurf]'); if (en) { const unter = S.ebenen[S.ebenen.length - 2], sc0 = unter && SC(unter.id), E0 = sc0 && erfFuer(sc0, { arg: unter.arg, zustand: unter.zustand }), f0 = E0 ? E0.felder : {};
+    (S.entwuerfe[S.rolle] = S.entwuerfe[S.rolle] || []).unshift({ titel: sc0 ? sc0.titel : 'Neuer Eingang', meta: [f0.kunde && f0.kunde.wert, f0.name && f0.name.wert, f0.menge && f0.bezeichnung ? f0.menge.wert + ' × ' + f0.bezeichnung.wert : '', 'heute ' + new Date().toTimeString().slice(0, 5)].filter(Boolean).join(' · '), ziel: unter ? unter.id : 'eingang' }); }
+  const z = t.closest('[data-z]'); if (z) { const r = z.getBoundingClientRect(), b = root.getBoundingClientRect(), f = S.f || 1; geh(z.dataset.z, z.dataset.arg, z.dataset.m, { oben: (r.top - b.top) / f, unten: (r.bottom - b.top) / f, rechts: (r.right - b.left) / f }, { n: z.dataset.n, abschluss: z.dataset.abschluss }); }
+});
+root.addEventListener('change', ev => { const t = ev.target; if (t.dataset.stufe) { const n = +t.dataset.stufe; t.checked ? S.stufen.add(n) : S.stufen.delete(n); render(); } if (t.dataset.addon) { t.checked ? S.addons.add(t.dataset.addon) : S.addons.delete(t.dataset.addon); render(); } });
+document.addEventListener('keydown', ev => {
+  if (!S.eingeloggt && S.ansicht === 'app' && S.loginZ !== 'email' && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+    if (/^[0-9]$/.test(ev.key)) { ev.preventDefault(); if (S.loginZ === 'fehler') S.loginZ = 'daten'; S.pin += ev.key; if (S.pin.length === 4) { S.pin = ''; return geh('start'); } return render(); }
+    if (ev.key === 'Backspace') { ev.preventDefault(); S.pin = S.pin.slice(0, -1); return render(); }
+  }
+  if (!S.eingeloggt || S.ansicht !== 'app') return; const tippt = ev.target.matches && ev.target.matches('input,textarea,select');
+  if (ev.key === 'Escape' && S.ebenen.length) return geh('zurueck');
+  if (S.ebenen.length && oben().id === 'kamera' && (ev.key === ' ' || ev.key === 'Enter')) { ev.preventDefault(); return geh('beleg', oben().arg); }
+  if (S.ebenen.length && oben().id === 'foto' && (ev.key === ' ' || ev.key === 'Enter')) { ev.preventDefault(); return geh('zurueck', undefined, 'Foto am Auftrag gespeichert'); }
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'k') { ev.preventDefault(); return geh('suche'); }
+  if (tippt || S.ebenen.length || ev.ctrlKey || ev.metaKey) return;
+  if (ev.key === '/') { ev.preventDefault(); geh('suche'); } else if (ev.key === 'n' || ev.key === 'N') { ev.preventDefault(); geh('eingang'); }
+});
+
+/* ===== Prüfung, Touch, Darstellung ===== */
+const cache = {};
+function check(k) { k = k || konf(); const key = JSON.stringify(k); return cache[key] || (cache[key] = KreilePruefung.pruefe(SPEC, k)); }
+let touch = { n: 0, liste: [] };
+function touchCheck() {
+  touch = { n: 0, liste: [] }; if (S.geraet === 'desktop' || S.ansicht !== 'app') return;
+  root.querySelectorAll('button,input:not([type=checkbox]),select,textarea,label.kr-check').forEach(el => {
+    if (el.disabled || el.closest('.kr-ausgrau') || !el.getClientRects().length) return;
+    const ziel = el.matches('input') && el.closest('.kr-suchfeld,.kr-palette-in') ? el.closest('.kr-suchfeld,.kr-palette-in') : el; /* ganzes Suchfeld = Ziel */
+    const r = ziel.getBoundingClientRect(), h = r.height / S.f; if (h > 0 && h < 47.5) { touch.n++; if (touch.liste.length < 8) touch.liste.push(`${el.className || el.tagName} „${(el.textContent || el.placeholder || '').trim().slice(0, 24)}“ ${Math.round(h)} px`); }
+  });
+}
+/* Stufe je Screen = kleinste Stufe seiner Funktionen; ohne Funktion: Navigation = 1, Platzhalter = später */
+const STUFENFARBE = { 1: ['#245C32', '#E3EDDD'], 2: ['#1F3A66', '#E6ECF6'], 3: ['#9C5214', '#FAE7D6'], 4: ['#8E1449', '#F6DCE7'], 'später': ['#596176', '#EDEFF2'] };
+function screenStufe(sc) { if (!sc) return 1; if (sc.status === 'platzhalter') return 'später'; const st = (sc.funktion || []).map(F).filter(f => f && Number.isInteger(f.stufe)).map(f => f.stufe); return st.length ? Math.min(...st) : 1; }
+function leiste() {
+  const seg = (key, opts, label, akt) => `<div class="ka-gruppe"><span>${label}</span>${opts.map(([v, t, dis]) => `<button type="button" data-k="${key}" data-v="${v}" aria-pressed="${akt(v)}"${dis ? ' disabled' : ''}>${t}</button>`).join('')}</div>`;
+  const r = check(), top = oben(), topSc = top ? SC(top.id) : SC(S.eingeloggt ? S.screen : 'login'), z = top ? top.zustand : (S.eingeloggt ? S.seiteZ : S.loginZ);
+  const zNamen = ['daten', ...Object.keys(topSc.zustaende || {}).filter(k => !(topSc.zustaende[k] || {}).na)];
+  const akt = top ? top.id : S.screen, DS = (SPEC.meta.owner_durchsicht || {}).ueberarbeitet || [];
+  const nrW = n => String(n || '').replace(/^M/, '90.').split('.').map(x => x.padStart(3, '0')).join('.');
+  const gruppen = [1, 2, 3, 4, 'später'].map(g => ({ g, l: SPEC.screens.filter(x => screenStufe(x) === g).sort((a, b) => nrW(a.nr).localeCompare(nrW(b.nr))) })).filter(x => x.l.length);
+  const opt = gruppen.map(({ g, l }) => { const fertig = l.filter(x => DS.includes(x.id)).length, F0 = STUFENFARBE[g];
+    return `<optgroup label="${g === 'später' ? 'Später (Platzhalter)' : 'Stufe ' + g} · ${fertig} von ${l.length} überarbeitet" style="color:${F0[0]}">${l.map(x => `<option value="${x.id}"${x.id === akt ? ' selected' : ''} style="background:${F0[1]};color:${F0[0]}">${DS.includes(x.id) ? '✓' : '○'} ${esc(x.nr || '')} ${esc(x.titel)} · ${x.typ}${x.rollen && !x.rollen.includes(S.rolle) ? ' (gesperrt)' : ''}</option>`).join('')}</optgroup>`; }).join('');
+  const s1 = gruppen.find(x => x.g === 1), sa = screenStufe(SC(akt)), Fa = STUFENFARBE[sa];
+  document.getElementById('leiste').innerHTML =
+    seg('rolle', SPEC.rollen.map(x => [x.id, `${x.person} · ${x.id}`]), 'Rolle', v => v === S.rolle) +
+    seg('geraet', [['desktop', 'Desktop'], ['tablet', 'Tablet'], ['handy', 'Handy']], 'Gerät', v => v === S.geraet) +
+    seg('stufe', SPEC.stufen.map(s => [s.n, 'Stufe ' + s.n, s.fest]), 'Stufen', v => S.stufen.has(+v)) +
+    seg('addon', SPEC.addons.map(a => [a.id, a.name]), '', v => S.addons.has(v)) +
+    seg('zustand', zNamen.map(n => [n, n === 'daten' ? 'Beispiel' : n]), 'Zustand', v => v === z) +
+    seg('groesse', [['v8', 'V8'], ['v11', 'V1.1']], 'Größe', v => v === S.groesse) +
+    seg('regeln', [['an', 'an'], ['aus', 'aus']], 'Regeln', v => (v === 'an') === S.regeln) +
+    `<div class="ka-gruppe"><span>Screen</span><span class="ka-stufe" style="background:${Fa[0]}">${sa === 'später' ? 'später' : 'Stufe ' + sa}</span><select data-springe style="border-left:6px solid ${Fa[0]}">${opt}</select>${s1 ? `<span class="ka-badge ka-info" title="Stufe 1 zuerst vollständig – dann startet Codex">Stufe 1: ${s1.l.filter(x => DS.includes(x.id)).length}/${s1.l.length} überarbeitet</span>` : ''}</div>` +
+    seg('ansicht', [['app', 'App'], ['verbindungen', 'Verbindungen'], ['pruefung', 'Prüfbericht']], 'Ansicht', v => v === S.ansicht) +
+    `<button type="button" class="ka-badge ${r.ok ? 'ka-ok' : 'ka-rot'}" data-k="ansicht" data-v="pruefung" title="Sackgassen-Check für die aktuelle Stufenwahl">Sackgassen-Check ${r.ok ? 'grün' : 'ROT · ' + r.fehler.length} · ${r.hinweise.length} Hinweise</button>` +
+    (S.geraet !== 'desktop' && S.ansicht === 'app' ? `<span class="ka-badge ${touch.n ? 'ka-rot' : 'ka-ok'}" title="${esc(touch.liste.join('\n'))}">Touch ≥ 48 px ${touch.n ? '✗ ' + touch.n : '✓'}</span>` : '') +
+    `<span class="ka-badge ka-info" title="${esc(QUELLE)}">${esc(SPEC.meta.version)} · Ebene ${SPEC.meta.ebene} · ${esc(QUELLE.split(' · ')[0])}</span>`;
+}
+document.getElementById('leiste').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-k]'); if (!b || b.disabled) return; const k = b.dataset.k, v = b.dataset.v;
+  if (k === 'rolle') { S.rolle = v; S.geraet = rolle().geraet; S.screen = rolle().start; S.ebenen = []; S.seiteZ = 'daten'; }
+  else if (k === 'geraet') S.geraet = v;
+  else if (k === 'stufe') { const n = +v; S.stufen.has(n) ? S.stufen.delete(n) : S.stufen.add(n); }
+  else if (k === 'addon') S.addons.has(v) ? S.addons.delete(v) : S.addons.add(v);
+  else if (k === 'zustand') { if (!S.eingeloggt) S.loginZ = v; else if (S.ebenen.length) oben().zustand = v; else S.seiteZ = v; }
+  else if (k === 'groesse') S.groesse = v;
+  else if (k === 'regeln') S.regeln = v === 'an';
+  else if (k === 'ansicht') S.ansicht = v;
+  render();
+});
+document.getElementById('leiste').addEventListener('change', ev => { if (ev.target.matches('[data-springe]')) springe(ev.target.value); });
+function springe(id) {
+  const sc = SC(id); S.ansicht = 'app';
+  if (sc.typ === 'login') { S.eingeloggt = false; S.ebenen = []; return render(); }
+  S.eingeloggt = true;
+  if (sc.typ === 'seite') { S.screen = id; S.ebenen = []; S.seiteZ = 'daten'; return render(); }
+  if (!S.ebenen.length) S.screen = rolle().start;
+  S.ebenen = [{ id, zustand: 'daten', arg: sc.modi ? Object.keys(sc.modi)[0] : undefined }]; render();
+}
+function panelHtml() {
+  const k1 = { stufen: [1], addons: [] }, k4 = { stufen: [1, 2, 3, 4], addons: ['DATEV'] };
+  const liste = (arr, ton) => arr.length ? arr.map(f => `<div class="ev-li"><span class="ev-chip ${ton}">${esc(f.art)}</span>${esc(f.text)} <code>${esc(f.wo)}</code></div>`).join('') : '<div class="ev-li">keine</div>';
+  if (S.ansicht === 'pruefung') {
+    return `<h2>Prüfbericht · Sackgassen-Check</h2><p>Geprüft wird: jede Aktion hat ein gültiges Ziel · jeder Screen ist je Rolle erreichbar · jedes Fenster hat „Schließen/Zurück“ · jeder Zustand (leer, teilweise, fehler, erfolg) hat einen Ausweg · jede Stufe-1-Funktion aus dem Bauumfang kommt vor · jeder Ablauf F1–F7 hat keinen Bruch. Selbsttest: <code>node werkzeuge/selbsttest.mjs</code>.</p>` +
+      [['Aktuelle Auswahl', konf()], ['Stufe 1 (Standard)', k1], ['Alle Stufen + DATEV', k4]].map(([n, k]) => { const r = check(k); return `<div class="ev-karte"><h3>${esc(n)} · <span class="ev-chip ${r.ok ? 'ev-chip--ok' : 'ev-chip--rot'}">${r.ok ? 'GRÜN' : 'ROT'}</span> ${r.fehler.length} Fehler · ${r.hinweise.length} Hinweise · ${r.zahlen.screens} Screens · ${r.zahlen.aktionen} Aktionen</h3><b>Fehler</b>${liste(r.fehler, 'ev-chip--rot')}<details><summary><b>Hinweise (keine Fehler, Owner-Themen)</b></summary>${liste(r.hinweise, '')}</details></div>`; }).join('');
+  }
+  const r = check(), roll = SPEC.rollen;
+  const zeilen = SPEC.screens.map(sc => { const z = [...new Set((r.kanten[sc.id] || []).map(a => a.ziel))]; return `<tr><td><span class="ev-chip" data-spring="${sc.id}"><b>${esc(sc.titel)}</b></span><br><code>${sc.id} · ${sc.typ}</code>${sc.status ? '<br><i>' + esc(sc.status) + '</i>' : ''}</td><td>${(sc.funktion || []).join(' ')}</td><td>${roll.map(x => `<span class="ev-chip ${r.erreichbar[x.id].includes(sc.id) ? 'ev-chip--ok' : ''}">${x.person}</span>`).join('')}</td><td>${z.map(x => `<span class="ev-chip" ${SC(x) ? `data-spring="${x}"` : ''}>${esc(x)}</span>`).join('')}</td><td>${Object.entries(sc.zustaende || {}).map(([n, v]) => `<span class="ev-chip ${v.na ? '' : 'ev-chip--ok'}" title="${esc(v.na || v.text)}">${n}${v.na ? ' n. z.' : ''}</span>`).join('')}</td></tr>`; }).join('');
+  const flows = SPEC.flows.map(fl => { const br = r.fehler.filter(f => f.wo === fl.id); return `<div class="ev-li"><span class="ev-chip ${br.length ? 'ev-chip--rot' : 'ev-chip--ok'}">${fl.id}</span><b>${esc(fl.name)}</b> (Ebene 1 · ${fl.ebene1}): ${[fl.schritte, ...(fl.varianten || [])].map(w => w.map(s => `<span class="ev-chip" data-spring="${s.split('#')[0]}">${esc(s)}</span>`).join(' → ')).join(' <br>&nbsp;&nbsp;oder ')}<br><small>Abnahme: ${esc(fl.abnahme)}</small></div>`; }).join('');
+  return `<h2>Verbindungen · ${SPEC.screens.length} Screens</h2><p>Grün = für diese Rolle erreichbar (aktuelle Stufenwahl). Klick auf einen Screen öffnet ihn.</p><h3>Abläufe (roter Faden)</h3><div class="ev-karte">${flows}</div><h3>Screens → Ziele</h3><table class="ev-tab"><tr><th>Screen</th><th>Funktion</th><th>erreichbar</th><th>führt zu</th><th>Zustände</th></tr>${zeilen}</table>`;
+}
+document.getElementById('panel').addEventListener('click', ev => { const s = ev.target.closest('[data-spring]'); if (s) springe(s.dataset.spring); });
+function skala() {
+  const sk = document.getElementById('skala'), [w, h] = SPEC.meta.geraete[S.geraet];
+  if (document.body.classList.contains('ka-pruef')) { S.f = 1; sk.style.transform = ''; sk.style.width = w + 'px'; sk.style.height = h + 'px'; return; }
+  const lh = document.getElementById('leiste').offsetHeight; S.f = Math.min(1, (innerWidth - 28) / w, (innerHeight - lh - 28) / h);
+  sk.style.transform = `scale(${S.f})`; sk.style.width = w * S.f + 'px'; sk.style.height = h * S.f + 'px';
+}
+/* U-191: jede Nummer trägt ihr Typ-Zeichen – Auftrag · Kunde · Rechnung · Mail */
+const TYP = [[/^A-\d/, 'auftrag', 'list', 'Auftrag'], [/^K-\d/, 'kunde', 'user', 'Kunde'], [/^R-\d/, 'rechnung', 'receipt', 'Rechnung'], [/^M-\d/, 'mail', 'mail', 'Mail']];
+function datumAppweit() { const h = SPEC.werkstattregel.heute_beispiel.slice(0, 4), w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); const r = [];
+  while (w.nextNode()) { const n = w.currentNode; if (/\b\d{4}-\d\d-\d\d\b/.test(n.nodeValue) && !n.parentElement.closest('textarea,script,style,.ev-spec,.ev-regel')) r.push(n); }
+  r.forEach(n => { n.nodeValue = n.nodeValue.replace(/\b(\d{4})-(\d\d)-(\d\d)\b/g, (m, y, mo, d) => y === h ? tag(new Date(m)) : d + '.' + mo + '.' + y); });
+  root.querySelectorAll('.kr-lage-f').forEach(b => { const n = +(b.querySelector('b') || {}).textContent, l = b.querySelector('.kr-lage-lbl'); if (n === 1 && l) l.textContent = { Konflikte: 'Konflikt', Entscheidungen: 'Entscheidung', Warnungen: 'Warnung' }[l.textContent] || l.textContent; }); }
+function typZeichen() { datumAppweit(); root.querySelectorAll('.kr-id:not(.ev-id),.kr-karte-nr:not(.ev-id)').forEach(el => { const t = el.textContent.trim(), m = TYP.find(x => x[0].test(t)); if (!m) return; el.classList.add('ev-id', 'ev-id--' + m[1]); el.insertAdjacentHTML('afterbegin', i(m[2])); el.setAttribute('title', m[3] + ' ' + t); }); }
+K.ICONS.flamme = '<path d="M12 3c.8 3 4.5 4.6 4.5 9a4.5 4.5 0 0 1-9 0c0-2.2 1.2-3.6 2.3-4.6.1 1.6 1 2.7 2.2 2.7 0-3-1.2-4.8 0-7.1z"/>'; K.ICONS.scheibe = '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.2"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3"/>'; K.ICONS.glanz = '<path d="M11 3l1.7 5.3L18 10l-5.3 1.7L11 17l-1.7-5.3L4 10l5.3-1.7z"/><path d="M18.5 15l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/>'; K.ICONS.spruehen = '<path d="M5 20l6-6"/><path d="M9.5 12.5l4-4 2 2-4 4z"/><path d="M16.5 5.5h.01M19 4h.01M19.5 7h.01M17.5 8.5h.01"/>';
+K.ICONS.mic = '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/>';
+function render() {
+  const app = S.ansicht === 'app';
+  document.getElementById('buehne').hidden = !app; const pn = document.getElementById('panel'); pn.hidden = app; if (!app) pn.innerHTML = panelHtml();
+  if (app) {
+    root.dataset.geraet = S.geraet; root.dataset.groesse = S.groesse; const [w, h] = SPEC.meta.geraete[S.geraet]; root.style.width = w + 'px'; root.style.height = h + 'px';
+    const t = S.toast ? K.toast({ text: esc(S.toast) }) : '';
+    if (!S.eingeloggt) { root.innerHTML = loginHtml() + t; if (S.geraet === 'desktop') { const c = root.querySelector('#login-code'); if (c) { try { window.focus(); c.focus({ preventScroll: true }); } catch (e) {} } } }
+    else root.innerHTML = shellHtml(seiteHtml(), (S.ebenen.length ? overlayHtml(oben()) : '') + t);
+    const f = root.querySelector('[data-fokus]'); if (f && oben() && SC(oben().id).typ === 'palette') f.focus();
+    typZeichen(); leiste(); skala(); touchCheck(); kameraStart();
+  }
+  leiste();
+}
+addEventListener('resize', () => { if (SPEC) { skala(); touchCheck(); leiste(); } });
+window.KE = { S, geh, springe, check, render, touch: () => touch };
+laden();
+</script>
+</body>
+</html>

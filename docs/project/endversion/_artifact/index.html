@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kreile Endversion</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="komponenten.css">
+<link rel="stylesheet" href="groessen_v8.css">
+<style>
+/* Nur Vorschau-Rahmen (ka-/ev-), kein Produktteil */
+html,body{margin:0;background:var(--cream-300);font-family:var(--sans);color:var(--navy-900)}
+.ka-leiste{position:sticky;top:0;z-index:100;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:8px 14px;background:var(--navy-900);color:var(--cream-100);font-size:12px}
+.ka-gruppe{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.ka-gruppe>span{color:var(--cream-400);font-weight:600}
+.ka-gruppe button,.ka-gruppe select{min-height:32px;border:1px solid var(--navy-600);background:var(--navy-800);color:var(--cream-100);border-radius:8px;padding:0 9px;font:inherit;font-weight:600;cursor:pointer}
+.ka-gruppe button[aria-pressed="true"]{background:var(--cream-50);color:var(--navy-900);border-color:var(--cream-50)}
+.ka-gruppe button:disabled{opacity:.55;cursor:default}
+.ka-badge{padding:5px 10px;border-radius:999px;font-weight:700;cursor:pointer;border:0;font:inherit;font-weight:700}
+.ka-ok{background:var(--succ-bg);color:var(--succ-fg)}.ka-rot{background:var(--ral-bg);color:var(--ral-fg)}.ka-info{background:var(--info-bg);color:var(--info-fg)}
+.ka-buehne{padding:14px;display:flex;justify-content:center}
+.ka-skala{transform-origin:top left}
+#geraet{box-shadow:var(--sh-lg);border-radius:4px}
+body.ka-pruef{background:var(--ground)}body.ka-pruef .ka-leiste{display:none}body.ka-pruef .ka-buehne{padding:0;display:block}body.ka-pruef #geraet{box-shadow:none;border-radius:0}
+body.ka-pruef .kr-app *{animation:none!important;transition:none!important}
+.ev-regel{display:block;margin-top:4px;font-size:11px;line-height:1.35;color:var(--warn-fg);background:var(--warn-bg);border-radius:6px;padding:3px 7px;font-weight:500;text-transform:none;letter-spacing:0}
+.ev-spec{margin-top:16px;border:1.5px dashed var(--amber);border-radius:12px;padding:10px 14px;font-size:12px;line-height:1.45;color:var(--navy-600);background:var(--surface)}
+.ev-spec b{color:var(--navy-800)}.ev-spec ul{margin:4px 0 0 16px;padding:0}
+[data-vorschlag]{outline:2px dashed var(--amber);outline-offset:2px}
+.ev-panel{max-width:1500px;margin:16px auto;padding:0 16px 40px;font-size:13px}
+.ev-panel h2{font-family:var(--serif);font-weight:500;font-size:24px;margin:18px 0 8px}
+.ev-panel h3{font-size:14px;margin:16px 0 6px}
+.ev-karte{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.ev-tab{width:100%;border-collapse:collapse;background:var(--surface);border-radius:12px;overflow:hidden}
+.ev-tab td,.ev-tab th{border-bottom:1px solid var(--line);padding:7px 9px;vertical-align:top;text-align:left}
+.ev-tab th{background:var(--flaeche);font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--navy-500)}
+.ev-chip{display:inline-block;margin:2px 3px 2px 0;padding:2px 8px;border-radius:999px;background:var(--flaeche);border:1px solid var(--line);font-size:11.5px;cursor:pointer}
+.ev-chip--rot{background:var(--ral-bg);color:var(--ral-fg)}.ev-chip--ok{background:var(--succ-bg);color:var(--succ-fg)}
+.ev-li{margin:3px 0}.ev-li code{font-size:11px;color:var(--navy-400)}
+</style>
+</head>
+<body>
+<div class="ka-leiste" id="leiste"></div>
+<div class="ka-buehne" id="buehne"><div class="ka-skala" id="skala"><div id="geraet" class="kr-app" data-geraet="desktop" data-groesse="v8"></div></div></div>
+<div class="ev-panel" id="panel" hidden></div>
+<script src="kr-vorschau.js"></script>
+<script src="pruefung.js"></script>
+<script src="spec.eingebettet.js"></script>
+<script>
+'use strict';
+const K = window.KR, { i, esc, btn, chip } = K;
+let SPEC = null, QUELLE = '';
+const P = new URLSearchParams(location.search);
+const S = { rolle: P.get('rolle') || 'meister', geraet: P.get('geraet') || null, stufen: new Set((P.get('stufen') || '1').split(',').map(Number)), addons: new Set((P.get('addons') || '').split(',').filter(Boolean)),
+  groesse: P.get('groesse') || 'v8', regeln: P.get('regeln') !== 'aus', ansicht: P.get('ansicht') || 'app', eingeloggt: P.get('screen') !== 'login', loginZ: 'daten', pin: '',
+  screen: null, seiteZ: 'daten', seiteArg: null, ansichtAuftr: 'liste', ebenen: [], toast: null, f: 1 };
+const root = document.getElementById('geraet');
+
+async function laden() {
+  const e = window.KREILE_SPEC_EINGEBETTET;
+  try {
+    const r = await fetch('spec.json', { cache: 'no-store' }); if (!r.ok) throw 0;
+    const t = await r.text(); SPEC = JSON.parse(t); QUELLE = 'spec.json';
+    if (e && crypto.subtle) { const h = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)))].map(x => x.toString(16).padStart(2, '0')).join(''); if (h !== e.sha) QUELLE += ' · Achtung: eingebettete Kopie veraltet (node werkzeuge/bauen.mjs)'; }
+  } catch (_) {
+    if (!e) { document.body.innerHTML = '<p style="padding:20px">spec.json nicht ladbar und keine eingebettete Kopie. <code>node werkzeuge/bauen.mjs</code> ausführen.</p>'; return; }
+    SPEC = e.spec; QUELLE = 'Kopie von spec.json · sha ' + e.sha.slice(0, 10);
+  }
+  const r = rolle(); S.geraet = S.geraet || r.geraet; S.screen = P.get('screen') && SC(P.get('screen')) && SC(P.get('screen')).typ === 'seite' ? P.get('screen') : r.start;
+  if (P.has('pruef')) document.body.classList.add('ka-pruef');
+  const ps = P.get('screen'); if (ps && SC(ps) && !['seite', 'login'].includes(SC(ps).typ)) S.ebenen = [{ id: ps, arg: P.get('arg') || undefined, zustand: P.get('zustand') || 'daten' }];
+  else if (P.get('zustand')) S.seiteZ = P.get('zustand');
+  render();
+}
+
+/* ===== Helfer ===== */
+const SC = id => SPEC.screens.find(s => s.id === id);
+const F = id => SPEC.funktionen.find(f => f.id === id);
+const konf = () => ({ stufen: [...S.stufen], addons: [...S.addons] });
+const an = fid => KreilePruefung.funktionAn(SPEC, fid, konf());
+const rolle = () => SPEC.rollen.find(r => r.id === S.rolle);
+const istW = () => S.rolle === 'werkstatt';
+const darf = o => !o || !o.rollen || o.rollen.includes(S.rolle);
+const geraetOk = o => !o.geraete || o.geraete.includes(S.geraet);
+const za = o => ({ 'data-z': o.ziel, 'data-arg': o.arg || undefined, 'data-m': o.meldung || undefined });
+function stufeLabel(fid) { const f = F(fid); if (!f) return 'geplant'; if (f.stufe == null) return f.status === 'geplant' ? 'geplant' : 'geplant · offen'; if (f.addon) return 'geplant · Add-on DATEV'; return 'geplant · Stufe ' + f.stufe; }
+function geplant(text, icon, fid, variante) { return K.ausgrau({ art: 'aufbau', text, icon, variante }).replace('kr-ausgrau--aufbau', 'kr-ausgrau--geplant').replace('>In Aufbau<', '>' + esc(stufeLabel(fid)) + '<'); }
+const txt = a => (istW() && a.textWerkstatt) || a.text;
+function ab(a, o = {}) {
+  if (!a || !darf(a) || !geraetOk(a)) return '';
+  if (a.funktion && !an(a.funktion)) return geplant(a.text, a.icon, a.funktion, 'knopf');
+  const z = SC(a.ziel); if (z && z.rollen && !z.rollen.includes(S.rolle)) return '';
+  return btn({ text: txt(a), icon: a.icon, art: a.art || o.art, attrs: { ...za(a), title: a.taste ? 'Taste: ' + a.taste : undefined, 'data-vorschlag': a.status === 'vorschlag' ? '1' : undefined } });
+}
+function regelInfo(f) {
+  if (!S.regeln) return '';
+  const p = { immer: 'Pflicht', fuer_auftrag: 'Pflicht für Auftrag', bedingt: 'Pflicht: ' + (f.pflicht_wann || 'bedingt') }[f.pflicht] || 'freiwillig';
+  return `<span class="ev-regel"><b>${esc(p)}</b> · wann: ${esc(f.wann || 'immer')}${f.vorbelegung ? ' · vorbelegt: ' + esc(f.vorbelegung) : ''}${f.regel ? ' · ' + esc(f.regel) : ''}${f.status === 'vorschlag' ? ' · <i>Vorschlag ' + esc(f.freigabe || '') + '</i>' : ''}</span>`;
+}
+function regelnHtml(sc) {
+  if (!S.regeln) return '';
+  const q = (sc.quelle || []).join(' · '), fn = (sc.funktion || []).join(' · ');
+  return `<div class="ev-spec"><b>${esc(sc.id)}</b> · ${esc(sc.typ)} · Funktion ${esc(fn || '–')} · Quelle ${esc(q || '–')} · Rollen ${esc((sc.rollen || []).join(', '))}${sc.status ? ' · <b>' + esc(sc.status) + '</b>' : ''}${sc.ablauf ? '<br>' + esc(sc.ablauf) : ''}${(sc.regeln || []).length ? '<ul>' + sc.regeln.map(r => '<li>' + esc(r) + '</li>').join('') + '</ul>' : ''}</div>`;
+}
+
+/* ===== Felder ===== */
+function feldHtml(f) {
+  if (!darf(f)) return '';
+  if (f.funktion && !an(f.funktion)) return `<div class="kr-voll">${geplant(f.label, 'lock', f.funktion)}</div>`;
+  const L = (istW() && f.label_werkstatt) || f.label, o = f.optionen || []; let h;
+  switch (f.typ) {
+    case 'segment': h = K.segment(o.map(x => [x, x]), o[0]); break;
+    case 'auswahl': h = K.auswahl(/^keine/.test(f.vorbelegung || '') ? [['', 'bitte wählen'], ...o.map(x => [x, x])] : o, {}, ''); break;
+    case 'textfeld': h = K.textfeld({ rows: 2 }, f.beispiel || ''); break;
+    case 'check': return `<div class="kr-voll">${K.check('<b>' + esc(L) + '</b>', {})}${regelInfo(f)}</div>`;
+    case 'checks': h = o.map(x => K.check(esc(x), { checked: true })).join(''); break;
+    case 'suche': h = `<span class="kr-suchfeld">${i('search')}<input placeholder="${esc(L)} – Name, Firma, Telefon, Ort, Nummer"></span>`; break;
+    case 'katalog': h = K.eingabe({ placeholder: 'Katalog oder Freitext', list: 'ev-katalog' }); break;
+    case 'foto': case 'datei': h = btn({ text: L, icon: f.typ === 'foto' ? 'camera' : 'upload', art: 'sekundaer', attrs: { 'data-z': 'zustand:daten', 'data-m': L + ' · Original gesichert' } }); break;
+    case 'pin': h = K.eingabe({ inputmode: 'numeric', maxlength: 4, placeholder: '••••' }); break;
+    case 'auto': h = K.eingabe({ value: 'wird automatisch vergeben', readonly: true }); break;
+    case 'fakten': h = `<div class="kr-zeile-s">${esc(f.vorbelegung || '')}</div>`; break;
+    case 'positionen': h = K.fakten([['Pos. 1 · Leisten verchromen · 6 Stück', '72,00 €'], ['Pos. 2 · Freitext · Halter', 'Preis fehlt', 'warn-fg']]); break;
+    case 'datum': h = K.eingabe({ type: 'date', value: '2026-10-09' }); break;
+    case 'zahl': case 'betrag': h = K.eingabe({ inputmode: 'decimal', placeholder: f.typ === 'betrag' ? '0,00 €' : '' }); break;
+    default: h = K.eingabe({ type: { email: 'email', tel: 'tel' }[f.typ] || 'text', value: f.beispiel || '' });
+  }
+  const voll = ['textfeld', 'checks', 'suche', 'positionen', 'fakten'].includes(f.typ) || f.id === 'name' || f.id === 'quelle';
+  return K.feld({ label: L, html: h + regelInfo(f), voll });
+}
+function kundeForm(modus, z) {
+  const fs = SPEC.formulare.kunde.felder; const teil = [feldHtml(fs[0])];
+  const neu = modus !== 'suche_dann_nur_fehlende' || z === 'neukunde';
+  if (!neu) {
+    if (z === 'teilweise') { teil.push(`<div class="kr-voll kr-hinweis kr-hinweis--warn">${i('alert')}Kunde Ost e. K. · für Auftrag fehlt: E-Mail, Zahlungsbedingung</div>`); teil.push(...fs.filter(f => ['email', 'zahlungsbedingung'].includes(f.id)).map(feldHtml)); }
+    else teil.push(`<div class="kr-voll">${K.kundenzeile({ kuerzel: 'NO', name: 'Kunde Nord GmbH · K-2026-0011', meta: 'vollständig · Rechnung auf Ziel · 20095 Hamburg', chips: [['vollständig', 'ok']] })}</div>`);
+  } else teil.push(...fs.slice(1).map(feldHtml));
+  return `<div class="kr-form">${teil.join('')}</div>`;
+}
+function posForm() {
+  const fs = SPEC.formulare.position.felder;
+  return [1].map(n => `<div class="kr-form"><div class="kr-voll"><span class="kr-chip">Position ${n} von 1–20</span></div>${fs.map(feldHtml).join('')}</div>`).join('') + '<datalist id="ev-katalog"><option value="Verchromen · Stück"><option value="Verzinken · kg"></datalist>';
+}
+
+/* ===== Blöcke ===== */
+const hbVis = q => (SPEC.beispiel.hb[q] || []).filter(e => !e.funktion || an(e.funktion));
+function zeileHtml(r) {
+  if (!darf(r)) return '';
+  if (r.funktion && !an(r.funktion)) return geplant(r.titel, 'lock', r.funktion, 'zeile');
+  const ct = (istW() && r.chipWerkstatt) || r.chip;
+  const seite = (ct ? chip(ct, ['ok', 'rot', 'warn'].includes(r.ton) ? r.ton : '') : '') + (r.aktion ? ab(r.aktion, { art: 'sekundaer' }) : '') + (r.ziel ? i('arrow') : '');
+  return K.zeile({ punkt: r.vorne ? undefined : (r.ton || ''), vorne: r.vorne ? `<span class="kr-av">${esc(r.vorne)}</span>` : undefined, id: r.id, titel: r.titel, meta: r.meta, seite, klick: !!r.ziel && !r.aktion, attrs: r.ziel ? za(r) : undefined });
+}
+function liste(q, zAkt, ziel) {
+  const d = SPEC.beispiel;
+  if (q === 'auftraege') return d.auftraege.map(a => K.auftragszeile({ ...a, chipTon: a.ton === 'ok' ? '' : a.ton, pfeil: true, klick: true, karte: true, attrs: { 'data-z': ziel || 'auftrag', 'data-arg': a.id } })).join('');
+  if (q === 'kunden') return d.kunden.map(k => K.kundenzeile({ kuerzel: k.kz, name: k.name, meta: k.vollstaendig ? `${k.ort} · ${k.typ}` : `unvollständig – für Auftrag fehlt: ${k.fehlt.join(', ')}`, chips: [...(k.vollstaendig ? [] : [['unvollständig', 'warn']]), ...(k.ziel && !istW() ? [['Rechnung auf Ziel', 'ok']] : [])], pfeil: true, klick: true, karte: true, attrs: { 'data-z': ziel || 'kunde', 'data-arg': k.id } })).join('');
+  if (q === 'rechnungen') return d.rechnungen.map(r => K.zeile({ punkt: r.st === 'ueberfaellig' ? 'rot' : '', id: r.id, titel: `${r.kunde} · ${r.betrag}`, meta: r.meta, seite: chip(r.st === 'ueberfaellig' ? 'überfällig' : 'offen', r.st === 'ueberfaellig' ? 'rot' : '') + (zAkt ? ab({ ...zAkt, arg: r.id }, { art: 'sekundaer' }) : '') })).join('');
+  return '';
+}
+function B(b, ctx) {
+  if (!b || !darf(b) || !geraetOk(b)) return '';
+  if (b.ansicht && b.ansicht !== S.ansichtAuftr) return '';
+  if (b.wenn === 'unvollständig' && !(ctx.zustand === 'teilweise' || ctx.arg === 'K-2026-0015')) return '';
+  const aus = b.funktion && !an(b.funktion), alle = l => (l || []).map(x => B(x, ctx)).join('');
+  switch (b.typ) {
+    case 'raster': return `<div class="kr-raster">${alle(b.bloecke)}</div>`;
+    case 'stapel': return `<div class="kr-stapel">${alle(b.bloecke)}</div>`;
+    case 'spalten': return `<div class="kr-spalten">${alle(b.bloecke)}</div>`;
+    case 'lage': {
+      const it = hbVis(ctx.screen.id === 'werkstatt' ? 'werkstatt' : 'meister'), z = { konflikt: 0, entscheidung: 0, warnung: 0 }; it.forEach(e => z[e.art]++);
+      const lab = b.gesund.filter(x => !an(x.funktion)).map(x => stufeLabel(x.funktion));
+      return K.lage({ zaehler: z, gesund: b.gesund.map(x => ({ t: x.label, icon: x.icon, st: an(x.funktion) ? 'ok' : 'aufbau', s: 'im Plan' })) }).replace(/In Aufbau/g, () => esc(lab.shift() || 'geplant')).replace(/kr-gesund--aufbau/g, 'kr-gesund--aufbau kr-ausgrau--geplant');
+    }
+    case 'hb': {
+      const it = hbVis(b.quelle).map(e => ({ ...e, status: undefined, attrs: { ...za(e.aktionen[0]) }, mehrAttrs: { 'data-z': 'hbmehr' },
+        aktionen: e.aktionen.filter(darf).map(a => ({ text: a.text, icon: a.icon, art: a.art, attrs: { ...za(a), 'data-vorschlag': e.status === 'vorschlag' ? '1' : undefined } })) }));
+      return K.hbListe({ eintraege: it, geraet: S.geraet, label: b.label, fokus: true, max: S.geraet !== 'desktop' ? 3 : undefined });
+    }
+    case 'schnell': return `<div class="kr-schnellleiste" style="margin:0">${b.aktionen.map(a => ab(a)).join('')}</div>`;
+    case 'zeitstrahl': {
+      if (aus) return geplant(b.titel, 'calendar', b.funktion);
+      const gr = b.gruppen.map(g => ({ titel: g.titel, zeilen: g.zeilen.map(r => ({ ...r, attrs: za(r), aktion: r.aktion && darf(r.aktion) ? { text: r.aktion.text, icon: r.aktion.icon, attrs: za(r.aktion) } : undefined })) }));
+      return K.kachel({ titel: b.titel, icon: 'calendar', icTon: 'info', inhalt: K.zeitstrahl({ jetzt: '08:12', gruppen: gr }), fuss: b.fuss ? { text: b.fuss.text, attrs: za(b.fuss) } : undefined });
+    }
+    case 'buendel': return aus ? geplant('Bündeln · ' + b.titel, 'layers', b.funktion) : K.buendel({ titel: esc(b.titel), aktion: { text: 'Bündeln', attrs: { 'data-z': 'stufenseite' } } });
+    case 'kachel': {
+      if (aus) return geplant(b.titel, b.icon, b.funktion);
+      let z = b.liste ? liste(b.liste, b.zeilenAktion) : (b.zeilen || []).map(zeileHtml).join(''); if (b.nachsatz) z += B(b.nachsatz, ctx);
+      return K.kachel({ titel: b.titel, icon: b.icon, icTon: 'info', inhalt: z || K.zustand({ art: 'leer' }), fuss: b.fuss && darf(b.fuss) ? { text: b.fuss.text, attrs: za(b.fuss) } : undefined });
+    }
+    case 'wip': return K.wip({ zahl: b.zahl, meta: b.meta, attrs: za(b) });
+    case 'liste': return `<div class="kr-stapel" style="gap:8px">${liste(b.quelle, null, b.ziel)}</div>`;
+    case 'filterleiste': return `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">${b.suche ? `<span class="kr-suchfeld" style="flex:1;min-width:220px">${i('search')}<input placeholder="${esc(b.suche)}"></span>` : ''}${b.optionen ? K.segment(b.optionen, b.optionen[0][0], { 'data-seg': 'filter' }) : ''}</div>`;
+    case 'woche': {
+      if (aus) return geplant('Wochenansicht', 'calendar', b.funktion);
+      const T = [['Mo', '09-28', [['14:00', 'Abholung', 'A-2026-0105', 'Mitte']]], ['Di', '09-29', [['', 'bestätigt', 'A-2026-0107', 'Süd']]], ['Mi', '09-30', []], ['Do', '10-01', [['', 'bestätigt', 'A-2026-0101', 'Nord']]], ['Fr', '10-02', [['', 'bestätigt', 'A-2026-0104', 'Ost']]], ['Sa', '10-03', []]];
+      return `<div class="kr-woche">${T.map(([w, d, t], n) => `<section class="kr-tag${n === 0 ? ' kr-tag--heute' : ''}"><h2 class="kr-tag-kopf" style="margin:0"><span>${w} · ${d}</span><span>${t.length || ''}</span></h2><div class="kr-tag-inhalt">${t.length ? t.map(x => K.terminzeile({ zeit: x[0] || '·', art: x[1], id: x[2], kunde: x[3], klick: true, attrs: { 'data-z': 'auftrag', 'data-arg': x[2] } })).join('') : '<div class="kr-zeile-s" style="padding:10px">frei</div>'}</div></section>`).join('')}</div>`;
+    }
+    case 'ausgrau': return aus ? geplant(b.text, b.icon, b.funktion) : btn({ text: b.text + ' · freigeschaltet', icon: b.icon, art: 'sekundaer', attrs: { 'data-z': 'stufenseite' } });
+    case 'aktionen': return `<div style="display:flex;gap:8px;flex-wrap:wrap">${b.aktionen.map(a => ab(a, { art: 'sekundaer' })).join('')}</div>`;
+    case 'hinweis': return `<div class="kr-hinweis${b.ton === 'warn' ? ' kr-hinweis--warn' : ''}" style="flex-wrap:wrap">${i(b.ton === 'warn' ? 'alert' : 'clock')}<span style="flex:1;min-width:180px">${esc(b.text)}</span>${b.aktion ? ab(b.aktion, { art: 'primaer' }) : ''}</div>`;
+    case 'dropzone': return `<div class="kr-zustand kr-zustand--leer" style="border:1.5px dashed var(--rand);min-height:120px;flex-wrap:wrap">${i('upload')}<span class="kr-zustand-text">${esc(b.text)}</span>${ab(b.aktion)}</div>`;
+    case 'fakten': return K.fakten((istW() && b.zeilenWerkstatt) || b.zeilen);
+    case 'abschnitt': {
+      let h; if (b.formular === 'kunde') h = kundeForm(b.modus, ctx.zustand); else if (b.formular === 'position') h = posForm();
+      else h = `<div class="kr-form">${(b.felder || []).map(f => f.formular === 'kunde' ? `</div>${kundeForm(f.modus, ctx.zustand)}<div class="kr-form">` : feldHtml(f)).join('')}</div>`;
+      return `<section class="kr-abschnitt" data-abschnitt="${b.nr}">${b.titel ? `<h3 class="kr-block-label">${b.nr} · ${esc(b.titel)}${b.wiederholt ? ' · ' + esc(b.wiederholt) : ''}</h3>` : ''}${h}${(b.aktionen || []).map(a => ab(a, { art: 'sekundaer' })).join('')}</section>`;
+    }
+    case 'picker': { const m = ctx.arg || 'oeffnen', ziel = b.ziele[m]; return K.picker({ suche: b.suche, scan: false, optionen: SPEC.beispiel.auftraege.map(a => ({ id: a.id, titel: a.kunde + ' · ' + a.titel, meta: a.meta, chip: a.chip, attrs: { 'data-z': ziel, 'data-arg': a.id } })) }); }
+    case 'stufenschalter': return `<div class="kr-stapel" style="gap:6px">${SPEC.stufen.map(s => K.check(`<b>Stufe ${s.n} · ${esc(s.name)}</b>${s.status === 'annahme' ? ' <span class="ev-regel" style="display:inline">Annahme</span>' : ''}`, { 'data-stufe': s.n, checked: S.stufen.has(s.n), disabled: s.fest })).join('')}${SPEC.addons.map(a => K.check(`<b>${esc(a.name)}</b> · Stufe ${a.stufe}`, { 'data-addon': a.id, checked: S.addons.has(a.id) })).join('')}</div>`;
+    case 'naechste': return `<div class="kr-naechste"><div class="kr-naechste-t">${esc(b.text)}</div><div class="kr-naechste-a">${ab(b.aktion)}</div></div>`;
+    case 'teile': return K.block(b.titel, `<div class="kr-teile">${b.zeilen.map(t => `<div class="kr-teil${t.fertig ? ' kr-teil--fertig' : ''}"><button type="button" class="kr-bild${t.foto ? ' kr-bild--leer' : ''}" aria-label="Bild ${t.id}" data-z="zustand:daten">${i(t.foto ? 'photooff' : 'photo')}</button><div style="min-width:0"><div class="kr-zeile-t" style="font-size:14px"><span class="kr-id">${t.id}</span>${esc(t.titel)} ${t.foto ? chip('Foto fehlt', 'warn', 'alert') : t.fertig ? chip('fertig', 'ok', 'check') : ''}</div><div class="kr-zeile-s">${esc(t.meta)}</div></div><div style="display:flex;gap:6px">${b.teilAktionen.map(a => darf(a) ? btn({ text: S.geraet === 'handy' || a.icon === 'edit' ? '' : a.text, icon: a.icon, art: 'sekundaer', label: a.text + ' ' + t.id, attrs: { ...za(a), title: a.text } }) : '').join('')}</div></div>`).join('')}</div>`, b.rechts ? ab(b.rechts) : '');
+    case 'block': return aus ? geplant(b.titel, 'lock', b.funktion) : K.block(b.titel, alle(b.bloecke), b.rechts ? ab(b.rechts) : '');
+    case 'notiz': return `<div class="kr-notiz">${esc(b.text)}<div class="kr-notiz-m">${esc(b.meta || '')}</div></div>`;
+    case 'docs': return `<div class="kr-docs">${b.eintraege.map(e => e === 'Foto' ? `<span class="kr-bild">${i('photo')}</span>` : `<span class="kr-doc">${i('file')}${esc(e)}</span>`).join('')}</div>`;
+    case 'zeilen': return `<div class="kr-stapel" style="gap:8px">${b.zeilen.map(zeileHtml).join('')}</div>`;
+    case 'verlauf': return K.block(b.titel, K.verlauf(b.zeilen));
+    case 'schnellaktionen': return K.block('', `<div class="kr-qa-raster">${b.aktionen.map(a => !darf(a) ? '' : a.funktion && !an(a.funktion) ? geplant(a.text, a.icon, a.funktion, 'knopf') : `<button type="button" class="kr-qa${a.art === 'primaer' ? ' kr-qa--primaer' : ''}"${K.at(za(a))}>${i(a.icon)}${esc(a.text)}</button>`).join('')}</div>`);
+    case 'text': return `<div class="kr-zeile-s">${esc(b.text)}</div>`;
+    case 'pin': return '';
+  }
+  return `<div class="ev-spec">Blocktyp „${esc(b.typ)}“ unbekannt</div>`;
+}
+function zBanner(sc, ctx) {
+  const z = ctx.zustand; if (!z || z === 'daten') return '';
+  const d = (sc.zustaende || {})[z]; if (!d || d.na) return '';
+  const art = { leer: 'leer', fehler: 'fehler' }[z], text = (istW() && d.textWerkstatt) || d.text;
+  const ak = (d.aktionen || []).map((a, n) => ab(a, { art: n ? 'sekundaer' : 'primaer' })).join('');
+  if (art) return `<div class="kr-zustand kr-zustand--${art}" role="status" style="flex-wrap:wrap">${i(art === 'fehler' ? 'alert' : 'check')}<span class="kr-zustand-text">${esc(text)}</span><span style="display:flex;gap:8px;flex-wrap:wrap">${ak}</span></div>`;
+  return `<div class="kr-hinweis${z === 'erfolg' ? '' : ' kr-hinweis--warn'}" style="flex-wrap:wrap;margin-bottom:10px">${i(z === 'erfolg' ? 'checkc' : 'alert')}<span style="flex:1;min-width:160px">${esc(text)}</span>${ak}</div>`;
+}
+
+/* ===== Karten, Overlays, Seiten ===== */
+function zurueckLeiste() { const v = S.ebenen[S.ebenen.length - 2]; if (!v || !['auftrag', 'kunde'].includes(v.id)) return ''; return `<div class="kr-blatt-zurueck">${btn({ text: 'Zurück · ' + (v.arg || SC(v.id).titel), icon: 'back', art: 'leise', attrs: { 'data-z': 'zurueck' } })}</div>`; }
+function karte(k, sc, ctx) {
+  const A = ctx.arg && SPEC.beispiel.auftraege.find(a => a.id === ctx.arg), KU = ctx.arg && SPEC.beispiel.kunden.find(a => a.id === ctx.arg);
+  const kopf = { ...k.kopf }; if (A) Object.assign(kopf, { nr: A.id, titel: A.titel, sub: A.meta }); if (KU) Object.assign(kopf, { nr: KU.id, titel: KU.name, sub: KU.typ + ' · ' + (KU.ort || 'Anschrift fehlt') });
+  const chips = (kopf.chips || []).filter(darf).map(c => c.ziel ? `<button type="button" class="kr-pill ${c.ziel === 'kunde' ? 'kr-pill--kunde' : 'kr-pill--leise'}"${K.at(za(c))}>${c.icon ? i(c.icon) : ''}${esc(c.text)}${c.ziel === 'kunde' ? i('arrow') : ''}</button>` : `<span class="kr-pill ${c.ton === 'marke' ? 'kr-pill--marke' : 'kr-pill--leise'}">${c.icon ? i(c.icon) : ''}${esc(c.text)}</span>`).join('');
+  const t = k.termin, termin = t ? `<div class="kr-termin${!A || A.ton === 'rot' ? ' kr-termin--dringend' : ''}"><span class="kr-termin-c">${esc(A ? A.chip : t.rel)}</span><span class="kr-termin-d">${esc(t.datum)} ${chip(t.status, 'ok')}</span><span class="kr-termin-d">${i('truck')} ${esc(t.ueb)}</span></div>${ab(t.aktion)}` : '';
+  const kopfH = `<header class="kr-kartenkopf"><div class="kr-kartenkopf-l"><div class="kr-karte-nr">${esc(kopf.nr)}</div><h2 class="kr-karte-titel">${esc(kopf.titel)}</h2><div class="kr-karte-sub">${esc(kopf.sub)}</div><div class="kr-karte-meta">${chips}</div></div><div class="kr-kartenkopf-r"><button type="button" class="kr-schliessen" data-z="zurueck" aria-label="Schließen">${i('x')}</button>${termin}</div></header>`;
+  const kette = k.kette ? `<div class="kr-kette-wrap">${K.kette(k.kette.map(s => ({ ...s, lbl: (istW() && s.lblWerkstatt) || s.lbl, klick: !!s.ziel && darf(s), attrs: s.ziel && darf(s) ? za(s) : undefined })))}</div>` : '';
+  const haupt = (k.haupt || []).map(x => x.typ === 'naechste' ? K.block('', B(x, ctx)) : B(x, ctx)).join('');
+  const rail = (k.rail || []).map(x => B(x, ctx)).join('');
+  const fuss = S.geraet === 'desktop' ? `<footer class="kr-kartenfuss">${(sc.aktionen || []).map(a => ab(a, { art: a.ziel === 'zurueck' ? undefined : 'primaer' })).join('')}</footer>`
+    : `<nav class="kr-kartendock">${(k.dock || []).filter(darf).map(a => a.funktion && !an(a.funktion) ? '' : `<button type="button" class="kr-qa${a.art ? ' kr-qa--' + a.art : ''}"${K.at(za(a))}>${i(a.icon)}${esc(a.text)}</button>`).join('')}</nav>`;
+  return `<div class="kr-ebene kr-ebene--blatt" data-ebene><section class="kr-dialog kr-dialog--karte" role="dialog" aria-modal="true" aria-label="${esc(sc.titel)}"><div class="kr-streifen"></div><div class="kr-karte"><div class="kr-karte-scroll">${zurueckLeiste()}${kopfH}${kette}<div style="padding:0 22px">${zBanner(sc, ctx)}</div><div class="kr-karte-koerper"><div class="kr-karte-haupt">${haupt}</div><div class="kr-karte-rail">${rail}</div></div><div style="padding:0 22px 20px">${regelnHtml(sc)}</div></div>${fuss}</div></section></div>`;
+}
+function overlayHtml(e) {
+  const sc = SC(e.id), ctx = { screen: sc, arg: e.arg, zustand: e.zustand };
+  if (sc.typ === 'blatt') return karte(sc.inhalt[0], sc, ctx);
+  if (sc.typ === 'menue') {
+    const pos = e.id === 'mehr' ? 'bottom:74px;right:10px' : ['spaeter', 'hbmehr'].includes(e.id) ? 'top:40%;right:12px' : e.id === 'konto' ? 'top:62px;right:14px' : 'top:62px;right:72px';
+    return `<div class="kr-ebene" data-ebene style="background:transparent"><div class="kr-plus-menue" style="${pos}">${sc.aktionen.filter(darf).map(a => a.funktion && !an(a.funktion) ? geplant(a.text, a.icon, a.funktion, 'zeile') : `<button type="button" class="kr-menue-el"${K.at(za(a))}>${i(a.icon || 'x')}${esc(a.text)}</button>`).join('')}</div></div>`;
+  }
+  if (sc.typ === 'palette') {
+    const p = sc.inhalt[0], tr = p.treffer.filter(t => darf(t) && (!t.funktion || an(t.funktion))).map(t => ({ ...t, attrs: za(t) })), tun = p.tun.filter(darf).map(a => ({ icon: a.icon, text: a.text, kbd: S.geraet === 'desktop' ? a.taste : undefined, attrs: za(a) }));
+    return `<div class="kr-ebene kr-ebene--palette" data-ebene>${K.palette({ treffer: tr, aktionen: tun, inAttrs: { 'data-fokus': '' } }).replace('data-a="zu"', 'data-z="zurueck"').replace('data-pal-liste>', 'data-pal-liste>' + zBanner(sc, ctx) + `<div class="kr-zeile-s" style="padding:6px 4px">durchsucht: ${esc(p.durchsucht.join(' · '))}</div>`)}</div>`;
+  }
+  const titel = (e.arg && sc.modi && sc.modi[e.arg]) || sc.titel;
+  const inhalt = zBanner(sc, ctx) + (sc.inhalt || []).map(b => B(b, ctx)).join('') + regelnHtml(sc);
+  const fuss = (sc.aktionen || []).filter(a => !a.haupt).map(a => ab(a, { art: a.ziel === 'zurueck' ? undefined : 'leise' })).join('') + (sc.aktionen || []).filter(a => a.haupt).map(a => ab(a)).join('');
+  return K.dialog({ titel, icon: sc.icon, groesse: sc.groesse, inhalt, fuss, zurueck: S.ebenen.length > 1 ? { 'data-z': 'zurueck' } : undefined, attrs: { 'data-ebene': '' }, schliessenAttrs: { 'data-z': 'zurueck' } });
+}
+function seiteHtml() {
+  const sc = SC(S.screen), ctx = { screen: sc, zustand: S.seiteZ, arg: S.seiteArg };
+  if (sc.rollen && !sc.rollen.includes(S.rolle)) return K.seitenKopf(sc.titel) + K.zustand({ art: 'gesperrt', text: 'Kein Zugriff · für diese Rolle gesperrt' }) + ab({ text: 'Zur Startseite', ziel: 'start' });
+  let wz = ''; if (sc.werkzeug) { const w = sc.werkzeug; wz = K.segment(w.optionen.map(o => [o[0], o[1] + (o[2] && !an(o[2]) ? ' · geplant' : ''), o[2] && !an(o[2])]), w.id === 'ansicht' ? S.ansichtAuftr : w.optionen[0][0], { 'data-seg': w.id }); }
+  const kopf = K.seitenKopf(sc.titel, wz + (sc.aktionen || []).map((a, n) => ab(a, { art: n === 0 ? 'primaer' : 'sekundaer' })).join(''));
+  const zd = (sc.zustaende || {})[S.seiteZ];
+  if (['leer', 'fehler'].includes(S.seiteZ) && zd && !zd.na) return kopf + zBanner(sc, ctx) + regelnHtml(sc);
+  return kopf + zBanner(sc, ctx) + `<div class="kr-stapel">${(sc.inhalt || []).map(b => B(b, ctx)).join('')}</div>` + regelnHtml(sc);
+}
+function shellHtml(inhalt, ebene) {
+  const r = rolle(), N = SPEC.navigation;
+  if (r.shell === 'werkstatt') return K.appShell({ geraet: S.geraet, variante: 'werkstatt', inhalt, kuerzel: r.kuerzel, ebene });
+  const lab = [];
+  const nav = N.buero.filter(n => n.trenner || darf(n)).map(n => { if (n.trenner) return { trenner: true, unten: n.unten }; if (n.funktion && !an(n.funktion)) { const f = F(n.funktion); lab.push(f && f.stufe ? 'Stufe ' + f.stufe : 'geplant'); return { id: n.id, text: n.label, icon: n.icon, ausgrau: 'aufbau' }; } return { id: n.id, text: n.label, icon: n.icon, gruppe: n.gruppe }; });
+  const aktiv = S.screen === 'katalog' || S.screen === 'datenkiste' ? 'einstellungen' : S.screen;
+  return K.appShell({ geraet: S.geraet, variante: 'buero', aktiv, inhalt, kuerzel: r.kuerzel, nav, dock: N.dock.filter(darf).map(n => ({ id: n.id, text: n.label, icon: n.icon })), datum: '<b>Mo</b><br>2026-09-28', ebene })
+    .replace(/In Aufbau/g, () => esc(lab.shift() || 'geplant')).replace(/kr-ausgrau--aufbau/g, 'kr-ausgrau--geplant');
+}
+function loginHtml() {
+  const sc = SC('login'), email = S.loginZ === 'email';
+  const kacheln = `<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:12px">${SPEC.rollen.map(x => `<button type="button" class="kr-btn${x.id === S.rolle ? ' kr-btn--primaer' : ''}" data-rolle="${x.id}">${esc(x.person)}</button>`).join('')}</div>`;
+  const body = email ? `<h1 class="kr-login-titel">Admin-Anmeldung</h1>${K.feld({ label: 'E-Mail', html: K.eingabe({ type: 'email' }) })}${K.feld({ label: 'Passwort', html: K.eingabe({ type: 'password' }) })}${btn({ text: 'Anmelden', art: 'primaer', attrs: { 'data-z': 'start' } })}${btn({ text: 'Mit Code anmelden', art: 'leise', attrs: { 'data-z': 'zustand:daten' } })}`
+    : `<h1 class="kr-login-titel">${esc(sc.titel)}</h1>${kacheln}<div class="kr-pin-punkte">${[0, 1, 2, 3].map(n => `<span class="kr-pin-punkt${S.pin.length > n ? ' kr-pin-punkt--an' : ''}"></span>`).join('')}</div><div class="kr-pin-meldung" role="alert">${S.loginZ === 'fehler' ? esc(sc.zustaende.fehler.text) : ''}</div><div class="kr-tastatur">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button type="button" class="kr-taste" data-pin="${n}">${n}</button>`).join('')}<button type="button" class="kr-taste kr-taste--klein" data-pin="weg">Löschen</button><button type="button" class="kr-taste" data-pin="0">0</button><button type="button" class="kr-taste kr-taste--klein" data-pin="neu">Neu</button></div>${S.rolle === 'developer' ? btn({ text: 'Admin-Anmeldung per E-Mail', art: 'leise', attrs: { 'data-z': 'zustand:email' } }) : ''}`;
+  return `<div class="kr-login"><div class="kr-login-karte"><div class="kr-login-marke"><div class="kr-marke"><span class="kr-logo">GK</span><span class="kr-marke-name">KREILE</span></div></div><div class="kr-login-pin">${body}</div></div></div>`;
+}
+
+/* ===== Navigation ===== */
+let toastT;
+function toast(t) { S.toast = t; clearTimeout(toastT); toastT = setTimeout(() => { S.toast = null; render(); }, 3200); }
+const oben = () => S.ebenen[S.ebenen.length - 1];
+function geh(z, arg, m) {
+  if (!z) return;
+  if (z === 'zurueck') { S.ebenen.pop(); if (m) toast(m); return render(); }
+  if (z === 'start') { S.eingeloggt = true; S.loginZ = 'daten'; S.screen = rolle().start; S.ebenen = []; S.seiteZ = 'daten'; if (m) toast(m); return render(); }
+  if (z.startsWith('extern:')) { toast('Öffnet extern · ' + z.slice(7)); return render(); }
+  if (z.startsWith('zustand:')) { const v = z.slice(8); if (!S.eingeloggt) S.loginZ = v; else if (S.ebenen.length) oben().zustand = v; else S.seiteZ = v; if (m) toast(m); return render(); }
+  const sc = SC(z); if (!sc) { toast('Ziel fehlt: ' + z); return render(); }
+  if (sc.rollen && !sc.rollen.includes(S.rolle)) { toast('Kein Zugriff für diese Rolle'); return render(); }
+  if (sc.typ === 'login') { S.eingeloggt = false; S.ebenen = []; S.pin = ''; S.loginZ = 'daten'; return render(); }
+  if (sc.typ === 'seite') { S.screen = z; S.ebenen = []; S.seiteZ = 'daten'; S.seiteArg = arg; if (z === 'auftraege') S.ansichtAuftr = arg === 'woche' ? 'woche' : 'liste'; if (m) toast(m); return render(); }
+  while (S.ebenen.length && ['menue', 'palette'].includes(SC(oben().id).typ)) S.ebenen.pop();
+  if (S.ebenen.length > 5) S.ebenen.shift();
+  S.ebenen.push({ id: z, arg, zustand: 'daten' }); if (m) toast(m); render();
+}
+root.addEventListener('click', ev => {
+  const t = ev.target;
+  if (t.matches('[data-ebene]')) return geh('zurueck');
+  const rl = t.closest('[data-rolle]'); if (rl) { S.rolle = rl.dataset.rolle; S.geraet = rolle().geraet; return render(); }
+  const pn = t.closest('[data-pin]'); if (pn) { const v = pn.dataset.pin; if (v === 'weg') S.pin = S.pin.slice(0, -1); else if (v === 'neu') S.pin = ''; else if (S.pin.length < 4) S.pin += v; if (S.pin.length === 4) { S.pin = ''; return geh('start'); } return render(); }
+  const seg = t.closest('.kr-segment button'); if (seg) { const p = seg.parentElement; if (seg.disabled) return; if (p.dataset.seg === 'ansicht') { S.ansichtAuftr = seg.dataset.wert; return render(); } p.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === seg))); return; }
+  const nv = t.closest('[data-nav]'); if (nv) { const id = nv.dataset.nav; if (id === 'start') return geh('start'); const n = [...SPEC.navigation.buero, ...SPEC.navigation.dock].find(x => x.id === id); if (n) geh(n.ziel, n.arg); return; }
+  const ak = t.closest('[data-aktion]'); if (ak) { const id = ak.dataset.aktion; const n = [...SPEC.navigation.kopf, ...SPEC.navigation.werkstatt].find(x => x.id === id); if (n) geh(n.ziel, n.arg); return; }
+  const z = t.closest('[data-z]'); if (z) geh(z.dataset.z, z.dataset.arg, z.dataset.m);
+});
+root.addEventListener('change', ev => { const t = ev.target; if (t.dataset.stufe) { const n = +t.dataset.stufe; t.checked ? S.stufen.add(n) : S.stufen.delete(n); render(); } if (t.dataset.addon) { t.checked ? S.addons.add(t.dataset.addon) : S.addons.delete(t.dataset.addon); render(); } });
+document.addEventListener('keydown', ev => {
+  if (!S.eingeloggt || S.ansicht !== 'app') return; const tippt = ev.target.matches && ev.target.matches('input,textarea,select');
+  if (ev.key === 'Escape' && S.ebenen.length) return geh('zurueck');
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'k') { ev.preventDefault(); return geh('suche'); }
+  if (tippt || S.ebenen.length || ev.ctrlKey || ev.metaKey) return;
+  if (ev.key === '/') { ev.preventDefault(); geh('suche'); } else if (ev.key === 'n' || ev.key === 'N') { ev.preventDefault(); geh('eingang'); }
+});
+
+/* ===== Prüfung, Touch, Darstellung ===== */
+const cache = {};
+function check(k) { k = k || konf(); const key = JSON.stringify(k); return cache[key] || (cache[key] = KreilePruefung.pruefe(SPEC, k)); }
+let touch = { n: 0, liste: [] };
+function touchCheck() {
+  touch = { n: 0, liste: [] }; if (S.geraet === 'desktop' || S.ansicht !== 'app') return;
+  root.querySelectorAll('button,input:not([type=checkbox]),select,textarea,label.kr-check').forEach(el => {
+    if (el.disabled || el.closest('.kr-ausgrau') || !el.getClientRects().length) return;
+    const ziel = el.matches('input') && el.closest('.kr-suchfeld,.kr-palette-in') ? el.closest('.kr-suchfeld,.kr-palette-in') : el; /* ganzes Suchfeld = Ziel */
+    const r = ziel.getBoundingClientRect(), h = r.height / S.f; if (h > 0 && h < 47.5) { touch.n++; if (touch.liste.length < 8) touch.liste.push(`${el.className || el.tagName} „${(el.textContent || el.placeholder || '').trim().slice(0, 24)}“ ${Math.round(h)} px`); }
+  });
+}
+function leiste() {
+  const seg = (key, opts, label, akt) => `<div class="ka-gruppe"><span>${label}</span>${opts.map(([v, t, dis]) => `<button type="button" data-k="${key}" data-v="${v}" aria-pressed="${akt(v)}"${dis ? ' disabled' : ''}>${t}</button>`).join('')}</div>`;
+  const r = check(), top = oben(), topSc = top ? SC(top.id) : SC(S.eingeloggt ? S.screen : 'login'), z = top ? top.zustand : (S.eingeloggt ? S.seiteZ : S.loginZ);
+  const zNamen = ['daten', ...Object.keys(topSc.zustaende || {}).filter(k => !(topSc.zustaende[k] || {}).na)];
+  const opt = SPEC.screens.map(s => `<option value="${s.id}"${s.id === (top ? top.id : S.screen) ? ' selected' : ''}>${esc(s.titel)} · ${s.typ}${s.rollen && !s.rollen.includes(S.rolle) ? ' (gesperrt)' : ''}</option>`).join('');
+  document.getElementById('leiste').innerHTML =
+    seg('rolle', SPEC.rollen.map(x => [x.id, `${x.person} · ${x.id}`]), 'Rolle', v => v === S.rolle) +
+    seg('geraet', [['desktop', 'Desktop'], ['tablet', 'Tablet'], ['handy', 'Handy']], 'Gerät', v => v === S.geraet) +
+    seg('stufe', SPEC.stufen.map(s => [s.n, 'Stufe ' + s.n, s.fest]), 'Stufen', v => S.stufen.has(+v)) +
+    seg('addon', SPEC.addons.map(a => [a.id, a.name]), '', v => S.addons.has(v)) +
+    seg('zustand', zNamen.map(n => [n, n === 'daten' ? 'Beispiel' : n]), 'Zustand', v => v === z) +
+    seg('groesse', [['v8', 'V8'], ['v11', 'V1.1']], 'Größe', v => v === S.groesse) +
+    seg('regeln', [['an', 'an'], ['aus', 'aus']], 'Regeln', v => (v === 'an') === S.regeln) +
+    `<div class="ka-gruppe"><span>Screen</span><select data-springe>${opt}</select></div>` +
+    seg('ansicht', [['app', 'App'], ['verbindungen', 'Verbindungen'], ['pruefung', 'Prüfbericht']], 'Ansicht', v => v === S.ansicht) +
+    `<button type="button" class="ka-badge ${r.ok ? 'ka-ok' : 'ka-rot'}" data-k="ansicht" data-v="pruefung" title="Sackgassen-Check für die aktuelle Stufenwahl">Sackgassen-Check ${r.ok ? 'grün' : 'ROT · ' + r.fehler.length} · ${r.hinweise.length} Hinweise</button>` +
+    (S.geraet !== 'desktop' && S.ansicht === 'app' ? `<span class="ka-badge ${touch.n ? 'ka-rot' : 'ka-ok'}" title="${esc(touch.liste.join('\n'))}">Touch ≥ 48 px ${touch.n ? '✗ ' + touch.n : '✓'}</span>` : '') +
+    `<span class="ka-badge ka-info" title="${esc(QUELLE)}">${esc(SPEC.meta.version)} · Ebene ${SPEC.meta.ebene} · ${esc(QUELLE.split(' · ')[0])}</span>`;
+}
+document.getElementById('leiste').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-k]'); if (!b || b.disabled) return; const k = b.dataset.k, v = b.dataset.v;
+  if (k === 'rolle') { S.rolle = v; S.geraet = rolle().geraet; S.screen = rolle().start; S.ebenen = []; S.seiteZ = 'daten'; }
+  else if (k === 'geraet') S.geraet = v;
+  else if (k === 'stufe') { const n = +v; S.stufen.has(n) ? S.stufen.delete(n) : S.stufen.add(n); }
+  else if (k === 'addon') S.addons.has(v) ? S.addons.delete(v) : S.addons.add(v);
+  else if (k === 'zustand') { if (!S.eingeloggt) S.loginZ = v; else if (S.ebenen.length) oben().zustand = v; else S.seiteZ = v; }
+  else if (k === 'groesse') S.groesse = v;
+  else if (k === 'regeln') S.regeln = v === 'an';
+  else if (k === 'ansicht') S.ansicht = v;
+  render();
+});
+document.getElementById('leiste').addEventListener('change', ev => { if (ev.target.matches('[data-springe]')) springe(ev.target.value); });
+function springe(id) {
+  const sc = SC(id); S.ansicht = 'app';
+  if (sc.typ === 'login') { S.eingeloggt = false; S.ebenen = []; return render(); }
+  S.eingeloggt = true;
+  if (sc.typ === 'seite') { S.screen = id; S.ebenen = []; S.seiteZ = 'daten'; return render(); }
+  if (!S.ebenen.length) S.screen = rolle().start;
+  S.ebenen = [{ id, zustand: 'daten', arg: sc.modi ? Object.keys(sc.modi)[0] : undefined }]; render();
+}
+function panelHtml() {
+  const k1 = { stufen: [1], addons: [] }, k4 = { stufen: [1, 2, 3, 4], addons: ['DATEV'] };
+  const liste = (arr, ton) => arr.length ? arr.map(f => `<div class="ev-li"><span class="ev-chip ${ton}">${esc(f.art)}</span>${esc(f.text)} <code>${esc(f.wo)}</code></div>`).join('') : '<div class="ev-li">keine</div>';
+  if (S.ansicht === 'pruefung') {
+    return `<h2>Prüfbericht · Sackgassen-Check</h2><p>Geprüft wird: jede Aktion hat ein gültiges Ziel · jeder Screen ist je Rolle erreichbar · jedes Fenster hat „Schließen/Zurück“ · jeder Zustand (leer, teilweise, fehler, erfolg) hat einen Ausweg · jede Stufe-1-Funktion aus dem Bauumfang kommt vor · jeder Ablauf F1–F7 hat keinen Bruch. Selbsttest: <code>node werkzeuge/selbsttest.mjs</code>.</p>` +
+      [['Aktuelle Auswahl', konf()], ['Stufe 1 (Standard)', k1], ['Alle Stufen + DATEV', k4]].map(([n, k]) => { const r = check(k); return `<div class="ev-karte"><h3>${esc(n)} · <span class="ev-chip ${r.ok ? 'ev-chip--ok' : 'ev-chip--rot'}">${r.ok ? 'GRÜN' : 'ROT'}</span> ${r.fehler.length} Fehler · ${r.hinweise.length} Hinweise · ${r.zahlen.screens} Screens · ${r.zahlen.aktionen} Aktionen</h3><b>Fehler</b>${liste(r.fehler, 'ev-chip--rot')}<details><summary><b>Hinweise (keine Fehler, Owner-Themen)</b></summary>${liste(r.hinweise, '')}</details></div>`; }).join('');
+  }
+  const r = check(), roll = SPEC.rollen;
+  const zeilen = SPEC.screens.map(sc => { const z = [...new Set((r.kanten[sc.id] || []).map(a => a.ziel))]; return `<tr><td><span class="ev-chip" data-spring="${sc.id}"><b>${esc(sc.titel)}</b></span><br><code>${sc.id} · ${sc.typ}</code>${sc.status ? '<br><i>' + esc(sc.status) + '</i>' : ''}</td><td>${(sc.funktion || []).join(' ')}</td><td>${roll.map(x => `<span class="ev-chip ${r.erreichbar[x.id].includes(sc.id) ? 'ev-chip--ok' : ''}">${x.person}</span>`).join('')}</td><td>${z.map(x => `<span class="ev-chip" ${SC(x) ? `data-spring="${x}"` : ''}>${esc(x)}</span>`).join('')}</td><td>${Object.entries(sc.zustaende || {}).map(([n, v]) => `<span class="ev-chip ${v.na ? '' : 'ev-chip--ok'}" title="${esc(v.na || v.text)}">${n}${v.na ? ' n. z.' : ''}</span>`).join('')}</td></tr>`; }).join('');
+  const flows = SPEC.flows.map(fl => { const br = r.fehler.filter(f => f.wo === fl.id); return `<div class="ev-li"><span class="ev-chip ${br.length ? 'ev-chip--rot' : 'ev-chip--ok'}">${fl.id}</span><b>${esc(fl.name)}</b> (Ebene 1 · ${fl.ebene1}): ${[fl.schritte, ...(fl.varianten || [])].map(w => w.map(s => `<span class="ev-chip" data-spring="${s.split('#')[0]}">${esc(s)}</span>`).join(' → ')).join(' <br>&nbsp;&nbsp;oder ')}<br><small>Abnahme: ${esc(fl.abnahme)}</small></div>`; }).join('');
+  return `<h2>Verbindungen · ${SPEC.screens.length} Screens</h2><p>Grün = für diese Rolle erreichbar (aktuelle Stufenwahl). Klick auf einen Screen öffnet ihn.</p><h3>Abläufe (roter Faden)</h3><div class="ev-karte">${flows}</div><h3>Screens → Ziele</h3><table class="ev-tab"><tr><th>Screen</th><th>Funktion</th><th>erreichbar</th><th>führt zu</th><th>Zustände</th></tr>${zeilen}</table>`;
+}
+document.getElementById('panel').addEventListener('click', ev => { const s = ev.target.closest('[data-spring]'); if (s) springe(s.dataset.spring); });
+function skala() {
+  const sk = document.getElementById('skala'), [w, h] = SPEC.meta.geraete[S.geraet];
+  if (document.body.classList.contains('ka-pruef')) { S.f = 1; sk.style.transform = ''; sk.style.width = w + 'px'; sk.style.height = h + 'px'; return; }
+  const lh = document.getElementById('leiste').offsetHeight; S.f = Math.min(1, (innerWidth - 28) / w, (innerHeight - lh - 28) / h);
+  sk.style.transform = `scale(${S.f})`; sk.style.width = w * S.f + 'px'; sk.style.height = h * S.f + 'px';
+}
+function render() {
+  const app = S.ansicht === 'app';
+  document.getElementById('buehne').hidden = !app; const pn = document.getElementById('panel'); pn.hidden = app; if (!app) pn.innerHTML = panelHtml();
+  if (app) {
+    root.dataset.geraet = S.geraet; root.dataset.groesse = S.groesse; const [w, h] = SPEC.meta.geraete[S.geraet]; root.style.width = w + 'px'; root.style.height = h + 'px';
+    const t = S.toast ? K.toast({ text: esc(S.toast) }) : '';
+    if (!S.eingeloggt) root.innerHTML = loginHtml() + t;
+    else root.innerHTML = shellHtml(seiteHtml(), (S.ebenen.length ? overlayHtml(oben()) : '') + t);
+    const f = root.querySelector('[data-fokus]'); if (f && oben() && SC(oben().id).typ === 'palette') f.focus();
+    leiste(); skala(); touchCheck();
+  }
+  leiste();
+}
+addEventListener('resize', () => { if (SPEC) { skala(); touchCheck(); leiste(); } });
+window.KE = { S, geh, springe, check, render, touch: () => touch };
+laden();
+</script>
+</body>
+</html>
