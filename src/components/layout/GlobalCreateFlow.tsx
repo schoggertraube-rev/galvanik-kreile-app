@@ -172,6 +172,7 @@ export type GlobalCreatePorts = {
   showPrimaryTrigger?: boolean;
   roleLabel: string;
   resumeQuoteId: string | null;
+  resumeQuoteConversionId: string | null;
   listCustomers: () => Promise<
     | { code: "OK"; customers: GlobalCreateCustomerChoice[] }
     | { code: "DENIED" | "UNAVAILABLE"; message: string }
@@ -191,6 +192,7 @@ export type GlobalCreatePorts = {
   createDirectIntake: (input: DirectIntakeInput) => Promise<GlobalCreateDirectIntakeResult>;
   readDirectIntakeReceipt: (input: { orderId: string; clientEventId: string }) => Promise<GlobalCreateDirectIntakeResult>;
   rememberQuote: (quoteId: string | null) => void;
+  rememberQuoteConversion: (quoteId: string, clientEventId: string) => void;
   openCustomer: (customerId: string) => void;
   openOrder: (orderId: string) => void;
   refresh: () => void;
@@ -318,6 +320,12 @@ function completeOrderCustomer(customer: CustomerDraft): boolean {
     customer.country.trim().length >= 2 && customer.paymentPreference.trim().length > 0;
 }
 
+function paymentModeFromPreference(preference: string | null | undefined): "vorkasse" | "abholung" | "rechnung" {
+  if (preference === "bar") return "abholung";
+  if (typeof preference === "string" && /^rechnung_/.test(preference)) return "rechnung";
+  return "vorkasse";
+}
+
 const newPosition = (): PositionDraft => ({
   key: globalThis.crypto.randomUUID(),
   catalogServiceId: "",
@@ -400,6 +408,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [dueDate, setDueDate] = useState("");
   const [quoteNote, setQuoteNote] = useState("");
   const [confirmedOrderDueDate, setConfirmedOrderDueDate] = useState("");
+  const [awardHandoverMode, setAwardHandoverMode] = useState<"pickup" | "shipping">("pickup");
+  const [awardPaymentMode, setAwardPaymentMode] = useState<"vorkasse" | "abholung" | "rechnung">("rechnung");
   const [directCustomerMode, setDirectCustomerMode] = useState<"NONE" | "EXISTING" | "NEW">("NONE");
   const [intakeStep, setIntakeStep] = useState<1 | 2 | 3>(1);
   const [intakeKind, setIntakeKind] = useState<"ORDER" | "QUOTE">("ORDER");
@@ -616,6 +626,21 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         return;
       }
       setCatalogServices(catalog.services);
+      if (result.quote.status === "converted" && ports.resumeQuoteConversionId) {
+        const converted = await ports.readQuoteConversionReceipt({
+          quoteId: result.quote.quoteId,
+          clientEventId: ports.resumeQuoteConversionId,
+        });
+        if (converted.code !== "OK") {
+          setFeedback(requestFeedback(converted, ports.resumeQuoteConversionId));
+          return;
+        }
+        setQuote(converted.quote);
+        setConversion(converted);
+        ports.rememberQuote(null);
+        navigate("order-saved");
+        return;
+      }
       resetAwardDateForQuoteContext();
       setQuote(result.quote);
       setQuoteReceipt(null);
@@ -678,7 +703,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     resetAwardDateForQuoteContext();
     setQuote(draft);
     setQuoteReceipt(null);
-    setCustomer({ id: draft.customerId, customerNumber: draft.customerNumber, name: draft.customerDisplayName, city: null });
+    const selected = customerChoices.find((entry) => entry.id === draft.customerId);
+    setCustomer(selected ?? { id: draft.customerId, customerNumber: draft.customerNumber, name: draft.customerDisplayName, city: null });
+    setAwardHandoverMode("pickup");
+    setAwardPaymentMode(paymentModeFromPreference(selected?.paymentPreference));
     setDueDate(draft.dueDate);
     setQuoteNote(draft.note ?? "");
     setPositions(draft.positions.map((position) => {
@@ -860,6 +888,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       }
     }
     resetAwardDateForQuoteContext();
+    setAwardHandoverMode("pickup");
+    setAwardPaymentMode(paymentModeFromPreference(selected.paymentPreference));
     setCustomer(selected);
     setQuote(null);
     setQuoteReceipt(null);
@@ -930,11 +960,21 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       setFeedback({ kind: "validation", message: "Bitte den zugesagten Termin für den Auftrag bestätigen." });
       return;
     }
-    const id = requestId("conversion");
+    const id = ports.resumeQuoteConversionId ?? requestId("conversion");
+    requestIds.current.conversion = id;
+    ports.rememberQuoteConversion(quote.quoteId, id);
     setBusy(true);
     setFeedback(null);
     try {
-      const result = await ports.convertQuote({ quoteId: quote.quoteId, clientEventId: id, expectedVersion: quote.version, confirmedAward: true, confirmedOrderDueDate });
+      const result = await ports.convertQuote({
+        quoteId: quote.quoteId,
+        clientEventId: id,
+        expectedVersion: quote.version,
+        confirmedAward: true,
+        confirmedOrderDueDate,
+        handoverMode: awardHandoverMode,
+        paymentMode: awardPaymentMode,
+      });
       if (result.code !== "OK") {
         setFeedback(requestFeedback(result, id));
         return;
@@ -1133,6 +1173,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       }
       setQuote(result.quote);
       setQuoteReceipt(result.receipt);
+      setAwardHandoverMode(intakeHandover === "PICKUP" ? "pickup" : "shipping");
+      setAwardPaymentMode(paymentModeFromPreference(directCustomer.paymentPreference));
       ports.rememberQuote(result.quote.quoteId);
       navigate("quote-saved");
     } catch {
@@ -1223,6 +1265,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setDueDate("");
     setQuoteNote("");
     setConfirmedOrderDueDate("");
+    setAwardHandoverMode("pickup");
+    setAwardPaymentMode("rechnung");
     setQuote(null);
     setQuoteReceipt(null);
     setConversion(null);
@@ -1276,6 +1320,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
             </section>
           ) : (
             <form id="kr-neuer-eingang" className="kr-stapel" onSubmit={(event) => void submitIntakePage(event)}>
+              {ports.resumeQuoteId ? <Hinweis><KrButton art="sekundaer" icon="arrow" text="Gespeicherten KV fortsetzen" disabled={busy} onClick={() => void resumeQuote()} /></Hinweis> : null}
               <datalist id="kr-service-catalog">{catalogServices.map((service) => <option key={service.id} value={service.name}>{service.surface}</option>)}</datalist>
               {isHandy ? <SchrittNav schritte={["Kunde", "Positionen", "Prüfung"]} aktuell={intakeStep - 1} erreicht={intakeStep - 1} onSchritt={(index) => setIntakeStep((index + 1) as 1 | 2 | 3)} /> : <AbschnittNav abschnitte={["Kunde", "Positionen", "Prüfung"]} aktuell={intakeStep - 1} onAbschnitt={(index) => {
                 setIntakeStep((index + 1) as 1 | 2 | 3);
@@ -1519,7 +1564,24 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                   <div className={styles.createContext}><span>KV-Stand</span><strong>{quote.status === "draft" ? "in Vorbereitung" : "beauftragt"}</strong><span>Bearbeitungsstand</span><strong>Stand {quote.version}</strong><span>Terminwunsch</span><strong>{quote.dueDate}</strong></div>
                   {quoteReceipt ? <ReceiptFacts title="KV – technische Details für Support" values={[["Vorgangskennung", quoteReceipt.receiptId], ["Nachweis", quoteReceipt.eventId], ["Zeit", quoteReceipt.recordedAt]]} /> : <p className={styles.createReadback}>Der KV ist sicher gespeichert und kann weiterbearbeitet werden.</p>}
                   <div className={styles.createFormActions}><a className={styles.createDownload} href={`/api/documents/${encodeURIComponent(quote.quoteId)}/quote-pdf`} target="_blank" rel="noreferrer">KV als PDF</a>{quote.status === "draft" ? <button type="button" onClick={() => editQuote(quote)} disabled={busy}>KV bearbeiten</button> : null}</div>
-                  {quote.status === "draft" ? <div className={styles.createAwardBlock}><label htmlFor="confirmed-order-due-date">Zugesagter Termin für den Auftrag</label><input id="confirmed-order-due-date" required type="date" value={confirmedOrderDueDate} onChange={(event) => setConfirmedOrderDueDate(event.target.value)} aria-describedby="confirmed-order-due-date-help" aria-invalid={!confirmedOrderDueDateValid} data-autofocus /><p id="confirmed-order-due-date-help" className={styles.createAwardHelp}>{confirmedOrderDueDateValid ? "Der Auftrag wird mit diesem Termin angelegt." : "Bitte vor dem Zuschlag einen gültigen Auftragstermin festlegen."}</p><button type="button" className={styles.createAward} onClick={() => void convertQuote()} disabled={busy || !confirmedOrderDueDateValid}>{busy ? <Loader2 className={styles.createSpinner} /> : <Check />} Zuschlag bestätigen · Auftrag anlegen</button></div> : null}
+                  {quote.status === "draft" ? <div className={styles.createAwardBlock}>
+                    <label htmlFor="confirmed-order-due-date">Zugesagter Termin für den Auftrag</label>
+                    <input id="confirmed-order-due-date" required type="date" value={confirmedOrderDueDate} onChange={(event) => setConfirmedOrderDueDate(event.target.value)} aria-describedby="confirmed-order-due-date-help" aria-invalid={!confirmedOrderDueDateValid} data-autofocus />
+                    <label htmlFor="quote-award-handover">Übergabe</label>
+                    <select id="quote-award-handover" value={awardHandoverMode} onChange={(event) => {
+                      const mode = event.target.value as "pickup" | "shipping";
+                      setAwardHandoverMode(mode);
+                      if (mode === "shipping" && awardPaymentMode === "abholung") setAwardPaymentMode("vorkasse");
+                    }}><option value="pickup">Abholung</option><option value="shipping">Versand</option></select>
+                    <label htmlFor="quote-award-payment">Zahlungsart</label>
+                    <select id="quote-award-payment" value={awardPaymentMode} onChange={(event) => setAwardPaymentMode(event.target.value as "vorkasse" | "abholung" | "rechnung")}>
+                      <option value="abholung" disabled={awardHandoverMode !== "pickup"}>Bar oder Karte bei Abholung</option>
+                      <option value="vorkasse">Vorkasse</option>
+                      <option value="rechnung">Rechnung auf Ziel</option>
+                    </select>
+                    <p id="confirmed-order-due-date-help" className={styles.createAwardHelp}>{confirmedOrderDueDateValid ? "Termin, Übergabe und Zahlungsart werden verbindlich an den Auftrag übergeben." : "Bitte vor dem Zuschlag einen gültigen Auftragstermin festlegen."}</p>
+                    <button type="button" className={styles.createAward} onClick={() => void convertQuote()} disabled={busy || !confirmedOrderDueDateValid}>{busy ? <Loader2 className={styles.createSpinner} /> : <Check />} Zuschlag bestätigen · Auftrag anlegen</button>
+                  </div> : null}
                 </div>
               ) : null}
 

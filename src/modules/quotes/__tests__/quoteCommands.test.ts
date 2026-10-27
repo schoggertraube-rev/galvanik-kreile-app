@@ -77,7 +77,39 @@ describe("quotes command boundary", () => {
     const { prepareQuoteConversionCommand } = await import("../server/quoteCommands");
     await expect(prepareQuoteConversionCommand(authorization, {
       quoteId: QUOTE, clientEventId: CLIENT, expectedVersion: 2, confirmedAward: true, confirmedOrderDueDate: "2026-10-20",
+      handoverMode: "pickup", paymentMode: "rechnung",
     })).resolves.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("binds the conversion hash to the complete normalized order intake", async () => {
+    const orderInput = {
+      clientEventId: CLIENT,
+      customer: { mode: "EXISTING" as const, customerId: CUSTOMER },
+      dueDate: "2026-10-20",
+      handoverMode: "shipping" as const,
+      items: [{
+        catalogServiceId: null, name: "Flansch", quantity: 2, material: "Stahl",
+        surfaceRequested: "Verzinken", unit: null, unitPriceCents: null, vatRateBasisPoints: null,
+      }],
+      note: input.note,
+      paymentMode: "vorkasse" as const,
+    };
+    const expectedOrderHash = createHash("sha256").update(JSON.stringify(orderInput), "utf8").digest("hex");
+    execute
+      .mockResolvedValueOnce([quoteRow])
+      .mockResolvedValueOnce([{ result_code: "OK", order_input: {
+        clientEventId: CLIENT,
+        customer: { mode: "EXISTING", customerId: CUSTOMER },
+        dueDate: input.dueDate,
+        note: input.note,
+        items: [{ name: "Flansch", quantity: 2, material: "Stahl", surfaceRequested: "Verzinken" }],
+      }, replayed: false }]);
+    const { prepareQuoteConversionCommand } = await import("../server/quoteCommands");
+    await expect(prepareQuoteConversionCommand(authorization, {
+      quoteId: QUOTE, clientEventId: CLIENT, expectedVersion: 1, confirmedAward: true,
+      confirmedOrderDueDate: "2026-10-20", handoverMode: "shipping", paymentMode: "vorkasse",
+    })).resolves.toMatchObject({ code: "OK", orderInput });
+    expect(execute.mock.calls[1]?.[0]?.values[5]).toBe(expectedOrderHash);
   });
 
   it("does not turn corrupt tenant or integrity readback into success or not-found", async () => {

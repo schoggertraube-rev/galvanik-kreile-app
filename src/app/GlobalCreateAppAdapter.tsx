@@ -25,12 +25,14 @@ import type { ConvertQuoteInput, CreateQuoteInput, UpdateQuoteInput } from "@/mo
 type CreateCustomerInput = Parameters<typeof createCustomerAction>[0];
 
 const PENDING_QUOTE_KEY = "path1.global-create.pending-quote";
+const PENDING_QUOTE_CONVERSION_KEY = "path1.global-create.pending-quote-conversion";
 
 export function GlobalCreateAppAdapter() {
   const router = useRouter();
   const openCustomer = useOverlayStore((state) => state.openCustomer);
   const { hasPermission, name, role } = usePermissions();
   const [resumeQuoteId, setResumeQuoteId] = useState<string | null>(null);
+  const [resumeQuoteConversionId, setResumeQuoteConversionId] = useState<string | null>(null);
   const canCreateCustomer = hasPermission("perm_data_customers");
   const canCreateQuote = hasPermission("perm_data_orders");
   const roleLabel = name.trim() || "dieses Profil";
@@ -38,14 +40,28 @@ export function GlobalCreateAppAdapter() {
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       setResumeQuoteId(window.sessionStorage.getItem(PENDING_QUOTE_KEY));
+      setResumeQuoteConversionId(window.sessionStorage.getItem(PENDING_QUOTE_CONVERSION_KEY));
     });
     return () => window.cancelAnimationFrame(frame);
   }, []);
 
   const rememberQuote = (quoteId: string | null) => {
-    if (quoteId) window.sessionStorage.setItem(PENDING_QUOTE_KEY, quoteId);
-    else window.sessionStorage.removeItem(PENDING_QUOTE_KEY);
+    if (quoteId) {
+      window.sessionStorage.setItem(PENDING_QUOTE_KEY, quoteId);
+      window.sessionStorage.removeItem(PENDING_QUOTE_CONVERSION_KEY);
+    } else {
+      window.sessionStorage.removeItem(PENDING_QUOTE_KEY);
+      window.sessionStorage.removeItem(PENDING_QUOTE_CONVERSION_KEY);
+    }
     setResumeQuoteId(quoteId);
+    setResumeQuoteConversionId(null);
+  };
+
+  const rememberQuoteConversion = (quoteId: string, clientEventId: string) => {
+    window.sessionStorage.setItem(PENDING_QUOTE_KEY, quoteId);
+    window.sessionStorage.setItem(PENDING_QUOTE_CONVERSION_KEY, clientEventId);
+    setResumeQuoteId(quoteId);
+    setResumeQuoteConversionId(clientEventId);
   };
 
   // Keep one safe, typed intake boundary mounted for authenticated workshop roles.
@@ -60,6 +76,7 @@ export function GlobalCreateAppAdapter() {
         showPrimaryTrigger: false,
         roleLabel,
         resumeQuoteId,
+        resumeQuoteConversionId,
         listCustomers: async () => {
           const result = await getCustomersDb();
           if (!result.ok) {
@@ -150,6 +167,7 @@ export function GlobalCreateAppAdapter() {
           return { code: "OK", replayed: true, receipt: result.data };
         },
         rememberQuote,
+        rememberQuoteConversion,
         openCustomer,
         openOrder: (orderId) => router.push(`/orders/${encodeURIComponent(orderId)}`),
         refresh: () => router.refresh(),

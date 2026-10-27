@@ -131,12 +131,15 @@ function normalizeCreate(value: unknown): CreateQuoteInput | null {
 }
 
 function normalizeConvert(value: unknown): ConvertQuoteInput | null {
-  if (!plainObject(value) || !exactKeys(value, ["clientEventId", "confirmedAward", "confirmedOrderDueDate", "expectedVersion", "quoteId"])) return null;
+  if (!plainObject(value) || !exactKeys(value, ["clientEventId", "confirmedAward", "confirmedOrderDueDate", "expectedVersion", "handoverMode", "paymentMode", "quoteId"])) return null;
   if (typeof value.quoteId !== "string" || !UUID_PATTERN.test(value.quoteId)
     || typeof value.clientEventId !== "string" || !UUID_PATTERN.test(value.clientEventId)
     || value.confirmedAward !== true || typeof value.expectedVersion !== "number"
     || !Number.isSafeInteger(value.expectedVersion) || value.expectedVersion < 1
-    || !validDate(value.confirmedOrderDueDate)) return null;
+    || !validDate(value.confirmedOrderDueDate)
+    || (value.handoverMode !== "pickup" && value.handoverMode !== "shipping")
+    || (value.paymentMode !== "vorkasse" && value.paymentMode !== "abholung" && value.paymentMode !== "rechnung")
+    || (value.paymentMode === "abholung" && value.handoverMode !== "pickup")) return null;
   return value as ConvertQuoteInput;
 }
 
@@ -172,10 +175,10 @@ function hashOrderIntent(input: QuoteOrderInput): string {
     clientEventId: input.clientEventId,
     customer: input.customer,
     dueDate: input.dueDate,
-    items: input.items.map(({ name, quantity, material, surfaceRequested }) => ({
-      name, quantity, material, surfaceRequested,
-    })),
+    handoverMode: input.handoverMode,
+    items: input.items,
     note: input.note,
+    paymentMode: input.paymentMode,
   });
 }
 
@@ -454,13 +457,17 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const quote = await readQuote(tx, authorization.tenantId, normalized.quoteId);
       if (!quote) return { code: "NOT_FOUND", message: "KV ist nicht verfügbar." };
-      const sourceOrderInput: QuoteOrderInput = {
+      const sourceOrderInput: Omit<QuoteOrderInput, "handoverMode" | "paymentMode"> = {
         clientEventId: normalized.clientEventId,
         customer: { mode: "EXISTING", customerId: quote.customerId },
         dueDate: quote.dueDate,
         note: quote.note,
         items: quote.positions.map(({ name, quantity, material, surfaceRequested }) => ({
+          catalogServiceId: null,
           name, quantity, material, surfaceRequested,
+          unit: null,
+          unitPriceCents: null,
+          vatRateBasisPoints: null,
         })),
       };
       // The quote keeps the customer's requested date. The confirmed order date is
@@ -468,6 +475,8 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
       const orderInput: QuoteOrderInput = {
         ...sourceOrderInput,
         dueDate: normalized.confirmedOrderDueDate,
+        handoverMode: normalized.handoverMode,
+        paymentMode: normalized.paymentMode,
       };
       const orderIntentSha256 = hashOrderIntent(orderInput);
       const rows = await tx.execute<{ result_code: string; order_input: unknown; replayed: boolean }>(sql`

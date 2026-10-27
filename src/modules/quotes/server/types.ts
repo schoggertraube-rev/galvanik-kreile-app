@@ -34,6 +34,8 @@ export type ConvertQuoteInput = {
   confirmedAward: true;
   /** The order promise is intentionally distinct from the customer's KV wish date. */
   confirmedOrderDueDate: string;
+  handoverMode: "pickup" | "shipping";
+  paymentMode: "vorkasse" | "abholung" | "rechnung";
 };
 
 export type UpdateQuoteInput = {
@@ -143,12 +145,18 @@ export type QuoteOrderInput = {
   clientEventId: string;
   customer: { mode: "EXISTING"; customerId: string };
   dueDate: string;
+  handoverMode: "pickup" | "shipping";
+  paymentMode: "vorkasse" | "abholung" | "rechnung";
   note: string | null;
   items: Array<{
+    catalogServiceId: null;
     name: string;
     quantity: number;
     material: string | null;
     surfaceRequested: string;
+    unit: null;
+    unitPriceCents: null;
+    vatRateBasisPoints: null;
   }>;
 };
 

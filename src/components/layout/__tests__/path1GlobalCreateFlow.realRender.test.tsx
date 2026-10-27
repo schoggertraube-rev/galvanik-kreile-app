@@ -50,6 +50,7 @@ function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
     canCreateQuote: true,
     roleLabel: "Rolf",
     resumeQuoteId: null,
+    resumeQuoteConversionId: null,
     listCustomers: vi.fn().mockResolvedValue({ code: "OK", customers: [{ id: CUSTOMER_ID, customerNumber: "K-2026-0042", name: "SYNTHETISCH Musterkunde GmbH", city: "Teststadt" }] }),
     listCatalog: vi.fn().mockResolvedValue({ code:"OK", services:[{id:"88888888-8888-4888-8888-888888888888",name:"Synthetischer Flansch",surface:"Verzinken",unit:"Stück",netPriceCents:12500,vatRateBasisPoints:1900,standardLeadTimeWorkingDays:5,active:true}] }),
     createCustomer: vi.fn().mockImplementation(async (input) => ({
@@ -162,6 +163,7 @@ function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
       },
     })),
     rememberQuote: vi.fn(),
+    rememberQuoteConversion: vi.fn(),
     openCustomer: vi.fn(),
     openOrder: vi.fn(),
     refresh: vi.fn(),
@@ -258,7 +260,15 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(awardButton).toBeEnabled();
     fireEvent.click(awardButton);
     await screen.findByRole("heading", { name: "Auftrag A-2026-0061 angelegt" });
-    expect(value.convertQuote).toHaveBeenCalledWith(expect.objectContaining({ quoteId: QUOTE_ID, expectedVersion: 1, confirmedAward: true, confirmedOrderDueDate: "2026-10-20" }));
+    expect(value.rememberQuoteConversion).toHaveBeenCalledWith(QUOTE_ID, expect.any(String));
+    expect(value.convertQuote).toHaveBeenCalledWith(expect.objectContaining({
+      quoteId: QUOTE_ID,
+      expectedVersion: 1,
+      confirmedAward: true,
+      confirmedOrderDueDate: "2026-10-20",
+      handoverMode: "pickup",
+      paymentMode: "vorkasse",
+    }));
     expect(value.rememberQuote).toHaveBeenLastCalledWith(null);
     expect(screen.getByRole("group", { name: "Auftrag – technische Details für Support" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Auftragskarte öffnen" }));
