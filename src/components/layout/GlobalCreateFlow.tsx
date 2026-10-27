@@ -228,45 +228,24 @@ function record(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function CustomerFields({ value, onChange, autofocus = false, requireOrderData = true }: { value: CustomerDraft; onChange: (value: CustomerDraft) => void; autofocus?: boolean; requireOrderData?: boolean }) {
-  const set = <K extends keyof CustomerDraft>(key: K, next: CustomerDraft[K]) => onChange({ ...value, [key]: next });
-  const setName = (name: string) => onChange({
-    ...value,
-    name,
-    companyName: value.customerType === "privat" ? null : nullable(name),
-  });
-  const setCustomerType = (customerType: CustomerDraft["customerType"]) => onChange({
-    ...value,
-    customerType,
-    companyName: customerType === "privat" ? null : nullable(value.name),
-  });
-  return <div className={styles.createFormGrid}>
-    <label className={styles.createFieldWide}>{value.customerType === "privat" ? "Name" : "Firmenname"}<input data-spec-id="kundeneu.name" data-autofocus={autofocus || undefined} required minLength={2} value={value.name} onChange={(event) => setName(event.target.value)} /></label>
-    <label>Kundentyp<select data-spec-id="kundeneu.kundentyp" value={value.customerType} onChange={(event) => setCustomerType(event.target.value as CustomerDraft["customerType"])}><option value="business">Firma</option><option value="privat">Privat</option><option value="institution">Institution</option></select></label>
-    <label>Ansprechpartner<input data-spec-id="kundeneu.ansprechpartner" required={requireOrderData} value={value.contactPerson ?? ""} onChange={(event) => set("contactPerson", nullable(event.target.value))} /></label>
-    <label>Telefon<input data-spec-id="kundeneu.telefon" required value={value.phone ?? ""} onChange={(event) => set("phone", nullable(event.target.value))} /></label>
-    <label>E-Mail<input data-spec-id="kundeneu.email" required={requireOrderData} type="email" value={value.email ?? ""} onChange={(event) => set("email", nullable(event.target.value))} /></label>
-    <label>Straße<input data-spec-id="kundeneu.strasse" required={requireOrderData} value={value.street} onChange={(event) => set("street", event.target.value)} /></label>
-    <label>PLZ<input data-spec-id="kundeneu.plz" required={requireOrderData} value={value.zipCode} onChange={(event) => set("zipCode", event.target.value)} /></label>
-    <label>Ort<input data-spec-id="kundeneu.ort" required={requireOrderData} value={value.city} onChange={(event) => set("city", event.target.value)} /></label>
-    <label>Land<input data-spec-id="kundeneu.land" required={requireOrderData} value={value.country} onChange={(event) => set("country", event.target.value)} /></label>
-    <label>Zahlung<select data-spec-id="kundeneu.zahlungsbedingung" value={value.paymentPreference} onChange={(event) => set("paymentPreference", event.target.value)}><option value="rechnung_14">Rechnung 14 Tage</option><option value="rechnung_30">Rechnung 30 Tage</option><option value="vorkasse">Vorkasse</option><option value="bar">Bar</option></select></label>
-    <label>USt-ID<input data-spec-id="kundeneu.ustid" value={value.vatId ?? ""} onChange={(event) => set("vatId", nullable(event.target.value))} /></label>
-  </div>;
-}
-
-function IntakeCustomerFields({
+function CustomerFormFields({
   value,
   onChange,
+  customerType,
+  onCustomerType,
   onlyMissing,
   showPayment,
   onPaymentChange,
+  autofocus = false,
 }: {
   value: CustomerDraft;
   onChange: (value: CustomerDraft) => void;
+  customerType: "" | "business" | "privat";
+  onCustomerType: (value: "business" | "privat") => void;
   onlyMissing: boolean;
   showPayment: boolean;
   onPaymentChange: (value: string) => void;
+  autofocus?: boolean;
 }) {
   const set = <K extends keyof CustomerDraft>(key: K, next: CustomerDraft[K]) => onChange({ ...value, [key]: next });
   const missing = (value: string | null | undefined) => !value?.trim();
@@ -276,24 +255,32 @@ function IntakeCustomerFields({
     name,
     companyName: value.customerType === "privat" ? null : nullable(name),
   });
-  return <>
+  return <div className="kr-stapel">
+    {!onlyMissing ? <div className="kr-feld kr-voll"><span className="kr-feld-label">Kundentyp</span><div data-spec-id="kundeneu.kundentyp"><Segment<"" | "business" | "privat"> label="Kundentyp" wert={customerType} optionen={[
+      { wert: "business", text: "Gewerbe" },
+      { wert: "privat", text: "Privat" },
+    ]} onWert={(next) => { if (next) onCustomerType(next); }} /></div></div> : null}
     <FormRaster>
-      {show(value.name) ? <Feld label="Name / Firma" voll><Eingabe data-autofocus required minLength={2} value={value.name} onChange={(event) => setName(event.target.value)} /></Feld> : null}
-      {show(value.contactPerson) ? <Feld label="Ansprechpartner"><Eingabe required value={value.contactPerson ?? ""} onChange={(event) => set("contactPerson", nullable(event.target.value))} /></Feld> : null}
-      {show(value.phone) ? <Feld label="Telefon"><Eingabe required type="tel" value={value.phone ?? ""} onChange={(event) => set("phone", nullable(event.target.value))} /></Feld> : null}
-      {show(value.email) ? <Feld label="E-Mail"><Eingabe required type="email" value={value.email ?? ""} onChange={(event) => set("email", nullable(event.target.value))} /></Feld> : null}
-      {show(value.street) ? <Feld label="Straße"><Eingabe required value={value.street} onChange={(event) => set("street", event.target.value)} /></Feld> : null}
-      {show(value.zipCode) ? <Feld label="PLZ"><Eingabe required value={value.zipCode} onChange={(event) => set("zipCode", event.target.value)} /></Feld> : null}
-      {show(value.city) ? <Feld label="Ort"><Eingabe required value={value.city} onChange={(event) => set("city", event.target.value)} /></Feld> : null}
-      {show(value.country) ? <Feld label="Land"><Eingabe required value={value.country} onChange={(event) => set("country", event.target.value)} /></Feld> : null}
-      {showPayment && show(value.paymentPreference) ? <Feld label="Zahlungsbedingung"><Auswahl required value={value.paymentPreference} onChange={(event) => onPaymentChange(event.target.value)} optionen={[
-        { wert: "", text: "Bitte auswählen" },
+      {show(value.name) ? <Feld label="Name / Firma" voll><Eingabe data-spec-id="kundeneu.name" data-autofocus={autofocus || undefined} required minLength={2} maxLength={160} value={value.name} onChange={(event) => setName(event.target.value)} /></Feld> : null}
+      {show(value.contactPerson) ? <Feld label="Ansprechpartner"><Eingabe data-spec-id="kundeneu.ansprechpartner" maxLength={120} value={value.contactPerson ?? ""} onChange={(event) => set("contactPerson", nullable(event.target.value))} /></Feld> : null}
+      {show(value.phone) ? <Feld label="Telefon"><Eingabe data-spec-id="kundeneu.telefon" required type="tel" minLength={6} maxLength={20} value={value.phone ?? ""} onChange={(event) => set("phone", nullable(event.target.value))} /></Feld> : null}
+      {show(value.email) ? <Feld label="E-Mail"><Eingabe data-spec-id="kundeneu.email" type="email" maxLength={254} value={value.email ?? ""} onChange={(event) => set("email", nullable(event.target.value))} /></Feld> : null}
+      {show(value.street) ? <Feld label="Straße"><Eingabe data-spec-id="kundeneu.strasse" maxLength={160} value={value.street} onChange={(event) => set("street", event.target.value)} /></Feld> : null}
+      {show(value.zipCode) ? <Feld label="PLZ"><Eingabe data-spec-id="kundeneu.plz" minLength={2} maxLength={10} value={value.zipCode} onChange={(event) => set("zipCode", event.target.value)} /></Feld> : null}
+      {show(value.city) ? <Feld label="Ort"><Eingabe data-spec-id="kundeneu.ort" maxLength={100} value={value.city} onChange={(event) => set("city", event.target.value)} /></Feld> : null}
+      {show(value.country) ? <Feld label="Land"><Auswahl data-spec-id="kundeneu.land" value={value.country} onChange={(event) => set("country", event.target.value)} optionen={[
+        { wert: "Deutschland", text: "Deutschland" },
+        { wert: "Österreich", text: "Österreich" },
+        { wert: "Schweiz", text: "Schweiz" },
+        { wert: "Anderes Land", text: "Anderes Land" },
+      ]} /></Feld> : null}
+      {showPayment && show(value.paymentPreference) ? <Feld label="Zahlungsbedingung"><Auswahl data-spec-id="kundeneu.zahlungsbedingung" required value={value.paymentPreference || "vorkasse"} onChange={(event) => onPaymentChange(event.target.value)} optionen={[
         { wert: "vorkasse", text: "Vorkasse" },
         { wert: "bar", text: "Bar oder Karte bei Abholung" },
       ]} /></Feld> : null}
     </FormRaster>
-    {!onlyMissing ? <details><summary>USt-ID (optional)</summary><Feld label="USt-ID"><Eingabe value={value.vatId ?? ""} onChange={(event) => set("vatId", nullable(event.target.value))} /></Feld></details> : null}
-  </>;
+    {!onlyMissing && customerType === "business" ? <details><summary>Weitere Angaben</summary><Feld label="USt-ID"><Eingabe data-spec-id="kundeneu.ustid" maxLength={20} value={value.vatId ?? ""} onChange={(event) => set("vatId", nullable(event.target.value))} /></Feld></details> : null}
+  </div>;
 }
 
 const EMPTY_CUSTOMER: CustomerDraft = {
@@ -343,7 +330,7 @@ function useHandy(): boolean {
 function customerChoiceToDraft(customer: GlobalCreateCustomerChoice): CustomerDraft {
   return {
     name: customer.name,
-    customerType: customer.customerType ?? "business",
+    customerType: customer.customerType === "privat" ? "privat" : "business",
     companyName: customer.companyName ?? null,
     contactPerson: customer.contactPerson ?? null,
     email: customer.email ?? null,
@@ -362,6 +349,31 @@ function completeOrderCustomer(customer: CustomerDraft, requirePaymentPreference
     Boolean(customer.phone?.trim()) && Boolean(customer.email?.trim()) && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email ?? "") &&
     customer.street.trim().length >= 2 && customer.zipCode.trim().length >= 2 && customer.city.trim().length >= 1 &&
     customer.country.trim().length >= 2 && (!requirePaymentPreference || customer.paymentPreference.trim().length > 0);
+}
+
+function validPhone(value: string | null | undefined): boolean {
+  const phone = value?.trim() ?? "";
+  return phone.length >= 6 && phone.length <= 20 && /^[0-9 +\-()/]+$/.test(phone) && phone.replace(/\D/g, "").length >= 6;
+}
+
+function validPostcode(country: string, value: string): boolean {
+  const postcode = value.trim();
+  if (!postcode) return true;
+  if (country === "Deutschland") return /^\d{5}$/.test(postcode);
+  if (country === "Österreich" || country === "Schweiz") return /^\d{4}$/.test(postcode);
+  return postcode.length >= 2 && postcode.length <= 10;
+}
+
+function customerOrderMissing(customer: CustomerDraft, includePayment: boolean): string[] {
+  const missing: string[] = [];
+  if (!customer.contactPerson?.trim()) missing.push("Ansprechpartner");
+  if (!customer.email?.trim()) missing.push("E-Mail");
+  if (!customer.street.trim()) missing.push("Straße");
+  if (!customer.zipCode.trim()) missing.push("PLZ");
+  if (!customer.city.trim()) missing.push("Ort");
+  if (!customer.country.trim()) missing.push("Land");
+  if (includePayment && !customer.paymentPreference.trim()) missing.push("Zahlungsbedingung");
+  return missing;
 }
 
 const newPosition = (): PositionDraft => ({
@@ -438,7 +450,12 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [retryConfirmed, setRetryConfirmed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [customerDraft, setCustomerDraft] = useState<CustomerDraft>(EMPTY_CUSTOMER);
+  const [customerType, setCustomerType] = useState<"" | "business" | "privat">("");
   const [customerNote, setCustomerNote] = useState("");
+  const [customerClosePrompt, setCustomerClosePrompt] = useState(false);
+  const [customerDuplicateResults, setCustomerDuplicateResults] = useState<GlobalCreateCustomerChoice[]>([]);
+  const [customerDuplicateState, setCustomerDuplicateState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [customerDuplicateAcceptedFor, setCustomerDuplicateAcceptedFor] = useState("");
   const [customer, setCustomer] = useState<GlobalCreateCustomerChoice | null>(null);
   const [customerReceipt, setCustomerReceipt] = useState<Extract<GlobalCreateCustomerResult, { code: "OK" }>["receipt"] | null>(null);
   const [customerQuery, setCustomerQuery] = useState("");
@@ -459,6 +476,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [quoteValidUntil, setQuoteValidUntil] = useState("");
   const [intakeChecked, setIntakeChecked] = useState(false);
   const [directCustomer, setDirectCustomer] = useState<CustomerDraft>(EMPTY_INTAKE_CUSTOMER);
+  const [directCustomerType, setDirectCustomerType] = useState<"" | "business" | "privat">("");
   const [directCustomerId, setDirectCustomerId] = useState("");
   const [intakeCustomerQuery, setIntakeCustomerQuery] = useState("");
   const [intakeCustomerResults, setIntakeCustomerResults] = useState<GlobalCreateCustomerChoice[]>([]);
@@ -483,10 +501,24 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const requestIds = useRef({ customer: "", quote: "", conversion: "", directCustomer: "" });
   const customerRequestSeq = useRef(0);
   const intakeCustomerSearchSeq = useRef(0);
+  const customerDuplicateSearchSeq = useRef(0);
   const dialogRef = useRef<HTMLElement>(null);
   const confirmedOrderDueDateValid = isValidDateInput(confirmedOrderDueDate);
   const customerCompleteForOrder = completeOrderCustomer(customerDraft);
   const isHandy = useHandy();
+  const customerOrderMissingFields = customerOrderMissing(customerDraft, ports.canManageMoney);
+  const customerCoreComplete = Boolean(customerType)
+    && customerDraft.name.trim().length >= 2
+    && validPhone(customerDraft.phone);
+  const customerChanged = customerType !== ""
+    || JSON.stringify(customerDraft) !== JSON.stringify(EMPTY_CUSTOMER)
+    || customerNote.trim().length > 0;
+  const customerDuplicateQueries = useMemo(() => [customerDraft.name, customerDraft.phone, customerDraft.email, customerDraft.city]
+    .map((value) => value?.trim() ?? "")
+    .filter((value, index, values) => value.length >= 2 && values.indexOf(value) === index), [customerDraft.city, customerDraft.email, customerDraft.name, customerDraft.phone]);
+  const customerDuplicateQuery = customerDuplicateQueries.join("|");
+  const customerDuplicateOpen = customerDuplicateResults.length > 0
+    && customerDuplicateAcceptedFor !== customerDuplicateQuery;
 
   const requestId = (kind: keyof typeof requestIds.current) => {
     if (!requestIds.current[kind]) requestIds.current[kind] = globalThis.crypto.randomUUID();
@@ -503,6 +535,26 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setStatusChecked(false);
     setRetryConfirmed(false);
     setStep(next);
+  };
+
+  const changeCustomerType = (next: "business" | "privat") => {
+    setCustomerType(next);
+    setCustomerDraft((current) => ({
+      ...current,
+      customerType: next,
+      companyName: next === "privat" ? null : nullable(current.name),
+      vatId: next === "privat" ? null : current.vatId,
+    }));
+  };
+
+  const changeDirectCustomerType = (next: "business" | "privat") => {
+    setDirectCustomerType(next);
+    setDirectCustomer((current) => ({
+      ...current,
+      customerType: next,
+      companyName: next === "privat" ? null : nullable(current.name),
+      vatId: next === "privat" ? null : current.vatId,
+    }));
   };
 
   useLayoutEffect(() => {
@@ -540,12 +592,51 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     return () => window.clearTimeout(timer);
   }, [directCustomerMode, intakeCustomerQuery, open, ports, step]);
 
+  useEffect(() => {
+    if (!open || step !== "customer") return;
+    const queries = customerDuplicateQueries;
+    if (queries.length === 0) {
+      const clearTimer = window.setTimeout(() => {
+        setCustomerDuplicateResults([]);
+        setCustomerDuplicateState("idle");
+      }, 0);
+      return () => window.clearTimeout(clearTimer);
+    }
+    const sequence = ++customerDuplicateSearchSeq.current;
+    const timer = window.setTimeout(() => {
+      setCustomerDuplicateState("loading");
+      void Promise.all(queries.map((query) => ports.searchIntakeCustomers(query))).then((results) => {
+        if (sequence !== customerDuplicateSearchSeq.current) return;
+        if (results.some((result) => result.code !== "OK")) {
+          setCustomerDuplicateResults([]);
+          setCustomerDuplicateState("error");
+          return;
+        }
+        const customers = results.flatMap((result) => result.code === "OK" ? result.customers : []);
+        setCustomerDuplicateResults(customers.filter((customer, index) => customers.findIndex((entry) => entry.id === customer.id) === index).slice(0, 10));
+        setCustomerDuplicateState("ready");
+      }).catch(() => {
+        if (sequence !== customerDuplicateSearchSeq.current) return;
+        setCustomerDuplicateResults([]);
+        setCustomerDuplicateState("error");
+      });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [customerDuplicateQueries, open, ports, step]);
+
   const closeNow = () => {
     if (!busy) {
       setDraftPrompt(false);
+      setCustomerClosePrompt(false);
       setSourceMode(null);
       setOpen(false);
     }
+  };
+
+  const requestCustomerClose = () => {
+    if (busy) return;
+    if (customerChanged) setCustomerClosePrompt(true);
+    else closeNow();
   };
 
   const intakeDraftPayload = (): Record<string, unknown> => ({
@@ -677,6 +768,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       return;
     }
     setDirectCustomerMode("NONE");
+    setDirectCustomerType("");
     setDirectCustomerId("");
     setDirectCustomer(EMPTY_INTAKE_CUSTOMER);
     setIntakeCustomerQuery("");
@@ -720,6 +812,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         const draftCustomer = customerChoiceToDraft(preselected);
         setDirectCustomer(draftCustomer);
         setDirectCustomerMode("EXISTING");
+        setDirectCustomerType(draftCustomer.customerType === "privat" ? "privat" : "business");
         setIntakePaymentMode(paymentModeFromPreference(draftCustomer.paymentPreference, "pickup"));
       }
     } catch {
@@ -732,7 +825,13 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     const prefill = typeof request === "string" ? undefined : request.prefill;
     setOpen(true);
     if (intent === "CUSTOMER") {
-      if (prefill) setCustomerDraft({ ...EMPTY_CUSTOMER, name: prefill.name?.trim() ?? "", email: prefill.email?.trim().toLowerCase() ?? null });
+      setCustomerType("");
+      setCustomerClosePrompt(false);
+      setCustomerDuplicateResults([]);
+      setCustomerDuplicateAcceptedFor("");
+      setCustomerDraft(prefill
+        ? { ...EMPTY_CUSTOMER, name: prefill.name?.trim() ?? "", email: prefill.email?.trim().toLowerCase() ?? null }
+        : EMPTY_CUSTOMER);
       if (ports.canCreateCustomer) navigate("customer");
       else deny("customer");
       return;
@@ -900,6 +999,37 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       deny("customer");
       return;
     }
+    const firstMissing = !customerType
+      ? { label: "Kundentyp", id: "kundeneu.kundentyp" }
+      : customerDraft.name.trim().length < 2
+        ? { label: "Name / Firma", id: "kundeneu.name" }
+        : !validPhone(customerDraft.phone)
+          ? { label: "Telefon", id: "kundeneu.telefon" }
+          : null;
+    if (firstMissing) {
+      setFeedback({ kind: "validation", message: `Noch offen: ${firstMissing.label}` });
+      document.querySelector<HTMLElement>(`[data-spec-id="${firstMissing.id}"]`)?.focus();
+      return;
+    }
+    if (customerDraft.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerDraft.email)) {
+      setFeedback({ kind: "validation", message: "E-Mail ist ungültig." });
+      document.querySelector<HTMLElement>('[data-spec-id="kundeneu.email"]')?.focus();
+      return;
+    }
+    if (!validPostcode(customerDraft.country, customerDraft.zipCode)) {
+      setFeedback({ kind: "validation", message: "PLZ passt nicht zum gewählten Land." });
+      document.querySelector<HTMLElement>('[data-spec-id="kundeneu.plz"]')?.focus();
+      return;
+    }
+    if (customerDraft.vatId && !(/^DE\d{9}$/i.test(customerDraft.vatId) || (customerDraft.vatId.length >= 4 && customerDraft.vatId.length <= 20))) {
+      setFeedback({ kind: "validation", message: "USt-ID ist ungültig." });
+      document.querySelector<HTMLElement>('[data-spec-id="kundeneu.ustid"]')?.focus();
+      return;
+    }
+    if (customerDuplicateOpen) {
+      setFeedback({ kind: "validation", message: "Bitte zuerst entscheiden, ob der ähnliche Kunde bereits vorhanden ist." });
+      return;
+    }
     const id = requestId("customer");
     setBusy(true);
     setFeedback(null);
@@ -910,8 +1040,6 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         setFeedback(requestFeedback(result, id));
         return;
       }
-      setCustomer({ id: result.customer.id, customerNumber: result.customer.customerNumber, name: result.customer.name, city: customerDraft.city });
-      setCustomerReceipt(result.receipt);
       if (customerNote.trim()) {
         const noteResult = await ports.saveCustomerNote({ clientEventId: globalThis.crypto.randomUUID(), customerId: result.customer.id, note: customerNote.trim() });
         if (noteResult.code !== "OK") {
@@ -919,7 +1047,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
           return;
         }
       }
-      navigate("customer-saved");
+      setOpen(false);
+      ports.openCustomer(result.customer.id);
     } catch {
       setFeedback({
         kind: "unclear",
@@ -981,9 +1110,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       } else if (step === "customer") {
         const result = await ports.readCustomerCreateReceipt(createInputForStatus());
         if (result.code === "OK") {
-          setCustomer({ id: result.customer.id, customerNumber: result.customer.customerNumber, name: result.customer.name, city: customerDraft.city });
-          setCustomerReceipt(result.receipt);
-          navigate("customer-saved");
+          setOpen(false);
+          ports.openCustomer(result.customer.id);
           return;
         }
         setFeedback({ kind: "unclear", message: result.code === "NOT_FOUND" ? "Es wurde noch keine Speicherung gefunden. Die Eingaben bleiben erhalten." : result.message, requestId: feedback.requestId });
@@ -1209,6 +1337,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setIntakeCustomerPaymentTouched(false);
     if (mode === "NONE") {
       setDirectCustomerMode("NONE");
+      setDirectCustomerType("");
       setDirectCustomerId("");
       setDirectCustomer(EMPTY_INTAKE_CUSTOMER);
       setIntakeCustomerResults([]);
@@ -1219,6 +1348,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       const paymentPreference = handoverMode === "pickup" ? "bar" : "vorkasse";
       const name = intakeCustomerQuery.trim();
       setDirectCustomerMode("NEW");
+      setDirectCustomerType("");
       setDirectCustomerId("");
       setDirectCustomer({
         ...EMPTY_CUSTOMER,
@@ -1233,6 +1363,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     if (!selected) return;
     const draft = customerChoiceToDraft(selected);
     setDirectCustomerMode("EXISTING");
+    setDirectCustomerType(draft.customerType === "privat" ? "privat" : "business");
     setDirectCustomerId(selected.id);
     setDirectCustomer(draft);
     setCustomerChoices((current) => [selected, ...current.filter((entry) => entry.id !== selected.id)]);
@@ -1269,6 +1400,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const advanceIntakeCustomer = async (): Promise<string | null> => {
     if (directCustomerMode === "NONE") {
       setFeedback({ kind: "validation", message: "Bitte einen bestehenden Kunden oder ‚Neukunde anlegen‘ auswählen." });
+      return null;
+    }
+    if (directCustomerMode === "NEW" && !directCustomerType) {
+      setFeedback({ kind: "validation", message: "Bitte den Kundentyp Gewerbe oder Privat wählen." });
       return null;
     }
     if (!completeOrderCustomer(directCustomer, ports.canManageMoney)) {
@@ -1554,6 +1689,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setConversion(null);
     setDirectReceipt(null);
     setDirectCustomer(EMPTY_INTAKE_CUSTOMER);
+    setDirectCustomerType("");
     setDirectCustomerId("");
     setDirectCustomerMode("NONE");
     setIntakeCustomerQuery("");
@@ -1585,7 +1721,90 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       {ports.showPrimaryTrigger !== false ? <button type="button" className={styles.globalCreateButton} onClick={() => { reset(); void loadDirectIntake(); }} aria-label="Anlegen" aria-haspopup="dialog" aria-expanded={open}>
         <span className={styles.globalCreatePlus} aria-hidden="true">＋</span><span>Anlegen</span>
       </button> : null}
-      {open && step === "direct-intake" ? (
+      {open && step === "customer" ? (
+        <KrDialog
+          key={customerClosePrompt ? "customer-close-prompt" : "customer"}
+          titel="Kunde anlegen"
+          icon="user"
+          groesse="breit"
+          onSchliessen={requestCustomerClose}
+          fuss={customerClosePrompt ? undefined : <>
+            <KrButton data-spec-id="kundeneu.abbrechen" text="Abbrechen" onClick={requestCustomerClose} />
+            <KrButton data-spec-id="kundeneu.kunde-speichern" form="kr-kunde-anlegen" type="submit" art="erledigen" icon="check" text="Kunde speichern" disabled={busy} />
+          </>}
+        >
+          {customerClosePrompt ? <div className="kr-stapel">
+            <h3>Eingaben verwerfen?</h3>
+            <p>Die Kundenanlage enthält noch nicht gespeicherte Eingaben.</p>
+            <div className="kr-stapel">
+              <KrButton art="sekundaer" text="Weiter bearbeiten" onClick={() => setCustomerClosePrompt(false)} />
+              <KrButton art="gefaehrlich" text="Eingaben verwerfen" onClick={closeNow} />
+            </div>
+          </div> : <form id="kr-kunde-anlegen" className="kr-stapel" noValidate onSubmit={(event) => void submitCustomer(event)}>
+            {!customerCoreComplete && !customerDraft.name && !customerDraft.phone ? <Hinweis>Erst suchen – vielleicht gibt es den Kunden schon</Hinweis> : null}
+            <div className="kr-spalten">
+              <div className="kr-stapel">
+                <section className="kr-stapel" aria-label="Pflicht">
+                  <h3>Pflicht</h3>
+                  <CustomerFormFields
+                    value={customerDraft}
+                    onChange={setCustomerDraft}
+                    customerType={customerType}
+                    onCustomerType={changeCustomerType}
+                    onlyMissing={false}
+                    showPayment={ports.canManageMoney}
+                    onPaymentChange={(paymentPreference) => setCustomerDraft((current) => ({ ...current, paymentPreference }))}
+                    autofocus
+                  />
+                  <Feld label="Notiz"><Textfeld data-spec-id="kundeneu.notiz" rows={3} maxLength={2000} value={customerNote} onChange={(event) => setCustomerNote(event.target.value)} /></Feld>
+                </section>
+                {customerDuplicateState === "loading" ? <p aria-live="polite">Ähnliche Kunden werden gesucht …</p> : null}
+                {customerDuplicateState === "error" ? <Hinweis ton="warn">Dublettenprüfung ist gerade nicht verfügbar. Eingaben bleiben erhalten.</Hinweis> : null}
+                {customerDuplicateOpen ? <Hinweis ton="warn"><div className="kr-stapel" data-spec-id="kundeneu.dublette">
+                  <strong>Ähnlicher Kunde vorhanden: {customerDuplicateResults[0]?.companyName ?? customerDuplicateResults[0]?.name}</strong>
+                  <div className="kr-stapel">
+                    <KrButton data-spec-id="kundeneu.vorhandenen-oeffnen" art="sekundaer" text="Vorhandenen öffnen" onClick={() => {
+                      const match = customerDuplicateResults[0];
+                      if (!match) return;
+                      setOpen(false);
+                      ports.openCustomer(match.id);
+                    }} />
+                    <KrButton data-spec-id="kundeneu.trotzdem-neu" text="Trotzdem neu anlegen" onClick={() => setCustomerDuplicateAcceptedFor(customerDuplicateQuery)} />
+                  </div>
+                </div></Hinweis> : null}
+                {customerCoreComplete && customerOrderMissingFields.length > 0 ? <Hinweis><div className="kr-stapel" data-spec-id="kundeneu.teilweise">
+                  <strong>Speicherbar als Interessent · für Auftrag fehlt: {customerOrderMissingFields.join(", ")}</strong>
+                  <div className="kr-stapel">
+                    <KrButton data-spec-id="kundeneu.als-interessent-speichern" art="primaer" text="Als Interessent speichern" onClick={() => void submitCustomer({ preventDefault() {} } as FormEvent)} />
+                    <KrButton data-spec-id="kundeneu.weiter-ausfuellen" text="Weiter ausfüllen" onClick={() => {
+                      const ids: Record<string, string> = { Ansprechpartner: "ansprechpartner", "E-Mail": "email", Straße: "strasse", PLZ: "plz", Ort: "ort", Land: "land", Zahlungsbedingung: "zahlungsbedingung" };
+                      const id = ids[customerOrderMissingFields[0] ?? ""];
+                      if (id) document.querySelector<HTMLElement>(`[data-spec-id="kundeneu.${id}"]`)?.focus();
+                    }} />
+                  </div>
+                </div></Hinweis> : null}
+                {feedback ? <>
+                  <Hinweis ton={feedback.kind === "validation" ? "warn" : undefined}><span><strong>{feedback.kind === "unclear" ? "Ausgang ungeklärt" : "Eingabe prüfen"}</strong><br />{feedback.message}</span></Hinweis>
+                  {feedback.kind === "unclear" ? <div className="kr-stapel">
+                    <KrButton art="sekundaer" text="Status mit gleicher Kennung prüfen" onClick={() => void checkUnclearStatus()} disabled={busy} />
+                    {statusChecked ? <KrButton text={retryConfirmed ? "Ja, jetzt erneut senden" : "Erneut senden vorbereiten"} onClick={retryAfterStatusCheck} disabled={busy} /> : null}
+                  </div> : null}
+                </> : null}
+              </div>
+              <aside className="kr-stapel" aria-label="Prüfliste">
+                <h3>Prüfliste</h3>
+                <Fakten zeilen={[
+                  { k: "Kundentyp", v: customerType ? "erfasst" : "fehlt" },
+                  { k: "Name / Firma", v: customerDraft.name.trim().length >= 2 ? "erfasst" : "fehlt" },
+                  { k: "Telefon", v: validPhone(customerDraft.phone) ? "erfasst" : "fehlt" },
+                  { k: "Für Aufträge", v: customerOrderMissingFields.length ? `fehlt: ${customerOrderMissingFields.join(", ")}` : "vollständig" },
+                  { k: "Kundennummer", v: "wird beim Speichern vergeben" },
+                ]} />
+              </aside>
+            </div>
+          </form>}
+        </KrDialog>
+      ) : open && step === "direct-intake" ? (
         <KrDialog
           key={draftPrompt ? "intake-with-draft-prompt" : "intake"}
           titel={intakeKind === "QUOTE" ? "Neuer Eingang · KV" : "Neuer Eingang"}
@@ -1664,10 +1883,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                     </div>}
                   </Feld>
                 </FormRaster>
-                {directCustomerMode === "NEW" ? <IntakeCustomerFields value={directCustomer} onChange={setDirectCustomer} onlyMissing={false} showPayment={ports.canManageMoney} onPaymentChange={changeIntakeCustomerPayment} /> : null}
+                {directCustomerMode === "NEW" ? <CustomerFormFields value={directCustomer} onChange={setDirectCustomer} customerType={directCustomerType} onCustomerType={changeDirectCustomerType} onlyMissing={false} showPayment={ports.canManageMoney} onPaymentChange={changeIntakeCustomerPayment} autofocus /> : null}
                 {directCustomerMode === "EXISTING" && !completeOrderCustomer(directCustomer, ports.canManageMoney) ? <>
                   <Hinweis ton="warn">Für diesen Kunden fehlen noch Pflichtdaten.</Hinweis>
-                  <IntakeCustomerFields value={directCustomer} onChange={setDirectCustomer} onlyMissing showPayment={ports.canManageMoney} onPaymentChange={changeIntakeCustomerPayment} />
+                  <CustomerFormFields value={directCustomer} onChange={setDirectCustomer} customerType={directCustomerType} onCustomerType={changeDirectCustomerType} onlyMissing showPayment={ports.canManageMoney} onPaymentChange={changeIntakeCustomerPayment} />
                 </> : null}
                 <FormRaster>
                   <Feld label="Liefertermin"><Eingabe data-spec-id="eingang.liefertermin" type="date" required value={directWishDate} onChange={(event) => { setDirectWishDate(event.target.value); setDirectConfirmedDate(event.target.value); }} /></Feld>
@@ -1788,7 +2007,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                       <button type="button" aria-pressed={directCustomerMode === "EXISTING"} onClick={() => { const first = customerChoices[0]; if (first) { setDirectCustomerMode("EXISTING"); setDirectCustomerId(first.id); setDirectCustomer(customerChoiceToDraft(first)); } }} disabled={customerChoices.length === 0}>Bestehender Kunde</button>
                     </div>
                     {directCustomerMode === "EXISTING" ? <label className={styles.createFieldWide}>Kunde<select value={directCustomerId} onChange={(event) => { const selected = customerChoices.find((entry) => entry.id === event.target.value); if (selected) { setDirectCustomerId(selected.id); setDirectCustomer(customerChoiceToDraft(selected)); } }}>{customerChoices.map((entry) => <option key={entry.id} value={entry.id}>{entry.customerNumber ?? "ohne Nummer"} · {entry.name}</option>)}</select></label> : null}
-                    <CustomerFields value={directCustomer} onChange={setDirectCustomer} autofocus />
+                    <CustomerFormFields value={directCustomer} onChange={setDirectCustomer} customerType={directCustomerType} onCustomerType={changeDirectCustomerType} onlyMissing={false} showPayment={ports.canManageMoney} onPaymentChange={changeIntakeCustomerPayment} autofocus />
                     <div className={styles.createFormGrid}><label>Terminwunsch<input type="date" value={directWishDate} onChange={(event) => setDirectWishDate(event.target.value)} required /></label><label>Zugesagter Termin<input type="date" value={directConfirmedDate} onChange={(event) => setDirectConfirmedDate(event.target.value)} required /></label><label>Eingangsart<select defaultValue="anruf"><option value="anruf">Anruf</option><option value="persoenlich">Persönlich</option><option value="email">E-Mail</option></select></label></div>
                     <div className={styles.createFormActions}><button type="button" className={styles.createPrimary} onClick={() => void advanceIntakeCustomer()} disabled={busy}>{busy ? <Loader2 className={styles.createSpinner} /> : null} Weiter zu Positionen</button></div>
                   </> : null}
@@ -1810,15 +2029,6 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                   <p>{feedback?.message}</p>
                   <button type="button" onClick={() => void ports.switchProfile()} disabled={busy} data-autofocus>Zum sicheren Profilwechsel</button>
                 </section>
-              ) : null}
-
-              {step === "customer" ? (
-                <form className={styles.createForm} onSubmit={(event) => void submitCustomer(event)}>
-                  <p className={styles.createLead}>Name und Telefon genügen für einen Interessenten. Fehlende Auftragsdaten werden sichtbar markiert und vor dem ersten Auftrag direkt ergänzt.</p>
-                  <CustomerFields value={customerDraft} onChange={setCustomerDraft} autofocus requireOrderData={false} />
-                  <label className={styles.createFieldWide}>Notiz<textarea data-spec-id="kundeneu.notiz" rows={3} maxLength={2000} value={customerNote} onChange={(event) => setCustomerNote(event.target.value)} /></label>
-                  <div className={styles.createFormActions}><button type="button" data-spec-id="kundeneu.abbrechen" onClick={closeNow}>Abbrechen</button><button type="submit" data-spec-id="kundeneu.kunde-speichern" className={styles.createPrimary} disabled={busy}>{busy ? <Loader2 className={styles.createSpinner} /> : <Check />} Neukunde speichern</button></div>
-                </form>
               ) : null}
 
               {step === "customer-saved" && customer && customerReceipt ? (
