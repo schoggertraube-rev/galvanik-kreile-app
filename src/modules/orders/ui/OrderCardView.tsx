@@ -1,46 +1,48 @@
 "use client";
-import { useState, type ReactNode } from "react";
+
+import { useState, useSyncExternalStore, type ReactNode } from "react";
+import type { OrderCardActionPorts, OrderCardState } from "../server/types";
 import {
-  ArrowLeft,
-  CalendarClock,
-  Check,
-  ChevronRight,
-  FileText,
-  PackageCheck,
-  ReceiptText,
-  RefreshCw,
-  Truck,
-  UserRound,
-  WalletCards,
-  X,
-} from "lucide-react";
-import type {
-  OrderCardActionPorts,
-  OrderCardModel,
-  OrderCardState,
-} from "../server/types";
-import styles from "./orders.module.css";
+  Button,
+  Chip,
+  Dialog,
+  Eingabe,
+  Fakten,
+  Feld,
+  Hinweis,
+  Karte,
+  KartenBlock,
+  Kartenkopf,
+  NaechsteAktion,
+  Notiz,
+  Schnellaktionen,
+  Seitenblatt,
+  Segment,
+  Teil,
+  TerminBox,
+  Textfeld,
+  Verlauf,
+  ZahlungsSchwelle,
+  Zustand,
+  Zustandskette,
+  type Geraet,
+  type IconName,
+  type SchnellAktion,
+  type SchrittStatus,
+} from "@/ui/kr";
 
 const STATIONS = ["angenommen", "galvanik", "fertig", "zahlung", "abgeholt"] as const;
+
 function money(cents: number | null) {
-  return cents === null
-    ? null
-    : new Intl.NumberFormat("de-DE", {
-        style: "currency",
-        currency: "EUR",
-      }).format(cents / 100);
+  return cents === null ? "Nicht belegt" : new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(cents / 100);
 }
+
 function dueLabel(value: string | null) {
   if (!value) return "Kein Termin belegt";
   const date = new Date(value);
-  return Number.isFinite(date.getTime())
-    ? date.toLocaleDateString("de-DE", {
-        day: "2-digit",
-        month: "long",
-        year: "numeric",
-      })
-    : "Termin nicht lesbar";
+  return Number.isFinite(date.getTime()) ? date.toLocaleDateString("de-DE", { day: "2-digit", month: "long", year: "numeric" }) : "Termin nicht lesbar";
 }
+
 function dueStatus(value: string | null) {
   if (!value) return { relative: "Kein Termin belegt", overdue: false };
   const target = new Date(`${value.slice(0, 10)}T12:00:00`);
@@ -53,38 +55,36 @@ function dueStatus(value: string | null) {
   if (days === 1) return { relative: "Morgen fällig", overdue: false };
   return { relative: `In ${days} Tagen`, overdue: false };
 }
-function nextStep(card: OrderCardModel, actions: OrderCardActionPorts) {
-  if (actions.handoff.visible) return "Übergabe an die Galvanik";
-  if (actions.freeze.visible) return "Fertig melden und Abrechnung einfrieren";
-  if (actions.invoice.visible) return "Rechnung unveränderlich ausstellen";
-  if (actions.payment.visible) return "Zahlungseingang bestätigen";
-  if (actions.goodsOut.visible) return "Warenausgang bestätigen";
-  return card.station === "abgeholt"
-    ? "Auftrag ist ausgegeben"
-    : "Kein weiterer freigegebener Schritt";
+
+function readDevice(): Geraet {
+  if (window.innerWidth <= 699) return "handy";
+  if (window.innerWidth <= 1399 && window.matchMedia?.("(pointer: coarse)").matches) return "tablet";
+  return "desktop";
 }
-function ActionButton({
-  label,
-  enabled,
-  reason,
-  onClick,
-  icon: Icon,
-}: {
-  label: string;
-  enabled: boolean;
-  reason: string | null;
-  onClick: () => void;
-  icon: typeof Check;
-}) {
-  return (
-    <div className={styles.actionItem}>
-      <button type="button" disabled={!enabled} onClick={onClick}>
-        <Icon />
-        <span>{label}</span>
-      </button>
-      {!enabled && reason ? <small>{reason}</small> : null}
-    </div>
-  );
+
+function subscribeDevice(onChange: () => void) {
+  window.addEventListener("resize", onChange);
+  return () => window.removeEventListener("resize", onChange);
+}
+
+function formatMoment(value: string) {
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date.toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" }) : "Zeitpunkt nicht lesbar";
+}
+
+function stateText(state: Exclude<OrderCardState, { kind: "data" }>) {
+  if (state.kind === "loading") return "Auftragskarte wird geladen.";
+  if (state.kind === "not-found") return "Auftrag nicht vorhanden.";
+  if (state.kind === "denied") return "Auftragskarte nicht freigegeben.";
+  if (state.kind === "conflict") return "Auftragsstand nicht eindeutig.";
+  return "Auftragskarte nicht verfügbar.";
+}
+
+function actionStatus(index: number, current: number): SchrittStatus {
+  if (index < current) return "erledigt";
+  if (index === current) return "aktiv";
+  if (index === current + 1) return "bereit";
+  return "warten";
 }
 
 export function OrderCardView({
@@ -102,419 +102,112 @@ export function OrderCardView({
   onOpenCustomer: (id: string) => void;
   onClose: () => void;
 }) {
+  const device = useSyncExternalStore(subscribeDevice, readDevice, () => "desktop" as const);
   const [paymentOpen, setPaymentOpen] = useState(false);
-  if (state.kind === "loading")
+  const [paymentMethod, setPaymentMethod] = useState<"" | "bar" | "ueberweisung" | "karte">("");
+  const [dueOpen, setDueOpen] = useState(false);
+
+  if (state.kind !== "data") {
+    const loading = state.kind === "loading";
+    const message = loading ? stateText(state) : `${stateText(state)} ${state.message}`;
     return (
-      <article className={styles.cardState} aria-busy="true">
-        <h1>Auftragskarte wird geladen</h1>
-      </article>
-    );
-  if (state.kind !== "data")
-    return (
-      <article
-        className={styles.cardState}
-        role={state.kind === "error" ? "alert" : "status"}
+      <Seitenblatt
+        titel="Auftragskarte"
+        onSchliessen={onClose}
+        zustand={loading ? "laedt" : state.kind === "denied" ? "gesperrt" : "fehler"}
+        texte={{ laedtText: message, gesperrtText: message, fehlerText: message }}
       >
-        <button type="button" onClick={onClose}>
-          <ArrowLeft />
-          Zurück
-        </button>
-        <h1>
-          {state.kind === "not-found"
-            ? "Auftrag nicht vorhanden"
-            : state.kind === "denied"
-              ? "Auftragskarte nicht freigegeben"
-              : state.kind === "conflict"
-                ? "Auftragsstand nicht eindeutig"
-                : "Auftragskarte nicht verfügbar"}
-        </h1>
-        <p>{state.message}</p>
-      </article>
+        {null}
+      </Seitenblatt>
     );
+  }
+
   const card = state.card;
   const payment = card.payment.kind === "available" ? card.payment.value : null;
   const current = card.station === "abgeholt" ? 4 : payment?.status === "bezahlt" ? 3 : Math.max(0, STATIONS.indexOf(card.station as (typeof STATIONS)[number]));
   const deadline = dueStatus(card.dueAt);
-  const advanceFromChain = (station: (typeof STATIONS)[number]) => {
-    if (station === "galvanik" && actions.handoff.visible && actions.handoff.enabled) return void actions.onHandoff();
-    if (station === "fertig" && actions.freeze.visible && actions.freeze.enabled) return void actions.onFreeze();
-    if (station === "zahlung" && actions.invoice.visible && actions.invoice.enabled) return void actions.onIssueInvoice();
-    if (station === "zahlung" && actions.payment.visible && actions.payment.enabled) return setPaymentOpen(true);
-    if (station === "abgeholt" && actions.goodsOut.visible && actions.goodsOut.enabled) return void actions.onRecordGoodsOut("abholung");
+  const paymentFree = payment?.status === "bezahlt" || payment?.mode === "rechnung";
+
+  const invokeStation = (station: (typeof STATIONS)[number]) => {
+    if (station === "galvanik" && actions.handoff.enabled) void actions.onHandoff();
+    if (station === "fertig" && actions.freeze.enabled) void actions.onFreeze();
+    if (station === "zahlung" && actions.invoice.enabled) void actions.onIssueInvoice();
+    else if (station === "zahlung" && actions.payment.enabled) setPaymentOpen(true);
+    if (station === "abgeholt" && actions.goodsOut.enabled) void actions.onRecordGoodsOut("abholung");
   };
-  const realActions = [
-    actions.handoff.visible,
-    actions.evidence.visible,
-    actions.freeze.visible,
-    actions.invoice.visible,
-    actions.payment.visible,
-    actions.goodsOut.visible,
-  ].filter(Boolean).length;
-  const confirmPayment = async (method: "bar" | "ueberweisung" | "karte") => {
-    await actions.onConfirmPayment(method);
-    setPaymentOpen(false);
-  };
-  return (
-    <article className={styles.orderCardV8} data-testid="order-card-v8">
-      <header className={styles.cardHeader}>
-        <button type="button" className={styles.back} onClick={onClose} aria-label="Zurück">
-          <ArrowLeft />
-          <span>Zurück</span>
-        </button>
-        <div className={styles.identityBlock}>
-          <p>{card.orderNumber}</p>
-          <h1>{card.title}</h1>
-          <button type="button" onClick={() => onOpenCustomer(card.customerId)}>
-            <UserRound /> {card.customerName}
-            <ChevronRight />
-          </button>
-        </div>
-        <div className={styles.due} data-overdue={deadline.overdue}>
-          <small>Liefertermin</small>
-          <strong>{deadline.relative}</strong>
-          <small>{dueLabel(card.dueAt)}</small>
-          <span data-station={card.station}>{card.station}</span>
-        </div>
-        <button
-          type="button"
-          className={styles.close}
-          onClick={onClose}
-          aria-label="Schließen"
-        >
-          <X />
-        </button>
-      </header>
-      <div className={styles.cardScroll}>
-        <section className={styles.lifecycle} aria-labelledby="lifecycle-title">
-          <div className={styles.sectionTitle}>
-            <p>Verlauf</p>
-            <h2 id="lifecycle-title">Auftrag und Zahlung</h2>
-          </div>
-          <ol>
-            {STATIONS.map((station, index) => (
-              <li
-                key={station}
-                data-done={index <= current}
-                data-current={index === current}
-              >
-                <button type="button" onClick={() => advanceFromChain(station)} disabled={index !== current + 1} aria-label={`${station} als nächsten Schritt ausführen`}>
-                  <span>{index < current ? <Check /> : index + 1}</span>
-                  <b>{station === "abgeholt" ? "abgeholt / verschickt" : station}</b>
-                </button>
-              </li>
-            ))}
-          </ol>
-          <div className={styles.paymentGate}>
-            <ReceiptText />
-            <div>
-              <small>Zahlung · getrennte Schwelle</small>
-              {card.payment.kind === "available" ? (
-                <>
-                  <strong>
-                    {payment?.mode} ·{" "}
-                    {payment?.invoiceState === "issued"
-                      ? (payment.status ?? "offen")
-                      : "Rechnung noch nicht ausgestellt"}
-                  </strong>
-                  {payment?.openAmountCents !== null &&
-                  payment?.openAmountCents !== undefined ? (
-                    <span>Offen: {money(payment.openAmountCents)}</span>
-                  ) : null}
-                </>
-              ) : (
-                <>
-                  <strong>
-                    {card.payment.kind === "restricted"
-                      ? "Details für diese Rolle geschützt"
-                      : "Zahlungsstand nicht verfügbar"}
-                  </strong>
-                  <span>{card.payment.message}</span>
-                </>
-              )}
-            </div>
-          </div>
-        </section>
-        <section className={styles.next}>
-          <small>Nächster echter Schritt</small>
-          <h2>{nextStep(card, actions)}</h2>
-          <p>
-            Auftragsversion {card.version} · Zustand {card.status}
-          </p>
-        </section>
-        <section className={styles.dueHistory} aria-labelledby="due-history-title">
-          <div className={styles.sectionTitle}>
-            <p>Termintreue</p>
-            <h2 id="due-history-title">Liefertermin und Verlauf</h2>
-          </div>
-          {actions.dueDate?.visible && actions.onChangeDueDate ? (
-            <form
-              className={styles.dueEditor}
-              onSubmit={(event) => {
-                event.preventDefault();
-                const form = new FormData(event.currentTarget);
-                 void actions.onChangeDueDate?.(
-                  String(form.get("dueDate") ?? ""),
-                  String(form.get("reason") ?? ""),
-                );
-              }}
-            >
-              <label>
-                Neuer Liefertermin
-                <input
-                  type="date"
-                  name="dueDate"
-                  defaultValue={card.dueAt?.slice(0, 10) ?? ""}
-                  required
-                />
-              </label>
-              <label>
-                Grund der Änderung
-                <textarea
-                  name="reason"
-                  minLength={3}
-                  maxLength={500}
-                  required
-                  placeholder="Warum ändert sich der zugesagte Termin?"
-                />
-              </label>
-              <button type="submit" disabled={!actions.dueDate?.enabled}>
-                <CalendarClock />
-                Termin mit Grund speichern
-              </button>
-              {!actions.dueDate?.enabled && actions.dueDate?.reason ? (
-                <small>{actions.dueDate.reason}</small>
-              ) : null}
-            </form>
-          ) : null}
-          {card.dueDateChanges?.length ? (
-            <ol className={styles.dueChangeList}>
-              {card.dueDateChanges.map((change) => (
-                <li key={change.eventId}>
-                  <CalendarClock />
-                  <span>
-                    <strong>{dueLabel(change.changedTo)}</strong>
-                    <small>{change.reason}</small>
-                  </span>
-                  <span>
-                    <strong>{change.changedBy}</strong>
-                    <small>{new Date(change.changedAt).toLocaleString("de-DE")}</small>
-                  </span>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className={styles.truthEmpty}>Noch keine Terminänderung gespeichert.</p>
-          )}
-        </section>
-        <section className={styles.parts} aria-labelledby="parts-title">
-          <div className={styles.sectionTitle}>
-            <p>Positionen</p>
-            <h2 id="parts-title">Teile und Leistungen</h2>
-          </div>
-          {card.items.length === 0 ? (
-            <p className={styles.truthEmpty}>
-              Für diesen Auftrag sind noch keine Positionen erfasst.
-            </p>
-          ) : (
-            <ol>
-              {card.items.map((item) => (
-                <li key={item.id}>
-                  <header>
-                    <span>Pos. {item.position}</span>
-                    <strong>
-                      {item.quantity} × {item.name}
-                    </strong>
-                  </header>
-                  <dl>
-                    <div>
-                      <dt>Material</dt>
-                      <dd>{item.material ?? "Nicht hinterlegt"}</dd>
-                    </div>
-                    <div>
-                      <dt>Oberfläche</dt>
-                      <dd>{item.surface}</dd>
-                    </div>
-                  </dl>
-                  {item.extraWork.length ? (
-                    <ul>
-                      {item.extraWork.map((line) => (
-                        <li key={line.lineId}>
-                          {line.name} · {line.minutes} Min. ·{" "}
-                          {money(line.amountCents)}
-                          {line.frozen ? " · eingefroren" : ""}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </li>
-              ))}
-            </ol>
-          )}
-          {actions.evidence.visible && attachmentPanel ? (
-            <div>{attachmentPanel}</div>
-          ) : null}
-        </section>
-        <div className={styles.detailGrid}>
-          <section>
-            <div className={styles.sectionTitle}>
-              <p>Auftragsnotiz</p>
-              <h2>Kontext</h2>
-            </div>
-            <p className={styles.truthEmpty}>
-              {card.note ?? "Keine Auftragsnotiz hinterlegt."}
-            </p>
-            <dl className={styles.metaList}>
-              <div>
-                <dt>Zuständig</dt>
-                <dd>{card.assignedTo ?? "Nicht zugewiesen"}</dd>
-              </div>
-              <div>
-                <dt>Eingang</dt>
-                <dd>{new Date(card.intakeAt).toLocaleString("de-DE")}</dd>
-              </div>
-              <div>
-                <dt>Freeze</dt>
-                <dd>
-                  {card.frozenAt
-                    ? new Date(card.frozenAt).toLocaleString("de-DE")
-                    : "Noch nicht erfolgt"}
-                </dd>
-              </div>
-            </dl>
-          </section>
-          <section>
-            <div className={styles.sectionTitle}>
-              <p>Originale und Belege</p>
-              <h2>Dokumentation</h2>
-            </div>
-            {card.evidence.length ? (
-              <ol className={styles.evidence}>
-                {card.evidence.map((item) => (
-                  <li key={item.key}>
-                    <FileText />
-                    <span>
-                      <strong>{item.source}</strong>
-                      <small>
-                        {item.state} ·{" "}
-                        {new Date(item.recordedAt).toLocaleString("de-DE")}
-                      </small>
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className={styles.truthEmpty}>
-                Noch keine Dokumente oder Fotos vorhanden.
-              </p>
-            )}
-            {documentsPanel}
-          </section>
-        </div>
-        {actions.feedback.kind !== "idle" ? (
-          <section
-            className={styles.feedback}
-            data-kind={actions.feedback.kind}
-            role={
-              actions.feedback.kind === "error" ||
-              actions.feedback.kind === "conflict"
-                ? "alert"
-                : "status"
-            }
-          >
-            <strong>{actions.feedback.message}</strong>
-            {actions.feedback.kind === "success" ? (
-              <details>
-                <summary>Technische Details für Support</summary>
-                <small>
-                  Vorgang durch {actions.feedback.receipt.actorId} ·{" "}
-                  {new Date(
-                    actions.feedback.receipt.occurredAt,
-                  ).toLocaleString("de-DE")} · Ereignis{" "}
-                  {actions.feedback.receipt.eventId} · Beleg{" "}
-                  {actions.feedback.receipt.receiptId}
-                </small>
-              </details>
-            ) : null}
-            {actions.feedback.kind === "conflict" ? (
-              <button type="button" onClick={() => void actions.onReload()}>
-                <RefreshCw />
-                Neu laden
-              </button>
-            ) : null}
-          </section>
-        ) : null}
-      </div>
-      {paymentOpen ? (
-        <div className={styles.paymentOverlay} onMouseDown={(event) => { if (event.target === event.currentTarget) setPaymentOpen(false); }}>
-          <section className={styles.paymentDialog} role="dialog" aria-modal="true" aria-labelledby="payment-dialog-title">
-            <header><div><small>Zahlungseingang</small><h2 id="payment-dialog-title">Zahlart wählen und bestätigen</h2></div><button type="button" aria-label="Zahlung schließen" onClick={() => setPaymentOpen(false)}><X /></button></header>
-            <p>Erst die tatsächlich erhaltene Zahlart wählen. Danach wird der Geldeingang verbindlich gespeichert.</p>
-            <div>
-              <button type="button" onClick={() => void confirmPayment("bar")}>Barzahlung bestätigen</button>
-              <button type="button" onClick={() => void confirmPayment("ueberweisung")}>Überweisung bestätigen</button>
-              <button type="button" onClick={() => void confirmPayment("karte")}>Kartenzahlung bestätigen</button>
-            </div>
-          </section>
-        </div>
-      ) : null}
-      {realActions > 0 ? (
-        <footer className={styles.actionDock} aria-label="Auftragsaktionen">
-          {actions.handoff.visible ? (
-            <ActionButton
-              label="In Galvanik"
-              enabled={actions.handoff.enabled}
-              reason={actions.handoff.reason}
-              onClick={() => void actions.onHandoff()}
-              icon={PackageCheck}
-            />
-          ) : null}
-          {actions.freeze.visible ? (
-            <ActionButton
-              label="Fertig melden"
-              enabled={actions.freeze.enabled}
-              reason={actions.freeze.reason}
-              onClick={() => void actions.onFreeze()}
-              icon={Check}
-            />
-          ) : null}
-          {actions.invoice.visible ? (
-            <ActionButton
-              label="Rechnung"
-              enabled={actions.invoice.enabled}
-              reason={actions.invoice.reason}
-              onClick={() => void actions.onIssueInvoice()}
-              icon={ReceiptText}
-            />
-          ) : null}
-          {actions.payment.visible ? (
-            <ActionButton
-              label="Zahlung bestätigen"
-              enabled={actions.payment.enabled}
-              reason={actions.payment.reason}
-              onClick={() => setPaymentOpen(true)}
-              icon={WalletCards}
-            />
-          ) : null}
-          {actions.goodsOut.visible ? (
-            <>
-              <ActionButton
-                label="Versand"
-                enabled={actions.goodsOut.enabled}
-                reason={actions.goodsOut.reason}
-                onClick={() => void actions.onRecordGoodsOut("versand")}
-                icon={Truck}
-              />
-              <ActionButton
-                label="Abholung"
-                enabled={actions.goodsOut.enabled}
-                reason={actions.goodsOut.reason}
-                onClick={() => void actions.onRecordGoodsOut("abholung")}
-                icon={PackageCheck}
-              />
-            </>
-          ) : null}
-        </footer>
-      ) : null}
-    </article>
+
+  const next = actions.handoff.visible
+    ? { title: "Übergabe an die Galvanik", text: "In Galvanik", icon: "droplet" as IconName, onClick: () => void actions.onHandoff() }
+    : actions.freeze.visible
+      ? { title: "Fertig melden, sobald alle Teile durch sind", text: "Fertig melden", icon: "checkc" as IconName, onClick: () => void actions.onFreeze() }
+      : actions.invoice.visible
+        ? { title: "Rechnung unveränderlich ausstellen", text: "Rechnung", icon: "receipt" as IconName, onClick: () => void actions.onIssueInvoice() }
+        : actions.payment.visible
+          ? { title: "Zahlungseingang bestätigen", text: "Zahlung", icon: "card" as IconName, onClick: () => setPaymentOpen(true) }
+          : actions.goodsOut.visible
+            ? { title: actions.goodsOut.enabled ? "Warenausgang prüfen" : "Warenausgang wartet auf Freigabe", text: "Ware raus", icon: "truck" as IconName, onClick: () => void actions.onRecordGoodsOut("abholung") }
+            : null;
+
+  const quickActions: SchnellAktion[] = [];
+  if (actions.handoff.visible && actions.handoff.enabled) quickActions.push({ key: "handoff", text: "Galvanik", icon: "droplet", primaer: true, onClick: () => void actions.onHandoff() });
+  if (actions.freeze.visible && actions.freeze.enabled) quickActions.push({ key: "freeze", text: "Fertig", icon: "checkc", erledigen: true, onClick: () => void actions.onFreeze() });
+  if (actions.invoice.visible && actions.invoice.enabled) quickActions.push({ key: "invoice", text: "Rechnung", icon: "receipt", onClick: () => void actions.onIssueInvoice() });
+  if (actions.payment.visible && actions.payment.enabled) quickActions.push({ key: "payment", text: "Zahlung", icon: "card", onClick: () => setPaymentOpen(true) });
+  if (actions.goodsOut.visible && actions.goodsOut.enabled) quickActions.push({ key: "goods", text: "Ware raus", icon: "truck", primaer: true, onClick: () => void actions.onRecordGoodsOut("abholung") });
+
+  const history = [
+    ...card.dueDateChanges?.map((change) => ({ key: change.eventId, zeit: formatMoment(change.changedAt), text: `Liefertermin geändert · ${dueLabel(change.changedTo)} · ${change.reason} · ${change.changedBy}`, icon: "calendar" as IconName, ton: "warn" as const })) ?? [],
+    ...card.evidence.map((entry) => ({ key: entry.key, zeit: formatMoment(entry.recordedAt), text: `${entry.source} · ${entry.state}`, icon: "file" as IconName })),
+    ...(card.frozenAt ? [{ key: "freeze", zeit: formatMoment(card.frozenAt), text: "Auftrag fertig gemeldet", icon: "checkc" as IconName, ton: "ok" as const }] : []),
+    { key: "intake", zeit: formatMoment(card.intakeAt), text: `Angenommen · ${card.items.length} ${card.items.length === 1 ? "Position" : "Positionen"}`, icon: "box" as IconName },
+  ];
+
+  const head = (
+    <Kartenkopf
+      nummer={card.orderNumber}
+      titel={card.title}
+      sub={`${card.items.length} ${card.items.length === 1 ? "Position" : "Positionen"} · ${card.status}`}
+      meta={<><Chip text={card.station} ton={deadline.overdue ? "rot" : "info"} /><Button art="leise" icon="user" text={`${card.customerName} · Kundenakte`} onClick={() => onOpenCustomer(card.customerId)} /></>}
+      termin={<><TerminBox relativ={deadline.relative} datum={dueLabel(card.dueAt)} status={<Chip text={deadline.overdue ? "überfällig" : "bestätigt"} ton={deadline.overdue ? "rot" : "ok"} />} dringend={deadline.overdue} />{actions.dueDate?.visible ? <Button art="leise" icon="calendar" text="Termin ändern" disabled={!actions.dueDate.enabled} onClick={() => setDueOpen(true)} /> : null}</>}
+      onSchliessen={onClose}
+    />
   );
+
+  const chain = <>
+    <Zustandskette schritte={[
+      { key: "angenommen", label: "angenommen", icon: "check", status: actionStatus(0, current), sub: new Date(card.intakeAt).toLocaleDateString("de-DE") },
+      { key: "galvanik", label: "Galvanik", icon: "droplet", status: actionStatus(1, current), onClick: actions.handoff.visible && actions.handoff.enabled ? () => invokeStation("galvanik") : undefined },
+      { key: "fertig", label: "fertig", icon: "flag", status: actionStatus(2, current), onClick: actions.freeze.visible && actions.freeze.enabled ? () => invokeStation("fertig") : undefined },
+      { key: "zahlung", label: "Zahlung", icon: "card", status: paymentFree ? "erledigt" : actions.payment.enabled ? "bereit" : "gesperrt", schwelle: true, frei: paymentFree, onClick: actions.payment.visible && actions.payment.enabled ? () => setPaymentOpen(true) : undefined },
+      { key: "abgeholt", label: payment?.goodsOut?.mode === "versand" ? "verschickt" : "abgeholt", icon: "truck", status: card.station === "abgeholt" ? "erledigt" : actions.goodsOut.enabled ? "bereit" : "gesperrt", onClick: actions.goodsOut.visible && actions.goodsOut.enabled ? () => invokeStation("abgeholt") : undefined },
+    ]} />
+    {!paymentFree && payment ? <ZahlungsSchwelle text={`${payment.mode} · ${payment.invoiceState === "issued" ? payment.status ?? "offen" : "Rechnung noch nicht ausgestellt"}`} aktion={actions.payment.visible && actions.payment.enabled ? <Button art="primaer" icon="card" text="Zahlung prüfen" onClick={() => setPaymentOpen(true)} /> : undefined} /> : null}
+  </>;
+
+  const main = <>
+    {next ? <KartenBlock><NaechsteAktion titel={next.title} aktionen={<Button art={actions.freeze.visible ? "erledigen" : "primaer"} icon={next.icon} text={next.text} disabled={(actions.handoff.visible && !actions.handoff.enabled) || (actions.freeze.visible && !actions.freeze.enabled) || (actions.invoice.visible && !actions.invoice.enabled) || (actions.payment.visible && !actions.payment.enabled) || (actions.goodsOut.visible && !actions.goodsOut.enabled)} onClick={next.onClick} />} /></KartenBlock> : null}
+    <KartenBlock label="Teile">
+      <div className="kr-teile">{card.items.map((item) => <Teil key={item.id} nr={`Pos. ${item.position}`} name={item.name} meta={`${item.surface} · ${item.quantity} Stück · ${item.material ?? "Material nicht hinterlegt"}${item.extraWork.length ? ` · ${item.extraWork.length} Mehrarbeit` : ""}`} fertig={current >= 2} fotoFehlt={!card.evidence.some((entry) => entry.itemIds.includes(item.id))} geraet={device} />)}</div>
+      {card.items.length === 0 ? <Zustand art="leer" text="Für diesen Auftrag sind noch keine Positionen erfasst." /> : null}
+      {actions.evidence.visible && attachmentPanel ? <div className="kr-stapel">{attachmentPanel}</div> : null}
+    </KartenBlock>
+    <KartenBlock label="Notizen"><Notiz text={card.note ?? "Keine Auftragsnotiz hinterlegt."} bezug={<Chip text="Auftrag" ton="info" />} autor={card.assignedTo ?? "Nicht zugewiesen"} /></KartenBlock>
+    <KartenBlock label="Fotos & Dokumente">
+      {card.evidence.length ? <div className="kr-docs">{card.evidence.map((entry) => <span className="kr-doc" key={entry.key}>{entry.source} · {entry.state}</span>)}</div> : <Zustand art="leer" text="Noch keine Dokumente oder Fotos vorhanden." />}
+      {documentsPanel}
+    </KartenBlock>
+    {card.payment.kind === "available" ? <KartenBlock label="Rechnung"><Fakten zeilen={[{ k: "Zahlungsmodus", v: payment?.mode ?? "Nicht belegt" }, { k: "Rechnung", v: payment?.invoiceState === "issued" ? payment.status ?? "offen" : "noch nicht ausgestellt" }, { k: "Offen", v: money(payment?.openAmountCents ?? null), warn: Boolean(payment?.openAmountCents) }]} /></KartenBlock> : <KartenBlock label="Rechnung"><Zustand art={card.payment.kind === "restricted" ? "gesperrt" : "fehler"} text={card.payment.message} /></KartenBlock>}
+    {actions.feedback.kind !== "idle" ? actions.feedback.kind === "submitting" ? <Zustand art="laedt" text={actions.feedback.message} /> : <Hinweis ton={actions.feedback.kind === "success" ? "ok" : "warn"}>{actions.feedback.message}{actions.feedback.kind === "conflict" ? <Button art="sekundaer" icon="refresh" text="Neu laden" onClick={() => void actions.onReload()} /> : null}</Hinweis> : null}
+  </>;
+
+  const rail = <>{device === "desktop" && quickActions.length ? <KartenBlock><Schnellaktionen aktionen={quickActions} als="raster" /></KartenBlock> : null}<KartenBlock label="Verlauf"><Verlauf eintraege={history} /></KartenBlock></>;
+  const footer = device === "desktop" ? <footer className="kr-kartenfuss"><Button text="Schließen" onClick={onClose} />{next ? <Button art="primaer" icon={next.icon} text={next.text} disabled={(actions.handoff.visible && !actions.handoff.enabled) || (actions.freeze.visible && !actions.freeze.enabled) || (actions.invoice.visible && !actions.invoice.enabled) || (actions.payment.visible && !actions.payment.enabled) || (actions.goodsOut.visible && !actions.goodsOut.enabled)} onClick={next.onClick} /> : null}</footer> : quickActions.length ? <Schnellaktionen aktionen={quickActions} als="dock" /> : undefined;
+
+  return <>
+    <Seitenblatt titel={`Auftragskarte ${card.orderNumber}`} onSchliessen={onClose}>
+      <Karte kopf={head} kette={chain} haupt={main} rail={rail} fuss={footer} />
+    </Seitenblatt>
+    {paymentOpen ? <Dialog titel="Zahlung bestätigen" icon="card" groesse="schmal" onSchliessen={() => setPaymentOpen(false)} fuss={<><Button text="Abbrechen" onClick={() => setPaymentOpen(false)} /><Button art="primaer" icon="check" text="Zahlung bestätigen" disabled={!paymentMethod} onClick={() => { if (!paymentMethod) return; void actions.onConfirmPayment(paymentMethod); setPaymentOpen(false); }} /></>}><Segment label="Zahlart" wert={paymentMethod} onWert={setPaymentMethod} optionen={[{ wert: "bar", text: "Bar" }, { wert: "ueberweisung", text: "Überweisung" }, { wert: "karte", text: "Karte" }]} /></Dialog> : null}
+    {dueOpen ? <Dialog titel="Liefertermin ändern" icon="calendar" groesse="schmal" onSchliessen={() => setDueOpen(false)}><form className="kr-stapel" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void actions.onChangeDueDate?.(String(form.get("dueDate") ?? ""), String(form.get("reason") ?? "")); setDueOpen(false); }}><Feld label="Neuer Liefertermin"><Eingabe type="date" name="dueDate" defaultValue={card.dueAt?.slice(0, 10) ?? ""} required /></Feld><Feld label="Grund der Änderung"><Textfeld name="reason" minLength={3} maxLength={500} required /></Feld><Button art="primaer" icon="calendar" text="Termin mit Grund speichern" type="submit" /></form></Dialog> : null}
+  </>;
 }
