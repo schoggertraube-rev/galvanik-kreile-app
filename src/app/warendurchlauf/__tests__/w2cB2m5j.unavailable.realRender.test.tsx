@@ -290,6 +290,25 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(ports.openOrder).not.toHaveBeenCalled();
   });
 
+  it("shows an order subject without repeating an identical leading customer name", async () => {
+    const incoming = order(
+      "we-subject",
+      "WE-SUBJECT",
+      "Sabrina Schmidt · stosstange",
+      "wareneingang",
+      "orange",
+    );
+    incoming.customerName = "Sabrina Schmidt";
+    ports.getWareneingangOrdersAction.mockResolvedValueOnce({ ok: true, data: [incoming] });
+
+    const { default: WarendurchlaufIndex } = await import("../page");
+    render(await WarendurchlaufIndex());
+
+    const card = screen.getByTestId("werkstatt-held-we-subject");
+    expect(card).toHaveTextContent("Sabrina Schmidt — stosstange");
+    expect(card).not.toHaveTextContent("Sabrina Schmidt — Sabrina Schmidt");
+  });
+
   it("opens the real-order picker in Galvanik-first order and selects the exact existing order id", async () => {
     const wareneingang = order(
       "we-picker",

@@ -19,6 +19,7 @@ const appUrl = option("app-url", process.env.KREILE_PREVIEW_URL)?.replace(/\/$/,
 const screen = option("screen", "completed");
 const pin = process.env.KREILE_PREVIEW_PIN;
 const oidc = process.env.VERCEL_OIDC_TOKEN;
+const protectionBypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
 const output = resolve("output/v11-paare");
 const prototypePath = resolve("docs/project/linie/ui/designsystem_v1_1/kundenansicht/index.html");
 
@@ -29,7 +30,10 @@ delete process.env.KREILE_PREVIEW_PIN;
 
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true });
-const headers = oidc ? { "x-vercel-trusted-oidc-idp-token": oidc } : undefined;
+const headers = {
+  ...(oidc ? { "x-vercel-trusted-oidc-idp-token": oidc } : {}),
+  ...(protectionBypass ? { "x-vercel-protection-bypass": protectionBypass } : {}),
+};
 
 async function loginStorage() {
   const context = await browser.newContext({ viewport: { width: 1914, height: 917 }, extraHTTPHeaders: headers });

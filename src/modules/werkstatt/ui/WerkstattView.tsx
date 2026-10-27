@@ -11,7 +11,7 @@ import {
   Lageleiste,
   SeitenKopf,
   WipMenge,
-  Zeile,
+  Zeitstrahl,
   Zustand,
   type Geraet,
   type HandlungsArt,
@@ -51,23 +51,24 @@ function rowTone(order: PhillipOrderCard): "ok" | "warn" | "rot" | "info" {
   return order.station === "fertig" ? "ok" : "info";
 }
 
+function orderSubject(order: PhillipOrderCard): string {
+  const customer = order.customerName?.trim() || "Kunde nicht hinterlegt";
+  const title = order.title.trim();
+  if (title.toLocaleLowerCase("de-DE").startsWith(customer.toLocaleLowerCase("de-DE"))) {
+    const remainder = title.slice(customer.length).replace(/^[\s·—–-]+/, "").trim();
+    return remainder || order.itemDescription?.trim() || "Auftrag";
+  }
+  return title || order.itemDescription?.trim() || "Auftrag";
+}
+
 function customerTitle(order: PhillipOrderCard): string {
   const customer = order.customerName?.trim() || "Kunde nicht hinterlegt";
-  return customer.localeCompare(order.title.trim(), "de", {
-    sensitivity: "base",
-  }) === 0
-    ? customer
-    : `${customer} — ${order.title}`;
+  const subject = orderSubject(order);
+  return subject === "Auftrag" ? customer : `${customer} — ${subject}`;
 }
 
 function shortOrderTitle(order: PhillipOrderCard): string {
-  const customer = order.customerName?.trim();
-  return customer &&
-    customer.localeCompare(order.title.trim(), "de", {
-      sensitivity: "base",
-    }) === 0
-    ? order.itemDescription?.trim() || "Auftrag"
-    : order.title;
+  return orderSubject(order);
 }
 
 function displayName(name: string | null): string | null {
@@ -80,6 +81,17 @@ function weekday(value: string): string {
   return new Intl.DateTimeFormat("de-DE", {
     timeZone: "Europe/Berlin",
     weekday: "short",
+  }).format(date);
+}
+
+function berlinTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("de-DE", {
+    timeZone: "Europe/Berlin",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
   }).format(date);
 }
 
@@ -342,6 +354,27 @@ export function WerkstattView({
   const dueOrders = view.pickerOrders
     .filter((order) => isDueThisWeek(order, view.loadedAt))
     .slice(0, 3);
+  const todayRows = view.goodsOutCandidates.slice(0, 3).map((order) => ({
+    key: `raus-${order.id}`,
+    zeit: "heute",
+    id: order.orderNumber,
+    titel: `${order.customerName ?? "Kunde"} · ${shortOrderTitle(order)}`,
+    meta: order.itemDescription ?? "Ausgabebereit",
+    ton: "ok" as const,
+    chip: { text: "bereit", ton: "ok" as const },
+    aktion: { text: "Ware raus", icon: "truck" as const, onClick: () => ports.onOpenGoodsOut(order.id) },
+    onOeffnen: () => ports.onOpenOrder(order.id),
+  }));
+  const weekRows = dueOrders.map((order) => ({
+    key: `termin-${order.id}`,
+    zeit: weekday(order.dueDate),
+    id: order.orderNumber,
+    titel: order.customerName ?? shortOrderTitle(order),
+    meta: shortOrderTitle(order),
+    ton: rowTone(order),
+    chip: { text: order.statusText || order.status, ton: rowTone(order) },
+    onOeffnen: () => ports.onOpenOrder(order.id),
+  }));
   const tightWip = view.pickerOrders.filter(
     (order) =>
       order.station === "galvanik" &&
@@ -418,48 +451,14 @@ export function WerkstattView({
       <div className="kr-spalten">
         {heldList}
         <div className="kr-stapel">
-          <Kachel
-            titel="Heute raus"
-            icon="truck"
-            iconTon="ok"
-            zahl={view.goodsOutCandidates.length}
-            zustand={view.goodsOutCandidates.length ? "daten" : "leer"}
-            texte={{ leerText: "Heute ist keine Ware ausgabebereit." }}
-          >
-            {view.goodsOutCandidates.slice(0, 3).map((order) => (
-              <Auftragszeile
-                key={order.id}
-                id={order.orderNumber}
-                kundeKurz={order.customerName ?? "Kunde"}
-                titel={shortOrderTitle(order)}
-                meta={order.itemDescription ?? "Ausgabebereit"}
-                ton="ok"
-                status={{ text: "bereit", ton: "ok" }}
-                onOeffnen={() => ports.onOpenGoodsOut(order.id)}
-              />
-            ))}
-          </Kachel>
-          <Kachel
-            titel="Fällig diese Woche"
-            icon="clock"
-            iconTon="info"
-            zahl={view.dueThisWeekCount}
-            zustand={view.dueThisWeekCount ? "daten" : "leer"}
-            texte={{ leerText: "Diese Woche sind keine Aufträge fällig." }}
-          >
-            {dueOrders.map((order) => (
-              <Zeile
-                key={order.id}
-                vorne={
-                  <span className="kr-zeit">{weekday(order.dueDate)}</span>
-                }
-                id={order.orderNumber}
-                titel={order.customerName ?? shortOrderTitle(order)}
-                meta={shortOrderTitle(order)}
-                seite={<span>{order.dueValue}</span>}
-                onClick={() => ports.onOpenOrder(order.id)}
-              />
-            ))}
+          <Kachel titel="Heute & Woche" icon="calendar" iconTon="info">
+            <Zeitstrahl
+              jetzt={berlinTime(view.loadedAt)}
+              gruppen={[
+                { key: "heute", titel: "Heute", zeilen: todayRows },
+                { key: "woche", titel: "Diese Woche", zeilen: weekRows },
+              ]}
+            />
           </Kachel>
           {view.bundleSuggestion ? (
             <div data-testid="werkstatt-bundle">
