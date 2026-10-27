@@ -41,6 +41,8 @@ export type OrderCardEvidence = {
 export type OrderCardPayment = {
   mode: "vorkasse" | "abholung" | "rechnung";
   invoiceState: "not_issued" | "issued";
+  invoiceId?: string | null;
+  invoiceNumber?: string | null;
   status: "offen" | "teilbezahlt" | "bezahlt" | null;
   openAmountCents: number | null;
   goodsOutAllowed: boolean;
@@ -107,7 +109,9 @@ export type OrderCardActionPorts = {
   onChangeDueDate?: (dueDate: string, reason: string) => void | Promise<void>;
   onHandoff: () => void | Promise<void>;
   onFreeze: () => void | Promise<void>;
-  onIssueInvoice: () => void | Promise<void>;
+  onIssueInvoice: (
+    prices?: Array<{ itemId: string; unitPriceCents: number }>,
+  ) => void | Promise<void>;
   onConfirmPayment: (
     method: "bar" | "ueberweisung" | "karte",
   ) => void | Promise<void>;

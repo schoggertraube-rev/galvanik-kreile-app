@@ -9,6 +9,10 @@ import type {
   CreateInvoiceResult,
 } from "@/lib/server/commands/immutableInvoiceCommand";
 import type {
+  SetInvoiceItemPricesInput,
+  SetInvoiceItemPricesResult,
+} from "@/lib/server/commands/invoiceItemPriceCommand";
+import type {
   ReadInvoiceCancellationReceiptInput,
   ReadInvoiceCancellationReceiptResult,
   ReadInvoiceReceiptInput,
@@ -42,6 +46,18 @@ export async function issueInvoiceAction(input: CreateInvoiceInput): Promise<Cre
   const result = await createInvoice(input);
   if (result.code === "OK") {
     revalidatePath("/buchhaltung/rechnungen");
+    revalidatePath("/warendurchlauf");
+  }
+  return result;
+}
+
+export async function setInvoiceItemPricesAction(
+  input: SetInvoiceItemPricesInput,
+): Promise<SetInvoiceItemPricesResult> {
+  const { setInvoiceItemPrices } = await import("@/lib/server/commands/invoiceItemPriceCommand");
+  const result = await setInvoiceItemPrices(input);
+  if (result.code === "OK") {
+    revalidatePath("/orders");
     revalidatePath("/warendurchlauf");
   }
   return result;

@@ -283,6 +283,21 @@ export function mapOrderCardIntakeItems(value: unknown): OrderCardItem[] {
     }
     const position = toSafeInteger(entry.position, "ORDER_CARD_ITEM_POSITION_INVALID");
     const quantity = toSafeInteger(entry.quantity, "ORDER_CARD_ITEM_QUANTITY_INVALID");
+    const currentCatalogItem = currentShape
+      && typeof entry.catalogServiceId === "string"
+      && UUID_PATTERN.test(entry.catalogServiceId)
+      && typeof entry.unit === "string"
+      && entry.unit.trim() === entry.unit
+      && entry.unit.length >= 1
+      && entry.unit.length <= 40
+      && Number.isSafeInteger(entry.unitPriceCents)
+      && Number(entry.unitPriceCents) >= 0
+      && [0, 700, 1900].includes(Number(entry.vatRateBasisPoints));
+    const currentFreeTextItem = currentShape
+      && entry.catalogServiceId === null
+      && entry.unit === null
+      && entry.unitPriceCents === null
+      && entry.vatRateBasisPoints === null;
     if (
       typeof entry.id !== "string"
       || !UUID_PATTERN.test(entry.id)
@@ -304,17 +319,7 @@ export function mapOrderCardIntakeItems(value: unknown): OrderCardItem[] {
       || entry.surfaceRequested.trim() !== entry.surfaceRequested
       || entry.surfaceRequested.length < 2
       || entry.surfaceRequested.length > 160
-      || (currentShape && (
-        typeof entry.catalogServiceId !== "string"
-        || !UUID_PATTERN.test(entry.catalogServiceId)
-        || typeof entry.unit !== "string"
-        || entry.unit.trim() !== entry.unit
-        || entry.unit.length < 1
-        || entry.unit.length > 40
-        || !Number.isSafeInteger(entry.unitPriceCents)
-        || Number(entry.unitPriceCents) < 0
-        || ![0, 700, 1900].includes(Number(entry.vatRateBasisPoints))
-      ))
+      || (currentShape && !currentCatalogItem && !currentFreeTextItem)
     ) throw new Error("ORDER_CARD_INTAKE_ITEM_INVALID");
 
     return {
@@ -324,10 +329,10 @@ export function mapOrderCardIntakeItems(value: unknown): OrderCardItem[] {
       quantity,
       material: entry.material,
       surfaceRequested: entry.surfaceRequested,
-      catalogServiceId: currentShape ? entry.catalogServiceId as string : null,
-      unit: currentShape ? entry.unit as string : null,
-      unitPriceCents: currentShape ? toSafeInteger(entry.unitPriceCents, "ORDER_CARD_ITEM_PRICE_INVALID") : null,
-      vatRateBasisPoints: currentShape ? toSafeInteger(entry.vatRateBasisPoints, "ORDER_CARD_ITEM_VAT_INVALID") as 0 | 700 | 1900 : null,
+      catalogServiceId: currentCatalogItem ? entry.catalogServiceId as string : null,
+      unit: currentCatalogItem ? entry.unit as string : null,
+      unitPriceCents: currentCatalogItem ? toSafeInteger(entry.unitPriceCents, "ORDER_CARD_ITEM_PRICE_INVALID") : null,
+      vatRateBasisPoints: currentCatalogItem ? toSafeInteger(entry.vatRateBasisPoints, "ORDER_CARD_ITEM_VAT_INVALID") as 0 | 700 | 1900 : null,
       finished: false,
       extraWork: [],
     } satisfies OrderCardItem;
@@ -661,7 +666,9 @@ export async function readLiveOrderCard(
       `);
       if (freezeRows.length > 1) throw new Error("ORDER_CARD_FREEZE_AMBIGUOUS");
       const freeze = freezeRows[0] ?? null;
-      const frozenFlag = queue.status === "fertig";
+      // The immutable completion freeze remains active after goods-out. A
+      // collected/shipped order must therefore still carry the same freeze.
+      const frozenFlag = queue.status === "fertig" || queue.station === "abgeholt";
       if ((freeze !== null) !== frozenFlag) throw new Error("ORDER_CARD_FREEZE_STATE_INVALID");
 
       let mappedFreeze: LiveOrderCard["freeze"] = null;

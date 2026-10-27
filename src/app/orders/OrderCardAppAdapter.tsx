@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import {
   issueInvoiceAction,
   getInvoiceReceiptAction,
+  setInvoiceItemPricesAction,
 } from "@/app/actions/invoices.actions";
 import { recordGoodsOutAction } from "@/app/actions/goodsOut.actions";
 import { getActiveCatalogAction } from "@/app/actions/catalog.actions";
@@ -99,6 +100,8 @@ function paymentContext(
     value: {
       mode: v.mode,
       invoiceState: v.invoiceState,
+      invoiceId: v.payment?.invoiceId ?? null,
+      invoiceNumber: v.payment?.invoiceNumber ?? null,
       status: v.payment?.status ?? null,
       openAmountCents: v.payment?.openAmountCents ?? null,
       goodsOutAllowed: v.goodsOutAllowed,
@@ -417,19 +420,40 @@ export function OrderCardAppAdapter({
       "Fertigstellung und Freeze bestätigt.",
     );
   }, [fail, load, orderId, snapshot, success]);
-  const onIssueInvoice = useCallback(async () => {
+  const onIssueInvoice = useCallback(async (
+    prices: Array<{ itemId: string; unitPriceCents: number }> = [],
+  ) => {
     if (!snapshot) return;
     setFeedback({
       kind: "submitting",
-      message: "Rechnung wird sicher ausgestellt.",
+      message: prices.length
+        ? "Preise werden gespeichert und die Rechnung wird ausgestellt."
+        : "Rechnung wird sicher ausgestellt.",
     });
+    let expectedVersion = snapshot.card.version;
+    if (prices.length > 0) {
+      const priceClientEventId = (requests.current.invoicePrices ??= crypto.randomUUID());
+      const priceResult = await setInvoiceItemPricesAction({
+        orderId,
+        expectedVersion,
+        clientEventId: priceClientEventId,
+        prices,
+      });
+      if (priceResult.code !== "OK") {
+        await fail(priceResult);
+        return;
+      }
+      expectedVersion = priceResult.receipt.aggregateVersion;
+      delete requests.current.invoicePrices;
+    }
     const clientEventId = (requests.current.invoice ??= crypto.randomUUID());
     const result = await issueInvoiceAction({
       orderId,
-      expectedVersion: snapshot.card.version,
+      expectedVersion,
       clientEventId,
     });
     if (result.code !== "OK") {
+      if (prices.length > 0) await load(true);
       await fail(result);
       return;
     }
@@ -633,7 +657,9 @@ export function OrderCardAppAdapter({
       payment.physicalStatus === "abgeholt" &&
       payment.goodsOut?.eventSchemaVersion === 2;
     const invoiceReady =
-      Boolean(card?.freeze) && (card?.station === "fertig" || invoiceAfter);
+      payment?.invoiceState === "not_issued"
+      && Boolean(card?.freeze)
+      && (card?.station === "fertig" || invoiceAfter);
     const paymentReady =
       payment?.invoiceState === "issued" &&
       Boolean(payment.payment && payment.payment.openAmountCents > 0);
