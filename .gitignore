@@ -59,3 +59,9 @@ Claude outputs/
 
 # Claude review handoffs are local coordination input and never repository content.
 _review/
+
+# Endversion mock stays local. Codex receives only the content-free build plan.
+docs/project/endversion/*
+!docs/project/endversion/codex/
+docs/project/endversion/codex/*
+!docs/project/endversion/codex/BAUPLAN.json

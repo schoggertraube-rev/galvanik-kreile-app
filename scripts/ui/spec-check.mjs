@@ -8,14 +8,14 @@ if (requested.length === 0) {
   process.exit(2);
 }
 
-const spec = JSON.parse(readFileSync(join(root, "docs/project/endversion/spec.json"), "utf8"));
+const buildPlan = JSON.parse(readFileSync(join(root, "docs/project/endversion/codex/BAUPLAN.json"), "utf8"));
 const screens = [];
 function visit(value) {
   if (!value || typeof value !== "object") return;
   if (!Array.isArray(value) && typeof value.id === "string" && requested.includes(value.id) && (value.felder || value.aktionen || value.inhalt)) screens.push(value);
   for (const child of Array.isArray(value) ? value : Object.values(value)) visit(child);
 }
-visit(spec);
+visit(buildPlan);
 
 function collectFields(value, into = []) {
   if (!value || typeof value !== "object") return into;
