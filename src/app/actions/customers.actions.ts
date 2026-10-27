@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/db";
-import { customers } from "@/db/schema";
+import { customers, orders } from "@/db/schema";
 import { eq, ilike, or, and, sql } from "drizzle-orm";
 import type { InferSelectModel } from "drizzle-orm";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
@@ -137,7 +137,7 @@ function mapDbCustomer(c: DbCustomer): Customer {
   };
 }
 
-export async function getCustomersDb(): Promise<ActionResult<Customer[]>> {
+export async function getCustomersDb(): Promise<ActionResult<Array<Customer & { activeOrderCount: number }>>> {
   noStore();
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
@@ -156,7 +156,19 @@ export async function getCustomersDb(): Promise<ActionResult<Customer[]>> {
         sql`coalesce(${customers.name}, '') NOT LIKE 'Capture%'`
       )
     ).orderBy(customers.createdAt);
-    const data = dbCustomers.map(mapDbCustomer).reverse(); // Order by createdAt desc
+    const activeCounts = await db.select({
+      customerId: orders.customerId,
+      count: sql<number>`count(*)::int`,
+    }).from(orders).where(and(
+      eq(orders.tenantId, tenantId),
+      sql`coalesce(${orders.station}, '') not in ('abgeholt', 'versendet', 'raus')`,
+      sql`coalesce(${orders.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`,
+    )).groupBy(orders.customerId);
+    const countByCustomer = new Map(activeCounts.map((entry) => [entry.customerId, Number(entry.count)]));
+    const data = dbCustomers.map((customer) => ({
+      ...mapDbCustomer(customer),
+      activeOrderCount: countByCustomer.get(customer.id) ?? 0,
+    })).reverse(); // Order by createdAt desc
     return { ok: true, data };
   } catch (error) {
     console.error("Failed to get customers from DB:", error);

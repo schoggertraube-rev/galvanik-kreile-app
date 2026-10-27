@@ -70,6 +70,7 @@ export function CustomersAppAdapter() {
             name: customer.name,
             type: customer.type,
             city: customer.city ?? null,
+            activeOrderCount: customer.activeOrderCount,
           })),
         });
       } catch {
@@ -114,7 +115,7 @@ export function CustomersAppAdapter() {
           key={customer.id}
           kuerzel={initials(customer.name)}
           name={customer.name}
-          meta={[customerNumberLabel(customer.customerNumber), customerTypeLabel(customer.type), customer.city].filter(Boolean).join(" · ")}
+          meta={[customer.city ?? customerNumberLabel(customer.customerNumber) ?? customerTypeLabel(customer.type), `${customer.activeOrderCount} ${customer.activeOrderCount === 1 ? "aktiver Auftrag" : "aktive Aufträge"}`].filter(Boolean).join(" · ")}
           karte
           onOeffnen={() => openCustomer(customer.id)}
         />)}
