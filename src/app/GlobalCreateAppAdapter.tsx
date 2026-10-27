@@ -33,7 +33,7 @@ const PENDING_QUOTE_CONVERSION_KEY = "path1.global-create.pending-quote-conversi
 export function GlobalCreateAppAdapter() {
   const router = useRouter();
   const openCustomer = useOverlayStore((state) => state.openCustomer);
-  const { hasPermission, name, role } = usePermissions();
+  const { hasArea, hasPermission, name, role } = usePermissions();
   const [resumeQuoteId, setResumeQuoteId] = useState<string | null>(null);
   const [resumeQuoteConversionId, setResumeQuoteConversionId] = useState<string | null>(null);
   const canCreateCustomer = hasPermission("perm_data_customers");
@@ -76,7 +76,7 @@ export function GlobalCreateAppAdapter() {
       ports={{
         canCreateCustomer,
         canCreateQuote,
-        canUseMail: hasPermission("perm_data_customers") || role === "developer",
+        canUseMail: hasArea("mails"),
         showPrimaryTrigger: false,
         roleLabel,
         resumeQuoteId,

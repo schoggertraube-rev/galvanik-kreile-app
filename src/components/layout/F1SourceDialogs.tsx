@@ -8,6 +8,7 @@ import {
   reserveDomainAttachmentAction,
 } from "@/app/actions/domainAttachments.actions";
 import { attachOutlookMailAction, getMicrosoftGraphStatusAction, listOutlookInboxAction } from "@/app/actions/communications.actions";
+import { getCustomersDb } from "@/app/actions/customers.actions";
 import { getOrdersDb } from "@/app/actions/orders.actions";
 import { Button, Checkbox, Dialog, Hinweis } from "@/ui/kr";
 import styles from "./TargetShell.module.css";
@@ -15,6 +16,7 @@ import styles from "./TargetShell.module.css";
 const ACCEPTED = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
 const MAX_BYTES = 20 * 1024 * 1024;
 type InboxMessage = Extract<Awaited<ReturnType<typeof listOutlookInboxAction>>, { code: "OK" }>["data"][number];
+type CustomerChoice = { id: string; customerNumber: string; name: string; email: string | null };
 type Suggestion = { field: string; label: string; value: string; confidence: number; source: { page: number } };
 
 export type F1SourceMode = "camera" | "document" | "mail";
@@ -62,8 +64,10 @@ export function F1SourceDialogs(props: Props) {
   const [reviewed, setReviewed] = useState(false);
   const [inbox, setInbox] = useState<InboxMessage[]>([]);
   const [mailState, setMailState] = useState<"loading" | "ready" | "empty" | "error">("loading");
+  const [customers, setCustomers] = useState<CustomerChoice[]>([]);
+  const [customerByMail, setCustomerByMail] = useState<Record<string, string>>({});
   const [orders, setOrders] = useState<Array<{ id: string; orderNumber: string }>>([]);
-  const [orderId, setOrderId] = useState("");
+  const [orderByMail, setOrderByMail] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (props.mode !== "camera") return;
@@ -84,22 +88,34 @@ export function F1SourceDialogs(props: Props) {
   }, [props.mode]);
 
   useEffect(() => {
-    if (props.mode !== "mail") return;
+    if (props.mode !== "mail" || !props.canUseMail) return;
     let active = true;
-    void Promise.all([getMicrosoftGraphStatusAction(), getOrdersDb()]).then(async ([status, orderResult]) => {
+    void Promise.all([getMicrosoftGraphStatusAction(), getOrdersDb(), getCustomersDb()]).then(async ([status, orderResult, customerResult]) => {
       if (!active) return;
       setOrders(orderResult.ok ? orderResult.data.map((entry) => ({ id: entry.id, orderNumber: entry.orderNumber })) : []);
+      const nextCustomers = customerResult.ok ? customerResult.data.map((entry) => ({
+        id: entry.id,
+        customerNumber: entry.customerNumber,
+        name: entry.name,
+        email: entry.email?.trim().toLowerCase() ?? null,
+      })) : [];
+      setCustomers(nextCustomers);
       if (status.code !== "OK") { setMessage(status.message); setMailState("error"); return; }
       const result = await listOutlookInboxAction();
       if (!active) return;
       if (result.code !== "OK") { setMessage(result.message); setMailState("error"); return; }
       setInbox(result.data);
+      setCustomerByMail(Object.fromEntries(result.data.map((mail) => {
+        const senderAddress = mail.senderAddress.trim().toLowerCase();
+        const exact = nextCustomers.find((customer) => customer.email === senderAddress);
+        return [mail.id, props.customerId ?? exact?.id ?? ""];
+      })));
       setMailState(result.data.length ? "ready" : "empty");
     }).catch(() => {
       if (active) { setMessage("Postfach nicht erreichbar · In Klärung"); setMailState("error"); }
     });
     return () => { active = false; };
-  }, [props.mode]);
+  }, [props.canUseMail, props.customerId, props.mode]);
 
   const storeFile = async (file: File | undefined) => {
     if (!file) return;
@@ -186,18 +202,23 @@ export function F1SourceDialogs(props: Props) {
   </Dialog>;
 
   return <Dialog titel="Mail zuordnen" icon="mail" groesse="breit" onSchliessen={props.onClose}>
-    {!props.canUseMail ? <Hinweis ton="warn">Mails sind für dieses Profil nicht freigegeben.</Hinweis> : mailState === "loading" ? <Hinweis><Loader2 /> Postfach wird gelesen …</Hinweis> : mailState === "error" ? <Hinweis ton="warn">{message}</Hinweis> : mailState === "empty" ? <Hinweis>Keine neuen Mails.</Hinweis> : <div className={styles.f1MailList}>{inbox.map((mail) => <article key={mail.id}>
-      <header><Mail /><div><strong>{mail.subject}</strong><small>{mail.senderName} · {mail.senderAddress}</small></div></header>
-      <p>{mail.preview || "Keine Vorschau vorhanden."}</p>
-      <div className={styles.f1MailActions}>
-        <Button data-spec-id="mailein.neuer-eingang-aus-mail" art="primaer" icon="inbox" text="Neuer Eingang aus Mail" onClick={() => { props.onMail(mail); props.onClose(); }} />
-        <Button data-spec-id="mailein.kunde-zuordnen" text="Kunde zuordnen" disabled={busy || !props.customerId} onClick={() => void attachMail(mail, "CUSTOMER", props.customerId ?? "")} />
-        <select aria-label="Auftrag wählen" value={orderId} onChange={(event) => setOrderId(event.target.value)}><option value="">Auftrag wählen</option>{orders.map((order) => <option key={order.id} value={order.id}>{order.orderNumber}</option>)}</select>
-        <Button data-spec-id="mailein.auftrag-zuordnen" text="Auftrag zuordnen" disabled={busy || !orderId} onClick={() => void attachMail(mail, "ORDER", orderId)} />
-        <Button data-spec-id="mailein.neukunde-aus-absender" text="Neukunde aus Absender" onClick={() => { props.onNewCustomer(mail); props.onClose(); }} />
-        <Button data-spec-id="mailein.spater" text="Später" onClick={props.onClose} />
-      </div>
-    </article>)}</div>}
+    {!props.canUseMail ? <Hinweis ton="warn">Mails sind für dieses Profil nicht freigegeben.</Hinweis> : mailState === "loading" ? <Hinweis><Loader2 /> Postfach wird gelesen …</Hinweis> : mailState === "error" ? <Hinweis ton="warn">{message}</Hinweis> : mailState === "empty" ? <Hinweis>Keine neuen Mails.</Hinweis> : <div className={styles.f1MailList}>{inbox.map((mail) => {
+      const customerId = customerByMail[mail.id] ?? "";
+      const orderId = orderByMail[mail.id] ?? "";
+      return <article key={mail.id}>
+        <header><Mail /><div><strong>{mail.subject}</strong><small>{mail.senderName} · {mail.senderAddress}</small></div></header>
+        <p>{mail.preview || "Keine Vorschau vorhanden."}</p>
+        <div className={styles.f1MailActions}>
+          <Button data-spec-id="mailein.neuer-eingang-aus-mail" art="primaer" icon="inbox" text="Neuer Eingang aus Mail" onClick={() => { props.onMail(mail); props.onClose(); }} />
+          <select aria-label={`Kunde für ${mail.subject} wählen`} value={customerId} onChange={(event) => setCustomerByMail((current) => ({ ...current, [mail.id]: event.target.value }))}><option value="">Kunde wählen</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.customerNumber} · {customer.name}</option>)}</select>
+          <Button data-spec-id="mailein.kunde-zuordnen" text="Kunde zuordnen" disabled={busy || !customerId} onClick={() => void attachMail(mail, "CUSTOMER", customerId)} />
+          <select aria-label={`Auftrag für ${mail.subject} wählen`} value={orderId} onChange={(event) => setOrderByMail((current) => ({ ...current, [mail.id]: event.target.value }))}><option value="">Auftrag wählen</option>{orders.map((order) => <option key={order.id} value={order.id}>{order.orderNumber}</option>)}</select>
+          <Button data-spec-id="mailein.auftrag-zuordnen" text="Auftrag zuordnen" disabled={busy || !orderId} onClick={() => void attachMail(mail, "ORDER", orderId)} />
+          <Button data-spec-id="mailein.neukunde-aus-absender" text="Neukunde aus Absender" onClick={() => { props.onNewCustomer(mail); props.onClose(); }} />
+          <Button data-spec-id="mailein.spater" text="Später" onClick={props.onClose} />
+        </div>
+      </article>;
+    })}</div>}
     {message && mailState === "ready" ? <Hinweis>{message}</Hinweis> : null}
   </Dialog>;
 }

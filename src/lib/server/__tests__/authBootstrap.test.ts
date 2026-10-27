@@ -16,6 +16,7 @@ const gregorAuthorization = {
     tenantId: "synthetic-tenant",
     displayName: "Gregor",
     role: "developer" as const,
+    areas: ["logins", "wartung"] as const,
     permissions: ["perm_sys_diag", "perm_sys_users"] as const,
     active: true as const,
   },
@@ -36,6 +37,7 @@ describe("getAuthBootstrapState()", () => {
       user: {
         role: "developer",
         displayName: "Gregor",
+        areas: ["logins", "wartung"],
         permissions: ["perm_sys_diag", "perm_sys_users"],
       },
     });
@@ -50,6 +52,7 @@ describe("getAuthBootstrapState()", () => {
 
     expect(state.status).toBe("authenticated");
     if (state.status !== "authenticated") return;
+    expect(state.user.areas).toEqual(gregorAuthorization.data.areas);
     expect(state.user.permissions).toEqual(gregorAuthorization.data.permissions);
     expect(ports.resolveAuthorization).toHaveBeenCalledOnce();
   });
@@ -59,6 +62,7 @@ describe("getAuthBootstrapState()", () => {
 
     expect(state.status).toBe("authenticated");
     if (state.status !== "authenticated") return;
+    expect(state.user.areas).not.toBe(gregorAuthorization.data.areas);
     expect(state.user.permissions).not.toBe(gregorAuthorization.data.permissions);
   });
 

@@ -5,6 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { appUsers } from "@/db/schema";
 import type {
+  AccessArea,
   AppRole,
   PermissionKey,
 } from "@/lib/auth/authorizationContract";
@@ -29,6 +30,7 @@ export type ClientAuthorizationResult =
       data: {
         displayName: string;
         role: AppRole;
+        areas: readonly AccessArea[];
         permissions: readonly PermissionKey[];
         active: true;
       };
@@ -60,6 +62,7 @@ export async function getAuthorizationSnapshotAction(): Promise<ClientAuthorizat
     data: {
       displayName: result.data.displayName,
       role: result.data.role,
+      areas: result.data.areas ?? [],
       permissions: result.data.permissions,
       active: true,
     },

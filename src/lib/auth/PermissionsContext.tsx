@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
 import { createClient } from "@/lib/supabase/client";
 import type { AuthBootstrapState } from "@/lib/server/authBootstrap";
+import type { AccessArea } from "@/lib/auth/authorizationContract";
 
 export function deriveInitials(displayName: string): string {
   if (!displayName || displayName === "Unknown" || displayName === "User") return "";
@@ -20,6 +21,7 @@ export function deriveInitials(displayName: string): string {
  */
 interface AuthState {
   role: string | null;
+  areas: AccessArea[];
   permissions: string[];
   name: string;
   initials: string;
@@ -29,6 +31,7 @@ interface AuthState {
 
 interface PermissionsContextType extends AuthState {
   loading: boolean;
+  hasArea: (area: AccessArea) => boolean;
   hasPermission: (key: string) => boolean;
   refreshPermissions: () => Promise<void>;
 }
@@ -42,6 +45,7 @@ function buildInitialAuthState(initial: AuthBootstrapState): AuthState {
   if (initial.status === "authenticated") {
     return {
       role: initial.user.role,
+      areas: [...initial.user.areas],
       permissions: [...initial.user.permissions],
       name: initial.user.displayName,
       initials: deriveInitials(initial.user.displayName),
@@ -51,6 +55,7 @@ function buildInitialAuthState(initial: AuthBootstrapState): AuthState {
   }
   return {
     role: null,
+    areas: [],
     permissions: [],
     name: "",
     initials: "",
@@ -61,10 +66,12 @@ function buildInitialAuthState(initial: AuthBootstrapState): AuthState {
 
 const PermissionsContext = createContext<PermissionsContextType>({
   role: null,
+  areas: [],
   permissions: [],
   name: "",
   initials: "",
   loading: true,
+  hasArea: () => false,
   hasPermission: () => false,
   refreshPermissions: async () => {},
   status: "unauthenticated",
@@ -110,6 +117,7 @@ export function PermissionsProvider({
       if (result.ok) {
         setAuthState({
           role: result.data.role,
+          areas: [...result.data.areas],
           permissions: [...result.data.permissions],
           name: result.data.displayName,
           initials: deriveInitials(result.data.displayName),
@@ -119,6 +127,7 @@ export function PermissionsProvider({
       } else if (result.status === "unauthenticated") {
         setAuthState({
           role: null,
+          areas: [],
           permissions: [],
           name: "",
           initials: "",
@@ -131,6 +140,7 @@ export function PermissionsProvider({
       } else {
         setAuthState({
           role: null,
+          areas: [],
           permissions: [],
           name: "",
           initials: "",
@@ -148,6 +158,7 @@ export function PermissionsProvider({
       console.error("Failed to load permissions", err);
       setAuthState({
         role: null,
+        areas: [],
         permissions: [],
         name: "",
         initials: "",
@@ -208,9 +219,14 @@ export function PermissionsProvider({
     return authState.permissions.includes(key);
   }, [authState.permissions]);
 
+  const hasArea = useCallback((area: AccessArea) => {
+    return authState.areas.includes(area);
+  }, [authState.areas]);
+
   const value: PermissionsContextType = {
     ...authState,
     loading,
+    hasArea,
     hasPermission,
     refreshPermissions,
   };

@@ -1,6 +1,7 @@
 import "server-only";
 
 import type {
+  AccessArea,
   AppRole,
   PermissionKey,
 } from "@/lib/auth/authorizationContract";
@@ -9,6 +10,7 @@ import { resolveAuthorization } from "@/lib/server/authorization";
 export type AuthBootstrapUser = {
   role: AppRole;
   displayName: string;
+  areas: readonly AccessArea[];
   /**
    * Dieselbe serverseitig aufgeloeste Faehigkeitsliste wie in
    * `getAuthorizationSnapshotAction`. Sie ist bereits clientsichtbar und
@@ -38,6 +40,7 @@ export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
       user: {
         role: result.data.role,
         displayName: result.data.displayName,
+        areas: [...(result.data.areas ?? [])],
         // Kopie: die geteilte Vertragstabelle bleibt unveraenderlich.
         permissions: [...result.data.permissions],
       },

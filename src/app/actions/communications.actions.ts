@@ -21,7 +21,7 @@ export async function getMicrosoftGraphStatusAction() {
   noStore();
   const auth = await authorization();
   if (!auth) return { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
-  if (!auth.permissions.includes("perm_view_customers")) return { code: "FORBIDDEN" as const, message: "Microsoft 365 ist für diese Rolle nicht freigegeben." };
+  if (!auth.areas?.includes("mails")) return { code: "FORBIDDEN" as const, message: "Microsoft 365 ist für dieses Profil nicht freigegeben." };
   return readMicrosoftGraphConfigurationStatus().code === "READY"
     ? { code: "OK" as const }
     : { code: "IN_KLAERUNG" as const, message: "Microsoft 365 · In Klärung. Die Preview-Zugangsdaten sind noch nicht vollständig verbunden." };

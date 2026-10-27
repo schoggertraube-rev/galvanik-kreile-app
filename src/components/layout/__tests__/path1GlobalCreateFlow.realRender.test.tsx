@@ -4,6 +4,13 @@ import {
   GlobalCreateFlow,
   type GlobalCreatePorts,
 } from "@/components/layout/GlobalCreateFlow";
+import {
+  attachOutlookMailAction,
+  getMicrosoftGraphStatusAction,
+  listOutlookInboxAction,
+} from "@/app/actions/communications.actions";
+import { getCustomersDb } from "@/app/actions/customers.actions";
+import { getOrdersDb } from "@/app/actions/orders.actions";
 
 vi.mock("@/app/actions/domainAttachments.actions", () => ({
   analyzeDomainAttachmentAction: vi.fn(),
@@ -15,6 +22,7 @@ vi.mock("@/app/actions/communications.actions", () => ({
   getMicrosoftGraphStatusAction: vi.fn(),
   listOutlookInboxAction: vi.fn(),
 }));
+vi.mock("@/app/actions/customers.actions", () => ({ getCustomersDb: vi.fn() }));
 vi.mock("@/app/actions/orders.actions", () => ({ getOrdersDb: vi.fn() }));
 
 const CUSTOMER_ID = "72d8c6c6-397c-4a9c-b464-d2e5595eb42a";
@@ -231,6 +239,40 @@ async function fillQuote() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(getMicrosoftGraphStatusAction).mockResolvedValue({ code: "OK" });
+  vi.mocked(listOutlookInboxAction).mockResolvedValue({
+    code: "OK",
+    data: [{
+      id: "graph-message-1",
+      internetMessageId: "<graph-message-1@example.invalid>",
+      subject: "TEST Anfrage",
+      senderName: "TEST Ansprechpartner",
+      senderAddress: "kunde@example.invalid",
+      receivedAt: "2026-10-27T20:00:00.000Z",
+      preview: "Bitte dem Vorgang zuordnen.",
+      body: "Bitte dem Vorgang zuordnen.",
+      hasAttachments: true,
+    }],
+  });
+  vi.mocked(getCustomersDb).mockResolvedValue({
+    ok: true,
+    data: [{ id: CUSTOMER_ID, customerNumber: "K-2026-0042", name: "SYNTHETISCH Musterkunde GmbH", email: "kunde@example.invalid" }],
+  } as never);
+  vi.mocked(getOrdersDb).mockResolvedValue({
+    ok: true,
+    data: [{ id: ORDER_ID, orderNumber: "A-2026-0061" }],
+  } as never);
+  vi.mocked(attachOutlookMailAction).mockResolvedValue({
+    code: "OK",
+    data: {
+      threadId: "thread-1",
+      messageId: "message-1",
+      customerId: CUSTOMER_ID,
+      orderId: null,
+      recordedAt: "2026-10-27T20:01:00.000Z",
+      replayed: false,
+    },
+  });
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
     value: vi.fn().mockImplementation((query: string) => ({
@@ -248,6 +290,32 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
+  it("reads incoming mail and assigns it to an exact customer or selected order", async () => {
+    render(<GlobalCreateFlow ports={ports()} />);
+
+    openFlow();
+    fireEvent.click(await screen.findByRole("button", { name: "Aus Mail" }));
+
+    expect(await screen.findByRole("heading", { name: "Mail zuordnen" })).toBeInTheDocument();
+    const customer = await screen.findByRole("combobox", { name: "Kunde für TEST Anfrage wählen" });
+    expect(customer).toHaveValue(CUSTOMER_ID);
+    fireEvent.click(screen.getByRole("button", { name: "Kunde zuordnen" }));
+    await waitFor(() => expect(attachOutlookMailAction).toHaveBeenCalledWith({
+      targetType: "CUSTOMER",
+      targetId: CUSTOMER_ID,
+      graphMessageId: "graph-message-1",
+    }));
+    expect(await screen.findByText("Mail und unterstützte Anhänge sind am Vorgang abgelegt.")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Auftrag für TEST Anfrage wählen" }), { target: { value: ORDER_ID } });
+    fireEvent.click(screen.getByRole("button", { name: "Auftrag zuordnen" }));
+    await waitFor(() => expect(attachOutlookMailAction).toHaveBeenLastCalledWith({
+      targetType: "ORDER",
+      targetId: ORDER_ID,
+      graphMessageId: "graph-message-1",
+    }));
+  });
+
   it("reaches the first manual customer field in two clicks and completes both receipt readbacks", async () => {
     const value = ports();
     render(<GlobalCreateFlow ports={value} />);

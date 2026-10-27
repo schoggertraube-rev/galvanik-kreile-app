@@ -23,11 +23,11 @@ type ThreadRow = { id: string; customer_id: string | null; order_id: string | nu
 export type CommunicationReceipt = { threadId: string; messageId: string | null; customerId: string; orderId: string | null; recordedAt: string; replayed: boolean; attachmentsImported?: number; attachmentsSkipped?: number; attachmentWarning?: string };
 
 function canRead(auth: AuthorizationSnapshot) {
-  return auth.permissions.includes("perm_view_customers");
+  return auth.areas?.includes("mails") === true;
 }
 
 function canWrite(auth: AuthorizationSnapshot) {
-  return auth.permissions.includes("perm_data_customers") || auth.permissions.includes("perm_data_orders");
+  return auth.areas?.includes("mails") === true;
 }
 
 function validTarget(type: unknown, id: unknown): type is TargetType {
