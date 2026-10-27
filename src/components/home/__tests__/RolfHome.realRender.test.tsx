@@ -76,6 +76,12 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     expect(screen.getByRole("button", { name: "morgen früh" })).toBeInTheDocument();
   });
 
+  it("benennt mehrere Konflikte im Plural", () => {
+    const secondConflict = { ...dashboard.items[0], key: "order:order-2", orderId: "order-2", title: "A-2026-0002 · Muster GmbH" };
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canDelegate: true, dashboard: { ...dashboard, items: [...dashboard.items, secondConflict], visibleFields: [...dashboard.visibleFields] }, projection }} />);
+    expect(within(screen.getByRole("region", { name: "Lage" })).getByText("Konflikte")).toBeInTheDocument();
+  });
+
   it("führt readonly ohne Warenausgang-Aktion", () => {
     render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "readonly", canCreateOrder: false, canDelegate: false, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields] }, projection }} />);
     expect(screen.queryByRole("button", { name: /Ware raus öffnen/ })).not.toBeInTheDocument();

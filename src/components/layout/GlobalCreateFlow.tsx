@@ -223,10 +223,19 @@ function record(value: unknown): value is Record<string, unknown> {
 
 function CustomerFields({ value, onChange, autofocus = false, requireOrderData = true }: { value: CustomerDraft; onChange: (value: CustomerDraft) => void; autofocus?: boolean; requireOrderData?: boolean }) {
   const set = <K extends keyof CustomerDraft>(key: K, next: CustomerDraft[K]) => onChange({ ...value, [key]: next });
+  const setName = (name: string) => onChange({
+    ...value,
+    name,
+    companyName: value.customerType === "privat" ? null : nullable(name),
+  });
+  const setCustomerType = (customerType: CustomerDraft["customerType"]) => onChange({
+    ...value,
+    customerType,
+    companyName: customerType === "privat" ? null : nullable(value.name),
+  });
   return <div className={styles.createFormGrid}>
-    <label className={styles.createFieldWide}>Firma / Name<input data-spec-id="kundeneu.name" data-autofocus={autofocus || undefined} required minLength={2} value={value.name} onChange={(event) => set("name", event.target.value)} /></label>
-    <label>Kundentyp<select data-spec-id="kundeneu.kundentyp" value={value.customerType} onChange={(event) => set("customerType", event.target.value as CustomerDraft["customerType"])}><option value="business">Firma</option><option value="privat">Privat</option><option value="institution">Institution</option></select></label>
-    <label>Firmenname<input value={value.companyName ?? ""} onChange={(event) => set("companyName", nullable(event.target.value))} /></label>
+    <label className={styles.createFieldWide}>{value.customerType === "privat" ? "Name" : "Firmenname"}<input data-spec-id="kundeneu.name" data-autofocus={autofocus || undefined} required minLength={2} value={value.name} onChange={(event) => setName(event.target.value)} /></label>
+    <label>Kundentyp<select data-spec-id="kundeneu.kundentyp" value={value.customerType} onChange={(event) => setCustomerType(event.target.value as CustomerDraft["customerType"])}><option value="business">Firma</option><option value="privat">Privat</option><option value="institution">Institution</option></select></label>
     <label>Ansprechpartner<input data-spec-id="kundeneu.ansprechpartner" required={requireOrderData} value={value.contactPerson ?? ""} onChange={(event) => set("contactPerson", nullable(event.target.value))} /></label>
     <label>Telefon<input data-spec-id="kundeneu.telefon" required value={value.phone ?? ""} onChange={(event) => set("phone", nullable(event.target.value))} /></label>
     <label>E-Mail<input data-spec-id="kundeneu.email" required={requireOrderData} type="email" value={value.email ?? ""} onChange={(event) => set("email", nullable(event.target.value))} /></label>
@@ -274,7 +283,7 @@ const EMPTY_CUSTOMER: CustomerDraft = {
   zipCode: "",
   city: "",
   country: "Deutschland",
-  paymentPreference: "rechnung_14",
+  paymentPreference: "vorkasse",
   vatId: null,
 };
 
@@ -311,7 +320,7 @@ function customerChoiceToDraft(customer: GlobalCreateCustomerChoice): CustomerDr
     zipCode: customer.zipCode ?? "",
     city: customer.city ?? "",
     country: customer.country ?? "Deutschland",
-    paymentPreference: customer.paymentPreference ?? "rechnung_14",
+    paymentPreference: customer.paymentPreference ?? "",
     vatId: customer.vatId ?? null,
   };
 }
@@ -1477,9 +1486,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 <FormRaster>
                   <Feld label="Liefertermin"><Eingabe data-spec-id="eingang.liefertermin" type="date" required value={directWishDate} onChange={(event) => { setDirectWishDate(event.target.value); setDirectConfirmedDate(event.target.value); }} /></Feld>
                   <Feld label="Termin ist"><div data-spec-id="eingang.terminstatus"><Segment label="Termin ist" wert={intakeTermStatus} optionen={[{ wert: "wish", text: "Wunsch" }, { wert: "confirmed", text: "bestätigt" }]} onWert={setIntakeTermStatus} /></div></Feld>
-                  <Feld label="Übergabe"><div data-spec-id="eingang.uebergabe"><Segment label="Übergabe" wert={intakeHandover} optionen={[{ wert: "PICKUP", text: "Abholung" }, { wert: "SHIPPING", text: "Versand" }]} onWert={(value) => { setIntakeHandover(value); setDirectCustomer((current) => ({ ...current, paymentPreference: value === "PICKUP" ? "bar" : "vorkasse" })); }} /></div></Feld>
+                  <Feld label="Übergabe"><div data-spec-id="eingang.uebergabe"><Segment label="Übergabe" wert={intakeHandover} optionen={[{ wert: "PICKUP", text: "Abholung" }, { wert: "SHIPPING", text: "Versand" }]} onWert={(value) => { setIntakeHandover(value); setDirectCustomer((current) => directCustomerMode === "EXISTING" && /^rechnung_/.test(current.paymentPreference) ? current : { ...current, paymentPreference: value === "PICKUP" ? "bar" : "vorkasse" }); }} /></div></Feld>
                   <Feld label="Zahlungsmodus">
-                    <Auswahl data-spec-id="eingang.zahlungsmodus" value={directCustomer.paymentPreference} onChange={(event) => setDirectCustomer((current) => ({ ...current, paymentPreference: event.target.value }))} optionen={[
+                    <Auswahl required data-spec-id="eingang.zahlungsmodus" value={directCustomer.paymentPreference} onChange={(event) => setDirectCustomer((current) => ({ ...current, paymentPreference: event.target.value }))} optionen={[
+                      ...(directCustomer.paymentPreference ? [] : [{ wert: "", text: "Bitte auswählen" }]),
                       intakeHandover === "PICKUP" ? { wert: "bar", text: "Bar oder Karte bei Abholung" } : { wert: "vorkasse", text: "Vorkasse" },
                       { wert: "rechnung_14", text: /^rechnung_/.test(directCustomer.paymentPreference) && directCustomerMode === "EXISTING" ? "Rechnung auf Ziel" : "Rechnung auf Ziel (nicht freigeschaltet)", gesperrt: !(directCustomerMode === "EXISTING" && /^rechnung_/.test(directCustomer.paymentPreference)) },
                     ]} />
