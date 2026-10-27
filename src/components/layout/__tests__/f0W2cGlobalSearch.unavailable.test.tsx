@@ -5,6 +5,9 @@ const ports = vi.hoisted(() => ({ search: vi.fn(), openOrder: vi.fn(), openCusto
 
 vi.mock("@/app/actions/search.actions", () => ({ searchTenantAction: ports.search }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: ports.push }) }));
+vi.mock("@/lib/auth/PermissionsContext", () => ({
+  usePermissions: () => ({ hasPermission: () => true }),
+}));
 vi.mock("@/lib/overlayStore", () => ({
   useOverlayStore: (selector: (state: { openOrder: typeof ports.openOrder; openCustomer: typeof ports.openCustomer; openInvoice: typeof ports.openInvoice }) => unknown) => selector({ openOrder: ports.openOrder, openCustomer: ports.openCustomer, openInvoice: ports.openInvoice }),
 }));
@@ -19,8 +22,8 @@ describe("W2C GlobalSearch real Lane-0 contract", () => {
     const { rerender } = render(<GlobalSearch onOpenChange={vi.fn()} open={false} />);
     expect(screen.queryByRole("dialog")).toBeNull();
     rerender(<GlobalSearch onOpenChange={vi.fn()} open />);
-    expect(screen.getByRole("dialog", { name: "Frag mich :)" })).toHaveAttribute("aria-modal", "true");
-    expect(screen.getByTestId("search-backdrop").parentElement).toBe(document.body);
+    expect(screen.getByRole("dialog", { name: "Suchen oder tun" })).toHaveAttribute("aria-modal", "true");
+    expect(screen.getByRole("dialog", { name: "Suchen oder tun" }).parentElement?.parentElement).toBe(document.body);
     expect(screen.queryByText("NOT_AVAILABLE")).not.toBeInTheDocument();
     expect(screen.queryByText(/nicht verfügbar/i)).not.toBeInTheDocument();
   });
@@ -32,10 +35,9 @@ describe("W2C GlobalSearch real Lane-0 contract", () => {
       hits: [{ type: "ORDER", id: "order-1", title: "Auftrag", subtitle: "A-42", status: "angenommen", matchField: "orderNumber", source: "Auftragsbestand", matchLabel: "Auftragsnummer", matchValue: "A-42", context: "A-42 · Kunde", href: "/orders/order-1", actionLabel: "Auftragskarte öffnen" }],
     });
     const { rerender } = render(<GlobalSearch onOpenChange={vi.fn()} open />);
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "A-42" } });
+    fireEvent.change(screen.getByPlaceholderText("Suchen oder tun"), { target: { value: "A-42" } });
     await act(() => vi.runAllTimersAsync());
-    expect(screen.getByRole("option", { name: /Auftrag/ })).toHaveAttribute("href", "/orders/order-1");
-    fireEvent.click(screen.getByRole("option", { name: /Auftrag/ }));
+    fireEvent.click(screen.getAllByText("Auftrag", { exact: true })[0].closest("button")!);
     expect(ports.openOrder).toHaveBeenCalledWith("order-1");
 
     ports.search.mockResolvedValueOnce({
@@ -44,9 +46,9 @@ describe("W2C GlobalSearch real Lane-0 contract", () => {
       hits: [{ type: "CUSTOMER", id: "customer-1", title: "Muster GmbH", subtitle: "K-1", status: "business", matchField: "companyName", source: "Kundenstamm", matchLabel: "Firma", matchValue: "Muster GmbH", context: "Muster GmbH · K-1", href: "/customers/customer-1", actionLabel: "Kundenkarte öffnen" }],
     });
     rerender(<GlobalSearch onOpenChange={vi.fn()} open />);
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "Kunde" } });
+    fireEvent.change(screen.getByPlaceholderText("Suchen oder tun"), { target: { value: "Kunde" } });
     await act(() => vi.runAllTimersAsync());
-    fireEvent.click(screen.getByRole("option", { name: /Muster GmbH/ }));
+    fireEvent.click(screen.getByText("Muster GmbH").closest("button")!);
     expect(ports.openCustomer).toHaveBeenCalledWith("customer-1");
   });
 
@@ -64,23 +66,23 @@ describe("W2C GlobalSearch real Lane-0 contract", () => {
         <GlobalSearch onOpenChange={onOpenChange} open />
       </div>,
     );
-    expect(screen.getByTestId("search-backdrop").parentElement).toBe(document.body);
-    expect(screen.getByRole("combobox")).toHaveFocus();
+    expect(screen.getByRole("dialog", { name: "Suchen oder tun" }).parentElement?.parentElement).toBe(document.body);
+    expect(screen.getByPlaceholderText("Suchen oder tun")).toHaveFocus();
   });
 
   it("keeps denial and port failure fail-closed without partial results", async () => {
     ports.search.mockResolvedValueOnce({ code: "FORBIDDEN", message: "Diese Suche ist für die aktuelle Sitzung nicht freigegeben." });
     const { rerender } = render(<GlobalSearch onOpenChange={vi.fn()} open />);
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "intern" } });
+    fireEvent.change(screen.getByPlaceholderText("Suchen oder tun"), { target: { value: "intern" } });
     await act(() => vi.runAllTimersAsync());
-    expect(screen.getByTestId("search-dialog")).toHaveAttribute("data-state", "denial");
-    expect(screen.queryByRole("option")).not.toBeInTheDocument();
+    expect(screen.getByText(/aktuelle Sitzung nicht freigegeben/)).toBeInTheDocument();
+    expect(screen.queryByText("Auftrag", { exact: true })).not.toBeInTheDocument();
 
     ports.search.mockResolvedValueOnce({ code: "UNAVAILABLE", message: "Die internen Bestände konnten nicht sicher durchsucht werden." });
     rerender(<GlobalSearch onOpenChange={vi.fn()} open />);
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "Fehler" } });
+    fireEvent.change(screen.getByPlaceholderText("Suchen oder tun"), { target: { value: "Fehler" } });
     await act(() => vi.runAllTimersAsync());
-    expect(screen.getByTestId("search-dialog")).toHaveAttribute("data-state", "error");
-    expect(screen.queryByRole("option")).not.toBeInTheDocument();
+    expect(screen.getByText(/nicht sicher durchsucht/)).toBeInTheDocument();
+    expect(screen.queryByText("Auftrag", { exact: true })).not.toBeInTheDocument();
   });
 });

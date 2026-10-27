@@ -129,5 +129,12 @@ export type SearchDialogProps = {
   onOpenChange: (open: boolean) => void;
   search: (query: string) => Promise<SearchTenantResult>;
   onSelect: (hit: SearchHit) => void;
+  commands?: {
+    onNewIntake?: () => void;
+    onGoodsOut?: () => void;
+    onFinish?: () => void;
+    onExtraWork?: () => void;
+    onWeek?: () => void;
+  };
   debounceMs?: number;
 };

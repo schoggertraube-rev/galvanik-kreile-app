@@ -27,22 +27,21 @@ describe("SearchDialog", () => {
   it("focuses on open and waits for two characters", async () => {
     const search = vi.fn();
     render(<SearchDialog debounceMs={1} onOpenChange={vi.fn()} onSelect={vi.fn()} open search={search} />);
-    const input = screen.getByRole("combobox");
+    const input = screen.getByPlaceholderText("Suchen oder tun");
     expect(input).toHaveFocus();
     fireEvent.change(input, { target: { value: "x" } });
     await act(() => vi.runAllTimersAsync());
     expect(search).not.toHaveBeenCalled();
-    expect(screen.getByTestId("search-backdrop").parentElement).toBe(document.body);
+    expect(screen.getByRole("dialog", { name: "Suchen oder tun" }).parentElement?.parentElement).toBe(document.body);
   });
 
   it("states checked sources, timestamp and safe alternatives without forbidden not-found wording", async () => {
     const search = vi.fn().mockResolvedValue(ok([], "Unbekannt"));
     render(<SearchDialog debounceMs={1} onOpenChange={vi.fn()} onSelect={vi.fn()} open search={search} />);
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "Unbekannt" } });
+    fireEvent.change(screen.getByPlaceholderText("Suchen oder tun"), { target: { value: "Unbekannt" } });
     await act(() => vi.runAllTimersAsync());
-    expect(screen.getByText(/keine belegte Übereinstimmung/)).toBeInTheDocument();
-    expect(screen.getByText(/Durchsucht: Auftragsbestand, Kundenstamm/)).toBeInTheDocument();
-    expect(screen.getByText(/Kundenname, Auftragsnummer, Teil oder Material/)).toBeInTheDocument();
+    expect(screen.getByText(/Kein Treffer für „Unbekannt“/)).toBeInTheDocument();
+    expect(screen.getByText(/durchsucht: Auftragsbestand, Kundenstamm/i)).toBeInTheDocument();
     expect(screen.queryByText(/nicht gefunden|Keine Treffer gefunden/i)).not.toBeInTheDocument();
   });
 
@@ -51,12 +50,11 @@ describe("SearchDialog", () => {
     const search = vi.fn().mockResolvedValue(ok([ORDER_HIT, second], "Auftrag"));
     const onSelect = vi.fn();
     render(<SearchDialog debounceMs={1} onOpenChange={vi.fn()} onSelect={onSelect} open search={search} />);
-    const input = screen.getByRole("combobox");
+    const input = screen.getByPlaceholderText("Suchen oder tun");
     fireEvent.change(input, { target: { value: "Auftrag" } });
     await act(() => vi.runAllTimersAsync());
     expect(screen.getAllByText(/Treffer über Auftragsnummer/)[0]).toHaveTextContent("A-2026-0042");
-    expect(screen.getAllByText(/Zusammenhang:/)[0]).toHaveTextContent("Muster GmbH");
-    expect(screen.getAllByRole("option")[0]).toHaveAttribute("href", "/orders/order-1");
+    expect(screen.getAllByText(/Treffer über Auftragsnummer/)[0]).toHaveTextContent("Muster GmbH");
     fireEvent.keyDown(input, { key: "ArrowDown" });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onSelect).toHaveBeenCalledWith(second);
@@ -65,17 +63,16 @@ describe("SearchDialog", () => {
   it("states incomplete coverage instead of presenting a capped result as complete", async () => {
     const search = vi.fn().mockResolvedValue(ok([ORDER_HIT], "Auftrag", true));
     render(<SearchDialog debounceMs={1} onOpenChange={vi.fn()} onSelect={vi.fn()} open search={search} />);
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "Auftrag" } });
+    fireEvent.change(screen.getByPlaceholderText("Suchen oder tun"), { target: { value: "Auftrag" } });
     await act(() => vi.runAllTimersAsync());
-    expect(screen.getByRole("status")).toHaveTextContent("Weitere Treffer sind möglich");
-    expect(screen.getByRole("status")).toHaveTextContent("Suchbegriff verfeinern");
+    expect(screen.getByText(/Weitere Treffer möglich/)).toBeInTheDocument();
   });
 
   it("discards stale responses", async () => {
     const stale = deferred<SearchTenantResult>(); const current = deferred<SearchTenantResult>();
     const search = vi.fn().mockImplementationOnce(() => stale.promise).mockImplementationOnce(() => current.promise);
     render(<SearchDialog debounceMs={1} onOpenChange={vi.fn()} onSelect={vi.fn()} open search={search} />);
-    const input = screen.getByRole("combobox");
+    const input = screen.getByPlaceholderText("Suchen oder tun");
     fireEvent.change(input, { target: { value: "alt" } }); await act(() => vi.runAllTimersAsync());
     fireEvent.change(input, { target: { value: "neu" } }); await act(() => vi.runAllTimersAsync());
     await act(async () => current.resolve(ok([ORDER_HIT], "neu")));
@@ -89,6 +86,6 @@ describe("SearchDialog", () => {
     fireEvent.keyDown(document, { ctrlKey: true, key: "k" }); expect(onOpenChange).toHaveBeenLastCalledWith(true);
     rerender(<SearchDialog onOpenChange={onOpenChange} onSelect={vi.fn()} open search={vi.fn()} />);
     fireEvent.keyDown(document, { key: "Escape" }); expect(onOpenChange).toHaveBeenLastCalledWith(false);
-    fireEvent.mouseDown(screen.getByTestId("search-backdrop")); expect(onOpenChange).toHaveBeenLastCalledWith(false);
+    fireEvent.click(screen.getByRole("dialog", { name: "Suchen oder tun" }).parentElement!); expect(onOpenChange).toHaveBeenLastCalledWith(false);
   });
 });

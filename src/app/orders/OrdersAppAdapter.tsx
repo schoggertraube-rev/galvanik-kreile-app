@@ -176,7 +176,11 @@ export function OrdersAppAdapter() {
 
   useEffect(() => {
     const stored = window.sessionStorage.getItem(KEY) ?? "";
-    queueMicrotask(() => setQuery(stored));
+    const requestedView = new URLSearchParams(window.location.search).get("view");
+    queueMicrotask(() => {
+      setQuery(stored);
+      if (requestedView === "woche" || requestedView === "monat") setView(requestedView);
+    });
   }, []);
 
   useEffect(() => {

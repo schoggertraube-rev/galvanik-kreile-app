@@ -4,6 +4,8 @@ import { searchTenantAction } from "@/app/actions/search.actions";
 import { useRouter } from "next/navigation";
 import { useOverlayStore } from "@/lib/overlayStore";
 import { SearchDialog, type SearchHit } from "@/modules/suche/public";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
+import { requestGlobalCreate } from "./GlobalCreateFlow";
 
 type GlobalSearchProps = {
   open: boolean;
@@ -15,6 +17,7 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
   const openOrder = useOverlayStore((state) => state.openOrder);
   const openCustomer = useOverlayStore((state) => state.openCustomer);
   const openInvoice = useOverlayStore((state) => state.openInvoice);
+  const permissions = usePermissions();
 
   const selectHit = (hit: SearchHit) => {
     if (hit.type === "ORDER") openOrder(hit.id);
@@ -23,5 +26,20 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
     else router.push(hit.href);
   };
 
-  return <SearchDialog onOpenChange={onOpenChange} onSelect={selectHit} open={open} search={searchTenantAction} />;
+  const canWorkOrders = permissions.hasPermission("perm_data_orders");
+  const canCreate = canWorkOrders || permissions.hasPermission("perm_data_customers");
+
+  return <SearchDialog
+    onOpenChange={onOpenChange}
+    onSelect={selectHit}
+    open={open}
+    search={searchTenantAction}
+    commands={{
+      onNewIntake: canCreate ? () => requestGlobalCreate("DIRECT_INTAKE") : undefined,
+      onGoodsOut: canWorkOrders ? () => router.push("/orders?station=fertig") : undefined,
+      onFinish: canWorkOrders ? () => router.push("/warendurchlauf") : undefined,
+      onExtraWork: canWorkOrders ? () => router.push("/warendurchlauf") : undefined,
+      onWeek: () => router.push("/orders?view=woche"),
+    }}
+  />;
 }

@@ -25,7 +25,7 @@ const prototypePath = resolve("docs/project/linie/ui/designsystem_v1_1/kundenans
 
 if (!appUrl) throw new Error("APP_URL_MISSING: --app-url oder KREILE_PREVIEW_URL setzen");
 if (!/^\d{4}$/.test(pin ?? "")) throw new Error("PREVIEW_PIN_MISSING: KREILE_PREVIEW_PIN nur für diesen Lauf setzen");
-if (!["shell-plus", "neuer-eingang", "der-tag", "auftragskarte", "werkstatt", "auftraege", "kunden", "kundenkarte", "completed"].includes(screen)) throw new Error(`SCREEN_NOT_IMPLEMENTED: ${screen}`);
+if (!["shell-plus", "neuer-eingang", "der-tag", "auftragskarte", "werkstatt", "auftraege", "kunden", "kundenkarte", "palette", "completed"].includes(screen)) throw new Error(`SCREEN_NOT_IMPLEMENTED: ${screen}`);
 delete process.env.KREILE_PREVIEW_PIN;
 
 await mkdir(output, { recursive: true });
@@ -76,6 +76,11 @@ async function savePair({ viewport, name, title, app, prototype }) {
   const suffix = `${viewport.width}x${viewport.height}`;
   const prototypeFile = `${name}-prototyp-${suffix}.png`;
   const appFile = `${name}-app-${suffix}.png`;
+  await Promise.all([
+    app.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))),
+    prototype.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))),
+  ]);
+  await Promise.all([app.waitForTimeout(450), prototype.waitForTimeout(450)]);
   await prototype.screenshot({ path: resolve(output, prototypeFile), animations: "disabled" });
   await app.screenshot({ path: resolve(output, appFile), animations: "disabled" });
   pairs.push({ screen: name, title, ...viewport, prototypeFile, appFile });
@@ -95,6 +100,25 @@ async function captureShell(viewport) {
     await prototype.locator(".kr-plus").click();
     await prototype.locator(".kr-plus-menue").waitFor();
     await savePair({ viewport, name: "shell-plus", title: "Shell + Plus", app, prototype });
+  } finally {
+    await appContext.close();
+    await prototypeContext.close();
+  }
+}
+
+async function capturePalette(viewport) {
+  const appContext = await browser.newContext(contextOptions(viewport, true));
+  const prototypeContext = await browser.newContext(contextOptions(viewport));
+  try {
+    const app = await appContext.newPage();
+    const prototype = await prototypeContext.newPage();
+    await app.goto(`${appUrl}/`, { waitUntil: "networkidle", timeout: 30_000 });
+    await app.locator(`.kr-app[data-geraet="${viewport.geraet}"]`).waitFor();
+    await app.getByRole("button", { name: /Auftrag, Kunde oder Nummer suchen/ }).click();
+    await app.getByRole("dialog", { name: "Suchen oder tun" }).waitFor();
+    await prototype.goto(prototypeUrl(viewport, "suche"), { waitUntil: "load" });
+    await prototype.getByRole("dialog", { name: "Suchen oder tun" }).waitFor();
+    await savePair({ viewport, name: "palette", title: "Suchen oder tun", app, prototype });
   } finally {
     await appContext.close();
     await prototypeContext.close();
@@ -301,6 +325,7 @@ async function captureIntake(viewport, state) {
 try {
   for (const viewport of VIEWPORTS) {
     if (screen === "shell-plus" || screen === "completed") await captureShell(viewport);
+    if (screen === "palette" || screen === "completed") await capturePalette(viewport);
     if (screen === "der-tag" || screen === "completed") await captureDay(viewport);
     if (screen === "auftragskarte" || screen === "completed") await captureOrderCard(viewport);
     if (screen === "werkstatt" || screen === "completed") await captureWorkshop(viewport);

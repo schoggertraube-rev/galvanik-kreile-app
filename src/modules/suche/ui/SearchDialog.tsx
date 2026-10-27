@@ -1,9 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { Search } from "lucide-react";
 import {
   SEARCH_MIN_QUERY_LENGTH,
   type SearchDialogProps,
@@ -11,9 +9,13 @@ import {
   type SearchHit,
   type SearchTenantResult,
 } from "../server/types";
-import styles from "./SearchDialog.module.css";
-
-const HIT_LABEL: Record<string, string> = { ORDER: "Auftrag", CUSTOMER: "Kunde", QUOTE: "KV", INVOICE: "Rechnung" };
+import {
+  Befehlspalette,
+  type DatenZustand,
+  type Geraet,
+  type PalettenAktion,
+  type SuchTreffer,
+} from "@/ui/kr";
 
 type PresentedResult = {
   state: SearchDialogState;
@@ -24,24 +26,12 @@ type PresentedResult = {
   checkedSources: string[];
 };
 
-function formatCheckedAt(value: string | null): string {
-  if (!value) return "";
-  return new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
-}
-
 function stateForResult(result: SearchTenantResult): PresentedResult {
   switch (result.code) {
     case "OK":
       return result.hits.length > 0
         ? { state: "data", hits: result.hits, message: "", checkedAt: result.checkedAt, truncated: result.coverage.truncated, checkedSources: result.checkedSources }
-        : {
-            state: "empty",
-            hits: [],
-            message: `Für „${result.query}“ liegt in den internen Auftrags- und Kundendaten keine belegte Übereinstimmung vor.`,
-            checkedAt: result.checkedAt,
-            truncated: false,
-            checkedSources: result.checkedSources,
-          };
+        : { state: "empty", hits: [], message: `Kein Treffer für „${result.query}“ · durchsucht: ${result.checkedSources.join(", ")}.`, checkedAt: result.checkedAt, truncated: false, checkedSources: result.checkedSources };
     case "UNAUTHENTICATED":
     case "FORBIDDEN":
       return { state: "denial", hits: [], message: result.message, checkedAt: null, truncated: false, checkedSources: [] };
@@ -53,11 +43,45 @@ function stateForResult(result: SearchTenantResult): PresentedResult {
   }
 }
 
-export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs = 220 }: SearchDialogProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+function readDevice(): Geraet {
+  if (window.innerWidth <= 699) return "handy";
+  if (window.innerWidth <= 1399 && window.matchMedia?.("(pointer: coarse)").matches) return "tablet";
+  return "desktop";
+}
+
+function subscribeDevice(onChange: () => void) {
+  const coarse = window.matchMedia?.("(pointer: coarse)");
+  window.addEventListener("resize", onChange);
+  coarse?.addEventListener("change", onChange);
+  return () => {
+    window.removeEventListener("resize", onChange);
+    coarse?.removeEventListener("change", onChange);
+  };
+}
+
+const readServerDevice = (): Geraet => "desktop";
+
+function sourceFor(hit: SearchHit): SuchTreffer["quelle"] {
+  if (hit.type === "ORDER") return "Auftrag";
+  if (hit.type === "CUSTOMER") return "Kunde";
+  if (hit.type === "QUOTE") return "KV";
+  if (hit.type === "INVOICE") return "Rechnung";
+  if (hit.matchField === "note") return "Notiz";
+  return "Dokument";
+}
+
+function stateForPalette(state: SearchDialogState): DatenZustand {
+  if (state === "loading") return "laedt";
+  if (state === "empty") return "leer";
+  if (state === "denial") return "gesperrt";
+  if (state === "error" || state === "conflict") return "fehler";
+  return "daten";
+}
+
+export function SearchDialog({ open, onOpenChange, search, onSelect, commands, debounceMs = 220 }: SearchDialogProps) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestSequence = useRef(0);
-  const listboxId = useId();
+  const device = useSyncExternalStore(subscribeDevice, readDevice, readServerDevice);
   const [query, setQuery] = useState("");
   const [state, setState] = useState<SearchDialogState>("idle");
   const [hits, setHits] = useState<SearchHit[]>([]);
@@ -65,7 +89,6 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
   const [checkedAt, setCheckedAt] = useState<string | null>(null);
   const [truncated, setTruncated] = useState(false);
   const [checkedSources, setCheckedSources] = useState<string[]>([]);
-  const [activeIndex, setActiveIndex] = useState(-1);
 
   const clearPending = useCallback(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -82,14 +105,17 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
     setCheckedAt(null);
     setTruncated(false);
     setCheckedSources([]);
-    setActiveIndex(-1);
   }, [clearPending]);
 
   const close = useCallback(() => { reset(); onOpenChange(false); }, [onOpenChange, reset]);
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase("de-DE") === "k") {
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      const isTyping = target?.matches("input, textarea, select, [contenteditable='true']") ?? false;
+      const ctrlK = (event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase("de-DE") === "k";
+      const slash = event.key === "/" && !isTyping && !event.ctrlKey && !event.metaKey && !event.altKey;
+      if (ctrlK || slash) {
         event.preventDefault();
         if (open) close(); else onOpenChange(true);
         return;
@@ -100,10 +126,7 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
     return () => document.removeEventListener("keydown", handleShortcut);
   }, [close, onOpenChange, open]);
 
-  useEffect(() => {
-    if (open) inputRef.current?.focus();
-    return clearPending;
-  }, [clearPending, open]);
+  useEffect(() => clearPending, [clearPending]);
 
   const runSearch = useCallback(async (term: string) => {
     const sequence = ++requestSequence.current;
@@ -113,7 +136,6 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
     setCheckedAt(null);
     setTruncated(false);
     setCheckedSources([]);
-    setActiveIndex(-1);
     try {
       const result = await search(term);
       if (sequence !== requestSequence.current) return;
@@ -124,7 +146,6 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
       setCheckedAt(next.checkedAt);
       setTruncated(next.truncated);
       setCheckedSources(next.checkedSources);
-      setActiveIndex(next.hits.length > 0 ? 0 : -1);
     } catch {
       if (sequence !== requestSequence.current) return;
       setState("error");
@@ -133,7 +154,6 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
       setCheckedAt(null);
       setTruncated(false);
       setCheckedSources([]);
-      setActiveIndex(-1);
     }
   }, [search]);
 
@@ -149,79 +169,48 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, debounceMs 
       setCheckedAt(null);
       setTruncated(false);
       setCheckedSources([]);
-      setActiveIndex(-1);
       return;
     }
     debounceRef.current = setTimeout(() => void runSearch(term), debounceMs);
   }, [clearPending, debounceMs, runSearch]);
 
   const select = useCallback((hit: SearchHit) => { onSelect(hit); close(); }, [close, onSelect]);
-
-  const selectLink = useCallback((event: ReactMouseEvent<HTMLAnchorElement>, hit: SearchHit) => {
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    event.preventDefault();
-    select(hit);
-  }, [select]);
-
-  const handleInputKeyDown = useCallback((event: ReactKeyboardEvent<HTMLInputElement>) => {
-    if (state !== "data" || hits.length === 0) return;
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setActiveIndex((current) => (current + 1) % hits.length);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setActiveIndex((current) => (current - 1 + hits.length) % hits.length);
-    } else if (event.key === "Enter" && activeIndex >= 0) {
-      event.preventDefault();
-      const hit = hits[activeIndex];
-      if (hit) select(hit);
-    }
-  }, [activeIndex, hits, select, state]);
-
   if (!open || typeof document === "undefined") return null;
-  const expanded = state === "data" && hits.length > 0;
-  const activeDescendant = expanded && activeIndex >= 0 ? `${listboxId}-option-${activeIndex}` : undefined;
-  const dataStand = formatCheckedAt(checkedAt);
 
-  return createPortal(
-    <div className={styles.backdrop} data-testid="search-backdrop" onMouseDown={close}>
-      <section aria-label="Frag mich :)" aria-modal="true" className={styles.dialog} data-state={state} data-testid="search-dialog" onMouseDown={(event) => event.stopPropagation()} role="dialog">
-        <header className={styles.header}>
-          <div><p className={styles.eyebrow}>Schnell finden</p><h2 className={styles.title} id="global-search-title">Frag mich :)</h2></div>
-          <button aria-label="Suche schließen" className={styles.closeButton} onClick={close} type="button">×</button>
-        </header>
-        <div className={styles.body}>
-          <div className={styles.inputWrap}>
-            <Search aria-hidden="true" size={20} strokeWidth={1.7} />
-            <input aria-activedescendant={activeDescendant} aria-autocomplete="list" aria-controls={listboxId} aria-expanded={expanded} aria-label="Kunde, Auftrag, Teil, Material, Oberfläche oder Termin suchen" autoComplete="off" className={styles.input} onChange={(event) => changeQuery(event.target.value)} onKeyDown={handleInputKeyDown} placeholder="Kunde, Auftrag, Teil, Material, Oberfläche oder Termin" ref={inputRef} role="combobox" type="search" value={query} />
-          </div>
-          <p className={styles.hint}>Mindestens zwei Zeichen · ↑↓ wählen · Enter öffnen · Esc schließen</p>
-          {state === "loading" ? <p aria-live="polite" className={styles.statePanel} role="status">Interne Bestände werden durchsucht …</p> : null}
-          {state === "empty" ? (
-            <div aria-live="polite" className={styles.statePanel} role="status">
-              <p><strong>Prüfergebnis</strong></p><p>{message}</p>
-              <p className={styles.checked}>Durchsucht: {checkedSources.join(", ")}{dataStand ? ` · Abfrage ${dataStand}` : ""}.</p>
-              <p className={styles.alternatives}>Sicher weitersuchen mit Kundenname, Auftragsnummer, Teil oder Material, Oberfläche oder Datum.</p>
-            </div>
-          ) : null}
-          {state === "denial" ? <p className={`${styles.statePanel} ${styles.denial}`} role="alert"><strong>Kein Zugriff.</strong> {message}</p> : null}
-          {state === "conflict" ? <p className={`${styles.statePanel} ${styles.conflict}`} role="alert"><strong>Datenkonflikt.</strong> {message}</p> : null}
-          {state === "error" ? <p className={`${styles.statePanel} ${styles.error}`} role="alert"><strong>Suche nicht möglich.</strong> {message}</p> : null}
-          <ul aria-label="Suchtreffer" className={expanded ? styles.results : "hidden"} id={listboxId} role="listbox">
-            {expanded ? hits.map((hit, index) => (
-              <li key={`${hit.type}-${hit.id}`} role="presentation">
-                <a aria-selected={index === activeIndex} className={styles.resultButton} data-active={index === activeIndex} data-hit-type={hit.type} href={hit.href} id={`${listboxId}-option-${index}`} onClick={(event) => selectLink(event, hit)} onMouseEnter={() => setActiveIndex(index)} role="option">
-                  <span><span className={styles.resultTitle}>{hit.title}</span><span className={styles.resultSubtitle}>{hit.subtitle}</span><span className={styles.resultEvidence}><strong>{hit.source}</strong> · Treffer über {hit.matchLabel}: „{hit.matchValue}“</span><span className={styles.resultContext}>Zusammenhang: {hit.context}</span></span>
-                  <span className={styles.resultAction}><span className={styles.type}>{HIT_LABEL[hit.type] ?? hit.type}</span><span>{hit.actionLabel}</span></span>
-                </a>
-              </li>
-            )) : null}
-          </ul>
-          {expanded && truncated ? <p className={styles.truncation} role="status">Weitere Treffer sind möglich. Bitte den Suchbegriff verfeinern.</p> : null}
-          {expanded && dataStand ? <p className={styles.dataStand}>Durchsucht: {checkedSources.join(", ")} · Abfrage {dataStand}</p> : null}
-        </div>
-      </section>
-    </div>,
-    document.body,
-  );
+  const checked = checkedSources.length
+    ? `Durchsucht: ${checkedSources.join(", ")}${checkedAt ? ` · ${new Date(checkedAt).toLocaleString("de-DE")}` : ""}`
+    : "";
+  const presentedHits: SuchTreffer[] = hits.map((hit) => ({
+    key: `${hit.type}-${hit.id}`,
+    titel: hit.title,
+    grund: <>{`Treffer über ${hit.matchLabel}: „${hit.matchValue}“ · ${hit.context}${truncated ? " · Weitere Treffer möglich" : ""}${checked ? ` · ${checked}` : ""}`}</>,
+    quelle: sourceFor(hit),
+    dringend: /überfällig|kritisch|gesperrt/i.test(hit.status),
+    onOeffnen: () => select(hit),
+  }));
+  const command = (id: PalettenAktion["id"], text: string, icon: PalettenAktion["icon"], onTun: (() => void) | undefined, kbd?: string): PalettenAktion[] => onTun ? [{ id, text, icon, kbd, onTun: () => { close(); onTun(); } }] : [];
+  const actions: PalettenAktion[] = [
+    ...command("eingang", "Neuer Eingang", "inbox", commands?.onNewIntake, "N"),
+    ...command("raus", "Ware raus", "truck", commands?.onGoodsOut),
+    ...command("fertig", "Fertig melden", "check", commands?.onFinish),
+    ...command("mehrarbeit", "Mehrarbeit", "layers", commands?.onExtraWork),
+    ...command("woche", "Woche ansehen", "calendar", commands?.onWeek),
+  ];
+  const paletteState = stateForPalette(state);
+
+  return createPortal(<Befehlspalette
+    wert={query}
+    onWert={changeQuery}
+    treffer={presentedHits}
+    aktionen={actions}
+    zustand={paletteState}
+    texte={{
+      laedtText: "Interne Bestände werden durchsucht …",
+      leerText: message || `Kein Treffer für „${query}“.`,
+      fehlerText: message || "Suche nicht möglich.",
+      gesperrtText: message || "Suche ist für diese Sitzung nicht freigegeben.",
+    }}
+    geraet={device}
+    onSchliessen={close}
+  />, document.body);
 }
