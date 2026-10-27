@@ -721,7 +721,11 @@ export async function readLiveOrderCard(
     return data === null
       ? { code: "NOT_FOUND", message: "Auftrag nicht verfügbar." }
       : { code: "OK", data };
-  } catch {
+  } catch (error) {
+    console.error("[ORDER_CARD_READ_ERROR]", {
+      orderId: input.orderId,
+      message: error instanceof Error ? error.message.slice(0, 200) : "UNKNOWN",
+    });
     return { code: "UNAVAILABLE", message: "Auftragskarte konnte nicht sicher geladen werden." };
   }
 }
@@ -791,7 +795,10 @@ export async function readExtraWorkMasterData(
       return { currentRate, catalog } satisfies ExtraWorkMasterData;
     });
     return { code: "OK", data };
-  } catch {
+  } catch (error) {
+    console.error("[ORDER_CARD_EXTRA_WORK_READ_ERROR]", {
+      message: error instanceof Error ? error.message.slice(0, 200) : "UNKNOWN",
+    });
     return { code: "UNAVAILABLE", message: "Mehrarbeitsstammdaten konnten nicht sicher geladen werden." };
   }
 }

@@ -43,7 +43,10 @@ export async function listCatalogServices(context: CatalogCommandContext, includ
       return rows.map(map);
     });
     return { code: "OK" as const, services };
-  } catch {
+  } catch (error) {
+    console.error("[CATALOG_READ_ERROR]", {
+      message: error instanceof Error ? error.message.slice(0, 200) : "UNKNOWN",
+    });
     return { code: "UNAVAILABLE" as const, message: "Leistungskatalog konnte nicht geladen werden." };
   }
 }

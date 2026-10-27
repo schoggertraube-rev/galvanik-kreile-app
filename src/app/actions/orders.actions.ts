@@ -164,7 +164,10 @@ async function resolveOrderCardAuthorization(): Promise<
   let authorization;
   try {
     authorization = await resolveAuthorization();
-  } catch {
+  } catch (error) {
+    console.error("[ORDER_CARD_AUTHORIZATION_ERROR]", {
+      message: error instanceof Error ? error.message.slice(0, 200) : "UNKNOWN",
+    });
     return {
       ok: false,
       result: { code: "UNAVAILABLE", message: "Auftragskarte ist derzeit nicht verfügbar." },
@@ -185,28 +188,43 @@ export async function getLiveOrderCardAction(
   input: { orderId: string },
 ): Promise<OrderCardActionResult<{ card: LiveOrderCard; evidence: EvidenceReadRecord[] }>> {
   noStore();
-  const authorization = await resolveOrderCardAuthorization();
-  if (!authorization.ok) return authorization.result;
-  const [{ readLiveOrderCard }, { readEvidenceRecordsByTarget }] = await Promise.all([
-    import("@/lib/server/orderCardRead"),
-    import("@/lib/server/evidenceRead"),
-  ]);
-  const card = await readLiveOrderCard(authorization.data, input);
-  if (card.code !== "OK") return card;
-  const evidence = await readEvidenceRecordsByTarget(authorization.data, {
-    targetType: "ORDER",
-    targetId: input.orderId,
-  });
-  if (evidence.code !== "OK") return evidence;
-  return { code: "OK", data: { card: card.data, evidence: evidence.data } };
+  try {
+    const authorization = await resolveOrderCardAuthorization();
+    if (!authorization.ok) return authorization.result;
+    const [{ readLiveOrderCard }, { readEvidenceRecordsByTarget }] = await Promise.all([
+      import("@/lib/server/orderCardRead"),
+      import("@/lib/server/evidenceRead"),
+    ]);
+    const card = await readLiveOrderCard(authorization.data, input);
+    if (card.code !== "OK") return card;
+    const evidence = await readEvidenceRecordsByTarget(authorization.data, {
+      targetType: "ORDER",
+      targetId: input.orderId,
+    });
+    if (evidence.code !== "OK") return evidence;
+    return { code: "OK", data: { card: card.data, evidence: evidence.data } };
+  } catch (error) {
+    console.error("[ORDER_CARD_ACTION_ERROR]", {
+      orderId: input.orderId,
+      message: error instanceof Error ? error.message.slice(0, 200) : "UNKNOWN",
+    });
+    return { code: "UNAVAILABLE", message: "Auftragskarte ist derzeit nicht verfügbar." };
+  }
 }
 
 export async function getExtraWorkMasterDataAction(): Promise<OrderCardActionResult<ExtraWorkMasterData>> {
   noStore();
-  const authorization = await resolveOrderCardAuthorization();
-  if (!authorization.ok) return authorization.result;
-  const { readExtraWorkMasterData } = await import("@/lib/server/orderCardRead");
-  return readExtraWorkMasterData(authorization.data);
+  try {
+    const authorization = await resolveOrderCardAuthorization();
+    if (!authorization.ok) return authorization.result;
+    const { readExtraWorkMasterData } = await import("@/lib/server/orderCardRead");
+    return readExtraWorkMasterData(authorization.data);
+  } catch (error) {
+    console.error("[ORDER_CARD_EXTRA_WORK_ACTION_ERROR]", {
+      message: error instanceof Error ? error.message.slice(0, 200) : "UNKNOWN",
+    });
+    return { code: "UNAVAILABLE", message: "Mehrarbeitsstammdaten sind derzeit nicht verfügbar." };
+  }
 }
 
 export async function getOrderFrozenReceiptAction(input: {

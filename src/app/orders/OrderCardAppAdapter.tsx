@@ -59,6 +59,31 @@ type Snapshot = {
   payment: OrderPaymentState | null;
   catalog: NonNullable<OrderCardModel["catalog"]>;
 };
+
+type OrderCardLoadCode =
+  | "ORDER_CARD_ACTION_FAILED"
+  | "ORDER_CARD_EXTRA_WORK_ACTION_FAILED"
+  | "ORDER_CARD_PAYMENT_ACTION_FAILED"
+  | "ORDER_CARD_CATALOG_ACTION_FAILED";
+
+class OrderCardLoadError extends Error {
+  constructor(readonly code: OrderCardLoadCode) {
+    super(code);
+    this.name = "OrderCardLoadError";
+  }
+}
+
+async function invokeOrderCardLoadStep<T>(
+  code: OrderCardLoadCode,
+  action: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await action();
+  } catch {
+    throw new OrderCardLoadError(code);
+  }
+}
+
 function failure(result: {
   code: string;
   message: string;
@@ -207,7 +232,10 @@ export function OrderCardAppAdapter({
       setState({ kind: "loading" });
       if (!preserve) setFeedback({ kind: "idle", message: "" });
       try {
-        const result = await getLiveOrderCardAction({ orderId });
+        const result = await invokeOrderCardLoadStep(
+          "ORDER_CARD_ACTION_FAILED",
+          () => getLiveOrderCardAction({ orderId }),
+        );
         if (result.code !== "OK") {
           setSnapshot(null);
           setState(failure(result));
@@ -215,9 +243,18 @@ export function OrderCardAppAdapter({
         }
         const card = result.data.card;
         const [masterResult, paymentResult, catalogResult] = await Promise.all([
-          getExtraWorkMasterDataAction(),
-          getOrderPaymentStateAction({ orderId }),
-          getActiveCatalogAction(),
+          invokeOrderCardLoadStep(
+            "ORDER_CARD_EXTRA_WORK_ACTION_FAILED",
+            getExtraWorkMasterDataAction,
+          ),
+          invokeOrderCardLoadStep(
+            "ORDER_CARD_PAYMENT_ACTION_FAILED",
+            () => getOrderPaymentStateAction({ orderId }),
+          ),
+          invokeOrderCardLoadStep(
+            "ORDER_CARD_CATALOG_ACTION_FAILED",
+            getActiveCatalogAction,
+          ),
         ]);
         const context = paymentContext(paymentResult, card);
         if ("conflict" in context) {
@@ -237,11 +274,15 @@ export function OrderCardAppAdapter({
           card: mapCard(card, result.data.evidence, context, next.catalog),
         });
         return next;
-      } catch {
+      } catch (error) {
+        const code = error instanceof OrderCardLoadError
+          ? error.code
+          : "ORDER_CARD_LOAD_UNEXPECTED";
+        console.error("[ORDER_CARD_LOAD_ERROR]", { code, orderId });
         setSnapshot(null);
         setState({
           kind: "error",
-          message: "Auftragskarte konnte nicht sicher geladen werden.",
+          message: `Auftragskarte konnte nicht sicher geladen werden. Fehlercode: ${code}.`,
         });
         return null;
       }

@@ -20,13 +20,21 @@ const admin = {
   userId: "66666666-6666-4666-8666-666666666666",
   displayName: "Administrator",
   role: "admin" as const,
-  permissions: ["perm_view_leitstand"] as const,
+  permissions: ["perm_view_leitstand", "perm_view_prices"] as const,
   active: true as const,
 };
 const buero = { ...admin, role: "buero" as const };
 const werkstatt = { ...admin, role: "werkstatt" as const };
-const readonlyUser = { ...admin, role: "readonly" as const };
-const developer = { ...admin, role: "developer" as const };
+const readonlyUser = {
+  ...admin,
+  role: "readonly" as const,
+  permissions: ["perm_view_leitstand"] as const,
+};
+const developer = {
+  ...admin,
+  role: "developer" as const,
+  permissions: ["perm_view_leitstand"] as const,
+};
 
 const paidRow = {
   invoice_id: INVOICE,
