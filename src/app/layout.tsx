@@ -54,6 +54,7 @@ import { AppShortcutProvider } from "@/components/ui/AppShortcutContext";
 import { SyncProvider } from "@/lib/offline/SyncContext";
 import { FeatureFlagProvider } from "@/lib/analytics/useFeatureFlag";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
+import { ClientActionErrorBanner } from "@/components/layout/ClientActionErrorBanner";
 
 import { getAuthBootstrapState } from "@/lib/server/authBootstrap";
 import { GlobalCreateAppAdapter } from "./GlobalCreateAppAdapter";
@@ -75,6 +76,7 @@ export default async function RootLayout({
     >
       <body>
         <ServiceWorkerRegister />
+        <ClientActionErrorBanner />
         <Suspense fallback={null}>
           <SyncProvider>
             <PermissionsProvider initialAuthState={authState}>

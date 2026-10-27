@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const ports = vi.hoisted(() => ({
@@ -8,6 +8,8 @@ const ports = vi.hoisted(() => ({
   }),
   readSettings: vi.fn(),
   saveFeature: vi.fn(),
+  changeOwnPin: vi.fn(),
+  saveManagedUser: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -20,10 +22,10 @@ vi.mock("@/app/actions/settings.actions", () => ({
   saveSalesStageFeatureAction: ports.saveFeature,
   saveCatalogServiceAction: vi.fn(),
   saveCompanySettingsAction: vi.fn(),
-  saveManagedUserAction: vi.fn(),
+  saveManagedUserAction: ports.saveManagedUser,
   createManagedUserAction: vi.fn(),
   setManagedUserAreaAction: vi.fn(),
-  changeOwnPinAction: vi.fn(),
+  changeOwnPinAction: ports.changeOwnPin,
 }));
 vi.mock("@/app/actions/orders.actions", () => ({ setExtraWorkHourlyRateAction: vi.fn() }));
 
@@ -49,6 +51,8 @@ describe("Gregor system administration composition", () => {
     ports.resolveAuthorization.mockResolvedValue(
       authorizationFor("admin"),
     );
+    ports.changeOwnPin.mockResolvedValue({ code: "OK" });
+    ports.saveManagedUser.mockResolvedValue({ code: "OK" });
     ports.readSettings.mockResolvedValue({ code:"OK", snapshot:{ company:{companyName:"Galvanik Kreile",street:"Testweg 1",zip:"12345",city:"Berlin",country:"Deutschland",taxId:"DE123456789",iban:"DE001234",bic:"TESTDEFF",bankName:"Testbank",paymentTermDays:14,logoUrl:"/logo.png"}, extraWorkHourlyRate:{rateId:null,hourlyRateCents:null,version:0}, users:[], capabilities:{canManageCompany:true,canManageLogins:true,canManageSystem:true}, numberRanges:[], features:[{id:"S01",enabled:true},{id:"Z01",enabled:false}] }, services:[] });
   });
 
@@ -91,6 +95,46 @@ describe("Gregor system administration composition", () => {
     ports.readSettings.mockResolvedValue({ code:"OK", snapshot:{ company:{companyName:"",street:"",zip:"",city:"",country:"",taxId:"",iban:"",bic:"",bankName:"",paymentTermDays:0,logoUrl:""}, extraWorkHourlyRate:{rateId:null,hourlyRateCents:null,version:0}, users:[], capabilities:{canManageCompany:false,canManageLogins:false,canManageSystem:false}, numberRanges:[], features:[] }, services:[] });
     render(await SettingsAppAdapter());
     expect(screen.getByRole("heading", { name: "Mein Code ändern" })).toBeInTheDocument();
+  });
+
+  it("shows a stable error code when changing the own code cannot reach the server action", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    ports.changeOwnPin.mockRejectedValueOnce(new Error("Failed to find Server Action"));
+
+    render(await SettingsAppAdapter());
+    fireEvent.change(screen.getByLabelText("Neuer Code"), { target: { value: "4321" } });
+    fireEvent.change(screen.getByLabelText("Code wiederholen"), { target: { value: "4321" } });
+    fireEvent.click(screen.getByRole("button", { name: "Code speichern" }));
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Fehlercode: ACTION_REQUEST_FAILED"));
+    expect(consoleError).toHaveBeenCalledWith("[ACTION_REQUEST_FAILED]", expect.any(Error));
+    consoleError.mockRestore();
+  });
+
+  it("shows the same error path when a managed user code cannot be saved", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    ports.saveManagedUser.mockRejectedValueOnce(new Error("Server Action request rejected"));
+    ports.readSettings.mockResolvedValue({
+      code: "OK",
+      snapshot: {
+        company: { companyName: "Galvanik Kreile", street: "Testweg 1", zip: "12345", city: "Berlin", country: "Deutschland", taxId: "DE123456789", iban: "DE001234", bic: "TESTDEFF", bankName: "Testbank", paymentTermDays: 14, logoUrl: "/logo.png" },
+        extraWorkHourlyRate: { rateId: null, hourlyRateCents: null, version: 0 },
+        users: [{ id: "11111111-1111-4111-8111-111111111111", email: null, fullName: "Phillip", shortCode: "PH", designation: "Werkstatt", role: "werkstatt", active: true, areas: ["werkstatt"], fixedAreas: [], isCurrent: false }],
+        capabilities: { canManageCompany: true, canManageLogins: true, canManageSystem: true },
+        numberRanges: [],
+        features: [],
+      },
+      services: [],
+    });
+
+    render(await SettingsAppAdapter());
+    fireEvent.click(screen.getByRole("button", { name: "Logins & Rechte" }));
+    fireEvent.change(screen.getAllByLabelText("Neuer Code")[1]!, { target: { value: "4321" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ändern" }));
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Fehlercode: ACTION_REQUEST_FAILED"));
+    expect(consoleError).toHaveBeenCalledWith("[ACTION_REQUEST_FAILED]", expect.any(Error));
+    consoleError.mockRestore();
   });
 
   it("renders a stable fail-closed state instead of bouncing on readiness failure", async () => {

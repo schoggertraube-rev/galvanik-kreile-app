@@ -20,6 +20,7 @@ import {
   type SystemSettingsSnapshot,
 } from "@/modules/fundament/public";
 import type { CatalogService } from "@/modules/katalog/public";
+import { runServerAction } from "@/lib/client/runServerAction";
 import styles from "./settings.module.css";
 
 type Tab = "company" | "catalog" | "users";
@@ -75,10 +76,16 @@ export function SettingsAdminClient({
   );
 
   function report(task: () => Promise<Result>, success: string, after?: () => void) {
-    startTransition(() => void task().then((result) => {
+    startTransition(async () => {
+      const execution = await runServerAction(task, "Speichern");
+      if (!execution.ok) {
+        setMessage(execution.message);
+        return;
+      }
+      const result = execution.value;
       setMessage(result.code === "OK" ? success : result.message ?? "Speichern fehlgeschlagen.");
       if (result.code === "OK") after?.();
-    }));
+    });
   }
 
   function saveHourlyRate() {
@@ -88,17 +95,23 @@ export function SettingsAdminClient({
       setMessage("Bitte einen gültigen Stundensatz zwischen 0,01 € und 10.000 € eingeben.");
       return;
     }
-    startTransition(() => void setExtraWorkHourlyRateAction({
-      rateId: crypto.randomUUID(),
-      expectedVersion: hourlyRate.version,
-      hourlyRateCents,
-      clientEventId: crypto.randomUUID(),
-    }).then((result) => {
+    startTransition(async () => {
+      const execution = await runServerAction(() => setExtraWorkHourlyRateAction({
+        rateId: crypto.randomUUID(),
+        expectedVersion: hourlyRate.version,
+        hourlyRateCents,
+        clientEventId: crypto.randomUUID(),
+      }), "Stundensatz speichern");
+      if (!execution.ok) {
+        setMessage(execution.message);
+        return;
+      }
+      const result = execution.value;
       if (result.code !== "OK") return setMessage(result.message);
       setHourlyRate({ rateId: result.receipt.rateId, hourlyRateCents: result.receipt.hourlyRateCents, version: result.receipt.aggregateVersion });
       setHourlyRateEuro((result.receipt.hourlyRateCents / 100).toFixed(2).replace(".", ","));
       setMessage("Stundensatz Mehrarbeit gespeichert.");
-    }));
+    });
   }
 
   function saveCompany() {
@@ -106,12 +119,21 @@ export function SettingsAdminClient({
   }
 
   function saveService() {
-    startTransition(() => void saveCatalogServiceAction({ ...draft, id: draft.id || null }).then((result) => {
+    startTransition(async () => {
+      const execution = await runServerAction(
+        () => saveCatalogServiceAction({ ...draft, id: draft.id || null }),
+        "Leistung speichern",
+      );
+      if (!execution.ok) {
+        setMessage(execution.message);
+        return;
+      }
+      const result = execution.value;
       if (result.code !== "OK") return setMessage(result.message ?? "Speichern fehlgeschlagen.");
       setServices((current) => [...current.filter((item) => item.id !== result.service.id), result.service]);
       setDraft(emptyService());
       setMessage("Leistung gespeichert.");
-    }));
+    });
   }
 
   function updateUser(user: ManagedUser) {
@@ -133,8 +155,12 @@ export function SettingsAdminClient({
     setUsers((current) => current.map((user) => user.id === userId
       ? { ...user, areas: granted ? [...user.areas, area] : user.areas.filter((item) => item !== area) }
       : user));
-    startTransition(() => void setManagedUserAreaAction({ userId, area, granted }).then((result) => {
-      if (result.code === "OK") {
+    startTransition(async () => {
+      const execution = await runServerAction(
+        () => setManagedUserAreaAction({ userId, area, granted }),
+        "Recht speichern",
+      );
+      if (execution.ok && execution.value.code === "OK") {
         setMessage("Recht ist sofort wirksam.");
         if (isCurrent) window.location.reload();
         return;
@@ -142,8 +168,8 @@ export function SettingsAdminClient({
       setUsers((current) => current.map((user) => user.id === userId
         ? { ...user, areas: granted ? user.areas.filter((item) => item !== area) : [...user.areas, area] }
         : user));
-      setMessage(result.message ?? "Recht konnte nicht gespeichert werden.");
-    }));
+      setMessage(execution.ok ? execution.value.message ?? "Recht konnte nicht gespeichert werden." : execution.message);
+    });
   }
 
   function saveOwnCode() {

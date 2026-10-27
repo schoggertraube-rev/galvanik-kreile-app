@@ -91,14 +91,19 @@ export async function saveCompanySettingsAction(input: CompanySettingsInput) {
 }
 
 export async function saveManagedUserAction(input: UpdateManagedUserInput) {
-  const resolved = await settingsContext();
-  if (!resolved?.authorization.areas?.includes("logins")) return { code: "FORBIDDEN" as const, message: "Logins dürfen nicht geändert werden." };
-  const result = await updateManagedUser(resolved.context, input);
-  if (result.code === "OK") {
-    revalidatePath("/settings");
-    revalidatePath("/start");
+  try {
+    const resolved = await settingsContext();
+    if (!resolved?.authorization.areas?.includes("logins")) return { code: "FORBIDDEN" as const, message: "Logins dürfen nicht geändert werden." };
+    const result = await updateManagedUser(resolved.context, input);
+    if (result.code === "OK") {
+      revalidatePath("/settings");
+      revalidatePath("/start");
+    }
+    return result;
+  } catch (error) {
+    console.error("[SETTINGS_USER_ACTION_FAILED]", error);
+    return { code: "UNAVAILABLE" as const, message: "Login konnte nicht gespeichert werden. Fehlercode: SETTINGS_USER_ACTION_FAILED." };
   }
-  return result;
 }
 
 export async function createManagedUserAction(input: CreateManagedUserInput) {
@@ -121,21 +126,26 @@ export async function setManagedUserAreaAction(input: SetUserAreaInput) {
 }
 
 export async function changeOwnPinAction(input: { pin: string }) {
-  const resolved = await settingsContext();
-  if (!resolved) return { code: "FORBIDDEN" as const, message: "Der eigene Code kann momentan nicht geändert werden." };
-  const result = await changeOwnPin({ tenantId: resolved.authorization.tenantId, actorId: resolved.authorization.userId }, input);
-  if (result.code === "OK") {
-    const now = Date.now();
-    await setAppSession({
-      userId: resolved.authorization.userId,
-      tenantId: resolved.authorization.tenantId,
-      role: resolved.authorization.role,
-      displayName: resolved.authorization.displayName,
-      issuedAt: now,
-      expiresAt: now + SESSION_TTL_MS,
-    });
+  try {
+    const resolved = await settingsContext();
+    if (!resolved) return { code: "FORBIDDEN" as const, message: "Der eigene Code kann momentan nicht geändert werden." };
+    const result = await changeOwnPin({ tenantId: resolved.authorization.tenantId, actorId: resolved.authorization.userId }, input);
+    if (result.code === "OK") {
+      const now = Date.now();
+      await setAppSession({
+        userId: resolved.authorization.userId,
+        tenantId: resolved.authorization.tenantId,
+        role: resolved.authorization.role,
+        displayName: resolved.authorization.displayName,
+        issuedAt: now,
+        expiresAt: now + SESSION_TTL_MS,
+      });
+    }
+    return result;
+  } catch (error) {
+    console.error("[SETTINGS_OWN_PIN_ACTION_FAILED]", error);
+    return { code: "UNAVAILABLE" as const, message: "Code konnte nicht gespeichert werden. Fehlercode: SETTINGS_OWN_PIN_ACTION_FAILED." };
   }
-  return result;
 }
 
 export async function saveCatalogServiceAction(input: SaveCatalogServiceInput) {
