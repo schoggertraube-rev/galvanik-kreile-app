@@ -41,7 +41,6 @@ import type {
 } from "@/lib/server/orderCardRead";
 import type { EvidenceReadRecord } from "@/lib/server/evidenceRead";
 import type { OrderPaymentState } from "@/lib/server/paymentContract";
-import type { CatalogService } from "@/modules/katalog/public";
 import {
   OrderCardView,
   OrderStationAttachmentPanel,
@@ -57,7 +56,7 @@ type Snapshot = {
   card: LiveOrderCard;
   master: ExtraWorkMasterData | null;
   payment: OrderPaymentState | null;
-  catalog: CatalogService[];
+  catalog: NonNullable<OrderCardModel["catalog"]>;
 };
 function failure(result: {
   code: string;
@@ -118,7 +117,7 @@ function mapCard(
   card: LiveOrderCard,
   evidence: EvidenceReadRecord[],
   payment: OrderCardPaymentContext,
-  catalog: CatalogService[],
+  catalog: NonNullable<OrderCardModel["catalog"]>,
 ): OrderCardModel {
   return {
     id: card.id,
