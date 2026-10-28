@@ -36,7 +36,7 @@ export type TodayDashboard = {
   layout: TodayLayoutItem[];
   defaultLayout: TodayLayoutItem[];
   allowedFields: readonly TodayVisibleField[];
-  phillipUserId: string | null;
+  delegationTargets: Array<{ userId: string; displayName: string }>;
   outlookMessage: string | null;
 };
 
@@ -44,7 +44,7 @@ type PreferenceRow = { visible_fields: string[]; layout: unknown | null };
 type ReminderRow = { item_key: string; reminder_until: Date | string };
 type InvoiceRow = { id: string; invoice_number: string; order_id: string; customer_name: string; customer_country: string | null; due_date: Date | string; open_amount_cents: number | string; payment_mode: string; payment_status: string; station: string };
 type PrepaymentRow = { order_id: string; order_number: string; customer_name: string; customer_country: string | null; due_date: Date | string | null; invoice_id: string | null; open_amount_cents: number | string | null; payment_status: string | null; station: string; goods_out_event_count: number | string };
-type UserRow = { id: string };
+type UserRow = { id: string; full_name: string };
 type GraphThreadRow = { source: string };
 type AssignmentRow = { order_id: string; assigned_to_name: string; current_order_version: number };
 
@@ -78,7 +78,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
     STAGE2_TODAY_FEATURES.has("drafts") ? readIntakeDraft(auth) : Promise.resolve({ code: "OK" as const, data: null }),
     graphAllowed ? listMicrosoftGraphInbox() : Promise.resolve({ code: "IN_KLAERUNG" as const, message: "Outlook ist für dieses Profil nicht eingeblendet." }),
     withPrivilegedTenantTransaction(auth, async (tx) => {
-      const [preferences, reminders, invoices, prepayments, phillip, graphThreads, assignments] = await Promise.all([
+      const [preferences, reminders, invoices, prepayments, delegationTargets, graphThreads, assignments] = await Promise.all([
         tx.execute<PreferenceRow>(sql`SELECT preference.visible_fields, to_jsonb(preference)->'layout' AS layout FROM private.today_preferences preference WHERE preference.tenant_id=${auth.tenantId} AND preference.actor_id=${auth.userId}::uuid LIMIT 1`),
         tx.execute<ReminderRow>(sql`SELECT item_key, reminder_until FROM private.today_reminders WHERE tenant_id=${auth.tenantId} AND actor_id=${auth.userId}::uuid`),
         moneyAllowed ? tx.execute<InvoiceRow>(sql`
@@ -113,7 +113,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
           LIMIT 20
         `) : Promise.resolve([]),
         ordersAllowed ? tx.execute<UserRow>(sql`
-          SELECT users.id
+          SELECT users.id, users.full_name
           FROM public.app_users users
           WHERE users.tenant_id=${auth.tenantId}
             AND users.active=true
@@ -125,7 +125,6 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
                 AND rights.bereich='auftraege'
             )
           ORDER BY users.full_name, users.id
-          LIMIT 1
         `) : Promise.resolve([]),
         graphAllowed ? tx.execute<GraphThreadRow>(sql`SELECT source FROM public.communication_threads WHERE tenant_id=${auth.tenantId} AND source LIKE 'MS_GRAPH_IN:%'`) : Promise.resolve([]),
         ordersAllowed ? tx.execute<AssignmentRow>(sql`
@@ -136,7 +135,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
             AND active=true
         `) : Promise.resolve([]),
       ]);
-      return { preferences, reminders, invoices, prepayments, phillip, graphThreads, assignments };
+      return { preferences, reminders, invoices, prepayments, delegationTargets, graphThreads, assignments };
     }),
   ]);
 
@@ -191,7 +190,15 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
   const bundle = [...surfaces.entries()].filter(([, group]) => group.length >= 2).sort((a, b) => b[1].length - a[1].length)[0];
   if (STAGE2_TODAY_FEATURES.has("bundle") && bundle) add({ key: `bundle:${bundle[0]}`, field: "bundle", kind: "bundle", title: `${bundle[1].length} Aufträge bündeln`, meta: bundle[0], urgency: "decision", bundleSurface: bundle[0], primaryActionLabel: "Bündel öffnen" });
 
-  return { items, visibleFields: selected, layout, defaultLayout: suggestedLayout, allowedFields: DEFAULT_FIELDS.filter((field) => allowed.has(field)), phillipUserId: support.phillip[0]?.id ?? null, outlookMessage: !graphAllowed || graph.code === "OK" ? null : graph.message };
+  return {
+    items,
+    visibleFields: selected,
+    layout,
+    defaultLayout: suggestedLayout,
+    allowedFields: DEFAULT_FIELDS.filter((field) => allowed.has(field)),
+    delegationTargets: support.delegationTargets.map((target) => ({ userId: target.id, displayName: target.full_name })),
+    outlookMessage: !graphAllowed || graph.code === "OK" ? null : graph.message,
+  };
 }
 
 export async function saveTodayPreferences(auth: AuthorizationSnapshot, value: unknown) {

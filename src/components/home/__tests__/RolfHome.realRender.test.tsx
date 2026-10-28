@@ -64,7 +64,10 @@ const dashboard = {
     { field: "money" as const, column: "right" as const, order: 3 },
   ],
   allowedFields: ["today", "assign", "money", "bundle"] as const,
-  phillipUserId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  delegationTargets: [
+    { userId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", displayName: "Phillip" },
+    { userId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", displayName: "Werkstatt Zwei" },
+  ],
   outlookMessage: null,
 };
 
@@ -158,12 +161,13 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     const { container } = render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: actionDashboard, projection }} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Weitere" }));
-    fireEvent.click(screen.getByRole("button", { name: "an Phillip delegieren" }));
+    expect(screen.getByRole("button", { name: "an Werkstatt Zwei geben" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "an Phillip geben" }));
 
     expect(await screen.findByText("bei Phillip · Frist 30.10.26")).toBeInTheDocument();
     expect(container.querySelector(".kr-hb-eintrag")).toHaveClass("kr-hb-eintrag--gedimmt");
     expect(within(screen.getByRole("region", { name: "Lage" })).queryByText("Konflikt")).not.toBeInTheDocument();
-    expect(actionPorts.assignOrder).toHaveBeenCalledWith(expect.objectContaining({ orderId: "order-1", expectedVersion: 1 }));
+    expect(actionPorts.assignOrder).toHaveBeenCalledWith(expect.objectContaining({ orderId: "order-1", assigneeUserId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", expectedVersion: 1 }));
 
     fireEvent.click(screen.getByRole("button", { name: "Rückgängig" }));
 
