@@ -27,18 +27,18 @@ Quelle: Reihenfolge des Arrays `korrekturen` in `docs/project/endversion/codex/B
 | K21 | eingang | erledigt | `a617cba8` | 28.10.2026 |
 | K22 | eingang | erledigt | `075f96e2` | 28.10.2026 |
 | K23 | eingang | erledigt | `bbd4270b` | 28.10.2026 |
-| K24 | eingang | erledigt | `HEAD dieses Pakets` | 28.10.2026 |
-| K25 | eingang | offen | — | — |
-| K26 | eingang | offen | — | — |
-| K27 | eingang | offen | — | — |
-| K28 | eingang | offen | — | — |
-| K29 | eingang | offen | — | — |
-| K30 | eingang | offen | — | — |
-| K31 | kundeneu | offen | — | — |
-| K32 | mailein | offen | — | — |
-| K33 | mailein | offen | — | — |
-| K34 | beleg | offen | — | — |
-| K35 | entwurf | offen | — | — |
+| K24 | eingang | erledigt | `48a5db9b` | 28.10.2026 |
+| K25 | eingang | zurückgestellt (Eingang-Freeze) | — | 28.10.2026 |
+| K26 | eingang | zurückgestellt (Eingang-Freeze) | — | 28.10.2026 |
+| K27 | eingang | zurückgestellt (Eingang-Freeze) | — | 28.10.2026 |
+| K28 | eingang | zurückgestellt (Eingang-Freeze) | — | 28.10.2026 |
+| K29 | eingang | zurückgestellt (Eingang-Freeze) | — | 28.10.2026 |
+| K30 | eingang | zurückgestellt (Eingang-Freeze) | — | 28.10.2026 |
+| K31 | kundeneu | zurückgestellt (Eingang-Freeze) | — | 28.10.2026 |
+| K32 | mailein | zurückgestellt (Eingang-Freeze) | — | 28.10.2026 |
+| K33 | mailein | zurückgestellt (Eingang-Freeze) | — | 28.10.2026 |
+| K34 | beleg | zurückgestellt (Eingang-Freeze) | — | 28.10.2026 |
+| K35 | entwurf | zurückgestellt (Eingang-Freeze) | — | 28.10.2026 |
 | K36 | tag | offen | — | — |
 | K37 | tag | offen | — | — |
 | K38 | tag | offen | — | — |
@@ -48,14 +48,14 @@ Quelle: Reihenfolge des Arrays `korrekturen` in `docs/project/endversion/codex/B
 | K42 | login | offen | — | — |
 | K43 | login | offen | — | — |
 | K44 | rechte | offen | — | — |
-| K45 | eingang | offen | — | — |
-| K46 | eingang | offen | — | — |
-| K47 | eingang | offen | — | — |
-| K48 | eingang | offen | — | — |
-| K49 | eingang | offen | — | — |
-| K50 | kamera | offen | — | — |
-| K51 | beleg | offen | — | — |
-| K52 | entwurf | offen | — | — |
+| K45 | eingang | zurückgestellt (Eingang-Freeze) | — | 28.10.2026 |
+| K46 | eingang | zurückgestellt (Eingang-Freeze) | — | 28.10.2026 |
+| K47 | eingang | zurückgestellt (Eingang-Freeze) | — | 28.10.2026 |
+| K48 | eingang | zurückgestellt (Eingang-Freeze) | — | 28.10.2026 |
+| K49 | eingang | zurückgestellt (Eingang-Freeze) | — | 28.10.2026 |
+| K50 | kamera | zurückgestellt (Eingang-Freeze) | — | 28.10.2026 |
+| K51 | beleg | zurückgestellt (Eingang-Freeze) | — | 28.10.2026 |
+| K52 | entwurf | zurückgestellt (Eingang-Freeze) | — | 28.10.2026 |
 | K53 | tag | offen | — | — |
 | K54 | tag | offen | — | — |
 | K55 | tag | offen | — | — |
