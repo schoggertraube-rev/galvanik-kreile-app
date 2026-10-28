@@ -104,11 +104,10 @@ function iso(value: Date | string) {
 }
 
 async function authorization(permission: "content" | "status") {
-  const result = await resolveAuthorization().catch(() => null);
-  if (!result) return { ok: false as const, result: { code: "UNAVAILABLE" as const, message: "Auftragsdaten können derzeit nicht geändert werden." } };
+  const result = await resolveAuthorization();
   if (!result.ok) return { ok: false as const, result: result.reason === "AUTHORIZATION_UNAVAILABLE"
-    ? { code: "UNAVAILABLE" as const, message: "Auftragsdaten können derzeit nicht geändert werden." }
-    : { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." } };
+    ? { code: "UNAVAILABLE" as const, message: result.message }
+    : { code: "UNAUTHENTICATED" as const, message: result.message } };
   const allowed = permission === "content"
     ? getAuthorizationActionGrants(result.data).editOrderContent
     : result.data.permissions.includes("perm_op_status");

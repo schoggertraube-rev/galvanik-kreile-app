@@ -504,12 +504,11 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
   const normalized = normalizeInput(input);
   if (!normalized) return { code: "VALIDATION_ERROR", message: "Wareneingangsdaten sind unvollständig oder ungültig." };
 
-  const authorization = await resolveAuthorization().catch(() => null);
-  if (!authorization) return { code: "UNAVAILABLE", message: "Wareneingang ist derzeit nicht verfügbar." };
+  const authorization = await resolveAuthorization();
   if (!authorization.ok) {
     return authorization.reason === "AUTHORIZATION_UNAVAILABLE"
-      ? { code: "UNAVAILABLE", message: "Wareneingang ist derzeit nicht verfügbar." }
-      : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+      ? { code: "UNAVAILABLE", message: authorization.message }
+      : { code: "UNAUTHENTICATED", message: authorization.message };
   }
   if (!authorization.data.permissions.includes("perm_data_orders")) {
     return { code: "FORBIDDEN", message: "Aufträge dürfen mit dieser Rolle nicht angelegt werden." };

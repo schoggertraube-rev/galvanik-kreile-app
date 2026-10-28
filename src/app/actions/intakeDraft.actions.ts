@@ -5,22 +5,21 @@ import { resolveAuthorization } from "@/lib/server/authorization";
 import { discardIntakeDraft, readIntakeDraft, saveIntakeDraft } from "@/lib/server/intakeDraft";
 
 async function authorization() {
-  const result = await resolveAuthorization().catch(() => null);
-  return result && result.ok ? result.data : null;
+  return resolveAuthorization();
 }
 
 export async function readIntakeDraftAction() {
   noStore();
   const auth = await authorization();
-  return auth ? readIntakeDraft(auth) : { code: "UNAVAILABLE" as const, message: "Sitzung ist nicht verfügbar." };
+  return auth.ok ? readIntakeDraft(auth.data) : { code: "UNAVAILABLE" as const, message: auth.message };
 }
 
 export async function saveIntakeDraftAction(payload: unknown) {
   const auth = await authorization();
-  return auth ? saveIntakeDraft(auth, payload) : { code: "UNAVAILABLE" as const, message: "Sitzung ist nicht verfügbar." };
+  return auth.ok ? saveIntakeDraft(auth.data, payload) : { code: "UNAVAILABLE" as const, message: auth.message };
 }
 
 export async function discardIntakeDraftAction() {
   const auth = await authorization();
-  return auth ? discardIntakeDraft(auth) : { code: "UNAVAILABLE" as const, message: "Sitzung ist nicht verfügbar." };
+  return auth.ok ? discardIntakeDraft(auth.data) : { code: "UNAVAILABLE" as const, message: auth.message };
 }

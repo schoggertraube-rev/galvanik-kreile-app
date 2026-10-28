@@ -109,7 +109,7 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
     return {
       ok: false,
       reason: "AUTHORIZATION_UNAVAILABLE",
-      message: "AUTH_ERROR: Berechtigungen nicht verfügbar",
+      message: "AUTH_SESSION_ERROR: Sitzung konnte nicht gelesen werden",
     };
   }
 
@@ -188,7 +188,7 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
     return {
       ok: false,
       reason: "AUTHORIZATION_UNAVAILABLE",
-      message: "AUTH_ERROR: Berechtigungen nicht verfügbar",
+      message: "AUTH_DB_ERROR: Berechtigungen nicht verfügbar",
     };
   }
 

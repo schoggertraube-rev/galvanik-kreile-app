@@ -239,7 +239,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toBe("AUTHORIZATION_UNAVAILABLE");
-      expect(result.message).toBe("AUTH_ERROR: Berechtigungen nicht verfügbar");
+      expect(result.message).toBe("AUTH_DB_ERROR: Berechtigungen nicht verfügbar");
     }
   });
 

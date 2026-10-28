@@ -185,9 +185,9 @@ export async function recognizeOrderIntakeTextAction(
   if (!input || typeof input.text !== "string" || input.text.length > 6000) {
     return { ok: false, error: "QUERY_ERROR", message: "Erfassungstext ist ungültig." };
   }
-  const authorization = await resolveAuthorization().catch(() => null);
-  if (!authorization || !authorization.ok) {
-    return { ok: false, error: "AUTH_ERROR", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+  const authorization = await resolveAuthorization();
+  if (!authorization.ok) {
+    return { ok: false, error: "AUTH_ERROR", message: authorization.message };
   }
   if (!authorization.data.permissions.includes("perm_data_orders") || authorization.data.areas?.includes("eingang") !== true) {
     return { ok: false, error: "FORBIDDEN", message: "Wareneingang ist mit dieser Rolle nicht erlaubt." };
@@ -200,9 +200,9 @@ export async function getOrderIntakeSuggestionsAction(
   input: IntakeSuggestionsInput,
 ): Promise<WarendurchlaufActionResult<IntakeSuggestions>> {
   noStore();
-  const authorization = await resolveAuthorization().catch(() => null);
-  if (!authorization || !authorization.ok) {
-    return { ok: false, error: "AUTH_ERROR", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+  const authorization = await resolveAuthorization();
+  if (!authorization.ok) {
+    return { ok: false, error: "AUTH_ERROR", message: authorization.message };
   }
   if (!authorization.data.permissions.includes("perm_data_orders") || authorization.data.areas?.includes("eingang") !== true) {
     return { ok: false, error: "FORBIDDEN", message: "Wareneingang ist mit dieser Rolle nicht erlaubt." };
@@ -223,14 +223,11 @@ export async function searchOrderIntakeCustomersAction(
   canCreateCustomer: boolean;
 }>> {
   noStore();
-  const authorization = await resolveAuthorization().catch(() => null);
-  if (!authorization) {
-    return { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." };
-  }
+  const authorization = await resolveAuthorization();
   if (!authorization.ok) {
     return authorization.reason === "AUTHORIZATION_UNAVAILABLE"
-      ? { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." }
-      : { ok: false, error: "AUTH_ERROR", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+      ? { ok: false, error: "UNAVAILABLE", message: authorization.message }
+      : { ok: false, error: "AUTH_ERROR", message: authorization.message };
   }
   if (
     !authorization.data.permissions.includes("perm_data_orders") ||
@@ -256,14 +253,11 @@ export async function getOrderIntakeReceiptAction(
   input: OrderIntakeReceiptReadInput,
 ): Promise<WarendurchlaufActionResult<OrderIntakeReceipt | null>> {
   noStore();
-  const authorization = await resolveAuthorization().catch(() => null);
-  if (!authorization) {
-    return { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." };
-  }
+  const authorization = await resolveAuthorization();
   if (!authorization.ok) {
     return authorization.reason === "AUTHORIZATION_UNAVAILABLE"
-      ? { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." }
-      : { ok: false, error: "AUTH_ERROR", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+      ? { ok: false, error: "UNAVAILABLE", message: authorization.message }
+      : { ok: false, error: "AUTH_ERROR", message: authorization.message };
   }
   if (!authorization.data.permissions.includes("perm_view_leitstand")) {
     return { ok: false, error: "FORBIDDEN", message: "Wareneingangsbeleg ist nicht erlaubt." };

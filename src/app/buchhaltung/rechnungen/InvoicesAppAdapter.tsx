@@ -5,17 +5,17 @@ import { InvoicesClient, type InvoicePageInitialState } from "./InvoicesClient";
 
 export async function InvoicesAppAdapter() {
   let initialState: InvoicePageInitialState;
-  const authorization = await resolveAuthorization().catch(() => null);
-  if (!authorization || (!authorization.ok && authorization.reason === "AUTHORIZATION_UNAVAILABLE")) {
+  const authorization = await resolveAuthorization();
+  if (!authorization.ok && authorization.reason === "AUTHORIZATION_UNAVAILABLE") {
     initialState = {
       state: "ERROR",
-      message: "Rechnungsliste konnte nicht sicher geladen werden.",
+      message: authorization.message,
       canCancel: false,
     };
   } else if (!authorization.ok) {
     initialState = {
       state: "DENIAL",
-      message: "Sitzung oder Berechtigung ist nicht verfügbar.",
+      message: authorization.message,
       canCancel: false,
     };
   } else if (!canViewAccounting(authorization.data)) {

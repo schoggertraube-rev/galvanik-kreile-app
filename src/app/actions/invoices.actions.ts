@@ -25,17 +25,17 @@ type ActionAuthorizationResult =
   | { ok: false; result: { code: "UNAUTHENTICATED" | "UNAVAILABLE"; message: string } };
 
 async function resolveActionAuthorization(): Promise<ActionAuthorizationResult> {
-  const authorization = await resolveAuthorization().catch(() => null);
-  if (!authorization || (!authorization.ok && authorization.reason === "AUTHORIZATION_UNAVAILABLE")) {
+  const authorization = await resolveAuthorization();
+  if (!authorization.ok && authorization.reason === "AUTHORIZATION_UNAVAILABLE") {
     return {
       ok: false,
-      result: { code: "UNAVAILABLE", message: "Rechnungsdaten konnten nicht sicher geladen werden." },
+      result: { code: "UNAVAILABLE", message: authorization.message },
     };
   }
   if (!authorization.ok) {
     return {
       ok: false,
-      result: { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." },
+      result: { code: "UNAUTHENTICATED", message: authorization.message },
     };
   }
   return { ok: true, data: authorization.data };

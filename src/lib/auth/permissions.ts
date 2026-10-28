@@ -7,7 +7,7 @@ import { resolveAuthorization } from "@/lib/server/authorization";
  * Returns true if the user has an admin or developer role.
  */
 export async function isAdminOrDeveloper(): Promise<boolean> {
-  const result = await resolveAuthorization().catch(() => null);
+  const result = await resolveAuthorization();
   return Boolean(result?.ok && result.data.permissions.includes("perm_sys_diag"));
 }
 
@@ -15,7 +15,7 @@ export async function isAdminOrDeveloper(): Promise<boolean> {
  * Asserts that the current user has the admin or developer role.
  */
 export async function requireAdminOrDeveloper() {
-  const result = await resolveAuthorization().catch(() => null);
+  const result = await resolveAuthorization();
   if (!result?.ok || !result.data.permissions.includes("perm_sys_diag")) redirect("/");
 }
 
@@ -41,7 +41,7 @@ export async function requireDeveloper() {
  * Checks if the current user has the specified permission.
  */
 export async function hasPermission(permissionKey: PermissionKey): Promise<boolean> {
-  const result = await resolveAuthorization().catch(() => null);
+  const result = await resolveAuthorization();
   return Boolean(result?.ok && result.data.permissions.includes(permissionKey));
 }
 
@@ -49,7 +49,7 @@ export async function hasPermission(permissionKey: PermissionKey): Promise<boole
  * Helper function to get all permissions for the current user.
  */
 export async function getUserPermissions(): Promise<string[]> {
-  const result = await resolveAuthorization().catch(() => null);
+  const result = await resolveAuthorization();
   return result?.ok ? [...result.data.permissions] : [];
 }
 

@@ -97,8 +97,8 @@ export async function readCustomerCreateReceiptAction(input: CreateCustomerInput
 }
 
 export async function updateCustomerCommercialAction(input: UpdateCustomerCommercialInput) {
-  const authorization = await resolveAuthorization().catch(() => null);
-  if (!authorization || !authorization.ok) return { code: "UNAVAILABLE" as const, message: "Kundendaten konnten nicht sicher gespeichert werden." };
+  const authorization = await resolveAuthorization();
+  if (!authorization.ok) return { code: "UNAVAILABLE" as const, message: authorization.message };
   const result = await updateCustomerCommercialCommand({
     tenantId: authorization.data.tenantId,
     userId: authorization.data.userId,
@@ -117,8 +117,8 @@ export async function updateCustomerCommercialAction(input: UpdateCustomerCommer
 }
 
 export async function updateCustomerNoteAction(input: { clientEventId: string; customerId: string; note: string }) {
-  const authorization = await resolveAuthorization().catch(() => null);
-  if (!authorization || !authorization.ok) return { code: "UNAVAILABLE" as const, message: "Kundennotiz konnte nicht sicher gespeichert werden." };
+  const authorization = await resolveAuthorization();
+  if (!authorization.ok) return { code: "UNAVAILABLE" as const, message: authorization.message };
   const result = await updateCustomerNoteCommand({
     tenantId: authorization.data.tenantId,
     userId: authorization.data.userId,

@@ -13,14 +13,14 @@ import { readQuoteAction, readQuotePdfAction } from "@/app/actions/quotes.action
 type TargetInput = { targetType: "CUSTOMER" | "ORDER"; targetId: string };
 
 async function authorization() {
-  const result = await resolveAuthorization().catch(() => null);
-  return result && result.ok ? result.data : null;
+  return resolveAuthorization();
 }
 
 export async function getMicrosoftGraphStatusAction() {
   noStore();
-  const auth = await authorization();
-  if (!auth) return { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+  const authorizationResult = await authorization();
+  if (!authorizationResult.ok) return { code: "UNAUTHENTICATED" as const, message: authorizationResult.message };
+  const auth = authorizationResult.data;
   if (!auth.areas?.includes("mails")) return { code: "FORBIDDEN" as const, message: "Microsoft 365 ist für dieses Profil nicht freigegeben." };
   return readMicrosoftGraphConfigurationStatus().code === "READY"
     ? { code: "OK" as const }
@@ -29,15 +29,15 @@ export async function getMicrosoftGraphStatusAction() {
 
 export async function listOutlookInboxAction() {
   noStore();
-  const auth = await authorization();
-  if (!auth) return { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
-  return readCommunicationInbox(auth);
+  const authorizationResult = await authorization();
+  if (!authorizationResult.ok) return { code: "UNAUTHENTICATED" as const, message: authorizationResult.message };
+  return readCommunicationInbox(authorizationResult.data);
 }
 
 export async function attachOutlookMailAction(input: TargetInput & { graphMessageId: string }) {
-  const auth = await authorization();
-  if (!auth) return { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
-  return attachInboxMessage(auth, input);
+  const authorizationResult = await authorization();
+  if (!authorizationResult.ok) return { code: "UNAUTHENTICATED" as const, message: authorizationResult.message };
+  return attachInboxMessage(authorizationResult.data, input);
 }
 
 export async function sendCustomerMailAction(input: TargetInput & {
@@ -46,8 +46,9 @@ export async function sendCustomerMailAction(input: TargetInput & {
   body: string;
   attachment?: { kind: "QUOTE"; documentId: string };
 }) {
-  const auth = await authorization();
-  if (!auth) return { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+  const authorizationResult = await authorization();
+  if (!authorizationResult.ok) return { code: "UNAUTHENTICATED" as const, message: authorizationResult.message };
+  const auth = authorizationResult.data;
   let attachment;
   if (input.attachment) {
     const quote = await readQuoteAction({ quoteId: input.attachment.documentId });

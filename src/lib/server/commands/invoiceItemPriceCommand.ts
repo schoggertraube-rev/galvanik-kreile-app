@@ -105,12 +105,11 @@ export async function setInvoiceItemPrices(inputValue: unknown): Promise<SetInvo
   const input = normalizeInput(inputValue);
   if (!input) return { code: "VALIDATION_ERROR", message: "Die Rechnungspreise sind unvollständig oder ungültig." };
 
-  const authorization = await resolveAuthorization().catch(() => null);
-  if (!authorization) return { code: "UNAVAILABLE", message: "Rechnungspreise konnten nicht sicher gespeichert werden." };
+  const authorization = await resolveAuthorization();
   if (!authorization.ok) {
     return authorization.reason === "AUTHORIZATION_UNAVAILABLE"
-      ? { code: "UNAVAILABLE", message: "Rechnungspreise konnten nicht sicher gespeichert werden." }
-      : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+      ? { code: "UNAVAILABLE", message: authorization.message }
+      : { code: "UNAUTHENTICATED", message: authorization.message };
   }
   if (
     !authorization.data.permissions.includes("perm_view_prices")
