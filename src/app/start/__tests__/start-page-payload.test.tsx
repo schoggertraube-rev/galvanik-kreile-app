@@ -34,9 +34,9 @@ vi.mock("@/app/actions/auth.actions", () => ({
 vi.mock("@/app/actions/auth", () => ({ login: vi.fn() }));
 
 const activeUsers = [
-  { loginHandle: "synthetic-rolf-handle", fullName: "Rolf", shortCode: "R", designation: "Meister", role: "meister" as const },
-  { loginHandle: "synthetic-phillip-handle", fullName: "Phillip", shortCode: "P", designation: "Werkstatt", role: "werkstatt" as const },
-  { loginHandle: "synthetic-gregor-handle", fullName: "Gregor", shortCode: "G", designation: "Wartung", role: "developer" as const },
+  { loginHandle: "synthetic-rolf-handle", fullName: "Rolf", shortCode: "R", designation: "Meister", role: "meister" as const, emailLoginAvailable: false },
+  { loginHandle: "synthetic-phillip-handle", fullName: "Phillip", shortCode: "P", designation: "Werkstatt", role: "werkstatt" as const, emailLoginAvailable: false },
+  { loginHandle: "synthetic-gregor-handle", fullName: "Gregor", shortCode: "G", designation: "Wartung", role: "developer" as const, emailLoginAvailable: true },
 ];
 
 afterEach(() => cleanup());
@@ -150,6 +150,13 @@ describe("StartPage product actor boundary", () => {
       "Anmeldung ist momentan nicht verfügbar",
     );
     expect(screen.getAllByRole("button").every((button) => button.hasAttribute("disabled"))).toBe(true);
+  });
+
+  it("shows a maintenance notice when active login rows were skipped", async () => {
+    ports.readActiveStartUsers.mockResolvedValue({ code: "OK", users: activeUsers, skipped: 2 });
+    const { default: StartPage } = await import("@/app/start/page");
+    render(await StartPage());
+    expect(screen.getByRole("status")).toHaveTextContent("Wartung prüfen");
   });
 
   it("fails closed and records a safe operational reference on an unexpected read error", async () => {

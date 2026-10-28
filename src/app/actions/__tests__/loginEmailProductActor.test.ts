@@ -22,6 +22,7 @@ vi.mock("@/lib/server/productActorReadiness", () => ({
 }));
 vi.mock("@/lib/server/authorization", () => ({
   resolveLoginIdentityByEmail: ports.resolveLoginIdentityByEmail,
+  hasAuthorizationArea: (identity: { areas?: string[] }, area: string) => identity.areas?.includes(area) ?? false,
 }));
 vi.mock("@/lib/server/appSession", () => ({
   setAppSession: ports.setAppSession,
@@ -72,6 +73,7 @@ describe("developer email product login", () => {
         fullName: "Technical DB Name",
         role: "developer",
         active: true,
+        areas: ["wartung"],
       },
     });
     ports.recordUserLastSeenForLogin.mockResolvedValue({ code: "OK" });
@@ -90,7 +92,7 @@ describe("developer email product login", () => {
     expect(ports.revalidatePath).toHaveBeenCalledWith("/", "layout");
   });
 
-  it("rejects admin even when the identity otherwise has settings access", async () => {
+  it("accepts any authenticated identity with the wartung area", async () => {
     ports.resolveLoginIdentityByEmail.mockResolvedValue({
       ok: true,
       data: {
@@ -100,14 +102,12 @@ describe("developer email product login", () => {
         fullName: "Admin",
         role: "admin",
         active: true,
+        areas: ["wartung"],
       },
     });
 
-    await expect(login(formData())).rejects.toThrow(
-      /REDIRECT:\/start\?.*support=bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/,
-    );
-    expect(ports.signOut).toHaveBeenCalledOnce();
-    expect(ports.setAppSession).not.toHaveBeenCalled();
+    await expect(login(formData())).rejects.toThrow("REDIRECT:/");
+    expect(ports.setAppSession).toHaveBeenCalledWith(expect.objectContaining({ role: "admin" }));
   });
 
   it("rejects an authenticated role without settings access", async () => {
@@ -120,6 +120,7 @@ describe("developer email product login", () => {
         fullName: "Office",
         role: "buero",
         active: true,
+        areas: ["einstellungen"],
       },
     });
 

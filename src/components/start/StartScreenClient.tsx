@@ -22,10 +22,12 @@ function StartContent({
   users,
   loginUnavailable,
   supportReference,
+  maintenanceNotice,
 }: {
   users: StartUserDto[];
   loginUnavailable: boolean;
   supportReference?: string;
+  maintenanceNotice?: boolean;
 }) {
   const searchParams = useSearchParams();
   const [selectedHandle, setSelectedHandle] = useState(users[0]?.loginHandle ?? "");
@@ -122,6 +124,7 @@ function StartContent({
     <section className={styles.loginPanel} aria-labelledby="login-title">
       <Image className={styles.logo} src="/assets/logo/kreile-wordmark-skyline.svg" alt="Galvanik Kreile" width={260} height={102} priority unoptimized />
       <h1 id="login-title">{greeting(new Date().getHours())}</h1>
+      {maintenanceNotice ? <div className={styles.error} role="status">Einige Logins sind unvollständig und werden nicht angezeigt · Wartung prüfen.</div> : null}
       {mode === "pin" ? <>
         {loginUnavailable ? <div className={styles.error} role="alert"><p>Anmeldung ist momentan nicht verfügbar.</p>{safeSupportReference ? <small>Referenz: {safeSupportReference}</small> : null}</div> : null}
         <div className={styles.users} aria-label="Person auswählen">
@@ -155,7 +158,7 @@ function StartContent({
           <button type="button" disabled={loginUnavailable || pinPending} onClick={() => void enterDigit("0")}>0</button>
           <button type="button" disabled={loginUnavailable || pinPending} aria-label="Löschen" onClick={() => { setPin((value) => value.slice(0, -1)); setMessage(null); }}><Delete aria-hidden="true" /></button>
         </div>
-        {selected?.role === "developer" ? <button className={styles.emailLink} data-spec-id="login.email" type="button" onClick={() => setMode("email")}>Mit E-Mail anmelden</button> : null}
+        {selected?.emailLoginAvailable ? <button className={styles.emailLink} data-spec-id="login.email" type="button" onClick={() => setMode("email")}>Mit E-Mail anmelden</button> : null}
       </> : <form className={styles.emailForm} onSubmit={submitEmail}>
         <label htmlFor="email">E-Mail</label>
         <input id="email" name="email" type="email" autoComplete="username" required autoFocus onChange={() => setShowServerMessage(false)} />
@@ -173,11 +176,13 @@ export function StartScreenClient({
   users,
   loginUnavailable = false,
   supportReference,
+  maintenanceNotice,
 }: {
   users: StartUserDto[];
   loginUnavailable?: boolean;
   supportReference?: string;
+  maintenanceNotice?: boolean;
 }) {
   usePageView();
-  return <Suspense fallback={<div className={styles.loading}>Anmeldung wird geladen …</div>}><StartContent users={users} loginUnavailable={loginUnavailable} supportReference={supportReference} /></Suspense>;
+  return <Suspense fallback={<div className={styles.loading}>Anmeldung wird geladen …</div>}><StartContent users={users} loginUnavailable={loginUnavailable} supportReference={supportReference} maintenanceNotice={maintenanceNotice} /></Suspense>;
 }

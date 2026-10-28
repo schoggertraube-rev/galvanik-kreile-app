@@ -9,7 +9,7 @@ import {
   setAppSession,
   SESSION_TTL_MS,
 } from "@/lib/server/appSession";
-import { resolveLoginIdentityByEmail } from "@/lib/server/authorization";
+import { hasAuthorizationArea, resolveLoginIdentityByEmail } from "@/lib/server/authorization";
 import {
   reportProductActorOperationalFailure,
 } from "@/lib/server/productActorReadiness";
@@ -56,7 +56,7 @@ export async function login(formData: FormData) {
   }
 
   const dbUser = identityResult.data;
-  if (dbUser.role !== "developer") {
+  if (!hasAuthorizationArea(dbUser, "wartung")) {
     await supabase.auth.signOut();
     const supportReference = reportProductActorOperationalFailure(
       "EMAIL_LOGIN_IDENTITY_MISMATCH",

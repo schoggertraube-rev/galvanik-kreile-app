@@ -6,6 +6,7 @@ export type StartUserDto = {
   shortCode: string;
   designation: string;
   role: AppRole;
+  emailLoginAvailable: boolean;
 };
 
 export type AdminUserDto = {

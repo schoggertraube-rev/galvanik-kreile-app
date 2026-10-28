@@ -68,6 +68,7 @@ export type LoginIdentitySnapshot = {
   role: AppRole;
   active: boolean;
   tenantId: string;
+  areas: readonly AccessArea[];
 };
 
 export type LoginIdentityResult =
@@ -242,7 +243,20 @@ export async function resolveLoginIdentityByEmail(
 ): Promise<LoginIdentityResult> {
   try {
     const [user] = await db
-      .select()
+      .select({
+        id: appUsers.id,
+        email: appUsers.email,
+        fullName: appUsers.fullName,
+        role: appUsers.role,
+        active: appUsers.active,
+        tenantId: appUsers.tenantId,
+        areas: sql<string[]>`(
+          SELECT COALESCE(array_agg(rights.bereich ORDER BY rights.bereich), ARRAY[]::text[])
+          FROM public.app_user_rights rights
+          WHERE rights.tenant_id = ${appUsers.tenantId}
+            AND rights.user_id = ${appUsers.id}
+        )`,
+      })
       .from(appUsers)
       .where(and(eq(appUsers.email, email), eq(appUsers.tenantId, tenantId)));
 
@@ -258,6 +272,9 @@ export async function resolveLoginIdentityByEmail(
     if (!isAppRole(role)) {
       return { ok: false, message: "AUTH_ERROR: Unbekannte Rolle" };
     }
+    if (user.areas.some((area) => !isAccessArea(area))) {
+      return { ok: false, message: "AUTH_ERROR: Unbekannter Bereich" };
+    }
 
     return {
       ok: true,
@@ -268,6 +285,7 @@ export async function resolveLoginIdentityByEmail(
         role: role,
         active: user.active,
         tenantId: user.tenantId,
+        areas: [...new Set(user.areas as AccessArea[])],
       },
     };
   } catch (err) {
