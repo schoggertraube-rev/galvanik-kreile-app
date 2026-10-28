@@ -9,7 +9,7 @@ import type { AppRole } from "@/lib/auth/authorizationContract";
 import type { TodayDashboard, TodayItem, TodayLayoutItem, TodayVisibleField } from "@/lib/server/todayDashboard";
 import { deriveTodayReminder, type TodayReminderMode } from "@/lib/server/todayDashboardPolicy";
 import type { OrdersHomeProjection, OrdersHomeSource } from "@/modules/orders/public";
-import { Button, Dialog, HandlungsListe, Hinweis, Kachel, Lageleiste, SeitenKopf, Zustand, type Geraet, type HandlungsArt } from "@/ui/kr";
+import { Button, Dialog, HandlungsListe, Hinweis, Kachel, Lageleiste, SeitenKopf, sortHandlungsEintraege, useListenTastatur, Zustand, type Geraet, type HandlungsArt } from "@/ui/kr";
 
 type RolfIdentity = { role: AppRole; canCreateOrder: boolean; canWorkOrders: boolean; canDelegate: boolean; dashboard: TodayDashboard };
 export type RolfHomeModel =
@@ -52,6 +52,15 @@ export function RolfHomeClient({ model, ports }: { model: RolfHomeModel; ports: 
   const [layout, setLayout] = useState<TodayLayoutItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const primary = (item: TodayItem) => { if (item.kind === "draft") requestGlobalCreate("DIRECT_INTAKE"); else if (item.kind === "order" && item.orderId) openOrder(item.orderId); else if (item.kind === "mail" && item.graphMessageId) requestGlobalCreate({ intent: "DIRECT_INTAKE", prefill: { sourceMode: "mail", graphMessageId: item.graphMessageId } }); else if (item.kind === "invoice" && item.invoiceId) openInvoice(item.invoiceId); else if (item.kind === "bundle" && item.bundleSurface) router.push(`/warendurchlauf?bundle=1&surface=${encodeURIComponent(item.bundleSurface)}`); };
+  const dashboardItems = model.kind === "data" || model.kind === "empty" ? model.dashboard.items : [];
+  const keyboardItems = sortHandlungsEintraege(dashboardItems.filter((item) => item.field === "action" && (filter === "alle" || actionType(item) === filter)).map((item) => ({ item, art: actionType(item), gedimmt: Boolean(item.snoozedUntil), termin: item.dueDate })));
+  const keyboardSelection = useListenTastatur({
+    anzahl: keyboardItems.length,
+    aktiv: device === "desktop" && !later && !more && !customize && (model.kind === "data" || model.kind === "empty"),
+    onHaupt: (index) => { const item = keyboardItems[index]?.item; if (item) primary(item); },
+    onSpaeter: (index) => { const item = keyboardItems[index]?.item; if (item?.kind !== "draft") setLater(item); },
+  });
   if (model.kind === "no_areas") return <section data-testid="rolf-v11-home"><SeitenKopf titel="Der Tag" /><Zustand art="leer" text="Noch keine Bereiche freigegeben" /></section>;
   if (model.kind === "denied" || model.kind === "error") return <section data-testid="rolf-v11-home"><SeitenKopf titel="Der Tag" /><Zustand art={model.kind === "error" ? "fehler" : "gesperrt"} text={model.kind === "error" ? "Der Tagesbestand ist gerade nicht verfügbar." : "Du kannst den Tagesbestand nicht öffnen."} /></section>;
 
@@ -60,7 +69,6 @@ export function RolfHomeClient({ model, ports }: { model: RolfHomeModel; ports: 
   const canDelegate = model.canDelegate && canWorkOrders;
   const filtered = filter === "alle" ? model.dashboard.items : model.dashboard.items.filter((item) => actionType(item) === filter);
   const counts = model.dashboard.items.filter((item) => item.field === "action").reduce<Record<HandlungsArt, number>>((sum, item) => { sum[actionType(item)] += 1; return sum; }, { konflikt: 0, entscheidung: 0, warnung: 0 });
-  const primary = (item: TodayItem) => { if (item.kind === "draft") requestGlobalCreate("DIRECT_INTAKE"); else if (item.kind === "order" && item.orderId) openOrder(item.orderId); else if (item.kind === "mail" && item.graphMessageId) requestGlobalCreate({ intent: "DIRECT_INTAKE", prefill: { sourceMode: "mail", graphMessageId: item.graphMessageId } }); else if (item.kind === "invoice" && item.invoiceId) openInvoice(item.invoiceId); else if (item.kind === "bundle" && item.bundleSurface) router.push(`/warendurchlauf?bundle=1&surface=${encodeURIComponent(item.bundleSurface)}`); };
   const primaryLabel = (item: TodayItem) => item.primaryActionLabel ?? (item.kind === "draft" ? "Weiter bearbeiten" : item.kind === "order" && item.field === "today" ? "Ware raus" : item.kind === "order" ? "Auftrag öffnen" : item.kind === "mail" ? "Zuordnen" : item.kind === "invoice" ? "Geld einfordern" : "Bündel öffnen");
   const discardDraft = async () => { setBusy(true); const result = await ports.discardDraft(); setBusy(false); if (result.code === "OK") router.refresh(); else setMessage(result.message ?? "Entwurf nicht gelöscht."); };
   const entries = (field: TodayItem["field"]) => filtered.filter((item) => item.field === field).map((item) => ({
@@ -89,7 +97,7 @@ export function RolfHomeClient({ model, ports }: { model: RolfHomeModel; ports: 
       {device === "desktop" && item.field !== "action" ? <Button text={item.column === "left" ? "Nach rechts" : "Nach links"} icon="handoff" onClick={() => setLayout((current) => current.map((entry) => entry.field === item.field ? { ...entry, column: entry.column === "left" ? "right" : "left" } : entry))} /> : null}
       {item.field !== "action" ? <Button text="Entfernen" icon="x" onClick={() => removeField(item.field as TodayVisibleField)} /> : null}
     </div> : null}
-    {entries(item.field).length ? <HandlungsListe eintraege={entries(item.field)} geraet={device} fokus={item.field === focusField} /> : <Zustand art="leer" text="Keine Einträge." />}
+    {entries(item.field).length ? <HandlungsListe eintraege={entries(item.field)} geraet={device} fokus={item.field === focusField} auswahl={item.field === "action" ? keyboardSelection : -1} /> : <Zustand art="leer" text="Keine Einträge." />}
   </Kachel>;
 
   return <section data-testid="rolf-v11-home">

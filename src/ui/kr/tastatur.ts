@@ -13,8 +13,8 @@ export function useListenTastatur({ anzahl, aktiv, onHaupt, onSpaeter }: ListenT
   useEffect(() => {
     if (!aktiv) return;
     const h = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (e.ctrlKey || e.metaKey || e.altKey || (t && (t.closest('input,textarea,select,[contenteditable="true"]')))) return;
+      const t = e.target;
+      if (e.ctrlKey || e.metaKey || e.altKey || (t instanceof Element && t.closest('input,textarea,select,[contenteditable="true"]'))) return;
       if (e.key === 'j') { e.preventDefault(); setSel(s => Math.min(anzahl - 1, s + 1)); }
       else if (e.key === 'k') { e.preventDefault(); setSel(s => Math.max(0, s - 1)); }
       else if (e.key === 'Enter' && sel >= 0) { e.preventDefault(); onHaupt(sel); }

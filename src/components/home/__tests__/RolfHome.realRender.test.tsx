@@ -152,6 +152,20 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     expect(lage.queryByText("Entscheidung")).not.toBeInTheDocument();
   });
 
+  it("steuert den Handlungsbedarf am Desktop mit j, k, Enter und s", () => {
+    const actionDashboard = { ...dashboard, items: [{ ...dashboard.items[0], field: "action" as const, dueDate: "2026-10-30" }], visibleFields: [...dashboard.visibleFields] };
+    const { container } = render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: actionDashboard, projection }} />);
+    fireEvent.keyDown(window, { key: "j" });
+    expect(container.querySelector(".kr-hb-eintrag")).toHaveClass("kr-hb-eintrag--gewaehlt");
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(ports.openOrder).toHaveBeenCalledWith("order-1");
+    fireEvent.keyDown(window, { key: "s" });
+    expect(screen.getByRole("heading", { name: "Später erinnern" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("dialog").querySelector('[data-spec-id="spaeter.schliessen"]')!);
+    fireEvent.keyDown(window, { key: "k" });
+    expect(container.querySelector(".kr-hb-eintrag")).toHaveClass("kr-hb-eintrag--gewaehlt");
+  });
+
   it("sortiert Konflikt vor Warnung vor Entscheidung und darin nach Termin", () => {
     const items = [
       { ...dashboard.items[0], key: "decision", title: "A-2026-0004 · Entscheidung", urgency: "decision" as const, dueDate: "2026-10-27", field: "action" as const },

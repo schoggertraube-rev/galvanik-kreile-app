@@ -79,10 +79,13 @@ export interface HandlungsListeProps {
 const ORDNUNG: Record<HandlungArtKey, number> = { konflikt: 0, warnung: 1, entscheidung: 2 };
 type HandlungArtKey = HandlungsArt;
 function terminWert(value?: string): number { const parsed = value ? Date.parse(value) : Number.NaN; return Number.isNaN(parsed) ? Number.MAX_SAFE_INTEGER : parsed; }
+export function sortHandlungsEintraege<T extends Pick<HandlungsEintragProps, 'art' | 'gedimmt' | 'termin'>>(eintraege: readonly T[]): T[] {
+  return [...eintraege].sort((a, c) => Number(Boolean(a.gedimmt)) - Number(Boolean(c.gedimmt)) || ORDNUNG[a.art] - ORDNUNG[c.art] || terminWert(a.termin) - terminWert(c.termin));
+}
 /** Reihenfolge: Konflikt → Warnung → Entscheidung, innerhalb nach Termin. Nichts dringend ⇒ rendert nichts. */
 export function HandlungsListe({ eintraege: roh, geraet, label, zustand = 'daten', texte, max, fokus, auswahl = -1 }: HandlungsListeProps) {
   const [offen, setOffen] = useState(false);
-  const sortiert = [...roh].sort((a, c) => Number(Boolean(a.gedimmt)) - Number(Boolean(c.gedimmt)) || ORDNUNG[a.art] - ORDNUNG[c.art] || terminWert(a.termin) - terminWert(c.termin));
+  const sortiert = sortHandlungsEintraege(roh);
   const f = fokus ? sortiert.find(e => !e.status) : undefined;
   const eintraege = (f ? [{ ...f, fokus: true }, ...sortiert.filter(e => e !== f)] : sortiert).map((e, n) => ({ ...e, gewaehlt: geraet === 'desktop' && n === auswahl }));
   if (zustand === 'daten' && eintraege.length === 0 && !label) return null;
