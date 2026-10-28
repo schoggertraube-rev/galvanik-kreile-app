@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyMoneyForToday, classifyOrderForToday, defaultTodayLayout, deriveOrderGuidance, filterTodayLayout, isBundleStationForToday, parseTodayLayout } from "@/lib/server/todayDashboardPolicy";
+import { classifyMoneyForToday, classifyOrderForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout } from "@/lib/server/todayDashboardPolicy";
 
 const TODAY = "2026-10-28";
 
@@ -84,5 +84,32 @@ describe("Der-Tag layout policy", () => {
     expect(parseTodayLayout([{ field: "today", column: "right", order: 0 }])).toBeNull();
     expect(parseTodayLayout([...valid, { field: "today", column: "left", order: 2 }])).toBeNull();
     expect(parseTodayLayout([{ field: "action", column: "left", order: 1 }])).toBeNull();
+  });
+});
+
+describe("Später in Europe/Berlin", () => {
+  it("uses 14:00 Berlin in summer and hides the option after the deadline", () => {
+    expect(deriveTodayReminder("afternoon", "2026-07-03", new Date("2026-07-01T08:00:00.000Z"))).toMatchObject({
+      until: new Date("2026-07-01T12:00:00.000Z"),
+      message: "Aufgeschoben bis heute 14:00 · zählt weiter mit",
+    });
+    expect(deriveTodayReminder("afternoon", "2026-07-03", new Date("2026-07-01T12:01:00.000Z"))).toBeNull();
+  });
+
+  it("uses the next workday at 07:00 across the daylight-saving boundary", () => {
+    expect(deriveTodayReminder("tomorrow", "2026-04-03", new Date("2026-03-27T09:00:00.000Z"))).toMatchObject({
+      until: new Date("2026-03-30T05:00:00.000Z"),
+      message: "Aufgeschoben bis Mo 07:00 · zählt weiter mit",
+    });
+  });
+
+  it("does not move an item beyond a reached due date", () => {
+    const now = new Date("2026-10-28T08:00:00.000Z");
+    expect(deriveTodayReminder("tomorrow", "2026-10-28", now)).toBeNull();
+    expect(deriveTodayReminder("after_due", "2026-10-27", now)).toBeNull();
+    expect(deriveTodayReminder("after_due", "2026-10-30", now)).toMatchObject({
+      until: new Date("2026-11-02T06:00:00.000Z"),
+      message: "Aufgeschoben bis 02.11.2026 07:00 · zählt weiter mit",
+    });
   });
 });

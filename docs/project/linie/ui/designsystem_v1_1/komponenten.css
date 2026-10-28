@@ -137,6 +137,7 @@
 .kr-hb-eintrag--konflikt{border-left-color:var(--ral);}
 .kr-hb-eintrag--warnung{border-left-color:var(--warn)}
 .kr-hb-eintrag--entscheidung{border-left-color:var(--info);}
+.kr-hb-eintrag--gedimmt{opacity:.62;box-shadow:none}
 .kr-hb-eintrag--konflikt .kr-punkt{background:var(--ral);box-shadow:0 0 0 4px rgba(175,43,30,.14)}
 .kr-hb-eintrag--warnung .kr-punkt{background:var(--warn)}
 .kr-hb-eintrag--entscheidung .kr-punkt{background:var(--info)}

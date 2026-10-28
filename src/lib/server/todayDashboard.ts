@@ -6,7 +6,7 @@ import { getOperationalOrders } from "@/lib/server/operationalOrders";
 import { readIntakeDraft } from "@/lib/server/intakeDraft";
 import { listMicrosoftGraphInbox } from "@/lib/server/microsoftGraph";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import { classifyMoneyForToday, defaultTodayLayout, deriveOrderGuidance, filterTodayLayout, isBundleStationForToday, parseTodayLayout, type TodayLayoutField, type TodayLayoutItem, type TodayOrderGuidance } from "@/lib/server/todayDashboardPolicy";
+import { classifyMoneyForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout, type TodayLayoutField, type TodayLayoutItem, type TodayOrderGuidance, type TodayReminderMode } from "@/lib/server/todayDashboardPolicy";
 
 export type TodayField = "action" | "today" | "assign" | "money" | "bundle";
 export type TodayVisibleField = Exclude<TodayField, "action">;
@@ -148,7 +148,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
     if (!guidance) continue;
     const caseTitle = guidance.caseId === "finished_waiting" ? "Fertig und wartet auf Warenausgang" : guidance.caseId === "due" ? "Liefertermin braucht Handlung" : guidance.caseId === "tight" ? "Zeitplan ist knapp" : guidance.caseId === "problem" ? "Gemeldetes Auftragsrisiko" : "Heute fertig zur Übergabe";
     const reason = guidance.reason === "due_today" ? `heute fällig · Station ${order.station}` : guidance.reason === "overdue" ? `überfällig · Station ${order.station}` : guidance.reason === "finished_overdue" ? `Liefertermin überschritten · fertig zur Übergabe` : guidance.reason === "tight_schedule" ? `${order.dueLabel} ${order.dueValue} · noch nicht begonnen` : guidance.reason === "reported_risk" ? `Risiko ${order.risk} · Station ${order.station}` : `${order.dueLabel} ${order.dueValue} · fertig`;
-    add({ key: `order:${order.id}`, field: guidance.field, kind: "order", title: `${order.orderNumber} · ${caseTitle}`, meta: `${order.customerName ?? "Kunde"} · ${reason}`, urgency: order.risk === "red" || order.risk === "blocked" ? "conflict" : "warning", orderId: order.id, orderVersion: order.version, dueDate: order.dueDate, primaryActionLabel: guidance.primaryActionLabel });
+    add({ key: `order:${order.id}:${guidance.caseId}:${guidance.reason}`, field: guidance.field, kind: "order", title: `${order.orderNumber} · ${caseTitle}`, meta: `${order.customerName ?? "Kunde"} · ${reason}`, urgency: order.risk === "red" || order.risk === "blocked" ? "conflict" : "warning", orderId: order.id, orderVersion: order.version, dueDate: order.dueDate, primaryActionLabel: guidance.primaryActionLabel });
   }
 
   const importedGraphIds = new Set(support.graphThreads.map((row) => row.source.slice("MS_GRAPH_IN:".length)));
@@ -195,22 +195,14 @@ export async function saveTodayPreferences(auth: AuthorizationSnapshot, value: u
   return { code: "OK" as const };
 }
 
-export async function saveTodayReminder(auth: AuthorizationSnapshot, input: { itemKey: string; mode: "afternoon" | "tomorrow" | "after_due"; dueDate?: string }) {
+export async function saveTodayReminder(auth: AuthorizationSnapshot, input: { itemKey: string; mode: TodayReminderMode; dueDate?: string }) {
   if (!input.itemKey || input.itemKey.length > 300 || !["afternoon", "tomorrow", "after_due"].includes(input.mode)) return { code: "VALIDATION_ERROR" as const, message: "Erinnerung ist ungültig." };
-  const now = new Date();
-  let until: Date;
-  if (input.mode === "afternoon") {
-    until = new Date(new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit" }).format(now) + "T14:00:00+01:00");
-    if (until <= now) until = new Date(now.getTime() + 60 * 60 * 1000);
-  } else if (input.mode === "tomorrow") until = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-  else {
-    if (!input.dueDate || !/^\d{4}-\d{2}-\d{2}$/.test(input.dueDate)) return { code: "VALIDATION_ERROR" as const, message: "Termin für die Erinnerung fehlt." };
-    until = new Date(`${input.dueDate}T18:00:00+01:00`);
-  }
+  const decision = deriveTodayReminder(input.mode, input.dueDate, new Date());
+  if (!decision) return { code: "VALIDATION_ERROR" as const, message: "Diese Erinnerung ist für den aktuellen Termin nicht möglich." };
   await withPrivilegedTenantTransaction(auth, (tx) => tx.execute(sql`
     INSERT INTO private.today_reminders (tenant_id, actor_id, item_key, reminder_until, reminder_mode)
-    VALUES (${auth.tenantId}, ${auth.userId}::uuid, ${input.itemKey}, ${until.toISOString()}::timestamptz, ${input.mode})
+    VALUES (${auth.tenantId}, ${auth.userId}::uuid, ${input.itemKey}, ${decision.until.toISOString()}::timestamptz, ${input.mode})
     ON CONFLICT (tenant_id, actor_id, item_key) DO UPDATE SET reminder_until=EXCLUDED.reminder_until, reminder_mode=EXCLUDED.reminder_mode, updated_at=statement_timestamp()
   `));
-  return { code: "OK" as const, data: { reminderUntil: until.toISOString() } };
+  return { code: "OK" as const, message: decision.message, data: { reminderUntil: decision.until.toISOString() } };
 }

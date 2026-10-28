@@ -23,6 +23,8 @@ export interface HandlungsEintragProps {
   gewaehlt?: boolean;
   /** V1.1 B5: Wischen erlaubt (nur Touch; nie für Freigaben und Geld – setzt die App) */
   wischbar?: boolean;
+  /** Aufgeschobene Einträge bleiben sichtbar, stehen aber gedimmt am Ende. */
+  gedimmt?: boolean;
 }
 const LABEL: Record<HandlungsArt, [string, 'rot' | 'warn' | 'info']> = { konflikt: ['Konflikt', 'rot'], warnung: ['Warnung', 'warn'], entscheidung: ['Entscheidung', 'info'] };
 /** Max. 2 Zeilen: Titel + 1 Meta · Aktion rechts · keine Erklärzeile */
@@ -33,7 +35,7 @@ export function HandlungsEintrag(p: HandlungsEintragProps) {
   const spaeter = aktionen.find(a => a.spaeter);
   const andere = aktionen.slice(1).filter(a => a !== spaeter);
   const eintrag = (
-    <div className={cx('kr-hb-eintrag', 'kr-hb-eintrag--' + p.art, p.fokus && 'kr-fokus', p.gewaehlt && 'kr-hb-eintrag--gewaehlt')} onClick={e => { if (!(e.target as HTMLElement).closest('button')) p.onOeffnen?.(); }}>
+    <div className={cx('kr-hb-eintrag', 'kr-hb-eintrag--' + p.art, p.fokus && 'kr-fokus', p.gewaehlt && 'kr-hb-eintrag--gewaehlt', p.gedimmt && 'kr-hb-eintrag--gedimmt')} onClick={e => { if (!(e.target as HTMLElement).closest('button')) p.onOeffnen?.(); }}>
       <span className="kr-punkt" />
       <div className="kr-hb-main">
         {/* Handy: Nummer wandert in die Meta-Zeile, damit der Titel lesbar bleibt */}
@@ -77,7 +79,7 @@ type HandlungArtKey = HandlungsArt;
 /** Reihenfolge: Konflikt → Entscheidung → Warnung. Nichts dringend ⇒ rendert nichts. */
 export function HandlungsListe({ eintraege: roh, geraet, label, zustand = 'daten', texte, max, fokus, auswahl = -1 }: HandlungsListeProps) {
   const [offen, setOffen] = useState(false);
-  const sortiert = [...roh].sort((a, c) => ORDNUNG[a.art] - ORDNUNG[c.art]);
+  const sortiert = [...roh].sort((a, c) => Number(Boolean(a.gedimmt)) - Number(Boolean(c.gedimmt)) || ORDNUNG[a.art] - ORDNUNG[c.art]);
   const f = fokus ? sortiert.find(e => !e.status) : undefined;
   const eintraege = (f ? [{ ...f, fokus: true }, ...sortiert.filter(e => e !== f)] : sortiert).map((e, n) => ({ ...e, gewaehlt: geraet === 'desktop' && n === auswahl }));
   if (zustand === 'daten' && eintraege.length === 0 && !label) return null;

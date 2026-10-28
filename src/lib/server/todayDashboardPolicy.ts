@@ -5,9 +5,92 @@ const TERMINAL_ORDER_STATES = new Set(["abgeholt", "versendet", "raus", "stornie
 export type TodayLayoutField = "action" | "today" | "assign" | "money" | "bundle";
 export type TodayLayoutColumn = "left" | "right";
 export type TodayLayoutItem = { field: TodayLayoutField; column: TodayLayoutColumn; order: number };
+export type TodayReminderMode = "afternoon" | "tomorrow" | "after_due";
+export type TodayReminderDecision = { until: Date; message: string };
 
 const TODAY_LAYOUT_FIELDS = new Set<TodayLayoutField>(["action", "today", "assign", "money", "bundle"]);
 const TODAY_LAYOUT_COLUMNS = new Set<TodayLayoutColumn>(["left", "right"]);
+const BERLIN_TIME_ZONE = "Europe/Berlin";
+const DATE_KEY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+type CalendarDay = { year: number; month: number; day: number };
+type BerlinClock = CalendarDay & { hour: number; minute: number };
+
+function berlinClock(value: Date): BerlinClock {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: BERLIN_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(value);
+  const part = (type: "year" | "month" | "day" | "hour" | "minute") => Number(parts.find((entry) => entry.type === type)?.value);
+  return { year: part("year"), month: part("month"), day: part("day"), hour: part("hour"), minute: part("minute") };
+}
+
+function dateKey(day: CalendarDay): string {
+  return `${day.year.toString().padStart(4, "0")}-${day.month.toString().padStart(2, "0")}-${day.day.toString().padStart(2, "0")}`;
+}
+
+function parseDateKey(value: string | undefined): CalendarDay | null {
+  const match = value?.match(DATE_KEY);
+  if (!match) return null;
+  const day = { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) };
+  const check = new Date(Date.UTC(day.year, day.month - 1, day.day));
+  return check.getUTCFullYear() === day.year && check.getUTCMonth() === day.month - 1 && check.getUTCDate() === day.day ? day : null;
+}
+
+function addCalendarDays(day: CalendarDay, amount: number): CalendarDay {
+  const value = new Date(Date.UTC(day.year, day.month - 1, day.day + amount));
+  return { year: value.getUTCFullYear(), month: value.getUTCMonth() + 1, day: value.getUTCDate() };
+}
+
+function nextWorkday(day: CalendarDay): CalendarDay {
+  let candidate = addCalendarDays(day, 1);
+  while ([0, 6].includes(new Date(Date.UTC(candidate.year, candidate.month - 1, candidate.day)).getUTCDay())) candidate = addCalendarDays(candidate, 1);
+  return candidate;
+}
+
+function berlinDate(day: CalendarDay, hour: number): Date {
+  const desired = Date.UTC(day.year, day.month - 1, day.day, hour);
+  let instant = new Date(desired);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const actual = berlinClock(instant);
+    const actualAsUtc = Date.UTC(actual.year, actual.month - 1, actual.day, actual.hour, actual.minute);
+    instant = new Date(instant.getTime() + desired - actualAsUtc);
+  }
+  return instant;
+}
+
+function shortWeekday(value: Date): string {
+  return new Intl.DateTimeFormat("de-DE", { timeZone: BERLIN_TIME_ZONE, weekday: "short" }).format(value).replace(".", "");
+}
+
+export function deriveTodayReminder(mode: TodayReminderMode, dueDate: string | undefined, now = new Date()): TodayReminderDecision | null {
+  const clock = berlinClock(now);
+  const today = { year: clock.year, month: clock.month, day: clock.day };
+  const todayKey = dateKey(today);
+  const due = parseDateKey(dueDate);
+  const dueKey = due ? dateKey(due) : null;
+  const deadlineReached = dueKey !== null && dueKey <= todayKey;
+
+  if (mode === "afternoon") {
+    if (clock.hour >= 14) return null;
+    const until = berlinDate(today, 14);
+    return until > now ? { until, message: "Aufgeschoben bis heute 14:00 · zählt weiter mit" } : null;
+  }
+  if (deadlineReached) return null;
+  if (mode === "tomorrow") {
+    const until = berlinDate(nextWorkday(today), 7);
+    return { until, message: `Aufgeschoben bis ${shortWeekday(until)} 07:00 · zählt weiter mit` };
+  }
+  if (!due || dueKey === null || dueKey <= todayKey) return null;
+  const until = berlinDate(nextWorkday(due), 7);
+  const label = new Intl.DateTimeFormat("de-DE", { timeZone: BERLIN_TIME_ZONE, day: "2-digit", month: "2-digit", year: "numeric" }).format(until);
+  return { until, message: `Aufgeschoben bis ${label} 07:00 · zählt weiter mit` };
+}
 
 const TEMPLATE_LAYOUTS: Record<"meister" | "werkstatt" | "developer" | "leer", Array<Omit<TodayLayoutItem, "order">>> = {
   meister: [

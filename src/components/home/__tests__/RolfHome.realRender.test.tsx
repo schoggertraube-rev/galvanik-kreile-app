@@ -84,11 +84,40 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     expect(ports.openOrder).toHaveBeenCalledWith("order-1");
   });
 
-  it("zeigt keine Aktionen ohne echte Anbindung", () => {
-    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields] }, projection }} />);
+  it("zeigt nur die aktuell zulässigen Später-Zeiten", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-28T08:00:00.000Z"));
+    const futureDashboard = { ...dashboard, items: [{ ...dashboard.items[0], dueDate: "2026-10-30" }], visibleFields: [...dashboard.visibleFields] };
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: futureDashboard, projection }} />);
     fireEvent.click(screen.getByRole("button", { name: "Später" }));
     expect(screen.getByRole("heading", { name: "Später erinnern" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "heute Nachmittag" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "morgen früh" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "nach dem Termin" })).toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it("hides reminder choices that would cross today's due date", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-28T08:00:00.000Z"));
+    const dueDashboard = { ...dashboard, items: [{ ...dashboard.items[0], dueDate: "2026-10-28" }], visibleFields: [...dashboard.visibleFields] };
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: dueDashboard, projection }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Später" }));
+    expect(screen.getByRole("button", { name: "heute Nachmittag" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "morgen früh" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "nach dem Termin" })).not.toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it("keeps a snoozed entry visible, dimmed, and at the end", () => {
+    const active = { ...dashboard.items[0], key: "order:active", title: "A-2026-0002 · Aktiv" };
+    const snoozed = { ...dashboard.items[0], key: "order:snoozed", snoozedUntil: "2026-10-29T06:00:00.000Z" };
+    const { container } = render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items: [snoozed, active], visibleFields: [...dashboard.visibleFields] }, projection }} />);
+    const rows = [...container.querySelectorAll(".kr-hb-eintrag")];
+    expect(rows[0]).toHaveTextContent("A-2026-0002");
+    expect(rows[1]).toHaveClass("kr-hb-eintrag--gedimmt");
+    expect(rows[1]).toHaveTextContent("Aufgeschoben bis");
+    expect(rows[1]).toHaveTextContent("zählt weiter mit");
   });
 
   it("öffnet beim Zuordnen genau die ausgewählte eingehende Mail", () => {

@@ -7,6 +7,7 @@ import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useOverlayStore } from "@/lib/overlayStore";
 import type { AppRole } from "@/lib/auth/authorizationContract";
 import type { TodayDashboard, TodayItem, TodayLayoutItem, TodayVisibleField } from "@/lib/server/todayDashboard";
+import { deriveTodayReminder, type TodayReminderMode } from "@/lib/server/todayDashboardPolicy";
 import type { OrdersHomeProjection, OrdersHomeSource } from "@/modules/orders/public";
 import { Button, Dialog, HandlungsListe, Hinweis, Kachel, Lageleiste, SeitenKopf, Zustand, type Geraet, type HandlungsArt } from "@/ui/kr";
 
@@ -20,7 +21,7 @@ export type RolfHomeModel =
 type BasicResult = { code: string; message?: string };
 export type RolfHomePorts = {
   savePreferences: (layout: TodayLayoutItem[]) => Promise<BasicResult>;
-  saveReminder: (input: { itemKey: string; mode: "afternoon" | "tomorrow" | "after_due"; dueDate?: string }) => Promise<BasicResult>;
+  saveReminder: (input: { itemKey: string; mode: TodayReminderMode; dueDate?: string }) => Promise<BasicResult>;
   discardDraft: () => Promise<BasicResult>;
   assignOrder: (input: { orderId: string; assigneeUserId: string; expectedVersion: number; clientEventId: string }) => Promise<BasicResult>;
 };
@@ -36,7 +37,7 @@ export function dayLineParts(orders: readonly OrdersHomeSource[], displayName: s
 function readDevice(): Geraet { if (window.innerWidth <= 699) return "handy"; if (window.innerWidth <= 1399 && window.matchMedia?.("(pointer: coarse)").matches) return "tablet"; return "desktop"; }
 function subscribeDevice(onChange: () => void) { window.addEventListener("resize", onChange); return () => window.removeEventListener("resize", onChange); }
 function actionType(item: TodayItem): HandlungsArt { return item.urgency === "conflict" ? "konflikt" : item.urgency === "warning" ? "warnung" : "entscheidung"; }
-function reminderLabel(value: string) { return `Erinnert ${new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(value))}`; }
+function reminderLabel(value: string) { return `Aufgeschoben bis ${new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(value))} · zählt weiter mit`; }
 
 export function RolfHomeClient({ model, ports }: { model: RolfHomeModel; ports: RolfHomePorts }) {
   const openOrder = useOverlayStore((state) => state.openOrder);
@@ -63,11 +64,11 @@ export function RolfHomeClient({ model, ports }: { model: RolfHomeModel; ports: 
   const primaryLabel = (item: TodayItem) => item.primaryActionLabel ?? (item.kind === "draft" ? "Weiter bearbeiten" : item.kind === "order" && item.field === "today" ? "Ware raus" : item.kind === "order" ? "Auftrag öffnen" : item.kind === "mail" ? "Zuordnen" : item.kind === "invoice" ? "Geld einfordern" : "Bündel öffnen");
   const discardDraft = async () => { setBusy(true); const result = await ports.discardDraft(); setBusy(false); if (result.code === "OK") router.refresh(); else setMessage(result.message ?? "Entwurf nicht gelöscht."); };
   const entries = (field: TodayItem["field"]) => filtered.filter((item) => item.field === field).map((item) => ({
-    key: item.key, art: actionType(item), id: item.kind === "order" ? item.title.split(" · ")[0] : undefined, titel: item.title, meta: item.snoozedUntil ? `${item.meta} · ${reminderLabel(item.snoozedUntil)}` : item.meta,
+    key: item.key, art: actionType(item), id: item.kind === "order" ? item.title.split(" · ")[0] : undefined, titel: item.title, meta: item.snoozedUntil ? `${item.meta} · ${reminderLabel(item.snoozedUntil)}` : item.meta, gedimmt: Boolean(item.snoozedUntil),
     aktionen: [{ text: primaryLabel(item), kurz: "Öffnen", icon: "open" as const, art: "primaer" as const, onClick: () => primary(item) }, ...(item.kind === "draft" ? [{ text: "Löschen", icon: "x" as const, onClick: () => void discardDraft() }] : [{ text: "Später", icon: "clock" as const, spaeter: true, onClick: () => setLater(item) }]), ...(canDelegate && item.kind === "order" && model.dashboard.phillipUserId ? [{ text: "Weitere", icon: "more" as const, onClick: () => setMore(item) }] : [])],
     onOeffnen: () => primary(item), onWeitere: () => setMore(item),
   }));
-  const saveReminder = async (mode: "afternoon" | "tomorrow" | "after_due") => { if (!later) return; setBusy(true); const result = await ports.saveReminder({ itemKey: later.key, mode, dueDate: later.dueDate }); setBusy(false); if (result.code === "OK") { setLater(null); router.refresh(); } else setMessage(result.message ?? "Erinnerung nicht gespeichert."); };
+  const saveReminder = async (mode: TodayReminderMode) => { if (!later) return; setBusy(true); const result = await ports.saveReminder({ itemKey: later.key, mode, dueDate: later.dueDate }); setBusy(false); if (result.code === "OK") { setMessage(result.message ?? "Erinnerung gespeichert"); setLater(null); router.refresh(); } else setMessage(result.message ?? "Erinnerung nicht gespeichert."); };
   const delegate = async () => { if (!more?.orderId || !more.orderVersion || !model.dashboard.phillipUserId) return; setBusy(true); const result = await ports.assignOrder({ orderId: more.orderId, assigneeUserId: model.dashboard.phillipUserId, expectedVersion: more.orderVersion, clientEventId: crypto.randomUUID() }); setBusy(false); if (result.code === "OK") { setMore(null); router.refresh(); } else setMessage(result.message ?? "Zuweisung nicht gespeichert."); };
   const focusField = (["action", "today", "assign", "money", "bundle"] as const).find((field) => entries(field).length > 0);
   const activeLayout = customize ? layout : model.dashboard.layout;
@@ -101,7 +102,7 @@ export function RolfHomeClient({ model, ports }: { model: RolfHomeModel; ports: 
       {device === "desktop" ? <div className="kr-spalten"><div className="kr-stapel">{activeLayout.filter((item) => item.column === "left" && (customize || entries(item.field).length)).map(fieldCard)}</div><div className="kr-stapel">{activeLayout.filter((item) => item.column === "right" && (customize || entries(item.field).length)).map(fieldCard)}</div></div> : activeLayout.filter((item) => customize || entries(item.field).length).map(fieldCard)}
       {device !== "desktop" && (canStartOrder || canWorkOrders) ? <div className="kr-schnellleiste">{canStartOrder ? <Button art="primaer" icon="inbox" text="Neuer Eingang" onClick={() => requestGlobalCreate("DIRECT_INTAKE")} /> : null}{canWorkOrders ? <Button icon="truck" text="Ware raus" onClick={() => router.push("/orders?station=fertig")} /> : null}</div> : null}
     </div>}
-    {later ? <Dialog titel="Später erinnern" icon="clock" groesse="schmal" onSchliessen={() => setLater(null)}><div className="kr-stapel"><Button data-spec-id="spaeter.heute-nachmittag" text="heute Nachmittag" icon="clock" disabled={busy} onClick={() => void saveReminder("afternoon")} /><Button data-spec-id="spaeter.morgen-fruh" text="morgen früh" icon="clock" disabled={busy} onClick={() => void saveReminder("tomorrow")} /><Button data-spec-id="spaeter.nach-dem-termin" text="nach dem Termin" icon="clock" disabled={busy || !later.dueDate} onClick={() => void saveReminder("after_due")} /><Button data-spec-id="spaeter.schliessen" art="leise" text="Schließen" onClick={() => setLater(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
+    {later ? <Dialog titel="Später erinnern" icon="clock" groesse="schmal" onSchliessen={() => setLater(null)}><div className="kr-stapel">{deriveTodayReminder("afternoon", later.dueDate) ? <Button data-spec-id="spaeter.heute-nachmittag" text="heute Nachmittag" icon="clock" disabled={busy} onClick={() => void saveReminder("afternoon")} /> : null}{deriveTodayReminder("tomorrow", later.dueDate) ? <Button data-spec-id="spaeter.morgen-fruh" text="morgen früh" icon="clock" disabled={busy} onClick={() => void saveReminder("tomorrow")} /> : null}{deriveTodayReminder("after_due", later.dueDate) ? <Button data-spec-id="spaeter.nach-dem-termin" text="nach dem Termin" icon="clock" disabled={busy} onClick={() => void saveReminder("after_due")} /> : null}<Button data-spec-id="spaeter.schliessen" art="leise" text="Schließen" onClick={() => setLater(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
     {more ? <Dialog titel="Weitere Aktionen" icon="more" groesse="schmal" onSchliessen={() => setMore(null)}><div className="kr-stapel"><Button data-spec-id="hbmehr.an-phillip-delegieren" text="an Phillip delegieren" icon="handoff" disabled={busy} onClick={() => void delegate()} /><Button data-spec-id="hbmehr.schliessen" art="leise" text="Schließen" onClick={() => setMore(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
   </section>;
 }
