@@ -46,11 +46,9 @@ export const metadata: Metadata = {
 };
 
 import { KreileAppShell } from "@/components/layout/KreileAppShell";
-import { LicenseProvider } from "@/lib/license/LicenseContext";
 import { DiagnosticsProvider } from "@/lib/diagnostics/DiagnosticsContext";
 import { DiagnosticsWidget } from "@/components/diagnostics/DiagnosticsWidget";
 import { PermissionsProvider } from "@/lib/auth/PermissionsContext";
-import { AppShortcutProvider } from "@/components/ui/AppShortcutContext";
 import { SyncProvider } from "@/lib/offline/SyncContext";
 import { FeatureFlagProvider } from "@/lib/analytics/useFeatureFlag";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
@@ -81,15 +79,11 @@ export default async function RootLayout({
           <SyncProvider>
             <PermissionsProvider initialAuthState={authState}>
               <DiagnosticsProvider>
-                <LicenseProvider>
-                  <AppShortcutProvider>
-                    <FeatureFlagProvider>
-                      <KreileAppShell globalCreate={<GlobalCreateAppAdapter />}>
-                        {children}
-                      </KreileAppShell>
-                    </FeatureFlagProvider>
-                  </AppShortcutProvider>
-                </LicenseProvider>
+                <FeatureFlagProvider>
+                  <KreileAppShell globalCreate={<GlobalCreateAppAdapter />}>
+                    {children}
+                  </KreileAppShell>
+                </FeatureFlagProvider>
                 {isAdmin && <DiagnosticsWidget />}
               </DiagnosticsProvider>
             </PermissionsProvider>
