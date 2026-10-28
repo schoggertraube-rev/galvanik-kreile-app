@@ -2,6 +2,13 @@
 
 Laufendes Protokoll (neueste oben). Der Endversion-Chat pflegt spec.json und erzeugt daraus `docs/project/endversion/codex/BAUPLAN.json`. Er schreibt nicht in den App-Code.
 
+## 28.10. – Nur noch die App-Basis (Owner)
+
+- Owner-Haken nur noch für die App-Basis: Login, F0 Rechte, F2 Der Tag. Waren- und Informationseingang (F1) und F3–F7 sind zurückgestellt. Reparaturen an der Basis laufen weiter, Neubau gibt es keinen.
+- `codex/BAUPLAN.json` (spec `9ce5a52f7517`) enthält nur noch diese drei Abschnitte und 25 Korrekturen. Die Korrekturen am Eingang stehen nicht mehr darin (passt zu H8).
+- In AKTUELLE_ANWEISUNG.md steht dazu H9 über H8.
+- Die Spec-Arbeit an F1 und F3–F7 ist geparkt. Der Stand der Gegenprüfung bleibt in der Spec erhalten (Runde 4: keine Blocker). Weitergemacht wird erst, wenn die Owner es freigibt.
+
 ## 27.10. ca. 23:15 – Einarbeitung F1, F3/F4, F5–F7 abgeschlossen, Gegenprüfung Runde 2 läuft
 
 - spec `8faee2a3d317`, Bauplan neu erzeugt. Baureif bleiben **Login, F0, F2**. F1 steht im Bauplan nur mit Korrekturen.

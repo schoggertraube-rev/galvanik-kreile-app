@@ -54,3 +54,5 @@
 - 28.10. 02:27 Berlin (Prüfer, Eingang-04..Tag-03): kein CI-/Vercel-Nachweis am Kopf a962c123. Vor Merge PR #154 CI grün belegen.
 
 - 28.10. 08:28 UTC (F0_04, 1d5c5915): Kürzel jetzt max. 3 Zeichen im Server, DB-Check `app_users_kuerzel_format_chk` und `varchar(8)` erlauben weiter 8. Bestehende Logins mit >3 Zeichen (falls je angelegt) könnten nicht mehr bearbeitet werden, weil `updateManagedUser` das unveränderte Kürzel mitprüft. Später DB-Check angleichen bzw. Bestand prüfen.
+
+- (Prüfer 28.10. 11:32 UTC) a617cba8 „feat(intake)“ ändert nebenbei `.github/workflows/eslint-ratchet.yml` (AUTHORITY_CHECKER_SHA256) und `scripts/quality/check-authoritative-sources.mjs` (KORREKTUREN_STAND.md ins Register). Inhaltlich gedeckt (Register-Freigabe 26.10. + H5), aber Governance-Änderungen künftig als eigener Commit mit eigener Abgabe, nicht im Produktcommit.
