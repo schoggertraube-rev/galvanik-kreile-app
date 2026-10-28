@@ -13,7 +13,7 @@ import {
   usePermissions,
 } from "../PermissionsContext";
 import {
-  getPermissionsForRole,
+  getPermissionsForAreas,
   getProductIdentityByKey,
 } from "../authorizationContract";
 
@@ -128,7 +128,7 @@ const initialRolf: AuthBootstrapState = {
     role: "meister",
     displayName: "Rolf",
     areas: ["auftraege", "mails"],
-    permissions: getPermissionsForRole("meister"),
+    permissions: getPermissionsForAreas(["auftraege", "mails"]),
   },
 };
 
@@ -143,12 +143,13 @@ describe("identity labels and capabilities", () => {
     expect(getProductIdentityByKey("gregor").name).toBe("Gregor");
   });
 
-  it("keeps Meister capabilities broader than Werkstatt", () => {
-    expect(getPermissionsForRole("meister")).toEqual(
-      expect.arrayContaining(["perm_data_customers", "perm_data_orders"]),
+  it("derives capabilities only from granted areas", () => {
+    expect(getPermissionsForAreas(["kunden"])).toEqual(
+      expect.arrayContaining(["perm_data_customers", "perm_view_customers"]),
     );
-    expect(getPermissionsForRole("werkstatt")).not.toContain("perm_data_customers");
-    expect(getPermissionsForRole("werkstatt")).not.toContain("perm_data_orders");
+    expect(getPermissionsForAreas(["kunden"])).not.toContain("perm_data_orders");
+    expect(getPermissionsForAreas(["eingang"])).toContain("perm_data_orders");
+    expect(getPermissionsForAreas(["eingang"])).not.toContain("perm_data_customers");
   });
 
   it("derives stable initials", () => {
@@ -185,7 +186,7 @@ describe("PermissionsProvider identity consistency", () => {
     expect(screen.getByTestId("role")).toHaveTextContent("meister");
     expect(screen.getByTestId("areas")).toHaveTextContent("auftraege,mails");
     expect(screen.getByTestId("permissions")).toHaveTextContent(
-      getPermissionsForRole("meister").join(","),
+      getPermissionsForAreas(["auftraege", "mails"]).join(","),
     );
     expect(screen.getByTestId("loading")).toHaveTextContent("ready");
     expect(screen.getByTestId("error")).toHaveTextContent("no-error");

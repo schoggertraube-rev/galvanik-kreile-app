@@ -25,6 +25,14 @@ Migration: `supabase/migrations/20261028163707_h11_align_access_rights.sql`. Sie
 - Ausgeführt auf dem verknüpften Dev-Projekt `syhaigjhsbpjmtnggqka`; Migration und Migrationshistorie führen Version `20261028163707` als angewendet.
 - DB-Soll belegt: Gregor (`developer`, aktiv) hat genau `einstellungen`, `logins`, `wartung`; Rolf (`meister`, aktiv) hat zusätzlich `logins`. Production blieb unangetastet.
 
+### Rest b – Zweite Rechtematrix entfernt
+
+- Befund: `ROLE_PERMISSIONS` hielt eine zweite, von den gespeicherten Bereichen abweichende Liste von `perm_*`-Fähigkeiten vor.
+- Fundstelle vor der Bereinigung: `src/lib/auth/authorizationContract.ts:128`, `:191` und `:199`.
+- Änderung: `ROLE_PERMISSIONS` und `getPermissionsForRole` sind entfernt. Rollenvalidierung nutzt nur noch die reine Rollenliste `APP_ROLES`; Fähigkeiten entstehen ausschließlich über `getPermissionsForAreas` aus den wirksamen Bereichen.
+- DB-Soll: unverändert zu Rest a; dieser Unterpunkt ändert keine Datenbankzeile.
+- Prüfung: fokussierte Rechte-/Provider-Tests 34/34 grün; TypeScript, gezieltes ESLint und Spec-Check `expected=5 found=5 missing=0` grün; `rg ROLE_PERMISSIONS|getPermissionsForRole src` ohne Treffer.
+
 ## Owner-Klickweg
 
 1. Als Gregor anmelden und **Einstellungen → Logins & Rechte** öffnen.
