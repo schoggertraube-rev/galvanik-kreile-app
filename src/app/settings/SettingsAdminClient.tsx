@@ -73,11 +73,14 @@ export function SettingsAdminClient({
   const [newLogin, setNewLogin] = useState({ fullName: "", shortCode: "", designation: "", template: "werkstatt" as "werkstatt" | "meister" | "leer", pin: "" });
   const [createLoginOpen, setCreateLoginOpen] = useState(false);
   const [ownCode, setOwnCode] = useState({ first: "", repeat: "" });
+  const [ownCodeOpen, setOwnCodeOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [pending, startTransition] = useTransition();
   const companyReady = Object.entries(company).every(([key, value]) => key === "paymentTermDays" ? Number(value) > 0 : String(value).trim().length > 0);
   const catalogReady = services.length > 0;
   const rateReady = hourlyRate.hourlyRateCents !== null;
+  const currentUser = users.find((user) => user.isCurrent) ?? null;
+  const visibleUsers = canManageLogins ? users : currentUser ? [currentUser] : [];
 
   const field = (key: keyof CompanySettingsInput, label: string, type = "text") => (
     <label>{label}<input type={type} value={String(company[key])} onChange={(event) => setCompany((current) => ({ ...current, [key]: type === "number" ? Number(event.target.value) : event.target.value }))} /></label>
@@ -213,24 +216,19 @@ export function SettingsAdminClient({
       setMessage("Die Codes müssen übereinstimmen und genau 4 Ziffern haben.");
       return;
     }
-    report(() => changeOwnPinAction({ pin: ownCode.first }), "Neuer Code gespeichert.", () => setOwnCode({ first: "", repeat: "" }));
+    report(() => changeOwnPinAction({ pin: ownCode.first }), "Neuer Code gespeichert", () => {
+      setOwnCode({ first: "", repeat: "" });
+      setOwnCodeOpen(false);
+    });
   }
 
   return <main className={styles.page} data-testid="gregor-system-admin">
     <header><p>Einstellungen</p><h1>Arbeitsplatz & Zugänge</h1><span>Firmendaten, Leistungen und bestehende Zugänge</span></header>
 
-    <section className={styles.ownCode} aria-labelledby="own-code-title">
-      <div><h2 id="own-code-title">Mein Code ändern</h2><p>Der neue Code gilt sofort. Andere Sitzungen dieses Logins werden beendet.</p></div>
-      <label>Neuer Code<input data-spec-id="meincode.code_neu" type="password" inputMode="numeric" value={ownCode.first} onChange={(event) => setOwnCode((current) => ({ ...current, first: event.target.value.replace(/\D/g, "").slice(0, 4) }))} /></label>
-      <label>Code wiederholen<input data-spec-id="meincode.code_wdh" type="password" inputMode="numeric" value={ownCode.repeat} onChange={(event) => setOwnCode((current) => ({ ...current, repeat: event.target.value.replace(/\D/g, "").slice(0, 4) }))} /></label>
-      <button data-spec-id="meincode.abbrechen" type="button" onClick={() => setOwnCode({ first: "", repeat: "" })}>Abbrechen</button>
-      <button data-spec-id="meincode.code-speichern" type="button" disabled={pending} onClick={saveOwnCode}>Code speichern</button>
-    </section>
-
-    {(canManageCompany || canManageLogins) ? <nav aria-label="Einstellungsbereiche">
+    {(canManageCompany || canManageLogins || currentUser) ? <nav aria-label="Einstellungsbereiche">
       {canManageCompany ? <button aria-pressed={tab === "company"} onClick={() => setTab("company")}>Firmendaten</button> : null}
       {canManageCompany ? <button aria-pressed={tab === "catalog"} onClick={() => setTab("catalog")}>Leistungskatalog</button> : null}
-      {canManageLogins ? <button aria-pressed={tab === "users"} onClick={() => setTab("users")}>Logins & Rechte</button> : null}
+      {(canManageLogins || currentUser) ? <button aria-pressed={tab === "users"} onClick={() => setTab("users")}>Logins & Rechte</button> : null}
     </nav> : null}
     {message ? <p role="status" className={styles.message}>{message}</p> : null}
 
@@ -258,9 +256,9 @@ export function SettingsAdminClient({
       <label className={styles.check}><input type="checkbox" checked={draft.active} onChange={(event) => setDraft({ ...draft, active: event.target.checked })} />Aktiv</label>
     </div><button disabled={pending} onClick={saveService}>Leistung speichern</button><div className={styles.list}>{services.map((service) => <button key={service.id} onClick={() => setDraft(service)}><strong>{service.name}</strong><span>{service.surface} · {(service.netPriceCents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" })} / {service.unit}</span></button>)}</div></section> : null}
 
-    {canManageLogins && tab === "users" ? <section data-spec-id="rechte.dialog">
-      <div className={styles.sectionHeading}><div><h2>Logins & Rechte</h2><p>Änderungen an der Matrix wirken sofort.</p></div><button data-spec-id="rechte.schliessen" type="button" onClick={() => setTab(canManageCompany ? "company" : "users")}>Schließen</button></div>
-      <div className={styles.createLogin}>
+    {(canManageLogins || currentUser) && tab === "users" ? <section data-spec-id="rechte.dialog">
+      <div className={styles.sectionHeading}><div><h2>Logins & Rechte</h2><p>{canManageLogins ? "Änderungen an der Matrix wirken sofort." : "Ihr Zugang und Ihr persönlicher Code."}</p></div><button data-spec-id="rechte.schliessen" type="button" onClick={() => setTab(canManageCompany ? "company" : "users")}>Schließen</button></div>
+      {canManageLogins ? <div className={styles.createLogin}>
         {createLoginOpen ? <>
           <h3>Login anlegen</h3>
           <label>Name<input data-spec-id="rechte.name" value={newLogin.fullName} onChange={(event) => setNewLogin({ ...newLogin, fullName: event.target.value, shortCode: suggestedShortCode(event.target.value) })} /></label>
@@ -271,12 +269,12 @@ export function SettingsAdminClient({
           <button data-spec-id="rechte.login-speichern" disabled={pending} onClick={createLogin}>Login speichern</button>
           <button type="button" disabled={pending} onClick={() => setCreateLoginOpen(false)}>Abbrechen</button>
         </> : <button data-spec-id="rechte.login-anlegen" type="button" disabled={pending} onClick={() => setCreateLoginOpen(true)}>Login anlegen</button>}
-      </div>
-      <div className={styles.userList}>{users.map((user) => {
+      </div> : null}
+      <div className={styles.userList}>{visibleUsers.map((user) => {
         const isEditing = editingUser?.id === user.id;
         return <article key={user.id}>
-          <div className={styles.userSummary}><span>{user.shortCode}</span><div><strong>{user.fullName}</strong><small>{[user.designation, `${user.areas.length} Bereiche`].filter(Boolean).join(" · ")}</small></div><button data-spec-id="rechte.aendern" type="button" disabled={pending} onClick={() => editUser(user)}>Ändern</button></div>
-          {isEditing ? <div className={styles.userFields}>
+          <div className={styles.userSummary}><span>{user.shortCode}</span><div><strong>{user.fullName}</strong><small>{[user.designation, `${user.areas.length} Bereiche`].filter(Boolean).join(" · ")}</small></div>{user.isCurrent ? <button data-spec-id="meincode.oeffnen" type="button" disabled={pending} onClick={() => setOwnCodeOpen(true)}>Mein Code</button> : null}{canManageLogins ? <button data-spec-id="rechte.aendern" type="button" disabled={pending} onClick={() => editUser(user)}>Ändern</button> : null}</div>
+          {canManageLogins && isEditing ? <div className={styles.userFields}>
             <label>Name<input value={editingUser.fullName} onChange={(event) => setEditingUser({ ...editingUser, fullName: event.target.value })} /></label>
             <label>Kürzel<input value={editingUser.shortCode} maxLength={3} onChange={(event) => setEditingUser({ ...editingUser, shortCode: event.target.value.toUpperCase() })} /></label>
             <label>Bezeichnung (optional)<input value={editingUser.designation} onChange={(event) => setEditingUser({ ...editingUser, designation: event.target.value })} /></label>
@@ -287,7 +285,16 @@ export function SettingsAdminClient({
           </div> : null}
         </article>;
       })}</div>
-      <div className={styles.rightsTable} role="region" aria-label="Rechtematrix"><table><thead><tr><th>Bereich</th>{users.map((user) => <th key={user.id}>{user.shortCode}</th>)}</tr></thead><tbody>{ACCESS_AREAS.map((area) => <tr key={area}><th><strong>{ACCESS_AREA_LABELS[area].text}</strong>{ACCESS_AREA_LABELS[area].sub ? <small>{ACCESS_AREA_LABELS[area].sub}</small> : null}</th>{users.map((user) => { const fixed = user.fixedAreas.includes(area); return <td key={user.id}><input aria-label={`${ACCESS_AREA_LABELS[area].text} für ${user.fullName}`} type="checkbox" checked={user.areas.includes(area)} disabled={pending || fixed} onChange={(event) => toggleArea(user.id, area, event.target.checked, user.isCurrent)} />{fixed ? <small>fest</small> : null}</td>; })}</tr>)}</tbody></table></div>
+      {canManageLogins ? <div className={styles.rightsTable} role="region" aria-label="Rechtematrix"><table><thead><tr><th>Bereich</th>{users.map((user) => <th key={user.id}>{user.shortCode}</th>)}</tr></thead><tbody>{ACCESS_AREAS.map((area) => <tr key={area}><th><strong>{ACCESS_AREA_LABELS[area].text}</strong>{ACCESS_AREA_LABELS[area].sub ? <small>{ACCESS_AREA_LABELS[area].sub}</small> : null}</th>{users.map((user) => { const fixed = user.fixedAreas.includes(area); return <td key={user.id}><input aria-label={`${ACCESS_AREA_LABELS[area].text} für ${user.fullName}`} type="checkbox" checked={user.areas.includes(area)} disabled={pending || fixed} onChange={(event) => toggleArea(user.id, area, event.target.checked, user.isCurrent)} />{fixed ? <small>fest</small> : null}</td>; })}</tr>)}</tbody></table></div> : null}
     </section> : null}
+    {ownCodeOpen ? <div className={styles.dialogBackdrop} role="presentation">
+      <section className={styles.ownCode} role="dialog" aria-modal="true" aria-labelledby="own-code-title">
+        <div><h2 id="own-code-title">Mein Code ändern</h2><p>Der neue Code gilt sofort. Andere Sitzungen dieses Logins werden beendet.</p></div>
+        <label>Neuer Code<input data-spec-id="meincode.code_neu" type="password" inputMode="numeric" value={ownCode.first} onChange={(event) => setOwnCode((current) => ({ ...current, first: event.target.value.replace(/\D/g, "").slice(0, 4) }))} /></label>
+        <label>Code wiederholen<input data-spec-id="meincode.code_wdh" type="password" inputMode="numeric" value={ownCode.repeat} onChange={(event) => setOwnCode((current) => ({ ...current, repeat: event.target.value.replace(/\D/g, "").slice(0, 4) }))} /></label>
+        <button data-spec-id="meincode.abbrechen" type="button" onClick={() => { setOwnCode({ first: "", repeat: "" }); setOwnCodeOpen(false); }}>Abbrechen</button>
+        <button data-spec-id="meincode.code-speichern" type="button" disabled={pending} onClick={saveOwnCode}>Code speichern</button>
+      </section>
+    </div> : null}
   </main>;
 }

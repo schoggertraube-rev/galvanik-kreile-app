@@ -116,16 +116,21 @@ describe("Gregor system administration composition", () => {
 
   it("lets every valid login change its own code", async () => {
     ports.resolveAuthorization.mockResolvedValue(authorizationFor("buero"));
-    ports.readSettings.mockResolvedValue({ code:"OK", snapshot:{ company:{companyName:"",street:"",zip:"",city:"",country:"",taxId:"",iban:"",bic:"",bankName:"",paymentTermDays:0,logoUrl:""}, extraWorkHourlyRate:{rateId:null,hourlyRateCents:null,version:0}, users:[], capabilities:{canManageCompany:false,canManageLogins:false,canManageSystem:false}, numberRanges:[], features:[] }, services:[] });
+    ports.readSettings.mockResolvedValue({ code:"OK", snapshot:{ company:{companyName:"",street:"",zip:"",city:"",country:"",taxId:"",iban:"",bic:"",bankName:"",paymentTermDays:0,logoUrl:""}, extraWorkHourlyRate:{rateId:null,hourlyRateCents:null,version:0}, users:[{ id: "11111111-1111-4111-8111-111111111111", email: null, fullName: "Büro", shortCode: "B", designation: "", role: "buero", active: true, areas: [], fixedAreas: [], isCurrent: true }], capabilities:{canManageCompany:false,canManageLogins:true,canManageSystem:false}, numberRanges:[], features:[] }, services:[] });
     render(await SettingsAppAdapter());
-    expect(screen.getByRole("heading", { name: "Mein Code ändern" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Mein Code ändern" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Mein Code" }));
+    expect(screen.getByRole("dialog", { name: "Mein Code ändern" })).toBeInTheDocument();
   });
 
   it("shows a stable error code when changing the own code cannot reach the server action", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     ports.changeOwnPin.mockRejectedValueOnce(new Error("Failed to find Server Action"));
+    ports.readSettings.mockResolvedValue({ code:"OK", snapshot:{ company:{companyName:"",street:"",zip:"",city:"",country:"",taxId:"",iban:"",bic:"",bankName:"",paymentTermDays:0,logoUrl:""}, extraWorkHourlyRate:{rateId:null,hourlyRateCents:null,version:0}, users:[{ id: "11111111-1111-4111-8111-111111111111", email: null, fullName: "Gregor", shortCode: "G", designation: "", role: "admin", active: true, areas: [], fixedAreas: [], isCurrent: true }], capabilities:{canManageCompany:true,canManageLogins:true,canManageSystem:true}, numberRanges:[], features:[] }, services:[] });
 
     render(await SettingsAppAdapter());
+    fireEvent.click(screen.getByRole("button", { name: "Logins & Rechte" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mein Code" }));
     fireEvent.change(screen.getByLabelText("Neuer Code"), { target: { value: "4321" } });
     fireEvent.change(screen.getByLabelText("Code wiederholen"), { target: { value: "4321" } });
     fireEvent.click(screen.getByRole("button", { name: "Code speichern" }));
@@ -154,7 +159,7 @@ describe("Gregor system administration composition", () => {
     render(await SettingsAppAdapter());
     fireEvent.click(screen.getByRole("button", { name: "Logins & Rechte" }));
     fireEvent.click(screen.getByRole("button", { name: "Ändern" }));
-    fireEvent.change(screen.getAllByLabelText("Neuer Code")[1]!, { target: { value: "4321" } });
+    fireEvent.change(screen.getByLabelText("Neuer Code"), { target: { value: "4321" } });
     fireEvent.click(screen.getByRole("button", { name: "Übernehmen" }));
 
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Fehlercode: ACTION_REQUEST_FAILED"));

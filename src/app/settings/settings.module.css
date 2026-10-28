@@ -95,10 +95,21 @@
 
 .ownCode {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(150px, .65fr)) auto auto;
-  align-items: end;
+  grid-template-columns: 1fr;
+  align-items: stretch;
   gap: var(--space-3);
-  margin-top: var(--space-4);
+  width: min(100%, 460px);
+  margin: 0;
+}
+
+.dialogBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: rgb(21 34 48 / 48%);
 }
 
 .ownCode h2,
