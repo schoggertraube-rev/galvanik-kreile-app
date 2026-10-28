@@ -75,6 +75,7 @@ export type GlobalCreateCustomerChoice = {
   country?: string;
   paymentPreference?: string;
   vatId?: string | null;
+  lastHandoverMode?: "pickup" | "shipping" | null;
 };
 
 export type GlobalCreateCustomerResult =
@@ -226,7 +227,7 @@ type PositionDraft = {
   unitPriceCents: number | null;
 };
 type IntakeExecution = "hochglanz" | "glaenzend" | "matt" | "gelb_passiviert" | "blau_passiviert" | "offen";
-type IntakePositionDraft = { key:string; catalogServiceId:string; name:string; quantity:string; material:string; surfaceRequested:string; executionRequested:IntakeExecution; unit:string|null; unitPriceCents:number|null; vatRateBasisPoints:0|700|1900|null };
+type IntakePositionDraft = { key:string; catalogServiceId:string; name:string; quantity:string; material:string; surfaceRequested:string; surfaceTouched:boolean; executionRequested:IntakeExecution; unit:string|null; unitPriceCents:number|null; vatRateBasisPoints:0|700|1900|null };
 type IntakeSuggestionState = { kind: "idle" | "loading" | "error" } | { kind: "data"; data: IntakeSuggestions; loading: boolean };
 type IntakeTermChoice = { kind: "adopted" | "kept"; basisKey: string; wishDate: string; achievableDate: string };
 type AppliedIntakePrice = { previousUnit: string | null; previousUnitPriceCents: number | null; suggestedUnitPriceCents: number };
@@ -399,7 +400,8 @@ const newIntakePosition = (): IntakePositionDraft => ({
   name: "",
   quantity: "1",
   material: "",
-  surfaceRequested: "",
+  surfaceRequested: "noch zu klären",
+  surfaceTouched: false,
   executionRequested: "offen",
   catalogServiceId: "",
   unit: null,
@@ -478,7 +480,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [intakeStep, setIntakeStep] = useState<1 | 2 | 3>(1);
   const [intakeKind, setIntakeKind] = useState<"ORDER" | "QUOTE">("ORDER");
   const [intakeHandover, setIntakeHandover] = useState<"PICKUP" | "SHIPPING">("PICKUP");
+  const [intakeHandoverTouched, setIntakeHandoverTouched] = useState(false);
   const [intakeSource, setIntakeSource] = useState<"personal" | "shipping" | "pickup" | "mail" | "phone">("personal");
+  const [intakeSourceTouched, setIntakeSourceTouched] = useState(false);
   const [intakeTermStatus, setIntakeTermStatus] = useState<"wish" | "confirmed">("wish");
   const [quoteValidUntil, setQuoteValidUntil] = useState("");
   const [intakeChecked, setIntakeChecked] = useState(false);
@@ -494,6 +498,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [directItems, setDirectItems] = useState<IntakePositionDraft[]>(() => [newIntakePosition()]);
   const [catalogServices, setCatalogServices] = useState<CatalogService[]>([]);
   const [directWishDate, setDirectWishDate] = useState("");
+  const [intakeWishDateOrigin, setIntakeWishDateOrigin] = useState<"empty" | "prefilled" | "recognized" | "manual">("empty");
   const [directConfirmedDate, setDirectConfirmedDate] = useState("");
   const [directNote, setDirectNote] = useState("");
   const [intakeRecognitionText, setIntakeRecognitionText] = useState("");
@@ -653,6 +658,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     }
 
     const sequence = ++intakeSuggestionSeq.current;
+    const suggestionWishDate = intakeWishDateOrigin === "prefilled"
+      ? null
+      : /^\d{4}-\d{2}-\d{2}$/.test(directWishDate) ? directWishDate : null;
+    const mayPrefillWishDate = intakeWishDateOrigin === "empty" || intakeWishDateOrigin === "prefilled";
     const timer = window.setTimeout(() => {
       setIntakeSuggestionState((current) => current.kind === "data" ? { ...current, loading: true } : { kind: "loading" });
       const timeout = window.setTimeout(() => {
@@ -662,12 +671,21 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       void ports.getIntakeSuggestions({
         customerId: directCustomerMode === "EXISTING" ? directCustomerId || null : null,
         kind: intakeKind,
-        wishDate: /^\d{4}-\d{2}-\d{2}$/.test(directWishDate) ? directWishDate : null,
+        wishDate: suggestionWishDate,
         positions,
       }).then((result) => {
         window.clearTimeout(timeout);
         if (sequence !== intakeSuggestionSeq.current) return;
-        setIntakeSuggestionState(result.code === "OK" ? { kind: "data", data: result.data, loading: false } : { kind: "error" });
+        if (result.code !== "OK") {
+          setIntakeSuggestionState({ kind: "error" });
+          return;
+        }
+        setIntakeSuggestionState({ kind: "data", data: result.data, loading: false });
+        if (mayPrefillWishDate && result.data.term?.wishDate === null) {
+          setDirectWishDate(result.data.term.achievableDate);
+          setDirectConfirmedDate(result.data.term.achievableDate);
+          setIntakeWishDateOrigin("prefilled");
+        }
       }).catch(() => {
         window.clearTimeout(timeout);
         if (sequence === intakeSuggestionSeq.current) setIntakeSuggestionState({ kind: "error" });
@@ -677,7 +695,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       window.clearTimeout(timer);
       intakeSuggestionSeq.current += 1;
     };
-  }, [directCustomerId, directCustomerMode, directItems, directReceipt, directWishDate, intakeKind, intakeSuggestionBasisKey, intakeTermChoice, open, ports, step]);
+  }, [directCustomerId, directCustomerMode, directItems, directReceipt, directWishDate, intakeKind, intakeSuggestionBasisKey, intakeTermChoice, intakeWishDateOrigin, open, ports, step]);
 
   useEffect(() => {
     if (!open || step !== "customer") return;
@@ -737,11 +755,14 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     customerPaymentTouched: intakeCustomerPaymentTouched,
     intakeKind,
     intakeHandover,
+    intakeHandoverTouched,
     intakeSource,
+    intakeSourceTouched,
     intakeTermStatus,
     intakeChecked,
     items: directItems,
     wishDate: directWishDate,
+    wishDateOrigin: intakeWishDateOrigin,
     confirmedDate: directConfirmedDate,
     validUntil: quoteValidUntil,
     note: directNote,
@@ -795,18 +816,28 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     if (typeof payload.customerPaymentTouched === "boolean") setIntakeCustomerPaymentTouched(payload.customerPaymentTouched);
     if (payload.intakeKind === "ORDER" || payload.intakeKind === "QUOTE") setIntakeKind(payload.intakeKind);
     if (payload.intakeHandover === "PICKUP" || payload.intakeHandover === "SHIPPING") setIntakeHandover(payload.intakeHandover);
+    if (typeof payload.intakeHandoverTouched === "boolean") setIntakeHandoverTouched(payload.intakeHandoverTouched);
     if (["personal", "shipping", "pickup", "mail", "phone"].includes(String(payload.intakeSource))) setIntakeSource(payload.intakeSource as typeof intakeSource);
+    if (typeof payload.intakeSourceTouched === "boolean") setIntakeSourceTouched(payload.intakeSourceTouched);
     if (payload.intakeTermStatus === "wish" || payload.intakeTermStatus === "confirmed") setIntakeTermStatus(payload.intakeTermStatus);
     if (typeof payload.intakeChecked === "boolean") setIntakeChecked(payload.intakeChecked);
     if (Array.isArray(payload.items) && payload.items.length >= 1 && payload.items.length <= 20 && payload.items.every(record)) {
       setDirectItems((payload.items as Array<Record<string, unknown>>).map((item) => ({
         ...(item as IntakePositionDraft),
+        surfaceTouched: item.surfaceTouched === true,
         executionRequested: EXECUTION_OPTIONS.some((option) => option.wert === item.executionRequested)
           ? item.executionRequested as IntakeExecution
           : "offen",
       })));
     }
-    if (typeof payload.wishDate === "string") setDirectWishDate(payload.wishDate);
+    if (typeof payload.wishDate === "string") {
+      setDirectWishDate(payload.wishDate);
+      setIntakeWishDateOrigin(
+        payload.wishDateOrigin === "prefilled" || payload.wishDateOrigin === "recognized" || payload.wishDateOrigin === "manual"
+          ? payload.wishDateOrigin
+          : payload.wishDate ? "manual" : "empty",
+      );
+    }
     if (typeof payload.confirmedDate === "string") setDirectConfirmedDate(payload.confirmedDate);
     if (typeof payload.validUntil === "string") setQuoteValidUntil(payload.validUntil);
     if (typeof payload.note === "string") setDirectNote(payload.note);
@@ -895,12 +926,17 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         ? result.customers.find((entry) => entry.id === preselectedCustomerId)
         : undefined;
       if (preselected) {
+        const preferredHandover = preselected.lastHandoverMode === "shipping" ? "SHIPPING" : "PICKUP";
         setDirectCustomerId(preselected.id);
         const draftCustomer = customerChoiceToDraft(preselected);
         setDirectCustomer(draftCustomer);
         setDirectCustomerMode("EXISTING");
         setDirectCustomerType(draftCustomer.customerType === "privat" ? "privat" : "business");
-        setIntakePaymentMode(paymentModeFromPreference(draftCustomer.paymentPreference, "pickup"));
+        if (!intakeHandoverTouched) setIntakeHandover(preferredHandover);
+        setIntakePaymentMode(paymentModeFromPreference(
+          draftCustomer.paymentPreference,
+          (intakeHandoverTouched ? intakeHandover : preferredHandover) === "PICKUP" ? "pickup" : "shipping",
+        ));
       }
     } catch {
       if (seq === customerRequestSeq.current) setFeedback({ kind: "error", message: "Die vorhandenen Kunden konnten nicht sicher gelesen werden. Es wurde nichts angelegt." });
@@ -910,6 +946,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const openWithIntent = (request: GlobalCreateIntent | GlobalCreateRequest) => {
     const intent = typeof request === "string" ? request : request.intent;
     const prefill = typeof request === "string" ? undefined : request.prefill;
+    reset();
     setOpen(true);
     if (intent === "CUSTOMER") {
       setCustomerType("");
@@ -943,7 +980,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     const selectedMailId = prefill?.sourceMode === "mail" && prefill.graphMessageId?.trim()
       ? prefill.graphMessageId.trim()
       : null;
-    setSourceMode(selectedMailId ? "mail" : null);
+    const requestedIntakeSource = prefill?.intakeSource ?? (prefill?.sourceMode === "mail" ? "mail" : "personal");
+    setIntakeSource(requestedIntakeSource);
+    setIntakeSourceTouched(false);
+    setSourceMode(prefill?.sourceMode ?? null);
     setPendingMailId(selectedMailId);
     void loadDirectIntake(prefill?.customerId, !selectedMailId);
   };
@@ -1379,16 +1419,28 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     }
   };
 
-  const updateDirectItem = (key: string, field: keyof Omit<IntakePositionDraft, "key">, value: string) => {
+  const updateDirectItem = (key: string, field: keyof Omit<IntakePositionDraft, "key" | "surfaceTouched">, value: string) => {
     setDirectItems((current) => current.map((item) => item.key === key ? { ...item, [field]: value } : item));
   };
 
   const setDirectPositionName = (key: string, name: string) => {
     const matches = catalogServices.filter((candidate) => candidate.name.localeCompare(name.trim(), "de-DE", { sensitivity: "base" }) === 0);
     const service = matches.length === 1 ? matches[0] : null;
-    setDirectItems((current) => current.map((item) => item.key !== key ? item : service
-      ? { ...item, catalogServiceId: service.id, name: service.name, surfaceRequested: service.surface, unit: service.unit, unitPriceCents: null, vatRateBasisPoints: service.vatRateBasisPoints }
-      : { ...item, catalogServiceId: FREE_TEXT_SERVICE, name, unit: null, unitPriceCents: null, vatRateBasisPoints: null }));
+    setDirectItems((current) => current.map((item) => {
+      if (item.key !== key) return item;
+      if (!service) return { ...item, catalogServiceId: FREE_TEXT_SERVICE, name, unit: null, unitPriceCents: null, vatRateBasisPoints: null };
+      const surfaceRequested = item.surfaceTouched ? item.surfaceRequested : service.surface;
+      const catalogMatchesSurface = surfaceRequested === service.surface;
+      return {
+        ...item,
+        catalogServiceId: catalogMatchesSurface ? service.id : FREE_TEXT_SERVICE,
+        name: service.name,
+        surfaceRequested,
+        unit: catalogMatchesSurface ? service.unit : null,
+        unitPriceCents: null,
+        vatRateBasisPoints: catalogMatchesSurface ? service.vatRateBasisPoints : null,
+      };
+    }));
   };
 
   const setDirectPositionSurface = (key: string, surfaceRequested: string) => {
@@ -1396,8 +1448,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       if (item.key !== key) return item;
       const service = catalogServices.find((candidate) => candidate.id === item.catalogServiceId);
       return service?.surface === surfaceRequested
-        ? { ...item, surfaceRequested }
-        : { ...item, catalogServiceId: FREE_TEXT_SERVICE, surfaceRequested, unit: null, unitPriceCents: null, vatRateBasisPoints: null };
+        ? { ...item, surfaceRequested, surfaceTouched: true }
+        : { ...item, catalogServiceId: FREE_TEXT_SERVICE, surfaceRequested, surfaceTouched: true, unit: null, unitPriceCents: null, vatRateBasisPoints: null };
     }));
   };
 
@@ -1492,6 +1544,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       if (values.dueDate && !directWishDate) {
         setDirectWishDate(values.dueDate);
         setDirectConfirmedDate(values.dueDate);
+        setIntakeWishDateOrigin("recognized");
       }
       if (result.data.positions.length > 0) {
         const recognized = result.data.positions.map((position) => ({
@@ -1500,6 +1553,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
           name: position.name,
           quantity: position.quantity,
           surfaceRequested: position.surfaceRequested,
+          surfaceTouched: false,
           executionRequested: position.executionRequested,
           unit: position.unit,
         }));
@@ -1536,7 +1590,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     && Number(item.quantity) > 0;
 
   const selectIntakeCustomer = (mode: "NONE" | "EXISTING" | "NEW", selected?: GlobalCreateCustomerChoice) => {
-    const handoverMode = intakeHandover === "PICKUP" ? "pickup" : "shipping";
+    const preferredHandover = selected?.lastHandoverMode === "shipping" ? "SHIPPING" : "PICKUP";
+    const effectiveHandover = intakeHandoverTouched ? intakeHandover : preferredHandover;
+    const handoverMode = effectiveHandover === "PICKUP" ? "pickup" : "shipping";
     setFeedback(null);
     setIntakePaymentModeTouched(false);
     setIntakeCustomerPaymentTouched(false);
@@ -1546,6 +1602,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       setDirectCustomerId("");
       setDirectCustomer(EMPTY_INTAKE_CUSTOMER);
       setIntakeCustomerResults([]);
+      if (!intakeHandoverTouched) setIntakeHandover("PICKUP");
       setIntakePaymentMode(paymentModeFromPreference(null, handoverMode));
       return;
     }
@@ -1562,6 +1619,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         paymentPreference,
       });
       setIntakeCustomerResults([]);
+      if (!intakeHandoverTouched) setIntakeHandover("PICKUP");
       setIntakePaymentMode(paymentModeFromPreference(paymentPreference, handoverMode));
       return;
     }
@@ -1574,12 +1632,14 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setCustomerChoices((current) => [selected, ...current.filter((entry) => entry.id !== selected.id)]);
     setIntakeCustomerQuery(selected.companyName ?? selected.name);
     setIntakeCustomerResults([]);
+    if (!intakeHandoverTouched) setIntakeHandover(preferredHandover);
     setIntakePaymentMode(paymentModeFromPreference(draft.paymentPreference, handoverMode));
   };
 
   const changeIntakeHandover = (value: "PICKUP" | "SHIPPING") => {
     const handoverMode = value === "PICKUP" ? "pickup" : "shipping";
     setIntakeHandover(value);
+    setIntakeHandoverTouched(true);
     if (directCustomerMode === "NEW" && !intakeCustomerPaymentTouched) {
       const paymentPreference = handoverMode === "pickup" ? "bar" : "vorkasse";
       setDirectCustomer((current) => ({ ...current, paymentPreference }));
@@ -1876,7 +1936,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       : position));
   };
 
-  const reset = () => {
+  function reset() {
     setStep("choose");
     setFeedback(null);
     setCustomerDraft(EMPTY_CUSTOMER);
@@ -1905,11 +1965,14 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setIntakeCustomerPaymentTouched(false);
     setDirectItems([newIntakePosition()]);
     setDirectWishDate("");
+    setIntakeWishDateOrigin("empty");
     setDirectConfirmedDate("");
     setDirectNote("");
     setIntakeKind("ORDER");
     setIntakeHandover("PICKUP");
+    setIntakeHandoverTouched(false);
     setIntakeSource("personal");
+    setIntakeSourceTouched(false);
     setIntakeTermStatus("wish");
     setQuoteValidUntil("");
     setIntakeChecked(false);
@@ -1922,7 +1985,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setPendingMailId(null);
     requestIds.current = { customer: "", quote: "", conversion: "", directCustomer: "" };
     setIntakeStep(1);
-  };
+  }
 
   return (
     <>
@@ -2131,7 +2194,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                       </>}
                     </div> : null}
                 <FormRaster>
-                  <Feld label="Liefertermin"><Eingabe data-spec-id="eingang.liefertermin" type="date" required value={directWishDate} onChange={(event) => { setDirectWishDate(event.target.value); setDirectConfirmedDate(event.target.value); }} /></Feld>
+                  <Feld label="Liefertermin"><Eingabe data-spec-id="eingang.liefertermin" type="date" required value={directWishDate} onChange={(event) => { setDirectWishDate(event.target.value); setDirectConfirmedDate(event.target.value); setIntakeWishDateOrigin(event.target.value ? "manual" : "empty"); }} /></Feld>
                   <Feld label="Termin ist"><div data-spec-id="eingang.terminstatus"><Segment label="Termin ist" wert={intakeTermStatus} optionen={[{ wert: "wish", text: "Wunsch" }, { wert: "confirmed", text: "bestätigt" }]} onWert={setIntakeTermStatus} /></div></Feld>
                   <Feld label="Übergabe"><div data-spec-id="eingang.uebergabe"><Segment label="Übergabe" wert={intakeHandover} optionen={[{ wert: "PICKUP", text: "Abholung" }, { wert: "SHIPPING", text: "Versand" }]} onWert={changeIntakeHandover} /></div></Feld>
                   {ports.canManageMoney ? <Feld label="Zahlungsmodus">
@@ -2141,7 +2204,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                       { wert: "rechnung", text: directCustomerMode === "EXISTING" && /^rechnung_/.test(directCustomer.paymentPreference) ? "Rechnung auf Ziel" : "Rechnung auf Ziel (nicht freigeschaltet)", gesperrt: !(directCustomerMode === "EXISTING" && /^rechnung_/.test(directCustomer.paymentPreference)) },
                     ]} />
                   </Feld> : null}
-                  <Feld label="Eingangsart"><Auswahl data-spec-id="eingang.eingangsart" value={intakeSource} onChange={(event) => setIntakeSource(event.target.value as typeof intakeSource)} optionen={[{ wert: "personal", text: "persönlich angeliefert" }, { wert: "shipping", text: "Versand eingegangen" }, { wert: "pickup", text: "Abholung durch Kreile" }, { wert: "mail", text: "Anfrage per Mail" }, { wert: "phone", text: "Anfrage per Telefon" }]} /></Feld>
+                  <Feld label="Eingangsart"><Auswahl data-spec-id="eingang.eingangsart" value={intakeSource} onChange={(event) => { setIntakeSource(event.target.value as typeof intakeSource); setIntakeSourceTouched(true); }} optionen={[{ wert: "personal", text: "persönlich angeliefert" }, { wert: "shipping", text: "Versand eingegangen" }, { wert: "pickup", text: "Abholung durch Kreile" }, { wert: "mail", text: "Anfrage per Mail" }, { wert: "phone", text: "Anfrage per Telefon" }]} /></Feld>
                   {intakeSource === "phone" ? <Feld label="Telefonnotiz" voll><Textfeld data-spec-id="eingang.telefonnotiz" rows={3} value={directNote} onChange={(event) => setDirectNote(event.target.value)} /></Feld> : null}
                   {intakeKind === "QUOTE" ? <Feld label="KV gültig bis"><Eingabe data-spec-id="eingang.gueltig_bis" type="date" required value={quoteValidUntil} onChange={(event) => setQuoteValidUntil(event.target.value)} /></Feld> : null}
                 </FormRaster>
@@ -2271,7 +2334,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                     </div>
                     {directCustomerMode === "EXISTING" ? <label className={styles.createFieldWide}>Kunde<select value={directCustomerId} onChange={(event) => { const selected = customerChoices.find((entry) => entry.id === event.target.value); if (selected) { setDirectCustomerId(selected.id); setDirectCustomer(customerChoiceToDraft(selected)); } }}>{customerChoices.map((entry) => <option key={entry.id} value={entry.id}>{entry.customerNumber ?? "ohne Nummer"} · {entry.name}</option>)}</select></label> : null}
                     <CustomerFormFields value={directCustomer} onChange={setDirectCustomer} customerType={directCustomerType} onCustomerType={changeDirectCustomerType} onlyMissing={false} showPayment={ports.canManageMoney} onPaymentChange={changeIntakeCustomerPayment} autofocus />
-                    <div className={styles.createFormGrid}><label>Terminwunsch<input type="date" value={directWishDate} onChange={(event) => setDirectWishDate(event.target.value)} required /></label><label>Zugesagter Termin<input type="date" value={directConfirmedDate} onChange={(event) => setDirectConfirmedDate(event.target.value)} required /></label><label>Eingangsart<select defaultValue="anruf"><option value="anruf">Anruf</option><option value="persoenlich">Persönlich</option><option value="email">E-Mail</option></select></label></div>
+                    <div className={styles.createFormGrid}><label>Terminwunsch<input type="date" value={directWishDate} onChange={(event) => { setDirectWishDate(event.target.value); setIntakeWishDateOrigin(event.target.value ? "manual" : "empty"); }} required /></label><label>Zugesagter Termin<input type="date" value={directConfirmedDate} onChange={(event) => setDirectConfirmedDate(event.target.value)} required /></label><label>Eingangsart<select value={intakeSource} onChange={(event) => { setIntakeSource(event.target.value as typeof intakeSource); setIntakeSourceTouched(true); }}><option value="personal">Persönlich</option><option value="shipping">Versand</option><option value="pickup">Abholung durch Kreile</option><option value="mail">E-Mail</option><option value="phone">Anruf</option></select></label></div>
                     <div className={styles.createFormActions}><button type="button" className={styles.createPrimary} onClick={() => void advanceIntakeCustomer()} disabled={busy}>{busy ? <Loader2 className={styles.createSpinner} /> : null} Weiter zu Positionen</button></div>
                   </> : null}
                   {intakeStep === 2 ? <>
@@ -2419,7 +2482,11 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
           const quantity = suggestions.find((item) => item.field === "QUANTITY")?.value;
           const material = suggestions.find((item) => item.field === "MATERIAL")?.value;
           const customerName = suggestions.find((item) => item.field === "CUSTOMER_NAME")?.value;
-          if (due && /^\d{4}-\d{2}-\d{2}$/.test(due)) { setDirectWishDate(due); setDirectConfirmedDate(due); }
+          if (due && /^\d{4}-\d{2}-\d{2}$/.test(due) && intakeWishDateOrigin !== "manual") {
+            setDirectWishDate(due);
+            setDirectConfirmedDate(due);
+            setIntakeWishDateOrigin("recognized");
+          }
           if (customerName && directCustomerMode !== "EXISTING") {
             setDirectCustomerMode("NEW");
             setDirectCustomer((current) => ({ ...current, name: customerName }));
@@ -2432,19 +2499,21 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         }}
         onMail={(mail, matchedCustomer) => {
           setPendingMailId(mail.id);
-          setIntakeSource("mail");
+          if (!intakeSourceTouched) setIntakeSource("mail");
           setIntakeKind(ports.canManageMoney ? "QUOTE" : "ORDER");
           setDirectNote((current) => [`Anfrage aus Outlook: ${mail.subject}`, current].filter(Boolean).join("\n"));
           if (matchedCustomer) {
             const draft = customerChoiceToDraft(matchedCustomer);
+            const preferredHandover = matchedCustomer.lastHandoverMode === "shipping" ? "SHIPPING" : "PICKUP";
             setDirectCustomerMode("EXISTING");
             setDirectCustomerId(matchedCustomer.id);
             setDirectCustomerType(draft.customerType === "privat" ? "privat" : "business");
             setDirectCustomer(draft);
             setIntakeCustomerQuery(matchedCustomer.companyName ?? matchedCustomer.name);
+            if (!intakeHandoverTouched) setIntakeHandover(preferredHandover);
             setIntakePaymentMode(paymentModeFromPreference(
               draft.paymentPreference,
-              intakeHandover === "PICKUP" ? "pickup" : "shipping",
+              (intakeHandoverTouched ? intakeHandover : preferredHandover) === "PICKUP" ? "pickup" : "shipping",
             ));
           } else {
             setDirectCustomerMode("NEW");
@@ -2457,7 +2526,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
           setDirectCustomerId("");
           setDirectCustomer((current) => ({ ...current, name: mail.senderName || mail.senderAddress, email: mail.senderAddress }));
           setPendingMailId(mail.id);
-          setIntakeSource("mail");
+          if (!intakeSourceTouched) setIntakeSource("mail");
         }}
       /> : null}
       {open && draftPrompt ? <KrDialog titel="Entwurf behalten?" icon="file" groesse="schmal" onSchliessen={() => setDraftPrompt(false)} fuss={<>

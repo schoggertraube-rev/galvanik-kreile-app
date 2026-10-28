@@ -28,6 +28,7 @@ export type OrderIntakeCustomerOption = {
   country: string | null;
   paymentPreference: string | null;
   vatId: string | null;
+  lastHandoverMode: "pickup" | "shipping" | null;
   ordersCount: number;
 };
 
@@ -47,6 +48,7 @@ type CustomerRow = {
   country: string | null;
   payment_preference: string | null;
   vat_id: string | null;
+  last_handover_mode: string | null;
   orders_count: number | string;
   integrity_ok: boolean;
 };
@@ -118,7 +120,9 @@ function mapCustomer(row: CustomerRow, tenantId: string): OrderIntakeCustomerOpt
     !optionalTrimmed(row.email, 254) || !optionalTrimmed(row.street, 160) ||
     !optionalTrimmed(row.zip_code, 20) || !optionalTrimmed(row.city, 120) ||
     !optionalTrimmed(row.country, 120) || !optionalTrimmed(row.payment_preference, 24) ||
-    !optionalTrimmed(row.vat_id, 40) || ordersCount === null
+    !optionalTrimmed(row.vat_id, 40) ||
+    (row.last_handover_mode !== null && row.last_handover_mode !== "pickup" && row.last_handover_mode !== "shipping") ||
+    ordersCount === null
   ) return null;
   return {
     id: row.id,
@@ -135,6 +139,7 @@ function mapCustomer(row: CustomerRow, tenantId: string): OrderIntakeCustomerOpt
     country: row.country,
     paymentPreference: row.payment_preference,
     vatId: row.vat_id,
+    lastHandoverMode: row.last_handover_mode,
     ordersCount,
   };
 }
@@ -227,12 +232,21 @@ export async function searchOrderIntakeCustomers(
   if (!validSearchInput(input)) throw new Error("ORDER_INTAKE_CUSTOMER_SEARCH_INPUT_INVALID");
   return withPrivilegedTenantTransaction(authorization, async (tx) => {
     const rows = await tx.execute<CustomerRow>(sql`
-      SELECT id, tenant_id, customer_number, name, company_name, customer_type,
-             contact_person, phone, email, street, zip_code, city, country,
-             payment_preference, vat_id, orders_count, integrity_ok
-      FROM private.v_order_intake_customers_v1
-      WHERE ${input.query} = '' OR strpos(search_text, lower(${input.query})) > 0
-      ORDER BY orders_count DESC, lower(coalesce(company_name, name)), id
+      SELECT customer.*, (
+        SELECT intake_order.handover_mode
+        FROM public.orders intake_order
+        WHERE intake_order.tenant_id = customer.tenant_id
+          AND intake_order.customer_id = customer.id
+          AND intake_order.handover_mode IN ('pickup', 'shipping')
+          AND coalesce(intake_order.source, '') NOT IN ('seed', 'test', 'demo', 'integration-test')
+        ORDER BY coalesce(intake_order.intake_date, intake_order.created_at) DESC,
+                 intake_order.created_at DESC,
+                 intake_order.id DESC
+        LIMIT 1
+      ) AS last_handover_mode
+      FROM private.v_order_intake_customers_v1 customer
+      WHERE ${input.query} = '' OR strpos(customer.search_text, lower(${input.query})) > 0
+      ORDER BY customer.orders_count DESC, lower(coalesce(customer.company_name, customer.name)), customer.id
       LIMIT 10
     `);
     return rows.map((row) => {

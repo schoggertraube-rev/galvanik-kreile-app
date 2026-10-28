@@ -109,6 +109,7 @@ export function GlobalCreateAppAdapter() {
               country: customer.country ?? "",
               paymentPreference: customer.paymentPreference,
               vatId: customer.vatId ?? null,
+              lastHandoverMode: customer.lastHandoverMode,
             })),
           };
         },
@@ -137,6 +138,7 @@ export function GlobalCreateAppAdapter() {
               country: customer.country ?? "",
               paymentPreference: customer.paymentPreference ?? undefined,
               vatId: customer.vatId,
+              lastHandoverMode: customer.lastHandoverMode,
             })),
           };
         },

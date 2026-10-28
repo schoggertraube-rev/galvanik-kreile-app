@@ -163,7 +163,10 @@ function mapDbCustomer(c: DbCustomer): Customer {
   };
 }
 
-export async function getCustomersDb(): Promise<ActionResult<Array<Customer & { activeOrderCount: number }>>> {
+export async function getCustomersDb(): Promise<ActionResult<Array<Customer & {
+  activeOrderCount: number;
+  lastHandoverMode: "pickup" | "shipping" | null;
+}>>> {
   noStore();
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
@@ -190,10 +193,25 @@ export async function getCustomersDb(): Promise<ActionResult<Array<Customer & { 
       sql`coalesce(${orders.station}, '') not in ('abgeholt', 'versendet', 'raus')`,
       sql`coalesce(${orders.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`,
     )).groupBy(orders.customerId);
+    const handoverHistory = await db.select({
+      customerId: orders.customerId,
+      handoverMode: orders.handoverMode,
+    }).from(orders).where(and(
+      eq(orders.tenantId, tenantId),
+      sql`${orders.handoverMode} in ('pickup', 'shipping')`,
+      sql`coalesce(${orders.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`,
+    )).orderBy(sql`coalesce(${orders.intakeDate}, ${orders.createdAt}) desc, ${orders.createdAt} desc, ${orders.id} desc`);
     const countByCustomer = new Map(activeCounts.map((entry) => [entry.customerId, Number(entry.count)]));
+    const handoverByCustomer = new Map<string, "pickup" | "shipping">();
+    for (const entry of handoverHistory) {
+      if (!handoverByCustomer.has(entry.customerId) && (entry.handoverMode === "pickup" || entry.handoverMode === "shipping")) {
+        handoverByCustomer.set(entry.customerId, entry.handoverMode);
+      }
+    }
     const data = dbCustomers.map((customer) => ({
       ...mapDbCustomer(customer),
       activeOrderCount: countByCustomer.get(customer.id) ?? 0,
+      lastHandoverMode: handoverByCustomer.get(customer.id) ?? null,
     })).reverse(); // Order by createdAt desc
     return { ok: true, data };
   } catch (error) {

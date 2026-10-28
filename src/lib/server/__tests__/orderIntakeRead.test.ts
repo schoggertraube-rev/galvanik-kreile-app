@@ -57,16 +57,17 @@ describe("order intake read ports", () => {
       id: "customer-a", tenant_id: KREILE_TENANT_SLUG, customer_number: "K-1", name: "Musterkunde",
       company_name: null, customer_type: "business", contact_person: "Ada Beispiel", phone: "03012345",
       email: "ada@example.test", street: "Testweg 1", zip_code: "10115", city: "Berlin", country: "Deutschland",
-      payment_preference: "vorkasse", vat_id: null, orders_count: 3, integrity_ok: true,
+      payment_preference: "vorkasse", vat_id: null, last_handover_mode: "shipping", orders_count: 3, integrity_ok: true,
     }]);
     const { searchOrderIntakeCustomers } = await import("../orderIntakeRead");
     await expect(searchOrderIntakeCustomers(authorization, { query: "muster" })).resolves.toEqual([{
       id: "customer-a", customerNumber: "K-1", name: "Musterkunde", companyName: null,
       customerType: "business", contactPerson: "Ada Beispiel", phone: "03012345", email: "ada@example.test",
       street: "Testweg 1", zipCode: "10115", city: "Berlin", country: "Deutschland",
-      paymentPreference: "vorkasse", vatId: null, ordersCount: 3,
+      paymentPreference: "vorkasse", vatId: null, lastHandoverMode: "shipping", ordersCount: 3,
     }]);
     expect(execute.mock.calls[0]?.[0].text).toContain("private.v_order_intake_customers_v1");
+    expect(execute.mock.calls[0]?.[0].text).toContain("last_handover_mode");
     expect(execute.mock.calls[0]?.[0].text).toContain("LIMIT 10");
 
     execute.mockResolvedValueOnce([{ id: "foreign", tenant_id: "tenant-b", integrity_ok: true }]);

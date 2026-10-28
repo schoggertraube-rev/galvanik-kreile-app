@@ -31,6 +31,7 @@ export type F1MailCustomerChoice = {
   country?: string;
   paymentPreference?: string;
   vatId?: string | null;
+  lastHandoverMode?: "pickup" | "shipping" | null;
 };
 type CustomerChoice = F1MailCustomerChoice;
 type Suggestion = { field: string; label: string; value: string; confidence: number; source: { page: number } };
@@ -129,6 +130,7 @@ export function F1SourceDialogs(props: Props) {
         country: entry.country ?? "Deutschland",
         paymentPreference: entry.paymentPreference ?? "",
         vatId: entry.vatId ?? null,
+        lastHandoverMode: entry.lastHandoverMode,
       })) : [];
       setCustomers(nextCustomers);
       if (status.code !== "OK") { setMessage(status.message); setMailState("error"); return; }

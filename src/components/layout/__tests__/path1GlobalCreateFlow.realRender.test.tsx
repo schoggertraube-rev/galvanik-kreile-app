@@ -323,6 +323,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.click(screen.getByRole("button", { name: "Neuer Eingang aus Mail" }));
     await waitFor(() => expect(screen.queryByRole("heading", { name: "Mail zuordnen" })).not.toBeInTheDocument());
     expect(screen.getByRole("button", { name: /Kunde Name \/ FirmaSYNTHETISCH Musterkunde GmbH/ })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Eingangsart" })).toHaveValue("mail");
     expect(screen.queryByLabelText("Name / Firma")).not.toBeInTheDocument();
     expect(value.createCustomer).not.toHaveBeenCalled();
 
@@ -804,6 +805,53 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(await screen.findByText(/netto übernommen/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "2026-11-03 übernehmen" }));
     expect(screen.getByLabelText("Liefertermin")).toHaveValue("2026-11-03");
+  });
+
+  it("prefills intake values from the invocation, customer history, catalog, and achievable term without overwriting manual input", async () => {
+    const getIntakeSuggestions = vi.fn<GlobalCreatePorts["getIntakeSuggestions"]>().mockImplementation(async (input) => ({
+      code: "OK",
+      data: {
+        term: input.positions[0]?.surfaceRequested === "noch zu klären" ? null : {
+          achievableDate: "2026-11-04",
+          wishDate: input.wishDate,
+          rating: input.wishDate ? "passt" : null,
+          bufferWorkingDays: input.wishDate ? 4 : null,
+          reasons: [{ kind: "lead", text: "Verzinken: 5 Arbeitstage Durchlauf" }],
+        },
+        prices: [],
+      },
+    }));
+    const listCustomers = vi.fn<GlobalCreatePorts["listCustomers"]>().mockResolvedValue({
+      code: "OK",
+      customers: [{ id: CUSTOMER_ID, customerNumber: "K-2026-0042", name: "SYNTHETISCH Musterkunde GmbH", city: "Teststadt", lastHandoverMode: "shipping" }],
+    });
+    render(<GlobalCreateFlow ports={ports({ getIntakeSuggestions, listCustomers })} />);
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent("path1:global-create-open", { detail: {
+        intent: "DIRECT_INTAKE",
+        prefill: { customerId: CUSTOMER_ID, intakeSource: "shipping" },
+      } }));
+    });
+
+    await screen.findByRole("heading", { name: "Neuer Eingang" });
+    await waitFor(() => expect(within(screen.getByRole("group", { name: "Übergabe" })).getByRole("button", { name: "Versand" })).toHaveAttribute("aria-pressed", "true"));
+    expect(screen.getByRole("combobox", { name: "Eingangsart" })).toHaveValue("shipping");
+    expect(screen.getByRole("combobox", { name: "Oberfläche" })).toHaveValue("noch zu klären");
+
+    fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "Synthetischer Flansch" } });
+    expect(screen.getByRole("combobox", { name: "Oberfläche" })).toHaveValue("Verzinken");
+    await waitFor(() => expect(screen.getByLabelText("Liefertermin")).toHaveValue("2026-11-04"));
+    expect(screen.queryByText("Terminvorschlag")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Oberfläche" }), { target: { value: "Vernickeln" } });
+    fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "Freitext" } });
+    fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "Synthetischer Flansch" } });
+    expect(screen.getByRole("combobox", { name: "Oberfläche" })).toHaveValue("Vernickeln");
+
+    fireEvent.change(screen.getByLabelText("Liefertermin"), { target: { value: "2026-11-20" } });
+    await waitFor(() => expect(getIntakeSuggestions).toHaveBeenLastCalledWith(expect.objectContaining({ wishDate: "2026-11-20" })));
+    expect(screen.getByLabelText("Liefertermin")).toHaveValue("2026-11-20");
   });
 
   it("keeps a failed inline-new intake atomic and leaves all inputs visible", async () => {
