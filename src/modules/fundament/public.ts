@@ -11,6 +11,9 @@ export type CompanySettingsInput = {
   companyName: string; street: string; zip: string; city: string; country: string;
   taxId: string; iban: string; bic: string; bankName: string; paymentTermDays: number; logoUrl: string;
 };
+export type CompanySettingsSnapshot = {
+  [Key in keyof CompanySettingsInput]: CompanySettingsInput[Key] | null;
+};
 export type ManagedUser = {
   id: string;
   email: string | null;
@@ -44,7 +47,7 @@ export type SetUserAreaInput = {
   granted: boolean;
 };
 export type SystemSettingsSnapshot = {
-  company: CompanySettingsInput;
+  company: CompanySettingsSnapshot;
   extraWorkHourlyRate: { rateId: string | null; hourlyRateCents: number | null; version: number };
   users: ManagedUser[];
   capabilities: { canManageCompany: boolean; canManageLogins: boolean; canManageSystem: boolean };

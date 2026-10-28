@@ -70,7 +70,7 @@ describe("system settings port", () => {
     const { readSystemSettings } = await import("../server/systemSettingsPort");
     await expect(readSystemSettings(context)).resolves.toMatchObject({
       code: "OK",
-      snapshot: { company: { companyName: "", country: "Deutschland", paymentTermDays: 14 } },
+      snapshot: { company: { companyName: null, country: null, paymentTermDays: null, logoUrl: null } },
     });
   });
 

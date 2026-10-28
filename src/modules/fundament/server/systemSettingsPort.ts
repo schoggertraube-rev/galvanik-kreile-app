@@ -15,6 +15,7 @@ import {
 } from "@/lib/auth/authorizationContract";
 import type {
   CompanySettingsInput,
+  CompanySettingsSnapshot,
   CreateManagedUserInput,
   ManagedUser,
   SetUserAreaInput,
@@ -45,9 +46,9 @@ type UserRow = {
   areas: string[];
 };
 
-const EMPTY_COMPANY: CompanySettingsInput = {
-  companyName: "", street: "", zip: "", city: "", country: "Deutschland", taxId: "",
-  iban: "", bic: "", bankName: "", paymentTermDays: 14, logoUrl: "/logo.png",
+const EMPTY_COMPANY: CompanySettingsSnapshot = {
+  companyName: null, street: null, zip: null, city: null, country: null, taxId: null,
+  iban: null, bic: null, bankName: null, paymentTermDays: null, logoUrl: null,
 };
 
 function text(value: unknown, min: number, max: number): string | null {
@@ -83,10 +84,10 @@ export async function readSystemSettings(context: SystemSettingsContext) {
       const company = companies[0];
       return {
         company: company ? {
-          companyName: company.company_name, street: company.street ?? "", zip: company.zip ?? "",
-          city: company.city ?? "", country: company.country ?? "", taxId: company.tax_id ?? "",
-          iban: company.iban ?? "", bic: company.bic ?? "", bankName: company.bank_name ?? "",
-          paymentTermDays: company.invoice_payment_term_days ?? 14, logoUrl: company.logo_url ?? "",
+          companyName: company.company_name, street: company.street, zip: company.zip,
+          city: company.city, country: company.country, taxId: company.tax_id,
+          iban: company.iban, bic: company.bic, bankName: company.bank_name,
+          paymentTermDays: company.invoice_payment_term_days, logoUrl: company.logo_url,
         } : EMPTY_COMPANY,
         users: users.map((user): ManagedUser => {
           const rawAreas = user.areas ?? (process.env.NODE_ENV === "test" && isAppRole(user.role) ? [...ROLE_ACCESS_AREA_TEMPLATES[user.role]] : []);

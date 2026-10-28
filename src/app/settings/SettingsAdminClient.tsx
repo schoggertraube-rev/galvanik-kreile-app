@@ -61,7 +61,19 @@ export function SettingsAdminClient({
   const [tab, setTab] = useState<Tab>(
     canManageCompany ? "company" : canManageLogins || initialSnapshot.users.some((user) => user.isCurrent) ? "users" : "company",
   );
-  const [company, setCompany] = useState(initialSnapshot.company);
+  const [company, setCompany] = useState<CompanySettingsInput>({
+    companyName: initialSnapshot.company.companyName ?? "",
+    street: initialSnapshot.company.street ?? "",
+    zip: initialSnapshot.company.zip ?? "",
+    city: initialSnapshot.company.city ?? "",
+    country: initialSnapshot.company.country ?? "",
+    taxId: initialSnapshot.company.taxId ?? "",
+    iban: initialSnapshot.company.iban ?? "",
+    bic: initialSnapshot.company.bic ?? "",
+    bankName: initialSnapshot.company.bankName ?? "",
+    paymentTermDays: initialSnapshot.company.paymentTermDays ?? 0,
+    logoUrl: initialSnapshot.company.logoUrl ?? "",
+  });
   const [services, setServices] = useState(initialServices);
   const [draft, setDraft] = useState(emptyService());
   const [users, setUsers] = useState(initialSnapshot.users);
@@ -266,12 +278,12 @@ export function SettingsAdminClient({
     {canManageCompany && tab === "company" ? <section>
       <h2>Rechnungsabsender</h2>
       <div className={styles.setup} aria-label="Ersteinrichtung">
-        <div><strong>Firmendaten</strong><span>{companyReady ? "vollständig" : "noch offen"}</span></div>
+        <div><strong>Firmendaten</strong>{companyReady ? <span>vollständig</span> : <Link href="#company-data">fehlt – in Firmendaten eintragen</Link>}</div>
         <div><strong>Leistung mit Preis</strong><span>{catalogReady ? "vorhanden" : "noch offen"}</span></div>
         <div><strong>Stundensatz</strong><span>{rateReady ? "gespeichert" : "noch offen"}</span></div>
         {companyReady && catalogReady && rateReady && returnTo ? <Link href={returnTo}>Zurück zum vorherigen Vorgang</Link> : null}
       </div>
-      <div className={styles.grid}>{field("companyName", "Firmenname")}{field("street", "Straße")}{field("zip", "PLZ")}{field("city", "Ort")}{field("country", "Land")}{field("taxId", "USt-ID / Steuernummer")}{field("iban", "IBAN")}{field("bic", "BIC")}{field("bankName", "Bank")}{field("paymentTermDays", "Zahlungsziel in Tagen", "number")}{field("logoUrl", "Logo-Pfad")}</div>
+      <div id="company-data" className={styles.grid}>{field("companyName", "Firmenname")}{field("street", "Straße")}{field("zip", "PLZ")}{field("city", "Ort")}{field("country", "Land")}{field("taxId", "USt-ID / Steuernummer")}{field("iban", "IBAN")}{field("bic", "BIC")}{field("bankName", "Bank")}{field("paymentTermDays", "Zahlungsziel in Tagen", "number")}{field("logoUrl", "Logo-Pfad")}</div>
       <button disabled={pending} onClick={saveCompany}>Firmendaten speichern</button>
       <div id="extra-work-rate"><h3>Mehrarbeit</h3><div className={styles.grid}><label>Stundensatz Mehrarbeit (€/h)<input inputMode="decimal" value={hourlyRateEuro} onChange={(event) => setHourlyRateEuro(event.target.value)} placeholder="z. B. 85,00" /></label></div><button disabled={pending} onClick={saveHourlyRate}>Stundensatz speichern</button></div>
       <h3>Nummernkreise (systemverwaltet)</h3><dl className={styles.ranges}>{initialSnapshot.numberRanges.map((range) => <div key={range.label}><dt>{range.label}</dt><dd>{range.pattern}</dd></div>)}</dl>
