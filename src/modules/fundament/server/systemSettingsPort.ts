@@ -192,7 +192,7 @@ export async function updateManagedUser(context: SystemSettingsContext, input: u
   if (Object.keys(value).sort().join(",") !== "active,designation,fullName,pin,shortCode,userId") return { code: "VALIDATION_ERROR" as const, message: "Logindaten sind unvollständig." };
   if (typeof value.userId !== "string" || !UUID.test(value.userId)) return { code: "VALIDATION_ERROR" as const, message: "Login-ID ist ungültig." };
   if (text(value.fullName, 2, 160) === null) return { code: "VALIDATION_ERROR" as const, message: "Name muss 2 bis 160 Zeichen haben." };
-  if (typeof value.shortCode !== "string" || !/^[A-ZÄÖÜ0-9][A-ZÄÖÜ0-9_-]{0,7}$/.test(value.shortCode.trim().toUpperCase())) return { code: "VALIDATION_ERROR" as const, message: "Kürzel muss 1 bis 8 erlaubte Zeichen haben." };
+  if (typeof value.shortCode !== "string" || !/^[A-ZÄÖÜ0-9][A-ZÄÖÜ0-9_-]{0,2}$/.test(value.shortCode.trim().toUpperCase())) return { code: "VALIDATION_ERROR" as const, message: "Kürzel muss 1 bis 3 erlaubte Zeichen haben." };
   if (text(value.designation, 0, 120) === null) return { code: "VALIDATION_ERROR" as const, message: "Bezeichnung darf höchstens 120 Zeichen haben." };
   if (typeof value.active !== "boolean") return { code: "VALIDATION_ERROR" as const, message: "Status muss aktiv oder inaktiv sein." };
   if (value.pin !== null && (typeof value.pin !== "string" || !/^\d{4}$/.test(value.pin))) return { code: "VALIDATION_ERROR" as const, message: "Ein neuer Code hat genau 4 Ziffern." };
@@ -246,20 +246,22 @@ export async function updateManagedUser(context: SystemSettingsContext, input: u
 function deriveShortCode(fullName: string): string {
   const parts = fullName.trim().split(/\s+/).filter(Boolean);
   const initials = parts.map((part) => part[0]).join("").replace(/[^A-Za-zÄÖÜäöü0-9]/g, "").toUpperCase();
-  return (initials || fullName.replace(/[^A-Za-zÄÖÜäöü0-9]/g, "").slice(0, 2).toUpperCase()).slice(0, 8);
+  return (initials || fullName.replace(/[^A-Za-zÄÖÜäöü0-9]/g, "").slice(0, 2).toUpperCase()).slice(0, 3);
 }
 
 export async function createManagedUser(context: SystemSettingsContext, input: unknown) {
   if (!context.canManage) return { code: "FORBIDDEN" as const, message: "Logins dürfen nicht angelegt werden." };
   if (!input || typeof input !== "object" || Array.isArray(input)) return { code: "VALIDATION_ERROR" as const, message: "Logindaten sind ungültig." };
   const value = input as Record<string, unknown>;
-  if (Object.keys(value).sort().join(",") !== "designation,fullName,pin,template") return { code: "VALIDATION_ERROR" as const, message: "Logindaten sind unvollständig." };
+  if (Object.keys(value).sort().join(",") !== "designation,fullName,pin,shortCode,template") return { code: "VALIDATION_ERROR" as const, message: "Logindaten sind unvollständig." };
   if (text(value.fullName, 2, 160) === null) return { code: "VALIDATION_ERROR" as const, message: "Name muss 2 bis 160 Zeichen haben." };
+  if (typeof value.shortCode !== "string" || !/^[A-ZÄÖÜ0-9][A-ZÄÖÜ0-9_-]{0,2}$/.test(value.shortCode.trim().toUpperCase())) return { code: "VALIDATION_ERROR" as const, message: "Kürzel muss 1 bis 3 erlaubte Zeichen haben." };
   if (text(value.designation, 0, 120) === null) return { code: "VALIDATION_ERROR" as const, message: "Bezeichnung darf höchstens 120 Zeichen haben." };
   if (value.template !== "werkstatt" && value.template !== "meister" && value.template !== "leer") return { code: "VALIDATION_ERROR" as const, message: "Vorlage ist ungültig." };
   if (typeof value.pin !== "string" || !/^\d{4}$/.test(value.pin)) return { code: "VALIDATION_ERROR" as const, message: "Code muss genau 4 Ziffern haben." };
   const normalized = {
     fullName: text(value.fullName, 2, 160)!,
+    shortCode: value.shortCode.trim().toUpperCase(),
     designation: text(value.designation, 0, 120)!,
     template: value.template as CreateManagedUserInput["template"],
     pin: value.pin,
@@ -267,14 +269,13 @@ export async function createManagedUser(context: SystemSettingsContext, input: u
   const role: AppRole = normalized.template === "leer" ? "readonly" : normalized.template;
   const areas = ROLE_ACCESS_AREA_TEMPLATES[role];
   const pinHash = await bcrypt.hash(normalized.pin, 12);
-  const shortCode = deriveShortCode(normalized.fullName);
   try {
     const created = await withPrivilegedTenantTransaction(context, async (tx) => {
       const rows = await tx.execute<{ id: string; short_code: string }>(sql`
         WITH candidates AS (
           SELECT CASE
-            WHEN number = 1 THEN ${shortCode}
-            ELSE left(${shortCode}, greatest(1, 8 - length(number::text))) || number::text
+            WHEN number = 1 THEN ${normalized.shortCode}
+            ELSE left(${normalized.shortCode}, greatest(1, 3 - length(number::text))) || number::text
           END AS kuerzel,
           number
           FROM generate_series(1, 99) AS number

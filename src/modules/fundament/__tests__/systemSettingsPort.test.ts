@@ -120,6 +120,7 @@ describe("system settings port", () => {
     const { createManagedUser } = await import("../server/systemSettingsPort");
     await expect(createManagedUser(context, {
       fullName: "Nina Neu",
+      shortCode: "NN",
       designation: "   ",
       template: "werkstatt",
       pin: "2468",
@@ -134,10 +135,18 @@ describe("system settings port", () => {
     const { createManagedUser, updateManagedUser } = await import("../server/systemSettingsPort");
     await expect(createManagedUser(context, {
       fullName: "N",
+      shortCode: "N",
       designation: "",
       template: "werkstatt",
       pin: "2468",
     })).resolves.toEqual({ code: "VALIDATION_ERROR", message: "Name muss 2 bis 160 Zeichen haben." });
+    await expect(createManagedUser(context, {
+      fullName: "Nina Neu",
+      shortCode: "NINA",
+      designation: "",
+      template: "werkstatt",
+      pin: "2468",
+    })).resolves.toEqual({ code: "VALIDATION_ERROR", message: "Kürzel muss 1 bis 3 erlaubte Zeichen haben." });
     await expect(updateManagedUser(context, {
       userId: "22222222-2222-4222-8222-222222222222",
       fullName: "Phillip Kreile",

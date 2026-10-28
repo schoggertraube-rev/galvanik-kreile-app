@@ -77,6 +77,8 @@ describe("Gregor system administration composition", () => {
   it("shows real new-user creation and the rights matrix", async () => {
     render(await SettingsAppAdapter());
     fireEvent.click(screen.getByRole("button", { name: "Logins & Rechte" }));
+    expect(screen.getByRole("button", { name: "Login anlegen" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Login anlegen" }));
     expect(screen.getByRole("heading", { name: "Login anlegen" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Rechtematrix" })).toBeInTheDocument();
   });
@@ -84,12 +86,15 @@ describe("Gregor system administration composition", () => {
   it("keeps Logins & Rechte open and adds a confirmed login to list and matrix", async () => {
     render(await SettingsAppAdapter());
     fireEvent.click(screen.getByRole("button", { name: "Logins & Rechte" }));
-    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Nina Neu" } });
-    fireEvent.change(screen.getByLabelText("Code", { exact: true }), { target: { value: "2468" } });
     fireEvent.click(screen.getByRole("button", { name: "Login anlegen" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Nina Neu" } });
+    expect(screen.getByLabelText("Kürzel")).toHaveValue("NN");
+    fireEvent.change(screen.getByLabelText("Kürzel"), { target: { value: "N3" } });
+    fireEvent.change(screen.getByLabelText("Code", { exact: true }), { target: { value: "2468" } });
+    fireEvent.click(screen.getByRole("button", { name: "Login speichern" }));
 
     expect(await screen.findByText("Nina Neu")).toBeInTheDocument();
-    expect(ports.createManagedUser).toHaveBeenCalledWith(expect.objectContaining({ designation: "" }));
+    expect(ports.createManagedUser).toHaveBeenCalledWith(expect.objectContaining({ designation: "", shortCode: "N3" }));
     expect(screen.getByRole("button", { name: "Logins & Rechte" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByLabelText("Aufträge & Werkstatt für Nina Neu")).toBeChecked();
     expect(screen.getByRole("status")).toHaveTextContent("Login angelegt.");

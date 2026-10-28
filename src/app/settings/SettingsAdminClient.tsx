@@ -37,6 +37,12 @@ const emptyService = (): CatalogService => ({
   active: true,
 });
 
+function suggestedShortCode(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  const initials = parts.map((part) => part[0]).join("").replace(/[^A-Za-zÄÖÜäöü0-9]/g, "").toUpperCase();
+  return (initials || fullName.replace(/[^A-Za-zÄÖÜäöü0-9]/g, "").slice(0, 2).toUpperCase()).slice(0, 3);
+}
+
 export function SettingsAdminClient({
   initialSnapshot,
   initialServices,
@@ -64,7 +70,8 @@ export function SettingsAdminClient({
   );
   const [editingUser, setEditingUser] = useState<ManagedUser | null>(null);
   const [editPin, setEditPin] = useState("");
-  const [newLogin, setNewLogin] = useState({ fullName: "", designation: "", template: "werkstatt" as "werkstatt" | "meister" | "leer", pin: "" });
+  const [newLogin, setNewLogin] = useState({ fullName: "", shortCode: "", designation: "", template: "werkstatt" as "werkstatt" | "meister" | "leer", pin: "" });
+  const [createLoginOpen, setCreateLoginOpen] = useState(false);
   const [ownCode, setOwnCode] = useState({ first: "", repeat: "" });
   const [message, setMessage] = useState("");
   const [pending, startTransition] = useTransition();
@@ -150,7 +157,8 @@ export function SettingsAdminClient({
         return;
       }
       setUsers((current) => [...current, result.user]);
-      setNewLogin({ fullName: "", designation: "", template: "werkstatt", pin: "" });
+      setNewLogin({ fullName: "", shortCode: "", designation: "", template: "werkstatt", pin: "" });
+      setCreateLoginOpen(false);
       setMessage("Login angelegt.");
     });
   }
@@ -253,12 +261,16 @@ export function SettingsAdminClient({
     {canManageLogins && tab === "users" ? <section data-spec-id="rechte.dialog">
       <div className={styles.sectionHeading}><div><h2>Logins & Rechte</h2><p>Änderungen an der Matrix wirken sofort.</p></div><button data-spec-id="rechte.schliessen" type="button" onClick={() => setTab(canManageCompany ? "company" : "users")}>Schließen</button></div>
       <div className={styles.createLogin}>
-        <h3>Login anlegen</h3>
-        <label>Name<input data-spec-id="rechte.name" value={newLogin.fullName} onChange={(event) => setNewLogin({ ...newLogin, fullName: event.target.value })} /></label>
-        <label>Bezeichnung (optional)<input data-spec-id="rechte.bezeichnung" value={newLogin.designation} onChange={(event) => setNewLogin({ ...newLogin, designation: event.target.value })} /></label>
-        <label>Rechte wie<select data-spec-id="rechte.vorlage" value={newLogin.template} onChange={(event) => setNewLogin({ ...newLogin, template: event.target.value as typeof newLogin.template })}><option value="werkstatt">wie Phillip</option><option value="meister">wie Rolf</option><option value="leer">leer</option></select></label>
-        <label>Code<input data-spec-id="rechte.code" type="password" inputMode="numeric" value={newLogin.pin} onChange={(event) => setNewLogin({ ...newLogin, pin: event.target.value.replace(/\D/g, "").slice(0, 4) })} /></label>
-        <button data-spec-id="rechte.login-anlegen" disabled={pending} onClick={createLogin}>Login anlegen</button>
+        {createLoginOpen ? <>
+          <h3>Login anlegen</h3>
+          <label>Name<input data-spec-id="rechte.name" value={newLogin.fullName} onChange={(event) => setNewLogin({ ...newLogin, fullName: event.target.value, shortCode: suggestedShortCode(event.target.value) })} /></label>
+          <label>Kürzel<input data-spec-id="rechte.kuerzel" value={newLogin.shortCode} maxLength={3} onChange={(event) => setNewLogin({ ...newLogin, shortCode: event.target.value.toUpperCase() })} /></label>
+          <label>Bezeichnung (optional)<input data-spec-id="rechte.bezeichnung" value={newLogin.designation} onChange={(event) => setNewLogin({ ...newLogin, designation: event.target.value })} /></label>
+          <label>Rechte wie<select data-spec-id="rechte.vorlage" value={newLogin.template} onChange={(event) => setNewLogin({ ...newLogin, template: event.target.value as typeof newLogin.template })}><option value="werkstatt">wie Phillip</option><option value="meister">wie Rolf</option><option value="leer">leer</option></select></label>
+          <label>Code<input data-spec-id="rechte.code" type="password" inputMode="numeric" value={newLogin.pin} onChange={(event) => setNewLogin({ ...newLogin, pin: event.target.value.replace(/\D/g, "").slice(0, 4) })} /></label>
+          <button data-spec-id="rechte.login-speichern" disabled={pending} onClick={createLogin}>Login speichern</button>
+          <button type="button" disabled={pending} onClick={() => setCreateLoginOpen(false)}>Abbrechen</button>
+        </> : <button data-spec-id="rechte.login-anlegen" type="button" disabled={pending} onClick={() => setCreateLoginOpen(true)}>Login anlegen</button>}
       </div>
       <div className={styles.userList}>{users.map((user) => {
         const isEditing = editingUser?.id === user.id;
@@ -266,7 +278,7 @@ export function SettingsAdminClient({
           <div className={styles.userSummary}><span>{user.shortCode}</span><div><strong>{user.fullName}</strong><small>{[user.designation, `${user.areas.length} Bereiche`].filter(Boolean).join(" · ")}</small></div><button data-spec-id="rechte.aendern" type="button" disabled={pending} onClick={() => editUser(user)}>Ändern</button></div>
           {isEditing ? <div className={styles.userFields}>
             <label>Name<input value={editingUser.fullName} onChange={(event) => setEditingUser({ ...editingUser, fullName: event.target.value })} /></label>
-            <label>Kürzel<input value={editingUser.shortCode} maxLength={8} onChange={(event) => setEditingUser({ ...editingUser, shortCode: event.target.value.toUpperCase() })} /></label>
+            <label>Kürzel<input value={editingUser.shortCode} maxLength={3} onChange={(event) => setEditingUser({ ...editingUser, shortCode: event.target.value.toUpperCase() })} /></label>
             <label>Bezeichnung (optional)<input value={editingUser.designation} onChange={(event) => setEditingUser({ ...editingUser, designation: event.target.value })} /></label>
             <label>Neuer Code<input type="password" inputMode="numeric" placeholder="unverändert" value={editPin} onChange={(event) => setEditPin(event.target.value.replace(/\D/g, "").slice(0, 4))} /></label>
             <label className={styles.check}><input type="checkbox" checked={editingUser.active} disabled={editingUser.isCurrent} onChange={(event) => setEditingUser({ ...editingUser, active: event.target.checked })} />Aktiv</label>

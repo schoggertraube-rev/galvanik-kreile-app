@@ -33,6 +33,7 @@ export type UpdateManagedUserInput = {
 };
 export type CreateManagedUserInput = {
   fullName: string;
+  shortCode: string;
   designation: string;
   template: "werkstatt" | "meister" | "leer";
   pin: string;
