@@ -395,6 +395,7 @@ export const companySettingsTable = pgTable("company_settings", {
   taxId: text("tax_id").default(""),
   invoiceVatRateBasisPoints: integer("invoice_vat_rate_basis_points").default(1900).notNull(),
   invoicePaymentTermDays: integer("invoice_payment_term_days"),
+  dailyOutputEur: integer("tagesleistung_eur").notNull().default(800),
   logoUrl: text("logo_url").default("/logo.png"),
   emailGreeting: text("email_greeting").default("Sehr geehrte Damen und Herren,"),
   emailPickupInfo: text("email_pickup_info").default("Ihr Auftrag ist fertig und kann abgeholt werden."),

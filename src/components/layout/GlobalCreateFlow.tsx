@@ -41,6 +41,7 @@ import type {
   UpdateQuoteInput,
 } from "@/modules/quotes/public";
 import type { IntakeTextRecognition } from "@/lib/server/intakeTextRecognition";
+import type { IntakePriceSuggestion, IntakeSuggestions, IntakeSuggestionsInput } from "@/lib/intakeSuggestionsContract";
 import { F1SourceDialogs, type F1SourceMode } from "./F1SourceDialogs";
 import { GLOBAL_CREATE_OPEN_EVENT, type GlobalCreateIntent, type GlobalCreateRequest } from "./globalCreateRequest";
 import styles from "./TargetShell.module.css";
@@ -178,6 +179,7 @@ export type GlobalCreatePorts = {
     | { code: "DENIED" | "UNAVAILABLE"; message: string }
   >;
   recognizeIntakeText: (text: string) => Promise<{ code: "OK"; data: IntakeTextRecognition } | Failure>;
+  getIntakeSuggestions: (input: IntakeSuggestionsInput) => Promise<{ code: "OK"; data: IntakeSuggestions } | Failure>;
   listCatalog?: () => Promise<{ code:"OK"; services:CatalogService[] }|{ code:"DENIED"|"UNAVAILABLE"; message:string }>;
   createCustomer: (input: CreateCustomerInput) => Promise<GlobalCreateCustomerResult>;
   updateCustomer?: (input: UpdateCustomerCommercialInput) => Promise<{ code: "OK" } | Failure>;
@@ -225,6 +227,9 @@ type PositionDraft = {
 };
 type IntakeExecution = "hochglanz" | "glaenzend" | "matt" | "gelb_passiviert" | "blau_passiviert" | "offen";
 type IntakePositionDraft = { key:string; catalogServiceId:string; name:string; quantity:string; material:string; surfaceRequested:string; executionRequested:IntakeExecution; unit:string|null; unitPriceCents:number|null; vatRateBasisPoints:0|700|1900|null };
+type IntakeSuggestionState = { kind: "idle" | "loading" | "error" } | { kind: "data"; data: IntakeSuggestions; loading: boolean };
+type IntakeTermChoice = { kind: "adopted" | "kept"; basisKey: string; wishDate: string; achievableDate: string };
+type AppliedIntakePrice = { previousUnit: string | null; previousUnitPriceCents: number | null; suggestedUnitPriceCents: number };
 
 function record(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -496,6 +501,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [recognitionBusy, setRecognitionBusy] = useState(false);
   const [recognitionMarkers, setRecognitionMarkers] = useState<Array<{ key: string; label: string; value: string; source: string }>>([]);
   const [recognitionConfirmed, setRecognitionConfirmed] = useState(false);
+  const [intakeSuggestionState, setIntakeSuggestionState] = useState<IntakeSuggestionState>({ kind: "idle" });
+  const [intakeTermChoice, setIntakeTermChoice] = useState<IntakeTermChoice | null>(null);
+  const [appliedIntakePrices, setAppliedIntakePrices] = useState<Record<string, AppliedIntakePrice>>({});
   const [sourceMode, setSourceMode] = useState<F1SourceMode | null>(null);
   const [draftPrompt, setDraftPrompt] = useState(false);
   const [pendingAttachmentIds, setPendingAttachmentIds] = useState<string[]>([]);
@@ -509,6 +517,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const customerRequestSeq = useRef(0);
   const intakeCustomerSearchSeq = useRef(0);
   const customerDuplicateSearchSeq = useRef(0);
+  const intakeSuggestionSeq = useRef(0);
   const dialogRef = useRef<HTMLElement>(null);
   const confirmedOrderDueDateValid = isValidDateInput(confirmedOrderDueDate);
   const customerCompleteForOrder = completeOrderCustomer(customerDraft);
@@ -526,6 +535,19 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const customerDuplicateQuery = customerDuplicateQueries.join("|");
   const customerDuplicateOpen = customerDuplicateResults.length > 0
     && customerDuplicateAcceptedFor !== customerDuplicateQuery;
+  const intakeSuggestionBasisKey = useMemo(() => JSON.stringify({
+    kind: intakeKind,
+    customerId: directCustomerMode === "EXISTING" ? directCustomerId : null,
+    positions: directItems.map((item) => ({
+      key: item.key,
+      catalogServiceId: item.catalogServiceId === FREE_TEXT_SERVICE ? null : item.catalogServiceId,
+      name: item.name.trim(),
+      quantity: Number(item.quantity),
+      surfaceRequested: item.surfaceRequested.trim(),
+      unit: item.unit,
+      unitPriceCents: item.unitPriceCents,
+    })),
+  }), [directCustomerId, directCustomerMode, directItems, intakeKind]);
 
   const requestId = (kind: keyof typeof requestIds.current) => {
     if (!requestIds.current[kind]) requestIds.current[kind] = globalThis.crypto.randomUUID();
@@ -598,6 +620,64 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     }, 250);
     return () => window.clearTimeout(timer);
   }, [directCustomerMode, intakeCustomerQuery, open, ports, step]);
+
+  useEffect(() => {
+    if (!open || step !== "direct-intake" || directReceipt) return;
+    const positions = directItems.map((item) => ({
+      key: item.key,
+      catalogServiceId: item.catalogServiceId === FREE_TEXT_SERVICE ? null : item.catalogServiceId,
+      name: item.name.trim(),
+      quantity: Number(item.quantity),
+      surfaceRequested: item.surfaceRequested.trim(),
+      unit: item.unit,
+      unitPriceCents: item.unitPriceCents,
+    }));
+    const ready = positions.length >= 1 && positions.every((position) => position.name.length >= 2
+      && Number.isSafeInteger(position.quantity) && position.quantity >= 1
+      && position.surfaceRequested.length >= 2);
+    if (!ready) {
+      const resetTimer = window.setTimeout(() => {
+        setIntakeSuggestionState({ kind: "idle" });
+        setIntakeTermChoice(null);
+      }, 0);
+      return () => window.clearTimeout(resetTimer);
+    }
+
+    if (intakeTermChoice?.basisKey === intakeSuggestionBasisKey) {
+      const chosenDate = intakeTermChoice.kind === "adopted" ? intakeTermChoice.achievableDate : intakeTermChoice.wishDate;
+      if (directWishDate === chosenDate) return;
+    }
+    if (intakeTermChoice) {
+      const resetTimer = window.setTimeout(() => setIntakeTermChoice(null), 0);
+      return () => window.clearTimeout(resetTimer);
+    }
+
+    const sequence = ++intakeSuggestionSeq.current;
+    const timer = window.setTimeout(() => {
+      setIntakeSuggestionState((current) => current.kind === "data" ? { ...current, loading: true } : { kind: "loading" });
+      const timeout = window.setTimeout(() => {
+        if (sequence !== intakeSuggestionSeq.current) return;
+        setIntakeSuggestionState({ kind: "error" });
+      }, 10_000);
+      void ports.getIntakeSuggestions({
+        customerId: directCustomerMode === "EXISTING" ? directCustomerId || null : null,
+        kind: intakeKind,
+        wishDate: /^\d{4}-\d{2}-\d{2}$/.test(directWishDate) ? directWishDate : null,
+        positions,
+      }).then((result) => {
+        window.clearTimeout(timeout);
+        if (sequence !== intakeSuggestionSeq.current) return;
+        setIntakeSuggestionState(result.code === "OK" ? { kind: "data", data: result.data, loading: false } : { kind: "error" });
+      }).catch(() => {
+        window.clearTimeout(timeout);
+        if (sequence === intakeSuggestionSeq.current) setIntakeSuggestionState({ kind: "error" });
+      });
+    }, 250);
+    return () => {
+      window.clearTimeout(timer);
+      intakeSuggestionSeq.current += 1;
+    };
+  }, [directCustomerId, directCustomerMode, directItems, directReceipt, directWishDate, intakeKind, intakeSuggestionBasisKey, intakeTermChoice, open, ports, step]);
 
   useEffect(() => {
     if (!open || step !== "customer") return;
@@ -1307,7 +1387,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     const matches = catalogServices.filter((candidate) => candidate.name.localeCompare(name.trim(), "de-DE", { sensitivity: "base" }) === 0);
     const service = matches.length === 1 ? matches[0] : null;
     setDirectItems((current) => current.map((item) => item.key !== key ? item : service
-      ? { ...item, catalogServiceId: service.id, name: service.name, surfaceRequested: service.surface, unit: service.unit, unitPriceCents: service.netPriceCents, vatRateBasisPoints: service.vatRateBasisPoints }
+      ? { ...item, catalogServiceId: service.id, name: service.name, surfaceRequested: service.surface, unit: service.unit, unitPriceCents: null, vatRateBasisPoints: service.vatRateBasisPoints }
       : { ...item, catalogServiceId: FREE_TEXT_SERVICE, name, unit: null, unitPriceCents: null, vatRateBasisPoints: null }));
   };
 
@@ -1326,6 +1406,61 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setDirectItems((current) => current.map((item) => item.key === key
       ? { ...item, unitPriceCents: Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) : null, unit: item.unit ?? "Stück", vatRateBasisPoints: item.vatRateBasisPoints ?? 1900 }
       : item));
+  };
+
+  const applyIntakePriceSuggestion = (suggestion: IntakePriceSuggestion) => {
+    const item = directItems.find((candidate) => candidate.key === suggestion.positionKey);
+    if (!item) return;
+    setAppliedIntakePrices((prices) => ({
+      ...prices,
+      [item.key]: {
+        previousUnit: item.unit,
+        previousUnitPriceCents: item.unitPriceCents,
+        suggestedUnitPriceCents: suggestion.unitPriceCents,
+      },
+    }));
+    setDirectItems((current) => current.map((candidate) => candidate.key === suggestion.positionKey
+      ? { ...candidate, unit: suggestion.unit, unitPriceCents: suggestion.unitPriceCents, vatRateBasisPoints: candidate.vatRateBasisPoints ?? 1900 }
+      : candidate));
+  };
+
+  const changeAppliedIntakePrice = (key: string) => {
+    const applied = appliedIntakePrices[key];
+    if (!applied) return;
+    setDirectItems((current) => current.map((item) => item.key === key
+      ? { ...item, unit: applied.previousUnit, unitPriceCents: applied.previousUnitPriceCents }
+      : item));
+    setAppliedIntakePrices((current) => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const adoptIntakeTermSuggestion = () => {
+    if (intakeSuggestionState.kind !== "data" || !intakeSuggestionState.data.term || !directWishDate) return;
+    const term = intakeSuggestionState.data.term;
+    setIntakeTermChoice({ kind: "adopted", basisKey: intakeSuggestionBasisKey, wishDate: directWishDate, achievableDate: term.achievableDate });
+    setDirectWishDate(term.achievableDate);
+    setDirectConfirmedDate(term.achievableDate);
+  };
+
+  const keepIntakeWish = () => {
+    if (intakeSuggestionState.kind !== "data" || !intakeSuggestionState.data.term || !directWishDate) return;
+    setIntakeTermChoice({
+      kind: "kept",
+      basisKey: intakeSuggestionBasisKey,
+      wishDate: directWishDate,
+      achievableDate: intakeSuggestionState.data.term.achievableDate,
+    });
+  };
+
+  const changeIntakeTermChoice = () => {
+    if (intakeTermChoice?.kind === "adopted") {
+      setDirectWishDate(intakeTermChoice.wishDate);
+      setDirectConfirmedDate(intakeTermChoice.wishDate);
+    }
+    setIntakeTermChoice(null);
   };
 
   const recognizeDirectIntakeText = async () => {
@@ -1384,6 +1519,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       ]);
       setLastRecognizedText(intakeRecognitionText);
       setRecognitionConfirmed(false);
+      setIntakeSuggestionState({ kind: "idle" });
+      setIntakeTermChoice(null);
     } catch {
       setFeedback({ kind: "error", message: "Erkennung nicht möglich · bitte von Hand ausfüllen" });
     } finally {
@@ -1776,6 +1913,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setIntakeTermStatus("wish");
     setQuoteValidUntil("");
     setIntakeChecked(false);
+    setIntakeSuggestionState({ kind: "idle" });
+    setIntakeTermChoice(null);
+    setAppliedIntakePrices({});
     setSourceMode(null);
     setDraftPrompt(false);
     setPendingAttachmentIds([]);
@@ -1970,6 +2110,26 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                   <Hinweis ton="warn">Für diesen Kunden fehlen noch Pflichtdaten.</Hinweis>
                   <CustomerFormFields value={directCustomer} onChange={setDirectCustomer} customerType={directCustomerType} onCustomerType={changeDirectCustomerType} onlyMissing showPayment={ports.canManageMoney} onPaymentChange={changeIntakeCustomerPayment} />
                 </> : null}
+                {intakeTermChoice ? <div className={styles.intakeSuggestion} data-spec-id="eingang.terminvorschlag">
+                  <div><strong>Liefertermin {intakeTermChoice.kind === "adopted" ? intakeTermChoice.achievableDate : intakeTermChoice.wishDate}</strong><span>{intakeTermChoice.kind === "adopted" ? "Vorschlag übernommen" : intakeKind === "QUOTE" ? "Wunsch gehalten" : "Wunsch gehalten, Kunde wird vorgewarnt"}</span></div>
+                  <KrButton art="sekundaer" text="Ändern" onClick={changeIntakeTermChoice} />
+                </div> : intakeSuggestionState.kind === "loading" ? <div className={styles.intakeSuggestion} data-spec-id="eingang.terminvorschlag"><span>Terminvorschlag wird berechnet …</span></div>
+                  : intakeSuggestionState.kind === "error" ? <div className={styles.intakeSuggestion} data-spec-id="eingang.terminvorschlag"><span>Terminvorschlag nicht verfügbar</span></div>
+                    : intakeSuggestionState.kind === "data" && intakeSuggestionState.data.term?.wishDate ? <div className={styles.intakeSuggestion} data-spec-id="eingang.terminvorschlag">
+                      {intakeSuggestionState.data.term.rating === "passt" ? <div><strong>Wunsch {intakeSuggestionState.data.term.wishDate} machbar</strong>{intakeSuggestionState.loading ? <span>wird berechnet …</span> : null}</div> : <>
+                        <div className={styles.intakeSuggestionHead}>
+                          <strong>Terminvorschlag</strong>
+                          <Chip text={intakeSuggestionState.data.term.rating === "knapp" ? "knapp" : "nicht machbar"} ton={intakeSuggestionState.data.term.rating === "knapp" ? "warn" : "rot"} />
+                          {intakeSuggestionState.loading ? <span>wird berechnet …</span> : null}
+                        </div>
+                        <p>Wunsch {intakeSuggestionState.data.term.wishDate} → Machbar {intakeSuggestionState.data.term.achievableDate}</p>
+                        <ul>{intakeSuggestionState.data.term.reasons.map((reason) => <li key={reason.kind}>{reason.text}</li>)}</ul>
+                        <div className={styles.intakeSuggestionActions}>
+                          <KrButton art="primaer" text={`${intakeSuggestionState.data.term.achievableDate} übernehmen`} onClick={adoptIntakeTermSuggestion} />
+                          <KrButton art="sekundaer" text={intakeKind === "QUOTE" ? "Wunsch halten" : "Wunsch halten · Kunde vorwarnen"} onClick={keepIntakeWish} />
+                        </div>
+                      </>}
+                    </div> : null}
                 <FormRaster>
                   <Feld label="Liefertermin"><Eingabe data-spec-id="eingang.liefertermin" type="date" required value={directWishDate} onChange={(event) => { setDirectWishDate(event.target.value); setDirectConfirmedDate(event.target.value); }} /></Feld>
                   <Feld label="Termin ist"><div data-spec-id="eingang.terminstatus"><Segment label="Termin ist" wert={intakeTermStatus} optionen={[{ wert: "wish", text: "Wunsch" }, { wert: "confirmed", text: "bestätigt" }]} onWert={setIntakeTermStatus} /></div></Feld>
@@ -1997,6 +2157,27 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                     <Feld label="Ausführung"><Auswahl data-spec-id="eingang.position.ausfuehrung" value={item.executionRequested} onChange={(event) => updateDirectItem(item.key, "executionRequested", event.target.value)} optionen={EXECUTION_OPTIONS} /></Feld>
                     <Feld label="Material"><Eingabe data-spec-id="eingang.position.material" maxLength={120} value={item.material} onChange={(event) => updateDirectItem(item.key, "material", event.target.value)} /></Feld>
                     {ports.canManageMoney && intakeKind === "QUOTE" && item.catalogServiceId === FREE_TEXT_SERVICE ? <Feld label="Preis netto (€)"><Eingabe required type="number" min="0" step="0.01" value={item.unitPriceCents === null ? "" : String(item.unitPriceCents / 100)} onChange={(event) => setDirectPositionPrice(item.key, event.target.value)} /></Feld> : null}
+                    {ports.canManageMoney && intakeSuggestionState.kind === "data" ? (() => {
+                      const suggestion = intakeSuggestionState.data.prices.find((entry) => entry.positionKey === item.key);
+                      if (!suggestion) return null;
+                      const applied = item.unitPriceCents === suggestion.unitPriceCents
+                        && appliedIntakePrices[item.key]?.suggestedUnitPriceCents === suggestion.unitPriceCents;
+                      return <div className={styles.intakeSuggestion} data-spec-id="eingang.preisvorschlag">
+                        {applied ? <>
+                          <div><strong>Preis {euro(suggestion.unitPriceCents)} / {suggestion.unit}</strong><span>{euro(suggestion.lineTotalCents)} netto übernommen</span></div>
+                          <KrButton art="sekundaer" text="Ändern" onClick={() => changeAppliedIntakePrice(item.key)} />
+                        </> : <>
+                          <div className={styles.intakeSuggestionHead}><strong>Preisvorschlag</strong>{intakeSuggestionState.loading ? <span>wird berechnet …</span> : null}</div>
+                          <p>{euro(suggestion.unitPriceCents)} / {suggestion.unit} · {item.quantity} × = {euro(suggestion.lineTotalCents)} netto</p>
+                          <p>{suggestion.source === "gleich" ? "Jüngster gleicher Fall" : suggestion.source === "aehnlich" ? `Median aus ${suggestion.caseCount} ähnlichen Fällen` : "Preis aus dem Leistungskatalog"}</p>
+                          <details>
+                            <summary>Vergleichsfälle ({suggestion.cases.length})</summary>
+                            <ul>{suggestion.cases.map((entry, caseIndex) => <li key={`${entry.kind}-${entry.invoiceDate ?? "catalog"}-${caseIndex}`}>{entry.customerName} · {entry.partName} · {entry.surface} · {euro(entry.unitPriceCents)}{entry.invoiceDate ? ` · ${entry.invoiceDate}` : ""}</li>)}</ul>
+                          </details>
+                          <KrButton art="primaer" text="Übernehmen" onClick={() => applyIntakePriceSuggestion(suggestion)} />
+                        </>}
+                      </div>;
+                    })() : null}
                     <KrButton art="sekundaer" icon="x" label="Position entfernen" disabled={directItems.length === 1} onClick={() => setDirectItems((current) => current.filter((entry) => entry.key !== item.key))} />
                   </div>)}
                 </div>

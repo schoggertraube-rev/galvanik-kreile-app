@@ -63,6 +63,12 @@
 .createQuickCapture{display:grid;gap:var(--a-4);padding:var(--a-6);border:1px solid var(--line);border-radius:var(--r-kachel);background:var(--surface)}
 .createQuickCapture h3,.createQuickCapture p{margin:0}.createQuickCapture p{color:var(--navy-400)}
 .createRecognition{display:grid;gap:var(--a-3)}.createRecognition>div{display:flex;flex-wrap:wrap;gap:var(--a-2)}
+.intakeSuggestion{grid-column:1/-1;display:grid;gap:var(--a-3);padding:var(--a-4);border:1px solid var(--line);border-radius:var(--r-kachel);background:var(--surface)}
+.intakeSuggestion>div:not(.intakeSuggestionHead):first-child{display:grid;gap:var(--a-1)}
+.intakeSuggestion p,.intakeSuggestion ul{margin:0}.intakeSuggestion ul{padding-left:var(--a-5);color:var(--navy-400)}
+.intakeSuggestion span,.intakeSuggestion summary{color:var(--navy-400);font-size:var(--fs-s)}
+.intakeSuggestionHead,.intakeSuggestionActions{display:flex;align-items:center;gap:var(--a-2);flex-wrap:wrap}.intakeSuggestionHead>span:last-child{margin-left:auto}
+.intakeSuggestionActions{justify-content:flex-start}
 .f1HiddenFile { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }
 .f1Camera { position: relative; min-block-size: 26rem; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--navy-800); display: grid; place-items: center; }
 .f1Camera video { inline-size: 100%; max-block-size: 62vh; object-fit: contain; }

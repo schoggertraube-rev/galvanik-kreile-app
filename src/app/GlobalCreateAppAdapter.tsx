@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { logout } from "@/app/actions/auth";
 import { createCustomerAction, getCustomersDb, readCustomerCreateReceiptAction, updateCustomerCommercialAction } from "@/app/actions/customers.actions";
 import { convertQuoteToOrderAction, createQuoteAction, listOpenQuotesAction, readQuoteAction, readQuoteCreateReceiptAction, readQuoteConversionReceiptAction, readQuoteUpdateReceiptAction, updateQuoteAction } from "@/app/actions/quotes.actions";
-import { createOrderIntakeAction, getOrderIntakeReceiptAction, recognizeOrderIntakeTextAction, searchOrderIntakeCustomersAction } from "@/app/warendurchlauf/actions";
+import { createOrderIntakeAction, getOrderIntakeReceiptAction, getOrderIntakeSuggestionsAction, recognizeOrderIntakeTextAction, searchOrderIntakeCustomersAction } from "@/app/warendurchlauf/actions";
 import { getActiveCatalogAction } from "@/app/actions/catalog.actions";
 import { attachIntakeDraftAttachmentAction } from "@/app/actions/domainAttachments.actions";
 import { attachOutlookMailAction } from "@/app/actions/communications.actions";
@@ -142,6 +142,14 @@ export function GlobalCreateAppAdapter() {
         },
         recognizeIntakeText: async (text) => {
           const result = await recognizeOrderIntakeTextAction({ text });
+          if (result.ok) return { code: "OK" as const, data: result.data };
+          return {
+            code: result.error === "FORBIDDEN" ? "FORBIDDEN" as const : result.error === "AUTH_ERROR" ? "UNAUTHENTICATED" as const : "UNAVAILABLE" as const,
+            message: result.message,
+          };
+        },
+        getIntakeSuggestions: async (input) => {
+          const result = await getOrderIntakeSuggestionsAction(input);
           if (result.ok) return { code: "OK" as const, data: result.data };
           return {
             code: result.error === "FORBIDDEN" ? "FORBIDDEN" as const : result.error === "AUTH_ERROR" ? "UNAUTHENTICATED" as const : "UNAVAILABLE" as const,

@@ -75,6 +75,7 @@ function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
     listCustomers: vi.fn().mockResolvedValue({ code: "OK", customers: [{ id: CUSTOMER_ID, customerNumber: "K-2026-0042", name: "SYNTHETISCH Musterkunde GmbH", city: "Teststadt" }] }),
     searchIntakeCustomers: vi.fn().mockImplementation(async (query: string) => ({ code: "OK", customers: query === "SYNTHETISCH" ? [{ id: CUSTOMER_ID, customerNumber: "K-2026-0042", name: "SYNTHETISCH Musterkunde GmbH", city: "Teststadt" }] : [] })),
     recognizeIntakeText: vi.fn().mockResolvedValue({ code: "OK", data: { fields: [], positions: [] } }),
+    getIntakeSuggestions: vi.fn().mockResolvedValue({ code: "OK", data: { term: null, prices: [] } }),
     listCatalog: vi.fn().mockResolvedValue({ code:"OK", services:[{id:"88888888-8888-4888-8888-888888888888",name:"Synthetischer Flansch",surface:"Verzinken",unit:"Stück",netPriceCents:12500,vatRateBasisPoints:1900,standardLeadTimeWorkingDays:5,active:true}] }),
     createCustomer: vi.fn().mockImplementation(async (input) => ({
       code: "OK",
@@ -763,6 +764,46 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(within(kind).queryByText("KV")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Preis netto (€)")).not.toBeInTheDocument();
     expect(screen.queryByText("Preisvorschlag")).not.toBeInTheDocument();
+  });
+
+  it("shows term and price proposals and applies each only after an explicit click", async () => {
+    const getIntakeSuggestions = vi.fn<GlobalCreatePorts["getIntakeSuggestions"]>().mockImplementation(async (input) => ({
+      code: "OK",
+      data: {
+        term: {
+          achievableDate: "2026-11-03",
+          wishDate: "2026-10-30",
+          rating: "nicht_machbar",
+          bufferWorkingDays: -2,
+          reasons: [{ kind: "lead", text: "Verzinken: 5 Arbeitstage Durchlauf" }, { kind: "effort", text: "1 Aufwandstage" }],
+        },
+        prices: [{
+          positionKey: input.positions[0].key,
+          source: "katalog",
+          unit: "Stück",
+          unitPriceCents: 12_500,
+          lineTotalCents: 12_500,
+          caseCount: 1,
+          cases: [{ kind: "katalog", customerName: "Leistungskatalog", partName: "Synthetischer Flansch", surface: "Verzinken", quantity: null, invoiceDate: null, unitPriceCents: 12_500 }],
+        }],
+      },
+    }));
+    render(<GlobalCreateFlow ports={ports({ getIntakeSuggestions })} />);
+
+    openFlow();
+    await screen.findByRole("heading", { name: "Neuer Eingang" });
+    fireEvent.change(screen.getByLabelText("Liefertermin"), { target: { value: "2026-10-30" } });
+    fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "Synthetischer Flansch" } });
+
+    expect(await screen.findByText("Terminvorschlag")).toBeInTheDocument();
+    expect(await screen.findByText("Preisvorschlag")).toBeInTheDocument();
+    expect(screen.getByText(/125,00.*Stück/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Liefertermin")).toHaveValue("2026-10-30");
+
+    fireEvent.click(screen.getByRole("button", { name: "Übernehmen" }));
+    expect(await screen.findByText(/netto übernommen/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "2026-11-03 übernehmen" }));
+    expect(screen.getByLabelText("Liefertermin")).toHaveValue("2026-11-03");
   });
 
   it("keeps a failed inline-new intake atomic and leaves all inputs visible", async () => {

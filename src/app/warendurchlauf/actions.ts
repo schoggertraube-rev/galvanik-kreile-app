@@ -35,6 +35,7 @@ import type { EvidenceReadRecord, ReadEvidenceTargetInput } from "@/lib/server/e
 import type { OperationalOrder } from "@/lib/types/operationalOrder";
 import type { WerkstattKpiSnapshot } from "@/modules/werkstatt/public";
 import type { IntakeTextRecognition } from "@/lib/server/intakeTextRecognition";
+import type { IntakeSuggestions, IntakeSuggestionsInput } from "@/lib/intakeSuggestionsContract";
 
 export type WarendurchlaufOrder = OperationalOrder;
 
@@ -193,6 +194,26 @@ export async function recognizeOrderIntakeTextAction(
   }
   const { recognizeIntakeText } = await import("@/lib/server/intakeTextRecognition");
   return { ok: true, data: recognizeIntakeText(input.text) };
+}
+
+export async function getOrderIntakeSuggestionsAction(
+  input: IntakeSuggestionsInput,
+): Promise<WarendurchlaufActionResult<IntakeSuggestions>> {
+  noStore();
+  const authorization = await resolveAuthorization().catch(() => null);
+  if (!authorization || !authorization.ok) {
+    return { ok: false, error: "AUTH_ERROR", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+  }
+  if (!authorization.data.permissions.includes("perm_data_orders") || authorization.data.areas?.includes("eingang") !== true) {
+    return { ok: false, error: "FORBIDDEN", message: "Wareneingang ist mit dieser Rolle nicht erlaubt." };
+  }
+  try {
+    const { readIntakeSuggestions } = await import("@/lib/server/intakeSuggestions");
+    return { ok: true, data: await readIntakeSuggestions(authorization.data, input) };
+  } catch (error) {
+    console.error("getOrderIntakeSuggestionsAction failed", error);
+    return { ok: false, error: "QUERY_ERROR", message: "Vorschläge sind derzeit nicht verfügbar." };
+  }
 }
 
 export async function searchOrderIntakeCustomersAction(
