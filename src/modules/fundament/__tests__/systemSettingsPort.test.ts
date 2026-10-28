@@ -104,11 +104,48 @@ describe("system settings port", () => {
       userId: "22222222-2222-4222-8222-222222222222",
       fullName: "Phillip Kreile",
       shortCode: "PK",
-      designation: "Werkstatt",
+      designation: "",
       active: true,
       pin: "0000",
     })).resolves.toEqual({ code: "OK" });
     expect(hash).toHaveBeenCalledWith("0000", 12);
     expect(execute.mock.calls[1]?.[0].text).toContain("tenant_id");
+  });
+
+  it("creates a login without a designation and persists the empty value as null", async () => {
+    execute
+      .mockResolvedValueOnce([{ id: "33333333-3333-4333-8333-333333333333", short_code: "NN" }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    const { createManagedUser } = await import("../server/systemSettingsPort");
+    await expect(createManagedUser(context, {
+      fullName: "Nina Neu",
+      designation: "   ",
+      template: "werkstatt",
+      pin: "2468",
+    })).resolves.toMatchObject({
+      code: "OK",
+      user: { fullName: "Nina Neu", designation: "" },
+    });
+    expect(execute.mock.calls[0]?.[0].values).toContain(null);
+  });
+
+  it("reports the invalid login field precisely before database access", async () => {
+    const { createManagedUser, updateManagedUser } = await import("../server/systemSettingsPort");
+    await expect(createManagedUser(context, {
+      fullName: "N",
+      designation: "",
+      template: "werkstatt",
+      pin: "2468",
+    })).resolves.toEqual({ code: "VALIDATION_ERROR", message: "Name muss 2 bis 160 Zeichen haben." });
+    await expect(updateManagedUser(context, {
+      userId: "22222222-2222-4222-8222-222222222222",
+      fullName: "Phillip Kreile",
+      shortCode: "PK",
+      designation: "x".repeat(121),
+      active: true,
+      pin: null,
+    })).resolves.toEqual({ code: "VALIDATION_ERROR", message: "Bezeichnung darf höchstens 120 Zeichen haben." });
+    expect(withTransaction).not.toHaveBeenCalled();
   });
 });

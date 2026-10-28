@@ -56,7 +56,7 @@ describe("Gregor system administration composition", () => {
     ports.saveManagedUser.mockResolvedValue({ code: "OK" });
     ports.createManagedUser.mockResolvedValue({
       code: "OK",
-      user: { id: "33333333-3333-4333-8333-333333333333", email: null, fullName: "Nina Neu", shortCode: "NN", designation: "Werkstatt", role: "werkstatt", active: true, areas: ["auftraege", "eingang", "kunden"], fixedAreas: [], isCurrent: false },
+      user: { id: "33333333-3333-4333-8333-333333333333", email: null, fullName: "Nina Neu", shortCode: "NN", designation: "", role: "werkstatt", active: true, areas: ["auftraege", "eingang", "kunden"], fixedAreas: [], isCurrent: false },
     });
     ports.readSettings.mockResolvedValue({ code:"OK", snapshot:{ company:{companyName:"Galvanik Kreile",street:"Testweg 1",zip:"12345",city:"Berlin",country:"Deutschland",taxId:"DE123456789",iban:"DE001234",bic:"TESTDEFF",bankName:"Testbank",paymentTermDays:14,logoUrl:"/logo.png"}, extraWorkHourlyRate:{rateId:null,hourlyRateCents:null,version:0}, users:[], capabilities:{canManageCompany:true,canManageLogins:true,canManageSystem:true}, numberRanges:[], features:[{id:"S01",enabled:true},{id:"Z01",enabled:false}] }, services:[] });
   });
@@ -85,11 +85,11 @@ describe("Gregor system administration composition", () => {
     render(await SettingsAppAdapter());
     fireEvent.click(screen.getByRole("button", { name: "Logins & Rechte" }));
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Nina Neu" } });
-    fireEvent.change(screen.getByLabelText("Bezeichnung"), { target: { value: "Werkstatt" } });
     fireEvent.change(screen.getByLabelText("Code", { exact: true }), { target: { value: "2468" } });
     fireEvent.click(screen.getByRole("button", { name: "Login anlegen" }));
 
     expect(await screen.findByText("Nina Neu")).toBeInTheDocument();
+    expect(ports.createManagedUser).toHaveBeenCalledWith(expect.objectContaining({ designation: "" }));
     expect(screen.getByRole("button", { name: "Logins & Rechte" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByLabelText("Aufträge & Werkstatt für Nina Neu")).toBeChecked();
     expect(screen.getByRole("status")).toHaveTextContent("Login angelegt.");

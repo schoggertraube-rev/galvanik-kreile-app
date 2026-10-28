@@ -189,20 +189,18 @@ export async function updateManagedUser(context: SystemSettingsContext, input: u
   if (!context.canManage) return { code: "FORBIDDEN" as const, message: "Nutzer dürfen nicht geändert werden." };
   if (!input || typeof input !== "object" || Array.isArray(input)) return { code: "VALIDATION_ERROR" as const, message: "Nutzerdaten sind ungültig." };
   const value = input as Record<string, unknown>;
-  if (Object.keys(value).sort().join(",") !== "active,designation,fullName,pin,shortCode,userId"
-    || typeof value.userId !== "string" || !UUID.test(value.userId)
-    || typeof value.active !== "boolean"
-    || text(value.fullName, 2, 160) === null
-    || text(value.designation, 1, 120) === null
-    || typeof value.shortCode !== "string" || !/^[A-ZÄÖÜ0-9][A-ZÄÖÜ0-9_-]{0,7}$/.test(value.shortCode.trim().toUpperCase())
-    || (value.pin !== null && (typeof value.pin !== "string" || !/^\d{4}$/.test(value.pin)))) {
-    return { code: "VALIDATION_ERROR" as const, message: "Name, Kürzel, Bezeichnung, Status oder Code ist ungültig. Ein neuer Code hat genau 4 Ziffern." };
-  }
+  if (Object.keys(value).sort().join(",") !== "active,designation,fullName,pin,shortCode,userId") return { code: "VALIDATION_ERROR" as const, message: "Logindaten sind unvollständig." };
+  if (typeof value.userId !== "string" || !UUID.test(value.userId)) return { code: "VALIDATION_ERROR" as const, message: "Login-ID ist ungültig." };
+  if (text(value.fullName, 2, 160) === null) return { code: "VALIDATION_ERROR" as const, message: "Name muss 2 bis 160 Zeichen haben." };
+  if (typeof value.shortCode !== "string" || !/^[A-ZÄÖÜ0-9][A-ZÄÖÜ0-9_-]{0,7}$/.test(value.shortCode.trim().toUpperCase())) return { code: "VALIDATION_ERROR" as const, message: "Kürzel muss 1 bis 8 erlaubte Zeichen haben." };
+  if (text(value.designation, 0, 120) === null) return { code: "VALIDATION_ERROR" as const, message: "Bezeichnung darf höchstens 120 Zeichen haben." };
+  if (typeof value.active !== "boolean") return { code: "VALIDATION_ERROR" as const, message: "Status muss aktiv oder inaktiv sein." };
+  if (value.pin !== null && (typeof value.pin !== "string" || !/^\d{4}$/.test(value.pin))) return { code: "VALIDATION_ERROR" as const, message: "Ein neuer Code hat genau 4 Ziffern." };
   const normalized: UpdateManagedUserInput = {
     userId: value.userId,
     fullName: text(value.fullName, 2, 160)!,
     shortCode: value.shortCode.trim().toUpperCase(),
-    designation: text(value.designation, 1, 120)!,
+    designation: text(value.designation, 0, 120)!,
     active: value.active,
     pin: value.pin as string | null,
   };
@@ -231,8 +229,8 @@ export async function updateManagedUser(context: SystemSettingsContext, input: u
       }
       if (normalized.active && !target.has_pin && !pinHash) throw new Error("USER_ACTIVE_PIN_REQUIRED");
       const rows = pinHash
-        ? await tx.execute<{ id: string }>(sql`UPDATE public.app_users SET full_name=${normalized.fullName}, kuerzel=${normalized.shortCode}, bezeichnung=${normalized.designation}, active=${normalized.active}, pin_hash=${pinHash}, updated_at=statement_timestamp() WHERE id=${normalized.userId}::uuid AND tenant_id=${context.tenantId} RETURNING id`)
-        : await tx.execute<{ id: string }>(sql`UPDATE public.app_users SET full_name=${normalized.fullName}, kuerzel=${normalized.shortCode}, bezeichnung=${normalized.designation}, active=${normalized.active}, updated_at=statement_timestamp() WHERE id=${normalized.userId}::uuid AND tenant_id=${context.tenantId} RETURNING id`);
+        ? await tx.execute<{ id: string }>(sql`UPDATE public.app_users SET full_name=${normalized.fullName}, kuerzel=${normalized.shortCode}, bezeichnung=${normalized.designation || null}, active=${normalized.active}, pin_hash=${pinHash}, updated_at=statement_timestamp() WHERE id=${normalized.userId}::uuid AND tenant_id=${context.tenantId} RETURNING id`)
+        : await tx.execute<{ id: string }>(sql`UPDATE public.app_users SET full_name=${normalized.fullName}, kuerzel=${normalized.shortCode}, bezeichnung=${normalized.designation || null}, active=${normalized.active}, updated_at=statement_timestamp() WHERE id=${normalized.userId}::uuid AND tenant_id=${context.tenantId} RETURNING id`);
       if (rows.length !== 1) throw new Error("USER_WRITE_NOT_FOUND");
       await tx.execute(sql`INSERT INTO public.ui_events (tenant_id, event_type, payload) VALUES (${context.tenantId}, 'login_updated', jsonb_build_object('actorId', ${context.actorId}, 'userId', ${normalized.userId}))`);
     });
@@ -255,16 +253,14 @@ export async function createManagedUser(context: SystemSettingsContext, input: u
   if (!context.canManage) return { code: "FORBIDDEN" as const, message: "Logins dürfen nicht angelegt werden." };
   if (!input || typeof input !== "object" || Array.isArray(input)) return { code: "VALIDATION_ERROR" as const, message: "Logindaten sind ungültig." };
   const value = input as Record<string, unknown>;
-  if (Object.keys(value).sort().join(",") !== "designation,fullName,pin,template"
-    || text(value.fullName, 2, 160) === null
-    || text(value.designation, 1, 120) === null
-    || (value.template !== "werkstatt" && value.template !== "meister" && value.template !== "leer")
-    || typeof value.pin !== "string" || !/^\d{4}$/.test(value.pin)) {
-    return { code: "VALIDATION_ERROR" as const, message: "Name, Bezeichnung, Vorlage und ein vierstelliger Code sind erforderlich." };
-  }
+  if (Object.keys(value).sort().join(",") !== "designation,fullName,pin,template") return { code: "VALIDATION_ERROR" as const, message: "Logindaten sind unvollständig." };
+  if (text(value.fullName, 2, 160) === null) return { code: "VALIDATION_ERROR" as const, message: "Name muss 2 bis 160 Zeichen haben." };
+  if (text(value.designation, 0, 120) === null) return { code: "VALIDATION_ERROR" as const, message: "Bezeichnung darf höchstens 120 Zeichen haben." };
+  if (value.template !== "werkstatt" && value.template !== "meister" && value.template !== "leer") return { code: "VALIDATION_ERROR" as const, message: "Vorlage ist ungültig." };
+  if (typeof value.pin !== "string" || !/^\d{4}$/.test(value.pin)) return { code: "VALIDATION_ERROR" as const, message: "Code muss genau 4 Ziffern haben." };
   const normalized = {
     fullName: text(value.fullName, 2, 160)!,
-    designation: text(value.designation, 1, 120)!,
+    designation: text(value.designation, 0, 120)!,
     template: value.template as CreateManagedUserInput["template"],
     pin: value.pin,
   };
@@ -294,7 +290,7 @@ export async function createManagedUser(context: SystemSettingsContext, input: u
           LIMIT 1
         )
         INSERT INTO public.app_users (tenant_id, email, full_name, kuerzel, bezeichnung, role, pin_hash, active, updated_at)
-        SELECT ${context.tenantId}, NULL, ${normalized.fullName}, chosen.kuerzel, ${normalized.designation}, ${role}, ${pinHash}, true, statement_timestamp()
+        SELECT ${context.tenantId}, NULL, ${normalized.fullName}, chosen.kuerzel, ${normalized.designation || null}, ${role}, ${pinHash}, true, statement_timestamp()
         FROM chosen
         RETURNING id::text AS id, kuerzel AS short_code
       `);

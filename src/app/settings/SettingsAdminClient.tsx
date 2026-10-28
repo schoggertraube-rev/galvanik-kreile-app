@@ -255,7 +255,7 @@ export function SettingsAdminClient({
       <div className={styles.createLogin}>
         <h3>Login anlegen</h3>
         <label>Name<input data-spec-id="rechte.name" value={newLogin.fullName} onChange={(event) => setNewLogin({ ...newLogin, fullName: event.target.value })} /></label>
-        <label>Bezeichnung<input data-spec-id="rechte.bezeichnung" value={newLogin.designation} onChange={(event) => setNewLogin({ ...newLogin, designation: event.target.value })} /></label>
+        <label>Bezeichnung (optional)<input data-spec-id="rechte.bezeichnung" value={newLogin.designation} onChange={(event) => setNewLogin({ ...newLogin, designation: event.target.value })} /></label>
         <label>Rechte wie<select data-spec-id="rechte.vorlage" value={newLogin.template} onChange={(event) => setNewLogin({ ...newLogin, template: event.target.value as typeof newLogin.template })}><option value="werkstatt">wie Phillip</option><option value="meister">wie Rolf</option><option value="leer">leer</option></select></label>
         <label>Code<input data-spec-id="rechte.code" type="password" inputMode="numeric" value={newLogin.pin} onChange={(event) => setNewLogin({ ...newLogin, pin: event.target.value.replace(/\D/g, "").slice(0, 4) })} /></label>
         <button data-spec-id="rechte.login-anlegen" disabled={pending} onClick={createLogin}>Login anlegen</button>
@@ -263,11 +263,11 @@ export function SettingsAdminClient({
       <div className={styles.userList}>{users.map((user) => {
         const isEditing = editingUser?.id === user.id;
         return <article key={user.id}>
-          <div className={styles.userSummary}><span>{user.shortCode}</span><div><strong>{user.fullName}</strong><small>{user.designation} · {user.areas.length} Bereiche</small></div><button data-spec-id="rechte.aendern" type="button" disabled={pending} onClick={() => editUser(user)}>Ändern</button></div>
+          <div className={styles.userSummary}><span>{user.shortCode}</span><div><strong>{user.fullName}</strong><small>{[user.designation, `${user.areas.length} Bereiche`].filter(Boolean).join(" · ")}</small></div><button data-spec-id="rechte.aendern" type="button" disabled={pending} onClick={() => editUser(user)}>Ändern</button></div>
           {isEditing ? <div className={styles.userFields}>
             <label>Name<input value={editingUser.fullName} onChange={(event) => setEditingUser({ ...editingUser, fullName: event.target.value })} /></label>
             <label>Kürzel<input value={editingUser.shortCode} maxLength={8} onChange={(event) => setEditingUser({ ...editingUser, shortCode: event.target.value.toUpperCase() })} /></label>
-            <label>Bezeichnung<input value={editingUser.designation} onChange={(event) => setEditingUser({ ...editingUser, designation: event.target.value })} /></label>
+            <label>Bezeichnung (optional)<input value={editingUser.designation} onChange={(event) => setEditingUser({ ...editingUser, designation: event.target.value })} /></label>
             <label>Neuer Code<input type="password" inputMode="numeric" placeholder="unverändert" value={editPin} onChange={(event) => setEditPin(event.target.value.replace(/\D/g, "").slice(0, 4))} /></label>
             <label className={styles.check}><input type="checkbox" checked={editingUser.active} disabled={editingUser.isCurrent} onChange={(event) => setEditingUser({ ...editingUser, active: event.target.checked })} />Aktiv</label>
             <button type="button" disabled={pending} onClick={() => updateUser(editingUser)}>Übernehmen</button>
