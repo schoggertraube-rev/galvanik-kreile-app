@@ -6,7 +6,7 @@ import { getOperationalOrders } from "@/lib/server/operationalOrders";
 import { readIntakeDraft } from "@/lib/server/intakeDraft";
 import { listMicrosoftGraphInbox } from "@/lib/server/microsoftGraph";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import { classifyOrderForToday } from "@/lib/server/todayDashboardPolicy";
+import { deriveOrderGuidance, type TodayOrderGuidance } from "@/lib/server/todayDashboardPolicy";
 
 export type TodayField = "action" | "today" | "assign" | "money" | "bundle";
 export type TodayVisibleField = Exclude<TodayField, "action">;
@@ -23,6 +23,7 @@ export type TodayItem = {
   graphMessageId?: string;
   dueDate?: string;
   snoozedUntil?: string;
+  primaryActionLabel?: TodayOrderGuidance["primaryActionLabel"];
 };
 
 export type TodayDashboard = {
@@ -91,9 +92,11 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
   if (draft.code === "OK" && draft.data) add({ key: "draft:intake", field: "action", kind: "draft", title: "Entwurf Neuer Eingang", meta: `Gespeichert ${new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(draft.data.updatedAt))}`, urgency: "decision" });
 
   for (const order of orders) {
-    const field = classifyOrderForToday(order, today);
-    if (!field) continue;
-    add({ key: `order:${order.id}`, field, kind: "order", title: `${order.orderNumber} · ${order.customerName ?? "Kunde"}`, meta: `${order.itemDescription ?? order.title} · ${order.dueLabel} ${order.dueValue}`, urgency: order.risk === "red" || order.risk === "blocked" ? "conflict" : "warning", orderId: order.id, orderVersion: order.version, dueDate: order.dueDate });
+    const guidance = deriveOrderGuidance(order, today);
+    if (!guidance) continue;
+    const caseTitle = guidance.caseId === "finished_waiting" ? "Fertig und wartet auf Warenausgang" : guidance.caseId === "due" ? "Liefertermin braucht Handlung" : guidance.caseId === "tight" ? "Zeitplan ist knapp" : guidance.caseId === "problem" ? "Gemeldetes Auftragsrisiko" : "Heute fertig zur Übergabe";
+    const reason = guidance.reason === "due_today" ? `heute fällig · Station ${order.station}` : guidance.reason === "overdue" ? `überfällig · Station ${order.station}` : guidance.reason === "finished_overdue" ? `Liefertermin überschritten · fertig zur Übergabe` : guidance.reason === "tight_schedule" ? `${order.dueLabel} ${order.dueValue} · noch nicht begonnen` : guidance.reason === "reported_risk" ? `Risiko ${order.risk} · Station ${order.station}` : `${order.dueLabel} ${order.dueValue} · fertig`;
+    add({ key: `order:${order.id}`, field: guidance.field, kind: "order", title: `${order.orderNumber} · ${caseTitle}`, meta: `${order.customerName ?? "Kunde"} · ${reason}`, urgency: order.risk === "red" || order.risk === "blocked" ? "conflict" : "warning", orderId: order.id, orderVersion: order.version, dueDate: order.dueDate, primaryActionLabel: guidance.primaryActionLabel });
   }
 
   const importedGraphIds = new Set(support.graphThreads.map((row) => row.source.slice("MS_GRAPH_IN:".length)));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyOrderForToday } from "@/lib/server/todayDashboardPolicy";
+import { classifyOrderForToday, deriveOrderGuidance } from "@/lib/server/todayDashboardPolicy";
 
 const TODAY = "2026-10-28";
 
@@ -22,6 +22,13 @@ describe("classifyOrderForToday", () => {
   it("moves overdue and risky orders to Handlungsbedarf", () => {
     expect(classifyOrderForToday(order({ dueDate: "2026-10-27T00:00:00.000Z" }), TODAY)).toBe("action");
     expect(classifyOrderForToday(order({ risk: "blocked" }), TODAY)).toBe("action");
+  });
+
+  it("gives each current action case a reason and one concrete primary action", () => {
+    expect(deriveOrderGuidance(order({ station: "galvanik", status: "galvanik" }), TODAY)).toMatchObject({ reason: "due_today", primaryActionLabel: "Fertig melden" });
+    expect(deriveOrderGuidance(order({ dueDate: "2026-10-27T00:00:00.000Z" }), TODAY)).toMatchObject({ reason: "finished_overdue", primaryActionLabel: "Ware raus" });
+    expect(deriveOrderGuidance(order({ dueDate: "2026-10-30T00:00:00.000Z", station: "wareneingang", status: "angenommen", risk: "yellow" }), TODAY)).toMatchObject({ reason: "tight_schedule", primaryActionLabel: "Kunde vorwarnen" });
+    expect(deriveOrderGuidance(order({ dueDate: "2026-10-30T00:00:00.000Z", station: "galvanik", status: "galvanik", risk: "blocked" }), TODAY)).toMatchObject({ reason: "reported_risk", primaryActionLabel: "Problem lösen" });
   });
 
   it("excludes collected, shipped, completed, and future healthy orders", () => {
