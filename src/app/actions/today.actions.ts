@@ -1,7 +1,7 @@
 "use server";
 
 import { resolveAuthorization } from "@/lib/server/authorization";
-import { saveTodayPreferences, saveTodayReminder, type TodayVisibleField } from "@/lib/server/todayDashboard";
+import { saveTodayPreferences, saveTodayReminder, type TodayLayoutItem } from "@/lib/server/todayDashboard";
 
 async function auth() {
   const result = await resolveAuthorization();
@@ -10,10 +10,10 @@ async function auth() {
   return { ok: true as const, data: result.data };
 }
 
-export async function saveTodayPreferencesAction(fields: TodayVisibleField[]) {
+export async function saveTodayPreferencesAction(layout: TodayLayoutItem[]) {
   const authorization = await auth();
   if (!authorization.ok) return authorization.result;
-  try { return await saveTodayPreferences(authorization.data, fields); }
+  try { return await saveTodayPreferences(authorization.data, layout); }
   catch { return { code: "UNAVAILABLE" as const, message: "Die Feldauswahl konnte nicht sicher gespeichert werden." }; }
 }
 

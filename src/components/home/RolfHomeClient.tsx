@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useOverlayStore } from "@/lib/overlayStore";
-import type { TodayDashboard, TodayItem, TodayVisibleField } from "@/lib/server/todayDashboard";
+import type { TodayDashboard, TodayItem, TodayLayoutItem, TodayVisibleField } from "@/lib/server/todayDashboard";
 import type { OrdersHomeProjection, OrdersHomeSource } from "@/modules/orders/public";
-import { Button, Checkbox, Dialog, HandlungsListe, Hinweis, Kachel, Lageleiste, SeitenKopf, Zustand, type Geraet, type HandlungsArt } from "@/ui/kr";
+import { Button, Dialog, HandlungsListe, Hinweis, Kachel, Lageleiste, SeitenKopf, Zustand, type Geraet, type HandlungsArt } from "@/ui/kr";
 
 type RolfIdentity = { role: "buero" | "developer" | "meister" | "readonly" | "werkstatt"; canCreateOrder: boolean; canDelegate: boolean; dashboard: TodayDashboard };
 export type RolfHomeModel =
@@ -17,7 +17,7 @@ export type RolfHomeModel =
   | { kind: "error"; message: string };
 type BasicResult = { code: string; message?: string };
 export type RolfHomePorts = {
-  savePreferences: (fields: TodayVisibleField[]) => Promise<BasicResult>;
+  savePreferences: (layout: TodayLayoutItem[]) => Promise<BasicResult>;
   saveReminder: (input: { itemKey: string; mode: "afternoon" | "tomorrow" | "after_due"; dueDate?: string }) => Promise<BasicResult>;
   discardDraft: () => Promise<BasicResult>;
   assignOrder: (input: { orderId: string; assigneeUserId: string; expectedVersion: number; clientEventId: string }) => Promise<BasicResult>;
@@ -25,7 +25,6 @@ export type RolfHomePorts = {
 
 const STATUS_LABELS: Record<string, string> = { angenommen: "Angenommen", wareneingang: "Angenommen", galvanik: "In Galvanik", fertig: "Fertig", raus: "Raus / abgeholt", abgeholt: "Raus / abgeholt", versendet: "Raus / abgeholt" };
 const FIELD_LABELS: Record<TodayItem["field"], string> = { action: "Handlungsbedarf", today: "Heute fällig", assign: "Zuordnen", money: "Geld einfordern", bundle: "Bündel-Vorschlag" };
-const CONFIG_FIELDS: Array<{ id: TodayVisibleField; label: string }> = [{ id: "today", label: "Heute fällig" }, { id: "assign", label: "Zuordnen" }, { id: "money", label: "Geld einfordern" }, { id: "bundle", label: "Bündel-Vorschlag" }];
 
 export function statusLabel(order: OrdersHomeSource): string { const status = order.statusText?.trim() || order.status; return STATUS_LABELS[status.toLowerCase()] ?? STATUS_LABELS[order.station.toLowerCase()] ?? "Status nicht hinterlegt"; }
 export function dayGreeting(hour: number): string { return hour < 12 ? "Guten Morgen" : hour < 18 ? "Guten Tag" : "Guten Abend"; }
@@ -47,7 +46,7 @@ export function RolfHomeClient({ model, ports }: { model: RolfHomeModel; ports: 
   const [later, setLater] = useState<TodayItem | null>(null);
   const [more, setMore] = useState<TodayItem | null>(null);
   const [customize, setCustomize] = useState(false);
-  const [visible, setVisible] = useState<TodayVisibleField[]>([]);
+  const [layout, setLayout] = useState<TodayLayoutItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   if (model.kind === "denied" || model.kind === "error") return <section data-testid="rolf-v11-home"><SeitenKopf titel="Der Tag" /><Zustand art={model.kind === "error" ? "fehler" : "gesperrt"} text={model.kind === "error" ? "Der Tagesbestand ist gerade nicht verfügbar." : "Du kannst den Tagesbestand nicht öffnen."} /></section>;
@@ -67,17 +66,38 @@ export function RolfHomeClient({ model, ports }: { model: RolfHomeModel; ports: 
   const saveReminder = async (mode: "afternoon" | "tomorrow" | "after_due") => { if (!later) return; setBusy(true); const result = await ports.saveReminder({ itemKey: later.key, mode, dueDate: later.dueDate }); setBusy(false); if (result.code === "OK") { setLater(null); router.refresh(); } else setMessage(result.message ?? "Erinnerung nicht gespeichert."); };
   const delegate = async () => { if (!more?.orderId || !more.orderVersion || !model.dashboard.phillipUserId) return; setBusy(true); const result = await ports.assignOrder({ orderId: more.orderId, assigneeUserId: model.dashboard.phillipUserId, expectedVersion: more.orderVersion, clientEventId: crypto.randomUUID() }); setBusy(false); if (result.code === "OK") { setMore(null); router.refresh(); } else setMessage(result.message ?? "Zuweisung nicht gespeichert."); };
   const focusField = (["action", "today", "assign", "money", "bundle"] as const).find((field) => entries(field).length > 0);
+  const activeLayout = customize ? layout : model.dashboard.layout;
+  const moveField = (field: TodayItem["field"], direction: -1 | 1) => setLayout((current) => {
+    const index = current.findIndex((item) => item.field === field);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= current.length) return current;
+    const next = [...current];
+    [next[index], next[target]] = [next[target]!, next[index]!];
+    return next.map((item, order) => ({ ...item, order }));
+  });
+  const removeField = (field: TodayVisibleField) => setLayout((current) => current.filter((item) => item.field !== field).map((item, order) => ({ ...item, order })));
+  const addField = (field: TodayVisibleField) => setLayout((current) => [...current, { field, column: model.dashboard.defaultLayout.find((item) => item.field === field)?.column ?? "left", order: current.length }]);
+  const fieldCard = (item: TodayLayoutItem) => <Kachel key={item.field} titel={FIELD_LABELS[item.field]} icon={item.field === "money" ? "euro" : item.field === "bundle" ? "layers" : item.field === "assign" ? "mail" : "clock"} iconTon={item.field === "action" ? "warn" : "info"}>
+    {customize ? <div className="kr-schnellleiste">
+      <Button text="Hoch" icon="arrow" disabled={item.order === 0 || item.order === 1} onClick={() => moveField(item.field, -1)} />
+      <Button text="Runter" icon="arrow" disabled={item.field === "action" || item.order === layout.length - 1} onClick={() => moveField(item.field, 1)} />
+      {device === "desktop" && item.field !== "action" ? <Button text={item.column === "left" ? "Nach rechts" : "Nach links"} icon="handoff" onClick={() => setLayout((current) => current.map((entry) => entry.field === item.field ? { ...entry, column: entry.column === "left" ? "right" : "left" } : entry))} /> : null}
+      {item.field !== "action" ? <Button text="Entfernen" icon="x" onClick={() => removeField(item.field as TodayVisibleField)} /> : null}
+    </div> : null}
+    {entries(item.field).length ? <HandlungsListe eintraege={entries(item.field)} geraet={device} fokus={item.field === focusField} /> : <Zustand art="leer" text="Keine Einträge." />}
+  </Kachel>;
 
   return <section data-testid="rolf-v11-home">
-    <SeitenKopf titel="Der Tag" werkzeug={<Button data-spec-id="tag.anpassen" art="leise" icon="grid" text="Anpassen" onClick={() => { setVisible(model.dashboard.visibleFields); setCustomize(true); }} />} />
+    <SeitenKopf titel="Der Tag" werkzeug={<Button data-spec-id="tag.anpassen" art="leise" icon="grid" text="Anpassen" onClick={() => { setLayout(model.dashboard.layout); setCustomize(true); setMessage(""); }} />} />
     {model.dashboard.items.length ? <Lageleiste zaehler={counts} filter={filter} onFilter={setFilter} gesund={[]} /> : null}
     {model.dashboard.outlookMessage ? <Hinweis ton="warn">{model.dashboard.outlookMessage}</Hinweis> : null}
-    {model.dashboard.items.length === 0 ? <Zustand art="leer" text="Noch keine Handlungen für dich." aktion={canStartOrder ? { text: "Neuer Eingang", icon: "inbox", onClick: () => requestGlobalCreate("DIRECT_INTAKE") } : undefined} /> : <div className="kr-stapel">
-      {(["action", "today", "assign", "money", "bundle"] as const).map((field) => entries(field).length ? <Kachel key={field} titel={FIELD_LABELS[field]} icon={field === "money" ? "euro" : field === "bundle" ? "layers" : field === "assign" ? "mail" : "clock"} iconTon={field === "action" ? "warn" : "info"}><HandlungsListe eintraege={entries(field)} geraet={device} fokus={field === focusField} /></Kachel> : null)}
+    {message ? <Hinweis ton="ok">{message}</Hinweis> : null}
+    {customize ? <Kachel titel="Felder zuordnen" icon="grid" iconTon="info"><div className="kr-stapel"><p>Handlungsbedarf bleibt immer Feld 1. Du kannst erlaubte Felder hinzufügen, entfernen, verschieben und am Desktop die Spalte wechseln.</p><div className="kr-schnellleiste">{model.dashboard.allowedFields.filter((field) => !layout.some((item) => item.field === field)).map((field) => <Button key={field} text={`${FIELD_LABELS[field]} hinzufügen`} icon="plus" onClick={() => addField(field)} />)}</div><div className="kr-schnellleiste"><Button data-spec-id="tag.vorschlag-ubernehmen" text="Vorschlag übernehmen" icon="grid" onClick={() => setLayout(model.dashboard.defaultLayout)} /><Button data-spec-id="tag.abbrechen" text="Abbrechen" onClick={() => { setCustomize(false); setLayout([]); }} /><Button data-spec-id="tag.fertig" art="primaer" icon="check" text="Fertig" disabled={busy} onClick={() => void (async () => { setBusy(true); const result = await ports.savePreferences(layout); setBusy(false); if (result.code === "OK") { setCustomize(false); setMessage("Der Tag gespeichert"); router.refresh(); } else setMessage(result.message ?? "Anordnung nicht gespeichert."); })()} /></div></div></Kachel> : null}
+    {model.dashboard.items.length === 0 && !customize ? <Zustand art="leer" text="Noch keine Handlungen für dich." aktion={canStartOrder ? { text: "Neuer Eingang", icon: "inbox", onClick: () => requestGlobalCreate("DIRECT_INTAKE") } : undefined} /> : <div className="kr-stapel">
+      {device === "desktop" ? <div className="kr-spalten"><div className="kr-stapel">{activeLayout.filter((item) => item.column === "left" && (customize || entries(item.field).length)).map(fieldCard)}</div><div className="kr-stapel">{activeLayout.filter((item) => item.column === "right" && (customize || entries(item.field).length)).map(fieldCard)}</div></div> : activeLayout.filter((item) => customize || entries(item.field).length).map(fieldCard)}
       {device !== "desktop" && (canStartOrder || canWrite) ? <div className="kr-schnellleiste">{canStartOrder ? <Button art="primaer" icon="inbox" text="Neuer Eingang" onClick={() => requestGlobalCreate("DIRECT_INTAKE")} /> : null}{canWrite ? <Button icon="truck" text="Ware raus" onClick={() => router.push("/orders?station=fertig")} /> : null}</div> : null}
     </div>}
     {later ? <Dialog titel="Später erinnern" icon="clock" groesse="schmal" onSchliessen={() => setLater(null)}><div className="kr-stapel"><Button data-spec-id="spaeter.heute-nachmittag" text="heute Nachmittag" icon="clock" disabled={busy} onClick={() => void saveReminder("afternoon")} /><Button data-spec-id="spaeter.morgen-fruh" text="morgen früh" icon="clock" disabled={busy} onClick={() => void saveReminder("tomorrow")} /><Button data-spec-id="spaeter.nach-dem-termin" text="nach dem Termin" icon="clock" disabled={busy || !later.dueDate} onClick={() => void saveReminder("after_due")} /><Button data-spec-id="spaeter.schliessen" art="leise" text="Schließen" onClick={() => setLater(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
     {more ? <Dialog titel="Weitere Aktionen" icon="more" groesse="schmal" onSchliessen={() => setMore(null)}><div className="kr-stapel"><Button data-spec-id="hbmehr.an-phillip-delegieren" text="an Phillip delegieren" icon="handoff" disabled={busy} onClick={() => void delegate()} /><Button data-spec-id="hbmehr.schliessen" art="leise" text="Schließen" onClick={() => setMore(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
-    {customize ? <Dialog titel="Felder zuordnen" icon="grid" groesse="schmal" onSchliessen={() => setCustomize(false)} fuss={<Button art="primaer" icon="check" text="Fertig" disabled={busy} onClick={() => void (async () => { setBusy(true); const result = await ports.savePreferences(visible); setBusy(false); if (result.code === "OK") { setCustomize(false); router.refresh(); } else setMessage(result.message ?? "Auswahl nicht gespeichert."); })()} />}><div className="kr-stapel"><p><b>Handlungsbedarf</b> ist immer sichtbar. Ausgeblendete Einträge landen dort.</p>{CONFIG_FIELDS.filter((field) => field.id !== "money" || hasPermission("perm_view_prices")).map((field) => <Checkbox key={field.id} checked={visible.includes(field.id)} onChange={(checked) => setVisible((current) => checked ? [...current, field.id] : current.filter((item) => item !== field.id))}>{field.label}</Checkbox>)}{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
   </section>;
 }

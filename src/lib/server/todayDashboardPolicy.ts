@@ -1,4 +1,63 @@
+import type { AppRole } from "@/lib/auth/authorizationContract";
+
 const TERMINAL_ORDER_STATES = new Set(["abgeholt", "versendet", "raus", "storniert", "cancelled", "canceled", "completed", "done", "erledigt"]);
+
+export type TodayLayoutField = "action" | "today" | "assign" | "money" | "bundle";
+export type TodayLayoutColumn = "left" | "right";
+export type TodayLayoutItem = { field: TodayLayoutField; column: TodayLayoutColumn; order: number };
+
+const TODAY_LAYOUT_FIELDS = new Set<TodayLayoutField>(["action", "today", "assign", "money", "bundle"]);
+const TODAY_LAYOUT_COLUMNS = new Set<TodayLayoutColumn>(["left", "right"]);
+
+const TEMPLATE_LAYOUTS: Record<"meister" | "werkstatt" | "developer" | "leer", Array<Omit<TodayLayoutItem, "order">>> = {
+  meister: [
+    { field: "action", column: "left" },
+    { field: "assign", column: "left" },
+    { field: "today", column: "right" },
+    { field: "money", column: "right" },
+  ],
+  werkstatt: [
+    { field: "action", column: "left" },
+    { field: "bundle", column: "left" },
+    { field: "today", column: "right" },
+  ],
+  developer: [{ field: "action", column: "left" }],
+  leer: [{ field: "action", column: "left" }],
+};
+
+export function parseTodayLayout(value: unknown): TodayLayoutItem[] | null {
+  if (!Array.isArray(value) || value.length < 1 || value.length > TODAY_LAYOUT_FIELDS.size) return null;
+  const parsed: TodayLayoutItem[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item) || Object.keys(item).length !== 3) return null;
+    const { field, column, order } = item as Record<string, unknown>;
+    if (typeof field !== "string" || !TODAY_LAYOUT_FIELDS.has(field as TodayLayoutField)
+      || typeof column !== "string" || !TODAY_LAYOUT_COLUMNS.has(column as TodayLayoutColumn)
+      || typeof order !== "number" || !Number.isSafeInteger(order) || order < 0 || order >= value.length) return null;
+    parsed.push({ field: field as TodayLayoutField, column: column as TodayLayoutColumn, order });
+  }
+  parsed.sort((a, b) => a.order - b.order);
+  if (new Set(parsed.map((item) => item.field)).size !== parsed.length
+    || new Set(parsed.map((item) => item.order)).size !== parsed.length
+    || parsed.some((item, index) => item.order !== index)
+    || parsed[0]?.field !== "action") return null;
+  return parsed;
+}
+
+export function filterTodayLayout(layout: TodayLayoutItem[], allowed: ReadonlySet<TodayLayoutField>): TodayLayoutItem[] {
+  return layout.filter((item) => item.field === "action" || allowed.has(item.field)).map((item, order) => ({ ...item, order }));
+}
+
+export function defaultTodayLayout(role: AppRole, allowed: ReadonlySet<TodayLayoutField>): TodayLayoutItem[] {
+  const template = role === "meister" || role === "buero" || role === "admin"
+    ? TEMPLATE_LAYOUTS.meister
+    : role === "werkstatt"
+      ? TEMPLATE_LAYOUTS.werkstatt
+      : role === "developer"
+        ? TEMPLATE_LAYOUTS.developer
+        : TEMPLATE_LAYOUTS.leer;
+  return filterTodayLayout(template.map((item, order) => ({ ...item, order })), allowed);
+}
 
 type TodayOrder = {
   dueDate: string;

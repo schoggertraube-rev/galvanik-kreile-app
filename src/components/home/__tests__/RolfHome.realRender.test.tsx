@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OrdersHomeProjection } from "@/modules/orders/public";
 
@@ -49,6 +49,19 @@ const projection: OrdersHomeProjection = {
 const dashboard = {
   items: [{ key: "order:order-1", field: "today" as const, kind: "order" as const, title: "A-2026-0001 · Muster GmbH", meta: "Bauteil · heute", urgency: "conflict" as const, orderId: "order-1", orderVersion: 1, dueDate: "2026-09-18" }],
   visibleFields: ["today", "assign", "money", "bundle"] as const,
+  layout: [
+    { field: "action" as const, column: "left" as const, order: 0 },
+    { field: "assign" as const, column: "left" as const, order: 1 },
+    { field: "today" as const, column: "right" as const, order: 2 },
+    { field: "money" as const, column: "right" as const, order: 3 },
+  ],
+  defaultLayout: [
+    { field: "action" as const, column: "left" as const, order: 0 },
+    { field: "assign" as const, column: "left" as const, order: 1 },
+    { field: "today" as const, column: "right" as const, order: 2 },
+    { field: "money" as const, column: "right" as const, order: 3 },
+  ],
+  allowedFields: ["today", "assign", "money", "bundle"] as const,
   phillipUserId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   outlookMessage: null,
 };
@@ -110,11 +123,26 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
 
   it("opens the existing bundle path with the selected surface", () => {
     const bundle = { key: "bundle:Zink & Nickel", field: "bundle" as const, kind: "bundle" as const, title: "2 Aufträge bündeln", meta: "Zink & Nickel", urgency: "decision" as const, bundleSurface: "Zink & Nickel", primaryActionLabel: "Bündel öffnen" as const };
-    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canDelegate: true, dashboard: { ...dashboard, items: [bundle], visibleFields: [...dashboard.visibleFields] }, projection }} />);
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canDelegate: true, dashboard: { ...dashboard, items: [bundle], visibleFields: [...dashboard.visibleFields], layout: [{ field: "action", column: "left", order: 0 }, { field: "bundle", column: "left", order: 1 }] }, projection }} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Bündel öffnen" }));
 
     expect(ports.push).toHaveBeenCalledWith("/warendurchlauf?bundle=1&surface=Zink%20%26%20Nickel");
+  });
+
+  it("edits and saves the complete allowed field layout on the page", async () => {
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canDelegate: true, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields], layout: [...dashboard.layout], defaultLayout: [...dashboard.defaultLayout], allowedFields: [...dashboard.allowedFields] }, projection }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Anpassen" }));
+    expect(screen.getByRole("heading", { name: "Felder zuordnen" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Bündel-Vorschlag hinzufügen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Fertig" }));
+
+    await waitFor(() => expect(actionPorts.savePreferences).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ field: "action", column: "left", order: 0 }),
+      expect.objectContaining({ field: "bundle", column: "left", order: 4 }),
+    ])));
+    expect(screen.getByText("Der Tag gespeichert")).toBeInTheDocument();
   });
 
   it("führt readonly ohne Warenausgang-Aktion", () => {

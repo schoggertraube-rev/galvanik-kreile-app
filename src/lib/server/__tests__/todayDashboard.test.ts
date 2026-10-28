@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyMoneyForToday, classifyOrderForToday, deriveOrderGuidance, isBundleStationForToday } from "@/lib/server/todayDashboardPolicy";
+import { classifyMoneyForToday, classifyOrderForToday, defaultTodayLayout, deriveOrderGuidance, filterTodayLayout, isBundleStationForToday, parseTodayLayout } from "@/lib/server/todayDashboardPolicy";
 
 const TODAY = "2026-10-28";
 
@@ -62,5 +62,27 @@ describe("isBundleStationForToday", () => {
   it("allows only Wareneingang and Galvanik stations", () => {
     for (const station of ["angenommen", "wareneingang", "eingang", "galvanik"]) expect(isBundleStationForToday(station)).toBe(true);
     for (const station of ["kv", "fertig", "abgeholt", "versendet"]) expect(isBundleStationForToday(station)).toBe(false);
+  });
+});
+
+describe("Der-Tag layout policy", () => {
+  const allowed = new Set(["action", "today", "assign", "money"] as const);
+
+  it("uses the role template and removes fields without an access area", () => {
+    expect(defaultTodayLayout("meister", allowed)).toEqual([
+      { field: "action", column: "left", order: 0 },
+      { field: "assign", column: "left", order: 1 },
+      { field: "today", column: "right", order: 2 },
+      { field: "money", column: "right", order: 3 },
+    ]);
+    expect(filterTodayLayout([...defaultTodayLayout("werkstatt", new Set(["action", "today", "bundle"])), { field: "money", column: "right", order: 3 }], allowed)).not.toContainEqual(expect.objectContaining({ field: "bundle" }));
+  });
+
+  it("accepts only a complete unique layout beginning with Handlungsbedarf", () => {
+    const valid = [{ field: "action", column: "left", order: 0 }, { field: "today", column: "right", order: 1 }];
+    expect(parseTodayLayout(valid)).toEqual(valid);
+    expect(parseTodayLayout([{ field: "today", column: "right", order: 0 }])).toBeNull();
+    expect(parseTodayLayout([...valid, { field: "today", column: "left", order: 2 }])).toBeNull();
+    expect(parseTodayLayout([{ field: "action", column: "left", order: 1 }])).toBeNull();
   });
 });

@@ -6,10 +6,11 @@ import { getOperationalOrders } from "@/lib/server/operationalOrders";
 import { readIntakeDraft } from "@/lib/server/intakeDraft";
 import { listMicrosoftGraphInbox } from "@/lib/server/microsoftGraph";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import { classifyMoneyForToday, deriveOrderGuidance, isBundleStationForToday, type TodayOrderGuidance } from "@/lib/server/todayDashboardPolicy";
+import { classifyMoneyForToday, defaultTodayLayout, deriveOrderGuidance, filterTodayLayout, isBundleStationForToday, parseTodayLayout, type TodayLayoutField, type TodayLayoutItem, type TodayOrderGuidance } from "@/lib/server/todayDashboardPolicy";
 
 export type TodayField = "action" | "today" | "assign" | "money" | "bundle";
 export type TodayVisibleField = Exclude<TodayField, "action">;
+export type { TodayLayoutItem } from "@/lib/server/todayDashboardPolicy";
 export type TodayItem = {
   key: string;
   field: TodayField;
@@ -30,11 +31,14 @@ export type TodayItem = {
 export type TodayDashboard = {
   items: TodayItem[];
   visibleFields: TodayVisibleField[];
+  layout: TodayLayoutItem[];
+  defaultLayout: TodayLayoutItem[];
+  allowedFields: readonly TodayVisibleField[];
   phillipUserId: string | null;
   outlookMessage: string | null;
 };
 
-type PreferenceRow = { visible_fields: string[] };
+type PreferenceRow = { visible_fields: string[]; layout: unknown | null };
 type ReminderRow = { item_key: string; reminder_until: Date | string };
 type InvoiceRow = { id: string; invoice_number: string; order_id: string; customer_name: string; customer_country: string | null; due_date: Date | string; open_amount_cents: number | string; payment_mode: string; payment_status: string; station: string };
 type PrepaymentRow = { order_id: string; order_number: string; customer_name: string; customer_country: string | null; due_date: Date | string | null; invoice_id: string | null; open_amount_cents: number | string | null; payment_status: string | null; station: string; goods_out_event_count: number | string };
@@ -42,7 +46,18 @@ type UserRow = { id: string };
 type GraphThreadRow = { source: string };
 
 const DEFAULT_FIELDS: TodayVisibleField[] = ["today", "assign", "money", "bundle"];
-const FIELD_SET = new Set<TodayVisibleField>(DEFAULT_FIELDS);
+function allowedTodayFields(auth: AuthorizationSnapshot): Set<TodayLayoutField> {
+  const allowed = new Set<TodayLayoutField>(["action"]);
+  const hasArea = (area: string) => auth.areas?.some((candidate) => candidate === area) === true;
+  const legacySnapshot = auth.areas === undefined;
+  if (hasArea("auftraege") || (legacySnapshot && auth.permissions.includes("perm_view_leitstand"))) {
+    allowed.add("today");
+    allowed.add("bundle");
+  }
+  if (hasArea("mails") || (legacySnapshot && (auth.role === "meister" || auth.role === "buero"))) allowed.add("assign");
+  if (hasArea("geld") || (legacySnapshot && auth.permissions.includes("perm_view_prices"))) allowed.add("money");
+  return allowed;
+}
 
 function dateOnly(value: Date | string) {
   return (value instanceof Date ? value.toISOString() : value).slice(0, 10);
@@ -50,11 +65,6 @@ function dateOnly(value: Date | string) {
 
 function euro(cents: number | string) {
   return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(Number(cents) / 100);
-}
-
-function visibleFields(value: unknown): TodayVisibleField[] {
-  if (!Array.isArray(value)) return DEFAULT_FIELDS;
-  return value.filter((field): field is TodayVisibleField => typeof field === "string" && FIELD_SET.has(field as TodayVisibleField));
 }
 
 export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<TodayDashboard> {
@@ -65,7 +75,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
     graphAllowed ? listMicrosoftGraphInbox() : Promise.resolve({ code: "IN_KLAERUNG" as const, message: "Outlook ist für dieses Profil nicht eingeblendet." }),
     withPrivilegedTenantTransaction(auth, async (tx) => {
       const [preferences, reminders, invoices, prepayments, phillip, graphThreads] = await Promise.all([
-        tx.execute<PreferenceRow>(sql`SELECT visible_fields FROM private.today_preferences WHERE tenant_id=${auth.tenantId} AND actor_id=${auth.userId}::uuid LIMIT 1`),
+        tx.execute<PreferenceRow>(sql`SELECT preference.visible_fields, to_jsonb(preference)->'layout' AS layout FROM private.today_preferences preference WHERE preference.tenant_id=${auth.tenantId} AND preference.actor_id=${auth.userId}::uuid LIMIT 1`),
         tx.execute<ReminderRow>(sql`SELECT item_key, reminder_until FROM private.today_reminders WHERE tenant_id=${auth.tenantId} AND actor_id=${auth.userId}::uuid`),
         auth.permissions.includes("perm_view_prices") ? tx.execute<InvoiceRow>(sql`
           SELECT invoice.id, invoice.invoice_number, invoice.order_id, customer.name AS customer_name,
@@ -105,7 +115,11 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
     }),
   ]);
 
-  const selected = visibleFields(support.preferences[0]?.visible_fields);
+  const allowed = allowedTodayFields(auth);
+  const suggestedLayout = defaultTodayLayout(auth.role, allowed);
+  const storedLayout = parseTodayLayout(support.preferences[0]?.layout);
+  const layout = storedLayout ? filterTodayLayout(storedLayout, allowed) : suggestedLayout;
+  const selected = layout.map((item) => item.field).filter((field): field is TodayVisibleField => field !== "action");
   const selectedSet = new Set(selected);
   const reminders = new Map(support.reminders.map((row) => [row.item_key, new Date(row.reminder_until).toISOString()]));
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -150,16 +164,18 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
   const bundle = [...surfaces.entries()].filter(([, group]) => group.length >= 2).sort((a, b) => b[1].length - a[1].length)[0];
   if (bundle) add({ key: `bundle:${bundle[0]}`, field: "bundle", kind: "bundle", title: `${bundle[1].length} Aufträge bündeln`, meta: bundle[0], urgency: "decision", bundleSurface: bundle[0], primaryActionLabel: "Bündel öffnen" });
 
-  return { items, visibleFields: selected, phillipUserId: support.phillip[0]?.id ?? null, outlookMessage: !graphAllowed || graph.code === "OK" ? null : graph.message };
+  return { items, visibleFields: selected, layout, defaultLayout: suggestedLayout, allowedFields: DEFAULT_FIELDS.filter((field) => allowed.has(field)), phillipUserId: support.phillip[0]?.id ?? null, outlookMessage: !graphAllowed || graph.code === "OK" ? null : graph.message };
 }
 
-export async function saveTodayPreferences(auth: AuthorizationSnapshot, fields: unknown) {
-  const normalized = visibleFields(fields);
-  if (!Array.isArray(fields) || normalized.length !== fields.length) return { code: "VALIDATION_ERROR" as const, message: "Feldauswahl ist ungültig." };
+export async function saveTodayPreferences(auth: AuthorizationSnapshot, value: unknown) {
+  const normalized = parseTodayLayout(value);
+  const allowed = allowedTodayFields(auth);
+  if (!normalized || normalized.some((item) => !allowed.has(item.field))) return { code: "VALIDATION_ERROR" as const, message: "Feldanordnung ist ungültig oder nicht erlaubt." };
+  const visible = normalized.map((item) => item.field).filter((field): field is TodayVisibleField => field !== "action");
   await withPrivilegedTenantTransaction(auth, (tx) => tx.execute(sql`
-    INSERT INTO private.today_preferences (tenant_id, actor_id, visible_fields)
-    VALUES (${auth.tenantId}, ${auth.userId}::uuid, ${normalized}::text[])
-    ON CONFLICT (tenant_id, actor_id) DO UPDATE SET visible_fields=EXCLUDED.visible_fields, updated_at=statement_timestamp()
+    INSERT INTO private.today_preferences (tenant_id, actor_id, visible_fields, layout)
+    VALUES (${auth.tenantId}, ${auth.userId}::uuid, ${visible}::text[], ${JSON.stringify(normalized)}::jsonb)
+    ON CONFLICT (tenant_id, actor_id) DO UPDATE SET visible_fields=EXCLUDED.visible_fields, layout=EXCLUDED.layout, updated_at=statement_timestamp()
   `));
   return { code: "OK" as const };
 }
