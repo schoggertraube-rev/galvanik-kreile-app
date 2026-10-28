@@ -9,7 +9,7 @@ import {
 import { RolfHomeClient, type RolfHomeModel } from "./RolfHomeClient";
 import { saveTodayPreferencesAction, saveTodayReminderAction } from "@/app/actions/today.actions";
 import { discardIntakeDraftAction } from "@/app/actions/intakeDraft.actions";
-import { assignOrderTaskAction } from "@/app/actions/orders.actions";
+import { assignOrderTaskAction, handBackOrderTaskAction } from "@/app/actions/orders.actions";
 
 function toHomeSource(order: OperationalOrder): OrdersHomeSource {
   return {
@@ -56,5 +56,6 @@ export async function RolfHome({ authorization }: { authorization: Authorization
     saveReminder: saveTodayReminderAction,
     discardDraft: discardIntakeDraftAction,
     assignOrder: assignOrderTaskAction,
+    handBackOrder: handBackOrderTaskAction,
   }} />;
 }

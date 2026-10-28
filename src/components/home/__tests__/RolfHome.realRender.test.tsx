@@ -26,7 +26,8 @@ const actionPorts = {
   savePreferences: vi.fn().mockResolvedValue({ code: "OK" }),
   saveReminder: vi.fn().mockResolvedValue({ code: "OK" }),
   discardDraft: vi.fn().mockResolvedValue({ code: "OK" }),
-  assignOrder: vi.fn().mockResolvedValue({ code: "OK" }),
+  assignOrder: vi.fn().mockResolvedValue({ code: "OK", receipt: { aggregateVersion: 2 } }),
+  handBackOrder: vi.fn().mockResolvedValue({ code: "OK", receipt: { aggregateVersion: 3 } }),
 };
 
 beforeEach(() => {
@@ -150,6 +151,25 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     expect(lage.getByText("Warnung")).toBeInTheDocument();
     expect(lage.queryByText("Konflikt")).not.toBeInTheDocument();
     expect(lage.queryByText("Entscheidung")).not.toBeInTheDocument();
+  });
+
+  it("zeigt nach der Weitergabe Status, Frist und Rückgängig", async () => {
+    const actionDashboard = { ...dashboard, items: [{ ...dashboard.items[0], field: "action" as const, dueDate: "2026-10-30" }], visibleFields: [...dashboard.visibleFields] };
+    const { container } = render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: actionDashboard, projection }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Weitere" }));
+    fireEvent.click(screen.getByRole("button", { name: "an Phillip delegieren" }));
+
+    expect(await screen.findByText("bei Phillip · Frist 30.10.26")).toBeInTheDocument();
+    expect(container.querySelector(".kr-hb-eintrag")).toHaveClass("kr-hb-eintrag--gedimmt");
+    expect(within(screen.getByRole("region", { name: "Lage" })).queryByText("Konflikt")).not.toBeInTheDocument();
+    expect(actionPorts.assignOrder).toHaveBeenCalledWith(expect.objectContaining({ orderId: "order-1", expectedVersion: 1 }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Rückgängig" }));
+
+    expect(actionPorts.handBackOrder).toHaveBeenCalledWith(expect.objectContaining({ orderId: "order-1", expectedVersion: 2 }));
+    expect(await screen.findByText("Zurückgeholt")).toBeInTheDocument();
+    expect(container.querySelector(".kr-hb-eintrag")).not.toHaveClass("kr-hb-eintrag--gedimmt");
   });
 
   it("steuert den Handlungsbedarf am Desktop mit j, k, Enter und s", () => {

@@ -19,11 +19,13 @@ export type RolfHomeModel =
   | { kind: "denied"; message: string }
   | { kind: "error"; message: string };
 type BasicResult = { code: string; message?: string };
+type AssignmentResult = BasicResult & { receipt?: { aggregateVersion: number } };
 export type RolfHomePorts = {
   savePreferences: (layout: TodayLayoutItem[]) => Promise<BasicResult>;
   saveReminder: (input: { itemKey: string; mode: TodayReminderMode; dueDate?: string }) => Promise<BasicResult>;
   discardDraft: () => Promise<BasicResult>;
-  assignOrder: (input: { orderId: string; assigneeUserId: string; expectedVersion: number; clientEventId: string }) => Promise<BasicResult>;
+  assignOrder: (input: { orderId: string; assigneeUserId: string; expectedVersion: number; clientEventId: string }) => Promise<AssignmentResult>;
+  handBackOrder: (input: { orderId: string; expectedVersion: number; clientEventId: string }) => Promise<AssignmentResult>;
 };
 
 const STATUS_LABELS: Record<string, string> = { angenommen: "Angenommen", wareneingang: "Angenommen", galvanik: "In Galvanik", fertig: "Fertig", raus: "Raus / abgeholt", abgeholt: "Raus / abgeholt", versendet: "Raus / abgeholt" };
@@ -38,6 +40,7 @@ function readDevice(): Geraet { if (window.innerWidth <= 699) return "handy"; if
 function subscribeDevice(onChange: () => void) { window.addEventListener("resize", onChange); return () => window.removeEventListener("resize", onChange); }
 function actionType(item: TodayItem): HandlungsArt { return item.urgency === "conflict" ? "konflikt" : item.urgency === "warning" ? "warnung" : "entscheidung"; }
 function reminderLabel(value: string) { return `Aufgeschoben bis ${new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(value))} · zählt weiter mit`; }
+function assignmentDeadline(value?: string) { return value ? `Frist ${new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(`${value.slice(0, 10)}T12:00:00Z`))}` : "bis erledigt"; }
 
 export function RolfHomeClient({ model, ports }: { model: RolfHomeModel; ports: RolfHomePorts }) {
   const openOrder = useOverlayStore((state) => state.openOrder);
@@ -52,9 +55,10 @@ export function RolfHomeClient({ model, ports }: { model: RolfHomeModel; ports: 
   const [layout, setLayout] = useState<TodayLayoutItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [delegated, setDelegated] = useState<Record<string, { name: string; version: number; dueDate?: string }>>({});
   const primary = (item: TodayItem) => { if (item.kind === "draft") requestGlobalCreate("DIRECT_INTAKE"); else if (item.kind === "order" && item.orderId) openOrder(item.orderId); else if (item.kind === "mail" && item.graphMessageId) requestGlobalCreate({ intent: "DIRECT_INTAKE", prefill: { sourceMode: "mail", graphMessageId: item.graphMessageId } }); else if (item.kind === "invoice" && item.invoiceId) openInvoice(item.invoiceId); else if (item.kind === "bundle" && item.bundleSurface) router.push(`/warendurchlauf?bundle=1&surface=${encodeURIComponent(item.bundleSurface)}`); };
   const dashboardItems = model.kind === "data" || model.kind === "empty" ? model.dashboard.items : [];
-  const keyboardItems = sortHandlungsEintraege(dashboardItems.filter((item) => item.field === "action" && (filter === "alle" || actionType(item) === filter)).map((item) => ({ item, art: actionType(item), gedimmt: Boolean(item.snoozedUntil), termin: item.dueDate })));
+  const keyboardItems = sortHandlungsEintraege(dashboardItems.filter((item) => item.field === "action" && !item.assignedToName && !delegated[item.key] && (filter === "alle" || actionType(item) === filter)).map((item) => ({ item, art: actionType(item), gedimmt: Boolean(item.snoozedUntil), termin: item.dueDate })));
   const keyboardSelection = useListenTastatur({
     anzahl: keyboardItems.length,
     aktiv: device === "desktop" && !later && !more && !customize && (model.kind === "data" || model.kind === "empty"),
@@ -68,16 +72,29 @@ export function RolfHomeClient({ model, ports }: { model: RolfHomeModel; ports: 
   const canWorkOrders = model.canWorkOrders && !permissionsLoading && hasArea("auftraege");
   const canDelegate = model.canDelegate && canWorkOrders;
   const filtered = filter === "alle" ? model.dashboard.items : model.dashboard.items.filter((item) => actionType(item) === filter);
-  const counts = model.dashboard.items.filter((item) => item.field === "action").reduce<Record<HandlungsArt, number>>((sum, item) => { sum[actionType(item)] += 1; return sum; }, { konflikt: 0, entscheidung: 0, warnung: 0 });
+  const counts = model.dashboard.items.filter((item) => item.field === "action" && !item.assignedToName && !delegated[item.key]).reduce<Record<HandlungsArt, number>>((sum, item) => { sum[actionType(item)] += 1; return sum; }, { konflikt: 0, entscheidung: 0, warnung: 0 });
   const primaryLabel = (item: TodayItem) => item.primaryActionLabel ?? (item.kind === "draft" ? "Weiter bearbeiten" : item.kind === "order" && item.field === "today" ? "Ware raus" : item.kind === "order" ? "Auftrag öffnen" : item.kind === "mail" ? "Zuordnen" : item.kind === "invoice" ? "Geld einfordern" : "Bündel öffnen");
   const discardDraft = async () => { setBusy(true); const result = await ports.discardDraft(); setBusy(false); if (result.code === "OK") router.refresh(); else setMessage(result.message ?? "Entwurf nicht gelöscht."); };
-  const entries = (field: TodayItem["field"]) => filtered.filter((item) => item.field === field).map((item) => ({
-    key: item.key, art: actionType(item), id: item.kind === "order" ? item.title.split(" · ")[0] : undefined, titel: item.title, meta: item.snoozedUntil ? `${item.meta} · ${reminderLabel(item.snoozedUntil)}` : item.meta, gedimmt: Boolean(item.snoozedUntil), termin: item.dueDate,
-    aktionen: [{ text: primaryLabel(item), kurz: "Öffnen", icon: "open" as const, art: "primaer" as const, onClick: () => primary(item) }, ...(item.kind === "draft" ? [{ text: "Löschen", icon: "x" as const, onClick: () => void discardDraft() }] : [{ text: "Später", icon: "clock" as const, spaeter: true, onClick: () => setLater(item) }]), ...(canDelegate && item.kind === "order" && model.dashboard.phillipUserId ? [{ text: "Weitere", icon: "more" as const, onClick: () => setMore(item) }] : [])],
+  const undoDelegation = async (item: TodayItem, version: number) => { if (!item.orderId) return; setBusy(true); const result = await ports.handBackOrder({ orderId: item.orderId, expectedVersion: version, clientEventId: crypto.randomUUID() }); setBusy(false); if (result.code === "OK") { setDelegated((current) => { const next = { ...current }; delete next[item.key]; return next; }); setMessage("Zurückgeholt"); router.refresh(); } else setMessage(result.message ?? "Weitergabe nicht zurückgeholt."); };
+  const entries = (field: TodayItem["field"]) => filtered.filter((item) => item.field === field).map((item) => { const assignment = delegated[item.key] ?? (item.assignedToName ? { name: item.assignedToName, version: item.assignmentVersion ?? item.orderVersion ?? 1, dueDate: item.dueDate } : null); return ({
+    key: item.key, art: actionType(item), id: item.kind === "order" ? item.title.split(" · ")[0] : undefined, titel: item.title, meta: item.snoozedUntil ? `${item.meta} · ${reminderLabel(item.snoozedUntil)}` : item.meta, gedimmt: Boolean(item.snoozedUntil || assignment), termin: item.dueDate, status: assignment ? { text: `bei ${assignment.name} · ${assignmentDeadline(assignment.dueDate)}`, ton: "info" as const, icon: "handoff" as const, aktion: { text: "Rückgängig", specId: "hbmehr.zuruckholen", onClick: () => void undoDelegation(item, assignment.version) } } : undefined,
+    aktionen: [{ text: primaryLabel(item), kurz: "Öffnen", icon: "open" as const, art: "primaer" as const, specId: item.kind === "order" ? "hbmehr.auftrag-offnen" : undefined, onClick: () => primary(item) }, ...(item.kind === "draft" ? [{ text: "Löschen", icon: "x" as const, onClick: () => void discardDraft() }] : [{ text: "Später", icon: "clock" as const, spaeter: true, onClick: () => setLater(item) }]), ...(canDelegate && item.kind === "order" && model.dashboard.phillipUserId ? [{ text: "Weitere", icon: "more" as const, onClick: () => setMore(item) }] : [])],
     onOeffnen: () => primary(item), onWeitere: () => setMore(item),
-  }));
+  }); });
   const saveReminder = async (mode: TodayReminderMode) => { if (!later) return; setBusy(true); const result = await ports.saveReminder({ itemKey: later.key, mode, dueDate: later.dueDate }); setBusy(false); if (result.code === "OK") { setMessage(result.message ?? "Erinnerung gespeichert"); setLater(null); router.refresh(); } else setMessage(result.message ?? "Erinnerung nicht gespeichert."); };
-  const delegate = async () => { if (!more?.orderId || !more.orderVersion || !model.dashboard.phillipUserId) return; setBusy(true); const result = await ports.assignOrder({ orderId: more.orderId, assigneeUserId: model.dashboard.phillipUserId, expectedVersion: more.orderVersion, clientEventId: crypto.randomUUID() }); setBusy(false); if (result.code === "OK") { setMore(null); router.refresh(); } else setMessage(result.message ?? "Zuweisung nicht gespeichert."); };
+  const delegate = async () => {
+    if (!more?.orderId || !more.orderVersion || !model.dashboard.phillipUserId) return;
+    const { key, orderId, orderVersion, dueDate } = more;
+    setBusy(true);
+    const result = await ports.assignOrder({ orderId, assigneeUserId: model.dashboard.phillipUserId, expectedVersion: orderVersion, clientEventId: crypto.randomUUID() });
+    setBusy(false);
+    if (result.code === "OK") {
+      setDelegated((current) => ({ ...current, [key]: { name: "Phillip", version: result.receipt?.aggregateVersion ?? orderVersion + 1, dueDate } }));
+      setMessage(`Bei Phillip · ${assignmentDeadline(dueDate)} · Rückgängig`);
+      setMore(null);
+      router.refresh();
+    } else setMessage(result.message ?? "Zuweisung nicht gespeichert.");
+  };
   const focusField = (["action", "today", "assign", "money", "bundle"] as const).find((field) => entries(field).length > 0);
   const activeLayout = customize ? layout : model.dashboard.layout;
   const moveField = (field: TodayItem["field"], direction: -1 | 1) => setLayout((current) => {
@@ -113,6 +130,6 @@ export function RolfHomeClient({ model, ports }: { model: RolfHomeModel; ports: 
       {device !== "desktop" && (canStartOrder || canWorkOrders) ? <div className="kr-schnellleiste">{canStartOrder ? <Button art="primaer" icon="inbox" text="Neuer Eingang" onClick={() => requestGlobalCreate("DIRECT_INTAKE")} /> : null}{canWorkOrders ? <Button icon="truck" text="Ware raus" onClick={() => router.push("/orders?station=fertig")} /> : null}</div> : null}
     </div>}
     {later ? <Dialog titel="Später erinnern" icon="clock" groesse="schmal" onSchliessen={() => setLater(null)}><div className="kr-stapel">{deriveTodayReminder("afternoon", later.dueDate) ? <Button data-spec-id="spaeter.heute-nachmittag" text="heute Nachmittag" icon="clock" disabled={busy} onClick={() => void saveReminder("afternoon")} /> : null}{deriveTodayReminder("tomorrow", later.dueDate) ? <Button data-spec-id="spaeter.morgen-fruh" text="morgen früh" icon="clock" disabled={busy} onClick={() => void saveReminder("tomorrow")} /> : null}{deriveTodayReminder("after_due", later.dueDate) ? <Button data-spec-id="spaeter.nach-dem-termin" text="nach dem Termin" icon="clock" disabled={busy} onClick={() => void saveReminder("after_due")} /> : null}<Button data-spec-id="spaeter.schliessen" art="leise" text="Schließen" onClick={() => setLater(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
-    {more ? <Dialog titel="Weitere Aktionen" icon="more" groesse="schmal" onSchliessen={() => setMore(null)}><div className="kr-stapel"><Button data-spec-id="hbmehr.an-phillip-delegieren" text="an Phillip delegieren" icon="handoff" disabled={busy} onClick={() => void delegate()} /><Button data-spec-id="hbmehr.schliessen" art="leise" text="Schließen" onClick={() => setMore(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
+    {more ? <Dialog titel="Weitere Aktionen" icon="more" groesse="schmal" onSchliessen={() => setMore(null)}><div className="kr-stapel"><Button data-spec-id="hbmehr.weitergeben" text="an Phillip delegieren" icon="handoff" disabled={busy} onClick={() => void delegate()} /><Button data-spec-id="hbmehr.schliessen" art="leise" text="Schließen" onClick={() => setMore(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
   </section>;
 }

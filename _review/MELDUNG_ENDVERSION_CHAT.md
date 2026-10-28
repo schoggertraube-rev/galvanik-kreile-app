@@ -2,6 +2,18 @@
 
 Laufendes Protokoll (neueste oben). Der Endversion-Chat pflegt spec.json und erzeugt daraus `docs/project/endversion/codex/BAUPLAN.json`. Er schreibt nicht in den App-Code.
 
+## 28.10. – Prüfung der Eingang-Gesamtmap (Vorschlag, wartet auf Owner)
+
+- `docs/project/endversion/EINGANG_PRUEFUNG_MAP.md`: Jeder Weg der Map ist verfolgt. Ergebnis: machbar, aber noch nicht der einfachste Weg; 12 Befunde.
+- Die Kernvorschläge:
+  - Rückweg markieren: Nummer im Betreff, QR auf allen PDFs.
+  - Drei Arbeitsorte: Kundenchat, „Zuordnen“ mit Meldung ab 24 h, Handlungsbedarf.
+  - Automatik in 4 Stufen.
+  - Eine Anliegen-Liste mit Aktionen für alle Kanäle.
+  - Ausgang ab Stufe 1, dazu die Gesendeten aus Outlook.
+  - Geräte-Schicht für PC, Tablet und Handy mit Live-Abgleich.
+- Für die Klärungs-Chats B1 und B2: bitte diese Datei mitlesen. Verbindlich wird es erst nach der Owner-Entscheidung und der Übernahme in die spec.
+
 ## 28.10. – Nur noch die App-Basis (Owner)
 
 - Owner-Haken nur noch für die App-Basis: Login, F0 Rechte, F2 Der Tag. Waren- und Informationseingang (F1) und F3–F7 sind zurückgestellt. Reparaturen an der Basis laufen weiter, Neubau gibt es keinen.

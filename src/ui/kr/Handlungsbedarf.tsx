@@ -6,7 +6,7 @@ import { Chip } from './Chip';
 import { MitZustand } from './Zustand';
 import { Wischbar } from './Wischbar';
 import { cx, type Geraet, type HandlungsArt, type DatenZustand, type ZustandTexte } from './typen';
-export interface HandlungsAktion { text: string; /** Kurzlabel fürs Handy */ kurz?: string; icon?: IconName; art?: ButtonArt; onClick: () => void;
+export interface HandlungsAktion { text: string; /** Kurzlabel fürs Handy */ kurz?: string; icon?: IconName; art?: ButtonArt; specId?: string; onClick: () => void;
   /** V1.1: markiert „Später“ (öffnet Zeitwahl V8 S1) – für Fokuseintrag, Taste s und Wischen links */ spaeter?: boolean; }
 export interface HandlungsEintragProps {
   art: HandlungsArt; id?: string; titel: string; titelKurz?: string; meta?: string; metaKurz?: string;
@@ -15,7 +15,7 @@ export interface HandlungsEintragProps {
   /** Erste Aktion = Primäraktion (1 Tipp). Handy: nur erste + Menü „Weitere“. */
   aktionen?: HandlungsAktion[];
   /** Nach Aktion: Statuszeile statt Knöpfen (z. B. „bei Phillip · Frist 11:30“) */
-  status?: { text: string; ton?: 'laedt' | 'rot' | 'info'; icon?: IconName };
+  status?: { text: string; ton?: 'laedt' | 'rot' | 'info'; icon?: IconName; aktion?: { text: string; specId?: string; onClick: () => void } };
   geraet: Geraet; onOeffnen?: () => void; onWeitere?: () => void;
   /** V1.1 B1: dringendster Punkt oben, etwas größer; genau eine Hauptaktion + „Später“ + weitere */
   fokus?: boolean;
@@ -46,17 +46,27 @@ export function HandlungsEintrag(p: HandlungsEintragProps) {
       </div>
       <div className="kr-hb-aktionen">
         {p.status ? (
-          <span className={p.status.ton && p.status.ton !== 'laedt' ? 'kr-hb-status kr-hb-status--' + p.status.ton : 'kr-hb-status'}>
-            {p.status.ton === 'laedt' ? <span className="kr-drehen" /> : <Icon name={p.status.icon ?? 'clock'} />}{p.status.text}
-          </span>
+          <>
+            <span className={p.status.ton && p.status.ton !== 'laedt' ? 'kr-hb-status kr-hb-status--' + p.status.ton : 'kr-hb-status'}>
+              {p.status.ton === 'laedt' ? <span className="kr-drehen" /> : <Icon name={p.status.icon ?? 'clock'} />}{p.status.text}
+            </span>
+            {p.status.aktion ? p.status.aktion.specId === 'hbmehr.zuruckholen'
+              ? <Button data-spec-id="hbmehr.zuruckholen" art="leise" icon="back" text={p.status.aktion.text} onClick={p.status.aktion.onClick} />
+              : <Button data-spec-id={p.status.aktion.specId} art="leise" icon="back" text={p.status.aktion.text} onClick={p.status.aktion.onClick} />
+              : null}
+          </>
         ) : p.fokus && aktionen[0] ? (<>
-          <Button art={aktionen[0].art ?? 'erledigen'} icon={aktionen[0].icon} text={handy ? aktionen[0].kurz ?? aktionen[0].text : aktionen[0].text} onClick={aktionen[0].onClick} />
+          {aktionen[0].specId === 'hbmehr.auftrag-offnen'
+            ? <Button data-spec-id="hbmehr.auftrag-offnen" art={aktionen[0].art ?? 'erledigen'} icon={aktionen[0].icon} text={handy ? aktionen[0].kurz ?? aktionen[0].text : aktionen[0].text} onClick={aktionen[0].onClick} />
+            : <Button data-spec-id={aktionen[0].specId} art={aktionen[0].art ?? 'erledigen'} icon={aktionen[0].icon} text={handy ? aktionen[0].kurz ?? aktionen[0].text : aktionen[0].text} onClick={aktionen[0].onClick} />}
           {spaeter && <Button art="leise" icon={spaeter.icon} text={spaeter.text} onClick={spaeter.onClick} />}
           {/* Owner 2026-09-27: keine Auswahl im Fokus – weitere Aktionen hinter „Weitere“ (onWeitere öffnet Menü) */}
           {andere.length > 0 && <Button art="leise" icon="more" text="Weitere" onClick={p.onWeitere} />}
         </>) : (<>
           {(handy ? aktionen.slice(0, 1) : aktionen).map((a, n) => (
-            <Button key={a.text} art={a.art ?? (n === 0 ? 'erledigen' : 'leise')} icon={a.icon} text={handy ? a.kurz ?? a.text : a.text} onClick={a.onClick} />
+            a.specId === 'hbmehr.auftrag-offnen'
+              ? <Button key={a.text} data-spec-id="hbmehr.auftrag-offnen" art={a.art ?? (n === 0 ? 'erledigen' : 'leise')} icon={a.icon} text={handy ? a.kurz ?? a.text : a.text} onClick={a.onClick} />
+              : <Button key={a.text} data-spec-id={a.specId} art={a.art ?? (n === 0 ? 'erledigen' : 'leise')} icon={a.icon} text={handy ? a.kurz ?? a.text : a.text} onClick={a.onClick} />
           ))}
           {handy && aktionen.length > 1 && <Button art="leise" icon="more" label="Weitere Aktionen" onClick={p.onWeitere} />}
         </>)}
