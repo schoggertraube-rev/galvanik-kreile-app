@@ -13,6 +13,7 @@ import {
   resolveAuthorization,
 } from "@/lib/server/authorization";
 import { readCustomerSummary } from "@/lib/server/customerSummaryRead";
+import { readInvoiceTruth } from "@/lib/server/invoiceTruthRead";
 import {
   createCustomerCommand,
   readCustomerCreateReceiptCommand,
@@ -308,32 +309,27 @@ export async function getTopKunden(limit = 5) {
     const authRes = await resolveAuthorization();
     if (!authRes.ok) return [];
     const tenantId = authRes.data.tenantId;
-
-    const { sql, desc } = await import("drizzle-orm");
-    const { ausgangsrechnung } = await import("@/db/schema_buchhaltung");
-    
-    const top = await db.select({
-      id: customers.id,
-      name: customers.name,
-      summe: sql<number>`sum(${ausgangsrechnung.netto})`
-    })
-    .from(customers)
-    .innerJoin(ausgangsrechnung, eq(customers.id, ausgangsrechnung.kundeId))
-    .where(
+    const invoiceTruth = await readInvoiceTruth(authRes.data);
+    if (invoiceTruth.code !== "OK") return [];
+    const revenueByCustomer = new Map<string, number>();
+    for (const invoice of invoiceTruth.data) {
+      if (invoice.status !== "issued") continue;
+      revenueByCustomer.set(
+        invoice.customerId,
+        (revenueByCustomer.get(invoice.customerId) ?? 0) + invoice.grossAmountCents,
+      );
+    }
+    const customerRows = await db.select({ id: customers.id, name: customers.name }).from(customers).where(
       and(
         eq(customers.tenantId, tenantId),
-        sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`
-      )
-    )
-    .groupBy(customers.id)
-    .orderBy(desc(sql`sum(${ausgangsrechnung.netto})`))
-    .limit(limit);
-
-    return top.map((t, idx) => ({
-      id: t.id || String(idx),
-      name: t.name,
-      wert: Number(t.summe) || 0
-    }));
+        sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`,
+      ),
+    );
+    return customerRows
+      .map((customer) => ({ id: customer.id, name: customer.name, wert: (revenueByCustomer.get(customer.id) ?? 0) / 100 }))
+      .filter((customer) => customer.wert > 0)
+      .sort((left, right) => right.wert - left.wert || left.name.localeCompare(right.name, "de"))
+      .slice(0, limit);
   } catch (error) {
     console.error("Failed to get top customers:", error);
     return [];

@@ -17,7 +17,7 @@ describe("KV PDF", () => {
         type: "business", contactPerson: "Testperson", email: "kunde@example.invalid", phone: "+49 221 123456", street: "Kundenweg 2",
         address: null, zipCode: "54321", city: "Kundenstadt", country: "Deutschland", paymentPreference: "rechnung_14", vatId: null,
         classification: null, internalNotes: null, tags: [], createdAt: "2026-10-01T10:00:00.000Z", updatedAt: "2026-10-01T10:00:00.000Z",
-        orderCount: 0, wareImHausCount: 0, wareImHaus: false, orders: [],
+        orderCount: 0, wareImHausCount: 0, wareImHaus: false, invoiceRevenueCents: 0, invoiceOpenCents: 0, orders: [],
       },
       quote: {
         quoteId: "11111111-1111-4111-8111-111111111111", quoteNumber: "KV-2026-0042", customerId: "customer-1", customerNumber: "K-2026-0042",

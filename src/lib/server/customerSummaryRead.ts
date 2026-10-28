@@ -40,6 +40,8 @@ export type CustomerSummary = {
   orderCount: number;
   wareImHausCount: number;
   wareImHaus: boolean;
+  invoiceRevenueCents: number;
+  invoiceOpenCents: number;
   orders: CustomerSummaryOrder[];
 };
 
@@ -75,6 +77,8 @@ type SummaryRow = {
   order_count: number;
   ware_im_haus_count: number;
   ware_im_haus: boolean;
+  invoice_revenue_cents: number | string;
+  invoice_open_cents: number | string;
   orders: unknown;
   integrity_ok: boolean;
 };
@@ -146,6 +150,8 @@ function mapTags(value: unknown): string[] {
 
 function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot): CustomerSummary {
   const orders = mapOrders(row.orders);
+  const invoiceRevenueCents = Number(row.invoice_revenue_cents);
+  const invoiceOpenCents = Number(row.invoice_open_cents);
   if (
     row.integrity_ok !== true
     || row.tenant_id !== authorization.tenantId
@@ -154,6 +160,10 @@ function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot): Cust
     || row.name.length < 1
     || !Number.isSafeInteger(row.order_count)
     || !Number.isSafeInteger(row.ware_im_haus_count)
+    || !Number.isSafeInteger(invoiceRevenueCents)
+    || invoiceRevenueCents < 0
+    || !Number.isSafeInteger(invoiceOpenCents)
+    || invoiceOpenCents < 0
     || row.order_count !== orders.length
     || row.ware_im_haus_count !== orders.filter((order) => ["angenommen", "galvanik", "fertig"].includes(order.status)).length
     || row.ware_im_haus !== (row.ware_im_haus_count > 0)
@@ -182,6 +192,8 @@ function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot): Cust
     orderCount: row.order_count,
     wareImHausCount: row.ware_im_haus_count,
     wareImHaus: row.ware_im_haus,
+    invoiceRevenueCents,
+    invoiceOpenCents,
     orders,
   };
 }
@@ -199,9 +211,18 @@ export async function readCustomerSummary(
   try {
     const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const rows = await tx.execute<SummaryRow>(sql`
-        SELECT *
-        FROM private.v_customer_summary_v1
-        WHERE id = ${input.customerId}
+        SELECT summary.*,
+               COALESCE(billing.invoice_revenue_cents, 0)::bigint AS invoice_revenue_cents,
+               COALESCE(billing.invoice_open_cents, 0)::bigint AS invoice_open_cents
+        FROM private.v_customer_summary_v1 summary
+        LEFT JOIN LATERAL (
+          SELECT sum(invoice.gross_amount_cents) FILTER (WHERE invoice.status = 'issued') AS invoice_revenue_cents,
+                 sum(invoice.payment_open_amount_cents) FILTER (WHERE invoice.status = 'issued') AS invoice_open_cents
+          FROM public.invoices invoice
+          WHERE invoice.tenant_id = summary.tenant_id
+            AND invoice.customer_id = summary.id
+        ) billing ON true
+        WHERE summary.id = ${input.customerId}
         LIMIT 2
       `);
       if (rows.length > 1) throw new Error("CUSTOMER_SUMMARY_AMBIGUOUS");

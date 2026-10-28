@@ -40,6 +40,10 @@ function moment(value: string) {
     : "Zeitpunkt nicht lesbar";
 }
 
+function euro(cents: number) {
+  return (cents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
+}
+
 function readDevice(): Geraet {
   if (window.innerWidth <= 699) return "handy";
   if (window.innerWidth <= 1399 && window.matchMedia?.("(pointer: coarse)").matches) return "tablet";
@@ -201,6 +205,8 @@ export function CustomerCardView({
     <KartenBlock label="Kundenstand"><Fakten zeilen={[
       { k: "Aufträge gesamt", v: card.orderCount },
       { k: "Ware im Haus", v: card.wareImHausCount },
+      { k: "Umsatz aus Rechnungen", v: euro(card.invoiceRevenueCents) },
+      { k: "Offene Posten", v: euro(card.invoiceOpenCents) },
       { k: "Klassifikation", v: card.classification ?? "Nicht hinterlegt" },
     ]} /></KartenBlock>
     <KartenBlock label="Kontaktverlauf"><Verlauf eintraege={[
