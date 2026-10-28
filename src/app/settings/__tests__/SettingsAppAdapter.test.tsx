@@ -93,7 +93,7 @@ describe("Gregor system administration composition", () => {
     fireEvent.change(screen.getByLabelText("Code", { exact: true }), { target: { value: "2468" } });
     fireEvent.click(screen.getByRole("button", { name: "Login speichern" }));
 
-    expect(await screen.findByText("Nina Neu")).toBeInTheDocument();
+    expect(await screen.findAllByText("Nina Neu")).toHaveLength(2);
     expect(ports.createManagedUser).toHaveBeenCalledWith(expect.objectContaining({ designation: "", shortCode: "N3" }));
     expect(screen.getByRole("button", { name: "Logins & Rechte" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByLabelText("Aufträge & Werkstatt für Nina Neu")).toBeChecked();
@@ -188,15 +188,18 @@ describe("Gregor system administration composition", () => {
     fireEvent.click(screen.getByRole("button", { name: "Logins & Rechte" }));
 
     expect(screen.getAllByRole("button", { name: "Ändern" })).toHaveLength(2);
+    const matrix = screen.getByRole("region", { name: "Rechtematrix" });
+    expect(within(matrix).getByRole("columnheader", { name: "PH Phillip" })).toBeInTheDocument();
+    expect(within(matrix).getByRole("columnheader", { name: "RO Rolf" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Übernehmen" })).not.toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("button", { name: "Ändern" })[0]!);
-    const phillipRow = screen.getByText("Phillip").closest("article");
+    const phillipRow = screen.getByDisplayValue("Phillip").closest("article");
     expect(phillipRow).not.toBeNull();
     expect(within(phillipRow!).getByLabelText("Name")).toHaveValue("Phillip");
     expect(screen.getByRole("button", { name: "Übernehmen" })).toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole("button", { name: "Ändern" })[1]!);
-    const rolfRow = screen.getByText("Rolf").closest("article");
+    const rolfRow = screen.getByDisplayValue("Rolf").closest("article");
     expect(rolfRow).not.toBeNull();
     expect(within(rolfRow!).getByLabelText("Name")).toHaveValue("Rolf");
     expect(screen.getAllByRole("button", { name: "Übernehmen" })).toHaveLength(1);

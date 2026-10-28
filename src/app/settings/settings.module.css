@@ -210,6 +210,9 @@
 .rightsTable th:first-child small, .rightsTable td small { color: var(--text-muted); font-weight: 400; }
 .rightsTable td input { width: 20px; height: 20px; }
 .rightsTable td small { display: block; margin-top: var(--space-1); }
+.rightsPerson { display: grid; justify-items: center; gap: var(--space-1); min-width: 96px; }
+.rightsPerson > span { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; background: var(--gold-100); color: var(--gold-600); font-weight: 800; }
+.rightsPerson strong { font-size: var(--font-size-sm); }
 
 .list {
   display: grid;
