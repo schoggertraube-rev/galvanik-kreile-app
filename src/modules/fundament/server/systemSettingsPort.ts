@@ -5,8 +5,11 @@ import { sql } from "drizzle-orm";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {
   ROLE_ACCESS_AREA_TEMPLATES,
+  getFixedAccessAreasForRole,
   isAccessArea,
+  isAccessAreaAllowedForRole,
   isAppRole,
+  normalizeAccessAreasForRole,
   type AccessArea,
   type AppRole,
 } from "@/lib/auth/authorizationContract";
@@ -21,7 +24,6 @@ import type {
 import { mapTenantFeatureRows, type TenantFeatureRow } from "./tenantFeaturePort";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const FIXED_DEVELOPER_AREAS = ["logins", "wartung"] as const satisfies readonly AccessArea[];
 export type SystemSettingsContext = {
   tenantId: string;
   actorId: string;
@@ -100,8 +102,8 @@ export async function readSystemSettings(context: SystemSettingsContext) {
             designation: user.bezeichnung ?? (process.env.NODE_ENV === "test" ? user.role : ""),
             role,
             active: user.active,
-            areas: rawAreas as AccessArea[],
-            fixedAreas: role === "developer" ? [...FIXED_DEVELOPER_AREAS] : [],
+            areas: user.active ? normalizeAccessAreasForRole(role, rawAreas as AccessArea[]) : [],
+            fixedAreas: user.active ? [...getFixedAccessAreasForRole(role)] : [],
             isCurrent: user.id === context.actorId,
           };
         }),
@@ -340,7 +342,12 @@ export async function setManagedUserArea(context: SystemSettingsContext, input: 
     await withPrivilegedTenantTransaction(context, async (tx) => {
       const users = await tx.execute<{ role: string; active: boolean }>(sql`SELECT role, active FROM public.app_users WHERE tenant_id=${context.tenantId} AND id=${normalized.userId}::uuid LIMIT 2 FOR UPDATE`);
       if (users.length !== 1 || !users[0]) throw new Error("USER_WRITE_NOT_FOUND");
-      if (!normalized.granted && users[0].role === "developer" && (FIXED_DEVELOPER_AREAS as readonly AccessArea[]).includes(normalized.area)) {
+      if (!isAppRole(users[0].role)) throw new Error("USER_ACCESS_CONTRACT_INVALID");
+      if (!users[0].active) throw new Error("USER_INACTIVE_RIGHT");
+      if (!isAccessAreaAllowedForRole(users[0].role, normalized.area)) {
+        throw new Error("USER_BLOCKED_RIGHT");
+      }
+      if (!normalized.granted && getFixedAccessAreasForRole(users[0].role).includes(normalized.area)) {
         throw new Error("USER_FIXED_RIGHT");
       }
       if (!normalized.granted && normalized.area === "logins" && users[0].active) {
@@ -361,7 +368,9 @@ export async function setManagedUserArea(context: SystemSettingsContext, input: 
     });
     return { code: "OK" as const };
   } catch (error) {
-    if (error instanceof Error && error.message === "USER_FIXED_RIGHT") return { code: "CONFLICT" as const, message: "Logins & Rechte und Wartung bleiben für developer fest aktiviert." };
+    if (error instanceof Error && error.message === "USER_INACTIVE_RIGHT") return { code: "CONFLICT" as const, message: "Inaktive Logins haben keine wirksamen Rechte." };
+    if (error instanceof Error && error.message === "USER_BLOCKED_RIGHT") return { code: "CONFLICT" as const, message: "Entwickler dürfen keine Geschäftsvorgänge ausführen." };
+    if (error instanceof Error && error.message === "USER_FIXED_RIGHT") return { code: "CONFLICT" as const, message: "Einstellungen, Logins & Rechte und Wartung bleiben für developer fest aktiviert." };
     if (error instanceof Error && error.message === "USER_LAST_LOGINS_RIGHT") return { code: "CONFLICT" as const, message: "Mindestens ein aktiver Login mit Logins & Rechte muss erhalten bleiben." };
     return { code: "UNAVAILABLE" as const, message: "Recht konnte nicht sicher gespeichert werden." };
   }

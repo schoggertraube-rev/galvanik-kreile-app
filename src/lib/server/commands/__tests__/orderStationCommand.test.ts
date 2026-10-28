@@ -11,7 +11,12 @@ const { resolveAuthorizationSpy, withTransactionSpy, executeSpy, receiptLookupSp
 }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization: resolveAuthorizationSpy }));
+vi.mock("@/lib/server/authorization", () => ({
+  resolveAuthorization: resolveAuthorizationSpy,
+  hasAuthorizationArea: (authorization: { role: string; permissions: readonly string[] }, area: string) => authorization.role !== "developer"
+    && area === "auftraege"
+    && authorization.permissions.includes("perm_op_status"),
+}));
 vi.mock("@/lib/server/privilegedDb", () => ({
   withPrivilegedTenantTransaction: withTransactionSpy,
 }));
@@ -350,8 +355,8 @@ describe("transitionWareneingangToGalvanik", () => {
     // missing or mismatched readback.
     expect(source).toContain("private.v_order_station_correction_receipts_v1");
     expect(source).toContain("ORDER_STATION_CORRECTION_RECEIPT_READBACK_INVALID");
-    expect(source).toContain('role === "developer"');
-    expect(source).toContain('permissions.includes("perm_op_status")');
+    expect(source).toContain('hasAuthorizationArea(authorization.data, "auftraege")');
+    expect(source).not.toContain('role === "developer"');
     const customerLock = source.match(/SELECT id, tenant_id\s+FROM public\.customers[\s\S]+?FOR SHARE/)?.[0] ?? "";
     expect(customerLock).toContain("WHERE id = ${order.customer_id}");
     expect(customerLock).toContain("AND tenant_id = ${authorization.data.tenantId}");

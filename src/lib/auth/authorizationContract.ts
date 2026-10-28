@@ -43,13 +43,43 @@ export const ACCESS_AREA_LABELS: Record<AccessArea, { text: string; sub?: string
 };
 
 export const ROLE_ACCESS_AREA_TEMPLATES: Record<AppRole, readonly AccessArea[]> = {
-  developer: ACCESS_AREAS,
+  developer: ["einstellungen", "logins", "wartung"],
   admin: ACCESS_AREAS,
-  meister: ["auftraege", "eingang", "kunden", "geld", "mails", "einstellungen", "kassieren"],
+  meister: ["auftraege", "eingang", "kunden", "geld", "mails", "einstellungen", "kassieren", "logins"],
   buero: ["auftraege", "eingang", "kunden", "geld", "mails", "einstellungen"],
   werkstatt: ["auftraege", "eingang", "kunden"],
   readonly: [],
 };
+
+const DEVELOPER_BUSINESS_AREAS = [
+  "auftraege",
+  "eingang",
+  "kunden",
+  "geld",
+  "kassieren",
+  "mails",
+] as const satisfies readonly AccessArea[];
+
+/**
+ * Roles are only defaults, except for the developer safety boundary: a
+ * developer is not an employee and can never receive business operations.
+ * Both the matrix and server authorization use this policy.
+ */
+export function isAccessAreaAllowedForRole(role: AppRole, area: AccessArea): boolean {
+  return role !== "developer"
+    || !(DEVELOPER_BUSINESS_AREAS as readonly AccessArea[]).includes(area);
+}
+
+export function normalizeAccessAreasForRole(
+  role: AppRole,
+  areas: readonly AccessArea[],
+): AccessArea[] {
+  return [...new Set(areas.filter((area) => isAccessAreaAllowedForRole(role, area)))];
+}
+
+export function getFixedAccessAreasForRole(role: AppRole): readonly AccessArea[] {
+  return role === "developer" ? ROLE_ACCESS_AREA_TEMPLATES.developer : [];
+}
 
 const ACCESS_AREA_PERMISSIONS: Record<AccessArea, readonly PermissionKey[]> = {
   auftraege: ["perm_op_status", "perm_op_risk", "perm_op_photos", "perm_op_qa", "perm_view_leitstand"],

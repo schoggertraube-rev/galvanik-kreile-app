@@ -12,7 +12,13 @@ import {
   getMyPermissionsAction,
   getRoleAction,
 } from "@/app/actions/auth.actions";
-import { getRoleLabel, type AppRole } from "@/lib/auth/authorizationContract";
+import {
+  ACCESS_AREAS,
+  ROLE_ACCESS_AREA_TEMPLATES,
+  getRoleLabel,
+  normalizeAccessAreasForRole,
+  type AppRole,
+} from "@/lib/auth/authorizationContract";
 
 vi.mock("@/db", () => {
   const mockWhere = vi.fn();
@@ -445,5 +451,24 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     expect(hasAuthorizationArea(base, "mails")).toBe(false);
     expect(hasAuthorizationArea({ role: "meister", areas: [] }, "auftraege")).toBe(false);
     expect(hasAnyAuthorizationArea({ role: "meister", areas: [] })).toBe(false);
+  });
+
+  it("H11 gate: matrix checks and server permission agree for every active role template", () => {
+    for (const [role, rawAreas] of Object.entries(ROLE_ACCESS_AREA_TEMPLATES) as Array<[AppRole, readonly (typeof ACCESS_AREAS)[number][]]>) {
+      const matrixChecks = normalizeAccessAreasForRole(role, rawAreas);
+      for (const area of ACCESS_AREAS) {
+        expect(
+          hasAuthorizationArea({ role, areas: matrixChecks }, area),
+          `${role}:${area}`,
+        ).toBe(matrixChecks.includes(area));
+      }
+    }
+
+    const staleDeveloperRows = { role: "developer" as const, areas: ACCESS_AREAS };
+    expect(hasAuthorizationArea(staleDeveloperRows, "auftraege")).toBe(false);
+    expect(hasAuthorizationArea(staleDeveloperRows, "geld")).toBe(false);
+    expect(hasAuthorizationArea(staleDeveloperRows, "einstellungen")).toBe(true);
+    expect(hasAuthorizationArea(staleDeveloperRows, "logins")).toBe(true);
+    expect(ROLE_ACCESS_AREA_TEMPLATES.meister).toContain("logins");
   });
 });

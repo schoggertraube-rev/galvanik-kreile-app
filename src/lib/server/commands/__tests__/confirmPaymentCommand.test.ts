@@ -21,7 +21,14 @@ vi.mock("node:crypto", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:crypto")>();
   return { ...actual, randomUUID };
 });
-vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization }));
+vi.mock("@/lib/server/authorization", () => ({
+  resolveAuthorization,
+  hasAuthorizationArea: (authorization: { role: string; permissions: readonly string[] }, area: string) => authorization.role !== "developer" && (
+    (area === "geld" && authorization.permissions.includes("perm_view_prices"))
+    || (area === "kassieren" && authorization.permissions.includes("perm_cash_pickup"))
+    || (area === "auftraege" && authorization.permissions.includes("perm_op_status"))
+  ),
+}));
 vi.mock("@/lib/server/privilegedDb", () => ({
   withPrivilegedTenantTransaction: withTransaction,
 }));

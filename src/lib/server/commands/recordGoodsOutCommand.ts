@@ -11,7 +11,7 @@ import {
   type PaymentStatus,
   type PaymentSummaryRow,
 } from "@/lib/server/paymentContract";
-import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
+import { hasAuthorizationArea, resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import {
   withPrivilegedTenantTransaction,
   type PrivilegedTenantTransaction,
@@ -377,8 +377,7 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
   }
   if (
     authorization.data.tenantId !== KREILE_TENANT_SLUG
-    || authorization.data.role === "developer"
-    || !authorization.data.permissions.includes("perm_op_status")
+    || !hasAuthorizationArea(authorization.data, "auftraege")
   ) {
     return { code: "FORBIDDEN", message: "Warenausgang ist mit dieser Rolle nicht erlaubt." };
   }

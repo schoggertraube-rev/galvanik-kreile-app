@@ -181,6 +181,7 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     ".playwright-cli/**",
+    "supabase/.temp/**",
     // Gebundene Referenzquellen und Historie sind Bauinput/Evidence, nicht Produktcode.
     "docs/project/linie/ui/designsystem_v1_1/**",
     "docs/project/history/**",

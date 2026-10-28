@@ -8,7 +8,7 @@ import {
   type PaymentMode,
   type PaymentStatus,
 } from "@/lib/server/paymentContract";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import {
   withPrivilegedTenantTransaction,
@@ -486,12 +486,11 @@ export async function confirmPayment(input: unknown): Promise<ConfirmPaymentResu
       ? { code: "UNAVAILABLE", message: "Zahlung konnte nicht sicher bestätigt werden." }
       : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
-  const canManageFinance = authorization.data.permissions.includes("perm_view_prices");
-  const canCashAtPickup = authorization.data.permissions.includes("perm_cash_pickup")
-    && authorization.data.permissions.includes("perm_op_status");
+  const canManageFinance = hasAuthorizationArea(authorization.data, "geld");
+  const canCashAtPickup = hasAuthorizationArea(authorization.data, "kassieren")
+    && hasAuthorizationArea(authorization.data, "auftraege");
   if (
     authorization.data.tenantId !== KREILE_TENANT_SLUG
-    || authorization.data.role === "developer"
     || (!canManageFinance && !canCashAtPickup)
   ) {
     return { code: "FORBIDDEN", message: "Zahlungsbestätigung ist mit dieser Rolle nicht erlaubt." };

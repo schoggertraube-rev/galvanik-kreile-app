@@ -14,6 +14,7 @@ import { setExtraWorkHourlyRateAction } from "@/app/actions/orders.actions";
 import {
   ACCESS_AREAS,
   ACCESS_AREA_LABELS,
+  isAccessAreaAllowedForRole,
   type AccessArea,
   type CompanySettingsInput,
   type ManagedUser,
@@ -83,6 +84,8 @@ export function SettingsAdminClient({
   const rateReady = hourlyRate.hourlyRateCents !== null;
   const currentUser = users.find((user) => user.isCurrent) ?? null;
   const visibleUsers = canManageLogins ? users : currentUser ? [currentUser] : [];
+  const activeUsers = visibleUsers.filter((user) => user.active);
+  const inactiveUsers = visibleUsers.filter((user) => !user.active);
 
   const field = (key: keyof CompanySettingsInput, label: string, type = "text") => (
     <label>{label}<input type={type} value={String(company[key])} onChange={(event) => setCompany((current) => ({ ...current, [key]: type === "number" ? Number(event.target.value) : event.target.value }))} /></label>
@@ -192,6 +195,32 @@ export function SettingsAdminClient({
     setEditPin("");
   }
 
+  function renderUserCard(user: ManagedUser, inactive = false) {
+    const isEditing = editingUser?.id === user.id;
+    return <article key={user.id} className={inactive ? styles.inactiveUser : undefined}>
+      <div className={styles.userSummary}>
+        <span>{user.shortCode}</span>
+        <div>
+          <strong>{user.fullName}</strong>
+          <small>{inactive
+            ? [user.designation, "inaktiv"].filter(Boolean).join(" · ")
+            : [user.designation, `${user.areas.length} Bereiche`].filter(Boolean).join(" · ")}</small>
+        </div>
+        {user.isCurrent ? <button data-spec-id="meincode.oeffnen" type="button" disabled={pending} onClick={() => setOwnCodeOpen(true)}>Mein Code</button> : null}
+        {canManageLogins ? <button data-spec-id="rechte.aendern" type="button" disabled={pending} onClick={() => editUser(user)}>Ändern</button> : null}
+      </div>
+      {canManageLogins && isEditing ? <div className={styles.userFields}>
+        <label>Name<input value={editingUser.fullName} onChange={(event) => setEditingUser({ ...editingUser, fullName: event.target.value })} /></label>
+        <label>Kürzel<input value={editingUser.shortCode} maxLength={3} onChange={(event) => setEditingUser({ ...editingUser, shortCode: event.target.value.toUpperCase() })} /></label>
+        <label>Bezeichnung (optional)<input value={editingUser.designation} onChange={(event) => setEditingUser({ ...editingUser, designation: event.target.value })} /></label>
+        <label>Neuer Code<input type="password" inputMode="numeric" placeholder="unverändert" value={editPin} onChange={(event) => setEditPin(event.target.value.replace(/\D/g, "").slice(0, 4))} /></label>
+        <label className={styles.check}><input type="checkbox" checked={editingUser.active} disabled={editingUser.isCurrent} onChange={(event) => setEditingUser({ ...editingUser, active: event.target.checked })} />Aktiv</label>
+        <button type="button" disabled={pending} onClick={() => updateUser(editingUser)}>Übernehmen</button>
+        <button type="button" disabled={pending} onClick={() => { setEditingUser(null); setEditPin(""); }}>Abbrechen</button>
+      </div> : null}
+    </article>;
+  }
+
   function toggleArea(userId: string, area: AccessArea, granted: boolean, isCurrent: boolean) {
     setUsers((current) => current.map((user) => user.id === userId
       ? { ...user, areas: granted ? [...user.areas, area] : user.areas.filter((item) => item !== area) }
@@ -272,22 +301,16 @@ export function SettingsAdminClient({
           <button type="button" disabled={pending} onClick={() => setCreateLoginOpen(false)}>Abbrechen</button>
         </> : <button data-spec-id="rechte.login-anlegen" type="button" disabled={pending} onClick={() => setCreateLoginOpen(true)}>Login anlegen</button>}
       </div> : null}
-      <div className={styles.userList}>{visibleUsers.map((user) => {
-        const isEditing = editingUser?.id === user.id;
-        return <article key={user.id}>
-          <div className={styles.userSummary}><span>{user.shortCode}</span><div><strong>{user.fullName}</strong><small>{[user.designation, `${user.areas.length} Bereiche`].filter(Boolean).join(" · ")}</small></div>{user.isCurrent ? <button data-spec-id="meincode.oeffnen" type="button" disabled={pending} onClick={() => setOwnCodeOpen(true)}>Mein Code</button> : null}{canManageLogins ? <button data-spec-id="rechte.aendern" type="button" disabled={pending} onClick={() => editUser(user)}>Ändern</button> : null}</div>
-          {canManageLogins && isEditing ? <div className={styles.userFields}>
-            <label>Name<input value={editingUser.fullName} onChange={(event) => setEditingUser({ ...editingUser, fullName: event.target.value })} /></label>
-            <label>Kürzel<input value={editingUser.shortCode} maxLength={3} onChange={(event) => setEditingUser({ ...editingUser, shortCode: event.target.value.toUpperCase() })} /></label>
-            <label>Bezeichnung (optional)<input value={editingUser.designation} onChange={(event) => setEditingUser({ ...editingUser, designation: event.target.value })} /></label>
-            <label>Neuer Code<input type="password" inputMode="numeric" placeholder="unverändert" value={editPin} onChange={(event) => setEditPin(event.target.value.replace(/\D/g, "").slice(0, 4))} /></label>
-            <label className={styles.check}><input type="checkbox" checked={editingUser.active} disabled={editingUser.isCurrent} onChange={(event) => setEditingUser({ ...editingUser, active: event.target.checked })} />Aktiv</label>
-            <button type="button" disabled={pending} onClick={() => updateUser(editingUser)}>Übernehmen</button>
-            <button type="button" disabled={pending} onClick={() => { setEditingUser(null); setEditPin(""); }}>Abbrechen</button>
-          </div> : null}
-        </article>;
-      })}</div>
-      {canManageLogins ? <div className={styles.rightsTable} role="region" aria-label="Rechtematrix"><table><thead><tr><th>Bereich</th>{users.map((user) => <th key={user.id} aria-label={`${user.shortCode} ${user.fullName}`}><span className={styles.rightsPerson}><span>{user.shortCode}</span><strong>{user.fullName}</strong></span></th>)}</tr></thead><tbody>{ACCESS_AREAS.map((area) => <tr key={area}><th><strong>{ACCESS_AREA_LABELS[area].text}</strong>{ACCESS_AREA_LABELS[area].sub ? <small>{ACCESS_AREA_LABELS[area].sub}</small> : null}</th>{users.map((user) => { const fixed = user.fixedAreas.includes(area); return <td key={user.id}><input aria-label={`${ACCESS_AREA_LABELS[area].text} für ${user.fullName}`} type="checkbox" checked={user.areas.includes(area)} disabled={pending || fixed} onChange={(event) => toggleArea(user.id, area, event.target.checked, user.isCurrent)} />{fixed ? <small>fest</small> : null}</td>; })}</tr>)}</tbody></table></div> : null}
+      <div className={styles.userList}>{activeUsers.map((user) => renderUserCard(user))}</div>
+      {inactiveUsers.length > 0 ? <details className={styles.inactiveUsers}>
+        <summary>Inaktive Logins ({inactiveUsers.length})</summary>
+        <div className={styles.userList}>{inactiveUsers.map((user) => renderUserCard(user, true))}</div>
+      </details> : null}
+      {canManageLogins ? <div className={styles.rightsTable} role="region" aria-label="Rechtematrix"><table><thead><tr><th>Bereich</th>{activeUsers.map((user) => <th key={user.id} aria-label={`${user.shortCode} ${user.fullName}`}><span className={styles.rightsPerson}><span>{user.shortCode}</span><strong>{user.fullName}</strong>{user.role === "developer" ? <small>Einsicht & Systempflege</small> : null}</span></th>)}</tr></thead><tbody>{ACCESS_AREAS.map((area) => <tr key={area}><th><strong>{ACCESS_AREA_LABELS[area].text}</strong>{ACCESS_AREA_LABELS[area].sub ? <small>{ACCESS_AREA_LABELS[area].sub}</small> : null}</th>{activeUsers.map((user) => {
+        const fixed = user.fixedAreas.includes(area);
+        const blocked = !isAccessAreaAllowedForRole(user.role, area);
+        return <td key={user.id} className={blocked ? styles.blockedRight : undefined}><input aria-label={`${ACCESS_AREA_LABELS[area].text} für ${user.fullName}`} type="checkbox" checked={!blocked && user.areas.includes(area)} disabled={pending || fixed || blocked} onChange={(event) => toggleArea(user.id, area, event.target.checked, user.isCurrent)} />{blocked ? <small>Entwickler, keine Geschäftsvorgänge</small> : fixed ? <small>fest</small> : null}</td>;
+      })}</tr>)}</tbody></table></div> : null}
     </section> : null}
     {ownCodeOpen ? <div className={styles.dialogBackdrop} role="presentation">
       <section className={styles.ownCode} role="dialog" aria-modal="true" aria-labelledby="own-code-title">

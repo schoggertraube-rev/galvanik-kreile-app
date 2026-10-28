@@ -1,7 +1,7 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 
@@ -230,12 +230,8 @@ export async function transitionWareneingangToGalvanik(
     };
   }
 
-  // D-F12-003: exactly buero, werkstatt, meister, admin — a narrow explicit role
-  // gate, deliberately not the generic operational-status permission (which
-  // developer holds and buero does not).
   if (
-    authorization.data.role === "developer"
-    || !authorization.data.permissions.includes("perm_op_status")
+    !hasAuthorizationArea(authorization.data, "auftraege")
   ) {
     return { code: "FORBIDDEN", message: "Stationswechsel ist nicht erlaubt." };
   }
@@ -658,10 +654,8 @@ export async function correctGalvanikToWareneingang(
     };
   }
 
-  // D-F12-003/004: identical explicit role gate as the forward transition.
   if (
-    authorization.data.role === "developer"
-    || !authorization.data.permissions.includes("perm_op_status")
+    !hasAuthorizationArea(authorization.data, "auftraege")
   ) {
     return { code: "FORBIDDEN", message: "Rücknahme ist nicht erlaubt." };
   }

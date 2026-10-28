@@ -10,7 +10,12 @@ const { resolveAuthorization, withTransaction, execute, renderToBuffer } = vi.ho
 }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization }));
+vi.mock("@/lib/server/authorization", () => ({
+  resolveAuthorization,
+  hasAuthorizationArea: (authorization: { role: string; permissions: readonly string[] }, area: string) => authorization.role !== "developer"
+    && area === "geld"
+    && authorization.permissions.includes("perm_view_prices"),
+}));
 vi.mock("@/lib/server/privilegedDb", () => ({ withPrivilegedTenantTransaction: withTransaction }));
 vi.mock("@react-pdf/renderer", () => ({ renderToBuffer }));
 vi.mock("@/lib/pdf/ImmutableInvoiceDocument", () => ({

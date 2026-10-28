@@ -3,7 +3,7 @@ import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { sql } from "drizzle-orm";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
 import {
   withPrivilegedTenantTransaction,
   type PrivilegedTenantTransaction,
@@ -900,8 +900,7 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
       : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
   if (
-    authorization.data.role === "developer"
-    || !authorization.data.permissions.includes("perm_view_prices")
+    !hasAuthorizationArea(authorization.data, "geld")
   ) {
     return { code: "FORBIDDEN", message: "Geld, Preise & Buchhaltung ist nicht freigegeben." };
   }
@@ -1195,8 +1194,7 @@ export async function cancelInvoice(input: unknown): Promise<CancelInvoiceResult
       : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
   if (
-    authorization.data.role === "developer"
-    || !authorization.data.permissions.includes("perm_view_prices")
+    !hasAuthorizationArea(authorization.data, "geld")
   ) {
     return { code: "FORBIDDEN", message: "Geld, Preise & Buchhaltung ist nicht freigegeben." };
   }

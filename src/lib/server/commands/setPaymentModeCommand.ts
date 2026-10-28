@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import {
   isPaymentMode,
@@ -280,8 +280,7 @@ export async function setPaymentMode(input: unknown): Promise<SetPaymentModeResu
   }
   if (
     authorization.data.tenantId !== KREILE_TENANT_SLUG ||
-    authorization.data.role === "developer" ||
-    !authorization.data.permissions.includes("perm_view_prices")
+    !hasAuthorizationArea(authorization.data, "geld")
   ) {
     return { code: "FORBIDDEN", message: "Zahlungsmodus darf mit dieser Rolle nicht geändert werden." };
   }

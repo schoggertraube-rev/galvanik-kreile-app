@@ -4,7 +4,7 @@ export { SystemAdminView } from "./ui/SystemAdminView";
 export type { SystemAdminViewProps } from "./ui/SystemAdminView";
 export { SALES_STAGE_FEATURES, isFeatureEnabled } from "./featureCatalog";
 export type { SalesStage, SalesStageFeature, SalesStageFeatureDefinition, SalesStageFeatureId } from "./featureCatalog";
-export { ACCESS_AREAS, ACCESS_AREA_LABELS } from "@/lib/auth/authorizationContract";
+export { ACCESS_AREAS, ACCESS_AREA_LABELS, isAccessAreaAllowedForRole } from "@/lib/auth/authorizationContract";
 export type { AccessArea, AppRole } from "@/lib/auth/authorizationContract";
 
 export type CompanySettingsInput = {

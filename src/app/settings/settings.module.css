@@ -196,6 +196,10 @@
 .createLogin h3 { grid-column: 1 / -1; margin: 0; }
 .userList { display: grid; gap: var(--space-3); }
 .userList article { padding: var(--space-3); border: 1px solid var(--neutral-gray-100); border-radius: var(--radius-md); }
+.inactiveUsers { margin-top: var(--space-4); border-top: 1px solid var(--neutral-gray-100); padding-top: var(--space-3); color: var(--text-muted); }
+.inactiveUsers summary { cursor: pointer; font-weight: 700; }
+.inactiveUsers .userList { margin-top: var(--space-3); }
+.inactiveUser { background: var(--bg-app-soft); opacity: .72; }
 .userSummary { display: flex; align-items: center; gap: var(--space-3); }
 .userSummary > span { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 50%; background: var(--gold-100); color: var(--gold-600); font-weight: 800; }
 .userSummary div { display: grid; gap: var(--space-1); }
@@ -210,6 +214,9 @@
 .rightsTable th:first-child small, .rightsTable td small { color: var(--text-muted); font-weight: 400; }
 .rightsTable td input { width: 20px; height: 20px; }
 .rightsTable td small { display: block; margin-top: var(--space-1); }
+.rightsTable td.blockedRight { min-width: 145px; background: var(--bg-app-soft); }
+.rightsTable td.blockedRight input { opacity: .45; }
+.rightsTable td.blockedRight small { max-width: 145px; margin-inline: auto; line-height: 1.25; }
 .rightsPerson { display: grid; justify-items: center; gap: var(--space-1); min-width: 96px; }
 .rightsPerson > span { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; background: var(--gold-100); color: var(--gold-600); font-weight: 800; }
 .rightsPerson strong { font-size: var(--font-size-sm); }

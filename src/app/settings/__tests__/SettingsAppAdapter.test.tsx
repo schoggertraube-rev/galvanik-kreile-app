@@ -11,6 +11,7 @@ const ports = vi.hoisted(() => ({
   changeOwnPin: vi.fn(),
   saveManagedUser: vi.fn(),
   createManagedUser: vi.fn(),
+  setManagedUserArea: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -25,7 +26,7 @@ vi.mock("@/app/actions/settings.actions", () => ({
   saveCompanySettingsAction: vi.fn(),
   saveManagedUserAction: ports.saveManagedUser,
   createManagedUserAction: ports.createManagedUser,
-  setManagedUserAreaAction: vi.fn(),
+  setManagedUserAreaAction: ports.setManagedUserArea,
   changeOwnPinAction: ports.changeOwnPin,
 }));
 vi.mock("@/app/actions/orders.actions", () => ({ setExtraWorkHourlyRateAction: vi.fn() }));
@@ -54,6 +55,7 @@ describe("Gregor system administration composition", () => {
     );
     ports.changeOwnPin.mockResolvedValue({ code: "OK" });
     ports.saveManagedUser.mockResolvedValue({ code: "OK" });
+    ports.setManagedUserArea.mockResolvedValue({ code: "OK" });
     ports.createManagedUser.mockResolvedValue({
       code: "OK",
       user: { id: "33333333-3333-4333-8333-333333333333", email: null, fullName: "Nina Neu", shortCode: "NN", designation: "", role: "werkstatt", active: true, areas: ["auftraege", "eingang", "kunden"], fixedAreas: [], isCurrent: false },
@@ -81,6 +83,50 @@ describe("Gregor system administration composition", () => {
     fireEvent.click(screen.getByRole("button", { name: "Login anlegen" }));
     expect(screen.getByRole("heading", { name: "Login anlegen" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Rechtematrix" })).toBeInTheDocument();
+  });
+
+  it("shows one H11 rights truth for active, inactive, developer and master logins", async () => {
+    ports.readSettings.mockResolvedValue({
+      code: "OK",
+      snapshot: {
+        company: { companyName: "Galvanik Kreile", street: "", zip: "", city: "", country: "Deutschland", taxId: "", iban: "", bic: "", bankName: "", paymentTermDays: 14, logoUrl: "/logo.png" },
+        extraWorkHourlyRate: { rateId: null, hourlyRateCents: null, version: 0 },
+        users: [
+          { id: "11111111-1111-4111-8111-111111111111", email: "gregor@example.invalid", fullName: "Gregor", shortCode: "G", designation: "Entwickler", role: "developer", active: true, areas: ["auftraege", "geld", "einstellungen", "logins", "wartung"], fixedAreas: ["einstellungen", "logins", "wartung"], isCurrent: true },
+          { id: "22222222-2222-4222-8222-222222222222", email: null, fullName: "Rolf", shortCode: "R", designation: "Meister", role: "meister", active: true, areas: ["auftraege", "logins"], fixedAreas: [], isCurrent: false },
+          { id: "33333333-3333-4333-8333-333333333333", email: null, fullName: "Phillip", shortCode: "P", designation: "Werkstatt", role: "werkstatt", active: true, areas: ["auftraege"], fixedAreas: [], isCurrent: false },
+          { id: "44444444-4444-4444-8444-444444444444", email: null, fullName: "Christian Dieter", shortCode: "CD", designation: "Altzugang", role: "meister", active: false, areas: ["auftraege", "geld", "logins"], fixedAreas: [], isCurrent: false },
+        ],
+        capabilities: { canManageCompany: true, canManageLogins: true, canManageSystem: true },
+        numberRanges: [],
+        features: [],
+      },
+      services: [],
+    });
+
+    render(await SettingsAppAdapter());
+    fireEvent.click(screen.getByRole("button", { name: "Logins & Rechte" }));
+
+    const matrix = screen.getByRole("region", { name: "Rechtematrix" });
+    expect(within(matrix).getByRole("columnheader", { name: "G Gregor" })).toBeInTheDocument();
+    expect(within(matrix).queryByRole("columnheader", { name: "CD Christian Dieter" })).not.toBeInTheDocument();
+    expect(screen.getByText("Inaktive Logins (1)")).toBeInTheDocument();
+    expect(screen.getByText("Altzugang · inaktiv")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Aufträge & Werkstatt für Christian Dieter")).not.toBeInTheDocument();
+
+    const gregorOrders = screen.getByLabelText("Aufträge & Werkstatt für Gregor");
+    expect(gregorOrders).not.toBeChecked();
+    expect(gregorOrders).toBeDisabled();
+    expect(screen.getAllByText("Entwickler, keine Geschäftsvorgänge")).toHaveLength(6);
+    expect(screen.getByLabelText("Firmen-Einstellungen für Gregor")).toBeChecked();
+    expect(screen.getByLabelText("Logins & Rechte verwalten für Rolf")).toBeChecked();
+
+    fireEvent.click(screen.getByLabelText("Logins & Rechte verwalten für Phillip"));
+    await waitFor(() => expect(ports.setManagedUserArea).toHaveBeenCalledWith({
+      userId: "33333333-3333-4333-8333-333333333333",
+      area: "logins",
+      granted: true,
+    }));
   });
 
   it("keeps Logins & Rechte open and adds a confirmed login to list and matrix", async () => {

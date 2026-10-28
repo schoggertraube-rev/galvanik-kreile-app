@@ -7,6 +7,8 @@ import {
   isAppRole,
   getPermissionsForAreas,
   isAccessArea,
+  isAccessAreaAllowedForRole,
+  normalizeAccessAreasForRole,
   ROLE_ACCESS_AREA_TEMPLATES,
   type AccessArea,
   type AppRole,
@@ -30,9 +32,9 @@ export function hasAuthorizationArea(
   authorization: Pick<AuthorizationSnapshot, "areas" | "role">,
   area: AccessArea,
 ): boolean {
-  return authorization.areas === undefined
+  return isAccessAreaAllowedForRole(authorization.role, area) && (authorization.areas === undefined
     ? ROLE_ACCESS_AREA_TEMPLATES[authorization.role].includes(area)
-    : authorization.areas.includes(area);
+    : authorization.areas.includes(area));
 }
 
 export function hasAnyAuthorizationArea(
@@ -40,7 +42,7 @@ export function hasAnyAuthorizationArea(
 ): boolean {
   return authorization.areas === undefined
     ? ROLE_ACCESS_AREA_TEMPLATES[authorization.role].length > 0
-    : authorization.areas.length > 0;
+    : normalizeAccessAreasForRole(authorization.role, authorization.areas).length > 0;
 }
 
 export type AuthorizationFailureReason =
@@ -197,6 +199,8 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
     };
   }
 
+  areas = normalizeAccessAreasForRole(dbRole, areas);
+
   // 5. Rollenübereinstimmung prüfen
   if (sessionRole.trim().toLowerCase() !== dbRole.trim().toLowerCase()) {
     return {
@@ -285,7 +289,7 @@ export async function resolveLoginIdentityByEmail(
         role: role,
         active: user.active,
         tenantId: user.tenantId,
-        areas: [...new Set(user.areas as AccessArea[])],
+        areas: normalizeAccessAreasForRole(role, user.areas as AccessArea[]),
       },
     };
   } catch (err) {

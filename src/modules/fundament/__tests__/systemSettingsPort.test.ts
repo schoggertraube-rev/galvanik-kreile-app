@@ -42,6 +42,26 @@ describe("system settings port", () => {
     });
   });
 
+  it("hides inactive rights and caps developer rights to the visible server policy", async () => {
+    execute
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        { id: "11111111-1111-4111-8111-111111111111", email: "gregor@example.invalid", full_name: "Gregor", kuerzel: "G", bezeichnung: "Entwickler", role: "developer", active: true, areas: ["auftraege", "geld", "einstellungen", "logins", "wartung"] },
+        { id: "22222222-2222-4222-8222-222222222222", email: null, full_name: "Christian Dieter", kuerzel: "CD", bezeichnung: null, role: "meister", active: false, areas: ["auftraege", "geld", "logins"] },
+      ])
+      .mockResolvedValueOnce(SALES_STAGE_FEATURES.map((feature) => ({ feature_id: feature.id, enabled: feature.defaultEnabled })));
+    const { readSystemSettings } = await import("../server/systemSettingsPort");
+    await expect(readSystemSettings(context)).resolves.toMatchObject({
+      code: "OK",
+      snapshot: {
+        users: [
+          { fullName: "Gregor", areas: ["einstellungen", "logins", "wartung"], fixedAreas: ["einstellungen", "logins", "wartung"] },
+          { fullName: "Christian Dieter", active: false, areas: [], fixedAreas: [] },
+        ],
+      },
+    });
+  });
+
   it("opens an empty, savable company draft when no settings row exists", async () => {
     execute
       .mockResolvedValueOnce([])
@@ -156,5 +176,36 @@ describe("system settings port", () => {
       pin: null,
     })).resolves.toEqual({ code: "VALIDATION_ERROR", message: "Bezeichnung darf höchstens 120 Zeichen haben." });
     expect(withTransaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects inactive and developer business rights and attributes future grants", async () => {
+    const { setManagedUserArea } = await import("../server/systemSettingsPort");
+
+    execute.mockResolvedValueOnce([{ role: "meister", active: false }]);
+    await expect(setManagedUserArea(context, {
+      userId: "22222222-2222-4222-8222-222222222222",
+      area: "auftraege",
+      granted: true,
+    })).resolves.toEqual({ code: "CONFLICT", message: "Inaktive Logins haben keine wirksamen Rechte." });
+
+    execute.mockResolvedValueOnce([{ role: "developer", active: true }]);
+    await expect(setManagedUserArea(context, {
+      userId: "22222222-2222-4222-8222-222222222222",
+      area: "geld",
+      granted: true,
+    })).resolves.toEqual({ code: "CONFLICT", message: "Entwickler dürfen keine Geschäftsvorgänge ausführen." });
+
+    execute
+      .mockResolvedValueOnce([{ role: "werkstatt", active: true }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    await expect(setManagedUserArea(context, {
+      userId: "22222222-2222-4222-8222-222222222222",
+      area: "kunden",
+      granted: true,
+    })).resolves.toEqual({ code: "OK" });
+    const grant = execute.mock.calls.at(-2)?.[0];
+    expect(grant.text).toContain("granted_by");
+    expect(grant.values).toContain(context.actorId);
   });
 });
