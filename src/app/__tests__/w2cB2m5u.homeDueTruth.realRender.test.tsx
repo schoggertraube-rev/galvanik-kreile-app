@@ -57,15 +57,17 @@ describe("F1-R0 root route containment", () => {
     expect(screen.getByTestId("today-home")).toHaveTextContent("werkstatt");
   });
 
-  it.each(["admin", "developer"] as const)(
-    "routes the validated Gregor %s session to settings",
-    async (role) => {
-      ports.resolveAuthorization.mockResolvedValue(
-        authorizationFor("gregor", role),
-      );
-      await expect(RootPage()).rejects.toThrow("REDIRECT:/settings");
-    },
-  );
+  it("keeps a legacy admin session in settings", async () => {
+    ports.resolveAuthorization.mockResolvedValue(authorizationFor("gregor", "admin"));
+    await expect(RootPage()).rejects.toThrow("REDIRECT:/settings");
+  });
+
+  it("renders Der Tag for the validated Gregor developer session", async () => {
+    ports.resolveAuthorization.mockResolvedValue(authorizationFor("gregor", "developer"));
+    render(await RootPage());
+    expect(screen.getByTestId("today-home")).toHaveTextContent("developer");
+    expect(ports.redirect).not.toHaveBeenCalled();
+  });
 
   it("redirects a missing session to start", async () => {
     ports.resolveAuthorization.mockResolvedValue({
@@ -98,5 +100,7 @@ describe("F1-R0 root route containment", () => {
     expect(source).toContain("<HomeAppAdapter");
     expect(adapter).toContain("@/modules/orders/public");
     expect(adapter).toContain("<RolfHome");
+    const home = readFileSync(resolve(process.cwd(), "src/components/home/RolfHome.tsx"), "utf8");
+    expect(home).toContain('authorization.role !== "developer"');
   });
 });

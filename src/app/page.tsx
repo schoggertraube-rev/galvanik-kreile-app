@@ -18,8 +18,8 @@ export default async function HomePage() {
   }
 
   const authorization = result.data;
-  if (authorization.role === "admin" || authorization.role === "developer") redirect("/settings");
-  if (authorization.role === "werkstatt" || authorization.role === "meister" || authorization.role === "buero" || authorization.role === "readonly") {
+  if (authorization.role === "admin") redirect("/settings");
+  if (authorization.role === "werkstatt" || authorization.role === "meister" || authorization.role === "buero" || authorization.role === "readonly" || authorization.role === "developer") {
     return <HomeAppAdapter authorization={authorization} />;
   }
 

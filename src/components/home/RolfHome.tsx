@@ -30,7 +30,7 @@ function toHomeSource(order: OperationalOrder): OrdersHomeSource {
 }
 
 export async function loadRolfHome(authorization: AuthorizationSnapshot): Promise<RolfHomeModel> {
-  if (authorization.role !== "buero" && authorization.role !== "meister" && authorization.role !== "readonly" && authorization.role !== "werkstatt") {
+  if (authorization.role !== "buero" && authorization.role !== "meister" && authorization.role !== "readonly" && authorization.role !== "werkstatt" && authorization.role !== "developer") {
     return { kind: "denied", message: "Diese Rollen-Startseite ist nicht freigegeben." };
   }
   if (!authorization.permissions.includes("perm_view_leitstand")) {

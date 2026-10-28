@@ -9,7 +9,7 @@ import type { TodayDashboard, TodayItem, TodayVisibleField } from "@/lib/server/
 import type { OrdersHomeProjection, OrdersHomeSource } from "@/modules/orders/public";
 import { Button, Checkbox, Dialog, HandlungsListe, Hinweis, Kachel, Lageleiste, SeitenKopf, Zustand, type Geraet, type HandlungsArt } from "@/ui/kr";
 
-type RolfIdentity = { role: "buero" | "meister" | "readonly" | "werkstatt"; canCreateOrder: boolean; canDelegate: boolean; dashboard: TodayDashboard };
+type RolfIdentity = { role: "buero" | "developer" | "meister" | "readonly" | "werkstatt"; canCreateOrder: boolean; canDelegate: boolean; dashboard: TodayDashboard };
 export type RolfHomeModel =
   | ({ kind: "data"; projection: OrdersHomeProjection } & RolfIdentity)
   | ({ kind: "empty"; projection: OrdersHomeProjection } & RolfIdentity)

@@ -157,9 +157,10 @@ describe("StartPage product actor boundary", () => {
     const rootPage = readFileSync(path.join(root, "src/app/page.tsx"), "utf8");
 
     expect(emailAuth).toContain("resolveLoginIdentityByEmail");
-    expect(emailAuth).toContain('redirect("/settings")');
+    expect(emailAuth).toContain('redirect("/")');
     expect(pinAuth).toContain('window.location.assign("/")');
     expect(rootPage).toContain("resolveAuthorization");
-    expect(rootPage).toContain('redirect("/settings")');
+    expect(rootPage).toContain('authorization.role === "admin"');
+    expect(rootPage).toContain('authorization.role === "developer"');
   });
 });
