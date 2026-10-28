@@ -54,7 +54,7 @@ const dashboard = {
 };
 
 describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
-  it("zeigt den V1.1-Aufbau mit echten Daten und öffnet den Auftrag", () => {
+  it("zeigt den V1.1-Aufbau und öffnet Ware raus für den heute fälligen Auftrag", () => {
     render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canDelegate: true, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields] }, projection }} />);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByTestId("rolf-v11-home")).toBeInTheDocument();
@@ -63,7 +63,7 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     expect(within(screen.getByRole("region", { name: "Lage" })).getByText("Konflikt")).toBeInTheDocument();
     expect(screen.getByText("Heute fällig")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Später" })).toBeInTheDocument();
-    const open = screen.getByRole("button", { name: "Auftrag öffnen" });
+    const open = screen.getByRole("button", { name: "Ware raus" });
     expect(open.closest(".kr-hb-eintrag")).toHaveClass("kr-hb-eintrag--konflikt", "kr-fokus");
     fireEvent.click(open);
     expect(ports.openOrder).toHaveBeenCalledWith("order-1");
