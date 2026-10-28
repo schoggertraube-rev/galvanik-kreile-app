@@ -76,6 +76,18 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     expect(screen.getByRole("button", { name: "morgen früh" })).toBeInTheDocument();
   });
 
+  it("öffnet beim Zuordnen genau die ausgewählte eingehende Mail", () => {
+    const mail = { key: "mail:graph-message-42", field: "assign" as const, kind: "mail" as const, title: "TEST Anfrage", meta: "TEST Absender", urgency: "decision" as const, graphMessageId: "graph-message-42" };
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canDelegate: true, dashboard: { ...dashboard, items: [mail], visibleFields: [...dashboard.visibleFields] }, projection }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Zuordnen" }));
+
+    expect(ports.requestCreate).toHaveBeenCalledWith({
+      intent: "DIRECT_INTAKE",
+      prefill: { sourceMode: "mail", graphMessageId: "graph-message-42" },
+    });
+  });
+
   it("benennt mehrere Konflikte im Plural", () => {
     const secondConflict = { ...dashboard.items[0], key: "order:order-2", orderId: "order-2", title: "A-2026-0002 · Muster GmbH" };
     render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canDelegate: true, dashboard: { ...dashboard, items: [...dashboard.items, secondConflict], visibleFields: [...dashboard.visibleFields] }, projection }} />);

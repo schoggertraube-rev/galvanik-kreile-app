@@ -343,6 +343,52 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     }));
   });
 
+  it("opens the exact mail from Der Tag without restoring an intake draft", async () => {
+    vi.mocked(listOutlookInboxAction).mockResolvedValue({
+      code: "OK",
+      data: [
+        {
+          id: "graph-message-other",
+          internetMessageId: "<graph-message-other@example.invalid>",
+          subject: "Andere Mail",
+          senderName: "Andere Person",
+          senderAddress: "andere@example.invalid",
+          receivedAt: "2026-10-27T19:00:00.000Z",
+          preview: "Nicht ausgewählt.",
+          body: "Nicht ausgewählt.",
+          hasAttachments: false,
+        },
+        {
+          id: "graph-message-1",
+          internetMessageId: "<graph-message-1@example.invalid>",
+          subject: "TEST Anfrage",
+          senderName: "TEST Ansprechpartner",
+          senderAddress: "kunde@example.invalid",
+          receivedAt: "2026-10-27T20:00:00.000Z",
+          preview: "Bitte dem Vorgang zuordnen.",
+          body: "Bitte dem Vorgang zuordnen.",
+          hasAttachments: true,
+        },
+      ],
+    });
+    const readIntakeDraft = vi.fn().mockResolvedValue({ code: "OK", data: { payload: { version: 1, kind: "INTAKE", note: "ALTER ENTWURF" } } });
+    const value = ports({ readIntakeDraft });
+    render(<GlobalCreateFlow ports={value} />);
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent("path1:global-create-open", { detail: {
+        intent: "DIRECT_INTAKE",
+        prefill: { sourceMode: "mail", graphMessageId: "graph-message-1" },
+      } }));
+    });
+
+    expect(await screen.findByRole("heading", { name: "Mail zuordnen" })).toBeInTheDocument();
+    expect(screen.getByText("TEST Anfrage")).toBeInTheDocument();
+    expect(screen.queryByText("Andere Mail")).not.toBeInTheDocument();
+    expect(readIntakeDraft).not.toHaveBeenCalled();
+    expect(screen.queryByText(/ALTER ENTWURF|wieder aufgenommen/)).not.toBeInTheDocument();
+  });
+
   it("does not guess a customer when an email address belongs to more than one record", async () => {
     vi.mocked(getCustomersDb).mockResolvedValue({
       ok: true,

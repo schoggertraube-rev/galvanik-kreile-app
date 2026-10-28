@@ -10,6 +10,7 @@ export type GlobalCreateRequest = {
     note?: string;
     dueDate?: string;
     sourceMode?: "camera" | "document" | "mail";
+    graphMessageId?: string;
     quotePositions?: Array<{ quantity?: string; material?: string }>;
   };
 };

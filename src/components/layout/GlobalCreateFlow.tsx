@@ -761,7 +761,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     }
   };
 
-  const loadDirectIntake = async (preselectedCustomerId?: string) => {
+  const loadDirectIntake = async (preselectedCustomerId?: string, restoreDraft = true) => {
     if (!ports.canCreateQuote) {
       deny("quote");
       return;
@@ -787,7 +787,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
           ? ports.listCustomers()
           : Promise.resolve({ code: "OK" as const, customers: [] }),
         ports.listCatalog?.() ?? Promise.resolve({ code:"UNAVAILABLE" as const, message:"Leistungskatalog ist nicht angebunden." }),
-        ports.readIntakeDraft(),
+        restoreDraft ? ports.readIntakeDraft() : Promise.resolve({ code: "OK" as const, data: null }),
       ]);
       if (seq !== customerRequestSeq.current) return;
       if (result.code !== "OK") {
@@ -852,7 +852,12 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       deny("quote");
       return;
     }
-    void loadDirectIntake(prefill?.customerId);
+    const selectedMailId = prefill?.sourceMode === "mail" && prefill.graphMessageId?.trim()
+      ? prefill.graphMessageId.trim()
+      : null;
+    setSourceMode(selectedMailId ? "mail" : null);
+    setPendingMailId(selectedMailId);
+    void loadDirectIntake(prefill?.customerId, !selectedMailId);
   };
 
   useEffect(() => {
@@ -2137,6 +2142,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       ) : null}
       {open && sourceMode ? <F1SourceDialogs
         mode={sourceMode}
+        graphMessageId={sourceMode === "mail" ? pendingMailId : null}
         canUseMail={ports.canUseMail}
         customerId={directCustomerMode === "EXISTING" ? directCustomerId : null}
         onClose={() => setSourceMode(null)}

@@ -39,6 +39,7 @@ export type F1SourceMode = "camera" | "document" | "mail";
 
 type Props = {
   mode: F1SourceMode;
+  graphMessageId?: string | null;
   canUseMail: boolean;
   customerId: string | null;
   onClose: () => void;
@@ -134,19 +135,28 @@ export function F1SourceDialogs(props: Props) {
       const result = await listOutlookInboxAction();
       if (!active) return;
       if (result.code !== "OK") { setMessage(result.message); setMailState("error"); return; }
-      setInbox(result.data);
-      setCustomerByMail(Object.fromEntries(result.data.map((mail) => {
+      const visibleInbox = props.graphMessageId
+        ? result.data.filter((mail) => mail.id === props.graphMessageId)
+        : result.data;
+      if (props.graphMessageId && visibleInbox.length === 0) {
+        setInbox([]);
+        setMessage("Die ausgewählte Mail ist nicht mehr im Postfach verfügbar.");
+        setMailState("error");
+        return;
+      }
+      setInbox(visibleInbox);
+      setCustomerByMail(Object.fromEntries(visibleInbox.map((mail) => {
         const senderAddress = mail.senderAddress.trim().toLowerCase();
         const exactMatches = nextCustomers.filter((customer) => customer.email?.trim().toLowerCase() === senderAddress);
         const exact = exactMatches.length === 1 ? exactMatches[0] : undefined;
         return [mail.id, props.customerId ?? exact?.id ?? ""];
       })));
-      setMailState(result.data.length ? "ready" : "empty");
+      setMailState(visibleInbox.length ? "ready" : "empty");
     }).catch(() => {
       if (active) { setMessage("Postfach nicht erreichbar · In Klärung"); setMailState("error"); }
     });
     return () => { active = false; };
-  }, [props.canUseMail, props.customerId, props.mode]);
+  }, [props.canUseMail, props.customerId, props.graphMessageId, props.mode]);
 
   const storeFile = async (file: File | undefined) => {
     if (!file) return;
