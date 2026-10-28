@@ -26,8 +26,8 @@ Quelle: Reihenfolge des Arrays `korrekturen` in `docs/project/endversion/codex/B
 | K20 | rechte | erledigt | `63e73e54` | 28.10.2026 |
 | K21 | tag | erledigt | `cd499e01` | 28.10.2026 |
 | K22 | tag | erledigt | `a61c0899` | 28.10.2026 |
-| K23 | tag | erledigt (Tasten; Dialog-10-Ziel gemäß BAUPLAN bis F3/F4 zurückgestellt) | dieser Commit | 28.10.2026 |
-| K24 | tag | offen | — | — |
+| K23 | tag | erledigt (Tasten; Dialog-10-Ziel gemäß BAUPLAN bis F3/F4 zurückgestellt) | `cbbff229` | 28.10.2026 |
+| K24 | tag | erledigt (Entwurfszustand gemäß U-212 Stufe 2) | dieser Commit | 28.10.2026 |
 | K25 | hbmehr | offen | — | — |
 
 ## Eingang-Freeze aus dem abgelösten 57er-Korrekturstand

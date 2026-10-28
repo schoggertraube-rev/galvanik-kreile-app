@@ -233,13 +233,22 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     const empty = { ...projection, orders: [], priority: [], recent: [], dominant: null } satisfies OrdersHomeProjection;
     const emptyDashboard = { ...dashboard, items: [], visibleFields: [...dashboard.visibleFields] };
     const { rerender } = render(<RolfHomeClient ports={actionPorts} model={{ kind: "empty", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: emptyDashboard, projection: empty }} />);
-    expect(screen.getByRole("status")).toHaveTextContent("Noch keine Handlungen für dich.");
+    expect(screen.getByRole("status")).toHaveTextContent("Noch keine Aufträge erfasst.");
     expect(screen.getByRole("button", { name: "Neuer Eingang" })).toBeInTheDocument();
     rerender(<RolfHomeClient ports={actionPorts} model={{ kind: "denied", message: "Nicht freigegeben." }} />);
     expect(screen.getByRole("status")).toHaveTextContent("Tagesbestand nicht öffnen");
     rerender(<RolfHomeClient ports={actionPorts} model={{ kind: "error", message: "Lesefehler." }} />);
-    expect(screen.getByRole("alert")).toHaveTextContent("gerade nicht verfügbar");
+    expect(screen.getByRole("alert")).toHaveTextContent("Aufträge konnten nicht geladen werden");
+    fireEvent.click(screen.getByRole("button", { name: "Erneut laden" }));
+    expect(ports.refresh).toHaveBeenCalled();
     rerender(<RolfHomeClient ports={actionPorts} model={{ kind: "no_areas" }} />);
     expect(screen.getByRole("status")).toHaveTextContent("Noch keine Bereiche freigegeben");
+  });
+
+  it("zeigt den Teilzustand für nicht erreichbare Mails mit erneutem Laden", () => {
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "empty", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items: [], visibleFields: [...dashboard.visibleFields], outlookMessage: "technischer Providertext" }, projection: { ...projection, orders: [], priority: [], recent: [], dominant: null } }} />);
+    expect(screen.getByText("Mails nicht erreichbar · Zuordnen ohne Mails")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Erneut laden" }));
+    expect(ports.refresh).toHaveBeenCalled();
   });
 });
