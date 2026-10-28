@@ -109,7 +109,7 @@
   display: grid;
   place-items: center;
   padding: var(--space-4);
-  background: rgb(21 34 48 / 48%);
+  background: var(--scrim);
 }
 
 .ownCode h2,

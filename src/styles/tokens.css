@@ -1,7 +1,7 @@
 /* Kompatibilitätsnamen für bestehenden Produktcode; Werte kommen ausschließlich aus V1.1. */
 :root {
   /* Sichtbare V1.1-Flaechenwahrheit. Mock-Shells erben diese Werte und liefern keine eigenen Flaechenwerte. */
-  --ground:#F4F2EE;--surface:#FFFFFF;--line:#E4E0D8;--rand:#D5D0C7;--flaeche:#F7F6F3;
+  --ground:#F4F2EE;--surface:#FFFFFF;--line:#E4E0D8;--rand:#D5D0C7;--flaeche:#F7F6F3;--scrim:rgba(18,22,31,.55);
   --bg-app:var(--ground);--bg-app-soft:var(--flaeche);--surface-card:var(--surface);
   --surface-tinted:var(--flaeche);--surface-tinted-soft:var(--ground-rail);
   --gold-600:var(--amber);--gold-500:var(--cream-500);--gold-100:var(--cream-300);
