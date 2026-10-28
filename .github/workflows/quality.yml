@@ -611,6 +611,13 @@ jobs:
       - name: P3 current schema replay fresh from zero without seed (blocking)
         run: ./node_modules/.bin/supabase db reset --local --no-seed
 
+      - name: H12 F0/F2 schema EXPLAIN gate and self-test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: |
+          npm run quality:f0-f2-schema
+          npm run quality:f0-f2-schema:selftest
+
       - name: P3 tenant-bound Lane-0 search integration test (blocking)
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres

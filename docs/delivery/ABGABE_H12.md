@@ -22,6 +22,14 @@ Production-/Live-Daten geändert: nein
 - Änderung: Der Read liefert alle anderen aktiven Logins mit Bereich `auftraege` als `{ userId, displayName }`, sortiert nach `app_users.full_name` und ID. Das Menü zeigt gemäß BAUPLAN M5 je Ziel „an {login} geben“ und übergibt genau dessen DB-ID an den bestehenden Serverbefehl. Gibt es kein Ziel, entfällt **Weitere**.
 - DB-Soll: keine Datenänderung beim Lesen. Erst der Owner-Klick legt über den bestehenden Zuweisungsbefehl genau eine aktive Aufgabenzuweisung mit gewähltem Empfänger, Geber und Frist an.
 
+## H12.3 – verkleinerter F0/F2-Schema-Gate
+
+- Befund: Die F0/F2-Reads wurden in CI nicht gemeinsam gegen die frisch replayte Datenbank geplant; eine nicht vorhandene Spalte konnte deshalb bis zur Laufzeit gelangen.
+- Fundstellen: `scripts/quality/check-f0-f2-schema.mjs:1`, `package.json` und `.github/workflows/quality.yml` direkt nach dem frischen P3-Replay.
+- Änderung: Zehn benannte SQL-Verträge aus Login, Rechte und „Der Tag“ laufen per PostgreSQL `EXPLAIN` gegen die frische Replay-Datenbank. Der Selbsttest fragt absichtlich `definitely_missing_h12_column` ab und ist nur grün, wenn der Gate diese Spalte ablehnt.
+- Abgrenzung U-217: Der Gate umfasst nur F0/F2. Die Ausweitung auf SQL in allen gegen `main` geänderten Dateien gehört ausschließlich zu H16.
+- DB-Soll: reiner Schema-Read; keine Zeile wird angelegt, geändert oder gelöscht.
+
 ## Owner-Klickweg
 
 1. Als Rolf anmelden.
