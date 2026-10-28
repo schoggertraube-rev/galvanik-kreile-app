@@ -618,6 +618,13 @@ jobs:
           npm run quality:f0-f2-schema
           npm run quality:f0-f2-schema:selftest
 
+      - name: H11 fixed action matrix against real server commands
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          H11_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          SUPABASE_SERVICE_ROLE_KEY: ""
+        run: npx vitest run src/test/h11_action_matrix.integration.test.ts --maxWorkers=1 --no-file-parallelism
+
       - name: P3 tenant-bound Lane-0 search integration test (blocking)
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres

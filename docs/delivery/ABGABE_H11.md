@@ -58,12 +58,13 @@ Migration: `supabase/migrations/20261028163707_h11_align_access_rights.sql`. Sie
 - DB-Soll: unverändert zu Rest a; dieser Unterpunkt ändert keine Datenbankzeile.
 - Prüfung: fokussierte Kunden-Tests 8/8, TypeScript, gezieltes ESLint, Modulgrenzen und Spec-Check `expected=5 found=5 missing=0` grün.
 
-### Rest f – nach einem Fixversuch zurückgenommen
+### Rest f – echte Aktionsmatrix im Replay
 
-- Befund: Der feste Replay-Test lief nach dem einen erlaubten Fixversuch mit allen zwölf Login/Aktions-Kombinationen grün; der anschließende Linter beanstandete jedoch den Testhelfernamen als React-Hook.
-- Fundstelle: `docs/project/endversion/codex/RUECKFRAGEN_H11.md`.
-- Ergebnis gemäß Regel 7: Alle H11f-Code- und Workflow-Änderungen wurden zurückgenommen. H11f ist nicht fertig; Produktcode und Datenbanken blieben unverändert.
-- DB-Soll: unverändert zu Rest a.
+- Befund: Der bisherige H11-Test verglich nur Matrix und `hasAuthorizationArea`, nicht die Antwort der vier echten Serverbefehle. Der erste zurückgenommene Replay-Test war fachlich grün; nur sein Helfername `useSession` wurde vom React-Hook-Linter beanstandet.
+- Fundstellen: `src/test/h11_action_matrix.integration.test.ts:1`, `.github/workflows/quality.yml:621` und `docs/project/endversion/codex/RUECKFRAGEN_H11.md`.
+- Ergebnis nach Owner-Freigabe: Der Testhelfer heißt mechanisch `setSession`. Der feste Vertrag prüft drei idempotente TEST-Logins × vier echte Serverbefehle = zwölf Kombinationen: Zahlung bestätigen, Auftragsinhalt ändern, Kunde anlegen und KV anlegen. Meister darf alle vier; Werkstatt mit `auftraege` + `kassieren` nur die Zahlung; developer keinen Geschäftsvorgang.
+- Prüfung: lokaler Replay-Lauf 1/1 Test mit allen 12/12 Kombinationen grün; TypeScript und ESLint grün. Derselbe Lauf ist im blockierenden Fresh-Replay-CI eingehängt.
+- DB-Soll: Dev- und Production-DB unverändert zu Rest a. Der Test schreibt ausschließlich klar markierte, idempotente TEST-Fixtures in die jeweils frische lokale Replay-DB.
 
 ## Owner-Klickweg
 
@@ -78,6 +79,7 @@ Migration: `supabase/migrations/20261028163707_h11_align_access_rights.sql`. Sie
 
 - `node scripts/ui/spec-check.mjs --screens=rechte,meincode`: `expected=5 found=5 missing=0`.
 - Fokussierte H11-Tests: 104/104 grün.
+- Fester H11f-Replay-Vertrag: 3 Testlogins, 4 echte Serverbefehle, 12/12 Kombinationen grün.
 - Lokale Migration: angewendet; `supabase db lint --local --level error`: 0 Fehler.
 - Dev-DB H11a: Migration `20261028163707` angewendet und per anschließender SQL-Abfrage gegen `app_users`/`app_user_rights` belegt.
 - TypeScript, gezieltes ESLint, Modulgrenzen, No-Fake-Gate und Produktions-Build: grün.
