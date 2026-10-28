@@ -221,8 +221,8 @@ describe("readPaymentSummary", () => {
 
   it("reads one order-bound paid state through the dedicated UI view", async () => {
     execute.mockResolvedValueOnce([orderPaidRow]);
-    const { readOrderPaymentState } = await import("../paymentSummaryRead");
-    await expect(readOrderPaymentState(admin, { orderId: paidRow.order_id })).resolves.toMatchObject({
+    const { getPaymentState } = await import("../paymentSummaryRead");
+    await expect(getPaymentState(admin, paidRow.order_id)).resolves.toMatchObject({
       code: "OK",
       data: {
         orderId: paidRow.order_id,
@@ -242,8 +242,8 @@ describe("readPaymentSummary", () => {
 
   it("returns Rechnung without an invoice and without inventing payment values", async () => {
     execute.mockResolvedValueOnce([orderWithoutInvoiceRow]);
-    const { readOrderPaymentState } = await import("../paymentSummaryRead");
-    await expect(readOrderPaymentState(werkstatt, { orderId: paidRow.order_id })).resolves.toEqual({
+    const { getPaymentState } = await import("../paymentSummaryRead");
+    await expect(getPaymentState(werkstatt, paidRow.order_id)).resolves.toEqual({
       code: "OK",
       data: {
         orderId: paidRow.order_id,
@@ -263,8 +263,8 @@ describe("readPaymentSummary", () => {
 
   it("reads the canonical F1.1 lifecycle/status pair without treating status as a station", async () => {
     execute.mockResolvedValueOnce([canonicalIntakeRow]);
-    const { readOrderPaymentState } = await import("../paymentSummaryRead");
-    await expect(readOrderPaymentState(admin, { orderId: paidRow.order_id })).resolves.toMatchObject({
+    const { getPaymentState } = await import("../paymentSummaryRead");
+    await expect(getPaymentState(admin, paidRow.order_id)).resolves.toMatchObject({
       code: "OK",
       data: {
         orderVersion: 1,
@@ -279,27 +279,27 @@ describe("readPaymentSummary", () => {
   });
 
   it("fails closed for invalid input, denial, missing, ambiguous or corrupt order state", async () => {
-    const { readOrderPaymentState } = await import("../paymentSummaryRead");
-    await expect(readOrderPaymentState(admin, { orderId: " bad " })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
-    await expect(readOrderPaymentState(readonlyUser, { orderId: paidRow.order_id })).resolves.toMatchObject({ code: "FORBIDDEN" });
+    const { getPaymentState } = await import("../paymentSummaryRead");
+    await expect(getPaymentState(admin, " bad ")).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(getPaymentState(readonlyUser, paidRow.order_id)).resolves.toMatchObject({ code: "FORBIDDEN" });
     expect(withTransaction).not.toHaveBeenCalled();
 
     execute.mockResolvedValueOnce([]);
-    await expect(readOrderPaymentState(admin, { orderId: paidRow.order_id })).resolves.toMatchObject({ code: "NOT_FOUND" });
+    await expect(getPaymentState(admin, paidRow.order_id)).resolves.toMatchObject({ code: "NOT_FOUND" });
     execute.mockResolvedValueOnce([orderPaidRow, orderPaidRow]);
-    await expect(readOrderPaymentState(admin, { orderId: paidRow.order_id })).resolves.toMatchObject({ code: "UNAVAILABLE" });
+    await expect(getPaymentState(admin, paidRow.order_id)).resolves.toMatchObject({ code: "UNAVAILABLE" });
     execute.mockResolvedValueOnce([{ ...orderPaidRow, integrity_ok: false }]);
-    await expect(readOrderPaymentState(admin, { orderId: paidRow.order_id })).resolves.toMatchObject({ code: "UNAVAILABLE" });
+    await expect(getPaymentState(admin, paidRow.order_id)).resolves.toMatchObject({ code: "UNAVAILABLE" });
     execute.mockResolvedValueOnce([{ ...canonicalIntakeRow, goods_out_allowed: true }]);
-    await expect(readOrderPaymentState(admin, { orderId: paidRow.order_id })).resolves.toMatchObject({ code: "UNAVAILABLE" });
+    await expect(getPaymentState(admin, paidRow.order_id)).resolves.toMatchObject({ code: "UNAVAILABLE" });
   });
 
   it("logs available database diagnostics while returning only a generic error", async () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
     execute.mockRejectedValueOnce({ message: "relation failed", details: "internal detail", hint: "retry later" });
-    const { readOrderPaymentState } = await import("../paymentSummaryRead");
-    const result = await readOrderPaymentState(admin, { orderId: paidRow.order_id });
-    expect(log).toHaveBeenCalledWith("readOrderPaymentState database error", {
+    const { getPaymentState } = await import("../paymentSummaryRead");
+    const result = await getPaymentState(admin, paidRow.order_id);
+    expect(log).toHaveBeenCalledWith("getPaymentState database error", {
       message: "relation failed",
       details: "internal detail",
       hint: "retry later",

@@ -12,7 +12,6 @@ import type {
 } from "@/lib/server/commands/setPaymentModeCommand";
 import type {
   OrderPaymentStateReadResult,
-  ReadOrderPaymentStateInput,
 } from "@/lib/server/paymentSummaryRead";
 
 type ActionAuthorizationResult =
@@ -71,13 +70,13 @@ export type GetOrderPaymentStateActionResult =
   | { code: "UNAUTHENTICATED"; message: string };
 
 export async function getOrderPaymentStateAction(
-  input: ReadOrderPaymentStateInput,
+  input: { orderId: string },
 ): Promise<GetOrderPaymentStateActionResult> {
   try {
     const authorization = await resolveActionAuthorization();
     if (!authorization.ok) return authorization.result;
-    const { readOrderPaymentState } = await import("@/lib/server/paymentSummaryRead");
-    return readOrderPaymentState(authorization.data, input);
+    const { getPaymentState } = await import("@/lib/server/paymentSummaryRead");
+    return getPaymentState(authorization.data, input.orderId);
   } catch (error) {
     console.error("[ORDER_CARD_PAYMENT_ACTION_ERROR]", {
       orderId: input.orderId,

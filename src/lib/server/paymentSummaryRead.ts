@@ -18,8 +18,6 @@ export type PaymentSummaryReadResult =
   | { code: "FORBIDDEN"; message: string }
   | { code: "UNAVAILABLE"; message: string };
 
-export type ReadOrderPaymentStateInput = { orderId: string };
-
 export type OrderPaymentStateReadResult =
   | { code: "OK"; data: OrderPaymentState }
   | { code: "NOT_FOUND"; message: string }
@@ -68,17 +66,13 @@ export async function readPaymentSummary(
   }
 }
 
-export async function readOrderPaymentState(
+export async function getPaymentState(
   authorization: AuthorizationSnapshot,
-  input: unknown,
+  orderId: unknown,
 ): Promise<OrderPaymentStateReadResult> {
   if (
-    !input
-    || typeof input !== "object"
-    || Array.isArray(input)
-    || Object.keys(input).length !== 1
-    || typeof (input as { orderId?: unknown }).orderId !== "string"
-    || !ORDER_ID_PATTERN.test((input as { orderId: string }).orderId)
+    typeof orderId !== "string"
+    || !ORDER_ID_PATTERN.test(orderId)
   ) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Zahlungsabfrage." };
   }
@@ -86,7 +80,6 @@ export async function readOrderPaymentState(
     return { code: "FORBIDDEN", message: "Zahlungs- und Warenausgangsdaten sind mit dieser Rolle nicht erlaubt." };
   }
 
-  const orderId = (input as ReadOrderPaymentStateInput).orderId;
   try {
     const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const rows = await tx.execute<OrderPaymentStateRow>(sql`
@@ -103,7 +96,7 @@ export async function readOrderPaymentState(
       ? { code: "OK", data }
       : { code: "NOT_FOUND", message: "Zahlungs- und Warenausgangsdaten sind nicht verfügbar." };
   } catch (error) {
-    logReadFailure("readOrderPaymentState database error", error);
+    logReadFailure("getPaymentState database error", error);
     return { code: "UNAVAILABLE", message: "Zahlungs- und Warenausgangsdaten konnten nicht sicher geladen werden." };
   }
 }
