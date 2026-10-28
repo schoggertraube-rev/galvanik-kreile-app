@@ -23,8 +23,8 @@ Quelle: Reihenfolge des Arrays `korrekturen` in `docs/project/endversion/codex/B
 | K17 | spaeter | erledigt | `5b5a3c9b` | 28.10.2026 |
 | K18 | login | erledigt | `6ca7ab84` | 28.10.2026 |
 | K19 | login | erledigt | `a43412ec` | 28.10.2026 |
-| K20 | rechte | erledigt | dieser Commit | 28.10.2026 |
-| K21 | tag | offen | — | — |
+| K20 | rechte | erledigt | `63e73e54` | 28.10.2026 |
+| K21 | tag | erledigt | dieser Commit | 28.10.2026 |
 | K22 | tag | offen | — | — |
 | K23 | tag | offen | — | — |
 | K24 | tag | offen | — | — |

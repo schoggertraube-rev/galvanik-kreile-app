@@ -138,6 +138,21 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     expect(within(screen.getByRole("region", { name: "Lage" })).getByText("Konflikte")).toBeInTheDocument();
   });
 
+  it("sortiert Konflikt vor Warnung vor Entscheidung und darin nach Termin", () => {
+    const items = [
+      { ...dashboard.items[0], key: "decision", title: "A-2026-0004 · Entscheidung", urgency: "decision" as const, dueDate: "2026-10-27", field: "action" as const },
+      { ...dashboard.items[0], key: "warning-late", title: "A-2026-0003 · Warnung spät", urgency: "warning" as const, dueDate: "2026-10-30", field: "action" as const },
+      { ...dashboard.items[0], key: "conflict", title: "A-2026-0001 · Konflikt", urgency: "conflict" as const, dueDate: "2026-10-31", field: "action" as const },
+      { ...dashboard.items[0], key: "warning-early", title: "A-2026-0002 · Warnung früh", urgency: "warning" as const, dueDate: "2026-10-29", field: "action" as const },
+    ];
+    const { container } = render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items, visibleFields: [...dashboard.visibleFields] }, projection }} />);
+    const titles = [...container.querySelectorAll(".kr-hb-titel")].map((node) => node.textContent);
+    expect(titles).toEqual(expect.arrayContaining([expect.stringContaining("Konflikt"), expect.stringContaining("Warnung früh"), expect.stringContaining("Warnung spät"), expect.stringContaining("Entscheidung")]));
+    expect(titles.map((title) => title?.split(" · ").at(-1))).toEqual(["Konflikt", "Warnung früh", "Warnung spät", "Entscheidung"]);
+    const filters = [...within(screen.getByRole("region", { name: "Lage" })).getAllByRole("button")].map((button) => button.textContent);
+    expect(filters).toEqual(["1Konflikt", "2Warnungen", "1Entscheidung"]);
+  });
+
   it("uses the concrete money action for overdue invoices and open prepayment", () => {
     const money = [
       { key: "invoice:invoice-1", field: "money" as const, kind: "invoice" as const, title: "R-2026-0001 · Muster GmbH", meta: "100,00 € · fällig 27.10.2026", urgency: "conflict" as const, invoiceId: "invoice-1", primaryActionLabel: "Erinnern" as const },

@@ -25,6 +25,8 @@ export interface HandlungsEintragProps {
   wischbar?: boolean;
   /** Aufgeschobene Einträge bleiben sichtbar, stehen aber gedimmt am Ende. */
   gedimmt?: boolean;
+  /** ISO-Termin für die stabile Sortierung innerhalb einer Dringlichkeitsart. */
+  termin?: string;
 }
 const LABEL: Record<HandlungsArt, [string, 'rot' | 'warn' | 'info']> = { konflikt: ['Konflikt', 'rot'], warnung: ['Warnung', 'warn'], entscheidung: ['Entscheidung', 'info'] };
 /** Max. 2 Zeilen: Titel + 1 Meta · Aktion rechts · keine Erklärzeile */
@@ -74,12 +76,13 @@ export interface HandlungsListeProps {
   auswahl?: number;
 }
 /** Handlungsbedarf zuerst (§6.1). Nichts dringend ⇒ rendert nichts (keine „Alles gut“-Fläche). */
-const ORDNUNG: Record<HandlungArtKey, number> = { konflikt: 0, entscheidung: 1, warnung: 2 };
+const ORDNUNG: Record<HandlungArtKey, number> = { konflikt: 0, warnung: 1, entscheidung: 2 };
 type HandlungArtKey = HandlungsArt;
-/** Reihenfolge: Konflikt → Entscheidung → Warnung. Nichts dringend ⇒ rendert nichts. */
+function terminWert(value?: string): number { const parsed = value ? Date.parse(value) : Number.NaN; return Number.isNaN(parsed) ? Number.MAX_SAFE_INTEGER : parsed; }
+/** Reihenfolge: Konflikt → Warnung → Entscheidung, innerhalb nach Termin. Nichts dringend ⇒ rendert nichts. */
 export function HandlungsListe({ eintraege: roh, geraet, label, zustand = 'daten', texte, max, fokus, auswahl = -1 }: HandlungsListeProps) {
   const [offen, setOffen] = useState(false);
-  const sortiert = [...roh].sort((a, c) => Number(Boolean(a.gedimmt)) - Number(Boolean(c.gedimmt)) || ORDNUNG[a.art] - ORDNUNG[c.art]);
+  const sortiert = [...roh].sort((a, c) => Number(Boolean(a.gedimmt)) - Number(Boolean(c.gedimmt)) || ORDNUNG[a.art] - ORDNUNG[c.art] || terminWert(a.termin) - terminWert(c.termin));
   const f = fokus ? sortiert.find(e => !e.status) : undefined;
   const eintraege = (f ? [{ ...f, fokus: true }, ...sortiert.filter(e => e !== f)] : sortiert).map((e, n) => ({ ...e, gewaehlt: geraet === 'desktop' && n === auswahl }));
   if (zustand === 'daten' && eintraege.length === 0 && !label) return null;
