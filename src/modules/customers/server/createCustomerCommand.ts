@@ -10,6 +10,7 @@ import type {
   CustomerCreateReceipt,
   ReadCustomerCreateReceiptResult,
 } from "./types";
+import { isCustomerPaymentPreference } from "../paymentPreferenceContract";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -88,7 +89,7 @@ function normalizeInput(value: unknown): NormalizedCreateCustomerInput | null {
   const notes = optionalFormText(value.notes, 1, 2000);
   if (!name || !phone || companyName === undefined || contactPerson === undefined || email === undefined || street === undefined
     || zipCode === undefined || city === undefined || country === undefined || paymentPreference === undefined || vatId === undefined || notes === undefined
-    || (paymentPreference !== null && !/^(?:vorkasse|bar)$/.test(paymentPreference))) return null;
+    || (paymentPreference !== null && !isCustomerPaymentPreference(paymentPreference, false))) return null;
   if (email !== null && !EMAIL_PATTERN.test(email)) return null;
   return {
     clientEventId: value.clientEventId,

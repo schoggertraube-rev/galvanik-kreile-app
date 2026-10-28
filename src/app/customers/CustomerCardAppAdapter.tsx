@@ -14,7 +14,8 @@ function toCard(c: CustomerSummaryData): CustomerCardModel {
   return {
     id:c.id, customerNumber:c.customerNumber, name:c.name, companyName:c.companyName, type:c.type,
     contactPerson:c.contactPerson, email:c.email, phone:c.phone, address:c.street ?? c.address,
-    zipCode:c.zipCode, city:c.city, country:c.country, paymentPreference:c.paymentPreference, vatId:c.vatId,
+    zipCode:c.zipCode, city:c.city, country:c.country, paymentPreference:c.paymentPreference,
+    invoiceTermsEnabled:c.invoiceTermsEnabled, vatId:c.vatId,
     classification:c.classification, notes:c.internalNotes, tags:c.tags, createdAt:c.createdAt,
     updatedAt:c.updatedAt, orderCount:c.orderCount, wareImHausCount:c.wareImHausCount,
     invoiceRevenueCents:c.invoiceRevenueCents, invoiceOpenCents:c.invoiceOpenCents, orders:c.orders,

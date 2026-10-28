@@ -31,6 +31,7 @@ export type CustomerSummary = {
   city: string | null;
   country: string | null;
   paymentPreference: string | null;
+  invoiceTermsEnabled: boolean;
   vatId: string | null;
   classification: string | null;
   internalNotes: string | null;
@@ -68,6 +69,7 @@ type SummaryRow = {
   city: string | null;
   country: string | null;
   payment_preference: string | null;
+  invoice_terms_enabled: boolean;
   vat_id: string | null;
   classification: string | null;
   internal_notes: string | null;
@@ -167,6 +169,7 @@ function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot): Cust
     || row.order_count !== orders.length
     || row.ware_im_haus_count !== orders.filter((order) => ["angenommen", "galvanik", "fertig"].includes(order.status)).length
     || row.ware_im_haus !== (row.ware_im_haus_count > 0)
+    || typeof row.invoice_terms_enabled !== "boolean"
   ) throw new Error("CUSTOMER_SUMMARY_INVALID");
   return {
     id: row.id,
@@ -183,6 +186,7 @@ function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot): Cust
     city: row.city,
     country: row.country,
     paymentPreference: row.payment_preference,
+    invoiceTermsEnabled: row.invoice_terms_enabled,
     vatId: row.vat_id,
     classification: row.classification,
     internalNotes: row.internal_notes,
@@ -212,9 +216,13 @@ export async function readCustomerSummary(
     const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const rows = await tx.execute<SummaryRow>(sql`
         SELECT summary.*,
+               customer.ziel_freigeschaltet AS invoice_terms_enabled,
                COALESCE(billing.invoice_revenue_cents, 0)::bigint AS invoice_revenue_cents,
                COALESCE(billing.invoice_open_cents, 0)::bigint AS invoice_open_cents
         FROM private.v_customer_summary_v1 summary
+        JOIN public.customers customer
+          ON customer.tenant_id = summary.tenant_id
+         AND customer.id = summary.id
         LEFT JOIN LATERAL (
           SELECT sum(invoice.gross_amount_cents) FILTER (WHERE invoice.status = 'issued') AS invoice_revenue_cents,
                  sum(invoice.payment_open_amount_cents) FILTER (WHERE invoice.status = 'issued') AS invoice_open_cents

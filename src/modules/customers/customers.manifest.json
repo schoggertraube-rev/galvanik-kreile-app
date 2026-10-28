@@ -27,7 +27,7 @@
     "@/modules/customers/server-public#updateCustomerNoteCommand"
   ],
   "capabilities": ["customers:create"],
-  "migrations": ["20260914100000_path1_customer_persistence_contract.sql", "20261025182920_s1_p1_datenfundament.sql", "20261027193000_f1_intake_drafts.sql", "20261028014500_customer_create_notes_and_invoice_terms.sql"],
+  "migrations": ["20260914100000_path1_customer_persistence_contract.sql", "20261025182920_s1_p1_datenfundament.sql", "20261027193000_f1_intake_drafts.sql", "20261028014500_customer_create_notes_and_invoice_terms.sql", "20261028234500_h13_clear_customer_payment_preferences.sql"],
   "viewsFunctions": [
     "private.allocate_customer_number",
     "private.create_customer_v1",

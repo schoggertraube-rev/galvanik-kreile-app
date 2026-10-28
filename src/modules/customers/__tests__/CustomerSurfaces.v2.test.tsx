@@ -5,7 +5,7 @@ import { CustomerCardView, type CustomerCardModel } from "../public";
 const card: CustomerCardModel = {
   id: "customer-1", customerNumber: "K-1042", name: "Erika Muster", companyName: "Muster GmbH", type: "business",
   contactPerson: "Erika Muster", email: "erika@example.invalid", phone: "+49 000", address: "Testweg 1", zipCode: "70173",
-  city: "Stuttgart", country: "Deutschland", classification: null, notes: "Rückruf vormittags", tags: [],
+  city: "Stuttgart", country: "Deutschland", invoiceTermsEnabled: false, classification: null, notes: "Rückruf vormittags", tags: [],
   createdAt: "2026-09-15T08:00:00.000Z", updatedAt: "2026-09-16T08:00:00.000Z", orderCount: 1, wareImHausCount: 1,
   invoiceRevenueCents: 17850, invoiceOpenCents: 8925,
   orders: [{ id: "order-1", orderNumber: "A-2026-0042", title: "Geländer", station: "galvanik", status: "angenommen", dueAt: "2026-09-20", version: 1 }],
@@ -36,6 +36,37 @@ describe("Customer card V2", () => {
     );
     expect(screen.getByText("Keine aktiven Aufträge.")).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Kundenkarte K-1042" })).not.toHaveTextContent(/Readback|zurückgelesen|tenantgebunden/i);
+  });
+
+  it("starts without country or payment defaults and hides invoice terms without approval", () => {
+    render(
+      <CustomerCardView
+        state={{ kind: "data", card: { ...card, country: null, paymentPreference: null, invoiceTermsEnabled: false } }}
+        onClose={vi.fn()}
+        onOpenOrder={vi.fn()}
+        onSaveCommercial={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Bearbeiten" })[0]);
+    expect(screen.getByRole("textbox", { name: "Land" })).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: "Zahlungsbedingung" })).toHaveValue("");
+    expect(screen.queryByRole("option", { name: "Rechnung 14 Tage" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Rechnung 30 Tage" })).not.toBeInTheDocument();
+  });
+
+  it("offers invoice terms only when the customer is approved for them", () => {
+    render(
+      <CustomerCardView
+        state={{ kind: "data", card: { ...card, paymentPreference: "rechnung_14", invoiceTermsEnabled: true } }}
+        onClose={vi.fn()}
+        onOpenOrder={vi.fn()}
+        onSaveCommercial={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Bearbeiten" })[0]);
+    expect(screen.getByRole("combobox", { name: "Zahlungsbedingung" })).toHaveValue("rechnung_14");
+    expect(screen.getByRole("option", { name: "Rechnung 14 Tage" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Rechnung 30 Tage" })).toBeInTheDocument();
   });
 
   it.each(["denied", "not-found", "error", "conflict"] as const)("keeps %s fail-closed", (kind) => {

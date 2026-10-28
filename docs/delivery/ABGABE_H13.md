@@ -1,6 +1,6 @@
 # ABGABE H13 – Stille Ersatzwerte
 
-Stand: 28.10.2026 23:45 Europe/Berlin
+Stand: 29.10.2026 00:05 Europe/Berlin
 Branch: `kreile/s1-p2-eingang`
 
 ## Befund und Stand
@@ -8,7 +8,7 @@ Branch: `kreile/s1-p2-eingang`
 | Unterpunkt | Ergebnis | Fundstelle / Nachweis |
 |---|---|---|
 | H13.1 Firmendaten | Erledigt nach Owner-Antwort. Der Read bewahrt fehlende Werte als `null`; die vorhandene Bearbeitungsfläche zeigt leere Eingaben und den verlinkten Hinweis „fehlt – in Firmendaten eintragen“. Es wird kein Land, Zahlungsziel oder Logo erfunden. | `src/modules/fundament/server/systemSettingsPort.ts:49,84-91`; `src/modules/fundament/public.ts:14-16,49-50`; `src/app/settings/SettingsAdminClient.tsx:64-76,281,286`; `src/modules/fundament/fundament.manifest.json:10` |
-| H13.2 Zahlungsziel Kunde | Nach einem Fixversuch vollständig zurückgenommen; die Migration wurde nicht auf die Dev-DB angewendet. Rückfrage dokumentiert. | `docs/project/endversion/codex/RUECKFRAGEN_H13.md` |
+| H13.2 Zahlungsziel Kunde | Erledigt nach Owner-Antwort. Oberfläche und Server verwenden denselben festen Vertrag. `rechnung_14` und `rechnung_30` erscheinen und gelten nur bei realem `ziel_freigeschaltet`. Land und Zahlungsbedingung haben keine Vorgabe. | `src/modules/customers/paymentPreferenceContract.ts:1-17`; `src/modules/customers/ui/CustomerCardView.tsx:113-115,258-259`; `src/modules/customers/server/createCustomerCommand.ts:92`; `src/modules/customers/server/updateCustomerCommercialCommand.ts:25,35-45`; `src/lib/server/customerSummaryRead.ts:219-224` |
 | H13.3 stille Berechtigungsfehler | Erledigt. Der Datenbankfehler behält die sichtbare Kennung `AUTH_DB_ERROR`; die 13 in der Warteschlange genannten Produktpfade geben die Resolver-Meldung weiter. Zusätzlich wurden vier gleichartige allgemeine Berechtigungshelfer vom stillen Catch befreit. | `src/lib/server/authorization.ts:191`; `src/app/actions/invoices.actions.ts:28`; `src/app/actions/intakeDraft.actions.ts:8`; `src/app/actions/customers.actions.ts:100`; `src/app/actions/communications.actions.ts:16`; `src/app/warendurchlauf/actions.ts:188`; `src/lib/server/commands/invoiceItemPriceCommand.ts:108`; `src/lib/server/commands/orderContentCommand.ts:107`; `src/lib/server/commands/orderIntakeCommand.ts:507`; `src/app/buchhaltung/rechnungen/InvoicesAppAdapter.tsx:8`; `src/lib/auth/permissions.ts:10` |
 | H13.4 Tenant / Eingang | Unverändert, wie beauftragt. | Keine Änderung an `src/db/schema.ts` oder `GlobalCreateFlow.tsx`. |
 
@@ -32,17 +32,26 @@ Branch: `kreile/s1-p2-eingang`
 - `scripts/ui/spec-check.mjs`: nicht anwendbar, da H13.3 keine BAUPLAN-Oberfläche oder `data-spec-id` ändert.
 - Datenbank: **keine Migration, keine Zeilenänderung** in H13.3.
 
+## Prüfergebnis H13.2
+
+- Fokussierte Tests: **18/18 grün**. TypeScript, fokussierter ESLint, `quality:module-gates` und `quality:no-fake-production`: **grün**.
+- Die mechanische PDF-Test-Fixture enthält den realen Pflichtwert `invoiceTermsEnabled` (`src/lib/pdf/__tests__/QuoteDocument.test.tsx:18`).
+- Dev-Migration `20261028234500_h13_clear_customer_payment_preferences.sql` gezielt ausgeführt und als angewandt registriert; die offene ältere Migration `20261028115141` blieb unberührt.
+- SQL-Nachweis nach Migration: K-2026-0001, K-2026-0011 und K-2026-0012 jeweils `payment_preference = NULL`, `ziel_freigeschaltet = false`.
+- Production blieb unverändert.
+
 ## Owner-Klickweg (maximal 6 Schritte)
 
-1. Als Rolf anmelden und **Einstellungen → Firmendaten** öffnen.
-2. Bei unvollständigen Firmendaten prüfen: oben steht **„fehlt – in Firmendaten eintragen“**.
-3. Den Link anklicken; der Browser springt zu den vorhandenen Firmendatenfeldern.
-4. Prüfen: ein fehlendes Land, Zahlungsziel oder Logo ist leer und nicht mit einem Ersatzwert vorbelegt.
+1. Als Rolf Kundenkarte **K-2026-0011** öffnen und **Bearbeiten** wählen.
+2. Erwartung: Zahlungsbedingung steht auf **„Nicht festgelegt“**; Rechnung 14/30 wird ohne Freischaltung nicht angeboten; Land hat keine Vorgabe, wenn es fehlt.
+3. **Vorkasse** wählen und speichern; Erwartung: Meldung **„Stammdaten gespeichert.“**
+4. **Einstellungen → Firmendaten** öffnen; bei Lücken steht **„fehlt – in Firmendaten eintragen“**, der Link springt zu den leeren Feldern.
 5. Für H13.3 einen Dev-Datenbankfehler im Berechtigungslesen auslösen und Kundenkarte oder Rechnungsliste öffnen.
 6. Erwartung: Die sichtbare Fehlermeldung enthält `AUTH_DB_ERROR`; sie lautet nicht „Sitzung nicht verfügbar“.
 
 ## Erwarteter Datenbankstand
 
 - H13.1 und H13.3 schreiben keine Datenbankzeile. Fehlende Firmendaten bleiben `NULL`.
-- K-2026-0001, K-2026-0011 und K-2026-0012 bleiben durch diese Abgabe unverändert, weil H13.2 vollständig zurückgenommen wurde.
+- Unmittelbar nach der H13.2-Migration: K-2026-0001, K-2026-0011 und K-2026-0012 jeweils `payment_preference = NULL`, `ziel_freigeschaltet = false`.
+- Nach Owner-Klick Schritt 3: K-2026-0011 hat `payment_preference = 'vorkasse'`; die beiden anderen bleiben `NULL`.
 - Production bleibt unverändert.

@@ -40,7 +40,7 @@ describe("customer payment guards", () => {
   });
 
   it("lehnt ohne Bereich Geld jede Ã„nderung der Zahlungsbedingung ab", async () => {
-    execute.mockResolvedValueOnce([{ payment_preference: "vorkasse" }]);
+    execute.mockResolvedValueOnce([{ payment_preference: "vorkasse", ziel_freigeschaltet: false }]);
     const { updateCustomerCommercialCommand } = await import("../server/updateCustomerCommercialCommand");
     await expect(updateCustomerCommercialCommand(context, { ...updateInput, paymentPreference: "bar" }))
       .resolves.toMatchObject({ code: "FORBIDDEN" });
@@ -48,13 +48,24 @@ describe("customer payment guards", () => {
   });
 
   it("lehnt auch mit Bereich Geld vorkasse zu Rechnung ohne Freischalt-Command ab", async () => {
-    execute.mockResolvedValueOnce([{ payment_preference: "vorkasse" }]);
+    execute.mockResolvedValueOnce([{ payment_preference: "vorkasse", ziel_freigeschaltet: false }]);
     const { updateCustomerCommercialCommand } = await import("../server/updateCustomerCommercialCommand");
     await expect(updateCustomerCommercialCommand({
       ...context,
       capabilities: { canCreateCustomer: true, canManageMoney: true },
     }, updateInput)).resolves.toMatchObject({ code: "FORBIDDEN", message: expect.stringContaining("Ziel nicht freigeschaltet") });
     expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts an invoice preference only with the stored approval", async () => {
+    execute
+      .mockResolvedValueOnce([{ payment_preference: "rechnung_14", ziel_freigeschaltet: true }])
+      .mockResolvedValueOnce([{ result_code: "OK", replayed: false }]);
+    const { updateCustomerCommercialCommand } = await import("../server/updateCustomerCommercialCommand");
+    await expect(updateCustomerCommercialCommand({
+      ...context,
+      capabilities: { canCreateCustomer: true, canManageMoney: true },
+    }, updateInput)).resolves.toEqual({ code: "OK", replayed: false });
   });
 
   it("stellt Rechnung auf Ziel ausschlieÃŸlich Ã¼ber den Geld-Command frei", async () => {

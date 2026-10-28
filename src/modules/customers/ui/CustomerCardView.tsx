@@ -2,6 +2,7 @@
 
 import { type ReactNode, useState, useSyncExternalStore } from "react";
 import type { CustomerCardState, UpdateCustomerCommercialInput } from "../server/types";
+import { CUSTOMER_PAYMENT_PREFERENCES } from "../paymentPreferenceContract";
 import {
   Auftragszeile,
   Button,
@@ -109,6 +110,9 @@ export function CustomerCardView({
   }
 
   const card = state.card;
+  const paymentPreferences = CUSTOMER_PAYMENT_PREFERENCES.filter((option) => (
+    !option.requiresInvoiceTerms || card.invoiceTermsEnabled
+  ));
   const missingForOrder = [
     !card.name.trim() ? "Name/Firma" : null,
     !card.contactPerson?.trim() ? "Ansprechpartner" : null,
@@ -251,8 +255,8 @@ export function CustomerCardView({
           <Feld label="Straße"><Eingabe name="street" required defaultValue={card.address ?? ""} /></Feld>
           <Feld label="PLZ"><Eingabe name="zipCode" required defaultValue={card.zipCode ?? ""} /></Feld>
           <Feld label="Ort"><Eingabe name="city" required defaultValue={card.city ?? ""} /></Feld>
-          <Feld label="Land"><Eingabe name="country" required defaultValue={card.country ?? "Deutschland"} /></Feld>
-          <Feld label="Zahlungsbedingung"><select className="kr-auswahl" name="paymentPreference" defaultValue={card.paymentPreference ?? "rechnung_14"}><option value="rechnung_14">Rechnung 14 Tage</option><option value="rechnung_30">Rechnung 30 Tage</option><option value="vorkasse">Vorkasse</option><option value="bar">Bar</option></select></Feld>
+          <Feld label="Land"><Eingabe name="country" required defaultValue={card.country ?? ""} /></Feld>
+          <Feld label="Zahlungsbedingung"><select className="kr-auswahl" name="paymentPreference" required defaultValue={card.paymentPreference ?? ""}><option value="">Nicht festgelegt</option>{paymentPreferences.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></Feld>
           <Feld label="USt-ID"><Eingabe name="vatId" defaultValue={card.vatId ?? ""} /></Feld>
         </FormRaster>
         {saveMessage ? <p role="status">{saveMessage}</p> : null}

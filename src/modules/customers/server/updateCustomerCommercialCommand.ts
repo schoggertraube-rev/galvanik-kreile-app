@@ -3,6 +3,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import type { CustomerCommandContext, UpdateCustomerCommercialInput } from "./types";
+import { isCustomerPaymentPreference } from "../paymentPreferenceContract";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -21,7 +22,7 @@ function normalize(input: unknown): UpdateCustomerCommercialInput | null {
     !name || (value.companyName !== null && !companyName) || (value.contactPerson !== null && !contactPerson) ||
     (value.email !== null && (!email || !EMAIL.test(email))) || (value.phone !== null && !phone) ||
     !street || !zipCode || !city || !country || (value.vatId !== null && !vatId)
-    || typeof value.paymentPreference !== "string" || !/^(?:rechnung_[1-9][0-9]{0,2}|vorkasse|bar)$/.test(value.paymentPreference)) return null;
+    || !isCustomerPaymentPreference(value.paymentPreference, true)) return null;
   return { clientEventId: value.clientEventId, customerId: value.customerId, name, companyName, contactPerson, email, phone, street, zipCode, city, country, paymentPreference: value.paymentPreference, vatId };
 }
 
@@ -31,14 +32,17 @@ export async function updateCustomerCommercialCommand(context: CustomerCommandCo
   if (!context.capabilities.canCreateCustomer) return { code: "FORBIDDEN" as const, message: "Kundendaten dürfen nicht geändert werden." };
   try {
     return await withPrivilegedTenantTransaction(context, async (tx) => {
-      const existing = await tx.execute<{ payment_preference: string | null }>(sql`
-        SELECT customer.payment_preference
+      const existing = await tx.execute<{ payment_preference: string | null; ziel_freigeschaltet: boolean }>(sql`
+        SELECT customer.payment_preference, customer.ziel_freigeschaltet
         FROM public.customers customer
         WHERE customer.tenant_id = ${context.tenantId}
           AND customer.id = ${value.customerId}
         FOR UPDATE
       `);
       const current = existing.length === 1 ? existing[0] : null;
+      if (current && !isCustomerPaymentPreference(value.paymentPreference, current.ziel_freigeschaltet)) {
+        return { code: "FORBIDDEN" as const, message: "Ziel nicht freigeschaltet." };
+      }
       if (!current) return { code: "NOT_FOUND" as const, message: "Kunde ist nicht verfÃ¼gbar." };
       if (!context.capabilities.canManageMoney) {
         if (current.payment_preference === null || current.payment_preference !== value.paymentPreference) {
