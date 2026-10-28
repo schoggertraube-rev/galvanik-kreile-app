@@ -19,9 +19,5 @@ export default async function HomePage() {
 
   const authorization = result.data;
   if (authorization.role === "admin") redirect("/settings");
-  if (authorization.role === "werkstatt" || authorization.role === "meister" || authorization.role === "buero" || authorization.role === "readonly" || authorization.role === "developer") {
-    return <HomeAppAdapter authorization={authorization} />;
-  }
-
-  return <ProductActorAccessUnavailable />;
+  return <HomeAppAdapter authorization={authorization} />;
 }

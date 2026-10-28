@@ -1,7 +1,7 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
-import type { AuthorizationSnapshot } from "@/lib/server/authorization";
+import { hasAuthorizationArea, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import { getOperationalOrders } from "@/lib/server/operationalOrders";
 import { readIntakeDraft } from "@/lib/server/intakeDraft";
 import { listMicrosoftGraphInbox } from "@/lib/server/microsoftGraph";
@@ -48,14 +48,12 @@ type GraphThreadRow = { source: string };
 const DEFAULT_FIELDS: TodayVisibleField[] = ["today", "assign", "money", "bundle"];
 function allowedTodayFields(auth: AuthorizationSnapshot): Set<TodayLayoutField> {
   const allowed = new Set<TodayLayoutField>(["action"]);
-  const hasArea = (area: string) => auth.areas?.some((candidate) => candidate === area) === true;
-  const legacySnapshot = auth.areas === undefined;
-  if (hasArea("auftraege") || (legacySnapshot && auth.permissions.includes("perm_view_leitstand"))) {
+  if (hasAuthorizationArea(auth, "auftraege")) {
     allowed.add("today");
     allowed.add("bundle");
   }
-  if (hasArea("mails") || (legacySnapshot && (auth.role === "meister" || auth.role === "buero"))) allowed.add("assign");
-  if (hasArea("geld") || (legacySnapshot && auth.permissions.includes("perm_view_prices"))) allowed.add("money");
+  if (hasAuthorizationArea(auth, "mails")) allowed.add("assign");
+  if (hasAuthorizationArea(auth, "geld")) allowed.add("money");
   return allowed;
 }
 
@@ -68,16 +66,18 @@ function euro(cents: number | string) {
 }
 
 export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<TodayDashboard> {
-  const graphAllowed = auth.role === "meister" || auth.role === "buero";
+  const ordersAllowed = hasAuthorizationArea(auth, "auftraege");
+  const graphAllowed = hasAuthorizationArea(auth, "mails");
+  const moneyAllowed = hasAuthorizationArea(auth, "geld");
   const [orders, draft, graph, support] = await Promise.all([
-    getOperationalOrders(auth),
+    ordersAllowed ? getOperationalOrders(auth) : Promise.resolve([]),
     readIntakeDraft(auth),
     graphAllowed ? listMicrosoftGraphInbox() : Promise.resolve({ code: "IN_KLAERUNG" as const, message: "Outlook ist für dieses Profil nicht eingeblendet." }),
     withPrivilegedTenantTransaction(auth, async (tx) => {
       const [preferences, reminders, invoices, prepayments, phillip, graphThreads] = await Promise.all([
         tx.execute<PreferenceRow>(sql`SELECT preference.visible_fields, to_jsonb(preference)->'layout' AS layout FROM private.today_preferences preference WHERE preference.tenant_id=${auth.tenantId} AND preference.actor_id=${auth.userId}::uuid LIMIT 1`),
         tx.execute<ReminderRow>(sql`SELECT item_key, reminder_until FROM private.today_reminders WHERE tenant_id=${auth.tenantId} AND actor_id=${auth.userId}::uuid`),
-        auth.permissions.includes("perm_view_prices") ? tx.execute<InvoiceRow>(sql`
+        moneyAllowed ? tx.execute<InvoiceRow>(sql`
           SELECT invoice.id, invoice.invoice_number, invoice.order_id, customer.name AS customer_name,
                  customer.country AS customer_country, invoice.due_date,
                  invoice.payment_open_amount_cents AS open_amount_cents,
@@ -91,7 +91,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
           ORDER BY invoice.due_date, invoice.invoice_number
           LIMIT 20
         `) : Promise.resolve([]),
-        auth.permissions.includes("perm_view_prices") ? tx.execute<PrepaymentRow>(sql`
+        moneyAllowed ? tx.execute<PrepaymentRow>(sql`
           SELECT payment.order_id, payment.order_number, customer.name AS customer_name,
                  customer.country AS customer_country, orders.due_date, payment.invoice_id,
                  payment.payment_open_amount_cents AS open_amount_cents,
@@ -108,8 +108,22 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
           ORDER BY orders.due_date NULLS LAST, payment.order_number
           LIMIT 20
         `) : Promise.resolve([]),
-        tx.execute<UserRow>(sql`SELECT id FROM public.app_users WHERE tenant_id=${auth.tenantId} AND active=true AND role='werkstatt' ORDER BY display_name LIMIT 1`),
-        tx.execute<GraphThreadRow>(sql`SELECT source FROM public.communication_threads WHERE tenant_id=${auth.tenantId} AND source LIKE 'MS_GRAPH_IN:%'`),
+        ordersAllowed ? tx.execute<UserRow>(sql`
+          SELECT users.id
+          FROM public.app_users users
+          WHERE users.tenant_id=${auth.tenantId}
+            AND users.active=true
+            AND users.id<>${auth.userId}::uuid
+            AND EXISTS (
+              SELECT 1 FROM public.app_user_rights rights
+              WHERE rights.tenant_id=users.tenant_id
+                AND rights.user_id=users.id
+                AND rights.bereich='auftraege'
+            )
+          ORDER BY users.display_name
+          LIMIT 1
+        `) : Promise.resolve([]),
+        graphAllowed ? tx.execute<GraphThreadRow>(sql`SELECT source FROM public.communication_threads WHERE tenant_id=${auth.tenantId} AND source LIKE 'MS_GRAPH_IN:%'`) : Promise.resolve([]),
       ]);
       return { preferences, reminders, invoices, prepayments, phillip, graphThreads };
     }),

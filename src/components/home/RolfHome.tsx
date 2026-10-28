@@ -1,4 +1,4 @@
-import type { AuthorizationSnapshot } from "@/lib/server/authorization";
+import { hasAnyAuthorizationArea, hasAuthorizationArea, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import { getOperationalOrders } from "@/lib/server/operationalOrders";
 import { readTodayDashboard } from "@/lib/server/todayDashboard";
 import type { OperationalOrder } from "@/lib/types/operationalOrder";
@@ -30,19 +30,15 @@ function toHomeSource(order: OperationalOrder): OrdersHomeSource {
 }
 
 export async function loadRolfHome(authorization: AuthorizationSnapshot): Promise<RolfHomeModel> {
-  if (authorization.role !== "buero" && authorization.role !== "meister" && authorization.role !== "readonly" && authorization.role !== "werkstatt" && authorization.role !== "developer") {
-    return { kind: "denied", message: "Diese Rollen-Startseite ist nicht freigegeben." };
-  }
-  if (!authorization.permissions.includes("perm_view_leitstand")) {
-    return { kind: "denied", message: "Der Tagesbestand ist für diese Rolle nicht freigegeben." };
-  }
+  if (!hasAnyAuthorizationArea(authorization)) return { kind: "no_areas" };
 
   try {
     const [orders, dashboard] = await Promise.all([getOperationalOrders(authorization), readTodayDashboard(authorization)]);
     const common = {
       role: authorization.role,
-      canCreateOrder: authorization.permissions.includes("perm_data_orders"),
-      canDelegate: authorization.role === "meister" || authorization.role === "buero",
+      canCreateOrder: hasAuthorizationArea(authorization, "eingang"),
+      canWorkOrders: hasAuthorizationArea(authorization, "auftraege"),
+      canDelegate: hasAuthorizationArea(authorization, "auftraege"),
       dashboard,
     } as const;
     const projection = buildOrdersHomeProjection(orders.map(toHomeSource), new Date().toISOString());

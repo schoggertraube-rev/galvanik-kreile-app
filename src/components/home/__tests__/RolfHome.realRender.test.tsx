@@ -8,7 +8,7 @@ const ports = vi.hoisted(() => ({
   requestCreate: vi.fn(),
   push: vi.fn(),
   refresh: vi.fn(),
-  permissions: { loading: false, canCreateOrder: true },
+  permissions: { loading: false, canCreateOrder: true, canWorkOrders: true },
 }));
 vi.mock("@/lib/overlayStore", () => ({ useOverlayStore: (selector: (state: { openOrder: typeof ports.openOrder; openInvoice: typeof ports.openInvoice }) => unknown) => selector({ openOrder: ports.openOrder, openInvoice: ports.openInvoice }) }));
 vi.mock("@/components/layout/GlobalCreateFlow", () => ({ requestGlobalCreate: ports.requestCreate }));
@@ -16,7 +16,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: ports.push, refres
 vi.mock("@/lib/auth/PermissionsContext", () => ({
   usePermissions: () => ({
     loading: ports.permissions.loading,
-    hasPermission: (permission: string) => permission === "perm_data_orders" && ports.permissions.canCreateOrder,
+    hasArea: (area: string) => (area === "eingang" && ports.permissions.canCreateOrder) || (area === "auftraege" && ports.permissions.canWorkOrders),
   }),
 }));
 
@@ -33,6 +33,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   ports.permissions.loading = false;
   ports.permissions.canCreateOrder = true;
+  ports.permissions.canWorkOrders = true;
 });
 
 const projection: OrdersHomeProjection = {
@@ -68,7 +69,7 @@ const dashboard = {
 
 describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
   it("zeigt den V1.1-Aufbau und öffnet Ware raus für den heute fälligen Auftrag", () => {
-    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canDelegate: true, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields] }, projection }} />);
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields] }, projection }} />);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     expect(screen.getByTestId("rolf-v11-home")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Der Tag" })).toHaveClass("kr-seite-titel");
@@ -76,6 +77,7 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     expect(within(screen.getByRole("region", { name: "Lage" })).getByText("Konflikt")).toBeInTheDocument();
     expect(screen.getByText("Heute fällig")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Später" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Weitere" })).toBeInTheDocument();
     const open = screen.getByRole("button", { name: "Ware raus" });
     expect(open.closest(".kr-hb-eintrag")).toHaveClass("kr-hb-eintrag--konflikt", "kr-fokus");
     fireEvent.click(open);
@@ -83,7 +85,7 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
   });
 
   it("zeigt keine Aktionen ohne echte Anbindung", () => {
-    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canDelegate: true, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields] }, projection }} />);
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields] }, projection }} />);
     fireEvent.click(screen.getByRole("button", { name: "Später" }));
     expect(screen.getByRole("heading", { name: "Später erinnern" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "morgen früh" })).toBeInTheDocument();
@@ -91,7 +93,7 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
 
   it("öffnet beim Zuordnen genau die ausgewählte eingehende Mail", () => {
     const mail = { key: "mail:graph-message-42", field: "assign" as const, kind: "mail" as const, title: "TEST Anfrage", meta: "TEST Absender", urgency: "decision" as const, graphMessageId: "graph-message-42" };
-    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canDelegate: true, dashboard: { ...dashboard, items: [mail], visibleFields: [...dashboard.visibleFields] }, projection }} />);
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items: [mail], visibleFields: [...dashboard.visibleFields] }, projection }} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Zuordnen" }));
 
@@ -103,7 +105,7 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
 
   it("benennt mehrere Konflikte im Plural", () => {
     const secondConflict = { ...dashboard.items[0], key: "order:order-2", orderId: "order-2", title: "A-2026-0002 · Muster GmbH" };
-    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canDelegate: true, dashboard: { ...dashboard, items: [...dashboard.items, secondConflict], visibleFields: [...dashboard.visibleFields] }, projection }} />);
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items: [...dashboard.items, secondConflict], visibleFields: [...dashboard.visibleFields] }, projection }} />);
     expect(within(screen.getByRole("region", { name: "Lage" })).getByText("Konflikte")).toBeInTheDocument();
   });
 
@@ -112,7 +114,7 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
       { key: "invoice:invoice-1", field: "money" as const, kind: "invoice" as const, title: "R-2026-0001 · Muster GmbH", meta: "100,00 € · fällig 27.10.2026", urgency: "conflict" as const, invoiceId: "invoice-1", primaryActionLabel: "Erinnern" as const },
       { key: "prepayment:order-1", field: "money" as const, kind: "order" as const, title: "A-2026-0001 · Vorkasse offen", meta: "Muster GmbH · 100,00 € · Versand gesperrt", urgency: "warning" as const, orderId: "order-1", primaryActionLabel: "Zahlung bestätigen" as const },
     ];
-    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canDelegate: true, dashboard: { ...dashboard, items: money, visibleFields: [...dashboard.visibleFields] }, projection }} />);
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items: money, visibleFields: [...dashboard.visibleFields] }, projection }} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Erinnern" }));
     fireEvent.click(screen.getByRole("button", { name: "Zahlung bestätigen" }));
@@ -123,7 +125,7 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
 
   it("opens the existing bundle path with the selected surface", () => {
     const bundle = { key: "bundle:Zink & Nickel", field: "bundle" as const, kind: "bundle" as const, title: "2 Aufträge bündeln", meta: "Zink & Nickel", urgency: "decision" as const, bundleSurface: "Zink & Nickel", primaryActionLabel: "Bündel öffnen" as const };
-    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canDelegate: true, dashboard: { ...dashboard, items: [bundle], visibleFields: [...dashboard.visibleFields], layout: [{ field: "action", column: "left", order: 0 }, { field: "bundle", column: "left", order: 1 }] }, projection }} />);
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items: [bundle], visibleFields: [...dashboard.visibleFields], layout: [{ field: "action", column: "left", order: 0 }, { field: "bundle", column: "left", order: 1 }] }, projection }} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Bündel öffnen" }));
 
@@ -131,7 +133,7 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
   });
 
   it("edits and saves the complete allowed field layout on the page", async () => {
-    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canDelegate: true, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields], layout: [...dashboard.layout], defaultLayout: [...dashboard.defaultLayout], allowedFields: [...dashboard.allowedFields] }, projection }} />);
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields], layout: [...dashboard.layout], defaultLayout: [...dashboard.defaultLayout], allowedFields: [...dashboard.allowedFields] }, projection }} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Anpassen" }));
     expect(screen.getByRole("heading", { name: "Felder zuordnen" })).toBeInTheDocument();
@@ -146,8 +148,9 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
   });
 
   it("führt readonly ohne Warenausgang-Aktion", () => {
-    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "readonly", canCreateOrder: false, canDelegate: false, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields] }, projection }} />);
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "readonly", canCreateOrder: false, canWorkOrders: false, canDelegate: false, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields] }, projection }} />);
     expect(screen.queryByRole("button", { name: /Ware raus öffnen/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Weitere" })).not.toBeInTheDocument();
   });
 
   it.each([
@@ -163,12 +166,14 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
   it("zeigt ehrliche Leer-, Verweigert- und Fehlerzustände", () => {
     const empty = { ...projection, orders: [], priority: [], recent: [], dominant: null } satisfies OrdersHomeProjection;
     const emptyDashboard = { ...dashboard, items: [], visibleFields: [...dashboard.visibleFields] };
-    const { rerender } = render(<RolfHomeClient ports={actionPorts} model={{ kind: "empty", role: "meister", canCreateOrder: true, canDelegate: true, dashboard: emptyDashboard, projection: empty }} />);
+    const { rerender } = render(<RolfHomeClient ports={actionPorts} model={{ kind: "empty", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: emptyDashboard, projection: empty }} />);
     expect(screen.getByRole("status")).toHaveTextContent("Noch keine Handlungen für dich.");
     expect(screen.getByRole("button", { name: "Neuer Eingang" })).toBeInTheDocument();
     rerender(<RolfHomeClient ports={actionPorts} model={{ kind: "denied", message: "Nicht freigegeben." }} />);
     expect(screen.getByRole("status")).toHaveTextContent("Tagesbestand nicht öffnen");
     rerender(<RolfHomeClient ports={actionPorts} model={{ kind: "error", message: "Lesefehler." }} />);
     expect(screen.getByRole("alert")).toHaveTextContent("gerade nicht verfügbar");
+    rerender(<RolfHomeClient ports={actionPorts} model={{ kind: "no_areas" }} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Noch keine Bereiche freigegeben");
   });
 });

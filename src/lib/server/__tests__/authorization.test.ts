@@ -2,7 +2,7 @@ process.env.DATABASE_URL = "postgres://mock:mock@localhost:5432/mock";
 
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { resolveAuthorization } from "../authorization";
+import { hasAnyAuthorizationArea, hasAuthorizationArea, resolveAuthorization } from "../authorization";
 import * as appSessionModule from "../appSession";
 import { db } from "@/db";
 import { appUsers } from "@/db/schema";
@@ -436,5 +436,14 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
       reason: "SESSION_REVOKED",
       message: "AUTH_ERROR: Sitzung widerrufen",
     });
+  });
+
+  it("bindet Bereichszugriff an app_user_rights statt an die Rolle", () => {
+    const base = { role: "meister" as const, areas: ["kunden"] as const };
+    expect(hasAnyAuthorizationArea(base)).toBe(true);
+    expect(hasAuthorizationArea(base, "kunden")).toBe(true);
+    expect(hasAuthorizationArea(base, "mails")).toBe(false);
+    expect(hasAuthorizationArea({ role: "meister", areas: [] }, "auftraege")).toBe(false);
+    expect(hasAnyAuthorizationArea({ role: "meister", areas: [] })).toBe(false);
   });
 });

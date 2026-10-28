@@ -24,6 +24,25 @@ export type AuthorizationSnapshot = {
   active: true;
 };
 
+/** Live snapshots use app_user_rights. The role template is only a compatibility
+ * fallback for older isolated fixtures that predate the areas field. */
+export function hasAuthorizationArea(
+  authorization: Pick<AuthorizationSnapshot, "areas" | "role">,
+  area: AccessArea,
+): boolean {
+  return authorization.areas === undefined
+    ? ROLE_ACCESS_AREA_TEMPLATES[authorization.role].includes(area)
+    : authorization.areas.includes(area);
+}
+
+export function hasAnyAuthorizationArea(
+  authorization: Pick<AuthorizationSnapshot, "areas" | "role">,
+): boolean {
+  return authorization.areas === undefined
+    ? ROLE_ACCESS_AREA_TEMPLATES[authorization.role].length > 0
+    : authorization.areas.length > 0;
+}
+
 export type AuthorizationFailureReason =
   | "NO_SESSION"
   | "INVALID_SESSION"

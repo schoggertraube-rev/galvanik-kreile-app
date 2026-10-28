@@ -101,6 +101,8 @@ describe("F1-R0 root route containment", () => {
     expect(adapter).toContain("@/modules/orders/public");
     expect(adapter).toContain("<RolfHome");
     const home = readFileSync(resolve(process.cwd(), "src/components/home/RolfHome.tsx"), "utf8");
-    expect(home).toContain('authorization.role !== "developer"');
+    expect(home).toContain("hasAnyAuthorizationArea(authorization)");
+    expect(home).toContain('hasAuthorizationArea(authorization, "auftraege")');
+    expect(home).not.toContain('authorization.role !== "developer"');
   });
 });

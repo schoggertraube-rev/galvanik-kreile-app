@@ -5,14 +5,16 @@ import { useRouter } from "next/navigation";
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useOverlayStore } from "@/lib/overlayStore";
+import type { AppRole } from "@/lib/auth/authorizationContract";
 import type { TodayDashboard, TodayItem, TodayLayoutItem, TodayVisibleField } from "@/lib/server/todayDashboard";
 import type { OrdersHomeProjection, OrdersHomeSource } from "@/modules/orders/public";
 import { Button, Dialog, HandlungsListe, Hinweis, Kachel, Lageleiste, SeitenKopf, Zustand, type Geraet, type HandlungsArt } from "@/ui/kr";
 
-type RolfIdentity = { role: "buero" | "developer" | "meister" | "readonly" | "werkstatt"; canCreateOrder: boolean; canDelegate: boolean; dashboard: TodayDashboard };
+type RolfIdentity = { role: AppRole; canCreateOrder: boolean; canWorkOrders: boolean; canDelegate: boolean; dashboard: TodayDashboard };
 export type RolfHomeModel =
   | ({ kind: "data"; projection: OrdersHomeProjection } & RolfIdentity)
   | ({ kind: "empty"; projection: OrdersHomeProjection } & RolfIdentity)
+  | { kind: "no_areas" }
   | { kind: "denied"; message: string }
   | { kind: "error"; message: string };
 type BasicResult = { code: string; message?: string };
@@ -39,7 +41,7 @@ function reminderLabel(value: string) { return `Erinnert ${new Intl.DateTimeForm
 export function RolfHomeClient({ model, ports }: { model: RolfHomeModel; ports: RolfHomePorts }) {
   const openOrder = useOverlayStore((state) => state.openOrder);
   const openInvoice = useOverlayStore((state) => state.openInvoice);
-  const { hasPermission, loading: permissionsLoading } = usePermissions();
+  const { hasArea, loading: permissionsLoading } = usePermissions();
   const router = useRouter();
   const device = useSyncExternalStore(subscribeDevice, readDevice, () => "desktop" as const);
   const [filter, setFilter] = useState<HandlungsArt | "alle">("alle");
@@ -49,10 +51,12 @@ export function RolfHomeClient({ model, ports }: { model: RolfHomeModel; ports: 
   const [layout, setLayout] = useState<TodayLayoutItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  if (model.kind === "no_areas") return <section data-testid="rolf-v11-home"><SeitenKopf titel="Der Tag" /><Zustand art="leer" text="Noch keine Bereiche freigegeben" /></section>;
   if (model.kind === "denied" || model.kind === "error") return <section data-testid="rolf-v11-home"><SeitenKopf titel="Der Tag" /><Zustand art={model.kind === "error" ? "fehler" : "gesperrt"} text={model.kind === "error" ? "Der Tagesbestand ist gerade nicht verfügbar." : "Du kannst den Tagesbestand nicht öffnen."} /></section>;
 
-  const canWrite = model.role !== "readonly";
-  const canStartOrder = canWrite && model.canCreateOrder && !permissionsLoading && hasPermission("perm_data_orders");
+  const canStartOrder = model.canCreateOrder && !permissionsLoading && hasArea("eingang");
+  const canWorkOrders = model.canWorkOrders && !permissionsLoading && hasArea("auftraege");
+  const canDelegate = model.canDelegate && canWorkOrders;
   const filtered = filter === "alle" ? model.dashboard.items : model.dashboard.items.filter((item) => actionType(item) === filter);
   const counts = model.dashboard.items.reduce<Record<HandlungsArt, number>>((sum, item) => { sum[actionType(item)] += 1; return sum; }, { konflikt: 0, entscheidung: 0, warnung: 0 });
   const primary = (item: TodayItem) => { if (item.kind === "draft") requestGlobalCreate("DIRECT_INTAKE"); else if (item.kind === "order" && item.orderId) openOrder(item.orderId); else if (item.kind === "mail" && item.graphMessageId) requestGlobalCreate({ intent: "DIRECT_INTAKE", prefill: { sourceMode: "mail", graphMessageId: item.graphMessageId } }); else if (item.kind === "invoice" && item.invoiceId) openInvoice(item.invoiceId); else if (item.kind === "bundle" && item.bundleSurface) router.push(`/warendurchlauf?bundle=1&surface=${encodeURIComponent(item.bundleSurface)}`); };
@@ -60,7 +64,7 @@ export function RolfHomeClient({ model, ports }: { model: RolfHomeModel; ports: 
   const discardDraft = async () => { setBusy(true); const result = await ports.discardDraft(); setBusy(false); if (result.code === "OK") router.refresh(); else setMessage(result.message ?? "Entwurf nicht gelöscht."); };
   const entries = (field: TodayItem["field"]) => filtered.filter((item) => item.field === field).map((item) => ({
     key: item.key, art: actionType(item), id: item.kind === "order" ? item.title.split(" · ")[0] : undefined, titel: item.title, meta: item.snoozedUntil ? `${item.meta} · ${reminderLabel(item.snoozedUntil)}` : item.meta,
-    aktionen: [{ text: primaryLabel(item), kurz: "Öffnen", icon: "open" as const, art: "primaer" as const, onClick: () => primary(item) }, ...(item.kind === "draft" ? [{ text: "Löschen", icon: "x" as const, onClick: () => void discardDraft() }] : [{ text: "Später", icon: "clock" as const, spaeter: true, onClick: () => setLater(item) }]), ...(model.canDelegate && item.kind === "order" && model.dashboard.phillipUserId ? [{ text: "Weitere", icon: "more" as const, onClick: () => setMore(item) }] : [])],
+    aktionen: [{ text: primaryLabel(item), kurz: "Öffnen", icon: "open" as const, art: "primaer" as const, onClick: () => primary(item) }, ...(item.kind === "draft" ? [{ text: "Löschen", icon: "x" as const, onClick: () => void discardDraft() }] : [{ text: "Später", icon: "clock" as const, spaeter: true, onClick: () => setLater(item) }]), ...(canDelegate && item.kind === "order" && model.dashboard.phillipUserId ? [{ text: "Weitere", icon: "more" as const, onClick: () => setMore(item) }] : [])],
     onOeffnen: () => primary(item), onWeitere: () => setMore(item),
   }));
   const saveReminder = async (mode: "afternoon" | "tomorrow" | "after_due") => { if (!later) return; setBusy(true); const result = await ports.saveReminder({ itemKey: later.key, mode, dueDate: later.dueDate }); setBusy(false); if (result.code === "OK") { setLater(null); router.refresh(); } else setMessage(result.message ?? "Erinnerung nicht gespeichert."); };
@@ -95,7 +99,7 @@ export function RolfHomeClient({ model, ports }: { model: RolfHomeModel; ports: 
     {customize ? <Kachel titel="Felder zuordnen" icon="grid" iconTon="info"><div className="kr-stapel"><p>Handlungsbedarf bleibt immer Feld 1. Du kannst erlaubte Felder hinzufügen, entfernen, verschieben und am Desktop die Spalte wechseln.</p><div className="kr-schnellleiste">{model.dashboard.allowedFields.filter((field) => !layout.some((item) => item.field === field)).map((field) => <Button key={field} text={`${FIELD_LABELS[field]} hinzufügen`} icon="plus" onClick={() => addField(field)} />)}</div><div className="kr-schnellleiste"><Button data-spec-id="tag.vorschlag-ubernehmen" text="Vorschlag übernehmen" icon="grid" onClick={() => setLayout(model.dashboard.defaultLayout)} /><Button data-spec-id="tag.abbrechen" text="Abbrechen" onClick={() => { setCustomize(false); setLayout([]); }} /><Button data-spec-id="tag.fertig" art="primaer" icon="check" text="Fertig" disabled={busy} onClick={() => void (async () => { setBusy(true); const result = await ports.savePreferences(layout); setBusy(false); if (result.code === "OK") { setCustomize(false); setMessage("Der Tag gespeichert"); router.refresh(); } else setMessage(result.message ?? "Anordnung nicht gespeichert."); })()} /></div></div></Kachel> : null}
     {model.dashboard.items.length === 0 && !customize ? <Zustand art="leer" text="Noch keine Handlungen für dich." aktion={canStartOrder ? { text: "Neuer Eingang", icon: "inbox", onClick: () => requestGlobalCreate("DIRECT_INTAKE") } : undefined} /> : <div className="kr-stapel">
       {device === "desktop" ? <div className="kr-spalten"><div className="kr-stapel">{activeLayout.filter((item) => item.column === "left" && (customize || entries(item.field).length)).map(fieldCard)}</div><div className="kr-stapel">{activeLayout.filter((item) => item.column === "right" && (customize || entries(item.field).length)).map(fieldCard)}</div></div> : activeLayout.filter((item) => customize || entries(item.field).length).map(fieldCard)}
-      {device !== "desktop" && (canStartOrder || canWrite) ? <div className="kr-schnellleiste">{canStartOrder ? <Button art="primaer" icon="inbox" text="Neuer Eingang" onClick={() => requestGlobalCreate("DIRECT_INTAKE")} /> : null}{canWrite ? <Button icon="truck" text="Ware raus" onClick={() => router.push("/orders?station=fertig")} /> : null}</div> : null}
+      {device !== "desktop" && (canStartOrder || canWorkOrders) ? <div className="kr-schnellleiste">{canStartOrder ? <Button art="primaer" icon="inbox" text="Neuer Eingang" onClick={() => requestGlobalCreate("DIRECT_INTAKE")} /> : null}{canWorkOrders ? <Button icon="truck" text="Ware raus" onClick={() => router.push("/orders?station=fertig")} /> : null}</div> : null}
     </div>}
     {later ? <Dialog titel="Später erinnern" icon="clock" groesse="schmal" onSchliessen={() => setLater(null)}><div className="kr-stapel"><Button data-spec-id="spaeter.heute-nachmittag" text="heute Nachmittag" icon="clock" disabled={busy} onClick={() => void saveReminder("afternoon")} /><Button data-spec-id="spaeter.morgen-fruh" text="morgen früh" icon="clock" disabled={busy} onClick={() => void saveReminder("tomorrow")} /><Button data-spec-id="spaeter.nach-dem-termin" text="nach dem Termin" icon="clock" disabled={busy || !later.dueDate} onClick={() => void saveReminder("after_due")} /><Button data-spec-id="spaeter.schliessen" art="leise" text="Schließen" onClick={() => setLater(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
     {more ? <Dialog titel="Weitere Aktionen" icon="more" groesse="schmal" onSchliessen={() => setMore(null)}><div className="kr-stapel"><Button data-spec-id="hbmehr.an-phillip-delegieren" text="an Phillip delegieren" icon="handoff" disabled={busy} onClick={() => void delegate()} /><Button data-spec-id="hbmehr.schliessen" art="leise" text="Schließen" onClick={() => setMore(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}

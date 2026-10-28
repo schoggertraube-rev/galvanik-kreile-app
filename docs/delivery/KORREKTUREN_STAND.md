@@ -17,8 +17,8 @@ Quelle: Reihenfolge des Arrays `korrekturen` in `docs/project/endversion/codex/B
 | K11 | meincode | erledigt | `a6b3fa46` | 28.10.2026 |
 | K12 | tag | erledigt | `d60e8077` | 28.10.2026 |
 | K13 | tag | erledigt | `1a997d52` | 28.10.2026 |
-| K14 | tag | erledigt | dieser Commit | 28.10.2026 |
-| K15 | tag | offen | — | — |
+| K14 | tag | erledigt | `e5e52b30` | 28.10.2026 |
+| K15 | tag | erledigt | dieser Commit | 28.10.2026 |
 | K16 | tag | offen | — | — |
 | K17 | spaeter | offen | — | — |
 | K18 | login | offen | — | — |

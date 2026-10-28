@@ -1,7 +1,7 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
 import {
   withPrivilegedTenantTransaction,
   type PrivilegedTenantTransaction,
@@ -228,8 +228,8 @@ export async function assignOrderTask(input: AssignOrderTaskInput): Promise<Orde
       ? { code: "UNAVAILABLE", message: "Zuweisung ist derzeit nicht verfügbar." }
       : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
-  if (!authorization.data.permissions.includes("perm_op_status")) {
-    return { code: "FORBIDDEN", message: "Zuweisung ist mit dieser Rolle nicht erlaubt." };
+  if (!hasAuthorizationArea(authorization.data, "auftraege")) {
+    return { code: "FORBIDDEN", message: "Zuweisung ist für diesen Bereich nicht erlaubt." };
   }
 
   try {

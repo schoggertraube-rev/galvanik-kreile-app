@@ -161,6 +161,7 @@ describe("StartPage product actor boundary", () => {
     expect(pinAuth).toContain('window.location.assign("/")');
     expect(rootPage).toContain("resolveAuthorization");
     expect(rootPage).toContain('authorization.role === "admin"');
-    expect(rootPage).toContain('authorization.role === "developer"');
+    expect(rootPage).toContain("<HomeAppAdapter");
+    expect(rootPage).not.toContain('authorization.role === "developer"');
   });
 });
