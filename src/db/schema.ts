@@ -132,6 +132,8 @@ export const orders = pgTable("orders", {
   priority: text("priority").default("normal"),
   dueDate: timestamp("due_date"),
   promisedDueDate: timestamp("promised_due_date", { withTimezone: true }),
+  intakeTermStatus: text("intake_term_status"),
+  intakeSource: text("intake_source"),
   handoverMode: text("handover_mode"),
   paymentMode: text("payment_mode").notNull().default("vorkasse"),
   paymentModeVersion: integer("payment_mode_version").notNull().default(0),

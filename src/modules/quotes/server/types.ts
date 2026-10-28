@@ -25,6 +25,9 @@ export type CreateQuoteInput = {
   dueDate: string;
   note: string | null;
   positions: QuotePositionInput[];
+  validUntil?: string | null;
+  termStatus?: "wunsch" | "bestaetigt" | "verschoben" | null;
+  intakeSource?: "persoenlich" | "versand" | "abholung_firma" | "anfrage_mail" | "anfrage_telefon" | null;
 };
 
 export type ConvertQuoteInput = {
@@ -63,6 +66,9 @@ export type QuoteReadback = {
   version: number;
   currency: "EUR";
   dueDate: string;
+  validUntil: string | null;
+  termStatus: "wunsch" | "bestaetigt" | "verschoben" | null;
+  intakeSource: "persoenlich" | "versand" | "abholung_firma" | "anfrage_mail" | "anfrage_telefon" | null;
   note: string | null;
   totalNetCents: number;
   linkedOrderId: string | null;
@@ -145,6 +151,8 @@ export type QuoteOrderInput = {
   clientEventId: string;
   customer: { mode: "EXISTING"; customerId: string };
   dueDate: string;
+  termStatus: "wunsch" | "bestaetigt" | "verschoben" | null;
+  intakeSource: "persoenlich" | "versand" | "abholung_firma" | "anfrage_mail" | "anfrage_telefon" | null;
   handoverMode: "pickup" | "shipping";
   paymentMode: "vorkasse" | "abholung" | "rechnung";
   note: string | null;

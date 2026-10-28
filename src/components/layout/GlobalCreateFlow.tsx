@@ -136,6 +136,8 @@ export type DirectIntakeInput = {
     street: string; zipCode: string; city: string | null; country: string; paymentPreference: string; vatId: string | null;
   };
   dueDate: string;
+  termStatus: "wunsch" | "bestaetigt" | "verschoben";
+  intakeSource: "persoenlich" | "versand" | "abholung_firma" | "anfrage_mail" | "anfrage_telefon";
   handoverMode: "pickup" | "shipping";
   paymentMode?: "vorkasse" | "abholung" | "rechnung";
   note: string | null;
@@ -155,6 +157,8 @@ export type GlobalCreateDirectIntakeResult =
         correlationId: string;
         actorId: string;
         dueDate: string;
+        termStatus: "wunsch" | "bestaetigt" | "verschoben" | null;
+        intakeSource: "persoenlich" | "versand" | "abholung_firma" | "anfrage_mail" | "anfrage_telefon" | null;
         handoverMode: "pickup" | "shipping";
         paymentMode: "vorkasse" | "abholung" | "rechnung";
         recordedAt: string;
@@ -1796,6 +1800,11 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       } : { mode: "EXISTING", customerId: customerKey },
       // The existing F1.1 contract persists the confirmed commitment, never the non-binding wish.
       dueDate: directConfirmedDate,
+      termStatus: intakeTermStatus === "confirmed" ? "bestaetigt" : "wunsch",
+      intakeSource: intakeSource === "personal" ? "persoenlich"
+        : intakeSource === "shipping" ? "versand"
+          : intakeSource === "pickup" ? "abholung_firma"
+            : intakeSource === "mail" ? "anfrage_mail" : "anfrage_telefon",
       handoverMode: intakeHandover === "PICKUP" ? "pickup" : "shipping",
       ...(ports.canManageMoney ? { paymentMode: intakePaymentMode } : {}),
       note: nullable(directNote),
@@ -1808,7 +1817,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         return;
       }
       const readback = await ports.readDirectIntakeReceipt({ orderId: created.receipt.orderId, clientEventId: id });
-      if (readback.code !== "OK" || readback.receipt.orderId !== created.receipt.orderId || readback.receipt.dueDate !== directConfirmedDate) {
+      if (readback.code !== "OK" || readback.receipt.orderId !== created.receipt.orderId
+        || readback.receipt.dueDate !== directConfirmedDate
+        || readback.receipt.termStatus !== input.termStatus
+        || readback.receipt.intakeSource !== input.intakeSource) {
         setFeedback({ kind: "error", message: "Der neue Eingang konnte nicht sicher erneut gelesen werden. Die Anfragekennung bleibt für den Support verfügbar.", requestId: id });
         return;
       }
@@ -1843,8 +1855,16 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setBusy(true);
     setFeedback(null);
     try {
-      const quoteNoteWithValidity = [`KV gültig bis: ${quoteValidUntil}`, directNote.trim()].filter(Boolean).join("\n");
-      const result = await ports.createQuote({ clientEventId, customerId, dueDate: directWishDate, note: quoteNoteWithValidity, positions: positions.map((position) => ({ ...position, unitPriceCents: position.unitPriceCents! })) });
+      const result = await ports.createQuote({
+        clientEventId, customerId, dueDate: directWishDate, validUntil: quoteValidUntil,
+        termStatus: intakeTermStatus === "confirmed" ? "bestaetigt" : "wunsch",
+        intakeSource: intakeSource === "personal" ? "persoenlich"
+          : intakeSource === "shipping" ? "versand"
+            : intakeSource === "pickup" ? "abholung_firma"
+              : intakeSource === "mail" ? "anfrage_mail" : "anfrage_telefon",
+        note: nullable(directNote),
+        positions: positions.map((position) => ({ ...position, unitPriceCents: position.unitPriceCents! })),
+      });
       if (result.code !== "OK") {
         setFeedback(requestFeedback(result, clientEventId));
         return;

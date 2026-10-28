@@ -18,10 +18,22 @@ const input = {
   clientEventId: CLIENT,
   customerId: CUSTOMER,
   dueDate: "2026-10-15",
+  validUntil: "2026-11-15",
+  termStatus: "wunsch" as const,
+  intakeSource: "anfrage_mail" as const,
   note: "Synthetischer KV",
   positions: [{ name: "Flansch", quantity: 2, material: "Stahl", surfaceRequested: "Verzinken", unitPriceCents: 12500 }],
 };
-const intent = createHash("sha256").update(JSON.stringify(input), "utf8").digest("hex");
+const intent = createHash("sha256").update(JSON.stringify({
+  clientEventId: input.clientEventId,
+  customerId: input.customerId,
+  dueDate: input.dueDate,
+  note: input.note,
+  positions: input.positions,
+  validUntil: input.validUntil,
+  termStatus: input.termStatus,
+  intakeSource: input.intakeSource,
+}), "utf8").digest("hex");
 const authorization = {
   tenantId: TENANT,
   userId: ACTOR,
@@ -31,6 +43,7 @@ const quoteRow = {
   quote_id: QUOTE, tenant_id: TENANT, quote_number: "KV-2026-0042", customer_id: CUSTOMER,
   customer_number: "K-2026-0041", customer_display_name: "Synthetischer Kunde", status: "draft",
   version: 1, currency: "EUR", due_date: input.dueDate, note: input.note, total_net_cents: "25000",
+  valid_until: input.validUntil, intake_term_status: input.termStatus, intake_source: input.intakeSource,
   linked_order_id: null, created_by: ACTOR, actor_display_name: "Test Büro",
   created_at: "2026-09-14T10:00:00.000Z", updated_at: "2026-09-14T10:00:00.000Z", converted_at: null,
   positions: [{ id: "88888888-8888-4888-8888-888888888888", position: 1, name: "Flansch", quantity: 2, material: "Stahl", surfaceRequested: "Verzinken", unitPriceCents: 12500, lineTotalCents: 25000 }],
@@ -93,6 +106,8 @@ describe("quotes command boundary", () => {
       }],
       note: input.note,
       paymentMode: "vorkasse" as const,
+      termStatus: "bestaetigt" as const,
+      intakeSource: "anfrage_mail" as const,
     };
     const expectedOrderHash = createHash("sha256").update(JSON.stringify(orderInput), "utf8").digest("hex");
     execute

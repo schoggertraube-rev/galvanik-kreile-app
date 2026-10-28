@@ -3,12 +3,14 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
-import type { OrderIntakeExecutionRequested, OrderIntakeReceipt, OrderIntakeReceiptItem } from "@/lib/server/commands/orderIntakeCommand";
+import type { OrderIntakeExecutionRequested, OrderIntakeReceipt, OrderIntakeReceiptItem, OrderIntakeSource, OrderIntakeTermStatus } from "@/lib/server/commands/orderIntakeCommand";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const EXECUTION_REQUESTED_VALUES: readonly OrderIntakeExecutionRequested[] = ["hochglanz", "glaenzend", "matt", "gelb_passiviert", "blau_passiviert", "offen"];
+const TERM_STATUS_VALUES: readonly OrderIntakeTermStatus[] = ["wunsch", "bestaetigt", "verschoben"];
+const INTAKE_SOURCE_VALUES: readonly OrderIntakeSource[] = ["persoenlich", "versand", "abholung_firma", "anfrage_mail", "anfrage_telefon"];
 
 export type OrderIntakeCustomerSearchInput = { query: string };
 export type OrderIntakeReceiptReadInput = { orderId: string; clientEventId: string };
@@ -66,6 +68,8 @@ type ReceiptRow = {
   order_number: string;
   customer_display_name: string;
   due_date: Date | string | null;
+  intake_term_status: string | null;
+  intake_source: string | null;
   note: string | null;
   items_snapshot: unknown;
   recorded_at: Date | string;
@@ -195,6 +199,8 @@ function mapReceipt(
     (row.customer_mode !== "EXISTING" && row.customer_mode !== "NEW") ||
     !/^A-\d{4}-\d{4,}$/.test(row.order_number) || !trimmed(row.customer_display_name, 2, 160) ||
     !dueDate || !DATE_PATTERN.test(dueDate) || (row.note !== null && !trimmed(row.note, 1, 2000)) ||
+    (row.intake_term_status !== null && !TERM_STATUS_VALUES.includes(row.intake_term_status as OrderIntakeTermStatus)) ||
+    (row.intake_source !== null && !INTAKE_SOURCE_VALUES.includes(row.intake_source as OrderIntakeSource)) ||
     Number.isNaN(recorded.getTime()) || row.current_order_version !== 1 ||
     (row.handover_mode !== "pickup" && row.handover_mode !== "shipping") ||
     (row.payment_mode !== "vorkasse" && row.payment_mode !== "abholung" && row.payment_mode !== "rechnung") ||
@@ -214,6 +220,8 @@ function mapReceipt(
     correlationId: row.correlation_id,
     actorId: row.actor_id,
     dueDate,
+    termStatus: row.intake_term_status as OrderIntakeTermStatus | null,
+    intakeSource: row.intake_source as OrderIntakeSource | null,
     handoverMode: row.handover_mode,
     paymentMode: row.payment_mode,
     note: row.note,

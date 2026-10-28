@@ -14,8 +14,12 @@ const EVENT_STATION = "wareneingang" as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const EXECUTION_REQUESTED_VALUES = ["hochglanz", "glaenzend", "matt", "gelb_passiviert", "blau_passiviert", "offen"] as const;
+const TERM_STATUS_VALUES = ["wunsch", "bestaetigt", "verschoben"] as const;
+const INTAKE_SOURCE_VALUES = ["persoenlich", "versand", "abholung_firma", "anfrage_mail", "anfrage_telefon"] as const;
 
 export type OrderIntakeExecutionRequested = typeof EXECUTION_REQUESTED_VALUES[number];
+export type OrderIntakeTermStatus = typeof TERM_STATUS_VALUES[number];
+export type OrderIntakeSource = typeof INTAKE_SOURCE_VALUES[number];
 
 export type OrderIntakeItemInput = {
   catalogServiceId?: string | null;
@@ -42,6 +46,8 @@ export type CreateOrderIntakeInput = {
   clientEventId: string;
   customer: OrderIntakeCustomerInput;
   dueDate: string;
+  termStatus?: OrderIntakeTermStatus | null;
+  intakeSource?: OrderIntakeSource | null;
   handoverMode?: "pickup" | "shipping";
   paymentMode?: PaymentMode;
   note: string | null;
@@ -65,6 +71,8 @@ export type OrderIntakeReceipt = {
   correlationId: string;
   actorId: string;
   dueDate: string;
+  termStatus: OrderIntakeTermStatus | null;
+  intakeSource: OrderIntakeSource | null;
   handoverMode: "pickup" | "shipping";
   paymentMode: PaymentMode;
   note: string | null;
@@ -107,6 +115,8 @@ type ExistingReceiptRow = {
   order_number: string;
   customer_display_name: string;
   due_date: Date | string | null;
+  intake_term_status: string | null;
+  intake_source: string | null;
   note: string | null;
   items_snapshot: unknown;
   recorded_at: Date | string;
@@ -193,7 +203,10 @@ function normalizeNewCustomer(value: Record<string, unknown>): Extract<Normalize
 function normalizeInput(input: unknown): NormalizedInput | null {
   if (!plainObject(input)) return null;
   const hasPaymentMode = Object.hasOwn(input, "paymentMode");
-  if (!exactKeys(input, ["clientEventId", "customer", "dueDate", "handoverMode", "items", "note", ...(hasPaymentMode ? ["paymentMode"] : [])])) {
+  const hasTermStatus = Object.hasOwn(input, "termStatus");
+  const hasIntakeSource = Object.hasOwn(input, "intakeSource");
+  if (!exactKeys(input, ["clientEventId", "customer", "dueDate", "handoverMode", "items", "note",
+    ...(hasPaymentMode ? ["paymentMode"] : []), ...(hasTermStatus ? ["termStatus"] : []), ...(hasIntakeSource ? ["intakeSource"] : [])])) {
     return null;
   }
   if (typeof input.clientEventId !== "string" || !UUID_PATTERN.test(input.clientEventId)) return null;
@@ -202,6 +215,8 @@ function normalizeInput(input: unknown): NormalizedInput | null {
   }
   if ((input.handoverMode !== "pickup" && input.handoverMode !== "shipping")
     || (hasPaymentMode && input.paymentMode !== "vorkasse" && input.paymentMode !== "abholung" && input.paymentMode !== "rechnung")) return null;
+  if ((hasTermStatus && input.termStatus !== null && !TERM_STATUS_VALUES.includes(input.termStatus as OrderIntakeTermStatus))
+    || (hasIntakeSource && input.intakeSource !== null && !INTAKE_SOURCE_VALUES.includes(input.intakeSource as OrderIntakeSource))) return null;
   const note = normalizedOptionalText(input.note, 2000);
   if (note === undefined) return null;
 
@@ -257,6 +272,8 @@ function normalizeInput(input: unknown): NormalizedInput | null {
     clientEventId: input.clientEventId,
     customer,
     dueDate: input.dueDate,
+    termStatus: hasTermStatus ? input.termStatus as OrderIntakeTermStatus | null : null,
+    intakeSource: hasIntakeSource ? input.intakeSource as OrderIntakeSource | null : null,
     handoverMode: input.handoverMode,
     paymentMode: hasPaymentMode ? input.paymentMode as PaymentMode : null,
     note,
@@ -269,6 +286,8 @@ function canonicalIntent(input: NormalizedInput): string {
     clientEventId: input.clientEventId,
     customer: input.customer,
     dueDate: input.dueDate,
+    termStatus: input.termStatus,
+    intakeSource: input.intakeSource,
     handoverMode: input.handoverMode,
     items: input.items,
     note: input.note,
@@ -345,6 +364,8 @@ function toReceipt(
     (row.customer_mode !== "EXISTING" && row.customer_mode !== "NEW") ||
     !/^A-\d{4}-\d{4,}$/.test(row.order_number) || !normalizedText(row.customer_display_name, 2, 160) ||
     !dueDate || !validDate(dueDate) || (row.note !== null && !normalizedText(row.note, 1, 2000)) ||
+    (row.intake_term_status !== null && !TERM_STATUS_VALUES.includes(row.intake_term_status as OrderIntakeTermStatus)) ||
+    (row.intake_source !== null && !INTAKE_SOURCE_VALUES.includes(row.intake_source as OrderIntakeSource)) ||
     !items || !recordedAt || row.current_order_version !== 1 || row.current_station !== STATION ||
     (row.handover_mode !== "pickup" && row.handover_mode !== "shipping") ||
     (row.payment_mode !== "vorkasse" && row.payment_mode !== "abholung" && row.payment_mode !== "rechnung") ||
@@ -362,6 +383,8 @@ function toReceipt(
     correlationId: row.correlation_id,
     actorId: row.actor_id,
     dueDate,
+    termStatus: row.intake_term_status as OrderIntakeTermStatus | null,
+    intakeSource: row.intake_source as OrderIntakeSource | null,
     handoverMode: row.handover_mode,
     paymentMode: row.payment_mode,
     note: row.note,
@@ -612,12 +635,13 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
         INSERT INTO public.orders (
           id, tenant_id, order_number, customer_id, title, task, station,
           current_station, current_station_id, version, status, risk, priority_computed,
-          intake_date, due_date, promised_due_date, source, source_ref, freetext_original,
+          intake_date, due_date, promised_due_date, intake_term_status, intake_source, source, source_ref, freetext_original,
           handover_mode, payment_mode, payment_mode_version, created_at
         ) VALUES (
           ${orderId}, ${expected.tenantId}, ${orderNumber}, ${customer.id}, ${title}, ${task}, ${STATION},
           ${STATION}, ${STATION}, 1, ${ORDER_LIFECYCLE_STATUS.ANGENOMMEN}, 'green', 'green',
           statement_timestamp() AT TIME ZONE 'UTC', ${normalized.dueDate}::date, ${normalized.dueDate}::date,
+          ${normalized.termStatus}, ${normalized.intakeSource},
           'F1_ORDER_INTAKE', ${normalized.clientEventId}, ${normalized.note},
           ${normalized.handoverMode}, ${paymentMode}, 0, statement_timestamp() AT TIME ZONE 'UTC'
         )
@@ -683,11 +707,12 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
         INSERT INTO private.order_intake_receipts (
           id, event_id, tenant_id, order_id, customer_id, actor_id, client_event_id,
           correlation_id, intent_sha256, customer_mode, order_number, customer_display_name,
-          due_date, note, items_snapshot, created_at
+          due_date, intake_term_status, intake_source, note, items_snapshot, created_at
         ) VALUES (
           ${receiptId}, ${eventId}, ${expected.tenantId}, ${orderId}, ${customer.id}, ${expected.actorId},
           ${expected.clientEventId}, ${correlationId}, ${expected.intentSha256}, ${normalized.customer.mode},
-          ${orderNumber}, ${customerDisplayName}, ${normalized.dueDate}::date, ${normalized.note},
+          ${orderNumber}, ${customerDisplayName}, ${normalized.dueDate}::date,
+          ${normalized.termStatus}, ${normalized.intakeSource}, ${normalized.note},
           ${JSON.stringify(items)}::jsonb, statement_timestamp()
         )
         RETURNING id, event_id, order_id, intent_sha256

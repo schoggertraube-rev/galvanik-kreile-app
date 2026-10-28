@@ -28,6 +28,8 @@ const input = {
   clientEventId: CLIENT,
   customer: { mode: "EXISTING" as const, customerId: CUSTOMER },
   dueDate: "2026-08-30",
+  termStatus: "bestaetigt" as const,
+  intakeSource: "persoenlich" as const,
   handoverMode: "pickup" as const,
   paymentMode: "abholung" as const,
   note: "Eilige Annahme",
@@ -37,6 +39,8 @@ const intentSha256 = createHash("sha256").update(JSON.stringify({
   clientEventId: CLIENT,
   customer: input.customer,
   dueDate: input.dueDate,
+  termStatus: input.termStatus,
+  intakeSource: input.intakeSource,
   handoverMode: input.handoverMode,
   items: input.items,
   note: input.note,
@@ -57,6 +61,8 @@ const receiptRow = {
   order_number: "A-2026-0042",
   customer_display_name: "Kunde A",
   due_date: "2026-08-30",
+  intake_term_status: "bestaetigt",
+  intake_source: "persoenlich",
   note: "Eilige Annahme",
   items_snapshot: itemSnapshot,
   recorded_at: "2026-08-12T12:00:00.000Z",
@@ -126,6 +132,7 @@ describe("createOrderIntake", () => {
     expect(withTransaction).not.toHaveBeenCalled();
 
     const { paymentMode: _paymentMode, ...withoutMode } = input;
+    void _paymentMode;
     resolveAuthorization.mockResolvedValueOnce(withoutMoney);
     await expect(createOrderIntake(withoutMode)).resolves.toEqual({
       code: "FORBIDDEN",
@@ -375,6 +382,8 @@ describe("createOrderIntake", () => {
         correlationId: created.correlationId,
         actorId: ACTOR,
         dueDate: "2026-08-30",
+        termStatus: "bestaetigt",
+        intakeSource: "persoenlich",
         handoverMode: "pickup",
         paymentMode: "abholung",
         note: "Eilige Annahme",

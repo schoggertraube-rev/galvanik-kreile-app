@@ -22,6 +22,7 @@ describe("KV PDF", () => {
       quote: {
         quoteId: "11111111-1111-4111-8111-111111111111", quoteNumber: "KV-2026-0042", customerId: "customer-1", customerNumber: "K-2026-0042",
         customerDisplayName: "SYNTHETISCH Musterkunde GmbH", status: "draft", version: 1, currency: "EUR", dueDate: "2026-11-10",
+        validUntil: null, termStatus: null, intakeSource: null,
         note: "SYNTHETISCHER HINWEIS", totalNetCents: 25_000, linkedOrderId: null, actorId: "22222222-2222-4222-8222-222222222222",
         actorDisplayName: "Testperson", createdAt: "2026-10-26T10:00:00.000Z", updatedAt: "2026-10-26T10:00:00.000Z", convertedAt: null,
         positions: [{

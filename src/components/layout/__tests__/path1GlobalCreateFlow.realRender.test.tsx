@@ -42,6 +42,9 @@ function quote(status: "draft" | "converted" = "draft", overrides: Partial<Quote
     version: status === "draft" ? 1 as const : 2 as const,
     currency: "EUR" as const,
     dueDate: "2026-10-15",
+    validUntil: null,
+    termStatus: null,
+    intakeSource: null,
     note: "SYNTHETISCHER KV",
     totalNetCents: 25_000,
     linkedOrderId: status === "converted" ? ORDER_ID : null,
@@ -167,6 +170,8 @@ function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
         correlationId: "9c0a2813-c5ba-41dc-afd8-80a343adbf31",
         actorId: "42026a2b-1457-4058-b1bf-20846d7bc654",
         dueDate: input.dueDate,
+        termStatus: input.termStatus,
+        intakeSource: input.intakeSource,
         recordedAt: "2026-09-15T10:10:00.000Z",
       },
     })),
@@ -183,6 +188,8 @@ function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
         correlationId: "9c0a2813-c5ba-41dc-afd8-80a343adbf31",
         actorId: "42026a2b-1457-4058-b1bf-20846d7bc654",
         dueDate: "2026-10-20",
+        termStatus: "wunsch",
+        intakeSource: "persoenlich",
         recordedAt: "2026-09-15T10:10:00.000Z",
       },
     })),
@@ -671,11 +678,46 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: /Ware, Menge und Zustand/ }));
     fireEvent.click(screen.getByRole("button", { name: "Wareneingang buchen" }));
     await screen.findByRole("heading", { name: "Auftrag A-2026-0061 angelegt" });
-    expect(value.createDirectIntake).toHaveBeenCalledWith(expect.objectContaining({ dueDate: "2026-10-20" }));
+    expect(value.createDirectIntake).toHaveBeenCalledWith(expect.objectContaining({
+      dueDate: "2026-10-20",
+      termStatus: "wunsch",
+      intakeSource: "persoenlich",
+    }));
     expect(value.createDirectIntake).toHaveBeenCalledWith(expect.objectContaining({ customer: expect.objectContaining({ mode: "NEW", name: "SYNTHETISCH Direkteingang GmbH" }) }));
     expect(value.createCustomer).not.toHaveBeenCalled();
     expect(value.readDirectIntakeReceipt).toHaveBeenCalledTimes(1);
     expect(value.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("stores validity, term status, and intake source as quote fields", async () => {
+    const value = ports();
+    render(<GlobalCreateFlow ports={value} />);
+    openFlow();
+    await screen.findByRole("heading", { name: "Neuer Eingang" });
+    await waitFor(() => expect(value.listCatalog).toHaveBeenCalledTimes(1));
+    await startNewIntakeCustomer();
+    fireEvent.change(screen.getByLabelText("Name / Firma"), { target: { value: "SYNTHETISCH KV Eingang GmbH" } });
+    fillRequiredCustomerAddress();
+    fireEvent.click(within(screen.getByRole("group", { name: "Art" })).getByRole("button", { name: "KV" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Termin ist" })).getByRole("button", { name: "bestätigt" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Eingangsart" }), { target: { value: "mail" } });
+    fireEvent.change(screen.getByLabelText("Liefertermin"), { target: { value: "2026-10-20" } });
+    fireEvent.change(screen.getByLabelText("KV gültig bis"), { target: { value: "2026-11-20" } });
+    fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "Synthetischer Sonderflansch" } });
+    fireEvent.change(screen.getByLabelText("Preis netto (€)"), { target: { value: "125.00" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: /Ware, Menge und Zustand/ }));
+    const submit = screen.getByRole("button", { name: "KV anlegen" });
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
+    await waitFor(() => expect(value.createCustomer).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(value.createQuote).toHaveBeenCalledTimes(1));
+    expect(value.createQuote).toHaveBeenCalledWith(expect.objectContaining({
+      dueDate: "2026-10-20",
+      validUntil: "2026-11-20",
+      termStatus: "bestaetigt",
+      intakeSource: "anfrage_mail",
+      note: null,
+    }));
   });
 
   it("prefills recognized intake text and confirms every marked value together", async () => {

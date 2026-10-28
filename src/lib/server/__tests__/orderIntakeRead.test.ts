@@ -23,6 +23,8 @@ const receiptRow = {
   order_number: "A-2026-0042",
   customer_display_name: "Musterkunde",
   due_date: "2026-08-30",
+  intake_term_status: "bestaetigt",
+  intake_source: "persoenlich",
   note: null,
   items_snapshot: [{
     id: "77777777-7777-4777-8777-777777777777",
