@@ -184,8 +184,8 @@ describe("StartPage product actor boundary", () => {
     expect(emailAuth).toContain('redirect("/")');
     expect(pinAuth).toContain('window.location.assign("/")');
     expect(rootPage).toContain("resolveAuthorization");
-    expect(rootPage).toContain('authorization.role === "admin"');
+    expect(rootPage).toContain('hasAuthorizationArea(authorization, "wartung")');
     expect(rootPage).toContain("<HomeAppAdapter");
-    expect(rootPage).not.toContain('authorization.role === "developer"');
+    expect(rootPage).not.toMatch(/authorization\.role\s*(?:===|!==)/);
   });
 });

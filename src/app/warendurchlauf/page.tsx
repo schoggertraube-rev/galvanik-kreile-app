@@ -1,4 +1,4 @@
-import { resolveAuthorization } from "@/lib/server/authorization";
+import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
 import {
   buildWerkstattData,
   type PhillipWerkstattViewModel,
@@ -95,8 +95,7 @@ export default async function WarendurchlaufIndex() {
     });
   }
 
-  const canCreateOrder = authorization.data.role !== "developer"
-    && authorization.data.permissions.includes("perm_data_orders");
+  const canCreateOrder = hasAuthorizationArea(authorization.data, "eingang");
 
   if (hasDuplicateCanonicalOrder([...wareneingangResult.data, ...galvanikResult.data])) {
     return render({ kind: "conflict", message: CONFLICT_MESSAGE });

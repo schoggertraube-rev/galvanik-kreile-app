@@ -33,6 +33,14 @@ Migration: `supabase/migrations/20261028163707_h11_align_access_rights.sql`. Sie
 - DB-Soll: unverändert zu Rest a; dieser Unterpunkt ändert keine Datenbankzeile.
 - Prüfung: fokussierte Rechte-/Provider-Tests 34/34 grün; TypeScript, gezieltes ESLint und Spec-Check `expected=5 found=5 missing=0` grün; `rg ROLE_PERMISSIONS|getPermissionsForRole src` ohne Treffer.
 
+### Rest c – Rollen-Sonderprüfungen entfernt
+
+- Befund: Cockpit, Werkstatt-Neuanlage, Rechnungsstorno, KVP, Kontrolle und Startseite entschieden lokal anhand von Rollennamen statt anhand der wirksamen Bereiche.
+- Fundstellen vor der Bereinigung: `src/app/cockpit/actions.ts:17`, `src/app/warendurchlauf/page.tsx:98`, `src/app/buchhaltung/rechnungen/InvoicesClient.tsx:59`, `src/app/betrieb-kvp/BetriebKvpClient.tsx:21`, `src/app/kontrolle/KontrolleDashboardClient.tsx:26`, `src/app/page.tsx:21`.
+- Änderung: Die Entscheidungen nutzen jetzt `wartung`, `eingang` oder die vom Server gelieferte `canCancel`-Freigabe. Der Rechnungs-Client besitzt keinen Rollen-Fallback mehr; die Kontrolle besitzt keine Rollen-Boolean-Prop mehr. Gregors Startseite folgt damit seinem wirksamen Bereich `wartung` nach `/settings`.
+- DB-Soll: unverändert zu Rest a; dieser Unterpunkt ändert keine Datenbankzeile.
+- Prüfung: In den sechs benannten Produktdateien gibt es keinen Vergleich `role ===`/`role !==` mehr. Fokussierte Tests einschließlich der abhängigen Start-, Werkstatt- und Cockpit-Verträge 57/57, TypeScript, gezieltes ESLint und Spec-Check `expected=5 found=5 missing=0` grün.
+
 ## Owner-Klickweg
 
 1. Als Gregor anmelden und **Einstellungen → Logins & Rechte** öffnen.

@@ -85,27 +85,27 @@ describe("F1.4 immutable invoice page states", () => {
   it("renders denial and error separately from an empty list", async () => {
     const { InvoicesClient } = await import("../InvoicesClient");
     render(
-      <InvoicesClient initialState={{ state: "DENIAL", message: "Nicht erlaubt", role: null }} />,
+      <InvoicesClient initialState={{ state: "DENIAL", message: "Nicht erlaubt", canCancel: false }} />,
     );
     expect(screen.getByRole("alert")).toHaveTextContent("Nicht erlaubt");
     expect(screen.queryByTestId("invoice-empty-state")).not.toBeInTheDocument();
 
     cleanup();
-    render(<InvoicesClient initialState={{ state: "ERROR", message: "Quelle nicht verfügbar", role: null }} />);
+    render(<InvoicesClient initialState={{ state: "ERROR", message: "Quelle nicht verfügbar", canCancel: false }} />);
     expect(screen.getByRole("alert")).toHaveTextContent("Quelle nicht verfügbar");
     expect(screen.queryByTestId("invoice-empty-state")).not.toBeInTheDocument();
   });
 
   it("renders the real empty state without fabricated metrics", async () => {
     const { InvoicesClient } = await import("../InvoicesClient");
-    render(<InvoicesClient initialState={{ state: "EMPTY", data: [], role: "buero" }} />);
+    render(<InvoicesClient initialState={{ state: "EMPTY", data: [], canCancel: false }} />);
     expect(screen.getByTestId("invoice-empty-state")).toHaveTextContent("Noch keine Rechnungen ausgestellt");
     expect(screen.queryByText(/offene posten|bezahlt|mahnung/i)).not.toBeInTheDocument();
   });
 
   it("shows immutable data and keeps cancellation unavailable to buero", async () => {
     const { InvoicesClient } = await import("../InvoicesClient");
-    render(<InvoicesClient initialState={{ state: "DATA", data: [issuedRow], role: "buero" }} />);
+    render(<InvoicesClient initialState={{ state: "DATA", data: [issuedRow], canCancel: false }} />);
     expect(screen.getByText("R-2026-0001")).toBeVisible();
     expect(screen.getByText("Synthetischer Testkunde · Auftrag A-2026-0001")).toBeVisible();
     expect(screen.getByTestId("invoice-original-pdf-R-2026-0001")).toHaveAttribute(
@@ -120,7 +120,7 @@ describe("F1.4 immutable invoice page states", () => {
     ports.getInvoiceCancellationReceiptAction.mockResolvedValueOnce({ code: "OK", data: cancellationReceipt });
     ports.getInvoiceSummariesAction.mockResolvedValueOnce({ code: "OK", data: [cancelledRow] });
     const { InvoicesClient } = await import("../InvoicesClient");
-    render(<InvoicesClient initialState={{ state: "DATA", data: [issuedRow], role: "meister" }} />);
+    render(<InvoicesClient initialState={{ state: "DATA", data: [issuedRow], canCancel: true }} />);
 
     fireEvent.change(screen.getByLabelText("Stornogrund"), {
       target: { value: cancellationReceipt.reason },
@@ -142,7 +142,7 @@ describe("F1.4 immutable invoice page states", () => {
       message: "Die Rechnung kann nicht storniert werden, weil bereits eine Zahlung vorliegt oder der Zahlungsstand nicht eindeutig ist.",
     });
     const { InvoicesClient } = await import("../InvoicesClient");
-    render(<InvoicesClient initialState={{ state: "DATA", data: [issuedRow], role: "admin" }} />);
+    render(<InvoicesClient initialState={{ state: "DATA", data: [issuedRow], canCancel: true }} />);
     fireEvent.change(screen.getByLabelText("Stornogrund"), {
       target: { value: "Doppelte Berechnung vollständig storniert" },
     });

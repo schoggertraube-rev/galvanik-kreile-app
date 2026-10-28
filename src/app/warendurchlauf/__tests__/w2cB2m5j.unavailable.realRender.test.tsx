@@ -42,6 +42,8 @@ vi.mock("@/app/warendurchlauf/actions", () => ({
 }));
 vi.mock("@/lib/server/authorization", () => ({
   resolveAuthorization: ports.resolveAuthorization,
+  hasAuthorizationArea: (authorization: { areas?: readonly string[] }, area: string) =>
+    authorization.areas?.includes(area) === true,
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: ports.pushRoute, refresh: ports.refreshRoute }),
@@ -83,6 +85,7 @@ const allowedAuthorization = (role: string = "werkstatt") => ({
     tenantId: KREILE_TENANT_SLUG,
     displayName: "Phillip",
     role,
+    areas: role === "buero" ? ["eingang"] : role === "developer" ? ["wartung"] : [],
     permissions:
       role === "werkstatt"
         ? ["perm_view_leitstand"]

@@ -13,6 +13,8 @@ const ports = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({ redirect: ports.redirect }));
 vi.mock("@/lib/server/authorization", () => ({
   resolveAuthorization: ports.resolveAuthorization,
+  hasAuthorizationArea: (authorization: { areas?: readonly string[] }, area: string) =>
+    authorization.areas?.includes(area) === true,
 }));
 vi.mock("@/app/HomeAppAdapter", () => ({
   HomeAppAdapter: ({ authorization }: { authorization: { role: string } }) => (
@@ -35,7 +37,8 @@ function authorizationFor(key: ActorKey, gregorRole: "admin" | "developer" = "ad
       tenantId: "synthetic-tenant",
       displayName,
       role,
-      permissions: ["perm_view_leitstand"],
+    areas: role === "admin" || role === "developer" ? ["wartung"] : ["auftraege"],
+    permissions: ["perm_view_leitstand"],
       active: true as const,
     },
   };
@@ -62,11 +65,9 @@ describe("F1-R0 root route containment", () => {
     await expect(RootPage()).rejects.toThrow("REDIRECT:/settings");
   });
 
-  it("renders Der Tag for the validated Gregor developer session", async () => {
+  it("keeps a developer session in settings through the granted maintenance area", async () => {
     ports.resolveAuthorization.mockResolvedValue(authorizationFor("gregor", "developer"));
-    render(await RootPage());
-    expect(screen.getByTestId("today-home")).toHaveTextContent("developer");
-    expect(ports.redirect).not.toHaveBeenCalled();
+    await expect(RootPage()).rejects.toThrow("REDIRECT:/settings");
   });
 
   it("redirects a missing session to start", async () => {

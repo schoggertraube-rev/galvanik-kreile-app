@@ -17,8 +17,8 @@ export function BetriebKvpClient() {
 
   const [items, setItems] = useState<KvpItem[]>([]);
   const [activeItem, setActiveItem] = useState<KvpItem | null>(null);
-  const { role } = usePermissions();
-  const isChef = role === "admin" || role === "developer" || role === "chef";
+  const { hasArea } = usePermissions();
+  const isChef = hasArea("wartung");
 
   // Form State
   const [newTitle] = useState("");

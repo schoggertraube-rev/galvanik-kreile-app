@@ -15,7 +15,7 @@ const ports = vi.hoisted(() => {
   return {
     resolveAuthorization: vi.fn(async () => ({
       ok: true as const,
-      data: { tenantId: KREILE_TENANT_SLUG, role: "admin" as const },
+      data: { tenantId: KREILE_TENANT_SLUG, role: "admin" as const, areas: ["wartung"] },
     })),
     createAuthorizedDataClient: vi.fn(async () => ({ from })),
     createAuthorizedDataContext: vi.fn(),
@@ -27,7 +27,11 @@ const ports = vi.hoisted(() => {
   };
 });
 
-vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization: ports.resolveAuthorization }));
+vi.mock("@/lib/server/authorization", () => ({
+  resolveAuthorization: ports.resolveAuthorization,
+  hasAuthorizationArea: (authorization: { areas?: readonly string[] }, area: string) =>
+    authorization.areas?.includes(area) === true,
+}));
 vi.mock("@/lib/server/appSession", () => ({ APP_TENANT_ID: KREILE_TENANT_SLUG }));
 vi.mock("@/lib/supabase/server", () => ({
   createAuthorizedDataClient: ports.createAuthorizedDataClient,

@@ -16,14 +16,13 @@ import type { QsListItem } from "./actions";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 
 interface Props {
-  isDevOrAdmin: boolean;
   qsData?: QsListItem[];
 }
 
-export function KontrolleDashboardClient({ isDevOrAdmin, qsData = [] }: Props) {
+export function KontrolleDashboardClient({ qsData = [] }: Props) {
   const [activeOverlay, setActiveOverlay] = useState<string | null>(null);
-  const { role } = usePermissions();
-  const isAdminOrDevLocal = isDevOrAdmin || role === "admin" || role === "developer";
+  const { hasArea } = usePermissions();
+  const canViewAnalytics = hasArea("wartung");
 
   const qsCount = qsData.length;
   const qsRows = qsCount > 0 ? qsData.map(q => ({
@@ -75,7 +74,7 @@ export function KontrolleDashboardClient({ isDevOrAdmin, qsData = [] }: Props) {
           <p className="text-xs text-text-muted">Abgeschlossene historische Vorgänge</p>
         </Link>
 
-        {isAdminOrDevLocal && (
+        {canViewAnalytics && (
           <Link href="/admin/analytics" className="bg-navy-900 hover:bg-navy-800 rounded-2xl p-6 border border-navy-900 shadow-sm hover:shadow-md transition-all relative overflow-hidden flex flex-col justify-between h-40 group cursor-pointer">
             <div>
               <BarChart3 className="w-8 h-8 text-white mb-3 group-hover:scale-110 transition-transform" />

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
 import { HomeAppAdapter } from "@/app/HomeAppAdapter";
 import { ProductActorAccessUnavailable } from "@/components/foundation/FoundationUnavailable";
 
@@ -18,6 +18,6 @@ export default async function HomePage() {
   }
 
   const authorization = result.data;
-  if (authorization.role === "admin") redirect("/settings");
+  if (hasAuthorizationArea(authorization, "wartung")) redirect("/settings");
   return <HomeAppAdapter authorization={authorization} />;
 }
