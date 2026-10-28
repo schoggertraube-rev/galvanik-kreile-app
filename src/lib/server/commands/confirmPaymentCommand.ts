@@ -93,6 +93,7 @@ type LockedPaymentOrder = {
   tenant_id: string;
   payment_mode: string;
   payment_mode_version: number | string;
+  station: string | null;
 };
 
 type PaymentEventRow = {
@@ -456,7 +457,8 @@ async function lockInvoiceOrder(
       orders.id,
       orders.tenant_id,
       orders.payment_mode,
-      orders.payment_mode_version
+      orders.payment_mode_version,
+      orders.station
     FROM public.invoices invoice
     JOIN public.orders orders
       ON orders.id = invoice.order_id
@@ -484,10 +486,13 @@ export async function confirmPayment(input: unknown): Promise<ConfirmPaymentResu
       ? { code: "UNAVAILABLE", message: "Zahlung konnte nicht sicher bestätigt werden." }
       : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
+  const canManageFinance = authorization.data.permissions.includes("perm_view_prices");
+  const canCashAtPickup = authorization.data.permissions.includes("perm_cash_pickup")
+    && authorization.data.permissions.includes("perm_op_status");
   if (
     authorization.data.tenantId !== KREILE_TENANT_SLUG
     || authorization.data.role === "developer"
-    || !authorization.data.permissions.includes("perm_view_prices")
+    || (!canManageFinance && !canCashAtPickup)
   ) {
     return { code: "FORBIDDEN", message: "Zahlungsbestätigung ist mit dieser Rolle nicht erlaubt." };
   }
@@ -535,6 +540,9 @@ export async function confirmPayment(input: unknown): Promise<ConfirmPaymentResu
         !isPaymentMode(order.payment_mode) || toSafeInteger(order.payment_mode_version) === null
       ) {
         return { code: "NOT_FOUND", message: "Rechnung nicht verfügbar." };
+      }
+      if (!canManageFinance && (order.payment_mode !== "abholung" || order.station !== "fertig")) {
+        return { code: "FORBIDDEN", message: "Kassieren ist nur bei fertiger Ware zur Abholung erlaubt." };
       }
 
       const invoiceRows = await readInvoice(tx, tenantId, input.invoiceId, true);

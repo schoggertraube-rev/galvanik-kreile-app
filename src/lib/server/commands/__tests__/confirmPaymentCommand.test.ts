@@ -41,6 +41,7 @@ const orderReference = {
   tenant_id: KREILE_TENANT_SLUG,
   payment_mode: "vorkasse",
   payment_mode_version: 0,
+  station: "fertig",
 };
 
 const authorization = {
@@ -248,6 +249,35 @@ describe("confirmPayment", () => {
       })).resolves.toEqual({ code: "NOT_FOUND", message: "Rechnung nicht verfügbar." });
     }
     expect(withTransaction).toHaveBeenCalledTimes(4);
+  });
+
+  it("allows pickup cash only for a permitted employee at the finished pickup state", async () => {
+    const { confirmPayment } = await import("../confirmPaymentCommand");
+    execute.mockImplementation((query: Query) => {
+      const text = queryText(query);
+      if (text.includes("pg_advisory_xact_lock") || text.includes("FROM public.events")) return Promise.resolve([]);
+      if (text.includes("FOR UPDATE OF orders")) return Promise.resolve([{ ...orderReference, payment_mode: "abholung", station: "fertig" }]);
+      if (text.includes("FROM public.invoices") && text.includes("FOR UPDATE")) return Promise.resolve([{ ...openInvoice, payment_mode: "abholung" }]);
+      throw new Error(`Unexpected SQL: ${text}`);
+    });
+    resolveAuthorization.mockResolvedValueOnce({
+      ...authorization,
+      data: { ...authorization.data, role: "werkstatt", permissions: ["perm_op_status", "perm_cash_pickup"] },
+    });
+    await expect(confirmPayment({ ...input, method: "bar", amount: 10_001 })).resolves.toEqual({ code: "VALIDATION_ERROR", message: "Zahlungsbetrag übersteigt den offenen Betrag." });
+
+    execute.mockClear();
+    resolveAuthorization.mockResolvedValueOnce({
+      ...authorization,
+      data: { ...authorization.data, role: "werkstatt", permissions: ["perm_op_status", "perm_cash_pickup"] },
+    });
+    execute.mockImplementation((query: Query) => {
+      const text = queryText(query);
+      if (text.includes("pg_advisory_xact_lock") || text.includes("FROM public.events")) return Promise.resolve([]);
+      if (text.includes("FOR UPDATE OF orders")) return Promise.resolve([{ ...orderReference, payment_mode: "abholung", station: "galvanik" }]);
+      throw new Error(`Unexpected SQL: ${text}`);
+    });
+    await expect(confirmPayment({ ...input, method: "bar" })).resolves.toEqual({ code: "FORBIDDEN", message: "Kassieren ist nur bei fertiger Ware zur Abholung erlaubt." });
   });
 
   it("makes missing and foreign invoices indistinguishable and performs no write", async () => {

@@ -11,6 +11,7 @@ export type PermissionKey =
   | "perm_op_risk"
   | "perm_op_photos"
   | "perm_op_qa"
+  | "perm_cash_pickup"
   | "perm_view_leitstand"
   | "perm_view_customers"
   | "perm_view_prices";
@@ -20,6 +21,7 @@ export const ACCESS_AREAS = [
   "eingang",
   "kunden",
   "geld",
+  "kassieren",
   "mails",
   "einstellungen",
   "logins",
@@ -33,6 +35,7 @@ export const ACCESS_AREA_LABELS: Record<AccessArea, { text: string; sub?: string
   eingang: { text: "Neuer Eingang & Kunde anlegen" },
   kunden: { text: "Kunden & Kontakt" },
   geld: { text: "Geld, Preise & Buchhaltung", sub: "Beträge, Rechnungen, Zahlungen, Preise, Zahlungsbedingungen" },
+  kassieren: { text: "Kassieren bei Abholung", sub: "Betrag sehen und bezahlt (bar / Karte) bestätigen – ohne Buchhaltung" },
   mails: { text: "Mails lesen & zuordnen" },
   einstellungen: { text: "Firmen-Einstellungen", sub: "Firmendaten, Katalog, Stundensatz" },
   logins: { text: "Logins & Rechte verwalten" },
@@ -42,7 +45,7 @@ export const ACCESS_AREA_LABELS: Record<AccessArea, { text: string; sub?: string
 export const ROLE_ACCESS_AREA_TEMPLATES: Record<AppRole, readonly AccessArea[]> = {
   developer: ACCESS_AREAS,
   admin: ACCESS_AREAS,
-  meister: ["auftraege", "eingang", "kunden", "geld", "mails", "einstellungen"],
+  meister: ["auftraege", "eingang", "kunden", "geld", "mails", "einstellungen", "kassieren"],
   buero: ["auftraege", "eingang", "kunden", "geld", "mails", "einstellungen"],
   werkstatt: ["auftraege", "eingang", "kunden"],
   readonly: [],
@@ -53,6 +56,7 @@ const ACCESS_AREA_PERMISSIONS: Record<AccessArea, readonly PermissionKey[]> = {
   eingang: ["perm_data_orders"],
   kunden: ["perm_data_customers", "perm_view_customers"],
   geld: ["perm_data_csv", "perm_view_prices"],
+  kassieren: ["perm_cash_pickup"],
   mails: [],
   einstellungen: ["perm_sys_toggles"],
   logins: ["perm_sys_users"],
@@ -103,6 +107,7 @@ export const ROLE_PERMISSIONS: Record<AppRole, readonly PermissionKey[]> = {
     "perm_op_risk",
     "perm_op_photos",
     "perm_op_qa",
+    "perm_cash_pickup",
     "perm_view_leitstand",
     "perm_view_customers",
     "perm_view_prices",
@@ -117,6 +122,7 @@ export const ROLE_PERMISSIONS: Record<AppRole, readonly PermissionKey[]> = {
     "perm_op_risk",
     "perm_op_photos",
     "perm_op_qa",
+    "perm_cash_pickup",
     "perm_view_leitstand",
     "perm_view_customers",
     "perm_view_prices",
