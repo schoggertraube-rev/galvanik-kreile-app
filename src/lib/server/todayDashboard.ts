@@ -6,6 +6,7 @@ import { getOperationalOrders } from "@/lib/server/operationalOrders";
 import { readIntakeDraft } from "@/lib/server/intakeDraft";
 import { listMicrosoftGraphInbox } from "@/lib/server/microsoftGraph";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { classifyOrderForToday } from "@/lib/server/todayDashboardPolicy";
 
 export type TodayField = "action" | "today" | "assign" | "money" | "bundle";
 export type TodayVisibleField = Exclude<TodayField, "action">;
@@ -90,10 +91,8 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
   if (draft.code === "OK" && draft.data) add({ key: "draft:intake", field: "action", kind: "draft", title: "Entwurf Neuer Eingang", meta: `Gespeichert ${new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(draft.data.updatedAt))}`, urgency: "decision" });
 
   for (const order of orders) {
-    const isToday = order.dueDate.slice(0, 10) <= today;
-    const risky = ["red", "blocked", "orange", "yellow"].includes(order.risk);
-    if (!isToday && !risky) continue;
-    const field: TodayField = isToday ? "today" : "action";
+    const field = classifyOrderForToday(order, today);
+    if (!field) continue;
     add({ key: `order:${order.id}`, field, kind: "order", title: `${order.orderNumber} · ${order.customerName ?? "Kunde"}`, meta: `${order.itemDescription ?? order.title} · ${order.dueLabel} ${order.dueValue}`, urgency: order.risk === "red" || order.risk === "blocked" ? "conflict" : "warning", orderId: order.id, orderVersion: order.version, dueDate: order.dueDate });
   }
 
