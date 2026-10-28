@@ -74,7 +74,7 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     expect(screen.getByTestId("rolf-v11-home")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Der Tag" })).toHaveClass("kr-seite-titel");
     expect(screen.getByRole("region", { name: "Lage" })).toBeInTheDocument();
-    expect(within(screen.getByRole("region", { name: "Lage" })).getByText("Konflikt")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Lage" })).queryByText("Konflikt")).not.toBeInTheDocument();
     expect(screen.getByText("Heute fällig")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Später" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Weitere" })).toBeInTheDocument();
@@ -133,9 +133,23 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
   });
 
   it("benennt mehrere Konflikte im Plural", () => {
-    const secondConflict = { ...dashboard.items[0], key: "order:order-2", orderId: "order-2", title: "A-2026-0002 · Muster GmbH" };
-    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items: [...dashboard.items, secondConflict], visibleFields: [...dashboard.visibleFields] }, projection }} />);
+    const firstConflict = { ...dashboard.items[0], field: "action" as const };
+    const secondConflict = { ...dashboard.items[0], field: "action" as const, key: "order:order-2", orderId: "order-2", title: "A-2026-0002 · Muster GmbH" };
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items: [firstConflict, secondConflict], visibleFields: [...dashboard.visibleFields] }, projection }} />);
     expect(within(screen.getByRole("region", { name: "Lage" })).getByText("Konflikte")).toBeInTheDocument();
+  });
+
+  it("zählt in der Lage nur Einträge aus dem Handlungsbedarf", () => {
+    const items = [
+      { ...dashboard.items[0], key: "action", field: "action" as const, urgency: "warning" as const },
+      { ...dashboard.items[0], key: "today", field: "today" as const, urgency: "conflict" as const },
+      { ...dashboard.items[0], key: "money", field: "money" as const, urgency: "decision" as const },
+    ];
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items, visibleFields: [...dashboard.visibleFields] }, projection }} />);
+    const lage = within(screen.getByRole("region", { name: "Lage" }));
+    expect(lage.getByText("Warnung")).toBeInTheDocument();
+    expect(lage.queryByText("Konflikt")).not.toBeInTheDocument();
+    expect(lage.queryByText("Entscheidung")).not.toBeInTheDocument();
   });
 
   it("sortiert Konflikt vor Warnung vor Entscheidung und darin nach Termin", () => {
