@@ -77,8 +77,8 @@ describe("developer email product login", () => {
     ports.recordUserLastSeenForLogin.mockResolvedValue({ code: "OK" });
   });
 
-  it("sets the authenticated developer identity before routing to settings", async () => {
-    await expect(login(formData())).rejects.toThrow("REDIRECT:/settings");
+  it("sets the authenticated developer identity before routing to the daily home", async () => {
+    await expect(login(formData())).rejects.toThrow("REDIRECT:/");
     expect(ports.setAppSession).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: GREGOR_ID,
