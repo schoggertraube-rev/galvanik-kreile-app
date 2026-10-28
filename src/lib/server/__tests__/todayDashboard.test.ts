@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyMoneyForToday, classifyOrderForToday, deriveOrderGuidance } from "@/lib/server/todayDashboardPolicy";
+import { classifyMoneyForToday, classifyOrderForToday, deriveOrderGuidance, isBundleStationForToday } from "@/lib/server/todayDashboardPolicy";
 
 const TODAY = "2026-10-28";
 
@@ -55,5 +55,12 @@ describe("classifyMoneyForToday", () => {
     expect(classifyMoneyForToday({ ...invoice, paymentMode: "vorkasse", station: "galvanik" }, TODAY)).toBeNull();
     expect(classifyMoneyForToday({ ...invoice, paymentMode: "vorkasse", customerCountry: "AT" }, TODAY)).toBeNull();
     expect(classifyMoneyForToday({ ...invoice, paymentMode: "vorkasse", goodsOutRecorded: true }, TODAY)).toBeNull();
+  });
+});
+
+describe("isBundleStationForToday", () => {
+  it("allows only Wareneingang and Galvanik stations", () => {
+    for (const station of ["angenommen", "wareneingang", "eingang", "galvanik"]) expect(isBundleStationForToday(station)).toBe(true);
+    for (const station of ["kv", "fertig", "abgeholt", "versendet"]) expect(isBundleStationForToday(station)).toBe(false);
   });
 });

@@ -26,6 +26,11 @@ export type TodayOrderGuidance = {
 };
 
 const NOT_STARTED_STATIONS = new Set(["angenommen", "wareneingang", "eingang", "neu"]);
+const BUNDLE_STATIONS = new Set(["angenommen", "wareneingang", "eingang", "galvanik"]);
+
+export function isBundleStationForToday(station: string): boolean {
+  return BUNDLE_STATIONS.has(station.trim().toLowerCase());
+}
 
 export function deriveOrderGuidance(order: TodayOrder, today: string): TodayOrderGuidance | null {
   const station = order.station.trim().toLowerCase();

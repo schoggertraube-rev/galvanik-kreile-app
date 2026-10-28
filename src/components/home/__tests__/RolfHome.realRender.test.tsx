@@ -108,6 +108,15 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     expect(ports.openOrder).toHaveBeenCalledWith("order-1");
   });
 
+  it("opens the existing bundle path with the selected surface", () => {
+    const bundle = { key: "bundle:Zink & Nickel", field: "bundle" as const, kind: "bundle" as const, title: "2 Aufträge bündeln", meta: "Zink & Nickel", urgency: "decision" as const, bundleSurface: "Zink & Nickel", primaryActionLabel: "Bündel öffnen" as const };
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canDelegate: true, dashboard: { ...dashboard, items: [bundle], visibleFields: [...dashboard.visibleFields] }, projection }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Bündel öffnen" }));
+
+    expect(ports.push).toHaveBeenCalledWith("/warendurchlauf?bundle=1&surface=Zink%20%26%20Nickel");
+  });
+
   it("führt readonly ohne Warenausgang-Aktion", () => {
     render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "readonly", canCreateOrder: false, canDelegate: false, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields] }, projection }} />);
     expect(screen.queryByRole("button", { name: /Ware raus öffnen/ })).not.toBeInTheDocument();

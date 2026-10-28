@@ -6,7 +6,7 @@ import { getOperationalOrders } from "@/lib/server/operationalOrders";
 import { readIntakeDraft } from "@/lib/server/intakeDraft";
 import { listMicrosoftGraphInbox } from "@/lib/server/microsoftGraph";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import { classifyMoneyForToday, deriveOrderGuidance, type TodayOrderGuidance } from "@/lib/server/todayDashboardPolicy";
+import { classifyMoneyForToday, deriveOrderGuidance, isBundleStationForToday, type TodayOrderGuidance } from "@/lib/server/todayDashboardPolicy";
 
 export type TodayField = "action" | "today" | "assign" | "money" | "bundle";
 export type TodayVisibleField = Exclude<TodayField, "action">;
@@ -21,9 +21,10 @@ export type TodayItem = {
   orderVersion?: number;
   invoiceId?: string;
   graphMessageId?: string;
+  bundleSurface?: string;
   dueDate?: string;
   snoozedUntil?: string;
-  primaryActionLabel?: TodayOrderGuidance["primaryActionLabel"] | "Erinnern" | "Zahlung bestätigen";
+  primaryActionLabel?: TodayOrderGuidance["primaryActionLabel"] | "Erinnern" | "Zahlung bestätigen" | "Bündel öffnen";
 };
 
 export type TodayDashboard = {
@@ -139,6 +140,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
 
   const surfaces = new Map<string, typeof orders>();
   for (const order of orders) {
+    if (!isBundleStationForToday(order.station)) continue;
     const surface = order.surfaceRequested?.trim();
     if (!surface) continue;
     const group = surfaces.get(surface) ?? [];
@@ -146,7 +148,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
     surfaces.set(surface, group);
   }
   const bundle = [...surfaces.entries()].filter(([, group]) => group.length >= 2).sort((a, b) => b[1].length - a[1].length)[0];
-  if (bundle) add({ key: `bundle:${bundle[0]}`, field: "bundle", kind: "bundle", title: `${bundle[1].length} Aufträge bündeln`, meta: bundle[0], urgency: "decision" });
+  if (bundle) add({ key: `bundle:${bundle[0]}`, field: "bundle", kind: "bundle", title: `${bundle[1].length} Aufträge bündeln`, meta: bundle[0], urgency: "decision", bundleSurface: bundle[0], primaryActionLabel: "Bündel öffnen" });
 
   return { items, visibleFields: selected, phillipUserId: support.phillip[0]?.id ?? null, outlookMessage: !graphAllowed || graph.code === "OK" ? null : graph.message };
 }
