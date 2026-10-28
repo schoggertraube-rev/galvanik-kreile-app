@@ -235,6 +235,15 @@ type IntakePositionDraft = { key:string; catalogServiceId:string; name:string; q
 type IntakeSuggestionState = { kind: "idle" | "loading" | "error" } | { kind: "data"; data: IntakeSuggestions; loading: boolean };
 type IntakeTermChoice = { kind: "adopted" | "kept"; basisKey: string; wishDate: string; achievableDate: string };
 type AppliedIntakePrice = { previousUnit: string | null; previousUnitPriceCents: number | null; suggestedUnitPriceCents: number };
+type IntakeChecklistEntry = {
+  id: string;
+  label: string;
+  detail: string;
+  complete: boolean;
+  step: 1 | 2 | 3;
+  target: string;
+  warning?: boolean;
+};
 
 function record(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -1593,6 +1602,55 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     && Number.isSafeInteger(Number(item.quantity))
     && Number(item.quantity) > 0;
 
+  const customerIssue = (() => {
+    if (directCustomerMode === "NONE") return { detail: "fehlt", target: "eingang.kunde" };
+    if (directCustomerMode === "NEW" && !directCustomerType) return { detail: "Kundentyp fehlt", target: "kundeneu.kundentyp" };
+    if (directCustomer.name.trim().length < 2) return { detail: "Name / Firma fehlt", target: "kundeneu.name" };
+    if (!directCustomer.contactPerson?.trim()) return { detail: "Ansprechpartner fehlt", target: "kundeneu.ansprechpartner" };
+    if (!validPhone(directCustomer.phone)) return { detail: "Telefon fehlt oder ungültig", target: "kundeneu.telefon" };
+    if (!directCustomer.email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(directCustomer.email)) return { detail: "E-Mail fehlt oder ungültig", target: "kundeneu.email" };
+    if (directCustomer.street.trim().length < 2) return { detail: "Straße fehlt", target: "kundeneu.strasse" };
+    if (!directCustomer.zipCode.trim() || !validPostcode(directCustomer.country, directCustomer.zipCode)) return { detail: "PLZ fehlt oder ungültig", target: "kundeneu.plz" };
+    if (!directCustomer.city.trim()) return { detail: "Ort fehlt", target: "kundeneu.ort" };
+    if (!directCustomer.country.trim()) return { detail: "Land fehlt", target: "kundeneu.land" };
+    if (ports.canManageMoney && !directCustomer.paymentPreference.trim()) return { detail: "Zahlungsbedingung fehlt", target: "kundeneu.zahlungsbedingung" };
+    return null;
+  })();
+  const firstMissingName = directItems.findIndex((item) => item.name.trim().length < 2 || (!item.catalogServiceId && item.name.trim().length >= 2));
+  const firstMissingQuantity = directItems.findIndex((item) => !Number.isSafeInteger(Number(item.quantity)) || Number(item.quantity) <= 0);
+  const firstMissingSurface = directItems.findIndex((item) => item.surfaceRequested.trim().length < 2);
+  const firstMissingPrice = directItems.findIndex((item) => item.unitPriceCents === null || item.unitPriceCents <= 0);
+  const warePresent = intakeSource !== "mail" && intakeSource !== "phone";
+  const intakeChecklist: IntakeChecklistEntry[] = [
+    { id: "kunde", label: "Kunde", detail: customerIssue?.detail ?? "vollständig", complete: customerIssue === null, step: 1, target: customerIssue?.target ?? "eingang.kunde" },
+    { id: "bezeichnung", label: "Teil / Leistung", detail: firstMissingName >= 0 ? `Position ${firstMissingName + 1} fehlt` : `${directItems.length} Position${directItems.length === 1 ? "" : "en"}`, complete: firstMissingName < 0, step: 2, target: `eingang.position.${Math.max(firstMissingName, 0)}.bezeichnung` },
+    { id: "menge", label: "Menge", detail: firstMissingQuantity >= 0 ? `Position ${firstMissingQuantity + 1} fehlt` : "vollständig", complete: firstMissingQuantity < 0, step: 2, target: `eingang.position.${Math.max(firstMissingQuantity, 0)}.menge` },
+    { id: "oberflaeche", label: "Oberfläche", detail: firstMissingSurface >= 0 ? `Position ${firstMissingSurface + 1} fehlt` : "vollständig", complete: firstMissingSurface < 0, step: 2, target: `eingang.position.${Math.max(firstMissingSurface, 0)}.oberflaeche` },
+    ...(intakeKind === "QUOTE" && ports.canManageMoney ? [{ id: "preis", label: "Preis je Position", detail: firstMissingPrice >= 0 ? `Position ${firstMissingPrice + 1} fehlt` : "vollständig", complete: firstMissingPrice < 0, step: 2 as const, target: `eingang.position.${Math.max(firstMissingPrice, 0)}.preis` }] : []),
+    { id: "liefertermin", label: "Liefertermin", detail: directWishDate || "fehlt", complete: Boolean(directWishDate), step: 3, target: "eingang.liefertermin" },
+    { id: "uebergabe", label: "Übergabe", detail: intakeHandover === "PICKUP" ? "Abholung" : "Versand", complete: true, step: 3, target: "eingang.uebergabe" },
+    ...(ports.canManageMoney ? [{ id: "zahlungsmodus", label: "Zahlungsmodus", detail: intakePaymentMode === "abholung" ? "Bar oder Karte bei Abholung" : intakePaymentMode === "rechnung" ? "Rechnung auf Ziel" : "Vorkasse", complete: Boolean(intakePaymentMode), step: 3 as const, target: "eingang.zahlungsmodus" }] : []),
+    ...(intakeKind === "QUOTE" ? [{ id: "gueltig_bis", label: "KV gültig bis", detail: quoteValidUntil || "fehlt", complete: Boolean(quoteValidUntil), step: 3 as const, target: "eingang.gueltig_bis" }] : []),
+    ...(warePresent ? [{ id: "geprueft", label: "Ware gemeinsam geprüft", detail: intakeChecked ? "bestätigt" : "fehlt", complete: intakeChecked, step: 3 as const, target: "eingang.geprueft" }] : []),
+    ...(warePresent ? [{ id: "eingangsfoto", label: "Eingangsfoto", detail: "fehlt · sperrt nicht", complete: false, step: 3 as const, target: "eingang.eingangsfoto", warning: true }] : []),
+  ];
+  const requiredIntakeChecks = intakeChecklist.filter((entry) => !entry.warning);
+  const completedIntakeChecks = requiredIntakeChecks.filter((entry) => entry.complete).length;
+
+  const jumpToIntakeCheck = (entry: IntakeChecklistEntry) => {
+    setIntakeStep(entry.step);
+    const focusTarget = () => {
+      const root = document.querySelector<HTMLElement>(`[data-spec-id="${entry.target}"]`);
+      if (!root) return;
+      const target = root.matches("input, select, textarea, button, [tabindex]")
+        ? root
+        : root.querySelector<HTMLElement>("input, select, textarea, button, [tabindex]");
+      root.scrollIntoView?.({ behavior: "smooth", block: "center" });
+      target?.focus();
+    };
+    requestAnimationFrame(() => requestAnimationFrame(focusTarget));
+  };
+
   const selectIntakeCustomer = (mode: "NONE" | "EXISTING" | "NEW", selected?: GlobalCreateCustomerChoice) => {
     const preferredHandover = selected?.lastHandoverMode === "shipping" ? "SHIPPING" : "PICKUP";
     const effectiveHandover = intakeHandoverTouched ? intakeHandover : preferredHandover;
@@ -1884,8 +1942,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
   const submitIntakePage = async (event: FormEvent) => {
     event.preventDefault();
-    if (!intakeChecked) {
-      setFeedback({ kind: "validation", message: "Bitte Ware, Menge und Zustand gemeinsam prüfen und bestätigen." });
+    const firstOpen = requiredIntakeChecks.find((entry) => !entry.complete);
+    if (firstOpen) {
+      setFeedback({ kind: "validation", message: `Noch offen: ${firstOpen.label}` });
+      jumpToIntakeCheck(firstOpen);
       return;
     }
     const customerId = await advanceIntakeCustomer();
@@ -2110,10 +2170,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 if (directItems.every(intakePositionComplete)) { setFeedback(null); setIntakeStep(3); }
                 else setFeedback({ kind: "validation", message: "Bitte für jede Position Bezeichnung, Menge und Oberfläche angeben." });
               }} /> : null}
-              {intakeStep === 3 ? <KrButton data-spec-id="eingang.buchen" form="kr-neuer-eingang" type="submit" art="erledigen" icon="check" text={intakeKind === "QUOTE" ? "KV anlegen" : "Wareneingang buchen"} disabled={busy || !intakeChecked} /> : null}
+              {intakeStep === 3 ? <KrButton data-spec-id="eingang.buchen" form="kr-neuer-eingang" type="submit" art="erledigen" icon="check" text={intakeKind === "QUOTE" ? "KV anlegen" : "Wareneingang buchen"} disabled={busy} /> : null}
             </>
           ) : (
-            <><KrButton data-spec-id="eingang.abbrechen" text="Abbrechen" onClick={requestClose} /><KrButton data-spec-id="eingang.buchen" form="kr-neuer-eingang" type="submit" art="erledigen" icon="check" text={intakeKind === "QUOTE" ? "KV anlegen" : "Wareneingang buchen"} disabled={busy || !intakeChecked} /></>
+            <><KrButton data-spec-id="eingang.abbrechen" text="Abbrechen" onClick={requestClose} /><KrButton data-spec-id="eingang.buchen" form="kr-neuer-eingang" type="submit" art="erledigen" icon="check" text={intakeKind === "QUOTE" ? "KV anlegen" : "Wareneingang buchen"} disabled={busy} /></>
           )}
         >
           {directReceipt ? (
@@ -2124,7 +2184,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
               <KrButton art="primaer" text="Auftragskarte öffnen" onClick={() => ports.openOrder(directReceipt.receipt.orderId)} />
             </section>
           ) : (
-            <form id="kr-neuer-eingang" className="kr-stapel" onSubmit={(event) => void submitIntakePage(event)}>
+            <form id="kr-neuer-eingang" className={`kr-stapel ${styles.intakeWorkspace}`} noValidate onSubmit={(event) => void submitIntakePage(event)}>
               {ports.resumeQuoteId ? <Hinweis><KrButton art="sekundaer" icon="arrow" text="Gespeicherten KV fortsetzen" disabled={busy} onClick={() => void resumeQuote()} /></Hinweis> : null}
               <section className={styles.createQuickCapture} aria-labelledby="quick-capture-title">
                 <div><h3 id="quick-capture-title">Schnell erfassen</h3><p>schreiben, sprechen oder fotografieren</p></div>
@@ -2157,6 +2217,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                   <Feld label={directCustomerMode === "NONE" ? "Kunde suchen" : "Kunde"} voll>
                     {directCustomerMode === "NONE" ? <div className="kr-stapel">
                       <Eingabe
+                        data-spec-id="eingang.kunde"
                         data-intake-customer-search
                         data-autofocus
                         aria-label="Kunde suchen"
@@ -2234,12 +2295,12 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 <div className="kr-stapel">
                   {directItems.map((item, index) => <div className="kr-position" key={item.key}>
                     <span className="kr-position-nr">{index + 1}</span>
-                    <Feld label="Teil / Bezeichnung"><Eingabe required minLength={2} list="kr-service-catalog" placeholder="Katalog oder Freitext" value={item.name} onChange={(event) => setDirectPositionName(item.key, event.target.value)} /></Feld>
-                    <Feld label="Menge"><Eingabe type="number" min="1" value={item.quantity} onChange={(event) => updateDirectItem(item.key, "quantity", event.target.value)} /></Feld>
-                    <Feld label="Oberfläche" className="kr-pos-oberflaeche"><Auswahl required value={item.surfaceRequested} onChange={(event) => setDirectPositionSurface(item.key, event.target.value)} optionen={[{ wert: "", text: "Bitte wählen" }, ...surfaceOptions.map((surface) => ({ wert: surface, text: surface }))]} /></Feld>
+                    <Feld label="Teil / Bezeichnung"><Eingabe data-spec-id={`eingang.position.${index}.bezeichnung`} required minLength={2} list="kr-service-catalog" placeholder="Katalog oder Freitext" value={item.name} onChange={(event) => setDirectPositionName(item.key, event.target.value)} /></Feld>
+                    <Feld label="Menge"><Eingabe data-spec-id={`eingang.position.${index}.menge`} type="number" min="1" value={item.quantity} onChange={(event) => updateDirectItem(item.key, "quantity", event.target.value)} /></Feld>
+                    <Feld label="Oberfläche" className="kr-pos-oberflaeche"><Auswahl data-spec-id={`eingang.position.${index}.oberflaeche`} required value={item.surfaceRequested} onChange={(event) => setDirectPositionSurface(item.key, event.target.value)} optionen={[{ wert: "", text: "Bitte wählen" }, ...surfaceOptions.map((surface) => ({ wert: surface, text: surface }))]} /></Feld>
                     <Feld label="Ausführung"><Auswahl data-spec-id="eingang.position.ausfuehrung" value={item.executionRequested} onChange={(event) => updateDirectItem(item.key, "executionRequested", event.target.value)} optionen={EXECUTION_OPTIONS} /></Feld>
                     <Feld label="Material"><Eingabe data-spec-id="eingang.position.material" maxLength={120} value={item.material} onChange={(event) => updateDirectItem(item.key, "material", event.target.value)} /></Feld>
-                    {ports.canManageMoney && intakeKind === "QUOTE" && item.catalogServiceId === FREE_TEXT_SERVICE ? <Feld label="Preis netto (€)"><Eingabe required type="number" min="0" step="0.01" value={item.unitPriceCents === null ? "" : String(item.unitPriceCents / 100)} onChange={(event) => setDirectPositionPrice(item.key, event.target.value)} /></Feld> : null}
+                    {ports.canManageMoney && intakeKind === "QUOTE" && item.catalogServiceId === FREE_TEXT_SERVICE ? <Feld label="Preis netto (€)"><Eingabe data-spec-id={`eingang.position.${index}.preis`} required type="number" min="0" step="0.01" value={item.unitPriceCents === null ? "" : String(item.unitPriceCents / 100)} onChange={(event) => setDirectPositionPrice(item.key, event.target.value)} /></Feld> : null}
                     {ports.canManageMoney && intakeSuggestionState.kind === "data" ? (() => {
                       const suggestion = intakeSuggestionState.data.prices.find((entry) => entry.positionKey === item.key);
                       if (!suggestion) return null;
@@ -2286,6 +2347,29 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 </FormRaster>
                 <div data-spec-id="eingang.geprueft"><Checkbox checked={intakeChecked} onChange={setIntakeChecked}><b>Ware, Menge und Zustand gemeinsam geprüft</b></Checkbox></div>
               </Abschnitt> : null}
+
+              {(!isHandy || intakeStep === 3) ? <aside className={styles.intakeChecklist} aria-label="Prüfliste" data-spec-id="eingang.pruefliste">
+                <div className={styles.intakeChecklistHead}>
+                  <div><span>Prüfen</span><strong>{completedIntakeChecks} von {requiredIntakeChecks.length} Pflichtangaben</strong></div>
+                  <progress value={completedIntakeChecks} max={requiredIntakeChecks.length}>{completedIntakeChecks} von {requiredIntakeChecks.length}</progress>
+                </div>
+                <div className={styles.intakeChecklistGroup}>
+                  <h3>Pflicht</h3>
+                  {requiredIntakeChecks.map((entry) => <button type="button" key={entry.id} data-state={entry.complete ? "ok" : "open"} onClick={() => jumpToIntakeCheck(entry)}>
+                    <span className={styles.intakeChecklistIcon}>{entry.complete ? <Check aria-hidden="true" /> : "!"}</span>
+                    <span><strong>{entry.label}</strong><small>{entry.detail}</small></span>
+                    <em>{entry.complete ? "ok" : "fehlt"}</em>
+                  </button>)}
+                </div>
+                {intakeChecklist.some((entry) => entry.warning) ? <div className={styles.intakeChecklistGroup}>
+                  <h3>Hinweis</h3>
+                  {intakeChecklist.filter((entry) => entry.warning).map((entry) => <button type="button" key={entry.id} data-state="warning" onClick={() => jumpToIntakeCheck(entry)}>
+                    <span className={styles.intakeChecklistIcon}>!</span>
+                    <span><strong>{entry.label}</strong><small>{entry.detail}</small></span>
+                    <em>Hinweis</em>
+                  </button>)}
+                </div> : null}
+              </aside> : null}
 
               {feedback ? <>
                 <Hinweis ton={feedback.kind === "validation" ? "warn" : undefined}><span><strong>{feedback.kind === "unclear" ? "Ausgang ungeklärt" : "Eingabe prüfen"}</strong><br />{feedback.message}</span></Hinweis>

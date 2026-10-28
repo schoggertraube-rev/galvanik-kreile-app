@@ -689,6 +689,24 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(value.refresh).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps the main intake action available and jumps to the first open checklist field", async () => {
+    const value = ports();
+    render(<GlobalCreateFlow ports={value} />);
+
+    openFlow();
+    await screen.findByRole("heading", { name: "Neuer Eingang" });
+
+    const submit = screen.getByRole("button", { name: "Wareneingang buchen" });
+    expect(submit).toBeEnabled();
+    expect(screen.getByRole("complementary", { name: "Prüfliste" })).toHaveTextContent(/\d+ von \d+ Pflichtangaben/);
+
+    fireEvent.click(submit);
+
+    expect(value.createDirectIntake).not.toHaveBeenCalled();
+    expect(await screen.findByText("Noch offen: Kunde")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText("Kunde suchen")).toHaveFocus());
+  });
+
   it("stores validity, term status, and intake source as quote fields", async () => {
     const value = ports();
     render(<GlobalCreateFlow ports={value} />);

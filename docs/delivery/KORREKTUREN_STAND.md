@@ -26,8 +26,8 @@ Quelle: Reihenfolge des Arrays `korrekturen` in `docs/project/endversion/codex/B
 | K20 | eingang | erledigt | `dce52ad1` | 28.10.2026 |
 | K21 | eingang | erledigt | `a617cba8` | 28.10.2026 |
 | K22 | eingang | erledigt | `075f96e2` | 28.10.2026 |
-| K23 | eingang | erledigt | `HEAD dieses Pakets` | 28.10.2026 |
-| K24 | eingang | offen | — | — |
+| K23 | eingang | erledigt | `bbd4270b` | 28.10.2026 |
+| K24 | eingang | erledigt | `HEAD dieses Pakets` | 28.10.2026 |
 | K25 | eingang | offen | — | — |
 | K26 | eingang | offen | — | — |
 | K27 | eingang | offen | — | — |
