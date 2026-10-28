@@ -50,6 +50,14 @@ Migration: `supabase/migrations/20261028163707_h11_align_access_rights.sql`. Sie
 - DB-Soll: unverändert zu Rest a; dieser Unterpunkt ändert keine Datenbankzeile.
 - Prüfung: fokussierte Auth-, Befehls-, Kunden- und Browser-Provider-Tests 75/75, TypeScript, gezieltes ESLint, Modulgrenzen und Spec-Check `expected=5 found=5 missing=0` grün.
 
+### Rest e – Kundenliste serverseitig geschützt
+
+- Befund: `getCustomersDb` prüfte nur Sitzung und Tenant, nicht den wirksamen Bereich `kunden`.
+- Fundstelle vor der Bereinigung: `src/app/actions/customers.actions.ts:176`.
+- Änderung: Der Read lehnt ohne `kunden` mit `FORBIDDEN` ab, bevor eine Datenbankabfrage beginnt. Ein fokussierter Test belegt den geschlossenen Fehlerpfad.
+- DB-Soll: unverändert zu Rest a; dieser Unterpunkt ändert keine Datenbankzeile.
+- Prüfung: fokussierte Kunden-Tests 8/8, TypeScript, gezieltes ESLint, Modulgrenzen und Spec-Check `expected=5 found=5 missing=0` grün.
+
 ## Owner-Klickweg
 
 1. Als Gregor anmelden und **Einstellungen → Logins & Rechte** öffnen.

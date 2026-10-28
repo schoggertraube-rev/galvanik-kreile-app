@@ -9,6 +9,7 @@ import { Customer } from "@/lib/types/customer";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import {
   getAuthorizationActionGrants,
+  hasAuthorizationArea,
   resolveAuthorization,
 } from "@/lib/server/authorization";
 import { readCustomerSummary } from "@/lib/server/customerSummaryRead";
@@ -176,6 +177,9 @@ export async function getCustomersDb(): Promise<ActionResult<Array<Customer & {
 
   const authRes = await resolveAuthorization();
   if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
+  if (!hasAuthorizationArea(authRes.data, "kunden")) {
+    return { ok: false, error: "FORBIDDEN", message: "Kundenstamm ist für diesen Login nicht freigegeben." };
+  }
   const tenantId = authRes.data.tenantId;
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
