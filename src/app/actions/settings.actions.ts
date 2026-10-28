@@ -60,7 +60,9 @@ export async function readSettingsAction() {
       ...settings.snapshot,
       company: canManageCompany ? settings.snapshot.company : { companyName: "", street: "", zip: "", city: "", country: "", taxId: "", iban: "", bic: "", bankName: "", paymentTermDays: 0, logoUrl: "" },
       numberRanges: canManageCompany ? settings.snapshot.numberRanges : [],
-      users: canManageLogins ? settings.snapshot.users : [],
+      users: canManageLogins
+        ? settings.snapshot.users
+        : settings.snapshot.users.filter((user) => user.isCurrent),
       extraWorkHourlyRate: hourlyRate.rate,
     },
     services: catalog.services,

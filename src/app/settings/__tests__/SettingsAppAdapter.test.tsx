@@ -116,7 +116,7 @@ describe("Gregor system administration composition", () => {
 
   it("lets every valid login change its own code", async () => {
     ports.resolveAuthorization.mockResolvedValue(authorizationFor("buero"));
-    ports.readSettings.mockResolvedValue({ code:"OK", snapshot:{ company:{companyName:"",street:"",zip:"",city:"",country:"",taxId:"",iban:"",bic:"",bankName:"",paymentTermDays:0,logoUrl:""}, extraWorkHourlyRate:{rateId:null,hourlyRateCents:null,version:0}, users:[{ id: "11111111-1111-4111-8111-111111111111", email: null, fullName: "Büro", shortCode: "B", designation: "", role: "buero", active: true, areas: [], fixedAreas: [], isCurrent: true }], capabilities:{canManageCompany:false,canManageLogins:true,canManageSystem:false}, numberRanges:[], features:[] }, services:[] });
+    ports.readSettings.mockResolvedValue({ code:"OK", snapshot:{ company:{companyName:"",street:"",zip:"",city:"",country:"",taxId:"",iban:"",bic:"",bankName:"",paymentTermDays:0,logoUrl:""}, extraWorkHourlyRate:{rateId:null,hourlyRateCents:null,version:0}, users:[{ id: "11111111-1111-4111-8111-111111111111", email: null, fullName: "Büro", shortCode: "B", designation: "", role: "buero", active: true, areas: [], fixedAreas: [], isCurrent: true }], capabilities:{canManageCompany:false,canManageLogins:false,canManageSystem:false}, numberRanges:[], features:[] }, services:[] });
     render(await SettingsAppAdapter());
     expect(screen.queryByRole("dialog", { name: "Mein Code ändern" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Mein Code" }));

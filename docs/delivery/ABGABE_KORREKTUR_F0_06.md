@@ -16,7 +16,7 @@ Bauquelle: `docs/project/endversion/codex/BAUPLAN.json`, Korrektur `meincode` (m
 
 - `src/app/settings/SettingsAdminClient.tsx`: Der dauerhafte Block ist entfernt. Nur die eigene Loginzeile zeigt nun `Mein Code`; der Knopf öffnet einen modal ausgezeichneten Dialog.
 - `src/app/settings/SettingsAdminClient.tsx`: Der Dialog akzeptiert weiterhin genau zwei gleiche vierstellige Codes; erfolgreiches Speichern schließt ihn und meldet exakt `Neuer Code gespeichert`.
-- `src/app/settings/SettingsAdminClient.tsx`: Ein Login ohne Verwaltungsrecht sieht ausschließlich seine eigene Zeile und kann dort seinen Code ändern, nicht aber fremde Logins oder die Rechtematrix.
+- `src/app/actions/settings.actions.ts` und `src/app/settings/SettingsAdminClient.tsx`: Ein Login ohne Verwaltungsrecht erhält und sieht ausschließlich seine eigene Zeile und kann dort seinen Code ändern, nicht aber fremde Logins oder die Rechtematrix.
 - `src/app/settings/settings.module.css`: Dialog-Überlagerung und kompakte Dialogbreite ergänzt.
 - `src/app/settings/__tests__/SettingsAppAdapter.test.tsx`: Dialog-Zugriff und Fehlerpfad aktualisiert.
 

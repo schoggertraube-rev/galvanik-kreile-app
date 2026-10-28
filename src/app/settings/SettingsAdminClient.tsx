@@ -57,7 +57,9 @@ export function SettingsAdminClient({
     canManageLogins: true,
     canManageSystem: true,
   };
-  const [tab, setTab] = useState<Tab>(canManageCompany ? "company" : canManageLogins ? "users" : "company");
+  const [tab, setTab] = useState<Tab>(
+    canManageCompany ? "company" : canManageLogins || initialSnapshot.users.some((user) => user.isCurrent) ? "users" : "company",
+  );
   const [company, setCompany] = useState(initialSnapshot.company);
   const [services, setServices] = useState(initialServices);
   const [draft, setDraft] = useState(emptyService());
