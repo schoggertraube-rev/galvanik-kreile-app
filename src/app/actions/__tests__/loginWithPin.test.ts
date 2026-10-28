@@ -122,7 +122,7 @@ describe("loginWithPin() active app user security", () => {
     const { loginWithPin } = await import("@/app/actions/auth.actions");
 
     await expect(loginWithPin(handleFor("synthetic-phillip-id"), "0000"))
-      .resolves.toEqual({ ok: false, message: "Ungültige PIN oder inaktiver Benutzer." });
+      .resolves.toEqual({ ok: false, message: "Code falsch · bitte neu eingeben" });
     expect(ports.setAppSession).not.toHaveBeenCalled();
   });
 
@@ -169,7 +169,7 @@ describe("loginWithPin() active app user security", () => {
   it("rejects raw internal IDs before database and bcrypt", async () => {
     const { loginWithPin } = await import("@/app/actions/auth.actions");
     await expect(loginWithPin("synthetic-phillip-id", "1234"))
-      .resolves.toEqual({ ok: false, message: "Ungültige PIN oder inaktiver Benutzer." });
+      .resolves.toEqual({ ok: false, message: "Code falsch · bitte neu eingeben" });
     expect(ports.dbSelect).not.toHaveBeenCalled();
   });
 });

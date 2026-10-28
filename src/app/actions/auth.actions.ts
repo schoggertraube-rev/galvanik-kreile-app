@@ -124,7 +124,7 @@ export async function loginWithPin(
 > {
   try {
     if (!isValidPinLoginHandle(loginHandle) || !/^\d{4}$/.test(pin)) {
-      return { ok: false, message: "Ungültige PIN oder inaktiver Benutzer." };
+      return { ok: false, message: "Code falsch · bitte neu eingeben" };
     }
 
     const candidates = await db
@@ -146,11 +146,11 @@ export async function loginWithPin(
     const user = resolvePinLoginCandidate(loginHandle, candidates);
 
     if (!user) {
-      return { ok: false, message: "Ungültige PIN oder inaktiver Benutzer." };
+      return { ok: false, message: "Code falsch · bitte neu eingeben" };
     }
 
     if (!isAppRole(user.role) || user.tenantId !== APP_TENANT_ID) {
-      return { ok: false, message: "Ungültige PIN oder inaktiver Benutzer." };
+      return { ok: false, message: "Code falsch · bitte neu eingeben" };
     }
 
     const pinAttempt = await runPinAttempt(
@@ -172,7 +172,7 @@ export async function loginWithPin(
     }
 
     if (pinAttempt.status === "invalid") {
-      return { ok: false, message: "Ungültige PIN oder inaktiver Benutzer." };
+      return { ok: false, message: "Code falsch · bitte neu eingeben" };
     }
 
     const now = Date.now();

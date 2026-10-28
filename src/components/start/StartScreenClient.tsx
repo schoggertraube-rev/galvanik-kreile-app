@@ -27,18 +27,19 @@ function StartContent({
   loginUnavailable: boolean;
   supportReference?: string;
 }) {
+  const searchParams = useSearchParams();
   const [selectedHandle, setSelectedHandle] = useState(users[0]?.loginHandle ?? "");
   const [pin, setPin] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [shaking, setShaking] = useState(false);
-  const [mode, setMode] = useState<"pin" | "email">("pin");
+  const [mode, setMode] = useState<"pin" | "email">(() => searchParams?.get("mode") === "email" ? "email" : "pin");
+  const [showServerMessage, setShowServerMessage] = useState(true);
   const [pinPending, setPinPending] = useState(false);
   const [emailPending, startEmailTransition] = useTransition();
   const submittingRef = useRef(false);
   const codeRef = useRef<HTMLDivElement>(null);
-  const searchParams = useSearchParams();
   const selected = users.find((user) => user.loginHandle === selectedHandle) ?? users[0];
-  const serverMessage = searchParams?.get("message");
+  const serverMessage = showServerMessage ? searchParams?.get("message") : null;
   const safeSupportReference = (searchParams?.get("support") ?? supportReference)?.match(/^[0-9a-f-]{36}$/i)?.[0];
 
   useEffect(() => {
@@ -56,6 +57,7 @@ function StartContent({
 
   async function enterDigit(digit: string) {
     if (!selected || loginUnavailable || submittingRef.current || pin.length >= 4) return;
+    setShowServerMessage(false);
     if (message) setMessage(null);
     const nextPin = `${pin}${digit}`;
     setPin(nextPin);
@@ -102,6 +104,7 @@ function StartContent({
     setSelectedHandle(loginHandle);
     setPin("");
     setMessage(null);
+    setShowServerMessage(false);
     setMode("pin");
     window.requestAnimationFrame(() => codeRef.current?.focus());
   }
@@ -155,10 +158,11 @@ function StartContent({
         {selected?.role === "developer" ? <button className={styles.emailLink} data-spec-id="login.email" type="button" onClick={() => setMode("email")}>Mit E-Mail anmelden</button> : null}
       </> : <form className={styles.emailForm} onSubmit={submitEmail}>
         <label htmlFor="email">E-Mail</label>
-        <input id="email" name="email" type="email" autoComplete="username" required autoFocus />
+        <input id="email" name="email" type="email" autoComplete="username" required autoFocus onChange={() => setShowServerMessage(false)} />
         <label htmlFor="password">Passwort</label>
         <input id="password" name="password" type="password" autoComplete="current-password" required />
-        <button className={styles.emailSubmit} type="submit" disabled={emailPending}>{emailPending ? "Anmeldung läuft …" : "Anmelden"}</button>
+        {serverMessage ? <p className={styles.errorText} role="alert" aria-live="polite">{serverMessage}</p> : null}
+        <button className={styles.emailSubmit} data-spec-id="login.email-anmelden" type="submit" disabled={emailPending}>{emailPending ? "Anmeldung läuft …" : "Anmelden"}</button>
         <button className={styles.emailLink} type="button" onClick={() => setMode("pin")}>Mit Code anmelden</button>
       </form>}
     </section>

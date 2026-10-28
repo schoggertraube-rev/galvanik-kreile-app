@@ -7,6 +7,7 @@ const ports = vi.hoisted(() => ({
   readActiveStartUsers: vi.fn(),
   reportProductActorOperationalFailure: vi.fn(),
   loginWithPin: vi.fn(),
+  searchParams: "",
 }));
 
 vi.mock("@/lib/server/productActorReadiness", () => ({
@@ -22,7 +23,7 @@ vi.mock("next/image", () => ({
   ),
 }));
 vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(ports.searchParams),
 }));
 vi.mock("@/app/actions/start.actions", () => ({
   notifyAdminPinReset: vi.fn(),
@@ -48,6 +49,7 @@ describe("StartPage product actor boundary", () => {
       "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
     );
     ports.loginWithPin.mockResolvedValue({ ok: false, message: "synthetic" });
+    ports.searchParams = "";
   });
 
   it("emits only browser-safe handles for every active app user", async () => {
@@ -118,6 +120,21 @@ describe("StartPage product actor boundary", () => {
     expect(ports.loginWithPin).toHaveBeenCalledWith("synthetic-rolf-handle", "4186");
     fireEvent.keyDown(window, { key: "Unidentified", code: "Numpad9" });
     expect(ports.loginWithPin).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears a URL error on the next digit and keeps email errors in the email form", async () => {
+    ports.searchParams = "message=Code+falsch&mode=pin";
+    const { default: StartPage } = await import("@/app/start/page");
+    const { unmount } = render(await StartPage());
+    expect(screen.getByRole("alert")).toHaveTextContent("Code falsch");
+    fireEvent.click(screen.getByRole("button", { name: "1" }));
+    expect(screen.queryByText("Code falsch")).not.toBeInTheDocument();
+    unmount();
+
+    ports.searchParams = "message=E-Mail+oder+Passwort+falsch&mode=email";
+    render(await StartPage());
+    expect(screen.getByLabelText("E-Mail")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("E-Mail oder Passwort falsch");
   });
 
   it("disables every login path and exposes only a correlation reference on readiness failure", async () => {

@@ -21,7 +21,7 @@ export type LogoutResult = {
 };
 
 function redirectToStart(message: string, supportReference?: string): never {
-  const query = new URLSearchParams({ message });
+  const query = new URLSearchParams({ message, mode: "email" });
   if (supportReference) query.set("support", supportReference);
   redirect(`/start?${query.toString()}`);
 }

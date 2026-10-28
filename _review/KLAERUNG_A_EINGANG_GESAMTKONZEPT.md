@@ -17,7 +17,7 @@ Der gemeinsame Begriff lautet **Eingang**. Ein Eingang besitzt mindestens:
 - ein oder mehrere **Anliegen**, wenn eine Quelle mehrere Geschäftsvorgänge betrifft,
 - einen unveränderlichen Verlauf bis zum Ergebnis.
 
-Kanäle: **Mail**, **Eingangsrechnung** einschließlich PDF, Bild, XML/XRechnung und ZUGFeRD, **Papier/Foto/Scan**, **Paket/Wareneingang**, **persönlich**, **Telefon**. Ausgang, Antwort, Eingangsbestätigung, Rückfrage, KV-Versand und sonstige Korrespondenz werden als Folgeaktion verknüpft; Text, Versandregeln und Zustellstatus klärt erst C.
+Kanäle: **Mail**, **Eingangsrechnung** einschließlich PDF, Bild, XML/XRechnung und ZUGFeRD, **Papier/Foto/Scan**, **Paket/Wareneingang**, **persönlich**, **Telefon**. Fax, Website/Kundenportal, SMS/Messenger, Mailbox, Datenträger/Download, interne Überbringer und behördliche Fristsachen nutzen in Stufe 1 den nächstliegenden sicheren Foto-/Datei-/Mail-/Notizweg; eine direkte Provideranbindung wird nicht vorgetäuscht. Ausgang, Antwort, Eingangsbestätigung, Rückfrage, KV-Versand und sonstige Korrespondenz werden als Folgeaktion verknüpft; Text, Versandregeln und Zustellstatus klärt erst C.
 
 Kunde, Lieferant, KV und Auftrag bleiben die fachliche Wahrheit in ihren bestehenden Modulen. Der Eingang speichert nur Quelle, Vorschläge, Bearbeitungszustand, Verknüpfungen und Verlauf; er wird keine zweite Kunden-, Auftrags- oder Rechnungswahrheit.
 
@@ -31,6 +31,7 @@ Kunde, Lieferant, KV und Auftrag bleiben die fachliche Wahrheit in ihren bestehe
 | Papier, Foto und Scan; unverändertes Original; OCR-Vorschläge mit Herkunft und Sicherheit; menschliche Bestätigung | Handschrift-Spezialisierung, lernende Belegerkennung und Stapeloptimierung |
 | Eingangsrechnungen aller genannten Formate erfassen, unverändert ablegen, technisch lesen und prüfen; Lieferant zuordnen | Kontierung, Freigabekette, Buchung, Zahlung, DATEV und Ausgangs-E-Rechnung |
 | Einfacher persönlicher und telefonischer Eingang als Notiz mit Zuordnung; erweiterte Telefonie ist nicht erforderlich | Telefonanlage, automatische Gesprächserkennung, Aufzeichnung und Sprachassistent |
+| Sonstige Zugänge wie Fax, Portaldownload, Messenger-Screenshot, Datenträger oder interne Übergabe über Foto, sichere Datei oder Ursprungsnotiz in denselben Eingangskorb führen | Direkte Integrationen für weitere Portale, Messenger, Formulare und Faxanbieter |
 | Fremdsprachige Inhalte: Original plus Übersetzungsvorschlag; bei Fehler immer manuell weiterbearbeitbar | Terminologie-Lernen und automatisch formulierte Antworten |
 | Technische Fehler dauerhaft in Wartung und am betroffenen Eingang; rot auf „Der Tag“, wenn die Eskalationsregel greift | Trendanalyse, SLA-Auswertung und automatische Provider-Umschaltung |
 
@@ -107,14 +108,32 @@ Bewertet ist der lokale Arbeitsstand vom 28.10.2026. Nicht eingecheckte Dateien 
 
 Worst-Case-Regeln stehen vor Normalfällen in Abschnitt 5. Der Normalfall verwendet denselben Ablauf, überspringt aber unnötige Schritte: sichere Zuordnung wird angezeigt, der Nutzer prüft nur offene Punkte und schließt ab.
 
+### Foto-zuerst-Einstieg und 5-Sekunden-Regel
+
+Für jeden **physischen** Eingang gilt ein gemeinsamer Start: **„Neuer Eingang“ öffnet mit einem Klick direkt die Kamera.** Vor dem Foto wird weder nach Paket, Rechnung, Papier, Kunde noch Erwartung gefragt. Eingang-ID, Zeit und verantwortliche Rolle entstehen vor beziehungsweise spätestens mit der Aufnahme. Nach dem Foto schlägt die App anhand von Bild, Absender, Referenzen, Korrespondenz, KV und offenen Aufträgen eine Art und den kürzesten Weg vor: Paket/Etikett, Eingangsrechnung, Lieferschein, Brief/Dokument, Kontaktkarte, Ware ohne Etikett oder „nicht sicher erkannt“. Der Mensch kann den Vorschlag bestätigen oder korrigieren. Das Originalfoto wird dadurch nie umgedeutet oder überschrieben.
+
+Mail und ihre Anhänge bilden die Ausnahme vom manuellen Start: Sie werden im Hintergrund empfangen, gesichert und eingeordnet. Telefon besitzt einen direkt beschrifteten Soforteinstieg „Telefonnotiz“. Eine persönlich anwesende Person ist kein eigener fachlicher Dokumenttyp: Ware führt in den Paketweg, Papier in Foto/Scan, Abholung in den Warenausgang, Zahlung in den Zahlungsweg, Frage/KV in den KV-Weg und Reklamation in die Klärung.
+
+Jede Oberfläche muss in fünf Sekunden erkennen lassen: **Wo bin ich? Was ist sicher gespeichert? Was ist der eine nächste Schritt?** Deshalb sind globale Aktionen mit Text beschriftet (`Telefonnotiz`, `Foto / Scan`, `Neuer Eingang`, `Konto`); alleinstehende Symbole `◉`, `▣`, `+` oder Initialen ohne Erklärung genügen nicht. Die Reihenfolge bleibt immer Eingang sichern → Art/Zusammenhang erkennen → nur echte Lücken ergänzen → prüfen → eindeutiger Endpunkt.
+
+Schwierigkeitskennzeichnung für Ablauf und Wegekarte:
+
+- **D1:** automatisch; keine Eingabe,
+- **D2:** einen eindeutigen Vorschlag bestätigen,
+- **D3:** auswählen oder korrigieren,
+- **D4:** tatsächlich fehlende Angaben eingeben,
+- **D5:** Sonderfall, Freigabe, Sicherheit oder technischer Fehler.
+
+Jeder Knoten der getrennten Wegekarte trägt D1 bis D5; jeder Blattknoten nennt einen Endpunkt. Eine höhere Nummer bedeutet nicht „schlechte Bedienung“, sondern mehr fachliche Unsicherheit oder Verantwortung.
+
 ### Geführter Paketweg – vom Plus bis „bereit für Galvanik“
 
 Das **globale Plus** ist der sichtbare Start für alles, was physisch im Betrieb ankommt. Mail erscheint dort nicht: Sie wird im Hintergrund abgerufen, als Eingang gesichert und nur bei nötiger Handlung im Eingangskorb beziehungsweise auf „Der Tag“ gezeigt. Auf der aktuellen Startseite bleiben Kopf, linke Navigation, „Der Tag“, „Neuer Eingang“ und „Ware raus“ erhalten (`src/ui/kr/AppShell.tsx:21-57`; `src/components/home/RolfHomeClient.tsx:29-63`, `:95-102`).
 
 Der Paketweg fragt **nicht** zuerst „erwartet oder unerwartet?“ und **nicht** „Kunde vorhanden?“. Diese Verzweigung wird aus den vorhandenen Informationen abgeleitet:
 
-1. **Plus → Neuer Eingang → Paket/Ware.** Sofort entstehen Eingang-ID, Empfangsdatum/-zeit, verantwortliche Rolle und Verlaufseintrag. Ab diesem Moment kann Abbruch nichts mehr verlieren.
-2. **Etikett fotografieren.** Ein Foto startet parallel: Text-/Adress-/Referenzerkennung, Kundensuche, Dublettenprüfung, Suche nach offenem KV/Auftrag, angekündigter Sendung und zugehöriger Mailkorrespondenz. Etikett, persönliche Übergabe oder Kurierangaben sind nur verschiedene Originalquellen desselben Eingangs.
+1. **Neuer Eingang → Kamera (D1).** Sofort entstehen Eingang-ID, Empfangsdatum/-zeit, verantwortliche Rolle und Verlaufseintrag. Es gibt keine vorgelagerte Typauswahl. Ab diesem Moment kann Abbruch nichts mehr verlieren.
+2. **Erstes Foto aufnehmen und Vorschlag bestätigen (D1/D2).** Ein Foto startet parallel: Typ-, Text-, Adress- und Referenzerkennung, Kundensuche, Dublettenprüfung, Suche nach offenem KV/Auftrag, angekündigter Sendung und zugehöriger Mailkorrespondenz. Wird ein Paketetikett vorgeschlagen, genügt im eindeutigen Fall ein Bestätigungsklick. Etikett, persönliche Übergabe oder Kurierangaben sind verschiedene Originalquellen desselben Eingangs.
 3. **App zeigt genau einen Ergebnisweg:**
    - **Erwartet und eindeutig:** Kunde plus KV/Auftrag/Korrespondenz sind verknüpft. Der Nutzer bestätigt nur den Treffer.
    - **Kunde eindeutig, Sendung nicht erwartet:** Kunde ist verknüpft; die App legt einen neuen Auftragsentwurf an und übernimmt alle auffindbaren Angaben aus Korrespondenz und ähnlichen Vorgängen.
@@ -131,7 +150,8 @@ Der bestehende Auftrags-Intake kann Kunde, Termin, Zahlungsmodus und 1–20 Posi
 
 ```text
 +--------------------------------------------------------------------------------+
-| Eingang                                  [ + Eingang erfassen ]                 |
+| KREILE   [Suche]  [Telefonnotiz] [Foto / Scan] [ + Neuer Eingang] [RL · Konto] |
+| Eingangskorb                              [Alle Eingangswege / D1–D5]           |
 | [Alle 18] [Rot 3] [Orange 6] [Navy 5] [Grün 4]  Kanal v  Status v  Zuständig v|
 +--------------------------------------------------------------------------------+
 | ! E-2026-0042  Paket · 09:14  Unbekannt       Werkstatt  von Hand   [Übernehmen]|
@@ -150,7 +170,7 @@ Der bestehende Auftrags-Intake kann Kunde, Termin, Zahlungsmodus und 1–20 Posi
 +--------------------------------------------------------------------------------+
 ```
 
-Liste und Detail dürfen als Seite oder Seitenblatt umgesetzt werden. Verbindlich sind Inhalt, Zustände, Aktionen und keine Sackgasse; Raster, Farben und endgültige Komposition bestimmt der Endversion-Chat.
+Liste und Detail dürfen als Seite oder Seitenblatt umgesetzt werden. Die gesamte Seite muss vertikal scrollbar bleiben; feste Kopf-/Seitennavigation darf keinen Inhalt abschneiden. Verbindlich sind Inhalt, Zustände, Aktionen und keine Sackgasse; Raster, Farben und endgültige Komposition bestimmt der Endversion-Chat.
 
 ## 4. Daten
 
@@ -231,7 +251,7 @@ Wiedereröffnung verlangt einen Grund und setzt `DONE_ARCHIVED → MANUAL`. Alte
 3. **Dubletten werden nicht gelöscht:** Exakte externe ID/Hash verhindert eine zweite Anlage. Fachlich ähnliche Dokumente werden als Verdacht verknüpft und durch einen Menschen entschieden.
 4. **Mehrere Anliegen:** Ein Eingang bleibt ein Eingang; Anliegen werden darunter getrennt. Abschluss erst, wenn jedes Anliegen ein Ergebnis hat.
 5. **Kein Geschäftsvorgang:** Pflichtgrund aus `Werbung/Spam`, `privat`, `Fehlzustellung`, `reine Information`, `Dublette bestätigt`, `sonstiges`; bei „sonstiges“ kurze Notiz Pflicht.
-6. **Rechnungen Stufe 1:** Original unverändert, Format/Lesbarkeit, Lieferant, Rechnungsnummer, Datum, Betrag/Steuer und Dublette prüfen; kein Buchungssatz.
+6. **Rechnungen Stufe 1:** Original unverändert, Format/Lesbarkeit, Lieferant, Rechnungsnummer, Datum, Betrag/Steuer und Dublette prüfen; danach ausdrücklich `bereits bezahlt`, `noch offen` oder `unklar` bestätigen. `Unklar` gilt niemals als bezahlt. Noch kein Buchungssatz.
 7. **ZUGFeRD:** PDF und eingebettetes XML sind ein Rechnungsbündel. Widerspruch zwischen sichtbarem PDF und XML ist rot und manuell zu klären.
 8. **Korrespondenz:** A speichert nur „Folgeaktion angefordert/ausgeführt“ mit Ziel. Formulierungen, Vorlagen, Versand und Rücklauf klärt C.
 9. **Sicherheit:** Providertexte sind Vorschläge; keine automatische Kunden-/Lieferantenanlage, kein Auftrag/KV und keine Buchung nur aufgrund eines Modells.
@@ -240,6 +260,10 @@ Wiedereröffnung verlangt einen Grund und setzt `DONE_ARCHIVED → MANUAL`. Alte
 12. **Paketbilder und Zustand sind Pflicht:** Ohne bestätigte Eingangsbilder und Zustandsprüfung wird ein Paket nicht „bereit für Galvanik“. Das ist eine neuere Owner-Vorgabe und ändert U-090 begründet; siehe Abschnitt 8.
 13. **Preis vor Galvanik:** Preis/KV muss geklärt sein, bevor „bereit für Galvanik“ gesetzt wird. Eine Ausnahme ist nur als sichtbare, berechtigte Freigabe mit Grund zulässig; kein stiller Platzhalter.
 14. **Versand erst nach Geld:** Bei Versand ist Vorkasse der Standard und Warenausgang bleibt bis Zahlung gesperrt. Abholung und freigeschaltete Zielrechnung folgen U-110 bis U-113; der Eingang prüft nur, ob der Vertrag vollständig gesetzt ist.
+15. **Foto vor Typwahl:** Bei physischem Eingang öffnet „Neuer Eingang“ direkt die Kamera. Erst nach Sicherung des Fotos wird ein begründeter Typ-/Zusammenhangsvorschlag gezeigt. Eine Korrektur ändert den Vorschlag, nie das Original.
+16. **Keine Symbolrätsel:** Globale Einstiege sind textlich beschriftet und nach Häufigkeit geordnet. Telefonnotiz ist direkt; Mail hat keinen manuellen Empfangsklick; Konto ist als Konto erkennbar.
+17. **Persönlich nach Handlung verzweigen:** Ein Besucher erzeugt kein leeres Allgemeinformular. Ware, Papier, Abholung, Zahlung, KV/Frage und Reklamation folgen direkt ihrem vorhandenen Fachweg.
+18. **Nicht integrierter Kanal bleibt sichtbar:** Fax, Portal, Messenger, Mailbox, Datenträger oder interne Übergabe werden mit Quelle, Zeit und erreichbarem Original über Foto/Datei/Notiz erfasst. Eine manuelle Sicherung ist als solche markiert; eine nicht vorhandene Provideranbindung wird nie behauptet.
 
 ### Falltabelle
 
@@ -250,7 +274,7 @@ Klickzählung beginnt beim sichtbaren Eingang oder bei „+ Eingang erfassen“,
 | **W1 Unbekannter Absender/Kunde** | Etikettfoto/orange Mail | automatisch ohne Treffer → Etikettdaten übernehmen → Dubletten prüfen → nur fehlende Pflichtdaten ergänzen → Kunde bestätigen | ≤7 | nur nicht erkannte Pflichtfelder | vollständiger Kunde und verknüpfter Eingang; noch kein Galvanikstart ohne vollständigen Auftrag | Offener `MANUAL`-Eingang bleibt; Foto, Entwurf und erkannte Werte erhalten |
 | **W2 Fremde Sprache** | orange Mail/Datei | öffnen → Original/Übersetzung vergleichen → Anliegenvorschlag prüfen → Ziel wählen → bestätigen | ≤5 | nur Korrektur/Notiz bei Bedarf | Originalsprache, Übersetzungsvorschlag und Bestätigung im Verlauf | Übersetzungsfehler setzt/behält `MANUAL`; Original bleibt nutzbar |
 | **W3 Inhalt unverständlich** | orange Eingang | übernehmen → „unklar“ → bekannte Partei suchen → Rückfrage als Folgeaktion oder `NO_BUSINESS` wählen | ≤5 | kurze Rückfrage-/Klärungsnotiz | Kein Raten; klarer offener Wartezustand oder begründeter Abschluss | Abbruch speichert offen; Frist und Eskalation laufen weiter |
-| **W4 Paket beschädigt** | Plus → Paket/Ware | Etikettfoto → Treffer bestätigen → Paketübersicht → „beschädigt“ → Schadensfoto → sichere Übergabe | ≤9 | optionale Schadensnotiz | roter Eingang, Originalfotos, Verantwortlicher, genau eine Handlung auf „Der Tag“ | Kamera-/Speicherfehler blockiert Abschluss, Eingang und bisherige Fotos bleiben erhalten |
+| **W4 Paket beschädigt** | `Neuer Eingang` | Kamera (D1) → Foto/Typvorschlag (D1) → Paket bestätigen (D2) → Treffer bestätigen (D2) → Paketübersicht (D1) → „beschädigt“ (D3) → Schadensfoto (D1) → sichere Übergabe (D2) | ≤9 | optionale Schadensnotiz | roter Eingang, Originalfotos, Verantwortlicher, genau eine Handlung auf „Der Tag“ | Kamera-/Speicherfehler blockiert Abschluss, Eingang und bisherige Fotos bleiben erhalten |
 | **W5 Beleg fehlt** | Paket/persönlich/Rechnung | erfassen → „Beleg fehlt“ → Partei/Ziel wählen → fehlenden Beleg als offene Prüfstelle bestätigen | ≤5 | optional, was fehlt | orange `MANUAL`, nicht fälschlich erledigt | Abbruch offen; späteres Dokument wird demselben Eingang hinzugefügt |
 | **W6 Mehrere Anliegen/Anhänge** | Mail/Scan mit mehreren Themen | öffnen → „Anliegen teilen“ → Anhänge je Anliegen markieren → je Anliegen Ziel bestätigen → gesamthaft erledigen | 5 + 2 je weiteres Anliegen | Kurzbezeichnung nur wenn nicht erkannt | Ein Eingang, mehrere getrennte Ergebnisse, gemeinsame Originale | Erledigen gesperrt, solange ein Anliegen offen ist |
 | **W7 Dublette** | Eingang mit Treffer | öffnen → Vergleich anzeigen → „gleicher Eingang“ oder „neuer Vorgang“ → Grund bestätigen | ≤4 | Grund nur bei Abweichung | kein zweiter Eingang bei exakter Dublette; sonst verknüpfter Verdacht | Keine automatische Löschung; bei Zweifel `MANUAL` |
@@ -258,16 +282,21 @@ Klickzählung beginnt beim sichtbaren Eingang oder bei „+ Eingang erfassen“,
 | **W9 Provider-/Abruffehler** | roter technischer Eintrag/Wartung | öffnen → betroffene Eingänge sehen → „erneut versuchen“ oder manuell fortsetzen | ≤3 | keine | idempotente Wiederholung oder manueller Weg; Vorfall protokolliert | Fehler bleibt sichtbar, wird nicht als erledigt markiert; Eskalation greift |
 | **W10 Gleichzeitige Bearbeitung** | zwei Nutzer öffnen denselben Eingang | erster übernimmt → zweiter versucht Änderung → Konflikthinweis → neu laden/übernehmen lassen | ≤3 | keine | keine verlorene Änderung; genau ein aktueller Bearbeiter | abgewiesener Schreibversuch ändert nichts; Konflikt im Verlauf |
 | **N1 Bekannte Mail mit Anhang** | Mailabruf | sichere Zuordnung öffnen → Vorschlag prüfen → erledigen | ≤3 | keine | Mail und Anhänge am Ziel, Eingang abgeschlossen | Anhangsfehler hält Eingang offen und zeigt fehlenden Teil |
-| **N2 Rechnung als PDF/Bild** | Mail/Upload/Scan | Rechnung erkennen → Lieferant und Werte prüfen → bestätigen → archivieren | ≤4 | nur unsichere Werte | unverändertes Original + geprüfte Rechnungsdaten, noch keine Buchung | unvollständig bleibt `REVIEW_PROPOSAL`/`MANUAL` |
+| **N2 Rechnung als PDF/Bild** | Mail automatisch oder `Neuer Eingang` → Foto | Original sichern/erkennen (D1) → Rechnungsart bestätigen (D2) → Lieferant/Werte prüfen (D2/D3) → `bezahlt`, `offen` oder `unklar` wählen (D2) → Ergebnis bestätigen (D2) | ≤5 | nur unsichere Werte | unverändertes Original + geprüfte Rechnungsdaten + eindeutiger Zahlungsstatus, noch keine Buchung | unvollständig bleibt `REVIEW_PROPOSAL`/`MANUAL`; nie still „bezahlt“ |
+| **N2a Rechnung bezahlt** | geprüfte Rechnung | „bereits bezahlt“ (D2) → Zahlungsbestätigung prüfen (D2) → archivieren (D2) | ≤3 | keine; optional Belegreferenz | geprüft bezahlt und archiviert; Original/Bestätigung getrennt | fehlende Bestätigung lässt den Fall offen |
+| **N2b Rechnung offen** | geprüfte Rechnung | „noch offen“ (D2) → vorgeschlagenen Zahlungslauf bestätigen (D2) | ≤2 | keine | offene Rechnung mit genau einer fälligen Buchhaltungsaufgabe/„Der Tag“ | Abbruch behält Zahlungsstatus offen; Aufgabe wird nicht doppelt angelegt |
+| **N2c Zahlung unklar** | geprüfte Rechnung | „unklar“ (D3) → Prüfverantwortung bestätigen (D2) | ≤2 | optional kurze Notiz | `MANUAL`, konkrete Prüfaufgabe, ausdrücklich nicht bezahlt | bleibt offen und eskaliert nach Regel |
 | **N3 XML/XRechnung** | XML-Anhang/Upload | XML lesen → Pflichtfelder/Format anzeigen → Lieferant prüfen → bestätigen | ≤4 | nur Korrektur | Original-XML unverändert, lesbare Ansicht und Prüfergebnis | ungültiges XML bleibt rot/orange und manuell sichtbar |
 | **N4 ZUGFeRD** | PDF mit XML | Bündel öffnen → PDF/XML-Abgleich → Lieferant prüfen → bestätigen | ≤4 | nur Korrektur | ein Eingang, zwei Originalteile, ein Prüfergebnis | Widerspruch wird rot; kein automatischer Abschluss |
-| **N5 Papier/Foto/Scan** | „Schnell erfassen“ | Quelle wählen → Foto/Datei → OCR-Vorschläge prüfen → Ziel → bestätigen | ≤6 | nur unsichere Felder | Original und bestätigte Werte am Ziel | Abbruch speichert nach Aufnahme; OCR-Fehler führt zu Handbearbeitung |
-| **N6 Paket erwartet** | Plus → Paket/Ware | Etikettfoto → eindeutigen Kunde/KV/Auftrag bestätigen → Paket-/Teilebild → Zustand „unauffällig“ → übernommene Positionen/Preis/Termin prüfen → Auftrag buchen | ≤8 | keine | Paket in ≤5 Minuten vollständig zugeordnet, Auftrag rechnungsfähig und „bereit für Galvanik“ | Prüfliste springt zum einzigen offenen Punkt; Abbruch bleibt im Eingangskorb |
-| **N6a Paket unerwartet, Kunde bekannt** | Plus → Paket/Ware | Etikettfoto → Kundentreffer bestätigen → neuen Auftragsentwurf → Teilegruppe/Bilder → nur fehlende Preis-/Termin-/Verfahrensdaten → buchen | ≤10 plus echte Texteingaben | nur fachlich fehlende Angaben | neuer Auftrag am bestehenden Kunden; gesamte Herkunft im Verlauf | Unvollständig bleibt als sichtbarer Entwurf und Eingang offen |
-| **N6b Paket neuer Kunde** | Plus → Paket/Ware | Etikettfoto → „kein Treffer“ → vorgefüllten Kunden vervollständigen → Teilegruppe/Bilder → Auftrag vervollständigen → buchen | kein starres 10-Klick-Ziel; jede vorhandene Angabe wird übernommen | nur fehlende Pflicht- und Auftragsdaten | Kunde einmal angelegt, Eingang und Auftrag verknüpft, keine Doppeleingabe | Dublette/Abbruch stoppt sicher vor Anlage; Eingang bleibt vollständig erhalten |
-| **N7 Kunde persönlich** | „Persönlich“ | Kunde suchen/Interessent → Anliegen wählen → Notiz/Foto → Ziel → bestätigen | ≤6 | kurze Notiz; bei Interessent Name + Telefon | persönlicher Eingang mit Zeit, Bearbeiter und Ergebnis | Entwurf bleibt im Eingangskorb |
-| **N8 Telefon** | „Telefon“ | Kunde suchen/Interessent → Notiz → Ziel/Folgeaktion → bestätigen | ≤5 | Gesprächsnotiz; ggf. Name + Telefon | Telefonnotiz im Eingang und an Partei/Vorgang | Abbruch speichert Notiz als offenen Entwurf |
+| **N5 Papier/Foto/Scan** | `Neuer Eingang` | Kamera (D1) → Foto/Datei (D1) → Typvorschlag bestätigen/korrigieren (D2/D3) → OCR-Vorschläge prüfen (D2/D3) → Ziel bestätigen (D2) | ≤5 | nur unsichere Felder | Original und bestätigte Werte am Ziel | Abbruch speichert ab Aufnahme; OCR-Fehler führt zu Handbearbeitung |
+| **N6 Paket erwartet** | `Neuer Eingang` | Kamera/Foto (D1) → Paketvorschlag (D2) → eindeutigen Kunde/KV/Auftrag bestätigen (D2) → Paket-/Teilebild (D1) → Zustand „unauffällig“ (D2) → übernommene Positionen/Preis/Termin prüfen (D2) → Auftrag buchen (D2) | ≤8 | keine | Paket in ≤5 Minuten vollständig zugeordnet, Auftrag rechnungsfähig und „bereit für Galvanik“ | Prüfliste springt zum einzigen offenen Punkt; Abbruch bleibt im Eingangskorb |
+| **N6a Paket unerwartet, Kunde bekannt** | `Neuer Eingang` | Kamera/Foto (D1) → Paket/Kundentreffer bestätigen (D2) → Auftragsentwurf (D2) → Teilegruppe/Bilder (D1) → nur fehlende Preis-/Termin-/Verfahrensdaten (D4) → buchen (D2) | ≤10 plus echte Texteingaben | nur fachlich fehlende Angaben | neuer Auftrag am bestehenden Kunden; gesamte Herkunft im Verlauf | Unvollständig bleibt als sichtbarer Entwurf und Eingang offen |
+| **N6b Paket neuer Kunde** | `Neuer Eingang` | Kamera/Foto (D1) → „kein Treffer“ prüfen (D3) → vorgefüllten Kunden vervollständigen (D4) → Teilegruppe/Bilder (D1) → Auftrag vervollständigen (D4) → buchen (D2) | kein starres 10-Klick-Ziel; jede vorhandene Angabe wird übernommen | nur fehlende Pflicht- und Auftragsdaten | Kunde einmal angelegt, Eingang und Auftrag verknüpft, keine Doppeleingabe | Dublette/Abbruch stoppt sicher vor Anlage; Eingang bleibt vollständig erhalten |
+| **N7 Person bringt Ware/Papier** | `Neuer Eingang` | direktes Foto (D1) → Art/Zusammenhang bestätigen (D2/D3) → Paket- oder Dokumentweg | 1 bis zum sicheren Original; danach jeweiliger Normalfall | keine zusätzliche Besuchsnotiz | Eingang ist nach Inhalt, nicht nach anwesender Person verarbeitet | Abbruch nach Foto bleibt offen; kein allgemeines Sackgassenformular |
+| **N7a Person holt ab/bezahlt/fragt/reklamiert** | direkte beschriftete Handlung | Abholung → Warenausgang; Zahlung → Zahlungsweg; Frage → KV; Reklamation → Auftrag/Klärung (je D2/D3) | ≤3 bis zum zuständigen Fachweg | nur tatsächlich neue Aussage | Handlung und Person/Vorgang verbunden | unbekannte Person: Name + Kontakt als D4; Aufgabe bleibt sichtbar |
+| **N8 Telefon** | Kopfaktion „Telefonnotiz“ | direkt öffnen (D1) → vorgeschlagenen Kontakt/Vorgang prüfen (D2/D3) → Anliegen wählen (D2) → kurze Notiz → Handlung bestätigen (D2) | ≤4 | Gesprächsnotiz; ggf. Name + Telefon | Telefonnotiz im Eingang und an Partei/Vorgang | Abbruch speichert vorhandene Notiz als offenen Entwurf |
 | **N9 Kein Geschäftsvorgang** | beliebiger Eingang | öffnen → `kein Geschäftsvorgang` → Grund → bestätigen | ≤4 | nur bei „sonstiges“ | begründet archiviert, Original und Verlauf erhalten | Ohne Grund kein Abschluss |
+| **N10 Fax/Portal/Messenger/Mailbox/Datenträger/interne Übergabe** | jeweilige Quelle | sicherstes verfügbares Original sichern (D1–D3) → Quelle/Kanal bestätigen (D2) → Typ/Zusammenhang vorschlagen (D2/D3) → zuständigen Fachweg öffnen | ≤4 bis zum Fachweg | nur fehlender Absender/Kontakt oder Ursprungsnotiz (D4) | derselbe Eingangskorb und eindeutiger Endpunkt; keine Schattenablage | nicht lesbar/verdächtig: D5 Wartung; Original oder Quellennachweis bleibt offen |
 
 ## 6. Rechte
 
@@ -314,6 +343,11 @@ Zusatzregeln:
 | Paketinhalt darf als Teilegruppe erfasst werden; genaue Angaben pro Teil bleiben möglich. Bei vorhandenem KV werden Positionen übernommen und nur geprüft. | 28.10.2026, Owner in diesem Chat | Teilegruppe ist Bedienhilfe, keine zweite fachliche Wahrheit. |
 | Vor „bereit für Galvanik“ müssen offene Angaben einschließlich Preis/KV, Bilder, Teile/Mengen und Termin geklärt sein. Rechnungsweg und Zahlung müssen feststehen; Versand grundsätzlich erst nach Zahlung, Ausnahmen sichtbar. | 28.10.2026, Owner in diesem Chat; Zahlungsbestand U-110 bis U-113 | Eingang endet mit einem vollständigen, rechnungsfähigen Auftrag; Warenausgang bleibt eigenes Anschlussmodul. |
 | Archivierte Angaben bleiben korrigierbar; jede spätere Änderung muss als solche erkennbar bleiben. | 28.10.2026, Owner in diesem Chat | Wiedereröffnung/Korrektur erzeugt Ereignis mit vorher/nachher, Grund, Zeit und Bearbeiter. |
+| Beim physischen Eingang wird zuerst fotografiert; erst danach schlägt die App Art und Zusammenhang vor. Der Nutzer muss Paket, Rechnung oder Papier nicht vorab wählen. | 28.10.2026, Owner in diesem Chat | „Neuer Eingang“ und „Foto / Scan“ öffnen direkt die Kamera; Korrektur des Vorschlags bleibt jederzeit möglich. |
+| Bei Eingangsrechnungen wird nach der Werteprüfung ausdrücklich gefragt: bereits bezahlt, noch offen oder unklar. | 28.10.2026, Owner in diesem Chat | Bezahlt wird geprüft archiviert; offen erzeugt den Zahlungslauf; unklar bleibt menschliche Prüfung und gilt nie als bezahlt. |
+| Die Oberfläche muss in fünf Sekunden verständlich, modern, nüchtern, geordnet und vollständig scrollbar sein. | 28.10.2026, Owner in diesem Chat | Globale Aktionen erhalten Klartext; alleinstehende Symbole werden nicht als Navigation vorausgesetzt. |
+| Telefon öffnet mit einem direkten Klick die Notiz; „persönlich“ wird nach tatsächlicher Handlung verzweigt und nicht als allgemeines Formular geführt. | 28.10.2026, Owner in diesem Chat | Telefon steht im Kopf; Ware/Papier/Abholung/Zahlung/KV/Reklamation nutzen sofort ihren Fachweg. |
+| Jede im Unternehmen erwartbare Eingangsquelle braucht einen Weg in die App, durch die App und zu einem benannten Endpunkt; es darf keine Sackgasse oder unsichtbare Ablage geben. | 28.10.2026, Owner in diesem Chat | Weitere Kanäle nutzen bis zu einer echten Integration den sicheren Foto-/Datei-/Notizweg; Wegekarte und Abnahme markieren D1–D5. |
 
 ## 8. Änderungsvorschläge zum Bestehenden
 
@@ -331,6 +365,10 @@ Diese Punkte ändern bestehenden Bauplan oder Codevertrag und benötigen Überna
 10. **U-090 für Paket/Ware präzisieren und ändern.** Eingangsbilder und Zustandsbestätigung sind bei physischer Ware ein Abschluss-Gate; bei reinen Dokument-/Notizfällen bleibt die Fotoregel fachabhängig. Begründung: Zustand und Umfang sind nach dem Öffnen nicht reproduzierbar. Nachteil: mindestens eine Aufnahme mehr im Normalfall. Empfehlung: eine Paketübersicht plus ein Bild je Teilegruppe; Einzelteilbild nur bei Abweichung oder wert-/zustandskritischem Teil.
 11. **Preis-/Rechnungs-Gate vor Galvanik ergänzen.** Der bestehende Intake lässt Positionen ohne finalen Preis zu; künftig darf das Paket zwar sofort sicher erfasst werden, aber erst nach geklärtem Preis/KV oder berechtigter dokumentierter Ausnahme „bereit für Galvanik“ werden. Begründung: Der Auftrag muss später ohne nachträgliche Suche korrekt abrechenbar sein. Nachteil: ungeklärte Preisfälle starten nicht sofort in der Werkstatt.
 12. **Teilegruppen als Bedienkonzept ergänzen.** Eine Gruppe übernimmt gemeinsame Menge, Verfahren, Preis, Termin und Bilder; abweichende Einzelteile werden aufgeklappt. Nachteil: falsches Gruppieren muss vor Buchung sichtbar korrigierbar sein. Die endgültigen Daten werden ausschließlich in vorhandene KV-/Auftragspositionen geschrieben.
+13. **Universellen Foto-zuerst-Einstieg statt vorgelagerter Typauswahl verwenden.** Der Klick auf „Neuer Eingang“ erzeugt den offenen Eingang und öffnet direkt die Kamera; erst das gesicherte Bild führt zu einem begründeten Typ- und Zusammenhangsvorschlag. Begründung: Nutzer wissen vor der Aufnahme oft nicht, ob ein Blatt Rechnung, Lieferschein oder sonstiger Beleg ist. Nachteil: Erkennung muss mehrere Dokument-/Objektarten unterscheiden; bei Unsicherheit ist eine kurze Typwahl nötig.
+14. **Globale Symbolknöpfe beschriften.** Diktat/Telefon, Scan, Plus und Konto dürfen nicht nur durch `◉`, `▣`, `+` und Initialen erklärt werden. Empfehlung: `Telefonnotiz`, `Foto / Scan`, `+ Neuer Eingang`, `RL · Konto`. Nachteil: mehr Breite im Kopf; auf kleinen Bildschirmen werden seltenere Aktionen in ein klar beschriftetes Menü verschoben.
+15. **Zahlungsstatus als Pflichtentscheidung der Rechnungsprüfung ergänzen.** Nach bestätigten Rechnungswerten stehen genau `bereits bezahlt`, `noch offen`, `unklar` zur Wahl. „Offen“ erzeugt eine idempotente Aufgabe zum konfigurierten Zahlungslauf; „unklar“ eine Prüfaufgabe; „bezahlt“ braucht eine menschliche Bestätigung. Nachteil: ein zusätzlicher Bestätigungsschritt, der jedoch falsches Archivieren verhindert.
+16. **Wegekarte D1–D5 als Klärungs- und Abnahmewerkzeug führen.** Jede Eingangsart, Verzweigung und jedes Ende ist sichtbar; kein Blatt darf ohne Endpunkt bleiben. Sie ist keine zweite fachliche Wahrheit, sondern visualisiert Regeln und verweist auf Eingangszustand/Folgeaktion. Nachteil: muss bei Regeländerungen mitgepflegt werden.
 
 ## 9. Abnahmefälle
 
@@ -363,6 +401,16 @@ Voraussetzung aller Fälle: UI-Prüfung über echte Klicks und Datenbankprüfung
 25. **Wenn** Preis, Rechnungsempfänger, Termin, Zahlungsmodus, Pflichtbild oder Zustand noch offen ist, **dann** ist „Bereit für Galvanik“ gesperrt und der Klick auf die Prüfliste springt zur ersten echten Lücke. In der Datenbank bleibt der Eingang offen; es gibt keinen Galvanik-Übergang und keinen fingierten Wert.
 26. **Wenn** ein vollständiger Versandauftrag gebucht wird, **dann** ist Zahlungsmodus standardmäßig Vorkasse, der Rechnungsempfänger festgelegt und der spätere Warenausgang bis Zahlung gesperrt. In der Datenbank sind Auftrag, Zahlungsmodus und Eingang verknüpft; eine Zielrechnungs-Ausnahme enthält Berechtigung und Verlauf.
 27. **Wenn** ein archivierter Paketeingang korrigiert wird, **dann** zeigt „Wieder öffnen“ den bisherigen und neuen Wert sowie einen Pflichtgrund. In der Datenbank bleibt der alte Wert im Ereignisverlauf, `version` steigt und der aktuelle fachliche Wert wird über den bestehenden Schreibweg geändert.
+28. **Wenn** auf der Startseite „Neuer Eingang“ oder „Foto / Scan“ einmal geklickt wird, **dann** öffnet direkt die Kamera, ohne vorher Paket, Rechnung, Kunde oder Erwartung abzufragen. In der Datenbank existiert bereits der offene Eingang mit Nummer, Empfangszeit, verantwortlicher Rolle und Ereignis „Eingang erzeugt“; ein Abbruch löscht ihn nicht.
+29. **Wenn** das erste Foto ein Paketetikett mit bekannter KV-Referenz zeigt, **dann** zeigt die nächste Ansicht den Vorschlag „Paketetikett“, Treffergrund und Sicherheit; ein weiterer Klick führt zum Kunden/KV-Treffer. In der Datenbank bleibt das Foto unverändertes Original, während Typ, Referenz und Sicherheit als Vorschlag gespeichert sind; die Verknüpfung entsteht erst nach Bestätigung.
+30. **Wenn** das erste Foto eine Rechnung zeigt, **dann** führt „Eingangsrechnung“ → Werte bestätigen zwingend zur Frage „bereits bezahlt / noch offen / unklar“. In der Datenbank existiert vor dieser Entscheidung kein impliziter Zahlungsstatus; Original, Erkennung und bestätigte Rechnungswerte bleiben getrennt.
+31. **Wenn** bei einer geprüften Rechnung „bereits bezahlt“ gewählt und bestätigt wird, **dann** endet der Klickweg sichtbar mit „als bezahlt geprüft“ und archiviert den Eingang. In der Datenbank stehen Zahlungsstatus, Bestätiger, Zeit und Ereignis; es entsteht in Stufe 1 kein Buchungssatz.
+32. **Wenn** bei einer geprüften Rechnung „noch offen“ gewählt wird, **dann** zeigt der Bestätigungsklick den vorgeschlagenen Zahlungslauf und genau eine konkrete Buchhaltungsaufgabe auf „Der Tag“. In der Datenbank bleiben Rechnung und Eingang offen, besitzen eine Fälligkeit/Aufgabenprojektion und keine doppelte Aufgabe bei erneutem Klick.
+33. **Wenn** bei einer geprüften Rechnung „unklar“ gewählt wird, **dann** führt der Bestätigungsklick zu „von Hand bearbeiten“ mit Verantwortlichkeit und nächster Prüfung. In der Datenbank ist der Status ausdrücklich unklar und niemals bezahlt; Verlauf und Eskalationsfrist laufen weiter.
+34. **Wenn** ein Nutzer den vollständigen Eingangskorb oder die Wegekarte auf einem unterstützten Bildschirm öffnet, **dann** kann er durch normales vertikales Scrollen jeden Inhalt und jeden Endpunkt erreichen; Kopf/Navigation verdecken keinen Abschlussknopf. In der Datenbank entsteht durch reines Scrollen keine Änderung; erst eine explizite Aktion erzeugt ein Ereignis.
+35. **Wenn** „Telefonnotiz“ in der Kopfzeile geklickt wird, **dann** öffnet ohne Zwischenmenü die Notiz mit vorgeschlagenem Kontakt/Vorgang, Anliegen und genau einem Textfeld für die neue Aussage. In der Datenbank entsteht beim Speichern ein Eingang/Anliegen mit Zeit, Bearbeiter, Zuordnung und Folgeaktion; Abbruch nach Texteingabe hält einen offenen Entwurf.
+36. **Wenn** eine anwesende Person Ware, Papier, eine Abholung, Zahlung, KV-Frage oder Reklamation auslöst, **dann** führt die jeweils sichtbare Handlung ohne allgemeines Personenformular in den zugehörigen Fachweg. In der Datenbank verweist genau ein Eingang beziehungsweise eine Folgeaktion auf das führende Zielobjekt; es entsteht kein paralleler Besuchsdatensatz als zweite Wahrheit.
+37. **Wenn** eine Information über Fax, Portal, Messenger, Mailbox, Datenträger oder einen internen Überbringer ankommt und dafür keine direkte Integration besteht, **dann** kann der Nutzer in höchstens vier Klicks Original/Quellennachweis sichern und den passenden Foto-/Datei-/Telefonweg öffnen; die UI kennzeichnet die Erfassung als manuell. In der Datenbank existieren genau ein Eingang, Kanal/konkrete Quelle, Empfangszeit, Original oder Ursprungsnotiz und Verlauf; kein nicht vorhandener Providerstatus wird gespeichert.
 
 ## 10. Offene Punkte
 
@@ -385,6 +433,9 @@ Empfehlung: allgemein nach 24 Stunden; beschädigtes Paket sofort; blockierender
 
 **O-06 – Mindestbilder je Paket/Teilegruppe**
 Empfehlung: im Normalfall genau eine Paketübersicht und ein aussagekräftiges Bild je Teilegruppe; ein zusätzliches Einzelteil-/Schadensbild nur bei Abweichung, unklarer Menge, besonderem Wert oder sichtbarem Schaden. Wesentlicher Nachteil: Bei großen gemischten Paketen entstehen mehrere Fotos. Kleine Alternative: nur ein Paketfoto, das für Zustand und spätere Zuordnung häufig zu wenig belegt. **Entscheidung erbeten:** diese Mindestregel bestätigen?
+
+**O-07 – Fester Zahlungslauf für offene Eingangsrechnungen**  
+Empfehlung: eine betriebsweit konfigurierbare Wochenzeit, initial Freitag 09:00; eine vor diesem Zeitpunkt fällige Rechnung erscheint zusätzlich sofort als dringend auf „Der Tag“. Wesentlicher Nachteil: Feiertage und Abwesenheit benötigen eine sichtbare Vertretung/Terminverschiebung. Kleine Alternative: jede Rechnung nur nach individueller Fälligkeit anzeigen, wodurch der gewünschte gemeinsame Zahllauf verloren geht. **Entscheidung erbeten:** Freitag 09:00 als initialen Zahlungslauf bestätigen?
 
 ### Übergaben, keine Owner-Fragen
 
