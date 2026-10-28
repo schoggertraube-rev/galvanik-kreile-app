@@ -3,9 +3,13 @@ import "server-only";
 import type {
   AccessArea,
   AppRole,
+  AuthorizationActionGrants,
   PermissionKey,
 } from "@/lib/auth/authorizationContract";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import {
+  getAuthorizationActionGrants,
+  resolveAuthorization,
+} from "@/lib/server/authorization";
 
 export type AuthBootstrapUser = {
   role: AppRole;
@@ -18,6 +22,8 @@ export type AuthBootstrapUser = {
    * zweite Berechtigungswahrheit.
    */
   permissions: readonly PermissionKey[];
+  /** Always present in live reads; optional only for older isolated fixtures. */
+  actions?: AuthorizationActionGrants;
 };
 
 export type AuthBootstrapState =
@@ -43,6 +49,7 @@ export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
         areas: [...(result.data.areas ?? [])],
         // Kopie: die geteilte Vertragstabelle bleibt unveraenderlich.
         permissions: [...result.data.permissions],
+        actions: getAuthorizationActionGrants(result.data),
       },
     };
   }

@@ -7,7 +7,10 @@ import type { InferSelectModel } from "drizzle-orm";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 import { Customer } from "@/lib/types/customer";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import {
+  getAuthorizationActionGrants,
+  resolveAuthorization,
+} from "@/lib/server/authorization";
 import { readCustomerSummary } from "@/lib/server/customerSummaryRead";
 import {
   createCustomerCommand,
@@ -51,7 +54,7 @@ export async function createCustomerAction(input: CreateCustomerInput) {
     tenantId: authorization.data.tenantId,
     userId: authorization.data.userId,
     capabilities: {
-      canCreateCustomer: authorization.data.permissions.includes("perm_data_customers"),
+      canCreateCustomer: getAuthorizationActionGrants(authorization.data).createCustomer,
       canManageMoney: authorization.data.areas?.includes("geld") ?? false,
     },
   }, input);
@@ -80,7 +83,7 @@ export async function readCustomerCreateReceiptAction(input: CreateCustomerInput
   const result = await readCustomerCreateReceiptCommand({
     tenantId: authorization.data.tenantId, userId: authorization.data.userId,
     capabilities: {
-      canCreateCustomer: authorization.data.permissions.includes("perm_data_customers"),
+      canCreateCustomer: getAuthorizationActionGrants(authorization.data).createCustomer,
       canManageMoney: authorization.data.areas?.includes("geld") ?? false,
     },
   }, input);
@@ -99,7 +102,7 @@ export async function updateCustomerCommercialAction(input: UpdateCustomerCommer
     tenantId: authorization.data.tenantId,
     userId: authorization.data.userId,
     capabilities: {
-      canCreateCustomer: authorization.data.permissions.includes("perm_data_customers"),
+      canCreateCustomer: getAuthorizationActionGrants(authorization.data).createCustomer,
       canManageMoney: authorization.data.areas?.includes("geld") ?? false,
     },
   }, input);
@@ -119,7 +122,7 @@ export async function updateCustomerNoteAction(input: { clientEventId: string; c
     tenantId: authorization.data.tenantId,
     userId: authorization.data.userId,
     capabilities: {
-      canCreateCustomer: authorization.data.permissions.includes("perm_data_customers"),
+      canCreateCustomer: getAuthorizationActionGrants(authorization.data).createCustomer,
       canManageMoney: authorization.data.areas?.includes("geld") ?? false,
     },
   }, input);

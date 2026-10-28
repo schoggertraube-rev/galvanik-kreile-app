@@ -61,6 +61,7 @@ function TestComponent() {
     loading,
     hasPermission,
     hasArea,
+    canAction,
     refreshPermissions,
   } = usePermissions();
   return (
@@ -79,6 +80,9 @@ function TestComponent() {
       </span>
       <span data-testid="has-prices">
         {hasPermission("perm_view_prices") ? "granted" : "denied"}
+      </span>
+      <span data-testid="can-edit-order-content">
+        {canAction("editOrderContent") ? "granted" : "denied"}
       </span>
       <span data-testid="error">{error || "no-error"}</span>
       <span data-testid="loading">{loading ? "pending" : "ready"}</span>
@@ -114,6 +118,12 @@ const authorizedRolf: ClientAuthorizationResult = {
     role: "meister",
     areas: ["auftraege", "mails"],
     permissions: ["perm_view_leitstand"],
+    actions: {
+      confirmPayment: false,
+      editOrderContent: false,
+      createCustomer: false,
+      createQuote: false,
+    },
     active: true,
   },
 };
@@ -129,6 +139,12 @@ const initialRolf: AuthBootstrapState = {
     displayName: "Rolf",
     areas: ["auftraege", "mails"],
     permissions: getPermissionsForAreas(["auftraege", "mails"]),
+    actions: {
+      confirmPayment: false,
+      editOrderContent: false,
+      createCustomer: false,
+      createQuote: false,
+    },
   },
 };
 
@@ -195,6 +211,7 @@ describe("PermissionsProvider identity consistency", () => {
     expect(screen.getByTestId("has-leitstand")).toHaveTextContent("granted");
     expect(screen.getByTestId("has-mails")).toHaveTextContent("granted");
     expect(screen.getByTestId("has-prices")).toHaveTextContent("denied");
+    expect(screen.getByTestId("can-edit-order-content")).toHaveTextContent("denied");
 
     // No mount-time server action, now or after React has settled.
     expect(getAuthorizationSnapshotAction).not.toHaveBeenCalled();
@@ -262,6 +279,12 @@ describe("PermissionsProvider identity consistency", () => {
         role: "werkstatt",
         areas: ["auftraege"],
         permissions: ["perm_op_status"],
+        actions: {
+          confirmPayment: false,
+          editOrderContent: true,
+          createCustomer: false,
+          createQuote: false,
+        },
         active: true,
       },
     });
@@ -281,6 +304,7 @@ describe("PermissionsProvider identity consistency", () => {
       expect(screen.getByTestId("areas")).toHaveTextContent("auftraege");
       expect(screen.getByTestId("permissions")).toHaveTextContent("perm_op_status");
       expect(screen.getByTestId("status")).toHaveTextContent("authenticated");
+      expect(screen.getByTestId("can-edit-order-content")).toHaveTextContent("granted");
     });
     // No leftover of the previous identity's capabilities.
     expect(screen.getByTestId("has-leitstand")).toHaveTextContent("denied");

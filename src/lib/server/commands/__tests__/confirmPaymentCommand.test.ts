@@ -28,6 +28,17 @@ vi.mock("@/lib/server/authorization", () => ({
     || (area === "kassieren" && authorization.permissions.includes("perm_cash_pickup"))
     || (area === "auftraege" && authorization.permissions.includes("perm_op_status"))
   ),
+  getAuthorizationActionGrants: (authorization: { role: string; permissions: readonly string[] }) => {
+    const geld = authorization.role !== "developer" && authorization.permissions.includes("perm_view_prices");
+    const kassieren = authorization.role !== "developer" && authorization.permissions.includes("perm_cash_pickup");
+    const auftraege = authorization.role !== "developer" && authorization.permissions.includes("perm_op_status");
+    return {
+      confirmPayment: geld || (kassieren && auftraege),
+      editOrderContent: false,
+      createCustomer: false,
+      createQuote: false,
+    };
+  },
 }));
 vi.mock("@/lib/server/privilegedDb", () => ({
   withPrivilegedTenantTransaction: withTransaction,

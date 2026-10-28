@@ -33,11 +33,11 @@ const PENDING_QUOTE_CONVERSION_KEY = "path1.global-create.pending-quote-conversi
 export function GlobalCreateAppAdapter() {
   const router = useRouter();
   const openCustomer = useOverlayStore((state) => state.openCustomer);
-  const { hasArea, hasPermission, name, role } = usePermissions();
+  const { canAction, hasArea, name, role } = usePermissions();
   const [resumeQuoteId, setResumeQuoteId] = useState<string | null>(null);
   const [resumeQuoteConversionId, setResumeQuoteConversionId] = useState<string | null>(null);
-  const canCreateCustomer = hasPermission("perm_data_customers");
-  const canCreateQuote = hasPermission("perm_data_orders");
+  const canCreateCustomer = canAction("createCustomer");
+  const canCreateQuote = canAction("createQuote");
   const roleLabel = name.trim() || "dieses Profil";
 
   useEffect(() => {

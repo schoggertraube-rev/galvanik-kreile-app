@@ -41,6 +41,15 @@ Migration: `supabase/migrations/20261028163707_h11_align_access_rights.sql`. Sie
 - DB-Soll: unverändert zu Rest a; dieser Unterpunkt ändert keine Datenbankzeile.
 - Prüfung: In den sechs benannten Produktdateien gibt es keinen Vergleich `role ===`/`role !==` mehr. Fokussierte Tests einschließlich der abhängigen Start-, Werkstatt- und Cockpit-Verträge 57/57, TypeScript, gezieltes ESLint und Spec-Check `expected=5 found=5 missing=0` grün.
 
+### Rest d – Aktionsrechte aus dem Server-Read
+
+- Befund: Die Oberfläche leitete vier Schreibrechte selbst aus groben `perm_*`-Fähigkeiten ab und wich dadurch von den Serverbefehlen ab: Zahlung bestätigen, Auftragsinhalt ändern, Kunde anlegen und KV anlegen.
+- Fundstellen vor der Bereinigung: `src/app/orders/OrderCardAppAdapter.tsx:689` und `:742`, `src/app/customers/CustomersAppAdapter.tsx:88`, `src/app/GlobalCreateAppAdapter.tsx:40` sowie die zugehörigen Serverprüfungen.
+- Änderung: `src/lib/server/authorization.ts:53` projiziert diese vier Aktionen einmalig aus den wirksamen Bereichen. Der Auth-Bootstrap und der Aktualisierungs-Read liefern die vier Booleans an `PermissionsContext`; die drei Oberflächen lesen nur `canAction(...)`. `confirmPaymentCommand`, `orderContentCommand`, Kunden- und KV-Actions verwenden dieselbe Projektion.
+- Eingang-Freeze: In `GlobalCreateAppAdapter.tsx` wurde ausschließlich die ausdrücklich erlaubte H11d-Rechteprüfung angeglichen; Ablauf, Felder und Optik blieben unverändert.
+- DB-Soll: unverändert zu Rest a; dieser Unterpunkt ändert keine Datenbankzeile.
+- Prüfung: fokussierte Auth-, Befehls-, Kunden- und Browser-Provider-Tests 75/75, TypeScript, gezieltes ESLint, Modulgrenzen und Spec-Check `expected=5 found=5 missing=0` grün.
+
 ## Owner-Klickweg
 
 1. Als Gregor anmelden und **Einstellungen → Logins & Rechte** öffnen.

@@ -1,10 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const ports = vi.hoisted(() => ({ resolveAuthorization: vi.fn() }));
+const ports = vi.hoisted(() => ({
+  resolveAuthorization: vi.fn(),
+  actionGrants: {
+    confirmPayment: false,
+    editOrderContent: false,
+    createCustomer: false,
+    createQuote: false,
+  },
+}));
 
 vi.mock("server-only", () => ({}));
 vi.mock("../authorization", () => ({
   resolveAuthorization: ports.resolveAuthorization,
+  getAuthorizationActionGrants: () => ports.actionGrants,
 }));
 
 import { getAuthBootstrapState } from "../authBootstrap";
@@ -39,6 +48,7 @@ describe("getAuthBootstrapState()", () => {
         displayName: "Gregor",
         areas: ["logins", "wartung"],
         permissions: ["perm_sys_diag", "perm_sys_users"],
+        actions: ports.actionGrants,
       },
     });
     expect(reload).toEqual(firstLoad);
@@ -54,6 +64,7 @@ describe("getAuthBootstrapState()", () => {
     if (state.status !== "authenticated") return;
     expect(state.user.areas).toEqual(gregorAuthorization.data.areas);
     expect(state.user.permissions).toEqual(gregorAuthorization.data.permissions);
+    expect(state.user.actions).toEqual(ports.actionGrants);
     expect(ports.resolveAuthorization).toHaveBeenCalledOnce();
   });
 

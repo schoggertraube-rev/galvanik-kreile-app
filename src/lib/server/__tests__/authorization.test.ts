@@ -2,7 +2,12 @@ process.env.DATABASE_URL = "postgres://mock:mock@localhost:5432/mock";
 
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { hasAnyAuthorizationArea, hasAuthorizationArea, resolveAuthorization } from "../authorization";
+import {
+  getAuthorizationActionGrants,
+  hasAnyAuthorizationArea,
+  hasAuthorizationArea,
+  resolveAuthorization,
+} from "../authorization";
 import * as appSessionModule from "../appSession";
 import { db } from "@/db";
 import { appUsers } from "@/db/schema";
@@ -360,6 +365,12 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
       data: {
         displayName: "Gregor",
         role: "developer",
+        actions: {
+          confirmPayment: false,
+          editOrderContent: false,
+          createCustomer: false,
+          createQuote: false,
+        },
       },
     });
     expect(JSON.stringify(result)).not.toContain("synthetic-gregor-id");
@@ -470,5 +481,35 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     expect(hasAuthorizationArea(staleDeveloperRows, "einstellungen")).toBe(true);
     expect(hasAuthorizationArea(staleDeveloperRows, "logins")).toBe(true);
     expect(ROLE_ACCESS_AREA_TEMPLATES.meister).toContain("logins");
+  });
+
+  it("H11d projects concrete action grants only from effective areas", () => {
+    expect(getAuthorizationActionGrants({
+      role: "buero",
+      areas: ["auftraege", "eingang", "kunden", "geld"],
+    })).toEqual({
+      confirmPayment: true,
+      editOrderContent: true,
+      createCustomer: true,
+      createQuote: true,
+    });
+    expect(getAuthorizationActionGrants({
+      role: "werkstatt",
+      areas: ["auftraege", "kassieren"],
+    })).toEqual({
+      confirmPayment: true,
+      editOrderContent: false,
+      createCustomer: false,
+      createQuote: false,
+    });
+    expect(getAuthorizationActionGrants({
+      role: "developer",
+      areas: ACCESS_AREAS,
+    })).toEqual({
+      confirmPayment: false,
+      editOrderContent: false,
+      createCustomer: false,
+      createQuote: false,
+    });
   });
 });

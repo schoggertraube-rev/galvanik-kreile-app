@@ -219,7 +219,7 @@ export function OrderCardAppAdapter({
   const router = useRouter();
   const storeCustomer = useOverlayStore((s) => s.openCustomer);
   const storeClose = useOverlayStore((s) => s.pop);
-  const { hasPermission } = usePermissions();
+  const { canAction, hasPermission } = usePermissions();
   const [state, setState] = useState<OrderCardState>({ kind: "loading" });
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [feedback, setFeedback] = useState<OrderCardActionFeedback>({
@@ -687,7 +687,8 @@ export function OrderCardAppAdapter({
     const finance = hasPermission("perm_view_prices");
     const goods = operate;
     const editDueDate = operate;
-    const editContent = operate;
+    const editContent = canAction("editOrderContent");
+    const canConfirmPayment = canAction("confirmPayment");
     const canPhoto = hasPermission("perm_op_photos");
     const invoiceAfter =
       payment?.mode === "rechnung" &&
@@ -741,8 +742,8 @@ export function OrderCardAppAdapter({
       ),
       payment: availability(
         paymentReady,
-        finance,
-        finance ? null : "Ihre Rolle darf keine Zahlung bestätigen.",
+        canConfirmPayment,
+        canConfirmPayment ? null : "Ihre Rolle darf keine Zahlung bestätigen.",
       ),
       goodsOut: availability(
         card?.station === "fertig",
@@ -785,6 +786,7 @@ export function OrderCardAppAdapter({
     onSaveContent,
     onToggleItemFinished,
     orderId,
+    canAction,
     hasPermission,
     snapshot,
   ]);

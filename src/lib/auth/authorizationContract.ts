@@ -25,6 +25,16 @@ export type PermissionKey =
   | "perm_view_customers"
   | "perm_view_prices";
 
+export const AUTHORIZATION_ACTIONS = [
+  "confirmPayment",
+  "editOrderContent",
+  "createCustomer",
+  "createQuote",
+] as const;
+
+export type AuthorizationAction = typeof AUTHORIZATION_ACTIONS[number];
+export type AuthorizationActionGrants = Record<AuthorizationAction, boolean>;
+
 export const ACCESS_AREAS = [
   "auftraege",
   "eingang",

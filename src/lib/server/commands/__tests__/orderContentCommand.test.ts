@@ -3,7 +3,15 @@ import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 
 const { execute, resolveAuthorization } = vi.hoisted(() => ({ execute: vi.fn(), resolveAuthorization: vi.fn() }));
 
-vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization }));
+vi.mock("@/lib/server/authorization", () => ({
+  resolveAuthorization,
+  getAuthorizationActionGrants: (authorization: { permissions: readonly string[] }) => ({
+    confirmPayment: false,
+    editOrderContent: authorization.permissions.includes("perm_data_orders"),
+    createCustomer: false,
+    createQuote: false,
+  }),
+}));
 vi.mock("@/lib/server/privilegedDb", () => ({
   withPrivilegedTenantTransaction: vi.fn(async (_context, work) => work({ execute })),
 }));

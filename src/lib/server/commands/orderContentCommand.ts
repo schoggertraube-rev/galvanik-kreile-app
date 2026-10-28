@@ -2,7 +2,10 @@ import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import {
+  getAuthorizationActionGrants,
+  resolveAuthorization,
+} from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -107,7 +110,7 @@ async function authorization(permission: "content" | "status") {
     ? { code: "UNAVAILABLE" as const, message: "Auftragsdaten können derzeit nicht geändert werden." }
     : { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." } };
   const allowed = permission === "content"
-    ? result.data.permissions.includes("perm_data_orders")
+    ? getAuthorizationActionGrants(result.data).editOrderContent
     : result.data.permissions.includes("perm_op_status");
   if (!allowed) return { ok: false as const, result: { code: "FORBIDDEN" as const, message: permission === "content" ? "Diese Rolle darf Auftragsdaten nicht ändern." : "Diese Rolle darf den Teilstatus nicht ändern." } };
   return { ok: true as const, data: result.data };

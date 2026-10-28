@@ -3,7 +3,12 @@
 import { renderToBuffer } from "@react-pdf/renderer";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import { createQuotePdfDocument } from "@/lib/pdf/QuoteDocument";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import {
+  getAuthorizationActionGrants,
+  hasAuthorizationArea,
+  resolveAuthorization,
+  type AuthorizationSnapshot,
+} from "@/lib/server/authorization";
 import { readCustomerSummary } from "@/lib/server/customerSummaryRead";
 import { createOrderIntake } from "@/lib/server/commands/orderIntakeCommand";
 import { readOrderIntakeReceipt } from "@/lib/server/orderIntakeRead";
@@ -23,16 +28,18 @@ import {
   type QuoteCommandContext,
 } from "@/modules/quotes/server-public";
 
-function quoteCommandContext(authorization: { tenantId: string; userId: string; permissions: readonly string[]; areas?: readonly string[] }): QuoteCommandContext {
-  const canUseMoney = authorization.areas?.includes("geld") === true;
+function quoteCommandContext(authorization: AuthorizationSnapshot): QuoteCommandContext {
+  const actionGrants = getAuthorizationActionGrants(authorization);
+  const canReadQuote = hasAuthorizationArea(authorization, "geld")
+    && hasAuthorizationArea(authorization, "auftraege");
   return {
     tenantId: authorization.tenantId,
     userId: authorization.userId,
     capabilities: {
-      canCreateQuote: canUseMoney && authorization.permissions.includes("perm_data_orders"),
-      canReadQuote: canUseMoney && authorization.permissions.includes("perm_view_leitstand"),
-      canUpdateQuote: canUseMoney && authorization.permissions.includes("perm_data_orders"),
-      canConvertQuote: canUseMoney && authorization.permissions.includes("perm_data_orders"),
+      canCreateQuote: actionGrants.createQuote,
+      canReadQuote,
+      canUpdateQuote: actionGrants.createQuote,
+      canConvertQuote: actionGrants.createQuote,
     },
   };
 }

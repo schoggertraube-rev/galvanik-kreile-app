@@ -41,7 +41,7 @@ function initials(name: string) {
 
 export function CustomersAppAdapter() {
   const openCustomer = useOverlayStore((state) => state.openCustomer);
-  const { hasPermission, loading: permissionsLoading } = usePermissions();
+  const { canAction, loading: permissionsLoading } = usePermissions();
   const [state, setState] = useState<CustomersViewState>({ kind: "loading" });
   const [query, setQuery] = useState("");
 
@@ -85,7 +85,7 @@ export function CustomersAppAdapter() {
     };
   }, []);
 
-  const canCreate = !permissionsLoading && (hasPermission("perm_data_customers") || hasPermission("perm_data_orders"));
+  const canCreate = !permissionsLoading && canAction("createCustomer");
   const customers = useMemo(() => state.kind === "data"
     ? state.customers.filter((customer) => matchesFilter(customer, query))
     : [], [query, state]);

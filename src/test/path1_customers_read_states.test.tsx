@@ -11,7 +11,7 @@ const ports = vi.hoisted(() => ({
 vi.mock("@/app/actions/customers.actions", () => ({ getCustomersDb: ports.getCustomersDb }));
 vi.mock("@/components/layout/GlobalCreateFlow", () => ({ requestGlobalCreate: vi.fn() }));
 vi.mock("@/lib/auth/PermissionsContext", () => ({
-  usePermissions: () => ({ hasPermission: () => false, loading: false }),
+  usePermissions: () => ({ canAction: () => false, loading: false }),
 }));
 vi.mock("@/lib/overlayStore", () => ({
   useOverlayStore: (selector: (state: { openCustomer: typeof ports.openCustomer }) => unknown) =>

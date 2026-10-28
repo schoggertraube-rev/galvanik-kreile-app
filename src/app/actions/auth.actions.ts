@@ -7,6 +7,7 @@ import { appUsers } from "@/db/schema";
 import type {
   AccessArea,
   AppRole,
+  AuthorizationActionGrants,
   PermissionKey,
 } from "@/lib/auth/authorizationContract";
 import { isAppRole } from "@/lib/auth/authorizationContract";
@@ -21,7 +22,10 @@ import {
   isValidPinLoginHandle,
   resolvePinLoginCandidate,
 } from "@/lib/server/pinLoginHandle";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import {
+  getAuthorizationActionGrants,
+  resolveAuthorization,
+} from "@/lib/server/authorization";
 import { recordUserLastSeenForLogin } from "@/lib/server/userLastSeen";
 
 export type ClientAuthorizationResult =
@@ -32,6 +36,7 @@ export type ClientAuthorizationResult =
         role: AppRole;
         areas: readonly AccessArea[];
         permissions: readonly PermissionKey[];
+        actions: AuthorizationActionGrants;
         active: true;
       };
     }
@@ -64,6 +69,7 @@ export async function getAuthorizationSnapshotAction(): Promise<ClientAuthorizat
       role: result.data.role,
       areas: result.data.areas ?? [],
       permissions: result.data.permissions,
+      actions: getAuthorizationActionGrants(result.data),
       active: true,
     },
   };
