@@ -31,11 +31,12 @@ const input = {
   street: "Testweg 1",
   zipCode: "12345",
   country: "Deutschland",
-  paymentPreference: "rechnung_14",
+  paymentPreference: "vorkasse",
   vatId: "DE123456789",
+  notes: "Synthetische Telefonnotiz",
 };
 const intentSha256 = createHash("sha256").update(JSON.stringify(input), "utf8").digest("hex");
-const authorization = { tenantId: TENANT, userId: ACTOR, capabilities: { canCreateCustomer: true } };
+const authorization = { tenantId: TENANT, userId: ACTOR, capabilities: { canCreateCustomer: true, canManageMoney: true } };
 const receiptRow = {
   receipt_id: RECEIPT,
   event_id: EVENT,
@@ -58,6 +59,7 @@ const receiptRow = {
   country: input.country,
   payment_preference: input.paymentPreference,
   vat_id: input.vatId,
+  notes: input.notes,
   recorded_at: "2026-09-14T10:00:00.000Z",
   integrity_ok: true,
 };
@@ -72,7 +74,7 @@ describe("createCustomerCommand", () => {
     const { createCustomerCommand } = await import("../server/createCustomerCommand");
     await expect(createCustomerCommand(authorization, { ...input, tenantId: "foreign" })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
     await expect(createCustomerCommand(authorization, { ...input, email: "ungueltig" })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
-    await expect(createCustomerCommand({ ...authorization, capabilities: { canCreateCustomer: false } }, input)).resolves.toMatchObject({ code: "FORBIDDEN" });
+    await expect(createCustomerCommand({ ...authorization, capabilities: { canCreateCustomer: false, canManageMoney: true } }, input)).resolves.toMatchObject({ code: "FORBIDDEN" });
     expect(withTransaction).not.toHaveBeenCalled();
   });
 
@@ -91,6 +93,7 @@ describe("createCustomerCommand", () => {
         customerId: CUSTOMER,
         customerNumber: "K-2026-0042",
         clientEventId: CLIENT,
+        notes: input.notes,
         aggregateVersion: 1,
       },
     });
@@ -115,6 +118,7 @@ describe("createCustomerCommand", () => {
       country: null,
       paymentPreference: null,
       vatId: null,
+      notes: null,
     };
     const prospectHash = createHash("sha256").update(JSON.stringify(prospectInput), "utf8").digest("hex");
     execute.mockImplementation((query: { text: string; values: unknown[] }) => {
@@ -133,6 +137,7 @@ describe("createCustomerCommand", () => {
         country: null,
         payment_preference: null,
         vat_id: null,
+        notes: null,
       }]);
       throw new Error(`unexpected SQL ${query.text}`);
     });

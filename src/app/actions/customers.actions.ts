@@ -52,6 +52,7 @@ export async function createCustomerAction(input: CreateCustomerInput) {
     userId: authorization.data.userId,
     capabilities: {
       canCreateCustomer: authorization.data.permissions.includes("perm_data_customers"),
+      canManageMoney: authorization.data.areas?.includes("geld") ?? false,
     },
   }, input);
   if (command.code !== "OK") return command;
@@ -78,7 +79,10 @@ export async function readCustomerCreateReceiptAction(input: CreateCustomerInput
     : { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   const result = await readCustomerCreateReceiptCommand({
     tenantId: authorization.data.tenantId, userId: authorization.data.userId,
-    capabilities: { canCreateCustomer: authorization.data.permissions.includes("perm_data_customers") },
+    capabilities: {
+      canCreateCustomer: authorization.data.permissions.includes("perm_data_customers"),
+      canManageMoney: authorization.data.areas?.includes("geld") ?? false,
+    },
   }, input);
   if (result.code !== "OK") return result;
   const readback = await readCustomerSummary(authorization.data, { customerId: result.receipt.customerId });
@@ -94,7 +98,10 @@ export async function updateCustomerCommercialAction(input: UpdateCustomerCommer
   const result = await updateCustomerCommercialCommand({
     tenantId: authorization.data.tenantId,
     userId: authorization.data.userId,
-    capabilities: { canCreateCustomer: authorization.data.permissions.includes("perm_data_customers") },
+    capabilities: {
+      canCreateCustomer: authorization.data.permissions.includes("perm_data_customers"),
+      canManageMoney: authorization.data.areas?.includes("geld") ?? false,
+    },
   }, input);
   if (result.code !== "OK") return result;
   const readback = await readCustomerSummary(authorization.data, { customerId: input.customerId });
@@ -111,7 +118,10 @@ export async function updateCustomerNoteAction(input: { clientEventId: string; c
   const result = await updateCustomerNoteCommand({
     tenantId: authorization.data.tenantId,
     userId: authorization.data.userId,
-    capabilities: { canCreateCustomer: authorization.data.permissions.includes("perm_data_customers") },
+    capabilities: {
+      canCreateCustomer: authorization.data.permissions.includes("perm_data_customers"),
+      canManageMoney: authorization.data.areas?.includes("geld") ?? false,
+    },
   }, input);
   if (result.code !== "OK") return result;
   const readback = await readCustomerSummary(authorization.data, { customerId: input.customerId });

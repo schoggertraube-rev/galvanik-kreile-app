@@ -177,7 +177,6 @@ export type GlobalCreatePorts = {
   >;
   listCatalog?: () => Promise<{ code:"OK"; services:CatalogService[] }|{ code:"DENIED"|"UNAVAILABLE"; message:string }>;
   createCustomer: (input: CreateCustomerInput) => Promise<GlobalCreateCustomerResult>;
-  saveCustomerNote: (input: { clientEventId: string; customerId: string; note: string }) => Promise<{ code: "OK" } | Failure>;
   updateCustomer?: (input: UpdateCustomerCommercialInput) => Promise<{ code: "OK" } | Failure>;
   readCustomerCreateReceipt: (input: CreateCustomerInput) => Promise<GlobalCreateCustomerResult | Failure>;
   createQuote: (input: CreateQuoteInput) => Promise<GlobalCreateQuoteResult>;
@@ -210,7 +209,7 @@ type OpenQuotesState =
   | { kind: "idle" | "loading" | "empty" }
   | { kind: "data"; quotes: QuoteReadback[] }
   | { kind: "denied" | "error" | "unknown"; message: string; requestId?: string };
-type CustomerDraft = Omit<CreateCustomerInput, "clientEventId"|"street"|"zipCode"|"city"|"country"|"paymentPreference"|"vatId"> & {street:string;zipCode:string;city:string;country:string;paymentPreference:string;vatId:string|null};
+type CustomerDraft = Omit<CreateCustomerInput, "clientEventId"|"street"|"zipCode"|"city"|"country"|"paymentPreference"|"vatId"|"notes"> & {street:string;zipCode:string;city:string;country:string;paymentPreference:string;vatId:string|null};
 type PositionDraft = {
   key: string;
   catalogServiceId: string;
@@ -1033,19 +1032,12 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     const id = requestId("customer");
     setBusy(true);
     setFeedback(null);
-    const input: CreateCustomerInput = { ...customerDraft, clientEventId: id };
+    const input: CreateCustomerInput = { ...customerDraft, clientEventId: id, notes: nullable(customerNote) };
     try {
       const result = await ports.createCustomer(input);
       if (result.code !== "OK") {
         setFeedback(requestFeedback(result, id));
         return;
-      }
-      if (customerNote.trim()) {
-        const noteResult = await ports.saveCustomerNote({ clientEventId: globalThis.crypto.randomUUID(), customerId: result.customer.id, note: customerNote.trim() });
-        if (noteResult.code !== "OK") {
-          setFeedback({ kind: "error", message: `Kunde ist gespeichert; die Notiz bleibt In Klärung. ${noteResult.message}` });
-          return;
-        }
       }
       setOpen(false);
       ports.openCustomer(result.customer.id);
@@ -1060,8 +1052,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     }
   };
 
-  const createInputForStatus = (): CreateCustomerInput => ({ ...customerDraft, clientEventId: requestId("customer") });
-  const directCustomerInputForStatus = (): CreateCustomerInput => ({ ...directCustomer, clientEventId: requestId("directCustomer") });
+  const createInputForStatus = (): CreateCustomerInput => ({ ...customerDraft, clientEventId: requestId("customer"), notes: nullable(customerNote) });
+  const directCustomerInputForStatus = (): CreateCustomerInput => ({ ...directCustomer, clientEventId: requestId("directCustomer"), notes: null });
 
   const quoteInputForStatus = (): CreateQuoteInput | null => {
     if (!customer) return null;
@@ -1470,7 +1462,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
   const createDirectCustomerOnly = async (): Promise<string | null> => {
     const clientEventId = requestId("directCustomer");
-    const created = await ports.createCustomer({ ...directCustomer, clientEventId });
+    const created = await ports.createCustomer({ ...directCustomer, clientEventId, notes: null });
     if (created.code !== "OK") {
       setFeedback(requestFeedback(created, clientEventId));
       return null;

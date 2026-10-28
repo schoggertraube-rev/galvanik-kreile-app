@@ -7,7 +7,7 @@ export type CustomerCardState={kind:"loading"}|{kind:"denied"|"not-found"|"error
 export type CreateCustomerInput = {
   clientEventId: string;
   name: string;
-  customerType: "business" | "privat" | "institution";
+  customerType: "business" | "privat";
   companyName: string | null;
   contactPerson: string | null;
   email: string | null;
@@ -18,10 +18,12 @@ export type CreateCustomerInput = {
   country?: string | null;
   paymentPreference?: string | null;
   vatId?: string | null;
+  notes?: string | null;
 };
 
 export type CustomerCommandCapabilities = {
   canCreateCustomer: boolean;
+  canManageMoney: boolean;
 };
 
 export type CustomerCommandContext = {
@@ -50,6 +52,7 @@ export type CustomerCreateReceipt = {
   country: string | null;
   paymentPreference: string | null;
   vatId: string | null;
+  notes: string | null;
   recordedAt: string;
   aggregateVersion: 1;
 };
@@ -67,4 +70,12 @@ export type UpdateCustomerCommercialInput = {
   contactPerson: string | null; email: string | null; phone: string | null;
   street: string; zipCode: string; city: string; country: string;
   paymentPreference: string; vatId: string | null;
+};
+
+export type EnableCustomerInvoiceTermsInput = {
+  clientEventId: string;
+  customerId: string;
+  targetDays: number;
+  cashDiscountPercent: number;
+  cashDiscountDays: number;
 };

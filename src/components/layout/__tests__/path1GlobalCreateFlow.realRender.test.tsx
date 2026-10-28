@@ -90,7 +90,6 @@ function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
       },
       customer: { id: CUSTOMER_ID, customerNumber: "K-2026-0042", name: input.name },
     })),
-    saveCustomerNote: vi.fn().mockResolvedValue({ code: "OK" }),
     readCustomerCreateReceipt: vi.fn().mockResolvedValue({ code: "NOT_FOUND", message: "Kein Kundenstand gefunden." }),
     createQuote: vi.fn().mockImplementation(async (input) => ({
       code: "OK",

@@ -31,6 +31,23 @@ export async function updateCustomerCommercialCommand(context: CustomerCommandCo
   if (!context.capabilities.canCreateCustomer) return { code: "FORBIDDEN" as const, message: "Kundendaten dürfen nicht geändert werden." };
   try {
     return await withPrivilegedTenantTransaction(context, async (tx) => {
+      const existing = await tx.execute<{ payment_preference: string | null }>(sql`
+        SELECT customer.payment_preference
+        FROM public.customers customer
+        WHERE customer.tenant_id = ${context.tenantId}
+          AND customer.id = ${value.customerId}
+        FOR UPDATE
+      `);
+      const current = existing.length === 1 ? existing[0] : null;
+      if (!current) return { code: "NOT_FOUND" as const, message: "Kunde ist nicht verfÃ¼gbar." };
+      if (!context.capabilities.canManageMoney) {
+        if (current.payment_preference === null || current.payment_preference !== value.paymentPreference) {
+          return { code: "FORBIDDEN" as const, message: "Zahlungsbedingungen dÃ¼rfen nur mit dem Bereich Geld geÃ¤ndert werden." };
+        }
+      } else if (current.payment_preference !== value.paymentPreference
+        && (/^rechnung_/.test(value.paymentPreference) || /^rechnung_/.test(current.payment_preference ?? ""))) {
+        return { code: "FORBIDDEN" as const, message: "Ziel nicht freigeschaltet. Zahlungsziel nur Ã¼ber die eigene Freischaltung Ã¤ndern." };
+      }
       const rows = await tx.execute<{ result_code: string; replayed: boolean }>(sql`SELECT * FROM private.update_customer_commercial_v1(${context.tenantId}, ${context.userId}::uuid, ${value.clientEventId}::uuid, ${value.customerId}, ${value.name}, ${value.companyName}, ${value.contactPerson}, ${value.email}, ${value.phone}, ${value.street}, ${value.zipCode}, ${value.city}, ${value.country}, ${value.paymentPreference}, ${value.vatId})`);
       const row = rows.length === 1 ? rows[0] : null;
       if (!row || !["OK", "NOT_FOUND", "VALIDATION_ERROR"].includes(row.result_code)) throw new Error("CUSTOMER_UPDATE_RESULT_INVALID");

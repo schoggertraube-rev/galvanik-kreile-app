@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { logout } from "@/app/actions/auth";
-import { createCustomerAction, getCustomersDb, readCustomerCreateReceiptAction, updateCustomerCommercialAction, updateCustomerNoteAction } from "@/app/actions/customers.actions";
+import { createCustomerAction, getCustomersDb, readCustomerCreateReceiptAction, updateCustomerCommercialAction } from "@/app/actions/customers.actions";
 import { convertQuoteToOrderAction, createQuoteAction, listOpenQuotesAction, readQuoteAction, readQuoteCreateReceiptAction, readQuoteConversionReceiptAction, readQuoteUpdateReceiptAction, updateQuoteAction } from "@/app/actions/quotes.actions";
 import { createOrderIntakeAction, getOrderIntakeReceiptAction, searchOrderIntakeCustomersAction } from "@/app/warendurchlauf/actions";
 import { getActiveCatalogAction } from "@/app/actions/catalog.actions";
@@ -159,7 +159,6 @@ export function GlobalCreateAppAdapter() {
             },
           };
         },
-        saveCustomerNote: async (input) => updateCustomerNoteAction(input),
         updateCustomer: async (input) => updateCustomerCommercialAction(input),
         readCustomerCreateReceipt: async (input: CreateCustomerInput): Promise<GlobalCreateCustomerResult> => {
           const result = await readCustomerCreateReceiptAction(input);

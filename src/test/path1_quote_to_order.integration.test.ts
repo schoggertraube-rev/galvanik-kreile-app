@@ -52,6 +52,12 @@ function customerInput(label: string) {
     email: `${label.toLowerCase()}-${suffix}@example.invalid`,
     name: `SYNTHETISCH ${label} ${suffix}`,
     phone: "+49 000 98765",
+    street: "Testweg 1",
+    zipCode: "12345",
+    country: "Deutschland",
+    paymentPreference: "vorkasse",
+    vatId: "DE123456789",
+    notes: null,
   };
 }
 
@@ -70,7 +76,7 @@ function quoteInput(customerId: string, label: string, clientEventId = randomUUI
 
 async function createCustomer(label: string, tenantId = KREILE_TENANT_SLUG, userId = users.buero) {
   const { createCustomerCommand } = await import("@/modules/customers/server-public");
-  const result = await createCustomerCommand({ tenantId, userId, capabilities: { canCreateCustomer: true } }, customerInput(label));
+  const result = await createCustomerCommand({ tenantId, userId, capabilities: { canCreateCustomer: true, canManageMoney: true } }, customerInput(label));
   expect(result.code).toBe("OK");
   if (result.code !== "OK") throw new Error(`CUSTOMER_SETUP_FAILED:${result.code}`);
   return result.receipt.customerId;

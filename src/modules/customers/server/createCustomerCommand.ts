@@ -36,6 +36,7 @@ type ReceiptRow = {
   country: string | null;
   payment_preference: string | null;
   vat_id: string | null;
+  notes: string | null;
   recorded_at: Date | string;
   integrity_ok: boolean;
 };
@@ -57,7 +58,7 @@ function requiredText(value: unknown, min: number, max: number): string | null {
 }
 
 type NormalizedCreateCustomerInput = CreateCustomerInput & {
-  street: string | null; zipCode: string | null; city: string | null; country: string | null; paymentPreference: string | null; vatId: string | null;
+  street: string | null; zipCode: string | null; city: string | null; country: string | null; paymentPreference: string | null; vatId: string | null; notes: string | null;
 };
 
 function optionalFormText(value: unknown, min: number, max: number): string | null | undefined {
@@ -69,10 +70,10 @@ function optionalFormText(value: unknown, min: number, max: number): string | nu
 
 function normalizeInput(value: unknown): NormalizedCreateCustomerInput | null {
   if (!isPlainObject(value) || !exactKeys(value, [
-    "city", "clientEventId", "companyName", "contactPerson", "country", "customerType", "email", "name", "paymentPreference", "phone", "street", "vatId", "zipCode",
+    "city", "clientEventId", "companyName", "contactPerson", "country", "customerType", "email", "name", "notes", "paymentPreference", "phone", "street", "vatId", "zipCode",
   ])) return null;
   if (typeof value.clientEventId !== "string" || !UUID_PATTERN.test(value.clientEventId)) return null;
-  if (!(["business", "privat", "institution"] as const).includes(value.customerType as never)) return null;
+  if (!(["business", "privat"] as const).includes(value.customerType as never)) return null;
   const name = requiredText(value.name, 2, 160);
   const companyName = optionalFormText(value.companyName, 2, 160);
   const contactPerson = optionalFormText(value.contactPerson, 1, 160);
@@ -84,9 +85,10 @@ function normalizeInput(value: unknown): NormalizedCreateCustomerInput | null {
   const country = optionalFormText(value.country, 2, 120);
   const paymentPreference = optionalFormText(value.paymentPreference, 3, 24);
   const vatId = optionalFormText(value.vatId, 4, 40);
+  const notes = optionalFormText(value.notes, 1, 2000);
   if (!name || !phone || companyName === undefined || contactPerson === undefined || email === undefined || street === undefined
-    || zipCode === undefined || city === undefined || country === undefined || paymentPreference === undefined || vatId === undefined
-    || (paymentPreference !== null && !/^(?:rechnung_[1-9][0-9]{0,2}|vorkasse|bar)$/.test(paymentPreference))) return null;
+    || zipCode === undefined || city === undefined || country === undefined || paymentPreference === undefined || vatId === undefined || notes === undefined
+    || (paymentPreference !== null && !/^(?:vorkasse|bar)$/.test(paymentPreference))) return null;
   if (email !== null && !EMAIL_PATTERN.test(email)) return null;
   return {
     clientEventId: value.clientEventId,
@@ -96,7 +98,7 @@ function normalizeInput(value: unknown): NormalizedCreateCustomerInput | null {
     contactPerson,
     email,
     phone,
-    street, zipCode, city, country, paymentPreference, vatId,
+    street, zipCode, city, country, paymentPreference, vatId, notes,
   };
 }
 
@@ -115,6 +117,7 @@ function intentHash(input: NormalizedCreateCustomerInput): string {
     country: input.country,
     paymentPreference: input.paymentPreference,
     vatId: input.vatId,
+    notes: input.notes,
   }), "utf8").digest("hex");
 }
 
@@ -169,6 +172,7 @@ function receiptFromRow(
     country: row.country,
     paymentPreference: row.payment_preference,
     vatId: row.vat_id,
+    notes: row.notes,
     recordedAt: recordedAt.toISOString(),
     aggregateVersion: 1,
   };
@@ -214,7 +218,7 @@ export async function createCustomerCommand(
           ${expected.intentSha256}, ${normalized.name}, ${normalized.customerType},
           ${normalized.companyName}, ${normalized.contactPerson}, ${normalized.email},
           ${normalized.phone}, ${normalized.street}, ${normalized.zipCode}, ${normalized.city},
-          ${normalized.country}, ${normalized.paymentPreference}, ${normalized.vatId}
+          ${normalized.country}, ${normalized.paymentPreference}, ${normalized.vatId}, ${normalized.notes}
         )
       `);
       const outcome = outcomes.length === 1 ? outcomes[0] : null;
