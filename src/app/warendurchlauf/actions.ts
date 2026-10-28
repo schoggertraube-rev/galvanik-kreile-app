@@ -34,6 +34,7 @@ import type {
 import type { EvidenceReadRecord, ReadEvidenceTargetInput } from "@/lib/server/evidenceRead";
 import type { OperationalOrder } from "@/lib/types/operationalOrder";
 import type { WerkstattKpiSnapshot } from "@/modules/werkstatt/public";
+import type { IntakeTextRecognition } from "@/lib/server/intakeTextRecognition";
 
 export type WarendurchlaufOrder = OperationalOrder;
 
@@ -174,6 +175,24 @@ export async function createOrderIntakeAction(
   noStore();
   const domain = await import("@/lib/server/commands/orderIntakeCommand");
   return domain.createOrderIntake(input);
+}
+
+export async function recognizeOrderIntakeTextAction(
+  input: { text: string },
+): Promise<WarendurchlaufActionResult<IntakeTextRecognition>> {
+  noStore();
+  if (!input || typeof input.text !== "string" || input.text.length > 6000) {
+    return { ok: false, error: "QUERY_ERROR", message: "Erfassungstext ist ungültig." };
+  }
+  const authorization = await resolveAuthorization().catch(() => null);
+  if (!authorization || !authorization.ok) {
+    return { ok: false, error: "AUTH_ERROR", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+  }
+  if (!authorization.data.permissions.includes("perm_data_orders") || authorization.data.areas?.includes("eingang") !== true) {
+    return { ok: false, error: "FORBIDDEN", message: "Wareneingang ist mit dieser Rolle nicht erlaubt." };
+  }
+  const { recognizeIntakeText } = await import("@/lib/server/intakeTextRecognition");
+  return { ok: true, data: recognizeIntakeText(input.text) };
 }
 
 export async function searchOrderIntakeCustomersAction(

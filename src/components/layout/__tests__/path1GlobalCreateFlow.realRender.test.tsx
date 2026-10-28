@@ -74,6 +74,7 @@ function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
     resumeQuoteConversionId: null,
     listCustomers: vi.fn().mockResolvedValue({ code: "OK", customers: [{ id: CUSTOMER_ID, customerNumber: "K-2026-0042", name: "SYNTHETISCH Musterkunde GmbH", city: "Teststadt" }] }),
     searchIntakeCustomers: vi.fn().mockImplementation(async (query: string) => ({ code: "OK", customers: query === "SYNTHETISCH" ? [{ id: CUSTOMER_ID, customerNumber: "K-2026-0042", name: "SYNTHETISCH Musterkunde GmbH", city: "Teststadt" }] : [] })),
+    recognizeIntakeText: vi.fn().mockResolvedValue({ code: "OK", data: { fields: [], positions: [] } }),
     listCatalog: vi.fn().mockResolvedValue({ code:"OK", services:[{id:"88888888-8888-4888-8888-888888888888",name:"Synthetischer Flansch",surface:"Verzinken",unit:"Stück",netPriceCents:12500,vatRateBasisPoints:1900,standardLeadTimeWorkingDays:5,active:true}] }),
     createCustomer: vi.fn().mockImplementation(async (input) => ({
       code: "OK",
@@ -673,6 +674,34 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(value.createCustomer).not.toHaveBeenCalled();
     expect(value.readDirectIntakeReceipt).toHaveBeenCalledTimes(1);
     expect(value.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("prefills recognized intake text and confirms every marked value together", async () => {
+    const recognizeIntakeText = vi.fn<GlobalCreatePorts["recognizeIntakeText"]>().mockResolvedValue({
+      code: "OK",
+      data: {
+        fields: [
+          { field: "companyName", value: "TEST Erkannt GmbH", source: "Text Zeile 1" },
+          { field: "dueDate", value: "2026-11-12", source: "Text Zeile 2" },
+        ],
+        positions: [{ name: "Flansch", quantity: "2", unit: "Stück", surfaceRequested: "Verzinken", executionRequested: "matt", source: "Text Abschnitt 1" }],
+      },
+    });
+    render(<GlobalCreateFlow ports={ports({ recognizeIntakeText })} />);
+    openFlow();
+    await screen.findByRole("heading", { name: "Neuer Eingang" });
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Schnell erfassen" }), { target: { value: "TEST Erkannt GmbH, 2 Stück Flansch verzinken matt bis 12.11." } });
+    fireEvent.click(screen.getByRole("button", { name: "Angaben erkennen" }));
+
+    await waitFor(() => expect(screen.getByLabelText("Name / Firma")).toHaveValue("TEST Erkannt GmbH"));
+    expect(screen.getByLabelText("Liefertermin")).toHaveValue("2026-11-12");
+    expect(screen.getByLabelText("Teil / Bezeichnung")).toHaveValue("Flansch");
+    expect(screen.getByText(/Angaben erkannt und vorausgefüllt/)).toBeInTheDocument();
+    expect(screen.getByText(/Name \/ Firma: TEST Erkannt GmbH · erkannt/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Alles bestätigen" }));
+    expect(screen.getByText(/Angaben bestätigt/)).toBeInTheDocument();
+    expect(recognizeIntakeText).toHaveBeenCalledWith(expect.stringContaining("TEST Erkannt GmbH"));
   });
 
   it("books a free-text intake when the catalog is empty and keeps the price open", async () => {

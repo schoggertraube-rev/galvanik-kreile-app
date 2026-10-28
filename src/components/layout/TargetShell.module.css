@@ -60,6 +60,9 @@
 .createInlineChoices button[aria-current="step"],.createInlineChoices button[aria-pressed="true"]{border-color:var(--rand);background:var(--surface);color:var(--navy-900);box-shadow:var(--sh-sm)}
 .createInlineChoices button:disabled{color:var(--navy-300);cursor:not-allowed;opacity:.62}
 @media(max-width:700px){.createInlineChoices{grid-template-columns:1fr}.createInlineChoices button{min-height:46px}}
+.createQuickCapture{display:grid;gap:var(--a-4);padding:var(--a-6);border:1px solid var(--line);border-radius:var(--r-kachel);background:var(--surface)}
+.createQuickCapture h3,.createQuickCapture p{margin:0}.createQuickCapture p{color:var(--navy-400)}
+.createRecognition{display:grid;gap:var(--a-3)}.createRecognition>div{display:flex;flex-wrap:wrap;gap:var(--a-2)}
 .f1HiddenFile { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }
 .f1Camera { position: relative; min-block-size: 26rem; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--navy-800); display: grid; place-items: center; }
 .f1Camera video { inline-size: 100%; max-block-size: 62vh; object-fit: contain; }

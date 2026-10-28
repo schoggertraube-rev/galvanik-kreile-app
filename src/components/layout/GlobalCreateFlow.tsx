@@ -20,6 +20,7 @@ import {
   Auswahl,
   Button as KrButton,
   Checkbox,
+  Chip,
   Dialog as KrDialog,
   Eingabe,
   Fakten,
@@ -39,6 +40,7 @@ import type {
   QuoteUpdateReceipt,
   UpdateQuoteInput,
 } from "@/modules/quotes/public";
+import type { IntakeTextRecognition } from "@/lib/server/intakeTextRecognition";
 import { F1SourceDialogs, type F1SourceMode } from "./F1SourceDialogs";
 import { GLOBAL_CREATE_OPEN_EVENT, type GlobalCreateIntent, type GlobalCreateRequest } from "./globalCreateRequest";
 import styles from "./TargetShell.module.css";
@@ -175,6 +177,7 @@ export type GlobalCreatePorts = {
     | { code: "OK"; customers: GlobalCreateCustomerChoice[] }
     | { code: "DENIED" | "UNAVAILABLE"; message: string }
   >;
+  recognizeIntakeText: (text: string) => Promise<{ code: "OK"; data: IntakeTextRecognition } | Failure>;
   listCatalog?: () => Promise<{ code:"OK"; services:CatalogService[] }|{ code:"DENIED"|"UNAVAILABLE"; message:string }>;
   createCustomer: (input: CreateCustomerInput) => Promise<GlobalCreateCustomerResult>;
   updateCustomer?: (input: UpdateCustomerCommercialInput) => Promise<{ code: "OK" } | Failure>;
@@ -488,6 +491,11 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [directWishDate, setDirectWishDate] = useState("");
   const [directConfirmedDate, setDirectConfirmedDate] = useState("");
   const [directNote, setDirectNote] = useState("");
+  const [intakeRecognitionText, setIntakeRecognitionText] = useState("");
+  const [lastRecognizedText, setLastRecognizedText] = useState("");
+  const [recognitionBusy, setRecognitionBusy] = useState(false);
+  const [recognitionMarkers, setRecognitionMarkers] = useState<Array<{ key: string; label: string; value: string; source: string }>>([]);
+  const [recognitionConfirmed, setRecognitionConfirmed] = useState(false);
   const [sourceMode, setSourceMode] = useState<F1SourceMode | null>(null);
   const [draftPrompt, setDraftPrompt] = useState(false);
   const [pendingAttachmentIds, setPendingAttachmentIds] = useState<string[]>([]);
@@ -1320,6 +1328,69 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       : item));
   };
 
+  const recognizeDirectIntakeText = async () => {
+    if (!intakeRecognitionText.trim()) return;
+    setRecognitionBusy(true);
+    setFeedback(null);
+    try {
+      const result = await ports.recognizeIntakeText(intakeRecognitionText);
+      if (result.code !== "OK") {
+        setFeedback({ kind: "error", message: "Erkennung nicht möglich · bitte von Hand ausfüllen" });
+        return;
+      }
+      const values = Object.fromEntries(result.data.fields.map((field) => [field.field, field.value]));
+      if (result.data.fields.some((field) => field.field !== "dueDate")) {
+        if (directCustomerMode === "NONE") {
+          setDirectCustomerMode("NEW");
+          if (values.companyName) setDirectCustomerType("business");
+        }
+        setDirectCustomer((current) => ({
+          ...current,
+          name: values.companyName ?? current.name,
+          companyName: values.companyName ?? current.companyName,
+          email: values.email ?? current.email,
+          phone: values.phone ?? current.phone,
+          zipCode: values.zipCode ?? current.zipCode,
+          city: values.city ?? current.city,
+        }));
+      }
+      if (values.dueDate && !directWishDate) {
+        setDirectWishDate(values.dueDate);
+        setDirectConfirmedDate(values.dueDate);
+      }
+      if (result.data.positions.length > 0) {
+        const recognized = result.data.positions.map((position) => ({
+          ...newIntakePosition(),
+          catalogServiceId: FREE_TEXT_SERVICE,
+          name: position.name,
+          quantity: position.quantity,
+          surfaceRequested: position.surfaceRequested,
+          executionRequested: position.executionRequested,
+          unit: position.unit,
+        }));
+        setDirectItems((current) => {
+          const existing = current.length === 1 && !current[0]?.name.trim() ? [] : current;
+          return [...existing, ...recognized].slice(0, 20);
+        });
+      }
+      const labels: Record<string, string> = { companyName: "Name / Firma", email: "E-Mail", phone: "Telefon", zipCode: "PLZ", city: "Ort", dueDate: "Liefertermin" };
+      setRecognitionMarkers([
+        ...result.data.fields.map((field) => ({ key: field.field, label: labels[field.field] ?? field.field, value: field.value, source: field.source })),
+        ...result.data.positions.flatMap((position, index) => [
+          { key: `position-${index}-name`, label: `Position ${index + 1}`, value: position.name, source: position.source },
+          { key: `position-${index}-quantity`, label: "Menge", value: `${position.quantity} ${position.unit}`, source: position.source },
+          { key: `position-${index}-surface`, label: "Oberfläche", value: position.surfaceRequested, source: position.source },
+        ]),
+      ]);
+      setLastRecognizedText(intakeRecognitionText);
+      setRecognitionConfirmed(false);
+    } catch {
+      setFeedback({ kind: "error", message: "Erkennung nicht möglich · bitte von Hand ausfüllen" });
+    } finally {
+      setRecognitionBusy(false);
+    }
+  };
+
   const intakePositionComplete = (item: IntakePositionDraft) =>
     (item.catalogServiceId === FREE_TEXT_SERVICE || item.catalogServiceId.length > 0)
     && item.name.trim().length >= 2
@@ -1832,6 +1903,20 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
           ) : (
             <form id="kr-neuer-eingang" className="kr-stapel" onSubmit={(event) => void submitIntakePage(event)}>
               {ports.resumeQuoteId ? <Hinweis><KrButton art="sekundaer" icon="arrow" text="Gespeicherten KV fortsetzen" disabled={busy} onClick={() => void resumeQuote()} /></Hinweis> : null}
+              <section className={styles.createQuickCapture} aria-labelledby="quick-capture-title">
+                <div><h3 id="quick-capture-title">Schnell erfassen</h3><p>schreiben, sprechen oder fotografieren</p></div>
+                <Textfeld data-spec-id="eingang.erfassen-text" aria-label="Schnell erfassen" rows={3} maxLength={6000} value={intakeRecognitionText} onChange={(event) => { setIntakeRecognitionText(event.target.value); setRecognitionConfirmed(false); }} placeholder="z. B. 2 Stück Flansch verzinken, bis 12.11." />
+                <div className={styles.createInlineChoices}>
+                  <KrButton text="Mikrofon · In Klärung" disabled />
+                  {(!lastRecognizedText || intakeRecognitionText !== lastRecognizedText) ? <KrButton data-spec-id="eingang.erkennen" art="sekundaer" text={recognitionBusy ? "Angaben werden erkannt …" : "Angaben erkennen"} disabled={recognitionBusy || !intakeRecognitionText.trim()} onClick={() => void recognizeDirectIntakeText()} /> : null}
+                </div>
+                {recognitionBusy ? <Hinweis>Angaben werden erkannt … Das Formular bleibt bedienbar.</Hinweis> : null}
+                {recognitionMarkers.length > 0 ? <div className={styles.createRecognition} aria-live="polite">
+                  <strong>{recognitionConfirmed ? `${recognitionMarkers.length} Angaben bestätigt` : `${recognitionMarkers.length} Angaben erkannt und vorausgefüllt`}</strong>
+                  <div>{recognitionMarkers.map((marker) => <Chip key={marker.key} text={`${marker.label}: ${marker.value} · ${recognitionConfirmed ? "bestätigt" : `erkannt · ${marker.source}`}`} ton={recognitionConfirmed ? "ok" : "info"} />)}</div>
+                  {!recognitionConfirmed ? <KrButton data-spec-id="eingang.alles-bestaetigen" art="sekundaer" text="Alles bestätigen" onClick={() => setRecognitionConfirmed(true)} /> : null}
+                </div> : null}
+              </section>
               <div className={styles.createInlineChoices} aria-label="Erfassen">
                 <KrButton icon="camera" text="Zettel, Etikett, Karte" onClick={() => setSourceMode("camera")} />
                 <KrButton icon="upload" text="Datei lesen" onClick={() => setSourceMode("document")} />
