@@ -107,6 +107,26 @@ Bewertet ist der lokale Arbeitsstand vom 28.10.2026. Nicht eingecheckte Dateien 
 
 Worst-Case-Regeln stehen vor Normalfällen in Abschnitt 5. Der Normalfall verwendet denselben Ablauf, überspringt aber unnötige Schritte: sichere Zuordnung wird angezeigt, der Nutzer prüft nur offene Punkte und schließt ab.
 
+### Geführter Paketweg – vom Plus bis „bereit für Galvanik“
+
+Das **globale Plus** ist der sichtbare Start für alles, was physisch im Betrieb ankommt. Mail erscheint dort nicht: Sie wird im Hintergrund abgerufen, als Eingang gesichert und nur bei nötiger Handlung im Eingangskorb beziehungsweise auf „Der Tag“ gezeigt. Auf der aktuellen Startseite bleiben Kopf, linke Navigation, „Der Tag“, „Neuer Eingang“ und „Ware raus“ erhalten (`src/ui/kr/AppShell.tsx:21-57`; `src/components/home/RolfHomeClient.tsx:29-63`, `:95-102`).
+
+Der Paketweg fragt **nicht** zuerst „erwartet oder unerwartet?“ und **nicht** „Kunde vorhanden?“. Diese Verzweigung wird aus den vorhandenen Informationen abgeleitet:
+
+1. **Plus → Neuer Eingang → Paket/Ware.** Sofort entstehen Eingang-ID, Empfangsdatum/-zeit, verantwortliche Rolle und Verlaufseintrag. Ab diesem Moment kann Abbruch nichts mehr verlieren.
+2. **Etikett fotografieren.** Ein Foto startet parallel: Text-/Adress-/Referenzerkennung, Kundensuche, Dublettenprüfung, Suche nach offenem KV/Auftrag, angekündigter Sendung und zugehöriger Mailkorrespondenz. Etikett, persönliche Übergabe oder Kurierangaben sind nur verschiedene Originalquellen desselben Eingangs.
+3. **App zeigt genau einen Ergebnisweg:**
+   - **Erwartet und eindeutig:** Kunde plus KV/Auftrag/Korrespondenz sind verknüpft. Der Nutzer bestätigt nur den Treffer.
+   - **Kunde eindeutig, Sendung nicht erwartet:** Kunde ist verknüpft; die App legt einen neuen Auftragsentwurf an und übernimmt alle auffindbaren Angaben aus Korrespondenz und ähnlichen Vorgängen.
+   - **Nicht eindeutig:** Die App zeigt Treffer nebeneinander und fragt nur die Entscheidung.
+   - **Neuer Kunde:** Etikettdaten füllen Firma, Name und Anschrift. Angezeigt werden nur fehlende Pflichtfelder; während der Eingabe läuft die Dublettenprüfung. Ohne vollständige Kundendaten bleibt der Eingang sicher offen und geht nicht in die Galvanik.
+4. **Eingangsbilder und Zustand.** Paketübersicht und Ware/Teile werden fotografiert; der Nutzer bestätigt „unauffällig“ oder markiert Abweichung. Schaden, Nässe, geöffnetes Paket, Mengenabweichung, falsche Teile, unbekannter Inhalt oder Verunreinigung verlangen passende Detailbilder und führen nicht still weiter.
+5. **Inhalt mit vorhandenen Daten abgleichen.** Positionen, Mengen, Verfahren, Ausführung, Preis, Termin und Absprachen aus KV/Auftrag/Mail werden als Vorschlag übernommen. Standard ist eine **Teilegruppe**; nur bei abweichendem Zustand, Verfahren, Preis oder Termin wird bis zum einzelnen Teil aufgeklappt. Nichts Vorhandenes wird erneut abgefragt.
+6. **Auftrags- und Rechnungsfähigkeit prüfen.** Die Prüfliste enthält Kunde/Rechnungsempfänger, Positionen/Mengen, Verfahren, Preis/KV, Wunsch-/Bestätigungstermin, Übergabeart, Zahlungsmodus, Eingangsbilder und Zustand. Zahlungsstandard bleibt: Versand nur nach Zahlung, Abholung bar/Karte; Rechnung auf Ziel nur als freigeschaltete Ausnahme (`docs/project/endversion/ENTSCHEIDUNGEN_UI.md:154-157`).
+7. **Buchen.** Erst bei vollständiger Prüfliste erzeugt beziehungsweise ergänzt der bestehende einzige Auftragsweg genau einen Auftrag und übernimmt den Eingang in dessen Akte. Dann lautet das Ergebnis „bereit für Galvanik“. Jede spätere Korrektur zeigt vorher/nachher, Zeit, Bearbeiter und Grund; sie überschreibt den Verlauf nicht.
+
+Der bestehende Auftrags-Intake kann Kunde, Termin, Zahlungsmodus und 1–20 Positionen bereits transaktional anlegen (`src/lib/server/commands/orderIntakeCommand.ts:37-80`, `:517-725`). Noch nicht vorhanden ist der hier beschriebene vorgeschaltete, verlustsichere Paket-Eingang mit Fotoerkennung, Korrespondenz-/KV-Suche, Teilegruppen, Prüfliste und Eingangskorb.
+
 ### Oberflächenskizze – Vorschlag, keine verbindliche Optik
 
 ```text
@@ -148,6 +168,14 @@ Die folgenden Namen sind der vorgeschlagene logische/physische Vertrag. Vor dem 
 | `provider_incidents` | Provider, Operation, sicherer Fehlercode, erster/letzter Zeitpunkt, Versuche, Zustand, betroffene Eingang-IDs | In Wartung sichtbar; keine Secrets, Mailinhalte oder Schlüssel im Fehlertext. |
 
 `handler_user_id` dokumentiert den angemeldeten Bearbeiter. Das ist kein personenbezogenes Rechtemodell: Rechte folgen weiterhin Rolle/Berechtigung; der Login ist nur für Verantwortung und Revision sichtbar.
+
+Für Paket/Ware gelten zusätzlich folgende Verknüpfungen, ohne eine zweite Auftragswahrheit anzulegen:
+
+- Eingangsbilder und Etikett bleiben unveränderliche `intake_originals`; Bildart (`LABEL`, `PACKAGE_OVERVIEW`, `PART_GROUP`, `DAMAGE`) und Aufnahmezeit sind Metadaten.
+- Erkannte Firma, Referenz, Position, Menge, Zustand, Verfahren, Preis und Termin sind bis zur Bestätigung `intake_suggestions` mit Quelle, Sicherheit und Fundstelle.
+- Erwartet/unerwartet ist ein **abgeleitetes Ergebnis**, kein manuell zu pflegendes Stammdatenfeld: `EXPECTED_ORDER`, `KNOWN_CUSTOMER_NO_ORDER`, `AMBIGUOUS` oder `NEW_CUSTOMER`.
+- Teilegruppen sind eine Erfassungsansicht. Nach Bestätigung werden sie über den bestehenden KV-/Auftragsschreibweg zu Auftragspositionen. Bilder können einer Gruppe oder einzelnen Positionen zugeordnet sein.
+- Die Prüfliste speichert pro Prüfpunkt Zustand, Quelle und Bestätigung. Geschäftsdaten bleiben in Kunde/KV/Auftrag/Rechnung führend.
 
 ### Arbeitsstatus – exakt ein Wert
 
@@ -208,6 +236,10 @@ Wiedereröffnung verlangt einen Grund und setzt `DONE_ARCHIVED → MANUAL`. Alte
 8. **Korrespondenz:** A speichert nur „Folgeaktion angefordert/ausgeführt“ mit Ziel. Formulierungen, Vorlagen, Versand und Rücklauf klärt C.
 9. **Sicherheit:** Providertexte sind Vorschläge; keine automatische Kunden-/Lieferantenanlage, kein Auftrag/KV und keine Buchung nur aufgrund eines Modells.
 10. **Frist:** Offen älter als 24 Stunden wird rot und erscheint auf „Der Tag“. Für Schäden und blockierende Fehler gelten die in Abschnitt 10 zu bestätigenden kürzeren Regeln.
+11. **Keine Vorabfragen beim Paket:** Erwartung, Kunde und Vorgang werden aus Etikett, Korrespondenz, KV und Auftrag abgeleitet. Erst ein fehlender oder widersprüchlicher Treffer erzeugt eine Frage.
+12. **Paketbilder und Zustand sind Pflicht:** Ohne bestätigte Eingangsbilder und Zustandsprüfung wird ein Paket nicht „bereit für Galvanik“. Das ist eine neuere Owner-Vorgabe und ändert U-090 begründet; siehe Abschnitt 8.
+13. **Preis vor Galvanik:** Preis/KV muss geklärt sein, bevor „bereit für Galvanik“ gesetzt wird. Eine Ausnahme ist nur als sichtbare, berechtigte Freigabe mit Grund zulässig; kein stiller Platzhalter.
+14. **Versand erst nach Geld:** Bei Versand ist Vorkasse der Standard und Warenausgang bleibt bis Zahlung gesperrt. Abholung und freigeschaltete Zielrechnung folgen U-110 bis U-113; der Eingang prüft nur, ob der Vertrag vollständig gesetzt ist.
 
 ### Falltabelle
 
@@ -215,10 +247,10 @@ Klickzählung beginnt beim sichtbaren Eingang oder bei „+ Eingang erfassen“,
 
 | Fall | Startpunkt | Geführte Schritte | Klicks | Texteingabe | Ergebnis | Bei Abbruch oder Fehler |
 |---|---|---|---:|---|---|---|
-| **W1 Unbekannter Absender/Kunde** | orange Mail/Paket | öffnen → übernehmen → Suche ohne Treffer → Kunde als Interessent anlegen oder Ziel wählen → bestätigen | ≤6 | Name + Telefon, wenn Neukunde; sonst keine | Eingang bleibt nachvollziehbar mit Kunde/Ziel oder `NO_BUSINESS` | Offener `MANUAL`-Eingang bleibt; Entwurf und Original erhalten |
+| **W1 Unbekannter Absender/Kunde** | Etikettfoto/orange Mail | automatisch ohne Treffer → Etikettdaten übernehmen → Dubletten prüfen → nur fehlende Pflichtdaten ergänzen → Kunde bestätigen | ≤7 | nur nicht erkannte Pflichtfelder | vollständiger Kunde und verknüpfter Eingang; noch kein Galvanikstart ohne vollständigen Auftrag | Offener `MANUAL`-Eingang bleibt; Foto, Entwurf und erkannte Werte erhalten |
 | **W2 Fremde Sprache** | orange Mail/Datei | öffnen → Original/Übersetzung vergleichen → Anliegenvorschlag prüfen → Ziel wählen → bestätigen | ≤5 | nur Korrektur/Notiz bei Bedarf | Originalsprache, Übersetzungsvorschlag und Bestätigung im Verlauf | Übersetzungsfehler setzt/behält `MANUAL`; Original bleibt nutzbar |
 | **W3 Inhalt unverständlich** | orange Eingang | übernehmen → „unklar“ → bekannte Partei suchen → Rückfrage als Folgeaktion oder `NO_BUSINESS` wählen | ≤5 | kurze Rückfrage-/Klärungsnotiz | Kein Raten; klarer offener Wartezustand oder begründeter Abschluss | Abbruch speichert offen; Frist und Eskalation laufen weiter |
-| **W4 Paket beschädigt** | „Ware ist da“ | Eingang starten → Paket/Schaden fotografieren → Kunde/KV/Auftrag wählen → Schaden markieren → Soforteskalation bestätigen → Eingang sichern | ≤9 | optionale Schadensnotiz | roter Eingang, Originalfotos, Verantwortlicher, „Der Tag“ | Kamera-/Speicherfehler blockiert Abschluss, verliert aber den Eingang nicht |
+| **W4 Paket beschädigt** | Plus → Paket/Ware | Etikettfoto → Treffer bestätigen → Paketübersicht → „beschädigt“ → Schadensfoto → sichere Übergabe | ≤9 | optionale Schadensnotiz | roter Eingang, Originalfotos, Verantwortlicher, genau eine Handlung auf „Der Tag“ | Kamera-/Speicherfehler blockiert Abschluss, Eingang und bisherige Fotos bleiben erhalten |
 | **W5 Beleg fehlt** | Paket/persönlich/Rechnung | erfassen → „Beleg fehlt“ → Partei/Ziel wählen → fehlenden Beleg als offene Prüfstelle bestätigen | ≤5 | optional, was fehlt | orange `MANUAL`, nicht fälschlich erledigt | Abbruch offen; späteres Dokument wird demselben Eingang hinzugefügt |
 | **W6 Mehrere Anliegen/Anhänge** | Mail/Scan mit mehreren Themen | öffnen → „Anliegen teilen“ → Anhänge je Anliegen markieren → je Anliegen Ziel bestätigen → gesamthaft erledigen | 5 + 2 je weiteres Anliegen | Kurzbezeichnung nur wenn nicht erkannt | Ein Eingang, mehrere getrennte Ergebnisse, gemeinsame Originale | Erledigen gesperrt, solange ein Anliegen offen ist |
 | **W7 Dublette** | Eingang mit Treffer | öffnen → Vergleich anzeigen → „gleicher Eingang“ oder „neuer Vorgang“ → Grund bestätigen | ≤4 | Grund nur bei Abweichung | kein zweiter Eingang bei exakter Dublette; sonst verknüpfter Verdacht | Keine automatische Löschung; bei Zweifel `MANUAL` |
@@ -230,7 +262,9 @@ Klickzählung beginnt beim sichtbaren Eingang oder bei „+ Eingang erfassen“,
 | **N3 XML/XRechnung** | XML-Anhang/Upload | XML lesen → Pflichtfelder/Format anzeigen → Lieferant prüfen → bestätigen | ≤4 | nur Korrektur | Original-XML unverändert, lesbare Ansicht und Prüfergebnis | ungültiges XML bleibt rot/orange und manuell sichtbar |
 | **N4 ZUGFeRD** | PDF mit XML | Bündel öffnen → PDF/XML-Abgleich → Lieferant prüfen → bestätigen | ≤4 | nur Korrektur | ein Eingang, zwei Originalteile, ein Prüfergebnis | Widerspruch wird rot; kein automatischer Abschluss |
 | **N5 Papier/Foto/Scan** | „Schnell erfassen“ | Quelle wählen → Foto/Datei → OCR-Vorschläge prüfen → Ziel → bestätigen | ≤6 | nur unsichere Felder | Original und bestätigte Werte am Ziel | Abbruch speichert nach Aufnahme; OCR-Fehler führt zu Handbearbeitung |
-| **N6 Paket/Wareneingang bekannt** | „Ware ist da“ | Foto Beleg/Ware → Kunde/KV/Auftrag übernehmen → Zustand prüfen → Positionen bestätigen → „in Galvanik“ als Folgeaktion | ≤10 | keine im erkannten Normalfall | Paket in ≤5 Minuten vollständig einem Vorgang zugeordnet | Checkliste zeigt exakt den offenen Punkt; kein Sackgassenabschluss |
+| **N6 Paket erwartet** | Plus → Paket/Ware | Etikettfoto → eindeutigen Kunde/KV/Auftrag bestätigen → Paket-/Teilebild → Zustand „unauffällig“ → übernommene Positionen/Preis/Termin prüfen → Auftrag buchen | ≤8 | keine | Paket in ≤5 Minuten vollständig zugeordnet, Auftrag rechnungsfähig und „bereit für Galvanik“ | Prüfliste springt zum einzigen offenen Punkt; Abbruch bleibt im Eingangskorb |
+| **N6a Paket unerwartet, Kunde bekannt** | Plus → Paket/Ware | Etikettfoto → Kundentreffer bestätigen → neuen Auftragsentwurf → Teilegruppe/Bilder → nur fehlende Preis-/Termin-/Verfahrensdaten → buchen | ≤10 plus echte Texteingaben | nur fachlich fehlende Angaben | neuer Auftrag am bestehenden Kunden; gesamte Herkunft im Verlauf | Unvollständig bleibt als sichtbarer Entwurf und Eingang offen |
+| **N6b Paket neuer Kunde** | Plus → Paket/Ware | Etikettfoto → „kein Treffer“ → vorgefüllten Kunden vervollständigen → Teilegruppe/Bilder → Auftrag vervollständigen → buchen | kein starres 10-Klick-Ziel; jede vorhandene Angabe wird übernommen | nur fehlende Pflicht- und Auftragsdaten | Kunde einmal angelegt, Eingang und Auftrag verknüpft, keine Doppeleingabe | Dublette/Abbruch stoppt sicher vor Anlage; Eingang bleibt vollständig erhalten |
 | **N7 Kunde persönlich** | „Persönlich“ | Kunde suchen/Interessent → Anliegen wählen → Notiz/Foto → Ziel → bestätigen | ≤6 | kurze Notiz; bei Interessent Name + Telefon | persönlicher Eingang mit Zeit, Bearbeiter und Ergebnis | Entwurf bleibt im Eingangskorb |
 | **N8 Telefon** | „Telefon“ | Kunde suchen/Interessent → Notiz → Ziel/Folgeaktion → bestätigen | ≤5 | Gesprächsnotiz; ggf. Name + Telefon | Telefonnotiz im Eingang und an Partei/Vorgang | Abbruch speichert Notiz als offenen Entwurf |
 | **N9 Kein Geschäftsvorgang** | beliebiger Eingang | öffnen → `kein Geschäftsvorgang` → Grund → bestätigen | ≤4 | nur bei „sonstiges“ | begründet archiviert, Original und Verlauf erhalten | Ohne Grund kein Abschluss |
@@ -260,7 +294,7 @@ Zusatzregeln:
 
 ## 7. Entscheidungen des Owners in diesem Chat
 
-**28.10.2026:** In diesem Themen-Chat liegt noch keine neue Owner-Antwort vor. Die folgenden vorhandenen Entscheidungen gelten und werden nicht erneut gefragt:
+**28.10.2026:** Der Owner hat den physischen Paketweg konkretisiert. Die folgenden neuen und vorhandenen Entscheidungen gelten und werden nicht erneut gefragt:
 
 | Entscheidung | Datum/Beleg | Folge für A |
 |---|---|---|
@@ -272,6 +306,14 @@ Zusatzregeln:
 | Wareneingang ist Kern-USP: höchstens fünf Minuten, ohne offenen Punkt. | 28.10.2026, `_review/OWNER_ENTSCHEIDUNGEN.md:116-120` | Der Normalfall N6 ist auf höchstens zehn Klicks begrenzt. |
 | Jede Information landet im Eingangskorb; vier sichtbare Status; geringe Sicherheit handelt nie selbst; überlange Eingänge erscheinen auf „Der Tag“. | 28.10.2026, `_review/ORIENTIERUNG_KLAERUNG.md:153-184` | Gemeinsamer Vertrag in Abschnitt 4. |
 | Empfangene XML-E-Rechnung muss erkannt und gelesen werden; Senden wird später in Thema 4 entschieden. | 28.10.2026, `_review/ORIENTIERUNG_KLAERUNG.md:187-189` | Eingang kann XML/ZUGFeRD; Ausgang bleibt außerhalb von A. |
+| Mail erfordert keinen Klick auf das Plus und keinen manuell geöffneten Eingang; Abruf, Originalablage und Erkennung laufen im Hintergrund. Das Plus startet physische Eingänge. | 28.10.2026, Owner in diesem Chat | Neuerer, begründeter Änderungsvorschlag zu U-160; siehe Abschnitt 8. Mail bleibt im selben Eingangskorb und derselben Zustandssprache. |
+| Beim Paket wird „erwartet/unerwartet“ und „Kunde vorhanden/nein“ nicht vorab gefragt. Das Etikettfoto sucht Kunde, Korrespondenz, KV, Auftrag und angekündigte Sendung. | 28.10.2026, Owner in diesem Chat | Die UI zeigt nur den ermittelten Treffer oder echte Unklarheit. |
+| Bei vorhandenem Kunde/Vorgang werden Korrespondenz, KV, Preise, Teile, Mengen, Bilder, Termin und Absprachen zusammengezogen und nur nachkontrolliert. | 28.10.2026, Owner in diesem Chat | Keine erneute Eingabe bereits vorhandener Daten; Vorschläge bleiben bis Bestätigung getrennt. |
+| Neukundenanlage ist der seltene Sonderfall; Etikett und vorhandene Kommunikation füllen vor, die UI verlangt nur fehlende Angaben und prüft Dubletten. | 28.10.2026, Owner in diesem Chat | Kunde wird einmal über den bestehenden Kundenschreibweg angelegt; unvollständiger Fall bleibt im Eingangskorb. |
+| Eingangsdatum/-zeit und jeder Verarbeitungsschritt werden automatisch historisiert. Bilder der Ware und Zustandsdokumentation sind unerlässlich. | 28.10.2026, Owner in diesem Chat | Neuere Vorgabe ändert U-090 für Paket/Ware; Abschnitt 8. |
+| Paketinhalt darf als Teilegruppe erfasst werden; genaue Angaben pro Teil bleiben möglich. Bei vorhandenem KV werden Positionen übernommen und nur geprüft. | 28.10.2026, Owner in diesem Chat | Teilegruppe ist Bedienhilfe, keine zweite fachliche Wahrheit. |
+| Vor „bereit für Galvanik“ müssen offene Angaben einschließlich Preis/KV, Bilder, Teile/Mengen und Termin geklärt sein. Rechnungsweg und Zahlung müssen feststehen; Versand grundsätzlich erst nach Zahlung, Ausnahmen sichtbar. | 28.10.2026, Owner in diesem Chat; Zahlungsbestand U-110 bis U-113 | Eingang endet mit einem vollständigen, rechnungsfähigen Auftrag; Warenausgang bleibt eigenes Anschlussmodul. |
+| Archivierte Angaben bleiben korrigierbar; jede spätere Änderung muss als solche erkennbar bleiben. | 28.10.2026, Owner in diesem Chat | Wiedereröffnung/Korrektur erzeugt Ereignis mit vorher/nachher, Grund, Zeit und Bearbeiter. |
 
 ## 8. Änderungsvorschläge zum Bestehenden
 
@@ -285,6 +327,10 @@ Diese Punkte ändern bestehenden Bauplan oder Codevertrag und benötigen Überna
 6. **Eingangsrechte feingranular ergänzen.** Die heutigen Bereichsrechte (`src/lib/auth/authorizationContract.ts:19-64`) reichen nicht für sehen/übernehmen/zuordnen/ändern/erledigen/wieder öffnen/Regeln. Alte feste Rollenrechte (`:98-157`) dürfen danach keine zweite Autorisierung bleiben.
 7. **„Der Tag“ aus dem Eingang ableiten.** Keine zweite Aufgabenzeile manuell pflegen. Rot, überfällig oder ausdrücklich eskaliert erzeugt genau eine Projektion; erledigt/Verantwortung geändert aktualisiert sie.
 8. **F1-Baureife vor Neubau bereinigen.** Der Widerspruch in `BAUPLAN.json` und der offene Idempotenzbefund (`docs/project/endversion/codex/BAUPLAN.json:369-374`) müssen vor Bau des neuen Moduls aufgelöst werden. Der Eingangskorb darf nicht als freigegeben gelten, solange Top-Level `baureife=false` ist.
+9. **U-160 an den Mail-Staubsauger anpassen.** Statt Mail manuell über den Quellenschalter „Neuer Eingang“ zu öffnen, erzeugt der Hintergrundabruf den Eingang automatisch. Der bestehende Dialog darf weiterhin eine bereits eingegangene Mail auswählen, ist aber nicht mehr der Empfangsweg. Begründung: Eine Mail liegt bereits digital vor und darf keinen Büro-Klick zum Eintreffen brauchen. Nachteil: Abruf, Idempotenz und sichtbare Providerstörung müssen zuverlässig gebaut sein.
+10. **U-090 für Paket/Ware präzisieren und ändern.** Eingangsbilder und Zustandsbestätigung sind bei physischer Ware ein Abschluss-Gate; bei reinen Dokument-/Notizfällen bleibt die Fotoregel fachabhängig. Begründung: Zustand und Umfang sind nach dem Öffnen nicht reproduzierbar. Nachteil: mindestens eine Aufnahme mehr im Normalfall. Empfehlung: eine Paketübersicht plus ein Bild je Teilegruppe; Einzelteilbild nur bei Abweichung oder wert-/zustandskritischem Teil.
+11. **Preis-/Rechnungs-Gate vor Galvanik ergänzen.** Der bestehende Intake lässt Positionen ohne finalen Preis zu; künftig darf das Paket zwar sofort sicher erfasst werden, aber erst nach geklärtem Preis/KV oder berechtigter dokumentierter Ausnahme „bereit für Galvanik“ werden. Begründung: Der Auftrag muss später ohne nachträgliche Suche korrekt abrechenbar sein. Nachteil: ungeklärte Preisfälle starten nicht sofort in der Werkstatt.
+12. **Teilegruppen als Bedienkonzept ergänzen.** Eine Gruppe übernimmt gemeinsame Menge, Verfahren, Preis, Termin und Bilder; abweichende Einzelteile werden aufgeklappt. Nachteil: falsches Gruppieren muss vor Buchung sichtbar korrigierbar sein. Die endgültigen Daten werden ausschließlich in vorhandene KV-/Auftragspositionen geschrieben.
 
 ## 9. Abnahmefälle
 
@@ -308,6 +354,15 @@ Voraussetzung aller Fälle: UI-Prüfung über echte Klicks und Datenbankprüfung
 16. **Wenn** ein offener Eingang 24 Stunden überschreitet, **dann** erscheint er ohne manuellen Doppelklick genau einmal auf „Der Tag“ der verantwortlichen Rolle. In der Datenbank existiert eine aktive Eskalation; Abschluss oder Verantwortungswechsel aktualisiert dieselbe Projektion, statt eine zweite anzulegen.
 17. **Wenn** „kein Geschäftsvorgang“ gewählt wird, **dann** verlangt die UI einen Grund und schließt in höchstens vier Klicks. In der Datenbank ist das Anliegen ausschließlich auf `NO_BUSINESS` gesetzt, der Grund gespeichert und das Original weiterhin vorhanden.
 18. **Wenn** ein Nutzer ohne jeweilige Fähigkeit eine Direkt-URL oder Serveraktion zum Zuordnen, Erledigen, Wiederöffnen oder Regeländern aufruft, **dann** wird die Aktion serverseitig abgelehnt. In der Datenbank ändern sich Eingang, Version und Verlauf nicht; der Sicherheitsversuch wird im vorhandenen Audit protokolliert.
+19. **Wenn** auf der echten Startseite das globale Plus und danach „Neuer Eingang“/„Paket oder Ware“ geklickt wird, **dann** öffnet spätestens nach zwei Auswahlen die Kamera und erzeugt vor der Erkennung einen offenen Eingang. In der Datenbank stehen `received_at`, verantwortliche Rolle, `work_state=MANUAL` und das Ereignis „Eingang erzeugt“, auch wenn danach abgebrochen wird.
+20. **Wenn** ein Etikettfoto eine eindeutige Kundenreferenz und einen offenen KV trifft, **dann** zeigt die nächste Ansicht Kunde, KV, zugehörige Mailquelle und den Grund des Treffers, ohne „erwartet?“ oder „Kunde vorhanden?“ zu fragen. In der Datenbank bleiben Foto und Erkennung Vorschlag; erst der Bestätigungsklick verknüpft den Eingang mit dem KV.
+21. **Wenn** das Etikett einen bekannten Kunden, aber keinen offenen Vorgang trifft, **dann** bietet die App nach einem Bestätigungsklick einen neuen Auftragsentwurf mit bereits gefundenen Kontakt-/Korrespondenzdaten. In der Datenbank existiert genau ein Eingang; der Auftrag entsteht erst beim abschließenden Buchen über den bestehenden Auftrags-Intake.
+22. **Wenn** weder Kunde noch Vorgang eindeutig erkannt werden, **dann** zeigt „Neuer Kunde“ die aus dem Etikett erkannten Angaben und nur die fehlenden Pflichtfelder; Dublettentreffer stoppen die Neuanlage und bieten den vorhandenen Kunden. In der Datenbank entsteht kein zweiter Kunde bei abgebrochener oder als Dublette erkannter Anlage.
+23. **Wenn** ein KV drei Positionen mit Menge, Verfahren, Preis und Termin enthält, **dann** sind diese nach Bestätigung des Treffers ohne Texteingabe in der Inhaltsprüfung sichtbar und änderbar. In der Datenbank bleiben KV-Quelle und spätere bestätigte Auftragspositionen nachvollziehbar; eine Änderung erzeugt ein Korrekturereignis statt die Herkunft zu löschen.
+24. **Wenn** mehrere gleichartige Teile gemeinsam ankommen, **dann** kann ein Nutzer sie als eine Teilegruppe mit gemeinsamem Bild/Zustand bestätigen und nur abweichende Teile einzeln öffnen. In der Datenbank entstehen die bestätigten Auftragspositionen über den bestehenden Schreibweg; Bildverknüpfungen zeigen Gruppe beziehungsweise Einzelposition eindeutig.
+25. **Wenn** Preis, Rechnungsempfänger, Termin, Zahlungsmodus, Pflichtbild oder Zustand noch offen ist, **dann** ist „Bereit für Galvanik“ gesperrt und der Klick auf die Prüfliste springt zur ersten echten Lücke. In der Datenbank bleibt der Eingang offen; es gibt keinen Galvanik-Übergang und keinen fingierten Wert.
+26. **Wenn** ein vollständiger Versandauftrag gebucht wird, **dann** ist Zahlungsmodus standardmäßig Vorkasse, der Rechnungsempfänger festgelegt und der spätere Warenausgang bis Zahlung gesperrt. In der Datenbank sind Auftrag, Zahlungsmodus und Eingang verknüpft; eine Zielrechnungs-Ausnahme enthält Berechtigung und Verlauf.
+27. **Wenn** ein archivierter Paketeingang korrigiert wird, **dann** zeigt „Wieder öffnen“ den bisherigen und neuen Wert sowie einen Pflichtgrund. In der Datenbank bleibt der alte Wert im Ereignisverlauf, `version` steigt und der aktuelle fachliche Wert wird über den bestehenden Schreibweg geändert.
 
 ## 10. Offene Punkte
 
@@ -328,6 +383,9 @@ Empfehlung: Azure AI Translator in der vorhandenen EU-Azure-Umgebung, mit Origin
 **O-05 – Eskalationsfristen**  
 Empfehlung: allgemein nach 24 Stunden; beschädigtes Paket sofort; blockierender Speicher-/Abruffehler sofort in Wartung und nach 2 Stunden zusätzlich auf „Der Tag“. Wesentlicher Nachteil: mehr rote Einträge bei längerer Providerstörung. Kleine Alternative: nur die 24-Stunden-Regel, wodurch akute Schäden/Fehler zu spät sichtbar werden. **Entscheidung erbeten:** diese drei Fristen bestätigen?
 
+**O-06 – Mindestbilder je Paket/Teilegruppe**
+Empfehlung: im Normalfall genau eine Paketübersicht und ein aussagekräftiges Bild je Teilegruppe; ein zusätzliches Einzelteil-/Schadensbild nur bei Abweichung, unklarer Menge, besonderem Wert oder sichtbarem Schaden. Wesentlicher Nachteil: Bei großen gemischten Paketen entstehen mehrere Fotos. Kleine Alternative: nur ein Paketfoto, das für Zustand und spätere Zuordnung häufig zu wenig belegt. **Entscheidung erbeten:** diese Mindestregel bestätigen?
+
 ### Übergaben, keine Owner-Fragen
 
 - B1 konkretisiert Fotos, Schadenscheckliste, KV-/Sendungstreffer und den ≤10-Klick-Weg, ohne Status oder Datenbegriffe zu ändern.
@@ -338,4 +396,4 @@ Empfehlung: allgemein nach 24 Stunden; beschädigtes Paket sofort; blockierender
 - C definiert Rückfrage, Eingangsbestätigung, KV-/Auftragskorrespondenz und Ausgang. A übergibt nur Eingang-ID, Anliegen-ID, Ziel und gewünschte Folgeaktion.
 - Endversion-Chat muss die Skizze, Tabellenverträge, vier Status, Rechte, Abnahmefälle und die Auflösung der F1-Baureife in Spec/BAUPLAN übernehmen; erst dort wird die Optik verbindlich.
 
-Mit den vier unveränderten Arbeitsstatus, getrennten Dringlichkeitsfarben, genau einem Verantwortungsprinzip, dem Anliegen-Unterobjekt, unveränderten Originalen und append-only Verlauf können B1 und B2 unabhängig und parallel detaillieren. Die offenen Owner-Punkte ändern keine Begriffe; sie setzen nur Nummernanzeige, Fallbackrolle, Automatikgrenze, Übersetzungsanbieter und Eskalationsfristen fest.
+Mit den vier unveränderten Arbeitsstatus, getrennten Dringlichkeitsfarben, genau einem Verantwortungsprinzip, dem Anliegen-Unterobjekt, unveränderten Originalen und append-only Verlauf können B1 und B2 unabhängig und parallel detaillieren. Der Paketweg verwendet dieselben Begriffe: Etikettfoto erzeugt einen Eingang, die Trefferart ist abgeleitet, Teilegruppen sind nur die Erfassungsansicht und erst der bestätigte bestehende Schreibweg erzeugt Kunde/KV/Auftrag. Die offenen Owner-Punkte ändern keine Begriffswelt; O-06 bestimmt nur die Anzahl der Pflichtbilder.

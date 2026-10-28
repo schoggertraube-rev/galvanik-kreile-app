@@ -58,3 +58,5 @@
 - (Prüfer 28.10. 11:32 UTC) a617cba8 „feat(intake)“ ändert nebenbei `.github/workflows/eslint-ratchet.yml` (AUTHORITY_CHECKER_SHA256) und `scripts/quality/check-authoritative-sources.mjs` (KORREKTUREN_STAND.md ins Register). Inhaltlich gedeckt (Register-Freigabe 26.10. + H5), aber Governance-Änderungen künftig als eigener Commit mit eigener Abgabe, nicht im Produktcommit.
 
 - (Prüfer 28.10. 12:35 UTC, TAG_05 d60e8077) `classifyMoneyForToday` (todayDashboardPolicy.ts:73-78): Rechnung eines Vorkasse-Auftrags wird im Rechnungszweig nie „overdue_invoice“; liegt der Auftrag nicht in Station „fertig“ (oder ist Auslandskunde), erscheint eine überfällige Vorkasse-Rechnung nirgends unter „Geld einfordern“. Bei Bau des Geld-Moduls klären.
+
+- (Prüfer 28.10. 13:37 UTC, TAG_07 e5e52b30) Supabase-Advisor (lokal) meldet 26 vorbestehende Tabellen in `public` ohne RLS. Vor Livegang zwingend: je Tabelle RLS + passende Policies oder Rechteentzug für anon/authenticated, als eigenes Paket mit Owner-Freigabe (vor Livegang Sicherheits-Blocker).

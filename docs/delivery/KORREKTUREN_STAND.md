@@ -18,8 +18,8 @@ Quelle: Reihenfolge des Arrays `korrekturen` in `docs/project/endversion/codex/B
 | K12 | tag | erledigt | `d60e8077` | 28.10.2026 |
 | K13 | tag | erledigt | `1a997d52` | 28.10.2026 |
 | K14 | tag | erledigt | `e5e52b30` | 28.10.2026 |
-| K15 | tag | erledigt | dieser Commit | 28.10.2026 |
-| K16 | tag | offen | — | — |
+| K15 | tag | erledigt | `b0213fe6` | 28.10.2026 |
+| K16 | tag | zurückgestellt (U-212: Entwürfe Stufe 2; bestehende Stufe-2-Anschlüsse grau „geplant“) | dieser Commit | 28.10.2026 |
 | K17 | spaeter | offen | — | — |
 | K18 | login | offen | — | — |
 | K19 | login | offen | — | — |

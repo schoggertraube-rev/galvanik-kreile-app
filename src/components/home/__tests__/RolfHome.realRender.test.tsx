@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OrdersHomeProjection } from "@/modules/orders/public";
 
@@ -132,19 +132,13 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     expect(ports.push).toHaveBeenCalledWith("/warendurchlauf?bundle=1&surface=Zink%20%26%20Nickel");
   });
 
-  it("edits and saves the complete allowed field layout on the page", async () => {
+  it("keeps the complete field layout code hidden behind the planned stage-2 connection", async () => {
     render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields], layout: [...dashboard.layout], defaultLayout: [...dashboard.defaultLayout], allowedFields: [...dashboard.allowedFields] }, projection }} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Anpassen" }));
-    expect(screen.getByRole("heading", { name: "Felder zuordnen" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Bündel-Vorschlag hinzufügen" }));
-    fireEvent.click(screen.getByRole("button", { name: "Fertig" }));
-
-    await waitFor(() => expect(actionPorts.savePreferences).toHaveBeenCalledWith(expect.arrayContaining([
-      expect.objectContaining({ field: "action", column: "left", order: 0 }),
-      expect.objectContaining({ field: "bundle", column: "left", order: 4 }),
-    ])));
-    expect(screen.getByText("Der Tag gespeichert")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Anpassen · geplant" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Bündeln · geplant" })).toBeDisabled();
+    expect(screen.queryByRole("heading", { name: "Felder zuordnen" })).not.toBeInTheDocument();
+    expect(actionPorts.savePreferences).not.toHaveBeenCalled();
   });
 
   it("führt readonly ohne Warenausgang-Aktion", () => {

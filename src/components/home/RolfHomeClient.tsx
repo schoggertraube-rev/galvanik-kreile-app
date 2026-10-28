@@ -92,7 +92,7 @@ export function RolfHomeClient({ model, ports }: { model: RolfHomeModel; ports: 
   </Kachel>;
 
   return <section data-testid="rolf-v11-home">
-    <SeitenKopf titel="Der Tag" werkzeug={<Button data-spec-id="tag.anpassen" art="leise" icon="grid" text="Anpassen" onClick={() => { setLayout(model.dashboard.layout); setCustomize(true); setMessage(""); }} />} />
+    <SeitenKopf titel="Der Tag" werkzeug={<div className="kr-schnellleiste"><Button data-spec-id="tag.anpassen" art="leise" icon="grid" text="Anpassen · geplant" disabled onClick={() => { setLayout(model.dashboard.layout); setCustomize(true); setMessage(""); }} /><Button art="leise" icon="layers" text="Bündeln · geplant" disabled /></div>} />
     {model.dashboard.items.length ? <Lageleiste zaehler={counts} filter={filter} onFilter={setFilter} gesund={[]} /> : null}
     {model.dashboard.outlookMessage ? <Hinweis ton="warn">{model.dashboard.outlookMessage}</Hinweis> : null}
     {message ? <Hinweis ton="ok">{message}</Hinweis> : null}

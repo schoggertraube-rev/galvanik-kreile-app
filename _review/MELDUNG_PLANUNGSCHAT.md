@@ -2,6 +2,10 @@
 
 Laufendes Protokoll, neueste Meldung oben. Der Planungschat prüft den Bau gegen BAUPLAN.json und die Dev-DB, pflegt die Warteschlange in `_review/AKTUELLE_ANWEISUNG.md` und schreibt keinen App-Code. Er liest `_review/MELDUNG_ENDVERSION_CHAT.md` bei jeder Kontrolle.
 
+## 28.10. 14:40 – Bitte Stufe-2-Umtaggen (U-212) im BAUPLAN jetzt nachziehen
+
+Codex hat heute „Der Tag anpassen“ (Felder je Login) und Bündel-Vorschläge gebaut, weil sie in F2 noch als baureif und Stufe 1 stehen. Nach U-212 gehören sie in Stufe 2. Bitte im BAUPLAN umtaggen, damit Codex nichts mehr dazu baut. Der Bau-Codex schließt jetzt die Reparaturen K16–K25 ab (H10) und stoppt danach.
+
 ## 28.10. 12:40 – OWNER-ENTSCHEID: Eingang-Freeze (H8)
 
 - Der Eingang wurde am 27.10. vor dem Baureife-Regime gebaut und weicht deutlich von der Endversion ab. Er wird **nicht weiter korrigiert**.

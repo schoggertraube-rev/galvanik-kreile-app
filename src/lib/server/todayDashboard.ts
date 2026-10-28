@@ -46,11 +46,12 @@ type UserRow = { id: string };
 type GraphThreadRow = { source: string };
 
 const DEFAULT_FIELDS: TodayVisibleField[] = ["today", "assign", "money", "bundle"];
+const STAGE2_TODAY_FEATURES = new Set<"bundle" | "drafts">();
 function allowedTodayFields(auth: AuthorizationSnapshot): Set<TodayLayoutField> {
   const allowed = new Set<TodayLayoutField>(["action"]);
   if (hasAuthorizationArea(auth, "auftraege")) {
     allowed.add("today");
-    allowed.add("bundle");
+    if (STAGE2_TODAY_FEATURES.has("bundle")) allowed.add("bundle");
   }
   if (hasAuthorizationArea(auth, "mails")) allowed.add("assign");
   if (hasAuthorizationArea(auth, "geld")) allowed.add("money");
@@ -71,7 +72,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
   const moneyAllowed = hasAuthorizationArea(auth, "geld");
   const [orders, draft, graph, support] = await Promise.all([
     ordersAllowed ? getOperationalOrders(auth) : Promise.resolve([]),
-    readIntakeDraft(auth),
+    STAGE2_TODAY_FEATURES.has("drafts") ? readIntakeDraft(auth) : Promise.resolve({ code: "OK" as const, data: null }),
     graphAllowed ? listMicrosoftGraphInbox() : Promise.resolve({ code: "IN_KLAERUNG" as const, message: "Outlook ist für dieses Profil nicht eingeblendet." }),
     withPrivilegedTenantTransaction(auth, async (tx) => {
       const [preferences, reminders, invoices, prepayments, phillip, graphThreads] = await Promise.all([
@@ -140,7 +141,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
   const items: TodayItem[] = [];
   const add = (item: TodayItem) => items.push({ ...item, field: item.field === "action" || selectedSet.has(item.field as TodayVisibleField) ? item.field : "action", snoozedUntil: reminders.get(item.key) });
 
-  if (draft.code === "OK" && draft.data) add({ key: "draft:intake", field: "action", kind: "draft", title: "Entwurf Neuer Eingang", meta: `Gespeichert ${new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(draft.data.updatedAt))}`, urgency: "decision" });
+  if (STAGE2_TODAY_FEATURES.has("drafts") && draft.code === "OK" && draft.data) add({ key: "draft:intake", field: "action", kind: "draft", title: "Entwurf Neuer Eingang", meta: `Gespeichert ${new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(draft.data.updatedAt))}`, urgency: "decision" });
 
   for (const order of orders) {
     const guidance = deriveOrderGuidance(order, today);
@@ -176,7 +177,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
     surfaces.set(surface, group);
   }
   const bundle = [...surfaces.entries()].filter(([, group]) => group.length >= 2).sort((a, b) => b[1].length - a[1].length)[0];
-  if (bundle) add({ key: `bundle:${bundle[0]}`, field: "bundle", kind: "bundle", title: `${bundle[1].length} Aufträge bündeln`, meta: bundle[0], urgency: "decision", bundleSurface: bundle[0], primaryActionLabel: "Bündel öffnen" });
+  if (STAGE2_TODAY_FEATURES.has("bundle") && bundle) add({ key: `bundle:${bundle[0]}`, field: "bundle", kind: "bundle", title: `${bundle[1].length} Aufträge bündeln`, meta: bundle[0], urgency: "decision", bundleSurface: bundle[0], primaryActionLabel: "Bündel öffnen" });
 
   return { items, visibleFields: selected, layout, defaultLayout: suggestedLayout, allowedFields: DEFAULT_FIELDS.filter((field) => allowed.has(field)), phillipUserId: support.phillip[0]?.id ?? null, outlookMessage: !graphAllowed || graph.code === "OK" ? null : graph.message };
 }
