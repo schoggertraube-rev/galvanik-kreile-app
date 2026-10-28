@@ -7,6 +7,17 @@ type TodayOrder = {
   status: string;
 };
 
+type TodayMoneyCandidate = {
+  customerCountry: string | null;
+  dueDate: string | null;
+  goodsOutRecorded: boolean;
+  paymentMode: string;
+  paymentStatus: string | null;
+  station: string;
+};
+
+export type TodayMoneyCase = "overdue_invoice" | "open_prepayment";
+
 export type TodayOrderGuidance = {
   field: "action" | "today";
   caseId: "due" | "finished_waiting" | "tight" | "problem" | "ready_today";
@@ -47,4 +58,22 @@ export function deriveOrderGuidance(order: TodayOrder, today: string): TodayOrde
 
 export function classifyOrderForToday(order: TodayOrder, today: string): "action" | "today" | null {
   return deriveOrderGuidance(order, today)?.field ?? null;
+}
+
+export function classifyMoneyForToday(candidate: TodayMoneyCandidate, today: string): TodayMoneyCase | null {
+  const country = candidate.customerCountry?.trim().toLowerCase() ?? "";
+  const foreignCustomer = country !== "" && country !== "de" && country !== "deutschland";
+  if (candidate.goodsOutRecorded) return null;
+
+  const paymentMode = candidate.paymentMode.trim().toLowerCase();
+  const paymentStatus = candidate.paymentStatus?.trim().toLowerCase() ?? null;
+  const station = candidate.station.trim().toLowerCase();
+  if (paymentMode === "vorkasse") {
+    return !foreignCustomer && station === "fertig" && paymentStatus !== "bezahlt" ? "open_prepayment" : null;
+  }
+
+  const dueDate = candidate.dueDate?.slice(0, 10) ?? "";
+  return dueDate !== "" && dueDate < today && (paymentStatus === "offen" || paymentStatus === "teilbezahlt")
+    ? "overdue_invoice"
+    : null;
 }

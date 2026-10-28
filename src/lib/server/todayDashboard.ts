@@ -6,7 +6,7 @@ import { getOperationalOrders } from "@/lib/server/operationalOrders";
 import { readIntakeDraft } from "@/lib/server/intakeDraft";
 import { listMicrosoftGraphInbox } from "@/lib/server/microsoftGraph";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import { deriveOrderGuidance, type TodayOrderGuidance } from "@/lib/server/todayDashboardPolicy";
+import { classifyMoneyForToday, deriveOrderGuidance, type TodayOrderGuidance } from "@/lib/server/todayDashboardPolicy";
 
 export type TodayField = "action" | "today" | "assign" | "money" | "bundle";
 export type TodayVisibleField = Exclude<TodayField, "action">;
@@ -23,7 +23,7 @@ export type TodayItem = {
   graphMessageId?: string;
   dueDate?: string;
   snoozedUntil?: string;
-  primaryActionLabel?: TodayOrderGuidance["primaryActionLabel"];
+  primaryActionLabel?: TodayOrderGuidance["primaryActionLabel"] | "Erinnern" | "Zahlung bestätigen";
 };
 
 export type TodayDashboard = {
@@ -35,7 +35,8 @@ export type TodayDashboard = {
 
 type PreferenceRow = { visible_fields: string[] };
 type ReminderRow = { item_key: string; reminder_until: Date | string };
-type InvoiceRow = { id: string; invoice_number: string; order_id: string; customer_name: string; due_date: Date | string; gross_amount_cents: number | string };
+type InvoiceRow = { id: string; invoice_number: string; order_id: string; customer_name: string; customer_country: string | null; due_date: Date | string; open_amount_cents: number | string; payment_mode: string; payment_status: string; station: string };
+type PrepaymentRow = { order_id: string; order_number: string; customer_name: string; customer_country: string | null; due_date: Date | string | null; invoice_id: string | null; open_amount_cents: number | string | null; payment_status: string | null; station: string; goods_out_event_count: number | string };
 type UserRow = { id: string };
 type GraphThreadRow = { source: string };
 
@@ -62,23 +63,44 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
     readIntakeDraft(auth),
     graphAllowed ? listMicrosoftGraphInbox() : Promise.resolve({ code: "IN_KLAERUNG" as const, message: "Outlook ist für dieses Profil nicht eingeblendet." }),
     withPrivilegedTenantTransaction(auth, async (tx) => {
-      const [preferences, reminders, invoices, phillip, graphThreads] = await Promise.all([
+      const [preferences, reminders, invoices, prepayments, phillip, graphThreads] = await Promise.all([
         tx.execute<PreferenceRow>(sql`SELECT visible_fields FROM private.today_preferences WHERE tenant_id=${auth.tenantId} AND actor_id=${auth.userId}::uuid LIMIT 1`),
         tx.execute<ReminderRow>(sql`SELECT item_key, reminder_until FROM private.today_reminders WHERE tenant_id=${auth.tenantId} AND actor_id=${auth.userId}::uuid`),
         auth.permissions.includes("perm_view_prices") ? tx.execute<InvoiceRow>(sql`
           SELECT invoice.id, invoice.invoice_number, invoice.order_id, customer.name AS customer_name,
-                 invoice.due_date, invoice.gross_amount_cents
+                 customer.country AS customer_country, invoice.due_date,
+                 invoice.payment_open_amount_cents AS open_amount_cents,
+                 orders.payment_mode, invoice.payment_status, orders.station
           FROM public.invoices invoice
+          JOIN public.orders orders ON orders.tenant_id=invoice.tenant_id AND orders.id=invoice.order_id
           JOIN public.customers customer ON customer.tenant_id=invoice.tenant_id AND customer.id=invoice.customer_id
           WHERE invoice.tenant_id=${auth.tenantId} AND invoice.status='issued'
             AND invoice.payment_status IN ('offen', 'teilbezahlt')
+            AND invoice.due_date < (statement_timestamp() AT TIME ZONE 'Europe/Berlin')::date
           ORDER BY invoice.due_date, invoice.invoice_number
+          LIMIT 20
+        `) : Promise.resolve([]),
+        auth.permissions.includes("perm_view_prices") ? tx.execute<PrepaymentRow>(sql`
+          SELECT payment.order_id, payment.order_number, customer.name AS customer_name,
+                 customer.country AS customer_country, orders.due_date, payment.invoice_id,
+                 payment.payment_open_amount_cents AS open_amount_cents,
+                 payment.payment_status, payment.station, payment.goods_out_event_count
+          FROM private.v_goods_out_ui_state_v1 payment
+          JOIN public.orders orders ON orders.tenant_id=payment.tenant_id AND orders.id=payment.order_id
+          JOIN public.customers customer ON customer.tenant_id=orders.tenant_id AND customer.id=orders.customer_id
+          WHERE payment.tenant_id=${auth.tenantId}
+            AND payment.payment_mode='vorkasse'
+            AND payment.station='fertig'
+            AND payment.goods_out_event_count=0
+            AND payment.integrity_ok=true
+            AND (payment.invoice_state='not_issued' OR payment.payment_status IN ('offen', 'teilbezahlt'))
+          ORDER BY orders.due_date NULLS LAST, payment.order_number
           LIMIT 20
         `) : Promise.resolve([]),
         tx.execute<UserRow>(sql`SELECT id FROM public.app_users WHERE tenant_id=${auth.tenantId} AND active=true AND role='werkstatt' ORDER BY display_name LIMIT 1`),
         tx.execute<GraphThreadRow>(sql`SELECT source FROM public.communication_threads WHERE tenant_id=${auth.tenantId} AND source LIKE 'MS_GRAPH_IN:%'`),
       ]);
-      return { preferences, reminders, invoices, phillip, graphThreads };
+      return { preferences, reminders, invoices, prepayments, phillip, graphThreads };
     }),
   ]);
 
@@ -102,7 +124,18 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
   const importedGraphIds = new Set(support.graphThreads.map((row) => row.source.slice("MS_GRAPH_IN:".length)));
   if (graph.code === "OK") for (const mail of graph.data.filter((entry) => !importedGraphIds.has(entry.id)).slice(0, 5)) add({ key: `mail:${mail.id}`, field: "assign", kind: "mail", title: mail.subject || "Mail ohne Betreff", meta: `${mail.senderName} · ${new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(mail.receivedAt))}`, urgency: "decision", graphMessageId: mail.id });
 
-  for (const invoice of support.invoices) add({ key: `invoice:${invoice.id}`, field: "money", kind: "invoice", title: `${invoice.invoice_number} · ${invoice.customer_name}`, meta: `${euro(invoice.gross_amount_cents)} · fällig ${dateOnly(invoice.due_date)}`, urgency: dateOnly(invoice.due_date) < today ? "conflict" : "warning", invoiceId: invoice.id, orderId: invoice.order_id, dueDate: dateOnly(invoice.due_date) });
+  for (const invoice of support.invoices) {
+    const dueDate = dateOnly(invoice.due_date);
+    if (classifyMoneyForToday({ customerCountry: invoice.customer_country, dueDate, goodsOutRecorded: false, paymentMode: invoice.payment_mode, paymentStatus: invoice.payment_status, station: invoice.station }, today) !== "overdue_invoice") continue;
+    add({ key: `invoice:${invoice.id}`, field: "money", kind: "invoice", title: `${invoice.invoice_number} · ${invoice.customer_name}`, meta: `${euro(invoice.open_amount_cents)} · fällig ${dueDate}`, urgency: "conflict", invoiceId: invoice.id, orderId: invoice.order_id, dueDate, primaryActionLabel: "Erinnern" });
+  }
+
+  for (const prepayment of support.prepayments) {
+    const dueDate = prepayment.due_date ? dateOnly(prepayment.due_date) : null;
+    if (classifyMoneyForToday({ customerCountry: prepayment.customer_country, dueDate, goodsOutRecorded: Number(prepayment.goods_out_event_count) > 0, paymentMode: "vorkasse", paymentStatus: prepayment.payment_status, station: prepayment.station }, today) !== "open_prepayment") continue;
+    const amount = prepayment.open_amount_cents === null ? "Betrag nach Rechnung" : euro(prepayment.open_amount_cents);
+    add({ key: `prepayment:${prepayment.order_id}`, field: "money", kind: "order", title: `${prepayment.order_number} · Vorkasse offen`, meta: `${prepayment.customer_name} · ${amount} · Versand gesperrt`, urgency: "warning", orderId: prepayment.order_id, invoiceId: prepayment.invoice_id ?? undefined, dueDate: dueDate ?? undefined, primaryActionLabel: "Zahlung bestätigen" });
+  }
 
   const surfaces = new Map<string, typeof orders>();
   for (const order of orders) {

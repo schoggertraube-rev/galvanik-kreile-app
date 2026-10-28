@@ -94,6 +94,20 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     expect(within(screen.getByRole("region", { name: "Lage" })).getByText("Konflikte")).toBeInTheDocument();
   });
 
+  it("uses the concrete money action for overdue invoices and open prepayment", () => {
+    const money = [
+      { key: "invoice:invoice-1", field: "money" as const, kind: "invoice" as const, title: "R-2026-0001 · Muster GmbH", meta: "100,00 € · fällig 27.10.2026", urgency: "conflict" as const, invoiceId: "invoice-1", primaryActionLabel: "Erinnern" as const },
+      { key: "prepayment:order-1", field: "money" as const, kind: "order" as const, title: "A-2026-0001 · Vorkasse offen", meta: "Muster GmbH · 100,00 € · Versand gesperrt", urgency: "warning" as const, orderId: "order-1", primaryActionLabel: "Zahlung bestätigen" as const },
+    ];
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canDelegate: true, dashboard: { ...dashboard, items: money, visibleFields: [...dashboard.visibleFields] }, projection }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Erinnern" }));
+    fireEvent.click(screen.getByRole("button", { name: "Zahlung bestätigen" }));
+
+    expect(ports.openInvoice).toHaveBeenCalledWith("invoice-1");
+    expect(ports.openOrder).toHaveBeenCalledWith("order-1");
+  });
+
   it("führt readonly ohne Warenausgang-Aktion", () => {
     render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "readonly", canCreateOrder: false, canDelegate: false, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields] }, projection }} />);
     expect(screen.queryByRole("button", { name: /Ware raus öffnen/ })).not.toBeInTheDocument();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyOrderForToday, deriveOrderGuidance } from "@/lib/server/todayDashboardPolicy";
+import { classifyMoneyForToday, classifyOrderForToday, deriveOrderGuidance } from "@/lib/server/todayDashboardPolicy";
 
 const TODAY = "2026-10-28";
 
@@ -36,5 +36,24 @@ describe("classifyOrderForToday", () => {
       expect(classifyOrderForToday(order({ station: terminal, status: terminal }), TODAY)).toBeNull();
     }
     expect(classifyOrderForToday(order({ dueDate: "2026-10-29T00:00:00.000Z" }), TODAY)).toBeNull();
+  });
+});
+
+describe("classifyMoneyForToday", () => {
+  const invoice = { customerCountry: "Deutschland", dueDate: "2026-10-27", goodsOutRecorded: false, paymentMode: "rechnung", paymentStatus: "offen", station: "fertig" };
+
+  it("shows only overdue open invoices", () => {
+    expect(classifyMoneyForToday(invoice, TODAY)).toBe("overdue_invoice");
+    expect(classifyMoneyForToday({ ...invoice, dueDate: TODAY }, TODAY)).toBeNull();
+    expect(classifyMoneyForToday({ ...invoice, dueDate: "2026-10-29" }, TODAY)).toBeNull();
+    expect(classifyMoneyForToday({ ...invoice, paymentStatus: "bezahlt" }, TODAY)).toBeNull();
+  });
+
+  it("shows open prepayment only for finished domestic orders before goods out", () => {
+    expect(classifyMoneyForToday({ ...invoice, dueDate: null, paymentMode: "vorkasse", paymentStatus: null }, TODAY)).toBe("open_prepayment");
+    expect(classifyMoneyForToday({ ...invoice, paymentMode: "vorkasse", paymentStatus: "bezahlt" }, TODAY)).toBeNull();
+    expect(classifyMoneyForToday({ ...invoice, paymentMode: "vorkasse", station: "galvanik" }, TODAY)).toBeNull();
+    expect(classifyMoneyForToday({ ...invoice, paymentMode: "vorkasse", customerCountry: "AT" }, TODAY)).toBeNull();
+    expect(classifyMoneyForToday({ ...invoice, paymentMode: "vorkasse", goodsOutRecorded: true }, TODAY)).toBeNull();
   });
 });
