@@ -58,6 +58,13 @@ Migration: `supabase/migrations/20261028163707_h11_align_access_rights.sql`. Sie
 - DB-Soll: unverändert zu Rest a; dieser Unterpunkt ändert keine Datenbankzeile.
 - Prüfung: fokussierte Kunden-Tests 8/8, TypeScript, gezieltes ESLint, Modulgrenzen und Spec-Check `expected=5 found=5 missing=0` grün.
 
+### Rest f – nach einem Fixversuch zurückgenommen
+
+- Befund: Der feste Replay-Test lief nach dem einen erlaubten Fixversuch mit allen zwölf Login/Aktions-Kombinationen grün; der anschließende Linter beanstandete jedoch den Testhelfernamen als React-Hook.
+- Fundstelle: `docs/project/endversion/codex/RUECKFRAGEN_H11.md`.
+- Ergebnis gemäß Regel 7: Alle H11f-Code- und Workflow-Änderungen wurden zurückgenommen. H11f ist nicht fertig; Produktcode und Datenbanken blieben unverändert.
+- DB-Soll: unverändert zu Rest a.
+
 ## Owner-Klickweg
 
 1. Als Gregor anmelden und **Einstellungen → Logins & Rechte** öffnen.
