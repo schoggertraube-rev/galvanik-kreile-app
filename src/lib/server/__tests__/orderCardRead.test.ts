@@ -28,6 +28,17 @@ describe("order card intake snapshot contract", () => {
     }])).toEqual([{ ...base, catalogServiceId: "77777777-7777-4777-8777-777777777777", unit: "Stück", unitPriceCents: 1250, vatRateBasisPoints: 1900, finished: false, extraWork: [] }]);
   });
 
+  it("reads the current free-text snapshot with a persisted execution request", () => {
+    expect(mapOrderCardIntakeItems([{
+      ...base,
+      catalogServiceId: null,
+      executionRequested: "offen",
+      unit: null,
+      unitPriceCents: null,
+      vatRateBasisPoints: null,
+    }])).toEqual([{ ...base, catalogServiceId: null, unit: null, unitPriceCents: null, vatRateBasisPoints: null, finished: false, extraWork: [] }]);
+  });
+
   it("rejects unversioned mixed shapes", () => {
     expect(() => mapOrderCardIntakeItems([{ ...base, unit: "Stück" }])).toThrow("ORDER_CARD_INTAKE_ITEM_SHAPE_INVALID");
   });

@@ -12,6 +12,8 @@ const MAX_ID_LENGTH = 128;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const LEGACY_ITEM_KEYS = ["id", "position", "name", "quantity", "material", "surfaceRequested"] as const;
 const CURRENT_ITEM_KEYS = ["catalogServiceId", "id", "material", "name", "position", "quantity", "surfaceRequested", "unit", "unitPriceCents", "vatRateBasisPoints"] as const;
+const CURRENT_ITEM_WITH_EXECUTION_KEYS = [...CURRENT_ITEM_KEYS, "executionRequested"] as const;
+const EXECUTION_REQUESTED_VALUES = ["hochglanz", "glaenzend", "matt", "gelb_passiviert", "blau_passiviert", "offen"] as const;
 
 export type OrderCardExtraWork = {
   lineId: string;
@@ -278,12 +280,14 @@ export function mapOrderCardIntakeItems(value: unknown): OrderCardItem[] {
   }
   const items = value.map((entry) => {
     const currentShape = hasExactKeys(entry, CURRENT_ITEM_KEYS);
-    if (!hasExactKeys(entry, LEGACY_ITEM_KEYS) && !currentShape) {
+    const currentShapeWithExecution = hasExactKeys(entry, CURRENT_ITEM_WITH_EXECUTION_KEYS);
+    const supportedCurrentShape = currentShape || currentShapeWithExecution;
+    if (!hasExactKeys(entry, LEGACY_ITEM_KEYS) && !supportedCurrentShape) {
       throw new Error("ORDER_CARD_INTAKE_ITEM_SHAPE_INVALID");
     }
     const position = toSafeInteger(entry.position, "ORDER_CARD_ITEM_POSITION_INVALID");
     const quantity = toSafeInteger(entry.quantity, "ORDER_CARD_ITEM_QUANTITY_INVALID");
-    const currentCatalogItem = currentShape
+    const currentCatalogItem = supportedCurrentShape
       && typeof entry.catalogServiceId === "string"
       && UUID_PATTERN.test(entry.catalogServiceId)
       && typeof entry.unit === "string"
@@ -293,7 +297,7 @@ export function mapOrderCardIntakeItems(value: unknown): OrderCardItem[] {
       && Number.isSafeInteger(entry.unitPriceCents)
       && Number(entry.unitPriceCents) >= 0
       && [0, 700, 1900].includes(Number(entry.vatRateBasisPoints));
-    const currentFreeTextItem = currentShape
+    const currentFreeTextItem = supportedCurrentShape
       && entry.catalogServiceId === null
       && entry.unit === null
       && entry.unitPriceCents === null
@@ -319,7 +323,11 @@ export function mapOrderCardIntakeItems(value: unknown): OrderCardItem[] {
       || entry.surfaceRequested.trim() !== entry.surfaceRequested
       || entry.surfaceRequested.length < 2
       || entry.surfaceRequested.length > 160
-      || (currentShape && !currentCatalogItem && !currentFreeTextItem)
+      || (currentShapeWithExecution && (
+        typeof entry.executionRequested !== "string"
+        || !EXECUTION_REQUESTED_VALUES.includes(entry.executionRequested as typeof EXECUTION_REQUESTED_VALUES[number])
+      ))
+      || (supportedCurrentShape && !currentCatalogItem && !currentFreeTextItem)
     ) throw new Error("ORDER_CARD_INTAKE_ITEM_INVALID");
 
     return {
