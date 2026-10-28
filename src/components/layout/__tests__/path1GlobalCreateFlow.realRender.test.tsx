@@ -309,7 +309,8 @@ afterEach(() => cleanup());
 
 describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
   it("reads incoming mail and assigns it to an exact customer or selected order", async () => {
-    render(<GlobalCreateFlow ports={ports()} />);
+    const value = ports();
+    render(<GlobalCreateFlow ports={value} />);
 
     openFlow();
     fireEvent.click(await screen.findByRole("button", { name: "Aus Mail" }));
@@ -317,6 +318,14 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(await screen.findByRole("heading", { name: "Mail zuordnen" })).toBeInTheDocument();
     const customer = await screen.findByRole("combobox", { name: "Kunde für TEST Anfrage wählen" });
     expect(customer).toHaveValue(CUSTOMER_ID);
+    fireEvent.click(screen.getByRole("button", { name: "Neuer Eingang aus Mail" }));
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Mail zuordnen" })).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: /Kunde Name \/ FirmaSYNTHETISCH Musterkunde GmbH/ })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Name / Firma")).not.toBeInTheDocument();
+    expect(value.createCustomer).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Aus Mail" }));
+    await screen.findByRole("heading", { name: "Mail zuordnen" });
     fireEvent.click(screen.getByRole("button", { name: "Kunde zuordnen" }));
     await waitFor(() => expect(attachOutlookMailAction).toHaveBeenCalledWith({
       targetType: "CUSTOMER",
@@ -332,6 +341,27 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
       targetId: ORDER_ID,
       graphMessageId: "graph-message-1",
     }));
+  });
+
+  it("does not guess a customer when an email address belongs to more than one record", async () => {
+    vi.mocked(getCustomersDb).mockResolvedValue({
+      ok: true,
+      data: [
+        { id: CUSTOMER_ID, customerNumber: "K-2026-0042", name: "SYNTHETISCH Musterkunde GmbH", email: "kunde@example.invalid" },
+        { id: "f2d8c6c6-397c-4a9c-b464-d2e5595eb42a", customerNumber: "K-2026-0043", name: "SYNTHETISCH Zweitkunde GmbH", email: "kunde@example.invalid" },
+      ],
+    } as never);
+    const value = ports();
+    render(<GlobalCreateFlow ports={value} />);
+
+    openFlow();
+    fireEvent.click(await screen.findByRole("button", { name: "Aus Mail" }));
+    const customer = await screen.findByRole("combobox", { name: "Kunde für TEST Anfrage wählen" });
+    expect(customer).toHaveValue("");
+    fireEvent.click(screen.getByRole("button", { name: "Neuer Eingang aus Mail" }));
+
+    expect(await screen.findByLabelText("Name / Firma")).toHaveValue("TEST Ansprechpartner");
+    expect(value.createCustomer).not.toHaveBeenCalled();
   });
 
   it("reaches the first manual customer field in two clicks and completes both receipt readbacks", async () => {

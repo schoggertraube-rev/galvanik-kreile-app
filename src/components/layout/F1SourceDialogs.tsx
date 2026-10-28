@@ -16,7 +16,23 @@ import styles from "./TargetShell.module.css";
 const ACCEPTED = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
 const MAX_BYTES = 20 * 1024 * 1024;
 type InboxMessage = Extract<Awaited<ReturnType<typeof listOutlookInboxAction>>, { code: "OK" }>["data"][number];
-type CustomerChoice = { id: string; customerNumber: string; name: string; email: string | null };
+export type F1MailCustomerChoice = {
+  id: string;
+  customerNumber: string | null;
+  name: string;
+  customerType?: "business" | "privat" | "institution";
+  companyName?: string | null;
+  contactPerson?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  street?: string;
+  zipCode?: string;
+  city: string | null;
+  country?: string;
+  paymentPreference?: string;
+  vatId?: string | null;
+};
+type CustomerChoice = F1MailCustomerChoice;
 type Suggestion = { field: string; label: string; value: string; confidence: number; source: { page: number } };
 
 export type F1SourceMode = "camera" | "document" | "mail";
@@ -29,7 +45,7 @@ type Props = {
   onMode: (mode: F1SourceMode) => void;
   onAttachment: (attachmentId: string) => void;
   onDocument: (suggestions: Suggestion[]) => void;
-  onMail: (mail: InboxMessage) => void;
+  onMail: (mail: InboxMessage, customer: F1MailCustomerChoice | null) => void;
   onNewCustomer: (mail: InboxMessage) => void;
 };
 
@@ -97,7 +113,21 @@ export function F1SourceDialogs(props: Props) {
         id: entry.id,
         customerNumber: entry.customerNumber,
         name: entry.name,
-        email: entry.email?.trim().toLowerCase() ?? null,
+        customerType: entry.type === "private" || entry.type === "Privatkunde"
+          ? "privat" as const
+          : entry.type === "institution" || entry.type === "Institution"
+            ? "institution" as const
+            : "business" as const,
+        companyName: entry.companyName ?? null,
+        contactPerson: entry.contactPerson ?? null,
+        email: entry.email ?? null,
+        phone: entry.phone ?? null,
+        street: entry.street ?? "",
+        zipCode: entry.zipCode ?? "",
+        city: entry.city ?? null,
+        country: entry.country ?? "Deutschland",
+        paymentPreference: entry.paymentPreference ?? "",
+        vatId: entry.vatId ?? null,
       })) : [];
       setCustomers(nextCustomers);
       if (status.code !== "OK") { setMessage(status.message); setMailState("error"); return; }
@@ -107,7 +137,8 @@ export function F1SourceDialogs(props: Props) {
       setInbox(result.data);
       setCustomerByMail(Object.fromEntries(result.data.map((mail) => {
         const senderAddress = mail.senderAddress.trim().toLowerCase();
-        const exact = nextCustomers.find((customer) => customer.email === senderAddress);
+        const exactMatches = nextCustomers.filter((customer) => customer.email?.trim().toLowerCase() === senderAddress);
+        const exact = exactMatches.length === 1 ? exactMatches[0] : undefined;
         return [mail.id, props.customerId ?? exact?.id ?? ""];
       })));
       setMailState(result.data.length ? "ready" : "empty");
@@ -209,7 +240,10 @@ export function F1SourceDialogs(props: Props) {
         <header><Mail /><div><strong>{mail.subject}</strong><small>{mail.senderName} · {mail.senderAddress}</small></div></header>
         <p>{mail.preview || "Keine Vorschau vorhanden."}</p>
         <div className={styles.f1MailActions}>
-          <Button data-spec-id="mailein.neuer-eingang-aus-mail" art="primaer" icon="inbox" text="Neuer Eingang aus Mail" onClick={() => { props.onMail(mail); props.onClose(); }} />
+          <Button data-spec-id="mailein.neuer-eingang-aus-mail" art="primaer" icon="inbox" text="Neuer Eingang aus Mail" onClick={() => {
+            props.onMail(mail, customers.find((customer) => customer.id === customerId) ?? null);
+            props.onClose();
+          }} />
           <select aria-label={`Kunde für ${mail.subject} wählen`} value={customerId} onChange={(event) => setCustomerByMail((current) => ({ ...current, [mail.id]: event.target.value }))}><option value="">Kunde wählen</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.customerNumber} · {customer.name}</option>)}</select>
           <Button data-spec-id="mailein.kunde-zuordnen" text="Kunde zuordnen" disabled={busy || !customerId} onClick={() => void attachMail(mail, "CUSTOMER", customerId)} />
           <select aria-label={`Auftrag für ${mail.subject} wählen`} value={orderId} onChange={(event) => setOrderByMail((current) => ({ ...current, [mail.id]: event.target.value }))}><option value="">Auftrag wählen</option>{orders.map((order) => <option key={order.id} value={order.id}>{order.orderNumber}</option>)}</select>

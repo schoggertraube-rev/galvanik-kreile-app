@@ -2158,13 +2158,25 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
             material: material ?? item.material,
           } : item));
         }}
-        onMail={(mail) => {
+        onMail={(mail, matchedCustomer) => {
           setPendingMailId(mail.id);
           setIntakeSource("mail");
           setIntakeKind(ports.canManageMoney ? "QUOTE" : "ORDER");
           setDirectNote((current) => [`Anfrage aus Outlook: ${mail.subject}`, current].filter(Boolean).join("\n"));
-          if (directCustomerMode !== "EXISTING") {
+          if (matchedCustomer) {
+            const draft = customerChoiceToDraft(matchedCustomer);
+            setDirectCustomerMode("EXISTING");
+            setDirectCustomerId(matchedCustomer.id);
+            setDirectCustomerType(draft.customerType === "privat" ? "privat" : "business");
+            setDirectCustomer(draft);
+            setIntakeCustomerQuery(matchedCustomer.companyName ?? matchedCustomer.name);
+            setIntakePaymentMode(paymentModeFromPreference(
+              draft.paymentPreference,
+              intakeHandover === "PICKUP" ? "pickup" : "shipping",
+            ));
+          } else {
             setDirectCustomerMode("NEW");
+            setDirectCustomerId("");
             setDirectCustomer((current) => ({ ...current, name: mail.senderName || mail.senderAddress, email: mail.senderAddress }));
           }
         }}
