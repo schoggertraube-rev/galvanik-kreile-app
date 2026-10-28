@@ -124,7 +124,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
                 AND rights.user_id=users.id
                 AND rights.bereich='auftraege'
             )
-          ORDER BY users.display_name
+          ORDER BY users.full_name, users.id
           LIMIT 1
         `) : Promise.resolve([]),
         graphAllowed ? tx.execute<GraphThreadRow>(sql`SELECT source FROM public.communication_threads WHERE tenant_id=${auth.tenantId} AND source LIKE 'MS_GRAPH_IN:%'`) : Promise.resolve([]),
