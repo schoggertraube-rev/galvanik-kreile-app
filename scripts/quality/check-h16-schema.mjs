@@ -35,12 +35,13 @@ function placeholder(expression, followingText, declarations, seen) {
 
   const expressionText = expression.getText();
   if (/^::uuid\[\]/i.test(followingText)) return "ARRAY[]";
+  if (/^::uuid/i.test(followingText)) return UUID;
   if (/^::jsonb/i.test(followingText) || /(?:payload|json|data)/i.test(expressionText)) return "'{}'";
   if (/^::date/i.test(followingText) || /(?:date|until|at|time)/i.test(expressionText)) return "'2026-01-01'";
   if (/(?:version|count|quantity|price|cents|basisPoints|rate|amount|limit|offset)/i.test(expressionText)) return "0";
   if (/(?:active|enabled|finished|granted|include)/i.test(expressionText)) return "false";
   const terminalName = expressionText.split(/[^A-Za-z0-9_$]+/).filter(Boolean).at(-1) ?? "";
-  if (/^::uuid/i.test(followingText) || terminalName === "id" || terminalName === "uuid" || /Id$/.test(terminalName)) return UUID;
+  if (terminalName === "id" || terminalName === "uuid" || /Id$/.test(terminalName)) return UUID;
   return "NULL";
 }
 
