@@ -9,19 +9,19 @@ export interface ListenTastaturOptionen {
 /** V1.1 B4: j/k wählen · Enter · s · Esc. Nie in Eingabefeldern (input/textarea/select/contenteditable). Gibt den gewählten Index zurück (−1 = keiner). */
 export function useListenTastatur({ anzahl, aktiv, onHaupt, onSpaeter }: ListenTastaturOptionen): number {
   const [sel, setSel] = useState(-1);
-  useEffect(() => { if (sel >= anzahl) setSel(anzahl - 1); }, [anzahl, sel]);
+  const selection = anzahl > 0 ? Math.min(sel, anzahl - 1) : -1;
   useEffect(() => {
     if (!aktiv) return;
     const h = (e: KeyboardEvent) => {
       const t = e.target;
       if (e.ctrlKey || e.metaKey || e.altKey || (t instanceof Element && t.closest('input,textarea,select,[contenteditable="true"]'))) return;
-      if (e.key === 'j') { e.preventDefault(); setSel(s => Math.min(anzahl - 1, s + 1)); }
-      else if (e.key === 'k') { e.preventDefault(); setSel(s => Math.max(0, s - 1)); }
-      else if (e.key === 'Enter' && sel >= 0) { e.preventDefault(); onHaupt(sel); }
-      else if ((e.key === 's' || e.key === 'S') && sel >= 0) { e.preventDefault(); onSpaeter(sel); }
-      else if (e.key === 'Escape' && sel >= 0) setSel(-1);
+      if (e.key === 'j') { e.preventDefault(); setSel(anzahl > 0 ? Math.min(anzahl - 1, selection + 1) : -1); }
+      else if (e.key === 'k') { e.preventDefault(); setSel(anzahl > 0 ? Math.max(0, selection - 1) : -1); }
+      else if (e.key === 'Enter' && selection >= 0) { e.preventDefault(); onHaupt(selection); }
+      else if ((e.key === 's' || e.key === 'S') && selection >= 0) { e.preventDefault(); onSpaeter(selection); }
+      else if (e.key === 'Escape' && selection >= 0) setSel(-1);
     };
     addEventListener('keydown', h); return () => removeEventListener('keydown', h);
-  }, [aktiv, anzahl, sel, onHaupt, onSpaeter]);
-  return aktiv ? sel : -1;
+  }, [aktiv, anzahl, selection, onHaupt, onSpaeter]);
+  return aktiv ? selection : -1;
 }

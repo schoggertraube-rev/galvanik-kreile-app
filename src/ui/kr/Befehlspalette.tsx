@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState, type ReactNode, type KeyboardEvent } from 'react';
+import { useRef, useState, type ReactNode, type KeyboardEvent } from 'react';
 import { Icon, type IconName } from './Icon';
 import { Button } from './Button';
 import { Chip, Punkt } from './Chip';
@@ -19,14 +19,17 @@ export interface BefehlspaletteProps {
 /** V1.1 B2 „Suchen oder tun“ – Strg K und / (Desktop) öffnen; Kopf-Suchfeld öffnet ebenfalls; Plus-Menü bleibt unverändert.
  *  ↑/↓ wählen, Enter führt aus, Esc schließt. Keine Überschrift (Eingabefeld ist die Mitte); aria-label trägt den Namen. */
 export function Befehlspalette({ wert, onWert, treffer, aktionen, zustand = 'daten', texte, geraet, onSchliessen }: BefehlspaletteProps) {
-  const [sel, setSel] = useState(-1);
+  const [selection, setSelection] = useState({ wert, index: wert ? 0 : -1 });
   const liste = useRef<HTMLDivElement>(null);
   const n = (zustand === 'daten' ? treffer.length : 0) + aktionen.length;
-  useEffect(() => { setSel(wert ? 0 : -1); }, [wert]);
+  const sel = selection.wert === wert
+    ? (n > 0 ? Math.min(selection.index, n - 1) : -1)
+    : (wert && n > 0 ? 0 : -1);
+  const waehlen = (index: number) => setSelection({ wert, index: n > 0 ? Math.min(n - 1, Math.max(0, index)) : -1 });
   const tun = (i: number) => { const t = zustand === 'daten' ? treffer : []; if (i < t.length) t[i].onOeffnen(); else aktionen[i - t.length]?.onTun(); };
   const taste = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'ArrowDown') { e.preventDefault(); setSel(s => Math.min(n - 1, s + 1)); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); setSel(s => Math.max(0, s - 1)); }
+    if (e.key === 'ArrowDown') { e.preventDefault(); waehlen(sel + 1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); waehlen(sel - 1); }
     else if (e.key === 'Enter') { e.preventDefault(); tun(Math.max(0, sel)); }
     else if (e.key === 'Escape') onSchliessen();
   };

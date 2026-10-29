@@ -251,12 +251,6 @@ const eslintConfig = defineConfig([
     ],
     rules: { "no-restricted-syntax": "off" },
   },
-  {
-    // Die ownergebundene V1.1-Komponentenquelle wird bytegleich eingebaut.
-    // Ihre beiden zustandsabgleichenden Effekte bleiben deshalb unverändert.
-    files: ["src/ui/kr/Befehlspalette.tsx", "src/ui/kr/tastatur.ts"],
-    rules: { "react-hooks/set-state-in-effect": "off" },
-  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
