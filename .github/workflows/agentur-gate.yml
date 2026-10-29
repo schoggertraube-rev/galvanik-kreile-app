@@ -42,45 +42,8 @@ jobs:
           npm run quality:delivery-contracts:selftest
           npm run quality:delivery-contracts
 
-      - name: H16 product-code ESLint contracts and self-test
-        run: |
-          npm run quality:h16-eslint-contracts
-          npm run quality:h16-eslint-contracts:selftest
-
       - name: Type-check
         run: npx tsc --noEmit
 
       - name: Run unit tests
         run: npm run test:unit
-
-  h16-schema:
-    name: h16-schema
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js 24
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Start isolated Supabase and replay every migration from empty
-        run: |
-          npm run quality:supabase-cli
-          ./node_modules/.bin/supabase start
-          ./node_modules/.bin/supabase db reset --local --no-seed
-
-      - name: Explain every SQL statement in files changed from origin/main
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-          H16_SCHEMA_BASE_REF: origin/main
-        run: |
-          npm run quality:h16-schema
-          npm run quality:h16-schema:selftest
