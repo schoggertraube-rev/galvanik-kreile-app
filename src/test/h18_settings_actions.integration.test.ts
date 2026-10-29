@@ -271,6 +271,38 @@ describe("H18 settings Server Actions against the real replay database", () => {
     expect(row).toEqual({ full_name: "Rolf Neuer Name", granted_by: fixture.actorId });
   }, 30_000);
 
+  it("C1a.4 invokes saveManagedUserAction and advances updated_at when renaming a login", async () => {
+    const fixture = await createFixture("rename-updated-at");
+    const [before] = await sql<{ updated_at: Date }[]>`
+      SELECT updated_at FROM public.app_users WHERE id = ${fixture.targetId}::uuid
+    `;
+    expect(before).toBeDefined();
+
+    const { saveManagedUserAction } = await import("@/app/actions/settings.actions");
+    await expect(withSession(fixture, () => saveManagedUserAction({
+      userId: fixture.targetId,
+      fullName: "Phillip Umbenannt",
+      shortCode: fixture.targetShortCode,
+      designation: "Werkstatt",
+      active: true,
+      pin: null,
+    }))).resolves.toMatchObject({ code: "OK" });
+
+    const [row] = await sql<{ full_name: string; updated_at: Date; event_count: number }[]>`
+      SELECT users.full_name, users.updated_at,
+        (SELECT count(*)::integer FROM public.ui_events events
+         WHERE events.tenant_id = users.tenant_id
+           AND events.event_type = 'login_updated'
+           AND events.payload->>'actorId' = ${fixture.actorId}
+           AND events.payload->>'userId' = ${fixture.targetId}) AS event_count
+      FROM public.app_users users WHERE users.id = ${fixture.targetId}::uuid
+    `;
+    expect(row).toBeDefined();
+    expect(row!.full_name).toBe("Phillip Umbenannt");
+    expect(row!.updated_at.getTime()).toBeGreaterThan(before!.updated_at.getTime());
+    expect(row!.event_count).toBe(1);
+  }, 30_000);
+
   it("H18.5 invokes readSettingsAction for the account return path and proves the current login row", async () => {
     const fixture = await createFixture("return-path");
     const { readSettingsAction } = await import("@/app/actions/settings.actions");

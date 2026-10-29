@@ -245,7 +245,7 @@ export async function updateManagedUser(context: SystemSettingsContext, input: u
         ? await tx.execute<{ id: string }>(sql`UPDATE public.app_users SET full_name=${normalized.fullName}, kuerzel=${normalized.shortCode}, bezeichnung=${normalized.designation || null}, active=${normalized.active}, pin_hash=${pinHash}, updated_at=statement_timestamp() WHERE id=${normalized.userId}::uuid AND tenant_id=${context.tenantId} RETURNING id`)
         : target.active !== normalized.active
           ? await tx.execute<{ id: string }>(sql`UPDATE public.app_users SET full_name=${normalized.fullName}, kuerzel=${normalized.shortCode}, bezeichnung=${normalized.designation || null}, active=${normalized.active}, updated_at=statement_timestamp() WHERE id=${normalized.userId}::uuid AND tenant_id=${context.tenantId} RETURNING id`)
-          : await tx.execute<{ id: string }>(sql`UPDATE public.app_users SET full_name=${normalized.fullName}, kuerzel=${normalized.shortCode}, bezeichnung=${normalized.designation || null} WHERE id=${normalized.userId}::uuid AND tenant_id=${context.tenantId} RETURNING id`);
+          : await tx.execute<{ id: string }>(sql`UPDATE public.app_users SET full_name=${normalized.fullName}, kuerzel=${normalized.shortCode}, bezeichnung=${normalized.designation || null}, updated_at=statement_timestamp() WHERE id=${normalized.userId}::uuid AND tenant_id=${context.tenantId} RETURNING id`);
       if (rows.length !== 1) throw new Error("USER_WRITE_NOT_FOUND");
       await tx.execute(sql`INSERT INTO public.ui_events (tenant_id, event_type, payload) VALUES (${context.tenantId}, 'login_updated', jsonb_build_object('actorId', ${context.actorId}::text, 'userId', ${normalized.userId}::text))`);
     });
