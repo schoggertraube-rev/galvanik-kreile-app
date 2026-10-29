@@ -1,6 +1,7 @@
 # Datenregister Dev-DB
 
-Stand: 29.10.2026 · Quelle: verknüpfte Dev-DB, Schema `public`  
+Stand: 29.10.2026 · Quelle: verknüpfte Dev-DB, Schema `public`
+
 Klassen: `stammdaten` · `bewegungsdaten` · `system` · `tot` · `?` (noch fachlich zu klären)
 
 Das Register klassifiziert jede aktuell in der Dev-DB vorhandene Public-Tabelle genau einmal. `?` ist bewusst kein Ersatzurteil: Diese Tabellen werden vor einer späteren Übernahme fachlich geklärt. Für H17 sind nur ausdrücklich freigegebene `stammdaten` übertragbar; PIN-Werte, Bewegungsdaten, Systemdaten, tote und ungeklärte Tabellen werden nicht kopiert.
