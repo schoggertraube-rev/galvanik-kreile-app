@@ -1,41 +1,41 @@
 # Datenregister Dev-DB
 
-Stand: 29.10.2026 · Quelle: verknüpfte Dev-DB, Schema `public`
+Stand: 29.10.2026 · Quelle: verknüpfte Dev-DB, Schemas `public`, `private` und `drizzle`
 
-Klassen: `stammdaten` · `bewegungsdaten` · `system` · `tot` · `?` (noch fachlich zu klären)
+Klassen: `stammdaten` · `bewegungsdaten` · `system` · `tot`
 
-Das Register klassifiziert jede aktuell in der Dev-DB vorhandene Public-Tabelle genau einmal. `?` ist bewusst kein Ersatzurteil: Diese Tabellen werden vor einer späteren Übernahme fachlich geklärt. Für H17 sind nur ausdrücklich freigegebene `stammdaten` übertragbar; PIN-Werte, Bewegungsdaten, Systemdaten, tote und ungeklärte Tabellen werden nicht kopiert.
+Das Register klassifiziert jede aktuell in der Dev-DB vorhandene Tabelle der drei Anwendungsschemas genau einmal. Für H17 sind nur ausdrücklich freigegebene `stammdaten` übertragbar. Eine Tabelle gilt nur dann als `stammdaten`, wenn aktiver Stufe-1-Code sie liest; der konkrete Leser steht in der Zusatzspalte. PIN-Werte, Bewegungsdaten, Systemdaten und tote Tabellen werden nicht kopiert.
 
-| Tabelle | Klasse | Begründung |
-|---|---|---|
+| Tabelle | Klasse | Begründung | Leser-Nachweis für `stammdaten` |
+|---|---|---|---|
 | `public.ai_usage_reservations` | `system` | Technische Reservierungen für KI-Nutzung. |
 | `public.aktion` | `bewegungsdaten` | Fachliche Marketing-/Aktionsvorgänge. |
 | `public.app_kvp_items` | `bewegungsdaten` | Erfasste Verbesserungsfälle der App. |
 | `public.app_usage_events` | `system` | Technische Nutzungsereignisse der App. |
-| `public.app_user_rights` | `stammdaten` | Freigegebene Rechtezuordnung der Logins. |
-| `public.app_users` | `stammdaten` | Login-Stammdaten; PIN-Werte sind von einer Übernahme ausgeschlossen. |
+| `public.app_user_rights` | `stammdaten` | Freigegebene Rechtezuordnung der Logins. | `src/modules/fundament/server/systemSettingsPort.ts:76` |
+| `public.app_users` | `stammdaten` | Login-Stammdaten; PIN-Werte sind von einer Übernahme ausgeschlossen. | `src/modules/fundament/server/systemSettingsPort.ts:75` |
 | `public.arbeitszeit_buchung` | `bewegungsdaten` | Zeitbuchungen sind betriebliche Vorgänge. |
 | `public.attribution` | `bewegungsdaten` | Zuordnung eines Marketing-/Kundenvorgangs. |
 | `public.audit_log` | `system` | Technischer Auditnachweis. |
 | `public.ausgangsrechnung` | `tot` | Durch H14 als abgelöste Rechnungswahrheit festgestellt. |
 | `public.ausgangsrechnung_position` | `tot` | Positionen der durch H14 abgelösten Rechnungswahrheit. |
 | `public.bath_measurements` | `bewegungsdaten` | Messwerte sind zeitbezogene Betriebsvorgänge. |
-| `public.baths` | `?` | Fachliche Rolle und künftige Nutzung der Bad-Stammdaten sind noch nicht geklärt. |
+| `public.baths` | `tot` | Kein Leser im aktiven Stufe-1-Kernweg; die Bäder-Funktion gehört nicht zur Stufe-1-Routengrenze. |
 | `public.beleg` | `bewegungsdaten` | Belege gehören zu Finanzvorgängen. |
 | `public.beleg_position` | `bewegungsdaten` | Positionen eines Belegvorgangs. |
 | `public.bh_audit_log` | `system` | Technischer Buchhaltungs-Auditnachweis. |
-| `public.bh_einstellungen` | `stammdaten` | Konfiguration der Buchhaltung. |
+| `public.bh_einstellungen` | `tot` | Kein Leser im aktiven Code. |
 | `public.business_kvp_items` | `bewegungsdaten` | Betriebliche Verbesserungsvorgänge. |
 | `public.calendar_events` | `bewegungsdaten` | Terminereignisse mit Zeitbezug. |
-| `public.catalog_services` | `stammdaten` | Freigegebener Leistungskatalog. |
+| `public.catalog_services` | `stammdaten` | Freigegebener Leistungskatalog. | `src/modules/katalog/server/catalogServicePort.ts:42` |
 | `public.communication_drafts` | `bewegungsdaten` | Entwürfe gehören zu Kommunikationsvorgängen. |
 | `public.communication_messages` | `bewegungsdaten` | Ein- und ausgehende Nachrichten. |
 | `public.communication_threads` | `bewegungsdaten` | Verläufe von Kommunikationsvorgängen. |
-| `public.communications` | `?` | Verhältnis zur aktiven Nachrichtenwahrheit ist noch nicht geklärt. |
-| `public.company_settings` | `stammdaten` | Freigegebene Firmendaten. |
+| `public.communications` | `tot` | Zweite, nicht im Stufe-1-Kernweg verwendete Kommunikationswahrheit; der aktive Stufe-1-Pfad nutzt `communication_messages`. |
+| `public.company_settings` | `stammdaten` | Freigegebene Firmendaten. | `src/modules/fundament/server/systemSettingsPort.ts:64` |
 | `public.complaints` | `bewegungsdaten` | Reklamationen sind Kunden-/Auftragsvorgänge. |
 | `public.consumable_uses` | `bewegungsdaten` | Erfasster Verbrauch im Betrieb. |
-| `public.cost_positions` | `?` | Abgrenzung zu den weiteren Kostenpositionstabellen ist noch nicht geklärt. |
+| `public.cost_positions` | `tot` | Kein Leser im aktiven Code. |
 | `public.customers` | `bewegungsdaten` | Kundendaten sind laut U-219 nicht Teil der Stammdatenübernahme. |
 | `public.developer_feedback` | `system` | Technisches Feedback für Wartung und Entwicklung. |
 | `public.devices` | `system` | Technische Geräteregistrierung. |
@@ -43,7 +43,7 @@ Das Register klassifiziert jede aktuell in der Dev-DB vorhandene Public-Tabelle 
 | `public.email_templates` | `bewegungsdaten` | Mailbezogene Daten werden nach H16b als Bewegungsdaten behandelt. |
 | `public.events` | `bewegungsdaten` | Fachliche Ereigniskette von Vorgängen. |
 | `public.export_lauf` | `system` | Technischer Nachweis eines Exports. |
-| `public.feature_flags` | `?` | Verhältnis zu `tenant_features` ist vor Übernahme zu klären. |
+| `public.feature_flags` | `tot` | Kein Datenbankleser im aktiven Code; der Stufe-1-Schalter liest `tenant_features`. |
 | `public.feedback_eingang` | `bewegungsdaten` | Eingegangenes Feedback ist ein Vorgang. |
 | `public.feedback_mail` | `bewegungsdaten` | Mailbezogenes Feedback ist ein Kommunikationsvorgang. |
 | `public.feedback_notes` | `bewegungsdaten` | Erfasste Feedbacknotizen sind Vorgangsdaten. |
@@ -51,29 +51,29 @@ Das Register klassifiziert jede aktuell in der Dev-DB vorhandene Public-Tabelle 
 | `public.import_job_rows` | `bewegungsdaten` | Importierte Nutzdatenzeilen. |
 | `public.import_jobs` | `system` | Technische Steuerung und Status von Importläufen. |
 | `public.inquiries` | `bewegungsdaten` | Anfragen sind Kunden-/Interessentenvorgänge. |
-| `public.inventory_items` | `?` | Künftige Lagerwahrheit und Übernahme sind noch nicht geklärt. |
+| `public.inventory_items` | `tot` | Nur außerhalb der Stufe-1-Routengrenze gelesen; Lager gehört nicht zum aktiven Kernweg. |
 | `public.invoices` | `bewegungsdaten` | Aktive Rechnungswahrheit. |
 | `public.item_photo_jobs` | `system` | Technische Verarbeitung von Positionsfotos. |
 | `public.item_photos` | `bewegungsdaten` | Fotos gehören zu Auftragspositionen. |
 | `public.items` | `bewegungsdaten` | Auftragspositionen. |
 | `public.kampagne` | `bewegungsdaten` | Marketingkampagnen mit Vorgangsbezug. |
-| `public.kanal` | `stammdaten` | Konfigurierter Kommunikationskanal. |
-| `public.kategorie` | `stammdaten` | Fachlicher Kategoriekatalog. |
-| `public.konto` | `stammdaten` | Konfiguration eines Buchhaltungskontos. |
-| `public.kosten_posten` | `?` | Abgrenzung zu `kostenposten` und `cost_positions` ist ungeklärt. |
-| `public.kostenposten` | `?` | Abgrenzung zu `kosten_posten` und `cost_positions` ist ungeklärt. |
-| `public.kostensatz_default` | `stammdaten` | Freigegebener Standard-Kostensatz. |
-| `public.kostenstelle` | `stammdaten` | Kostenstellenkatalog. |
+| `public.kanal` | `tot` | Nur im Marketing-Altbereich gelesen; Marketing gehört nicht zur Stufe 1. |
+| `public.kategorie` | `tot` | Nur im Kosten-/Buchhaltungs-Altbereich gelesen; kein Stufe-1-Stammdatum. |
+| `public.konto` | `tot` | Kein Tabellenleser im aktiven Stufe-1-Code. |
+| `public.kosten_posten` | `tot` | Kein Leser im aktiven Code. |
+| `public.kostenposten` | `tot` | Nur im Kosten-/Buchhaltungs-Altbereich gelesen; kein Stufe-1-Stammdatum. |
+| `public.kostensatz_default` | `tot` | Nur vom alten Erfassungs-Snapshot gelesen; kein Leser im aktiven Stufe-1-Kernweg. |
+| `public.kostenstelle` | `tot` | Kein Tabellenleser im aktiven Stufe-1-Code. |
 | `public.kostenstellen_energie_monat` | `bewegungsdaten` | Monatliche Energieverbrauchs-/Kostenwerte. |
-| `public.kpi_cost_assumptions` | `stammdaten` | Konfigurierte Annahmen für Kostenkennzahlen. |
+| `public.kpi_cost_assumptions` | `tot` | Kein Leser im aktiven Code. |
 | `public.kpi_snapshots` | `bewegungsdaten` | Zeitbezogene Kennzahlenstände. |
 | `public.kraftstoff_detail` | `bewegungsdaten` | Erfasste Kraftstoffdetails. |
 | `public.kvp_items` | `bewegungsdaten` | Verbesserungsfälle mit Lebenszyklus. |
 | `public.lern_metrik` | `bewegungsdaten` | Zeitbezogene Lern-/Wirkungswerte. |
 | `public.licenses` | `tot` | Die Fake-Lizenz-/Quota-Funktion wurde in H15 entfernt. |
-| `public.lieferant` | `stammdaten` | Lieferantenstamm. |
-| `public.locations` | `stammdaten` | Standortkatalog. |
-| `public.marketing_asset` | `stammdaten` | Wiederverwendbare Marketingvorlage bzw. -ressource. |
+| `public.lieferant` | `tot` | Kein Tabellenleser im aktiven Code. |
+| `public.locations` | `tot` | Kein Leser im aktiven Code. |
+| `public.marketing_asset` | `tot` | Nur als altes Schema definiert; kein aktiver Leser und nicht Stufe 1. |
 | `public.marketing_touchpoints` | `bewegungsdaten` | Erfasste Marketingkontakte. |
 | `public.offline_outbox` | `system` | Technische Warteschlange noch nicht synchronisierter Befehle. |
 | `public.operator_control_events` | `system` | Technische Bedien-/Kontrollereignisse. |
@@ -89,33 +89,33 @@ Das Register klassifiziert jede aktuell in der Dev-DB vorhandene Public-Tabelle 
 | `public.price_lines` | `bewegungsdaten` | Positionen kundenbezogener Preisvereinbarungen. |
 | `public.scan_uploads` | `bewegungsdaten` | Hochgeladene Belege/Fotos eines Vorgangs. |
 | `public.security_rate_limit_counters` | `system` | Technische Sicherheitszähler. |
-| `public.segment` | `stammdaten` | Segmentkatalog. |
+| `public.segment` | `tot` | Nur im Marketing-Altbereich gelesen; Marketing gehört nicht zur Stufe 1. |
 | `public.shipments` | `bewegungsdaten` | Versand-/Warenausgangsvorgänge. |
 | `public.statistik_kennzahl` | `bewegungsdaten` | Zeitbezogene Statistikwerte. |
-| `public.steuerprofil` | `stammdaten` | Steuerliche Grundkonfiguration. |
+| `public.steuerprofil` | `tot` | Nur im Buchhaltungs-/Export-Altbereich gelesen; nicht Teil des Stufe-1-Kernwegs. |
 | `public.stock_movements` | `bewegungsdaten` | Lagerbewegungen. |
-| `public.teile_klassifikator` | `stammdaten` | Klassifikationskatalog für Teile. |
+| `public.teile_klassifikator` | `tot` | Nur vom alten Vorlagenpfad gelesen; kein Stufe-1-Stammdatum. |
 | `public.telemetrie_event` | `system` | Technische Telemetrie. |
-| `public.tenant_features` | `stammdaten` | Freigegebene Stufen-/Funktionsschalter. |
+| `public.tenant_features` | `stammdaten` | Freigegebene Stufen-/Funktionsschalter. | `src/modules/fundament/server/tenantFeaturePort.ts:32` |
 | `public.tenant_operator_controls` | `system` | Technische Bedienkontrollen je Mandant. |
 | `public.touchpoint` | `bewegungsdaten` | Erfasster Kontaktpunkt. |
 | `public.ui_events` | `system` | Technische UI-Ereignisse und Diagnose. |
 | `public.ustva_periode` | `bewegungsdaten` | Umsatzsteuervoranmeldungsperiode mit Zeitbezug. |
-| `public.vorlage_verbrauch` | `stammdaten` | Vorlage für Verbrauchserfassung. |
-| `public.vorlage_zeit` | `stammdaten` | Vorlage für Zeiterfassung. |
+| `public.vorlage_verbrauch` | `tot` | Nur vom alten Vorlagenpfad gelesen; kein Stufe-1-Stammdatum. |
+| `public.vorlage_zeit` | `tot` | Nur vom alten Vorlagenpfad gelesen; kein Stufe-1-Stammdatum. |
 | `public.warning_event` | `bewegungsdaten` | Fachliches Warnereignis. |
-| `public.zahlung` | `?` | Verhältnis zur aktiven Zahlungswahrheit `payments` ist ungeklärt. |
+| `public.zahlung` | `tot` | Kein Tabellenleser im aktiven Code; die aktive Zahlungswahrheit ist `payments`. |
 
 ## Schema `private`
 
-| Tabelle | Klasse | Begründung |
-|---|---|---|
+| Tabelle | Klasse | Begründung | Leser-Nachweis für `stammdaten` |
+|---|---|---|---|
 | `private.customer_create_receipts` | `bewegungsdaten` | Receipt eines konkreten Kundenanlagevorgangs. |
 | `private.customer_number_counters` | `system` | Technischer Nummernkreis; wird nie kopiert und startet leer. |
 | `private.evidence_domain_links` | `bewegungsdaten` | Zuordnung eines Belegs zu einem fachlichen Vorgang. |
 | `private.evidence_extraction_metadata` | `bewegungsdaten` | Extraktionsnachweis zu einem konkreten Belegvorgang. |
-| `private.extra_work_catalog_positions` | `stammdaten` | Freigegebener Katalog für Mehrarbeitspositionen. |
-| `private.extra_work_hourly_rates` | `stammdaten` | Freigegebene Stundensätze für Mehrarbeit. |
+| `private.extra_work_catalog_positions` | `stammdaten` | Freigegebener Katalog für Mehrarbeitspositionen. | `src/lib/server/commands/extraWorkAdminCommand.ts:316` |
+| `private.extra_work_hourly_rates` | `stammdaten` | Freigegebene Stundensätze für Mehrarbeit. | `src/lib/server/commands/extraWorkAdminCommand.ts:455` |
 | `private.intake_drafts` | `bewegungsdaten` | Entwurf eines konkreten Eingangsvorgangs. |
 | `private.invoice_number_sequences` | `system` | Technischer Rechnungsnummernkreis; wird nie kopiert und startet leer. |
 | `private.order_freeze_corrections` | `bewegungsdaten` | Korrektur eines eingefrorenen Auftragsstands. |
@@ -139,8 +139,8 @@ Das Register klassifiziert jede aktuell in der Dev-DB vorhandene Public-Tabelle 
 
 ## Schema `drizzle`
 
-| Tabelle | Klasse | Begründung |
-|---|---|---|
+| Tabelle | Klasse | Begründung | Leser-Nachweis für `stammdaten` |
+|---|---|---|---|
 | `drizzle.__drizzle_migrations` | `system` | Technische Historie des Drizzle-Migrationswerkzeugs; wird nicht kopiert. |
 
 ## Zählung
@@ -150,4 +150,4 @@ Das Register klassifiziert jede aktuell in der Dev-DB vorhandene Public-Tabelle 
 - Fehlende Tabellen: **0**
 - Doppelte Tabellen: **0**
 - Zusätzliche Tabellen: **0**
-- Ungeklärt (`?`): **8**
+- Ungeklärt (`?`): **0**
