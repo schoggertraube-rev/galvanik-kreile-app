@@ -1,10 +1,10 @@
 {
   "moduleId": "werkstatt",
   "version": "1.0.0",
-  "owner": "Path-1 Werkstatt (Kontroll-Home)",
+  "owner": "Path-1 Werkstatt (Phillip V4 Kontroll-Home)",
   "publicExports": [
-    "@/modules/werkstatt/public#WorkshopOrderCard",
-    "@/modules/werkstatt/public#WorkshopViewModel",
+    "@/modules/werkstatt/public#PhillipOrderCard",
+    "@/modules/werkstatt/public#PhillipWerkstattViewModel",
     "@/modules/werkstatt/public#WerkstattData",
     "@/modules/werkstatt/public#WerkstattHeldCard",
     "@/modules/werkstatt/public#WerkstattKpiSnapshot",

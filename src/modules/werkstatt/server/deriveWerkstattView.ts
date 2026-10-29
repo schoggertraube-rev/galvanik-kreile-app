@@ -1,5 +1,5 @@
 import type {
-  WorkshopOrderCard,
+  PhillipOrderCard,
   WerkstattBundleSuggestion,
   WerkstattData,
   WerkstattHeldCard,
@@ -8,7 +8,7 @@ import type {
   WerkstattSurfaceOrder,
 } from "./types";
 
-function toWorkshopOrderCard(order: WerkstattSurfaceOrder): WorkshopOrderCard {
+function toPhillipOrderCard(order: WerkstattSurfaceOrder): PhillipOrderCard {
   return {
     id: order.id,
     orderNumber: order.orderNumber,
@@ -121,8 +121,8 @@ export function buildWerkstattData(
   if (Number.isNaN(loadedAt.getTime()) || loadedAt.toISOString() !== input.loadedAt) {
     throw new Error("WERKSTATT_DATA_STAND_INVALID");
   }
-  const wareneingang = input.wareneingang.map(toWorkshopOrderCard);
-  const galvanik = input.galvanik.map(toWorkshopOrderCard);
+  const wareneingang = input.wareneingang.map(toPhillipOrderCard);
+  const galvanik = input.galvanik.map(toPhillipOrderCard);
   const combined = [...galvanik, ...wareneingang];
 
   const held: WerkstattHeldCard[] = combined

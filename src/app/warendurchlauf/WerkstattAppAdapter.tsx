@@ -6,14 +6,14 @@ import { usePageView } from "@/hooks/usePageView";
 import { useOverlayStore } from "@/lib/overlayStore";
 import {
   WerkstattView,
-  type WorkshopViewModel,
+  type PhillipWerkstattViewModel,
 } from "@/modules/werkstatt/public";
 
 /** App composition adapter: owns legacy app hooks and injects narrow Werkstatt ports. */
 export function WerkstattAppAdapter({
   view,
 }: {
-  view: WorkshopViewModel;
+  view: PhillipWerkstattViewModel;
 }) {
   usePageView();
   const router = useRouter();

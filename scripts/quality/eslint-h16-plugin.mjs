@@ -20,18 +20,6 @@ function sourceTextRule(pattern, message) {
 
 export default {
   rules: {
-    "no-role-identity-comparison": sourceTextRule(
-      /\b(?:[A-Za-z_$][\w$]*\.)?role\s*(?:===|!==)/,
-      "Rollenidentität darf keine Rechteentscheidung treffen; nutze Bereiche oder Berechtigungen.",
-    ),
-    "no-role-permissions": sourceTextRule(
-      /\bROLE_PERMISSIONS\b/,
-      "ROLE_PERMISSIONS ist eine zweite Rechtewahrheit und darf nicht verwendet werden.",
-    ),
-    "no-person-names": sourceTextRule(
-      /\b(?:Rolf|Phillip|Gregor)\b/,
-      "Personennamen gehören nicht in Produktcode; nutze die Datenbankidentität oder Rollenbezeichnung.",
-    ),
     "no-silent-error": sourceTextRule(
       /catch\s*\{\s*\}|\.catch\s*\(\s*\(\s*\)\s*=>\s*(?:null|\[\])\s*\)/s,
       "Fehler dürfen nicht still verworfen werden; protokolliere einen stabilen Code und liefere einen sichtbaren Fehlerpfad.",

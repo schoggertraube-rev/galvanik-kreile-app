@@ -6,7 +6,7 @@ import {
   buildOrdersHomeProjection,
   type OrdersHomeSource,
 } from "@/modules/orders/public";
-import { OfficeHomeClient, type OfficeHomeModel } from "./OfficeHomeClient";
+import { RolfHomeClient, type RolfHomeModel } from "./RolfHomeClient";
 import { saveTodayPreferencesAction, saveTodayReminderAction } from "@/app/actions/today.actions";
 import { discardIntakeDraftAction } from "@/app/actions/intakeDraft.actions";
 import { assignOrderTaskAction, handBackOrderTaskAction } from "@/app/actions/orders.actions";
@@ -29,7 +29,7 @@ function toHomeSource(order: OperationalOrder): OrdersHomeSource {
   };
 }
 
-export async function loadOfficeHome(authorization: AuthorizationSnapshot): Promise<OfficeHomeModel> {
+export async function loadRolfHome(authorization: AuthorizationSnapshot): Promise<RolfHomeModel> {
   if (!hasAnyAuthorizationArea(authorization)) return { kind: "no_areas" };
 
   try {
@@ -50,8 +50,8 @@ export async function loadOfficeHome(authorization: AuthorizationSnapshot): Prom
   }
 }
 
-export async function OfficeHome({ authorization }: { authorization: AuthorizationSnapshot }) {
-  return <OfficeHomeClient model={await loadOfficeHome(authorization)} ports={{
+export async function RolfHome({ authorization }: { authorization: AuthorizationSnapshot }) {
+  return <RolfHomeClient model={await loadRolfHome(authorization)} ports={{
     savePreferences: saveTodayPreferencesAction,
     saveReminder: saveTodayReminderAction,
     discardDraft: discardIntakeDraftAction,

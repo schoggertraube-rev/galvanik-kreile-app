@@ -185,7 +185,7 @@ export async function resolveProductActorAuthorization(): Promise<ProductActorAu
       supportReference,
     };
   }
-  if (!new Set([authorization.data.role]).has(actor.role)) {
+  if (actor.role !== authorization.data.role) {
     const supportReference = reportAuthorizationFailure(
       "SESSION_ACTOR_ROLE_MISMATCH",
     );

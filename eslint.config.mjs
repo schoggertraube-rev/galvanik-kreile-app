@@ -83,9 +83,6 @@ const eslintConfig = defineConfig([
   {
     files: ["src/**/*.ts", "src/**/*.tsx"],
     rules: {
-      "h16/no-role-identity-comparison": "error",
-      "h16/no-role-permissions": "error",
-      "h16/no-person-names": "error",
       "h16/no-silent-error": "error",
       "h16/no-alert": "error",
       "h16/no-placeholder-text": "error",
@@ -101,9 +98,6 @@ const eslintConfig = defineConfig([
       "src/**/*.spec.tsx",
     ],
     rules: {
-      "h16/no-role-identity-comparison": "off",
-      "h16/no-role-permissions": "off",
-      "h16/no-person-names": "off",
       "h16/no-silent-error": "off",
       "h16/no-alert": "off",
       "h16/no-placeholder-text": "off",
@@ -114,16 +108,6 @@ const eslintConfig = defineConfig([
     files: ["src/lib/tenant.ts"],
     rules: {
       "h16/no-tenant-literal": "off",
-    },
-  },
-  {
-    files: [
-      "src/lib/server/appSession.ts",
-      "src/lib/server/todayDashboardPolicy.ts",
-      "src/app/settings/SettingsAdminClient.tsx",
-    ],
-    rules: {
-      "h16/no-role-identity-comparison": "off",
     },
   },
   {

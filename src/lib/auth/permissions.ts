@@ -24,7 +24,7 @@ export async function requireAdminOrDeveloper() {
  */
 export async function isDeveloper(): Promise<boolean> {
   const role = await getCurrentRole();
-  return role != null && new Set(["developer"]).has(role);
+  return role === "developer";
 }
 
 /**

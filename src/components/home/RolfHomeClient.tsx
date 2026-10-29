@@ -11,16 +11,16 @@ import { deriveTodayReminder, type TodayReminderMode } from "@/lib/server/todayD
 import type { OrdersHomeProjection, OrdersHomeSource } from "@/modules/orders/public";
 import { Button, Dialog, HandlungsListe, Hinweis, Kachel, Lageleiste, SeitenKopf, sortHandlungsEintraege, useListenTastatur, Zustand, type Geraet, type HandlungsArt } from "@/ui/kr";
 
-type OfficeIdentity = { role: AppRole; canCreateOrder: boolean; canWorkOrders: boolean; canDelegate: boolean; dashboard: TodayDashboard };
-export type OfficeHomeModel =
-  | ({ kind: "data"; projection: OrdersHomeProjection } & OfficeIdentity)
-  | ({ kind: "empty"; projection: OrdersHomeProjection } & OfficeIdentity)
+type RolfIdentity = { role: AppRole; canCreateOrder: boolean; canWorkOrders: boolean; canDelegate: boolean; dashboard: TodayDashboard };
+export type RolfHomeModel =
+  | ({ kind: "data"; projection: OrdersHomeProjection } & RolfIdentity)
+  | ({ kind: "empty"; projection: OrdersHomeProjection } & RolfIdentity)
   | { kind: "no_areas" }
   | { kind: "denied"; message: string }
   | { kind: "error"; message: string };
 type BasicResult = { code: string; message?: string };
 type AssignmentResult = BasicResult & { receipt?: { aggregateVersion: number } };
-export type OfficeHomePorts = {
+export type RolfHomePorts = {
   savePreferences: (layout: TodayLayoutItem[]) => Promise<BasicResult>;
   saveReminder: (input: { itemKey: string; mode: TodayReminderMode; dueDate?: string }) => Promise<BasicResult>;
   discardDraft: () => Promise<BasicResult>;
@@ -35,14 +35,14 @@ export function statusLabel(order: OrdersHomeSource): string { const status = or
 export function dayGreeting(hour: number): string { return hour < 12 ? "Guten Morgen" : hour < 18 ? "Guten Tag" : "Guten Abend"; }
 function berlinHour(now: Date): number { const hour = new Intl.DateTimeFormat("de-DE", { timeZone: "Europe/Berlin", hour: "numeric", hourCycle: "h23" }).formatToParts(now).find((part) => part.type === "hour")?.value; return Number(hour ?? now.getHours()); }
 export type DayLine = { salutation: string; urgent: number; other: number };
-export function dayLineParts(orders: readonly OrdersHomeSource[], displayName: string, now = new Date()): DayLine { const firstName = displayName.trim().split(/\s+/)[0] || "Meister"; const urgent = orders.filter((order) => order.risk === "red" || order.risk === "blocked").length; return { salutation: `${dayGreeting(berlinHour(now))}, ${firstName}.`, urgent, other: orders.length - urgent }; }
+export function dayLineParts(orders: readonly OrdersHomeSource[], displayName: string, now = new Date()): DayLine { const firstName = displayName.trim().split(/\s+/)[0] || "Rolf"; const urgent = orders.filter((order) => order.risk === "red" || order.risk === "blocked").length; return { salutation: `${dayGreeting(berlinHour(now))}, ${firstName}.`, urgent, other: orders.length - urgent }; }
 function readDevice(): Geraet { if (window.innerWidth <= 699) return "handy"; if (window.innerWidth <= 1399 && window.matchMedia?.("(pointer: coarse)").matches) return "tablet"; return "desktop"; }
 function subscribeDevice(onChange: () => void) { window.addEventListener("resize", onChange); return () => window.removeEventListener("resize", onChange); }
 function actionType(item: TodayItem): HandlungsArt { return item.urgency === "conflict" ? "konflikt" : item.urgency === "warning" ? "warnung" : "entscheidung"; }
 function reminderLabel(value: string) { return `Aufgeschoben bis ${new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(value))} · zählt weiter mit`; }
 function assignmentDeadline(value?: string) { return value ? `Frist ${new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(`${value.slice(0, 10)}T12:00:00Z`))}` : "bis erledigt"; }
 
-export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; ports: OfficeHomePorts }) {
+export function RolfHomeClient({ model, ports }: { model: RolfHomeModel; ports: RolfHomePorts }) {
   const openOrder = useOverlayStore((state) => state.openOrder);
   const openInvoice = useOverlayStore((state) => state.openInvoice);
   const { hasArea, loading: permissionsLoading } = usePermissions();

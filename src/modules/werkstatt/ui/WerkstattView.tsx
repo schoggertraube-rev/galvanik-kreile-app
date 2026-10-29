@@ -17,8 +17,8 @@ import {
   type HandlungsArt,
 } from "@/ui/kr";
 import type {
-  WorkshopOrderCard,
-  WorkshopViewModel,
+  PhillipOrderCard,
+  PhillipWerkstattViewModel,
   WerkstattHeldCard,
   WerkstattViewPorts,
 } from "../server/types";
@@ -45,13 +45,13 @@ function actionType(order: WerkstattHeldCard): HandlungsArt {
   return order.heldGroup === "crit" ? "konflikt" : "warnung";
 }
 
-function rowTone(order: WorkshopOrderCard): "ok" | "warn" | "rot" | "info" {
+function rowTone(order: PhillipOrderCard): "ok" | "warn" | "rot" | "info" {
   if (order.risk === "red" || order.risk === "blocked") return "rot";
   if (order.risk === "orange" || order.risk === "yellow") return "warn";
   return order.station === "fertig" ? "ok" : "info";
 }
 
-function orderSubject(order: WorkshopOrderCard): string {
+function orderSubject(order: PhillipOrderCard): string {
   const customer = order.customerName?.trim() || "Kunde nicht hinterlegt";
   const title = order.title.trim();
   if (title.toLocaleLowerCase("de-DE").startsWith(customer.toLocaleLowerCase("de-DE"))) {
@@ -61,13 +61,13 @@ function orderSubject(order: WorkshopOrderCard): string {
   return title || order.itemDescription?.trim() || "Auftrag";
 }
 
-function customerTitle(order: WorkshopOrderCard): string {
+function customerTitle(order: PhillipOrderCard): string {
   const customer = order.customerName?.trim() || "Kunde nicht hinterlegt";
   const subject = orderSubject(order);
   return subject === "Auftrag" ? customer : `${customer} — ${subject}`;
 }
 
-function shortOrderTitle(order: WorkshopOrderCard): string {
+function shortOrderTitle(order: PhillipOrderCard): string {
   return orderSubject(order);
 }
 
@@ -112,7 +112,7 @@ function startOfBerlinWeek(value: string): number | null {
   return utc - (weekdayIndex - 1) * 86_400_000;
 }
 
-function isDueThisWeek(order: WorkshopOrderCard, loadedAt: string): boolean {
+function isDueThisWeek(order: PhillipOrderCard, loadedAt: string): boolean {
   const currentWeek = startOfBerlinWeek(loadedAt);
   const dueWeek = startOfBerlinWeek(order.dueDate);
   return currentWeek !== null && dueWeek === currentWeek;
@@ -121,7 +121,7 @@ function isDueThisWeek(order: WorkshopOrderCard, loadedAt: string): boolean {
 function DayStatus({
   view,
 }: {
-  view: Extract<WorkshopViewModel, { kind: "data" }>;
+  view: Extract<PhillipWerkstattViewModel, { kind: "data" }>;
 }) {
   const name = displayName(view.greetingName);
   return (
@@ -145,7 +145,7 @@ function Picker({
   onScan,
 }: {
   kind: PickerKind;
-  orders: readonly WorkshopOrderCard[];
+  orders: readonly PhillipOrderCard[];
   onClose: () => void;
   onSelect: (orderId: string) => void;
   onScan: () => void;
@@ -209,7 +209,7 @@ export function WerkstattView({
   ports,
   onRetry,
 }: {
-  view: WorkshopViewModel;
+  view: PhillipWerkstattViewModel;
   ports: WerkstattViewPorts;
   onRetry: () => void;
 }) {
@@ -227,7 +227,7 @@ export function WerkstattView({
   const isData = view.kind === "data";
   const isEmpty = view.kind === "empty";
   const authorized = isData || isEmpty;
-  const pickerOrders: readonly WorkshopOrderCard[] = isData
+  const pickerOrders: readonly PhillipOrderCard[] = isData
     ? activePicker === "goods-out"
       ? view.goodsOutCandidates
       : view.pickerOrders

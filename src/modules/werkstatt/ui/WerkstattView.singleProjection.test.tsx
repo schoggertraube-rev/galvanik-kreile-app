@@ -1,9 +1,9 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { WorkshopViewModel, WerkstattViewPorts } from "../server/types";
+import type { PhillipWerkstattViewModel, WerkstattViewPorts } from "../server/types";
 import { WerkstattView } from "./WerkstattView";
 
-const view: WorkshopViewModel = {
+const view: PhillipWerkstattViewModel = {
   kind: "data",
   source: "Auftragsbestand",
   loadedAt: "2026-09-24T08:00:00.000Z",

@@ -6,7 +6,7 @@ import { Chip, Punkt } from './Chip';
 import { MitZustand, Zustand } from './Zustand';
 import type { DatenZustand, Geraet, ZustandTexte } from './typen';
 import type { SuchTreffer } from './Suche';
-/** Nur Aktionen, die es in V1 gibt. Die App filtert nach Rechten: gesperrte Bereiche und in der Werkstatt alles zu Geld erscheinen nicht. */
+/** Nur Aktionen, die es in V1 gibt. Die App filtert nach Rechten: gesperrte Bereiche und bei Phillip alles zu Geld erscheinen nicht. */
 export type PalettenAktionId = 'eingang' | 'raus' | 'fertig' | 'mehrarbeit' | 'woche';
 export interface PalettenAktion { id: PalettenAktionId; text: string; icon: IconName; /** Tastenhinweis, nur Desktop */ kbd?: string; onTun: () => void; }
 export interface BefehlspaletteProps {

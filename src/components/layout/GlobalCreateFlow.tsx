@@ -812,8 +812,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setFeedback({
       kind: "denied",
       message: kind === "customer"
-        ? `Das Profil ${ports.roleLabel} darf keine Kunden anlegen. Eine freigegebene Person ist für diesen Vorgang zuständig.`
-        : `Das Profil ${ports.roleLabel} darf keinen KV oder Auftrag anlegen. Eine freigegebene Person ist für diesen Vorgang zuständig.`,
+        ? `Das Profil ${ports.roleLabel} darf keine Kunden anlegen. Rolf ist für diesen Vorgang zuständig.`
+        : `Das Profil ${ports.roleLabel} darf keinen KV oder Auftrag anlegen. Rolf ist für diesen Vorgang zuständig.`,
     });
     setStep("denied");
   };

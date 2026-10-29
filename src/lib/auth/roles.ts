@@ -43,5 +43,5 @@ export async function requireRole(allowedRoles: string[]) {
  */
 export async function isDeveloper(): Promise<boolean> {
   const role = await getCurrentRole();
-  return role != null && new Set(["developer"]).has(role);
+  return role === "developer";
 }

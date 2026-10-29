@@ -20,7 +20,7 @@ vi.mock("@/lib/auth/PermissionsContext", () => ({
   }),
 }));
 
-import { dayLineParts, OfficeHomeClient as RolfHomeClient } from "../OfficeHomeClient";
+import { dayLineParts, RolfHomeClient } from "../RolfHomeClient";
 
 const actionPorts = {
   savePreferences: vi.fn().mockResolvedValue({ code: "OK" }),

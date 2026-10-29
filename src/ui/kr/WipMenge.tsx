@@ -2,7 +2,7 @@ import { Icon } from './Icon';
 import { MitZustand } from './Zustand';
 import type { DatenZustand, ZustandTexte } from './typen';
 export interface WipMengeProps { anzahl: number; meta?: string; onOeffnen: () => void; zustand?: DatenZustand; texte?: ZustandTexte; }
-/** „In Arbeit“ als EINE ruhige Menge. Keine Riesenzahl (G5). Keine Bäder/Stationen (D-ARCH-010). */
+/** „In Arbeit“ als EINE ruhige Menge (Phillip V4). Keine Riesenzahl (G5). Keine Bäder/Stationen (D-ARCH-010). */
 export function WipMenge({ anzahl, meta, onOeffnen, zustand = 'daten', texte }: WipMengeProps) {
   return (
     <MitZustand zustand={zustand} texte={{ titel: 'In Arbeit', leerText: 'Nichts in Arbeit.', ...texte }}>

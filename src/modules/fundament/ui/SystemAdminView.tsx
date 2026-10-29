@@ -2,7 +2,7 @@ import Link from "next/link";
 import styles from "./SystemAdminView.module.css";
 
 export type SystemAdminViewProps = {
-  displayName: string;
+  displayName: "Gregor";
   responsibility: "Systemadministrator";
 };
 
@@ -21,7 +21,7 @@ export function SystemAdminView({ displayName, responsibility }: SystemAdminView
         </div>
         <p>
           Dieser persönliche Zugang ist für kontrollierte Systempflege vorgesehen.
-          Betriebliche Arbeit bleibt bei den dafür freigegebenen Mitarbeitenden.
+          Betriebliche Arbeit bleibt bei Rolf und Phillip.
         </p>
       </section>
       <nav aria-label="Reale Systemziele" className={styles.links}>

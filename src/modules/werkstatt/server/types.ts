@@ -15,7 +15,7 @@ export type WerkstattSurfaceOrder = {
   dueValue: string;
 };
 
-export type WorkshopOrderCard = Pick<
+export type PhillipOrderCard = Pick<
   WerkstattSurfaceOrder,
   | "id"
   | "orderNumber"
@@ -34,7 +34,7 @@ export type WorkshopOrderCard = Pick<
 
 export type WerkstattHeldGroup = "crit" | "soon";
 
-export type WerkstattHeldCard = WorkshopOrderCard & { heldGroup: WerkstattHeldGroup };
+export type WerkstattHeldCard = PhillipOrderCard & { heldGroup: WerkstattHeldGroup };
 
 export type WerkstattBundleSuggestion = {
   surfaceRequested: string;
@@ -67,12 +67,12 @@ export type WerkstattData = {
   bundleSuggestion: WerkstattBundleSuggestion | null;
   wipCount: number;
   dueThisWeekCount: number;
-  pickerOrders: readonly WorkshopOrderCard[];
-  goodsOutCandidates: readonly WorkshopOrderCard[];
+  pickerOrders: readonly PhillipOrderCard[];
+  goodsOutCandidates: readonly PhillipOrderCard[];
   canCreateOrder: boolean;
 };
 
-export type WorkshopViewModel =
+export type PhillipWerkstattViewModel =
   | ({ kind: "data" } & WerkstattData)
   | { kind: "empty"; canCreateOrder: boolean }
   | { kind: "denied"; message: string }

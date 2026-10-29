@@ -85,8 +85,7 @@ const DEVELOPER_BUSINESS_AREAS = [
  * Both the matrix and server authorization use this policy.
  */
 export function isAccessAreaAllowedForRole(role: AppRole, area: AccessArea): boolean {
-  const restrictedRoles = new Set<AppRole>(["developer"]);
-  return !restrictedRoles.has(role)
+  return role !== "developer"
     || !(DEVELOPER_BUSINESS_AREAS as readonly AccessArea[]).includes(area);
 }
 
@@ -98,10 +97,7 @@ export function normalizeAccessAreasForRole(
 }
 
 export function getFixedAccessAreasForRole(role: AppRole): readonly AccessArea[] {
-  const fixedByRole: Partial<Record<AppRole, readonly AccessArea[]>> = {
-    developer: ROLE_ACCESS_AREA_TEMPLATES.developer,
-  };
-  return fixedByRole[role] ?? [];
+  return role === "developer" ? ROLE_ACCESS_AREA_TEMPLATES.developer : [];
 }
 
 const ACCESS_AREA_PERMISSIONS: Record<AccessArea, readonly PermissionKey[]> = {
@@ -128,10 +124,10 @@ export type ProductIdentityKey = "rolf" | "phillip" | "gregor";
 
 /** Product labels are separate from the authenticated actor and role contract. */
 export type ProductIdentityByKey = {
-  rolf: { name: "Meister"; responsibility: "Meister"; initials: "R" };
-  phillip: { name: "Werkstatt"; responsibility: "Werkstatt"; initials: "P" };
+  rolf: { name: "Rolf"; responsibility: "Meister"; initials: "R" };
+  phillip: { name: "Phillip"; responsibility: "Werkstatt"; initials: "P" };
   gregor: {
-    name: "System";
+    name: "Gregor";
     responsibility: "Systemadministrator";
     initials: "G";
   };
@@ -157,9 +153,9 @@ export function getRoleLabel(role: AppRole): string {
 }
 
 const PRODUCT_IDENTITIES: ProductIdentityByKey = {
-  rolf: { name: "Meister", responsibility: "Meister", initials: "R" },
-  phillip: { name: "Werkstatt", responsibility: "Werkstatt", initials: "P" },
-  gregor: { name: "System", responsibility: "Systemadministrator", initials: "G" },
+  rolf: { name: "Rolf", responsibility: "Meister", initials: "R" },
+  phillip: { name: "Phillip", responsibility: "Werkstatt", initials: "P" },
+  gregor: { name: "Gregor", responsibility: "Systemadministrator", initials: "G" },
 };
 
 /** Browser-safe label lookup. Actor/configuration validation is server-only. */
