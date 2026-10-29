@@ -569,4 +569,81 @@ describe("H18 settings Server Actions against the real replay database", () => {
       event_count: 1,
     });
   }, 30_000);
+
+  it("C1a.6 invokes getLiveOrderCardAction and reads a legacy scan from its real database row", async () => {
+    const fixture = await createFixture("legacy-evidence-label");
+    const scanId = `c1a-legacy-${randomUUID()}`;
+    const uploadedAt = new Date().toISOString();
+    const { createOrderIntakeAction } = await import("@/app/warendurchlauf/actions");
+    const intake = await withSession(fixture, () => createOrderIntakeAction({
+      clientEventId: randomUUID(),
+      customer: { mode: "EXISTING", customerId: fixture.customerId },
+      dueDate: "2026-12-19",
+      termStatus: "bestaetigt",
+      intakeSource: "persoenlich",
+      handoverMode: "pickup",
+      paymentMode: "vorkasse",
+      note: "C1a übernommener Scan",
+      items: [{
+        catalogServiceId: null,
+        name: "C1a Scanteil",
+        quantity: 1,
+        material: "Stahl",
+        surfaceRequested: "Verzinken",
+        executionRequested: "offen",
+        unit: null,
+        unitPriceCents: null,
+        vatRateBasisPoints: null,
+      }],
+    }));
+    if (intake.code !== "OK") throw new Error(`C1A_INTAKE_FAILED:${intake.code}:${intake.message}`);
+
+    await sql`
+      INSERT INTO public.scan_uploads (
+        id, tenant_id, file_url, file_type, uploaded_by, uploaded_at,
+        detected_type, detection_confidence, extracted_data, linked_order_id,
+        linked_customer_id, ocr_provider, original_hash, original_storage_path,
+        original_size_bytes, original_secured_at, field_confidence
+      ) VALUES (
+        ${scanId}, ${KREILE_TENANT_SLUG}, 'legacy://c1a/order-scan.pdf',
+        'application/pdf', ${fixture.actorId}::uuid, ${uploadedAt}::timestamptz,
+        'Lieferschein', 0.91, ${sql.json({ documentType: "Lieferschein" })},
+        ${intake.receipt.orderId}, ${fixture.customerId}, 'legacy-ocr',
+        ${"a".repeat(64)}, 'legacy/private/c1a-order-scan.pdf', 321,
+        ${uploadedAt}::timestamptz, ${sql.json({ documentType: 0.91 })}
+      )
+    `;
+
+    const { getLiveOrderCardAction } = await import("@/app/actions/orders.actions");
+    const card = await withSession(fixture, () => getLiveOrderCardAction({
+      orderId: intake.receipt.orderId,
+    }));
+    expect(card.code).toBe("OK");
+    if (card.code === "OK") {
+      expect(card.data.evidence).toContainEqual(expect.objectContaining({
+        evidenceKey: `legacy-scan-upload:${scanId}`,
+        source: "LEGACY_SCAN_UPLOAD",
+        original: expect.objectContaining({ state: "LEGACY_RECORDED" }),
+      }));
+    }
+
+    const [row] = await sql<{
+      id: string;
+      linked_order_id: string;
+      original_storage_path: string;
+      original_hash: string;
+      original_size_bytes: string;
+    }[]>`
+      SELECT id, linked_order_id, original_storage_path, original_hash,
+        original_size_bytes::text
+      FROM public.scan_uploads WHERE id = ${scanId}
+    `;
+    expect(row).toEqual({
+      id: scanId,
+      linked_order_id: intake.receipt.orderId,
+      original_storage_path: "legacy/private/c1a-order-scan.pdf",
+      original_hash: "a".repeat(64),
+      original_size_bytes: "321",
+    });
+  }, 30_000);
 });

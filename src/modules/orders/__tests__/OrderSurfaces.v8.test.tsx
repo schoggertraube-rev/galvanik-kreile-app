@@ -62,6 +62,26 @@ describe("Orders V1.1 one-surface truth", () => {
     expect(screen.getByRole("dialog", { name: "Auftragskarte A-2026-0042" })).not.toHaveTextContent(/Readback|kanonisch|tenantgebunden/i);
   });
 
+  it("translates legacy evidence codes into workshop language", () => {
+    render(<OrderCardView actions={actions} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{
+      kind: "data",
+      card: {
+        ...card,
+        evidence: [{
+          key: "legacy-scan-upload:c1a-legacy-scan",
+          source: "LEGACY_SCAN_UPLOAD",
+          state: "LEGACY_RECORDED",
+          recordedAt: "2026-10-29T16:00:00.000Z",
+          itemIds: [],
+        }],
+      },
+    }} />);
+    const orderCard = screen.getByRole("dialog", { name: "Auftragskarte A-2026-0042" });
+    expect(orderCard).toHaveTextContent("Übernommener Scan · Original erfasst");
+    expect(orderCard).not.toHaveTextContent("LEGACY_SCAN_UPLOAD");
+    expect(orderCard).not.toHaveTextContent("LEGACY_RECORDED");
+  });
+
   it("requires a reason and exposes the persisted due-date history", () => {
     const onChangeDueDate = vi.fn();
     render(<OrderCardView actions={{ ...actions, onChangeDueDate }} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{ kind: "data", card }} />);

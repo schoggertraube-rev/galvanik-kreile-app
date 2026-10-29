@@ -33,8 +33,8 @@ export type OrderCardItem = {
 };
 export type OrderCardEvidence = {
   key: string;
-  source: string;
-  state: string;
+  source: "ORDER_STATION_ATTACHMENT" | "ORDER_INTAKE_ATTACHMENT" | "LEGACY_SCAN_UPLOAD";
+  state: "VERIFIED" | "LEGACY_RECORDED" | "LEGACY_PARTIAL" | "NOT_RECORDED";
   recordedAt: string;
   itemIds: string[];
 };

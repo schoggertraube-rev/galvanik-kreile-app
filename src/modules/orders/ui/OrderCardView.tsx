@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useSyncExternalStore, type ReactNode } from "react";
-import type { OrderCardActionPorts, OrderCardState } from "../server/types";
+import type { OrderCardActionPorts, OrderCardEvidence, OrderCardState } from "../server/types";
 import {
   Button,
   Chip,
@@ -99,6 +99,23 @@ function paymentMethodLabel(method: "bar" | "ueberweisung" | "karte"): string {
   if (method === "bar") return "Bar";
   if (method === "ueberweisung") return "Überweisung";
   return "Karte";
+}
+
+const EVIDENCE_SOURCE_LABEL: Record<OrderCardEvidence["source"], string> = {
+  ORDER_STATION_ATTACHMENT: "Werkstattfoto",
+  ORDER_INTAKE_ATTACHMENT: "Eingangsfoto",
+  LEGACY_SCAN_UPLOAD: "Übernommener Scan",
+};
+
+const EVIDENCE_STATE_LABEL: Record<OrderCardEvidence["state"], string> = {
+  VERIFIED: "Original geprüft",
+  LEGACY_RECORDED: "Original erfasst",
+  LEGACY_PARTIAL: "Original teilweise erfasst",
+  NOT_RECORDED: "Original fehlt",
+};
+
+function evidenceLabel(entry: OrderCardEvidence): string {
+  return `${EVIDENCE_SOURCE_LABEL[entry.source]} · ${EVIDENCE_STATE_LABEL[entry.state]}`;
 }
 
 export function OrderCardView({
@@ -205,7 +222,7 @@ export function OrderCardView({
 
   const history = [
     ...card.dueDateChanges?.map((change) => ({ key: change.eventId, zeit: formatMoment(change.changedAt), text: `Liefertermin geändert · ${dueLabel(change.changedTo)} · ${change.reason} · ${change.changedBy}`, icon: "calendar" as IconName, ton: "warn" as const })) ?? [],
-    ...card.evidence.map((entry) => ({ key: entry.key, zeit: formatMoment(entry.recordedAt), text: `${entry.source} · ${entry.state}`, icon: "file" as IconName })),
+    ...card.evidence.map((entry) => ({ key: entry.key, zeit: formatMoment(entry.recordedAt), text: evidenceLabel(entry), icon: "file" as IconName })),
     ...(payment?.paymentEvent ? [{ key: payment.paymentEvent.eventId, zeit: formatMoment(payment.paymentEvent.occurredAt), text: `Zahlung bestätigt · ${paymentMethodLabel(payment.paymentEvent.method)}`, icon: "card" as IconName, ton: "ok" as const }] : []),
     ...(card.frozenAt ? [{ key: "freeze", zeit: formatMoment(card.frozenAt), text: "Auftrag fertig gemeldet", icon: "checkc" as IconName, ton: "ok" as const }] : []),
     { key: "intake", zeit: formatMoment(card.intakeAt), text: `Angenommen · ${card.items.length} ${card.items.length === 1 ? "Position" : "Positionen"}`, icon: "box" as IconName },
@@ -242,7 +259,7 @@ export function OrderCardView({
     </KartenBlock>
     <KartenBlock label="Notizen" rechts={<Button art="leise" icon={card.note ? "edit" : "plus"} text="Notiz" disabled={!contentEnabled} onClick={() => contentEnabled ? setNoteOpen(true) : unavailable(actions.content?.reason)} />}><Notiz text={card.note ?? "Keine Auftragsnotiz hinterlegt."} bezug={<Chip text="Auftrag" ton="info" />} autor={card.assignedTo ?? "Nicht zugewiesen"} /></KartenBlock>
     <KartenBlock label="Fotos & Dokumente">
-      {card.evidence.length ? <div className="kr-docs">{card.evidence.map((entry) => <span className="kr-doc" key={entry.key}>{entry.source} · {entry.state}</span>)}</div> : <Zustand art="leer" text="Noch keine Dokumente oder Fotos vorhanden." />}
+      {card.evidence.length ? <div className="kr-docs">{card.evidence.map((entry) => <span className="kr-doc" key={entry.key}>{evidenceLabel(entry)}</span>)}</div> : <Zustand art="leer" text="Noch keine Dokumente oder Fotos vorhanden." />}
       {documentsPanel}
     </KartenBlock>
     {card.payment.kind === "available" ? <KartenBlock label="Rechnung"><Fakten zeilen={[{ k: "Zahlungsmodus", v: payment ? paymentModeLabel(payment.mode) : "Nicht belegt" }, { k: "Rechnung", v: payment?.invoiceState === "issued" ? payment.invoiceNumber ?? payment.status ?? "ausgestellt" : "noch nicht ausgestellt" }, { k: payment?.status === "bezahlt" ? "Bezahlt" : payment?.status === "teilbezahlt" ? "Noch offen" : "Offen", v: money(payment?.openAmountCents ?? null), warn: Boolean(payment?.openAmountCents) }]} />{payment?.invoiceState === "issued" && payment.invoiceId ? <Button art="sekundaer" icon="file" text="Rechnungs-PDF öffnen" onClick={openInvoicePdf} /> : null}</KartenBlock> : <KartenBlock label="Rechnung"><Zustand art={card.payment.kind === "restricted" ? "gesperrt" : "fehler"} text={card.payment.message} /></KartenBlock>}
