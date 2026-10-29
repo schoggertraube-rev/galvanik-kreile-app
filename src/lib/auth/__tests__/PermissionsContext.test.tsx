@@ -151,12 +151,12 @@ const initialRolf: AuthBootstrapState = {
 describe("identity labels and capabilities", () => {
   it("keeps browser-safe labels keyed separately from actor IDs", () => {
     expect(getProductIdentityByKey("rolf")).toEqual({
-      name: "Rolf",
+      name: "Meister",
       responsibility: "Meister",
       initials: "R",
     });
-    expect(getProductIdentityByKey("phillip").name).toBe("Phillip");
-    expect(getProductIdentityByKey("gregor").name).toBe("Gregor");
+    expect(getProductIdentityByKey("phillip").name).toBe("Werkstatt");
+    expect(getProductIdentityByKey("gregor").name).toBe("System");
   });
 
   it("derives capabilities only from granted areas", () => {

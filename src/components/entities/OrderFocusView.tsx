@@ -16,6 +16,7 @@ export function OrderFocusView({ order, onClose, onSave }: OrderFocusViewProps) 
   const [station, setStation] = useState(order.station);
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -32,6 +33,7 @@ export function OrderFocusView({ order, onClose, onSave }: OrderFocusViewProps) 
   const [isPrinting, setIsPrinting] = useState(false);
   const handlePrint = async () => {
     setIsPrinting(true);
+    setErrorMessage("");
     try {
       const base64 = await generateOrderLabel(order.id);
       const url = `data:application/pdf;base64,${base64}`;
@@ -48,7 +50,7 @@ export function OrderFocusView({ order, onClose, onSave }: OrderFocusViewProps) 
       }
     } catch (e) {
       console.error("Fehler beim Generieren der Laufkarte", e);
-      alert("Fehler beim Generieren der Laufkarte.");
+      setErrorMessage("Fehler beim Generieren der Laufkarte.");
     } finally {
       setIsPrinting(false);
     }
@@ -122,6 +124,7 @@ export function OrderFocusView({ order, onClose, onSave }: OrderFocusViewProps) 
 
       {/* Footer / Actions */}
       <div className="p-4 border-t border-neutral-gray-200 bg-white flex justify-end gap-3 shrink-0">
+        {errorMessage ? <p role="alert" className="mr-auto text-sm font-semibold text-red-700">{errorMessage}</p> : null}
         <button 
           onClick={onClose}
           className="px-6 py-2.5 text-sm font-bold text-text-muted hover:text-navy-900 hover:bg-neutral-gray-100 rounded-xl transition-colors"

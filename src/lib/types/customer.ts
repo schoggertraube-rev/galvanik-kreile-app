@@ -121,7 +121,7 @@ export interface CustomerOrderPart {
   [key: string]: unknown;
 }
 
-// MockOrder integration to avoid importing huge mock file everywhere
+// Legacy order integration without importing the large fixture file everywhere
 export interface CustomerMockOrder {
   id: string;
   orderNumber: string;

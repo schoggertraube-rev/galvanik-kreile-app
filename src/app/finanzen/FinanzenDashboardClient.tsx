@@ -16,7 +16,7 @@ interface CostItem {
   amount: number;
   interval: string; // monatlich, jährlich, einmalig, …
   category: 'fix' | 'variabel';
-  status: string; // e.g. "Demo" / "vorbereitet"
+  status: string; // z. B. "vorbereitet"
 }
 
 const FIXED_STORAGE_KEY = 'kreile_finance_fixed_costs';
@@ -50,7 +50,7 @@ function AddCostForm({ category, onAdd }: { category: 'fix' | 'variabel'; onAdd:
     e.preventDefault();
     const amt = parseFloat(amount);
     if (!name || isNaN(amt)) return;
-    onAdd({ name, amount: amt, interval, category, status: 'Demo' });
+    onAdd({ name, amount: amt, interval, category, status: 'Vorbereitet' });
     setName('');
     setAmount('');
   };
@@ -202,7 +202,7 @@ export function FinanzenDashboardClient() {
       <div>
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-navy-900 font-serif">Finanz-Zentrale</h2>
-          <span className="bg-accent-orange/10 text-accent-orange text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">Demo / In Vorbereitung</span>
+          <span className="bg-accent-orange/10 text-accent-orange text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">In Vorbereitung</span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -366,7 +366,7 @@ export function FinanzenDashboardClient() {
           <div className="bg-warning-yellow/10 border border-warning-yellow/30 rounded-xl p-4 flex gap-3">
             <Info className="w-5 h-5 text-warning-yellow shrink-0 mt-0.5" />
             <div>
-              <h4 className="font-bold text-navy-900">Demo / Noch nicht angebunden</h4>
+              <h4 className="font-bold text-navy-900">Noch nicht angebunden</h4>
               <p className="text-sm text-text-muted">Das Buchhaltungs-Backend verarbeitet noch keine echten Zahlungseingänge.</p>
             </div>
           </div>
@@ -383,7 +383,7 @@ export function FinanzenDashboardClient() {
           </div>
           
           <div>
-            <h4 className="font-bold mb-3 border-b border-neutral-gray-200 pb-2">Größte offene Kunden (Demo)</h4>
+            <h4 className="font-bold mb-3 border-b border-neutral-gray-200 pb-2">Größte offene Kunden (Vorbereitung)</h4>
             <ul className="space-y-3">
               <li className="bg-bg-app-soft p-3 rounded-lg flex justify-between items-center border border-neutral-gray-100">
                 <div><p className="font-bold">Metallbau Müller</p><p className="text-xs text-text-muted">Rechnung R-2026-041</p></div>
@@ -481,7 +481,7 @@ export function FinanzenDashboardClient() {
       <DetailOverlay open={activeOverlay === "excel_export"} onClose={closeOverlay} title="Lexware / Excel CSV-Export" subtitle="Einfacher Datenexport als Tabelle.">
         <div className="space-y-6 text-navy-900">
           <div>
-            <h4 className="font-bold mb-3 border-b border-neutral-gray-200 pb-2">Vorschau: Rechnungsjournal (Demo)</h4>
+            <h4 className="font-bold mb-3 border-b border-neutral-gray-200 pb-2">Vorschau: Rechnungsjournal (Vorbereitung)</h4>
             <div className="overflow-x-auto border border-neutral-gray-200 rounded-lg">
               <table className="w-full text-xs text-left whitespace-nowrap">
                 <thead className="bg-bg-app-soft text-text-muted uppercase">
@@ -561,7 +561,7 @@ export function FinanzenDashboardClient() {
           <div className="bg-warning-yellow/10 border border-warning-yellow/30 rounded-xl p-4 flex gap-3 mb-6">
             <AlertTriangle className="w-5 h-5 text-warning-yellow shrink-0 mt-0.5" />
             <div>
-              <h4 className="font-bold text-navy-900">Demo / Fallback</h4>
+              <h4 className="font-bold text-navy-900">Vorbereitung / Ersatzanzeige</h4>
               <p className="text-sm text-text-muted">Das System hat aktuell noch keinen Zugriff auf echte Fixkosten und Fremdleistungen. Alle Zahlen sind Platzhalter.</p>
             </div>
           </div>
@@ -677,13 +677,13 @@ export function FinanzenDashboardClient() {
           </div>
           <div className="bg-white border-2 border-dashed border-neutral-gray-300 p-6 rounded-xl flex flex-col items-center justify-center text-center">
             <QrCode className="w-16 h-16 text-neutral-gray-400 mb-2" />
-            <span className="font-bold text-navy-900">Demo-QR-Code</span>
+            <span className="font-bold text-navy-900">QR-Code in Vorbereitung</span>
             <span className="text-xs text-text-muted mt-1">Ein echter Checkout ist noch nicht angebunden.</span>
           </div>
           
           <div className="pt-4 border-t border-neutral-gray-200 flex justify-end">
             <button disabled className="w-full bg-navy-900 text-white font-bold py-3 rounded-xl opacity-50 cursor-not-allowed" title="Zahlung vorbereiten (in Entwicklung)">
-              Zahlung vorbereiten (Demo)
+              Zahlung vorbereiten
             </button>
           </div>
         </div>
@@ -734,7 +734,7 @@ export function FinanzenDashboardClient() {
                   <span className="text-xs bg-white border border-neutral-gray-200 px-2 py-1 rounded">Noch 150 € offen</span>
                 </div>
                 <div className="flex gap-2">
-                  <button disabled className="text-xs font-bold bg-navy-900 text-white px-3 py-1.5 rounded-lg opacity-50 cursor-not-allowed" title="In Vorbereitung">Zahlung klären (Demo)</button>
+                  <button disabled className="text-xs font-bold bg-navy-900 text-white px-3 py-1.5 rounded-lg opacity-50 cursor-not-allowed" title="In Vorbereitung">Zahlung klären (in Vorbereitung)</button>
                 </div>
               </li>
               <li className="bg-bg-app-soft p-3 rounded-xl border border-neutral-gray-200">

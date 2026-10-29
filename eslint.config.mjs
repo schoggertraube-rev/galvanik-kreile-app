@@ -86,6 +86,10 @@ const eslintConfig = defineConfig([
       "h16/no-role-identity-comparison": "error",
       "h16/no-role-permissions": "error",
       "h16/no-person-names": "error",
+      "h16/no-silent-error": "error",
+      "h16/no-alert": "error",
+      "h16/no-placeholder-text": "error",
+      "h16/no-tenant-literal": "error",
     },
   },
   {
@@ -100,6 +104,16 @@ const eslintConfig = defineConfig([
       "h16/no-role-identity-comparison": "off",
       "h16/no-role-permissions": "off",
       "h16/no-person-names": "off",
+      "h16/no-silent-error": "off",
+      "h16/no-alert": "off",
+      "h16/no-placeholder-text": "off",
+      "h16/no-tenant-literal": "off",
+    },
+  },
+  {
+    files: ["src/lib/tenant.ts"],
+    rules: {
+      "h16/no-tenant-literal": "off",
     },
   },
   {

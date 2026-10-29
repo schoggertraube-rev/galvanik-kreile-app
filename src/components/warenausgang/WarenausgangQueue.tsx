@@ -57,9 +57,11 @@ export function WarenausgangQueue({ allOrders }: WarenausgangQueueProps) {
   }, [allOrders, finishedOrders]);
 
   const [isGeneratingNote, setIsGeneratingNote] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const handleGenerateNote = async (customerName: string, custOrders: OperationalOrder[]) => {
     setIsGeneratingNote(customerName);
+    setErrorMessage("");
     try {
       const orderIds = custOrders.map(o => o.id);
       const base64 = await generateDeliveryNote(orderIds);
@@ -76,7 +78,7 @@ export function WarenausgangQueue({ allOrders }: WarenausgangQueueProps) {
       }
     } catch (e) {
       console.error("Fehler beim Generieren des Lieferscheins", e);
-      alert("Fehler beim Generieren des Lieferscheins.");
+      setErrorMessage("Fehler beim Generieren des Lieferscheins.");
     } finally {
       setIsGeneratingNote(null);
     }
@@ -88,6 +90,7 @@ export function WarenausgangQueue({ allOrders }: WarenausgangQueueProps) {
         <span>{finishedOrders.length} Aufträge im Warenausgang</span>
         <span>Nach Kunde gruppiert</span>
       </div>
+      {errorMessage ? <p role="alert" className="text-sm font-semibold text-danger-red">{errorMessage}</p> : null}
 
       {groupedOrders.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-2xl border border-neutral-gray-100 shadow-sm text-text-muted text-sm font-medium">
@@ -132,7 +135,7 @@ export function WarenausgangQueue({ allOrders }: WarenausgangQueueProps) {
                         title="Zahlungslink-Versand in Vorbereitung"
                       >
                         <Mail className="w-4 h-4" />
-                        Zahlungs-QR anfordern (Demo)
+                        Zahlungs-QR anfordern (in Vorbereitung)
                       </button>
                   </div>
                 )}
@@ -171,7 +174,7 @@ export function WarenausgangQueue({ allOrders }: WarenausgangQueueProps) {
                     title="Zahlungslink-Versand in Vorbereitung"
                   >
                     <Mail className="w-4 h-4" />
-                    Zahlungs-QR anfordern (Demo)
+                    Zahlungs-QR anfordern (in Vorbereitung)
                   </button>
               )}
             </div>

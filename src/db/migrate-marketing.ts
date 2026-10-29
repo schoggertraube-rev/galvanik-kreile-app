@@ -9,7 +9,7 @@ async function main() {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS "marketing_touchpoints" (
         "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        "tenant_id" varchar(50) NOT NULL DEFAULT 'galvanik-kreile',
+        "tenant_id" varchar(50) NOT NULL,
         "aktion_id" text,
         "kanal" text NOT NULL,
         "titel" text,
@@ -24,7 +24,7 @@ async function main() {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS "kosten_posten" (
         "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-        "tenant_id" varchar(50) NOT NULL DEFAULT 'galvanik-kreile',
+        "tenant_id" varchar(50) NOT NULL,
         "modul" text NOT NULL DEFAULT 'marketing',
         "kanal" text,
         "kampagne_id" text,

@@ -12,20 +12,23 @@ export function MassenzuordnungModal({ isOpen, onClose, onAssign, count }: Masse
   const [konto, setKonto] = useState("");
   const [kostenstelle, setKostenstelle] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   if (!isOpen) return null;
 
   const handleSubmit = async () => {
     if (!konto && !kostenstelle) {
-      alert("Bitte wählen Sie mindestens ein Konto oder eine Kostenstelle.");
+      setErrorMessage("Bitte wählen Sie mindestens ein Konto oder eine Kostenstelle.");
       return;
     }
+    setErrorMessage("");
     setIsSubmitting(true);
     try {
       await onAssign(konto, kostenstelle);
       onClose();
-    } catch {
-      alert("Fehler bei der Zuordnung");
+    } catch (error) {
+      console.error("MASS_ASSIGNMENT_FAILED", error);
+      setErrorMessage("Fehler bei der Zuordnung.");
     } finally {
       setIsSubmitting(false);
     }
@@ -41,6 +44,7 @@ export function MassenzuordnungModal({ isOpen, onClose, onAssign, count }: Masse
           </button>
         </div>
         <div className="p-6 space-y-4">
+          {errorMessage ? <p role="alert" className="text-sm font-semibold text-red-700">{errorMessage}</p> : null}
           <div>
             <label className="block text-sm font-semibold text-neutral-700 mb-1">Sachkonto (SKR03)</label>
             <select

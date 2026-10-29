@@ -5,6 +5,10 @@ const H16_RULES = {
   "h16/no-role-identity-comparison": "error",
   "h16/no-role-permissions": "error",
   "h16/no-person-names": "error",
+  "h16/no-silent-error": "error",
+  "h16/no-alert": "error",
+  "h16/no-placeholder-text": "error",
+  "h16/no-tenant-literal": "error",
 };
 
 function runSelftest() {
@@ -13,6 +17,10 @@ function runSelftest() {
     ["const denied = session.role === 'developer';", "h16/no-role-identity-comparison"],
     ["const ROLE_PERMISSIONS = {};", "h16/no-role-permissions"],
     ["const displayName = 'Rolf';", "h16/no-person-names"],
+    ["fetchValue().catch(() => null);", "h16/no-silent-error"],
+    ["alert('Fehler');", "h16/no-alert"],
+    ["const label = 'Demo';", "h16/no-placeholder-text"],
+    ["const tenant = 'galvanik-kreile';", "h16/no-tenant-literal"],
   ];
 
   for (const [source, expectedRule] of cases) {
