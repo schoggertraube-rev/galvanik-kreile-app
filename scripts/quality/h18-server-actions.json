@@ -2,6 +2,15 @@
   "version": 1,
   "inventorySha256": "99a408082c4162011cc0f5989aad0b389c004511dfdc2c4b9e7efa5d552750c4",
   "testedWriteActions": {
+    "src/app/actions/invoices.actions.ts#cancelInvoiceAction": [
+      "src/test/h18_invoice_actions.integration.test.ts"
+    ],
+    "src/app/actions/invoices.actions.ts#issueInvoiceAction": [
+      "src/test/h18_invoice_actions.integration.test.ts"
+    ],
+    "src/app/actions/invoices.actions.ts#setInvoiceItemPricesAction": [
+      "src/test/h18_invoice_actions.integration.test.ts"
+    ],
     "src/app/actions/orders.actions.ts#changeOrderPromisedDueDateAction": [
       "src/test/h18_settings_actions.integration.test.ts"
     ],
@@ -56,9 +65,6 @@
     "src/app/actions/intakeDraft.actions.ts#discardIntakeDraftAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/intakeDraft.actions.ts#saveIntakeDraftAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/inventory.actions.ts#createInventoryMovementAction": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/invoices.actions.ts#cancelInvoiceAction": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/invoices.actions.ts#issueInvoiceAction": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/invoices.actions.ts#setInvoiceItemPricesAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/items.actions.ts#createItemDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/items.actions.ts#deleteItemDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/items.actions.ts#updateItemDb": "H18.8 Bestand ohne Replay-Action-Test",
