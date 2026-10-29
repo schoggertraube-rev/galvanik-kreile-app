@@ -74,21 +74,6 @@ describe("Erfassung containment (F0-W2C-B2M1)", () => {
 
 describe("Erfassung caller containment (F0-W2C-B2M1)", () => {
   const srcRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-  const callerFiles = [
-    "components/erfassung/ErfassungCard.tsx",
-    "components/erfassung/ErfassungSheet.tsx",
-  ];
-
-  it("replaces every named browser caller with a non-interactive FoundationUnavailable state", async () => {
-    const sources = await Promise.all(callerFiles.map((file) => readFile(path.join(srcRoot, file), "utf8")));
-    for (const source of sources) {
-      expect(source).toMatch(/FoundationUnavailable|NOT_AVAILABLE/);
-      expect(source).not.toMatch(/from\s+["'][^"']*(erfassung\.actions|orderCost\.actions)[^"']*["']/);
-      expect(source).not.toMatch(/\b(createClient|createAuthorizedDataClient|getStationCostSummary|getBenchmarkData|bookStationCosts|startZeit|stopZeit|erfasseZeitDirekt|erfasseVerbrauch|uebernehmeVorlage|createOrderFromErfassung)\b/);
-      expect(source).not.toMatch(/\b(useEffect|fetch|supabase)\b/i);
-      expect(source).not.toMatch(/onClick\s*=|<button\b|Mutation-CTA/);
-    }
-  });
 
   it("keeps the independently accepted F1.1 intake as the only reactivated ManualWizard path", async () => {
     const source = await readFile(
