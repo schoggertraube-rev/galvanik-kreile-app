@@ -458,7 +458,7 @@ describe("createOrderIntake", () => {
     const { createOrderIntake } = await import("../orderIntakeCommand");
     await expect(createOrderIntake(input)).resolves.toEqual({
       code: "UNAVAILABLE",
-      message: "Wareneingang konnte nicht sicher gespeichert werden.",
+      message: "Wareneingang konnte nicht sicher gespeichert werden. Fehlercode: ORDER_INTAKE_WRITE_FAILED.",
     });
   });
 });
