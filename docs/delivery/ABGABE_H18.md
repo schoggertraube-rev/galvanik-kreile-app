@@ -2,15 +2,15 @@
 
 Stand: 29.10.2026
 
-Produktkandidat und Exact-SHA-Preview: `1324d8bef162ab0b67eec46ced8231930a2db910`
+Produktkandidat und Exact-SHA-Preview: `e8e87e4686dc9d76406c94ba9c65c68b7b15d914`
 
-Produktbaum: `400f872531dfbe9d7665862e073b6e68deaa9c0f` (identisch mit dem letzten Code-Commit `d133f45b`)
+Produktbaum: `1789bd53122185425edf6fb6040497c16f80aee7`
 
-CI: PASS, [agentur-gate 40926306955](https://github.com/schoggertraube-rev/galvanik-kreile-app/actions/runs/40926306955)
+CI: PASS, [agentur-gate 40931976966](https://github.com/schoggertraube-rev/galvanik-kreile-app/actions/runs/40931976966)
 
-Exact-SHA-Preview: [https://galvanik-kreile-werkstatt-byz3i5r9n.vercel.app](https://galvanik-kreile-werkstatt-byz3i5r9n.vercel.app), Vercel-Status `READY`, Deployment `7420182725`
+Exact-SHA-Preview: [https://galvanik-kreile-werkstatt-a133kmzd9.vercel.app](https://galvanik-kreile-werkstatt-a133kmzd9.vercel.app), Vercel-Status `READY`, Deployment `7420972568`
 
-`1324d8be` ist der einmalige, baumgleiche Preview-Neustart nach einem fehlgeschlagenen Vercel-Lauf des Code-SHA `d133f45b`. Zwischen beiden Commits gibt es keine Code- oder Dateidifferenz.
+`e8e87e46` enthält zusätzlich die Korrektur aus dem Owner-Klicktest: Rechte werden in der Matrix zuerst vorgemerkt, ausdrücklich über „Rechte speichern“ geschrieben und anschließend mit einem vier Sekunden sichtbaren V1.1-Toast bestätigt. „Code ändern“ blieb unverändert.
 
 ## C1a.1 – Dev-Migration und Gleichstand
 
@@ -21,7 +21,7 @@ Exact-SHA-Preview: [https://galvanik-kreile-werkstatt-byz3i5r9n.vercel.app](http
 
 ## C1a.2–C1a.7 – Befunde und Korrekturen
 
-2. **Wartung bleibt ausschließlich für developer fest.** Die gemeinsame Rollenprüfung sperrt `wartung` für alle anderen Rollen (`src/lib/auth/authorizationContract.ts:105`), die Oberfläche verwendet dieselbe Prüfung (`src/app/settings/SettingsAdminClient.tsx:353`), und der Server weist den Schreibversuch mit einem fachlichen Code zurück (`src/modules/fundament/server/systemSettingsPort.ts:362`). Der echte Action-/DB-Test steht in `src/test/h18_settings_actions.integration.test.ts:225`.
+2. **Wartung bleibt ausschließlich für developer fest; andere Rechte werden bewusst gespeichert.** Die gemeinsame Rollenprüfung sperrt `wartung` für alle anderen Rollen (`src/lib/auth/authorizationContract.ts:105`), die Oberfläche verwendet dieselbe Prüfung (`src/app/settings/SettingsAdminClient.tsx:405`), und der Server weist den Schreibversuch mit einem fachlichen Code zurück (`src/modules/fundament/server/systemSettingsPort.ts:362`). Erlaubte Haken werden zunächst als Änderung vorgemerkt (`src/app/settings/SettingsAdminClient.tsx:287`), erst über „Rechte speichern“ an die bestehende Action gesendet (`:301`, `:409`) und danach als Toast bestätigt (`:331`). Der echte UI-/Action-/DB-Test klickt denselben Speicherweg und prüft weiterhin `app_user_rights.granted_by` (`src/test/h18_settings_client.integration.test.tsx:231`).
 3. **„Der Tag“ unterscheidet vorhandene Aufträge von fehlendem Handlungsbedarf.** Die Projektion ermittelt, ob überhaupt Aufträge vorhanden sind (`src/components/home/OfficeHomeClient.tsx:74`), und zeigt bei acht Aufträgen ohne aktuelle Aufgabe „Nichts offen“ statt „Noch keine Aufträge erfasst“ (`:129`). Der echte `getOrdersDb`-/Replay-DB-Test steht in `src/test/h18_settings_actions.integration.test.ts:416`.
 4. **Umbenennen aktualisiert `app_users.updated_at`.** Alle drei vorhandenen Update-Zweige setzen jetzt `updated_at=statement_timestamp()` (`src/modules/fundament/server/systemSettingsPort.ts:245`). Der echte `saveManagedUserAction`-/DB-Test prüft Name, Ereignis und vorwärts laufenden Zeitstempel (`src/test/h18_settings_actions.integration.test.ts:274`).
 5. **Zahlungsbestätigung ist am Handlungsort sichtbar und im Verlauf belegt.** Der Dialog schließt nur nach erfolgreicher Action; Fehler bleiben im Dialog (`src/modules/orders/ui/OrderCardView.tsx:278`). Die Karte liest das persistierte Zahlungsereignis (`src/app/orders/OrderCardAppAdapter.tsx:133`) und zeigt es im Verlauf (`src/modules/orders/ui/OrderCardView.tsx:226`). Der echte `confirmPaymentAction`-/DB-Test prüft `payments` und `PAYMENT_CONFIRMED_V1` (`src/test/h18_settings_actions.integration.test.ts:467`).
@@ -30,7 +30,7 @@ Exact-SHA-Preview: [https://galvanik-kreile-werkstatt-byz3i5r9n.vercel.app](http
 
 ## Replay-DB-, Wächter- und CI-Nachweis
 
-- Lokal und in CI: 13/13 H18-Integrationstests grün. Sie rufen die echten Server-Actions über die echte Sessionkette gegen eine frisch aus allen Migrationen aufgebaute lokale Replay-DB auf und prüfen die betroffenen DB-Zeilen.
+- Lokal und in CI: 16/16 H18-Tests grün, davon 13 Actiontests und 3 Client-/Actiontests. Sie rufen die echten Server-Actions über die echte Sessionkette gegen eine frisch aus allen Migrationen aufgebaute lokale Replay-DB auf und prüfen die betroffenen DB-Zeilen.
 - CI `h16-schema`: vollständiger Migrations-Replay, H12-SQL-Verträge und alle H18-Actiontests grün.
 - CI `agentur-gate`: Delivery-Verträge, TypeScript, H16, H18.8 und vollständiger Unit-Lauf grün.
 - H18.8: Inventar 249 Server-Actions, 100 Schreib-Actions, 6 mit dem neuen echten Replay-Actiontest, 94 explizite Bestandsausnahmen. Eine neue ungetestete Schreib-Action macht CI rot; die Ausnahmeliste darf nur schrumpfen.
@@ -40,7 +40,7 @@ Exact-SHA-Preview: [https://galvanik-kreile-werkstatt-byz3i5r9n.vercel.app](http
 
 1. `supabase_migrations.schema_migrations` endet bei `20261029173000`; Repo und Dev-DB enthalten dieselben 61 Migrationen.
 2. A-2026-0001 öffnet ohne `ORDER_CARD_INTAKE_RECEIPT_INVALID`; Liefertermin und neuester gültiger Terminänderungsbeleg stimmen überein.
-3. Ein Wartungs-Haken für Rolf oder eine andere Nicht-developer-Rolle bleibt deaktiviert; es entsteht keine entsprechende Zeile in `public.app_user_rights`.
+3. Ein Wartungs-Haken für Rolf oder eine andere Nicht-developer-Rolle bleibt deaktiviert; es entsteht keine entsprechende Zeile in `public.app_user_rights`. Ein erlaubter Haken verändert die DB erst nach „Rechte speichern“; danach enthält die Zeile `granted_by` = Rolfs `app_users.id`.
 4. Bei vorhandenen Aufträgen ohne aktuelle Aufgabe zeigt „Der Tag“ „Nichts offen“; die acht Auftragszeilen bleiben unverändert.
 5. Nach einer Login-Umbenennung enthält `public.app_users.full_name` den neuen Namen und `updated_at` ist größer als vor dem Klick.
 6. Nach einer neuen erfolgreichen Zahlungsbestätigung existieren die passende Zeile in `public.payments` und genau das zugehörige `public.order_events`-Ereignis `PAYMENT_CONFIRMED_V1`; die Oberfläche zeigt Erfolg und Verlaufseintrag.
@@ -49,8 +49,8 @@ Exact-SHA-Preview: [https://galvanik-kreile-werkstatt-byz3i5r9n.vercel.app](http
 
 ## Owner-Klickweg
 
-1. [Exact-SHA-Preview öffnen](https://galvanik-kreile-werkstatt-byz3i5r9n.vercel.app) und mit einem bestehenden Zugang anmelden.
-2. Als Rolf `Einstellungen` → `Logins & Rechte` öffnen. Erwartet: „Wartung, Stufen & Anbindungen“ ist bei Rolf und allen Nicht-developer-Logins deaktiviert; Gregors developer-Festbereich bleibt unveränderlich.
+1. [Exact-SHA-Preview öffnen](https://galvanik-kreile-werkstatt-a133kmzd9.vercel.app) und mit einem bestehenden Zugang anmelden.
+2. Als Rolf `Einstellungen` → `Logins & Rechte` öffnen, bei Phillip einen erlaubten Haken ändern und auf „Rechte speichern“ klicken. Erwartet: Vorher steht „1 Änderung noch nicht gespeichert“, die DB ändert sich erst durch den Button, danach erscheint „Recht gespeichert.“ als Popup/Toast und der Button ist wieder deaktiviert. „Wartung, Stufen & Anbindungen“ bleibt bei allen Nicht-developer-Logins deaktiviert.
 3. Einen bestehenden Nicht-owner-Login umbenennen und speichern. Erwartet: Erfolgsmeldung direkt an der Bearbeitung; Name bleibt nach Neuladen erhalten. Danach den ursprünglichen Namen wiederherstellen und beide `updated_at`-Fortschritte in der DB prüfen.
 4. Als Phillip `/` öffnen. Erwartet: Bei vorhandenen Aufträgen ohne persönliche Aufgabe steht „Nichts offen“, niemals „Noch keine Aufträge erfasst“.
 5. A-2026-0001 öffnen. Erwartet: Die Karte lädt ohne `ORDER_CARD_INTAKE_RECEIPT_INVALID`.
