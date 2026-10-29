@@ -193,12 +193,22 @@ function hashOrderIntent(input: QuoteOrderInput): string {
     clientEventId: input.clientEventId,
     customer: input.customer,
     dueDate: input.dueDate,
-    handoverMode: input.handoverMode,
-    items: input.items,
-    note: input.note,
-    paymentMode: input.paymentMode,
     termStatus: input.termStatus,
     intakeSource: input.intakeSource,
+    handoverMode: input.handoverMode,
+    items: input.items.map((item) => ({
+      catalogServiceId: item.catalogServiceId,
+      name: item.name,
+      quantity: item.quantity,
+      material: item.material,
+      surfaceRequested: item.surfaceRequested,
+      executionRequested: "offen",
+      unit: item.unit,
+      unitPriceCents: item.unitPriceCents,
+      vatRateBasisPoints: item.vatRateBasisPoints,
+    })),
+    note: input.note,
+    paymentMode: input.paymentMode,
   });
 }
 
