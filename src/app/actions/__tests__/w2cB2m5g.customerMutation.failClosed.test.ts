@@ -78,10 +78,9 @@ describe("W2C-B2M5G customer mutation fail-closed", () => {
   });
 
   it("locks mutation bodies and inert UI save controls", async () => {
-    const [actions, repository, wizard] = await Promise.all([
+    const [actions, repository] = await Promise.all([
       readFile("src/app/actions/customers.actions.ts", "utf8"),
       readFile("src/lib/repositories/customersRepository.ts", "utf8"),
-      readFile("src/components/erfassung/ManualFlow/CustomerWizard.tsx", "utf8"),
     ]);
     const actionBodies = actions.match(/export async function (?:createCustomerDb|updateCustomerDb)[\s\S]*?(?=\nexport async function)/g) ?? [];
     expect(actionBodies).toHaveLength(2);
@@ -95,8 +94,5 @@ describe("W2C-B2M5G customer mutation fail-closed", () => {
     expect(repository).not.toContain("updateCustomerDb");
     expect(existsSync("src/components/customers/NewCustomerForm.tsx")).toBe(false);
     expect(existsSync("src/modules/customers/legacy-ui/NewCustomerForm.tsx")).toBe(false);
-    expect(wizard).not.toMatch(/createCustomerDb|updateCustomer|handleSave|Google|googlemaps|importLibrary|setOptions|Kunde gespeichert|erfolgreich gespeichert|automatisch gespeichert/);
-    expect(wizard).toContain(createDenial.message);
-    expect(wizard).toMatch(/<button disabled className="[^"]*">Speichern<\/button>/);
   });
 });

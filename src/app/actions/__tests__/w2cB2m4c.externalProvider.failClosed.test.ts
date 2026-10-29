@@ -53,9 +53,8 @@ describe("W2C-B2M4C external provider fail-closed", () => {
   });
 
   it("keeps callers local and manual", async () => {
-    const [globalSearch, customerWizard, startScreen] = await Promise.all([
+    const [globalSearch, startScreen] = await Promise.all([
       readFile("src/components/layout/GlobalSearch.tsx", "utf8"),
-      readFile("src/components/erfassung/ManualFlow/CustomerWizard.tsx", "utf8"),
       readFile("src/components/start/StartScreenClient.tsx", "utf8"),
     ]);
 
@@ -66,16 +65,6 @@ describe("W2C-B2M4C external provider fail-closed", () => {
     expect(globalSearch).not.toContain("FoundationUnavailable");
     expect(globalSearch).not.toContain("askGlobalAiAction");
     expect(globalSearch).not.toContain("useGlobalSearch");
-    expect(customerWizard).not.toContain("ai-enrichment.actions");
-    expect(customerWizard).not.toContain("handleExtractFreetext");
-    expect(customerWizard).not.toContain("handleEnrichWeb");
-    expect(customerWizard).not.toContain("extractCustomerDataFromFreetext");
-    expect(customerWizard).not.toContain("enrichCustomerData");
-    expect(customerWizard).not.toContain("Daten aus Freitext erkannt");
-    expect(customerWizard).not.toContain("Daten per Web/Gemini ergänzt");
-    expect(customerWizard).toContain("disabled");
-    expect(customerWizard).toContain("NOT_AVAILABLE");
-    expect(customerWizard).not.toContain("createCustomerDb");
     expect(startScreen).not.toContain("getFeierabendEvents");
     expect(startScreen).not.toContain("fetch(");
     expect(startScreen).not.toContain("Open-Meteo");

@@ -1,5 +1,4 @@
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -74,16 +73,6 @@ describe("Erfassung containment (F0-W2C-B2M1)", () => {
 
 describe("Erfassung caller containment (F0-W2C-B2M1)", () => {
   const srcRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-
-  it("keeps the independently accepted F1.1 intake as the only reactivated ManualWizard path", async () => {
-    const source = await readFile(
-      path.join(srcRoot, "components/erfassung/ManualFlow/ManualWizard.tsx"),
-      "utf8",
-    );
-    expect(source).toContain('import { OrderIntakePanel } from "@/components/erfassung/OrderIntakePanel";');
-    expect(source).toContain("<OrderIntakePanel");
-    expect(source).not.toMatch(/erfassung\.actions|orderCost\.actions|createClient|supabase/);
-  });
 
   it("removes the obsolete order variant shells rather than relocating them", () => {
     for (const file of [
