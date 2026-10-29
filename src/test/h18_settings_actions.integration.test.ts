@@ -314,6 +314,28 @@ describe("H18 settings Server Actions against the real replay database", () => {
     });
   }, 30_000);
 
+  it("H18.8 invokes notifyAdminPinReset with the public UI handle and persists the reset event", async () => {
+    const fixture = await createFixture("pin-reset-request");
+    const { createPinLoginHandle } = await import("@/lib/server/pinLoginHandle");
+    const { notifyAdminPinReset } = await import("@/app/actions/start.actions");
+    const result = await notifyAdminPinReset(createPinLoginHandle(fixture.targetId));
+    expect(result).toEqual({ success: true });
+    const [row] = await sql<{ event_type: string; user_id: string; user_name: string }[]>`
+      SELECT event_type, payload->>'userId' AS user_id, payload->>'userName' AS user_name
+      FROM public.ui_events
+      WHERE tenant_id=${KREILE_TENANT_SLUG}
+        AND event_type='pin_reset_requested'
+        AND payload->>'userId'=${fixture.targetId}
+      ORDER BY created_at DESC
+      LIMIT 1
+    `;
+    expect(row).toEqual({
+      event_type: "pin_reset_requested",
+      user_id: fixture.targetId,
+      user_name: fixture.targetName,
+    });
+  }, 30_000);
+
   it("C1a.4 invokes saveManagedUserAction and advances updated_at when renaming a login", async () => {
     const fixture = await createFixture("rename-updated-at");
     const [before] = await sql<{ updated_at: Date }[]>`
