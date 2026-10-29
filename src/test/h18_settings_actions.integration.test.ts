@@ -380,4 +380,55 @@ describe("H18 settings Server Actions against the real replay database", () => {
     `;
     expect(row).toEqual({ id: intake.receipt.orderId, intake_term_status: "verschoben" });
   }, 30_000);
+
+  it("C1a.3 invokes getOrdersDb and distinguishes an existing order without a current action", async () => {
+    const fixture = await createFixture("today-no-action");
+    const { createOrderIntakeAction } = await import("@/app/warendurchlauf/actions");
+    const intake = await withSession(fixture, () => createOrderIntakeAction({
+      clientEventId: randomUUID(),
+      customer: { mode: "EXISTING", customerId: fixture.customerId },
+      dueDate: "2027-03-31",
+      termStatus: "bestaetigt",
+      intakeSource: "persoenlich",
+      handoverMode: "pickup",
+      paymentMode: "vorkasse",
+      note: "C1a vorhandener Auftrag ohne heutige Handlung",
+      items: [{
+        catalogServiceId: null,
+        name: "C1a ruhender Prüfkörper",
+        quantity: 1,
+        material: "Stahl",
+        surfaceRequested: "Hartchrom",
+        executionRequested: "offen",
+        unit: null,
+        unitPriceCents: null,
+        vatRateBasisPoints: null,
+      }],
+    }));
+    if (intake.code !== "OK") throw new Error(`C1A_INTAKE_FAILED:${intake.code}:${intake.message}`);
+
+    const { getOrdersDb } = await import("@/app/actions/orders.actions");
+    const listed = await withSession(fixture, () => getOrdersDb());
+    expect(listed.ok).toBe(true);
+    if (listed.ok) expect(listed.data).toContainEqual(expect.objectContaining({ id: intake.receipt.orderId }));
+
+    const dashboard = await withSession(fixture, async () => {
+      const { resolveAuthorization } = await import("@/lib/server/authorization");
+      const authorization = await resolveAuthorization();
+      if (!authorization.ok) throw new Error(`C1A_AUTH_FAILED:${authorization.reason}`);
+      const { readTodayDashboard } = await import("@/lib/server/todayDashboard");
+      return readTodayDashboard(authorization.data);
+    });
+    expect(dashboard.items.some((item) => item.orderId === intake.receipt.orderId)).toBe(false);
+
+    const [row] = await sql<{ id: string; order_number: string; due_date: string }[]>`
+      SELECT id, order_number, due_date::date::text AS due_date
+      FROM public.orders WHERE id = ${intake.receipt.orderId}
+    `;
+    expect(row).toEqual({
+      id: intake.receipt.orderId,
+      order_number: intake.receipt.orderNumber,
+      due_date: "2027-03-31",
+    });
+  }, 30_000);
 });

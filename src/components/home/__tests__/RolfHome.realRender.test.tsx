@@ -269,6 +269,13 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Noch keine Bereiche freigegeben");
   });
 
+  it("unterscheidet vorhandene Aufträge ohne heutige Handlung vom leeren Auftragsbestand", () => {
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "werkstatt", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items: [], visibleFields: [...dashboard.visibleFields] }, projection }} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Nichts offen");
+    expect(screen.queryByText("Noch keine Aufträge erfasst.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Neuer Eingang" })).not.toBeInTheDocument();
+  });
+
   it("zeigt den Teilzustand für nicht erreichbare Mails mit erneutem Laden", () => {
     render(<RolfHomeClient ports={actionPorts} model={{ kind: "empty", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items: [], visibleFields: [...dashboard.visibleFields], outlookMessage: "technischer Providertext" }, projection: { ...projection, orders: [], priority: [], recent: [], dominant: null } }} />);
     expect(screen.getByText("Mails nicht erreichbar · Zuordnen ohne Mails")).toBeInTheDocument();
