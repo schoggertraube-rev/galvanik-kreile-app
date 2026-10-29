@@ -533,8 +533,8 @@ describe("H18 settings Server Actions against the real replay database", () => {
     const fixture = await createFixture("payment-timeline");
     const invoiceId = randomUUID();
     const clientEventId = randomUUID();
-    const invoiceSerial = 10_000 + Number.parseInt(invoiceId.slice(0, 8), 16);
-    const invoiceNumber = `R-2026-${invoiceSerial}`;
+    const invoiceSerial = 10_000 + Number.parseInt(invoiceId.slice(0, 7), 16);
+    const invoiceNumber = `R-2099-${invoiceSerial}`;
     const { createOrderIntakeAction } = await import("@/app/warendurchlauf/actions");
     const intake = await withSession(fixture, () => createOrderIntakeAction({
       clientEventId: randomUUID(),
