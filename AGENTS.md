@@ -132,6 +132,10 @@ Mindestens:
 - `npm run quality:package-scope -- --base <base> --head <head> --branch <branch>`
 - `npm run quality:no-fake-production`
 - `npm run quality:module-gates`
+- `npm run quality:h16-eslint-contracts`
+- `npm run quality:h16-eslint-contracts:selftest`
+- `npm run quality:h16-schema`
+- `npm run quality:h16-schema:selftest`
 - `npx tsc --noEmit --incremental false`
 - `npm run lint:full`
 - `npm run test:unit`

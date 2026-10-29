@@ -623,6 +623,14 @@ jobs:
           npm run quality:h16-eslint-contracts
           npm run quality:h16-eslint-contracts:selftest
 
+      - name: H16 changed SQL EXPLAIN gate and self-test after full replay
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          H16_SCHEMA_BASE_REF: origin/main
+        run: |
+          npm run quality:h16-schema
+          npm run quality:h16-schema:selftest
+
       - name: H11 fixed action matrix against real server commands
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
