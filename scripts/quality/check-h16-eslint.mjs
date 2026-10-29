@@ -6,6 +6,9 @@ const RULES = {
   "h16/no-role-identity-comparison": "error",
   "h16/no-role-permissions": "error",
   "h16/no-person-names": "error",
+  "h16/no-silent-errors": "error",
+  "h16/no-alert": "error",
+  "h16/no-placeholder-text": "error",
 };
 
 function verifySample(source) {
@@ -22,6 +25,13 @@ function selftest() {
     'const denied = new Set(["developer"]).has(role);',
     'const denied = new Set(ROLE_PERMISSIONS);',
     'const denied = "Rolf";',
+    'try { work(); } catch {}',
+    'work().catch(() => null);',
+    'work().catch(() => []);',
+    'alert("Fehler");',
+    'const denied = "WIP";',
+    'const denied = "Demo";',
+    'const denied = "mock";',
   ];
   for (const source of violations) {
     const messages = verifySample(source).filter((message) => message.ruleId?.startsWith("h16/"));

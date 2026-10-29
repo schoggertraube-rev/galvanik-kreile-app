@@ -32,6 +32,54 @@ const erfassungMustNotImport = [
   "@/lib/marketing", "@/lib/marketing/*",
 ];
 
+// H16c Bestand: Jede Datei ist einzeln gebunden; diese Listen duerfen nur schrumpfen.
+const h16SilentErrorBaselineFiles = [
+  "src/app/finanzen/FinanzenDashboardClient.tsx", // H16c Bestand: leerer catch.
+  "src/components/layout/SessionWarningBanner.tsx", // H16c Bestand: leerer catch.
+  "src/hooks/useAutosaveDraft.ts", // H16c Bestand: leere catch-Fallbacks.
+  "src/lib/diagnostics/DiagnosticsContext.tsx", // H16c Bestand: leere catch-Fallbacks.
+  "src/lib/hardware/printQueue.ts", // H16c Bestand: leerer catch.
+  "src/lib/hardware/registry.ts", // H16c Bestand: leerer catch.
+  "src/lib/offline/idbSync.ts", // H16c Bestand: leere catch-Fallbacks.
+  "src/lib/search/recent.ts", // H16c Bestand: leere catch-Fallbacks.
+  "src/lib/server/communicationPort.ts", // H16c Bestand: catch auf null.
+  "src/lib/server/microsoftGraph.ts", // H16c Bestand: catch auf null.
+  "src/lib/supabase/server.ts", // H16c Bestand: leerer catch.
+  "src/lib/warendurchlaufIconResolver.ts", // H16c Bestand: leerer catch.
+  "src/lib/warnings/store.ts", // H16c Bestand: leerer catch.
+  "src/proxy.ts", // H16c Bestand: leerer catch.
+];
+
+const h16AlertBaselineFiles = [
+  "src/app/marketing/MarketingStudioClient.tsx", // H16c Bestand: alert.
+  "src/components/buchhaltung/MassenzuordnungModal.tsx", // H16c Bestand: alert.
+  "src/components/entities/OrderFocusView.tsx", // H16c Bestand: alert.
+  "src/components/kommunikation/ContextAnalysisOverlay.tsx", // H16c Bestand: alert.
+  "src/components/warenausgang/WarenausgangQueue.tsx", // H16c Bestand: alert.
+];
+
+const h16PlaceholderTextBaselineFiles = [
+  "src/app/actions/customers.actions.ts", // H16c Bestand: Demo-Datenquellenname.
+  "src/app/baeder/BaederDashboardClient.tsx", // H16c Bestand: Demo-Text.
+  "src/app/betrieb-kvp/BetriebKvpClient.tsx", // H16c Bestand: Mock-/Demo-Text.
+  "src/app/buchhaltung/BuchhaltungCockpitClient.tsx", // H16c Bestand: Demo-Text.
+  "src/app/finanzen/FinanzenDashboardClient.tsx", // H16c Bestand: Demo-Text.
+  "src/app/layout.tsx", // H16c Bestand: historische mock-Stylesheet-Pfade.
+  "src/components/admin/AdminDashboard.tsx", // H16c Bestand: Demo-Text.
+  "src/components/admin/DataImportCenter.tsx", // H16c Bestand: Demo-Text.
+  "src/components/buchhaltung/BelegUploadOverlay.tsx", // H16c Bestand: Demo-Text.
+  "src/components/kommunikation/ContextAnalysisOverlay.tsx", // H16c Bestand: Mock-/Demo-Text.
+  "src/components/warenausgang/WarenausgangQueue.tsx", // H16c Bestand: Demo-Text.
+  "src/lib/buchhaltung/providers/MockBuchhaltungProvider.ts", // H16c Bestand: Mock-Text.
+  "src/lib/buchhaltung/stufe2/mocks.ts", // H16c Bestand: Mock-Text.
+  "src/lib/demoDataGenerator.ts", // H16c Bestand: Demo-Text.
+  "src/lib/server/orderIntakeRead.ts", // H16c Bestand: Demo-Datenquellenname.
+  "src/lib/validation/orderSchema.ts", // H16c Bestand: Mock-Datenquellenname.
+  "src/modules/werkstatt/ui/WerkstattLoading.tsx", // H16c Bestand: historische mock-Klasse.
+  "src/modules/werkstatt/ui/WerkstattView.tsx", // H16c Bestand: WIP-Test-ID.
+  "src/ui/kr/WipMenge.tsx", // H16c Bestand: WIP-Klassen.
+];
+
 // ── Positive Fassade (D-ARCH-008 Naht 2 / S1): Fremdmodul nur ueber public.ts ──
 // Editor-Feedback; die verbindliche Pruefung (auch relative Tiefimporte, dynamic
 // import, vi.mock, eigenes Modul nur relativ) ist scripts/quality/check-module-gates.mjs.
@@ -93,6 +141,9 @@ const eslintConfig = defineConfig([
       "h16/no-role-identity-comparison": "error",
       "h16/no-role-permissions": "error",
       "h16/no-person-names": "error",
+      "h16/no-silent-errors": "error",
+      "h16/no-alert": "error",
+      "h16/no-placeholder-text": "error",
       "no-restricted-imports": [
         "error",
         { patterns: [modulesFacadePattern, nonExecutableReferencePattern] },
@@ -112,7 +163,22 @@ const eslintConfig = defineConfig([
       "h16/no-role-identity-comparison": "off",
       "h16/no-role-permissions": "off",
       "h16/no-person-names": "off",
+      "h16/no-silent-errors": "off",
+      "h16/no-alert": "off",
+      "h16/no-placeholder-text": "off",
     },
+  },
+  {
+    files: h16SilentErrorBaselineFiles,
+    rules: { "h16/no-silent-errors": "off" },
+  },
+  {
+    files: h16AlertBaselineFiles,
+    rules: { "h16/no-alert": "off" },
+  },
+  {
+    files: h16PlaceholderTextBaselineFiles,
+    rules: { "h16/no-placeholder-text": "off" },
   },
   {
     files: [
