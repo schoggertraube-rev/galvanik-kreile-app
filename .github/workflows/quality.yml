@@ -374,12 +374,31 @@ jobs:
         run: ./node_modules/.bin/supabase db reset --local --no-seed --version 20260817120000
 
       - name: W3/F1.2 order-station command, receipt, and private read-model integration
+        shell: bash
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           W3_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           W4_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           SUPABASE_SERVICE_ROLE_KEY: ""
-        run: npx vitest run src/test/w3_order_station.integration.test.ts
+        run: |
+          set -euo pipefail
+          # This job proves the immutable F1.2 schema contract. Run it with the
+          # matching source snapshot; current product code is exercised again
+          # after the complete migration replay below.
+          F1_2_SOURCE_SHA="c64d460e11733a966d9fbaa2a120eb8c30a61989"
+          CURRENT_SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+          F1_2_TEST_PATH="src/test/w3_order_station.integration.test.ts"
+          F1_2_TEST_BLOB="1bbe44fb54ed2a5feb1e3c78f8914031fa974806"
+          git cat-file -e "${F1_2_SOURCE_SHA}^{commit}"
+          git merge-base --is-ancestor "$F1_2_SOURCE_SHA" "$CURRENT_SOURCE_SHA"
+          test "$(git rev-parse "${F1_2_SOURCE_SHA}:${F1_2_TEST_PATH}")" = "$F1_2_TEST_BLOB"
+          test "$(git rev-parse "${CURRENT_SOURCE_SHA}:${F1_2_TEST_PATH}")" = "$F1_2_TEST_BLOB"
+
+          f1_2_source="$(mktemp -d)"
+          git archive "$F1_2_SOURCE_SHA" | tar -x -C "$f1_2_source"
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$f1_2_source/node_modules"
+          cd "$f1_2_source"
+          "$GITHUB_WORKSPACE/node_modules/.bin/vitest" run "$F1_2_TEST_PATH"
 
       - name: M1-source-compatible 14-migration W4-03 replay
         run: ./node_modules/.bin/supabase db reset --local --no-seed --version 20260812133649
