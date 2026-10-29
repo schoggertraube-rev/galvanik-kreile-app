@@ -57,7 +57,7 @@ describe("catalog service port", () => {
   });
 
   it("returns only the database readback after a valid upsert", async () => {
-    execute.mockResolvedValueOnce([row]);
+    execute.mockResolvedValueOnce([]).mockResolvedValueOnce([row]);
     const { saveCatalogService } = await import("../server/catalogServicePort");
     await expect(saveCatalogService(context, {
       id: row.id,
@@ -69,7 +69,7 @@ describe("catalog service port", () => {
       standardLeadTimeWorkingDays: row.standard_lead_time_working_days,
       active: true,
     })).resolves.toMatchObject({ code: "OK", service: { id: row.id, netPriceCents: 12500 } });
-    expect(execute.mock.calls[0]?.[0].text).toContain("catalog_services");
-    expect(execute.mock.calls[1]?.[0].text).toContain("catalog_service_saved");
+    expect(execute.mock.calls[0]?.[0].text).toContain("set_config('app.actor_id'");
+    expect(execute.mock.calls[1]?.[0].text).toContain("catalog_services");
   });
 });

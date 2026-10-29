@@ -58,6 +58,7 @@ export async function saveCatalogService(context: CatalogCommandContext, input: 
   const id = value.id ?? randomUUID();
   try {
     const service = await withPrivilegedTenantTransaction(context, async (tx) => {
+      await tx.execute(sql`SELECT set_config('app.actor_id', ${context.actorId}, true)`);
       const rows = await tx.execute<Row>(sql`
         INSERT INTO public.catalog_services (id, tenant_id, name, surface, unit, net_price_cents, vat_rate_basis_points, standard_lead_time_working_days, active)
         VALUES (${id}::uuid, ${context.tenantId}, ${value.name}, ${value.surface}, ${value.unit}, ${value.netPriceCents}, ${value.vatRateBasisPoints}, ${value.standardLeadTimeWorkingDays}, ${value.active})
@@ -69,16 +70,7 @@ export async function saveCatalogService(context: CatalogCommandContext, input: 
         RETURNING id, name, surface, unit, net_price_cents, vat_rate_basis_points, standard_lead_time_working_days, active
       `);
       if (rows.length !== 1 || !rows[0]) throw new Error("CATALOG_WRITE_FAILED");
-      const saved = map(rows[0]);
-      await tx.execute(sql`
-        INSERT INTO public.ui_events (tenant_id, event_type, payload)
-        VALUES (
-          ${context.tenantId},
-          'catalog_service_saved',
-          jsonb_build_object('actorId', ${context.actorId}::text, 'serviceId', ${saved.id}::text)
-        )
-      `);
-      return saved;
+      return map(rows[0]);
     });
     return { code: "OK" as const, service };
   } catch (error) {

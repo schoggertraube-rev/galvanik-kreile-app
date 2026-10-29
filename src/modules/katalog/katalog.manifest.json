@@ -10,11 +10,11 @@
     "@/modules/katalog/server-public#saveCatalogService"
   ],
   "capabilities": ["catalog:read", "catalog:manage"],
-  "migrations": ["20261025182920_s1_p1_datenfundament.sql"],
+  "migrations": ["20261025182920_s1_p1_datenfundament.sql", "20261030001500_catalog_service_audit_event.sql"],
   "viewsFunctions": [],
   "ownsTables": ["public.catalog_services"],
   "storagePurposes": [],
-  "events": { "emits": [], "consumes": [] },
+  "events": { "emits": ["catalog_service_saved"], "consumes": [] },
   "config": {},
   "dependencies": []
 }
