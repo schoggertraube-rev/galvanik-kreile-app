@@ -32,7 +32,7 @@ export type GraphInboxMessage = {
   receivedAt: string;
   preview: string;
   body: string;
-  hasAttachments: boolean;
+  hasAttachments: boolean | null;
 };
 
 export type GraphMailAttachment = {

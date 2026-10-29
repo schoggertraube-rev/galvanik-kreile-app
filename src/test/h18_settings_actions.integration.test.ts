@@ -647,7 +647,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
     });
   }, 30_000);
 
-  it("C1a.7 invokes listLinkedOutlookMailsAction and returns only the mail assigned to the requested order", async () => {
+  it("C1a.7 invokes listOutlookInboxAction and returns only the mail assigned to the requested order", async () => {
     const fixture = await createFixture("linked-order-mail");
     await sql`
       INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
@@ -705,18 +705,20 @@ describe("H18 settings Server Actions against the real replay database", () => {
          'incoming', 'email', 'Fremder Rückläufer.', 'Outlook <mailer@example.test>', ${fixture.actorId}::uuid)
     `;
 
-    const { listLinkedOutlookMailsAction } = await import("@/app/actions/communications.actions");
-    const result = await withSession(fixture, () => listLinkedOutlookMailsAction({
+    const { listOutlookInboxAction } = await import("@/app/actions/communications.actions");
+    const result = await withSession(fixture, () => listOutlookInboxAction({
       targetType: "ORDER",
       targetId: requestedOrder.receipt.orderId,
     }));
     expect(result).toEqual({
       code: "OK",
       data: [expect.objectContaining({
-        threadId: requestedThreadId,
-        graphMessageId: "graph-requested",
+        id: "graph-requested",
         subject: "Anfrage zum Auftrag",
         body: "Bitte Auftrag prüfen.",
+        senderName: "Kunde A",
+        senderAddress: "kunde-a@example.test",
+        hasAttachments: null,
       })],
     });
 

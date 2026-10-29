@@ -28,18 +28,13 @@ export async function getMicrosoftGraphStatusAction() {
     : { code: "IN_KLAERUNG" as const, message: "Microsoft 365 · In Klärung. Die Preview-Zugangsdaten sind noch nicht vollständig verbunden." };
 }
 
-export async function listOutlookInboxAction() {
+export async function listOutlookInboxAction(input?: TargetInput) {
   noStore();
   const authorizationResult = await authorization();
   if (!authorizationResult.ok) return { code: "UNAUTHENTICATED" as const, message: authorizationResult.message };
-  return readCommunicationInbox(authorizationResult.data);
-}
-
-export async function listLinkedOutlookMailsAction(input: TargetInput) {
-  noStore();
-  const authorizationResult = await authorization();
-  if (!authorizationResult.ok) return { code: "UNAUTHENTICATED" as const, message: authorizationResult.message };
-  return readLinkedCommunicationMessages(authorizationResult.data, input);
+  return input
+    ? readLinkedCommunicationMessages(authorizationResult.data, input)
+    : readCommunicationInbox(authorizationResult.data);
 }
 
 export async function attachOutlookMailAction(input: TargetInput & { graphMessageId: string }) {

@@ -33,15 +33,6 @@ function logCommunicationFailure(code: string, error: unknown) {
 }
 
 export type CommunicationReceipt = { threadId: string; messageId: string | null; customerId: string; orderId: string | null; recordedAt: string; replayed: boolean; attachmentsImported?: number; attachmentsSkipped?: number; attachmentWarning?: string };
-export type LinkedCommunicationMessage = {
-  threadId: string;
-  graphMessageId: string;
-  subject: string | null;
-  body: string | null;
-  senderLabel: string | null;
-  receivedAt: string;
-};
-
 function canRead(auth: AuthorizationSnapshot) {
   return auth.areas?.includes("mails") === true;
 }
@@ -88,7 +79,7 @@ export async function readCommunicationInbox(auth: AuthorizationSnapshot): Promi
 export async function readLinkedCommunicationMessages(
   auth: AuthorizationSnapshot,
   input: { targetType: TargetType; targetId: string },
-): Promise<Result<LinkedCommunicationMessage[]>> {
+): Promise<Result<GraphInboxMessage[]>> {
   if (!validTarget(input?.targetType, input?.targetId)) {
     return { code: "VALIDATION_ERROR", message: "Mail-Zuordnung ist ungültig." };
   }
@@ -127,13 +118,18 @@ export async function readLinkedCommunicationMessages(
       if (!/^[0-9a-f-]{36}$/i.test(row.thread_id) || !graphMessageId || graphMessageId.length > 1024) {
         throw new Error("COMMUNICATION_LINKED_ROW_INVALID");
       }
+      const sender = /^(.+?)\s+<([^<>\s]+)>$/.exec(row.summary?.trim() ?? "");
+      const body = row.body?.trim() || "fehlt";
       return {
-        threadId: row.thread_id,
-        graphMessageId,
-        subject: row.subject?.trim() || null,
-        body: row.body?.trim() || null,
-        senderLabel: row.summary?.trim() || null,
+        id: graphMessageId,
+        internetMessageId: null,
+        subject: row.subject?.trim() || "fehlt",
+        body,
+        preview: body,
+        senderName: sender?.[1]?.trim() || "fehlt",
+        senderAddress: sender?.[2]?.trim() || "fehlt",
         receivedAt: iso(row.received_at),
+        hasAttachments: null,
       };
     });
     return { code: "OK", data };
