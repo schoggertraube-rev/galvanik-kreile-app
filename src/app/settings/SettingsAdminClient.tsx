@@ -307,7 +307,7 @@ export function SettingsAdminClient({
           <label>Name<input data-spec-id="rechte.name" value={newLogin.fullName} onChange={(event) => setNewLogin({ ...newLogin, fullName: event.target.value, shortCode: suggestedShortCode(event.target.value) })} /></label>
           <label>Kürzel<input data-spec-id="rechte.kuerzel" value={newLogin.shortCode} maxLength={3} onChange={(event) => setNewLogin({ ...newLogin, shortCode: event.target.value.toUpperCase() })} /></label>
           <label>Bezeichnung (optional)<input data-spec-id="rechte.bezeichnung" value={newLogin.designation} onChange={(event) => setNewLogin({ ...newLogin, designation: event.target.value })} /></label>
-          <label>Rechte wie<select data-spec-id="rechte.vorlage" value={newLogin.template} onChange={(event) => setNewLogin({ ...newLogin, template: event.target.value as typeof newLogin.template })}><option value="werkstatt">wie Phillip</option><option value="meister">wie Rolf</option><option value="leer">leer</option></select></label>
+          <label>Rechte wie<select data-spec-id="rechte.vorlage" value={newLogin.template} onChange={(event) => setNewLogin({ ...newLogin, template: event.target.value as typeof newLogin.template })}><option value="werkstatt">wie Werkstatt</option><option value="meister">wie Meister</option><option value="leer">leer</option></select></label>
           <label>Code<input data-spec-id="rechte.code" type="password" inputMode="numeric" value={newLogin.pin} onChange={(event) => setNewLogin({ ...newLogin, pin: event.target.value.replace(/\D/g, "").slice(0, 4) })} /></label>
           <button data-spec-id="rechte.login-speichern" disabled={pending} onClick={createLogin}>Login speichern</button>
           <button type="button" disabled={pending} onClick={() => setCreateLoginOpen(false)}>Abbrechen</button>
@@ -318,7 +318,10 @@ export function SettingsAdminClient({
         <summary>Inaktive Logins ({inactiveUsers.length})</summary>
         <div className={styles.userList}>{inactiveUsers.map((user) => renderUserCard(user, true))}</div>
       </details> : null}
-      {canManageLogins ? <div className={styles.rightsTable} role="region" aria-label="Rechtematrix"><table><thead><tr><th>Bereich</th>{activeUsers.map((user) => <th key={user.id} aria-label={`${user.shortCode} ${user.fullName}`}><span className={styles.rightsPerson}><span>{user.shortCode}</span><strong>{user.fullName}</strong>{user.role === "developer" ? <small>Einsicht & Systempflege</small> : null}</span></th>)}</tr></thead><tbody>{ACCESS_AREAS.map((area) => <tr key={area}><th><strong>{ACCESS_AREA_LABELS[area].text}</strong>{ACCESS_AREA_LABELS[area].sub ? <small>{ACCESS_AREA_LABELS[area].sub}</small> : null}</th>{activeUsers.map((user) => {
+      {canManageLogins ? <div className={styles.rightsTable} role="region" aria-label="Rechtematrix"><table><thead><tr><th>Bereich</th>{activeUsers.map((user) => <th key={user.id} aria-label={`${user.shortCode} ${user.fullName}`}><span className={styles.rightsPerson}><span>{user.shortCode}</span><strong>{user.fullName}</strong>{
+        // eslint-disable-next-line h16/no-role-identity-comparison -- erlaubt H11c: Anzeige Einsicht & Systempflege
+        user.role === "developer" ? <small>Einsicht & Systempflege</small> : null
+      }</span></th>)}</tr></thead><tbody>{ACCESS_AREAS.map((area) => <tr key={area}><th><strong>{ACCESS_AREA_LABELS[area].text}</strong>{ACCESS_AREA_LABELS[area].sub ? <small>{ACCESS_AREA_LABELS[area].sub}</small> : null}</th>{activeUsers.map((user) => {
         const fixed = user.fixedAreas.includes(area);
         const blocked = !isAccessAreaAllowedForRole(user.role, area);
         return <td key={user.id} className={blocked ? styles.blockedRight : undefined}><input aria-label={`${ACCESS_AREA_LABELS[area].text} für ${user.fullName}`} type="checkbox" checked={!blocked && user.areas.includes(area)} disabled={pending || fixed || blocked} onChange={(event) => toggleArea(user.id, area, event.target.checked, user.isCurrent)} />{blocked ? <small>Entwickler, keine Geschäftsvorgänge</small> : fixed ? <small>fest</small> : null}</td>;

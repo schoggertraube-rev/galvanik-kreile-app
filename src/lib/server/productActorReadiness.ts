@@ -185,6 +185,7 @@ export async function resolveProductActorAuthorization(): Promise<ProductActorAu
       supportReference,
     };
   }
+  // eslint-disable-next-line h16/no-role-identity-comparison -- erlaubt H11c: Sitzungsprüfung
   if (actor.role !== authorization.data.role) {
     const supportReference = reportAuthorizationFailure(
       "SESSION_ACTOR_ROLE_MISMATCH",
@@ -200,10 +201,7 @@ export async function resolveProductActorAuthorization(): Promise<ProductActorAu
   return {
     ok: true,
     data: {
-      authorization: {
-        ...authorization.data,
-        displayName: actor.identity.name,
-      },
+      authorization: authorization.data,
       actor,
     },
   };

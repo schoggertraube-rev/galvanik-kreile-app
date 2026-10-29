@@ -48,9 +48,9 @@
   "storagePurposes": [],
   "events": { "emits": [], "consumes": [] },
   "config": {
-    "KREILE_ROLF_APP_USER_ID": "Server-only exact AppUser binding for Rolf",
-    "KREILE_PHILLIP_APP_USER_ID": "Server-only exact AppUser binding for Phillip",
-    "KREILE_GREGOR_APP_USER_ID": "Server-only exact AppUser binding for Gregor"
+    "KREILE_ROLF_APP_USER_ID": "Server-only exact office AppUser binding",
+    "KREILE_PHILLIP_APP_USER_ID": "Server-only exact workshop AppUser binding",
+    "KREILE_GREGOR_APP_USER_ID": "Server-only exact maintenance AppUser binding"
   },
   "dependencies": []
 }

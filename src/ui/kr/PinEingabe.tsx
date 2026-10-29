@@ -1,7 +1,7 @@
 'use client';
 import { Button } from './Button';
 export interface PinEingabeProps { laenge: number; meldung?: string; onZiffer: (z: string) => void; onLoeschen: () => void; onNeu: () => void; onEmailAnmeldung?: () => void; }
-/** Login /start: PIN, ohne Slogan/Wetter/Provider-Platzhalter (D-UI-CORE-002 A). Gregor: E-Mail-Einstieg. */
+/** Login /start: PIN, ohne Slogan/Wetter/Provider-Platzhalter (D-UI-CORE-002 A). Wartung: E-Mail-Einstieg. */
 export function PinEingabe({ laenge, meldung, onZiffer, onLoeschen, onNeu, onEmailAnmeldung }: PinEingabeProps) {
   return (
     <div className="kr-login"><div className="kr-login-karte">

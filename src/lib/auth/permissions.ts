@@ -20,24 +20,6 @@ export async function requireAdminOrDeveloper() {
 }
 
 /**
- * Returns true if the user is a developer.
- */
-export async function isDeveloper(): Promise<boolean> {
-  const role = await getCurrentRole();
-  return role === "developer";
-}
-
-/**
- * Asserts that the current user is a developer.
- */
-export async function requireDeveloper() {
-  const authorized = await isDeveloper();
-  if (!authorized) {
-    redirect("/");
-  }
-}
-
-/**
  * Checks if the current user has the specified permission.
  */
 export async function hasPermission(permissionKey: PermissionKey): Promise<boolean> {

@@ -1,4 +1,4 @@
-/** Icons aus den Seitenreferenzen (Rolf V8 · Phillip V4 · Auftragskarte V8 · Kundenkarte V2), Strich 2px */
+/** Icons aus den Seitenreferenzen (Büro · Werkstatt · Auftragskarte · Kundenkarte), Strich 2px */
 const ICONS = {
   sun:'<circle cx="12" cy="12" r="4.2"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/>',
   list:'<path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>',

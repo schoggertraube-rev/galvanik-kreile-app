@@ -650,7 +650,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     render(<GlobalCreateFlow ports={value} />);
 
     await openIntent("CUSTOMER");
-    expect(screen.getByRole("alert")).toHaveTextContent("Rolf ist für diesen Vorgang zuständig");
+    expect(screen.getByRole("alert")).toHaveTextContent("Eine freigegebene Person ist für diesen Vorgang zuständig");
     fireEvent.click(screen.getByRole("button", { name: "Zum sicheren Profilwechsel" }));
     await waitFor(() => expect(value.switchProfile).toHaveBeenCalledTimes(1));
     expect(value.createCustomer).not.toHaveBeenCalled();

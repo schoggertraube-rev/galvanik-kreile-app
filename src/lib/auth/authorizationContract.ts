@@ -79,14 +79,31 @@ const DEVELOPER_BUSINESS_AREAS = [
   "mails",
 ] as const satisfies readonly AccessArea[];
 
+const BLOCKED_ACCESS_AREAS_BY_ROLE: Record<AppRole, readonly AccessArea[]> = {
+  developer: DEVELOPER_BUSINESS_AREAS,
+  admin: [],
+  meister: [],
+  buero: [],
+  werkstatt: [],
+  readonly: [],
+};
+
+const FIXED_ACCESS_AREAS_BY_ROLE: Record<AppRole, readonly AccessArea[]> = {
+  developer: ROLE_ACCESS_AREA_TEMPLATES.developer,
+  admin: [],
+  meister: [],
+  buero: [],
+  werkstatt: [],
+  readonly: [],
+};
+
 /**
  * Roles are only defaults, except for the developer safety boundary: a
  * developer is not an employee and can never receive business operations.
  * Both the matrix and server authorization use this policy.
  */
 export function isAccessAreaAllowedForRole(role: AppRole, area: AccessArea): boolean {
-  return role !== "developer"
-    || !(DEVELOPER_BUSINESS_AREAS as readonly AccessArea[]).includes(area);
+  return !BLOCKED_ACCESS_AREAS_BY_ROLE[role].includes(area);
 }
 
 export function normalizeAccessAreasForRole(
@@ -97,7 +114,7 @@ export function normalizeAccessAreasForRole(
 }
 
 export function getFixedAccessAreasForRole(role: AppRole): readonly AccessArea[] {
-  return role === "developer" ? ROLE_ACCESS_AREA_TEMPLATES.developer : [];
+  return FIXED_ACCESS_AREAS_BY_ROLE[role];
 }
 
 const ACCESS_AREA_PERMISSIONS: Record<AccessArea, readonly PermissionKey[]> = {
@@ -122,19 +139,6 @@ export function getPermissionsForAreas(areas: readonly AccessArea[]): readonly P
 
 export type ProductIdentityKey = "rolf" | "phillip" | "gregor";
 
-/** Product labels are separate from the authenticated actor and role contract. */
-export type ProductIdentityByKey = {
-  rolf: { name: "Rolf"; responsibility: "Meister"; initials: "R" };
-  phillip: { name: "Phillip"; responsibility: "Werkstatt"; initials: "P" };
-  gregor: {
-    name: "Gregor";
-    responsibility: "Systemadministrator";
-    initials: "G";
-  };
-};
-
-export type ProductIdentity = ProductIdentityByKey[ProductIdentityKey];
-
 export const ROLE_LABELS: Record<AppRole, string> = {
   developer: "Entwickler",
   admin: "Administrator",
@@ -150,17 +154,4 @@ export function isAppRole(value: unknown): value is AppRole {
 
 export function getRoleLabel(role: AppRole): string {
   return ROLE_LABELS[role] || role;
-}
-
-const PRODUCT_IDENTITIES: ProductIdentityByKey = {
-  rolf: { name: "Rolf", responsibility: "Meister", initials: "R" },
-  phillip: { name: "Phillip", responsibility: "Werkstatt", initials: "P" },
-  gregor: { name: "Gregor", responsibility: "Systemadministrator", initials: "G" },
-};
-
-/** Browser-safe label lookup. Actor/configuration validation is server-only. */
-export function getProductIdentityByKey<Key extends ProductIdentityKey>(
-  key: Key,
-): ProductIdentityByKey[Key] {
-  return PRODUCT_IDENTITIES[key];
 }

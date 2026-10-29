@@ -10,11 +10,11 @@ export interface HandlungsAktion { text: string; /** Kurzlabel fürs Handy */ ku
   /** V1.1: markiert „Später“ (öffnet Zeitwahl V8 S1) – für Fokuseintrag, Taste s und Wischen links */ spaeter?: boolean; }
 export interface HandlungsEintragProps {
   art: HandlungsArt; id?: string; titel: string; titelKurz?: string; meta?: string; metaKurz?: string;
-  /** Delegiert von Person (z. B. „Rolf“) – ersetzt das Art-Kurzlabel */
+  /** Delegiert von Person – ersetzt das Art-Kurzlabel */
   von?: string;
   /** Erste Aktion = Primäraktion (1 Tipp). Handy: nur erste + Menü „Weitere“. */
   aktionen?: HandlungsAktion[];
-  /** Nach Aktion: Statuszeile statt Knöpfen (z. B. „bei Phillip · Frist 11:30“) */
+  /** Nach Aktion: Statuszeile statt Knöpfen (z. B. „bei Werkstatt · Frist 11:30“) */
   status?: { text: string; ton?: 'laedt' | 'rot' | 'info'; icon?: IconName; aktion?: { text: string; specId?: string; onClick: () => void } };
   geraet: Geraet; onOeffnen?: () => void; onWeitere?: () => void;
   /** V1.1 B1: dringendster Punkt oben, etwas größer; genau eine Hauptaktion + „Später“ + weitere */
@@ -78,7 +78,7 @@ export function HandlungsEintrag(p: HandlungsEintragProps) {
 }
 export interface HandlungsListeProps {
   eintraege: Array<Omit<HandlungsEintragProps, 'geraet'> & { key: string }>; geraet: Geraet;
-  /** Nur Phillip V4: „Heute sichern“ (kanonisch). Rolf/Gregor: ohne Label. */
+  /** Nur Werkstatt-Variante: „Heute sichern“ (kanonisch). Andere Varianten: ohne Label. */
   label?: string; zustand?: DatenZustand; texte?: ZustandTexte; /** Handy/Tablet: max. sichtbare Einträge (inkl. Fokus), Rest fließend aufklappbar */ max?: number;
   /** V1.1 B1: erster offener Eintrag (ohne Status) wird Fokuseintrag. Kein Zähler „1/n“ (steht in der Lage-Leiste). */
   fokus?: boolean;

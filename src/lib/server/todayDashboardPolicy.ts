@@ -108,6 +108,15 @@ const TEMPLATE_LAYOUTS: Record<"meister" | "werkstatt" | "developer" | "leer", A
   leer: [{ field: "action", column: "left" }],
 };
 
+const TEMPLATE_KEY_BY_ROLE: Record<AppRole, keyof typeof TEMPLATE_LAYOUTS> = {
+  developer: "developer",
+  admin: "meister",
+  meister: "meister",
+  buero: "meister",
+  werkstatt: "werkstatt",
+  readonly: "leer",
+};
+
 export function parseTodayLayout(value: unknown): TodayLayoutItem[] | null {
   if (!Array.isArray(value) || value.length < 1 || value.length > TODAY_LAYOUT_FIELDS.size) return null;
   const parsed: TodayLayoutItem[] = [];
@@ -132,13 +141,7 @@ export function filterTodayLayout(layout: TodayLayoutItem[], allowed: ReadonlySe
 }
 
 export function defaultTodayLayout(role: AppRole, allowed: ReadonlySet<TodayLayoutField>): TodayLayoutItem[] {
-  const template = role === "meister" || role === "buero" || role === "admin"
-    ? TEMPLATE_LAYOUTS.meister
-    : role === "werkstatt"
-      ? TEMPLATE_LAYOUTS.werkstatt
-      : role === "developer"
-        ? TEMPLATE_LAYOUTS.developer
-        : TEMPLATE_LAYOUTS.leer;
+  const template = TEMPLATE_LAYOUTS[TEMPLATE_KEY_BY_ROLE[role]];
   return filterTodayLayout(template.map((item, order) => ({ ...item, order })), allowed);
 }
 

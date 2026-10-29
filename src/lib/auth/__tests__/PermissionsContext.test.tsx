@@ -14,7 +14,6 @@ import {
 } from "../PermissionsContext";
 import {
   getPermissionsForAreas,
-  getProductIdentityByKey,
 } from "../authorizationContract";
 
 const navigation = vi.hoisted(() => ({
@@ -149,16 +148,6 @@ const initialRolf: AuthBootstrapState = {
 };
 
 describe("identity labels and capabilities", () => {
-  it("keeps browser-safe labels keyed separately from actor IDs", () => {
-    expect(getProductIdentityByKey("rolf")).toEqual({
-      name: "Rolf",
-      responsibility: "Meister",
-      initials: "R",
-    });
-    expect(getProductIdentityByKey("phillip").name).toBe("Phillip");
-    expect(getProductIdentityByKey("gregor").name).toBe("Gregor");
-  });
-
   it("derives capabilities only from granted areas", () => {
     expect(getPermissionsForAreas(["kunden"])).toEqual(
       expect.arrayContaining(["perm_data_customers", "perm_view_customers"]),

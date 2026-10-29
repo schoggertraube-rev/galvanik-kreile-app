@@ -2,6 +2,7 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 import unusedImports from "eslint-plugin-unused-imports";
+import h16Plugin from "./scripts/quality/eslint-h16-plugin.mjs";
 
 // ── Module-boundary import rules (APP-STRUCTURE-001) ──────────────
 // These rules enforce zero-violation boundaries from OWNERSHIP_MAP.md.
@@ -73,6 +74,7 @@ const eslintConfig = defineConfig([
   {
     plugins: {
       "unused-imports": unusedImports,
+      h16: h16Plugin,
     },
     rules: {
       "unused-imports/no-unused-imports": "error",
@@ -88,10 +90,40 @@ const eslintConfig = defineConfig([
   {
     files: ["src/**/*.ts", "src/**/*.tsx"],
     rules: {
+      "h16/no-role-identity-comparison": "error",
+      "h16/no-role-permissions": "error",
+      "h16/no-person-names": "error",
       "no-restricted-imports": [
         "error",
         { patterns: [modulesFacadePattern, nonExecutableReferencePattern] },
       ],
+    },
+  },
+  {
+    files: [
+      "src/**/*.test.ts",
+      "src/**/*.test.tsx",
+      "src/**/__tests__/**/*.ts",
+      "src/**/__tests__/**/*.tsx",
+      "src/test/**/*.ts",
+      "src/test/**/*.tsx",
+    ],
+    rules: {
+      "h16/no-role-identity-comparison": "off",
+      "h16/no-role-permissions": "off",
+      "h16/no-person-names": "off",
+    },
+  },
+  {
+    files: [
+      "src/app/settings/SettingsAdminClient.tsx",
+      "src/lib/server/appSession.ts",
+      "src/lib/server/productActorReadiness.ts",
+      "src/lib/server/productActorReadinessCore.ts",
+    ],
+    linterOptions: {
+      noInlineConfig: false,
+      reportUnusedDisableDirectives: "error",
     },
   },
   // STAGE_1_PIN_ONLY: Dieser Override pinnt ausschliesslich den kuenftigen ESLint-Vertrag.

@@ -45,5 +45,10 @@ jobs:
       - name: Type-check
         run: npx tsc --noEmit
 
+      - name: H16 rights and identity contracts
+        run: |
+          npm run quality:h16-eslint-contracts:selftest
+          npm run quality:h16-eslint-contracts
+
       - name: Run unit tests
         run: npm run test:unit

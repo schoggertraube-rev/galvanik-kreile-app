@@ -13,7 +13,7 @@ export interface ZeitstrahlZeile {
 export interface ZeitstrahlGruppe { key: string; titel: string; zeilen: ZeitstrahlZeile[]; }
 export interface ZeitstrahlProps { gruppen: ZeitstrahlGruppe[]; /** Jetzt-Linie in der ersten Gruppe, z. B. „08:12“ */ jetzt?: string; zustand?: DatenZustand; texte?: ZustandTexte; }
 /** V1.1 C1 (Owner-Umschalter, Standard = Kacheln): „Heute & Woche“ ersetzt Kacheln Termine + Heute raus.
- *  Rolf-Startseite: keine Beträge, kein Kassieren (§6.9). Phillip: ohne jede Geld-Info – Meta liefert die App entsprechend. */
+ *  Büro-Startseite: keine Beträge, kein Kassieren (§6.9). Werkstatt: ohne jede Geld-Info – Meta liefert die App entsprechend. */
 export function Zeitstrahl({ gruppen, jetzt, zustand = 'daten', texte }: ZeitstrahlProps) {
   const leer = zustand === 'daten' && gruppen.every(g => g.zeilen.length === 0);
   return (
