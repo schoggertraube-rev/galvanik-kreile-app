@@ -234,7 +234,9 @@ describe("H18 settings client surfaces with real Server Action responses", () =>
       await renderSettings(fixture, "/orders");
       expect(screen.getByRole("link", { name: "Schließen" })).toHaveAttribute("href", "/orders");
       fireEvent.click(screen.getByRole("checkbox", { name: `Aufträge & Werkstatt für ${fixture.target.fullName}` }));
-      await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Recht ist sofort wirksam."), { timeout: 20_000 });
+      expect(screen.getByText("1 Änderung noch nicht gespeichert")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Rechte speichern" }));
+      await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Recht gespeichert."), { timeout: 20_000 });
     });
     const [row] = await sql<{ granted_by: string }[]>`
       SELECT granted_by::text FROM public.app_user_rights

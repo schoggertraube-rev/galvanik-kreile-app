@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
   changeOwnPinAction,
   createManagedUserAction,
@@ -23,10 +23,26 @@ import {
 import type { CatalogService } from "@/modules/katalog/public";
 import { runServerAction } from "@/lib/client/runServerAction";
 import { Dialog, DialogAktionsmeldung, type DialogMeldung } from "@/ui/kr/Dialog";
+import { Toast } from "@/ui/kr/Toast";
 import styles from "./settings.module.css";
 
 type Tab = "company" | "catalog" | "users";
 type Result = { code: string; message?: string };
+type RightChange = { userId: string; area: AccessArea; granted: boolean; isCurrent: boolean };
+
+function rightChangeKey(userId: string, area: AccessArea): string {
+  return `${userId}:${area}`;
+}
+
+function applyRightChanges(users: ManagedUser[], changes: RightChange[]): ManagedUser[] {
+  return changes.reduce((current, change) => current.map((user) => {
+    if (user.id !== change.userId) return user;
+    const areas = change.granted
+      ? [...new Set([...user.areas, change.area])]
+      : user.areas.filter((area) => area !== change.area);
+    return { ...user, areas };
+  }), users);
+}
 
 const emptyService = (): CatalogService => ({
   id: "",
@@ -94,6 +110,9 @@ export function SettingsAdminClient({
   const [editUserMessage, setEditUserMessage] = useState<DialogMeldung | null>(null);
   const [createLoginMessage, setCreateLoginMessage] = useState<DialogMeldung | null>(null);
   const [rightsMessage, setRightsMessage] = useState<DialogMeldung | null>(null);
+  const [rightChanges, setRightChanges] = useState<Record<string, RightChange>>({});
+  const [rightsToast, setRightsToast] = useState<string | null>(null);
+  const [reloadAfterRightsSave, setReloadAfterRightsSave] = useState(false);
   const [message, setMessage] = useState("");
   const [pending, startTransition] = useTransition();
   const companyReady = Object.entries(company).every(([key, value]) => key === "paymentTermDays" ? Number(value) > 0 : String(value).trim().length > 0);
@@ -103,6 +122,16 @@ export function SettingsAdminClient({
   const visibleUsers = canManageLogins ? users : currentUser ? [currentUser] : [];
   const activeUsers = visibleUsers.filter((user) => user.active);
   const inactiveUsers = visibleUsers.filter((user) => !user.active);
+  const rightChangeCount = Object.keys(rightChanges).length;
+
+  useEffect(() => {
+    if (!rightsToast) return;
+    const timeout = window.setTimeout(() => {
+      setRightsToast(null);
+      if (reloadAfterRightsSave) window.location.reload();
+    }, 4_000);
+    return () => window.clearTimeout(timeout);
+  }, [reloadAfterRightsSave, rightsToast]);
 
   const field = (key: keyof CompanySettingsInput, label: string, type = "text") => (
     <label>{label}<input type={type} value={String(company[key])} onChange={(event) => setCompany((current) => ({ ...current, [key]: type === "number" ? Number(event.target.value) : event.target.value }))} /></label>
@@ -255,28 +284,51 @@ export function SettingsAdminClient({
     </article>;
   }
 
-  function toggleArea(userId: string, area: AccessArea, granted: boolean, isCurrent: boolean) {
-    setUsers((current) => current.map((user) => user.id === userId
-      ? { ...user, areas: granted ? [...user.areas, area] : user.areas.filter((item) => item !== area) }
-      : user));
+  function draftArea(userId: string, area: AccessArea, granted: boolean, isCurrent: boolean) {
+    const persisted = users.find((user) => user.id === userId)?.areas.includes(area);
+    if (persisted === undefined) return;
+    setRightsMessage(null);
+    setRightsToast(null);
+    setRightChanges((current) => {
+      const next = { ...current };
+      const key = rightChangeKey(userId, area);
+      if (granted === persisted) delete next[key];
+      else next[key] = { userId, area, granted, isCurrent };
+      return next;
+    });
+  }
+
+  function saveRights() {
+    const changes = Object.values(rightChanges).sort((left, right) => Number(left.isCurrent) - Number(right.isCurrent));
+    if (changes.length === 0) return;
+    setRightsMessage(null);
+    setRightsToast(null);
     startTransition(async () => {
-      const execution = await runServerAction(
-        () => setManagedUserAreaAction({ userId, area, granted }),
-        "Recht speichern",
-      );
-      if (execution.ok && execution.value.code === "OK") {
-        setRightsMessage(null);
-        setMessage("Recht ist sofort wirksam.");
-        if (isCurrent) window.location.reload();
-        return;
+      const saved: RightChange[] = [];
+      for (const change of changes) {
+        const execution = await runServerAction(
+          () => setManagedUserAreaAction({ userId: change.userId, area: change.area, granted: change.granted }),
+          "Rechte speichern",
+        );
+        if (!execution.ok || execution.value.code !== "OK") {
+          setUsers((current) => applyRightChanges(current, saved));
+          setRightChanges((current) => {
+            const next = { ...current };
+            saved.forEach((item) => delete next[rightChangeKey(item.userId, item.area)]);
+            return next;
+          });
+          setRightsMessage({
+            text: execution.ok ? execution.value.message ?? "Rechte konnten nicht gespeichert werden." : execution.message,
+            ton: "fehler",
+          });
+          return;
+        }
+        saved.push(change);
       }
-      setUsers((current) => current.map((user) => user.id === userId
-        ? { ...user, areas: granted ? user.areas.filter((item) => item !== area) : [...user.areas, area] }
-        : user));
-      setRightsMessage({
-        text: execution.ok ? execution.value.message ?? "Recht konnte nicht gespeichert werden." : execution.message,
-        ton: "fehler",
-      });
+      setUsers((current) => applyRightChanges(current, saved));
+      setRightChanges({});
+      setReloadAfterRightsSave(saved.some((change) => change.isCurrent));
+      setRightsToast(saved.length === 1 ? "Recht gespeichert." : `${saved.length} Rechte gespeichert.`);
     });
   }
 
@@ -326,7 +378,7 @@ export function SettingsAdminClient({
     </div><button disabled={pending} onClick={saveService}>Leistung speichern</button><div className={styles.list}>{services.map((service) => <button key={service.id} onClick={() => setDraft(service)}><strong>{service.name}</strong><span>{service.surface} · {(service.netPriceCents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" })} / {service.unit}</span></button>)}</div></section> : null}
 
     {(canManageLogins || currentUser) && tab === "users" ? <section data-spec-id="rechte.dialog">
-      <div className={styles.sectionHeading}><div><h2>Logins & Rechte</h2><p>{canManageLogins ? "Änderungen an der Matrix wirken sofort." : "Ihr Zugang und Ihr persönlicher Code."}</p></div><Link data-spec-id="rechte.schliessen" href={returnTo ?? "/"}>Schließen</Link></div>
+      <div className={styles.sectionHeading}><div><h2>Logins & Rechte</h2><p>{canManageLogins ? "Rechte auswählen und anschließend speichern." : "Ihr Zugang und Ihr persönlicher Code."}</p></div><Link data-spec-id="rechte.schliessen" href={returnTo ?? "/"}>Schließen</Link></div>
       {canManageLogins ? <div className={styles.createLogin}>
         {createLoginOpen ? <>
           <h3>Login anlegen</h3>
@@ -345,14 +397,16 @@ export function SettingsAdminClient({
         <summary>Inaktive Logins ({inactiveUsers.length})</summary>
         <div className={styles.userList}>{inactiveUsers.map((user) => renderUserCard(user, true))}</div>
       </details> : null}
-      {canManageLogins ? <div className={styles.rightsTable} role="region" aria-label="Rechtematrix">{rightsMessage ? <DialogAktionsmeldung meldung={rightsMessage} /> : null}<table><thead><tr><th>Bereich</th>{activeUsers.map((user) => <th key={user.id} aria-label={`${user.shortCode} ${user.fullName}`}><span className={styles.rightsPerson}><span>{user.shortCode}</span><strong>{user.fullName}</strong>{
+      {canManageLogins ? <div className={styles.rightsRegion} role="region" aria-label="Rechtematrix">{rightsMessage ? <DialogAktionsmeldung meldung={rightsMessage} /> : null}<div className={styles.rightsTable}><table><thead><tr><th>Bereich</th>{activeUsers.map((user) => <th key={user.id} aria-label={`${user.shortCode} ${user.fullName}`}><span className={styles.rightsPerson}><span>{user.shortCode}</span><strong>{user.fullName}</strong>{
         // eslint-disable-next-line h16/no-role-identity-comparison -- erlaubt H11c: Anzeige Einsicht & Systempflege
         user.role === "developer" ? <small>Einsicht & Systempflege</small> : null
       }</span></th>)}</tr></thead><tbody>{ACCESS_AREAS.map((area) => <tr key={area}><th><strong>{ACCESS_AREA_LABELS[area].text}</strong>{ACCESS_AREA_LABELS[area].sub ? <small>{ACCESS_AREA_LABELS[area].sub}</small> : null}</th>{activeUsers.map((user) => {
         const fixed = user.fixedAreas.includes(area);
         const blocked = !isAccessAreaAllowedForRole(user.role, area);
-        return <td key={user.id} className={blocked ? styles.blockedRight : undefined}><input aria-label={`${ACCESS_AREA_LABELS[area].text} für ${user.fullName}`} type="checkbox" checked={!blocked && user.areas.includes(area)} disabled={pending || fixed || blocked} onChange={(event) => toggleArea(user.id, area, event.target.checked, user.isCurrent)} />{blocked ? <small>{area === "wartung" ? "nur Entwickler" : "Entwickler, keine Geschäftsvorgänge"}</small> : fixed ? <small>fest</small> : null}</td>;
-      })}</tr>)}</tbody></table></div> : null}
+        const drafted = rightChanges[rightChangeKey(user.id, area)];
+        const checked = drafted?.granted ?? user.areas.includes(area);
+        return <td key={user.id} className={blocked ? styles.blockedRight : undefined}><input aria-label={`${ACCESS_AREA_LABELS[area].text} für ${user.fullName}`} type="checkbox" checked={!blocked && checked} disabled={pending || fixed || blocked} onChange={(event) => draftArea(user.id, area, event.target.checked, user.isCurrent)} />{blocked ? <small>{area === "wartung" ? "nur Entwickler" : "Entwickler, keine Geschäftsvorgänge"}</small> : fixed ? <small>fest</small> : null}</td>;
+      })}</tr>)}</tbody></table></div><div className={styles.rightsActions}><span>{rightChangeCount === 0 ? "Keine ungespeicherten Änderungen" : rightChangeCount === 1 ? "1 Änderung noch nicht gespeichert" : `${rightChangeCount} Änderungen noch nicht gespeichert`}</span><button data-spec-id="rechte.rechte-speichern" aria-label="Rechte speichern" type="button" disabled={pending || rightChangeCount === 0} onClick={saveRights}>{pending ? "Rechte werden gespeichert …" : "Rechte speichern"}</button></div>{rightsToast ? <Toast text={rightsToast} /> : null}</div> : null}
     </section> : null}
     {ownCodeOpen ? <Dialog
       titel="Mein Code ändern"

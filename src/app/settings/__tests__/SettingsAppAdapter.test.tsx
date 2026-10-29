@@ -125,11 +125,17 @@ describe("Gregor system administration composition", () => {
     expect(screen.getAllByText("nur Entwickler")).toHaveLength(2);
 
     fireEvent.click(screen.getByLabelText("Logins & Rechte verwalten für Phillip"));
+    expect(ports.setManagedUserArea).not.toHaveBeenCalled();
+    expect(screen.getByText("1 Änderung noch nicht gespeichert")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Rechte speichern" }));
     await waitFor(() => expect(ports.setManagedUserArea).toHaveBeenCalledWith({
       userId: "33333333-3333-4333-8333-333333333333",
       area: "logins",
       granted: true,
     }));
+    expect(await screen.findByText("Recht gespeichert.")).toBeInTheDocument();
+    expect(screen.getByText("Recht gespeichert.").closest(".kr-toast")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Rechte speichern" })).toBeDisabled();
   });
 
   it("keeps Logins & Rechte open and adds a confirmed login to list and matrix", async () => {

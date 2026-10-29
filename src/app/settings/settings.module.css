@@ -206,7 +206,8 @@
 .userSummary small { color: var(--text-muted); }
 .userSummary > button { margin-left: auto; }
 .userFields { display: grid; grid-template-columns: 1.2fr .45fr 1fr .7fr auto auto; gap: var(--space-2); align-items: end; margin-top: var(--space-3); }
-.rightsTable { overflow-x: auto; margin-top: var(--space-5); }
+.rightsRegion { position: relative; margin-top: var(--space-5); }
+.rightsTable { overflow-x: auto; }
 .rightsTable table { width: 100%; border-collapse: collapse; }
 .rightsTable th, .rightsTable td { padding: var(--space-3); border-bottom: 1px solid var(--neutral-gray-100); text-align: center; }
 .rightsTable th:first-child { min-width: 260px; text-align: left; }
@@ -220,6 +221,8 @@
 .rightsPerson { display: grid; justify-items: center; gap: var(--space-1); min-width: 96px; }
 .rightsPerson > span { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 50%; background: var(--gold-100); color: var(--gold-600); font-weight: 800; }
 .rightsPerson strong { font-size: var(--font-size-sm); }
+.rightsActions { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-3); padding-top: var(--space-3); }
+.rightsActions span { color: var(--text-muted); font-size: var(--font-size-sm); }
 
 .list {
   display: grid;
