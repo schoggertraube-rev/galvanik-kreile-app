@@ -53,6 +53,15 @@
     "src/app/actions/payments.actions.ts#setPaymentModeAction": [
       "src/test/h18_workshop_actions.integration.test.ts"
     ],
+    "src/app/actions/orders.actions.ts#setExtraWorkHourlyRateAction": [
+      "src/test/h18_masterdata_actions.integration.test.ts"
+    ],
+    "src/app/actions/settings.actions.ts#saveCatalogServiceAction": [
+      "src/test/h18_masterdata_actions.integration.test.ts"
+    ],
+    "src/app/actions/settings.actions.ts#saveCompanySettingsAction": [
+      "src/test/h18_masterdata_actions.integration.test.ts"
+    ],
     "src/app/actions/settings.actions.ts#changeOwnPinAction": [
       "src/test/h18_settings_actions.integration.test.ts",
       "src/test/h18_settings_client.integration.test.tsx"
@@ -110,15 +119,12 @@
     "src/app/actions/orders.actions.ts#createOrderFromScan": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/orders.actions.ts#handBackOrderTaskAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/orders.actions.ts#reopenFrozenOrderAction": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/orders.actions.ts#setExtraWorkHourlyRateAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/orders.actions.ts#transitionOrderProcess": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/orders.actions.ts#updateOrderDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/price-lines.actions.ts#createPriceLineDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/price-lines.actions.ts#deletePriceLineDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/price-lines.actions.ts#updatePriceLineDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/settings.actions.ts#createManagedUserAction": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/settings.actions.ts#saveCatalogServiceAction": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/settings.actions.ts#saveCompanySettingsAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/settings.actions.ts#saveSalesStageFeatureAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/start.actions.ts#notifyAdminPinReset": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/systemStats.ts#runSupabaseWriteTest": "H18.8 Bestand ohne Replay-Action-Test",
