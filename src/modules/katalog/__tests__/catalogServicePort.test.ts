@@ -7,7 +7,12 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/server/privilegedDb", () => ({ withPrivilegedTenantTransaction: withTransaction }));
 vi.mock("drizzle-orm", () => ({ sql: (parts: TemplateStringsArray, ...values: unknown[]) => ({ text: parts.join("?"), values }) }));
 
-const context = { tenantId: KREILE_TENANT_SLUG, canRead: true, canManage: true };
+const context = {
+  tenantId: KREILE_TENANT_SLUG,
+  actorId: "22222222-2222-4222-8222-222222222222",
+  canRead: true,
+  canManage: true,
+};
 const row = {
   id: "11111111-1111-4111-8111-111111111111",
   name: "Verchromen",
@@ -65,5 +70,6 @@ describe("catalog service port", () => {
       active: true,
     })).resolves.toMatchObject({ code: "OK", service: { id: row.id, netPriceCents: 12500 } });
     expect(execute.mock.calls[0]?.[0].text).toContain("catalog_services");
+    expect(execute.mock.calls[1]?.[0].text).toContain("catalog_service_saved");
   });
 });

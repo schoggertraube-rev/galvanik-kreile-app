@@ -6,7 +6,7 @@ import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import type { CatalogService, SaveCatalogServiceInput } from "../public";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-export type CatalogCommandContext = { tenantId: string; canRead: boolean; canManage: boolean };
+export type CatalogCommandContext = { tenantId: string; actorId: string; canRead: boolean; canManage: boolean };
 type Row = { id: string; name: string; surface: string; unit: string; net_price_cents: number; vat_rate_basis_points: number; standard_lead_time_working_days: number; active: boolean };
 
 function map(row: Row): CatalogService {
@@ -69,7 +69,16 @@ export async function saveCatalogService(context: CatalogCommandContext, input: 
         RETURNING id, name, surface, unit, net_price_cents, vat_rate_basis_points, standard_lead_time_working_days, active
       `);
       if (rows.length !== 1 || !rows[0]) throw new Error("CATALOG_WRITE_FAILED");
-      return map(rows[0]);
+      const saved = map(rows[0]);
+      await tx.execute(sql`
+        INSERT INTO public.ui_events (tenant_id, event_type, payload)
+        VALUES (
+          ${context.tenantId},
+          'catalog_service_saved',
+          jsonb_build_object('actorId', ${context.actorId}::text, 'serviceId', ${saved.id}::text)
+        )
+      `);
+      return saved;
     });
     return { code: "OK" as const, service };
   } catch (error) {

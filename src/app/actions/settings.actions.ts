@@ -65,7 +65,7 @@ export async function readSettingsAction() {
   const [settings, catalog, hourlyRate] = await Promise.all([
     readSystemSettings(context),
     canManageCompany
-      ? listCatalogServices({ tenantId: context.tenantId, canRead: true, canManage: true }, true)
+      ? listCatalogServices({ tenantId: context.tenantId, actorId: context.actorId, canRead: true, canManage: true }, true)
       : Promise.resolve({ code: "OK" as const, services: [] }),
     canManageCompany
       ? import("@/lib/server/commands/extraWorkAdminCommand").then(({ readExtraWorkHourlyRate }) => readExtraWorkHourlyRate())
@@ -168,7 +168,7 @@ export async function changeOwnPinAction(input: { pin: string }) {
 export async function saveCatalogServiceAction(input: SaveCatalogServiceInput) {
   const resolved = await settingsContext();
   if (!resolved?.authorization.areas?.includes("einstellungen")) return { code: "FORBIDDEN" as const, message: "Leistungen dürfen nicht geändert werden." };
-  const result = await saveCatalogService({ tenantId: resolved.context.tenantId, canRead: true, canManage: true }, input);
+  const result = await saveCatalogService({ tenantId: resolved.context.tenantId, actorId: resolved.context.actorId, canRead: true, canManage: true }, input);
   if (result.code === "OK") revalidatePath("/settings");
   return result;
 }
