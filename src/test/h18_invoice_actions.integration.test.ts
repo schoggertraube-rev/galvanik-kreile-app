@@ -104,12 +104,22 @@ async function createFixture(): Promise<Fixture> {
         id, tenant_id, company_name, street, zip, city, country,
         iban, bic, bank_name, tax_id, invoice_vat_rate_basis_points,
         invoice_payment_term_days
-      ) VALUES (
+      ) SELECT
         ${settingsId}, ${KREILE_TENANT_SLUG}, 'H18 Galvanik Kreile',
         'Pruefstrasse 18', '70173', 'Stuttgart', 'Deutschland',
         'DE02120300000000202051', 'BYLADEM1001', 'H18 Testbank',
         'DE-H18-INVOICE', 1900, 14
+      WHERE NOT EXISTS (
+        SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG}
       )
+    `;
+    await transaction`
+      UPDATE public.company_settings
+      SET company_name='H18 Galvanik Kreile', street='Pruefstrasse 18', zip='70173',
+        city='Stuttgart', country='Deutschland', iban='DE02120300000000202051',
+        bic='BYLADEM1001', bank_name='H18 Testbank', tax_id='DE-H18-INVOICE',
+        invoice_vat_rate_basis_points=1900, invoice_payment_term_days=14
+      WHERE tenant_id=${KREILE_TENANT_SLUG}
     `;
     await transaction`
       INSERT INTO public.customers (
@@ -202,7 +212,10 @@ describe("H18 invoice Server Actions against the real replay database", () => {
       await transaction`
         INSERT INTO private.extra_work_hourly_rates
           (id, tenant_id, hourly_rate_cents, version, created_by, effective_at)
-        VALUES (${fixture.rateId}::uuid, ${KREILE_TENANT_SLUG}, 12000, 1, ${fixture.actorId}::uuid, now())
+        SELECT ${fixture.rateId}::uuid, ${KREILE_TENANT_SLUG}, 12000,
+          coalesce(max(version), 0) + 1, ${fixture.actorId}::uuid, now()
+        FROM private.extra_work_hourly_rates
+        WHERE tenant_id=${KREILE_TENANT_SLUG}
       `;
       await transaction`
         INSERT INTO public.events (
