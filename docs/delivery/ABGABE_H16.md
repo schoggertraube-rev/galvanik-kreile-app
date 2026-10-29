@@ -1,7 +1,9 @@
 # ABGABE H16 · Abschluss nach Prüfer-Halt
 
-Branch: `kreile/s1-p2-eingang` · PR #154  
-H16.1: `971276713a89b0638c2c5f4442d30db7c6dfb1aa`  
+Branch: `kreile/s1-p2-eingang` · PR #154
+
+H16.1: `971276713a89b0638c2c5f4442d30db7c6dfb1aa`
+
 H16.3: `a05eb82dd1fe5134c89ae85e77c5ce17ac996a14`
 
 ## Befund und Änderung
