@@ -38,9 +38,9 @@ function placeholder(expression, followingText, declarations, seen) {
   if (/^::uuid\[\]/i.test(followingText)) return "ARRAY[]";
   if (/^::uuid/i.test(followingText)) return UUID;
   if (terminalName === "id" || terminalName === "uuid" || /Id$/.test(terminalName)) return UUID;
-  if (/^::jsonb/i.test(followingText) || /(?:payload|json|data)/i.test(expressionText)) return "'{}'";
-  if (/(?:version|count|quantity|price|cents|basisPoints|rate|amount|limit|offset)/i.test(expressionText)) return "0";
-  if (/(?:active|enabled|finished|granted|include)/i.test(expressionText)) return "false";
+  if (/^::jsonb/i.test(followingText) || /(?:payload|json|data)$/i.test(terminalName) || /JSON\.stringify\b/.test(expressionText)) return "'{}'";
+  if (ts.isNumericLiteral(expression) || ts.isBinaryExpression(expression) || /(?:version|count|quantity|price|cents|basisPoints|rate|amount|limit|offset)$/i.test(terminalName)) return "0";
+  if (/^(?:true|false)$/.test(expressionText) || /(?:active|enabled|finished|granted|include)$/i.test(terminalName)) return "false";
   if (/^::(?:date|timestamp)/i.test(followingText) || /(?:date|until|at|time|timestamp)$/i.test(terminalName) || /new\s+Date\b/.test(expressionText)) return "'2026-01-01'";
   return "NULL";
 }
