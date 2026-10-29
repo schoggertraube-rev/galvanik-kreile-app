@@ -106,10 +106,47 @@ Das Register klassifiziert jede aktuell in der Dev-DB vorhandene Public-Tabelle 
 | `public.warning_event` | `bewegungsdaten` | Fachliches Warnereignis. |
 | `public.zahlung` | `?` | Verhältnis zur aktiven Zahlungswahrheit `payments` ist ungeklärt. |
 
+## Schema `private`
+
+| Tabelle | Klasse | Begründung |
+|---|---|---|
+| `private.customer_create_receipts` | `bewegungsdaten` | Receipt eines konkreten Kundenanlagevorgangs. |
+| `private.customer_number_counters` | `system` | Technischer Nummernkreis; wird nie kopiert und startet leer. |
+| `private.evidence_domain_links` | `bewegungsdaten` | Zuordnung eines Belegs zu einem fachlichen Vorgang. |
+| `private.evidence_extraction_metadata` | `bewegungsdaten` | Extraktionsnachweis zu einem konkreten Belegvorgang. |
+| `private.extra_work_catalog_positions` | `stammdaten` | Freigegebener Katalog für Mehrarbeitspositionen. |
+| `private.extra_work_hourly_rates` | `stammdaten` | Freigegebene Stundensätze für Mehrarbeit. |
+| `private.intake_drafts` | `bewegungsdaten` | Entwurf eines konkreten Eingangsvorgangs. |
+| `private.invoice_number_sequences` | `system` | Technischer Rechnungsnummernkreis; wird nie kopiert und startet leer. |
+| `private.order_freeze_corrections` | `bewegungsdaten` | Korrektur eines eingefrorenen Auftragsstands. |
+| `private.order_freezes` | `bewegungsdaten` | Eingefrorener Stand eines konkreten Auftrags. |
+| `private.order_frozen_extra_work_lines` | `bewegungsdaten` | Mehrarbeitszeilen eines eingefrorenen Auftragsstands. |
+| `private.order_intake_receipts` | `bewegungsdaten` | Receipt eines konkreten Auftragseingangs. |
+| `private.order_item_extra_work` | `bewegungsdaten` | Mehrarbeit an einer konkreten Auftragsposition. |
+| `private.order_station_evidence` | `bewegungsdaten` | Beleg für einen Stationsschritt eines Auftrags. |
+| `private.order_station_evidence_reservations` | `bewegungsdaten` | Reservierung eines Belegs für einen Stationsschritt. |
+| `private.order_task_assignment_state` | `bewegungsdaten` | Zuweisungsstand eines konkreten Auftrags. |
+| `private.quote_conversion_receipts` | `bewegungsdaten` | Receipt einer konkreten KV-Umwandlung. |
+| `private.quote_conversion_requests` | `bewegungsdaten` | Anfrage zur Umwandlung eines konkreten KV. |
+| `private.quote_create_receipts` | `bewegungsdaten` | Receipt einer konkreten KV-Anlage. |
+| `private.quote_number_counters` | `system` | Technischer KV-Nummernkreis; wird nie kopiert und startet leer. |
+| `private.quote_positions` | `bewegungsdaten` | Positionen eines konkreten KV. |
+| `private.quote_update_receipts` | `bewegungsdaten` | Receipt einer konkreten KV-Änderung. |
+| `private.quotes` | `bewegungsdaten` | Aktive KV-Vorgänge. |
+| `private.today_preferences` | `bewegungsdaten` | Personenbezogene Einstellung für den aktuellen Tagesablauf. |
+| `private.today_reminders` | `bewegungsdaten` | Erinnerung zu einem konkreten Tagesvorgang. |
+| `private.user_last_seen` | `system` | Technischer letzter Aktivitätszeitpunkt eines Logins. |
+
+## Schema `drizzle`
+
+| Tabelle | Klasse | Begründung |
+|---|---|---|
+| `drizzle.__drizzle_migrations` | `system` | Technische Historie des Drizzle-Migrationswerkzeugs; wird nicht kopiert. |
+
 ## Zählung
 
-- Public-Tabellen in der Dev-DB: **97**
-- Registerzeilen: **97**
+- Tabellen in der Dev-DB: **public 97 · private 26 · drizzle 1**
+- Registerzeilen: **124**
 - Fehlende Tabellen: **0**
 - Doppelte Tabellen: **0**
 - Zusätzliche Tabellen: **0**
