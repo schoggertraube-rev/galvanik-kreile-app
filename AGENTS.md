@@ -134,6 +134,8 @@ Mindestens:
 - `npm run quality:module-gates`
 - `npm run quality:h16-eslint-contracts:selftest`
 - `npm run quality:h16-eslint-contracts`
+- `npm run quality:f0-f2-schema:selftest`
+- `npm run quality:f0-f2-schema`
 - `npx tsc --noEmit --incremental false`
 - `npm run lint:full`
 - `npm run test:unit`
