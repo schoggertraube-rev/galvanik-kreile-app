@@ -20,13 +20,25 @@ export async function readAuxiliarySearchRecords(auth: AuthorizationSnapshot): P
   return withPrivilegedTenantTransaction(auth, async (tx) => {
     const [documents, mails, appointments] = await Promise.all([
       tx.execute<{ id:string; customer_id:string; order_id:string|null; customer_name:string; order_number:string|null; file_type:string|null; status:string; extracted_data:unknown; recorded_at:Date|string }>(sql`
-        SELECT scan.id, scan.linked_customer_id AS customer_id, scan.linked_order_id AS order_id,
-          customer.name AS customer_name, orders.order_number, scan.file_type, scan.status,
-          scan.extracted_data, coalesce(scan.original_secured_at, scan.uploaded_at) AS recorded_at
-        FROM public.scan_uploads scan
-        JOIN public.customers customer ON customer.id=scan.linked_customer_id AND customer.tenant_id=scan.tenant_id
-        LEFT JOIN public.orders orders ON orders.id=scan.linked_order_id AND orders.tenant_id=scan.tenant_id
-        WHERE scan.tenant_id=${auth.tenantId} AND scan.status IN ('secured','ocr_review')
+        SELECT evidence.source_id AS id, links.customer_id, links.order_id,
+          customer.name AS customer_name, orders.order_number,
+          evidence.original_mime_type AS file_type,
+          CASE WHEN evidence.extraction_state = 'LEGACY_RECORDED' THEN 'ocr_review' ELSE 'secured' END AS status,
+          evidence.extracted_data,
+          coalesce(evidence.original_secured_at, evidence.recorded_at) AS recorded_at
+        FROM private.v_evidence_records_v2 evidence
+        CROSS JOIN LATERAL (
+          SELECT
+            max(target ->> 'targetId') FILTER (WHERE target ->> 'targetType' = 'CUSTOMER') AS customer_id,
+            max(target ->> 'targetId') FILTER (WHERE target ->> 'targetType' = 'ORDER') AS order_id
+          FROM jsonb_array_elements(evidence.target_links) target
+        ) links
+        JOIN public.customers customer ON customer.id=links.customer_id AND customer.tenant_id=evidence.tenant_id
+        LEFT JOIN public.orders orders ON orders.id=links.order_id AND orders.tenant_id=evidence.tenant_id
+        WHERE evidence.tenant_id=${auth.tenantId}
+          AND evidence.source_kind='LEGACY_SCAN_UPLOAD'
+          AND evidence.integrity_ok IS TRUE
+          AND evidence.original_state='LEGACY_RECORDED'
         ORDER BY recorded_at DESC LIMIT 250
       `),
       tx.execute<{ id:string; customer_id:string; order_id:string|null; customer_name:string; order_number:string|null; subject:string|null; status:string|null; body:string|null; direction:string|null; recorded_at:Date|string }>(sql`
