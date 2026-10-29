@@ -8,10 +8,12 @@ type ShellPermissionSnapshot = {
   role: string | null;
   status: "authenticated" | "unauthenticated" | "error";
   error: string | null;
+  areas: string[];
   permissions: string[];
   name: string;
   initials: string;
   hasPermission: (permission: string) => boolean;
+  hasArea: (area: string) => boolean;
   refreshPermissions: () => Promise<void>;
 };
 
@@ -22,11 +24,13 @@ const boundary = vi.hoisted(() => ({
     role: "buero",
     status: "authenticated",
     error: null,
+    areas: ["auftraege", "geld", "einstellungen"],
     permissions: ["perm_view_leitstand", "perm_view_customers"],
     name: "Rolf",
     initials: "R",
     hasPermission: vi.fn((permission: string) =>
       ["perm_view_leitstand", "perm_view_customers"].includes(permission)),
+    hasArea: vi.fn((area: string) => ["auftraege", "geld", "einstellungen"].includes(area)),
     refreshPermissions: vi.fn(async () => {}),
   } as ShellPermissionSnapshot,
   parkedCallProvider: vi.fn(),
@@ -36,6 +40,9 @@ const boundary = vi.hoisted(() => ({
 }));
 
 function setPermissionSnapshot(role: string, permissions: string[]) {
+  const areas = role === "werkstatt"
+    ? ["auftraege"]
+    : ["auftraege", "geld", "einstellungen"];
   const identity = role === "werkstatt"
     ? { name: "Phillip", initials: "P" }
     : role === "admin" || role === "developer"
@@ -47,9 +54,11 @@ function setPermissionSnapshot(role: string, permissions: string[]) {
     role,
     status: "authenticated",
     error: null,
+    areas,
     permissions,
     ...identity,
     hasPermission: vi.fn((permission: string) => permissions.includes(permission)),
+    hasArea: vi.fn((area: string) => areas.includes(area)),
     refreshPermissions: vi.fn(async () => {}),
   };
 }
