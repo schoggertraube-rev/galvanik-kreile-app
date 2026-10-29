@@ -11,6 +11,15 @@
     "src/app/actions/invoices.actions.ts#setInvoiceItemPricesAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
     ],
+    "src/app/actions/customers.actions.ts#createCustomerAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/customers.actions.ts#updateCustomerCommercialAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/customers.actions.ts#updateCustomerNoteAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
     "src/app/actions/quotes.actions.ts#convertQuoteToOrderAction": [
       "src/test/h18_quote_actions.integration.test.ts"
     ],
@@ -61,11 +70,8 @@
     "src/app/actions/complaints.actions.ts#createComplaint": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/complaints.actions.ts#resolveComplaint": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/complaints.actions.ts#updateComplaint": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/customers.actions.ts#createCustomerAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/customers.actions.ts#createCustomerDb": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/customers.actions.ts#updateCustomerCommercialAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/customers.actions.ts#updateCustomerDb": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/customers.actions.ts#updateCustomerNoteAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/domainAttachments.actions.ts#analyzeDomainAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/domainAttachments.actions.ts#attachIntakeDraftAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/domainAttachments.actions.ts#finalizeDomainAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
