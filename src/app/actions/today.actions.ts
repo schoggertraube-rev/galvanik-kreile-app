@@ -15,7 +15,12 @@ export async function saveTodayPreferencesAction(layout: TodayLayoutItem[]) {
   const authorization = await auth();
   if (!authorization.ok) return authorization.result;
   try { return await saveTodayPreferences(authorization.data, layout); }
-  catch { return { code: "UNAVAILABLE" as const, message: "Die Feldauswahl konnte nicht sicher gespeichert werden." }; }
+  catch (error) {
+    console.error("[TODAY_PREFERENCES_SAVE_FAILED]", {
+      message: error instanceof Error ? error.message.slice(0, 200) : "UNKNOWN",
+    });
+    return { code: "UNAVAILABLE" as const, message: "Die Feldauswahl konnte nicht sicher gespeichert werden. Fehlercode: TODAY_PREFERENCES_SAVE_FAILED." };
+  }
 }
 
 export async function saveTodayReminderAction(input: { itemKey: string; mode: "afternoon" | "tomorrow" | "after_due"; dueDate?: string }) {

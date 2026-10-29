@@ -206,11 +206,26 @@ export async function saveTodayPreferences(auth: AuthorizationSnapshot, value: u
   const allowed = allowedTodayFields(auth);
   if (!normalized || normalized.some((item) => !allowed.has(item.field))) return { code: "VALIDATION_ERROR" as const, message: "Feldanordnung ist ungültig oder nicht erlaubt." };
   const visible = normalized.map((item) => item.field).filter((field): field is TodayVisibleField => field !== "action");
-  await withPrivilegedTenantTransaction(auth, (tx) => tx.execute(sql`
-    INSERT INTO private.today_preferences (tenant_id, actor_id, visible_fields, layout)
-    VALUES (${auth.tenantId}, ${auth.userId}::uuid, ${visible}::text[], ${JSON.stringify(normalized)}::jsonb)
-    ON CONFLICT (tenant_id, actor_id) DO UPDATE SET visible_fields=EXCLUDED.visible_fields, layout=EXCLUDED.layout, updated_at=statement_timestamp()
-  `));
+  await withPrivilegedTenantTransaction(auth, async (tx) => {
+    await tx.execute(sql`
+      INSERT INTO private.today_preferences (tenant_id, actor_id, visible_fields, layout)
+      VALUES (
+        ${auth.tenantId},
+        ${auth.userId}::uuid,
+        ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(visible)}::jsonb)),
+        ${JSON.stringify(normalized)}::jsonb
+      )
+      ON CONFLICT (tenant_id, actor_id) DO UPDATE SET visible_fields=EXCLUDED.visible_fields, layout=EXCLUDED.layout, updated_at=statement_timestamp()
+    `);
+    await tx.execute(sql`
+      INSERT INTO public.ui_events (tenant_id, event_type, payload)
+      VALUES (
+        ${auth.tenantId},
+        'today_preferences_saved',
+        jsonb_build_object('actorId', ${auth.userId}::text)
+      )
+    `);
+  });
   return { code: "OK" as const };
 }
 
