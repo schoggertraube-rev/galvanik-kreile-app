@@ -84,6 +84,9 @@
       "src/test/h18_settings_actions.integration.test.ts",
       "src/test/h18_settings_client.integration.test.tsx"
     ],
+    "src/app/actions/settings.actions.ts#createManagedUserAction": [
+      "src/test/h18_settings_actions.integration.test.ts"
+    ],
     "src/app/actions/settings.actions.ts#saveManagedUserAction": [
       "src/test/h18_settings_actions.integration.test.ts",
       "src/test/h18_settings_client.integration.test.tsx"
@@ -91,6 +94,12 @@
     "src/app/actions/settings.actions.ts#setManagedUserAreaAction": [
       "src/test/h18_settings_actions.integration.test.ts",
       "src/test/h18_settings_client.integration.test.tsx"
+    ],
+    "src/app/actions/today.actions.ts#saveTodayPreferencesAction": [
+      "src/test/h18_settings_actions.integration.test.ts"
+    ],
+    "src/app/actions/today.actions.ts#saveTodayReminderAction": [
+      "src/test/h18_settings_actions.integration.test.ts"
     ],
     "src/app/warendurchlauf/actions.ts#createOrderIntakeAction": [
       "src/test/h18_settings_actions.integration.test.ts"
@@ -136,12 +145,9 @@
     "src/app/actions/price-lines.actions.ts#createPriceLineDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/price-lines.actions.ts#deletePriceLineDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/price-lines.actions.ts#updatePriceLineDb": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/settings.actions.ts#createManagedUserAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/settings.actions.ts#saveSalesStageFeatureAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/start.actions.ts#notifyAdminPinReset": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/systemStats.ts#runSupabaseWriteTest": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/today.actions.ts#saveTodayPreferencesAction": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/today.actions.ts#saveTodayReminderAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/tracking.actions.ts#logUiEvent": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/buchhaltung/actions.ts#assignBelegeBatchAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/buchhaltung/actions.ts#createBelegAction": "H18.8 Bestand ohne Replay-Action-Test",

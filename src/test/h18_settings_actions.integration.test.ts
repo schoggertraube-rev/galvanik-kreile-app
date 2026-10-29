@@ -271,6 +271,49 @@ describe("H18 settings Server Actions against the real replay database", () => {
     expect(row).toEqual({ full_name: "Rolf Neuer Name", granted_by: fixture.actorId });
   }, 30_000);
 
+  it("H18.8 invokes createManagedUserAction and reloads the persisted login with event", async () => {
+    const fixture = await createFixture("create-login");
+    const { createManagedUserAction, readSettingsAction } = await import("@/app/actions/settings.actions");
+    const created = await withSession(fixture, () => createManagedUserAction({
+      fullName: "Phillip H18 Neu",
+      shortCode: "HN",
+      designation: "Werkstatt",
+      template: "werkstatt",
+      pin: "6842",
+    }));
+    expect(created.code).toBe("OK");
+    if (created.code !== "OK") throw new Error(`H18_CREATE_LOGIN_FAILED:${created.code}:${created.message}`);
+    const [row] = await sql<{
+      full_name: string;
+      role: string;
+      rights_count: number;
+      event_type: string;
+      actor_id: string;
+    }[]>`
+      SELECT users.full_name, users.role,
+        (SELECT count(*)::integer FROM public.app_user_rights rights
+         WHERE rights.tenant_id=users.tenant_id AND rights.user_id=users.id) AS rights_count,
+        event.event_type, event.payload->>'actorId' AS actor_id
+      FROM public.app_users users
+      JOIN public.ui_events event ON event.tenant_id=users.tenant_id
+        AND event.event_type='login_created'
+        AND event.payload->>'userId'=users.id::text
+      WHERE users.id=${created.user.id}::uuid AND users.tenant_id=${KREILE_TENANT_SLUG}
+    `;
+    expect(row).toEqual({
+      full_name: "Phillip H18 Neu",
+      role: "werkstatt",
+      rights_count: created.user.areas.length,
+      event_type: "login_created",
+      actor_id: fixture.actorId,
+    });
+    const view = await withSession(fixture, () => readSettingsAction());
+    expect(view).toMatchObject({
+      code: "OK",
+      snapshot: { users: expect.arrayContaining([expect.objectContaining({ id: created.user.id, fullName: "Phillip H18 Neu" })]) },
+    });
+  }, 30_000);
+
   it("C1a.4 invokes saveManagedUserAction and advances updated_at when renaming a login", async () => {
     const fixture = await createFixture("rename-updated-at");
     const [before] = await sql<{ updated_at: Date }[]>`
@@ -738,5 +781,106 @@ describe("H18 settings Server Actions against the real replay database", () => {
       order_id: foreignOrder.receipt.orderId,
       source: "MS_GRAPH_IN:graph-foreign-bounce",
     });
+  }, 30_000);
+
+  it("H18.8 saves Der-Tag preferences through the UI action with DB, event and dashboard readback", async () => {
+    const fixture = await createFixture("today-preferences");
+    const layout = [
+      { field: "action" as const, column: "left" as const, order: 0 },
+      { field: "today" as const, column: "right" as const, order: 1 },
+      { field: "money" as const, column: "right" as const, order: 2 },
+    ];
+    const { saveTodayPreferencesAction } = await import("@/app/actions/today.actions");
+    await expect(withSession(fixture, () => saveTodayPreferencesAction(layout))).resolves.toMatchObject({ code: "OK" });
+    const [row] = await sql<{ layout: unknown; event_type: string; actor_id: string }[]>`
+      SELECT preference.layout, event.event_type, event.payload->>'actorId' AS actor_id
+      FROM private.today_preferences preference
+      JOIN public.ui_events event ON event.tenant_id=preference.tenant_id
+        AND event.event_type='today_preferences_saved'
+        AND event.payload->>'actorId'=preference.actor_id::text
+      WHERE preference.tenant_id=${KREILE_TENANT_SLUG} AND preference.actor_id=${fixture.actorId}::uuid
+    `;
+    expect(row).toEqual({ layout, event_type: "today_preferences_saved", actor_id: fixture.actorId });
+    const dashboard = await withSession(fixture, async () => {
+      const { resolveAuthorization } = await import("@/lib/server/authorization");
+      const authorization = await resolveAuthorization();
+      if (!authorization.ok) throw new Error(`H18_TODAY_PREFERENCES_AUTH_FAILED:${authorization.reason}`);
+      const { readTodayDashboard } = await import("@/lib/server/todayDashboard");
+      return readTodayDashboard(authorization.data);
+    });
+    expect(dashboard.layout).toEqual(layout);
+  }, 30_000);
+
+  it("H18.8 saves a Der-Tag reminder through the UI action with DB, event and dashboard readback", async () => {
+    const fixture = await createFixture("today-reminder");
+    const dueDate = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Berlin",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(Date.now() + 24 * 60 * 60 * 1000));
+    const { createOrderIntakeAction } = await import("@/app/warendurchlauf/actions");
+    const intake = await withSession(fixture, () => createOrderIntakeAction({
+      clientEventId: randomUUID(),
+      customer: { mode: "EXISTING", customerId: fixture.customerId },
+      dueDate,
+      termStatus: "bestaetigt",
+      intakeSource: "persoenlich",
+      handoverMode: "pickup",
+      paymentMode: "vorkasse",
+      note: "H18 Der Tag Erinnerung",
+      items: [{
+        catalogServiceId: null,
+        name: "H18 Erinnerungsteil",
+        quantity: 1,
+        material: "Stahl",
+        surfaceRequested: "Hartchrom",
+        executionRequested: "offen",
+        unit: null,
+        unitPriceCents: null,
+        vatRateBasisPoints: null,
+      }],
+    }));
+    if (intake.code !== "OK") throw new Error(`H18_TODAY_REMINDER_INTAKE_FAILED:${intake.code}:${intake.message}`);
+    const readDashboard = () => withSession(fixture, async () => {
+      const { resolveAuthorization } = await import("@/lib/server/authorization");
+      const authorization = await resolveAuthorization();
+      if (!authorization.ok) throw new Error(`H18_TODAY_REMINDER_AUTH_FAILED:${authorization.reason}`);
+      const { readTodayDashboard } = await import("@/lib/server/todayDashboard");
+      return readTodayDashboard(authorization.data);
+    });
+    const before = await readDashboard();
+    const item = before.items.find((entry) => entry.orderId === intake.receipt.orderId);
+    expect(item).toBeDefined();
+    if (!item) throw new Error("H18_TODAY_REMINDER_ITEM_MISSING");
+
+    const { saveTodayReminderAction } = await import("@/app/actions/today.actions");
+    const saved = await withSession(fixture, () => saveTodayReminderAction({
+      itemKey: item.key,
+      mode: "tomorrow",
+      dueDate,
+    }));
+    expect(saved.code).toBe("OK");
+    if (saved.code !== "OK") throw new Error(`H18_TODAY_REMINDER_SAVE_FAILED:${saved.code}:${saved.message}`);
+    const [row] = await sql<{ item_key: string; reminder_mode: string; event_type: string; actor_id: string }[]>`
+      SELECT reminder.item_key, reminder.reminder_mode, event.event_type,
+        event.payload->>'actorId' AS actor_id
+      FROM private.today_reminders reminder
+      JOIN public.ui_events event ON event.tenant_id=reminder.tenant_id
+        AND event.event_type='today_reminder_saved'
+        AND event.payload->>'actorId'=reminder.actor_id::text
+        AND event.payload->>'itemKey'=reminder.item_key
+      WHERE reminder.tenant_id=${KREILE_TENANT_SLUG}
+        AND reminder.actor_id=${fixture.actorId}::uuid
+        AND reminder.item_key=${item.key}
+    `;
+    expect(row).toEqual({
+      item_key: item.key,
+      reminder_mode: "tomorrow",
+      event_type: "today_reminder_saved",
+      actor_id: fixture.actorId,
+    });
+    const after = await readDashboard();
+    expect(after.items).toContainEqual(expect.objectContaining({ key: item.key, snoozedUntil: saved.data.reminderUntil }));
   }, 30_000);
 });
