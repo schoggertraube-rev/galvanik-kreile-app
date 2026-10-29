@@ -81,8 +81,11 @@ describe("system settings port", () => {
       companyName: "Galvanik Kreile", street: "Testweg 1", zip: "12345", city: "Berlin", country: "Deutschland",
       taxId: "DE123456789", iban: "DE0012345678", bic: "TESTDEFF", bankName: "Testbank", paymentTermDays: 14, logoUrl: "/logo.png",
     })).resolves.toEqual({ code: "OK" });
+    expect(execute.mock.calls[0]?.[0].text).toContain("WITH updated AS");
     expect(execute.mock.calls[0]?.[0].text).toContain("INSERT INTO public.company_settings");
-    expect(execute.mock.calls[0]?.[0].text).toContain("ON CONFLICT");
+    expect(execute.mock.calls[0]?.[0].text).toContain("WHERE tenant_id=");
+    expect(execute.mock.calls[1]?.[0].text).toContain("INSERT INTO public.ui_events");
+    expect(execute.mock.calls[1]?.[0].text).toContain("company_settings_updated");
   });
 
   it("reads complete company data for a tenant-bound document and fails closed when it is missing", async () => {

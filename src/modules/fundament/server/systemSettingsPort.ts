@@ -183,13 +183,40 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
   try {
     await withPrivilegedTenantTransaction(context, async (tx) => {
       const rows = await tx.execute<{ id: string }>(sql`
-        INSERT INTO public.company_settings (id, tenant_id, company_name, street, zip, city, country, tax_id, iban, bic, bank_name, invoice_payment_term_days, logo_url, updated_at)
-        VALUES (${`company:${context.tenantId}`}, ${context.tenantId}, ${normalized.companyName}, ${normalized.street}, ${normalized.zip}, ${normalized.city}, ${normalized.country}, ${normalized.taxId}, ${normalized.iban}, ${normalized.bic}, ${normalized.bankName}, ${normalized.paymentTermDays}, ${normalized.logoUrl}, statement_timestamp())
-        ON CONFLICT (id) DO UPDATE SET company_name=EXCLUDED.company_name, street=EXCLUDED.street, zip=EXCLUDED.zip, city=EXCLUDED.city, country=EXCLUDED.country, tax_id=EXCLUDED.tax_id, iban=EXCLUDED.iban, bic=EXCLUDED.bic, bank_name=EXCLUDED.bank_name, invoice_payment_term_days=EXCLUDED.invoice_payment_term_days, logo_url=EXCLUDED.logo_url, updated_at=statement_timestamp()
-        WHERE company_settings.tenant_id=${context.tenantId}
-        RETURNING id
+        WITH updated AS (
+          UPDATE public.company_settings
+          SET company_name=${normalized.companyName}, street=${normalized.street}, zip=${normalized.zip},
+              city=${normalized.city}, country=${normalized.country}, tax_id=${normalized.taxId},
+              iban=${normalized.iban}, bic=${normalized.bic}, bank_name=${normalized.bankName},
+              invoice_payment_term_days=${normalized.paymentTermDays}, logo_url=${normalized.logoUrl},
+              updated_at=statement_timestamp()
+          WHERE tenant_id=${context.tenantId}
+          RETURNING id
+        ), inserted AS (
+          INSERT INTO public.company_settings (
+            id, tenant_id, company_name, street, zip, city, country, tax_id,
+            iban, bic, bank_name, invoice_payment_term_days, logo_url, updated_at
+          )
+          SELECT ${`company:${context.tenantId}`}, ${context.tenantId}, ${normalized.companyName},
+            ${normalized.street}, ${normalized.zip}, ${normalized.city}, ${normalized.country},
+            ${normalized.taxId}, ${normalized.iban}, ${normalized.bic}, ${normalized.bankName},
+            ${normalized.paymentTermDays}, ${normalized.logoUrl}, statement_timestamp()
+          WHERE NOT EXISTS (SELECT 1 FROM updated)
+          RETURNING id
+        )
+        SELECT id FROM updated
+        UNION ALL
+        SELECT id FROM inserted
       `);
       if (rows.length !== 1) throw new Error("COMPANY_SETTINGS_WRITE_AMBIGUOUS");
+      await tx.execute(sql`
+        INSERT INTO public.ui_events (tenant_id, event_type, payload)
+        VALUES (
+          ${context.tenantId},
+          'company_settings_updated',
+          jsonb_build_object('actorId', ${context.actorId}::text, 'settingsId', ${rows[0]!.id}::text)
+        )
+      `);
     });
     return { code: "OK" as const };
   } catch (error) {
