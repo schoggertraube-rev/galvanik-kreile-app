@@ -128,7 +128,7 @@ export function BuchhaltungCockpitClient() {
         <FristenKachel />
       </div>
 
-      <SectionHeader icon={<Sparkles className="w-4.5 h-4.5 text-amber-600" strokeWidth={2} />} iconBg="bg-amber-50" title="Marketing & Umsatzwirkung" badge="In Vorbereitung" />
+      <SectionHeader icon={<Sparkles className="w-4.5 h-4.5 text-amber-600" strokeWidth={2} />} iconBg="bg-amber-50" title="Marketing & Umsatzwirkung" badge="Demo-Daten" />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Tile title="Marketingkosten" description="Gesamtkosten für Kundenansprache, E-Mail-Kampagnen und Reaktivierungsmaßnahmen." icon={<Sparkles className="w-5 h-5 text-amber-600" strokeWidth={1.8} />} iconColor="bg-amber-50" kpi="– €" status={{ label: "Noch keine Daten", variant: "default" }} footer="Kosten erfassen" />
         <Tile title="Umsatz aus Reaktivierung" description="Umsatz, der durch Kundenreaktivierung generiert wurde. Verknüpfung mit Kampagnen erforderlich." icon={<TrendingUp className="w-5 h-5 text-emerald-600" strokeWidth={1.8} />} iconColor="bg-emerald-50" kpi="– €" status={{ label: "Nicht berechenbar", variant: "default" }} footer="Auswertung" />

@@ -32,7 +32,7 @@ export interface StatistikUebersicht {
   bewertungsKlickrate: { quote: number };
 }
 
-/** Vorbereitete Daten für die Statistik */
+/** Demo-Daten für die Statistik */
 export const DEMO_STATISTIK: StatistikUebersicht = {
   zufriedenheit: { durchschnitt: 4.7, anzahl: 42, trend: 'up' },
   googleBewertungen: { durchschnitt: 4.8, anzahl: 28, trend: 'up' },

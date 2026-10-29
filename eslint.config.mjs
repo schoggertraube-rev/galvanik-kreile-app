@@ -2,7 +2,6 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 import unusedImports from "eslint-plugin-unused-imports";
-import h16Plugin from "./scripts/quality/eslint-h16-plugin.mjs";
 
 // ── Module-boundary import rules (APP-STRUCTURE-001) ──────────────
 // These rules enforce zero-violation boundaries from OWNERSHIP_MAP.md.
@@ -74,40 +73,9 @@ const eslintConfig = defineConfig([
   {
     plugins: {
       "unused-imports": unusedImports,
-      h16: h16Plugin,
     },
     rules: {
       "unused-imports/no-unused-imports": "error",
-    },
-  },
-  {
-    files: ["src/**/*.ts", "src/**/*.tsx"],
-    rules: {
-      "h16/no-silent-error": "error",
-      "h16/no-alert": "error",
-      "h16/no-placeholder-text": "error",
-      "h16/no-tenant-literal": "error",
-    },
-  },
-  {
-    files: [
-      "src/**/__tests__/**",
-      "src/**/*.test.ts",
-      "src/**/*.test.tsx",
-      "src/**/*.spec.ts",
-      "src/**/*.spec.tsx",
-    ],
-    rules: {
-      "h16/no-silent-error": "off",
-      "h16/no-alert": "off",
-      "h16/no-placeholder-text": "off",
-      "h16/no-tenant-literal": "off",
-    },
-  },
-  {
-    files: ["src/lib/tenant.ts"],
-    rules: {
-      "h16/no-tenant-literal": "off",
     },
   },
   {

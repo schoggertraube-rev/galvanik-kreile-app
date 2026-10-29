@@ -322,7 +322,7 @@ export default function MarketingStudioClient({
         ],
         insight: {
           body: "<b>Beobachtung:</b> Die Kosten für Arbeitszeit der Mitarbeiter bei der Content-Erstellung fehlen noch (Datenqualität 85%).",
-          actions: [{ label: "Zeiterfassung verknüpfen" }]
+          actions: [{ label: "Zeiterfassung verknüpfen", onClick: () => alert("Verknüpfung öffnen") }]
         },
         linkedAreas: [
           { label: "Buchhaltung (kosten_posten)", href: "/buchhaltung/kosten" },

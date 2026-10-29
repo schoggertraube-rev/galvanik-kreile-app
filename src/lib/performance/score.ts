@@ -50,7 +50,7 @@ export async function calculateWorkshopHealthScore(): Promise<{
   const critical   = clamp(100 - criticalOrders * 15, 0, 100);          
   const complaintsScore = clamp(100 - complaintRate * 100, 0, 100);
   
-  // Da OCR und Dokumente im MVP noch nicht angebunden sind, schätzen wir die Dokumentationsrate ab
+  // Da OCR und Docs im MVP noch mock sind, schätzen wir die Dokumentationsrate ab
   const docs       = clamp(100 - criticalOrders * 5, 0, 100); // Dummy-Wert für MVP
   const stations   = clamp(100 - criticalOrders * 10, 0, 100); // Dummy-Wert für MVP
 

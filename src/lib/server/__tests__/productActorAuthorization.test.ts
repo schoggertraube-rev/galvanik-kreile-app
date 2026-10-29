@@ -77,7 +77,7 @@ describe("resolveProductActorAuthorization() choke point", () => {
     expect(result).toMatchObject({
       ok: true,
       data: {
-        authorization: { role: "meister", displayName: "Technical DB Name" },
+        authorization: { role: "meister", displayName: "Rolf" },
         actor: { key: "rolf", role: "meister" },
       },
     });

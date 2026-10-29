@@ -38,7 +38,7 @@ export async function getAttributionData() {
 
     // Finde Aufträge, die aus diesen Leads entstanden sind.
     // (Hier heuristisch: Anteil der Leads am Gesamtumsatz, oder direkte Zuordnung wenn möglich)
-    // Vorbereitete Berechnung: (Anzahl Channel-Leads / Gesamt-Leads) * Gesamt-Aufträge
+    // Einfache Demo-Berechnung: (Anzahl Channel-Leads / Gesamt-Leads) * Gesamt-Aufträge
     const totalLeads = leads.length || 1;
     const ratio = leadCount / totalLeads;
     

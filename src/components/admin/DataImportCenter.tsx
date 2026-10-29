@@ -169,7 +169,7 @@ export function DataImportCenter() {
             <div className="flex justify-end pt-4 border-t">
               <Button disabled className="gap-2 cursor-not-allowed opacity-50" title="Import-Schnittstelle in Vorbereitung">
                 <Play className="w-4 h-4" />
-                {pendingCount} Datensätze importieren (in Vorbereitung)
+                {pendingCount} Datensätze importieren (Demo)
               </Button>
             </div>
           </div>

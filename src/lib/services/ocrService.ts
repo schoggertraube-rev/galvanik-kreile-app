@@ -19,7 +19,7 @@ export const ocrService = {
     // Simuliere Wartezeit für echtes Feeling
     await new Promise(r => setTimeout(r, 1800)); 
     
-    // Vorbereitete Daten mit absichtlich eingebauten Unsicherheiten (< 0.85)
+    // Demo-Daten mit absichtlich eingebauten Unsicherheiten (< 0.85)
     return {
       id: createId(),
       extractedFields: [

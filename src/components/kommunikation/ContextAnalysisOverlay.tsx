@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { X, Database, MessageSquare, AlertCircle, ExternalLink, ChevronRight } from "lucide-react";
 import Link from "next/link";
 
@@ -26,7 +26,7 @@ export type ContextAnalysisOverlayProps = {
   facts: Array<{
     label: string;
     value: string;
-    source: "database" | "chat" | "prepared" | "unknown";
+    source: "database" | "chat" | "mock" | "unknown";
     confidence?: number;
   }>;
   actions: Array<{
@@ -49,7 +49,6 @@ export function ContextAnalysisOverlay({
   facts,
   actions,
 }: ContextAnalysisOverlayProps) {
-  const [actionMessage, setActionMessage] = useState("");
   if (!open) return null;
 
   return (
@@ -114,9 +113,9 @@ export function ContextAnalysisOverlay({
                       <MessageSquare size={12} /> Im Chat erwähnt
                     </span>
                   )}
-                  {fact.source === "prepared" && (
+                  {fact.source === "mock" && (
                     <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-orange-50 text-orange-700 px-2 py-1 rounded-md border border-orange-200">
-                      <AlertCircle size={12} /> Nur vorbereitet
+                      <AlertCircle size={12} /> Demo / vorbereitet
                     </span>
                   )}
                   {fact.source === "unknown" && (
@@ -132,7 +131,6 @@ export function ContextAnalysisOverlay({
 
         {/* Actions Footer */}
         <div className="p-6 bg-white border-t border-neutral-gray-200 flex flex-col sm:flex-row gap-3 sm:items-center justify-end">
-          {actionMessage ? <p role="status" className="text-sm font-semibold text-navy-700">{actionMessage}</p> : null}
           <button
             onClick={onClose}
             className="px-5 py-3 rounded-[12px] font-bold text-sm bg-neutral-gray-100 hover:bg-neutral-gray-200 text-navy-900 transition-colors"
@@ -163,7 +161,7 @@ export function ContextAnalysisOverlay({
                 onClick={() => {
                   if (action.onClick) action.onClick();
                   else if (action.onClickKey === "close") onClose();
-                  else setActionMessage(`Aktion nicht angebunden: ${action.label}`);
+                  else alert(`Aktion ausgeführt: ${action.label}`);
                 }}
                 disabled={action.disabled}
                 className={`px-5 py-3 rounded-[12px] font-bold text-sm flex items-center justify-center gap-2 transition-colors ${

@@ -284,7 +284,7 @@ export function BetriebKvpClient() {
               <div>
                 <h3 className="font-bold text-sm uppercase text-text-muted mb-2 flex items-center gap-2"><Camera className="w-4 h-4"/> Angehängtes Foto</h3>
                 <div className="w-full h-40 bg-neutral-gray-100 border border-dashed border-neutral-gray-300 rounded-xl flex items-center justify-center text-neutral-gray-400 font-bold text-sm">
-                  [Foto noch nicht angebunden]
+                  [Foto Platzhalter - Demo]
                 </div>
               </div>
             )}

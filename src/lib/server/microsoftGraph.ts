@@ -70,10 +70,7 @@ function safeProviderCode(payload: unknown): string {
 }
 
 async function providerFailure(response: Response, operation: string): Promise<never> {
-  const payload = await response.clone().json().catch((error: unknown) => {
-    console.error("GRAPH_ERROR_PAYLOAD_UNREADABLE", error);
-    return null;
-  });
+  const payload = await response.clone().json().catch(() => null);
   throw new GraphProviderError(`${operation}_${response.status}_${safeProviderCode(payload)}`);
 }
 

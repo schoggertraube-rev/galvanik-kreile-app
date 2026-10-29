@@ -1,7 +1,7 @@
 /**
  * BuchhaltungDataProvider — zentrale Abstraktion
  * UI-Komponenten arbeiten nur gegen dieses Interface.
- * Produktimplementierung: SupabaseBuchhaltungProvider.
+ * Implementierungen: MockBuchhaltungProvider (Demo) → SupabaseBuchhaltungProvider (Live)
  */
 
 import type {

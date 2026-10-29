@@ -119,7 +119,7 @@ export function BelegUploadOverlay({ open, onClose, onSubmit, mode }: BelegUploa
                     onClick={handleSimulateCapture}
                     className="flex items-center justify-center gap-2 px-6 py-3 bg-[#1e1b18] text-white rounded-xl font-bold text-sm hover:bg-black transition-colors min-h-[48px]"
                   >
-                    <Camera className="w-4 h-4" /> Foto aufnehmen (in Vorbereitung)
+                    <Camera className="w-4 h-4" /> Foto aufnehmen (Demo)
                   </button>
                 ) : (
                   <>
@@ -133,7 +133,7 @@ export function BelegUploadOverlay({ open, onClose, onSubmit, mode }: BelegUploa
                       onClick={handleSimulateCapture}
                       className="flex items-center justify-center gap-2 px-6 py-3 bg-white text-[#1e1b18] border border-neutral-200 rounded-xl font-bold text-sm hover:bg-neutral-50 transition-colors min-h-[48px]"
                     >
-                      Vorbereiteten Beleg laden
+                      Demo-Beleg laden
                     </button>
                   </>
                 )}

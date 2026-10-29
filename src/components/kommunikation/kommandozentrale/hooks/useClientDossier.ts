@@ -103,7 +103,7 @@ export interface ClientDossier {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   BUILD DOSSIER from existing and prepared data
+   BUILD DOSSIER from existing data + mock
    ═══════════════════════════════════════════════════════════ */
 
 import { useState, useEffect } from "react";

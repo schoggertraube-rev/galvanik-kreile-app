@@ -5,7 +5,7 @@ import { and, gte, lte, eq, sql } from "drizzle-orm";
 import { aktion, touchpoint, attribution } from "@/db/schema_marketing";
 
 function generateInsight() {
-  // Prepared logic as a placeholder for the real insights
+  // Simple mock logic as a placeholder for the real insights
   return {
     beobachtungen: [
       "Die Marketing-Daten für diesen Monat zeigen erste Trends.",

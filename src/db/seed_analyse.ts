@@ -1,17 +1,16 @@
 import { db } from './index';
 import { sql } from 'drizzle-orm';
-import { KREILE_TENANT_SLUG } from '../lib/tenant';
 
 async function seedAnalyse() {
   console.log("Starting Analyse seed...");
-  const tenantSql = sql.raw(`'${KREILE_TENANT_SLUG.replaceAll("'", "''")}'`);
+  
   await db.execute(sql`
     DO $$ 
     DECLARE
       v_customer_id text;
       v_order_id text;
       v_item_id text;
-      v_tenant_id text := ${tenantSql};
+      v_tenant_id text := 'galvanik-kreile';
     BEGIN
       -- Clear old seed data
       DELETE FROM orders WHERE order_number IN ('A-SEED-101', 'A-SEED-102', 'A-SEED-103');

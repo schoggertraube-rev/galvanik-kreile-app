@@ -200,7 +200,10 @@ export async function resolveProductActorAuthorization(): Promise<ProductActorAu
   return {
     ok: true,
     data: {
-      authorization: authorization.data,
+      authorization: {
+        ...authorization.data,
+        displayName: actor.identity.name,
+      },
       actor,
     },
   };

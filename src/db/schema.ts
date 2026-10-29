@@ -41,13 +41,13 @@ export const pinRateLimits = pgTable("pin_rate_limits", {
   lastFailedAt: timestamp("last_failed_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-  tenantId: text("tenant_id").notNull(),
+  tenantId: text("tenant_id").notNull().default("galvanik-kreile"),
 });
 
 // 2. Customers
 export const customers = pgTable("customers", {
   id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull(),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   customerNumber: varchar("customer_number", { length: 50 }),
   name: text("name").notNull(),
   type: varchar("type", { length: 50 }).notNull(), // business, privat, institution
@@ -107,7 +107,7 @@ export const priceAgreements = pgTable("price_agreements", {
 // 4. Orders
 export const orders = pgTable("orders", {
   id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }),
+  tenantId: varchar("tenant_id", { length: 50 }).default("galvanik-kreile"),
   orderNumber: text("order_number").notNull().unique(),
   customerId: text("customer_id").notNull().references(() => customers.id),
   title: text("title").notNull(),
@@ -168,7 +168,7 @@ export const calendarEvents = pgTable("calendar_events", {
 // 4.5 Items (Standalone table for parts, referenced by orders.actions.ts)
 export const items = pgTable("items", {
   id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }),
+  tenantId: varchar("tenant_id", { length: 50 }).default("galvanik-kreile"),
   orderId: text("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
   customerId: text("customer_id").notNull().references(() => customers.id),
   name: text("name").notNull(),
@@ -193,7 +193,7 @@ export const items = pgTable("items", {
 // 5. Events / Timeline
 export const events = pgTable("events", {
   id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }),
+  tenantId: varchar("tenant_id", { length: 50 }).default("galvanik-kreile"),
   orderId: text("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
   itemId: text("item_id"),
   eventType: varchar("event_type", { length: 100 }).notNull(),
@@ -215,7 +215,7 @@ export const events = pgTable("events", {
 // 6. Complaints / Reklamationen
 export const complaints = pgTable("complaints", {
   id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }),
+  tenantId: varchar("tenant_id", { length: 50 }).default("galvanik-kreile"),
   orderId: text("order_id").notNull().references(() => orders.id),
   customerId: text("customer_id").notNull().references(() => customers.id),
   itemId: text("item_id"),
@@ -315,7 +315,7 @@ export const inquiries = pgTable("inquiries", {
 // 8.5 Scan Uploads
 export const scanUploads = pgTable("scan_uploads", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull(),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   fileUrl: text("file_url").notNull(),
   fileType: text("file_type"),
   uploadedBy: uuid("uploaded_by").references(() => appUsers.id),
@@ -424,7 +424,7 @@ export const catalogServices = pgTable("catalog_services", {
 
 export const phoneNotes = pgTable("phone_notes", {
   id: uuid("id").primaryKey().defaultRandom(),
-  tenantId: text("tenant_id").notNull(),
+  tenantId: text("tenant_id").notNull().default("galvanik-kreile"),
   threadId: uuid("thread_id"),
   customerId: text("customer_id").references(() => customers.id),
   orderId: text("order_id").references(() => orders.id),
@@ -447,7 +447,7 @@ export const phoneNotes = pgTable("phone_notes", {
 // 12. Phase 3 (Resilience & Marketing)
 export const offlineOutbox = pgTable("offline_outbox", {
   id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull(),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   mutationType: varchar("mutation_type", { length: 100 }).notNull(),
   payload: jsonb("payload").notNull().$type<Record<string, unknown>>(),
   status: varchar("status", { length: 50 }).notNull().default("pending"),
@@ -459,7 +459,7 @@ export const offlineOutbox = pgTable("offline_outbox", {
 
 export const orderCostPositions = pgTable("order_cost_positions", {
   id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull(),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   orderId: text("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
   type: varchar("type", { length: 50 }).notNull(), // labor, material, external
   description: text("description").notNull(),
@@ -469,7 +469,7 @@ export const orderCostPositions = pgTable("order_cost_positions", {
 
 export const communicationDrafts = pgTable("communication_drafts", {
   id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull(),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   customerId: text("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
   subject: text("subject").notNull(),
   body: text("body").notNull(),
@@ -482,7 +482,7 @@ export const communicationDrafts = pgTable("communication_drafts", {
 // 13. Marketing Tracking & Attribution
 export const marketingTouchpoints = pgTable("marketing_touchpoints", {
   id: uuid("id").primaryKey().defaultRandom(),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull(),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   aktionId: text("aktion_id"),
   kanal: text("kanal").notNull(),
   titel: text("titel"),
@@ -494,7 +494,7 @@ export const marketingTouchpoints = pgTable("marketing_touchpoints", {
 
 export const kostenPosten = pgTable("kosten_posten", {
   id: uuid("id").primaryKey().defaultRandom(),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull(),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   modul: text("modul").notNull().default("marketing"),
   kanal: text("kanal"),
   kampagneId: text("kampagne_id"),
@@ -521,7 +521,7 @@ export const baeder = pgTable("baths", {
 // 16. Bad-Messwerte (Historie)
 export const badMesswerte = pgTable("bath_measurements", {
   id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull(),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   badId: text("bath_id").notNull().references(() => baeder.id, { onDelete: "cascade" }),
   temperature: numeric("temperature", { precision: 10, scale: 2 }),
   phValue: numeric("ph_value", { precision: 10, scale: 2 }),
@@ -540,7 +540,7 @@ export * from "./schema_erfassung";
 
 export const communications = pgTable("communications", {
   id: uuid("id").primaryKey().defaultRandom(),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull(),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   customerId: text("customer_id").references(() => customers.id),
   orderId: text("order_id").references(() => orders.id, { onDelete: "cascade" }),
   subject: text("subject"),
@@ -557,7 +557,7 @@ export const communications = pgTable("communications", {
 
 export const emailTemplates = pgTable("email_templates", {
   id: uuid("id").primaryKey().defaultRandom(),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull(),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   templateKey: text("template_key").notNull().unique(),
   name: text("name").notNull(),
   subjectTemplate: text("subject_template").notNull(),
@@ -570,7 +570,7 @@ export const emailTemplates = pgTable("email_templates", {
 
 export const priceLines = pgTable("price_lines", {
   id: uuid("id").primaryKey().defaultRandom(),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull(),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   orderId: text("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
   itemId: text("item_id").references(() => items.id, { onDelete: "cascade" }),
   positionText: text("position_text").notNull(),
@@ -584,7 +584,7 @@ export const priceLines = pgTable("price_lines", {
 
 export const payments = pgTable("payments", {
   id: uuid("id").primaryKey().defaultRandom(),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull(),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   orderId: text("order_id").references(() => orders.id, { onDelete: "set null" }),
   amountEur: numeric("amount_eur", { precision: 10, scale: 2 }).notNull(),
   status: text("status").notNull().default("pending"),

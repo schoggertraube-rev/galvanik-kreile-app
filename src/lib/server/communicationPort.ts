@@ -73,10 +73,7 @@ export async function attachInboxMessage(
     return { code: "VALIDATION_ERROR", message: "Mail oder Zuordnung ist ungültig." };
   }
   if (!canWrite(auth)) return { code: "FORBIDDEN", message: "Mails dürfen für diese Rolle nicht zugeordnet werden." };
-  const target = await resolveTarget(auth, input.targetType, input.targetId).catch((error: unknown) => {
-    console.error("COMMUNICATION_TARGET_READ_FAILED", error);
-    throw error;
-  });
+  const target = await resolveTarget(auth, input.targetType, input.targetId).catch(() => null);
   if (!target) return { code: "NOT_FOUND", message: "Kunde oder Auftrag ist nicht verfügbar." };
   const graph = await readMicrosoftGraphMessage(input.graphMessageId);
   if (graph.code !== "OK") return graph;
@@ -147,10 +144,7 @@ export async function sendCommunicationMail(
   if (readMicrosoftGraphConfigurationStatus().code !== "READY") {
     return { code: "IN_KLAERUNG", message: "Microsoft 365 ist noch nicht für die Preview verbunden." };
   }
-  const target = await resolveTarget(auth, input.targetType, input.targetId).catch((error: unknown) => {
-    console.error("COMMUNICATION_TARGET_READ_FAILED", error);
-    throw error;
-  });
+  const target = await resolveTarget(auth, input.targetType, input.targetId).catch(() => null);
   if (!target) return { code: "NOT_FOUND", message: "Kunde oder Auftrag ist nicht verfügbar." };
   if (!/^\S+@\S+\.\S+$/.test(target.email)) return { code: "VALIDATION_ERROR", message: "Beim Kunden ist keine gültige E-Mail-Adresse hinterlegt." };
   const source = `MS_GRAPH_OUT:${input.clientRequestId}`;

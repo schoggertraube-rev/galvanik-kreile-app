@@ -93,7 +93,7 @@ export function useLiveContext(
     let stock: LiveContextData["stock"] = null;
     if (matchedMaterial) {
       const mat = matchedMaterial.charAt(0).toUpperCase() + matchedMaterial.slice(1);
-      // Vorbereitete Bestandswerte
+      // Demo stock levels
       const levels: Record<string, { level: string; status: "ok" | "low" }> = {
         zink: { level: "88 % voll", status: "ok" },
         chrom: { level: "45 % voll", status: "low" },
