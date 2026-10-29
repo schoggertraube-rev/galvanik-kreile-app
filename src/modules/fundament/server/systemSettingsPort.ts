@@ -339,11 +339,10 @@ export async function createManagedUser(context: SystemSettingsContext, input: u
         RETURNING id::text AS id, kuerzel AS short_code
       `);
       if (rows.length !== 1 || !rows[0]) throw new Error("USER_CREATE_FAILED");
-      if (areas.length > 0) {
+      for (const area of areas) {
         await tx.execute(sql`
           INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
-          SELECT ${context.tenantId}, ${rows[0].id}::uuid, area, ${context.actorId}::uuid
-          FROM unnest(${[...areas]}::text[]) AS area
+          VALUES (${context.tenantId}, ${rows[0].id}::uuid, ${area}, ${context.actorId}::uuid)
         `);
       }
       await tx.execute(sql`INSERT INTO public.ui_events (tenant_id, event_type, payload) VALUES (${context.tenantId}, 'login_created', jsonb_build_object('actorId', ${context.actorId}::text, 'userId', ${rows[0].id}::text, 'template', ${normalized.template}::text))`);
