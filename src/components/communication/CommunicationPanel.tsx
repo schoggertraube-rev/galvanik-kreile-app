@@ -5,6 +5,7 @@ import { AtSign, Inbox, Loader2, MailPlus, Paperclip, Send } from "lucide-react"
 import {
   attachOutlookMailAction,
   getMicrosoftGraphStatusAction,
+  listLinkedOutlookMailsAction,
   listOutlookInboxAction,
   sendCustomerMailAction,
 } from "@/app/actions/communications.actions";
@@ -15,11 +16,13 @@ import styles from "./CommunicationPanel.module.css";
 
 type Target = { targetType: "CUSTOMER" | "ORDER"; targetId: string };
 type InboxMessage = Extract<Awaited<ReturnType<typeof listOutlookInboxAction>>, { code: "OK" }>["data"][number];
+type LinkedMessage = Extract<Awaited<ReturnType<typeof listLinkedOutlookMailsAction>>, { code: "OK" }>["data"][number];
 
 export function CommunicationPanel({ targetType, targetId }: Target) {
   const [state, setState] = useState<"loading" | "ready" | "in-klärung" | "error">("loading");
   const [message, setMessage] = useState("");
   const [inbox, setInbox] = useState<InboxMessage[]>([]);
+  const [linkedInbox, setLinkedInbox] = useState<LinkedMessage[]>([]);
   const [quotes, setQuotes] = useState<QuoteReadback[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [sendBusy, setSendBusy] = useState(false);
@@ -44,14 +47,20 @@ export function CommunicationPanel({ targetType, targetId }: Target) {
         setMessage(status.message);
         return;
       }
-      const [mail, quoteResult] = await Promise.all([listOutlookInboxAction(), listOpenQuotesAction()]);
+      const [mail, quoteResult] = await Promise.all([
+        targetType === "ORDER"
+          ? listLinkedOutlookMailsAction({ targetType, targetId })
+          : listOutlookInboxAction(),
+        listOpenQuotesAction(),
+      ]);
       if (!active) return;
       if (mail.code !== "OK") {
         setState(mail.code === "IN_KLAERUNG" ? "in-klärung" : "error");
         setMessage(mail.message);
         return;
       }
-      setInbox(mail.data);
+      if (targetType === "ORDER") setLinkedInbox(mail.data as LinkedMessage[]);
+      else setInbox(mail.data as InboxMessage[]);
       setQuotes(quoteResult.code === "OK" ? quoteResult.quotes : []);
       setState("ready");
     };
@@ -62,7 +71,7 @@ export function CommunicationPanel({ targetType, targetId }: Target) {
       }
     });
     return () => { active = false; };
-  }, []);
+  }, [targetId, targetType]);
 
   const attach = async (mail: InboxMessage) => {
     setBusyId(mail.id);
@@ -104,8 +113,14 @@ export function CommunicationPanel({ targetType, targetId }: Target) {
         <label>PDF-Anhang<select name="quoteId" defaultValue=""><option value="">Ohne Anhang</option>{matchingQuotes.map((quote) => <option key={quote.quoteId} value={quote.quoteId}>KV {quote.quoteNumber}</option>)}</select></label>
         <button type="submit" disabled={sendBusy}>{sendBusy ? <Loader2 className={styles.spin} /> : <Send />}Versenden</button>
       </form>
-      <div className={styles.inboxHead}><Inbox /><div><small>Posteingang</small><h3>Letzte Outlook-Mails</h3></div></div>
-      {inbox.length === 0 ? <p className={styles.empty}>Der Posteingang enthält keine lesbaren Mails.</p> : (
+      <div className={styles.inboxHead}><Inbox /><div><small>{targetType === "ORDER" ? "Auftrag" : "Posteingang"}</small><h3>{targetType === "ORDER" ? "Zugeordnete Outlook-Mails" : "Letzte Outlook-Mails"}</h3></div></div>
+      {targetType === "ORDER" ? linkedInbox.length === 0 ? <p className={styles.empty}>Diesem Auftrag sind keine Mails zugeordnet.</p> : (
+        <ol className={styles.inbox}>
+          {linkedInbox.map((mail) => <li key={mail.threadId}>
+            <div><strong>{mail.subject ?? "fehlt"}</strong><small>{mail.senderLabel ?? "fehlt"} · {new Date(mail.receivedAt).toLocaleString("de-DE")}</small><p>{mail.body ?? "fehlt"}</p></div>
+          </li>)}
+        </ol>
+      ) : inbox.length === 0 ? <p className={styles.empty}>Der Posteingang enthält keine lesbaren Mails.</p> : (
         <ol className={styles.inbox}>
           {inbox.map((mail) => <li key={mail.id}>
             <div><strong>{mail.subject}</strong><small>{mail.senderName} · {new Date(mail.receivedAt).toLocaleString("de-DE")}</small><p>{mail.preview || "Keine Vorschau vorhanden."}</p>{mail.hasAttachments ? <span><Paperclip /> Mit Anhang</span> : null}</div>

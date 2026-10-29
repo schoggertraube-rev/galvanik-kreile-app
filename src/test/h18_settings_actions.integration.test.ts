@@ -646,4 +646,95 @@ describe("H18 settings Server Actions against the real replay database", () => {
       original_size_bytes: "321",
     });
   }, 30_000);
+
+  it("C1a.7 invokes listLinkedOutlookMailsAction and returns only the mail assigned to the requested order", async () => {
+    const fixture = await createFixture("linked-order-mail");
+    await sql`
+      INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
+      VALUES (${KREILE_TENANT_SLUG}, ${fixture.actorId}::uuid, 'mails', ${fixture.actorId}::uuid)
+      ON CONFLICT (tenant_id, user_id, bereich) DO NOTHING
+    `;
+    const { createOrderIntakeAction } = await import("@/app/warendurchlauf/actions");
+    const createOrder = (label: string) => withSession(fixture, () => createOrderIntakeAction({
+      clientEventId: randomUUID(),
+      customer: { mode: "EXISTING" as const, customerId: fixture.customerId },
+      dueDate: "2026-12-20",
+      termStatus: "bestaetigt" as const,
+      intakeSource: "persoenlich" as const,
+      handoverMode: "pickup" as const,
+      paymentMode: "vorkasse" as const,
+      note: `C1a Mail ${label}`,
+      items: [{
+        catalogServiceId: null,
+        name: `C1a Mailteil ${label}`,
+        quantity: 1,
+        material: "Stahl",
+        surfaceRequested: "Vernickeln",
+        executionRequested: "offen",
+        unit: null,
+        unitPriceCents: null,
+        vatRateBasisPoints: null,
+      }],
+    }));
+    const requestedOrder = await createOrder("angefordert");
+    const foreignOrder = await createOrder("fremd");
+    if (requestedOrder.code !== "OK" || foreignOrder.code !== "OK") {
+      throw new Error("C1A_MAIL_ORDER_INTAKE_FAILED");
+    }
+    const requestedThreadId = randomUUID();
+    const foreignThreadId = randomUUID();
+    await sql`
+      INSERT INTO public.communication_threads (
+        id, tenant_id, customer_id, order_id, source, subject, status,
+        priority, category, created_by
+      ) VALUES
+        (${requestedThreadId}::uuid, ${KREILE_TENANT_SLUG}, ${fixture.customerId},
+         ${requestedOrder.receipt.orderId}, 'MS_GRAPH_IN:graph-requested',
+         'Anfrage zum Auftrag', 'received', 'normal', 'email', ${fixture.actorId}::uuid),
+        (${foreignThreadId}::uuid, ${KREILE_TENANT_SLUG}, ${fixture.customerId},
+         ${foreignOrder.receipt.orderId}, 'MS_GRAPH_IN:graph-foreign-bounce',
+         'Unzustellbar fremder Auftrag', 'received', 'normal', 'email', ${fixture.actorId}::uuid)
+    `;
+    await sql`
+      INSERT INTO public.communication_messages (
+        id, tenant_id, thread_id, direction, channel, body, summary, created_by
+      ) VALUES
+        (${randomUUID()}::uuid, ${KREILE_TENANT_SLUG}, ${requestedThreadId}::uuid,
+         'incoming', 'email', 'Bitte Auftrag prüfen.', 'Kunde A <kunde-a@example.test>', ${fixture.actorId}::uuid),
+        (${randomUUID()}::uuid, ${KREILE_TENANT_SLUG}, ${foreignThreadId}::uuid,
+         'incoming', 'email', 'Fremder Rückläufer.', 'Outlook <mailer@example.test>', ${fixture.actorId}::uuid)
+    `;
+
+    const { listLinkedOutlookMailsAction } = await import("@/app/actions/communications.actions");
+    const result = await withSession(fixture, () => listLinkedOutlookMailsAction({
+      targetType: "ORDER",
+      targetId: requestedOrder.receipt.orderId,
+    }));
+    expect(result).toEqual({
+      code: "OK",
+      data: [expect.objectContaining({
+        threadId: requestedThreadId,
+        graphMessageId: "graph-requested",
+        subject: "Anfrage zum Auftrag",
+        body: "Bitte Auftrag prüfen.",
+      })],
+    });
+
+    const rows = await sql<{ id: string; order_id: string; source: string }[]>`
+      SELECT id::text, order_id, source FROM public.communication_threads
+      WHERE id IN (${requestedThreadId}::uuid, ${foreignThreadId}::uuid)
+      ORDER BY id
+    `;
+    expect(rows).toHaveLength(2);
+    expect(rows).toContainEqual({
+      id: requestedThreadId,
+      order_id: requestedOrder.receipt.orderId,
+      source: "MS_GRAPH_IN:graph-requested",
+    });
+    expect(rows).toContainEqual({
+      id: foreignThreadId,
+      order_id: foreignOrder.receipt.orderId,
+      source: "MS_GRAPH_IN:graph-foreign-bounce",
+    });
+  }, 30_000);
 });

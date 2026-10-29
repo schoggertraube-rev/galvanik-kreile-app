@@ -5,6 +5,7 @@ import { resolveAuthorization } from "@/lib/server/authorization";
 import {
   attachInboxMessage,
   readCommunicationInbox,
+  readLinkedCommunicationMessages,
   sendCommunicationMail,
 } from "@/lib/server/communicationPort";
 import { readMicrosoftGraphConfigurationStatus } from "@/lib/server/microsoftGraph";
@@ -32,6 +33,13 @@ export async function listOutlookInboxAction() {
   const authorizationResult = await authorization();
   if (!authorizationResult.ok) return { code: "UNAUTHENTICATED" as const, message: authorizationResult.message };
   return readCommunicationInbox(authorizationResult.data);
+}
+
+export async function listLinkedOutlookMailsAction(input: TargetInput) {
+  noStore();
+  const authorizationResult = await authorization();
+  if (!authorizationResult.ok) return { code: "UNAUTHENTICATED" as const, message: authorizationResult.message };
+  return readLinkedCommunicationMessages(authorizationResult.data, input);
 }
 
 export async function attachOutlookMailAction(input: TargetInput & { graphMessageId: string }) {
