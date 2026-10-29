@@ -38,7 +38,7 @@ const card: OrderCardModel = {
   evidence: [],
   frozenAt: null,
   totalAmountCents: null,
-  payment: { kind: "available", value: { mode: "vorkasse", invoiceState: "not_issued", status: null, openAmountCents: null, goodsOutAllowed: false, goodsOut: null } },
+  payment: { kind: "available", value: { mode: "vorkasse", invoiceState: "not_issued", status: null, openAmountCents: null, goodsOutAllowed: false, paymentEvent: null, goodsOut: null } },
   catalog: [{ id: "11111111-1111-4111-8111-111111111111", name: "Vernickeln", surface: "Nickel", unit: "Stück", netPriceCents: 1200, vatRateBasisPoints: 1900 }],
 };
 
@@ -77,7 +77,7 @@ describe("Orders V1.1 one-surface truth", () => {
   });
 
   it("requires an explicit payment method before confirming money received", async () => {
-    const onConfirmPayment = vi.fn();
+    const onConfirmPayment = vi.fn().mockResolvedValue(true);
     render(<OrderCardView actions={{ ...actions, payment: { visible: true, enabled: true, reason: null }, onConfirmPayment }} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{ kind: "data", card }} />);
     fireEvent.click(screen.getAllByRole("button", { name: "Zahlung" })[0]);
     expect(screen.getByRole("dialog", { name: "Zahlung bestätigen" })).toBeInTheDocument();
@@ -85,6 +85,42 @@ describe("Orders V1.1 one-surface truth", () => {
     fireEvent.click(screen.getByRole("button", { name: "Bar" }));
     fireEvent.click(screen.getByRole("button", { name: "Zahlung bestätigen" }));
     await waitFor(() => expect(onConfirmPayment).toHaveBeenCalledWith("bar"));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Zahlung bestätigen" })).not.toBeInTheDocument());
+  });
+
+  it("keeps a failed payment in the dialog and shows an event-backed payment in history", async () => {
+    const onConfirmPayment = vi.fn().mockResolvedValue(false);
+    const paidCard: OrderCardModel = {
+      ...card,
+      payment: {
+        kind: "available",
+        value: {
+          mode: "vorkasse",
+          invoiceState: "issued",
+          invoiceId: "invoice-1",
+          invoiceNumber: "R-2026-0042",
+          status: "bezahlt",
+          openAmountCents: 0,
+          goodsOutAllowed: true,
+          paymentEvent: {
+            eventId: "payment-event-1",
+            actorId: "actor-1",
+            occurredAt: "2026-09-18T09:30:00.000Z",
+            method: "bar",
+          },
+          goodsOut: null,
+        },
+      },
+    };
+    render(<OrderCardView actions={{ ...actions, payment: { visible: true, enabled: true, reason: null }, feedback: { kind: "error", message: "Zahlung konnte nicht bestätigt werden." }, onConfirmPayment }} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{ kind: "data", card: paidCard }} />);
+    expect(screen.getByText("Zahlung bestätigt · Bar")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Zahlung" })[0]);
+    const dialog = screen.getByRole("dialog", { name: "Zahlung bestätigen" });
+    expect(dialog).toHaveTextContent("Zahlung konnte nicht bestätigt werden.");
+    fireEvent.click(screen.getByRole("button", { name: "Bar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Zahlung bestätigen" }));
+    await waitFor(() => expect(onConfirmPayment).toHaveBeenCalledWith("bar"));
+    expect(screen.getByRole("dialog", { name: "Zahlung bestätigen" })).toBeInTheDocument();
   });
 
   it("exposes the V1.1 action rail and persists note, item and part-state changes through ports", async () => {

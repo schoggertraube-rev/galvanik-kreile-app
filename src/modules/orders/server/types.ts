@@ -46,6 +46,12 @@ export type OrderCardPayment = {
   status: "offen" | "teilbezahlt" | "bezahlt" | null;
   openAmountCents: number | null;
   goodsOutAllowed: boolean;
+  paymentEvent: null | {
+    eventId: string;
+    actorId: string;
+    occurredAt: string;
+    method: "bar" | "ueberweisung" | "karte";
+  };
   goodsOut: null | {
     eventId: string;
     actorId: string;
@@ -114,7 +120,7 @@ export type OrderCardActionPorts = {
   ) => void | Promise<void>;
   onConfirmPayment: (
     method: "bar" | "ueberweisung" | "karte",
-  ) => void | Promise<void>;
+  ) => Promise<boolean>;
   onRecordGoodsOut: (mode: "versand" | "abholung") => void | Promise<void>;
   onReload: () => void | Promise<void>;
 };

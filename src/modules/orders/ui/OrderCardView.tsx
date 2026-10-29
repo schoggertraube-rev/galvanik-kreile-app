@@ -95,6 +95,12 @@ function paymentModeLabel(mode: "vorkasse" | "abholung" | "rechnung"): string {
   return "Rechnung";
 }
 
+function paymentMethodLabel(method: "bar" | "ueberweisung" | "karte"): string {
+  if (method === "bar") return "Bar";
+  if (method === "ueberweisung") return "Überweisung";
+  return "Karte";
+}
+
 export function OrderCardView({
   state,
   actions,
@@ -200,6 +206,7 @@ export function OrderCardView({
   const history = [
     ...card.dueDateChanges?.map((change) => ({ key: change.eventId, zeit: formatMoment(change.changedAt), text: `Liefertermin geändert · ${dueLabel(change.changedTo)} · ${change.reason} · ${change.changedBy}`, icon: "calendar" as IconName, ton: "warn" as const })) ?? [],
     ...card.evidence.map((entry) => ({ key: entry.key, zeit: formatMoment(entry.recordedAt), text: `${entry.source} · ${entry.state}`, icon: "file" as IconName })),
+    ...(payment?.paymentEvent ? [{ key: payment.paymentEvent.eventId, zeit: formatMoment(payment.paymentEvent.occurredAt), text: `Zahlung bestätigt · ${paymentMethodLabel(payment.paymentEvent.method)}`, icon: "card" as IconName, ton: "ok" as const }] : []),
     ...(card.frozenAt ? [{ key: "freeze", zeit: formatMoment(card.frozenAt), text: "Auftrag fertig gemeldet", icon: "checkc" as IconName, ton: "ok" as const }] : []),
     { key: "intake", zeit: formatMoment(card.intakeAt), text: `Angenommen · ${card.items.length} ${card.items.length === 1 ? "Position" : "Positionen"}`, icon: "box" as IconName },
   ];
@@ -251,7 +258,7 @@ export function OrderCardView({
     <Seitenblatt titel={`Auftragskarte ${card.orderNumber}`} onSchliessen={onClose}>
       <Karte kopf={head} kette={chain} haupt={main} rail={rail} fuss={footer} />
     </Seitenblatt>
-    {paymentOpen ? <Dialog titel="Zahlung bestätigen" icon="card" groesse="schmal" onSchliessen={() => setPaymentOpen(false)} fuss={<><Button text="Abbrechen" onClick={() => setPaymentOpen(false)} /><Button art="primaer" icon="check" text="Zahlung bestätigen" disabled={!paymentMethod} onClick={() => { if (!paymentMethod) return; void actions.onConfirmPayment(paymentMethod); setPaymentOpen(false); }} /></>}><Segment label="Zahlart" wert={paymentMethod} onWert={setPaymentMethod} optionen={[{ wert: "bar", text: "Bar" }, { wert: "ueberweisung", text: "Überweisung" }, { wert: "karte", text: "Karte" }]} /></Dialog> : null}
+    {paymentOpen ? <Dialog titel="Zahlung bestätigen" icon="card" groesse="schmal" onSchliessen={() => setPaymentOpen(false)} meldung={actions.feedback.kind === "error" || actions.feedback.kind === "conflict" ? { text: actions.feedback.message, ton: "fehler" } : null} fuss={<><Button text="Abbrechen" disabled={actions.feedback.kind === "submitting"} onClick={() => setPaymentOpen(false)} /><Button art="primaer" icon="check" text="Zahlung bestätigen" disabled={!paymentMethod || actions.feedback.kind === "submitting"} onClick={async () => { if (!paymentMethod) return; const confirmed = await actions.onConfirmPayment(paymentMethod); if (confirmed) { setPaymentOpen(false); setPaymentMethod(""); } }} /></>}><Segment label="Zahlart" wert={paymentMethod} onWert={setPaymentMethod} optionen={[{ wert: "bar", text: "Bar" }, { wert: "ueberweisung", text: "Überweisung" }, { wert: "karte", text: "Karte" }]} />{actions.feedback.kind === "submitting" ? <Zustand art="laedt" text={actions.feedback.message} /> : null}</Dialog> : null}
     {invoicePriceOpen ? <Dialog titel="Preise für die Rechnung" icon="receipt" groesse="schmal" onSchliessen={() => setInvoicePriceOpen(false)}><form className="kr-stapel" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const prices = missingInvoicePrices.map((item) => ({ itemId: item.id, unitPriceCents: Math.round(Number(form.get(`price-${item.id}`)) * 100) })); if (prices.some((price) => !Number.isSafeInteger(price.unitPriceCents) || price.unitPriceCents < 1)) return; void actions.onIssueInvoice(prices); setInvoicePriceOpen(false); }}>{missingInvoicePrices.map((item) => <Feld key={item.id} label={`${item.name} · Einzelpreis netto`}><Eingabe name={`price-${item.id}`} type="number" min="0.01" step="0.01" inputMode="decimal" required /></Feld>)}<Hinweis>Die Preise werden am Auftrag gespeichert und direkt in die unveränderliche Rechnung übernommen.</Hinweis><Button art="primaer" icon="receipt" text="Preise speichern & Rechnung ausstellen" type="submit" /></form></Dialog> : null}
     {dueOpen ? <Dialog titel="Liefertermin ändern" icon="calendar" groesse="schmal" onSchliessen={() => setDueOpen(false)}><form className="kr-stapel" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void actions.onChangeDueDate?.(String(form.get("dueDate") ?? ""), String(form.get("reason") ?? "")); setDueOpen(false); }}><Feld label="Neuer Liefertermin"><Eingabe type="date" name="dueDate" defaultValue={card.dueAt?.slice(0, 10) ?? ""} required /></Feld><Feld label="Grund der Änderung"><Textfeld name="reason" minLength={3} maxLength={500} required /></Feld><Button art="primaer" icon="calendar" text="Termin mit Grund speichern" type="submit" /></form></Dialog> : null}
     {noteOpen ? <Dialog titel="Auftragsnotiz bearbeiten" icon="edit" groesse="schmal" onSchliessen={() => setNoteOpen(false)}><form className="kr-stapel" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const value = String(form.get("note") ?? "").trim(); void actions.onSaveContent?.({ note: value || null, items: contentItems }); setNoteOpen(false); }}><Feld label="Notiz"><Textfeld name="note" defaultValue={card.note ?? ""} maxLength={2000} /></Feld><Button art="primaer" icon="check" text="Notiz speichern" type="submit" /></form></Dialog> : null}

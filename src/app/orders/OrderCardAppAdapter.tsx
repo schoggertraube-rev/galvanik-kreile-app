@@ -130,6 +130,18 @@ function paymentContext(
       status: v.payment?.status ?? null,
       openAmountCents: v.payment?.openAmountCents ?? null,
       goodsOutAllowed: v.goodsOutAllowed,
+      paymentEvent:
+        v.payment?.eventId &&
+        v.payment.method &&
+        v.payment.paidAt &&
+        v.paymentActorId
+          ? {
+              eventId: v.payment.eventId,
+              actorId: v.paymentActorId,
+              occurredAt: v.payment.paidAt,
+              method: v.payment.method,
+            }
+          : null,
       goodsOut: v.goodsOut
         ? {
             eventId: v.goodsOut.eventId,
@@ -229,7 +241,7 @@ export function OrderCardAppAdapter({
   const requests = useRef<Record<string, string>>({});
   const load = useCallback(
     async (preserve = false): Promise<Snapshot | null> => {
-      setState({ kind: "loading" });
+      if (!preserve) setState({ kind: "loading" });
       if (!preserve) setFeedback({ kind: "idle", message: "" });
       try {
         const result = await invokeOrderCardLoadStep(
@@ -528,9 +540,9 @@ export function OrderCardAppAdapter({
     );
   }, [fail, load, orderId, snapshot, success]);
   const onConfirmPayment = useCallback(
-    async (method: "bar" | "ueberweisung" | "karte") => {
+    async (method: "bar" | "ueberweisung" | "karte"): Promise<boolean> => {
       const invoice = snapshot?.payment?.payment;
-      if (!invoice || invoice.openAmountCents <= 0) return;
+      if (!invoice || invoice.openAmountCents <= 0) return false;
       setFeedback({
         kind: "submitting",
         message: "Zahlung wird sicher bestätigt.",
@@ -545,7 +557,7 @@ export function OrderCardAppAdapter({
       });
       if (result.code !== "OK") {
         await fail(result);
-        return;
+        return false;
       }
       const fresh = await load(true);
       const persisted = fresh?.payment?.payment;
@@ -560,7 +572,7 @@ export function OrderCardAppAdapter({
           message:
             "Die Zahlung konnte nicht sicher bestätigt werden. Bitte den Zahlungsstand neu laden.",
         });
-        return;
+        return false;
       }
       success(
         "payment",
@@ -572,6 +584,7 @@ export function OrderCardAppAdapter({
         },
         "Zahlung wurde sicher bestätigt.",
       );
+      return true;
     },
     [fail, load, snapshot, success],
   );

@@ -463,4 +463,110 @@ describe("H18 settings Server Actions against the real replay database", () => {
       due_date: "2027-03-31",
     });
   }, 30_000);
+
+  it("C1a.5 invokes confirmPaymentAction and exposes the persisted payment event for the order timeline", async () => {
+    const fixture = await createFixture("payment-timeline");
+    const invoiceId = randomUUID();
+    const clientEventId = randomUUID();
+    const invoiceSerial = 10_000 + Number.parseInt(invoiceId.slice(0, 8), 16);
+    const invoiceNumber = `R-2026-${invoiceSerial}`;
+    const { createOrderIntakeAction } = await import("@/app/warendurchlauf/actions");
+    const intake = await withSession(fixture, () => createOrderIntakeAction({
+      clientEventId: randomUUID(),
+      customer: { mode: "EXISTING", customerId: fixture.customerId },
+      dueDate: "2026-12-18",
+      termStatus: "bestaetigt",
+      intakeSource: "persoenlich",
+      handoverMode: "pickup",
+      paymentMode: "vorkasse",
+      note: "C1a Zahlungsbeleg",
+      items: [{
+        catalogServiceId: null,
+        name: "C1a Zahlungsteil",
+        quantity: 1,
+        material: "Stahl",
+        surfaceRequested: "Vernickeln",
+        executionRequested: "offen",
+        unit: null,
+        unitPriceCents: null,
+        vatRateBasisPoints: null,
+      }],
+    }));
+    if (intake.code !== "OK") throw new Error(`C1A_INTAKE_FAILED:${intake.code}:${intake.message}`);
+
+    await sql`
+      UPDATE public.orders
+      SET station = 'fertig', current_station = 'fertig', current_station_id = 'fertig',
+          status = 'fertig', version = 2
+      WHERE id = ${intake.receipt.orderId} AND tenant_id = ${KREILE_TENANT_SLUG}
+    `;
+    await sql`
+      INSERT INTO public.invoices (
+        id, tenant_id, customer_id, order_id, invoice_number, amount_total,
+        status, due_date, gross_amount_cents, payment_contract_version,
+        payment_mode, payment_status, payment_open_amount_cents,
+        payment_paid_amount_cents, payment_currency, payment_version
+      ) VALUES (
+        ${invoiceId}::uuid, ${KREILE_TENANT_SLUG}, ${fixture.customerId},
+        ${intake.receipt.orderId}, ${invoiceNumber}, 125.00, 'issued',
+        '2026-12-18'::date, 12500, 1, 'vorkasse', 'offen', 12500, 0, 'EUR', 0
+      )
+    `;
+
+    const { confirmPaymentAction, getOrderPaymentStateAction } = await import("@/app/actions/payments.actions");
+    const confirmed = await withSession(fixture, () => confirmPaymentAction({
+      invoiceId,
+      amount: 12_500,
+      method: "bar",
+      expectedVersion: 0,
+      clientEventId,
+    }));
+    expect(confirmed.code).toBe("OK");
+    if (confirmed.code !== "OK") throw new Error(`C1A_PAYMENT_FAILED:${confirmed.code}`);
+
+    const readback = await withSession(fixture, () => getOrderPaymentStateAction({
+      orderId: intake.receipt.orderId,
+    }));
+    expect(readback.code).toBe("OK");
+    if (readback.code === "OK") {
+      expect(readback.data.payment).toMatchObject({
+        invoiceId,
+        status: "bezahlt",
+        openAmountCents: 0,
+        method: "bar",
+        eventId: confirmed.receipt.eventId,
+        paidAt: confirmed.receipt.confirmedAt,
+      });
+      expect(readback.data.paymentActorId).toBe(fixture.actorId);
+    }
+
+    const [row] = await sql<{
+      payment_status: string;
+      payment_open_amount_cents: number;
+      payment_method: string;
+      payment_event_id: string;
+      actor_id: string;
+      event_count: number;
+    }[]>`
+      SELECT invoice.payment_status, invoice.payment_open_amount_cents,
+        invoice.payment_method, invoice.payment_event_id,
+        events.user_id::text AS actor_id,
+        (SELECT count(*)::integer FROM public.events counted
+         WHERE counted.tenant_id = invoice.tenant_id
+           AND counted.order_id = invoice.order_id
+           AND counted.event_type = 'PAYMENT_CONFIRMED_V1'
+           AND counted.id = invoice.payment_event_id) AS event_count
+      FROM public.invoices invoice
+      JOIN public.events events ON events.id = invoice.payment_event_id
+      WHERE invoice.id = ${invoiceId}::uuid
+    `;
+    expect(row).toEqual({
+      payment_status: "bezahlt",
+      payment_open_amount_cents: 0,
+      payment_method: "bar",
+      payment_event_id: confirmed.receipt.eventId,
+      actor_id: fixture.actorId,
+      event_count: 1,
+    });
+  }, 30_000);
 });
