@@ -6,7 +6,7 @@ export type Bereich = 'tag' | 'werkstatt' | 'auftraege' | 'kunden' | 'geld' | 'e
 export interface NavEintrag { id: Bereich; text: string; icon: IconName; badge?: { n: number; rot?: boolean }; }
 export interface AppShellProps {
   geraet: Geraet;
-  /** buero = Rolf-V8-Machart (Seitenleiste bzw. Dock) · werkstatt = Phillip V4 (Kompaktkopf + feste Aktionsleiste) */
+  /** buero = Seitenleiste bzw. Dock · werkstatt = Kompaktkopf + feste Aktionsleiste */
   variante: 'buero' | 'werkstatt';
   aktiv: Bereich; kuerzel: string; datum?: ReactNode;
   /** vom Admin je Person gesperrte Bereiche (OE-2609-09) werden nicht angezeigt */
@@ -26,7 +26,7 @@ const DOCK: Array<{ id: Bereich | 'mehr'; text: string; icon: IconName }> = [
   { id: 'tag', text: 'Der Tag', icon: 'sun' }, { id: 'auftraege', text: 'Aufträge', icon: 'list' }, { id: 'kunden', text: 'Kunden', icon: 'users' },
   { id: 'geld', text: 'Geld', icon: 'euro' }, { id: 'mehr', text: 'Mehr', icon: 'grid' }
 ];
-/** Navigation nach Gerät, nicht nach Rolle. Aktionsleiste NUR variante=werkstatt – nie auf Rolf-Desktop (G3/G4). Kalender-Menüpunkt erst nach M365-Abnahme. */
+/** Navigation nach Gerät, nicht nach Rolle. Aktionsleiste NUR variante=werkstatt – nie auf Büro-Desktop (G3/G4). Kalender-Menüpunkt erst nach M365-Abnahme. */
 export function AppShell(p: AppShellProps) {
   const kopf = (
     <header className="kr-kopf">

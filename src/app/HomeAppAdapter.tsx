@@ -1,6 +1,6 @@
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type { OrdersHomeProjection } from "@/modules/orders/public";
-import { RolfHome } from "@/components/home/RolfHome";
+import { OfficeHome } from "@/components/home/OfficeHome";
 
 type HomeAppAdapterProps = {
   authorization: AuthorizationSnapshot;
@@ -8,5 +8,5 @@ type HomeAppAdapterProps = {
 };
 
 export async function HomeAppAdapter({ authorization }: HomeAppAdapterProps) {
-  return <RolfHome authorization={authorization} />;
+  return <OfficeHome authorization={authorization} />;
 }

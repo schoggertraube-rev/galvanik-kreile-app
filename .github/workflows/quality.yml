@@ -618,6 +618,11 @@ jobs:
           npm run quality:f0-f2-schema
           npm run quality:f0-f2-schema:selftest
 
+      - name: H16 product-code ESLint contracts and self-test
+        run: |
+          npm run quality:h16-eslint-contracts
+          npm run quality:h16-eslint-contracts:selftest
+
       - name: H11 fixed action matrix against real server commands
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres

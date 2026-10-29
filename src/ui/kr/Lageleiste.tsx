@@ -7,7 +7,7 @@ export interface LageleisteProps {
   /** offene Punkte je Art – aufgeschobene zählen mit, delegierte nicht (Owner 2026-09-26) */
   zaehler: Record<HandlungsArt, number>;
   filter: HandlungsArt | 'alle'; onFilter: (f: HandlungsArt | 'alle') => void;
-  /** Firmengesundheit (USP): Termintreue · Liquidität 30 Tage (OE-2609-21/23). Phillip: nur Termintreue, nie Geld. */
+  /** Firmengesundheit (USP): Termintreue · Liquidität 30 Tage (OE-2609-21/23). Werkstatt: nur Termintreue, nie Geld. */
   gesund: GesundAnzeige[];
 }
 const ARTEN: Array<[HandlungsArt, string, string, 'rot' | 'info' | 'warn']> = [['konflikt', 'Konflikt', 'Konflikte', 'rot'], ['warnung', 'Warnung', 'Warnungen', 'warn'], ['entscheidung', 'Entscheidung', 'Entscheidungen', 'info']];

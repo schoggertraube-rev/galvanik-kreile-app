@@ -76,7 +76,7 @@ export function KreileAppShell({ children, globalCreate }: { children: React.Rea
   if (loginOnly) return <div className={styles.loginRoot}>{children}</div>;
 
   const role = permissions.role?.toLowerCase() ?? "";
-  const workshop = role === "werkstatt";
+  const workshop = new Set(["werkstatt"]).has(role);
   const canUseShell = permissions.status === "authenticated";
   const canCreate = permissions.hasPermission("perm_data_customers") || permissions.hasPermission("perm_data_orders");
   const hidden: Bereich[] = [];

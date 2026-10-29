@@ -46,6 +46,8 @@
     "quality:supabase-cli:selftest": "node scripts/supabase-version-check.mjs --selftest",
     "quality:f0-f2-schema": "node scripts/quality/check-f0-f2-schema.mjs",
     "quality:f0-f2-schema:selftest": "node scripts/quality/check-f0-f2-schema.mjs --selftest",
+    "quality:h16-eslint-contracts": "node scripts/quality/check-h16-eslint.mjs",
+    "quality:h16-eslint-contracts:selftest": "node scripts/quality/check-h16-eslint.mjs --selftest",
     "db:seed": "tsx src/db/seed.ts",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",

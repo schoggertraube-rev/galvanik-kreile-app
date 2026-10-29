@@ -1,7 +1,7 @@
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import {
   buildWerkstattData,
-  type PhillipWerkstattViewModel,
+  type WorkshopViewModel,
   type WerkstattSurfaceOrder,
 } from "@/modules/werkstatt/public";
 import {
@@ -43,10 +43,7 @@ function hasDuplicateIdentity(orders: readonly WarendurchlaufOrder[]): boolean {
 
 export async function loadWerkstattHome(
   authorization: AuthorizationSnapshot,
-): Promise<PhillipWerkstattViewModel> {
-  if (authorization.role !== "werkstatt") {
-    return { kind: "denied", message: "Diese Rollen-Startseite ist nicht freigegeben." };
-  }
+): Promise<WorkshopViewModel> {
   if (!authorization.permissions.includes("perm_view_leitstand")) {
     return { kind: "denied", message: "Werkstattdaten sind für diese Rolle nicht freigegeben." };
   }

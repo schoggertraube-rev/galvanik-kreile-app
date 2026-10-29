@@ -1,7 +1,7 @@
 import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
 import {
   buildWerkstattData,
-  type PhillipWerkstattViewModel,
+  type WorkshopViewModel,
   type WerkstattSurfaceOrder,
 } from "@/modules/werkstatt/public";
 import {
@@ -16,7 +16,7 @@ const DENIAL_MESSAGE = "Zugriff nicht erlaubt.";
 const ERROR_MESSAGE = "Werkstattdaten konnten nicht sicher geladen werden.";
 const CONFLICT_MESSAGE = "Werkstattdaten enthalten widersprüchliche Auftragskennungen.";
 
-function render(view: PhillipWerkstattViewModel) {
+function render(view: WorkshopViewModel) {
   return <WerkstattAppAdapter view={view} />;
 }
 

@@ -1,12 +1,14 @@
 export function getGreeting(date = new Date(), role = "Meister") {
   const hour = date.getHours();
-  
-  // Map roles to displays
-  let roleDisplay = role || "Meister";
-  if (role === "admin" || role === "developer" || role === "inhaber") roleDisplay = "Admin";
-  else if (role === "werkstatt") roleDisplay = "Werkstatt";
-  else if (role === "buero") roleDisplay = "Büro";
-  else if (role === "meister") roleDisplay = "Meister";
+  const roleLabels: Record<string, string> = {
+    admin: "Admin",
+    developer: "Admin",
+    inhaber: "Admin",
+    werkstatt: "Werkstatt",
+    buero: "Büro",
+    meister: "Meister",
+  };
+  let roleDisplay = roleLabels[role] ?? (role || "Meister");
   
   // Capitalize first letter if it's something else
   roleDisplay = roleDisplay.charAt(0).toUpperCase() + roleDisplay.slice(1);

@@ -1,6 +1,6 @@
 export type {
-  PhillipOrderCard,
-  PhillipWerkstattViewModel,
+  WorkshopOrderCard,
+  WorkshopViewModel,
   WerkstattData,
   WerkstattHeldCard,
   WerkstattKpiSnapshot,

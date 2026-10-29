@@ -2,6 +2,7 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 import unusedImports from "eslint-plugin-unused-imports";
+import h16Plugin from "./scripts/quality/eslint-h16-plugin.mjs";
 
 // ── Module-boundary import rules (APP-STRUCTURE-001) ──────────────
 // These rules enforce zero-violation boundaries from OWNERSHIP_MAP.md.
@@ -73,9 +74,42 @@ const eslintConfig = defineConfig([
   {
     plugins: {
       "unused-imports": unusedImports,
+      h16: h16Plugin,
     },
     rules: {
       "unused-imports/no-unused-imports": "error",
+    },
+  },
+  {
+    files: ["src/**/*.ts", "src/**/*.tsx"],
+    rules: {
+      "h16/no-role-identity-comparison": "error",
+      "h16/no-role-permissions": "error",
+      "h16/no-person-names": "error",
+    },
+  },
+  {
+    files: [
+      "src/**/__tests__/**",
+      "src/**/*.test.ts",
+      "src/**/*.test.tsx",
+      "src/**/*.spec.ts",
+      "src/**/*.spec.tsx",
+    ],
+    rules: {
+      "h16/no-role-identity-comparison": "off",
+      "h16/no-role-permissions": "off",
+      "h16/no-person-names": "off",
+    },
+  },
+  {
+    files: [
+      "src/lib/server/appSession.ts",
+      "src/lib/server/todayDashboardPolicy.ts",
+      "src/app/settings/SettingsAdminClient.tsx",
+    ],
+    rules: {
+      "h16/no-role-identity-comparison": "off",
     },
   },
   {
