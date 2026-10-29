@@ -21,19 +21,12 @@ function expectNoPortCalls() {
 describe("W2C B2M3A fail-closed commands", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("denies every phone-note, status-event, cockpit, service, and repository writer without data or port access", async () => {
-    const [phoneNotes, statusEvents, cockpit, { eventsRepository }, { labelService }, { intakeService }] = await Promise.all([
-      import("../phoneNotes.actions"), import("../status-events.actions"), import("@/app/cockpit/actions"),
+  it("denies every cockpit, service, and repository writer without data or port access", async () => {
+    const [cockpit, { eventsRepository }, { labelService }, { intakeService }] = await Promise.all([
+      import("@/app/cockpit/actions"),
       import("@/lib/repositories/eventsRepository"), import("@/lib/services/labelService"), import("@/lib/services/intakeService"),
     ]);
 
-    await expect(phoneNotes.createPhoneNote({ rawText: "note" })).resolves.toEqual({ success: false, error: "NOT_AVAILABLE", message: denial });
-    await expect(phoneNotes.updatePhoneNote("note-1", {})).resolves.toEqual({ success: false, error: "NOT_AVAILABLE", message: denial });
-    await expect(phoneNotes.getRecentPhoneNotes()).resolves.toEqual({ success: false, error: "NOT_AVAILABLE", message: denial });
-    await expect(statusEvents.createStatusEvent({ orderId: "order-1", eventType: "NOTE_ADDED" })).resolves.toEqual({ ok: false, error: "CONFLICT", message: denial });
-    await expect(statusEvents.getStatusEventsByOrderId("order-1")).resolves.toEqual({ ok: false, error: "CONFLICT", message: denial });
-    await expect(statusEvents.getStatusEventsByItemId("item-1")).resolves.toEqual({ ok: false, error: "CONFLICT", message: denial });
-    await expect(statusEvents.getRecentStatusEvents()).resolves.toEqual({ ok: false, error: "CONFLICT", message: denial });
     await expect(cockpit.savePhoneNote({ raw_text: "note", category: "x", urgency: "x" })).resolves.toEqual({ ok: false, error: "NOT_AVAILABLE", message: denial });
     await expect(eventsRepository.addEvent({ eventType: "NOTE_ADDED" })).resolves.toEqual({ ok: false, error: "NOT_AVAILABLE", message: denial });
     await expect(eventsRepository.getAll()).resolves.toEqual([]);

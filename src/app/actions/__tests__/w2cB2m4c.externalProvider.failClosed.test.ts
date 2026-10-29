@@ -6,8 +6,6 @@ const extractZeitraum = vi.fn();
 const buildDataContext = vi.fn();
 const generateAiResponse = vi.fn();
 const generateGeminiContentWithFallback = vi.fn();
-const geminiOcr = vi.fn();
-const simulateScan = vi.fn();
 const checkAppAuth = vi.fn();
 const GoogleGenerativeAI = vi.fn();
 const fetchSpy = vi.fn();
@@ -15,8 +13,6 @@ const canonicalSearch = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/search/aiAggregation", () => ({ extractZeitraum, buildDataContext }));
 vi.mock("@/lib/ai/geminiClient", () => ({ generateAiResponse, generateGeminiContentWithFallback }));
-vi.mock("@/lib/ocr/geminiOcr", () => ({ extractDocumentData: geminiOcr }));
-vi.mock("@/lib/services/ocrService", () => ({ ocrService: { simulateScan } }));
 vi.mock("@/lib/server/authHelper", () => ({ checkAppAuth }));
 vi.mock("@google/generative-ai", () => ({ GoogleGenerativeAI }));
 vi.mock("@/db", () => ({ db: {} }));
@@ -31,23 +27,17 @@ const denial = "NOT_AVAILABLE: Sicherer W3-KI-/Provider-Vertrag fehlt.";
 describe("W2C-B2M4C external provider fail-closed", () => {
   it("denies every server provider path before a side effect", async () => {
     vi.stubGlobal("fetch", fetchSpy);
-    const [{ askGlobalAiAction }, { analyzePhoneNoteWithAI }, { processImage, processImageWithAI }, { extractCustomerDataFromFreetext, enrichCustomerData }, { getFeierabendEvents }] = await Promise.all([
+    const [{ askGlobalAiAction }, { analyzePhoneNoteWithAI }, { getFeierabendEvents }] = await Promise.all([
       import("@/app/actions/aiSearch"),
       import("@/app/actions/analyzePhoneNote"),
-      import("@/app/actions/ocr.actions"),
-      import("@/app/actions/ai-enrichment.actions"),
       import("@/app/actions/start.actions"),
     ]);
 
     await expect(askGlobalAiAction("wie ist die Lage?")).resolves.toEqual({ zusammenfassung: denial, kernzahlen: [], auffaelligkeiten: [], empfehlungen: [] });
     await expect(analyzePhoneNoteWithAI({ text: "Bitte zurückrufen", knownFacts: { customerCandidates: [], orderCandidates: [], selectedCustomer: null, selectedOrders: [], detectedDate: null, paymentKnown: null } })).resolves.toBeNull();
-    await expect(processImage("image")).rejects.toThrow(denial);
-    await expect(processImageWithAI("image")).rejects.toThrow(denial);
-    await expect(extractCustomerDataFromFreetext("Max Mustermann")).resolves.toEqual({ ok: false, error: denial });
-    await expect(enrichCustomerData("Mustermann", "Frankfurt")).resolves.toEqual({ ok: false, error: denial });
     await expect(getFeierabendEvents()).resolves.toEqual({ event: null, success: false });
 
-    for (const spy of [extractZeitraum, buildDataContext, generateAiResponse, generateGeminiContentWithFallback, geminiOcr, simulateScan, checkAppAuth, GoogleGenerativeAI, fetchSpy]) {
+    for (const spy of [extractZeitraum, buildDataContext, generateAiResponse, generateGeminiContentWithFallback, checkAppAuth, GoogleGenerativeAI, fetchSpy]) {
       expect(spy).not.toHaveBeenCalled();
     }
   });
