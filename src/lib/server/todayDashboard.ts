@@ -233,10 +233,20 @@ export async function saveTodayReminder(auth: AuthorizationSnapshot, input: { it
   if (!input.itemKey || input.itemKey.length > 300 || !["afternoon", "tomorrow", "after_due"].includes(input.mode)) return { code: "VALIDATION_ERROR" as const, message: "Erinnerung ist ungültig." };
   const decision = deriveTodayReminder(input.mode, input.dueDate, new Date());
   if (!decision) return { code: "VALIDATION_ERROR" as const, message: "Diese Erinnerung ist für den aktuellen Termin nicht möglich." };
-  await withPrivilegedTenantTransaction(auth, (tx) => tx.execute(sql`
-    INSERT INTO private.today_reminders (tenant_id, actor_id, item_key, reminder_until, reminder_mode)
-    VALUES (${auth.tenantId}, ${auth.userId}::uuid, ${input.itemKey}, ${decision.until.toISOString()}::timestamptz, ${input.mode})
-    ON CONFLICT (tenant_id, actor_id, item_key) DO UPDATE SET reminder_until=EXCLUDED.reminder_until, reminder_mode=EXCLUDED.reminder_mode, updated_at=statement_timestamp()
-  `));
+  await withPrivilegedTenantTransaction(auth, async (tx) => {
+    await tx.execute(sql`
+      INSERT INTO private.today_reminders (tenant_id, actor_id, item_key, reminder_until, reminder_mode)
+      VALUES (${auth.tenantId}, ${auth.userId}::uuid, ${input.itemKey}, ${decision.until.toISOString()}::timestamptz, ${input.mode})
+      ON CONFLICT (tenant_id, actor_id, item_key) DO UPDATE SET reminder_until=EXCLUDED.reminder_until, reminder_mode=EXCLUDED.reminder_mode, updated_at=statement_timestamp()
+    `);
+    await tx.execute(sql`
+      INSERT INTO public.ui_events (tenant_id, event_type, payload)
+      VALUES (
+        ${auth.tenantId},
+        'today_reminder_saved',
+        jsonb_build_object('actorId', ${auth.userId}::text, 'itemKey', ${input.itemKey}::text, 'mode', ${input.mode}::text)
+      )
+    `);
+  });
   return { code: "OK" as const, message: decision.message, data: { reminderUntil: decision.until.toISOString() } };
 }

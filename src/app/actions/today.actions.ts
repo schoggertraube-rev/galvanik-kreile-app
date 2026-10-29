@@ -27,5 +27,10 @@ export async function saveTodayReminderAction(input: { itemKey: string; mode: "a
   const authorization = await auth("auftraege");
   if (!authorization.ok) return authorization.result;
   try { return await saveTodayReminder(authorization.data, input); }
-  catch { return { code: "UNAVAILABLE" as const, message: "Die Erinnerung konnte nicht sicher gespeichert werden." }; }
+  catch (error) {
+    console.error("[TODAY_REMINDER_SAVE_FAILED]", {
+      message: error instanceof Error ? error.message.slice(0, 200) : "UNKNOWN",
+    });
+    return { code: "UNAVAILABLE" as const, message: "Die Erinnerung konnte nicht sicher gespeichert werden. Fehlercode: TODAY_REMINDER_SAVE_FAILED." };
+  }
 }
