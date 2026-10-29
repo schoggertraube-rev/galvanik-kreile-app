@@ -398,8 +398,7 @@ export function SettingsAdminClient({
         <div className={styles.userList}>{inactiveUsers.map((user) => renderUserCard(user, true))}</div>
       </details> : null}
       {canManageLogins ? <div className={styles.rightsRegion} role="region" aria-label="Rechtematrix">{rightsMessage ? <DialogAktionsmeldung meldung={rightsMessage} /> : null}<div className={styles.rightsTable}><table><thead><tr><th>Bereich</th>{activeUsers.map((user) => <th key={user.id} aria-label={`${user.shortCode} ${user.fullName}`}><span className={styles.rightsPerson}><span>{user.shortCode}</span><strong>{user.fullName}</strong>{
-        // eslint-disable-next-line h16/no-role-identity-comparison -- erlaubt H11c: Anzeige Einsicht & Systempflege
-        user.role === "developer" ? <small>Einsicht & Systempflege</small> : null
+        user.fixedAreas.includes("wartung") ? <small>Einsicht & Systempflege</small> : null
       }</span></th>)}</tr></thead><tbody>{ACCESS_AREAS.map((area) => <tr key={area}><th><strong>{ACCESS_AREA_LABELS[area].text}</strong>{ACCESS_AREA_LABELS[area].sub ? <small>{ACCESS_AREA_LABELS[area].sub}</small> : null}</th>{activeUsers.map((user) => {
         const fixed = user.fixedAreas.includes(area);
         const blocked = !isAccessAreaAllowedForRole(user.role, area);

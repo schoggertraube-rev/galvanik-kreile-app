@@ -41,7 +41,7 @@ function selftest() {
   }
 
   const allowed = [
-    "// eslint-disable-next-line h16/no-role-identity-comparison -- erlaubt H11c",
+    "// erlaubt H11c: synthetische Sitzungsprüfung",
     'const allowed = role === "developer";',
   ].join("\n");
   const allowedMessages = verifySample(allowed).filter((message) => message.ruleId?.startsWith("h16/"));
