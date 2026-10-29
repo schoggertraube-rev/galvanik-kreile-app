@@ -109,7 +109,28 @@ describe("quotes command boundary", () => {
       termStatus: "bestaetigt" as const,
       intakeSource: "anfrage_mail" as const,
     };
-    const expectedOrderHash = createHash("sha256").update(JSON.stringify(orderInput), "utf8").digest("hex");
+    const expectedOrderIntent = {
+      clientEventId: orderInput.clientEventId,
+      customer: orderInput.customer,
+      dueDate: orderInput.dueDate,
+      termStatus: orderInput.termStatus,
+      intakeSource: orderInput.intakeSource,
+      handoverMode: orderInput.handoverMode,
+      items: orderInput.items.map((item) => ({
+        catalogServiceId: item.catalogServiceId,
+        name: item.name,
+        quantity: item.quantity,
+        material: item.material,
+        surfaceRequested: item.surfaceRequested,
+        executionRequested: "offen",
+        unit: item.unit,
+        unitPriceCents: item.unitPriceCents,
+        vatRateBasisPoints: item.vatRateBasisPoints,
+      })),
+      note: orderInput.note,
+      paymentMode: orderInput.paymentMode,
+    };
+    const expectedOrderHash = createHash("sha256").update(JSON.stringify(expectedOrderIntent), "utf8").digest("hex");
     execute
       .mockResolvedValueOnce([quoteRow])
       .mockResolvedValueOnce([{ result_code: "OK", order_input: {
