@@ -35,11 +35,29 @@
     "src/app/actions/orders.actions.ts#changeOrderPromisedDueDateAction": [
       "src/test/h18_settings_actions.integration.test.ts"
     ],
+    "src/app/actions/orders.actions.ts#assignOrderTaskAction": [
+      "src/test/h18_order_admin_actions.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#changeOrderContentAction": [
+      "src/test/h18_order_admin_actions.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#changeOrderItemExtraWorkAction": [
+      "src/test/h18_order_admin_actions.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#configureExtraWorkCatalogPositionAction": [
+      "src/test/h18_order_admin_actions.integration.test.ts"
+    ],
     "src/app/actions/orders.actions.ts#correctGalvanikToWareneingangAction": [
       "src/test/h18_workshop_actions.integration.test.ts"
     ],
     "src/app/actions/orders.actions.ts#freezeOrderAction": [
       "src/test/h18_workshop_actions.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#handBackOrderTaskAction": [
+      "src/test/h18_order_admin_actions.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#reopenFrozenOrderAction": [
+      "src/test/h18_order_admin_actions.integration.test.ts"
     ],
     "src/app/actions/orders.actions.ts#setOrderItemFinishedAction": [
       "src/test/h18_workshop_actions.integration.test.ts"
@@ -111,14 +129,8 @@
     "src/app/actions/items.actions.ts#updateItemDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/mahnung.actions.ts#sendeMahnung": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/mahnung.actions.ts#sendeZahlungserinnerung": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/orders.actions.ts#assignOrderTaskAction": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/orders.actions.ts#changeOrderContentAction": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/orders.actions.ts#changeOrderItemExtraWorkAction": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/orders.actions.ts#configureExtraWorkCatalogPositionAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/orders.actions.ts#createOrderDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/orders.actions.ts#createOrderFromScan": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/orders.actions.ts#handBackOrderTaskAction": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/orders.actions.ts#reopenFrozenOrderAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/orders.actions.ts#transitionOrderProcess": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/orders.actions.ts#updateOrderDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/price-lines.actions.ts#createPriceLineDb": "H18.8 Bestand ohne Replay-Action-Test",
