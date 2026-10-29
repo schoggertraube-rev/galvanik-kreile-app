@@ -360,6 +360,7 @@ export async function setManagedUserArea(context: SystemSettingsContext, input: 
       if (!isAppRole(users[0].role)) throw new Error("USER_ACCESS_CONTRACT_INVALID");
       if (!users[0].active) throw new Error("USER_INACTIVE_RIGHT");
       if (!isAccessAreaAllowedForRole(users[0].role, normalized.area)) {
+        if (normalized.area === "wartung") throw new Error("USER_DEVELOPER_ONLY_RIGHT");
         throw new Error("USER_BLOCKED_RIGHT");
       }
       if (!normalized.granted && getFixedAccessAreasForRole(users[0].role).includes(normalized.area)) {
@@ -385,6 +386,7 @@ export async function setManagedUserArea(context: SystemSettingsContext, input: 
   } catch (error) {
     logSystemSettingsPortFailure("MANAGED_USER_AREA_WRITE_FAILED", error);
     if (error instanceof Error && error.message === "USER_INACTIVE_RIGHT") return { code: "CONFLICT" as const, message: "Inaktive Logins haben keine wirksamen Rechte." };
+    if (error instanceof Error && error.message === "USER_DEVELOPER_ONLY_RIGHT") return { code: "CONFLICT" as const, message: "Wartung, Stufen & Anbindungen ist nur für den Entwickler verfügbar." };
     if (error instanceof Error && error.message === "USER_BLOCKED_RIGHT") return { code: "CONFLICT" as const, message: "Entwickler dürfen keine Geschäftsvorgänge ausführen." };
     if (error instanceof Error && error.message === "USER_FIXED_RIGHT") return { code: "CONFLICT" as const, message: "Einstellungen, Logins & Rechte und Wartung bleiben für developer fest aktiviert." };
     if (error instanceof Error && error.message === "USER_LAST_LOGINS_RIGHT") return { code: "CONFLICT" as const, message: "Mindestens ein aktiver Login mit Logins & Rechte muss erhalten bleiben." };

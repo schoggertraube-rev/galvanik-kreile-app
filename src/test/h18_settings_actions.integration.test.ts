@@ -222,6 +222,32 @@ describe("H18 settings Server Actions against the real replay database", () => {
     expect(row).toEqual({ granted_by: fixture.actorId });
   }, 30_000);
 
+  it("C1a.2 invokes setManagedUserAreaAction and keeps maintenance developer-only", async () => {
+    const fixture = await createFixture("maintenance-right");
+    const { setManagedUserAreaAction } = await import("@/app/actions/settings.actions");
+    await expect(withSession(fixture, () => setManagedUserAreaAction({
+      userId: fixture.actorId,
+      area: "wartung",
+      granted: true,
+    }))).resolves.toEqual({
+      code: "CONFLICT",
+      message: "Wartung, Stufen & Anbindungen ist nur für den Entwickler verfügbar.",
+    });
+    const [row] = await sql<{ right_count: number; event_count: number }[]>`
+      SELECT
+        (SELECT count(*)::integer FROM public.app_user_rights
+         WHERE tenant_id = ${KREILE_TENANT_SLUG}
+           AND user_id = ${fixture.actorId}::uuid
+           AND bereich = 'wartung') AS right_count,
+        (SELECT count(*)::integer FROM public.ui_events
+         WHERE tenant_id = ${KREILE_TENANT_SLUG}
+           AND event_type = 'login_right_changed'
+           AND payload->>'actorId' = ${fixture.actorId}
+           AND payload->>'area' = 'wartung') AS event_count
+    `;
+    expect(row).toEqual({ right_count: 0, event_count: 0 });
+  }, 30_000);
+
   it("H18.4 invokes saveManagedUserAction, changes a name, and keeps the actor session usable", async () => {
     const fixture = await createFixture("name");
     const { saveManagedUserAction, setManagedUserAreaAction } = await import("@/app/actions/settings.actions");

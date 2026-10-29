@@ -63,7 +63,7 @@ export const ACCESS_AREA_LABELS: Record<AccessArea, { text: string; sub?: string
 
 export const ROLE_ACCESS_AREA_TEMPLATES: Record<AppRole, readonly AccessArea[]> = {
   developer: ["einstellungen", "logins", "wartung"],
-  admin: ACCESS_AREAS,
+  admin: ACCESS_AREAS.filter((area) => area !== "wartung"),
   meister: ["auftraege", "eingang", "kunden", "geld", "mails", "einstellungen", "kassieren", "logins"],
   buero: ["auftraege", "eingang", "kunden", "geld", "mails", "einstellungen"],
   werkstatt: ["auftraege", "eingang", "kunden"],
@@ -103,6 +103,7 @@ const FIXED_ACCESS_AREAS_BY_ROLE: Record<AppRole, readonly AccessArea[]> = {
  * Both the matrix and server authorization use this policy.
  */
 export function isAccessAreaAllowedForRole(role: AppRole, area: AccessArea): boolean {
+  if (area === "wartung") return FIXED_ACCESS_AREAS_BY_ROLE[role].includes(area);
   return !BLOCKED_ACCESS_AREAS_BY_ROLE[role].includes(area);
 }
 

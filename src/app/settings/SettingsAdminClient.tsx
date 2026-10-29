@@ -351,7 +351,7 @@ export function SettingsAdminClient({
       }</span></th>)}</tr></thead><tbody>{ACCESS_AREAS.map((area) => <tr key={area}><th><strong>{ACCESS_AREA_LABELS[area].text}</strong>{ACCESS_AREA_LABELS[area].sub ? <small>{ACCESS_AREA_LABELS[area].sub}</small> : null}</th>{activeUsers.map((user) => {
         const fixed = user.fixedAreas.includes(area);
         const blocked = !isAccessAreaAllowedForRole(user.role, area);
-        return <td key={user.id} className={blocked ? styles.blockedRight : undefined}><input aria-label={`${ACCESS_AREA_LABELS[area].text} für ${user.fullName}`} type="checkbox" checked={!blocked && user.areas.includes(area)} disabled={pending || fixed || blocked} onChange={(event) => toggleArea(user.id, area, event.target.checked, user.isCurrent)} />{blocked ? <small>Entwickler, keine Geschäftsvorgänge</small> : fixed ? <small>fest</small> : null}</td>;
+        return <td key={user.id} className={blocked ? styles.blockedRight : undefined}><input aria-label={`${ACCESS_AREA_LABELS[area].text} für ${user.fullName}`} type="checkbox" checked={!blocked && user.areas.includes(area)} disabled={pending || fixed || blocked} onChange={(event) => toggleArea(user.id, area, event.target.checked, user.isCurrent)} />{blocked ? <small>{area === "wartung" ? "nur Entwickler" : "Entwickler, keine Geschäftsvorgänge"}</small> : fixed ? <small>fest</small> : null}</td>;
       })}</tr>)}</tbody></table></div> : null}
     </section> : null}
     {ownCodeOpen ? <Dialog

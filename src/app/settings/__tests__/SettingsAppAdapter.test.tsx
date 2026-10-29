@@ -120,6 +120,9 @@ describe("Gregor system administration composition", () => {
     expect(screen.getAllByText("Entwickler, keine Geschäftsvorgänge")).toHaveLength(6);
     expect(screen.getByLabelText("Firmen-Einstellungen für Gregor")).toBeChecked();
     expect(screen.getByLabelText("Logins & Rechte verwalten für Rolf")).toBeChecked();
+    expect(screen.getByLabelText("Wartung, Stufen & Anbindungen für Gregor")).toBeDisabled();
+    expect(screen.getByLabelText("Wartung, Stufen & Anbindungen für Rolf")).toBeDisabled();
+    expect(screen.getAllByText("nur Entwickler")).toHaveLength(2);
 
     fireEvent.click(screen.getByLabelText("Logins & Rechte verwalten für Phillip"));
     await waitFor(() => expect(ports.setManagedUserArea).toHaveBeenCalledWith({

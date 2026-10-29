@@ -75,7 +75,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     if (result.ok) {
       expect(result.data.userId).toBe("user-1");
       expect(result.data.role).toBe("admin");
-      expect(result.data.permissions).toContain("perm_sys_diag");
+      expect(result.data.permissions).not.toContain("perm_sys_diag");
     }
   });
 
@@ -480,6 +480,9 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     expect(hasAuthorizationArea(staleDeveloperRows, "geld")).toBe(false);
     expect(hasAuthorizationArea(staleDeveloperRows, "einstellungen")).toBe(true);
     expect(hasAuthorizationArea(staleDeveloperRows, "logins")).toBe(true);
+    expect(hasAuthorizationArea({ role: "meister", areas: ["wartung"] }, "wartung")).toBe(false);
+    expect(hasAuthorizationArea({ role: "admin", areas: ["wartung"] }, "wartung")).toBe(false);
+    expect(hasAuthorizationArea({ role: "developer", areas: ["wartung"] }, "wartung")).toBe(true);
     expect(ROLE_ACCESS_AREA_TEMPLATES.meister).toContain("logins");
   });
 
