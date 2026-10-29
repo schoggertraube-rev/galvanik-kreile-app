@@ -38,6 +38,7 @@ type OrderListRow =
     | "statusText"
     | "dueDate"
     | "dueValue"
+    | "cardReadErrorCode"
   >;
 
 function normalized(value: string): string {
@@ -60,6 +61,7 @@ function toOrderListRow(order: OrderResponse): OrderListRow {
     statusText: order.statusText,
     dueDate: order.dueDate,
     dueValue: order.dueValue,
+    cardReadErrorCode: order.cardReadErrorCode,
   };
 }
 
@@ -75,6 +77,7 @@ function matchesQuery(order: OrderListRow, query: string): boolean {
     order.status,
     order.statusText,
     order.surfaceRequested ?? "",
+    order.cardReadErrorCode ?? "",
     ...order.parts.flatMap((part) => [part.name, part.material ?? "", part.surfaceRequested ?? ""]),
   ].join(" ")).includes(query);
 }
@@ -97,6 +100,7 @@ function orderSubject(order: OrderListRow): string {
 }
 
 function detailText(order: OrderListRow): string | undefined {
+  if (order.cardReadErrorCode) return `Lesefehler · ${order.cardReadErrorCode}`;
   const subject = orderSubject(order);
   const surface = order.surfaceRequested?.trim();
   const quantity = order.parts.length > 0 ? `${order.parts.length} ${order.parts.length === 1 ? "Teil" : "Teile"}` : null;
@@ -104,6 +108,7 @@ function detailText(order: OrderListRow): string | undefined {
 }
 
 function rowTone(order: OrderListRow): "ok" | "warn" | "rot" | "info" {
+  if (order.cardReadErrorCode) return "rot";
   if (order.risk === "red" || order.risk === "blocked") return "rot";
   if (order.risk === "orange" || order.risk === "yellow") return "warn";
   return order.station === "fertig" ? "ok" : "info";
@@ -160,7 +165,7 @@ function OrderRow({ order, onOpen }: { order: OrderListRow; onOpen: (id: string)
     titel={orderSubject(order)}
     meta={detailText(order)}
     ton={rowTone(order)}
-    status={{ text: order.dueValue || order.statusText, ton: rowTone(order) }}
+    status={{ text: order.cardReadErrorCode ?? (order.dueValue || order.statusText), ton: rowTone(order) }}
     karte
     onOeffnen={() => onOpen(order.id)}
   />;

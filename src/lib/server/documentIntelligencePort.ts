@@ -8,6 +8,10 @@ import { analyzeWithAzureDocumentIntelligence, readAzureDocumentIntelligenceStat
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 type ScanRow = { id: string; tenant_id: string; uploaded_by: string | null; file_type: string | null; original_storage_path: string | null; original_size_bytes: number | string | null; original_hash: string | null; status: string; linked_customer_id: string | null; linked_order_id: string | null };
 
+function logDocumentIntelligenceFailure(code: string, error: unknown) {
+  console.error(`[${code}]`, error instanceof Error ? error.message : "UNKNOWN_ERROR");
+}
+
 export async function analyzeDomainAttachment(auth: AuthorizationSnapshot, input: { attachmentId: string; targetType: "CUSTOMER" | "ORDER" | "INTAKE_DRAFT"; targetId: string }) {
   if (!input || !UUID.test(input.attachmentId) || !["CUSTOMER", "ORDER", "INTAKE_DRAFT"].includes(input.targetType) || typeof input.targetId !== "string" || input.targetId.length < 1 || input.targetId.length > 128) {
     return { code: "VALIDATION_ERROR" as const, message: "Dokument oder Zuordnung ist ungültig." };
@@ -46,7 +50,8 @@ export async function analyzeDomainAttachment(auth: AuthorizationSnapshot, input
     `));
     if (customer.length !== 1 || !customer[0]) return { code: "UNAVAILABLE" as const, message: "Der zugehörige Kunde ist nicht sicher lesbar." };
     return { code: "OK" as const, data: { ...analyzed.data, customerId: customer[0].id, customerName: customer[0].name } };
-  } catch {
+  } catch (error) {
+    logDocumentIntelligenceFailure("DOCUMENT_INTELLIGENCE_ANALYSIS_FAILED", error);
     return { code: "UNAVAILABLE" as const, message: "Das Dokument konnte nicht sicher analysiert und gespeichert werden." };
   }
 }

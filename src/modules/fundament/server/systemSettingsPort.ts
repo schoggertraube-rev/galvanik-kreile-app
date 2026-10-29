@@ -57,6 +57,13 @@ function text(value: unknown, min: number, max: number): string | null {
   return normalized.length >= min && normalized.length <= max ? normalized : null;
 }
 
+function logSystemSettingsPortFailure(code: string, error: unknown): void {
+  console.error(`[${code}]`, {
+    errorName: error instanceof Error ? error.name : "UnknownError",
+    errorMessage: error instanceof Error ? error.message : "Unbekannter Serverfehler",
+  });
+}
+
 export async function readSystemSettings(context: SystemSettingsContext) {
   if (!context.canManage) return { code: "FORBIDDEN" as const, message: "Einstellungen sind nicht erlaubt." };
   try {
@@ -122,8 +129,9 @@ export async function readSystemSettings(context: SystemSettingsContext) {
       };
     });
     return { code: "OK" as const, snapshot };
-  } catch {
-    return { code: "UNAVAILABLE" as const, message: "Einstellungen konnten nicht sicher geladen werden." };
+  } catch (error) {
+    logSystemSettingsPortFailure("SYSTEM_SETTINGS_READ_FAILED", error);
+    return { code: "UNAVAILABLE" as const, message: "Einstellungen konnten nicht sicher geladen werden. Fehlercode: SYSTEM_SETTINGS_READ_FAILED." };
   }
 }
 
@@ -153,8 +161,9 @@ export async function readCompanyDocumentSettings(context: CompanyDocumentContex
       return mapped;
     });
     return { code: "OK" as const, company };
-  } catch {
-    return { code: "UNAVAILABLE" as const, message: "Firmendaten für den KV sind noch nicht vollständig gepflegt." };
+  } catch (error) {
+    logSystemSettingsPortFailure("COMPANY_DOCUMENT_SETTINGS_READ_FAILED", error);
+    return { code: "UNAVAILABLE" as const, message: "Firmendaten für den KV sind noch nicht vollständig gepflegt. Fehlercode: COMPANY_DOCUMENT_SETTINGS_READ_FAILED." };
   }
 }
 
@@ -183,8 +192,9 @@ export async function updateCompanySettings(context: SystemSettingsContext, inpu
       if (rows.length !== 1) throw new Error("COMPANY_SETTINGS_WRITE_AMBIGUOUS");
     });
     return { code: "OK" as const };
-  } catch {
-    return { code: "UNAVAILABLE" as const, message: "Firmendaten konnten nicht sicher gespeichert werden." };
+  } catch (error) {
+    logSystemSettingsPortFailure("COMPANY_SETTINGS_WRITE_FAILED", error);
+    return { code: "UNAVAILABLE" as const, message: "Firmendaten konnten nicht sicher gespeichert werden. Fehlercode: COMPANY_SETTINGS_WRITE_FAILED." };
   }
 }
 
@@ -233,16 +243,19 @@ export async function updateManagedUser(context: SystemSettingsContext, input: u
       if (normalized.active && !target.has_pin && !pinHash) throw new Error("USER_ACTIVE_PIN_REQUIRED");
       const rows = pinHash
         ? await tx.execute<{ id: string }>(sql`UPDATE public.app_users SET full_name=${normalized.fullName}, kuerzel=${normalized.shortCode}, bezeichnung=${normalized.designation || null}, active=${normalized.active}, pin_hash=${pinHash}, updated_at=statement_timestamp() WHERE id=${normalized.userId}::uuid AND tenant_id=${context.tenantId} RETURNING id`)
-        : await tx.execute<{ id: string }>(sql`UPDATE public.app_users SET full_name=${normalized.fullName}, kuerzel=${normalized.shortCode}, bezeichnung=${normalized.designation || null}, active=${normalized.active}, updated_at=statement_timestamp() WHERE id=${normalized.userId}::uuid AND tenant_id=${context.tenantId} RETURNING id`);
+        : target.active !== normalized.active
+          ? await tx.execute<{ id: string }>(sql`UPDATE public.app_users SET full_name=${normalized.fullName}, kuerzel=${normalized.shortCode}, bezeichnung=${normalized.designation || null}, active=${normalized.active}, updated_at=statement_timestamp() WHERE id=${normalized.userId}::uuid AND tenant_id=${context.tenantId} RETURNING id`)
+          : await tx.execute<{ id: string }>(sql`UPDATE public.app_users SET full_name=${normalized.fullName}, kuerzel=${normalized.shortCode}, bezeichnung=${normalized.designation || null} WHERE id=${normalized.userId}::uuid AND tenant_id=${context.tenantId} RETURNING id`);
       if (rows.length !== 1) throw new Error("USER_WRITE_NOT_FOUND");
-      await tx.execute(sql`INSERT INTO public.ui_events (tenant_id, event_type, payload) VALUES (${context.tenantId}, 'login_updated', jsonb_build_object('actorId', ${context.actorId}, 'userId', ${normalized.userId}))`);
+      await tx.execute(sql`INSERT INTO public.ui_events (tenant_id, event_type, payload) VALUES (${context.tenantId}, 'login_updated', jsonb_build_object('actorId', ${context.actorId}::text, 'userId', ${normalized.userId}::text))`);
     });
     return { code: "OK" as const };
   } catch (error) {
+    logSystemSettingsPortFailure("MANAGED_USER_WRITE_FAILED", error);
     if (error instanceof Error && error.message === "USER_SELF_DEACTIVATION") return { code: "CONFLICT" as const, message: "Der aktuell angemeldete Nutzer kann sich nicht selbst deaktivieren." };
     if (error instanceof Error && error.message === "USER_LAST_LOGINS_DEACTIVATION") return { code: "CONFLICT" as const, message: "Mindestens ein aktiver Login mit dem Bereich Logins & Rechte muss erhalten bleiben." };
     if (error instanceof Error && error.message === "USER_ACTIVE_PIN_REQUIRED") return { code: "VALIDATION_ERROR" as const, message: "Ein aktiver Nutzer braucht eine vierstellige PIN." };
-    return { code: "UNAVAILABLE" as const, message: "Nutzer konnte nicht sicher gespeichert werden." };
+    return { code: "UNAVAILABLE" as const, message: "Nutzer konnte nicht sicher gespeichert werden. Fehlercode: MANAGED_USER_WRITE_FAILED." };
   }
 }
 
@@ -306,7 +319,7 @@ export async function createManagedUser(context: SystemSettingsContext, input: u
           FROM unnest(${[...areas]}::text[]) AS area
         `);
       }
-      await tx.execute(sql`INSERT INTO public.ui_events (tenant_id, event_type, payload) VALUES (${context.tenantId}, 'login_created', jsonb_build_object('actorId', ${context.actorId}, 'userId', ${rows[0].id}, 'template', ${normalized.template}))`);
+      await tx.execute(sql`INSERT INTO public.ui_events (tenant_id, event_type, payload) VALUES (${context.tenantId}, 'login_created', jsonb_build_object('actorId', ${context.actorId}::text, 'userId', ${rows[0].id}::text, 'template', ${normalized.template}::text))`);
       return rows[0];
     });
     return {
@@ -324,8 +337,9 @@ export async function createManagedUser(context: SystemSettingsContext, input: u
         isCurrent: false,
       } satisfies ManagedUser,
     };
-  } catch {
-    return { code: "UNAVAILABLE" as const, message: "Login konnte nicht sicher angelegt werden. Prüfe, ob das Kürzel bereits vergeben ist." };
+  } catch (error) {
+    logSystemSettingsPortFailure("MANAGED_USER_CREATE_FAILED", error);
+    return { code: "UNAVAILABLE" as const, message: "Login konnte nicht sicher angelegt werden. Prüfe, ob das Kürzel bereits vergeben ist. Fehlercode: MANAGED_USER_CREATE_FAILED." };
   }
 }
 
@@ -365,15 +379,16 @@ export async function setManagedUserArea(context: SystemSettingsContext, input: 
       } else {
         await tx.execute(sql`DELETE FROM public.app_user_rights WHERE tenant_id=${context.tenantId} AND user_id=${normalized.userId}::uuid AND bereich=${normalized.area}`);
       }
-      await tx.execute(sql`INSERT INTO public.ui_events (tenant_id, event_type, payload) VALUES (${context.tenantId}, 'login_right_changed', jsonb_build_object('actorId', ${context.actorId}, 'userId', ${normalized.userId}, 'area', ${normalized.area}, 'granted', ${normalized.granted}))`);
+      await tx.execute(sql`INSERT INTO public.ui_events (tenant_id, event_type, payload) VALUES (${context.tenantId}, 'login_right_changed', jsonb_build_object('actorId', ${context.actorId}::text, 'userId', ${normalized.userId}::text, 'area', ${normalized.area}::text, 'granted', ${normalized.granted}::boolean))`);
     });
     return { code: "OK" as const };
   } catch (error) {
+    logSystemSettingsPortFailure("MANAGED_USER_AREA_WRITE_FAILED", error);
     if (error instanceof Error && error.message === "USER_INACTIVE_RIGHT") return { code: "CONFLICT" as const, message: "Inaktive Logins haben keine wirksamen Rechte." };
     if (error instanceof Error && error.message === "USER_BLOCKED_RIGHT") return { code: "CONFLICT" as const, message: "Entwickler dürfen keine Geschäftsvorgänge ausführen." };
     if (error instanceof Error && error.message === "USER_FIXED_RIGHT") return { code: "CONFLICT" as const, message: "Einstellungen, Logins & Rechte und Wartung bleiben für developer fest aktiviert." };
     if (error instanceof Error && error.message === "USER_LAST_LOGINS_RIGHT") return { code: "CONFLICT" as const, message: "Mindestens ein aktiver Login mit Logins & Rechte muss erhalten bleiben." };
-    return { code: "UNAVAILABLE" as const, message: "Recht konnte nicht sicher gespeichert werden." };
+    return { code: "UNAVAILABLE" as const, message: "Recht konnte nicht sicher gespeichert werden. Fehlercode: MANAGED_USER_AREA_WRITE_FAILED." };
   }
 }
 
@@ -388,10 +403,11 @@ export async function changeOwnPin(context: { tenantId: string; actorId: string 
     await withPrivilegedTenantTransaction(context, async (tx) => {
       const rows = await tx.execute<{ id: string }>(sql`UPDATE public.app_users SET pin_hash=${pinHash}, updated_at=statement_timestamp() WHERE tenant_id=${context.tenantId} AND id=${context.actorId}::uuid AND active=true RETURNING id::text AS id`);
       if (rows.length !== 1) throw new Error("USER_WRITE_NOT_FOUND");
-      await tx.execute(sql`INSERT INTO public.ui_events (tenant_id, event_type, payload) VALUES (${context.tenantId}, 'own_pin_changed', jsonb_build_object('actorId', ${context.actorId}))`);
+      await tx.execute(sql`INSERT INTO public.ui_events (tenant_id, event_type, payload) VALUES (${context.tenantId}, 'own_pin_changed', jsonb_build_object('actorId', ${context.actorId}::text))`);
     });
     return { code: "OK" as const };
-  } catch {
-    return { code: "UNAVAILABLE" as const, message: "Code konnte nicht sicher gespeichert werden." };
+  } catch (error) {
+    logSystemSettingsPortFailure("OWN_PIN_WRITE_FAILED", error);
+    return { code: "UNAVAILABLE" as const, message: "Code konnte nicht sicher gespeichert werden. Fehlercode: OWN_PIN_WRITE_FAILED." };
   }
 }

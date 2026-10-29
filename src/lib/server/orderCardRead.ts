@@ -98,7 +98,7 @@ export type OrderCardReadResult<T> =
   | { code: "FORBIDDEN"; message: string }
   | { code: "NOT_FOUND"; message: string }
   | { code: "VALIDATION_ERROR"; message: string }
-  | { code: "UNAVAILABLE"; message: string };
+  | { code: "UNAVAILABLE"; message: string; errorCode?: string };
 
 type QueueRow = {
   id: string;
@@ -730,11 +730,18 @@ export async function readLiveOrderCard(
       ? { code: "NOT_FOUND", message: "Auftrag nicht verfügbar." }
       : { code: "OK", data };
   } catch (error) {
+    const errorCode = error instanceof Error && /^ORDER_CARD_[A-Z0-9_]+$/.test(error.message)
+      ? error.message
+      : "ORDER_CARD_READ_FAILED";
     console.error("[ORDER_CARD_READ_ERROR]", {
       orderId: input.orderId,
-      message: error instanceof Error ? error.message.slice(0, 200) : "UNKNOWN",
+      code: errorCode,
     });
-    return { code: "UNAVAILABLE", message: "Auftragskarte konnte nicht sicher geladen werden." };
+    return {
+      code: "UNAVAILABLE",
+      message: `Auftragskarte konnte nicht sicher geladen werden. Fehlercode: ${errorCode}.`,
+      errorCode,
+    };
   }
 }
 

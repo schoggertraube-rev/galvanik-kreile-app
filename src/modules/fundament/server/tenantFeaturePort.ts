@@ -9,6 +9,10 @@ export type TenantFeatureRow = { feature_id: string; enabled: boolean };
 
 const FEATURE_IDS = new Set<string>(SALES_STAGE_FEATURES.map((feature) => feature.id));
 
+function logTenantFeatureFailure(code: string, error: unknown) {
+  console.error(`[${code}]`, error instanceof Error ? error.message : "UNKNOWN_ERROR");
+}
+
 function featureId(value: unknown): SalesStageFeatureId | null {
   return typeof value === "string" && FEATURE_IDS.has(value) ? value as SalesStageFeatureId : null;
 }
@@ -36,7 +40,8 @@ export async function readTenantFeatures(context: TenantFeatureContext) {
       return mapTenantFeatureRows(rows);
     });
     return { code: "OK" as const, features };
-  } catch {
+  } catch (error) {
+    logTenantFeatureFailure("TENANT_FEATURE_READ_FAILED", error);
     return { code: "UNAVAILABLE" as const, message: "Stufen-Schalter konnten nicht sicher gelesen werden." };
   }
 }
@@ -58,7 +63,8 @@ export async function setTenantFeature(context: TenantFeatureContext, input: unk
     `));
     if (updated.length !== 1) return { code: "NOT_FOUND" as const, message: "Stufen-Schalter ist nicht eingerichtet." };
     return { code: "OK" as const, feature: { id, enabled: value.enabled } as SalesStageFeature };
-  } catch {
+  } catch (error) {
+    logTenantFeatureFailure("TENANT_FEATURE_WRITE_FAILED", error);
     return { code: "UNAVAILABLE" as const, message: "Stufen-Schalter konnte nicht sicher gespeichert werden." };
   }
 }

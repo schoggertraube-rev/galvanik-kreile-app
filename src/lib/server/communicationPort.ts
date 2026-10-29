@@ -20,6 +20,10 @@ type Result<T> = { code: "OK"; data: T } | { code: "FORBIDDEN" | "NOT_FOUND" | "
 type Target = { customerId: string; orderId: string | null; email: string; label: string };
 type ThreadRow = { id: string; customer_id: string | null; order_id: string | null; status: string | null; created_at: Date | string | null };
 
+function logCommunicationFailure(code: string, error: unknown) {
+  console.error(`[${code}]`, error instanceof Error ? error.message : "UNKNOWN_ERROR");
+}
+
 export type CommunicationReceipt = { threadId: string; messageId: string | null; customerId: string; orderId: string | null; recordedAt: string; replayed: boolean; attachmentsImported?: number; attachmentsSkipped?: number; attachmentWarning?: string };
 
 function canRead(auth: AuthorizationSnapshot) {
@@ -73,7 +77,10 @@ export async function attachInboxMessage(
     return { code: "VALIDATION_ERROR", message: "Mail oder Zuordnung ist ungültig." };
   }
   if (!canWrite(auth)) return { code: "FORBIDDEN", message: "Mails dürfen für diese Rolle nicht zugeordnet werden." };
-  const target = await resolveTarget(auth, input.targetType, input.targetId).catch(() => null);
+  const target = await resolveTarget(auth, input.targetType, input.targetId).catch((error) => {
+    logCommunicationFailure("COMMUNICATION_TARGET_READ_FAILED", error);
+    return null;
+  });
   if (!target) return { code: "NOT_FOUND", message: "Kunde oder Auftrag ist nicht verfügbar." };
   const graph = await readMicrosoftGraphMessage(input.graphMessageId);
   if (graph.code !== "OK") return graph;
@@ -128,7 +135,8 @@ export async function attachInboxMessage(
       attachmentsSkipped: graphAttachments.data.skipped,
       ...(failed > 0 ? { attachmentWarning: `${failed} unterstützte Mailanhänge konnten nicht sicher gespeichert werden.` } : {}),
     } };
-  } catch {
+  } catch (error) {
+    logCommunicationFailure("COMMUNICATION_ATTACH_FAILED", error);
     return { code: "UNAVAILABLE", message: "Die Mail konnte nicht sicher am Vorgang abgelegt werden." };
   }
 }
@@ -144,7 +152,10 @@ export async function sendCommunicationMail(
   if (readMicrosoftGraphConfigurationStatus().code !== "READY") {
     return { code: "IN_KLAERUNG", message: "Microsoft 365 ist noch nicht für die Preview verbunden." };
   }
-  const target = await resolveTarget(auth, input.targetType, input.targetId).catch(() => null);
+  const target = await resolveTarget(auth, input.targetType, input.targetId).catch((error) => {
+    logCommunicationFailure("COMMUNICATION_TARGET_READ_FAILED", error);
+    return null;
+  });
   if (!target) return { code: "NOT_FOUND", message: "Kunde oder Auftrag ist nicht verfügbar." };
   if (!/^\S+@\S+\.\S+$/.test(target.email)) return { code: "VALIDATION_ERROR", message: "Beim Kunden ist keine gültige E-Mail-Adresse hinterlegt." };
   const source = `MS_GRAPH_OUT:${input.clientRequestId}`;
@@ -172,6 +183,7 @@ export async function sendCommunicationMail(
       return { threadId, recordedAt: iso(rows[0].created_at) };
     });
   } catch (error) {
+    logCommunicationFailure("COMMUNICATION_SEND_PREPARE_FAILED", error);
     return { code: error instanceof Error && error.message === "COMMUNICATION_OUTCOME_UNCLEAR" ? "CONFLICT" : "UNAVAILABLE", message: error instanceof Error && error.message === "COMMUNICATION_OUTCOME_UNCLEAR" ? "Der Ausgang dieses Versands ist ungeklärt. Nicht erneut senden; zuerst im Outlook-Ausgang prüfen." : "Der Mailversand konnte nicht sicher vorbereitet werden." };
   }
   if (pending.replay) return { code: "OK", data: pending.replay };
@@ -180,7 +192,10 @@ export async function sendCommunicationMail(
     await withPrivilegedTenantTransaction(auth, (tx) => tx.execute(sql`
       UPDATE public.communication_threads SET status='failed', updated_at=statement_timestamp()
       WHERE tenant_id=${auth.tenantId} AND id=${pending.threadId} AND status='pending'
-    `)).catch(() => undefined);
+    `)).catch((error) => {
+      logCommunicationFailure("COMMUNICATION_SEND_FAILURE_STATUS_WRITE_FAILED", error);
+      return undefined;
+    });
     return sent;
   }
   try {
@@ -198,7 +213,8 @@ export async function sendCommunicationMail(
       if (messages.length !== 1 || messages[0]?.id !== messageId) throw new Error("COMMUNICATION_MESSAGE_INSERT_FAILED");
     });
     return { code: "OK", data: { threadId: pending.threadId, messageId, customerId: target.customerId, orderId: target.orderId, recordedAt: pending.recordedAt, replayed: false } };
-  } catch {
+  } catch (error) {
+    logCommunicationFailure("COMMUNICATION_SEND_FINALIZE_FAILED", error);
     return { code: "UNAVAILABLE", message: "Microsoft 365 hat die Mail angenommen, die lokale Vorgangskopie ist aber noch nicht sicher bestätigt. Nicht erneut senden." };
   }
 }

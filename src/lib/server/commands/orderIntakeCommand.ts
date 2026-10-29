@@ -729,7 +729,11 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
       }
       return { code: "OK", receipt, replayed: false };
     });
-  } catch {
-    return { code: "UNAVAILABLE", message: "Wareneingang konnte nicht sicher gespeichert werden." };
+  } catch (error) {
+    console.error("[ORDER_INTAKE_WRITE_FAILED]", {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorMessage: error instanceof Error ? error.message : "Unbekannter Serverfehler",
+    });
+    return { code: "UNAVAILABLE", message: "Wareneingang konnte nicht sicher gespeichert werden. Fehlercode: ORDER_INTAKE_WRITE_FAILED." };
   }
 }

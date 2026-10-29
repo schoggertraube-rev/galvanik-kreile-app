@@ -22,6 +22,7 @@ import {
 } from "@/modules/fundament/public";
 import type { CatalogService } from "@/modules/katalog/public";
 import { runServerAction } from "@/lib/client/runServerAction";
+import { Dialog, DialogAktionsmeldung, type DialogMeldung } from "@/ui/kr/Dialog";
 import styles from "./settings.module.css";
 
 type Tab = "company" | "catalog" | "users";
@@ -89,6 +90,10 @@ export function SettingsAdminClient({
   const [createLoginOpen, setCreateLoginOpen] = useState(false);
   const [ownCode, setOwnCode] = useState({ first: "", repeat: "" });
   const [ownCodeOpen, setOwnCodeOpen] = useState(false);
+  const [ownCodeMessage, setOwnCodeMessage] = useState<DialogMeldung | null>(null);
+  const [editUserMessage, setEditUserMessage] = useState<DialogMeldung | null>(null);
+  const [createLoginMessage, setCreateLoginMessage] = useState<DialogMeldung | null>(null);
+  const [rightsMessage, setRightsMessage] = useState<DialogMeldung | null>(null);
   const [message, setMessage] = useState("");
   const [pending, startTransition] = useTransition();
   const companyReady = Object.entries(company).every(([key, value]) => key === "paymentTermDays" ? Number(value) > 0 : String(value).trim().length > 0);
@@ -103,16 +108,29 @@ export function SettingsAdminClient({
     <label>{label}<input type={type} value={String(company[key])} onChange={(event) => setCompany((current) => ({ ...current, [key]: type === "number" ? Number(event.target.value) : event.target.value }))} /></label>
   );
 
-  function report(task: () => Promise<Result>, success: string, after?: () => void) {
+  function report(
+    task: () => Promise<Result>,
+    success: string,
+    after?: () => void,
+    setLocalMessage?: (message: DialogMeldung | null) => void,
+  ) {
     startTransition(async () => {
       const execution = await runServerAction(task, "Speichern");
       if (!execution.ok) {
-        setMessage(execution.message);
+        if (setLocalMessage) setLocalMessage({ text: execution.message, ton: "fehler" });
+        else setMessage(execution.message);
         return;
       }
       const result = execution.value;
-      setMessage(result.code === "OK" ? success : result.message ?? "Speichern fehlgeschlagen.");
-      if (result.code === "OK") after?.();
+      if (result.code !== "OK") {
+        const failure = result.message ?? "Speichern fehlgeschlagen.";
+        if (setLocalMessage) setLocalMessage({ text: failure, ton: "fehler" });
+        else setMessage(failure);
+        return;
+      }
+      setLocalMessage?.(null);
+      setMessage(success);
+      after?.();
     });
   }
 
@@ -168,16 +186,17 @@ export function SettingsAdminClient({
     startTransition(async () => {
       const execution = await runServerAction(() => createManagedUserAction(newLogin), "Login anlegen");
       if (!execution.ok) {
-        setMessage(execution.message);
+        setCreateLoginMessage({ text: execution.message, ton: "fehler" });
         return;
       }
       const result = execution.value;
       if (result.code !== "OK") {
-        setMessage(result.message ?? "Login konnte nicht angelegt werden.");
+        setCreateLoginMessage({ text: result.message ?? "Login konnte nicht angelegt werden.", ton: "fehler" });
         return;
       }
       setUsers((current) => [...current, result.user]);
       setNewLogin({ fullName: "", shortCode: "", designation: "", template: "werkstatt", pin: "" });
+      setCreateLoginMessage(null);
       setCreateLoginOpen(false);
       setMessage("Login angelegt.");
     });
@@ -199,12 +218,14 @@ export function SettingsAdminClient({
         setEditPin("");
         setEditingUser(null);
       },
+      setEditUserMessage,
     );
   }
 
   function editUser(user: ManagedUser) {
     setEditingUser({ ...user, areas: [...user.areas], fixedAreas: [...user.fixedAreas] });
     setEditPin("");
+    setEditUserMessage(null);
   }
 
   function renderUserCard(user: ManagedUser, inactive = false) {
@@ -218,17 +239,18 @@ export function SettingsAdminClient({
             ? [user.designation, "inaktiv"].filter(Boolean).join(" · ")
             : [user.designation, `${user.areas.length} Bereiche`].filter(Boolean).join(" · ")}</small>
         </div>
-        {user.isCurrent ? <button data-spec-id="meincode.oeffnen" type="button" disabled={pending} onClick={() => setOwnCodeOpen(true)}>Mein Code</button> : null}
+        {user.isCurrent ? <button data-spec-id="meincode.oeffnen" type="button" disabled={pending} onClick={() => { setOwnCodeMessage(null); setOwnCodeOpen(true); }}>Mein Code</button> : null}
         {canManageLogins ? <button data-spec-id="rechte.aendern" type="button" disabled={pending} onClick={() => editUser(user)}>Ändern</button> : null}
       </div>
       {canManageLogins && isEditing ? <div className={styles.userFields}>
+        {editUserMessage ? <DialogAktionsmeldung meldung={editUserMessage} /> : null}
         <label>Name<input value={editingUser.fullName} onChange={(event) => setEditingUser({ ...editingUser, fullName: event.target.value })} /></label>
         <label>Kürzel<input value={editingUser.shortCode} maxLength={3} onChange={(event) => setEditingUser({ ...editingUser, shortCode: event.target.value.toUpperCase() })} /></label>
         <label>Bezeichnung (optional)<input value={editingUser.designation} onChange={(event) => setEditingUser({ ...editingUser, designation: event.target.value })} /></label>
         <label>Neuer Code<input type="password" inputMode="numeric" placeholder="unverändert" value={editPin} onChange={(event) => setEditPin(event.target.value.replace(/\D/g, "").slice(0, 4))} /></label>
         <label className={styles.check}><input type="checkbox" checked={editingUser.active} disabled={editingUser.isCurrent} onChange={(event) => setEditingUser({ ...editingUser, active: event.target.checked })} />Aktiv</label>
         <button type="button" disabled={pending} onClick={() => updateUser(editingUser)}>Übernehmen</button>
-        <button type="button" disabled={pending} onClick={() => { setEditingUser(null); setEditPin(""); }}>Abbrechen</button>
+        <button type="button" disabled={pending} onClick={() => { setEditingUser(null); setEditPin(""); setEditUserMessage(null); }}>Abbrechen</button>
       </div> : null}
     </article>;
   }
@@ -243,6 +265,7 @@ export function SettingsAdminClient({
         "Recht speichern",
       );
       if (execution.ok && execution.value.code === "OK") {
+        setRightsMessage(null);
         setMessage("Recht ist sofort wirksam.");
         if (isCurrent) window.location.reload();
         return;
@@ -250,19 +273,22 @@ export function SettingsAdminClient({
       setUsers((current) => current.map((user) => user.id === userId
         ? { ...user, areas: granted ? user.areas.filter((item) => item !== area) : [...user.areas, area] }
         : user));
-      setMessage(execution.ok ? execution.value.message ?? "Recht konnte nicht gespeichert werden." : execution.message);
+      setRightsMessage({
+        text: execution.ok ? execution.value.message ?? "Recht konnte nicht gespeichert werden." : execution.message,
+        ton: "fehler",
+      });
     });
   }
 
   function saveOwnCode() {
     if (!/^\d{4}$/.test(ownCode.first) || ownCode.first !== ownCode.repeat) {
-      setMessage("Die Codes müssen übereinstimmen und genau 4 Ziffern haben.");
+      setOwnCodeMessage({ text: "Die Codes müssen übereinstimmen und genau 4 Ziffern haben.", ton: "fehler" });
       return;
     }
     report(() => changeOwnPinAction({ pin: ownCode.first }), "Neuer Code gespeichert", () => {
       setOwnCode({ first: "", repeat: "" });
       setOwnCodeOpen(false);
-    });
+    }, setOwnCodeMessage);
   }
 
   return <main className={styles.page} data-testid="gregor-system-admin">
@@ -300,25 +326,26 @@ export function SettingsAdminClient({
     </div><button disabled={pending} onClick={saveService}>Leistung speichern</button><div className={styles.list}>{services.map((service) => <button key={service.id} onClick={() => setDraft(service)}><strong>{service.name}</strong><span>{service.surface} · {(service.netPriceCents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" })} / {service.unit}</span></button>)}</div></section> : null}
 
     {(canManageLogins || currentUser) && tab === "users" ? <section data-spec-id="rechte.dialog">
-      <div className={styles.sectionHeading}><div><h2>Logins & Rechte</h2><p>{canManageLogins ? "Änderungen an der Matrix wirken sofort." : "Ihr Zugang und Ihr persönlicher Code."}</p></div><button data-spec-id="rechte.schliessen" type="button" onClick={() => setTab(canManageCompany ? "company" : "users")}>Schließen</button></div>
+      <div className={styles.sectionHeading}><div><h2>Logins & Rechte</h2><p>{canManageLogins ? "Änderungen an der Matrix wirken sofort." : "Ihr Zugang und Ihr persönlicher Code."}</p></div><Link data-spec-id="rechte.schliessen" href={returnTo ?? "/"}>Schließen</Link></div>
       {canManageLogins ? <div className={styles.createLogin}>
         {createLoginOpen ? <>
           <h3>Login anlegen</h3>
+          {createLoginMessage ? <DialogAktionsmeldung meldung={createLoginMessage} /> : null}
           <label>Name<input data-spec-id="rechte.name" value={newLogin.fullName} onChange={(event) => setNewLogin({ ...newLogin, fullName: event.target.value, shortCode: suggestedShortCode(event.target.value) })} /></label>
           <label>Kürzel<input data-spec-id="rechte.kuerzel" value={newLogin.shortCode} maxLength={3} onChange={(event) => setNewLogin({ ...newLogin, shortCode: event.target.value.toUpperCase() })} /></label>
           <label>Bezeichnung (optional)<input data-spec-id="rechte.bezeichnung" value={newLogin.designation} onChange={(event) => setNewLogin({ ...newLogin, designation: event.target.value })} /></label>
           <label>Rechte wie<select data-spec-id="rechte.vorlage" value={newLogin.template} onChange={(event) => setNewLogin({ ...newLogin, template: event.target.value as typeof newLogin.template })}><option value="werkstatt">wie Werkstatt</option><option value="meister">wie Meister</option><option value="leer">leer</option></select></label>
           <label>Code<input data-spec-id="rechte.code" type="password" inputMode="numeric" value={newLogin.pin} onChange={(event) => setNewLogin({ ...newLogin, pin: event.target.value.replace(/\D/g, "").slice(0, 4) })} /></label>
           <button data-spec-id="rechte.login-speichern" disabled={pending} onClick={createLogin}>Login speichern</button>
-          <button type="button" disabled={pending} onClick={() => setCreateLoginOpen(false)}>Abbrechen</button>
-        </> : <button data-spec-id="rechte.login-anlegen" type="button" disabled={pending} onClick={() => setCreateLoginOpen(true)}>Login anlegen</button>}
+          <button type="button" disabled={pending} onClick={() => { setCreateLoginMessage(null); setCreateLoginOpen(false); }}>Abbrechen</button>
+        </> : <button data-spec-id="rechte.login-anlegen" type="button" disabled={pending} onClick={() => { setCreateLoginMessage(null); setCreateLoginOpen(true); }}>Login anlegen</button>}
       </div> : null}
       <div className={styles.userList}>{activeUsers.map((user) => renderUserCard(user))}</div>
       {inactiveUsers.length > 0 ? <details className={styles.inactiveUsers}>
         <summary>Inaktive Logins ({inactiveUsers.length})</summary>
         <div className={styles.userList}>{inactiveUsers.map((user) => renderUserCard(user, true))}</div>
       </details> : null}
-      {canManageLogins ? <div className={styles.rightsTable} role="region" aria-label="Rechtematrix"><table><thead><tr><th>Bereich</th>{activeUsers.map((user) => <th key={user.id} aria-label={`${user.shortCode} ${user.fullName}`}><span className={styles.rightsPerson}><span>{user.shortCode}</span><strong>{user.fullName}</strong>{
+      {canManageLogins ? <div className={styles.rightsTable} role="region" aria-label="Rechtematrix">{rightsMessage ? <DialogAktionsmeldung meldung={rightsMessage} /> : null}<table><thead><tr><th>Bereich</th>{activeUsers.map((user) => <th key={user.id} aria-label={`${user.shortCode} ${user.fullName}`}><span className={styles.rightsPerson}><span>{user.shortCode}</span><strong>{user.fullName}</strong>{
         // eslint-disable-next-line h16/no-role-identity-comparison -- erlaubt H11c: Anzeige Einsicht & Systempflege
         user.role === "developer" ? <small>Einsicht & Systempflege</small> : null
       }</span></th>)}</tr></thead><tbody>{ACCESS_AREAS.map((area) => <tr key={area}><th><strong>{ACCESS_AREA_LABELS[area].text}</strong>{ACCESS_AREA_LABELS[area].sub ? <small>{ACCESS_AREA_LABELS[area].sub}</small> : null}</th>{activeUsers.map((user) => {
@@ -327,14 +354,19 @@ export function SettingsAdminClient({
         return <td key={user.id} className={blocked ? styles.blockedRight : undefined}><input aria-label={`${ACCESS_AREA_LABELS[area].text} für ${user.fullName}`} type="checkbox" checked={!blocked && user.areas.includes(area)} disabled={pending || fixed || blocked} onChange={(event) => toggleArea(user.id, area, event.target.checked, user.isCurrent)} />{blocked ? <small>Entwickler, keine Geschäftsvorgänge</small> : fixed ? <small>fest</small> : null}</td>;
       })}</tr>)}</tbody></table></div> : null}
     </section> : null}
-    {ownCodeOpen ? <div className={styles.dialogBackdrop} role="presentation">
-      <section className={styles.ownCode} role="dialog" aria-modal="true" aria-labelledby="own-code-title">
-        <div><h2 id="own-code-title">Mein Code ändern</h2><p>Der neue Code gilt sofort. Andere Sitzungen dieses Logins werden beendet.</p></div>
+    {ownCodeOpen ? <Dialog
+      titel="Mein Code ändern"
+      icon="lock"
+      groesse="schmal"
+      meldung={ownCodeMessage}
+      onSchliessen={() => { setOwnCode({ first: "", repeat: "" }); setOwnCodeMessage(null); setOwnCodeOpen(false); }}
+      fuss={<><button data-spec-id="meincode.abbrechen" type="button" onClick={() => { setOwnCode({ first: "", repeat: "" }); setOwnCodeMessage(null); setOwnCodeOpen(false); }}>Abbrechen</button><button data-spec-id="meincode.code-speichern" type="button" disabled={pending} onClick={saveOwnCode}>Code speichern</button></>}
+    >
+      <div className={styles.ownCode}>
+        <p>Der neue Code gilt sofort. Andere Sitzungen dieses Logins werden beendet.</p>
         <label>Neuer Code<input data-spec-id="meincode.code_neu" type="password" inputMode="numeric" value={ownCode.first} onChange={(event) => setOwnCode((current) => ({ ...current, first: event.target.value.replace(/\D/g, "").slice(0, 4) }))} /></label>
         <label>Code wiederholen<input data-spec-id="meincode.code_wdh" type="password" inputMode="numeric" value={ownCode.repeat} onChange={(event) => setOwnCode((current) => ({ ...current, repeat: event.target.value.replace(/\D/g, "").slice(0, 4) }))} /></label>
-        <button data-spec-id="meincode.abbrechen" type="button" onClick={() => { setOwnCode({ first: "", repeat: "" }); setOwnCodeOpen(false); }}>Abbrechen</button>
-        <button data-spec-id="meincode.code-speichern" type="button" disabled={pending} onClick={saveOwnCode}>Code speichern</button>
-      </section>
-    </div> : null}
+      </div>
+    </Dialog> : null}
   </main>;
 }

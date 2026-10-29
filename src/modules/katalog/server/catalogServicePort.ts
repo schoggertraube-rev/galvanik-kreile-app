@@ -72,7 +72,10 @@ export async function saveCatalogService(context: CatalogCommandContext, input: 
       return map(rows[0]);
     });
     return { code: "OK" as const, service };
-  } catch {
+  } catch (error) {
+    console.error("[CATALOG_WRITE_ERROR]", {
+      message: error instanceof Error ? error.message.slice(0, 200) : "UNKNOWN",
+    });
     return { code: "UNAVAILABLE" as const, message: "Leistung konnte nicht sicher gespeichert werden." };
   }
 }

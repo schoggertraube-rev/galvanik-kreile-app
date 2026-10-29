@@ -58,6 +58,10 @@ class GraphProviderError extends Error {
   }
 }
 
+function logMicrosoftGraphFailure(code: string, error: unknown) {
+  console.error(`[${code}]`, error instanceof Error ? error.message : "UNKNOWN_ERROR");
+}
+
 function safeProviderCode(payload: unknown): string {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return "UNKNOWN";
   const error = (payload as Record<string, unknown>).error;
@@ -70,11 +74,15 @@ function safeProviderCode(payload: unknown): string {
 }
 
 async function providerFailure(response: Response, operation: string): Promise<never> {
-  const payload = await response.clone().json().catch(() => null);
+  const payload = await response.clone().json().catch((error) => {
+    logMicrosoftGraphFailure("MICROSOFT_GRAPH_ERROR_PAYLOAD_INVALID", error);
+    return null;
+  });
   throw new GraphProviderError(`${operation}_${response.status}_${safeProviderCode(payload)}`);
 }
 
 function unavailable(message: string, error: unknown): GraphResult<never> {
+  logMicrosoftGraphFailure("MICROSOFT_GRAPH_UNAVAILABLE", error);
   return {
     code: "UNAVAILABLE",
     message: error instanceof GraphProviderError ? `${message} Fehlercode: ${error.safeCode}.` : message,

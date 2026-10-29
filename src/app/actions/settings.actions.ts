@@ -20,7 +20,10 @@ import { setAppSession, SESSION_TTL_MS } from "@/lib/server/appSession";
 
 async function settingsContext() {
   const result = await resolveAuthorization();
-  if (!result.ok) return null;
+  if (!result.ok) {
+    console.error("[SETTINGS_AUTHORIZATION_FAILED]", { reason: result.reason });
+    return null;
+  }
   const areas = result.data.areas ?? [];
   return {
     authorization: result.data,
@@ -33,6 +36,23 @@ async function settingsContext() {
       canManageSystem: areas.includes("wartung"),
     },
   };
+}
+
+async function refreshSettingsSession(authorization: {
+  userId: string;
+  tenantId: string;
+  role: string;
+  displayName: string;
+}): Promise<void> {
+  const now = Date.now();
+  await setAppSession({
+    userId: authorization.userId,
+    tenantId: authorization.tenantId,
+    role: authorization.role,
+    displayName: authorization.displayName,
+    issuedAt: now,
+    expiresAt: now + SESSION_TTL_MS,
+  });
 }
 
 export async function readSettingsAction() {
@@ -98,6 +118,9 @@ export async function saveManagedUserAction(input: UpdateManagedUserInput) {
     if (!resolved?.authorization.areas?.includes("logins")) return { code: "FORBIDDEN" as const, message: "Logins dürfen nicht geändert werden." };
     const result = await updateManagedUser(resolved.context, input);
     if (result.code === "OK") {
+      if (input.userId === resolved.authorization.userId) {
+        await refreshSettingsSession({ ...resolved.authorization, displayName: input.fullName });
+      }
       revalidatePath("/settings");
       revalidatePath("/start");
     }
@@ -133,15 +156,7 @@ export async function changeOwnPinAction(input: { pin: string }) {
     if (!resolved) return { code: "FORBIDDEN" as const, message: "Der eigene Code kann momentan nicht geändert werden." };
     const result = await changeOwnPin({ tenantId: resolved.authorization.tenantId, actorId: resolved.authorization.userId }, input);
     if (result.code === "OK") {
-      const now = Date.now();
-      await setAppSession({
-        userId: resolved.authorization.userId,
-        tenantId: resolved.authorization.tenantId,
-        role: resolved.authorization.role,
-        displayName: resolved.authorization.displayName,
-        issuedAt: now,
-        expiresAt: now + SESSION_TTL_MS,
-      });
+      await refreshSettingsSession(resolved.authorization);
     }
     return result;
   } catch (error) {

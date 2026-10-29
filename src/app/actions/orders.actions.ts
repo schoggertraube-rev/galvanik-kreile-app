@@ -55,7 +55,7 @@ import type {
 import type { EvidenceReadRecord } from "@/lib/server/evidenceRead";
 
 // DTO Typen (zur Vereinfachung)
-export type OrderResponse = OperationalOrder;
+export type OrderResponse = OperationalOrder & { cardReadErrorCode?: string | null };
 
 export type OrderRegisterFilter = "ALL" | "ORDER" | "QUOTE";
 
@@ -362,7 +362,22 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
 
   try {
     const { getOperationalOrders } = await import("@/lib/server/operationalOrders");
-    const data = await getOperationalOrders(authorization.data);
+    const [{ readLiveOrderCard }, orders] = await Promise.all([
+      import("@/lib/server/orderCardRead"),
+      getOperationalOrders(authorization.data),
+    ]);
+    const cardReads = await Promise.all(orders.map((order) => readLiveOrderCard(authorization.data, { orderId: order.id })));
+    const data: OrderResponse[] = orders.map((order, index) => {
+      const cardRead = cardReads[index];
+      return {
+        ...order,
+        cardReadErrorCode: cardRead?.code === "OK"
+          ? null
+          : cardRead?.code === "UNAVAILABLE"
+            ? cardRead.errorCode ?? "ORDER_CARD_READ_FAILED"
+            : `ORDER_CARD_${cardRead?.code ?? "READ_FAILED"}`,
+      };
+    });
     return { ok: true, data };
   } catch (error: unknown) {
     console.error("[ORDER_READ_ERROR]", error);

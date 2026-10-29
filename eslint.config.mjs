@@ -42,8 +42,6 @@ const h16SilentErrorBaselineFiles = [
   "src/lib/hardware/registry.ts", // H16c Bestand: leerer catch.
   "src/lib/offline/idbSync.ts", // H16c Bestand: leere catch-Fallbacks.
   "src/lib/search/recent.ts", // H16c Bestand: leere catch-Fallbacks.
-  "src/lib/server/communicationPort.ts", // H16c Bestand: catch auf null.
-  "src/lib/server/microsoftGraph.ts", // H16c Bestand: catch auf null.
   "src/lib/supabase/server.ts", // H16c Bestand: leerer catch.
   "src/lib/warendurchlaufIconResolver.ts", // H16c Bestand: leerer catch.
   "src/lib/warnings/store.ts", // H16c Bestand: leerer catch.

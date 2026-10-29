@@ -84,6 +84,11 @@ jobs:
         # Baseline shrink-only), AGENTS-Verweis. Siehe ARCHITEKTUR_MODULE_PATH1.md §2/§5.
         run: node scripts/quality/check-module-gates.mjs
 
+      - name: H18 Server Action write contracts
+        run: |
+          npm run quality:h18-server-actions:selftest
+          npm run quality:h18-server-actions
+
       - name: Product actor contract and config-name preflight (synthetic; never Production evidence)
         env:
           KREILE_ROLF_APP_USER_ID: 11111111-1111-4111-8111-111111111111
