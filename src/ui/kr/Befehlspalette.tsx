@@ -38,14 +38,14 @@ export function Befehlspalette({ wert, onWert, treffer, aktionen, zustand = 'dat
         <div className="kr-palette-liste" ref={liste}>
           <MitZustand zustand={zustand} texte={{ titel: 'Suche', ...texte }}>
             {treffer.length > 0 ? <><div className="kr-palette-gr">Treffer</div><div className="kr-treffer-liste">{treffer.map(t => (
-              <button key={t.key} type="button" className="kr-treffer" aria-selected={nx()} onClick={t.onOeffnen}>
+              <button key={t.key} type="button" role="option" className="kr-treffer" aria-selected={nx()} onClick={t.onOeffnen}>
                 <Punkt ton={t.dringend ? 'rot' : undefined} />
                 <span style={{ minWidth: 0 }}><span className="kr-treffer-t" style={{ display: 'block' }}>{t.id && <span className="kr-id">{t.id} </span>}{t.titel}</span><span className="kr-treffer-grund" style={{ display: 'block' }}>{t.grund}</span></span>
                 <Chip text={t.quelle} ton="info" />
               </button>))}</div></> : wert ? <Zustand art="leer" text={'Kein Treffer für „' + wert + '“.'} /> : null}
           </MitZustand>
           {aktionen.length > 0 && <><div className="kr-palette-gr">Tun</div>{aktionen.map(a => (
-            <button key={a.id} type="button" className="kr-tun" aria-selected={nx()} onClick={a.onTun}><span className="kr-tun-ic"><Icon name={a.icon} /></span><span>{a.text}</span>{a.kbd && geraet === 'desktop' && <span className="kr-tun-kbd">{a.kbd}</span>}</button>))}</>}
+            <button key={a.id} type="button" role="option" className="kr-tun" aria-selected={nx()} onClick={a.onTun}><span className="kr-tun-ic"><Icon name={a.icon} /></span><span>{a.text}</span>{a.kbd && geraet === 'desktop' && <span className="kr-tun-kbd">{a.kbd}</span>}</button>))}</>}
         </div>
       </section>
     </div>
