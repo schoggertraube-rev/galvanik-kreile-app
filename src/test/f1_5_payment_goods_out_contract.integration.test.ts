@@ -270,9 +270,19 @@ async function createCommandReadyOrder(
     clientEventId: randomUUID(),
     customer: { mode: "EXISTING", customerId: COMMAND_CUSTOMER },
     dueDate: "2026-09-30",
+    handoverMode: "pickup",
     paymentMode: "vorkasse",
     note: `F1.5 contract ${label}`,
-    items: [{ name: label, quantity: 1, material: "Stahl", surfaceRequested: "Galvanik" }],
+    items: [{
+      catalogServiceId: null,
+      name: label,
+      quantity: 1,
+      material: "Stahl",
+      surfaceRequested: "Galvanik",
+      unit: null,
+      unitPriceCents: null,
+      vatRateBasisPoints: null,
+    }],
   }));
   expect(intake.code).toBe("OK");
   if (intake.code !== "OK") throw new Error(`INTAKE_FAILED:${intake.code}`);
