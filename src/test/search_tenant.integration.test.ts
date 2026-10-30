@@ -101,12 +101,12 @@ describe("Path-1 P3 tenant search real database contract", () => {
         zipCode: "73728",
         city: "Esslingen",
         country: "Deutschland",
-        paymentPreference: "rechnung_14",
+        paymentPreference: "vorkasse",
         vatId: null,
       },
       dueDate: "2026-11-19",
       handoverMode: "pickup",
-      paymentMode: "rechnung",
+      paymentMode: "vorkasse",
       note: "P3 Suchvertrag",
       items: [{
         catalogServiceId: null,
@@ -130,7 +130,15 @@ describe("Path-1 P3 tenant search real database contract", () => {
       const result = await withSession(() => searchTenantAction(query));
       expect(result.code).toBe("OK");
       if (result.code === "OK") {
-        expect(result.checkedSources).toEqual(["Auftragsbestand", "Kundenstamm"]);
+        expect(result.checkedSources).toEqual([
+          "Auftragsbestand",
+          "Kundenstamm",
+          "Angebote",
+          "Rechnungen",
+          "Dokumente",
+          "Mails",
+          "Termine",
+        ]);
         expect(result.checkedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
         expect(result.hits).toContainEqual(expect.objectContaining({ id: intake.receipt.orderId, type: "ORDER", matchField }));
       }
@@ -165,8 +173,20 @@ describe("Path-1 P3 tenant search real database contract", () => {
     });
     expect(foreign).toMatchObject({ code: "OK", hits: [] });
 
-    await sql`UPDATE public.customers SET tenant_id = ${`foreign-${suffix}`} WHERE id = ${intake.receipt.customerId}`;
-    await expect(withSession(() => searchTenantAction(intake.receipt.orderNumber))).resolves.toMatchObject({ code: "UNAVAILABLE" });
-    await sql`UPDATE public.customers SET tenant_id = ${KREILE_TENANT_SLUG} WHERE id = ${intake.receipt.customerId}`;
+    await expect(sql`
+      UPDATE public.customers
+      SET tenant_id = ${`foreign-${suffix}`}
+      WHERE id = ${intake.receipt.customerId}
+    `).rejects.toMatchObject({
+      code: "23503",
+      constraint_name: "customer_create_receipts_customer_fkey",
+    });
+    await expect(withSession(() => searchTenantAction(intake.receipt.orderNumber)))
+      .resolves.toMatchObject({
+        code: "OK",
+        hits: expect.arrayContaining([
+          expect.objectContaining({ id: intake.receipt.orderId, type: "ORDER" }),
+        ]),
+      });
   }, 30_000);
 });
