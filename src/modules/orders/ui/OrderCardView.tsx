@@ -142,6 +142,7 @@ export function OrderCardView({
   const [invoicePriceOpen, setInvoicePriceOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [notice, setNotice] = useState("");
+  const [dismissedInvoiceReceiptId, setDismissedInvoiceReceiptId] = useState<string | null>(null);
 
   if (state.kind !== "data") {
     const loading = state.kind === "loading";
@@ -159,6 +160,11 @@ export function OrderCardView({
   }
 
   const card = state.card;
+  const invoiceSuccess = actions.feedback.kind === "success"
+    && actions.feedback.receipt.kind === "invoice"
+    && actions.feedback.receipt.receiptId !== dismissedInvoiceReceiptId
+    ? actions.feedback
+    : null;
   const payment = card.payment.kind === "available" ? card.payment.value : null;
   const current = card.station === "abgeholt" ? 4 : payment?.status === "bezahlt" ? 3 : Math.max(0, STATIONS.indexOf(card.station as (typeof STATIONS)[number]));
   const deadline = dueStatus(card.dueAt);
@@ -275,6 +281,16 @@ export function OrderCardView({
     <Seitenblatt titel={`Auftragskarte ${card.orderNumber}`} onSchliessen={onClose}>
       <Karte kopf={head} kette={chain} haupt={main} rail={rail} fuss={footer} />
     </Seitenblatt>
+    {invoiceSuccess ? <Dialog
+      titel="Rechnung ausgestellt"
+      icon="receipt"
+      groesse="schmal"
+      onSchliessen={() => setDismissedInvoiceReceiptId(invoiceSuccess.receipt.receiptId)}
+      meldung={{ text: invoiceSuccess.message, ton: "erfolg" }}
+      fuss={<Button art="primaer" icon="check" text="Schließen" onClick={() => setDismissedInvoiceReceiptId(invoiceSuccess.receipt.receiptId)} />}
+    >
+      <Hinweis ton="ok">Die Rechnung ist gespeichert und in der Auftragskarte nachgelesen.</Hinweis>
+    </Dialog> : null}
     {paymentOpen ? <Dialog titel="Zahlung bestätigen" icon="card" groesse="schmal" onSchliessen={() => setPaymentOpen(false)} meldung={actions.feedback.kind === "error" || actions.feedback.kind === "conflict" ? { text: actions.feedback.message, ton: "fehler" } : null} fuss={<><Button text="Abbrechen" disabled={actions.feedback.kind === "submitting"} onClick={() => setPaymentOpen(false)} /><Button art="primaer" icon="check" text="Zahlung bestätigen" disabled={!paymentMethod || actions.feedback.kind === "submitting"} onClick={async () => { if (!paymentMethod) return; const confirmed = await actions.onConfirmPayment(paymentMethod); if (confirmed) { setPaymentOpen(false); setPaymentMethod(""); } }} /></>}><Segment label="Zahlart" wert={paymentMethod} onWert={setPaymentMethod} optionen={[{ wert: "bar", text: "Bar" }, { wert: "ueberweisung", text: "Überweisung" }, { wert: "karte", text: "Karte" }]} />{actions.feedback.kind === "submitting" ? <Zustand art="laedt" text={actions.feedback.message} /> : null}</Dialog> : null}
     {invoicePriceOpen ? <Dialog titel="Preise für die Rechnung" icon="receipt" groesse="schmal" onSchliessen={() => setInvoicePriceOpen(false)}><form className="kr-stapel" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const prices = missingInvoicePrices.map((item) => ({ itemId: item.id, unitPriceCents: Math.round(Number(form.get(`price-${item.id}`)) * 100) })); if (prices.some((price) => !Number.isSafeInteger(price.unitPriceCents) || price.unitPriceCents < 1)) return; void actions.onIssueInvoice(prices); setInvoicePriceOpen(false); }}>{missingInvoicePrices.map((item) => <Feld key={item.id} label={`${item.name} · Einzelpreis netto`}><Eingabe name={`price-${item.id}`} type="number" min="0.01" step="0.01" inputMode="decimal" required /></Feld>)}<Hinweis>Die Preise werden am Auftrag gespeichert und direkt in die unveränderliche Rechnung übernommen.</Hinweis><Button art="primaer" icon="receipt" text="Preise speichern & Rechnung ausstellen" type="submit" /></form></Dialog> : null}
     {dueOpen ? <Dialog titel="Liefertermin ändern" icon="calendar" groesse="schmal" onSchliessen={() => setDueOpen(false)}><form className="kr-stapel" onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void actions.onChangeDueDate?.(String(form.get("dueDate") ?? ""), String(form.get("reason") ?? "")); setDueOpen(false); }}><Feld label="Neuer Liefertermin"><Eingabe type="date" name="dueDate" defaultValue={card.dueAt?.slice(0, 10) ?? ""} required /></Feld><Feld label="Grund der Änderung"><Textfeld name="reason" minLength={3} maxLength={500} required /></Feld><Button art="primaer" icon="calendar" text="Termin mit Grund speichern" type="submit" /></form></Dialog> : null}

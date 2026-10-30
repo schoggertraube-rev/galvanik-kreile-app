@@ -143,6 +143,27 @@ describe("Orders V1.1 one-surface truth", () => {
     expect(screen.getByRole("dialog", { name: "Zahlung bestätigen" })).toBeInTheDocument();
   });
 
+  it("shows the confirmed invoice receipt where the invoice was issued", () => {
+    render(<OrderCardView actions={{
+      ...actions,
+      feedback: {
+        kind: "success",
+        message: "Rechnung R-2026-0042 wurde unveränderlich ausgestellt.",
+        receipt: {
+          kind: "invoice",
+          actorId: "actor-1",
+          occurredAt: "2026-09-18T09:30:00.000Z",
+          eventId: "invoice-event-1",
+          receiptId: "invoice://invoice-1/3",
+        },
+      },
+    }} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{ kind: "data", card }} />);
+
+    const confirmation = screen.getByRole("dialog", { name: "Rechnung ausgestellt" });
+    expect(confirmation).toHaveTextContent("Rechnung R-2026-0042 wurde unveränderlich ausgestellt.");
+    expect(confirmation).toHaveTextContent("Die Rechnung ist gespeichert und in der Auftragskarte nachgelesen.");
+  });
+
   it("exposes the V1.1 action rail and persists note, item and part-state changes through ports", async () => {
     const onSaveContent = vi.fn();
     const onToggleItemFinished = vi.fn();
