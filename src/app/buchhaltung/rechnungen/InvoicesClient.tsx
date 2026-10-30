@@ -10,6 +10,7 @@ import {
 } from "@/app/actions/invoices.actions";
 import type { ImmutableInvoiceCancellationReceipt } from "@/lib/server/commands/immutableInvoiceCommand";
 import type { ImmutableInvoiceSummary } from "@/lib/server/invoiceRead";
+import { Button } from "@/ui/kr";
 
 export type InvoicePageInitialState =
   | { state: "DATA" | "EMPTY"; data: ImmutableInvoiceSummary[]; canCancel: boolean }
@@ -226,7 +227,7 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
                         Stornobeleg-PDF
                       </a>
                     ) : null}
-                    <Link className="inline-flex min-h-12 items-center px-2 text-sm font-semibold text-navy-900 underline" href="/warendurchlauf" prefetch={false}>
+                    <Link className="inline-flex min-h-12 items-center px-2 text-sm font-semibold text-navy-900 underline" href={`/orders/${row.orderId}`} prefetch={false}>
                       Auftrag öffnen
                     </Link>
                   </div>
@@ -263,13 +264,12 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
                           className="min-h-12 flex-1 rounded-lg border border-neutral-gray-300 px-3 text-sm"
                           placeholder="Grund der vollständigen Stornierung"
                         />
-                        <button
+                        <Button
                           type="submit"
                           disabled={!interactive || pending}
-                          className="min-h-12 rounded-lg bg-navy-900 px-5 text-sm font-semibold text-white disabled:opacity-50"
-                        >
-                          {pending ? "Storno wird bestätigt…" : "Rechnung stornieren"}
-                        </button>
+                          art="gefaehrlich"
+                          text={pending ? "Storno wird bestätigt…" : "Rechnung stornieren"}
+                        />
                       </form>
                     </div>
                   ) : null}

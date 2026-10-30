@@ -11,6 +11,7 @@ import {
   Fakten,
   Feld,
   Hinweis,
+  Icon,
   Karte,
   KartenBlock,
   Kartenkopf,
@@ -239,7 +240,7 @@ export function OrderCardView({
       nummer={card.orderNumber}
       titel={card.title}
       sub={`${card.items.length} ${card.items.length === 1 ? "Position" : "Positionen"} · ${card.status}`}
-      meta={<><Chip text={card.station} ton={deadline.overdue ? "rot" : "info"} /><Button art="leise" icon="user" text={`${card.customerName} · Kundenakte`} onClick={() => onOpenCustomer(card.customerId)} /></>}
+      meta={<><Chip text={card.station} ton={deadline.overdue ? "rot" : "info"} /><button type="button" className="kr-pill kr-pill--kunde" onClick={() => onOpenCustomer(card.customerId)}><Icon name="user" />{card.customerName} · Kundenakte <Icon name="arrow" /></button></>}
       termin={<><TerminBox relativ={deadline.relative} datum={dueLabel(card.dueAt)} status={<Chip text={deadline.overdue ? "überfällig" : "bestätigt"} ton={deadline.overdue ? "rot" : "ok"} />} dringend={deadline.overdue} />{actions.dueDate?.visible ? <Button art="leise" icon="calendar" text="Termin ändern" disabled={!actions.dueDate.enabled} onClick={() => setDueOpen(true)} /> : null}</>}
       onSchliessen={onClose}
     />
