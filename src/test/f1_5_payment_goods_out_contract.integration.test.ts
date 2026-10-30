@@ -211,12 +211,23 @@ async function seedCommandPrerequisites() {
     await transaction`
       INSERT INTO public.customers (
         id, tenant_id, customer_number, name, company_name, type,
-        street, zip_code, city, country, created_at, updated_at
+        contact_person, email, phone, street, zip_code, city, country,
+        payment_preference, created_at, updated_at
       ) VALUES (
         ${COMMAND_CUSTOMER}, ${COMMAND_TENANT}, ${`F15-${suffix}`}, 'F1.5 Contract Customer',
-        'F1.5 Contract Customer GmbH', 'business', 'Kundenweg 2',
-        '70174', 'Stuttgart', 'Deutschland', now(), now()
-      ) ON CONFLICT (id) DO NOTHING
+        'F1.5 Contract Customer GmbH', 'business', 'Fiona Vertrag',
+        ${`f15-contract-customer-${suffix}@local.invalid`}, '+49 711 5550150',
+        'Kundenweg 2', '70174', 'Stuttgart', 'Deutschland', 'vorkasse', now(), now()
+      ) ON CONFLICT (id) DO UPDATE SET
+        contact_person = EXCLUDED.contact_person,
+        email = EXCLUDED.email,
+        phone = EXCLUDED.phone,
+        street = EXCLUDED.street,
+        zip_code = EXCLUDED.zip_code,
+        city = EXCLUDED.city,
+        country = EXCLUDED.country,
+        payment_preference = EXCLUDED.payment_preference,
+        updated_at = EXCLUDED.updated_at
     `;
     await transaction`
       INSERT INTO private.extra_work_hourly_rates
