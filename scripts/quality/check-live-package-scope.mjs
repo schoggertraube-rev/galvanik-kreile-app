@@ -98,6 +98,46 @@ const POST_LIVE_CONTROL_PATTERNS = Object.freeze([
   "scripts/quality/check-live-package-scope.mjs",
   "scripts/quality/select-live-regression-specs.mjs",
 ]);
+const SALES_STAGE_B1_BRANCH = "kreile/b1-shell";
+const PR154_REBASELINE_BRANCH = "kreile/s1-p2-eingang";
+const PR154_REBASELINE_BASE_SHA = "1fa4920d6d06b02413c8c157ae6b739507105846";
+const PR154_REBASELINE_RECEIPT = "docs/evidence/live-line/pr154/REBASELINE.json";
+const PR154_REBASELINE_VALUES = Object.freeze({
+  schemaVersion: 1,
+  package: "PR-154-REBASELINE",
+  pullRequest: 154,
+  headBranch: PR154_REBASELINE_BRANCH,
+  mainBaseSha: PR154_REBASELINE_BASE_SHA,
+  authorizedBy: "Siglinder",
+  authorizedAt: "2026-10-30",
+  scopeMode: "CUMULATIVE_REBASELINE_AFTER_RETARGET",
+  followingPullRequests: "STRICT_UNCHANGED",
+});
+const PR154_TRUST_ANCHOR_PINNED_FILES = Object.freeze([
+  ".github/workflows/eslint-ratchet.yml",
+  "AGENTS.md",
+  "_review/AKTUELLE_ANWEISUNG.md",
+  "_review/OWNER_ENTSCHEIDUNGEN.md",
+  "quality/authoritative-sources.json",
+  "missions/F1_ORDER_TO_CASH_PILOT_001.yml",
+  "docs/delivery/KREILE_VERKAUFSSTUFE_1.md",
+  "scripts/quality/check-authoritative-sources.mjs",
+  "scripts/quality/check-delivery-contracts.mjs",
+  "scripts/quality/check-live-package-scope.mjs",
+]);
+const PR154_TRUST_ANCHOR_BASE_FILES = Object.freeze([
+  ...PR154_TRUST_ANCHOR_PINNED_FILES,
+  "quality/eslint-baseline.json",
+]);
+const SALES_STAGE_B1_ALLOWLIST = Object.freeze([
+  "docs/delivery/AENDERUNGEN_B1.md",
+  "src/app/**",
+  "src/components/**",
+  "src/modules/werkstatt/**",
+  "src/proxy.ts",
+  "src/test/**",
+  "e2e/**",
+]);
 
 const posix = (value) => value.replaceAll("\\", "/");
 const isSha = (value) => /^[0-9a-f]{40}$/i.test(value ?? "");
@@ -161,6 +201,78 @@ function commitList(root, base, head) {
 
 function resolved(root, revision) {
   return git(root, ["rev-parse", revision]);
+}
+
+function checkPr154TrustAnchorBase(root, baseSha, originalBaseSha = PR154_REBASELINE_BASE_SHA) {
+  if (baseSha === originalBaseSha) return [];
+  const errors = [];
+  try {
+    git(root, ["merge-base", "--is-ancestor", originalBaseSha, baseSha]);
+  } catch {
+    return [`PR154_REBASELINE_BASE_INVALID:${baseSha}:${originalBaseSha}`];
+  }
+  let commits;
+  let files;
+  try {
+    commits = commitList(root, originalBaseSha, baseSha);
+    files = changedFiles(root, originalBaseSha, baseSha).sort();
+  } catch {
+    return [`PR154_REBASELINE_BASE_INVALID:${baseSha}:${originalBaseSha}`];
+  }
+  if (commits.length !== 1) errors.push(`PR154_TRUST_ANCHOR_COMMIT_COUNT:${commits.length}`);
+  const expectedFiles = [...PR154_TRUST_ANCHOR_BASE_FILES].sort();
+  if (JSON.stringify(files) !== JSON.stringify(expectedFiles)) {
+    errors.push(`PR154_TRUST_ANCHOR_FILES:${files.join(",")}`);
+  }
+  for (const rel of PR154_TRUST_ANCHOR_PINNED_FILES) {
+    try {
+      const protectedBlob = git(root, ["rev-parse", `${baseSha}:${rel}`]);
+      const candidateBlob = git(root, ["hash-object", "--path", rel, rel]);
+      if (candidateBlob !== protectedBlob) errors.push(`PR154_TRUST_ANCHOR_BYTES:${rel}`);
+    } catch {
+      errors.push(`PR154_TRUST_ANCHOR_BYTES:${rel}`);
+    }
+  }
+  return errors;
+}
+
+function checkPr154Rebaseline(root, baseSha, originalBaseSha = PR154_REBASELINE_BASE_SHA) {
+  const errors = [];
+  errors.push(...checkPr154TrustAnchorBase(root, baseSha, originalBaseSha));
+  const full = path.join(root, PR154_REBASELINE_RECEIPT);
+  let receipt;
+  try {
+    receipt = JSON.parse(readFileSync(full, "utf8"));
+  } catch {
+    errors.push("PR154_REBASELINE_RECEIPT_UNREADABLE");
+    return errors;
+  }
+  const expectedKeys = [...Object.keys(PR154_REBASELINE_VALUES), "reason"].sort();
+  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(expectedKeys)) {
+    errors.push("PR154_REBASELINE_RECEIPT_SCHEMA");
+  }
+  for (const [key, value] of Object.entries(PR154_REBASELINE_VALUES)) {
+    if (receipt[key] !== value) errors.push(`PR154_REBASELINE_RECEIPT_VALUE:${key}`);
+  }
+  if (typeof receipt.reason !== "string" || receipt.reason.trim().length < 40) {
+    errors.push("PR154_REBASELINE_RECEIPT_REASON");
+  }
+  return errors;
+}
+
+function checkSalesStageB1Scope(files, mission, branch) {
+  const errors = [];
+  if (branch !== SALES_STAGE_B1_BRANCH) errors.push(`SALES_STAGE_BRANCH_INVALID:${branch}`);
+  if (mission.active_block !== "B1" || mission.branch !== SALES_STAGE_B1_BRANCH) {
+    errors.push("SALES_STAGE_MISSION_MISMATCH");
+  }
+  for (const rel of files) {
+    if (!covered(rel, SALES_STAGE_B1_ALLOWLIST)) errors.push(`SALES_STAGE_B1_SCOPE:${rel}`);
+  }
+  if (files.some((rel) => rel.startsWith("supabase/migrations/") || rel.startsWith("src/db/"))) {
+    errors.push("SALES_STAGE_B1_DATA_MODEL_FORBIDDEN");
+  }
+  return errors;
 }
 
 function checkActivation(files, baseSha, plan) {
@@ -454,6 +566,12 @@ function checkClosure(root, baseSha, files, mission) {
 export function checkLivePackageScope({ root, base, head, branch }) {
   const files = changedFiles(root, base, head);
   if (branch === "main") return [];
+  const candidateMission = parseMission(readFileSync(path.join(root, MISSION_PATH), "utf8"));
+  if (candidateMission.mission_id === "KREILE-VERKAUFSSTUFE-1") {
+    const baseSha = resolved(root, base);
+    if (branch === PR154_REBASELINE_BRANCH) return checkPr154Rebaseline(root, baseSha);
+    return checkSalesStageB1Scope(files, candidateMission, branch);
+  }
   try {
     const baseMission = parseMission(gitFile(root, base, MISSION_PATH));
     if (baseMission.phase === "DONE" && baseMission.next_gate_after_active_package === "LIVE_COMPLETE") {
@@ -771,6 +889,64 @@ function selftestGateToBuildAmendment(fixture, plan, item) {
 export function runSelftest(root = process.cwd()) {
   if (!covered("src/modules/orders/server/get.ts", ["src/modules/orders/**"])) throw new Error("glob positive failed");
   if (covered("src/modules/customers/server/get.ts", ["src/modules/orders/**"])) throw new Error("glob negative failed");
+  const salesStageMission = { active_block: "B1", branch: SALES_STAGE_B1_BRANCH };
+  const validSalesStage = checkSalesStageB1Scope(
+    ["src/app/start/page.tsx", "src/test/shell.test.ts", "docs/delivery/AENDERUNGEN_B1.md"],
+    salesStageMission,
+    SALES_STAGE_B1_BRANCH,
+  );
+  if (validSalesStage.length > 0) throw new Error(`valid sales-stage B1 scope rejected: ${validSalesStage.join(" | ")}`);
+  for (const protectedFile of ["AGENTS.md", "missions/F1_ORDER_TO_CASH_PILOT_001.yml", "scripts/quality/check-delivery-contracts.mjs"]) {
+    const protectedErrors = checkSalesStageB1Scope([protectedFile], salesStageMission, SALES_STAGE_B1_BRANCH);
+    if (!protectedErrors.includes(`SALES_STAGE_B1_SCOPE:${protectedFile}`)) {
+      throw new Error(`sales-stage governance mutation accepted: ${protectedFile}`);
+    }
+  }
+  const rebaselineFixture = mkdtempSync(path.join(tmpdir(), "kreile-pr154-rebaseline-"));
+  try {
+    git(rebaselineFixture, ["init", "-q"]);
+    git(rebaselineFixture, ["config", "user.email", "pr154-selftest@example.invalid"]);
+    git(rebaselineFixture, ["config", "user.name", "PR154 Selftest"]);
+    git(rebaselineFixture, ["config", "commit.gpgsign", "false"]);
+    for (const rel of PR154_TRUST_ANCHOR_BASE_FILES) write(rebaselineFixture, rel, `protected-v1:${rel}\n`);
+    write(rebaselineFixture, PR154_REBASELINE_RECEIPT, `${JSON.stringify({
+      ...PR154_REBASELINE_VALUES,
+      reason: "Owner-authorized one-time cumulative rebaseline after retargeting pull request 154 to main.",
+    }, null, 2)}\n`);
+    commit(rebaselineFixture, "original protected base");
+    const fixtureOriginalBase = git(rebaselineFixture, ["rev-parse", "HEAD"]);
+    const validRebaseline = checkPr154Rebaseline(rebaselineFixture, PR154_REBASELINE_BASE_SHA);
+    if (validRebaseline.length > 0) throw new Error(`valid PR154 rebaseline rejected: ${validRebaseline.join(" | ")}`);
+    for (const rel of PR154_TRUST_ANCHOR_BASE_FILES) write(rebaselineFixture, rel, `protected-v2:${rel}\n`);
+    commit(rebaselineFixture, "approved trust anchors only");
+    const fixtureTrustAnchor = git(rebaselineFixture, ["rev-parse", "HEAD"]);
+    write(rebaselineFixture, "quality/eslint-baseline.json", "candidate ratchet migration\n");
+    const validTrustAnchor = checkPr154Rebaseline(rebaselineFixture, fixtureTrustAnchor, fixtureOriginalBase);
+    if (validTrustAnchor.length > 0) {
+      throw new Error(`valid PR154 trust-anchor base rejected: ${validTrustAnchor.join(" | ")}`);
+    }
+    write(rebaselineFixture, "unexpected.txt", "not approved\n");
+    commit(rebaselineFixture, "unexpected second base commit");
+    const fixtureUnexpectedBase = git(rebaselineFixture, ["rev-parse", "HEAD"]);
+    const invalidTrustAnchor = checkPr154Rebaseline(rebaselineFixture, fixtureUnexpectedBase, fixtureOriginalBase);
+    if (!invalidTrustAnchor.some((error) => error.startsWith("PR154_TRUST_ANCHOR_COMMIT_COUNT:"))
+        || !invalidTrustAnchor.some((error) => error.startsWith("PR154_TRUST_ANCHOR_FILES:"))) {
+      throw new Error(`expanded PR154 trust-anchor base not rejected: ${invalidTrustAnchor.join(" | ")}`);
+    }
+    const movedBase = checkPr154Rebaseline(rebaselineFixture, "b".repeat(40));
+    if (!movedBase.some((error) => error.startsWith("PR154_REBASELINE_BASE_INVALID:"))) {
+      throw new Error(`moved PR154 base not rejected: ${movedBase.join(" | ")}`);
+    }
+    const changedReceipt = JSON.parse(readFileSync(path.join(rebaselineFixture, PR154_REBASELINE_RECEIPT), "utf8"));
+    changedReceipt.followingPullRequests = "RELAXED";
+    write(rebaselineFixture, PR154_REBASELINE_RECEIPT, `${JSON.stringify(changedReceipt, null, 2)}\n`);
+    const invalidReceipt = checkPr154Rebaseline(rebaselineFixture, PR154_REBASELINE_BASE_SHA);
+    if (!invalidReceipt.includes("PR154_REBASELINE_RECEIPT_VALUE:followingPullRequests")) {
+      throw new Error(`changed PR154 receipt not rejected: ${invalidReceipt.join(" | ")}`);
+    }
+  } finally {
+    rmSync(rebaselineFixture, { recursive: true, force: true });
+  }
   const plan = JSON.parse(readFileSync(path.join(root, PLAN_PATH), "utf8"));
   const fixture = mkdtempSync(path.join(tmpdir(), "kreile-live-scope-"));
   try {
