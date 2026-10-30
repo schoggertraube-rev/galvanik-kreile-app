@@ -28,13 +28,6 @@ function isMembershipCheck(node) {
     && (node.callee.property.value === "has" || node.callee.property.value === "includes");
 }
 
-function hasDocumentedH11cException(context, node) {
-  return context.sourceCode.getAllComments().some((comment) => (
-    comment.loc?.end.line === node.loc?.start.line - 1
-    && /^erlaubt H11c: .+$/u.test(comment.value.trim())
-  ));
-}
-
 function isMemberNamed(node, name) {
   if (node?.type !== "MemberExpression") return false;
   if (!node.computed && node.property.type === "Identifier") {
@@ -99,13 +92,11 @@ const plugin = {
               (node.operator === "===" || node.operator === "!==")
               && (isRoleReference(node.left) || isRoleReference(node.right))
             ) {
-              if (!hasDocumentedH11cException(context, node)) {
-                context.report({ node, messageId: "forbidden" });
-              }
+              context.report({ node, messageId: "forbidden" });
             }
           },
           CallExpression(node) {
-            if (isMembershipCheck(node) && !hasDocumentedH11cException(context, node)) {
+            if (isMembershipCheck(node)) {
               context.report({ node, messageId: "forbidden" });
             }
           },

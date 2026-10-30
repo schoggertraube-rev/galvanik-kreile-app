@@ -187,7 +187,7 @@ export function evaluateProductActorReadiness(input: {
     }
     if (
       !isAppRole(profile.role) ||
-      // erlaubt H11c: Sitzungsprüfung
+      // eslint-disable-next-line h16/no-role-identity-comparison -- erlaubt H11c: Sitzungsprüfung
       !PRODUCT_ACTOR_RULES[key].allowedRoles.includes(profile.role)
     ) {
       return readinessFailure(

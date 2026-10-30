@@ -178,6 +178,18 @@ const eslintConfig = defineConfig([
     files: h16PlaceholderTextBaselineFiles,
     rules: { "h16/no-placeholder-text": "off" },
   },
+  {
+    files: [
+      "src/app/settings/SettingsAdminClient.tsx",
+      "src/lib/server/appSession.ts",
+      "src/lib/server/productActorReadiness.ts",
+      "src/lib/server/productActorReadinessCore.ts",
+    ],
+    linterOptions: {
+      noInlineConfig: false,
+      reportUnusedDisableDirectives: "error",
+    },
+  },
   // STAGE_1_PIN_ONLY: Dieser Override pinnt ausschliesslich den kuenftigen ESLint-Vertrag.
   // Der geschuetzte S1-Modul-Checker bleibt bis zur atomaren Folgestufe absichtlich
   // strenger/public-only und blockiert jeden server-public-Verbraucher weiterhin.
