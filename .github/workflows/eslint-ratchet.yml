@@ -66,7 +66,7 @@ jobs:
       - name: Enforce D-GOV-001 authority contract on candidate
         working-directory: ratchet-base
         env:
-          AUTHORITY_CHECKER_SHA256: "64171b7e421d5e97fbf841e1451f6ada0d3aaed19e2fc329e23a448de2df1b22"
+          AUTHORITY_CHECKER_SHA256: "ab0e3e716c153380e31f7aff2dfb340811310610488b60583897280bff45e14a"
           AUTHORITY_SCHEMA_SHA256: "9ef5be59be86093a0b78523b69844f40784f992853685ccc3e09d06663b25766"
         run: |
           set -euo pipefail

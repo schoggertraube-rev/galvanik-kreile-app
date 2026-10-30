@@ -43,14 +43,15 @@ const REQUIRED_DECISIONS = Object.freeze([
   "D-UI-DS-001",
   "D-GOV-004",
 ]);
-const ACTIVE_ENTRY_DOCS = Object.freeze([
-  "AGENTS.md",
+const EXECUTABLE_ENTRY_DOCS = Object.freeze(["AGENTS.md"]);
+const REFERENCE_ONLY_ENTRY_DOCS = Object.freeze([
   "docs/project/DOCUMENT_AUTHORITY.md",
   "docs/project/MASTERPLAN.md",
   "docs/project/linie/00_ABC_INDEX.md",
   "docs/project/linie/00_BIBEL_INDEX.md",
   "docs/project/linie/00_JETZT_UND_LEITPLANKEN.md",
 ]);
+const REFERENCE_ONLY_MARKER = "<!-- STATUS: REFERENCE_ONLY_NON_EXECUTABLE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->";
 const FORBIDDEN_ACTIVE_TOKENS = Object.freeze([
   "ROLLING_MANIFEST_QUEUE_V1",
   "KR-22R",
@@ -178,18 +179,32 @@ function validateDecisionAndUiTruth(root, errors) {
   }
 }
 
+function validateReferenceEntryText(rel, text, errors) {
+  if (!text.startsWith(REFERENCE_ONLY_MARKER)) errors.push(`REFERENCE_ENTRY_NOT_NON_EXECUTABLE:${rel}`);
+  for (const token of FORBIDDEN_ACTIVE_TOKENS) if (text.includes(token)) errors.push(`REFERENCE_ENTRY_LEGACY_TOKEN:${rel}:${token}`);
+}
+
 function validateActiveEntryDocs(root, errors) {
-  for (const rel of ACTIVE_ENTRY_DOCS) {
+  for (const rel of EXECUTABLE_ENTRY_DOCS) {
     const file = absolute(root, rel);
     if (!existsSync(file)) {
       errors.push(`ACTIVE_ENTRY_MISSING:${rel}`);
       continue;
     }
     const text = readFileSync(file, "utf8");
-    if (rel === "AGENTS.md" && !text.includes("docs/delivery/KREILE_VERKAUFSSTUFE_1.md")) {
+    if (!text.includes("docs/delivery/KREILE_VERKAUFSSTUFE_1.md")) {
       errors.push(`ACTIVE_ENTRY_PLAN_POINTER_MISSING:${rel}`);
     }
     for (const token of FORBIDDEN_ACTIVE_TOKENS) if (text.includes(token)) errors.push(`ACTIVE_ENTRY_LEGACY_TOKEN:${rel}:${token}`);
+  }
+  for (const rel of REFERENCE_ONLY_ENTRY_DOCS) {
+    const file = absolute(root, rel);
+    if (!existsSync(file)) {
+      errors.push(`REFERENCE_ENTRY_MISSING:${rel}`);
+      continue;
+    }
+    const text = readFileSync(file, "utf8");
+    validateReferenceEntryText(rel, text, errors);
   }
 }
 
@@ -305,6 +320,11 @@ export function runSelftest(root = process.cwd()) {
   expectConfigMutation(config, (value) => { value.designSystem.role = "PAGE_COMPOSITION"; }, "DESIGN_SYSTEM_CONFIG_CONTRACT");
   expectConfigMutation(config, (value) => { value.uiReferences.pop(); }, "UI_REFERENCE_CONFIG_CONTRACT");
   expectConfigMutation(config, (value) => { value.schemaVersion = 2; }, "AUTHORITY_CONFIG_SCHEMA_VERSION");
+  const referenceErrors = [];
+  validateReferenceEntryText("reference.md", "# executable\n", referenceErrors);
+  if (!referenceErrors.includes("REFERENCE_ENTRY_NOT_NON_EXECUTABLE:reference.md")) {
+    throw new Error(`reference entry mutation did not fail closed: ${referenceErrors.join(" | ")}`);
+  }
   return true;
 }
 

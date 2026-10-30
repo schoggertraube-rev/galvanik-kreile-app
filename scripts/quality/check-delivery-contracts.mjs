@@ -11,6 +11,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const PLAN_PATH = "docs/delivery/KREILE_LIVE_PLAN_V1.json";
 const SALES_STAGE_PLAN_PATH = "docs/delivery/KREILE_VERKAUFSSTUFE_1.md";
+const SALES_STAGE_PLAN_SHA256 = "7680f735a43230df1f7dba950dd7dbb677a4bca4ed74d90f418f304c596c3148";
 const MISSION_PATH = "missions/F1_ORDER_TO_CASH_PILOT_001.yml";
 const CLAUDE_SETTINGS_PATH = ".claude/settings.json";
 const EXPECTED_PLAN_KEYS = [
@@ -507,6 +508,14 @@ function validateMission(root, plan, errors) {
   }
 }
 
+function validateSalesStagePlanText(planText, errors) {
+  const normalized = planText.replaceAll("\r\n", "\n");
+  const actualHash = createHash("sha256").update(normalized).digest("hex");
+  if (actualHash !== SALES_STAGE_PLAN_SHA256) {
+    errors.push(`SALES_STAGE_PLAN_SHA256:${actualHash}`);
+  }
+}
+
 function validateSalesStageRepository(root, errors) {
   const planFile = absolute(root, SALES_STAGE_PLAN_PATH);
   const missionFile = absolute(root, MISSION_PATH);
@@ -520,17 +529,7 @@ function validateSalesStageRepository(root, errors) {
   }
 
   const planText = readFileSync(planFile, "utf8");
-  for (const token of [
-    "OWNER_AUTHORIZED",
-    "Siglinder, 25.10.2026",
-    "KREILE_LIVE_PLAN_V1.json",
-    "D-GOV-004",
-    "kreile/b1-shell",
-    "AENDERUNGEN_B1.md",
-    "OWNER_EXPLICIT_AUTHORITY_ONLY",
-  ]) {
-    if (!planText.includes(token)) errors.push(`SALES_STAGE_PLAN_TOKEN:${token}`);
-  }
+  validateSalesStagePlanText(planText, errors);
 
   const missionErrors = [];
   const mission = parseMission(readFileSync(missionFile, "utf8"), missionErrors);
@@ -608,6 +607,21 @@ function expectMutation(plan, mutate, expectedCode) {
 }
 
 export function runSelftest(root = process.cwd()) {
+  const missionText = readFileSync(absolute(root, MISSION_PATH), "utf8");
+  if (/^mission_id:\s*KREILE-VERKAUFSSTUFE-1\s*$/m.test(missionText)) {
+    const planText = readFileSync(absolute(root, SALES_STAGE_PLAN_PATH), "utf8");
+    const baselineErrors = [];
+    validateSalesStagePlanText(planText, baselineErrors);
+    if (baselineErrors.length > 0) {
+      throw new Error(`sales-stage selftest baseline invalid: ${baselineErrors.join(" | ")}`);
+    }
+    const mutationErrors = [];
+    validateSalesStagePlanText(planText.replace("OWNER_AUTHORIZED", "DRAFT"), mutationErrors);
+    if (!mutationErrors.some((error) => error.startsWith("SALES_STAGE_PLAN_SHA256:"))) {
+      throw new Error(`sales-stage mutation did not fail closed: ${mutationErrors.join(" | ")}`);
+    }
+    return true;
+  }
   const plan = JSON.parse(readFileSync(absolute(root, PLAN_PATH), "utf8"));
   const validErrors = [];
   validatePlanShape(plan, validErrors);
