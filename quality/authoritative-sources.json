@@ -2,6 +2,8 @@
   "schemaVersion": 4,
   "truthTypes": [
     { "id": "project_rules", "source": "AGENTS.md" },
+    { "id": "active_queue", "source": "_review/AKTUELLE_ANWEISUNG.md" },
+    { "id": "owner_decisions", "source": "_review/OWNER_ENTSCHEIDUNGEN.md" },
     { "id": "product_decisions", "source": "docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md" },
     { "id": "scope_modules", "source": "docs/project/linie/MODULKARTE_KANON.md" },
     { "id": "architecture", "source": "docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md" },

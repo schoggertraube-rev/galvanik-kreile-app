@@ -11,6 +11,8 @@ const AUTHORITY_CHECKER_PATH = "scripts/quality/check-authoritative-sources.mjs"
 const RATCHET_WORKFLOW_PATH = ".github/workflows/eslint-ratchet.yml";
 const TRUTH_SOURCE_CONTRACT = Object.freeze({
   project_rules: "AGENTS.md",
+  active_queue: "_review/AKTUELLE_ANWEISUNG.md",
+  owner_decisions: "_review/OWNER_ENTSCHEIDUNGEN.md",
   product_decisions: "docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md",
   scope_modules: "docs/project/linie/MODULKARTE_KANON.md",
   architecture: "docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md",

@@ -116,6 +116,8 @@ const PR154_REBASELINE_VALUES = Object.freeze({
 const PR154_TRUST_ANCHOR_PINNED_FILES = Object.freeze([
   ".github/workflows/eslint-ratchet.yml",
   "AGENTS.md",
+  "_review/AKTUELLE_ANWEISUNG.md",
+  "_review/OWNER_ENTSCHEIDUNGEN.md",
   "quality/authoritative-sources.json",
   "missions/F1_ORDER_TO_CASH_PILOT_001.yml",
   "docs/delivery/KREILE_VERKAUFSSTUFE_1.md",

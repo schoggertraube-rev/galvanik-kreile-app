@@ -5,6 +5,12 @@ Codex liest diese Datei vor jedem Paket und nach jedem Eintrag in OWNER_TODO.md.
 ## 30.10.2026 · U-222 Einmalige Rebaseline PR #154
 Entschieden (Owner 30.10.): PR #154 wird nach dem Retarget auf `main` einmalig als kumuliertes Rebaseline-Paket geprüft. Die Umfangsprüfung bleibt für alle Folge-PRs unverändert streng. Die ESLint-Basis wird als geprüfte Migration ohne Regelabschwächung und ohne Zunahme der Fehlerzahl aktualisiert. F1.4 läuft auf dem aktuellen Schema, ohne seinen Prüfinhalt abzuschwächen. Danach muss CI vollständig grün sein. Zusätzlich erhält „Rechnung ausstellen“ die vom Prüfchat verlangte sichtbare Erfolgsmeldung mit Replay-DB-Nachweis. Kein Merge.
 
+## 30.10.2026 · U-220 Nicht härten, was die Endversion ersetzt
+Entschieden (Owner 30.10.): Codex testet und repariert nur Aktionen, die der Planungschat als stabiler Stufe-1-Kern bestätigt hat. Was eingefroren, Stub, ersetzt, Legacy-außerhalb-Stufe-1 oder Stufe-2 ist, bleibt unangetastet, bis die Endversion es neu schneidet. Kein Fix, der später ohnehin verworfen wird. Umgesetzt als Regel A9 in AKTUELLE_ANWEISUNG.md.
+
+## 30.10.2026 · U-221 Test schreibt nicht, wer den Code schrieb
+Entschieden (Owner 30.10.): Den Abnahmefall je Fix (Eingaben → Soll-Zeile DB → Soll-Ansicht) gibt der lesende Prüf-/Red-Team-Codex plus der Planungschat vor, nicht der Bau-Codex. Der Bau-Codex erfüllt ihn. Nur der Bau-Codex schreibt auf dem Branch; keine zweite schreibende Codex-Sitzung. Umgesetzt als Regel A10 in AKTUELLE_ANWEISUNG.md.
+
 ## 25.10.2026 · S03 Nutzer & Rollen
 Entschieden: Für Stufe 1 reichen die drei bestehenden Nutzer Rolf, Phillip, Gregor. S03 bleibt auf Rollen-, PIN- und Sperrpflege dieser drei begrenzt. Neue Nutzer anlegen kommt später als eigene Auth-Erweiterung. In der App die Stelle „Nutzer anlegen“ ausgegraut im V8-Muster „geplant“ zeigen, nicht „In Klärung“.
 
@@ -121,3 +127,45 @@ Neueste vom Owner freigegebene Version (27.09.2026, `_DESIGN_VERBINDLICH/FREIGAB
 - **U-213 Betrieb:** Die App läuft in der Cloud auf bezahlten Tarifen, Region EU/Frankfurt. Dazu kommt ein **nächtliches automatisches Backup auf ein NAS bei Kreile**. Kein eigener Server. Details klärt Thema 6.
 - **U-214 Steuerdateien versionieren:** Die dauerhaften Steuer- und Klärungsdateien in `_review/` kommen unter Git: OWNER_ENTSCHEIDUNGEN, AKTUELLE_ANWEISUNG, MELDUNG_*, ORIENTIERUNG_KLAERUNG, KLAERUNG_*, DEZEMBER_LISTE. Vorläufige Prüfdateien bleiben ignoriert. Committen darf nur der Bau-Codex.
 - **U-215 Wareneingang ist der Kern-USP:** Vom Paket bis zur Ware in der Galvanik dauert es höchstens 5 Minuten, ohne offene Punkte. Die App führt, nichts muss gesucht werden. Das ist Thema 1b in ORIENTIERUNG_KLAERUNG.md.
+
+## 28.10.2026 abends – Bereinigung (Owner)
+
+- **U-216 Bereinigung und Wächter:** Der Owner gibt die Bereinigung aus `_review/SAUBERKEIT_AUDIT_2026-10-28.md` frei, in dieser Reihenfolge:
+  1. H11 Rechte: eine einzige Quelle.
+  2. H12 „Der Tag“.
+  3. H13 automatische Wächter.
+  4. H14 stille Ersatzwerte und Tenant.
+  5. H15 eine Datenwahrheit (Rechnung, Zahlstatus, Station, Stufen, Testdaten).
+  6. H16 toter Code und Mock.
+
+  Grundsätze:
+  - Es gibt keine zweite Wahrheit, keinen erfundenen Ersatzwert, keinen Mock und keinen toten Code. Fehlt ein Wert, zeigt die App „fehlt“.
+  - Ab H13 verhindert CI jeden neuen Verstoß. Bestehende Verstöße stehen in einer Ausgangsliste, die nur schrumpfen darf.
+  - Migrationen auf die Dev-DB sind für H11–H15 freigegeben, nur additiv und ohne Löschen.
+  - Der Eingang-Freeze bleibt.
+  - **Alle bis 28.10. angelegten Kunden, Aufträge, KV, Rechnungen und Zahlungen sind Testdaten.** Sie bekommen `is_test = true`.
+- **U-217 Bereinigung verkleinert (nach Red-Team), Prod-DB vorgezogen, Bauplan-Regeln:**
+  - **Ersetzt U-216 in Umfang und Reihenfolge.** Die Warteschlange läuft so: H11 Rechte → H12 Der Tag → Owner-Klick und Merge #154 → H13 Ersatzwerte (ohne Tenant) → H14 Rechnungswahrheit (Zahlstatus nur lesen) → H15 nur live erreichbarer Müll → H16 drei CI-Wächter → H17 eigene Produktions-DB → Eingang-Bau.
+  - **Nach dem Go-live:** Stationen zusammenlegen, `tenant_features`, Tenant-Default entfernen, Drizzle angleichen, restlichen toten Code löschen, nächtlicher Bericht. Das Testdaten-Kennzeichen entfällt, weil die Prod-DB leer startet.
+  - **Produktions-DB:** Ein zweites Supabase-Projekt für Production ist jetzt gewollt. Das ersetzt die frühere Regel „kein zweites Supabase-Projekt“. Das Projekt legt die Owner an, nicht Codex.
+  - **Bauplan-Regeln R1–R4** (AKTUELLE_ANWEISUNG Regel 8): Ersetzt-Liste mit Grep-/404-Gate, Datenvertrag für neue Felder, Gegenprüfung vor `baureif`, Abnahmefälle als Klickwege.
+- **U-218 Neue Arbeitsteilung ab dem Eingang.** Owner-Auftrag: „Präzisere Aufgabenstellung statt mehr Kontrolle.“ Ein unabhängiges Red-Team hat am 28.10. bestätigt: ADOPT WITH CHANGES. Die Änderungen sind eingearbeitet.
+  - **Endversion-Chat = WAS:** Verhalten, Felder, Regeln, Zustände, Rechte, Abnahme-Klickwege.
+  - **Planungschat = WIE:** Arbeitspakete gegen echten Code und DB. Enthalten: Ist→Soll, Ersetzt-Liste, Verbote, Datenvertrag, Typen und Signaturen, Migrations-SQL, roter Akzeptanztest mit Fixture. Kein Produktcode.
+  - **Codex = TUN:** nur Pakete mit Status `bereit`. Akzeptanztests sind unveränderlich; Einwände gehen per `BLOCKER.md`.
+  - **Spike-Pakete** (max. 2 h, Wegwerf-Prototyp) vor technischen Unbekannten: OCR, Mail-Abruf, E-Rechnung.
+  - **Annahmen** des Planungschats bestätigt der Endversion-Chat, bevor ein Paket abgenommen wird.
+  - **Stand** liegt nur in Dateien: `docs/project/arbeitspakete/WORKQUEUE.json` und die Paketordner.
+  - **Schnitt** des Eingangs nach Kanälen, jeder für sich abnahmefähig. Reihenfolge nach U-215: Paket/persönlich → Mail inkl. E-Rechnung → OCR → Eingangsrechnungen → Telefon.
+- **U-219 Go-live sauber, eine App (Owner 29.10.):**
+  - **Zeitpunkt:** Die Produktions-DB (H17) kommt erst in der Woche vor Go-live, vor der ersten echten Nutzung.
+  - **Bis dahin:**
+    - Kein echtes Postfach, kein echter Beleg und keine echten Kundendaten an Dev oder Preview.
+    - Genau ein Repo, ein Vercel-Projekt und eine Dev-DB.
+    - Schema nur über Migrationen.
+    - Keine Parallel-Tabellen oder -Routen.
+  - **Go-live** läuft nach `docs/delivery/GO_LIVE_ABLAUF.md`:
+    - Die Produktions-DB wird aus den Migrationen leer aufgebaut.
+    - Übernommen werden nur Stammdaten laut Datenregister (Firmendaten, Katalog, Stundensätze, Logins ohne PIN, Rechte).
+    - Testdaten und Nummernkreise werden nie übernommen.
+    - Ein Smoke-Test läuft vor der ersten echten Nutzung. Mischbetrieb gibt es nicht.
