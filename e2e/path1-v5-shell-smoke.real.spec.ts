@@ -92,7 +92,7 @@ async function loginPin(page: Page, actor: (typeof ACTORS)[number], secret: stri
   const userCard = page.getByTestId(`pin-user-card-${createPinLoginHandle(actor.id)}`);
   await userCard.click();
   await expect(userCard).toHaveAttribute("aria-pressed", "true");
-  const keypad = page.getByRole("generic", { name: "Ziffernblock", exact: true });
+  const keypad = page.locator('[data-spec-id="login.anmelden"]');
   await expect(keypad).toBeVisible();
   const home = page.waitForURL((url) => url.pathname === "/", { waitUntil: "commit" });
   for (const digit of actor.pin) await keypad.getByRole("button", { name: digit, exact: true }).click();
