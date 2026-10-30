@@ -437,11 +437,32 @@ jobs:
         run: ./node_modules/.bin/supabase db reset --local --no-seed --version 20260820143000
 
       - name: F1.3 foundation ports integration test
+        shell: bash
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           F1_3_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           SUPABASE_SERVICE_ROLE_KEY: ""
-        run: npx vitest run src/test/f1_3_foundation_ports.integration.test.ts
+        run: |
+          set -euo pipefail
+          # This step proves the historical F1.3 schema contract. The current
+          # authorization resolver requires app_user_rights, which is added by
+          # a later migration, so run the unchanged F1.3 test with its matching
+          # source snapshot. Current product code is exercised again after the
+          # complete migration replay below.
+          F1_3_SOURCE_SHA="c64d460e11733a966d9fbaa2a120eb8c30a61989"
+          CURRENT_SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+          F1_3_TEST_PATH="src/test/f1_3_foundation_ports.integration.test.ts"
+          F1_3_TEST_BLOB="d2c50fc49c7df17f369ab529446e5722138b104b"
+          git cat-file -e "${F1_3_SOURCE_SHA}^{commit}"
+          git merge-base --is-ancestor "$F1_3_SOURCE_SHA" "$CURRENT_SOURCE_SHA"
+          test "$(git rev-parse "${F1_3_SOURCE_SHA}:${F1_3_TEST_PATH}")" = "$F1_3_TEST_BLOB"
+          test "$(git rev-parse "${CURRENT_SOURCE_SHA}:${F1_3_TEST_PATH}")" = "$F1_3_TEST_BLOB"
+
+          f1_3_source="$(mktemp -d)"
+          git archive "$F1_3_SOURCE_SHA" | tar -x -C "$f1_3_source"
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$f1_3_source/node_modules"
+          cd "$f1_3_source"
+          "$GITHUB_WORKSPACE/node_modules/.bin/vitest" run "$F1_3_TEST_PATH"
 
       - name: Persist W4 candidate fingerprint artifact
         run: |
