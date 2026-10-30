@@ -6,6 +6,7 @@ import path from "node:path";
 import postgres from "postgres";
 import { ROLE_ACCESS_AREA_TEMPLATES } from "../src/lib/auth/authorizationContract";
 import { createPinLoginHandle } from "../src/lib/server/pinLoginHandle";
+import { SALES_STAGE_FEATURES } from "../src/modules/fundament/featureCatalog";
 
 const TENANT = "galvanik-kreile";
 const V5_SHA256 = "75258FF3BD4CC212C8E989061708A29DC26EA44B851BD28E8F16E8509B0CC0AA";
@@ -245,6 +246,13 @@ test.describe("PATH1 V5 Shell Smoke", () => {
           INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
           SELECT ${TENANT}, ${actor.id}::uuid, area, ${GREGOR_ACTOR_ID}::uuid
           FROM unnest(${sql.array([...ROLE_ACCESS_AREA_TEMPLATES[actor.role]])}::text[]) area
+        `;
+      }
+      for (const feature of SALES_STAGE_FEATURES) {
+        await sql`
+          INSERT INTO public.tenant_features (tenant, feature_id, enabled)
+          VALUES (${TENANT}, ${feature.id}, ${feature.defaultEnabled})
+          ON CONFLICT (tenant, feature_id) DO UPDATE SET enabled = excluded.enabled
         `;
       }
       for (const actor of ACTORS) for (const viewport of VIEWPORTS) {
