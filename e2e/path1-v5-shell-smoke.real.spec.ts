@@ -37,8 +37,8 @@ function renderedPathFor(requestedPath: string): string {
   return requestedPath;
 }
 
-function expectedHeading(actor: string, pagePath: string): string {
-  if (pagePath === "/") return actor === "phillip" ? "Werkstatt" : "Der Tag";
+function expectedHeading(pagePath: string): string {
+  if (pagePath === "/") return "Der Tag";
   if (pagePath === "/warendurchlauf") return "Werkstatt";
   if (pagePath === "/orders") return "Aufträge";
   if (pagePath === "/customers") return "Kunden & Kontakt";
@@ -133,7 +133,7 @@ async function capture(page: Page, actor: string, viewport: (typeof VIEWPORTS)[n
 }
 
 async function assertPage(page: Page, actor: string, viewport: (typeof VIEWPORTS)[number], pagePath: string, problems: string[], screens: string[]) {
-  await expect(page.getByRole("main").getByRole("heading", { name: expectedHeading(actor, pagePath), exact: true })).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
+  await expect(page.getByRole("main").getByRole("heading", { name: expectedHeading(pagePath), exact: true })).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
   const alerts = (await page.locator('[role="alert"]:not(#__next-route-announcer__)').allInnerTexts()).map((text) => text.trim()).filter(Boolean);
   if (alerts.length) {
     problems.push(`${pagePath}:\n${alerts.join("\n")}`);
@@ -141,7 +141,7 @@ async function assertPage(page: Page, actor: string, viewport: (typeof VIEWPORTS
   }
 }
 
-async function navigateAndWaitForContent(page: Page, actor: string, target: ReturnType<Page["locator"]>, href: string): Promise<string> {
+async function navigateAndWaitForContent(page: Page, target: ReturnType<Page["locator"]>, href: string): Promise<string> {
   const requestedPath = new URL(href, ORIGIN).pathname;
   const renderedPath = renderedPathFor(requestedPath);
 
@@ -157,7 +157,7 @@ async function navigateAndWaitForContent(page: Page, actor: string, target: Retu
   if (renderedPath !== requestedPath) {
     await expect.poll(() => new URL(page.url()).pathname, { timeout: NAVIGATION_TIMEOUT }).toBe(renderedPath);
   }
-  await expect(page.getByRole("main").getByRole("heading", { name: expectedHeading(actor, renderedPath), exact: true })).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
+  await expect(page.getByRole("main").getByRole("heading", { name: expectedHeading(renderedPath), exact: true })).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
   return renderedPath;
 }
 
@@ -174,7 +174,7 @@ async function visitDesktopLinks(page: Page, actor: string, viewport: (typeof VI
     await page.goto("/", { waitUntil: "domcontentloaded" });
     const target = page.getByRole("navigation", { name: "Hauptnavigation", exact: true })
       .getByRole("button", { name: new RegExp(`^${label}(?:\\s+\\d+)?$`) });
-    const renderedPath = await navigateAndWaitForContent(page, actor, target, href);
+    const renderedPath = await navigateAndWaitForContent(page, target, href);
     await assertPage(page, actor, viewport, renderedPath, problems, screens);
     if (!screens.includes(`${actor}-${viewport.name}-${viewport.width}x${viewport.height}-path-${renderedPath === "/" ? "root" : renderedPath.slice(1).replace(/\//g, "-")}`)) {
       screens.push(await capture(page, actor, viewport, renderedPath));
@@ -196,10 +196,10 @@ async function visitMore(page: Page, actor: string, viewport: (typeof VIEWPORTS)
     await dock.getByRole("button", { name: "Mehr", exact: true }).click({ timeout: NAVIGATION_TIMEOUT });
     const more = page.getByRole("dialog", { name: "Mehr", exact: true });
     await expect(more).toBeVisible();
-    const renderedPath = await navigateAndWaitForContent(page, actor, more.locator(`a[href="${href}"]`), href);
+    const renderedPath = await navigateAndWaitForContent(page, more.locator(`a[href="${href}"]`), href);
     await assertPage(page, actor, viewport, renderedPath, problems, screens);
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("main").getByRole("heading", { name: expectedHeading(actor, "/"), exact: true })).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
+    await expect(page.getByRole("main").getByRole("heading", { name: expectedHeading("/"), exact: true })).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
   }
 }
 
