@@ -195,6 +195,16 @@ async function seedCommandPrerequisites() {
       `;
     }
     await transaction`
+      INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
+      VALUES
+        (${COMMAND_TENANT}, ${COMMAND_USERS.admin}::uuid, 'eingang', ${COMMAND_USERS.admin}::uuid),
+        (${COMMAND_TENANT}, ${COMMAND_USERS.admin}::uuid, 'geld', ${COMMAND_USERS.admin}::uuid),
+        (${COMMAND_TENANT}, ${COMMAND_USERS.admin}::uuid, 'auftraege', ${COMMAND_USERS.admin}::uuid),
+        (${COMMAND_TENANT}, ${COMMAND_USERS.werkstatt}::uuid, 'auftraege', ${COMMAND_USERS.admin}::uuid)
+      ON CONFLICT (tenant_id, user_id, bereich) DO UPDATE SET
+        granted_by = EXCLUDED.granted_by
+    `;
+    await transaction`
       INSERT INTO public.company_settings (
         id, tenant_id, company_name, street, zip, city, country,
         iban, bic, bank_name, tax_id, invoice_vat_rate_basis_points,
