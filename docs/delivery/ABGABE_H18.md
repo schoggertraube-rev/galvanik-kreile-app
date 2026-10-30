@@ -95,6 +95,8 @@ BF-006-Ursache in einer Zeile: Die aktuelle App lief im Fresh-Replay noch gegen 
 
 Lokaler Fixnachweis: vollständiges 65/65-Replay vor dem aktuellen App-HTTP-Vertrag; echter Meister- und Readonly-PIN-Login, echtes Session-Cookie, `UNAUTHENTICATED`/`FORBIDDEN` und unveränderte sieben Geschäftstabellen jeweils grün. Der eingefrorene Eingangscode wurde nicht geändert.
 
+F1.4-Replay-Ursache in einer Zeile: Der unveränderte historische Rechnungstest lief auf dem F1.5-Schema mit dem heutigen, erst später eingeführten `app_user_rights`-Resolver; er ist nun per Vorfahr- und Blob-Prüfung an seinen bytegleichen Quellstand gebunden, während der aktuelle Rechnungsweg weiter im vollständigen H18-Replay läuft.
+
 | Check | Stand | Einordnung |
 |---|---|---|
 | Vercel | grün | Exact-SHA-Preview READY |

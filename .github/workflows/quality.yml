@@ -621,11 +621,37 @@ jobs:
         run: npx vitest run src/test/werkstatt_kpi_contract.integration.test.ts --maxWorkers=1 --no-file-parallelism
 
       - name: F1.4 immutable invoice regression on the F1.5 B2 schema (blocking)
+        shell: bash
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           F1_4_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           SUPABASE_SERVICE_ROLE_KEY: ""
-        run: npx vitest run src/test/f1_4_immutable_invoice.integration.test.ts src/test/f1_4_immutable_invoice_contract.integration.test.ts --maxWorkers=1 --no-file-parallelism
+        run: |
+          set -euo pipefail
+          # This is an immutable historical contract on the F1.5 B2 schema.
+          # The current authorization resolver requires app_user_rights, added
+          # later, so execute the unchanged tests with their matching source.
+          F1_4_SOURCE_SHA="4faa2ba97c0a4b6a7c43d7a3fcc06bdd7ce64609"
+          CURRENT_SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+          F1_4_TEST_PATH="src/test/f1_4_immutable_invoice.integration.test.ts"
+          F1_4_TEST_BLOB="ca435320dc70b34ba84cdfd84ade1eab0d3edd11"
+          F1_4_CONTRACT_PATH="src/test/f1_4_immutable_invoice_contract.integration.test.ts"
+          F1_4_CONTRACT_BLOB="91a8cfa949a741ca657687aad37581881ae9b965"
+
+          git cat-file -e "${F1_4_SOURCE_SHA}^{commit}"
+          git merge-base --is-ancestor "$F1_4_SOURCE_SHA" "$CURRENT_SOURCE_SHA"
+          test "$(git rev-parse "${F1_4_SOURCE_SHA}:${F1_4_TEST_PATH}")" = "$F1_4_TEST_BLOB"
+          test "$(git rev-parse "${CURRENT_SOURCE_SHA}:${F1_4_TEST_PATH}")" = "$F1_4_TEST_BLOB"
+          test "$(git rev-parse "${F1_4_SOURCE_SHA}:${F1_4_CONTRACT_PATH}")" = "$F1_4_CONTRACT_BLOB"
+          test "$(git rev-parse "${CURRENT_SOURCE_SHA}:${F1_4_CONTRACT_PATH}")" = "$F1_4_CONTRACT_BLOB"
+
+          f1_4_source="$(mktemp -d)"
+          git archive "$F1_4_SOURCE_SHA" | tar -x -C "$f1_4_source"
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$f1_4_source/node_modules"
+          cd "$f1_4_source"
+          "$GITHUB_WORKSPACE/node_modules/.bin/vitest" run \
+            "$F1_4_TEST_PATH" "$F1_4_CONTRACT_PATH" \
+            --maxWorkers=1 --no-file-parallelism
 
       - name: F1.5 payment and goods-out contract integration test (blocking)
         env:
