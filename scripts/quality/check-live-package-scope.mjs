@@ -113,6 +113,13 @@ const PR154_REBASELINE_VALUES = Object.freeze({
   scopeMode: "CUMULATIVE_REBASELINE_AFTER_RETARGET",
   followingPullRequests: "STRICT_UNCHANGED",
 });
+const PR154_TRUST_ANCHOR_FILES = Object.freeze([
+  ".github/workflows/eslint-ratchet.yml",
+  "quality/authoritative-sources.json",
+  "scripts/quality/check-authoritative-sources.mjs",
+  "scripts/quality/check-delivery-contracts.mjs",
+  "scripts/quality/check-live-package-scope.mjs",
+]);
 const SALES_STAGE_B1_ALLOWLIST = Object.freeze([
   ".github/workflows/eslint-ratchet.yml",
   "AGENTS.md",
@@ -195,11 +202,42 @@ function resolved(root, revision) {
   return git(root, ["rev-parse", revision]);
 }
 
-function checkPr154Rebaseline(root, baseSha) {
+function checkPr154TrustAnchorBase(root, baseSha, originalBaseSha = PR154_REBASELINE_BASE_SHA) {
+  if (baseSha === originalBaseSha) return [];
   const errors = [];
-  if (baseSha !== PR154_REBASELINE_BASE_SHA) {
-    errors.push(`PR154_REBASELINE_BASE_INVALID:${baseSha}:${PR154_REBASELINE_BASE_SHA}`);
+  try {
+    git(root, ["merge-base", "--is-ancestor", originalBaseSha, baseSha]);
+  } catch {
+    return [`PR154_REBASELINE_BASE_INVALID:${baseSha}:${originalBaseSha}`];
   }
+  let commits;
+  let files;
+  try {
+    commits = commitList(root, originalBaseSha, baseSha);
+    files = changedFiles(root, originalBaseSha, baseSha).sort();
+  } catch {
+    return [`PR154_REBASELINE_BASE_INVALID:${baseSha}:${originalBaseSha}`];
+  }
+  if (commits.length !== 1) errors.push(`PR154_TRUST_ANCHOR_COMMIT_COUNT:${commits.length}`);
+  const expectedFiles = [...PR154_TRUST_ANCHOR_FILES].sort();
+  if (JSON.stringify(files) !== JSON.stringify(expectedFiles)) {
+    errors.push(`PR154_TRUST_ANCHOR_FILES:${files.join(",")}`);
+  }
+  for (const rel of PR154_TRUST_ANCHOR_FILES) {
+    try {
+      const protectedBlob = git(root, ["rev-parse", `${baseSha}:${rel}`]);
+      const candidateBlob = git(root, ["hash-object", "--path", rel, rel]);
+      if (candidateBlob !== protectedBlob) errors.push(`PR154_TRUST_ANCHOR_BYTES:${rel}`);
+    } catch {
+      errors.push(`PR154_TRUST_ANCHOR_BYTES:${rel}`);
+    }
+  }
+  return errors;
+}
+
+function checkPr154Rebaseline(root, baseSha, originalBaseSha = PR154_REBASELINE_BASE_SHA) {
+  const errors = [];
+  errors.push(...checkPr154TrustAnchorBase(root, baseSha, originalBaseSha));
   const full = path.join(root, PR154_REBASELINE_RECEIPT);
   let receipt;
   try {
@@ -848,12 +886,34 @@ export function runSelftest(root = process.cwd()) {
   if (covered("src/modules/customers/server/get.ts", ["src/modules/orders/**"])) throw new Error("glob negative failed");
   const rebaselineFixture = mkdtempSync(path.join(tmpdir(), "kreile-pr154-rebaseline-"));
   try {
+    git(rebaselineFixture, ["init", "-q"]);
+    git(rebaselineFixture, ["config", "user.email", "pr154-selftest@example.invalid"]);
+    git(rebaselineFixture, ["config", "user.name", "PR154 Selftest"]);
+    git(rebaselineFixture, ["config", "commit.gpgsign", "false"]);
+    for (const rel of PR154_TRUST_ANCHOR_FILES) write(rebaselineFixture, rel, `protected-v1:${rel}\n`);
     write(rebaselineFixture, PR154_REBASELINE_RECEIPT, `${JSON.stringify({
       ...PR154_REBASELINE_VALUES,
       reason: "Owner-authorized one-time cumulative rebaseline after retargeting pull request 154 to main.",
     }, null, 2)}\n`);
+    commit(rebaselineFixture, "original protected base");
+    const fixtureOriginalBase = git(rebaselineFixture, ["rev-parse", "HEAD"]);
     const validRebaseline = checkPr154Rebaseline(rebaselineFixture, PR154_REBASELINE_BASE_SHA);
     if (validRebaseline.length > 0) throw new Error(`valid PR154 rebaseline rejected: ${validRebaseline.join(" | ")}`);
+    for (const rel of PR154_TRUST_ANCHOR_FILES) write(rebaselineFixture, rel, `protected-v2:${rel}\n`);
+    commit(rebaselineFixture, "approved trust anchors only");
+    const fixtureTrustAnchor = git(rebaselineFixture, ["rev-parse", "HEAD"]);
+    const validTrustAnchor = checkPr154Rebaseline(rebaselineFixture, fixtureTrustAnchor, fixtureOriginalBase);
+    if (validTrustAnchor.length > 0) {
+      throw new Error(`valid PR154 trust-anchor base rejected: ${validTrustAnchor.join(" | ")}`);
+    }
+    write(rebaselineFixture, "unexpected.txt", "not approved\n");
+    commit(rebaselineFixture, "unexpected second base commit");
+    const fixtureUnexpectedBase = git(rebaselineFixture, ["rev-parse", "HEAD"]);
+    const invalidTrustAnchor = checkPr154Rebaseline(rebaselineFixture, fixtureUnexpectedBase, fixtureOriginalBase);
+    if (!invalidTrustAnchor.some((error) => error.startsWith("PR154_TRUST_ANCHOR_COMMIT_COUNT:"))
+        || !invalidTrustAnchor.some((error) => error.startsWith("PR154_TRUST_ANCHOR_FILES:"))) {
+      throw new Error(`expanded PR154 trust-anchor base not rejected: ${invalidTrustAnchor.join(" | ")}`);
+    }
     const movedBase = checkPr154Rebaseline(rebaselineFixture, "b".repeat(40));
     if (!movedBase.some((error) => error.startsWith("PR154_REBASELINE_BASE_INVALID:"))) {
       throw new Error(`moved PR154 base not rejected: ${movedBase.join(" | ")}`);

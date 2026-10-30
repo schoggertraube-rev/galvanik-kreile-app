@@ -245,7 +245,7 @@ function validateActiveSurface(root, errors) {
   for (const rel of deliveryFiles) {
     if (!["KREILE_LIVE_PLAN_V1.json", "KREILE_VERKAUFSSTUFE_1.md", "AENDERUNGEN_B1.md",
       "KREILE_BAUUMFANG_STUFEN.html", "KREILE_CODEX_BAUAUFTRAG_STUFE1.md", "KORREKTUREN_STAND.md", "OWNER_TODO.md",
-      "DATEN_REGISTER.md"].includes(rel)
+      "DATEN_REGISTER.md", "GO_LIVE_ABLAUF.md"].includes(rel)
         && !/^ABGABE_[A-Z0-9_-]+\.md$/.test(rel)
         && !/^amendments\/KR-AMEND-\d{4}\.json$/.test(rel)) {
       errors.push(`ACTIVE_DELIVERY_SURFACE:${rel}`);
