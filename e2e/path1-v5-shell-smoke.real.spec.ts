@@ -31,9 +31,6 @@ const DESKTOP_NAVIGATION = [
 ] as const;
 
 function renderedPathFor(requestedPath: string): string {
-  // Settings is intentionally restricted to Gregor and redirects the two
-  // smoke actors to their role-aware start page.
-  if (requestedPath === "/settings") return "/";
   return requestedPath;
 }
 
@@ -43,6 +40,7 @@ function expectedHeading(actor: string, pagePath: string): string {
   if (pagePath === "/orders") return "Aufträge";
   if (pagePath === "/customers") return "Kunden & Kontakt";
   if (pagePath === "/buchhaltung/rechnungen") return "Rechnungen";
+  if (pagePath === "/settings") return "Admin Console & Einstellungen";
   throw new Error(`PATH1_V5_SHELL_SMOKE_HEADING_MISSING:${pagePath}`);
 }
 
