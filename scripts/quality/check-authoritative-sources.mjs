@@ -11,10 +11,12 @@ const AUTHORITY_CHECKER_PATH = "scripts/quality/check-authoritative-sources.mjs"
 const RATCHET_WORKFLOW_PATH = ".github/workflows/eslint-ratchet.yml";
 const TRUTH_SOURCE_CONTRACT = Object.freeze({
   project_rules: "AGENTS.md",
+  active_queue: "_review/AKTUELLE_ANWEISUNG.md",
+  owner_decisions: "_review/OWNER_ENTSCHEIDUNGEN.md",
   product_decisions: "docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md",
   scope_modules: "docs/project/linie/MODULKARTE_KANON.md",
   architecture: "docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md",
-  live_plan: "docs/delivery/KREILE_LIVE_PLAN_V1.json",
+  live_plan: "docs/delivery/KREILE_VERKAUFSSTUFE_1.md",
   active_execution: "missions/F1_ORDER_TO_CASH_PILOT_001.yml",
   delivered_main: "docs/project/CURRENT_STATE.md",
   ui_truth: "docs/project/linie/00_UI_REFERENZEN_PFADE.md",
@@ -43,14 +45,15 @@ const REQUIRED_DECISIONS = Object.freeze([
   "D-UI-DS-001",
   "D-GOV-004",
 ]);
-const ACTIVE_ENTRY_DOCS = Object.freeze([
-  "AGENTS.md",
+const EXECUTABLE_ENTRY_DOCS = Object.freeze(["AGENTS.md"]);
+const REFERENCE_ONLY_ENTRY_DOCS = Object.freeze([
   "docs/project/DOCUMENT_AUTHORITY.md",
   "docs/project/MASTERPLAN.md",
   "docs/project/linie/00_ABC_INDEX.md",
   "docs/project/linie/00_BIBEL_INDEX.md",
   "docs/project/linie/00_JETZT_UND_LEITPLANKEN.md",
 ]);
+const REFERENCE_ONLY_MARKER = "<!-- STATUS: REFERENCE_ONLY_NON_EXECUTABLE | CANONICAL_ENTRY: docs/project/DOCUMENT_AUTHORITY.md -->";
 const FORBIDDEN_ACTIVE_TOKENS = Object.freeze([
   "ROLLING_MANIFEST_QUEUE_V1",
   "KR-22R",
@@ -178,18 +181,32 @@ function validateDecisionAndUiTruth(root, errors) {
   }
 }
 
+function validateReferenceEntryText(rel, text, errors) {
+  if (!text.startsWith(REFERENCE_ONLY_MARKER)) errors.push(`REFERENCE_ENTRY_NOT_NON_EXECUTABLE:${rel}`);
+  for (const token of FORBIDDEN_ACTIVE_TOKENS) if (text.includes(token)) errors.push(`REFERENCE_ENTRY_LEGACY_TOKEN:${rel}:${token}`);
+}
+
 function validateActiveEntryDocs(root, errors) {
-  for (const rel of ACTIVE_ENTRY_DOCS) {
+  for (const rel of EXECUTABLE_ENTRY_DOCS) {
     const file = absolute(root, rel);
     if (!existsSync(file)) {
       errors.push(`ACTIVE_ENTRY_MISSING:${rel}`);
       continue;
     }
     const text = readFileSync(file, "utf8");
-    if (!text.includes("docs/delivery/KREILE_LIVE_PLAN_V1.json") && !text.includes("KREILE_LIVE_PLAN_V1.json")) {
+    if (!text.includes("docs/delivery/KREILE_VERKAUFSSTUFE_1.md")) {
       errors.push(`ACTIVE_ENTRY_PLAN_POINTER_MISSING:${rel}`);
     }
     for (const token of FORBIDDEN_ACTIVE_TOKENS) if (text.includes(token)) errors.push(`ACTIVE_ENTRY_LEGACY_TOKEN:${rel}:${token}`);
+  }
+  for (const rel of REFERENCE_ONLY_ENTRY_DOCS) {
+    const file = absolute(root, rel);
+    if (!existsSync(file)) {
+      errors.push(`REFERENCE_ENTRY_MISSING:${rel}`);
+      continue;
+    }
+    const text = readFileSync(file, "utf8");
+    validateReferenceEntryText(rel, text, errors);
   }
 }
 
@@ -243,11 +260,15 @@ function validateActiveSurface(root, errors) {
   if (!sameSet(directFiles(root, "docs/project/linie/ui"), ACTIVE_SURFACE.uiFiles)) errors.push("ACTIVE_UI_SURFACE");
   const deliveryFiles = recursiveFiles(root, "docs/delivery");
   for (const rel of deliveryFiles) {
-    if (rel !== "KREILE_LIVE_PLAN_V1.json" && !/^amendments\/KR-AMEND-\d{4}\.json$/.test(rel)) {
+    if (!["KREILE_LIVE_PLAN_V1.json", "KREILE_VERKAUFSSTUFE_1.md", "AENDERUNGEN_B1.md",
+      "KREILE_BAUUMFANG_STUFEN.html", "KREILE_CODEX_BAUAUFTRAG_STUFE1.md", "KORREKTUREN_STAND.md", "OWNER_TODO.md",
+      "DATEN_REGISTER.md", "GO_LIVE_ABLAUF.md"].includes(rel)
+        && !/^ABGABE_[A-Z0-9_-]+\.md$/.test(rel)
+        && !/^amendments\/KR-AMEND-\d{4}\.json$/.test(rel)) {
       errors.push(`ACTIVE_DELIVERY_SURFACE:${rel}`);
     }
   }
-  if (!deliveryFiles.includes("KREILE_LIVE_PLAN_V1.json")) errors.push("ACTIVE_DELIVERY_PLAN_MISSING");
+  if (!deliveryFiles.includes("KREILE_VERKAUFSSTUFE_1.md")) errors.push("ACTIVE_DELIVERY_PLAN_MISSING");
   if (!sameSet(recursiveFiles(root, "missions"), ["F1_ORDER_TO_CASH_PILOT_001.yml"])) errors.push("ACTIVE_MISSION_SURFACE");
   for (const rel of [
     "scripts/quality/resolve-delivery-trust-anchor.mjs",
@@ -301,6 +322,11 @@ export function runSelftest(root = process.cwd()) {
   expectConfigMutation(config, (value) => { value.designSystem.role = "PAGE_COMPOSITION"; }, "DESIGN_SYSTEM_CONFIG_CONTRACT");
   expectConfigMutation(config, (value) => { value.uiReferences.pop(); }, "UI_REFERENCE_CONFIG_CONTRACT");
   expectConfigMutation(config, (value) => { value.schemaVersion = 2; }, "AUTHORITY_CONFIG_SCHEMA_VERSION");
+  const referenceErrors = [];
+  validateReferenceEntryText("reference.md", "# executable\n", referenceErrors);
+  if (!referenceErrors.includes("REFERENCE_ENTRY_NOT_NON_EXECUTABLE:reference.md")) {
+    throw new Error(`reference entry mutation did not fail closed: ${referenceErrors.join(" | ")}`);
+  }
   return true;
 }
 

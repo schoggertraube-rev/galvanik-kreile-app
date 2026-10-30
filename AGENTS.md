@@ -1,5 +1,8 @@
 # Galvanik-Kreile WerkstattCockpit — verbindliche Baulinie
 
+Bis auf Widerruf des Owners steuert `_review/AKTUELLE_ANWEISUNG.md` (Warteschlange)
+Reihenfolge, Branch, Nachweis und Abgabe. Bei Widerspruch gilt sie vor Abschnitt 1, 4 und 7.
+
 ## 1. Einziger Arbeitsort und einzige Lieferwahrheit
 
 - Repository: dieses Checkout `02_app`; keine weiteren Clones oder Worktrees.
@@ -13,9 +16,9 @@
 PL, Writer und Reviewer verwenden fuer die Ausfuehrung nur:
 
 1. `AGENTS.md`
-2. `docs/delivery/KREILE_LIVE_PLAN_V1.json`
+2. `docs/delivery/KREILE_VERKAUFSSTUFE_1.md`
 3. `missions/F1_ORDER_TO_CASH_PILOT_001.yml`
-4. die `editablePaths`, `focusedSpec`, Routen und Akzeptanzsaetze des aktiven Pakets
+4. die Routen, Ziele und Abgabesaetze des aktiven Blocks
 5. `docs/project/linie/MODULKARTE_KANON.md`
 6. `docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md`
 7. `docs/project/linie/KREILE_LINIE_ENTSCHEIDUNGSREGISTER_2026-08-28.md`
@@ -28,6 +31,14 @@ als Abnahmequelle gelesen. Fehlt eine Aussage im aktiven Paket, entscheidet der 
 gewoehnliche Implementierungsdetails innerhalb bestehender Struktur. Nur eine wirklich
 neue dauerhafte Produkt-, Daten-, Provider-, Auth-/Rollen-/Session- oder Modulentscheidung
 geht mit genau einer konkreten Frage an den Owner.
+
+`docs/delivery/KREILE_LIVE_PLAN_V1.json` und D-GOV-004 sind seit der
+Owner-Rebaseline vom 25.10.2026 ausschliesslich historischer Nachweis und nicht
+ausfuehrbar. Bei Widerspruch mit dem alten Paketablauf bestimmt
+`docs/delivery/KREILE_VERKAUFSSTUFE_1.md` den aktiven Block, Branch, Zeitrahmen und
+die Abgabe. Fuer die dort bezeichneten ausgegrauten Anschluss-Stellen ersetzt der
+neue Plan das fruehere absolute Verbot von „kommt bald“-Flaechen; ausserhalb dieser
+ausdruecklichen Liste bleibt das Verbot bestehen.
 
 Diese Grenze ist nicht nur Text: `.claude/settings.json` sperrt den direkten Lesezugriff
 auf Altquellen und auf Pfade ausserhalb des Repositorys. Alte Projekt-Agenten, Skills,
@@ -121,6 +132,10 @@ Mindestens:
 - `npm run quality:package-scope -- --base <base> --head <head> --branch <branch>`
 - `npm run quality:no-fake-production`
 - `npm run quality:module-gates`
+- `npm run quality:h16-eslint-contracts:selftest`
+- `npm run quality:h16-eslint-contracts`
+- `npm run quality:f0-f2-schema:selftest`
+- `npm run quality:f0-f2-schema`
 - `npx tsc --noEmit --incremental false`
 - `npm run lint:full`
 - `npm run test:unit`
