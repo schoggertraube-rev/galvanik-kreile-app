@@ -30,7 +30,7 @@ import { createFromFetch } from "next/dist/compiled/react-server-dom-turbopack/c
 //     Ergebnis mit exakt {ok, role} + echtes kreile_app_session-Cookie (alles gemeinsam)
 //  2. createOrderIntakeAction: echte Server Action auf /warendurchlauf/wareneingang
 //     mit gueltigem meister-Session -> VALIDATION_ERROR (abgelehnt wegen ungueultiger Input)
-//  3. mit gueltigem readonly-Session -> FORBIDDEN (Rolle hat keine perm_op_photos)
+//  3. mit gueltigem readonly-Login -> FORBIDDEN (Rolle hat keine Schreibrechte)
 //  4. ohne Session -> UNAUTHENTICATED
 //  5. mit manipuliertem Cookie -> UNAUTHENTICATED
 //  6. Vor + nach den ungültigen/abgewiesenen Intake-Aufrufen: DB-State ist bit-for-bit unveraendert (Count+Digest).
@@ -161,24 +161,6 @@ function loginHandleFor(userId) {
   return createHmac("sha256", APP_SESSION_SECRET)
     .update(`pin-login:${APP_TENANT_ID}:${userId}`)
     .digest("base64url");
-}
-
-// Isolated command-authorization fixture only. This does not represent a
-// product-actor login and cannot contribute product-role or Production evidence.
-function syntheticTechnicalSessionCookie({ userId, role, displayName }) {
-  const now = Date.now();
-  const payload = JSON.stringify({
-    userId,
-    tenantId: APP_TENANT_ID,
-    role,
-    displayName,
-    issuedAt: now,
-    expiresAt: now + 12 * 60 * 60 * 1000,
-  });
-  const signature = createHmac("sha256", APP_SESSION_SECRET)
-    .update(payload)
-    .digest("hex");
-  return `${SESSION_COOKIE_NAME}=${Buffer.from(payload).toString("base64")}.${signature}`;
 }
 
 // Resolves action IDs deterministically from the Next.js manifest.
@@ -787,30 +769,6 @@ async function loginAndAssert({
   return cookie;
 }
 
-async function loginRejectedAssert({
-  actionId,
-  userId,
-  pin,
-  clientReferenceManifest,
-  routeRuntime,
-}) {
-  const invocation = await invokeServerAction({
-    actionId,
-    args: [loginHandleFor(userId), pin],
-    cookieHeader: null,
-    pathname: LOGIN_ACTION_PATH,
-    clientReferenceManifest,
-    routeRuntime,
-  });
-  if (
-    invocation.result?.ok !== false ||
-    invocation.result?.message !== "Ungültige PIN oder inaktiver Benutzer." ||
-    invocation.cookie !== null
-  ) {
-    throw new Error("Nicht-Produktprofil wurde nicht fail-closed abgewiesen");
-  }
-}
-
 // Intake-/Fehlercode exakt pruefen. 503/NOT_AVAILABLE ist niemals ein PASS.
 function assertIntakeCode(result, expectedCode) {
   const code = result.code;
@@ -925,15 +883,31 @@ const INTAKE_AUTH_PROBE_INPUT = {
     mode: "NEW",
     name: "F0 Intake Probe",
     customerType: "business",
-    companyName: null,
-    contactPerson: null,
-    email: null,
-    phone: null,
-    city: null,
+    companyName: "F0 Intake Probe GmbH",
+    contactPerson: "F0 Pruefer",
+    email: "f0-intake@example.invalid",
+    phone: "+49 69 000000",
+    street: "Pruefweg 1",
+    zipCode: "60311",
+    city: "Frankfurt am Main",
+    country: "Deutschland",
+    paymentPreference: "rechnung_14",
+    vatId: null,
   },
   dueDate: "2026-09-16",
+  handoverMode: "shipping",
   note: null,
-  items: [{ name: "Probe", quantity: 1, material: null, surfaceRequested: "Mattnickel" }],
+  items: [{
+    catalogServiceId: null,
+    name: "Probe",
+    quantity: 1,
+    material: null,
+    surfaceRequested: "Mattnickel",
+    executionRequested: "matt",
+    unit: null,
+    unitPriceCents: null,
+    vatRateBasisPoints: null,
+  }],
 };
 
 async function main() {
@@ -1036,27 +1010,23 @@ async function main() {
     }
 
     // ── V1-NONPRODUCT: readonly is never a visible product login ─────────────────────────────
-    let readonlyCookie = syntheticTechnicalSessionCookie({
-      userId: readonlyId,
-      role: "readonly",
-      displayName: "Synthetic Readonly",
-    });
+    let readonlyCookie = null;
     try {
-      await loginRejectedAssert({
+      readonlyCookie = await loginAndAssert({
         actionId: loginWithPinId,
         userId: readonlyId,
         pin: readonlyPin,
+        expectedRole: "readonly",
         clientReferenceManifest: startClientReferenceManifest,
         routeRuntime: startRouteRuntime,
       });
       report(
-        "V1-NONPRODUCT",
+        "V1-READONLY",
         true,
-        "readonly PIN login fail-closed without session cookie"
+        "readonly PIN login creates a real empty-rights session"
       );
     } catch (error) {
-      readonlyCookie = null;
-      report("V1-NONPRODUCT", false, `readonly login boundary: ${error.message}`);
+      report("V1-READONLY", false, `readonly login boundary: ${error.message}`);
     }
 
     // ── DB-Snapshot vor den abgewiesenen Intake-Aufrufen ─────────────────────────────────────

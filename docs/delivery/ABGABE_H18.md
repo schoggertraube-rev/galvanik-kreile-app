@@ -91,6 +91,10 @@ Die erforderlichen Bauplan-Entscheidungen sind in `_review/MELDUNG_PLANUNGSCHAT.
 
 ## CI am Produktkandidaten
 
+BF-006-Ursache in einer Zeile: Die aktuelle App lief im Fresh-Replay noch gegen den historischen F1.3-Migrationsstand und der HTTP-Test behandelte die inzwischen kanonische Leerrechte-Rolle `readonly` weiterhin als nicht anmeldbar.
+
+Lokaler Fixnachweis: vollständiges 65/65-Replay vor dem aktuellen App-HTTP-Vertrag; echter Meister- und Readonly-PIN-Login, echtes Session-Cookie, `UNAUTHENTICATED`/`FORBIDDEN` und unveränderte sieben Geschäftstabellen jeweils grün. Der eingefrorene Eingangscode wurde nicht geändert.
+
 | Check | Stand | Einordnung |
 |---|---|---|
 | Vercel | grün | Exact-SHA-Preview READY |

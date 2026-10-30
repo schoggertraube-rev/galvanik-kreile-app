@@ -496,6 +496,12 @@ jobs:
           SUPABASE_URL: http://127.0.0.1:54321
         run: npx vitest run src/test/scan_order.integration.test.ts
 
+      - name: Replay current candidate schema for current app HTTP contracts
+        # Earlier steps intentionally prove historical F0/F1.3 snapshots. The
+        # current app requires the complete candidate migration chain,
+        # including the canonical app_user_rights authorization source.
+        run: ./node_modules/.bin/supabase db reset --local --no-seed
+
       - name: BF-006 build (gegen lokale Supabase-Replay-DB, echte Session-Kette)
         env:
           NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
