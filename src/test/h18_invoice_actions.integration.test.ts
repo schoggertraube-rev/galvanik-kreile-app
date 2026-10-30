@@ -170,6 +170,52 @@ describe("H18 invoice Server Actions against the real replay database", () => {
     const freezeEventId = randomUUID();
     const freezeClientEventId = randomUUID();
     const freezeCorrelationId = randomUUID();
+    const legacyInvoiceId = randomUUID();
+
+    const [numberBoundary] = await sql<{
+      invoice_year: number;
+      existing_max: string;
+      sequence_last: number | null;
+    }[]>`
+      WITH invoice_clock AS (
+        SELECT extract(year FROM clock_timestamp() AT TIME ZONE 'Europe/Berlin')::integer AS invoice_year
+      )
+      SELECT invoice_clock.invoice_year,
+        coalesce((
+          SELECT max(substring(invoice.invoice_number FROM
+            ('^R-' || invoice_clock.invoice_year::text || '-([0-9]{4,})$'))::numeric)::text
+          FROM public.invoices invoice
+          WHERE invoice.tenant_id=${KREILE_TENANT_SLUG}
+            AND invoice.invoice_number ~
+              ('^R-' || invoice_clock.invoice_year::text || '-([0-9]{4,})$')
+        ), '0') AS existing_max,
+        (
+          SELECT sequence.last_number
+          FROM private.invoice_number_sequences sequence
+          WHERE sequence.tenant_id=${KREILE_TENANT_SLUG}
+            AND sequence.invoice_year=invoice_clock.invoice_year
+        ) AS sequence_last
+      FROM invoice_clock
+    `;
+    if (!numberBoundary) throw new Error("H18_INVOICE_NUMBER_BOUNDARY_MISSING");
+    const legacySuffix = Math.max(
+      10_000,
+      Number(numberBoundary.existing_max),
+      numberBoundary.sequence_last ?? 0,
+    ) + 100;
+    if (!Number.isSafeInteger(legacySuffix) || legacySuffix > 2_147_483_646) {
+      throw new Error("H18_INVOICE_NUMBER_BOUNDARY_INVALID");
+    }
+    await sql`
+      INSERT INTO public.invoices (id, tenant_id, invoice_number, amount_total, status)
+      VALUES (
+        ${legacyInvoiceId}::uuid,
+        ${KREILE_TENANT_SLUG},
+        ${`R-${numberBoundary.invoice_year}-${legacySuffix}`},
+        0,
+        'draft'
+      )
+    `;
 
     const { createOrderIntakeAction } = await import("@/app/warendurchlauf/actions");
     const intake = await withSession(fixture, () => createOrderIntakeAction({
@@ -303,6 +349,9 @@ describe("H18 invoice Server Actions against the real replay database", () => {
     }));
     expect(issued.code).toBe("OK");
     if (issued.code !== "OK") throw new Error(`H18_INVOICE_ISSUE_FAILED:${issued.code}`);
+    expect(issued.receipt.invoiceNumber).toBe(
+      `R-${numberBoundary.invoice_year}-${legacySuffix + 1}`,
+    );
     const [invoiceRow] = await sql<{
       id: string;
       status: string;

@@ -1172,7 +1172,15 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
 
       return { code: "OK", receipt, replayed: false };
     });
-  } catch {
+  } catch (error) {
+    const cause = error && typeof error === "object" && "cause" in error
+      ? (error as { cause?: { code?: unknown; constraint_name?: unknown } }).cause
+      : undefined;
+    console.error("INVOICE_CREATE_UNAVAILABLE", {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+      databaseCode: typeof cause?.code === "string" ? cause.code : null,
+      constraint: typeof cause?.constraint_name === "string" ? cause.constraint_name : null,
+    });
     return { code: "UNAVAILABLE", message: "Rechnung konnte nicht sicher ausgestellt werden." };
   }
 }
