@@ -99,6 +99,20 @@ const POST_LIVE_CONTROL_PATTERNS = Object.freeze([
   "scripts/quality/select-live-regression-specs.mjs",
 ]);
 const SALES_STAGE_B1_BRANCH = "kreile/b1-shell";
+const PR154_REBASELINE_BRANCH = "kreile/s1-p2-eingang";
+const PR154_REBASELINE_BASE_SHA = "1fa4920d6d06b02413c8c157ae6b739507105846";
+const PR154_REBASELINE_RECEIPT = "docs/evidence/live-line/pr154/REBASELINE.json";
+const PR154_REBASELINE_VALUES = Object.freeze({
+  schemaVersion: 1,
+  package: "PR-154-REBASELINE",
+  pullRequest: 154,
+  headBranch: PR154_REBASELINE_BRANCH,
+  mainBaseSha: PR154_REBASELINE_BASE_SHA,
+  authorizedBy: "Siglinder",
+  authorizedAt: "2026-10-30",
+  scopeMode: "CUMULATIVE_REBASELINE_AFTER_RETARGET",
+  followingPullRequests: "STRICT_UNCHANGED",
+});
 const SALES_STAGE_B1_ALLOWLIST = Object.freeze([
   ".github/workflows/eslint-ratchet.yml",
   "AGENTS.md",
@@ -179,6 +193,32 @@ function commitList(root, base, head) {
 
 function resolved(root, revision) {
   return git(root, ["rev-parse", revision]);
+}
+
+function checkPr154Rebaseline(root, baseSha) {
+  const errors = [];
+  if (baseSha !== PR154_REBASELINE_BASE_SHA) {
+    errors.push(`PR154_REBASELINE_BASE_INVALID:${baseSha}:${PR154_REBASELINE_BASE_SHA}`);
+  }
+  const full = path.join(root, PR154_REBASELINE_RECEIPT);
+  let receipt;
+  try {
+    receipt = JSON.parse(readFileSync(full, "utf8"));
+  } catch {
+    errors.push("PR154_REBASELINE_RECEIPT_UNREADABLE");
+    return errors;
+  }
+  const expectedKeys = [...Object.keys(PR154_REBASELINE_VALUES), "reason"].sort();
+  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(expectedKeys)) {
+    errors.push("PR154_REBASELINE_RECEIPT_SCHEMA");
+  }
+  for (const [key, value] of Object.entries(PR154_REBASELINE_VALUES)) {
+    if (receipt[key] !== value) errors.push(`PR154_REBASELINE_RECEIPT_VALUE:${key}`);
+  }
+  if (typeof receipt.reason !== "string" || receipt.reason.trim().length < 40) {
+    errors.push("PR154_REBASELINE_RECEIPT_REASON");
+  }
+  return errors;
 }
 
 function checkActivation(files, baseSha, plan) {
@@ -474,6 +514,8 @@ export function checkLivePackageScope({ root, base, head, branch }) {
   if (branch === "main") return [];
   const candidateMission = parseMission(readFileSync(path.join(root, MISSION_PATH), "utf8"));
   if (candidateMission.mission_id === "KREILE-VERKAUFSSTUFE-1") {
+    const baseSha = resolved(root, base);
+    if (branch === PR154_REBASELINE_BRANCH) return checkPr154Rebaseline(root, baseSha);
     const errors = [];
     if (branch !== SALES_STAGE_B1_BRANCH) errors.push(`SALES_STAGE_BRANCH_INVALID:${branch}`);
     if (candidateMission.active_block !== "B1" || candidateMission.branch !== SALES_STAGE_B1_BRANCH) {
@@ -804,6 +846,28 @@ function selftestGateToBuildAmendment(fixture, plan, item) {
 export function runSelftest(root = process.cwd()) {
   if (!covered("src/modules/orders/server/get.ts", ["src/modules/orders/**"])) throw new Error("glob positive failed");
   if (covered("src/modules/customers/server/get.ts", ["src/modules/orders/**"])) throw new Error("glob negative failed");
+  const rebaselineFixture = mkdtempSync(path.join(tmpdir(), "kreile-pr154-rebaseline-"));
+  try {
+    write(rebaselineFixture, PR154_REBASELINE_RECEIPT, `${JSON.stringify({
+      ...PR154_REBASELINE_VALUES,
+      reason: "Owner-authorized one-time cumulative rebaseline after retargeting pull request 154 to main.",
+    }, null, 2)}\n`);
+    const validRebaseline = checkPr154Rebaseline(rebaselineFixture, PR154_REBASELINE_BASE_SHA);
+    if (validRebaseline.length > 0) throw new Error(`valid PR154 rebaseline rejected: ${validRebaseline.join(" | ")}`);
+    const movedBase = checkPr154Rebaseline(rebaselineFixture, "b".repeat(40));
+    if (!movedBase.some((error) => error.startsWith("PR154_REBASELINE_BASE_INVALID:"))) {
+      throw new Error(`moved PR154 base not rejected: ${movedBase.join(" | ")}`);
+    }
+    const changedReceipt = JSON.parse(readFileSync(path.join(rebaselineFixture, PR154_REBASELINE_RECEIPT), "utf8"));
+    changedReceipt.followingPullRequests = "RELAXED";
+    write(rebaselineFixture, PR154_REBASELINE_RECEIPT, `${JSON.stringify(changedReceipt, null, 2)}\n`);
+    const invalidReceipt = checkPr154Rebaseline(rebaselineFixture, PR154_REBASELINE_BASE_SHA);
+    if (!invalidReceipt.includes("PR154_REBASELINE_RECEIPT_VALUE:followingPullRequests")) {
+      throw new Error(`changed PR154 receipt not rejected: ${invalidReceipt.join(" | ")}`);
+    }
+  } finally {
+    rmSync(rebaselineFixture, { recursive: true, force: true });
+  }
   const plan = JSON.parse(readFileSync(path.join(root, PLAN_PATH), "utf8"));
   const fixture = mkdtempSync(path.join(tmpdir(), "kreile-live-scope-"));
   try {

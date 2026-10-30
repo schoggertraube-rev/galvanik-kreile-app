@@ -620,12 +620,18 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ""
         run: npx vitest run src/test/werkstatt_kpi_contract.integration.test.ts --maxWorkers=1 --no-file-parallelism
 
-      - name: F1.4 immutable invoice regression on the F1.5 B2 schema (blocking)
+      - name: F1.4 current candidate replay fresh from zero without seed (blocking)
+        run: ./node_modules/.bin/supabase db reset --local --no-seed
+
+      - name: F1.4 immutable invoice regression on the current schema (blocking)
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           F1_4_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           SUPABASE_SERVICE_ROLE_KEY: ""
         run: npx vitest run src/test/f1_4_immutable_invoice.integration.test.ts src/test/f1_4_immutable_invoice_contract.integration.test.ts --maxWorkers=1 --no-file-parallelism
+
+      - name: Restore F1.5 B2 replay after isolated current-schema F1.4 (blocking)
+        run: ./node_modules/.bin/supabase db reset --local --no-seed --version 20260909180000
 
       - name: F1.5 payment and goods-out contract integration test (blocking)
         env:
