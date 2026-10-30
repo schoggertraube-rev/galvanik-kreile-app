@@ -442,7 +442,7 @@ async function resolveCustomer(
         ${tenantId}, ${actorId}::uuid, ${clientEventId}::uuid, ${customerIntentSha256},
         ${customer.name}, ${customer.customerType}, ${customer.companyName}, ${customer.contactPerson},
         ${customer.email}, ${customer.phone}, ${customer.street}, ${customer.zipCode}, ${customer.city},
-        ${customer.country}, ${customer.paymentPreference}, ${customer.vatId}
+        ${customer.country}, ${customer.paymentPreference}, ${customer.vatId}, NULL::text
       )
     `);
     const outcome = outcomes.length === 1 ? outcomes[0] : null;
