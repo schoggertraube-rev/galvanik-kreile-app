@@ -1,8 +1,8 @@
 # Abgabe Q01 – Katalog oder Freitext
 
-Status: **PASS**  
-Branch: `kreile/s1-p2-eingang`  
-Geprüfter Produkt-SHA: `36e1c402ec4fa7db116e599f641e329ba04bf018`  
+Status: **PASS**
+Branch: `kreile/s1-p2-eingang`
+Geprüfter Produkt-SHA: `36e1c402ec4fa7db116e599f641e329ba04bf018`
 Preview: <https://galvanik-kreile-werkstatt-531saf6rs.vercel.app>
 
 ## Geändert

@@ -416,25 +416,25 @@ Voraussetzung aller Fälle: UI-Prüfung über echte Klicks und Datenbankprüfung
 
 ### Einzeln zu entscheidende Owner-Fragen
 
-**O-01 – Sichtbare Eingang-Nummer**  
+**O-01 – Sichtbare Eingang-Nummer**
 Empfehlung: zusätzlich zur UUID `E-JJJJ-NNNNN`, mandantenweit fortlaufend. Wesentlicher Nachteil: ein weiterer Nummernkreis und Lücken bei abgebrochenen Transaktionen müssen erlaubt sein. Kleine Alternative: nur gekürzte UUID, technisch einfacher, am Telefon schlechter. **Entscheidung erbeten:** Empfehlung übernehmen?
 
-**O-02 – Fallback-Verantwortung**  
+**O-02 – Fallback-Verantwortung**
 Empfehlung: In Stufe 1 ist die Rolle `meister` Fallback für jeden Eingang; Paket/persönlich kann sicher an `werkstatt`, Mail/Rechnung an `buero` geroutet werden, aber nur wenn dort mindestens ein aktiver berechtigter Login existiert. Wesentlicher Nachteil: ohne Büro-Login erhält der Meister mehr Einträge. Kleine Alternative: neue Rolle „Eingang“, die vor Go-live besetzt werden muss. **Entscheidung erbeten:** Fallback `meister` bestätigen?
 
-**O-03 – Grenze der Automatik**  
+**O-03 – Grenze der Automatik**
 Empfehlung: automatische Zuordnung nur mit eindeutiger starker Referenz; OCR-Konfidenz und bekannte Absenderadresse allein erzeugen höchstens „Vorschlag prüfen“. Wesentlicher Nachteil: anfangs mehr manuelle Bestätigungen. Kleine Alternative: konfigurierbarer Schwellenwert, der aber Fehlzuordnungen riskiert. **Entscheidung erbeten:** konservative Regel bestätigen?
 
-**O-04 – Übersetzungsanbieter**  
+**O-04 – Übersetzungsanbieter**
 Empfehlung: Azure AI Translator in der vorhandenen EU-Azure-Umgebung, mit Original immer daneben und ohne automatisches Handeln. Wesentlicher Nachteil: zusätzlicher Dienst, Vertrag und laufende Kosten. Kleine Alternative: Übersetzung zunächst nur manuell; dann ist der verbindliche Worst Case nicht durchgängig in der App gelöst. **Entscheidung erbeten:** Azure Translator für Stufe 1 freigeben?
 
-**O-05 – Eskalationsfristen**  
+**O-05 – Eskalationsfristen**
 Empfehlung: allgemein nach 24 Stunden; beschädigtes Paket sofort; blockierender Speicher-/Abruffehler sofort in Wartung und nach 2 Stunden zusätzlich auf „Der Tag“. Wesentlicher Nachteil: mehr rote Einträge bei längerer Providerstörung. Kleine Alternative: nur die 24-Stunden-Regel, wodurch akute Schäden/Fehler zu spät sichtbar werden. **Entscheidung erbeten:** diese drei Fristen bestätigen?
 
 **O-06 – Mindestbilder je Paket/Teilegruppe**
 Empfehlung: im Normalfall genau eine Paketübersicht und ein aussagekräftiges Bild je Teilegruppe; ein zusätzliches Einzelteil-/Schadensbild nur bei Abweichung, unklarer Menge, besonderem Wert oder sichtbarem Schaden. Wesentlicher Nachteil: Bei großen gemischten Paketen entstehen mehrere Fotos. Kleine Alternative: nur ein Paketfoto, das für Zustand und spätere Zuordnung häufig zu wenig belegt. **Entscheidung erbeten:** diese Mindestregel bestätigen?
 
-**O-07 – Fester Zahlungslauf für offene Eingangsrechnungen**  
+**O-07 – Fester Zahlungslauf für offene Eingangsrechnungen**
 Empfehlung: eine betriebsweit konfigurierbare Wochenzeit, initial Freitag 09:00; eine vor diesem Zeitpunkt fällige Rechnung erscheint zusätzlich sofort als dringend auf „Der Tag“. Wesentlicher Nachteil: Feiertage und Abwesenheit benötigen eine sichtbare Vertretung/Terminverschiebung. Kleine Alternative: jede Rechnung nur nach individueller Fälligkeit anzeigen, wodurch der gewünschte gemeinsame Zahllauf verloren geht. **Entscheidung erbeten:** Freitag 09:00 als initialen Zahlungslauf bestätigen?
 
 ### Übergaben, keine Owner-Fragen

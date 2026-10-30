@@ -1,9 +1,9 @@
 # Abgabe Reparatur-Abschluss H10
 
-Stand: 28.10.2026  
-Branch: `kreile/s1-p2-eingang`  
-PR: <https://github.com/schoggertraube-rev/galvanik-kreile-app/pull/154>  
-Produktkopf K25: `d3bf7225d2c1963a8a1cd143208beafdb7b66a23`  
+Stand: 28.10.2026
+Branch: `kreile/s1-p2-eingang`
+PR: <https://github.com/schoggertraube-rev/galvanik-kreile-app/pull/154>
+Produktkopf K25: `d3bf7225d2c1963a8a1cd143208beafdb7b66a23`
 Preview (Branch-Alias): <https://galvanik-kreile-werksta-git-25bb48-schoggertraube-revs-projects.vercel.app>
 
 ## K1–K25

@@ -1,8 +1,8 @@
 # Abgabe Q03 – Teil und Auftrag fertig
 
-Status: **PASS**  
-Branch: `kreile/s1-p2-eingang`  
-Geprüfter Produkt-SHA: `57592c54a225df9732c78f4c37e678febbf02a78`  
+Status: **PASS**
+Branch: `kreile/s1-p2-eingang`
+Geprüfter Produkt-SHA: `57592c54a225df9732c78f4c37e678febbf02a78`
 Preview: <https://galvanik-kreile-werkstatt-h9wjsnljj.vercel.app>
 
 ## Geändert

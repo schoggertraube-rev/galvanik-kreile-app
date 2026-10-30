@@ -1,6 +1,6 @@
 # Abgabe H16c
 
-Stand: 29.10.2026  
+Stand: 29.10.2026
 Branch: `kreile/s1-p2-eingang`
 
 ## Befund und Umsetzung

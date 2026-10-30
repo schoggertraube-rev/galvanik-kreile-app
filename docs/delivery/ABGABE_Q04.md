@@ -1,9 +1,9 @@
 # Abgabe Q04 · Rechnung → PDF → Zahlung → Ware raus
 
-Status: **PASS**  
-Branch: `kreile/s1-p2-eingang`  
-Geprüfter Produkt-SHA: `0b024bccbfbbd2e7518acb451fab5e5474e2ef07`  
-Preview: https://galvanik-kreile-werkstatt-i4h9ze3zn.vercel.app  
+Status: **PASS**
+Branch: `kreile/s1-p2-eingang`
+Geprüfter Produkt-SHA: `0b024bccbfbbd2e7518acb451fab5e5474e2ef07`
+Preview: https://galvanik-kreile-werkstatt-i4h9ze3zn.vercel.app
 Vercel-Deployment: `dpl_zMFPMD7GhPwK6Yd3gZy514cEDNgT`
 
 ## Neu gemacht

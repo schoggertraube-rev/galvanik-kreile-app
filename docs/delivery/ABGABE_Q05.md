@@ -1,9 +1,9 @@
 # Abgabe Q05 · Zahlungsart und Übergabe aus dem Eingang
 
-Status: **PASS**  
-Branch: `kreile/s1-p2-eingang`  
-Geprüfter Produkt-SHA: `a6b844f21c21eedd4c03928a9f131f4e29dfc3e0`  
-Preview: <https://galvanik-kreile-werkstatt-gj5xfjho1.vercel.app>  
+Status: **PASS**
+Branch: `kreile/s1-p2-eingang`
+Geprüfter Produkt-SHA: `a6b844f21c21eedd4c03928a9f131f4e29dfc3e0`
+Preview: <https://galvanik-kreile-werkstatt-gj5xfjho1.vercel.app>
 Vercel-Deployment: `dpl_9uXjHYpi96qKimEaiJ2fr14UHs3y` · Ready · Funktionen `fra1`
 
 ## Neu gemacht

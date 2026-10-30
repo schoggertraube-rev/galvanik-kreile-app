@@ -4,10 +4,10 @@ Stand: 30.10.2026, 01:10 Uhr
 
 Produktkandidat: `617e776ac7e497bba410ca05fc1dd5194db2d333`
 
-Exact-SHA-Preview: [https://galvanik-kreile-werkstatt-ouqtv2eth.vercel.app](https://galvanik-kreile-werkstatt-ouqtv2eth.vercel.app)  
+Exact-SHA-Preview: [https://galvanik-kreile-werkstatt-ouqtv2eth.vercel.app](https://galvanik-kreile-werkstatt-ouqtv2eth.vercel.app)
 Vercel-Status: `READY` / GitHub-Deployment `7427230666`
 
-PR: [#154](https://github.com/schoggertraube-rev/galvanik-kreile-app/pull/154), Basis `main`, nicht gemergt.  
+PR: [#154](https://github.com/schoggertraube-rev/galvanik-kreile-app/pull/154), Basis `main`, nicht gemergt.
 PR #152 und #153 wurden mit dem Vermerk „in #154 enthalten“ geschlossen; ihre Branches wurden nicht gelöscht.
 
 ## Ergebnis

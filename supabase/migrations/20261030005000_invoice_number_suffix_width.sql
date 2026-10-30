@@ -68,4 +68,3 @@ $$;
 
 COMMENT ON FUNCTION private.allocate_invoice_number(text, integer) IS
   'Allocates one transaction-bound invoice number without truncating suffixes above four digits.';
-

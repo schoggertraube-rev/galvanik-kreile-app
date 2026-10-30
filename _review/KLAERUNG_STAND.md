@@ -1,6 +1,6 @@
 # Klärungsstand
 
-Stand: 28.10.2026  
+Stand: 28.10.2026
 Rolle dieser Datei: Organisationsstand. Keine Bau- oder Freigabemeldung.
 
 ## 0. Quellen-Freeze
@@ -17,11 +17,11 @@ Rolle dieser Datei: Organisationsstand. Keine Bau- oder Freigabemeldung.
 ### Gültige Klärungsquellen dieses Laufs
 
 1. Direkte Owner-Aussagen im aktuellen Klärungslauf.
-2. `_review/OWNER_ENTSCHEIDUNGEN.md`  
+2. `_review/OWNER_ENTSCHEIDUNGEN.md`
    SHA-256: `62ef7b847897499b2e54a7287e00a63823445d46a1d34dc00c30c5cd76cb043c`
-3. `_review/ORIENTIERUNG_KLAERUNG.md`  
+3. `_review/ORIENTIERUNG_KLAERUNG.md`
    SHA-256: `e8139b08c7206be8123e94be3dea2feec2ca24def6121327d55fcce1be0454c4`
-4. `docs/project/endversion/codex/BAUPLAN.json` in der lokalen Arbeitskopie  
+4. `docs/project/endversion/codex/BAUPLAN.json` in der lokalen Arbeitskopie
    SHA-256: `2f953ae2301947e99f4c93ca594ae055ce268561b2ca3382daceedb31bb108ce`
 5. Tatsächlich vorhandener Code, Datenmodell und nachweisbare Lieferbelege; bei Widersprüchen wird nicht aus einer Planung auf eine fertige Funktion geschlossen.
 6. Offizielle externe Vorgaben für Recht, Formate und Anbietergrenzen.

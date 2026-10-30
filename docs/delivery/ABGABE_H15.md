@@ -1,7 +1,7 @@
 # ABGABE H15 · Live erreichbaren Müll entfernen
 
-Stand: `855961db8c55b3869897c378e924557a6ee6e776`  
-Branch: `kreile/s1-p2-eingang` · PR #154  
+Stand: `855961db8c55b3869897c378e924557a6ee6e776`
+Branch: `kreile/s1-p2-eingang` · PR #154
 Preview: <https://galvanik-kreile-werksta-git-25bb48-schoggertraube-revs-projects.vercel.app>
 
 ## Befund und Ergebnis
