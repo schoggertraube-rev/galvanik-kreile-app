@@ -630,8 +630,11 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ""
         run: npx vitest run src/test/f1_4_immutable_invoice.integration.test.ts src/test/f1_4_immutable_invoice_contract.integration.test.ts --maxWorkers=1 --no-file-parallelism
 
-      - name: Restore F1.5 B2 replay after isolated current-schema F1.4 (blocking)
-        run: ./node_modules/.bin/supabase db reset --local --no-seed --version 20260909180000
+      - name: Replay current candidate schema for current F1.5 server-action contracts (blocking)
+        # The historical F1.5 schema contract is proven above. Current server
+        # actions resolve authorization through app_user_rights and therefore
+        # must run against the complete current candidate migration chain.
+        run: ./node_modules/.bin/supabase db reset --local --no-seed
 
       - name: F1.5 payment and goods-out contract integration test (blocking)
         env:
@@ -654,16 +657,13 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ""
         run: npx vitest run src/test/f1_5_set_payment_mode.integration.test.ts --maxWorkers=1 --no-file-parallelism
 
-      - name: F1.3 live-card replay fresh from zero on the F1.5 B2 schema
-        # Isolation (root cause of the CONFLICT red): the F1.3 live-card regression
-        # assumes a clean database and creates master data at version 0. The preceding
-        # F1.4/F1.5 tests share this database and leave data behind, so without a reset
-        # the F1.3 command correctly returns CONFLICT. On main, F1.3 live-card ran right
-        # after its own fresh reset; this restores that isolation on the B2 schema.
-        # Fail-closed: without an always condition, a failed reset stops the job.
-        run: ./node_modules/.bin/supabase db reset --local --no-seed --version 20260909180000
+      - name: F1.3 current live-card replay fresh from zero (blocking)
+        # The historical F1.3 contract is proven above with its bound source
+        # snapshot. This current-code regression needs both a clean database and
+        # the canonical app_user_rights authorization source from the current schema.
+        run: ./node_modules/.bin/supabase db reset --local --no-seed
 
-      - name: F1.3 live-card regression on the F1.5 B2 schema (blocking)
+      - name: F1.3 live-card regression on the current schema (blocking)
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           F1_3_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
