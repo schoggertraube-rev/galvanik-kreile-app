@@ -103,6 +103,8 @@ Auftragsannahme-Ursache in einer Zeile: `private.create_customer_v1` erhielt mit
 
 P3-Suchfixture-Ursache in einer Zeile: Der aktuelle Vollschema-Test nutzte noch den alten Intake-Payload, die alte Quellenliste und eine inzwischen durch den Receipt-FK verbotene Tenant-Manipulation; die Fixture wurde ohne weitere Produktänderung an die bestehenden Verträge angeglichen.
 
+V5-Smoke-Ursache in einer Zeile: Die Browser-Fixture legte ihre synthetischen Produktakteure ohne das für die Login-Liste verpflichtende Kürzel an; der echte Login verwarf die unvollständigen Zeilen deshalb korrekt.
+
 | Check | Stand | Einordnung |
 |---|---|---|
 | Vercel | grün | Exact-SHA-Preview READY |

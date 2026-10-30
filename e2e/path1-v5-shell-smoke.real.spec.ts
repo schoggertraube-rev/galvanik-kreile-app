@@ -207,12 +207,12 @@ test.describe("PATH1 V5 Shell Smoke", () => {
       await createLocalAuthUser(apiUrl, anonKey, gregorEmail, gregorPassword);
       const insertedAt = new Date(Date.now() - 5_000).toISOString();
       await sql`
-        INSERT INTO public.app_users (id, tenant_id, email, full_name, role, pin_hash, active, created_at, updated_at)
+        INSERT INTO public.app_users (id, tenant_id, email, full_name, kuerzel, bezeichnung, role, pin_hash, active, created_at, updated_at)
         VALUES
-          (${ACTORS[0].id}::uuid, ${TENANT}, ${emailRolf}, 'Rolf', 'meister', ${hashRolf}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz),
-          (${ACTORS[1].id}::uuid, ${TENANT}, ${emailPhillip}, 'Phillip', 'werkstatt', ${hashPhillip}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz),
-          (${GREGOR_ACTOR_ID}::uuid, ${TENANT}, ${gregorEmail}, 'Gregor', 'admin', null, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz)
-        ON CONFLICT (id) DO UPDATE SET email = excluded.email, full_name = excluded.full_name, role = excluded.role, pin_hash = excluded.pin_hash, active = excluded.active, updated_at = excluded.updated_at
+          (${ACTORS[0].id}::uuid, ${TENANT}, ${emailRolf}, 'Rolf', 'R', 'Meister', 'meister', ${hashRolf}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz),
+          (${ACTORS[1].id}::uuid, ${TENANT}, ${emailPhillip}, 'Phillip', 'P', 'Werkstatt', 'werkstatt', ${hashPhillip}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz),
+          (${GREGOR_ACTOR_ID}::uuid, ${TENANT}, ${gregorEmail}, 'Gregor', 'G', 'Entwickler', 'admin', null, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz)
+        ON CONFLICT (id) DO UPDATE SET email = excluded.email, full_name = excluded.full_name, kuerzel = excluded.kuerzel, bezeichnung = excluded.bezeichnung, role = excluded.role, pin_hash = excluded.pin_hash, active = excluded.active, updated_at = excluded.updated_at
       `;
       for (const actor of ACTORS) for (const viewport of VIEWPORTS) {
         const context = await browser.newContext({ viewport });
