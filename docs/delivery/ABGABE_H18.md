@@ -97,6 +97,8 @@ Lokaler Fixnachweis: vollständiges 65/65-Replay vor dem aktuellen App-HTTP-Vert
 
 F1.4-Replay-Ursache in einer Zeile: Der unveränderte historische Rechnungstest lief auf dem F1.5-Schema mit dem heutigen, erst später eingeführten `app_user_rights`-Resolver; er ist nun per Vorfahr- und Blob-Prüfung an seinen bytegleichen Quellstand gebunden, während der aktuelle Rechnungsweg weiter im vollständigen H18-Replay läuft.
 
+Mechanische Folgearbeit: Dieselbe harte Vorfahr-/Blob-Bindung gilt für die unveränderten historischen F1.5-Verträge und den ausdrücklich historischen F1.3-Live-Card-Gate; aktuelle Vollschema-Verträge laufen danach unverändert weiter.
+
 | Check | Stand | Einordnung |
 |---|---|---|
 | Vercel | grün | Exact-SHA-Preview READY |
