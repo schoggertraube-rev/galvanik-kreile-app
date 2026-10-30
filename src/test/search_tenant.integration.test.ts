@@ -64,11 +64,6 @@ beforeAll(async () => {
   const updatedAt = new Date(Date.now() - 5_000).toISOString();
   await sql`INSERT INTO public.app_users (id, tenant_id, email, full_name, role, active, created_at, updated_at)
     VALUES (${userId}::uuid, ${KREILE_TENANT_SLUG}, ${`p3-search-${suffix}@local.invalid`}, 'Rolf', 'meister', true, ${updatedAt}::timestamptz, ${updatedAt}::timestamptz)`;
-  await sql`INSERT INTO public.app_user_rights (tenant_id, user_id, bereich)
-    VALUES
-      (${KREILE_TENANT_SLUG}, ${userId}::uuid, 'auftraege'),
-      (${KREILE_TENANT_SLUG}, ${userId}::uuid, 'eingang'),
-      (${KREILE_TENANT_SLUG}, ${userId}::uuid, 'kunden')`;
   const [clock] = await sql<{ updated_at_ms: string }[]>`SELECT floor(extract(epoch FROM updated_at) * 1000)::bigint::text AS updated_at_ms FROM public.app_users WHERE id = ${userId}::uuid`;
   sessionIssuedAt = Date.now();
   if (!clock || Number(clock.updated_at_ms) >= sessionIssuedAt) throw new Error("P3_SEARCH_SESSION_REVOCATION_ORDER_INVALID");
@@ -84,19 +79,9 @@ describe("Path-1 P3 tenant search real database contract", () => {
     const { createOrderIntake } = await import("@/lib/server/commands/orderIntakeCommand");
     const intake = await withSession(() => createOrderIntake({
       clientEventId: randomUUID(),
-      customer: {
-        mode: "NEW", name: `Suchkunde ${suffix}`, customerType: "business",
-        companyName: `Nordlicht ${suffix} GmbH`, contactPerson: "Ada Suchtest",
-        email: `ada-${suffix}@local.invalid`, phone: "+49 711 000000",
-        street: "Pruefweg 1", zipCode: "73728", city: "Esslingen",
-        country: "Deutschland", paymentPreference: "vorkasse", vatId: null,
-      },
-      dueDate: "2026-11-19", handoverMode: "shipping", note: "P3 Suchvertrag",
-      items: [{
-        catalogServiceId: null, name: `Pruefbolzen ${suffix} Nordlicht`, quantity: 2,
-        material: `Titan ${suffix}`, surfaceRequested: `Hartchrom ${suffix}`,
-        executionRequested: "offen", unit: null, unitPriceCents: null, vatRateBasisPoints: null,
-      }],
+      customer: { mode: "NEW", name: `Suchkunde ${suffix}`, customerType: "business", companyName: `Nordlicht ${suffix} GmbH`, contactPerson: "Ada Suchtest", email: `ada-${suffix}@local.invalid`, phone: null, city: "Esslingen" },
+      dueDate: "2026-11-19", note: "P3 Suchvertrag",
+      items: [{ name: `Pruefbolzen ${suffix} Nordlicht`, quantity: 2, material: `Titan ${suffix}`, surfaceRequested: `Hartchrom ${suffix}` }],
     }));
     expect(intake.code).toBe("OK");
     if (intake.code !== "OK") throw new Error(`P3_SEARCH_INTAKE_FAILED:${intake.code}`);
@@ -109,9 +94,7 @@ describe("Path-1 P3 tenant search real database contract", () => {
       const result = await withSession(() => searchTenantAction(query));
       expect(result.code).toBe("OK");
       if (result.code === "OK") {
-        expect(result.checkedSources).toEqual([
-          "Auftragsbestand", "Kundenstamm", "Angebote", "Dokumente", "Mails", "Termine",
-        ]);
+        expect(result.checkedSources).toEqual(["Auftragsbestand", "Kundenstamm"]);
         expect(result.checkedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
         expect(result.hits).toContainEqual(expect.objectContaining({ id: intake.receipt.orderId, type: "ORDER", matchField }));
       }
@@ -146,11 +129,8 @@ describe("Path-1 P3 tenant search real database contract", () => {
     });
     expect(foreign).toMatchObject({ code: "OK", hits: [] });
 
-    const foreignCustomerId = randomUUID();
-    await sql`INSERT INTO public.customers (id, tenant_id, name, type, source)
-      VALUES (${foreignCustomerId}, ${`foreign-${suffix}`}, 'Fremdmandant Suchtest', 'business', 'integration-test')`;
-    await sql`UPDATE public.orders SET customer_id = ${foreignCustomerId} WHERE id = ${intake.receipt.orderId}`;
+    await sql`UPDATE public.customers SET tenant_id = ${`foreign-${suffix}`} WHERE id = ${intake.receipt.customerId}`;
     await expect(withSession(() => searchTenantAction(intake.receipt.orderNumber))).resolves.toMatchObject({ code: "UNAVAILABLE" });
-    await sql`UPDATE public.orders SET customer_id = ${intake.receipt.customerId} WHERE id = ${intake.receipt.orderId}`;
+    await sql`UPDATE public.customers SET tenant_id = ${KREILE_TENANT_SLUG} WHERE id = ${intake.receipt.customerId}`;
   }, 30_000);
 });

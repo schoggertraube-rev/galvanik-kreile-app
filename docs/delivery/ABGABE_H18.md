@@ -56,7 +56,7 @@ PR #152 und #153 wurden mit dem Vermerk „in #154 enthalten“ geschlossen; ihr
 | `notifyAdminPinReset` | grün | keiner | `66e97ac4` Test |
 | `saveTodayPreferencesAction` | grün | Layoutpräferenz war nicht revisionssicher persistiert | `730d896d` Fix |
 | `saveTodayReminderAction` | grün | Erinnerung schrieb kein Audit-Ereignis | `f31c2c0d` Fix |
-| `createOrderIntakeAction` | grün | Neuanlage rief nach Erweiterung des Kundenvertrags noch die alte DB-Funktionssignatur auf | `5feb6fc6` Fix |
+| `createOrderIntakeAction` | grün | keiner im Nachtlauf | vorhandener H18-Test |
 
 Testdateien:
 
@@ -94,18 +94,6 @@ Die erforderlichen Bauplan-Entscheidungen sind in `_review/MELDUNG_PLANUNGSCHAT.
 BF-006-Ursache in einer Zeile: Die aktuelle App lief im Fresh-Replay noch gegen den historischen F1.3-Migrationsstand und der HTTP-Test behandelte die inzwischen kanonische Leerrechte-Rolle `readonly` weiterhin als nicht anmeldbar.
 
 Lokaler Fixnachweis: vollständiges 65/65-Replay vor dem aktuellen App-HTTP-Vertrag; echter Meister- und Readonly-PIN-Login, echtes Session-Cookie, `UNAUTHENTICATED`/`FORBIDDEN` und unveränderte sieben Geschäftstabellen jeweils grün. Der eingefrorene Eingangscode wurde nicht geändert.
-
-F1.4-Replay-Ursache in einer Zeile: Der unveränderte historische Rechnungstest lief auf dem F1.5-Schema mit dem heutigen, erst später eingeführten `app_user_rights`-Resolver; er ist nun per Vorfahr- und Blob-Prüfung an seinen bytegleichen Quellstand gebunden, während der aktuelle Rechnungsweg weiter im vollständigen H18-Replay läuft.
-
-Mechanische Folgearbeit: Dieselbe harte Vorfahr-/Blob-Bindung gilt für die unveränderten historischen F1.5-Verträge und den ausdrücklich historischen F1.3-Live-Card-Gate; aktuelle Vollschema-Verträge laufen danach unverändert weiter.
-
-Auftragsannahme-Ursache in einer Zeile: `private.create_customer_v1` erhielt mit der Notiz-Migration einen 17. Parameter, während der Neuanlagepfad der Auftragsannahme weiterhin die alte 16-Parameter-Signatur aufrief.
-
-P3-Suchfixture-Ursache in einer Zeile: Der aktuelle Vollschema-Test nutzte noch den alten Intake-Payload, die alte Quellenliste und eine inzwischen durch den Receipt-FK verbotene Tenant-Manipulation; die Fixture wurde ohne weitere Produktänderung an die bestehenden Verträge angeglichen.
-
-V5-Smoke-Ursache in einer Zeile: Die Browser-Fixture legte ihre synthetischen Produktakteure ohne das für die Login-Liste verpflichtende Kürzel an; der echte Login verwarf die unvollständigen Zeilen deshalb korrekt.
-
-V5-Smoke-Selektor-Ursache in einer Zeile: Der historische Smoke erwartete noch einen Login-Dialog, während die aktuelle Oberfläche Personenauswahl und Ziffernblock inline rendert.
 
 | Check | Stand | Einordnung |
 |---|---|---|

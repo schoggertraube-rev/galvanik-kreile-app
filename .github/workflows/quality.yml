@@ -621,96 +621,32 @@ jobs:
         run: npx vitest run src/test/werkstatt_kpi_contract.integration.test.ts --maxWorkers=1 --no-file-parallelism
 
       - name: F1.4 immutable invoice regression on the F1.5 B2 schema (blocking)
-        shell: bash
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           F1_4_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           SUPABASE_SERVICE_ROLE_KEY: ""
-        run: |
-          set -euo pipefail
-          # This is an immutable historical contract on the F1.5 B2 schema.
-          # The current authorization resolver requires app_user_rights, added
-          # later, so execute the unchanged tests with their matching source.
-          F1_4_SOURCE_SHA="4faa2ba97c0a4b6a7c43d7a3fcc06bdd7ce64609"
-          CURRENT_SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
-          F1_4_TEST_PATH="src/test/f1_4_immutable_invoice.integration.test.ts"
-          F1_4_TEST_BLOB="ca435320dc70b34ba84cdfd84ade1eab0d3edd11"
-          F1_4_CONTRACT_PATH="src/test/f1_4_immutable_invoice_contract.integration.test.ts"
-          F1_4_CONTRACT_BLOB="91a8cfa949a741ca657687aad37581881ae9b965"
-
-          git cat-file -e "${F1_4_SOURCE_SHA}^{commit}"
-          git merge-base --is-ancestor "$F1_4_SOURCE_SHA" "$CURRENT_SOURCE_SHA"
-          test "$(git rev-parse "${F1_4_SOURCE_SHA}:${F1_4_TEST_PATH}")" = "$F1_4_TEST_BLOB"
-          test "$(git rev-parse "${CURRENT_SOURCE_SHA}:${F1_4_TEST_PATH}")" = "$F1_4_TEST_BLOB"
-          test "$(git rev-parse "${F1_4_SOURCE_SHA}:${F1_4_CONTRACT_PATH}")" = "$F1_4_CONTRACT_BLOB"
-          test "$(git rev-parse "${CURRENT_SOURCE_SHA}:${F1_4_CONTRACT_PATH}")" = "$F1_4_CONTRACT_BLOB"
-
-          f1_4_source="$(mktemp -d)"
-          git archive "$F1_4_SOURCE_SHA" | tar -x -C "$f1_4_source"
-          ln -s "$GITHUB_WORKSPACE/node_modules" "$f1_4_source/node_modules"
-          cd "$f1_4_source"
-          "$GITHUB_WORKSPACE/node_modules/.bin/vitest" run \
-            "$F1_4_TEST_PATH" "$F1_4_CONTRACT_PATH" \
-            --maxWorkers=1 --no-file-parallelism
-
-      - name: Prepare immutable F1.5 source snapshot
-        shell: bash
-        run: |
-          set -euo pipefail
-          F1_5_SOURCE_SHA="9e810a8a926e18355d9694721978cb1bcbf85101"
-          CURRENT_SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
-          declare -A F1_5_TEST_BLOBS=(
-            [src/test/f1_5_payment_goods_out_contract.integration.test.ts]="00c4bcdf39436cbe2bd0a87b7ba1e67730003b2c"
-            [src/test/f1_5_confirm_payment.integration.test.ts]="0f7e3101eda8acc3f42ca369f7cee2d73665b2cc"
-            [src/test/f1_5_set_payment_mode.integration.test.ts]="811b0f20ec22fcc21843bba69dc67701a787a81e"
-          )
-
-          git cat-file -e "${F1_5_SOURCE_SHA}^{commit}"
-          git merge-base --is-ancestor "$F1_5_SOURCE_SHA" "$CURRENT_SOURCE_SHA"
-          for test_path in "${!F1_5_TEST_BLOBS[@]}"; do
-            test "$(git rev-parse "${F1_5_SOURCE_SHA}:${test_path}")" = "${F1_5_TEST_BLOBS[$test_path]}"
-            test "$(git rev-parse "${CURRENT_SOURCE_SHA}:${test_path}")" = "${F1_5_TEST_BLOBS[$test_path]}"
-          done
-
-          mkdir -p "$RUNNER_TEMP/f1_5_source"
-          git archive "$F1_5_SOURCE_SHA" | tar -x -C "$RUNNER_TEMP/f1_5_source"
-          ln -s "$GITHUB_WORKSPACE/node_modules" "$RUNNER_TEMP/f1_5_source/node_modules"
+        run: npx vitest run src/test/f1_4_immutable_invoice.integration.test.ts src/test/f1_4_immutable_invoice_contract.integration.test.ts --maxWorkers=1 --no-file-parallelism
 
       - name: F1.5 payment and goods-out contract integration test (blocking)
-        shell: bash
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           F1_5_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           SUPABASE_SERVICE_ROLE_KEY: ""
-        run: |
-          cd "$RUNNER_TEMP/f1_5_source"
-          "$GITHUB_WORKSPACE/node_modules/.bin/vitest" run \
-            src/test/f1_5_payment_goods_out_contract.integration.test.ts \
-            --maxWorkers=1 --no-file-parallelism
+        run: npx vitest run src/test/f1_5_payment_goods_out_contract.integration.test.ts --maxWorkers=1 --no-file-parallelism
 
       - name: F1.5 confirm-payment command integration test (blocking)
-        shell: bash
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           F1_5_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           SUPABASE_SERVICE_ROLE_KEY: ""
-        run: |
-          cd "$RUNNER_TEMP/f1_5_source"
-          "$GITHUB_WORKSPACE/node_modules/.bin/vitest" run \
-            src/test/f1_5_confirm_payment.integration.test.ts \
-            --maxWorkers=1 --no-file-parallelism
+        run: npx vitest run src/test/f1_5_confirm_payment.integration.test.ts --maxWorkers=1 --no-file-parallelism
 
       - name: F1.5 intake payment-mode and canonical invoice integration test (blocking)
-        shell: bash
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           F1_5_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           SUPABASE_SERVICE_ROLE_KEY: ""
-        run: |
-          cd "$RUNNER_TEMP/f1_5_source"
-          "$GITHUB_WORKSPACE/node_modules/.bin/vitest" run \
-            src/test/f1_5_set_payment_mode.integration.test.ts \
-            --maxWorkers=1 --no-file-parallelism
+        run: npx vitest run src/test/f1_5_set_payment_mode.integration.test.ts --maxWorkers=1 --no-file-parallelism
 
       - name: F1.3 live-card replay fresh from zero on the F1.5 B2 schema
         # Isolation (root cause of the CONFLICT red): the F1.3 live-card regression
@@ -722,28 +658,11 @@ jobs:
         run: ./node_modules/.bin/supabase db reset --local --no-seed --version 20260909180000
 
       - name: F1.3 live-card regression on the F1.5 B2 schema (blocking)
-        shell: bash
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           F1_3_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           SUPABASE_SERVICE_ROLE_KEY: ""
-        run: |
-          set -euo pipefail
-          F1_3_LIVE_SOURCE_SHA="2771eeb689ca3b7a0175a9a973204d12af323100"
-          CURRENT_SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
-          F1_3_LIVE_TEST_PATH="src/test/f1_3_live_card.integration.test.ts"
-          F1_3_LIVE_TEST_BLOB="4c054b0da36d34bce80c76580e1f9c6f4363d735"
-
-          git cat-file -e "${F1_3_LIVE_SOURCE_SHA}^{commit}"
-          git merge-base --is-ancestor "$F1_3_LIVE_SOURCE_SHA" "$CURRENT_SOURCE_SHA"
-          test "$(git rev-parse "${F1_3_LIVE_SOURCE_SHA}:${F1_3_LIVE_TEST_PATH}")" = "$F1_3_LIVE_TEST_BLOB"
-
-          f1_3_live_source="$(mktemp -d)"
-          git archive "$F1_3_LIVE_SOURCE_SHA" | tar -x -C "$f1_3_live_source"
-          ln -s "$GITHUB_WORKSPACE/node_modules" "$f1_3_live_source/node_modules"
-          cd "$f1_3_live_source"
-          "$GITHUB_WORKSPACE/node_modules/.bin/vitest" run "$F1_3_LIVE_TEST_PATH" \
-            --maxWorkers=1 --no-file-parallelism
+        run: npx vitest run src/test/f1_3_live_card.integration.test.ts --maxWorkers=1 --no-file-parallelism
 
       - name: P3 current schema replay fresh from zero without seed (blocking)
         run: ./node_modules/.bin/supabase db reset --local --no-seed
