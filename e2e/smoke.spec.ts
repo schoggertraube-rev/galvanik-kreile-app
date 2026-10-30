@@ -7,23 +7,16 @@ test.describe("Kreile auth boundary", () => {
     await expect(page).toHaveURL(/\/start$/);
     await expect(page).toHaveTitle(/Kreile/i);
     await expect(
-      page.getByRole("button", { name: /Gregor.*Systemadministrator/ }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: "Persönlichen Code eingeben" }),
+      page.getByRole("heading", { name: /Guten (Morgen|Tag|Abend)/ }),
     ).toBeVisible();
     const unavailableAlert = page.getByRole("alert").filter({
       hasText: "Anmeldung ist momentan nicht verfügbar.",
     });
     await expect(unavailableAlert).toHaveCount(1);
     await expect(unavailableAlert).toBeVisible();
-    await expect(page.getByRole("button", { name: /Rolf.*Meister/ })).toBeDisabled();
-    await expect(
-      page.getByRole("button", { name: /Phillip.*Werkstatt/ }),
-    ).toBeDisabled();
-    await expect(
-      page.getByRole("button", { name: /Gregor.*Systemadministrator/ }),
-    ).toBeDisabled();
+    await expect(page.getByLabel("Person auswählen").getByRole("button")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "1", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Löschen" })).toBeDisabled();
     await expect(page.locator("body")).not.toContainText(/Auftrag\s+[A-Z]-?\d+/i);
     await expect(
       page.getByRole("button", { name: "Tablet Test-Login (Werkstatt)" }),
