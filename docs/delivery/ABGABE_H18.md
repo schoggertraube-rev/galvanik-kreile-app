@@ -105,6 +105,8 @@ P3-Suchfixture-Ursache in einer Zeile: Der aktuelle Vollschema-Test nutzte noch 
 
 V5-Smoke-Ursache in einer Zeile: Die Browser-Fixture legte ihre synthetischen Produktakteure ohne das für die Login-Liste verpflichtende Kürzel an; der echte Login verwarf die unvollständigen Zeilen deshalb korrekt.
 
+V5-Smoke-Selektor-Ursache in einer Zeile: Der historische Smoke erwartete noch einen Login-Dialog, während die aktuelle Oberfläche Personenauswahl und Ziffernblock inline rendert.
+
 | Check | Stand | Einordnung |
 |---|---|---|
 | Vercel | grün | Exact-SHA-Preview READY |
