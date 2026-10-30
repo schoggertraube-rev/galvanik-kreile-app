@@ -1,61 +1,115 @@
-# Abgabe H18 / C1a – Prüfer-Funktionstest
+# Abgabe H18.8 – Schreibaktionen gegen die Replay-DB
 
-Stand: 29.10.2026
+Stand: 30.10.2026, 01:10 Uhr
 
-Produktkandidat und Exact-SHA-Preview: `e8e87e4686dc9d76406c94ba9c65c68b7b15d914`
+Produktkandidat: `617e776ac7e497bba410ca05fc1dd5194db2d333`
 
-Produktbaum: `1789bd53122185425edf6fb6040497c16f80aee7`
+Exact-SHA-Preview: [https://galvanik-kreile-werkstatt-ouqtv2eth.vercel.app](https://galvanik-kreile-werkstatt-ouqtv2eth.vercel.app)  
+Vercel-Status: `READY` / GitHub-Deployment `7427230666`
 
-CI: PASS, [agentur-gate 40931976966](https://github.com/schoggertraube-rev/galvanik-kreile-app/actions/runs/40931976966)
+PR: [#154](https://github.com/schoggertraube-rev/galvanik-kreile-app/pull/154), Basis `main`, nicht gemergt.  
+PR #152 und #153 wurden mit dem Vermerk „in #154 enthalten“ geschlossen; ihre Branches wurden nicht gelöscht.
 
-Exact-SHA-Preview: [https://galvanik-kreile-werkstatt-a133kmzd9.vercel.app](https://galvanik-kreile-werkstatt-a133kmzd9.vercel.app), Vercel-Status `READY`, Deployment `7420972568`
+## Ergebnis
 
-`e8e87e46` enthält zusätzlich die Korrektur aus dem Owner-Klicktest: Rechte werden in der Matrix zuerst vorgemerkt, ausdrücklich über „Rechte speichern“ geschrieben und anschließend mit einem vier Sekunden sichtbaren V1.1-Toast bestätigt. „Code ändern“ blieb unverändert.
+- H18.8: `34 von 100` Schreibaktionen mit echten Action-/Replay-DB-Tests belegt; Ausnahmeliste von 94 auf 66 geschrumpft.
+- Frische lokale Replay-DB: 65 Migrationen, 8/8 H18-Dateien, 29/29 Tests grün.
+- Jeder gelistete Test ruft die öffentliche Server-Action wie die UI auf, prüft DB-Zeile und Ereignis und liest anschließend die zugehörige Ansicht beziehungsweise den Beleg neu.
+- Dev-DB: Repo = Dev `65/65`, letzter Stand `20261030005000`.
+- Neue additive Migration: `supabase/migrations/20261030005000_invoice_number_suffix_width.sql`.
+- Ursache des gefundenen Produktfehlers: PostgreSQL `lpad(v_number::text, 4, '0')` kürzte Rechnungsnummern ab fünf Stellen und konnte dadurch eine bereits vorhandene Nummer erneut ausgeben.
 
-## C1a.1 – Dev-Migration und Gleichstand
+## Aktionstabelle
 
-- Die additive Migration `supabase/migrations/20261029173000_h18_order_intake_due_change_integrity.sql:1` wurde mit `supabase migration up --linked --yes` auf die Dev-DB angewendet.
-- Sie berücksichtigt den neuesten gültigen `ORDER_PROMISED_DUE_DATE_CHANGED_V1`-Beleg (`:28`) und berechnet daraus die Integrität des Eingangsbelegs (`:99`). Es gab keinen Datenpatch.
-- Gleichstand belegt: `DEV_DB_REPO_MIGRATIONS=PASS count=61 last=20261029173000`.
-- Der echte Replay-DB-Test ändert den Liefertermin über die Server-Action und öffnet die Karte anschließend erneut: `src/test/h18_settings_actions.integration.test.ts:320`.
+| Aktion | Test | gefundener Fehler | Commit |
+|---|---|---|---|
+| `cancelInvoiceAction` | grün | keiner | `3bc0634b` Test |
+| `issueInvoiceAction` | grün | Nummernsuffix ab fünf Stellen abgeschnitten | `617e776a` Fix |
+| `setInvoiceItemPricesAction` | grün | keiner | `3bc0634b` Test |
+| `createQuoteAction` | grün | keiner | `b43c345b` Test/Fix |
+| `updateQuoteAction` | grün | keiner | `b43c345b` Test/Fix |
+| `convertQuoteToOrderAction` | grün | normalisierter Beauftragungsinhalt wurde vor dem Hash nicht einheitlich behandelt | `b43c345b` Fix |
+| `createCustomerAction` | grün | keiner | `a90590c0` Test |
+| `updateCustomerCommercialAction` | grün | keiner | `a90590c0` Test |
+| `updateCustomerNoteAction` | grün | keiner | `a90590c0` Test |
+| `recordGoodsOutAction` | grün | keiner | `c63a2dbe` Test |
+| `correctGalvanikToWareneingangAction` | grün | Korrekturbeleg verwendete nicht die kanonische Station | `e001a00c` Fix |
+| `freezeOrderAction` | grün | keiner | `c63a2dbe` Test |
+| `setOrderItemFinishedAction` | grün | keiner | `c63a2dbe` Test |
+| `transitionWareneingangToGalvanikAction` | grün | keiner | `c63a2dbe` Test |
+| `setPaymentModeAction` | grün | Eingangs-Readback erkannte belegten Zahlungsmodus nicht | `829f9f63` Fix |
+| `assignOrderTaskAction` | grün | keiner | `470454a2` Test |
+| `changeOrderContentAction` | grün | keiner | `470454a2` Test |
+| `changeOrderItemExtraWorkAction` | grün | keiner | `470454a2` Test |
+| `configureExtraWorkCatalogPositionAction` | grün | keiner | `470454a2` Test |
+| `handBackOrderTaskAction` | grün | keiner | `470454a2` Test |
+| `reopenFrozenOrderAction` | grün | keiner | `470454a2` Test |
+| `changeOrderPromisedDueDateAction` | grün | keiner im Nachtlauf | vorhandener H18-Test |
+| `confirmPaymentAction` | grün | Testfixture belegte den aktuellen Rechnungsnummernraum; auf Jahr 2099 isoliert | `1fcbecf6` Testfix |
+| `setExtraWorkHourlyRateAction` | grün | keiner | `7d658bb9` Test |
+| `saveCatalogServiceAction` | grün | Audit-Ereignis schrieb an der Modulgrenze vorbei | `0ee0ab91` Fix |
+| `saveCompanySettingsAction` | grün | Firmendaten hatten mehr als einen Schreibvertrag | `e074f2f4` Fix |
+| `changeOwnPinAction` | grün | keiner im Nachtlauf | vorhandener H18-Test |
+| `createManagedUserAction` | grün | neue Logins erhielten Rechte nicht im selben bestätigten Schreibweg | `f2af7b6f` Fix |
+| `saveManagedUserAction` | grün | Umbenennen aktualisierte `updated_at` nicht | `b0fc1f8a` Fix |
+| `setManagedUserAreaAction` | grün | Rechte waren ohne ausdrücklichen Speicherweg uneindeutig | `e8e87e46` Fix |
+| `notifyAdminPinReset` | grün | keiner | `66e97ac4` Test |
+| `saveTodayPreferencesAction` | grün | Layoutpräferenz war nicht revisionssicher persistiert | `730d896d` Fix |
+| `saveTodayReminderAction` | grün | Erinnerung schrieb kein Audit-Ereignis | `f31c2c0d` Fix |
+| `createOrderIntakeAction` | grün | keiner im Nachtlauf | vorhandener H18-Test |
 
-## C1a.2–C1a.7 – Befunde und Korrekturen
+Testdateien:
 
-2. **Wartung bleibt ausschließlich für developer fest; andere Rechte werden bewusst gespeichert.** Die gemeinsame Rollenprüfung sperrt `wartung` für alle anderen Rollen (`src/lib/auth/authorizationContract.ts:105`), die Oberfläche verwendet dieselbe Prüfung (`src/app/settings/SettingsAdminClient.tsx:405`), und der Server weist den Schreibversuch mit einem fachlichen Code zurück (`src/modules/fundament/server/systemSettingsPort.ts:362`). Erlaubte Haken werden zunächst als Änderung vorgemerkt (`src/app/settings/SettingsAdminClient.tsx:287`), erst über „Rechte speichern“ an die bestehende Action gesendet (`:301`, `:409`) und danach als Toast bestätigt (`:331`). Der echte UI-/Action-/DB-Test klickt denselben Speicherweg und prüft weiterhin `app_user_rights.granted_by` (`src/test/h18_settings_client.integration.test.tsx:231`).
-3. **„Der Tag“ unterscheidet vorhandene Aufträge von fehlendem Handlungsbedarf.** Die Projektion ermittelt, ob überhaupt Aufträge vorhanden sind (`src/components/home/OfficeHomeClient.tsx:74`), und zeigt bei acht Aufträgen ohne aktuelle Aufgabe „Nichts offen“ statt „Noch keine Aufträge erfasst“ (`:129`). Der echte `getOrdersDb`-/Replay-DB-Test steht in `src/test/h18_settings_actions.integration.test.ts:416`.
-4. **Umbenennen aktualisiert `app_users.updated_at`.** Alle drei vorhandenen Update-Zweige setzen jetzt `updated_at=statement_timestamp()` (`src/modules/fundament/server/systemSettingsPort.ts:245`). Der echte `saveManagedUserAction`-/DB-Test prüft Name, Ereignis und vorwärts laufenden Zeitstempel (`src/test/h18_settings_actions.integration.test.ts:274`).
-5. **Zahlungsbestätigung ist am Handlungsort sichtbar und im Verlauf belegt.** Der Dialog schließt nur nach erfolgreicher Action; Fehler bleiben im Dialog (`src/modules/orders/ui/OrderCardView.tsx:278`). Die Karte liest das persistierte Zahlungsereignis (`src/app/orders/OrderCardAppAdapter.tsx:133`) und zeigt es im Verlauf (`src/modules/orders/ui/OrderCardView.tsx:226`). Der echte `confirmPaymentAction`-/DB-Test prüft `payments` und `PAYMENT_CONFIRMED_V1` (`src/test/h18_settings_actions.integration.test.ts:467`).
-6. **Interne Dokumentcodes sind übersetzt.** `LEGACY_SCAN_UPLOAD` erscheint als „Übernommener Scan“ und `LEGACY_RECORDED` als „Original erfasst“ (`src/modules/orders/ui/OrderCardView.tsx:104`, `:110`). Der echte `getLiveOrderCardAction`-/DB-Test liest den Bestandsbeleg aus seiner realen Datenbankzeile (`src/test/h18_settings_actions.integration.test.ts:573`).
-7. **Auftragskarten lesen nur zugeordnete Mails.** `listOutlookInboxAction` leitet bei einem Auftrag in den zugeordneten Lesepfad (`src/app/actions/communications.actions.ts:31`), dessen Query auf `communication_threads.order_id` begrenzt ist (`src/lib/server/communicationPort.ts:79`, `:111`). Ohne Zuordnung erscheint der ehrliche Leerzustand (`src/components/communication/CommunicationPanel.tsx:122`). Der echte Action-/DB-Test legt einen zugeordneten und einen fremden Thread an und erwartet ausschließlich den zugeordneten (`src/test/h18_settings_actions.integration.test.ts:650`). Der Mail-Kanal selbst wurde nicht verändert oder geöffnet.
+- `src/test/h18_invoice_actions.integration.test.ts`
+- `src/test/h18_quote_actions.integration.test.ts`
+- `src/test/h18_customer_actions.integration.test.ts`
+- `src/test/h18_workshop_actions.integration.test.ts`
+- `src/test/h18_masterdata_actions.integration.test.ts`
+- `src/test/h18_order_admin_actions.integration.test.ts`
+- `src/test/h18_settings_actions.integration.test.ts`
+- `src/test/h18_settings_client.integration.test.tsx`
 
-## Replay-DB-, Wächter- und CI-Nachweis
+## Verbleibende 66 Ausnahmen
 
-- Lokal und in CI: 16/16 H18-Tests grün, davon 13 Actiontests und 3 Client-/Actiontests. Sie rufen die echten Server-Actions über die echte Sessionkette gegen eine frisch aus allen Migrationen aufgebaute lokale Replay-DB auf und prüfen die betroffenen DB-Zeilen.
-- CI `h16-schema`: vollständiger Migrations-Replay, H12-SQL-Verträge und alle H18-Actiontests grün.
-- CI `agentur-gate`: Delivery-Verträge, TypeScript, H16, H18.8 und vollständiger Unit-Lauf grün.
-- H18.8: Inventar 249 Server-Actions, 100 Schreib-Actions, 6 mit dem neuen echten Replay-Actiontest, 94 explizite Bestandsausnahmen. Eine neue ungetestete Schreib-Action macht CI rot; die Ausnahmeliste darf nur schrumpfen.
-- Lokaler Produktbuild und TypeScript-Lauf waren vor dem Push grün. Der lokale vollständige Unit-Lauf hatte ausschließlich zwei Authority-Gate-Abweichungen durch vorhandene, nicht zu diesem Auftrag gehörende Arbeitsbaumdateien; der saubere CI-Checkout ist vollständig grün.
+Die verbliebenen Einträge sind nicht als getestete Schreibaktionen ausgegeben:
 
-## DB-Soll nach dem Owner-Klick
+- 3 Cookie-/Session-Actions ohne fachliche DB-Zeile,
+- 12 eingefrorene Eingang-/Mail-Actions,
+- 44 ausdrücklich nicht verfügbare, ersetzte oder Stufe-2-Stubs,
+- 6 reale Legacy-Actions außerhalb Verkaufsstufe 1,
+- 1 bis nach Go-live gesperrte Action.
 
-1. `supabase_migrations.schema_migrations` endet bei `20261029173000`; Repo und Dev-DB enthalten dieselben 61 Migrationen.
-2. A-2026-0001 öffnet ohne `ORDER_CARD_INTAKE_RECEIPT_INVALID`; Liefertermin und neuester gültiger Terminänderungsbeleg stimmen überein.
-3. Ein Wartungs-Haken für Rolf oder eine andere Nicht-developer-Rolle bleibt deaktiviert; es entsteht keine entsprechende Zeile in `public.app_user_rights`. Ein erlaubter Haken verändert die DB erst nach „Rechte speichern“; danach enthält die Zeile `granted_by` = Rolfs `app_users.id`.
-4. Bei vorhandenen Aufträgen ohne aktuelle Aufgabe zeigt „Der Tag“ „Nichts offen“; die acht Auftragszeilen bleiben unverändert.
-5. Nach einer Login-Umbenennung enthält `public.app_users.full_name` den neuen Namen und `updated_at` ist größer als vor dem Klick.
-6. Nach einer neuen erfolgreichen Zahlungsbestätigung existieren die passende Zeile in `public.payments` und genau das zugehörige `public.order_events`-Ereignis `PAYMENT_CONFIRMED_V1`; die Oberfläche zeigt Erfolg und Verlaufseintrag.
-7. A-2026-0008 zeigt „Übernommener Scan · Original erfasst“; die gespeicherten Quellcodes bleiben unverändert.
-8. Eine Auftragskarte zeigt nur `communication_threads`/`communication_messages` mit ihrer eigenen `order_id`; ohne Zuordnung bleibt die Liste leer. Fremde Threads erscheinen nicht.
+Die erforderlichen Bauplan-Entscheidungen sind in `_review/MELDUNG_PLANUNGSCHAT.md` gemeldet. Die Ausnahmeliste wurde nicht vergrößert.
+
+## DB-Nachweis
+
+- Lokal: vollständiger Neuaufbau aus allen 65 Migrationen erfolgreich.
+- Dev: `20261030005000_invoice_number_suffix_width.sql` additiv angewendet.
+- Gleichstand: 65 lokale und 65 entfernte Versionsnummern, keine Abweichung; letzte Version lokal/Dev jeweils `20261030005000`.
+- H18-Testlauf: 29/29 grün; `quality:h18-server-actions:selftest` und `quality:h18-server-actions` grün.
+- Es wurden keine Live-/Produktionsdaten geändert.
+
+## CI am Produktkandidaten
+
+| Check | Stand | Einordnung |
+|---|---|---|
+| Vercel | grün | Exact-SHA-Preview READY |
+| `agentur-gate` (2 Läufe) | grün | Action-/Produktgate |
+| `h16-schema` (2 Läufe) | grün | 29/29 H18-Tests und Replay-Schema |
+| Fresh Supabase replay | läuft | historischer Gesamtreplay |
+| `quality` | rot | Retargeting-Vertrag erwartet Branch `kreile/b1-shell` und B1-Allowlist |
+| `ratchet` | rot | `main` hat den neuen Authority-Checker-Hash noch nicht vorautorisiert |
+
+Die beiden roten Checks sind keine durch einen Produktfix lösbaren H18-Fehler. Ein stilles Erweitern der Allowlist oder Umschreiben der geschützten Hashprüfung wäre ein Austricksen der Wächter und wurde nicht vorgenommen. #154 ist daher nicht mergebereit.
 
 ## Owner-Klickweg
 
-1. [Exact-SHA-Preview öffnen](https://galvanik-kreile-werkstatt-a133kmzd9.vercel.app) und mit einem bestehenden Zugang anmelden.
-2. Als Rolf `Einstellungen` → `Logins & Rechte` öffnen, bei Phillip einen erlaubten Haken ändern und auf „Rechte speichern“ klicken. Erwartet: Vorher steht „1 Änderung noch nicht gespeichert“, die DB ändert sich erst durch den Button, danach erscheint „Recht gespeichert.“ als Popup/Toast und der Button ist wieder deaktiviert. „Wartung, Stufen & Anbindungen“ bleibt bei allen Nicht-developer-Logins deaktiviert.
-3. Einen bestehenden Nicht-owner-Login umbenennen und speichern. Erwartet: Erfolgsmeldung direkt an der Bearbeitung; Name bleibt nach Neuladen erhalten. Danach den ursprünglichen Namen wiederherstellen und beide `updated_at`-Fortschritte in der DB prüfen.
-4. Als Phillip `/` öffnen. Erwartet: Bei vorhandenen Aufträgen ohne persönliche Aufgabe steht „Nichts offen“, niemals „Noch keine Aufträge erfasst“.
-5. A-2026-0001 öffnen. Erwartet: Die Karte lädt ohne `ORDER_CARD_INTAKE_RECEIPT_INVALID`.
-6. A-2026-0008 öffnen und „Fotos & Dokumente“ prüfen. Erwartet: „Übernommener Scan · Original erfasst“, keine internen Codes.
-7. Eine noch unbezahlte, zur Zahlungsbestätigung freigegebene Auftragskarte öffnen, Zahlung bestätigen. Erwartet: Dialog schließt nur bei Erfolg, die Erfolgsmeldung steht auf der Karte und im Verlauf erscheint „Zahlung bestätigt“ mit Zahlart. Danach die in Abschnitt „DB-Soll“ genannten Zahlungszeilen prüfen.
-8. Den Mail-Bereich auf zwei Auftragskarten prüfen. Erwartet: nur dem jeweiligen Auftrag zugeordnete Mails oder „Diesem Auftrag sind keine Mails zugeordnet“; keine identische globale Rückläuferliste.
+1. [Exact-SHA-Preview öffnen](https://galvanik-kreile-werkstatt-ouqtv2eth.vercel.app) und mit einem bestehenden Büro-/Meister-Zugang anmelden.
+2. `Geld & Rechnungen` öffnen und bei einem fertigen Auftrag die Positionspreise speichern. Erwartet: Erfolgsmeldung, Preise nach Neuladen unverändert.
+3. Rechnung ausstellen. Erwartet: Erfolgsmeldung; Rechnung erscheint nach Neuladen einmalig und die PDF lässt sich öffnen.
+4. Rechnung ändern über den vorhandenen Preisweg vor Ausstellung prüfen; eine ausgestellte Rechnung bleibt unveränderlich. Storno mit Grund ausführen. Erwartet: Storno-Beleg und Storno-PDF nach Neuladen.
+5. In der DB prüfen: eine `public.invoices`-Zeile, genau ein `INVOICE_CREATED_V1`-Ereignis, nach Storno genau ein `INVOICE_CANCELLED_V1`-Ereignis; `invoice_number` ist nicht abgeschnitten.
+6. Einen KV anlegen und in Auftrag umwandeln; Kundenanlage/-bearbeitung, Zahlungsziel, Teil fertig, Station, Ware raus und Zahlungsmodus jeweils speichern und die Ansicht neu laden.
+7. Firmendaten, Katalog und Stundensatz speichern; jeweils Erfolgsmeldung und frischen Readback prüfen.
 
-Codex hat gemäß Regel A7 keinen Owner-Klicktest ausgeführt. Außer der ausdrücklich freigegebenen additiven Dev-Migration wurden keine Dev-Produktdaten verändert; Live-/Produktionsdaten blieben unverändert. Es gab keinen Merge und keinen Production-Deploy.
+Codex hat gemäß Warteschlange keinen Owner-Klicktest ausgeführt, nicht gemergt und nicht nach Production deployt.
