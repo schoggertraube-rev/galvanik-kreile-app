@@ -1,34 +1,45 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OrdersHomeProjection } from "@/modules/orders/public";
 
 const ports = vi.hoisted(() => ({
   openOrder: vi.fn(),
+  openInvoice: vi.fn(),
   requestCreate: vi.fn(),
   push: vi.fn(),
-  permissions: { loading: false, canCreateOrder: true },
+  refresh: vi.fn(),
+  permissions: { loading: false, canCreateOrder: true, canWorkOrders: true },
 }));
-vi.mock("@/lib/overlayStore", () => ({ useOverlayStore: (selector: (state: { openOrder: typeof ports.openOrder }) => unknown) => selector({ openOrder: ports.openOrder }) }));
+vi.mock("@/lib/overlayStore", () => ({ useOverlayStore: (selector: (state: { openOrder: typeof ports.openOrder; openInvoice: typeof ports.openInvoice }) => unknown) => selector({ openOrder: ports.openOrder, openInvoice: ports.openInvoice }) }));
 vi.mock("@/components/layout/GlobalCreateFlow", () => ({ requestGlobalCreate: ports.requestCreate }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: ports.push }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: ports.push, refresh: ports.refresh }) }));
 vi.mock("@/lib/auth/PermissionsContext", () => ({
   usePermissions: () => ({
     loading: ports.permissions.loading,
-    name: "Rolf Meister",
-    hasPermission: (permission: string) => permission === "perm_data_orders" && ports.permissions.canCreateOrder,
+    hasArea: (area: string) => (area === "eingang" && ports.permissions.canCreateOrder) || (area === "auftraege" && ports.permissions.canWorkOrders),
   }),
 }));
 
-import { RolfHomeClient } from "../RolfHomeClient";
+import { dayLineParts, OfficeHomeClient as RolfHomeClient } from "../OfficeHomeClient";
+
+const actionPorts = {
+  savePreferences: vi.fn().mockResolvedValue({ code: "OK" }),
+  saveReminder: vi.fn().mockResolvedValue({ code: "OK" }),
+  discardDraft: vi.fn().mockResolvedValue({ code: "OK" }),
+  assignOrder: vi.fn().mockResolvedValue({ code: "OK", receipt: { aggregateVersion: 2 } }),
+  handBackOrder: vi.fn().mockResolvedValue({ code: "OK", receipt: { aggregateVersion: 3 } }),
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
   ports.permissions.loading = false;
   ports.permissions.canCreateOrder = true;
+  ports.permissions.canWorkOrders = true;
 });
 
 const projection: OrdersHomeProjection = {
-  source: "Auftragsbestand", loadedAt: "2026-09-16T08:15:00.000Z",
+  source: "Auftragsbestand",
+  loadedAt: "2026-09-16T08:15:00.000Z",
   orders: [{ id: "order-1", orderNumber: "A-2026-0001", customerName: "Muster GmbH", title: "Auftrag", detail: "Bauteil", station: "galvanik", status: "angenommen", statusText: "In Arbeit", risk: "red", dueDate: "2026-09-18", dueLabel: "Fällig", dueValue: "18.09.2026", createdAt: "2026-09-16T07:00:00.000Z" }],
   priority: [{ id: "order-1", orderNumber: "A-2026-0001", customerName: "Muster GmbH", title: "Auftrag", detail: "Bauteil", station: "galvanik", status: "angenommen", statusText: "In Arbeit", risk: "red", dueDate: "2026-09-18", dueLabel: "Fällig", dueValue: "18.09.2026", createdAt: "2026-09-16T07:00:00.000Z" }],
   recent: [{ id: "order-1", orderNumber: "A-2026-0001", customerName: "Muster GmbH", title: "Auftrag", detail: "Bauteil", station: "galvanik", status: "angenommen", statusText: "In Arbeit", risk: "red", dueDate: "2026-09-18", dueLabel: "Fällig", dueValue: "18.09.2026", createdAt: "2026-09-16T07:00:00.000Z" }],
@@ -37,62 +48,238 @@ const projection: OrdersHomeProjection = {
   dominant: { orderId: "order-1", reason: "Dieser Auftrag ist kritisch." },
 };
 
-const dayLine = (container: HTMLElement) => container.querySelector(".day-line")?.textContent?.replace(/\s+/g, " ").trim();
+const dashboard = {
+  items: [{ key: "order:order-1", field: "today" as const, kind: "order" as const, title: "A-2026-0001 · Muster GmbH", meta: "Bauteil · heute", urgency: "conflict" as const, orderId: "order-1", orderVersion: 1, dueDate: "2026-09-18" }],
+  visibleFields: ["today", "assign", "money", "bundle"] as const,
+  layout: [
+    { field: "action" as const, column: "left" as const, order: 0 },
+    { field: "assign" as const, column: "left" as const, order: 1 },
+    { field: "today" as const, column: "right" as const, order: 2 },
+    { field: "money" as const, column: "right" as const, order: 3 },
+  ],
+  defaultLayout: [
+    { field: "action" as const, column: "left" as const, order: 0 },
+    { field: "assign" as const, column: "left" as const, order: 1 },
+    { field: "today" as const, column: "right" as const, order: 2 },
+    { field: "money" as const, column: "right" as const, order: 3 },
+  ],
+  allowedFields: ["today", "assign", "money", "bundle"] as const,
+  delegationTargets: [
+    { userId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", displayName: "Phillip" },
+    { userId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", displayName: "Werkstatt Zwei" },
+  ],
+  outlookMessage: null,
+};
 
-describe("Rolf 'Der Tag' aus der Owner-Mock-Bauvorlage mit echter Projektion", () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it("zeigt den Mock-Aufbau mit echten Daten und oeffnet den Auftrag", () => {
-    render(<RolfHomeClient model={{ kind: "data", role: "meister", canCreateOrder: true, projection }} />);
-    expect(screen.getAllByRole("heading")).toHaveLength(1);
-    expect(screen.getByRole("heading", { name: "Der Tag" })).toHaveClass("day-title");
-    expect(screen.getByText("Das braucht dich")).toBeInTheDocument();
-    expect(screen.getByText("Heute raus")).toBeInTheDocument();
-    expect(screen.getByText("Neu seit gestern 18:30")).toBeInTheDocument();
-    const open = screen.getAllByRole("button", { name: "Auftrag A-2026-0001 öffnen" })[0];
-    expect(open).toHaveClass("pi-t");
-    expect(open.closest(".pi")).toHaveClass("crit");
+describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
+  it("zeigt den V1.1-Aufbau und öffnet Ware raus für den heute fälligen Auftrag", () => {
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields] }, projection }} />);
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.getByTestId("rolf-v11-home")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Der Tag" })).toHaveClass("kr-seite-titel");
+    expect(screen.getByRole("region", { name: "Lage" })).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Lage" })).queryByText("Konflikt")).not.toBeInTheDocument();
+    expect(screen.getByText("Heute fällig")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Später" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Weitere" })).toBeInTheDocument();
+    const open = screen.getByRole("button", { name: "Ware raus" });
+    expect(open.closest(".kr-hb-eintrag")).toHaveClass("kr-hb-eintrag--konflikt", "kr-fokus");
     fireEvent.click(open);
     expect(ports.openOrder).toHaveBeenCalledWith("order-1");
   });
 
-  it("zeigt keine Aktionen ohne echte Anbindung (Owner G7)", () => {
-    render(<RolfHomeClient model={{ kind: "data", role: "meister", canCreateOrder: true, projection }} />);
-    for (const name of [/Kümmern/, /an Phillip/, /Später/, /Erinnerung/, /Freigeben/]) {
-      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
-    }
-    expect(screen.queryByText(/erledigt, sobald/)).not.toBeInTheDocument();
+  it("zeigt nur die aktuell zulässigen Später-Zeiten", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-28T08:00:00.000Z"));
+    const futureDashboard = { ...dashboard, items: [{ ...dashboard.items[0], dueDate: "2026-10-30" }], visibleFields: [...dashboard.visibleFields] };
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: futureDashboard, projection }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Später" }));
+    expect(screen.getByRole("heading", { name: "Später erinnern" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "heute Nachmittag" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "morgen früh" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "nach dem Termin" })).toBeInTheDocument();
+    vi.useRealTimers();
   });
 
-  it("fuehrt readonly ohne Warenausgang-Aktion", () => {
-    render(<RolfHomeClient model={{ kind: "data", role: "readonly", canCreateOrder: false, projection }} />);
-    expect(screen.queryByRole("button", { name: /Warenausgang öffnen/ })).not.toBeInTheDocument();
+  it("hides reminder choices that would cross today's due date", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-28T08:00:00.000Z"));
+    const dueDashboard = { ...dashboard, items: [{ ...dashboard.items[0], dueDate: "2026-10-28" }], visibleFields: [...dashboard.visibleFields] };
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: dueDashboard, projection }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Später" }));
+    expect(screen.getByRole("button", { name: "heute Nachmittag" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "morgen früh" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "nach dem Termin" })).not.toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it("keeps a snoozed entry visible, dimmed, and at the end", () => {
+    const active = { ...dashboard.items[0], key: "order:active", title: "A-2026-0002 · Aktiv" };
+    const snoozed = { ...dashboard.items[0], key: "order:snoozed", snoozedUntil: "2026-10-29T06:00:00.000Z" };
+    const { container } = render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items: [snoozed, active], visibleFields: [...dashboard.visibleFields] }, projection }} />);
+    const rows = [...container.querySelectorAll(".kr-hb-eintrag")];
+    expect(rows[0]).toHaveTextContent("A-2026-0002");
+    expect(rows[1]).toHaveClass("kr-hb-eintrag--gedimmt");
+    expect(rows[1]).toHaveTextContent("Aufgeschoben bis");
+    expect(rows[1]).toHaveTextContent("zählt weiter mit");
+  });
+
+  it("öffnet beim Zuordnen genau die ausgewählte eingehende Mail", () => {
+    const mail = { key: "mail:graph-message-42", field: "assign" as const, kind: "mail" as const, title: "TEST Anfrage", meta: "TEST Absender", urgency: "decision" as const, graphMessageId: "graph-message-42" };
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items: [mail], visibleFields: [...dashboard.visibleFields] }, projection }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Zuordnen" }));
+
+    expect(ports.requestCreate).toHaveBeenCalledWith({
+      intent: "DIRECT_INTAKE",
+      prefill: { sourceMode: "mail", graphMessageId: "graph-message-42" },
+    });
+  });
+
+  it("benennt mehrere Konflikte im Plural", () => {
+    const firstConflict = { ...dashboard.items[0], field: "action" as const };
+    const secondConflict = { ...dashboard.items[0], field: "action" as const, key: "order:order-2", orderId: "order-2", title: "A-2026-0002 · Muster GmbH" };
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items: [firstConflict, secondConflict], visibleFields: [...dashboard.visibleFields] }, projection }} />);
+    expect(within(screen.getByRole("region", { name: "Lage" })).getByText("Konflikte")).toBeInTheDocument();
+  });
+
+  it("zählt in der Lage nur Einträge aus dem Handlungsbedarf", () => {
+    const items = [
+      { ...dashboard.items[0], key: "action", field: "action" as const, urgency: "warning" as const },
+      { ...dashboard.items[0], key: "today", field: "today" as const, urgency: "conflict" as const },
+      { ...dashboard.items[0], key: "money", field: "money" as const, urgency: "decision" as const },
+    ];
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items, visibleFields: [...dashboard.visibleFields] }, projection }} />);
+    const lage = within(screen.getByRole("region", { name: "Lage" }));
+    expect(lage.getByText("Warnung")).toBeInTheDocument();
+    expect(lage.queryByText("Konflikt")).not.toBeInTheDocument();
+    expect(lage.queryByText("Entscheidung")).not.toBeInTheDocument();
+  });
+
+  it("zeigt nach der Weitergabe Status, Frist und Rückgängig", async () => {
+    const actionDashboard = { ...dashboard, items: [{ ...dashboard.items[0], field: "action" as const, dueDate: "2026-10-30" }], visibleFields: [...dashboard.visibleFields] };
+    const { container } = render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: actionDashboard, projection }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Weitere" }));
+    expect(screen.getByRole("button", { name: "an Werkstatt Zwei geben" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "an Phillip geben" }));
+
+    expect(await screen.findByText("bei Phillip · Frist 30.10.26")).toBeInTheDocument();
+    expect(container.querySelector(".kr-hb-eintrag")).toHaveClass("kr-hb-eintrag--gedimmt");
+    expect(within(screen.getByRole("region", { name: "Lage" })).queryByText("Konflikt")).not.toBeInTheDocument();
+    expect(actionPorts.assignOrder).toHaveBeenCalledWith(expect.objectContaining({ orderId: "order-1", assigneeUserId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", expectedVersion: 1 }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Rückgängig" }));
+
+    expect(actionPorts.handBackOrder).toHaveBeenCalledWith(expect.objectContaining({ orderId: "order-1", expectedVersion: 2 }));
+    expect(await screen.findByText("Zurückgeholt")).toBeInTheDocument();
+    expect(container.querySelector(".kr-hb-eintrag")).not.toHaveClass("kr-hb-eintrag--gedimmt");
+  });
+
+  it("steuert den Handlungsbedarf am Desktop mit j, k, Enter und s", () => {
+    const actionDashboard = { ...dashboard, items: [{ ...dashboard.items[0], field: "action" as const, dueDate: "2026-10-30" }], visibleFields: [...dashboard.visibleFields] };
+    const { container } = render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: actionDashboard, projection }} />);
+    fireEvent.keyDown(window, { key: "j" });
+    expect(container.querySelector(".kr-hb-eintrag")).toHaveClass("kr-hb-eintrag--gewaehlt");
+    fireEvent.keyDown(window, { key: "Enter" });
+    expect(ports.openOrder).toHaveBeenCalledWith("order-1");
+    fireEvent.keyDown(window, { key: "s" });
+    expect(screen.getByRole("heading", { name: "Später erinnern" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("dialog").querySelector('[data-spec-id="spaeter.schliessen"]')!);
+    fireEvent.keyDown(window, { key: "k" });
+    expect(container.querySelector(".kr-hb-eintrag")).toHaveClass("kr-hb-eintrag--gewaehlt");
+  });
+
+  it("sortiert Konflikt vor Warnung vor Entscheidung und darin nach Termin", () => {
+    const items = [
+      { ...dashboard.items[0], key: "decision", title: "A-2026-0004 · Entscheidung", urgency: "decision" as const, dueDate: "2026-10-27", field: "action" as const },
+      { ...dashboard.items[0], key: "warning-late", title: "A-2026-0003 · Warnung spät", urgency: "warning" as const, dueDate: "2026-10-30", field: "action" as const },
+      { ...dashboard.items[0], key: "conflict", title: "A-2026-0001 · Konflikt", urgency: "conflict" as const, dueDate: "2026-10-31", field: "action" as const },
+      { ...dashboard.items[0], key: "warning-early", title: "A-2026-0002 · Warnung früh", urgency: "warning" as const, dueDate: "2026-10-29", field: "action" as const },
+    ];
+    const { container } = render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items, visibleFields: [...dashboard.visibleFields] }, projection }} />);
+    const titles = [...container.querySelectorAll(".kr-hb-titel")].map((node) => node.textContent);
+    expect(titles).toEqual(expect.arrayContaining([expect.stringContaining("Konflikt"), expect.stringContaining("Warnung früh"), expect.stringContaining("Warnung spät"), expect.stringContaining("Entscheidung")]));
+    expect(titles.map((title) => title?.split(" · ").at(-1))).toEqual(["Konflikt", "Warnung früh", "Warnung spät", "Entscheidung"]);
+    const filters = [...within(screen.getByRole("region", { name: "Lage" })).getAllByRole("button")].map((button) => button.textContent);
+    expect(filters).toEqual(["1Konflikt", "2Warnungen", "1Entscheidung"]);
+  });
+
+  it("uses the concrete money action for overdue invoices and open prepayment", () => {
+    const money = [
+      { key: "invoice:invoice-1", field: "money" as const, kind: "invoice" as const, title: "R-2026-0001 · Muster GmbH", meta: "100,00 € · fällig 27.10.2026", urgency: "conflict" as const, invoiceId: "invoice-1", primaryActionLabel: "Erinnern" as const },
+      { key: "prepayment:order-1", field: "money" as const, kind: "order" as const, title: "A-2026-0001 · Vorkasse offen", meta: "Muster GmbH · 100,00 € · Versand gesperrt", urgency: "warning" as const, orderId: "order-1", primaryActionLabel: "Zahlung bestätigen" as const },
+    ];
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items: money, visibleFields: [...dashboard.visibleFields] }, projection }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Erinnern" }));
+    fireEvent.click(screen.getByRole("button", { name: "Zahlung bestätigen" }));
+
+    expect(ports.openInvoice).toHaveBeenCalledWith("invoice-1");
+    expect(ports.openOrder).toHaveBeenCalledWith("order-1");
+  });
+
+  it("opens the existing bundle path with the selected surface", () => {
+    const bundle = { key: "bundle:Zink & Nickel", field: "bundle" as const, kind: "bundle" as const, title: "2 Aufträge bündeln", meta: "Zink & Nickel", urgency: "decision" as const, bundleSurface: "Zink & Nickel", primaryActionLabel: "Bündel öffnen" as const };
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items: [bundle], visibleFields: [...dashboard.visibleFields], layout: [{ field: "action", column: "left", order: 0 }, { field: "bundle", column: "left", order: 1 }] }, projection }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Bündel öffnen" }));
+
+    expect(ports.push).toHaveBeenCalledWith("/warendurchlauf?bundle=1&surface=Zink%20%26%20Nickel");
+  });
+
+  it("keeps the complete field layout code hidden behind the planned stage-2 connection", async () => {
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields], layout: [...dashboard.layout], defaultLayout: [...dashboard.defaultLayout], allowedFields: [...dashboard.allowedFields] }, projection }} />);
+
+    expect(screen.getByRole("button", { name: "Anpassen · geplant" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Bündeln · geplant" })).toBeDisabled();
+    expect(screen.queryByRole("heading", { name: "Felder zuordnen" })).not.toBeInTheDocument();
+    expect(actionPorts.savePreferences).not.toHaveBeenCalled();
+  });
+
+  it("führt readonly ohne Warenausgang-Aktion", () => {
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "readonly", canCreateOrder: false, canWorkOrders: false, canDelegate: false, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields] }, projection }} />);
+    expect(screen.queryByRole("button", { name: /Ware raus öffnen/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Weitere" })).not.toBeInTheDocument();
   });
 
   it.each([
-    { risks: ["red", "red", "yellow"], expected: "Guten Morgen, Rolf. 2 dringend · 1 weiterer braucht dich." },
-    { risks: ["yellow", "orange"], expected: "Guten Morgen, Rolf. 2 brauchen dich." },
-    { risks: ["red"], expected: "Guten Morgen, Rolf. 1 dringend." },
-    { risks: [], expected: "Guten Morgen, Rolf. Heute ist nichts offen." },
-  ] as const)("leitet die ehrliche Tageszeile ab (%#)", ({ risks, expected }) => {
+    { risks: ["red", "red", "yellow"], expected: { salutation: "Guten Morgen, Rolf.", urgent: 2, other: 1 } },
+    { risks: ["yellow", "orange"], expected: { salutation: "Guten Morgen, Rolf.", urgent: 0, other: 2 } },
+    { risks: ["red"], expected: { salutation: "Guten Morgen, Rolf.", urgent: 1, other: 0 } },
+    { risks: [], expected: { salutation: "Guten Morgen, Rolf.", urgent: 0, other: 0 } },
+  ] as const)("leitet die Tageslage weiterhin ehrlich ab (%#)", ({ risks, expected }) => {
     const orders = risks.map((risk, index) => ({ ...projection.orders[0], id: `order-${index + 1}`, orderNumber: `A-2026-00${index + 1}`, risk }));
-    const { container } = render(
-      <RolfHomeClient now={new Date("2026-09-24T07:00:00.000Z")} model={{ kind: orders.length === 0 ? "empty" : "data", role: "meister", canCreateOrder: true, projection: { ...projection, orders, priority: orders, recent: orders } }} />,
-    );
-    expect(dayLine(container)).toBe(expected);
+    expect(dayLineParts(orders, "Rolf Meister", new Date("2026-09-24T07:00:00.000Z"))).toEqual(expected);
   });
 
-  it("zeigt ehrliche Leer-, Verweigert- und Fehlerzustaende", () => {
+  it("zeigt ehrliche Leer-, Verweigert- und Fehlerzustände", () => {
     const empty = { ...projection, orders: [], priority: [], recent: [], dominant: null } satisfies OrdersHomeProjection;
-    const { rerender } = render(<RolfHomeClient model={{ kind: "empty", role: "meister", canCreateOrder: true, projection: empty }} />);
-    expect(screen.getByText("Heute keine offenen Aufträge.")).toBeInTheDocument();
-    expect(screen.getByText("Heute keine fertigen Aufträge.")).toBeInTheDocument();
-    expect(screen.getByText("Seit gestern keine neuen Aufträge.")).toBeInTheDocument();
-    rerender(<RolfHomeClient model={{ kind: "denied", message: "Nicht freigegeben." }} />);
+    const emptyDashboard = { ...dashboard, items: [], visibleFields: [...dashboard.visibleFields] };
+    const { rerender } = render(<RolfHomeClient ports={actionPorts} model={{ kind: "empty", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: emptyDashboard, projection: empty }} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Noch keine Aufträge erfasst.");
+    expect(screen.getByRole("button", { name: "Neuer Eingang" })).toBeInTheDocument();
+    rerender(<RolfHomeClient ports={actionPorts} model={{ kind: "denied", message: "Nicht freigegeben." }} />);
     expect(screen.getByRole("status")).toHaveTextContent("Tagesbestand nicht öffnen");
-    rerender(<RolfHomeClient model={{ kind: "error", message: "Lesefehler." }} />);
-    expect(screen.getByRole("alert")).toHaveTextContent("gerade nicht verfügbar");
+    rerender(<RolfHomeClient ports={actionPorts} model={{ kind: "error", message: "Lesefehler." }} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Aufträge konnten nicht geladen werden");
+    fireEvent.click(screen.getByRole("button", { name: "Erneut laden" }));
+    expect(ports.refresh).toHaveBeenCalled();
+    rerender(<RolfHomeClient ports={actionPorts} model={{ kind: "no_areas" }} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Noch keine Bereiche freigegeben");
+  });
+
+  it("unterscheidet vorhandene Aufträge ohne heutige Handlung vom leeren Auftragsbestand", () => {
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "werkstatt", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items: [], visibleFields: [...dashboard.visibleFields] }, projection }} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Nichts offen");
+    expect(screen.queryByText("Noch keine Aufträge erfasst.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Neuer Eingang" })).not.toBeInTheDocument();
+  });
+
+  it("zeigt den Teilzustand für nicht erreichbare Mails mit erneutem Laden", () => {
+    render(<RolfHomeClient ports={actionPorts} model={{ kind: "empty", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items: [], visibleFields: [...dashboard.visibleFields], outlookMessage: "technischer Providertext" }, projection: { ...projection, orders: [], priority: [], recent: [], dominant: null } }} />);
+    expect(screen.getByText("Mails nicht erreichbar · Zuordnen ohne Mails")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Erneut laden" }));
+    expect(ports.refresh).toHaveBeenCalled();
   });
 });

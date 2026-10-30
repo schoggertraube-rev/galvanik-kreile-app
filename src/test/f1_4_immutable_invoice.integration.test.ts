@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
+import { getPermissionsForAreas } from "@/lib/auth/authorizationContract";
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const EXPECTED_DATABASE_URL = process.env.F1_4_EXPECTED_DATABASE_URL;
@@ -124,7 +125,8 @@ const foreignAuthorization: AuthorizationSnapshot = {
   tenantId: FOREIGN_TENANT_ID,
   displayName: "F1.4 Synthetic Foreign",
   role: "meister",
-  permissions: ["perm_data_orders"],
+  areas: ["auftraege", "geld"],
+  permissions: getPermissionsForAreas(["auftraege", "geld"]),
   active: true,
 };
 
@@ -184,6 +186,11 @@ async function insertPrerequisites() {
         ${USER_ID}::uuid, ${TENANT_ID}, 'f14-command-meister@local.invalid',
         'F1.4 Synthetic Meister', 'meister', true, now(), now()
       )
+    `;
+    await transaction`
+      INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
+      SELECT ${TENANT_ID}, ${USER_ID}::uuid, area, ${USER_ID}::uuid
+      FROM unnest(ARRAY['auftraege', 'geld']::text[]) area
     `;
     await transaction`
       INSERT INTO public.company_settings (
@@ -373,12 +380,14 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
       readInvoiceReceipt,
       readInvoiceSummaries,
     } = await import("@/lib/server/invoiceRead");
+    const authorizationAreas = ["auftraege", "geld"] as const;
     const authorization: AuthorizationSnapshot = {
       userId: USER_ID,
       tenantId: TENANT_ID,
       displayName: "F1.4 Synthetic Meister",
       role: "meister",
-      permissions: ["perm_data_orders"],
+      areas: authorizationAreas,
+      permissions: getPermissionsForAreas(authorizationAreas),
       active: true,
     };
     const input = {

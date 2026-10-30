@@ -105,5 +105,15 @@ describe("F1.4 invoice server actions", () => {
 
     ports.resolveAuthorization.mockResolvedValueOnce({ ok: false, reason: "NO_SESSION", message: "no" });
     await expect(getInvoiceSummariesAction()).resolves.toMatchObject({ code: "UNAUTHENTICATED" });
+
+    ports.resolveAuthorization.mockResolvedValueOnce({
+      ok: false,
+      reason: "AUTHORIZATION_UNAVAILABLE",
+      message: "AUTH_DB_ERROR: Berechtigungen nicht verfügbar",
+    });
+    await expect(getInvoiceSummariesAction()).resolves.toEqual({
+      code: "UNAVAILABLE",
+      message: "AUTH_DB_ERROR: Berechtigungen nicht verfügbar",
+    });
   });
 });

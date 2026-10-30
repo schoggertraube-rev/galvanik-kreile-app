@@ -1,25 +1,17 @@
-export function getGreeting(date = new Date(), role = "Meister") {
+export function getGreeting(date = new Date(), displayName = "") {
   const hour = date.getHours();
-  
-  // Map roles to displays
-  let roleDisplay = role || "Meister";
-  if (role === "admin" || role === "developer" || role === "inhaber") roleDisplay = "Admin";
-  else if (role === "werkstatt") roleDisplay = "Werkstatt";
-  else if (role === "buero") roleDisplay = "Büro";
-  else if (role === "meister") roleDisplay = "Meister";
-  
-  // Capitalize first letter if it's something else
-  roleDisplay = roleDisplay.charAt(0).toUpperCase() + roleDisplay.slice(1);
+  const greetingName = displayName.trim();
+  const suffix = greetingName ? `, ${greetingName}` : "";
 
   if (hour >= 4 && hour < 11) {
-    return { text: `Guten Morgen, ${roleDisplay}!`, emoji: "👋" };
+    return { text: `Guten Morgen${suffix}!`, emoji: "👋" };
   } else if (hour >= 11 && hour < 14) {
-    return { text: `Mahlzeit, ${roleDisplay}!`, emoji: "🍽" };
+    return { text: `Mahlzeit${suffix}!`, emoji: "🍽" };
   } else if (hour >= 14 && hour < 18) {
-    return { text: `Schönen Nachmittag, ${roleDisplay}!`, emoji: "☀️" };
+    return { text: `Schönen Nachmittag${suffix}!`, emoji: "☀️" };
   } else if (hour >= 18 && hour < 22) {
-    return { text: `Guten Abend, ${roleDisplay}!`, emoji: "🌙" };
+    return { text: `Guten Abend${suffix}!`, emoji: "🌙" };
   } else {
-    return { text: `Späte Schicht, ${roleDisplay}.`, emoji: "🌙" };
+    return { text: `Späte Schicht${suffix}.`, emoji: "🌙" };
   }
 }

@@ -21,7 +21,25 @@ vi.mock("node:crypto", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:crypto")>();
   return { ...actual, randomUUID };
 });
-vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization }));
+vi.mock("@/lib/server/authorization", () => ({
+  resolveAuthorization,
+  hasAuthorizationArea: (authorization: { role: string; permissions: readonly string[] }, area: string) => authorization.role !== "developer" && (
+    (area === "geld" && authorization.permissions.includes("perm_view_prices"))
+    || (area === "kassieren" && authorization.permissions.includes("perm_cash_pickup"))
+    || (area === "auftraege" && authorization.permissions.includes("perm_op_status"))
+  ),
+  getAuthorizationActionGrants: (authorization: { role: string; permissions: readonly string[] }) => {
+    const geld = authorization.role !== "developer" && authorization.permissions.includes("perm_view_prices");
+    const kassieren = authorization.role !== "developer" && authorization.permissions.includes("perm_cash_pickup");
+    const auftraege = authorization.role !== "developer" && authorization.permissions.includes("perm_op_status");
+    return {
+      confirmPayment: geld || (kassieren && auftraege),
+      editOrderContent: false,
+      createCustomer: false,
+      createQuote: false,
+    };
+  },
+}));
 vi.mock("@/lib/server/privilegedDb", () => ({
   withPrivilegedTenantTransaction: withTransaction,
 }));
@@ -41,6 +59,7 @@ const orderReference = {
   tenant_id: KREILE_TENANT_SLUG,
   payment_mode: "vorkasse",
   payment_mode_version: 0,
+  station: "fertig",
 };
 
 const authorization = {
@@ -50,7 +69,7 @@ const authorization = {
     tenantId: KREILE_TENANT_SLUG,
     displayName: "Büro",
     role: "buero" as const,
-    permissions: ["perm_data_orders"] as const,
+    permissions: ["perm_view_prices"] as const,
     active: true as const,
   },
 };
@@ -215,17 +234,20 @@ describe("confirmPayment", () => {
       data: { ...authorization.data, tenantId: "foreign" },
     });
     await expect(confirmPayment(input)).resolves.toMatchObject({ code: "FORBIDDEN" });
-    for (const role of ["werkstatt", "readonly", "developer"] as const) {
+    for (const [role, permissions] of [
+      ["readonly", []],
+      ["developer", ["perm_view_prices"]],
+    ] as const) {
       resolveAuthorization.mockResolvedValueOnce({
         ...authorization,
-        data: { ...authorization.data, role },
+        data: { ...authorization.data, role, permissions },
       });
       await expect(confirmPayment(input)).resolves.toMatchObject({ code: "FORBIDDEN" });
     }
     expect(withTransaction).not.toHaveBeenCalled();
   });
 
-  it("allows exactly buero, meister, and admin without a generic finance permission", async () => {
+  it("allows employees with the finance permission", async () => {
     const { confirmPayment } = await import("../confirmPaymentCommand");
     execute.mockImplementation((query: Query) => {
       const text = queryText(query);
@@ -234,17 +256,46 @@ describe("confirmPayment", () => {
       if (text.includes("FOR UPDATE OF orders")) return Promise.resolve([]);
       throw new Error(`Unexpected SQL: ${text}`);
     });
-    for (const role of ["buero", "meister", "admin"] as const) {
+    for (const role of ["buero", "werkstatt", "meister", "admin"] as const) {
       resolveAuthorization.mockResolvedValueOnce({
         ...authorization,
-        data: { ...authorization.data, role, permissions: [] },
+        data: { ...authorization.data, role, permissions: ["perm_view_prices"] },
       });
       await expect(confirmPayment({
         ...input,
-        clientEventId: `${CLIENT_EVENT.slice(0, -1)}${role === "buero" ? "1" : role === "meister" ? "2" : "3"}`,
+        clientEventId: `${CLIENT_EVENT.slice(0, -1)}${role === "buero" ? "1" : role === "werkstatt" ? "2" : role === "meister" ? "3" : "4"}`,
       })).resolves.toEqual({ code: "NOT_FOUND", message: "Rechnung nicht verfügbar." });
     }
-    expect(withTransaction).toHaveBeenCalledTimes(3);
+    expect(withTransaction).toHaveBeenCalledTimes(4);
+  });
+
+  it("allows pickup cash only for a permitted employee at the finished pickup state", async () => {
+    const { confirmPayment } = await import("../confirmPaymentCommand");
+    execute.mockImplementation((query: Query) => {
+      const text = queryText(query);
+      if (text.includes("pg_advisory_xact_lock") || text.includes("FROM public.events")) return Promise.resolve([]);
+      if (text.includes("FOR UPDATE OF orders")) return Promise.resolve([{ ...orderReference, payment_mode: "abholung", station: "fertig" }]);
+      if (text.includes("FROM public.invoices") && text.includes("FOR UPDATE")) return Promise.resolve([{ ...openInvoice, payment_mode: "abholung" }]);
+      throw new Error(`Unexpected SQL: ${text}`);
+    });
+    resolveAuthorization.mockResolvedValueOnce({
+      ...authorization,
+      data: { ...authorization.data, role: "werkstatt", permissions: ["perm_op_status", "perm_cash_pickup"] },
+    });
+    await expect(confirmPayment({ ...input, method: "bar", amount: 10_001 })).resolves.toEqual({ code: "VALIDATION_ERROR", message: "Zahlungsbetrag übersteigt den offenen Betrag." });
+
+    execute.mockClear();
+    resolveAuthorization.mockResolvedValueOnce({
+      ...authorization,
+      data: { ...authorization.data, role: "werkstatt", permissions: ["perm_op_status", "perm_cash_pickup"] },
+    });
+    execute.mockImplementation((query: Query) => {
+      const text = queryText(query);
+      if (text.includes("pg_advisory_xact_lock") || text.includes("FROM public.events")) return Promise.resolve([]);
+      if (text.includes("FOR UPDATE OF orders")) return Promise.resolve([{ ...orderReference, payment_mode: "abholung", station: "galvanik" }]);
+      throw new Error(`Unexpected SQL: ${text}`);
+    });
+    await expect(confirmPayment({ ...input, method: "bar" })).resolves.toEqual({ code: "FORBIDDEN", message: "Kassieren ist nur bei fertiger Ware zur Abholung erlaubt." });
   });
 
   it("makes missing and foreign invoices indistinguishable and performs no write", async () => {

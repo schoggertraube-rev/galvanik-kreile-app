@@ -10,6 +10,10 @@ import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
 const MAX_ID_LENGTH = 128;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const LEGACY_ITEM_KEYS = ["id", "position", "name", "quantity", "material", "surfaceRequested"] as const;
+const CURRENT_ITEM_KEYS = ["catalogServiceId", "id", "material", "name", "position", "quantity", "surfaceRequested", "unit", "unitPriceCents", "vatRateBasisPoints"] as const;
+const CURRENT_ITEM_WITH_EXECUTION_KEYS = [...CURRENT_ITEM_KEYS, "executionRequested"] as const;
+const EXECUTION_REQUESTED_VALUES = ["hochglanz", "glaenzend", "matt", "gelb_passiviert", "blau_passiviert", "offen"] as const;
 
 export type OrderCardExtraWork = {
   lineId: string;
@@ -30,6 +34,11 @@ export type OrderCardItem = {
   quantity: number;
   material: string | null;
   surfaceRequested: string;
+  catalogServiceId: string | null;
+  unit: string | null;
+  unitPriceCents: number | null;
+  vatRateBasisPoints: 0 | 700 | 1900 | null;
+  finished: boolean;
   extraWork: OrderCardExtraWork[];
 };
 
@@ -39,6 +48,7 @@ export type LiveOrderCard = {
   orderNumber: string;
   customerId: string;
   customerName: string;
+  customerPhone: string | null;
   title: string;
   note: string | null;
   station: string;
@@ -47,6 +57,14 @@ export type LiveOrderCard = {
   intakeAt: string;
   assignment: OrderTaskAssignmentState | null;
   assignmentOptions: OrderTaskAssigneeOption[];
+  dueDateChanges: Array<{
+    eventId: string;
+    changedTo: string;
+    reason: string;
+    changedAt: string;
+    changedBy: string;
+    aggregateVersion: number;
+  }>;
   items: OrderCardItem[];
   freeze: null | {
     freezeId: string;
@@ -80,7 +98,7 @@ export type OrderCardReadResult<T> =
   | { code: "FORBIDDEN"; message: string }
   | { code: "NOT_FOUND"; message: string }
   | { code: "VALIDATION_ERROR"; message: string }
-  | { code: "UNAVAILABLE"; message: string };
+  | { code: "UNAVAILABLE"; message: string; errorCode?: string };
 
 type QueueRow = {
   id: string;
@@ -110,6 +128,29 @@ type IntakeRow = {
   current_station: string;
   current_status: string;
   integrity_ok: boolean;
+};
+
+type CurrentItemRow = {
+  id: string;
+  name: string;
+  quantity: number;
+  material: string | null;
+  surface_requested: string | null;
+  catalog_service_id: string | null;
+  unit: string | null;
+  unit_price_cents: number | string | null;
+  vat_rate_basis_points: number | null;
+  current_station_id: string | null;
+};
+
+type ContentEventRow = {
+  tenant_id: string;
+  order_id: string;
+  event_type: string;
+  event_schema_version: number;
+  aggregate_version: number;
+  status: string;
+  payload: unknown;
 };
 
 type ExtraWorkRow = {
@@ -190,6 +231,19 @@ type CatalogRow = {
   integrity_ok: boolean;
 };
 
+type DueDateChangeRow = {
+  event_id: string;
+  tenant_id: string;
+  order_id: string;
+  changed_to: string;
+  reason: string;
+  changed_at: Date | string;
+  changed_by: string;
+  actor_id: string;
+  aggregate_version: number;
+  event_schema_version: number;
+};
+
 function validId(value: unknown): value is string {
   return typeof value === "string"
     && value.length >= 1
@@ -220,16 +274,34 @@ function toSafeInteger(value: unknown, error: string): number {
   return parsed;
 }
 
-function mapIntakeItems(value: unknown): OrderCardItem[] {
+export function mapOrderCardIntakeItems(value: unknown): OrderCardItem[] {
   if (!Array.isArray(value) || value.length < 1 || value.length > 20) {
     throw new Error("ORDER_CARD_INTAKE_ITEMS_INVALID");
   }
   const items = value.map((entry) => {
-    if (!hasExactKeys(entry, ["id", "position", "name", "quantity", "material", "surfaceRequested"])) {
+    const currentShape = hasExactKeys(entry, CURRENT_ITEM_KEYS);
+    const currentShapeWithExecution = hasExactKeys(entry, CURRENT_ITEM_WITH_EXECUTION_KEYS);
+    const supportedCurrentShape = currentShape || currentShapeWithExecution;
+    if (!hasExactKeys(entry, LEGACY_ITEM_KEYS) && !supportedCurrentShape) {
       throw new Error("ORDER_CARD_INTAKE_ITEM_SHAPE_INVALID");
     }
     const position = toSafeInteger(entry.position, "ORDER_CARD_ITEM_POSITION_INVALID");
     const quantity = toSafeInteger(entry.quantity, "ORDER_CARD_ITEM_QUANTITY_INVALID");
+    const currentCatalogItem = supportedCurrentShape
+      && typeof entry.catalogServiceId === "string"
+      && UUID_PATTERN.test(entry.catalogServiceId)
+      && typeof entry.unit === "string"
+      && entry.unit.trim() === entry.unit
+      && entry.unit.length >= 1
+      && entry.unit.length <= 40
+      && Number.isSafeInteger(entry.unitPriceCents)
+      && Number(entry.unitPriceCents) >= 0
+      && [0, 700, 1900].includes(Number(entry.vatRateBasisPoints));
+    const currentFreeTextItem = supportedCurrentShape
+      && entry.catalogServiceId === null
+      && entry.unit === null
+      && entry.unitPriceCents === null
+      && entry.vatRateBasisPoints === null;
     if (
       typeof entry.id !== "string"
       || !UUID_PATTERN.test(entry.id)
@@ -251,6 +323,11 @@ function mapIntakeItems(value: unknown): OrderCardItem[] {
       || entry.surfaceRequested.trim() !== entry.surfaceRequested
       || entry.surfaceRequested.length < 2
       || entry.surfaceRequested.length > 160
+      || (currentShapeWithExecution && (
+        typeof entry.executionRequested !== "string"
+        || !EXECUTION_REQUESTED_VALUES.includes(entry.executionRequested as typeof EXECUTION_REQUESTED_VALUES[number])
+      ))
+      || (supportedCurrentShape && !currentCatalogItem && !currentFreeTextItem)
     ) throw new Error("ORDER_CARD_INTAKE_ITEM_INVALID");
 
     return {
@@ -260,6 +337,11 @@ function mapIntakeItems(value: unknown): OrderCardItem[] {
       quantity,
       material: entry.material,
       surfaceRequested: entry.surfaceRequested,
+      catalogServiceId: currentCatalogItem ? entry.catalogServiceId as string : null,
+      unit: currentCatalogItem ? entry.unit as string : null,
+      unitPriceCents: currentCatalogItem ? toSafeInteger(entry.unitPriceCents, "ORDER_CARD_ITEM_PRICE_INVALID") : null,
+      vatRateBasisPoints: currentCatalogItem ? toSafeInteger(entry.vatRateBasisPoints, "ORDER_CARD_ITEM_VAT_INVALID") as 0 | 700 | 1900 : null,
+      finished: false,
       extraWork: [],
     } satisfies OrderCardItem;
   });
@@ -267,6 +349,29 @@ function mapIntakeItems(value: unknown): OrderCardItem[] {
     throw new Error("ORDER_CARD_ITEM_DUPLICATE");
   }
   return items.sort((left, right) => left.position - right.position);
+}
+
+function mapCurrentOrderItems(rows: CurrentItemRow[], positions: Map<string, number>): OrderCardItem[] {
+  if (rows.length < 1 || rows.length > 20) throw new Error("ORDER_CARD_CURRENT_ITEMS_INVALID");
+  const mapped = rows.map((row) => {
+    const position = positions.get(row.id);
+    const quantity = toSafeInteger(row.quantity, "ORDER_CARD_ITEM_QUANTITY_INVALID");
+    const price = row.unit_price_cents === null ? null : toSafeInteger(row.unit_price_cents, "ORDER_CARD_ITEM_PRICE_INVALID");
+    if (!position || !UUID_PATTERN.test(row.id) || row.name.trim() !== row.name || row.name.length < 2 || row.name.length > 160
+      || quantity < 1 || quantity > 1_000_000 || !row.surface_requested || row.surface_requested.trim() !== row.surface_requested
+      || row.surface_requested.length < 2 || row.surface_requested.length > 160
+      || (row.catalog_service_id !== null && !UUID_PATTERN.test(row.catalog_service_id))
+      || (row.vat_rate_basis_points !== null && ![0, 700, 1900].includes(row.vat_rate_basis_points))) throw new Error("ORDER_CARD_CURRENT_ITEM_INVALID");
+    return {
+      id: row.id, position, name: row.name, quantity, material: row.material,
+      surfaceRequested: row.surface_requested, catalogServiceId: row.catalog_service_id,
+      unit: row.unit, unitPriceCents: price,
+      vatRateBasisPoints: row.vat_rate_basis_points as 0 | 700 | 1900 | null,
+      finished: row.current_station_id === "fertig",
+      extraWork: [],
+    } satisfies OrderCardItem;
+  });
+  return mapped.sort((left, right) => left.position - right.position);
 }
 
 function mapExtraWork(row: ExtraWorkRow, tenantId: string): OrderCardExtraWork {
@@ -349,9 +454,37 @@ function mapAssigneeOption(row: AssigneeOptionRow, tenantId: string): OrderTaskA
     || !UUID_PATTERN.test(row.user_id)
     || row.full_name !== row.full_name.trim()
     || row.full_name.length < 1
-    || !["buero", "werkstatt", "meister", "admin"].includes(row.role)
   ) throw new Error("ORDER_CARD_ASSIGNMENT_OPTION_INVALID");
   return { userId: row.user_id, fullName: row.full_name, role: row.role };
+}
+
+function mapDueDateChange(row: DueDateChangeRow, tenantId: string, orderId: string) {
+  if (
+    row.tenant_id !== tenantId
+    || row.order_id !== orderId
+    || !UUID_PATTERN.test(row.event_id)
+    || !UUID_PATTERN.test(row.actor_id)
+    || row.event_schema_version !== 1
+    || typeof row.changed_to !== "string"
+    || !/^\d{4}-\d{2}-\d{2}$/.test(row.changed_to)
+    || typeof row.reason !== "string"
+    || row.reason !== row.reason.trim()
+    || row.reason.length < 3
+    || row.reason.length > 500
+    || typeof row.changed_by !== "string"
+    || row.changed_by !== row.changed_by.trim()
+    || row.changed_by.length < 1
+    || !Number.isSafeInteger(row.aggregate_version)
+    || row.aggregate_version < 1
+  ) throw new Error("ORDER_CARD_DUE_DATE_CHANGE_INVALID");
+  return {
+    eventId: row.event_id,
+    changedTo: row.changed_to,
+    reason: row.reason,
+    changedAt: toIso(row.changed_at),
+    changedBy: row.changed_by,
+    aggregateVersion: row.aggregate_version,
+  };
 }
 
 function canView(authorization: AuthorizationSnapshot): boolean {
@@ -413,9 +546,62 @@ export async function readLiveOrderCard(
         || intake.current_order_version !== queue.version
         || intake.current_station !== queue.station
         || intake.current_status !== queue.status
-        || intake.integrity_ok !== true
       ) throw new Error("ORDER_CARD_INTAKE_RECEIPT_INVALID");
-      const items = mapIntakeItems(intake.items_snapshot);
+      const intakeItems = mapOrderCardIntakeItems(intake.items_snapshot);
+      const contentEvents = await tx.execute<ContentEventRow>(sql`
+        SELECT tenant_id, order_id, event_type, event_schema_version,
+               aggregate_version, status, payload
+        FROM public.events
+        WHERE tenant_id = ${authorization.tenantId}
+          AND order_id = ${input.orderId}
+          AND event_type = 'ORDER_CONTENT_CHANGED_V1'
+        ORDER BY aggregate_version DESC, created_at DESC
+        LIMIT 1
+      `);
+      const contentEvent = contentEvents[0] ?? null;
+      const eventPayload = contentEvent?.payload as { note?: unknown; items?: unknown } | null;
+      const eventItems = contentEvent ? mapOrderCardIntakeItems(eventPayload?.items) : null;
+      if (contentEvent && (
+        contentEvent.tenant_id !== authorization.tenantId
+        || contentEvent.order_id !== queue.id
+        || contentEvent.event_schema_version !== 1
+        || contentEvent.status !== "success"
+        || contentEvent.aggregate_version > queue.version
+        || !(eventPayload?.note === null || typeof eventPayload?.note === "string")
+      )) throw new Error("ORDER_CARD_CONTENT_EVENT_INVALID");
+      if (!contentEvent && intake.integrity_ok !== true) throw new Error("ORDER_CARD_INTAKE_RECEIPT_INVALID");
+      const positions = new Map((eventItems ?? intakeItems).map((item) => [item.id, item.position]));
+      const currentRows = await tx.execute<CurrentItemRow>(sql`
+        SELECT id, name, quantity, material, surface_requested,
+               catalog_service_id::text AS catalog_service_id, unit,
+               CASE WHEN preis_netto IS NULL THEN NULL ELSE round(preis_netto * 100)::bigint END AS unit_price_cents,
+               vat_rate_basis_points, current_station_id
+        FROM public.items
+        WHERE tenant_id = ${authorization.tenantId}
+          AND order_id = ${input.orderId}
+        ORDER BY created_at, id
+      `);
+      const items = mapCurrentOrderItems(currentRows, positions);
+      if (eventItems) {
+        const shape = (item: OrderCardItem) => ({
+          id: item.id, position: item.position, name: item.name, quantity: item.quantity,
+          material: item.material, surfaceRequested: item.surfaceRequested,
+          catalogServiceId: item.catalogServiceId, unit: item.unit,
+          unitPriceCents: item.unitPriceCents, vatRateBasisPoints: item.vatRateBasisPoints,
+        });
+        const currentShape = items.map(shape);
+        const eventShape = eventItems.map(shape);
+        if (JSON.stringify(currentShape) !== JSON.stringify(eventShape) || eventPayload?.note !== (queue.task ?? null)) {
+          throw new Error("ORDER_CARD_CONTENT_READBACK_INVALID");
+        }
+      }
+
+      const customerRows = await tx.execute<{ phone: string | null }>(sql`
+        SELECT phone FROM public.customers
+        WHERE tenant_id = ${authorization.tenantId} AND id = ${queue.customer_id}
+        LIMIT 2
+      `);
+      if (customerRows.length !== 1 || !customerRows[0]) throw new Error("ORDER_CARD_CUSTOMER_INVALID");
 
       const assignmentRows = await tx.execute<AssignmentRow>(sql`
         SELECT id::text AS id, tenant_id, order_id,
@@ -433,13 +619,30 @@ export async function readLiveOrderCard(
         ? mapAssignment(assignmentRows[0], authorization)
         : null;
 
-      const assignmentOptions = ["meister", "admin"].includes(authorization.role)
+      const assignmentOptions = authorization.permissions.includes("perm_op_status")
         ? (await tx.execute<AssigneeOptionRow>(sql`
             SELECT tenant_id, user_id::text AS user_id, full_name, role, active, integrity_ok
             FROM private.v_order_task_assignee_options_v1
             ORDER BY lower(full_name), user_id
           `)).map((row) => mapAssigneeOption(row, authorization.tenantId))
         : [];
+
+      const dueDateChanges = (await tx.execute<DueDateChangeRow>(sql`
+        SELECT event.id AS event_id, event.tenant_id, event.order_id,
+               event.payload ->> 'promisedDueDate' AS changed_to,
+               event.notes AS reason, event.created_at AS changed_at,
+               coalesce(nullif(btrim(actor.full_name), ''), event.user_id::text) AS changed_by,
+               event.user_id::text AS actor_id, event.aggregate_version,
+               event.event_schema_version
+        FROM public.events event
+        LEFT JOIN public.app_users actor
+          ON actor.tenant_id = event.tenant_id AND actor.id = event.user_id
+        WHERE event.tenant_id = ${authorization.tenantId}
+          AND event.order_id = ${input.orderId}
+          AND event.event_type = 'ORDER_PROMISED_DUE_DATE_CHANGED_V1'
+        ORDER BY event.created_at DESC, event.id DESC
+        LIMIT 50
+      `)).map((row) => mapDueDateChange(row, authorization.tenantId, queue.id));
 
       const extraRows = await tx.execute<ExtraWorkRow>(sql`
         SELECT tenant_id, order_id, item_id, line_id::text AS line_id,
@@ -470,7 +673,9 @@ export async function readLiveOrderCard(
       `);
       if (freezeRows.length > 1) throw new Error("ORDER_CARD_FREEZE_AMBIGUOUS");
       const freeze = freezeRows[0] ?? null;
-      const frozenFlag = queue.status === "fertig";
+      // The immutable completion freeze remains active after goods-out. A
+      // collected/shipped order must therefore still carry the same freeze.
+      const frozenFlag = queue.status === "fertig" || queue.station === "abgeholt";
       if ((freeze !== null) !== frozenFlag) throw new Error("ORDER_CARD_FREEZE_STATE_INVALID");
 
       let mappedFreeze: LiveOrderCard["freeze"] = null;
@@ -507,6 +712,7 @@ export async function readLiveOrderCard(
         orderNumber: queue.order_number,
         customerId: queue.customer_id,
         customerName: queue.customer_name,
+        customerPhone: customerRows[0].phone,
         title: queue.title,
         note: queue.task,
         station: queue.station,
@@ -515,6 +721,7 @@ export async function readLiveOrderCard(
         intakeAt: toIso(queue.intake_date ?? queue.created_at),
         assignment,
         assignmentOptions,
+        dueDateChanges,
         items,
         freeze: mappedFreeze,
       } satisfies LiveOrderCard;
@@ -522,8 +729,19 @@ export async function readLiveOrderCard(
     return data === null
       ? { code: "NOT_FOUND", message: "Auftrag nicht verfügbar." }
       : { code: "OK", data };
-  } catch {
-    return { code: "UNAVAILABLE", message: "Auftragskarte konnte nicht sicher geladen werden." };
+  } catch (error) {
+    const errorCode = error instanceof Error && /^ORDER_CARD_[A-Z0-9_]+$/.test(error.message)
+      ? error.message
+      : "ORDER_CARD_READ_FAILED";
+    console.error("[ORDER_CARD_READ_ERROR]", {
+      orderId: input.orderId,
+      code: errorCode,
+    });
+    return {
+      code: "UNAVAILABLE",
+      message: `Auftragskarte konnte nicht sicher geladen werden. Fehlercode: ${errorCode}.`,
+      errorCode,
+    };
   }
 }
 
@@ -592,7 +810,10 @@ export async function readExtraWorkMasterData(
       return { currentRate, catalog } satisfies ExtraWorkMasterData;
     });
     return { code: "OK", data };
-  } catch {
+  } catch (error) {
+    console.error("[ORDER_CARD_EXTRA_WORK_READ_ERROR]", {
+      message: error instanceof Error ? error.message.slice(0, 200) : "UNKNOWN",
+    });
     return { code: "UNAVAILABLE", message: "Mehrarbeitsstammdaten konnten nicht sicher geladen werden." };
   }
 }

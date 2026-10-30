@@ -2,23 +2,8 @@
 
 import { createClient } from '@/lib/supabase/server'
 import type { Beleg, BelegDetail, BelegFilter, Ausgangsrechnung, RechnungFilter, AusgangsrechnungPosition , Kostenposten, KostenpostenFilter } from '@/lib/buchhaltung/types'
-
-type RechnungRow = {
-  id: string;
-  nummer: string;
-  kunde_id?: string;
-  kunde_name?: string;
-  datum: string;
-  faellig_am?: string;
-  brutto: number;
-  netto?: number;
-  ust_satz?: number;
-  ust_betrag?: number;
-  bezahlt_am?: string;
-  status: Ausgangsrechnung['status'];
-  mahnstufe?: number;
-  erechnung_xml?: string;
-};
+import { resolveAuthorization } from '@/lib/server/authorization'
+import { readInvoiceTruth, type InvoiceTruthRow } from '@/lib/server/invoiceTruthRead'
 
 type BelegRow = {
   id: string;
@@ -155,78 +140,62 @@ export async function exportBelegeAction(format: "DATEV" | "Lexware" | "CSV"): P
 }
 
 export async function listRechnungenAction(filter?: RechnungFilter): Promise<Ausgangsrechnung[]> {
-  const supabase = await createClient();
-  let query = supabase.from('ausgangsrechnung').select('*').order('datum', { ascending: false });
-
-  if (filter?.status) {
-    if (filter.status === 'ueberfaellig') {
-      query = query.in('status', ['offen', 'teilbezahlt']).lt('faellig_am', new Date().toISOString());
-    } else {
-      query = query.eq('status', filter.status);
-    }
-  }
-
-  if (filter?.kundeId) {
-    query = query.eq('kunde_id', filter.kundeId);
-  }
-
-  if (filter?.zeitraum?.von) {
-    query = query.gte('datum', filter.zeitraum.von);
-  }
-
-  if (filter?.zeitraum?.bis) {
-    query = query.lte('datum', filter.zeitraum.bis);
-  }
-
-  if (filter?.ueberfaellig) {
-    query = query.in('status', ['offen', 'teilbezahlt']).lt('faellig_am', new Date().toISOString());
-  }
-
-  const { data, error } = await query;
-  if (error) {
-    console.error('Fehler bei listRechnungenAction:', error);
-    throw new Error('Rechnungen konnten nicht geladen werden.');
-  }
-
-  return data.map(mapToClientRechnung);
+  const rows = await canonicalInvoices(filter?.zeitraum?.von, filter?.zeitraum?.bis, filter?.kundeId);
+  const today = new Date().toISOString().slice(0, 10);
+  return rows
+    .filter((invoice) => {
+      if (filter?.status === 'storniert') return invoice.status === 'cancelled';
+      if (invoice.status !== 'issued') return !filter?.status;
+      if (filter?.status === 'bezahlt') return invoice.paymentStatus === 'bezahlt';
+      if (filter?.status === 'teilbezahlt') return invoice.paymentStatus === 'teilbezahlt';
+      if (filter?.status === 'offen') return invoice.openAmountCents > 0;
+      if (filter?.status === 'ueberfaellig') return invoice.openAmountCents > 0 && invoice.dueDate < today;
+      return !filter?.ueberfaellig || (invoice.openAmountCents > 0 && invoice.dueDate < today);
+    })
+    .map(mapInvoiceTruthToClient);
 }
 
 export async function listOffenePostenAction(): Promise<Ausgangsrechnung[]> {
-  const supabase = await createClient();
-  // Offene Posten: Status ist 'offen' oder 'ueberfaellig' oder 'gemahnt'
-  const { data, error } = await supabase.from('ausgangsrechnung')
-    .select('*')
-    .in('status', ['offen', 'ueberfaellig', 'gemahnt'])
-    .order('faellig_am', { ascending: true });
+  const rows = await canonicalInvoices();
+  return rows
+    .filter((invoice) => invoice.status === 'issued' && invoice.openAmountCents > 0)
+    .sort((left, right) => left.dueDate.localeCompare(right.dueDate))
+    .map(mapInvoiceTruthToClient);
+}
 
-  if (error) {
-    console.error('Fehler bei listOffenePostenAction:', error);
-    throw new Error('Offene Posten konnten nicht geladen werden.');
-  }
+async function canonicalInvoices(from?: string, to?: string, customerId?: string): Promise<InvoiceTruthRow[]> {
+  const authorization = await resolveAuthorization();
+  if (!authorization.ok) throw new Error(authorization.message);
+  const result = await readInvoiceTruth(authorization.data, { from, to, customerId });
+  if (result.code !== 'OK') throw new Error(result.message);
+  return result.data;
+}
 
-  return data.map(mapToClientRechnung);
+function mapInvoiceTruthToClient(invoice: InvoiceTruthRow): Ausgangsrechnung {
+  const today = new Date().toISOString().slice(0, 10);
+  const status: Ausgangsrechnung['status'] = invoice.status === 'cancelled'
+    ? 'storniert'
+    : invoice.paymentStatus === 'bezahlt'
+      ? 'bezahlt'
+      : invoice.paymentStatus === 'teilbezahlt'
+        ? 'teilbezahlt'
+        : invoice.openAmountCents > 0 && invoice.dueDate < today ? 'ueberfaellig' : 'offen';
+  return {
+    id: invoice.invoiceId,
+    nummer: invoice.invoiceNumber,
+    kundeId: invoice.customerId,
+    datum: invoice.issuedAt.slice(0, 10),
+    faelligAm: invoice.dueDate,
+    brutto: invoice.grossAmountCents / 100,
+    netto: invoice.netAmountCents / 100,
+    ustSatz: invoice.vatRateBasisPoints / 100,
+    ustBetrag: invoice.vatAmountCents / 100,
+    status,
+    mahnstufe: 0,
+  };
 }
 
 // ---------------- Helper -------------------------------------------------------------------
-
-function mapToClientRechnung(dbData: RechnungRow): Ausgangsrechnung {
-  return {
-    id: dbData.id,
-    nummer: dbData.nummer,
-    kundeId: dbData.kunde_id,
-    kundeName: dbData.kunde_name,
-    datum: dbData.datum,
-    faelligAm: dbData.faellig_am,
-    brutto: dbData.brutto,
-    netto: dbData.netto,
-    ustSatz: dbData.ust_satz,
-    ustBetrag: dbData.ust_betrag,
-    bezahltAm: dbData.bezahlt_am,
-    status: dbData.status,
-    mahnstufe: dbData.mahnstufe || 0,
-    erechnungXml: dbData.erechnung_xml,
-  };
-}
 
 function mapToClientBeleg(dbData: BelegRow): Beleg {
   return {
@@ -319,24 +288,20 @@ export async function getKostenpostenAction(id: string): Promise<Kostenposten> {
 
 // === COCKPIT & AUSWERTUNGEN ===
 import { db } from '@/db';
-import { ausgangsrechnung, beleg, kostenposten, kategorie } from '@/db/schema_buchhaltung';
-import { and, gte, lte, ne, sql } from 'drizzle-orm';
+import { beleg, kostenposten, kategorie } from '@/db/schema_buchhaltung';
+import { and, gte, lte, ne } from 'drizzle-orm';
 import { UstvaWerte, Ersparnis, KategorieSumme } from '@/lib/buchhaltung/types';
 
 export async function getCockpitMetricsAction(von: string, bis: string) {
   // Einnahmen & USt aus Rechnungen grouped by ustSatz
-  const rechnungenGrouped = await db.select({
-    ustSatz: ausgangsrechnung.ustSatz,
-    nettoSum: sql<number>`sum(CAST(${ausgangsrechnung.netto} AS numeric))`,
-    ustSum: sql<number>`sum(CAST(${ausgangsrechnung.ustBetrag} AS numeric))`
-  })
-    .from(ausgangsrechnung)
-    .where(and(
-      ne(ausgangsrechnung.status, 'storniert'),
-      gte(ausgangsrechnung.datum, von),
-      lte(ausgangsrechnung.datum, bis)
-    ))
-    .groupBy(ausgangsrechnung.ustSatz);
+  const invoiceRows = (await canonicalInvoices(von, bis)).filter((invoice) => invoice.status === 'issued');
+  const rechnungenGrouped = [...invoiceRows.reduce((grouped, invoice) => {
+    const current = grouped.get(invoice.vatRateBasisPoints) ?? { ustSatz: invoice.vatRateBasisPoints / 100, nettoSum: 0, ustSum: 0 };
+    current.nettoSum += invoice.netAmountCents / 100;
+    current.ustSum += invoice.vatAmountCents / 100;
+    grouped.set(invoice.vatRateBasisPoints, current);
+    return grouped;
+  }, new Map<number, { ustSatz: number; nettoSum: number; ustSum: number }>()).values()];
 
   // Ausgaben & Vorsteuer aus Belegen
   const belege = await db.select({ netto: beleg.netto, ustBetrag: beleg.ustBetrag, kategorieId: beleg.kategorieId, ocrConfidence: beleg.ocrConfidence })

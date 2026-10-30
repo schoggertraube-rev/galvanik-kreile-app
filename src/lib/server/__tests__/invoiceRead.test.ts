@@ -19,10 +19,10 @@ const buero = {
   userId: ACTOR,
   displayName: "Büro",
   role: "buero" as const,
-  permissions: ["perm_data_orders"] as const,
+  permissions: ["perm_view_prices"] as const,
   active: true as const,
 };
-const werkstatt = { ...buero, role: "werkstatt" as const };
+const werkstatt = { ...buero, role: "werkstatt" as const, permissions: [] as const };
 
 const validReceiptRow = {
   event_id: EVENT,
@@ -80,7 +80,7 @@ describe("readInvoiceReceipt", () => {
     expect(withTransaction).not.toHaveBeenCalled();
   });
 
-  it("forbids roles outside the invoice-read allowlist without a transaction", async () => {
+  it("forbids missing invoice-read permission without a transaction", async () => {
     const { readInvoiceReceipt } = await import("../invoiceRead");
     await expect(readInvoiceReceipt(werkstatt, { orderId: ORDER, clientEventId: CLIENT }))
       .resolves.toMatchObject({ code: "FORBIDDEN" });
@@ -154,7 +154,7 @@ describe("readInvoicePdf", () => {
     expect(withTransaction).not.toHaveBeenCalled();
   });
 
-  it("forbids roles outside the invoice-read allowlist without a transaction", async () => {
+  it("forbids missing invoice-read permission without a transaction", async () => {
     const { readInvoicePdf } = await import("../invoiceRead");
     await expect(readInvoicePdf(werkstatt, INVOICE)).resolves.toMatchObject({ code: "FORBIDDEN" });
     expect(withTransaction).not.toHaveBeenCalled();

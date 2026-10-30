@@ -8,15 +8,13 @@ import {
   getInvoiceCancellationReceiptAction,
   getInvoiceSummariesAction,
 } from "@/app/actions/invoices.actions";
-import type { AppRole } from "@/lib/auth/authorizationContract";
 import type { ImmutableInvoiceCancellationReceipt } from "@/lib/server/commands/immutableInvoiceCommand";
 import type { ImmutableInvoiceSummary } from "@/lib/server/invoiceRead";
-
-type InvoiceReaderRole = Extract<AppRole, "buero" | "meister" | "admin">;
+import { Button } from "@/ui/kr";
 
 export type InvoicePageInitialState =
-  | { state: "DATA" | "EMPTY"; data: ImmutableInvoiceSummary[]; role: InvoiceReaderRole }
-  | { state: "ERROR" | "DENIAL"; message: string; role: AppRole | null };
+  | { state: "DATA" | "EMPTY"; data: ImmutableInvoiceSummary[]; canCancel: boolean }
+  | { state: "ERROR" | "DENIAL"; message: string; canCancel: false };
 
 type InvoicePageState = InvoicePageInitialState["state"] | "LOADING";
 
@@ -58,7 +56,7 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
   const [pendingInvoiceId, setPendingInvoiceId] = useState<string | null>(null);
   const [rowMessages, setRowMessages] = useState<Record<string, { kind: "success" | "error"; text: string }>>({});
   const requestIds = useRef<Record<string, string>>({});
-  const canCancel = initialState.role === "meister" || initialState.role === "admin";
+  const canCancel = initialState.canCancel;
   const interactive = useHydrated();
 
   function stableClientEventId(invoiceId: string): string {
@@ -229,7 +227,7 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
                         Stornobeleg-PDF
                       </a>
                     ) : null}
-                    <Link className="inline-flex min-h-12 items-center px-2 text-sm font-semibold text-navy-900 underline" href="/warendurchlauf" prefetch={false}>
+                    <Link className="inline-flex min-h-12 items-center px-2 text-sm font-semibold text-navy-900 underline" href={`/orders/${row.orderId}`} prefetch={false}>
                       Auftrag öffnen
                     </Link>
                   </div>
@@ -266,13 +264,12 @@ export function InvoicesClient({ initialState }: { initialState: InvoicePageInit
                           className="min-h-12 flex-1 rounded-lg border border-neutral-gray-300 px-3 text-sm"
                           placeholder="Grund der vollständigen Stornierung"
                         />
-                        <button
+                        <Button
                           type="submit"
                           disabled={!interactive || pending}
-                          className="min-h-12 rounded-lg bg-navy-900 px-5 text-sm font-semibold text-white disabled:opacity-50"
-                        >
-                          {pending ? "Storno wird bestätigt…" : "Rechnung stornieren"}
-                        </button>
+                          art="gefaehrlich"
+                          text={pending ? "Storno wird bestätigt…" : "Rechnung stornieren"}
+                        />
                       </form>
                     </div>
                   ) : null}

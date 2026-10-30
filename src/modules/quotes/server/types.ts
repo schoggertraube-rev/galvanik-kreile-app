@@ -25,6 +25,9 @@ export type CreateQuoteInput = {
   dueDate: string;
   note: string | null;
   positions: QuotePositionInput[];
+  validUntil?: string | null;
+  termStatus?: "wunsch" | "bestaetigt" | "verschoben" | null;
+  intakeSource?: "persoenlich" | "versand" | "abholung_firma" | "anfrage_mail" | "anfrage_telefon" | null;
 };
 
 export type ConvertQuoteInput = {
@@ -34,6 +37,8 @@ export type ConvertQuoteInput = {
   confirmedAward: true;
   /** The order promise is intentionally distinct from the customer's KV wish date. */
   confirmedOrderDueDate: string;
+  handoverMode: "pickup" | "shipping";
+  paymentMode: "vorkasse" | "abholung" | "rechnung";
 };
 
 export type UpdateQuoteInput = {
@@ -61,6 +66,9 @@ export type QuoteReadback = {
   version: number;
   currency: "EUR";
   dueDate: string;
+  validUntil: string | null;
+  termStatus: "wunsch" | "bestaetigt" | "verschoben" | null;
+  intakeSource: "persoenlich" | "versand" | "abholung_firma" | "anfrage_mail" | "anfrage_telefon" | null;
   note: string | null;
   totalNetCents: number;
   linkedOrderId: string | null;
@@ -143,12 +151,20 @@ export type QuoteOrderInput = {
   clientEventId: string;
   customer: { mode: "EXISTING"; customerId: string };
   dueDate: string;
+  termStatus: "wunsch" | "bestaetigt" | "verschoben" | null;
+  intakeSource: "persoenlich" | "versand" | "abholung_firma" | "anfrage_mail" | "anfrage_telefon" | null;
+  handoverMode: "pickup" | "shipping";
+  paymentMode: "vorkasse" | "abholung" | "rechnung";
   note: string | null;
   items: Array<{
+    catalogServiceId: null;
     name: string;
     quantity: number;
     material: string | null;
     surfaceRequested: string;
+    unit: null;
+    unitPriceCents: null;
+    vatRateBasisPoints: null;
   }>;
 };
 

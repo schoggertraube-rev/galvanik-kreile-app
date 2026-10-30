@@ -120,6 +120,18 @@ async function seedPrerequisites() {
       `;
     }
     await transaction`
+      INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
+      VALUES
+        (${TENANT}, ${USERS.buero}::uuid, 'geld', ${USERS.admin}::uuid),
+        (${TENANT}, ${USERS.meister}::uuid, 'geld', ${USERS.admin}::uuid),
+        (${TENANT}, ${USERS.admin}::uuid, 'eingang', ${USERS.admin}::uuid),
+        (${TENANT}, ${USERS.admin}::uuid, 'geld', ${USERS.admin}::uuid),
+        (${TENANT}, ${USERS.admin}::uuid, 'auftraege', ${USERS.admin}::uuid),
+        (${TENANT}, ${USERS.werkstatt}::uuid, 'auftraege', ${USERS.admin}::uuid)
+      ON CONFLICT (tenant_id, user_id, bereich) DO UPDATE SET
+        granted_by = EXCLUDED.granted_by
+    `;
+    await transaction`
       INSERT INTO public.company_settings (
         id, tenant_id, company_name, street, zip, city, country,
         iban, bic, bank_name, tax_id, invoice_vat_rate_basis_points,
@@ -136,17 +148,20 @@ async function seedPrerequisites() {
     await transaction`
       INSERT INTO public.customers (
         id, tenant_id, customer_number, name, company_name, type,
-        street, zip_code, city, country, created_at, updated_at
+        contact_person, email, phone, street, zip_code, city, country,
+        payment_preference, created_at, updated_at
       ) VALUES
         (
           ${CUSTOMER}, ${TENANT}, 'F15-B2-001', 'F1.5 B2 Synthetic Customer',
-          'F1.5 B2 Synthetic Customer GmbH', 'business', 'Kundenweg 2',
-          '70174', 'Stuttgart', 'Deutschland', now(), now()
+          'F1.5 B2 Synthetic Customer GmbH', 'business', 'Fiona Vertrag',
+          'f15-b2-customer@local.invalid', '+49 711 5550150', 'Kundenweg 2',
+          '70174', 'Stuttgart', 'Deutschland', 'vorkasse', now(), now()
         ),
         (
           ${FOREIGN_CUSTOMER}, ${FOREIGN_TENANT}, 'F15-B2-F', 'F1.5 B2 Foreign Customer',
-          'F1.5 B2 Foreign Customer GmbH', 'business', 'Fremdweg 3',
-          '20095', 'Hamburg', 'Deutschland', now(), now()
+          'F1.5 B2 Foreign Customer GmbH', 'business', 'Fiona Fremd',
+          'f15-b2-foreign@local.invalid', '+49 40 5550150', 'Fremdweg 3',
+          '20095', 'Hamburg', 'Deutschland', 'vorkasse', now(), now()
         )
     `;
     await transaction`
@@ -253,12 +268,18 @@ describe("F1.5 D-F15-002 real intake/payment-mode contract — AUTH_ADAPTER_SYNT
       clientEventId: INTAKE_EVENT,
       customer: { mode: "EXISTING", customerId: CUSTOMER },
       dueDate: "2026-09-30",
+      handoverMode: "pickup",
+      paymentMode: "vorkasse",
       note: "F1.5 B2 canonical intake",
       items: [{
+        catalogServiceId: null,
         name: "F1.5 B2 Werkstück",
         quantity: 1,
         material: "Stahl",
         surfaceRequested: "Galvanik",
+        unit: null,
+        unitPriceCents: null,
+        vatRateBasisPoints: null,
       }],
     });
     expect(intake.code).toBe("OK");

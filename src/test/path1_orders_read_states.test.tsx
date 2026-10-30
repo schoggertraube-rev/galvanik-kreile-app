@@ -49,8 +49,8 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 async function findOrderRow(orderNumber = "A-100"): Promise<HTMLElement> {
-  const button = await screen.findByRole("button", { name: `Auftrag ${orderNumber} öffnen` });
-  const row = button.closest(".app-row");
+  const button = await screen.findByRole("button", { name: new RegExp(orderNumber) });
+  const row = button.closest(".kr-zeile");
   if (!(row instanceof HTMLElement)) throw new Error("Auftragszeile fehlt");
   return row;
 }
@@ -61,7 +61,7 @@ describe("W4 orders read states", () => {
     render(<OrdersPage />);
 
     expect(screen.getByRole("status")).toHaveTextContent("Aufträge werden geladen.");
-    expect(screen.queryByText("Keine Aufträge.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Noch keine Aufträge.")).not.toBeInTheDocument();
   });
 
   it("shows unavailable without presenting failure as an empty list", async () => {
@@ -73,14 +73,14 @@ describe("W4 orders read states", () => {
     render(<OrdersPage />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("neutral");
-    expect(screen.queryByText("Keine Aufträge.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Noch keine Aufträge.")).not.toBeInTheDocument();
   });
 
   it("shows true loaded-empty only after a successful empty read", async () => {
     ports.getOrdersDb.mockResolvedValue({ ok: true, data: [] });
     render(<OrdersPage />);
 
-    expect(await screen.findByText("Keine Aufträge.")).toBeInTheDocument();
+    expect(await screen.findByText("Noch keine Aufträge.")).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
   });
 
@@ -89,19 +89,20 @@ describe("W4 orders read states", () => {
     render(<OrdersPage />);
 
     const row = await findOrderRow();
-    expect(row).toHaveTextContent("A-100 · Kreile GmbH");
+    expect(row).toHaveTextContent("A-100");
+    expect(row).toHaveTextContent("Kreile GmbH · Welle");
     expect(row).toHaveTextContent("Welle · Zink");
     expect(row).not.toHaveTextContent("Welle verzinken");
-    fireEvent.change(screen.getByRole("textbox", { name: "Aufträge filtern" }), { target: { value: "nicht-vorhanden" } });
-    expect(await screen.findByText("Keine Aufträge gefunden.")).toBeInTheDocument();
-    expect(screen.queryByText("Keine Aufträge.")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText("Auftrag, Kunde, Teil oder Oberfläche"), { target: { value: "nicht-vorhanden" } });
+    expect(await screen.findByText("Kein Auftrag für „nicht-vorhanden“.")).toBeInTheDocument();
+    expect(screen.queryByText("Noch keine Aufträge.")).not.toBeInTheDocument();
   });
 
   it("opens the selected order with its ID", async () => {
     ports.getOrdersDb.mockResolvedValue({ ok: true, data: [order("order-42", "A-100")] });
     render(<OrdersPage />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Auftrag A-100 öffnen" }));
+    fireEvent.click(await screen.findByRole("button", { name: /A-100/ }));
 
     expect(ports.openOrder).toHaveBeenCalledWith("order-42");
   });
@@ -124,12 +125,12 @@ describe("W4 orders read states", () => {
     await waitFor(() => {
       expect(screen.getByRole("status")).toHaveTextContent("Aufträge werden geladen.");
     });
-    expect(screen.queryByRole("button", { name: "Auftrag A-100 öffnen" })).not.toBeInTheDocument();
-    expect(screen.queryByText("Keine Aufträge.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /A-100/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("Noch keine Aufträge.")).not.toBeInTheDocument();
 
     finishReload({ ok: false, error: "DB_ERROR", message: "neutral" });
     expect(await screen.findByRole("alert")).toHaveTextContent("neutral");
-    expect(screen.queryByRole("button", { name: "Auftrag A-100 öffnen" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /A-100/ })).not.toBeInTheDocument();
   });
 
   it("clears stale values and shows unavailable when a sync reload rejects", async () => {
@@ -141,7 +142,7 @@ describe("W4 orders read states", () => {
 
     fireEvent(window, new Event("kreile-sync-orders"));
     expect(await screen.findByRole("alert")).toHaveTextContent("Aufträge konnten nicht sicher geladen werden.");
-    expect(screen.queryByRole("button", { name: "Auftrag A-100 öffnen" })).not.toBeInTheDocument();
-    expect(screen.queryByText("Keine Aufträge.")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /A-100/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("Noch keine Aufträge.")).not.toBeInTheDocument();
   });
 });

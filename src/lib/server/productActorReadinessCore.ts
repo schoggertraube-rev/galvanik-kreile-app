@@ -1,8 +1,6 @@
 import {
-  getProductIdentityByKey,
   isAppRole,
   type AppRole,
-  type ProductIdentity,
   type ProductIdentityKey,
 } from "@/lib/auth/authorizationContract";
 
@@ -71,7 +69,6 @@ export type ReadyProductActor = {
   actorId: string;
   tenantId: string;
   role: AppRole;
-  identity: ProductIdentity;
   login: "pin" | "email";
 };
 
@@ -190,6 +187,7 @@ export function evaluateProductActorReadiness(input: {
     }
     if (
       !isAppRole(profile.role) ||
+      // erlaubt H11c: Sitzungsprüfung
       !PRODUCT_ACTOR_RULES[key].allowedRoles.includes(profile.role)
     ) {
       return readinessFailure(
@@ -204,7 +202,6 @@ export function evaluateProductActorReadiness(input: {
       actorId,
       tenantId: profile.tenantId,
       role: profile.role,
-      identity: getProductIdentityByKey(key),
       login: PRODUCT_ACTOR_RULES[key].login,
     };
   }

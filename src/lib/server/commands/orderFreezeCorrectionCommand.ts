@@ -8,7 +8,6 @@ const EVENT_TYPE = "ORDER_FREEZE_CORRECTED_V1";
 const EVENT_SCHEMA_VERSION = 1 as const;
 const SOURCE_STATION = "fertig" as const;
 const TARGET_STATION = "galvanik" as const;
-const CORRECTION_ROLES = ["meister", "admin"] as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 export type ReopenFrozenOrderInput = {
@@ -185,7 +184,7 @@ export async function reopenFrozenOrder(
       ? { code: "UNAVAILABLE", message: "Freeze-Korrektur ist derzeit nicht verfügbar." }
       : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
-  if (!CORRECTION_ROLES.includes(authorization.data.role as (typeof CORRECTION_ROLES)[number])) {
+  if (!authorization.data.permissions.includes("perm_op_status")) {
     return { code: "FORBIDDEN", message: "Freeze-Korrektur ist mit dieser Rolle nicht erlaubt." };
   }
 

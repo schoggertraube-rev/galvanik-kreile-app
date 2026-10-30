@@ -30,6 +30,9 @@ export type CustomerSummary = {
   zipCode: string | null;
   city: string | null;
   country: string | null;
+  paymentPreference: string | null;
+  invoiceTermsEnabled: boolean;
+  vatId: string | null;
   classification: string | null;
   internalNotes: string | null;
   tags: string[];
@@ -38,6 +41,8 @@ export type CustomerSummary = {
   orderCount: number;
   wareImHausCount: number;
   wareImHaus: boolean;
+  invoiceRevenueCents: number;
+  invoiceOpenCents: number;
   orders: CustomerSummaryOrder[];
 };
 
@@ -63,6 +68,9 @@ type SummaryRow = {
   zip_code: string | null;
   city: string | null;
   country: string | null;
+  payment_preference: string | null;
+  invoice_terms_enabled: boolean;
+  vat_id: string | null;
   classification: string | null;
   internal_notes: string | null;
   tags: unknown;
@@ -71,6 +79,8 @@ type SummaryRow = {
   order_count: number;
   ware_im_haus_count: number;
   ware_im_haus: boolean;
+  invoice_revenue_cents: number | string;
+  invoice_open_cents: number | string;
   orders: unknown;
   integrity_ok: boolean;
 };
@@ -142,6 +152,8 @@ function mapTags(value: unknown): string[] {
 
 function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot): CustomerSummary {
   const orders = mapOrders(row.orders);
+  const invoiceRevenueCents = Number(row.invoice_revenue_cents);
+  const invoiceOpenCents = Number(row.invoice_open_cents);
   if (
     row.integrity_ok !== true
     || row.tenant_id !== authorization.tenantId
@@ -150,9 +162,14 @@ function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot): Cust
     || row.name.length < 1
     || !Number.isSafeInteger(row.order_count)
     || !Number.isSafeInteger(row.ware_im_haus_count)
+    || !Number.isSafeInteger(invoiceRevenueCents)
+    || invoiceRevenueCents < 0
+    || !Number.isSafeInteger(invoiceOpenCents)
+    || invoiceOpenCents < 0
     || row.order_count !== orders.length
     || row.ware_im_haus_count !== orders.filter((order) => ["angenommen", "galvanik", "fertig"].includes(order.status)).length
     || row.ware_im_haus !== (row.ware_im_haus_count > 0)
+    || typeof row.invoice_terms_enabled !== "boolean"
   ) throw new Error("CUSTOMER_SUMMARY_INVALID");
   return {
     id: row.id,
@@ -168,6 +185,9 @@ function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot): Cust
     zipCode: row.zip_code,
     city: row.city,
     country: row.country,
+    paymentPreference: row.payment_preference,
+    invoiceTermsEnabled: row.invoice_terms_enabled,
+    vatId: row.vat_id,
     classification: row.classification,
     internalNotes: row.internal_notes,
     tags: mapTags(row.tags),
@@ -176,6 +196,8 @@ function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot): Cust
     orderCount: row.order_count,
     wareImHausCount: row.ware_im_haus_count,
     wareImHaus: row.ware_im_haus,
+    invoiceRevenueCents,
+    invoiceOpenCents,
     orders,
   };
 }
@@ -193,9 +215,22 @@ export async function readCustomerSummary(
   try {
     const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const rows = await tx.execute<SummaryRow>(sql`
-        SELECT *
-        FROM private.v_customer_summary_v1
-        WHERE id = ${input.customerId}
+        SELECT summary.*,
+               customer.ziel_freigeschaltet AS invoice_terms_enabled,
+               COALESCE(billing.invoice_revenue_cents, 0)::bigint AS invoice_revenue_cents,
+               COALESCE(billing.invoice_open_cents, 0)::bigint AS invoice_open_cents
+        FROM private.v_customer_summary_v1 summary
+        JOIN public.customers customer
+          ON customer.tenant_id = summary.tenant_id
+         AND customer.id = summary.id
+        LEFT JOIN LATERAL (
+          SELECT sum(invoice.gross_amount_cents) FILTER (WHERE invoice.status = 'issued') AS invoice_revenue_cents,
+                 sum(invoice.payment_open_amount_cents) FILTER (WHERE invoice.status = 'issued') AS invoice_open_cents
+          FROM public.invoices invoice
+          WHERE invoice.tenant_id = summary.tenant_id
+            AND invoice.customer_id = summary.id
+        ) billing ON true
+        WHERE summary.id = ${input.customerId}
         LIMIT 2
       `);
       if (rows.length > 1) throw new Error("CUSTOMER_SUMMARY_AMBIGUOUS");

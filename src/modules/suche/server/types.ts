@@ -3,7 +3,7 @@ export const SEARCH_MAX_QUERY_LENGTH = 80;
 export const SEARCH_MAX_HITS = 20;
 export const SEARCH_MAX_HITS_PER_TYPE = 10;
 
-export type SearchHitType = "ORDER" | "CUSTOMER";
+export type SearchHitType = "ORDER" | "CUSTOMER" | (string & {});
 
 export type SearchMatchField =
   | "orderNumber"
@@ -18,9 +18,13 @@ export type SearchMatchField =
   | "companyName"
   | "customerNumber"
   | "city"
-  | "customerRecord";
+  | "customerRecord"
+  | "quoteNumber"
+  | "invoiceNumber"
+  | "note"
+  | "position";
 
-export type SearchSource = "Auftragsbestand" | "Kundenstamm";
+export type SearchSource = "Auftragsbestand" | "Kundenstamm" | (string & {});
 
 export type SearchHit = {
   type: SearchHitType;
@@ -33,8 +37,8 @@ export type SearchHit = {
   matchLabel: string;
   matchValue: string;
   context: string;
-  href: `/orders/${string}` | `/customers/${string}`;
-  actionLabel: "Auftragskarte öffnen" | "Kundenkarte öffnen";
+  href: `/${string}`;
+  actionLabel: string;
 };
 
 export type SearchOrderPart = {
@@ -80,6 +84,20 @@ export type SearchPorts = {
   readOrders: () => Promise<readonly SearchOrderDocument[]>;
   searchCustomers: (query: string) => Promise<SearchCustomerBatch>;
   readTimestamp: () => string;
+  providers?: readonly SearchProvider[];
+};
+
+export type SearchProviderBatch = {
+  hits: readonly SearchHit[];
+  /** False when the provider can prove that its complete match set was returned. */
+  exhaustive: boolean;
+};
+
+/** A module-owned search provider. The search UI only consumes this stable contract. */
+export type SearchProvider = {
+  id: string;
+  label: SearchSource;
+  search: (query: string) => Promise<SearchProviderBatch>;
 };
 
 export type SearchTenantResult =
@@ -111,5 +129,12 @@ export type SearchDialogProps = {
   onOpenChange: (open: boolean) => void;
   search: (query: string) => Promise<SearchTenantResult>;
   onSelect: (hit: SearchHit) => void;
+  commands?: {
+    onNewIntake?: () => void;
+    onGoodsOut?: () => void;
+    onFinish?: () => void;
+    onExtraWork?: () => void;
+    onWeek?: () => void;
+  };
   debounceMs?: number;
 };

@@ -2,11 +2,17 @@ import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { readAppSession } from "@/lib/server/appSession";
 import { db } from "@/db";
 import { appUsers } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import {
   isAppRole,
-  getPermissionsForRole,
+  getPermissionsForAreas,
+  isAccessArea,
+  isAccessAreaAllowedForRole,
+  normalizeAccessAreasForRole,
+  ROLE_ACCESS_AREA_TEMPLATES,
+  type AccessArea,
   type AppRole,
+  type AuthorizationActionGrants,
   type PermissionKey,
 } from "@/lib/auth/authorizationContract";
 
@@ -15,9 +21,50 @@ export type AuthorizationSnapshot = {
   tenantId: string;
   displayName: string;
   role: AppRole;
+  /** Present on live resolver snapshots. Optional only for older isolated test fixtures. */
+  areas?: readonly AccessArea[];
   permissions: readonly PermissionKey[];
   active: true;
 };
+
+/** Live snapshots use app_user_rights. The role template is only a compatibility
+ * fallback for older isolated fixtures that predate the areas field. */
+export function hasAuthorizationArea(
+  authorization: Pick<AuthorizationSnapshot, "areas" | "role">,
+  area: AccessArea,
+): boolean {
+  return isAccessAreaAllowedForRole(authorization.role, area) && (authorization.areas === undefined
+    ? ROLE_ACCESS_AREA_TEMPLATES[authorization.role].includes(area)
+    : authorization.areas.includes(area));
+}
+
+export function hasAnyAuthorizationArea(
+  authorization: Pick<AuthorizationSnapshot, "areas" | "role">,
+): boolean {
+  return authorization.areas === undefined
+    ? ROLE_ACCESS_AREA_TEMPLATES[authorization.role].length > 0
+    : normalizeAccessAreasForRole(authorization.role, authorization.areas).length > 0;
+}
+
+/**
+ * The single server-side projection from effective areas to concrete product
+ * actions. Commands and browser reads consume the same projection.
+ */
+export function getAuthorizationActionGrants(
+  authorization: Pick<AuthorizationSnapshot, "areas" | "role">,
+): AuthorizationActionGrants {
+  const canManageOrders = hasAuthorizationArea(authorization, "eingang");
+  const canManageMoney = hasAuthorizationArea(authorization, "geld");
+  return {
+    confirmPayment: canManageMoney || (
+      hasAuthorizationArea(authorization, "kassieren")
+      && hasAuthorizationArea(authorization, "auftraege")
+    ),
+    editOrderContent: canManageOrders,
+    createCustomer: hasAuthorizationArea(authorization, "kunden"),
+    createQuote: canManageOrders && canManageMoney,
+  };
+}
 
 export type AuthorizationFailureReason =
   | "NO_SESSION"
@@ -44,6 +91,7 @@ export type LoginIdentitySnapshot = {
   role: AppRole;
   active: boolean;
   tenantId: string;
+  areas: readonly AccessArea[];
 };
 
 export type LoginIdentityResult =
@@ -61,7 +109,7 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
     return {
       ok: false,
       reason: "AUTHORIZATION_UNAVAILABLE",
-      message: "AUTH_ERROR: Berechtigungen nicht verfügbar",
+      message: "AUTH_SESSION_ERROR: Sitzung konnte nicht gelesen werden",
     };
   }
 
@@ -108,18 +156,39 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
 
   // 2. DB-Abfrage
   let dbUser;
+  let areas: AccessArea[] = [];
   try {
-    const [user] = await db
-      .select()
+    const rows = await db
+      .select({
+        id: appUsers.id,
+        tenantId: appUsers.tenantId,
+        fullName: appUsers.fullName,
+        role: appUsers.role,
+        active: appUsers.active,
+        updatedAt: appUsers.updatedAt,
+        areas: sql<string[]>`(
+          SELECT COALESCE(array_agg(rights.bereich ORDER BY rights.bereich), ARRAY[]::text[])
+          FROM public.app_user_rights rights
+          WHERE rights.tenant_id = ${appUsers.tenantId}
+            AND rights.user_id = ${appUsers.id}
+        )`,
+      })
       .from(appUsers)
       .where(and(eq(appUsers.id, userId), eq(appUsers.tenantId, sessionTenantId)));
-    dbUser = user;
+    dbUser = rows[0];
+    const rawAreas = dbUser?.areas ?? (process.env.NODE_ENV === "test" && dbUser && isAppRole(dbUser.role)
+      ? [...ROLE_ACCESS_AREA_TEMPLATES[dbUser.role]]
+      : []);
+    if (rawAreas.some((area) => !isAccessArea(area))) {
+      throw new Error("UNKNOWN_ACCESS_AREA");
+    }
+    areas = [...new Set(rawAreas as AccessArea[])];
   } catch (err) {
     console.error("resolveAuthorization database error:", err);
     return {
       ok: false,
       reason: "AUTHORIZATION_UNAVAILABLE",
-      message: "AUTH_ERROR: Berechtigungen nicht verfügbar",
+      message: "AUTH_DB_ERROR: Berechtigungen nicht verfügbar",
     };
   }
 
@@ -151,6 +220,8 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
     };
   }
 
+  areas = normalizeAccessAreasForRole(dbRole, areas);
+
   // 5. Rollenübereinstimmung prüfen
   if (sessionRole.trim().toLowerCase() !== dbRole.trim().toLowerCase()) {
     return {
@@ -172,7 +243,7 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
   }
 
   // 6. Berechtigungen ableiten
-  const permissions = getPermissionsForRole(dbRole);
+  const permissions = getPermissionsForAreas(areas);
 
   return {
     ok: true,
@@ -181,6 +252,7 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
       tenantId: dbUser.tenantId,
       displayName: dbUser.fullName,
       role: dbRole,
+      areas,
       permissions,
       active: true,
     },
@@ -196,11 +268,24 @@ export async function resolveLoginIdentityByEmail(
 ): Promise<LoginIdentityResult> {
   try {
     const [user] = await db
-      .select()
+      .select({
+        id: appUsers.id,
+        email: appUsers.email,
+        fullName: appUsers.fullName,
+        role: appUsers.role,
+        active: appUsers.active,
+        tenantId: appUsers.tenantId,
+        areas: sql<string[]>`(
+          SELECT COALESCE(array_agg(rights.bereich ORDER BY rights.bereich), ARRAY[]::text[])
+          FROM public.app_user_rights rights
+          WHERE rights.tenant_id = ${appUsers.tenantId}
+            AND rights.user_id = ${appUsers.id}
+        )`,
+      })
       .from(appUsers)
       .where(and(eq(appUsers.email, email), eq(appUsers.tenantId, tenantId)));
 
-    if (!user) {
+    if (!user || !user.email) {
       return { ok: false, message: "AUTH_ERROR: Benutzer nicht gefunden" };
     }
 
@@ -212,6 +297,9 @@ export async function resolveLoginIdentityByEmail(
     if (!isAppRole(role)) {
       return { ok: false, message: "AUTH_ERROR: Unbekannte Rolle" };
     }
+    if (user.areas.some((area) => !isAccessArea(area))) {
+      return { ok: false, message: "AUTH_ERROR: Unbekannter Bereich" };
+    }
 
     return {
       ok: true,
@@ -222,6 +310,7 @@ export async function resolveLoginIdentityByEmail(
         role: role,
         active: user.active,
         tenantId: user.tenantId,
+        areas: normalizeAccessAreasForRole(role, user.areas as AccessArea[]),
       },
     };
   } catch (err) {

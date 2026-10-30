@@ -9,6 +9,10 @@ import type {
   CreateInvoiceResult,
 } from "@/lib/server/commands/immutableInvoiceCommand";
 import type {
+  SetInvoiceItemPricesInput,
+  SetInvoiceItemPricesResult,
+} from "@/lib/server/commands/invoiceItemPriceCommand";
+import type {
   ReadInvoiceCancellationReceiptInput,
   ReadInvoiceCancellationReceiptResult,
   ReadInvoiceReceiptInput,
@@ -21,17 +25,17 @@ type ActionAuthorizationResult =
   | { ok: false; result: { code: "UNAUTHENTICATED" | "UNAVAILABLE"; message: string } };
 
 async function resolveActionAuthorization(): Promise<ActionAuthorizationResult> {
-  const authorization = await resolveAuthorization().catch(() => null);
-  if (!authorization || (!authorization.ok && authorization.reason === "AUTHORIZATION_UNAVAILABLE")) {
+  const authorization = await resolveAuthorization();
+  if (!authorization.ok && authorization.reason === "AUTHORIZATION_UNAVAILABLE") {
     return {
       ok: false,
-      result: { code: "UNAVAILABLE", message: "Rechnungsdaten konnten nicht sicher geladen werden." },
+      result: { code: "UNAVAILABLE", message: authorization.message },
     };
   }
   if (!authorization.ok) {
     return {
       ok: false,
-      result: { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." },
+      result: { code: "UNAUTHENTICATED", message: authorization.message },
     };
   }
   return { ok: true, data: authorization.data };
@@ -42,6 +46,18 @@ export async function issueInvoiceAction(input: CreateInvoiceInput): Promise<Cre
   const result = await createInvoice(input);
   if (result.code === "OK") {
     revalidatePath("/buchhaltung/rechnungen");
+    revalidatePath("/warendurchlauf");
+  }
+  return result;
+}
+
+export async function setInvoiceItemPricesAction(
+  input: SetInvoiceItemPricesInput,
+): Promise<SetInvoiceItemPricesResult> {
+  const { setInvoiceItemPrices } = await import("@/lib/server/commands/invoiceItemPriceCommand");
+  const result = await setInvoiceItemPrices(input);
+  if (result.code === "OK") {
+    revalidatePath("/orders");
     revalidatePath("/warendurchlauf");
   }
   return result;

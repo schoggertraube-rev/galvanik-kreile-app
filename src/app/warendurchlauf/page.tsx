@@ -1,7 +1,7 @@
-import { resolveAuthorization } from "@/lib/server/authorization";
+import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
 import {
   buildWerkstattData,
-  type PhillipWerkstattViewModel,
+  type WorkshopViewModel,
   type WerkstattSurfaceOrder,
 } from "@/modules/werkstatt/public";
 import {
@@ -16,7 +16,7 @@ const DENIAL_MESSAGE = "Zugriff nicht erlaubt.";
 const ERROR_MESSAGE = "Werkstattdaten konnten nicht sicher geladen werden.";
 const CONFLICT_MESSAGE = "Werkstattdaten enthalten widersprüchliche Auftragskennungen.";
 
-function render(view: PhillipWerkstattViewModel) {
+function render(view: WorkshopViewModel) {
   return <WerkstattAppAdapter view={view} />;
 }
 
@@ -66,7 +66,7 @@ export default async function WarendurchlaufIndex() {
     });
   }
 
-  if (!["buero", "werkstatt", "meister", "admin"].includes(authorization.data.role)) {
+  if (!authorization.data.permissions.includes("perm_view_leitstand")) {
     return render({ kind: "denied", message: DENIAL_MESSAGE });
   }
 
@@ -95,7 +95,7 @@ export default async function WarendurchlaufIndex() {
     });
   }
 
-  const canCreateOrder = authorization.data.permissions.includes("perm_data_orders");
+  const canCreateOrder = hasAuthorizationArea(authorization.data, "eingang");
 
   if (hasDuplicateCanonicalOrder([...wareneingangResult.data, ...galvanikResult.data])) {
     return render({ kind: "conflict", message: CONFLICT_MESSAGE });

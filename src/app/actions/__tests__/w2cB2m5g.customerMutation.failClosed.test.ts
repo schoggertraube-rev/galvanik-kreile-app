@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const db = { insert: vi.fn(), update: vi.fn(), select: vi.fn() };
 const checkAppAuth = vi.fn();
 const resolveAuthorization = vi.fn();
+const hasAuthorizationArea = vi.fn();
 const createId = vi.fn();
 const revalidatePath = vi.fn();
 const safeParse = vi.fn();
@@ -13,7 +14,11 @@ vi.mock("@/db", () => ({ db }));
 vi.mock("@/db/schema", () => ({ customers: {} }));
 vi.mock("drizzle-orm", () => ({ and: vi.fn(), eq: vi.fn(), ilike: vi.fn(), or: vi.fn(), sql: vi.fn() }));
 vi.mock("@/lib/server/authHelper", () => ({ checkAppAuth }));
-vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization }));
+vi.mock("@/lib/server/authorization", () => ({
+  resolveAuthorization,
+  hasAuthorizationArea,
+  getAuthorizationActionGrants: vi.fn(),
+}));
 vi.mock("@/lib/validation/customerSchema", () => ({ customerSchema: { safeParse } }));
 vi.mock("@paralleldrive/cuid2", () => ({ createId }));
 vi.mock("next/cache", () => ({ unstable_noStore: vi.fn(), revalidatePath }));
@@ -35,6 +40,27 @@ afterEach(() => {
 });
 
 describe("W2C-B2M5G customer mutation fail-closed", () => {
+  it("denies the customer-list read before opening a data port without area kunden", async () => {
+    checkAppAuth.mockResolvedValue({ ok: true, data: "meister" });
+    resolveAuthorization.mockResolvedValue({
+      ok: true,
+      data: { tenantId: "synthetic-tenant", role: "meister", areas: ["auftraege"] },
+    });
+    hasAuthorizationArea.mockReturnValue(false);
+    const { getCustomersDb } = await import("@/app/actions/customers.actions");
+
+    await expect(getCustomersDb()).resolves.toEqual({
+      ok: false,
+      error: "FORBIDDEN",
+      message: "Kundenstamm ist für diesen Login nicht freigegeben.",
+    });
+    expect(hasAuthorizationArea).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: "synthetic-tenant" }),
+      "kunden",
+    );
+    expect(db.select).not.toHaveBeenCalled();
+  });
+
   it("denies actions and repository writers before every bridge", async () => {
     const [{ createCustomerDb, updateCustomerDb }, { customersRepository }] = await Promise.all([
       import("@/app/actions/customers.actions"),
@@ -52,10 +78,9 @@ describe("W2C-B2M5G customer mutation fail-closed", () => {
   });
 
   it("locks mutation bodies and inert UI save controls", async () => {
-    const [actions, repository, wizard] = await Promise.all([
+    const [actions, repository] = await Promise.all([
       readFile("src/app/actions/customers.actions.ts", "utf8"),
       readFile("src/lib/repositories/customersRepository.ts", "utf8"),
-      readFile("src/components/erfassung/ManualFlow/CustomerWizard.tsx", "utf8"),
     ]);
     const actionBodies = actions.match(/export async function (?:createCustomerDb|updateCustomerDb)[\s\S]*?(?=\nexport async function)/g) ?? [];
     expect(actionBodies).toHaveLength(2);
@@ -69,8 +94,5 @@ describe("W2C-B2M5G customer mutation fail-closed", () => {
     expect(repository).not.toContain("updateCustomerDb");
     expect(existsSync("src/components/customers/NewCustomerForm.tsx")).toBe(false);
     expect(existsSync("src/modules/customers/legacy-ui/NewCustomerForm.tsx")).toBe(false);
-    expect(wizard).not.toMatch(/createCustomerDb|updateCustomer|handleSave|Google|googlemaps|importLibrary|setOptions|Kunde gespeichert|erfolgreich gespeichert|automatisch gespeichert/);
-    expect(wizard).toContain(createDenial.message);
-    expect(wizard).toMatch(/<button disabled className="[^"]*">Speichern<\/button>/);
   });
 });

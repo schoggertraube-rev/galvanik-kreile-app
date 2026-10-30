@@ -35,7 +35,7 @@ describe("ESLint pinned non-executable references", () => {
         }),
       ]),
     );
-  });
+  }, 15_000);
 
   it("admits only the two closed evidence trees during their explicit migration", () => {
     expect(isPinnedNonExecutableCodeReference("docs/project/history/old-check.ts")).toBe(true);

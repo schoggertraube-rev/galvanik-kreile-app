@@ -87,7 +87,10 @@ const styles = StyleSheet.create({
   page: {
     flexDirection: "column",
     backgroundColor: "#FFFFFF",
-    padding: 40,
+    color: "#12161F",
+    paddingTop: 38,
+    paddingHorizontal: 42,
+    paddingBottom: 54,
     fontFamily: "Helvetica",
     fontSize: 9,
   },
@@ -95,20 +98,36 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 30,
+    paddingBottom: 18,
+    marginBottom: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E4E0D8",
   },
   sellerBlock: {
+    width: "50%",
     fontSize: 8,
-    color: "#666666",
+    color: "#596176",
     lineHeight: 1.4,
   },
+  sellerName: {
+    color: "#12161F",
+    fontSize: 12,
+    fontWeight: "bold",
+    marginBottom: 5,
+  },
   metaBlock: {
+    width: "42%",
+    flexShrink: 1,
     textAlign: "right",
+    backgroundColor: "#F4F2EE",
+    borderRadius: 6,
+    padding: 12,
   },
   documentTitle: {
-    fontSize: 22,
+    color: "#1A1F2E",
+    fontSize: 21,
     fontWeight: "bold",
-    marginBottom: 4,
+    marginBottom: 6,
   },
   metaLine: {
     fontSize: 9,
@@ -117,10 +136,22 @@ const styles = StyleSheet.create({
   addressRow: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "flex-start",
     marginBottom: 24,
   },
   customerBlock: {
+    width: "52%",
+    flexShrink: 1,
+    paddingRight: 18,
     lineHeight: 1.5,
+  },
+  sectionLabel: {
+    color: "#687083",
+    fontSize: 7,
+    fontWeight: "bold",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    marginBottom: 5,
   },
   customerName: {
     fontSize: 11,
@@ -128,7 +159,12 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   serviceBlock: {
-    textAlign: "right",
+    width: "40%",
+    flexShrink: 1,
+    backgroundColor: "#F7F6F3",
+    borderLeftWidth: 3,
+    borderLeftColor: "#353C4E",
+    padding: 10,
     lineHeight: 1.5,
   },
   table: {
@@ -137,7 +173,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRightWidth: 0,
     borderBottomWidth: 0,
-    borderColor: "#DDDDDD",
+    borderColor: "#D5D0C7",
     marginTop: 10,
     marginBottom: 20,
   },
@@ -150,7 +186,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderLeftWidth: 0,
     borderTopWidth: 0,
-    borderColor: "#DDDDDD",
+    borderColor: "#D5D0C7",
     padding: 5,
   },
   colDesc: {
@@ -159,7 +195,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderLeftWidth: 0,
     borderTopWidth: 0,
-    borderColor: "#DDDDDD",
+    borderColor: "#D5D0C7",
     padding: 5,
   },
   colQty: {
@@ -168,7 +204,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderLeftWidth: 0,
     borderTopWidth: 0,
-    borderColor: "#DDDDDD",
+    borderColor: "#D5D0C7",
     padding: 5,
     textAlign: "right",
   },
@@ -178,7 +214,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderLeftWidth: 0,
     borderTopWidth: 0,
-    borderColor: "#DDDDDD",
+    borderColor: "#D5D0C7",
     padding: 5,
     textAlign: "right",
   },
@@ -188,11 +224,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderLeftWidth: 0,
     borderTopWidth: 0,
-    borderColor: "#DDDDDD",
+    borderColor: "#D5D0C7",
     padding: 5,
     textAlign: "right",
   },
   headerCell: {
+    color: "#FFFFFF",
     fontSize: 8,
     fontWeight: "bold",
   },
@@ -201,7 +238,10 @@ const styles = StyleSheet.create({
   },
   totalsBlock: {
     alignSelf: "flex-end",
-    width: "45%",
+    width: "48%",
+    backgroundColor: "#F7F6F3",
+    borderRadius: 6,
+    padding: 10,
     marginBottom: 24,
   },
   totalsRow: {
@@ -214,7 +254,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 4,
     borderTopWidth: 1,
-    borderTopColor: "#000000",
+    borderTopColor: "#353C4E",
     marginTop: 2,
   },
   totalsLabel: {
@@ -232,6 +272,9 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   paymentBlock: {
+    borderTopWidth: 1,
+    borderTopColor: "#E4E0D8",
+    paddingTop: 10,
     marginBottom: 24,
     lineHeight: 1.5,
   },
@@ -246,13 +289,13 @@ const styles = StyleSheet.create({
   footer: {
     position: "absolute",
     bottom: 30,
-    left: 40,
-    right: 40,
+    left: 42,
+    right: 42,
     textAlign: "center",
     fontSize: 7,
-    color: "#999999",
+    color: "#687083",
     borderTopWidth: 1,
-    borderTopColor: "#EEEEEE",
+    borderTopColor: "#E4E0D8",
     paddingTop: 8,
   },
 });
@@ -356,7 +399,7 @@ export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot }: I
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
           <View style={styles.sellerBlock}>
-            <Text style={{ fontWeight: "bold", color: "#000000", fontSize: 10 }}>{seller.companyName}</Text>
+            <Text style={styles.sellerName}>{seller.companyName}</Text>
             <Text>{seller.street}</Text>
             <Text>{seller.zip} {seller.city}</Text>
             <Text>{seller.country}</Text>
@@ -373,6 +416,7 @@ export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot }: I
 
         <View style={styles.addressRow}>
           <View style={styles.customerBlock}>
+            <Text style={styles.sectionLabel}>Rechnung an</Text>
             <Text style={styles.customerName}>{customer.companyName ?? customer.name}</Text>
             {customer.companyName && customer.contactPerson ? <Text>{customer.contactPerson}</Text> : null}
             <Text>{customer.street}</Text>
@@ -380,17 +424,18 @@ export function ImmutableInvoiceDocument({ invoiceNumber, dueDate, snapshot }: I
             <Text>{customer.country}</Text>
           </View>
           <View style={styles.serviceBlock}>
+            <Text style={styles.sectionLabel}>Leistungsbezug</Text>
             <Text>Auftrag: {order.title}</Text>
           </View>
         </View>
 
         <View style={styles.table}>
           <View style={styles.tableRow}>
-            <View style={[styles.colPos, { backgroundColor: "#F8F8F8" }]}><Text style={styles.headerCell}>Pos.</Text></View>
-            <View style={[styles.colDesc, { backgroundColor: "#F8F8F8" }]}><Text style={styles.headerCell}>Bezeichnung</Text></View>
-            <View style={[styles.colQty, { backgroundColor: "#F8F8F8" }]}><Text style={styles.headerCell}>Menge</Text></View>
-            <View style={[styles.colUnit, { backgroundColor: "#F8F8F8" }]}><Text style={styles.headerCell}>Einzelpreis netto</Text></View>
-            <View style={[styles.colTotal, { backgroundColor: "#F8F8F8" }]}><Text style={styles.headerCell}>Gesamt netto</Text></View>
+            <View style={[styles.colPos, { backgroundColor: "#1A1F2E" }]}><Text style={styles.headerCell}>Pos.</Text></View>
+            <View style={[styles.colDesc, { backgroundColor: "#1A1F2E" }]}><Text style={styles.headerCell}>Bezeichnung</Text></View>
+            <View style={[styles.colQty, { backgroundColor: "#1A1F2E" }]}><Text style={styles.headerCell}>Menge</Text></View>
+            <View style={[styles.colUnit, { backgroundColor: "#1A1F2E" }]}><Text style={styles.headerCell}>Einzelpreis netto</Text></View>
+            <View style={[styles.colTotal, { backgroundColor: "#1A1F2E" }]}><Text style={styles.headerCell}>Gesamt netto</Text></View>
           </View>
           {lines.map((line, index) => (
             <View style={styles.tableRow} key={`${line.type}-${line.itemId}-${index}`}>
@@ -454,7 +499,7 @@ export function ImmutableInvoiceCancellationDocument({
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
           <View style={styles.sellerBlock}>
-            <Text style={{ fontWeight: "bold", color: "#000000", fontSize: 10 }}>{seller.companyName}</Text>
+            <Text style={styles.sellerName}>{seller.companyName}</Text>
             <Text>{seller.street}</Text>
             <Text>{seller.zip} {seller.city}</Text>
             <Text>{seller.country}</Text>
@@ -477,6 +522,7 @@ export function ImmutableInvoiceCancellationDocument({
 
         <View style={styles.addressRow}>
           <View style={styles.customerBlock}>
+            <Text style={styles.sectionLabel}>Stornobeleg an</Text>
             <Text style={styles.customerName}>{customer.companyName ?? customer.name}</Text>
             {customer.companyName && customer.contactPerson ? <Text>{customer.contactPerson}</Text> : null}
             <Text>{customer.street}</Text>
@@ -484,17 +530,18 @@ export function ImmutableInvoiceCancellationDocument({
             <Text>{customer.country}</Text>
           </View>
           <View style={styles.serviceBlock}>
+            <Text style={styles.sectionLabel}>Leistungsbezug</Text>
             <Text>Auftrag: {order.title}</Text>
           </View>
         </View>
 
         <View style={styles.table}>
           <View style={styles.tableRow}>
-            <View style={[styles.colPos, { backgroundColor: "#F8F8F8" }]}><Text style={styles.headerCell}>Pos.</Text></View>
-            <View style={[styles.colDesc, { backgroundColor: "#F8F8F8" }]}><Text style={styles.headerCell}>Bezeichnung</Text></View>
-            <View style={[styles.colQty, { backgroundColor: "#F8F8F8" }]}><Text style={styles.headerCell}>Menge</Text></View>
-            <View style={[styles.colUnit, { backgroundColor: "#F8F8F8" }]}><Text style={styles.headerCell}>Einzelpreis netto</Text></View>
-            <View style={[styles.colTotal, { backgroundColor: "#F8F8F8" }]}><Text style={styles.headerCell}>Storno netto</Text></View>
+            <View style={[styles.colPos, { backgroundColor: "#1A1F2E" }]}><Text style={styles.headerCell}>Pos.</Text></View>
+            <View style={[styles.colDesc, { backgroundColor: "#1A1F2E" }]}><Text style={styles.headerCell}>Bezeichnung</Text></View>
+            <View style={[styles.colQty, { backgroundColor: "#1A1F2E" }]}><Text style={styles.headerCell}>Menge</Text></View>
+            <View style={[styles.colUnit, { backgroundColor: "#1A1F2E" }]}><Text style={styles.headerCell}>Einzelpreis netto</Text></View>
+            <View style={[styles.colTotal, { backgroundColor: "#1A1F2E" }]}><Text style={styles.headerCell}>Storno netto</Text></View>
           </View>
           {lines.map((line, index) => (
             <View style={styles.tableRow} key={`cancel-${line.type}-${line.itemId}-${index}`}>

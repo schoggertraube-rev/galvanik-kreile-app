@@ -20,7 +20,7 @@ vi.mock("@/lib/server/orderIntakeRead", () => ({
   readOrderIntakeReceipt: ports.receipt,
 }));
 
-const auth = (permissions: string[]) => ({
+const auth = (permissions: string[], areas: string[] = ["eingang"]) => ({
   ok: true as const,
   data: {
     userId: "11111111-1111-4111-8111-111111111111",
@@ -28,6 +28,7 @@ const auth = (permissions: string[]) => ({
     displayName: "Büro",
     role: "buero" as const,
     permissions,
+    areas,
     active: true as const,
   },
 });
@@ -63,6 +64,8 @@ describe("F1 order intake actions", () => {
       ok: true, data: { canCreateCustomer: false },
     });
     ports.resolveAuthorization.mockResolvedValueOnce(auth(["perm_view_customers"]));
+    await expect(searchOrderIntakeCustomersAction({ query: "" })).resolves.toMatchObject({ ok: false, error: "FORBIDDEN" });
+    ports.resolveAuthorization.mockResolvedValueOnce(auth(["perm_data_orders"], []));
     await expect(searchOrderIntakeCustomersAction({ query: "" })).resolves.toMatchObject({ ok: false, error: "FORBIDDEN" });
   });
 

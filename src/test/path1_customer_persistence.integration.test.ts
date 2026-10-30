@@ -52,6 +52,12 @@ function customerInput(label: string, clientEventId = randomUUID()) {
     email: `${label.toLowerCase()}-${suffix}@example.invalid`,
     name: `SYNTHETISCH ${label} ${suffix}`,
     phone: "+49 000 12345",
+    street: "Testweg 1",
+    zipCode: "12345",
+    country: "Deutschland",
+    paymentPreference: "vorkasse",
+    vatId: "DE123456789",
+    notes: `SYNTHETISCH ${label} Notiz`,
   };
 }
 
@@ -70,6 +76,13 @@ beforeAll(async () => {
       (${users.readonly}::uuid, ${KREILE_TENANT_SLUG}, ${`path1-readonly-${suffix}@example.invalid`}, 'Path1 Readonly', 'readonly', true, ${now}::timestamptz, ${now}::timestamptz),
       (${users.foreign}::uuid, ${foreignTenant}, ${`path1-foreign-${suffix}@example.invalid`}, 'Path1 Foreign', 'buero', true, ${now}::timestamptz, ${now}::timestamptz)
   `;
+  await db`
+    INSERT INTO public.app_user_rights (tenant_id, user_id, bereich)
+    VALUES
+      (${KREILE_TENANT_SLUG}, ${users.buero}::uuid, 'kunden'),
+      (${KREILE_TENANT_SLUG}, ${users.buero}::uuid, 'geld'),
+      (${KREILE_TENANT_SLUG}, ${users.buero}::uuid, 'auftraege')
+  `;
 });
 
 beforeEach(() => setSession(users.buero, "buero"));
@@ -84,10 +97,12 @@ describe("PATH1 customer persistence", () => {
     if (first.code !== "OK") return;
     expect(first.replayed).toBe(false);
     expect(first.receipt.customerNumber).toMatch(/^K-\d{4}-\d{4,}$/);
+    expect(first.receipt.notes).toBe(input.notes);
     expect(first.customer).toMatchObject({
       id: first.receipt.customerId,
       customerNumber: first.receipt.customerNumber,
       name: input.name,
+      internalNotes: input.notes,
       orderCount: 0,
     });
 
@@ -128,7 +143,7 @@ describe("PATH1 customer persistence", () => {
     const foreign = await createCustomerCommand({
       tenantId: foreignTenant,
       userId: users.foreign,
-      capabilities: { canCreateCustomer: true },
+      capabilities: { canCreateCustomer: true, canManageMoney: true },
     }, customerInput("FOREIGN"));
     expect(foreign.code).toBe("OK");
     if (foreign.code !== "OK") return;

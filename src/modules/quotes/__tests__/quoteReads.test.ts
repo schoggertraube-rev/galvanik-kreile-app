@@ -13,7 +13,8 @@ const authorization = {
 const row = {
   quote_id: "44444444-4444-4444-8444-444444444444", tenant_id: authorization.tenantId, quote_number: "KV-2026-0042",
   customer_id: "33333333-3333-4333-8333-333333333333", customer_number: "K-2026-0041", customer_display_name: "Synthetischer Kunde",
-  status: "draft", version: 3, currency: "EUR", due_date: "2026-10-15", note: "Notiz", total_net_cents: 25000,
+  status: "draft", version: 3, currency: "EUR", due_date: "2026-10-15", valid_until: null,
+  intake_term_status: null, intake_source: null, note: "Notiz", total_net_cents: 25000,
   linked_order_id: null, created_by: authorization.userId, actor_display_name: "Synthetische Person",
   created_at: "2026-09-16T10:00:00.000Z", updated_at: "2026-09-16T10:01:00.000Z", converted_at: null,
   positions: [{ id: "88888888-8888-4888-8888-888888888888", position: 1, name: "Flansch", quantity: 2, material: "Stahl", surfaceRequested: "Verzinken", unitPriceCents: 12500, lineTotalCents: 25000 }], integrity_ok: true,

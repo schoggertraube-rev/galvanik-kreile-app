@@ -1,9 +1,9 @@
 .orderCardV8 {
-  color: #12161f;
+  color: var(--navy-900);
 }
 .sectionTitle p {
   margin: 0 0 4px;
-  color: #9b281d;
+  color: var(--ral);
   font-size: 11px;
   font-weight: 900;
   letter-spacing: 0.15em;
@@ -12,14 +12,14 @@
 .cardState {
   min-height: 320px;
   padding: 34px;
-  border: 1px dashed #d8d0c4;
+  border: 1px dashed var(--rand);
   border-radius: 20px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 9px;
-  background: #fffdf8;
+  background: var(--surface);
   text-align: center;
 }
 .cardState h1,
@@ -29,7 +29,7 @@
 .cardState > button {
   min-height: 48px;
   padding: 0 14px;
-  border: 1px solid #d8d0c4;
+  border: 1px solid var(--rand);
   border-radius: 12px;
   display: flex;
   align-items: center;
@@ -42,28 +42,28 @@
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
-  background: #f7f1e7;
+  background: var(--ground-rail);
   box-shadow: 0 34px 100px rgb(18 22 31/0.35);
 }
 .cardHeader {
   padding: 18px 22px;
-  border-bottom: 1px solid #d8d0c4;
+  border-bottom: 1px solid var(--rand);
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 18px;
-  background: #fffdf8;
+  background: var(--surface);
 }
 .back,
 .close {
   min-height: 48px;
-  border: 1px solid #d8d0c4;
+  border: 1px solid var(--rand);
   border-radius: 13px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  background: #fffdf8;
+  background: var(--surface);
 }
 .back {
   padding: 0 13px;
@@ -80,7 +80,7 @@
 }
 .identityBlock p {
   margin: 0;
-  color: #9b281d;
+  color: var(--ral);
   font:
     800 11px var(--font-geist-mono),
     monospace;
@@ -102,7 +102,7 @@
   align-items: center;
   gap: 5px;
   background: transparent;
-  color: #394154;
+  color: var(--navy-600);
   font-weight: 750;
   overflow-wrap: anywhere;
   text-align: left;
@@ -114,12 +114,12 @@
 .due {
   min-width: 190px;
   padding: 11px 14px;
-  border-left: 1px solid #d8d0c4;
+  border-left: 1px solid var(--rand);
   display: grid;
   gap: 3px;
 }
 .due small {
-  color: #687083;
+  color: var(--navy-300);
   font-size: 10px;
   font-weight: 800;
   text-transform: uppercase;
@@ -131,7 +131,7 @@
   width: max-content;
   padding: 4px 8px;
   border-radius: 999px;
-  background: #ebe4d8;
+  background: var(--ground-rail);
   font-size: 10px;
   font-weight: 800;
   text-transform: capitalize;
@@ -145,12 +145,13 @@
 }
 .lifecycle,
 .next,
+.dueHistory,
 .parts,
 .detailGrid > section {
   padding: 18px;
-  border: 1px solid #d8d0c4;
+  border: 1px solid var(--rand);
   border-radius: 17px;
-  background: #fffdf8;
+  background: var(--surface);
 }
 .sectionTitle h2 {
   margin: 0;
@@ -161,7 +162,7 @@
 }
 .lifecycle > ol {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   margin: 18px 0;
   padding: 0;
   list-style: none;
@@ -171,10 +172,28 @@
   display: grid;
   justify-items: center;
   gap: 6px;
-  color: #7a8191;
+  color: var(--navy-300);
   font-size: 11px;
   font-weight: 800;
   text-transform: capitalize;
+}
+.lifecycle > ol li button {
+  min-height: 48px;
+  border: 0;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+.lifecycle > ol li button:disabled {
+  cursor: default;
+}
+.due[data-overdue="true"] strong {
+  color: var(--danger-red);
 }
 .lifecycle > ol li:before {
   content: "";
@@ -184,13 +203,13 @@
   right: 50%;
   width: 100%;
   height: 2px;
-  background: #d8d0c4;
+  background: var(--rand);
 }
 .lifecycle > ol li:first-child:before {
   display: none;
 }
 .lifecycle > ol li[data-done="true"]:before {
-  background: #3f7d69;
+  background: var(--succ);
 }
 .lifecycle > ol span {
   position: relative;
@@ -200,11 +219,11 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: #ddd6ca;
+  background: var(--cream-300);
 }
 .lifecycle > ol li[data-done="true"] span {
-  background: #3f7d69;
-  color: #fff;
+  background: var(--succ);
+  color: var(--surface);
 }
 .lifecycle > ol svg {
   width: 16px;
@@ -215,19 +234,19 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  background: #171c29;
-  color: #fff;
+  background: var(--navy-800);
+  color: var(--surface);
 }
 .paymentGate > svg {
   width: 24px;
-  color: #efb44d;
+  color: var(--amber);
 }
 .paymentGate div {
   display: grid;
   gap: 2px;
 }
 .paymentGate small {
-  color: #c7cad2;
+  color: var(--rand);
   font-size: 10px;
   text-transform: uppercase;
 }
@@ -237,10 +256,10 @@
 }
 .paymentGate span {
   font-size: 11px;
-  color: #e3e5e9;
+  color: var(--line);
 }
 .next {
-  background: linear-gradient(110deg, #f0dfbb, #f7ead1);
+  background: var(--warn-bg);
 }
 .next small {
   font-size: 10px;
@@ -257,8 +276,94 @@
 }
 .next p {
   margin: 0;
-  color: #5c6372;
+  color: var(--navy-400);
   font-size: 11px;
+}
+.dueEditor {
+  display: grid;
+  grid-template-columns: minmax(180px, .7fr) minmax(260px, 1.3fr) auto;
+  gap: var(--space-3);
+  align-items: end;
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  border: 1px solid var(--neutral-gray-100);
+  border-radius: var(--radius-md);
+  background: var(--bg-app-soft);
+}
+.dueEditor label {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--navy-700);
+  font-size: 11px;
+  font-weight: 800;
+}
+.dueEditor input,
+.dueEditor textarea {
+  min-height: 48px;
+  border: 1px solid var(--neutral-gray-300);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  padding: 10px;
+}
+.dueEditor textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+.dueEditor button {
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--navy-900);
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  background: var(--navy-900);
+  color: var(--surface-card);
+  font-weight: 750;
+}
+.dueEditor button:disabled {
+  opacity: .55;
+}
+.dueEditor button svg {
+  width: 18px;
+}
+.dueEditor > small {
+  grid-column: 1 / -1;
+  color: var(--danger-red);
+}
+.dueChangeList {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.dueChangeList li {
+  min-height: 58px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--neutral-gray-100);
+  border-radius: var(--radius-sm);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  background: var(--surface-card);
+}
+.dueChangeList li > svg {
+  width: 18px;
+  color: var(--gold-600);
+}
+.dueChangeList li > span {
+  display: grid;
+  gap: 2px;
+}
+.dueChangeList li > span:last-child {
+  text-align: right;
+}
+.dueChangeList small {
+  color: var(--text-muted);
+  font-size: 10px;
 }
 .parts > ol {
   display: grid;
@@ -269,7 +374,7 @@
 }
 .parts > ol > li {
   padding: 14px;
-  border: 1px solid #e3ddd2;
+  border: 1px solid var(--line);
   border-radius: 13px;
 }
 .parts header {
@@ -278,7 +383,7 @@
   gap: 12px;
 }
 .parts header span {
-  color: #687083;
+  color: var(--navy-300);
   font-size: 11px;
 }
 .parts dl,
@@ -294,7 +399,7 @@
 }
 .parts dt,
 .metaList dt {
-  color: #687083;
+  color: var(--navy-300);
   font-size: 10px;
   text-transform: uppercase;
 }
@@ -307,19 +412,19 @@
 .parts ul {
   margin: 10px 0 0;
   padding-left: 18px;
-  color: #4d5567;
+  color: var(--navy-500);
   font-size: 11px;
 }
 .parts li > button {
   min-height: 44px;
   margin-top: 12px;
   padding: 0 12px;
-  border: 1px solid #d8d0c4;
+  border: 1px solid var(--rand);
   border-radius: 11px;
   display: flex;
   align-items: center;
   gap: 7px;
-  background: #fff;
+  background: var(--surface);
 }
 .parts li > button svg {
   width: 17px;
@@ -331,7 +436,7 @@
 }
 .truthEmpty {
   margin: 14px 0 0;
-  color: #687083;
+  color: var(--navy-300);
   font-size: 12px;
   line-height: 1.55;
 }
@@ -344,7 +449,7 @@
 }
 .evidence li {
   padding: 10px;
-  border: 1px solid #e3ddd2;
+  border: 1px solid var(--line);
   border-radius: 11px;
   display: flex;
   align-items: center;
@@ -357,20 +462,20 @@
   display: grid;
 }
 .evidence small {
-  color: #687083;
+  color: var(--navy-300);
 }
 .feedback {
   padding: 14px 16px;
   border-radius: 13px;
   display: grid;
   gap: 4px;
-  background: #e6f0eb;
-  color: #245b48;
+  background: var(--succ-bg);
+  color: var(--succ-fg);
 }
 .feedback[data-kind="error"],
 .feedback[data-kind="conflict"] {
-  background: #f4e1de;
-  color: #8f2017;
+  background: var(--ral-bg);
+  color: var(--ral-fg);
 }
 .feedback small {
   font-size: 11px;
@@ -392,12 +497,12 @@
 .actionDock {
   min-height: 82px;
   padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
-  border-top: 1px solid #303647;
+  border-top: 1px solid var(--navy-700);
   display: flex;
   align-items: stretch;
   justify-content: center;
   gap: 8px;
-  background: #171c29;
+  background: var(--navy-800);
 }
 .actionItem {
   display: grid;
@@ -407,18 +512,18 @@
 .actionItem button {
   min-height: 50px;
   padding: 0 15px;
-  border: 1px solid #555c6d;
+  border: 1px solid var(--navy-500);
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: #2a3040;
-  color: #fff;
+  background: var(--navy-700);
+  color: var(--surface);
   font-weight: 750;
 }
 .actionItem button:not(:disabled):hover {
-  background: #394154;
+  background: var(--navy-600);
 }
 .actionItem button:disabled {
   opacity: 0.58;
@@ -428,9 +533,66 @@
 }
 .actionItem small {
   max-width: 160px;
-  color: #c5c8d1;
+  color: var(--rand);
   font-size: 9px;
   text-align: center;
+}
+.paymentOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 250;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(18 22 31/0.56);
+}
+.paymentDialog {
+  width: min(520px, 100%);
+  padding: 20px;
+  border: 1px solid var(--rand);
+  border-radius: var(--radius-lg);
+  display: grid;
+  gap: var(--space-4);
+  background: var(--surface-card);
+  box-shadow: var(--sh-lg);
+}
+.paymentDialog header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.paymentDialog h2,
+.paymentDialog p {
+  margin: 0;
+}
+.paymentDialog header small {
+  color: var(--ral);
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.paymentDialog header button {
+  width: 48px;
+  min-height: 48px;
+  border: 1px solid var(--rand);
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  background: var(--surface-card);
+}
+.paymentDialog > div {
+  display: grid;
+  gap: var(--space-2);
+}
+.paymentDialog > div button {
+  min-height: 48px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--navy-700);
+  border-radius: var(--radius-sm);
+  background: var(--navy-800);
+  color: var(--surface-card);
+  font-weight: 750;
 }
 @media (max-width: 740px) {
   .orderCardV8 {
@@ -460,6 +622,16 @@
   }
   .detailGrid {
     grid-template-columns: 1fr;
+  }
+  .dueEditor {
+    grid-template-columns: 1fr;
+  }
+  .dueChangeList li {
+    grid-template-columns: auto 1fr;
+  }
+  .dueChangeList li > span:last-child {
+    grid-column: 2;
+    text-align: left;
   }
   .cardScroll {
     padding: 12px;

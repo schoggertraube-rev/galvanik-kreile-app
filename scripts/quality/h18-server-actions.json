@@ -1,0 +1,179 @@
+{
+  "version": 1,
+  "inventorySha256": "99a408082c4162011cc0f5989aad0b389c004511dfdc2c4b9e7efa5d552750c4",
+  "testedWriteActions": {
+    "src/app/actions/invoices.actions.ts#cancelInvoiceAction": [
+      "src/test/h18_invoice_actions.integration.test.ts"
+    ],
+    "src/app/actions/invoices.actions.ts#issueInvoiceAction": [
+      "src/test/h18_invoice_actions.integration.test.ts"
+    ],
+    "src/app/actions/invoices.actions.ts#setInvoiceItemPricesAction": [
+      "src/test/h18_invoice_actions.integration.test.ts"
+    ],
+    "src/app/actions/customers.actions.ts#createCustomerAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/customers.actions.ts#updateCustomerCommercialAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/customers.actions.ts#updateCustomerNoteAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/goodsOut.actions.ts#recordGoodsOutAction": [
+      "src/test/h18_workshop_actions.integration.test.ts"
+    ],
+    "src/app/actions/quotes.actions.ts#convertQuoteToOrderAction": [
+      "src/test/h18_quote_actions.integration.test.ts"
+    ],
+    "src/app/actions/quotes.actions.ts#createQuoteAction": [
+      "src/test/h18_quote_actions.integration.test.ts"
+    ],
+    "src/app/actions/quotes.actions.ts#updateQuoteAction": [
+      "src/test/h18_quote_actions.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#changeOrderPromisedDueDateAction": [
+      "src/test/h18_settings_actions.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#assignOrderTaskAction": [
+      "src/test/h18_order_admin_actions.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#changeOrderContentAction": [
+      "src/test/h18_order_admin_actions.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#changeOrderItemExtraWorkAction": [
+      "src/test/h18_order_admin_actions.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#configureExtraWorkCatalogPositionAction": [
+      "src/test/h18_order_admin_actions.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#correctGalvanikToWareneingangAction": [
+      "src/test/h18_workshop_actions.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#freezeOrderAction": [
+      "src/test/h18_workshop_actions.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#handBackOrderTaskAction": [
+      "src/test/h18_order_admin_actions.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#reopenFrozenOrderAction": [
+      "src/test/h18_order_admin_actions.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#setOrderItemFinishedAction": [
+      "src/test/h18_workshop_actions.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#transitionWareneingangToGalvanikAction": [
+      "src/test/h18_workshop_actions.integration.test.ts"
+    ],
+    "src/app/actions/payments.actions.ts#confirmPaymentAction": [
+      "src/test/h18_settings_actions.integration.test.ts"
+    ],
+    "src/app/actions/payments.actions.ts#setPaymentModeAction": [
+      "src/test/h18_workshop_actions.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#setExtraWorkHourlyRateAction": [
+      "src/test/h18_masterdata_actions.integration.test.ts"
+    ],
+    "src/app/actions/settings.actions.ts#saveCatalogServiceAction": [
+      "src/test/h18_masterdata_actions.integration.test.ts"
+    ],
+    "src/app/actions/settings.actions.ts#saveCompanySettingsAction": [
+      "src/test/h18_masterdata_actions.integration.test.ts"
+    ],
+    "src/app/actions/settings.actions.ts#changeOwnPinAction": [
+      "src/test/h18_settings_actions.integration.test.ts",
+      "src/test/h18_settings_client.integration.test.tsx"
+    ],
+    "src/app/actions/settings.actions.ts#createManagedUserAction": [
+      "src/test/h18_settings_actions.integration.test.ts"
+    ],
+    "src/app/actions/settings.actions.ts#saveManagedUserAction": [
+      "src/test/h18_settings_actions.integration.test.ts",
+      "src/test/h18_settings_client.integration.test.tsx"
+    ],
+    "src/app/actions/settings.actions.ts#setManagedUserAreaAction": [
+      "src/test/h18_settings_actions.integration.test.ts",
+      "src/test/h18_settings_client.integration.test.tsx"
+    ],
+    "src/app/actions/start.actions.ts#notifyAdminPinReset": [
+      "src/test/h18_settings_actions.integration.test.ts"
+    ],
+    "src/app/actions/today.actions.ts#saveTodayPreferencesAction": [
+      "src/test/h18_settings_actions.integration.test.ts"
+    ],
+    "src/app/actions/today.actions.ts#saveTodayReminderAction": [
+      "src/test/h18_settings_actions.integration.test.ts"
+    ],
+    "src/app/warendurchlauf/actions.ts#createOrderIntakeAction": [
+      "src/test/h18_settings_actions.integration.test.ts"
+    ]
+  },
+  "writeActionOverrides": {
+    "src/app/actions/admin.actions.ts#createUser": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/admin.actions.ts#initializeDefaultFlags": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/admin.actions.ts#toggleFeatureFlag": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/admin.actions.ts#toggleUserStatus": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/admin.actions.ts#updateFeatureFlagRoles": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/admin.actions.ts#updateUserPin": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/admin.actions.ts#updateUserRole": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/auth.actions.ts#loginWithPin": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/auth.ts#login": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/auth.ts#logout": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/baths.actions.ts#createBathMeasurementDb": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/baths.actions.ts#updateBathDb": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/communications.actions.ts#attachOutlookMailAction": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/communications.actions.ts#sendCustomerMailAction": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/company.actions.ts#updateCompanySettings": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/complaints.actions.ts#createComplaint": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/complaints.actions.ts#resolveComplaint": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/complaints.actions.ts#updateComplaint": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/customers.actions.ts#createCustomerDb": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/customers.actions.ts#updateCustomerDb": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/domainAttachments.actions.ts#analyzeDomainAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/domainAttachments.actions.ts#attachIntakeDraftAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/domainAttachments.actions.ts#finalizeDomainAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/domainAttachments.actions.ts#reserveDomainAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/intakeDraft.actions.ts#discardIntakeDraftAction": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/intakeDraft.actions.ts#saveIntakeDraftAction": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/inventory.actions.ts#createInventoryMovementAction": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/items.actions.ts#createItemDb": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/items.actions.ts#deleteItemDb": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/items.actions.ts#updateItemDb": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/mahnung.actions.ts#sendeMahnung": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/mahnung.actions.ts#sendeZahlungserinnerung": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/orders.actions.ts#createOrderDb": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/orders.actions.ts#createOrderFromScan": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/orders.actions.ts#transitionOrderProcess": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/orders.actions.ts#updateOrderDb": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/price-lines.actions.ts#createPriceLineDb": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/price-lines.actions.ts#deletePriceLineDb": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/price-lines.actions.ts#updatePriceLineDb": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/settings.actions.ts#saveSalesStageFeatureAction": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/systemStats.ts#runSupabaseWriteTest": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/actions/tracking.actions.ts#logUiEvent": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/buchhaltung/actions.ts#assignBelegeBatchAction": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/buchhaltung/actions.ts#createBelegAction": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/buchhaltung/actions.ts#createKostenpostenAction": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/buchhaltung/actions.ts#createRechnungAction": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/buchhaltung/actions.ts#freigebenBelegAction": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/buchhaltung/actions.ts#stornoBelegAction": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/buchhaltung/periodenabschluss/actions.ts#finalSchliessePeriodeAction": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/buchhaltung/periodenabschluss/actions.ts#runEnergieVerteilungAction": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/buchhaltung/periodenabschluss/actions.ts#schliessePeriodeAction": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/cockpit/actions.ts#dismissWarnung": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/cockpit/actions.ts#refreshWarnungen": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/cockpit/actions.ts#savePhoneNote": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/cockpit/actions.ts#speichereJahresplan": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/marketing/aktion/actions.ts#changeAktionStatus": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/marketing/aktion/actions.ts#createAktion": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/marketing/kanaele/actions.ts#updateKanalConfig": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/marketing/segmente/actions.ts#createSegment": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/marketing/segmente/actions.ts#deleteSegment": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/marketing/segmente/actions.ts#updateSegment": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/warendurchlauf/actions.ts#finalizeGalvanikHandoffAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/warendurchlauf/actions.ts#finalizeOrderIntakeAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/warendurchlauf/actions.ts#reserveGalvanikHandoffAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/warendurchlauf/actions.ts#reserveOrderIntakeAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
+    "src/app/warendurchlauf/actions.ts#startProcessingStation": "H18.8 Bestand ohne Replay-Action-Test"
+  }
+}

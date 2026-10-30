@@ -56,3 +56,18 @@ Agentur für App und Web/KREILE_COWORK_AUTONOME_IDEA_TO_LIVE_STEUERUNG.zip
 # Chat-/Agent-Artefakte (nie Repo-Inhalt) — verhindern "fremde ungetrackte Dateien"-Verwirrung
 .claude/
 Claude outputs/
+
+# Verbindliche Owner-Steuerung wird versioniert; vorläufige Prüfdateien bleiben lokal.
+_review/*
+!_review/OWNER_ENTSCHEIDUNGEN.md
+!_review/AKTUELLE_ANWEISUNG.md
+!_review/MELDUNG_*.md
+!_review/ORIENTIERUNG_KLAERUNG.md
+!_review/KLAERUNG_*.md
+!_review/DEZEMBER_LISTE.md
+
+# Endversion mock stays local. Codex receives only the content-free build plan.
+docs/project/endversion/*
+!docs/project/endversion/codex/
+docs/project/endversion/codex/*
+!docs/project/endversion/codex/BAUPLAN.json

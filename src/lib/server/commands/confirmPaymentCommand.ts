@@ -8,7 +8,11 @@ import {
   type PaymentMode,
   type PaymentStatus,
 } from "@/lib/server/paymentContract";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import {
+  getAuthorizationActionGrants,
+  hasAuthorizationArea,
+  resolveAuthorization,
+} from "@/lib/server/authorization";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import {
   withPrivilegedTenantTransaction,
@@ -20,7 +24,6 @@ const EVENT_SCHEMA_VERSION = 1 as const;
 const PAYMENT_CONTRACT_VERSION = 1 as const;
 const PAYMENT_CURRENCY = "EUR" as const;
 const PAYMENT_SOURCE = "manual" as const;
-const PAYMENT_ROLES = ["buero", "meister", "admin"] as const;
 const MAX_INT4 = 2_147_483_647;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const INVOICE_NUMBER_PATTERN = /^R-[0-9]{4}-[0-9]{4,}$/;
@@ -94,6 +97,7 @@ type LockedPaymentOrder = {
   tenant_id: string;
   payment_mode: string;
   payment_mode_version: number | string;
+  station: string | null;
 };
 
 type PaymentEventRow = {
@@ -457,7 +461,8 @@ async function lockInvoiceOrder(
       orders.id,
       orders.tenant_id,
       orders.payment_mode,
-      orders.payment_mode_version
+      orders.payment_mode_version,
+      orders.station
     FROM public.invoices invoice
     JOIN public.orders orders
       ON orders.id = invoice.order_id
@@ -485,9 +490,11 @@ export async function confirmPayment(input: unknown): Promise<ConfirmPaymentResu
       ? { code: "UNAVAILABLE", message: "Zahlung konnte nicht sicher bestätigt werden." }
       : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
+  const actionGrants = getAuthorizationActionGrants(authorization.data);
+  const canManageFinance = hasAuthorizationArea(authorization.data, "geld");
   if (
     authorization.data.tenantId !== KREILE_TENANT_SLUG
-    || !PAYMENT_ROLES.includes(authorization.data.role as (typeof PAYMENT_ROLES)[number])
+    || !actionGrants.confirmPayment
   ) {
     return { code: "FORBIDDEN", message: "Zahlungsbestätigung ist mit dieser Rolle nicht erlaubt." };
   }
@@ -535,6 +542,9 @@ export async function confirmPayment(input: unknown): Promise<ConfirmPaymentResu
         !isPaymentMode(order.payment_mode) || toSafeInteger(order.payment_mode_version) === null
       ) {
         return { code: "NOT_FOUND", message: "Rechnung nicht verfügbar." };
+      }
+      if (!canManageFinance && (order.payment_mode !== "abholung" || order.station !== "fertig")) {
+        return { code: "FORBIDDEN", message: "Kassieren ist nur bei fertiger Ware zur Abholung erlaubt." };
       }
 
       const invoiceRows = await readInvoice(tx, tenantId, input.invoiceId, true);

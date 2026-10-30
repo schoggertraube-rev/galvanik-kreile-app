@@ -8,10 +8,12 @@ type ShellPermissionSnapshot = {
   role: string | null;
   status: "authenticated" | "unauthenticated" | "error";
   error: string | null;
+  areas: string[];
   permissions: string[];
   name: string;
   initials: string;
   hasPermission: (permission: string) => boolean;
+  hasArea: (area: string) => boolean;
   refreshPermissions: () => Promise<void>;
 };
 
@@ -22,19 +24,25 @@ const boundary = vi.hoisted(() => ({
     role: "buero",
     status: "authenticated",
     error: null,
+    areas: ["auftraege", "geld", "einstellungen"],
     permissions: ["perm_view_leitstand", "perm_view_customers"],
     name: "Rolf",
     initials: "R",
     hasPermission: vi.fn((permission: string) =>
       ["perm_view_leitstand", "perm_view_customers"].includes(permission)),
+    hasArea: vi.fn((area: string) => ["auftraege", "geld", "einstellungen"].includes(area)),
     refreshPermissions: vi.fn(async () => {}),
   } as ShellPermissionSnapshot,
   parkedCallProvider: vi.fn(),
   pathname: { value: "/start" },
+  push: vi.fn(),
   realtimeSyncProvider: vi.fn(),
 }));
 
 function setPermissionSnapshot(role: string, permissions: string[]) {
+  const areas = role === "werkstatt"
+    ? ["auftraege"]
+    : ["auftraege", "geld", "einstellungen"];
   const identity = role === "werkstatt"
     ? { name: "Phillip", initials: "P" }
     : role === "admin" || role === "developer"
@@ -46,21 +54,30 @@ function setPermissionSnapshot(role: string, permissions: string[]) {
     role,
     status: "authenticated",
     error: null,
+    areas,
     permissions,
     ...identity,
     hasPermission: vi.fn((permission: string) => permissions.includes(permission)),
+    hasArea: vi.fn((area: string) => areas.includes(area)),
     refreshPermissions: vi.fn(async () => {}),
   };
 }
 
 vi.mock("next/navigation", () => ({
   usePathname: () => boundary.pathname.value,
+  useRouter: () => ({ push: boundary.push }),
 }));
 vi.mock("@/lib/auth/PermissionsContext", () => ({
   usePermissions: () => boundary.permissions,
 }));
-vi.mock("@/components/layout/MockAppFrame", () => ({
-  MockAppFrame: ({ children }: { children: React.ReactNode }) => <div data-testid="mock-app-frame-marker">{children}</div>,
+vi.mock("@/components/layout/GlobalSearch", () => ({
+  GlobalSearch: ({ open }: { open: boolean }) => open ? <div data-testid="global-search-marker" /> : null,
+}));
+vi.mock("@/components/layout/MoreMenu", () => ({
+  MoreMenu: ({ open }: { open: boolean }) => open ? <div data-testid="more-menu-marker" /> : null,
+}));
+vi.mock("@/components/layout/GlobalCreateFlow", () => ({
+  requestGlobalCreate: vi.fn(),
 }));
 vi.mock("@/components/layout/SessionWarningBanner", () => ({
   SessionWarningBanner: ({ show }: { show: boolean }) => (
@@ -126,7 +143,7 @@ describe("W2C-B2M5V global browser provider containment", () => {
 
     expect(screen.getByTestId("children-marker")).toBeInTheDocument();
     expect(screen.queryByTestId("entity-overlay-stack-marker")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("mock-app-frame-marker")).not.toBeInTheDocument();
+    expect(document.querySelector(".kr-app")).not.toBeInTheDocument();
     expect(screen.queryByTestId("session-warning-marker")).not.toBeInTheDocument();
     expect(screen.queryByTestId("global-create-marker")).not.toBeInTheDocument();
     expectRemovedBrowserProvidersAbsent();
@@ -136,7 +153,7 @@ describe("W2C-B2M5V global browser provider containment", () => {
     renderShell("/orders");
 
     expect(screen.getByTestId("children-marker")).toBeInTheDocument();
-    expect(screen.getByTestId("mock-app-frame-marker")).toBeInTheDocument();
+    expect(document.querySelector(".kr-app")).toBeInTheDocument();
     expect(screen.getByTestId("session-warning-marker")).toHaveAttribute("data-show", "false");
     expect(screen.getByTestId("entity-overlay-stack-marker")).toBeInTheDocument();
     expect(screen.getByTestId("global-create-marker")).toBeInTheDocument();
@@ -149,7 +166,7 @@ describe("W2C-B2M5V global browser provider containment", () => {
       setPermissionSnapshot(role, ["perm_view_leitstand", "perm_view_customers"]);
       renderShell("/orders");
 
-      expect(screen.getByTestId("mock-app-frame-marker")).toBeInTheDocument();
+      expect(document.querySelector(".kr-app")).toBeInTheDocument();
       expect(screen.getByTestId("children-marker")).toBeInTheDocument();
       expect(screen.getByTestId("global-create-marker")).toBeInTheDocument();
     },
@@ -189,7 +206,8 @@ describe("W2C-B2M5V global browser provider containment", () => {
       resolve(process.cwd(), "src/components/layout/KreileAppShell.tsx"),
       "utf8",
     );
-    expect(shellSource).toContain("<MockAppFrame>");
+    expect(shellSource).toContain('from "@/ui/kr"');
+    expect(shellSource).toContain("<AppShell");
     expect(shellSource).not.toContain("RightNav");
     expect(shellSource).not.toContain("MobileNav");
   });

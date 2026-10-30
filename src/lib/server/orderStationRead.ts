@@ -10,7 +10,7 @@ import type {
 } from "@/lib/server/commands/orderStationCommand";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
-type Station = "wareneingang" | "galvanik";
+type Station = "wareneingang" | "angenommen" | "galvanik";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 type QueueRow = {
@@ -315,9 +315,9 @@ export async function readTenantStationOrders(
     ` : sql`
       SELECT queue.*, queue.due_date::date::text AS due_date_text
       FROM private.v_operational_station_queue_v1 queue
-      WHERE station = 'wareneingang'
-        AND (current_station = 'wareneingang' OR current_station IS NULL)
-        AND (current_station_id = 'wareneingang' OR current_station_id IS NULL)
+      WHERE station = 'angenommen'
+        AND (current_station = 'angenommen' OR current_station IS NULL)
+        AND (current_station_id = 'angenommen' OR current_station_id IS NULL)
       ORDER BY created_at DESC
     `);
 
@@ -360,7 +360,7 @@ export async function readTenantOrderStationReceipt(
       !UUID_PATTERN.test(row.correlation_id) ||
       row.event_schema_version !== 1 ||
       !isPositiveVersion(row.aggregate_version) ||
-      row.from_station !== "wareneingang" ||
+      row.from_station !== "angenommen" ||
       row.to_station !== "galvanik" ||
       !UUID_PATTERN.test(row.actor_id) ||
       !occurredAt
@@ -375,7 +375,7 @@ export async function readTenantOrderStationReceipt(
       eventSchemaVersion: 1,
       orderId: row.order_id,
       aggregateVersion: row.aggregate_version,
-      fromStation: "wareneingang",
+      fromStation: "angenommen",
       toStation: "galvanik",
       actorId: row.actor_id,
       occurredAt,
@@ -425,7 +425,7 @@ export async function readTenantOrderStationCorrectionReceipt(
       row.event_schema_version !== 1 ||
       !isPositiveVersion(row.aggregate_version) ||
       row.from_station !== "galvanik" ||
-      row.to_station !== "wareneingang" ||
+      row.to_station !== "angenommen" ||
       !UUID_PATTERN.test(row.actor_id) ||
       typeof row.reason !== "string" ||
       row.reason.trim().length === 0 ||
@@ -442,7 +442,7 @@ export async function readTenantOrderStationCorrectionReceipt(
       orderId: row.order_id,
       aggregateVersion: row.aggregate_version,
       fromStation: "galvanik",
-      toStation: "wareneingang",
+      toStation: "angenommen",
       actorId: row.actor_id,
       occurredAt,
       reason: row.reason,

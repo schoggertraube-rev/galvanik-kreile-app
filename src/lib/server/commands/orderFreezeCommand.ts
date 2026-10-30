@@ -10,7 +10,6 @@ const EVENT_SCHEMA_VERSION = 1 as const;
 const SOURCE_STATION = ORDER_LIFECYCLE_STATUS.GALVANIK;
 const TARGET_STATION = ORDER_LIFECYCLE_STATUS.FERTIG;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const ORDER_STATION_FORWARD_ROLES = ["buero", "werkstatt", "meister", "admin"] as const;
 
 export type FreezeOrderInput = {
   orderId: string;
@@ -261,9 +260,7 @@ export async function freezeOrder(input: FreezeOrderInput): Promise<FreezeOrderR
       ? { code: "UNAVAILABLE", message: "Auftrag konnte nicht sicher abgeschlossen werden." }
       : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
-  if (!ORDER_STATION_FORWARD_ROLES.includes(
-    authorization.data.role as (typeof ORDER_STATION_FORWARD_ROLES)[number],
-  )) {
+  if (!authorization.data.permissions.includes("perm_op_status")) {
     return { code: "FORBIDDEN", message: "Fertig-Abschluss ist mit dieser Rolle nicht erlaubt." };
   }
 
@@ -361,10 +358,11 @@ export async function freezeOrder(input: FreezeOrderInput): Promise<FreezeOrderR
       if (itemRows.some((item) =>
         item.tenant_id !== authorization.data.tenantId
         || item.customer_id !== order.customer_id
-        || item.current_station_id !== SOURCE_STATION
+        || (item.current_station_id !== SOURCE_STATION && item.current_station_id !== TARGET_STATION)
       )) {
         return { code: "VALIDATION_ERROR", message: "Auftragsteile sind nicht fertigsetzbar." };
       }
+      const pendingItemCount = itemRows.filter((item) => item.current_station_id === SOURCE_STATION).length;
 
       const rateRows = await tx.execute<RateRow>(sql`
         SELECT id::text AS id, tenant_id, hourly_rate_cents, version
@@ -456,7 +454,7 @@ export async function freezeOrder(input: FreezeOrderInput): Promise<FreezeOrderR
             AND current_station_id = ${SOURCE_STATION}
           RETURNING id
         `);
-        if (updatedItems.length !== itemRows.length) throw new Error("ORDER_FROZEN_ITEM_UPDATE_MISMATCH");
+        if (updatedItems.length !== pendingItemCount) throw new Error("ORDER_FROZEN_ITEM_UPDATE_MISMATCH");
       }
 
       const eventRows = await tx.execute<{ event_id: string; occurred_at: Date | string }>(sql`

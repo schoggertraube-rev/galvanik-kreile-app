@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "package": "PR-154-REBASELINE",
+  "pullRequest": 154,
+  "headBranch": "kreile/s1-p2-eingang",
+  "mainBaseSha": "1fa4920d6d06b02413c8c157ae6b739507105846",
+  "authorizedBy": "Siglinder",
+  "authorizedAt": "2026-10-30",
+  "scopeMode": "CUMULATIVE_REBASELINE_AFTER_RETARGET",
+  "followingPullRequests": "STRICT_UNCHANGED",
+  "reason": "Einmalige Owner-Freigabe fuer den kumulierten Umfang von PR #154 nach dem Retarget auf main; alle Folge-PRs bleiben unveraendert streng paketgebunden."
+}

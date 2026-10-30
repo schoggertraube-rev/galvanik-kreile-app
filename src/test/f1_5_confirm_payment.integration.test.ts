@@ -144,6 +144,16 @@ async function seedFixtures() {
       `;
     }
     await transaction`
+      INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
+      VALUES
+        (${TENANT}, ${USERS.buero}::uuid, 'geld', ${USERS.admin}::uuid),
+        (${TENANT}, ${USERS.meister}::uuid, 'geld', ${USERS.admin}::uuid),
+        (${TENANT}, ${USERS.admin}::uuid, 'geld', ${USERS.admin}::uuid),
+        (${TENANT}, ${USERS.werkstatt}::uuid, 'auftraege', ${USERS.admin}::uuid)
+      ON CONFLICT (tenant_id, user_id, bereich) DO UPDATE SET
+        granted_by = EXCLUDED.granted_by
+    `;
+    await transaction`
       INSERT INTO public.customers
         (id, tenant_id, customer_number, name, type, created_at, updated_at)
       VALUES

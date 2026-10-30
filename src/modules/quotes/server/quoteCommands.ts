@@ -24,6 +24,8 @@ import type {
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const TERM_STATUS_VALUES = ["wunsch", "bestaetigt", "verschoben"] as const;
+const INTAKE_SOURCE_VALUES = ["persoenlich", "versand", "abholung_firma", "anfrage_mail", "anfrage_telefon"] as const;
 
 type QuoteRow = {
   quote_id: string;
@@ -36,6 +38,9 @@ type QuoteRow = {
   version: number;
   currency: string;
   due_date: Date | string;
+  valid_until: Date | string | null;
+  intake_term_status: string | null;
+  intake_source: string | null;
   note: string | null;
   total_net_cents: number | string;
   linked_order_id: string | null;
@@ -111,11 +116,17 @@ function validDate(value: unknown): value is string {
 }
 
 function normalizeCreate(value: unknown): CreateQuoteInput | null {
-  if (!plainObject(value) || !exactKeys(value, ["clientEventId", "customerId", "dueDate", "note", "positions"])) return null;
+  if (!plainObject(value)) return null;
+  const hasIntakeMetadata = Object.hasOwn(value, "validUntil") || Object.hasOwn(value, "termStatus") || Object.hasOwn(value, "intakeSource");
+  if (!exactKeys(value, ["clientEventId", "customerId", "dueDate", "note", "positions",
+    ...(hasIntakeMetadata ? ["validUntil", "termStatus", "intakeSource"] : [])])) return null;
   if (typeof value.clientEventId !== "string" || !UUID_PATTERN.test(value.clientEventId)) return null;
   const customerId = text(value.customerId, 1, 128);
   const note = optionalText(value.note, 2000);
   if (!customerId || !validDate(value.dueDate) || note === undefined || !Array.isArray(value.positions) || value.positions.length < 1 || value.positions.length > 20) return null;
+  if (hasIntakeMetadata && (!validDate(value.validUntil)
+    || !TERM_STATUS_VALUES.includes(value.termStatus as typeof TERM_STATUS_VALUES[number])
+    || !INTAKE_SOURCE_VALUES.includes(value.intakeSource as typeof INTAKE_SOURCE_VALUES[number]))) return null;
   const positions = [];
   for (const candidate of value.positions) {
     if (!plainObject(candidate) || !exactKeys(candidate, ["material", "name", "quantity", "surfaceRequested", "unitPriceCents"])) return null;
@@ -127,16 +138,26 @@ function normalizeCreate(value: unknown): CreateQuoteInput | null {
       || typeof candidate.unitPriceCents !== "number" || !Number.isSafeInteger(candidate.unitPriceCents) || candidate.unitPriceCents < 0 || candidate.unitPriceCents > 999_999_999) return null;
     positions.push({ name, quantity: candidate.quantity, material, surfaceRequested, unitPriceCents: candidate.unitPriceCents });
   }
-  return { clientEventId: value.clientEventId, customerId, dueDate: value.dueDate, note, positions };
+  return {
+    clientEventId: value.clientEventId, customerId, dueDate: value.dueDate, note, positions,
+    ...(hasIntakeMetadata ? {
+      validUntil: value.validUntil as string,
+      termStatus: value.termStatus as typeof TERM_STATUS_VALUES[number],
+      intakeSource: value.intakeSource as typeof INTAKE_SOURCE_VALUES[number],
+    } : {}),
+  };
 }
 
 function normalizeConvert(value: unknown): ConvertQuoteInput | null {
-  if (!plainObject(value) || !exactKeys(value, ["clientEventId", "confirmedAward", "confirmedOrderDueDate", "expectedVersion", "quoteId"])) return null;
+  if (!plainObject(value) || !exactKeys(value, ["clientEventId", "confirmedAward", "confirmedOrderDueDate", "expectedVersion", "handoverMode", "paymentMode", "quoteId"])) return null;
   if (typeof value.quoteId !== "string" || !UUID_PATTERN.test(value.quoteId)
     || typeof value.clientEventId !== "string" || !UUID_PATTERN.test(value.clientEventId)
     || value.confirmedAward !== true || typeof value.expectedVersion !== "number"
     || !Number.isSafeInteger(value.expectedVersion) || value.expectedVersion < 1
-    || !validDate(value.confirmedOrderDueDate)) return null;
+    || !validDate(value.confirmedOrderDueDate)
+    || (value.handoverMode !== "pickup" && value.handoverMode !== "shipping")
+    || (value.paymentMode !== "vorkasse" && value.paymentMode !== "abholung" && value.paymentMode !== "rechnung")
+    || (value.paymentMode === "abholung" && value.handoverMode !== "pickup")) return null;
   return value as ConvertQuoteInput;
 }
 
@@ -172,10 +193,22 @@ function hashOrderIntent(input: QuoteOrderInput): string {
     clientEventId: input.clientEventId,
     customer: input.customer,
     dueDate: input.dueDate,
-    items: input.items.map(({ name, quantity, material, surfaceRequested }) => ({
-      name, quantity, material, surfaceRequested,
+    termStatus: input.termStatus,
+    intakeSource: input.intakeSource,
+    handoverMode: input.handoverMode,
+    items: input.items.map((item) => ({
+      catalogServiceId: item.catalogServiceId,
+      name: item.name,
+      quantity: item.quantity,
+      material: item.material,
+      surfaceRequested: item.surfaceRequested,
+      executionRequested: "offen",
+      unit: item.unit,
+      unitPriceCents: item.unitPriceCents,
+      vatRateBasisPoints: item.vatRateBasisPoints,
     })),
     note: input.note,
+    paymentMode: input.paymentMode,
   });
 }
 
@@ -215,18 +248,25 @@ function quoteFromRow(row: QuoteRow, tenantId: string): QuoteReadback | null {
   const updatedAt = iso(row.updated_at);
   const convertedAt = iso(row.converted_at);
   const dueDate = row.due_date instanceof Date ? row.due_date.toISOString().slice(0, 10) : String(row.due_date).slice(0, 10);
+  const validUntil = row.valid_until === null ? null : row.valid_until instanceof Date
+    ? row.valid_until.toISOString().slice(0, 10) : String(row.valid_until).slice(0, 10);
   const total = Number(row.total_net_cents);
   if (row.integrity_ok !== true || row.tenant_id !== tenantId || !UUID_PATTERN.test(row.quote_id)
     || !/^KV-\d{4}-\d{4,}$/.test(row.quote_number) || !positions || !validDate(dueDate)
     || !Number.isSafeInteger(total) || total !== positions.reduce((sum, item) => sum + item.lineTotalCents, 0)
     || !createdAt || !updatedAt || (row.converted_at !== null && !convertedAt)
+    || (validUntil !== null && !validDate(validUntil))
+    || (row.intake_term_status !== null && !TERM_STATUS_VALUES.includes(row.intake_term_status as typeof TERM_STATUS_VALUES[number]))
+    || (row.intake_source !== null && !INTAKE_SOURCE_VALUES.includes(row.intake_source as typeof INTAKE_SOURCE_VALUES[number]))
     || !["draft", "converted"].includes(row.status) || !Number.isSafeInteger(row.version) || row.version < 1
     || row.currency !== "EUR" || !UUID_PATTERN.test(row.created_by)) return null;
   return {
     quoteId: row.quote_id, quoteNumber: row.quote_number, customerId: row.customer_id,
     customerNumber: row.customer_number, customerDisplayName: row.customer_display_name,
     status: row.status as QuoteReadback["status"], version: row.version, currency: "EUR",
-    dueDate, note: row.note, totalNetCents: total, linkedOrderId: row.linked_order_id,
+    dueDate, validUntil, termStatus: row.intake_term_status as QuoteReadback["termStatus"],
+    intakeSource: row.intake_source as QuoteReadback["intakeSource"],
+    note: row.note, totalNetCents: total, linkedOrderId: row.linked_order_id,
     actorId: row.created_by, actorDisplayName: row.actor_display_name, createdAt, updatedAt, convertedAt, positions,
   };
 }
@@ -259,7 +299,8 @@ export async function createQuoteCommand(authorization: QuoteCommandContext, inp
       const result = await tx.execute<{ result_code: string; result_quote_id: string | null; replayed: boolean }>(sql`
         SELECT * FROM private.create_quote_v1(
           ${authorization.tenantId}, ${authorization.userId}::uuid, ${normalized.clientEventId}::uuid,
-          ${intentSha256}, ${normalized.customerId}, ${normalized.dueDate}::date, ${normalized.note},
+          ${intentSha256}, ${normalized.customerId}, ${normalized.dueDate}::date,
+          ${normalized.validUntil ?? null}::date, ${normalized.termStatus ?? null}, ${normalized.intakeSource ?? null}, ${normalized.note},
           ${JSON.stringify(normalized.positions)}::jsonb
         )
       `);
@@ -280,7 +321,10 @@ export async function createQuoteCommand(authorization: QuoteCommandContext, inp
       if (!quote || !receipt || receipt.integrity_ok !== true || receipt.tenant_id !== authorization.tenantId
         || receipt.quote_id !== quote.quoteId || receipt.customer_id !== normalized.customerId
         || receipt.actor_id !== authorization.userId || receipt.client_event_id !== normalized.clientEventId
-        || receipt.intent_sha256 !== intentSha256 || !recordedAt) throw new Error("QUOTE_CREATE_READBACK_INVALID");
+        || receipt.intent_sha256 !== intentSha256 || !recordedAt
+        || quote.validUntil !== (normalized.validUntil ?? null)
+        || quote.termStatus !== (normalized.termStatus ?? null)
+        || quote.intakeSource !== (normalized.intakeSource ?? null)) throw new Error("QUOTE_CREATE_READBACK_INVALID");
       return { code: "OK", quote, replayed: outcome.replayed, receipt: {
         receiptId: receipt.receipt_id, eventId: receipt.event_id, quoteId: receipt.quote_id,
         customerId: receipt.customer_id, actorId: receipt.actor_id, clientEventId: receipt.client_event_id,
@@ -393,7 +437,10 @@ export async function readQuoteCreateReceiptCommand(
         throw new Error("QUOTE_CREATE_RECEIPT_INVALID");
       }
       const quote = await readQuote(tx, authorization.tenantId, receipt.quote_id);
-      if (!quote || quote.customerId !== normalized.customerId) throw new Error("QUOTE_CREATE_RECEIPT_READBACK_INVALID");
+      if (!quote || quote.customerId !== normalized.customerId
+        || quote.validUntil !== (normalized.validUntil ?? null)
+        || quote.termStatus !== (normalized.termStatus ?? null)
+        || quote.intakeSource !== (normalized.intakeSource ?? null)) throw new Error("QUOTE_CREATE_RECEIPT_READBACK_INVALID");
       return { code: "OK", quote, receipt: {
         receiptId: receipt.receipt_id, eventId: receipt.event_id, quoteId: receipt.quote_id, customerId: receipt.customer_id,
         actorId: receipt.actor_id, clientEventId: receipt.client_event_id, correlationId: receipt.correlation_id,
@@ -454,13 +501,19 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const quote = await readQuote(tx, authorization.tenantId, normalized.quoteId);
       if (!quote) return { code: "NOT_FOUND", message: "KV ist nicht verfügbar." };
-      const sourceOrderInput: QuoteOrderInput = {
+      const sourceOrderInput: Omit<QuoteOrderInput, "handoverMode" | "paymentMode"> = {
         clientEventId: normalized.clientEventId,
         customer: { mode: "EXISTING", customerId: quote.customerId },
         dueDate: quote.dueDate,
+        termStatus: quote.termStatus === null ? null : "bestaetigt",
+        intakeSource: quote.intakeSource,
         note: quote.note,
         items: quote.positions.map(({ name, quantity, material, surfaceRequested }) => ({
+          catalogServiceId: null,
           name, quantity, material, surfaceRequested,
+          unit: null,
+          unitPriceCents: null,
+          vatRateBasisPoints: null,
         })),
       };
       // The quote keeps the customer's requested date. The confirmed order date is
@@ -468,6 +521,8 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
       const orderInput: QuoteOrderInput = {
         ...sourceOrderInput,
         dueDate: normalized.confirmedOrderDueDate,
+        handoverMode: normalized.handoverMode,
+        paymentMode: normalized.paymentMode,
       };
       const orderIntentSha256 = hashOrderIntent(orderInput);
       const rows = await tx.execute<{ result_code: string; order_input: unknown; replayed: boolean }>(sql`

@@ -195,6 +195,16 @@ async function seedCommandPrerequisites() {
       `;
     }
     await transaction`
+      INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
+      VALUES
+        (${COMMAND_TENANT}, ${COMMAND_USERS.admin}::uuid, 'eingang', ${COMMAND_USERS.admin}::uuid),
+        (${COMMAND_TENANT}, ${COMMAND_USERS.admin}::uuid, 'geld', ${COMMAND_USERS.admin}::uuid),
+        (${COMMAND_TENANT}, ${COMMAND_USERS.admin}::uuid, 'auftraege', ${COMMAND_USERS.admin}::uuid),
+        (${COMMAND_TENANT}, ${COMMAND_USERS.werkstatt}::uuid, 'auftraege', ${COMMAND_USERS.admin}::uuid)
+      ON CONFLICT (tenant_id, user_id, bereich) DO UPDATE SET
+        granted_by = EXCLUDED.granted_by
+    `;
+    await transaction`
       INSERT INTO public.company_settings (
         id, tenant_id, company_name, street, zip, city, country,
         iban, bic, bank_name, tax_id, invoice_vat_rate_basis_points,
@@ -211,12 +221,23 @@ async function seedCommandPrerequisites() {
     await transaction`
       INSERT INTO public.customers (
         id, tenant_id, customer_number, name, company_name, type,
-        street, zip_code, city, country, created_at, updated_at
+        contact_person, email, phone, street, zip_code, city, country,
+        payment_preference, created_at, updated_at
       ) VALUES (
         ${COMMAND_CUSTOMER}, ${COMMAND_TENANT}, ${`F15-${suffix}`}, 'F1.5 Contract Customer',
-        'F1.5 Contract Customer GmbH', 'business', 'Kundenweg 2',
-        '70174', 'Stuttgart', 'Deutschland', now(), now()
-      ) ON CONFLICT (id) DO NOTHING
+        'F1.5 Contract Customer GmbH', 'business', 'Fiona Vertrag',
+        ${`f15-contract-customer-${suffix}@local.invalid`}, '+49 711 5550150',
+        'Kundenweg 2', '70174', 'Stuttgart', 'Deutschland', 'vorkasse', now(), now()
+      ) ON CONFLICT (id) DO UPDATE SET
+        contact_person = EXCLUDED.contact_person,
+        email = EXCLUDED.email,
+        phone = EXCLUDED.phone,
+        street = EXCLUDED.street,
+        zip_code = EXCLUDED.zip_code,
+        city = EXCLUDED.city,
+        country = EXCLUDED.country,
+        payment_preference = EXCLUDED.payment_preference,
+        updated_at = EXCLUDED.updated_at
     `;
     await transaction`
       INSERT INTO private.extra_work_hourly_rates
@@ -259,8 +280,19 @@ async function createCommandReadyOrder(
     clientEventId: randomUUID(),
     customer: { mode: "EXISTING", customerId: COMMAND_CUSTOMER },
     dueDate: "2026-09-30",
+    handoverMode: "pickup",
+    paymentMode: "vorkasse",
     note: `F1.5 contract ${label}`,
-    items: [{ name: label, quantity: 1, material: "Stahl", surfaceRequested: "Galvanik" }],
+    items: [{
+      catalogServiceId: null,
+      name: label,
+      quantity: 1,
+      material: "Stahl",
+      surfaceRequested: "Galvanik",
+      unit: null,
+      unitPriceCents: null,
+      vatRateBasisPoints: null,
+    }],
   }));
   expect(intake.code).toBe("OK");
   if (intake.code !== "OK") throw new Error(`INTAKE_FAILED:${intake.code}`);
@@ -718,34 +750,82 @@ describe("F1.5 payment and goods-out contract", () => {
     })).rejects.toBe(rollbackSignal);
   });
 
-  it("runs the blocking real command path through payment gates and invoice-less Rechnung V2", async () => {
+  it("runs the real command path through the Vorkasse gate, open Abholung and invoice-less Rechnung V2", async () => {
     await seedCommandPrerequisites();
     const { recordGoodsOut } = await import("@/lib/server/commands/recordGoodsOutCommand");
     const { createInvoice } = await import("@/lib/server/commands/immutableInvoiceCommand");
+    const { resolveAuthorization } = await import("@/lib/server/authorization");
+    const { getPaymentState } = await import("@/lib/server/paymentSummaryRead");
 
-    for (const paymentMode of ["vorkasse", "abholung"] as const) {
-      const ready = await createCommandReadyOrder(`${paymentMode}-${suffix}`, paymentMode, true);
-      if (!ready.invoiceId || ready.grossAmountCents === null) throw new Error("ISSUED_INVOICE_MISSING");
-      const input = {
-        orderId: ready.orderId,
-        mode: paymentMode === "vorkasse" ? "versand" as const : "abholung" as const,
-        expectedVersion: ready.version,
-        clientEventId: randomUUID(),
-      };
-      const before = await readCommandSnapshot(ready.orderId);
-      await expect(withRealSession("werkstatt", () => recordGoodsOut(input)))
-        .resolves.toMatchObject({ code: "CONFLICT" });
-      expect(await readCommandSnapshot(ready.orderId)).toEqual(before);
+    const prepaid = await createCommandReadyOrder(`vorkasse-${suffix}`, "vorkasse", true);
+    if (!prepaid.invoiceId || prepaid.grossAmountCents === null) throw new Error("ISSUED_INVOICE_MISSING");
+    const prepaidInput = {
+      orderId: prepaid.orderId,
+      mode: "versand" as const,
+      expectedVersion: prepaid.version,
+      clientEventId: randomUUID(),
+    };
+    const prepaidBefore = await readCommandSnapshot(prepaid.orderId);
+    await expect(withRealSession("werkstatt", () => recordGoodsOut(prepaidInput)))
+      .resolves.toMatchObject({ code: "CONFLICT" });
+    expect(await readCommandSnapshot(prepaid.orderId)).toEqual(prepaidBefore);
 
-      const payment = await confirmCommandPayment(ready.invoiceId, ready.grossAmountCents);
-      expect(payment).toMatchObject({ code: "OK", receipt: { paymentStatus: "bezahlt", openAmountCents: 0 } });
-      const goodsOut = await withRealSession("werkstatt", () => recordGoodsOut(input));
-      expect(goodsOut).toMatchObject({
-        code: "OK",
-        replayed: false,
-        receipt: { eventSchemaVersion: 1, paymentMode, paymentStatus: "bezahlt", openAmountCents: 0 },
-      });
-    }
+    const prepaidPayment = await confirmCommandPayment(prepaid.invoiceId, prepaid.grossAmountCents);
+    expect(prepaidPayment).toMatchObject({ code: "OK", receipt: { paymentStatus: "bezahlt", openAmountCents: 0 } });
+    const prepaidGoodsOut = await withRealSession("werkstatt", () => recordGoodsOut(prepaidInput));
+    expect(prepaidGoodsOut).toMatchObject({
+      code: "OK",
+      replayed: false,
+      receipt: { eventSchemaVersion: 1, paymentMode: "vorkasse", paymentStatus: "bezahlt", openAmountCents: 0 },
+    });
+    expect(await readCommandSnapshot(prepaid.orderId)).toMatchObject({
+      station: "abgeholt",
+      version: prepaid.version + 1,
+      v1_events: 1,
+      invoices: 1,
+    });
+
+    const pickup = await createCommandReadyOrder(`abholung-${suffix}`, "abholung", true);
+    if (!pickup.invoiceId || pickup.grossAmountCents === null) throw new Error("ISSUED_INVOICE_MISSING");
+    const pickupGoodsOut = await withRealSession("werkstatt", () => recordGoodsOut({
+      orderId: pickup.orderId,
+      mode: "abholung",
+      expectedVersion: pickup.version,
+      clientEventId: randomUUID(),
+    }));
+    expect(pickupGoodsOut).toMatchObject({
+      code: "OK",
+      replayed: false,
+      receipt: {
+        eventSchemaVersion: 1,
+        paymentMode: "abholung",
+        paymentStatus: "offen",
+        openAmountCents: pickup.grossAmountCents,
+      },
+    });
+    expect(await readCommandSnapshot(pickup.orderId)).toMatchObject({
+      station: "abgeholt",
+      version: pickup.version + 1,
+      v1_events: 1,
+      invoices: 1,
+    });
+    const pickupView = await withRealSession("admin", async () => {
+      const authorization = await resolveAuthorization();
+      if (!authorization.ok) throw new Error(`AUTHORIZATION_FAILED:${authorization.reason}`);
+      return getPaymentState(authorization.data, pickup.orderId);
+    });
+    expect(pickupView).toMatchObject({
+      code: "OK",
+      data: {
+        physicalStatus: "abgeholt",
+        payment: {
+          mode: "abholung",
+          status: "offen",
+          openAmountCents: pickup.grossAmountCents,
+        },
+        goodsOut: { eventSchemaVersion: 1, mode: "abholung" },
+      },
+    });
 
     const issuedRechnung = await createCommandReadyOrder(`rechnung-issued-${suffix}`, "rechnung", true);
     const issuedRechnungGoodsOut = await withRealSession("werkstatt", () => recordGoodsOut({

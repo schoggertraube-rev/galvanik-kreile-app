@@ -9,9 +9,8 @@ import {
   setAppSession,
   SESSION_TTL_MS,
 } from "@/lib/server/appSession";
-import { resolveLoginIdentityByEmail } from "@/lib/server/authorization";
+import { hasAuthorizationArea, resolveLoginIdentityByEmail } from "@/lib/server/authorization";
 import {
-  readProductActorReadiness,
   reportProductActorOperationalFailure,
 } from "@/lib/server/productActorReadiness";
 import { recordUserLastSeenForLogin } from "@/lib/server/userLastSeen";
@@ -22,20 +21,12 @@ export type LogoutResult = {
 };
 
 function redirectToStart(message: string, supportReference?: string): never {
-  const query = new URLSearchParams({ message });
+  const query = new URLSearchParams({ message, mode: "email" });
   if (supportReference) query.set("support", supportReference);
   redirect(`/start?${query.toString()}`);
 }
 
 export async function login(formData: FormData) {
-  const readiness = await readProductActorReadiness();
-  if (!readiness.ok) {
-    redirectToStart(
-      "Anmeldung ist momentan nicht sicher verfügbar.",
-      readiness.supportReference,
-    );
-  }
-
   const supabase = await createClient();
   const data = {
     email: formData.get("email") as string,
@@ -65,12 +56,7 @@ export async function login(formData: FormData) {
   }
 
   const dbUser = identityResult.data;
-  const actor = readiness.actors.gregor;
-  if (
-    dbUser.id !== actor.actorId ||
-    dbUser.tenantId !== actor.tenantId ||
-    dbUser.role !== actor.role
-  ) {
+  if (!hasAuthorizationArea(dbUser, "wartung")) {
     await supabase.auth.signOut();
     const supportReference = reportProductActorOperationalFailure(
       "EMAIL_LOGIN_IDENTITY_MISMATCH",
@@ -83,10 +69,10 @@ export async function login(formData: FormData) {
 
   const now = Date.now();
   await setAppSession({
-    userId: actor.actorId,
-    tenantId: actor.tenantId,
-    role: actor.role,
-    displayName: actor.identity.name,
+    userId: dbUser.id,
+    tenantId: dbUser.tenantId,
+    role: dbUser.role,
+    displayName: dbUser.fullName,
     issuedAt: now,
     expiresAt: now + SESSION_TTL_MS,
   });
@@ -99,7 +85,7 @@ export async function login(formData: FormData) {
   }
 
   revalidatePath("/", "layout");
-  redirect("/settings");
+  redirect("/");
 }
 
 /**

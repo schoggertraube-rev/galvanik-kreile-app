@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getCustomersDb } from "@/app/actions/customers.actions";
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useOverlayStore } from "@/lib/overlayStore";
 import type { CustomerListItem, CustomersViewState } from "@/modules/customers/public";
+import { Kundenzeile, SeitenKopf, SuchFeld, Zustand } from "@/ui/kr";
 
 function normalize(value: string) {
-  return value.trim().toLocaleLowerCase("de");
+  return value.trim().toLocaleLowerCase("de-DE");
 }
 
 function matchesFilter(customer: CustomerListItem, query: string) {
@@ -23,6 +24,7 @@ function customerNumberLabel(customerNumber: string) {
 function customerTypeLabel(type: string) {
   const labels: Record<string, string> = {
     private: "Privatkunde",
+    privat: "Privatkunde",
     business: "Gewerbekunde",
     institution: "Institution",
     Privatkunde: "Privatkunde",
@@ -32,12 +34,16 @@ function customerTypeLabel(type: string) {
   return labels[type] ?? null;
 }
 
+function initials(name: string) {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  return (words.length > 1 ? `${words[0][0]}${words.at(-1)?.[0] ?? ""}` : words[0]?.slice(0, 2) ?? "K").toLocaleUpperCase("de-DE");
+}
+
 export function CustomersAppAdapter() {
   const openCustomer = useOverlayStore((state) => state.openCustomer);
-  const { hasPermission, loading: permissionsLoading } = usePermissions();
+  const { canAction, loading: permissionsLoading } = usePermissions();
   const [state, setState] = useState<CustomersViewState>({ kind: "loading" });
-  const [filterDraft, setFilterDraft] = useState("");
-  const [filter, setFilter] = useState("");
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -64,6 +70,7 @@ export function CustomersAppAdapter() {
             name: customer.name,
             type: customer.type,
             city: customer.city ?? null,
+            activeOrderCount: customer.activeOrderCount,
           })),
         });
       } catch {
@@ -78,83 +85,41 @@ export function CustomersAppAdapter() {
     };
   }, []);
 
-  const canCreateOrder = !permissionsLoading && hasPermission("perm_data_orders");
-  const customers = state.kind === "data" && filter.trim() ? state.customers.filter((customer) => matchesFilter(customer, filter)) : state.kind === "data" ? state.customers : [];
-  const status = state.kind === "loading"
-    ? { role: "status" as const, busy: true, message: "Kunden werden geladen." }
-    : state.kind === "data" && state.customers.length === 0
-      ? { role: "status" as const, busy: false, message: "Keine Kunden." }
-      : state.kind === "data" && customers.length === 0
-        ? { role: "status" as const, busy: false, message: "Keine Kunden passen zum Filter." }
-        : state.kind !== "data"
-          ? { role: state.kind === "error" ? "alert" as const : "status" as const, busy: false, message: state.message }
-          : null;
+  const canCreate = !permissionsLoading && canAction("createCustomer");
+  const customers = useMemo(() => state.kind === "data"
+    ? state.customers.filter((customer) => matchesFilter(customer, query))
+    : [], [query, state]);
+  const createAction = canCreate ? { text: "Kunde anlegen", icon: "plus" as const, onClick: () => requestGlobalCreate("CUSTOMER") } : undefined;
 
-  return (
-    <div className="app-page">
-      <div className="app-head">
-        <div>
-          <h1 style={{ margin: 0 }}>Kunden & Kontakt</h1>
-          <p>Kontakte, Eigenheiten, Aufträge und Dokumente bleiben in derselben Kundenkarte V2.</p>
-        </div>
-        {canCreateOrder ? (
-          <button className="app-btn primary" type="button" onClick={() => requestGlobalCreate("DIRECT_INTAKE")}>
-            Neuer Auftrag
-          </button>
-        ) : null}
-      </div>
-      {state.kind === "data" ? (
-        <div className="app-toolbar">
-          <label className="app-search">
-            ⌕
-            <input
-              data-list-filter=""
-              placeholder="Name, Ort, Auftrag oder Stichwort"
-              value={filterDraft}
-              onChange={(event) => setFilterDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") setFilter(filterDraft);
-              }}
-            />
-          </label>
-          <button className="app-btn" type="button" onClick={() => setFilter(filterDraft)}>
-            Filter
-          </button>
-        </div>
-      ) : null}
-      <div className="app-list">
-        {state.kind === "data" && customers.length > 0 ? (
-          <>
-            <div className="app-list-head">
-              <span>Kunde</span>
-              <span>Aufträge</span>
-              <span>Letzter Kontext</span>
-              <span></span>
-            </div>
-            {customers.map((customer) => (
-              <div
-                key={customer.id}
-                className="app-row"
-                data-filter-value={[customer.customerNumber, customer.name, customer.type, customer.city ?? ""].join(" ")}
-              >
-                <div className="app-main">
-                  <b>{customer.name}</b>
-                  <span>{[customerNumberLabel(customer.customerNumber), customerTypeLabel(customer.type), customer.city].filter(Boolean).join(" · ")}</span>
-                </div>
-                <div className="app-meta"></div>
-                <div className="app-meta">Kundenakte mit Aufträgen, Notizen und Dokumenten</div>
-                <button className="app-btn" type="button" onClick={() => openCustomer(customer.id)}>
-                  Karte öffnen →
-                </button>
-              </div>
-            ))}
-          </>
-        ) : status ? (
-          <div className="app-row" role={status.role} aria-busy={status.busy || undefined}>
-            <div className="app-main">{status.message}</div>
-          </div>
-        ) : null}
-      </div>
+  if (state.kind === "loading") return <section data-testid="customers-v11">
+    <SeitenKopf titel="Kunden & Kontakt" />
+    <Zustand art="laedt" text="Kunden werden geladen." />
+  </section>;
+
+  if (state.kind !== "data") return <section data-testid="customers-v11">
+    <SeitenKopf titel="Kunden & Kontakt" />
+    <Zustand art={state.kind === "error" ? "fehler" : "gesperrt"} text={state.message} />
+  </section>;
+
+  if (state.customers.length === 0) return <section data-testid="customers-v11">
+    <SeitenKopf titel="Kunden & Kontakt" />
+    <Zustand art="leer" text="Noch keine Kunden." aktion={createAction} />
+  </section>;
+
+  return <section data-testid="customers-v11">
+    <SeitenKopf titel="Kunden & Kontakt" />
+    <div className="kr-stapel">
+      <SuchFeld wert={query} onWert={setQuery} platzhalter="Name, Ort, Auftrag oder Stichwort" />
+      {customers.length ? <div className="kr-stapel" style={{ gap: 8 }}>
+        {customers.map((customer) => <Kundenzeile
+          key={customer.id}
+          kuerzel={initials(customer.name)}
+          name={customer.name}
+          meta={[customer.city ?? customerNumberLabel(customer.customerNumber) ?? customerTypeLabel(customer.type), `${customer.activeOrderCount} ${customer.activeOrderCount === 1 ? "aktiver Auftrag" : "aktive Aufträge"}`].filter(Boolean).join(" · ")}
+          karte
+          onOeffnen={() => openCustomer(customer.id)}
+        />)}
+      </div> : <Zustand art="leer" text={`Kein Kunde für „${query}“.`} aktion={createAction} />}
     </div>
-  );
+  </section>;
 }

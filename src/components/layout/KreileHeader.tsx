@@ -9,7 +9,7 @@ import { logout } from "@/app/actions/auth";
 import { useRealtimeStatus } from "./RealtimeSyncManager";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useSync } from "@/lib/offline/SyncContext";
-import { useErfassung } from "@/components/erfassung/ErfassungProvider";
+import { requestGlobalCreate } from "./globalCreateRequest";
 import { useRouter } from "next/navigation";
 
 interface KreileHeaderProps {
@@ -24,7 +24,6 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   const { initials, status, name } = usePermissions();
   const { status: realtimeStatus } = useRealtimeStatus();
   const { isOnline, outboxItems } = useSync();
-  const { openErfassung } = useErfassung();
   const pendingOutboxCount = outboxItems.filter((item) => item.status !== "synced").length;
 
   // User Dropdown State
@@ -122,7 +121,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              openErfassung({ mode: "scan" });
+              requestGlobalCreate({ intent: "DIRECT_INTAKE", prefill: { sourceMode: "camera" } });
             }}
             className="p-2 hover:bg-neutral-gray-100 rounded-full transition-colors z-10"
             title="Schnellannahme (Scan)"
@@ -145,7 +144,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
 
         {/* Header Plus (Generic Erfassung) */}
         <button
-          onClick={() => openErfassung({ mode: "gate" })}
+          onClick={() => requestGlobalCreate("DIRECT_INTAKE")}
           className="w-9 h-9 rounded-full bg-accent-orange text-white flex items-center justify-center hover:bg-accent-orange/90 transition-all shadow-sm"
           title="Neu anlegen"
         >

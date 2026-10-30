@@ -1,18 +1,26 @@
 "use server";
 
 import { db } from "@/db";
-import { customers } from "@/db/schema";
+import { customers, orders } from "@/db/schema";
 import { eq, ilike, or, and, sql } from "drizzle-orm";
 import type { InferSelectModel } from "drizzle-orm";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 import { Customer } from "@/lib/types/customer";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import {
+  getAuthorizationActionGrants,
+  hasAuthorizationArea,
+  resolveAuthorization,
+} from "@/lib/server/authorization";
 import { readCustomerSummary } from "@/lib/server/customerSummaryRead";
+import { readInvoiceTruth } from "@/lib/server/invoiceTruthRead";
 import {
   createCustomerCommand,
   readCustomerCreateReceiptCommand,
+  updateCustomerCommercialCommand,
+  updateCustomerNoteCommand,
   type CreateCustomerInput,
+  type UpdateCustomerCommercialInput,
 } from "@/modules/customers/server-public";
 
 export async function getCustomerSummaryAction(input: { customerId: string }) {
@@ -48,7 +56,8 @@ export async function createCustomerAction(input: CreateCustomerInput) {
     tenantId: authorization.data.tenantId,
     userId: authorization.data.userId,
     capabilities: {
-      canCreateCustomer: authorization.data.permissions.includes("perm_data_customers"),
+      canCreateCustomer: getAuthorizationActionGrants(authorization.data).createCustomer,
+      canManageMoney: authorization.data.areas?.includes("geld") ?? false,
     },
   }, input);
   if (command.code !== "OK") return command;
@@ -75,7 +84,10 @@ export async function readCustomerCreateReceiptAction(input: CreateCustomerInput
     : { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   const result = await readCustomerCreateReceiptCommand({
     tenantId: authorization.data.tenantId, userId: authorization.data.userId,
-    capabilities: { canCreateCustomer: authorization.data.permissions.includes("perm_data_customers") },
+    capabilities: {
+      canCreateCustomer: getAuthorizationActionGrants(authorization.data).createCustomer,
+      canManageMoney: authorization.data.areas?.includes("geld") ?? false,
+    },
   }, input);
   if (result.code !== "OK") return result;
   const readback = await readCustomerSummary(authorization.data, { customerId: result.receipt.customerId });
@@ -83,6 +95,44 @@ export async function readCustomerCreateReceiptAction(input: CreateCustomerInput
     return { code: "UNAVAILABLE" as const, message: "Ein Kundenbeleg wurde gefunden, der fachliche Stand ist aber noch nicht sicher lesbar." };
   }
   return { code: "OK" as const, receipt: result.receipt, customer: readback.data };
+}
+
+export async function updateCustomerCommercialAction(input: UpdateCustomerCommercialInput) {
+  const authorization = await resolveAuthorization();
+  if (!authorization.ok) return { code: "UNAVAILABLE" as const, message: authorization.message };
+  const result = await updateCustomerCommercialCommand({
+    tenantId: authorization.data.tenantId,
+    userId: authorization.data.userId,
+    capabilities: {
+      canCreateCustomer: getAuthorizationActionGrants(authorization.data).createCustomer,
+      canManageMoney: authorization.data.areas?.includes("geld") ?? false,
+    },
+  }, input);
+  if (result.code !== "OK") return result;
+  const readback = await readCustomerSummary(authorization.data, { customerId: input.customerId });
+  if (readback.code !== "OK" || !readback.data.customerNumber || readback.data.name !== input.name || readback.data.contactPerson !== input.contactPerson ||
+    readback.data.email !== input.email || readback.data.phone !== input.phone || readback.data.street !== input.street ||
+    readback.data.paymentPreference !== input.paymentPreference) return { code: "UNAVAILABLE" as const, message: "Änderung konnte nicht frisch bestätigt werden." };
+  revalidatePath("/customers"); revalidatePath(`/customers/${input.customerId}`);
+  return { code: "OK" as const, customer: readback.data };
+}
+
+export async function updateCustomerNoteAction(input: { clientEventId: string; customerId: string; note: string }) {
+  const authorization = await resolveAuthorization();
+  if (!authorization.ok) return { code: "UNAVAILABLE" as const, message: authorization.message };
+  const result = await updateCustomerNoteCommand({
+    tenantId: authorization.data.tenantId,
+    userId: authorization.data.userId,
+    capabilities: {
+      canCreateCustomer: getAuthorizationActionGrants(authorization.data).createCustomer,
+      canManageMoney: authorization.data.areas?.includes("geld") ?? false,
+    },
+  }, input);
+  if (result.code !== "OK") return result;
+  const readback = await readCustomerSummary(authorization.data, { customerId: input.customerId });
+  if (readback.code !== "OK" || (readback.data.internalNotes ?? "") !== input.note) return { code: "UNAVAILABLE" as const, message: "Kundennotiz wurde geschrieben, aber noch nicht sicher zurückgelesen." };
+  revalidatePath("/customers"); revalidatePath(`/customers/${input.customerId}`);
+  return { code: "OK" as const };
 }
 
 type DbCustomer = InferSelectModel<typeof customers>;
@@ -98,6 +148,8 @@ function mapDbCustomer(c: DbCustomer): Customer {
     email: c.email || undefined,
     phone: c.phone || undefined,
     paymentProfile: c.paymentProfile || undefined,
+    paymentPreference: c.paymentPreference || undefined,
+    vatId: c.vatId || undefined,
     approvalProfile: c.approvalProfile || undefined,
     expectationProfile: c.expectationProfile || undefined,
     technicalProfile: c.technicalProfile || undefined,
@@ -116,13 +168,19 @@ function mapDbCustomer(c: DbCustomer): Customer {
   };
 }
 
-export async function getCustomersDb(): Promise<ActionResult<Customer[]>> {
+export async function getCustomersDb(): Promise<ActionResult<Array<Customer & {
+  activeOrderCount: number;
+  lastHandoverMode: "pickup" | "shipping" | null;
+}>>> {
   noStore();
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
 
   const authRes = await resolveAuthorization();
   if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
+  if (!hasAuthorizationArea(authRes.data, "kunden")) {
+    return { ok: false, error: "FORBIDDEN", message: "Kundenstamm ist für diesen Login nicht freigegeben." };
+  }
   const tenantId = authRes.data.tenantId;
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
@@ -135,7 +193,34 @@ export async function getCustomersDb(): Promise<ActionResult<Customer[]>> {
         sql`coalesce(${customers.name}, '') NOT LIKE 'Capture%'`
       )
     ).orderBy(customers.createdAt);
-    const data = dbCustomers.map(mapDbCustomer).reverse(); // Order by createdAt desc
+    const activeCounts = await db.select({
+      customerId: orders.customerId,
+      count: sql<number>`count(*)::int`,
+    }).from(orders).where(and(
+      eq(orders.tenantId, tenantId),
+      sql`coalesce(${orders.station}, '') not in ('abgeholt', 'versendet', 'raus')`,
+      sql`coalesce(${orders.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`,
+    )).groupBy(orders.customerId);
+    const handoverHistory = await db.select({
+      customerId: orders.customerId,
+      handoverMode: orders.handoverMode,
+    }).from(orders).where(and(
+      eq(orders.tenantId, tenantId),
+      sql`${orders.handoverMode} in ('pickup', 'shipping')`,
+      sql`coalesce(${orders.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`,
+    )).orderBy(sql`coalesce(${orders.intakeDate}, ${orders.createdAt}) desc, ${orders.createdAt} desc, ${orders.id} desc`);
+    const countByCustomer = new Map(activeCounts.map((entry) => [entry.customerId, Number(entry.count)]));
+    const handoverByCustomer = new Map<string, "pickup" | "shipping">();
+    for (const entry of handoverHistory) {
+      if (!handoverByCustomer.has(entry.customerId) && (entry.handoverMode === "pickup" || entry.handoverMode === "shipping")) {
+        handoverByCustomer.set(entry.customerId, entry.handoverMode);
+      }
+    }
+    const data = dbCustomers.map((customer) => ({
+      ...mapDbCustomer(customer),
+      activeOrderCount: countByCustomer.get(customer.id) ?? 0,
+      lastHandoverMode: handoverByCustomer.get(customer.id) ?? null,
+    })).reverse(); // Order by createdAt desc
     return { ok: true, data };
   } catch (error) {
     console.error("Failed to get customers from DB:", error);
@@ -224,32 +309,27 @@ export async function getTopKunden(limit = 5) {
     const authRes = await resolveAuthorization();
     if (!authRes.ok) return [];
     const tenantId = authRes.data.tenantId;
-
-    const { sql, desc } = await import("drizzle-orm");
-    const { ausgangsrechnung } = await import("@/db/schema_buchhaltung");
-    
-    const top = await db.select({
-      id: customers.id,
-      name: customers.name,
-      summe: sql<number>`sum(${ausgangsrechnung.netto})`
-    })
-    .from(customers)
-    .innerJoin(ausgangsrechnung, eq(customers.id, ausgangsrechnung.kundeId))
-    .where(
+    const invoiceTruth = await readInvoiceTruth(authRes.data);
+    if (invoiceTruth.code !== "OK") return [];
+    const revenueByCustomer = new Map<string, number>();
+    for (const invoice of invoiceTruth.data) {
+      if (invoice.status !== "issued") continue;
+      revenueByCustomer.set(
+        invoice.customerId,
+        (revenueByCustomer.get(invoice.customerId) ?? 0) + invoice.grossAmountCents,
+      );
+    }
+    const customerRows = await db.select({ id: customers.id, name: customers.name }).from(customers).where(
       and(
         eq(customers.tenantId, tenantId),
-        sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`
-      )
-    )
-    .groupBy(customers.id)
-    .orderBy(desc(sql`sum(${ausgangsrechnung.netto})`))
-    .limit(limit);
-
-    return top.map((t, idx) => ({
-      id: t.id || String(idx),
-      name: t.name,
-      wert: Number(t.summe) || 0
-    }));
+        sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`,
+      ),
+    );
+    return customerRows
+      .map((customer) => ({ id: customer.id, name: customer.name, wert: (revenueByCustomer.get(customer.id) ?? 0) / 100 }))
+      .filter((customer) => customer.wert > 0)
+      .sort((left, right) => right.wert - left.wert || left.name.localeCompare(right.name, "de"))
+      .slice(0, limit);
   } catch (error) {
     console.error("Failed to get top customers:", error);
     return [];

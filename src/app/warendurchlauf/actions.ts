@@ -34,6 +34,8 @@ import type {
 import type { EvidenceReadRecord, ReadEvidenceTargetInput } from "@/lib/server/evidenceRead";
 import type { OperationalOrder } from "@/lib/types/operationalOrder";
 import type { WerkstattKpiSnapshot } from "@/modules/werkstatt/public";
+import type { IntakeTextRecognition } from "@/lib/server/intakeTextRecognition";
+import type { IntakeSuggestions, IntakeSuggestionsInput } from "@/lib/intakeSuggestionsContract";
 
 export type WarendurchlaufOrder = OperationalOrder;
 
@@ -68,7 +70,7 @@ export async function getStationReadyOrders(stationId: string): Promise<Warendur
   return { ok: false, error: "NOT_AVAILABLE", message: "NOT_AVAILABLE: Generische Stationslisten sind nicht verfügbar." };
 }
 
-async function getFixedStationOrders(station: "wareneingang" | "galvanik"): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
+async function getFixedStationOrders(station: "angenommen" | "galvanik"): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
   noStore();
   let authorization;
   try {
@@ -96,7 +98,7 @@ async function getFixedStationOrders(station: "wareneingang" | "galvanik"): Prom
 }
 
 export async function getWareneingangOrdersAction(): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
-  return getFixedStationOrders("wareneingang");
+  return getFixedStationOrders("angenommen");
 }
 
 export async function getGalvanikOrdersAction(): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
@@ -176,6 +178,44 @@ export async function createOrderIntakeAction(
   return domain.createOrderIntake(input);
 }
 
+export async function recognizeOrderIntakeTextAction(
+  input: { text: string },
+): Promise<WarendurchlaufActionResult<IntakeTextRecognition>> {
+  noStore();
+  if (!input || typeof input.text !== "string" || input.text.length > 6000) {
+    return { ok: false, error: "QUERY_ERROR", message: "Erfassungstext ist ungültig." };
+  }
+  const authorization = await resolveAuthorization();
+  if (!authorization.ok) {
+    return { ok: false, error: "AUTH_ERROR", message: authorization.message };
+  }
+  if (!authorization.data.permissions.includes("perm_data_orders") || authorization.data.areas?.includes("eingang") !== true) {
+    return { ok: false, error: "FORBIDDEN", message: "Wareneingang ist mit dieser Rolle nicht erlaubt." };
+  }
+  const { recognizeIntakeText } = await import("@/lib/server/intakeTextRecognition");
+  return { ok: true, data: recognizeIntakeText(input.text) };
+}
+
+export async function getOrderIntakeSuggestionsAction(
+  input: IntakeSuggestionsInput,
+): Promise<WarendurchlaufActionResult<IntakeSuggestions>> {
+  noStore();
+  const authorization = await resolveAuthorization();
+  if (!authorization.ok) {
+    return { ok: false, error: "AUTH_ERROR", message: authorization.message };
+  }
+  if (!authorization.data.permissions.includes("perm_data_orders") || authorization.data.areas?.includes("eingang") !== true) {
+    return { ok: false, error: "FORBIDDEN", message: "Wareneingang ist mit dieser Rolle nicht erlaubt." };
+  }
+  try {
+    const { readIntakeSuggestions } = await import("@/lib/server/intakeSuggestions");
+    return { ok: true, data: await readIntakeSuggestions(authorization.data, input) };
+  } catch (error) {
+    console.error("getOrderIntakeSuggestionsAction failed", error);
+    return { ok: false, error: "QUERY_ERROR", message: "Vorschläge sind derzeit nicht verfügbar." };
+  }
+}
+
 export async function searchOrderIntakeCustomersAction(
   input: OrderIntakeCustomerSearchInput,
 ): Promise<WarendurchlaufActionResult<{
@@ -183,18 +223,15 @@ export async function searchOrderIntakeCustomersAction(
   canCreateCustomer: boolean;
 }>> {
   noStore();
-  const authorization = await resolveAuthorization().catch(() => null);
-  if (!authorization) {
-    return { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." };
-  }
+  const authorization = await resolveAuthorization();
   if (!authorization.ok) {
     return authorization.reason === "AUTHORIZATION_UNAVAILABLE"
-      ? { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." }
-      : { ok: false, error: "AUTH_ERROR", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+      ? { ok: false, error: "UNAVAILABLE", message: authorization.message }
+      : { ok: false, error: "AUTH_ERROR", message: authorization.message };
   }
   if (
     !authorization.data.permissions.includes("perm_data_orders") ||
-    !authorization.data.permissions.includes("perm_view_customers")
+    authorization.data.areas?.includes("eingang") !== true
   ) {
     return { ok: false, error: "FORBIDDEN", message: "Wareneingang ist mit dieser Rolle nicht erlaubt." };
   }
@@ -216,14 +253,11 @@ export async function getOrderIntakeReceiptAction(
   input: OrderIntakeReceiptReadInput,
 ): Promise<WarendurchlaufActionResult<OrderIntakeReceipt | null>> {
   noStore();
-  const authorization = await resolveAuthorization().catch(() => null);
-  if (!authorization) {
-    return { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." };
-  }
+  const authorization = await resolveAuthorization();
   if (!authorization.ok) {
     return authorization.reason === "AUTHORIZATION_UNAVAILABLE"
-      ? { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." }
-      : { ok: false, error: "AUTH_ERROR", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+      ? { ok: false, error: "UNAVAILABLE", message: authorization.message }
+      : { ok: false, error: "AUTH_ERROR", message: authorization.message };
   }
   if (!authorization.data.permissions.includes("perm_view_leitstand")) {
     return { ok: false, error: "FORBIDDEN", message: "Wareneingangsbeleg ist nicht erlaubt." };

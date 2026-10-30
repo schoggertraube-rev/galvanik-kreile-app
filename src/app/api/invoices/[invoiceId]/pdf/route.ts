@@ -24,6 +24,9 @@ export async function GET(
     return Response.json({ message: "Ungültige Belegart." }, { status: 400 });
   }
   const kind: InvoicePdfKind = kindValue;
+  const disposition = new URL(request.url).searchParams.get("disposition") === "inline"
+    ? "inline"
+    : "attachment";
 
   let authorization;
   try {
@@ -64,7 +67,7 @@ export async function GET(
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Disposition": `${disposition}; filename="${filename}"`,
       "Content-Length": String(pdf.byteLength),
       "Cache-Control": "private, no-store",
     },

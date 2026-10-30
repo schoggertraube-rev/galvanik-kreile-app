@@ -1,52 +1,232 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { OrderCardView, type OrderCardActionPorts, type OrderCardModel } from "../public";
 
 const actions: OrderCardActionPorts = {
-  handoff: { visible: false, enabled: false, reason: null }, evidence: { visible: false, enabled: false, reason: null },
-  freeze: { visible: false, enabled: false, reason: null }, invoice: { visible: false, enabled: false, reason: null },
-  payment: { visible: false, enabled: false, reason: null }, goodsOut: { visible: false, enabled: false, reason: null },
-  feedback: { kind: "idle", message: "" }, onHandoff: vi.fn(), onFreeze: vi.fn(), onIssueInvoice: vi.fn(),
-  onConfirmPayment: vi.fn(), onRecordGoodsOut: vi.fn(), onReload: vi.fn(),
+  dueDate: { visible: true, enabled: true, reason: null },
+  handoff: { visible: false, enabled: false, reason: null },
+  evidence: { visible: false, enabled: false, reason: null },
+  freeze: { visible: false, enabled: false, reason: null },
+  invoice: { visible: false, enabled: false, reason: null },
+  payment: { visible: false, enabled: false, reason: null },
+  goodsOut: { visible: false, enabled: false, reason: null },
+  feedback: { kind: "idle", message: "" },
+  onChangeDueDate: vi.fn(),
+  onHandoff: vi.fn(),
+  onFreeze: vi.fn(),
+  onIssueInvoice: vi.fn(),
+  onConfirmPayment: vi.fn(),
+  onRecordGoodsOut: vi.fn(),
+  onReload: vi.fn(),
 };
 
 const card: OrderCardModel = {
-  id: "order-1", version: 1, orderNumber: "A-2026-0042", customerId: "customer-1", customerName: "Muster GmbH",
-  title: "Geländer Süd", note: "Bitte separat verpacken", station: "angenommen", status: "angenommen",
-  dueAt: "2026-09-20", intakeAt: "2026-09-16T08:00:00.000Z", assignedTo: null,
+  id: "order-1",
+  version: 1,
+  orderNumber: "A-2026-0042",
+  customerId: "customer-1",
+  customerName: "Muster GmbH",
+  title: "Geländer Süd",
+  note: "Bitte separat verpacken",
+  station: "angenommen",
+  status: "angenommen",
+  dueAt: "2026-09-20",
+  intakeAt: "2026-09-16T08:00:00.000Z",
+  assignedTo: null,
+  dueDateChanges: [{ eventId: "event-1", changedTo: "2026-09-20", reason: "Kundenwunsch", changedAt: "2026-09-17T09:00:00.000Z", changedBy: "Rolf Kreile", aggregateVersion: 2 }],
   items: [{ id: "item-1", position: 1, name: "Haltewinkel", quantity: 2, material: "Stahl", surface: "Blau verzinken", extraWork: [] }],
-  evidence: [], frozenAt: null, totalAmountCents: null,
-  payment: { kind: "available", value: { mode: "vorkasse", invoiceState: "not_issued", status: null, openAmountCents: null, goodsOutAllowed: false, goodsOut: null } },
+  evidence: [],
+  frozenAt: null,
+  totalAmountCents: null,
+  payment: { kind: "available", value: { mode: "vorkasse", invoiceState: "not_issued", status: null, openAmountCents: null, goodsOutAllowed: false, paymentEvent: null, goodsOut: null } },
+  catalog: [{ id: "11111111-1111-4111-8111-111111111111", name: "Vernickeln", surface: "Nickel", unit: "Stück", netPriceCents: 1200, vatRateBasisPoints: 1900 }],
 };
 
-describe("Orders V8 one-surface truth", () => {
-  it("renders the same complete V8 card and customer cross-link", () => {
+describe("Orders V1.1 one-surface truth", () => {
+  it("renders the complete V1.1 card and customer cross-link", () => {
     const openCustomer = vi.fn();
     render(<OrderCardView actions={actions} onClose={vi.fn()} onOpenCustomer={openCustomer} state={{ kind: "data", card }} />);
-    expect(screen.getByTestId("order-card-v8")).toHaveTextContent("A-2026-0042");
-    expect(screen.getByText("Teile und Leistungen")).toBeInTheDocument();
-    expect(screen.getByText("Auftrag und Zahlung")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Auftragskarte A-2026-0042" })).toHaveTextContent("A-2026-0042");
+    expect(screen.getByText("Teile")).toBeInTheDocument();
+    expect(screen.getAllByText("angenommen").length).toBeGreaterThan(0);
+    expect(screen.getByText("Galvanik")).toBeInTheDocument();
+    expect(screen.getByText(/Vorkasse · Rechnung noch nicht ausgestellt/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Muster GmbH/ }));
     expect(openCustomer).toHaveBeenCalledWith("customer-1");
   });
 
   it("keeps implementation details out of the visible empty card copy", () => {
-    render(
-      <OrderCardView
-        actions={actions}
-        onClose={vi.fn()}
-        onOpenCustomer={vi.fn()}
-        state={{ kind: "data", card: { ...card, items: [], evidence: [] } }}
-      />,
-    );
+    render(<OrderCardView actions={actions} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{ kind: "data", card: { ...card, items: [], evidence: [] } }} />);
     expect(screen.getByText("Für diesen Auftrag sind noch keine Positionen erfasst.")).toBeInTheDocument();
     expect(screen.getByText("Noch keine Dokumente oder Fotos vorhanden.")).toBeInTheDocument();
-    expect(screen.getByTestId("order-card-v8")).not.toHaveTextContent(/Readback|kanonisch|tenantgebunden/i);
+    expect(screen.getByRole("dialog", { name: "Auftragskarte A-2026-0042" })).not.toHaveTextContent(/Readback|kanonisch|tenantgebunden/i);
+  });
+
+  it("translates legacy evidence codes into workshop language", () => {
+    render(<OrderCardView actions={actions} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{
+      kind: "data",
+      card: {
+        ...card,
+        evidence: [{
+          key: "legacy-scan-upload:c1a-legacy-scan",
+          source: "LEGACY_SCAN_UPLOAD",
+          state: "LEGACY_RECORDED",
+          recordedAt: "2026-10-29T16:00:00.000Z",
+          itemIds: [],
+        }],
+      },
+    }} />);
+    const orderCard = screen.getByRole("dialog", { name: "Auftragskarte A-2026-0042" });
+    expect(orderCard).toHaveTextContent("Übernommener Scan · Original erfasst");
+    expect(orderCard).not.toHaveTextContent("LEGACY_SCAN_UPLOAD");
+    expect(orderCard).not.toHaveTextContent("LEGACY_RECORDED");
+  });
+
+  it("requires a reason and exposes the persisted due-date history", () => {
+    const onChangeDueDate = vi.fn();
+    render(<OrderCardView actions={{ ...actions, onChangeDueDate }} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{ kind: "data", card }} />);
+    expect(screen.getByText(/Kundenwunsch/)).toHaveTextContent("Rolf Kreile");
+    fireEvent.click(screen.getByRole("button", { name: "Termin ändern" }));
+    const reason = screen.getByLabelText("Grund der Änderung");
+    expect(reason).toBeRequired();
+    expect(reason).toHaveAttribute("minLength", "3");
+    fireEvent.change(screen.getByLabelText("Neuer Liefertermin"), { target: { value: "2026-09-24" } });
+    fireEvent.change(reason, { target: { value: "Material verspätet" } });
+    fireEvent.submit(screen.getByRole("button", { name: "Termin mit Grund speichern" }).closest("form")!);
+    expect(onChangeDueDate).toHaveBeenCalledWith("2026-09-24", "Material verspätet");
+  });
+
+  it("requires an explicit payment method before confirming money received", async () => {
+    const onConfirmPayment = vi.fn().mockResolvedValue(true);
+    render(<OrderCardView actions={{ ...actions, payment: { visible: true, enabled: true, reason: null }, onConfirmPayment }} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{ kind: "data", card }} />);
+    fireEvent.click(screen.getAllByRole("button", { name: "Zahlung" })[0]);
+    expect(screen.getByRole("dialog", { name: "Zahlung bestätigen" })).toBeInTheDocument();
+    expect(onConfirmPayment).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Bar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Zahlung bestätigen" }));
+    await waitFor(() => expect(onConfirmPayment).toHaveBeenCalledWith("bar"));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Zahlung bestätigen" })).not.toBeInTheDocument());
+  });
+
+  it("keeps a failed payment in the dialog and shows an event-backed payment in history", async () => {
+    const onConfirmPayment = vi.fn().mockResolvedValue(false);
+    const paidCard: OrderCardModel = {
+      ...card,
+      payment: {
+        kind: "available",
+        value: {
+          mode: "vorkasse",
+          invoiceState: "issued",
+          invoiceId: "invoice-1",
+          invoiceNumber: "R-2026-0042",
+          status: "bezahlt",
+          openAmountCents: 0,
+          goodsOutAllowed: true,
+          paymentEvent: {
+            eventId: "payment-event-1",
+            actorId: "actor-1",
+            occurredAt: "2026-09-18T09:30:00.000Z",
+            method: "bar",
+          },
+          goodsOut: null,
+        },
+      },
+    };
+    render(<OrderCardView actions={{ ...actions, payment: { visible: true, enabled: true, reason: null }, feedback: { kind: "error", message: "Zahlung konnte nicht bestätigt werden." }, onConfirmPayment }} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{ kind: "data", card: paidCard }} />);
+    expect(screen.getByText("Zahlung bestätigt · Bar")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Zahlung" })[0]);
+    const dialog = screen.getByRole("dialog", { name: "Zahlung bestätigen" });
+    expect(dialog).toHaveTextContent("Zahlung konnte nicht bestätigt werden.");
+    fireEvent.click(screen.getByRole("button", { name: "Bar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Zahlung bestätigen" }));
+    await waitFor(() => expect(onConfirmPayment).toHaveBeenCalledWith("bar"));
+    expect(screen.getByRole("dialog", { name: "Zahlung bestätigen" })).toBeInTheDocument();
+  });
+
+  it("shows the confirmed invoice receipt where the invoice was issued", () => {
+    render(<OrderCardView actions={{
+      ...actions,
+      feedback: {
+        kind: "success",
+        message: "Rechnung R-2026-0042 wurde unveränderlich ausgestellt.",
+        receipt: {
+          kind: "invoice",
+          actorId: "actor-1",
+          occurredAt: "2026-09-18T09:30:00.000Z",
+          eventId: "invoice-event-1",
+          receiptId: "invoice://invoice-1/3",
+        },
+      },
+    }} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{ kind: "data", card }} />);
+
+    const confirmation = screen.getByRole("dialog", { name: "Rechnung ausgestellt" });
+    expect(confirmation).toHaveTextContent("Rechnung R-2026-0042 wurde unveränderlich ausgestellt.");
+    expect(confirmation).toHaveTextContent("Die Rechnung ist gespeichert und in der Auftragskarte nachgelesen.");
+  });
+
+  it("exposes the V1.1 action rail and persists note, item and part-state changes through ports", async () => {
+    const onSaveContent = vi.fn();
+    const onToggleItemFinished = vi.fn();
+    const onOpenStatusMail = vi.fn();
+    const onCallCustomer = vi.fn();
+    const onOpenPhoto = vi.fn();
+    render(<OrderCardView actions={{
+      ...actions,
+      content: { visible: true, enabled: true, reason: null },
+      itemStatus: { visible: true, enabled: true, reason: null },
+      contact: { visible: true, enabled: true, reason: null },
+      photo: { visible: true, enabled: true, reason: null },
+      onSaveContent, onToggleItemFinished, onOpenStatusMail, onCallCustomer, onOpenPhoto,
+    }} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{ kind: "data", card: { ...card, customerPhone: "+49 711 123" } }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Status-Mail" }));
+    fireEvent.click(screen.getByRole("button", { name: "Anrufen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Foto +" }));
+    expect(onOpenStatusMail).toHaveBeenCalledOnce();
+    expect(onCallCustomer).toHaveBeenCalledOnce();
+    expect(onOpenPhoto).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByRole("button", { name: "Teil bearbeiten" }));
+    fireEvent.change(screen.getByLabelText("Menge"), { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Teil speichern" }));
+    expect(onSaveContent).toHaveBeenCalledWith(expect.objectContaining({ items: [expect.objectContaining({ id: "item-1", quantity: 3 })] }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Notiz" }));
+    fireEvent.change(screen.getByLabelText("Notiz"), { target: { value: "Neue Auftragsnotiz" } });
+    fireEvent.click(screen.getByRole("button", { name: "Notiz speichern" }));
+    expect(onSaveContent).toHaveBeenLastCalledWith(expect.objectContaining({ note: "Neue Auftragsnotiz" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "fertig" }));
+    expect(onToggleItemFinished).toHaveBeenCalledWith("item-1", true);
+  });
+
+  it("adds a free-text part with its own surface when no catalog service is selected", () => {
+    const onSaveContent = vi.fn();
+    render(<OrderCardView actions={{
+      ...actions,
+      content: { visible: true, enabled: true, reason: null },
+      onSaveContent,
+    }} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{ kind: "data", card: { ...card, catalog: [] } }} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Teil hinzufügen" }));
+    fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "TEST Sonderteil" } });
+    fireEvent.change(screen.getByLabelText("Oberfläche"), { target: { value: "Vernickeln" } });
+    const buttons = screen.getAllByRole("button", { name: "Teil hinzufügen" });
+    fireEvent.click(buttons[buttons.length - 1]!);
+
+    expect(onSaveContent).toHaveBeenCalledWith(expect.objectContaining({
+      items: expect.arrayContaining([expect.objectContaining({
+        catalogServiceId: null,
+        name: "TEST Sonderteil",
+        surface: "Vernickeln",
+        unitPriceCents: null,
+      })]),
+    }));
   });
 
   it.each(["denied", "error", "conflict"] as const)("keeps %s fail-closed", (kind) => {
     render(<OrderCardView actions={actions} onClose={vi.fn()} onOpenCustomer={vi.fn()} state={{ kind, message: "Sicherer Zustand" }} />);
-    expect(screen.getByText("Sicherer Zustand")).toBeInTheDocument();
-    expect(screen.queryByTestId("order-card-v8")).not.toBeInTheDocument();
+    expect(screen.getByRole(kind === "denied" ? "status" : "alert")).toHaveTextContent("Sicherer Zustand");
+    expect(screen.queryByRole("dialog", { name: /Auftragskarte A-/ })).not.toBeInTheDocument();
   });
 });

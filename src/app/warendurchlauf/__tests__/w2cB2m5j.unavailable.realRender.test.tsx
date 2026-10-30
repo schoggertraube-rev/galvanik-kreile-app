@@ -42,6 +42,8 @@ vi.mock("@/app/warendurchlauf/actions", () => ({
 }));
 vi.mock("@/lib/server/authorization", () => ({
   resolveAuthorization: ports.resolveAuthorization,
+  hasAuthorizationArea: (authorization: { areas?: readonly string[] }, area: string) =>
+    authorization.areas?.includes(area) === true,
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: ports.pushRoute, refresh: ports.refreshRoute }),
@@ -83,6 +85,7 @@ const allowedAuthorization = (role: string = "werkstatt") => ({
     tenantId: KREILE_TENANT_SLUG,
     displayName: "Phillip",
     role,
+    areas: role === "buero" ? ["eingang"] : role === "developer" ? ["wartung"] : [],
     permissions:
       role === "werkstatt"
         ? ["perm_view_leitstand"]
@@ -122,6 +125,11 @@ const order = (
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({
+    matches: true,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }));
   ports.resolveAuthorization.mockResolvedValue(allowedAuthorization());
   ports.getWareneingangOrdersAction.mockResolvedValue({ ok: true, data: [] });
   ports.getGalvanikOrdersAction.mockResolvedValue({ ok: true, data: [] });
@@ -214,20 +222,14 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(screen.getByTestId("werkstatt-held-ga-1")).toHaveTextContent("Galvanik Sentinel");
     expect(screen.getByTestId("werkstatt-held-we-1")).toBeInTheDocument();
     expect(screen.getByTestId("werkstatt-held-ga-1")).toBeInTheDocument();
-    const wipTile = screen.getByRole("button", {
-      name: /In Arbeit \(Galvanik\)/,
-    });
+    const wipTile = screen.getByRole("button", { name: /In Arbeit/ });
     expect(wipTile).toHaveTextContent("1");
     fireEvent.click(wipTile);
     expect(ports.pushRoute).toHaveBeenCalledTimes(1);
     expect(ports.pushRoute).toHaveBeenCalledWith("/warendurchlauf/galvanik");
 
-    const wareneingangOrder = screen.getByRole("button", {
-      name: /Auftrag WE-001/,
-    });
-    const galvanikOrder = screen.getByRole("button", {
-      name: /Auftrag GA-001/,
-    });
+    const wareneingangOrder = within(screen.getByTestId("werkstatt-held-we-1")).getByRole("button", { name: "Auftrag öffnen" });
+    const galvanikOrder = within(screen.getByTestId("werkstatt-held-ga-1")).getByRole("button", { name: "Auftrag öffnen" });
     fireEvent.click(galvanikOrder);
     fireEvent.click(wareneingangOrder);
     expect(ports.openOrder).toHaveBeenNthCalledWith(1, "ga-1");
@@ -284,13 +286,30 @@ describe("W2C-B2M5J unavailable UI", () => {
     const filterButton = within(bundle).getByRole("button", {
       name: "Diese Aufträge zeigen",
     });
-    expect(filterButton).toHaveAttribute("aria-pressed", "false");
-
     fireEvent.click(filterButton);
-    expect(filterButton).toHaveAttribute("aria-pressed", "true");
+    expect(within(bundle).getByRole("button", { name: "Alle Aufträge zeigen" })).toBeVisible();
     const heldList = screen.getByTestId("werkstatt-held-list");
     expect(within(heldList).getAllByTestId(/^werkstatt-held-/)).toHaveLength(2);
     expect(ports.openOrder).not.toHaveBeenCalled();
+  });
+
+  it("shows an order subject without repeating an identical leading customer name", async () => {
+    const incoming = order(
+      "we-subject",
+      "WE-SUBJECT",
+      "Sabrina Schmidt · stosstange",
+      "wareneingang",
+      "orange",
+    );
+    incoming.customerName = "Sabrina Schmidt";
+    ports.getWareneingangOrdersAction.mockResolvedValueOnce({ ok: true, data: [incoming] });
+
+    const { default: WarendurchlaufIndex } = await import("../page");
+    render(await WarendurchlaufIndex());
+
+    const card = screen.getByTestId("werkstatt-held-we-subject");
+    expect(card).toHaveTextContent("Sabrina Schmidt — stosstange");
+    expect(card).not.toHaveTextContent("Sabrina Schmidt — Sabrina Schmidt");
   });
 
   it("opens the real-order picker in Galvanik-first order and selects the exact existing order id", async () => {
@@ -317,9 +336,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     const { default: WarendurchlaufIndex } = await import("../page");
     render(await WarendurchlaufIndex());
 
-    const trigger = screen.getByRole("button", {
-      name: "Auftrag öffnen",
-    });
+    const trigger = within(screen.getByRole("group", { name: "Werkstattaktionen" })).getByRole("button", { name: "Auftrag öffnen" });
     expect(
       screen.queryByRole("dialog", { name: "Auftrag öffnen" }),
     ).not.toBeInTheDocument();
@@ -339,7 +356,7 @@ describe("W2C-B2M5J unavailable UI", () => {
       within(dialog).getAllByText("WE-PICKER", { exact: true }),
     ).toHaveLength(1);
 
-    fireEvent.click(within(dialog).getByTestId("order-picker-order-ga-picker"));
+    fireEvent.click(within(within(dialog).getByTestId("order-picker-order-ga-picker")).getByRole("button"));
 
     expect(ports.openOrder).toHaveBeenCalledTimes(1);
     expect(ports.openOrder).toHaveBeenCalledWith("ga-picker");
@@ -356,14 +373,15 @@ describe("W2C-B2M5J unavailable UI", () => {
     const { default: WarendurchlaufIndex } = await import("../page");
     render(await WarendurchlaufIndex());
 
-    fireEvent.click(screen.getByRole("button", { name: "Mehrarbeit" }));
+    const actions = within(screen.getByRole("group", { name: "Werkstattaktionen" }));
+    fireEvent.click(actions.getByRole("button", { name: "Mehrarbeit" }));
     expect(
       screen.getByRole("dialog", { name: "Auftrag öffnen" }),
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Schließen" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Fertig melden" }));
+    fireEvent.click(actions.getByRole("button", { name: "Fertig melden" }));
     expect(
       screen.getByRole("dialog", { name: "Auftrag öffnen" }),
     ).toBeInTheDocument();
@@ -378,9 +396,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     const { default: WarendurchlaufIndex } = await import("../page");
     render(await WarendurchlaufIndex());
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Auftrag öffnen" }),
-    );
+    fireEvent.click(within(screen.getByRole("group", { name: "Werkstattaktionen" })).getByRole("button", { name: "Auftrag öffnen" }));
     fireEvent.click(screen.getByRole("button", { name: "Nummer, Kunde oder Scan …" }));
     expect(ports.openGlobalCreate).toHaveBeenCalledWith("DIRECT_INTAKE");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -408,7 +424,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     const { default: WarendurchlaufIndex } = await import("../page");
     render(await WarendurchlaufIndex());
 
-    const trigger = screen.getByRole("button", { name: "Ware raus" });
+    const trigger = within(screen.getByRole("group", { name: "Werkstattaktionen" })).getByRole("button", { name: "Ware raus" });
     expect(trigger).toBeEnabled();
     fireEvent.click(trigger);
 
@@ -426,9 +442,7 @@ describe("W2C-B2M5J unavailable UI", () => {
       within(dialog).queryByRole("button", { name: "Auftrag scannen" }),
     ).not.toBeInTheDocument();
 
-    fireEvent.click(
-      within(dialog).getByTestId("goods-out-picker-order-fi-out"),
-    );
+    fireEvent.click(within(within(dialog).getByTestId("goods-out-picker-order-fi-out")).getByRole("button"));
 
     expect(ports.openOrder).toHaveBeenCalledTimes(1);
     expect(ports.openOrder).toHaveBeenCalledWith("fi-out");
@@ -445,7 +459,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     const { default: WarendurchlaufIndex } = await import("../page");
     render(await WarendurchlaufIndex());
 
-    fireEvent.click(screen.getByRole("button", { name: "Ware raus" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Werkstattaktionen" })).getByRole("button", { name: "Ware raus" }));
 
     const dialog = screen.getByRole("dialog", { name: "Ware raus" });
     expect(
@@ -476,17 +490,15 @@ describe("W2C-B2M5J unavailable UI", () => {
     const { default: WarendurchlaufIndex } = await import("../page");
     render(await WarendurchlaufIndex());
 
-    const trigger = screen.getByRole("button", {
-      name: "Auftrag öffnen",
-    });
+    const trigger = within(screen.getByRole("group", { name: "Werkstattaktionen" })).getByRole("button", { name: "Auftrag öffnen" });
     trigger.focus();
     fireEvent.click(trigger);
     const closeButton = screen.getByRole("button", { name: "Schließen" });
     await waitFor(() => expect(closeButton).toHaveFocus());
     const dialog = screen.getByRole("dialog", { name: "Auftrag öffnen" });
-    const lastPickerOrder = within(dialog).getByTestId(
-      "order-picker-order-we-focus-last",
-    );
+    const lastPickerOrder = within(
+      within(dialog).getByTestId("order-picker-order-we-focus-last"),
+    ).getByRole("button");
 
     fireEvent.keyDown(closeButton, { key: "Tab", shiftKey: true });
     expect(lastPickerOrder).toHaveFocus();
@@ -542,17 +554,17 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(screen.queryByRole("button", { name: "Ware raus" })).not.toBeInTheDocument();
   });
 
-  it("denies an excluded root role before either station action is invoked", async () => {
+  it("allows developer insight but suppresses the employee intake action", async () => {
     ports.resolveAuthorization.mockResolvedValueOnce(
       allowedAuthorization("developer"),
     );
     const { default: WarendurchlaufIndex } = await import("../page");
     render(await WarendurchlaufIndex());
 
-    expect(screen.getByText("Zugriff nicht erlaubt.")).toBeInTheDocument();
-    expect(ports.getWareneingangOrdersAction).not.toHaveBeenCalled();
-    expect(ports.getGalvanikOrdersAction).not.toHaveBeenCalled();
-    expect(ports.getWarendurchlaufKPIs).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { level: 1, name: "Werkstatt" })).toBeInTheDocument();
+    expect(ports.getWareneingangOrdersAction).toHaveBeenCalledTimes(1);
+    expect(ports.getGalvanikOrdersAction).toHaveBeenCalledTimes(1);
+    expect(ports.getWarendurchlaufKPIs).toHaveBeenCalledTimes(1);
     expect(
       screen.queryByRole("button", { name: "Auftrag öffnen" }),
     ).not.toBeInTheDocument();
@@ -562,9 +574,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(
       screen.queryByRole("button", { name: "Neuer Eingang" }),
     ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("group", { name: "Werkstattaktionen" }),
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Werkstattaktionen" })).toBeInTheDocument();
   });
 
   it("suppresses a successful Wareneingang payload when Galvanik denies the atomic root read", async () => {
@@ -782,20 +792,11 @@ describe("W2C-B2M5J unavailable UI", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("source-locks the Phillip-Mock hierarchy, global Mock CSS, and real ports", () => {
+  it("source-locks the V1.1 hierarchy and real ports", () => {
     const clientSource = readFileSync(
       resolve(process.cwd(), "src/modules/werkstatt/ui/WerkstattView.tsx"),
       "utf8",
     );
-    const cssSource = readFileSync(
-      resolve(
-        process.cwd(),
-        "src/styles/mock/mock-kreile-phillip-home.css",
-      ),
-      "utf8",
-    );
-    const layoutSource = readFileSync(resolve(process.cwd(), "src/app/layout.tsx"), "utf8");
-    const compatSource = readFileSync(resolve(process.cwd(), "src/styles/mock/mock-kreile-compat.css"), "utf8");
     const adapterSource = readFileSync(
       resolve(process.cwd(), "src/app/warendurchlauf/WerkstattAppAdapter.tsx"),
       "utf8",
@@ -822,14 +823,10 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(clientSource).toContain("aria-controls={PICKER_DIALOG_ID}");
     expect(clientSource).toContain('activePicker === "goods-out"');
     expect(clientSource).toContain("view.goodsOutCandidates");
-    expect(clientSource).toContain('className="mock-kreile-phillip-home"');
+    expect(clientSource).toContain('from "@/ui/kr"');
+    expect(clientSource).toContain('data-testid="werkstatt-v11"');
+    expect(clientSource).not.toContain('className="mock-kreile-phillip-home"');
     expect(clientSource).not.toContain("WerkstattView.module.css");
-    expect(cssSource).toContain("AUTOMATISCH aus dem Owner-Mock erzeugt");
-    expect(cssSource).toContain(".mock-kreile-phillip-home .actionbar");
-    expect(cssSource).toContain("@media (prefers-reduced-motion:reduce)");
-    expect(layoutSource).toContain('mock-kreile-phillip-home.css');
-    expect(compatSource).toContain(".content > .mock-kreile-phillip-home");
-    expect(compatSource).toContain(".tcontent > .mock-kreile-phillip-home");
     expect(typesSource).not.toContain("OperationalOrder");
     expect(typesSource).toContain("export type WerkstattViewPorts");
     expect(typesSource).toContain("onOpenWip: () => void;");
@@ -839,7 +836,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(clientSource).not.toMatch(
       /@\/components\/|@\/hooks\/|@\/lib\/overlayStore/,
     );
-    expect(clientSource).toContain("onClick={ports.onOpenWip}");
+    expect(clientSource).toContain("onOeffnen={ports.onOpenWip}");
     expect(clientSource).not.toMatch(
       /next\/link|next\/navigation|\/warendurchlauf\//,
     );

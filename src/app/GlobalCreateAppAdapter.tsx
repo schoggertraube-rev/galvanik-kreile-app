@@ -3,9 +3,13 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { logout } from "@/app/actions/auth";
-import { createCustomerAction, getCustomersDb, readCustomerCreateReceiptAction } from "@/app/actions/customers.actions";
+import { createCustomerAction, getCustomersDb, readCustomerCreateReceiptAction, updateCustomerCommercialAction } from "@/app/actions/customers.actions";
 import { convertQuoteToOrderAction, createQuoteAction, listOpenQuotesAction, readQuoteAction, readQuoteCreateReceiptAction, readQuoteConversionReceiptAction, readQuoteUpdateReceiptAction, updateQuoteAction } from "@/app/actions/quotes.actions";
-import { createOrderIntakeAction, getOrderIntakeReceiptAction } from "@/app/warendurchlauf/actions";
+import { createOrderIntakeAction, getOrderIntakeReceiptAction, getOrderIntakeSuggestionsAction, recognizeOrderIntakeTextAction, searchOrderIntakeCustomersAction } from "@/app/warendurchlauf/actions";
+import { getActiveCatalogAction } from "@/app/actions/catalog.actions";
+import { attachIntakeDraftAttachmentAction } from "@/app/actions/domainAttachments.actions";
+import { attachOutlookMailAction } from "@/app/actions/communications.actions";
+import { discardIntakeDraftAction, readIntakeDraftAction, saveIntakeDraftAction } from "@/app/actions/intakeDraft.actions";
 import {
   GlobalCreateFlow,
   type GlobalCreateConversionResult,
@@ -24,27 +28,43 @@ import type { ConvertQuoteInput, CreateQuoteInput, UpdateQuoteInput } from "@/mo
 type CreateCustomerInput = Parameters<typeof createCustomerAction>[0];
 
 const PENDING_QUOTE_KEY = "path1.global-create.pending-quote";
+const PENDING_QUOTE_CONVERSION_KEY = "path1.global-create.pending-quote-conversion";
 
 export function GlobalCreateAppAdapter() {
   const router = useRouter();
   const openCustomer = useOverlayStore((state) => state.openCustomer);
-  const { hasPermission, name, role } = usePermissions();
+  const { canAction, hasArea, name, role } = usePermissions();
   const [resumeQuoteId, setResumeQuoteId] = useState<string | null>(null);
-  const canCreateCustomer = hasPermission("perm_data_customers");
-  const canCreateQuote = hasPermission("perm_data_orders");
+  const [resumeQuoteConversionId, setResumeQuoteConversionId] = useState<string | null>(null);
+  const canCreateCustomer = canAction("createCustomer");
+  const canCreateQuote = canAction("createQuote");
   const roleLabel = name.trim() || "dieses Profil";
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       setResumeQuoteId(window.sessionStorage.getItem(PENDING_QUOTE_KEY));
+      setResumeQuoteConversionId(window.sessionStorage.getItem(PENDING_QUOTE_CONVERSION_KEY));
     });
     return () => window.cancelAnimationFrame(frame);
   }, []);
 
   const rememberQuote = (quoteId: string | null) => {
-    if (quoteId) window.sessionStorage.setItem(PENDING_QUOTE_KEY, quoteId);
-    else window.sessionStorage.removeItem(PENDING_QUOTE_KEY);
+    if (quoteId) {
+      window.sessionStorage.setItem(PENDING_QUOTE_KEY, quoteId);
+      window.sessionStorage.removeItem(PENDING_QUOTE_CONVERSION_KEY);
+    } else {
+      window.sessionStorage.removeItem(PENDING_QUOTE_KEY);
+      window.sessionStorage.removeItem(PENDING_QUOTE_CONVERSION_KEY);
+    }
     setResumeQuoteId(quoteId);
+    setResumeQuoteConversionId(null);
+  };
+
+  const rememberQuoteConversion = (quoteId: string, clientEventId: string) => {
+    window.sessionStorage.setItem(PENDING_QUOTE_KEY, quoteId);
+    window.sessionStorage.setItem(PENDING_QUOTE_CONVERSION_KEY, clientEventId);
+    setResumeQuoteId(quoteId);
+    setResumeQuoteConversionId(clientEventId);
   };
 
   // Keep one safe, typed intake boundary mounted for authenticated workshop roles.
@@ -56,9 +76,12 @@ export function GlobalCreateAppAdapter() {
       ports={{
         canCreateCustomer,
         canCreateQuote,
-        showPrimaryTrigger: canCreateCustomer || canCreateQuote,
+        canManageMoney: hasArea("geld"),
+        canUseMail: hasArea("mails"),
+        showPrimaryTrigger: false,
         roleLabel,
         resumeQuoteId,
+        resumeQuoteConversionId,
         listCustomers: async () => {
           const result = await getCustomersDb();
           if (!result.ok) {
@@ -75,9 +98,70 @@ export function GlobalCreateAppAdapter() {
               id: customer.id,
               customerNumber: customer.customerNumber ?? null,
               name: customer.name,
+              customerType: customer.type === "institution" || customer.type === "Institution" ? "institution" as const : customer.type === "private" || customer.type === "Privatkunde" ? "privat" as const : "business" as const,
+              companyName: customer.companyName ?? null,
+              contactPerson: customer.contactPerson ?? null,
+              email: customer.email ?? null,
+              phone: customer.phone ?? null,
+              street: customer.street ?? "",
+              zipCode: customer.zipCode ?? "",
               city: customer.city ?? null,
+              country: customer.country ?? "",
+              paymentPreference: customer.paymentPreference,
+              vatId: customer.vatId ?? null,
+              lastHandoverMode: customer.lastHandoverMode,
             })),
           };
+        },
+        searchIntakeCustomers: async (query) => {
+          const result = await searchOrderIntakeCustomersAction({ query });
+          if (!result.ok) {
+            return {
+              code: result.error === "FORBIDDEN" || result.error === "AUTH_ERROR" ? "DENIED" as const : "UNAVAILABLE" as const,
+              message: result.message,
+            };
+          }
+          return {
+            code: "OK" as const,
+            customers: result.data.customers.map((customer) => ({
+              id: customer.id,
+              customerNumber: customer.customerNumber,
+              name: customer.name,
+              customerType: customer.customerType === "institution" ? "institution" as const : customer.customerType === "privat" || customer.customerType === "private" ? "privat" as const : "business" as const,
+              companyName: customer.companyName,
+              contactPerson: customer.contactPerson,
+              email: customer.email,
+              phone: customer.phone,
+              street: customer.street ?? "",
+              zipCode: customer.zipCode ?? "",
+              city: customer.city,
+              country: customer.country ?? "",
+              paymentPreference: customer.paymentPreference ?? undefined,
+              vatId: customer.vatId,
+              lastHandoverMode: customer.lastHandoverMode,
+            })),
+          };
+        },
+        recognizeIntakeText: async (text) => {
+          const result = await recognizeOrderIntakeTextAction({ text });
+          if (result.ok) return { code: "OK" as const, data: result.data };
+          return {
+            code: result.error === "FORBIDDEN" ? "FORBIDDEN" as const : result.error === "AUTH_ERROR" ? "UNAUTHENTICATED" as const : "UNAVAILABLE" as const,
+            message: result.message,
+          };
+        },
+        getIntakeSuggestions: async (input) => {
+          const result = await getOrderIntakeSuggestionsAction(input);
+          if (result.ok) return { code: "OK" as const, data: result.data };
+          return {
+            code: result.error === "FORBIDDEN" ? "FORBIDDEN" as const : result.error === "AUTH_ERROR" ? "UNAUTHENTICATED" as const : "UNAVAILABLE" as const,
+            message: result.message,
+          };
+        },
+        listCatalog: async () => {
+          if (!hasArea("geld")) return { code: "OK" as const, services: [] };
+          const result = await getActiveCatalogAction();
+          return result.code === "OK" ? result : { code: result.code === "FORBIDDEN" ? "DENIED" as const : "UNAVAILABLE" as const, message: result.message };
         },
         createCustomer: async (input: CreateCustomerInput): Promise<GlobalCreateCustomerResult> => {
           const result = await createCustomerAction(input);
@@ -93,6 +177,7 @@ export function GlobalCreateAppAdapter() {
             },
           };
         },
+        updateCustomer: async (input) => updateCustomerCommercialAction(input),
         readCustomerCreateReceipt: async (input: CreateCustomerInput): Promise<GlobalCreateCustomerResult> => {
           const result = await readCustomerCreateReceiptAction(input);
           if (result.code !== "OK") return result;
@@ -133,7 +218,19 @@ export function GlobalCreateAppAdapter() {
           if (!result.data) return { code: "NOT_FOUND", message: "Der gespeicherte Eingang wurde nicht gefunden." };
           return { code: "OK", replayed: true, receipt: result.data };
         },
+        readIntakeDraft: async () => readIntakeDraftAction(),
+        saveIntakeDraft: async (payload) => saveIntakeDraftAction(payload),
+        discardIntakeDraft: async () => discardIntakeDraftAction(),
+        attachIntakeAttachment: async (input) => {
+          const result = await attachIntakeDraftAttachmentAction(input);
+          return result.code === "OK" ? { code: "OK" as const } : result;
+        },
+        attachIntakeMail: async ({ graphMessageId, orderId }) => {
+          const result = await attachOutlookMailAction({ targetType: "ORDER", targetId: orderId, graphMessageId });
+          return result.code === "OK" ? { code: "OK" as const } : result;
+        },
         rememberQuote,
+        rememberQuoteConversion,
         openCustomer,
         openOrder: (orderId) => router.push(`/orders/${encodeURIComponent(orderId)}`),
         refresh: () => router.refresh(),

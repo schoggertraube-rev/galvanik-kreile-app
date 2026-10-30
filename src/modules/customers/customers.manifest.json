@@ -7,25 +7,35 @@
     "@/modules/customers/public#CustomerCardState",
     "@/modules/customers/public#CustomerCardView",
     "@/modules/customers/public#CreateCustomerInput",
+    "@/modules/customers/public#EnableCustomerInvoiceTermsInput",
     "@/modules/customers/public#CustomerListItem",
     "@/modules/customers/public#CustomerCreateCommandResult",
     "@/modules/customers/public#CustomerCreateReceipt",
     "@/modules/customers/public#ReadCustomerCreateReceiptResult",
+    "@/modules/customers/public#UpdateCustomerCommercialInput",
     "@/modules/customers/public#CustomersViewState",
     "@/modules/customers/server-public#CreateCustomerInput",
     "@/modules/customers/server-public#CustomerCommandCapabilities",
     "@/modules/customers/server-public#CustomerCommandContext",
+    "@/modules/customers/server-public#EnableCustomerInvoiceTermsInput",
     "@/modules/customers/server-public#ReadCustomerCreateReceiptResult",
+    "@/modules/customers/server-public#UpdateCustomerCommercialInput",
     "@/modules/customers/server-public#createCustomerCommand",
-    "@/modules/customers/server-public#readCustomerCreateReceiptCommand"
+    "@/modules/customers/server-public#enableCustomerInvoiceTermsCommand",
+    "@/modules/customers/server-public#readCustomerCreateReceiptCommand",
+    "@/modules/customers/server-public#updateCustomerCommercialCommand",
+    "@/modules/customers/server-public#updateCustomerNoteCommand"
   ],
   "capabilities": ["customers:create"],
-  "migrations": ["20260914100000_path1_customer_persistence_contract.sql"],
+  "migrations": ["20260914100000_path1_customer_persistence_contract.sql", "20261025182920_s1_p1_datenfundament.sql", "20261027193000_f1_intake_drafts.sql", "20261028014500_customer_create_notes_and_invoice_terms.sql", "20261028234500_h13_clear_customer_payment_preferences.sql"],
   "viewsFunctions": [
     "private.allocate_customer_number",
     "private.create_customer_v1",
+    "private.enable_customer_invoice_terms_v1",
     "private.v_customer_create_receipts_v1",
-    "private.v_customer_summary_v1"
+    "private.v_customer_summary_v1",
+    "private.update_customer_commercial_v1",
+    "private.update_customer_note_v1"
   ],
   "ownsTables": [
     "private.customer_create_receipts",
@@ -33,7 +43,7 @@
     "public.customers"
   ],
   "storagePurposes": [],
-  "events": { "emits": ["CUSTOMER_CREATED_V1"], "consumes": [] },
+  "events": { "emits": ["CUSTOMER_CREATED_V1", "CUSTOMER_NOTE_CHANGED_V1", "CUSTOMER_INVOICE_TERMS_ENABLED_V1"], "consumes": [] },
   "config": {},
   "dependencies": []
 }

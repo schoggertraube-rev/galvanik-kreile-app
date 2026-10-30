@@ -5,6 +5,18 @@ import { usePathname, useRouter } from "next/navigation";
 import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
 import { createClient } from "@/lib/supabase/client";
 import type { AuthBootstrapState } from "@/lib/server/authBootstrap";
+import type {
+  AccessArea,
+  AuthorizationAction,
+  AuthorizationActionGrants,
+} from "@/lib/auth/authorizationContract";
+
+const DENIED_ACTIONS: AuthorizationActionGrants = {
+  confirmPayment: false,
+  editOrderContent: false,
+  createCustomer: false,
+  createQuote: false,
+};
 
 export function deriveInitials(displayName: string): string {
   if (!displayName || displayName === "Unknown" || displayName === "User") return "";
@@ -20,7 +32,9 @@ export function deriveInitials(displayName: string): string {
  */
 interface AuthState {
   role: string | null;
+  areas: AccessArea[];
   permissions: string[];
+  actions: AuthorizationActionGrants;
   name: string;
   initials: string;
   status: "authenticated" | "unauthenticated" | "error";
@@ -29,7 +43,9 @@ interface AuthState {
 
 interface PermissionsContextType extends AuthState {
   loading: boolean;
+  hasArea: (area: AccessArea) => boolean;
   hasPermission: (key: string) => boolean;
+  canAction: (action: AuthorizationAction) => boolean;
   refreshPermissions: () => Promise<void>;
 }
 
@@ -42,7 +58,9 @@ function buildInitialAuthState(initial: AuthBootstrapState): AuthState {
   if (initial.status === "authenticated") {
     return {
       role: initial.user.role,
+      areas: [...initial.user.areas],
       permissions: [...initial.user.permissions],
+      actions: { ...DENIED_ACTIONS, ...initial.user.actions },
       name: initial.user.displayName,
       initials: deriveInitials(initial.user.displayName),
       status: "authenticated",
@@ -51,7 +69,9 @@ function buildInitialAuthState(initial: AuthBootstrapState): AuthState {
   }
   return {
     role: null,
+    areas: [],
     permissions: [],
+    actions: { ...DENIED_ACTIONS },
     name: "",
     initials: "",
     status: initial.status === "error" ? "error" : "unauthenticated",
@@ -61,11 +81,15 @@ function buildInitialAuthState(initial: AuthBootstrapState): AuthState {
 
 const PermissionsContext = createContext<PermissionsContextType>({
   role: null,
+  areas: [],
   permissions: [],
+  actions: { ...DENIED_ACTIONS },
   name: "",
   initials: "",
   loading: true,
+  hasArea: () => false,
   hasPermission: () => false,
+  canAction: () => false,
   refreshPermissions: async () => {},
   status: "unauthenticated",
   error: null,
@@ -110,7 +134,9 @@ export function PermissionsProvider({
       if (result.ok) {
         setAuthState({
           role: result.data.role,
+          areas: [...result.data.areas],
           permissions: [...result.data.permissions],
+          actions: { ...result.data.actions },
           name: result.data.displayName,
           initials: deriveInitials(result.data.displayName),
           status: "authenticated",
@@ -119,7 +145,9 @@ export function PermissionsProvider({
       } else if (result.status === "unauthenticated") {
         setAuthState({
           role: null,
+          areas: [],
           permissions: [],
+          actions: { ...DENIED_ACTIONS },
           name: "",
           initials: "",
           status: "unauthenticated",
@@ -131,7 +159,9 @@ export function PermissionsProvider({
       } else {
         setAuthState({
           role: null,
+          areas: [],
           permissions: [],
+          actions: { ...DENIED_ACTIONS },
           name: "",
           initials: "",
           status: "error",
@@ -148,7 +178,9 @@ export function PermissionsProvider({
       console.error("Failed to load permissions", err);
       setAuthState({
         role: null,
+        areas: [],
         permissions: [],
+        actions: { ...DENIED_ACTIONS },
         name: "",
         initials: "",
         status: "error",
@@ -208,10 +240,20 @@ export function PermissionsProvider({
     return authState.permissions.includes(key);
   }, [authState.permissions]);
 
+  const canAction = useCallback((action: AuthorizationAction) => {
+    return authState.actions[action];
+  }, [authState.actions]);
+
+  const hasArea = useCallback((area: AccessArea) => {
+    return authState.areas.includes(area);
+  }, [authState.areas]);
+
   const value: PermissionsContextType = {
     ...authState,
     loading,
+    hasArea,
     hasPermission,
+    canAction,
     refreshPermissions,
   };
 

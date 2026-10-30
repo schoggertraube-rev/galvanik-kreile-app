@@ -28,9 +28,15 @@ const input = {
   email: "synthetisch@example.invalid",
   name: "Synthetischer Kunde",
   phone: "+49 000 12345",
+  street: "Testweg 1",
+  zipCode: "12345",
+  country: "Deutschland",
+  paymentPreference: "vorkasse",
+  vatId: "DE123456789",
+  notes: "Synthetische Telefonnotiz",
 };
 const intentSha256 = createHash("sha256").update(JSON.stringify(input), "utf8").digest("hex");
-const authorization = { tenantId: TENANT, userId: ACTOR, capabilities: { canCreateCustomer: true } };
+const authorization = { tenantId: TENANT, userId: ACTOR, capabilities: { canCreateCustomer: true, canManageMoney: true } };
 const receiptRow = {
   receipt_id: RECEIPT,
   event_id: EVENT,
@@ -48,6 +54,12 @@ const receiptRow = {
   email: input.email,
   phone: input.phone,
   city: input.city,
+  street: input.street,
+  zip_code: input.zipCode,
+  country: input.country,
+  payment_preference: input.paymentPreference,
+  vat_id: input.vatId,
+  notes: input.notes,
   recorded_at: "2026-09-14T10:00:00.000Z",
   integrity_ok: true,
 };
@@ -62,7 +74,7 @@ describe("createCustomerCommand", () => {
     const { createCustomerCommand } = await import("../server/createCustomerCommand");
     await expect(createCustomerCommand(authorization, { ...input, tenantId: "foreign" })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
     await expect(createCustomerCommand(authorization, { ...input, email: "ungueltig" })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
-    await expect(createCustomerCommand({ ...authorization, capabilities: { canCreateCustomer: false } }, input)).resolves.toMatchObject({ code: "FORBIDDEN" });
+    await expect(createCustomerCommand({ ...authorization, capabilities: { canCreateCustomer: false, canManageMoney: true } }, input)).resolves.toMatchObject({ code: "FORBIDDEN" });
     expect(withTransaction).not.toHaveBeenCalled();
   });
 
@@ -81,6 +93,7 @@ describe("createCustomerCommand", () => {
         customerId: CUSTOMER,
         customerNumber: "K-2026-0042",
         clientEventId: CLIENT,
+        notes: input.notes,
         aggregateVersion: 1,
       },
     });
@@ -88,6 +101,57 @@ describe("createCustomerCommand", () => {
     expect(statements).toContain("private.create_customer_v1");
     expect(statements).toContain("private.v_customer_create_receipts_v1");
     expect(statements).not.toMatch(/max\s*\(/i);
+  });
+
+  it("legt einen Interessenten mit Name und Telefon über denselben nummerierten Schreibweg an", async () => {
+    const prospectInput = {
+      city: null,
+      clientEventId: CLIENT,
+      companyName: null,
+      contactPerson: null,
+      customerType: "business" as const,
+      email: null,
+      name: "Synthetischer Interessent",
+      phone: "+49 000 54321",
+      street: null,
+      zipCode: null,
+      country: null,
+      paymentPreference: null,
+      vatId: null,
+      notes: null,
+    };
+    const prospectHash = createHash("sha256").update(JSON.stringify(prospectInput), "utf8").digest("hex");
+    execute.mockImplementation((query: { text: string; values: unknown[] }) => {
+      if (query.text.includes("private.create_customer_v1")) return Promise.resolve([{ result_code: "OK", result_receipt_id: RECEIPT, replayed: false }]);
+      if (query.text.includes("private.v_customer_create_receipts_v1")) return Promise.resolve([{
+        ...receiptRow,
+        intent_sha256: prospectHash,
+        name: prospectInput.name,
+        company_name: null,
+        contact_person: null,
+        email: null,
+        phone: prospectInput.phone,
+        city: null,
+        street: null,
+        zip_code: null,
+        country: null,
+        payment_preference: null,
+        vat_id: null,
+        notes: null,
+      }]);
+      throw new Error(`unexpected SQL ${query.text}`);
+    });
+    const { createCustomerCommand } = await import("../server/createCustomerCommand");
+    await expect(createCustomerCommand(authorization, prospectInput)).resolves.toMatchObject({
+      code: "OK",
+      receipt: {
+        customerNumber: "K-2026-0042",
+        name: prospectInput.name,
+        phone: prospectInput.phone,
+        street: null,
+        paymentPreference: null,
+      },
+    });
   });
 
   it("spielt denselben Intent exakt wieder ab und weist abweichenden Intent ohne Write ab", async () => {

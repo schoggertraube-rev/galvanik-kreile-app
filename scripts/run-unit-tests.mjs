@@ -8,6 +8,8 @@ const result = spawnSync(
     "run",
     "--exclude",
     "**/*.integration.test.ts",
+    "--exclude",
+    "**/*.integration.test.tsx",
     ...process.argv.slice(2),
     "--maxWorkers=1",
     "--no-file-parallelism",

@@ -4,21 +4,17 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const ports = vi.hoisted(() => ({
-  readProductActorReadiness: vi.fn(),
+  readActiveStartUsers: vi.fn(),
   reportProductActorOperationalFailure: vi.fn(),
-  createPinLoginHandle: vi.fn((actorId: string) =>
-    actorId.endsWith("1") ? "synthetic-rolf-handle" : "synthetic-phillip-handle",
-  ),
   loginWithPin: vi.fn(),
-  login: vi.fn(),
+  searchParams: "",
 }));
 
 vi.mock("@/lib/server/productActorReadiness", () => ({
-  readProductActorReadiness: ports.readProductActorReadiness,
   reportProductActorOperationalFailure: ports.reportProductActorOperationalFailure,
 }));
-vi.mock("@/lib/server/pinLoginHandle", () => ({
-  createPinLoginHandle: ports.createPinLoginHandle,
+vi.mock("@/lib/server/startUserRead", () => ({
+  readActiveStartUsers: ports.readActiveStartUsers,
 }));
 vi.mock("@/hooks/usePageView", () => ({ usePageView: vi.fn() }));
 vi.mock("next/image", () => ({
@@ -27,7 +23,7 @@ vi.mock("next/image", () => ({
   ),
 }));
 vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(ports.searchParams),
 }));
 vi.mock("@/app/actions/start.actions", () => ({
   notifyAdminPinReset: vi.fn(),
@@ -35,71 +31,36 @@ vi.mock("@/app/actions/start.actions", () => ({
 vi.mock("@/app/actions/auth.actions", () => ({
   loginWithPin: ports.loginWithPin,
 }));
-vi.mock("@/app/actions/auth", () => ({ login: ports.login }));
+vi.mock("@/app/actions/auth", () => ({ login: vi.fn() }));
 
-const ACTOR_IDS = {
-  rolf: "11111111-1111-4111-8111-111111111111",
-  phillip: "22222222-2222-4222-8222-222222222222",
-  gregor: "33333333-3333-4333-8333-333333333333",
-} as const;
-
-const ready = {
-  ok: true as const,
-  evidenceScope: "RUNTIME_REQUEST" as const,
-  actors: {
-    rolf: {
-      key: "rolf" as const,
-      actorId: ACTOR_IDS.rolf,
-      tenantId: "synthetic-tenant",
-      role: "meister" as const,
-      identity: { name: "Rolf" as const, responsibility: "Meister" as const, initials: "R" as const },
-      login: "pin" as const,
-    },
-    phillip: {
-      key: "phillip" as const,
-      actorId: ACTOR_IDS.phillip,
-      tenantId: "synthetic-tenant",
-      role: "werkstatt" as const,
-      identity: { name: "Phillip" as const, responsibility: "Werkstatt" as const, initials: "P" as const },
-      login: "pin" as const,
-    },
-    gregor: {
-      key: "gregor" as const,
-      actorId: ACTOR_IDS.gregor,
-      tenantId: "synthetic-tenant",
-      role: "admin" as const,
-      identity: { name: "Gregor" as const, responsibility: "Systemadministrator" as const, initials: "G" as const },
-      login: "email" as const,
-    },
-  },
-};
+const activeUsers = [
+  { loginHandle: "synthetic-rolf-handle", fullName: "Rolf", shortCode: "R", designation: "Meister", role: "meister" as const, emailLoginAvailable: false },
+  { loginHandle: "synthetic-phillip-handle", fullName: "Phillip", shortCode: "P", designation: "Werkstatt", role: "werkstatt" as const, emailLoginAvailable: false },
+  { loginHandle: "synthetic-gregor-handle", fullName: "Gregor", shortCode: "G", designation: "Wartung", role: "developer" as const, emailLoginAvailable: true },
+];
 
 afterEach(() => cleanup());
 
 describe("StartPage product actor boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    ports.readProductActorReadiness.mockResolvedValue(ready);
+    ports.readActiveStartUsers.mockResolvedValue({ code: "OK", users: activeUsers });
     ports.reportProductActorOperationalFailure.mockReturnValue(
       "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
     );
     ports.loginWithPin.mockResolvedValue({ ok: false, message: "synthetic" });
+    ports.searchParams = "";
   });
 
-  it("emits only browser-safe handles for exact Rolf and Phillip profiles", async () => {
+  it("emits only browser-safe handles for every active app user", async () => {
     const { default: StartPage } = await import("@/app/start/page");
     const element = await StartPage();
 
-    expect(element.props.users).toEqual([
-      { loginHandle: "synthetic-rolf-handle", identity: "rolf" },
-      { loginHandle: "synthetic-phillip-handle", identity: "phillip" },
-    ]);
+    expect(element.props.users).toEqual(activeUsers);
     expect(element.props.loginUnavailable).toBe(false);
-    expect(JSON.stringify(element.props.users)).not.toContain(ACTOR_IDS.rolf);
-    expect(JSON.stringify(element.props.users)).not.toContain(ACTOR_IDS.phillip);
     expect(element.props.users[0]).not.toHaveProperty("id");
-    expect(element.props.users[0]).not.toHaveProperty("role");
     expect(element.props.users[0]).not.toHaveProperty("tenantId");
+    expect(element.props.users[0]).not.toHaveProperty("email");
 
     render(element);
     expect(screen.getByText("Rolf", { exact: true })).toBeInTheDocument();
@@ -107,14 +68,16 @@ describe("StartPage product actor boundary", () => {
     expect(screen.getByText("Gregor", { exact: true })).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("pin-user-card-synthetic-rolf-handle"));
-    expect(screen.getByRole("heading", { name: "Persönlichen Code eingeben", level: 2 })).toBeInTheDocument();
+    expect(screen.getByLabelText("0 von 4 Stellen eingegeben")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Löschen" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Neu" })).toBeInTheDocument();
     expect(ports.loginWithPin).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: /Gregor/ }));
-    expect(screen.getByText("Mit E-Mail anmelden", { exact: true })).toBeInTheDocument();
-    expect(ports.login).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("pin-user-card-synthetic-gregor-handle"));
+    fireEvent.click(screen.getByRole("button", { name: "Mit E-Mail anmelden" }));
+    expect(screen.getByLabelText("E-Mail")).toBeInTheDocument();
+    expect(screen.getByLabelText("Passwort")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Mit Code anmelden" }));
+    await waitFor(() => expect(screen.getByLabelText("0 von 4 Stellen eingegeben")).toHaveFocus());
   });
 
   it.each([
@@ -130,10 +93,10 @@ describe("StartPage product actor boundary", () => {
       const { default: StartPage } = await import("@/app/start/page");
       render(await StartPage());
 
-      expect(screen.getByRole("heading", { name: "Persönlichen Code eingeben", level: 1 })).toBeVisible();
-      expect(screen.getByRole("button", { name: /Rolf.*Meister/ })).toBeVisible();
-      expect(screen.getByRole("button", { name: /Phillip.*Werkstatt/ })).toBeVisible();
-      expect(screen.getByRole("button", { name: /Gregor.*Systemadministrator/ })).toBeVisible();
+      expect(screen.getByRole("heading", { name: /Guten (Morgen|Tag|Abend)/, level: 1 })).toBeVisible();
+      expect(screen.getByTestId("pin-user-card-synthetic-rolf-handle")).toBeVisible();
+      expect(screen.getByTestId("pin-user-card-synthetic-phillip-handle")).toBeVisible();
+      expect(screen.getByTestId("pin-user-card-synthetic-gregor-handle")).toBeVisible();
       expect(document.body).not.toHaveTextContent(/Willkommen zurück|Sicher anmelden|Wähle deinen Namen/i);
       expect(document.body).not.toHaveTextContent(/tenantgebunden|rollenbasiert|Produktprofil|Systemzugang ist erhöht/i);
     },
@@ -159,13 +122,23 @@ describe("StartPage product actor boundary", () => {
     expect(ports.loginWithPin).toHaveBeenCalledTimes(1);
   });
 
+  it("clears a URL error on the next digit and keeps email errors in the email form", async () => {
+    ports.searchParams = "message=Code+falsch&mode=pin";
+    const { default: StartPage } = await import("@/app/start/page");
+    const { unmount } = render(await StartPage());
+    expect(screen.getByRole("alert")).toHaveTextContent("Code falsch");
+    fireEvent.click(screen.getByRole("button", { name: "1" }));
+    expect(screen.queryByText("Code falsch")).not.toBeInTheDocument();
+    unmount();
+
+    ports.searchParams = "message=E-Mail+oder+Passwort+falsch&mode=email";
+    render(await StartPage());
+    expect(screen.getByLabelText("E-Mail")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("E-Mail oder Passwort falsch");
+  });
+
   it("disables every login path and exposes only a correlation reference on readiness failure", async () => {
-    ports.readProductActorReadiness.mockResolvedValue({
-      ok: false,
-      evidenceScope: "RUNTIME_REQUEST",
-      code: "CONFIG_PARTIAL",
-      supportReference: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-    });
+    ports.readActiveStartUsers.mockResolvedValue({ code: "UNAVAILABLE" });
 
     const { default: StartPage } = await import("@/app/start/page");
     const element = await StartPage();
@@ -176,15 +149,18 @@ describe("StartPage product actor boundary", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Anmeldung ist momentan nicht verfügbar",
     );
-    expect(screen.getByText(/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Gregor/ })).toBeDisabled();
-    expect(screen.getByTestId("pin-profile-rolf-unavailable")).toBeDisabled();
-    expect(screen.getByTestId("pin-profile-phillip-unavailable")).toBeDisabled();
-    expect(document.body.textContent).not.toContain("CONFIG_PARTIAL");
+    expect(screen.getAllByRole("button").every((button) => button.hasAttribute("disabled"))).toBe(true);
+  });
+
+  it("shows a maintenance notice when active login rows were skipped", async () => {
+    ports.readActiveStartUsers.mockResolvedValue({ code: "OK", users: activeUsers, skipped: 2 });
+    const { default: StartPage } = await import("@/app/start/page");
+    render(await StartPage());
+    expect(screen.getByRole("status")).toHaveTextContent("Wartung prüfen");
   });
 
   it("fails closed and records a safe operational reference on an unexpected read error", async () => {
-    ports.readProductActorReadiness.mockRejectedValue(new Error("synthetic failure"));
+    ports.readActiveStartUsers.mockRejectedValue(new Error("synthetic failure"));
     const { default: StartPage } = await import("@/app/start/page");
     const element = await StartPage();
 
@@ -204,10 +180,12 @@ describe("StartPage product actor boundary", () => {
     const pinAuth = readFileSync(path.join(root, "src/components/start/StartScreenClient.tsx"), "utf8");
     const rootPage = readFileSync(path.join(root, "src/app/page.tsx"), "utf8");
 
-    expect(emailAuth).toContain("readProductActorReadiness");
-    expect(emailAuth).toContain('redirect("/settings")');
+    expect(emailAuth).toContain("resolveLoginIdentityByEmail");
+    expect(emailAuth).toContain('redirect("/")');
     expect(pinAuth).toContain('window.location.assign("/")');
-    expect(rootPage).toContain("resolveProductActorAuthorization");
-    expect(rootPage).toContain('redirect("/settings")');
+    expect(rootPage).toContain("resolveAuthorization");
+    expect(rootPage).toContain('hasAuthorizationArea(authorization, "wartung")');
+    expect(rootPage).toContain("<HomeAppAdapter");
+    expect(rootPage).not.toMatch(/authorization\.role\s*(?:===|!==)/);
   });
 });

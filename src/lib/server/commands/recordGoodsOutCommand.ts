@@ -11,7 +11,7 @@ import {
   type PaymentStatus,
   type PaymentSummaryRow,
 } from "@/lib/server/paymentContract";
-import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
+import { hasAuthorizationArea, resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import {
   withPrivilegedTenantTransaction,
   type PrivilegedTenantTransaction,
@@ -22,7 +22,6 @@ const EVENT_TYPE_V1 = "ORDER_PICKED_UP_V1" as const;
 const EVENT_TYPE_V2 = "ORDER_PICKED_UP_V2" as const;
 const SOURCE_STATION = ORDER_LIFECYCLE_STATUS.FERTIG;
 const TARGET_STATION = ORDER_LIFECYCLE_STATUS.ABGEHOLT;
-const GOODS_OUT_ROLES = ["werkstatt", "meister", "admin"] as const;
 const GOODS_OUT_MODES = ["versand", "abholung"] as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -317,7 +316,8 @@ function parseEvent(row: GoodsOutEventRow, tenantId: string): GoodsOutReceipt {
     || !actualKeys.every((key, index) => key === expectedKeys[index])
     || openAmountCents === null
     || (payload.paymentStatus !== "offen" && payload.paymentStatus !== "teilbezahlt" && payload.paymentStatus !== "bezahlt")
-    || (payload.paymentMode !== "rechnung" && (payload.paymentStatus !== "bezahlt" || openAmountCents !== 0))
+    || (payload.paymentMode !== "rechnung" && payload.paymentMode !== "abholung"
+      && (payload.paymentStatus !== "bezahlt" || openAmountCents !== 0))
   ) throw new Error("GOODS_OUT_RECEIPT_INVALID");
   return {
     ...base,
@@ -350,10 +350,13 @@ function orderMatchesReceipt(order: LockedOrder, receipt: GoodsOutReceipt, tenan
 }
 
 function paymentAuthorization(authorization: AuthorizationSnapshot): AuthorizationSnapshot {
-  // The command role is narrower than the shared read-port role. Every allowed
-  // goods-out role already owns the established read permission; this explicit
-  // snapshot keeps the canonical row mapper as the integrity boundary.
-  return authorization;
+  // Goods-out needs the canonical payment integrity mapper to evaluate its
+  // payment gate. That internal read does not grant the actor a finance UI or
+  // a finance mutation; the command itself remains guarded by perm_op_status.
+  return {
+    ...authorization,
+    permissions: [...new Set([...authorization.permissions, "perm_view_prices" as const])],
+  };
 }
 
 export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResult> {
@@ -374,7 +377,7 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
   }
   if (
     authorization.data.tenantId !== KREILE_TENANT_SLUG
-    || !GOODS_OUT_ROLES.includes(authorization.data.role as (typeof GOODS_OUT_ROLES)[number])
+    || !hasAuthorizationArea(authorization.data, "auftraege")
   ) {
     return { code: "FORBIDDEN", message: "Warenausgang ist mit dieser Rolle nicht erlaubt." };
   }

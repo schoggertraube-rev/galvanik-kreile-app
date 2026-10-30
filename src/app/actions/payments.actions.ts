@@ -12,7 +12,6 @@ import type {
 } from "@/lib/server/commands/setPaymentModeCommand";
 import type {
   OrderPaymentStateReadResult,
-  ReadOrderPaymentStateInput,
 } from "@/lib/server/paymentSummaryRead";
 
 type ActionAuthorizationResult =
@@ -21,7 +20,12 @@ type ActionAuthorizationResult =
 
 async function resolveActionAuthorization(): Promise<ActionAuthorizationResult> {
   const { resolveAuthorization } = await import("@/lib/server/authorization");
-  const authorization = await resolveAuthorization().catch(() => null);
+  const authorization = await resolveAuthorization().catch((error: unknown) => {
+    console.error("[ORDER_CARD_PAYMENT_AUTHORIZATION_ERROR]", {
+      message: error instanceof Error ? error.message.slice(0, 200) : "UNKNOWN",
+    });
+    return null;
+  });
   if (!authorization || (!authorization.ok && authorization.reason === "AUTHORIZATION_UNAVAILABLE")) {
     return {
       ok: false,
@@ -66,10 +70,18 @@ export type GetOrderPaymentStateActionResult =
   | { code: "UNAUTHENTICATED"; message: string };
 
 export async function getOrderPaymentStateAction(
-  input: ReadOrderPaymentStateInput,
+  input: { orderId: string },
 ): Promise<GetOrderPaymentStateActionResult> {
-  const authorization = await resolveActionAuthorization();
-  if (!authorization.ok) return authorization.result;
-  const { readOrderPaymentState } = await import("@/lib/server/paymentSummaryRead");
-  return readOrderPaymentState(authorization.data, input);
+  try {
+    const authorization = await resolveActionAuthorization();
+    if (!authorization.ok) return authorization.result;
+    const { getPaymentState } = await import("@/lib/server/paymentSummaryRead");
+    return getPaymentState(authorization.data, input.orderId);
+  } catch (error) {
+    console.error("[ORDER_CARD_PAYMENT_ACTION_ERROR]", {
+      orderId: input.orderId,
+      message: error instanceof Error ? error.message.slice(0, 200) : "UNKNOWN",
+    });
+    return { code: "UNAVAILABLE", message: "Zahlungsdaten konnten nicht sicher geladen werden." };
+  }
 }

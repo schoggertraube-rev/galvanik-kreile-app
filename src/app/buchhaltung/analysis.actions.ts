@@ -1,15 +1,23 @@
 'use server';
 
 import { db } from '@/db';
-import { ausgangsrechnung, beleg } from '@/db/schema_buchhaltung';
+import { beleg } from '@/db/schema_buchhaltung';
 import { and, gte, lte, ne } from 'drizzle-orm';
 import { generateInsight } from '@/lib/analyse/insights';
+import { resolveAuthorization } from '@/lib/server/authorization';
+import { readInvoiceTruth, type InvoiceTruthRow } from '@/lib/server/invoiceTruthRead';
+
+async function invoiceRows(from?: string, to?: string): Promise<InvoiceTruthRow[]> {
+  const authorization = await resolveAuthorization();
+  if (!authorization.ok) throw new Error(authorization.message);
+  const result = await readInvoiceTruth(authorization.data, { from, to });
+  if (result.code !== 'OK') throw new Error(result.message);
+  return result.data;
+}
 
 export async function getUstvaAnalysisAction(von: string, bis: string) {
   // Aktueller Monat
-  const rechnungen = await db.select({ netto: ausgangsrechnung.netto, ustBetrag: ausgangsrechnung.ustBetrag, ustSatz: ausgangsrechnung.ustSatz })
-    .from(ausgangsrechnung)
-    .where(and(ne(ausgangsrechnung.status, 'storniert'), gte(ausgangsrechnung.datum, von), lte(ausgangsrechnung.datum, bis)));
+  const rechnungen = (await invoiceRows(von, bis)).filter((invoice) => invoice.status === 'issued');
 
   const belege = await db.select({ netto: beleg.netto, ustBetrag: beleg.ustBetrag, belegart: beleg.belegart, status: beleg.status })
     .from(beleg)
@@ -17,9 +25,9 @@ export async function getUstvaAnalysisAction(von: string, bis: string) {
 
   let umsatz19 = 0, umsatz7 = 0;
   for (const r of rechnungen) {
-    const netto = Number(r.netto) || 0;
-    if (Number(r.ustSatz) === 19) umsatz19 += netto;
-    else if (Number(r.ustSatz) === 7) umsatz7 += netto;
+    const netto = r.netAmountCents / 100;
+    if (r.vatRateBasisPoints === 1900) umsatz19 += netto;
+    else if (r.vatRateBasisPoints === 700) umsatz7 += netto;
   }
   const ust19 = umsatz19 * 0.19;
   const ust7 = umsatz7 * 0.07;
@@ -36,12 +44,11 @@ export async function getUstvaAnalysisAction(von: string, bis: string) {
   const vmVon = dVon.toISOString().substring(0, 10);
   const vmBis = von; // roughly
   
-  const vmRechnungen = await db.select({ netto: ausgangsrechnung.netto, ustBetrag: ausgangsrechnung.ustBetrag })
-    .from(ausgangsrechnung).where(and(ne(ausgangsrechnung.status, 'storniert'), gte(ausgangsrechnung.datum, vmVon), lte(ausgangsrechnung.datum, vmBis)));
+  const vmRechnungen = (await invoiceRows(vmVon, vmBis)).filter((invoice) => invoice.status === 'issued');
   const vmBelege = await db.select({ ustBetrag: beleg.ustBetrag }).from(beleg)
     .where(and(ne(beleg.status, 'storniert'), gte(beleg.belegdatum, vmVon), lte(beleg.belegdatum, vmBis)));
     
-  const vmUst = vmRechnungen.reduce((sum, r) => sum + (Number(r.ustBetrag) || 0), 0);
+  const vmUst = vmRechnungen.reduce((sum, r) => sum + (r.vatAmountCents / 100), 0);
   const vmVorsteuer = vmBelege.reduce((sum, b) => sum + (Number(b.ustBetrag) || 0), 0);
   const vmZahllast = vmUst - vmVorsteuer;
 
@@ -117,9 +124,8 @@ export async function getKraftstoffAnalysisAction(von: string, bis: string) {
     vorjahr: null
   }));
 
-  const umsatzRaw = await db.select({ netto: ausgangsrechnung.netto }).from(ausgangsrechnung)
-    .where(and(ne(ausgangsrechnung.status, 'storniert'), gte(ausgangsrechnung.datum, von), lte(ausgangsrechnung.datum, bis)));
-  const umsatz = umsatzRaw.reduce((s, u) => s + (Number(u.netto) || 0), 0);
+  const umsatzRaw = (await invoiceRows(von, bis)).filter((invoice) => invoice.status === 'issued');
+  const umsatz = umsatzRaw.reduce((sum, invoice) => sum + (invoice.netAmountCents / 100), 0);
 
   const insights = generateInsight('kraftstoff', {
     trend: { prozent: Math.round(trendProzent), positivIstGut: false },
@@ -141,24 +147,13 @@ export async function getKraftstoffAnalysisAction(von: string, bis: string) {
 }
 
 export async function getOffenePostenAnalysisAction(von: string, bis: string) {
-  const { and, gte, lte, ne } = await import('drizzle-orm');
-  const raw = await db.select({
-    id: ausgangsrechnung.id,
-    netto: ausgangsrechnung.netto,
-    brutto: ausgangsrechnung.brutto,
-    datum: ausgangsrechnung.datum,
-    status: ausgangsrechnung.status,
-    kunde: ausgangsrechnung.kundeId, // Vereinfacht
-    faelligAm: ausgangsrechnung.faelligAm
-  })
-  .from(ausgangsrechnung)
-  .where(ne(ausgangsrechnung.status, 'storniert'));
-
-  const offene = raw.filter(r => r.status === 'offen' || r.status === 'ueberfaellig');
-  const ueberfaellig = raw.filter(r => r.status === 'ueberfaellig');
+  const today = new Date().toISOString().slice(0, 10);
+  const raw = (await invoiceRows()).filter((invoice) => invoice.status === 'issued');
+  const offene = raw.filter((invoice) => invoice.openAmountCents > 0);
+  const ueberfaellig = offene.filter((invoice) => invoice.dueDate < today);
   
-  const offeneSumme = offene.reduce((s, r) => s + (Number(r.brutto) || 0), 0);
-  const ueberfaelligSumme = ueberfaellig.reduce((s, r) => s + (Number(r.brutto) || 0), 0);
+  const offeneSumme = offene.reduce((sum, invoice) => sum + (invoice.openAmountCents / 100), 0);
+  const ueberfaelligSumme = ueberfaellig.reduce((sum, invoice) => sum + (invoice.openAmountCents / 100), 0);
   
   // F0-W2b (ANA-01): keine Historiendaten für OPOS vorhanden — keine erfundenen Werte.
   const chartData = Array.from({length: 6}).map(() => ({
@@ -167,9 +162,8 @@ export async function getOffenePostenAnalysisAction(von: string, bis: string) {
     vorjahr: null
   }));
 
-  const umsatzRaw = await db.select({ netto: ausgangsrechnung.netto }).from(ausgangsrechnung)
-    .where(and(ne(ausgangsrechnung.status, 'storniert'), gte(ausgangsrechnung.datum, von), lte(ausgangsrechnung.datum, bis)));
-  const jahresUmsatz = umsatzRaw.reduce((s, u) => s + (Number(u.netto) || 0), 0);
+  const umsatzRaw = (await invoiceRows(von, bis)).filter((invoice) => invoice.status === 'issued');
+  const jahresUmsatz = umsatzRaw.reduce((sum, invoice) => sum + (invoice.netAmountCents / 100), 0);
 
   const insights = generateInsight('offene_posten', {
     ueberfaelligCount: ueberfaellig.length,
@@ -184,20 +178,28 @@ export async function getOffenePostenAnalysisAction(von: string, bis: string) {
     jahresUmsatz,
     chartData,
     insights,
-    topOffene: offene.sort((a, b) => Number(b.brutto) - Number(a.brutto)).slice(0, 5)
+    topOffene: offene
+      .sort((a, b) => b.openAmountCents - a.openAmountCents)
+      .slice(0, 5)
+      .map((invoice) => ({
+        id: invoice.invoiceId,
+        netto: invoice.netAmountCents / 100,
+        brutto: invoice.grossAmountCents / 100,
+        datum: invoice.issuedAt.slice(0, 10),
+        status: invoice.dueDate < today ? 'ueberfaellig' : invoice.paymentStatus,
+        kunde: invoice.customerId,
+        faelligAm: invoice.dueDate,
+      }))
   };
 }
 
 export async function getBwaAnalysisAction(von: string, bis: string) {
-  const { and, gte, lte, ne } = await import('drizzle-orm');
-  
-  const rechnungen = await db.select({ netto: ausgangsrechnung.netto }).from(ausgangsrechnung)
-    .where(and(ne(ausgangsrechnung.status, 'storniert'), gte(ausgangsrechnung.datum, von), lte(ausgangsrechnung.datum, bis)));
+  const rechnungen = (await invoiceRows(von, bis)).filter((invoice) => invoice.status === 'issued');
   
   const belege = await db.select({ netto: beleg.netto, kategorieId: beleg.kategorieId }).from(beleg)
     .where(and(ne(beleg.status, 'storniert'), gte(beleg.belegdatum, von), lte(beleg.belegdatum, bis)));
     
-  const einnahmen = rechnungen.reduce((s, r) => s + (Number(r.netto) || 0), 0);
+  const einnahmen = rechnungen.reduce((sum, invoice) => sum + (invoice.netAmountCents / 100), 0);
   
   // Categorize
   let material = 0, personal = 0, betrieb = 0;

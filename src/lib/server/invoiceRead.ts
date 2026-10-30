@@ -11,7 +11,6 @@ import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const INVOICE_NUMBER_PATTERN = /^R-[0-9]{4}-[0-9]{4,}$/;
 const HEX64_PATTERN = /^[a-f0-9]{64}$/;
-const INVOICE_READ_ROLES = ["buero", "meister", "admin"] as const;
 
 export type ReadInvoiceReceiptInput = {
   orderId: string;
@@ -180,7 +179,7 @@ function isCancellationReceiptInput(value: unknown): value is ReadInvoiceCancell
 }
 
 function canReadInvoices(authorization: AuthorizationSnapshot): boolean {
-  return INVOICE_READ_ROLES.includes(authorization.role as (typeof INVOICE_READ_ROLES)[number]);
+  return authorization.permissions.includes("perm_view_prices");
 }
 
 function isCanonicalTextId(value: unknown): value is string {

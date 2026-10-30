@@ -24,21 +24,34 @@ export type OrderCardItem = {
   quantity: number;
   material: string | null;
   surface: string;
+  catalogServiceId?: string | null;
+  unit?: string | null;
+  unitPriceCents?: number | null;
+  vatRateBasisPoints?: 0 | 700 | 1900 | null;
+  finished?: boolean;
   extraWork: OrderCardExtraWork[];
 };
 export type OrderCardEvidence = {
   key: string;
-  source: string;
-  state: string;
+  source: "ORDER_STATION_ATTACHMENT" | "ORDER_INTAKE_ATTACHMENT" | "LEGACY_SCAN_UPLOAD";
+  state: "VERIFIED" | "LEGACY_RECORDED" | "LEGACY_PARTIAL" | "NOT_RECORDED";
   recordedAt: string;
   itemIds: string[];
 };
 export type OrderCardPayment = {
   mode: "vorkasse" | "abholung" | "rechnung";
   invoiceState: "not_issued" | "issued";
+  invoiceId?: string | null;
+  invoiceNumber?: string | null;
   status: "offen" | "teilbezahlt" | "bezahlt" | null;
   openAmountCents: number | null;
   goodsOutAllowed: boolean;
+  paymentEvent: null | {
+    eventId: string;
+    actorId: string;
+    occurredAt: string;
+    method: "bar" | "ueberweisung" | "karte";
+  };
   goodsOut: null | {
     eventId: string;
     actorId: string;
@@ -50,7 +63,7 @@ export type OrderCardPaymentContext =
   | { kind: "available"; value: OrderCardPayment }
   | { kind: "restricted" | "unavailable"; message: string };
 export type OrderCardActionReceipt = {
-  kind: "handoff" | "evidence" | "freeze" | "invoice" | "payment" | "goods-out";
+  kind: "handoff" | "evidence" | "freeze" | "invoice" | "payment" | "goods-out" | "due-date" | "content" | "item-finished" | "duplicate";
   actorId: string;
   occurredAt: string;
   eventId: string;
@@ -66,6 +79,11 @@ export type OrderCardActionAvailability = {
   reason: string | null;
 };
 export type OrderCardActionPorts = {
+  dueDate?: OrderCardActionAvailability;
+  content?: OrderCardActionAvailability;
+  itemStatus?: OrderCardActionAvailability;
+  contact?: OrderCardActionAvailability;
+  photo?: OrderCardActionAvailability;
   handoff: OrderCardActionAvailability;
   evidence: OrderCardActionAvailability;
   freeze: OrderCardActionAvailability;
@@ -73,12 +91,36 @@ export type OrderCardActionPorts = {
   payment: OrderCardActionAvailability;
   goodsOut: OrderCardActionAvailability;
   feedback: OrderCardActionFeedback;
+  onSaveContent?: (input: {
+    note: string | null;
+    items: Array<{
+      id: string;
+      catalogServiceId: string | null;
+      name: string;
+      quantity: number;
+      material: string | null;
+      surface: string;
+      unit: string | null;
+      unitPriceCents: number | null;
+      vatRateBasisPoints: 0 | 700 | 1900 | null;
+    }>;
+  }) => void | Promise<void>;
+  onToggleItemFinished?: (itemId: string, finished: boolean) => void | Promise<void>;
+  onOpenStatusMail?: () => void;
+  onCallCustomer?: () => void;
+  onOpenPhoto?: () => void;
+  onOpenDocument?: () => void;
+  onOpenQuote?: () => void;
+  onDuplicate?: () => void | Promise<void>;
+  onChangeDueDate?: (dueDate: string, reason: string) => void | Promise<void>;
   onHandoff: () => void | Promise<void>;
   onFreeze: () => void | Promise<void>;
-  onIssueInvoice: () => void | Promise<void>;
+  onIssueInvoice: (
+    prices?: Array<{ itemId: string; unitPriceCents: number }>,
+  ) => void | Promise<void>;
   onConfirmPayment: (
     method: "bar" | "ueberweisung" | "karte",
-  ) => void | Promise<void>;
+  ) => Promise<boolean>;
   onRecordGoodsOut: (mode: "versand" | "abholung") => void | Promise<void>;
   onReload: () => void | Promise<void>;
 };
@@ -88,6 +130,7 @@ export type OrderCardModel = {
   orderNumber: string;
   customerId: string;
   customerName: string;
+  customerPhone?: string | null;
   title: string;
   note: string | null;
   station: string;
@@ -95,11 +138,27 @@ export type OrderCardModel = {
   dueAt: string | null;
   intakeAt: string;
   assignedTo: string | null;
+  dueDateChanges?: Array<{
+    eventId: string;
+    changedTo: string;
+    reason: string;
+    changedAt: string;
+    changedBy: string;
+    aggregateVersion: number;
+  }>;
   items: OrderCardItem[];
   evidence: OrderCardEvidence[];
   frozenAt: string | null;
   totalAmountCents: number | null;
   payment: OrderCardPaymentContext;
+  catalog?: Array<{
+    id: string;
+    name: string;
+    surface: string;
+    unit: string;
+    netPriceCents: number;
+    vatRateBasisPoints: 0 | 700 | 1900;
+  }>;
 };
 export type OrderCardState =
   | { kind: "loading" }

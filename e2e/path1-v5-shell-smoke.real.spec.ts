@@ -4,7 +4,9 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import postgres from "postgres";
+import { ROLE_ACCESS_AREA_TEMPLATES } from "../src/lib/auth/authorizationContract";
 import { createPinLoginHandle } from "../src/lib/server/pinLoginHandle";
+import { SALES_STAGE_FEATURES } from "../src/modules/fundament/featureCatalog";
 
 const TENANT = "galvanik-kreile";
 const V5_SHA256 = "75258FF3BD4CC212C8E989061708A29DC26EA44B851BD28E8F16E8509B0CC0AA";
@@ -20,21 +22,28 @@ const ACTORS = [
   { key: "phillip", id: "22222222-2222-4222-8222-222222222222", pin: "7315", role: "werkstatt" },
 ] as const;
 const GREGOR_ACTOR_ID = "33333333-3333-4333-8333-333333333333";
+const FIXTURE_ACTORS = [...ACTORS, { id: GREGOR_ACTOR_ID, role: "admin" as const }];
 const NAVIGATION_TIMEOUT = 30_000;
+const DESKTOP_NAVIGATION = [
+  { label: "Der Tag", href: "/" },
+  { label: "Werkstatt", href: "/warendurchlauf" },
+  { label: "Aufträge", href: "/orders" },
+  { label: "Kunden & Kontakt", href: "/customers" },
+  { label: "Geld & Rechnungen", href: "/buchhaltung/rechnungen" },
+  { label: "Einstellungen", href: "/settings" },
+] as const;
 
 function renderedPathFor(requestedPath: string): string {
-  // Settings is intentionally restricted to Gregor and redirects the two
-  // smoke actors to their role-aware start page.
-  if (requestedPath === "/settings") return "/";
   return requestedPath;
 }
 
-function expectedHeading(actor: string, pagePath: string): string {
-  if (pagePath === "/") return actor === "phillip" ? "Werkstatt" : "Der Tag";
+function expectedHeading(pagePath: string): string {
+  if (pagePath === "/") return "Der Tag";
   if (pagePath === "/warendurchlauf") return "Werkstatt";
   if (pagePath === "/orders") return "Aufträge";
   if (pagePath === "/customers") return "Kunden & Kontakt";
   if (pagePath === "/buchhaltung/rechnungen") return "Rechnungen";
+  if (pagePath === "/settings") return "Arbeitsplatz & Zugänge";
   throw new Error(`PATH1_V5_SHELL_SMOKE_HEADING_MISSING:${pagePath}`);
 }
 
@@ -89,11 +98,13 @@ async function assertSignedSession(page: Page, actorId: string, secret: string) 
 
 async function loginPin(page: Page, actor: (typeof ACTORS)[number], secret: string) {
   await page.goto("/start", { waitUntil: "domcontentloaded" });
-  await page.getByTestId(`pin-user-card-${createPinLoginHandle(actor.id)}`).click();
-  const dialog = page.getByTestId("pin-login-dialog");
-  await expect(dialog).toBeVisible();
+  const userCard = page.getByTestId(`pin-user-card-${createPinLoginHandle(actor.id)}`);
+  await userCard.click();
+  await expect(userCard).toHaveAttribute("aria-pressed", "true");
+  const keypad = page.locator('[data-spec-id="login.anmelden"]');
+  await expect(keypad).toBeVisible();
   const home = page.waitForURL((url) => url.pathname === "/", { waitUntil: "commit" });
-  for (const digit of actor.pin) await dialog.getByRole("button", { name: digit, exact: true }).click();
+  for (const digit of actor.pin) await keypad.getByRole("button", { name: digit, exact: true }).click();
   await home;
   await expect(page.locator("main h1")).toBeVisible();
   await assertSignedSession(page, actor.id, secret);
@@ -122,7 +133,7 @@ async function capture(page: Page, actor: string, viewport: (typeof VIEWPORTS)[n
 }
 
 async function assertPage(page: Page, actor: string, viewport: (typeof VIEWPORTS)[number], pagePath: string, problems: string[], screens: string[]) {
-  await expect(page.getByRole("main").getByRole("heading", { name: expectedHeading(actor, pagePath), exact: true })).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
+  await expect(page.getByRole("main").getByRole("heading", { name: expectedHeading(pagePath), exact: true })).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
   const alerts = (await page.locator('[role="alert"]:not(#__next-route-announcer__)').allInnerTexts()).map((text) => text.trim()).filter(Boolean);
   if (alerts.length) {
     problems.push(`${pagePath}:\n${alerts.join("\n")}`);
@@ -130,7 +141,7 @@ async function assertPage(page: Page, actor: string, viewport: (typeof VIEWPORTS
   }
 }
 
-async function navigateAndWaitForContent(page: Page, actor: string, target: ReturnType<Page["locator"]>, href: string): Promise<string> {
+async function navigateAndWaitForContent(page: Page, target: ReturnType<Page["locator"]>, href: string): Promise<string> {
   const requestedPath = new URL(href, ORIGIN).pathname;
   const renderedPath = renderedPathFor(requestedPath);
 
@@ -146,19 +157,24 @@ async function navigateAndWaitForContent(page: Page, actor: string, target: Retu
   if (renderedPath !== requestedPath) {
     await expect.poll(() => new URL(page.url()).pathname, { timeout: NAVIGATION_TIMEOUT }).toBe(renderedPath);
   }
-  await expect(page.getByRole("main").getByRole("heading", { name: expectedHeading(actor, renderedPath), exact: true })).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
+  await expect(page.getByRole("main").getByRole("heading", { name: expectedHeading(renderedPath), exact: true })).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
   return renderedPath;
 }
 
 async function visitDesktopLinks(page: Page, actor: string, viewport: (typeof VIEWPORTS)[number], problems: string[], screens: string[]) {
   const navigation = page.getByRole("navigation", { name: "Hauptnavigation", exact: true });
   await expect(navigation).toBeVisible();
-  const hrefs = await navigation.locator("[data-href]").evaluateAll((items) => items.map((item) => item.getAttribute("data-href")).filter((href): href is string => Boolean(href)));
-  expect(hrefs.length).toBeGreaterThan(0);
-  for (const href of hrefs) {
+  const visibleTargets = [];
+  for (const item of DESKTOP_NAVIGATION) {
+    const target = navigation.getByRole("button", { name: new RegExp(`^${item.label}(?:\\s+\\d+)?$`) });
+    if (await target.count()) visibleTargets.push(item);
+  }
+  expect(visibleTargets.length).toBeGreaterThan(0);
+  for (const { label, href } of visibleTargets) {
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    const target = page.getByRole("navigation", { name: "Hauptnavigation", exact: true }).locator(`[data-href="${href}"]`);
-    const renderedPath = await navigateAndWaitForContent(page, actor, target, href);
+    const target = page.getByRole("navigation", { name: "Hauptnavigation", exact: true })
+      .getByRole("button", { name: new RegExp(`^${label}(?:\\s+\\d+)?$`) });
+    const renderedPath = await navigateAndWaitForContent(page, target, href);
     await assertPage(page, actor, viewport, renderedPath, problems, screens);
     if (!screens.includes(`${actor}-${viewport.name}-${viewport.width}x${viewport.height}-path-${renderedPath === "/" ? "root" : renderedPath.slice(1).replace(/\//g, "-")}`)) {
       screens.push(await capture(page, actor, viewport, renderedPath));
@@ -167,17 +183,23 @@ async function visitDesktopLinks(page: Page, actor: string, viewport: (typeof VI
 }
 
 async function visitMore(page: Page, actor: string, viewport: (typeof VIEWPORTS)[number], problems: string[], screens: string[]) {
-  const dock = page.getByRole("navigation", { name: "Mobile Hauptnavigation", exact: true });
+  const dock = page.getByRole("navigation", { name: "Hauptnavigation", exact: true });
   await expect(dock).toBeVisible();
   await expect(dock.locator(":scope > *")).toHaveCount(5);
-  for (const href of ["/warendurchlauf", "/settings"]) {
+  await dock.getByRole("button", { name: "Mehr", exact: true }).click({ timeout: NAVIGATION_TIMEOUT });
+  const menu = page.getByRole("dialog", { name: "Mehr", exact: true });
+  await expect(menu).toBeVisible();
+  const hrefs = await menu.locator("a[href]").evaluateAll((items) => items.map((item) => item.getAttribute("href")).filter((href): href is string => Boolean(href)));
+  await menu.getByRole("button", { name: "Schließen", exact: true }).click();
+  expect(hrefs.length).toBeGreaterThan(0);
+  for (const href of hrefs) {
     await dock.getByRole("button", { name: "Mehr", exact: true }).click({ timeout: NAVIGATION_TIMEOUT });
     const more = page.getByRole("dialog", { name: "Mehr", exact: true });
     await expect(more).toBeVisible();
-    const renderedPath = await navigateAndWaitForContent(page, actor, more.locator(`a[href="${href}"]`), href);
+    const renderedPath = await navigateAndWaitForContent(page, more.locator(`a[href="${href}"]`), href);
     await assertPage(page, actor, viewport, renderedPath, problems, screens);
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("main").getByRole("heading", { name: expectedHeading(actor, "/"), exact: true })).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
+    await expect(page.getByRole("main").getByRole("heading", { name: expectedHeading("/"), exact: true })).toBeVisible({ timeout: NAVIGATION_TIMEOUT });
   }
 }
 
@@ -207,22 +229,47 @@ test.describe("PATH1 V5 Shell Smoke", () => {
       await createLocalAuthUser(apiUrl, anonKey, gregorEmail, gregorPassword);
       const insertedAt = new Date(Date.now() - 5_000).toISOString();
       await sql`
-        INSERT INTO public.app_users (id, tenant_id, email, full_name, role, pin_hash, active, created_at, updated_at)
+        INSERT INTO public.app_users (id, tenant_id, email, full_name, kuerzel, bezeichnung, role, pin_hash, active, created_at, updated_at)
         VALUES
-          (${ACTORS[0].id}::uuid, ${TENANT}, ${emailRolf}, 'Rolf', 'meister', ${hashRolf}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz),
-          (${ACTORS[1].id}::uuid, ${TENANT}, ${emailPhillip}, 'Phillip', 'werkstatt', ${hashPhillip}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz),
-          (${GREGOR_ACTOR_ID}::uuid, ${TENANT}, ${gregorEmail}, 'Gregor', 'admin', null, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz)
-        ON CONFLICT (id) DO UPDATE SET email = excluded.email, full_name = excluded.full_name, role = excluded.role, pin_hash = excluded.pin_hash, active = excluded.active, updated_at = excluded.updated_at
+          (${ACTORS[0].id}::uuid, ${TENANT}, ${emailRolf}, 'Rolf', 'R', 'Meister', 'meister', ${hashRolf}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz),
+          (${ACTORS[1].id}::uuid, ${TENANT}, ${emailPhillip}, 'Phillip', 'P', 'Werkstatt', 'werkstatt', ${hashPhillip}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz),
+          (${GREGOR_ACTOR_ID}::uuid, ${TENANT}, ${gregorEmail}, 'Gregor', 'G', 'Entwickler', 'admin', null, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz)
+        ON CONFLICT (id) DO UPDATE SET email = excluded.email, full_name = excluded.full_name, kuerzel = excluded.kuerzel, bezeichnung = excluded.bezeichnung, role = excluded.role, pin_hash = excluded.pin_hash, active = excluded.active, updated_at = excluded.updated_at
       `;
+      await sql`
+        DELETE FROM public.app_user_rights
+        WHERE tenant_id = ${TENANT}
+          AND user_id IN (${ACTORS[0].id}::uuid, ${ACTORS[1].id}::uuid, ${GREGOR_ACTOR_ID}::uuid)
+      `;
+      for (const actor of FIXTURE_ACTORS) {
+        await sql`
+          INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
+          SELECT ${TENANT}, ${actor.id}::uuid, area, ${GREGOR_ACTOR_ID}::uuid
+          FROM unnest(${sql.array([...ROLE_ACCESS_AREA_TEMPLATES[actor.role]])}::text[]) area
+        `;
+      }
+      for (const feature of SALES_STAGE_FEATURES) {
+        await sql`
+          INSERT INTO public.tenant_features (tenant, feature_id, enabled)
+          VALUES (${TENANT}, ${feature.id}, ${feature.defaultEnabled})
+          ON CONFLICT (tenant, feature_id) DO UPDATE SET enabled = excluded.enabled
+        `;
+      }
       for (const actor of ACTORS) for (const viewport of VIEWPORTS) {
-        const context = await browser.newContext({ viewport });
+        const context = await browser.newContext({ viewport, hasTouch: viewport.width < 1300 });
         try {
           const page = await context.newPage();
           await loginPin(page, actor, sessionSecret);
           await assertPage(page, actor.key, viewport, "/", problems, screens);
           screens.push(await capture(page, actor.key, viewport));
-          if (viewport.width >= 1300) await visitDesktopLinks(page, actor.key, viewport, problems, screens);
-          else await visitMore(page, actor.key, viewport, problems, screens);
+          if (actor.key === "phillip") {
+            await expect(page.getByRole("navigation", { name: "Hauptnavigation", exact: true })).toHaveCount(0);
+            await expect(page.getByRole("navigation", { name: "Mobile Hauptnavigation", exact: true })).toHaveCount(0);
+          } else if (viewport.width >= 1300) {
+            await visitDesktopLinks(page, actor.key, viewport, problems, screens);
+          } else {
+            await visitMore(page, actor.key, viewport, problems, screens);
+          }
         } finally {
           await context.close();
         }

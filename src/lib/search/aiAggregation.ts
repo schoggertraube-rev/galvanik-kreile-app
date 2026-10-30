@@ -1,7 +1,9 @@
 import { db } from "@/db";
-import { beleg, ausgangsrechnung } from "@/db/schema_buchhaltung";
+import { beleg } from "@/db/schema_buchhaltung";
 import { orders, customers } from "@/db/schema";
 import { sql, and, gte, lte } from "drizzle-orm";
+import { resolveAuthorization } from "@/lib/server/authorization";
+import { readInvoiceTruth } from "@/lib/server/invoiceTruthRead";
 
 export function extractZeitraum(query: string) {
   const q = query.toLowerCase();
@@ -70,42 +72,43 @@ export async function buildDataContext(zeitraum: { startDate: Date, endDate: Dat
   const startStr = zeitraum.startDate.toISOString().split('T')[0];
   const endStr = zeitraum.endDate.toISOString().split('T')[0];
 
+  const authorization = await resolveAuthorization();
+  if (!authorization.ok) throw new Error(authorization.message);
+  const invoiceTruth = await readInvoiceTruth(authorization.data, { from: startStr, to: endStr });
+  if (invoiceTruth.code !== "OK") throw new Error(invoiceTruth.message);
+  const issuedInvoices = invoiceTruth.data.filter((invoice) => invoice.status === "issued");
+
   const [
     belegeCount,
-    rechnungenCount,
     ordersCount,
     customersCount,
-    umsatzResult,
     kostenResult
   ] = await Promise.all([
     db.select({ count: sql<number>`count(*)` }).from(beleg).where(and(gte(beleg.belegdatum, startStr), lte(beleg.belegdatum, endStr))),
-    db.select({ count: sql<number>`count(*)` }).from(ausgangsrechnung).where(and(gte(ausgangsrechnung.datum, startStr), lte(ausgangsrechnung.datum, endStr))),
     db.select({ count: sql<number>`count(*)` }).from(orders).where(and(gte(orders.createdAt, zeitraum.startDate), lte(orders.createdAt, zeitraum.endDate))),
     db.select({ count: sql<number>`count(*)` }).from(customers),
-    db.select({ summe: sql<number>`sum(${ausgangsrechnung.netto})` }).from(ausgangsrechnung).where(and(gte(ausgangsrechnung.datum, startStr), lte(ausgangsrechnung.datum, endStr), sql`${ausgangsrechnung.status} != 'storniert'`)),
     db.select({ summe: sql<number>`sum(${beleg.netto})` }).from(beleg).where(and(gte(beleg.belegdatum, startStr), lte(beleg.belegdatum, endStr)))
   ]);
 
-  const topCustomersData = await db.select({
-    name: customers.name,
-    summe: sql<number>`sum(${ausgangsrechnung.netto})`
-  })
-  .from(customers)
-  .leftJoin(ausgangsrechnung, sql`${customers.id} = ${ausgangsrechnung.kundeId}`)
-  .where(and(gte(ausgangsrechnung.datum, startStr), lte(ausgangsrechnung.datum, endStr)))
-  .groupBy(customers.id)
-  .orderBy(sql`sum(${ausgangsrechnung.netto}) desc nulls last`)
-  .limit(3);
-
-  const topKunden = topCustomersData.map(c => c.name);
+  const revenueByCustomer = new Map<string, number>();
+  for (const invoice of issuedInvoices) {
+    revenueByCustomer.set(invoice.customerId, (revenueByCustomer.get(invoice.customerId) ?? 0) + invoice.netAmountCents);
+  }
+  const customerNames = await db.select({ id: customers.id, name: customers.name }).from(customers);
+  const topKunden = customerNames
+    .map((customer) => ({ name: customer.name, cents: revenueByCustomer.get(customer.id) ?? 0 }))
+    .filter((customer) => customer.cents > 0)
+    .sort((left, right) => right.cents - left.cents)
+    .slice(0, 3)
+    .map((customer) => customer.name);
   
-  const realUmsatz = umsatzResult[0]?.summe || 0;
+  const realUmsatz = issuedInvoices.reduce((sum, invoice) => sum + invoice.netAmountCents, 0) / 100;
   const realKosten = kostenResult[0]?.summe || 0;
 
   // Base metrics for current timeframe
   const metrics = {
     anzahlBelege: belegeCount[0]?.count || 0,
-    anzahlRechnungen: rechnungenCount[0]?.count || 0,
+    anzahlRechnungen: issuedInvoices.length,
     anzahlAuftraege: ordersCount[0]?.count || 0,
     aktiveKunden: customersCount[0]?.count || 0,
     gesamtUmsatz: Number(realUmsatz).toFixed(2),

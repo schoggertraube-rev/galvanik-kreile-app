@@ -13,8 +13,7 @@ import {
   usePermissions,
 } from "../PermissionsContext";
 import {
-  getPermissionsForRole,
-  getProductIdentityByKey,
+  getPermissionsForAreas,
 } from "../authorizationContract";
 
 const navigation = vi.hoisted(() => ({
@@ -55,10 +54,13 @@ function TestComponent() {
     initials,
     name,
     role,
+    areas,
     permissions,
     error,
     loading,
     hasPermission,
+    hasArea,
+    canAction,
     refreshPermissions,
   } = usePermissions();
   return (
@@ -67,12 +69,19 @@ function TestComponent() {
       <span data-testid="initials">{initials}</span>
       <span data-testid="name">{name}</span>
       <span data-testid="role">{role}</span>
+      <span data-testid="areas">{areas.join(",")}</span>
       <span data-testid="permissions">{permissions.join(",")}</span>
+      <span data-testid="has-mails">
+        {hasArea("mails") ? "granted" : "denied"}
+      </span>
       <span data-testid="has-leitstand">
         {hasPermission("perm_view_leitstand") ? "granted" : "denied"}
       </span>
       <span data-testid="has-prices">
         {hasPermission("perm_view_prices") ? "granted" : "denied"}
+      </span>
+      <span data-testid="can-edit-order-content">
+        {canAction("editOrderContent") ? "granted" : "denied"}
       </span>
       <span data-testid="error">{error || "no-error"}</span>
       <span data-testid="loading">{loading ? "pending" : "ready"}</span>
@@ -106,7 +115,14 @@ const authorizedRolf: ClientAuthorizationResult = {
   data: {
     displayName: "Rolf",
     role: "meister",
+    areas: ["auftraege", "mails"],
     permissions: ["perm_view_leitstand"],
+    actions: {
+      confirmPayment: false,
+      editOrderContent: false,
+      createCustomer: false,
+      createQuote: false,
+    },
     active: true,
   },
 };
@@ -120,27 +136,25 @@ const initialRolf: AuthBootstrapState = {
   user: {
     role: "meister",
     displayName: "Rolf",
-    permissions: getPermissionsForRole("meister"),
+    areas: ["auftraege", "mails"],
+    permissions: getPermissionsForAreas(["auftraege", "mails"]),
+    actions: {
+      confirmPayment: false,
+      editOrderContent: false,
+      createCustomer: false,
+      createQuote: false,
+    },
   },
 };
 
 describe("identity labels and capabilities", () => {
-  it("keeps browser-safe labels keyed separately from actor IDs", () => {
-    expect(getProductIdentityByKey("rolf")).toEqual({
-      name: "Rolf",
-      responsibility: "Meister",
-      initials: "R",
-    });
-    expect(getProductIdentityByKey("phillip").name).toBe("Phillip");
-    expect(getProductIdentityByKey("gregor").name).toBe("Gregor");
-  });
-
-  it("keeps Meister capabilities broader than Werkstatt", () => {
-    expect(getPermissionsForRole("meister")).toEqual(
-      expect.arrayContaining(["perm_data_customers", "perm_data_orders"]),
+  it("derives capabilities only from granted areas", () => {
+    expect(getPermissionsForAreas(["kunden"])).toEqual(
+      expect.arrayContaining(["perm_data_customers", "perm_view_customers"]),
     );
-    expect(getPermissionsForRole("werkstatt")).not.toContain("perm_data_customers");
-    expect(getPermissionsForRole("werkstatt")).not.toContain("perm_data_orders");
+    expect(getPermissionsForAreas(["kunden"])).not.toContain("perm_data_orders");
+    expect(getPermissionsForAreas(["eingang"])).toContain("perm_data_orders");
+    expect(getPermissionsForAreas(["eingang"])).not.toContain("perm_data_customers");
   });
 
   it("derives stable initials", () => {
@@ -175,15 +189,18 @@ describe("PermissionsProvider identity consistency", () => {
     expect(screen.getByTestId("name")).toHaveTextContent("Rolf");
     expect(screen.getByTestId("initials")).toHaveTextContent("R");
     expect(screen.getByTestId("role")).toHaveTextContent("meister");
+    expect(screen.getByTestId("areas")).toHaveTextContent("auftraege,mails");
     expect(screen.getByTestId("permissions")).toHaveTextContent(
-      getPermissionsForRole("meister").join(","),
+      getPermissionsForAreas(["auftraege", "mails"]).join(","),
     );
     expect(screen.getByTestId("loading")).toHaveTextContent("ready");
     expect(screen.getByTestId("error")).toHaveTextContent("no-error");
 
     // Capabilities are usable immediately, and only the granted ones.
     expect(screen.getByTestId("has-leitstand")).toHaveTextContent("granted");
+    expect(screen.getByTestId("has-mails")).toHaveTextContent("granted");
     expect(screen.getByTestId("has-prices")).toHaveTextContent("denied");
+    expect(screen.getByTestId("can-edit-order-content")).toHaveTextContent("denied");
 
     // No mount-time server action, now or after React has settled.
     expect(getAuthorizationSnapshotAction).not.toHaveBeenCalled();
@@ -249,7 +266,14 @@ describe("PermissionsProvider identity consistency", () => {
       data: {
         displayName: "Phillip",
         role: "werkstatt",
+        areas: ["auftraege"],
         permissions: ["perm_op_status"],
+        actions: {
+          confirmPayment: false,
+          editOrderContent: true,
+          createCustomer: false,
+          createQuote: false,
+        },
         active: true,
       },
     });
@@ -266,11 +290,14 @@ describe("PermissionsProvider identity consistency", () => {
       expect(screen.getByTestId("name")).toHaveTextContent("Phillip");
       expect(screen.getByTestId("initials")).toHaveTextContent("P");
       expect(screen.getByTestId("role")).toHaveTextContent("werkstatt");
+      expect(screen.getByTestId("areas")).toHaveTextContent("auftraege");
       expect(screen.getByTestId("permissions")).toHaveTextContent("perm_op_status");
       expect(screen.getByTestId("status")).toHaveTextContent("authenticated");
+      expect(screen.getByTestId("can-edit-order-content")).toHaveTextContent("granted");
     });
     // No leftover of the previous identity's capabilities.
     expect(screen.getByTestId("has-leitstand")).toHaveTextContent("denied");
+    expect(screen.getByTestId("has-mails")).toHaveTextContent("denied");
     expect(getAuthorizationSnapshotAction).toHaveBeenCalledOnce();
   });
 

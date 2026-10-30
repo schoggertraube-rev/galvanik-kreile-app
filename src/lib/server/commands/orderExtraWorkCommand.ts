@@ -8,7 +8,6 @@ import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 const EVENT_TYPE = "ORDER_ITEM_EXTRA_WORK_CHANGED_V1";
 const EVENT_SCHEMA_VERSION = 1 as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const ORDER_STATION_FORWARD_ROLES = ["buero", "werkstatt", "meister", "admin"] as const;
 
 export type ChangeOrderItemExtraWorkInput = {
   lineId: string;
@@ -216,9 +215,7 @@ export async function changeOrderItemExtraWork(
       ? { code: "UNAVAILABLE", message: "Mehrarbeit konnte nicht gespeichert werden." }
       : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
-  if (!ORDER_STATION_FORWARD_ROLES.includes(
-    authorization.data.role as (typeof ORDER_STATION_FORWARD_ROLES)[number],
-  )) {
+  if (!authorization.data.permissions.includes("perm_op_status")) {
     return { code: "FORBIDDEN", message: "Mehrarbeit darf mit dieser Rolle nicht geändert werden." };
   }
 

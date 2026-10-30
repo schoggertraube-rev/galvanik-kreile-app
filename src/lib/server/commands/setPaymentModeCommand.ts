@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import {
   isPaymentMode,
@@ -15,7 +15,6 @@ import {
 
 const EVENT_TYPE = "PAYMENT_MODE_SET_V1" as const;
 const EVENT_SCHEMA_VERSION = 1 as const;
-const PAYMENT_MODE_ROLES = ["buero", "meister", "admin"] as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const ISO_INSTANT_PATTERN = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/;
 const MAX_INT4 = 2_147_483_647;
@@ -281,7 +280,7 @@ export async function setPaymentMode(input: unknown): Promise<SetPaymentModeResu
   }
   if (
     authorization.data.tenantId !== KREILE_TENANT_SLUG ||
-    !PAYMENT_MODE_ROLES.includes(authorization.data.role as (typeof PAYMENT_MODE_ROLES)[number])
+    !hasAuthorizationArea(authorization.data, "geld")
   ) {
     return { code: "FORBIDDEN", message: "Zahlungsmodus darf mit dieser Rolle nicht geändert werden." };
   }

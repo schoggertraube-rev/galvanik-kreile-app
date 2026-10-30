@@ -2,7 +2,12 @@ process.env.DATABASE_URL = "postgres://mock:mock@localhost:5432/mock";
 
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { resolveAuthorization } from "../authorization";
+import {
+  getAuthorizationActionGrants,
+  hasAnyAuthorizationArea,
+  hasAuthorizationArea,
+  resolveAuthorization,
+} from "../authorization";
 import * as appSessionModule from "../appSession";
 import { db } from "@/db";
 import { appUsers } from "@/db/schema";
@@ -12,16 +17,13 @@ import {
   getMyPermissionsAction,
   getRoleAction,
 } from "@/app/actions/auth.actions";
-import { getRoleLabel, type AppRole } from "@/lib/auth/authorizationContract";
-
-const productActorPorts = vi.hoisted(() => ({
-  resolveProductActorAuthorization: vi.fn(),
-}));
-
-vi.mock("@/lib/server/productActorReadiness", () => ({
-  resolveProductActorAuthorization: productActorPorts.resolveProductActorAuthorization,
-  readProductActorReadiness: vi.fn(),
-}));
+import {
+  ACCESS_AREAS,
+  ROLE_ACCESS_AREA_TEMPLATES,
+  getRoleLabel,
+  normalizeAccessAreasForRole,
+  type AppRole,
+} from "@/lib/auth/authorizationContract";
 
 vi.mock("@/db", () => {
   const mockWhere = vi.fn();
@@ -73,7 +75,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     if (result.ok) {
       expect(result.data.userId).toBe("user-1");
       expect(result.data.role).toBe("admin");
-      expect(result.data.permissions).toContain("perm_sys_diag");
+      expect(result.data.permissions).not.toContain("perm_sys_diag");
     }
   });
 
@@ -237,7 +239,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toBe("AUTHORIZATION_UNAVAILABLE");
-      expect(result.message).toBe("AUTH_ERROR: Berechtigungen nicht verfügbar");
+      expect(result.message).toBe("AUTH_DB_ERROR: Berechtigungen nicht verfügbar");
     }
   });
 
@@ -328,11 +330,7 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
   });
 
   it("13. Client-Action nutzt ausschließlich Resolver", async () => {
-    productActorPorts.resolveProductActorAuthorization.mockResolvedValue({
-      ok: false,
-      reason: "NO_SESSION",
-      message: "not signed in",
-    });
+    vi.spyOn(appSessionModule, "readAppSession").mockResolvedValue({ ok: false, reason: "NO_COOKIE" });
 
     await expect(getAuthorizationSnapshotAction()).resolves.toEqual({
       ok: false,
@@ -341,38 +339,38 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
   });
 
   it("13a. Client-Action zeigt Gregor ohne Actor-ID oder Tenant", async () => {
-    productActorPorts.resolveProductActorAuthorization.mockResolvedValue({
+    vi.spyOn(appSessionModule, "readAppSession").mockResolvedValue({
       ok: true,
-      data: {
-        authorization: {
-          userId: "synthetic-gregor-id",
-          tenantId: KREILE_TENANT_SLUG,
-          displayName: "Gregor",
-          role: "admin",
-          permissions: ["perm_sys_diag"],
-          active: true,
-        },
-        actor: {
-          key: "gregor",
-          actorId: "synthetic-gregor-id",
-          tenantId: KREILE_TENANT_SLUG,
-          role: "admin",
-          identity: {
-            name: "Gregor",
-            responsibility: "Systemadministrator",
-            initials: "G",
-          },
-          login: "email",
-        },
+      session: {
+        userId: "synthetic-gregor-id",
+        tenantId: KREILE_TENANT_SLUG,
+        role: "developer",
+        displayName: "Gregor",
+        issuedAt: 0,
+        expiresAt: Date.now() + 10_000,
       },
     });
+    vi.mocked(db.select().from(appUsers).where).mockResolvedValue([{
+      id: "synthetic-gregor-id",
+      tenantId: KREILE_TENANT_SLUG,
+      fullName: "Gregor",
+      role: "developer",
+      active: true,
+      updatedAt: null,
+    }] as unknown as Array<typeof appUsers.$inferSelect>);
 
     const result = await getAuthorizationSnapshotAction();
     expect(result).toMatchObject({
       ok: true,
       data: {
         displayName: "Gregor",
-        role: "admin",
+        role: "developer",
+        actions: {
+          confirmPayment: false,
+          editOrderContent: false,
+          createCustomer: false,
+          createQuote: false,
+        },
       },
     });
     expect(JSON.stringify(result)).not.toContain("synthetic-gregor-id");
@@ -380,28 +378,39 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
   });
 
   it("13b. Client-Action fails closed without exposing technical classification", async () => {
-    productActorPorts.resolveProductActorAuthorization.mockResolvedValue({
-      ok: false,
-      reason: "ACTOR_READINESS_UNAVAILABLE",
-      message: "technical detail",
-      supportReference: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    vi.spyOn(appSessionModule, "readAppSession").mockResolvedValue({
+      ok: true,
+      session: {
+        userId: "user-1",
+        tenantId: KREILE_TENANT_SLUG,
+        role: "meister",
+        displayName: "Rolf",
+        issuedAt: 0,
+        expiresAt: Date.now() + 10_000,
+      },
     });
+    vi.mocked(db.select().from(appUsers).where).mockRejectedValue(new Error("technical detail"));
 
     await expect(getAuthorizationSnapshotAction()).resolves.toEqual({
       ok: false,
       status: "error",
       message: "Der Produktzugang ist momentan nicht sicher verfügbar.",
-      supportReference: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     });
   });
 
   it("13c. Rollen- und Berechtigungsfassaden failen ohne Namensfallback", async () => {
-    productActorPorts.resolveProductActorAuthorization.mockResolvedValue({
-      ok: false,
-      reason: "ACTOR_READINESS_UNAVAILABLE",
-      message: "technical detail",
-      supportReference: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    vi.spyOn(appSessionModule, "readAppSession").mockResolvedValue({
+      ok: true,
+      session: {
+        userId: "user-1",
+        tenantId: KREILE_TENANT_SLUG,
+        role: "meister",
+        displayName: "Rolf",
+        issuedAt: 0,
+        expiresAt: Date.now() + 10_000,
+      },
     });
+    vi.mocked(db.select().from(appUsers).where).mockRejectedValue(new Error("technical detail"));
 
     await expect(getRoleAction()).resolves.toBeNull();
     await expect(getMyPermissionsAction()).resolves.toEqual({
@@ -443,6 +452,67 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
       ok: false,
       reason: "SESSION_REVOKED",
       message: "AUTH_ERROR: Sitzung widerrufen",
+    });
+  });
+
+  it("bindet Bereichszugriff an app_user_rights statt an die Rolle", () => {
+    const base = { role: "meister" as const, areas: ["kunden"] as const };
+    expect(hasAnyAuthorizationArea(base)).toBe(true);
+    expect(hasAuthorizationArea(base, "kunden")).toBe(true);
+    expect(hasAuthorizationArea(base, "mails")).toBe(false);
+    expect(hasAuthorizationArea({ role: "meister", areas: [] }, "auftraege")).toBe(false);
+    expect(hasAnyAuthorizationArea({ role: "meister", areas: [] })).toBe(false);
+  });
+
+  it("H11 gate: matrix checks and server permission agree for every active role template", () => {
+    for (const [role, rawAreas] of Object.entries(ROLE_ACCESS_AREA_TEMPLATES) as Array<[AppRole, readonly (typeof ACCESS_AREAS)[number][]]>) {
+      const matrixChecks = normalizeAccessAreasForRole(role, rawAreas);
+      for (const area of ACCESS_AREAS) {
+        expect(
+          hasAuthorizationArea({ role, areas: matrixChecks }, area),
+          `${role}:${area}`,
+        ).toBe(matrixChecks.includes(area));
+      }
+    }
+
+    const staleDeveloperRows = { role: "developer" as const, areas: ACCESS_AREAS };
+    expect(hasAuthorizationArea(staleDeveloperRows, "auftraege")).toBe(false);
+    expect(hasAuthorizationArea(staleDeveloperRows, "geld")).toBe(false);
+    expect(hasAuthorizationArea(staleDeveloperRows, "einstellungen")).toBe(true);
+    expect(hasAuthorizationArea(staleDeveloperRows, "logins")).toBe(true);
+    expect(hasAuthorizationArea({ role: "meister", areas: ["wartung"] }, "wartung")).toBe(false);
+    expect(hasAuthorizationArea({ role: "admin", areas: ["wartung"] }, "wartung")).toBe(false);
+    expect(hasAuthorizationArea({ role: "developer", areas: ["wartung"] }, "wartung")).toBe(true);
+    expect(ROLE_ACCESS_AREA_TEMPLATES.meister).toContain("logins");
+  });
+
+  it("H11d projects concrete action grants only from effective areas", () => {
+    expect(getAuthorizationActionGrants({
+      role: "buero",
+      areas: ["auftraege", "eingang", "kunden", "geld"],
+    })).toEqual({
+      confirmPayment: true,
+      editOrderContent: true,
+      createCustomer: true,
+      createQuote: true,
+    });
+    expect(getAuthorizationActionGrants({
+      role: "werkstatt",
+      areas: ["auftraege", "kassieren"],
+    })).toEqual({
+      confirmPayment: true,
+      editOrderContent: false,
+      createCustomer: false,
+      createQuote: false,
+    });
+    expect(getAuthorizationActionGrants({
+      role: "developer",
+      areas: ACCESS_AREAS,
+    })).toEqual({
+      confirmPayment: false,
+      editOrderContent: false,
+      createCustomer: false,
+      createQuote: false,
     });
   });
 });

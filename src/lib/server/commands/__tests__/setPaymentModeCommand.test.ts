@@ -13,7 +13,12 @@ vi.mock("node:crypto", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:crypto")>();
   return { ...actual, randomUUID };
 });
-vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization }));
+vi.mock("@/lib/server/authorization", () => ({
+  resolveAuthorization,
+  hasAuthorizationArea: (authorization: { role: string; permissions: readonly string[] }, area: string) => authorization.role !== "developer"
+    && area === "geld"
+    && authorization.permissions.includes("perm_view_prices"),
+}));
 vi.mock("@/lib/server/privilegedDb", () => ({ withPrivilegedTenantTransaction: withTransaction }));
 vi.mock("drizzle-orm", () => ({
   sql: (parts: TemplateStringsArray, ...values: unknown[]) => ({ text: parts.join("?"), values }),
@@ -33,7 +38,7 @@ const authorization = {
     tenantId: KREILE_TENANT_SLUG,
     displayName: "Büro",
     role: "buero" as const,
-    permissions: [] as const,
+    permissions: ["perm_view_prices"] as const,
     active: true as const,
   },
 };
@@ -147,7 +152,7 @@ describe("setPaymentMode", () => {
     expect(withTransaction).not.toHaveBeenCalled();
   });
 
-  it("allows exactly buero, meister and admin and denies all other roles or tenants before a transaction", async () => {
+  it("allows permitted employees and denies missing permission, developer, or foreign tenant", async () => {
     const { setPaymentMode } = await import("../setPaymentModeCommand");
     resolveAuthorization.mockResolvedValueOnce({ ok: false, reason: "NO_SESSION", message: "none" });
     await expect(setPaymentMode(input)).resolves.toMatchObject({ code: "UNAUTHENTICATED" });
@@ -158,8 +163,11 @@ describe("setPaymentMode", () => {
       data: { ...authorization.data, tenantId: "foreign" },
     });
     await expect(setPaymentMode(input)).resolves.toMatchObject({ code: "FORBIDDEN" });
-    for (const role of ["werkstatt", "readonly", "developer"] as const) {
-      resolveAuthorization.mockResolvedValueOnce({ ...authorization, data: { ...authorization.data, role } });
+    for (const [role, permissions] of [
+      ["readonly", []],
+      ["developer", ["perm_view_prices"]],
+    ] as const) {
+      resolveAuthorization.mockResolvedValueOnce({ ...authorization, data: { ...authorization.data, role, permissions } });
       await expect(setPaymentMode(input)).resolves.toMatchObject({ code: "FORBIDDEN" });
     }
     expect(withTransaction).not.toHaveBeenCalled();
@@ -170,14 +178,14 @@ describe("setPaymentMode", () => {
       if (query.text.includes("FOR UPDATE")) return Promise.resolve([]);
       throw new Error(`Unexpected SQL: ${query.text}`);
     });
-    for (const role of ["buero", "meister", "admin"] as const) {
+    for (const role of ["buero", "werkstatt", "meister", "admin"] as const) {
       resolveAuthorization.mockResolvedValueOnce({ ...authorization, data: { ...authorization.data, role } });
       await expect(setPaymentMode({
         ...input,
-        clientEventId: `${CLIENT_EVENT.slice(0, -1)}${role === "buero" ? "1" : role === "meister" ? "2" : "3"}`,
+        clientEventId: `${CLIENT_EVENT.slice(0, -1)}${role === "buero" ? "1" : role === "werkstatt" ? "2" : role === "meister" ? "3" : "4"}`,
       })).resolves.toMatchObject({ code: "NOT_FOUND" });
     }
-    expect(withTransaction).toHaveBeenCalledTimes(3);
+    expect(withTransaction).toHaveBeenCalledTimes(4);
   });
 
   it("updates only the independent mode version and returns exact event/state readback", async () => {

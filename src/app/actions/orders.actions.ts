@@ -39,6 +39,15 @@ import type {
   OrderTaskAssignmentResult,
 } from "@/lib/server/commands/orderTaskAssignmentCommand";
 import type {
+  ChangeOrderPromisedDueDateInput,
+  ChangeOrderPromisedDueDateResult,
+} from "@/lib/server/commands/orderPromiseCommand";
+import type {
+  ChangeOrderContentInput,
+  OrderContentResult,
+  SetOrderItemFinishedInput,
+} from "@/lib/server/commands/orderContentCommand";
+import type {
   ExtraWorkMasterData,
   LiveOrderCard,
   OrderCardReadResult,
@@ -46,7 +55,21 @@ import type {
 import type { EvidenceReadRecord } from "@/lib/server/evidenceRead";
 
 // DTO Typen (zur Vereinfachung)
-export type OrderResponse = OperationalOrder;
+export type OrderResponse = OperationalOrder & { cardReadErrorCode?: string | null };
+
+export type OrderRegisterFilter = "ALL" | "ORDER" | "QUOTE";
+
+export type OrderRegisterEntry = {
+  kind: "ORDER" | "QUOTE";
+  id: string;
+  reference: string;
+  customerId: string;
+  customerName: string;
+  title: string;
+  dueDate: string;
+  status: string;
+  changedAt: string | null;
+};
 
 export async function transitionWareneingangToGalvanikAction(
   input: OrderStationCommandInput,
@@ -102,6 +125,29 @@ export async function handBackOrderTaskAction(
   return handBackOrderTask(input);
 }
 
+export async function changeOrderPromisedDueDateAction(
+  input: ChangeOrderPromisedDueDateInput,
+): Promise<ChangeOrderPromisedDueDateResult> {
+  const { changeOrderPromisedDueDate } = await import(
+    "@/lib/server/commands/orderPromiseCommand"
+  );
+  return changeOrderPromisedDueDate(input);
+}
+
+export async function changeOrderContentAction(
+  input: ChangeOrderContentInput,
+): Promise<OrderContentResult> {
+  const { changeOrderContent } = await import("@/lib/server/commands/orderContentCommand");
+  return changeOrderContent(input);
+}
+
+export async function setOrderItemFinishedAction(
+  input: SetOrderItemFinishedInput,
+): Promise<OrderContentResult> {
+  const { setOrderItemFinished } = await import("@/lib/server/commands/orderContentCommand");
+  return setOrderItemFinished(input);
+}
+
 export async function configureExtraWorkCatalogPositionAction(
   input: ConfigureExtraWorkCatalogInput,
 ): Promise<ConfigureExtraWorkCatalogResult> {
@@ -132,7 +178,10 @@ async function resolveOrderCardAuthorization(): Promise<
   let authorization;
   try {
     authorization = await resolveAuthorization();
-  } catch {
+  } catch (error) {
+    console.error("[ORDER_CARD_AUTHORIZATION_ERROR]", {
+      message: error instanceof Error ? error.message.slice(0, 200) : "UNKNOWN",
+    });
     return {
       ok: false,
       result: { code: "UNAVAILABLE", message: "Auftragskarte ist derzeit nicht verfügbar." },
@@ -153,28 +202,43 @@ export async function getLiveOrderCardAction(
   input: { orderId: string },
 ): Promise<OrderCardActionResult<{ card: LiveOrderCard; evidence: EvidenceReadRecord[] }>> {
   noStore();
-  const authorization = await resolveOrderCardAuthorization();
-  if (!authorization.ok) return authorization.result;
-  const [{ readLiveOrderCard }, { readEvidenceRecordsByTarget }] = await Promise.all([
-    import("@/lib/server/orderCardRead"),
-    import("@/lib/server/evidenceRead"),
-  ]);
-  const card = await readLiveOrderCard(authorization.data, input);
-  if (card.code !== "OK") return card;
-  const evidence = await readEvidenceRecordsByTarget(authorization.data, {
-    targetType: "ORDER",
-    targetId: input.orderId,
-  });
-  if (evidence.code !== "OK") return evidence;
-  return { code: "OK", data: { card: card.data, evidence: evidence.data } };
+  try {
+    const authorization = await resolveOrderCardAuthorization();
+    if (!authorization.ok) return authorization.result;
+    const [{ readLiveOrderCard }, { readEvidenceRecordsByTarget }] = await Promise.all([
+      import("@/lib/server/orderCardRead"),
+      import("@/lib/server/evidenceRead"),
+    ]);
+    const card = await readLiveOrderCard(authorization.data, input);
+    if (card.code !== "OK") return card;
+    const evidence = await readEvidenceRecordsByTarget(authorization.data, {
+      targetType: "ORDER",
+      targetId: input.orderId,
+    });
+    if (evidence.code !== "OK") return evidence;
+    return { code: "OK", data: { card: card.data, evidence: evidence.data } };
+  } catch (error) {
+    console.error("[ORDER_CARD_ACTION_ERROR]", {
+      orderId: input.orderId,
+      message: error instanceof Error ? error.message.slice(0, 200) : "UNKNOWN",
+    });
+    return { code: "UNAVAILABLE", message: "Auftragskarte ist derzeit nicht verfügbar." };
+  }
 }
 
 export async function getExtraWorkMasterDataAction(): Promise<OrderCardActionResult<ExtraWorkMasterData>> {
   noStore();
-  const authorization = await resolveOrderCardAuthorization();
-  if (!authorization.ok) return authorization.result;
-  const { readExtraWorkMasterData } = await import("@/lib/server/orderCardRead");
-  return readExtraWorkMasterData(authorization.data);
+  try {
+    const authorization = await resolveOrderCardAuthorization();
+    if (!authorization.ok) return authorization.result;
+    const { readExtraWorkMasterData } = await import("@/lib/server/orderCardRead");
+    return readExtraWorkMasterData(authorization.data);
+  } catch (error) {
+    console.error("[ORDER_CARD_EXTRA_WORK_ACTION_ERROR]", {
+      message: error instanceof Error ? error.message.slice(0, 200) : "UNKNOWN",
+    });
+    return { code: "UNAVAILABLE", message: "Mehrarbeitsstammdaten sind derzeit nicht verfügbar." };
+  }
 }
 
 export async function getOrderFrozenReceiptAction(input: {
@@ -298,7 +362,22 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
 
   try {
     const { getOperationalOrders } = await import("@/lib/server/operationalOrders");
-    const data = await getOperationalOrders(authorization.data);
+    const [{ readLiveOrderCard }, orders] = await Promise.all([
+      import("@/lib/server/orderCardRead"),
+      getOperationalOrders(authorization.data),
+    ]);
+    const cardReads = await Promise.all(orders.map((order) => readLiveOrderCard(authorization.data, { orderId: order.id })));
+    const data: OrderResponse[] = orders.map((order, index) => {
+      const cardRead = cardReads[index];
+      return {
+        ...order,
+        cardReadErrorCode: cardRead?.code === "OK"
+          ? null
+          : cardRead?.code === "UNAVAILABLE"
+            ? cardRead.errorCode ?? "ORDER_CARD_READ_FAILED"
+            : `ORDER_CARD_${cardRead?.code ?? "READ_FAILED"}`,
+      };
+    });
     return { ok: true, data };
   } catch (error: unknown) {
     console.error("[ORDER_READ_ERROR]", error);
@@ -306,6 +385,100 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
       ok: false,
       error: "DB_ERROR",
       message: "Auftragsdaten konnten nicht sicher geladen werden.",
+    };
+  }
+}
+
+/**
+ * F3 register read: one tenant-bound source for the order list and its KV
+ * filter. The UI can select either aggregate without joining client results or
+ * resolving authorization twice.
+ */
+export async function getOrderRegisterDb(
+  input: { filter: OrderRegisterFilter } = { filter: "ALL" },
+): Promise<ActionResult<OrderRegisterEntry[]>> {
+  noStore();
+  if (
+    !input
+    || typeof input !== "object"
+    || Object.keys(input).length !== 1
+    || !["ALL", "ORDER", "QUOTE"].includes(input.filter)
+  ) {
+    return {
+      ok: false,
+      error: "VALIDATION_ERROR",
+      message: "Auftragsfilter ist ungültig.",
+    };
+  }
+
+  const authorization = await resolveOperationalReadAuthorization();
+  if (!authorization.ok) return authorization;
+
+  try {
+    const readOrders = input.filter !== "QUOTE";
+    const readQuotes = input.filter !== "ORDER";
+    const [orderRows, quoteResult] = await Promise.all([
+      readOrders
+        ? import("@/lib/server/operationalOrders").then(({ getOperationalOrders }) => getOperationalOrders(authorization.data))
+        : Promise.resolve([]),
+      readQuotes
+        ? import("@/modules/quotes/server-public").then(({ listOpenQuotesCommand }) => listOpenQuotesCommand({
+          tenantId: authorization.data.tenantId,
+          userId: authorization.data.userId,
+          capabilities: {
+            canCreateQuote: false,
+            canReadQuote: true,
+            canUpdateQuote: false,
+            canConvertQuote: false,
+          },
+        }))
+        : Promise.resolve({ code: "OK" as const, quotes: [] }),
+    ]);
+
+    if (quoteResult.code !== "OK") {
+      return {
+        ok: false,
+        error: quoteResult.code === "FORBIDDEN" ? "FORBIDDEN" : "DB_ERROR",
+        message: "Aufträge und KVs konnten nicht gemeinsam sicher geladen werden.",
+      };
+    }
+
+    const entries: OrderRegisterEntry[] = [
+      ...orderRows.map((order) => ({
+        kind: "ORDER" as const,
+        id: order.id,
+        reference: order.orderNumber,
+        customerId: order.customerId,
+        customerName: order.customerName ?? "",
+        title: order.title,
+        dueDate: order.dueDate,
+        status: order.status,
+        changedAt: order.createdAt ?? null,
+      })),
+      ...quoteResult.quotes.map((quote) => ({
+        kind: "QUOTE" as const,
+        id: quote.quoteId,
+        reference: quote.quoteNumber,
+        customerId: quote.customerId,
+        customerName: quote.customerDisplayName,
+        title: quote.positions[0]?.name ?? quote.quoteNumber,
+        dueDate: quote.dueDate,
+        status: quote.status,
+        changedAt: quote.updatedAt,
+      })),
+    ];
+
+    entries.sort((left, right) => {
+      const timeOrder = (right.changedAt ?? "").localeCompare(left.changedAt ?? "");
+      return timeOrder || left.reference.localeCompare(right.reference, "de");
+    });
+    return { ok: true, data: entries };
+  } catch (error: unknown) {
+    console.error("[ORDER_REGISTER_READ_ERROR]", error);
+    return {
+      ok: false,
+      error: "DB_ERROR",
+      message: "Aufträge und KVs konnten nicht gemeinsam sicher geladen werden.",
     };
   }
 }

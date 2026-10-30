@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, integer, jsonb, uuid, varchar, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, integer, jsonb, uuid, varchar, numeric, primaryKey } from "drizzle-orm/pg-core";
 import { createId } from "@paralleldrive/cuid2";
 
 // Helper for CUID primary keys
@@ -8,8 +8,10 @@ const cuidPrimaryKey = (name: string) => text(name).primaryKey().$defaultFn(() =
 export const appUsers = pgTable("app_users", {
   id: uuid("id").primaryKey().defaultRandom(), // matches Supabase auth.users.id
   tenantId: text("tenant_id").notNull(),
-  email: text("email").notNull(),
+  email: text("email"),
   fullName: text("full_name").notNull(),
+  shortCode: varchar("kuerzel", { length: 8 }),
+  designation: text("bezeichnung"),
   role: varchar("role", { length: 50 }).notNull().default("werkstatt"), // developer, admin, meister, buero, werkstatt, readonly
   location: text("location"),
   language: text("language").default("de"),
@@ -22,6 +24,14 @@ export const appUsers = pgTable("app_users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const appUserRights = pgTable("app_user_rights", {
+  tenantId: text("tenant_id").notNull(),
+  userId: uuid("user_id").notNull().references(() => appUsers.id, { onDelete: "cascade" }),
+  area: text("bereich").notNull(),
+  grantedBy: uuid("granted_by").references(() => appUsers.id, { onDelete: "set null" }),
+  grantedAt: timestamp("granted_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [primaryKey({ columns: [table.tenantId, table.userId, table.area] })]);
 
 export const pinRateLimits = pgTable("pin_rate_limits", {
   operatorId: uuid("operator_id")
@@ -64,7 +74,12 @@ export const customers = pgTable("customers", {
   tags: jsonb("tags").default([]),
   creditRating: text("credit_rating"),
   shippingPreference: text("shipping_preference").default('abholung'),
-  paymentPreference: text("payment_preference").default('rechnung_14'),
+  paymentPreference: text("payment_preference"),
+  invoiceTermsEnabled: boolean("ziel_freigeschaltet").notNull().default(false),
+  invoiceTermDays: integer("ziel_tage"),
+  cashDiscountPercent: numeric("skonto_prozent", { precision: 5, scale: 2 }),
+  cashDiscountDays: integer("skonto_tage"),
+  vatId: text("vat_id"),
   classification: text("classification").default('B'),
   internalNotes: text("internal_notes"),
   marketingOptOut: boolean("marketing_opt_out").default(false),
@@ -97,8 +112,8 @@ export const orders = pgTable("orders", {
   customerId: text("customer_id").notNull().references(() => customers.id),
   title: text("title").notNull(),
   task: text("task"),
-  station: varchar("station", { length: 100 }).notNull().default("wareneingang"),
-  currentStation: text("current_station").default("wareneingang"),
+  station: varchar("station", { length: 100 }).notNull().default("angenommen"),
+  currentStation: text("current_station").default("angenommen"),
   currentStationId: varchar("current_station_id", { length: 100 }),
   version: integer("version").notNull().default(1),
   status: varchar("status", { length: 50 }).notNull().default("in_progress"),
@@ -117,6 +132,11 @@ export const orders = pgTable("orders", {
   priority: text("priority").default("normal"),
   dueDate: timestamp("due_date"),
   promisedDueDate: timestamp("promised_due_date", { withTimezone: true }),
+  intakeTermStatus: text("intake_term_status"),
+  intakeSource: text("intake_source"),
+  handoverMode: text("handover_mode"),
+  paymentMode: text("payment_mode").notNull().default("vorkasse"),
+  paymentModeVersion: integer("payment_mode_version").notNull().default(0),
   completedDate: timestamp("completed_date", { withTimezone: true }),
   attachmentUrl: text("attachment_url"),
   source: text("source"),
@@ -153,9 +173,14 @@ export const items = pgTable("items", {
   customerId: text("customer_id").notNull().references(() => customers.id),
   name: text("name").notNull(),
   quantity: integer("quantity").notNull().default(1),
-  currentStationId: varchar("current_station_id", { length: 100 }).default("wareneingang"),
+  currentStationId: varchar("current_station_id", { length: 100 }).default("angenommen"),
   material: text("material"),
   surfaceRequested: text("surface_requested"),
+  executionRequested: text("execution_requested").notNull().default("offen"),
+  catalogServiceId: uuid("catalog_service_id"),
+  unit: text("unit"),
+  preisNetto: numeric("preis_netto", { precision: 10, scale: 2 }),
+  vatRateBasisPoints: integer("vat_rate_basis_points"),
   photoIds: jsonb("photo_ids").$type<string[]>(),
   photo: text("photo"),
   repairTypes: text("repair_types").array().default([]),
@@ -370,6 +395,9 @@ export const companySettingsTable = pgTable("company_settings", {
   bic: text("bic").default(""),
   bankName: text("bank_name").default(""),
   taxId: text("tax_id").default(""),
+  invoiceVatRateBasisPoints: integer("invoice_vat_rate_basis_points").default(1900).notNull(),
+  invoicePaymentTermDays: integer("invoice_payment_term_days"),
+  dailyOutputEur: integer("tagesleistung_eur").notNull().default(800),
   logoUrl: text("logo_url").default("/logo.png"),
   emailGreeting: text("email_greeting").default("Sehr geehrte Damen und Herren,"),
   emailPickupInfo: text("email_pickup_info").default("Ihr Auftrag ist fertig und kann abgeholt werden."),
@@ -378,6 +406,20 @@ export const companySettingsTable = pgTable("company_settings", {
   emailFooter: text("email_footer").default("Mit freundlichen Gruessen, Ihr Team von Galvanik Kreile"),
   emailAdditionalNotes: text("email_additional_notes").default(""),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const catalogServices = pgTable("catalog_services", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  name: text("name").notNull(),
+  surface: text("surface").notNull(),
+  unit: text("unit").notNull(),
+  netPriceCents: integer("net_price_cents").notNull(),
+  vatRateBasisPoints: integer("vat_rate_basis_points").notNull().default(1900),
+  standardLeadTimeWorkingDays: integer("standard_lead_time_working_days").notNull(),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const phoneNotes = pgTable("phone_notes", {
@@ -461,18 +503,6 @@ export const kostenPosten = pgTable("kosten_posten", {
   gebuchtAm: timestamp("gebucht_am").defaultNow().notNull(),
 });
 
-// 14. Qualitätskontrolle (QS)
-export const qs = pgTable("qs", {
-  id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
-  orderId: text("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
-  ergebnis: varchar("ergebnis", { length: 50 }).notNull(), // "bestanden", "nacharbeit", "ausschuss"
-  pruefer: text("pruefer"),
-  datum: timestamp("datum").defaultNow().notNull(),
-  bemerkung: text("bemerkung"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
 // 15. Bäder (Galvanik)
 export const baeder = pgTable("baths", {
   id: cuidPrimaryKey("id"),
@@ -498,20 +528,6 @@ export const badMesswerte = pgTable("bath_measurements", {
   notes: text("notes"),
   measuredAt: timestamp("measured_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
-});
-
-// 17. Lager & Chemie
-export const lagerArtikel = pgTable("lager_artikel", {
-  id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
-  artikelnummer: varchar("artikelnummer", { length: 100 }).notNull(),
-  name: varchar("name", { length: 255 }).notNull(),
-  kategorie: varchar("kategorie", { length: 50 }).notNull(), // "chemie", "verpackung", "verschleiss"
-  bestand: numeric("bestand", { precision: 10, scale: 2 }).notNull().default("0"),
-  mindestbestand: numeric("mindestbestand", { precision: 10, scale: 2 }).notNull().default("0"),
-  einheit: varchar("einheit", { length: 20 }).notNull().default("Stk"),
-  letzterWareneingang: timestamp("letzter_wareneingang"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // 11. Buchhaltung & Finanzen

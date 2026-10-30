@@ -18,10 +18,22 @@ const input = {
   clientEventId: CLIENT,
   customerId: CUSTOMER,
   dueDate: "2026-10-15",
+  validUntil: "2026-11-15",
+  termStatus: "wunsch" as const,
+  intakeSource: "anfrage_mail" as const,
   note: "Synthetischer KV",
   positions: [{ name: "Flansch", quantity: 2, material: "Stahl", surfaceRequested: "Verzinken", unitPriceCents: 12500 }],
 };
-const intent = createHash("sha256").update(JSON.stringify(input), "utf8").digest("hex");
+const intent = createHash("sha256").update(JSON.stringify({
+  clientEventId: input.clientEventId,
+  customerId: input.customerId,
+  dueDate: input.dueDate,
+  note: input.note,
+  positions: input.positions,
+  validUntil: input.validUntil,
+  termStatus: input.termStatus,
+  intakeSource: input.intakeSource,
+}), "utf8").digest("hex");
 const authorization = {
   tenantId: TENANT,
   userId: ACTOR,
@@ -31,6 +43,7 @@ const quoteRow = {
   quote_id: QUOTE, tenant_id: TENANT, quote_number: "KV-2026-0042", customer_id: CUSTOMER,
   customer_number: "K-2026-0041", customer_display_name: "Synthetischer Kunde", status: "draft",
   version: 1, currency: "EUR", due_date: input.dueDate, note: input.note, total_net_cents: "25000",
+  valid_until: input.validUntil, intake_term_status: input.termStatus, intake_source: input.intakeSource,
   linked_order_id: null, created_by: ACTOR, actor_display_name: "Test Büro",
   created_at: "2026-09-14T10:00:00.000Z", updated_at: "2026-09-14T10:00:00.000Z", converted_at: null,
   positions: [{ id: "88888888-8888-4888-8888-888888888888", position: 1, name: "Flansch", quantity: 2, material: "Stahl", surfaceRequested: "Verzinken", unitPriceCents: 12500, lineTotalCents: 25000 }],
@@ -77,7 +90,62 @@ describe("quotes command boundary", () => {
     const { prepareQuoteConversionCommand } = await import("../server/quoteCommands");
     await expect(prepareQuoteConversionCommand(authorization, {
       quoteId: QUOTE, clientEventId: CLIENT, expectedVersion: 2, confirmedAward: true, confirmedOrderDueDate: "2026-10-20",
+      handoverMode: "pickup", paymentMode: "rechnung",
     })).resolves.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("binds the conversion hash to the complete normalized order intake", async () => {
+    const orderInput = {
+      clientEventId: CLIENT,
+      customer: { mode: "EXISTING" as const, customerId: CUSTOMER },
+      dueDate: "2026-10-20",
+      handoverMode: "shipping" as const,
+      items: [{
+        catalogServiceId: null, name: "Flansch", quantity: 2, material: "Stahl",
+        surfaceRequested: "Verzinken", unit: null, unitPriceCents: null, vatRateBasisPoints: null,
+      }],
+      note: input.note,
+      paymentMode: "vorkasse" as const,
+      termStatus: "bestaetigt" as const,
+      intakeSource: "anfrage_mail" as const,
+    };
+    const expectedOrderIntent = {
+      clientEventId: orderInput.clientEventId,
+      customer: orderInput.customer,
+      dueDate: orderInput.dueDate,
+      termStatus: orderInput.termStatus,
+      intakeSource: orderInput.intakeSource,
+      handoverMode: orderInput.handoverMode,
+      items: orderInput.items.map((item) => ({
+        catalogServiceId: item.catalogServiceId,
+        name: item.name,
+        quantity: item.quantity,
+        material: item.material,
+        surfaceRequested: item.surfaceRequested,
+        executionRequested: "offen",
+        unit: item.unit,
+        unitPriceCents: item.unitPriceCents,
+        vatRateBasisPoints: item.vatRateBasisPoints,
+      })),
+      note: orderInput.note,
+      paymentMode: orderInput.paymentMode,
+    };
+    const expectedOrderHash = createHash("sha256").update(JSON.stringify(expectedOrderIntent), "utf8").digest("hex");
+    execute
+      .mockResolvedValueOnce([quoteRow])
+      .mockResolvedValueOnce([{ result_code: "OK", order_input: {
+        clientEventId: CLIENT,
+        customer: { mode: "EXISTING", customerId: CUSTOMER },
+        dueDate: input.dueDate,
+        note: input.note,
+        items: [{ name: "Flansch", quantity: 2, material: "Stahl", surfaceRequested: "Verzinken" }],
+      }, replayed: false }]);
+    const { prepareQuoteConversionCommand } = await import("../server/quoteCommands");
+    await expect(prepareQuoteConversionCommand(authorization, {
+      quoteId: QUOTE, clientEventId: CLIENT, expectedVersion: 1, confirmedAward: true,
+      confirmedOrderDueDate: "2026-10-20", handoverMode: "shipping", paymentMode: "vorkasse",
+    })).resolves.toMatchObject({ code: "OK", orderInput });
+    expect(execute.mock.calls[1]?.[0]?.values[5]).toBe(expectedOrderHash);
   });
 
   it("does not turn corrupt tenant or integrity readback into success or not-found", async () => {

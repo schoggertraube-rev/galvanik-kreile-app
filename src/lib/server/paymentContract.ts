@@ -122,20 +122,13 @@ export type OrderPaymentStateRow = {
   integrity_ok: boolean;
 };
 
-export const PAYMENT_SUMMARY_READ_ROLES = ["buero", "werkstatt", "meister", "admin"] as const;
-
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const INVOICE_NUMBER_PATTERN = /^R-[0-9]{4}-[0-9]{4,}$/;
-
-function isPaymentReadRole(value: AuthorizationSnapshot["role"]): boolean {
-  return PAYMENT_SUMMARY_READ_ROLES.includes(value as (typeof PAYMENT_SUMMARY_READ_ROLES)[number]);
-}
 
 export function canReadPaymentSummary(authorization: AuthorizationSnapshot): boolean {
   return authorization.active === true
     && authorization.tenantId === KREILE_TENANT_SLUG
-    && isPaymentReadRole(authorization.role)
-    && authorization.permissions.includes("perm_view_leitstand");
+    && authorization.permissions.includes("perm_view_prices");
 }
 
 function isCanonicalTextId(value: unknown): value is string {
@@ -164,6 +157,35 @@ function toIsoTimestamp(value: unknown): string {
 
 export function isPaymentMode(value: unknown): value is PaymentMode {
   return PAYMENT_MODES.includes(value as PaymentMode);
+}
+
+export function paymentModeFromPreference(
+  preference: string | null | undefined,
+  handoverMode: "pickup" | "shipping" = "shipping",
+): PaymentMode {
+  if (preference === "bar") return handoverMode === "pickup" ? "abholung" : "vorkasse";
+  if (typeof preference === "string" && /^rechnung_[1-9][0-9]{0,2}$/.test(preference)) return "rechnung";
+  return handoverMode === "pickup" && !preference ? "abholung" : "vorkasse";
+}
+
+export function intakePaymentContract(input: {
+  customerMode: "EXISTING" | "NEW";
+  paymentPreference: string | null | undefined;
+  handoverMode: "pickup" | "shipping";
+  requestedMode?: PaymentMode;
+}): { ok: true; mode: PaymentMode } | { ok: false; message: string } {
+  const mode = input.requestedMode
+    ?? paymentModeFromPreference(input.paymentPreference, input.handoverMode);
+  const targetEnabled = input.customerMode === "EXISTING"
+    && typeof input.paymentPreference === "string"
+    && /^rechnung_[1-9][0-9]{0,2}$/.test(input.paymentPreference);
+  if (mode === "rechnung" && !targetEnabled) {
+    return { ok: false, message: "Ziel nicht freigeschaltet." };
+  }
+  if (mode === "abholung" && input.handoverMode === "shipping") {
+    return { ok: false, message: "Bar oder Karte nur bei Abholung." };
+  }
+  return { ok: true, mode };
 }
 
 function isPaymentStatus(value: unknown): value is PaymentStatus {
@@ -238,7 +260,7 @@ export function mapPaymentSummaryRow(
 
   if (
     !(openStateValid || (settledStateValid && (paidStateValid || partialStateValid)))
-    || row.goods_out_allowed !== (mode === "rechnung" || status === "bezahlt")
+    || row.goods_out_allowed !== (mode === "rechnung" || mode === "abholung" || status === "bezahlt")
   ) {
     throw new Error("PAYMENT_SUMMARY_STATE_INVALID");
   }

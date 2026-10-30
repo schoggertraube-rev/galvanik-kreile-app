@@ -11,7 +11,12 @@ const { resolveAuthorizationSpy, withTransactionSpy, executeSpy, receiptLookupSp
 }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization: resolveAuthorizationSpy }));
+vi.mock("@/lib/server/authorization", () => ({
+  resolveAuthorization: resolveAuthorizationSpy,
+  hasAuthorizationArea: (authorization: { role: string; permissions: readonly string[] }, area: string) => authorization.role !== "developer"
+    && area === "auftraege"
+    && authorization.permissions.includes("perm_op_status"),
+}));
 vi.mock("@/lib/server/privilegedDb", () => ({
   withPrivilegedTenantTransaction: withTransactionSpy,
 }));
@@ -27,8 +32,8 @@ const authorization = {
   },
 };
 const validOrder = {
-  id: "order-1", tenant_id: "tenant-a", customer_id: "customer-a", station: "wareneingang",
-  current_station: "wareneingang", current_station_id: "wareneingang",
+  id: "order-1", tenant_id: "tenant-a", customer_id: "customer-a", station: "angenommen",
+  current_station: "angenommen", current_station_id: "angenommen",
   status: "angenommen", version: 1,
 };
 const CLIENT_EVENT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -48,7 +53,7 @@ const insertedReceipt = {
   correlation_id: CORRELATION_ID,
   event_schema_version: 1,
   aggregate_version: 2,
-  from_station: "wareneingang",
+  from_station: "angenommen",
   to_station: "galvanik",
   actor_id: ACTOR_ID,
   status: "success",
@@ -58,7 +63,7 @@ const insertedReceipt = {
 const validCustomer = { id: "customer-a", tenant_id: "tenant-a" };
 const validItem = {
   id: "item-1", tenant_id: "tenant-a", customer_id: "customer-a",
-  current_station_id: "wareneingang",
+  current_station_id: "angenommen",
 };
 
 describe("transitionWareneingangToGalvanik", () => {
@@ -101,11 +106,8 @@ describe("transitionWareneingangToGalvanik", () => {
     expect(withTransactionSpy).not.toHaveBeenCalled();
   });
 
-  it("keeps readonly and developer snapshots out of the command transaction (D-F12-003: exact role gate)", async () => {
+  it("keeps missing permissions and the developer role out of the command transaction", async () => {
     const { transitionWareneingangToGalvanik } = await import("../orderStationCommand");
-    // developer intentionally holds perm_op_status generically but must still be
-    // forbidden here: the gate is an explicit role allowlist, never the generic
-    // permission.
     for (const [role, permissions] of [
       ["readonly", ["perm_view_leitstand"]],
       ["developer", ["perm_op_status"]],
@@ -119,15 +121,13 @@ describe("transitionWareneingangToGalvanik", () => {
     expect(withTransactionSpy).not.toHaveBeenCalled();
   });
 
-  it("allows exactly buero, werkstatt, meister, and admin without requiring generic perm_op_status", async () => {
+  it("allows employees with perm_op_status", async () => {
     const { transitionWareneingangToGalvanik } = await import("../orderStationCommand");
-    // buero intentionally lacks perm_op_status in the generic role/permission table
-    // (D-F12-003) yet must still pass this explicit role gate.
     for (const role of ["buero", "werkstatt", "meister", "admin"] as const) {
       withTransactionSpy.mockClear();
       resolveAuthorizationSpy.mockResolvedValueOnce({
         ...authorization,
-        data: { ...authorization.data, role, permissions: ["perm_view_leitstand"] },
+        data: { ...authorization.data, role, permissions: ["perm_op_status"] },
       });
       const result = await transitionWareneingangToGalvanik(commandInput("order-1"));
       expect(result.code).not.toBe("FORBIDDEN");
@@ -230,7 +230,7 @@ describe("transitionWareneingangToGalvanik", () => {
         eventSchemaVersion: 1,
         orderId: "order-1",
         aggregateVersion: 2,
-        fromStation: "wareneingang",
+        fromStation: "angenommen",
         toStation: "galvanik",
         actorId: ACTOR_ID,
         occurredAt: "2026-08-11T15:47:32.000Z",
@@ -355,9 +355,8 @@ describe("transitionWareneingangToGalvanik", () => {
     // missing or mismatched readback.
     expect(source).toContain("private.v_order_station_correction_receipts_v1");
     expect(source).toContain("ORDER_STATION_CORRECTION_RECEIPT_READBACK_INVALID");
-    // D-F12-003: exact role allowlist, never the generic perm_op_status permission.
-    expect(source).toContain("ORDER_STATION_FORWARD_ROLES");
-    expect(source).not.toContain("perm_op_status");
+    expect(source).toContain('hasAuthorizationArea(authorization.data, "auftraege")');
+    expect(source).not.toContain('role === "developer"');
     const customerLock = source.match(/SELECT id, tenant_id\s+FROM public\.customers[\s\S]+?FOR SHARE/)?.[0] ?? "";
     expect(customerLock).toContain("WHERE id = ${order.customer_id}");
     expect(customerLock).toContain("AND tenant_id = ${authorization.data.tenantId}");
@@ -392,7 +391,7 @@ describe("correctGalvanikToWareneingang", () => {
     event_schema_version: 1,
     aggregate_version: 2,
     from_station: "galvanik",
-    to_station: "wareneingang",
+    to_station: "angenommen",
     actor_id: ACTOR_ID,
     status: "success",
     description: REASON,
@@ -412,7 +411,7 @@ describe("correctGalvanikToWareneingang", () => {
     event_schema_version: 1,
     aggregate_version: 2,
     from_station: "galvanik",
-    to_station: "wareneingang",
+    to_station: "angenommen",
     actor_id: ACTOR_ID,
     occurred_at: "2026-08-17T09:00:00.000Z",
     reason: REASON,
@@ -459,7 +458,7 @@ describe("correctGalvanikToWareneingang", () => {
     ).resolves.toMatchObject({ code: "OK", receipt: { reason: REASON } });
   });
 
-  it("keeps readonly and developer out of the correction transaction, allows the four forward roles", async () => {
+  it("keeps missing permissions and developer out of correction, and allows permitted employees", async () => {
     const { correctGalvanikToWareneingang } = await import("../orderStationCommand");
     for (const [role, permissions] of [
       ["readonly", ["perm_view_leitstand"]],
@@ -477,7 +476,7 @@ describe("correctGalvanikToWareneingang", () => {
       withTransactionSpy.mockClear();
       resolveAuthorizationSpy.mockResolvedValueOnce({
         ...authorization,
-        data: { ...authorization.data, role, permissions: ["perm_view_leitstand"] },
+        data: { ...authorization.data, role, permissions: ["perm_op_status"] },
       });
       const result = await correctGalvanikToWareneingang(correctionInput("order-1"));
       expect(result.code).not.toBe("FORBIDDEN");
@@ -496,7 +495,7 @@ describe("correctGalvanikToWareneingang", () => {
 
   it("rejects orders not exactly parked at galvanik/galvanik before any write", async () => {
     executeSpy
-      .mockResolvedValueOnce([{ ...galvanikOrder, station: "wareneingang" }])
+      .mockResolvedValueOnce([{ ...galvanikOrder, station: "angenommen" }])
       .mockResolvedValueOnce([{ ...galvanikOrder, status: "fertig" }]);
     const { correctGalvanikToWareneingang } = await import("../orderStationCommand");
     await expect(correctGalvanikToWareneingang(correctionInput("order-1"))).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
@@ -524,7 +523,7 @@ describe("correctGalvanikToWareneingang", () => {
         orderId: "order-1",
         aggregateVersion: 2,
         fromStation: "galvanik",
-        toStation: "wareneingang",
+        toStation: "angenommen",
         actorId: ACTOR_ID,
         occurredAt: "2026-08-17T09:00:00.000Z",
         reason: REASON,
@@ -532,7 +531,7 @@ describe("correctGalvanikToWareneingang", () => {
       replayed: false,
     });
     expect(executeSpy.mock.calls[3][0].text).toContain("status = ?");
-    expect(executeSpy.mock.calls[3][0].values).toContain("wareneingang");
+    expect(executeSpy.mock.calls[3][0].values).toContain("angenommen");
     expect(executeSpy.mock.calls[3][0].values).toContain("angenommen");
     expect(executeSpy.mock.calls[6][0].text).toContain("private.v_order_station_correction_receipts_v1");
   });

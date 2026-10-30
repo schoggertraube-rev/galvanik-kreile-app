@@ -1,7 +1,7 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
 import {
   withPrivilegedTenantTransaction,
   type PrivilegedTenantTransaction,
@@ -10,8 +10,6 @@ import {
 const ASSIGNED_EVENT = "ORDER_TASK_ASSIGNED_V1" as const;
 const HANDED_BACK_EVENT = "ORDER_TASK_HANDED_BACK_V1" as const;
 const EVENT_SCHEMA_VERSION = 1 as const;
-const ASSIGN_ROLES = ["meister", "admin"] as const;
-const ASSIGNEE_ROLES = ["buero", "werkstatt", "meister", "admin"] as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 export type AssignOrderTaskInput = {
@@ -64,6 +62,7 @@ type LockedOrder = {
 type AssignmentStateRow = {
   id: string;
   assigned_to: string;
+  assigned_by: string;
   active: boolean;
 };
 
@@ -230,8 +229,8 @@ export async function assignOrderTask(input: AssignOrderTaskInput): Promise<Orde
       ? { code: "UNAVAILABLE", message: "Zuweisung ist derzeit nicht verfügbar." }
       : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
-  if (!ASSIGN_ROLES.includes(authorization.data.role as (typeof ASSIGN_ROLES)[number])) {
-    return { code: "FORBIDDEN", message: "Zuweisung ist mit dieser Rolle nicht erlaubt." };
+  if (!hasAuthorizationArea(authorization.data, "auftraege")) {
+    return { code: "FORBIDDEN", message: "Zuweisung ist für diesen Bereich nicht erlaubt." };
   }
 
   try {
@@ -284,6 +283,12 @@ export async function assignOrderTask(input: AssignOrderTaskInput): Promise<Orde
         FROM public.app_users
         WHERE tenant_id = ${authorization.data.tenantId}
           AND id = ${input.assigneeUserId}::uuid
+          AND EXISTS (
+            SELECT 1 FROM public.app_user_rights rights
+            WHERE rights.tenant_id=public.app_users.tenant_id
+              AND rights.user_id=public.app_users.id
+              AND rights.bereich='auftraege'
+          )
         FOR SHARE
       `);
       const assignee = assigneeRows[0];
@@ -291,13 +296,12 @@ export async function assignOrderTask(input: AssignOrderTaskInput): Promise<Orde
         assigneeRows.length !== 1
         || !assignee
         || assignee.active !== true
-        || !ASSIGNEE_ROLES.includes(assignee.role as (typeof ASSIGNEE_ROLES)[number])
       ) {
         return { code: "VALIDATION_ERROR", message: "Zielperson ist nicht zuweisbar." };
       }
 
       const stateRows = await tx.execute<AssignmentStateRow>(sql`
-        SELECT id::text AS id, assigned_to::text AS assigned_to, active
+        SELECT id::text AS id, assigned_to::text AS assigned_to, assigned_by::text AS assigned_by, active
         FROM private.order_task_assignment_state
         WHERE tenant_id = ${authorization.data.tenantId}
           AND order_id = ${order.id}
@@ -427,7 +431,6 @@ export async function handBackOrderTask(input: HandBackOrderTaskInput): Promise<
         const receipt = mapReceipt(replayRows[0], authorization.data.tenantId);
         return receipt.eventType === HANDED_BACK_EVENT
           && receipt.orderId === input.orderId
-          && receipt.assignedTo === authorization.data.userId
           && receipt.actorId === authorization.data.userId
           && receipt.aggregateVersion === input.expectedVersion + 1
           ? { code: "OK", receipt, replayed: true }
@@ -456,7 +459,7 @@ export async function handBackOrderTask(input: HandBackOrderTaskInput): Promise<
       }
 
       const stateRows = await tx.execute<AssignmentStateRow>(sql`
-        SELECT id::text AS id, assigned_to::text AS assigned_to, active
+        SELECT id::text AS id, assigned_to::text AS assigned_to, assigned_by::text AS assigned_by, active
         FROM private.order_task_assignment_state
         WHERE tenant_id = ${authorization.data.tenantId}
           AND order_id = ${order.id}
@@ -466,8 +469,8 @@ export async function handBackOrderTask(input: HandBackOrderTaskInput): Promise<
       if (stateRows.length !== 1 || !state || state.active !== true) {
         return { code: "VALIDATION_ERROR", message: "Keine aktive Zuweisung vorhanden." };
       }
-      if (state.assigned_to !== authorization.data.userId) {
-        return { code: "FORBIDDEN", message: "Nur die zugewiesene Person darf zurückgeben." };
+      if (state.assigned_to !== authorization.data.userId && state.assigned_by !== authorization.data.userId) {
+        return { code: "FORBIDDEN", message: "Nur die zugewiesene oder zuweisende Person darf zurückgeben." };
       }
       const nextVersion = input.expectedVersion + 1;
 
@@ -518,7 +521,7 @@ export async function handBackOrderTask(input: HandBackOrderTaskInput): Promise<
           AND order_id = ${order.id}
           AND id = ${state.id}::uuid
           AND active = true
-          AND assigned_to = ${authorization.data.userId}::uuid
+          AND (assigned_to = ${authorization.data.userId}::uuid OR assigned_by = ${authorization.data.userId}::uuid)
         RETURNING id::text AS id, order_version
       `);
       if (
@@ -533,7 +536,6 @@ export async function handBackOrderTask(input: HandBackOrderTaskInput): Promise<
       if (
         receipt.eventType !== HANDED_BACK_EVENT
         || receipt.orderId !== input.orderId
-        || receipt.assignedTo !== authorization.data.userId
         || receipt.assignmentStateId !== state.id
         || receipt.actorId !== authorization.data.userId
         || receipt.aggregateVersion !== nextVersion

@@ -13,7 +13,7 @@ const boundary = vi.hoisted(() => {
   return {
     logout: vi.fn(),
     onMenuToggle: vi.fn(),
-    openErfassung: vi.fn(),
+    requestGlobalCreate: vi.fn(),
     realtime: { status: "disabled" as RealtimeStatus },
     routerReplace: vi.fn(),
     sync: {
@@ -49,8 +49,8 @@ vi.mock("@/lib/auth/PermissionsContext", () => ({
 vi.mock("@/lib/offline/SyncContext", () => ({
   useSync: () => boundary.sync,
 }));
-vi.mock("@/components/erfassung/ErfassungProvider", () => ({
-  useErfassung: () => ({ openErfassung: boundary.openErfassung }),
+vi.mock("@/components/layout/globalCreateRequest", () => ({
+  requestGlobalCreate: boundary.requestGlobalCreate,
 }));
 
 function renderHeader() {
@@ -132,8 +132,11 @@ describe("W2C header truth", () => {
     fireEvent.click(screen.getByTitle("Schnellannahme (Scan)"));
 
     expect(boundary.onMenuToggle).toHaveBeenCalledTimes(1);
-    expect(boundary.openErfassung).toHaveBeenNthCalledWith(1, { mode: "gate" });
-    expect(boundary.openErfassung).toHaveBeenNthCalledWith(2, { mode: "scan" });
+    expect(boundary.requestGlobalCreate).toHaveBeenNthCalledWith(1, "DIRECT_INTAKE");
+    expect(boundary.requestGlobalCreate).toHaveBeenNthCalledWith(2, {
+      intent: "DIRECT_INTAKE",
+      prefill: { sourceMode: "camera" },
+    });
   });
 
   it("contains no fabricated notification or synchronization claims in the source", () => {

@@ -159,6 +159,8 @@ export type Customer = {
   riskNote?: string;
 
   paymentProfile?: PaymentProfile;
+  paymentPreference?: string;
+  vatId?: string;
   approvalProfile?: ApprovalProfile;
   expectationProfile?: ExpectationProfile;
   technicalProfile?: TechnicalProfile;

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kreile Bauumfang – Stufen</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, system-ui, sans-serif; background: #f4f2ee; color: #17233b; }
+    body { margin: 0; }
+    header { background: #17233b; color: #fff; padding: 24px max(24px, calc((100vw - 1120px) / 2)); }
+    nav { background: #fff; border-bottom: 1px solid #d5d0c7; padding: 0 max(24px, calc((100vw - 1120px) / 2)); }
+    .tab { display: inline-block; border-bottom: 3px solid #d79a2b; padding: 16px 4px 13px; font-weight: 750; }
+    main { max-width: 1120px; margin: 24px auto; padding: 0 24px 40px; }
+    pre { margin: 0; border: 1px solid #d5d0c7; border-radius: 12px; background: #fff; padding: 24px; white-space: pre-wrap; overflow-wrap: anywhere; font: 15px/1.55 Inter, system-ui, sans-serif; }
+  </style>
+</head>
+<body>
+  <header><strong>KREILE BAUUMFANG · 25.10.2026</strong></header>
+  <nav aria-label="Bauumfang"><span class="tab" aria-current="page">Bauumfang</span></nav>
+  <main>
+    <pre>KREILE BAUUMFANG · 25.10.2026
+Stufen: 1 Basis · Überblick &amp; Termintreue
+OPTIK: unverändert Rolf V8, Phillip V4, Auftragskarte V8, Kundenkarte V2, Ablauf V5 (docs/project/linie/ui/). Keine neuen Bausteine. Gesperrtes im V8-Muster „geplant / kommt · Paket“ (gestrichelt, nicht klickbar).
+SUCHE: Anbieter-Prinzip – jedes Modul registriert seine Inhalte; Suchleiste zeigt, was durchsucht wird.
+
+BAUEN (echt, keine Platzhalter, keine Demo-Daten):
+- E01 Datenkiste: Formatoffene Erstbefüllung (Excel, CSV, PDF, Word, Fotos, Outlook-Mails/Kontakte). Erkennt Typ, legt Kunden und Kontakte vollständig nach Pflichtfeldern an (fehlende Felder als „fehlt“ markiert, nie erfunden), findet Dubletten. Alte Rechnungen/Lieferscheine werden Dokumente am Kunden, KEINE Aufträge. Übernahme erst nach Prüfung. Offen während Einführung, Admin schließt/öffnet. [braucht E04, A06, S02]
+- E02 Neuer Eingang manuell: Schnellaktion, max. 2 Klicks: Kunde wählen/neu, Positionen aus Leistungskatalog (Menge, Material, Oberfläche, Preis), Liefertermin (Pflicht), Fotos, Telefonnotiz. Gleiche Pflichtfelder wie Auftrag aus KV. [braucht A06, A04, S02]
+- E03 Foto &amp; Dokument am Vorgang: Upload an Kunde und Auftrag, privat gespeichert, mit Fundstelle. [braucht A04]
+- E04 Dokument lesen (OCR): Anfrage, Lieferschein, Foto → Felder mit Fundstelle und Sicherheit → Mensch bestätigt → KV/Auftrag. Azure-Testkonto. [braucht A07]
+- E05 Outlook-Mail rein: Mails und Anhänge aus M365 im Eingang, Kunde/Auftrag zuordnen, am Kunden abgelegt. M365-Testkonto. [braucht A06]
+- A01 Der Tag (Rolf V8): Handlungsbedarf nach Dringlichkeit, Zähler dringend/weitere, je Punkt Primäraktion und „erledigt, sobald …“. Heute raus, Neu seit gestern.
+- A02 Termin-Ampel: Liefertermin und Puffer je Auftrag, rot/gelb/grün, Sortierung nach Termin. Puffer = Liefertermin minus heute minus Standard-Durchlaufzeit der Oberfläche (aus Leistungskatalog). [braucht A04, S02]
+- A09 Frühwarnung Termin in Gefahr: Erkennt knappe Termine, schlägt „Termin sichern“ oder „Kunde vorwarnen“ (Mail-Entwurf) vor. [braucht A02, R02]
+- A03 Wochenansicht: Liefertermine, Abholungen und Outlook-Termine der Woche als Anzahl je Tag. Keine Auslastung (dafür fehlen Kapazitätsdaten bis Z04). [braucht R01]
+- A04 Auftragskarte (V8): Einzige Wahrheit des Auftrags: angenommen → Galvanik → fertig → abgeholt, Fotos, Notizen, Mehrarbeit (als Position mit Preis), Termin änderbar nur mit Grund. Jeder Statuswechsel und jede Terminänderung wird mit Zeitpunkt gespeichert (Grundlage für Zahlen in Stufe 4). [braucht S02]
+- A05 Werkstatt (Phillip V4): Werkstatt-Home unverändert nach Vorlage. [braucht A04]
+- A06 Kundenkarte (V2): Pflichtfelder vollständig (siehe unten), Kontakte, Eigenheiten, Preisabsprachen, Zahlungsbedingung, Historie, Mails, Dokumente. Ohne Analyse-/Marketing-Teil der V2.
+- A07 Angebot/KV → Auftrag: KV mit Positionen aus Leistungskatalog, Preis, Gültigkeit, Status. KV als PDF an Kunden (R02). Zuschlag erzeugt genau einen Auftrag mit allen Daten inkl. Liefertermin. [braucht A06, A04, S01, S02]
+- A08 Suchleiste: Feld „frag mich :)“ wie V8. Jedes Modul meldet seine Inhalte selbst an (Anbieter-Prinzip). Stufe 1 durchsucht Kunden, Aufträge, Angebote, Rechnungen, Dokumente, Mails, Termine. Neue Pakete melden sich an, ohne Umbau. Zeigt offen, was durchsucht wird.
+- R01 Outlook-Kalender: Termine App → Outlook, Outlook-Termine lesend in der App. M365-Testkonto.
+- R02 Mail raus aus der App: KV, Rechnung, Vorwarnung per M365 an Kunden, Kopie am Vorgang. [braucht A06]
+- R03 Rechnung: Nummer R-JJJJ-NNNN lückenlos, alle Pflichtangaben §14 UStG, echtes unveränderbares PDF aus eingefrorener Auftragskarte. Storno per Gutschrift mit eigener Nummer. Diese Daten nutzt später die Buchhaltung unverändert. [braucht A04, S01]
+- R04 Zahlung &amp; offener Betrag: Zahlung manuell bestätigen, OFFEN/BEZAHLT, offener Betrag. [braucht R03]
+- R05 Ware raus &amp; Lieferschein: Fertige Aufträge, Lieferschein-PDF, Status abgeholt. Vorkasse-Sperre nach Zahlungsbedingung des Kunden. [braucht A04, R04, A06]
+- S01 Firmendaten &amp; Nummernkreise: Absender für KV, Rechnung, Lieferschein: Name, Anschrift, USt-ID/Steuernummer, Bank, Logo. Nummernkreise A-/K-/R-JJJJ-NNNN.
+- S02 Leistungskatalog: Oberflächen und Leistungen mit Einheit, Preis, Steuersatz, Standard-Durchlaufzeit. Grundlage für KV, Auftrag, Rechnung, Termin-Ampel.
+- S03 Nutzer &amp; Rollen: Admin legt Nutzer an (Rolf, Phillip, Gregor), PIN/Login, Rolle, sperren.
+
+GESPERRT ANZEIGEN (kein Bau, Anschlussstelle vorhanden):
+- R06 Export Steuerberater (kommt · Buchhaltung &amp; Geld)
+- B04 Buchhaltung (kommt · Buchhaltung &amp; Geld)
+- B01 Bankabgleich (kommt · Buchhaltung &amp; Geld)
+- B02 Mahnwesen (kommt · Buchhaltung &amp; Geld)
+- B03 Mails automatisch zuordnen (kommt · Buchhaltung &amp; Geld)
+- B05 Status-Link für Kunden (kommt · Buchhaltung &amp; Geld)
+- W01 Galvanik-Stufen (kommt · Werkstatt)
+- W02 Material &amp; Einkauf (kommt · Werkstatt)
+- W04 Versand DHL (kommt · Werkstatt)
+- W05 Begleitschein &amp; Etiketten (kommt · Werkstatt)
+- Z01 Zahlen (kommt · Assistent)
+- Z03 Spracheingabe (kommt · Assistent)
+- Z04 Kapazitätsplanung (kommt · Assistent)</pre>
+  </main>
+</body>
+</html>

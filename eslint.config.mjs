@@ -2,6 +2,7 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 import unusedImports from "eslint-plugin-unused-imports";
+import h16Plugin from "./scripts/quality/eslint-h16-plugin.mjs";
 
 // ── Module-boundary import rules (APP-STRUCTURE-001) ──────────────
 // These rules enforce zero-violation boundaries from OWNERSHIP_MAP.md.
@@ -29,6 +30,52 @@ const buchhaltungMustNotImport = [
 const erfassungMustNotImport = [
   "@/lib/buchhaltung", "@/lib/buchhaltung/*",
   "@/lib/marketing", "@/lib/marketing/*",
+];
+
+// H16c Bestand: Jede Datei ist einzeln gebunden; diese Listen duerfen nur schrumpfen.
+const h16SilentErrorBaselineFiles = [
+  "src/app/finanzen/FinanzenDashboardClient.tsx", // H16c Bestand: leerer catch.
+  "src/components/layout/SessionWarningBanner.tsx", // H16c Bestand: leerer catch.
+  "src/hooks/useAutosaveDraft.ts", // H16c Bestand: leere catch-Fallbacks.
+  "src/lib/diagnostics/DiagnosticsContext.tsx", // H16c Bestand: leere catch-Fallbacks.
+  "src/lib/hardware/printQueue.ts", // H16c Bestand: leerer catch.
+  "src/lib/hardware/registry.ts", // H16c Bestand: leerer catch.
+  "src/lib/offline/idbSync.ts", // H16c Bestand: leere catch-Fallbacks.
+  "src/lib/search/recent.ts", // H16c Bestand: leere catch-Fallbacks.
+  "src/lib/supabase/server.ts", // H16c Bestand: leerer catch.
+  "src/lib/warendurchlaufIconResolver.ts", // H16c Bestand: leerer catch.
+  "src/lib/warnings/store.ts", // H16c Bestand: leerer catch.
+  "src/proxy.ts", // H16c Bestand: leerer catch.
+];
+
+const h16AlertBaselineFiles = [
+  "src/app/marketing/MarketingStudioClient.tsx", // H16c Bestand: alert.
+  "src/components/buchhaltung/MassenzuordnungModal.tsx", // H16c Bestand: alert.
+  "src/components/entities/OrderFocusView.tsx", // H16c Bestand: alert.
+  "src/components/kommunikation/ContextAnalysisOverlay.tsx", // H16c Bestand: alert.
+  "src/components/warenausgang/WarenausgangQueue.tsx", // H16c Bestand: alert.
+];
+
+const h16PlaceholderTextBaselineFiles = [
+  "src/app/actions/customers.actions.ts", // H16c Bestand: Demo-Datenquellenname.
+  "src/app/baeder/BaederDashboardClient.tsx", // H16c Bestand: Demo-Text.
+  "src/app/betrieb-kvp/BetriebKvpClient.tsx", // H16c Bestand: Mock-/Demo-Text.
+  "src/app/buchhaltung/BuchhaltungCockpitClient.tsx", // H16c Bestand: Demo-Text.
+  "src/app/finanzen/FinanzenDashboardClient.tsx", // H16c Bestand: Demo-Text.
+  "src/app/layout.tsx", // H16c Bestand: historische mock-Stylesheet-Pfade.
+  "src/components/admin/AdminDashboard.tsx", // H16c Bestand: Demo-Text.
+  "src/components/admin/DataImportCenter.tsx", // H16c Bestand: Demo-Text.
+  "src/components/buchhaltung/BelegUploadOverlay.tsx", // H16c Bestand: Demo-Text.
+  "src/components/kommunikation/ContextAnalysisOverlay.tsx", // H16c Bestand: Mock-/Demo-Text.
+  "src/components/warenausgang/WarenausgangQueue.tsx", // H16c Bestand: Demo-Text.
+  "src/lib/buchhaltung/providers/MockBuchhaltungProvider.ts", // H16c Bestand: Mock-Text.
+  "src/lib/buchhaltung/stufe2/mocks.ts", // H16c Bestand: Mock-Text.
+  "src/lib/demoDataGenerator.ts", // H16c Bestand: Demo-Text.
+  "src/lib/server/orderIntakeRead.ts", // H16c Bestand: Demo-Datenquellenname.
+  "src/lib/validation/orderSchema.ts", // H16c Bestand: Mock-Datenquellenname.
+  "src/modules/werkstatt/ui/WerkstattLoading.tsx", // H16c Bestand: historische mock-Klasse.
+  "src/modules/werkstatt/ui/WerkstattView.tsx", // H16c Bestand: WIP-Test-ID.
+  "src/ui/kr/WipMenge.tsx", // H16c Bestand: WIP-Klassen.
 ];
 
 // ── Positive Fassade (D-ARCH-008 Naht 2 / S1): Fremdmodul nur ueber public.ts ──
@@ -73,6 +120,7 @@ const eslintConfig = defineConfig([
   {
     plugins: {
       "unused-imports": unusedImports,
+      h16: h16Plugin,
     },
     rules: {
       "unused-imports/no-unused-imports": "error",
@@ -88,10 +136,58 @@ const eslintConfig = defineConfig([
   {
     files: ["src/**/*.ts", "src/**/*.tsx"],
     rules: {
+      "h16/no-role-identity-comparison": "error",
+      "h16/no-role-permissions": "error",
+      "h16/no-person-names": "error",
+      "h16/no-silent-errors": "error",
+      "h16/no-alert": "error",
+      "h16/no-placeholder-text": "error",
       "no-restricted-imports": [
         "error",
         { patterns: [modulesFacadePattern, nonExecutableReferencePattern] },
       ],
+    },
+  },
+  {
+    files: [
+      "src/**/*.test.ts",
+      "src/**/*.test.tsx",
+      "src/**/__tests__/**/*.ts",
+      "src/**/__tests__/**/*.tsx",
+      "src/test/**/*.ts",
+      "src/test/**/*.tsx",
+    ],
+    rules: {
+      "h16/no-role-identity-comparison": "off",
+      "h16/no-role-permissions": "off",
+      "h16/no-person-names": "off",
+      "h16/no-silent-errors": "off",
+      "h16/no-alert": "off",
+      "h16/no-placeholder-text": "off",
+    },
+  },
+  {
+    files: h16SilentErrorBaselineFiles,
+    rules: { "h16/no-silent-errors": "off" },
+  },
+  {
+    files: h16AlertBaselineFiles,
+    rules: { "h16/no-alert": "off" },
+  },
+  {
+    files: h16PlaceholderTextBaselineFiles,
+    rules: { "h16/no-placeholder-text": "off" },
+  },
+  {
+    files: [
+      "src/app/settings/SettingsAdminClient.tsx",
+      "src/lib/server/appSession.ts",
+      "src/lib/server/productActorReadiness.ts",
+      "src/lib/server/productActorReadinessCore.ts",
+    ],
+    linterOptions: {
+      noInlineConfig: false,
+      reportUnusedDisableDirectives: "error",
     },
   },
   // STAGE_1_PIN_ONLY: Dieser Override pinnt ausschliesslich den kuenftigen ESLint-Vertrag.
@@ -175,6 +271,7 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     ".playwright-cli/**",
+    "supabase/.temp/**",
     // Gebundene Referenzquellen und Historie sind Bauinput/Evidence, nicht Produktcode.
     "docs/project/linie/ui/designsystem_v1_1/**",
     "docs/project/history/**",

@@ -11,9 +11,12 @@ const ports = vi.hoisted(() => ({
   resolveAuthorization: vi.fn(),
   getOperationalOrders: vi.fn(),
   getOperationalOrderCount: vi.fn(),
+  execute: vi.fn(),
+  withTransaction: vi.fn(),
   noStore: vi.fn(),
 }));
 
+vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ unstable_noStore: ports.noStore }));
 vi.mock("@/lib/server/authorization", () => ({
   resolveAuthorization: ports.resolveAuthorization,
@@ -21,6 +24,9 @@ vi.mock("@/lib/server/authorization", () => ({
 vi.mock("@/lib/server/operationalOrders", () => ({
   getOperationalOrders: ports.getOperationalOrders,
   getOperationalOrderCount: ports.getOperationalOrderCount,
+}));
+vi.mock("@/lib/server/privilegedDb", () => ({
+  withPrivilegedTenantTransaction: ports.withTransaction,
 }));
 vi.mock("@/lib/server/commands/orderStationCommand", () => ({
   transitionWareneingangToGalvanik: vi.fn(),
@@ -172,6 +178,133 @@ describe("W4 operational order read actions", () => {
     ports.resolveAuthorization.mockResolvedValue({ ok: true, data: snapshot() });
     ports.getOperationalOrders.mockResolvedValue([]);
     ports.getOperationalOrderCount.mockResolvedValue(0);
+    ports.execute.mockResolvedValue([]);
+    ports.withTransaction.mockImplementation(async (_authorization, work) => work({ execute: ports.execute }));
+  });
+
+  it("combines the tenant-bound order and KV sources for the register filter", async () => {
+    const authorization = {
+      ...snapshot("buero"),
+      userId: "11111111-1111-4111-8111-111111111111",
+    };
+    ports.resolveAuthorization.mockResolvedValueOnce({ ok: true, data: authorization });
+    ports.getOperationalOrders.mockResolvedValueOnce([{
+      id: "order-1",
+      orderNumber: "A-2026-0001",
+      customerId: "customer-1",
+      customerName: "Kunde A",
+      title: "Auftrag A",
+      dueDate: "2026-11-05",
+      status: "in_progress",
+      createdAt: "2026-10-26T10:00:00.000Z",
+    }]);
+    ports.execute.mockResolvedValueOnce([{
+      quote_id: "44444444-4444-4444-8444-444444444444",
+      tenant_id: authorization.tenantId,
+      quote_number: "KV-2026-0001",
+      customer_id: "33333333-3333-4333-8333-333333333333",
+      customer_number: "K-2026-0002",
+      customer_display_name: "Kunde B",
+      status: "draft",
+      version: 1,
+      currency: "EUR",
+      due_date: "2026-11-06",
+      valid_until: null,
+      intake_term_status: null,
+      intake_source: null,
+      note: null,
+      total_net_cents: 1000,
+      linked_order_id: null,
+      created_by: authorization.userId,
+      actor_display_name: "Büro",
+      created_at: "2026-10-27T09:00:00.000Z",
+      updated_at: "2026-10-27T10:00:00.000Z",
+      converted_at: null,
+      positions: [{
+        id: "55555555-5555-4555-8555-555555555555",
+        position: 1,
+        name: "Teil B",
+        quantity: 1,
+        material: null,
+        surfaceRequested: "Verzinken",
+        unitPriceCents: 1000,
+        lineTotalCents: 1000,
+      }],
+      integrity_ok: true,
+    }]);
+    const { getOrderRegisterDb } = await import("../orders.actions");
+
+    await expect(getOrderRegisterDb()).resolves.toEqual({
+      ok: true,
+      data: [
+        expect.objectContaining({ kind: "QUOTE", id: "44444444-4444-4444-8444-444444444444", reference: "KV-2026-0001", title: "Teil B" }),
+        expect.objectContaining({ kind: "ORDER", id: "order-1", reference: "A-2026-0001", title: "Auftrag A" }),
+      ],
+    });
+    expect(ports.getOperationalOrders).toHaveBeenCalledWith(authorization);
+    expect(ports.withTransaction).toHaveBeenCalledWith({
+      tenantId: authorization.tenantId,
+      userId: authorization.userId,
+      capabilities: {
+        canCreateQuote: false,
+        canReadQuote: true,
+        canUpdateQuote: false,
+        canConvertQuote: false,
+      },
+    }, expect.any(Function));
+    expect(ports.execute).toHaveBeenCalledOnce();
+  });
+
+  it("reads only the selected aggregate and rejects an injected filter contract", async () => {
+    const { getOrderRegisterDb } = await import("../orders.actions");
+
+    await expect(getOrderRegisterDb({ filter: "QUOTE" })).resolves.toEqual({ ok: true, data: [] });
+    expect(ports.getOperationalOrders).not.toHaveBeenCalled();
+    expect(ports.withTransaction).toHaveBeenCalledOnce();
+
+    vi.clearAllMocks();
+    ports.resolveAuthorization.mockResolvedValue({ ok: true, data: snapshot() });
+    ports.getOperationalOrders.mockResolvedValue([]);
+    ports.execute.mockResolvedValue([]);
+    ports.withTransaction.mockImplementation(async (_authorization, work) => work({ execute: ports.execute }));
+    await expect(getOrderRegisterDb({ filter: "ORDER" })).resolves.toEqual({ ok: true, data: [] });
+    expect(ports.getOperationalOrders).toHaveBeenCalledOnce();
+    expect(ports.withTransaction).not.toHaveBeenCalled();
+
+    vi.clearAllMocks();
+    await expect(getOrderRegisterDb({ filter: "QUOTE", tenantId: "tenant-b" } as never)).resolves.toEqual({
+      ok: false,
+      error: "VALIDATION_ERROR",
+      message: "Auftragsfilter ist ungültig.",
+    });
+    expect(ports.resolveAuthorization).not.toHaveBeenCalled();
+    expect(ports.getOperationalOrders).not.toHaveBeenCalled();
+    expect(ports.withTransaction).not.toHaveBeenCalled();
+  });
+
+  it("fails the combined register closed instead of returning a partial order list", async () => {
+    ports.getOperationalOrders.mockResolvedValueOnce([{
+      id: "order-1",
+      orderNumber: "A-2026-0001",
+      customerId: "customer-1",
+      customerName: "Kunde A",
+      title: "Auftrag A",
+      dueDate: "2026-11-05",
+      status: "in_progress",
+      createdAt: "2026-10-26T10:00:00.000Z",
+    }]);
+    ports.execute.mockResolvedValueOnce([{
+      quote_id: "44444444-4444-4444-8444-444444444444",
+      tenant_id: "tenant-a",
+      integrity_ok: false,
+    }]);
+    const { getOrderRegisterDb } = await import("../orders.actions");
+
+    await expect(getOrderRegisterDb()).resolves.toEqual({
+      ok: false,
+      error: "DB_ERROR",
+      message: "Aufträge und KVs konnten nicht gemeinsam sicher geladen werden.",
+    });
   });
 
   it.each(["readonly", "buero"] as const)(

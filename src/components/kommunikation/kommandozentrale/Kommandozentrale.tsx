@@ -9,7 +9,7 @@ import {
 import { useClientDossier, ClientDossier } from "./hooks/useClientDossier";
 import { useTopicRelevance, TileKey } from "./hooks/useTopicRelevance";
 import { MatchResult } from "@/app/kommunikation/smartMatcher";
-import { useErfassung } from "@/components/erfassung/ErfassungProvider";
+import { requestGlobalCreate } from "@/components/layout/globalCreateRequest";
 import dynamic from "next/dynamic";
 import "./kommandozentrale.css";
 
@@ -640,7 +640,6 @@ export function Kommandozentrale({
   const [showToast, setShowToast] = useState(false);
   const [composerOverride, setComposerOverride] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const { openErfassung } = useErfassung();
 
   const dossier = useClientDossier(customerId, matchData);
   const composerText = composerOverride ?? dossier.suggestedAnswer;
@@ -682,32 +681,16 @@ export function Kommandozentrale({
   }, [open, activeDetail, handleClose]);
 
   const handleApplyAll = useCallback(() => {
-    // Phase 4: Route to central flow for quotes
-    if (customerId) {
-      openErfassung({
-        mode: "order",
-        intent: "create_quote",
-        customerId: customerId,
-        source: "inquiry",
-        sourceRef: `inquiry_${Date.now()}`,
-        prefill: {
-          customer: matchData?.matchedCustomer || { id: customerId, name: customerName, city: customerCity },
-          order: matchData?.matchedOrder || null,
-        }
-      });
-    } else {
-      openErfassung({
-        mode: "gate",
-        intent: "create_quote",
-        source: "inquiry",
-        sourceRef: `inquiry_${Date.now()}`,
-        prefill: {
-          rawText: messages.map(m => m.text).join('\n')
-        }
-      });
-    }
+    requestGlobalCreate({
+      intent: "QUOTE",
+      prefill: {
+        ...(customerId ? { customerId } : {}),
+        customerQuery: customerName || undefined,
+        note: messages.map((message) => message.text).join("\n"),
+      },
+    });
     setActionsApplied(true);
-  }, [openErfassung, matchData, customerId, customerName, customerCity, messages]);
+  }, [customerId, customerName, messages]);
 
   const handleHighlightClick = useCallback((key: TileKey) => {
     setActiveDetail(key);

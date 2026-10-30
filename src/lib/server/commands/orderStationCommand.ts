@@ -1,11 +1,11 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 
-const SOURCE_STATION = "wareneingang";
+const SOURCE_STATION = "angenommen";
 const TARGET_STATION = "galvanik";
 const EVENT_TYPE = "ORDER_STATION_MOVED_V1";
 const CORRECTION_EVENT_TYPE = "ORDER_STATION_CORRECTED_V1";
@@ -14,7 +14,6 @@ const MAX_ORDER_ID_LENGTH = 128;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const REASON_MIN_LENGTH = 5;
 const REASON_MAX_LENGTH = 500;
-const ORDER_STATION_FORWARD_ROLES = ["buero", "werkstatt", "meister", "admin"] as const;
 
 export type OrderStationCommandInput = {
   orderId: string;
@@ -231,10 +230,9 @@ export async function transitionWareneingangToGalvanik(
     };
   }
 
-  // D-F12-003: exactly buero, werkstatt, meister, admin — a narrow explicit role
-  // gate, deliberately not the generic operational-status permission (which
-  // developer holds and buero does not).
-  if (!ORDER_STATION_FORWARD_ROLES.includes(authorization.data.role as (typeof ORDER_STATION_FORWARD_ROLES)[number])) {
+  if (
+    !hasAuthorizationArea(authorization.data, "auftraege")
+  ) {
     return { code: "FORBIDDEN", message: "Stationswechsel ist nicht erlaubt." };
   }
 
@@ -407,7 +405,7 @@ export async function transitionWareneingangToGalvanik(
           ${updatedOrder.id},
           NULL,
           ${EVENT_TYPE},
-          'Order handed from wareneingang to galvanik',
+          'Order handed from angenommen to galvanik',
           'success',
           ${authorization.data.userId},
           ${TARGET_STATION},
@@ -656,8 +654,9 @@ export async function correctGalvanikToWareneingang(
     };
   }
 
-  // D-F12-003/004: identical explicit role gate as the forward transition.
-  if (!ORDER_STATION_FORWARD_ROLES.includes(authorization.data.role as (typeof ORDER_STATION_FORWARD_ROLES)[number])) {
+  if (
+    !hasAuthorizationArea(authorization.data, "auftraege")
+  ) {
     return { code: "FORBIDDEN", message: "Rücknahme ist nicht erlaubt." };
   }
 

@@ -10,7 +10,12 @@ const { resolveAuthorization, withTransaction, execute, renderToBuffer } = vi.ho
 }));
 
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization }));
+vi.mock("@/lib/server/authorization", () => ({
+  resolveAuthorization,
+  hasAuthorizationArea: (authorization: { role: string; permissions: readonly string[] }, area: string) => authorization.role !== "developer"
+    && area === "geld"
+    && authorization.permissions.includes("perm_view_prices"),
+}));
 vi.mock("@/lib/server/privilegedDb", () => ({ withPrivilegedTenantTransaction: withTransaction }));
 vi.mock("@react-pdf/renderer", () => ({ renderToBuffer }));
 vi.mock("@/lib/pdf/ImmutableInvoiceDocument", () => ({
@@ -52,7 +57,7 @@ const authorization = {
     tenantId: KREILE_TENANT_SLUG,
     displayName: "Büro",
     role: "buero" as const,
-    permissions: ["perm_data_orders"] as const,
+    permissions: ["perm_view_prices"] as const,
     active: true as const,
   },
 };
@@ -144,7 +149,7 @@ describe("createInvoice", () => {
     expect(withTransaction).not.toHaveBeenCalled();
   });
 
-  it("fails closed on missing session, unavailable authorization and forbidden roles without opening a transaction", async () => {
+  it("fails closed on missing session, unavailable authorization, missing permission, and developer", async () => {
     const { createInvoice } = await import("../immutableInvoiceCommand");
 
     resolveAuthorization.mockResolvedValueOnce({ ok: false, reason: "NO_SESSION", message: "no" });
@@ -153,7 +158,10 @@ describe("createInvoice", () => {
     resolveAuthorization.mockResolvedValueOnce({ ok: false, reason: "AUTHORIZATION_UNAVAILABLE", message: "n/a" });
     await expect(createInvoice(validInput)).resolves.toMatchObject({ code: "UNAVAILABLE" });
 
-    resolveAuthorization.mockResolvedValueOnce({ ...authorization, data: { ...authorization.data, role: "werkstatt" } });
+    resolveAuthorization.mockResolvedValueOnce({ ...authorization, data: { ...authorization.data, role: "werkstatt", permissions: [] } });
+    await expect(createInvoice(validInput)).resolves.toMatchObject({ code: "FORBIDDEN" });
+
+    resolveAuthorization.mockResolvedValueOnce({ ...authorization, data: { ...authorization.data, role: "developer" } });
     await expect(createInvoice(validInput)).resolves.toMatchObject({ code: "FORBIDDEN" });
 
     resolveAuthorization.mockRejectedValueOnce(new Error("resolve failed"));
@@ -284,14 +292,14 @@ describe("cancelInvoice", () => {
     withTransaction.mockImplementation(async (_authorization, work) => work({ execute }));
   });
 
-  it("rejects malformed input and non-cancellation roles before opening a transaction", async () => {
+  it("rejects malformed input and developer business actions before opening a transaction", async () => {
     const { cancelInvoice } = await import("../immutableInvoiceCommand");
     await expect(cancelInvoice({ ...validCancelInput, reason: "kurz" })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
     await expect(cancelInvoice({ ...validCancelInput, reason: ` ${validCancelInput.reason}` })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
     await expect(cancelInvoice({ ...validCancelInput, expectedVersion: 0 })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
     expect(withTransaction).not.toHaveBeenCalled();
 
-    resolveAuthorization.mockResolvedValueOnce(authorization);
+    resolveAuthorization.mockResolvedValueOnce({ ...authorization, data: { ...authorization.data, role: "developer" } });
     await expect(cancelInvoice(validCancelInput)).resolves.toMatchObject({ code: "FORBIDDEN" });
     expect(withTransaction).not.toHaveBeenCalled();
   });

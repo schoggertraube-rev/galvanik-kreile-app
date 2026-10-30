@@ -1,22 +1,29 @@
-export type CustomerListItem={id:string;customerNumber:string;name:string;type:string;city:string|null};
+export type CustomerListItem={id:string;customerNumber:string;name:string;type:string;city:string|null;activeOrderCount:number};
 export type CustomersViewState={kind:"loading"}|{kind:"denied"|"error"|"conflict";message:string}|{kind:"data";customers:CustomerListItem[]};
 export type CustomerOrderItem={id:string;orderNumber:string;title:string;station:string;status:string;dueAt:string|null;version:number};
-export type CustomerCardModel={id:string;customerNumber:string|null;name:string;companyName:string|null;type:string;contactPerson:string|null;email:string|null;phone:string|null;address:string|null;zipCode:string|null;city:string|null;country:string|null;classification:string|null;notes:string|null;tags:string[];createdAt:string;updatedAt:string;orderCount:number;wareImHausCount:number;orders:CustomerOrderItem[]};
+export type CustomerCardModel={id:string;customerNumber:string|null;name:string;companyName:string|null;type:string;contactPerson:string|null;email:string|null;phone:string|null;address:string|null;zipCode:string|null;city:string|null;country:string|null;paymentPreference?:string|null;invoiceTermsEnabled:boolean;vatId?:string|null;classification:string|null;notes:string|null;tags:string[];createdAt:string;updatedAt:string;orderCount:number;wareImHausCount:number;invoiceRevenueCents:number;invoiceOpenCents:number;orders:CustomerOrderItem[]};
 export type CustomerCardState={kind:"loading"}|{kind:"denied"|"not-found"|"error"|"conflict";message:string}|{kind:"data";card:CustomerCardModel};
 
 export type CreateCustomerInput = {
   clientEventId: string;
   name: string;
-  customerType: "business" | "privat" | "institution";
+  customerType: "business" | "privat";
   companyName: string | null;
   contactPerson: string | null;
   email: string | null;
   phone: string | null;
+  street?: string | null;
+  zipCode?: string | null;
   city: string | null;
+  country?: string | null;
+  paymentPreference?: string | null;
+  vatId?: string | null;
+  notes?: string | null;
 };
 
 export type CustomerCommandCapabilities = {
   canCreateCustomer: boolean;
+  canManageMoney: boolean;
 };
 
 export type CustomerCommandContext = {
@@ -39,7 +46,13 @@ export type CustomerCreateReceipt = {
   contactPerson: string | null;
   email: string | null;
   phone: string | null;
+  street: string | null;
+  zipCode: string | null;
   city: string | null;
+  country: string | null;
+  paymentPreference: string | null;
+  vatId: string | null;
+  notes: string | null;
   recordedAt: string;
   aggregateVersion: 1;
 };
@@ -51,3 +64,18 @@ export type CustomerCreateCommandResult =
 export type ReadCustomerCreateReceiptResult =
   | { code: "OK"; receipt: CustomerCreateReceipt }
   | { code: "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_ERROR" | "UNAVAILABLE"; message: string };
+
+export type UpdateCustomerCommercialInput = {
+  clientEventId: string; customerId: string; name: string; companyName: string | null;
+  contactPerson: string | null; email: string | null; phone: string | null;
+  street: string; zipCode: string; city: string; country: string;
+  paymentPreference: string; vatId: string | null;
+};
+
+export type EnableCustomerInvoiceTermsInput = {
+  clientEventId: string;
+  customerId: string;
+  targetDays: number;
+  cashDiscountPercent: number;
+  cashDiscountDays: number;
+};

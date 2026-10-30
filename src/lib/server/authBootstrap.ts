@@ -1,15 +1,20 @@
 import "server-only";
 
 import type {
+  AccessArea,
   AppRole,
+  AuthorizationActionGrants,
   PermissionKey,
-  ProductIdentity,
 } from "@/lib/auth/authorizationContract";
-import { resolveProductActorAuthorization } from "@/lib/server/productActorReadiness";
+import {
+  getAuthorizationActionGrants,
+  resolveAuthorization,
+} from "@/lib/server/authorization";
 
 export type AuthBootstrapUser = {
   role: AppRole;
-  displayName: ProductIdentity["name"];
+  displayName: string;
+  areas: readonly AccessArea[];
   /**
    * Dieselbe serverseitig aufgeloeste Faehigkeitsliste wie in
    * `getAuthorizationSnapshotAction`. Sie ist bereits clientsichtbar und
@@ -17,6 +22,8 @@ export type AuthBootstrapUser = {
    * zweite Berechtigungswahrheit.
    */
   permissions: readonly PermissionKey[];
+  /** Always present in live reads; optional only for older isolated fixtures. */
+  actions?: AuthorizationActionGrants;
 };
 
 export type AuthBootstrapState =
@@ -26,21 +33,23 @@ export type AuthBootstrapState =
 
 /**
  * Browser-minimaler Bootstrap. Derselbe serverseitige Chokepoint validiert
- * Sitzung, DB-Rolle und alle drei Produktprofile; interne IDs verlassen den
+ * Sitzung, aktive DB-Nutzerzeile und Rolle; interne IDs verlassen den
  * Server dabei nicht. Rolle, Anzeigename und Faehigkeiten stammen aus genau
  * einer Aufloesung und werden deshalb atomar ausgeliefert.
  */
 export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
-  const result = await resolveProductActorAuthorization();
+  const result = await resolveAuthorization();
 
   if (result.ok) {
     return {
       status: "authenticated",
       user: {
-        role: result.data.authorization.role,
-        displayName: result.data.actor.identity.name,
+        role: result.data.role,
+        displayName: result.data.displayName,
+        areas: [...(result.data.areas ?? [])],
         // Kopie: die geteilte Vertragstabelle bleibt unveraenderlich.
-        permissions: [...result.data.authorization.permissions],
+        permissions: [...result.data.permissions],
+        actions: getAuthorizationActionGrants(result.data),
       },
     };
   }
@@ -59,6 +68,5 @@ export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
   return {
     status: "error",
     message: "Der Produktzugang ist momentan nicht sicher verfügbar.",
-    supportReference: result.supportReference,
   };
 }

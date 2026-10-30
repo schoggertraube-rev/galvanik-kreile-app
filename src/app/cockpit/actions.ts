@@ -5,7 +5,7 @@ import {
   createAuthorizedDataClient,
   createClient,
 } from '@/lib/supabase/server';
-import { resolveAuthorization } from '@/lib/server/authorization';
+import { hasAuthorizationArea, resolveAuthorization } from '@/lib/server/authorization';
 import { APP_TENANT_ID } from '@/lib/server/appSession';
 import type { KontextDaten } from '@/lib/whatif/engine';
 
@@ -14,9 +14,9 @@ async function requireCockpitRead(): Promise<void> {
   if (
     !result.ok ||
     result.data.tenantId !== APP_TENANT_ID ||
-    (result.data.role !== 'admin' && result.data.role !== 'developer')
+    !hasAuthorizationArea(result.data, 'wartung')
   ) {
-    throw new Error('NOT_AVAILABLE: Cockpit-Datenzugriff erfordert kanonische Admin- oder Entwickler-Autorisierung.');
+    throw new Error('NOT_AVAILABLE: Cockpit-Datenzugriff erfordert den Bereich Wartung.');
   }
 }
 

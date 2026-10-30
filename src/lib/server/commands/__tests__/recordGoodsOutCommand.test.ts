@@ -13,7 +13,12 @@ vi.mock("node:crypto", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:crypto")>();
   return { ...actual, randomUUID };
 });
-vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization }));
+vi.mock("@/lib/server/authorization", () => ({
+  resolveAuthorization,
+  hasAuthorizationArea: (authorization: { role: string; permissions: readonly string[] }, area: string) => authorization.role !== "developer"
+    && area === "auftraege"
+    && authorization.permissions.includes("perm_op_status"),
+}));
 vi.mock("@/lib/server/privilegedDb", () => ({ withPrivilegedTenantTransaction: withTransaction }));
 vi.mock("drizzle-orm", () => ({
   sql: (parts: TemplateStringsArray, ...values: unknown[]) => ({ text: parts.join("?"), values }),
@@ -36,7 +41,7 @@ const authorization = {
     tenantId: KREILE_TENANT_SLUG,
     displayName: "Werkstatt",
     role: "werkstatt" as const,
-    permissions: ["perm_view_leitstand"] as const,
+    permissions: ["perm_op_status"] as const,
     active: true as const,
   },
 };
@@ -101,7 +106,7 @@ function summary(paymentMode: "vorkasse" | "abholung" | "rechnung", status: "off
     payment_correlation_id: status === "offen" ? null : "55555555-5555-4555-8555-555555555555",
     payment_mode_version: 0,
     payment_version: status === "offen" ? 0 : 1,
-    goods_out_allowed: paymentMode === "rechnung" || status === "bezahlt",
+    goods_out_allowed: paymentMode === "rechnung" || paymentMode === "abholung" || status === "bezahlt",
     integrity_ok: true,
   };
 }
@@ -189,7 +194,7 @@ function configureSuccess(options: {
       orderReads += 1;
       return Promise.resolve(orderReads === 1
         ? [{ ...finishedOrder, payment_mode: paymentMode }]
-        : [pickedUpOrder]);
+        : [{ ...pickedUpOrder, payment_mode: paymentMode }]);
     }
     if (text.includes("FROM public.invoices")) return Promise.resolve(invoiceIssued ? [invoice] : []);
     if (text.includes("FROM private.v_payment_summary_v1")) return Promise.resolve([summary(paymentMode, paymentStatus)]);
@@ -229,14 +234,17 @@ describe("recordGoodsOut", () => {
     expect(withTransaction).not.toHaveBeenCalled();
   });
 
-  it("allows exactly werkstatt, meister and admin and fails closed for session, tenant and other roles", async () => {
+  it("allows permitted employees and fails closed for session, tenant, missing permission, and developer", async () => {
     const { recordGoodsOut } = await import("../recordGoodsOutCommand");
     resolveAuthorization.mockResolvedValueOnce({ ok: false, reason: "NO_SESSION", message: "none" });
     await expect(recordGoodsOut(input)).resolves.toMatchObject({ code: "UNAUTHENTICATED" });
     resolveAuthorization.mockResolvedValueOnce({ ok: false, reason: "AUTHORIZATION_UNAVAILABLE", message: "down" });
     await expect(recordGoodsOut(input)).resolves.toMatchObject({ code: "UNAVAILABLE" });
-    for (const role of ["buero", "readonly", "developer"] as const) {
-      resolveAuthorization.mockResolvedValueOnce({ ...authorization, data: { ...authorization.data, role } });
+    for (const [role, permissions] of [
+      ["readonly", ["perm_view_leitstand"]],
+      ["developer", ["perm_op_status"]],
+    ] as const) {
+      resolveAuthorization.mockResolvedValueOnce({ ...authorization, data: { ...authorization.data, role, permissions } });
       await expect(recordGoodsOut(input)).resolves.toMatchObject({ code: "FORBIDDEN" });
     }
     resolveAuthorization.mockResolvedValueOnce({ ...authorization, data: { ...authorization.data, tenantId: "foreign" } });
@@ -249,9 +257,9 @@ describe("recordGoodsOut", () => {
       if (text.includes("FROM public.orders")) return Promise.resolve([]);
       throw new Error(`Unexpected SQL: ${text}`);
     });
-    for (const role of ["werkstatt", "meister", "admin"] as const) {
+    for (const role of ["buero", "werkstatt", "meister", "admin"] as const) {
       resolveAuthorization.mockResolvedValueOnce({ ...authorization, data: { ...authorization.data, role } });
-      await expect(recordGoodsOut({ ...input, clientEventId: `${CLIENT_EVENT.slice(0, -1)}${role === "werkstatt" ? "1" : role === "meister" ? "2" : "3"}` }))
+      await expect(recordGoodsOut({ ...input, clientEventId: `${CLIENT_EVENT.slice(0, -1)}${role === "buero" ? "1" : role === "werkstatt" ? "2" : role === "meister" ? "3" : "4"}` }))
         .resolves.toMatchObject({ code: "NOT_FOUND" });
     }
   });
@@ -300,8 +308,6 @@ describe("recordGoodsOut", () => {
     for (const [paymentMode, paymentStatus] of [
       ["vorkasse", "offen"],
       ["vorkasse", "teilbezahlt"],
-      ["abholung", "offen"],
-      ["abholung", "teilbezahlt"],
     ] as const) {
       execute.mockReset();
       configureSuccess({ paymentMode, paymentStatus });
@@ -310,6 +316,15 @@ describe("recordGoodsOut", () => {
         message: "Zahlung ist für den Warenausgang noch offen.",
       });
       expect(execute.mock.calls.map(([query]) => queryText(query as Query)).join("\n")).not.toContain("UPDATE public.orders");
+    }
+
+    for (const paymentStatus of ["offen", "teilbezahlt"] as const) {
+      execute.mockReset();
+      configureSuccess({ paymentMode: "abholung", paymentStatus, mode: "abholung" });
+      await expect(recordGoodsOut({ ...input, mode: "abholung" })).resolves.toMatchObject({
+        code: "OK",
+        receipt: { paymentMode: "abholung", paymentStatus },
+      });
     }
 
     execute.mockReset();

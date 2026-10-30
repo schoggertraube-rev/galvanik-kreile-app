@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const denial = "NOT_AVAILABLE: Cockpit-Datenzugriff erfordert kanonische Admin- oder Entwickler-Autorisierung.";
+const denial = "NOT_AVAILABLE: Cockpit-Datenzugriff erfordert den Bereich Wartung.";
 const readNames = [
   "getCockpitKpis", "getTopKunden", "getInaktiveKunden", "getEngpassDaten",
   "getAgingDaten", "getAuftragDbRanking", "getWhatIfKontext", "getEngpassDetails",
@@ -32,7 +32,11 @@ const ports = vi.hoisted(() => {
   };
 });
 
-vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization: ports.resolveAuthorization }));
+vi.mock("@/lib/server/authorization", () => ({
+  resolveAuthorization: ports.resolveAuthorization,
+  hasAuthorizationArea: (authorization: { areas?: readonly string[] }, area: string) =>
+    authorization.areas?.includes(area) === true,
+}));
 vi.mock("@/lib/server/appSession", () => ({ APP_TENANT_ID: KREILE_TENANT_SLUG }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: ports.createClient,
@@ -40,7 +44,7 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 function allowed(role: "admin" | "developer") {
-  return { ok: true, data: { tenantId: KREILE_TENANT_SLUG, role } };
+  return { ok: true, data: { tenantId: KREILE_TENANT_SLUG, role, areas: ["wartung"] } };
 }
 
 function source() {
@@ -92,8 +96,8 @@ describe("W2C-B2M5S Cockpit Read Guard", () => {
     ["no session", { ok: false, error: "NO_SESSION" }],
     ["authorization error", { ok: false, error: "ROLE_MISMATCH" }],
     ["wrong tenant", { ok: true, data: { tenantId: "other-tenant", role: "admin" } }],
-    ["operator", { ok: true, data: { tenantId: KREILE_TENANT_SLUG, role: "operator" } }],
-    ["inhaber is not an AppRole", { ok: true, data: { tenantId: KREILE_TENANT_SLUG, role: "inhaber" } }],
+    ["operator", { ok: true, data: { tenantId: KREILE_TENANT_SLUG, role: "operator", areas: [] } }],
+    ["inhaber is not an AppRole", { ok: true, data: { tenantId: KREILE_TENANT_SLUG, role: "inhaber", areas: [] } }],
   ])("denies %s before every data, event, realtime, clock, or revalidation port", async (_caseName, result) => {
     ports.resolveAuthorization.mockResolvedValue(result);
     const actions = await import("../actions");

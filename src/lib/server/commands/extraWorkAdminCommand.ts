@@ -67,6 +67,12 @@ export type SetExtraWorkHourlyRateResult =
   | { code: "OK"; receipt: ExtraWorkHourlyRateReceipt; replayed: boolean }
   | CommandDenial;
 
+export type ExtraWorkHourlyRateSnapshot = {
+  rateId: string | null;
+  hourlyRateCents: number | null;
+  version: number;
+};
+
 type CatalogStateRow = {
   id: string;
   tenant_id: string;
@@ -253,8 +259,8 @@ async function resolveAdminAuthorization(): Promise<
         : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." },
     };
   }
-  if (authorization.data.role !== "admin") {
-    return { ok: false, result: { code: "FORBIDDEN", message: "Mehrarbeit-Stammdaten dürfen nur Admins ändern." } };
+  if (!authorization.data.areas?.includes("einstellungen")) {
+    return { ok: false, result: { code: "FORBIDDEN", message: "Firmen-Einstellungen sind nicht freigegeben." } };
   }
   return { ok: true, data: authorization as Awaited<ReturnType<typeof resolveAuthorization>> & { ok: true } };
 }
@@ -506,5 +512,32 @@ export async function setExtraWorkHourlyRate(
     });
   } catch {
     return { code: "UNAVAILABLE", message: "Stundensatz konnte nicht sicher gespeichert werden." };
+  }
+}
+
+export async function readExtraWorkHourlyRate(): Promise<
+  | { code: "OK"; rate: ExtraWorkHourlyRateSnapshot }
+  | CommandDenial
+> {
+  const authorization = await resolveAdminAuthorization();
+  if (!authorization.ok) return authorization.result;
+  const snapshot = authorization.data.data;
+  try {
+    const rows = await withPrivilegedTenantTransaction(snapshot, (tx) => tx.execute<RateStateRow>(sql`
+      SELECT id::text AS id, tenant_id, hourly_rate_cents, version
+      FROM private.extra_work_hourly_rates
+      WHERE tenant_id = ${snapshot.tenantId}
+      ORDER BY version DESC
+      LIMIT 2
+    `));
+    const current = rows[0];
+    if (rows.length > 1 && current?.version === rows[1]?.version) {
+      return { code: "CONFLICT", message: "Stundensatz ist nicht eindeutig." };
+    }
+    return { code: "OK", rate: current
+      ? { rateId: current.id, hourlyRateCents: current.hourly_rate_cents, version: current.version }
+      : { rateId: null, hourlyRateCents: null, version: 0 } };
+  } catch {
+    return { code: "UNAVAILABLE", message: "Stundensatz konnte nicht sicher geladen werden." };
   }
 }

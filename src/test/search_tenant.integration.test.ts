@@ -64,6 +64,16 @@ beforeAll(async () => {
   const updatedAt = new Date(Date.now() - 5_000).toISOString();
   await sql`INSERT INTO public.app_users (id, tenant_id, email, full_name, role, active, created_at, updated_at)
     VALUES (${userId}::uuid, ${KREILE_TENANT_SLUG}, ${`p3-search-${suffix}@local.invalid`}, 'Rolf', 'meister', true, ${updatedAt}::timestamptz, ${updatedAt}::timestamptz)`;
+  await sql`
+    INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
+    VALUES
+      (${KREILE_TENANT_SLUG}, ${userId}::uuid, 'auftraege', ${userId}::uuid),
+      (${KREILE_TENANT_SLUG}, ${userId}::uuid, 'eingang', ${userId}::uuid),
+      (${KREILE_TENANT_SLUG}, ${userId}::uuid, 'kunden', ${userId}::uuid),
+      (${KREILE_TENANT_SLUG}, ${userId}::uuid, 'geld', ${userId}::uuid)
+    ON CONFLICT (tenant_id, user_id, bereich) DO UPDATE SET
+      granted_by = EXCLUDED.granted_by
+  `;
   const [clock] = await sql<{ updated_at_ms: string }[]>`SELECT floor(extract(epoch FROM updated_at) * 1000)::bigint::text AS updated_at_ms FROM public.app_users WHERE id = ${userId}::uuid`;
   sessionIssuedAt = Date.now();
   if (!clock || Number(clock.updated_at_ms) >= sessionIssuedAt) throw new Error("P3_SEARCH_SESSION_REVOCATION_ORDER_INVALID");
@@ -79,9 +89,35 @@ describe("Path-1 P3 tenant search real database contract", () => {
     const { createOrderIntake } = await import("@/lib/server/commands/orderIntakeCommand");
     const intake = await withSession(() => createOrderIntake({
       clientEventId: randomUUID(),
-      customer: { mode: "NEW", name: `Suchkunde ${suffix}`, customerType: "business", companyName: `Nordlicht ${suffix} GmbH`, contactPerson: "Ada Suchtest", email: `ada-${suffix}@local.invalid`, phone: null, city: "Esslingen" },
-      dueDate: "2026-11-19", note: "P3 Suchvertrag",
-      items: [{ name: `Pruefbolzen ${suffix} Nordlicht`, quantity: 2, material: `Titan ${suffix}`, surfaceRequested: `Hartchrom ${suffix}` }],
+      customer: {
+        mode: "NEW",
+        name: `Suchkunde ${suffix}`,
+        customerType: "business",
+        companyName: `Nordlicht ${suffix} GmbH`,
+        contactPerson: "Ada Suchtest",
+        email: `ada-${suffix}@local.invalid`,
+        phone: "+49 711 5550199",
+        street: "Suchweg 1",
+        zipCode: "73728",
+        city: "Esslingen",
+        country: "Deutschland",
+        paymentPreference: "vorkasse",
+        vatId: null,
+      },
+      dueDate: "2026-11-19",
+      handoverMode: "pickup",
+      paymentMode: "vorkasse",
+      note: "P3 Suchvertrag",
+      items: [{
+        catalogServiceId: null,
+        name: `Pruefbolzen ${suffix} Nordlicht`,
+        quantity: 2,
+        material: `Titan ${suffix}`,
+        surfaceRequested: `Hartchrom ${suffix}`,
+        unit: null,
+        unitPriceCents: null,
+        vatRateBasisPoints: null,
+      }],
     }));
     expect(intake.code).toBe("OK");
     if (intake.code !== "OK") throw new Error(`P3_SEARCH_INTAKE_FAILED:${intake.code}`);
@@ -94,7 +130,15 @@ describe("Path-1 P3 tenant search real database contract", () => {
       const result = await withSession(() => searchTenantAction(query));
       expect(result.code).toBe("OK");
       if (result.code === "OK") {
-        expect(result.checkedSources).toEqual(["Auftragsbestand", "Kundenstamm"]);
+        expect(result.checkedSources).toEqual([
+          "Auftragsbestand",
+          "Kundenstamm",
+          "Angebote",
+          "Rechnungen",
+          "Dokumente",
+          "Mails",
+          "Termine",
+        ]);
         expect(result.checkedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
         expect(result.hits).toContainEqual(expect.objectContaining({ id: intake.receipt.orderId, type: "ORDER", matchField }));
       }
@@ -129,8 +173,20 @@ describe("Path-1 P3 tenant search real database contract", () => {
     });
     expect(foreign).toMatchObject({ code: "OK", hits: [] });
 
-    await sql`UPDATE public.customers SET tenant_id = ${`foreign-${suffix}`} WHERE id = ${intake.receipt.customerId}`;
-    await expect(withSession(() => searchTenantAction(intake.receipt.orderNumber))).resolves.toMatchObject({ code: "UNAVAILABLE" });
-    await sql`UPDATE public.customers SET tenant_id = ${KREILE_TENANT_SLUG} WHERE id = ${intake.receipt.customerId}`;
+    await expect(sql`
+      UPDATE public.customers
+      SET tenant_id = ${`foreign-${suffix}`}
+      WHERE id = ${intake.receipt.customerId}
+    `).rejects.toMatchObject({
+      code: "23503",
+      constraint_name: "customer_create_receipts_customer_fkey",
+    });
+    await expect(withSession(() => searchTenantAction(intake.receipt.orderNumber)))
+      .resolves.toMatchObject({
+        code: "OK",
+        hits: expect.arrayContaining([
+          expect.objectContaining({ id: intake.receipt.orderId, type: "ORDER" }),
+        ]),
+      });
   }, 30_000);
 });
