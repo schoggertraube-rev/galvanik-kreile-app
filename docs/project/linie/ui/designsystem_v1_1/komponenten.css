@@ -130,7 +130,7 @@
 .kr-spalten{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:16px;align-items:start}
 
 /* ===== Handlungsbedarf (Konflikt · Warnung · Entscheidung) ===== */
-.kr-hb{display:flex;flex-direction:column;gap:8px}
+.kr-hb{display:flex;flex-direction:column;gap:8px;container-type:inline-size}
 .kr-hb-label{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--navy-800);margin:0 0 2px}
 .kr-hb-label .kr-i{font-size:15px;color:var(--warn-fg)}
 .kr-hb-eintrag{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px;align-items:center;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--rand);border-radius:var(--r-eintrag);padding:10px 12px 10px 14px;box-shadow:var(--sh-sm)}
@@ -153,6 +153,10 @@
 .kr-hb-mehr{font-size:14px;font-weight:600;color:var(--navy-800);background:var(--surface);border:1.5px solid var(--rand);border-radius:var(--r-eintrag);min-height:56px;box-shadow:var(--sh-sm)}
 .kr-hb-mehr .kr-i{font-size:20px}
 .kr-hb-mehr:hover{background:var(--flaeche)}
+@container (max-width:42rem){
+  .kr-hb-eintrag{grid-template-columns:auto minmax(0,1fr)}
+  .kr-hb-aktionen{grid-column:2;justify-content:flex-start;flex-wrap:wrap;min-width:0}
+}
 
 /* ===== Kachel (Tagesüberblick) – Höhe = Inhalt ===== */
 .kr-kachel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-kachel);box-shadow:var(--sh-sm);display:flex;flex-direction:column;overflow:hidden}
