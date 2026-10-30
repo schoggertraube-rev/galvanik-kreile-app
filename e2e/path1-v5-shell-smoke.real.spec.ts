@@ -21,6 +21,14 @@ const ACTORS = [
 ] as const;
 const GREGOR_ACTOR_ID = "33333333-3333-4333-8333-333333333333";
 const NAVIGATION_TIMEOUT = 30_000;
+const DESKTOP_NAVIGATION = [
+  { label: "Der Tag", href: "/" },
+  { label: "Werkstatt", href: "/warendurchlauf" },
+  { label: "Aufträge", href: "/orders" },
+  { label: "Kunden & Kontakt", href: "/customers" },
+  { label: "Geld & Rechnungen", href: "/buchhaltung/rechnungen" },
+  { label: "Einstellungen", href: "/settings" },
+] as const;
 
 function renderedPathFor(requestedPath: string): string {
   // Settings is intentionally restricted to Gregor and redirects the two
@@ -155,11 +163,16 @@ async function navigateAndWaitForContent(page: Page, actor: string, target: Retu
 async function visitDesktopLinks(page: Page, actor: string, viewport: (typeof VIEWPORTS)[number], problems: string[], screens: string[]) {
   const navigation = page.getByRole("navigation", { name: "Hauptnavigation", exact: true });
   await expect(navigation).toBeVisible();
-  const hrefs = await navigation.locator("[data-href]").evaluateAll((items) => items.map((item) => item.getAttribute("data-href")).filter((href): href is string => Boolean(href)));
-  expect(hrefs.length).toBeGreaterThan(0);
-  for (const href of hrefs) {
+  const visibleTargets = [];
+  for (const item of DESKTOP_NAVIGATION) {
+    const target = navigation.getByRole("button", { name: new RegExp(`^${item.label}(?:\\s+\\d+)?$`) });
+    if (await target.count()) visibleTargets.push(item);
+  }
+  expect(visibleTargets.length).toBeGreaterThan(0);
+  for (const { label, href } of visibleTargets) {
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    const target = page.getByRole("navigation", { name: "Hauptnavigation", exact: true }).locator(`[data-href="${href}"]`);
+    const target = page.getByRole("navigation", { name: "Hauptnavigation", exact: true })
+      .getByRole("button", { name: new RegExp(`^${label}(?:\\s+\\d+)?$`) });
     const renderedPath = await navigateAndWaitForContent(page, actor, target, href);
     await assertPage(page, actor, viewport, renderedPath, problems, screens);
     if (!screens.includes(`${actor}-${viewport.name}-${viewport.width}x${viewport.height}-path-${renderedPath === "/" ? "root" : renderedPath.slice(1).replace(/\//g, "-")}`)) {
@@ -169,10 +182,16 @@ async function visitDesktopLinks(page: Page, actor: string, viewport: (typeof VI
 }
 
 async function visitMore(page: Page, actor: string, viewport: (typeof VIEWPORTS)[number], problems: string[], screens: string[]) {
-  const dock = page.getByRole("navigation", { name: "Mobile Hauptnavigation", exact: true });
+  const dock = page.getByRole("navigation", { name: "Hauptnavigation", exact: true });
   await expect(dock).toBeVisible();
   await expect(dock.locator(":scope > *")).toHaveCount(5);
-  for (const href of ["/warendurchlauf", "/settings"]) {
+  await dock.getByRole("button", { name: "Mehr", exact: true }).click({ timeout: NAVIGATION_TIMEOUT });
+  const menu = page.getByRole("dialog", { name: "Mehr", exact: true });
+  await expect(menu).toBeVisible();
+  const hrefs = await menu.locator("a[href]").evaluateAll((items) => items.map((item) => item.getAttribute("href")).filter((href): href is string => Boolean(href)));
+  await menu.getByRole("button", { name: "Schließen", exact: true }).click();
+  expect(hrefs.length).toBeGreaterThan(0);
+  for (const href of hrefs) {
     await dock.getByRole("button", { name: "Mehr", exact: true }).click({ timeout: NAVIGATION_TIMEOUT });
     const more = page.getByRole("dialog", { name: "Mehr", exact: true });
     await expect(more).toBeVisible();
@@ -217,7 +236,7 @@ test.describe("PATH1 V5 Shell Smoke", () => {
         ON CONFLICT (id) DO UPDATE SET email = excluded.email, full_name = excluded.full_name, kuerzel = excluded.kuerzel, bezeichnung = excluded.bezeichnung, role = excluded.role, pin_hash = excluded.pin_hash, active = excluded.active, updated_at = excluded.updated_at
       `;
       for (const actor of ACTORS) for (const viewport of VIEWPORTS) {
-        const context = await browser.newContext({ viewport });
+        const context = await browser.newContext({ viewport, hasTouch: viewport.width < 1300 });
         try {
           const page = await context.newPage();
           await loginPin(page, actor, sessionSecret);
