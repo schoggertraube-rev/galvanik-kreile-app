@@ -4,6 +4,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import postgres from "postgres";
+import { ROLE_ACCESS_AREA_TEMPLATES } from "../src/lib/auth/authorizationContract";
 import { createPinLoginHandle } from "../src/lib/server/pinLoginHandle";
 
 const TENANT = "galvanik-kreile";
@@ -20,6 +21,7 @@ const ACTORS = [
   { key: "phillip", id: "22222222-2222-4222-8222-222222222222", pin: "7315", role: "werkstatt" },
 ] as const;
 const GREGOR_ACTOR_ID = "33333333-3333-4333-8333-333333333333";
+const FIXTURE_ACTORS = [...ACTORS, { id: GREGOR_ACTOR_ID, role: "admin" as const }];
 const NAVIGATION_TIMEOUT = 30_000;
 const DESKTOP_NAVIGATION = [
   { label: "Der Tag", href: "/" },
@@ -233,6 +235,18 @@ test.describe("PATH1 V5 Shell Smoke", () => {
           (${GREGOR_ACTOR_ID}::uuid, ${TENANT}, ${gregorEmail}, 'Gregor', 'G', 'Entwickler', 'admin', null, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz)
         ON CONFLICT (id) DO UPDATE SET email = excluded.email, full_name = excluded.full_name, kuerzel = excluded.kuerzel, bezeichnung = excluded.bezeichnung, role = excluded.role, pin_hash = excluded.pin_hash, active = excluded.active, updated_at = excluded.updated_at
       `;
+      await sql`
+        DELETE FROM public.app_user_rights
+        WHERE tenant_id = ${TENANT}
+          AND user_id IN (${ACTORS[0].id}::uuid, ${ACTORS[1].id}::uuid, ${GREGOR_ACTOR_ID}::uuid)
+      `;
+      for (const actor of FIXTURE_ACTORS) {
+        await sql`
+          INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
+          SELECT ${TENANT}, ${actor.id}::uuid, area, ${GREGOR_ACTOR_ID}::uuid
+          FROM unnest(${sql.array([...ROLE_ACCESS_AREA_TEMPLATES[actor.role]])}::text[]) area
+        `;
+      }
       for (const actor of ACTORS) for (const viewport of VIEWPORTS) {
         const context = await browser.newContext({ viewport, hasTouch: viewport.width < 1300 });
         try {
