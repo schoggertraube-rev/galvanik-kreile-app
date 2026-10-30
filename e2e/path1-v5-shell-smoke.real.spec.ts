@@ -89,11 +89,13 @@ async function assertSignedSession(page: Page, actorId: string, secret: string) 
 
 async function loginPin(page: Page, actor: (typeof ACTORS)[number], secret: string) {
   await page.goto("/start", { waitUntil: "domcontentloaded" });
-  await page.getByTestId(`pin-user-card-${createPinLoginHandle(actor.id)}`).click();
-  const dialog = page.getByTestId("pin-login-dialog");
-  await expect(dialog).toBeVisible();
+  const userCard = page.getByTestId(`pin-user-card-${createPinLoginHandle(actor.id)}`);
+  await userCard.click();
+  await expect(userCard).toHaveAttribute("aria-pressed", "true");
+  const keypad = page.getByRole("generic", { name: "Ziffernblock", exact: true });
+  await expect(keypad).toBeVisible();
   const home = page.waitForURL((url) => url.pathname === "/", { waitUntil: "commit" });
-  for (const digit of actor.pin) await dialog.getByRole("button", { name: digit, exact: true }).click();
+  for (const digit of actor.pin) await keypad.getByRole("button", { name: digit, exact: true }).click();
   await home;
   await expect(page.locator("main h1")).toBeVisible();
   await assertSignedSession(page, actor.id, secret);
@@ -207,12 +209,12 @@ test.describe("PATH1 V5 Shell Smoke", () => {
       await createLocalAuthUser(apiUrl, anonKey, gregorEmail, gregorPassword);
       const insertedAt = new Date(Date.now() - 5_000).toISOString();
       await sql`
-        INSERT INTO public.app_users (id, tenant_id, email, full_name, role, pin_hash, active, created_at, updated_at)
+        INSERT INTO public.app_users (id, tenant_id, email, full_name, kuerzel, bezeichnung, role, pin_hash, active, created_at, updated_at)
         VALUES
-          (${ACTORS[0].id}::uuid, ${TENANT}, ${emailRolf}, 'Rolf', 'meister', ${hashRolf}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz),
-          (${ACTORS[1].id}::uuid, ${TENANT}, ${emailPhillip}, 'Phillip', 'werkstatt', ${hashPhillip}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz),
-          (${GREGOR_ACTOR_ID}::uuid, ${TENANT}, ${gregorEmail}, 'Gregor', 'admin', null, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz)
-        ON CONFLICT (id) DO UPDATE SET email = excluded.email, full_name = excluded.full_name, role = excluded.role, pin_hash = excluded.pin_hash, active = excluded.active, updated_at = excluded.updated_at
+          (${ACTORS[0].id}::uuid, ${TENANT}, ${emailRolf}, 'Rolf', 'R', 'Meister', 'meister', ${hashRolf}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz),
+          (${ACTORS[1].id}::uuid, ${TENANT}, ${emailPhillip}, 'Phillip', 'P', 'Werkstatt', 'werkstatt', ${hashPhillip}, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz),
+          (${GREGOR_ACTOR_ID}::uuid, ${TENANT}, ${gregorEmail}, 'Gregor', 'G', 'Entwickler', 'admin', null, true, ${insertedAt}::timestamptz, ${insertedAt}::timestamptz)
+        ON CONFLICT (id) DO UPDATE SET email = excluded.email, full_name = excluded.full_name, kuerzel = excluded.kuerzel, bezeichnung = excluded.bezeichnung, role = excluded.role, pin_hash = excluded.pin_hash, active = excluded.active, updated_at = excluded.updated_at
       `;
       for (const actor of ACTORS) for (const viewport of VIEWPORTS) {
         const context = await browser.newContext({ viewport });
