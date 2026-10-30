@@ -79,9 +79,35 @@ describe("Path-1 P3 tenant search real database contract", () => {
     const { createOrderIntake } = await import("@/lib/server/commands/orderIntakeCommand");
     const intake = await withSession(() => createOrderIntake({
       clientEventId: randomUUID(),
-      customer: { mode: "NEW", name: `Suchkunde ${suffix}`, customerType: "business", companyName: `Nordlicht ${suffix} GmbH`, contactPerson: "Ada Suchtest", email: `ada-${suffix}@local.invalid`, phone: null, city: "Esslingen" },
-      dueDate: "2026-11-19", note: "P3 Suchvertrag",
-      items: [{ name: `Pruefbolzen ${suffix} Nordlicht`, quantity: 2, material: `Titan ${suffix}`, surfaceRequested: `Hartchrom ${suffix}` }],
+      customer: {
+        mode: "NEW",
+        name: `Suchkunde ${suffix}`,
+        customerType: "business",
+        companyName: `Nordlicht ${suffix} GmbH`,
+        contactPerson: "Ada Suchtest",
+        email: `ada-${suffix}@local.invalid`,
+        phone: "+49 711 5550199",
+        street: "Suchweg 1",
+        zipCode: "73728",
+        city: "Esslingen",
+        country: "Deutschland",
+        paymentPreference: "rechnung_14",
+        vatId: null,
+      },
+      dueDate: "2026-11-19",
+      handoverMode: "pickup",
+      paymentMode: "rechnung",
+      note: "P3 Suchvertrag",
+      items: [{
+        catalogServiceId: null,
+        name: `Pruefbolzen ${suffix} Nordlicht`,
+        quantity: 2,
+        material: `Titan ${suffix}`,
+        surfaceRequested: `Hartchrom ${suffix}`,
+        unit: null,
+        unitPriceCents: null,
+        vatRateBasisPoints: null,
+      }],
     }));
     expect(intake.code).toBe("OK");
     if (intake.code !== "OK") throw new Error(`P3_SEARCH_INTAKE_FAILED:${intake.code}`);
