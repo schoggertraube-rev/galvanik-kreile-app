@@ -64,6 +64,16 @@ beforeAll(async () => {
   const updatedAt = new Date(Date.now() - 5_000).toISOString();
   await sql`INSERT INTO public.app_users (id, tenant_id, email, full_name, role, active, created_at, updated_at)
     VALUES (${userId}::uuid, ${KREILE_TENANT_SLUG}, ${`p3-search-${suffix}@local.invalid`}, 'Rolf', 'meister', true, ${updatedAt}::timestamptz, ${updatedAt}::timestamptz)`;
+  await sql`
+    INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
+    VALUES
+      (${KREILE_TENANT_SLUG}, ${userId}::uuid, 'auftraege', ${userId}::uuid),
+      (${KREILE_TENANT_SLUG}, ${userId}::uuid, 'eingang', ${userId}::uuid),
+      (${KREILE_TENANT_SLUG}, ${userId}::uuid, 'kunden', ${userId}::uuid),
+      (${KREILE_TENANT_SLUG}, ${userId}::uuid, 'geld', ${userId}::uuid)
+    ON CONFLICT (tenant_id, user_id, bereich) DO UPDATE SET
+      granted_by = EXCLUDED.granted_by
+  `;
   const [clock] = await sql<{ updated_at_ms: string }[]>`SELECT floor(extract(epoch FROM updated_at) * 1000)::bigint::text AS updated_at_ms FROM public.app_users WHERE id = ${userId}::uuid`;
   sessionIssuedAt = Date.now();
   if (!clock || Number(clock.updated_at_ms) >= sessionIssuedAt) throw new Error("P3_SEARCH_SESSION_REVOCATION_ORDER_INVALID");
