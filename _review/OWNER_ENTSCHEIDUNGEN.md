@@ -2,6 +2,9 @@
 
 Codex liest diese Datei vor jedem Paket und nach jedem Eintrag in OWNER_TODO.md.
 
+## 30.10.2026 · U-222 Einmalige Rebaseline PR #154
+Entschieden (Owner 30.10.): PR #154 wird nach dem Retarget auf `main` einmalig als kumuliertes Rebaseline-Paket geprüft. Die Umfangsprüfung bleibt für alle Folge-PRs unverändert streng. Die ESLint-Basis wird als geprüfte Migration ohne Regelabschwächung und ohne Zunahme der Fehlerzahl aktualisiert. F1.4 läuft auf dem aktuellen Schema, ohne seinen Prüfinhalt abzuschwächen. Danach muss CI vollständig grün sein. Zusätzlich erhält „Rechnung ausstellen“ die vom Prüfchat verlangte sichtbare Erfolgsmeldung mit Replay-DB-Nachweis. Kein Merge.
+
 ## 25.10.2026 · S03 Nutzer & Rollen
 Entschieden: Für Stufe 1 reichen die drei bestehenden Nutzer Rolf, Phillip, Gregor. S03 bleibt auf Rollen-, PIN- und Sperrpflege dieser drei begrenzt. Neue Nutzer anlegen kommt später als eigene Auth-Erweiterung. In der App die Stelle „Nutzer anlegen“ ausgegraut im V8-Muster „geplant“ zeigen, nicht „In Klärung“.
 

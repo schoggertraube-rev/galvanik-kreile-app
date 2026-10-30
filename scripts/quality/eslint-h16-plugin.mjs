@@ -2,6 +2,38 @@ const PERSON_NAME_PATTERN = /\b(?:Rolf|Phillip|Gregor)\b/u;
 const ROLE_PERMISSIONS_PATTERN = /\bROLE_PERMISSIONS\b/u;
 const PLACEHOLDER_TEXT_PATTERN = /\b(?:WIP|Demo|mock)\b/iu;
 
+// H11c permits exactly these three role-identity checks. They are integrity/display
+// checks, not a second permission source. A plain adjacent marker keeps the exception
+// visible while the previous main ESLint contract (noInlineConfig=true) can still judge
+// the candidate without manufacturing directive warnings during the reviewed migration.
+const H11C_ROLE_IDENTITY_EXCEPTIONS = new Map([
+  [
+    "src/app/settings/SettingsAdminClient.tsx",
+    new Set(['user.role === "developer"']),
+  ],
+  [
+    "src/lib/server/productActorReadiness.ts",
+    new Set(["actor.role !== authorization.data.role"]),
+  ],
+  [
+    "src/lib/server/productActorReadinessCore.ts",
+    new Set(["PRODUCT_ACTOR_RULES[key].allowedRoles.includes(profile.role)"]),
+  ],
+]);
+
+function normalizedFilename(context) {
+  return context.filename.replaceAll("\\", "/");
+}
+
+function isDocumentedH11cException(context, node) {
+  const filename = normalizedFilename(context);
+  const entry = [...H11C_ROLE_IDENTITY_EXCEPTIONS.entries()]
+    .find(([suffix]) => filename === suffix || filename.endsWith(`/${suffix}`));
+  if (!entry || !entry[1].has(context.sourceCode.getText(node))) return false;
+  const previousLine = context.sourceCode.text.split(/\r?\n/u)[(node.loc?.start.line ?? 1) - 2];
+  return previousLine?.trim().startsWith("// erlaubt H11c:") === true;
+}
+
 function isRoleReference(node) {
   if (!node) return false;
   if (node.type === "Identifier") return node.name === "role";
@@ -91,12 +123,13 @@ const plugin = {
             if (
               (node.operator === "===" || node.operator === "!==")
               && (isRoleReference(node.left) || isRoleReference(node.right))
+              && !isDocumentedH11cException(context, node)
             ) {
               context.report({ node, messageId: "forbidden" });
             }
           },
           CallExpression(node) {
-            if (isMembershipCheck(node)) {
+            if (isMembershipCheck(node) && !isDocumentedH11cException(context, node)) {
               context.report({ node, messageId: "forbidden" });
             }
           },

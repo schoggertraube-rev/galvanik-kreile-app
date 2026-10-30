@@ -259,6 +259,7 @@ async function createCommandReadyOrder(
     clientEventId: randomUUID(),
     customer: { mode: "EXISTING", customerId: COMMAND_CUSTOMER },
     dueDate: "2026-09-30",
+    paymentMode: "vorkasse",
     note: `F1.5 contract ${label}`,
     items: [{ name: label, quantity: 1, material: "Stahl", surfaceRequested: "Galvanik" }],
   }));

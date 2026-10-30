@@ -7,12 +7,12 @@
   "note": "Machine-readable capability inventory based on snapshot_sha; the immutable review SHA is recorded separately when the candidate is frozen. Every page route, API route, Server Action group, KPI definition, and provider connection must carry exactly one of: REAL_VERIFIED | REAL_PENDING_SECRET | PENDING_CONTRACT | TEST_ONLY | LEGACY_REMOVE",
   "summary": {
     "page_routes": 13,
-    "api_routes": 20,
-    "server_action_groups": 57,
+    "api_routes": 2,
+    "server_action_groups": 48,
     "kpi_definitions": 7,
     "provider_connections": 16,
     "nav_links_without_page": 3,
-    "total": 116
+    "total": 89
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -185,125 +185,6 @@
       "open_reason": "Unsupported station-hours CTA to /einstellungen removed from EngpassKachel.tsx in F1-R0."
     },
     {
-      "stable_id": "api.cron.send-feedback",
-      "kind": "API_ROUTE",
-      "entry_point": "src/app/api/cron/send-feedback/route.ts",
-      "route": "/api/cron/send-feedback",
-      "visible": false,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "provider": "mail",
-      "open_reason": "Returns notAvailableResponse (503). Email provider not activated. Cron trigger not configured."
-    },
-    {
-      "stable_id": "api.email.send",
-      "kind": "API_ROUTE",
-      "entry_point": "src/app/api/email/send/route.ts",
-      "route": "/api/email/send",
-      "visible": false,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "provider": "mail",
-      "open_reason": "Returns notAvailableResponse (503). Email provider not activated."
-    },
-    {
-      "stable_id": "api.erfassung.customer-enrich",
-      "kind": "API_ROUTE",
-      "entry_point": "src/app/api/erfassung/customer-enrich/route.ts",
-      "route": "/api/erfassung/customer-enrich",
-      "visible": false,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "provider": "gemini",
-      "open_reason": "Returns notAvailableResponse (503). Quarantined pending F0 command contract review."
-    },
-    {
-      "stable_id": "api.erfassung.customer-search",
-      "kind": "API_ROUTE",
-      "entry_point": "src/app/api/erfassung/customer-search/route.ts",
-      "route": "/api/erfassung/customer-search",
-      "visible": false,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Returns notAvailableResponse (503). Quarantined pending F0 command contract review."
-    },
-    {
-      "stable_id": "api.erfassung.freetext-extract",
-      "kind": "API_ROUTE",
-      "entry_point": "src/app/api/erfassung/freetext-extract/route.ts",
-      "route": "/api/erfassung/freetext-extract",
-      "visible": false,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "provider": "gemini",
-      "open_reason": "Returns notAvailableResponse (503). Quarantined pending provider contract."
-    },
-    {
-      "stable_id": "api.erfassung.inquiry-extract",
-      "kind": "API_ROUTE",
-      "entry_point": "src/app/api/erfassung/inquiry-extract/route.ts",
-      "route": "/api/erfassung/inquiry-extract",
-      "visible": false,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "provider": "gemini",
-      "open_reason": "Returns notAvailableResponse (503). Quarantined pending provider contract."
-    },
-    {
-      "stable_id": "api.erfassung.item-photo-upload",
-      "kind": "API_ROUTE",
-      "entry_point": "src/app/api/erfassung/item-photo-upload/route.ts",
-      "route": "/api/erfassung/item-photo-upload",
-      "visible": false,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "provider": "supabase-storage",
-      "open_reason": "Returns notAvailableResponse (503). Quarantined pending F0 command contract review. F1.1 photo upload uses a separate verified path."
-    },
-    {
-      "stable_id": "api.erfassung.notes-extract",
-      "kind": "API_ROUTE",
-      "entry_point": "src/app/api/erfassung/notes-extract/route.ts",
-      "route": "/api/erfassung/notes-extract",
-      "visible": false,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "provider": "gemini",
-      "open_reason": "Returns notAvailableResponse (503). Quarantined pending provider contract."
-    },
-    {
-      "stable_id": "api.erfassung.scan-status.id",
-      "kind": "API_ROUTE",
-      "entry_point": "src/app/api/erfassung/scan-status/[id]/route.ts",
-      "route": "/api/erfassung/scan-status/[id]",
-      "visible": false,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Returns notAvailableResponse (503). Quarantined pending OCR contract."
-    },
-    {
-      "stable_id": "api.erfassung.scan-upload",
-      "kind": "API_ROUTE",
-      "entry_point": "src/app/api/erfassung/scan-upload/route.ts",
-      "route": "/api/erfassung/scan-upload",
-      "visible": false,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "provider": "klippa",
-      "open_reason": "Returns notAvailableResponse (503). Quarantined pending OCR provider contract."
-    },
-    {
-      "stable_id": "api.morning-message",
-      "kind": "API_ROUTE",
-      "entry_point": "src/app/api/morning-message/route.ts",
-      "route": "/api/morning-message",
-      "visible": false,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "provider": "gemini",
-      "open_reason": "Returns notAvailableResponse (503). Quarantined pending cron and Gemini contract."
-    },
-    {
       "stable_id": "api.invoices.invoice-id.pdf",
       "kind": "API_ROUTE",
       "entry_point": "src/app/api/invoices/[invoiceId]/pdf/route.ts",
@@ -322,78 +203,6 @@
       "reachable": true,
       "classification": "PENDING_CONTRACT",
       "open_reason": "Tenant-bound quote PDF download. Owner verification remains pending."
-    },
-    {
-      "stable_id": "api.ocr-process",
-      "kind": "API_ROUTE",
-      "entry_point": "src/app/api/ocr-process/route.ts",
-      "route": "/api/ocr-process",
-      "visible": false,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "provider": "klippa",
-      "open_reason": "OCR processing route. Not quarantined but no verified E2E contract."
-    },
-    {
-      "stable_id": "api.payments.mollie.create",
-      "kind": "API_ROUTE",
-      "entry_point": "src/app/api/payments/mollie/create/route.ts",
-      "route": "/api/payments/mollie/create",
-      "visible": false,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "provider": "mollie",
-      "open_reason": "Returns notAvailableResponse (503). Mollie payment integration not activated."
-    },
-    {
-      "stable_id": "api.today.has-deadlines",
-      "kind": "API_ROUTE",
-      "entry_point": "src/app/api/today/has-deadlines/route.ts",
-      "route": "/api/today/has-deadlines",
-      "visible": false,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Today deadline check. Supabase-connected but no independent E2E evidence."
-    },
-    {
-      "stable_id": "api.today.important",
-      "kind": "API_ROUTE",
-      "entry_point": "src/app/api/today/important/route.ts",
-      "route": "/api/today/important",
-      "visible": false,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Today important items. Supabase-connected but no independent E2E evidence."
-    },
-    {
-      "stable_id": "api.today.status",
-      "kind": "API_ROUTE",
-      "entry_point": "src/app/api/today/status/route.ts",
-      "route": "/api/today/status",
-      "visible": false,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Today status summary. Supabase-connected but no independent E2E evidence."
-    },
-    {
-      "stable_id": "api.today.timeline",
-      "kind": "API_ROUTE",
-      "entry_point": "src/app/api/today/timeline/route.ts",
-      "route": "/api/today/timeline",
-      "visible": false,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Today timeline feed. Supabase-connected but no independent E2E evidence."
-    },
-    {
-      "stable_id": "api.users",
-      "kind": "API_ROUTE",
-      "entry_point": "src/app/api/users/route.ts",
-      "route": "/api/users",
-      "visible": false,
-      "reachable": true,
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "User management API. Admin-only, no verified E2E contract."
     },
     {
       "stable_id": "server-actions.auth",
@@ -441,21 +250,6 @@
       "open_reason": "Admin user/feature-flag management. Supabase-connected, no independent E2E evidence.",
       "visible": false,
       "reachable": false
-    },
-    {
-      "stable_id": "server-actions.ai-enrichment",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/actions/ai-enrichment.actions.ts",
-      "exported_functions": [
-        "extractCustomerDataFromFreetext",
-        "enrichCustomerData"
-      ],
-      "classification": "REAL_PENDING_SECRET",
-      "provider": "gemini",
-      "open_reason": "AI enrichment via Gemini. GeminiClient throws GeminiConfigError on missing GEMINI_API_KEY (honest). Route quarantined.",
-      "visible": false,
-      "reachable": false,
-      "env_vars": ["GEMINI_API_KEY"]
     },
     {
       "stable_id": "server-actions.ai-search",
@@ -669,39 +463,6 @@
       "reachable": true
     },
     {
-      "stable_id": "server-actions.erfassung",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/actions/erfassung.actions.ts",
-      "exported_functions": [
-        "startZeit",
-        "stopZeit",
-        "erfasseZeitDirekt",
-        "erfasseVerbrauch",
-        "uebernehmeVorlage",
-        "createCustomerFromErfassung",
-        "createOrderFromErfassung"
-      ],
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Time/resource capture actions. Supabase-connected but quarantined route path. No independent E2E evidence.",
-      "visible": false,
-      "reachable": false
-    },
-    {
-      "stable_id": "server-actions.inquiries",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/actions/inquiries.actions.ts",
-      "exported_functions": [
-        "getInquiries",
-        "getOpenInquiriesCount",
-        "createInquiry",
-        "updateInquiry"
-      ],
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Quote/inquiry management. Supabase-connected but no independent E2E evidence.",
-      "visible": false,
-      "reachable": false
-    },
-    {
       "stable_id": "server-actions.inventory",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/inventory.actions.ts",
@@ -760,18 +521,6 @@
       "open_reason": "Payment reminder email actions. Email route quarantined. No verified provider contract.",
       "visible": false,
       "reachable": false
-    },
-    {
-      "stable_id": "server-actions.ocr",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/actions/ocr.actions.ts",
-      "exported_functions": ["processImage", "processImageWithAI"],
-      "classification": "REAL_PENDING_SECRET",
-      "provider": "gemini",
-      "open_reason": "OCR via Gemini or Klippa. GeminiClient throws on missing key (honest). Requires GEMINI_API_KEY.",
-      "visible": false,
-      "reachable": false,
-      "env_vars": ["GEMINI_API_KEY"]
     },
     {
       "stable_id": "server-actions.orders",
@@ -861,20 +610,6 @@
       "reachable": false
     },
     {
-      "stable_id": "server-actions.phone-notes",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/actions/phoneNotes.actions.ts",
-      "exported_functions": [
-        "createPhoneNote",
-        "getRecentPhoneNotes",
-        "updatePhoneNote"
-      ],
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Phone note CRUD. Functions return PhoneNoteUnavailable stub (honest not-available).",
-      "visible": false,
-      "reachable": false
-    },
-    {
       "stable_id": "server-actions.price-lines",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/price-lines.actions.ts",
@@ -908,21 +643,6 @@
       "open_reason": "Start/today page actions. Supabase-connected, no independent E2E evidence.",
       "visible": false,
       "reachable": true
-    },
-    {
-      "stable_id": "server-actions.status-events",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/actions/status-events.actions.ts",
-      "exported_functions": [
-        "createStatusEvent",
-        "getStatusEventsByOrderId",
-        "getStatusEventsByItemId",
-        "getRecentStatusEvents"
-      ],
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Status event log. Supabase-connected, no independent E2E evidence.",
-      "visible": false,
-      "reachable": false
     },
     {
       "stable_id": "server-actions.timeline",
@@ -1070,26 +790,6 @@
       "reachable": false
     },
     {
-      "stable_id": "server-actions.kontrolle",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/kontrolle/actions.ts",
-      "exported_functions": ["getQsListenAction"],
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Quality control list action. Supabase-connected, no independent E2E evidence.",
-      "visible": false,
-      "reachable": false
-    },
-    {
-      "stable_id": "server-actions.lager",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/lager/actions.ts",
-      "exported_functions": ["getLagerbestandAction"],
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Stock/inventory action. Supabase-connected, no independent E2E evidence.",
-      "visible": false,
-      "reachable": false
-    },
-    {
       "stable_id": "server-actions.marketing-aktion",
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/marketing/aktion/actions.ts",
@@ -1180,16 +880,6 @@
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "Marketing hub actions. Supabase-connected, no verified external provider integration.",
-      "visible": false,
-      "reachable": false
-    },
-    {
-      "stable_id": "server-actions.performance-actions",
-      "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/performance/actions.ts",
-      "exported_functions": ["getPerformanceKPIsAction"],
-      "classification": "PENDING_CONTRACT",
-      "open_reason": "Performance KPI aggregation. Supabase read-models, no independent E2E evidence.",
       "visible": false,
       "reachable": false
     },

@@ -11,12 +11,13 @@ const RULES = {
   "h16/no-placeholder-text": "error",
 };
 
-function verifySample(source) {
+function verifySample(source, filename = "src/selftest.ts") {
   const linter = new Linter({ configType: "flat" });
   return linter.verify(source, [{
+    files: ["**/*.{js,ts,tsx}"],
     plugins: { h16: h16Plugin },
     rules: RULES,
-  }]);
+  }], { filename });
 }
 
 function selftest() {
@@ -41,12 +42,19 @@ function selftest() {
   }
 
   const allowed = [
-    "// eslint-disable-next-line h16/no-role-identity-comparison -- erlaubt H11c",
+    "// erlaubt H11c: Anzeige Einsicht & Systempflege",
     'const allowed = role === "developer";',
   ].join("\n");
-  const allowedMessages = verifySample(allowed).filter((message) => message.ruleId?.startsWith("h16/"));
+  const allowedMessages = verifySample(
+    allowed.replace('const allowed = role === "developer";', 'const allowed = user.role === "developer";'),
+    "src/app/settings/SettingsAdminClient.tsx",
+  ).filter((message) => message.ruleId?.startsWith("h16/"));
   if (allowedMessages.length !== 0) {
     throw new Error("H16_SELFTEST_DOCUMENTED_EXCEPTION_REJECTED");
+  }
+  const wrongFileMessages = verifySample(allowed).filter((message) => message.ruleId?.startsWith("h16/"));
+  if (wrongFileMessages.length !== 1) {
+    throw new Error("H16_SELFTEST_EXCEPTION_ESCAPED_ALLOWLIST");
   }
   process.stdout.write("H16_ESLINT_SELFTEST=PASS\n");
 }
