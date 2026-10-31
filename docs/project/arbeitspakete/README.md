@@ -19,7 +19,7 @@ Pflichtteile:
    - **Gate:** Testdatei(en), Grep-Regeln und die DB-Zeile, die danach stehen muss.
    - **Abnahme:** Owner-Klickweg (höchstens 6 Schritte) mit dem Soll in der DB, aus dem BAUPLAN übernommen.
 2. **`migration.sql`**, falls nötig: additiv, mit RLS und Rechten.
-3. **`*.acceptance.test.ts`**: der rote Akzeptanztest gegen die Replay-DB mit Fixture, dazu ein Negativtest für die Rechte. Codex kopiert ihn **unverändert** nach `src/test/acceptance/` (Prüfung per SHA-256 in der Abgabe). **Codex ändert Akzeptanztests nie.** Hält er einen Test für falsch, schreibt er `BLOCKER.md` im Paketordner und macht mit dem nächsten Paket weiter.
+3. **`*.acceptance.test.ts.txt`** (Planungsort mit Endung `.txt`, damit der globale Typecheck/Lint ihn dort nicht erfasst; Codex kopiert bytegleich als `*.acceptance.test.ts`): der rote Akzeptanztest gegen die Replay-DB mit Fixture, dazu ein Negativtest für die Rechte. Codex kopiert ihn **unverändert** nach `src/test/acceptance/` (Prüfung per SHA-256 in der Abgabe). **Codex ändert Akzeptanztests nie.** Hält er einen Test für falsch, schreibt er `BLOCKER.md` im Paketordner und macht mit dem nächsten Paket weiter.
 4. **`fixtures/`**: echte Beispiel-Eingaben (Mail, E-Rechnung, Scan) ohne personenbezogene Echtdaten.
 
 ## Spike-Pakete (`AP-<Nr>-SPIKE-<kurz>`)

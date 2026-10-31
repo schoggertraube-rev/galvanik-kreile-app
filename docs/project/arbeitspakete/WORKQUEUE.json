@@ -21,6 +21,8 @@
       "voraussetzung": "TA-B2 auf main gemergt",
       "branch": "kreile/b2-eingang",
       "fassung": 2,
+      "acceptance_test_quelle": "AP-01-eingang-geruest-paket-persoenlich/AP-01-eingang-paket-persoenlich.acceptance.test.ts.txt",
+      "acceptance_test_ziel": "src/test/acceptance/AP-01-eingang-paket-persoenlich.acceptance.test.ts",
       "acceptance_test_sha256": "F309FF84B59B1FC72AF6D41742A1FEBD99D599654605161BFA8F1A995BDBD7E0",
       "migration_sha256": "308A6A1548E67147AD549923BF4C8B9C840B969A05B3447AD4A4BBBE388912B9",
       "migration_probelauf": "2026-10-31 gegen Dev-DB in Transaktion mit ROLLBACK fehlerfrei; keine Rueckstaende",

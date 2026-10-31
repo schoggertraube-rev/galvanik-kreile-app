@@ -20,7 +20,7 @@ Diese Datei **ersetzt alle früheren Fassungen**. Das Archiv `_review/archiv/AKT
    - Keine Umschreibungen, die einen Wächter austricksen.
 6. **Scheitern.** Scheitert ein Unterpunkt fachlich nach einem Fixversuch, wird er zurückgenommen, `RUECKFRAGEN_<Nr>.md` geschrieben und der nächste Unterpunkt begonnen. Mechanische Folgearbeit zählt nicht als Fixversuch: Lint-Umbenennung, Fixture-Feld, Manifest, Testselektor. Bei einem Werkzeug-Timeout entscheidet CI.
 7. **Grenzen.**
-   - Nur Branch `kreile/s1-p2-eingang` bis zum Merge von #154 durch die Owner.
+   - Branch nach Mission: Anker TA-B2 auf `codex/ta-b2`, danach AP-01 auf `kreile/b2-eingang` (#154 ist erledigt).
    - Kein Merge und kein Production-Deploy durch Codex.
    - Nichts löschen, keine Secrets, keine alte Migration ändern.
    - Dev-DB-Migrationen nur additiv; danach belegen, dass die Migrationsliste der DB gleich dem Repo ist.
@@ -29,6 +29,10 @@ Diese Datei **ersetzt alle früheren Fassungen**. Das Archiv `_review/archiv/AKT
 8. **Eingang eingefroren.** Nichts am Eingang bauen oder reparieren, bis dazu Arbeitspakete mit Status `bereit` vorliegen.
 9. **Nicht härten, was die Endversion ersetzt (U-220).** Codex testet und repariert nur Aktionen, die der Planungschat als stabiler Stufe-1-Kern bestätigt hat. Alles, was auf der Ausnahmeliste als eingefroren, Stub, ersetzt, Legacy-außerhalb-Stufe-1 oder Stufe-2 steht, bleibt unangetastet und wird erst gebaut und getestet, wenn die Endversion es neu schneidet. Im Zweifel: nicht anfassen, als Frage an den Planungschat.
 10. **Test schreibt nicht, wer den Code schrieb (U-221).** Der Abnahmefall je Fix (Eingaben → Soll-Zeile in der DB → Soll-Ansicht) wird vom lesenden Prüf-/Red-Team-Codex und vom Planungschat vorgegeben, nicht vom Bau-Codex. Der Bau-Codex erfüllt ihn, definiert ihn nicht. Nur der Bau-Codex schreibt auf dem Branch; der Prüf-Codex liest und urteilt, er baut nichts. Keine zweite schreibende Codex-Sitzung auf demselben Branch.
+11. **Durchlauf statt Pingpong (U-224).**
+   - Vor jedem Commit und PR läuft die komplette lokal ausführbare Strecke von `quality` und `agentur-gate`: authority-gate (+selftest), delivery-contracts (+selftest), package-scope-selftest, live-regression-selftest, module-gates, h18 (+selftest), h16 (+selftest), no-fake-production (+selftest), f0-doc-truth, supabase-client-boundary, `npx tsc --noEmit --incremental false`, `npm run lint:full`, `npm run test:unit`. Alle Befunde werden **gesammelt** gemeldet, nie einzeln.
+   - **Selbst lösen, dokumentieren, weitermachen** bei rein mechanischen Befunden: Import-Pfade/Dateiorte nach Gate-Regeln, Testselektoren, Fixture-Felder, Lint-Formalien, Benennung, Ablage im Planungsordner — solange der Akzeptanztest bytegleich bleibt, kein Gate/Workflow/Hash/`tsconfig.json` geändert und kein Produktverhalten anders als im Paket gebaut wird.
+   - **Stoppen nur bei:** Änderung geschützter Checker/Workflows/Hashes/`tsconfig.json` über die freigegebene Liste hinaus; Lockern einer Regel; Inhalt eines Akzeptanztests; `createOrderIntake` oder bestehende Migrationen; fehlende Produktentscheidung; Merge/Deploy. Dann **alle** offenen Punkte in **einer** Meldung, je mit Empfehlung.
 
 ## B. Stand (geprüft vom Planungschat, 29.10. 16:40)
 - **Bereinigung H11–H16c erledigt** (Kopf 37b0c566, CI grün). Erledigt sind Rechte aus einer Quelle, „Der Tag“ ohne Absturz, keine Ersatzwerte bei Firmendaten und Zahlungsziel, eine Rechnungswahrheit, entfernter Müll, Wächter und das Datenregister.

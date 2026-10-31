@@ -74,7 +74,7 @@ export async function erfasseAuftragAusEingangAction(input: unknown): Promise<Er
 - Maßstab: Endversion-Prototyp (spec 403d1b31ad24), Screens `rein`/`anliegenwahl`/`eingang`. Farben V1.1, Größen V8, Touch ≥ 48 px, heller Hintergrund, wichtige Knöpfe farbig nach Dringlichkeit, keine doppelten Beschreibungen, „fehlt" statt Vorbelegung. Der HTML-Mock geht nicht an Codex.
 
 ## Gate
-- Akzeptanztest `AP-01-eingang-paket-persoenlich.acceptance.test.ts` unverändert nach `src/test/acceptance/`, SHA-256 in der Abgabe gleich dem Wert in `WORKQUEUE.json`.
+- Akzeptanztest liegt im Planungsordner als `AP-01-eingang-paket-persoenlich.acceptance.test.ts.txt` (Endung `.txt`, damit der globale Typecheck ihn am Planungsort nicht erfasst). Bytegleich kopieren nach `src/test/acceptance/AP-01-eingang-paket-persoenlich.acceptance.test.ts`; SHA-256 in der Abgabe gleich dem Wert in `WORKQUEUE.json`.
 - Grep-Gate wie oben; Modul-Gates grün; Scope-Gate B2 grün; quality, ratchet, Fresh-Supabase-Replay, agentur-gate grün.
 
 ## Abnahme (Owner-Klickweg ≤ 6 Schritte, Preview-Link des SHA in der Abgabe)
