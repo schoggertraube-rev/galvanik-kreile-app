@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "package": "B2-EINGANG-AP01-INFRA",
+  "headBranch": "codex/ta-b2b",
+  "mainBaseSha": "ac6c1d2a7eb652dc5e64219a24eed8d4065fbc4e",
+  "authorizedBy": "Siglinder",
+  "authorizedAt": "2026-10-31",
+  "scope": "H18-Inventar-Allowlist und Acceptance-Tests gegen Replay-DB"
+}

@@ -2,12 +2,23 @@ import { describe, expect, it } from "vitest";
 
 import {
   checkSalesStageB2ScopeForTest,
+  checkTaB2bScopeForTest,
   runSelftest,
 } from "../../scripts/quality/check-live-package-scope.mjs";
 
 const b2Mission = {
   active_block: "B2",
   branch: "kreile/b2-eingang",
+};
+
+const b2AnchorMission = {
+  ...b2Mission,
+  phase: "WRITING",
+  started_from_sha: "ae79c12fb6bea83b8ac68fa065af4671f4bf09b5",
+  desktop_due_at: "2026-11-08",
+  tablet_mobile_due_at: "2026-11-08",
+  handoff_path: "docs/delivery/ABGABE_B2.md",
+  next_block: "B3",
 };
 
 describe("Kreile live package scope", () => {
@@ -17,10 +28,36 @@ describe("Kreile live package scope", () => {
 
   it("accepts the narrow B2 branch allowlist", () => {
     expect(checkSalesStageB2ScopeForTest({
-      files: ["src/modules/eingang/index.ts", "docs/delivery/ABGABE_AP-01.md"],
+      files: [
+        "src/modules/eingang/index.ts",
+        "docs/delivery/ABGABE_AP-01.md",
+        "scripts/quality/h18-server-actions.json",
+      ],
       mission: b2Mission,
       branch: "kreile/b2-eingang",
     })).toEqual([]);
+  });
+
+  it("accepts only the TA-B2b anchor paths on the pinned main base", () => {
+    expect(checkTaB2bScopeForTest({
+      files: [
+        ".github/workflows/agentur-gate.yml",
+        "docs/project/arbeitspakete/TRUST_ANCHOR_B2B.md",
+        "docs/evidence/live-line/b2/TRUST_ANCHOR_B2B.json",
+      ],
+      mission: b2AnchorMission,
+      branch: "codex/ta-b2b",
+      baseSha: "ac6c1d2a7eb652dc5e64219a24eed8d4065fbc4e",
+    })).toEqual([]);
+  });
+
+  it("rejects AP-01's H18 inventory mutation from the TA-B2b anchor itself", () => {
+    expect(checkTaB2bScopeForTest({
+      files: ["scripts/quality/h18-server-actions.json"],
+      mission: b2AnchorMission,
+      branch: "codex/ta-b2b",
+      baseSha: "ac6c1d2a7eb652dc5e64219a24eed8d4065fbc4e",
+    })).toContain("TA_B2B_SCOPE:scripts/quality/h18-server-actions.json");
   });
 
   it("rejects paths outside B2 and the former B1 branch", () => {
