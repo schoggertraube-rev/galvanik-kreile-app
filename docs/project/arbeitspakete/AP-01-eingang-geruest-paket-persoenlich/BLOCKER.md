@@ -46,3 +46,13 @@ Vor dem Bau wird ein enges Trust-Anchor-/Paket-Amendment auf `main` freigegeben 
 Wesentlicher Nachteil: Das Amendment berührt einen geschützten Checker und den bestehenden Order-Command, bevor AP-01 gebaut werden kann. Ohne diese Korrektur wären grüne CI oder echte Atomarität nur durch Regelumgehung beziehungsweise eine zweite Wahrheit vortäuschbar.
 
 Nach Merge dieses Amendments muss AP-01 auf einem frischen Branch aus dem neuen `origin/main` neu begonnen werden. Der Planungscommit `215ced0da296bb729aa9ca8b8ef2242c1fccee98` ist dann nur Herkunftsnachweis und keine Produktbasis.
+
+## Auflösung durch den Planungschat — 31.10.2026 abends
+
+Alle drei Punkte sind berechtigt und wie folgt aufgelöst (AP-01 Fassung 2):
+
+1. **Paket-Scope:** Nicht im Paket umgehen, sondern regulär fortschreiben: Trust-Anchor **TA-B2** (`docs/project/arbeitspakete/TRUST_ANCHOR_B2.md`) stellt Mission und Scope-Gate von erledigtem B1 auf B2 (Branch `kreile/b2-eingang`, enge AP-01-Allowlist), Muster PR154-Anker, Merge durch die Owner, vor AP-01.
+2. **Action-Pfad:** Vertrag auf den gate-konformen Ort `src/app/actions/eingang.actions.ts` umgestellt. Akzeptanztest neu ausgegeben, Import `@/app/actions/eingang.actions`; neuer SHA-256 `F309FF84B59B1FC72AF6D41742A1FEBD99D599654605161BFA8F1A995BDBD7E0` (in WORKQUEUE.json).
+3. **Transaktion:** Die Forderung nach einer gemeinsamen Transaktion entfällt. Drei idempotente Schritte (intake_item per client_key → kanonischer createOrderIntake mit clientEventId = clientKey → Verknüpfung + Event). `createOrderIntake` bleibt **unverändert**; der vorgeschlagene interne Transaktions-Seam wird nicht gebaut.
+
+Zusätzlich: Migration korrigiert (`customers.id` ist `text`), per Probelauf gegen Dev in Transaktion mit ROLLBACK fehlerfrei belegt. Status: **aufgelöst**. AP-01 startet frisch auf `kreile/b2-eingang` nach dem Merge von TA-B2; dieser Branch (`kreile/s1-ap01-eingang`) ist nur Herkunftsnachweis.

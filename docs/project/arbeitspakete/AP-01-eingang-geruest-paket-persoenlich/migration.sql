@@ -19,7 +19,7 @@ CREATE TABLE public.intake_item (
   betreff text,
   text text,
   text_sprache text,
-  kunde_id uuid REFERENCES public.customers(id) ON DELETE RESTRICT,
+  kunde_id text REFERENCES public.customers(id) ON DELETE RESTRICT,  -- customers.id ist text (DB-Abgleich 31.10.)
   vorgang_art text,
   vorgang_id text,
   zuordnung text NOT NULL DEFAULT 'offen',

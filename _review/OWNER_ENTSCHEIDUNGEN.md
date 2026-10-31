@@ -5,6 +5,9 @@ Codex liest diese Datei vor jedem Paket und nach jedem Eintrag in OWNER_TODO.md.
 ## 30.10.2026 · U-222 Einmalige Rebaseline PR #154
 Entschieden (Owner 30.10.): PR #154 wird nach dem Retarget auf `main` einmalig als kumuliertes Rebaseline-Paket geprüft. Die Umfangsprüfung bleibt für alle Folge-PRs unverändert streng. Die ESLint-Basis wird als geprüfte Migration ohne Regelabschwächung und ohne Zunahme der Fehlerzahl aktualisiert. F1.4 läuft auf dem aktuellen Schema, ohne seinen Prüfinhalt abzuschwächen. Danach muss CI vollständig grün sein. Zusätzlich erhält „Rechnung ausstellen“ die vom Prüfchat verlangte sichtbare Erfolgsmeldung mit Replay-DB-Nachweis. Kein Merge.
 
+## 31.10.2026 · U-223 Eingang-Bauweg (vom Owner an den Planungschat delegiert)
+Owner 31.10.: „den besten und sichersten Weg, das muss heute noch sauber laufen." Entschieden vom Planungschat: Gate-Rahmen ist die Mission KREILE-VERKAUFSSTUFE-1 (löst Live-Plan V1 ab). Zuerst Trust-Anchor TA-B2 (Mission + Scope-Gate B1 → B2, enge Allowlist, Muster PR154), Merge durch die Owner; danach AP-01 Fassung 2 auf `kreile/b2-eingang`. WAS bleibt BAUPLAN F1 (spec 403d1b31ad24). `createOrderIntake` unverändert, kein Gate gelockert. Die Antwort „Live-Plan V1 nutzen" vom selben Tag beruhte auf einer falschen Prämisse des Planungschats und ist damit gegenstandslos.
+
 ## 30.10.2026 · U-220 Nicht härten, was die Endversion ersetzt
 Entschieden (Owner 30.10.): Codex testet und repariert nur Aktionen, die der Planungschat als stabiler Stufe-1-Kern bestätigt hat. Was eingefroren, Stub, ersetzt, Legacy-außerhalb-Stufe-1 oder Stufe-2 ist, bleibt unangetastet, bis die Endversion es neu schneidet. Kein Fix, der später ohnehin verworfen wird. Umgesetzt als Regel A9 in AKTUELLE_ANWEISUNG.md.
 

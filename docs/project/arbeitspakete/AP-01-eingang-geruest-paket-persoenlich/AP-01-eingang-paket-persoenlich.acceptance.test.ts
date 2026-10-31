@@ -42,7 +42,7 @@ const pool = {
   },
 };
 
-let eingang: typeof import("@/app/eingang/actions");
+let eingang: typeof import("@/app/actions/eingang.actions");
 let warendurchlauf: typeof import("@/app/warendurchlauf/actions");
 let bestandskundeId = "";
 
@@ -76,7 +76,7 @@ async function seedFixtures() {
 }
 
 beforeAll(async () => {
-  eingang = await import("@/app/eingang/actions");
+  eingang = await import("@/app/actions/eingang.actions");
   warendurchlauf = await import("@/app/warendurchlauf/actions");
   await seedFixtures();
 
@@ -155,18 +155,32 @@ describe("AP-01 Kanal Paket/persoenlich: getippt -> Auftrag (Bestandskunde)", ()
     expect(created.rows.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("ist idempotent ueber clientKey: zweiter Aufruf legt keine zweite Zeile an", async () => {
+  it("ist idempotent ueber clientKey: gleicher Auftrag, keine zweite Zeile", async () => {
     const clientKey = randomUUID();
     const first = await eingang.erfasseAuftragAusEingangAction(auftragInput(clientKey));
     expect(first.code).toBe("OK");
-    const second = await eingang.erfasseAuftragAusEingangAction(auftragInput(clientKey));
-    expect(["OK", "CONFLICT"]).toContain(second.code);
+    if (first.code !== "OK") return;
+    expect(first.replayed).toBe(false);
 
-    const rows = await pool.query(
+    const second = await eingang.erfasseAuftragAusEingangAction(auftragInput(clientKey));
+    expect(second.code).toBe("OK");
+    if (second.code !== "OK") return;
+    expect(second.replayed).toBe(true);
+    expect(second.orderNumber).toBe(first.orderNumber);
+    expect(second.intakeItemId).toBe(first.intakeItemId);
+
+    const items = await pool.query(
       `SELECT id FROM public.intake_item WHERE tenant_id=$1 AND client_key=$2`,
       [TENANT_A, clientKey],
     );
-    expect(rows.rows).toHaveLength(1);
+    expect(items.rows).toHaveLength(1);
+
+    const receipts = await pool.query(
+      `SELECT order_number FROM private.order_intake_receipts WHERE tenant_id=$1 AND client_event_id=$2`,
+      [TENANT_A, clientKey],
+    );
+    expect(receipts.rows).toHaveLength(1);
+    expect(receipts.rows[0]?.order_number).toBe(first.orderNumber);
   });
 
   it("verweigert ohne Recht 'eingang' (readonly) und schreibt nichts", async () => {
