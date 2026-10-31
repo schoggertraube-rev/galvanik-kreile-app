@@ -516,6 +516,17 @@ function validateSalesStagePlanText(planText, errors) {
   }
 }
 
+export function checkSalesStageMissionRoute(mission) {
+  const errors = [];
+  if (mission.active_block !== "B2" || mission.phase !== "WRITING" || mission.branch !== "kreile/b2-eingang") {
+    errors.push("MISSION_ACTIVE_BLOCK");
+  }
+  if (mission.handoff_path !== "docs/delivery/ABGABE_B2.md" || mission.next_block !== "B3") {
+    errors.push("MISSION_HANDOFF");
+  }
+  return errors;
+}
+
 function validateSalesStageRepository(root, errors) {
   const planFile = absolute(root, SALES_STAGE_PLAN_PATH);
   const missionFile = absolute(root, MISSION_PATH);
@@ -550,14 +561,9 @@ function validateSalesStageRepository(root, errors) {
       || mission.supersedes !== "docs/delivery/KREILE_LIVE_PLAN_V1.json;D-GOV-004") {
     errors.push("MISSION_PLAN_BINDING");
   }
-  if (mission.active_block !== "B1" || mission.phase !== "WRITING" || mission.branch !== "kreile/b1-shell") {
-    errors.push("MISSION_ACTIVE_BLOCK");
-  }
+  errors.push(...checkSalesStageMissionRoute(mission));
   if (mission.base_ref !== "origin/main" || !isSha(mission.started_from_sha)) errors.push("MISSION_BASE_REF");
   if (mission.writer_count !== "1" || mission.reviewer !== "INDEPENDENT_EXACT_SHA") errors.push("MISSION_REVIEW_SEPARATION");
-  if (mission.handoff_path !== "docs/delivery/AENDERUNGEN_B1.md" || mission.next_block !== "B2") {
-    errors.push("MISSION_HANDOFF");
-  }
   for (const key of ["merge_rule", "production_rule", "cost_rule"]) {
     if (mission[key] !== "OWNER_EXPLICIT_AUTHORITY_ONLY") errors.push(`MISSION_OWNER_RULE:${key}`);
   }

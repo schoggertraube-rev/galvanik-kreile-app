@@ -98,7 +98,19 @@ const POST_LIVE_CONTROL_PATTERNS = Object.freeze([
   "scripts/quality/check-live-package-scope.mjs",
   "scripts/quality/select-live-regression-specs.mjs",
 ]);
-const SALES_STAGE_B1_BRANCH = "kreile/b1-shell";
+const SALES_STAGE_B2_BRANCH = "kreile/b2-eingang";
+const TA_B2_BRANCH = "codex/ta-b2";
+const TA_B2_BASE_SHA = "ae79c12fb6bea83b8ac68fa065af4671f4bf09b5";
+const TA_B2_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR.json";
+const TA_B2_VALUES = Object.freeze({
+  schemaVersion: 1,
+  package: "B2-EINGANG-AP01",
+  headBranch: SALES_STAGE_B2_BRANCH,
+  mainBaseSha: TA_B2_BASE_SHA,
+  authorizedBy: "Siglinder",
+  authorizedAt: "2026-10-31",
+  scope: "AP-01 laut docs/project/arbeitspakete/WORKQUEUE.json",
+});
 const PR154_REBASELINE_BRANCH = "kreile/s1-p2-eingang";
 const PR154_REBASELINE_BASE_SHA = "1fa4920d6d06b02413c8c157ae6b739507105846";
 const PR154_REBASELINE_RECEIPT = "docs/evidence/live-line/pr154/REBASELINE.json";
@@ -129,14 +141,45 @@ const PR154_TRUST_ANCHOR_BASE_FILES = Object.freeze([
   ...PR154_TRUST_ANCHOR_PINNED_FILES,
   "quality/eslint-baseline.json",
 ]);
-const SALES_STAGE_B1_ALLOWLIST = Object.freeze([
-  "docs/delivery/AENDERUNGEN_B1.md",
-  "src/app/**",
-  "src/components/**",
-  "src/modules/werkstatt/**",
-  "src/proxy.ts",
+const TA_B2_ANCHOR_ALLOWLIST = Object.freeze([
+  "_review/AKTUELLE_ANWEISUNG.md",
+  "_review/MELDUNG_PLANUNGSCHAT.md",
+  "_review/OWNER_ENTSCHEIDUNGEN.md",
+  "docs/project/arbeitspakete/**",
+  TA_B2_RECEIPT,
+  MISSION_PATH,
+  "scripts/quality/check-delivery-contracts.mjs",
+  "scripts/quality/check-live-package-scope.mjs",
+  "src/test/delivery_contracts.test.ts",
+  "src/test/live_package_scope.test.ts",
+]);
+const TA_B2_REQUIRED_FILES = Object.freeze([
+  "docs/project/arbeitspakete/TRUST_ANCHOR_B2.md",
+  TA_B2_RECEIPT,
+  MISSION_PATH,
+  "scripts/quality/check-delivery-contracts.mjs",
+  "scripts/quality/check-live-package-scope.mjs",
+  "src/test/delivery_contracts.test.ts",
+  "src/test/live_package_scope.test.ts",
+]);
+const SALES_STAGE_B2_ALLOWLIST = Object.freeze([
+  "docs/delivery/ABGABE_B2.md",
+  "docs/delivery/ABGABE_AP-01.md",
+  "docs/project/arbeitspakete/**",
+  "docs/evidence/live-line/b2/**",
+  "src/modules/eingang/**",
+  "src/app/actions/eingang.actions.ts",
+  "src/app/GlobalCreateAppAdapter.tsx",
+  "src/app/layout.tsx",
+  "src/components/layout/GlobalCreateFlow.tsx",
+  "src/components/layout/globalCreateRequest.ts",
+  "src/lib/server/intakeDraft.ts",
+  "src/app/actions/intakeDraft.actions.ts",
+  "src/components/home/OfficeHome.tsx",
+  "src/lib/server/todayDashboard.ts",
   "src/test/**",
   "e2e/**",
+  "supabase/migrations/*_ap01_intake_item.sql",
 ]);
 
 const posix = (value) => value.replaceAll("\\", "/");
@@ -187,6 +230,18 @@ function parseFacts(text) {
 function changedFiles(root, base, head) {
   const output = git(root, ["diff", "--name-only", "--diff-filter=ACMRD", base, head]);
   return output ? output.split(/\r?\n/).map(posix) : [];
+}
+
+function changedEntries(root, base, head) {
+  const output = git(root, ["diff", "--name-status", "--diff-filter=ACMRD", base, head]);
+  if (!output) return [];
+  return output.split(/\r?\n/).map((line) => {
+    const [rawStatus, ...paths] = line.split("\t");
+    return {
+      status: rawStatus.slice(0, 1),
+      path: posix(paths.at(-1)),
+    };
+  });
 }
 
 function commitFiles(root, commit) {
@@ -260,19 +315,69 @@ function checkPr154Rebaseline(root, baseSha, originalBaseSha = PR154_REBASELINE_
   return errors;
 }
 
-function checkSalesStageB1Scope(files, mission, branch) {
+function checkTaB2Anchor(root, files, mission, branch, baseSha) {
   const errors = [];
-  if (branch !== SALES_STAGE_B1_BRANCH) errors.push(`SALES_STAGE_BRANCH_INVALID:${branch}`);
-  if (mission.active_block !== "B1" || mission.branch !== SALES_STAGE_B1_BRANCH) {
+  if (branch !== TA_B2_BRANCH) errors.push(`TA_B2_BRANCH_INVALID:${branch}`);
+  if (baseSha !== TA_B2_BASE_SHA) errors.push(`TA_B2_BASE_INVALID:${baseSha}:${TA_B2_BASE_SHA}`);
+  for (const rel of files) {
+    if (!covered(rel, TA_B2_ANCHOR_ALLOWLIST)) errors.push(`TA_B2_SCOPE:${rel}`);
+  }
+  for (const rel of TA_B2_REQUIRED_FILES) {
+    if (!files.includes(rel)) errors.push(`TA_B2_REQUIRED_FILE_MISSING:${rel}`);
+  }
+  if (mission.active_block !== "B2" || mission.phase !== "WRITING" || mission.branch !== SALES_STAGE_B2_BRANCH
+      || mission.started_from_sha !== TA_B2_BASE_SHA || mission.desktop_due_at !== "2026-11-08"
+      || mission.tablet_mobile_due_at !== "2026-11-08" || mission.handoff_path !== "docs/delivery/ABGABE_B2.md"
+      || mission.next_block !== "B3") {
+    errors.push("TA_B2_MISSION_INVALID");
+  }
+  let receipt;
+  try {
+    receipt = JSON.parse(readFileSync(path.join(root, TA_B2_RECEIPT), "utf8"));
+  } catch {
+    errors.push("TA_B2_RECEIPT_UNREADABLE");
+    return errors;
+  }
+  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2_VALUES).sort())) {
+    errors.push("TA_B2_RECEIPT_SCHEMA");
+  }
+  for (const [key, value] of Object.entries(TA_B2_VALUES)) {
+    if (receipt[key] !== value) errors.push(`TA_B2_RECEIPT_VALUE:${key}`);
+  }
+  return errors;
+}
+
+function checkSalesStageB2Scope(files, entries, mission, branch) {
+  const errors = [];
+  if (branch !== SALES_STAGE_B2_BRANCH) errors.push(`SALES_STAGE_BRANCH_INVALID:${branch}`);
+  if (mission.active_block !== "B2" || mission.branch !== SALES_STAGE_B2_BRANCH) {
     errors.push("SALES_STAGE_MISSION_MISMATCH");
   }
   for (const rel of files) {
-    if (!covered(rel, SALES_STAGE_B1_ALLOWLIST)) errors.push(`SALES_STAGE_B1_SCOPE:${rel}`);
+    if (!covered(rel, SALES_STAGE_B2_ALLOWLIST)) errors.push(`SALES_STAGE_B2_SCOPE:${rel}`);
   }
-  if (files.some((rel) => rel.startsWith("supabase/migrations/") || rel.startsWith("src/db/"))) {
-    errors.push("SALES_STAGE_B1_DATA_MODEL_FORBIDDEN");
+  const migrations = entries.filter((entry) => entry.path.startsWith("supabase/migrations/"));
+  if (migrations.length > 1) errors.push(`SALES_STAGE_B2_MIGRATION_COUNT:${migrations.length}`);
+  for (const entry of migrations) {
+    if (entry.status !== "A") errors.push(`SALES_STAGE_B2_MIGRATION_NOT_NEW:${entry.path}`);
+    if (!/^supabase\/migrations\/\d{14}_ap01_intake_item\.sql$/.test(entry.path)) {
+      errors.push(`SALES_STAGE_B2_MIGRATION_INVALID:${entry.path}`);
+    }
   }
+  if (files.some((rel) => rel.startsWith("src/db/"))) errors.push("SALES_STAGE_B2_DATA_MODEL_FORBIDDEN");
   return errors;
+}
+
+/**
+ * @param {{
+ *   files: string[],
+ *   entries?: Array<{status: string, path: string}>,
+ *   mission: {active_block?: string, branch?: string},
+ *   branch: string,
+ * }} input
+ */
+export function checkSalesStageB2ScopeForTest({ files, entries = [], mission, branch }) {
+  return checkSalesStageB2Scope(files, entries, mission, branch);
 }
 
 function checkActivation(files, baseSha, plan) {
@@ -570,7 +675,11 @@ export function checkLivePackageScope({ root, base, head, branch }) {
   if (candidateMission.mission_id === "KREILE-VERKAUFSSTUFE-1") {
     const baseSha = resolved(root, base);
     if (branch === PR154_REBASELINE_BRANCH) return checkPr154Rebaseline(root, baseSha);
-    return checkSalesStageB1Scope(files, candidateMission, branch);
+    if (branch === TA_B2_BRANCH) return checkTaB2Anchor(root, files, candidateMission, branch, baseSha);
+    if (candidateMission.active_block !== "B2") {
+      return [`SALES_STAGE_ACTIVE_BLOCK_INVALID:${candidateMission.active_block}`];
+    }
+    return checkSalesStageB2Scope(files, changedEntries(root, base, head), candidateMission, branch);
   }
   try {
     const baseMission = parseMission(gitFile(root, base, MISSION_PATH));
@@ -889,16 +998,55 @@ function selftestGateToBuildAmendment(fixture, plan, item) {
 export function runSelftest(root = process.cwd()) {
   if (!covered("src/modules/orders/server/get.ts", ["src/modules/orders/**"])) throw new Error("glob positive failed");
   if (covered("src/modules/customers/server/get.ts", ["src/modules/orders/**"])) throw new Error("glob negative failed");
-  const salesStageMission = { active_block: "B1", branch: SALES_STAGE_B1_BRANCH };
-  const validSalesStage = checkSalesStageB1Scope(
-    ["src/app/start/page.tsx", "src/test/shell.test.ts", "docs/delivery/AENDERUNGEN_B1.md"],
+  const salesStageMission = { active_block: "B2", branch: SALES_STAGE_B2_BRANCH };
+  const migrationA = "supabase/migrations/20261102080000_ap01_intake_item.sql";
+  const validSalesStage = checkSalesStageB2Scope(
+    ["src/modules/eingang/index.ts", "src/test/eingang.test.ts", "docs/delivery/ABGABE_B2.md", migrationA],
+    [{ status: "A", path: migrationA }],
     salesStageMission,
-    SALES_STAGE_B1_BRANCH,
+    SALES_STAGE_B2_BRANCH,
   );
-  if (validSalesStage.length > 0) throw new Error(`valid sales-stage B1 scope rejected: ${validSalesStage.join(" | ")}`);
+  if (validSalesStage.length > 0) throw new Error(`valid sales-stage B2 scope rejected: ${validSalesStage.join(" | ")}`);
+  const outsideErrors = checkSalesStageB2Scope(
+    ["src/modules/orders/server/get.ts"],
+    [],
+    salesStageMission,
+    SALES_STAGE_B2_BRANCH,
+  );
+  if (!outsideErrors.includes("SALES_STAGE_B2_SCOPE:src/modules/orders/server/get.ts")) {
+    throw new Error(`out-of-scope B2 path accepted: ${outsideErrors.join(" | ")}`);
+  }
+  const secondMigration = "supabase/migrations/20261102080100_ap01_intake_item.sql";
+  const twoMigrationErrors = checkSalesStageB2Scope(
+    [migrationA, secondMigration],
+    [{ status: "A", path: migrationA }, { status: "A", path: secondMigration }],
+    salesStageMission,
+    SALES_STAGE_B2_BRANCH,
+  );
+  if (!twoMigrationErrors.includes("SALES_STAGE_B2_MIGRATION_COUNT:2")) {
+    throw new Error(`second B2 migration accepted: ${twoMigrationErrors.join(" | ")}`);
+  }
+  const changedMigrationErrors = checkSalesStageB2Scope(
+    [migrationA],
+    [{ status: "M", path: migrationA }],
+    salesStageMission,
+    SALES_STAGE_B2_BRANCH,
+  );
+  if (!changedMigrationErrors.includes(`SALES_STAGE_B2_MIGRATION_NOT_NEW:${migrationA}`)) {
+    throw new Error(`changed B2 migration accepted: ${changedMigrationErrors.join(" | ")}`);
+  }
+  const b1BranchErrors = checkSalesStageB2Scope(
+    ["src/modules/eingang/index.ts"],
+    [],
+    salesStageMission,
+    "kreile/b1-shell",
+  );
+  if (!b1BranchErrors.includes("SALES_STAGE_BRANCH_INVALID:kreile/b1-shell")) {
+    throw new Error(`B1 branch accepted for new work: ${b1BranchErrors.join(" | ")}`);
+  }
   for (const protectedFile of ["AGENTS.md", "missions/F1_ORDER_TO_CASH_PILOT_001.yml", "scripts/quality/check-delivery-contracts.mjs"]) {
-    const protectedErrors = checkSalesStageB1Scope([protectedFile], salesStageMission, SALES_STAGE_B1_BRANCH);
-    if (!protectedErrors.includes(`SALES_STAGE_B1_SCOPE:${protectedFile}`)) {
+    const protectedErrors = checkSalesStageB2Scope([protectedFile], [], salesStageMission, SALES_STAGE_B2_BRANCH);
+    if (!protectedErrors.includes(`SALES_STAGE_B2_SCOPE:${protectedFile}`)) {
       throw new Error(`sales-stage governance mutation accepted: ${protectedFile}`);
     }
   }

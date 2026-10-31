@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "package": "B2-EINGANG-AP01",
+  "headBranch": "kreile/b2-eingang",
+  "mainBaseSha": "ae79c12fb6bea83b8ac68fa065af4671f4bf09b5",
+  "authorizedBy": "Siglinder",
+  "authorizedAt": "2026-10-31",
+  "scope": "AP-01 laut docs/project/arbeitspakete/WORKQUEUE.json"
+}

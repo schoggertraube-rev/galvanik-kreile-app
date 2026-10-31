@@ -20,7 +20,7 @@ Diese Datei **ersetzt alle früheren Fassungen**. Das Archiv `_review/archiv/AKT
    - Keine Umschreibungen, die einen Wächter austricksen.
 6. **Scheitern.** Scheitert ein Unterpunkt fachlich nach einem Fixversuch, wird er zurückgenommen, `RUECKFRAGEN_<Nr>.md` geschrieben und der nächste Unterpunkt begonnen. Mechanische Folgearbeit zählt nicht als Fixversuch: Lint-Umbenennung, Fixture-Feld, Manifest, Testselektor. Bei einem Werkzeug-Timeout entscheidet CI.
 7. **Grenzen.**
-   - Nur Branch `kreile/s1-p2-eingang` bis zum Merge von #154 durch die Owner.
+   - Branch nach Mission: Anker TA-B2 auf `codex/ta-b2`, danach AP-01 auf `kreile/b2-eingang` (#154 ist erledigt).
    - Kein Merge und kein Production-Deploy durch Codex.
    - Nichts löschen, keine Secrets, keine alte Migration ändern.
    - Dev-DB-Migrationen nur additiv; danach belegen, dass die Migrationsliste der DB gleich dem Repo ist.
@@ -29,6 +29,10 @@ Diese Datei **ersetzt alle früheren Fassungen**. Das Archiv `_review/archiv/AKT
 8. **Eingang eingefroren.** Nichts am Eingang bauen oder reparieren, bis dazu Arbeitspakete mit Status `bereit` vorliegen.
 9. **Nicht härten, was die Endversion ersetzt (U-220).** Codex testet und repariert nur Aktionen, die der Planungschat als stabiler Stufe-1-Kern bestätigt hat. Alles, was auf der Ausnahmeliste als eingefroren, Stub, ersetzt, Legacy-außerhalb-Stufe-1 oder Stufe-2 steht, bleibt unangetastet und wird erst gebaut und getestet, wenn die Endversion es neu schneidet. Im Zweifel: nicht anfassen, als Frage an den Planungschat.
 10. **Test schreibt nicht, wer den Code schrieb (U-221).** Der Abnahmefall je Fix (Eingaben → Soll-Zeile in der DB → Soll-Ansicht) wird vom lesenden Prüf-/Red-Team-Codex und vom Planungschat vorgegeben, nicht vom Bau-Codex. Der Bau-Codex erfüllt ihn, definiert ihn nicht. Nur der Bau-Codex schreibt auf dem Branch; der Prüf-Codex liest und urteilt, er baut nichts. Keine zweite schreibende Codex-Sitzung auf demselben Branch.
+11. **Durchlauf statt Pingpong (U-224).**
+   - Vor jedem Commit und PR läuft die komplette lokal ausführbare Strecke von `quality` und `agentur-gate`: authority-gate (+selftest), delivery-contracts (+selftest), package-scope-selftest, live-regression-selftest, module-gates, h18 (+selftest), h16 (+selftest), no-fake-production (+selftest), f0-doc-truth, supabase-client-boundary, `npx tsc --noEmit --incremental false`, `npm run lint:full`, `npm run test:unit`. Alle Befunde werden **gesammelt** gemeldet, nie einzeln.
+   - **Selbst lösen, dokumentieren, weitermachen** bei rein mechanischen Befunden: Import-Pfade/Dateiorte nach Gate-Regeln, Testselektoren, Fixture-Felder, Lint-Formalien, Benennung, Ablage im Planungsordner — solange der Akzeptanztest bytegleich bleibt, kein Gate/Workflow/Hash/`tsconfig.json` geändert und kein Produktverhalten anders als im Paket gebaut wird.
+   - **Stoppen nur bei:** Änderung geschützter Checker/Workflows/Hashes/`tsconfig.json` über die freigegebene Liste hinaus; Lockern einer Regel; Inhalt eines Akzeptanztests; `createOrderIntake` oder bestehende Migrationen; fehlende Produktentscheidung; Merge/Deploy. Dann **alle** offenen Punkte in **einer** Meldung, je mit Empfehlung.
 
 ## B. Stand (geprüft vom Planungschat, 29.10. 16:40)
 - **Bereinigung H11–H16c erledigt** (Kopf 37b0c566, CI grün). Erledigt sind Rechte aus einer Quelle, „Der Tag“ ohne Absturz, keine Ersatzwerte bei Firmendaten und Zahlungsziel, eine Rechnungswahrheit, entfernter Müll, Wächter und das Datenregister.
@@ -36,8 +40,13 @@ Diese Datei **ersetzt alle früheren Fassungen**. Das Archiv `_review/archiv/AKT
 - Mail-Versand: Graph sendet zwar, die Zustellung scheitert aber (Rückläufer). Das wird mit dem Mail-Kanal im Eingang geklärt, nicht jetzt.
 
 ## C. Warteschlange (nur offene Punkte, in dieser Reihenfolge)
-**WÄCHTER-HALT (30.10. 10:30 UTC):** DRIFT: Halt von 08:30 missachtet. Nach 8dfdbee7 (Trust-Anchor-Hash in eslint-ratchet.yml weitergerückt) und 0caa588a (Login-Smoke angepasst) ist CI weiter rot (Quality 41035522158, ESLint Ratchet 41035520010), trotzdem kein A6; stattdessen weiterer Wächter-Umbau gestaged (check-authoritative-sources/check-delivery-contracts umgeschrieben, AUTHORITY_CHECKER_SHA256 und judgeContractHash erneut nachgezogen). Regel A6 jetzt: Staging verwerfen, 8dfdbee7 und 0caa588a zurücknehmen, `RUECKFRAGEN_PR154_REBASELINE.md` schreiben, keine Änderung an Workflows, Prüfskripten oder Hashes bis Owner-Entscheid.
-**PLANUNGSCHAT 30.10. 06:45:** CI-Rot nach Retarget ist kein Produktfehler, sondern drei Alt-Gates, die den kumulierten Stapel gegen main messen (Scope-Gate B1, ESLint-Ratchet-Basis von main, F1.4-Replay auf altem Zwischenschema ohne app_user_rights). Owner-Entscheid ist angefragt. Bis dahin: RUECKFRAGEN_H18_8.md ist damit erledigt, keine weiteren CI-Versuche.
+**PRÜFER 31.10. 11:55: C1/C2 ERLEDIGT.** #154 auf main gemergt (Kopf ae79c12f). Pflicht-Checks quality+agentur-gate grün, dazu Fresh-Supabase-Replay und h16-schema grün. Guards nicht aufgeweicht: ESLint-Baseline weiter 0 Fehler, Ratchet-Vertrag regulär neu signiert, neue Prüfskripte dazu. Dev-DB 65/65 = Repo, additiv. Rebaseline fasste nur Rechnung/Auftragskarte an, NICHT den Eingang. Smoke auf main grün (Login, Storno, Auftrag öffnen). Hinweis: #154 = „P2 Eingang", daher liegt jetzt auch der alte, zu ersetzende Eingang auf main (geparkt, nicht neu gebaut). Nächster und einziger kritischer Pfad: Owner gibt F1 (Eingang) in der Endversion-Vorschau frei -> dann Arbeitspakete -> Neubau Eingang mit Ersetzt-Liste. Bis dahin baut Codex nichts (kein WORKQUEUE bereit, korrekt).
+
+### C-Eingang · Stand 31.10. abends (verbindlich)
+**Weg (Owner hat dem Planungschat den sichersten Weg ueberlassen, U-223):** Mission KREILE-VERKAUFSSTUFE-1 ist der gueltige Gate-Rahmen (sie loest den Live-Plan V1 ab; die Rueckfrage 'Live-Plan V1' beruhte auf einem Irrtum des Planungschats). B1 ist erledigt, die Gates stehen aber noch auf B1. Reihenfolge:
+1. **TA-B2** (docs/project/arbeitspakete/TRUST_ANCHOR_B2.md): Mission und Scope-Gate von B1 auf B2, Branch kreile/b2-eingang, enge Allowlist fuer AP-01, nach Muster PR154-Anker. Owner merged.
+2. **AP-01 Fassung 2** (Eingang-Modul + Kanal Paket/persoenlich, getippt -> Auftrag) auf kreile/b2-eingang: korrigiert nach BLOCKER.md (Action src/app/actions/eingang.actions.ts; drei idempotente Schritte statt Einzel-Transaktion; createOrderIntake unveraendert). Migration per Probelauf gegen Dev belegt (ROLLBACK, keine Rueckstaende). Akzeptanztest-SHA in WORKQUEUE.json.
+WAS bleibt BAUPLAN F1 (spec 403d1b31ad24). Kein zweiter Erfassungsweg, kein zweiter Auftrags-Schreibweg, kein Gate gelockert.
 
 ### C1a · H18-Nachtrag – Prüfer-Funktionstest 29.10. 17:25 (jetzt, vor allem anderen)
 
