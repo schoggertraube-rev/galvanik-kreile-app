@@ -1,0 +1,17 @@
+{
+  "format": "U-218",
+  "hinweis": "Einzige Liste der Bau-Arbeitspakete ab dem Eingang. Codex baut nur Pakete mit status=bereit, in der Reihenfolge des Feldes reihenfolge. Die Bereinigung H11-H17 lief ueber _review/AKTUELLE_ANWEISUNG.md und ist abgeschlossen (Basis auf main, ae79c12f).",
+  "kanalreihenfolge": "U-215: Paket/persoenlich -> Mail/E-Rechnung -> OCR -> Eingangsrechnungen -> Telefon",
+  "pakete": [
+    {
+      "nr": "AP-01",
+      "ordner": "AP-01-eingang-geruest-paket-persoenlich",
+      "titel": "Eingang-Modulgeruest + Kanal Paket/persoenlich (getippt -> Auftrag/KV)",
+      "reihenfolge": 1,
+      "status": "bereit",
+      "enthaelt": ["PAKET.md", "migration.sql", "AP-01-eingang-paket-persoenlich.acceptance.test.ts", "fixtures/"],
+      "bereit_seit": "2026-10-31",
+      "spec": "403d1b31ad24"
+    }
+  ]
+}
