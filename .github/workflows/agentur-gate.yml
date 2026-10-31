@@ -94,6 +94,13 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ""
         run: npx vitest run src/test/h18_settings_actions.integration.test.ts src/test/h18_settings_client.integration.test.tsx src/test/h18_invoice_actions.integration.test.ts src/test/h18_quote_actions.integration.test.ts src/test/h18_customer_actions.integration.test.ts src/test/h18_workshop_actions.integration.test.ts src/test/h18_masterdata_actions.integration.test.ts src/test/h18_order_admin_actions.integration.test.ts --maxWorkers=1 --no-file-parallelism
 
+      - name: Acceptance tests against replay DB (all packages)
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          H18_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          SUPABASE_SERVICE_ROLE_KEY: ""
+        run: npx vitest run src/test/acceptance/ --passWithNoTests --maxWorkers=1 --no-file-parallelism
+
       - name: Stop local database
         if: always()
         run: ./node_modules/.bin/supabase stop --no-backup

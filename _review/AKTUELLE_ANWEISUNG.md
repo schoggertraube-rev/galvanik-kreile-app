@@ -42,7 +42,12 @@ Diese Datei **ersetzt alle früheren Fassungen**. Das Archiv `_review/archiv/AKT
 ## C. Warteschlange (nur offene Punkte, in dieser Reihenfolge)
 **PRÜFER 31.10. 11:55: C1/C2 ERLEDIGT.** #154 auf main gemergt (Kopf ae79c12f). Pflicht-Checks quality+agentur-gate grün, dazu Fresh-Supabase-Replay und h16-schema grün. Guards nicht aufgeweicht: ESLint-Baseline weiter 0 Fehler, Ratchet-Vertrag regulär neu signiert, neue Prüfskripte dazu. Dev-DB 65/65 = Repo, additiv. Rebaseline fasste nur Rechnung/Auftragskarte an, NICHT den Eingang. Smoke auf main grün (Login, Storno, Auftrag öffnen). Hinweis: #154 = „P2 Eingang", daher liegt jetzt auch der alte, zu ersetzende Eingang auf main (geparkt, nicht neu gebaut). Nächster und einziger kritischer Pfad: Owner gibt F1 (Eingang) in der Endversion-Vorschau frei -> dann Arbeitspakete -> Neubau Eingang mit Ersetzt-Liste. Bis dahin baut Codex nichts (kein WORKQUEUE bereit, korrekt).
 
-### C-Eingang · Stand 31.10. abends (verbindlich)
+### C-Eingang · Stand 31.10. 22 Uhr (verbindlich, ersetzt die Reihenfolge darunter)
+1. TA-B2 erledigt: #156 gemergt, main ac6c1d2a vollständig grün.
+2. **TA-B2b** (`docs/project/arbeitspakete/TRUST_ANCHOR_B2B.md`): H18-Inventar in die B2-Allowlist + dauerhafter CI-Schritt „Acceptance tests against replay DB". Owner merged.
+3. **AP-01 Fassung 3** auf `kreile/b2-eingang`: Akzeptanztest neu im H18-Harness (`ap01_eingang_paket_persoenlich.integration.test.ts`), zugleich H18-Nachweis; Kunden-Typ `customerId` wie `OrderIntakeCustomerInput`. Werte in WORKQUEUE.json.
+
+### C-Eingang · Stand 31.10. abends
 **Weg (Owner hat dem Planungschat den sichersten Weg ueberlassen, U-223):** Mission KREILE-VERKAUFSSTUFE-1 ist der gueltige Gate-Rahmen (sie loest den Live-Plan V1 ab; die Rueckfrage 'Live-Plan V1' beruhte auf einem Irrtum des Planungschats). B1 ist erledigt, die Gates stehen aber noch auf B1. Reihenfolge:
 1. **TA-B2** (docs/project/arbeitspakete/TRUST_ANCHOR_B2.md): Mission und Scope-Gate von B1 auf B2, Branch kreile/b2-eingang, enge Allowlist fuer AP-01, nach Muster PR154-Anker. Owner merged.
 2. **AP-01 Fassung 2** (Eingang-Modul + Kanal Paket/persoenlich, getippt -> Auftrag) auf kreile/b2-eingang: korrigiert nach BLOCKER.md (Action src/app/actions/eingang.actions.ts; drei idempotente Schritte statt Einzel-Transaktion; createOrderIntake unveraendert). Migration per Probelauf gegen Dev belegt (ROLLBACK, keine Rueckstaende). Akzeptanztest-SHA in WORKQUEUE.json.

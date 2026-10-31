@@ -1,7 +1,6 @@
 {
   "format": "U-218",
-  "hinweis": "Einzige Liste der Bau-Arbeitspakete ab dem Eingang. Codex baut nur Pakete mit status=bereit, in der Reihenfolge des Feldes reihenfolge. Gate-Rahmen: Mission KREILE-VERKAUFSSTUFE-1 (missions/F1_ORDER_TO_CASH_PILOT_001.yml), Block B2. Der Live-Plan V1 ist durch diese Mission abgeloest und kein Bauweg.",
-  "korrektur_2026-10-31": "Die Rueckziehung von 15:xx war ein Irrtum des Planungschats (Live-Plan V1 ist laut Mission abgeloest). AP-01 gilt wieder, Fassung 2 nach BLOCKER.md korrigiert.",
+  "hinweis": "Einzige Liste der Bau-Arbeitspakete ab dem Eingang. Codex baut nur Pakete mit status=bereit, in der Reihenfolge des Feldes reihenfolge. Gate-Rahmen: Mission KREILE-VERKAUFSSTUFE-1, Block B2. Der Live-Plan V1 ist durch diese Mission abgeloest und kein Bauweg.",
   "kanalreihenfolge": "U-215: Paket/persoenlich -> Mail/E-Rechnung -> OCR -> Eingangsrechnungen -> Telefon",
   "pakete": [
     {
@@ -9,24 +8,35 @@
       "datei": "TRUST_ANCHOR_B2.md",
       "titel": "Trust-Anchor: Mission und Scope-Gate von B1 auf B2",
       "reihenfolge": 0,
+      "status": "abgenommen",
+      "nachweis": "PR #156, main ac6c1d2a, main-Lauf vollstaendig gruen (Planungschat 31.10.)"
+    },
+    {
+      "nr": "TA-B2b",
+      "datei": "TRUST_ANCHOR_B2B.md",
+      "titel": "Trust-Anchor: H18-Inventar in B2-Allowlist + Akzeptanztests laufen in CI",
+      "reihenfolge": 1,
       "status": "bereit",
+      "branch": "codex/ta-b2b",
       "merge": "Owner, vor AP-01"
     },
     {
       "nr": "AP-01",
       "ordner": "AP-01-eingang-geruest-paket-persoenlich",
       "titel": "Eingang-Modul + Kanal Paket/persoenlich (getippt -> Auftrag)",
-      "reihenfolge": 1,
+      "reihenfolge": 2,
       "status": "bereit",
-      "voraussetzung": "TA-B2 auf main gemergt",
-      "branch": "kreile/b2-eingang",
-      "fassung": 2,
-      "acceptance_test_quelle": "AP-01-eingang-geruest-paket-persoenlich/AP-01-eingang-paket-persoenlich.acceptance.test.ts.txt",
-      "acceptance_test_ziel": "src/test/acceptance/AP-01-eingang-paket-persoenlich.acceptance.test.ts",
-      "acceptance_test_sha256": "F309FF84B59B1FC72AF6D41742A1FEBD99D599654605161BFA8F1A995BDBD7E0",
+      "voraussetzung": "TA-B2b auf main gemergt und main gruen",
+      "branch": "kreile/b2-eingang (frisch von main nach TA-B2b)",
+      "fassung": 3,
+      "acceptance_test_quelle": "AP-01-eingang-geruest-paket-persoenlich/ap01_eingang_paket_persoenlich.integration.test.ts.txt",
+      "acceptance_test_ziel": "src/test/acceptance/ap01_eingang_paket_persoenlich.integration.test.ts",
+      "acceptance_test_sha256": "BE54C2C5FD0F7B6EF707D8B81B00F542732395FE7AC6695EA86DB8E26627E48E",
+      "acceptance_test_ist_h18_nachweis": true,
       "migration_sha256": "308A6A1548E67147AD549923BF4C8B9C840B969A05B3447AD4A4BBBE388912B9",
       "migration_probelauf": "2026-10-31 gegen Dev-DB in Transaktion mit ROLLBACK fehlerfrei; keine Rueckstaende",
-      "spec": "403d1b31ad24"
+      "typecheck_probelauf": "2026-10-31 Planungschat: einziger Fehler im Test = noch fehlende Action (erwartet); Kundenanlage, Sitzung, Fixture typensauber",
+        "spec": "5ac4d4b5ea34"
     }
   ]
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   checkSalesStageB2ScopeForTest,
+  checkTaB2bScopeForTest,
   runSelftest,
 } from "../../scripts/quality/check-live-package-scope.mjs";
 
@@ -10,17 +11,97 @@ const b2Mission = {
   branch: "kreile/b2-eingang",
 };
 
+const b2AnchorMission = {
+  ...b2Mission,
+  phase: "WRITING",
+  started_from_sha: "ae79c12fb6bea83b8ac68fa065af4671f4bf09b5",
+  desktop_due_at: "2026-11-08",
+  tablet_mobile_due_at: "2026-11-08",
+  handoff_path: "docs/delivery/ABGABE_B2.md",
+  next_block: "B3",
+};
+
+const ap01ExactPaths = [
+  "docs/delivery/ABGABE_AP-01.md",
+  "docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json",
+  "e2e/f1-4-immutable-invoice.real.spec.ts",
+  "e2e/path1-ui-convergence-v5-global-create.spec.ts",
+  "e2e/path1-ui-convergence-v5-p3.real.spec.ts",
+  "scripts/quality/h18-server-actions.json",
+  "src/app/GlobalCreateAppAdapter.tsx",
+  "src/app/actions/eingang.actions.ts",
+  "src/app/actions/intakeDraft.actions.ts",
+  "src/app/orders/OrdersAppAdapter.tsx",
+  "src/app/warendurchlauf/__tests__/w2cB2m5j.unavailable.realRender.test.tsx",
+  "src/components/home/OfficeHome.tsx",
+  "src/components/home/OfficeHomeClient.tsx",
+  "src/components/home/__tests__/RolfHome.realRender.test.tsx",
+  "src/components/layout/GlobalCreateFlow.tsx",
+  "src/components/layout/KreileHeader.tsx",
+  "src/components/layout/MoreMenu.tsx",
+  "src/components/layout/TargetShell.module.css",
+  "src/components/layout/__tests__/path1GlobalCreateFlow.realRender.test.tsx",
+  "src/components/layout/__tests__/w2cHeaderTruth.realRender.test.tsx",
+  "src/components/layout/globalCreateRequest.ts",
+  "src/lib/auth/authorizationContract.ts",
+  "src/lib/server/intakeDraft.ts",
+  "src/lib/server/todayDashboard.ts",
+  "src/modules/fundament/featureCatalog.ts",
+  "src/modules/suche/ui/SearchDialog.tsx",
+  "src/modules/werkstatt/ui/WerkstattView.singleProjection.test.tsx",
+  "src/modules/werkstatt/ui/WerkstattView.tsx",
+  "src/test/acceptance/ap01_eingang_paket_persoenlich.integration.test.ts",
+  "src/ui/kr/AppShell.tsx",
+  "src/ui/kr/GlobalesPlus.tsx",
+  "supabase/migrations/20261031212320_ap01_intake_item.sql",
+] as const;
+
 describe("Kreile live package scope", () => {
   it("keeps the PR154 contract green while proving the B2 scope contract", () => {
     expect(runSelftest()).toBe(true);
   }, 60_000);
 
-  it("accepts the narrow B2 branch allowlist", () => {
+  it("accepts the complete AP-01 diff and every exact B2 path individually", () => {
     expect(checkSalesStageB2ScopeForTest({
-      files: ["src/modules/eingang/index.ts", "docs/delivery/ABGABE_AP-01.md"],
+      files: [
+        "src/modules/eingang/index.ts",
+        ...ap01ExactPaths,
+      ],
+      entries: [{ status: "A", path: "supabase/migrations/20261031212320_ap01_intake_item.sql" }],
       mission: b2Mission,
       branch: "kreile/b2-eingang",
     })).toEqual([]);
+    for (const file of ap01ExactPaths) {
+      expect(checkSalesStageB2ScopeForTest({
+        files: [file],
+        entries: file.startsWith("supabase/migrations/") ? [{ status: "A", path: file }] : [],
+        mission: b2Mission,
+        branch: "kreile/b2-eingang",
+      }), file).toEqual([]);
+    }
+  });
+
+  it("accepts only the TA-B2b anchor paths on the pinned main base", () => {
+    expect(checkTaB2bScopeForTest({
+      files: [
+        ".github/workflows/agentur-gate.yml",
+        "docs/project/arbeitspakete/TRUST_ANCHOR_B2B.md",
+        "docs/project/endversion/codex/BAUPLAN.json",
+        "docs/evidence/live-line/b2/TRUST_ANCHOR_B2B.json",
+      ],
+      mission: b2AnchorMission,
+      branch: "codex/ta-b2b",
+      baseSha: "ac6c1d2a7eb652dc5e64219a24eed8d4065fbc4e",
+    })).toEqual([]);
+  });
+
+  it("rejects AP-01's H18 inventory mutation from the TA-B2b anchor itself", () => {
+    expect(checkTaB2bScopeForTest({
+      files: ["scripts/quality/h18-server-actions.json"],
+      mission: b2AnchorMission,
+      branch: "codex/ta-b2b",
+      baseSha: "ac6c1d2a7eb652dc5e64219a24eed8d4065fbc4e",
+    })).toContain("TA_B2B_SCOPE:scripts/quality/h18-server-actions.json");
   });
 
   it("rejects paths outside B2 and the former B1 branch", () => {
@@ -35,7 +116,7 @@ describe("Kreile live package scope", () => {
   });
 
   it("rejects a second or changed AP-01 migration", () => {
-    const first = "supabase/migrations/20261102080000_ap01_intake_item.sql";
+    const first = "supabase/migrations/20261031212320_ap01_intake_item.sql";
     const second = "supabase/migrations/20261102080100_ap01_intake_item.sql";
     expect(checkSalesStageB2ScopeForTest({
       files: [first, second],
