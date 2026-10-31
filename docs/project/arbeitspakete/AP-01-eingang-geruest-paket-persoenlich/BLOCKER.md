@@ -1,7 +1,7 @@
 # BLOCKER AP-01 – Paket ist gegen die geschützten Main-Gates nicht ausführbar
 
-Stand: 2026-10-31  
-Branch: `kreile/s1-ap01-eingang`  
+Stand: 2026-10-31
+Branch: `kreile/s1-ap01-eingang`
 Main-Basis: `ae79c12fb6bea83b8ac68fa065af4671f4bf09b5`
 
 ## Ergebnis
