@@ -114,6 +114,8 @@ const TA_B2_VALUES = Object.freeze({
 const TA_B2B_BRANCH = "codex/ta-b2b";
 const TA_B2B_BASE_SHA = "ac6c1d2a7eb652dc5e64219a24eed8d4065fbc4e";
 const TA_B2B_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2B.json";
+const TA_B2B_BAUPLAN = "docs/project/endversion/codex/BAUPLAN.json";
+const TA_B2B_BAUPLAN_SHA256 = "6E5E4EA663783F28C7A6ED1A8EF2017FAD1F8DA0458CC8A2670E6F1863453F77";
 const TA_B2B_VALUES = Object.freeze({
   schemaVersion: 1,
   package: "B2-EINGANG-AP01-INFRA",
@@ -121,7 +123,7 @@ const TA_B2B_VALUES = Object.freeze({
   mainBaseSha: TA_B2B_BASE_SHA,
   authorizedBy: "Siglinder",
   authorizedAt: "2026-10-31",
-  scope: "H18-Inventar-Allowlist und Acceptance-Tests gegen Replay-DB",
+  scope: "AP-01-Komplettscope, H18-Inventar, Acceptance-Replay und Endversion 5ac4d4b5ea34",
 });
 const PR154_REBASELINE_BRANCH = "kreile/s1-p2-eingang";
 const PR154_REBASELINE_BASE_SHA = "1fa4920d6d06b02413c8c157ae6b739507105846";
@@ -180,6 +182,7 @@ const TA_B2B_ANCHOR_ALLOWLIST = Object.freeze([
   "_review/MELDUNG_PLANUNGSCHAT.md",
   "_review/OWNER_ENTSCHEIDUNGEN.md",
   "docs/project/arbeitspakete/**",
+  TA_B2B_BAUPLAN,
   TA_B2B_RECEIPT,
   "scripts/quality/check-live-package-scope.mjs",
   "src/test/live_package_scope.test.ts",
@@ -192,29 +195,49 @@ const TA_B2B_REQUIRED_FILES = Object.freeze([
   "docs/project/arbeitspakete/AP-01-eingang-geruest-paket-persoenlich/PAKET.md",
   "docs/project/arbeitspakete/AP-01-eingang-geruest-paket-persoenlich/AP-01-eingang-paket-persoenlich.acceptance.test.ts.txt",
   "docs/project/arbeitspakete/AP-01-eingang-geruest-paket-persoenlich/ap01_eingang_paket_persoenlich.integration.test.ts.txt",
+  TA_B2B_BAUPLAN,
   TA_B2B_RECEIPT,
   "scripts/quality/check-live-package-scope.mjs",
   "src/test/live_package_scope.test.ts",
 ]);
-const SALES_STAGE_B2_ALLOWLIST = Object.freeze([
+const SALES_STAGE_B2_EXACT_ALLOWLIST = Object.freeze([
   "docs/delivery/ABGABE_B2.md",
   "docs/delivery/ABGABE_AP-01.md",
-  "docs/project/arbeitspakete/**",
-  "docs/evidence/live-line/b2/**",
+  "docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json",
+  "e2e/f1-4-immutable-invoice.real.spec.ts",
+  "e2e/path1-ui-convergence-v5-global-create.spec.ts",
+  "e2e/path1-ui-convergence-v5-p3.real.spec.ts",
   "scripts/quality/h18-server-actions.json",
-  "src/modules/eingang/**",
   "src/app/actions/eingang.actions.ts",
   "src/app/GlobalCreateAppAdapter.tsx",
-  "src/app/layout.tsx",
-  "src/components/layout/GlobalCreateFlow.tsx",
-  "src/components/layout/globalCreateRequest.ts",
-  "src/lib/server/intakeDraft.ts",
   "src/app/actions/intakeDraft.actions.ts",
+  "src/app/orders/OrdersAppAdapter.tsx",
+  "src/app/warendurchlauf/__tests__/w2cB2m5j.unavailable.realRender.test.tsx",
   "src/components/home/OfficeHome.tsx",
+  "src/components/home/OfficeHomeClient.tsx",
+  "src/components/home/__tests__/RolfHome.realRender.test.tsx",
+  "src/components/layout/GlobalCreateFlow.tsx",
+  "src/components/layout/KreileHeader.tsx",
+  "src/components/layout/MoreMenu.tsx",
+  "src/components/layout/TargetShell.module.css",
+  "src/components/layout/__tests__/path1GlobalCreateFlow.realRender.test.tsx",
+  "src/components/layout/__tests__/w2cHeaderTruth.realRender.test.tsx",
+  "src/components/layout/globalCreateRequest.ts",
+  "src/lib/auth/authorizationContract.ts",
+  "src/lib/server/intakeDraft.ts",
   "src/lib/server/todayDashboard.ts",
-  "src/test/**",
-  "e2e/**",
-  "supabase/migrations/*_ap01_intake_item.sql",
+  "src/modules/fundament/featureCatalog.ts",
+  "src/modules/suche/ui/SearchDialog.tsx",
+  "src/modules/werkstatt/ui/WerkstattView.singleProjection.test.tsx",
+  "src/modules/werkstatt/ui/WerkstattView.tsx",
+  "src/test/acceptance/ap01_eingang_paket_persoenlich.integration.test.ts",
+  "src/ui/kr/AppShell.tsx",
+  "src/ui/kr/GlobalesPlus.tsx",
+  "supabase/migrations/20261031212320_ap01_intake_item.sql",
+]);
+const SALES_STAGE_B2_ALLOWLIST = Object.freeze([
+  ...SALES_STAGE_B2_EXACT_ALLOWLIST,
+  "src/modules/eingang/**",
 ]);
 
 const posix = (value) => value.replaceAll("\\", "/");
@@ -415,6 +438,12 @@ function checkTaB2bAnchor(root, files, mission, branch, baseSha) {
   }
   for (const [key, value] of Object.entries(TA_B2B_VALUES)) {
     if (receipt[key] !== value) errors.push(`TA_B2B_RECEIPT_VALUE:${key}`);
+  }
+  try {
+    const bauplan = readFileSync(path.join(root, TA_B2B_BAUPLAN));
+    if (hash(bauplan) !== TA_B2B_BAUPLAN_SHA256) errors.push("TA_B2B_BAUPLAN_HASH");
+  } catch {
+    errors.push("TA_B2B_BAUPLAN_UNREADABLE");
   }
   return errors;
 }
@@ -1076,16 +1105,25 @@ export function runSelftest(root = process.cwd()) {
   if (!covered("src/modules/orders/server/get.ts", ["src/modules/orders/**"])) throw new Error("glob positive failed");
   if (covered("src/modules/customers/server/get.ts", ["src/modules/orders/**"])) throw new Error("glob negative failed");
   const salesStageMission = { active_block: "B2", branch: SALES_STAGE_B2_BRANCH };
-  const migrationA = "supabase/migrations/20261102080000_ap01_intake_item.sql";
+  const migrationA = "supabase/migrations/20261031212320_ap01_intake_item.sql";
   const validSalesStage = checkSalesStageB2Scope(
-    ["src/modules/eingang/index.ts", "src/test/eingang.test.ts", "docs/delivery/ABGABE_B2.md", "scripts/quality/h18-server-actions.json", migrationA],
+    ["src/modules/eingang/index.ts", ...SALES_STAGE_B2_EXACT_ALLOWLIST],
     [{ status: "A", path: migrationA }],
     salesStageMission,
     SALES_STAGE_B2_BRANCH,
   );
   if (validSalesStage.length > 0) throw new Error(`valid sales-stage B2 scope rejected: ${validSalesStage.join(" | ")}`);
+  for (const rel of SALES_STAGE_B2_EXACT_ALLOWLIST) {
+    const exactErrors = checkSalesStageB2Scope(
+      [rel],
+      rel === migrationA ? [{ status: "A", path: rel }] : [],
+      salesStageMission,
+      SALES_STAGE_B2_BRANCH,
+    );
+    if (exactErrors.length > 0) throw new Error(`exact B2 path rejected (${rel}): ${exactErrors.join(" | ")}`);
+  }
   const validTaB2b = checkTaB2bScope(
-    [".github/workflows/agentur-gate.yml", "docs/project/arbeitspakete/TRUST_ANCHOR_B2B.md"],
+    [".github/workflows/agentur-gate.yml", "docs/project/arbeitspakete/TRUST_ANCHOR_B2B.md", TA_B2B_BAUPLAN],
     {
       ...salesStageMission,
       phase: "WRITING",

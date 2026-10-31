@@ -5,5 +5,5 @@
   "mainBaseSha": "ac6c1d2a7eb652dc5e64219a24eed8d4065fbc4e",
   "authorizedBy": "Siglinder",
   "authorizedAt": "2026-10-31",
-  "scope": "H18-Inventar-Allowlist und Acceptance-Tests gegen Replay-DB"
+  "scope": "AP-01-Komplettscope, H18-Inventar, Acceptance-Replay und Endversion 5ac4d4b5ea34"
 }

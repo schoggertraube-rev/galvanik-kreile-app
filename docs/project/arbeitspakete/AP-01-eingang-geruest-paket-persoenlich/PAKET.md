@@ -1,8 +1,8 @@
 # AP-01 · Eingang-Modul + Kanal „Paket/persönlich" (getippt → Auftrag), eine Wahrheit
 
-Status: **bereit** — Voraussetzung: TA-B2 (#156, gemergt) und TA-B2b (`TRUST_ANCHOR_B2B.md`) auf main. Fassung 2 vom 31.10. (korrigiert nach BLOCKER.md von Codex: Action-Pfad, keine Einzel-Transaktion, createOrderIntake unverändert).
+Status: **bereit** — Voraussetzung: TA-B2 (#156, gemergt) und TA-B2b (`TRUST_ANCHOR_B2B.md`) auf main. Fassung 3 vom 31.10. (korrigiert nach BLOCKER.md von Codex: Action-Pfad, keine Einzel-Transaktion, createOrderIntake unverändert; H18-Harness und Endversion-Update).
 Gate-Rahmen: Mission KREILE-VERKAUFSSTUFE-1, Block **B2**, Branch **`kreile/b2-eingang`** (frisch von main nach dem Trust-Anchor).
-WAS: BAUPLAN spec `403d1b31ad24` (Owner-Freigabe 31.10.), Abschnitt `eingang`; Befehle `eingang.anlegen`/`eingang.notiz`/`eingang.zuordnen`; Screens `M6 anliegenwahl`, `3.0 rein`, `3 eingang`.
+WAS: BAUPLAN spec `5ac4d4b5ea34` (Owner-Freigabe 31.10.), Abschnitt `eingang`; Befehle `eingang.anlegen`/`eingang.notiz`/`eingang.zuordnen`; Screens `M6 anliegenwahl`, `3.0 rein`, `3 eingang`.
 
 ## Ziel
 Neues Modul `src/modules/eingang/` wird die **einzige** Erfassungsstrecke. AP-01 baut den getippten Pfad „Paket/persönlich": Rotes Plus → `rein` → Text tippen → Anliegen „Auftrag" + Bestandskunde → Auftrag `A-JJJJ-NNNN`. Jeder Eingang wird als `intake_item` festgehalten. Der alte `GlobalCreateFlow` wird im selben Paket abgelöst.
@@ -71,7 +71,7 @@ export async function erfasseAuftragAusEingangAction(input: unknown): Promise<Er
 - Modul-Interna, Komponenten, State frei, solange Vertrag, Verbote und Idempotenz stimmen.
 
 ## Optische Umsetzung
-- Maßstab: Endversion-Prototyp (spec 403d1b31ad24), Screens `rein`/`anliegenwahl`/`eingang`. Farben V1.1, Größen V8, Touch ≥ 48 px, heller Hintergrund, wichtige Knöpfe farbig nach Dringlichkeit, keine doppelten Beschreibungen, „fehlt" statt Vorbelegung. Der HTML-Mock geht nicht an Codex.
+- Maßstab: Endversion-Prototyp (spec 5ac4d4b5ea34), Screens `rein`/`anliegenwahl`/`eingang`. Farben V1.1, Größen V8, Touch ≥ 48 px, heller Hintergrund, wichtige Knöpfe farbig nach Dringlichkeit, keine doppelten Beschreibungen, „fehlt" statt Vorbelegung. Der HTML-Mock geht nicht an Codex.
 
 ## Gate
 - Akzeptanztest (Fassung 3, H18-Harness) liegt als `ap01_eingang_paket_persoenlich.integration.test.ts.txt` im Planungsordner. Bytegleich kopieren nach `src/test/acceptance/ap01_eingang_paket_persoenlich.integration.test.ts`; SHA-256 in der Abgabe gleich dem Wert in `WORKQUEUE.json`. Die frühere Kopie `src/test/acceptance/AP-01-eingang-paket-persoenlich.acceptance.test.ts` entfernen.
@@ -81,3 +81,10 @@ export async function erfasseAuftragAusEingangAction(input: unknown): Promise<Er
 
 ## Abnahme (Owner-Klickweg ≤ 6 Schritte, Preview-Link des SHA in der Abgabe)
 1. Als Rolf anmelden. 2. Rotes Plus → „rein" öffnet sich. 3. Text tippen („2 Stück Flansch verzinken"). 4. Anliegen „Auftrag", Bestandskunde wählen; leere Pflichtfelder zeigen „fehlt". 5. „Wareneingang buchen". 6. Auftrag `A-2026-00NN` in der Liste; DB: `intake_item` (notiz, vorgang_id = Nummer), `orders`, `intake_event`, `ORDER_INTAKE_CREATED_V1`.
+
+## Endversion-Update spec 5ac4d4b5ea34 (31.10., Fassung 3)
+- Seite 3.0 `rein` heißt überall **„Neu erfassen“** (vorher „Was ist neu?“): Dialogtitel, Beschriftung und aria-label des roten Plus, Hinweis Taste N, Knöpfe in leeren Listen, Suche „Tun“. Ablauf, Befehle, Daten und Rechte unverändert.
+- Kachel „Fotos mit Tablet/Handy“ in 3.0: Kamerasymbol (nicht Telefonhörer).
+- Nicht in AP-01 (eigenes Folgepaket): `werkstattregel.ablauf/abschluss/ruecknahme`, Fall `rechnung_schreiben` in Der Tag › Geld einfordern.
+- Der Akzeptanztest prüft keine Beschriftung; Test-SHA und Migrations-SHA bleiben gültig.
+- `docs/project/endversion/codex/BAUPLAN.json` (SHA256 6E5E4EA663783F28C7A6ED1A8EF2017FAD1F8DA0458CC8A2670E6F1863453F77) kommt bytegleich mit dem Anker TA-B2b auf main.

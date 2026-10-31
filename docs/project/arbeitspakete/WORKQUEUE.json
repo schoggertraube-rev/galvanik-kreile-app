@@ -36,7 +36,7 @@
       "migration_sha256": "308A6A1548E67147AD549923BF4C8B9C840B969A05B3447AD4A4BBBE388912B9",
       "migration_probelauf": "2026-10-31 gegen Dev-DB in Transaktion mit ROLLBACK fehlerfrei; keine Rueckstaende",
       "typecheck_probelauf": "2026-10-31 Planungschat: einziger Fehler im Test = noch fehlende Action (erwartet); Kundenanlage, Sitzung, Fixture typensauber",
-      "spec": "403d1b31ad24"
+        "spec": "5ac4d4b5ea34"
     }
   ]
 }
