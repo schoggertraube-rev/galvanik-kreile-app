@@ -127,12 +127,12 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     expect(rows[1]).toHaveTextContent("zählt weiter mit");
   });
 
-  it("öffnet beim Zuordnen genau die ausgewählte eingehende Mail statt Neu erfassen", async () => {
+  it("öffnet über Mail ansehen genau die ausgewählte eingehende Mail statt Neu erfassen", async () => {
     const mail = { key: "mail:graph-message-42", field: "assign" as const, kind: "mail" as const, title: "TEST Anfrage", meta: "TEST Absender", urgency: "decision" as const, graphMessageId: "graph-message-42" };
     ports.listInbox.mockResolvedValue({ code: "OK", data: [{ id: "graph-message-42", subject: "TEST Anfrage", senderName: "TEST Absender", senderAddress: "test@example.invalid", receivedAt: "2026-11-01T10:00:00.000Z", preview: "Vorschau", body: "Mailtext", hasAttachments: false }] });
     render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items: [mail], visibleFields: [...dashboard.visibleFields] }, projection }} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Zuordnen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mail ansehen" }));
 
     await waitFor(() => expect(screen.getByRole("dialog", { name: "Mail" })).toHaveTextContent("Mailtext"));
     expect(ports.listInbox).toHaveBeenCalledTimes(1);

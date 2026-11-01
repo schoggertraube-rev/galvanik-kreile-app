@@ -74,7 +74,23 @@ function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
         actorId: "1b3ef014-582c-445f-9fdc-e399d7aa6ef0",
         recordedAt: "2026-09-14T10:00:00.000Z",
       },
-      customer: { id: CUSTOMER_ID, customerNumber: "K-2026-0042", name: input.name },
+      customer: {
+        id: CUSTOMER_ID,
+        customerNumber: "K-2026-0042",
+        name: input.name,
+        customerType: input.customerType,
+        companyName: input.companyName,
+        contactPerson: input.contactPerson,
+        email: input.email,
+        phone: input.phone,
+        street: input.street,
+        zipCode: input.zipCode,
+        city: input.city,
+        country: input.country,
+        paymentPreference: input.paymentPreference,
+        vatId: input.vatId,
+        lastHandoverMode: null,
+      },
     })),
     readCustomerCreateReceipt: vi.fn().mockResolvedValue({ code: "NOT_FOUND", message: "Kein Kundenstand gefunden." }),
     createQuote: vi.fn().mockImplementation(async (input) => ({
@@ -391,7 +407,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(value.openCustomer).toHaveBeenCalledWith(CUSTOMER_ID);
   });
 
-  it("searches intake customers on the server without opening a second customer creation path", async () => {
+  it("searches intake customers on the server and offers the existing customer dialog when nothing matches", async () => {
     const searchIntakeCustomers = vi.fn().mockResolvedValue({ code: "OK", customers: [] });
     render(<GlobalCreateFlow ports={ports({ searchIntakeCustomers })} />);
 
@@ -401,7 +417,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.change(search, { target: { value: "SYNTHETISCH Neue Firma" } });
     await waitFor(() => expect(searchIntakeCustomers).toHaveBeenCalledWith("SYNTHETISCH Neue Firma"));
     expect(await screen.findByText("Kein Kunde gefunden.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /als Neukunde anlegen/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Kunde anlegen" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Name / Firma")).not.toBeInTheDocument();
   });
 
@@ -533,12 +549,13 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(screen.getByRole("complementary", { name: "Prüfliste" })).toHaveTextContent("Kunde");
   });
 
-  it("prefills recognized intake text and confirms every marked value together", async () => {
+  it("prefills only real intake fields and searches with recognized customer data", async () => {
     const recognizeIntakeText = vi.fn<GlobalCreatePorts["recognizeIntakeText"]>().mockResolvedValue({
       code: "OK",
       data: {
         fields: [
-          { field: "companyName", value: "TEST Erkannt GmbH", source: "Text Zeile 1" },
+          { field: "zipCode", value: "63150", source: "Text Zeile 1" },
+          { field: "city", value: "Heusenstamm", source: "Text Zeile 1" },
           { field: "dueDate", value: "2026-11-12", source: "Text Zeile 2" },
         ],
         positions: [{ name: "Flansch", quantity: "2", unit: "Stück", surfaceRequested: "Verzinken", executionRequested: "matt", source: "Text Abschnitt 1" }],
@@ -548,19 +565,70 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     openFlow();
     await screen.findByRole("heading", { name: "Neu erfassen" });
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Schnell erfassen" }), { target: { value: "TEST Erkannt GmbH, 2 Stück Flansch verzinken matt bis 12.11." } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Schnell erfassen" }), { target: { value: "gregor laucht rembrücker strasse 4 63150 heusenstamm, 2 Stück Flansch verzinken matt bis 12.11." } });
     fireEvent.click(screen.getByRole("button", { name: "Angaben erkennen" }));
 
     await waitFor(() => expect(screen.getByLabelText("Liefertermin")).toHaveValue("2026-11-12"));
     expect(screen.queryByLabelText("Name / Firma")).not.toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "Kunde suchen" })).toHaveValue("");
+    expect(screen.getByRole("textbox", { name: "Kunde suchen" })).toHaveValue("gregor laucht");
     expect(screen.getByLabelText("Liefertermin")).toHaveValue("2026-11-12");
     expect(screen.getByLabelText("Teil / Bezeichnung")).toHaveValue("Flansch");
     expect(screen.getByText(/Angaben erkannt und vorausgefüllt/)).toBeInTheDocument();
-    expect(screen.getByText(/Name \/ Firma: TEST Erkannt GmbH · erkannt/)).toBeInTheDocument();
+    expect(screen.queryByText(/Name \/ Firma: gregor laucht/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/PLZ: 63150/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Ort: Heusenstamm/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Alles bestätigen" }));
     expect(screen.getByText(/Angaben bestätigt/)).toBeInTheDocument();
-    expect(recognizeIntakeText).toHaveBeenCalledWith(expect.stringContaining("TEST Erkannt GmbH"));
+    expect(screen.queryByText(/PLZ.*bestätigt/)).not.toBeInTheDocument();
+    expect(recognizeIntakeText).toHaveBeenCalledWith(expect.stringContaining("gregor laucht"));
+  });
+
+  it("asks before discarding changed intake data and reopens with a fresh empty intake", async () => {
+    render(<GlobalCreateFlow ports={ports()} />);
+    openFlow();
+    await screen.findByRole("heading", { name: "Neu erfassen" });
+    fireEvent.change(screen.getByRole("textbox", { name: "Schnell erfassen" }), { target: { value: "SYNTHETISCH nicht speichern" } });
+    fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "SYNTHETISCH Flansch" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Abbrechen" }));
+    expect(await screen.findByRole("heading", { name: "Entwurf verwerfen?" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Verwerfen" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Weiter bearbeiten" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Entwurf behalten" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Verwerfen" }));
+    expect(await screen.findByText("Entwurf verworfen")).toBeInTheDocument();
+    openFlow();
+    await screen.findByRole("heading", { name: "Neu erfassen" });
+    expect(screen.getByRole("textbox", { name: "Schnell erfassen" })).toHaveValue("");
+    expect(screen.getByRole("textbox", { name: "Kunde suchen" })).toHaveValue("");
+    expect(screen.getByLabelText("Teil / Bezeichnung")).toHaveValue("");
+  });
+
+  it("creates a missing customer over the intake and returns with the intake unchanged", async () => {
+    const searchIntakeCustomers = vi.fn<GlobalCreatePorts["searchIntakeCustomers"]>().mockResolvedValue({ code: "OK", customers: [] });
+    const value = ports({ searchIntakeCustomers });
+    render(<GlobalCreateFlow ports={value} />);
+    openFlow();
+    await screen.findByRole("heading", { name: "Neu erfassen" });
+    fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "SYNTHETISCH Flansch bleibt" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Kunde suchen" }), { target: { value: "SYNTHETISCH Neuer Kunde" } });
+    expect(await screen.findByText("Kein Kunde gefunden.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Kunde anlegen" }));
+    expect(await screen.findByRole("heading", { name: "Kunde anlegen" })).toBeInTheDocument();
+    expect(screen.getAllByRole("dialog")).toHaveLength(2);
+    expect(screen.getByLabelText("Name / Firma")).toHaveValue("SYNTHETISCH Neuer Kunde");
+    fireEvent.click(screen.getByRole("button", { name: "Gewerbe" }));
+    fireEvent.change(screen.getByLabelText("Telefon"), { target: { value: "+49 221 123456" } });
+    fillRequiredCustomerAddress();
+    fireEvent.click(screen.getByRole("button", { name: "Kunde speichern" }));
+
+    await waitFor(() => expect(value.createCustomer).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Kunde anlegen" })).not.toBeInTheDocument());
+    expect(screen.getAllByText("SYNTHETISCH Neuer Kunde").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Teil / Bezeichnung")).toHaveValue("SYNTHETISCH Flansch bleibt");
+    expect(value.openCustomer).not.toHaveBeenCalled();
   });
 
   it("books a free-text intake when the catalog is empty and keeps the price open", async () => {
