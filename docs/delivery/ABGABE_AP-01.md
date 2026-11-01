@@ -1,18 +1,18 @@
 # ABGABE AP-01 — Eingang, Kanal Paket/persönlich
 
-Stand: 01.11.2026 01:15 CET
+Stand: 01.11.2026 01:54 CET
 
 Branch: `kreile/b2-eingang`
 
 ## 1. Produktkandidat und Preview
 
-- Produkt-SHA: `750e0534fc28efb9e6a8eb517355986cd459dc15`
+- Produkt-SHA: `3beb6c43af63c5ddf9d52ff1c72be523bd257b9e`
 - Basis: `11091c0be7b2c58ef7b009d4ad5664ad3e9db01d` (`origin/main` nach Merge von #157)
 - Exakte READY-Preview dieses Produkt-SHA:
 
-  `https://galvanik-kreile-werkstatt-mblgvzoei.vercel.app`
-- Vercel-Deployment: `dpl_5k4QmWDxCSo2WLCQQzgYtYwiT9ix`, Ziel `preview`, Zustand `READY`, Region `fra1`
-- Zuordnung zum SHA: Der GitHub-Commit-Status von `750e0534…` verweist auf genau dieses Deployment; die Vercel-Inspektion meldet dieselbe Deployment-ID und den obigen eindeutigen Deployment-Host.
+  `https://galvanik-kreile-werkstatt-f2xocv4rb.vercel.app`
+- Vercel-Deployment: `dpl_7ejzmPH5pC7p6eVZzb7bk7sVLp3F`, Ziel `preview`, Zustand `READY`, Region `fra1`
+- Zuordnung zum SHA: Der GitHub-Commit-Status von `3beb6c43…` verweist auf genau dieses Deployment; die Vercel-Inspektion meldet dieselbe Deployment-ID und den obigen eindeutigen Deployment-Host.
 - Kein Merge und kein Production-Deploy durch Codex.
 
 ## 2. Eine Erfassungs- und Datenwahrheit
@@ -68,7 +68,7 @@ Lokal auf dem Produkt-SHA bzw. unmittelbar vor seinem Commit:
 - `quality:authority-gate:selftest` / `quality:authority-gate`: PASS
 - `quality:delivery-contracts:selftest` / `quality:delivery-contracts`: PASS
 - `quality:package-scope:selftest`: PASS
-- `quality:package-scope -- --base 11091c0b… --head 750e0534… --branch kreile/b2-eingang`: PASS
+- `quality:package-scope -- --base 11091c0b… --head 3beb6c43… --branch kreile/b2-eingang`: PASS
 - `quality:live-regression:selftest`: PASS
 - `quality:module-gates`: PASS
 - `quality:h18-server-actions:selftest` / `quality:h18-server-actions`: PASS (`99` Schreibaktionen, `35` getestet, `64` bestehende Ausnahmen)
