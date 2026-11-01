@@ -196,6 +196,9 @@ async function searchAndSelectIntakeCustomer(query: string, expectedName: RegExp
 
 async function fillDirectIntakeForExistingCustomer() {
   await searchAndSelectIntakeCustomer("SYNTHETISCH", /SYNTHETISCH Musterkunde GmbH.*Auswählen/);
+  const [wish] = within(screen.getByRole("group", { name: "Termin ist" })).getAllByRole("button");
+  fireEvent.click(wish);
+  fireEvent.change(screen.getByRole("combobox", { name: "Eingangsart" }), { target: { value: "persoenlich" } });
   const [pickup] = within(screen.getByRole("group", { name: "Übergabe" })).getAllByRole("button");
   fireEvent.click(pickup);
   fireEvent.change(screen.getByRole("combobox", { name: "Zahlungsmodus" }), { target: { value: "vorkasse" } });
@@ -570,6 +573,9 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     });
     await screen.findByRole("heading", { name: "Neu erfassen" });
     await searchAndSelectIntakeCustomer("SYNTHETISCH", /SYNTHETISCH Musterkunde GmbH.*Auswählen/);
+    const [wish] = within(screen.getByRole("group", { name: "Termin ist" })).getAllByRole("button");
+    fireEvent.click(wish);
+    fireEvent.change(screen.getByRole("combobox", { name: "Eingangsart" }), { target: { value: "persoenlich" } });
     const [pickup] = within(screen.getByRole("group", { name: "Übergabe" })).getAllByRole("button");
     fireEvent.click(pickup);
     fireEvent.change(screen.getByRole("combobox", { name: "Zahlungsmodus" }), { target: { value: "vorkasse" } });
@@ -580,7 +586,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "Oberfläche" }), { target: { value: "Vernickeln" } });
     fireEvent.change(screen.getByRole("combobox", { name: "Ausführung" }), { target: { value: "matt" } });
     fireEvent.change(screen.getByLabelText("Material"), { target: { value: "Stahl 1.4301" } });
-    expect(screen.getByRole("complementary", { name: "Prüfliste" })).toHaveTextContent("7 von 7 Pflichtangaben");
+    expect(screen.getByRole("complementary", { name: "Prüfliste" })).toHaveTextContent("9 von 9 Pflichtangaben");
     fireEvent.click(screen.getByRole("button", { name: "Wareneingang buchen" }));
     await waitFor(() => expect(value.createDirectIntake).toHaveBeenCalledTimes(1));
     await screen.findByRole("heading", { name: "Auftrag A-2026-0061 angelegt" });
@@ -604,7 +610,11 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     await screen.findByRole("heading", { name: "Neu erfassen" });
     expect(screen.getByRole("navigation", { name: "Abschnitte" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /1Kunde/ })).toHaveAttribute("aria-current", "step");
+    expect(within(screen.getByRole("group", { name: "Termin ist" })).getAllByRole("button").every((button) => button.getAttribute("aria-pressed") === "false")).toBe(true);
+    expect(screen.getByRole("combobox", { name: "Eingangsart" })).toHaveValue("");
+    expect(within(screen.getByRole("group", { name: "Übergabe" })).getAllByRole("button").every((button) => button.getAttribute("aria-pressed") === "false")).toBe(true);
     expect(screen.getByRole("combobox", { name: "Zahlungsmodus" })).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: "Zahlungsmodus" })).toBeDisabled();
     expect(screen.queryByRole("heading", { name: "Was möchtest du anlegen?" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Offene KVs bearbeiten/ })).not.toBeInTheDocument();
   });

@@ -76,7 +76,8 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
         return;
       }
       setMailPreview(found);
-    } catch {
+    } catch (error) {
+      console.error("[TODAY_MAIL_READ_FAILED]", { graphMessageId, error });
       setMailMessage("Die Mail konnte nicht sicher gelesen werden.");
     }
   };

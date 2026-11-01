@@ -211,6 +211,8 @@ export function GlobalCreateAppAdapter() {
             customer: input.customer,
             dueDate: input.dueDate,
             items: input.items,
+            intakeSource: input.intakeSource,
+            termStatus: input.termStatus,
             handoverMode: input.handoverMode,
             paymentMode: input.paymentMode,
           });
