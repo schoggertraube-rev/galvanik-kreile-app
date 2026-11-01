@@ -125,6 +125,20 @@ const TA_B2B_VALUES = Object.freeze({
   authorizedAt: "2026-10-31",
   scope: "AP-01-Komplettscope, H18-Inventar, Acceptance-Replay und Endversion 5ac4d4b5ea34",
 });
+const TA_B2C_BRANCH = "codex/ta-b2c";
+const TA_B2C_BASE_SHA = "11091c0be7b2c58ef7b009d4ad5664ad3e9db01d";
+const TA_B2C_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2C.json";
+const TA_B2C_BAUPLAN = "docs/project/endversion/codex/BAUPLAN.json";
+const TA_B2C_BAUPLAN_SHA256 = "225B7FB5D3503522D8BC972E535CE53827E4047F75932B18E52E7B905CB35305";
+const TA_B2C_VALUES = Object.freeze({
+  schemaVersion: 1,
+  package: "B2-EINGANG-AP01-F4-ANCHOR",
+  headBranch: TA_B2C_BRANCH,
+  mainBaseSha: TA_B2C_BASE_SHA,
+  authorizedBy: "Siglinder",
+  authorizedAt: "2026-11-01",
+  scope: "AP-01 Fassung 4, Bauplan 6b782924134c und enge B2-Folgepfade",
+});
 const PR154_REBASELINE_BRANCH = "kreile/s1-p2-eingang";
 const PR154_REBASELINE_BASE_SHA = "1fa4920d6d06b02413c8c157ae6b739507105846";
 const PR154_REBASELINE_RECEIPT = "docs/evidence/live-line/pr154/REBASELINE.json";
@@ -200,6 +214,30 @@ const TA_B2B_REQUIRED_FILES = Object.freeze([
   "scripts/quality/check-live-package-scope.mjs",
   "src/test/live_package_scope.test.ts",
 ]);
+const TA_B2C_ANCHOR_ALLOWLIST = Object.freeze([
+  "_review/AKTUELLE_ANWEISUNG.md",
+  "_review/MELDUNG_PLANUNGSCHAT.md",
+  "_review/OWNER_ENTSCHEIDUNGEN.md",
+  "docs/project/arbeitspakete/**",
+  TA_B2C_BAUPLAN,
+  TA_B2C_RECEIPT,
+  "scripts/quality/check-live-package-scope.mjs",
+  "src/test/live_package_scope.test.ts",
+]);
+const TA_B2C_REQUIRED_FILES = Object.freeze([
+  "_review/AKTUELLE_ANWEISUNG.md",
+  "_review/OWNER_ENTSCHEIDUNGEN.md",
+  "docs/project/arbeitspakete/TRUST_ANCHOR_B2C.md",
+  "docs/project/arbeitspakete/WORKQUEUE.json",
+  "docs/project/arbeitspakete/AP-01-eingang-geruest-paket-persoenlich/PAKET.md",
+  "docs/project/arbeitspakete/AP-01-eingang-geruest-paket-persoenlich/ap01b_eingang_bestandskunde_unvollstaendig.integration.test.ts.txt",
+  "docs/project/arbeitspakete/AP-02-eingang-neukunde/PAKET.md",
+  "docs/project/arbeitspakete/AP-02-eingang-neukunde/ap02_eingang_neukunde.integration.test.ts.txt",
+  TA_B2C_BAUPLAN,
+  TA_B2C_RECEIPT,
+  "scripts/quality/check-live-package-scope.mjs",
+  "src/test/live_package_scope.test.ts",
+]);
 const SALES_STAGE_B2_EXACT_ALLOWLIST = Object.freeze([
   "docs/delivery/ABGABE_B2.md",
   "docs/delivery/ABGABE_AP-01.md",
@@ -230,6 +268,13 @@ const SALES_STAGE_B2_EXACT_ALLOWLIST = Object.freeze([
   "src/modules/suche/ui/SearchDialog.tsx",
   "src/modules/werkstatt/ui/WerkstattView.singleProjection.test.tsx",
   "src/modules/werkstatt/ui/WerkstattView.tsx",
+  "src/modules/customers/__tests__/orderReadiness.test.ts",
+  "src/modules/customers/customers.manifest.json",
+  "src/modules/customers/orderReadiness.ts",
+  "src/modules/customers/public.ts",
+  "src/modules/customers/server-public.ts",
+  "src/modules/customers/server/readCustomerOrderReadinessCommand.ts",
+  "src/modules/customers/server/types.ts",
   "src/test/acceptance/ap01_eingang_paket_persoenlich.integration.test.ts",
   "src/ui/kr/AppShell.tsx",
   "src/ui/kr/GlobalesPlus.tsx",
@@ -237,7 +282,9 @@ const SALES_STAGE_B2_EXACT_ALLOWLIST = Object.freeze([
 ]);
 const SALES_STAGE_B2_ALLOWLIST = Object.freeze([
   ...SALES_STAGE_B2_EXACT_ALLOWLIST,
+  "docs/delivery/ABGABE_AP-*.md",
   "src/modules/eingang/**",
+  "src/test/acceptance/*.integration.test.ts",
 ]);
 
 const posix = (value) => value.replaceAll("\\", "/");
@@ -448,6 +495,49 @@ function checkTaB2bAnchor(root, files, mission, branch, baseSha) {
   return errors;
 }
 
+function checkTaB2cScope(files, mission, branch, baseSha) {
+  const errors = [];
+  if (branch !== TA_B2C_BRANCH) errors.push(`TA_B2C_BRANCH_INVALID:${branch}`);
+  if (baseSha !== TA_B2C_BASE_SHA) errors.push(`TA_B2C_BASE_INVALID:${baseSha}:${TA_B2C_BASE_SHA}`);
+  for (const rel of files) {
+    if (!covered(rel, TA_B2C_ANCHOR_ALLOWLIST)) errors.push(`TA_B2C_SCOPE:${rel}`);
+  }
+  if (mission.active_block !== "B2" || mission.phase !== "WRITING" || mission.branch !== SALES_STAGE_B2_BRANCH
+      || mission.started_from_sha !== TA_B2_BASE_SHA || mission.desktop_due_at !== "2026-11-08"
+      || mission.tablet_mobile_due_at !== "2026-11-08" || mission.handoff_path !== "docs/delivery/ABGABE_B2.md"
+      || mission.next_block !== "B3") {
+    errors.push("TA_B2C_MISSION_INVALID");
+  }
+  return errors;
+}
+
+function checkTaB2cAnchor(root, files, mission, branch, baseSha) {
+  const errors = checkTaB2cScope(files, mission, branch, baseSha);
+  for (const rel of TA_B2C_REQUIRED_FILES) {
+    if (!files.includes(rel)) errors.push(`TA_B2C_REQUIRED_FILE_MISSING:${rel}`);
+  }
+  let receipt;
+  try {
+    receipt = JSON.parse(readFileSync(path.join(root, TA_B2C_RECEIPT), "utf8"));
+  } catch {
+    errors.push("TA_B2C_RECEIPT_UNREADABLE");
+    return errors;
+  }
+  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2C_VALUES).sort())) {
+    errors.push("TA_B2C_RECEIPT_SCHEMA");
+  }
+  for (const [key, value] of Object.entries(TA_B2C_VALUES)) {
+    if (receipt[key] !== value) errors.push(`TA_B2C_RECEIPT_VALUE:${key}`);
+  }
+  try {
+    const bauplan = readFileSync(path.join(root, TA_B2C_BAUPLAN));
+    if (hash(bauplan) !== TA_B2C_BAUPLAN_SHA256) errors.push("TA_B2C_BAUPLAN_HASH");
+  } catch {
+    errors.push("TA_B2C_BAUPLAN_UNREADABLE");
+  }
+  return errors;
+}
+
 function checkSalesStageB2Scope(files, entries, mission, branch) {
   const errors = [];
   if (branch !== SALES_STAGE_B2_BRANCH) errors.push(`SALES_STAGE_BRANCH_INVALID:${branch}`);
@@ -483,6 +573,10 @@ export function checkSalesStageB2ScopeForTest({ files, entries = [], mission, br
 
 export function checkTaB2bScopeForTest({ files, mission, branch, baseSha }) {
   return checkTaB2bScope(files, mission, branch, baseSha);
+}
+
+export function checkTaB2cScopeForTest({ files, mission, branch, baseSha }) {
+  return checkTaB2cScope(files, mission, branch, baseSha);
 }
 
 function checkActivation(files, baseSha, plan) {
@@ -782,6 +876,7 @@ export function checkLivePackageScope({ root, base, head, branch }) {
     if (branch === PR154_REBASELINE_BRANCH) return checkPr154Rebaseline(root, baseSha);
     if (branch === TA_B2_BRANCH) return checkTaB2Anchor(root, files, candidateMission, branch, baseSha);
     if (branch === TA_B2B_BRANCH) return checkTaB2bAnchor(root, files, candidateMission, branch, baseSha);
+    if (branch === TA_B2C_BRANCH) return checkTaB2cAnchor(root, files, candidateMission, branch, baseSha);
     if (candidateMission.active_block !== "B2") {
       return [`SALES_STAGE_ACTIVE_BLOCK_INVALID:${candidateMission.active_block}`];
     }
@@ -1153,6 +1248,44 @@ export function runSelftest(root = process.cwd()) {
   );
   if (!taB2bH18Mutation.includes("TA_B2B_SCOPE:scripts/quality/h18-server-actions.json")) {
     throw new Error(`TA-B2b accepted the AP-01 H18 inventory mutation: ${taB2bH18Mutation.join(" | ")}`);
+  }
+  const taB2cMission = {
+    ...salesStageMission,
+    phase: "WRITING",
+    started_from_sha: TA_B2_BASE_SHA,
+    desktop_due_at: "2026-11-08",
+    tablet_mobile_due_at: "2026-11-08",
+    handoff_path: "docs/delivery/ABGABE_B2.md",
+    next_block: "B3",
+  };
+  const validTaB2c = checkTaB2cScope(
+    ["docs/project/arbeitspakete/TRUST_ANCHOR_B2C.md", TA_B2C_BAUPLAN, TA_B2C_RECEIPT],
+    taB2cMission,
+    TA_B2C_BRANCH,
+    TA_B2C_BASE_SHA,
+  );
+  if (validTaB2c.length > 0) throw new Error(`valid TA-B2c scope rejected: ${validTaB2c.join(" | ")}`);
+  for (const allowed of [
+    "src/test/acceptance/ap01b_eingang_bestandskunde_unvollstaendig.integration.test.ts",
+    "docs/delivery/ABGABE_AP-K1.md",
+  ]) {
+    const allowedErrors = checkSalesStageB2Scope([allowed], [], salesStageMission, SALES_STAGE_B2_BRANCH);
+    if (allowedErrors.length > 0) throw new Error(`TA-B2c pattern rejected (${allowed}): ${allowedErrors.join(" | ")}`);
+  }
+  for (const rejected of [
+    "src/test/acceptance/x.test.ts",
+    "src/test/x.integration.test.ts",
+    "docs/delivery/ABGABE_B3.md",
+    TA_B2C_BAUPLAN,
+  ]) {
+    const rejectedErrors = checkSalesStageB2Scope([rejected], [], salesStageMission, SALES_STAGE_B2_BRANCH);
+    if (!rejectedErrors.includes(`SALES_STAGE_B2_SCOPE:${rejected}`)) {
+      throw new Error(`TA-B2c pattern accepted (${rejected}): ${rejectedErrors.join(" | ")}`);
+    }
+  }
+  const taB2cOutside = checkTaB2cScope(["src/app/page.tsx"], taB2cMission, TA_B2C_BRANCH, TA_B2C_BASE_SHA);
+  if (!taB2cOutside.includes("TA_B2C_SCOPE:src/app/page.tsx")) {
+    throw new Error(`TA-B2c accepted an out-of-anchor file: ${taB2cOutside.join(" | ")}`);
   }
   const outsideErrors = checkSalesStageB2Scope(
     ["src/modules/orders/server/get.ts"],

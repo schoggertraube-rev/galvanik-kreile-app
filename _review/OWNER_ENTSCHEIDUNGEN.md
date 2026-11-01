@@ -175,3 +175,24 @@ Neueste vom Owner freigegebene Version (27.09.2026, `_DESIGN_VERBINDLICH/FREIGAB
     - Übernommen werden nur Stammdaten laut Datenregister (Firmendaten, Katalog, Stundensätze, Logins ohne PIN, Rechte).
     - Testdaten und Nummernkreise werden nie übernommen.
     - Ein Smoke-Test läuft vor der ersten echten Nutzung. Mischbetrieb gibt es nicht.
+
+## U-225 · Eingang: Herkunftsprinzip, AP-01 Fassung 4, Buchen in einer Transaktion (01.11.2026)
+- Angelegt wird am Herkunftsort: Mail aus der Mail, KV aus der KV-Karte, Folgeauftrag aus Kunden-/Auftragskarte; das rote Plus nur für Eingänge ohne Herkunft in der App (Mindmap Auftragseingang, Planungschat 01.11.).
+- #158 wird nicht wie abgegeben gemergt. AP-01 Fassung 4: vollständiger Bestandskunde → Auftrag; unvollständiger Bestandskunde → serverseitige Sperre `CUSTOMER_INCOMPLETE` + „In Kundenkarte ergänzen“ über den bestehenden Schreibweg; keine lokal bearbeitbaren Kundenfelder; Plus-Symbol; Mail-Eintrag in „Der Tag“ öffnet die Mail.
+- Reihenfolge: TA-B2c → AP-01 F4 → AP-K1 (Kunde, Runde 21) → AP-02 Fassung 2. Kein Ergänzen/Neukunde auf dem alten Kundenmodell (sonst Doppelbau).
+- AP-02 Fassung 2 darf `orderIntakeCommand` erweitern, damit Buchen nach `werkbank.buchen` in EINER Transaktion läuft (Kunde neu/ergänzen + Auftrag + Eingangs-Zuordnung). Die frühere Sperre „createOrderIntake nicht anfassen“ gilt dafür nicht mehr; jede Änderung mit Akzeptanztest des Planungschats.
+- Owner-Autorisierung: Siglinder, delegiert („den besten und sichersten Weg“, „die Mindmap muss stimmen“).
+
+## U-226 · Spec-Freeze je Paket (01.11.2026)
+- Für AP-01 Fassung 4 und TA-B2c gilt Bauplan spec `6b782924134c`, BAUPLAN.json SHA-256 `225B7FB5D3503522D8BC972E535CE53827E4047F75932B18E52E7B905CB35305` (enthält W1-Korrektur). Spec `7a343efd` ist ersetzt und wird nicht wiederhergestellt (keine zwei Wahrheiten).
+- Während ein Anker oder Paket offen ist, ändert der Endversion-Chat BAUPLAN.json nicht; Änderungen gehen nach `BAUPLAN.next.json` und werden vom Planungschat beim nächsten Anker übernommen (AKTUELLE_ANWEISUNG Regel 12).
+- F1 `baureif: false` (Lücke kundeneu/adresse) sperrt AP-01 F4 nicht: F4 ist Korrektur ohne kundeneu-/Adress-Element. AP-K1 startet erst, wenn der Endversion-Chat `bausteine_vertraege.adresse` geschlossen hat.
+- Owner-Autorisierung: Siglinder, delegiert.
+
+## U-227 · AP-K1 Kunde: Zuschnitt (01.11.2026)
+- AP-K1 baut nach Bauplan spec `c82bf2d6d880` (BAUPLAN.next, SHA `1D2A6268…`); wird mit TA-B2d zu BAUPLAN.json.
+- Ein Schreibweg für Kunden; `name` bildet nur der Server; `contact_person` wird nicht mehr geschrieben oder angezeigt (bleibt als Spalte).
+- Altes Eingabeformat wird serverseitig mit derselben Teilungsregel wie die Migration normalisiert (kein zweiter Weg; hält AP-01-Tests gültig).
+- Adressverzeichnis: AP-K1 baut Tabelle und Prüfung; Import der Daten DE/AT/CH ist AP-K2. Ohne Daten gilt die Anschrift als „ungeprüft“ (address_status NULL), keine Sperre.
+- Die Vollständigkeitsprüfung aus AP-01 F4 ist dieselbe Funktion `kundeVollstaendigkeit`, die AP-K1 erweitert.
+- Owner-Autorisierung: Siglinder, delegiert.

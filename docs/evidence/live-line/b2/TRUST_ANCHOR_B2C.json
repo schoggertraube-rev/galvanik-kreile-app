@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "package": "B2-EINGANG-AP01-F4-ANCHOR",
+  "headBranch": "codex/ta-b2c",
+  "mainBaseSha": "11091c0be7b2c58ef7b009d4ad5664ad3e9db01d",
+  "authorizedBy": "Siglinder",
+  "authorizedAt": "2026-11-01",
+  "scope": "AP-01 Fassung 4, Bauplan 6b782924134c und enge B2-Folgepfade"
+}

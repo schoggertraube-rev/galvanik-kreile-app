@@ -9,8 +9,11 @@
    "darf": "App-Basis: Korrekturen aus „korrekturen“ ausführen und die Seiten dieses Abschnitts nach diesem Plan stabil fertigstellen – kein Neubau anderer Seiten oder Funktionen (Owner 28.10., H8)"
   },
   "F1 Neuer Eingang": {
-   "baureif": true,
-   "darf": "App-Basis: Korrekturen aus „korrekturen“ ausführen und die Seiten dieses Abschnitts nach diesem Plan stabil fertigstellen – kein Neubau anderer Seiten oder Funktionen (Owner 28.10., H8)"
+   "baureif": false,
+   "darf": "nur Korrekturen aus „korrekturen“ – kein Neubau von Elementen mit Lücke",
+   "luecken": [
+    "kundeneu: Baustein „adresse“ ohne Vertrag (bausteine_vertraege.adresse)"
+   ]
   },
   "F2 Der Tag": {
    "baureif": true,
@@ -18,8 +21,8 @@
   }
  },
  "bauplan": {
-  "erzeugt": "2026-10-31T21:28:24.378Z",
-  "spec_sha": "5ac4d4b5ea34",
+  "erzeugt": "2026-11-01T13:13:56.607Z",
+  "spec_sha": "6b782924134c",
   "regel": "Nur bau-freie Abschnitte (OR-17). Ohne Inhalt (OR-13/U-202): Daten kommen vom Server; Platzhalter {auftrag} {kunde} {rechnung} {betrag} … sind Felder, keine Werte. Ziele zu Seiten außerhalb dieses Bauplans: nur verlinken, nicht bauen.",
   "reihenfolge": [
    "Login",
@@ -437,11 +440,12 @@
    "screens": [
     "tag",
     "spaeter",
-    "hbmehr"
+    "hbmehr",
+    "neuigkeiten"
    ],
    "status": "bau-frei",
    "reihenfolge": 4,
-   "umfang": "Der Tag nach U-206 (nur Handlungen), Später/Wiedervorlage (F#13); Felder je Person (Anpassen, X11) und Entwürfe (X12) sind Stufe 2 (U-212)",
+   "umfang": "Der Tag nach U-206 (nur Handlungen), Später/Wiedervorlage (F#13); Felder je Person (Anpassen, X11) und Entwürfe (X12) sind Stufe 2 (U-212) · Was ist neu? (A13, Owner 01.11.)",
    "bauhinweise": [
     "K17",
     "K21"
@@ -499,6 +503,12 @@
   "befehle_geld_mail": "Jeder schreibende Befehl der Abschnitte F5–F7 (Kunde speichern, Notiz, Mail senden, Rechnung festschreiben, Zahlung buchen, Storno, Ziel freischalten/aufheben, Einstellungen speichern inkl. Ersteinrichtung) trägt eine Request-ID. Der Client erzeugt sie beim Öffnen des Dialogs und nach jeder Änderung einer Eingabe neu; bei „Notiz speichern“ (kein Dialog) je Absenden. Der Server speichert nur einen erfolgreichen Ausgang je Request-ID und liefert bei Wiederholung derselben ID dieses gespeicherte Ergebnis (keine zweite Ausführung). Fehler und Rollback (Validierung, gesperrt, Firmendaten fehlen, PDF-Fehler, CONFLICT) verbrauchen die ID nicht: eine Wiederholung führt erneut aus. Dieselbe ID mit anderem Inhalt lehnt der Server mit CONFLICT ab. „Erneut …“ sendet dieselben Eingaben mit derselben ID; wurde vorher eine Eingabe geändert, ist es bereits eine neue ID. Festschreiben (7.1, 7.2 ohne Rechnung, 7.4) ist eine Transaktion: Preise der Positionen, Mehrarbeit-Beträge, Nummer, Rechnungsdaten, PDF und Akte-Eintrag; schlägt ein Teil fehl, wird alles zurückgerollt und keine Nummer verbraucht. Mail senden: kein automatisches Wiederholen; ist der Ausgang unklar (Zeitüberschreitung beim Postfach), meldet 5.3 den Zustand „unklar“ und sendet erst nach ausdrücklicher Bestätigung mit neuer Request-ID.",
   "laden": "Ladezustand (appweit): Bis die Daten einer Seite, Karte oder eines Dialogs da sind, steht an ihrer Stelle ein Platzhalter ohne Inhalt („Wird geladen …“, Kopf mit Titel sichtbar, Knöpfe noch nicht bedienbar); nach 10 s ohne Antwort gilt der Ladefehler der Seite (zustaende.fehler bzw. ladefehler) mit „Erneut laden“. Neuladen im Hintergrund (verhalten_appweit.gleichzeitig) zeigt keinen Platzhalter, der bisherige Stand bleibt sichtbar.",
   "fehlt": "U-216 (Owner 28.10.): Fehlt ein Wert, zeigt jede Stelle „fehlt“ mit Link bzw. Sprung zur Stelle, wo er eingetragen wird – nie ein Ersatzwert (kein erfundenes 19 % USt, 14 Tage, „Deutschland“, „Stück“). Vom Owner festgelegte, sichtbare und änderbare Vorbelegungen (z. B. U-110 Neukunde Vorkasse) sind keine Ersatzwerte. Jede Seite führt dafür den Zustand fehlt, wo ein Pflichtwert aus anderen Daten kommt. Festgelegte Regeln sind keine Ersatzwerte: A-71 (Owner bestätigt) gibt Freitext- und Mehrarbeit-Positionen 19 %. Eine Katalogposition übernimmt Einheit und Steuersatz ihrer Katalogleistung (Pflichtfelder in 8.3); fehlt einer davon (Altdaten), zeigt die Position „{feld} fehlt“ mit Sprung zur Leistung (8.3) – nie 19 % oder „Stück“.",
+  "auswahl": {
+   "regel": "Jede Formular-Auswahl zeigt den gewählten Wert grün gefüllt mit Haken (Erfolg-Grün, weiße Schrift); nicht gewählte Optionen bleiben neutral. Gilt überall gleich: Segmente (Übergabe, Termin ist, Art, Anrede), Auswahl-Chips, Kacheln (Firma/Privat, Terminvorschläge, Bearbeitungszeit), „Bezahlt bei Abholung“. Ohne Wahl ist nichts grün – so sieht man auf einen Blick, was erledigt ist und was noch fehlt.",
+   "vorbelegt": "Ein vorbelegter Wert (aus Kundenkarte, letzter Auftrag, Erkennung) ist grün und trägt seine Herkunft als kleine Zeile („aus Kundenkarte“); ein Klick auf eine andere Option ändert ihn.",
+   "nicht": "Ansichts-Umschalter und Filter (Liste/Woche, Alle/Abholung/Versand, Anliegen) sind keine Eingabe und bleiben neutral hervorgehoben.",
+   "grund": "Owner 01.11.: „gewählte Buttons … müssen nach Auswahl grün sein, damit ich sehe was ich gemacht habe und was nicht“"
+  },
   "grundzustand": "„zustand:daten“ = Grundzustand eines Fensters bzw. einer Seite: die normale Ansicht mit Daten (kein Sonderzustand aus zustaende); „Erneut“, „Zurück“, „Zur Lücke“ führen dorthin, Eingaben bleiben erhalten (Befund 40).",
   "entscheidung_fuehren": "Blickführung durch Farbe: Je Ansicht genau EIN empfohlener Hauptknopf in der Akzentfarbe (Primär, blau); alle weiteren Aktionen ruhig (sekundär/leise, ohne Füllfarbe). Der empfohlene Weg ist der, den der Zustand bzw. das erkannte Anliegen nahelegt; nie zwei konkurrierende Primärknöpfe. Der blaue Knopf zieht das Auge zuerst und sitzt in Daumennähe (Tablet) bzw. als Hauptknopf unten/rechts (Desktop).",
   "hervorhebung": "Zentrale Eingabe-/Pflichtfelder und der jeweils wichtigste Block werden farblich hervorgehoben (eigener Hintergrund/Rahmen in einer ruhigen Akzenttönung), damit der Blick sie zuerst findet; rein informierende Felder bleiben neutral. Farbe ersetzt nie einen Wert (U-216 gilt: fehlt → „fehlt“ mit Sprung zur Stelle).",
@@ -699,7 +709,7 @@
    },
    {
     "id": "A-56",
-    "text": "Altdaten-Korrektur: Kunden mit Zahlungsbedingung „rechnung_14“ werden per Migration auf leer (NULL) gesetzt, weil die Herkunft (Spalten-Default oder bewusste Freischaltung) nicht unterscheidbar ist; „Rechnung auf Ziel“ wird danach nur über den Freischalt-Command gesetzt. Spalten-Default der Zahlungsbedingung = NULL. Altwert Kundentyp „institution“ wird zu „Gewerbe“. Die Migration schreibt die geänderten Kunden ins Wartungsprotokoll.",
+    "text": "Altdaten-Korrektur: Kunden mit Zahlungsbedingung „rechnung_14“ werden per Migration auf leer (NULL) gesetzt, weil die Herkunft (Spalten-Default oder bewusste Freischaltung) nicht unterscheidbar ist; „Rechnung auf Ziel“ wird danach nur über den Freischalt-Command gesetzt. Spalten-Default der Zahlungsbedingung = NULL. Altwert Kundentyp „institution“ wird zu „Firma“. Die Migration schreibt die geänderten Kunden ins Wartungsprotokoll.",
     "grund": "U-111: Ziel ist eine Ausnahme je Kunde – lieber einmal inline nachfragen als unbemerkt Ziel gewähren (K6). Die App ist vor dem Livegang; echte Kunden kommen über die Datenkiste.",
     "status": "Annahme – Owner bestätigt",
     "schluessel": "F1-altdaten",
@@ -1541,6 +1551,30 @@
    "name": "Entwürfe je Login (Eingang/Kunde unterbrechen und auf „Der Tag“ fortsetzen)",
    "stufe": 2,
    "grund": "U-212 (Owner 28.10.): nach Stufe 2 umgetaggt – grau „geplant“, kein Bau in Stufe 1"
+  },
+  {
+   "id": "E15",
+   "name": "Kunde: Autofill und Adressprüfung (PLZ, Ort, Straße) beim Tippen",
+   "stufe": 1,
+   "regel": "formulare.kunde.autofill und formulare.kunde.adresspruefung – lokales Adressverzeichnis, kein externer Aufruf",
+   "grund": "Owner 01.11.: Kunde sauber und ohne Tippfehler anlegen"
+  },
+  {
+   "id": "Z11",
+   "name": "Kunde: Angaben aus dem Internet ergänzen (nur Firma)",
+   "stufe": 4,
+   "braucht": [
+    "E15"
+   ],
+   "regel": "formulare.kunde.internet_abgleich – Vorschlag mit Quelle, nie ohne Bestätigung, nie für Privatpersonen",
+   "grund": "Owner 01.11.: „später soll es mit dem Internet abgeglichen werden“ (Stufe 4 wie Z10, gleiche Anbieter-Anbindung)"
+  },
+  {
+   "id": "A13",
+   "name": "Was ist neu? – umgesetzte Änderungen ansehen, testen, melden",
+   "stufe": 1,
+   "regel": "screens[neuigkeiten]; Quelle: Änderungsnotizen je Arbeitspaket im Code (release_notes), Status je Login in der Datenbank",
+   "grund": "Owner 01.11.: Button in der echten App, um zu sehen, was neu umgesetzt und gebaut wurde – ansehen, testen, mergen; später sieht der Kunde dort Updates"
   }
  ],
  "navigation": {
@@ -1605,6 +1639,14 @@
     "icon": "sun",
     "ziel": "tag",
     "funktion": "A01"
+   },
+   {
+    "id": "neuigkeiten",
+    "label": "Was ist neu?",
+    "icon": "flag",
+    "ziel": "neuigkeiten",
+    "funktion": "A13",
+    "regel": "bis Livestart in der Seitenleiste mit Zähler; danach im Konto-Menü (screens[neuigkeiten].regeln[0])"
    },
    {
     "id": "nachrichten",
@@ -1736,47 +1778,113 @@
      "pflicht": "immer",
      "wann": "immer zuerst",
      "vorbelegung": "Absender (Mail) · erkannter Kunde (Beleg) · aktueller Kunde (aus Kundenkarte, Q8)",
-     "regel": "sucht Name/Firma, Ansprechpartner, Telefon, E-Mail, Ort, Kundennummer ab 2 Zeichen (250 ms Debounce, höchstens 10 Treffer, keine archivierten Kunden); Sortierung und „möglicher Doppelter“ nach bausteine_vertraege.dublette; ähnliche Treffer werden vor „Neukunde anlegen“ gezeigt; im Eingang Bereich „eingang“"
+     "regel": "sucht Firmenname, Vor- und Nachname (beide Reihenfolgen), Ansprechpartner, Telefon, E-Mail, Ort, Kundennummer ab 2 Zeichen (250 ms Debounce, höchstens 10 Treffer, keine archivierten Kunden); Sortierung und „möglicher Doppelter“ nach bausteine_vertraege.dublette; ähnliche Treffer werden vor „Neukunde anlegen“ gezeigt; im Eingang Bereich „eingang“"
     },
     {
      "id": "kundentyp",
-     "label": "Kundentyp",
+     "label": "Firma oder Privat?",
      "typ": "segment",
      "optionen": [
-      "Gewerbe",
+      "Firma",
       "Privat",
       "Lieferant"
      ],
      "pflicht": "immer",
      "wann": "Neukunde",
-     "vorbelegung": "aus Beleg/Signatur (Firma erkannt → Gewerbe), sonst keine",
+     "vorbelegung": "aus Beleg/Signatur/Visitenkarte: Rechtsform erkannt → Firma; nur Vor- und Nachname → Privat; sonst keine",
      "schluessel": {
-      "Gewerbe": "business",
       "Privat": "privat",
       "Altwert institution": "business (Migration, Annahme A-56)",
+      "Firma": "business",
       "Lieferant": "lieferant"
      },
-     "regel_lieferant": "Lieferant (F1): Pflicht nur Name; keine Zahlungsbedingung, keine Aufträge; IBAN und Zahlungsziel für 3.8; Kundennummer-Kreis wie Kunden (eine Kartei, kein „[L-…]“). Anlegen und Ändern als Lieferant nur mit Recht „geld“; Lieferanten erscheinen in Suchen nur mit „geld“."
+     "regel_lieferant": "Lieferant (F1): Pflicht nur Name; keine Zahlungsbedingung, keine Aufträge; IBAN und Zahlungsziel für 3.8; Kundennummer-Kreis wie Kunden (eine Kartei, kein „[L-…]“). Anlegen und Ändern als Lieferant nur mit Recht „geld“; Lieferanten erscheinen in Suchen nur mit „geld“.",
+     "regel_typ": "Die Wahl steuert die Felder (formulare.kunde.typ_felder): ohne Wahl zeigt das Formular nur „Firma oder Privat?“, Kundensuche und Kontakt; nach der Wahl genau die Felder dieses Typs. Wechsel in 5.2 nach typ_felder.wechsel."
     },
     {
      "id": "name",
-     "label": "Name / Firma",
+     "label": "Firmenname",
      "typ": "text",
      "pflicht": "immer",
-     "wann": "Neukunde oder leer",
-     "vorbelegung": "Suchtext bzw. Aufruf-Text wird nach Muster übernommen (erfassen.erkennung.text_regeln): E-Mail-Muster → E-Mail, Telefon-Muster → Telefon, sonst Name / Firma (nichts doppelt tippen)",
+     "wann": "Neukunde oder leer · Firma/Lieferant",
+     "vorbelegung": "Suchtext bzw. Aufruf-Text nach Muster (erfassen.erkennung.text_regeln); aus Beleg/Signatur/Visitenkarte",
      "validierung": "2–160 Zeichen",
-     "fehlertext": "Name bitte mit mindestens 2 Zeichen"
+     "fehlertext": "Firmenname bitte mit mindestens 2 Zeichen",
+     "typ_nur": [
+      "Firma",
+      "Lieferant"
+     ],
+     "regel": "mit Rechtsform (GmbH, KG …); ist zugleich der Anzeigename (formulare.kunde.anzeige)"
     },
     {
-     "id": "ansprechpartner",
-     "label": "Ansprechpartner",
-     "typ": "text",
-     "pflicht": "fuer_auftrag",
+     "id": "anrede",
+     "label": "Anrede",
+     "typ": "segment",
+     "optionen": [
+      "Frau",
+      "Herr",
+      "ohne"
+     ],
+     "pflicht": false,
+     "typ_nur": [
+      "Firma",
+      "Privat",
+      "Lieferant"
+     ],
      "wann": "Neukunde oder leer",
-     "vorbelegung": "Privat: läuft beim Tippen mit dem Namen mit, bis er von Hand geändert wird",
-     "validierung": "höchstens 120 Zeichen",
-     "fehlertext": "Höchstens 120 Zeichen"
+     "vorbelegung": "aus Beleg/Signatur („Frau …“, „Herr …“), sonst keine",
+     "regel": "steuert nur die Briefanrede (formulare.kunde.anzeige.anrede_zeile); nie aus dem Vornamen geraten"
+    },
+    {
+     "id": "vorname",
+     "label": "Vorname",
+     "typ": "text",
+     "pflicht_je_typ": {
+      "Privat": "fuer_auftrag",
+      "Firma": false,
+      "Lieferant": false
+     },
+     "typ_nur": [
+      "Firma",
+      "Privat",
+      "Lieferant"
+     ],
+     "wann": "Neukunde oder leer",
+     "vorbelegung": "aus Beleg/Signatur/Visitenkarte; Privat: Suchtext „Vorname Nachname“ wird geteilt (letztes Wort = Nachname)",
+     "validierung": "1–60 Zeichen",
+     "fehlertext": "Vorname höchstens 60 Zeichen"
+    },
+    {
+     "id": "nachname",
+     "label": "Nachname",
+     "typ": "text",
+     "pflicht_je_typ": {
+      "Privat": "immer",
+      "Firma": "fuer_auftrag",
+      "Lieferant": false
+     },
+     "typ_nur": [
+      "Firma",
+      "Privat",
+      "Lieferant"
+     ],
+     "wann": "Neukunde oder leer",
+     "vorbelegung": "wie Vorname",
+     "validierung": "2–80 Zeichen",
+     "fehlertext": "Nachname bitte mit mindestens 2 Zeichen"
+    },
+    {
+     "id": "funktion",
+     "label": "Funktion / Abteilung",
+     "typ": "text",
+     "pflicht": false,
+     "typ_nur": [
+      "Firma",
+      "Lieferant"
+     ],
+     "wann": "Neukunde oder leer",
+     "validierung": "höchstens 60 Zeichen",
+     "fehlertext": "Höchstens 60 Zeichen"
     },
     {
      "id": "telefon",
@@ -1799,14 +1907,43 @@
      "fehlertext": "E-Mail-Adresse prüfen"
     },
     {
+     "id": "rechnungs_email",
+     "label": "E-Mail für Rechnungen",
+     "typ": "email",
+     "pflicht": false,
+     "typ_nur": [
+      "Firma"
+     ],
+     "wann": "Neukunde oder leer",
+     "vorbelegung": "leer (Rechnungen gehen sonst an E-Mail)",
+     "validierung": "wie E-Mail",
+     "fehlertext": "E-Mail-Adresse prüfen",
+     "regel": "Empfänger von Rechnung und Zahlungserinnerung (5.3 Vorlagen Rechnung, Zahlungserinnerung); leer → E-Mail"
+    },
+    {
      "id": "strasse",
-     "label": "Straße und Nr.",
+     "label": "Straße",
      "typ": "text",
      "pflicht": "fuer_auftrag",
      "wann": "Neukunde oder leer",
-     "vorbelegung": "aus Signatur/Beleg",
-     "validierung": "höchstens 160 Zeichen",
-     "fehlertext": "Höchstens 160 Zeichen"
+     "vorbelegung": "aus Signatur/Beleg; Vorschläge aus dem Adressverzeichnis zur PLZ (adresspruefung)",
+     "validierung": "höchstens 120 Zeichen",
+     "fehlertext": "Höchstens 120 Zeichen"
+    },
+    {
+     "id": "hausnummer",
+     "label": "Nr.",
+     "typ": "text",
+     "pflicht": "fuer_auftrag",
+     "typ_nur": [
+      "Firma",
+      "Privat",
+      "Lieferant"
+     ],
+     "wann": "Neukunde oder leer",
+     "vorbelegung": "aus Beleg/Signatur (letzter Teil mit Ziffer aus „Straße Nr.“)",
+     "validierung": "1–10 Zeichen (Ziffern, Buchstabe, „-“, „/“)",
+     "fehlertext": "Hausnummer prüfen"
     },
     {
      "id": "plz",
@@ -1876,16 +2013,59 @@
      },
      "spalten": "zahlungsbedingung ∈ {vorkasse, bar, rechnung, NULL}; ziel_freigeschaltet (ja/nein), ziel_tage, skonto_prozent, skonto_tage sind eigene Spalten (A-73, A-79).",
      "anzeige": "überall gleich: „Vorkasse“ · „Bar oder Karte bei Abholung“ · „Rechnung auf Ziel · {n} Tage“, bei p > 0 zusätzlich „ · {p} % Skonto bis {m} Tage“ · leer = fehlt.",
-     "regel": "Auswahl im Neuen Eingang und in Kunde bearbeiten (5.2): Vorkasse, Bar oder Karte bei Abholung und NUR bei ziel_freigeschaltet = ja zusätzlich option_ziel. Kunde anlegen (3.1) und Inline-Neukunde: nur die zwei Optionen (ein Neukunde ist nie freigeschaltet). Tage und Skonto ändert nur 8.6. Nach „Aufheben“ (8.6) ist die Kundenbedingung vorkasse (A-79); rechnung mit ziel_freigeschaltet = nein kommt nur bei Altdaten vor und lehnt der Server ab (K7) – im Eingang gilt ein solcher Altwert wie fehlend (keine Vorbelegung, paymentContract nimmt keinen Ziel-Modus an, K6)."
+     "regel": "Auswahl im Neuen Eingang und in Kunde bearbeiten (5.2): Vorkasse, Bar oder Karte bei Abholung und NUR bei ziel_freigeschaltet = ja zusätzlich option_ziel. Kunde anlegen (3.1) und Inline-Neukunde: nur die zwei Optionen (ein Neukunde ist nie freigeschaltet). Tage und Skonto ändert nur 8.6. Nach „Aufheben“ (8.6) ist die Kundenbedingung vorkasse (A-79); rechnung mit ziel_freigeschaltet = nein kommt nur bei Altdaten vor und lehnt der Server ab (K7) – im Eingang gilt ein solcher Altwert wie fehlend (keine Vorbelegung, paymentContract nimmt keinen Ziel-Modus an, K6).",
+     "typ_nur": [
+      "Firma",
+      "Privat"
+     ]
+    },
+    {
+     "id": "uebergabe",
+     "label": "Übergabe bevorzugt",
+     "typ": "segment",
+     "optionen": [
+      "Abholung",
+      "Versand"
+     ],
+     "pflicht": false,
+     "typ_nur": [
+      "Firma",
+      "Privat"
+     ],
+     "wann": "Kunde anlegen und bearbeiten",
+     "vorbelegung": "leer; nach dem ersten Auftrag Vorschlag „wie zuletzt: {übergabe}“",
+     "schluessel": {
+      "Abholung": "abholung",
+      "Versand": "versand"
+     },
+     "regel": "Vorbelegung der Übergabe im Neuen Eingang (Herkunft „aus Kundenkarte“); Spalte customers.handover_preference"
     },
     {
      "id": "ustid",
      "label": "USt-ID",
      "typ": "text",
      "pflicht": false,
-     "wann": "Kundentyp Gewerbe",
+     "wann": "Kundentyp Firma",
      "validierung": "Deutschland: „DE“ + 9 Ziffern; sonst 4–20 Zeichen",
-     "fehlertext": "USt-ID prüfen"
+     "fehlertext": "USt-ID prüfen",
+     "typ_nur": [
+      "Firma"
+     ]
+    },
+    {
+     "id": "website",
+     "label": "Website",
+     "typ": "text",
+     "pflicht": false,
+     "typ_nur": [
+      "Firma",
+      "Lieferant"
+     ],
+     "wann": "Neukunde oder leer",
+     "vorbelegung": "Vorschlag aus der E-Mail-Domain (nicht bei Freemail-Domains), Herkunft „aus E-Mail“",
+     "validierung": "Domain mit Punkt, höchstens 120 Zeichen",
+     "fehlertext": "Website prüfen",
+     "regel": "Quelle für den Internet-Abgleich (internet_abgleich, Stufe 4)"
     },
     {
      "id": "iban",
@@ -1895,7 +2075,10 @@
      "wann": "Kundentyp Lieferant",
      "vorbelegung": "aus der ersten Eingangsrechnung (erkannt)",
      "pruefung": "IBAN-Prüfziffer; Fehlertext „IBAN ungültig“",
-     "regel": "Abgleich in 3.8 (abweichende IBAN → Warnung)"
+     "regel": "Abgleich in 3.8 (abweichende IBAN → Warnung)",
+     "typ_nur": [
+      "Lieferant"
+     ]
     },
     {
      "id": "zahlungsziel_tage",
@@ -1905,7 +2088,10 @@
      "wann": "Kundentyp Lieferant",
      "vorbelegung": "aus der ersten Eingangsrechnung (erkannt), sonst leer",
      "pruefung": "0–120",
-     "regel": "Vorbelegung „Fällig am“ in 3.8"
+     "regel": "Vorbelegung „Fällig am“ in 3.8",
+     "typ_nur": [
+      "Lieferant"
+     ]
     },
     {
      "id": "kundennummer",
@@ -1970,12 +2156,16 @@
     "regel": "Eine geteilte Funktion vollstaendigkeit(kunde, login) aus OR-03 (ein Modul für Client und Server). Gespeicherte Kunden: der Server liefert das Kennzeichen (Liste, Karte, Filter „Unvollständig“). Ungespeicherte bzw. gerade ergänzte Werte (Eingang, 5.2): der Client rechnet beim Tippen mit derselben Funktion; der Server prüft beim Speichern/Buchen erneut (pruefliste.regeln).",
     "labels": [
      [
-      "Name / Firma",
-      "name"
+      "Name",
+      "Firma: Firmenname · Privat: Nachname"
      ],
      [
       "Ansprechpartner",
-      "ansprechpartner"
+      "nur Firma: Nachname des Ansprechpartners"
+     ],
+     [
+      "Vorname",
+      "nur Privat"
      ],
      [
       "Telefon",
@@ -1987,7 +2177,7 @@
      ],
      [
       "Anschrift",
-      "strasse, plz, ort, land (alle vier)"
+      "strasse, hausnummer, plz, ort, land (alle fünf)"
      ],
      [
       "Zahlungsbedingung",
@@ -1997,10 +2187,70 @@
     "text": "„Unvollständig – für Auftrag fehlt: {liste}“ – {liste} = fehlende Labels in obiger Reihenfolge mit „, “ getrennt",
     "ohne_geld": "Login ohne „geld“: Zahlungsbedingung steht nicht in {liste}; fehlt sie, endet der Text mit „ · Zahlungsbedingung fehlt · Büro ergänzt“; fehlt nur sie: „Unvollständig – Zahlungsbedingung fehlt · Büro ergänzt“ ohne Knopf „Ergänzen“.",
     "speichern_ohne_geld": "5.2 (kundebearbeiten): der Zwischenschritt „Für Auftrag fehlt noch: {liste}“ bildet {liste} nach ohne_geld (ohne Zahlungsbedingung). Fehlt für einen Login ohne „geld“ nur die Zahlungsbedingung, wird ohne Zwischenschritt gespeichert (Toast „Kunde gespeichert“); die Karte zeigt danach „Unvollständig – Zahlungsbedingung fehlt · Büro ergänzt“.",
-    "rechnungsanschrift": "7.1 und 7.2 ohne Rechnung (Sperrfall „kundendaten“, vor „firmendaten“): Name / Firma, Straße und Nr., PLZ, Ort und Land müssen gesetzt sein (Empfängeranschrift §14 UStG); {angabe} = die fehlenden davon in dieser Reihenfolge mit „, “ getrennt (dieselbe Funktion vollstaendigkeit). Leeres Land ist kein Ausland, sondern „Kundenanschrift unvollständig · Land fehlt“; Ausland nur bei gesetztem Land ≠ Deutschland (A-70).",
-    "kundenliste": "Kundenliste (kundenhinweise Grund 5): „Für Auftrag fehlt: {liste}“; Login ohne „geld“ nach ohne_geld: „Für Auftrag fehlt: {liste} · Zahlungsbedingung fehlt · Büro ergänzt“, fehlt nur die Zahlungsbedingung: „Zahlungsbedingung fehlt · Büro ergänzt“. Der Grund zählt als Hinweis-Grund (oranges „!“, Kunde oben, Filter „Mit Hinweis“) und der Kunde unter „Unvollständig“."
+    "rechnungsanschrift": "7.1 und 7.2 ohne Rechnung (Sperrfall „kundendaten“, vor „firmendaten“): Name (Firma: Firmenname · Privat: Nachname), Straße, Nr., PLZ, Ort und Land müssen gesetzt sein (Empfängeranschrift §14 UStG); {angabe} = die fehlenden davon in dieser Reihenfolge mit „, “ getrennt (dieselbe Funktion vollstaendigkeit). Leeres Land ist kein Ausland, sondern „Kundenanschrift unvollständig · Land fehlt“; Ausland nur bei gesetztem Land ≠ Deutschland (A-70).",
+    "kundenliste": "Kundenliste (kundenhinweise Grund 5): „Für Auftrag fehlt: {liste}“; Login ohne „geld“ nach ohne_geld: „Für Auftrag fehlt: {liste} · Zahlungsbedingung fehlt · Büro ergänzt“, fehlt nur die Zahlungsbedingung: „Zahlungsbedingung fehlt · Büro ergänzt“. Der Grund zählt als Hinweis-Grund (oranges „!“, Kunde oben, Filter „Mit Hinweis“) und der Kunde unter „Unvollständig“.",
+    "lieferant": "Lieferant: vollständig mit Firmenname; Anschrift, IBAN und Zahlungsziel sind Hinweise, keine Pflicht."
    },
-   "validierung_regel": "Je Kundenfeld gilt genau „validierung“ mit „fehlertext“ – im Client beim Verlassen des Felds und beim Hauptknopf, im Server (createCustomerCommand, orderIntakeCommand NEW, Kunde bearbeiten) mit denselben Grenzen, Antwort VALIDATION_ERROR je Feld. Leere Felder ohne Pflicht werden nicht geprüft. Gilt für Neuer Eingang, Kunde anlegen, Kunde bearbeiten und Datenkiste-Prüfung."
+   "validierung_regel": "Je Kundenfeld gilt genau „validierung“ mit „fehlertext“ – im Client beim Verlassen des Felds und beim Hauptknopf, im Server (createCustomerCommand, orderIntakeCommand NEW, Kunde bearbeiten) mit denselben Grenzen, Antwort VALIDATION_ERROR je Feld. Leere Felder ohne Pflicht werden nicht geprüft. Gilt für Neuer Eingang, Kunde anlegen, Kunde bearbeiten und Datenkiste-Prüfung.",
+   "typ_felder": {
+    "regel": "Eine Komponente, Felder je Typ (Feld typ_nur). Reihenfolge = formulare.kunde.felder; Überschriften je Typ.",
+    "Firma": "Firmenname* · Ansprechpartner (Anrede, Vorname, Nachname¹, Funktion) · Telefon* · E-Mail¹ · E-Mail für Rechnungen · Straße¹ Nr.¹ PLZ¹ Ort¹ Land¹ · Zahlungsbedingung¹ · USt-ID · Website · Notiz",
+    "Privat": "Anrede · Vorname¹ · Nachname* · Telefon* · E-Mail¹ · Straße¹ Nr.¹ PLZ¹ Ort¹ Land¹ · Zahlungsbedingung¹ · Notiz (kein Firmenname, keine USt-ID, kein Ansprechpartner – die Person ist der Kontakt)",
+    "Lieferant": "Firmenname* · Ansprechpartner (Anrede, Vorname, Nachname, Funktion) · Telefon · E-Mail · Anschrift · IBAN · Zahlungsziel (Tage) · Notiz",
+    "legende": "* Pflicht · ¹ für Auftrag nötig (formulare.kunde.vollstaendigkeit)",
+    "ueberschrift": "Firma/Lieferant: Zwischenüberschrift „Ansprechpartner“ vor Anrede, Vorname, Nachname, Funktion (Feldnamen ohne Wiederholung); Privat: keine",
+    "ohne_wahl": "Nur „Firma oder Privat?“ groß oben, darunter Kontakt (Telefon, E-Mail) und Kundensuche; Name-Felder erscheinen nach der Wahl. Erkennt die App den Typ (Rechtsform, Visitenkarte), ist er vorgewählt mit Herkunft.",
+    "wechsel": "Typwechsel (3.1 vor dem Speichern, 5.2 jederzeit, K8): Privat → Firma: Vorname/Nachname/Anrede werden Ansprechpartner, Firmenname bleibt leer (Pflicht). Firma → Privat: Ansprechpartner wird die Person; Firmenname, Funktion, USt-ID, Website und E-Mail für Rechnungen entfallen nach Rückfrage „{n} Angaben entfallen: {liste} – wechseln?“ (Wechseln | Abbrechen); ohne Ansprechpartner wird der Nachname Pflicht. Nichts verschwindet still."
+   },
+   "anzeige": {
+    "name": "Anzeigename (customers.name, vom Server gebildet, nie getippt): Firma/Lieferant = Firmenname; Privat = „{vorname} {nachname}“ (ohne Vorname nur Nachname)",
+    "sortierung": "Kundenliste alphabetisch nach Sortiername: Firma = Firmenname, Privat = Nachname, Vorname",
+    "kuerzel": "Firma: Anfangsbuchstaben der ersten zwei Wörter des Firmennamens ohne Rechtsform; Privat: Vorname[0] + Nachname[0]",
+    "ansprechpartner": "Anzeige (Kundenkarte, Kundeninfo, 3.4, Suche): Firma = „{Anrede} {Vorname} {Nachname} · {Funktion}“ (fehlende Teile entfallen); Privat entfällt (Name ist die Person)",
+    "anrede_zeile": "Mail-Platzhalter {anrede_zeile} (5.3 alle Vorlagen): mit Anrede „Guten Tag Frau {nachname}“ bzw. „Guten Tag Herr {nachname}“; Anrede „ohne“ oder leer: „Guten Tag {vorname} {nachname}“; Firma ohne Ansprechpartner: „Guten Tag“",
+    "rechnung": "Rechnungs- und Lieferscheinempfänger: Firma = Firmenname + „z. Hd. {Anrede} {Vorname} {Nachname}“ (falls vorhanden) + Anschrift; Privat = „{Anrede} {Vorname} {Nachname}“ + Anschrift"
+   },
+   "autofill": {
+    "funktion": "E15",
+    "regel": "Vorbelegen heißt vorschlagen: jeder vorbelegte Wert trägt seine Herkunft („erkannt · Visitenkarte“, „aus PLZ“, „aus E-Mail“) und gilt erst mit Speichern; getippte Werte werden nie überschrieben.",
+    "quellen": [
+     "Neuer Eingang, Mail-Signatur, Visitenkarte, Beleg (E04, E05, E07): alle erkannten Felder einschließlich Anrede, Vor- und Nachname getrennt, Straße und Hausnummer getrennt.",
+     "PLZ → Ort (DE, AT, CH aus dem Adressverzeichnis; mehrere Orte → Auswahl); Ort → PLZ-Vorschläge; Straße → Vorschläge zur PLZ beim Tippen (ab 3 Buchstaben).",
+     "E-Mail-Domain → Website (Firma; nicht bei Freemail wie gmx, web, gmail, t-online, outlook, icloud).",
+     "Suchtext aus der Kundensuche: E-Mail-Muster → E-Mail, Telefon-Muster → Telefon, sonst Firma: Firmenname · Privat: „Vorname Nachname“ geteilt.",
+     "Telefon wird beim Verlassen einheitlich angezeigt ({telefon}), gespeichert wird die normalisierte Nummer."
+    ]
+   },
+   "adresspruefung": {
+    "funktion": "E15",
+    "quelle": "Lokales Adressverzeichnis in der Datenbank (Tabelle address_directory: Land, PLZ, Ort, Ortsteil, Straße), monatlich aus offenen amtlichen Verzeichnissen geladen (DE: Straßen- und PLZ-Verzeichnis, AT/CH: PLZ- und Straßenverzeichnisse der Post). Keine Kundendaten verlassen die App; kein externer Aufruf beim Tippen.",
+    "wann": "live beim Tippen und beim Verlassen von PLZ, Ort, Straße (Debounce 250 ms); Land ≠ DE/AT/CH: nicht prüfbar (neutraler Hinweis)",
+    "ergebnisse": {
+     "gefunden": "grün „Adresse gefunden“ (PLZ, Ort und Straße passen zusammen; Hausnummer wird in Stufe 1 nicht geprüft)",
+     "ort_passt_nicht": "orange „PLZ {plz} gehört zu {ort_richtig} – nicht zu „{ort}““ mit Knopf „{ort_richtig} übernehmen“ (und bei mehreren Orten Auswahl)",
+     "plz_unbekannt": "orange „PLZ {plz} gibt es in {land} nicht“ + Vorschläge aus dem Ort (falls getippt)",
+     "strasse_unbekannt": "orange „{strasse} gibt es in {plz} {ort} nicht“ + bis 3 ähnliche Straßen zur Übernahme",
+     "nicht_pruefbar": "grau „Land {land} wird nicht geprüft“"
+    },
+    "speichern": "Eine orange Meldung sperrt nicht still: „Kunde speichern“ springt zur Meldung; dort „Vorschlag übernehmen“ oder bewusst „Adresse stimmt so“ (z. B. Neubaustraße). Gespeichert wird address_status ∈ {gefunden, uebernommen, bestaetigt, nicht_pruefbar} mit Zeitpunkt; „bestaetigt“ steht als leiser Hinweis an der Anschrift der Kundenkarte („Adresse von Hand bestätigt“).",
+    "server": "Der Server prüft beim Speichern mit derselben Funktion erneut; eine ungeklärte orange Meldung lehnt er mit VALIDATION_ERROR „Adresse prüfen“ ab."
+   },
+   "internet_abgleich": {
+    "funktion": "Z11",
+    "stufe": 4,
+    "nur": "Kundentyp Firma bzw. Lieferant; nie für Privatpersonen (Datenschutz)",
+    "ausloeser": "Werkzeug „Im Internet ergänzen“ in 3.1/5.2 (vor Stufe 4 ausgegraut) und automatisch als Vorschlag, sobald Firmenname und Ort oder Website stehen",
+    "quellen": "Impressum der Firmen-Website, Unternehmens-/Handelsregister, Firmeneintrag eines geprüften EU-Anbieters; USt-ID über die EU-Prüfung (VIES)",
+    "ergebnis": "Vorschlag je Feld mit Quelle und Abrufdatum („gefunden · Impressum {domain} · {datum}“); leere Felder werden vorbelegt, abweichende als „dein Wert · gefunden“ zur Wahl; „Alle übernehmen“ oder je Feld; nichts wird ohne Bestätigung gespeichert."
+   },
+   "daten": {
+    "tabelle": "customers (bestehend) – ein Schreibweg createCustomerCommand / updateCustomerCommand, dieselbe Prüfung wie der Client",
+    "spalten_neu": "salutation (frau|herr|ohne|NULL), first_name, last_name, contact_role, house_number, billing_email, website, address_status (gefunden|uebernommen|bestaetigt|nicht_pruefbar|NULL), address_checked_at",
+    "bestehend": "customer_type (business|privat|lieferant), name (Anzeigename, nur vom Server gebildet nach formulare.kunde.anzeige.name), company_name (Firmenname, nur Firma/Lieferant), phone, email, street (ohne Hausnummer), zip_code, city, country, vat_id",
+    "entfaellt": "keine Spalte wird gelöscht (Migrationen nur additiv). contact_person wird stillgelegt: nach der Migration nur noch lesend, App schreibt sie nicht mehr und zeigt sie nicht mehr an; neue Werte nur in salutation, first_name, last_name, contact_role.",
+    "migration": "additiv; Altdaten: contact_person bzw. Privat-name „{Anrede} {Vorname} {Nachname}“ → salutation, first_name, last_name (führendes Frau/Herr → Anrede, letztes Wort → Nachname, Rest → Vorname); street „{Straße} {Nr.}“ → street, house_number (letzter Teil mit Ziffer). Nicht sicher teilbar → alles in last_name und Kundenhinweis „Name prüfen“ (kundenhinweise). Danach contact_person nur noch lesend (stillgelegt, bleibt dauerhaft in der Tabelle).",
+    "adressverzeichnis": "address_directory (country, zip_code, city, district, street) – nur lesend für alle Logins, geladen per Import-Job; Index auf (country, zip_code) und (country, zip_code, street)"
+   }
   },
   "position": {
    "baustein": "PositionZeile",
@@ -2249,6 +2499,10 @@
    "befehl": "auftrag.fertig_zuruecknehmen (grund 3–200 Zeichen), Versionsbefehl",
    "folgen": "Station In Arbeit, Fertigzeitpunkt gelöscht; Teil-Haken, gut/Ausschuss und Gründe bleiben; Teile, Mehrarbeit und Termin wieder änderbar; der Auftrag verlässt Werkstatt › Fertig, Ware raus und Buchhaltung › Abrechnen (Rechnungsentwurf verworfen), Fälle „heute fällig“ und Geld-Fälle dazu entfallen; Verlauf „Fertigmeldung zurückgenommen · {grund} · {login}“. Wurde der Kunde mit der Fertigmeldung informiert, zeigt der Dialog „Kunde am {datum} informiert“ mit „Status-Mail“ (Recht kunden).",
    "rueckgaengig": "Die 4 s „Rückgängig“ im Toast nach „Fertig melden“ bleiben (ohne Grund)."
+  },
+  "abholung": {
+   "abholtag": "company_settings.pickup_weekday (Standard Freitag, änderbar in 8.4)",
+   "hoechstzahl": "company_settings.pickups_max_per_day (leer = keine Grenze, änderbar in 8.4)"
   },
   "aktive_position": "F1: Eine Position (ein Teil) ist aktiv, wenn sie weder storniert noch nicht_geliefert ist (items.nicht_geliefert, ware.rest_nicht_gekommen). Fertig melden, Pflichtfoto, Lieferschein, Rechnung, Auftragswert, Termin, Kurzform, Bündel und Listen zählen nur aktive Positionen.",
   "abschluss": "Ein Auftrag ist abgeschlossen, wenn die Ware raus ist (abgeholt | versendet | unbearbeitet zurück | ohne Ware geschlossen) UND das Geld erledigt ist: jede gültige Rechnung bezahlt (offen 0) oder keine Berechnung (Nacharbeitsauftrag, unbearbeitet, ohne Ware, Auslandskunde). Bis dahin bleibt er für Logins mit Recht geld sichtbar: Karte (Kette, nächster Schritt, Geld), Buchhaltung (Abrechnen | Offen | Geld fehlt) und Der Tag (rechnung_schreiben, bar_offen, überfällig). Ohne Recht geld endet der Weg mit „abgeholt“ bzw. „versendet“."
@@ -6143,7 +6397,7 @@
          ],
          "pflicht": "immer",
          "wann": "immer",
-         "vorbelegung": "nach werkbank.vorbelegung_je_aufruf (Auftrag; KV bei Aufruf {mail} bzw. {auftrag}#kv)",
+         "vorbelegung": "nach werkbank.vorbelegung_je_aufruf mit Herkunft (Auftrag bei {kunde}/{beleg}; KV bei {mail} bzw. {auftrag}#kv; ohne Argument leer bis Erkennung/Klick)",
          "aenderung": "optik",
          "schluessel": {
           "Auftrag": "auftrag",
@@ -6160,7 +6414,7 @@
          "typ": "datum",
          "pflicht": "immer",
          "wann": "immer",
-         "vorbelegung": "Machbar-Termin laut terminvorschlag.berechnung (Herkunft vorbelegt), sobald eine Position eine Oberfläche ≠ „noch zu klären“ hat; sonst leer, ebenso wenn die Berechnung fehlschlägt (terminvorschlag.laden.fehler). Ein erkannter oder von Hand eingegebener Termin ist der Wunsch und wird nie von der Vorbelegung überschrieben (Befund 4)",
+         "vorbelegung": "keine stille Vorbelegung: darüber stehen drei leistbare Vorschläge (bausteine_vertraege.terminvorschlag); Klick setzt das Datum. Ein erkannter oder getippter Termin ist der Wunsch und wird gegen die Vorschläge abgeglichen (Befund 4).",
          "aenderung": "optik",
          "pruefung": "Datum ≥ heute (Europe/Berlin), kein Sonntag und kein Feiertag (Feiertage nach verhalten_appweit.arbeitstage; Samstag erlaubt, A-47). Sonntage und Feiertage sind in der Datumsauswahl nicht wählbar; ein getipptes bzw. erkanntes Datum wird beim Verlassen des Felds geprüft. Fehlertexte „Liefertermin liegt in der Vergangenheit“ bzw. „Kein Liefertermin an Sonn- und Feiertagen“; der Server prüft dasselbe (VALIDATION_ERROR je Feld).",
          "schluessel": "Datum JJJJ-MM-TT"
@@ -6175,14 +6429,14 @@
          ],
          "pflicht": "immer",
          "wann": "immer",
-         "vorbelegung": "Wunsch",
+         "vorbelegung": "nach werkbank.vorbelegung_je_aufruf.termin_ist (aus der Quelle des Datums, mit Herkunft; sonst leer)",
          "aenderung": "funktion_neu",
          "schluessel": {
           "Wunsch": "wunsch",
           "bestätigt": "bestaetigt",
           "(nur über Termin ändern)": "verschoben"
          },
-         "regel": "eigenes Feld; „verschoben“ entsteht nur über Termin ändern mit Grund (U-167); der Terminvorschlag ändert es nicht"
+         "regel": "eigenes Feld; „verschoben“ entsteht nur über Termin ändern mit Grund (U-167); die Terminwahl setzt es nur nach werkbank.vorbelegung_je_aufruf.termin_ist"
         },
         {
          "id": "uebergabe",
@@ -6194,7 +6448,7 @@
          ],
          "pflicht": "immer",
          "wann": "immer",
-         "vorbelegung": "letzte Übergabe des Kunden, sonst Abholung",
+         "vorbelegung": "Bestandskunde: bevorzugte Übergabe aus der Kundenkarte (Herkunft „aus Kundenkarte“), sonst die des letzten Auftrags („wie zuletzt“); Neukunde bzw. ohne Vorgeschichte: keine Vorbelegung, Pflichtwahl (nichts still vorgewählt)",
          "aenderung": "optik",
          "schluessel": {
           "Abholung": "abholung",
@@ -6212,7 +6466,7 @@
          ],
          "pflicht": "immer",
          "wann": "immer",
-         "vorbelegung": "nach werkbank.zahlung (Zahlungsbedingung des Kunden über paymentContract; ohne Bedingung Abholung → Bar oder Karte, Versand → Vorkasse)",
+         "vorbelegung": "nach werkbank.zahlung (Zahlungsbedingung des Kunden über paymentContract; ohne Bedingung Abholung → Bar oder Karte, Versand → Vorkasse) – sichtbar als grüne Wahl mit Herkunft „aus Kundenkarte“ (verhalten_appweit.auswahl.vorbelegt)",
          "recht": "geld",
          "ohne_recht": "Feld fehlt; Server setzt den Modus nach werkbank.zahlung",
          "aenderung": "optik",
@@ -6236,7 +6490,7 @@
          ],
          "pflicht": "immer",
          "wann": "immer",
-         "vorbelegung": "nach werkbank.vorbelegung_je_aufruf",
+         "vorbelegung": "nach werkbank.vorbelegung_je_aufruf.eingangsart (nur aus Kanal oder Erkennung, mit Herkunft; sonst leer, Pflichtwahl)",
          "aenderung": "funktion_neu",
          "optionen_regel": "{firma} = Kurzname aus den Firmendaten (8.1)",
          "schluessel": {
@@ -6823,7 +7077,8 @@
    "titel": "Kunde anlegen",
    "icon": "user",
    "funktion": [
-    "A06"
+    "A06",
+    "E15"
    ],
    "quelle": [
     "DS11",
@@ -6866,39 +7121,137 @@
          "aenderung": "funktion_neu",
          "id": "aus-mail-signatur",
          "arg_ist": "auswahl#kundeneu (3.4 zeigt die nicht zugeordneten Mails; „Übernehmen“ führt zurück)"
+        },
+        {
+         "id": "internet-ergaenzen",
+         "text": "Im Internet ergänzen",
+         "icon": "search",
+         "ziel": "zustand:daten",
+         "meldung": "Gefundene Angaben stehen als Vorschlag an den Feldern",
+         "funktion": "Z11",
+         "wann": "Kundentyp Firma (formulare.kunde.internet_abgleich)"
         }
        ]
       },
       {
        "typ": "abschnitt",
        "nr": 1,
-       "titel": "Pflicht",
+       "titel": "Wer?",
        "felder": [
         {
          "id": "kundentyp",
-         "label": "Kundentyp",
+         "label": "Firma oder Privat?",
          "typ": "segment",
          "optionen": [
-          "Gewerbe",
-          "Privat"
+          "Firma",
+          "Privat",
+          "Lieferant"
          ],
          "pflicht": "immer",
          "wann": "Neukunde",
-         "vorbelegung": "aus Beleg/Signatur (Firma erkannt → Gewerbe), sonst keine",
-         "aenderung": "optik",
-         "ohne_modus": "lieferant"
+         "vorbelegung": "aus Beleg/Signatur/Visitenkarte: Rechtsform erkannt → Firma; nur Vor- und Nachname → Privat; sonst keine",
+         "schluessel": {
+          "Firma": "business",
+          "Privat": "privat",
+          "Altwert institution": "business (Migration, Annahme A-56)",
+          "Lieferant": "lieferant"
+         },
+         "regel_lieferant": "Lieferant (F1): Pflicht nur Name; keine Zahlungsbedingung, keine Aufträge; IBAN und Zahlungsziel für 3.8; Kundennummer-Kreis wie Kunden (eine Kartei, kein „[L-…]“). Anlegen und Ändern als Lieferant nur mit Recht „geld“; Lieferanten erscheinen in Suchen nur mit „geld“.",
+         "regel_typ": "Die Wahl steuert die Felder (formulare.kunde.typ_felder): ohne Wahl zeigt das Formular nur „Firma oder Privat?“, Kundensuche und Kontakt; nach der Wahl genau die Felder dieses Typs. Wechsel in 5.2 nach typ_felder.wechsel."
         },
         {
          "id": "name",
-         "label": "Name / Firma",
+         "label": "Firmenname",
          "typ": "text",
          "pflicht": "immer",
-         "wann": "Neukunde oder leer",
-         "vorbelegung": "Suchtext bzw. Aufruf-Text wird nach Muster übernommen (erfassen.erkennung.text_regeln): E-Mail-Muster → E-Mail, Telefon-Muster → Telefon, sonst Name / Firma (nichts doppelt tippen)",
-         "aenderung": "optik",
+         "typ_nur": [
+          "Firma",
+          "Lieferant"
+         ],
+         "wann": "Neukunde oder leer · Firma/Lieferant",
+         "vorbelegung": "Suchtext bzw. Aufruf-Text nach Muster (erfassen.erkennung.text_regeln); aus Beleg/Signatur/Visitenkarte",
          "validierung": "2–160 Zeichen",
-         "fehlertext": "Name bitte mit mindestens 2 Zeichen"
+         "fehlertext": "Firmenname bitte mit mindestens 2 Zeichen",
+         "regel": "mit Rechtsform (GmbH, KG …); ist zugleich der Anzeigename (formulare.kunde.anzeige)"
         },
+        {
+         "id": "anrede",
+         "label": "Anrede",
+         "typ": "segment",
+         "optionen": [
+          "Frau",
+          "Herr",
+          "ohne"
+         ],
+         "pflicht": false,
+         "typ_nur": [
+          "Firma",
+          "Privat",
+          "Lieferant"
+         ],
+         "wann": "Neukunde oder leer",
+         "vorbelegung": "aus Beleg/Signatur („Frau …“, „Herr …“), sonst keine",
+         "regel": "steuert nur die Briefanrede (formulare.kunde.anzeige.anrede_zeile); nie aus dem Vornamen geraten"
+        },
+        {
+         "id": "vorname",
+         "label": "Vorname",
+         "typ": "text",
+         "pflicht_je_typ": {
+          "Privat": "fuer_auftrag",
+          "Firma": false,
+          "Lieferant": false
+         },
+         "typ_nur": [
+          "Firma",
+          "Privat",
+          "Lieferant"
+         ],
+         "wann": "Neukunde oder leer",
+         "vorbelegung": "aus Beleg/Signatur/Visitenkarte; Privat: Suchtext „Vorname Nachname“ wird geteilt (letztes Wort = Nachname)",
+         "validierung": "1–60 Zeichen",
+         "fehlertext": "Vorname höchstens 60 Zeichen"
+        },
+        {
+         "id": "nachname",
+         "label": "Nachname",
+         "typ": "text",
+         "pflicht_je_typ": {
+          "Privat": "immer",
+          "Firma": "fuer_auftrag",
+          "Lieferant": false
+         },
+         "typ_nur": [
+          "Firma",
+          "Privat",
+          "Lieferant"
+         ],
+         "wann": "Neukunde oder leer",
+         "vorbelegung": "wie Vorname",
+         "validierung": "2–80 Zeichen",
+         "fehlertext": "Nachname bitte mit mindestens 2 Zeichen"
+        },
+        {
+         "id": "funktion",
+         "label": "Funktion / Abteilung",
+         "typ": "text",
+         "pflicht": false,
+         "typ_nur": [
+          "Firma",
+          "Lieferant"
+         ],
+         "wann": "Neukunde oder leer",
+         "validierung": "höchstens 60 Zeichen",
+         "fehlertext": "Höchstens 60 Zeichen"
+        }
+       ],
+       "regel": "formulare.kunde.typ_felder: Firma zeigt Firmenname und darunter „Ansprechpartner“; Privat zeigt Anrede, Vor- und Nachname"
+      },
+      {
+       "typ": "abschnitt",
+       "nr": 2,
+       "titel": "Kontakt",
+       "felder": [
         {
          "id": "telefon",
          "label": "Telefon",
@@ -6906,115 +7259,8 @@
          "pflicht": "immer",
          "wann": "Neukunde oder leer",
          "vorbelegung": "aus Signatur/Beleg",
-         "aenderung": "optik",
          "validierung": "6–20 Zeichen aus Ziffern, Leerzeichen, +, /, -, ( ), mindestens 6 Ziffern",
-         "fehlertext": "Telefonnummer prüfen",
-         "ohne_modus": "lieferant"
-        }
-       ]
-      },
-      {
-       "typ": "abschnitt",
-       "nr": 2,
-       "titel": "Lieferant",
-       "nur_modus": "lieferant",
-       "regel": "Kundentyp ist fest „Lieferant“ (kein Feld); keine Zahlungsbedingung, kein Telefon-Pflichtfeld, keine Aufträge (formulare.kunde.felder[kundentyp].regel_lieferant)",
-       "felder": [
-        {
-         "id": "email",
-         "label": "E-Mail",
-         "typ": "email",
-         "validierung": "ein @, Domain mit Punkt, höchstens 254 Zeichen, keine Leerzeichen",
-         "fehlertext": "E-Mail-Adresse prüfen",
-         "pflicht": false,
-         "wann": "Modus lieferant",
-         "vorbelegung": "Absender des Eingangs (Mail)"
-        },
-        {
-         "id": "iban",
-         "label": "IBAN",
-         "typ": "text",
-         "pruefung": "IBAN-Prüfziffer; Fehlertext „IBAN ungültig“",
-         "pflicht": false,
-         "wann": "Modus lieferant",
-         "vorbelegung": "erkannt aus der Rechnung (Herkunft erkannt)"
-        },
-        {
-         "id": "zahlungsziel_tage",
-         "label": "Zahlungsziel (Tage)",
-         "typ": "zahl",
-         "pruefung": "0–120",
-         "pflicht": false,
-         "wann": "Modus lieferant",
-         "vorbelegung": "erkannt aus der Rechnung, sonst leer"
-        },
-        {
-         "id": "strasse",
-         "label": "Straße und Nr.",
-         "typ": "text",
-         "validierung": "höchstens 160 Zeichen",
-         "fehlertext": "Höchstens 160 Zeichen",
-         "pflicht": false,
-         "wann": "Modus lieferant",
-         "vorbelegung": "erkannt aus der Rechnung"
-        },
-        {
-         "id": "plz",
-         "label": "PLZ",
-         "typ": "text",
-         "validierung": "Deutschland 5 Ziffern · Österreich/Schweiz 4 Ziffern · anderes Land 2–10 Zeichen",
-         "fehlertext": "PLZ prüfen",
-         "pflicht": false,
-         "wann": "Modus lieferant",
-         "vorbelegung": "erkannt aus der Rechnung"
-        },
-        {
-         "id": "ort",
-         "label": "Ort",
-         "typ": "text",
-         "validierung": "höchstens 100 Zeichen",
-         "fehlertext": "Höchstens 100 Zeichen",
-         "pflicht": false,
-         "wann": "Modus lieferant",
-         "vorbelegung": "aus PLZ bzw. erkannt"
-        },
-        {
-         "id": "land",
-         "label": "Land",
-         "typ": "auswahl",
-         "optionen": [
-          "Deutschland",
-          "Österreich",
-          "Schweiz",
-          "anderes Land"
-         ],
-         "schluessel": {
-          "Deutschland": "DE",
-          "Österreich": "AT",
-          "Schweiz": "CH",
-          "anderes Land": "andere"
-         },
-         "pflicht": false,
-         "wann": "Modus lieferant",
-         "vorbelegung": "erkannt aus der Rechnung, sonst leer"
-        }
-       ]
-      },
-      {
-       "typ": "abschnitt",
-       "nr": 2,
-       "titel": "Für Aufträge nötig",
-       "felder": [
-        {
-         "id": "ansprechpartner",
-         "label": "Ansprechpartner",
-         "typ": "text",
-         "pflicht": "fuer_auftrag",
-         "wann": "Neukunde oder leer",
-         "vorbelegung": "Privat: läuft beim Tippen mit dem Namen mit, bis er von Hand geändert wird",
-         "aenderung": "optik",
-         "validierung": "höchstens 120 Zeichen",
-         "fehlertext": "Höchstens 120 Zeichen"
+         "fehlertext": "Telefonnummer prüfen"
         },
         {
          "id": "email",
@@ -7027,14 +7273,50 @@
          "fehlertext": "E-Mail-Adresse prüfen"
         },
         {
+         "id": "rechnungs_email",
+         "label": "E-Mail für Rechnungen",
+         "typ": "email",
+         "pflicht": false,
+         "typ_nur": [
+          "Firma"
+         ],
+         "wann": "Neukunde oder leer",
+         "vorbelegung": "leer (Rechnungen gehen sonst an E-Mail)",
+         "validierung": "wie E-Mail",
+         "fehlertext": "E-Mail-Adresse prüfen",
+         "regel": "Empfänger von Rechnung und Zahlungserinnerung (5.3 Vorlagen Rechnung, Zahlungserinnerung); leer → E-Mail"
+        }
+       ]
+      },
+      {
+       "typ": "abschnitt",
+       "nr": 3,
+       "titel": "Anschrift",
+       "felder": [
+        {
          "id": "strasse",
-         "label": "Straße und Nr.",
+         "label": "Straße",
          "typ": "text",
          "pflicht": "fuer_auftrag",
          "wann": "Neukunde oder leer",
-         "vorbelegung": "aus Signatur/Beleg",
-         "validierung": "höchstens 160 Zeichen",
-         "fehlertext": "Höchstens 160 Zeichen"
+         "vorbelegung": "aus Signatur/Beleg; Vorschläge aus dem Adressverzeichnis zur PLZ (adresspruefung)",
+         "validierung": "höchstens 120 Zeichen",
+         "fehlertext": "Höchstens 120 Zeichen"
+        },
+        {
+         "id": "hausnummer",
+         "label": "Nr.",
+         "typ": "text",
+         "pflicht": "fuer_auftrag",
+         "typ_nur": [
+          "Firma",
+          "Privat",
+          "Lieferant"
+         ],
+         "wann": "Neukunde oder leer",
+         "vorbelegung": "aus Beleg/Signatur (letzter Teil mit Ziffer aus „Straße Nr.“)",
+         "validierung": "1–10 Zeichen (Ziffern, Buchstabe, „-“, „/“)",
+         "fehlertext": "Hausnummer prüfen"
         },
         {
          "id": "plz",
@@ -7042,6 +7324,7 @@
          "typ": "text",
          "pflicht": "fuer_auftrag",
          "wann": "Neukunde oder leer",
+         "vorbelegung": "aus Signatur/Beleg",
          "validierung": "Deutschland 5 Ziffern · Österreich/Schweiz 4 Ziffern · anderes Land 2–10 Zeichen",
          "fehlertext": "PLZ prüfen"
         },
@@ -7073,8 +7356,18 @@
           "Österreich": "AT",
           "Schweiz": "CH",
           "anderes Land": "andere"
-         }
-        },
+         },
+         "regel": "Ausland = Land gesetzt und ≠ DE; leer ist kein Ausland, sondern „Anschrift unvollständig“. Bei „anderes Land“ steht der Ländername in Stufe 1 im Feld Ort (A-87)."
+        }
+       ],
+       "regel": "Adresse wird beim Tippen geprüft (formulare.kunde.adresspruefung); Meldung direkt unter den Feldern"
+      },
+      {
+       "typ": "abschnitt",
+       "nr": 4,
+       "titel": "Zahlung",
+       "ohne_modus": "lieferant",
+       "felder": [
         {
          "id": "zahlungsbedingung",
          "label": "Zahlungsbedingung",
@@ -7084,25 +7377,70 @@
           "Bar oder Karte bei Abholung"
          ],
          "pflicht": "fuer_auftrag",
-         "wann": "Neukunde oder leer",
+         "wann": "Neukunde; Bestandskunde nur, wenn die Bedingung fehlt („Für den Auftrag ergänzen“)",
          "vorbelegung": "Vorkasse (U-110)",
-         "aenderung": "optik",
          "recht": "geld",
-         "ohne_recht": "Feld fehlt; gespeichert wird Vorkasse (werkbank.zahlung)",
-         "regel": "Optionen nur Vorkasse | Bar oder Karte bei Abholung; „Rechnung auf Ziel“ hier nie (nur über 8.6, K8/U-111) (formulare.kunde.felder[zahlungsbedingung])",
+         "ohne_recht": "Feld fehlt und ist nicht änderbar; Server setzt nach werkbank.zahlung (Neukunde Regelwert, Bestandskunde unverändert)",
          "schluessel": {
           "Vorkasse": "vorkasse",
           "Bar oder Karte bei Abholung": "bar",
           "Rechnung auf Ziel · {n} Tage[ · {p} % Skonto bis {m} Tage]": "rechnung (nur mit ziel_freigeschaltet = ja; Tage und Skonto in eigenen Spalten ziel_tage, skonto_prozent, skonto_tage)",
           "leer": "NULL"
-         }
+         },
+         "option_ziel": {
+          "text": "Rechnung auf Ziel · {n} Tage",
+          "zusatz_skonto": " · {p} % Skonto bis {m} Tage (nur wenn p > 0)",
+          "nur_wenn": "ziel_freigeschaltet = ja (Kunde); sonst erscheint die Option nicht",
+          "werte": "{n} = ziel_tage, {p} = skonto_prozent, {m} = skonto_tage des Kunden; ändern nur über 8.6 (zielfrei, Recht „geld“)"
+         },
+         "spalten": "zahlungsbedingung ∈ {vorkasse, bar, rechnung, NULL}; ziel_freigeschaltet (ja/nein), ziel_tage, skonto_prozent, skonto_tage sind eigene Spalten (A-73, A-79).",
+         "anzeige": "überall gleich: „Vorkasse“ · „Bar oder Karte bei Abholung“ · „Rechnung auf Ziel · {n} Tage“, bei p > 0 zusätzlich „ · {p} % Skonto bis {m} Tage“ · leer = fehlt.",
+         "regel": "Auswahl im Neuen Eingang und in Kunde bearbeiten (5.2): Vorkasse, Bar oder Karte bei Abholung und NUR bei ziel_freigeschaltet = ja zusätzlich option_ziel. Kunde anlegen (3.1) und Inline-Neukunde: nur die zwei Optionen (ein Neukunde ist nie freigeschaltet). Tage und Skonto ändert nur 8.6. Nach „Aufheben“ (8.6) ist die Kundenbedingung vorkasse (A-79); rechnung mit ziel_freigeschaltet = nein kommt nur bei Altdaten vor und lehnt der Server ab (K7) – im Eingang gilt ein solcher Altwert wie fehlend (keine Vorbelegung, paymentContract nimmt keinen Ziel-Modus an, K6).",
+         "typ_nur": [
+          "Firma",
+          "Privat"
+         ]
         }
-       ],
-       "ohne_modus": "lieferant"
+       ]
       },
       {
        "typ": "abschnitt",
-       "nr": 3,
+       "nr": 4,
+       "titel": "Lieferant",
+       "nur_modus": "lieferant",
+       "regel": "Kundentyp fest „Lieferant“; Firmenname Pflicht; IBAN und Zahlungsziel für 3.8; keine Zahlungsbedingung (formulare.kunde.felder[kundentyp].regel_lieferant)",
+       "felder": [
+        {
+         "id": "iban",
+         "label": "IBAN",
+         "typ": "text",
+         "pflicht": false,
+         "wann": "Kundentyp Lieferant",
+         "vorbelegung": "aus der ersten Eingangsrechnung (erkannt)",
+         "pruefung": "IBAN-Prüfziffer; Fehlertext „IBAN ungültig“",
+         "regel": "Abgleich in 3.8 (abweichende IBAN → Warnung)",
+         "typ_nur": [
+          "Lieferant"
+         ]
+        },
+        {
+         "id": "zahlungsziel_tage",
+         "label": "Zahlungsziel (Tage)",
+         "typ": "zahl",
+         "pflicht": false,
+         "wann": "Kundentyp Lieferant",
+         "vorbelegung": "aus der ersten Eingangsrechnung (erkannt), sonst leer",
+         "pruefung": "0–120",
+         "regel": "Vorbelegung „Fällig am“ in 3.8",
+         "typ_nur": [
+          "Lieferant"
+         ]
+        }
+       ]
+      },
+      {
+       "typ": "abschnitt",
+       "nr": 5,
        "titel": "Weitere Angaben",
        "felder": [
         {
@@ -7110,10 +7448,27 @@
          "label": "USt-ID",
          "typ": "text",
          "pflicht": false,
-         "wann": "Kundentyp Gewerbe",
-         "aenderung": "optik",
+         "wann": "Kundentyp Firma",
          "validierung": "Deutschland: „DE“ + 9 Ziffern; sonst 4–20 Zeichen",
-         "fehlertext": "USt-ID prüfen"
+         "fehlertext": "USt-ID prüfen",
+         "typ_nur": [
+          "Firma"
+         ]
+        },
+        {
+         "id": "website",
+         "label": "Website",
+         "typ": "text",
+         "pflicht": false,
+         "typ_nur": [
+          "Firma",
+          "Lieferant"
+         ],
+         "wann": "Neukunde oder leer",
+         "vorbelegung": "Vorschlag aus der E-Mail-Domain (nicht bei Freemail-Domains), Herkunft „aus E-Mail“",
+         "validierung": "Domain mit Punkt, höchstens 120 Zeichen",
+         "fehlertext": "Website prüfen",
+         "regel": "Quelle für den Internet-Abgleich (internet_abgleich, Stufe 4)"
         },
         {
          "id": "notiz",
@@ -7133,29 +7488,33 @@
        "typ": "dublette"
       },
       {
+       "typ": "adresse",
+       "regel": "Zustand der Adressprüfung (formulare.kunde.adresspruefung.ergebnisse) – dieselbe Meldung wie unter den Feldern, hier nur als Zeile der Prüfliste"
+      },
+      {
        "typ": "pruefliste",
        "pflicht": [
         [
          "kundentyp",
-         "Kundentyp",
+         "Firma oder Privat",
          1
         ],
         [
-         "name",
-         "Name / Firma",
+         "name_typ",
+         "Name (Firma: Firmenname · Privat: Nachname)",
          1
         ],
         [
          "telefon",
          "Telefon",
-         1
+         2
         ]
        ],
        "fuer_auftrag": [
         [
-         "ansprechpartner",
-         "Ansprechpartner",
-         2
+         "person",
+         "Firma: Ansprechpartner (Nachname) · Privat: Vorname",
+         1
         ],
         [
          "email",
@@ -7165,13 +7524,13 @@
         [
          "anschrift",
          "Anschrift",
-         2,
-         "Straße und Nr., PLZ, Ort, Land"
+         3,
+         "Straße, Nr., PLZ, Ort, Land – geprüft oder bestätigt"
         ],
         [
          "zahlungsbedingung",
          "Zahlungsbedingung",
-         2,
+         4,
          "Recht geld"
         ]
        ],
@@ -7181,12 +7540,22 @@
          "pflicht": [
           [
            "name",
-           "Name / Firma",
+           "Firmenname",
            1
           ]
          ],
          "fuer_auftrag": [],
          "info": "Kundentyp Lieferant · Kundennummer wird beim Speichern vergeben"
+        }
+       },
+       "je_typ": {
+        "Firma": {
+         "name_typ": "name",
+         "person": "nachname"
+        },
+        "Privat": {
+         "name_typ": "nachname",
+         "person": "vorname"
         }
        }
       }
@@ -7246,7 +7615,8 @@
     "Kundennummer wird nie eingegeben (vergibt der Schreibweg).",
     "Aufrufe mit {mail}, suche#{text}, {beleg}, {entwurf}: werkbank.interaktion aufruf-kundeneu.",
     "F1: Aufruf {eingang} (3.0, „Wem gehört das?“ › Neukunde, Etikett/Signatur/Visitenkarte/Zettel): Felder aus den Vorschlägen des Eingangs (erkannt); beim Speichern wird der Eingang am neuen Kunden abgelegt (Zuordnung hand) und – kam der Aufruf aus 3.0 mit Ware oder Anfrage – öffnet direkt 3 mit diesem Eingang. Aus 3.4 im Modus rein: zurück in 3.0 (Zustand erkannt mit dem neuen Kunden). Aus 3.4 sonst: Kundenkarte mit „Kunde {kunde} angelegt · Eingang abgelegt“ (werkbank.stapel_kundeneu).",
-    "F1: Aufruf {eingang}#lieferant (Recht „geld“): Modus lieferant (Abschnitt Lieferant, Felder mit nur_modus/ohne_modus, Prüfliste modi.lieferant) – Kundentyp fest „Lieferant“; Pflicht nur Name; IBAN und Zahlungsziel aus der Rechnung; „Lieferant speichern“ ordnet den Eingang dem Lieferanten zu und führt zurück in 3.8 bzw. 3.4. In 5.2 ist der Kundentyp „Lieferant“ nur mit „geld“ wählbar."
+    "F1: Aufruf {eingang}#lieferant (Recht „geld“): Modus lieferant (Abschnitt Lieferant, Felder mit nur_modus/ohne_modus, Prüfliste modi.lieferant) – Kundentyp fest „Lieferant“; Pflicht nur Name; IBAN und Zahlungsziel aus der Rechnung; „Lieferant speichern“ ordnet den Eingang dem Lieferanten zu und führt zurück in 3.8 bzw. 3.4. In 5.2 ist der Kundentyp „Lieferant“ nur mit „geld“ wählbar.",
+    "Owner 01.11.: Firma oder Privat steuert die Felder (Vor- und Nachname getrennt; Firma mit Firmenname und Ansprechpartner); der vorhandene Kunde wird beim Tippen vorgeschlagen und kann direkt bearbeitet werden; Adresse live geprüft; Vorbelegung nur als Vorschlag mit Herkunft (formulare.kunde.typ_felder, autofill, adresspruefung, internet_abgleich; bausteine_vertraege.dublette)."
    ],
    "zustaende": {
     "leer": {
@@ -7324,20 +7694,26 @@
    "groesse": "werkbank",
    "abnahme": [
     "Gegeben Kundentyp, Name und Telefon ausgefüllt, Rest leer · Wenn „Kunde speichern“ · Dann wird der Kunde als Interessent mit Kennzeichen „unvollständig – für Auftrag fehlt: …“ angelegt; die Prüfliste zeigt die Fehlenden unter „Für Aufträge“, sperrt aber nicht.",
-    "Gegeben ein leerer Dialog ohne Modus lieferant · Dann steht der Hinweis „Erst suchen – vielleicht gibt es den Kunden schon“ ohne eigenen Knopf, Kundentyp bietet nur Gewerbe | Privat ohne Vorbelegung, Land ist eine Auswahl mit Deutschland, die Kundennummer ist nicht eingebbar und die Prüfliste sagt nur „Kundennummer wird beim Speichern vergeben“ (Klärung 22).",
+    "Gegeben ein leerer Dialog ohne Modus lieferant · Dann steht der Hinweis „Erst suchen – vielleicht gibt es den Kunden schon“ ohne eigenen Knopf, Kundentyp bietet nur Firma | Privat ohne Vorbelegung, Land ist eine Auswahl mit Deutschland, die Kundennummer ist nicht eingebbar und die Prüfliste sagt nur „Kundennummer wird beim Speichern vergeben“ (Klärung 22).",
     "Gegeben ein Login mit Recht „geld“ · Dann bietet die Zahlungsbedingung nur „Vorkasse“ | „Bar oder Karte bei Abholung“, vorbelegt „Vorkasse“, „Rechnung auf Ziel“ gibt es hier nicht; ohne Recht „geld“ fehlt das Feld, die Prüfliste hat keine Zeile dazu und der gespeicherte Kunde hat Vorkasse.",
     "Gegeben ein Bestandskunde mit derselben Telefonnummer (auch als +49 statt 0) oder E-Mail · Wenn diese getippt wird · Dann meldet die Dublettenprüfung „Ähnlicher Kunde vorhanden: {kunde}“; „Vorhandenen öffnen“ öffnet genau diesen {kunde}; „Trotzdem neu anlegen“ speichert nichts, erst danach legt „Kunde speichern“ an.",
     "Gegeben ein vollständiger Neukunde · Wenn „Kunde speichern“ · Dann vergibt der Server die Kundennummer, die Kundenkarte des neuen {kunde} öffnet sich direkt (kein Erfolgsbildschirm) mit Meldung „Kunde {kunde} angelegt“, die Notiz ist gespeichert; „Neuer Auftrag“ auf dieser Kundenkarte öffnet Neuer Eingang mit {kunde} (Q8).",
     "Gegeben das Speichern scheitert serverseitig · Dann bleibt der Dialog offen mit allen Eingaben, Zustand fehler „Speichern fehlgeschlagen · alle Eingaben sind noch da“ mit „Erneut speichern“ und „Entwurf behalten und schließen“; Feldfehler stehen am Feld.",
-    "Gegeben „Visitenkarte scannen“ · Wenn aufgenommen und in 3.0 „Übernehmen“ · Dann kehrt die App in denselben Dialog 3.1 zurück (3.0 geschlossen), die Felder sind als „erkannt“ markiert, Ort/Land aus der PLZ als „vorgeschlagen“, Kundentyp Gewerbe bei erkannter Rechtsform; beim Speichern liegt das Visitenkarten-Original als Dokument am neuen Kunden.",
+    "Gegeben „Visitenkarte scannen“ · Wenn aufgenommen und in 3.0 „Übernehmen“ · Dann kehrt die App in denselben Dialog 3.1 zurück (3.0 geschlossen), die Felder sind als „erkannt“ markiert, Ort/Land aus der PLZ als „vorgeschlagen“, Kundentyp Firma bei erkannter Rechtsform; beim Speichern liegt das Visitenkarten-Original als Dokument am neuen Kunden.",
     "Gegeben ein Login ohne Recht „mails“ · Dann fehlt „Aus Mail-Signatur“; mit Recht öffnet es 3.4 mit der Liste der nicht zugeordneten Mails, und „Übernehmen“ füllt Absender und Signatur-Felder in DIESEN Dialog (Klärung 1).",
     "Gegeben 3.4 „Neukunde aus Absender“ für {mail} · Wenn der Kunde gespeichert wird · Dann liegt {mail} mit Anhängen am neuen {kunde}, steht nicht mehr in Zuordnen, und die Kundenkarte meldet „Kunde {kunde} angelegt · Mail abgelegt“; scheitert das Speichern, ist weder Kunde angelegt noch Mail abgelegt (Klärung 4).",
-    "Gegeben der Aufruf aus Kunden „{text} als Kunde anlegen“ · Dann steht {text} je nach Muster im Feld E-Mail, Telefon oder sonst Name / Firma und die Dublettenprüfung läuft sofort.",
+    "Gegeben der Aufruf aus Kunden „{text} als Kunde anlegen“ · Dann steht {text} je nach Muster im Feld E-Mail, Telefon oder sonst Name (Firma: Firmenname · Privat: Nachname) und die Dublettenprüfung läuft sofort.",
     "Gegeben Kundentyp Privat · Wenn der Name getippt wird · Dann läuft der Ansprechpartner mit; nach einer Handänderung des Ansprechpartners nicht mehr.",
     "Gegeben eine deutsche PLZ mit mehreren Orten · Dann bietet das Feld Ort diese zur Auswahl; bei Land Österreich/Schweiz gibt es keinen Vorschlag.",
-    "Gegeben ein Altkunde mit Kundentyp „institution“ · Dann zeigt das Formular Gewerbe.",
+    "Gegeben ein Altkunde mit Kundentyp „institution“ · Dann zeigt das Formular Firma.",
     "Stufe 2 (X12): Gegeben Eingaben im Dialog · Wenn Abbrechen und „Entwurf behalten“ · Dann wird ein Entwurf der Art Kunde mit den Kundendaten gespeichert; „Weiter bearbeiten“ auf Der Tag öffnet wieder Kunde anlegen (nicht Neuer Eingang) mit diesen Daten; ohne Eingaben schließt Abbrechen sofort.",
-    "Gegeben 3.8 mit unbekanntem Lieferanten und Recht „geld“ · Wenn „Lieferant anlegen“ (3.1 {eingang}#lieferant) · Dann Titel „Lieferant anlegen“, Pflicht nur Name, Abschnitt Lieferant mit E-Mail (aus dem Absender), IBAN, Zahlungsziel (Tage) und Anschrift; kein Kundentyp, kein Telefon, keine Zahlungsbedingung · Wenn „Lieferant speichern“ · Dann zurück in 3.8 mit gesetztem Lieferanten und „Fällig am“ aus dem Zahlungsziel, Toast „Lieferant {kunde} angelegt“; DB: customers.kundentyp = lieferant, intake_item.kunde_id = Lieferant, zuordnung hand."
+    "Gegeben 3.8 mit unbekanntem Lieferanten und Recht „geld“ · Wenn „Lieferant anlegen“ (3.1 {eingang}#lieferant) · Dann Titel „Lieferant anlegen“, Pflicht nur Name, Abschnitt Lieferant mit E-Mail (aus dem Absender), IBAN, Zahlungsziel (Tage) und Anschrift; kein Kundentyp, kein Telefon, keine Zahlungsbedingung · Wenn „Lieferant speichern“ · Dann zurück in 3.8 mit gesetztem Lieferanten und „Fällig am“ aus dem Zahlungsziel, Toast „Lieferant {kunde} angelegt“; DB: customers.kundentyp = lieferant, intake_item.kunde_id = Lieferant, zuordnung hand.",
+    "Gegeben 3.1 ohne Typ · Dann stehen nur „Firma oder Privat?“, Telefon, E-Mail und Anschrift da; nach „Privat“ erscheinen Anrede, Vorname, Nachname (Nachname Pflicht), kein Firmenname, keine USt-ID.",
+    "Gegeben „Firma“ · Dann Firmenname (Pflicht), darunter „Ansprechpartner“ mit Anrede, Vorname, Nachname, Funktion; USt-ID, Website und E-Mail für Rechnungen unter Weitere Angaben bzw. Kontakt.",
+    "Gegeben Privat, Vor- und Nachname eines vorhandenen Kunden getippt · Dann zeigt die Dublette „Ähnlicher Kunde vorhanden: {kunde}“ mit „Diesen Kunden bearbeiten“ → 5.2 mit den getippten Werten als Vorschlag.",
+    "Gegeben gültige PLZ und ein Ort, der nicht dazu gehört · Dann „PLZ {plz} gehört zu {ort_richtig}“ mit „{ort_richtig} übernehmen“; „Kunde speichern“ springt zur Meldung, bis übernommen oder „Adresse stimmt so“.",
+    "Gegeben gültige PLZ und leerer Ort · Dann steht der Ort „vorgeschlagen · aus PLZ“ (mehrere Orte → Auswahl).",
+    "Gegeben Typ Firma ist gespeichert und wird in 5.2 auf Privat gewechselt · Dann fragt die App „3 Angaben entfallen: Firmenname, USt-ID, Website – wechseln?“; der Ansprechpartner wird die Person."
    ],
    "recht": "eingang",
    "modi": {
@@ -10486,6 +10862,142 @@
      "bemerkung": "Schließen/Abbrechen/Zurück/Erneut laden: reine Navigation"
     }
    ]
+  },
+  {
+   "id": "neuigkeiten",
+   "nr": "14",
+   "typ": "seite",
+   "titel": "Was ist neu?",
+   "icon": "flag",
+   "funktion": [
+    "A13"
+   ],
+   "quelle": [
+    "OE"
+   ],
+   "rollen": [
+    "meister",
+    "werkstatt",
+    "developer"
+   ],
+   "inhalt": [
+    {
+     "typ": "block",
+     "titel": "Neu umgesetzt",
+     "bloecke": [
+      {
+       "typ": "text",
+       "text": "Liste der umgesetzten Änderungen je Version, ungesehene oben."
+      }
+     ],
+     "ableitung": {
+      "quelle": "Änderungsnotizen im Code-Repository: je Arbeitspaket eine Datei release_notes/{paket}.json (Version, Datum, Punkte: id, titel, text, seite (Screen-ID), ziel {screen, arg}, markierung (Element-Kennung), testschritte ≤ 6, sichtbar_fuer: owner | alle). Die Datei wird mit dem Code gebaut: eine Vorschau (Preview-Deploy eines Branches) zeigt ihre Punkte als „zum Testen“, nach dem Merge in main als „neu“. Status je Login in release_note_status (login, punkt_id, gesehen_am, test ok|problem, notiz, getestet_am).",
+      "sortierung": "nicht gesehene zuerst, je Version gruppiert (neueste oben); „Schon angesehen“ eingeklappt",
+      "je_zeile": {
+       "titel": "{seite} · {titel}",
+       "grund/meta": "{text} · {Version, Datum}",
+       "chip/ton": "„zum Testen“ (Preview) blau · „neu“ grün · getestet ✓ grau · Problem rot"
+      },
+      "aktion": [
+       {
+        "id": "neu-ansehen",
+        "text": "Ansehen",
+        "verhalten": "öffnet ziel.screen mit ziel.arg (die Stelle) und hebt das Element ({markierung}) 4 s hervor; Punkt gilt als gesehen"
+       },
+       {
+        "id": "neu-naechstes",
+        "text": "Nächstes ansehen",
+        "verhalten": "springt zum nächsten nicht gesehenen Punkt (auch als Knopf in der Kopfleiste, solange es Ungesehenes gibt)"
+       },
+       {
+        "id": "neu-getestet",
+        "text": "Getestet",
+        "recht": "entscheiden",
+        "verhalten": "Status test = ok mit Zeitpunkt; im Preview-Deploy zählt „alle Punkte getestet“ als Abnahme-Hinweis für den Merge"
+       },
+       {
+        "id": "neu-problem",
+        "text": "Problem",
+        "recht": "entscheiden",
+        "verhalten": "Pflichtnotiz 3–500 Zeichen (Diktat); legt eine Aufgabe für Wartung (Recht developer) mit Link zur Stelle an; Punkt rot, bis erledigt"
+       },
+       {
+        "id": "neu-abhaken",
+        "text": "Abhaken",
+        "verhalten": "als gesehen markieren ohne Ansehen"
+       }
+      ],
+      "nicht": "Keine Punkte ohne Stelle in der App (jeder Punkt braucht ziel und markierung); keine technischen Commit-Texte – Sprache wie für den Owner."
+     }
+    }
+   ],
+   "aktionen": [
+    {
+     "id": "zur-startseite",
+     "text": "Zur Startseite",
+     "ziel": "start"
+    }
+   ],
+   "zustaende": {
+    "fehlt": {
+     "wann": "ein Punkt hat kein ziel bzw. keine markierung (Notiz unvollständig)",
+     "text": "„Stelle fehlt“ statt „Ansehen“ (Ton warn) – der Punkt bleibt lesbar, nie ein geratenes Ziel",
+     "aktionen": [
+      {
+       "id": "fehlt-abhaken",
+       "text": "Abhaken",
+       "ziel": "zustand:daten",
+       "regel": "Punkt als gesehen markieren; die Notiz korrigiert das nächste Paket"
+      }
+     ]
+    },
+    "teilweise": {
+     "text": "{n} Punkte zum Testen · {m} neu",
+     "regel": "Preview-Deploy: Punkte des Branches „zum Testen“ oben, darunter die schon gemergten „neu“",
+     "aktionen": [
+      {
+       "id": "nachstes-ansehen",
+       "text": "Nächstes ansehen",
+       "ziel": "zustand:daten"
+      }
+     ]
+    },
+    "erfolg": {
+     "na": "die Seite speichert nichts selbst; „Getestet“ und „Problem“ melden per Toast"
+    },
+    "leer": {
+     "text": "Alles angesehen · Neues erscheint hier nach dem nächsten Update",
+     "aktionen": [
+      {
+       "id": "zur-startseite",
+       "text": "Zur Startseite",
+       "ziel": "start"
+      }
+     ]
+    },
+    "fehler": {
+     "text": "Änderungen konnten nicht geladen werden",
+     "aktionen": [
+      {
+       "id": "erneut-laden",
+       "text": "Erneut laden",
+       "ziel": "zustand:daten"
+      }
+     ]
+    }
+   },
+   "regeln": [
+    "Owner 01.11.: Bis zum Livestart Menüpunkt „Was ist neu?“ in der Seitenleiste (Desktop) bzw. unter „Mehr“ (Tablet/Handy) mit Zähler der ungesehenen Punkte; danach im Konto-Menü und als Eintrag in der Suche („Tun“) – für alle Logins, damit der Kunde Updates sieht.",
+    "Der Tag zeigt bei ungesehenen Punkten oben eine Zeile „Neu umgesetzt: {n} Punkte · Ansehen“ (ausblendbar bis zum nächsten Update); kein eigener Fall im Handlungsbedarf.",
+    "Jedes Arbeitspaket liefert seine Änderungsnotiz mit (Abgabe-Regel, release_notes/{paket}.json); ohne Notiz ist ein Paket nicht abnahmefähig.",
+    "Punkte mit sichtbar_fuer owner (Bau-/Testhinweise) sehen nur Logins mit Recht „entscheiden“; Kunden-taugliche Punkte alle."
+   ],
+   "abnahme": [
+    "Gegeben ein Preview-Deploy mit einer Änderungsnotiz · Wenn „Was ist neu?“ geöffnet wird · Dann stehen ihre Punkte „zum Testen“ oben; „Ansehen“ öffnet die Stelle und hebt sie hervor.",
+    "Gegeben alle Punkte angesehen · Dann zeigt der Menüpunkt keinen Zähler und die Seite „Alles angesehen“.",
+    "Gegeben Login mit Recht entscheiden · Wenn „Problem“ mit Notiz · Dann entsteht eine Aufgabe für Wartung mit Link zur Stelle, der Punkt ist rot."
+   ],
+   "aenderung_je_element": []
   }
  ],
  "bausteine_vertraege": {
@@ -10778,9 +11290,9 @@
      "Anfrage per Telefon": "anfrage_telefon"
     },
     "kundentyp": {
-     "Gewerbe": "business",
      "Privat": "privat",
-     "Altwert institution": "business (Migration, Annahme A-56)"
+     "Altwert institution": "business (Migration, Annahme A-56)",
+     "Firma": "business"
     },
     "oberflaeche": {
      "Verchromen": "verchromen",
@@ -10829,13 +11341,16 @@
    },
    "vorbelegung_je_aufruf": {
     "regel": "Ausgangszustand der Erfassung je Aufruf (Befund 28). Vorbelegte und erkannte, noch nicht bestätigte Werte darf eine spätere Vorbelegung oder Übernahme ändern; Werte mit Herkunft „hand“ oder „bestaetigt“ nie; ein Kunde wird aus einer weiteren Quelle nur gesetzt, solange keiner gesetzt ist (schluessel.bezuege) – dann steht am Feld „erkannt: {wert} · übernehmen“.",
-    "ohne Argument": "Kunde leer · Art Auftrag · Eingangsart „persönlich angeliefert“ · eine leere Position (Menge 1, Einheit „bitte wählen“ – Pflicht, keine Vorbelegung, formulare.position.felder[einheit]; Oberfläche und Ausführung „noch zu klären“) · Übergabe Abholung · Terminstatus Wunsch",
-    "{kunde}": "Kunde gesetzt · Art Auftrag · Eingangsart „persönlich angeliefert“ · Übergabe = letzte Übergabe des Kunden, sonst Abholung",
+    "ohne Argument": "Kunde leer · Art leer · Eingangsart leer · Übergabe leer · Termin ist leer · eine leere Position (Menge 1, Einheit „bitte wählen“ – Pflicht, keine Vorbelegung, formulare.position.felder[einheit]; Oberfläche und Ausführung „noch zu klären“). Art, Eingangsart, Übergabe und Termin füllen sich aus „Schnell erfassen“ (erkannt · {zitat}) oder per Klick; danach Übergabe/Zahlung aus dem gewählten Kunden wie bei {kunde}.",
+    "{kunde}": "Kunde gesetzt (aus Aufruf · Kundenkarte) · Art Auftrag (aus Aufruf · „Neuer Auftrag“) · Eingangsart leer · Übergabe: customers.handover_preference („aus Kundenkarte“), sonst Übergabe des letzten Auftrags („wie zuletzt · {auftrag}“), ohne Vorgeschichte leer · Zahlungsmodus nach werkbank.zahlung („aus Kundenkarte“) · Termin ist leer",
     "{mail}": "Absender-Kunde · Art KV (ohne „geld“ Auftrag) · Eingangsart „Anfrage per Mail“ · Mailtext erkannt · Anhänge",
-    "{beleg}": "erkannter Kunde · Art Auftrag · Eingangsart „persönlich angeliefert“ · angehakte Vorschläge",
+    "{beleg}": "erkannter Kunde · Art Auftrag (aus Aufruf · Beleg) · Eingangsart erkannt aus dem Beleg, sonst leer · Übergabe wie {kunde} · angehakte Vorschläge",
     "{auftrag}#kv / #kopie": "siehe interaktion aufruf-auftrag · Eingangsart des Ursprungsauftrags",
     "{entwurf}": "genau der gespeicherte Stand (keine neue Vorbelegung)",
-    "{eingang}": "F1: Kunde aus der Zuordnung des Eingangs · Art Auftrag (Anliegen Anfrage/KV mit Recht „geld“: KV) · Eingangsart aus dem Kanal (Foto/Ware „Versand eingegangen“ bzw. „persönlich angeliefert“, Mail „Anfrage per Mail“, Notiz „Anfrage per Telefon“ mit Telefonnotiz) · Text und erkannte Angaben · Originale (Bilder → Eingangsfoto, übrige → Dokumente)"
+    "{eingang}": "F1: Kunde aus der Zuordnung des Eingangs · Art Auftrag (Anliegen Anfrage/KV mit Recht „geld“: KV) · Eingangsart aus dem Kanal (Foto/Ware „Versand eingegangen“ bzw. „persönlich angeliefert“, Mail „Anfrage per Mail“, Notiz „Anfrage per Telefon“ mit Telefonnotiz) · Text und erkannte Angaben · Originale (Bilder → Eingangsfoto, übrige → Dokumente)",
+    "herkunft": "Owner 01.11. (Runde 22b/c): eine Vorbelegung braucht eine Quelle und zeigt sie am Feld als Herkunftszeile: „aus Aufruf · {knopf/kanal}“, „aus Kundenkarte“, „wie zuletzt · {auftrag}“, „erkannt · {zitat}“. Ohne Quelle bleibt die Auswahl leer (Zustand fehlt, U-216) – nie still die erste Option. Vorbelegt = grün mit Herkunft (verhalten_appweit.auswahl.vorbelegt); ein Klick ändert.",
+    "eingangsart": "Eingangsart ist der Kanal, kein Standard: vorbelegt nur, wenn der Aufruf ihn kennt ({eingang}: Kanal; {mail}: „Anfrage per Mail“; {auftrag}#kv/#kopie: Ursprung) oder die Erkennung ihn liest („hat … gebracht“ → persönlich angeliefert) – jeweils mit Herkunft. Ohne Argument und bei {kunde} leer, Pflichtwahl. Damit verstößt sie nicht gegen verhalten_appweit.auswahl.",
+    "termin_ist": "Termin ist folgt der Quelle des Datums: erkannter oder getippter Kundenwunsch → „Wunsch“ (Herkunft „Kundenwunsch“); Klick auf einen Terminvorschlag oder „anderes Datum“ bei Eingangsart „persönlich angeliefert“ → „bestätigt“ (Herkunft „mit Kunde abgestimmt“); bei den anderen Eingangsarten bleibt es leer (Pflichtwahl), bis jemand „bestätigt“ oder „Wunsch“ wählt; „Wunsch halten · Kunde vorwarnen“ → „Wunsch“. Ohne Datum leer. „verschoben“ weiter nur über Termin ändern (U-167)."
    },
    "aenderung": "Änderung (für die Rückfrage 3.6, Befund 14): der aktuelle Formularzustand weicht vom Zustand direkt nach dem Öffnen ab – verglichen werden alle Feldwerte, Positionen und Anhänge; der Ausgangszustand enthält die Spec-Vorbelegungen und alles, was aus dem Aufruf-Argument ({kunde}, {mail}, {beleg}, {auftrag}#…, {entwurf}, suche#{text}) übernommen wurde. Eine Übernahme aus 3.2/3.3/3.4 nach dem Öffnen zählt als Änderung. Ohne Änderung schließen Abbrechen, X und Esc sofort; ein geöffneter Entwurf bleibt dann unverändert.",
    "stapel": "Ebenen (Befund 23): Übernahme aus 3.3 bzw. 3.4 schließt die Ebenen 3.2/3.3/3.4 und zeigt die Erfassung – liegt darunter schon eine Erfassung, ist es DIESE (keine zweite); liegt keine darunter (Aufruf aus Kopfleiste, Plus, Suche, Der Tag), öffnet die Erfassung an Stelle der geschlossenen Ebenen. Abbrechen/Schließen in 3.3 nach einer Aufnahme in 3.2 schließt 3.3 und 3.2 zusammen und zeigt die Ebene vor 3.2 unverändert. Zurück aus der Erfassung führt nie in 3.2/3.3/3.4. Was mit dem Original beim Abbrechen geschieht: stapel_original (einzige Regel).",
@@ -10864,7 +11379,8 @@
      }
     ],
     "ziel_freigeschaltet": "Kunden-Merkmal ziel_freigeschaltet (ja/nein) mit ziel_tage, skonto_prozent, skonto_tage (eigene Spalten, A-73/A-79); setzbar nur über 8.6 (zielfrei, K8, Recht „geld“). Nur dann ist „Rechnung auf Ziel“ im Zahlungsmodus wählbar (sonst gesperrt mit „Ziel nicht freigeschaltet“) und bietet die Kunden-Zahlungsbedingung zusätzlich „Rechnung auf Ziel · {n} Tage[ · {p} % Skonto bis {m} Tage]“ (formulare.kunde.felder[zahlungsbedingung].option_ziel).",
-    "versand_bar": "„Bar oder Karte bei Abholung“ ist bei Übergabe Versand gesperrt mit Hinweis „nur bei Abholung“; wechselt die Übergabe auf Versand, während dieser Modus gewählt ist, wird der Modus auf Vorkasse gesetzt (Hinweis am Feld „angepasst: Versand“). Der Server lehnt Versand + bar mit VALIDATION_ERROR „Bar oder Karte nur bei Abholung“ ab (Befund 46)."
+    "versand_bar": "„Bar oder Karte bei Abholung“ ist bei Übergabe Versand gesperrt mit Hinweis „nur bei Abholung“; wechselt die Übergabe auf Versand, während dieser Modus gewählt ist, wird der Modus auf Vorkasse gesetzt (Hinweis am Feld „angepasst: Versand“). Der Server lehnt Versand + bar mit VALIDATION_ERROR „Bar oder Karte nur bei Abholung“ ab (Befund 46).",
+    "ohne_uebergabe": "Hängt die Vorbelegung des Zahlungsmodus an der Übergabe (Neukunde, bar bei Versand) und ist die Übergabe noch leer, bleibt auch der Zahlungsmodus leer; er füllt sich mit Herkunft, sobald die Übergabe gewählt ist (Runde 23)."
    },
    "buchen": {
     "command": "Ein Server-Command (orderIntakeCommand, mode EXISTING | NEW) in EINER Datenbank-Transaktion (K1); kundeneu nutzt createCustomerCommand ebenso in einer Transaktion.",
@@ -11013,7 +11529,7 @@
     "feld_abbildung": "CUSTOMER_NAME → Name/Firma (und Bestandssuche) · CONTACT_PERSON → ansprechpartner · PHONE → telefon · EMAIL → email · ADDRESS → strasse, plz, ort, land (zerlegt in „Straße Nr.“ und „PLZ Ort“) · ITEM_DESCRIPTION → bezeichnung (je Tabellenzeile eine Position; Text: text_positionen) · QUANTITY → menge (+ einheit „kg“, wenn angegeben) · SURFACE → oberflaeche (+ ausfuehrung aus Zusatzwörtern) · MATERIAL → material · DUE_DATE → liefertermin als Wunsch.",
     "ausgabeschema": "je erkanntem Feld: feld (Feld-ID des Ziel-Formulars, bei Positionen mit Positionsnummer) · wert (normalisiert auf den Feldtyp bzw. die Option) · roh (erkannter Originaltext) · sicherheit (0–1) · fundstelle (Seite {n} · oben|Mitte|unten bzw. „Tabelle Zeile {n}“; bei Text „Text Zeile {n}“).",
     "schwelle": "sicherheit ≥ 0,80 = „sicher“, darunter „unsicher“ (3.3 Chip „prüfen“). Regelbasiert: eindeutiger Mustertreffer 0,9 · Treffer über Synonym 0,7 · mehrere mögliche Werte → kein Wert, nur Hinweis „erkannt: „{roh}““ am Feld.",
-    "auswahllisten": "Freie Werte auf Optionen abbilden (Groß/Klein, Endungen ignoriert). Synonyme: Chrom/verchromt → Verchromen · Nickel/vernickelt → Vernickeln · Zink/verzinkt → Verzinken · entchromen → Entchromen / prüfen · Hochglanz → Hochglanz · Glanz/glänzend → glänzend · matt → matt · gelb → gelb passiviert · blau → blau passiviert · Rechtsform im Namen (GmbH, KG, AG, UG, OHG, GbR, e. K., e. V.) → Kundentyp Gewerbe. Kein eindeutiger Treffer → Oberfläche/Ausführung „noch zu klären“, übrige Felder leer, Rohtext als Hinweis am Feld.",
+    "auswahllisten": "Freie Werte auf Optionen abbilden (Groß/Klein, Endungen ignoriert). Synonyme: Chrom/verchromt → Verchromen · Nickel/vernickelt → Vernickeln · Zink/verzinkt → Verzinken · entchromen → Entchromen / prüfen · Hochglanz → Hochglanz · Glanz/glänzend → glänzend · matt → matt · gelb → gelb passiviert · blau → blau passiviert · Rechtsform im Namen (GmbH, KG, AG, UG, OHG, GbR, e. K., e. V.) → Kundentyp Firma. Kein eindeutiger Treffer → Oberfläche/Ausführung „noch zu klären“, übrige Felder leer, Rohtext als Hinweis am Feld.",
     "katalog": "Teil/Leistung: erkannte Bezeichnung gegen die Bezeichnungen des Leistungskatalogs (S02) abgleichen (normalisiert: gleich oder alle Wörter enthalten); genau ein Treffer → diese Katalogleistung mit ihren Vorbelegungen (PositionZeile), sonst Freitext = Rohtext.",
     "kunde": "Kundenfelder: Modus eingang – Name/Firma, Ansprechpartner, Telefon, E-Mail, Straße, PLZ, Ort, Land; zuerst Bestandssuche (interaktion erkannter-kunde), nur ohne Treffer als Neukunde-Vorbelegung. Kunde anlegen (kundeneu) – dieselben Felder plus Kundentyp, ohne Bestandssuche (die Dublettenprüfung übernimmt). Kundentyp immer nur aus Rechtsform.",
     "text_regeln": "E-Mail-Muster · Telefon (+49, 0049 oder 0 und 6–15 Ziffern mit Leerzeichen, /, -) · „PLZ Ort“ (5 Ziffern + Wort) · Datum TT.MM.JJJJ bzw. TT.MM.JJ, „bis TT.MM.“ → Wunsch-Liefertermin; ein Datum ohne Jahr ist das nächste Vorkommen ≥ heute (Europe/Berlin) · Menge = Zahl vor „Stück“, „Stk“, „St.“, „x“ oder „kg“ · Oberfläche/Ausführung über die Synonyme · Teil über den Katalog · Name/Firma = Zeile mit Rechtsform bzw. Absendername. Nichts wird geraten.",
@@ -11055,8 +11571,8 @@
    "regeln": [
     "Status (Befund 6): „ok“ = von Hand gesetzt, erkannt und bestätigt, oder vorbelegt aus Spec/Regel/Kundendaten (Herkunft vorbelegt, z. B. Menge 1, Übergabe, Zahlungsmodus) · „prüfen“ = erkannt, noch nicht bestätigt · „fehlt“ = leer oder mit Fehlertext am Feld · „entscheiden“ = Liefertermin mit Terminvorschlag knapp/nicht machbar ohne Wahl (nur solange eine Bewertung vorliegt, terminvorschlag.laden.fehler) bzw. Kunde mit offenem Dublettenhinweis. Nur „ok“ zählt und öffnet das Tor. „entscheiden“ beim Liefertermin ist ein reines Client-Tor (der Server prüft den Liefertermin, nicht die Wahl).",
     "Positionsfelder (Teil / Leistung, Menge, Oberfläche): eine Zeile je Feld über alle Positionen; „ok“, wenn das Feld in jeder Position „ok“ ist, sonst Unterzeile „Position {n} fehlt“ (erste betroffene). Oberfläche „noch zu klären“ ist ein gültiger Wert (K11) und zählt als „ok“ mit Unterzeile „noch zu klären“.",
-    "Zeile Kunde (eingang): „Kunde gesetzt“ = Bestandskunde gewählt ODER Neukunde (inline) mit Kundentyp, Name / Firma und Telefon. „ok“ nur, wenn der Kunde gesetzt ist, kein Dublettenhinweis offen ist UND bei Art Auftrag seine Daten für Aufträge vollständig sind (OR-03, formulare.kunde.vollstaendigkeit: Name/Firma, Ansprechpartner, Telefon, E-Mail, Anschrift, Zahlungsbedingung – diese nur mit Recht „geld“, werkbank.zahlung) bzw. bei Art KV Name / Firma und Telefon stehen (Neukunde zusätzlich Kundentyp). Unterzeile „fehlt: {liste}“: beim Neukunden zuerst die fehlenden von Kundentyp, Name / Firma, Telefon (Labels aus formulare.kunde.felder), danach – nur bei Art Auftrag – die fehlenden Labels nach formulare.kunde.vollstaendigkeit (z. B. „fehlt: Kundentyp, Telefon, E-Mail“); ohne Kunde „fehlt“.",
-    "Anschrift (Befund 16): „ok“ nur, wenn Straße und Nr., PLZ, Ort und Land gefüllt sind; Unterzeile nennt die fehlenden Teile („fehlt: PLZ, Ort“).",
+    "Zeile Kunde (eingang): „Kunde gesetzt“ = Bestandskunde gewählt ODER Neukunde (inline) mit Kundentyp, Name (Firma: Firmenname · Privat: Nachname) und Telefon. „ok“ nur, wenn der Kunde gesetzt ist, kein Dublettenhinweis offen ist UND bei Art Auftrag seine Daten für Aufträge vollständig sind (OR-03, formulare.kunde.vollstaendigkeit: Name/Firma, Ansprechpartner, Telefon, E-Mail, Anschrift, Zahlungsbedingung – diese nur mit Recht „geld“, werkbank.zahlung) bzw. bei Art KV Name (Firma: Firmenname · Privat: Nachname) und Telefon stehen (Neukunde zusätzlich Kundentyp). Unterzeile „fehlt: {liste}“: beim Neukunden zuerst die fehlenden von Kundentyp, Name (Firma: Firmenname · Privat: Nachname), Telefon (Labels aus formulare.kunde.felder), danach – nur bei Art Auftrag – die fehlenden Labels nach formulare.kunde.vollstaendigkeit (z. B. „fehlt: Kundentyp, Telefon, E-Mail“); ohne Kunde „fehlt“.",
+    "Anschrift (Befund 16): „ok“ nur, wenn Straße, Nr., PLZ, Ort und Land gefüllt sind; Unterzeile nennt die fehlenden Teile („fehlt: PLZ, Ort“).",
     "„Hinweis“-Zeilen (Eingangsfoto) sperren nie.",
     "kundeneu: das Tor prüft nur die Gruppe „Pflicht“ (Interessent, K8/OR-04) und einen offenen Dublettentreffer; „Für Aufträge“ informiert und setzt beim Speichern das Kennzeichen „unvollständig – für Auftrag fehlt: …“.",
     "Server prüft dieselben Regeln; das Client-Tor ersetzt die Server-Prüfung nie.",
@@ -11067,7 +11583,7 @@
    "zweck": "Warnt beim Anlegen eines Kunden vor einem möglichen Doppelten, bevor gespeichert wird.",
    "daten": {
     "quelle": "Kundenbestand, abgefragt über dieselbe Serversuche wie die Kundensuche (formulare.kunde.kundensuche).",
-    "filter": "Vergleich beim Tippen (Debounce 250 ms) über dieselbe Serversuche (Klärung 6, Befund 17). Normalisierung: Telefon = nur Ziffern, führendes +49 bzw. 0049 → 0; E-Mail = getrimmt, klein; Name = klein, ohne Rechtsform (GmbH & Co. KG, GmbH, KG, OHG, AG, UG (haftungsbeschränkt), e. K., e.K., GbR, e. V.), ohne Satzzeichen und doppelte Leerzeichen. „sicherer Treffer“ = gleiche normalisierte Telefonnummer oder E-Mail; „möglicher Treffer“ = normalisierter Name gleich oder einer enthält den anderen (mind. 4 Zeichen) UND gleiche PLZ oder gleicher Ort. Sichere Treffer zuerst, dann mögliche; archivierte Kunden zählen nicht. Dieselbe Regel sortiert die Kundentreffer der Kundensuche.",
+    "filter": "Vergleich beim Tippen (Debounce 250 ms) über dieselbe Serversuche (Klärung 6, Befund 17). Normalisierung: Telefon = nur Ziffern, führendes +49 bzw. 0049 → 0; E-Mail = getrimmt, klein; Name = klein, ohne Rechtsform (GmbH & Co. KG, GmbH, KG, OHG, AG, UG (haftungsbeschränkt), e. K., e.K., GbR, e. V.), ohne Satzzeichen und doppelte Leerzeichen. „sicherer Treffer“ = gleiche normalisierte Telefonnummer oder E-Mail; „möglicher Treffer“ = normalisierter Name (Firma: Firmenname; Privat: Vor- und Nachname in beliebiger Reihenfolge, auch nur Nachname + gleiche Straße) gleich oder einer enthält den anderen (mind. 4 Zeichen) UND (gleiche PLZ oder gleicher Ort ODER PLZ und Ort noch leer); gleiche Straße + Hausnummer + PLZ zählt ebenfalls; Firma: gleiche E-Mail-Domain (außer Freemail) ist ein möglicher Treffer. Sichere Treffer zuerst, dann mögliche; archivierte Kunden zählen nicht. Dieselbe Regel sortiert die Kundentreffer der Kundensuche.",
     "je_eintrag": [
      "Name/Firma",
      "Kundennummer",
@@ -11084,22 +11600,29 @@
      "ergebnis": "legt sich über die Erfassung; Rückkehr ohne Datenverlust (werkbank.interaktion[ueberlagern], bis F5 gebaut ist dort geregelt); nur mit Recht „kunden“, sonst nur Name/Nummer ohne Knopf"
     },
     {
+     "ausloeser": "Diesen Kunden bearbeiten",
+     "ziel": "kundebearbeiten",
+     "arg": "{kunde}#uebernahme",
+     "ergebnis": "öffnet 5.2 des vorhandenen Kunden statt einen zweiten anzulegen: leere Felder sind mit den getippten Werten vorbelegt (Herkunft „aus deiner Eingabe“), abweichende Werte stehen je Feld als „neu: {wert} · bisher: {wert}“ zur Wahl; gespeichert wird erst mit „Speichern“; die angefangene Neuanlage wird verworfen. Recht „kunden“. Aus dem Neuen Eingang bleibt daneben „Diesen Kunden verwenden“."
+    },
+    {
      "ausloeser": "Diesen Kunden verwenden (nur eingang)",
      "ergebnis": "der Treffer wird als Bestandskunde gesetzt, der Neukunde-Modus endet; bereits getippte Neukunde-Werte füllen nur fehlende Felder des Bestandskunden unter „Für den Auftrag ergänzen“ vor (Herkunft vorbelegt)"
     },
     {
-     "ausloeser": "Trotzdem neu anlegen",
+     "ausloeser": "Ist ein anderer Kunde",
      "ergebnis": "nur bewusste Bestätigung (es wird nichts gespeichert, Zustand bleibt); danach darf „Kunde speichern“ bzw. „Wareneingang buchen“ anlegen. Ein neuer Treffer durch spätere Eingaben braucht eine neue Bestätigung."
     }
    ],
    "zustaende": {
     "leer": "„Dublettenprüfung · läuft beim Tippen: Name, Telefon, E-Mail, Ort“",
     "teilweise": "kein Treffer: „Keine Dublette · geprüft: Name, Telefon, E-Mail, Ort“ mit Chip „frei“",
-    "fehler": "Treffer: „Ähnlicher Kunde vorhanden: {kunde}“ mit übereinstimmendem Merkmal, „Vorhandenen öffnen“, im Eingang „Diesen Kunden verwenden“, und „Trotzdem neu anlegen“"
+    "fehler": "Treffer: sicherer Treffer (gleiche Telefonnummer oder E-Mail) → „Diesen Kunden gibt es schon: {kunde}“ mit „Diesen Kunden bearbeiten“ als Hauptknopf; möglicher Treffer → „Ähnlicher Kunde vorhanden: {kunde}“ mit übereinstimmendem Merkmal, „Diesen Kunden bearbeiten“, „Vorhandenen öffnen“, im Eingang „Diesen Kunden verwenden“, und „Ist ein anderer Kunde“ (bisher „Trotzdem neu anlegen“)."
    },
    "regeln": [
     "Solange ein angezeigter Treffer nicht entschieden ist, legen weder der Hauptknopf noch „Nur als Interessent speichern“ (eingang) bzw. „Als Interessent speichern“ (kundeneu) an; sie springen zur Entscheidung (Prüfliste Kunde „entscheiden“, werkbank.interaktion[interessent-tor]).",
-    "Im Neuen Eingang steht der Dublettenhinweis in der rail über der Prüfliste, solange Abschnitt 1 im Zustand neukunde ist (formulare.kunde.kundensuche.regel)."
+    "Im Neuen Eingang steht der Dublettenhinweis in der rail über der Prüfliste, solange Abschnitt 1 im Zustand neukunde ist (formulare.kunde.kundensuche.regel).",
+    "Die Prüfung läuft ab dem ersten Namensfeld (ab 3 Zeichen) und bei Telefon/E-Mail live – nicht erst beim Speichern (Owner 01.11.)."
    ]
   },
   "preisvorschlag": {
@@ -11154,7 +11677,7 @@
    }
   },
   "terminvorschlag": {
-   "zweck": "Terminvorschlag (A10) vor dem Feld Liefertermin: gleicht den Wunschtermin gegen den machbaren Termin ab.",
+   "zweck": "Drei leistbare Liefertermine zur Wahl (A10), abhängig von Bearbeitungszeit, Auslastung, Kalender und Übergabe; gleicht einen Kundenwunsch dagegen ab.",
    "daten": {
     "quelle": "Oberflächen der Positionen, Durchlauf je Oberfläche nach werkstattregel.stufe1_regeln.durchlauf_quelle, Auftragswert (Einzelpreis × Menge, Positionen ohne Preis mit 0 – werkstattregel.stufe1_regeln.ohne_preis; serverseitig, auch für Logins ohne „geld“, ohne Betrag anzuzeigen), Tagesleistung (werkstattregel.stufe1_regeln.tagesleistung_quelle), geplanter Aufwand (Σ aufwand_min, nur Art KV), Arbeitstage über die zentralen Funktionen arbeitstage, plus_arbeitstage (verhalten_appweit.arbeitstage); Wunschtermin = Feld Liefertermin mit Herkunft erkannt oder hand.",
     "filter": "Berechnet, sobald mindestens eine Position eine Oberfläche ≠ „noch zu klären“ hat. Anzeige (in dieser Rangfolge): (1) Wahl übernommen bzw. gehalten → Einzeile laut aufbau („Liefertermin {datum} · Vorschlag übernommen“ bzw. „· Wunsch gehalten …“ mit „Ändern“), ohne Abgleich und ohne Neuberechnung; (2) sonst Wunsch vorhanden (Liefertermin mit Herkunft erkannt oder hand, nicht durch „{machbar} übernehmen“ gesetzt) → Abgleich laut aufbau; gegen die eigene Vorbelegung und gegen den übernommenen Vorschlag wird nicht abgeglichen (Befund 4); (3) kein Block nur ohne Wunsch und ohne Wahl (der Liefertermin trägt dann die Vorbelegung).",
@@ -11162,10 +11685,10 @@
      "Wunsch {datum} mit Quelle (erkannt · {Quelle} | eingegeben)",
      "Machbar {datum} („Vorschlag der App“)",
      "Bewertung passt | knapp | nicht machbar (mit Puffer in Arbeitstagen)",
-     "Gründe, je Grund Symbol + Satz: Durchlauf („{oberflaeche}: {n} Arbeitstage Durchlauf“), Aufwand („{n} Aufwandstage“), Verhalten des Kunden (vom Büro als Hinweis markierte Absprachen des Kunden, Quelle wie kundenhinweise; nur Anzeige, ändert das Datum nicht). Auslastung/Bündel und Erfahrung ähnlicher Aufträge: in Stufe 1 nicht (Kapazität zählt nicht, Erfahrungswert = 1)."
+     "Gründe, je Grund Symbol + Satz: Durchlauf („{oberflaeche}: {n} Arbeitstage Durchlauf“), Aufwand („{n} Aufwandstage“), Verhalten des Kunden (vom Büro als Hinweis markierte Absprachen des Kunden, Quelle wie kundenhinweise; nur Anzeige, ändert das Datum nicht). Auslastung der Woche und Abholaufkommen ab Stufe 1 (terminvorschlag.kapazitaet, uebergabe_regel); Erfahrung ähnlicher Aufträge Stufe 4."
     ]
    },
-   "aufbau": "Bewertung „passt“: einzeilig „Wunsch {datum} machbar“ ohne Entscheidungspflicht (Klärung 9). Bewertung „knapp“ bzw. „nicht machbar“ (gleich dargestellt): Kopf „Terminvorschlag“ mit Bewertungs-Chip; Vergleich Wunsch → Machbar; Gründe-Liste; Knöpfe „{machbar} übernehmen“ und „Wunsch halten · Kunde vorwarnen“ (bei Art KV: „Wunsch halten“, A-88). Nach der Wahl (ohne Neuberechnung, interaktion uebernehmen/wunsch-halten) einzeilig „Liefertermin {datum} · Vorschlag übernommen“ bzw. „· Wunsch gehalten, Kunde wird vorgewarnt“ (Art KV: „· Wunsch gehalten“) mit „Ändern“. Während einer Berechnung im Blockkopf bzw. als einzige Zeile „wird berechnet …“ (laden).",
+   "aufbau": "Block „Liefertermin“ oben in Abschnitt Termin & Übergabe: (1) Übergabe (Abholung | Versand) · (2) Bearbeitungszeit-Chips · (3) drei Vorschlags-Kacheln nebeneinander (Handy untereinander) · (4) „anderes Datum“ · bei einem Kundenwunsch darüber der Abgleich Wunsch ↔ Schnell. Alles in einem Block, kein zweites Terminfeld.",
    "interaktion": [
     {
      "id": "uebernehmen",
@@ -11192,7 +11715,8 @@
    "regeln": [
     "A10: nie automatisch übernommen; bei knapp/nicht machbar steht die Prüfliste-Zeile Liefertermin auf „entscheiden“, bis gewählt ist; bei passt „ok“. Ohne Bewertung (laden ohne bisherigen Stand, fehler) folgt die Zeile nur dem Feld.",
     "Terminstatus (Wunsch/bestätigt) bleibt ein eigenes Feld und wird vom Vorschlag nicht verändert.",
-    "Stufe 1: einfacher Algorithmus (berechnung); Stufe 4 lernt (OR-12) – gleiche Eingaben, gleicher Block."
+    "Stufe 1: einfacher Algorithmus (berechnung); Stufe 4 lernt (OR-12) – gleiche Eingaben, gleicher Block.",
+    "Owner 01.11.: drei leistbare Vorschläge statt eines Datums; Abholung frühestens am Abholtag (Freitag); Bearbeitungszeit in Wochen wählbar; Kalender, Betriebsruhe und Auslastung zählen. Dieselbe Funktion liefert die Vorschläge in 4.5 Termin ändern."
    ],
    "berechnung": "Stufe 1 (Annahme A-52), alle Arbeitstag-Rechnungen über verhalten_appweit.arbeitstage (dort Zählweise und Beispiele): Durchlauf = größter Durchlauf über alle Positionen (werkstattregel.stufe1_regeln.mehrere_oberflaechen, je Position durchlauf_quelle bzw. durchlauf_unbekannt). Aufwandstage = werkstattregel.formel (dieselbe Server-Funktion wie Wareneingang und Terminampel): Art KV mit geplantem Aufwand = aufrunden(max(Auftragswert ÷ Tagesleistung, Σ aufwand_min ÷ 420)), mindestens 1; Art Auftrag bzw. ohne Aufwand = stufe1_regeln.ohne_kv_oder_plan; ohne gespeicherte Tagesleistung stufe1_regeln.werte. machbar = plus_arbeitstage(heute, 1 + Durchlauf + Aufwandstage). Puffer = arbeitstage(machbar, Wunsch) (Liefertermin am Samstag nach liefertermin_samstag). Bewertung: Puffer > 2 passt · 0–2 knapp · < 0 nicht machbar. Dieselbe Berechnung liefert die Vorbelegung des Liefertermins (Herkunft vorbelegt), solange kein Wunsch vorliegt; ohne Position mit Oberfläche ≠ „noch zu klären“ bleibt der Liefertermin leer.",
    "laden": {
@@ -11206,8 +11730,48 @@
     "laden": "siehe laden.laden",
     "fehler": "„Terminvorschlag nicht verfügbar“ (siehe laden.fehler)"
    },
+   "bearbeitungszeit": {
+    "aufbau": "Zeile „Bearbeitungszeit“ mit Chips „1 Woche · 2 Wochen · 3 Wochen · 5 Wochen · andere …“ (andere: 1–26 Wochen)",
+    "vorbelegung": "App-Schätzung = aufrunden((Durchlauf + Aufwandstage) ÷ 5) Wochen (werkstattregel.formel), grün mit Herkunft „App-Schätzung“; ein Klick auf einen anderen Chip ersetzt sie (Herkunft „gewählt“).",
+    "speichern": "orders.processing_weeks (Ist-Wert für Stufe 4)"
+   },
+   "kapazitaet": {
+    "stufe1": "Wochenkapazität = Tagesleistung × Arbeitstage der Woche (verhalten_appweit.arbeitstage: ohne Sonn-/Feiertage und Betriebsruhe). Belegt = Auftragswert aller offenen Aufträge (Wareneingang, In Arbeit), gleichmäßig verteilt auf ihre Arbeitstage von heute bzw. Galvanik-Start bis zum Liefertermin. Auslastung = belegt ÷ Kapazität je Kalenderwoche.",
+    "stufe2": "Zusätzlich Abwesenheiten aus dem M365-Kalender (Urlaub, Krankheit) mindern die Wochenkapazität anteilig (U-212).",
+    "stufe4": "Erfahrungswerte (Z04) ersetzen die Schätzung.",
+    "leistbar": "Ein Termin ist leistbar, wenn vom frühesten Start bis zum Termin genug freie Kapazität für den neuen Auftrag bleibt (Auftragswert ÷ Tagesleistung Aufwandstage, mindestens 1) und die Bearbeitungszeit eingehalten ist."
+   },
+   "uebergabe_regel": {
+    "abholung": "Abholtermine nur am Abholtag (Einstellung company_settings.pickup_weekday, Standard Freitag): frühestens der erste Abholtag nach dem leistbaren Fertigtag. Je Abholtag wird das Abholaufkommen gezählt (Aufträge mit Übergabe Abholung und Liefertermin an diesem Tag) und angezeigt („4 Abholungen“); ist eine Höchstzahl gesetzt (company_settings.pickups_max_per_day, leer = keine Grenze) und erreicht, rückt der Vorschlag auf den nächsten Abholtag. Fällt der Abholtag auf einen Feiertag/Betriebsruhe: letzter Arbeitstag davor.",
+    "versand": "Versand an jedem Arbeitstag: Termin = leistbarer Fertigtag (Versand am selben Tag).",
+    "ohne_uebergabe": "Ohne gewählte Übergabe zeigt der Block „Erst Abholung oder Versand wählen“ und noch keine Termine."
+   },
+   "vorschlaege": {
+    "drei": [
+     {
+      "id": "schnell",
+      "titel": "Schnell",
+      "regel": "frühester leistbarer Termin"
+     },
+     {
+      "id": "empfohlen",
+      "titel": "Empfohlen",
+      "regel": "eine Woche später als „Schnell“ (bei Abholung: der Abholtag eine Woche danach) – Puffer für Unvorhergesehenes"
+     },
+     {
+      "id": "entspannt",
+      "titel": "Entspannt",
+      "regel": "zwei Wochen später als „Schnell“"
+     }
+    ],
+    "je_kachel": "Wochentag und Datum groß · darunter Auslastung der Woche als Ampel (< 80 % grün „Luft“, 80–100 % orange „voll“, > 100 % rot nur als Begründung) · bei Abholung „{n} Abholungen“ · Hinweis bei Feiertag/Betriebsruhe in der Bearbeitungszeit („inkl. Betriebsruhe 23.12.–06.01.“)",
+    "klick": "setzt den Liefertermin; die Kachel wird grün (verhalten_appweit.auswahl); Terminstatus bleibt „Wunsch“, bis „bestätigt“ gewählt ist. Prüfliste Liefertermin „ok“.",
+    "eigenes_datum": "Darunter „anderes Datum“ (Datumsfeld): getippt = Wunsch; er wird gegen „Schnell“ abgeglichen (passt | knapp | nicht machbar) mit „Wunsch halten · Kunde vorwarnen“ wie bisher.",
+    "neu_berechnen": "bei Änderung von Positionen, Oberfläche, Menge, Preis, Übergabe oder Bearbeitungszeit; eine getroffene Wahl bleibt, solange ihr Datum leistbar ist, sonst „Termin nicht mehr leistbar – neu wählen“."
+   },
    "grund_betriebsruhe": "Fällt ein Zeitraum der Betriebsruhe in die Rechnung, steht er als eigener Grund in der Herkunft („Betriebsurlaub 21.12.–06.01. berücksichtigt“).",
-   "ausbau": "Stufe 1: Feiertage + Betriebsruhe + Durchlauf + Bündel + Erfahrung (wie berechnet). Stufe 2 (R01, Owner U-212): echter M365-Kalender mit persönlicher Abwesenheit und Auslastung aller Aufträge."
+   "ausbau": "Stufe 1: Feiertage + Betriebsruhe + Durchlauf + Bündel + Erfahrung (wie berechnet). Stufe 2 (R01, Owner U-212): echter M365-Kalender mit persönlicher Abwesenheit und Auslastung aller Aufträge.",
+   "data_stufe1_alt": "ersetzt: „Auslastung/Bündel … in Stufe 1 nicht (Kapazität zählt nicht)“ – Kapazität zählt ab Stufe 1 (Owner 01.11.)"
   },
   "kamera": {
    "zweck": "Sucher, der sofort öffnet, um Beleg, Zettel, Etikett, Visitenkarte oder Foto aufzunehmen (U-181).",
@@ -11477,7 +12041,7 @@
      "Zahlungsbedingung nur mit Recht „geld“"
     ]
    },
-   "aufbau": "Modus suche_dann_nur_fehlende (Eingang): (1) ohne Kunde: Suchfeld „Kunde suchen“ (freie Eingabe mit Trefferliste beim Tippen – KEINE Auswahlliste aller Kunden), darunter „Neukunde anlegen“; ähnliche Treffer zum Suchtext sind als „möglicher Doppelter“ markiert. (2) Kunde gesetzt: Kundenzeile (Name, Nummer, Ansprechpartner, Ort, vollständig/unvollständig, Herkunft „erkannt …“ / „aus der Kundenkarte“ / „aus Mail“, Knopf „Kundenkarte“ nur mit Recht „kunden“) und darunter die Kundenhinweise nach bausteine_vertraege.kundenhinweise (nur Gründe, die der Login sehen darf; ohne Grund entfällt die Zeile); ist der Kunde unvollständig, darunter „Für den Auftrag ergänzen“ mit NUR den fehlenden Feldern – bei Art Auftrag alle als Pflicht; bei Art KV sind Name / Firma und Telefon Pflicht (markiert), die übrigen fehlenden Felder ohne Pflicht-Markierung (pruefliste.regeln[2]); darunter Suchfeld „Anderer Kunde“. (3) Neukunde (Zustand neukunde): inline dieselben Felder wie Kunde anlegen (Pflicht – auch bei Art KV: Kundentyp, Name, Telefon; für Auftrag: Ansprechpartner, E-Mail, Straße und Nr., PLZ, Ort, Land, Zahlungsbedingung nur mit „geld“ – bei Art KV ohne Pflicht-Markierung; weiter: USt-ID bei Gewerbe) – OHNE Kunden-Notiz (Befund 21, U-170: die Telefonnotiz gehört zum Auftrag) – mit „Zurück zur Suche“. Modus Kunde anlegen (3.1): Abschnitte Pflicht · Für Aufträge nötig · Weitere Angaben (mit Notiz). Modus fehlende_zuerst (Kunde bearbeiten 5.2): keine Kundensuche, alle Felder mit den gespeicherten Werten vorbelegt (U-209); oben „Für Aufträge fehlt: {liste}“ (formulare.kunde.vollstaendigkeit, ohne „geld“ nach vollstaendigkeit.ohne_geld) mit genau den fehlenden Feldern als Pflicht markiert; darunter alle übrigen Felder in der Reihenfolge von formulare.kunde.felder ohne kundensuche: Kundentyp (änderbar, K8), Name / Firma, Ansprechpartner, Telefon, E-Mail, Straße und Nr., PLZ, Ort, Land, Zahlungsbedingung (nur mit „geld“; Optionen nach formulare.kunde.felder[zahlungsbedingung].regel, mit „geld“ immer änderbar), USt-ID (bei Gewerbe), Kundennummer (nur Anzeige), Notiz, danach Absprachen & Eigenheiten. Die Spalte „wann“ in formulare.kunde.felder gilt nur für Eingang und 3.1.",
+   "aufbau": "Modus suche_dann_nur_fehlende (Eingang): (1) ohne Kunde: Suchfeld „Kunde suchen“ (freie Eingabe mit Trefferliste beim Tippen – KEINE Auswahlliste aller Kunden), darunter „Neukunde anlegen“; ähnliche Treffer zum Suchtext sind als „möglicher Doppelter“ markiert. (2) Kunde gesetzt: Kundenzeile (Name, Nummer, Ansprechpartner, Ort, vollständig/unvollständig, Herkunft „erkannt …“ / „aus der Kundenkarte“ / „aus Mail“, Knopf „Kundenkarte“ nur mit Recht „kunden“) und darunter die Kundenhinweise nach bausteine_vertraege.kundenhinweise (nur Gründe, die der Login sehen darf; ohne Grund entfällt die Zeile); ist der Kunde unvollständig, darunter „Für den Auftrag ergänzen“ mit NUR den fehlenden Feldern – bei Art Auftrag alle als Pflicht; bei Art KV sind Name (Firma: Firmenname · Privat: Nachname) und Telefon Pflicht (markiert), die übrigen fehlenden Felder ohne Pflicht-Markierung (pruefliste.regeln[2]); darunter Suchfeld „Anderer Kunde“. (3) Neukunde (Zustand neukunde): inline dieselben Felder wie Kunde anlegen (Pflicht – auch bei Art KV: Kundentyp, Name, Telefon; für Auftrag: Ansprechpartner, E-Mail, Straße, Nr., PLZ, Ort, Land, Zahlungsbedingung nur mit „geld“ – bei Art KV ohne Pflicht-Markierung; weiter: USt-ID bei Firma) – OHNE Kunden-Notiz (Befund 21, U-170: die Telefonnotiz gehört zum Auftrag) – mit „Zurück zur Suche“. Modus Kunde anlegen (3.1): Abschnitte Pflicht · Für Aufträge nötig · Weitere Angaben (mit Notiz). Modus fehlende_zuerst (Kunde bearbeiten 5.2): keine Kundensuche, alle Felder mit den gespeicherten Werten vorbelegt (U-209); oben „Für Aufträge fehlt: {liste}“ (formulare.kunde.vollstaendigkeit, ohne „geld“ nach vollstaendigkeit.ohne_geld) mit genau den fehlenden Feldern als Pflicht markiert; darunter alle übrigen Felder in der Reihenfolge von formulare.kunde.felder ohne kundensuche: Firma oder Privat (änderbar, K8, Wechsel nach formulare.kunde.typ_felder.wechsel), Name nach Typ (Firma: Firmenname und Ansprechpartner mit Anrede, Vorname, Nachname, Funktion · Privat: Anrede, Vorname, Nachname), Telefon, E-Mail, E-Mail für Rechnungen (Firma), Straße, Nr., PLZ, Ort, Land, Zahlungsbedingung (nur mit „geld“; Optionen nach formulare.kunde.felder[zahlungsbedingung].regel, mit „geld“ immer änderbar), USt-ID (bei Firma), Kundennummer (nur Anzeige), Notiz, danach Absprachen & Eigenheiten. Die Spalte „wann“ in formulare.kunde.felder gilt nur für Eingang und 3.1.",
    "interaktion": [
     {
      "ausloeser": "Tippen in Kunde suchen",
@@ -11490,7 +12054,7 @@
     {
      "ausloeser": "Neukunde anlegen",
      "ziel": "zustand:neukunde",
-     "ergebnis": "Neukunde-Modus inline (nicht Dialog 3.1); Suchtext bzw. Aufruf-Text wird nach Muster übernommen (erfassen.erkennung.text_regeln): E-Mail-Muster → E-Mail, Telefon-Muster → Telefon, sonst Name / Firma (nichts doppelt tippen); Dublettenhinweis in der rail"
+     "ergebnis": "Neukunde-Modus inline (nicht Dialog 3.1); Suchtext bzw. Aufruf-Text wird nach Muster übernommen (erfassen.erkennung.text_regeln): E-Mail-Muster → E-Mail, Telefon-Muster → Telefon, sonst Name (Firma: Firmenname · Privat: Nachname) (nichts doppelt tippen); Dublettenhinweis in der rail"
     },
     {
      "ausloeser": "Zurück zur Suche",
@@ -11512,7 +12076,7 @@
      "ergebnis": "Ansprechpartner läuft beim Tippen mit dem Namen mit (Herkunft vorbelegt), bis der Ansprechpartner von Hand geändert wird; danach nicht mehr"
     },
     {
-     "ausloeser": "Kundentyp Gewerbe",
+     "ausloeser": "Kundentyp Firma",
      "ergebnis": "Feld USt-ID erscheint"
     }
    ],
@@ -11523,7 +12087,7 @@
    },
    "regeln": [
     "Kundennummer wird nie eingegeben; sie entsteht beim Speichern bzw. beim Vervollständigen eines Altkunden (Q8).",
-    "Kundentyp: nur Gewerbe | Privat, ohne Vorbelegung außer erkannt (Rechtsform erkannt → Gewerbe). Altwert „institution“ wird als Gewerbe angezeigt und per Migration zu business (Befund 40, Annahme A-56). Land: Auswahl, Vorbelegung Deutschland.",
+    "Kundentyp: nur Firma | Privat, ohne Vorbelegung außer erkannt (Rechtsform erkannt → Firma). Altwert „institution“ wird als Firma angezeigt und per Migration zu business (Befund 40, Annahme A-56). Land: Auswahl, Vorbelegung Deutschland.",
     "Zahlungsbedingung: formulare.kunde.felder[zahlungsbedingung] (Optionen, option_ziel nur bei ziel_freigeschaltet = ja, Schlüssel vorkasse | bar | rechnung | NULL, Anzeige). Neukunde nur Vorkasse | Bar oder Karte bei Abholung (3.1 Vorkasse, U-110; Eingang bei Abholung Bar oder Karte); Tage und Skonto ändert nur 8.6 (K8, U-111, werkbank.zahlung).",
     "K6: Fehlt die Zahlungsbedingung, bleibt sie leer und wird als fehlend angezeigt; kein Ersatzwert, nie „Rechnung auf Ziel“.",
     "K9: Notiz ist Teil des Anlege- und Änderungsvertrags (nicht im Inline-Neukunden des Eingangs).",
@@ -11663,7 +12227,7 @@
     "filter": "Nicht abgeschlossen (abgeholt/versendet gehören nicht hinein). Dann Segment der filterleiste (Station) UND Suche. Eine Klammer erscheint, solange mindestens ein Auftrag des Kunden sichtbar ist.",
     "sortierung": "werkstattregel.etiketten.sortierung (Klammern: Kunde mit dem dringendsten Auftrag oben; Gleichstand früherer Liefertermin des dringendsten Auftrags, dann Kundennummer)",
     "je_eintrag": [
-     "Klammer-Kopf: Kundenkürzel (2 Großbuchstaben: Gewerbe = Anfangsbuchstaben der ersten zwei Wörter des Namens ohne Rechtsform-Zusätze GmbH, AG, KG, OHG, UG, GbR, e. K., e. V., & Co.; nur ein Wort → erste zwei Buchstaben; Privat = Anfang Vorname + Anfang Nachname) · Kundenname · Kundennummer · Anzahl „{n} Aufträge · {m} KV“ (aus allen aktiven Vorgängen des Kunden, ungefiltert) · Knopf „Kundenkarte“",
+     "Klammer-Kopf: Kundenkürzel (2 Großbuchstaben: Firma = Anfangsbuchstaben der ersten zwei Wörter des Namens ohne Rechtsform-Zusätze GmbH, AG, KG, OHG, UG, GbR, e. K., e. V., & Co.; nur ein Wort → erste zwei Buchstaben; Privat = Anfang Vorname + Anfang Nachname) · Kundenname · Kundennummer · Anzahl „{n} Aufträge · {m} KV“ (aus allen aktiven Vorgängen des Kunden, ungefiltert) · Knopf „Kundenkarte“",
      "Karte: Bild/Titel laut verhalten_appweit.auftrag_kurzform · Auftragsnummer · Status-Wort (Wareneingang / In Arbeit / Fertig / KV)",
      "Zeile 2: Ziel (Verfahren · Ausführung) · Menge",
      "Etikett: werkstattregel.etiketten (vollständige Liste je Station)",
@@ -16905,6 +17469,9 @@
    "status": "abweichungen",
    "commit": "7af94e99",
    "gebaut_gegen_spec": "84acb8bd8e8d"
+  },
+  "neuigkeiten": {
+   "status": "offen"
   }
  },
  "korrekturen": [
@@ -16969,7 +17536,7 @@
    "schwere": "hoch",
    "befund": "3.1 nicht nach Spec gebaut: Alt-Formular (Kundentyp Firma/Privat/Institution vorbelegt, Land Freitext, Zahlung Rechnung frei wählbar entgegen U-111, keine Dublettenprüfung/Prüfliste/Erfassen, Abbrechen ohne Entwurf-Rückfrage, Erfolg führt zum Alt-KV).",
    "beleg": "src/components/layout/GlobalCreateFlow.tsx:224–249,1627–1647",
-   "bauvorgabe": "Codex muss 3.1 als Werkbank-Dialog mit der einen Kunden-Formular-Komponente aus formulare.kunde neu bauen und den Alt-Step ersetzen; Altwert Kundentyp „institution“ per Migration zu Gewerbe (Annahme A-56)."
+   "bauvorgabe": "Codex muss 3.1 als Werkbank-Dialog mit der einen Kunden-Formular-Komponente aus formulare.kunde neu bauen und den Alt-Step ersetzen; Altwert Kundentyp „institution“ per Migration zu Firma (Annahme A-56)."
   },
   {
    "seite": "mailein",
