@@ -1,13 +1,15 @@
 # ABGABE AP-01 — Eingang, Kanal Paket/persönlich
 
-Stand: 01.11.2026 01:15 CET  
+Stand: 01.11.2026 01:15 CET
+
 Branch: `kreile/b2-eingang`
 
 ## 1. Produktkandidat und Preview
 
 - Produkt-SHA: `750e0534fc28efb9e6a8eb517355986cd459dc15`
 - Basis: `11091c0be7b2c58ef7b009d4ad5664ad3e9db01d` (`origin/main` nach Merge von #157)
-- Exakte READY-Preview dieses Produkt-SHA:  
+- Exakte READY-Preview dieses Produkt-SHA:
+
   `https://galvanik-kreile-werkstatt-mblgvzoei.vercel.app`
 - Vercel-Deployment: `dpl_5k4QmWDxCSo2WLCQQzgYtYwiT9ix`, Ziel `preview`, Zustand `READY`, Region `fra1`
 - Zuordnung zum SHA: Der GitHub-Commit-Status von `750e0534…` verweist auf genau dieses Deployment; die Vercel-Inspektion meldet dieselbe Deployment-ID und den obigen eindeutigen Deployment-Host.
@@ -95,7 +97,8 @@ Die finalen PR-Checks werden nach dem separaten Abgabe-Commit erneut abgewartet 
 
 ## 6. Änderung an `authorizationContract.ts`
 
-Alt: `Neuer Eingang & Kunde anlegen`  
+Alt: `Neuer Eingang & Kunde anlegen`
+
 Neu: `Neu erfassen & Kunde anlegen`
 
 Begründung: reine sichtbare Umbenennung der bereits bestehenden AccessArea `eingang` entsprechend Endversion spec `5ac4d4b5ea34`. Bereich, Rechteauflösung, Rollenmodell und Serverautorisierung bleiben unverändert. Für die AP-01-Auftragsanlage ist ausschließlich `eingang` erforderlich; die Geldberechtigung steuert weiterhin nur Geldfelder.
@@ -192,4 +195,3 @@ Jede folgende Selektor-/Sichtbarkeitsassertion behält ihre Aussage und wechselt
 4. Anliegen `Auftrag`, einen Bestandskunden und alle als `fehlt` markierten Pflichtangaben ausdrücklich wählen/ausfüllen.
 5. `Wareneingang buchen` klicken und die Erfolgsmeldung mit Auftrag `A-2026-00NN` prüfen.
 6. Auftrag in der Auftragsliste öffnen; Planungschat prüft dazu DB-Kette `intake_item` → `orders` → `intake_event` → `ORDER_INTAKE_CREATED_V1`.
-

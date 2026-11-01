@@ -25,4 +25,3 @@ export type ErfasseAuftragResult =
   | { code: "FORBIDDEN"; message: string }
   | { code: "VALIDATION_ERROR"; message: string }
   | { code: "CONFLICT"; message: string };
-
