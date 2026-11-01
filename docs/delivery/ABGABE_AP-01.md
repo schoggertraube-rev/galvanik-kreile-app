@@ -1,16 +1,16 @@
 # ABGABE AP-01 – Eingang, Kanal Paket/persönlich, Fassung 4.2
 
-Stand: 01.11.2026, Korrektur nach Owner-Klicktest auf `3f605239`
+Stand: 01.11.2026, Korrektur Fassung 4.2 einschließlich Punkte 6–9 und echter Namenssuche
 
 Branch: `kreile/b2-eingang` · PR: `#158` · kein Merge durch Codex
 
 ## 1. Produkt-SHA und exakte Preview
 
-- Produkt-SHA: `1319b3d89de9441fb729e5c058fdd98b84910220`
+- Produkt-SHA: `1acf911800b3954ea7cb7e748317fe5b22fa6525`
 - Basis: `8e1e03f567278d24d5f3a468f6cbef3729db96b9` (`origin/main`, #159)
 - Exakte READY-Preview dieses Produkt-SHA:
 
-  `https://galvanik-kreile-werkstatt-dnferken9.vercel.app`
+  `https://galvanik-kreile-werkstatt-rgqxchogv.vercel.app`
 - Vercel-Zustand: `READY`; Deployment-Metadaten nennen exakt den Produkt-SHA und PR `#158`.
 - Kein Merge und kein Production-Deploy durch Codex.
 
@@ -27,9 +27,13 @@ Branch: `kreile/b2-eingang` · PR: `#158` · kein Merge durch Codex
 - Die für AP-K1 geplante Umbenennung von `getOrderReadiness` zu `kundeVollstaendigkeit` ist ausdrücklich nicht Teil von #158 und wird hier weder als Alias noch als zweite Funktion vorweggenommen.
 - Eingangsart, Terminstatus, Übergabe und Zahlungsmodus starten leer. Zahlung bleibt gesperrt, bis eine Übergabe gewählt ist. Fehlende `intakeSource`/`termStatus` werden als `null` gespeichert, nicht still ersetzt.
 - Erkannte Kundendaten gelten nicht als bestätigt: Telefon, E-Mail oder Name befüllen und starten nur die bestehende Kundensuche. Ein allein eingegebener Kundenname wird als Suchbegriff übernommen; bei Treffern erscheinen bis zu drei Vorschläge mit `· übernehmen`. `Kunde anlegen` bleibt während des Tippens sowie unter Treffern und unter `Kein Kunde gefunden` sichtbar.
-- Ursache des Namensfehlers im Client: `customerSearchFromRecognition()` lieferte bisher `""`, sobald die Erkennung weder E-Mail, Telefon, Firma, PLZ noch Ort strukturiert gefunden hatte. Ein reiner Name erreichte deshalb die bereits funktionierende Serversuche `searchOrderIntakeCustomers` nie. Der Fallback übergibt nun Namenswörter aus der Notiz an genau diese bestehende Suche; es gibt keinen zweiten Suchweg.
+- Ursache des Namensfehlers: Der bisherige realRender-Stub lieferte für jede Suchanfrage `Sabrina Schmidt` und belegte nur die Übergabe in der Oberfläche. Produktiv gab es keinen servergestützten Abgleich der Notizwörter gegen echte Kunden; der Client leitete lediglich einen Suchstring aus strukturiert erkannten Feldern ab. `findRecognizedCustomers` fragt jetzt ausschließlich die bestehende Serversuche `searchOrderIntakeCustomers` ab und filtert deren echte Treffer nach der BAUPLAN-Ganzwortregel (Wörter ab vier Zeichen, Rechtsformen ausgeschlossen, höchstens drei Vorschläge). Es gibt keinen zweiten Suchweg.
 - Abbrechen, × und Esc schließen eine unveränderte Erfassung sofort. Bei Änderungen erscheint ausschließlich die Stufe-1-Rückfrage mit `Verwerfen` und `Weiter bearbeiten`; Verwerfen leert den gesamten Zustand und erzeugt einen neuen `clientKey`.
 - Ein Mail-Eintrag in „Der Tag“ zeigt `Mail ansehen`, öffnet die bestehende Mailansicht und niemals den Eingangsdialog.
+- `Wareneingang buchen` und der mobile Weiter-Knopf bleiben bedienbar. Bei fehlenden Angaben wird nichts geschrieben; die Oberfläche springt zur ersten offenen Prüflisten-Zeile und meldet `Noch offen: {Label}`. Während des Schreibens steht `Wird gebucht …`; ein zweiter Klick bleibt ohne Wirkung.
+- Nach Erfolg schließt die Erfassung, meldet `Auftrag {Nummer} angelegt` und öffnet direkt die Auftragskarte. Der frühere Erfolgszwischenbildschirm ist entfernt.
+- Die Kundenkarte öffnet für Ergänzungen als Ebene über der Erfassung. Rückkehr oder Speichern erhält alle Eingaben, liest den Kunden neu und prüft ihn erneut; Esc schließt nur die oberste Ebene.
+- `Neuer Auftrag` aus der Kundenkarte öffnet dieselbe Erfassung mit gesetztem Kunden und sichtbarer Markierung `aus der Kundenkarte`.
 
 ## 3. Migration und Datenbankgleichstand
 
@@ -45,16 +49,17 @@ Branch: `kreile/b2-eingang` · PR: `#158` · kein Merge durch Codex
 |---|---|---|
 | `src/test/acceptance/ap01_eingang_paket_persoenlich.integration.test.ts` | `BE54C2C5FD0F7B6EF707D8B81B00F542732395FE7AC6695EA86DB8E26627E48E` | einzeln, `3/3` grün |
 | `src/test/acceptance/ap01b_eingang_bestandskunde_unvollstaendig.integration.test.ts` | `4B67978D5433D16395A7072E4B691F6AB5EF6B4A3F3D4D4C42131994120057A1` | einzeln, `2/2` grün |
+| `src/test/acceptance/ap01c_eingang_kundenvorschlag.integration.test.ts` | `5D7FD9672EB10346C0569BFED39BBB1F0ADA6768B0F198630A7DB36BE3506A6D` | einzeln, `1/1` grün |
 
-Beide Tests rufen die echte Server-Action mit signierter Sitzung gegen Loopback-Postgres auf. Es gibt keinen Action- oder Datenbank-Mock.
+Alle drei Tests rufen echte Server-Actions mit signierter Sitzung gegen Loopback-Postgres auf. Es gibt keinen Action- oder Datenbank-Mock. Der dritte Test legt über `createCustomerAction` den Kunden `Sabrina Schmidt` an, prüft Kundenzeile und `CUSTOMER_CREATED_V1`, ruft die echte Erkennung sowie die bestehende Serversuche auf und verlangt den eben angelegten Kunden unter höchstens drei Vorschlägen.
 
 ### Datenbankbeleg aus diesem Lauf
 
 | `client_key` | Auftrag | Kunde | `intake_item` | `intake_event` | Auftragsevent |
 |---|---|---|---|---|---|
-| `ede95557-e08f-4eb1-acaf-ec45cde23ce8` | `A-2026-0001` | `AP01 Bestandskunde fa709f39` | `notiz`, `geraet`, `auftrag` | `angelegt`, `zugeordnet` | `ORDER_INTAKE_CREATED_V1`, `success` |
-| `28f44232-4d68-4110-8e3a-ead2982412df` | `A-2026-0002` | `AP01 Bestandskunde fa709f39` | `notiz`, `geraet`, `auftrag` | `angelegt`, `zugeordnet` | `ORDER_INTAKE_CREATED_V1`, `success` |
-| `5aebeae2-16b9-43da-8b82-3dff87c81169` | `A-2026-0003` | `AP01B Schmidt 0d257e6b` | `notiz`, `geraet`, `auftrag` | `angelegt`, `zugeordnet` | `ORDER_INTAKE_CREATED_V1`, `success` |
+| `7305af0c-0879-4c88-b095-1d9ad644a614` | `A-2026-0001` | `AP01 Bestandskunde 97db7048` | `notiz`, `geraet`, `auftrag` | `angelegt`, `zugeordnet` | `ORDER_INTAKE_CREATED_V1`, `success` |
+| `0216aa33-1ff1-48e1-81c9-95a4e6248bbe` | `A-2026-0002` | `AP01 Bestandskunde 97db7048` | `notiz`, `geraet`, `auftrag` | `angelegt`, `zugeordnet` | `ORDER_INTAKE_CREATED_V1`, `success` |
+| `c9133a44-d186-4647-a2c6-649537d2c133` | `A-2026-0003` | `AP01B Schmidt 74c5c8fd` | `notiz`, `geraet`, `auftrag` | `angelegt`, `zugeordnet` | `ORDER_INTAKE_CREATED_V1`, `success` |
 
 - Für alle drei Aufträge sind `intake_source` und `intake_term_status` in `private.order_intake_receipts` tatsächlich `null`, weil die Tests diese Felder nicht senden. Damit ist die fehlende stille Vorbelegung auf Server/DB-Ebene belegt.
 - Der Idempotenzfall ruft dieselbe Action zweimal mit demselben `clientKey` auf und erhält denselben Auftrag/dasselbe `intake_item`; DB-Zähler bleiben jeweils `1`.
@@ -78,10 +83,10 @@ Lokal vollständig grün:
 - `git diff --check origin/main`: leer
 - TypeScript: grün
 - ESLint: `0` Fehler; sechs bereits vorhandene Warnungen ausschließlich in `docs/project/endversion/werkzeuge/bauplan.mjs`
-- Zielgerichtete Fassung-4.2-Abnahme: `2` Dateien, `34` Tests grün
-- Unit: `133` Dateien, `1059` Tests grün
+- Zielgerichtete Fassung-4.2-Abnahme: `35/35` realRender-Tests grün
+- Unit: `133` Dateien, `1064` Tests grün
 - Produktions-Build: grün
-- Replay-Abnahme: `3/3` plus `2/2` grün
+- Replay-Abnahme: `3/3` plus `2/2` plus `1/1` grün
 
 Remote auf dem Produkt-SHA:
 
@@ -131,7 +136,7 @@ Begründung: sichtbare Umbenennung der bestehenden AccessArea `eingang`. Bereich
 | 9 | Texterkennung zeigte erkannte Kundendaten als bestätigt und ließ die Kundensuche leer | PLZ/Ort erscheinen nicht als bestätigt; die Suche wird mit dem erkannten Namen vorbelegt und ausgelöst |
 | 10 | Freitext-Auftrag legte Inline-Kunden an | Freitext-Auftrag verwendet den ausdrücklich gewählten Bestandskunden |
 | 11 | Manuelle Vollständigkeits-Checkbox | echte Prüfliste; vollständig `9 von 9`, Action genau einmal |
-| 12 | Hauptknopf blieb bei fehlenden Pflichtfeldern aktiv und sprang zum Feld | Hauptknopf ist gesperrt; es erfolgt kein Schreibaufruf |
+| 12 | Hauptknopf war bei fehlenden Pflichtfeldern deaktiviert | Hauptknopf bleibt klickbar; ohne Pflichtangabe erfolgt kein Schreibaufruf, stattdessen Sprung/Fokus und `Noch offen: {Label}` |
 | 13 | Zahlungsmodus startete mit einem Wert | startet leer |
 | 14 | Übergabe setzte Zahlungsmodus automatisch | Zahlung bleibt leer; Nutzerwahl ist erforderlich |
 | 15 | Zielkunde setzte `rechnung` automatisch | keine automatische Zahlungsentscheidung |
@@ -154,6 +159,11 @@ Begründung: sichtbare Umbenennung der bestehenden AccessArea `eingang`. Bereich
 | 32 | Reiner Namensfreitext ohne strukturiert erkanntes Feld startete keine Kundensuche | `sabrina schmidt` befüllt die Suche, startet die bestehende Serversuche und zeigt `Sabrina Schmidt · übernehmen` |
 | 33 | Suchtreffer hatten den allgemeinen Knopf `Auswählen` | jeder Treffer zeigt konkret `<Kundenname> · übernehmen` und setzt per Klick genau diesen Kunden |
 | 34 | `Kunde anlegen` erschien nur im leeren Zustand oder nach `Kein Kunde gefunden` | der Knopf bleibt beim Tippen und unter Trefferlisten sichtbar |
+| 35 | Kein belegter Handy-Weg bei fehlender Pflichtangabe | `Positionen` bleibt klickbar, wechselt in den passenden Schritt und meldet die erste offene Angabe |
+| 36 | Erfolgszwischenbildschirm mit zwei Folgeknöpfen | Erfassung schließt; `openOrder(orderId)` öffnet direkt die Karte und die Meldung nennt die Auftragsnummer |
+| 37 | Kein Doppelklick-Beleg | während des Schreibens `Wird gebucht …`; ein zweiter Klick löst keinen zweiten Action-Aufruf aus |
+| 38 | Kundenkarte ersetzte den Kontext oder verlor Eingaben | Kundenkarte liegt als Ebene über der Erfassung; Rückkehr erhält Eingaben, liest den Kunden neu und prüft erneut |
+| 39 | Kein Beleg für den Aufruf aus der Kundenkarte | `Neuer Auftrag` setzt den Kunden in derselben Erfassung und zeigt `aus der Kundenkarte` |
 
 ### 7.3 `RolfHome.realRender.test.tsx`
 
@@ -170,10 +180,18 @@ Neue Tests haben kein „alt“: `orderReadiness.test.ts` prüft zusätzlich Pri
 - Weitere erlaubte Einstiege: `MoreMenu.tsx`, `SearchDialog.tsx`, `OfficeHomeClient.tsx`, `OrdersAppAdapter.tsx`, `WerkstattView.tsx`, `AppShell.tsx`
 - Sichtbare Fähigkeit/Recht: `featureCatalog.ts` und `authorizationContract.ts`
 
-## 9. Owner-Klickweg aus PAKET Fassung 4.2, Punkt 5
+## 9. Preview-Screenshot und Owner-Klickweg aus PAKET Fassung 4.2, Punkt 5
+
+- Screenshot der exakten Preview auf Produkt-SHA `1acf9118…`:
+  `output/playwright/ap01-1acf9118-sabrina-schmidt.png`
+- Sichtbarer Nachweis: Suchfeld `Sabrina Schmidt`, Vorschlag `Sabrina Schmidt · übernehmen`, Kundennummer `K-2026-0011` und der weiterhin sichtbare Knopf `Kunde anlegen`.
 
 1. Exakte Preview öffnen, als Rolf anmelden und über das Plus den bestehenden Privatkunden `gregor laucht` (`K-2026-0013`) wählen. Es erscheint kein Hinweis `Ansprechpartner fehlt`; nach Ergänzung der übrigen Pflichtangaben ist `Wareneingang buchen` möglich.
 2. Plus erneut öffnen, in `Schnell erfassen` nur `sabrina schmidt` eingeben und `Angaben erkennen` wählen. Die Kundensuche ist mit `sabrina schmidt` vorbelegt und zeigt `Sabrina Schmidt · übernehmen`; ein Klick setzt diesen Kunden.
 3. Bei `Kunde suchen` tippen. Während des Tippens sowie unter vorhandenen Treffern bleibt `Kunde anlegen` sichtbar; ohne Treffer steht der Knopf direkt unter `Kein Kunde gefunden`.
+4. Ohne Position `Wareneingang buchen` wählen. Es gibt keinen Schreibaufruf; die Ansicht springt zu `Teil / Leistung` und meldet `Noch offen: Teil / Leistung`. Auf dem Handy führt `Positionen` entsprechend in Schritt 2.
+5. Alle Pflichtangaben ausfüllen und buchen. Währenddessen steht `Wird gebucht …`; ein Doppelklick erzeugt keinen zweiten Auftrag. Danach schließt die Erfassung, meldet `Auftrag {Nummer} angelegt` und öffnet direkt die Auftragskarte.
+6. Den unvollständigen Kunden `Sabrina Schmidt` wählen und `In Kundenkarte ergänzen` öffnen. Die Karte liegt über der Erfassung. Land auf `Schweiz` korrigieren und speichern oder schließen: dieselbe Erfassung mit allen Eingaben erscheint wieder, der Kunde wurde neu gelesen und der frühere Hinweis ist verschwunden. Esc schließt nur die Kundenkarte.
+7. In einer Kundenkarte `Neuer Auftrag` wählen. Die Erfassung öffnet mit gesetztem Kunden und der Markierung `aus der Kundenkarte`.
 
 Nach dem Owner-Klick prüft der Planungschat die reale Kette `intake_item` → `orders`/Receipt → `intake_event` → `ORDER_INTAKE_CREATED_V1`. #158 bleibt bis zur Owner-Entscheidung ungemergt.
