@@ -192,6 +192,7 @@ function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
     })),
     rememberQuote: vi.fn(),
     rememberQuoteConversion: vi.fn(),
+    activeCustomerOverlayId: null,
     openCustomer: vi.fn(),
     openOrder: vi.fn(),
     refresh: vi.fn(),
@@ -512,7 +513,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     openFlow();
     await searchAndSelectIntakeCustomer("Firma", /SYNTHETISCH Firma GmbH.*übernehmen/);
     expect(screen.getAllByText(/Ansprechpartner fehlt/).length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Wareneingang buchen" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Wareneingang buchen" })).toBeEnabled();
   });
 
   it("blocks an incomplete existing customer and opens only the customer card for correction", async () => {
@@ -541,11 +542,60 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     openFlow();
     await searchAndSelectIntakeCustomer("Zielkunde", /SYNTHETISCH Zielkunde GmbH.*übernehmen/);
     expect(screen.getAllByText(/PLZ 3013 passt nicht zu Deutschland/).length).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Wareneingang buchen" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Wareneingang buchen" })).toBeEnabled();
     expect(screen.queryByLabelText("PLZ")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Land")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "In Kundenkarte ergänzen" }));
     expect(value.openCustomer).toHaveBeenCalledWith(CUSTOMER_ID);
+  });
+
+  it("keeps the intake below the customer card, rereads the customer after return, and preserves all input", async () => {
+    const incompleteCustomer = {
+      id: CUSTOMER_ID, customerNumber: "K-2026-0042", name: "SYNTHETISCH Zielkunde GmbH", customerType: "business" as const,
+      companyName: "SYNTHETISCH Zielkunde GmbH", contactPerson: "Testperson", email: "zielkunde@example.invalid", phone: "+49 221 123456",
+      street: "Testweg 1", zipCode: "3013", city: "Bern", country: "Deutschland", paymentPreference: "vorkasse", vatId: null,
+    };
+    const completeCustomer = { ...incompleteCustomer, country: "Schweiz" };
+    let currentCustomer = incompleteCustomer;
+    const listCustomers = vi.fn<GlobalCreatePorts["listCustomers"]>(async () => ({ code: "OK", customers: [currentCustomer] }));
+    const base = ports({
+      listCustomers,
+      searchIntakeCustomers: vi.fn().mockResolvedValue({ code: "OK", customers: [incompleteCustomer] }),
+    });
+    const { rerender } = render(<GlobalCreateFlow ports={{ ...base, activeCustomerOverlayId: null }} />);
+
+    openFlow();
+    await searchAndSelectIntakeCustomer("Zielkunde", /SYNTHETISCH Zielkunde GmbH.*übernehmen/);
+    fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "SYNTHETISCH Eingabe bleibt" } });
+    fireEvent.click(screen.getByRole("button", { name: "In Kundenkarte ergänzen" }));
+    expect(base.openCustomer).toHaveBeenCalledWith(CUSTOMER_ID);
+
+    rerender(<GlobalCreateFlow ports={{ ...base, activeCustomerOverlayId: CUSTOMER_ID }} />);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.getByRole("heading", { name: "Neu erfassen" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Teil / Bezeichnung")).toHaveValue("SYNTHETISCH Eingabe bleibt");
+
+    currentCustomer = completeCustomer;
+    rerender(<GlobalCreateFlow ports={{ ...base, activeCustomerOverlayId: null }} />);
+    await waitFor(() => expect(listCustomers).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByText(/PLZ 3013 passt nicht zu Deutschland/)).not.toBeInTheDocument());
+    expect(screen.getByLabelText("Teil / Bezeichnung")).toHaveValue("SYNTHETISCH Eingabe bleibt");
+  });
+
+  it("marks a customer-card order entry and keeps that customer selected", async () => {
+    const value = ports();
+    render(<GlobalCreateFlow ports={value} />);
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent("path1:global-create-open", { detail: {
+        intent: "DIRECT_INTAKE",
+        prefill: { customerId: CUSTOMER_ID },
+      } }));
+    });
+
+    expect(await screen.findByText("aus der Kundenkarte")).toBeInTheDocument();
+    expect(screen.getAllByText("SYNTHETISCH Musterkunde GmbH").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("textbox", { name: "Kunde suchen" })).not.toBeInTheDocument();
   });
 
   it("checks an unclear customer result read-only and restores only a verified receipt", async () => {
@@ -617,7 +667,10 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(screen.queryByText("Digitaler Wareneingang")).not.toBeInTheDocument();
     await fillDirectIntakeForExistingCustomer();
     fireEvent.click(screen.getByRole("button", { name: "Wareneingang buchen" }));
-    await screen.findByRole("heading", { name: "Auftrag A-2026-0061 angelegt" });
+    await waitFor(() => expect(value.openOrder).toHaveBeenCalledWith(ORDER_ID));
+    expect(screen.queryByRole("heading", { name: "Neu erfassen" })).not.toBeInTheDocument();
+    expect(screen.getByText("Auftrag A-2026-0061 angelegt")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Auftragskarte öffnen" })).not.toBeInTheDocument();
     expect(value.createDirectIntake).toHaveBeenCalledWith(expect.objectContaining({
       dueDate: "2026-10-20",
       termStatus: "wunsch",
@@ -629,7 +682,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(value.refresh).toHaveBeenCalledTimes(1);
   });
 
-  it("locks the main intake action while mandatory intake data is missing", async () => {
+  it("keeps the main intake action clickable and focuses the first missing checklist row without sending", async () => {
     const value = ports();
     render(<GlobalCreateFlow ports={value} />);
 
@@ -637,10 +690,65 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     await screen.findByRole("heading", { name: "Neu erfassen" });
 
     const submit = screen.getByRole("button", { name: "Wareneingang buchen" });
-    expect(submit).toBeDisabled();
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+    expect(await screen.findByText("Noch offen: Kunde")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Kunde suchen" })).toHaveFocus();
     expect(screen.getByRole("complementary", { name: "Prüfliste" })).toHaveTextContent(/\d+ von \d+ Pflichtangaben/);
     expect(value.createDirectIntake).not.toHaveBeenCalled();
     expect(screen.getByRole("complementary", { name: "Prüfliste" })).toHaveTextContent("Kunde");
+  });
+
+  it("jumps from booking to the first missing position after a complete customer was selected", async () => {
+    const value = ports();
+    render(<GlobalCreateFlow ports={value} />);
+
+    openFlow();
+    await searchAndSelectIntakeCustomer("SYNTHETISCH", /SYNTHETISCH Musterkunde GmbH.*übernehmen/);
+    fireEvent.click(screen.getByRole("button", { name: "Wareneingang buchen" }));
+
+    expect(await screen.findByText("Noch offen: Teil / Leistung")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText("Teil / Bezeichnung")).toHaveFocus());
+    expect(value.createDirectIntake).not.toHaveBeenCalled();
+  });
+
+  it("keeps the mobile Positionen action clickable and jumps to the first open customer field", async () => {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: query.includes("max-width"), media: query, onchange: null,
+        addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
+      })),
+    });
+    const value = ports();
+    render(<GlobalCreateFlow ports={value} />);
+
+    openFlow();
+    const next = await screen.findByRole("button", { name: "Positionen" });
+    expect(next).toBeEnabled();
+    fireEvent.click(next);
+
+    expect(await screen.findByText("Noch offen: Kunde")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Kunde suchen" })).toHaveFocus();
+    expect(value.createDirectIntake).not.toHaveBeenCalled();
+  });
+
+  it("locks a booking synchronously, shows progress, and ignores a second click", async () => {
+    let finishCreate!: (result: Awaited<ReturnType<GlobalCreatePorts["createDirectIntake"]>>) => void;
+    const createDirectIntake = vi.fn<GlobalCreatePorts["createDirectIntake"]>(() => new Promise((resolve) => { finishCreate = resolve; }));
+    const value = ports({ createDirectIntake });
+    render(<GlobalCreateFlow ports={value} />);
+
+    openFlow();
+    await fillDirectIntakeForExistingCustomer();
+    const submit = screen.getByRole("button", { name: "Wareneingang buchen" });
+    fireEvent.click(submit);
+    fireEvent.click(submit);
+
+    expect(await screen.findByRole("button", { name: "Wird gebucht …" })).toBeDisabled();
+    expect(createDirectIntake).toHaveBeenCalledTimes(1);
+    await act(async () => finishCreate(await ports().createDirectIntake(createDirectIntake.mock.calls[0][0])));
+    await waitFor(() => expect(value.openOrder).toHaveBeenCalledWith(ORDER_ID));
   });
 
   it("prefills only real intake fields and searches with recognized customer data", async () => {
@@ -694,7 +802,10 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
       paymentPreference: "vorkasse",
     };
     const recognizeIntakeText = vi.fn<GlobalCreatePorts["recognizeIntakeText"]>().mockResolvedValue({ code: "OK", data: { fields: [], positions: [] } });
-    const searchIntakeCustomers = vi.fn<GlobalCreatePorts["searchIntakeCustomers"]>().mockResolvedValue({ code: "OK", customers: [customer] });
+    const searchIntakeCustomers = vi.fn<GlobalCreatePorts["searchIntakeCustomers"]>(async (query) => ({
+      code: "OK",
+      customers: query === "sabrina schmidt" ? [customer] : [],
+    }));
     render(<GlobalCreateFlow ports={ports({ recognizeIntakeText, searchIntakeCustomers })} />);
     openFlow();
 
@@ -702,7 +813,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.click(screen.getByRole("button", { name: "Angaben erkennen" }));
 
     await waitFor(() => expect(searchIntakeCustomers).toHaveBeenCalledWith("sabrina schmidt"));
-    expect(screen.getByRole("textbox", { name: "Kunde suchen" })).toHaveValue("sabrina schmidt");
+    expect(screen.getByRole("textbox", { name: "Kunde suchen" })).toHaveValue("Sabrina Schmidt");
     const suggestion = await screen.findByRole("button", { name: /Sabrina Schmidt.*übernehmen/ });
     fireEvent.click(suggestion);
     expect(screen.getAllByText("Sabrina Schmidt").length).toBeGreaterThan(0);
@@ -782,7 +893,8 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(screen.getByRole("complementary", { name: "Prüfliste" })).toHaveTextContent("9 von 9 Pflichtangaben");
     fireEvent.click(screen.getByRole("button", { name: "Wareneingang buchen" }));
     await waitFor(() => expect(value.createDirectIntake).toHaveBeenCalledTimes(1));
-    await screen.findByRole("heading", { name: "Auftrag A-2026-0061 angelegt" });
+    await waitFor(() => expect(value.openOrder).toHaveBeenCalledWith(ORDER_ID));
+    expect(screen.getByText("Auftrag A-2026-0061 angelegt")).toBeInTheDocument();
     expect(value.createDirectIntake).toHaveBeenCalledWith(expect.objectContaining({
       items: [expect.objectContaining({
         catalogServiceId: null,

@@ -7,6 +7,8 @@ export type {
   GlobalCreateRequest,
 } from "./requestGlobalCreate";
 export { GlobalCreateFlow } from "./GlobalCreateFlow";
+export { findRecognizedCustomers } from "./customerRecognition";
+export type { RecognizedCustomerSuggestions } from "./customerRecognition";
 export type {
   DirectIntakeInput,
   ConvertQuoteInput,
