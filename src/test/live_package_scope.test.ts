@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   checkSalesStageB2ScopeForTest,
   checkTaB2bScopeForTest,
+  checkTaB2cScopeForTest,
   runSelftest,
 } from "../../scripts/quality/check-live-package-scope.mjs";
 
@@ -19,6 +20,10 @@ const b2AnchorMission = {
   tablet_mobile_due_at: "2026-11-08",
   handoff_path: "docs/delivery/ABGABE_B2.md",
   next_block: "B3",
+};
+
+const b2cAnchorMission = {
+  ...b2AnchorMission,
 };
 
 const ap01ExactPaths = [
@@ -102,6 +107,43 @@ describe("Kreile live package scope", () => {
       branch: "codex/ta-b2b",
       baseSha: "ac6c1d2a7eb652dc5e64219a24eed8d4065fbc4e",
     })).toContain("TA_B2B_SCOPE:scripts/quality/h18-server-actions.json");
+  });
+
+  it("allows only the TA-B2c anchor paths on its pinned main base", () => {
+    expect(checkTaB2cScopeForTest({
+      files: [
+        "docs/project/arbeitspakete/TRUST_ANCHOR_B2C.md",
+        "docs/project/endversion/codex/BAUPLAN.json",
+        "docs/evidence/live-line/b2/TRUST_ANCHOR_B2C.json",
+      ],
+      mission: b2cAnchorMission,
+      branch: "codex/ta-b2c",
+      baseSha: "11091c0be7b2c58ef7b009d4ad5664ad3e9db01d",
+    })).toEqual([]);
+    expect(checkTaB2cScopeForTest({
+      files: ["src/app/page.tsx"],
+      mission: b2cAnchorMission,
+      branch: "codex/ta-b2c",
+      baseSha: "11091c0be7b2c58ef7b009d4ad5664ad3e9db01d",
+    })).toContain("TA_B2C_SCOPE:src/app/page.tsx");
+  });
+
+  it("allows the narrow AP acceptance and delivery patterns only", () => {
+    for (const path of [
+      "src/test/acceptance/ap01b_eingang_bestandskunde_unvollstaendig.integration.test.ts",
+      "docs/delivery/ABGABE_AP-K1.md",
+    ]) {
+      expect(checkSalesStageB2ScopeForTest({ files: [path], mission: b2Mission, branch: "kreile/b2-eingang" }), path).toEqual([]);
+    }
+    for (const path of [
+      "src/test/acceptance/x.test.ts",
+      "src/test/x.integration.test.ts",
+      "docs/delivery/ABGABE_B3.md",
+      "docs/project/endversion/codex/BAUPLAN.json",
+    ]) {
+      expect(checkSalesStageB2ScopeForTest({ files: [path], mission: b2Mission, branch: "kreile/b2-eingang" }), path)
+        .toContain(`SALES_STAGE_B2_SCOPE:${path}`);
+    }
   });
 
   it("rejects paths outside B2 and the former B1 branch", () => {

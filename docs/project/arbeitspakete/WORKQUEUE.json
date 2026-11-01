@@ -16,27 +16,103 @@
       "datei": "TRUST_ANCHOR_B2B.md",
       "titel": "Trust-Anchor: H18-Inventar in B2-Allowlist + Akzeptanztests laufen in CI",
       "reihenfolge": 1,
-      "status": "bereit",
-      "branch": "codex/ta-b2b",
-      "merge": "Owner, vor AP-01"
+      "status": "abgenommen",
+      "nachweis": "PR #157 (efb8b128), main 11091c0b; Planungschat 01.11. geprueft"
     },
     {
       "nr": "AP-01",
       "ordner": "AP-01-eingang-geruest-paket-persoenlich",
-      "titel": "Eingang-Modul + Kanal Paket/persoenlich (getippt -> Auftrag)",
+      "titel": "Eingang-Modul + Kanal Paket/persoenlich, vollstaendiger Bestandskunde -> Auftrag; unvollstaendig -> Sperre + Kundenkarte",
       "reihenfolge": 2,
       "status": "bereit",
-      "voraussetzung": "TA-B2b auf main gemergt und main gruen",
-      "branch": "kreile/b2-eingang (frisch von main nach TA-B2b)",
-      "fassung": 3,
-      "acceptance_test_quelle": "AP-01-eingang-geruest-paket-persoenlich/ap01_eingang_paket_persoenlich.integration.test.ts.txt",
-      "acceptance_test_ziel": "src/test/acceptance/ap01_eingang_paket_persoenlich.integration.test.ts",
-      "acceptance_test_sha256": "BE54C2C5FD0F7B6EF707D8B81B00F542732395FE7AC6695EA86DB8E26627E48E",
+      "fassung": 4,
       "acceptance_test_ist_h18_nachweis": true,
       "migration_sha256": "308A6A1548E67147AD549923BF4C8B9C840B969A05B3447AD4A4BBBE388912B9",
-      "migration_probelauf": "2026-10-31 gegen Dev-DB in Transaktion mit ROLLBACK fehlerfrei; keine Rueckstaende",
-      "typecheck_probelauf": "2026-10-31 Planungschat: einziger Fehler im Test = noch fehlende Action (erwartet); Kundenanlage, Sitzung, Fixture typensauber",
-        "spec": "5ac4d4b5ea34"
+      "spec": "6b782924134c",
+      "nachweis": "PR #158 offen; Fassung 4 (U-225) nach Owner-Klicktest 01.11.: Plus-Symbol, Server CUSTOMER_INCOMPLETE, keine lokalen Kundenfelder, Mail-Eintrag oeffnet Mail",
+      "voraussetzung": "TA-B2c auf main (Bauplan 6b782924, Pfade)",
+      "branch": "kreile/b2-eingang (#158 weiter)",
+      "acceptance_tests": [
+        {
+          "quelle": "AP-01-eingang-geruest-paket-persoenlich/ap01_eingang_paket_persoenlich.integration.test.ts.txt",
+          "ziel": "src/test/acceptance/ap01_eingang_paket_persoenlich.integration.test.ts",
+          "sha256": "BE54C2C5FD0F7B6EF707D8B81B00F542732395FE7AC6695EA86DB8E26627E48E"
+        },
+        {
+          "quelle": "AP-01-eingang-geruest-paket-persoenlich/ap01b_eingang_bestandskunde_unvollstaendig.integration.test.ts.txt",
+          "ziel": "src/test/acceptance/ap01b_eingang_bestandskunde_unvollstaendig.integration.test.ts",
+          "sha256": "4B67978D5433D16395A7072E4B691F6AB5EF6B4A3F3D4D4C42131994120057A1",
+          "typecheck": "01.11. Planungschat: nur CUSTOMER_INCOMPLETE fehlt (erwartet)"
+        }
+      ],
+      "bauplan_sha256": "225B7FB5D3503522D8BC972E535CE53827E4047F75932B18E52E7B905CB35305"
+    },
+    {
+      "nr": "TA-B2c",
+      "datei": "TRUST_ANCHOR_B2C.md",
+      "titel": "Trust-Anchor: Bauplan 6b782924 + B2-Allowlist fuer AP-01 F4 und Folgepakete",
+      "reihenfolge": 2.5,
+      "status": "bereit",
+      "voraussetzung": "AP-01 F4 lokal fertig gebaut (Probe)",
+      "branch": "codex/ta-b2c",
+      "merge": "Owner, vor Push von AP-01 F4"
+    },
+    {
+      "nr": "TA-B2d",
+      "datei": "TRUST_ANCHOR_B2D.md",
+      "titel": "Trust-Anchor: Bauplan c82bf2d6 + B2-Allowlist fuer AP-K1",
+      "reihenfolge": 3.5,
+      "status": "bereit",
+      "voraussetzung": "AP-01 F4 gemergt; AP-K1 lokal fertig (Probe)",
+      "branch": "codex/ta-b2d",
+      "merge": "Owner, vor AP-K1-PR"
+    },
+    {
+      "nr": "AP-K1",
+      "titel": "Kunde: eine Kunden-Komponente (Runde 21) fuer 5.2/3.1/Eingang, Datenvertrag additiv, Dubletten live",
+      "reihenfolge": 4,
+      "status": "bereit",
+      "voraussetzung": "AP-01 F4 (#158) gemergt; AP-K1 lokal fertig; dann TA-B2d gemergt",
+      "ordner": "AP-K1-kunde",
+      "branch": "kreile/b2-eingang (frisch von main)",
+      "fassung": 1,
+      "acceptance_test_quelle": "AP-K1-kunde/apk1_kunde_datenvertrag.integration.test.ts.txt",
+      "acceptance_test_ziel": "src/test/acceptance/apk1_kunde_datenvertrag.integration.test.ts",
+      "acceptance_test_sha256": "CFFFA0314A4BA1EA50969C5070F1438E984B80FFF7BCCC128C4B81820ABC42A1",
+      "typecheck_probelauf": "01.11. Planungschat: nur neue Kundenfelder/kundeVollstaendigkeit fehlen (erwartet)",
+      "migration_quelle": "AP-K1-kunde/migration.sql",
+      "migration_ziel": "supabase/migrations/<zeitstempel>_b2_kunde_k1.sql",
+      "migration_sha256": "C724DA84283D94E7EEA1684EA9DF720EAA9D6356AB0C1DD290426B5F2CC380F7",
+      "migration_probelauf": "01.11. gegen Dev mit ROLLBACK fehlerfrei; 12/12 Kunden geteilt",
+      "spec": "c82bf2d6d880",
+      "bauplan_sha256": "1D2A62680FDCCBE6E40D2802D629972F77747BCAD0ED5FF7101D761FB3FF9DDA"
+    },
+    {
+      "nr": "AP-K2",
+      "titel": "Adressverzeichnis DE/AT/CH laden (E15): PLZ->Ort, Strassen-Vorschlaege, Pruefung gefunden/orange",
+      "reihenfolge": 4.5,
+      "status": "in_planung",
+      "offen": "Datenquelle (Owner-Entscheid)"
+    },
+    {
+      "nr": "AP-02",
+      "ordner": "AP-02-eingang-neukunde",
+      "titel": "Eingang: Kunde inline ergaenzen + Neukunde (Fassung 2 folgt nach AP-K1)",
+      "reihenfolge": 5,
+      "status": "zurueckgezogen",
+      "voraussetzung": "AP-K1 abgenommen",
+      "migration": "keine",
+      "spec": "5ac4d4b5ea34"
     }
-  ]
+  ],
+  "folgepakete_reihenfolge": [
+    "AP-C Karten-Aufrufe {kunde}/{auftrag}#kopie/#kv (zweiter Auftragsweg weg)",
+    "AP-E KV->Auftrag (A07)",
+    "AP-W Ware annehmen 3.7",
+    "AP-F Foto/Datei in 3.0",
+    "AP-Q1 Auswahl app-weit (22c)",
+    "B3/B4",
+    "B5: AP-M Mail-Herkunft, AP-O OCR, AP-N Live-Erkennung, Termin (22a/b), Was ist neu (22d)"
+  ],
+  "mindmap": "https://claude.ai/artifact/A6Hh6asV2F5oecZm2GdP64 (Planungschat, Stand 01.11.)"
 }
