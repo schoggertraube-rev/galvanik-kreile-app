@@ -8,4 +8,3 @@ import {
 export async function erfasseAuftragAusEingangAction(input: unknown): Promise<ErfasseAuftragResult> {
   return erfasseAuftragAusEingangCommand(input);
 }
-
