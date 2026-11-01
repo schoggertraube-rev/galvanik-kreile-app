@@ -33,6 +33,14 @@ const PENDING_QUOTE_CONVERSION_KEY = "path1.global-create.pending-quote-conversi
 export function GlobalCreateAppAdapter() {
   const router = useRouter();
   const openCustomer = useOverlayStore((state) => state.openCustomer);
+  const openOrder = useOverlayStore((state) => state.openOrder);
+  const activeCustomerOverlayId = useOverlayStore((state) => {
+    for (let index = state.stack.length - 1; index >= 0; index -= 1) {
+      const overlay = state.stack[index];
+      if (overlay?.type === "customer") return overlay.id;
+    }
+    return null;
+  });
   const { canAction, hasArea, name, role } = usePermissions();
   const [resumeQuoteId, setResumeQuoteId] = useState<string | null>(null);
   const [resumeQuoteConversionId, setResumeQuoteConversionId] = useState<string | null>(null);
@@ -264,8 +272,9 @@ export function GlobalCreateAppAdapter() {
         },
         rememberQuote,
         rememberQuoteConversion,
+        activeCustomerOverlayId,
         openCustomer,
-        openOrder: (orderId) => router.push(`/orders/${encodeURIComponent(orderId)}`),
+        openOrder,
         refresh: () => router.refresh(),
         switchProfile: async () => {
           await logout();

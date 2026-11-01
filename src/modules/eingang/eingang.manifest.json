@@ -17,6 +17,8 @@
     "@/modules/eingang/public#GlobalCreateQuoteReadResult",
     "@/modules/eingang/public#GlobalCreateQuoteResult",
     "@/modules/eingang/public#GlobalCreateRequest",
+    "@/modules/eingang/public#RecognizedCustomerSuggestions",
+    "@/modules/eingang/public#findRecognizedCustomers",
     "@/modules/eingang/public#requestGlobalCreate",
     "@/modules/eingang/public#UpdateQuoteInput",
     "@/modules/eingang/server-public#ErfasseAuftragInput",
