@@ -1,16 +1,16 @@
-# ABGABE AP-01 – Eingang, Kanal Paket/persönlich, Fassung 4.1
+# ABGABE AP-01 – Eingang, Kanal Paket/persönlich, Fassung 4.2
 
-Stand: 01.11.2026, Korrektur nach Owner-Klicktest auf `bbf4c2fa`
+Stand: 01.11.2026, Korrektur nach Owner-Klicktest auf `3f605239`
 
 Branch: `kreile/b2-eingang` · PR: `#158` · kein Merge durch Codex
 
 ## 1. Produkt-SHA und exakte Preview
 
-- Produkt-SHA: `3f6052395274f7200ff7c4e2e0c5432ef0588f07`
+- Produkt-SHA: `1319b3d89de9441fb729e5c058fdd98b84910220`
 - Basis: `8e1e03f567278d24d5f3a468f6cbef3729db96b9` (`origin/main`, #159)
 - Exakte READY-Preview dieses Produkt-SHA:
 
-  `https://galvanik-kreile-werkstatt-nb4kg5r6j.vercel.app`
+  `https://galvanik-kreile-werkstatt-dnferken9.vercel.app`
 - Vercel-Zustand: `READY`; Deployment-Metadaten nennen exakt den Produkt-SHA und PR `#158`.
 - Kein Merge und kein Production-Deploy durch Codex.
 
@@ -22,11 +22,12 @@ Branch: `kreile/b2-eingang` · PR: `#158` · kein Merge durch Codex
 - Drei idempotente Schritte verwenden denselben `clientKey`: `intake_item` anlegen, Auftrag anlegen/lesen, Eingang zuordnen und `intake_event` anhängen.
 - Der alte Produktweg über `intake_drafts` ist entfernt; die Tabelle bleibt ohne zweiten Produktzugriff bestehen.
 - Ein vollständiger Bestandskunde wird über seine ID verwendet. Gibt es keinen Treffer, öffnet AP-01 den bestehenden Dialog `Kunde anlegen` über der erhaltenen Erfassung; dessen einziger Schreibweg bleibt `createCustomerAction`.
-- Ein unvollständiger Bestandskunde wird in Oberfläche und Server durch dieselbe reine Prüffunktion bewertet. Der Server antwortet vor dem ersten Schreiben mit `CUSTOMER_INCOMPLETE`.
+- Ein unvollständiger Bestandskunde wird in Oberfläche und Server durch dieselbe reine Prüffunktion bewertet. Der Server antwortet vor dem ersten Schreiben mit `CUSTOMER_INCOMPLETE`. `Ansprechpartner` ist dabei ausschließlich für Firmen und Institutionen Pflicht; bei Privatkunden ist die Person selbst der Kontakt.
 - Korrekturen erfolgen ausschließlich in der bestehenden Kundenkarte über `updateCustomerCommercialAction`; der Eingang zeigt keine lokalen PLZ-/Land- oder sonstigen Kundenfelder.
 - Die für AP-K1 geplante Umbenennung von `getOrderReadiness` zu `kundeVollstaendigkeit` ist ausdrücklich nicht Teil von #158 und wird hier weder als Alias noch als zweite Funktion vorweggenommen.
 - Eingangsart, Terminstatus, Übergabe und Zahlungsmodus starten leer. Zahlung bleibt gesperrt, bis eine Übergabe gewählt ist. Fehlende `intakeSource`/`termStatus` werden als `null` gespeichert, nicht still ersetzt.
-- Erkannte Kundendaten gelten nicht als bestätigt: Telefon, E-Mail oder Name befüllen und starten nur die bestehende Kundensuche. Nur tatsächlich gesetzte AP-01-Felder erscheinen als erkannt/bestätigt.
+- Erkannte Kundendaten gelten nicht als bestätigt: Telefon, E-Mail oder Name befüllen und starten nur die bestehende Kundensuche. Ein allein eingegebener Kundenname wird als Suchbegriff übernommen; bei Treffern erscheinen bis zu drei Vorschläge mit `· übernehmen`. `Kunde anlegen` bleibt während des Tippens sowie unter Treffern und unter `Kein Kunde gefunden` sichtbar.
+- Ursache des Namensfehlers im Client: `customerSearchFromRecognition()` lieferte bisher `""`, sobald die Erkennung weder E-Mail, Telefon, Firma, PLZ noch Ort strukturiert gefunden hatte. Ein reiner Name erreichte deshalb die bereits funktionierende Serversuche `searchOrderIntakeCustomers` nie. Der Fallback übergibt nun Namenswörter aus der Notiz an genau diese bestehende Suche; es gibt keinen zweiten Suchweg.
 - Abbrechen, × und Esc schließen eine unveränderte Erfassung sofort. Bei Änderungen erscheint ausschließlich die Stufe-1-Rückfrage mit `Verwerfen` und `Weiter bearbeiten`; Verwerfen leert den gesamten Zustand und erzeugt einen neuen `clientKey`.
 - Ein Mail-Eintrag in „Der Tag“ zeigt `Mail ansehen`, öffnet die bestehende Mailansicht und niemals den Eingangsdialog.
 
@@ -66,7 +67,7 @@ Beide Tests rufen die echte Server-Action mit signierter Sitzung gegen Loopback-
 Lokal vollständig grün:
 
 - Authority-, Delivery-, Package-Scope- und Live-Regression-Gates jeweils mit Selbsttest
-- Package-Scope gegen Basis `8e1e03f5…`, Kopf `3f605239…`, Branch `kreile/b2-eingang`
+- Package-Scope gegen Basis `8e1e03f5…`, Kopf `1319b3d8…`, Branch `kreile/b2-eingang`
 - Modul-Gates
 - H18 mit Selbsttest: `247` Actions inventarisiert, `99` schreibend, `35` getestet, `64` bestehende Ausnahmen
 - H16 mit Selbsttest
@@ -77,8 +78,8 @@ Lokal vollständig grün:
 - `git diff --check origin/main`: leer
 - TypeScript: grün
 - ESLint: `0` Fehler; sechs bereits vorhandene Warnungen ausschließlich in `docs/project/endversion/werkzeuge/bauplan.mjs`
-- Zielgerichtete realRender-Abnahme: `2` Dateien, `47` Tests grün
-- Unit: `133` Dateien, `1054` Tests grün
+- Zielgerichtete Fassung-4.2-Abnahme: `2` Dateien, `34` Tests grün
+- Unit: `133` Dateien, `1059` Tests grün
 - Produktions-Build: grün
 - Replay-Abnahme: `3/3` plus `2/2` grün
 
@@ -149,6 +150,10 @@ Begründung: sichtbare Umbenennung der bestehenden AccessArea `eingang`. Bereich
 | 28 | Unvollständiger Kunde konnte im Dialog korrigiert werden | `Wareneingang buchen` gesperrt; `In Kundenkarte ergänzen` ruft `openCustomer(customerId)` |
 | 29 | Zahlungs-/Übergabe-Test prüfte nur, dass Kundenzahlungsziel unverändert bleibt | F4-Test prüft serverkonforme Sperre bei `3013 Bern / Deutschland`, keine lokalen Felder und Kundenkarten-Rückweg |
 | 30 | Kein Test für die Kundenanlage über einer laufenden Erfassung | bestehender Kundendialog liegt über der Erfassung; nach Speichern ist der neue Kunde gesetzt und die vorhandene Position erhalten |
+| 31 | Privat- und Firmenkunden ohne Ansprechpartner wurden gleich behandelt | Privatkunde ohne Ansprechpartner ist vollständig; Firma/Institution ohne Ansprechpartner bleibt konkret gesperrt |
+| 32 | Reiner Namensfreitext ohne strukturiert erkanntes Feld startete keine Kundensuche | `sabrina schmidt` befüllt die Suche, startet die bestehende Serversuche und zeigt `Sabrina Schmidt · übernehmen` |
+| 33 | Suchtreffer hatten den allgemeinen Knopf `Auswählen` | jeder Treffer zeigt konkret `<Kundenname> · übernehmen` und setzt per Klick genau diesen Kunden |
+| 34 | `Kunde anlegen` erschien nur im leeren Zustand oder nach `Kein Kunde gefunden` | der Knopf bleibt beim Tippen und unter Trefferlisten sichtbar |
 
 ### 7.3 `RolfHome.realRender.test.tsx`
 
@@ -156,7 +161,7 @@ Begründung: sichtbare Umbenennung der bestehenden AccessArea `eingang`. Bereich
 |---|---|
 | `Zuordnen` öffnete die gewählte Outlook-Mail | `Mail ansehen` öffnet exakt dieselbe Outlook-Mail und ruft `requestGlobalCreate` nicht auf |
 
-Neue Tests haben kein „alt“: `orderReadiness.test.ts` prüft vollständigen Kunden, konkrete PLZ-/Land-Abweichung und die geldabhängige Zahlungsbedingung. Die beiden Abnahmetests sind unverändert aus den Planungsquellen kopiert.
+Neue Tests haben kein „alt“: `orderReadiness.test.ts` prüft zusätzlich Privatkunde gegen Firma ohne Ansprechpartner. Die realRender-Abnahme belegt den reinen Namensweg über die bestehende Serversuche sowie den dauerhaft sichtbaren Kundenanlage-Knopf. Die beiden Abnahmetests sind unverändert aus den Planungsquellen kopiert.
 
 ## 8. Sichtbare Stellen „Neu erfassen“ und Kamera
 
@@ -165,12 +170,10 @@ Neue Tests haben kein „alt“: `orderReadiness.test.ts` prüft vollständigen 
 - Weitere erlaubte Einstiege: `MoreMenu.tsx`, `SearchDialog.tsx`, `OfficeHomeClient.tsx`, `OrdersAppAdapter.tsx`, `WerkstattView.tsx`, `AppShell.tsx`
 - Sichtbare Fähigkeit/Recht: `featureCatalog.ts` und `authorizationContract.ts`
 
-## 9. Owner-Klickweg aus PAKET Fassung 4.1, Punkt 6
+## 9. Owner-Klickweg aus PAKET Fassung 4.2, Punkt 5
 
-1. Exakte Preview öffnen, als Rolf anmelden, Plus wählen und `gregor laucht rembrücker strasse 4 63150 heusenstamm` eingeben. `Angaben erkennen` auslösen: die Kundensuche zeigt `gregor laucht`; PLZ und Ort werden nicht als bestätigt ausgegeben.
-2. Bei `Kein Kunde gefunden` auf `Kunde anlegen` gehen. Der vorhandene Kundendialog liegt über der Erfassung und der Name ist vorbelegt. Daten ergänzen und speichern: dieselbe Erfassung erscheint wieder, der Kunde ist gesetzt und die bisherigen Eingaben sind erhalten.
-3. Eingangsart, Übergabe, Zahlung und Terminstatus ausdrücklich wählen und den Auftrag anlegen: die Auftragsnummer erscheint.
-4. Plus erneut öffnen, etwas eingeben und × wählen: die Rückfrage zeigt genau `Verwerfen` und `Weiter bearbeiten`. `Verwerfen` wählen, Plus erneut öffnen: alle Felder sind leer.
-5. In `Der Tag` einen Mail-Eintrag prüfen: der Knopf heißt `Mail ansehen` und öffnet die Mail, nicht `Neu erfassen`.
+1. Exakte Preview öffnen, als Rolf anmelden und über das Plus den bestehenden Privatkunden `gregor laucht` (`K-2026-0013`) wählen. Es erscheint kein Hinweis `Ansprechpartner fehlt`; nach Ergänzung der übrigen Pflichtangaben ist `Wareneingang buchen` möglich.
+2. Plus erneut öffnen, in `Schnell erfassen` nur `sabrina schmidt` eingeben und `Angaben erkennen` wählen. Die Kundensuche ist mit `sabrina schmidt` vorbelegt und zeigt `Sabrina Schmidt · übernehmen`; ein Klick setzt diesen Kunden.
+3. Bei `Kunde suchen` tippen. Während des Tippens sowie unter vorhandenen Treffern bleibt `Kunde anlegen` sichtbar; ohne Treffer steht der Knopf direkt unter `Kein Kunde gefunden`.
 
 Nach dem Owner-Klick prüft der Planungschat die reale Kette `intake_item` → `orders`/Receipt → `intake_event` → `ORDER_INTAKE_CREATED_V1`. #158 bleibt bis zur Owner-Entscheidung ungemergt.
