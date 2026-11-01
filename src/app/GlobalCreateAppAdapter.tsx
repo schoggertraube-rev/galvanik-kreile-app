@@ -4,12 +4,10 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { logout } from "@/app/actions/auth";
 import { createCustomerAction, getCustomersDb, readCustomerCreateReceiptAction, updateCustomerCommercialAction } from "@/app/actions/customers.actions";
+import { erfasseAuftragAusEingangAction } from "@/app/actions/eingang.actions";
 import { convertQuoteToOrderAction, createQuoteAction, listOpenQuotesAction, readQuoteAction, readQuoteCreateReceiptAction, readQuoteConversionReceiptAction, readQuoteUpdateReceiptAction, updateQuoteAction } from "@/app/actions/quotes.actions";
-import { createOrderIntakeAction, getOrderIntakeReceiptAction, getOrderIntakeSuggestionsAction, recognizeOrderIntakeTextAction, searchOrderIntakeCustomersAction } from "@/app/warendurchlauf/actions";
+import { getOrderIntakeReceiptAction, getOrderIntakeSuggestionsAction, recognizeOrderIntakeTextAction, searchOrderIntakeCustomersAction } from "@/app/warendurchlauf/actions";
 import { getActiveCatalogAction } from "@/app/actions/catalog.actions";
-import { attachIntakeDraftAttachmentAction } from "@/app/actions/domainAttachments.actions";
-import { attachOutlookMailAction } from "@/app/actions/communications.actions";
-import { discardIntakeDraftAction, readIntakeDraftAction, saveIntakeDraftAction } from "@/app/actions/intakeDraft.actions";
 import {
   GlobalCreateFlow,
   type GlobalCreateConversionResult,
@@ -19,11 +17,13 @@ import {
   type GlobalCreateOpenQuotesResult,
   type GlobalCreateDirectIntakeResult,
   type DirectIntakeInput,
-} from "@/components/layout/GlobalCreateFlow";
+  type ConvertQuoteInput,
+  type CreateQuoteInput,
+  type UpdateQuoteInput,
+} from "@/modules/eingang/public";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { isAppRole } from "@/lib/auth/authorizationContract";
 import { useOverlayStore } from "@/lib/overlayStore";
-import type { ConvertQuoteInput, CreateQuoteInput, UpdateQuoteInput } from "@/modules/quotes/public";
 
 type CreateCustomerInput = Parameters<typeof createCustomerAction>[0];
 
@@ -75,9 +75,9 @@ export function GlobalCreateAppAdapter() {
     <GlobalCreateFlow
       ports={{
         canCreateCustomer,
+        canCreateOrder: hasArea("eingang"),
         canCreateQuote,
         canManageMoney: hasArea("geld"),
-        canUseMail: hasArea("mails"),
         showPrimaryTrigger: false,
         roleLabel,
         resumeQuoteId,
@@ -203,9 +203,28 @@ export function GlobalCreateAppAdapter() {
           return result.code === "OK" ? { ...result, replayed: true } : result;
         },
         createDirectIntake: async (input: DirectIntakeInput): Promise<GlobalCreateDirectIntakeResult> => {
-          const result = await createOrderIntakeAction(input);
+          if (input.customer.mode !== "EXISTING") {
+            return { code: "VALIDATION_ERROR", message: "AP-01 verarbeitet Aufträge nur für Bestandskunden." };
+          }
+          const result = await erfasseAuftragAusEingangAction({
+            clientKey: input.clientEventId,
+            text: input.note,
+            customer: input.customer,
+            dueDate: input.dueDate,
+            items: input.items,
+            handoverMode: input.handoverMode,
+            paymentMode: input.paymentMode,
+          });
           if (result.code !== "OK") return result;
-          return { code: "OK", replayed: result.replayed, receipt: result.receipt };
+          const readback = await getOrderIntakeReceiptAction({ orderId: result.orderId, clientEventId: input.clientEventId });
+          if (!readback.ok) {
+            return {
+              code: readback.error === "FORBIDDEN" ? "FORBIDDEN" : readback.error === "AUTH_ERROR" ? "UNAUTHENTICATED" : "UNAVAILABLE",
+              message: readback.message,
+            };
+          }
+          if (!readback.data) return { code: "UNAVAILABLE", message: "Der gespeicherte Eingang konnte nicht sicher gelesen werden." };
+          return { code: "OK", replayed: result.replayed, receipt: readback.data };
         },
         readDirectIntakeReceipt: async ({ orderId, clientEventId }): Promise<GlobalCreateDirectIntakeResult> => {
           const result = await getOrderIntakeReceiptAction({ orderId, clientEventId });
@@ -217,17 +236,6 @@ export function GlobalCreateAppAdapter() {
           }
           if (!result.data) return { code: "NOT_FOUND", message: "Der gespeicherte Eingang wurde nicht gefunden." };
           return { code: "OK", replayed: true, receipt: result.data };
-        },
-        readIntakeDraft: async () => readIntakeDraftAction(),
-        saveIntakeDraft: async (payload) => saveIntakeDraftAction(payload),
-        discardIntakeDraft: async () => discardIntakeDraftAction(),
-        attachIntakeAttachment: async (input) => {
-          const result = await attachIntakeDraftAttachmentAction(input);
-          return result.code === "OK" ? { code: "OK" as const } : result;
-        },
-        attachIntakeMail: async ({ graphMessageId, orderId }) => {
-          const result = await attachOutlookMailAction({ targetType: "ORDER", targetId: orderId, graphMessageId });
-          return result.code === "OK" ? { code: "OK" as const } : result;
         },
         rememberQuote,
         rememberQuoteConversion,

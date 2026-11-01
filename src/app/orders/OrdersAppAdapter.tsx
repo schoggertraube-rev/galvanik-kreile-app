@@ -252,7 +252,7 @@ export function OrdersAppAdapter() {
 
   if (state.orders.length === 0) return <section data-testid="orders-v11">
     <SeitenKopf titel="Aufträge" werkzeug={viewPicker} />
-    <Zustand art="leer" text="Noch keine Aufträge." aktion={canCreateOrder ? { text: "Neuer Eingang", icon: "inbox", onClick: () => requestGlobalCreate("DIRECT_INTAKE") } : undefined} />
+    <Zustand art="leer" text="Noch keine Aufträge." aktion={canCreateOrder ? { text: "Neu erfassen", icon: "inbox", onClick: () => requestGlobalCreate("DIRECT_INTAKE") } : undefined} />
   </section>;
 
   const now = berlinDate(state.loadedAt);
@@ -298,7 +298,7 @@ export function OrdersAppAdapter() {
           onWert={setFilter}
         />
       </div>
-      {orders.length ? <div className="kr-stapel" style={{ gap: 8 }}>{orders.map((order) => <OrderRow key={order.id} order={order} onOpen={openOrder} />)}</div> : <Zustand art="leer" text={query ? `Kein Auftrag für „${query}“.` : "Keine Aufträge in dieser Auswahl."} aktion={canCreateOrder ? { text: "Neuer Eingang", icon: "inbox", onClick: () => requestGlobalCreate("DIRECT_INTAKE") } : undefined} />}
+      {orders.length ? <div className="kr-stapel" style={{ gap: 8 }}>{orders.map((order) => <OrderRow key={order.id} order={order} onOpen={openOrder} />)}</div> : <Zustand art="leer" text={query ? `Kein Auftrag für „${query}“.` : "Keine Aufträge in dieser Auswahl."} aktion={canCreateOrder ? { text: "Neu erfassen", icon: "inbox", onClick: () => requestGlobalCreate("DIRECT_INTAKE") } : undefined} />}
     </div> : null}
     {view === "woche" ? <div className="kr-stapel"><Terminuebersicht ansicht="woche" tage={weekDays} /></div> : null}
     {view === "monat" ? <div className="kr-stapel">

@@ -324,7 +324,7 @@ export function WerkstattView({
           aktion={
             view.canCreateOrder
               ? {
-                  text: "Neuer Eingang",
+                  text: "Neu erfassen",
                   icon: "inbox",
                   onClick: ports.onCreateOrder,
                 }
@@ -511,7 +511,7 @@ export function WerkstattView({
         </button>
         {view.canCreateOrder ? (
           <button type="button" onClick={ports.onCreateOrder}>
-            Neuer Eingang
+            Neu erfassen
           </button>
         ) : null}
         <button

@@ -190,7 +190,7 @@ export function SearchDialog({ open, onOpenChange, search, onSelect, commands, d
   }));
   const command = (id: PalettenAktion["id"], text: string, icon: PalettenAktion["icon"], onTun: (() => void) | undefined, kbd?: string): PalettenAktion[] => onTun ? [{ id, text, icon, kbd, onTun: () => { close(); onTun(); } }] : [];
   const actions: PalettenAktion[] = [
-    ...command("eingang", "Neuer Eingang", "inbox", commands?.onNewIntake, "N"),
+    ...command("eingang", "Neu erfassen", "inbox", commands?.onNewIntake, "N"),
     ...command("raus", "Ware raus", "truck", commands?.onGoodsOut),
     ...command("fertig", "Fertig melden", "check", commands?.onFinish),
     ...command("mehrarbeit", "Mehrarbeit", "layers", commands?.onExtraWork),

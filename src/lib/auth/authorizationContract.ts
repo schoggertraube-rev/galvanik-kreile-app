@@ -51,7 +51,7 @@ export type AccessArea = typeof ACCESS_AREAS[number];
 
 export const ACCESS_AREA_LABELS: Record<AccessArea, { text: string; sub?: string }> = {
   auftraege: { text: "Aufträge & Werkstatt", sub: "sehen, Fertig melden, Mehrarbeit, Fotos" },
-  eingang: { text: "Neuer Eingang & Kunde anlegen" },
+  eingang: { text: "Neu erfassen & Kunde anlegen" },
   kunden: { text: "Kunden & Kontakt" },
   geld: { text: "Geld, Preise & Buchhaltung", sub: "Beträge, Rechnungen, Zahlungen, Preise, Zahlungsbedingungen" },
   kassieren: { text: "Kassieren bei Abholung", sub: "Betrag sehen und bezahlt (bar / Karte) bestätigen – ohne Buchhaltung" },
