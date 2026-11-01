@@ -1,18 +1,18 @@
 # ABGABE AP-01 — Eingang, Kanal Paket/persönlich
 
-Stand: 01.11.2026 01:54 CET
+Stand: 01.11.2026 13:08 CET
 
 Branch: `kreile/b2-eingang`
 
 ## 1. Produktkandidat und Preview
 
-- Produkt-SHA: `3beb6c43af63c5ddf9d52ff1c72be523bd257b9e`
+- Produkt-SHA: `a20e7dec26dcdbc50ee7f75d6c9fc14091259467`
 - Basis: `11091c0be7b2c58ef7b009d4ad5664ad3e9db01d` (`origin/main` nach Merge von #157)
 - Exakte READY-Preview dieses Produkt-SHA:
 
-  `https://galvanik-kreile-werkstatt-f2xocv4rb.vercel.app`
-- Vercel-Deployment: `dpl_7ejzmPH5pC7p6eVZzb7bk7sVLp3F`, Ziel `preview`, Zustand `READY`, Region `fra1`
-- Zuordnung zum SHA: Der GitHub-Commit-Status von `3beb6c43…` verweist auf genau dieses Deployment; die Vercel-Inspektion meldet dieselbe Deployment-ID und den obigen eindeutigen Deployment-Host.
+  `https://galvanik-kreile-werkstatt-lm3boofoz.vercel.app`
+- Vercel-Deployment: `dpl_8WqgaAjoE5dCapBY6kVygb4rkewR`, Ziel `preview`, Zustand `READY`, Region `fra1`
+- Zuordnung zum SHA: Der GitHub-Commit-Status von `a20e7dec…` verweist auf genau dieses Deployment; die Vercel-Inspektion meldet dieselbe Deployment-ID und den obigen eindeutigen Deployment-Host.
 - Kein Merge und kein Production-Deploy durch Codex.
 
 ## 2. Eine Erfassungs- und Datenwahrheit
@@ -68,7 +68,7 @@ Lokal auf dem Produkt-SHA bzw. unmittelbar vor seinem Commit:
 - `quality:authority-gate:selftest` / `quality:authority-gate`: PASS
 - `quality:delivery-contracts:selftest` / `quality:delivery-contracts`: PASS
 - `quality:package-scope:selftest`: PASS
-- `quality:package-scope -- --base 11091c0b… --head 3beb6c43… --branch kreile/b2-eingang`: PASS
+- `quality:package-scope -- --base 11091c0b… --head a20e7dec… --branch kreile/b2-eingang`: PASS
 - `quality:live-regression:selftest`: PASS
 - `quality:module-gates`: PASS
 - `quality:h18-server-actions:selftest` / `quality:h18-server-actions`: PASS (`99` Schreibaktionen, `35` getestet, `64` bestehende Ausnahmen)
@@ -86,12 +86,12 @@ Lokal auf dem Produkt-SHA bzw. unmittelbar vor seinem Commit:
 - Commit-Hook: TypeScript, Staged-Lint und nochmals `132` Dateien / `1047` Tests: PASS
 - Vercel Preview: READY
 
-Remote-Checks des Produkt-SHA bei Erstellung dieser Abgabe:
+Remote-Checks des Produkt-SHA bei Fortschreibung dieser Abgabe:
 
 - `Vercel`: SUCCESS / READY
 - `Vercel Preview Comments`: SUCCESS
-- `agentur-gate`: läuft
-- `h16-schema`: läuft
+- `quality`, `ratchet`, beide `agentur-gate`- und beide `h16-schema`-Läufe: SUCCESS
+- `Fresh Supabase replay`: läuft
 
 Die finalen PR-Checks werden nach dem separaten Abgabe-Commit erneut abgewartet und außerhalb dieses unveränderlichen Produktkandidaten gemeldet.
 
@@ -190,8 +190,15 @@ Jede folgende Selektor-/Sichtbarkeitsassertion behält ihre Aussage und wechselt
 ## 9. Owner-Klickweg (höchstens sechs Schritte)
 
 1. Exakte Preview öffnen und als Rolf anmelden.
-2. Rotes Plus `Neu erfassen` öffnen.
+2. Rotes Plus anklicken; es öffnet unmittelbar `Neu erfassen` ohne vorgeschaltetes zweites Menü.
 3. Text `2 Stück Flansch verzinken` eingeben.
-4. Anliegen `Auftrag`, einen Bestandskunden und alle als `fehlt` markierten Pflichtangaben ausdrücklich wählen/ausfüllen.
+4. Anliegen `Auftrag`, einen Bestandskunden und alle als `fehlt` markierten Pflichtangaben ausdrücklich wählen/ausfüllen. Bei widersprüchlichen Bestandsdaten werden die betroffenen Kundenfelder direkt zur Korrektur eingeblendet.
 5. `Wareneingang buchen` klicken und die Erfolgsmeldung mit Auftrag `A-2026-00NN` prüfen.
 6. Auftrag in der Auftragsliste öffnen; Planungschat prüft dazu DB-Kette `intake_item` → `orders` → `intake_event` → `ORDER_INTAKE_CREATED_V1`.
+
+## 10. Korrektur aus der Owner-Klickprüfung
+
+- Das rote Plus öffnet jetzt direkt die einzige kanonische AP-01-Strecke `Neu erfassen`; das alte vorgeschaltete Auswahlmenü ist nicht mehr sichtbar.
+- Ein Bestandskunde mit widersprüchlicher Postleitzahl/Land-Kombination wird weiterhin korrekt als unvollständig bewertet, aber nicht mehr in einem unauflösbaren Zustand gehalten: PLZ und Land werden im Dialog zur Korrektur eingeblendet.
+- Der konkret geprüfte Datensatz enthielt `3013 Bern` zusammen mit Land `Deutschland`. Die Korrektur verändert keine Daten stillschweigend; gespeichert wird erst mit der ausdrücklich bestätigten Buchung.
+- Die Korrektur liegt im Produkt-SHA `a20e7dec26dcdbc50ee7f75d6c9fc14091259467`; TypeScript, gezieltes ESLint, der bestehende Real-Render-Test (`24/24`) und die vollständige A11-Strecke einschließlich `132` Dateien / `1047` Unit-Tests sind lokal grün.
