@@ -243,6 +243,7 @@ function CustomerFormFields({
   onlyMissing,
   showPayment,
   onPaymentChange,
+  forceFields = [],
   autofocus = false,
 }: {
   value: CustomerDraft;
@@ -252,11 +253,12 @@ function CustomerFormFields({
   onlyMissing: boolean;
   showPayment: boolean;
   onPaymentChange: (value: string) => void;
+  forceFields?: readonly (keyof CustomerDraft)[];
   autofocus?: boolean;
 }) {
   const set = <K extends keyof CustomerDraft>(key: K, next: CustomerDraft[K]) => onChange({ ...value, [key]: next });
   const missing = (value: string | null | undefined) => !value?.trim();
-  const show = (value: string | null | undefined) => !onlyMissing || missing(value);
+  const show = (key: keyof CustomerDraft, value: string | null | undefined) => !onlyMissing || missing(value) || forceFields.includes(key);
   const setName = (name: string) => onChange({
     ...value,
     name,
@@ -268,20 +270,20 @@ function CustomerFormFields({
       { wert: "privat", text: "Privat" },
     ]} onWert={(next) => { if (next) onCustomerType(next); }} /></div></div> : null}
     <FormRaster>
-      {show(value.name) ? <Feld label="Name / Firma" voll><Eingabe data-spec-id="kundeneu.name" data-autofocus={autofocus || undefined} required minLength={2} maxLength={160} value={value.name} onChange={(event) => setName(event.target.value)} /></Feld> : null}
-      {show(value.contactPerson) ? <Feld label="Ansprechpartner"><Eingabe data-spec-id="kundeneu.ansprechpartner" maxLength={120} value={value.contactPerson ?? ""} onChange={(event) => set("contactPerson", nullable(event.target.value))} /></Feld> : null}
-      {show(value.phone) ? <Feld label="Telefon"><Eingabe data-spec-id="kundeneu.telefon" required type="tel" minLength={6} maxLength={20} value={value.phone ?? ""} onChange={(event) => set("phone", nullable(event.target.value))} /></Feld> : null}
-      {show(value.email) ? <Feld label="E-Mail"><Eingabe data-spec-id="kundeneu.email" type="email" maxLength={254} value={value.email ?? ""} onChange={(event) => set("email", nullable(event.target.value))} /></Feld> : null}
-      {show(value.street) ? <Feld label="Straße"><Eingabe data-spec-id="kundeneu.strasse" maxLength={160} value={value.street} onChange={(event) => set("street", event.target.value)} /></Feld> : null}
-      {show(value.zipCode) ? <Feld label="PLZ"><Eingabe data-spec-id="kundeneu.plz" minLength={2} maxLength={10} value={value.zipCode} onChange={(event) => set("zipCode", event.target.value)} /></Feld> : null}
-      {show(value.city) ? <Feld label="Ort"><Eingabe data-spec-id="kundeneu.ort" maxLength={100} value={value.city} onChange={(event) => set("city", event.target.value)} /></Feld> : null}
-      {show(value.country) ? <Feld label="Land"><Auswahl data-spec-id="kundeneu.land" value={value.country} onChange={(event) => set("country", event.target.value)} optionen={[
+      {show("name", value.name) ? <Feld label="Name / Firma" voll><Eingabe data-spec-id="kundeneu.name" data-autofocus={autofocus || undefined} required minLength={2} maxLength={160} value={value.name} onChange={(event) => setName(event.target.value)} /></Feld> : null}
+      {show("contactPerson", value.contactPerson) ? <Feld label="Ansprechpartner"><Eingabe data-spec-id="kundeneu.ansprechpartner" maxLength={120} value={value.contactPerson ?? ""} onChange={(event) => set("contactPerson", nullable(event.target.value))} /></Feld> : null}
+      {show("phone", value.phone) ? <Feld label="Telefon"><Eingabe data-spec-id="kundeneu.telefon" required type="tel" minLength={6} maxLength={20} value={value.phone ?? ""} onChange={(event) => set("phone", nullable(event.target.value))} /></Feld> : null}
+      {show("email", value.email) ? <Feld label="E-Mail"><Eingabe data-spec-id="kundeneu.email" type="email" maxLength={254} value={value.email ?? ""} onChange={(event) => set("email", nullable(event.target.value))} /></Feld> : null}
+      {show("street", value.street) ? <Feld label="Straße"><Eingabe data-spec-id="kundeneu.strasse" maxLength={160} value={value.street} onChange={(event) => set("street", event.target.value)} /></Feld> : null}
+      {show("zipCode", value.zipCode) ? <Feld label="PLZ"><Eingabe data-spec-id="kundeneu.plz" minLength={2} maxLength={10} value={value.zipCode} onChange={(event) => set("zipCode", event.target.value)} /></Feld> : null}
+      {show("city", value.city) ? <Feld label="Ort"><Eingabe data-spec-id="kundeneu.ort" maxLength={100} value={value.city} onChange={(event) => set("city", event.target.value)} /></Feld> : null}
+      {show("country", value.country) ? <Feld label="Land"><Auswahl data-spec-id="kundeneu.land" value={value.country} onChange={(event) => set("country", event.target.value)} optionen={[
         { wert: "Deutschland", text: "Deutschland" },
         { wert: "Österreich", text: "Österreich" },
         { wert: "Schweiz", text: "Schweiz" },
         { wert: "Anderes Land", text: "Anderes Land" },
       ]} /></Feld> : null}
-      {showPayment && show(value.paymentPreference) ? <Feld label="Zahlungsbedingung"><Auswahl data-spec-id="kundeneu.zahlungsbedingung" required value={value.paymentPreference || "vorkasse"} onChange={(event) => onPaymentChange(event.target.value)} optionen={[
+      {showPayment && show("paymentPreference", value.paymentPreference) ? <Feld label="Zahlungsbedingung"><Auswahl data-spec-id="kundeneu.zahlungsbedingung" required value={value.paymentPreference || "vorkasse"} onChange={(event) => onPaymentChange(event.target.value)} optionen={[
         { wert: "vorkasse", text: "Vorkasse" },
         { wert: "bar", text: "Bar oder Karte bei Abholung" },
       ]} /></Feld> : null}
@@ -353,9 +355,10 @@ function customerChoiceToDraft(customer: GlobalCreateCustomerChoice): CustomerDr
 
 function completeOrderCustomer(customer: CustomerDraft, requirePaymentPreference = true): boolean {
   return customer.name.trim().length >= 2 && Boolean(customer.contactPerson?.trim()) &&
-    Boolean(customer.phone?.trim()) && Boolean(customer.email?.trim()) && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email ?? "") &&
+    validPhone(customer.phone) && Boolean(customer.email?.trim()) && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email ?? "") &&
     customer.street.trim().length >= 2 && customer.zipCode.trim().length >= 2 && customer.city.trim().length >= 1 &&
-    customer.country.trim().length >= 2 && (!requirePaymentPreference || customer.paymentPreference.trim().length > 0);
+    customer.country.trim().length >= 2 && validPostcode(customer.country, customer.zipCode)
+    && (!requirePaymentPreference || customer.paymentPreference.trim().length > 0);
 }
 
 function validPhone(value: string | null | undefined): boolean {
@@ -1437,6 +1440,11 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   ];
   const requiredIntakeChecks = intakeChecklist.filter((entry) => !entry.warning);
   const completedIntakeChecks = requiredIntakeChecks.filter((entry) => entry.complete).length;
+  const directCustomerInvalidFields: readonly (keyof CustomerDraft)[] = [
+    ...(!validPhone(directCustomer.phone) && directCustomer.phone?.trim() ? ["phone" as const] : []),
+    ...(Boolean(directCustomer.email?.trim()) && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(directCustomer.email ?? "") ? ["email" as const] : []),
+    ...(!validPostcode(directCustomer.country, directCustomer.zipCode) && directCustomer.zipCode.trim() ? ["zipCode" as const, "country" as const] : []),
+  ];
 
   const jumpToIntakeCheck = (entry: IntakeChecklistEntry) => {
     setIntakeStep(entry.step);
@@ -1903,7 +1911,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 </FormRaster>
                 {directCustomerMode === "EXISTING" && !completeOrderCustomer(directCustomer, ports.canManageMoney) ? <>
                   <Hinweis ton="warn">Für diesen Kunden fehlen noch Pflichtdaten.</Hinweis>
-                  <CustomerFormFields value={directCustomer} onChange={setDirectCustomer} customerType={directCustomerType} onCustomerType={changeDirectCustomerType} onlyMissing showPayment={ports.canManageMoney} onPaymentChange={changeIntakeCustomerPayment} />
+                  <CustomerFormFields value={directCustomer} onChange={setDirectCustomer} customerType={directCustomerType} onCustomerType={changeDirectCustomerType} onlyMissing showPayment={ports.canManageMoney} onPaymentChange={changeIntakeCustomerPayment} forceFields={directCustomerInvalidFields} />
                 </> : null}
                 {intakeTermChoice ? <div className={styles.intakeSuggestion} data-spec-id="eingang.terminvorschlag">
                   <div><strong>Liefertermin {intakeTermChoice.kind === "adopted" ? intakeTermChoice.achievableDate : intakeTermChoice.wishDate}</strong><span>{intakeTermChoice.kind === "adopted" ? "Vorschlag übernommen" : "Wunsch gehalten, Kunde wird vorgewarnt"}</span></div>
