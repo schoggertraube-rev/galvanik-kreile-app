@@ -372,7 +372,10 @@ function customerSearchFromRecognition(data: IntakeTextRecognition, text: string
   if (phone) return phone;
   const companyName = field("companyName");
   if (companyName) return companyName;
-  if (!field("zipCode") && !field("city")) return "";
+  if (!field("zipCode") && !field("city")) {
+    const nameWords = text.match(/[\p{L}][\p{L}'’.-]*/gu)?.filter((word) => word.length >= 4) ?? [];
+    return nameWords.slice(0, 3).join(" ");
+  }
 
   const beforePostcode = field("zipCode") ? text.split(field("zipCode"), 1)[0] ?? "" : text;
   const words = beforePostcode.match(/[\p{L}][\p{L}'’.-]*/gu) ?? [];
@@ -613,7 +616,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
           setFeedback({ kind: result.code === "DENIED" ? "denied" : "error", message: result.message });
           return;
         }
-        setIntakeCustomerResults(result.customers.slice(0, 10));
+        setIntakeCustomerResults(result.customers.slice(0, 3));
         setIntakeCustomerSearchState(result.customers.length > 0 ? "ready" : "empty");
       }).catch(() => {
         if (sequence !== intakeCustomerSearchSeq.current) return;
@@ -1944,14 +1947,14 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                         placeholder="Name, Firma, Ansprechpartner, Telefon, E-Mail, Ort oder Kundennummer"
                       />
                       {intakeCustomerSearchState === "loading" ? <p aria-live="polite">Kunden werden gesucht …</p> : null}
-                      {intakeCustomerSearchState === "empty" ? <Hinweis><div className="kr-stapel"><span>Kein Kunde gefunden.</span><KrButton data-spec-id="eingang.kunde-anlegen" art="sekundaer" text="Kunde anlegen" onClick={openIntakeCustomerCreate} /></div></Hinweis> : null}
+                      {intakeCustomerSearchState === "empty" ? <Hinweis>Kein Kunde gefunden.</Hinweis> : null}
                       {intakeCustomerResults.length > 0 ? <div className={styles.createCustomerList} aria-label="Kundentreffer">
-                        {intakeCustomerResults.map((entry) => <button type="button" key={entry.id} onClick={() => selectIntakeCustomer("EXISTING", entry)}>
-                          <span><strong>{entry.companyName ?? entry.name}</strong><small>{entry.customerNumber ?? "ohne Kundennummer"} · {entry.contactPerson ?? "kein Ansprechpartner"} · {entry.city ?? "ohne Ort"}</small></span>
-                          <small>Auswählen</small>
+                        {intakeCustomerResults.map((entry) => <button type="button" key={entry.id} aria-label={`${entry.companyName ?? entry.name} · übernehmen`} onClick={() => selectIntakeCustomer("EXISTING", entry)}>
+                          <span><strong>{entry.companyName ?? entry.name} · übernehmen</strong><small>{entry.customerNumber ?? "ohne Kundennummer"} · {entry.customerType === "privat" ? "Privatkunde" : entry.contactPerson ?? "kein Ansprechpartner"} · {entry.city ?? "ohne Ort"}</small></span>
                         </button>)}
                       </div> : null}
                       {intakeCustomerResults.length > 0 ? <Hinweis ton="warn">Möglicher Doppelter vorhanden – bitte Treffer prüfen.</Hinweis> : null}
+                      <KrButton data-spec-id="eingang.kunde-anlegen" art="sekundaer" text="Kunde anlegen" onClick={openIntakeCustomerCreate} />
                     </div> : <div className="kr-stapel">
                       <Fakten zeilen={[{ k: "Name / Firma", v: directCustomer.companyName ?? directCustomer.name }, { k: "Kundennummer", v: customerChoices.find((entry) => entry.id === directCustomerId)?.customerNumber ?? "fehlt" }]} />
                       <KrButton art="sekundaer" text="Anderer Kunde" onClick={() => selectIntakeCustomer("NONE")} />

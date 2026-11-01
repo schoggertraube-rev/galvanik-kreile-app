@@ -11,6 +11,7 @@ export type OrderReadinessField =
 
 export type OrderReadinessCustomer = {
   name: string | null | undefined;
+  customerType: "business" | "privat" | "institution";
   phone: string | null | undefined;
   contactPerson: string | null | undefined;
   email: string | null | undefined;
@@ -64,6 +65,7 @@ export function getOrderReadiness(
 ): OrderReadiness {
   const issues: OrderReadinessIssue[] = [];
   const name = text(customer.name);
+  const customerType = customer.customerType;
   const phone = text(customer.phone);
   const contactPerson = text(customer.contactPerson);
   const email = text(customer.email);
@@ -75,7 +77,9 @@ export function getOrderReadiness(
 
   if (name.length < 2) issues.push({ field: "name", message: "Name/Firma fehlt" });
   if (!validPhone(phone)) issues.push({ field: "phone", message: phone ? "Telefon ist ungültig" : "Telefon fehlt" });
-  if (!contactPerson) issues.push({ field: "contactPerson", message: "Ansprechpartner fehlt" });
+  if ((customerType === "business" || customerType === "institution") && !contactPerson) {
+    issues.push({ field: "contactPerson", message: "Ansprechpartner fehlt" });
+  }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) issues.push({ field: "email", message: email ? "E-Mail ist ungültig" : "E-Mail fehlt" });
   if (street.length < 2) issues.push({ field: "street", message: "Straße fehlt" });
   if (!country) issues.push({ field: "country", message: "Land fehlt" });

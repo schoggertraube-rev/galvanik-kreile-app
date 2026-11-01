@@ -11,6 +11,7 @@ import type {
 
 type CustomerOrderReadinessRow = {
   name: string | null;
+  customer_type: "business" | "privat" | "institution";
   phone: string | null;
   contact_person: string | null;
   email: string | null;
@@ -29,6 +30,7 @@ export async function readCustomerOrderReadinessCommand(
     const rows = await withPrivilegedTenantTransaction(context, async (tx) => tx.execute<CustomerOrderReadinessRow>(sql`
       SELECT
         customer.name,
+        customer.type AS customer_type,
         customer.phone,
         customer.contact_person,
         customer.email,
@@ -49,6 +51,7 @@ export async function readCustomerOrderReadinessCommand(
       code: "OK",
       readiness: getOrderReadiness({
         name: customer.name,
+        customerType: customer.customer_type,
         phone: customer.phone,
         contactPerson: customer.contact_person,
         email: customer.email,
