@@ -1,7 +1,10 @@
 {
   "version": 1,
-  "inventorySha256": "99a408082c4162011cc0f5989aad0b389c004511dfdc2c4b9e7efa5d552750c4",
+  "inventorySha256": "75e20205f6eae5ab80ad9e0b590640eb1dc8f03c622c6d4f745da3725a77d8e2",
   "testedWriteActions": {
+    "src/app/actions/eingang.actions.ts#erfasseAuftragAusEingangAction": [
+      "src/test/acceptance/ap01_eingang_paket_persoenlich.integration.test.ts"
+    ],
     "src/app/actions/invoices.actions.ts#cancelInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
     ],
@@ -133,8 +136,6 @@
     "src/app/actions/domainAttachments.actions.ts#attachIntakeDraftAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/domainAttachments.actions.ts#finalizeDomainAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/domainAttachments.actions.ts#reserveDomainAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/intakeDraft.actions.ts#discardIntakeDraftAction": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/intakeDraft.actions.ts#saveIntakeDraftAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/inventory.actions.ts#createInventoryMovementAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/items.actions.ts#createItemDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/items.actions.ts#deleteItemDb": "H18.8 Bestand ohne Replay-Action-Test",

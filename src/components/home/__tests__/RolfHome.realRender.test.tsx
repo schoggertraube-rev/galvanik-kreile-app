@@ -258,7 +258,7 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     const emptyDashboard = { ...dashboard, items: [], visibleFields: [...dashboard.visibleFields] };
     const { rerender } = render(<RolfHomeClient ports={actionPorts} model={{ kind: "empty", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: emptyDashboard, projection: empty }} />);
     expect(screen.getByRole("status")).toHaveTextContent("Noch keine Aufträge erfasst.");
-    expect(screen.getByRole("button", { name: "Neuer Eingang" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Neu erfassen" })).toBeInTheDocument();
     rerender(<RolfHomeClient ports={actionPorts} model={{ kind: "denied", message: "Nicht freigegeben." }} />);
     expect(screen.getByRole("status")).toHaveTextContent("Tagesbestand nicht öffnen");
     rerender(<RolfHomeClient ports={actionPorts} model={{ kind: "error", message: "Lesefehler." }} />);
@@ -273,7 +273,7 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "werkstatt", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items: [], visibleFields: [...dashboard.visibleFields] }, projection }} />);
     expect(screen.getByRole("status")).toHaveTextContent("Nichts offen");
     expect(screen.queryByText("Noch keine Aufträge erfasst.")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Neuer Eingang" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Neu erfassen" })).not.toBeInTheDocument();
   });
 
   it("zeigt den Teilzustand für nicht erreichbare Mails mit erneutem Laden", () => {

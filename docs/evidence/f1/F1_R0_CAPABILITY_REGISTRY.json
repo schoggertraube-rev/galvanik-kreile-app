@@ -386,16 +386,14 @@
       "provider": "supabase-storage"
     },
     {
-      "stable_id": "server-actions.intake-drafts",
+      "stable_id": "server-actions.eingang",
       "kind": "SERVER_ACTION_GROUP",
-      "entry_point": "src/app/actions/intakeDraft.actions.ts",
+      "entry_point": "src/app/actions/eingang.actions.ts",
       "exported_functions": [
-        "readIntakeDraftAction",
-        "saveIntakeDraftAction",
-        "discardIntakeDraftAction"
+        "erfasseAuftragAusEingangAction"
       ],
       "classification": "PENDING_CONTRACT",
-      "open_reason": "Per-user tenant-bound intake draft persistence. Owner verification remains pending.",
+      "open_reason": "AP-01 Eingang action is covered against the replay database; exact-SHA review and owner verification remain pending.",
       "visible": false,
       "reachable": true
     },

@@ -37,7 +37,7 @@ export function MoreMenu({ open, onClose }: { open: boolean; onClose: () => void
         </header>
         <div className={styles.moreGrid}>
           {hasPermission("perm_data_orders") ? <button type="button" className={styles.moreTile} onClick={() => { onClose(); requestGlobalCreate("DIRECT_INTAKE"); }}>
-            <Inbox aria-hidden="true" /><strong>Neuer Eingang</strong>
+            <Inbox aria-hidden="true" /><strong>Neu erfassen</strong>
           </button> : null}
           {hasPermission("perm_view_leitstand") ? <Link className={styles.moreTile} href="/warendurchlauf" prefetch={false} onNavigate={onClose}>
             <PackageCheck aria-hidden="true" /><strong>Werkstatt</strong>

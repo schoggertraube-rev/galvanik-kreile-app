@@ -8,7 +8,7 @@ export function GlobalesPlus({ onKundeAnlegen, onAuftragKv }: GlobalesPlusProps)
   const wahl = (f: () => void) => () => { setOffen(false); f(); };
   return (
     <div style={{ position: 'relative' }}>
-      <button type="button" className="kr-plus" aria-label="Neu anlegen" aria-expanded={offen} onClick={() => setOffen(o => !o)}><Icon name="plus" /></button>
+      <button type="button" className="kr-plus" aria-label="Neu erfassen" title="Neu erfassen" aria-expanded={offen} onClick={() => setOffen(o => !o)}><Icon name="plus" /></button>
       {offen && (
         <div className="kr-plus-menue" role="menu" style={{ top: 56, right: 0 }}>
           <button type="button" role="menuitem" className="kr-menue-el" onClick={wahl(onKundeAnlegen)}><Icon name="user" />Kunde anlegen</button>

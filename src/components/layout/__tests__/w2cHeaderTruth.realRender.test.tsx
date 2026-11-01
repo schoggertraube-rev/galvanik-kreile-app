@@ -128,7 +128,7 @@ describe("W2C header truth", () => {
 
     expect(menuButton).not.toBeNull();
     fireEvent.click(menuButton!);
-    fireEvent.click(screen.getByTitle("Neu anlegen"));
+    fireEvent.click(screen.getByTitle("Neu erfassen"));
     fireEvent.click(screen.getByTitle("Schnellannahme (Scan)"));
 
     expect(boundary.onMenuToggle).toHaveBeenCalledTimes(1);

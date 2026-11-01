@@ -9,7 +9,7 @@ export type SalesStageFeatureDefinition = {
 
 export const SALES_STAGE_FEATURES = [
   { id: "E01", label: "Datenkiste", stage: 1, defaultEnabled: true },
-  { id: "E02", label: "Neuer Eingang", stage: 1, defaultEnabled: true },
+  { id: "E02", label: "Neu erfassen", stage: 1, defaultEnabled: true },
   { id: "E03", label: "Foto & Dokument", stage: 1, defaultEnabled: true },
   { id: "E04", label: "Dokument lesen (OCR)", stage: 1, defaultEnabled: true },
   { id: "E05", label: "Outlook-Mail rein", stage: 1, defaultEnabled: true },

@@ -8,7 +8,6 @@ import {
 } from "@/modules/orders/public";
 import { OfficeHomeClient, type OfficeHomeModel } from "./OfficeHomeClient";
 import { saveTodayPreferencesAction, saveTodayReminderAction } from "@/app/actions/today.actions";
-import { discardIntakeDraftAction } from "@/app/actions/intakeDraft.actions";
 import { assignOrderTaskAction, handBackOrderTaskAction } from "@/app/actions/orders.actions";
 
 function toHomeSource(order: OperationalOrder): OrdersHomeSource {
@@ -54,7 +53,6 @@ export async function OfficeHome({ authorization }: { authorization: Authorizati
   return <OfficeHomeClient model={await loadOfficeHome(authorization)} ports={{
     savePreferences: saveTodayPreferencesAction,
     saveReminder: saveTodayReminderAction,
-    discardDraft: discardIntakeDraftAction,
     assignOrder: assignOrderTaskAction,
     handBackOrder: handBackOrderTaskAction,
   }} />;

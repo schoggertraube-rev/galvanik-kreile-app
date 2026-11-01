@@ -149,8 +149,8 @@ test.describe("PATH1 V5 globales Plus – realer Kunde zu KV zu F1.1-Auftrag", (
       await loginPin(desktop.page, rolfId, rolfPin);
       await expect(desktop.page.getByText("Guten Tag, Rolf")).toBeVisible();
       captures.push(await capture(desktop.page, "v5-rolf-empty-desktop-1914x917.png", "rolf-empty"));
-      await desktop.page.getByRole("button", { name: "Neuer Eingang" }).click();
-      await expect(desktop.page.getByRole("heading", { name: "Neuer Eingang" })).toBeVisible();
+      await desktop.page.getByRole("button", { name: "Neu erfassen" }).click();
+      await expect(desktop.page.getByRole("heading", { name: "Neu erfassen" })).toBeVisible();
       await expect(desktop.page.getByText("Digitaler Wareneingang")).toHaveCount(0);
       await desktop.page.getByRole("button", { name: "Neukunde" }).click();
       await desktop.page.getByLabel("Firma / Name").fill(intakeCustomerName);
