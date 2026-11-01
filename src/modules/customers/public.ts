@@ -1,4 +1,11 @@
 export { CustomerCardView } from "./ui/CustomerCardView";
+export { getOrderReadiness } from "./orderReadiness";
+export type {
+  OrderReadiness,
+  OrderReadinessCustomer,
+  OrderReadinessField,
+  OrderReadinessIssue,
+} from "./orderReadiness";
 export type {
   CreateCustomerInput,
   CustomerCreateCommandResult,

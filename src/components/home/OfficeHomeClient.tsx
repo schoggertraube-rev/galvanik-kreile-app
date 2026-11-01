@@ -2,6 +2,7 @@
 
 import { useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
+import { listOutlookInboxAction } from "@/app/actions/communications.actions";
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useOverlayStore } from "@/lib/overlayStore";
@@ -9,7 +10,7 @@ import type { AppRole } from "@/lib/auth/authorizationContract";
 import type { TodayDashboard, TodayItem, TodayLayoutItem, TodayVisibleField } from "@/lib/server/todayDashboard";
 import { deriveTodayReminder, type TodayReminderMode } from "@/lib/server/todayDashboardPolicy";
 import type { OrdersHomeProjection, OrdersHomeSource } from "@/modules/orders/public";
-import { Button, Dialog, HandlungsListe, Hinweis, Kachel, Lageleiste, SeitenKopf, sortHandlungsEintraege, useListenTastatur, Zustand, type Geraet, type HandlungsArt } from "@/ui/kr";
+import { Button, Dialog, Fakten, HandlungsListe, Hinweis, Kachel, Lageleiste, SeitenKopf, sortHandlungsEintraege, useListenTastatur, Zustand, type Geraet, type HandlungsArt } from "@/ui/kr";
 
 type OfficeIdentity = { role: AppRole; canCreateOrder: boolean; canWorkOrders: boolean; canDelegate: boolean; dashboard: TodayDashboard };
 export type OfficeHomeModel =
@@ -20,6 +21,7 @@ export type OfficeHomeModel =
   | { kind: "error"; message: string };
 type BasicResult = { code: string; message?: string };
 type AssignmentResult = BasicResult & { receipt?: { aggregateVersion: number } };
+type MailPreview = { id: string; subject: string; senderName: string; senderAddress: string; receivedAt: string; preview: string; body: string };
 export type OfficeHomePorts = {
   savePreferences: (layout: TodayLayoutItem[]) => Promise<BasicResult>;
   saveReminder: (input: { itemKey: string; mode: TodayReminderMode; dueDate?: string }) => Promise<BasicResult>;
@@ -55,7 +57,30 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [delegated, setDelegated] = useState<Record<string, { name: string; version: number; dueDate?: string }>>({});
-  const primary = (item: TodayItem) => { if (item.kind === "order" && item.orderId) openOrder(item.orderId); else if (item.kind === "mail" && item.graphMessageId) requestGlobalCreate({ intent: "DIRECT_INTAKE", prefill: { sourceMode: "mail", graphMessageId: item.graphMessageId } }); else if (item.kind === "invoice" && item.invoiceId) openInvoice(item.invoiceId); else if (item.kind === "bundle" && item.bundleSurface) router.push(`/warendurchlauf?bundle=1&surface=${encodeURIComponent(item.bundleSurface)}`); };
+  const [mailId, setMailId] = useState<string | null>(null);
+  const [mailPreview, setMailPreview] = useState<MailPreview | null>(null);
+  const [mailMessage, setMailMessage] = useState("");
+  const openMail = async (graphMessageId: string) => {
+    setMailId(graphMessageId);
+    setMailPreview(null);
+    setMailMessage("");
+    try {
+      const result = await listOutlookInboxAction();
+      if (result.code !== "OK") {
+        setMailMessage(result.message);
+        return;
+      }
+      const found = result.data.find((mail) => mail.id === graphMessageId);
+      if (!found) {
+        setMailMessage("Die ausgewählte Mail ist nicht mehr im Postfach verfügbar.");
+        return;
+      }
+      setMailPreview(found);
+    } catch {
+      setMailMessage("Die Mail konnte nicht sicher gelesen werden.");
+    }
+  };
+  const primary = (item: TodayItem) => { if (item.kind === "order" && item.orderId) openOrder(item.orderId); else if (item.kind === "mail" && item.graphMessageId) void openMail(item.graphMessageId); else if (item.kind === "invoice" && item.invoiceId) openInvoice(item.invoiceId); else if (item.kind === "bundle" && item.bundleSurface) router.push(`/warendurchlauf?bundle=1&surface=${encodeURIComponent(item.bundleSurface)}`); };
   const dashboardItems = model.kind === "data" || model.kind === "empty" ? model.dashboard.items : [];
   const keyboardItems = sortHandlungsEintraege(dashboardItems.filter((item) => item.field === "action" && !item.assignedToName && !delegated[item.key] && (filter === "alle" || actionType(item) === filter)).map((item) => ({ item, art: actionType(item), gedimmt: Boolean(item.snoozedUntil), termin: item.dueDate })));
   const keyboardSelection = useListenTastatur({
@@ -129,6 +154,11 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
       {device !== "desktop" && (canStartOrder || canWorkOrders) ? <div className="kr-schnellleiste">{canStartOrder ? <Button art="primaer" icon="inbox" text="Neu erfassen" onClick={() => requestGlobalCreate("DIRECT_INTAKE")} /> : null}{canWorkOrders ? <Button icon="truck" text="Ware raus" onClick={() => router.push("/orders?station=fertig")} /> : null}</div> : null}
     </div>}
     {later ? <Dialog titel="Später erinnern" icon="clock" groesse="schmal" onSchliessen={() => setLater(null)}><div className="kr-stapel">{deriveTodayReminder("afternoon", later.dueDate) ? <Button data-spec-id="spaeter.heute-nachmittag" text="heute Nachmittag" icon="clock" disabled={busy} onClick={() => void saveReminder("afternoon")} /> : null}{deriveTodayReminder("tomorrow", later.dueDate) ? <Button data-spec-id="spaeter.morgen-fruh" text="morgen früh" icon="clock" disabled={busy} onClick={() => void saveReminder("tomorrow")} /> : null}{deriveTodayReminder("after_due", later.dueDate) ? <Button data-spec-id="spaeter.nach-dem-termin" text="nach dem Termin" icon="clock" disabled={busy} onClick={() => void saveReminder("after_due")} /> : null}<Button data-spec-id="spaeter.schliessen" art="leise" text="Schließen" onClick={() => setLater(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
+    {mailId ? <Dialog titel="Mail" icon="mail" groesse="breit" onSchliessen={() => setMailId(null)}><div className="kr-stapel">
+      {!mailPreview && !mailMessage ? <Hinweis>Mail wird gelesen …</Hinweis> : null}
+      {mailMessage ? <Hinweis ton="warn">{mailMessage}</Hinweis> : null}
+      {mailPreview ? <><Fakten zeilen={[{ k: "Von", v: `${mailPreview.senderName} · ${mailPreview.senderAddress}` }, { k: "Eingegangen", v: new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(mailPreview.receivedAt)) }]} /><h3>{mailPreview.subject || "Mail ohne Betreff"}</h3><p>{mailPreview.body || mailPreview.preview || "Keine lesbare Nachricht vorhanden."}</p></> : null}
+    </div></Dialog> : null}
     {more ? <Dialog titel="Weitere Aktionen" icon="more" groesse="schmal" onSchliessen={() => setMore(null)}><div className="kr-stapel">{model.dashboard.delegationTargets.map((target) => <Button key={target.userId} data-spec-id="hbmehr.weitergeben" text={`an ${target.displayName} geben`} icon="handoff" disabled={busy} onClick={() => void delegate(target)} />)}<Button data-spec-id="hbmehr.schliessen" art="leise" text="Schließen" onClick={() => setMore(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
   </section>;
 }

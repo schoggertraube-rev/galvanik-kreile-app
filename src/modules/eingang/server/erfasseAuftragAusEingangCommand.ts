@@ -12,6 +12,7 @@ import {
 } from "@/lib/server/commands/orderIntakeCommand";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import type { PaymentMode } from "@/lib/server/paymentContract";
+import type { OrderReadiness } from "@/modules/customers/public";
 import type {
   ErfasseAuftragResult,
 } from "../types";
@@ -48,6 +49,11 @@ type ErfasseAuftragFailure = Exclude<ErfasseAuftragResult, { code: "OK" }>;
 type EingangAuthorization =
   | { ok: true; data: AuthorizationSnapshot }
   | { ok: false; result: ErfasseAuftragResult };
+
+export type EingangCustomerPreflight = {
+  customerId: string;
+  readiness: OrderReadiness;
+};
 
 function plainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
@@ -102,6 +108,26 @@ async function authorizeEingang(): Promise<EingangAuthorization> {
     };
   }
   return { ok: true, data: authorization.data };
+}
+
+function validateCustomerPreflight(
+  input: NormalizedInput,
+  preflight: EingangCustomerPreflight | undefined,
+): { code: "OK" } | ErfasseAuftragFailure {
+  if (!preflight || preflight.customerId !== input.customer.customerId) {
+    return {
+      code: "CONFLICT",
+      message: "Kundenstand konnte nicht sicher geprüft werden. Fehlercode: EINGANG_CUSTOMER_PREFLIGHT_MISSING.",
+    };
+  }
+  if (!preflight.readiness.ready) {
+    return {
+      code: "CUSTOMER_INCOMPLETE",
+      message: `Kunde ist für den Auftrag unvollständig: ${preflight.readiness.issues.map((issue) => issue.message).join(", ")}. Bitte in der Kundenkarte ergänzen.`,
+      missing: preflight.readiness.issues.map((issue) => issue.field),
+    };
+  }
+  return { code: "OK" };
 }
 
 function matchesIntake(row: IntakeRow, authorization: AuthorizationSnapshot, input: NormalizedInput): boolean {
@@ -261,7 +287,10 @@ async function assignIntake(
   }
 }
 
-export async function erfasseAuftragAusEingangCommand(input: unknown): Promise<ErfasseAuftragResult> {
+export async function erfasseAuftragAusEingangCommand(
+  input: unknown,
+  customerPreflight?: EingangCustomerPreflight,
+): Promise<ErfasseAuftragResult> {
   const normalized = normalizeInput(input);
   if (!normalized) {
     return { code: "VALIDATION_ERROR", message: "Eingangsdaten sind unvollständig oder ungültig." };
@@ -269,6 +298,8 @@ export async function erfasseAuftragAusEingangCommand(input: unknown): Promise<E
 
   const createAuthorization = await authorizeEingang();
   if (!createAuthorization.ok) return createAuthorization.result;
+  const readiness = validateCustomerPreflight(normalized, customerPreflight);
+  if (readiness.code !== "OK") return readiness;
   const intake = await ensureOpenIntake(createAuthorization.data, normalized);
   if (intake.code !== "OK") return intake;
 

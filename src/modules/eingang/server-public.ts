@@ -1,6 +1,6 @@
 import "server-only";
 
-export { erfasseAuftragAusEingangCommand } from "./server/erfasseAuftragAusEingangCommand";
+export { erfasseAuftragAusEingangCommand, type EingangCustomerPreflight } from "./server/erfasseAuftragAusEingangCommand";
 export type {
   ErfasseAuftragInput,
   ErfasseAuftragResult,

@@ -3,7 +3,8 @@
   "inventorySha256": "75e20205f6eae5ab80ad9e0b590640eb1dc8f03c622c6d4f745da3725a77d8e2",
   "testedWriteActions": {
     "src/app/actions/eingang.actions.ts#erfasseAuftragAusEingangAction": [
-      "src/test/acceptance/ap01_eingang_paket_persoenlich.integration.test.ts"
+      "src/test/acceptance/ap01_eingang_paket_persoenlich.integration.test.ts",
+      "src/test/acceptance/ap01b_eingang_bestandskunde_unvollstaendig.integration.test.ts"
     ],
     "src/app/actions/invoices.actions.ts#cancelInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"

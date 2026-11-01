@@ -4,6 +4,7 @@ export { createCustomerCommand, readCustomerCreateReceiptCommand } from "./serve
 export { updateCustomerCommercialCommand } from "./server/updateCustomerCommercialCommand";
 export { updateCustomerNoteCommand } from "./server/updateCustomerNoteCommand";
 export { enableCustomerInvoiceTermsCommand } from "./server/enableCustomerInvoiceTermsCommand";
+export { readCustomerOrderReadinessCommand } from "./server/readCustomerOrderReadinessCommand";
 export type {
   CreateCustomerInput,
   CustomerCommandCapabilities,
@@ -11,4 +12,6 @@ export type {
   ReadCustomerCreateReceiptResult,
   UpdateCustomerCommercialInput,
   EnableCustomerInvoiceTermsInput,
+  ReadCustomerOrderReadinessInput,
+  ReadCustomerOrderReadinessResult,
 } from "./server/types";
