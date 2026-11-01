@@ -211,7 +211,7 @@ async function searchAndSelectIntakeCustomer(query: string, expectedName: RegExp
 }
 
 async function fillDirectIntakeForExistingCustomer() {
-  await searchAndSelectIntakeCustomer("SYNTHETISCH", /SYNTHETISCH Musterkunde GmbH.*Auswählen/);
+  await searchAndSelectIntakeCustomer("SYNTHETISCH", /SYNTHETISCH Musterkunde GmbH.*übernehmen/);
   const [wish] = within(screen.getByRole("group", { name: "Termin ist" })).getAllByRole("button");
   fireEvent.click(wish);
   fireEvent.change(screen.getByRole("combobox", { name: "Eingangsart" }), { target: { value: "persoenlich" } });
@@ -378,7 +378,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Abbrechen" }));
     openFlow();
-    await searchAndSelectIntakeCustomer("SYNTHETISCH", /SYNTHETISCH Musterkunde GmbH.*Auswählen/);
+    await searchAndSelectIntakeCustomer("SYNTHETISCH", /SYNTHETISCH Musterkunde GmbH.*übernehmen/);
     const paymentMode = screen.getByRole("combobox", { name: "Zahlungsmodus" });
     expect(paymentMode).toHaveValue("");
     expect(screen.getByRole("option", { name: /Rechnung auf Ziel \(nicht freigeschaltet\)/ })).toBeDisabled();
@@ -421,6 +421,100 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(screen.queryByLabelText("Name / Firma")).not.toBeInTheDocument();
   });
 
+  it("keeps customer creation visible while typing, below matches and below the empty result", async () => {
+    const matchingCustomer = {
+      id: CUSTOMER_ID,
+      customerNumber: "K-2026-0043",
+      name: "Sabrina Schmidt",
+      customerType: "privat" as const,
+      companyName: null,
+      contactPerson: null,
+      email: "sabrina@example.invalid",
+      phone: "+49 221 123456",
+      street: "Testweg 1",
+      zipCode: "12345",
+      city: "Teststadt",
+      country: "Deutschland",
+      paymentPreference: "vorkasse",
+    };
+    const searchIntakeCustomers = vi.fn<GlobalCreatePorts["searchIntakeCustomers"]>(async (query) => ({
+      code: "OK",
+      customers: query === "sabrina schmidt" ? [matchingCustomer] : [],
+    }));
+    render(<GlobalCreateFlow ports={ports({ searchIntakeCustomers })} />);
+
+    openFlow();
+    const search = await screen.findByRole("textbox", { name: "Kunde suchen" });
+    expect(screen.getByRole("button", { name: "Kunde anlegen" })).toBeInTheDocument();
+    fireEvent.change(search, { target: { value: "sabrina schmidt" } });
+    expect(screen.getByRole("button", { name: "Kunde anlegen" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Sabrina Schmidt.*übernehmen/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Kunde anlegen" })).toBeInTheDocument();
+
+    fireEvent.change(search, { target: { value: "kein treffer" } });
+    expect(await screen.findByText("Kein Kunde gefunden.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Kunde anlegen" })).toBeInTheDocument();
+  });
+
+  it("accepts a complete private intake customer without a contact person", async () => {
+    const privateCustomer = {
+      id: CUSTOMER_ID,
+      customerNumber: "K-2026-0013",
+      name: "gregor laucht",
+      customerType: "privat" as const,
+      companyName: null,
+      contactPerson: null,
+      email: "gregor@example.invalid",
+      phone: "+49 6104 123456",
+      street: "Rembrücker Straße 4",
+      zipCode: "63150",
+      city: "Heusenstamm",
+      country: "Deutschland",
+      paymentPreference: "vorkasse",
+    };
+    render(<GlobalCreateFlow ports={ports({ searchIntakeCustomers: vi.fn().mockResolvedValue({ code: "OK", customers: [privateCustomer] }) })} />);
+
+    openFlow();
+    await searchAndSelectIntakeCustomer("gregor laucht", /gregor laucht.*übernehmen/);
+    expect(screen.queryByText(/Ansprechpartner fehlt/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/kein Ansprechpartner/)).not.toBeInTheDocument();
+    const [wish] = within(screen.getByRole("group", { name: "Termin ist" })).getAllByRole("button");
+    fireEvent.click(wish);
+    fireEvent.change(screen.getByRole("combobox", { name: "Eingangsart" }), { target: { value: "persoenlich" } });
+    const [pickup] = within(screen.getByRole("group", { name: "Übergabe" })).getAllByRole("button");
+    fireEvent.click(pickup);
+    fireEvent.change(screen.getByRole("combobox", { name: "Zahlungsmodus" }), { target: { value: "vorkasse" } });
+    fireEvent.change(screen.getByLabelText("Liefertermin"), { target: { value: "2026-11-20" } });
+    fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "Synthetischer Flansch" } });
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Menge" }), { target: { value: "1" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Oberfläche" }), { target: { value: "Verzinken" } });
+    expect(screen.getByRole("button", { name: "Wareneingang buchen" })).toBeEnabled();
+  });
+
+  it("blocks a company intake customer without a contact person", async () => {
+    const companyCustomer = {
+      id: CUSTOMER_ID,
+      customerNumber: "K-2026-0044",
+      name: "SYNTHETISCH Firma GmbH",
+      customerType: "business" as const,
+      companyName: "SYNTHETISCH Firma GmbH",
+      contactPerson: null,
+      email: "firma@example.invalid",
+      phone: "+49 221 123456",
+      street: "Testweg 1",
+      zipCode: "12345",
+      city: "Teststadt",
+      country: "Deutschland",
+      paymentPreference: "vorkasse",
+    };
+    render(<GlobalCreateFlow ports={ports({ searchIntakeCustomers: vi.fn().mockResolvedValue({ code: "OK", customers: [companyCustomer] }) })} />);
+
+    openFlow();
+    await searchAndSelectIntakeCustomer("Firma", /SYNTHETISCH Firma GmbH.*übernehmen/);
+    expect(screen.getAllByText(/Ansprechpartner fehlt/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Wareneingang buchen" })).toBeDisabled();
+  });
+
   it("blocks an incomplete existing customer and opens only the customer card for correction", async () => {
     const customer = {
       id: CUSTOMER_ID,
@@ -445,7 +539,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     render(<GlobalCreateFlow ports={value} />);
 
     openFlow();
-    await searchAndSelectIntakeCustomer("Zielkunde", /SYNTHETISCH Zielkunde GmbH.*Auswählen/);
+    await searchAndSelectIntakeCustomer("Zielkunde", /SYNTHETISCH Zielkunde GmbH.*übernehmen/);
     expect(screen.getAllByText(/PLZ 3013 passt nicht zu Deutschland/).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Wareneingang buchen" })).toBeDisabled();
     expect(screen.queryByLabelText("PLZ")).not.toBeInTheDocument();
@@ -583,6 +677,37 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(recognizeIntakeText).toHaveBeenCalledWith(expect.stringContaining("gregor laucht"));
   });
 
+  it("uses a name-only quick capture as the customer search and offers the matching customer", async () => {
+    const customer = {
+      id: CUSTOMER_ID,
+      customerNumber: "K-2026-0011",
+      name: "Sabrina Schmidt",
+      customerType: "privat" as const,
+      companyName: null,
+      contactPerson: null,
+      email: "sabrina@example.invalid",
+      phone: "+49 221 123456",
+      street: "Testweg 1",
+      zipCode: "12345",
+      city: "Teststadt",
+      country: "Deutschland",
+      paymentPreference: "vorkasse",
+    };
+    const recognizeIntakeText = vi.fn<GlobalCreatePorts["recognizeIntakeText"]>().mockResolvedValue({ code: "OK", data: { fields: [], positions: [] } });
+    const searchIntakeCustomers = vi.fn<GlobalCreatePorts["searchIntakeCustomers"]>().mockResolvedValue({ code: "OK", customers: [customer] });
+    render(<GlobalCreateFlow ports={ports({ recognizeIntakeText, searchIntakeCustomers })} />);
+    openFlow();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Schnell erfassen" }), { target: { value: "sabrina schmidt" } });
+    fireEvent.click(screen.getByRole("button", { name: "Angaben erkennen" }));
+
+    await waitFor(() => expect(searchIntakeCustomers).toHaveBeenCalledWith("sabrina schmidt"));
+    expect(screen.getByRole("textbox", { name: "Kunde suchen" })).toHaveValue("sabrina schmidt");
+    const suggestion = await screen.findByRole("button", { name: /Sabrina Schmidt.*übernehmen/ });
+    fireEvent.click(suggestion);
+    expect(screen.getAllByText("Sabrina Schmidt").length).toBeGreaterThan(0);
+  });
+
   it("asks before discarding changed intake data and reopens with a fresh empty intake", async () => {
     render(<GlobalCreateFlow ports={ports()} />);
     openFlow();
@@ -640,7 +765,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
       window.dispatchEvent(new CustomEvent("path1:global-create-open", { detail: "DIRECT_INTAKE" }));
     });
     await screen.findByRole("heading", { name: "Neu erfassen" });
-    await searchAndSelectIntakeCustomer("SYNTHETISCH", /SYNTHETISCH Musterkunde GmbH.*Auswählen/);
+    await searchAndSelectIntakeCustomer("SYNTHETISCH", /SYNTHETISCH Musterkunde GmbH.*übernehmen/);
     const [wish] = within(screen.getByRole("group", { name: "Termin ist" })).getAllByRole("button");
     fireEvent.click(wish);
     fireEvent.change(screen.getByRole("combobox", { name: "Eingangsart" }), { target: { value: "persoenlich" } });

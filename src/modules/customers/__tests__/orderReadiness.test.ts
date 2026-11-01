@@ -3,6 +3,7 @@ import { getOrderReadiness } from "../orderReadiness";
 
 const complete = {
   name: "Kreile GmbH",
+  customerType: "business" as const,
   phone: "+49 711 5550303",
   contactPerson: "Sabrina Schmidt",
   email: "sabrina@example.invalid",
@@ -30,6 +31,17 @@ describe("getOrderReadiness", () => {
     expect(getOrderReadiness({ ...complete, paymentPreference: null }, { requirePaymentPreference: true }).issues).toContainEqual({
       field: "paymentPreference",
       message: "Zahlungsbedingung fehlt",
+    });
+  });
+
+  it("requires a contact person for a company but not for a private customer", () => {
+    expect(getOrderReadiness({ ...complete, customerType: "privat", name: "Gregor Laucht", contactPerson: null })).toEqual({
+      ready: true,
+      issues: [],
+    });
+    expect(getOrderReadiness({ ...complete, customerType: "business", contactPerson: null }).issues).toContainEqual({
+      field: "contactPerson",
+      message: "Ansprechpartner fehlt",
     });
   });
 });
