@@ -1,16 +1,16 @@
-# ABGABE AP-01 – Eingang, Kanal Paket/persönlich, Fassung 4
+# ABGABE AP-01 – Eingang, Kanal Paket/persönlich, Fassung 4.1
 
-Stand: 01.11.2026, Produktkandidat nach Merge von TA-B2c (#159)
+Stand: 01.11.2026, Korrektur nach Owner-Klicktest auf `bbf4c2fa`
 
 Branch: `kreile/b2-eingang` · PR: `#158` · kein Merge durch Codex
 
 ## 1. Produkt-SHA und exakte Preview
 
-- Produkt-SHA: `bbf4c2faa913c325ab7b049b5a2dde45763c1632`
+- Produkt-SHA: `3f6052395274f7200ff7c4e2e0c5432ef0588f07`
 - Basis: `8e1e03f567278d24d5f3a468f6cbef3729db96b9` (`origin/main`, #159)
 - Exakte READY-Preview dieses Produkt-SHA:
 
-  `https://galvanik-kreile-werkstatt-nwips9lp6.vercel.app`
+  `https://galvanik-kreile-werkstatt-nb4kg5r6j.vercel.app`
 - Vercel-Zustand: `READY`; Deployment-Metadaten nennen exakt den Produkt-SHA und PR `#158`.
 - Kein Merge und kein Production-Deploy durch Codex.
 
@@ -21,12 +21,14 @@ Branch: `kreile/b2-eingang` · PR: `#158` · kein Merge durch Codex
 - Die Auftragsanlage läuft ausschließlich über den bestehenden, unveränderten `createOrderIntake`.
 - Drei idempotente Schritte verwenden denselben `clientKey`: `intake_item` anlegen, Auftrag anlegen/lesen, Eingang zuordnen und `intake_event` anhängen.
 - Der alte Produktweg über `intake_drafts` ist entfernt; die Tabelle bleibt ohne zweiten Produktzugriff bestehen.
-- Ein vollständiger Bestandskunde wird über seine ID verwendet. AP-01 legt keinen Kunden an und verändert keine Kundendaten.
+- Ein vollständiger Bestandskunde wird über seine ID verwendet. Gibt es keinen Treffer, öffnet AP-01 den bestehenden Dialog `Kunde anlegen` über der erhaltenen Erfassung; dessen einziger Schreibweg bleibt `createCustomerAction`.
 - Ein unvollständiger Bestandskunde wird in Oberfläche und Server durch dieselbe reine Prüffunktion bewertet. Der Server antwortet vor dem ersten Schreiben mit `CUSTOMER_INCOMPLETE`.
 - Korrekturen erfolgen ausschließlich in der bestehenden Kundenkarte über `updateCustomerCommercialAction`; der Eingang zeigt keine lokalen PLZ-/Land- oder sonstigen Kundenfelder.
 - Die für AP-K1 geplante Umbenennung von `getOrderReadiness` zu `kundeVollstaendigkeit` ist ausdrücklich nicht Teil von #158 und wird hier weder als Alias noch als zweite Funktion vorweggenommen.
 - Eingangsart, Terminstatus, Übergabe und Zahlungsmodus starten leer. Zahlung bleibt gesperrt, bis eine Übergabe gewählt ist. Fehlende `intakeSource`/`termStatus` werden als `null` gespeichert, nicht still ersetzt.
-- Ein Mail-Eintrag in „Der Tag“ öffnet die bestehende Mailansicht und niemals den Eingangsdialog.
+- Erkannte Kundendaten gelten nicht als bestätigt: Telefon, E-Mail oder Name befüllen und starten nur die bestehende Kundensuche. Nur tatsächlich gesetzte AP-01-Felder erscheinen als erkannt/bestätigt.
+- Abbrechen, × und Esc schließen eine unveränderte Erfassung sofort. Bei Änderungen erscheint ausschließlich die Stufe-1-Rückfrage mit `Verwerfen` und `Weiter bearbeiten`; Verwerfen leert den gesamten Zustand und erzeugt einen neuen `clientKey`.
+- Ein Mail-Eintrag in „Der Tag“ zeigt `Mail ansehen`, öffnet die bestehende Mailansicht und niemals den Eingangsdialog.
 
 ## 3. Migration und Datenbankgleichstand
 
@@ -64,7 +66,7 @@ Beide Tests rufen die echte Server-Action mit signierter Sitzung gegen Loopback-
 Lokal vollständig grün:
 
 - Authority-, Delivery-, Package-Scope- und Live-Regression-Gates jeweils mit Selbsttest
-- Package-Scope gegen Basis `8e1e03f5…`, Kopf `bbf4c2fa…`, Branch `kreile/b2-eingang`
+- Package-Scope gegen Basis `8e1e03f5…`, Kopf `3f605239…`, Branch `kreile/b2-eingang`
 - Modul-Gates
 - H18 mit Selbsttest: `247` Actions inventarisiert, `99` schreibend, `35` getestet, `64` bestehende Ausnahmen
 - H16 mit Selbsttest
@@ -75,7 +77,8 @@ Lokal vollständig grün:
 - `git diff --check origin/main`: leer
 - TypeScript: grün
 - ESLint: `0` Fehler; sechs bereits vorhandene Warnungen ausschließlich in `docs/project/endversion/werkzeuge/bauplan.mjs`
-- Unit: `133` Dateien, `1052` Tests grün
+- Zielgerichtete realRender-Abnahme: `2` Dateien, `47` Tests grün
+- Unit: `133` Dateien, `1054` Tests grün
 - Produktions-Build: grün
 - Replay-Abnahme: `3/3` plus `2/2` grün
 
@@ -122,9 +125,9 @@ Begründung: sichtbare Umbenennung der bestehenden AccessArea `eingang`. Bereich
 | 4 | Mail konnte aus dem Eingang Kunden/Aufträgen zugeordnet werden | Mailzuordnung bleibt im vorhandenen Mail-Port; kein zweiter Eingangsschreibweg |
 | 5 | Alter `intake_drafts`-Entwurf wurde gelesen/abgewählt | kein Entwurf und kein Text „wieder aufgenommen“ |
 | 6 | Foto/Datei waren aktive Altanschlüsse | Foto-Kachel ist `aria-disabled=true`, Kamera vorhanden; Dateiweg fehlt |
-| 7 | Leere Kundensuche bot Inline-Neukunde und `Name / Firma` | kein Neukunde-CTA und kein Kunden-Eingabefeld im Eingang |
+| 7 | Leere Kundensuche bot keinen Kundenanlage-CTA im Eingang | `Kunde anlegen` öffnet den bestehenden Kundendialog über der erhaltenen Erfassung |
 | 8 | Direkteingang erwartete `{ mode: NEW, name }` | exakt `{ mode: EXISTING, customerId }` |
-| 9 | Texterkennung schrieb Kundenname | Kundensuche bleibt unverändert; erkannter Liefertermin bleibt geprüft |
+| 9 | Texterkennung zeigte erkannte Kundendaten als bestätigt und ließ die Kundensuche leer | PLZ/Ort erscheinen nicht als bestätigt; die Suche wird mit dem erkannten Namen vorbelegt und ausgelöst |
 | 10 | Freitext-Auftrag legte Inline-Kunden an | Freitext-Auftrag verwendet den ausdrücklich gewählten Bestandskunden |
 | 11 | Manuelle Vollständigkeits-Checkbox | echte Prüfliste; vollständig `9 von 9`, Action genau einmal |
 | 12 | Hauptknopf blieb bei fehlenden Pflichtfeldern aktiv und sprang zum Feld | Hauptknopf ist gesperrt; es erfolgt kein Schreibaufruf |
@@ -140,17 +143,18 @@ Begründung: sichtbare Umbenennung der bestehenden AccessArea `eingang`. Bereich
 | 22 | Preisvorschlag und Preisübernahme sichtbar | kein erfundener Preisvorschlag; nur Terminvorschlag bleibt |
 | 23 | Ohne Geldrecht wurde die alte Gruppe `Art` geprüft | Anliegen zeigt `Auftrag`; alte Art-Gruppe und Preisfelder fehlen |
 | 24 | Fehlerfall hielt Inline-Neukunden sichtbar | ausgewählter Bestandskunde bleibt sichtbar; kein falscher Erfolg |
-| 25 | Escape öffnete `Entwurf behalten?` | nicht persistenter AP-01-Dialog schließt direkt |
+| 25 | Veränderte Erfassung schloss ohne Stufe-1-Verwerfentscheidung | `Abbrechen` öffnet exakt `Verwerfen`/`Weiter bearbeiten`; nach Verwerfen öffnet das Plus eine vollständig leere Erfassung |
 | 26 | Test änderte PLZ/Land lokal im Eingang | unvollständiger Kunde zeigt konkreten Grund; PLZ/Land fehlen als Eingabefelder |
 | 27 | Lokaler `updateCustomer`-Port war vorhanden | kein Kunden-Write-Port im Eingang |
 | 28 | Unvollständiger Kunde konnte im Dialog korrigiert werden | `Wareneingang buchen` gesperrt; `In Kundenkarte ergänzen` ruft `openCustomer(customerId)` |
 | 29 | Zahlungs-/Übergabe-Test prüfte nur, dass Kundenzahlungsziel unverändert bleibt | F4-Test prüft serverkonforme Sperre bei `3013 Bern / Deutschland`, keine lokalen Felder und Kundenkarten-Rückweg |
+| 30 | Kein Test für die Kundenanlage über einer laufenden Erfassung | bestehender Kundendialog liegt über der Erfassung; nach Speichern ist der neue Kunde gesetzt und die vorhandene Position erhalten |
 
 ### 7.3 `RolfHome.realRender.test.tsx`
 
 | Alt | Neu |
 |---|---|
-| `Zuordnen` rief `requestGlobalCreate` mit `sourceMode: mail` auf | `Zuordnen` liest exakt die gewählte Outlook-Mail, öffnet den Dialog `Mail` und ruft `requestGlobalCreate` nicht auf |
+| `Zuordnen` öffnete die gewählte Outlook-Mail | `Mail ansehen` öffnet exakt dieselbe Outlook-Mail und ruft `requestGlobalCreate` nicht auf |
 
 Neue Tests haben kein „alt“: `orderReadiness.test.ts` prüft vollständigen Kunden, konkrete PLZ-/Land-Abweichung und die geldabhängige Zahlungsbedingung. Die beiden Abnahmetests sind unverändert aus den Planungsquellen kopiert.
 
@@ -161,13 +165,12 @@ Neue Tests haben kein „alt“: `orderReadiness.test.ts` prüft vollständigen 
 - Weitere erlaubte Einstiege: `MoreMenu.tsx`, `SearchDialog.tsx`, `OfficeHomeClient.tsx`, `OrdersAppAdapter.tsx`, `WerkstattView.tsx`, `AppShell.tsx`
 - Sichtbare Fähigkeit/Recht: `featureCatalog.ts` und `authorizationContract.ts`
 
-## 9. Owner-Klickweg aus PAKET Fassung 4, Punkt 8
+## 9. Owner-Klickweg aus PAKET Fassung 4.1, Punkt 6
 
-1. Exakte Preview öffnen, als Rolf anmelden und das rote Plus anklicken: Dialog `Neu erfassen` öffnet mit Plus-Symbol.
-2. Einen vollständigen Bestandskunden wählen, Pflichtangaben ausdrücklich wählen und Auftrag anlegen: Auftragsnummer erscheint.
-3. Kunden mit `3013 Bern / Deutschland` wählen: konkreter Hinweis erscheint und `Wareneingang buchen` bleibt gesperrt.
-4. `In Kundenkarte ergänzen` anklicken, Land auf `Schweiz` ändern und dort über den bestehenden Kundenweg speichern.
-5. Zurück zu `Neu erfassen`, Kunden neu wählen; Eingangsart, Übergabe, Zahlung und Terminstatus sind leer, werden ausdrücklich gewählt, danach lässt sich der Auftrag anlegen.
-6. In „Der Tag“ einen Mail-Eintrag öffnen: die Mail erscheint, nicht `Neu erfassen`.
+1. Exakte Preview öffnen, als Rolf anmelden, Plus wählen und `gregor laucht rembrücker strasse 4 63150 heusenstamm` eingeben. `Angaben erkennen` auslösen: die Kundensuche zeigt `gregor laucht`; PLZ und Ort werden nicht als bestätigt ausgegeben.
+2. Bei `Kein Kunde gefunden` auf `Kunde anlegen` gehen. Der vorhandene Kundendialog liegt über der Erfassung und der Name ist vorbelegt. Daten ergänzen und speichern: dieselbe Erfassung erscheint wieder, der Kunde ist gesetzt und die bisherigen Eingaben sind erhalten.
+3. Eingangsart, Übergabe, Zahlung und Terminstatus ausdrücklich wählen und den Auftrag anlegen: die Auftragsnummer erscheint.
+4. Plus erneut öffnen, etwas eingeben und × wählen: die Rückfrage zeigt genau `Verwerfen` und `Weiter bearbeiten`. `Verwerfen` wählen, Plus erneut öffnen: alle Felder sind leer.
+5. In `Der Tag` einen Mail-Eintrag prüfen: der Knopf heißt `Mail ansehen` und öffnet die Mail, nicht `Neu erfassen`.
 
 Nach dem Owner-Klick prüft der Planungschat die reale Kette `intake_item` → `orders`/Receipt → `intake_event` → `ORDER_INTAKE_CREATED_V1`. #158 bleibt bis zur Owner-Entscheidung ungemergt.
