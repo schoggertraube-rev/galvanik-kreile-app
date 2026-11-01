@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   checkSalesStageB2ScopeForTest,
   checkTaB2bScopeForTest,
+  checkTaB2c2ScopeForTest,
   checkTaB2cScopeForTest,
   runSelftest,
 } from "../../scripts/quality/check-live-package-scope.mjs";
@@ -49,6 +50,8 @@ const ap01ExactPaths = [
   "src/components/layout/__tests__/w2cHeaderTruth.realRender.test.tsx",
   "src/components/layout/globalCreateRequest.ts",
   "src/lib/auth/authorizationContract.ts",
+  "src/lib/server/commands/orderIntakeCommand.ts",
+  "src/lib/server/commands/__tests__/orderIntakeCommand.test.ts",
   "src/lib/server/intakeDraft.ts",
   "src/lib/server/todayDashboard.ts",
   "src/modules/fundament/featureCatalog.ts",
@@ -126,6 +129,33 @@ describe("Kreile live package scope", () => {
       branch: "codex/ta-b2c",
       baseSha: "11091c0be7b2c58ef7b009d4ad5664ad3e9db01d",
     })).toContain("TA_B2C_SCOPE:src/app/page.tsx");
+  });
+
+  it("allows only the TA-B2c2 anchor paths and its two exact product paths", () => {
+    expect(checkTaB2c2ScopeForTest({
+      files: [
+        "docs/project/arbeitspakete/TRUST_ANCHOR_B2C2.md",
+        "docs/evidence/live-line/b2/TRUST_ANCHOR_B2C2.json",
+      ],
+      mission: b2cAnchorMission,
+      branch: "codex/ta-b2c2",
+      baseSha: "8e1e03f567278d24d5f3a468f6cbef3729db96b9",
+    })).toEqual([]);
+    expect(checkTaB2c2ScopeForTest({
+      files: ["src/app/page.tsx"],
+      mission: b2cAnchorMission,
+      branch: "codex/ta-b2c2",
+      baseSha: "8e1e03f567278d24d5f3a468f6cbef3729db96b9",
+    })).toContain("TA_B2C2_SCOPE:src/app/page.tsx");
+    for (const path of [
+      "src/lib/server/commands/orderIntakeCommand.ts",
+      "src/lib/server/commands/__tests__/orderIntakeCommand.test.ts",
+    ]) {
+      expect(checkSalesStageB2ScopeForTest({ files: [path], mission: b2Mission, branch: "kreile/b2-eingang" }), path).toEqual([]);
+    }
+    const adjacent = "src/lib/server/commands/quoteCommand.ts";
+    expect(checkSalesStageB2ScopeForTest({ files: [adjacent], mission: b2Mission, branch: "kreile/b2-eingang" }))
+      .toContain(`SALES_STAGE_B2_SCOPE:${adjacent}`);
   });
 
   it("allows the narrow AP acceptance and delivery patterns only", () => {

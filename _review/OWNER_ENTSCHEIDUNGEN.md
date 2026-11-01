@@ -196,3 +196,20 @@ Neueste vom Owner freigegebene Version (27.09.2026, `_DESIGN_VERBINDLICH/FREIGAB
 - Adressverzeichnis: AP-K1 baut Tabelle und Prüfung; Import der Daten DE/AT/CH ist AP-K2. Ohne Daten gilt die Anschrift als „ungeprüft“ (address_status NULL), keine Sperre.
 - Die Vollständigkeitsprüfung aus AP-01 F4 ist dieselbe Funktion `kundeVollstaendigkeit`, die AP-K1 erweitert.
 - Owner-Autorisierung: Siglinder, delegiert.
+
+## U-229 · Wegeprüfung vor dem Bau, eigener Klicklauf vor dem Owner-Test (01.11.2026)
+- Anlass: AP-01 brauchte drei Owner-Runden, weil die Pakete nur die DB-Wirkung festlegten, nicht alle Wege in der Oberfläche (Abbrechen, Ebenen, Erkennung, Privat/Firma, Hauptknopf, Erfolg).
+- Ab sofort enthält jedes Paket eine Wege-Matrix (Aufruf × Zustand × Aktion → Anzeige + DB-Wirkung) gegen `werkbank.interaktion`, `screens[].aktionen`, `verhalten_appweit`; Regel 13 in AKTUELLE_ANWEISUNG.
+- Vor jedem Owner-Klicktest prüft der Planungschat die Matrix selbst per Playwright auf der Preview genau dieses SHA; die Login-Codes liest er nur aus Windows-Benutzer-Umgebungsvariablen `KR_CODE_*`, nie aus Dateien.
+- Owner: Siglinder („so eine Verzögerung brauche ich nicht noch einmal“).
+
+## U-230 · Ausführbares Testmodell und Befundliste (01.11.2026)
+- Die Wege jeder Seite stehen einmal im BAUPLAN-Abschnitt `testmodell` (Endversion-Chat); ein Generator im Repo erzeugt daraus Playwright-Tests, die in CI gegen die Replay-DB laufen (AP-G). Pakete sind erst fertig, wenn ihre erzeugten Fälle grün sind. Codex baut Generator und Gerüst, schreibt aber keine Erwartungen.
+- Ein Bau-Codex, kein zweiter schreibender Chat; Vorbauen lokal, während auf Owner-Merges gewartet wird.
+- Owner-Befunde gehen an den Planungschat und werden in `docs/project/arbeitspakete/BEFUNDE.md` eingeordnet (jetzt / späteres Paket / Optik / parken); an Codex geht nur „jetzt“.
+- Owner: Siglinder („okay, dann machen wir das“).
+
+## U-231 · Mini-Anker TA-B2c2 für orderIntakeCommand (02.11.2026)
+- Ursache des Buchungsfehlers (AP-01 4.3): `createOrderIntake` wies Privatkunden ohne Ansprechpartner ab. Die Regel wird in `orderIntakeCommand.ts` selbst korrigiert (eine Regel, keine zweite davor). Dafür ein Anker mit genau diesem Pfad und seinem Test.
+- Diese Änderung an `createOrderIntake` ist freigegeben (Korrektur nach `formulare.kunde.vollstaendigkeit`); weitere Änderungen dort nur nach Paketvertrag (AP-02 F2, U-225).
+- Owner-Autorisierung: Siglinder, delegiert.

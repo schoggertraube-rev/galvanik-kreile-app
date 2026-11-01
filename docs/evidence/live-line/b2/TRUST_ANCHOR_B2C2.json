@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "package": "B2-EINGANG-AP01-F43-ANCHOR",
+  "headBranch": "codex/ta-b2c2",
+  "mainBaseSha": "8e1e03f567278d24d5f3a468f6cbef3729db96b9",
+  "authorizedBy": "Siglinder",
+  "authorizedAt": "2026-11-02",
+  "scope": "AP-01 Fassung 4.3: orderIntakeCommand und zugehoeriger Unit-Test",
+  "probeCandidateSha": "6bca5f68e1acd8ec262c6ac2373a7bae58094bea",
+  "probeResult": "PASS"
+}
