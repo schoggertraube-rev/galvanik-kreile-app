@@ -9,6 +9,8 @@ import {
 import {
   createOrderIntake,
   type OrderIntakeItemInput,
+  type OrderIntakeSource,
+  type OrderIntakeTermStatus,
 } from "@/lib/server/commands/orderIntakeCommand";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import type { PaymentMode } from "@/lib/server/paymentContract";
@@ -25,6 +27,8 @@ type NormalizedInput = {
   customer: { mode: "EXISTING"; customerId: string };
   dueDate: string;
   items: OrderIntakeItemInput[];
+  intakeSource: OrderIntakeSource | undefined;
+  termStatus: OrderIntakeTermStatus | undefined;
   handoverMode: "pickup" | "shipping" | undefined;
   paymentMode: PaymentMode | undefined;
 };
@@ -69,6 +73,16 @@ function normalizeInput(input: unknown): NormalizedInput | null {
   if (!plainObject(input.customer) || input.customer.mode !== "EXISTING"
     || typeof input.customer.customerId !== "string" || input.customer.customerId.trim().length === 0) return null;
   if (typeof input.dueDate !== "string" || !Array.isArray(input.items)) return null;
+  if (input.intakeSource !== undefined
+    && input.intakeSource !== "persoenlich"
+    && input.intakeSource !== "versand"
+    && input.intakeSource !== "abholung_firma"
+    && input.intakeSource !== "anfrage_mail"
+    && input.intakeSource !== "anfrage_telefon") return null;
+  if (input.termStatus !== undefined
+    && input.termStatus !== "wunsch"
+    && input.termStatus !== "bestaetigt"
+    && input.termStatus !== "verschoben") return null;
   if (input.handoverMode !== undefined && input.handoverMode !== "pickup" && input.handoverMode !== "shipping") return null;
   if (input.paymentMode !== undefined
     && input.paymentMode !== "vorkasse"
@@ -80,6 +94,8 @@ function normalizeInput(input: unknown): NormalizedInput | null {
     customer: { mode: "EXISTING", customerId: input.customer.customerId.trim() },
     dueDate: input.dueDate,
     items: input.items as OrderIntakeItemInput[],
+    intakeSource: input.intakeSource as OrderIntakeSource | undefined,
+    termStatus: input.termStatus as OrderIntakeTermStatus | undefined,
     handoverMode: input.handoverMode,
     paymentMode: input.paymentMode,
   };
@@ -309,8 +325,9 @@ export async function erfasseAuftragAusEingangCommand(
     clientEventId: normalized.clientKey,
     customer: normalized.customer,
     dueDate: normalized.dueDate,
+    termStatus: normalized.termStatus ?? null,
     handoverMode: normalized.handoverMode,
-    intakeSource: "persoenlich",
+    intakeSource: normalized.intakeSource ?? null,
     items: normalized.items,
     note: normalized.text,
     ...(hasAuthorizationArea(orderAuthorization.data, "geld") && normalized.paymentMode

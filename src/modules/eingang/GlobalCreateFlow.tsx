@@ -133,8 +133,8 @@ export type DirectIntakeInput = {
   clientEventId: string;
   customer: { mode: "EXISTING"; customerId: string };
   dueDate: string;
-  termStatus: "wunsch" | "bestaetigt" | "verschoben";
-  intakeSource: "persoenlich" | "versand" | "abholung_firma" | "anfrage_mail" | "anfrage_telefon";
+  termStatus?: "wunsch" | "bestaetigt" | "verschoben";
+  intakeSource?: "persoenlich" | "versand" | "abholung_firma" | "anfrage_mail" | "anfrage_telefon";
   handoverMode: "pickup" | "shipping";
   paymentMode?: "vorkasse" | "abholung" | "rechnung";
   note: string | null;
@@ -464,7 +464,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [directCustomerMode, setDirectCustomerMode] = useState<"NONE" | "EXISTING">("NONE");
   const [intakeStep, setIntakeStep] = useState<1 | 2 | 3>(1);
   const [intakeHandover, setIntakeHandover] = useState<"" | "PICKUP" | "SHIPPING">("");
-  const [intakeTermStatus, setIntakeTermStatus] = useState<"wish" | "confirmed">("wish");
+  const [intakeTermStatus, setIntakeTermStatus] = useState<"" | "wish" | "confirmed">("");
+  const [intakeSource, setIntakeSource] = useState<"" | "persoenlich" | "versand" | "abholung_firma" | "anfrage_mail" | "anfrage_telefon">("");
   const [directCustomer, setDirectCustomer] = useState<CustomerDraft>(EMPTY_INTAKE_CUSTOMER);
   const [directCustomerId, setDirectCustomerId] = useState("");
   const [intakeCustomerQuery, setIntakeCustomerQuery] = useState("");
@@ -777,7 +778,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setIntakeCustomerResults([]);
     setIntakeCustomerSearchState("idle");
     setIntakeClientKey(globalThis.crypto.randomUUID());
+    setIntakeHandover("");
     setIntakePaymentMode("");
+    setIntakeSource("");
+    setIntakeTermStatus("");
     setOpen(true);
     setIntakeStep(1);
     navigate("direct-intake");
@@ -847,7 +851,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setDirectConfirmedDate("");
     setDirectNote("");
     setIntakeHandover("");
-    setIntakeTermStatus("wish");
+    setIntakeSource("");
+    setIntakeTermStatus("");
     setIntakeSuggestionState({ kind: "idle" });
     setIntakeTermChoice(null);
     requestIds.current = { customer: "", quote: "", conversion: "", directCustomer: "" };
@@ -1437,6 +1442,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     { id: "menge", label: "Menge", detail: firstMissingQuantity >= 0 ? `Position ${firstMissingQuantity + 1} fehlt` : "vollständig", complete: firstMissingQuantity < 0, step: 2, target: `eingang.position.${Math.max(firstMissingQuantity, 0)}.menge` },
     { id: "oberflaeche", label: "Oberfläche", detail: firstMissingSurface >= 0 ? `Position ${firstMissingSurface + 1} fehlt` : "vollständig", complete: firstMissingSurface < 0, step: 2, target: `eingang.position.${Math.max(firstMissingSurface, 0)}.oberflaeche` },
     { id: "liefertermin", label: "Liefertermin", detail: directWishDate || "fehlt", complete: Boolean(directWishDate), step: 3, target: "eingang.liefertermin" },
+    { id: "terminstatus", label: "Terminstatus", detail: intakeTermStatus === "wish" ? "Wunsch" : intakeTermStatus === "confirmed" ? "bestätigt" : "fehlt", complete: Boolean(intakeTermStatus), step: 3, target: "eingang.terminstatus" },
+    { id: "eingangsart", label: "Eingangsart", detail: intakeSource === "persoenlich" ? "persönlich angeliefert" : intakeSource === "versand" ? "Versand eingegangen" : intakeSource === "abholung_firma" ? "Abholung durch Firma" : intakeSource === "anfrage_mail" ? "Anfrage per Mail" : intakeSource === "anfrage_telefon" ? "Anfrage per Telefon" : "fehlt", complete: Boolean(intakeSource), step: 3, target: "eingang.eingangsart" },
     { id: "uebergabe", label: "Übergabe", detail: intakeHandover === "PICKUP" ? "Abholung" : intakeHandover === "SHIPPING" ? "Versand" : "fehlt", complete: Boolean(intakeHandover), step: 3, target: "eingang.uebergabe" },
     ...(ports.canManageMoney ? [{ id: "zahlungsmodus", label: "Zahlungsmodus", detail: intakePaymentMode === "abholung" ? "Bar oder Karte bei Abholung" : intakePaymentMode === "rechnung" ? "Rechnung auf Ziel" : intakePaymentMode === "vorkasse" ? "Vorkasse" : "fehlt", complete: Boolean(intakePaymentMode), step: 3 as const, target: "eingang.zahlungsmodus" }] : []),
   ];
@@ -1522,9 +1529,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     }));
     const validCustomer = directCustomerMode === "EXISTING" && customerKey.length > 0
       && directCustomerReadiness.ready;
-    if (!validCustomer || !validDates || !intakeHandover || (ports.canManageMoney && !intakePaymentMode)
+    if (!validCustomer || !validDates || !intakeTermStatus || !intakeSource || !intakeHandover || (ports.canManageMoney && !intakePaymentMode)
       || items.length < 1 || items.length > 20 || !directItems.every(intakePositionComplete)) {
-      setFeedback({ kind: "validation", message: "Bitte Kunde, Position, Termin, Übergabe und Zahlungsmodus vollständig angeben." });
+      setFeedback({ kind: "validation", message: "Bitte Kunde, Position, Termin, Terminstatus, Eingangsart, Übergabe und Zahlungsmodus vollständig angeben." });
       return;
     }
     const id = intakeClientKey;
@@ -1536,7 +1543,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       // The existing F1.1 contract persists the confirmed commitment, never the non-binding wish.
       dueDate: directConfirmedDate,
       termStatus: intakeTermStatus === "confirmed" ? "bestaetigt" : "wunsch",
-      intakeSource: "persoenlich",
+      intakeSource,
       handoverMode: intakeHandover === "PICKUP" ? "pickup" : "shipping",
       ...(ports.canManageMoney && intakePaymentMode ? { paymentMode: intakePaymentMode } : {}),
       note: nullable(directNote),
@@ -1847,11 +1854,19 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                     </div> : null}
                 <FormRaster>
                   <Feld label="Liefertermin"><Eingabe data-spec-id="eingang.liefertermin" type="date" required value={directWishDate} onChange={(event) => { setDirectWishDate(event.target.value); setDirectConfirmedDate(event.target.value); setIntakeWishDateOrigin(event.target.value ? "manual" : "empty"); }} /></Feld>
-                  <Feld label="Termin ist"><div data-spec-id="eingang.terminstatus"><Segment label="Termin ist" wert={intakeTermStatus} optionen={[{ wert: "wish", text: "Wunsch" }, { wert: "confirmed", text: "bestätigt" }]} onWert={setIntakeTermStatus} /></div></Feld>
+                  <Feld label="Termin ist"><div data-spec-id="eingang.terminstatus"><Segment<"" | "wish" | "confirmed"> label="Termin ist" wert={intakeTermStatus} optionen={[{ wert: "wish", text: "Wunsch" }, { wert: "confirmed", text: "bestätigt" }]} onWert={setIntakeTermStatus} /></div></Feld>
+                  <Feld label="Eingangsart"><Auswahl required data-spec-id="eingang.eingangsart" value={intakeSource} onChange={(event) => setIntakeSource(event.target.value as typeof intakeSource)} optionen={[
+                    { wert: "", text: "Bitte wählen" },
+                    { wert: "persoenlich", text: "persönlich angeliefert" },
+                    { wert: "versand", text: "Versand eingegangen" },
+                    { wert: "abholung_firma", text: "Abholung durch Firma" },
+                    { wert: "anfrage_mail", text: "Anfrage per Mail" },
+                    { wert: "anfrage_telefon", text: "Anfrage per Telefon" },
+                  ]} /></Feld>
                   <Feld label="Übergabe"><div data-spec-id="eingang.uebergabe"><Segment<"" | "PICKUP" | "SHIPPING"> label="Übergabe" wert={intakeHandover} optionen={[{ wert: "PICKUP", text: "Abholung" }, { wert: "SHIPPING", text: "Versand" }]} onWert={(value) => { if (value) changeIntakeHandover(value); }} /></div></Feld>
                   {ports.canManageMoney ? <Feld label="Zahlungsmodus">
-                    <Auswahl required data-spec-id="eingang.zahlungsmodus" value={intakePaymentMode} onChange={(event) => setIntakePaymentMode(event.target.value as PaymentMode | "")} optionen={[
-                      { wert: "", text: "Bitte wählen" },
+                    <Auswahl required disabled={!intakeHandover} data-spec-id="eingang.zahlungsmodus" value={intakePaymentMode} onChange={(event) => setIntakePaymentMode(event.target.value as PaymentMode | "")} optionen={[
+                      { wert: "", text: intakeHandover ? "Bitte wählen" : "Zuerst Übergabe wählen" },
                       { wert: "vorkasse", text: "Vorkasse" },
                       { wert: "abholung", text: intakeHandover === "PICKUP" ? "Bar oder Karte bei Abholung" : "Bar oder Karte bei Abholung (nur bei Abholung)", gesperrt: intakeHandover === "SHIPPING" },
                       { wert: "rechnung", text: directCustomerMode === "EXISTING" && /^rechnung_/.test(directCustomer.paymentPreference) ? "Rechnung auf Ziel" : "Rechnung auf Ziel (nicht freigeschaltet)", gesperrt: !(directCustomerMode === "EXISTING" && /^rechnung_/.test(directCustomer.paymentPreference)) },

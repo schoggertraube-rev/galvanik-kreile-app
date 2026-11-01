@@ -1,5 +1,7 @@
 import type {
   OrderIntakeItemInput,
+  OrderIntakeSource,
+  OrderIntakeTermStatus,
 } from "@/lib/server/commands/orderIntakeCommand";
 import type { PaymentMode } from "@/lib/server/paymentContract";
 
@@ -9,6 +11,8 @@ export type ErfasseAuftragInput = {
   customer: { mode: "EXISTING"; customerId: string };
   dueDate: string;
   items: OrderIntakeItemInput[];
+  intakeSource?: OrderIntakeSource;
+  termStatus?: OrderIntakeTermStatus;
   handoverMode?: "pickup" | "shipping";
   paymentMode?: PaymentMode;
 };
