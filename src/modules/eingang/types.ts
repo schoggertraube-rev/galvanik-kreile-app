@@ -23,5 +23,6 @@ export type ErfasseAuftragResult =
     }
   | { code: "UNAUTHENTICATED"; message: string }
   | { code: "FORBIDDEN"; message: string }
+  | { code: "CUSTOMER_INCOMPLETE"; message: string; missing: string[] }
   | { code: "VALIDATION_ERROR"; message: string }
   | { code: "CONFLICT"; message: string };

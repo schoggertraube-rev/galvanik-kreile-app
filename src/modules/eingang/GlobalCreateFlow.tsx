@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { FormEvent, KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import type { CreateCustomerInput, UpdateCustomerCommercialInput } from "@/modules/customers/public";
+import { getOrderReadiness, type CreateCustomerInput } from "@/modules/customers/public";
 import type { CatalogService } from "@/modules/katalog/public";
 import { paymentModeFromPreference, type PaymentMode } from "@/lib/server/paymentContract";
 import {
@@ -54,6 +54,7 @@ type FailureCode =
   | "UNAUTHENTICATED"
   | "NOT_FOUND"
   | "CONFLICT"
+  | "CUSTOMER_INCOMPLETE"
   | "VALIDATION_ERROR"
   | "IN_KLAERUNG"
   | "UNAVAILABLE";
@@ -184,7 +185,6 @@ export type GlobalCreatePorts = {
   getIntakeSuggestions: (input: IntakeSuggestionsInput) => Promise<{ code: "OK"; data: IntakeSuggestions } | Failure>;
   listCatalog?: () => Promise<{ code:"OK"; services:CatalogService[] }|{ code:"DENIED"|"UNAVAILABLE"; message:string }>;
   createCustomer: (input: CreateCustomerInput) => Promise<GlobalCreateCustomerResult>;
-  updateCustomer?: (input: UpdateCustomerCommercialInput) => Promise<{ code: "OK" } | Failure>;
   readCustomerCreateReceipt: (input: CreateCustomerInput) => Promise<GlobalCreateCustomerResult | Failure>;
   createQuote: (input: CreateQuoteInput) => Promise<GlobalCreateQuoteResult>;
   updateQuote: (input: UpdateQuoteInput) => Promise<GlobalCreateQuoteResult>;
@@ -243,7 +243,6 @@ function CustomerFormFields({
   onlyMissing,
   showPayment,
   onPaymentChange,
-  forceFields = [],
   autofocus = false,
 }: {
   value: CustomerDraft;
@@ -253,12 +252,11 @@ function CustomerFormFields({
   onlyMissing: boolean;
   showPayment: boolean;
   onPaymentChange: (value: string) => void;
-  forceFields?: readonly (keyof CustomerDraft)[];
   autofocus?: boolean;
 }) {
   const set = <K extends keyof CustomerDraft>(key: K, next: CustomerDraft[K]) => onChange({ ...value, [key]: next });
   const missing = (value: string | null | undefined) => !value?.trim();
-  const show = (key: keyof CustomerDraft, value: string | null | undefined) => !onlyMissing || missing(value) || forceFields.includes(key);
+  const show = (_key: keyof CustomerDraft, value: string | null | undefined) => !onlyMissing || missing(value);
   const setName = (name: string) => onChange({
     ...value,
     name,
@@ -353,14 +351,6 @@ function customerChoiceToDraft(customer: GlobalCreateCustomerChoice): CustomerDr
   };
 }
 
-function completeOrderCustomer(customer: CustomerDraft, requirePaymentPreference = true): boolean {
-  return customer.name.trim().length >= 2 && Boolean(customer.contactPerson?.trim()) &&
-    validPhone(customer.phone) && Boolean(customer.email?.trim()) && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email ?? "") &&
-    customer.street.trim().length >= 2 && customer.zipCode.trim().length >= 2 && customer.city.trim().length >= 1 &&
-    customer.country.trim().length >= 2 && validPostcode(customer.country, customer.zipCode)
-    && (!requirePaymentPreference || customer.paymentPreference.trim().length > 0);
-}
-
 function validPhone(value: string | null | undefined): boolean {
   const phone = value?.trim() ?? "";
   return phone.length >= 6 && phone.length <= 20 && /^[0-9 +\-()/]+$/.test(phone) && phone.replace(/\D/g, "").length >= 6;
@@ -375,15 +365,7 @@ function validPostcode(country: string, value: string): boolean {
 }
 
 function customerOrderMissing(customer: CustomerDraft, includePayment: boolean): string[] {
-  const missing: string[] = [];
-  if (!customer.contactPerson?.trim()) missing.push("Ansprechpartner");
-  if (!customer.email?.trim()) missing.push("E-Mail");
-  if (!customer.street.trim()) missing.push("Straße");
-  if (!customer.zipCode.trim()) missing.push("PLZ");
-  if (!customer.city.trim()) missing.push("Ort");
-  if (!customer.country.trim()) missing.push("Land");
-  if (includePayment && !customer.paymentPreference.trim()) missing.push("Zahlungsbedingung");
-  return missing;
+  return getOrderReadiness(customer, { requirePaymentPreference: includePayment }).issues.map((issue) => issue.message);
 }
 
 const newPosition = (): PositionDraft => ({
@@ -431,6 +413,7 @@ function isValidDateInput(value: string): boolean {
 
 function requestFeedback(result: Failure, requestId: string): Feedback {
   if (result.code === "VALIDATION_ERROR") return { kind: "validation", message: result.message, requestId };
+  if (result.code === "CUSTOMER_INCOMPLETE") return { kind: "validation", message: result.message, requestId };
   if (result.code === "FORBIDDEN" || result.code === "UNAUTHENTICATED") return { kind: "denied", message: result.message, requestId };
   if (result.code === "CONFLICT") return { kind: "conflict", message: `${result.message} Eingaben bleiben erhalten; bitte den aktuellen Stand prüfen.`, requestId };
   if (result.code === "UNAVAILABLE") {
@@ -483,7 +466,6 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [intakeHandover, setIntakeHandover] = useState<"" | "PICKUP" | "SHIPPING">("");
   const [intakeTermStatus, setIntakeTermStatus] = useState<"wish" | "confirmed">("wish");
   const [directCustomer, setDirectCustomer] = useState<CustomerDraft>(EMPTY_INTAKE_CUSTOMER);
-  const [directCustomerType, setDirectCustomerType] = useState<"" | "business" | "privat">("");
   const [directCustomerId, setDirectCustomerId] = useState("");
   const [intakeCustomerQuery, setIntakeCustomerQuery] = useState("");
   const [intakeCustomerResults, setIntakeCustomerResults] = useState<GlobalCreateCustomerChoice[]>([]);
@@ -515,9 +497,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const intakeSuggestionSeq = useRef(0);
   const dialogRef = useRef<HTMLElement>(null);
   const confirmedOrderDueDateValid = isValidDateInput(confirmedOrderDueDate);
-  const customerCompleteForOrder = completeOrderCustomer(customerDraft);
+  const customerCompleteForOrder = getOrderReadiness(customerDraft, { requirePaymentPreference: true }).ready;
   const isHandy = useHandy();
   const customerOrderMissingFields = customerOrderMissing(customerDraft, ports.canManageMoney);
+  const directCustomerReadiness = getOrderReadiness(directCustomer, { requirePaymentPreference: ports.canManageMoney });
   const customerCoreComplete = Boolean(customerType)
     && customerDraft.name.trim().length >= 2
     && validPhone(customerDraft.phone);
@@ -564,16 +547,6 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const changeCustomerType = (next: "business" | "privat") => {
     setCustomerType(next);
     setCustomerDraft((current) => ({
-      ...current,
-      customerType: next,
-      companyName: next === "privat" ? null : nullable(current.name),
-      vatId: next === "privat" ? null : current.vatId,
-    }));
-  };
-
-  const changeDirectCustomerType = (next: "business" | "privat") => {
-    setDirectCustomerType(next);
-    setDirectCustomer((current) => ({
       ...current,
       customerType: next,
       companyName: next === "privat" ? null : nullable(current.name),
@@ -798,7 +771,6 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       return;
     }
     setDirectCustomerMode("NONE");
-    setDirectCustomerType("");
     setDirectCustomerId("");
     setDirectCustomer(EMPTY_INTAKE_CUSTOMER);
     setIntakeCustomerQuery("");
@@ -838,12 +810,49 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         const draftCustomer = customerChoiceToDraft(preselected);
         setDirectCustomer(draftCustomer);
         setDirectCustomerMode("EXISTING");
-        setDirectCustomerType(draftCustomer.customerType === "privat" ? "privat" : "business");
       }
     } catch {
       if (seq === customerRequestSeq.current) setFeedback({ kind: "error", message: "Die vorhandenen Kunden konnten nicht sicher gelesen werden. Es wurde nichts angelegt." });
     }
   };
+
+  function reset() {
+    setStep("choose");
+    setFeedback(null);
+    setCustomerDraft(EMPTY_CUSTOMER);
+    setCustomerNote("");
+    setCustomer(null);
+    setCustomerReceipt(null);
+    setPositions([newPosition()]);
+    setDueDate("");
+    setQuoteNote("");
+    setConfirmedOrderDueDate("");
+    setAwardHandoverMode("pickup");
+    setAwardPaymentMode("rechnung");
+    setQuote(null);
+    setQuoteReceipt(null);
+    setConversion(null);
+    setDirectReceipt(null);
+    setIntakeClientKey(globalThis.crypto.randomUUID());
+    setDirectCustomer(EMPTY_INTAKE_CUSTOMER);
+    setDirectCustomerId("");
+    setDirectCustomerMode("NONE");
+    setIntakeCustomerQuery("");
+    setIntakeCustomerResults([]);
+    setIntakeCustomerSearchState("idle");
+    setIntakePaymentMode("");
+    setDirectItems([newIntakePosition()]);
+    setDirectWishDate("");
+    setIntakeWishDateOrigin("empty");
+    setDirectConfirmedDate("");
+    setDirectNote("");
+    setIntakeHandover("");
+    setIntakeTermStatus("wish");
+    setIntakeSuggestionState({ kind: "idle" });
+    setIntakeTermChoice(null);
+    requestIds.current = { customer: "", quote: "", conversion: "", directCustomer: "" };
+    setIntakeStep(1);
+  }
 
   const openWithIntent = (request: GlobalCreateIntent | GlobalCreateRequest) => {
     const intent = typeof request === "string" ? request : request.intent;
@@ -1415,15 +1424,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
   const customerIssue = (() => {
     if (directCustomerMode === "NONE") return { detail: "fehlt", target: "eingang.kunde" };
-    if (directCustomer.name.trim().length < 2) return { detail: "Name / Firma fehlt", target: "kundeneu.name" };
-    if (!directCustomer.contactPerson?.trim()) return { detail: "Ansprechpartner fehlt", target: "kundeneu.ansprechpartner" };
-    if (!validPhone(directCustomer.phone)) return { detail: "Telefon fehlt oder ungültig", target: "kundeneu.telefon" };
-    if (!directCustomer.email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(directCustomer.email)) return { detail: "E-Mail fehlt oder ungültig", target: "kundeneu.email" };
-    if (directCustomer.street.trim().length < 2) return { detail: "Straße fehlt", target: "kundeneu.strasse" };
-    if (!directCustomer.zipCode.trim() || !validPostcode(directCustomer.country, directCustomer.zipCode)) return { detail: "PLZ fehlt oder ungültig", target: "kundeneu.plz" };
-    if (!directCustomer.city.trim()) return { detail: "Ort fehlt", target: "kundeneu.ort" };
-    if (!directCustomer.country.trim()) return { detail: "Land fehlt", target: "kundeneu.land" };
-    if (ports.canManageMoney && !directCustomer.paymentPreference.trim()) return { detail: "Zahlungsbedingung fehlt", target: "kundeneu.zahlungsbedingung" };
+    const firstIssue = directCustomerReadiness.issues[0];
+    if (firstIssue) return { detail: firstIssue.message, target: "eingang.kunde-erganzen" };
     return null;
   })();
   const firstMissingName = directItems.findIndex((item) => item.name.trim().length < 2 || (!item.catalogServiceId && item.name.trim().length >= 2));
@@ -1440,12 +1442,6 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   ];
   const requiredIntakeChecks = intakeChecklist.filter((entry) => !entry.warning);
   const completedIntakeChecks = requiredIntakeChecks.filter((entry) => entry.complete).length;
-  const directCustomerInvalidFields: readonly (keyof CustomerDraft)[] = [
-    ...(!validPhone(directCustomer.phone) && directCustomer.phone?.trim() ? ["phone" as const] : []),
-    ...(Boolean(directCustomer.email?.trim()) && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(directCustomer.email ?? "") ? ["email" as const] : []),
-    ...(!validPostcode(directCustomer.country, directCustomer.zipCode) && directCustomer.zipCode.trim() ? ["zipCode" as const, "country" as const] : []),
-  ];
-
   const jumpToIntakeCheck = (entry: IntakeChecklistEntry) => {
     setIntakeStep(entry.step);
     const focusTarget = () => {
@@ -1466,7 +1462,6 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setIntakePaymentMode("");
     if (mode === "NONE") {
       setDirectCustomerMode("NONE");
-      setDirectCustomerType("");
       setDirectCustomerId("");
       setDirectCustomer(EMPTY_INTAKE_CUSTOMER);
       setIntakeCustomerResults([]);
@@ -1475,7 +1470,6 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     if (!selected) return;
     const draft = customerChoiceToDraft(selected);
     setDirectCustomerMode("EXISTING");
-    setDirectCustomerType(draft.customerType === "privat" ? "privat" : "business");
     setDirectCustomerId(selected.id);
     setDirectCustomer(draft);
     setCustomerChoices((current) => [selected, ...current.filter((entry) => entry.id !== selected.id)]);
@@ -1490,70 +1484,22 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     }
   };
 
-  const changeIntakeCustomerPayment = (paymentPreference: string) => {
-    setDirectCustomer((current) => ({ ...current, paymentPreference }));
-  };
-
   const advanceIntakeCustomer = async (): Promise<string | null> => {
     if (directCustomerMode === "NONE") {
       setFeedback({ kind: "validation", message: "Bitte einen bestehenden Kunden auswählen." });
       return null;
     }
-    if (!completeOrderCustomer(directCustomer, ports.canManageMoney)) {
-      setFeedback({ kind: "validation", message: "Für den Auftrag fehlen Name/Firma, Ansprechpartner, Telefon, E-Mail, vollständige Anschrift oder Zahlungsbedingung." });
+    if (!directCustomerReadiness.ready) {
+      setFeedback({ kind: "validation", message: `Unvollständig – für Auftrag fehlt: ${directCustomerReadiness.issues.map((issue) => issue.message).join(", ")}.` });
       return null;
     }
-    setBusy(true);
     setFeedback(null);
-    try {
-      if (!directCustomerId) {
-        setFeedback({ kind: "validation", message: "Bitte einen Kunden auswählen." });
-        return null;
-      }
-        const selected = customerChoices.find((entry) => entry.id === directCustomerId);
-        const needsInlineUpdate = selected
-          ? !completeOrderCustomer(customerChoiceToDraft(selected), ports.canManageMoney)
-          : true;
-        if (!needsInlineUpdate) {
-          setIntakeStep(2);
-          return directCustomerId;
-        }
-        if (!ports.updateCustomer) {
-          setFeedback({ kind: "error", message: "Die Kundenaktualisierung ist derzeit nicht verfügbar." });
-          return null;
-        }
-        const updated = await ports.updateCustomer({
-          clientEventId: globalThis.crypto.randomUUID(),
-          customerId: directCustomerId,
-          name: directCustomer.name,
-          companyName: directCustomer.companyName,
-          contactPerson: directCustomer.contactPerson,
-          email: directCustomer.email,
-          phone: directCustomer.phone,
-          street: directCustomer.street,
-          zipCode: directCustomer.zipCode,
-          city: directCustomer.city,
-          country: directCustomer.country,
-          paymentPreference: directCustomer.paymentPreference,
-          vatId: directCustomer.vatId,
-        });
-        if (updated.code !== "OK") {
-          setFeedback(requestFeedback(updated, directCustomerId));
-          return null;
-        }
-        setCustomerChoices((current) => current.map((entry) => entry.id === directCustomerId ? { ...entry, ...directCustomer, city: directCustomer.city } : entry));
-        setIntakeStep(2);
-      return directCustomerId;
-    } catch {
-      setFeedback({
-        kind: "unclear",
-        message: "Der Kundenstand konnte nicht sicher bestätigt werden. Es wurde noch kein Auftrag angelegt.",
-        requestId: requestId("directCustomer"),
-      });
+    if (!directCustomerId) {
+      setFeedback({ kind: "validation", message: "Bitte einen Kunden auswählen." });
       return null;
-    } finally {
-      setBusy(false);
     }
+    setIntakeStep(2);
+    return directCustomerId;
   };
 
   const submitDirectIntake = async (event: FormEvent, customerKey = directCustomerId) => {
@@ -1575,7 +1521,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       vatRateBasisPoints: ports.canManageMoney ? item.vatRateBasisPoints : null,
     }));
     const validCustomer = directCustomerMode === "EXISTING" && customerKey.length > 0
-      && completeOrderCustomer(directCustomer, ports.canManageMoney);
+      && directCustomerReadiness.ready;
     if (!validCustomer || !validDates || !intakeHandover || (ports.canManageMoney && !intakePaymentMode)
       || items.length < 1 || items.length > 20 || !directItems.every(intakePositionComplete)) {
       setFeedback({ kind: "validation", message: "Bitte Kunde, Position, Termin, Übergabe und Zahlungsmodus vollständig angeben." });
@@ -1691,45 +1637,6 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       : position));
   };
 
-  function reset() {
-    setStep("choose");
-    setFeedback(null);
-    setCustomerDraft(EMPTY_CUSTOMER);
-    setCustomerNote("");
-    setCustomer(null);
-    setCustomerReceipt(null);
-    setPositions([newPosition()]);
-    setDueDate("");
-    setQuoteNote("");
-    setConfirmedOrderDueDate("");
-    setAwardHandoverMode("pickup");
-    setAwardPaymentMode("rechnung");
-    setQuote(null);
-    setQuoteReceipt(null);
-    setConversion(null);
-    setDirectReceipt(null);
-    setIntakeClientKey(globalThis.crypto.randomUUID());
-    setDirectCustomer(EMPTY_INTAKE_CUSTOMER);
-    setDirectCustomerType("");
-    setDirectCustomerId("");
-    setDirectCustomerMode("NONE");
-    setIntakeCustomerQuery("");
-    setIntakeCustomerResults([]);
-    setIntakeCustomerSearchState("idle");
-    setIntakePaymentMode("");
-    setDirectItems([newIntakePosition()]);
-    setDirectWishDate("");
-    setIntakeWishDateOrigin("empty");
-    setDirectConfirmedDate("");
-    setDirectNote("");
-    setIntakeHandover("");
-    setIntakeTermStatus("wish");
-    setIntakeSuggestionState({ kind: "idle" });
-    setIntakeTermChoice(null);
-    requestIds.current = { customer: "", quote: "", conversion: "", directCustomer: "" };
-    setIntakeStep(1);
-  }
-
   return (
     <>
       {ports.showPrimaryTrigger !== false ? <button type="button" className={styles.globalCreateButton} onClick={() => { reset(); void loadDirectIntake(); }} aria-label="Neu erfassen" aria-haspopup="dialog" aria-expanded={open}>
@@ -1822,21 +1729,21 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         <KrDialog
           key="intake"
           titel="Neu erfassen"
-          icon="inbox"
+          icon="plus"
           groesse="breit"
           onSchliessen={requestClose}
           fuss={directReceipt ? undefined : isHandy ? (
             <>
               {intakeStep > 1 ? <KrButton text="Zurück" onClick={() => setIntakeStep((intakeStep - 1) as 1 | 2)} /> : <KrButton data-spec-id="eingang.abbrechen" text="Abbrechen" onClick={requestClose} />}
-              {intakeStep === 1 ? <KrButton art="primaer" icon="arrow" text="Positionen" disabled={busy} onClick={() => void advanceIntakeCustomer()} /> : null}
+              {intakeStep === 1 ? <KrButton art="primaer" icon="arrow" text="Positionen" disabled={busy || !directCustomerReadiness.ready} onClick={() => void advanceIntakeCustomer()} /> : null}
               {intakeStep === 2 ? <KrButton art="primaer" icon="arrow" text="Belege & Prüfung" onClick={() => {
                 if (directItems.every(intakePositionComplete)) { setFeedback(null); setIntakeStep(3); }
                 else setFeedback({ kind: "validation", message: "Bitte für jede Position Bezeichnung, Menge und Oberfläche angeben." });
               }} /> : null}
-              {intakeStep === 3 ? <KrButton data-spec-id="eingang.buchen" form="kr-neuer-eingang" type="submit" art="erledigen" icon="check" text="Wareneingang buchen" disabled={busy} /> : null}
+              {intakeStep === 3 ? <KrButton data-spec-id="eingang.buchen" form="kr-neuer-eingang" type="submit" art="erledigen" icon="check" text="Wareneingang buchen" disabled={busy || !directCustomerReadiness.ready} /> : null}
             </>
           ) : (
-            <><KrButton data-spec-id="eingang.abbrechen" text="Abbrechen" onClick={requestClose} /><KrButton data-spec-id="eingang.buchen" form="kr-neuer-eingang" type="submit" art="erledigen" icon="check" text="Wareneingang buchen" disabled={busy} /></>
+            <><KrButton data-spec-id="eingang.abbrechen" text="Abbrechen" onClick={requestClose} /><KrButton data-spec-id="eingang.buchen" form="kr-neuer-eingang" type="submit" art="erledigen" icon="check" text="Wareneingang buchen" disabled={busy || !directCustomerReadiness.ready} /></>
           )}
         >
           {directReceipt ? (
@@ -1909,10 +1816,15 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                     </div>}
                   </Feld>
                 </FormRaster>
-                {directCustomerMode === "EXISTING" && !completeOrderCustomer(directCustomer, ports.canManageMoney) ? <>
-                  <Hinweis ton="warn">Für diesen Kunden fehlen noch Pflichtdaten.</Hinweis>
-                  <CustomerFormFields value={directCustomer} onChange={setDirectCustomer} customerType={directCustomerType} onCustomerType={changeDirectCustomerType} onlyMissing showPayment={ports.canManageMoney} onPaymentChange={changeIntakeCustomerPayment} forceFields={directCustomerInvalidFields} />
-                </> : null}
+                {directCustomerMode === "EXISTING" && !directCustomerReadiness.ready ? <Hinweis ton="warn"><div className="kr-stapel">
+                  <strong>Unvollständig – für Auftrag fehlt: {directCustomerReadiness.issues.map((issue) => issue.message).join(", ")}</strong>
+                  <span>Ergänzungen werden ausschließlich in der Kundenkarte gespeichert.</span>
+                  <KrButton data-spec-id="eingang.kunde-erganzen" art="sekundaer" text="In Kundenkarte ergänzen" onClick={() => {
+                    const customerId = directCustomerId;
+                    selectIntakeCustomer("NONE");
+                    if (customerId) ports.openCustomer(customerId);
+                  }} />
+                </div></Hinweis> : null}
                 {intakeTermChoice ? <div className={styles.intakeSuggestion} data-spec-id="eingang.terminvorschlag">
                   <div><strong>Liefertermin {intakeTermChoice.kind === "adopted" ? intakeTermChoice.achievableDate : intakeTermChoice.wishDate}</strong><span>{intakeTermChoice.kind === "adopted" ? "Vorschlag übernommen" : "Wunsch gehalten, Kunde wird vorgewarnt"}</span></div>
                   <KrButton art="sekundaer" text="Ändern" onClick={changeIntakeTermChoice} />

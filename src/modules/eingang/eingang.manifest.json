@@ -21,6 +21,7 @@
     "@/modules/eingang/public#UpdateQuoteInput",
     "@/modules/eingang/server-public#ErfasseAuftragInput",
     "@/modules/eingang/server-public#ErfasseAuftragResult",
+    "@/modules/eingang/server-public#EingangCustomerPreflight",
     "@/modules/eingang/server-public#erfasseAuftragAusEingangCommand"
   ],
   "capabilities": ["eingang:auftrag-anlegen"],
