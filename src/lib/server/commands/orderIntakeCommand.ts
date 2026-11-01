@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { intakePaymentContract, type PaymentMode } from "@/lib/server/paymentContract";
+import { getOrderReadiness } from "@/modules/customers/public";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 
 const EVENT_TYPE = "ORDER_INTAKE_CREATED_V1";
@@ -131,6 +132,7 @@ type ExistingReceiptRow = {
 type CustomerRow = {
   id: string;
   tenant_id: string;
+  type: string;
   name: string;
   company_name: string | null;
   customer_number: string | null;
@@ -456,7 +458,7 @@ async function resolveCustomer(
     `);
     if (receipts.length !== 1 || !receipts[0]) return null;
     const rows = await tx.execute<CustomerRow>(sql`
-      SELECT id, tenant_id, customer_number, name, company_name, contact_person, email, phone,
+      SELECT id, tenant_id, customer_number, type, name, company_name, contact_person, email, phone,
         street, zip_code, city, country, payment_preference
       FROM public.customers
       WHERE id = ${receipts[0].customer_id} AND tenant_id = ${tenantId}
@@ -465,15 +467,31 @@ async function resolveCustomer(
     return rows.length === 1 ? rows[0] ?? null : null;
   }
   const rows = await tx.execute<CustomerRow>(sql`
-    SELECT id, tenant_id, customer_number, name, company_name, contact_person, email, phone,
+    SELECT id, tenant_id, customer_number, type, name, company_name, contact_person, email, phone,
       street, zip_code, city, country, payment_preference
     FROM public.customers
     WHERE id = ${customer.customerId} AND tenant_id = ${tenantId}
     FOR SHARE
   `);
   const row = rows.length === 1 ? rows[0] : null;
-  if (!row || !row.customer_number || !row.contact_person || !row.email || !row.phone || !row.street ||
-    !row.zip_code || !row.city || !row.country) return null;
+  if (!row || !row.customer_number) return null;
+  const readiness = getOrderReadiness({
+    name: row.name,
+    customerType: row.type === "privat" || row.type === "private" || row.type === "Privatkunde"
+      ? "privat"
+      : row.type === "institution" || row.type === "Institution"
+        ? "institution"
+        : "business",
+    phone: row.phone,
+    contactPerson: row.contact_person,
+    email: row.email,
+    street: row.street,
+    zipCode: row.zip_code,
+    city: row.city,
+    country: row.country,
+    paymentPreference: row.payment_preference,
+  });
+  if (!readiness.ready) return null;
   return row;
 }
 

@@ -364,7 +364,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(value.createQuote).not.toHaveBeenCalled();
   });
 
-  it("uses one name field and requires explicit intake handover and payment choices", async () => {
+  it("uses one name field and derives the allowed intake payment choices from the shared contract", async () => {
     render(<GlobalCreateFlow ports={ports()} />);
 
     await openIntent("CUSTOMER");
@@ -382,11 +382,45 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     await searchAndSelectIntakeCustomer("SYNTHETISCH", /SYNTHETISCH Musterkunde GmbH.*übernehmen/);
     const paymentMode = screen.getByRole("combobox", { name: "Zahlungsmodus" });
     expect(paymentMode).toHaveValue("");
-    expect(screen.getByRole("option", { name: /Rechnung auf Ziel \(nicht freigeschaltet\)/ })).toBeDisabled();
+    expect(screen.getByRole("option", { name: /Rechnung auf Ziel/ })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Versand" }));
-    expect(paymentMode).toHaveValue("");
+    expect(paymentMode).toHaveValue("vorkasse");
+    expect(screen.getByText("aus Kundenkarte")).toBeInTheDocument();
     expect(within(paymentMode).getByRole("option", { name: "Vorkasse" })).toBeInTheDocument();
-    expect(within(paymentMode).getByRole("option", { name: /Bar oder Karte bei Abholung \(nur bei Abholung\)/ })).toBeDisabled();
+    expect(within(paymentMode).getByRole("option", { name: /Bar oder Karte bei Abholung \(Bar oder Karte nur bei Abholung\.\)/ })).toBeDisabled();
+  });
+
+  it("prefills bar pickup from the customer card and still allows an approved manual change", async () => {
+    const barCustomer = {
+      id: CUSTOMER_ID,
+      customerNumber: "K-2026-0012",
+      name: "SYNTHETISCH Bar-Kunde",
+      customerType: "business" as const,
+      companyName: "SYNTHETISCH Bar-Kunde",
+      contactPerson: "Testperson",
+      email: "bar@example.invalid",
+      phone: "+49 221 123456",
+      street: "Testweg 1",
+      zipCode: "12345",
+      city: "Teststadt",
+      country: "Deutschland",
+      paymentPreference: "bar",
+    };
+    const searchIntakeCustomers = vi.fn().mockResolvedValue({ code: "OK", customers: [barCustomer] });
+    render(<GlobalCreateFlow ports={ports({ searchIntakeCustomers })} />);
+
+    openFlow();
+    await searchAndSelectIntakeCustomer("Bar-Kunde", /SYNTHETISCH Bar-Kunde.*übernehmen/);
+    const [pickup] = within(screen.getByRole("group", { name: "Übergabe" })).getAllByRole("button");
+    fireEvent.click(pickup);
+
+    const paymentMode = screen.getByRole("combobox", { name: "Zahlungsmodus" });
+    expect(paymentMode).toHaveValue("abholung");
+    expect(screen.getByText("aus Kundenkarte")).toBeInTheDocument();
+    expect(within(paymentMode).getByRole("option", { name: /Rechnung auf Ziel/ })).toBeDisabled();
+    fireEvent.change(paymentMode, { target: { value: "vorkasse" } });
+    expect(paymentMode).toHaveValue("vorkasse");
+    expect(screen.queryByText("aus Kundenkarte")).not.toBeInTheDocument();
   });
 
   it("requires an explicit decision for a possible duplicate before creating the customer", async () => {
@@ -677,6 +711,14 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
       intakeSource: "persoenlich",
     }));
     expect(value.createDirectIntake).toHaveBeenCalledWith(expect.objectContaining({ customer: { mode: "EXISTING", customerId: CUSTOMER_ID } }));
+    expect(value.createDirectIntake).toHaveBeenCalledWith(expect.objectContaining({
+      items: [expect.objectContaining({
+        catalogServiceId: "88888888-8888-4888-8888-888888888888",
+        unit: "Stück",
+        unitPriceCents: 12_500,
+        vatRateBasisPoints: 1900,
+      })],
+    }));
     expect(value.createCustomer).not.toHaveBeenCalled();
     expect(value.readDirectIntakeReceipt).toHaveBeenCalledTimes(1);
     expect(value.refresh).toHaveBeenCalledTimes(1);
@@ -810,7 +852,10 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     openFlow();
 
     fireEvent.change(screen.getByRole("textbox", { name: "Schnell erfassen" }), { target: { value: "sabrina schmidt" } });
-    fireEvent.click(screen.getByRole("button", { name: "Angaben erkennen" }));
+    const recognize = screen.getByRole("button", { name: "Angaben erkennen" });
+    expect(recognize).toBeEnabled();
+    expect(recognize).toHaveClass("kr-btn--primaer");
+    fireEvent.click(recognize);
 
     await waitFor(() => expect(searchIntakeCustomers).toHaveBeenCalledWith("sabrina schmidt"));
     expect(screen.getByRole("textbox", { name: "Kunde suchen" })).toHaveValue("Sabrina Schmidt");
@@ -1026,8 +1071,11 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(screen.getByLabelText("Liefertermin")).toHaveValue("2026-11-20");
   });
 
-  it("keeps a failed existing-customer intake visible without false success", async () => {
-    const createDirectIntake = vi.fn<GlobalCreatePorts["createDirectIntake"]>().mockResolvedValue({ code: "UNAVAILABLE", message: "Speichern nicht verfügbar." });
+  it("keeps a failed existing-customer intake visible and retries with the same client key", async () => {
+    const success = ports().createDirectIntake;
+    const createDirectIntake = vi.fn<GlobalCreatePorts["createDirectIntake"]>()
+      .mockResolvedValueOnce({ code: "UNAVAILABLE", message: "Speichern nicht verfügbar." })
+      .mockImplementation(success);
     const value = ports({ createDirectIntake });
     render(<GlobalCreateFlow ports={value} />);
 
@@ -1036,10 +1084,16 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.click(screen.getByRole("button", { name: "Wareneingang buchen" }));
 
     await waitFor(() => expect(createDirectIntake).toHaveBeenCalledTimes(1));
+    expect(screen.getByText("Speichern fehlgeschlagen · alle Eingaben sind noch da")).toBeInTheDocument();
     expect(screen.getByText(/Speichern nicht verfügbar/)).toBeInTheDocument();
+    const firstClientKey = createDirectIntake.mock.calls[0][0].clientEventId;
     expect(screen.getAllByText("SYNTHETISCH Musterkunde GmbH").length).toBeGreaterThan(0);
     expect(createDirectIntake).toHaveBeenCalledTimes(1);
     expect(value.createCustomer).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Erneut buchen" }));
+    await waitFor(() => expect(createDirectIntake).toHaveBeenCalledTimes(2));
+    expect(createDirectIntake.mock.calls[1][0].clientEventId).toBe(firstClientKey);
+    await waitFor(() => expect(value.openOrder).toHaveBeenCalledWith(ORDER_ID));
   });
 
   it("clears an award date when editing a KV", async () => {

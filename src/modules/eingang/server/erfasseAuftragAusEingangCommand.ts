@@ -316,11 +316,6 @@ export async function erfasseAuftragAusEingangCommand(
   if (!createAuthorization.ok) return createAuthorization.result;
   const readiness = validateCustomerPreflight(normalized, customerPreflight);
   if (readiness.code !== "OK") return readiness;
-  const intake = await ensureOpenIntake(createAuthorization.data, normalized);
-  if (intake.code !== "OK") return intake;
-
-  const orderAuthorization = await authorizeEingang();
-  if (!orderAuthorization.ok) return orderAuthorization.result;
   const order = await createOrderIntake({
     clientEventId: normalized.clientKey,
     customer: normalized.customer,
@@ -330,7 +325,7 @@ export async function erfasseAuftragAusEingangCommand(
     intakeSource: normalized.intakeSource ?? null,
     items: normalized.items,
     note: normalized.text,
-    ...(hasAuthorizationArea(orderAuthorization.data, "geld") && normalized.paymentMode
+    ...(hasAuthorizationArea(createAuthorization.data, "geld") && normalized.paymentMode
       ? { paymentMode: normalized.paymentMode }
       : {}),
   });
@@ -347,6 +342,9 @@ export async function erfasseAuftragAusEingangCommand(
     }
     return order;
   }
+
+  const intake = await ensureOpenIntake(createAuthorization.data, normalized);
+  if (intake.code !== "OK") return intake;
 
   const assignAuthorization = await authorizeEingang();
   if (!assignAuthorization.ok) return assignAuthorization.result;
