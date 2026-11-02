@@ -1836,7 +1836,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       ports.refresh();
       reset();
       setOpen(false);
-      setIntakeToast(`Auftrag ${readback.receipt.orderNumber} angelegt`);
+      setIntakeToast(`Wareneingang gebucht · ${readback.receipt.orderNumber}`);
       ports.openOrder(readback.receipt.orderId);
     } catch (error) {
       console.error("[EINGANG_AP01_BOOKING_REQUEST_FAILED]", {

@@ -703,7 +703,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.click(screen.getByRole("button", { name: "Wareneingang buchen" }));
     await waitFor(() => expect(value.openOrder).toHaveBeenCalledWith(ORDER_ID));
     expect(screen.queryByRole("heading", { name: "Neu erfassen" })).not.toBeInTheDocument();
-    expect(screen.getByText("Auftrag A-2026-0061 angelegt")).toBeInTheDocument();
+    expect(screen.getByText("Wareneingang gebucht · A-2026-0061")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Auftragskarte öffnen" })).not.toBeInTheDocument();
     expect(value.createDirectIntake).toHaveBeenCalledWith(expect.objectContaining({
       dueDate: "2026-10-20",
@@ -939,7 +939,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.click(screen.getByRole("button", { name: "Wareneingang buchen" }));
     await waitFor(() => expect(value.createDirectIntake).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(value.openOrder).toHaveBeenCalledWith(ORDER_ID));
-    expect(screen.getByText("Auftrag A-2026-0061 angelegt")).toBeInTheDocument();
+    expect(screen.getByText("Wareneingang gebucht · A-2026-0061")).toBeInTheDocument();
     expect(value.createDirectIntake).toHaveBeenCalledWith(expect.objectContaining({
       items: [expect.objectContaining({
         catalogServiceId: null,
