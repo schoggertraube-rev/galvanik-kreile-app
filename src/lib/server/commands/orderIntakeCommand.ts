@@ -6,7 +6,7 @@ import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { intakePaymentContract, type PaymentMode } from "@/lib/server/paymentContract";
 import { getOrderReadiness } from "@/modules/customers/public";
-import { isOrderIntakeFreeTextUnit } from "@/modules/eingang/public";
+import { isOrderIntakeFreeTextUnit, orderIntakeSurfaceKey } from "@/modules/eingang/public";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 
 const EVENT_TYPE = "ORDER_INTAKE_CREATED_V1";
@@ -232,7 +232,8 @@ function normalizeInput(input: unknown): NormalizedInput | null {
       return null;
     }
     const name = normalizedText(candidate.name, 2, 160);
-    const surfaceRequested = normalizedText(candidate.surfaceRequested, 2, 160);
+    const surfaceLabel = normalizedText(candidate.surfaceRequested, 2, 160);
+    const surfaceRequested = surfaceLabel ? orderIntakeSurfaceKey(surfaceLabel) : null;
     const material = normalizedOptionalText(candidate.material, 120);
     const executionRequested = hasExecutionRequested && typeof candidate.executionRequested === "string"
       && EXECUTION_REQUESTED_VALUES.includes(candidate.executionRequested as OrderIntakeExecutionRequested)

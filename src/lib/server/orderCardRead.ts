@@ -1,7 +1,7 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
-import { isOrderIntakeFreeTextUnit } from "@/modules/eingang/public";
+import { isOrderIntakeFreeTextUnit, orderIntakeSurfaceLabel } from "@/modules/eingang/public";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type {
   OrderTaskAssigneeOption,
@@ -340,7 +340,7 @@ export function mapOrderCardIntakeItems(value: unknown): OrderCardItem[] {
       name: entry.name,
       quantity,
       material: entry.material,
-      surfaceRequested: entry.surfaceRequested,
+      surfaceRequested: orderIntakeSurfaceLabel(entry.surfaceRequested),
       catalogServiceId: currentCatalogItem ? entry.catalogServiceId as string : null,
       unit: currentCatalogItem || currentFreeTextItem ? entry.unit as string | null : null,
       unitPriceCents: currentCatalogItem ? toSafeInteger(entry.unitPriceCents, "ORDER_CARD_ITEM_PRICE_INVALID") : null,
@@ -369,7 +369,7 @@ function mapCurrentOrderItems(rows: CurrentItemRow[], positions: Map<string, num
       || (row.vat_rate_basis_points !== null && ![0, 700, 1900].includes(row.vat_rate_basis_points))) throw new Error("ORDER_CARD_CURRENT_ITEM_INVALID");
     return {
       id: row.id, position, name: row.name, quantity, material: row.material,
-      surfaceRequested: row.surface_requested, catalogServiceId: row.catalog_service_id,
+      surfaceRequested: orderIntakeSurfaceLabel(row.surface_requested), catalogServiceId: row.catalog_service_id,
       unit: row.unit, unitPriceCents: price,
       vatRateBasisPoints: row.vat_rate_basis_points as 0 | 700 | 1900 | null,
       finished: row.current_station_id === "fertig",
