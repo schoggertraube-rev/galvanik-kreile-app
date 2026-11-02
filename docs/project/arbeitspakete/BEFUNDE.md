@@ -21,3 +21,5 @@ Regel (U-220/U-229): Jeder Befund wird vom Planungschat **einmal** eingeordnet, 
 | 02.11. | Prüfliste ohne Zeilen Eingangsart/Einheit, Art ohne Recht „geld“ (E45–E47) | Endversion-Chat | Paket AP-R |
 | 02.11. | Kunden-Datenvertrag a887 weicht von AP-K1 F1 ab (Lieferant, Felder, Absprachen, Zahlung, Land, Grenzen) | Codex-Vorbau | Paket AP-K1 Fassung 2 |
 | 02.11. | Prüfskript t14 M10 klickt „Wunsch“ außerhalb des Dialogs (Timeout) | Prüflauf | Planungschat (eigenes Skript) |
+| 02.11. | Einheit: Bauplan speichert Schlüssel stueck/kg/dm2/satz/stunde, Bestand und Code speichern Anzeigewerte (Stück …) | AP-R-Lauf | Paket AP-U (Einheit-Schlüssel für Position, Katalog, Rechnung) nach AP-K1 |
+| 02.11. | Codex stasht Planungsdateien beim Branchwechsel (AP-K1 F2 war im Stash) | Planungschat | jetzt (Prozess: Planungsdateien nie stashen, P25) |

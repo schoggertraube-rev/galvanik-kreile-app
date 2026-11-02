@@ -1,7 +1,11 @@
--- AP-K1 Kunde (Runde 21): Datenvertrag customers additiv + Adressverzeichnis + Teilungsfunktionen + Altdaten.
--- Planungschat 01.11.2026, BAUPLAN.next spec c82bf2d6d880 formulare.kunde.daten. Nur additiv, keine Spalte geloescht.
+-- AP-K1 Kunde, Fassung 2 (Planungschat 02.11.2026): Datenvertrag customers nach BAUPLAN spec a887ece362f4
+-- formulare.kunde.daten + A-87 (Land als Schluessel) + K5 (Zahlungsbedingung vorkasse|bar|rechnung, Ziel getrennt)
+-- + Absprachen (customer_agreements) + Lieferant + Adressverzeichnis (leer, Import AP-K2).
+-- Ersetzt Fassung 1 (nie auf Dev oder main). Keine Spalte geloescht. Einzige nicht-additive Aenderung: die zwei
+-- CHECK-Regeln customers_payment_preference_s1_chk und customers_invoice_terms_s1_chk werden durch K1-Regeln ersetzt.
 -- Codex legt diese Datei bytegleich als supabase/migrations/<zeitstempel>_b2_kunde_k1.sql an.
 
+-- 1. Neue Spalten
 ALTER TABLE public.customers
   ADD COLUMN IF NOT EXISTS salutation text,
   ADD COLUMN IF NOT EXISTS first_name text,
@@ -10,22 +14,18 @@ ALTER TABLE public.customers
   ADD COLUMN IF NOT EXISTS house_number text,
   ADD COLUMN IF NOT EXISTS billing_email text,
   ADD COLUMN IF NOT EXISTS website text,
+  ADD COLUMN IF NOT EXISTS handover_preference text,
+  ADD COLUMN IF NOT EXISTS iban text,
+  ADD COLUMN IF NOT EXISTS zahlungsziel_tage integer,
   ADD COLUMN IF NOT EXISTS address_status text,
   ADD COLUMN IF NOT EXISTS address_checked_at timestamptz;
 
-ALTER TABLE public.customers
-  ADD CONSTRAINT customers_salutation_chk CHECK (salutation IS NULL OR salutation IN ('frau', 'herr', 'ohne')),
-  ADD CONSTRAINT customers_address_status_chk CHECK (address_status IS NULL OR address_status IN ('gefunden', 'uebernommen', 'bestaetigt', 'nicht_pruefbar')),
-  ADD CONSTRAINT customers_first_name_len_chk CHECK (first_name IS NULL OR char_length(first_name) BETWEEN 1 AND 60),
-  ADD CONSTRAINT customers_last_name_len_chk CHECK (last_name IS NULL OR char_length(last_name) BETWEEN 1 AND 160),
-  ADD CONSTRAINT customers_contact_role_len_chk CHECK (contact_role IS NULL OR char_length(contact_role) <= 60),
-  ADD CONSTRAINT customers_house_number_len_chk CHECK (house_number IS NULL OR char_length(house_number) BETWEEN 1 AND 10),
-  ADD CONSTRAINT customers_billing_email_len_chk CHECK (billing_email IS NULL OR char_length(billing_email) <= 254),
-  ADD CONSTRAINT customers_website_len_chk CHECK (website IS NULL OR char_length(website) <= 120);
+COMMENT ON COLUMN public.customers.contact_person IS 'Stillgelegt (AP-K1): nur lesend, App schreibt und zeigt sie nicht; Werte in salutation, first_name, last_name, contact_role.';
+COMMENT ON COLUMN public.customers.shipping_preference IS 'Stillgelegt (AP-K1): ersetzt durch handover_preference (pickup|shipping|NULL); App liest und schreibt sie nicht.';
+COMMENT ON COLUMN public.customers.country IS 'Schluessel DE | AT | CH | andere (A-87); bei andere steht der Laendername im Ort.';
+COMMENT ON COLUMN public.customers.payment_preference IS 'Zahlungsbedingung vorkasse | bar | rechnung | NULL (K5); rechnung nur bei ziel_freigeschaltet; Lieferant immer NULL.';
 
-COMMENT ON COLUMN public.customers.contact_person IS 'Stillgelegt (AP-K1, 01.11.2026): nur lesend, App schreibt und zeigt sie nicht mehr; Werte in salutation, first_name, last_name, contact_role.';
-
--- Eine Teilungsregel fuer Migration UND Server-Normalisierung alter Eingaben (eine Wahrheit).
+-- 2. Eine Regel je Teilung (Migration UND Server-Normalisierung alter Eingaben)
 CREATE OR REPLACE FUNCTION private.kunde_split_name(p_text text)
 RETURNS TABLE (salutation text, first_name text, last_name text, sicher boolean)
 LANGUAGE plpgsql IMMUTABLE AS $$
@@ -68,12 +68,42 @@ BEGIN
 END;
 $$;
 
+-- Land: Klartext oder Schluessel -> Schluessel (A-87). NULL/leer bleibt NULL ("Anschrift unvollstaendig", kein Ausland).
+CREATE OR REPLACE FUNCTION private.kunde_land_schluessel(p_text text)
+RETURNS text
+LANGUAGE sql IMMUTABLE AS $$
+  SELECT CASE
+    WHEN p_text IS NULL OR btrim(p_text) = '' THEN NULL
+    WHEN lower(btrim(p_text)) IN ('de', 'deutschland', 'germany') THEN 'DE'
+    WHEN lower(btrim(p_text)) IN ('at', 'österreich', 'oesterreich', 'austria') THEN 'AT'
+    WHEN lower(btrim(p_text)) IN ('ch', 'schweiz', 'switzerland', 'suisse', 'svizzera') THEN 'CH'
+    ELSE 'andere'
+  END
+$$;
+
 REVOKE ALL ON FUNCTION private.kunde_split_name(text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION private.kunde_split_street(text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.kunde_land_schluessel(text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION private.kunde_split_name(text) TO service_role;
 GRANT EXECUTE ON FUNCTION private.kunde_split_street(text) TO service_role;
+GRANT EXECUTE ON FUNCTION private.kunde_land_schluessel(text) TO service_role;
 
--- Altdaten: Firma aus contact_person, Privat aus name; Strasse in Strasse + Nr.; unsicher -> Hinweis-Tag.
+-- 3. Altdaten
+UPDATE public.customers SET type = 'business' WHERE type = 'institution';
+
+UPDATE public.customers
+SET city = CASE
+      WHEN private.kunde_land_schluessel(country) = 'andere' AND city IS NOT NULL AND btrim(city) <> ''
+        THEN left(btrim(city) || ', ' || btrim(country), 100)
+      WHEN private.kunde_land_schluessel(country) = 'andere' THEN left(btrim(country), 100)
+      ELSE city END,
+    country = private.kunde_land_schluessel(country)
+WHERE country IS DISTINCT FROM private.kunde_land_schluessel(country);
+
+ALTER TABLE public.customers DROP CONSTRAINT IF EXISTS customers_invoice_terms_s1_chk;
+ALTER TABLE public.customers DROP CONSTRAINT IF EXISTS customers_payment_preference_s1_chk;
+UPDATE public.customers SET payment_preference = 'rechnung' WHERE payment_preference ~ '^rechnung_[0-9]+$';
+
 WITH quelle AS (
   SELECT c.id, c.tenant_id,
          CASE WHEN c.type = 'privat' THEN c.name ELSE c.contact_person END AS person
@@ -102,7 +132,54 @@ SET street = g.street, house_number = g.house_number
 FROM geteilt g
 WHERE c.id = g.id AND c.tenant_id = g.tenant_id;
 
--- Adressverzeichnis (E15): mandantenfreie Referenzdaten, nur lesend fuer die App. Import folgt in AP-K2.
+-- 4. Regeln (DB-Sicherheitsnetz; die Feldgrenzen des Bauplans prueft die eine Validierung in Client und Server)
+ALTER TABLE public.customers
+  ADD CONSTRAINT customers_type_k1_chk CHECK (type IN ('business', 'privat', 'lieferant')),
+  ADD CONSTRAINT customers_country_k1_chk CHECK (country IS NULL OR country IN ('DE', 'AT', 'CH', 'andere')),
+  ADD CONSTRAINT customers_payment_preference_k1_chk CHECK (payment_preference IS NULL OR payment_preference IN ('vorkasse', 'bar', 'rechnung')),
+  ADD CONSTRAINT customers_invoice_terms_k1_chk CHECK (
+    (NOT ziel_freigeschaltet AND ziel_tage IS NULL AND skonto_prozent IS NULL AND skonto_tage IS NULL
+       AND payment_preference IS DISTINCT FROM 'rechnung')
+    OR (ziel_freigeschaltet AND ziel_tage BETWEEN 1 AND 90 AND skonto_prozent BETWEEN 0 AND 100
+       AND skonto_tage BETWEEN 0 AND ziel_tage)),
+  ADD CONSTRAINT customers_salutation_chk CHECK (salutation IS NULL OR salutation IN ('frau', 'herr', 'ohne')),
+  ADD CONSTRAINT customers_handover_preference_chk CHECK (handover_preference IS NULL OR handover_preference IN ('pickup', 'shipping')),
+  ADD CONSTRAINT customers_address_status_chk CHECK (address_status IS NULL OR address_status IN ('gefunden', 'uebernommen', 'bestaetigt', 'nicht_pruefbar')),
+  ADD CONSTRAINT customers_first_name_len_chk CHECK (first_name IS NULL OR char_length(first_name) BETWEEN 1 AND 60),
+  ADD CONSTRAINT customers_last_name_len_chk CHECK (last_name IS NULL OR char_length(last_name) BETWEEN 1 AND 160),
+  ADD CONSTRAINT customers_contact_role_len_chk CHECK (contact_role IS NULL OR char_length(contact_role) <= 60),
+  ADD CONSTRAINT customers_house_number_len_chk CHECK (house_number IS NULL OR char_length(house_number) BETWEEN 1 AND 10),
+  ADD CONSTRAINT customers_billing_email_len_chk CHECK (billing_email IS NULL OR char_length(billing_email) <= 254),
+  ADD CONSTRAINT customers_website_len_chk CHECK (website IS NULL OR char_length(website) <= 120),
+  ADD CONSTRAINT customers_iban_format_chk CHECK (iban IS NULL OR iban ~ '^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$'),
+  ADD CONSTRAINT customers_zahlungsziel_tage_chk CHECK (zahlungsziel_tage IS NULL OR zahlungsziel_tage BETWEEN 0 AND 120),
+  ADD CONSTRAINT customers_lieferant_felder_chk CHECK (
+    (type = 'lieferant' AND payment_preference IS NULL AND vat_id IS NULL AND billing_email IS NULL AND handover_preference IS NULL)
+    OR (type <> 'lieferant' AND iban IS NULL AND zahlungsziel_tage IS NULL));
+
+-- 5. Absprachen & Eigenheiten (5.2): geordnete Liste, hoechstens 20, geschrieben nur ueber den Kunden-Schreibweg
+CREATE TABLE IF NOT EXISTS public.customer_agreements (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id text NOT NULL,
+  customer_id text NOT NULL REFERENCES public.customers(id) ON DELETE RESTRICT,
+  position integer NOT NULL CHECK (position BETWEEN 1 AND 20),
+  bezeichnung text NOT NULL CHECK (char_length(btrim(bezeichnung)) BETWEEN 1 AND 40),
+  wert text NOT NULL CHECK (char_length(btrim(wert)) BETWEEN 1 AND 200),
+  geld boolean NOT NULL DEFAULT false,
+  hinweis boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT customer_agreements_position_uidx UNIQUE (tenant_id, customer_id, position) DEFERRABLE INITIALLY DEFERRED
+);
+CREATE INDEX IF NOT EXISTS customer_agreements_customer_idx ON public.customer_agreements (tenant_id, customer_id, position);
+ALTER TABLE public.customer_agreements ENABLE ROW LEVEL SECURITY;
+CREATE POLICY customer_agreements_tenant_isolation ON public.customer_agreements
+  USING (tenant_id = nullif(btrim(current_setting('app.tenant_id', true)), ''))
+  WITH CHECK (tenant_id = nullif(btrim(current_setting('app.tenant_id', true)), ''));
+REVOKE ALL ON TABLE public.customer_agreements FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.customer_agreements TO service_role;
+
+-- 6. Adressverzeichnis (E15): mandantenfreie Referenzdaten, nur lesend fuer die App. Import folgt in AP-K2.
 CREATE TABLE IF NOT EXISTS public.address_directory (
   id bigserial PRIMARY KEY,
   country text NOT NULL CHECK (country IN ('DE', 'AT', 'CH')),

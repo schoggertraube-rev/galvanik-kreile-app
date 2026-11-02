@@ -92,11 +92,22 @@
       "datei": "TRUST_ANCHOR_B2D2.md",
       "titel": "Trust-Anchor: Bauplan a887 (Testmodell) + Pfade AP-G und AP-R + CI-Schritt Wege-Tests",
       "reihenfolge": 3.5,
-      "status": "bereit",
+      "status": "abgenommen",
       "spec": "a887ece362f4",
       "bauplan_sha256": "5E7B880BD9D4B35EAF7BF906F2693011192933E000FA7AEA94222395F34A1F70",
       "voraussetzung": "#158 gemergt (erledigt); AP-G und AP-R lokal fertig (Pfad-Probe)",
       "branch": "codex/ta-b2d2",
+      "merge": "Owner, vor PR AP-G + AP-R",
+      "nachweis": "PR #162, main 10be0a03"
+    },
+    {
+      "nr": "TA-B2e",
+      "datei": "TRUST_ANCHOR_B2E.md",
+      "titel": "Mini-Anker: Migrationspfad AP-R (Einheit je Freitext-Position, Beleg-View)",
+      "reihenfolge": 3.6,
+      "status": "bereit",
+      "voraussetzung": "AP-R-Migration lokal gebaut (Probe)",
+      "branch": "codex/ta-b2e",
       "merge": "Owner, vor PR AP-G + AP-R"
     },
     {
@@ -119,27 +130,50 @@
       "status": "bereit",
       "spec": "a887ece362f4",
       "bauplan_sha256": "5E7B880BD9D4B35EAF7BF906F2693011192933E000FA7AEA94222395F34A1F70",
-      "voraussetzung": "TA-B2d2 gemergt",
+      "voraussetzung": "TA-B2d2 und TA-B2e gemergt",
       "branch": "kreile/b2-eingang (frisch von main)",
       "lieferung": "ein PR zusammen mit AP-G",
-      "migration": "keine"
+      "migration": "supabase/migrations/<zeitstempel>_ap_r_freitext_einheiten.sql (View, PAKET Nachtrag 2 Punkt 8)",
+      "acceptance_test_quelle": "AP-R-neu-erfassen/apr_freitext_einheiten.integration.test.ts.txt",
+      "acceptance_test_ziel": "src/test/acceptance/apr_freitext_einheiten.integration.test.ts",
+      "acceptance_test_sha256": "6863EDA9CD74B806209C42C212EB81BA841B55DE6C34B1C61EBABDEB86D43243"
+    },
+    {
+      "nr": "TA-B2f",
+      "datei": "TRUST_ANCHOR_B2F.md",
+      "titel": "Mini-Anker: Pfade AP-K1 F2 + Wege-Test-Schritt ohne Bedingung",
+      "reihenfolge": 3.95,
+      "status": "in_planung",
+      "voraussetzung": "AP-G + AP-R gemergt; AP-K1 F2 lokal gebaut (Pfad-Probe)"
     },
     {
       "nr": "AP-K1",
       "titel": "Kunde: eine Kunden-Komponente (Runde 21) fuer 5.2/3.1/Eingang, Datenvertrag additiv, Dubletten live",
       "reihenfolge": 4,
-      "status": "in_planung",
-      "voraussetzung": "AP-G + AP-R gemergt; eigener Mini-Anker fuer die AP-K1-Pfade",
+      "status": "bereit",
+      "voraussetzung": "AP-G + AP-R gemergt; Mini-Anker TA-B2f (Pfade AP-K1, Wege-Test-Schritt ohne Bedingung) gemergt",
       "ordner": "AP-K1-kunde",
       "branch": "kreile/b2-eingang (frisch von main)",
       "fassung": 2,
-      "acceptance_test_quelle": "AP-K1-kunde/apk1_kunde_datenvertrag.integration.test.ts.txt",
-      "acceptance_test_ziel": "src/test/acceptance/apk1_kunde_datenvertrag.integration.test.ts",
       "migration_quelle": "AP-K1-kunde/migration.sql",
       "migration_ziel": "supabase/migrations/<zeitstempel>_b2_kunde_k1.sql",
       "spec": "a887ece362f4",
       "bauplan_sha256": "5E7B880BD9D4B35EAF7BF906F2693011192933E000FA7AEA94222395F34A1F70",
-      "offen": "Fassung 2 (Lieferant, Datenvertrag a887, customer_agreements, Zahlung, Land, Grenzen) schreibt der Planungschat; Migration und Akzeptanztest werden neu gebunden"
+      "acceptance_tests": [
+        {
+          "quelle": "AP-K1-kunde/apk1_kunde_datenvertrag.integration.test.ts.txt",
+          "ziel": "src/test/acceptance/apk1_kunde_datenvertrag.integration.test.ts",
+          "sha256": "0A2ECBEF90534F5962D1ADC84B59BD8758DD390150397B371F2F283DEB1B625F"
+        },
+        {
+          "quelle": "AP-K1-kunde/ap01b_eingang_bestandskunde_unvollstaendig.f2.integration.test.ts.txt",
+          "ziel": "src/test/acceptance/ap01b_eingang_bestandskunde_unvollstaendig.integration.test.ts",
+          "sha256": "D9C758AFBAE1A583440F85BEA5C19CC50C148B22A71C325E43D5236E5626B1ED",
+          "ersetzt": "ap01b Fassung 1 (4B67978D…)"
+        }
+      ],
+      "migration_sha256": "0AB913F24D9B5B74AD408C73FF4B874319D9C964175CA256C98F00AB1CA3A1EC",
+      "migration_probelauf": "02.11. gegen Dev mit erzwungenem Abbruch fehlerfrei; 13/13 Kunden geteilt, Land DE/CH"
     },
     {
       "nr": "AP-K2",
