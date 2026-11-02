@@ -24,21 +24,22 @@
       "datei": "TRUST_ANCHOR_B2C2.md",
       "titel": "Mini-Anker: orderIntakeCommand.ts fuer AP-01 4.3",
       "reihenfolge": 1.9,
-      "status": "bereit",
+      "status": "abgenommen",
       "branch": "codex/ta-b2c2",
-      "merge": "Owner, vor Push von AP-01 4.3"
+      "merge": "Owner, vor Push von AP-01 4.3",
+      "nachweis": "PR #160, main 8d5dd1fc"
     },
     {
       "nr": "AP-01",
       "ordner": "AP-01-eingang-geruest-paket-persoenlich",
       "titel": "Eingang-Modul + Kanal Paket/persoenlich, vollstaendiger Bestandskunde -> Auftrag; unvollstaendig -> Sperre + Kundenkarte",
       "reihenfolge": 2,
-      "status": "bereit",
-      "fassung": "4.2",
+      "status": "abgenommen",
+      "fassung": "4.3",
       "acceptance_test_ist_h18_nachweis": true,
       "migration_sha256": "308A6A1548E67147AD549923BF4C8B9C840B969A05B3447AD4A4BBBE388912B9",
       "spec": "6b782924134c",
-      "nachweis": "PR #158 (3f605239) Owner-Klicktest 01.11.: 4.1 ok bis auf Fassung 4.2 (Privat ohne Ansprechpartner, Namenserkennung->Kunde, Kunde anlegen immer sichtbar); danach Merge",
+      "nachweis": "PR #158, main b364f569; Planungschat-Lauf auf e8af9f53 (gpy0h1mex) gruen, Owner-Klicktest 02.11. bestanden",
       "voraussetzung": "TA-B2c auf main (Bauplan 6b782924, Pfade)",
       "branch": "kreile/b2-eingang (#158 weiter)",
       "acceptance_tests": [
@@ -57,24 +58,46 @@
       "bauplan_sha256": "225B7FB5D3503522D8BC972E535CE53827E4047F75932B18E52E7B905CB35305"
     },
     {
+      "nr": "TA-B2c3",
+      "datei": "TRUST_ANCHOR_B2C3.md",
+      "titel": "Mini-Anker: orderIntakeRead fuer AP-01 4.3",
+      "reihenfolge": 2.2,
+      "status": "abgenommen",
+      "nachweis": "PR #161, main 5f6fa944"
+    },
+    {
       "nr": "TA-B2c",
       "datei": "TRUST_ANCHOR_B2C.md",
       "titel": "Trust-Anchor: Bauplan 6b782924 + B2-Allowlist fuer AP-01 F4 und Folgepakete",
       "reihenfolge": 2.5,
-      "status": "bereit",
+      "status": "abgenommen",
       "voraussetzung": "AP-01 F4 lokal fertig gebaut (Probe)",
       "branch": "codex/ta-b2c",
-      "merge": "Owner, vor Push von AP-01 F4"
+      "merge": "Owner, vor Push von AP-01 F4",
+      "nachweis": "PR #159, main 8e1e03f5"
     },
     {
       "nr": "TA-B2d",
       "datei": "TRUST_ANCHOR_B2D.md",
       "titel": "Trust-Anchor: Bauplan (inkl. testmodell) + B2-Allowlist fuer AP-G und AP-K1",
       "reihenfolge": 3.5,
-      "status": "bereit",
+      "status": "ersetzt",
       "voraussetzung": "#158 gemergt; AP-G und AP-K1 lokal fertig (Pfad-Probe beider)",
       "branch": "codex/ta-b2d",
-      "merge": "Owner, vor AP-K1-PR"
+      "merge": "Owner, vor AP-K1-PR",
+      "ersetzt_durch": "TA-B2d2"
+    },
+    {
+      "nr": "TA-B2d2",
+      "datei": "TRUST_ANCHOR_B2D2.md",
+      "titel": "Trust-Anchor: Bauplan a887 (Testmodell) + Pfade AP-G und AP-R + CI-Schritt Wege-Tests",
+      "reihenfolge": 3.5,
+      "status": "bereit",
+      "spec": "a887ece362f4",
+      "bauplan_sha256": "5E7B880BD9D4B35EAF7BF906F2693011192933E000FA7AEA94222395F34A1F70",
+      "voraussetzung": "#158 gemergt (erledigt); AP-G und AP-R lokal fertig (Pfad-Probe)",
+      "branch": "codex/ta-b2d2",
+      "merge": "Owner, vor PR AP-G + AP-R"
     },
     {
       "nr": "AP-G",
@@ -82,28 +105,41 @@
       "titel": "Ausfuehrbares Testmodell: Generator BAUPLAN.testmodell -> Playwright in CI (Replay-DB)",
       "reihenfolge": 3.7,
       "status": "bereit",
-      "voraussetzung": "#158 gemergt; testmodell im BAUPLAN (Endversion-Chat) via TA-B2d",
-      "branch": "kreile/b2-eingang (frisch von main)"
+      "voraussetzung": "TA-B2d2 gemergt",
+      "branch": "kreile/b2-eingang (frisch von main)",
+      "spec": "a887ece362f4",
+      "bauplan_sha256": "5E7B880BD9D4B35EAF7BF906F2693011192933E000FA7AEA94222395F34A1F70",
+      "lieferung": "ein PR zusammen mit AP-R"
+    },
+    {
+      "nr": "AP-R",
+      "ordner": "AP-R-neu-erfassen",
+      "titel": "3.0 Neu erfassen als einziger Plus-Einstieg (U-233) + Pruefliste E45-E47",
+      "reihenfolge": 3.8,
+      "status": "bereit",
+      "spec": "a887ece362f4",
+      "bauplan_sha256": "5E7B880BD9D4B35EAF7BF906F2693011192933E000FA7AEA94222395F34A1F70",
+      "voraussetzung": "TA-B2d2 gemergt",
+      "branch": "kreile/b2-eingang (frisch von main)",
+      "lieferung": "ein PR zusammen mit AP-G",
+      "migration": "keine"
     },
     {
       "nr": "AP-K1",
       "titel": "Kunde: eine Kunden-Komponente (Runde 21) fuer 5.2/3.1/Eingang, Datenvertrag additiv, Dubletten live",
       "reihenfolge": 4,
-      "status": "bereit",
-      "voraussetzung": "AP-G gemergt (erzeugte Wege-Tests fuer kundeneu/kundebearbeiten muessen gruen werden)",
+      "status": "in_planung",
+      "voraussetzung": "AP-G + AP-R gemergt; eigener Mini-Anker fuer die AP-K1-Pfade",
       "ordner": "AP-K1-kunde",
       "branch": "kreile/b2-eingang (frisch von main)",
-      "fassung": 1,
+      "fassung": 2,
       "acceptance_test_quelle": "AP-K1-kunde/apk1_kunde_datenvertrag.integration.test.ts.txt",
       "acceptance_test_ziel": "src/test/acceptance/apk1_kunde_datenvertrag.integration.test.ts",
-      "acceptance_test_sha256": "CFFFA0314A4BA1EA50969C5070F1438E984B80FFF7BCCC128C4B81820ABC42A1",
-      "typecheck_probelauf": "01.11. Planungschat: nur neue Kundenfelder/kundeVollstaendigkeit fehlen (erwartet)",
       "migration_quelle": "AP-K1-kunde/migration.sql",
       "migration_ziel": "supabase/migrations/<zeitstempel>_b2_kunde_k1.sql",
-      "migration_sha256": "C724DA84283D94E7EEA1684EA9DF720EAA9D6356AB0C1DD290426B5F2CC380F7",
-      "migration_probelauf": "01.11. gegen Dev mit ROLLBACK fehlerfrei; 12/12 Kunden geteilt",
-      "spec": "c82bf2d6d880",
-      "bauplan_sha256": "1D2A62680FDCCBE6E40D2802D629972F77747BCAD0ED5FF7101D761FB3FF9DDA"
+      "spec": "a887ece362f4",
+      "bauplan_sha256": "5E7B880BD9D4B35EAF7BF906F2693011192933E000FA7AEA94222395F34A1F70",
+      "offen": "Fassung 2 (Lieferant, Datenvertrag a887, customer_agreements, Zahlung, Land, Grenzen) schreibt der Planungschat; Migration und Akzeptanztest werden neu gebunden"
     },
     {
       "nr": "AP-K2",
@@ -132,5 +168,6 @@
     "B3/B4",
     "B5: AP-M Mail-Herkunft, AP-O OCR, AP-N Live-Erkennung, Termin (22a/b), Was ist neu (22d)"
   ],
-  "mindmap": "https://claude.ai/artifact/A6Hh6asV2F5oecZm2GdP64 (Planungschat, Stand 01.11.)"
+  "mindmap": "https://claude.ai/artifact/A6Hh6asV2F5oecZm2GdP64 (Planungschat, Stand 01.11.)",
+  "methode": "U-234 Wege zuerst: kein Paket ohne seine Faelle im BAUPLAN-testmodell; erzeugte Wege-Tests laufen in agentur-gate (ab AP-G + AP-R)"
 }

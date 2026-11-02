@@ -213,3 +213,16 @@ Neueste vom Owner freigegebene Version (27.09.2026, `_DESIGN_VERBINDLICH/FREIGAB
 - Ursache des Buchungsfehlers (AP-01 4.3): `createOrderIntake` wies Privatkunden ohne Ansprechpartner ab. Die Regel wird in `orderIntakeCommand.ts` selbst korrigiert (eine Regel, keine zweite davor). Dafür ein Anker mit genau diesem Pfad und seinem Test.
 - Diese Änderung an `createOrderIntake` ist freigegeben (Korrektur nach `formulare.kunde.vollstaendigkeit`); weitere Änderungen dort nur nach Paketvertrag (AP-02 F2, U-225).
 - Owner-Autorisierung: Siglinder, delegiert.
+
+## U-232 · 5.2 „Kunde bearbeiten“ freigegeben (02.11.2026)
+- 5.2 wird mit AP-K1 gebaut, nach Bauplan (F5a, spec a887ece362f4) und AP-K1-Paket: Ebene oben, alle Felder der einen Kunden-Komponente, Typwechsel nach `typ_felder.wechsel`.
+- Owner: Siglinder (direkt).
+
+## U-233 · Plus-Einstieg wie Bauplan: zuerst 3.0 „Neu erfassen“ (02.11.2026)
+- Plus und Taste N öffnen 3.0 „Neu erfassen“ mit „Auftrag oder KV erfassen“ (A) und „Kunde anlegen“ (K); erst dann 3 bzw. 3.1. Aufrufe mit Herkunft (z. B. Kundenkarte „Neuer Auftrag“) bleiben direkt. Ersetzt AP-01 Fassung 4 Punkt 1 („direkter Einstieg“). Umsetzung als Paket AP-R; #158 wurde ohne diese Änderung gemergt.
+- Owner: Siglinder (direkt, „A“).
+
+## U-234 · Arbeitsweise „Wege zuerst“ (02.11.2026)
+- Name für U-229/U-230: Die Wege jeder Seite stehen als Testfälle im BAUPLAN-Abschnitt `testmodell` (Endversion-Chat); ein Generator erzeugt daraus Playwright-Tests, die in agentur-gate gegen die Replay-DB laufen (ab AP-G + AP-R). Kein Paket ohne seine Fälle; ein Paket ist fertig, wenn seine Fälle grün sind. Die Liste „erwartet rot“ darf nur schrumpfen.
+- Previews entstehen nur aus Git, nicht per CLI aus dem Arbeitsbaum.
+- Owner: Siglinder (direkt).
