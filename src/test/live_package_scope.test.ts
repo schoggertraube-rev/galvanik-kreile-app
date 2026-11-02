@@ -246,6 +246,23 @@ describe("Kreile live package scope", () => {
       baseSha: "10be0a0326a2ef003fe4a6d30cdc1f484086ceb3",
     })).toContain("TA_B2E_SCOPE:src/app/page.tsx");
 
+    for (const path of [
+      "src/lib/server/orderCardRead.ts",
+      "src/lib/server/__tests__/orderCardRead.test.ts",
+    ]) {
+      expect(checkSalesStageB2ScopeForTest({
+        files: [path],
+        mission: b2Mission,
+        branch: "kreile/b2-eingang",
+      }), path).toEqual([]);
+    }
+    const adjacentOrderCardPath = "src/lib/server/orderCardWrite.ts";
+    expect(checkSalesStageB2ScopeForTest({
+      files: [adjacentOrderCardPath],
+      mission: b2Mission,
+      branch: "kreile/b2-eingang",
+    })).toContain(`SALES_STAGE_B2_SCOPE:${adjacentOrderCardPath}`);
+
     const migration = "supabase/migrations/20261103010000_ap_r_freitext_einheiten.sql";
     expect(checkSalesStageB2ScopeForTest({
       files: [migration],

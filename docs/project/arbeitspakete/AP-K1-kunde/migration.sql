@@ -1,6 +1,6 @@
--- AP-K1 Kunde, Fassung 2 (Planungschat 02.11.2026): Datenvertrag customers nach BAUPLAN spec a887ece362f4
+-- AP-EIN Teil 1 Kunde (aus AP-K1 F2, Planungschat 02.11.2026): Datenvertrag customers nach BAUPLAN spec 21d0347a3319
 -- formulare.kunde.daten + A-87 (Land als Schluessel) + K5 (Zahlungsbedingung vorkasse|bar|rechnung, Ziel getrennt)
--- + Absprachen (customer_agreements) + Lieferant + Adressverzeichnis (leer, Import AP-K2).
+-- + auto_info/vorrang (standard_fuer_auftraege) + Lieferant + Adressverzeichnis (leer, Import AP-K2). Absprachen: eigener Teil AP-ABS.
 -- Ersetzt Fassung 1 (nie auf Dev oder main). Keine Spalte geloescht. Einzige nicht-additive Aenderung: die zwei
 -- CHECK-Regeln customers_payment_preference_s1_chk und customers_invoice_terms_s1_chk werden durch K1-Regeln ersetzt.
 -- Codex legt diese Datei bytegleich als supabase/migrations/<zeitstempel>_b2_kunde_k1.sql an.
@@ -18,7 +18,9 @@ ALTER TABLE public.customers
   ADD COLUMN IF NOT EXISTS iban text,
   ADD COLUMN IF NOT EXISTS zahlungsziel_tage integer,
   ADD COLUMN IF NOT EXISTS address_status text,
-  ADD COLUMN IF NOT EXISTS address_checked_at timestamptz;
+  ADD COLUMN IF NOT EXISTS address_checked_at timestamptz,
+  ADD COLUMN IF NOT EXISTS auto_info boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS vorrang boolean NOT NULL DEFAULT false;
 
 COMMENT ON COLUMN public.customers.contact_person IS 'Stillgelegt (AP-K1): nur lesend, App schreibt und zeigt sie nicht; Werte in salutation, first_name, last_name, contact_role.';
 COMMENT ON COLUMN public.customers.shipping_preference IS 'Stillgelegt (AP-K1): ersetzt durch handover_preference (pickup|shipping|NULL); App liest und schreibt sie nicht.';
@@ -157,29 +159,7 @@ ALTER TABLE public.customers
     (type = 'lieferant' AND payment_preference IS NULL AND vat_id IS NULL AND billing_email IS NULL AND handover_preference IS NULL)
     OR (type <> 'lieferant' AND iban IS NULL AND zahlungsziel_tage IS NULL));
 
--- 5. Absprachen & Eigenheiten (5.2): geordnete Liste, hoechstens 20, geschrieben nur ueber den Kunden-Schreibweg
-CREATE TABLE IF NOT EXISTS public.customer_agreements (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id text NOT NULL,
-  customer_id text NOT NULL REFERENCES public.customers(id) ON DELETE RESTRICT,
-  position integer NOT NULL CHECK (position BETWEEN 1 AND 20),
-  bezeichnung text NOT NULL CHECK (char_length(btrim(bezeichnung)) BETWEEN 1 AND 40),
-  wert text NOT NULL CHECK (char_length(btrim(wert)) BETWEEN 1 AND 200),
-  geld boolean NOT NULL DEFAULT false,
-  hinweis boolean NOT NULL DEFAULT false,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now(),
-  CONSTRAINT customer_agreements_position_uidx UNIQUE (tenant_id, customer_id, position) DEFERRABLE INITIALLY DEFERRED
-);
-CREATE INDEX IF NOT EXISTS customer_agreements_customer_idx ON public.customer_agreements (tenant_id, customer_id, position);
-ALTER TABLE public.customer_agreements ENABLE ROW LEVEL SECURITY;
-CREATE POLICY customer_agreements_tenant_isolation ON public.customer_agreements
-  USING (tenant_id = nullif(btrim(current_setting('app.tenant_id', true)), ''))
-  WITH CHECK (tenant_id = nullif(btrim(current_setting('app.tenant_id', true)), ''));
-REVOKE ALL ON TABLE public.customer_agreements FROM PUBLIC, anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.customer_agreements TO service_role;
-
--- 6. Adressverzeichnis (E15): mandantenfreie Referenzdaten, nur lesend fuer die App. Import folgt in AP-K2.
+-- 5. Adressverzeichnis (E15): mandantenfreie Referenzdaten, nur lesend fuer die App. Import folgt in AP-K2.
 CREATE TABLE IF NOT EXISTS public.address_directory (
   id bigserial PRIMARY KEY,
   country text NOT NULL CHECK (country IN ('DE', 'AT', 'CH')),

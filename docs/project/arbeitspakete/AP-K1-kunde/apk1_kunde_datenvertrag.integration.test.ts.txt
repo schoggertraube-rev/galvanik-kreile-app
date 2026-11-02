@@ -1,7 +1,7 @@
 // @vitest-environment node
-// AP-K1 Akzeptanztest, Fassung 2 (Planungschat 02.11.2026, BAUPLAN spec a887ece362f4): Datenvertrag Kunde,
+// AP-EIN Teil 1 Kunde, Akzeptanztest (aus AP-K1 F2, Planungschat 02.11.2026, BAUPLAN spec 21d0347a3319): Datenvertrag Kunde,
 // ein Schreibweg (createCustomerAction / updateCustomerAction), Land als Schluessel (A-87), Zahlungsbedingung (K5),
-// Lieferant, Absprachen, eine Vollstaendigkeitsfunktion. Planungschat-Vertrag (U-221). Codex kopiert diese Datei
+// Lieferant, auto_info/vorrang, eine Vollstaendigkeitsfunktion. Planungschat-Vertrag (U-221). Codex kopiert diese Datei
 // bytegleich nach src/test/acceptance/apk1_kunde_datenvertrag.integration.test.ts und aendert sie nie.
 // Harness wie AP-01/H18. Adressverzeichnis ist in der Replay-DB leer -> Anschrift "ungeprueft" (address_status NULL).
 
@@ -134,13 +134,14 @@ type Row = {
   house_number: string | null; zip_code: string | null; city: string | null; country: string | null;
   billing_email: string | null; website: string | null; address_status: string | null; customer_number: string | null;
   payment_preference: string | null; handover_preference: string | null; iban: string | null; zahlungsziel_tage: number | null;
+  auto_info: boolean; vorrang: boolean;
 };
 
 async function zeile(customerId: string): Promise<Row | undefined> {
   const [row] = await sql<Row[]>`
     SELECT type, name, company_name, salutation, first_name, last_name, contact_role, contact_person, street,
            house_number, zip_code, city, country, billing_email, website, address_status, customer_number,
-           payment_preference, handover_preference, iban, zahlungsziel_tage
+           payment_preference, handover_preference, iban, zahlungsziel_tage, auto_info, vorrang
     FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${customerId}
   `;
   return row;
@@ -151,13 +152,6 @@ async function anzahl(email: string): Promise<number> {
     SELECT count(*)::int AS n FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND email=${email}
   `;
   return row?.n ?? -1;
-}
-
-async function absprachen(customerId: string) {
-  return sql<{ position: number; bezeichnung: string; wert: string; geld: boolean; hinweis: boolean }[]>`
-    SELECT position, bezeichnung, wert, geld, hinweis FROM public.customer_agreements
-    WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${customerId} ORDER BY position
-  `;
 }
 
 function firma(email: string) {
@@ -227,6 +221,7 @@ describe("AP-K1 Fassung 2: Datenvertrag, ein Schreibweg", () => {
       street: "Industriestrasse", house_number: "7", zip_code: "70176", city: "Stuttgart", country: "DE",
       billing_email: input.billingEmail, website: "apk1-beschichtung.example", address_status: null,
       payment_preference: "vorkasse", handover_preference: "shipping", iban: null, zahlungsziel_tage: null,
+      auto_info: true, vorrang: false,
     });
     expect(row?.customer_number).toMatch(/^K-\d{4}-\d{4,}$/);
   });
@@ -335,53 +330,13 @@ describe("AP-K1 Fassung 2: Datenvertrag, ein Schreibweg", () => {
     const customerId = created.receipt.customerId;
     const updated = await withSession(geldLogin, () => actions.updateCustomerAction({
       ...input, clientEventId: randomUUID(), customerId, contactRole: "Geschaeftsfuehrung",
-      zipCode: "3013", city: "Bern", country: "CH", notes: "APK1 Notiz", agreements: [],
+      zipCode: "3013", city: "Bern", country: "CH", notes: "APK1 Notiz", autoInfo: false, vorrang: true,
     }));
     expect(updated.code).toBe("OK");
     expect(await zeile(customerId)).toMatchObject({
       contact_role: "Geschaeftsfuehrung", zip_code: "3013", city: "Bern", country: "CH", contact_person: null,
-      address_status: null,
+      address_status: null, auto_info: false, vorrang: true,
     });
-  });
-
-  it("Absprachen: geordnete Liste; Geld-Eintraege bleiben fuer Logins ohne geld unveraendert an ihrer Position; hoechstens 20", async () => {
-    const { createCustomerAction, updateCustomerAction } = await import("@/app/actions/customers.actions");
-    const input = firma(`apk1-abspr-${RUN}@example.invalid`);
-    const created = await withSession(geldLogin, () => createCustomerAction(input));
-    if (created.code !== "OK") throw new Error(`APK1_ABSPR_SEED_FAILED:${created.code}:${created.message}`);
-    const customerId = created.receipt.customerId;
-
-    const mitGeld = await withSession(geldLogin, () => updateCustomerAction({
-      ...input, clientEventId: randomUUID(), customerId,
-      agreements: [
-        { bezeichnung: "Preis", wert: "Rahmenpreis 2026 je kg", geld: true, hinweis: false },
-        { bezeichnung: "Verpackung", wert: "nur Gitterbox", geld: false, hinweis: true },
-      ],
-    }));
-    expect(mitGeld.code).toBe("OK");
-    expect(await absprachen(customerId)).toEqual([
-      { position: 1, bezeichnung: "Preis", wert: "Rahmenpreis 2026 je kg", geld: true, hinweis: false },
-      { position: 2, bezeichnung: "Verpackung", wert: "nur Gitterbox", geld: false, hinweis: true },
-    ]);
-
-    const ohnePaymentInput = Object.fromEntries(Object.entries(input).filter(([key]) => key !== "paymentPreference")) as Omit<typeof input, "paymentPreference">;
-    const ohne = await withSession(ohneGeld, () => updateCustomerAction({
-      ...ohnePaymentInput, clientEventId: randomUUID(), customerId,
-      agreements: [{ bezeichnung: "Anlieferung", wert: "nur vormittags", geld: false, hinweis: false }],
-    }));
-    expect(ohne.code).toBe("OK");
-    expect(await absprachen(customerId)).toEqual([
-      { position: 1, bezeichnung: "Preis", wert: "Rahmenpreis 2026 je kg", geld: true, hinweis: false },
-      { position: 2, bezeichnung: "Anlieferung", wert: "nur vormittags", geld: false, hinweis: false },
-    ]);
-    expect(await zeile(customerId)).toMatchObject({ payment_preference: "vorkasse" });
-
-    const zuViele = await withSession(geldLogin, () => updateCustomerAction({
-      ...input, clientEventId: randomUUID(), customerId,
-      agreements: Array.from({ length: 21 }, (_, i) => ({ bezeichnung: `A${i + 1}`, wert: "x", geld: false, hinweis: false })),
-    }));
-    expect(zuViele.code).toBe("VALIDATION_ERROR");
-    expect((await absprachen(customerId)).length).toBe(2);
   });
 });
 

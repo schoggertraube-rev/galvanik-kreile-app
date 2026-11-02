@@ -5,7 +5,7 @@
   "mainBaseSha": "10be0a0326a2ef003fe4a6d30cdc1f484086ceb3",
   "authorizedBy": "Siglinder",
   "authorizedAt": "2026-11-02",
-  "scope": "AP-R Pflicht-Einheit je Freitext-Position: genau ein additiver View-Migrationspfad",
-  "probeCandidateSha": "a4ab055a3c03830aa10a1c239c9b7ad8397979f4",
+  "scope": "AP-R Pflicht-Einheit je Freitext-Position: View-Migration und kanonischer Auftragskarten-Leser",
+  "probeCandidateSha": "d8deac8608221399d5c73bc776fee1ca1e1d9741",
   "probeResult": "PASS"
 }

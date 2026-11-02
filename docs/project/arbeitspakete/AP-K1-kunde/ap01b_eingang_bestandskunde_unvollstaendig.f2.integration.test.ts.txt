@@ -229,7 +229,6 @@ describe("AP-01 Fassung 4: Bestandskunde fuer den Auftrag unvollstaendig", () =>
       iban: null,
       paymentTermDays: null,
       notes: SEED.notes,
-      agreements: [],
     }));
     expect(corrected.code).toBe("OK");
     expect(await kunde()).toEqual({ zip_code: "3013", city: "Bern", country: "CH" });

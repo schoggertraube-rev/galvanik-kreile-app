@@ -194,8 +194,8 @@ const TA_B2E_VALUES = Object.freeze({
   mainBaseSha: TA_B2E_BASE_SHA,
   authorizedBy: "Siglinder",
   authorizedAt: "2026-11-02",
-  scope: "AP-R Pflicht-Einheit je Freitext-Position: genau ein additiver View-Migrationspfad",
-  probeCandidateSha: "a4ab055a3c03830aa10a1c239c9b7ad8397979f4",
+  scope: "AP-R Pflicht-Einheit je Freitext-Position: View-Migration und kanonischer Auftragskarten-Leser",
+  probeCandidateSha: "d8deac8608221399d5c73bc776fee1ca1e1d9741",
   probeResult: "PASS",
 });
 const PR154_REBASELINE_BRANCH = "kreile/s1-p2-eingang";
@@ -406,6 +406,8 @@ const SALES_STAGE_B2_EXACT_ALLOWLIST = Object.freeze([
   "src/lib/server/commands/__tests__/orderIntakeCommand.test.ts",
   "src/lib/server/orderIntakeRead.ts",
   "src/lib/server/__tests__/orderIntakeRead.test.ts",
+  "src/lib/server/orderCardRead.ts",
+  "src/lib/server/__tests__/orderCardRead.test.ts",
   "src/lib/server/intakeDraft.ts",
   "src/lib/server/todayDashboard.ts",
   "src/modules/fundament/featureCatalog.ts",
@@ -1656,6 +1658,23 @@ export function runSelftest(root = process.cwd()) {
   const taB2eOutside = checkTaB2eScope(["src/app/page.tsx"], taB2cMission, TA_B2E_BRANCH, TA_B2E_BASE_SHA);
   if (!taB2eOutside.includes("TA_B2E_SCOPE:src/app/page.tsx")) {
     throw new Error(`TA-B2e accepted an out-of-anchor file: ${taB2eOutside.join(" | ")}`);
+  }
+  for (const allowed of [
+    "src/lib/server/orderCardRead.ts",
+    "src/lib/server/__tests__/orderCardRead.test.ts",
+  ]) {
+    const allowedErrors = checkSalesStageB2Scope([allowed], [], salesStageMission, SALES_STAGE_B2_BRANCH);
+    if (allowedErrors.length > 0) throw new Error(`TA-B2e path rejected (${allowed}): ${allowedErrors.join(" | ")}`);
+  }
+  const adjacentOrderCardPath = "src/lib/server/orderCardWrite.ts";
+  const adjacentOrderCardErrors = checkSalesStageB2Scope(
+    [adjacentOrderCardPath],
+    [],
+    salesStageMission,
+    SALES_STAGE_B2_BRANCH,
+  );
+  if (!adjacentOrderCardErrors.includes(`SALES_STAGE_B2_SCOPE:${adjacentOrderCardPath}`)) {
+    throw new Error(`TA-B2e accepted an adjacent order-card path: ${adjacentOrderCardErrors.join(" | ")}`);
   }
   const apRUnitMigration = "supabase/migrations/20261103010000_ap_r_freitext_einheiten.sql";
   const apRUnitMigrationErrors = checkSalesStageB2Scope(
