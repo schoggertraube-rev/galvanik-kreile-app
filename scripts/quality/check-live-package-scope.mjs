@@ -194,8 +194,8 @@ const TA_B2E_VALUES = Object.freeze({
   mainBaseSha: TA_B2E_BASE_SHA,
   authorizedBy: "Siglinder",
   authorizedAt: "2026-11-02",
-  scope: "AP-R Pflicht-Einheit je Freitext-Position: View-Migration, kanonischer Auftragskarten-Leser und lokale Webfonts",
-  probeCandidateSha: "d8deac8608221399d5c73bc776fee1ca1e1d9741",
+  scope: "AP-R Pflicht-Einheit je Freitext-Position: View-Migration, kanonischer Auftragskarten-Leser, lokale Webfonts und schrumpfende Modul-Baseline",
+  probeCandidateSha: "b3823e11e67dd9ca1b2a194cc8db360e58011d46",
   probeResult: "PASS",
 });
 const PR154_REBASELINE_BRANCH = "kreile/s1-p2-eingang";
@@ -378,6 +378,7 @@ const TA_B2E_REQUIRED_FILES = Object.freeze([
 ]);
 const SALES_STAGE_B2_EXACT_ALLOWLIST = Object.freeze([
   ".github/workflows/agentur-gate.yml",
+  "quality/module-gates-baseline.json",
   "docs/delivery/ABGABE_B2.md",
   "docs/delivery/ABGABE_AP-01.md",
   "docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json",
@@ -413,6 +414,8 @@ const SALES_STAGE_B2_EXACT_ALLOWLIST = Object.freeze([
   "src/lib/server/intakeDraft.ts",
   "src/lib/server/todayDashboard.ts",
   "src/modules/fundament/featureCatalog.ts",
+  "src/modules/orders/__tests__/OrderSurfaces.v8.test.tsx",
+  "src/modules/orders/ui/OrderCardView.tsx",
   "src/modules/suche/ui/SearchDialog.tsx",
   "src/modules/werkstatt/ui/WerkstattView.singleProjection.test.tsx",
   "src/modules/werkstatt/ui/WerkstattView.tsx",
@@ -1669,6 +1672,9 @@ export function runSelftest(root = process.cwd()) {
     "src/app/telefonnotiz/layout.tsx",
     "src/app/fonts/localFonts.ts",
     "src/app/fonts/fraunces-latin-variable.woff2",
+    "quality/module-gates-baseline.json",
+    "src/modules/orders/__tests__/OrderSurfaces.v8.test.tsx",
+    "src/modules/orders/ui/OrderCardView.tsx",
   ]) {
     const allowedErrors = checkSalesStageB2Scope([allowed], [], salesStageMission, SALES_STAGE_B2_BRANCH);
     if (allowedErrors.length > 0) throw new Error(`TA-B2e path rejected (${allowed}): ${allowedErrors.join(" | ")}`);
@@ -1692,6 +1698,26 @@ export function runSelftest(root = process.cwd()) {
   );
   if (!adjacentFontErrors.includes(`SALES_STAGE_B2_SCOPE:${adjacentFontPath}`)) {
     throw new Error(`TA-B2e accepted an adjacent font path: ${adjacentFontErrors.join(" | ")}`);
+  }
+  const adjacentBaselinePath = "quality/other-module-gates-baseline.json";
+  const adjacentBaselineErrors = checkSalesStageB2Scope(
+    [adjacentBaselinePath],
+    [],
+    salesStageMission,
+    SALES_STAGE_B2_BRANCH,
+  );
+  if (!adjacentBaselineErrors.includes(`SALES_STAGE_B2_SCOPE:${adjacentBaselinePath}`)) {
+    throw new Error(`TA-B2e accepted an adjacent baseline path: ${adjacentBaselineErrors.join(" | ")}`);
+  }
+  const adjacentOrderUiPath = "src/modules/orders/ui/OrderListView.tsx";
+  const adjacentOrderUiErrors = checkSalesStageB2Scope(
+    [adjacentOrderUiPath],
+    [],
+    salesStageMission,
+    SALES_STAGE_B2_BRANCH,
+  );
+  if (!adjacentOrderUiErrors.includes(`SALES_STAGE_B2_SCOPE:${adjacentOrderUiPath}`)) {
+    throw new Error(`TA-B2e accepted an adjacent order UI path: ${adjacentOrderUiErrors.join(" | ")}`);
   }
   const apRUnitMigration = "supabase/migrations/20261103010000_ap_r_freitext_einheiten.sql";
   const apRUnitMigrationErrors = checkSalesStageB2Scope(

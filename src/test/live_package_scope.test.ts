@@ -253,6 +253,9 @@ describe("Kreile live package scope", () => {
       "src/app/telefonnotiz/layout.tsx",
       "src/app/fonts/localFonts.ts",
       "src/app/fonts/fraunces-latin-variable.woff2",
+      "quality/module-gates-baseline.json",
+      "src/modules/orders/__tests__/OrderSurfaces.v8.test.tsx",
+      "src/modules/orders/ui/OrderCardView.tsx",
     ]) {
       expect(checkSalesStageB2ScopeForTest({
         files: [path],
@@ -272,6 +275,18 @@ describe("Kreile live package scope", () => {
       mission: b2Mission,
       branch: "kreile/b2-eingang",
     })).toContain(`SALES_STAGE_B2_SCOPE:${adjacentFontPath}`);
+    const adjacentBaselinePath = "quality/other-module-gates-baseline.json";
+    expect(checkSalesStageB2ScopeForTest({
+      files: [adjacentBaselinePath],
+      mission: b2Mission,
+      branch: "kreile/b2-eingang",
+    })).toContain(`SALES_STAGE_B2_SCOPE:${adjacentBaselinePath}`);
+    const adjacentOrderUiPath = "src/modules/orders/ui/OrderListView.tsx";
+    expect(checkSalesStageB2ScopeForTest({
+      files: [adjacentOrderUiPath],
+      mission: b2Mission,
+      branch: "kreile/b2-eingang",
+    })).toContain(`SALES_STAGE_B2_SCOPE:${adjacentOrderUiPath}`);
 
     const migration = "supabase/migrations/20261103010000_ap_r_freitext_einheiten.sql";
     expect(checkSalesStageB2ScopeForTest({
