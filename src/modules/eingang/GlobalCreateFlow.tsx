@@ -52,6 +52,7 @@ import type { IntakeTextRecognition } from "@/lib/server/intakeTextRecognition";
 import type { IntakeSuggestions, IntakeSuggestionsInput } from "@/lib/intakeSuggestionsContract";
 import styles from "@/components/layout/TargetShell.module.css";
 import { findRecognizedCustomers } from "./customerRecognition";
+import { ORDER_INTAKE_FREE_TEXT_UNITS } from "./orderIntakeUnits";
 import { GLOBAL_CREATE_OPEN_EVENT, type GlobalCreateIntent, type GlobalCreateRequest } from "./requestGlobalCreate";
 
 export { requestGlobalCreate } from "./requestGlobalCreate";
@@ -332,7 +333,6 @@ const EXECUTION_OPTIONS: Array<{ wert: IntakeExecution; text: string }> = [
   { wert: "blau_passiviert", text: "blau passiviert" },
   { wert: "offen", text: "noch zu klären" },
 ];
-const INTAKE_UNIT_OPTIONS = ["Stück", "kg", "dm²", "Satz", "Std."] as const;
 const subscribeHandy = (notify: () => void) => {
   if (typeof window.matchMedia !== "function") return () => undefined;
   const query = window.matchMedia(HANDY_QUERY);
@@ -2245,7 +2245,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                       <Eingabe aria-label="Menge" data-spec-id="eingang.menge" type="number" min="0.001" max="99999" step={item.unit === "Stück" || item.unit === "Satz" ? "1" : "0.001"} aria-invalid={intakeQuantityError(item) !== null} value={item.quantity} onChange={(event) => updateDirectItem(item.key, "quantity", event.target.value)} />
                       {intakeQuantityError(item) ? <span className="kr-feld-fehler" data-spec-id="eingang.menge.fehler">{intakeQuantityError(item)}</span> : null}
                     </></Feld>
-                    <Feld label="Einheit"><Auswahl data-spec-id="eingang.einheit" required value={item.unit ?? ""} onChange={(event) => setDirectPositionUnit(item.key, event.target.value)} optionen={[{ wert: "", text: "Bitte wählen" }, ...INTAKE_UNIT_OPTIONS.map((unit) => ({ wert: unit, text: unit }))]} /></Feld>
+                    <Feld label="Einheit"><Auswahl data-spec-id="eingang.einheit" required value={item.unit ?? ""} onChange={(event) => setDirectPositionUnit(item.key, event.target.value)} optionen={[{ wert: "", text: "Bitte wählen" }, ...ORDER_INTAKE_FREE_TEXT_UNITS.map((unit) => ({ wert: unit, text: unit }))]} /></Feld>
                     <Feld label="Oberfläche" className="kr-pos-oberflaeche"><Auswahl data-spec-id="eingang.oberflaeche" required value={item.surfaceRequested} onChange={(event) => setDirectPositionSurface(item.key, event.target.value)} optionen={[{ wert: "", text: "Bitte wählen" }, ...surfaceOptions.map((surface) => ({ wert: surface, text: surface }))]} /></Feld>
                     <Feld label="Ausführung"><Auswahl data-spec-id="eingang.position.ausfuehrung" value={item.executionRequested} onChange={(event) => updateDirectItem(item.key, "executionRequested", event.target.value)} optionen={EXECUTION_OPTIONS} /></Feld>
                     <Feld label="Material"><Eingabe data-spec-id="eingang.position.material" maxLength={120} value={item.material} onChange={(event) => updateDirectItem(item.key, "material", event.target.value)} /></Feld>

@@ -1,9 +1,10 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
+import { isOrderIntakeFreeTextUnit } from "@/modules/eingang/public";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
-import { isOrderIntakeFreeTextUnit, type OrderIntakeExecutionRequested, type OrderIntakeReceipt, type OrderIntakeReceiptItem, type OrderIntakeSource, type OrderIntakeTermStatus } from "@/lib/server/commands/orderIntakeCommand";
+import type { OrderIntakeExecutionRequested, OrderIntakeReceipt, OrderIntakeReceiptItem, OrderIntakeSource, OrderIntakeTermStatus } from "@/lib/server/commands/orderIntakeCommand";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;

@@ -1,6 +1,4 @@
--- H18.8d: an immutable intake receipt remains valid after a later, receipted
--- payment-mode change. The current mode must still equal the intake event or
--- the newest canonical PAYMENT_MODE_SET_V1 receipt.
+-- AP-R: Freitext-Positionen mit Einheit (Stück, kg, dm², Satz, Std.) im Beleg gültig; sonst bytegleich zu 20261029231500.
 
 CREATE OR REPLACE VIEW private.v_order_intake_receipts_v1
 WITH (security_invoker = true) AS

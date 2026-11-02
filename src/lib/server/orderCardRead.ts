@@ -1,6 +1,7 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
+import { isOrderIntakeFreeTextUnit } from "@/modules/eingang/public";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type {
   OrderTaskAssigneeOption,
@@ -299,7 +300,10 @@ export function mapOrderCardIntakeItems(value: unknown): OrderCardItem[] {
       && [0, 700, 1900].includes(Number(entry.vatRateBasisPoints));
     const currentFreeTextItem = supportedCurrentShape
       && entry.catalogServiceId === null
-      && entry.unit === null
+      && (entry.unit === null || (
+        typeof entry.unit === "string"
+        && isOrderIntakeFreeTextUnit(entry.unit)
+      ))
       && entry.unitPriceCents === null
       && entry.vatRateBasisPoints === null;
     if (
@@ -338,7 +342,7 @@ export function mapOrderCardIntakeItems(value: unknown): OrderCardItem[] {
       material: entry.material,
       surfaceRequested: entry.surfaceRequested,
       catalogServiceId: currentCatalogItem ? entry.catalogServiceId as string : null,
-      unit: currentCatalogItem ? entry.unit as string : null,
+      unit: currentCatalogItem || currentFreeTextItem ? entry.unit as string | null : null,
       unitPriceCents: currentCatalogItem ? toSafeInteger(entry.unitPriceCents, "ORDER_CARD_ITEM_PRICE_INVALID") : null,
       vatRateBasisPoints: currentCatalogItem ? toSafeInteger(entry.vatRateBasisPoints, "ORDER_CARD_ITEM_VAT_INVALID") as 0 | 700 | 1900 : null,
       finished: false,
@@ -361,6 +365,7 @@ function mapCurrentOrderItems(rows: CurrentItemRow[], positions: Map<string, num
       || quantity < 1 || quantity > 1_000_000 || !row.surface_requested || row.surface_requested.trim() !== row.surface_requested
       || row.surface_requested.length < 2 || row.surface_requested.length > 160
       || (row.catalog_service_id !== null && !UUID_PATTERN.test(row.catalog_service_id))
+      || (row.catalog_service_id === null && row.unit !== null && !isOrderIntakeFreeTextUnit(row.unit))
       || (row.vat_rate_basis_points !== null && ![0, 700, 1900].includes(row.vat_rate_basis_points))) throw new Error("ORDER_CARD_CURRENT_ITEM_INVALID");
     return {
       id: row.id, position, name: row.name, quantity, material: row.material,

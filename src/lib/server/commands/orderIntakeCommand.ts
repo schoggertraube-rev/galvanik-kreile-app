@@ -6,6 +6,7 @@ import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { intakePaymentContract, type PaymentMode } from "@/lib/server/paymentContract";
 import { getOrderReadiness } from "@/modules/customers/public";
+import { isOrderIntakeFreeTextUnit } from "@/modules/eingang/public";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 
 const EVENT_TYPE = "ORDER_INTAKE_CREATED_V1";
@@ -15,18 +16,12 @@ const EVENT_STATION = "wareneingang" as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const EXECUTION_REQUESTED_VALUES = ["hochglanz", "glaenzend", "matt", "gelb_passiviert", "blau_passiviert", "offen"] as const;
-export const ORDER_INTAKE_FREE_TEXT_UNITS = ["Stück", "kg", "dm²", "Satz", "Std."] as const;
 const TERM_STATUS_VALUES = ["wunsch", "bestaetigt", "verschoben"] as const;
 const INTAKE_SOURCE_VALUES = ["persoenlich", "versand", "abholung_firma", "anfrage_mail", "anfrage_telefon"] as const;
 
 export type OrderIntakeExecutionRequested = typeof EXECUTION_REQUESTED_VALUES[number];
 export type OrderIntakeTermStatus = typeof TERM_STATUS_VALUES[number];
 export type OrderIntakeSource = typeof INTAKE_SOURCE_VALUES[number];
-
-/** One contract for free-text intake positions at write and receipt-read time. */
-export function isOrderIntakeFreeTextUnit(value: string): value is typeof ORDER_INTAKE_FREE_TEXT_UNITS[number] {
-  return (ORDER_INTAKE_FREE_TEXT_UNITS as readonly string[]).includes(value);
-}
 
 export type OrderIntakeItemInput = {
   catalogServiceId?: string | null;

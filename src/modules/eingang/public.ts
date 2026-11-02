@@ -7,6 +7,11 @@ export type {
   GlobalCreateRequest,
 } from "./requestGlobalCreate";
 export { GlobalCreateFlow } from "./GlobalCreateFlow";
+export {
+  ORDER_INTAKE_FREE_TEXT_UNITS,
+  isOrderIntakeFreeTextUnit,
+} from "./orderIntakeUnits";
+export type { OrderIntakeFreeTextUnit } from "./orderIntakeUnits";
 export { findRecognizedCustomers } from "./customerRecognition";
 export type { RecognizedCustomerSuggestions } from "./customerRecognition";
 export type {
