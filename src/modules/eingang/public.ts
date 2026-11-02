@@ -12,11 +12,6 @@ export {
   isOrderIntakeFreeTextUnit,
 } from "./orderIntakeUnits";
 export type { OrderIntakeFreeTextUnit } from "./orderIntakeUnits";
-export {
-  ORDER_INTAKE_SURFACES,
-  orderIntakeSurfaceKey,
-  orderIntakeSurfaceLabel,
-} from "./orderIntakeSurfaces";
 export { findRecognizedCustomers } from "./customerRecognition";
 export type { RecognizedCustomerSuggestions } from "./customerRecognition";
 export type {
