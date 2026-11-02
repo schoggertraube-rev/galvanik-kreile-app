@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "package": "B2-EINGANG-APG-APR-ANCHOR",
+  "headBranch": "codex/ta-b2d2",
+  "mainBaseSha": "b364f569524a636a1aceefac0fb1934f7f24f556",
+  "authorizedBy": "Siglinder",
+  "authorizedAt": "2026-11-02",
+  "scope": "Bauplan a887ece362f4, AP-G-Testmodell, AP-R Neu erfassen und Replay-Wege-Tests",
+  "bauplanSha256": "5E7B880BD9D4B35EAF7BF906F2693011192933E000FA7AEA94222395F34A1F70",
+  "probeCandidateSha": "d5d47a356b42c581fc96ca010b9f82f6b3811584",
+  "probeResult": "PASS"
+}

@@ -101,6 +101,20 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ""
         run: npx vitest run src/test/acceptance/ --passWithNoTests --maxWorkers=1 --no-file-parallelism
 
+      - name: Generated BAUPLAN flows against replay DB
+        if: ${{ hashFiles('scripts/spec/generate-flow-tests.mjs') != '' || hashFiles('e2e/generated/playwright.config.ts') != '' }}
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYXNlLWRlbW8iLCJyb2xlIjoiYW5vbiIsImV4cCI6MTk4MzgxMjk5Nn0.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+          APP_SESSION_SECRET: generated-flow-tests-local-only
+          SUPABASE_SERVICE_ROLE_KEY: ""
+        run: |
+          npm run build
+          npx playwright install --with-deps chromium
+          node scripts/spec/generate-flow-tests.mjs --check
+          npx playwright test -c e2e/generated/playwright.config.ts
+
       - name: Stop local database
         if: always()
         run: ./node_modules/.bin/supabase stop --no-backup

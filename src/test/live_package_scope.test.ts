@@ -6,6 +6,7 @@ import {
   checkTaB2c2ScopeForTest,
   checkTaB2c3ScopeForTest,
   checkTaB2cScopeForTest,
+  checkTaB2d2ScopeForTest,
   runSelftest,
 } from "../../scripts/quality/check-live-package-scope.mjs";
 
@@ -63,6 +64,27 @@ const ap01ExactPaths = [
   "src/ui/kr/AppShell.tsx",
   "src/ui/kr/GlobalesPlus.tsx",
   "supabase/migrations/20261031212320_ap01_intake_item.sql",
+] as const;
+
+const apgAprExactPaths = [
+  ".github/workflows/agentur-gate.yml",
+  "e2e/generated/_erwartet_rot.json",
+  "e2e/generated/_harness.ts",
+  "e2e/generated/_model.ts",
+  "e2e/generated/_seed.sql",
+  "e2e/generated/eingang.flow.spec.ts",
+  "e2e/generated/kundebearbeiten.flow.spec.ts",
+  "e2e/generated/kundeneu.flow.spec.ts",
+  "e2e/generated/playwright.config.ts",
+  "scripts/spec/generate-flow-tests.mjs",
+  "src/components/layout/KreileAppShell.tsx",
+  "src/components/layout/__tests__/path1GlobalCreateFlow.realRender.test.tsx",
+  "src/lib/server/commands/__tests__/orderIntakeCommand.test.ts",
+  "src/lib/server/commands/__tests__/orderIntakeCommand.test.ts",
+  "src/modules/eingang/GlobalCreateFlow.tsx",
+  "src/modules/eingang/requestGlobalCreate.ts",
+  "src/ui/kr/Dialog.tsx",
+  "src/ui/kr/GlobalesPlus.tsx",
 ] as const;
 
 describe("Kreile live package scope", () => {
@@ -184,6 +206,47 @@ describe("Kreile live package scope", () => {
     const adjacent = "src/lib/server/quoteRead.ts";
     expect(checkSalesStageB2ScopeForTest({ files: [adjacent], mission: b2Mission, branch: "kreile/b2-eingang" }))
       .toContain(`SALES_STAGE_B2_SCOPE:${adjacent}`);
+  });
+
+  it("allows only the TA-B2d2 anchor paths on its pinned main base", () => {
+    expect(checkTaB2d2ScopeForTest({
+      files: [
+        ".github/workflows/agentur-gate.yml",
+        "docs/project/arbeitspakete/TRUST_ANCHOR_B2D2.md",
+        "docs/project/endversion/codex/BAUPLAN.json",
+        "docs/evidence/live-line/b2/TRUST_ANCHOR_B2D2.json",
+      ],
+      mission: b2cAnchorMission,
+      branch: "codex/ta-b2d2",
+      baseSha: "b364f569524a636a1aceefac0fb1934f7f24f556",
+    })).toEqual([]);
+    expect(checkTaB2d2ScopeForTest({
+      files: ["src/app/page.tsx"],
+      mission: b2cAnchorMission,
+      branch: "codex/ta-b2d2",
+      baseSha: "b364f569524a636a1aceefac0fb1934f7f24f556",
+    })).toContain("TA_B2D2_SCOPE:src/app/page.tsx");
+  });
+
+  it("accepts every AP-G/AP-R candidate path and no adjacent product path", () => {
+    expect(checkSalesStageB2ScopeForTest({
+      files: [...apgAprExactPaths],
+      mission: b2Mission,
+      branch: "kreile/b2-eingang",
+    })).toEqual([]);
+    for (const file of apgAprExactPaths) {
+      expect(checkSalesStageB2ScopeForTest({
+        files: [file],
+        mission: b2Mission,
+        branch: "kreile/b2-eingang",
+      }), file).toEqual([]);
+    }
+    const adjacent = "src/components/layout/UnknownLayout.tsx";
+    expect(checkSalesStageB2ScopeForTest({
+      files: [adjacent],
+      mission: b2Mission,
+      branch: "kreile/b2-eingang",
+    })).toContain(`SALES_STAGE_B2_SCOPE:${adjacent}`);
   });
 
   it("allows the narrow AP acceptance and delivery patterns only", () => {

@@ -167,6 +167,23 @@ const TA_B2C3_VALUES = Object.freeze({
   probeCandidateSha: "2e90f44a373c2ccc025a99bdc845c51cdd2d8d7a",
   probeResult: "PASS",
 });
+const TA_B2D2_BRANCH = "codex/ta-b2d2";
+const TA_B2D2_BASE_SHA = "b364f569524a636a1aceefac0fb1934f7f24f556";
+const TA_B2D2_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2D2.json";
+const TA_B2D2_BAUPLAN = "docs/project/endversion/codex/BAUPLAN.json";
+const TA_B2D2_BAUPLAN_SHA256 = "5E7B880BD9D4B35EAF7BF906F2693011192933E000FA7AEA94222395F34A1F70";
+const TA_B2D2_VALUES = Object.freeze({
+  schemaVersion: 1,
+  package: "B2-EINGANG-APG-APR-ANCHOR",
+  headBranch: TA_B2D2_BRANCH,
+  mainBaseSha: TA_B2D2_BASE_SHA,
+  authorizedBy: "Siglinder",
+  authorizedAt: "2026-11-02",
+  scope: "Bauplan a887ece362f4, AP-G-Testmodell, AP-R Neu erfassen und Replay-Wege-Tests",
+  bauplanSha256: TA_B2D2_BAUPLAN_SHA256,
+  probeCandidateSha: "d5d47a356b42c581fc96ca010b9f82f6b3811584",
+  probeResult: "PASS",
+});
 const PR154_REBASELINE_BRANCH = "kreile/s1-p2-eingang";
 const PR154_REBASELINE_BASE_SHA = "1fa4920d6d06b02413c8c157ae6b739507105846";
 const PR154_REBASELINE_RECEIPT = "docs/evidence/live-line/pr154/REBASELINE.json";
@@ -304,7 +321,34 @@ const TA_B2C3_REQUIRED_FILES = Object.freeze([
   "scripts/quality/check-live-package-scope.mjs",
   "src/test/live_package_scope.test.ts",
 ]);
+const TA_B2D2_ANCHOR_ALLOWLIST = Object.freeze([
+  ".github/workflows/agentur-gate.yml",
+  "_review/AKTUELLE_ANWEISUNG.md",
+  "_review/MELDUNG_PLANUNGSCHAT.md",
+  "_review/OWNER_ENTSCHEIDUNGEN.md",
+  "docs/project/arbeitspakete/**",
+  TA_B2D2_BAUPLAN,
+  TA_B2D2_RECEIPT,
+  "scripts/quality/check-live-package-scope.mjs",
+  "src/test/live_package_scope.test.ts",
+]);
+const TA_B2D2_REQUIRED_FILES = Object.freeze([
+  ".github/workflows/agentur-gate.yml",
+  "_review/AKTUELLE_ANWEISUNG.md",
+  "_review/OWNER_ENTSCHEIDUNGEN.md",
+  "docs/project/arbeitspakete/AP-G-testmodell/PAKET.md",
+  "docs/project/arbeitspakete/AP-R-neu-erfassen/PAKET.md",
+  "docs/project/arbeitspakete/BEFUNDE.md",
+  "docs/project/arbeitspakete/TRUST_ANCHOR_B2D.md",
+  "docs/project/arbeitspakete/TRUST_ANCHOR_B2D2.md",
+  "docs/project/arbeitspakete/WORKQUEUE.json",
+  TA_B2D2_BAUPLAN,
+  TA_B2D2_RECEIPT,
+  "scripts/quality/check-live-package-scope.mjs",
+  "src/test/live_package_scope.test.ts",
+]);
 const SALES_STAGE_B2_EXACT_ALLOWLIST = Object.freeze([
+  ".github/workflows/agentur-gate.yml",
   "docs/delivery/ABGABE_B2.md",
   "docs/delivery/ABGABE_AP-01.md",
   "docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json",
@@ -323,6 +367,7 @@ const SALES_STAGE_B2_EXACT_ALLOWLIST = Object.freeze([
   "src/components/layout/GlobalCreateFlow.tsx",
   "src/components/layout/KreileHeader.tsx",
   "src/components/layout/MoreMenu.tsx",
+  "src/components/layout/KreileAppShell.tsx",
   "src/components/layout/TargetShell.module.css",
   "src/components/layout/__tests__/path1GlobalCreateFlow.realRender.test.tsx",
   "src/components/layout/__tests__/w2cHeaderTruth.realRender.test.tsx",
@@ -347,12 +392,15 @@ const SALES_STAGE_B2_EXACT_ALLOWLIST = Object.freeze([
   "src/modules/customers/server/types.ts",
   "src/test/acceptance/ap01_eingang_paket_persoenlich.integration.test.ts",
   "src/ui/kr/AppShell.tsx",
+  "src/ui/kr/Dialog.tsx",
   "src/ui/kr/GlobalesPlus.tsx",
   "supabase/migrations/20261031212320_ap01_intake_item.sql",
 ]);
 const SALES_STAGE_B2_ALLOWLIST = Object.freeze([
   ...SALES_STAGE_B2_EXACT_ALLOWLIST,
   "docs/delivery/ABGABE_AP-*.md",
+  "e2e/generated/**",
+  "scripts/spec/**",
   "src/modules/eingang/**",
   "src/test/acceptance/*.integration.test.ts",
 ]);
@@ -682,6 +730,49 @@ function checkTaB2c3Anchor(root, files, mission, branch, baseSha) {
   return errors;
 }
 
+function checkTaB2d2Scope(files, mission, branch, baseSha) {
+  const errors = [];
+  if (branch !== TA_B2D2_BRANCH) errors.push(`TA_B2D2_BRANCH_INVALID:${branch}`);
+  if (baseSha !== TA_B2D2_BASE_SHA) errors.push(`TA_B2D2_BASE_INVALID:${baseSha}:${TA_B2D2_BASE_SHA}`);
+  for (const rel of files) {
+    if (!covered(rel, TA_B2D2_ANCHOR_ALLOWLIST)) errors.push(`TA_B2D2_SCOPE:${rel}`);
+  }
+  if (mission.active_block !== "B2" || mission.phase !== "WRITING" || mission.branch !== SALES_STAGE_B2_BRANCH
+      || mission.started_from_sha !== TA_B2_BASE_SHA || mission.desktop_due_at !== "2026-11-08"
+      || mission.tablet_mobile_due_at !== "2026-11-08" || mission.handoff_path !== "docs/delivery/ABGABE_B2.md"
+      || mission.next_block !== "B3") {
+    errors.push("TA_B2D2_MISSION_INVALID");
+  }
+  return errors;
+}
+
+function checkTaB2d2Anchor(root, files, mission, branch, baseSha) {
+  const errors = checkTaB2d2Scope(files, mission, branch, baseSha);
+  for (const rel of TA_B2D2_REQUIRED_FILES) {
+    if (!files.includes(rel)) errors.push(`TA_B2D2_REQUIRED_FILE_MISSING:${rel}`);
+  }
+  let receipt;
+  try {
+    receipt = JSON.parse(readFileSync(path.join(root, TA_B2D2_RECEIPT), "utf8"));
+  } catch {
+    errors.push("TA_B2D2_RECEIPT_UNREADABLE");
+    return errors;
+  }
+  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2D2_VALUES).sort())) {
+    errors.push("TA_B2D2_RECEIPT_SCHEMA");
+  }
+  for (const [key, value] of Object.entries(TA_B2D2_VALUES)) {
+    if (receipt[key] !== value) errors.push(`TA_B2D2_RECEIPT_VALUE:${key}`);
+  }
+  try {
+    const bauplan = readFileSync(path.join(root, TA_B2D2_BAUPLAN));
+    if (hash(bauplan) !== TA_B2D2_BAUPLAN_SHA256) errors.push("TA_B2D2_BAUPLAN_HASH");
+  } catch {
+    errors.push("TA_B2D2_BAUPLAN_UNREADABLE");
+  }
+  return errors;
+}
+
 function checkSalesStageB2Scope(files, entries, mission, branch) {
   const errors = [];
   if (branch !== SALES_STAGE_B2_BRANCH) errors.push(`SALES_STAGE_BRANCH_INVALID:${branch}`);
@@ -729,6 +820,10 @@ export function checkTaB2c2ScopeForTest({ files, mission, branch, baseSha }) {
 
 export function checkTaB2c3ScopeForTest({ files, mission, branch, baseSha }) {
   return checkTaB2c3Scope(files, mission, branch, baseSha);
+}
+
+export function checkTaB2d2ScopeForTest({ files, mission, branch, baseSha }) {
+  return checkTaB2d2Scope(files, mission, branch, baseSha);
 }
 
 function checkActivation(files, baseSha, plan) {
@@ -1031,6 +1126,7 @@ export function checkLivePackageScope({ root, base, head, branch }) {
     if (branch === TA_B2C_BRANCH) return checkTaB2cAnchor(root, files, candidateMission, branch, baseSha);
     if (branch === TA_B2C2_BRANCH) return checkTaB2c2Anchor(root, files, candidateMission, branch, baseSha);
     if (branch === TA_B2C3_BRANCH) return checkTaB2c3Anchor(root, files, candidateMission, branch, baseSha);
+    if (branch === TA_B2D2_BRANCH) return checkTaB2d2Anchor(root, files, candidateMission, branch, baseSha);
     if (candidateMission.active_block !== "B2") {
       return [`SALES_STAGE_ACTIVE_BLOCK_INVALID:${candidateMission.active_block}`];
     }
@@ -1476,6 +1572,36 @@ export function runSelftest(root = process.cwd()) {
   const taB2c3Outside = checkTaB2c3Scope(["src/app/page.tsx"], taB2cMission, TA_B2C3_BRANCH, TA_B2C3_BASE_SHA);
   if (!taB2c3Outside.includes("TA_B2C3_SCOPE:src/app/page.tsx")) {
     throw new Error(`TA-B2c3 accepted an out-of-anchor file: ${taB2c3Outside.join(" | ")}`);
+  }
+  const validTaB2d2 = checkTaB2d2Scope(TA_B2D2_REQUIRED_FILES, taB2cMission, TA_B2D2_BRANCH, TA_B2D2_BASE_SHA);
+  if (validTaB2d2.length > 0) throw new Error(`valid TA-B2d2 scope rejected: ${validTaB2d2.join(" | ")}`);
+  const taB2d2Outside = checkTaB2d2Scope(["src/app/page.tsx"], taB2cMission, TA_B2D2_BRANCH, TA_B2D2_BASE_SHA);
+  if (!taB2d2Outside.includes("TA_B2D2_SCOPE:src/app/page.tsx")) {
+    throw new Error(`TA-B2d2 accepted an out-of-anchor file: ${taB2d2Outside.join(" | ")}`);
+  }
+  const apgAprPaths = [
+    ".github/workflows/agentur-gate.yml",
+    "e2e/generated/_erwartet_rot.json",
+    "e2e/generated/_harness.ts",
+    "e2e/generated/_model.ts",
+    "e2e/generated/_seed.sql",
+    "e2e/generated/eingang.flow.spec.ts",
+    "e2e/generated/kundebearbeiten.flow.spec.ts",
+    "e2e/generated/kundeneu.flow.spec.ts",
+    "e2e/generated/playwright.config.ts",
+    "scripts/spec/generate-flow-tests.mjs",
+    "src/components/layout/KreileAppShell.tsx",
+    "src/components/layout/__tests__/path1GlobalCreateFlow.realRender.test.tsx",
+    "src/lib/server/commands/__tests__/orderIntakeCommand.test.ts",
+    "src/lib/server/commands/orderIntakeCommand.ts",
+    "src/modules/eingang/GlobalCreateFlow.tsx",
+    "src/modules/eingang/requestGlobalCreate.ts",
+    "src/ui/kr/Dialog.tsx",
+    "src/ui/kr/GlobalesPlus.tsx",
+  ];
+  for (const rel of apgAprPaths) {
+    const allowedErrors = checkSalesStageB2Scope([rel], [], salesStageMission, SALES_STAGE_B2_BRANCH);
+    if (allowedErrors.length > 0) throw new Error(`TA-B2d2 AP-G/AP-R path rejected (${rel}): ${allowedErrors.join(" | ")}`);
   }
   const adjacentCommand = "src/lib/server/commands/quoteCommand.ts";
   const adjacentErrors = checkSalesStageB2Scope([adjacentCommand], [], salesStageMission, SALES_STAGE_B2_BRANCH);

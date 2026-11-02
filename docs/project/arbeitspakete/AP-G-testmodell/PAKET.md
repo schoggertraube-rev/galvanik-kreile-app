@@ -20,3 +20,8 @@ Produktcode (außer fehlenden `data-spec-id` an Elementen, die das Modell nennt 
 - `--check` grün (erzeugte Dateien = Modell). Alle AP-01-Fälle grün in CI. A11 inkl. `git diff --check`.
 - Abgabe `docs/delivery/ABGABE_AP-G.md`: Bauplan-SHA, Anzahl Fälle je Seite, Liste „erwartet rot“ (nur AP-K1), CI-Lauf-Link.
 - Prüfung durch den Planungschat: Stichprobe erzeugter Fälle gegen den Bauplan + eigener Playwright-Lauf auf der Preview.
+
+## Nachtrag 02.11. (Planungschat, gilt vor Fassung 1)
+- Bauplan: spec `a887ece362f4` (SHA `5E7B880B…1F70`), kommt mit TA-B2d2 auf main; Lieferung in **einem** PR mit AP-R.
+- Einstieg `oeffne(ziel,arg)` im Testmodell stellt das Gerüst bereit (mechanisch, Testinhalt unverändert).
+- Liste „erwartet rot“ ist die eingecheckte Datei `e2e/generated/_erwartet_rot.json` (Fall-ID → Paket, Grund). CI ist rot, wenn ein Fall rot ist, der nicht darauf steht, **und** wenn ein Fall darauf steht, der grün ist. Fälle ohne `paket` oder eines abgenommenen Pakets dürfen nicht darauf stehen. Nach AP-G + AP-R stehen dort nur AP-K1-Fälle.
