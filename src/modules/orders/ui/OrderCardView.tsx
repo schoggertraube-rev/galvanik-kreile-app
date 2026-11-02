@@ -280,7 +280,9 @@ export function OrderCardView({
 
   return <>
     <Seitenblatt titel={`Auftragskarte ${card.orderNumber}`} onSchliessen={onClose}>
-      <Karte kopf={head} kette={chain} haupt={main} rail={rail} fuss={footer} />
+      <div data-spec-id="auftrag" style={{ display: "contents" }}>
+        <Karte kopf={head} kette={chain} haupt={main} rail={rail} fuss={footer} />
+      </div>
     </Seitenblatt>
     {invoiceSuccess ? <Dialog
       titel="Rechnung ausgestellt"
