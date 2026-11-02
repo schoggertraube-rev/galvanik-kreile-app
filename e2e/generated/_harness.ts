@@ -79,6 +79,7 @@ function dataSpecs(page: Page, id: string): Locator {
 }
 
 async function control(locator: Locator): Promise<Locator> {
+  await locator.waitFor({ state: "attached", timeout: 5_000 });
   const tag = await locator.evaluate((element) => element.tagName.toLowerCase());
   return ["input", "textarea", "select", "button"].includes(tag)
     ? locator
@@ -174,9 +175,9 @@ async function interruptNextServerAction(page: Page) {
   await page.context().setOffline(true);
 }
 
-const settledWriteActions = new Set(["eingang.buchen", "eingang.erneut-buchen"]);
+const settledServerActions = new Set(["eingang.buchen", "eingang.erneut-buchen", "eingang.angaben-erkennen"]);
 
-async function waitForWriteAction(page: Page, id: string) {
+async function waitForServerAction(page: Page, id: string) {
   await page.evaluate(() => new Promise<void>((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
   }));
@@ -206,7 +207,7 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
     case "klicken":
       if (!locator) throw new Error("FLOW_STEP_ID_REQUIRED:klicken");
       await locator.click({ timeout: 5_000 });
-      if (step.id && settledWriteActions.has(step.id)) await waitForWriteAction(page, step.id);
+      if (step.id && settledServerActions.has(step.id)) await waitForServerAction(page, step.id);
       if (state.restoreOnlineAfterWrite) {
         await page.context().setOffline(false);
         state.restoreOnlineAfterWrite = false;
@@ -215,7 +216,7 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
     case "doppelklicken":
       if (!locator) throw new Error("FLOW_STEP_ID_REQUIRED:doppelklicken");
       await locator.dblclick({ timeout: 5_000 });
-      if (step.id && settledWriteActions.has(step.id)) await waitForWriteAction(page, step.id);
+      if (step.id && settledServerActions.has(step.id)) await waitForServerAction(page, step.id);
       if (state.restoreOnlineAfterWrite) {
         await page.context().setOffline(false);
         state.restoreOnlineAfterWrite = false;
@@ -237,6 +238,12 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
     case "taste":
       if (locator) await (await control(locator)).press(String(value ?? ""), { timeout: 5_000 });
       else {
+        if (String(value ?? "").toLowerCase() === "n") {
+          await page.getByRole("button", { name: "Konto", exact: true }).waitFor({ state: "visible", timeout: 5_000 });
+          await page.evaluate(() => new Promise<void>((resolve) => {
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+          }));
+        }
         await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
         await page.locator("body").press(String(value ?? ""), { timeout: 5_000 });
       }
