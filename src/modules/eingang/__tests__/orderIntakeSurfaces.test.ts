@@ -7,8 +7,8 @@ describe("order intake surface contract", () => {
     ["Verchromen", "verchromen"],
     ["Vernickeln", "vernickeln"],
     ["Verzinken", "verzinken"],
-    ["Entchromen / prÃ¼fen", "entchromen_pruefen"],
-    ["noch zu klÃ¤ren", "offen"],
+    ["Entchromen / prüfen", "entchromen_pruefen"],
+    ["noch zu klären", "offen"],
   ])("stores %s as %s and renders the label again", (label, key) => {
     expect(orderIntakeSurfaceKey(label)).toBe(key);
     expect(orderIntakeSurfaceLabel(key)).toBe(label);
