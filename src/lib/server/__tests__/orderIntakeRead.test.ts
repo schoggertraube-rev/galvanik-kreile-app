@@ -90,6 +90,11 @@ describe("order intake read ports", () => {
     });
     expect(execute.mock.calls[0]?.[0].text).toContain("actor_id = ?");
     expect(execute.mock.calls[0]?.[0].text).toContain("client_event_id = ?");
+    const receiptSelect = execute.mock.calls[0]?.[0].text ?? "";
+    for (const validatedColumn of Object.keys(receiptRow)) {
+      expect(receiptSelect, `validated receipt column missing from SELECT: ${validatedColumn}`)
+        .toMatch(new RegExp(`\\b${validatedColumn}\\b`));
+    }
 
     execute.mockResolvedValueOnce([]);
     await expect(readOrderIntakeReceipt(authorization, { orderId, clientEventId })).resolves.toBeNull();

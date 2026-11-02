@@ -207,7 +207,7 @@ async function createIntakeThroughRealUi(page: Page, suffix: string, catalogServ
   const intake = page.getByRole("dialog");
   await expectExactlyOneVisible(intake);
   await expectExactlyOneVisible(intake.getByRole("heading", {
-    name: "Neuer Eingang",
+    name: "Neu erfassen",
     exact: true,
   }));
   await fillExactlyOne(intake.getByLabel("Firma / Name", { exact: true }), "F1.4 Synthetischer Kunde GmbH");

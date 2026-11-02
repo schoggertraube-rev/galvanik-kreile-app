@@ -47,7 +47,7 @@ describe("WerkstattView projection", () => {
     render(<WerkstattView view={view} ports={ports} onRetry={vi.fn()} />);
 
     expect(screen.getByRole("button", { name: "Auftrag öffnen" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Neuer Eingang" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Neu erfassen" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Ware raus" })).toBeVisible();
   });
 });

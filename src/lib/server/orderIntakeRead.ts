@@ -274,7 +274,8 @@ export async function readOrderIntakeReceipt(
     const rows = await tx.execute<ReceiptRow>(sql`
       SELECT receipt_id, event_id, tenant_id, order_id, customer_id, actor_id,
              client_event_id, correlation_id, customer_mode, order_number,
-             customer_display_name, due_date, note, items_snapshot, recorded_at,
+             customer_display_name, due_date, intake_term_status, intake_source,
+             note, items_snapshot, recorded_at,
              current_order_version, current_station, current_status,
              handover_mode, payment_mode, integrity_ok
       FROM private.v_order_intake_receipts_v1

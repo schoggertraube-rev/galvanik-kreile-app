@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OrdersHomeProjection } from "@/modules/orders/public";
 
@@ -6,12 +6,14 @@ const ports = vi.hoisted(() => ({
   openOrder: vi.fn(),
   openInvoice: vi.fn(),
   requestCreate: vi.fn(),
+  listInbox: vi.fn(),
   push: vi.fn(),
   refresh: vi.fn(),
   permissions: { loading: false, canCreateOrder: true, canWorkOrders: true },
 }));
 vi.mock("@/lib/overlayStore", () => ({ useOverlayStore: (selector: (state: { openOrder: typeof ports.openOrder; openInvoice: typeof ports.openInvoice }) => unknown) => selector({ openOrder: ports.openOrder, openInvoice: ports.openInvoice }) }));
 vi.mock("@/components/layout/GlobalCreateFlow", () => ({ requestGlobalCreate: ports.requestCreate }));
+vi.mock("@/app/actions/communications.actions", () => ({ listOutlookInboxAction: ports.listInbox }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: ports.push, refresh: ports.refresh }) }));
 vi.mock("@/lib/auth/PermissionsContext", () => ({
   usePermissions: () => ({
@@ -35,6 +37,7 @@ beforeEach(() => {
   ports.permissions.loading = false;
   ports.permissions.canCreateOrder = true;
   ports.permissions.canWorkOrders = true;
+  ports.listInbox.mockResolvedValue({ code: "OK", data: [] });
 });
 
 const projection: OrdersHomeProjection = {
@@ -124,16 +127,16 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     expect(rows[1]).toHaveTextContent("zählt weiter mit");
   });
 
-  it("öffnet beim Zuordnen genau die ausgewählte eingehende Mail", () => {
+  it("öffnet über Mail ansehen genau die ausgewählte eingehende Mail statt Neu erfassen", async () => {
     const mail = { key: "mail:graph-message-42", field: "assign" as const, kind: "mail" as const, title: "TEST Anfrage", meta: "TEST Absender", urgency: "decision" as const, graphMessageId: "graph-message-42" };
+    ports.listInbox.mockResolvedValue({ code: "OK", data: [{ id: "graph-message-42", subject: "TEST Anfrage", senderName: "TEST Absender", senderAddress: "test@example.invalid", receivedAt: "2026-11-01T10:00:00.000Z", preview: "Vorschau", body: "Mailtext", hasAttachments: false }] });
     render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items: [mail], visibleFields: [...dashboard.visibleFields] }, projection }} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Zuordnen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mail ansehen" }));
 
-    expect(ports.requestCreate).toHaveBeenCalledWith({
-      intent: "DIRECT_INTAKE",
-      prefill: { sourceMode: "mail", graphMessageId: "graph-message-42" },
-    });
+    await waitFor(() => expect(screen.getByRole("dialog", { name: "Mail" })).toHaveTextContent("Mailtext"));
+    expect(ports.listInbox).toHaveBeenCalledTimes(1);
+    expect(ports.requestCreate).not.toHaveBeenCalled();
   });
 
   it("benennt mehrere Konflikte im Plural", () => {
@@ -258,7 +261,7 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     const emptyDashboard = { ...dashboard, items: [], visibleFields: [...dashboard.visibleFields] };
     const { rerender } = render(<RolfHomeClient ports={actionPorts} model={{ kind: "empty", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: emptyDashboard, projection: empty }} />);
     expect(screen.getByRole("status")).toHaveTextContent("Noch keine Aufträge erfasst.");
-    expect(screen.getByRole("button", { name: "Neuer Eingang" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Neu erfassen" })).toBeInTheDocument();
     rerender(<RolfHomeClient ports={actionPorts} model={{ kind: "denied", message: "Nicht freigegeben." }} />);
     expect(screen.getByRole("status")).toHaveTextContent("Tagesbestand nicht öffnen");
     rerender(<RolfHomeClient ports={actionPorts} model={{ kind: "error", message: "Lesefehler." }} />);
@@ -273,7 +276,7 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "werkstatt", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items: [], visibleFields: [...dashboard.visibleFields] }, projection }} />);
     expect(screen.getByRole("status")).toHaveTextContent("Nichts offen");
     expect(screen.queryByText("Noch keine Aufträge erfasst.")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Neuer Eingang" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Neu erfassen" })).not.toBeInTheDocument();
   });
 
   it("zeigt den Teilzustand für nicht erreichbare Mails mit erneutem Laden", () => {

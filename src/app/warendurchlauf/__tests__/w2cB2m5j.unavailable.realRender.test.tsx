@@ -236,7 +236,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(ports.openOrder).toHaveBeenNthCalledWith(2, "we-1");
 
     expect(
-      screen.queryByRole("button", { name: "Neuer Eingang" }),
+      screen.queryByRole("button", { name: "Neu erfassen" }),
     ).not.toBeInTheDocument();
     expect(ports.openGlobalCreate).not.toHaveBeenCalled();
 
@@ -529,7 +529,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     const { default: WarendurchlaufIndex } = await import("../page");
     render(await WarendurchlaufIndex());
 
-    const intakeButton = screen.getByRole("button", { name: "Neuer Eingang" });
+    const intakeButton = screen.getByRole("button", { name: "Neu erfassen" });
     fireEvent.click(intakeButton);
     expect(ports.openGlobalCreate).toHaveBeenCalledWith("DIRECT_INTAKE");
   });
@@ -547,7 +547,7 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(
       screen.queryByRole("dialog", { name: "Auftrag öffnen" }),
     ).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Neuer Eingang" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Neu erfassen" })).not.toBeInTheDocument();
     expect(
       screen.getByRole("group", { name: "Werkstattaktionen" }),
     ).toBeInTheDocument();
@@ -572,7 +572,7 @@ describe("W2C-B2M5J unavailable UI", () => {
       screen.queryByRole("dialog", { name: "Auftrag öffnen" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Neuer Eingang" }),
+      screen.queryByRole("button", { name: "Neu erfassen" }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("group", { name: "Werkstattaktionen" })).toBeInTheDocument();
   });
@@ -750,7 +750,7 @@ describe("W2C-B2M5J unavailable UI", () => {
         screen.queryByTestId(`werkstatt-held-${galvanik.id}`),
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: "Neuer Eingang" }),
+        screen.queryByRole("button", { name: "Neu erfassen" }),
       ).not.toBeInTheDocument();
       expect(
         screen.queryByRole("button", { name: "Auftrag öffnen" }),

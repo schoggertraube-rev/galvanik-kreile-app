@@ -1,3 +1,5 @@
+import type { OrderReadiness } from "../orderReadiness";
+
 export type CustomerListItem={id:string;customerNumber:string;name:string;type:string;city:string|null;activeOrderCount:number};
 export type CustomersViewState={kind:"loading"}|{kind:"denied"|"error"|"conflict";message:string}|{kind:"data";customers:CustomerListItem[]};
 export type CustomerOrderItem={id:string;orderNumber:string;title:string;station:string;status:string;dueAt:string|null;version:number};
@@ -79,3 +81,12 @@ export type EnableCustomerInvoiceTermsInput = {
   cashDiscountPercent: number;
   cashDiscountDays: number;
 };
+
+export type ReadCustomerOrderReadinessInput = {
+  customerId: string;
+  requirePaymentPreference: boolean;
+};
+
+export type ReadCustomerOrderReadinessResult =
+  | { code: "OK"; readiness: OrderReadiness }
+  | { code: "NOT_FOUND" | "UNAVAILABLE"; message: string };
