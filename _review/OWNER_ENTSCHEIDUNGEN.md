@@ -226,3 +226,15 @@ Neueste vom Owner freigegebene Version (27.09.2026, `_DESIGN_VERBINDLICH/FREIGAB
 - Name für U-229/U-230: Die Wege jeder Seite stehen als Testfälle im BAUPLAN-Abschnitt `testmodell` (Endversion-Chat); ein Generator erzeugt daraus Playwright-Tests, die in agentur-gate gegen die Replay-DB laufen (ab AP-G + AP-R). Kein Paket ohne seine Fälle; ein Paket ist fertig, wenn seine Fälle grün sind. Die Liste „erwartet rot“ darf nur schrumpfen.
 - Previews entstehen nur aus Git, nicht per CLI aus dem Arbeitsbaum.
 - Owner: Siglinder (direkt).
+
+## U-235 · Auftragskarte 4.1 ganz bau-frei (02.11.2026)
+- Die Auftragskarte wird mit allen Zuständen (inkl. KV) freigegeben und bekommt Testfälle; AP-C und AP-E decken dieselbe Karte ab.
+- Owner: Siglinder (direkt, „ganz“).
+
+## U-236 · App wie eine echte App testen, Tablet und Desktop (02.11.2026)
+- Die App wird installierbar (Manifest, Symbol, Vollbild, Web-Share-Ziel nach `eingang.geraete`) und mit den bezahlten Diensten Microsoft 365 (Testpostfach über Graph) und Azure Document Intelligence auf der Preview echt getestet – auf Tablet (Kamera) und Desktop. Umsetzung in AP-EIN Teil 3–5; in CI bleiben Graph und Azure hinter dem bestehenden Adapter.
+- Owner: Siglinder (direkt).
+
+## U-237 · Absprachen als eigener Teil nach AP-EIN (02.11.2026)
+- Absprachen & Eigenheiten (5.2, customer_agreements) sind nicht in AP-EIN; eigener Teil AP-ABS direkt danach, mit Testfällen vom Endversion-Chat. Entschieden vom Planungschat (Owner: „löse die offenen Punkte“).
+- Owner-Autorisierung: Siglinder, delegiert.

@@ -249,6 +249,10 @@ describe("Kreile live package scope", () => {
     for (const path of [
       "src/lib/server/orderCardRead.ts",
       "src/lib/server/__tests__/orderCardRead.test.ts",
+      "src/app/layout.tsx",
+      "src/app/telefonnotiz/layout.tsx",
+      "src/app/fonts/localFonts.ts",
+      "src/app/fonts/fraunces-latin-variable.woff2",
     ]) {
       expect(checkSalesStageB2ScopeForTest({
         files: [path],
@@ -262,6 +266,12 @@ describe("Kreile live package scope", () => {
       mission: b2Mission,
       branch: "kreile/b2-eingang",
     })).toContain(`SALES_STAGE_B2_SCOPE:${adjacentOrderCardPath}`);
+    const adjacentFontPath = "src/app/font-cache/localFonts.ts";
+    expect(checkSalesStageB2ScopeForTest({
+      files: [adjacentFontPath],
+      mission: b2Mission,
+      branch: "kreile/b2-eingang",
+    })).toContain(`SALES_STAGE_B2_SCOPE:${adjacentFontPath}`);
 
     const migration = "supabase/migrations/20261103010000_ap_r_freitext_einheiten.sql";
     expect(checkSalesStageB2ScopeForTest({

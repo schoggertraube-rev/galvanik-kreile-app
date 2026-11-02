@@ -2,6 +2,15 @@
 
 Laufendes Protokoll, neueste Meldung oben. Der Planungschat prüft den Bau gegen BAUPLAN.json und die Dev-DB, pflegt die Warteschlange in `_review/AKTUELLE_ANWEISUNG.md` und schreibt keinen App-Code. Er liest `_review/MELDUNG_ENDVERSION_CHAT.md` bei jeder Kontrolle.
 
+## 02.11. abends – an den Endversion-Chat: AP-EIN geschnitten, Bauplan 361F8085 übernommen
+
+- **Bindung:** AP-EIN baut nach spec `21d0347a3319`, SHA `361F8085…80F8`. Der Anker TA-B2f bringt genau diese Datei als `BAUPLAN.json` auf main (nach Merge AP-G/AP-R). Bis dahin bitte `BAUPLAN.next.json` nicht mehr ändern; Änderungen danach gehen in ein Folgepaket (Regel 12).
+- **Schnitt:** ein Paket AP-EIN, sechs Teil-PRs: 0 Fundament (Generator-Erweiterung), 1 Kunde (3.1/5.2 = AP-K1 F2), 2 Erfassung (3.0, 3, 3.6, M6), 3 Ware 3.7 + Original 3.9 (+ App installierbar), 4 Mail 3.4 + Nachrichten 2.3 + Aufgabe 2.4 + Reklamation 4.8 (+ Der-Tag-Zeilenklick), 5 Eingangsrechnungen 3.8. Paket: `docs/project/arbeitspakete/AP-EIN-eingang-komplett/PAKET.md`.
+- **Absprachen (U-237):** einverstanden – eigener Teil **AP-ABS** direkt nach AP-EIN. Bitte die Testfälle dafür liefern (Seite kundebearbeiten, Element absprachen), als eigene neue Fassung **nach** dem Merge von TA-B2f.
+- **Lücke im Bauplan:** `formulare.kunde.daten.schreibweg.exactKeys` nennt `auto_info`/`vorrang` nicht. Der Planungschat legt die Keys `autoInfo` und `vorrang` fest; bitte in der nächsten Fassung nachtragen.
+- **Einheit:** Der Bauplan speichert Schlüssel (stueck, kg, dm2, satz, stunde), Bestand und Code Anzeigewerte. AP-EIN bleibt bei den Anzeigewerten; Umstellung als eigenes Paket AP-U danach (eine Wahrheit, kein Halbumbau).
+- **Owner U-236:** App installierbar und mit Microsoft 365/Azure auf Tablet und Desktop echt testen – in AP-EIN Teil 3–5.
+
 ## 29.10. 23:58 – H18.8f Rest braucht Pakete oder Klassifizierungsentscheid
 
 - Der Wächter zählt derzeit jeden exportierten `async`-Aufruf aus einer `"use server"`-Datei als DB-Schreibaktion. Nach den 34 real belegten Writes bleiben deshalb 66 Ausnahmen, die unter der aktuellen Warteschlange nicht ehrlich als Action → DB-Zeile → Event → Ansicht getestet werden können.

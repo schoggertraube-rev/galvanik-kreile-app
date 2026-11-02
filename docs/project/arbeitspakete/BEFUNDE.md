@@ -23,3 +23,5 @@ Regel (U-220/U-229): Jeder Befund wird vom Planungschat **einmal** eingeordnet, 
 | 02.11. | Prüfskript t14 M10 klickt „Wunsch“ außerhalb des Dialogs (Timeout) | Prüflauf | Planungschat (eigenes Skript) |
 | 02.11. | Einheit: Bauplan speichert Schlüssel stueck/kg/dm2/satz/stunde, Bestand und Code speichern Anzeigewerte (Stück …) | AP-R-Lauf | Paket AP-U (Einheit-Schlüssel für Position, Katalog, Rechnung) nach AP-K1 |
 | 02.11. | Codex stasht Planungsdateien beim Branchwechsel (AP-K1 F2 war im Stash) | Planungschat | jetzt (Prozess: Planungsdateien nie stashen, P25) |
+| 02.11. | Oberfläche: Bauplan speichert Schlüssel (verzinken …), Bestand Anzeigewerte; Codex stellte nur neue Zeilen um (zwei Wahrheiten) | Prüfung Planungschat | Paket AP-U (zusammen mit Einheit, mit Datenmigration); in AP-R zurückgenommen (P29) |
+| 02.11. | Build scheitert in Vercel und CI an next/font/google (Fraunces) | CI #163 | jetzt (Schriften lokal, P29) |

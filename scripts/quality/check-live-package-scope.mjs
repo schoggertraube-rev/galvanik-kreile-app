@@ -194,7 +194,7 @@ const TA_B2E_VALUES = Object.freeze({
   mainBaseSha: TA_B2E_BASE_SHA,
   authorizedBy: "Siglinder",
   authorizedAt: "2026-11-02",
-  scope: "AP-R Pflicht-Einheit je Freitext-Position: View-Migration und kanonischer Auftragskarten-Leser",
+  scope: "AP-R Pflicht-Einheit je Freitext-Position: View-Migration, kanonischer Auftragskarten-Leser und lokale Webfonts",
   probeCandidateSha: "d8deac8608221399d5c73bc776fee1ca1e1d9741",
   probeResult: "PASS",
 });
@@ -387,6 +387,8 @@ const SALES_STAGE_B2_EXACT_ALLOWLIST = Object.freeze([
   "scripts/quality/h18-server-actions.json",
   "src/app/actions/eingang.actions.ts",
   "src/app/GlobalCreateAppAdapter.tsx",
+  "src/app/layout.tsx",
+  "src/app/telefonnotiz/layout.tsx",
   "src/app/actions/intakeDraft.actions.ts",
   "src/app/orders/OrdersAppAdapter.tsx",
   "src/app/warendurchlauf/__tests__/w2cB2m5j.unavailable.realRender.test.tsx",
@@ -432,6 +434,7 @@ const SALES_STAGE_B2_ALLOWLIST = Object.freeze([
   "docs/delivery/ABGABE_AP-*.md",
   "e2e/generated/**",
   "scripts/spec/**",
+  "src/app/fonts/**",
   "src/modules/eingang/**",
   "src/test/acceptance/*.integration.test.ts",
   "supabase/migrations/*_ap_r_freitext_einheiten.sql",
@@ -1662,6 +1665,10 @@ export function runSelftest(root = process.cwd()) {
   for (const allowed of [
     "src/lib/server/orderCardRead.ts",
     "src/lib/server/__tests__/orderCardRead.test.ts",
+    "src/app/layout.tsx",
+    "src/app/telefonnotiz/layout.tsx",
+    "src/app/fonts/localFonts.ts",
+    "src/app/fonts/fraunces-latin-variable.woff2",
   ]) {
     const allowedErrors = checkSalesStageB2Scope([allowed], [], salesStageMission, SALES_STAGE_B2_BRANCH);
     if (allowedErrors.length > 0) throw new Error(`TA-B2e path rejected (${allowed}): ${allowedErrors.join(" | ")}`);
@@ -1675,6 +1682,16 @@ export function runSelftest(root = process.cwd()) {
   );
   if (!adjacentOrderCardErrors.includes(`SALES_STAGE_B2_SCOPE:${adjacentOrderCardPath}`)) {
     throw new Error(`TA-B2e accepted an adjacent order-card path: ${adjacentOrderCardErrors.join(" | ")}`);
+  }
+  const adjacentFontPath = "src/app/font-cache/localFonts.ts";
+  const adjacentFontErrors = checkSalesStageB2Scope(
+    [adjacentFontPath],
+    [],
+    salesStageMission,
+    SALES_STAGE_B2_BRANCH,
+  );
+  if (!adjacentFontErrors.includes(`SALES_STAGE_B2_SCOPE:${adjacentFontPath}`)) {
+    throw new Error(`TA-B2e accepted an adjacent font path: ${adjacentFontErrors.join(" | ")}`);
   }
   const apRUnitMigration = "supabase/migrations/20261103010000_ap_r_freitext_einheiten.sql";
   const apRUnitMigrationErrors = checkSalesStageB2Scope(
