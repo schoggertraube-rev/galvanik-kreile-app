@@ -49,6 +49,7 @@ export type FlowCase = {
 type FlowRunState = {
   before: Map<string, number>;
   rows: Map<string, Record<string, unknown>>;
+  restoreOnlineAfterWrite: boolean;
 };
 
 const TENANT = "galvanik-kreile";
@@ -171,9 +172,21 @@ async function select(locator: Locator, label: string) {
 
 async function interruptNextServerAction(page: Page) {
   await page.context().setOffline(true);
-  void page.locator('[data-spec-id="eingang.zustand.fehler"]').waitFor({ state: "visible", timeout: 10_000 })
-    .catch(() => undefined)
-    .then(() => page.context().setOffline(false).catch(() => undefined));
+}
+
+const settledWriteActions = new Set(["eingang.buchen", "eingang.erneut-buchen"]);
+
+async function waitForWriteAction(page: Page, id: string) {
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
+  await expect.poll(async () => {
+    const action = page.locator(`[data-spec-id="${id}"]`).first();
+    if (await action.count() === 0) return "settled";
+    const busy = await action.isDisabled().catch(() => false)
+      || (await action.textContent().catch(() => ""))?.includes("Wird gebucht");
+    return busy ? "busy" : "settled";
+  }, { timeout: 15_000 }).toBe("settled");
 }
 
 async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
@@ -184,6 +197,7 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
   }
   if (step.aktion === "netz_unterbrechen") {
     await interruptNextServerAction(page);
+    state.restoreOnlineAfterWrite = true;
     return;
   }
   const locator = step.id ? dataSpec(page, step.id, step.nr) : null;
@@ -192,10 +206,20 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
     case "klicken":
       if (!locator) throw new Error("FLOW_STEP_ID_REQUIRED:klicken");
       await locator.click({ timeout: 5_000 });
+      if (step.id && settledWriteActions.has(step.id)) await waitForWriteAction(page, step.id);
+      if (state.restoreOnlineAfterWrite) {
+        await page.context().setOffline(false);
+        state.restoreOnlineAfterWrite = false;
+      }
       break;
     case "doppelklicken":
       if (!locator) throw new Error("FLOW_STEP_ID_REQUIRED:doppelklicken");
       await locator.dblclick({ timeout: 5_000 });
+      if (step.id && settledWriteActions.has(step.id)) await waitForWriteAction(page, step.id);
+      if (state.restoreOnlineAfterWrite) {
+        await page.context().setOffline(false);
+        state.restoreOnlineAfterWrite = false;
+      }
       break;
     case "tippen":
       if (!locator) throw new Error("FLOW_STEP_ID_REQUIRED:tippen");
@@ -321,7 +345,7 @@ const newestRowQuery: Record<string, string> = {
     CASE WHEN coalesce(is_quote, false) THEN 'kv' ELSE 'auftrag' END AS art,
     promised_due_date::date::text AS liefertermin, intake_term_status AS terminstatus,
     CASE handover_mode WHEN 'pickup' THEN 'abholung' WHEN 'shipping' THEN 'versand' ELSE handover_mode END AS uebergabe,
-    payment_mode AS zahlungsmodus, intake_source AS eingangsart,
+    CASE payment_mode WHEN 'abholung' THEN 'bar' ELSE payment_mode END AS zahlungsmodus, intake_source AS eingangsart,
     EXISTS (SELECT 1 FROM public.events event WHERE event.tenant_id = orders.tenant_id AND event.order_id = orders.id AND event.event_type = 'ORDER_INTAKE_CREATED_V1') AS geprueft
     FROM public.orders WHERE tenant_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
   items: `SELECT id, order_id AS auftrag, name AS bezeichnung, quantity AS menge,
@@ -344,8 +368,12 @@ async function captureNewestRow(table: string) {
 async function captureDbResults(expectations: FlowDbExpectation[], state: FlowRunState) {
   for (const expectation of expectations) {
     if (typeof expectation.neu !== "number") continue;
+    const before = state.before.get(expectation.tabelle) ?? await tableCount(expectation.tabelle);
+    if (expectation.neu > 0) {
+      await expect.poll(() => tableCount(expectation.tabelle), { timeout: 10_000 }).toBe(before + expectation.neu);
+    }
     const after = await tableCount(expectation.tabelle);
-    expect(after - (state.before.get(expectation.tabelle) ?? after)).toBe(expectation.neu);
+    expect(after - before).toBe(expectation.neu);
     if (expectation.neu > 0) {
       if (expectation.neu !== 1 && expectation.werte && Object.keys(expectation.werte).length > 0) {
         throw new Error(`FLOW_DB_VALUE_NEW_ROW_AMBIGUOUS:${expectation.tabelle}`);
@@ -426,7 +454,7 @@ async function assertDbValues(expectation: FlowDbExpectation, state: FlowRunStat
 export async function runGeneratedFlowCase(page: Page, flowCase: FlowCase) {
   testTimeoutGuard(flowCase);
   const dbExpectations = flowCase.dann?.db ?? [];
-  const state: FlowRunState = { before: new Map<string, number>(), rows: new Map<string, Record<string, unknown>>() };
+  const state: FlowRunState = { before: new Map<string, number>(), rows: new Map<string, Record<string, unknown>>(), restoreOnlineAfterWrite: false };
   const stepExpectations = [
     ...(Array.isArray(flowCase.gegeben.aufruf.weg) ? flowCase.gegeben.aufruf.weg : []),
     ...(flowCase.wenn ?? []),

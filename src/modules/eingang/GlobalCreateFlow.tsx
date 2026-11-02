@@ -456,6 +456,29 @@ function isValidDateInput(value: string): boolean {
     && parsed.getUTCDate() === day;
 }
 
+function isPastDateInput(value: string): boolean {
+  if (!isValidDateInput(value)) return false;
+  const today = new Date();
+  const todayInput = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  return value < todayInput;
+}
+
+function intakeQuantityError(item: IntakePositionDraft): string | null {
+  if (!item.unit) return null;
+  const quantity = Number(item.quantity);
+  if (item.unit === "Stück" || item.unit === "Satz") {
+    return Number.isSafeInteger(quantity) && quantity >= 1 && quantity <= 99_999
+      ? null
+      : "Menge 1–99 999 (ganze Zahl)";
+  }
+  return Number.isFinite(quantity)
+    && quantity > 0
+    && quantity <= 99_999
+    && /^\d+(?:\.\d{1,3})?$/.test(item.quantity)
+    ? null
+    : "Menge größer 0, höchstens 3 Nachkommastellen";
+}
+
 function requestFeedback(result: Failure, requestId: string): Feedback {
   if (result.code === "VALIDATION_ERROR") return { kind: "validation", message: result.message, requestId };
   if (result.code === "CUSTOMER_INCOMPLETE") return { kind: "validation", message: result.message, requestId };
@@ -1613,8 +1636,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     && item.name.trim().length >= 2
     && item.surfaceRequested.trim().length >= 2
     && Boolean(item.unit)
-    && Number.isSafeInteger(Number(item.quantity))
-    && Number(item.quantity) > 0;
+    && intakeQuantityError(item) === null;
 
   const customerIssue = (() => {
     if (directCustomerMode === "NONE") return { detail: "fehlt", target: "eingang.kundensuche" };
@@ -1623,7 +1645,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     return null;
   })();
   const firstMissingName = directItems.findIndex((item) => item.name.trim().length < 2 || (!item.catalogServiceId && item.name.trim().length >= 2));
-  const firstMissingQuantity = directItems.findIndex((item) => !Number.isSafeInteger(Number(item.quantity)) || Number(item.quantity) <= 0);
+  const firstMissingQuantity = directItems.findIndex((item) => intakeQuantityError(item) !== null);
   const firstMissingUnit = directItems.findIndex((item) => !item.unit);
   const firstMissingSurface = directItems.findIndex((item) => item.surfaceRequested.trim().length < 2);
   const hasPendingRecognizedPosition = !recognitionConfirmed && recognitionMarkers.some((marker) => marker.key.startsWith("position-"));
@@ -2182,7 +2204,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                       </>}
                     </div> : null}
                 <FormRaster>
-                  <Feld label="Liefertermin"><Eingabe data-spec-id="eingang.liefertermin" type="date" required value={directWishDate} onChange={(event) => { setDirectWishDate(event.target.value); setDirectConfirmedDate(event.target.value); setIntakeWishDateOrigin(event.target.value ? "manual" : "empty"); setIntakeDirty(true); }} /></Feld>
+                  <Feld label="Liefertermin"><>
+                    <Eingabe aria-label="Liefertermin" data-spec-id="eingang.liefertermin" type="date" required aria-invalid={isPastDateInput(directWishDate)} value={directWishDate} onChange={(event) => { setDirectWishDate(event.target.value); setDirectConfirmedDate(event.target.value); setIntakeWishDateOrigin(event.target.value ? "manual" : "empty"); setIntakeDirty(true); }} />
+                    {isPastDateInput(directWishDate) ? <span className="kr-feld-fehler" data-spec-id="eingang.liefertermin.fehler">Liefertermin liegt in der Vergangenheit</span> : null}
+                  </></Feld>
                   <Feld label="Termin ist"><div data-spec-id="eingang.terminstatus"><Segment<"" | "wish" | "confirmed"> label="Termin ist" wert={intakeTermStatus} optionen={[{ wert: "wish", text: "Wunsch" }, { wert: "confirmed", text: "bestätigt" }]} onWert={(value) => { setIntakeTermStatus(value); setIntakeDirty(true); }} /></div></Feld>
                   <Feld label="Eingangsart"><Auswahl required data-spec-id="eingang.eingangsart" value={intakeSource} onChange={(event) => { setIntakeSource(event.target.value as typeof intakeSource); setIntakeDirty(true); }} optionen={[
                     { wert: "", text: "Bitte wählen" },
@@ -2216,15 +2241,18 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                   {directItems.map((item, index) => <div className="kr-position" key={item.key}>
                     <span className="kr-position-nr">{index + 1}</span>
                     <Feld label="Teil / Bezeichnung"><Eingabe data-spec-id="eingang.bezeichnung" required minLength={2} list="kr-service-catalog" placeholder="Katalog oder Freitext" value={item.name} onChange={(event) => setDirectPositionName(item.key, event.target.value)} /></Feld>
-                    <Feld label="Menge"><Eingabe data-spec-id="eingang.menge" type="number" min="1" value={item.quantity} onChange={(event) => updateDirectItem(item.key, "quantity", event.target.value)} /></Feld>
+                    <Feld label="Menge"><>
+                      <Eingabe aria-label="Menge" data-spec-id="eingang.menge" type="number" min="0.001" max="99999" step={item.unit === "Stück" || item.unit === "Satz" ? "1" : "0.001"} aria-invalid={intakeQuantityError(item) !== null} value={item.quantity} onChange={(event) => updateDirectItem(item.key, "quantity", event.target.value)} />
+                      {intakeQuantityError(item) ? <span className="kr-feld-fehler" data-spec-id="eingang.menge.fehler">{intakeQuantityError(item)}</span> : null}
+                    </></Feld>
                     <Feld label="Einheit"><Auswahl data-spec-id="eingang.einheit" required value={item.unit ?? ""} onChange={(event) => setDirectPositionUnit(item.key, event.target.value)} optionen={[{ wert: "", text: "Bitte wählen" }, ...INTAKE_UNIT_OPTIONS.map((unit) => ({ wert: unit, text: unit }))]} /></Feld>
                     <Feld label="Oberfläche" className="kr-pos-oberflaeche"><Auswahl data-spec-id="eingang.oberflaeche" required value={item.surfaceRequested} onChange={(event) => setDirectPositionSurface(item.key, event.target.value)} optionen={[{ wert: "", text: "Bitte wählen" }, ...surfaceOptions.map((surface) => ({ wert: surface, text: surface }))]} /></Feld>
                     <Feld label="Ausführung"><Auswahl data-spec-id="eingang.position.ausfuehrung" value={item.executionRequested} onChange={(event) => updateDirectItem(item.key, "executionRequested", event.target.value)} optionen={EXECUTION_OPTIONS} /></Feld>
                     <Feld label="Material"><Eingabe data-spec-id="eingang.position.material" maxLength={120} value={item.material} onChange={(event) => updateDirectItem(item.key, "material", event.target.value)} /></Feld>
-                    <KrButton art="sekundaer" icon="x" label="Position entfernen" disabled={directItems.length === 1} onClick={() => { setDirectItems((current) => current.filter((entry) => entry.key !== item.key)); setIntakeDirty(true); }} />
+                    {directItems.length > 1 ? <KrButton data-spec-id="eingang.position-entfernen" art="sekundaer" icon="x" label="Position entfernen" onClick={() => { setDirectItems((current) => current.filter((entry) => entry.key !== item.key)); setIntakeDirty(true); }} /> : null}
                   </div>)}
                 </div>
-                <KrButton art="sekundaer" icon="plus" text="Position hinzufügen" disabled={directItems.length >= 20} onClick={() => { setDirectItems((current) => [...current, newIntakePosition()]); setIntakeDirty(true); }} />
+                <KrButton data-spec-id="eingang.position-hinzufuegen" art="sekundaer" icon="plus" text="Position hinzufügen" disabled={directItems.length >= 20} onClick={() => { setDirectItems((current) => [...current, newIntakePosition()]); setIntakeDirty(true); }} />
               </Abschnitt> : null}
 
                   {(!isHandy || intakeStep === 3) ? <Abschnitt nr={2} label="Prüfung" dataSpecId="eingang.geprueft">
