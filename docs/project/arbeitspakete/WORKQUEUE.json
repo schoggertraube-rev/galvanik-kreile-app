@@ -20,16 +20,25 @@
       "nachweis": "PR #157 (efb8b128), main 11091c0b; Planungschat 01.11. geprueft"
     },
     {
+      "nr": "TA-B2c2",
+      "datei": "TRUST_ANCHOR_B2C2.md",
+      "titel": "Mini-Anker: orderIntakeCommand.ts fuer AP-01 4.3",
+      "reihenfolge": 1.9,
+      "status": "bereit",
+      "branch": "codex/ta-b2c2",
+      "merge": "Owner, vor Push von AP-01 4.3"
+    },
+    {
       "nr": "AP-01",
       "ordner": "AP-01-eingang-geruest-paket-persoenlich",
       "titel": "Eingang-Modul + Kanal Paket/persoenlich, vollstaendiger Bestandskunde -> Auftrag; unvollstaendig -> Sperre + Kundenkarte",
       "reihenfolge": 2,
       "status": "bereit",
-      "fassung": 4,
+      "fassung": "4.2",
       "acceptance_test_ist_h18_nachweis": true,
       "migration_sha256": "308A6A1548E67147AD549923BF4C8B9C840B969A05B3447AD4A4BBBE388912B9",
       "spec": "6b782924134c",
-      "nachweis": "PR #158 offen; Fassung 4 (U-225) nach Owner-Klicktest 01.11.: Plus-Symbol, Server CUSTOMER_INCOMPLETE, keine lokalen Kundenfelder, Mail-Eintrag oeffnet Mail",
+      "nachweis": "PR #158 (3f605239) Owner-Klicktest 01.11.: 4.1 ok bis auf Fassung 4.2 (Privat ohne Ansprechpartner, Namenserkennung->Kunde, Kunde anlegen immer sichtbar); danach Merge",
       "voraussetzung": "TA-B2c auf main (Bauplan 6b782924, Pfade)",
       "branch": "kreile/b2-eingang (#158 weiter)",
       "acceptance_tests": [
@@ -60,19 +69,28 @@
     {
       "nr": "TA-B2d",
       "datei": "TRUST_ANCHOR_B2D.md",
-      "titel": "Trust-Anchor: Bauplan c82bf2d6 + B2-Allowlist fuer AP-K1",
+      "titel": "Trust-Anchor: Bauplan (inkl. testmodell) + B2-Allowlist fuer AP-G und AP-K1",
       "reihenfolge": 3.5,
       "status": "bereit",
-      "voraussetzung": "AP-01 F4 gemergt; AP-K1 lokal fertig (Probe)",
+      "voraussetzung": "#158 gemergt; AP-G und AP-K1 lokal fertig (Pfad-Probe beider)",
       "branch": "codex/ta-b2d",
       "merge": "Owner, vor AP-K1-PR"
+    },
+    {
+      "nr": "AP-G",
+      "ordner": "AP-G-testmodell",
+      "titel": "Ausfuehrbares Testmodell: Generator BAUPLAN.testmodell -> Playwright in CI (Replay-DB)",
+      "reihenfolge": 3.7,
+      "status": "bereit",
+      "voraussetzung": "#158 gemergt; testmodell im BAUPLAN (Endversion-Chat) via TA-B2d",
+      "branch": "kreile/b2-eingang (frisch von main)"
     },
     {
       "nr": "AP-K1",
       "titel": "Kunde: eine Kunden-Komponente (Runde 21) fuer 5.2/3.1/Eingang, Datenvertrag additiv, Dubletten live",
       "reihenfolge": 4,
       "status": "bereit",
-      "voraussetzung": "AP-01 F4 (#158) gemergt; AP-K1 lokal fertig; dann TA-B2d gemergt",
+      "voraussetzung": "AP-G gemergt (erzeugte Wege-Tests fuer kundeneu/kundebearbeiten muessen gruen werden)",
       "ordner": "AP-K1-kunde",
       "branch": "kreile/b2-eingang (frisch von main)",
       "fassung": 1,
