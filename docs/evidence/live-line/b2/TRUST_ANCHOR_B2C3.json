@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "package": "B2-EINGANG-AP01-F43-READ-ANCHOR",
+  "headBranch": "codex/ta-b2c3",
+  "mainBaseSha": "8d5dd1fc7af5509898a317ef4f42087df052685a",
+  "authorizedBy": "Siglinder",
+  "authorizedAt": "2026-11-02",
+  "scope": "AP-01 Fassung 4.3: orderIntakeRead und zugehoeriger Unit-Test",
+  "probeCandidateSha": "2e90f44a373c2ccc025a99bdc845c51cdd2d8d7a",
+  "probeResult": "PASS"
+}

@@ -4,6 +4,7 @@ import {
   checkSalesStageB2ScopeForTest,
   checkTaB2bScopeForTest,
   checkTaB2c2ScopeForTest,
+  checkTaB2c3ScopeForTest,
   checkTaB2cScopeForTest,
   runSelftest,
 } from "../../scripts/quality/check-live-package-scope.mjs";
@@ -154,6 +155,33 @@ describe("Kreile live package scope", () => {
       expect(checkSalesStageB2ScopeForTest({ files: [path], mission: b2Mission, branch: "kreile/b2-eingang" }), path).toEqual([]);
     }
     const adjacent = "src/lib/server/commands/quoteCommand.ts";
+    expect(checkSalesStageB2ScopeForTest({ files: [adjacent], mission: b2Mission, branch: "kreile/b2-eingang" }))
+      .toContain(`SALES_STAGE_B2_SCOPE:${adjacent}`);
+  });
+
+  it("allows only the TA-B2c3 anchor paths and its two exact receipt-read paths", () => {
+    expect(checkTaB2c3ScopeForTest({
+      files: [
+        "docs/project/arbeitspakete/TRUST_ANCHOR_B2C3.md",
+        "docs/evidence/live-line/b2/TRUST_ANCHOR_B2C3.json",
+      ],
+      mission: b2cAnchorMission,
+      branch: "codex/ta-b2c3",
+      baseSha: "8d5dd1fc7af5509898a317ef4f42087df052685a",
+    })).toEqual([]);
+    expect(checkTaB2c3ScopeForTest({
+      files: ["src/app/page.tsx"],
+      mission: b2cAnchorMission,
+      branch: "codex/ta-b2c3",
+      baseSha: "8d5dd1fc7af5509898a317ef4f42087df052685a",
+    })).toContain("TA_B2C3_SCOPE:src/app/page.tsx");
+    for (const path of [
+      "src/lib/server/orderIntakeRead.ts",
+      "src/lib/server/__tests__/orderIntakeRead.test.ts",
+    ]) {
+      expect(checkSalesStageB2ScopeForTest({ files: [path], mission: b2Mission, branch: "kreile/b2-eingang" }), path).toEqual([]);
+    }
+    const adjacent = "src/lib/server/quoteRead.ts";
     expect(checkSalesStageB2ScopeForTest({ files: [adjacent], mission: b2Mission, branch: "kreile/b2-eingang" }))
       .toContain(`SALES_STAGE_B2_SCOPE:${adjacent}`);
   });
