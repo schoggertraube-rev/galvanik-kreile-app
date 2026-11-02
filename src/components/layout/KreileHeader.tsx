@@ -146,7 +146,8 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
         <button
           onClick={() => requestGlobalCreate("DIRECT_INTAKE")}
           className="w-9 h-9 rounded-full bg-accent-orange text-white flex items-center justify-center hover:bg-accent-orange/90 transition-all shadow-sm"
-          title="Neu anlegen"
+          aria-label="Neu erfassen"
+          title="Neu erfassen"
         >
           <Plus className="w-5 h-5" />
         </button>

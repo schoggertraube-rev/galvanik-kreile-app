@@ -447,7 +447,7 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
           await expect(emptyWorkshopHeading).toHaveCount(0);
         }
         const hubIntake = rolf.page.getByRole("button", {
-          name: "Neuer Eingang",
+          name: "Neu erfassen",
           exact: true,
         });
         await expect(hubIntake).toBeVisible();
@@ -472,7 +472,7 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
         );
         await hubIntake.click();
         const hubCreateDialog = rolf.page.getByRole("dialog", {
-          name: "Neuer Eingang",
+          name: "Neu erfassen",
         });
         await expect(hubCreateDialog).toBeVisible();
         await expect(hubCreateDialog.getByLabel("Firma / Name")).toBeFocused();
@@ -510,7 +510,7 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
         );
         await stationIntake.click();
         const stationCreateDialog = rolf.page.getByRole("dialog", {
-          name: "Neuer Eingang",
+          name: "Neu erfassen",
         });
         await expect(stationCreateDialog).toBeVisible();
         await expect(
@@ -539,9 +539,9 @@ test.describe("PATH1 V5 P3 – reale Kernflächen und Lane-0-Suche", () => {
       await rolf.page.setViewportSize({ width: 1914, height: 917 });
       await rolf.page.goto("/", { waitUntil: "networkidle" });
 
-      await rolf.page.getByRole("button", { name: "Neuer Eingang" }).click();
+      await rolf.page.getByRole("button", { name: "Neu erfassen" }).click();
       await expect(
-        rolf.page.getByRole("heading", { name: "Neuer Eingang" }),
+        rolf.page.getByRole("heading", { name: "Neu erfassen" }),
       ).toBeVisible();
       await rolf.page.getByRole("button", { name: "Neukunde" }).click();
       await rolf.page.getByLabel("Firma / Name").fill(customerName);

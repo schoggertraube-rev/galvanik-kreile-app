@@ -3,7 +3,6 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { hasAuthorizationArea, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import { getOperationalOrders } from "@/lib/server/operationalOrders";
-import { readIntakeDraft } from "@/lib/server/intakeDraft";
 import { listMicrosoftGraphInbox } from "@/lib/server/microsoftGraph";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { classifyMoneyForToday, defaultTodayLayout, deriveOrderGuidance, deriveTodayReminder, filterTodayLayout, isBundleStationForToday, parseTodayLayout, type TodayLayoutField, type TodayLayoutItem, type TodayOrderGuidance, type TodayReminderMode } from "@/lib/server/todayDashboardPolicy";
@@ -14,7 +13,7 @@ export type { TodayLayoutItem } from "@/lib/server/todayDashboardPolicy";
 export type TodayItem = {
   key: string;
   field: TodayField;
-  kind: "draft" | "order" | "mail" | "invoice" | "bundle";
+  kind: "order" | "mail" | "invoice" | "bundle";
   title: string;
   meta: string;
   urgency: "conflict" | "decision" | "warning";
@@ -49,7 +48,7 @@ type GraphThreadRow = { source: string };
 type AssignmentRow = { order_id: string; assigned_to_name: string; current_order_version: number };
 
 const DEFAULT_FIELDS: TodayVisibleField[] = ["today", "assign", "money", "bundle"];
-const STAGE2_TODAY_FEATURES = new Set<"bundle" | "drafts">();
+const STAGE2_TODAY_FEATURES = new Set<"bundle">();
 function allowedTodayFields(auth: AuthorizationSnapshot): Set<TodayLayoutField> {
   const allowed = new Set<TodayLayoutField>(["action"]);
   if (hasAuthorizationArea(auth, "auftraege")) {
@@ -73,9 +72,8 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
   const ordersAllowed = hasAuthorizationArea(auth, "auftraege");
   const graphAllowed = hasAuthorizationArea(auth, "mails");
   const moneyAllowed = hasAuthorizationArea(auth, "geld");
-  const [orders, draft, graph, support] = await Promise.all([
+  const [orders, graph, support] = await Promise.all([
     ordersAllowed ? getOperationalOrders(auth) : Promise.resolve([]),
-    STAGE2_TODAY_FEATURES.has("drafts") ? readIntakeDraft(auth) : Promise.resolve({ code: "OK" as const, data: null }),
     graphAllowed ? listMicrosoftGraphInbox() : Promise.resolve({ code: "IN_KLAERUNG" as const, message: "Outlook ist für dieses Profil nicht eingeblendet." }),
     withPrivilegedTenantTransaction(auth, async (tx) => {
       const [preferences, reminders, invoices, prepayments, delegationTargets, graphThreads, assignments] = await Promise.all([
@@ -150,8 +148,6 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
   const items: TodayItem[] = [];
   const assignments = new Map(support.assignments.map((row) => [row.order_id, row]));
   const add = (item: TodayItem) => items.push({ ...item, field: item.field === "action" || selectedSet.has(item.field as TodayVisibleField) ? item.field : "action", snoozedUntil: reminders.get(item.key) });
-
-  if (STAGE2_TODAY_FEATURES.has("drafts") && draft.code === "OK" && draft.data) add({ key: "draft:intake", field: "action", kind: "draft", title: "Entwurf Neuer Eingang", meta: `Gespeichert ${new Intl.DateTimeFormat("de-DE", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Berlin" }).format(new Date(draft.data.updatedAt))}`, urgency: "decision" });
 
   for (const order of orders) {
     const guidance = deriveOrderGuidance(order, today);
