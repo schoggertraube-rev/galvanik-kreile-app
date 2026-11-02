@@ -43,8 +43,8 @@ export function AbschnittNav({ abschnitte, aktuell, onAbschnitt }: AbschnittNavP
   return <div className="kr-eingang-nav"><nav className="kr-schritt-nav" aria-label="Abschnitte">{abschnitte.map((s, n) => (
     <button key={s} type="button" className={n <= aktuell ? 'an' : undefined} aria-current={n === aktuell ? 'step' : undefined} onClick={() => onAbschnitt(n)}><b>{n + 1}</b>{s}</button>))}</nav></div>;
 }
-export interface AbschnittProps { nr: number; label: string; children: ReactNode; }
+export interface AbschnittProps { nr: number; label: string; dataSpecId?: string; children: ReactNode; }
 /** Abschnitt ohne eigene Überschrift (§6.3) – Name steht nur in der AbschnittNav; aria-label für Screenreader */
-export function Abschnitt({ nr, label, children }: AbschnittProps) {
-  return <section className="kr-abschnitt" data-abschnitt={nr} aria-label={label}>{children}</section>;
+export function Abschnitt({ nr, label, dataSpecId, children }: AbschnittProps) {
+  return <section className="kr-abschnitt" data-abschnitt={nr} data-spec-id={dataSpecId} aria-label={label}>{children}</section>;
 }

@@ -1284,7 +1284,6 @@ test.describe("BAUPLAN Wege · kundebearbeiten", () => {
   for (const flowCase of cases) {
     const packageTag = flowCase.paket ? `@${flowCase.paket}` : "@UNASSIGNED";
     test(`${flowCase.id || "OFFEN"} ${packageTag} · ${flowCase.titel || "noch nicht beschrieben"}`, async ({ page }) => {
-      test.skip(!flowCase.paket, "Im Bauplan noch keinem Paket zugeordnet");
       const red = expectedRed[flowCase.id as keyof typeof expectedRed];
       test.fail(Boolean(red), red ? `${red.paket}: ${red.grund}` : undefined);
       await runGeneratedFlowCase(page, flowCase);

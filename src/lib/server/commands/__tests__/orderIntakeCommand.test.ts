@@ -415,7 +415,7 @@ describe("createOrderIntake", () => {
     expect(sqlText).not.toMatch(/createClient|supabase|rpc\(/i);
   });
 
-  it.each([null, "Stück"])("accepts a free-text item without catalog or price, unit %s, and skips catalog validation", async (unit) => {
+  it.each([null, "Stück", "kg", "dm²", "Satz", "Std."])("accepts a free-text item without catalog or price, unit %s, and skips catalog validation", async (unit) => {
     const freeTextInput = {
       ...input,
       items: [{ catalogServiceId: null, name: "TEST Sonderteil", quantity: 1, material: "Stahl", surfaceRequested: "Vernickeln", unit, unitPriceCents: null, vatRateBasisPoints: null }],

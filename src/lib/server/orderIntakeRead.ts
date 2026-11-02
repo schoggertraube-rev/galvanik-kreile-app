@@ -3,7 +3,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
-import type { OrderIntakeExecutionRequested, OrderIntakeReceipt, OrderIntakeReceiptItem, OrderIntakeSource, OrderIntakeTermStatus } from "@/lib/server/commands/orderIntakeCommand";
+import { isOrderIntakeFreeTextUnit, type OrderIntakeExecutionRequested, type OrderIntakeReceipt, type OrderIntakeReceiptItem, type OrderIntakeSource, type OrderIntakeTermStatus } from "@/lib/server/commands/orderIntakeCommand";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -166,7 +166,11 @@ function parseItems(value: unknown): OrderIntakeReceiptItem[] | null {
       !(candidate.unit === null || trimmed(candidate.unit, 1, 40)) ||
       !(candidate.unitPriceCents === null || (typeof candidate.unitPriceCents === "number" && Number.isSafeInteger(candidate.unitPriceCents) && candidate.unitPriceCents >= 0)) ||
       !(candidate.vatRateBasisPoints === null || (typeof candidate.vatRateBasisPoints === "number" && [0,700,1900].includes(candidate.vatRateBasisPoints))) ||
-      ((candidate.catalogServiceId === null) !== (candidate.unit === null && candidate.unitPriceCents === null && candidate.vatRateBasisPoints === null))
+      !(
+        (candidate.catalogServiceId !== null && candidate.unit !== null && candidate.unitPriceCents !== null && candidate.vatRateBasisPoints !== null)
+        || (candidate.catalogServiceId === null && candidate.unitPriceCents === null && candidate.vatRateBasisPoints === null
+          && (candidate.unit === null || (typeof candidate.unit === "string" && isOrderIntakeFreeTextUnit(candidate.unit))))
+      )
     ) throw new Error("ORDER_INTAKE_RECEIPT_INVALID");
     return {
       id: candidate.id,

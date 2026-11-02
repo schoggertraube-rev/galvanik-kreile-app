@@ -243,6 +243,7 @@ type IntakeChecklistEntry = {
   target: string;
   targetIndex?: number;
   warning?: boolean;
+  pending?: boolean;
 };
 
 function CustomerFormFields({
@@ -1056,7 +1057,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       if (isTyping) return;
       const key = event.key.toLowerCase();
       if (!open && key === "n") {
-        if (!ports.canCreateOrder || activeCustomerOverlayId || document.querySelector("[role='dialog']")) return;
+        const visibleDialogOpen = [...document.querySelectorAll<HTMLElement>("[role='dialog']")]
+          .some((dialog) => dialog.getClientRects().length > 0 && dialog.getAttribute("aria-hidden") !== "true");
+        if (!ports.canCreateOrder || activeCustomerOverlayId || visibleDialogOpen) return;
         event.preventDefault();
         openWithIntent("DIRECT_INTAKE");
         return;
@@ -1566,6 +1569,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         setDirectWishDate(values.dueDate);
         setDirectConfirmedDate(values.dueDate);
         setIntakeWishDateOrigin("recognized");
+        setIntakeTermStatus((current) => current || "wish");
       }
       if (result.data.positions.length > 0) {
         const recognized = result.data.positions.map((position) => ({
@@ -1622,15 +1626,17 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const firstMissingQuantity = directItems.findIndex((item) => !Number.isSafeInteger(Number(item.quantity)) || Number(item.quantity) <= 0);
   const firstMissingUnit = directItems.findIndex((item) => !item.unit);
   const firstMissingSurface = directItems.findIndex((item) => item.surfaceRequested.trim().length < 2);
+  const hasPendingRecognizedPosition = !recognitionConfirmed && recognitionMarkers.some((marker) => marker.key.startsWith("position-"));
+  const hasPendingRecognizedDueDate = !recognitionConfirmed && recognitionMarkers.some((marker) => marker.key === "dueDate");
   const intakeChecklist: IntakeChecklistEntry[] = [
     { id: "kunde", label: "Kunde", detail: customerIssue?.detail ?? "vollständig", complete: customerIssue === null, step: 1, target: customerIssue?.target ?? "eingang.kundensuche" },
-    { id: "bezeichnung", label: "Teil / Leistung", detail: firstMissingName >= 0 ? `Position ${firstMissingName + 1} fehlt` : `${directItems.length} Position${directItems.length === 1 ? "" : "en"}`, complete: firstMissingName < 0, step: 2, target: "eingang.bezeichnung", targetIndex: Math.max(firstMissingName, 0) },
-    { id: "menge", label: "Menge", detail: firstMissingQuantity >= 0 ? `Position ${firstMissingQuantity + 1} fehlt` : "vollständig", complete: firstMissingQuantity < 0, step: 2, target: "eingang.menge", targetIndex: Math.max(firstMissingQuantity, 0) },
-    { id: "einheit", label: "Einheit", detail: firstMissingUnit >= 0 ? `Position ${firstMissingUnit + 1} fehlt` : "vollständig", complete: firstMissingUnit < 0, step: 2, target: "eingang.einheit", targetIndex: Math.max(firstMissingUnit, 0) },
-    { id: "oberflaeche", label: "Oberfläche", detail: firstMissingSurface >= 0 ? `Position ${firstMissingSurface + 1} fehlt` : "vollständig", complete: firstMissingSurface < 0, step: 2, target: "eingang.oberflaeche", targetIndex: Math.max(firstMissingSurface, 0) },
+    { id: "bezeichnung", label: "Teil / Leistung", detail: firstMissingName >= 0 ? `Position ${firstMissingName + 1} fehlt` : hasPendingRecognizedPosition ? "erkannt · bitte bestätigen" : `${directItems.length} Position${directItems.length === 1 ? "" : "en"}`, complete: firstMissingName < 0 && !hasPendingRecognizedPosition, pending: firstMissingName < 0 && hasPendingRecognizedPosition, step: 2, target: "eingang.bezeichnung", targetIndex: Math.max(firstMissingName, 0) },
+    { id: "menge", label: "Menge", detail: firstMissingQuantity >= 0 ? `Position ${firstMissingQuantity + 1} fehlt` : hasPendingRecognizedPosition ? "erkannt · bitte bestätigen" : "vollständig", complete: firstMissingQuantity < 0 && !hasPendingRecognizedPosition, pending: firstMissingQuantity < 0 && hasPendingRecognizedPosition, step: 2, target: "eingang.menge", targetIndex: Math.max(firstMissingQuantity, 0) },
+    { id: "einheit", label: "Einheit", detail: firstMissingUnit >= 0 ? `Position ${firstMissingUnit + 1} fehlt` : hasPendingRecognizedPosition ? "erkannt · bitte bestätigen" : "vollständig", complete: firstMissingUnit < 0 && !hasPendingRecognizedPosition, pending: firstMissingUnit < 0 && hasPendingRecognizedPosition, step: 2, target: "eingang.einheit", targetIndex: Math.max(firstMissingUnit, 0) },
+    { id: "oberflaeche", label: "Oberfläche", detail: firstMissingSurface >= 0 ? `Position ${firstMissingSurface + 1} fehlt` : hasPendingRecognizedPosition ? "erkannt · bitte bestätigen" : "vollständig", complete: firstMissingSurface < 0 && !hasPendingRecognizedPosition, pending: firstMissingSurface < 0 && hasPendingRecognizedPosition, step: 2, target: "eingang.oberflaeche", targetIndex: Math.max(firstMissingSurface, 0) },
     ...(ports.canManageMoney ? [{ id: "art", label: "Art", detail: intakeKind === "auftrag" ? "Auftrag" : "fehlt", complete: intakeKind === "auftrag", step: 3 as const, target: "eingang.art" }] : []),
-    { id: "liefertermin", label: "Liefertermin", detail: directWishDate || "fehlt", complete: Boolean(directWishDate), step: 3, target: "eingang.liefertermin" },
-    { id: "terminstatus", label: "Terminstatus", detail: intakeTermStatus === "wish" ? "Wunsch" : intakeTermStatus === "confirmed" ? "bestätigt" : "fehlt", complete: Boolean(intakeTermStatus), step: 3, target: "eingang.terminstatus" },
+    { id: "liefertermin", label: "Liefertermin", detail: directWishDate ? hasPendingRecognizedDueDate ? "erkannt · bitte bestätigen" : directWishDate : "fehlt", complete: Boolean(directWishDate) && !hasPendingRecognizedDueDate, pending: Boolean(directWishDate) && hasPendingRecognizedDueDate, step: 3, target: "eingang.liefertermin" },
+    { id: "terminstatus", label: "Terminstatus", detail: intakeTermStatus === "wish" ? hasPendingRecognizedDueDate ? "erkannt · bitte bestätigen" : "Wunsch" : intakeTermStatus === "confirmed" ? "bestätigt" : "fehlt", complete: Boolean(intakeTermStatus) && !hasPendingRecognizedDueDate, pending: Boolean(intakeTermStatus) && hasPendingRecognizedDueDate, step: 3, target: "eingang.terminstatus" },
     { id: "eingangsart", label: "Eingangsart", detail: intakeSource === "persoenlich" ? "persönlich angeliefert" : intakeSource === "versand" ? "Versand eingegangen" : intakeSource === "abholung_firma" ? "Abholung durch Firma" : intakeSource === "anfrage_mail" ? "Anfrage per Mail" : intakeSource === "anfrage_telefon" ? "Anfrage per Telefon" : "fehlt", complete: Boolean(intakeSource), step: 3, target: "eingang.eingangsart" },
     { id: "uebergabe", label: "Übergabe", detail: intakeHandover === "PICKUP" ? "Abholung" : intakeHandover === "SHIPPING" ? "Versand" : "fehlt", complete: Boolean(intakeHandover), step: 3, target: "eingang.uebergabe" },
     ...(ports.canManageMoney ? [{ id: "zahlungsmodus", label: "Zahlungsmodus", detail: intakePaymentMode === "abholung" ? "Bar oder Karte bei Abholung" : intakePaymentMode === "rechnung" ? "Rechnung auf Ziel" : intakePaymentMode === "vorkasse" ? "Vorkasse" : "fehlt", complete: Boolean(intakePaymentMode), step: 3 as const, target: "eingang.zahlungsmodus" }] : []),
@@ -2085,18 +2091,18 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 <div><h3 id="quick-capture-title">Schnell erfassen</h3><p>Paket oder persönliche Übergabe als Text erfassen</p></div>
                 <Textfeld data-spec-id="eingang.erfassen-text" aria-label="Schnell erfassen" rows={3} maxLength={6000} value={intakeRecognitionText} onChange={(event) => { setIntakeRecognitionText(event.target.value); setRecognitionConfirmed(false); setIntakeDirty(true); }} placeholder="z. B. 2 Stück Flansch verzinken, bis 12.11." />
                 <div className={styles.createInlineChoices}>
-                  {(!lastRecognizedText || intakeRecognitionText !== lastRecognizedText) ? <KrButton data-spec-id="eingang.erkennen" art={intakeRecognitionText.trim() ? "primaer" : "sekundaer"} text={recognitionBusy ? "Angaben werden erkannt …" : "Angaben erkennen"} disabled={recognitionBusy || !intakeRecognitionText.trim()} onClick={() => void recognizeDirectIntakeText()} /> : null}
+                  {(!lastRecognizedText || intakeRecognitionText !== lastRecognizedText) ? <KrButton data-spec-id="eingang.angaben-erkennen" art={intakeRecognitionText.trim() ? "primaer" : "sekundaer"} text={recognitionBusy ? "Angaben werden erkannt …" : "Angaben erkennen"} disabled={recognitionBusy || !intakeRecognitionText.trim()} onClick={() => void recognizeDirectIntakeText()} /> : null}
                 </div>
                 <div className={styles.createPhotoConnector} aria-label="Fotos mit Tablet/Handy" aria-disabled="true">
                   <Camera aria-hidden="true" />
                   <span><strong>Fotos mit Tablet/Handy</strong><small>Fotoerfassung ist in diesem Paket noch nicht aktiv.</small></span>
                 </div>
                 {recognitionBusy ? <Hinweis>Angaben werden erkannt … Das Formular bleibt bedienbar.</Hinweis> : null}
-                {recognitionMarkers.length > 0 ? <div className={styles.createRecognition} aria-live="polite">
-                  <strong>{recognitionConfirmed ? `${recognitionMarkers.length} Angaben bestätigt` : `${recognitionMarkers.length} Angaben erkannt und vorausgefüllt`}</strong>
-                  <div>{recognitionMarkers.map((marker) => <Chip key={marker.key} text={`${marker.label}: ${marker.value} · ${recognitionConfirmed ? "bestätigt" : `erkannt · ${marker.source}`}`} ton={recognitionConfirmed ? "ok" : "info"} />)}</div>
-                  {!recognitionConfirmed ? <KrButton data-spec-id="eingang.alles-bestaetigen" art="sekundaer" text="Alles bestätigen" onClick={() => setRecognitionConfirmed(true)} /> : null}
-                </div> : null}
+                  {recognitionMarkers.length > 0 ? <div className={styles.createRecognition} aria-live="polite">
+                    <strong>{recognitionConfirmed ? `${recognitionMarkers.length} Angaben bestätigt` : `${recognitionMarkers.length} Angaben erkannt und vorausgefüllt`}</strong>
+                    <div>{recognitionMarkers.map((marker) => <span key={marker.key} data-spec-id={marker.key.includes("quantity") ? "eingang.menge.herkunft" : undefined}><Chip text={`${marker.label}: ${marker.value} · ${recognitionConfirmed ? "bestätigt" : `erkannt · ${marker.source}`}`} ton={recognitionConfirmed ? "ok" : "info"} /></span>)}</div>
+                    {!recognitionConfirmed ? <KrButton data-spec-id="eingang.alles-bestaetigen" art="sekundaer" text="Alles bestätigen" onClick={() => setRecognitionConfirmed(true)} /> : null}
+                  </div> : null}
               </section>
               <datalist id="kr-service-catalog">{catalogServices.map((service) => <option key={service.id} value={service.name}>{service.surface}</option>)}</datalist>
               {isHandy ? <SchrittNav schritte={["Kunde", "Positionen", "Prüfung"]} aktuell={intakeStep - 1} erreicht={intakeStep - 1} onSchritt={(index) => setIntakeStep((index + 1) as 1 | 2 | 3)} /> : <AbschnittNav abschnitte={["Kunde", "Positionen", "Prüfung"]} aktuell={intakeStep - 1} onAbschnitt={(index) => {
@@ -2104,7 +2110,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 document.querySelector(`[data-abschnitt="${index}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
               }} />}
 
-              {(!isHandy || intakeStep === 1) ? <Abschnitt nr={0} label="Kunde">
+                {(!isHandy || intakeStep === 1) ? <Abschnitt nr={0} label="Kunde">
                 <FormRaster>
                   {ports.canManageMoney ? <Feld label="Art" voll><div data-spec-id="eingang.art"><Segment<"" | "auftrag"> label="Art" wert={intakeKind} optionen={[{ wert: "auftrag", text: "Auftrag" }]} onWert={(value) => { setIntakeKind(value); setIntakeDirty(true); }} /></div></Feld> : null}
                   <Feld label={directCustomerMode === "NONE" ? "Kunde suchen" : "Kunde"} voll>
@@ -2137,24 +2143,24 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                       </div> : null}
                       {intakeCustomerResults.length > 0 ? <Hinweis ton="warn">Möglicher Doppelter vorhanden – bitte Treffer prüfen.</Hinweis> : null}
                       <KrButton data-spec-id="eingang.kunde-anlegen" art="sekundaer" text="Kunde anlegen" onClick={openIntakeCustomerCreate} />
-                    </div> : <div className="kr-stapel">
+                    </div> : <div className="kr-stapel" data-spec-id="eingang.kundenzeile">
                       <Fakten zeilen={[{ k: "Name / Firma", v: directCustomer.companyName ?? directCustomer.name }, { k: "Kundennummer", v: customerChoices.find((entry) => entry.id === directCustomerId)?.customerNumber ?? "fehlt" }]} />
                       {intakeOrigin === "customer-card" ? <Chip text="aus der Kundenkarte" ton="info" /> : null}
                       <KrButton art="sekundaer" text="Anderer Kunde" onClick={() => selectIntakeCustomer("NONE")} />
                     </div>}
                   </Feld>
                 </FormRaster>
-                {directCustomerMode === "EXISTING" && !directCustomerReadiness.ready ? <Hinweis ton="warn"><div className="kr-stapel">
-                   <strong>Unvollständig – für Auftrag fehlt: {directCustomerReadiness.issues.map((issue) => issue.message).join(", ")}</strong>
-                   <span>Ergänzungen werden ausschließlich in der Kundenkarte gespeichert.</span>
-                   <KrButton data-spec-id="eingang.kunde-erganzen" art="sekundaer" text="In Kundenkarte ergänzen" onClick={() => {
+                {directCustomerMode === "EXISTING" && !directCustomerReadiness.ready ? <div data-spec-id="eingang.zustand.teilweise_bestand"><Hinweis ton="warn"><div className="kr-stapel">
+                    <strong>Unvollständig – für Auftrag fehlt: {directCustomerReadiness.issues.map((issue) => ["street", "zipCode", "city", "country"].includes(issue.field) ? `Anschrift: ${issue.message}` : issue.message).join(", ")}</strong>
+                    <span>Ergänzungen werden ausschließlich in der Kundenkarte gespeichert.</span>
+                    <KrButton data-spec-id="eingang.kunde-erganzen" art="sekundaer" text="In Kundenkarte ergänzen" onClick={() => {
                      const customerId = directCustomerId;
                      if (!customerId) return;
                      intakeCustomerOverlayWasOpen.current = false;
                      setIntakeCustomerOverlayId(customerId);
-                     ports.openCustomer(customerId);
-                   }} />
-                </div></Hinweis> : null}
+                      ports.openCustomer(customerId);
+                    }} />
+                </div></Hinweis></div> : null}
                 {intakeTermChoice ? <div className={styles.intakeSuggestion} data-spec-id="eingang.terminvorschlag">
                   <div><strong>Liefertermin {intakeTermChoice.kind === "adopted" ? intakeTermChoice.achievableDate : intakeTermChoice.wishDate}</strong><span>{intakeTermChoice.kind === "adopted" ? "Vorschlag übernommen" : "Wunsch gehalten, Kunde wird vorgewarnt"}</span></div>
                   <KrButton art="sekundaer" text="Ändern" onClick={changeIntakeTermChoice} />
@@ -2199,7 +2205,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                         { wert: "abholung", text: intakePaymentChoices.abholung.allowed ? "Bar oder Karte bei Abholung" : `Bar oder Karte bei Abholung (${intakePaymentChoices.abholung.reason})`, gesperrt: !intakePaymentChoices.abholung.allowed },
                         { wert: "rechnung", text: intakePaymentChoices.rechnung.allowed ? "Rechnung auf Ziel" : `Rechnung auf Ziel (${intakePaymentChoices.rechnung.reason})`, gesperrt: !intakePaymentChoices.rechnung.allowed },
                       ]} />
-                      {intakePaymentOrigin === "customer-card" && intakePaymentMode ? <Chip text="aus Kundenkarte" ton="info" /> : null}
+                      {intakePaymentOrigin === "customer-card" && intakePaymentMode ? <span data-spec-id="eingang.zahlungsmodus.herkunft"><Chip text="aus Kundenkarte" ton="info" /></span> : null}
                     </div>
                   </Feld> : null}
                 </FormRaster>
@@ -2221,7 +2227,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 <KrButton art="sekundaer" icon="plus" text="Position hinzufügen" disabled={directItems.length >= 20} onClick={() => { setDirectItems((current) => [...current, newIntakePosition()]); setIntakeDirty(true); }} />
               </Abschnitt> : null}
 
-              {(!isHandy || intakeStep === 3) ? <Abschnitt nr={2} label="Prüfung">
+                  {(!isHandy || intakeStep === 3) ? <Abschnitt nr={2} label="Prüfung" dataSpecId="eingang.geprueft">
                 <Feld label="Hinweis / Belege" voll><Textfeld rows={3} value={directNote} onChange={(event) => { setDirectNote(event.target.value); setIntakeDirty(true); }} /></Feld>
                 <FormRaster>
                   <Fakten zeilen={[
@@ -2242,10 +2248,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 </div>
                 <div className={styles.intakeChecklistGroup}>
                   <h3>Pflicht</h3>
-                  {requiredIntakeChecks.map((entry) => <button data-spec-id={`eingang.pruefliste.${entry.id}`} type="button" key={entry.id} data-state={entry.complete ? "ok" : "open"} onClick={() => jumpToIntakeCheck(entry)}>
+                  {requiredIntakeChecks.map((entry) => <button data-spec-id={`eingang.pruefliste.${entry.id}`} type="button" key={entry.id} data-state={entry.complete ? "ok" : entry.pending ? "pending" : "open"} onClick={() => jumpToIntakeCheck(entry)}>
                     <span className={styles.intakeChecklistIcon}>{entry.complete ? <Check aria-hidden="true" /> : "!"}</span>
                     <span><strong>{entry.label}</strong><small>{entry.detail}</small></span>
-                    <em>{entry.complete ? "ok" : "fehlt"}</em>
+                    <em>{entry.complete ? "ok" : entry.pending ? "prüfen" : "fehlt"}</em>
                   </button>)}
                 </div>
                 {intakeChecklist.some((entry) => entry.warning) ? <div className={styles.intakeChecklistGroup}>
@@ -2259,8 +2265,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
               </aside> : null}
 
               {feedback ? <>
-                <Hinweis ton={feedback.kind === "validation" ? "warn" : undefined}><span><strong>{feedback.kind === "save-failed" ? "Speichern fehlgeschlagen · alle Eingaben sind noch da" : feedback.kind === "unclear" ? "Ausgang ungeklärt" : "Eingabe prüfen"}</strong><br />{feedback.message}</span></Hinweis>
-                {feedback.kind === "save-failed" ? <KrButton art="primaer" text={busy ? "Wird gebucht …" : "Erneut buchen"} onClick={() => void submitDirectIntake({ preventDefault() {} } as FormEvent)} disabled={busy} /> : null}
+                <div data-spec-id={feedback.kind === "save-failed" ? "eingang.zustand.fehler" : undefined}><Hinweis ton={feedback.kind === "validation" ? "warn" : undefined}><span><strong>{feedback.kind === "save-failed" ? "Speichern fehlgeschlagen · alle Eingaben sind noch da" : feedback.kind === "unclear" ? "Ausgang ungeklärt" : "Eingabe prüfen"}</strong><br />{feedback.message}</span></Hinweis></div>
+                {feedback.kind === "save-failed" ? <KrButton data-spec-id="eingang.erneut-buchen" art="primaer" text={busy ? "Wird gebucht …" : "Erneut buchen"} onClick={() => void submitDirectIntake({ preventDefault() {} } as FormEvent)} disabled={busy} /> : null}
                 {feedback.kind === "unclear" ? <div className="kr-stapel">
                   <KrButton art="sekundaer" text="Status mit gleicher Kennung prüfen" onClick={() => void checkUnclearStatus()} disabled={busy} />
                   {statusChecked ? <KrButton text={retryConfirmed ? "Ja, jetzt erneut senden" : "Erneut senden vorbereiten"} onClick={retryAfterStatusCheck} disabled={busy} /> : null}
@@ -2270,19 +2276,19 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         </KrDialog>
       ) : null}
       {open && intakeClosePrompt ? createPortal(
-        <KrDialog
+          <KrDialog
           key="intake-close-prompt"
           titel="Entwurf verwerfen?"
           icon="alert"
           groesse="schmal"
           onSchliessen={() => setIntakeClosePrompt(false)}
           fuss={<>
-            <KrButton art="leise" text="Verwerfen" onClick={discardIntake} />
-            <KrButton art="primaer" text="Weiter bearbeiten" onClick={() => setIntakeClosePrompt(false)} />
+            <KrButton data-spec-id="entwurf.verwerfen" art="leise" text="Verwerfen" onClick={discardIntake} />
+            <KrButton data-spec-id="entwurf.weiter-bearbeiten" art="primaer" text="Weiter bearbeiten" onClick={() => setIntakeClosePrompt(false)} />
           </>}
-        >
-          <p>In Stufe 1 kannst du die Eingaben verwerfen oder weiter bearbeiten.</p>
-        </KrDialog>,
+          >
+            <div data-spec-id="entwurf"><p>In Stufe 1 kannst du die Eingaben verwerfen oder weiter bearbeiten.</p></div>
+          </KrDialog>,
         document.body,
       ) : null}
       {open && step !== "choose" && step !== "customer" && step !== "direct-intake" ? (

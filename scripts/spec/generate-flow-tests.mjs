@@ -7,6 +7,7 @@ const root = process.cwd();
 const generatedRoot = path.join(root, "e2e", "generated");
 const defaultBauplan = "docs/project/endversion/codex/BAUPLAN.json";
 const expectedRedPath = path.join(generatedRoot, "_erwartet_rot.json");
+const workQueuePath = path.join(root, "docs", "project", "arbeitspakete", "WORKQUEUE.json");
 
 function parseArguments(argv) {
   let bauplan = defaultBauplan;
@@ -184,7 +185,6 @@ function renderPage(pageName, page, bauplanSha) {
     + `  for (const flowCase of cases) {\n`
     + `    const packageTag = flowCase.paket ? \`@\${flowCase.paket}\` : "@UNASSIGNED";\n`
     + `    test(\`\${flowCase.id || "OFFEN"} \${packageTag} · \${flowCase.titel || "noch nicht beschrieben"}\`, async ({ page }) => {\n`
-    + `      test.skip(!flowCase.paket, "Im Bauplan noch keinem Paket zugeordnet");\n`
     + `      const red = expectedRed[flowCase.id as keyof typeof expectedRed];\n`
     + `      test.fail(Boolean(red), red ? \`\${red.paket}: \${red.grund}\` : undefined);\n`
     + `      await runGeneratedFlowCase(page, flowCase);\n`
@@ -206,13 +206,20 @@ function readAndValidateExpectedRed(document) {
       cases.set(flowCase.id, flowCase);
     }
   }
+  if (!existsSync(workQueuePath)) throw new Error("FLOW_EXPECTED_RED_WORKQUEUE_MISSING");
+  const workQueue = JSON.parse(readFileSync(workQueuePath, "utf8"));
+  const acceptedPackages = new Set(
+    (workQueue.pakete ?? [])
+      .filter((workPackage) => workPackage?.status === "abgenommen")
+      .map((workPackage) => workPackage.nr)
+      .filter((packageId) => typeof packageId === "string"),
+  );
   for (const [id, entry] of Object.entries(expectedRed)) {
     const flowCase = cases.get(id);
     if (!flowCase) throw new Error(`FLOW_EXPECTED_RED_CASE_UNKNOWN:${id}`);
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error(`FLOW_EXPECTED_RED_ENTRY_INVALID:${id}`);
-    if (!flowCase.paket) throw new Error(`FLOW_EXPECTED_RED_UNASSIGNED:${id}`);
-    if (entry.paket !== flowCase.paket) throw new Error(`FLOW_EXPECTED_RED_PACKAGE_MISMATCH:${id}`);
-    if (entry.paket !== "AP-K1") throw new Error(`FLOW_EXPECTED_RED_ACCEPTED_PACKAGE:${id}:${entry.paket}`);
+    if (typeof entry.paket !== "string" || !entry.paket.startsWith("AP-")) throw new Error(`FLOW_EXPECTED_RED_PACKAGE_REQUIRED:${id}`);
+    if (acceptedPackages.has(entry.paket)) throw new Error(`FLOW_EXPECTED_RED_ACCEPTED_PACKAGE:${id}:${entry.paket}`);
     if (typeof entry.grund !== "string" || entry.grund.trim().length === 0) throw new Error(`FLOW_EXPECTED_RED_REASON_REQUIRED:${id}`);
   }
   return expectedRed;

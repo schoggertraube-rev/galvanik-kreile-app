@@ -15,13 +15,18 @@ const EVENT_STATION = "wareneingang" as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const EXECUTION_REQUESTED_VALUES = ["hochglanz", "glaenzend", "matt", "gelb_passiviert", "blau_passiviert", "offen"] as const;
-const FREE_TEXT_UNIT_VALUES = ["Stück", "kg", "dm²", "Satz", "Std."] as const;
+export const ORDER_INTAKE_FREE_TEXT_UNITS = ["Stück", "kg", "dm²", "Satz", "Std."] as const;
 const TERM_STATUS_VALUES = ["wunsch", "bestaetigt", "verschoben"] as const;
 const INTAKE_SOURCE_VALUES = ["persoenlich", "versand", "abholung_firma", "anfrage_mail", "anfrage_telefon"] as const;
 
 export type OrderIntakeExecutionRequested = typeof EXECUTION_REQUESTED_VALUES[number];
 export type OrderIntakeTermStatus = typeof TERM_STATUS_VALUES[number];
 export type OrderIntakeSource = typeof INTAKE_SOURCE_VALUES[number];
+
+/** One contract for free-text intake positions at write and receipt-read time. */
+export function isOrderIntakeFreeTextUnit(value: string): value is typeof ORDER_INTAKE_FREE_TEXT_UNITS[number] {
+  return (ORDER_INTAKE_FREE_TEXT_UNITS as readonly string[]).includes(value);
+}
 
 export type OrderIntakeItemInput = {
   catalogServiceId?: string | null;
@@ -247,7 +252,7 @@ function normalizeInput(input: unknown): NormalizedInput | null {
       && typeof unitPriceCents === "number" && Number.isSafeInteger(unitPriceCents) && unitPriceCents >= 0 && unitPriceCents <= 999_999_999
       && ([0, 700, 1900] as const).includes(vatRateBasisPoints as never);
     const freeTextFieldsValid = candidate.catalogServiceId === null
-      && (candidate.unit === null || (unit !== null && FREE_TEXT_UNIT_VALUES.includes(unit as typeof FREE_TEXT_UNIT_VALUES[number])))
+      && (candidate.unit === null || (unit !== null && isOrderIntakeFreeTextUnit(unit)))
       && candidate.unitPriceCents === null && candidate.vatRateBasisPoints === null;
     if (
       !name || !surfaceRequested || material === undefined || !executionRequested || (!catalogFieldsValid && !freeTextFieldsValid) ||
@@ -332,7 +337,11 @@ function parseReceiptItems(value: unknown): OrderIntakeReceiptItem[] | null {
       !(item.unit === null || (typeof item.unit === "string" && normalizedText(item.unit, 1, 40))) ||
       !(item.unitPriceCents === null || (typeof item.unitPriceCents === "number" && Number.isSafeInteger(item.unitPriceCents) && item.unitPriceCents >= 0)) ||
       !(item.vatRateBasisPoints === null || ([0, 700, 1900] as const).includes(item.vatRateBasisPoints as never)) ||
-      ((item.catalogServiceId === null) !== (item.unit === null && item.unitPriceCents === null && item.vatRateBasisPoints === null))
+      !(
+        (item.catalogServiceId !== null && item.unit !== null && item.unitPriceCents !== null && item.vatRateBasisPoints !== null)
+        || (item.catalogServiceId === null && item.unitPriceCents === null && item.vatRateBasisPoints === null
+          && (item.unit === null || (typeof item.unit === "string" && isOrderIntakeFreeTextUnit(item.unit))))
+      )
     ) return null;
     parsed.push({
       id: item.id,

@@ -46,6 +46,11 @@ export type FlowCase = {
   dann?: { anzeige?: FlowExpectation[]; db?: FlowDbExpectation[] };
 };
 
+type FlowRunState = {
+  before: Map<string, number>;
+  rows: Map<string, Record<string, unknown>>;
+};
+
 const TENANT = "galvanik-kreile";
 const databaseUrl = process.env.DATABASE_URL?.trim();
 if (!databaseUrl) throw new Error("FLOW_HARNESS_DATABASE_URL_REQUIRED");
@@ -66,6 +71,10 @@ export async function closeGeneratedDatabase() {
 function dataSpec(page: Page, id: string, nr?: number): Locator {
   const result = page.locator(`[data-spec-id="${id}"]`);
   return typeof nr === "number" ? result.nth(nr - 1) : result.first();
+}
+
+function dataSpecs(page: Page, id: string): Locator {
+  return page.locator(`[data-spec-id="${id}"]`);
 }
 
 async function control(locator: Locator): Promise<Locator> {
@@ -106,8 +115,28 @@ function dateIso(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
-function resolveString(value: string): string {
+function runtimeValue(name: string, state?: FlowRunState): string | null {
+  const row = name === "auftrag" ? state?.rows.get("orders")
+    : name === "kunde" ? state?.rows.get("customers")
+      : name === "kv" ? state?.rows.get("orders")
+        : undefined;
+  if (!row) return null;
+  const key = name === "auftrag" ? "order_number" : name === "kunde" ? "customer_number" : "order_number";
+  return typeof row[key] === "string" ? row[key] : null;
+}
+
+function resolveString(value: string, state?: FlowRunState): string {
   let result = value;
+  result = result.replace(/\{neu:([a-z_]+)\}/g, (match, table) => {
+    const id = state?.rows.get(table)?.id;
+    if (typeof id !== "string") throw new Error(`FLOW_RUNTIME_REFERENCE_UNRESOLVED:${match}`);
+    return id;
+  });
+  result = result.replace(/\{(auftrag|kunde|kv)\}/g, (match, name) => {
+    const resolved = runtimeValue(name, state);
+    if (!resolved) return match;
+    return resolved;
+  });
   result = result.replace(/\{arbeitstag:([+-]\d+)(\|TT\.MM\.)?\}/g, (_, raw, short) => {
     const date = addWorkdays(new Date(), Number(raw));
     return short ? `${String(date.getUTCDate()).padStart(2, "0")}.${String(date.getUTCMonth() + 1).padStart(2, "0")}.` : dateIso(date);
@@ -126,10 +155,10 @@ function resolveString(value: string): string {
   return result;
 }
 
-function resolveValue(value: unknown): unknown {
-  if (typeof value === "string") return resolveString(value);
-  if (Array.isArray(value)) return value.map(resolveValue);
-  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, resolveValue(entry)]));
+function resolveValue(value: unknown, state?: FlowRunState): unknown {
+  if (typeof value === "string") return resolveString(value, state);
+  if (Array.isArray(value)) return value.map((entry) => resolveValue(entry, state));
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, resolveValue(entry, state)]));
   return value;
 }
 
@@ -142,14 +171,15 @@ async function select(locator: Locator, label: string) {
 
 async function interruptNextServerAction(page: Page) {
   await page.context().setOffline(true);
-  void page.locator('[data-spec-id="kundebearbeiten.zustand.fehler"]').waitFor({ state: "visible", timeout: 10_000 })
-    .finally(() => page.context().setOffline(false));
+  void page.locator('[data-spec-id="eingang.zustand.fehler"]').waitFor({ state: "visible", timeout: 10_000 })
+    .catch(() => undefined)
+    .then(() => page.context().setOffline(false).catch(() => undefined));
 }
 
-async function executeStep(page: Page, step: FlowStep) {
+async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
   if (step.aktion === "erwarten") {
-    await assertExpectations(page, step.anzeige ?? []);
-    await assertDb(step.db ?? [], new Map());
+    await assertExpectations(page, step.anzeige ?? [], state);
+    await assertDb(step.db ?? [], state);
     return;
   }
   if (step.aktion === "netz_unterbrechen") {
@@ -157,7 +187,7 @@ async function executeStep(page: Page, step: FlowStep) {
     return;
   }
   const locator = step.id ? dataSpec(page, step.id, step.nr) : null;
-  const value = resolveValue(step.wert);
+  const value = resolveValue(step.wert, state);
   switch (step.aktion) {
     case "klicken":
       if (!locator) throw new Error("FLOW_STEP_ID_REQUIRED:klicken");
@@ -183,8 +213,8 @@ async function executeStep(page: Page, step: FlowStep) {
     case "taste":
       if (locator) await (await control(locator)).press(String(value ?? ""), { timeout: 5_000 });
       else {
-        await page.locator("main").click({ position: { x: 4, y: 4 }, timeout: 5_000 });
-        await page.keyboard.press(String(value ?? ""));
+        await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+        await page.locator("body").press(String(value ?? ""), { timeout: 5_000 });
       }
       break;
     default:
@@ -196,7 +226,7 @@ async function topDialog(page: Page) {
   return page.locator('[role="dialog"]:visible').last();
 }
 
-async function assertExpectation(page: Page, expectation: FlowExpectation) {
+async function assertExpectation(page: Page, expectation: FlowExpectation, state: FlowRunState) {
   if (typeof expectation.dialoge === "number") {
     await expect(page.locator('[role="dialog"]:visible')).toHaveCount(expectation.dialoge);
     return;
@@ -207,10 +237,10 @@ async function assertExpectation(page: Page, expectation: FlowExpectation) {
     return;
   }
   if (expectation.toast) {
-    await expect(page.getByRole("status").filter({ hasText: resolveString(expectation.toast) })).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: resolveString(expectation.toast, state) })).toBeVisible();
     return;
   }
-  const value = resolveValue(expectation.wert ?? expectation.text);
+  const value = resolveValue(expectation.wert ?? expectation.text, state);
   if (!expectation.id) {
     const dialog = await topDialog(page);
     if (expectation.erwartung === "toast") await expect(page.getByRole("status").last()).toBeVisible();
@@ -219,7 +249,9 @@ async function assertExpectation(page: Page, expectation: FlowExpectation) {
     else await expect(dialog.getByText(String(value), { exact: false })).toBeVisible();
     return;
   }
-  const locator = dataSpec(page, expectation.id, expectation.nr);
+  const locator = ["anzahl", "anzahl_min", "anzahl_max"].includes(expectation.erwartung ?? "")
+    ? dataSpecs(page, expectation.id)
+    : dataSpec(page, expectation.id, expectation.nr);
   switch (expectation.erwartung) {
     case "sichtbar": await expect(locator).toBeVisible(); break;
     case "nicht_sichtbar": await expect(locator).toBeHidden(); break;
@@ -246,7 +278,7 @@ async function assertExpectation(page: Page, expectation: FlowExpectation) {
       const target = await control(locator);
       const tag = await target.evaluate((element) => element.tagName.toLowerCase());
       if (tag === "select") await expect(target.locator("option:checked")).toHaveText(String(value));
-      else await expect(locator.getByRole("button", { name: String(value), exact: true })).toHaveAttribute("aria-pressed", "true");
+      else await expect(locator.locator("button").filter({ hasText: String(value) }).first()).toHaveAttribute("aria-pressed", "true");
       break;
     }
     case "optionen": {
@@ -260,7 +292,8 @@ async function assertExpectation(page: Page, expectation: FlowExpectation) {
     case "gesperrt": {
       const target = await control(locator);
       const option = target.locator("option:disabled").filter({ hasText: String(value) });
-      await expect(option).toBeVisible();
+      await expect(option).toHaveCount(1);
+      await expect(option).toHaveAttribute("disabled", "");
       break;
     }
     case "aktiviert": await expect(await control(locator)).toBeEnabled(); break;
@@ -273,8 +306,8 @@ async function assertExpectation(page: Page, expectation: FlowExpectation) {
   }
 }
 
-async function assertExpectations(page: Page, expectations: FlowExpectation[]) {
-  for (const expectation of expectations) await assertExpectation(page, expectation);
+async function assertExpectations(page: Page, expectations: FlowExpectation[], state: FlowRunState) {
+  for (const expectation of expectations) await assertExpectation(page, expectation, state);
 }
 
 async function tableCount(table: string) {
@@ -283,13 +316,52 @@ async function tableCount(table: string) {
   return Number(rows[0]?.count ?? 0);
 }
 
-async function assertDb(expectations: FlowDbExpectation[], before: Map<string, number>) {
+const newestRowQuery: Record<string, string> = {
+  orders: `SELECT id, order_number, customer_id AS kunde,
+    CASE WHEN coalesce(is_quote, false) THEN 'kv' ELSE 'auftrag' END AS art,
+    promised_due_date::date::text AS liefertermin, intake_term_status AS terminstatus,
+    CASE handover_mode WHEN 'pickup' THEN 'abholung' WHEN 'shipping' THEN 'versand' ELSE handover_mode END AS uebergabe,
+    payment_mode AS zahlungsmodus, intake_source AS eingangsart,
+    EXISTS (SELECT 1 FROM public.events event WHERE event.tenant_id = orders.tenant_id AND event.order_id = orders.id AND event.event_type = 'ORDER_INTAKE_CREATED_V1') AS geprueft
+    FROM public.orders WHERE tenant_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
+  items: `SELECT id, order_id AS auftrag, name AS bezeichnung, quantity AS menge,
+    CASE unit WHEN 'Stück' THEN 'stueck' WHEN 'dm²' THEN 'dm2' ELSE lower(coalesce(unit, '')) END AS einheit,
+    surface_requested AS oberflaeche, execution_requested AS ausfuehrung
+    FROM public.items WHERE tenant_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
+  intake_item: `SELECT id, kanal, richtung, kunde_id, vorgang_art, vorgang_id, einsatz, text
+    FROM public.intake_item WHERE tenant_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
+  customers: "SELECT id, customer_number FROM public.customers WHERE tenant_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1",
+};
+
+async function captureNewestRow(table: string) {
+  const query = newestRowQuery[table];
+  if (!query) throw new Error(`FLOW_DB_VALUE_TABLE_UNSUPPORTED:${table}`);
+  const rows = await sql.unsafe<Record<string, unknown>[]>(query, [TENANT]);
+  expect(rows).toHaveLength(1);
+  return rows[0]!;
+}
+
+async function captureDbResults(expectations: FlowDbExpectation[], state: FlowRunState) {
+  for (const expectation of expectations) {
+    if (typeof expectation.neu !== "number") continue;
+    const after = await tableCount(expectation.tabelle);
+    expect(after - (state.before.get(expectation.tabelle) ?? after)).toBe(expectation.neu);
+    if (expectation.neu > 0) {
+      if (expectation.neu !== 1 && expectation.werte && Object.keys(expectation.werte).length > 0) {
+        throw new Error(`FLOW_DB_VALUE_NEW_ROW_AMBIGUOUS:${expectation.tabelle}`);
+      }
+      state.rows.set(expectation.tabelle, await captureNewestRow(expectation.tabelle));
+    }
+  }
+}
+
+async function assertDb(expectations: FlowDbExpectation[], state: FlowRunState) {
   for (const expectation of expectations) {
     if (typeof expectation.neu === "number") {
       const after = await tableCount(expectation.tabelle);
-      expect(after - (before.get(expectation.tabelle) ?? after)).toBe(expectation.neu);
+      expect(after - (state.before.get(expectation.tabelle) ?? after)).toBe(expectation.neu);
     }
-    if (expectation.werte && Object.keys(expectation.werte).length > 0) await assertDbValues(expectation);
+    if (expectation.werte && Object.keys(expectation.werte).length > 0) await assertDbValues(expectation, state);
   }
 }
 
@@ -314,12 +386,11 @@ const customerColumns: Record<string, string> = {
   billing_email: "billing_email",
 };
 
-async function assertDbValues(expectation: FlowDbExpectation) {
-  if (expectation.tabelle !== "customers") throw new Error(`FLOW_DB_VALUE_TABLE_UNSUPPORTED:${expectation.tabelle}`);
-  const where = resolveValue(expectation.wo ?? {}) as Record<string, unknown>;
+async function assertCustomerDbValues(expectation: FlowDbExpectation, state: FlowRunState) {
+  const where = resolveValue(expectation.wo ?? {}, state) as Record<string, unknown>;
   const whereEntries = Object.entries(where);
   if (whereEntries.some(([key]) => key !== "id")) throw new Error(`FLOW_DB_WHERE_UNSUPPORTED:${whereEntries.map(([key]) => key).join(",")}`);
-  const values = Object.entries(resolveValue(expectation.werte ?? {}) as Record<string, unknown>);
+  const values = Object.entries(resolveValue(expectation.werte ?? {}, state) as Record<string, unknown>);
   const columns = values.map(([key]) => customerColumns[key] ?? "");
   if (columns.some((column) => !column)) throw new Error(`FLOW_DB_COLUMNS_UNSUPPORTED:${values.map(([key]) => key).join(",")}`);
   const params: string[] = [TENANT];
@@ -338,27 +409,48 @@ async function assertDbValues(expectation: FlowDbExpectation) {
   }
 }
 
+async function assertDbValues(expectation: FlowDbExpectation, state: FlowRunState) {
+  if (expectation.tabelle === "customers" && expectation.wo) {
+    await assertCustomerDbValues(expectation, state);
+    return;
+  }
+  const row = state.rows.get(expectation.tabelle);
+  if (!row) throw new Error(`FLOW_DB_NEW_ROW_REQUIRED:${expectation.tabelle}`);
+  const values = Object.entries(resolveValue(expectation.werte ?? {}, state) as Record<string, unknown>);
+  for (const [key, value] of values) {
+    if (!Object.hasOwn(row, key)) throw new Error(`FLOW_DB_COLUMNS_UNSUPPORTED:${expectation.tabelle}:${key}`);
+    expect(row[key]).toEqual(value);
+  }
+}
+
 export async function runGeneratedFlowCase(page: Page, flowCase: FlowCase) {
   testTimeoutGuard(flowCase);
   const dbExpectations = flowCase.dann?.db ?? [];
-  const before = new Map<string, number>();
-  for (const expectation of dbExpectations) {
-    if (typeof expectation.neu === "number" && !before.has(expectation.tabelle)) before.set(expectation.tabelle, await tableCount(expectation.tabelle));
+  const state: FlowRunState = { before: new Map<string, number>(), rows: new Map<string, Record<string, unknown>>() };
+  const stepExpectations = [
+    ...(Array.isArray(flowCase.gegeben.aufruf.weg) ? flowCase.gegeben.aufruf.weg : []),
+    ...(flowCase.wenn ?? []),
+  ].filter((step) => step.aktion === "erwarten").flatMap((step) => step.db ?? []);
+  for (const expectation of [...dbExpectations, ...stepExpectations]) {
+    if (typeof expectation.neu === "number" && !state.before.has(expectation.tabelle)) {
+      state.before.set(expectation.tabelle, await tableCount(expectation.tabelle));
+    }
   }
   await login(page, flowCase.gegeben.login);
   const route = flowCase.gegeben.aufruf;
   if (route.weg === "oeffne") {
     if (route.seite !== "kundebearbeiten") throw new Error(`FLOW_OPEN_TARGET_UNSUPPORTED:${route.seite}`);
-    const [customerId, fragment] = String(resolveValue(route.arg ?? "")).split("#", 2);
+    const [customerId, fragment] = String(resolveValue(route.arg ?? "", state)).split("#", 2);
     if (!customerId) throw new Error("FLOW_OPEN_CUSTOMER_REQUIRED");
     await page.goto(`/customers/${encodeURIComponent(customerId)}${fragment ? `#${encodeURIComponent(fragment)}` : ""}`);
     await dataSpec(page, "kundebearbeiten.oeffnen").click({ timeout: 5_000 });
   } else {
-    for (const step of route.weg ?? []) await executeStep(page, step);
+    for (const step of route.weg ?? []) await executeStep(page, step, state);
   }
-  for (const step of flowCase.wenn ?? []) await executeStep(page, step);
-  await assertExpectations(page, flowCase.dann?.anzeige ?? []);
-  await assertDb(dbExpectations, before);
+  for (const step of flowCase.wenn ?? []) await executeStep(page, step, state);
+  await captureDbResults(dbExpectations, state);
+  await assertExpectations(page, flowCase.dann?.anzeige ?? [], state);
+  await assertDb(dbExpectations, state);
 }
 
 function testTimeoutGuard(flowCase: FlowCase) {
