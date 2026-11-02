@@ -20,10 +20,6 @@
         "sha256": "87A97386E3FF5964924403B0CEDB20011C3CA074C7A3D3C57EE2F6A0C4D3B69F"
       },
       {
-        "path": "src/app/telefonnotiz/layout.tsx",
-        "sha256": "AE8CBE00A8E35CBB102771712FFC02D0A0A9E081EE3DC0D12A4CF536720B1C7E"
-      },
-      {
         "path": "src/app/warendurchlauf/neu/page.tsx",
         "sha256": "27B6150774FE11CEB655B1E578717553EC84601EA86D424183D7493E13D6B4B1"
       }

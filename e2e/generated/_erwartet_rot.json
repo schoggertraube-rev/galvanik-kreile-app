@@ -1,5 +1,6 @@
 {
   "E04": { "paket": "AP-02", "grund": "Neukunde aus der Erfassung folgt mit AP-02" },
+  "E07": { "paket": "AP-U", "grund": "Kanonische Oberflächen- und Einheitsschlüssel folgen gemeinsam mit Datenmigration in AP-U" },
   "E22": { "paket": "AP-K1", "grund": "Zahlungs- und Übergabevertrag folgt mit AP-K1" },
   "E25": { "paket": "AP-K1", "grund": "Kundenzahlungsbedingung folgt mit AP-K1" },
   "E27": { "paket": "AP-K1", "grund": "Kunden- und Rechtevertrag folgt mit AP-K1" },

@@ -23,6 +23,8 @@
     "@/modules/eingang/public#findRecognizedCustomers",
     "@/modules/eingang/public#isOrderIntakeFreeTextUnit",
     "@/modules/eingang/public#requestGlobalCreate",
+    "@/modules/eingang/public#TelefonnotizLayoutBoundary",
+    "@/modules/eingang/public#TelefonnotizLayoutBoundaryProps",
     "@/modules/eingang/public#UpdateQuoteInput",
     "@/modules/eingang/server-public#ErfasseAuftragInput",
     "@/modules/eingang/server-public#ErfasseAuftragResult",

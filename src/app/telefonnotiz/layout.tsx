@@ -1,20 +1,11 @@
 import "./telefonnotiz.css";
-import { Fraunces, Manrope } from "next/font/google";
-
-const fraunces = Fraunces({
-  subsets: ["latin"],
-  variable: "--font-telefonnotiz-fraunces",
-});
-
-const manrope = Manrope({
-  subsets: ["latin"],
-  variable: "--font-telefonnotiz-manrope",
-});
+import { TelefonnotizLayoutBoundary } from "@/modules/eingang/public";
+import { telefonnotizFraunces, telefonnotizManrope } from "../fonts/localFonts";
 
 export default function TelefonnotizLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className={`${fraunces.variable} ${manrope.variable}`}>
+    <TelefonnotizLayoutBoundary className={`${telefonnotizFraunces.variable} ${telefonnotizManrope.variable}`}>
       {children}
-    </div>
+    </TelefonnotizLayoutBoundary>
   );
 }
