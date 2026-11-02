@@ -5,6 +5,7 @@ import {
   Check,
   ClipboardCopy,
   FileText,
+  Inbox,
   Loader2,
   Plus,
   Trash2,
@@ -240,6 +241,7 @@ type IntakeChecklistEntry = {
   complete: boolean;
   step: 1 | 2 | 3;
   target: string;
+  targetIndex?: number;
   warning?: boolean;
 };
 
@@ -329,6 +331,7 @@ const EXECUTION_OPTIONS: Array<{ wert: IntakeExecution; text: string }> = [
   { wert: "blau_passiviert", text: "blau passiviert" },
   { wert: "offen", text: "noch zu klären" },
 ];
+const INTAKE_UNIT_OPTIONS = ["Stück", "kg", "dm²", "Satz", "Std."] as const;
 const subscribeHandy = (notify: () => void) => {
   if (typeof window.matchMedia !== "function") return () => undefined;
   const query = window.matchMedia(HANDY_QUERY);
@@ -423,9 +426,9 @@ const newPosition = (): PositionDraft => ({
 const newIntakePosition = (): IntakePositionDraft => ({
   key: globalThis.crypto.randomUUID(),
   name: "",
-  quantity: "",
+  quantity: "1",
   material: "",
-  surfaceRequested: "",
+  surfaceRequested: "noch zu klären",
   surfaceTouched: false,
   executionRequested: "offen",
   catalogServiceId: "",
@@ -507,6 +510,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [directCustomerMode, setDirectCustomerMode] = useState<"NONE" | "EXISTING">("NONE");
   const [intakeStep, setIntakeStep] = useState<1 | 2 | 3>(1);
   const [intakeHandover, setIntakeHandover] = useState<"" | "PICKUP" | "SHIPPING">("");
+  const [intakeKind, setIntakeKind] = useState<"" | "auftrag">("");
   const [intakeTermStatus, setIntakeTermStatus] = useState<"" | "wish" | "confirmed">("");
   const [intakeSource, setIntakeSource] = useState<"" | "persoenlich" | "versand" | "abholung_firma" | "anfrage_mail" | "anfrage_telefon">("");
   const [directCustomer, setDirectCustomer] = useState<CustomerDraft>(EMPTY_INTAKE_CUSTOMER);
@@ -886,6 +890,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setIntakeOrigin(fromCustomerCard ? "customer-card" : null);
     setIntakeClientKey(globalThis.crypto.randomUUID());
     setIntakeHandover("");
+    setIntakeKind(fromCustomerCard ? "auftrag" : "");
     setIntakePaymentMode("");
     setIntakePaymentOrigin(null);
     setIntakeSource("");
@@ -976,6 +981,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setRecognitionMarkers([]);
     setRecognitionConfirmed(false);
     setIntakeHandover("");
+    setIntakeKind("");
     setIntakeSource("");
     setIntakeTermStatus("");
     setIntakeSuggestionState({ kind: "idle" });
@@ -1021,6 +1027,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       deny("quote");
       return;
     }
+    if (!prefill) {
+      navigate("choose");
+      return;
+    }
     void loadDirectIntake(prefill?.customerId, Boolean(prefill?.customerId));
   };
 
@@ -1035,6 +1045,34 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     };
     window.addEventListener(GLOBAL_CREATE_OPEN_EVENT, handler);
     return () => window.removeEventListener(GLOBAL_CREATE_OPEN_EVENT, handler);
+  });
+
+  useEffect(() => {
+    const handler = (event: globalThis.KeyboardEvent) => {
+      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      const target = event.target;
+      const isTyping = target instanceof Element
+        && Boolean(target.closest("input, textarea, select, [contenteditable='true']"));
+      if (isTyping) return;
+      const key = event.key.toLowerCase();
+      if (!open && key === "n") {
+        if (!ports.canCreateOrder || activeCustomerOverlayId || document.querySelector("[role='dialog']")) return;
+        event.preventDefault();
+        openWithIntent("DIRECT_INTAKE");
+        return;
+      }
+      if (!open || step !== "choose") return;
+      if (key === "a") {
+        event.preventDefault();
+        void loadDirectIntake();
+      } else if (key === "k") {
+        event.preventDefault();
+        if (ports.canCreateCustomer) navigate("customer");
+        else deny("customer");
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   });
 
   const resumeQuote = async () => {
@@ -1080,48 +1118,6 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       navigate("quote-saved");
     } catch {
       setFeedback({ kind: "error", message: "Der gespeicherte KV konnte nicht sicher zurückgelesen werden.", requestId: ports.resumeQuoteId });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const loadOpenQuotes = async () => {
-    if (!ports.canCreateQuote) {
-      deny("quote");
-      return;
-    }
-    setBusy(true);
-    setOpenQuotesState({ kind: "loading" });
-    navigate("quote-list");
-    try {
-      const [result, catalog] = await Promise.all([
-        ports.listOpenQuotes(),
-        ports.listCatalog?.() ?? Promise.resolve({ code: "UNAVAILABLE" as const, message: "Leistungskatalog ist nicht angebunden." }),
-      ]);
-      if (result.code !== "OK") {
-        setOpenQuotesState({
-          kind: result.code === "UNAUTHENTICATED" || result.code === "FORBIDDEN"
-            ? "denied"
-            : result.code === "UNAVAILABLE"
-              ? "unknown"
-              : "error",
-          message: result.message,
-        });
-        return;
-      }
-      if (catalog.code !== "OK") {
-        setOpenQuotesState({ kind: catalog.code === "DENIED" ? "denied" : "error", message: catalog.message });
-        return;
-      }
-      setCatalogServices(catalog.services);
-      setOpenQuotesState(result.quotes.length === 0
-        ? { kind: "empty" }
-        : { kind: "data", quotes: result.quotes });
-    } catch {
-      setOpenQuotesState({
-        kind: "unknown",
-        message: "Der Stand der offenen KVs konnte nicht sicher geladen werden. Bitte später erneut öffnen.",
-      });
     } finally {
       setBusy(false);
     }
@@ -1470,7 +1466,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         catalogServiceId: catalogMatchesSurface ? service.id : FREE_TEXT_SERVICE,
         name: service.name,
         surfaceRequested,
-        unit: catalogMatchesSurface ? service.unit : null,
+        unit: null,
         unitPriceCents: catalogMatchesSurface && ports.canManageMoney ? service.netPriceCents : null,
         vatRateBasisPoints: catalogMatchesSurface ? service.vatRateBasisPoints : null,
       };
@@ -1484,7 +1480,23 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       const service = catalogServices.find((candidate) => candidate.id === item.catalogServiceId);
       return service?.surface === surfaceRequested
         ? { ...item, surfaceRequested, surfaceTouched: true }
-        : { ...item, catalogServiceId: FREE_TEXT_SERVICE, surfaceRequested, surfaceTouched: true, unit: null, unitPriceCents: null, vatRateBasisPoints: null };
+        : { ...item, catalogServiceId: FREE_TEXT_SERVICE, surfaceRequested, surfaceTouched: true, unitPriceCents: null, vatRateBasisPoints: null };
+    }));
+  };
+
+  const setDirectPositionUnit = (key: string, unit: string) => {
+    setIntakeDirty(true);
+    setDirectItems((current) => current.map((item) => {
+      if (item.key !== key) return item;
+      const service = catalogServices.find((candidate) => candidate.id === item.catalogServiceId);
+      if (!service || service.unit === unit) return { ...item, unit: unit || null };
+      return {
+        ...item,
+        catalogServiceId: FREE_TEXT_SERVICE,
+        unit: unit || null,
+        unitPriceCents: null,
+        vatRateBasisPoints: null,
+      };
     }));
   };
 
@@ -1596,23 +1608,27 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     (item.catalogServiceId === FREE_TEXT_SERVICE || item.catalogServiceId.length > 0)
     && item.name.trim().length >= 2
     && item.surfaceRequested.trim().length >= 2
+    && Boolean(item.unit)
     && Number.isSafeInteger(Number(item.quantity))
     && Number(item.quantity) > 0;
 
   const customerIssue = (() => {
-    if (directCustomerMode === "NONE") return { detail: "fehlt", target: "eingang.kunde" };
+    if (directCustomerMode === "NONE") return { detail: "fehlt", target: "eingang.kundensuche" };
     const firstIssue = directCustomerReadiness.issues[0];
     if (firstIssue) return { detail: firstIssue.message, target: "eingang.kunde-erganzen" };
     return null;
   })();
   const firstMissingName = directItems.findIndex((item) => item.name.trim().length < 2 || (!item.catalogServiceId && item.name.trim().length >= 2));
   const firstMissingQuantity = directItems.findIndex((item) => !Number.isSafeInteger(Number(item.quantity)) || Number(item.quantity) <= 0);
+  const firstMissingUnit = directItems.findIndex((item) => !item.unit);
   const firstMissingSurface = directItems.findIndex((item) => item.surfaceRequested.trim().length < 2);
   const intakeChecklist: IntakeChecklistEntry[] = [
-    { id: "kunde", label: "Kunde", detail: customerIssue?.detail ?? "vollständig", complete: customerIssue === null, step: 1, target: customerIssue?.target ?? "eingang.kunde" },
-    { id: "bezeichnung", label: "Teil / Leistung", detail: firstMissingName >= 0 ? `Position ${firstMissingName + 1} fehlt` : `${directItems.length} Position${directItems.length === 1 ? "" : "en"}`, complete: firstMissingName < 0, step: 2, target: `eingang.position.${Math.max(firstMissingName, 0)}.bezeichnung` },
-    { id: "menge", label: "Menge", detail: firstMissingQuantity >= 0 ? `Position ${firstMissingQuantity + 1} fehlt` : "vollständig", complete: firstMissingQuantity < 0, step: 2, target: `eingang.position.${Math.max(firstMissingQuantity, 0)}.menge` },
-    { id: "oberflaeche", label: "Oberfläche", detail: firstMissingSurface >= 0 ? `Position ${firstMissingSurface + 1} fehlt` : "vollständig", complete: firstMissingSurface < 0, step: 2, target: `eingang.position.${Math.max(firstMissingSurface, 0)}.oberflaeche` },
+    { id: "kunde", label: "Kunde", detail: customerIssue?.detail ?? "vollständig", complete: customerIssue === null, step: 1, target: customerIssue?.target ?? "eingang.kundensuche" },
+    { id: "bezeichnung", label: "Teil / Leistung", detail: firstMissingName >= 0 ? `Position ${firstMissingName + 1} fehlt` : `${directItems.length} Position${directItems.length === 1 ? "" : "en"}`, complete: firstMissingName < 0, step: 2, target: "eingang.bezeichnung", targetIndex: Math.max(firstMissingName, 0) },
+    { id: "menge", label: "Menge", detail: firstMissingQuantity >= 0 ? `Position ${firstMissingQuantity + 1} fehlt` : "vollständig", complete: firstMissingQuantity < 0, step: 2, target: "eingang.menge", targetIndex: Math.max(firstMissingQuantity, 0) },
+    { id: "einheit", label: "Einheit", detail: firstMissingUnit >= 0 ? `Position ${firstMissingUnit + 1} fehlt` : "vollständig", complete: firstMissingUnit < 0, step: 2, target: "eingang.einheit", targetIndex: Math.max(firstMissingUnit, 0) },
+    { id: "oberflaeche", label: "Oberfläche", detail: firstMissingSurface >= 0 ? `Position ${firstMissingSurface + 1} fehlt` : "vollständig", complete: firstMissingSurface < 0, step: 2, target: "eingang.oberflaeche", targetIndex: Math.max(firstMissingSurface, 0) },
+    ...(ports.canManageMoney ? [{ id: "art", label: "Art", detail: intakeKind === "auftrag" ? "Auftrag" : "fehlt", complete: intakeKind === "auftrag", step: 3 as const, target: "eingang.art" }] : []),
     { id: "liefertermin", label: "Liefertermin", detail: directWishDate || "fehlt", complete: Boolean(directWishDate), step: 3, target: "eingang.liefertermin" },
     { id: "terminstatus", label: "Terminstatus", detail: intakeTermStatus === "wish" ? "Wunsch" : intakeTermStatus === "confirmed" ? "bestätigt" : "fehlt", complete: Boolean(intakeTermStatus), step: 3, target: "eingang.terminstatus" },
     { id: "eingangsart", label: "Eingangsart", detail: intakeSource === "persoenlich" ? "persönlich angeliefert" : intakeSource === "versand" ? "Versand eingegangen" : intakeSource === "abholung_firma" ? "Abholung durch Firma" : intakeSource === "anfrage_mail" ? "Anfrage per Mail" : intakeSource === "anfrage_telefon" ? "Anfrage per Telefon" : "fehlt", complete: Boolean(intakeSource), step: 3, target: "eingang.eingangsart" },
@@ -1624,7 +1640,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const jumpToIntakeCheck = (entry: IntakeChecklistEntry) => {
     setIntakeStep(entry.step);
     const focusTarget = () => {
-      const root = document.querySelector<HTMLElement>(`[data-spec-id="${entry.target}"]`);
+      const roots = document.querySelectorAll<HTMLElement>(`[data-spec-id="${entry.target}"]`);
+      const root = roots.item(entry.targetIndex ?? 0);
       if (!root) return;
       const target = root.matches("input, select, textarea, button, [tabindex]")
         ? root
@@ -1929,9 +1946,32 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
   return (
     <>
-      {ports.showPrimaryTrigger !== false ? <button type="button" className={styles.globalCreateButton} onClick={() => { reset(); void loadDirectIntake(); }} aria-label="Neu erfassen" aria-haspopup="dialog" aria-expanded={open}>
+      {ports.showPrimaryTrigger !== false ? <button type="button" className={styles.globalCreateButton} onClick={() => openWithIntent("DIRECT_INTAKE")} aria-label="Neu erfassen" aria-haspopup="dialog" aria-expanded={open}>
         <span className={styles.globalCreatePlus} aria-hidden="true">＋</span><span>Neu erfassen</span>
       </button> : null}
+      {open && step === "choose" ? (
+        <KrDialog
+          titel="Neu erfassen"
+          icon="plus"
+          groesse="breit"
+          schliessenSpecId="rein.schliessen"
+          onSchliessen={closeNow}
+        >
+          <div data-spec-id="rein" className="kr-stapel">
+            <p className={styles.createLead}>Ohne Vorlage</p>
+            <div className={styles.createChoiceGrid}>
+              <button aria-label="Auftrag oder KV erfassen" data-spec-id="rein.auftrag-erfassen" type="button" onClick={() => void loadDirectIntake()} data-autofocus>
+                <Inbox aria-hidden="true" />
+                <span><strong>Auftrag oder KV erfassen</strong><small>Taste A</small></span>
+              </button>
+              <button aria-label="Kunde anlegen" data-spec-id="rein.kunde-anlegen" type="button" onClick={() => ports.canCreateCustomer ? navigate("customer") : deny("customer")}>
+                <UserPlus aria-hidden="true" />
+                <span><strong>Kunde anlegen</strong><small>Taste K</small></span>
+              </button>
+            </div>
+          </div>
+        </KrDialog>
+      ) : null}
       {open && (step === "customer" || intakeCustomerCreateOpen) ? (() => {
         const customerDialog = <KrDialog
           key={customerClosePrompt ? "customer-close-prompt" : "customer"}
@@ -2023,6 +2063,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
           titel="Neu erfassen"
           icon="plus"
           groesse="breit"
+          schliessenSpecId="eingang.schliessen"
           onSchliessen={intakeCustomerCreateOpen || intakeClosePrompt ? () => undefined : requestClose}
           fuss={isHandy ? (
             <>
@@ -2030,7 +2071,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
               {intakeStep === 1 ? <KrButton art="primaer" icon="arrow" text="Positionen" disabled={busy} onClick={() => void advanceIntakeCustomer()} /> : null}
               {intakeStep === 2 ? <KrButton art="primaer" icon="arrow" text="Belege & Prüfung" onClick={() => {
                 if (directItems.every(intakePositionComplete)) { setFeedback(null); setIntakeStep(3); }
-                else setFeedback({ kind: "validation", message: "Bitte für jede Position Bezeichnung, Menge und Oberfläche angeben." });
+                else setFeedback({ kind: "validation", message: "Bitte für jede Position Bezeichnung, Menge, Einheit und Oberfläche angeben." });
               }} /> : null}
               {intakeStep === 3 ? <KrButton data-spec-id="eingang.buchen" form="kr-neuer-eingang" type="submit" art="erledigen" icon="check" text={busy ? "Wird gebucht …" : "Wareneingang buchen"} disabled={busy} /> : null}
             </>
@@ -2038,7 +2079,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
             <><KrButton data-spec-id="eingang.abbrechen" text="Abbrechen" onClick={requestClose} /><KrButton data-spec-id="eingang.buchen" form="kr-neuer-eingang" type="submit" art="erledigen" icon="check" text={busy ? "Wird gebucht …" : "Wareneingang buchen"} disabled={busy} /></>
           )}
         >
-          <form id="kr-neuer-eingang" className={`kr-stapel ${styles.intakeWorkspace}`} noValidate onSubmit={(event) => void submitIntakePage(event)}>
+          <form data-spec-id="eingang" id="kr-neuer-eingang" className={`kr-stapel ${styles.intakeWorkspace}`} noValidate onSubmit={(event) => void submitIntakePage(event)}>
               {ports.resumeQuoteId ? <Hinweis><KrButton art="sekundaer" icon="arrow" text="Gespeicherten KV fortsetzen" disabled={busy} onClick={() => void resumeQuote()} /></Hinweis> : null}
               <section className={styles.createQuickCapture} aria-labelledby="quick-capture-title">
                 <div><h3 id="quick-capture-title">Schnell erfassen</h3><p>Paket oder persönliche Übergabe als Text erfassen</p></div>
@@ -2065,11 +2106,11 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
               {(!isHandy || intakeStep === 1) ? <Abschnitt nr={0} label="Kunde">
                 <FormRaster>
-                  <Feld label="Anliegen" voll><Fakten zeilen={[{ k: "Art", v: "Auftrag" }]} /></Feld>
+                  {ports.canManageMoney ? <Feld label="Art" voll><div data-spec-id="eingang.art"><Segment<"" | "auftrag"> label="Art" wert={intakeKind} optionen={[{ wert: "auftrag", text: "Auftrag" }]} onWert={(value) => { setIntakeKind(value); setIntakeDirty(true); }} /></div></Feld> : null}
                   <Feld label={directCustomerMode === "NONE" ? "Kunde suchen" : "Kunde"} voll>
                     {directCustomerMode === "NONE" ? <div className="kr-stapel">
                       <Eingabe
-                        data-spec-id="eingang.kunde"
+                        data-spec-id="eingang.kundensuche"
                         data-intake-customer-search
                         data-autofocus
                         aria-label="Kunde suchen"
@@ -2086,10 +2127,11 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                         }}
                         placeholder="Name, Firma, Ansprechpartner, Telefon, E-Mail, Ort oder Kundennummer"
                       />
+                      {!intakeCustomerQuery.trim() && intakeCustomerSearchState === "idle" ? <div data-spec-id="eingang.zustand.leer"><Hinweis>Kunde suchen oder Neukunde anlegen</Hinweis></div> : null}
                       {intakeCustomerSearchState === "loading" ? <p aria-live="polite">Kunden werden gesucht …</p> : null}
                       {intakeCustomerSearchState === "empty" ? <Hinweis>Kein Kunde gefunden.</Hinweis> : null}
                       {intakeCustomerResults.length > 0 ? <div className={styles.createCustomerList} aria-label="Kundentreffer">
-                        {intakeCustomerResults.map((entry) => <button type="button" key={entry.id} aria-label={`${entry.companyName ?? entry.name} · übernehmen`} onClick={() => selectIntakeCustomer("EXISTING", entry)}>
+                        {intakeCustomerResults.map((entry) => <button data-spec-id="eingang.kundensuche.treffer" type="button" key={entry.id} aria-label={`${entry.companyName ?? entry.name} · übernehmen`} onClick={() => selectIntakeCustomer("EXISTING", entry)}>
                           <span><strong>{entry.companyName ?? entry.name} · übernehmen</strong><small>{entry.customerNumber ?? "ohne Kundennummer"} · {entry.customerType === "privat" ? "Privatkunde" : entry.contactPerson ?? "kein Ansprechpartner"} · {entry.city ?? "ohne Ort"}</small></span>
                         </button>)}
                       </div> : null}
@@ -2167,9 +2209,10 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 <div className="kr-stapel">
                   {directItems.map((item, index) => <div className="kr-position" key={item.key}>
                     <span className="kr-position-nr">{index + 1}</span>
-                    <Feld label="Teil / Bezeichnung"><Eingabe data-spec-id={`eingang.position.${index}.bezeichnung`} required minLength={2} list="kr-service-catalog" placeholder="Katalog oder Freitext" value={item.name} onChange={(event) => setDirectPositionName(item.key, event.target.value)} /></Feld>
-                    <Feld label="Menge"><Eingabe data-spec-id={`eingang.position.${index}.menge`} type="number" min="1" value={item.quantity} onChange={(event) => updateDirectItem(item.key, "quantity", event.target.value)} /></Feld>
-                    <Feld label="Oberfläche" className="kr-pos-oberflaeche"><Auswahl data-spec-id={`eingang.position.${index}.oberflaeche`} required value={item.surfaceRequested} onChange={(event) => setDirectPositionSurface(item.key, event.target.value)} optionen={[{ wert: "", text: "Bitte wählen" }, ...surfaceOptions.map((surface) => ({ wert: surface, text: surface }))]} /></Feld>
+                    <Feld label="Teil / Bezeichnung"><Eingabe data-spec-id="eingang.bezeichnung" required minLength={2} list="kr-service-catalog" placeholder="Katalog oder Freitext" value={item.name} onChange={(event) => setDirectPositionName(item.key, event.target.value)} /></Feld>
+                    <Feld label="Menge"><Eingabe data-spec-id="eingang.menge" type="number" min="1" value={item.quantity} onChange={(event) => updateDirectItem(item.key, "quantity", event.target.value)} /></Feld>
+                    <Feld label="Einheit"><Auswahl data-spec-id="eingang.einheit" required value={item.unit ?? ""} onChange={(event) => setDirectPositionUnit(item.key, event.target.value)} optionen={[{ wert: "", text: "Bitte wählen" }, ...INTAKE_UNIT_OPTIONS.map((unit) => ({ wert: unit, text: unit }))]} /></Feld>
+                    <Feld label="Oberfläche" className="kr-pos-oberflaeche"><Auswahl data-spec-id="eingang.oberflaeche" required value={item.surfaceRequested} onChange={(event) => setDirectPositionSurface(item.key, event.target.value)} optionen={[{ wert: "", text: "Bitte wählen" }, ...surfaceOptions.map((surface) => ({ wert: surface, text: surface }))]} /></Feld>
                     <Feld label="Ausführung"><Auswahl data-spec-id="eingang.position.ausfuehrung" value={item.executionRequested} onChange={(event) => updateDirectItem(item.key, "executionRequested", event.target.value)} optionen={EXECUTION_OPTIONS} /></Feld>
                     <Feld label="Material"><Eingabe data-spec-id="eingang.position.material" maxLength={120} value={item.material} onChange={(event) => updateDirectItem(item.key, "material", event.target.value)} /></Feld>
                     <KrButton art="sekundaer" icon="x" label="Position entfernen" disabled={directItems.length === 1} onClick={() => { setDirectItems((current) => current.filter((entry) => entry.key !== item.key)); setIntakeDirty(true); }} />
@@ -2199,7 +2242,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 </div>
                 <div className={styles.intakeChecklistGroup}>
                   <h3>Pflicht</h3>
-                  {requiredIntakeChecks.map((entry) => <button type="button" key={entry.id} data-state={entry.complete ? "ok" : "open"} onClick={() => jumpToIntakeCheck(entry)}>
+                  {requiredIntakeChecks.map((entry) => <button data-spec-id={`eingang.pruefliste.${entry.id}`} type="button" key={entry.id} data-state={entry.complete ? "ok" : "open"} onClick={() => jumpToIntakeCheck(entry)}>
                     <span className={styles.intakeChecklistIcon}>{entry.complete ? <Check aria-hidden="true" /> : "!"}</span>
                     <span><strong>{entry.label}</strong><small>{entry.detail}</small></span>
                     <em>{entry.complete ? "ok" : "fehlt"}</em>
@@ -2242,42 +2285,19 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         </KrDialog>,
         document.body,
       ) : null}
-      {open && step !== "customer" && step !== "direct-intake" ? (
+      {open && step !== "choose" && step !== "customer" && step !== "direct-intake" ? (
         <div className={styles.createOverlay} onMouseDown={(event) => { if (event.target === event.currentTarget) closeNow(); }}>
           <section ref={dialogRef} className={styles.createDialog} role="dialog" aria-modal="true" aria-labelledby="global-create-title" onKeyDown={handleDialogKey}>
             <header className={styles.createHeader}>
               <span className={styles.createBadge}><Plus /></span>
               <div>
                 <p>Kunde <span>›</span> KV / Angebot <span>›</span> Auftrag</p>
-                <h2 id="global-create-title">{step === "choose" ? "Was möchtest du anlegen?" : step === "customer-saved" ? "Kunde gesichert" : step === "customer-picker" ? "Kunde für KV wählen" : step === "quote-list" ? "Offene KVs" : step === "quote" ? quote ? "KV bearbeiten" : "Kostenvoranschlag anlegen" : step === "quote-saved" ? "KV gesichert" : step === "order-saved" ? "Auftrag angelegt" : "Berechtigung klären"}</h2>
+                <h2 id="global-create-title">{step === "customer-saved" ? "Kunde gesichert" : step === "customer-picker" ? "Kunde für KV wählen" : step === "quote-list" ? "Offene KVs" : step === "quote" ? quote ? "KV bearbeiten" : "Kostenvoranschlag anlegen" : step === "quote-saved" ? "KV gesichert" : step === "order-saved" ? "Auftrag angelegt" : "Berechtigung klären"}</h2>
               </div>
               <button type="button" className={styles.createIconButton} onClick={closeNow} disabled={busy} aria-label="Anlegen schließen"><X /></button>
             </header>
 
             <div className={styles.createBody}>
-              {step === "choose" ? (
-                <>
-                  <p className={styles.createLead}>Manuell erfassen und nach jedem Speichern sicher weiterarbeiten.</p>
-                  {ports.resumeQuoteId ? (
-                    <button type="button" className={styles.createResume} onClick={() => void resumeQuote()} disabled={busy} data-autofocus>
-                      <FileText /> <span><strong>Gespeicherten KV fortsetzen</strong><small>Sicher gespeicherten KV weiterbearbeiten und den Zuschlag erfassen.</small></span>
-                    </button>
-                  ) : null}
-                  <div className={styles.createChoiceGrid}>
-                    <button type="button" onClick={() => ports.canCreateCustomer ? navigate("customer") : deny("customer")} data-autofocus={!ports.resumeQuoteId || undefined}>
-                      <UserPlus /><span><strong>Kunde anlegen</strong><small>Neukunde manuell erfassen. Danach direkt einen KV anlegen.</small></span>
-                    </button>
-                    <button type="button" className={styles.createChoiceAlternate} onClick={() => void loadCustomers()}>
-                      <FileText /><span><strong>Auftrag / KV anlegen</strong><small>Bestehenden Kunden wählen und einen KV sicher speichern.</small></span>
-                    </button>
-                    <button type="button" className={styles.createChoiceAlternate} onClick={() => void loadOpenQuotes()}>
-                      <FileText /><span><strong>Offene KVs bearbeiten</strong><small>Gespeicherte Entwürfe sicher wieder aufnehmen.</small></span>
-                    </button>
-                  </div>
-                  <p className={styles.createPassive}>Hier wird ausschließlich manuell erfasst. Weitere Anbindungen sind nicht aktiv.</p>
-                </>
-              ) : null}
-
               {step === "denied" ? (
                 <section className={styles.createDenied} role="alert">
                   <h3>Diese Handlung gehört zu einem anderen Profil.</h3>

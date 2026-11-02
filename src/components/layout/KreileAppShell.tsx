@@ -79,7 +79,7 @@ export function KreileAppShell({ children, globalCreate }: { children: React.Rea
     && !permissions.hasArea("geld")
     && !permissions.hasArea("einstellungen");
   const canUseShell = permissions.status === "authenticated";
-  const canCreate = permissions.hasPermission("perm_data_customers") || permissions.hasPermission("perm_data_orders");
+  const canCreate = permissions.hasArea("eingang");
   const hidden: Bereich[] = [];
   if (!permissions.hasPermission("perm_view_leitstand")) hidden.push("werkstatt", "auftraege");
   if (!permissions.hasPermission("perm_view_customers")) hidden.push("kunden");
@@ -116,14 +116,13 @@ export function KreileAppShell({ children, globalCreate }: { children: React.Rea
           suche={canUseShell ? <SuchKopf onOeffnen={() => setSearchOpen(true)} /> : <span />}
           plus={canUseShell && canCreate ? (
             <GlobalesPlus
-              onKundeAnlegen={() => requestGlobalCreate("CUSTOMER")}
-              onAuftragKv={() => requestGlobalCreate("DIRECT_INTAKE")}
+              onOeffnen={() => requestGlobalCreate()}
             />
           ) : <span />}
           onNav={go}
           onStart={() => router.push("/")}
           onKonto={() => setMoreOpen(true)}
-          onNeuerEingang={permissions.hasPermission("perm_data_orders") ? () => requestGlobalCreate("DIRECT_INTAKE") : undefined}
+          onNeuerEingang={permissions.hasArea("eingang") ? () => requestGlobalCreate() : undefined}
           onWareRaus={permissions.hasPermission("perm_op_status") ? () => router.push("/orders?station=fertig") : undefined}
           onAuftragOeffnen={permissions.hasPermission("perm_view_leitstand") ? () => router.push("/orders") : undefined}
           onMehrarbeit={permissions.hasPermission("perm_op_status") ? () => router.push("/warendurchlauf") : undefined}

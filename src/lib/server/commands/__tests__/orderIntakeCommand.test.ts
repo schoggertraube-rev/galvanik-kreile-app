@@ -415,10 +415,10 @@ describe("createOrderIntake", () => {
     expect(sqlText).not.toMatch(/createClient|supabase|rpc\(/i);
   });
 
-  it("accepts a free-text item without catalog or price and skips catalog validation", async () => {
+  it.each([null, "Stück"])("accepts a free-text item without catalog or price, unit %s, and skips catalog validation", async (unit) => {
     const freeTextInput = {
       ...input,
-      items: [{ catalogServiceId: null, name: "TEST Sonderteil", quantity: 1, material: "Stahl", surfaceRequested: "Vernickeln", unit: null, unitPriceCents: null, vatRateBasisPoints: null }],
+      items: [{ catalogServiceId: null, name: "TEST Sonderteil", quantity: 1, material: "Stahl", surfaceRequested: "Vernickeln", unit, unitPriceCents: null, vatRateBasisPoints: null }],
     };
     execute.mockImplementation((query: { text: string }) => {
       if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);

@@ -15,6 +15,7 @@ const EVENT_STATION = "wareneingang" as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const EXECUTION_REQUESTED_VALUES = ["hochglanz", "glaenzend", "matt", "gelb_passiviert", "blau_passiviert", "offen"] as const;
+const FREE_TEXT_UNIT_VALUES = ["Stück", "kg", "dm²", "Satz", "Std."] as const;
 const TERM_STATUS_VALUES = ["wunsch", "bestaetigt", "verschoben"] as const;
 const INTAKE_SOURCE_VALUES = ["persoenlich", "versand", "abholung_firma", "anfrage_mail", "anfrage_telefon"] as const;
 
@@ -245,7 +246,8 @@ function normalizeInput(input: unknown): NormalizedInput | null {
       && unit !== null
       && typeof unitPriceCents === "number" && Number.isSafeInteger(unitPriceCents) && unitPriceCents >= 0 && unitPriceCents <= 999_999_999
       && ([0, 700, 1900] as const).includes(vatRateBasisPoints as never);
-    const freeTextFieldsValid = candidate.catalogServiceId === null && candidate.unit === null
+    const freeTextFieldsValid = candidate.catalogServiceId === null
+      && (candidate.unit === null || (unit !== null && FREE_TEXT_UNIT_VALUES.includes(unit as typeof FREE_TEXT_UNIT_VALUES[number])))
       && candidate.unitPriceCents === null && candidate.vatRateBasisPoints === null;
     if (
       !name || !surfaceRequested || material === undefined || !executionRequested || (!catalogFieldsValid && !freeTextFieldsValid) ||

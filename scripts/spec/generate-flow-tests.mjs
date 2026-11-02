@@ -1,0 +1,272 @@
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import process from "node:process";
+
+const root = process.cwd();
+const generatedRoot = path.join(root, "e2e", "generated");
+const defaultBauplan = "docs/project/endversion/codex/BAUPLAN.json";
+const expectedRedPath = path.join(generatedRoot, "_erwartet_rot.json");
+
+function parseArguments(argv) {
+  let bauplan = defaultBauplan;
+  let check = false;
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index];
+    if (argument === "--check") check = true;
+    else if (argument === "--bauplan") {
+      bauplan = argv[index + 1];
+      if (!bauplan) throw new Error("FLOW_GENERATOR_BAUPLAN_VALUE_REQUIRED");
+      index += 1;
+    } else throw new Error(`FLOW_GENERATOR_UNKNOWN_ARGUMENT:${argument}`);
+  }
+  return { bauplan, check };
+}
+
+function quoted(value) {
+  if (value === null || value === undefined) return "NULL";
+  return `'${String(value).replaceAll("'", "''")}'`;
+}
+
+function customerSeedRows(datenlagen) {
+  return Object.entries(datenlagen)
+    .filter(([, fixture]) => fixture?.tabelle === "customers")
+    .map(([name, fixture], index) => {
+      const values = fixture.werte ?? {};
+      const id = `00000000-0000-4000-8000-${String(index + 101).padStart(12, "0")}`;
+      const customerNumber = `K-FLOW-${String(index + 1).padStart(3, "0")}`;
+      const contactPerson = values.contact_person
+        ?? ([values.first_name, values.last_name].filter(Boolean).join(" ") || null);
+      const country = { DE: "Deutschland", AT: "Österreich", CH: "Schweiz" }[values.country] ?? values.country ?? null;
+      const shippingPreference = values.handover_preference === "versand"
+        ? "versand"
+        : values.handover_preference === "abholung"
+          ? "abholung"
+          : null;
+      return {
+        name,
+        id,
+        customerNumber,
+        columns: {
+          name: values.name ?? values.company_name ?? name,
+          type: values.customer_type ?? "business",
+          company_name: values.company_name ?? null,
+          contact_person: contactPerson,
+          salutation: values.salutation ?? null,
+          first_name: values.first_name ?? null,
+          last_name: values.last_name ?? null,
+          contact_role: values.contact_role ?? null,
+          phone: values.phone ?? null,
+          email: values.email ?? null,
+          billing_email: values.billing_email ?? null,
+          website: values.website ?? null,
+          street: values.street ?? null,
+          house_number: values.house_number ?? null,
+          address: null,
+          zip_code: values.zip_code ?? null,
+          city: values.city ?? null,
+          country,
+          payment_preference: values.zahlungsbedingung === "rechnung" ? `rechnung_${values.ziel_tage ?? 14}` : values.zahlungsbedingung ?? null,
+          shipping_preference: shippingPreference,
+          vat_id: values.vat_id ?? null,
+          ziel_freigeschaltet: values.ziel_freigeschaltet ?? false,
+          ziel_tage: values.ziel_tage ?? null,
+          skonto_prozent: values.skonto_prozent ?? null,
+          skonto_tage: values.ziel_freigeschaltet ? values.skonto_tage ?? 0 : null,
+        },
+      };
+    });
+}
+
+function renderSeed(model) {
+  const loginIds = {
+    login_meister: "10000000-0000-4000-8000-000000000001",
+    login_werkstatt: "10000000-0000-4000-8000-000000000002",
+    login_ohne_eingang: "10000000-0000-4000-8000-000000000003",
+    login_ohne_kunden: "10000000-0000-4000-8000-000000000004",
+  };
+  const pins = {
+    login_meister: ["1111", "$2b$12$u4o.djf1c9OZbJWiD7XtCOFahRnoeyJe2OiyG7QyzsIEb4vv/UHaq"],
+    login_werkstatt: ["2222", "$2b$12$a9ZEwrinIz0zIJ7jrTabAuF6ACwd.oUHJv1iOZ61xkkn.1minJHBy"],
+    login_ohne_eingang: ["3333", "$2b$12$/C2xIVQ7tBxoZKRL6Ba7UOtHwE.fBynIDbe0fejXDxjQyWaFkzQnq"],
+    login_ohne_kunden: ["4444", "$2b$12$lgvHXCJ7iDaE3gRb28yQsunVSdvEAPBaesRNAY3XWYUO3/znrjk3i"],
+  };
+  const allowedRights = new Set(["auftraege", "eingang", "kunden", "geld", "kassieren", "mails", "einstellungen", "logins", "wartung"]);
+  const users = Object.entries(model.logins).map(([name, login]) => ({
+    name,
+    id: loginIds[name],
+    pin: pins[name][0],
+    pinHash: pins[name][1],
+    role: login.vorlage === "werkstatt" ? "werkstatt" : "meister",
+    fullName: `Flow ${name.replace("login_", "")}`,
+    rights: login.rechte.filter((right) => allowedRights.has(right)),
+  }));
+  const customers = customerSeedRows(model.datenlagen);
+  const addresses = Object.values(model.datenlagen)
+    .filter((fixture) => fixture?.tabelle === "address_directory")
+    .flatMap((fixture) => fixture.zeilen ?? []);
+  const lines = [
+    "-- Generated from BAUPLAN.testmodell. Local replay database only.",
+    "BEGIN;",
+  ];
+  for (const user of users) {
+    lines.push(
+      "INSERT INTO public.app_users (id, tenant_id, email, full_name, role, pin_hash, active, kuerzel, bezeichnung)",
+      `VALUES (${quoted(user.id)}::uuid, 'galvanik-kreile', ${quoted(`${user.name}@flow.local`)}, ${quoted(user.fullName)}, ${quoted(user.role)}, ${quoted(user.pinHash)}, true, ${quoted(user.name.slice(-3).toUpperCase())}, 'Generierter Wege-Test')`,
+      "ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, role = EXCLUDED.role, pin_hash = EXCLUDED.pin_hash, active = true, updated_at = statement_timestamp();",
+      `DELETE FROM public.app_user_rights WHERE tenant_id = 'galvanik-kreile' AND user_id = ${quoted(user.id)}::uuid;`,
+    );
+    for (const right of user.rights) {
+      lines.push(`INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', ${quoted(user.id)}::uuid, ${quoted(right)}) ON CONFLICT DO NOTHING;`);
+    }
+  }
+  for (const customer of customers) {
+    const c = customer.columns;
+    lines.push(
+      "INSERT INTO public.customers (id, tenant_id, customer_number, name, type, company_name, contact_person, phone, email, street, address, zip_code, city, country, payment_preference, shipping_preference, vat_id, ziel_freigeschaltet, ziel_tage, skonto_prozent, skonto_tage, source)",
+      `VALUES (${quoted(customer.id)}, 'galvanik-kreile', ${quoted(customer.customerNumber)}, ${quoted(c.name)}, ${quoted(c.type)}, ${quoted(c.company_name)}, ${quoted(c.contact_person)}, ${quoted(c.phone)}, ${quoted(c.email)}, ${quoted(c.street)}, ${quoted(c.address)}, ${quoted(c.zip_code)}, ${quoted(c.city)}, ${quoted(c.country)}, ${quoted(c.payment_preference)}, ${quoted(c.shipping_preference)}, ${quoted(c.vat_id)}, ${c.ziel_freigeschaltet ? "true" : "false"}, ${c.ziel_tage ?? "NULL"}, ${c.skonto_prozent ?? "NULL"}, ${c.skonto_tage ?? "NULL"}, 'flow-spec')`,
+      "ON CONFLICT (id) DO UPDATE SET customer_number = EXCLUDED.customer_number, name = EXCLUDED.name, type = EXCLUDED.type, company_name = EXCLUDED.company_name, contact_person = EXCLUDED.contact_person, phone = EXCLUDED.phone, email = EXCLUDED.email, street = EXCLUDED.street, address = EXCLUDED.address, zip_code = EXCLUDED.zip_code, city = EXCLUDED.city, country = EXCLUDED.country, payment_preference = EXCLUDED.payment_preference, shipping_preference = EXCLUDED.shipping_preference, vat_id = EXCLUDED.vat_id, ziel_freigeschaltet = EXCLUDED.ziel_freigeschaltet, ziel_tage = EXCLUDED.ziel_tage, skonto_prozent = EXCLUDED.skonto_prozent, skonto_tage = EXCLUDED.skonto_tage, source = 'flow-spec', updated_at = statement_timestamp();",
+    );
+    const optionalColumns = {
+      salutation: c.salutation,
+      first_name: c.first_name,
+      last_name: c.last_name,
+      contact_role: c.contact_role,
+      billing_email: c.billing_email,
+      website: c.website,
+      house_number: c.house_number,
+    };
+    lines.push("DO $flow$ BEGIN");
+    for (const [column, value] of Object.entries(optionalColumns)) {
+      const update = `UPDATE public.customers SET ${column} = ${quoted(value)} WHERE id = ${quoted(customer.id)}::uuid AND tenant_id = 'galvanik-kreile'`;
+      lines.push(
+        `IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = ${quoted(column)}) THEN`,
+        `  EXECUTE ${quoted(update)};`,
+        "END IF;",
+      );
+    }
+    lines.push("END $flow$;");
+  }
+  if (addresses.length > 0) {
+    lines.push("DO $flow$ BEGIN IF to_regclass('public.address_directory') IS NOT NULL THEN");
+    for (const address of addresses) {
+      lines.push(
+        "INSERT INTO public.address_directory (country, zip_code, city, district, street)",
+        `VALUES (${quoted(address.country)}, ${quoted(address.zip_code)}, ${quoted(address.city)}, ${quoted(address.district ?? null)}, ${quoted(address.street ?? null)})`,
+        "ON CONFLICT DO NOTHING;",
+      );
+    }
+    lines.push("END IF; END $flow$;");
+  }
+  lines.push("COMMIT;", "");
+  return {
+    sql: lines.join("\n"),
+    runtime: {
+      logins: Object.fromEntries(users.map((user) => [user.name, { id: user.id, pin: user.pin }])),
+      datenlagen: Object.fromEntries(customers.map((customer) => [customer.name, {
+        id: customer.id,
+        customer_number: customer.customerNumber,
+        ...model.datenlagen[customer.name].werte,
+      }])),
+    },
+  };
+}
+
+function renderPage(pageName, page, bauplanSha) {
+  const cases = JSON.stringify(page.faelle ?? [], null, 2);
+  return `// Generated from BAUPLAN SHA-256 ${bauplanSha}. Do not edit.\n`
+    + `import { test } from "@playwright/test";\n`
+    + `import expectedRed from "./_erwartet_rot.json";\n`
+    + `import { prepareGeneratedSeed, runGeneratedFlowCase, type FlowCase } from "./_harness";\n\n`
+    + `const cases = ${cases} as unknown as FlowCase[];\n\n`
+    + `test.beforeEach(async () => { await prepareGeneratedSeed(); });\n\n`
+    + `test.describe(${JSON.stringify(`BAUPLAN Wege · ${pageName}`)}, () => {\n`
+    + `  for (const flowCase of cases) {\n`
+    + `    const packageTag = flowCase.paket ? \`@\${flowCase.paket}\` : "@UNASSIGNED";\n`
+    + `    test(\`\${flowCase.id || "OFFEN"} \${packageTag} · \${flowCase.titel || "noch nicht beschrieben"}\`, async ({ page }) => {\n`
+    + `      test.skip(!flowCase.paket, "Im Bauplan noch keinem Paket zugeordnet");\n`
+    + `      const red = expectedRed[flowCase.id as keyof typeof expectedRed];\n`
+    + `      test.fail(Boolean(red), red ? \`\${red.paket}: \${red.grund}\` : undefined);\n`
+    + `      await runGeneratedFlowCase(page, flowCase);\n`
+    + `    });\n`
+    + `  }\n`
+    + `});\n`;
+}
+
+function readAndValidateExpectedRed(document) {
+  if (!existsSync(expectedRedPath)) throw new Error("FLOW_EXPECTED_RED_FILE_MISSING");
+  const expectedRed = JSON.parse(readFileSync(expectedRedPath, "utf8"));
+  if (!expectedRed || Array.isArray(expectedRed) || typeof expectedRed !== "object") {
+    throw new Error("FLOW_EXPECTED_RED_FORMAT_INVALID");
+  }
+  const cases = new Map();
+  for (const page of Object.values(document.testmodell?.seiten ?? {})) {
+    for (const flowCase of page.faelle ?? []) {
+      if (cases.has(flowCase.id)) throw new Error(`FLOW_CASE_ID_DUPLICATE:${flowCase.id}`);
+      cases.set(flowCase.id, flowCase);
+    }
+  }
+  for (const [id, entry] of Object.entries(expectedRed)) {
+    const flowCase = cases.get(id);
+    if (!flowCase) throw new Error(`FLOW_EXPECTED_RED_CASE_UNKNOWN:${id}`);
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error(`FLOW_EXPECTED_RED_ENTRY_INVALID:${id}`);
+    if (!flowCase.paket) throw new Error(`FLOW_EXPECTED_RED_UNASSIGNED:${id}`);
+    if (entry.paket !== flowCase.paket) throw new Error(`FLOW_EXPECTED_RED_PACKAGE_MISMATCH:${id}`);
+    if (entry.paket !== "AP-K1") throw new Error(`FLOW_EXPECTED_RED_ACCEPTED_PACKAGE:${id}:${entry.paket}`);
+    if (typeof entry.grund !== "string" || entry.grund.trim().length === 0) throw new Error(`FLOW_EXPECTED_RED_REASON_REQUIRED:${id}`);
+  }
+  return expectedRed;
+}
+
+function renderRuntime(runtime, sha) {
+  return `// Generated from BAUPLAN SHA-256 ${sha}. Do not edit.\nexport const generatedFlowRuntime = ${JSON.stringify(runtime, null, 2)} as const;\n`;
+}
+
+function buildOutputs(raw, document) {
+  if (!document.testmodell?.seiten) throw new Error("FLOW_GENERATOR_TESTMODELL_MISSING");
+  const sha = createHash("sha256").update(raw).digest("hex").toUpperCase();
+  const seed = renderSeed(document.testmodell);
+  const outputs = new Map([
+    ["_model.ts", renderRuntime(seed.runtime, sha)],
+    ["_seed.sql", seed.sql],
+  ]);
+  for (const [pageName, page] of Object.entries(document.testmodell.seiten)) {
+    outputs.set(`${pageName}.flow.spec.ts`, renderPage(pageName, page, sha));
+  }
+  return { outputs, sha };
+}
+
+function main() {
+  const options = parseArguments(process.argv.slice(2));
+  const bauplanPath = path.resolve(root, options.bauplan);
+  const raw = readFileSync(bauplanPath, "utf8");
+  const document = JSON.parse(raw);
+  readAndValidateExpectedRed(document);
+  const { outputs, sha } = buildOutputs(raw, document);
+  mkdirSync(generatedRoot, { recursive: true });
+
+  if (options.check) {
+    const mismatches = [];
+    for (const [name, expected] of outputs) {
+      const target = path.join(generatedRoot, name);
+      if (!existsSync(target) || readFileSync(target, "utf8") !== expected) mismatches.push(name);
+    }
+    const expectedSpecs = new Set([...outputs.keys()].filter((name) => name.endsWith(".flow.spec.ts")));
+    for (const name of readdirSync(generatedRoot).filter((name) => name.endsWith(".flow.spec.ts"))) {
+      if (!expectedSpecs.has(name)) mismatches.push(name);
+    }
+    if (mismatches.length) throw new Error(`FLOW_GENERATOR_CHECK_FAILED:${[...new Set(mismatches)].sort().join(",")}`);
+    console.log(`FLOW_GENERATOR_CHECK=PASS bauplan_sha256=${sha} files=${outputs.size}`);
+    return;
+  }
+
+  for (const [name, content] of outputs) writeFileSync(path.join(generatedRoot, name), content, "utf8");
+  console.log(`FLOW_GENERATOR_WRITE=PASS bauplan_sha256=${sha} files=${outputs.size}`);
+}
+
+try {
+  main();
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+}

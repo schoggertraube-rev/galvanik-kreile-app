@@ -4,10 +4,10 @@ import { Icon, type IconName } from './Icon';
 import { Button } from './Button';
 import { cx } from './typen';
 export type DialogMeldung = { text: string; ton: 'fehler' | 'erfolg' };
-export interface DialogProps { titel: string; icon?: IconName; groesse?: 'normal' | 'breit' | 'schmal' | 'karte'; onSchliessen: () => void; onZurueck?: () => void; fuss?: ReactNode; meldung?: DialogMeldung | null; children: ReactNode; }
+export interface DialogProps { titel: string; icon?: IconName; groesse?: 'normal' | 'breit' | 'schmal' | 'karte'; onSchliessen: () => void; onZurueck?: () => void; schliessenSpecId?: string; fuss?: ReactNode; meldung?: DialogMeldung | null; children: ReactNode; }
 /** Genau eine Überschrift, keine Unterzeile. Handy: Bottom-Sheet. Esc schließt. */
 /** Schließt mit umgekehrter Bewegung (180 ms), dann onSchliessen – kein hartes Verschwinden. */
-export function Dialog({ titel, icon = 'file', groesse = 'normal', onSchliessen: sofort, onZurueck, fuss, meldung, children }: DialogProps) {
+export function Dialog({ titel, icon = 'file', groesse = 'normal', onSchliessen: sofort, onZurueck, schliessenSpecId, fuss, meldung, children }: DialogProps) {
   const [zu, setZu] = useState(false);
   const onSchliessen = () => { if (zu) return; const still = matchMedia('(prefers-reduced-motion:reduce)').matches; if (still) return sofort(); setZu(true); setTimeout(sofort, 190); };
   useEffect(() => { const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onSchliessen(); }; addEventListener('keydown', h); return () => removeEventListener('keydown', h); });
@@ -15,7 +15,7 @@ export function Dialog({ titel, icon = 'file', groesse = 'normal', onSchliessen:
   return (
     <div className={zu ? 'kr-ebene kr-ebene--zu' : 'kr-ebene'} onClick={e => e.target === e.currentTarget && onSchliessen()}>
       <section className={cx('kr-dialog', groesse !== 'normal' && 'kr-dialog--' + groesse)} role="dialog" aria-modal="true" aria-label={titel}>
-        <header className="kr-dialog-kopf">{onZurueck && <Button art="leise" icon="back" label="Zurück" onClick={onZurueck} />}<span className="kr-dialog-ic"><Icon name={icon} /></span><h2 className="kr-dialog-titel">{titel}</h2><Button art="leise" icon="x" label="Schließen" onClick={onSchliessen} /></header>
+        <header className="kr-dialog-kopf">{onZurueck && <Button art="leise" icon="back" label="Zurück" onClick={onZurueck} />}<span className="kr-dialog-ic"><Icon name={icon} /></span><h2 className="kr-dialog-titel">{titel}</h2><Button data-spec-id={schliessenSpecId} art="leise" icon="x" label="Schließen" onClick={onSchliessen} /></header>
         <div className="kr-dialog-inhalt">{meldung ? <DialogAktionsmeldung meldung={meldung} /> : null}{children}</div>
         {fuss && <footer className="kr-dialog-fuss">{fuss}</footer>}
       </section>
