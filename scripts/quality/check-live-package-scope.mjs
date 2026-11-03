@@ -393,6 +393,7 @@ const TA_B2E_REQUIRED_FILES = Object.freeze([
   "src/test/live_package_scope.test.ts",
 ]);
 const TA_B2F_ANCHOR_ALLOWLIST = Object.freeze([
+  "quality/eslint-baseline.json",
   ".gitattributes",
   ".github/workflows/agentur-gate.yml",
   ".github/workflows/eslint-ratchet.yml",
@@ -413,6 +414,7 @@ const TA_B2F_ANCHOR_ALLOWLIST = Object.freeze([
   "src/test/live_package_scope.test.ts",
 ]);
 const TA_B2F_REQUIRED_FILES = Object.freeze([
+  "quality/eslint-baseline.json",
   ".gitattributes",
   ".github/workflows/eslint-ratchet.yml",
   "_review/AKTUELLE_ANWEISUNG.md",
@@ -1052,6 +1054,15 @@ function checkTaB2fScope(files, mission, branch, baseSha) {
   return errors;
 }
 
+export function checkTaB2fBaselineChangeForTest({ before, after }) {
+  const oldField = '"judgeContractHash": "d322170885867420ca489927b5ad52522206e06009c5afb619d5159d4147752b"';
+  const newField = '"judgeContractHash": "f02832e8e3da8367b3604c5f356b6df95fe61310a2c24d04d5b8105b582aab88"';
+  if (before.split(oldField).length !== 2 || after !== before.replace(oldField, newField)) {
+    return ["TA_B2F_BASELINE_CHANGE_NOT_AUTHORIZED"];
+  }
+  return [];
+}
+
 function checkTaB2fAnchor(root, files, mission, branch, baseSha) {
   const errors = checkTaB2fScope(files, mission, branch, baseSha);
   for (const rel of TA_B2F_REQUIRED_FILES) {
@@ -1077,7 +1088,14 @@ function checkTaB2fAnchor(root, files, mission, branch, baseSha) {
   } catch {
     errors.push("TA_B2F_BAUPLAN_UNREADABLE");
   }
-  // Fassung 3 has no Bauplan permission. A change is rejected by the closed allowlist.
+  try {
+    // P42 permits exactly one field replacement; even whitespace/debt changes fail.
+    const before = execFileSync("git", ["-C", root, "show", TA_B2F_BASE_SHA + ":quality/eslint-baseline.json"], { encoding: "utf8", maxBuffer: 8_000_000 });
+    const after = readFileSync(path.join(root, "quality/eslint-baseline.json"), "utf8");
+    errors.push(...checkTaB2fBaselineChangeForTest({ before, after }));
+  } catch {
+    errors.push("TA_B2F_BASELINE_UNREADABLE");
+  }
   return errors;
 }
 
@@ -1997,6 +2015,11 @@ export function runSelftest(root = process.cwd()) {
   if (!changedApRMigrationErrors.includes(`SALES_STAGE_B2_MIGRATION_NOT_NEW:${apRUnitMigration}`)) {
     throw new Error(`TA-B2e accepted a changed AP-R migration: ${changedApRMigrationErrors.join(" | ")}`);
   }
+  const p42Before = JSON.stringify({ judgeContractHash: "d322170885867420ca489927b5ad52522206e06009c5afb619d5159d4147752b", lintContractHash: "unchanged", issues: [], ignoredCodeFiles: [] }, null, 2) + "\n";
+  const p42After = p42Before.replace("d322170885867420ca489927b5ad52522206e06009c5afb619d5159d4147752b", "f02832e8e3da8367b3604c5f356b6df95fe61310a2c24d04d5b8105b582aab88");
+  if (checkTaB2fBaselineChangeForTest({ before: p42Before, after: p42After }).length) throw new Error("P42 valid one-field migration rejected");
+  const p42Mutations = [p42Before, p42After + "\n", p42After.replace('"issues": []', '"issues": [1]'), p42After.replace('"ignoredCodeFiles": []', '"ignoredCodeFiles": [1]'), p42After.replace('"lintContractHash": "unchanged"', '"lintContractHash": "changed"'), p42After.replace("{", '{"extra":true,')];
+  for (const after of p42Mutations) if (!checkTaB2fBaselineChangeForTest({ before: p42Before, after }).includes("TA_B2F_BASELINE_CHANGE_NOT_AUTHORIZED")) throw new Error("P42 accepted an additional baseline mutation");
   const validTaB2f = checkTaB2fScope(TA_B2F_REQUIRED_FILES, taB2cMission, TA_B2F_BRANCH, TA_B2F_BASE_SHA);
   if (validTaB2f.length > 0) throw new Error(`valid TA-B2f scope rejected: ${validTaB2f.join(" | ")}`);
   const taB2fOutside = checkTaB2fScope(["src/app/page.tsx"], taB2cMission, TA_B2F_BRANCH, TA_B2F_BASE_SHA);

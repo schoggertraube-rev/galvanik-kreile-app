@@ -9,6 +9,7 @@ import {
   checkTaB2d2ScopeForTest,
   checkTaB2eScopeForTest,
   checkTaB2fScopeForTest,
+  checkTaB2fBaselineChangeForTest,
   runSelftest,
 } from "../../scripts/quality/check-live-package-scope.mjs";
 
@@ -448,6 +449,17 @@ describe("Kreile live package scope", () => {
       expect(checkSalesStageB2ScopeForTest({files:[adjacent],mission:b2Mission,branch:"kreile/b2-ein-3"}),adjacent).toContain(`SALES_STAGE_B2_SCOPE:${adjacent}`);
     }
     expect(checkSalesStageB2ScopeForTest({files:["eslint.config.mjs"],mission:b2Mission,branch:"kreile/b2-ein-3"})).toContain("SALES_STAGE_B2_SCOPE:eslint.config.mjs");
+  });
+
+  it("allows only the P42 judge hash replacement and rejects every other baseline byte", () => {
+    const before = JSON.stringify({ judgeContractHash: "d322170885867420ca489927b5ad52522206e06009c5afb619d5159d4147752b", lintContractHash: "unchanged", issues: [], ignoredCodeFiles: [] }, null, 2) + "\n";
+    const after = before.replace("d322170885867420ca489927b5ad52522206e06009c5afb619d5159d4147752b", "f02832e8e3da8367b3604c5f356b6df95fe61310a2c24d04d5b8105b582aab88");
+    expect(checkTaB2fBaselineChangeForTest({before,after})).toEqual([]);
+    for (const changed of [before, after+"\n", after.replace('"issues": []','"issues": [1]'), after.replace('"ignoredCodeFiles": []','"ignoredCodeFiles": [1]'), after.replace('"lintContractHash": "unchanged"','"lintContractHash": "changed"'), after.replace("{",'{"extra":true,')]) {
+      expect(checkTaB2fBaselineChangeForTest({before,after:changed})).toEqual(["TA_B2F_BASELINE_CHANGE_NOT_AUTHORIZED"]);
+    }
+    expect(checkTaB2fScopeForTest({files:["quality/eslint-baseline.json"],mission:b2cAnchorMission,branch:"codex/ta-b2f",baseSha:"06e56daae267e49a7e23a5c40a70fbbef21b8cb8"})).toEqual([]);
+    expect(checkSalesStageB2ScopeForTest({files:["quality/eslint-baseline.json"],mission:b2Mission,branch:"kreile/b2-ein-1"})).toContain("SALES_STAGE_B2_SCOPE:quality/eslint-baseline.json");
   });
 
   it("allows only the TA-B2f anchor paths on its pinned main base", () => {

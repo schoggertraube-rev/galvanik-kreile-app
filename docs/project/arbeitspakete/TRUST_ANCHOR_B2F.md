@@ -40,3 +40,6 @@ Rot erlaubt: nur der Ratchet-Job am Byte-Gleichheits-Schritt.
 
 ## Fassung Runde 52 (03.11., 19:07) – geht allen früheren Fassungen vor
 Bauplan **DF3E1AFEC7B6C3DED6DA51F22FDAADF8CFAB780DA9A4F619EDB42D3C2D6AC5C4** (spec `ee64f8882bb7`) als `BAUPLAN.json`, `e2e/generated/**` neu, Rot-Liste je Teil. UI-Ordner + `CURRENT_DESIGN_REFERENCE.json` (1509BE93) unverändert aus dem Arbeitsbaum. Sonst wie Fassung 3/4 (DESIGN_POINTER-Neupin, eslint-ratchet-Pins, Generator-Pfad, ESLint-Ignore nur `docs/project/endversion/ui/**`, Allowlist Fassung 2).
+
+## Freigabe 03.11. 19:30 (Runde 52)
+Zusaetzlich erlaubt: `quality/eslint-baseline.json` - **ausschliesslich** `judgeContractHash` von `d322170885867420ca489927b5ad52522206e06009c5afb619d5159d4147752b` auf `f02832e8e3da8367b3604c5f356b6df95fe61310a2c24d04d5b8105b582aab88` (Diff `.git/kreile-ta52-judge-migration.patch`, vom Planungschat geprueft: genau diese eine Zeile). Fehlerzahlen, Regeln, lintContractHash, Ausnahmen unveraendert; der Selbsttest muss jede weitere Aenderung an der Datei ablehnen.
