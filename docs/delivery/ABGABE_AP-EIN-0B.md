@@ -1,6 +1,6 @@
 # AP-EIN Teil 0b – gemeinsames UI-Fundament, Runde 51
 
-Status: gebauter Arbeitsstand zur Prüfung, kein Merge. Produkt-SHA, READY-Git-Preview und Sicht-Ausgangsbericht werden nach dem Git-Build ergänzt; diese Zwischenfassung ist kein Fertig-Claim.
+Produkt-SHA: `0c88c457407454db1369fe3e50e848509ae25125`. READY-Git-Preview genau dieses SHA: https://galvanik-kreile-werkstatt-lsdsbjn5m.vercel.app . Draft-PR #169, kein Merge. Der Seitenumbau ist noch nicht abgeschlossen.
 
 ## Sichtbare Änderungen
 
@@ -28,10 +28,43 @@ Status: gebauter Arbeitsstand zur Prüfung, kein Merge. Produkt-SHA, READY-Git-P
 - Keine Server-Action, kein Befehl, keine Tabelle und kein Daten-Schreibweg geändert. Keine Dev-Migration.
 - Reale Preview-Anmeldung der bestehenden Rollen Meister und Werkstatt für die Vorbereitung des Sichtlaufs: PASS. Zugangsdaten werden ausschließlich im Lauf verwendet.
 - Gezielter Auswahl-Fall E32 gegen die echte Replay-App einschließlich Erfolg-Grün: PASS. Keine Assertion geändert und kein neuer Rotlisten-Eintrag.
-- A11, CI und Sicht-Ausgangsbericht: Ergebnis folgt im nachgeführten Prüfstand.
+- A11 PASS; normaler Commit-Hook ohne Umgehung: 133 Unit-Dateien und 1088 Tests PASS (323,50 s).
+- Sicht-Ausgangsbericht: alle 117 Vertragseinträge mit unverändertem Prüfer 03F4E0AA auf der exakten READY-Preview ausgeführt. Ergebnis: **0 grün / 78 gelb / 39 rot**. Beide Originalberichte bleiben unverändert erhalten; die gemeinsame Tabelle enthält nur Einträge der jeweils tatsächlich angemeldeten Rolle.
+- UI-Produktstand ist noch nicht fertig: 15 rote Einträge betreffen die erst folgenden Kunden-/Erfassungslayouts (Teile 1/2); 24 rote Einträge betreffen weitere bestehende Seiten. Gelb markiert die noch fehlenden expliziten Aufrufe. Dieser Ausgangsbericht wird nicht als grüne Abnahme ausgegeben.
+- CI am Produkt-SHA: Vercel und Preview Comments PASS; quality rot am Paket-Scope gegen main wegen der noch ungemergten Ankerpfade (#165); ratchet rot am noch nicht freigegebenen ESLint-Vertragswechsel. agentur-gate, h16-schema und Fresh Supabase replay laufen zum Zeitpunkt dieser Nachführung noch. Alle Ergebnisse bleiben im PR einsehbar.
 
 ## Abgrenzung der sichtbaren Abgabe
 
 Dieser Teil stellt die gemeinsame Stilschicht um. Die einzelnen Seitenlayouts werden anschließend in den Teilen 1–6 ersetzt: Kunde in Teil 1; rotes Plus, Auftrag/KV erfassen, Rückfrage und Anliegenwahl in Teil 2. Die alten Reiter der Erfassung gehören zu diesem folgenden Seitenumbau.
 
 Der Ausgangsbericht führt alle 117 Vertragseinträge. Fehlende Aufrufe späterer Teile werden mit ihrer Teil-Zuordnung gelb ausgewiesen; Abweichungen vorhandener Seiten bleiben sichtbar. Vor dem jeweiligen Seiten-Merge muss dessen eigener Sichtlauf grün sein.
+
+## Sicht-Ausgangsbericht je Seite
+
+| Seite | Grün | Gelb | Rot |
+|---|---:|---:|---:|
+| tag | 0 | 0 | 6 |
+| auftraege | 0 | 0 | 3 |
+| kunden | 0 | 0 | 3 |
+| rein | 0 | 15 | 3 |
+| eingang | 0 | 0 | 3 |
+| kundeneu | 0 | 3 | 3 |
+| kundebearbeiten | 0 | 0 | 3 |
+| entwurf | 0 | 0 | 3 |
+| ware | 0 | 3 | 0 |
+| mailein | 0 | 9 | 0 |
+| rechnungein | 0 | 6 | 0 |
+| original | 0 | 3 | 0 |
+| nachrichten | 0 | 3 | 0 |
+| aufgabe | 0 | 15 | 0 |
+| anliegenwahl | 0 | 3 | 0 |
+| reklamation | 0 | 6 | 0 |
+| auftrag | 0 | 0 | 6 |
+| rauspruefen | 0 | 3 | 0 |
+| kunde | 0 | 0 | 3 |
+| werkstatt | 0 | 0 | 3 |
+| teil | 0 | 3 | 0 |
+| fertig | 0 | 3 | 0 |
+| mehrarbeit | 0 | 3 | 0 |
+
+Originalberichte lokal: `.git/kreile-sicht-0c88c457/meister.raw.json`, `werkstatt.raw.json`; gemeinsame Zuordnung: `gesamt.json` und `gesamt.md`. Modus-Bildpaare der App liegen unter `bilder/`. Die temporären Login-Routenkopien außerhalb des Repos wurden nach beiden Läufen gelöscht. Keine Geheimnisse im Repository.
