@@ -1,0 +1,219 @@
+// @vitest-environment node
+// AP-R Akzeptanztest – Einheit je Freitext-Position (Planungschat 02.11.2026, BAUPLAN a887 formulare.position.felder[einheit]).
+// Planungschat-Vertrag (U-221). Codex kopiert diese Datei bytegleich nach
+// src/test/acceptance/apr_freitext_einheiten.integration.test.ts und aendert sie nie.
+// Jede erlaubte Einheit wird ueber die echte Server-Action gebucht, in public.items gespeichert und vom Beleg als gueltig gelesen.
+
+import { AsyncLocalStorage } from "node:async_hooks";
+import { randomUUID } from "node:crypto";
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
+import postgres from "postgres";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
+import type { AppSession } from "@/lib/server/appSession";
+
+(globalThis as typeof globalThis & { AsyncLocalStorage: typeof AsyncLocalStorage }).AsyncLocalStorage = AsyncLocalStorage;
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
+
+const DATABASE_URL = process.env.DATABASE_URL;
+const EXPECTED_DATABASE_URL = process.env.H18_EXPECTED_DATABASE_URL;
+if (!DATABASE_URL || !EXPECTED_DATABASE_URL || DATABASE_URL !== EXPECTED_DATABASE_URL) {
+  throw new Error("APR_LOCAL_REPLAY_REQUIRED: DATABASE_URL must equal H18_EXPECTED_DATABASE_URL");
+}
+const parsed = new URL(DATABASE_URL);
+if (parsed.protocol !== "postgresql:" || parsed.hostname !== "127.0.0.1" || parsed.pathname !== "/postgres" || parsed.username !== "postgres") {
+  throw new Error("APR_LOCAL_REPLAY_REQUIRED: dedicated loopback Postgres expected");
+}
+if (process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error("APR_LOCAL_REPLAY_REQUIRED: service role must be unset");
+
+const sql = postgres(DATABASE_URL, { max: 2, prepare: false });
+const originalSecret = process.env.APP_SESSION_SECRET;
+process.env.APP_SESSION_SECRET = "apr-einheit-local-only";
+const RUN = randomUUID().slice(0, 8);
+
+type Fixture = { actorId: string; actorIssuedAt: number };
+
+async function withRequest<T>(cookie: string, work: () => Promise<T>): Promise<T> {
+  const { NextRequest } = await import("next/server");
+  const { createRequestStoreForAPI } = await import("next/dist/server/async-storage/request-store");
+  const { workAsyncStorage } = await import("next/dist/server/app-render/work-async-storage.external");
+  const { workUnitAsyncStorage } = await import("next/dist/server/app-render/work-unit-async-storage.external");
+  const request = new NextRequest("http://127.0.0.1/apr-einheit", { headers: { cookie } });
+  const workStore = {
+    isStaticGeneration: false,
+    page: "/apr-einheit",
+    route: "/apr-einheit",
+    afterContext: {},
+    previouslyRevalidatedTags: [],
+    refreshTagsByCacheKind: new Map(),
+    shouldTrackFetchMetrics: false,
+    deploymentId: "test",
+    buildId: "test",
+    incrementalCache: {},
+    cacheComponentsEnabled: false,
+    runInCleanSnapshot: (fn: (...args: never[]) => unknown, ...args: never[]) => fn(...args),
+    reactServerErrorsByDigest: new Map(),
+  } as unknown as import("next/dist/server/app-render/work-async-storage.external").WorkStore;
+  const requestStore = createRequestStoreForAPI(
+    request,
+    { pathname: "/apr-einheit", search: "" },
+    { tags: [], expirationsByCacheKind: new Map() },
+    undefined,
+    undefined as never,
+  );
+  return workAsyncStorage.run(workStore, () => workUnitAsyncStorage.run(requestStore, work));
+}
+
+async function withSession<T>(fixture: Fixture, work: () => Promise<T>): Promise<T> {
+  const { COOKIE_NAME, getSecretKey, signAppSession } = await import("@/lib/server/appSession");
+  const session: AppSession = {
+    userId: fixture.actorId,
+    tenantId: KREILE_TENANT_SLUG,
+    role: "meister",
+    displayName: "APR Kunde",
+    issuedAt: fixture.actorIssuedAt,
+    expiresAt: Date.now() + 5 * 60_000,
+  };
+  return withRequest(`${COOKIE_NAME}=${signAppSession(session, getSecretKey())}`, work);
+}
+
+async function createFixture(rights: string[]): Promise<Fixture> {
+  const actorId = randomUUID();
+  const updatedAt = new Date(Date.now() - 5_000).toISOString();
+  await sql.begin(async (transaction) => {
+    await transaction`
+      INSERT INTO public.app_users
+        (id, tenant_id, email, full_name, role, active, created_at, updated_at)
+      VALUES (
+        ${actorId}::uuid, ${KREILE_TENANT_SLUG}, ${`apr-einheit-${actorId}@local.invalid`},
+        'APR Kunde', 'meister', true, ${updatedAt}::timestamptz, ${updatedAt}::timestamptz
+      )
+    `;
+    await transaction`
+      INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
+      SELECT ${KREILE_TENANT_SLUG}, ${actorId}::uuid, area, ${actorId}::uuid
+      FROM unnest(${rights}::text[]) area
+    `;
+  });
+  const [clock] = await sql<{ updated_at_ms: string }[]>`
+    SELECT floor(extract(epoch FROM updated_at) * 1000)::bigint::text AS updated_at_ms
+    FROM public.app_users WHERE id=${actorId}::uuid
+  `;
+  const actorIssuedAt = Date.now();
+  if (!clock || Number(clock.updated_at_ms) >= actorIssuedAt) throw new Error("APR_SESSION_ORDER_INVALID");
+  return { actorId, actorIssuedAt };
+}
+
+let customerId = "";
+let actor: Fixture;
+const EINHEITEN = ["Stück", "kg", "dm²", "Satz", "Std."] as const;
+
+beforeAll(async () => {
+  const migrations = await sql<{ version: string }[]>`
+    SELECT version::text FROM supabase_migrations.schema_migrations ORDER BY version
+  `;
+  const repositoryMigrations = readdirSync(join(process.cwd(), "supabase", "migrations"))
+    .filter((file) => /^\d+_.+\.sql$/.test(file))
+    .map((file) => file.slice(0, file.indexOf("_")))
+    .sort();
+  expect(migrations.map((row) => row.version)).toEqual(repositoryMigrations);
+  actor = await createFixture(["eingang", "auftraege", "kunden", "geld"]);
+  const { createCustomerAction } = await import("@/app/actions/customers.actions");
+  const created = await withSession(actor, () => createCustomerAction({
+    city: "Stuttgart",
+    clientEventId: randomUUID(),
+    companyName: `APR Einheit ${RUN} GmbH`,
+    contactPerson: "Frau Erna Einheit",
+    customerType: "business",
+    email: `apr-einheit-${RUN}@example.invalid`,
+    name: `APR Einheit ${RUN}`,
+    notes: "APR Seed",
+    paymentPreference: "vorkasse",
+    phone: "+49 711 5551010",
+    street: "Messweg 9",
+    zipCode: "70176",
+    country: "Deutschland",
+    vatId: null,
+  }));
+  if (created.code !== "OK") throw new Error(`APR_CUSTOMER_SEED_FAILED:${created.code}:${created.message}`);
+  customerId = created.receipt.customerId;
+});
+
+afterAll(async () => {
+  await sql.end({ timeout: 1 });
+  if (originalSecret === undefined) delete process.env.APP_SESSION_SECRET;
+  else process.env.APP_SESSION_SECRET = originalSecret;
+});
+
+function auftragInput(clientKey: string, unit: string | null) {
+  return {
+    clientKey,
+    text: "Freitext-Position mit Einheit",
+    customer: { mode: "EXISTING" as const, customerId },
+    dueDate: "2027-06-14",
+    handoverMode: "pickup" as const,
+    paymentMode: "vorkasse" as const,
+    items: [{
+      catalogServiceId: null,
+      name: "APR Probe",
+      quantity: 3,
+      material: "Stahl",
+      surfaceRequested: "Verzinken",
+      executionRequested: "offen" as const,
+      unit,
+      unitPriceCents: null,
+      vatRateBasisPoints: null,
+    }],
+  };
+}
+
+async function beleg(orderNumber: string) {
+  return sql.begin(async (tx) => {
+    await tx`SELECT set_config('app.tenant_id', ${KREILE_TENANT_SLUG}, true)`;
+    const rows = await tx<{ unit: string | null; integrity_ok: boolean }[]>`
+      SELECT line.unit, receipt.integrity_ok
+      FROM public.orders o
+      JOIN public.items line ON line.order_id = o.id AND line.tenant_id = o.tenant_id
+      JOIN private.v_order_intake_receipts_v1 receipt ON receipt.order_id = o.id
+      WHERE o.tenant_id = ${KREILE_TENANT_SLUG} AND o.order_number = ${orderNumber}
+    `;
+    return rows;
+  });
+}
+
+async function zaehle(clientKey: string) {
+  const [counts] = await sql<{ items: number; receipts: number }[]>`
+    SELECT
+      (SELECT count(*)::int FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${clientKey}) AS items,
+      (SELECT count(*)::int FROM private.order_intake_receipts WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${clientKey}::uuid) AS receipts
+  `;
+  return counts;
+}
+
+describe("AP-R: Einheit je Freitext-Position", () => {
+  it.each(EINHEITEN)("bucht Einheit %s, speichert sie an der Position und der Beleg bleibt gueltig", async (einheit) => {
+    const { erfasseAuftragAusEingangAction } = await import("@/app/actions/eingang.actions");
+    const clientKey = randomUUID();
+    const result = await withSession(actor, () => erfasseAuftragAusEingangAction(auftragInput(clientKey, einheit)));
+    if (result.code !== "OK") throw new Error(`APR_BUCHEN_FAILED:${einheit}:${result.code}:${result.message}`);
+    expect(await beleg(result.orderNumber)).toEqual([{ unit: einheit, integrity_ok: true }]);
+    expect(await zaehle(clientKey)).toEqual({ items: 1, receipts: 1 });
+  });
+
+  it("weist eine Einheit ausserhalb des Wertebereichs ab und schreibt nichts", async () => {
+    const { erfasseAuftragAusEingangAction } = await import("@/app/actions/eingang.actions");
+    const clientKey = randomUUID();
+    const result = await withSession(actor, () => erfasseAuftragAusEingangAction(auftragInput(clientKey, "Liter")));
+    expect(result.code).toBe("VALIDATION_ERROR");
+    expect(await zaehle(clientKey)).toEqual({ items: 0, receipts: 0 });
+  });
+
+  it("Bestand: Freitext-Position ohne Einheit bleibt buchbar und gueltig", async () => {
+    const { erfasseAuftragAusEingangAction } = await import("@/app/actions/eingang.actions");
+    const clientKey = randomUUID();
+    const result = await withSession(actor, () => erfasseAuftragAusEingangAction(auftragInput(clientKey, null)));
+    if (result.code !== "OK") throw new Error(`APR_NULL_FAILED:${result.code}:${result.message}`);
+    expect(await beleg(result.orderNumber)).toEqual([{ unit: null, integrity_ok: true }]);
+  });
+});

@@ -7,6 +7,7 @@ import {
   checkTaB2c3ScopeForTest,
   checkTaB2cScopeForTest,
   checkTaB2d2ScopeForTest,
+  checkTaB2eScopeForTest,
   runSelftest,
 } from "../../scripts/quality/check-live-package-scope.mjs";
 
@@ -226,6 +227,90 @@ describe("Kreile live package scope", () => {
       branch: "codex/ta-b2d2",
       baseSha: "b364f569524a636a1aceefac0fb1934f7f24f556",
     })).toContain("TA_B2D2_SCOPE:src/app/page.tsx");
+  });
+
+  it("allows only the TA-B2e anchor paths and the exact new AP-R migration", () => {
+    expect(checkTaB2eScopeForTest({
+      files: [
+        "docs/project/arbeitspakete/TRUST_ANCHOR_B2E.md",
+        "docs/evidence/live-line/b2/TRUST_ANCHOR_B2E.json",
+      ],
+      mission: b2cAnchorMission,
+      branch: "codex/ta-b2e",
+      baseSha: "10be0a0326a2ef003fe4a6d30cdc1f484086ceb3",
+    })).toEqual([]);
+    expect(checkTaB2eScopeForTest({
+      files: ["src/app/page.tsx"],
+      mission: b2cAnchorMission,
+      branch: "codex/ta-b2e",
+      baseSha: "10be0a0326a2ef003fe4a6d30cdc1f484086ceb3",
+    })).toContain("TA_B2E_SCOPE:src/app/page.tsx");
+
+    for (const path of [
+      "src/lib/server/orderCardRead.ts",
+      "src/lib/server/__tests__/orderCardRead.test.ts",
+      "src/app/layout.tsx",
+      "src/app/telefonnotiz/layout.tsx",
+      "src/app/fonts/localFonts.ts",
+      "src/app/fonts/fraunces-latin-variable.woff2",
+      "quality/module-gates-baseline.json",
+      "src/modules/orders/__tests__/OrderSurfaces.v8.test.tsx",
+      "src/modules/orders/ui/OrderCardView.tsx",
+    ]) {
+      expect(checkSalesStageB2ScopeForTest({
+        files: [path],
+        mission: b2Mission,
+        branch: "kreile/b2-eingang",
+      }), path).toEqual([]);
+    }
+    const adjacentOrderCardPath = "src/lib/server/orderCardWrite.ts";
+    expect(checkSalesStageB2ScopeForTest({
+      files: [adjacentOrderCardPath],
+      mission: b2Mission,
+      branch: "kreile/b2-eingang",
+    })).toContain(`SALES_STAGE_B2_SCOPE:${adjacentOrderCardPath}`);
+    const adjacentFontPath = "src/app/font-cache/localFonts.ts";
+    expect(checkSalesStageB2ScopeForTest({
+      files: [adjacentFontPath],
+      mission: b2Mission,
+      branch: "kreile/b2-eingang",
+    })).toContain(`SALES_STAGE_B2_SCOPE:${adjacentFontPath}`);
+    const adjacentBaselinePath = "quality/other-module-gates-baseline.json";
+    expect(checkSalesStageB2ScopeForTest({
+      files: [adjacentBaselinePath],
+      mission: b2Mission,
+      branch: "kreile/b2-eingang",
+    })).toContain(`SALES_STAGE_B2_SCOPE:${adjacentBaselinePath}`);
+    const adjacentOrderUiPath = "src/modules/orders/ui/OrderListView.tsx";
+    expect(checkSalesStageB2ScopeForTest({
+      files: [adjacentOrderUiPath],
+      mission: b2Mission,
+      branch: "kreile/b2-eingang",
+    })).toContain(`SALES_STAGE_B2_SCOPE:${adjacentOrderUiPath}`);
+
+    const migration = "supabase/migrations/20261103010000_ap_r_freitext_einheiten.sql";
+    expect(checkSalesStageB2ScopeForTest({
+      files: [migration],
+      entries: [{ status: "A", path: migration }],
+      mission: b2Mission,
+      branch: "kreile/b2-eingang",
+    })).toEqual([]);
+    expect(checkSalesStageB2ScopeForTest({
+      files: [migration],
+      entries: [{ status: "M", path: migration }],
+      mission: b2Mission,
+      branch: "kreile/b2-eingang",
+    })).toContain(`SALES_STAGE_B2_MIGRATION_NOT_NEW:${migration}`);
+    const adjacent = "supabase/migrations/20261103010000_ap_r_other.sql";
+    expect(checkSalesStageB2ScopeForTest({
+      files: [adjacent],
+      entries: [{ status: "A", path: adjacent }],
+      mission: b2Mission,
+      branch: "kreile/b2-eingang",
+    })).toEqual(expect.arrayContaining([
+      `SALES_STAGE_B2_SCOPE:${adjacent}`,
+      `SALES_STAGE_B2_MIGRATION_INVALID:${adjacent}`,
+    ]));
   });
 
   it("accepts every AP-G/AP-R candidate path and no adjacent product path", () => {
