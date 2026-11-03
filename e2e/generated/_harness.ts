@@ -183,10 +183,14 @@ async function waitForServerAction(page: Page, id: string) {
   }));
   await expect.poll(async () => {
     const action = page.locator(`[data-spec-id="${id}"]`).first();
-    if (await action.count() === 0) return "settled";
-    const busy = await action.isDisabled().catch(() => false)
-      || (await action.textContent().catch(() => ""))?.includes("Wird gebucht");
-    return busy ? "busy" : "settled";
+    // Recognition removes this button; inspect its state in one DOM snapshot.
+    return action.evaluateAll((elements) => {
+      const element = elements[0];
+      if (!element) return "settled";
+      const busy = element.matches(":disabled") || element.getAttribute("aria-disabled") === "true"
+        || element.textContent?.includes("Wird gebucht");
+      return busy ? "busy" : "settled";
+    });
   }, { timeout: 15_000 }).toBe("settled");
 }
 
