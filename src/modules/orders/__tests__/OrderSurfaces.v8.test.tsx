@@ -46,6 +46,7 @@ describe("Orders V1.1 one-surface truth", () => {
   it("renders the complete V1.1 card and customer cross-link", () => {
     const openCustomer = vi.fn();
     render(<OrderCardView actions={actions} onClose={vi.fn()} onOpenCustomer={openCustomer} state={{ kind: "data", card }} />);
+    expect(document.querySelector('[data-spec-id="auftrag"]')).toBeTruthy();
     expect(screen.getByRole("dialog", { name: "Auftragskarte A-2026-0042" })).toHaveTextContent("A-2026-0042");
     expect(screen.getByText("Teile")).toBeInTheDocument();
     expect(screen.getAllByText("angenommen").length).toBeGreaterThan(0);

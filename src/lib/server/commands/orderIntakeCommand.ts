@@ -6,6 +6,7 @@ import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { intakePaymentContract, type PaymentMode } from "@/lib/server/paymentContract";
 import { getOrderReadiness } from "@/modules/customers/public";
+import { isOrderIntakeFreeTextUnit } from "@/modules/eingang/public";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 
 const EVENT_TYPE = "ORDER_INTAKE_CREATED_V1";
@@ -245,7 +246,8 @@ function normalizeInput(input: unknown): NormalizedInput | null {
       && unit !== null
       && typeof unitPriceCents === "number" && Number.isSafeInteger(unitPriceCents) && unitPriceCents >= 0 && unitPriceCents <= 999_999_999
       && ([0, 700, 1900] as const).includes(vatRateBasisPoints as never);
-    const freeTextFieldsValid = candidate.catalogServiceId === null && candidate.unit === null
+    const freeTextFieldsValid = candidate.catalogServiceId === null
+      && (candidate.unit === null || (unit !== null && isOrderIntakeFreeTextUnit(unit)))
       && candidate.unitPriceCents === null && candidate.vatRateBasisPoints === null;
     if (
       !name || !surfaceRequested || material === undefined || !executionRequested || (!catalogFieldsValid && !freeTextFieldsValid) ||
@@ -330,7 +332,11 @@ function parseReceiptItems(value: unknown): OrderIntakeReceiptItem[] | null {
       !(item.unit === null || (typeof item.unit === "string" && normalizedText(item.unit, 1, 40))) ||
       !(item.unitPriceCents === null || (typeof item.unitPriceCents === "number" && Number.isSafeInteger(item.unitPriceCents) && item.unitPriceCents >= 0)) ||
       !(item.vatRateBasisPoints === null || ([0, 700, 1900] as const).includes(item.vatRateBasisPoints as never)) ||
-      ((item.catalogServiceId === null) !== (item.unit === null && item.unitPriceCents === null && item.vatRateBasisPoints === null))
+      !(
+        (item.catalogServiceId !== null && item.unit !== null && item.unitPriceCents !== null && item.vatRateBasisPoints !== null)
+        || (item.catalogServiceId === null && item.unitPriceCents === null && item.vatRateBasisPoints === null
+          && (item.unit === null || (typeof item.unit === "string" && isOrderIntakeFreeTextUnit(item.unit))))
+      )
     ) return null;
     parsed.push({
       id: item.id,

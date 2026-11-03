@@ -18,6 +18,6 @@ export type GlobalCreateRequest = {
 
 export const GLOBAL_CREATE_OPEN_EVENT = "path1:global-create-open";
 
-export function requestGlobalCreate(request: GlobalCreateIntent | GlobalCreateRequest): void {
+export function requestGlobalCreate(request: GlobalCreateIntent | GlobalCreateRequest = "DIRECT_INTAKE"): void {
   window.dispatchEvent(new CustomEvent<GlobalCreateIntent | GlobalCreateRequest>(GLOBAL_CREATE_OPEN_EVENT, { detail: request }));
 }

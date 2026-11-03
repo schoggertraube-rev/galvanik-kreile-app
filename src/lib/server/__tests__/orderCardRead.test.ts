@@ -39,6 +39,28 @@ describe("order card intake snapshot contract", () => {
     }])).toEqual([{ ...base, catalogServiceId: null, unit: null, unitPriceCents: null, vatRateBasisPoints: null, finished: false, extraWork: [] }]);
   });
 
+  it("reads a current free-text snapshot with an allowed intake unit", () => {
+    expect(mapOrderCardIntakeItems([{
+      ...base,
+      catalogServiceId: null,
+      executionRequested: "offen",
+      unit: "dm²",
+      unitPriceCents: null,
+      vatRateBasisPoints: null,
+    }])).toEqual([{ ...base, catalogServiceId: null, unit: "dm²", unitPriceCents: null, vatRateBasisPoints: null, finished: false, extraWork: [] }]);
+  });
+
+  it("rejects a current free-text snapshot with a unit outside the intake contract", () => {
+    expect(() => mapOrderCardIntakeItems([{
+      ...base,
+      catalogServiceId: null,
+      executionRequested: "offen",
+      unit: "Meter",
+      unitPriceCents: null,
+      vatRateBasisPoints: null,
+    }])).toThrow("ORDER_CARD_INTAKE_ITEM_INVALID");
+  });
+
   it("rejects unversioned mixed shapes", () => {
     expect(() => mapOrderCardIntakeItems([{ ...base, unit: "Stück" }])).toThrow("ORDER_CARD_INTAKE_ITEM_SHAPE_INVALID");
   });

@@ -110,4 +110,22 @@ describe("order intake read ports", () => {
     await expect(searchOrderIntakeCustomers(authorization, { query: "x", tenantId: "tenant-b" })).rejects.toThrow("INPUT_INVALID");
     expect(withTransaction).not.toHaveBeenCalled();
   });
+
+  it.each(["Stück", "kg", "dm²", "Satz", "Std."])("reads an allowed free-text unit %s from the immutable receipt", async (unit) => {
+    const { readOrderIntakeReceipt } = await import("../orderIntakeRead");
+    execute.mockResolvedValueOnce([{
+      ...receiptRow,
+      items_snapshot: [{
+        ...receiptRow.items_snapshot[0],
+        catalogServiceId: null,
+        unit,
+        unitPriceCents: null,
+        vatRateBasisPoints: null,
+      }],
+    }]);
+
+    await expect(readOrderIntakeReceipt(authorization, { orderId, clientEventId })).resolves.toMatchObject({
+      items: [{ catalogServiceId: null, unit, unitPriceCents: null, vatRateBasisPoints: null }],
+    });
+  });
 });

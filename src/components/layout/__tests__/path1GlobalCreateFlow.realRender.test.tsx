@@ -203,6 +203,7 @@ function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
 
 function openFlow() {
   fireEvent.click(screen.getByRole("button", { name: "Neu erfassen" }));
+  fireEvent.click(screen.getByRole("button", { name: "Auftrag oder KV erfassen" }));
 }
 
 async function searchAndSelectIntakeCustomer(query: string, expectedName: RegExp) {
@@ -213,6 +214,7 @@ async function searchAndSelectIntakeCustomer(query: string, expectedName: RegExp
 
 async function fillDirectIntakeForExistingCustomer() {
   await searchAndSelectIntakeCustomer("SYNTHETISCH", /SYNTHETISCH Musterkunde GmbH.*übernehmen/);
+  fireEvent.click(within(screen.getByRole("group", { name: "Art" })).getAllByRole("button")[0]);
   const [wish] = within(screen.getByRole("group", { name: "Termin ist" })).getAllByRole("button");
   fireEvent.click(wish);
   fireEvent.change(screen.getByRole("combobox", { name: "Eingangsart" }), { target: { value: "persoenlich" } });
@@ -222,6 +224,9 @@ async function fillDirectIntakeForExistingCustomer() {
   fireEvent.change(screen.getByLabelText("Liefertermin"), { target: { value: "2026-10-20" } });
   fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "Synthetischer Flansch" } });
   fireEvent.change(screen.getByRole("spinbutton", { name: "Menge" }), { target: { value: "1" } });
+  const unit = screen.getByRole("combobox", { name: "Einheit" });
+  expect(unit).toHaveValue("");
+  fireEvent.change(unit, { target: { value: "Stück" } });
   fireEvent.change(screen.getByRole("combobox", { name: "Oberfläche" }), { target: { value: "Verzinken" } });
 }
 
@@ -282,6 +287,33 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
+  it("uses one two-choice entry for plus and the N, A and K shortcuts", async () => {
+    const value = ports();
+    const { unmount } = render(<GlobalCreateFlow ports={value} />);
+
+    fireEvent.keyDown(window, { key: "n" });
+    const entry = await screen.findByRole("dialog", { name: "Neu erfassen" });
+    expect(within(entry).getAllByRole("button").filter((button) => button.getAttribute("aria-label") !== "Schließen")).toHaveLength(2);
+    expect(within(entry).getByRole("button", { name: /Auftrag oder KV erfassen/ })).toHaveTextContent("Taste A");
+    expect(within(entry).getByRole("button", { name: /Kunde anlegen/ })).toHaveTextContent("Taste K");
+    expect(screen.queryByText("Offene KVs bearbeiten")).not.toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "a" });
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Kunde suchen" })).toHaveFocus());
+    unmount();
+
+    render(<GlobalCreateFlow ports={ports()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Neu erfassen" }));
+    fireEvent.keyDown(window, { key: "k" });
+    await waitFor(() => expect(screen.getByLabelText("Name / Firma")).toHaveFocus());
+  });
+
+  it("ignores the N shortcut without the eingang right", () => {
+    render(<GlobalCreateFlow ports={ports({ canCreateOrder: false, showPrimaryTrigger: false })} />);
+    fireEvent.keyDown(window, { key: "n" });
+    expect(screen.queryByRole("dialog", { name: "Neu erfassen" })).not.toBeInTheDocument();
+  });
+
   it("keeps later intake channels and draft restoration outside AP-01", async () => {
     render(<GlobalCreateFlow ports={ports()} />);
 
@@ -698,6 +730,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
       window.dispatchEvent(new CustomEvent("path1:global-create-open", { detail: "DIRECT_INTAKE" }));
     });
     await screen.findByRole("heading", { name: "Neu erfassen" });
+    fireEvent.click(screen.getByRole("button", { name: "Auftrag oder KV erfassen" }));
     expect(screen.queryByText("Digitaler Wareneingang")).not.toBeInTheDocument();
     await fillDirectIntakeForExistingCustomer();
     fireEvent.click(screen.getByRole("button", { name: "Wareneingang buchen" }));
@@ -921,7 +954,9 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
       window.dispatchEvent(new CustomEvent("path1:global-create-open", { detail: "DIRECT_INTAKE" }));
     });
     await screen.findByRole("heading", { name: "Neu erfassen" });
+    fireEvent.click(screen.getByRole("button", { name: "Auftrag oder KV erfassen" }));
     await searchAndSelectIntakeCustomer("SYNTHETISCH", /SYNTHETISCH Musterkunde GmbH.*übernehmen/);
+    fireEvent.click(within(screen.getByRole("group", { name: "Art" })).getAllByRole("button")[0]);
     const [wish] = within(screen.getByRole("group", { name: "Termin ist" })).getAllByRole("button");
     fireEvent.click(wish);
     fireEvent.change(screen.getByRole("combobox", { name: "Eingangsart" }), { target: { value: "persoenlich" } });
@@ -932,10 +967,11 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.change(screen.getByLabelText("Liefertermin"), { target: { value: "2026-10-20" } });
     fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "TEST Sonderteil" } });
     fireEvent.change(screen.getByRole("spinbutton", { name: "Menge" }), { target: { value: "1" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Einheit" }), { target: { value: "Stück" } });
     fireEvent.change(screen.getByRole("combobox", { name: "Oberfläche" }), { target: { value: "Vernickeln" } });
     fireEvent.change(screen.getByRole("combobox", { name: "Ausführung" }), { target: { value: "matt" } });
     fireEvent.change(screen.getByLabelText("Material"), { target: { value: "Stahl 1.4301" } });
-    expect(screen.getByRole("complementary", { name: "Prüfliste" })).toHaveTextContent("9 von 9 Pflichtangaben");
+    expect(screen.getByRole("complementary", { name: "Prüfliste" })).toHaveTextContent("11 von 11 Pflichtangaben");
     fireEvent.click(screen.getByRole("button", { name: "Wareneingang buchen" }));
     await waitFor(() => expect(value.createDirectIntake).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(value.openOrder).toHaveBeenCalledWith(ORDER_ID));
@@ -947,6 +983,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
         material: "Stahl 1.4301",
         surfaceRequested: "Vernickeln",
         executionRequested: "matt",
+        unit: "Stück",
         unitPriceCents: null,
       })],
     }));
@@ -965,6 +1002,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(within(screen.getByRole("group", { name: "Übergabe" })).getAllByRole("button").every((button) => button.getAttribute("aria-pressed") === "false")).toBe(true);
     expect(screen.getByRole("combobox", { name: "Zahlungsmodus" })).toHaveValue("");
     expect(screen.getByRole("combobox", { name: "Zahlungsmodus" })).toBeDisabled();
+    expect(within(screen.getByRole("group", { name: "Art" })).getAllByRole("button").every((button) => button.getAttribute("aria-pressed") === "false")).toBe(true);
     expect(screen.queryByRole("heading", { name: "Was möchtest du anlegen?" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Offene KVs bearbeiten/ })).not.toBeInTheDocument();
   });
@@ -976,8 +1014,6 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     await screen.findByRole("heading", { name: "Neu erfassen" });
 
     expect(screen.queryByRole("combobox", { name: "Zahlungsmodus" })).not.toBeInTheDocument();
-    expect(screen.getByText("Anliegen")).toBeInTheDocument();
-    expect(screen.getAllByText("Auftrag").length).toBeGreaterThan(0);
     expect(screen.queryByRole("group", { name: "Art" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Preis netto (€)")).not.toBeInTheDocument();
     expect(screen.queryByText("Preisvorschlag")).not.toBeInTheDocument();
@@ -1052,7 +1088,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     await waitFor(() => expect(screen.getAllByText("SYNTHETISCH Musterkunde GmbH").length).toBeGreaterThan(0));
     const handover = screen.getByRole("group", { name: "Übergabe" });
     expect(within(handover).getAllByRole("button").every((button) => button.getAttribute("aria-pressed") === "false")).toBe(true);
-    expect(screen.getByRole("combobox", { name: "Oberfläche" })).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: "Oberfläche" })).toHaveValue("noch zu klären");
     expect(screen.getByLabelText("Liefertermin")).toHaveValue("");
 
     fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "Synthetischer Flansch" } });
