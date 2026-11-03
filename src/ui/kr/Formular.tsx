@@ -17,6 +17,6 @@ export function Checkbox({ checked, onChange, children, disabled }: CheckboxProp
 }
 export interface SegmentProps<T extends string> { optionen: Array<{ wert: T; text: string; gesperrt?: boolean }>; wert: T; onWert: (v: T) => void; label?: string; }
 export function Segment<T extends string>({ optionen, wert, onWert, label }: SegmentProps<T>) {
-  return <div className="kr-segment" role="group" aria-label={label}>{optionen.map(o => <button key={o.wert} type="button" aria-pressed={o.wert === wert} disabled={o.gesperrt} onClick={() => onWert(o.wert)}>{o.text}</button>)}</div>;
+  return <div className="kr-segment" data-fwseg="" role="group" aria-label={label}>{optionen.map(o => <button key={o.wert} type="button" aria-pressed={o.wert === wert} aria-label={o.text} disabled={o.gesperrt} onClick={() => onWert(o.wert)}>{o.text}</button>)}</div>;
 }
 export function FormRaster({ spalten = 2, children }: { spalten?: 2 | 3; children: ReactNode }) { return <div className={cx('kr-form', spalten === 3 && 'kr-form--3')}>{children}</div>; }

@@ -73,4 +73,4 @@ export function SeitenKopf({ titel, werkzeug }: SeitenKopfProps) {
   return <div className="kr-seite-kopf"><h1 className="kr-seite-titel">{titel}</h1>{werkzeug && <div className="kr-seite-werkzeug">{werkzeug}</div>}</div>;
 }
 /** Wurzel: setzt Gerät. Gerät bestimmt die App (Breite ≤699 = handy; Touch & ≤1399 = tablet; sonst desktop). */
-export function KrApp({ geraet, children }: { geraet: Geraet; children: ReactNode }) { return <div className="kr-app" data-geraet={geraet}>{children}</div>; }
+export function KrApp({ geraet, children }: { geraet: Geraet; children: ReactNode }) { return <div className="kr-app" data-geraet={geraet} data-groesse="v8">{children}</div>; }
