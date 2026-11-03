@@ -43,10 +43,6 @@
     "paket": "AP-EIN-2",
     "grund": "eingang nach Runde 51 wird mit AP-EIN-2 geliefert"
   },
-  "E32": {
-    "paket": "AP-EIN-2",
-    "grund": "eingang nach Runde 51 wird mit AP-EIN-2 geliefert"
-  },
   "E33": {
     "paket": "AP-EIN-2",
     "grund": "eingang nach Runde 51 wird mit AP-EIN-2 geliefert"
@@ -243,19 +239,7 @@
     "paket": "AP-EIN-2",
     "grund": "eingang nach Runde 51 wird mit AP-EIN-2 geliefert"
   },
-  "RT04-01": {
-    "paket": "AP-EIN-2",
-    "grund": "eingang nach Runde 51 wird mit AP-EIN-2 geliefert"
-  },
-  "RT04-02": {
-    "paket": "AP-EIN-2",
-    "grund": "eingang nach Runde 51 wird mit AP-EIN-2 geliefert"
-  },
   "RT04-03": {
-    "paket": "AP-EIN-2",
-    "grund": "eingang nach Runde 51 wird mit AP-EIN-2 geliefert"
-  },
-  "RT04-04": {
     "paket": "AP-EIN-2",
     "grund": "eingang nach Runde 51 wird mit AP-EIN-2 geliefert"
   },
@@ -272,10 +256,6 @@
     "grund": "eingang nach Runde 51 wird mit AP-EIN-2 geliefert"
   },
   "RT04-08": {
-    "paket": "AP-EIN-2",
-    "grund": "eingang nach Runde 51 wird mit AP-EIN-2 geliefert"
-  },
-  "RT04-09": {
     "paket": "AP-EIN-2",
     "grund": "eingang nach Runde 51 wird mit AP-EIN-2 geliefert"
   },
@@ -1088,10 +1068,6 @@
     "grund": "entwurf nach Runde 51 wird mit AP-EIN-2 geliefert"
   },
   "D06": {
-    "paket": "AP-EIN-2",
-    "grund": "entwurf nach Runde 51 wird mit AP-EIN-2 geliefert"
-  },
-  "D07": {
     "paket": "AP-EIN-2",
     "grund": "entwurf nach Runde 51 wird mit AP-EIN-2 geliefert"
   }
