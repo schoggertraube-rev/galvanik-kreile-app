@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "package": "B2-EINGANG-SHARE-ANCHOR",
+  "headBranch": "codex/ta-b2h",
+  "mainBaseSha": "6ce527da70bdf5a9b6104226af7bb1cafa92864d",
+  "authorizedBy": "Siglinder",
+  "authorizedAt": "2026-11-03",
+  "scope": "P44: authentisierter Web-Share-POST ueber den vorhandenen Original-Schreibweg",
+  "probeCandidateSha": "ecd08fcbcab7402a6e3ed0eb6d34510473c0f1e2",
+  "probeResult": "PASS"
+}

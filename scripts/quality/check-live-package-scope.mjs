@@ -215,6 +215,26 @@ const TA_B2F_VALUES = Object.freeze({
   probeResult: "PASS",
 });
 const PR154_REBASELINE_BRANCH = "kreile/s1-p2-eingang";
+const TA_B2H_BRANCH = "codex/ta-b2h";
+const TA_B2H_BASE_SHA = "6ce527da70bdf5a9b6104226af7bb1cafa92864d";
+const TA_B2H_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2H.json";
+const TA_B2H_VALUES = Object.freeze({
+  schemaVersion: 1,
+  package: "B2-EINGANG-SHARE-ANCHOR",
+  headBranch: TA_B2H_BRANCH,
+  mainBaseSha: TA_B2H_BASE_SHA,
+  authorizedBy: "Siglinder",
+  authorizedAt: "2026-11-03",
+  scope: "P44: authentisierter Web-Share-POST ueber den vorhandenen Original-Schreibweg",
+  probeCandidateSha: "ecd08fcbcab7402a6e3ed0eb6d34510473c0f1e2",
+  probeResult: "PASS",
+});
+const TA_B2H_ANCHOR_ALLOWLIST = Object.freeze([
+  "scripts/quality/check-live-package-scope.mjs",
+  "src/test/live_package_scope.test.ts",
+  TA_B2H_RECEIPT,
+  "docs/delivery/ABGABE_TA-B2H.md",
+]);
 const PR154_REBASELINE_BASE_SHA = "1fa4920d6d06b02413c8c157ae6b739507105846";
 const PR154_REBASELINE_RECEIPT = "docs/evidence/live-line/pr154/REBASELINE.json";
 const PR154_REBASELINE_VALUES = Object.freeze({
@@ -602,6 +622,8 @@ const SALES_STAGE_B2_EXACT_ALLOWLIST = Object.freeze([
 ]);
 const SALES_STAGE_B2_ALLOWLIST = Object.freeze([
   ...SALES_STAGE_B2_EXACT_ALLOWLIST,
+  "src/app/api/eingang-share/route.ts",
+  "src/test/eingang_share.integration.test.ts",
   "docs/delivery/ABGABE_AP-*.md",
   "e2e/generated/**",
   "scripts/spec/**",
@@ -1099,6 +1121,33 @@ function checkTaB2fAnchor(root, files, mission, branch, baseSha) {
   return errors;
 }
 
+function checkTaB2hScope(files, mission, branch, baseSha) {
+  const errors = [];
+  if (branch !== TA_B2H_BRANCH) errors.push(`TA_B2H_BRANCH_INVALID:${branch}`);
+  if (baseSha !== TA_B2H_BASE_SHA) errors.push(`TA_B2H_BASE_INVALID:${baseSha}:${TA_B2H_BASE_SHA}`);
+  for (const rel of files) if (!TA_B2H_ANCHOR_ALLOWLIST.includes(rel)) errors.push(`TA_B2H_SCOPE:${rel}`);
+  if (mission.active_block !== "B2" || mission.phase !== "WRITING" || mission.branch !== SALES_STAGE_B2_BRANCH
+      || mission.started_from_sha !== TA_B2_BASE_SHA || mission.desktop_due_at !== "2026-11-08"
+      || mission.tablet_mobile_due_at !== "2026-11-08" || mission.handoff_path !== "docs/delivery/ABGABE_B2.md"
+      || mission.next_block !== "B3") errors.push("TA_B2H_MISSION_INVALID");
+  return errors;
+}
+
+function checkTaB2hAnchor(root, files, mission, branch, baseSha) {
+  const errors = checkTaB2hScope(files, mission, branch, baseSha);
+  for (const rel of TA_B2H_ANCHOR_ALLOWLIST) if (!files.includes(rel)) errors.push(`TA_B2H_REQUIRED_FILE_MISSING:${rel}`);
+  let receipt;
+  try { receipt = JSON.parse(readFileSync(path.join(root, TA_B2H_RECEIPT), "utf8")); }
+  catch { return [...errors, "TA_B2H_RECEIPT_UNREADABLE"]; }
+  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2H_VALUES).sort())) errors.push("TA_B2H_RECEIPT_SCHEMA");
+  for (const [key, value] of Object.entries(TA_B2H_VALUES)) if (receipt[key] !== value) errors.push(`TA_B2H_RECEIPT_VALUE:${key}`);
+  return errors;
+}
+
+export function checkTaB2hScopeForTest({ files, mission, branch, baseSha }) {
+  return checkTaB2hScope(files, mission, branch, baseSha);
+}
+
 function checkSalesStageB2Scope(files, entries, mission, branch) {
   const errors = [];
   if (branch !== SALES_STAGE_B2_BRANCH && !/^kreile\/b2-ein-(?:[0-6]|0b)$/.test(branch)) {
@@ -1471,6 +1520,7 @@ export function checkLivePackageScope({ root, base, head, branch }) {
     if (branch === TA_B2D2_BRANCH) return checkTaB2d2Anchor(root, files, candidateMission, branch, baseSha);
     if (branch === TA_B2E_BRANCH) return checkTaB2eAnchor(root, files, candidateMission, branch, baseSha);
     if (branch === TA_B2F_BRANCH) return checkTaB2fAnchor(root, files, candidateMission, branch, baseSha);
+    if (branch === TA_B2H_BRANCH) return checkTaB2hAnchor(root, files, candidateMission, branch, baseSha);
     if (candidateMission.active_block !== "B2") {
       return [`SALES_STAGE_ACTIVE_BLOCK_INVALID:${candidateMission.active_block}`];
     }
@@ -1796,6 +1846,13 @@ export function runSelftest(root = process.cwd()) {
   if (!covered("supabase/migrations/20261103030000_ein2_erfassung.sql", ["supabase/migrations/*_ein[1-5]_*.sql"])) throw new Error("glob character-class positive failed");
   if (covered("supabase/migrations/20261103030000_ein6_erfassung.sql", ["supabase/migrations/*_ein[1-5]_*.sql"])) throw new Error("glob character-class negative failed");
   const salesStageMission = { active_block: "B2", branch: SALES_STAGE_B2_BRANCH };
+  for (const rel of ["src/app/api/eingang-share/route.ts", "src/test/eingang_share.integration.test.ts"]) {
+    const errors = checkSalesStageB2Scope([rel], [], salesStageMission, "kreile/b2-ein-3");
+    if (errors.length) throw new Error(`P44 exact path rejected: ${rel}:${errors.join("|")}`);
+  }
+  for (const rel of ["src/app/api/eingang-share/other.ts", "src/app/api/eingang-share-extra/route.ts", "src/test/eingang_share_extra.integration.test.ts"]) {
+    if (!checkSalesStageB2Scope([rel], [], salesStageMission, "kreile/b2-ein-3").includes(`SALES_STAGE_B2_SCOPE:${rel}`)) throw new Error(`P44 adjacent path accepted: ${rel}`);
+  }
   const migrationA = "supabase/migrations/20261031212320_ap01_intake_item.sql";
   const validSalesStage = checkSalesStageB2Scope(
     ["src/modules/eingang/index.ts", ...SALES_STAGE_B2_EXACT_ALLOWLIST],
