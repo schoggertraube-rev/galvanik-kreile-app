@@ -9,6 +9,9 @@ import { checkDeliveryRepository } from "./check-delivery-contracts.mjs";
 const CONFIG_PATH = "quality/authoritative-sources.json";
 const AUTHORITY_CHECKER_PATH = "scripts/quality/check-authoritative-sources.mjs";
 const RATCHET_WORKFLOW_PATH = ".github/workflows/eslint-ratchet.yml";
+const DESIGN_POINTER_PATH = "docs/project/linie/ui/CURRENT_DESIGN_REFERENCE.json";
+const DESIGN_POINTER_SHA256 = "DE0FC7654A9686FE7AE0E3664786A47B1B7F804F88B92243FAFC90EB9975DDFD";
+const ENDVERSION_UI_PATH = "docs/project/endversion/ui";
 const TRUTH_SOURCE_CONTRACT = Object.freeze({
   project_rules: "AGENTS.md",
   active_queue: "_review/AKTUELLE_ANWEISUNG.md",
@@ -155,6 +158,41 @@ function validateConfigShape(config, errors) {
   if (JSON.stringify(config.designSystem) !== JSON.stringify(DESIGN_SYSTEM)) errors.push("DESIGN_SYSTEM_CONFIG_CONTRACT");
 }
 
+function readEndversionBinding(root) {
+  const assets = ["endversion_design.css", "SICHTVERTRAG.json", "pruefe_sicht.cjs"];
+  const hashes = Object.fromEntries(assets.map((name) => {
+    const rel = `${ENDVERSION_UI_PATH}/${name}`;
+    return [rel, existsSync(absolute(root, rel)) ? hashFile(absolute(root, rel)) : null];
+  }));
+  const images = recursiveFiles(root, `${ENDVERSION_UI_PATH}/pruefbilder`);
+  let expectedImages = [];
+  try {
+    const sight = JSON.parse(readFileSync(absolute(root, `${ENDVERSION_UI_PATH}/SICHTVERTRAG.json`), "utf8"));
+    expectedImages = sight.seiten.map((page) => page.bild.replace(/^pruefbilder\//, ""));
+  } catch {
+    return { hashes, images, expectedImages: [] }; // Fails DESIGN_POINTER_PAGE_BINDING below.
+  }
+  return { hashes, images, expectedImages };
+}
+
+function checkEndversionPointer(pointer, pointerBytes, binding) {
+  const errors = [];
+  const pinned = createHash("sha256").update(pointerBytes).digest("hex").toUpperCase() === DESIGN_POINTER_SHA256;
+  const ui = pointer.uiTruth;
+  const artifactMatches = (entry, name) => entry?.path === `${ENDVERSION_UI_PATH}/${name}`
+    && binding.hashes[entry.path] === entry.sha256;
+  if (!pinned || ui?.path !== `${ENDVERSION_UI_PATH}/`
+    || ui?.role !== "SINGLE_UI_TRUTH_LOOK_LAYOUT_ORDER_SIZES"
+    || !artifactMatches(ui?.designCss, "endversion_design.css")) errors.push("DESIGN_POINTER_SYSTEM_BINDING");
+  if (!pinned || !artifactMatches(ui?.sightContract, "SICHTVERTRAG.json")
+    || !artifactMatches(ui?.checkScript, "pruefe_sicht.cjs")) errors.push("DESIGN_POINTER_FLOW_BINDING");
+  if (!pinned || ui?.referenceImages !== `${ENDVERSION_UI_PATH}/pruefbilder/`
+    || binding.expectedImages.length !== 117
+    || new Set(binding.expectedImages).size !== 117
+    || !sameSet(binding.images, binding.expectedImages)) errors.push("DESIGN_POINTER_PAGE_BINDING");
+  return errors;
+}
+
 function validateDecisionAndUiTruth(root, errors) {
   const decisionPath = TRUTH_SOURCE_CONTRACT.product_decisions;
   const decision = readFileSync(absolute(root, decisionPath), "utf8");
@@ -168,16 +206,11 @@ function validateDecisionAndUiTruth(root, errors) {
     if (!uiIndex.includes(token)) errors.push(`UI_INDEX_LAYER_MISSING:${token}`);
   }
 
-  const pointer = readJson(root, "docs/project/linie/ui/CURRENT_DESIGN_REFERENCE.json", errors, "DESIGN_POINTER");
+  // The older V1.1/HTML inventory above remains an immutable reference inventory.
+  // U-239 binds the sole executable UI source through this exact Endversion pointer.
+  const pointer = readJson(root, DESIGN_POINTER_PATH, errors, "DESIGN_POINTER");
   if (pointer) {
-    if (pointer.designSystem?.path !== DESIGN_SYSTEM.path
-      || pointer.designSystem?.manifestPath !== DESIGN_SYSTEM.manifestPath
-      || pointer.designSystem?.manifestSha256 !== DESIGN_SYSTEM.manifestSha256
-      || pointer.designSystem?.role !== DESIGN_SYSTEM.role) errors.push("DESIGN_POINTER_SYSTEM_BINDING");
-    if (pointer.current?.path !== DESIGN_SYSTEM.flowPath
-      || pointer.current?.sha256 !== DESIGN_SYSTEM.flowSha256
-      || pointer.current?.role !== DESIGN_SYSTEM.flowRole) errors.push("DESIGN_POINTER_FLOW_BINDING");
-    if (!sameSet(pointer.pageTruth ?? [], UI_REFERENCES)) errors.push("DESIGN_POINTER_PAGE_BINDING");
+    errors.push(...checkEndversionPointer(pointer, readFileSync(absolute(root, DESIGN_POINTER_PATH)), readEndversionBinding(root)));
   }
 }
 
@@ -322,6 +355,17 @@ export function runSelftest(root = process.cwd()) {
   expectConfigMutation(config, (value) => { value.designSystem.role = "PAGE_COMPOSITION"; }, "DESIGN_SYSTEM_CONFIG_CONTRACT");
   expectConfigMutation(config, (value) => { value.uiReferences.pop(); }, "UI_REFERENCE_CONFIG_CONTRACT");
   expectConfigMutation(config, (value) => { value.schemaVersion = 2; }, "AUTHORITY_CONFIG_SCHEMA_VERSION");
+  const pointerBytes = readFileSync(absolute(root, DESIGN_POINTER_PATH));
+  const pointer = JSON.parse(pointerBytes.toString("utf8"));
+  const binding = readEndversionBinding(root);
+  if (checkEndversionPointer(pointer, pointerBytes, binding).length) throw new Error("selftest Endversion binding invalid");
+  const changedPointer = Buffer.concat([pointerBytes, Buffer.from(" ")]);
+  if (checkEndversionPointer(pointer, changedPointer, binding).length !== 3) throw new Error("selftest pointer pin did not fail closed");
+  for (const [name, code] of [["endversion_design.css", "DESIGN_POINTER_SYSTEM_BINDING"], ["SICHTVERTRAG.json", "DESIGN_POINTER_FLOW_BINDING"], ["pruefe_sicht.cjs", "DESIGN_POINTER_FLOW_BINDING"]]) {
+    const changedBinding = { ...binding, hashes: { ...binding.hashes, [`${ENDVERSION_UI_PATH}/${name}`]: "0".repeat(64) } };
+    if (!checkEndversionPointer(pointer, pointerBytes, changedBinding).includes(code)) throw new Error(`selftest asset pin did not fail closed: ${name}`);
+  }
+  if (!checkEndversionPointer(pointer, pointerBytes, { ...binding, images: binding.images.slice(1) }).includes("DESIGN_POINTER_PAGE_BINDING")) throw new Error("selftest reference image missing did not fail closed");
   const referenceErrors = [];
   validateReferenceEntryText("reference.md", "# executable\n", referenceErrors);
   if (!referenceErrors.includes("REFERENCE_ENTRY_NOT_NON_EXECUTABLE:reference.md")) {
@@ -355,7 +399,7 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  console.log(`AUTHORITY_GATE=PASS truth_types=${Object.keys(TRUTH_SOURCE_CONTRACT).length} ui_references=${UI_REFERENCES.length} design=V1.1`);
+  console.log(`AUTHORITY_GATE=PASS truth_types=${Object.keys(TRUTH_SOURCE_CONTRACT).length} ui_references=${UI_REFERENCES.length} design=ENDVERSION pointer=${DESIGN_POINTER_SHA256}`);
 }
 
 if (import.meta.url === pathToFileURL(path.resolve(process.argv[1] ?? "")).href) await main();

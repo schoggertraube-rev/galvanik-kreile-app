@@ -275,6 +275,7 @@ const eslintConfig = defineConfig([
     // Gebundene Referenzquellen und Historie sind Bauinput/Evidence, nicht Produktcode.
     "docs/project/linie/ui/designsystem_v1_1/**",
     "docs/project/history/**",
+    "docs/project/endversion/ui/**",
     // Standalone maintenance and local verification CLIs; none are part of the Next.js build.
     "create_migrate.js",
     "enrich.js",

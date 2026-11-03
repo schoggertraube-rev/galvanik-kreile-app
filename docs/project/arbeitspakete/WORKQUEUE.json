@@ -156,17 +156,84 @@
       "titel": "Eingang komplett (13 Seiten, 272 Faelle), sechs Teil-PRs 0-5",
       "reihenfolge": 4,
       "status": "bereit",
-      "spec": "21d0347a3319",
-      "bauplan_sha256": "361F8085F38C7883055FBDC03368B1AB144DA39BC25945E41048D260DC6780F8",
+      "spec": "a9474e3f73c3",
+      "bauplan_sha256": "888114C6247B711CC02D8C78BB9429ADCF9C494CFBC2E066F5202C6E966BB0D8",
       "voraussetzung": "TA-B2f gemergt (Vorbau lokal ab sofort)",
       "teile": [
-        "0 Fundament (Generator)",
-        "1 Kunde (AP-K1 F2)",
-        "2 Erfassung 3.0/3/3.6/M6",
+        "0 Fundament (Generator, 306 Faelle gegen AFB3D838)",
+        "0b UI-Fundament (endversion_design.css einbinden, kr-Nachbauten raus, routen.json, Sicht-Ausgangsbericht)",
+        "1 Kunde (AP-K1 F2) - Oberflaeche nach Sichtvertrag",
+        "2 Erfassung 3.0/3/3.6/M6 + X12 + RT01-RT04 - Oberflaeche nach Sichtvertrag",
         "3 Ware 3.7 + Original 3.9 + App installierbar",
         "4 Mail 3.4 + Nachrichten 2.3 + Aufgabe 2.4 + Reklamation 4.8 + Der-Tag-Zeilenklick",
-        "5 Eingangsrechnungen 3.8"
-      ]
+        "5 Eingangsrechnungen 3.8",
+        "6 Korrekturen ausserhalb (10.1, Werkstatt, appweit RT06/RT08/B10, 8.1 Versand)"
+      ],
+      "acceptance_tests": [
+        {
+          "quelle": "AP-EIN-eingang-komplett/apk1_kunde_datenvertrag.f2.integration.test.ts.txt",
+          "teil": 1,
+          "sha256": "0EE82CF1A7A0980A50AA342C37B8B861047ABD9361BE5ADC08613F11CEC93072",
+          "ersetzt": "C3E99986"
+        },
+        {
+          "quelle": "AP-K1-kunde/ap01b_eingang_bestandskunde_unvollstaendig.f2.integration.test.ts.txt",
+          "teil": 1,
+          "sha256": "198C039878FB6080BE34DD54E3A2467779A083E008D2D3626888C900FE4D5823"
+        },
+        {
+          "quelle": "AP-EIN-eingang-komplett/ap01_eingang_paket_persoenlich.f1b.integration.test.ts.txt",
+          "teil": 1,
+          "sha256": "1B414E327D6A60EFE1DDFD6080AE2A22E2AD0A72E03503DEEAF19A606DBE425A",
+          "ersetzt": "BE54C2C5 (main)"
+        },
+        {
+          "quelle": "AP-EIN-eingang-komplett/ap01c_eingang_kundenvorschlag.f2.integration.test.ts.txt",
+          "teil": 1,
+          "sha256": "B33A375E1B2F75E2A001B532791C796DA67245578EB9F686E63132BD476C4059",
+          "ersetzt": "5D7FD967 (main)"
+        },
+        {
+          "quelle": "AP-EIN-eingang-komplett/ap01d_eingang_f43.f2.integration.test.ts.txt",
+          "teil": 1,
+          "sha256": "A573C670924ABAC41F17724B451EBA9D81F761D3A856C7191F5E0C01E0491CCF",
+          "ersetzt": "FE2B8554 (main)"
+        },
+        {
+          "quelle": "AP-EIN-eingang-komplett/ap01_eingang_paket_persoenlich.f3.integration.test.ts.txt",
+          "teil": 2,
+          "sha256": "A33B821101FD9BA08954A8627B5A3A6A70506A9FE0BB58FBC367E7C7121277EA",
+          "ersetzt": "E80D98E3 (F2) bzw. 1B414E32 (Teil 1)"
+        },
+        {
+          "quelle": "AP-EIN-eingang-komplett/apr_freitext_einheiten.f2.integration.test.ts.txt",
+          "teil": 2,
+          "sha256": "F22BE903AAE550926408A8F87F7D3C68A05AD0E2D770A933A93AFACE72281C6F"
+        },
+        {
+          "quelle": "AP-EIN-eingang-komplett/ap01b_eingang_bestandskunde_unvollstaendig.f3.integration.test.ts.txt",
+          "teil": 2,
+          "sha256": "4A14A5576968EF1E3ECE20EB0565BBD20A93FC4C08D7BEC4A08AD423826BC7E1",
+          "ersetzt": "198C0398 (Teil 1)"
+        },
+        {
+          "quelle": "AP-EIN-eingang-komplett/ap01d_eingang_f43.f3.integration.test.ts.txt",
+          "teil": 2,
+          "sha256": "150FA54CF9490FEBED406B07AC9EF1A7C20A577DECD1DAE59ABE3299FC7BCDD7",
+          "ersetzt": "A573C670 (Teil 1)"
+        }
+      ],
+      "hinweis": "Entscheidungen 02.11. 23:00 im PAKET gelten vor der Inventur; Schluessel Einheit/Oberflaeche in Teil 2 (AP-U entfaellt)",
+      "ui": {
+        "ordner": "docs/project/endversion/ui/",
+        "design_css": "061AF6F3",
+        "sichtvertrag": "509BE267",
+        "pruefe_sicht": "03F4E0AA",
+        "design_reference": "DE0FC765",
+        "gate": "pruefe_sicht gruen fuer die Seiten des Teils vor jedem Merge (U-239)",
+        "stand": "Runde 51 (03.11. 17:30)"
+      },
+      "fassung": "3 (03.11. 15:30, PAKET.md Abschnitt Fassung 3)"
     },
     {
       "nr": "AP-K1",
@@ -226,7 +293,6 @@
   ],
   "folgepakete_reihenfolge": [
     "AP-ABS Absprachen (5.2)",
-    "AP-U Einheit-Schluessel (Position, Katalog, Rechnung)",
     "AP-C/AP-E Auftragskarte ganz inkl. KV (U-235)",
     "Picker-Paket (mail-zuordnen, vorgang-waehlen, anliegen-zuordnen)",
     "Der Tag Runde 36",

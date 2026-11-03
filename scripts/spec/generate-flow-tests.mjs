@@ -85,21 +85,28 @@ function renderSeed(model) {
     login_werkstatt: "10000000-0000-4000-8000-000000000002",
     login_ohne_eingang: "10000000-0000-4000-8000-000000000003",
     login_ohne_kunden: "10000000-0000-4000-8000-000000000004",
+    login_nur_eingang: "10000000-0000-4000-8000-000000000005",
+    login_buero_ohne_geld: "10000000-0000-4000-8000-000000000006",
+    login_einstellungen: "10000000-0000-4000-8000-000000000007",
   };
   const pins = {
     login_meister: ["1111", "$2b$12$u4o.djf1c9OZbJWiD7XtCOFahRnoeyJe2OiyG7QyzsIEb4vv/UHaq"],
     login_werkstatt: ["2222", "$2b$12$a9ZEwrinIz0zIJ7jrTabAuF6ACwd.oUHJv1iOZ61xkkn.1minJHBy"],
     login_ohne_eingang: ["3333", "$2b$12$/C2xIVQ7tBxoZKRL6Ba7UOtHwE.fBynIDbe0fejXDxjQyWaFkzQnq"],
     login_ohne_kunden: ["4444", "$2b$12$lgvHXCJ7iDaE3gRb28yQsunVSdvEAPBaesRNAY3XWYUO3/znrjk3i"],
+    login_nur_eingang: ["5555", "$2b$12$iX9SQ7tzMSuCSdN9P1ZokeuIjv53solEfRP2g0ve.ObqxdXFTV9eu"],
+    login_buero_ohne_geld: ["6666", "$2b$12$REJw.ffLob7XTc35.mq5BuGF5QfanyzWTey1N0rMh3hy8DUuQtay2"],
+    login_einstellungen: ["7777", "$2b$12$cgAV2CpgQkfW9zMsrQSFUOIobbZIEwVppDcRJA2G378JOw9jpSlyy"],
   };
   const allowedRights = new Set(["auftraege", "eingang", "kunden", "geld", "kassieren", "mails", "einstellungen", "logins", "wartung"]);
-  const users = Object.entries(model.logins).map(([name, login]) => ({
+  const users = Object.entries(model.logins).map(([name, login], index) => ({
     name,
     id: loginIds[name],
     pin: pins[name][0],
     pinHash: pins[name][1],
     role: login.vorlage === "werkstatt" ? "werkstatt" : "meister",
     fullName: `Flow ${name.replace("login_", "")}`,
+    shortCode: `F${String(index + 1).padStart(2, "0")}`,
     rights: login.rechte.filter((right) => allowedRights.has(right)),
   }));
   const customers = customerSeedRows(model.datenlagen);
@@ -113,7 +120,7 @@ function renderSeed(model) {
   for (const user of users) {
     lines.push(
       "INSERT INTO public.app_users (id, tenant_id, email, full_name, role, pin_hash, active, kuerzel, bezeichnung)",
-      `VALUES (${quoted(user.id)}::uuid, 'galvanik-kreile', ${quoted(`${user.name}@flow.local`)}, ${quoted(user.fullName)}, ${quoted(user.role)}, ${quoted(user.pinHash)}, true, ${quoted(user.name.slice(-3).toUpperCase())}, 'Generierter Wege-Test')`,
+      `VALUES (${quoted(user.id)}::uuid, 'galvanik-kreile', ${quoted(`${user.name}@flow.local`)}, ${quoted(user.fullName)}, ${quoted(user.role)}, ${quoted(user.pinHash)}, true, ${quoted(user.shortCode)}, 'Generierter Wege-Test')`,
       "ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, role = EXCLUDED.role, pin_hash = EXCLUDED.pin_hash, active = true, updated_at = statement_timestamp();",
       `DELETE FROM public.app_user_rights WHERE tenant_id = 'galvanik-kreile' AND user_id = ${quoted(user.id)}::uuid;`,
     );

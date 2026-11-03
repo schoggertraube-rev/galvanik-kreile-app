@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 3,
+  "hinweis": "VORSCHLAG der Endversion (03.11.2026). Ersetzt CURRENT_DESIGN_REFERENCE.json erst nach Owner-Bestätigung (updateContract.ownerConfirmationRequired). Bis dahin gilt die alte Datei.",
+  "uiTruth": {
+    "path": "docs/project/endversion/ui/",
+    "liesmich": "docs/project/endversion/ui/LIESMICH.md",
+    "role": "SINGLE_UI_TRUTH_LOOK_LAYOUT_ORDER_SIZES",
+    "designCss": {
+      "path": "docs/project/endversion/ui/endversion_design.css",
+      "sha256": "061AF6F380A94B58A626B57D2C2C8E63DC8CE71C76184C3C23677842232B7A24",
+      "replaces": [
+        "docs/project/linie/ui/designsystem_v1_1/komponenten.css",
+        "src/app/globals.css eigene kr-* Nachbauten"
+      ],
+      "keeps": "tokens.css der V1.1 ist byteidentisch enthalten"
+    },
+    "sightContract": {
+      "path": "docs/project/endversion/ui/SICHTVERTRAG.json",
+      "sha256": "509BE267819D9DECB002A14B0360B096BCB3AB2E91DEE425929FAF920FD96FB4",
+      "sizes": {
+        "desktop": [
+          1914,
+          917
+        ],
+        "tablet": [
+          1220,
+          880
+        ],
+        "handy": [
+          390,
+          844
+        ]
+      },
+      "entries": 117
+    },
+    "checkScript": {
+      "path": "docs/project/endversion/ui/pruefe_sicht.cjs",
+      "sha256": "03F4E0AA23D58C2CBB1F30F136B68767A54A2F9D1A0B2DCC936D7AB05E6013DA",
+      "routes": "docs/project/endversion/ui/routen.json",
+      "gate": "Rot = kein Merge; Gelb nur mit Grund in docs/delivery/ABGABE_*.md"
+    },
+    "referenceImages": "docs/project/endversion/ui/pruefbilder/",
+    "boundToBauplan": "codex/BAUPLAN.next.json → bauplan.ui (gleiche Hashes)",
+    "pageCatalog": "codex/BAUPLAN.next.json → paket.seitenkatalog (13 Seiten, Namen, Einstiege, Modi)"
+  },
+  "designSystem": {
+    "path": "docs/project/linie/ui/designsystem_v1_1",
+    "role": "TOKENS_ONLY",
+    "note": "komponenten.css nicht mehr Bau-Input (im Bündel enthalten, Stand Endversion)"
+  },
+  "superseded": {
+    "current": "docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html",
+    "pageTruth": [
+      "KREILE_STARTSEITE_PHILLIP_V4_2026-08-20.html",
+      "KREILE_STARTSEITE_ROLF_V8_2026-08-20.html",
+      "KREILE_AUFTRAGSKARTE_MACHART_V8_2026-08-19.html",
+      "KREILE_KUNDENKARTE_MACHART_V2_2026-08-19.html"
+    ],
+    "status": "SUPERSEDED_NOT_BUILD_INPUT"
+  },
+  "updateContract": {
+    "ownerConfirmationRequired": true,
+    "requiredBinding": [
+      "path",
+      "sha256"
+    ],
+    "verifyBefore": [
+      "implementation_stage",
+      "browser_acceptance",
+      "draft_pr"
+    ],
+    "sightCheckBefore": [
+      "draft_pr",
+      "merge"
+    ],
+    "documentHashDelta": true
+  }
+}

@@ -1,7 +1,7 @@
 -- Generated from BAUPLAN.testmodell. Local replay database only.
 BEGIN;
 INSERT INTO public.app_users (id, tenant_id, email, full_name, role, pin_hash, active, kuerzel, bezeichnung)
-VALUES ('10000000-0000-4000-8000-000000000001'::uuid, 'galvanik-kreile', 'login_meister@flow.local', 'Flow meister', 'meister', '$2b$12$u4o.djf1c9OZbJWiD7XtCOFahRnoeyJe2OiyG7QyzsIEb4vv/UHaq', true, 'TER', 'Generierter Wege-Test')
+VALUES ('10000000-0000-4000-8000-000000000001'::uuid, 'galvanik-kreile', 'login_meister@flow.local', 'Flow meister', 'meister', '$2b$12$u4o.djf1c9OZbJWiD7XtCOFahRnoeyJe2OiyG7QyzsIEb4vv/UHaq', true, 'F01', 'Generierter Wege-Test')
 ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, role = EXCLUDED.role, pin_hash = EXCLUDED.pin_hash, active = true, updated_at = statement_timestamp();
 DELETE FROM public.app_user_rights WHERE tenant_id = 'galvanik-kreile' AND user_id = '10000000-0000-4000-8000-000000000001'::uuid;
 INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000001'::uuid, 'auftraege') ON CONFLICT DO NOTHING;
@@ -13,24 +13,42 @@ INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvan
 INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000001'::uuid, 'kassieren') ON CONFLICT DO NOTHING;
 INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000001'::uuid, 'logins') ON CONFLICT DO NOTHING;
 INSERT INTO public.app_users (id, tenant_id, email, full_name, role, pin_hash, active, kuerzel, bezeichnung)
-VALUES ('10000000-0000-4000-8000-000000000002'::uuid, 'galvanik-kreile', 'login_werkstatt@flow.local', 'Flow werkstatt', 'werkstatt', '$2b$12$a9ZEwrinIz0zIJ7jrTabAuF6ACwd.oUHJv1iOZ61xkkn.1minJHBy', true, 'ATT', 'Generierter Wege-Test')
+VALUES ('10000000-0000-4000-8000-000000000002'::uuid, 'galvanik-kreile', 'login_werkstatt@flow.local', 'Flow werkstatt', 'werkstatt', '$2b$12$a9ZEwrinIz0zIJ7jrTabAuF6ACwd.oUHJv1iOZ61xkkn.1minJHBy', true, 'F02', 'Generierter Wege-Test')
 ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, role = EXCLUDED.role, pin_hash = EXCLUDED.pin_hash, active = true, updated_at = statement_timestamp();
 DELETE FROM public.app_user_rights WHERE tenant_id = 'galvanik-kreile' AND user_id = '10000000-0000-4000-8000-000000000002'::uuid;
 INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000002'::uuid, 'auftraege') ON CONFLICT DO NOTHING;
 INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000002'::uuid, 'eingang') ON CONFLICT DO NOTHING;
 INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000002'::uuid, 'kunden') ON CONFLICT DO NOTHING;
 INSERT INTO public.app_users (id, tenant_id, email, full_name, role, pin_hash, active, kuerzel, bezeichnung)
-VALUES ('10000000-0000-4000-8000-000000000003'::uuid, 'galvanik-kreile', 'login_ohne_eingang@flow.local', 'Flow ohne_eingang', 'meister', '$2b$12$/C2xIVQ7tBxoZKRL6Ba7UOtHwE.fBynIDbe0fejXDxjQyWaFkzQnq', true, 'ANG', 'Generierter Wege-Test')
+VALUES ('10000000-0000-4000-8000-000000000003'::uuid, 'galvanik-kreile', 'login_ohne_eingang@flow.local', 'Flow ohne_eingang', 'meister', '$2b$12$/C2xIVQ7tBxoZKRL6Ba7UOtHwE.fBynIDbe0fejXDxjQyWaFkzQnq', true, 'F03', 'Generierter Wege-Test')
 ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, role = EXCLUDED.role, pin_hash = EXCLUDED.pin_hash, active = true, updated_at = statement_timestamp();
 DELETE FROM public.app_user_rights WHERE tenant_id = 'galvanik-kreile' AND user_id = '10000000-0000-4000-8000-000000000003'::uuid;
 INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000003'::uuid, 'auftraege') ON CONFLICT DO NOTHING;
 INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000003'::uuid, 'kunden') ON CONFLICT DO NOTHING;
 INSERT INTO public.app_users (id, tenant_id, email, full_name, role, pin_hash, active, kuerzel, bezeichnung)
-VALUES ('10000000-0000-4000-8000-000000000004'::uuid, 'galvanik-kreile', 'login_ohne_kunden@flow.local', 'Flow ohne_kunden', 'meister', '$2b$12$lgvHXCJ7iDaE3gRb28yQsunVSdvEAPBaesRNAY3XWYUO3/znrjk3i', true, 'DEN', 'Generierter Wege-Test')
+VALUES ('10000000-0000-4000-8000-000000000004'::uuid, 'galvanik-kreile', 'login_ohne_kunden@flow.local', 'Flow ohne_kunden', 'meister', '$2b$12$lgvHXCJ7iDaE3gRb28yQsunVSdvEAPBaesRNAY3XWYUO3/znrjk3i', true, 'F04', 'Generierter Wege-Test')
 ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, role = EXCLUDED.role, pin_hash = EXCLUDED.pin_hash, active = true, updated_at = statement_timestamp();
 DELETE FROM public.app_user_rights WHERE tenant_id = 'galvanik-kreile' AND user_id = '10000000-0000-4000-8000-000000000004'::uuid;
 INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000004'::uuid, 'auftraege') ON CONFLICT DO NOTHING;
 INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000004'::uuid, 'eingang') ON CONFLICT DO NOTHING;
+INSERT INTO public.app_users (id, tenant_id, email, full_name, role, pin_hash, active, kuerzel, bezeichnung)
+VALUES ('10000000-0000-4000-8000-000000000005'::uuid, 'galvanik-kreile', 'login_nur_eingang@flow.local', 'Flow nur_eingang', 'meister', '$2b$12$iX9SQ7tzMSuCSdN9P1ZokeuIjv53solEfRP2g0ve.ObqxdXFTV9eu', true, 'F05', 'Generierter Wege-Test')
+ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, role = EXCLUDED.role, pin_hash = EXCLUDED.pin_hash, active = true, updated_at = statement_timestamp();
+DELETE FROM public.app_user_rights WHERE tenant_id = 'galvanik-kreile' AND user_id = '10000000-0000-4000-8000-000000000005'::uuid;
+INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000005'::uuid, 'eingang') ON CONFLICT DO NOTHING;
+INSERT INTO public.app_users (id, tenant_id, email, full_name, role, pin_hash, active, kuerzel, bezeichnung)
+VALUES ('10000000-0000-4000-8000-000000000006'::uuid, 'galvanik-kreile', 'login_buero_ohne_geld@flow.local', 'Flow buero_ohne_geld', 'meister', '$2b$12$REJw.ffLob7XTc35.mq5BuGF5QfanyzWTey1N0rMh3hy8DUuQtay2', true, 'F06', 'Generierter Wege-Test')
+ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, role = EXCLUDED.role, pin_hash = EXCLUDED.pin_hash, active = true, updated_at = statement_timestamp();
+DELETE FROM public.app_user_rights WHERE tenant_id = 'galvanik-kreile' AND user_id = '10000000-0000-4000-8000-000000000006'::uuid;
+INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000006'::uuid, 'auftraege') ON CONFLICT DO NOTHING;
+INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000006'::uuid, 'eingang') ON CONFLICT DO NOTHING;
+INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000006'::uuid, 'kunden') ON CONFLICT DO NOTHING;
+INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000006'::uuid, 'mails') ON CONFLICT DO NOTHING;
+INSERT INTO public.app_users (id, tenant_id, email, full_name, role, pin_hash, active, kuerzel, bezeichnung)
+VALUES ('10000000-0000-4000-8000-000000000007'::uuid, 'galvanik-kreile', 'login_einstellungen@flow.local', 'Flow einstellungen', 'meister', '$2b$12$cgAV2CpgQkfW9zMsrQSFUOIobbZIEwVppDcRJA2G378JOw9jpSlyy', true, 'F07', 'Generierter Wege-Test')
+ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, role = EXCLUDED.role, pin_hash = EXCLUDED.pin_hash, active = true, updated_at = statement_timestamp();
+DELETE FROM public.app_user_rights WHERE tenant_id = 'galvanik-kreile' AND user_id = '10000000-0000-4000-8000-000000000007'::uuid;
+INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', '10000000-0000-4000-8000-000000000007'::uuid, 'einstellungen') ON CONFLICT DO NOTHING;
 INSERT INTO public.customers (id, tenant_id, customer_number, name, type, company_name, contact_person, phone, email, street, address, zip_code, city, country, payment_preference, shipping_preference, vat_id, ziel_freigeschaltet, ziel_tage, skonto_prozent, skonto_tage, source)
 VALUES ('00000000-0000-4000-8000-000000000101', 'galvanik-kreile', 'K-FLOW-001', 'Prueffirma Alpha GmbH', 'business', 'Prueffirma Alpha GmbH', 'Testa Alphaprobe', '06100 111111', 'einkauf@alpha-pruef.test', 'Prüfweg', NULL, '99001', 'Prüfstadt', 'Deutschland', 'vorkasse', NULL, NULL, false, NULL, NULL, NULL, 'flow-spec')
 ON CONFLICT (id) DO UPDATE SET customer_number = EXCLUDED.customer_number, name = EXCLUDED.name, type = EXCLUDED.type, company_name = EXCLUDED.company_name, contact_person = EXCLUDED.contact_person, phone = EXCLUDED.phone, email = EXCLUDED.email, street = EXCLUDED.street, address = EXCLUDED.address, zip_code = EXCLUDED.zip_code, city = EXCLUDED.city, country = EXCLUDED.country, payment_preference = EXCLUDED.payment_preference, shipping_preference = EXCLUDED.shipping_preference, vat_id = EXCLUDED.vat_id, ziel_freigeschaltet = EXCLUDED.ziel_freigeschaltet, ziel_tage = EXCLUDED.ziel_tage, skonto_prozent = EXCLUDED.skonto_prozent, skonto_tage = EXCLUDED.skonto_tage, source = 'flow-spec', updated_at = statement_timestamp();
@@ -263,6 +281,84 @@ IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public
 END IF;
 IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = 'house_number') THEN
   EXECUTE 'UPDATE public.customers SET house_number = ''4'' WHERE id = ''00000000-0000-4000-8000-000000000109''::uuid AND tenant_id = ''galvanik-kreile''';
+END IF;
+END $flow$;
+INSERT INTO public.customers (id, tenant_id, customer_number, name, type, company_name, contact_person, phone, email, street, address, zip_code, city, country, payment_preference, shipping_preference, vat_id, ziel_freigeschaltet, ziel_tage, skonto_prozent, skonto_tage, source)
+VALUES ('00000000-0000-4000-8000-000000000110', 'galvanik-kreile', 'K-FLOW-010', 'Prueflieferant Omega GmbH', 'lieferant', 'Prueflieferant Omega GmbH', NULL, '06100 121212', 'rechnung@omega-pruef.test', 'Prüfweg', NULL, '99012', 'Prüfstadt', 'Deutschland', NULL, NULL, NULL, false, NULL, NULL, NULL, 'flow-spec')
+ON CONFLICT (id) DO UPDATE SET customer_number = EXCLUDED.customer_number, name = EXCLUDED.name, type = EXCLUDED.type, company_name = EXCLUDED.company_name, contact_person = EXCLUDED.contact_person, phone = EXCLUDED.phone, email = EXCLUDED.email, street = EXCLUDED.street, address = EXCLUDED.address, zip_code = EXCLUDED.zip_code, city = EXCLUDED.city, country = EXCLUDED.country, payment_preference = EXCLUDED.payment_preference, shipping_preference = EXCLUDED.shipping_preference, vat_id = EXCLUDED.vat_id, ziel_freigeschaltet = EXCLUDED.ziel_freigeschaltet, ziel_tage = EXCLUDED.ziel_tage, skonto_prozent = EXCLUDED.skonto_prozent, skonto_tage = EXCLUDED.skonto_tage, source = 'flow-spec', updated_at = statement_timestamp();
+DO $flow$ BEGIN
+IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = 'salutation') THEN
+  EXECUTE 'UPDATE public.customers SET salutation = NULL WHERE id = ''00000000-0000-4000-8000-000000000110''::uuid AND tenant_id = ''galvanik-kreile''';
+END IF;
+IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = 'first_name') THEN
+  EXECUTE 'UPDATE public.customers SET first_name = NULL WHERE id = ''00000000-0000-4000-8000-000000000110''::uuid AND tenant_id = ''galvanik-kreile''';
+END IF;
+IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = 'last_name') THEN
+  EXECUTE 'UPDATE public.customers SET last_name = NULL WHERE id = ''00000000-0000-4000-8000-000000000110''::uuid AND tenant_id = ''galvanik-kreile''';
+END IF;
+IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = 'contact_role') THEN
+  EXECUTE 'UPDATE public.customers SET contact_role = NULL WHERE id = ''00000000-0000-4000-8000-000000000110''::uuid AND tenant_id = ''galvanik-kreile''';
+END IF;
+IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = 'billing_email') THEN
+  EXECUTE 'UPDATE public.customers SET billing_email = NULL WHERE id = ''00000000-0000-4000-8000-000000000110''::uuid AND tenant_id = ''galvanik-kreile''';
+END IF;
+IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = 'website') THEN
+  EXECUTE 'UPDATE public.customers SET website = NULL WHERE id = ''00000000-0000-4000-8000-000000000110''::uuid AND tenant_id = ''galvanik-kreile''';
+END IF;
+IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = 'house_number') THEN
+  EXECUTE 'UPDATE public.customers SET house_number = ''12'' WHERE id = ''00000000-0000-4000-8000-000000000110''::uuid AND tenant_id = ''galvanik-kreile''';
+END IF;
+END $flow$;
+INSERT INTO public.customers (id, tenant_id, customer_number, name, type, company_name, contact_person, phone, email, street, address, zip_code, city, country, payment_preference, shipping_preference, vat_id, ziel_freigeschaltet, ziel_tage, skonto_prozent, skonto_tage, source)
+VALUES ('00000000-0000-4000-8000-000000000111', 'galvanik-kreile', 'K-FLOW-011', 'Prueffirma Iota GmbH', 'business', 'Prueffirma Iota GmbH', 'Ina Iotaprobe', '06100 101010', 'einkauf@iota-pruef.test', 'Prüfweg', NULL, '99001', 'Prüfstadt', 'Deutschland', 'vorkasse', NULL, NULL, false, NULL, NULL, NULL, 'flow-spec')
+ON CONFLICT (id) DO UPDATE SET customer_number = EXCLUDED.customer_number, name = EXCLUDED.name, type = EXCLUDED.type, company_name = EXCLUDED.company_name, contact_person = EXCLUDED.contact_person, phone = EXCLUDED.phone, email = EXCLUDED.email, street = EXCLUDED.street, address = EXCLUDED.address, zip_code = EXCLUDED.zip_code, city = EXCLUDED.city, country = EXCLUDED.country, payment_preference = EXCLUDED.payment_preference, shipping_preference = EXCLUDED.shipping_preference, vat_id = EXCLUDED.vat_id, ziel_freigeschaltet = EXCLUDED.ziel_freigeschaltet, ziel_tage = EXCLUDED.ziel_tage, skonto_prozent = EXCLUDED.skonto_prozent, skonto_tage = EXCLUDED.skonto_tage, source = 'flow-spec', updated_at = statement_timestamp();
+DO $flow$ BEGIN
+IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = 'salutation') THEN
+  EXECUTE 'UPDATE public.customers SET salutation = ''frau'' WHERE id = ''00000000-0000-4000-8000-000000000111''::uuid AND tenant_id = ''galvanik-kreile''';
+END IF;
+IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = 'first_name') THEN
+  EXECUTE 'UPDATE public.customers SET first_name = ''Ina'' WHERE id = ''00000000-0000-4000-8000-000000000111''::uuid AND tenant_id = ''galvanik-kreile''';
+END IF;
+IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = 'last_name') THEN
+  EXECUTE 'UPDATE public.customers SET last_name = ''Iotaprobe'' WHERE id = ''00000000-0000-4000-8000-000000000111''::uuid AND tenant_id = ''galvanik-kreile''';
+END IF;
+IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = 'contact_role') THEN
+  EXECUTE 'UPDATE public.customers SET contact_role = ''Einkauf'' WHERE id = ''00000000-0000-4000-8000-000000000111''::uuid AND tenant_id = ''galvanik-kreile''';
+END IF;
+IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = 'billing_email') THEN
+  EXECUTE 'UPDATE public.customers SET billing_email = NULL WHERE id = ''00000000-0000-4000-8000-000000000111''::uuid AND tenant_id = ''galvanik-kreile''';
+END IF;
+IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = 'website') THEN
+  EXECUTE 'UPDATE public.customers SET website = NULL WHERE id = ''00000000-0000-4000-8000-000000000111''::uuid AND tenant_id = ''galvanik-kreile''';
+END IF;
+IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = 'house_number') THEN
+  EXECUTE 'UPDATE public.customers SET house_number = ''10'' WHERE id = ''00000000-0000-4000-8000-000000000111''::uuid AND tenant_id = ''galvanik-kreile''';
+END IF;
+END $flow$;
+INSERT INTO public.customers (id, tenant_id, customer_number, name, type, company_name, contact_person, phone, email, street, address, zip_code, city, country, payment_preference, shipping_preference, vat_id, ziel_freigeschaltet, ziel_tage, skonto_prozent, skonto_tage, source)
+VALUES ('00000000-0000-4000-8000-000000000112', 'galvanik-kreile', 'K-FLOW-012', 'Prueffirma Kappa GmbH', 'business', 'Prueffirma Kappa GmbH', 'Kai Kappaprobe', '06100 131313', 'einkauf@kappa-pruef.test', 'Prüfweg', NULL, '99001', 'Prüfstadt', 'Deutschland', 'vorkasse', NULL, NULL, false, NULL, NULL, NULL, 'flow-spec')
+ON CONFLICT (id) DO UPDATE SET customer_number = EXCLUDED.customer_number, name = EXCLUDED.name, type = EXCLUDED.type, company_name = EXCLUDED.company_name, contact_person = EXCLUDED.contact_person, phone = EXCLUDED.phone, email = EXCLUDED.email, street = EXCLUDED.street, address = EXCLUDED.address, zip_code = EXCLUDED.zip_code, city = EXCLUDED.city, country = EXCLUDED.country, payment_preference = EXCLUDED.payment_preference, shipping_preference = EXCLUDED.shipping_preference, vat_id = EXCLUDED.vat_id, ziel_freigeschaltet = EXCLUDED.ziel_freigeschaltet, ziel_tage = EXCLUDED.ziel_tage, skonto_prozent = EXCLUDED.skonto_prozent, skonto_tage = EXCLUDED.skonto_tage, source = 'flow-spec', updated_at = statement_timestamp();
+DO $flow$ BEGIN
+IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = 'salutation') THEN
+  EXECUTE 'UPDATE public.customers SET salutation = ''frau'' WHERE id = ''00000000-0000-4000-8000-000000000112''::uuid AND tenant_id = ''galvanik-kreile''';
+END IF;
+IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = 'first_name') THEN
+  EXECUTE 'UPDATE public.customers SET first_name = ''Kai'' WHERE id = ''00000000-0000-4000-8000-000000000112''::uuid AND tenant_id = ''galvanik-kreile''';
+END IF;
+IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = 'last_name') THEN
+  EXECUTE 'UPDATE public.customers SET last_name = ''Kappaprobe'' WHERE id = ''00000000-0000-4000-8000-000000000112''::uuid AND tenant_id = ''galvanik-kreile''';
+END IF;
+IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = 'contact_role') THEN
+  EXECUTE 'UPDATE public.customers SET contact_role = ''Einkauf'' WHERE id = ''00000000-0000-4000-8000-000000000112''::uuid AND tenant_id = ''galvanik-kreile''';
+END IF;
+IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = 'billing_email') THEN
+  EXECUTE 'UPDATE public.customers SET billing_email = NULL WHERE id = ''00000000-0000-4000-8000-000000000112''::uuid AND tenant_id = ''galvanik-kreile''';
+END IF;
+IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = 'website') THEN
+  EXECUTE 'UPDATE public.customers SET website = NULL WHERE id = ''00000000-0000-4000-8000-000000000112''::uuid AND tenant_id = ''galvanik-kreile''';
+END IF;
+IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = 'house_number') THEN
+  EXECUTE 'UPDATE public.customers SET house_number = ''13'' WHERE id = ''00000000-0000-4000-8000-000000000112''::uuid AND tenant_id = ''galvanik-kreile''';
 END IF;
 END $flow$;
 DO $flow$ BEGIN IF to_regclass('public.address_directory') IS NOT NULL THEN

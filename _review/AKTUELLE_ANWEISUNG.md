@@ -1,4 +1,4 @@
-# AKTUELLE ANWEISUNG – einzige Auftragsquelle für den Bau-Codex (Stand 29.10.2026, 16:40)
+# AKTUELLE ANWEISUNG – einzige Auftragsquelle für den Bau-Codex (Stand 03.11.2026, 17:45)
 
 Diese Datei **ersetzt alle früheren Fassungen**. Das Archiv `_review/archiv/AKTUELLE_ANWEISUNG_bis_2026-10-29.md` ist nur Nachschlagewerk und **kein Auftrag**. Steht etwas dort anders als hier, gilt diese Datei. Der Planungschat hält diese Datei kurz: Erledigtes fliegt raus, und nichts wird nur angehängt.
 
@@ -36,101 +36,28 @@ Diese Datei **ersetzt alle früheren Fassungen**. Das Archiv `_review/archiv/AKT
 
 12. **Spec-Freeze je Paket (U-226).** Der Bauplan, den WORKQUEUE für das laufende Paket nennt (spec + SHA-256), gilt bis zu dessen Merge. Der Endversion-Chat ändert `docs/project/endversion/codex/BAUPLAN.json` nicht, solange ein Anker oder Paket offen ist; Änderungen legt er in `docs/project/endversion/codex/BAUPLAN.next.json` ab (nicht im Repo). Der Planungschat übernimmt sie beim nächsten Anker und nennt die neue SHA. Weicht die SHA im Arbeitsbaum von WORKQUEUE ab: Codex stoppt nicht, sondern meldet es und baut nach der WORKQUEUE-SHA, sofern diese Datei vorliegt; sonst Stopp.
 13. **Wegeprüfung vor dem Bau (U-229).** Jedes Paket enthält eine Wege-Matrix: jeder Aufruf × Zustand × Aktion (Speichern/Buchen, Abbrechen, ×, Esc, Zurück, Ebene öffnen/schließen, Fehler, Doppelklick, ohne Recht) → sichtbare Anzeige + DB-Wirkung, abgeglichen mit `werkbank.interaktion`, `screens[].aktionen` und `verhalten_appweit`. Der Planungschat prüft sie vor der Übergabe; Codex baut und testet genau diese Matrix (realRender je Zeile). Vor jedem Owner-Klicktest läuft der Planungschat die Matrix selbst per Playwright auf der Preview genau dieses SHA (Codes nur aus Umgebungsvariablen).
+14. **Paket ist abschließend (02.11.).** Gebaut wird nur, was das gültige Paket ausdrücklich nennt. Sagt der Bauplan mehr (z. B. Schlüssel statt Anzeigewerte, andere Tabellen, weitere Felder), wird das **nicht** im Vorbeigehen gebaut, sondern in NACHTLAUF C als „Bauplan > Paket: Stelle, Bauplan sagt, Paket sagt, Vorschlag“ gemeldet; der Planungschat entscheidet im Paket. Datenumstellungen (Schlüssel, Spaltenbedeutung) nur mit Datenmigration im selben Paket – nie nur für neue Zeilen.
+15. **Eine Auftragsquelle (02.11.).** Gültig ist nur Abschnitt C dieser Datei; der Planungschat **ersetzt** ihn bei jeder Änderung (nichts anhängen). `_review/NACHTLAUF_2026-11-02.md` ist Protokoll: Codex meldet dort unter C, der Planungschat schreibt Befunde unter P. Ein P-Eintrag gilt als Auftrag nur, wenn C ihn nennt.
+16. **Blocker und Weiterarbeit (02.11.).** Fehlt ein Pfad, eine Freigabe oder eine Entscheidung: in NACHTLAUF C melden (Pfad/Stelle, Grund, Vorschlag) und am nächsten Punkt von C weiterarbeiten. Ein Schritt „PR pushen“ wird trotzdem ausgeführt (CI-rot nur wegen fehlender Freigabe ist erwartbar und steht in der Abgabe) – sonst kann der Planungschat nicht prüfen.
+17. **Meldetakt und Git (02.11.).** Nach jedem Commit eine Zeile in NACHTLAUF C (SHA, Inhalt, Tests). `git add` nur mit ausdrücklichen Pfaden; Planungsdateien (`_review/**`, `docs/project/arbeitspakete/**`, `docs/project/endversion/**`) nie stashen, stagen oder committen – außer unverändert im Anker. Previews nur aus Git, nie per CLI.
+18. **PR-Status nur belegt (02.11. 23:55).** Den Zustand eines PR meldet Codex erst nach `gh pr checks <n>` über **alle** Jobs und deren Schritte (auch `h16-schema` → „Generated BAUPLAN flows“). „Erwartbar rot“ nur mit Run-Link, Schritt und Fehlerzeile. Was lokal grün ist, muss in CI mit demselben Befehl laufen; Abweichung CI ≠ lokal ist ein eigener Befund und wird vor allem anderen behoben.
+19. **UI-Wahrheit (U-239, 03.11.).** Aussehen, Aufbau, Reihenfolge und Größen jedes Screens kommen **nur** aus `docs/project/endversion/ui/` (zuerst `LIESMICH.md` lesen): `endversion_design.css` wird **eingebunden, nicht abgeschrieben**; `SICHTVERTRAG.json` ist das Soll je Seite × Rolle × Größe (Kennungen `data-spec-id`, Texte wörtlich, Klassen wie dort, Hauptaktion in der Dialog-Fußzeile ohne Scrollen sichtbar, Knöpfe ≥ 44 px); `pruefbilder/` zeigen es. Keine eigenen Nachbauten in Tailwind/shadcn/globals.css, kein Mock-/Prototyp-Code, keine Musterdaten. Alte Layouts (z. B. Reiter-Werkbank „1 Kunde · 2 Positionen · 3 Prüfung“, dunkle 3.0-Kacheln) werden im Teil ihrer Seite gelöscht, nicht daneben weitergeführt. Server-Wege, Tabellen, Befehle und Tests bleiben. **Fertig heißt zusätzlich:** `node docs/project/endversion/ui/pruefe_sicht.cjs --app <READY-Preview genau des SHA> --routen docs/project/endversion/ui/routen.json --nur <Seiten des Teils>` grün (Gelb nur mit Grund in der Abgabe), Bericht in der Abgabe. Das Skript wird nie geändert.
 
-## B. Stand (geprüft vom Planungschat, 29.10. 16:40)
-- **Bereinigung H11–H16c erledigt** (Kopf 37b0c566, CI grün). Erledigt sind Rechte aus einer Quelle, „Der Tag“ ohne Absturz, keine Ersatzwerte bei Firmendaten und Zahlungsziel, eine Rechnungswahrheit, entfernter Müll, Wächter und das Datenregister.
-- **Owner-Klicktest 29.10. ist gescheitert**, siehe C1. Das Zahlungsziel funktioniert (DB-Beleg). Code ändern, Rechte setzen und die Auftragskarte nach einer Terminänderung funktionieren nicht.
-- Mail-Versand: Graph sendet zwar, die Zustellung scheitert aber (Rückläufer). Das wird mit dem Mail-Kanal im Eingang geklärt, nicht jetzt.
+## B. Stand (Planungschat, 03.11. 17:45)
+- main `10be0a03`. Dev-DB 66 Migrationen = main. Owner merged #163 → #164 → TA-B2f.
+- **Runde 51 freigegeben (Endversion 17:30):** BAUPLAN `888114C6247B711CC02D8C78BB9429ADCF9C494CFBC2E066F5202C6E966BB0D8` (spec `a9474e3f73c3`), UI-Wahrheit `docs/project/endversion/ui/`: `endversion_design.css` 061AF6F3, `SICHTVERTRAG.json` 509BE267 (117 Einträge inkl. Modi), `pruefe_sicht.cjs` 03F4E0AA, 117 neue Prüfbilder, `CURRENT_DESIGN_REFERENCE.json` DE0FC765. Alte Soll-Bilder/Sichtvertrag 8204C911 ungültig. Seitennamen/Modi nur aus `paket.seitenkatalog`; Seiten-Gate `paket.seiten_gate`.
+- Endversion-STOPP 16:10 ist aufgehoben.
 
-## C. Warteschlange (nur offene Punkte, in dieser Reihenfolge)
-**C-Eingang · Stand 02.11. (verbindlich, ersetzt alle Blöcke darunter; Arbeitsweise „Wege zuerst“, U-234):** AP-01 ist gemergt (#158, main b364f569). Reihenfolge laut `docs/project/arbeitspakete/WORKQUEUE.json`: (1) AP-R lokal fertig auf `wip/ap-r` committen. (2) TA-B2d2 nach `TRUST_ANCHOR_B2D2.md` (Bauplan a887ece362f4, Pfade AP-G + AP-R, CI-Schritt Wege-Tests) → Owner-Merge. (3) Ein PR AP-G + AP-R auf `kreile/b2-eingang` frisch von main; Liste „erwartet rot“ nur AP-K1. (4) TA-B2e (Migrationspfad AP-R) vor dem AP-G/AP-R-PR. (5) TA-B2f (Bauplan 21d0347a, Pfade AP-EIN). (6) AP-EIN in sechs Teil-PRs 0–5 nach `AP-EIN-eingang-komplett/PAKET.md` (AP-K1 F2 = Teil 1; Absprachen = AP-ABS danach). Tagesplan steht in `_review/NACHTLAUF_2026-11-02.md` (P25, P27). Previews nur aus Git, kein CLI-Deploy. Die Warteschlange pflegt nur der Planungschat; es gibt keinen zweiten Auftraggeber in dieser Datei.
-**C-Eingang · Stand 01.11. 14 Uhr (verbindlich, ersetzt die Blöcke darunter zu AP-01/AP-02):** U-225. Reihenfolge laut `docs/project/arbeitspakete/WORKQUEUE.json`: AP-01 Fassung 4 lokal auf `kreile/b2-eingang` bauen → TA-B2c (Bauplan 6b782924 + Pfad-Probe) → Owner-Merge → AP-01 F4 pushen auf #158 → Owner-Klicktest/Merge → AP-K1 (Paket folgt) → AP-02 Fassung 2. AP-02 Fassung 1 ist zurückgezogen; WIP auf `wip/ap02-parkiert`. Prüfdatei `zz_*probe*` des Planungschats nie committen.
-**PRÜFER 31.10. 11:55: C1/C2 ERLEDIGT.** #154 auf main gemergt (Kopf ae79c12f). Pflicht-Checks quality+agentur-gate grün, dazu Fresh-Supabase-Replay und h16-schema grün. Guards nicht aufgeweicht: ESLint-Baseline weiter 0 Fehler, Ratchet-Vertrag regulär neu signiert, neue Prüfskripte dazu. Dev-DB 65/65 = Repo, additiv. Rebaseline fasste nur Rechnung/Auftragskarte an, NICHT den Eingang. Smoke auf main grün (Login, Storno, Auftrag öffnen). Hinweis: #154 = „P2 Eingang", daher liegt jetzt auch der alte, zu ersetzende Eingang auf main (geparkt, nicht neu gebaut). Nächster und einziger kritischer Pfad: Owner gibt F1 (Eingang) in der Endversion-Vorschau frei -> dann Arbeitspakete -> Neubau Eingang mit Ersetzt-Liste. Bis dahin baut Codex nichts (kein WORKQUEUE bereit, korrekt).
-
-### C-Eingang · Stand 31.10. 22 Uhr (verbindlich, ersetzt die Reihenfolge darunter)
-1. TA-B2 erledigt: #156 gemergt, main ac6c1d2a vollständig grün.
-2. **TA-B2b** (`docs/project/arbeitspakete/TRUST_ANCHOR_B2B.md`): H18-Inventar in die B2-Allowlist + dauerhafter CI-Schritt „Acceptance tests against replay DB". Owner merged.
-3. **AP-01 Fassung 3** auf `kreile/b2-eingang`: Akzeptanztest neu im H18-Harness (`ap01_eingang_paket_persoenlich.integration.test.ts`), zugleich H18-Nachweis; Kunden-Typ `customerId` wie `OrderIntakeCustomerInput`. Werte in WORKQUEUE.json.
-
-### C-Eingang · Stand 31.10. abends
-**Weg (Owner hat dem Planungschat den sichersten Weg ueberlassen, U-223):** Mission KREILE-VERKAUFSSTUFE-1 ist der gueltige Gate-Rahmen (sie loest den Live-Plan V1 ab; die Rueckfrage 'Live-Plan V1' beruhte auf einem Irrtum des Planungschats). B1 ist erledigt, die Gates stehen aber noch auf B1. Reihenfolge:
-1. **TA-B2** (docs/project/arbeitspakete/TRUST_ANCHOR_B2.md): Mission und Scope-Gate von B1 auf B2, Branch kreile/b2-eingang, enge Allowlist fuer AP-01, nach Muster PR154-Anker. Owner merged.
-2. **AP-01 Fassung 2** (Eingang-Modul + Kanal Paket/persoenlich, getippt -> Auftrag) auf kreile/b2-eingang: korrigiert nach BLOCKER.md (Action src/app/actions/eingang.actions.ts; drei idempotente Schritte statt Einzel-Transaktion; createOrderIntake unveraendert). Migration per Probelauf gegen Dev belegt (ROLLBACK, keine Rueckstaende). Akzeptanztest-SHA in WORKQUEUE.json.
-WAS bleibt BAUPLAN F1 (spec 403d1b31ad24). Kein zweiter Erfassungsweg, kein zweiter Auftrags-Schreibweg, kein Gate gelockert.
-
-### C1a · H18-Nachtrag – Prüfer-Funktionstest 29.10. 17:25 (jetzt, vor allem anderen)
-
-**PRÜFER 29.10. 22:12: C1a GRÜN** auf 84effe2c (Preview jo5wpnjpo). Eigener Funktionstest + DB-Beleg: Dev 61/61, letzte 20261029173000; Login 3/3; Rechte setzen/entfernen mit 'Rechte speichern' -> app_user_rights + ui_events 21:08/21:09; Wartung für alle außer Entwickler gesperrt; Phillip 'Der Tag' = 'Nichts offen'; 8/8 Auftragskarten öffnen, keine internen Codes, keine fremden Mails; Termin A-2026-0001 -> 13.11. (orders.promised_due_date + ORDER_PROMISED_DUE_DATE_CHANGED_V1), Karte öffnet danach; Zahlung im Verlauf. Nächster Schritt: C2 Owner-Klick auf jo5wpnjpo, dann Merge. Offene Owner-Entscheidung: #154 auf main umstellen (Stapel #152/#153).
-- PRÜFER 30.10. 06:40: Rechnung geprüft auf f93ece18 (Preview 6gxksup79). Ausstellen funktioniert: A-2026-0006 -> R-2026-0004 (invoices issued/offen, ORDER_INVOICE_PRICES_SET_V1 + INVOICE_CREATED_V1). Knopf 'Rechnung' erscheint erst bei Station fertig (Bauplan). Mangel: keine Erfolgsmeldung nach Ausstellen. 'Rechnung ändern' gibt es absichtlich nicht (nur Storno + neu). Nachtlauf H18.8: 34/100 getestet, 9 echte Fehler behoben, Dev 65/65.
-Der Prüfer hat auf `galvanik-kreile-werkstatt-d1m0go0j9.vercel.app` (e494aeeb) selbst im Browser geklickt und danach die DB abgefragt.
-
-**Grün, mit DB-Beleg:**
-- Anmelden für alle drei.
-- Eigenen Code ändern und mit dem neuen Code anmelden (`own_pin_changed` um 16:24 UTC).
-- Rechte-Haken setzen und entfernen (`app_user_rights.mails` bei Phillip, `granted_by` = Rolf).
-- Login umbenennen (`full_name`).
-- Die Liste zeigt A-2026-0001 als „Lesefehler“ statt ihn auszublenden.
-
-**Rot:**
-1. **H18.6 wirkt nicht:** Die Migration `20261029173000_h18_order_intake_due_change_integrity.sql` ist **nicht auf die Dev-DB angewendet**. Die Dev-DB endet bei `20261028234500`. A-2026-0001 zeigt deshalb weiter `ORDER_CARD_INTAKE_RECEIPT_INVALID`. Gegen Regel A7: Migration additiv auf die Dev-DB anwenden, Migrationsliste DB = Repo belegen, danach A-2026-0001 öffnen.
-2. **Wartung bei Rolf anklickbar:** Der Haken „Wartung, Stufen & Anbindungen für Rolf“ ist bedienbar. Nach U-216/H11 ist Wartung nur für developer vorgesehen. Sperren wie die übrigen festen Bereiche, Server und Oberfläche gleich.
-3. **„Der Tag“ bei Phillip** zeigt „Noch keine Aufträge erfasst“, obwohl 8 Aufträge existieren. Den Leerzustand-Text nach BAUPLAN F2 korrigieren: „nichts zu tun“ ist nicht dasselbe wie „keine Aufträge“.
-4. **Klein:** `saveManagedUser` setzt `app_users.updated_at` beim Umbenennen nicht.
-5. **Zahlung bestätigen** (A-2026-0003, Bar): Die Zahlung steht in der DB (`payments`, `PAYMENT_CONFIRMED_V1` um 16:28 UTC). In der Oberfläche erscheint aber **keine Erfolgsmeldung**, und der Verlauf der Karte zeigt die Zahlung nicht. Regel A4: Meldung am Ort der Handlung, und der Verlauf liest die Ereignisse.
-6. **Interne Codes sichtbar:** Die Auftragskarte A-2026-0008 zeigt unter „Fotos & Dokumente“ `LEGACY_SCAN_UPLOAD · LEGACY_RECORDED`. Für den Nutzer verständlichen Text anzeigen, keine internen Codes.
-7. **Mail-Kasten auf jeder Auftragskarte zeigt fremde Mails:** „Letzte Outlook-Mails“ listet auf jeder Karte dieselben Rückläufer („Unzustellbar …“), unabhängig vom Auftrag. Das ist eine zweite Wahrheit. Nur Mails zeigen, die diesem Auftrag zugeordnet sind, sonst den Leerzustand. Der Mail-Kanal selbst bleibt eingefroren.
-
-**Ebenfalls grün mit DB-Beleg:**
-- Zahlung bestätigen (Datenebene).
-- Ware raus (`ORDER_PICKED_UP_V1`, Status `abgeholt`).
-- Station „In Galvanik“ (A-2026-0006 → `galvanik`).
-- Alle Hauptseiten laden ohne Fehlertext; Ausnahme ist die Auftragsliste wegen A-2026-0001, siehe 1.
-
-Bericht und Screenshots liegen außerhalb des Repos in `galvanik_kreile/_pruefer/`.
-
-**Regel ab jetzt:** Eine Abgabe mit Migration gilt nur, wenn die Migration auf der Dev-DB angewendet und der Gleichstand belegt ist. CI-Replay allein reicht nicht.
-
-### C1 · H18 – Schreibaktionen ohne Wirkung (Code fertig e494aeeb; Rest siehe C1a)
-Preview zum Zeitpunkt des Owner-Tests: `galvanik-kreile-werkstatt-d1d6m0aud.vercel.app` (37b0c566).
-
-**Gemeinsame Ursache von 1–3 (Prüfer-Beleg):**
-- Der letzte erfolgreiche Schreibvorgang in „Logins & Rechte“ war am **27.10. um 14:49 UTC**; das ist die letzte Zeile in `public.ui_events`. Seitdem ist keiner mehr angekommen.
-- Der DB-Pfad selbst funktioniert: Ein Probelauf mit dem UPDATE `app_users` und dem INSERT `ui_events` als Transaktion, danach zurückgerollt, läuft durch. **Der Fehler liegt vor der DB**: Die Action kommt nicht an oder wird von Sitzung/Rechteprüfung abgelehnt.
-- Die Meldung steht in `SettingsAdminClient.tsx:276` hinter dem modalen Dialog (`:330`).
-- `systemSettingsPort.ts:394` verschluckt den Fehler ohne Log.
-
-**Unterpunkte:**
-1. Eigenen Code ändern (Konto/meincode und Logins & Rechte): Speichern ist ohne Wirkung, es kommt keine Meldung.
-2. Neuer Code für einen anderen Login (`saveManagedUserAction`): dasselbe.
-3. Rechte-Haken als Rolf (`setManagedUserAreaAction`): keine neue Zeile in `app_user_rights`.
-4. Login bearbeiten, Name lässt sich nicht ändern: Sieht BAUPLAN F0 das vor, wird es gebaut. Sonst eine Rückfrage, nicht raten.
-5. Nach „Code ändern“ gibt es keinen Rückweg: Rückweg nach BAUPLAN.
-6. Auftragskarte nach Liefertermin-Änderung nicht ladbar: A-2026-0001 (`fa31ffa8-…`), `ORDER_PROMISED_DUE_DATE_CHANGED_V1` um 14:47:27 UTC, danach `ORDER_CARD_READ_ERROR ORDER_CARD_INTAKE_RECEIPT_INVALID`. Die Daten sind korrekt. Beheben ohne Datenpatch; alle 8 Aufträge müssen öffnen.
-7. Die Auftragsliste blendet einen Auftrag mit Lesefehler still aus. Stattdessen eine sichtbare Zeile mit Code.
-
-**App-weit im selben Zug:**
-- a) Dialog-Baustein: Meldung im Dialog, Schließen nur bei Erfolg. Überall verwenden.
-- b) Kein `catch` ohne Log in Server-Ports. Die H16.2-Override-Liste für Server-Ports wird leer.
-- c) Ursache „Action kommt nicht an“ mit Datei:Zeile in die Abgabe.
-
-**Wächter H18.8, dauerhaft:** CI listet alle Server-Actions mit Schreibwirkung. Jede braucht einen Integrationstest nach Regel A3, der sie beim Namen aufruft. Fehlende stehen in einer Override-Liste, die nur schrumpfen darf. Eine neue Schreib-Action ohne Test macht CI rot.
-
-**Prüfschritt:**
-- Für 1–7 je ein Integrationstest grün, H18.8 in CI.
-- DB-Soll nach dem Owner-Klick: `own_pin_changed` bei Gregor, eine neue Zeile in `app_user_rights` mit `granted_by` = Rolf, A-2026-0001 öffnet.
-- Abgabe `ABGABE_H18.md` mit Preview-Link.
-
-### C2 · Owner-Klick und Merge #154
-Erst nach C1. Den Klickweg und die DB-Prüfung bereitet der Planungschat vor. Die Owner klickt und mergt (squash). Danach arbeitet Codex auf einem neuen Branch aus `main`.
-
-### C3 · Eingang über Arbeitspakete
-- Owner-Befund 29.10. (Eingang-Paket, Pflicht): 'Neuer Eingang' zeigt bei leerem Formular 4/8 Pflichtangaben OK (Menge, Oberfläche, Übergabe=Abholung, Zahlungsmodus) = stille Vorbelegung, Verstoß gegen 'keine Ersatzwerte'. Soll: alle Pflichtfelder leer und FEHLT, bis der Nutzer wählt oder die Erkennung sie belegt.
-- Owner-Befund 29.10.: Wege lang und kompliziert -> Klickzahl je Kernaufgabe im Eingang-Paket als Akzeptanzkriterium festlegen.
-- Owner-Befund 29.10. (für Eingang/Mail-Paket, nicht vorher anfassen): 'Zuordnen' auf Der Tag öffnet 'Mail zuordnen' ÜBER dem Dialog 'Neuer Eingang' (Dialog auf Dialog, 7 Knöpfe gleichrangig). Rückläufer eigener Testmails (Undeliverable) landen als Zuordnungsaufgabe auf Der Tag.
-Nur Pakete mit Status `bereit` aus `WORKQUEUE.json`. Solange es keins gibt, meldet Codex „warte auf Arbeitspakete“ und baut nichts.
+## C. Warteschlange (ersetzt alle früheren C-Fassungen)
+1. **TA-B2f (Fassung 4 in TRUST_ANCHOR_B2F.md):** Bauplan `888114C6247B711CC02D8C78BB9429ADCF9C494CFBC2E066F5202C6E966BB0D8` als `BAUPLAN.json` + `e2e/generated/**` neu + Rot-Liste je Teil; `docs/project/endversion/ui/**` und `CURRENT_DESIGN_REFERENCE.json` unverändert; Neu-Pin DESIGN_POINTER_*; Hash-Pins `eslint-ratchet.yml`; `scripts/spec/generate-flow-tests.mjs`; ESLint-Ignore nur `docs/project/endversion/ui/**`; Allowlist aus Fassung 2. Nach Owner-Merge #164 rebasen, ready, `gh pr checks` vollständig in C.
+2. **Teil 0** neu gegen `888114C6247B711CC02D8C78BB9429ADCF9C494CFBC2E066F5202C6E966BB0D8` erzeugen, push #166. **Teil 0b** gegen neues Bündel abgleichen, `routen.json` (alle Seiten + Modi aus `paket.seitenkatalog`), Sicht-Ausgangsbericht, Commit, Draft-PR.
+3. **Teil 1 → 2 → 3 → 4 → 5 → 6** nach PAKET Fassung 3 (+ Nachtrag 17:45): Oberfläche nach neuem Sichtvertrag (Normalfall + Modi, M6 als Liste), Server/DB wie geplant. Je Teil: A11 → Fälle → `pruefe_sicht --nur <Seiten>` grün → Commit → Zeile in C → Draft-PR → `gh pr checks`.
+4. **PIN-Login für den Sichtlauf ohne Skriptänderung:** `routen.json` im Repo enthält Seitenpfade und Login-Schritte mit Platzhaltern, nie eine PIN. Für jeden Lauf eine **temporäre Kopie außerhalb des Repos** erzeugen, in der Personenknopf und Ziffernklicks aus `<ROLLE>_PASSWORT` eingesetzt sind; Vercel-Share aus Umgebungsvariable. Kopie danach löschen.
+5. Migrationen: Datei + SHA in C, Dev erst nach „Migration geprüft“ und Merge.
+6. **Nie:** Merge, Dev-DB ohne Freigabe, Vercel-CLI/Env, Secrets, `git stash`, Force-Push auf fremde Branches, Planungsdateien stagen (außer unverändert im Anker), `pruefe_sicht.cjs`/Sichtvertrag/Bündel ändern, Gates außerhalb der Anker-Allowlist.
 
 ### C4 · H17 Produktions-DB – erst in der Woche vor Go-live
-Erst nach dem Owner-Schritt (Supabase-Projekt anlegen). Ablauf genau nach `docs/delivery/GO_LIVE_ABLAUF.md`.
+Erst nach dem Owner-Schritt (Supabase-Projekt anlegen, Vercel-Tarif für gewerbliche Nutzung). Ablauf genau nach `docs/delivery/GO_LIVE_ABLAUF.md`.
 
 ### Gesperrt bis nach Go-live
-Stationsspalten, `tenant_features`, Tenant-Default, Drizzle-Angleich, toter Code außerhalb eines ersetzenden Pakets, nächtlicher Bericht, Schreibpfade für `orders.payment_status`.
+Stationsspalten, `tenant_features`, Tenant-Default, Drizzle-Angleich außerhalb der Paket-Tabellen, toter Code außerhalb eines ersetzenden Pakets, nächtlicher Bericht, Schreibpfade für `orders.payment_status`.

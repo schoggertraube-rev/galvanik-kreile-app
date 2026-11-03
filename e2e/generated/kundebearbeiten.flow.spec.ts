@@ -1,4 +1,4 @@
-// Generated from BAUPLAN SHA-256 5E7B880BD9D4B35EAF7BF906F2693011192933E000FA7AEA94222395F34A1F70. Do not edit.
+// Generated from BAUPLAN SHA-256 888114C6247B711CC02D8C78BB9429ADCF9C494CFBC2E066F5202C6E966BB0D8. Do not edit.
 import { test } from "@playwright/test";
 import expectedRed from "./_erwartet_rot.json";
 import { prepareGeneratedSeed, runGeneratedFlowCase, type FlowCase } from "./_harness";
@@ -757,15 +757,16 @@ const cases = [
   },
   {
     "id": "B12a",
-    "titel": "Abbrechen schließt ohne Rückfrage und ohne Änderung",
+    "titel": "Mit Änderung: Abbrechen → Rückfrage über 5.2; „Verwerfen“ schließt ohne zu speichern",
     "paket": "AP-K1",
     "quelle": [
-      "screens[kundebearbeiten].aktionen[abbrechen]",
-      "screens[kundebearbeiten].regeln[-1]",
-      "screens[kundebearbeiten].abnahme[9]"
+      "verhalten_appweit.rueckfrage",
+      "verhalten_appweit.aenderung",
+      "screens[entwurf]"
     ],
     "deckt": [
-      "kundebearbeiten.abbrechen"
+      "kundebearbeiten.abbrechen",
+      "entwurf.verwerfen"
     ],
     "gegeben": {
       "login": "login_meister",
@@ -789,6 +790,39 @@ const cases = [
       },
       {
         "id": "kundebearbeiten.abbrechen",
+        "aktion": "klicken"
+      },
+      {
+        "aktion": "erwarten",
+        "anzeige": [
+          {
+            "oben": "entwurf"
+          },
+          {
+            "id": "kundebearbeiten",
+            "erwartung": "sichtbar"
+          },
+          {
+            "id": "entwurf",
+            "erwartung": "text_enthaelt",
+            "wert": "E-Mail"
+          },
+          {
+            "id": "entwurf.speichern",
+            "erwartung": "sichtbar"
+          },
+          {
+            "id": "entwurf.verwerfen",
+            "erwartung": "sichtbar"
+          },
+          {
+            "id": "entwurf.weiter-bearbeiten",
+            "erwartung": "sichtbar"
+          }
+        ]
+      },
+      {
+        "id": "entwurf.verwerfen",
         "aktion": "klicken"
       }
     ],
@@ -818,14 +852,16 @@ const cases = [
   },
   {
     "id": "B12b",
-    "titel": "× schließt ohne Rückfrage und ohne Änderung",
+    "titel": "Mit Änderung: × → Rückfrage; „Weiter bearbeiten“ lässt die Eingabe stehen",
     "paket": "AP-K1",
     "quelle": [
-      "screens[kundebearbeiten].aktionen[abbrechen]",
-      "screens[kundebearbeiten].regeln[-1]",
-      "screens[kundebearbeiten].abnahme[9]"
+      "verhalten_appweit.rueckfrage",
+      "verhalten_appweit.aenderung",
+      "screens[entwurf]"
     ],
-    "deckt": [],
+    "deckt": [
+      "entwurf.weiter-bearbeiten"
+    ],
     "gegeben": {
       "login": "login_meister",
       "datenlagen": [
@@ -849,17 +885,54 @@ const cases = [
       {
         "id": "kundebearbeiten.schliessen",
         "aktion": "klicken"
+      },
+      {
+        "aktion": "erwarten",
+        "anzeige": [
+          {
+            "oben": "entwurf"
+          },
+          {
+            "id": "kundebearbeiten",
+            "erwartung": "sichtbar"
+          },
+          {
+            "id": "entwurf",
+            "erwartung": "text_enthaelt",
+            "wert": "E-Mail"
+          },
+          {
+            "id": "entwurf.speichern",
+            "erwartung": "sichtbar"
+          },
+          {
+            "id": "entwurf.verwerfen",
+            "erwartung": "sichtbar"
+          },
+          {
+            "id": "entwurf.weiter-bearbeiten",
+            "erwartung": "sichtbar"
+          }
+        ]
+      },
+      {
+        "id": "entwurf.weiter-bearbeiten",
+        "aktion": "klicken"
       }
     ],
     "dann": {
       "anzeige": [
         {
-          "id": "kundebearbeiten",
-          "erwartung": "nicht_sichtbar"
+          "oben": "kundebearbeiten"
         },
         {
           "id": "entwurf",
           "erwartung": "nicht_sichtbar"
+        },
+        {
+          "id": "kundebearbeiten.email",
+          "erwartung": "wert",
+          "wert": "nicht@alpha-pruef.test"
         }
       ],
       "db": [
@@ -877,12 +950,12 @@ const cases = [
   },
   {
     "id": "B12c",
-    "titel": "Esc schließt ohne Rückfrage und ohne Änderung",
+    "titel": "Mit Änderung: Esc → Rückfrage; Esc in der Rückfrage = Weiter bearbeiten",
     "paket": "AP-K1",
     "quelle": [
-      "screens[kundebearbeiten].aktionen[abbrechen]",
-      "screens[kundebearbeiten].regeln[-1]",
-      "screens[kundebearbeiten].abnahme[9]"
+      "verhalten_appweit.rueckfrage",
+      "verhalten_appweit.aenderung",
+      "screens[entwurf]"
     ],
     "deckt": [],
     "gegeben": {
@@ -908,17 +981,54 @@ const cases = [
       {
         "aktion": "taste",
         "wert": "Escape"
+      },
+      {
+        "aktion": "erwarten",
+        "anzeige": [
+          {
+            "oben": "entwurf"
+          },
+          {
+            "id": "kundebearbeiten",
+            "erwartung": "sichtbar"
+          },
+          {
+            "id": "entwurf",
+            "erwartung": "text_enthaelt",
+            "wert": "E-Mail"
+          },
+          {
+            "id": "entwurf.speichern",
+            "erwartung": "sichtbar"
+          },
+          {
+            "id": "entwurf.verwerfen",
+            "erwartung": "sichtbar"
+          },
+          {
+            "id": "entwurf.weiter-bearbeiten",
+            "erwartung": "sichtbar"
+          }
+        ]
+      },
+      {
+        "aktion": "taste",
+        "wert": "Escape"
       }
     ],
     "dann": {
       "anzeige": [
         {
-          "id": "kundebearbeiten",
-          "erwartung": "nicht_sichtbar"
+          "oben": "kundebearbeiten"
         },
         {
           "id": "entwurf",
           "erwartung": "nicht_sichtbar"
+        },
+        {
+          "id": "kundebearbeiten.email",
+          "erwartung": "wert",
+          "wert": "nicht@alpha-pruef.test"
         }
       ],
       "db": [
@@ -1272,6 +1382,596 @@ const cases = [
             "email": "neu@alpha-pruef.test",
             "billing_email": "rechnung@alpha-pruef.test"
           }
+        }
+      ]
+    }
+  },
+  {
+    "id": "Q05",
+    "titel": "Gespeicherte Werte sind gewählt und grün; ohne gespeicherten Wert ist nichts grün",
+    "paket": "AP-Q1",
+    "quelle": [
+      "verhalten_appweit.auswahl",
+      "screens[kundebearbeiten].aufrufe",
+      "formulare.kunde.felder[uebergabe]"
+    ],
+    "deckt": [],
+    "gegeben": {
+      "login": "login_meister",
+      "datenlagen": [
+        "kunde_vollstaendig_firma",
+        "verzeichnis_pruefadressen"
+      ],
+      "aufruf": {
+        "seite": "kundebearbeiten",
+        "arg": "{kunde_vollstaendig_firma}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation (oeffne)"
+      },
+      "geraet": "desktop"
+    },
+    "wenn": [],
+    "dann": {
+      "anzeige": [
+        {
+          "id": "kundebearbeiten.kundentyp",
+          "erwartung": "gewaehlt",
+          "wert": "Firma"
+        },
+        {
+          "id": "kundebearbeiten.anrede",
+          "erwartung": "gewaehlt",
+          "wert": "Frau"
+        },
+        {
+          "id": "kundebearbeiten.zahlungsbedingung",
+          "erwartung": "gewaehlt",
+          "wert": "Vorkasse"
+        },
+        {
+          "id": "kundebearbeiten.uebergabe",
+          "erwartung": "nicht_gewaehlt",
+          "option": "Abholung"
+        },
+        {
+          "id": "kundebearbeiten.uebergabe",
+          "erwartung": "nicht_gewaehlt",
+          "option": "Versand"
+        }
+      ]
+    }
+  },
+  {
+    "id": "B12d",
+    "titel": "Ohne Änderung: Abbrechen, × und Esc schließen sofort ohne Rückfrage",
+    "paket": "AP-K1",
+    "quelle": [
+      "verhalten_appweit.rueckfrage",
+      "verhalten_appweit.aenderung",
+      "screens[entwurf]"
+    ],
+    "deckt": [],
+    "gegeben": {
+      "login": "login_meister",
+      "datenlagen": [
+        "kunde_vollstaendig_firma",
+        "verzeichnis_pruefadressen"
+      ],
+      "aufruf": {
+        "seite": "kundebearbeiten",
+        "arg": "{kunde_vollstaendig_firma}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – die Einstiege (5.1, 5.3, 7.1/7.2, 8.6) liegen außerhalb dieses Bauplans"
+      },
+      "geraet": "desktop"
+    },
+    "wenn": [
+      {
+        "id": "kundebearbeiten.abbrechen",
+        "aktion": "klicken"
+      }
+    ],
+    "dann": {
+      "anzeige": [
+        {
+          "id": "kundebearbeiten",
+          "erwartung": "nicht_sichtbar"
+        },
+        {
+          "id": "entwurf",
+          "erwartung": "nicht_sichtbar"
+        }
+      ]
+    }
+  },
+  {
+    "id": "B12e",
+    "titel": "Mit Änderung: „Speichern“ in der Rückfrage speichert 5.2 und schließt",
+    "paket": "AP-K1",
+    "quelle": [
+      "verhalten_appweit.rueckfrage",
+      "verhalten_appweit.aenderung",
+      "screens[entwurf]"
+    ],
+    "deckt": [
+      "entwurf.speichern"
+    ],
+    "gegeben": {
+      "login": "login_meister",
+      "datenlagen": [
+        "kunde_vollstaendig_firma",
+        "verzeichnis_pruefadressen"
+      ],
+      "aufruf": {
+        "seite": "kundebearbeiten",
+        "arg": "{kunde_vollstaendig_firma}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – die Einstiege (5.1, 5.3, 7.1/7.2, 8.6) liegen außerhalb dieses Bauplans"
+      },
+      "geraet": "desktop"
+    },
+    "wenn": [
+      {
+        "id": "kundebearbeiten.email",
+        "aktion": "tippen",
+        "wert": "nicht@alpha-pruef.test"
+      },
+      {
+        "id": "kundebearbeiten.abbrechen",
+        "aktion": "klicken"
+      },
+      {
+        "id": "entwurf.speichern",
+        "aktion": "klicken"
+      }
+    ],
+    "dann": {
+      "anzeige": [
+        {
+          "id": "kundebearbeiten",
+          "erwartung": "nicht_sichtbar"
+        },
+        {
+          "id": "entwurf",
+          "erwartung": "nicht_sichtbar"
+        }
+      ],
+      "db": [
+        {
+          "tabelle": "customers",
+          "wo": {
+            "id": "{kunde_vollstaendig_firma}"
+          },
+          "werte": {
+            "email": "nicht@alpha-pruef.test"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "B12g",
+    "titel": "Nach dem Speichern keine Rückfrage",
+    "paket": "AP-K1",
+    "quelle": [
+      "verhalten_appweit.rueckfrage",
+      "verhalten_appweit.aenderung",
+      "screens[entwurf]"
+    ],
+    "deckt": [],
+    "gegeben": {
+      "login": "login_meister",
+      "datenlagen": [
+        "kunde_vollstaendig_firma",
+        "verzeichnis_pruefadressen"
+      ],
+      "aufruf": {
+        "seite": "kundebearbeiten",
+        "arg": "{kunde_vollstaendig_firma}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – die Einstiege (5.1, 5.3, 7.1/7.2, 8.6) liegen außerhalb dieses Bauplans"
+      },
+      "geraet": "desktop"
+    },
+    "wenn": [
+      {
+        "id": "kundebearbeiten.email",
+        "aktion": "tippen",
+        "wert": "nicht@alpha-pruef.test"
+      },
+      {
+        "id": "kundebearbeiten.speichern",
+        "aktion": "klicken"
+      },
+      {
+        "aktion": "erwarten",
+        "anzeige": [
+          {
+            "id": "kundebearbeiten",
+            "erwartung": "nicht_sichtbar"
+          }
+        ]
+      }
+    ],
+    "dann": {
+      "anzeige": [
+        {
+          "id": "entwurf",
+          "erwartung": "nicht_sichtbar"
+        }
+      ]
+    }
+  },
+  {
+    "id": "B12h",
+    "titel": "Änderung zurückgenommen (Ausgangswert) → Abbrechen schließt ohne Rückfrage",
+    "paket": "AP-K1",
+    "quelle": [
+      "verhalten_appweit.rueckfrage",
+      "verhalten_appweit.rueckfrage.ebenen",
+      "screens[entwurf].abnahme"
+    ],
+    "deckt": [],
+    "gegeben": {
+      "login": "login_meister",
+      "datenlagen": [
+        "kunde_vollstaendig_firma",
+        "verzeichnis_pruefadressen"
+      ],
+      "aufruf": {
+        "seite": "kundebearbeiten",
+        "arg": "{kunde_vollstaendig_firma}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – die Einstiege (5.1, 5.3, 7.1/7.2, 8.6) liegen außerhalb dieses Bauplans"
+      },
+      "geraet": "desktop"
+    },
+    "wenn": [
+      {
+        "id": "kundebearbeiten.email",
+        "aktion": "tippen",
+        "wert": "nicht@alpha-pruef.test"
+      },
+      {
+        "id": "kundebearbeiten.email",
+        "aktion": "tippen",
+        "wert": "{kunde_vollstaendig_firma.email}"
+      },
+      {
+        "id": "kundebearbeiten.abbrechen",
+        "aktion": "klicken"
+      }
+    ],
+    "dann": {
+      "anzeige": [
+        {
+          "id": "kundebearbeiten",
+          "erwartung": "nicht_sichtbar"
+        },
+        {
+          "id": "entwurf",
+          "erwartung": "nicht_sichtbar"
+        }
+      ],
+      "db": [
+        {
+          "tabelle": "customers",
+          "wo": {
+            "id": "{kunde_vollstaendig_firma}"
+          },
+          "werte": {
+            "email": "{kunde_vollstaendig_firma.email}"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "B12i",
+    "titel": "Mit Änderung: Esc öffnet die Rückfrage, zweites Esc = Weiter bearbeiten (Eingabe bleibt)",
+    "paket": "AP-K1",
+    "quelle": [
+      "verhalten_appweit.rueckfrage",
+      "verhalten_appweit.rueckfrage.ebenen",
+      "screens[entwurf].abnahme"
+    ],
+    "deckt": [],
+    "gegeben": {
+      "login": "login_meister",
+      "datenlagen": [
+        "kunde_vollstaendig_firma",
+        "verzeichnis_pruefadressen"
+      ],
+      "aufruf": {
+        "seite": "kundebearbeiten",
+        "arg": "{kunde_vollstaendig_firma}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – die Einstiege (5.1, 5.3, 7.1/7.2, 8.6) liegen außerhalb dieses Bauplans"
+      },
+      "geraet": "desktop"
+    },
+    "wenn": [
+      {
+        "id": "kundebearbeiten.email",
+        "aktion": "tippen",
+        "wert": "nicht@alpha-pruef.test"
+      },
+      {
+        "aktion": "taste",
+        "wert": "Escape"
+      },
+      {
+        "aktion": "erwarten",
+        "anzeige": [
+          {
+            "oben": "entwurf"
+          }
+        ]
+      },
+      {
+        "aktion": "taste",
+        "wert": "Escape"
+      }
+    ],
+    "dann": {
+      "anzeige": [
+        {
+          "id": "entwurf",
+          "erwartung": "nicht_sichtbar"
+        },
+        {
+          "id": "kundebearbeiten",
+          "erwartung": "sichtbar"
+        },
+        {
+          "id": "kundebearbeiten.email",
+          "erwartung": "wert",
+          "wert": "nicht@alpha-pruef.test"
+        },
+        {
+          "id": "kundebearbeiten.email",
+          "erwartung": "fokus"
+        }
+      ],
+      "db": [
+        {
+          "tabelle": "customers",
+          "wo": {
+            "id": "{kunde_vollstaendig_firma}"
+          },
+          "werte": {
+            "email": "{kunde_vollstaendig_firma.email}"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "B18",
+    "titel": "Doppelklick „Speichern“: einmal gespeichert, Toast, kein Konflikt",
+    "paket": "AP-EIN",
+    "quelle": [
+      "screens[kundebearbeiten].aktionen[speichern]",
+      "verhalten_appweit.gleichzeitig"
+    ],
+    "deckt": [],
+    "gegeben": {
+      "login": "login_meister",
+      "datenlagen": [
+        "kunde_vollstaendig_firma",
+        "verzeichnis_pruefadressen"
+      ],
+      "aufruf": {
+        "seite": "kundebearbeiten",
+        "arg": "{kunde_vollstaendig_firma}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation (oeffne); Einstieg außerhalb dieser Seite"
+      },
+      "geraet": "desktop"
+    },
+    "wenn": [
+      {
+        "id": "kundebearbeiten.email",
+        "aktion": "tippen",
+        "wert": "doppel@alpha-pruef.test"
+      },
+      {
+        "id": "kundebearbeiten.speichern",
+        "aktion": "doppelklicken"
+      }
+    ],
+    "dann": {
+      "anzeige": [
+        {
+          "toast": "Kunde gespeichert"
+        },
+        {
+          "id": "kundebearbeiten",
+          "erwartung": "nicht_sichtbar"
+        }
+      ],
+      "db": [
+        {
+          "tabelle": "customers",
+          "wo": {
+            "id": "{kunde_vollstaendig_firma}"
+          },
+          "werte": {
+            "email": "doppel@alpha-pruef.test"
+          }
+        },
+        {
+          "tabelle": "customers",
+          "neu": 0
+        }
+      ]
+    }
+  },
+  {
+    "id": "B19",
+    "titel": "„Kunde automatisch informieren“: vorbelegt Ja; Nein speichert auto_info = false",
+    "paket": "AP-EIN",
+    "quelle": [
+      "formulare.kunde.felder[auto_info]",
+      "verhalten_appweit.annahme.kundenkarte"
+    ],
+    "deckt": [],
+    "gegeben": {
+      "login": "login_meister",
+      "datenlagen": [
+        "kunde_vollstaendig_firma",
+        "verzeichnis_pruefadressen"
+      ],
+      "aufruf": {
+        "seite": "kundebearbeiten",
+        "arg": "{kunde_vollstaendig_firma}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation (oeffne); Einstieg außerhalb dieser Seite"
+      },
+      "geraet": "desktop"
+    },
+    "wenn": [
+      {
+        "aktion": "erwarten",
+        "anzeige": [
+          {
+            "id": "kundebearbeiten.auto_info",
+            "erwartung": "gewaehlt",
+            "wert": "Ja"
+          }
+        ]
+      },
+      {
+        "id": "kundebearbeiten.auto_info",
+        "aktion": "waehlen",
+        "wert": "Nein"
+      },
+      {
+        "id": "kundebearbeiten.speichern",
+        "aktion": "klicken"
+      }
+    ],
+    "dann": {
+      "anzeige": [
+        {
+          "toast": "Kunde gespeichert"
+        }
+      ],
+      "db": [
+        {
+          "tabelle": "customers",
+          "wo": {
+            "id": "{kunde_vollstaendig_firma}"
+          },
+          "werte": {
+            "auto_info": false
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "B20",
+    "titel": "„Vorrang bei Terminen“ (Recht entscheiden): Ja speichert vorrang = true",
+    "paket": "AP-EIN",
+    "quelle": [
+      "formulare.kunde.felder[vorrang]",
+      "verhalten_appweit.terminabgleich.vorrang"
+    ],
+    "deckt": [],
+    "gegeben": {
+      "login": "login_meister",
+      "datenlagen": [
+        "kunde_vollstaendig_firma",
+        "verzeichnis_pruefadressen"
+      ],
+      "aufruf": {
+        "seite": "kundebearbeiten",
+        "arg": "{kunde_vollstaendig_firma}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation (oeffne); Einstieg außerhalb dieser Seite"
+      },
+      "geraet": "desktop"
+    },
+    "wenn": [
+      {
+        "aktion": "erwarten",
+        "anzeige": [
+          {
+            "id": "kundebearbeiten.vorrang",
+            "erwartung": "gewaehlt",
+            "wert": "Nein"
+          }
+        ]
+      },
+      {
+        "id": "kundebearbeiten.vorrang",
+        "aktion": "waehlen",
+        "wert": "Ja"
+      },
+      {
+        "id": "kundebearbeiten.speichern",
+        "aktion": "klicken"
+      }
+    ],
+    "dann": {
+      "anzeige": [
+        {
+          "toast": "Kunde gespeichert"
+        }
+      ],
+      "db": [
+        {
+          "tabelle": "customers",
+          "wo": {
+            "id": "{kunde_vollstaendig_firma}"
+          },
+          "werte": {
+            "vorrang": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "id": "B21",
+    "titel": "Ohne Recht „entscheiden“: Vorrang sichtbar, nur lesbar („nur Meister“); auto_info änderbar",
+    "paket": "AP-EIN",
+    "quelle": [
+      "formulare.kunde.felder[vorrang].ohne_recht",
+      "formulare.kunde.felder[auto_info].ohne_recht"
+    ],
+    "deckt": [],
+    "gegeben": {
+      "login": "login_werkstatt",
+      "datenlagen": [
+        "kunde_vollstaendig_firma",
+        "verzeichnis_pruefadressen"
+      ],
+      "aufruf": {
+        "seite": "kundebearbeiten",
+        "arg": "{kunde_vollstaendig_firma}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation (oeffne); Einstieg außerhalb dieser Seite"
+      },
+      "geraet": "desktop"
+    },
+    "wenn": [],
+    "dann": {
+      "anzeige": [
+        {
+          "id": "kundebearbeiten.vorrang",
+          "erwartung": "sichtbar"
+        },
+        {
+          "id": "kundebearbeiten.vorrang",
+          "erwartung": "gesperrt",
+          "wert": "nur Meister",
+          "option": "Ja"
+        },
+        {
+          "id": "kundebearbeiten.auto_info",
+          "erwartung": "sichtbar"
         }
       ]
     }

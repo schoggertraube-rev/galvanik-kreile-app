@@ -8,6 +8,7 @@ import {
   checkTaB2cScopeForTest,
   checkTaB2d2ScopeForTest,
   checkTaB2eScopeForTest,
+  checkTaB2fScopeForTest,
   runSelftest,
 } from "../../scripts/quality/check-live-package-scope.mjs";
 
@@ -86,6 +87,120 @@ const apgAprExactPaths = [
   "src/modules/eingang/requestGlobalCreate.ts",
   "src/ui/kr/Dialog.tsx",
   "src/ui/kr/GlobalesPlus.tsx",
+] as const;
+
+const apEinInventoryPaths = [
+  "src/app/actions/goodsOut.actions.ts",
+  "src/app/actions/orders.actions.ts",
+  "src/app/settings/SettingsAppAdapter.tsx",
+  "src/components/admin/CompanySettingsForm.tsx",
+  "src/components/warenausgang/WarenausgangQueue.tsx",
+  "src/modules/orders/server/types.ts",
+  "src/modules/werkstatt/server/deriveWerkstattView.ts",
+  "src/modules/werkstatt/server/types.ts",
+  "src/modules/werkstatt/__tests__/deriveWerkstattView.test.ts",
+  "src/modules/fundament/public.ts",
+  "src/lib/server/commands/recordGoodsOutCommand.ts",
+  "src/lib/server/commands/__tests__/recordGoodsOutCommand.test.ts",
+  "src/lib/repositories/companySettingsRepository.ts",
+  "src/lib/email/deliveryMailTemplate.ts",
+  "src/lib/server/__tests__/intakeSuggestions.test.ts",
+  "src/test/f1_5_goods_out.integration.test.ts",
+  "docs/evidence/f0/W4_CROSS_MODULE_READ_PORT_INVENTORY.json",
+  "scripts/quality/f0-verify-http-tests.mjs",
+  "src/app/actions/catalog.actions.ts",
+  "src/app/actions/search.actions.ts",
+  "src/app/api/device-file-changes/route.ts",
+  "src/app/orders/OrderCardAppAdapter.tsx",
+  "src/app/rein/page.tsx",
+  "src/app/settings/SettingsAdminClient.tsx",
+  "src/app/settings/__tests__/SettingsAppAdapter.test.tsx",
+  "src/app/warendurchlauf/__tests__/f1OrderIntakeActions.test.ts",
+  "src/app/warendurchlauf/__tests__/w3StationTenantRead.test.ts",
+  "src/components/layout/EntityOverlayStack.tsx",
+  "src/lib/orderPositionContract.ts",
+  "src/lib/overlayStore.ts",
+  "src/lib/server/__tests__/w2cB2m5u.operationalDueTruth.failClosed.test.ts",
+  "src/lib/server/authorization.ts",
+  "src/lib/server/commands/__tests__/orderContentCommand.test.ts",
+  "src/lib/server/commands/orderContentCommand.ts",
+  "src/lib/server/orderStationRead.ts",
+  "src/modules/katalog/__tests__/catalogServicePort.test.ts",
+  "src/modules/katalog/katalog.manifest.json",
+  "src/modules/katalog/public.ts",
+  "src/modules/katalog/server/catalogServicePort.ts",
+  "src/modules/quotes/server/quoteCommands.ts",
+  "src/modules/suche/public.ts",
+  "src/modules/suche/server/searchTenant.ts",
+  "src/modules/suche/suche.manifest.json",
+  "src/proxy.ts",
+  "src/test/f1_order_intake.integration.test.ts",
+  "src/test/h11_action_matrix.integration.test.ts",
+  "src/test/h18_masterdata_actions.integration.test.ts",
+  "src/test/h18_settings_actions.integration.test.ts",
+  "src/test/localReplayStorage.ts",
+  "src/ui/kr/Formular.tsx",
+  "src/ui/kr/Seitenblatt.tsx",
+  "quality/module-gates-baseline.json",
+  "src/app/layout.tsx",
+  "src/app/telefonnotiz/layout.tsx",
+  "src/app/fonts/Inter-latin.woff2",
+  "src/modules/orders/__tests__/OrderSurfaces.v8.test.tsx",
+  "src/modules/orders/ui/OrderCardView.tsx",
+  "e2e/f1-5-goods-out-ui.real.spec.ts",
+  "src/lib/pdf/__tests__/ImmutableInvoiceDocument.test.tsx",
+  "src/lib/pdf/__tests__/QuoteDocument.test.tsx",
+  "src/test/f1_4_immutable_invoice.integration.test.ts",
+  "src/test/f1_4_immutable_invoice_contract.integration.test.ts",
+  "src/test/f1_5_payment_goods_out_contract.integration.test.ts",
+  "src/test/f1_5_set_payment_mode.integration.test.ts",
+  "src/test/h18_customer_actions.integration.test.ts",
+  "src/test/h18_invoice_actions.integration.test.ts",
+  "src/test/h18_order_admin_actions.integration.test.ts",
+  "src/test/h18_quote_actions.integration.test.ts",
+  "src/test/h18_workshop_actions.integration.test.ts",
+  "src/test/search_tenant.integration.test.ts",
+  "public/manifest.webmanifest",
+  "public/icons/icon-192.png",
+  "src/app/actions/communications.actions.ts",
+  "src/app/actions/complaints.actions.ts",
+  "src/app/actions/customers.actions.ts",
+  "src/app/actions/domainAttachments.actions.ts",
+  "src/app/actions/timeline.actions.ts",
+  "src/app/customers/CustomerCardAppAdapter.tsx",
+  "src/app/warendurchlauf/actions.ts",
+  "src/components/attachments/DomainAttachmentPanel.tsx",
+  "src/components/communication/CommunicationPanel.tsx",
+  "src/components/home/OfficeHomeClient.tsx",
+  "src/components/intake/CameraCapture.tsx",
+  "src/components/layout/F1SourceDialogs.tsx",
+  "src/components/layout/PwaRegister.tsx",
+  "src/db/schema.ts",
+  "src/db/schema_buchhaltung.ts",
+  "src/lib/buchhaltung/erechnung/ERechnungParser.ts",
+  "src/lib/intakeSuggestionsContract.ts",
+  "src/lib/pdf/ImmutableInvoiceDocument.tsx",
+  "src/lib/pdf/QuoteDocument.tsx",
+  "src/lib/repositories/complaintsRepository.ts",
+  "src/lib/server/azureDocumentIntelligence.ts",
+  "src/lib/server/commands/immutableInvoiceCommand.ts",
+  "src/lib/server/communicationPort.ts",
+  "src/lib/server/customerSummaryRead.ts",
+  "src/lib/server/documentIntelligencePort.ts",
+  "src/lib/server/intakeSuggestions.ts",
+  "src/lib/server/intakeTextRecognition.ts",
+  "src/lib/server/microsoftGraph.ts",
+  "src/lib/server/orderCardRead.ts",
+  "src/lib/server/paymentContract.ts",
+  "src/lib/server/todayDashboardPolicy.ts",
+  "src/lib/types/customer.ts",
+  "src/modules/communications/public.ts",
+  "src/modules/complaints/public.ts",
+  "src/modules/customers/public.ts",
+  "src/modules/eingang/public.ts",
+  "src/modules/fundament/server/systemSettingsPort.ts",
+  "src/modules/supplier-invoices/public.ts",
+  "src/modules/tasks/public.ts",
 ] as const;
 
 describe("Kreile live package scope", () => {
@@ -311,6 +426,99 @@ describe("Kreile live package scope", () => {
       `SALES_STAGE_B2_SCOPE:${adjacent}`,
       `SALES_STAGE_B2_MIGRATION_INVALID:${adjacent}`,
     ]));
+  });
+
+  it("allows only the TA-B2f anchor paths on its pinned main base", () => {
+    expect(checkTaB2fScopeForTest({
+      files: [
+        ".gitattributes",
+        ".github/workflows/agentur-gate.yml",
+        "docs/project/arbeitspakete/TRUST_ANCHOR_B2F.md",
+        ".github/workflows/eslint-ratchet.yml",
+        "eslint.config.mjs",
+        "scripts/quality/check-authoritative-sources.mjs",
+        "scripts/spec/generate-flow-tests.mjs",
+        "docs/project/endversion/ui/endversion_design.css",
+        "docs/project/linie/ui/CURRENT_DESIGN_REFERENCE.json",
+        "docs/project/endversion/codex/BAUPLAN.json",
+        "docs/evidence/live-line/b2/TRUST_ANCHOR_B2F.json",
+      ],
+      mission: b2cAnchorMission,
+      branch: "codex/ta-b2f",
+      baseSha: "06e56daae267e49a7e23a5c40a70fbbef21b8cb8",
+    })).toEqual([]);
+    expect(checkTaB2fScopeForTest({
+      files: ["src/app/page.tsx"],
+      mission: b2cAnchorMission,
+      branch: "codex/ta-b2f",
+      baseSha: "06e56daae267e49a7e23a5c40a70fbbef21b8cb8",
+    })).toContain("TA_B2F_SCOPE:src/app/page.tsx");
+    expect(checkTaB2fScopeForTest({
+      files: ["docs/project/endversion/codex/BAUPLAN.json"],
+      mission: b2cAnchorMission,
+      branch: "codex/ta-b2f",
+      baseSha: "06e56daae267e49a7e23a5c40a70fbbef21b8cb8",
+    })).toEqual([]);
+    expect(checkSalesStageB2ScopeForTest({
+      files: ["docs/project/endversion/codex/BAUPLAN.json"],
+      mission: b2Mission,
+      branch: "kreile/b2-ein-2",
+    })).toContain("SALES_STAGE_B2_SCOPE:docs/project/endversion/codex/BAUPLAN.json");
+    expect(checkSalesStageB2ScopeForTest({
+      files: [".gitattributes"],
+      mission: b2Mission,
+      branch: "kreile/b2-ein-2",
+    })).toContain("SALES_STAGE_B2_SCOPE:.gitattributes");
+  });
+
+  it("accepts the complete AP-EIN inventory and only one additive migration per part", () => {
+    for (const file of apEinInventoryPaths) {
+      expect(checkSalesStageB2ScopeForTest({
+        files: [file],
+        mission: b2Mission,
+        branch: "kreile/b2-ein-1",
+      }), file).toEqual([]);
+    }
+    for (const file of [
+      "supabase/migrations/20261103020000_b2_kunde_k1.sql",
+      "supabase/migrations/20261103025000_ein1_kunde_schreibweg.sql",
+      "supabase/migrations/20261103030000_ein2_erfassung.sql",
+      "supabase/migrations/20261103040000_ein3_ware_original.sql",
+      "supabase/migrations/20261103050000_ein4_nachrichten.sql",
+      "supabase/migrations/20261103060000_ein5_eingangsrechnungen.sql",
+      "supabase/migrations/20261103070000_ein6_korrekturen.sql",
+    ]) {
+      expect(checkSalesStageB2ScopeForTest({
+        files: [file],
+        entries: [{ status: "A", path: file }],
+        mission: b2Mission,
+        branch: "kreile/b2-ein-2",
+      }), file).toEqual([]);
+    }
+    const adjacent = "src/modules/inventory/public.ts";
+    expect(checkSalesStageB2ScopeForTest({ files: [adjacent], mission: b2Mission, branch: "kreile/b2-ein-2" }))
+      .toContain(`SALES_STAGE_B2_SCOPE:${adjacent}`);
+  });
+
+  it("permits the frozen UI foundation paths, but never immutable UI sources in product PRs", () => {
+    for (const branch of ["kreile/b2-ein-0b", "kreile/b2-ein-6"]) {
+      for (const file of ["src/app/globals.css", "src/styles/tokens.css", "src/styles/mock/mock-kreile-compat.css", "src/ui/kr/Dialog.tsx", "docs/project/endversion/ui/routen.json"]) {
+        expect(checkSalesStageB2ScopeForTest({files:[file],mission:b2Mission,branch}), branch + ":" + file).toEqual([]);
+      }
+      for (const file of ["docs/project/endversion/ui/endversion_design.css", "docs/project/endversion/ui/SICHTVERTRAG.json", "docs/project/endversion/ui/pruefe_sicht.cjs"]) {
+        expect(checkSalesStageB2ScopeForTest({files:[file],mission:b2Mission,branch})).toContain("SALES_STAGE_B2_SCOPE:" + file);
+      }
+    }
+  });
+
+  it("accepts stacked parts but rejects a second migration in every individual part", () => {
+    const files = ["supabase/migrations/20261103020000_b2_kunde_k1.sql",
+      ...[0, 1, 2, 3, 4, 5, 6].map(part => "supabase/migrations/20261103030000_ein" + part + "_teil.sql")];
+    expect(checkSalesStageB2ScopeForTest({files,entries:files.map(path=>({status:"A",path})),mission:b2Mission,branch:"kreile/b2-ein-5"})).toEqual([]);
+    for (const part of [0, 1, 2, 3, 4, 5, 6]) {
+      const duplicate = ["supabase/migrations/20261103030001_ein" + part + "_a.sql", "supabase/migrations/20261103030002_ein" + part + "_b.sql"];
+      expect(checkSalesStageB2ScopeForTest({files:duplicate,entries:duplicate.map(path=>({status:"A",path})),mission:b2Mission,branch:"kreile/b2-ein-5"})).toContain("SALES_STAGE_B2_MIGRATION_COUNT:2");
+    }
   });
 
   it("accepts every AP-G/AP-R candidate path and no adjacent product path", () => {

@@ -1,4 +1,4 @@
-// Generated from BAUPLAN SHA-256 5E7B880BD9D4B35EAF7BF906F2693011192933E000FA7AEA94222395F34A1F70. Do not edit.
+// Generated from BAUPLAN SHA-256 888114C6247B711CC02D8C78BB9429ADCF9C494CFBC2E066F5202C6E966BB0D8. Do not edit.
 import { test } from "@playwright/test";
 import expectedRed from "./_erwartet_rot.json";
 import { prepareGeneratedSeed, runGeneratedFlowCase, type FlowCase } from "./_harness";
@@ -1481,7 +1481,8 @@ const cases = [
     "paket": "AP-K1",
     "quelle": [
       "screens[kundeneu].aktionen[abbrechen]",
-      "screens[entwurf].abnahme[0]"
+      "screens[entwurf].abnahme[0]",
+      "verhalten_appweit.rueckfrage"
     ],
     "deckt": [
       "werkbank.abbrechen"
@@ -1532,6 +1533,10 @@ const cases = [
         },
         {
           "id": "entwurf.weiter-bearbeiten",
+          "erwartung": "sichtbar"
+        },
+        {
+          "id": "entwurf.speichern",
           "erwartung": "sichtbar"
         }
       ]
@@ -1593,7 +1598,8 @@ const cases = [
     "paket": "AP-K1",
     "quelle": [
       "screens[kundeneu].aktionen[abbrechen]",
-      "screens[entwurf].abnahme[0]"
+      "screens[entwurf].abnahme[0]",
+      "verhalten_appweit.rueckfrage"
     ],
     "deckt": [
       "werkbank.abbrechen"
@@ -1644,6 +1650,10 @@ const cases = [
         },
         {
           "id": "entwurf.weiter-bearbeiten",
+          "erwartung": "sichtbar"
+        },
+        {
+          "id": "entwurf.speichern",
           "erwartung": "sichtbar"
         }
       ]
@@ -1705,7 +1715,8 @@ const cases = [
     "paket": "AP-K1",
     "quelle": [
       "screens[kundeneu].aktionen[abbrechen]",
-      "screens[entwurf].abnahme[0]"
+      "screens[entwurf].abnahme[0]",
+      "verhalten_appweit.rueckfrage"
     ],
     "deckt": [
       "werkbank.abbrechen"
@@ -1756,6 +1767,10 @@ const cases = [
         },
         {
           "id": "entwurf.weiter-bearbeiten",
+          "erwartung": "sichtbar"
+        },
+        {
+          "id": "entwurf.speichern",
           "erwartung": "sichtbar"
         }
       ]
@@ -2436,11 +2451,10 @@ const cases = [
   },
   {
     "id": "K24",
-    "titel": "Werkzeug „Aus Mail-Signatur“ nur mit Recht „mails“",
-    "paket": null,
+    "titel": "Kein Knopf „Aus Mail-Signatur“ in 3.1 (Signatur nur aus der Mail, Runde 36)",
+    "paket": "AP-K1",
     "quelle": [
-      "screens[kundeneu].erfassen.werkzeuge[aus-mail-signatur].recht",
-      "screens[kundeneu].abnahme[7]"
+      "screens[kundeneu].regeln (Runde 36)"
     ],
     "deckt": [],
     "gegeben": {
@@ -2467,7 +2481,7 @@ const cases = [
     "dann": {
       "anzeige": [
         {
-          "id": "kundeneu.aus-mail-signatur",
+          "text": "Aus Mail-Signatur",
           "erwartung": "nicht_sichtbar"
         },
         {
@@ -2480,7 +2494,7 @@ const cases = [
   {
     "id": "K25",
     "titel": "Schnell erfassen: Rechtsform → Firma, Name, Telefon, E-Mail erkannt mit Herkunft",
-    "paket": null,
+    "paket": "AP-EIN",
     "quelle": [
       "bausteine_vertraege.erfassen.erkennung.kunde",
       "bausteine_vertraege.erfassen.erkennung.text_regeln",
@@ -2716,6 +2730,235 @@ const cases = [
           "id": "kundeneu.nachname",
           "erwartung": "wert",
           "wert": "Sigmaprobe"
+        }
+      ]
+    }
+  },
+  {
+    "id": "Q04",
+    "titel": "Kacheln Firma/Privat und Segment Anrede: gewählte grün, die anderen neutral",
+    "paket": "AP-Q1",
+    "quelle": [
+      "verhalten_appweit.auswahl",
+      "formulare.kunde.felder[kundentyp]",
+      "formulare.kunde.felder[anrede]"
+    ],
+    "deckt": [],
+    "gegeben": {
+      "login": "login_meister",
+      "datenlagen": [],
+      "aufruf": {
+        "seite": "kundeneu",
+        "arg": "(leer)",
+        "weg": [
+          {
+            "id": "navigation.plus",
+            "aktion": "klicken"
+          },
+          {
+            "id": "rein.kunde-anlegen",
+            "aktion": "klicken"
+          }
+        ],
+        "quelle": "rein.inhalt.ohne_vorlage[kunde-anlegen]"
+      },
+      "geraet": "desktop"
+    },
+    "wenn": [
+      {
+        "aktion": "erwarten",
+        "anzeige": [
+          {
+            "id": "kundeneu.kundentyp",
+            "erwartung": "nicht_gewaehlt",
+            "option": "Firma"
+          },
+          {
+            "id": "kundeneu.kundentyp",
+            "erwartung": "nicht_gewaehlt",
+            "option": "Privat"
+          }
+        ]
+      },
+      {
+        "id": "kundeneu.kundentyp",
+        "aktion": "waehlen",
+        "wert": "Privat"
+      },
+      {
+        "id": "kundeneu.anrede",
+        "aktion": "waehlen",
+        "wert": "Frau"
+      }
+    ],
+    "dann": {
+      "anzeige": [
+        {
+          "id": "kundeneu.kundentyp",
+          "erwartung": "gewaehlt",
+          "wert": "Privat"
+        },
+        {
+          "id": "kundeneu.kundentyp",
+          "erwartung": "nicht_gewaehlt",
+          "option": "Firma"
+        },
+        {
+          "id": "kundeneu.anrede",
+          "erwartung": "gewaehlt",
+          "wert": "Frau"
+        },
+        {
+          "id": "kundeneu.anrede",
+          "erwartung": "nicht_gewaehlt",
+          "option": "Herr"
+        },
+        {
+          "id": "kundeneu.anrede",
+          "erwartung": "nicht_gewaehlt",
+          "option": "ohne"
+        }
+      ]
+    }
+  },
+  {
+    "id": "K29",
+    "titel": "Kunde anlegen: „automatisch informieren“ vorbelegt Ja; „Vorrang“ gibt es erst in 5.2",
+    "paket": "AP-EIN",
+    "quelle": [
+      "formulare.kunde.felder[auto_info].vorbelegung",
+      "formulare.kunde.felder[vorrang].wann"
+    ],
+    "deckt": [],
+    "gegeben": {
+      "login": "login_meister",
+      "datenlagen": [],
+      "aufruf": {
+        "seite": "kundeneu",
+        "arg": "(leer)",
+        "weg": [
+          {
+            "id": "navigation.plus",
+            "aktion": "klicken"
+          },
+          {
+            "id": "rein.kunde-anlegen",
+            "aktion": "klicken"
+          }
+        ],
+        "quelle": "rein.inhalt.ohne_vorlage[kunde-anlegen]"
+      },
+      "geraet": "desktop"
+    },
+    "wenn": [
+      {
+        "id": "kundeneu.kundentyp",
+        "aktion": "waehlen",
+        "wert": "Firma"
+      }
+    ],
+    "dann": {
+      "anzeige": [
+        {
+          "id": "kundeneu.auto_info",
+          "erwartung": "gewaehlt",
+          "wert": "Ja"
+        },
+        {
+          "id": "kundeneu.vorrang",
+          "erwartung": "nicht_sichtbar"
+        }
+      ]
+    }
+  },
+  {
+    "id": "KK02",
+    "titel": "Kundenkarte aus 3.1 („Vorhandenen öffnen“) öffnet als Ebene; × zurück in 3.1 mit den Eingaben",
+    "paket": "AP-EIN",
+    "quelle": [
+      "verhalten_appweit.kundenkarte_im_eingang",
+      "bausteine_vertraege.dublette.interaktion"
+    ],
+    "deckt": [
+      "kundeneu.vorhandenen-oeffnen"
+    ],
+    "gegeben": {
+      "login": "login_meister",
+      "datenlagen": [
+        "kunde_vollstaendig_firma"
+      ],
+      "aufruf": {
+        "seite": "kundeneu",
+        "arg": "(leer)",
+        "weg": [
+          {
+            "id": "navigation.plus",
+            "aktion": "klicken"
+          },
+          {
+            "id": "rein.kunde-anlegen",
+            "aktion": "klicken"
+          }
+        ],
+        "quelle": "rein.inhalt.ohne_vorlage[kunde-anlegen]"
+      },
+      "geraet": "desktop"
+    },
+    "wenn": [
+      {
+        "id": "kundeneu.kundentyp",
+        "aktion": "waehlen",
+        "wert": "Firma"
+      },
+      {
+        "id": "kundeneu.telefon",
+        "aktion": "tippen",
+        "wert": "{kunde_vollstaendig_firma.phone}"
+      },
+      {
+        "id": "kundeneu.telefon",
+        "aktion": "verlassen"
+      },
+      {
+        "id": "kundeneu.vorhandenen-oeffnen",
+        "aktion": "klicken"
+      },
+      {
+        "aktion": "erwarten",
+        "anzeige": [
+          {
+            "oben": "kunde"
+          },
+          {
+            "id": "kundeneu",
+            "erwartung": "sichtbar"
+          }
+        ]
+      },
+      {
+        "id": "kunde.schliessen",
+        "aktion": "klicken"
+      }
+    ],
+    "dann": {
+      "anzeige": [
+        {
+          "oben": "kundeneu"
+        },
+        {
+          "id": "kundeneu.telefon",
+          "erwartung": "wert",
+          "wert": "{kunde_vollstaendig_firma.phone}"
+        },
+        {
+          "id": "entwurf",
+          "erwartung": "nicht_sichtbar"
+        }
+      ],
+      "db": [
+        {
+          "tabelle": "customers",
+          "neu": 0
         }
       ]
     }
