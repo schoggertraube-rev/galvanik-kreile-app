@@ -9,6 +9,22 @@ const defaultBauplan = "docs/project/endversion/codex/BAUPLAN.json";
 const expectedRedPath = path.join(generatedRoot, "_erwartet_rot.json");
 const workQueuePath = path.join(root, "docs", "project", "arbeitspakete", "WORKQUEUE.json");
 
+// All model-to-storage names live here; the harness never guesses another column.
+const DATABASE_MAPPING = Object.freeze({
+  orders: { table: "orders", columns: { kunde: "customer_id", art: "is_quote", liefertermin: "promised_due_date", terminstatus: "intake_term_status", uebergabe: "handover_mode", zahlungsmodus: "payment_mode", eingangsart: "intake_source" }, transforms: { art: "order_kind", uebergabe: "handover", zahlungsmodus: "payment_mode", geprueft: "order_intake_event" } },
+  items: { table: "items", columns: { auftrag: "order_id", bezeichnung: "name", menge: "quantity", einheit: "unit", oberflaeche: "surface_requested", ausfuehrung: "execution_requested" }, transforms: {} },
+  customers: { table: "customers", columns: { customer_type: "type", zahlungsbedingung: "payment_preference", notiz: "notes" }, transforms: {} },
+  intake_item: { table: "intake_item", columns: {}, transforms: {} },
+  intake_file: { table: "intake_file", columns: {}, transforms: {} },
+  intake_suggestion: { table: "intake_suggestion", columns: {}, transforms: {} },
+  intake_drafts: { schema: "private", table: "intake_drafts", columns: { login: "actor_id" }, transforms: {} },
+  goods_receipt: { table: "goods_receipt", columns: {}, transforms: {} },
+  outbox_mails: { table: "outbox_mails", columns: {}, transforms: {} },
+  task: { table: "tasks", columns: {}, transforms: {} },
+  complaint: { table: "complaints", columns: { auftrag_id: "order_id", kunde_id: "customer_id", mangel: "reason" }, transforms: {} },
+  supplier_invoice: { table: "supplier_invoice", columns: {}, transforms: {} },
+});
+
 function parseArguments(argv) {
   let bauplan = defaultBauplan;
   let check = false;
@@ -98,7 +114,7 @@ function renderSeed(model) {
     login_buero_ohne_geld: ["6666", "$2b$12$REJw.ffLob7XTc35.mq5BuGF5QfanyzWTey1N0rMh3hy8DUuQtay2"],
     login_einstellungen: ["7777", "$2b$12$cgAV2CpgQkfW9zMsrQSFUOIobbZIEwVppDcRJA2G378JOw9jpSlyy"],
   };
-  const allowedRights = new Set(["auftraege", "eingang", "kunden", "geld", "kassieren", "mails", "einstellungen", "logins", "wartung"]);
+  const allowedRights = new Set(["auftraege", "eingang", "kunden", "geld", "kassieren", "mails", "einstellungen", "logins", "wartung", "entscheiden"]);
   const users = Object.entries(model.logins).map(([name, login], index) => ({
     name,
     id: loginIds[name],
@@ -110,9 +126,7 @@ function renderSeed(model) {
     rights: login.rechte.filter((right) => allowedRights.has(right)),
   }));
   const customers = customerSeedRows(model.datenlagen);
-  const addresses = Object.values(model.datenlagen)
-    .filter((fixture) => fixture?.tabelle === "address_directory")
-    .flatMap((fixture) => fixture.zeilen ?? []);
+  const fixtureSql = {};
   const lines = [
     "-- Generated from BAUPLAN.testmodell. Local replay database only.",
     "BEGIN;",
@@ -125,10 +139,16 @@ function renderSeed(model) {
       `DELETE FROM public.app_user_rights WHERE tenant_id = 'galvanik-kreile' AND user_id = ${quoted(user.id)}::uuid;`,
     );
     for (const right of user.rights) {
-      lines.push(`INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', ${quoted(user.id)}::uuid, ${quoted(right)}) ON CONFLICT DO NOTHING;`);
+      const insertRight = `INSERT INTO public.app_user_rights (tenant_id, user_id, bereich) VALUES ('galvanik-kreile', ${quoted(user.id)}::uuid, ${quoted(right)}) ON CONFLICT DO NOTHING;`;
+      if (right === "entscheiden") {
+        lines.push(`DO $flow$ BEGIN BEGIN ${insertRight} EXCEPTION WHEN check_violation THEN RAISE NOTICE 'FLOW_SEED_AREA_PENDING:entscheiden'; END; END $flow$;`);
+      } else {
+        lines.push(insertRight);
+      }
     }
   }
   for (const customer of customers) {
+    const seedStart = lines.length;
     const c = customer.columns;
     lines.push(
       "INSERT INTO public.customers (id, tenant_id, customer_number, name, type, company_name, contact_person, phone, email, street, address, zip_code, city, country, payment_preference, shipping_preference, vat_id, ziel_freigeschaltet, ziel_tage, skonto_prozent, skonto_tage, source)",
@@ -154,8 +174,11 @@ function renderSeed(model) {
       );
     }
     lines.push("END $flow$;");
+    fixtureSql[customer.name] = lines.splice(seedStart).join("\n");
   }
-  if (addresses.length > 0) {
+  for (const [fixtureName, fixture] of Object.entries(model.datenlagen).filter(([, value]) => value.tabelle === "address_directory")) {
+    const seedStart = lines.length;
+    const addresses = fixture.zeilen ?? [];
     lines.push("DO $flow$ BEGIN IF to_regclass('public.address_directory') IS NOT NULL THEN");
     for (const address of addresses) {
       lines.push(
@@ -165,17 +188,41 @@ function renderSeed(model) {
       );
     }
     lines.push("END IF; END $flow$;");
+    fixtureSql[fixtureName] = lines.splice(seedStart).join("\n");
   }
   lines.push("COMMIT;", "");
+  const customerRuntime = new Map(customers.map((customer) => [customer.name, {
+    id: customer.id,
+    tabelle: "customers",
+    customer_number: customer.customerNumber,
+    ...model.datenlagen[customer.name].werte,
+  }]));
+  const fixtureCounters = new Map();
+  const allFixtures = Object.fromEntries(Object.entries(model.datenlagen).map(([name, fixture], index) => {
+    const customer = customerRuntime.get(name);
+    if (customer) return [name, customer];
+    const sequence = (fixtureCounters.get(fixture.tabelle) ?? 0) + 1;
+    fixtureCounters.set(fixture.tabelle, sequence);
+    const generatedKeys = fixture.tabelle === "orders"
+      ? { order_number: `A-2099-${String(9000 + sequence)}` }
+      : fixture.tabelle === "complaint"
+        ? { nummer: `RK-2099-${String(9000 + sequence)}` }
+        : {};
+    return [name, {
+      id: `20000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+      tabelle: fixture.tabelle,
+      ...generatedKeys,
+      ...(fixture.werte ?? {}),
+      ...(fixture.zeilen ? { zeilen: fixture.zeilen } : {}),
+    }];
+  }));
   return {
     sql: lines.join("\n"),
     runtime: {
+      database: DATABASE_MAPPING,
+      fixtureSql,
       logins: Object.fromEntries(users.map((user) => [user.name, { id: user.id, pin: user.pin }])),
-      datenlagen: Object.fromEntries(customers.map((customer) => [customer.name, {
-        id: customer.id,
-        customer_number: customer.customerNumber,
-        ...model.datenlagen[customer.name].werte,
-      }])),
+      datenlagen: allFixtures,
     },
   };
 }
@@ -187,13 +234,14 @@ function renderPage(pageName, page, bauplanSha) {
     + `import expectedRed from "./_erwartet_rot.json";\n`
     + `import { prepareGeneratedSeed, runGeneratedFlowCase, type FlowCase } from "./_harness";\n\n`
     + `const cases = ${cases} as unknown as FlowCase[];\n\n`
-    + `test.beforeEach(async () => { await prepareGeneratedSeed(); });\n\n`
+
     + `test.describe(${JSON.stringify(`BAUPLAN Wege · ${pageName}`)}, () => {\n`
     + `  for (const flowCase of cases) {\n`
     + `    const packageTag = flowCase.paket ? \`@\${flowCase.paket}\` : "@UNASSIGNED";\n`
     + `    test(\`\${flowCase.id || "OFFEN"} \${packageTag} · \${flowCase.titel || "noch nicht beschrieben"}\`, async ({ page }) => {\n`
     + `      const red = expectedRed[flowCase.id as keyof typeof expectedRed];\n`
     + `      test.fail(Boolean(red), red ? \`\${red.paket}: \${red.grund}\` : undefined);\n`
+    + `      await prepareGeneratedSeed(flowCase);\n`
     + `      await runGeneratedFlowCase(page, flowCase);\n`
     + `    });\n`
     + `  }\n`

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import postgres from "postgres";
 import { createPinLoginHandle } from "../../src/lib/server/pinLoginHandle";
+import { berlinCalendarDay, isWorkingDay, plusWorkingDays, previousWorkingDay } from "../../src/lib/domain/workingDays";
 import { generatedFlowRuntime } from "./_model";
 
 export type FlowExpectation = {
@@ -14,6 +15,8 @@ export type FlowExpectation = {
   oben?: string;
   dialoge?: number;
   toast?: string;
+  druck?: number;
+  option?: string;
 };
 
 export type FlowStep = {
@@ -21,6 +24,7 @@ export type FlowStep = {
   nr?: number;
   aktion: string;
   wert?: unknown;
+  arg?: unknown;
   anzeige?: FlowExpectation[];
   db?: FlowDbExpectation[];
 };
@@ -48,21 +52,296 @@ export type FlowCase = {
 
 type FlowRunState = {
   before: Map<string, number>;
+  beforeIds: Map<string, Set<string>>;
   rows: Map<string, Record<string, unknown>>;
   restoreOnlineAfterWrite: boolean;
+  loginId: string;
 };
 
 const TENANT = "galvanik-kreile";
+const VALUE_IS_SET = "__FLOW_VALUE_IS_SET__";
 const databaseUrl = process.env.DATABASE_URL?.trim();
 if (!databaseUrl) throw new Error("FLOW_HARNESS_DATABASE_URL_REQUIRED");
-if (!/^postgresql?:\/\/postgres:postgres@127\.0\.0\.1:\d+\/postgres$/.test(databaseUrl)) {
+if (!/^postgresql?:\/\/postgres:postgres@127\.0\.0\.1:54322\/postgres$/.test(databaseUrl)) {
   throw new Error("FLOW_HARNESS_LOCAL_REPLAY_DATABASE_REQUIRED");
 }
-const sql = postgres(databaseUrl, { max: 1, prepare: false });
+const pendingAreas = new Set<string>();
+let fixtureLoginId: string = generatedFlowRuntime.logins.login_meister.id;
+const sql = postgres(databaseUrl, { max: 1, prepare: false, onnotice: (notice) => {
+  if (notice.message.startsWith("truncate cascades")) return;
+  if (notice.message.startsWith("FLOW_SEED_AREA_PENDING:")) {
+    if (pendingAreas.has(notice.message)) return;
+    pendingAreas.add(notice.message);
+  }
+  console.info("FLOW_REPLAY_NOTICE", notice.message);
+} });
 
-export async function prepareGeneratedSeed() {
+export async function prepareGeneratedSeed(flowCase: FlowCase) {
+  fixtureLoginId = generatedFlowRuntime.logins[flowCase.gegeben.login].id;
+  await resetGeneratedDomain();
   const seed = readFileSync(path.resolve(process.cwd(), "e2e/generated/_seed.sql"), "utf8");
   await sql.unsafe(seed);
+  const names = selectedFixtureNames(flowCase.gegeben.datenlagen);
+  const seeds = generatedFlowRuntime.fixtureSql as unknown as Record<string, string>;
+  for (const name of names) {
+    if (seeds[name]) await sql.unsafe(seeds[name]);
+    else await seedSupplementalFixtures([generatedFixtures[name]!]);
+  }
+}
+
+type GeneratedFixture = {
+  id: string;
+  tabelle: string;
+  order_number?: string;
+  nummer?: string;
+  [key: string]: unknown;
+};
+
+const generatedFixtures = generatedFlowRuntime.datenlagen as unknown as Record<string, GeneratedFixture>;
+const columnCache = new Map<string, Map<string, { column_name: string; data_type: string; udt_name: string }>>();
+let baselineSettings: Record<string, unknown>[] | null = null;
+
+function selectedFixtureNames(requested: string[]) {
+  const selected: string[] = [];
+  const visiting = new Set<string>();
+  const done = new Set<string>();
+  const visit = (name: string) => {
+    if (done.has(name)) return;
+    if (visiting.has(name)) throw new Error(`FLOW_FIXTURE_CYCLE:${name}`);
+    const fixture = generatedFixtures[name];
+    if (!fixture) throw new Error(`FLOW_FIXTURE_UNKNOWN:${name}`);
+    visiting.add(name);
+    for (const match of JSON.stringify(fixture).matchAll(/\{([a-z_0-9]+)(?:\.[a-z_]+)?\}/g)) {
+      if (generatedFixtures[match[1]!]) visit(match[1]!);
+    }
+    visiting.delete(name);
+    done.add(name);
+    selected.push(name);
+  };
+  requested.forEach(visit);
+  return selected;
+}
+
+async function resetGeneratedDomain() {
+  if (baselineSettings === null) {
+    const rows = await sql<{ row: Record<string, unknown> }[]>`SELECT to_jsonb(settings) AS row FROM public.company_settings settings WHERE tenant_id = ${TENANT}`;
+    baselineSettings = rows.map((row) => row.row);
+  }
+  const names = [...new Set([...Object.values(databaseMapping).map((entry) => `${entry.schema ?? "public"}.${entry.table}`), "public.events"])];
+  const present = await sql<{ schema: string; name: string }[]>`SELECT schemaname AS schema, tablename AS name FROM pg_tables WHERE schemaname || '.' || tablename = ANY(${names}::text[]) ORDER BY schemaname, tablename`;
+  if (present.some((row) => !/^[a-z_]+$/.test(row.name) || !["public", "private"].includes(row.schema))) throw new Error("FLOW_REPLAY_TABLE_NAME_INVALID");
+  const targets = present.map((row) => `"${row.schema}"."${row.name}"`).join(", ");
+  const protectedRows = await sql<{ relname: string }[]>`WITH RECURSIVE affected(oid) AS (
+    SELECT relation.oid FROM pg_class relation JOIN pg_namespace schema ON schema.oid = relation.relnamespace
+    WHERE schema.nspname || '.' || relation.relname = ANY(${names}::text[])
+    UNION SELECT constraint_row.conrelid FROM pg_constraint constraint_row JOIN affected ON affected.oid = constraint_row.confrelid WHERE constraint_row.contype = 'f'
+  ) SELECT relation.relname FROM affected JOIN pg_class relation ON relation.oid = affected.oid
+    WHERE relation.relname IN ('app_users', 'app_user_rights')`;
+  if (protectedRows.length) throw new Error("FLOW_REPLAY_CLEANUP_SCOPE_INVALID");
+  // Fixture cleanup only, on the guarded local replay connection. Append-only
+  // tables may be reset here; real app connections retain every trigger.
+  await sql.begin(async (cleanup) => {
+    await cleanup.unsafe("SET LOCAL session_replication_role = replica");
+    await cleanup.unsafe(`TRUNCATE TABLE ${targets} CASCADE`);
+  });
+  await sql`DELETE FROM public.company_settings WHERE tenant_id = ${TENANT}`;
+  for (const row of baselineSettings) await upsertFixture("company_settings", row);
+}
+
+async function tableColumns(table: string) {
+  const cached = columnCache.get(table);
+  if (cached) return cached;
+  const rows = await sql<{ column_name: string; data_type: string; udt_name: string }[]>`
+    SELECT column_name, data_type, udt_name
+    FROM information_schema.columns
+    WHERE table_schema = ${fixtureStorageSchema(table)} AND table_name = ${table}
+  `;
+  const columns = new Map(rows.map((row) => [row.column_name, row]));
+  columnCache.set(table, columns);
+  return columns;
+}
+
+function parameterCast(index: number, column: { data_type: string; udt_name: string }) {
+  if (column.data_type === "json" || column.data_type === "jsonb") return `$${index}::${column.data_type}`;
+  if (column.data_type === "ARRAY") return `$${index}::${column.udt_name.replace(/^_/, "")}[]`;
+  if (column.data_type === "uuid") return `$${index}::uuid`;
+  if (column.data_type === "date") return `$${index}::date`;
+  if (column.data_type.startsWith("timestamp")) return `$${index}::timestamptz`;
+  return `$${index}`;
+}
+
+async function upsertFixture(table: string, values: Record<string, unknown>) {
+  const columns = await tableColumns(table);
+  if (columns.size === 0) throw new Error(`FLOW_MODEL_TABLE_NOT_BUILT:${table}`);
+  const entries = Object.entries(values).filter(([name, value]) => columns.has(name) && value !== undefined);
+  if (!entries.some(([name]) => name === "id")) throw new Error(`FLOW_SEED_ID_REQUIRED:${table}`);
+  const params = entries.map(([name, value]) => {
+    const column = columns.get(name)!;
+    return column.data_type === "json" || column.data_type === "jsonb" ? sql.json(value as postgres.JSONValue) : value;
+  });
+  const names = entries.map(([name]) => `"${name}"`);
+  const placeholders = entries.map(([name], index) => parameterCast(index + 1, columns.get(name)!));
+  const updates = entries.filter(([name]) => name !== "id").map(([name]) => `"${name}" = EXCLUDED."${name}"`);
+  await sql.unsafe(
+    `INSERT INTO ${qualifiedStorageTable(table)} (${names.join(", ")}) VALUES (${placeholders.join(", ")}) ON CONFLICT (id) DO UPDATE SET ${updates.join(", ")}`,
+    params as never[],
+  );
+}
+
+function resolvedFixture(fixture: GeneratedFixture) {
+  const loginId = fixtureLoginId;
+  return resolveValue(fixture, {
+    before: new Map(), beforeIds: new Map(), rows: new Map(), restoreOnlineAfterWrite: false, loginId,
+  }) as GeneratedFixture;
+}
+
+function unitLabel(value: unknown) {
+  return value === "stueck" ? "Stück" : value === "dm2" ? "dm²" : value;
+}
+
+async function seedOrderFixture(fixture: GeneratedFixture, orderIndex: number) {
+  const value = resolvedFixture(fixture);
+  const positions = Array.isArray(value.positionen) ? value.positionen as Array<Record<string, unknown>> : [];
+  const customerId = String(value.kunde ?? "");
+  const station = String(value.station ?? "angenommen");
+  await upsertFixture("orders", {
+    id: value.id,
+    tenant_id: TENANT,
+    order_number: value.order_number,
+    customer_id: customerId,
+    title: positions[0]?.bezeichnung ?? value.order_number,
+    task: positions.map((position) => position.bezeichnung).filter(Boolean).join(", "),
+    station,
+    current_station: station,
+    current_station_id: station,
+    status: station === "abgeschlossen" ? "completed" : "in_progress",
+    parts: positions,
+    intake_date: value.angenommen_am ?? new Date().toISOString(),
+    due_date: value.liefertermin,
+    promised_due_date: value.liefertermin,
+    payment_mode: value.zahlungsmodus === "bar" ? "abholung" : value.zahlungsmodus,
+    handover_mode: value.uebergabe === "abholung" ? "pickup" : value.uebergabe === "versand" ? "shipping" : value.uebergabe,
+    intake_term_status: value.terminstatus,
+    intake_source: value.eingangsart,
+    source: "FLOW_SPEC",
+    source_ref: value.id,
+    ware: value.ware,
+    angenommen_am: value.angenommen_am,
+  });
+  for (let positionIndex = 0; positionIndex < positions.length; positionIndex += 1) {
+    const position = positions[positionIndex]!;
+    const suffix = String(700000 + orderIndex * 100 + positionIndex).padStart(12, "0");
+    await upsertFixture("items", {
+      id: `30000000-0000-4000-8000-${suffix}`,
+      tenant_id: TENANT,
+      order_id: value.id,
+      customer_id: customerId,
+      name: position.bezeichnung,
+      quantity: position.menge ?? 1,
+      current_station_id: station,
+      material: position.material,
+      surface_requested: position.oberflaeche,
+      execution_requested: position.ausfuehrung ?? "offen",
+      unit: unitLabel(position.einheit),
+      preis_netto: position.einzelpreis,
+    });
+  }
+}
+
+async function seedIntakeFixture(fixture: GeneratedFixture, fixtureIndex: number) {
+  const value = resolvedFixture(fixture);
+  const actorId = fixtureLoginId;
+  await upsertFixture("intake_item", {
+    id: value.id,
+    tenant_id: TENANT,
+    client_key: `flow:${value.id}`,
+    kanal: value.kanal,
+    richtung: value.richtung ?? "rein",
+    quelle: value.quelle ?? "geraet",
+    erstellt_von: actorId,
+    empfangen_am: new Date().toISOString(),
+    absender_name: value.absender_name,
+    absender_adresse: value.absender_adresse,
+    betreff: value.betreff,
+    text: value.text,
+    kunde_id: value.kunde_id,
+    vorgang_art: value.vorgang_art,
+    vorgang_id: value.vorgang_id,
+    zuordnung: value.zuordnung ?? "offen",
+    zuordnung_regel: value.zuordnung_regel,
+    einsatz: value.einsatz ?? "offen",
+    anliegen: value.anliegen,
+    anliegen_haupt: value.anliegen_haupt,
+    anliegen_offen: value.anliegen_offen,
+  });
+  const files = Array.isArray(value.dateien) ? value.dateien as Array<Record<string, unknown>> : [];
+  for (let index = 0; index < files.length; index += 1) {
+    const file = files[index]!;
+    await upsertFixture("intake_file", {
+      id: `40000000-0000-4000-8000-${String(800000 + fixtureIndex * 100 + index).padStart(12, "0")}`,
+      tenant_id: TENANT,
+      item_id: value.id,
+      ...file,
+    });
+  }
+  const suggestions = Array.isArray(value.vorschlaege) ? value.vorschlaege as Array<Record<string, unknown>> : [];
+  for (let index = 0; index < suggestions.length; index += 1) {
+    const suggestion = suggestions[index]!;
+    await upsertFixture("intake_suggestion", {
+      id: `50000000-0000-4000-8000-${String(900000 + fixtureIndex * 100 + index).padStart(12, "0")}`,
+      tenant_id: TENANT,
+      item_id: value.id,
+      ...suggestion,
+    });
+  }
+}
+
+async function seedSupplementalFixtures(fixtures: GeneratedFixture[]) {
+  for (const fixture of fixtures) {
+    const fixtureIndex = Object.values(generatedFixtures).indexOf(fixture) + 1;
+    if (!fixtureIndex) throw new Error("FLOW_FIXTURE_IDENTITY_UNKNOWN");
+    if (fixture.tabelle === "customers" || fixture.tabelle === "address_directory") continue;
+    if (fixture.tabelle === "orders") {
+      await seedOrderFixture(fixture, fixtureIndex);
+      continue;
+    }
+    if (fixture.tabelle === "intake_item") {
+      await seedIntakeFixture(fixture, fixtureIndex);
+      continue;
+    }
+    const value = resolvedFixture(fixture);
+    if (fixture.tabelle === "intake_drafts") {
+      const actor = generatedFlowRuntime.logins[String(value.login) as keyof typeof generatedFlowRuntime.logins];
+      if (!actor) throw new Error(`FLOW_DRAFT_FIXTURE_LOGIN_UNKNOWN:${String(value.login)}`);
+      await upsertFixture("intake_drafts", {
+        id: value.id,
+        tenant_id: TENANT,
+        actor_id: actor.id,
+        payload: { art: value.art, text: value.text },
+        status: "open",
+      });
+      continue;
+    }
+    if (fixture.tabelle === "company_settings") {
+      await upsertFixture("company_settings", { ...value, id: "default", tenant_id: TENANT, company_name: "Galvanik Kreile" });
+      continue;
+    }
+    if (fixture.tabelle === "complaint") {
+      await upsertFixture("complaints", {
+        ...value,
+        id: value.id,
+        tenant_id: TENANT,
+        order_id: value.auftrag_id,
+        customer_id: value.kunde_id,
+        reason: value.mangel ?? "sonstiges",
+        description: value.beschreibung ?? "",
+        status: value.stand === "abgeschlossen" ? "resolved" : "open",
+      });
+      continue;
+    }
+    const table = fixture.tabelle === "task" ? "tasks" : fixture.tabelle;
+    await upsertFixture(table, { ...value, id: value.id, tenant_id: TENANT });
+  }
 }
 
 export async function closeGeneratedDatabase() {
@@ -80,7 +359,8 @@ function dataSpecs(page: Page, id: string): Locator {
 
 async function control(locator: Locator): Promise<Locator> {
   await locator.waitFor({ state: "attached", timeout: 5_000 });
-  const tag = await locator.evaluate((element) => element.tagName.toLowerCase());
+  const tag = await locator.evaluateAll((elements) => elements[0]?.tagName.toLowerCase() ?? null);
+  if (!tag) throw new Error("FLOW_CONTROL_REMOVED");
   return ["input", "textarea", "select", "button"].includes(tag)
     ? locator
     : locator.locator("input, textarea, select, button").first();
@@ -98,32 +378,71 @@ async function login(page: Page, loginName: keyof typeof generatedFlowRuntime.lo
   const navigation = page.waitForURL((url) => url.pathname !== "/start", { timeout: 30_000 });
   for (const digit of fixture.pin) await keypad.getByRole("button", { name: digit, exact: true }).click();
   await navigation;
-  await page.waitForTimeout(250);
+  await shellReady(page);
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
 }
 
-function addWorkdays(date: Date, delta: number) {
-  const direction = delta < 0 ? -1 : 1;
-  let remaining = Math.abs(delta);
-  while (remaining > 0) {
-    date.setUTCDate(date.getUTCDate() + direction);
-    const day = date.getUTCDay();
-    if (day !== 0 && day !== 6) remaining -= 1;
-  }
-  return date;
+async function shellReady(page: Page) {
+  await page.getByRole("button", { name: "Konto", exact: true }).waitFor({ state: "visible", timeout: 5_000 });
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
 }
+
+function addWorkdays(date: Date, delta: number) {
+  let day = dateIso(date);
+  if (delta >= 0) {
+    const next = plusWorkingDays(day, delta);
+    if (!next) throw new Error(`FLOW_WORKDAY_INVALID:${day}:${delta}`);
+    return new Date(`${next}T12:00:00Z`);
+  }
+  day = previousWorkingDay(day)!;
+  for (let index = 0; index < Math.abs(delta); index += 1) {
+    const before = new Date(`${day}T12:00:00Z`);
+    before.setUTCDate(before.getUTCDate() - 1);
+    day = previousWorkingDay(dateIso(before))!;
+  }
+  return new Date(`${day}T12:00:00Z`);
+}
+
+function today() { return new Date(`${berlinCalendarDay()}T12:00:00Z`); }
 
 function dateIso(date: Date) {
   return date.toISOString().slice(0, 10);
+}
+
+function formattedDate(date: Date, format?: string) {
+  if (!format) return dateIso(date);
+  const short = `${String(date.getUTCDate()).padStart(2, "0")}.${String(date.getUTCMonth() + 1).padStart(2, "0")}.`;
+  if (format === "TT.MM.") return short;
+  if (format === "WT TT.MM.") return `${["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"][date.getUTCDay()]} ${short}`;
+  throw new Error(`FLOW_DATE_FORMAT_UNSUPPORTED:${format}`);
+}
+
+function calendarWeekEnd(date: Date) {
+  const result = new Date(date);
+  result.setUTCDate(result.getUTCDate() + (5 - (result.getUTCDay() || 7)));
+  while (!isWorkingDay(dateIso(result))) result.setUTCDate(result.getUTCDate() - 1);
+  return result;
+}
+
+function followingWeekStart(date: Date) {
+  const result = new Date(date);
+  result.setUTCDate(result.getUTCDate() + (8 - (result.getUTCDay() || 7)));
+  while (!isWorkingDay(dateIso(result))) result.setUTCDate(result.getUTCDate() + 1);
+  return result;
 }
 
 function runtimeValue(name: string, state?: FlowRunState): string | null {
   const row = name === "auftrag" ? state?.rows.get("orders")
     : name === "kunde" ? state?.rows.get("customers")
       : name === "kv" ? state?.rows.get("orders")
+        : name === "reklamation" ? state?.rows.get("complaint") ?? state?.rows.get("complaints")
         : undefined;
   if (!row) return null;
-  const key = name === "auftrag" ? "order_number" : name === "kunde" ? "customer_number" : "order_number";
+  const key = name === "auftrag" || name === "kv" ? "order_number"
+    : name === "kunde" ? "customer_number"
+      : "nummer";
   return typeof row[key] === "string" ? row[key] : null;
 }
 
@@ -131,28 +450,39 @@ function resolveString(value: string, state?: FlowRunState): string {
   let result = value;
   result = result.replace(/\{neu:([a-z_]+)\}/g, (match, table) => {
     const id = state?.rows.get(table)?.id;
-    if (typeof id !== "string") throw new Error(`FLOW_RUNTIME_REFERENCE_UNRESOLVED:${match}`);
+    if (typeof id !== "string" || !state?.beforeIds.has(table) || state.beforeIds.get(table)!.has(id)) throw new Error(`FLOW_RUNTIME_REFERENCE_UNRESOLVED:${match}`);
     return id;
   });
-  result = result.replace(/\{(auftrag|kunde|kv)\}/g, (match, name) => {
+  result = result.replace(/\{(auftrag|kunde|kv|reklamation)\}/g, (match, name) => {
     const resolved = runtimeValue(name, state);
     if (!resolved) return match;
     return resolved;
   });
-  result = result.replace(/\{arbeitstag:([+-]\d+)(\|TT\.MM\.)?\}/g, (_, raw, short) => {
-    const date = addWorkdays(new Date(), Number(raw));
-    return short ? `${String(date.getUTCDate()).padStart(2, "0")}.${String(date.getUTCMonth() + 1).padStart(2, "0")}.` : dateIso(date);
+  result = result.replace(/\{arbeitstag:([+-]\d+)(?:\|(TT\.MM\.|WT TT\.MM\.))?\}/g, (_, raw, format) => {
+    const date = addWorkdays(today(), Number(raw));
+    return formattedDate(date, format);
   });
-  result = result.replace(/\{heute:([+-]\d+)\}/g, (_, raw) => {
-    const date = new Date();
+  result = result.replace(/\{heute:([+-]\d+)(?:\|(TT\.MM\.|WT TT\.MM\.))?\}/g, (_, raw, format) => {
+    const date = today();
     date.setUTCDate(date.getUTCDate() + Number(raw));
-    return dateIso(date);
+    return formattedDate(date, format);
   });
+  result = result.replace(/\{kw_ende:([+-]\d+)\}/g, (_, raw) => {
+    return dateIso(calendarWeekEnd(addWorkdays(today(), Number(raw))));
+  });
+  result = result.replace(/\{kw_folge_anfang:([+-]\d+)\}/g, (_, raw) => {
+    return dateIso(followingWeekStart(addWorkdays(today(), Number(raw))));
+  });
+  result = result.replaceAll("{gesetzt}", VALUE_IS_SET);
+  result = result.replaceAll("{login}", state?.loginId ?? "");
+  result = result.replaceAll("{fehler}", "");
   result = result.replace(/\{([a-z_]+)(?:\.([a-z_]+))?\}/g, (match, fixtureName, field) => {
     const fixture = generatedFlowRuntime.datenlagen[fixtureName as keyof typeof generatedFlowRuntime.datenlagen];
     if (!fixture) return match;
     const resolved = field ? fixture[field as keyof typeof fixture] : fixture.id;
-    return resolved === null || resolved === undefined ? "" : String(resolved);
+    if (resolved === null || resolved === undefined) return "";
+    const text = String(resolved);
+    return text.includes("{") ? resolveString(text, state) : text;
   });
   return result;
 }
@@ -168,11 +498,33 @@ async function select(locator: Locator, label: string) {
   const target = await control(locator);
   const tagName = await target.evaluate((element) => element.tagName.toLowerCase());
   if (tagName === "select") await target.selectOption({ label }, { timeout: 5_000 });
-  else await locator.locator("button").filter({ hasText: label }).first().click({ timeout: 5_000 });
+  else await choiceButton(locator, label).click({ timeout: 5_000 });
+}
+
+function choiceButton(locator: Locator, label: string): Locator {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return locator.locator("button").filter({ hasText: new RegExp(`^\\s*${escaped}\\s*$`) });
 }
 
 async function interruptNextServerAction(page: Page) {
   await page.context().setOffline(true);
+}
+
+async function interruptNextLoad(page: Page) {
+  const matcher = "**/*";
+  let handled = false;
+  const handler = async (route: import("@playwright/test").Route) => {
+    const request = route.request();
+    const isLoad = request.method() === "GET" && ["document", "fetch", "xhr"].includes(request.resourceType());
+    if (!handled && isLoad) {
+      handled = true;
+      await page.unroute(matcher, handler);
+      await route.abort("failed");
+      return;
+    }
+    await route.continue();
+  };
+  await page.route(matcher, handler);
 }
 
 const settledServerActions = new Set(["eingang.buchen", "eingang.erneut-buchen", "eingang.angaben-erkennen"]);
@@ -195,6 +547,10 @@ async function waitForServerAction(page: Page, id: string) {
 }
 
 async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
+  if (step.aktion === "oeffne") {
+    await openTarget(page, String(step.wert), resolveValue(step.arg, state));
+    return;
+  }
   if (step.aktion === "erwarten") {
     await assertExpectations(page, step.anzeige ?? [], state);
     await assertDb(step.db ?? [], state);
@@ -205,9 +561,37 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
     state.restoreOnlineAfterWrite = true;
     return;
   }
+  if (step.aktion === "netz_laden") {
+    await interruptNextLoad(page);
+    return;
+  }
   const locator = step.id ? dataSpec(page, step.id, step.nr) : null;
   const value = resolveValue(step.wert, state);
   switch (step.aktion) {
+    case "datei": {
+      if (!locator) throw new Error("FLOW_STEP_ID_REQUIRED:datei");
+      await locator.waitFor({ state: "attached", timeout: 5_000 });
+      const names = Array.isArray(value) ? value.map(String) : [String(value)];
+      const files = names.map((name) => {
+        if (!/^pruef_(?:foto(?:_2)?\.jpg|tabelle\.xlsx)$/.test(name)) throw new Error(`FLOW_TEST_FILE_UNSUPPORTED:${name}`);
+        return {
+          name,
+          mimeType: name.endsWith(".jpg") ? "image/jpeg" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          buffer: name.endsWith(".jpg")
+            ? Buffer.from("/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAABAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k=", "base64")
+            : Buffer.from("Isolated generated-flow fixture: unsupported spreadsheet upload\n", "utf8"),
+        };
+      });
+      const input = locator.locator('input[type="file"]');
+      if (await locator.evaluate((element) => element.matches('input[type="file"]'))) await locator.setInputFiles(files, { timeout: 5_000 });
+      else if (await input.count()) await input.setInputFiles(files, { timeout: 5_000 });
+      else {
+        const chooser = page.waitForEvent("filechooser", { timeout: 5_000 });
+        await locator.click({ timeout: 5_000 });
+        await (await chooser).setFiles(files);
+      }
+      break;
+    }
     case "klicken":
       if (!locator) throw new Error("FLOW_STEP_ID_REQUIRED:klicken");
       await locator.click({ timeout: 5_000 });
@@ -243,10 +627,7 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
       if (locator) await (await control(locator)).press(String(value ?? ""), { timeout: 5_000 });
       else {
         if (String(value ?? "").toLowerCase() === "n") {
-          await page.getByRole("button", { name: "Konto", exact: true }).waitFor({ state: "visible", timeout: 5_000 });
-          await page.evaluate(() => new Promise<void>((resolve) => {
-            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-          }));
+          await shellReady(page);
         }
         await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
         await page.locator("body").press(String(value ?? ""), { timeout: 5_000 });
@@ -261,7 +642,37 @@ async function topDialog(page: Page) {
   return page.locator('[role="dialog"]:visible').last();
 }
 
+async function openTarget(page: Page, target: string, arg: unknown) {
+  if (target === "kundebearbeiten") {
+    const [customerId, fragment] = String(arg ?? "").split("#", 2);
+    if (!customerId) throw new Error("FLOW_OPEN_CUSTOMER_REQUIRED");
+    await page.goto(`/customers/${encodeURIComponent(customerId)}${fragment ? `#${encodeURIComponent(fragment)}` : ""}`);
+    await dataSpec(page, "kundebearbeiten.oeffnen").click({ timeout: 5_000 });
+    return;
+  }
+  await page.evaluate(({ ziel, argument }) => {
+    window.dispatchEvent(new CustomEvent("kreile:oeffne", { detail: { ziel, arg: argument } }));
+  }, { ziel: target, argument: arg ?? null });
+}
+
+async function selectedColor(locator: Locator, selected: boolean) {
+  const color = await locator.evaluate((element) => {
+    const probe = document.createElement("span");
+    probe.style.backgroundColor = "var(--ci-success)";
+    element.appendChild(probe);
+    const expected = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return { expected, actual: getComputedStyle(element).backgroundColor };
+  });
+  if (selected) expect(color.actual).toBe(color.expected);
+  else expect(color.actual).not.toBe(color.expected);
+}
+
 async function assertExpectation(page: Page, expectation: FlowExpectation, state: FlowRunState) {
+  if (typeof expectation.druck === "number") {
+    await expect.poll(() => page.evaluate(() => Number((window as unknown as Record<string, unknown>).__flowPrintCount ?? 0))).toBe(expectation.druck);
+    return;
+  }
   if (typeof expectation.dialoge === "number") {
     await expect(page.locator('[role="dialog"]:visible')).toHaveCount(expectation.dialoge);
     return;
@@ -312,10 +723,30 @@ async function assertExpectation(page: Page, expectation: FlowExpectation, state
     case "gewaehlt": {
       const target = await control(locator);
       const tag = await target.evaluate((element) => element.tagName.toLowerCase());
-      if (tag === "select") await expect(target.locator("option:checked")).toHaveText(String(value));
-      else await expect(locator.locator("button").filter({ hasText: String(value) }).first()).toHaveAttribute("aria-pressed", "true");
+      if (tag === "select") {
+        await expect(target.locator("option:checked")).toHaveText(String(value));
+        await selectedColor(target, true);
+      } else {
+        const chosen = choiceButton(locator, String(value));
+        await expect(chosen).toHaveAttribute("aria-pressed", "true");
+        await selectedColor(chosen, true);
+      }
       break;
     }
+    case "nicht_gewaehlt": {
+      const target = await control(locator);
+      const label = resolveString(expectation.option ?? String(value), state);
+      if (await target.evaluate((element) => element.tagName.toLowerCase()) === "select") {
+        await expect(target.locator("option:checked")).not.toHaveText(label);
+      } else {
+        const option = choiceButton(locator, label);
+        await expect(option).not.toHaveAttribute("aria-pressed", "true");
+        await selectedColor(option, false);
+      }
+      break;
+    }
+    case "an": await expect(await control(locator)).toBeChecked(); break;
+    case "aus": await expect(await control(locator)).not.toBeChecked(); break;
     case "optionen": {
       const target = await control(locator);
       const labels = Array.isArray(value) ? value.map(String) : [];
@@ -326,9 +757,17 @@ async function assertExpectation(page: Page, expectation: FlowExpectation, state
     }
     case "gesperrt": {
       const target = await control(locator);
-      const option = target.locator("option:disabled").filter({ hasText: String(value) });
-      await expect(option).toHaveCount(1);
-      await expect(option).toHaveAttribute("disabled", "");
+      const label = resolveString(expectation.option ?? String(value), state);
+      if (await target.evaluate((element) => element.tagName.toLowerCase()) === "select") {
+        const option = target.locator("option:disabled").filter({ hasText: label });
+        await expect(option).toHaveCount(1);
+        await expect(option).toContainText(String(value));
+      } else {
+        const option = locator.getByRole("button", { name: label, exact: false });
+        await expect(option).toBeDisabled();
+        const reason = locator.getByText(String(value), { exact: false });
+        await expect(reason).toBeVisible();
+      }
       break;
     }
     case "aktiviert": await expect(await control(locator)).toBeEnabled(); break;
@@ -345,127 +784,134 @@ async function assertExpectations(page: Page, expectations: FlowExpectation[], s
   for (const expectation of expectations) await assertExpectation(page, expectation, state);
 }
 
-async function tableCount(table: string) {
-  if (!new Set(["orders", "items", "intake_item", "customers"]).has(table)) throw new Error(`FLOW_DB_TABLE_UNSUPPORTED:${table}`);
-  const rows = await sql.unsafe<{ count: string }[]>(`SELECT count(*)::text AS count FROM public.${table} WHERE tenant_id = $1`, [TENANT]);
-  return Number(rows[0]?.count ?? 0);
+type DatabaseMapping = { schema?: string; table: string; columns: Record<string, string>; transforms: Record<string, string> };
+const databaseMapping = generatedFlowRuntime.database as unknown as Record<string, DatabaseMapping>;
+
+function fixtureStorageSchema(table: string): string {
+  return Object.values(databaseMapping).find((entry) => entry.table === table)?.schema ?? "public";
 }
 
-const newestRowQuery: Record<string, string> = {
-  orders: `SELECT id, order_number, customer_id AS kunde,
-    CASE WHEN coalesce(is_quote, false) THEN 'kv' ELSE 'auftrag' END AS art,
-    promised_due_date::date::text AS liefertermin, intake_term_status AS terminstatus,
-    CASE handover_mode WHEN 'pickup' THEN 'abholung' WHEN 'shipping' THEN 'versand' ELSE handover_mode END AS uebergabe,
-    CASE payment_mode WHEN 'abholung' THEN 'bar' ELSE payment_mode END AS zahlungsmodus, intake_source AS eingangsart,
-    EXISTS (SELECT 1 FROM public.events event WHERE event.tenant_id = orders.tenant_id AND event.order_id = orders.id AND event.event_type = 'ORDER_INTAKE_CREATED_V1') AS geprueft
-    FROM public.orders WHERE tenant_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
-  items: `SELECT id, order_id AS auftrag, name AS bezeichnung, quantity AS menge,
-    CASE unit WHEN 'Stück' THEN 'stueck' WHEN 'dm²' THEN 'dm2' ELSE lower(coalesce(unit, '')) END AS einheit,
-    surface_requested AS oberflaeche, execution_requested AS ausfuehrung
-    FROM public.items WHERE tenant_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
-  intake_item: `SELECT id, kanal, richtung, kunde_id, vorgang_art, vorgang_id, einsatz, text
-    FROM public.intake_item WHERE tenant_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
-  customers: "SELECT id, customer_number FROM public.customers WHERE tenant_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1",
-};
+function qualifiedStorageTable(table: string): string {
+  const schema = fixtureStorageSchema(table);
+  if (!/^[a-z_]+$/.test(table) || !["public", "private"].includes(schema)) throw new Error("FLOW_DB_TABLE_INVALID");
+  return `"${schema}"."${table}"`;
+}
 
-async function captureNewestRow(table: string) {
-  const query = newestRowQuery[table];
-  if (!query) throw new Error(`FLOW_DB_VALUE_TABLE_UNSUPPORTED:${table}`);
-  const rows = await sql.unsafe<Record<string, unknown>[]>(query, [TENANT]);
-  expect(rows).toHaveLength(1);
-  return rows[0]!;
+function storageMapping(table: string): DatabaseMapping {
+  const mapping = databaseMapping[table];
+  if (!mapping || !/^[a-z_]+$/.test(mapping.table)) throw new Error(`FLOW_DB_TABLE_UNSUPPORTED:${table}`);
+  return mapping;
+}
+
+function storageColumn(table: string, field: string) {
+  const column = storageMapping(table).columns[field] ?? field;
+  if (!/^[a-z_]+$/.test(column)) throw new Error(`FLOW_DB_COLUMN_INVALID:${table}:${field}`);
+  return column;
+}
+
+async function tableIds(table: string): Promise<string[]> {
+  const actual = storageMapping(table).table;
+  const rows = await sql.unsafe<{ id: string }[]>(`SELECT id::text AS id FROM ${qualifiedStorageTable(actual)} WHERE tenant_id = $1`, [TENANT]);
+  return rows.map((row) => row.id);
+}
+
+async function tableCount(table: string) { return (await tableIds(table)).length; }
+
+async function readStorageRow(table: string, where: Record<string, unknown>) {
+  const actual = storageMapping(table).table;
+  const params: unknown[] = [TENANT];
+  const clauses = ['record.tenant_id = $1'];
+  for (const [field, value] of Object.entries(where)) {
+    params.push(storageColumn(table, field), JSON.stringify(value));
+    clauses.push(`(to_jsonb(record) -> $${params.length - 1}::text) IS NOT DISTINCT FROM $${params.length}::jsonb`);
+  }
+  const rows = await sql.unsafe<{ row: Record<string, unknown> }[]>(
+    `SELECT to_jsonb(record) AS row FROM ${qualifiedStorageTable(actual)} record WHERE ${clauses.join(' AND ')} LIMIT 2`, params as never[],
+  );
+  expect(rows, `one exact ${table} row for ${JSON.stringify(where)}`).toHaveLength(1);
+  return rows[0]!.row;
 }
 
 async function captureDbResults(expectations: FlowDbExpectation[], state: FlowRunState) {
   for (const expectation of expectations) {
-    if (typeof expectation.neu !== "number") continue;
-    const before = state.before.get(expectation.tabelle) ?? await tableCount(expectation.tabelle);
-    if (expectation.neu > 0) {
-      await expect.poll(() => tableCount(expectation.tabelle), { timeout: 10_000 }).toBe(before + expectation.neu);
-    }
-    const after = await tableCount(expectation.tabelle);
-    expect(after - before).toBe(expectation.neu);
-    if (expectation.neu > 0) {
-      if (expectation.neu !== 1 && expectation.werte && Object.keys(expectation.werte).length > 0) {
-        throw new Error(`FLOW_DB_VALUE_NEW_ROW_AMBIGUOUS:${expectation.tabelle}`);
-      }
-      state.rows.set(expectation.tabelle, await captureNewestRow(expectation.tabelle));
-    }
+    if (typeof expectation.neu !== 'number') continue;
+    const before = state.before.get(expectation.tabelle);
+    const beforeIds = state.beforeIds.get(expectation.tabelle);
+    if (before === undefined || !beforeIds) throw new Error(`FLOW_DB_BASELINE_MISSING:${expectation.tabelle}`);
+    if (expectation.neu > 0) await expect.poll(() => tableCount(expectation.tabelle), { timeout: 10_000 }).toBe(before + expectation.neu);
+    const afterIds = await tableIds(expectation.tabelle);
+    expect(afterIds.length - before).toBe(expectation.neu);
+    const created = afterIds.filter((id) => !beforeIds.has(id));
+    expect(created).toHaveLength(expectation.neu);
+    if (created.length === 1) state.rows.set(expectation.tabelle, await readStorageRow(expectation.tabelle, { id: created[0] }));
+    else if (created.length > 1 && Object.keys(expectation.werte ?? {}).length) throw new Error(`FLOW_DB_VALUE_NEW_ROW_AMBIGUOUS:${expectation.tabelle}`);
+  }
+}
+
+async function storageValue(table: string, row: Record<string, unknown>, field: string) {
+  const transform = storageMapping(table).transforms[field];
+  if (transform === 'order_intake_event') {
+    const events = await sql<{ present: boolean }[]>`SELECT EXISTS (
+      SELECT 1 FROM public.events WHERE tenant_id = ${TENANT} AND order_id::text = ${String(row.id)} AND event_type = 'ORDER_INTAKE_CREATED_V1'
+    ) AS present`;
+    return events[0]!.present;
+  }
+  const column = storageColumn(table, field);
+  if (!Object.hasOwn(row, column)) throw new Error(`FLOW_DB_COLUMN_NOT_BUILT:${table}:${column}`);
+  const value = row[column];
+  if (transform === 'order_kind') return value === true ? 'kv' : 'auftrag';
+  if (transform === 'handover') return value === 'pickup' ? 'abholung' : value === 'shipping' ? 'versand' : value;
+  if (transform === 'payment_mode') return value === 'abholung' ? 'bar' : value;
+  if (transform) throw new Error(`FLOW_DB_TRANSFORM_UNSUPPORTED:${transform}`);
+  return value;
+}
+
+async function assertDbValues(expectation: FlowDbExpectation, state: FlowRunState) {
+  const where = resolveValue(expectation.wo, state) as Record<string, unknown> | undefined;
+  const reference = state.rows.get(expectation.tabelle);
+  const row = where ? await readStorageRow(expectation.tabelle, where)
+    : reference ? await readStorageRow(expectation.tabelle, { id: reference.id }) : undefined;
+  if (!row) throw new Error(`FLOW_DB_NEW_ROW_REQUIRED:${expectation.tabelle}`);
+  const values = Object.entries(resolveValue(expectation.werte ?? {}, state) as Record<string, unknown>);
+  for (const [key, expected] of values) {
+    const contains = key.endsWith('_enthaelt');
+    const field = contains ? key.slice(0, -'_enthaelt'.length) : key;
+    const actual = await storageValue(expectation.tabelle, row, field);
+    if (expected === VALUE_IS_SET) expect(actual).not.toBeNull();
+    else if (contains) {
+      if (Array.isArray(actual) || typeof actual === 'string') expect(actual).toContain(expected);
+      else throw new Error(`FLOW_DB_CONTAINS_TYPE_INVALID:${expectation.tabelle}:${field}`);
+    } else expect(actual).toEqual(expected);
   }
 }
 
 async function assertDb(expectations: FlowDbExpectation[], state: FlowRunState) {
   for (const expectation of expectations) {
-    if (typeof expectation.neu === "number") {
-      const after = await tableCount(expectation.tabelle);
-      expect(after - (state.before.get(expectation.tabelle) ?? after)).toBe(expectation.neu);
+    if (typeof expectation.neu === 'number') {
+      const before = state.before.get(expectation.tabelle);
+      if (before === undefined) throw new Error(`FLOW_DB_BASELINE_MISSING:${expectation.tabelle}`);
+      expect((await tableCount(expectation.tabelle)) - before).toBe(expectation.neu);
     }
-    if (expectation.werte && Object.keys(expectation.werte).length > 0) await assertDbValues(expectation, state);
-  }
-}
-
-const customerColumns: Record<string, string> = {
-  zahlungsbedingung: "payment_preference",
-  handover_preference: "shipping_preference",
-  customer_type: "type",
-  company_name: "company_name",
-  address_status: "address_status",
-  name: "name",
-  salutation: "salutation",
-  first_name: "first_name",
-  last_name: "last_name",
-  contact_role: "contact_role",
-  email: "email",
-  street: "street",
-  house_number: "house_number",
-  zip_code: "zip_code",
-  city: "city",
-  country: "country",
-  notiz: "internal_notes",
-  billing_email: "billing_email",
-};
-
-async function assertCustomerDbValues(expectation: FlowDbExpectation, state: FlowRunState) {
-  const where = resolveValue(expectation.wo ?? {}, state) as Record<string, unknown>;
-  const whereEntries = Object.entries(where);
-  if (whereEntries.some(([key]) => key !== "id")) throw new Error(`FLOW_DB_WHERE_UNSUPPORTED:${whereEntries.map(([key]) => key).join(",")}`);
-  const values = Object.entries(resolveValue(expectation.werte ?? {}, state) as Record<string, unknown>);
-  const columns = values.map(([key]) => customerColumns[key] ?? "");
-  if (columns.some((column) => !column)) throw new Error(`FLOW_DB_COLUMNS_UNSUPPORTED:${values.map(([key]) => key).join(",")}`);
-  const params: string[] = [TENANT];
-  let whereSql = "tenant_id = $1";
-  if (where.id !== undefined) {
-    params.push(String(where.id));
-    whereSql += ` AND id = $${params.length}`;
-  }
-  const rows = await sql.unsafe<Record<string, unknown>[]>(
-    `SELECT ${columns.join(", ")} FROM public.customers WHERE ${whereSql} ORDER BY created_at DESC LIMIT 1`,
-    params,
-  );
-  expect(rows).toHaveLength(1);
-  for (let index = 0; index < values.length; index += 1) {
-    expect(rows[0]?.[columns[index]!]).toEqual(values[index]?.[1]);
-  }
-}
-
-async function assertDbValues(expectation: FlowDbExpectation, state: FlowRunState) {
-  if (expectation.tabelle === "customers" && expectation.wo) {
-    await assertCustomerDbValues(expectation, state);
-    return;
-  }
-  const row = state.rows.get(expectation.tabelle);
-  if (!row) throw new Error(`FLOW_DB_NEW_ROW_REQUIRED:${expectation.tabelle}`);
-  const values = Object.entries(resolveValue(expectation.werte ?? {}, state) as Record<string, unknown>);
-  for (const [key, value] of values) {
-    if (!Object.hasOwn(row, key)) throw new Error(`FLOW_DB_COLUMNS_UNSUPPORTED:${expectation.tabelle}:${key}`);
-    expect(row[key]).toEqual(value);
+    if (Object.keys(expectation.werte ?? {}).length) await assertDbValues(expectation, state);
   }
 }
 
 export async function runGeneratedFlowCase(page: Page, flowCase: FlowCase) {
   testTimeoutGuard(flowCase);
   const dbExpectations = flowCase.dann?.db ?? [];
-  const state: FlowRunState = { before: new Map<string, number>(), rows: new Map<string, Record<string, unknown>>(), restoreOnlineAfterWrite: false };
+  const state: FlowRunState = {
+    before: new Map<string, number>(),
+    beforeIds: new Map<string, Set<string>>(),
+    rows: new Map<string, Record<string, unknown>>(),
+    restoreOnlineAfterWrite: false,
+    loginId: generatedFlowRuntime.logins[flowCase.gegeben.login].id,
+  };
+  for (const name of selectedFixtureNames(flowCase.gegeben.datenlagen)) {
+    const fixture = generatedFixtures[name]!;
+    if (["orders", "customers", "complaint"].includes(fixture.tabelle) && !state.rows.has(fixture.tabelle)) {
+      state.rows.set(fixture.tabelle, resolvedFixture(fixture));
+    }
+  }
   const stepExpectations = [
     ...(Array.isArray(flowCase.gegeben.aufruf.weg) ? flowCase.gegeben.aufruf.weg : []),
     ...(flowCase.wenn ?? []),
@@ -473,16 +919,23 @@ export async function runGeneratedFlowCase(page: Page, flowCase: FlowCase) {
   for (const expectation of [...dbExpectations, ...stepExpectations]) {
     if (typeof expectation.neu === "number" && !state.before.has(expectation.tabelle)) {
       state.before.set(expectation.tabelle, await tableCount(expectation.tabelle));
+      state.beforeIds.set(expectation.tabelle, new Set(await tableIds(expectation.tabelle)));
     }
   }
   await login(page, flowCase.gegeben.login);
+  await page.addInitScript(() => {
+    const scope = window as unknown as Record<string, unknown>;
+    scope.__flowPrintCount = 0;
+    window.print = () => { scope.__flowPrintCount = Number(scope.__flowPrintCount) + 1; };
+  });
+  await page.evaluate(() => {
+    const scope = window as unknown as Record<string, unknown>;
+    scope.__flowPrintCount = 0;
+    window.print = () => { scope.__flowPrintCount = Number(scope.__flowPrintCount) + 1; };
+  });
   const route = flowCase.gegeben.aufruf;
   if (route.weg === "oeffne") {
-    if (route.seite !== "kundebearbeiten") throw new Error(`FLOW_OPEN_TARGET_UNSUPPORTED:${route.seite}`);
-    const [customerId, fragment] = String(resolveValue(route.arg ?? "", state)).split("#", 2);
-    if (!customerId) throw new Error("FLOW_OPEN_CUSTOMER_REQUIRED");
-    await page.goto(`/customers/${encodeURIComponent(customerId)}${fragment ? `#${encodeURIComponent(fragment)}` : ""}`);
-    await dataSpec(page, "kundebearbeiten.oeffnen").click({ timeout: 5_000 });
+    await openTarget(page, route.seite, resolveValue(route.arg, state));
   } else {
     for (const step of route.weg ?? []) await executeStep(page, step, state);
   }
