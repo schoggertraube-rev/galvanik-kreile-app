@@ -156,8 +156,8 @@
       "titel": "Eingang komplett (13 Seiten, 272 Faelle), sechs Teil-PRs 0-5",
       "reihenfolge": 4,
       "status": "bereit",
-      "spec": "a9474e3f73c3",
-      "bauplan_sha256": "888114C6247B711CC02D8C78BB9429ADCF9C494CFBC2E066F5202C6E966BB0D8",
+      "spec": "ee64f8882bb7",
+      "bauplan_sha256": "DF3E1AFEC7B6C3DED6DA51F22FDAADF8CFAB780DA9A4F619EDB42D3C2D6AC5C4",
       "voraussetzung": "TA-B2f gemergt (Vorbau lokal ab sofort)",
       "teile": [
         "0 Fundament (Generator, 306 Faelle gegen AFB3D838)",
@@ -226,12 +226,12 @@
       "hinweis": "Entscheidungen 02.11. 23:00 im PAKET gelten vor der Inventur; Schluessel Einheit/Oberflaeche in Teil 2 (AP-U entfaellt)",
       "ui": {
         "ordner": "docs/project/endversion/ui/",
-        "design_css": "061AF6F3",
-        "sichtvertrag": "509BE267",
-        "pruefe_sicht": "03F4E0AA",
-        "design_reference": "DE0FC765",
+        "design_css": "35146E45",
+        "sichtvertrag": "B1A53EA6",
+        "pruefe_sicht": "FDA7C59C",
+        "design_reference": "1509BE93",
         "gate": "pruefe_sicht gruen fuer die Seiten des Teils vor jedem Merge (U-239)",
-        "stand": "Runde 51 (03.11. 17:30)"
+        "stand": "Runde 52 (03.11., 19:07)"
       },
       "fassung": "3 (03.11. 15:30, PAKET.md Abschnitt Fassung 3)"
     },

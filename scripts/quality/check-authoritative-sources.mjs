@@ -10,7 +10,7 @@ const CONFIG_PATH = "quality/authoritative-sources.json";
 const AUTHORITY_CHECKER_PATH = "scripts/quality/check-authoritative-sources.mjs";
 const RATCHET_WORKFLOW_PATH = ".github/workflows/eslint-ratchet.yml";
 const DESIGN_POINTER_PATH = "docs/project/linie/ui/CURRENT_DESIGN_REFERENCE.json";
-const DESIGN_POINTER_SHA256 = "DE0FC7654A9686FE7AE0E3664786A47B1B7F804F88B92243FAFC90EB9975DDFD";
+const DESIGN_POINTER_SHA256 = "1509BE93E71B486728A49D1786CD60826943C6CBE954FC7BFF2EE1D3120A8FCE";
 const ENDVERSION_UI_PATH = "docs/project/endversion/ui";
 const TRUTH_SOURCE_CONTRACT = Object.freeze({
   project_rules: "AGENTS.md",

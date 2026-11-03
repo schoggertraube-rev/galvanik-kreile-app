@@ -22,19 +22,19 @@
   }
  },
  "bauplan": {
-  "erzeugt": "2026-11-03T13:48:39.693Z",
-  "spec_sha": "a9474e3f73c3",
+  "erzeugt": "2026-11-03T17:54:20.526Z",
+  "spec_sha": "ee64f8882bb7",
   "ui": {
-   "regel": "Einzige UI-Wahrheit ist die Endversion: ui/endversion_design.css einbinden (ersetzt designsystem_v1_1/komponenten.css und eigene Nachbauten), Klassen und data-spec-id wie im Sichtvertrag, Hauptaktion in Dialogen in der Fußzeile ohne Scrollen sichtbar (3 Größen), Knöpfe ≥ 44 px. Prüfung vor jedem Merge: node ui/pruefe_sicht.cjs – Rot = nicht mergen. Abweichung nur mit Grund in der Abgabe.",
+   "regel": "Einzige UI-Wahrheit ist die Endversion: ui/endversion_design.css einbinden (ersetzt designsystem_v1_1/komponenten.css und eigene Nachbauten), Klassen und data-spec-id wie im Sichtvertrag, Hauptaktion in Dialogen in der Fußzeile ohne Scrollen sichtbar (3 Größen); Größen je Gerät nach verhalten_appweit.groessenregel (U-240: data-geraet + data-groesse v11 | dicht | v8; Desktop-Dialoge ≤ ca. 1100 px, Knöpfe Desktop ≥ 40 px, Tablet/Handy ≥ 44 px); Enter = nächstes Feld in der Fokusreihenfolge des Sichtvertrags (seiten[].fokus). Prüfung vor jedem Merge: node ui/pruefe_sicht.cjs – Rot = nicht mergen. Abweichung nur mit Grund in der Abgabe.",
    "ordner": "docs/project/endversion/ui/",
    "liesmich": "LIESMICH.md",
    "design_css": {
     "datei": "endversion_design.css",
-    "sha256": "061AF6F380A94B58A626B57D2C2C8E63DC8CE71C76184C3C23677842232B7A24"
+    "sha256": "35146E45B96F84D7CB30D38F403F1DC0AE9D9232B7F1F7B4C5ED8D950B4537AB"
    },
    "sichtvertrag": {
     "datei": "SICHTVERTRAG.json",
-    "sha256": "509BE267819D9DECB002A14B0360B096BCB3AB2E91DEE425929FAF920FD96FB4",
+    "sha256": "B1A53EA675F52B999CD034C5C5D6D0F4D4B1CC131AB40E818DF3BDD138B6EB4C",
     "seiten": 117,
     "groessen": {
      "desktop": {
@@ -53,7 +53,7 @@
    },
    "pruefskript": {
     "datei": "pruefe_sicht.cjs",
-    "sha256": "03F4E0AA23D58C2CBB1F30F136B68767A54A2F9D1A0B2DCC936D7AB05E6013DA",
+    "sha256": "FDA7C59C0E3EF9FEC0C0F81B98975F712D8438DE7236D75D0B8D03897F6A052C",
     "routen": "routen.json (PL/Codex füllt; Beispiel routen.beispiel.json)"
    },
    "pruefbilder": "pruefbilder/<screen>_<rolle>_<groesse>.png (75)",
@@ -323,7 +323,291 @@
     }
    ]
   },
-  "seiten_gate": "Runde 51 (Owner 03.11.): Die Endversion prüft vor jeder Lieferung jede Paket-Seite und jeden Modus über den echten Aufruf (Desktop und Handy): Kopf = Seitenname (+ Modus-Unterzeile), keine Roh-Platzhalter im sichtbaren Text, kein Knopftext doppelt in einem Dialog, höchstens ein Hauptknopf im Fuß, 3.0 leer ohne Zuordnen-Knöpfe. Rot = keine Lieferung."
+  "seiten_gate": "Runde 51 (Owner 03.11.): Die Endversion prüft vor jeder Lieferung jede Paket-Seite und jeden Modus über den echten Aufruf (Desktop und Handy): Kopf = Seitenname (+ Modus-Unterzeile), keine Roh-Platzhalter im sichtbaren Text, kein Knopftext doppelt in einem Dialog, höchstens ein Hauptknopf im Fuß, 3.0 leer ohne Zuordnen-Knöpfe. Rot = keine Lieferung.",
+  "korrekturen_ausserhalb_runde52": {
+   "quelle": "Runde 52 (Owner 03.11.)",
+   "regel": "Wie Runde 48: der PL nimmt sie als „korrekturen“ in die Teil-PRs der Zielseiten.",
+   "liste": [
+    "appweit: verhalten_appweit.zahlung_wahrheit (Zahlstand nur aus Rechnung/Zahlung; Invarianten)",
+    "raus (10): paket.runde52.raus (Reiter Fertig im Haus / Rausgegangen, Kunde/Auftrag als Link, Belege)",
+    "rauspruefen (10.1): paket.runde52.rauspruefen (Kopf-Links, Block Zahlung, Block Belege, Übergabe vorbereiten / Belege drucken, Erinnern) und paket.runde52.sondervereinbarung_zusatz (Bar/Karte bleiben)",
+    "werkstatt (11): paket.runde52.werkstatt (Teil-Block → 4.2, Ware raus nur mit Freigabe)",
+    "kunde (5.1): paket.runde52.kunde (Rechnung mit Auftrag und Warenort, Block Rausgegangen)",
+    "auftrag (4.1) / kunde (5.1): verhalten_appweit.seitenname.objektkarten (Objektname im Kopf)",
+    "teil (4.2): paket.runde52.teil_formular (Formular-Fuß wieder Abbrechen · Teil stornieren · Speichern)",
+    "auftrag (4.1): paket.runde52.auftrag (jedes Teil → Teilkarte 4.2, in jeder Station)",
+    "rauspruefen (10.1): paket.runde52.rauspruefen_rausgegangen (Ansicht für rausgegangene Ware)",
+    "appweit: verhalten_appweit.keine_stillen_loeschungen + paket.runde52.entfernt_ledger (nichts entfernen, was nicht dort steht)",
+    "appweit: verhalten_appweit.groessenregel (U-240: data-geraet/data-groesse je Breite, Desktop-Dialoge ≤ ca. 1100 px, Tablet dicht und zweispaltig, Prüfliste einklappbar)",
+    "appweit: verhalten_appweit.tastatur_enter (Enter = nächstes Feld, im letzten Pflichtfeld Hauptaktion mit Tor; Fokusreihenfolge laut Sichtvertrag)"
+   ]
+  },
+  "runde52": {
+   "quelle": "Runde 52 (Owner 03.11.)",
+   "regel": "Inhalt der Korrekturen außerhalb des Pakets (korrekturen_ausserhalb_runde52) – hier vollständig, weil die Zielseiten selbst nicht im Bauplan stehen.",
+   "raus": {
+    "quelle": "Runde 52 (Owner 03.11.)",
+    "reiter": [
+     [
+      "bereit",
+      "Fertig im Haus"
+     ],
+     [
+      "raus",
+      "Rausgegangen · 30 Tage"
+     ]
+    ],
+    "zeile_fertig": {
+     "aufbau": "{Kunde} (Link → kunde {kunde}) · {auftrag} {Titel} (Link → auftrag {auftrag}) · {Übergabe} · Zahlstand laut zahlung_wahrheit (mit geld) · Belege „Lieferschein ✓ · Rechnung {nr} ✓“ bzw. „Belege werden vorbereitet“ · Etikett (werkstattregel.etiketten.fertig)",
+     "klick": "Zeile (außer Links) → rauspruefen {auftrag}; Kunde → kunde; Auftragsnummer → auftrag"
+    },
+    "zeile_raus": {
+     "quelle": "Aufträge mit Station raus, Übergabe in den letzten 30 Tagen, neueste oben",
+     "aufbau": "{TT.MM.} · abgeholt von {Abholer} | versendet ({versanddienst} {Sendungsnummer}, Link Sendungsverfolgung aus 8.1) · {Kunde} (Link) · {auftrag} {Titel} (Link) · Lieferschein (ansehen) · Rechnung {nr} · {Betrag} · Zahlstand (mit geld)",
+     "aktionen": "Lieferschein ansehen/drucken · Rechnung ansehen/drucken (mit geld) · offen/überfällig: „Erinnern“ (→ mail {rechnung}#erinnerung)",
+     "nicht": "keine Übergabe-Knöpfe (schon raus); Rücknahme nur über die Auftragskarte (Reklamation)"
+    },
+    "abnahme": [
+     "Gegeben Ware raus · Dann Reiter „Fertig im Haus“ und „Rausgegangen · 30 Tage“; im zweiten stehen abgeholte/versendete Aufträge mit Datum, Abholer bzw. Sendungsnummer, Lieferschein und Rechnung.",
+     "Gegeben eine Zeile · Wenn Kundenname angetippt · Dann öffnet die Kundenkarte; Auftragsnummer → Auftragskarte; Rest der Zeile → Warenausgang."
+    ]
+   },
+   "rauspruefen": {
+    "quelle": "Runde 52 (Owner 03.11.)",
+    "kopf": "{auftrag} {Titel} (Link → auftrag) · {Kunde} (Link → kunde) · Anrufen · Mail (5.3)",
+    "block_zahlung": {
+     "recht": "geld (ohne geld: nur „Freigabe erteilt | fehlt“)",
+     "daten": "vom Server (keine Musterdaten im Bauplan)"
+    },
+    "block_belege": {
+     "daten": "vom Server (keine Musterdaten im Bauplan)",
+     "quelle": "prozesse.abschluss (Zustand vorbereitet: Lieferschein-Entwurf, Rechnung, Kundeninfo)"
+    },
+    "uebergabe_vorbereiten": {
+     "wann": "Übergabe Abholung, Station Fertig",
+     "knopf": "„Belege drucken“ (Lieferschein + Rechnung in einem Druck); vor dem Zustand vorbereitet heißt er „Übergabe vorbereiten“ und startet prozesse.abschluss sofort",
+     "wirkung": "Lieferschein wird erstellt; eine Rechnung im Entwurf wird beim Drucken festgeschrieben (Rückfrage einmal: „Rechnung {nr} wird festgeschrieben – danach nur Storno“), Verlaufseintrag „Belege gedruckt · vorbereitet für Abholung“; bei der Übergabe wird nur noch Zahlung (Bar/Karte) gebucht und die Station gesetzt – kein zweiter Beleg.",
+     "nicht": "Drucken gibt die Ware nicht frei; Vorkasse bleibt gesperrt bis Zahlung."
+    },
+    "weitere_aktionen": [
+     "Vorkasse offen/überfällig: „Erinnern“ (→ mail {rechnung}#erinnerung, Recht geld) neben der gesperrten Übergabe",
+     "Auftrag ansehen",
+     "Kunde ansehen"
+    ],
+    "abnahme": [
+     "Gegeben A-… Vorkasse, Rechnung offen · Dann Block Zahlung zeigt Rechnungsnummer, Betrag, „überfällig seit {n} Tagen“ und „Ansehen“; Übergabe gesperrt „Vorkasse offen“; „Erinnern“ aktiv.",
+     "Gegeben Abholung, Zustand vorbereitet · Wenn „Belege drucken“ · Dann Lieferschein und Rechnung als PDF zum Druck, Verlauf „Belege gedruckt“; Übergabe bucht danach nur Zahlung und Station.",
+     "Gegeben 10.1 · Wenn Kundenname angetippt · Dann Kundenkarte; Auftragsnummer → Auftragskarte."
+    ]
+   },
+   "sondervereinbarung_zusatz": {
+    "quelle": "Runde 52 (Owner 03.11.)",
+    "regel": "Bei „Bar oder Karte bei Abholung“ bleiben „Bar bezahlt · übergeben“ und „Karte bezahlt · übergeben“ immer die Hauptwege. Eine gültige Sondervereinbarung zeigt ihren gelben Kasten und zusätzlich den Nebenknopf „Übergeben · Rechnung folgt“ (sekundär) – sie ersetzt die Bezahlwege nicht.",
+    "abnahme": [
+     "Gegeben Auftrag „Bar oder Karte bei Abholung“, Kunde mit Sondervereinbarung „Rechnung folgt“ · Dann „Bar bezahlt · übergeben“, „Karte bezahlt · übergeben“ und als Nebenknopf „Übergeben · Rechnung folgt“."
+    ]
+   },
+   "werkstatt": {
+    "quelle": "Runde 52 (Owner 03.11.)",
+    "teil_details": "Kurzansicht: Tipp auf einen Teil-Block (außer seinen Knöpfen) und Tipp auf ein Segment des Fortschrittsbalkens öffnen die Teilkarte 4.2 (teil {auftrag}#{teil}) – Details, Fotos, Hinweise, Mehrarbeit des Teils. Die Auftragskarte bleibt über „Karte öffnen“ erreichbar.",
+    "ware_raus": "Fertig: „Ware raus“ ist nur aktiv, wenn orders.ausgabe_frei (bereit_regel); sonst sichtbar und gesperrt mit Grund – mit geld „Vorkasse offen“, ohne geld „Freigabe fehlt“. Ein Auftrag mit Station raus steht nie in der Werkstatt.",
+    "abnahme": [
+     "Gegeben Kurzansicht offen · Wenn Teil-Block {teil} angetippt · Dann öffnet 4.2 mit {teil}.",
+     "Gegeben Fertig, Vorkasse unbezahlt · Dann „Ware raus“ gesperrt „Vorkasse offen“ (werkstatt: „Freigabe fehlt“)."
+    ]
+   },
+   "kunde": {
+    "quelle": "Runde 52 (Owner 03.11.)",
+    "rechnungen": "Block Rechnungen: je offene Rechnung „{nr} · {Betrag}“, darunter „{auftrag} {Titel} · Ware im Haus | abgeholt/versendet am {TT.MM.}“, Chip Zahlstand; Tipp → Zahlung bestätigen (7.2), Auftragsnummer → Auftragskarte.",
+    "hinweis": "Kopf-Hinweis Zahlung nach zahlung_wahrheit.texte (nennt Rechnung und Auftrag, Tipp öffnet den Auftrag).",
+    "rausgegangen": "Block „Rausgegangen“ unter „Aktive Aufträge“: abgeholte/versendete Aufträge des Kunden, neueste oben, je Zeile Datum, Rechnung, Zahlstand; Tipp → Auftragskarte."
+   },
+   "auftrag": {
+    "quelle": "Runde 52 (Owner 03.11.)",
+    "teil_details": "Jedes Teil der Auftragskarte öffnet per Tipp (Block oder Knopf „Details“) seine Teilkarte 4.2 ({auftrag}#{teil}) – in jeder Station, auch Fertig und rausgegangen; Bearbeiten nur, solange erlaubt."
+   },
+   "rauspruefen_rausgegangen": {
+    "quelle": "Runde 52 (Owner 03.11.)",
+    "rausgegangen": "Aufruf mit einem rausgegangenen Auftrag (Station raus): Ansicht statt Übergabe – Kopf-Links Auftrag/Kunde, Block „Rausgegangen“ (Datum, Abholer bzw. {versanddienst} + Sendungsnummer), Block Zahlung (Rechnung, Zahlstand, Ansehen; offen: Zahlung bestätigen, Erinnern), Block Belege (Lieferschein ansehen/drucken, Rechnung ansehen); kein Übergabe-Knopf, keine Zeile „Fertigmeldung offen“."
+   },
+   "teil_formular": {
+    "regel": "Aktionen foto-hinzufuegen, mehrarbeit, bearbeiten, teil-fertig, preis-freigeben nur in der Teilkarte (Ansicht). Formular (#bearbeiten/#neu): Fuß Abbrechen · Teil stornieren (nur #bearbeiten, Sperrgründe laut screens[teil].aktionen.teil_stornieren: „Fertig gemeldet“, „Letztes Teil – Auftrag stornieren in Stufe 1 nicht“) · Speichern."
+   },
+   "entfernt_ledger": {
+    "quelle": "Runde 52 (Owner 03.11.)",
+    "regel": "Nur Einträge mit Owner-Entscheidung. Abgleich aller Archivstände V07–V39 (Spec + Klick-Inventar der Vorschau) am 03.11.",
+    "bewusst_entfernt": [
+     {
+      "was": "Werkstatt-Zeile: Knöpfe Foto · Mehrarbeit · Fertig melden · Ware annehmen je Auftrag, „Öffnen“",
+      "seit": "V28 Runde 34",
+      "entscheid": "Owner 02.11. Fassung 3 „Werker-Blick“: In Arbeit ohne Auftrags-Knöpfe, Knöpfe je Teil in der Kurzansicht, „Karte öffnen“ dort"
+     },
+     {
+      "was": "Auftragskarte: „Fertig melden“ auf Auftragsebene, solange Teile offen",
+      "seit": "V28 Runde 34",
+      "entscheid": "Owner 02.11. Fassung 3: Fertig melden nur über die Teile"
+     },
+     {
+      "was": "3.1 „Aus Mail-Signatur“",
+      "seit": "V30 Runde 36",
+      "entscheid": "Owner 02.11. Logikwege: Umweg 3.1 → 3.4 entfällt, Signatur kommt aus 3.4"
+     },
+     {
+      "was": "3 Liefertermin „Wunsch halten · Kunde vorwarnen“",
+      "seit": "V30 Runde 36b",
+      "entscheid": "Owner 02.11.: ersetzt durch „Wunsch trotzdem zusagen“"
+     },
+     {
+      "was": "10.1 Segment „noch offen / bar bezahlt / mit Karte bezahlt“ + „Übergabe bestätigen“",
+      "seit": "V30 Runde 36 G4",
+      "entscheid": "Owner 02.11.: ein Klick je Fall („Bar bezahlt · übergeben“, „Karte bezahlt · übergeben“)"
+     },
+     {
+      "was": "10.1 „Ohne Zahlung übergeben“",
+      "seit": "V35 Runde 48",
+      "entscheid": "Owner 03.11.: nur Sondervereinbarung, sonst bleibt die Ware"
+     },
+     {
+      "was": "Abholtage / Abholungen je Tag (8.4, 8.11)",
+      "seit": "V32 Runde 46",
+      "entscheid": "Owner 02.11.: Abholtage entfallen"
+     },
+     {
+      "was": "Grauer Balken „← zurück zu …“",
+      "seit": "V38 Runde 50",
+      "entscheid": "Owner 03.11.: entfällt, Rücksprung automatisch"
+     },
+     {
+      "was": "Fester Dienstleister „DPD“ im Text",
+      "seit": "V37 Runde 49",
+      "entscheid": "Owner 03.11.: Versanddienst in 8.1 einstellbar"
+     },
+     {
+      "was": "4.4 Schalter „Kunde wird informiert“",
+      "seit": "V28 Runde 34",
+      "entscheid": "Owner 02.11. Fassung 3: Kundeninfo läuft automatisch nach Kundenkarten-Einstellung"
+     },
+     {
+      "was": "4.4 Teilmengen „fertig? − +“ und „Problem melden“ im Dialog",
+      "seit": "V28 Runde 34",
+      "entscheid": "Owner 02.11. Fassung 3: fertig je Teil; „Problem melden“ steht im Fuß der Werkstatt-Kurzansicht"
+     },
+     {
+      "was": "Werkstatt-Abschnitt „Wareneingang“ mit „Ware annehmen“; Werkstatt-Zeile öffnet direkt die Auftragskarte",
+      "seit": "V28 Runde 34",
+      "entscheid": "Owner 02.11. Fassung 3: erwartete Ware nur auf Der Tag/3.0/Auftragskarte; Zeile öffnet die Kurzansicht"
+     },
+     {
+      "was": "Auftragskarte: Kettenschritt „fertig n von m“ öffnet 4.4",
+      "seit": "V28 Runde 34",
+      "entscheid": "Owner 02.11. Fassung 3: Fertig melden nur über die Teile"
+     },
+     {
+      "was": "Ware-Zustand „Gefahr“ / „gesperrt“ (3, 3.7)",
+      "seit": "V16 Runde 16",
+      "entscheid": "Owner 31.10.: entfällt ersatzlos, Verunreinigung = Abweichung; Recht heißt „Abweichungen & Reklamationen entscheiden“"
+     },
+     {
+      "was": "F1-Trefferliste der Suche",
+      "seit": "V13 F9",
+      "entscheid": "Owner: ersetzt durch die Suche mit Gehirn (F9)"
+     },
+     {
+      "was": "Developer-Login in der Anmeldeliste",
+      "seit": "V12",
+      "entscheid": "Owner: Wartungs-/Developer-Logins erscheinen nicht in der Anmeldeliste"
+     },
+     {
+      "was": "Mehrarbeit an der Auftragskarte in Station Fertig",
+      "seit": "V30 Runde 33",
+      "entscheid": "werkstattregel.stationen: in Fertig entfällt; nachtragen in 4.4"
+     },
+     {
+      "was": "„Zahlung“/„Rechnung erstellen“ an jeder Auftragskarte",
+      "seit": "V15 / V40",
+      "entscheid": "Regel statt Löschung: „Zahlung bestätigen“ nur mit offener Rechnung, „Rechnung erstellen“ nur ohne Rechnung (zahlung_wahrheit, prozesse.abschluss)"
+     }
+    ],
+    "zurueckgeholt_runde52": [
+     {
+      "was": "4.2 Formular: „Abbrechen“ und „Teil stornieren“ im Fuß",
+      "weg_seit": "V31 Runde 38 (Knöpfe der Teilkarte rutschten in den Formular-Fuß und verdrängten sie)",
+      "jetzt": "screens[teil].aktionen[].nur_ansicht"
+     },
+     {
+      "was": "Werkstatt-Kurzansicht: Tipp auf ein Teil öffnet seine Details (4.2)",
+      "weg_seit": "V28 Fassung 3 (nicht mitgebaut, nicht entschieden)",
+      "jetzt": "screens[werkstatt].runde52.teil_details"
+     },
+     {
+      "was": "10.1 „Bar bezahlt · übergeben“ / „Karte bezahlt · übergeben“ bei Kunden mit Sondervereinbarung",
+      "weg_seit": "V35 Runde 48 (Sondervereinbarung ersetzte die Knöpfe statt sie zu ergänzen)",
+      "jetzt": "screens[rauspruefen].sondervereinbarung_zusatz"
+     },
+     {
+      "was": "Kopf der Auftragskarte = Auftragstitel, Kopf der Kundenkarte = Kundenname",
+      "weg_seit": "V39 Runde 51 (Seitenname-Regel zu breit angewendet)",
+      "jetzt": "verhalten_appweit.seitenname.objektkarten"
+     },
+     {
+      "was": "10.1 Rechnung ansehen und „Zahlung bestätigen“ (Recht geld)",
+      "weg_seit": "V30 Runde 36 G4 (mit dem Segment verschwunden, nicht entschieden)",
+      "jetzt": "screens[rauspruefen].runde52.block_zahlung"
+     },
+     {
+      "was": "Auftragskarte: jedes Teil öffnet seine Teilkarte 4.2 – auch bei fertigen und rausgegangenen Aufträgen",
+      "weg_seit": "V18 (bei Fertig nur noch gesperrt, später ganz weg; nicht entschieden)",
+      "jetzt": "screens[auftrag].runde52b.teil_details"
+     },
+     {
+      "was": "10.1 für rausgegangene Ware: Datum, Abholer/Versand, Rechnung, Lieferschein ansehen",
+      "weg_seit": "V27 (Kette „verschickt“ führte hierher; danach nur leere Übergabe-Ansicht)",
+      "jetzt": "screens[rauspruefen].runde52b.rausgegangen"
+     },
+     {
+      "was": "Kundenkarte: Tipp auf offene Rechnung → Zahlung bestätigen (7.2)",
+      "weg_seit": "V40-Entwurf (Runde 52 setzte den Tipp auf den Auftrag)",
+      "jetzt": "screens[kunde].runde52.rechnungen"
+     },
+     {
+      "was": "Der Tag, Block Geld einfordern: „Erinnern“",
+      "weg_seit": "V40-Entwurf (Musterdaten-Umbau Runde 52)",
+      "jetzt": "tagkonfig.bausteine[rechnungen]"
+     }
+    ]
+   },
+   "groessenregel": {
+    "quelle": "Runde 52c · U-240 (Owner 03.11., PL 18:30)",
+    "regel": "Größe je Gerät statt einer Größe für alle. Gerät nach Breite (verhalten_appweit.geraete): Handy < 768 px, Tablet 768–1279 px, Desktop ≥ 1280 px. KrApp setzt data-geraet und data-groesse; endversion_design.css stylt danach.",
+    "desktop": {
+     "data_groesse": "v11",
+     "was": "kompakt (Schriftgrößen V1.1, --touch 40 px für Maus)",
+     "dialoge": "höchstens ca. 1100 px breit (Werkbank-Dialoge wie 3, 3.1: min(1100 px, Breite − 40 px)); Formulare zweispaltig, Prüfliste rechts 320 px"
+    },
+    "tablet": {
+     "data_groesse": "dicht",
+     "groesse": "1220 × 880 (auch mit Tastatur)",
+     "was": "Größen unter V8 erlaubt (Schrift ≈ V1.1, Knöpfe/Felder ≥ 44 px), Anordnung dichter: Formulare zweispaltig volle Breite, Prüfliste und Hinweise oben einklappbar („Prüfliste & Hinweise · n offen“)",
+     "pflicht": "Hauptaktion steht immer im Fuß ohne Scrollen; alle Pflichtfelder sind ohne Scrollen sichtbar oder werden per Enter der Reihe nach angesprungen und ins Bild gerollt (klare Fokusmarkierung)."
+    },
+    "handy": {
+     "data_groesse": "v8",
+     "was": "V8 wie bisher (Touch ≥ 48 px), einspaltig"
+    },
+    "pruefung": "Sichtvertrag und Prüfbilder je Größe; UI-Gate: Desktop-Dialog > 1120 px = rot, Knöpfe Desktop ≥ 38 px, Tablet/Handy ≥ 44 px; Hauptaktion in Dialogen auf allen drei Größen ohne Scrollen."
+   },
+   "tastatur_enter": {
+    "quelle": "Runde 52c · U-240 (Owner 03.11., PL 18:30)",
+    "regel": "Überall (alle Formulare, Dialoge, Seiten): Enter in einem Eingabefeld (input, select) springt ins nächste Feld der Fokusreihenfolge; in einem Mehrzeilenfeld bleibt Enter ein Zeilenumbruch. Im letzten Pflichtfeld löst Enter die Hauptaktion aus – mit Tor: fehlt noch ein Pflichtfeld, springt der Fokus dorthin und ein Hinweis „Pflicht fehlt: {Feld}“ erscheint; sonst gilt das Tor der Hauptaktion selbst (z. B. Dublette, Vorkasse).",
+    "ausnahmen": "Felder mit offener Trefferliste (Suche, Kundenauswahl, Katalog): Enter wählt den markierten Treffer. PIN-Eingabe: Ziffern direkt.",
+    "reihenfolge": "Fokusreihenfolge = Reihenfolge der Felder im Sichtvertrag (seiten[].fokus.felder); enter_bis = letztes Pflichtfeld. Tab folgt derselben Reihenfolge.",
+    "pruefung": "pruefe_sicht.cjs drückt je Seite Enter vom ersten Feld bis zum letzten Pflichtfeld und vergleicht das fokussierte Feld mit dem Sichtvertrag – Abweichung = rot."
+   },
+   "pruefskript": {
+    "quelle": "PL 03.11. 16:30 / 18:30",
+    "regel": "pruefe_sicht.cjs meldet per PIN an: routen.json login.schritte mit Platzhaltern im Selektor ({rolle_person} = <ROLLE>_NAME, {passwort_ziffer_n} = n-te Stelle von <ROLLE>_PASSWORT) oder Schritt „tippen“ (PIN Ziffer für Ziffer); Vercel-Freigabe aus Umgebungsvariable (routen.share_env, Standard VERCEL_SHARE) beim ersten Aufruf; Seiten mit pfad null + grund = gelb mit Grund; prüft Fokusreihenfolge per Enter. Ohne require() (import()), keine unbenutzten Variablen."
+   }
+  }
  },
  "abschnitte": {
   "Login": {
@@ -785,8 +1069,8 @@
   "rechte": "Ohne Recht ist ein Bereich/Eintrag/Knopf unsichtbar (nicht ausgegraut); dieselbe Prüfung im Server für jede Lese- und Schreibaktion (U-200, K21). `rollen` an Elementen ist nur Vorlage für Musteransichten – verbindlich ist ausschließlich `recht`. F1: `recht_einer` (Liste) = eines der genannten Rechte genügt; Knopf und Server prüfen dieselbe Liste. `recht_regel` beschreibt nur eine zusätzliche Bedingung.",
   "zeit": "Alle Zeiten und Datumsgrenzen in Europe/Berlin (Sommer/Winterzeit). „Tage“ in Grundzeilen = Arbeitstage nach arbeitstage() (werkstattregel.stufe1_regeln.arbeitstage, inkl. Feiertage); Ausnahmen: Fälligkeit/Überfälligkeit von Rechnungen in Kalendertagen. Format: Datum „Do 01.10.“, Uhrzeit „14:00“.",
   "zeilenklick": "Klick auf eine Zeile – auch im Handlungsbedarf (Der Tag) – öffnet das Objekt der Zeile (Auftragskarte, Kundenkarte, Rechnung, Reklamation, Aufgabe, Mail); die Hauptaktion des Falls löst nur der farbige Knopf aus (Runde 46 (Owner 02.11. abends)).",
-  "tastatur": "Desktop (U-049): j/k wählt Einträge im Handlungsbedarf, Enter = Hauptaktion, s = Später, N = „Neu erfassen“ (3.0), / = Suche, Esc schließt die oberste Ebene – ist darin ein Formular offen (z. B. Login ändern), schließt Esc zuerst das Formular. Nicht in Eingabefeldern. „Nicht in Eingabefeldern“ gilt für die Buchstaben-Tasten (j, k, s, N, /); Esc schließt die oberste Ebene auch aus einem Eingabefeld heraus (Runde 26).",
-  "geraete": "Handy < 768 px, Tablet 768–1279 px, Desktop ≥ 1280 px Breite. Zweispaltige Dialoge werden auf Tablet/Handy einspaltig, breite Tabellen scrollen waagrecht.",
+  "tastatur": "Desktop (U-049): j/k wählt Einträge im Handlungsbedarf, Enter = Hauptaktion, s = Später, N = „Neu erfassen“ (3.0), / = Suche, Esc schließt die oberste Ebene – ist darin ein Formular offen (z. B. Login ändern), schließt Esc zuerst das Formular. Nicht in Eingabefeldern. „Nicht in Eingabefeldern“ gilt für die Buchstaben-Tasten (j, k, s, N, /); Esc schließt die oberste Ebene auch aus einem Eingabefeld heraus (Runde 26). Runde 52c · U-240 (Owner 03.11., PL 18:30): in Eingabefeldern Enter = nächstes Feld, im letzten Pflichtfeld Enter = Hauptaktion mit Tor (verhalten_appweit.tastatur_enter).",
+  "geraete": "Handy < 768 px, Tablet 768–1279 px, Desktop ≥ 1280 px Breite. Runde 52c · U-240 (Owner 03.11., PL 18:30): Desktop kompakt (V1.1, Dialoge ≤ ca. 1100 px, Formulare zweispaltig), Tablet dicht (zweispaltig, Prüfliste einklappbar, ≥ 44 px), Handy V8 einspaltig – siehe verhalten_appweit.groessenregel. Breite Tabellen scrollen waagrecht.",
   "kennungen": "Jedes Feld und jede Aktion trägt data-spec-id=\"<screen>.<id>\"; fehlt im Bauplan eine id, ist sie die Kleinschreibung des Textes mit Bindestrichen (ohne Umlaute: ä→a …). F1-Ergänzung (Runde 25, U-230 Testmodell): Dialoge, Seiten und Karten tragen data-spec-id=\"<screen>\" am Rahmen, das × im Dialogkopf \"<screen>.schliessen\"; Kopfleiste und Seitenleiste \"navigation.<id>\" (navigation.kopf/buero). Wiederholte Elemente (Positionen, Treffer) tragen dieselbe Kennung je Eintrag, gezählt in Anzeigereihenfolge ab 1. Zusätzlich je Seite: Zustandsblock \"<screen>.zustand.<zustand>\", Prüflisten-Zeile \"<screen>.pruefliste.<zeile>\" (Status-Chip ok · prüfen · fehlt · entscheiden) und \"<screen>.pruefliste.info\", Herkunftszeile am Feld \"<screen>.<feld>.herkunft\", Fehlertext am Feld \"<screen>.<feld>.fehler\", rail-Bausteine \"<screen>.dublette\" und \"<screen>.adresse\", Kundenzeile im Eingang \"eingang.kundenzeile\", Treffer der Kundensuche \"eingang.kundensuche.treffer\"; Schnell erfassen: \"<screen>.erfassen-text\", \"<screen>.angaben-erkennen\", \"<screen>.alles-bestaetigen\". Die Felder des Kundenformulars tragen \"<screen>.<feld-id aus formulare.kunde>\", die Positionsfelder \"eingang.<feld-id aus formulare.position>\". Runde 26: Rückfrage Typwechsel \"<screen>.zustand.typwechsel\" mit \"<screen>.typ-wechseln\" und \"<screen>.typ-wechsel-abbrechen\"; in 5.2 der Hinweis oben \"kundebearbeiten.hinweis\" („Für Aufträge fehlt: …“) und je Feld mit Vorschlag die Zeile „neu: {wert} · bisher: {wert}“ mit dem Knopf \"<screen>.<feld>.uebernehmen\". Absprachen in 5.2: \"kundebearbeiten.absprache-hinzufuegen\" und je Eintrag \"kundebearbeiten.absprache.<bezeichnung|wert|geld|hinweis|hoch|runter|entfernen>\" (gezählt ab 1); Adressmeldung unter den Feldern: \"<screen>.adresse-uebernehmen\" („{ort_richtig} übernehmen“ bzw. Vorschlag übernehmen) und \"<screen>.adresse-stimmt-so\". Kennungen der F1- und F5a-Seiten schreiben Umlaute als ae/oe/ue/ss. Runde 28 (Warenprüfung, 3.7 und 3 Abschnitt 4): \"<screen>.packstuecke\" (Anzeige „{n} von {m}“) mit \"<screen>.packstuecke-minus\"/\"-plus\", Chip \"<screen>.rest-kommt-noch\", Segment \"<screen>.warenzustand\" (Unauffällig | Abweichung), Grund-Chips \"<screen>.grund\" (Option = Label), Fotos \"<screen>.foto.paket\" / \".foto.teile\" / \".foto.abweichung\" (öffnet Kamera bzw. Dateiauswahl), \"<screen>.alle-stimmen\", je Position \"<screen>.position.stimmt\" und \"<screen>.position.geliefert\" (gezählt ab 1), \"<screen>.abgestellt\", \"<screen>.verfahren\" (stimmt | abweichend), \"<screen>.hinweis-werkstatt\".",
   "ziele_bestand": "Solange eine Zielseite noch nicht nach Bauplan gebaut ist, ruft der Knopf den bestehenden Code-Pfad mit demselben Objekt auf (z. B. Auftragskarte, bestehende Fertigmeldung, bestehender Warenausgang, bestehender Mail-Dialog, bestehende Zahlung). Gibt es dafür keinen Pfad, ist die Ersatzaktion „Auftrag öffnen“ (bzw. das Objekt öffnen) – nie ein Eintrag ohne Knopf. Links auf noch nicht gebaute Ziele (z. B. kunde, katalog) aus einer offenen Erfassung oder einem Dialog: Ist der bestehende Pfad eine Ebene (Dialog/Blatt), öffnet oeffne() ihn als Ebene darüber; ist er eine Seitennavigation, öffnet er in einem neuen Browser-Tab – die offene Erfassung bzw. der Dialog bleibt erhalten. Ausnahme (Runde 44): die Kundenkarte aus dem Eingang öffnet immer als Ebene.",
   "argumente": "{auftrag} A-Nummer · {kv} KV-Nummer KV-JJJJ-NNNN (eigenes Objekt, U-169/A-43; die Auftragskarte und ihre Dialoge nehmen statt {auftrag} auch {kv}) · {kunde} K-Nummer · {rechnung} R-Nummer · {mail} Graph-Nachrichten-ID · {beleg} Beleg-ID (eigenes Objekt Beleg mit geordneten Seiten = Datei-IDs, bausteine_vertraege.werkbank.schluessel.beleg) · {entwurf} Entwurfs-ID · {teil} Positions-ID · {oberflaeche} Schlüssel der Oberflächen-Auswahl (formulare.position.felder[oberflaeche].schluessel; angezeigt wird der Text der Auswahl) · {leistung} Leistungs-ID (Katalog) · {zahlung} Zahlungs-ID (gebuchte Zahlung) · {dokument} Datei-ID eines Dokuments am Auftrag (KV-PDF, Lieferschein, hochgeladene Datei) · Foto-Aufruf aus Fertig melden: {auftrag}#{teil}#fertig (Art „fertig“, werkstattregel.pflichtfoto.art) · F1: {eingang} Eingang (intake_item, Mail/Foto/Datei/Notiz; {mail} ist ein {eingang} der Art Mail) · {reklamation} RK-JJJJ-NNNN · {aufgabe} Aufgaben-ID · {eingangsrechnung} ER-JJJJ-NNNN · {datei} Original (intake_file)",
@@ -1281,7 +1565,55 @@
   "seitenname": {
    "quelle": "Runde 51 (Owner 03.11.)",
    "regel": "Eine Wahrheit je Seite: Der Kopf jeder Seite und jedes Dialogs zeigt immer den Seitennamen aus screens[].titel – in Menü, Seitenwahl, Bauplan, Testfällen und App gleich. Ein Modus (screens[].modi) ersetzt den Namen nie, er steht als Unterzeile im Kopf (z. B. „Wem gehört das?“ · darunter „Kein Geschäftsvorgang“). Knöpfe, die eine Seite öffnen, heißen wie diese Seite oder wie deren Hauptaktion (3.0 „Wem gehört das?“ öffnet 3.4 – nicht „Zuordnen“).",
-   "abnahme": "Für jede Seite des Pakets und jeden Modus: Kopf = screens[].titel, Unterzeile = modi[k] (wenn Modus). Prüfung automatisch (Seiten-Gate der Endversion, pruefe_sicht.cjs Titelvergleich)."
+   "abnahme": "Für jede Seite des Pakets und jeden Modus: Kopf = screens[].titel, Unterzeile = modi[k] (wenn Modus). Prüfung automatisch (Seiten-Gate der Endversion, pruefe_sicht.cjs Titelvergleich).",
+   "objektkarten": "Runde 52 (Owner 03.11.): Die Regel „Kopf = Seitenname“ gilt für Seiten und Dialoge. Objektkarten zeigen im Kopf den Namen des Objekts (4.1 Auftragstitel, 5.1 Kundenname, 4.2 „{teil} · {Bezeichnung}“, 4.8 Reklamation {nr}); der Seitenname steht klein als Kennung davor (z. B. „4.1 Auftragskarte · {auftrag}“)."
+  },
+  "zahlung_wahrheit": {
+   "quelle": "Runde 52 (Owner 03.11.)",
+   "regel": "Zahlstand eines Auftrags wird nur aus Rechnungen und Zahlungen abgeleitet (invoices.status, payments), nie aus dem Zahlungsmodus-Text. Zahlungsmodus sagt, WANN gezahlt werden muss; Rechnung/Zahlung sagen, OB gezahlt ist.",
+   "ableitung": {
+    "zahlstand": "keine Rechnung → „Rechnung folgt“ (vor Fertig) bzw. „Rechnung fehlt“ (nach Fertig, nicht Vorkasse) · Rechnung offen, nicht fällig → „offen · fällig {TT.MM.}“ · offen und fällig überschritten → „überfällig seit {n} Tagen“ · bezahlt → „bezahlt {TT.MM.}“ · Sondervereinbarung → „Rechnung folgt (Sondervereinbarung)“",
+    "ware": "Station des Auftrags: im Haus (Wareneingang/In Arbeit/Fertig) · raus (abgeholt/versendet am {TT.MM.})"
+   },
+   "invarianten": [
+    "Vorkasse und Station raus ⇒ Rechnung bezahlt oder gültige Sondervereinbarung (sonst Datenfehler, recordGoodsOutCommand lehnt ab).",
+    "Vorkasse-Kunde mit offener/überfälliger Rechnung ⇒ die Ware dieser Rechnung ist im Haus (Station Fertig) – die App zeigt das an jeder Stelle, an der die Rechnung erscheint („Ware im Haus“).",
+    "Jede Rechnung zeigt ihren Auftrag; jede Stelle, die „überfällig“/„Vorkasse offen“ zeigt, führt mit einem Klick zum Auftrag und zur Rechnung.",
+    "Rechnung festgeschrieben ⇒ Verlaufseintrag „Rechnung {nr} · {Betrag}“ am Auftrag; Zahlung gebucht ⇒ Verlaufseintrag „Zahlung {nr} · {Betrag}“; der Reiter „Rechnungen & Zahlungen“ zählt genau diese."
+   ],
+   "pruefung": "Gate der Endversion (musterdaten_gate): die Beispieldaten der Vorschau erfüllen alle Invarianten – sonst keine Lieferung."
+  },
+  "keine_stillen_loeschungen": {
+   "quelle": "Runde 52 (Owner 03.11.)",
+   "regel": "Ein sichtbares Element oder ein Klickweg, der einmal in einer gelieferten Fassung stand, verschwindet nur mit Eintrag in baustand.entfernt_ledger (was, seit wann, Owner-Entscheidung mit Quelle). Ohne Eintrag ist das Entfernen ein Fehler und wird zurückgeholt. Gilt für Spec, Vorschau und App gleichermaßen.",
+   "pruefung": "Gate der Endversion (klick_inventar): je Seite und Beispiel-Aufruf werden alle anklickbaren Elemente mit Ziel erfasst und mit der zuletzt gelieferten Fassung verglichen; fehlt etwas ohne Ledger-Eintrag → rot, keine Lieferung. Codex: Teil-PRs dürfen keine Knöpfe/Wege der Zielseite entfernen, die nicht im Ledger stehen (Prüfchat vergleicht vor dem Merge mit den Soll-Bildern). Seit Runde 52b zusätzlich gegen alle Archivstände V07–V38: jedes Ziel, das ein Aufruf je hatte, bleibt erreichbar oder steht mit Grund im Ledger."
+  },
+  "groessenregel": {
+   "quelle": "Runde 52c · U-240 (Owner 03.11., PL 18:30)",
+   "regel": "Größe je Gerät statt einer Größe für alle. Gerät nach Breite (verhalten_appweit.geraete): Handy < 768 px, Tablet 768–1279 px, Desktop ≥ 1280 px. KrApp setzt data-geraet und data-groesse; endversion_design.css stylt danach.",
+   "desktop": {
+    "data_groesse": "v11",
+    "was": "kompakt (Schriftgrößen V1.1, --touch 40 px für Maus)",
+    "dialoge": "höchstens ca. 1100 px breit (Werkbank-Dialoge wie 3, 3.1: min(1100 px, Breite − 40 px)); Formulare zweispaltig, Prüfliste rechts 320 px"
+   },
+   "tablet": {
+    "data_groesse": "dicht",
+    "groesse": "1220 × 880 (auch mit Tastatur)",
+    "was": "Größen unter V8 erlaubt (Schrift ≈ V1.1, Knöpfe/Felder ≥ 44 px), Anordnung dichter: Formulare zweispaltig volle Breite, Prüfliste und Hinweise oben einklappbar („Prüfliste & Hinweise · n offen“)",
+    "pflicht": "Hauptaktion steht immer im Fuß ohne Scrollen; alle Pflichtfelder sind ohne Scrollen sichtbar oder werden per Enter der Reihe nach angesprungen und ins Bild gerollt (klare Fokusmarkierung)."
+   },
+   "handy": {
+    "data_groesse": "v8",
+    "was": "V8 wie bisher (Touch ≥ 48 px), einspaltig"
+   },
+   "pruefung": "Sichtvertrag und Prüfbilder je Größe; UI-Gate: Desktop-Dialog > 1120 px = rot, Knöpfe Desktop ≥ 38 px, Tablet/Handy ≥ 44 px; Hauptaktion in Dialogen auf allen drei Größen ohne Scrollen."
+  },
+  "tastatur_enter": {
+   "quelle": "Runde 52c · U-240 (Owner 03.11., PL 18:30)",
+   "regel": "Überall (alle Formulare, Dialoge, Seiten): Enter in einem Eingabefeld (input, select) springt ins nächste Feld der Fokusreihenfolge; in einem Mehrzeilenfeld bleibt Enter ein Zeilenumbruch. Im letzten Pflichtfeld löst Enter die Hauptaktion aus – mit Tor: fehlt noch ein Pflichtfeld, springt der Fokus dorthin und ein Hinweis „Pflicht fehlt: {Feld}“ erscheint; sonst gilt das Tor der Hauptaktion selbst (z. B. Dublette, Vorkasse).",
+   "ausnahmen": "Felder mit offener Trefferliste (Suche, Kundenauswahl, Katalog): Enter wählt den markierten Treffer. PIN-Eingabe: Ziffern direkt.",
+   "reihenfolge": "Fokusreihenfolge = Reihenfolge der Felder im Sichtvertrag (seiten[].fokus.felder); enter_bis = letztes Pflichtfeld. Tab folgt derselben Reihenfolge.",
+   "pruefung": "pruefe_sicht.cjs drückt je Seite Enter vom ersten Feld bis zum letzten Pflichtfeld und vergleicht das fokussierte Feld mit dem Sichtvertrag – Abweichung = rot."
   },
   "grundzustand": "„zustand:daten“ = Grundzustand eines Fensters bzw. einer Seite: die normale Ansicht mit Daten (kein Sonderzustand aus zustaende); „Erneut“, „Zurück“, „Zur Lücke“ führen dorthin, Eingaben bleiben erhalten (Befund 40).",
   "entscheidung_fuehren": "Blickführung durch Farbe: Je Ansicht genau EIN empfohlener Hauptknopf in der Akzentfarbe (Primär, blau); alle weiteren Aktionen ruhig (sekundär/leise, ohne Füllfarbe). Der empfohlene Weg ist der, den der Zustand bzw. das erkannte Anliegen nahelegt; nie zwei konkurrierende Primärknöpfe. Der blaue Knopf zieht das Auge zuerst und sitzt in Daumennähe (Tablet) bzw. als Hauptknopf unten/rechts (Desktop).",

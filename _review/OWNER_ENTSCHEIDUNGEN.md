@@ -252,3 +252,9 @@ Neueste vom Owner freigegebene Version (27.09.2026, `_DESIGN_VERBINDLICH/FREIGAB
 - Ersetzt U-238 (Prototyp-Ordner mit Mock-Code entfernt, ins 99_archive verschoben).
 - Kein Produkt-Merge ohne gruenen pruefe_sicht-Lauf des Pruefchats fuer die Seiten des PR (Gelb nur mit Grund in der Abgabe).
 - Owner-Autorisierung: Siglinder.
+
+## U-240 - Groessenregel je Geraet (03.11.2026)
+- Desktop: kompakt (V1.1-Groessen), Dialoge hoechstens ca. 1100 px breit.
+- Tablet (1220x880, auch mit Tastatur): alles ohne Scrollen der Hauptaktion sichtbar; dafuer duerfen Knoepfe/Felder kleiner sein als V8 (Abstriche erlaubt), Felder und Knoepfe dichter und sinnvoller angeordnet (z. B. zwei Spalten, Pruefliste einklappbar). Handy bleibt V8 (Touch >= 48 px).
+- Ueberall: Enter springt ins naechste Feld (Fokusreihenfolge = Lesereihenfolge), Enter im letzten Pflichtfeld loest die Hauptaktion mit ihrem Tor aus; Auswahlfelder per Tastatur bedienbar.
+- Owner-Autorisierung: Siglinder (Antwort 03.11.: Tablet muss alles zeigen und Tastatur koennen, Abstriche ok, besser anordnen, automatisch ins naechste Feld mit Enter).

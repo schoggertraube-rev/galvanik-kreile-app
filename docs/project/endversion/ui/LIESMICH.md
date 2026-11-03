@@ -1,6 +1,6 @@
 # UI-Wahrheit der Endversion (für Planungschat, Prüfchat, Codex)
 
-Stand: 2026-11-03 (Runde 51) · Quelle: Owner-Vorschau (Endversion) · Hashes siehe codex/BAUPLAN.next.json → bauplan.ui
+Stand: 2026-11-03 (Runde 52 · V41) · Quelle: Owner-Vorschau (Endversion) · Hashes siehe codex/BAUPLAN.next.json → bauplan.ui
 
 ## Warum dieser Ordner existiert
 Codex war bis jetzt an zwei UI-Wahrheiten gebunden: Designsystem V1.1 (tokens/komponenten) plus vier August-Seitenreferenzen und den V5-Gesamtmock für Abläufe. Der Look der Endversion (Der Tag, Auftragskarte, Teilkarte, Eingang, Werkstattkarte, Mehrarbeit, Warenausgang …) steckt aber in `groessen_v8.css`, `ui_ergaenzung.css` und ~60 KB Inline-Styles der Vorschau, die Codex nie bekommen hat. Ergebnis: die gebaute App sieht anders aus als die Vorschau. Dieser Ordner macht die Endversion zur **einzigen** UI-Wahrheit – inhaltsfrei (keine Musterdaten, keine Namen, kein Mock-Code).
@@ -26,7 +26,7 @@ Codex war bis jetzt an zwei UI-Wahrheiten gebunden: Designsystem V1.1 (tokens/ko
 ## Aufruf Prüfskript
 ```
 npm i -D playwright && npx playwright install chromium   # einmalig
-MEISTER_EMAIL=… MEISTER_PASSWORT=… WERKSTATT_EMAIL=… WERKSTATT_PASSWORT=… \
+MEISTER_NAME=… MEISTER_PASSWORT=… WERKSTATT_NAME=… WERKSTATT_PASSWORT=… VERCEL_SHARE=… \
 node docs/project/endversion/ui/pruefe_sicht.cjs --app https://<preview>.vercel.app --routen docs/project/endversion/ui/routen.json [--nur eingang,auftrag]
 ```
 Ergebnis: `pruefbericht.json|md` + `pruefbilder_app/`. Rot = nicht mergen.
@@ -38,3 +38,10 @@ Mock-Code (index.html, JS), Musterdaten, Kundennamen, Beträge – der Musterdat
 - **Ein Name je Seite:** Kopf = `screens[].titel`; ein Modus ersetzt ihn nie, sondern steht als Unterzeile (`verhalten_appweit.seitenname`). Verbindliche Liste mit Einstiegen und Modi: `paket.seitenkatalog` im Bauplan.
 - **Normalfall vs. Modus:** Soll-Bilder ohne `__modus` zeigen den Normalfall (so wie die App die Seite öffnet, z. B. 3.0 über das Plus); jeder Modus hat ein eigenes Bild. Frühere Soll-Bilder, die 3.0 als „Zettel lesen“, 3.1 als „Lieferant anlegen“ usw. zeigten, sind ungültig.
 - **Seiten-Gate** der Endversion (vor jeder Lieferung): Kopf/Unterzeile, keine Roh-Platzhalter, kein Knopf doppelt, höchstens ein Hauptknopf im Fuß, 3.0 leer ohne Zuordnen-Knöpfe – über alle Paket-Seiten und Modi, Desktop und Handy.
+
+## Runde 52 (Owner/PL 03.11.) – Größenregel U-240, Enter, PIN
+- **Größe je Gerät** (`verhalten_appweit.groessenregel`): KrApp setzt `data-geraet` nach Breite (Handy < 768, Tablet 768–1279, Desktop ≥ 1280) und `data-groesse` = `v11` (Desktop, kompakt, `--touch` 40 px, Dialoge ≤ ca. 1100 px, Formulare zweispaltig) · `dicht` (Tablet: ≥ 44 px, zweispaltig, „Prüfliste & Hinweise“ oben einklappbar) · `v8` (Handy). Das Bündel stylt danach; Sichtvertrag und Prüfbilder sind je Größe neu.
+- **Enter = nächstes Feld** (`verhalten_appweit.tastatur_enter`): im letzten Pflichtfeld Hauptaktion mit Tor. Reihenfolge je Seite: `SICHTVERTRAG.json → seiten[].fokus.felder`, `enter_bis` = letztes Pflichtfeld. `pruefe_sicht.cjs` drückt Enter vom ersten Feld bis dorthin und meldet Abweichungen rot.
+- **Kopf-Soll**: Paket-Seiten = Seitenname; Objektkarten (4.1, 5.1, 4.2) zeigen den Objektnamen (`kopf_art`), übrige Seiten den Kopf wie in der Vorschau.
+- **PIN-Anmeldung im Prüfskript** (PL 16:30): `routen.json` → `login.schritte` mit Platzhaltern auch im Selektor – `{rolle_person}` = `<ROLLE>_NAME`, `{passwort_ziffer_1…4}` = Stelle von `<ROLLE>_PASSWORT` – oder kürzer `["tippen", "[data-spec-id=\"login.anmelden\"] button:text-is(\"{ziffer}\")", "{passwort}"]`. Vercel-Freigabe: `VERCEL_SHARE` (oder `routen.share_env`) → erster Aufruf mit `?_vercel_share=`. Seiten mit `"pfad": null, "grund": "…"` erscheinen gelb mit Grund. Datei ohne `require()` (Module per `import()`), ESLint-recommended sauber – der Pfad `pruefe_sicht.cjs` bleibt.
+- **Prüfung in der Endversion** vor jeder Lieferung: Selbsttest des Prüfskripts gegen die Vorschau (117/117 grün), UI-Gate (Desktop-Dialog > 1120 px rot, Knöpfe Desktop ≥ 38 px, Tablet/Handy ≥ 44 px, Fokusreihenfolge vorhanden), Seiten-, Musterdaten-, Klick-, Referenz-, Stand-Gate.

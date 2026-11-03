@@ -202,7 +202,7 @@ const TA_B2F_BRANCH = "codex/ta-b2f";
 const TA_B2F_BASE_SHA = "06e56daae267e49a7e23a5c40a70fbbef21b8cb8";
 const TA_B2F_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2F.json";
 const TA_B2F_BAUPLAN = "docs/project/endversion/codex/BAUPLAN.json";
-const TA_B2F_BAUPLAN_SHA256 = "888114C6247B711CC02D8C78BB9429ADCF9C494CFBC2E066F5202C6E966BB0D8";
+const TA_B2F_BAUPLAN_SHA256 = "DF3E1AFEC7B6C3DED6DA51F22FDAADF8CFAB780DA9A4F619EDB42D3C2D6AC5C4";
 const TA_B2F_VALUES = Object.freeze({
   schemaVersion: 1,
   package: "B2-EINGANG-KOMPLETT-ANCHOR",
@@ -210,7 +210,7 @@ const TA_B2F_VALUES = Object.freeze({
   mainBaseSha: TA_B2F_BASE_SHA,
   authorizedBy: "Siglinder",
   authorizedAt: "2026-11-03",
-  scope: "TA-B2f Fassung 4: Runde 51, eine Endversion-UI-Bindung und AP-EIN Teile 0-6",
+  scope: "TA-B2f Runde 52: gebundene Endversion V41 und AP-EIN Teile 0-6",
   bauplanSha256: TA_B2F_BAUPLAN_SHA256,
   probeResult: "PASS",
 });
@@ -415,7 +415,6 @@ const TA_B2F_ANCHOR_ALLOWLIST = Object.freeze([
 const TA_B2F_REQUIRED_FILES = Object.freeze([
   ".gitattributes",
   ".github/workflows/eslint-ratchet.yml",
-  "eslint.config.mjs",
   "_review/AKTUELLE_ANWEISUNG.md",
   "_review/OWNER_ENTSCHEIDUNGEN.md",
   "docs/project/arbeitspakete/AP-EIN-eingang-komplett/PAKET.md",
@@ -433,6 +432,18 @@ const TA_B2F_REQUIRED_FILES = Object.freeze([
   "src/test/live_package_scope.test.ts",
 ]);
 const SALES_STAGE_B2_EXACT_ALLOWLIST = Object.freeze([
+  "src/app/actions/settings.actions.ts",
+  "src/app/warendurchlauf/page.tsx",
+  "src/lib/server/commands/orderStationCommand.ts",
+  "src/lib/server/goodsReceiptOrderPort.ts",
+  "src/lib/server/intakeDraftEvents.ts",
+  "src/lib/server/intakeOriginalAudit.ts",
+  "src/lib/types/operationalOrder.ts",
+  "src/modules/fundament/fundament.manifest.json",
+  "src/modules/fundament/server-public.ts",
+  "src/modules/quotes/__tests__/quoteCommands.test.ts",
+  "src/modules/quotes/server/types.ts",
+  "src/test/f1_3_live_card.integration.test.ts",
   ".github/workflows/agentur-gate.yml",
   "quality/module-gates-baseline.json",
   "docs/delivery/ABGABE_B2.md",

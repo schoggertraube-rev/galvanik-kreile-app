@@ -428,6 +428,28 @@ describe("Kreile live package scope", () => {
     ]));
   });
 
+  it("accepts each exact Runde 52 inventory path and rejects its adjacent file", () => {
+    for (const path of [
+      "src/app/actions/settings.actions.ts",
+      "src/app/warendurchlauf/page.tsx",
+      "src/lib/server/commands/orderStationCommand.ts",
+      "src/lib/server/goodsReceiptOrderPort.ts",
+      "src/lib/server/intakeDraftEvents.ts",
+      "src/lib/server/intakeOriginalAudit.ts",
+      "src/lib/types/operationalOrder.ts",
+      "src/modules/fundament/fundament.manifest.json",
+      "src/modules/fundament/server-public.ts",
+      "src/modules/quotes/__tests__/quoteCommands.test.ts",
+      "src/modules/quotes/server/types.ts",
+      "src/test/f1_3_live_card.integration.test.ts"
+]) {
+      expect(checkSalesStageB2ScopeForTest({files:[path],mission:b2Mission,branch:"kreile/b2-ein-3"}),path).toEqual([]);
+      const adjacent = path.replace(/\.tsx?$/, ".outside.ts").replace(/\.json$/, ".outside.json");
+      expect(checkSalesStageB2ScopeForTest({files:[adjacent],mission:b2Mission,branch:"kreile/b2-ein-3"}),adjacent).toContain(`SALES_STAGE_B2_SCOPE:${adjacent}`);
+    }
+    expect(checkSalesStageB2ScopeForTest({files:["eslint.config.mjs"],mission:b2Mission,branch:"kreile/b2-ein-3"})).toContain("SALES_STAGE_B2_SCOPE:eslint.config.mjs");
+  });
+
   it("allows only the TA-B2f anchor paths on its pinned main base", () => {
     expect(checkTaB2fScopeForTest({
       files: [

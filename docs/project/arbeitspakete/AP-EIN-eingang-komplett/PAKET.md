@@ -87,3 +87,6 @@ Der Planungschat legt den Klickweg je Teil vor, nachdem er ihn selbst auf der Pr
 ### Nachtrag 03.11. 17:45 – Runde 51
 - Bindung: BAUPLAN **888114C6247B711CC02D8C78BB9429ADCF9C494CFBC2E066F5202C6E966BB0D8** (spec `a9474e3f73c3`), UI: Bündel 061AF6F3, Sichtvertrag 509BE267 (117 inkl. Modi), Prüfskript 03F4E0AA, Referenz DE0FC765. Ersetzt AFB3D838/8204C911.
 - Seitennamen, Einstiege und Modi **nur** aus `paket.seitenkatalog`; Kopf = Name, Modus als Unterzeile. M6 Anliegen wählen als Liste nach `screens[anliegenwahl].aufbau_runde51`. `paket.seiten_gate` gehört zur Abnahme (Kopf = Name, keine Roh-Platzhalter, kein Knopf doppelt, genau ein Hauptknopf im Fuß, 3.0 leer ohne Zuordnen).
+
+### Bindung Runde 52 (03.11., 19:07) – ersetzt alle früheren Bindungen
+BAUPLAN **DF3E1AFEC7B6C3DED6DA51F22FDAADF8CFAB780DA9A4F619EDB42D3C2D6AC5C4** (spec `ee64f8882bb7`), UI: Bündel 35146E45, Sichtvertrag B1A53EA6, Prüfskript FDA7C59C, Referenz 1509BE93. Größenregel U-240 und Enter-Fokusführung gehören zur Abnahme (Sichtvertrag).

@@ -2,6 +2,12 @@
 
 Laufendes Protokoll, neueste Meldung oben. Der Planungschat prüft den Bau gegen BAUPLAN.json und die Dev-DB, pflegt die Warteschlange in `_review/AKTUELLE_ANWEISUNG.md` und schreibt keinen App-Code. Er liest `_review/MELDUNG_ENDVERSION_CHAT.md` bei jeder Kontrolle.
 
+## 03.11. 18:30 - Runde 52 bitte vor Bindung ergaenzen: Groessenregel U-240
+Owner-Befund: Kunde anlegen am Desktop riesig (Messung: Bau = Sollbild, Dialog 1680 px, V8). Bitte in Runde 52 einbauen und Sichtvertrag/Pruefbilder neu: (1) Desktop kompakt (V1.1), Dialoge max. ca. 1100 px; (2) Tablet 1220x880 auch mit Tastatur: Hauptaktion und alle Pflichtfelder ohne Scrollen bzw. mit klarer Fokusfuehrung sichtbar, Groessen unter V8 erlaubt, Anordnung dichter (zwei Spalten, Pruefliste einklappbar); (3) Handy V8; (4) ueberall Enter = naechstes Feld, im letzten Pflichtfeld Hauptaktion mit Tor; Fokusreihenfolge im Sichtvertrag je Seite festhalten, pruefe_sicht prueft sie. (5) bleibt: pruefe_sicht PIN-faehig (siehe 16:30). Danach Runde 52 als Freigabe melden; ich binde einmal per TA-B2f. Bis dahin aendert Codex keine Oberflaeche.
+
+## 03.11. 18:05 - Freeze nach Runde-51-Freigabe
+Bitte die freigegebenen Dateien (BAUPLAN.next 888114C6, ui/* 061AF6F3/509BE267/03F4E0AA) nicht mehr ueberschreiben, bis TA-B2f gemergt ist. Weitere Aenderungen nur als neue Runde in eigenen Dateien (*.next) mit Meldung; sonst baut Codex gegen ein bewegliches Ziel.
+
 ## 03.11. 17:45 – Runde 51 übernommen
 Gebunden: BAUPLAN 888114C6, UI 061AF6F3 / 509BE267 / 03F4E0AA, Referenz DE0FC765 (TA-B2f Fassung 4, PAKET-Nachtrag, WORKQUEUE, C). Hinweis: `pruefe_sicht.cjs` kann weiter keine PIN; gelöst ohne Skriptänderung über temporäre routen-Kopie mit Ziffernklicks aus Umgebungsvariable. Lint: Ordner `ui/**` per Anker von ESLint ausgenommen. Keine Fragen offen.
 

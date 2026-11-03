@@ -37,3 +37,6 @@ Rot erlaubt: nur der Ratchet-Job am Byte-Gleichheits-Schritt.
 ## Fassung 4 (03.11. 17:45) – geht Fassung 2/3 vor
 - Bauplan **888114C6247B711CC02D8C78BB9429ADCF9C494CFBC2E066F5202C6E966BB0D8** (spec `a9474e3f73c3`, Runde 51) **doch in TA-B2f** (kein eigener TA-B2g): `BAUPLAN.json` = `BAUPLAN.next.json` mit genau dieser SHA, `e2e/generated/**` neu, Rot-Liste je Fall mit `AP-EIN-0b` … `AP-EIN-6`.
 - Sonst wie Fassung 3 (UI-Ordner + `CURRENT_DESIGN_REFERENCE.json` DE0FC765 unverändert, DESIGN_POINTER-Neupin, eslint-ratchet-Pins, Generator-Pfad, ESLint-Ignore nur `docs/project/endversion/ui/**`) und Allowlist aus Fassung 2.
+
+## Fassung Runde 52 (03.11., 19:07) – geht allen früheren Fassungen vor
+Bauplan **DF3E1AFEC7B6C3DED6DA51F22FDAADF8CFAB780DA9A4F619EDB42D3C2D6AC5C4** (spec `ee64f8882bb7`) als `BAUPLAN.json`, `e2e/generated/**` neu, Rot-Liste je Teil. UI-Ordner + `CURRENT_DESIGN_REFERENCE.json` (1509BE93) unverändert aus dem Arbeitsbaum. Sonst wie Fassung 3/4 (DESIGN_POINTER-Neupin, eslint-ratchet-Pins, Generator-Pfad, ESLint-Ignore nur `docs/project/endversion/ui/**`, Allowlist Fassung 2).

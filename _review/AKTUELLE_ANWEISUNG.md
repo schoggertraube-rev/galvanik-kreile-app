@@ -1,4 +1,4 @@
-# AKTUELLE ANWEISUNG – einzige Auftragsquelle für den Bau-Codex (Stand 03.11.2026, 17:45)
+# AKTUELLE ANWEISUNG – einzige Auftragsquelle für den Bau-Codex (Stand 03.11., 19:07)
 
 Diese Datei **ersetzt alle früheren Fassungen**. Das Archiv `_review/archiv/AKTUELLE_ANWEISUNG_bis_2026-10-29.md` ist nur Nachschlagewerk und **kein Auftrag**. Steht etwas dort anders als hier, gilt diese Datei. Der Planungschat hält diese Datei kurz: Erledigtes fliegt raus, und nichts wird nur angehängt.
 
@@ -43,18 +43,23 @@ Diese Datei **ersetzt alle früheren Fassungen**. Das Archiv `_review/archiv/AKT
 18. **PR-Status nur belegt (02.11. 23:55).** Den Zustand eines PR meldet Codex erst nach `gh pr checks <n>` über **alle** Jobs und deren Schritte (auch `h16-schema` → „Generated BAUPLAN flows“). „Erwartbar rot“ nur mit Run-Link, Schritt und Fehlerzeile. Was lokal grün ist, muss in CI mit demselben Befehl laufen; Abweichung CI ≠ lokal ist ein eigener Befund und wird vor allem anderen behoben.
 19. **UI-Wahrheit (U-239, 03.11.).** Aussehen, Aufbau, Reihenfolge und Größen jedes Screens kommen **nur** aus `docs/project/endversion/ui/` (zuerst `LIESMICH.md` lesen): `endversion_design.css` wird **eingebunden, nicht abgeschrieben**; `SICHTVERTRAG.json` ist das Soll je Seite × Rolle × Größe (Kennungen `data-spec-id`, Texte wörtlich, Klassen wie dort, Hauptaktion in der Dialog-Fußzeile ohne Scrollen sichtbar, Knöpfe ≥ 44 px); `pruefbilder/` zeigen es. Keine eigenen Nachbauten in Tailwind/shadcn/globals.css, kein Mock-/Prototyp-Code, keine Musterdaten. Alte Layouts (z. B. Reiter-Werkbank „1 Kunde · 2 Positionen · 3 Prüfung“, dunkle 3.0-Kacheln) werden im Teil ihrer Seite gelöscht, nicht daneben weitergeführt. Server-Wege, Tabellen, Befehle und Tests bleiben. **Fertig heißt zusätzlich:** `node docs/project/endversion/ui/pruefe_sicht.cjs --app <READY-Preview genau des SHA> --routen docs/project/endversion/ui/routen.json --nur <Seiten des Teils>` grün (Gelb nur mit Grund in der Abgabe), Bericht in der Abgabe. Das Skript wird nie geändert.
 
-## B. Stand (Planungschat, 03.11. 17:45)
-- main `10be0a03`. Dev-DB 66 Migrationen = main. Owner merged #163 → #164 → TA-B2f.
-- **Runde 51 freigegeben (Endversion 17:30):** BAUPLAN `888114C6247B711CC02D8C78BB9429ADCF9C494CFBC2E066F5202C6E966BB0D8` (spec `a9474e3f73c3`), UI-Wahrheit `docs/project/endversion/ui/`: `endversion_design.css` 061AF6F3, `SICHTVERTRAG.json` 509BE267 (117 Einträge inkl. Modi), `pruefe_sicht.cjs` 03F4E0AA, 117 neue Prüfbilder, `CURRENT_DESIGN_REFERENCE.json` DE0FC765. Alte Soll-Bilder/Sichtvertrag 8204C911 ungültig. Seitennamen/Modi nur aus `paket.seitenkatalog`; Seiten-Gate `paket.seiten_gate`.
-- Endversion-STOPP 16:10 ist aufgehoben.
+## B. Stand (Planungschat, 03.11., 19:07)
+- main mit #163/#164. **Runde 52 gebunden:** BAUPLAN `DF3E1AFEC7B6C3DED6DA51F22FDAADF8CFAB780DA9A4F619EDB42D3C2D6AC5C4` (spec `ee64f8882bb7`), UI `docs/project/endversion/ui/`: Bündel 35146E45, Sichtvertrag B1A53EA6, Prüfskript FDA7C59C, Referenz 1509BE93; Prüfbilder `ui/pruefbilder/` = Sichtvorlage. Größenregel U-240 (Desktop kompakt, Tablet dicht + Tastatur, Handy V8, Enter = nächstes Feld). Alle früheren Stopps sind aufgehoben; bis zum Ende von AP-EIN ändert sich die Vorgabe nicht (Spec-Freeze, Regel 12).
 
-## C. Warteschlange (ersetzt alle früheren C-Fassungen)
-1. **TA-B2f (Fassung 4 in TRUST_ANCHOR_B2F.md):** Bauplan `888114C6247B711CC02D8C78BB9429ADCF9C494CFBC2E066F5202C6E966BB0D8` als `BAUPLAN.json` + `e2e/generated/**` neu + Rot-Liste je Teil; `docs/project/endversion/ui/**` und `CURRENT_DESIGN_REFERENCE.json` unverändert; Neu-Pin DESIGN_POINTER_*; Hash-Pins `eslint-ratchet.yml`; `scripts/spec/generate-flow-tests.mjs`; ESLint-Ignore nur `docs/project/endversion/ui/**`; Allowlist aus Fassung 2. Nach Owner-Merge #164 rebasen, ready, `gh pr checks` vollständig in C.
-2. **Teil 0** neu gegen `888114C6247B711CC02D8C78BB9429ADCF9C494CFBC2E066F5202C6E966BB0D8` erzeugen, push #166. **Teil 0b** gegen neues Bündel abgleichen, `routen.json` (alle Seiten + Modi aus `paket.seitenkatalog`), Sicht-Ausgangsbericht, Commit, Draft-PR.
-3. **Teil 1 → 2 → 3 → 4 → 5 → 6** nach PAKET Fassung 3 (+ Nachtrag 17:45): Oberfläche nach neuem Sichtvertrag (Normalfall + Modi, M6 als Liste), Server/DB wie geplant. Je Teil: A11 → Fälle → `pruefe_sicht --nur <Seiten>` grün → Commit → Zeile in C → Draft-PR → `gh pr checks`.
-4. **PIN-Login für den Sichtlauf ohne Skriptänderung:** `routen.json` im Repo enthält Seitenpfade und Login-Schritte mit Platzhaltern, nie eine PIN. Für jeden Lauf eine **temporäre Kopie außerhalb des Repos** erzeugen, in der Personenknopf und Ziffernklicks aus `<ROLLE>_PASSWORT` eingesetzt sind; Vercel-Share aus Umgebungsvariable. Kopie danach löschen.
-5. Migrationen: Datei + SHA in C, Dev erst nach „Migration geprüft“ und Merge.
-6. **Nie:** Merge, Dev-DB ohne Freigabe, Vercel-CLI/Env, Secrets, `git stash`, Force-Push auf fremde Branches, Planungsdateien stagen (außer unverändert im Anker), `pruefe_sicht.cjs`/Sichtvertrag/Bündel ändern, Gates außerhalb der Anker-Allowlist.
+## C. Warteschlange – Durchbau (ersetzt alle früheren C-Fassungen)
+
+**Ziel der Mission (nicht verhandelbar):** Eingang komplett – 13 Seiten aus paket.seitenkatalog, 306 Fälle grün, jede Seite in allen drei Größen gleich der Vorschau V41 (Sichtvertrag B1A53EA6 grün), echte Server-Wege und DB, kein Mock. Gebaut wird nur das, nichts daneben. Pilot 30.11.
+**Sichtbericht:** immer mit --aus <Pfad außerhalb des Repos>; nie Berichte/Bilder in docs/project/endversion/ui/ schreiben. Gate geprüft: PIN-Login + Share laufen (Planungschat 19:10, Teil-1-Altstand rot wie erwartet).
+1. **TA-B2f** nach `TRUST_ANCHOR_B2F.md` Abschnitt „Fassung Runde 52“: rebasen auf main, Probe gegen den obersten AP-EIN-Branch, ready, `gh pr checks` vollständig in C. Owner merged sofort.
+2. **Teil 0 → 0b → 1 → 2 → 3 → 4 → 5 → 6** nach `AP-EIN-eingang-komplett/PAKET.md` (Fassung 3, Nachträge, Bindung Runde 52) ohne Pause, gestapelt, je Draft-PR. Oberfläche nach Sichtvertrag + Prüfbildern, Server/DB wie geplant, `geprueft` nach P39.
+3. **Tempo-Regeln (Owner 03.11.):**
+   - Ein Commit je fertigem Teil-Schritt (nicht je Kleinkorrektur); der volle Commit-Hook läuft damit selten. Zwischenstände lokal ohne Commit.
+   - Je Teil genau ein vollständiger Lauf (A11 + Fälle der Seiten + `pruefe_sicht --nur <Seiten>`), dann Push. Kein Wiederholen unveränderter Läufe.
+   - Ein Fixversuch je Befund; klemmt es fachlich: eine Zeile in C (Stelle, Bauplan sagt, Vorschlag), betroffene Fälle rot lassen, weiter. Der Planungschat entscheidet stündlich.
+   - Meldungen in C kurz: SHA, Fälle grün/rot, Sicht-Ampel, offene Punkte. Keine Prosa.
+4. **Sichtlauf mit PIN:** `routen.json` ohne PIN; Lauf mit temporärer Kopie außerhalb des Repos (PIN aus `<ROLLE>_PASSWORT`, Share aus Umgebungsvariable), Kopie danach löschen. Skript nie ändern.
+5. Migrationen: je Teil eine Datei `*_ein<n>_*.sql`, Datei + SHA in C; Dev erst nach „Migration geprüft“ und Merge.
+6. **Nie:** Merge, Dev ohne Freigabe, Vercel-CLI/Env, Secrets, `git stash`, Force-Push auf fremde Branches, Planungsdateien stagen (außer unverändert im Anker), Prüfwerkzeuge/Sichtvertrag/Bündel ändern, Beispieldaten aus Prüfbildern/Spec in Code, Seeds oder Tests, Gates außerhalb der Anker-Allowlist.
 
 ### C4 · H17 Produktions-DB – erst in der Woche vor Go-live
 Erst nach dem Owner-Schritt (Supabase-Projekt anlegen, Vercel-Tarif für gewerbliche Nutzung). Ablauf genau nach `docs/delivery/GO_LIVE_ABLAUF.md`.

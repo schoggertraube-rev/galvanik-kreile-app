@@ -2,6 +2,127 @@
 
 Laufendes Protokoll (neueste oben). Der Endversion-Chat pflegt spec.json und erzeugt daraus `docs/project/endversion/codex/BAUPLAN.json`. Er schreibt nicht in den App-Code.
 
+## 03.11. 19:00 – Runde 52 · Freigabe (ersetzt den Eintrag 17:40; enthält U-240 aus 18:30 und das PIN-Prüfskript aus 16:30) · bitte einmal binden (TA-B2f)
+
+### 1 · Gültiger Stand (eine Wahrheit)
+| Was | Wert |
+|---|---|
+| spec.json | `ee64f8882bb7` |
+| `docs/project/endversion/codex/BAUPLAN.next.json` | **SHA-256 DF3E1AFEC7B6C3DED6DA51F22FDAADF8CFAB780DA9A4F619EDB42D3C2D6AC5C4** (ersetzt 6734399A… und 888114C6…) |
+| UI `docs/project/endversion/ui/` | endversion_design.css **35146E45**B96F84D7CB30D38F403F1DC0AE9D9232B7F1F7B4C5ED8D950B4537AB · SICHTVERTRAG.json **B1A53EA6**75F52B999CD034C5C5D6D0F4D4B1CC131AB40E818DF3BDD138B6EB4C (117, mit Fokusreihenfolge) · pruefe_sicht.cjs **FDA7C59C**0E3EF9FEC0C0F81B98975F712D8438DE7236D75D0B8D03897F6A052C · CURRENT_DESIGN_REFERENCE.endversion.json **1509BE93**E71B486728A49D1786CD60826943C6CBE954FC7BFF2EE1D3120A8FCE · 117 Prüfbilder neu · LIESMICH Abschnitt „Runde 52“ |
+| Vorschau | https://claude.ai/artifact/3LYUJAMVnys4EugcBjGirC – oben „Stand V41 · spec ee64f8882bb7“, nach Veröffentlichung gegengeprüft |
+| Archiv | V41 (`VERSIONEN/`) |
+
+**Zum Freeze von 18:05:** Die freigegebenen Runde-51-Dateien (888114C6 / 061AF6F3 / 509BE267 / 03F4E0AA) habe ich um 17:40 ersetzt – deine Freeze-Notiz kam danach. Die alten Dateien liegen im Archiv V39 und in der git-Historie. Ab jetzt ändere ich BAUPLAN.next und ui/* erst wieder nach deinem TA-B2f-Merge, und dann nur mit einer neuen Runde.
+
+### 2 · U-240 Größenregel (18:30), umgesetzt
+1. **Desktop kompakt:** V1.1, `--touch` 40 px. Werkbank-Dialoge sind höchstens ca. 1100 px breit (vorher 1680 px), Formulare zweispaltig, Prüfliste rechts mit 320 px.
+2. **Tablet 1220 × 880:**
+   - `data-groesse="dicht"`: Schrift wie V1.1, Knöpfe und Felder mindestens 44 px.
+   - Formulare zweispaltig über die volle Breite; „Prüfliste & Hinweise“ oben einklappbar.
+   - Die Hauptaktion steht immer im Fuß. Pflichtfelder erreicht man per Enter der Reihe nach; das aktive Feld rollt ins Bild und ist markiert.
+3. **Handy:** V8 wie bisher.
+4. **Enter = nächstes Feld**, überall:
+   - Im letzten Pflichtfeld löst Enter die Hauptaktion aus, mit Tor. Fehlt noch ein Pflichtfeld, springt der Fokus dorthin und es erscheint „Pflicht fehlt: …“.
+   - Die Fokusreihenfolge steht je Seite in `SICHTVERTRAG.json → seiten[].fokus` (Felder, `enter_bis`).
+   - `pruefe_sicht.cjs` drückt Enter vom ersten Feld bis zum letzten Pflichtfeld. Weicht die Reihenfolge ab, ist das Ergebnis rot.
+5. **Prüfskript (16:30):**
+   - PIN-Anmeldung über `login.schritte` mit Platzhaltern auch im Selektor: `{rolle_person}` = `<ROLLE>_NAME`, `{passwort_ziffer_n}`. Alternativ Schritt `tippen` mit `{ziffer}`.
+   - Deine `routen.json` (Ziffernklicks) läuft damit unverändert; die temporäre Kopie entfällt.
+   - Vercel-Freigabe aus `VERCEL_SHARE` (oder `routen.share_env`) beim ersten Aufruf.
+   - `pfad: null` + `grund` erscheint gelb mit dem Grund.
+   - Kein `require()` mehr, sondern `import()`; Pfad und Dateiname bleiben. ESLint (recommended + no-unused-vars) läuft ohne Fehler.
+   - Getestet mit einer PIN-Attrappe: Person, PIN und Freigabe-Parameter kommen korrekt an.
+
+Spec dazu: `verhalten_appweit.groessenregel`, `verhalten_appweit.tastatur_enter`, `geraete` und `tastatur` angepasst. Im Bauplan steht der Inhalt vollständig unter `paket.runde52` (`groessenregel`, `tastatur_enter`, `pruefskript`). `korrekturen_ausserhalb_runde52.liste` ist um zwei Einträge für die ganze App ergänzt.
+
+### 3 · Inhalt Runde 52 (unverändert aus 17:40, steht weiter unten im Protokoll)
+- `zahlung_wahrheit`
+- 10 Ware raus: Reiter „Fertig im Haus“ und „Rausgegangen“
+- 10.1: Kopf-Links, Zahlung, Belege, Übergabe vorbereiten, Ansicht für rausgegangene Ware
+- Teil → 4.2 in Werkstatt und Auftragskarte
+- Ledger: 19 Punkte bewusst entfernt, 9 zurückgeholt
+- Objektkarten zeigen im Kopf den Objektnamen
+
+### 4 · Prüfstand (Endversion, vor dieser Meldung)
+- **UI-Gate:** grün, 117 Seiten, 0 gelb. Prüft Desktop-Dialoge ≤ 1120 px, Knöpfe am Desktop ≥ 38 px, auf Tablet/Handy ≥ 44 px, und dass die Fokusreihenfolge im Vertrag steht.
+- **Neu: Selbsttest des Prüfskripts gegen die Vorschau:** 117/117 grün, jetzt fester Teil der Baukette. In V40 hätte er 12 rote Kopfzeilen gefunden: Objektkarten und 4.4, inzwischen im Sichtvertrag korrigiert.
+- **Seiten-Gate:** 54 × 2.
+- **Musterdaten-Gate.**
+- **Klick-Gate:** gegen die letzte Lieferung V40 und alle Archivstände.
+- **Referenz-Hash-Gate.**
+- **Neu: Stand-Gate.** Ein neuer Spec-Stand braucht eine neue V-Nummer.
+- **Baureife.**
+
+### 5 · Was der PL tut
+1. **Einmal binden per TA-B2f:**
+   - Bauplan DF3E1AFE…, UI 35146E45 / B1A53EA6 / FDA7C59C, Referenz 1509BE93.
+   - Runde 46–52 vollständig.
+   - Die Korrekturliste `paket.korrekturen_ausserhalb_runde52.liste` in die Teil-PRs übernehmen.
+2. **Prüfung vor dem Merge:**
+   - `MEISTER_NAME/…_PASSWORT`, `WERKSTATT_NAME/…_PASSWORT` und `VERCEL_SHARE` als Umgebungsvariablen setzen.
+   - Aufruf: `node docs/project/endversion/ui/pruefe_sicht.cjs --app <preview> --routen docs/project/endversion/ui/routen.json`. Rot = kein Merge.
+3. **Keine Migration nötig.** `data-geraet`/`data-groesse` setzt der KrApp-Client nach Breite.
+
+Antwort bitte in `_review/MELDUNG_PLANUNGSCHAT.md`.
+
+### (Teil der Freigabe 19:00) 03.11. 17:40 – Runde 52 · Zahlung/Ware eine Wahrheit · Warenausgang · Zurückgeholtes · keine stillen Löschungen (ersetzt den Stand 888114C6…) · bitte prüfen, dann an Codex
+
+### 1 · Stand 17:40 (überholt – gültig ist der Eintrag 19:00)
+| Was | Wert |
+|---|---|
+| spec.json | `515b98d18e32` |
+| `docs/project/endversion/codex/BAUPLAN.next.json` | ~~6734399A…~~ **überholt – gültig ist DF3E1AFE… (Eintrag 19:00)** |
+| UI-Wahrheit `docs/project/endversion/ui/` | endversion_design.css D3D77E83… · SICHTVERTRAG.json 3E148DC8… (117) · pruefe_sicht.cjs 03F4E0AA… (unverändert) · 117 Prüfbilder neu · `CURRENT_DESIGN_REFERENCE.endversion.json` trägt jetzt dieselben Hashes (stand vorher noch auf V39) |
+| Vorschau (Owner-Referenz) | https://claude.ai/artifact/3LYUJAMVnys4EugcBjGirC – oben „Stand V40 · spec 515b98d18e32“, nach Veröffentlichung gegengeprüft |
+| Archiv | V40 (`VERSIONEN/`) |
+
+### 2 · Owner-Befund 03.11. (Kunde K-2026-0012) und Ursache (bei mir, nicht bei Codex)
+- Vorkasse und gleichzeitig überfällige Rechnung bei schon abgeholter Ware: Die Beispieldaten haben den eigenen Regeln widersprochen, und die Vorschau hat den Zahlstand aus dem Text „Vorkasse“ abgeleitet statt aus Rechnung und Zahlung.
+- 10 Ware raus und 10.1 Warenausgang hatten keine Links zu Kunde und Auftrag, keine Rechnung, keine vorbereiteten Belege und keine Liste der rausgegangenen Ware.
+- Stille Löschungen: Klickwege sind ohne Owner-Entscheidung weggefallen. Kein Gate hat gegen frühere Fassungen geprüft.
+
+### 3 · Inhalt (alles im Bauplan; Seiten außerhalb des Pakets vollständig unter `paket.runde52`)
+- **`verhalten_appweit.zahlung_wahrheit`**: Der Zahlstand kommt nur aus Rechnung und Zahlung, nie aus dem Text des Zahlungsmodus. Festgelegte Bedingungen, die immer gelten müssen:
+  - Vorkasse und Ware raus heißt: Die Rechnung ist bezahlt, oder es gibt eine Sondervereinbarung. Sonst lehnt recordGoodsOutCommand ab.
+  - Jede Stelle, die „überfällig“ zeigt, führt zu Auftrag und Rechnung.
+- **10 Ware raus**: Zwei Reiter, „Fertig im Haus“ und „Rausgegangen · 30 Tage“. Kunde und Auftrag sind Links. Jede Zeile zeigt Zahlstand und Belege.
+- **10.1 Warenausgang**:
+  - Kopf mit Links zu Auftrag und Kunde, dazu Block Zahlung (Rechnung ansehen, Zahlung bestätigen, Erinnern, weitere offene Posten) und Block Belege.
+  - **„Übergabe vorbereiten / Belege drucken“** druckt Lieferschein und Rechnung vorab. Die Ware bleibt gesperrt, bis gezahlt ist.
+  - Bei Sondervereinbarung bleiben „Bar/Karte bezahlt · übergeben“ erhalten.
+  - **Rausgegangene Ware** zeigt eine Ansicht: Datum, Abholer bzw. Versand, Rechnung, Lieferschein – ohne Übergabe-Knopf.
+- **Werkstatt / 4.1**: Jedes Teil öffnet seine Teilkarte 4.2, in jeder Station. „Ware raus“ ist nur aktiv, wenn `orders.ausgabe_frei` gesetzt ist. Sonst steht der Knopf gesperrt mit Grund da.
+- **„Korrektur“ / „Fertigmeldung zurücknehmen“**: Gibt es eine festgeschriebene Rechnung, stehen beide gesperrt mit Grund da („Erst Rechnung … stornieren (7.4)“) – sie verschwinden nicht.
+- **5.1 Kundenkarte**: Jede offene Rechnung zeigt ihren Auftrag und wo die Ware ist („Ware im Haus“ bzw. „abgeholt am …“). Ein Tipp öffnet 7.2. Neu ist der Block „Rausgegangen“.
+- **Objektkarten**: Der Kopf zeigt den Objektnamen (`verhalten_appweit.seitenname.objektkarten`).
+
+### 4 · Keine stillen Löschungen (`verhalten_appweit.keine_stillen_loeschungen`, `baustand.entfernt_ledger`)
+- Ich habe alle Archivstände V07–V39 abgeglichen, sowohl die Spec als auch das Klick-Inventar der Vorschau.
+- **Bewusst entfernt**: 19 Einträge, jeder mit Owner-Entscheidung und Quelle.
+- **Zurückgeholt**: 9 Klickwege, die ohne Entscheidung weggefallen waren:
+  - 4.2 Formular-Fuß
+  - Teil-Details in der Werkstatt und in der Auftragskarte
+  - 10.1 Bar/Karte bei Sondervereinbarung
+  - 10.1 Rechnung ansehen und Zahlung bestätigen
+  - 10.1 Ansicht für rausgegangene Ware
+  - Kopf der Objektkarten
+  - Kundenkarte: Tipp auf eine Rechnung öffnet 7.2
+  - Der Tag: „Erinnern“
+- **Regel für Codex/Prüfchat**: Teil-PRs dürfen keine Knöpfe oder Wege der Zielseite entfernen, die nicht im Ledger stehen. Vor dem Merge gegen die Soll-Bilder prüfen.
+- **Meine Gates, laufen vor jeder Lieferung**:
+  - Musterdaten-Gate: Die Beispieldaten erfüllen zahlung_wahrheit.
+  - Klick-Gate gegen die letzte Lieferung und gegen alle Archivstände.
+  - Referenz-Hash-Gate.
+
+### 5 · Was der PL tut (keine Rückfrage nötig)
+1. Bauplan-Anker 6734399A… in `AP-EIN-eingang-komplett/PAKET.md` binden. Er ersetzt 888114C6…; Runde 46–51 gilt weiter.
+2. Die Liste `paket.korrekturen_ausserhalb_runde52.liste` als „korrekturen“ in die Teil-PRs der Zielseiten übernehmen (10, 10.1, 11, 5.1, 4.1, 4.2, appweit).
+3. Keine Migration nötig; alles läuft über vorhandene Felder (invoices, payments, orders.ausgabe_frei, prozesse.abschluss). Falls im Code der Zahlstand aus `payment_terms`-Text abgeleitet wird: auf invoices/payments umstellen (Korrektur appweit).
+4. Prüfung vor dem Merge unverändert: `pruefe_sicht.cjs` gegen die neuen Prüfbilder.
+
+Antwort bitte in `_review/MELDUNG_PLANUNGSCHAT.md`.
+
 ## 03.11. 17:30 – Runde 51 · Freigabe Oberfläche Eingang (ersetzt STOPP 16:10) · bitte prüfen, dann an Codex
 
 ### 1 · Gültiger Stand (eine Wahrheit, ersetzt 20F41503…)
