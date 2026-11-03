@@ -35,6 +35,12 @@ Der genaue neue Testfundament-SHA, seine Git-Preview und die Check-Liste werden 
 
 ## Owner-Klickweg und DB-Soll
 
+Gerüstkorrektur aus dem ersten vollständigen Runde-52-Kundenlauf: Der DB-Readback las trotz vorhandener Zeile 0 Treffer, weil ein JSON-Parameter doppelt kodiert wurde. Dieselbe lokale Zeile liefert mit der expliziten Text-zu-JSON-Konvertierung genau 1 Treffer. Daten, Erwartungen und Zeilenzahlprüfung bleiben unverändert.
+
+Weitere mechanische Anschlüsse: 5.2 benutzt den vorhandenen Knopf `kunde.bearbeiten`; ein Modus wird als vollständiges Argument an den bestehenden Kundenadapter übergeben. Optionslabels werden als zugängliche Namen gelesen, ohne den zusätzlichen Beschreibungstext der gelieferten Auswahlkarten. Die positive Sichtbarkeit eines Texts verlangt weiterhin einen sichtbaren Treffer; ausdrücklich vorgegebene Anzahl-/Eindeutigkeitsprüfungen bleiben unverändert. Kein Owner-Modellfall und keine feste Akzeptanzdatei wurde umgeschrieben. Die geänderten Anschlüsse werden gezielt im folgenden Teil 1 geprüft; es wird kein zweiter unveränderter Gesamtlauf gestartet.
+
+Der exakte Auswahl-Farbvergleich wartet lediglich die gelieferte CSS-Transition ab; Sollfarbe und Auswahlzustand bleiben unverändert. `orders.geprueft` wird nach P39 direkt als Datenbankspalte gelesen, statt aus der bloßen Existenz eines Auftragsereignisses abgeleitet. Vor Lieferung dieser Spalte in Teil 2 bleiben entsprechende Zukunftsfälle rot.
+
 Teil 0 liefert keine neue sichtbare Produktfunktion. Die Preview oben zeigt die unveränderte Produktbasis; die Korrektur des roten Plus folgt in Teil 2 nach dem UI-Fundament und der Kundenoberfläche.
 
 DB-Soll dieses Teils: ausschließlich synthetische Daten auf `127.0.0.1:54322`; vorhandene Produkt-, Auth- und Tenant-Verträge bleiben bestehen. Die sichtbaren Teile bekommen ihren eigenen Preview-/Sichtnachweis und ihren jeweiligen echten Action–DB–Ansicht-Nachweis.

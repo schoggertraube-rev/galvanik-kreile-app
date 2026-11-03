@@ -646,8 +646,11 @@ async function openTarget(page: Page, target: string, arg: unknown) {
   if (target === "kundebearbeiten") {
     const [customerId, fragment] = String(arg ?? "").split("#", 2);
     if (!customerId) throw new Error("FLOW_OPEN_CUSTOMER_REQUIRED");
-    await page.goto(`/customers/${encodeURIComponent(customerId)}${fragment ? `#${encodeURIComponent(fragment)}` : ""}`);
-    await dataSpec(page, "kundebearbeiten.oeffnen").click({ timeout: 5_000 });
+    if (fragment && !["fehlend", "uebernahme", "bearbeiten"].includes(fragment)) throw new Error(`FLOW_CUSTOMER_MODE_UNSUPPORTED:${fragment}`);
+    // The existing adapter receives the complete customer argument, including mode.
+    // A URL fragment is never delivered to the server route's id parameter.
+    await page.goto(`/customers/${encodeURIComponent(String(arg))}`);
+    if (!fragment) await dataSpec(page, "kunde.bearbeiten").click({ timeout: 5_000 });
     return;
   }
   await page.evaluate(({ ziel, argument }) => {
@@ -664,8 +667,10 @@ async function selectedColor(locator: Locator, selected: boolean) {
     probe.remove();
     return { expected, actual: getComputedStyle(element).backgroundColor };
   });
-  if (selected) expect(color.actual).toBe(color.expected);
-  else expect(color.actual).not.toBe(color.expected);
+  // Wait for the supplied color transition; the exact required color is unchanged.
+  const settled = () => locator.evaluate(element => getComputedStyle(element).backgroundColor);
+  if (selected) await expect.poll(settled, { timeout: 2_000 }).toBe(color.expected);
+  else await expect.poll(settled, { timeout: 2_000 }).not.toBe(color.expected);
 }
 
 async function assertExpectation(page: Page, expectation: FlowExpectation, state: FlowRunState) {
@@ -692,7 +697,7 @@ async function assertExpectation(page: Page, expectation: FlowExpectation, state
     if (expectation.erwartung === "toast") await expect(page.getByRole("status").last()).toBeVisible();
     else if (expectation.erwartung === "nicht_sichtbar") await expect(dialog.getByText(String(value), { exact: false })).toHaveCount(0);
     else if (expectation.erwartung === "text") await expect(dialog.getByText(String(value), { exact: true })).toBeVisible();
-    else await expect(dialog.getByText(String(value), { exact: false })).toBeVisible();
+    else await expect(dialog.getByText(String(value), { exact: false }).first()).toBeVisible();
     return;
   }
   const locator = ["anzahl", "anzahl_min", "anzahl_max"].includes(expectation.erwartung ?? "")
@@ -751,7 +756,7 @@ async function assertExpectation(page: Page, expectation: FlowExpectation, state
       const target = await control(locator);
       const labels = Array.isArray(value) ? value.map(String) : [];
       const tag = await target.evaluate((element) => element.tagName.toLowerCase());
-      const actual = tag === "select" ? await target.locator("option").allTextContents() : await locator.getByRole("button").allTextContents();
+      const actual = tag === "select" ? await target.locator("option").allTextContents() : await locator.getByRole("button").evaluateAll(buttons => buttons.map(button => button.getAttribute("aria-label") ?? button.textContent ?? ""));
       expect(actual.map((entry) => entry.trim()).filter(Boolean)).toEqual(labels);
       break;
     }
@@ -823,7 +828,8 @@ async function readStorageRow(table: string, where: Record<string, unknown>) {
   const clauses = ['record.tenant_id = $1'];
   for (const [field, value] of Object.entries(where)) {
     params.push(storageColumn(table, field), JSON.stringify(value));
-    clauses.push(`(to_jsonb(record) -> $${params.length - 1}::text) IS NOT DISTINCT FROM $${params.length}::jsonb`);
+    // JSON text is explicitly typed as text so postgres.js does not encode it twice.
+    clauses.push(`(to_jsonb(record) -> $${params.length - 1}::text) IS NOT DISTINCT FROM $${params.length}::text::jsonb`);
   }
   const rows = await sql.unsafe<{ row: Record<string, unknown> }[]>(
     `SELECT to_jsonb(record) AS row FROM ${qualifiedStorageTable(actual)} record WHERE ${clauses.join(' AND ')} LIMIT 2`, params as never[],

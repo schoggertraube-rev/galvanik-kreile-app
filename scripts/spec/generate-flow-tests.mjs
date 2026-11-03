@@ -11,7 +11,7 @@ const workQueuePath = path.join(root, "docs", "project", "arbeitspakete", "WORKQ
 
 // All model-to-storage names live here; the harness never guesses another column.
 const DATABASE_MAPPING = Object.freeze({
-  orders: { table: "orders", columns: { kunde: "customer_id", art: "is_quote", liefertermin: "promised_due_date", terminstatus: "intake_term_status", uebergabe: "handover_mode", zahlungsmodus: "payment_mode", eingangsart: "intake_source" }, transforms: { art: "order_kind", uebergabe: "handover", zahlungsmodus: "payment_mode", geprueft: "order_intake_event" } },
+  orders: { table: "orders", columns: { kunde: "customer_id", art: "is_quote", liefertermin: "promised_due_date", terminstatus: "intake_term_status", uebergabe: "handover_mode", zahlungsmodus: "payment_mode", eingangsart: "intake_source" }, transforms: { art: "order_kind", uebergabe: "handover", zahlungsmodus: "payment_mode" } },
   items: { table: "items", columns: { auftrag: "order_id", bezeichnung: "name", menge: "quantity", einheit: "unit", oberflaeche: "surface_requested", ausfuehrung: "execution_requested" }, transforms: {} },
   customers: { table: "customers", columns: { customer_type: "type", zahlungsbedingung: "payment_preference", notiz: "notes" }, transforms: {} },
   intake_item: { table: "intake_item", columns: {}, transforms: {} },

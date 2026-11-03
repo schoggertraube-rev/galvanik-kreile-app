@@ -15,8 +15,7 @@ export const generatedFlowRuntime = {
       "transforms": {
         "art": "order_kind",
         "uebergabe": "handover",
-        "zahlungsmodus": "payment_mode",
-        "geprueft": "order_intake_event"
+        "zahlungsmodus": "payment_mode"
       }
     },
     "items": {
