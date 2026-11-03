@@ -1,6 +1,6 @@
-# AP-EIN Teil 0b – gemeinsames UI-Fundament, Runde 51
+# AP-EIN Teil 0b – gemeinsames UI-Fundament, Runde 52
 
-Produkt-SHA: `0c88c457407454db1369fe3e50e848509ae25125`. READY-Git-Preview genau dieses SHA: https://galvanik-kreile-werkstatt-lsdsbjn5m.vercel.app . Draft-PR #169, kein Merge. Der Seitenumbau ist noch nicht abgeschlossen.
+Draft-PR #169, gestapelt auf Teil 0. Der Runde-52-Produkt-SHA und seine exakte READY-Preview werden nach dem Git-Push im PR und im nachfolgenden Sichtnachweis angegeben. Die frühere Runde-51-Preview ist keine aktuelle Abnahme. Der Seitenumbau ist noch nicht abgeschlossen.
 
 ## Sichtbare Änderungen
 
@@ -8,20 +8,22 @@ Produkt-SHA: `0c88c457407454db1369fe3e50e848509ae25125`. READY-Git-Preview genau
 - `src/app/globals.css` bindet vorhandene Framework-Namen an diese Tokens. Die separate alte V1.1-Komponentenschicht entfällt.
 - Die drei abgelösten Stylesheets unter `src/styles/mock/` und ihre Importe sind entfernt. Es bleibt eine visuelle Quelle.
 - `src/styles/tokens.css` und `src/styles/ci-tokens.css` enthalten nur Anschlüsse an die eine Farb-/Größenquelle.
-- `src/ui/kr/AppShell.tsx` aktiviert die gelieferten V8-Regeln. `Formular.tsx` markiert Formular-Auswahlen mit dem vorhandenen `data-fwseg`; Erfolg-Grün und Auswahlhaken kommen aus dem Originalbündel.
+- `src/ui/kr/AppShell.tsx` setzt je Gerät die gelieferten Größenregeln: Desktop `v11`, Tablet `dicht`, Handy `v8`. Die Gerätegrenzen sind <768 / 768–1279 / ≥1280 px und hängen nicht mehr von einem Touch-Zeiger ab. Auch die Erfassung befindet sich innerhalb desselben Größenkontexts.
+- `src/ui/kr/tastatur.ts` führt Enter durch die sichtbaren Eingabefelder der obersten Ebene. Die letzte Pflichtangabe nutzt denselben gegateten Hauptknopf wie der Klick; Shift+Enter, laufende Zeicheneingabe und bereits behandelte Tastendrücke bleiben erhalten. Die seitenbezogenen Pflichtangaben und die Tablet-Prüfliste werden in den jeweiligen Seitenteilen gebunden.
+- `Formular.tsx` markiert Formular-Auswahlen mit dem vorhandenen `data-fwseg`; Erfolg-Grün und Auswahlhaken kommen aus dem Originalbündel.
 - `docs/project/endversion/ui/routen.json` benennt alle 27 Paket-Seiten-/Modus-Schlüssel und die zusätzlichen Seiten des Sichtvertrags: insgesamt 37 Routenschlüssel. Vorhandene Aufrufe verwenden echte UI-Klicks. Fehlende zukünftige Aufrufe sind ausdrücklich als solche gekennzeichnet; es gibt keine Ersatzroute.
 
 ## Unveränderte Quellen
 
 | Quelle | SHA-256 |
 |---|---|
-| BAUPLAN | 888114C6247B711CC02D8C78BB9429ADCF9C494CFBC2E066F5202C6E966BB0D8 |
-| CSS-Bündel | 061AF6F380A94B58A626B57D2C2C8E63DC8CE71C76184C3C23677842232B7A24 |
-| Sichtvertrag | 509BE267819D9DECB002A14B0360B096BCB3AB2E91DEE425929FAF920FD96FB4 |
-| Sichtprüfer | 03F4E0AA23D58C2CBB1F30F136B68767A54A2F9D1A0B2DCC936D7AB05E6013DA |
-| Design-Referenz | DE0FC7654A9686FE7AE0E3664786A47B1B7F804F88B92243FAFC90EB9975DDFD |
+| BAUPLAN | DF3E1AFEC7B6C3DED6DA51F22FDAADF8CFAB780DA9A4F619EDB42D3C2D6AC5C4 |
+| CSS-Bündel | 35146E45B96F84D7CB30D38F403F1DC0AE9D9232B7F1F7B4C5ED8D950B4537AB |
+| Sichtvertrag | B1A53EA675F52B999CD034C5C5D6D0F4D4B1CC131AB40E818DF3BDD138B6EB4C |
+| Sichtprüfer | FDA7C59C0E3EF9FEC0C0F81B98975F712D8438DE7236D75D0B8D03897F6A052C |
+| Design-Referenz | 1509BE93E71B486728A49D1786CD60826943C6CBE954FC7BFF2EE1D3120A8FCE |
 
-## Nachweise
+## Frühere Runde-51-Nachweise (kein Runde-52-Abnahmeclaim)
 
 - Produktions-Build mit lokalem Replay-Ziel: PASS.
 - Aus dem Import-/Alias-Abgleich: sämtliche verwendeten Zielvariablen sind im Originalbündel vorhanden.

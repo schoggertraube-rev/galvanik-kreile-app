@@ -1,5 +1,32 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+
+/** U-240: Lesereihenfolge; die letzte Pflichtangabe nutzt dieselbe gegatete Hauptaktion wie der Klick. */
+export function weiterMitEnter(event: ReactKeyboardEvent<HTMLDivElement>) {
+  if (event.key !== 'Enter' || event.defaultPrevented || event.nativeEvent.isComposing
+      || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement)
+      || target.matches('[type=checkbox],[type=radio],[type=file],[type=submit],[type=button]')) return;
+  const layer = target.closest<HTMLElement>('[role=dialog],dialog[open],[data-ebene]');
+  const boundary = layer ?? target.form;
+  if (!boundary) return;
+  const layers = [...event.currentTarget.querySelectorAll('[role=dialog],dialog[open],[data-ebene]')];
+  if (layer && layers.length && layers.at(-1) !== layer) return;
+  const fields = [...boundary.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input,select,textarea')]
+    .filter(field => !field.disabled && !field.matches('[readonly],[type=hidden],[type=checkbox],[type=radio],[type=file],[type=submit],[type=button]')
+      && field.getClientRects().length > 0 && getComputedStyle(field).visibility !== 'hidden');
+  const index = fields.indexOf(target);
+  if (index < 0) return;
+  const lastRequired = fields.findLast(field => field.required || field.dataset.enterSubmit === 'true');
+  const primary = boundary.querySelector<HTMLButtonElement>('.kr-dialog-fuss button.kr-btn--erledigen,.kr-dialog-fuss button.kr-btn--primaer');
+  if (target === lastRequired || index === fields.length - 1) {
+    if (primary && !primary.disabled) { event.preventDefault(); primary.click(); }
+    return;
+  }
+  event.preventDefault();
+  fields[index + 1].focus();
+}
 export interface ListenTastaturOptionen {
   /** Anzahl sichtbarer Handlungsbedarf-Einträge (Fokus zuerst) */ anzahl: number;
   /** nur Desktop und nur ohne offenen Dialog/Palette */ aktiv: boolean;

@@ -1,4 +1,6 @@
+'use client';
 import type { ReactNode } from 'react';
+import { weiterMitEnter } from './tastatur';
 import { Icon, type IconName } from './Icon';
 import type { Geraet } from './typen';
 import { cx } from './typen';
@@ -72,5 +74,8 @@ export interface SeitenKopfProps { titel: string; werkzeug?: ReactNode; }
 export function SeitenKopf({ titel, werkzeug }: SeitenKopfProps) {
   return <div className="kr-seite-kopf"><h1 className="kr-seite-titel">{titel}</h1>{werkzeug && <div className="kr-seite-werkzeug">{werkzeug}</div>}</div>;
 }
-/** Wurzel: setzt Gerät. Gerät bestimmt die App (Breite ≤699 = handy; Touch & ≤1399 = tablet; sonst desktop). */
-export function KrApp({ geraet, children }: { geraet: Geraet; children: ReactNode }) { return <div className="kr-app" data-geraet={geraet} data-groesse="v8">{children}</div>; }
+/** Runde 52: ein Größenkontext für Seite und alle darüber geöffneten Ebenen. */
+export function KrApp({ geraet, children }: { geraet: Geraet; children: ReactNode }) {
+  const groesse = geraet === 'desktop' ? 'v11' : geraet === 'tablet' ? 'dicht' : 'v8';
+  return <div className="kr-app" data-geraet={geraet} data-groesse={groesse} onKeyDown={weiterMitEnter}>{children}</div>;
+}
