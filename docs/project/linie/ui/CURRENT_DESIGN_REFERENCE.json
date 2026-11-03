@@ -1,30 +1,63 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
+  "hinweis": "VORSCHLAG der Endversion (03.11.2026). Ersetzt CURRENT_DESIGN_REFERENCE.json erst nach Owner-Bestätigung (updateContract.ownerConfirmationRequired). Bis dahin gilt die alte Datei.",
+  "uiTruth": {
+    "path": "docs/project/endversion/ui/",
+    "liesmich": "docs/project/endversion/ui/LIESMICH.md",
+    "role": "SINGLE_UI_TRUTH_LOOK_LAYOUT_ORDER_SIZES",
+    "designCss": {
+      "path": "docs/project/endversion/ui/endversion_design.css",
+      "sha256": "35146E45B96F84D7CB30D38F403F1DC0AE9D9232B7F1F7B4C5ED8D950B4537AB",
+      "replaces": [
+        "docs/project/linie/ui/designsystem_v1_1/komponenten.css",
+        "src/app/globals.css eigene kr-* Nachbauten"
+      ],
+      "keeps": "tokens.css der V1.1 ist byteidentisch enthalten"
+    },
+    "sightContract": {
+      "path": "docs/project/endversion/ui/SICHTVERTRAG.json",
+      "sha256": "B1A53EA675F52B999CD034C5C5D6D0F4D4B1CC131AB40E818DF3BDD138B6EB4C",
+      "sizes": {
+        "desktop": [
+          1914,
+          917
+        ],
+        "tablet": [
+          1220,
+          880
+        ],
+        "handy": [
+          390,
+          844
+        ]
+      },
+      "entries": 117
+    },
+    "checkScript": {
+      "path": "docs/project/endversion/ui/pruefe_sicht.cjs",
+      "sha256": "FDA7C59C0E3EF9FEC0C0F81B98975F712D8438DE7236D75D0B8D03897F6A052C",
+      "routes": "docs/project/endversion/ui/routen.json",
+      "gate": "Rot = kein Merge; Gelb nur mit Grund in docs/delivery/ABGABE_*.md"
+    },
+    "referenceImages": "docs/project/endversion/ui/pruefbilder/",
+    "boundToBauplan": "codex/BAUPLAN.next.json → bauplan.ui (gleiche Hashes)",
+    "pageCatalog": "codex/BAUPLAN.next.json → paket.seitenkatalog (13 Seiten, Namen, Einstiege, Modi)"
+  },
   "designSystem": {
     "path": "docs/project/linie/ui/designsystem_v1_1",
-    "manifestPath": "docs/project/linie/ui/designsystem_v1_1/SHA256SUMS.txt",
-    "manifestSha256": "71B0CB01F484BEEF042CFD04D31F951D2DB2D441C427F8212F35A8D41A8041E5",
-    "role": "TOKENS_TYPOGRAPHY_COMPONENTS_RESPONSIVE"
+    "role": "TOKENS_ONLY",
+    "note": "komponenten.css nicht mehr Bau-Input (im Bündel enthalten, Stand Endversion)"
   },
-  "current": {
-    "path": "docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html",
-    "sha256": "75258FF3BD4CC212C8E989061708A29DC26EA44B851BD28E8F16E8509B0CC0AA",
-    "approvedAt": "2026-09-14",
-    "role": "FLOW_AND_INTERMEDIATE_STEPS_ONLY"
+  "superseded": {
+    "current": "docs/project/linie/ui/KREILE_GESAMTMOCK_V5_2026-09-14.html",
+    "pageTruth": [
+      "KREILE_STARTSEITE_PHILLIP_V4_2026-08-20.html",
+      "KREILE_STARTSEITE_ROLF_V8_2026-08-20.html",
+      "KREILE_AUFTRAGSKARTE_MACHART_V8_2026-08-19.html",
+      "KREILE_KUNDENKARTE_MACHART_V2_2026-08-19.html"
+    ],
+    "status": "SUPERSEDED_NOT_BUILD_INPUT"
   },
-  "pageTruth": [
-    "docs/project/linie/ui/KREILE_STARTSEITE_PHILLIP_V4_2026-08-20.html",
-    "docs/project/linie/ui/KREILE_STARTSEITE_ROLF_V8_2026-08-20.html",
-    "docs/project/linie/ui/KREILE_AUFTRAGSKARTE_MACHART_V8_2026-08-19.html",
-    "docs/project/linie/ui/KREILE_KUNDENKARTE_MACHART_V2_2026-08-19.html"
-  ],
-  "supersededAggregateMocks": [
-    "KREILE_GESAMTMOCK_V2",
-    "KREILE_GESAMTMOCK_V3",
-    "KREILE_GESAMTMOCK_V4"
-  ],
-  "supersededAggregateMockStatus": "SUPERSEDED_NOT_BUILD_INPUT",
-  "metadataCaveat": "An internal HTML title such as V2-MOCK is stale metadata and never product text.",
   "updateContract": {
     "ownerConfirmationRequired": true,
     "requiredBinding": [
@@ -36,7 +69,10 @@
       "browser_acceptance",
       "draft_pr"
     ],
-    "documentHashDelta": true,
-    "selectionByVersionDateOrHtmlTitleForbidden": true
+    "sightCheckBefore": [
+      "draft_pr",
+      "merge"
+    ],
+    "documentHashDelta": true
   }
 }

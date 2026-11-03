@@ -1,4 +1,4 @@
-// Generated from BAUPLAN SHA-256 5E7B880BD9D4B35EAF7BF906F2693011192933E000FA7AEA94222395F34A1F70. Do not edit.
+// Generated from BAUPLAN SHA-256 DF3E1AFEC7B6C3DED6DA51F22FDAADF8CFAB780DA9A4F619EDB42D3C2D6AC5C4. Do not edit.
 export const generatedFlowRuntime = {
   "logins": {
     "login_meister": {
@@ -16,6 +16,18 @@ export const generatedFlowRuntime = {
     "login_ohne_kunden": {
       "id": "10000000-0000-4000-8000-000000000004",
       "pin": "4444"
+    },
+    "login_nur_eingang": {
+      "id": "10000000-0000-4000-8000-000000000005",
+      "pin": "5555"
+    },
+    "login_buero_ohne_geld": {
+      "id": "10000000-0000-4000-8000-000000000006",
+      "pin": "6666"
+    },
+    "login_einstellungen": {
+      "id": "10000000-0000-4000-8000-000000000007",
+      "pin": "7777"
     }
   },
   "datenlagen": {
@@ -195,6 +207,68 @@ export const generatedFlowRuntime = {
       "last_name": "Deltaprobe",
       "email": "buero@delta-pruef.test",
       "zahlungsbedingung": "vorkasse"
+    },
+    "lieferant_bekannt": {
+      "id": "00000000-0000-4000-8000-000000000110",
+      "customer_number": "K-FLOW-010",
+      "customer_type": "lieferant",
+      "name": "Prueflieferant Omega GmbH",
+      "company_name": "Prueflieferant Omega GmbH",
+      "email": "rechnung@omega-pruef.test",
+      "phone": "06100 121212",
+      "country": "DE",
+      "street": "Prüfweg",
+      "house_number": "12",
+      "zip_code": "99012",
+      "city": "Prüfstadt",
+      "zahlungsziel_tage": 14,
+      "iban": null
+    },
+    "kunde_vorrang": {
+      "id": "00000000-0000-4000-8000-000000000111",
+      "customer_number": "K-FLOW-011",
+      "customer_type": "business",
+      "country": "DE",
+      "street": "Prüfweg",
+      "zip_code": "99001",
+      "city": "Prüfstadt",
+      "ziel_freigeschaltet": false,
+      "handover_preference": null,
+      "salutation": "frau",
+      "contact_role": "Einkauf",
+      "zahlungsbedingung": "vorkasse",
+      "phone": "06100 101010",
+      "house_number": "10",
+      "company_name": "Prueffirma Iota GmbH",
+      "name": "Prueffirma Iota GmbH",
+      "first_name": "Ina",
+      "last_name": "Iotaprobe",
+      "email": "einkauf@iota-pruef.test",
+      "vorrang": true,
+      "auto_info": true
+    },
+    "kunde_ohne_auto_info": {
+      "id": "00000000-0000-4000-8000-000000000112",
+      "customer_number": "K-FLOW-012",
+      "customer_type": "business",
+      "country": "DE",
+      "street": "Prüfweg",
+      "zip_code": "99001",
+      "city": "Prüfstadt",
+      "ziel_freigeschaltet": false,
+      "handover_preference": null,
+      "salutation": "frau",
+      "contact_role": "Einkauf",
+      "zahlungsbedingung": "vorkasse",
+      "phone": "06100 131313",
+      "house_number": "13",
+      "company_name": "Prueffirma Kappa GmbH",
+      "name": "Prueffirma Kappa GmbH",
+      "first_name": "Kai",
+      "last_name": "Kappaprobe",
+      "email": "einkauf@kappa-pruef.test",
+      "vorrang": false,
+      "auto_info": false
     }
   }
 } as const;

@@ -43,3 +43,4 @@ supabase/migrations/20260807090100_f0_06_storage_view_hardening.sql -whitespace
 docs/project/history/legacy-sources/2026-10-11/** -text -whitespace
 docs/project/history/controls/2026-10-11/** -text -whitespace
 docs/project/linie/ui/designsystem_v1_1/README.md -whitespace
+docs/project/endversion/ui/endversion_design.css -whitespace

@@ -1,65 +1,1074 @@
 {
-  "E04": { "paket": "AP-02", "grund": "Neukunde aus der Erfassung folgt mit AP-02" },
-  "E07": { "paket": "AP-EIN-2", "grund": "Schlüssel samt Bestandsmigration folgen in AP-EIN Teil 2 (Entscheidung 02.11. 23:00)" },
-  "E22": { "paket": "AP-K1", "grund": "Zahlungs- und Übergabevertrag folgt mit AP-K1" },
-  "E25": { "paket": "AP-K1", "grund": "Kundenzahlungsbedingung folgt mit AP-K1" },
-  "E26": { "paket": "AP-K1", "grund": "Altwert-Zahlungsbedingung folgt mit AP-K1 (P25)" },
-  "E27": { "paket": "AP-K1", "grund": "Kunden- und Rechtevertrag folgt mit AP-K1" },
-  "E28": { "paket": "AP-K1", "grund": "Übergabepräferenz aus der Kundenkarte folgt mit AP-K1" },
-  "E33": { "paket": "AP-N", "grund": "Bestätigung erkannter Felder folgt mit AP-N (P25)" },
-  "E34": { "paket": "AP-N", "grund": "Kundenerkennung über Telefon folgt mit AP-N" },
-  "E35": { "paket": "AP-02", "grund": "Neukunde inline folgt mit AP-02" },
-  "E36": { "paket": "AP-02", "grund": "Teilweiser Neukunde folgt mit AP-02" },
-  "E37": { "paket": "AP-02", "grund": "Dublettenschutz für Neukunden folgt mit AP-02" },
-  "E38": { "paket": "AP-E", "grund": "Kostenvoranschlag aus der Erfassung folgt mit AP-E" },
-  "E40": { "paket": "AP-F", "grund": "Weitere Eingangsarten folgen mit AP-F" },
-  "E43": { "paket": "AP-M", "grund": "Mail-Eingang und Rechte folgen mit AP-M" },
-  "E44": { "paket": "AP-M", "grund": "Mail-Eingang und Rechte folgen mit AP-M" },
-  "K01": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K02": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K03": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K04": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K05": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K06": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K07": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K08": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K09": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K10": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K11": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K13": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K14": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K16": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K17": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K19a": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K18b": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K19b": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K19c": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K20": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K21": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K22": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K23": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K24": { "paket": "AP-M", "grund": "Mail-Dublette folgt mit AP-M" },
-  "K25": { "paket": "AP-N", "grund": "Schnellerfassung folgt mit AP-N (P25)" },
-  "K26": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K27": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "K28": { "paket": "AP-K1", "grund": "Kundenformular wird mit AP-K1 geliefert" },
-  "B01": { "paket": "AP-K1", "grund": "Kundenbearbeitung wird mit AP-K1 geliefert" },
-  "B02": { "paket": "AP-K1", "grund": "Kundenbearbeitung wird mit AP-K1 geliefert" },
-  "B03": { "paket": "AP-K1", "grund": "Kundenbearbeitung wird mit AP-K1 geliefert" },
-  "B04": { "paket": "AP-K1", "grund": "Kundenbearbeitung wird mit AP-K1 geliefert" },
-  "B05": { "paket": "AP-K1", "grund": "Kundenbearbeitung wird mit AP-K1 geliefert" },
-  "B06": { "paket": "AP-K1", "grund": "Kundenbearbeitung wird mit AP-K1 geliefert" },
-  "B17": { "paket": "AP-K1", "grund": "Kundenbearbeitung wird mit AP-K1 geliefert" },
-  "B07": { "paket": "AP-K1", "grund": "Kundenbearbeitung wird mit AP-K1 geliefert" },
-  "B08": { "paket": "AP-K1", "grund": "Kundenbearbeitung wird mit AP-K1 geliefert" },
-  "B09": { "paket": "AP-K1", "grund": "Kundenbearbeitung wird mit AP-K1 geliefert" },
-  "B10": { "paket": "AP-K1", "grund": "Kundenbearbeitung wird mit AP-K1 geliefert" },
-  "B11": { "paket": "AP-K1", "grund": "Kundenbearbeitung wird mit AP-K1 geliefert" },
-  "B12a": { "paket": "AP-K1", "grund": "Kundenbearbeitung wird mit AP-K1 geliefert" },
-  "B12b": { "paket": "AP-K1", "grund": "Kundenbearbeitung wird mit AP-K1 geliefert" },
-  "B12c": { "paket": "AP-K1", "grund": "Kundenbearbeitung wird mit AP-K1 geliefert" },
-  "B13": { "paket": "AP-K1", "grund": "Kundenbearbeitung wird mit AP-K1 geliefert" },
-  "B14": { "paket": "AP-K1", "grund": "Kundenbearbeitung wird mit AP-K1 geliefert" },
-  "B15": { "paket": "AP-K1", "grund": "Kundenbearbeitung wird mit AP-K1 geliefert" },
-  "B16": { "paket": "AP-K1", "grund": "Kundenbearbeitung wird mit AP-K1 geliefert" }
+  "E04": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "E07": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "E10": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "E11": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "E18": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "E20": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "E22": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "E25": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "E26": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "E27": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "E28": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "E33": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "E34": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "E35": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "E36": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "E37": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "E38": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "E40": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "E43": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "E44": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "C01": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "C02": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "C03": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "C04": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "C05": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "C06": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "C07": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "C08": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "C09": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "C10": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "C11": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "C12": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "Q01": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "Q02": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "Q03": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "TA01": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "TA02": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "TA03": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "TA04": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "TA05": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "TA06": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "TA07": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "TA08": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "TA09": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "TA10": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "TA11": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "TA12": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "AB01": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "AB02": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "TA13a": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "TA13b": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "TA14": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "TA15": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "TA16": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "TA17": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "TA18": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "AB03": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "KK01": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "DA01": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "DA02": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "RT04-03": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "RT04-05": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "RT04-06": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "RT04-07": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "RT04-08": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "RT04-10": {
+    "paket": "AP-EIN-2",
+    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "K01": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K02": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K03": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K04": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K05": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K06": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K07": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K08": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K09": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K10": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K11": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K13": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K14": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K16": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K17": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K19a": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K18b": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K19b": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K19c": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K20": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K21": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K22": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K23": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K26": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K24": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K25": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K27": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K28": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "Q04": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "K29": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "KK02": {
+    "paket": "AP-EIN-1",
+    "grund": "kundeneu nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B01": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B02": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B03": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B04": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B05": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B06": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B17": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B07": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B08": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B09": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B10": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B11": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B12a": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B12b": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B12c": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B13": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B14": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B15": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B16": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "Q05": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B12d": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B12e": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B12g": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B12h": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B12i": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B18": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B19": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B20": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "B21": {
+    "paket": "AP-EIN-1",
+    "grund": "kundebearbeiten nach Runde 52 wird mit AP-EIN-1 geliefert"
+  },
+  "W01": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "W02": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "W03": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "W04": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "W05": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "W06": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "W07": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "W08": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "W09": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "W10": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "W11": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "W12": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "W13": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "W14": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "Q06": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "W15": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "W16": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "W17": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "RT01-01": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "RT01-02": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "RT02-01": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "RT02-02": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "RT03-01": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "RT03-02": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "RT03-03": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "RT03-04": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "RT03-05": {
+    "paket": "AP-EIN-3",
+    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "F01": {
+    "paket": "AP-EIN-2",
+    "grund": "rein nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "F02": {
+    "paket": "AP-EIN-2",
+    "grund": "rein nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "F03": {
+    "paket": "AP-EIN-2",
+    "grund": "rein nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "F04": {
+    "paket": "AP-EIN-2",
+    "grund": "rein nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "F05": {
+    "paket": "AP-EIN-2",
+    "grund": "rein nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "F06": {
+    "paket": "AP-EIN-2",
+    "grund": "rein nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "F07": {
+    "paket": "AP-EIN-2",
+    "grund": "rein nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "F08": {
+    "paket": "AP-EIN-2",
+    "grund": "rein nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "F09": {
+    "paket": "AP-EIN-2",
+    "grund": "rein nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "F10": {
+    "paket": "AP-EIN-2",
+    "grund": "rein nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "F11": {
+    "paket": "AP-EIN-2",
+    "grund": "rein nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "F12": {
+    "paket": "AP-EIN-2",
+    "grund": "rein nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "F13": {
+    "paket": "AP-EIN-2",
+    "grund": "rein nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "M01": {
+    "paket": "AP-EIN-4",
+    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "M02": {
+    "paket": "AP-EIN-4",
+    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "M03": {
+    "paket": "AP-EIN-4",
+    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "M04": {
+    "paket": "AP-EIN-4",
+    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "M05": {
+    "paket": "AP-EIN-4",
+    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "M06": {
+    "paket": "AP-EIN-4",
+    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "M07": {
+    "paket": "AP-EIN-4",
+    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "M08a": {
+    "paket": "AP-EIN-4",
+    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "M08b": {
+    "paket": "AP-EIN-4",
+    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "M09": {
+    "paket": "AP-EIN-4",
+    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "M10": {
+    "paket": "AP-EIN-4",
+    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "M11": {
+    "paket": "AP-EIN-4",
+    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "M12": {
+    "paket": "AP-EIN-4",
+    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "M13": {
+    "paket": "AP-EIN-4",
+    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "M14": {
+    "paket": "AP-EIN-4",
+    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "R01": {
+    "paket": "AP-EIN-5",
+    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
+  },
+  "R02": {
+    "paket": "AP-EIN-5",
+    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
+  },
+  "R03": {
+    "paket": "AP-EIN-5",
+    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
+  },
+  "R04": {
+    "paket": "AP-EIN-5",
+    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
+  },
+  "R05": {
+    "paket": "AP-EIN-5",
+    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
+  },
+  "R06": {
+    "paket": "AP-EIN-5",
+    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
+  },
+  "R07": {
+    "paket": "AP-EIN-5",
+    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
+  },
+  "R08": {
+    "paket": "AP-EIN-5",
+    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
+  },
+  "R06b": {
+    "paket": "AP-EIN-5",
+    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
+  },
+  "R09": {
+    "paket": "AP-EIN-5",
+    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
+  },
+  "R10": {
+    "paket": "AP-EIN-5",
+    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
+  },
+  "R11": {
+    "paket": "AP-EIN-5",
+    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
+  },
+  "R12": {
+    "paket": "AP-EIN-5",
+    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
+  },
+  "R13": {
+    "paket": "AP-EIN-5",
+    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
+  },
+  "R14": {
+    "paket": "AP-EIN-5",
+    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
+  },
+  "R15": {
+    "paket": "AP-EIN-5",
+    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
+  },
+  "O01": {
+    "paket": "AP-EIN-3",
+    "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "O02": {
+    "paket": "AP-EIN-3",
+    "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "O03a": {
+    "paket": "AP-EIN-3",
+    "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "O03b": {
+    "paket": "AP-EIN-3",
+    "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "O04": {
+    "paket": "AP-EIN-3",
+    "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "O05": {
+    "paket": "AP-EIN-3",
+    "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "O06": {
+    "paket": "AP-EIN-3",
+    "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "O07": {
+    "paket": "AP-EIN-3",
+    "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "O08": {
+    "paket": "AP-EIN-3",
+    "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "O09": {
+    "paket": "AP-EIN-3",
+    "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
+  },
+  "N01": {
+    "paket": "AP-EIN-4",
+    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "N03": {
+    "paket": "AP-EIN-4",
+    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "N04": {
+    "paket": "AP-EIN-4",
+    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "N05": {
+    "paket": "AP-EIN-4",
+    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "N06": {
+    "paket": "AP-EIN-4",
+    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "N07": {
+    "paket": "AP-EIN-4",
+    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "N08": {
+    "paket": "AP-EIN-4",
+    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "N09": {
+    "paket": "AP-EIN-4",
+    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "N10": {
+    "paket": "AP-EIN-4",
+    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "N11": {
+    "paket": "AP-EIN-4",
+    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "N12": {
+    "paket": "AP-EIN-4",
+    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "N13": {
+    "paket": "AP-EIN-4",
+    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "N14": {
+    "paket": "AP-EIN-4",
+    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "N15": {
+    "paket": "AP-EIN-4",
+    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "G01": {
+    "paket": "AP-EIN-4",
+    "grund": "aufgabe nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "G02": {
+    "paket": "AP-EIN-4",
+    "grund": "aufgabe nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "G03": {
+    "paket": "AP-EIN-4",
+    "grund": "aufgabe nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "G04": {
+    "paket": "AP-EIN-4",
+    "grund": "aufgabe nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "G05": {
+    "paket": "AP-EIN-4",
+    "grund": "aufgabe nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "G06": {
+    "paket": "AP-EIN-4",
+    "grund": "aufgabe nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "G07": {
+    "paket": "AP-EIN-4",
+    "grund": "aufgabe nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "G08": {
+    "paket": "AP-EIN-4",
+    "grund": "aufgabe nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "G09": {
+    "paket": "AP-EIN-4",
+    "grund": "aufgabe nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "G10": {
+    "paket": "AP-EIN-4",
+    "grund": "aufgabe nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "G11": {
+    "paket": "AP-EIN-4",
+    "grund": "aufgabe nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "A01": {
+    "paket": "AP-EIN-2",
+    "grund": "anliegenwahl nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "A02": {
+    "paket": "AP-EIN-2",
+    "grund": "anliegenwahl nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "A03": {
+    "paket": "AP-EIN-2",
+    "grund": "anliegenwahl nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "A04": {
+    "paket": "AP-EIN-2",
+    "grund": "anliegenwahl nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "A05a": {
+    "paket": "AP-EIN-2",
+    "grund": "anliegenwahl nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "A05b": {
+    "paket": "AP-EIN-2",
+    "grund": "anliegenwahl nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "A06": {
+    "paket": "AP-EIN-2",
+    "grund": "anliegenwahl nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "L01": {
+    "paket": "AP-EIN-4",
+    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "L02": {
+    "paket": "AP-EIN-4",
+    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "L03": {
+    "paket": "AP-EIN-4",
+    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "L04": {
+    "paket": "AP-EIN-4",
+    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "L05": {
+    "paket": "AP-EIN-4",
+    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "L06": {
+    "paket": "AP-EIN-4",
+    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "L07": {
+    "paket": "AP-EIN-4",
+    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "L08": {
+    "paket": "AP-EIN-4",
+    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "L09": {
+    "paket": "AP-EIN-4",
+    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "L10": {
+    "paket": "AP-EIN-4",
+    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "L11": {
+    "paket": "AP-EIN-4",
+    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "L12": {
+    "paket": "AP-EIN-4",
+    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "L13": {
+    "paket": "AP-EIN-4",
+    "grund": "reklamation nach Runde 52 wird mit AP-EIN-4 geliefert"
+  },
+  "T01": {
+    "paket": "AP-EIN",
+    "grund": "termineinst außerhalb der 13 Paket-Seiten; Modell-Zuordnung AP-EIN"
+  },
+  "T02": {
+    "paket": "AP-EIN",
+    "grund": "termineinst außerhalb der 13 Paket-Seiten; Modell-Zuordnung AP-EIN"
+  },
+  "T03": {
+    "paket": "AP-EIN",
+    "grund": "termineinst außerhalb der 13 Paket-Seiten; Modell-Zuordnung AP-EIN"
+  },
+  "T04": {
+    "paket": "AP-EIN",
+    "grund": "termineinst außerhalb der 13 Paket-Seiten; Modell-Zuordnung AP-EIN"
+  },
+  "T05a": {
+    "paket": "AP-EIN",
+    "grund": "termineinst außerhalb der 13 Paket-Seiten; Modell-Zuordnung AP-EIN"
+  },
+  "T05b": {
+    "paket": "AP-EIN",
+    "grund": "termineinst außerhalb der 13 Paket-Seiten; Modell-Zuordnung AP-EIN"
+  },
+  "T05c": {
+    "paket": "AP-EIN",
+    "grund": "termineinst außerhalb der 13 Paket-Seiten; Modell-Zuordnung AP-EIN"
+  },
+  "T06": {
+    "paket": "AP-EIN",
+    "grund": "termineinst außerhalb der 13 Paket-Seiten; Modell-Zuordnung AP-EIN"
+  },
+  "T07": {
+    "paket": "AP-EIN",
+    "grund": "termineinst außerhalb der 13 Paket-Seiten; Modell-Zuordnung AP-EIN"
+  },
+  "T08": {
+    "paket": "AP-EIN",
+    "grund": "termineinst außerhalb der 13 Paket-Seiten; Modell-Zuordnung AP-EIN"
+  },
+  "D01": {
+    "paket": "AP-EIN-2",
+    "grund": "entwurf nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "D02": {
+    "paket": "AP-EIN-2",
+    "grund": "entwurf nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "D03": {
+    "paket": "AP-EIN-2",
+    "grund": "entwurf nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "D04": {
+    "paket": "AP-EIN-2",
+    "grund": "entwurf nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "D05": {
+    "paket": "AP-EIN-2",
+    "grund": "entwurf nach Runde 52 wird mit AP-EIN-2 geliefert"
+  },
+  "D06": {
+    "paket": "AP-EIN-2",
+    "grund": "entwurf nach Runde 52 wird mit AP-EIN-2 geliefert"
+  }
 }

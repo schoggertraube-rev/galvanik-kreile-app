@@ -238,3 +238,23 @@ Neueste vom Owner freigegebene Version (27.09.2026, `_DESIGN_VERBINDLICH/FREIGAB
 ## U-237 · Absprachen als eigener Teil nach AP-EIN (02.11.2026)
 - Absprachen & Eigenheiten (5.2, customer_agreements) sind nicht in AP-EIN; eigener Teil AP-ABS direkt danach, mit Testfällen vom Endversion-Chat. Entschieden vom Planungschat (Owner: „löse die offenen Punkte“).
 - Owner-Autorisierung: Siglinder, delegiert.
+
+## U-238 – Optik = Endversion-Prototyp (03.11.2026)
+- Owner 03.11.: „Das Gebaute ist absolut nicht das, was geplant wurde – Optik und Handling entsprechen nicht der Endversion.“
+- Verbindliche Optik- und Handling-Quelle ist der Endversion-Prototyp `docs/project/endversion/prototyp/` (SHA-Liste in `PROTOTYP.md`), zusammen mit dem BAUPLAN gleicher spec. Ersetzt für alle Endversion-Screens die frühere Vorlage `designsystem_v1_1/kundenansicht` (U-Abschnitt „Bildschirm-Wahrheit“).
+- Die Stilschicht des Prototyps (tokens, komponenten, groessen_v8, ui_ergaenzung) wird die eine Stilschicht der App – app-weit in einem Schritt, nicht Seite für Seite.
+- Abnahme jedes Pakets zusätzlich: Optik-Abgleich Soll (Prototyp) / Ist (Preview genau des SHA) je Screen, Zustand und Gerät; ohne grünen Abgleich kein Owner-Klicktest.
+- Owner-Autorisierung: Siglinder (Aussage 03.11.), umgesetzt vom Planungschat.
+
+## U-239 - UI-Wahrheit der Endversion gebunden (03.11.2026)
+- Owner 03.11. 15:xx: Endversion-Gesamtmeldung freigegeben ("kuemmerst du dich darum, dass du alles erstellst, was codex ... benoetigt ... es muss genauso gebaut werden wie geplant"). Damit Owner-Haken fuer die UI-Wahrheit.
+- Einzige UI-Wahrheit: `docs/project/endversion/ui/` (endversion_design.css BEC708B4, SICHTVERTRAG.json 8204C911, pruefe_sicht.cjs 98D1C21C, Pruefbilder). `docs/project/linie/ui/CURRENT_DESIGN_REFERENCE.json` = `CURRENT_DESIGN_REFERENCE.endversion.json` (7D7B1FCA); alte Bindung V1.1/August-HTML/V5 superseded (Kopie im 99_archive).
+- Ersetzt U-238 (Prototyp-Ordner mit Mock-Code entfernt, ins 99_archive verschoben).
+- Kein Produkt-Merge ohne gruenen pruefe_sicht-Lauf des Pruefchats fuer die Seiten des PR (Gelb nur mit Grund in der Abgabe).
+- Owner-Autorisierung: Siglinder.
+
+## U-240 - Groessenregel je Geraet (03.11.2026)
+- Desktop: kompakt (V1.1-Groessen), Dialoge hoechstens ca. 1100 px breit.
+- Tablet (1220x880, auch mit Tastatur): alles ohne Scrollen der Hauptaktion sichtbar; dafuer duerfen Knoepfe/Felder kleiner sein als V8 (Abstriche erlaubt), Felder und Knoepfe dichter und sinnvoller angeordnet (z. B. zwei Spalten, Pruefliste einklappbar). Handy bleibt V8 (Touch >= 48 px).
+- Ueberall: Enter springt ins naechste Feld (Fokusreihenfolge = Lesereihenfolge), Enter im letzten Pflichtfeld loest die Hauptaktion mit ihrem Tor aus; Auswahlfelder per Tastatur bedienbar.
+- Owner-Autorisierung: Siglinder (Antwort 03.11.: Tablet muss alles zeigen und Tastatur koennen, Abstriche ok, besser anordnen, automatisch ins naechste Feld mit Enter).

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "package": "B2-EINGANG-KOMPLETT-ANCHOR",
+  "headBranch": "codex/ta-b2f",
+  "mainBaseSha": "06e56daae267e49a7e23a5c40a70fbbef21b8cb8",
+  "authorizedBy": "Siglinder",
+  "authorizedAt": "2026-11-03",
+  "scope": "TA-B2f Runde 52: gebundene Endversion V41 und AP-EIN Teile 0-6",
+  "bauplanSha256": "DF3E1AFEC7B6C3DED6DA51F22FDAADF8CFAB780DA9A4F619EDB42D3C2D6AC5C4",
+  "probeResult": "PASS"
+}

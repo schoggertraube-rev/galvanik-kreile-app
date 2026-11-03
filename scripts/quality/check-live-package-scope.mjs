@@ -198,6 +198,22 @@ const TA_B2E_VALUES = Object.freeze({
   probeCandidateSha: "b3823e11e67dd9ca1b2a194cc8db360e58011d46",
   probeResult: "PASS",
 });
+const TA_B2F_BRANCH = "codex/ta-b2f";
+const TA_B2F_BASE_SHA = "06e56daae267e49a7e23a5c40a70fbbef21b8cb8";
+const TA_B2F_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2F.json";
+const TA_B2F_BAUPLAN = "docs/project/endversion/codex/BAUPLAN.json";
+const TA_B2F_BAUPLAN_SHA256 = "DF3E1AFEC7B6C3DED6DA51F22FDAADF8CFAB780DA9A4F619EDB42D3C2D6AC5C4";
+const TA_B2F_VALUES = Object.freeze({
+  schemaVersion: 1,
+  package: "B2-EINGANG-KOMPLETT-ANCHOR",
+  headBranch: TA_B2F_BRANCH,
+  mainBaseSha: TA_B2F_BASE_SHA,
+  authorizedBy: "Siglinder",
+  authorizedAt: "2026-11-03",
+  scope: "TA-B2f Runde 52: gebundene Endversion V41 und AP-EIN Teile 0-6",
+  bauplanSha256: TA_B2F_BAUPLAN_SHA256,
+  probeResult: "PASS",
+});
 const PR154_REBASELINE_BRANCH = "kreile/s1-p2-eingang";
 const PR154_REBASELINE_BASE_SHA = "1fa4920d6d06b02413c8c157ae6b739507105846";
 const PR154_REBASELINE_RECEIPT = "docs/evidence/live-line/pr154/REBASELINE.json";
@@ -376,7 +392,60 @@ const TA_B2E_REQUIRED_FILES = Object.freeze([
   "scripts/quality/check-live-package-scope.mjs",
   "src/test/live_package_scope.test.ts",
 ]);
+const TA_B2F_ANCHOR_ALLOWLIST = Object.freeze([
+  "quality/eslint-baseline.json",
+  ".gitattributes",
+  ".github/workflows/agentur-gate.yml",
+  ".github/workflows/eslint-ratchet.yml",
+  "eslint.config.mjs",
+  "_review/AKTUELLE_ANWEISUNG.md",
+  "_review/MELDUNG_PLANUNGSCHAT.md",
+  "_review/MELDUNG_ENDVERSION_CHAT.md",
+  "_review/OWNER_ENTSCHEIDUNGEN.md",
+  "docs/project/arbeitspakete/**",
+  "docs/project/endversion/ui/**",
+  TA_B2F_BAUPLAN,
+  "e2e/generated/**",
+  "docs/project/linie/ui/CURRENT_DESIGN_REFERENCE.json",
+  TA_B2F_RECEIPT,
+  "scripts/quality/check-authoritative-sources.mjs",
+  "scripts/quality/check-live-package-scope.mjs",
+  "scripts/spec/generate-flow-tests.mjs",
+  "src/test/live_package_scope.test.ts",
+]);
+const TA_B2F_REQUIRED_FILES = Object.freeze([
+  "quality/eslint-baseline.json",
+  ".gitattributes",
+  ".github/workflows/eslint-ratchet.yml",
+  "_review/AKTUELLE_ANWEISUNG.md",
+  "_review/OWNER_ENTSCHEIDUNGEN.md",
+  "docs/project/arbeitspakete/AP-EIN-eingang-komplett/PAKET.md",
+  "docs/project/arbeitspakete/TRUST_ANCHOR_B2F.md",
+  "docs/project/arbeitspakete/WORKQUEUE.json",
+  "docs/project/endversion/ui/LIESMICH.md",
+  "docs/project/endversion/ui/endversion_design.css",
+  "docs/project/endversion/ui/SICHTVERTRAG.json",
+  "docs/project/endversion/ui/pruefe_sicht.cjs",
+  "docs/project/linie/ui/CURRENT_DESIGN_REFERENCE.json",
+  TA_B2F_BAUPLAN,
+  TA_B2F_RECEIPT,
+  "scripts/quality/check-authoritative-sources.mjs",
+  "scripts/quality/check-live-package-scope.mjs",
+  "src/test/live_package_scope.test.ts",
+]);
 const SALES_STAGE_B2_EXACT_ALLOWLIST = Object.freeze([
+  "src/app/actions/settings.actions.ts",
+  "src/app/warendurchlauf/page.tsx",
+  "src/lib/server/commands/orderStationCommand.ts",
+  "src/lib/server/goodsReceiptOrderPort.ts",
+  "src/lib/server/intakeDraftEvents.ts",
+  "src/lib/server/intakeOriginalAudit.ts",
+  "src/lib/types/operationalOrder.ts",
+  "src/modules/fundament/fundament.manifest.json",
+  "src/modules/fundament/server-public.ts",
+  "src/modules/quotes/__tests__/quoteCommands.test.ts",
+  "src/modules/quotes/server/types.ts",
+  "src/test/f1_3_live_card.integration.test.ts",
   ".github/workflows/agentur-gate.yml",
   "quality/module-gates-baseline.json",
   "docs/delivery/ABGABE_B2.md",
@@ -431,6 +500,105 @@ const SALES_STAGE_B2_EXACT_ALLOWLIST = Object.freeze([
   "src/ui/kr/Dialog.tsx",
   "src/ui/kr/GlobalesPlus.tsx",
   "supabase/migrations/20261031212320_ap01_intake_item.sql",
+  "src/app/actions/goodsOut.actions.ts",
+  "src/app/actions/orders.actions.ts",
+  "src/app/settings/SettingsAppAdapter.tsx",
+  "src/components/admin/CompanySettingsForm.tsx",
+  "src/components/warenausgang/WarenausgangQueue.tsx",
+  "src/modules/orders/server/types.ts",
+  "src/modules/werkstatt/server/deriveWerkstattView.ts",
+  "src/modules/werkstatt/server/types.ts",
+  "src/modules/werkstatt/__tests__/deriveWerkstattView.test.ts",
+  "src/modules/fundament/public.ts",
+  "src/lib/server/commands/recordGoodsOutCommand.ts",
+  "src/lib/server/commands/__tests__/recordGoodsOutCommand.test.ts",
+  "src/lib/repositories/companySettingsRepository.ts",
+  "src/lib/email/deliveryMailTemplate.ts",
+  "src/lib/server/__tests__/intakeSuggestions.test.ts",
+  "src/test/f1_5_goods_out.integration.test.ts",
+  "docs/evidence/f0/W4_CROSS_MODULE_READ_PORT_INVENTORY.json",
+  "scripts/quality/f0-verify-http-tests.mjs",
+  "src/app/actions/catalog.actions.ts",
+  "src/app/actions/search.actions.ts",
+  "src/app/api/device-file-changes/route.ts",
+  "src/app/orders/OrderCardAppAdapter.tsx",
+  "src/app/rein/page.tsx",
+  "src/app/settings/SettingsAdminClient.tsx",
+  "src/app/settings/__tests__/SettingsAppAdapter.test.tsx",
+  "src/app/warendurchlauf/__tests__/f1OrderIntakeActions.test.ts",
+  "src/app/warendurchlauf/__tests__/w3StationTenantRead.test.ts",
+  "src/components/layout/EntityOverlayStack.tsx",
+  "src/lib/orderPositionContract.ts",
+  "src/lib/overlayStore.ts",
+  "src/lib/server/__tests__/w2cB2m5u.operationalDueTruth.failClosed.test.ts",
+  "src/lib/server/authorization.ts",
+  "src/lib/server/commands/__tests__/orderContentCommand.test.ts",
+  "src/lib/server/commands/orderContentCommand.ts",
+  "src/lib/server/orderStationRead.ts",
+  "src/modules/katalog/__tests__/catalogServicePort.test.ts",
+  "src/modules/katalog/katalog.manifest.json",
+  "src/modules/katalog/public.ts",
+  "src/modules/katalog/server/catalogServicePort.ts",
+  "src/modules/quotes/server/quoteCommands.ts",
+  "src/modules/suche/public.ts",
+  "src/modules/suche/server/searchTenant.ts",
+  "src/modules/suche/suche.manifest.json",
+  "src/proxy.ts",
+  "src/test/f1_order_intake.integration.test.ts",
+  "src/test/h11_action_matrix.integration.test.ts",
+  "src/test/h18_masterdata_actions.integration.test.ts",
+  "src/test/h18_settings_actions.integration.test.ts",
+  "src/test/localReplayStorage.ts",
+  "src/ui/kr/Formular.tsx",
+  "src/ui/kr/Seitenblatt.tsx",
+  "e2e/f1-5-goods-out-ui.real.spec.ts",
+  "src/lib/pdf/__tests__/ImmutableInvoiceDocument.test.tsx",
+  "src/lib/pdf/__tests__/QuoteDocument.test.tsx",
+  "src/test/f1_4_immutable_invoice.integration.test.ts",
+  "src/test/f1_4_immutable_invoice_contract.integration.test.ts",
+  "src/test/f1_5_payment_goods_out_contract.integration.test.ts",
+  "src/test/f1_5_set_payment_mode.integration.test.ts",
+  "src/test/h18_customer_actions.integration.test.ts",
+  "src/test/h18_invoice_actions.integration.test.ts",
+  "src/test/h18_order_admin_actions.integration.test.ts",
+  "src/test/h18_quote_actions.integration.test.ts",
+  "src/test/h18_workshop_actions.integration.test.ts",
+  "src/test/search_tenant.integration.test.ts",
+  "src/app/actions/communications.actions.ts",
+  "src/app/actions/complaints.actions.ts",
+  "src/app/actions/customers.actions.ts",
+  "src/app/actions/domainAttachments.actions.ts",
+  "src/app/actions/timeline.actions.ts",
+  "src/app/customers/CustomerCardAppAdapter.tsx",
+  "src/app/warendurchlauf/actions.ts",
+  "src/components/layout/F1SourceDialogs.tsx",
+  "src/components/layout/PwaRegister.tsx",
+  "src/components/attachments/DomainAttachmentPanel.module.css",
+  "src/components/attachments/DomainAttachmentPanel.tsx",
+  "src/components/attachments/__tests__/DomainAttachmentPanel.test.tsx",
+  "src/components/communication/CommunicationPanel.module.css",
+  "src/components/communication/CommunicationPanel.tsx",
+  "src/components/communication/__tests__/CommunicationPanel.test.tsx",
+  "src/components/intake/CameraCapture.tsx",
+  "src/db/schema.ts",
+  "src/db/schema_buchhaltung.ts",
+  "src/lib/server/commands/immutableInvoiceCommand.ts",
+  "src/lib/server/communicationPort.ts",
+  "src/lib/server/customerSummaryRead.ts",
+  "src/lib/server/documentIntelligencePort.ts",
+  "src/lib/server/azureDocumentIntelligence.ts",
+  "src/lib/server/intakeSuggestions.ts",
+  "src/lib/server/intakeTextRecognition.ts",
+  "src/lib/server/microsoftGraph.ts",
+  "src/lib/server/todayDashboardPolicy.ts",
+  "src/lib/intakeSuggestionsContract.ts",
+  "src/lib/buchhaltung/erechnung/ERechnungParser.ts",
+  "src/lib/pdf/ImmutableInvoiceDocument.tsx",
+  "src/lib/pdf/QuoteDocument.tsx",
+  "src/lib/repositories/complaintsRepository.ts",
+  "src/lib/server/paymentContract.ts",
+  "src/lib/types/customer.ts",
+  "src/modules/fundament/server/systemSettingsPort.ts",
 ]);
 const SALES_STAGE_B2_ALLOWLIST = Object.freeze([
   ...SALES_STAGE_B2_EXACT_ALLOWLIST,
@@ -441,6 +609,19 @@ const SALES_STAGE_B2_ALLOWLIST = Object.freeze([
   "src/modules/eingang/**",
   "src/test/acceptance/*.integration.test.ts",
   "supabase/migrations/*_ap_r_freitext_einheiten.sql",
+  "public/icons/**",
+  "public/manifest.webmanifest",
+  "src/styles/**",
+  "src/ui/kr/**",
+  "src/app/globals.css",
+  "docs/project/endversion/ui/routen.json",
+  "src/modules/communications/**",
+  "src/modules/complaints/**",
+  "src/modules/customers/**",
+  "src/modules/supplier-invoices/**",
+  "src/modules/tasks/**",
+  "supabase/migrations/*_b2_kunde_k1.sql",
+  "supabase/migrations/*_ein[0-6]_*.sql",
 ]);
 
 const posix = (value) => value.replaceAll("\\", "/");
@@ -448,10 +629,19 @@ const isSha = (value) => /^[0-9a-f]{40}$/i.test(value ?? "");
 const hash = (value) => createHash("sha256").update(value).digest("hex").toUpperCase();
 
 function globRegex(pattern) {
-  let source = posix(pattern).replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  const characterClasses = [];
+  let source = posix(pattern).replace(/\[[^\]]+\]/g, (value) => {
+    const token = `__CHARACTER_CLASS_${characterClasses.length}__`;
+    characterClasses.push(value);
+    return token;
+  });
+  source = source.replace(/[.+^${}()|[\]\\]/g, "\\$&");
   source = source.replaceAll("**", "__DOUBLE_STAR__");
   source = source.replaceAll("*", "[^/]*");
   source = source.replaceAll("__DOUBLE_STAR__", ".*");
+  characterClasses.forEach((value, index) => {
+    source = source.replaceAll(`__CHARACTER_CLASS_${index}__`, value);
+  });
   return new RegExp(`^${source}$`);
 }
 
@@ -848,9 +1038,72 @@ function checkTaB2eAnchor(root, files, mission, branch, baseSha) {
   return errors;
 }
 
+function checkTaB2fScope(files, mission, branch, baseSha) {
+  const errors = [];
+  if (branch !== TA_B2F_BRANCH) errors.push(`TA_B2F_BRANCH_INVALID:${branch}`);
+  if (baseSha !== TA_B2F_BASE_SHA) errors.push(`TA_B2F_BASE_INVALID:${baseSha}:${TA_B2F_BASE_SHA}`);
+  for (const rel of files) {
+    if (!covered(rel, TA_B2F_ANCHOR_ALLOWLIST)) errors.push(`TA_B2F_SCOPE:${rel}`);
+  }
+  if (mission.active_block !== "B2" || mission.phase !== "WRITING" || mission.branch !== SALES_STAGE_B2_BRANCH
+      || mission.started_from_sha !== TA_B2_BASE_SHA || mission.desktop_due_at !== "2026-11-08"
+      || mission.tablet_mobile_due_at !== "2026-11-08" || mission.handoff_path !== "docs/delivery/ABGABE_B2.md"
+      || mission.next_block !== "B3") {
+    errors.push("TA_B2F_MISSION_INVALID");
+  }
+  return errors;
+}
+
+export function checkTaB2fBaselineChangeForTest({ before, after }) {
+  const oldField = '"judgeContractHash": "d322170885867420ca489927b5ad52522206e06009c5afb619d5159d4147752b"';
+  const newField = '"judgeContractHash": "f02832e8e3da8367b3604c5f356b6df95fe61310a2c24d04d5b8105b582aab88"';
+  if (before.split(oldField).length !== 2 || after !== before.replace(oldField, newField)) {
+    return ["TA_B2F_BASELINE_CHANGE_NOT_AUTHORIZED"];
+  }
+  return [];
+}
+
+function checkTaB2fAnchor(root, files, mission, branch, baseSha) {
+  const errors = checkTaB2fScope(files, mission, branch, baseSha);
+  for (const rel of TA_B2F_REQUIRED_FILES) {
+    if (!files.includes(rel)) errors.push(`TA_B2F_REQUIRED_FILE_MISSING:${rel}`);
+  }
+  let receipt;
+  try {
+    receipt = JSON.parse(readFileSync(path.join(root, TA_B2F_RECEIPT), "utf8"));
+  } catch {
+    errors.push("TA_B2F_RECEIPT_UNREADABLE");
+    return errors;
+  }
+  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2F_VALUES).sort())) {
+    errors.push("TA_B2F_RECEIPT_SCHEMA");
+  }
+  for (const [key, value] of Object.entries(TA_B2F_VALUES)) {
+    if (receipt[key] !== value) errors.push(`TA_B2F_RECEIPT_VALUE:${key}`);
+  }
+  try {
+    if (hash(readFileSync(path.join(root, TA_B2F_BAUPLAN))) !== TA_B2F_BAUPLAN_SHA256) {
+      errors.push("TA_B2F_BAUPLAN_HASH");
+    }
+  } catch {
+    errors.push("TA_B2F_BAUPLAN_UNREADABLE");
+  }
+  try {
+    // P42 permits exactly one field replacement; even whitespace/debt changes fail.
+    const before = execFileSync("git", ["-C", root, "show", TA_B2F_BASE_SHA + ":quality/eslint-baseline.json"], { encoding: "utf8", maxBuffer: 8_000_000 });
+    const after = readFileSync(path.join(root, "quality/eslint-baseline.json"), "utf8");
+    errors.push(...checkTaB2fBaselineChangeForTest({ before, after }));
+  } catch {
+    errors.push("TA_B2F_BASELINE_UNREADABLE");
+  }
+  return errors;
+}
+
 function checkSalesStageB2Scope(files, entries, mission, branch) {
   const errors = [];
-  if (branch !== SALES_STAGE_B2_BRANCH) errors.push(`SALES_STAGE_BRANCH_INVALID:${branch}`);
+  if (branch !== SALES_STAGE_B2_BRANCH && !/^kreile\/b2-ein-(?:[0-6]|0b)$/.test(branch)) {
+    errors.push(`SALES_STAGE_BRANCH_INVALID:${branch}`);
+  }
   if (mission.active_block !== "B2" || mission.branch !== SALES_STAGE_B2_BRANCH) {
     errors.push("SALES_STAGE_MISSION_MISMATCH");
   }
@@ -858,14 +1111,20 @@ function checkSalesStageB2Scope(files, entries, mission, branch) {
     if (!covered(rel, SALES_STAGE_B2_ALLOWLIST)) errors.push(`SALES_STAGE_B2_SCOPE:${rel}`);
   }
   const migrations = entries.filter((entry) => entry.path.startsWith("supabase/migrations/"));
-  if (migrations.length > 1) errors.push(`SALES_STAGE_B2_MIGRATION_COUNT:${migrations.length}`);
+  const migrationCounts = new Map();
+  for (const entry of migrations) {
+    const family = entry.path.match(/_(ap01_intake_item|ap_r_freitext_einheiten|b2_kunde_k1|ein[0-6])(?:_|\.sql)/)?.[1];
+    if (family) migrationCounts.set(family, (migrationCounts.get(family) ?? 0) + 1);
+  }
+  for (const count of migrationCounts.values()) {
+    if (count > 1) errors.push(`SALES_STAGE_B2_MIGRATION_COUNT:${count}`);
+  }
   for (const entry of migrations) {
     if (entry.status !== "A") errors.push(`SALES_STAGE_B2_MIGRATION_NOT_NEW:${entry.path}`);
-    if (!/^supabase\/migrations\/\d{14}_(?:ap01_intake_item|ap_r_freitext_einheiten)\.sql$/.test(entry.path)) {
+    if (!/^supabase\/migrations\/\d{14}_(?:ap01_intake_item|ap_r_freitext_einheiten|b2_kunde_k1|ein[0-6]_[a-z0-9_]+)\.sql$/.test(entry.path)) {
       errors.push(`SALES_STAGE_B2_MIGRATION_INVALID:${entry.path}`);
     }
   }
-  if (files.some((rel) => rel.startsWith("src/db/"))) errors.push("SALES_STAGE_B2_DATA_MODEL_FORBIDDEN");
   return errors;
 }
 
@@ -903,6 +1162,10 @@ export function checkTaB2d2ScopeForTest({ files, mission, branch, baseSha }) {
 
 export function checkTaB2eScopeForTest({ files, mission, branch, baseSha }) {
   return checkTaB2eScope(files, mission, branch, baseSha);
+}
+
+export function checkTaB2fScopeForTest({ files, mission, branch, baseSha }) {
+  return checkTaB2fScope(files, mission, branch, baseSha);
 }
 
 function checkActivation(files, baseSha, plan) {
@@ -1207,6 +1470,7 @@ export function checkLivePackageScope({ root, base, head, branch }) {
     if (branch === TA_B2C3_BRANCH) return checkTaB2c3Anchor(root, files, candidateMission, branch, baseSha);
     if (branch === TA_B2D2_BRANCH) return checkTaB2d2Anchor(root, files, candidateMission, branch, baseSha);
     if (branch === TA_B2E_BRANCH) return checkTaB2eAnchor(root, files, candidateMission, branch, baseSha);
+    if (branch === TA_B2F_BRANCH) return checkTaB2fAnchor(root, files, candidateMission, branch, baseSha);
     if (candidateMission.active_block !== "B2") {
       return [`SALES_STAGE_ACTIVE_BLOCK_INVALID:${candidateMission.active_block}`];
     }
@@ -1529,6 +1793,8 @@ function selftestGateToBuildAmendment(fixture, plan, item) {
 export function runSelftest(root = process.cwd()) {
   if (!covered("src/modules/orders/server/get.ts", ["src/modules/orders/**"])) throw new Error("glob positive failed");
   if (covered("src/modules/customers/server/get.ts", ["src/modules/orders/**"])) throw new Error("glob negative failed");
+  if (!covered("supabase/migrations/20261103030000_ein2_erfassung.sql", ["supabase/migrations/*_ein[1-5]_*.sql"])) throw new Error("glob character-class positive failed");
+  if (covered("supabase/migrations/20261103030000_ein6_erfassung.sql", ["supabase/migrations/*_ein[1-5]_*.sql"])) throw new Error("glob character-class negative failed");
   const salesStageMission = { active_block: "B2", branch: SALES_STAGE_B2_BRANCH };
   const migrationA = "supabase/migrations/20261031212320_ap01_intake_item.sql";
   const validSalesStage = checkSalesStageB2Scope(
@@ -1749,7 +2015,61 @@ export function runSelftest(root = process.cwd()) {
   if (!changedApRMigrationErrors.includes(`SALES_STAGE_B2_MIGRATION_NOT_NEW:${apRUnitMigration}`)) {
     throw new Error(`TA-B2e accepted a changed AP-R migration: ${changedApRMigrationErrors.join(" | ")}`);
   }
+  const p42Before = JSON.stringify({ judgeContractHash: "d322170885867420ca489927b5ad52522206e06009c5afb619d5159d4147752b", lintContractHash: "unchanged", issues: [], ignoredCodeFiles: [] }, null, 2) + "\n";
+  const p42After = p42Before.replace("d322170885867420ca489927b5ad52522206e06009c5afb619d5159d4147752b", "f02832e8e3da8367b3604c5f356b6df95fe61310a2c24d04d5b8105b582aab88");
+  if (checkTaB2fBaselineChangeForTest({ before: p42Before, after: p42After }).length) throw new Error("P42 valid one-field migration rejected");
+  const p42Mutations = [p42Before, p42After + "\n", p42After.replace('"issues": []', '"issues": [1]'), p42After.replace('"ignoredCodeFiles": []', '"ignoredCodeFiles": [1]'), p42After.replace('"lintContractHash": "unchanged"', '"lintContractHash": "changed"'), p42After.replace("{", '{"extra":true,')];
+  for (const after of p42Mutations) if (!checkTaB2fBaselineChangeForTest({ before: p42Before, after }).includes("TA_B2F_BASELINE_CHANGE_NOT_AUTHORIZED")) throw new Error("P42 accepted an additional baseline mutation");
+  const validTaB2f = checkTaB2fScope(TA_B2F_REQUIRED_FILES, taB2cMission, TA_B2F_BRANCH, TA_B2F_BASE_SHA);
+  if (validTaB2f.length > 0) throw new Error(`valid TA-B2f scope rejected: ${validTaB2f.join(" | ")}`);
+  const taB2fOutside = checkTaB2fScope(["src/app/page.tsx"], taB2cMission, TA_B2F_BRANCH, TA_B2F_BASE_SHA);
+  if (!taB2fOutside.includes("TA_B2F_SCOPE:src/app/page.tsx")) {
+    throw new Error(`TA-B2f accepted an out-of-anchor file: ${taB2fOutside.join(" | ")}`);
+  }
+  if (checkTaB2fScope([TA_B2F_BAUPLAN], taB2cMission, TA_B2F_BRANCH, TA_B2F_BASE_SHA).length) {
+    throw new Error("TA-B2f Fassung 4 rejected its pinned Bauplan");
+  }
+  for (const rel of ["src/app/globals.css", "src/styles/tokens.css", "src/ui/kr/Dialog.tsx", "docs/project/endversion/ui/routen.json"]) {
+    const errors = checkSalesStageB2Scope([rel], [], salesStageMission, "kreile/b2-ein-0b");
+    if (errors.length) throw new Error(`TA-B2f 0b path rejected (${rel}): ${errors.join(" | ")}`);
+  }
+  for (const rel of ["docs/project/endversion/ui/SICHTVERTRAG.json", "docs/project/endversion/ui/pruefe_sicht.cjs", "docs/project/endversion/ui/endversion_design.css"]) {
+    if (!checkSalesStageB2Scope([rel], [], salesStageMission, "kreile/b2-ein-0b").includes(`SALES_STAGE_B2_SCOPE:${rel}`)) throw new Error(`Product scope accepted an immutable UI source: ${rel}`);
+  }
+  for (const rel of [
+    "public/manifest.webmanifest",
+    "public/icons/icon-192.png",
+    "src/modules/communications/public.ts",
+    "src/modules/complaints/public.ts",
+    "src/modules/customers/public.ts",
+    "src/modules/eingang/public.ts",
+    "src/modules/supplier-invoices/public.ts",
+    "src/modules/tasks/public.ts",
+    "src/db/schema.ts",
+    "src/lib/server/microsoftGraph.ts",
+    "src/components/layout/F1SourceDialogs.tsx",
+  ]) {
+    const allowedErrors = checkSalesStageB2Scope([rel], [], salesStageMission, "kreile/b2-ein-1");
+    if (allowedErrors.length > 0) throw new Error(`TA-B2f AP-EIN path rejected (${rel}): ${allowedErrors.join(" | ")}`);
+  }
+  for (const migration of [
+    "supabase/migrations/20261103020000_b2_kunde_k1.sql",
+    "supabase/migrations/20261103030000_ein2_erfassung.sql",
+    "supabase/migrations/20261103040000_ein3_ware_original.sql",
+    "supabase/migrations/20261103050000_ein4_nachrichten.sql",
+    "supabase/migrations/20261103060000_ein5_eingangsrechnungen.sql",
+    "supabase/migrations/20261103070000_ein6_korrekturen.sql",
+  ]) {
+    const migrationErrors = checkSalesStageB2Scope(
+      [migration],
+      [{ status: "A", path: migration }],
+      salesStageMission,
+      "kreile/b2-ein-2",
+    );
+    if (migrationErrors.length > 0) throw new Error(`TA-B2f migration rejected (${migration}): ${migrationErrors.join(" | ")}`);
+  }
   const apgAprPaths = [
+    apRUnitMigration,
     ".github/workflows/agentur-gate.yml",
     "e2e/generated/_erwartet_rot.json",
     "e2e/generated/_harness.ts",
@@ -1768,7 +2088,6 @@ export function runSelftest(root = process.cwd()) {
     "src/modules/eingang/requestGlobalCreate.ts",
     "src/ui/kr/Dialog.tsx",
     "src/ui/kr/GlobalesPlus.tsx",
-    apRUnitMigration,
   ];
   for (const rel of apgAprPaths) {
     const allowedErrors = checkSalesStageB2Scope([rel], [], salesStageMission, SALES_STAGE_B2_BRANCH);

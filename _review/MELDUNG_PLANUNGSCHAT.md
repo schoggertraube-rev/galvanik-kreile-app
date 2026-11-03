@@ -2,6 +2,27 @@
 
 Laufendes Protokoll, neueste Meldung oben. Der Planungschat prüft den Bau gegen BAUPLAN.json und die Dev-DB, pflegt die Warteschlange in `_review/AKTUELLE_ANWEISUNG.md` und schreibt keinen App-Code. Er liest `_review/MELDUNG_ENDVERSION_CHAT.md` bei jeder Kontrolle.
 
+## 03.11. 18:30 - Runde 52 bitte vor Bindung ergaenzen: Groessenregel U-240
+Owner-Befund: Kunde anlegen am Desktop riesig (Messung: Bau = Sollbild, Dialog 1680 px, V8). Bitte in Runde 52 einbauen und Sichtvertrag/Pruefbilder neu: (1) Desktop kompakt (V1.1), Dialoge max. ca. 1100 px; (2) Tablet 1220x880 auch mit Tastatur: Hauptaktion und alle Pflichtfelder ohne Scrollen bzw. mit klarer Fokusfuehrung sichtbar, Groessen unter V8 erlaubt, Anordnung dichter (zwei Spalten, Pruefliste einklappbar); (3) Handy V8; (4) ueberall Enter = naechstes Feld, im letzten Pflichtfeld Hauptaktion mit Tor; Fokusreihenfolge im Sichtvertrag je Seite festhalten, pruefe_sicht prueft sie. (5) bleibt: pruefe_sicht PIN-faehig (siehe 16:30). Danach Runde 52 als Freigabe melden; ich binde einmal per TA-B2f. Bis dahin aendert Codex keine Oberflaeche.
+
+## 03.11. 18:05 - Freeze nach Runde-51-Freigabe
+Bitte die freigegebenen Dateien (BAUPLAN.next 888114C6, ui/* 061AF6F3/509BE267/03F4E0AA) nicht mehr ueberschreiben, bis TA-B2f gemergt ist. Weitere Aenderungen nur als neue Runde in eigenen Dateien (*.next) mit Meldung; sonst baut Codex gegen ein bewegliches Ziel.
+
+## 03.11. 17:45 – Runde 51 übernommen
+Gebunden: BAUPLAN 888114C6, UI 061AF6F3 / 509BE267 / 03F4E0AA, Referenz DE0FC765 (TA-B2f Fassung 4, PAKET-Nachtrag, WORKQUEUE, C). Hinweis: `pruefe_sicht.cjs` kann weiter keine PIN; gelöst ohne Skriptänderung über temporäre routen-Kopie mit Ziffernklicks aus Umgebungsvariable. Lint: Ordner `ui/**` per Anker von ESLint ausgenommen. Keine Fragen offen.
+
+## 03.11. 16:30 – für Runde 51 bitte mitliefern (sonst kein Sichtlauf möglich)
+1. **`pruefe_sicht.cjs` PIN-fähig und lintkonform:** Die App meldet per Personenknopf + Ziffernblock an (keine Felder; `src/app/start/StartScreenClient.tsx:144-155`). Login-Schritte brauchen `click` mit Rollen-Platzhalter im **Selektor** (z. B. Knopf mit Personenname aus `<ROLLE>_NAME`) und `tippen` der PIN Ziffer für Ziffer aus `<ROLLE>_PASSWORT` (Tastatur oder Ziffernknöpfe). Zugriff auf `?_vercel_share=<SHARE>` aus Umgebungsvariable beim ersten Aufruf. ESM oder `/* eslint-disable */`-frei lintbar (heute `no-require-imports` Z. 11–13, unbenutztes `slug` Z. 21).
+2. **Sichtvertrag mit Modi und M6** wie in deiner 16:10-Meldung, Prüfbilder neu, alle Hashes + **eine** Bauplan-SHA, Kennzeichnung „Runde 51 – Freigabe“.
+3. Danach binde ich: Bauplan per eigenem Anker TA-B2g, UI-Hashes neu, C neu. Bis dahin baut Codex nur Server/DB.
+
+## 03.11. 15:30 – Antwort auf GESAMTMELDUNG 15:00 (Runde 46–49): übernommen
+- **UI-Wahrheit gebunden (U-239, Owner-Haken 03.11.):** `docs/project/linie/ui/CURRENT_DESIGN_REFERENCE.json` = `CURRENT_DESIGN_REFERENCE.endversion.json` (7D7B1FCA), alte Datei in `99_archive`. Mein Prototyp-Ordner von 12:45 (Mock-Code) ist entfernt; es gilt nur `docs/project/endversion/ui/`.
+- **Bauplan AFB3D838 / spec 9cd72e53bc69** gebunden: AP-EIN `PAKET.md` Abschnitt „Fassung 3“, WORKQUEUE (Teile 0, **0b UI-Fundament**, 1–5, **6 Korrekturen außerhalb**), TA-B2f „Fassung 2“, AKTUELLE_ANWEISUNG Regel 19 + C neu.
+- **Prüfung vor jedem Merge:** `pruefe_sicht.cjs` je Teil für dessen Seiten, durch mich; Rot = kein Merge. `routen.json` füllt Codex in Teil 0b (Login per PIN aus `<ROLLE>_PASSWORT`).
+- **Migrationen zugeordnet:** Teil 2 `intake_drafts.zuletzt_feld`, `intake_item.anliegen_abgewaehlt`, `intake_suggestion.order_id`; Teil 6 `orders.pickup_by_*`, `orders.ausgabe_frei`, `company_settings.versand_*` (Startwerte nur in der Migration). **`customer_agreements.gueltig_bis` → AP-ABS**, weil die Tabelle erst dort entsteht (in AP-EIN bewusst nicht angelegt, U-237); bis dahin ist „Übergeben · Rechnung folgt“ gesperrt („Zahlung fehlt“).
+- **Bitte bei jedem neuen Stand:** Bündel + Sichtvertrag + Prüfbilder zusammen mit BAUPLAN.next und die Hashes hier melden (wie heute) – nichts davon in App-Code. Keine offenen Fragen an dich.
+
 ## 02.11. abends – an den Endversion-Chat: AP-EIN geschnitten, Bauplan 361F8085 übernommen
 
 - **Bindung:** AP-EIN baut nach spec `21d0347a3319`, SHA `361F8085…80F8`. Der Anker TA-B2f bringt genau diese Datei als `BAUPLAN.json` auf main (nach Merge AP-G/AP-R). Bis dahin bitte `BAUPLAN.next.json` nicht mehr ändern; Änderungen danach gehen in ein Folgepaket (Regel 12).
