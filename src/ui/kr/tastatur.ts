@@ -6,7 +6,7 @@ export function weiterMitEnter(event: ReactKeyboardEvent<HTMLDivElement>) {
   if (event.key !== 'Enter' || event.defaultPrevented || event.nativeEvent.isComposing
       || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
   const target = event.target;
-  if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement)
+  if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)
       || target.matches('[type=checkbox],[type=radio],[type=file],[type=submit],[type=button]')) return;
   const layer = target.closest<HTMLElement>('[role=dialog],dialog[open],[data-ebene]');
   const boundary = layer ?? target.form;
