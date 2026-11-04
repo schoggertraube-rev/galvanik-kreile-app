@@ -9,6 +9,7 @@ import {
   checkTaB2d2ScopeForTest,
   checkTaB2eScopeForTest,
   checkTaB2fScopeForTest,
+  checkTaB2hScopeForTest,
   checkTaB2fBaselineChangeForTest,
   runSelftest,
 } from "../../scripts/quality/check-live-package-scope.mjs";
@@ -31,6 +32,41 @@ const b2AnchorMission = {
 const b2cAnchorMission = {
   ...b2AnchorMission,
 };
+
+describe("P44/P47 TA-B2h: exact Web-Share and canonical messages entries", () => {
+  const branch = "codex/ta-b2h";
+  const baseSha = "6ce527da70bdf5a9b6104226af7bb1cafa92864d";
+  const files = ["scripts/quality/check-live-package-scope.mjs", "src/test/live_package_scope.test.ts",
+    "docs/evidence/live-line/b2/TRUST_ANCHOR_B2H.json", "docs/delivery/ABGABE_TA-B2H.md"];
+
+  it("allows the four anchor files on exactly the approved main and branch", () => {
+    expect(checkTaB2hScopeForTest({files,mission:b2AnchorMission,branch,baseSha})).toEqual([]);
+    expect(checkTaB2hScopeForTest({files,mission:b2AnchorMission,branch:"codex/ta-b2h-other",baseSha}))
+      .toContain("TA_B2H_BRANCH_INVALID:codex/ta-b2h-other");
+    expect(checkTaB2hScopeForTest({files,mission:b2AnchorMission,branch,baseSha:"wrong"}))
+      .toContain("TA_B2H_BASE_INVALID:wrong:" + baseSha);
+    expect(checkTaB2hScopeForTest({files,mission:{...b2AnchorMission,active_block:"B3"},branch,baseSha}))
+      .toContain("TA_B2H_MISSION_INVALID");
+  });
+
+  it("never carries product, migration, provider, workflow or baseline changes in the anchor", () => {
+    for(const path of ["src/app/api/eingang-share/route.ts", "src/app/nachrichten/page.tsx", "src/test/nachrichten_page.integration.test.ts", "src/app/page.tsx", "quality/eslint-baseline.json",
+      ".github/workflows/quality.yml", "docs/project/endversion/codex/BAUPLAN.json", "supabase/migrations/20261104000000_ein3_extra.sql"]){
+      expect(checkTaB2hScopeForTest({files:[...files,path],mission:b2AnchorMission,branch,baseSha}),path)
+        .toContain("TA_B2H_SCOPE:" + path);
+    }
+  });
+
+  it("adds exactly both routes and their Replay integration tests, with no adjacent glob", () => {
+    for(const path of ["src/app/api/eingang-share/route.ts", "src/test/eingang_share.integration.test.ts", "src/app/nachrichten/page.tsx", "src/test/nachrichten_page.integration.test.ts"]){
+      expect(checkSalesStageB2ScopeForTest({files:[path],mission:b2Mission,branch:"kreile/b2-ein-3"}),path).toEqual([]);
+    }
+    for(const path of ["src/app/api/eingang-share/other.ts", "src/app/api/eingang-share-extra/route.ts", "src/test/eingang_share_extra.integration.test.ts", "src/app/nachrichten/layout.tsx", "src/app/nachrichten-extra/page.tsx", "src/test/nachrichten_page_extra.integration.test.ts"]){
+      expect(checkSalesStageB2ScopeForTest({files:[path],mission:b2Mission,branch:"kreile/b2-ein-3"}),path)
+        .toContain("SALES_STAGE_B2_SCOPE:" + path);
+    }
+  });
+});
 
 const ap01ExactPaths = [
   "docs/delivery/ABGABE_AP-01.md",
