@@ -335,14 +335,14 @@
         "createCustomerAction",
         "readCustomerCreateReceiptAction",
         "getCustomerSummaryAction",
-        "updateCustomerCommercialAction",
-        "updateCustomerNoteAction",
         "getCustomersDb",
         "getCustomerByIdDb",
         "createCustomerDb",
         "updateCustomerDb",
         "searchCustomersDb",
-        "getTopKunden"
+        "getTopKunden",
+        "updateCustomerAction",
+        "readCustomerAddressAction"
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "Customer CRUD. The read-only customer receipt action supports safe recovery of an interrupted V5 command; it never starts a mutation. Remaining CRUD evidence is still package-bound.",
@@ -390,7 +390,8 @@
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/eingang.actions.ts",
       "exported_functions": [
-        "erfasseAuftragAusEingangAction"
+        "erfasseAuftragAusEingangAction",
+        "createOrderIntakeAction"
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "AP-01 Eingang action is covered against the replay database; exact-SHA review and owner verification remain pending.",
@@ -892,7 +893,6 @@
         "getGalvanikOrdersAction",
         "getOrderStationReceiptAction",
         "getOrderStationCorrectionReceiptAction",
-        "createOrderIntakeAction",
         "searchOrderIntakeCustomersAction",
         "recognizeOrderIntakeTextAction",
         "getOrderIntakeSuggestionsAction",

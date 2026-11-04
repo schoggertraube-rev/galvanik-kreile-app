@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, integer, jsonb, uuid, varchar, numeric, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, bigserial, text, timestamp, boolean, integer, jsonb, uuid, varchar, numeric, primaryKey } from "drizzle-orm/pg-core";
 import { createId } from "@paralleldrive/cuid2";
 
 // Helper for CUID primary keys
@@ -50,13 +50,27 @@ export const customers = pgTable("customers", {
   tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   customerNumber: varchar("customer_number", { length: 50 }),
   name: text("name").notNull(),
-  type: varchar("type", { length: 50 }).notNull(), // business, privat, institution
+  type: varchar("type", { length: 50 }).notNull(), // business, privat, lieferant
   street: text("street"),
   city: text("city"),
   zipCode: text("zip_code"),
   country: text("country"),
   address: text("address"), // Raw full address string
   companyName: text("company_name"),
+  salutation: text("salutation"),
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  contactRole: text("contact_role"),
+  houseNumber: text("house_number"),
+  billingEmail: text("billing_email"),
+  website: text("website"),
+  handoverPreference: text("handover_preference"),
+  iban: text("iban"),
+  paymentTermDays: integer("zahlungsziel_tage"),
+  addressStatus: text("address_status"),
+  addressCheckedAt: timestamp("address_checked_at",{withTimezone:true}),
+  autoInfo: boolean("auto_info").notNull().default(true),
+  vorrang: boolean("vorrang").notNull().default(false),
   contactPerson: text("contact_person"),
   phone: text("phone"),
   email: text("email"),
@@ -93,6 +107,11 @@ export const customers = pgTable("customers", {
   convertedAt: timestamp("converted_at", { withTimezone: true }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const addressDirectory = pgTable("address_directory", {
+  id: bigserial("id", {mode:"number"}).primaryKey(), country:text("country").notNull(),
+  zipCode:text("zip_code").notNull(),city:text("city").notNull(),district:text("district"),street:text("street"),
 });
 
 // 3. Price Agreements (Standalone table linked to Customer)

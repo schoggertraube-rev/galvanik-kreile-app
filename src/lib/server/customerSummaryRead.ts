@@ -4,6 +4,10 @@ import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
+import type {CustomerStoredProfile} from "@/modules/customers/public";
+import type {PrivilegedTenantTransaction} from "@/lib/server/privilegedDb";
+import { customerContactLabel } from "@/modules/customers/public";
+
 const MAX_ID_LENGTH = 128;
 
 export type CustomerSummaryOrder = {
@@ -16,7 +20,7 @@ export type CustomerSummaryOrder = {
   dueAt: string | null;
 };
 
-export type CustomerSummary = {
+export type CustomerSummary = CustomerStoredProfile & {
   id: string;
   customerNumber: string | null;
   name: string;
@@ -150,7 +154,7 @@ function mapTags(value: unknown): string[] {
   return tags;
 }
 
-function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot): CustomerSummary {
+function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot, profile: CustomerStoredProfile): CustomerSummary {
   const orders = mapOrders(row.orders);
   const invoiceRevenueCents = Number(row.invoice_revenue_cents);
   const invoiceOpenCents = Number(row.invoice_open_cents);
@@ -172,24 +176,25 @@ function mapSummary(row: SummaryRow, authorization: AuthorizationSnapshot): Cust
     || typeof row.invoice_terms_enabled !== "boolean"
   ) throw new Error("CUSTOMER_SUMMARY_INVALID");
   return {
+    ...profile,
     id: row.id,
     customerNumber: row.customer_number,
-    name: row.name,
-    companyName: row.company_name,
-    type: row.type,
-    contactPerson: row.contact_person,
-    email: row.email,
-    phone: row.phone,
-    street: row.street,
+    name: profile.name,
+    companyName: profile.companyName,
+    type: profile.customerType,
+    contactPerson: customerContactLabel(profile),
+    email: profile.email,
+    phone: profile.phone,
+    street: profile.street,
     address: row.address,
-    zipCode: row.zip_code,
-    city: row.city,
-    country: row.country,
-    paymentPreference: row.payment_preference,
+    zipCode: profile.zipCode,
+    city: profile.city,
+    country: profile.country,
+    paymentPreference: profile.paymentPreference,
     invoiceTermsEnabled: row.invoice_terms_enabled,
-    vatId: row.vat_id,
+    vatId: profile.vatId,
     classification: row.classification,
-    internalNotes: row.internal_notes,
+    internalNotes: profile.notes,
     tags: mapTags(row.tags),
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
@@ -209,7 +214,8 @@ export async function readCustomerSummary(
   if (!exactObject(input, ["customerId"]) || !validId(input.customerId)) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Kundenkennung." };
   }
-  if (!authorization.permissions.includes("perm_view_leitstand")) {
+  const {hasAuthorizationArea}=await import("@/lib/server/authorization");
+  if (!hasAuthorizationArea(authorization,"kunden")) {
     return { code: "FORBIDDEN", message: "Kundenkarte ist nicht erlaubt." };
   }
   try {
@@ -234,12 +240,31 @@ export async function readCustomerSummary(
         LIMIT 2
       `);
       if (rows.length > 1) throw new Error("CUSTOMER_SUMMARY_AMBIGUOUS");
-      return rows[0] ? mapSummary(rows[0], authorization) : null;
+      if(!rows[0])return null;
+      const profile=await readCustomerProfile(tx,authorization.tenantId,input.customerId);
+      if(!profile)throw new Error("CUSTOMER_PROFILE_UNAVAILABLE");
+      return mapSummary(rows[0],authorization,profile);
     });
     return data
       ? { code: "OK", data }
       : { code: "NOT_FOUND", message: "Kunde nicht verfügbar." };
-  } catch {
-    return { code: "UNAVAILABLE", message: "Kundenkarte konnte nicht sicher geladen werden." };
+  } catch (error) {
+    console.error("[CUSTOMER_SUMMARY_READ_FAILED]", {errorName:error instanceof Error?error.name:"UnknownError"});
+    return { code: "UNAVAILABLE", message: "Kundenkarte konnte nicht sicher geladen werden. Code: CUSTOMER_SUMMARY_READ_FAILED." };
   }
+}
+
+export async function readCustomerProfile(tx: PrivilegedTenantTransaction, tenantId: string, customerId: string, lock = false) {
+  const rows = await tx.execute<Omit<CustomerStoredProfile,"contactPerson">>(sql`
+    SELECT id,customer_number AS "customerNumber",name,type AS "customerType",company_name AS "companyName",
+      salutation,first_name AS "firstName",last_name AS "lastName",contact_role AS "contactRole",phone,email,
+      billing_email AS "billingEmail",website,street,house_number AS "houseNumber",zip_code AS "zipCode",city,country,
+      payment_preference AS "paymentPreference",vat_id AS "vatId",notes,handover_preference AS "handoverPreference",
+      iban,zahlungsziel_tage AS "paymentTermDays",auto_info AS "autoInfo",vorrang,
+      address_status AS "addressStatus",
+      ziel_freigeschaltet AS "invoiceTermsEnabled",ziel_tage AS "invoiceTermDays"
+    FROM public.customers WHERE tenant_id=${tenantId} AND id=${customerId} LIMIT 2 ${lock ? sql`FOR UPDATE` : sql`FOR SHARE`}
+  `);
+  if (rows.length !== 1 || !rows[0]) return null;
+  return {...rows[0],contactPerson:customerContactLabel(rows[0])};
 }

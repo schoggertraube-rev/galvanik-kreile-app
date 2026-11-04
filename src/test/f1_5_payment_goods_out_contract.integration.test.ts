@@ -220,14 +220,9 @@ async function seedCommandPrerequisites() {
     `;
     await transaction`
       INSERT INTO public.customers (
-        id, tenant_id, customer_number, name, company_name, type,
-        contact_person, email, phone, street, zip_code, city, country,
-        payment_preference, created_at, updated_at
+        id, tenant_id, customer_number, name, company_name, type, contact_person, email, phone, street, zip_code, city, country, payment_preference, created_at, updated_at, first_name, last_name, salutation, house_number
       ) VALUES (
-        ${COMMAND_CUSTOMER}, ${COMMAND_TENANT}, ${`F15-${suffix}`}, 'F1.5 Contract Customer',
-        'F1.5 Contract Customer GmbH', 'business', 'Fiona Vertrag',
-        ${`f15-contract-customer-${suffix}@local.invalid`}, '+49 711 5550150',
-        'Kundenweg 2', '70174', 'Stuttgart', 'Deutschland', 'vorkasse', now(), now()
+        ${COMMAND_CUSTOMER}, ${COMMAND_TENANT}, ${`F15-${suffix}`}, 'F1.5 Contract Customer', 'F1.5 Contract Customer GmbH', 'business', 'Fiona Vertrag', ${`f15-contract-customer-${suffix}@local.invalid`}, '+49 711 5550150', (SELECT street FROM private.kunde_split_street('Kundenweg 2')), '70174', 'Stuttgart', private.kunde_land_schluessel('Deutschland'), 'vorkasse', now(), now(), (SELECT first_name FROM private.kunde_split_name('Fiona Vertrag')), (SELECT last_name FROM private.kunde_split_name('Fiona Vertrag')), (SELECT salutation FROM private.kunde_split_name('Fiona Vertrag')), (SELECT house_number FROM private.kunde_split_street('Kundenweg 2'))
       ) ON CONFLICT (id) DO UPDATE SET
         contact_person = EXCLUDED.contact_person,
         email = EXCLUDED.email,
@@ -402,11 +397,11 @@ async function seedUser(transaction: Tx, tenantId: string, userId: string, label
 async function seedPaidFixture(transaction: Tx, fixture: PaymentFixture) {
   await seedUser(transaction, fixture.tenantId, fixture.userId, fixture.invoiceNumber);
   await transaction`
-    INSERT INTO public.customers (id, tenant_id, customer_number, name, type, created_at, updated_at)
-    VALUES (
-      ${fixture.customerId}, ${fixture.tenantId}, ${`F15-${fixture.invoiceNumber}`},
-      'F1.5 Synthetic Customer', 'business', now(), now()
-    )
+    INSERT INTO public.customers (
+        id, tenant_id, customer_number, name, type, created_at, updated_at
+      ) VALUES (
+        ${fixture.customerId}, ${fixture.tenantId}, ${`F15-${fixture.invoiceNumber}`}, 'F1.5 Synthetic Customer', 'business', now(), now()
+      )
   `;
   await transaction`
     INSERT INTO public.orders (

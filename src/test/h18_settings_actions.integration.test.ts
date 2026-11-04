@@ -114,15 +114,10 @@ async function createFixture(label: string): Promise<Fixture> {
   `;
   await sql`
     INSERT INTO public.customers (
-      id, tenant_id, customer_number, name, company_name, type, contact_person,
-      email, phone, street, zip_code, city, country, payment_preference,
-      ziel_freigeschaltet, source
-    ) VALUES (
-      ${customerId}, ${KREILE_TENANT_SLUG}, ${`H18-${customerId.slice(0, 8)}`},
-      ${`H18 Kunde ${label}`}, ${`H18 ${label} GmbH`}, 'business', 'Ada H18',
-      ${`kunde-${customerId}@local.invalid`}, '+49 711 5550100', 'Prüfstraße 18',
-      '70173', 'Stuttgart', 'DE', 'vorkasse', false, 'manual'
-    )
+        id, tenant_id, customer_number, name, company_name, type, contact_person, email, phone, street, zip_code, city, country, payment_preference, ziel_freigeschaltet, source, first_name, last_name, salutation, house_number
+      ) VALUES (
+        ${customerId}, ${KREILE_TENANT_SLUG}, ${`H18-${customerId.slice(0, 8)}`}, ${`H18 Kunde ${label}`}, ${`H18 ${label} GmbH`}, 'business', 'Ada H18', ${`kunde-${customerId}@local.invalid`}, '+49 711 5550100', (SELECT street FROM private.kunde_split_street('Prüfstraße 18')), '70173', 'Stuttgart', private.kunde_land_schluessel('DE'), 'vorkasse', false, 'manual', (SELECT first_name FROM private.kunde_split_name('Ada H18')), (SELECT last_name FROM private.kunde_split_name('Ada H18')), (SELECT salutation FROM private.kunde_split_name('Ada H18')), (SELECT house_number FROM private.kunde_split_street('Prüfstraße 18'))
+      )
   `;
   await sql`
     INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
@@ -384,7 +379,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
 
   it("H18.6 changes the promised due date through the action and still opens the order card", async () => {
     const fixture = await createFixture("due-date");
-    const { createOrderIntakeAction } = await import("@/app/warendurchlauf/actions");
+    const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
     const { changeOrderPromisedDueDateAction, getLiveOrderCardAction } = await import("@/app/actions/orders.actions");
     const intake = await withSession(fixture, () => createOrderIntakeAction({
       clientEventId: randomUUID(),
@@ -437,7 +432,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
 
   it("H18.7 keeps an order with a card read error in getOrdersDb and exposes its code", async () => {
     const fixture = await createFixture("read-error");
-    const { createOrderIntakeAction } = await import("@/app/warendurchlauf/actions");
+    const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
     const intake = await withSession(fixture, () => createOrderIntakeAction({
       clientEventId: randomUUID(),
       customer: { mode: "EXISTING", customerId: fixture.customerId },
@@ -480,7 +475,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
 
   it("C1a.3 invokes getOrdersDb and distinguishes an existing order without a current action", async () => {
     const fixture = await createFixture("today-no-action");
-    const { createOrderIntakeAction } = await import("@/app/warendurchlauf/actions");
+    const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
     const intake = await withSession(fixture, () => createOrderIntakeAction({
       clientEventId: randomUUID(),
       customer: { mode: "EXISTING", customerId: fixture.customerId },
@@ -535,7 +530,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
     const clientEventId = randomUUID();
     const invoiceSerial = 10_000 + Number.parseInt(invoiceId.slice(0, 7), 16);
     const invoiceNumber = `R-2099-${invoiceSerial}`;
-    const { createOrderIntakeAction } = await import("@/app/warendurchlauf/actions");
+    const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
     const intake = await withSession(fixture, () => createOrderIntakeAction({
       clientEventId: randomUUID(),
       customer: { mode: "EXISTING", customerId: fixture.customerId },
@@ -639,7 +634,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
     const fixture = await createFixture("legacy-evidence-label");
     const scanId = `c1a-legacy-${randomUUID()}`;
     const uploadedAt = new Date().toISOString();
-    const { createOrderIntakeAction } = await import("@/app/warendurchlauf/actions");
+    const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
     const intake = await withSession(fixture, () => createOrderIntakeAction({
       clientEventId: randomUUID(),
       customer: { mode: "EXISTING", customerId: fixture.customerId },
@@ -719,7 +714,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
       VALUES (${KREILE_TENANT_SLUG}, ${fixture.actorId}::uuid, 'mails', ${fixture.actorId}::uuid)
       ON CONFLICT (tenant_id, user_id, bereich) DO NOTHING
     `;
-    const { createOrderIntakeAction } = await import("@/app/warendurchlauf/actions");
+    const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
     const createOrder = (label: string) => withSession(fixture, () => createOrderIntakeAction({
       clientEventId: randomUUID(),
       customer: { mode: "EXISTING" as const, customerId: fixture.customerId },
@@ -841,7 +836,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
       month: "2-digit",
       day: "2-digit",
     }).format(new Date(Date.now() + 24 * 60 * 60 * 1000));
-    const { createOrderIntakeAction } = await import("@/app/warendurchlauf/actions");
+    const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
     const intake = await withSession(fixture, () => createOrderIntakeAction({
       clientEventId: randomUUID(),
       customer: { mode: "EXISTING", customerId: fixture.customerId },

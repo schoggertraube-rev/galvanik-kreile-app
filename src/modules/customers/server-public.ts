@@ -1,16 +1,18 @@
 import "server-only";
 
-export { createCustomerCommand, readCustomerCreateReceiptCommand } from "./server/createCustomerCommand";
-export { updateCustomerCommercialCommand } from "./server/updateCustomerCommercialCommand";
-export { updateCustomerNoteCommand } from "./server/updateCustomerNoteCommand";
+export { createCustomerCommand, createCustomerInTransaction, readCustomerCreateReceiptCommand } from "./server/createCustomerCommand";
+export { updateCustomerCommand } from "./server/updateCustomerCommand";
+export { readCustomerAddress } from "./server/customerAddressRead";
+export { readCustomerProfile } from "./server/customerWriteContract";
 export { enableCustomerInvoiceTermsCommand } from "./server/enableCustomerInvoiceTermsCommand";
 export { readCustomerOrderReadinessCommand } from "./server/readCustomerOrderReadinessCommand";
 export type {
   CreateCustomerInput,
   CustomerCommandCapabilities,
   CustomerCommandContext,
+  CustomerStoredProfile,
   ReadCustomerCreateReceiptResult,
-  UpdateCustomerCommercialInput,
+  UpdateCustomerInput,
   EnableCustomerInvoiceTermsInput,
   ReadCustomerOrderReadinessInput,
   ReadCustomerOrderReadinessResult,

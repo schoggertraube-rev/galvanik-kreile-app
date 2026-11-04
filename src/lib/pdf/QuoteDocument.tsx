@@ -2,6 +2,7 @@ import "server-only";
 
 import { Document, Page, StyleSheet, Text, View, type DocumentProps } from "@react-pdf/renderer";
 import type { ReactElement } from "react";
+import { customerCountryLabel } from "@/modules/customers/public";
 import type { CustomerSummary } from "@/lib/server/customerSummaryRead";
 import type { CompanySettingsInput } from "@/modules/fundament/public";
 import type { QuoteReadback } from "@/modules/quotes/public";
@@ -64,10 +65,10 @@ export function createQuotePdfDocument(input: {
 
         <View style={styles.address}>
           <Text style={{ fontFamily: "Helvetica-Bold" }}>{customerName}</Text>
-          {customer.contactPerson ? <Text>{customer.contactPerson}</Text> : null}
-          <Text>{customer.street}</Text>
+          {customer.contactPerson ? <Text>z. Hd. {customer.contactPerson}</Text> : null}
+          <Text>{[customer.street,customer.houseNumber].filter(Boolean).join(" ")}</Text>
           <Text>{customer.zipCode} {customer.city}</Text>
-          <Text>{customer.country}</Text>
+          <Text>{customerCountryLabel(customer.country)}</Text>
         </View>
 
         <Text style={styles.title}>Kostenvoranschlag</Text>

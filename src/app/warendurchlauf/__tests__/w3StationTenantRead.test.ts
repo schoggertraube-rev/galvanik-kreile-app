@@ -11,7 +11,7 @@ const searchOrderIntakeCustomersSpy = vi.hoisted(() => vi.fn());
 const readOrderIntakeReceiptSpy = vi.hoisted(() => vi.fn());
 
 vi.mock("next/cache", () => ({ unstable_noStore: vi.fn() }));
-vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization: resolveAuthorizationSpy }));
+vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization: resolveAuthorizationSpy,hasAuthorizationArea:(auth:{areas:readonly string[]},area:string)=>auth.areas.includes(area),getAuthorizationActionGrants:(auth:{areas:readonly string[]})=>({createCustomer:auth.areas.includes("eingang")}) }));
 vi.mock("@/lib/server/orderStationRead", () => ({
   readTenantStationOrders: readTenantStationOrdersSpy,
   readTenantOrderStationReceipt: readTenantOrderStationReceiptSpy,
@@ -79,7 +79,7 @@ describe("W3 tenant station reads", () => {
 
     await expect(searchOrderIntakeCustomersAction({ query: "Sentinel" })).resolves.toEqual({
       ok: true,
-      data: { customers: [], canCreateCustomer: false },
+      data: { customers: [], canCreateCustomer: true },
     });
     await expect(getOrderIntakeReceiptAction(receiptInput)).resolves.toEqual({ ok: true, data: null });
 
@@ -90,7 +90,7 @@ describe("W3 tenant station reads", () => {
   it("blocks missing intake capabilities before either intake read port", async () => {
     resolveAuthorizationSpy.mockResolvedValue({
       ...authorization,
-      data: { ...authorization.data, permissions: [] },
+      data: { ...authorization.data, permissions: [],areas:[] },
     });
     const { getOrderIntakeReceiptAction, searchOrderIntakeCustomersAction } = await import("../actions");
     const receiptInput = {

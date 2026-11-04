@@ -93,7 +93,8 @@ function orderMatchField(order: SearchOrderDocument, query: string): SearchMatch
   return null;
 }
 
-function customerMatchField(customer: SearchCustomerDocument, query: string): SearchMatchField | null {
+export function customerMatchField(customer: SearchCustomerDocument, query: string): SearchMatchField | null {
+  query = normalizedText(query);
   if (includesQuery(customer.name, query)) return "name";
   if (includesQuery(customer.companyName, query)) return "companyName";
   if (includesQuery(customer.customerNumber, query)) return "customerNumber";
@@ -278,7 +279,8 @@ export async function searchTenant(query: unknown, ports: SearchPorts): Promise<
       checkedAt,
       coverage: { returnedHits: hits.length, matchingHitsAtLeast, truncated },
     };
-  } catch {
+  } catch (error) {
+    console.error("[TENANT_SEARCH_FAILED]", { errorName: error instanceof Error ? error.name : "UnknownError" });
     return { code: "UNAVAILABLE", message: UNAVAILABLE_MESSAGE };
   }
 }

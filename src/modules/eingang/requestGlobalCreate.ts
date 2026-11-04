@@ -4,6 +4,7 @@ export type GlobalCreateRequest = {
   intent: GlobalCreateIntent;
   prefill?: {
     customerId?: string;
+    customerMode?:"lieferant";
     name?: string;
     email?: string;
     customerQuery?: string;

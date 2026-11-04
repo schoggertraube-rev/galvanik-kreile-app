@@ -86,8 +86,8 @@ afterAll(async () => {
 
 describe("Path-1 P3 tenant search real database contract", () => {
   it("finds F1.1 order/customer facts and fails closed across session and tenant boundaries", async () => {
-    const { createOrderIntake } = await import("@/lib/server/commands/orderIntakeCommand");
-    const intake = await withSession(() => createOrderIntake({
+    const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
+    const intake = await withSession(() => createOrderIntakeAction({
       clientEventId: randomUUID(),
       customer: {
         mode: "NEW",
@@ -110,7 +110,7 @@ describe("Path-1 P3 tenant search real database contract", () => {
       note: "P3 Suchvertrag",
       items: [{
         catalogServiceId: null,
-        name: `Pruefbolzen ${suffix} Nordlicht`,
+        name: `Pruefbolzen ${suffix} GmbH Nordlicht`,
         quantity: 2,
         material: `Titan ${suffix}`,
         surfaceRequested: `Hartchrom ${suffix}`,
@@ -146,9 +146,9 @@ describe("Path-1 P3 tenant search real database contract", () => {
 
     const customer = await withSession(() => searchTenantAction(`Nordlicht ${suffix}`));
     expect(customer.code).toBe("OK");
-    if (customer.code === "OK") expect(customer.hits).toContainEqual(expect.objectContaining({ id: intake.receipt.customerId, type: "CUSTOMER", matchField: "companyName" }));
+    if (customer.code === "OK") expect(customer.hits).toContainEqual(expect.objectContaining({ id: intake.receipt.customerId, type: "CUSTOMER", matchField: "name" }));
 
-    const combined = await withSession(() => searchTenantAction(`${suffix} Nordlicht`));
+    const combined = await withSession(() => searchTenantAction(`${suffix} GmbH Nordlicht`));
     expect(combined.code).toBe("OK");
     if (combined.code === "OK") {
       expect(combined.hits).toEqual(expect.arrayContaining([

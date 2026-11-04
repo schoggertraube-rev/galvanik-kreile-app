@@ -1,7 +1,8 @@
 'use client';
-import type { ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 import { weiterMitEnter } from './tastatur';
 import { Icon, type IconName } from './Icon';
+import { Chip } from './Chip';
 import type { Geraet } from './typen';
 import { cx } from './typen';
 export type Bereich = 'tag' | 'werkstatt' | 'auftraege' | 'kunden' | 'geld' | 'einstellungen';
@@ -77,5 +78,19 @@ export function SeitenKopf({ titel, werkzeug }: SeitenKopfProps) {
 /** Runde 52: ein Größenkontext für Seite und alle darüber geöffneten Ebenen. */
 export function KrApp({ geraet, children }: { geraet: Geraet; children: ReactNode }) {
   const groesse = geraet === 'desktop' ? 'v11' : geraet === 'tablet' ? 'dicht' : 'v8';
-  return <div className="kr-app" data-geraet={geraet} data-groesse={groesse} onKeyDown={weiterMitEnter}>{children}</div>;
+  return <GeraetContext.Provider value={geraet}><div className="kr-app" data-geraet={geraet} data-groesse={groesse} onKeyDown={weiterMitEnter}>{children}</div></GeraetContext.Provider>;
+}
+
+const GeraetContext = createContext<Geraet>('desktop');
+export const useKrGeraet = () => useContext(GeraetContext);
+
+/** Runde 52: dieselben tatsächlichen Hinweise auf Tablet oberhalb einklappbar. */
+export function PruefRail({ children, offeneAngaben }: { children: ReactNode; offeneAngaben: number }) {
+  const geraet = useKrGeraet();
+  return <aside className="ev-wb-rail kr-stapel" aria-label="Prüfliste">
+    {geraet === 'tablet' ? <details className="r52-rail">
+      <summary><Icon name="check" /><b>Prüfliste &amp; Hinweise</b><Chip text={offeneAngaben ? `${offeneAngaben} offen` : 'alles da'} ton={offeneAngaben ? 'warn' : 'ok'} /><em><Icon name="chevron-down" /></em></summary>
+      <div className="r52-rail-inhalt">{children}</div>
+    </details> : children}
+  </aside>;
 }

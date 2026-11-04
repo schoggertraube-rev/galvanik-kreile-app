@@ -123,14 +123,9 @@ async function createFixture(): Promise<Fixture> {
     `;
     await transaction`
       INSERT INTO public.customers (
-        id, tenant_id, customer_number, name, company_name, type, contact_person,
-        email, phone, street, zip_code, city, country, payment_preference,
-        ziel_freigeschaltet, source
+        id, tenant_id, customer_number, name, company_name, type, contact_person, email, phone, street, zip_code, city, country, payment_preference, ziel_freigeschaltet, source, first_name, last_name, salutation, house_number
       ) VALUES (
-        ${customerId}, ${KREILE_TENANT_SLUG}, ${`H18-R-${customerId.slice(0, 8)}`},
-        'H18 Rechnungskunde', 'H18 Rechnungskunde GmbH', 'business', 'Ada Rechnung',
-        ${`rechnung-${customerId}@local.invalid`}, '+49 711 5550188', 'Kundenweg 18',
-        '70174', 'Stuttgart', 'Deutschland', 'vorkasse', false, 'manual'
+        ${customerId}, ${KREILE_TENANT_SLUG}, ${`H18-R-${customerId.slice(0, 8)}`}, 'H18 Rechnungskunde', 'H18 Rechnungskunde GmbH', 'business', 'Ada Rechnung', ${`rechnung-${customerId}@local.invalid`}, '+49 711 5550188', (SELECT street FROM private.kunde_split_street('Kundenweg 18')), '70174', 'Stuttgart', private.kunde_land_schluessel('Deutschland'), 'vorkasse', false, 'manual', (SELECT first_name FROM private.kunde_split_name('Ada Rechnung')), (SELECT last_name FROM private.kunde_split_name('Ada Rechnung')), (SELECT salutation FROM private.kunde_split_name('Ada Rechnung')), (SELECT house_number FROM private.kunde_split_street('Kundenweg 18'))
       )
     `;
   });
@@ -217,7 +212,7 @@ describe("H18 invoice Server Actions against the real replay database", () => {
       )
     `;
 
-    const { createOrderIntakeAction } = await import("@/app/warendurchlauf/actions");
+    const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
     const intake = await withSession(fixture, () => createOrderIntakeAction({
       clientEventId: intakeClientEventId,
       customer: { mode: "EXISTING", customerId: fixture.customerId },

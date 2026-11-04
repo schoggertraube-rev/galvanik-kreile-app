@@ -2,7 +2,7 @@
 
 import { unstable_noStore as noStore } from "next/cache";
 import { sql } from "drizzle-orm";
-import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
+import { resolveAuthorization, hasAuthorizationArea, getAuthorizationActionGrants, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import {
   readTenantOrderStationReceipt,
   readTenantOrderStationCorrectionReceipt,
@@ -15,8 +15,6 @@ import type {
   OrderStationCorrectionReceipt,
 } from "@/lib/server/commands/orderStationCommand";
 import type {
-  CreateOrderIntakeInput,
-  OrderIntakeCommandResult,
   OrderIntakeReceipt,
 } from "@/lib/server/commands/orderIntakeCommand";
 import type {
@@ -170,13 +168,6 @@ export async function getOrderStationCorrectionReceiptAction(
   }
 }
 
-export async function createOrderIntakeAction(
-  input: CreateOrderIntakeInput,
-): Promise<OrderIntakeCommandResult> {
-  noStore();
-  const domain = await import("@/lib/server/commands/orderIntakeCommand");
-  return domain.createOrderIntake(input);
-}
 
 export async function recognizeOrderIntakeTextAction(
   input: { text: string },
@@ -230,8 +221,7 @@ export async function searchOrderIntakeCustomersAction(
       : { ok: false, error: "AUTH_ERROR", message: authorization.message };
   }
   if (
-    !authorization.data.permissions.includes("perm_data_orders") ||
-    authorization.data.areas?.includes("eingang") !== true
+    !hasAuthorizationArea(authorization.data,"eingang")
   ) {
     return { ok: false, error: "FORBIDDEN", message: "Wareneingang ist mit dieser Rolle nicht erlaubt." };
   }
@@ -241,10 +231,11 @@ export async function searchOrderIntakeCustomersAction(
       ok: true,
       data: {
         customers: await domain.searchOrderIntakeCustomers(authorization.data, input),
-        canCreateCustomer: authorization.data.permissions.includes("perm_data_customers"),
+        canCreateCustomer: getAuthorizationActionGrants(authorization.data).createCustomer,
       },
     };
-  } catch {
+  } catch (error) {
+    console.error("[CUSTOMER_SEARCH_FAILED]",{errorName:error instanceof Error?error.name:"UnknownError"});
     return { ok: false, error: "QUERY_ERROR", message: "Kunden konnten nicht sicher geladen werden." };
   }
 }

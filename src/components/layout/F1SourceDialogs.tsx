@@ -20,7 +20,7 @@ export type F1MailCustomerChoice = {
   id: string;
   customerNumber: string | null;
   name: string;
-  customerType?: "business" | "privat" | "institution";
+  customerType?: "business" | "privat" | "lieferant";
   companyName?: string | null;
   contactPerson?: string | null;
   email?: string | null;
@@ -31,7 +31,7 @@ export type F1MailCustomerChoice = {
   country?: string;
   paymentPreference?: string;
   vatId?: string | null;
-  lastHandoverMode?: "pickup" | "shipping" | null;
+  handoverPreference?: "pickup" | "shipping" | null;
 };
 type CustomerChoice = F1MailCustomerChoice;
 type Suggestion = { field: string; label: string; value: string; confidence: number; source: { page: number } };
@@ -115,11 +115,8 @@ export function F1SourceDialogs(props: Props) {
         id: entry.id,
         customerNumber: entry.customerNumber,
         name: entry.name,
-        customerType: entry.type === "private" || entry.type === "Privatkunde"
-          ? "privat" as const
-          : entry.type === "institution" || entry.type === "Institution"
-            ? "institution" as const
-            : "business" as const,
+        customerType: entry.type === "privat" ? "privat" as const : entry.type === "lieferant" ? "lieferant" as const : "business" as const,
+        salutation:entry.salutation,firstName:entry.firstName,lastName:entry.lastName,contactRole:entry.contactRole,houseNumber:entry.houseNumber,invoiceTermsEnabled:entry.invoiceTermsEnabled,invoiceTermDays:entry.invoiceTermDays,
         companyName: entry.companyName ?? null,
         contactPerson: entry.contactPerson ?? null,
         email: entry.email ?? null,
@@ -127,10 +124,10 @@ export function F1SourceDialogs(props: Props) {
         street: entry.street ?? "",
         zipCode: entry.zipCode ?? "",
         city: entry.city ?? null,
-        country: entry.country ?? "Deutschland",
+        country: entry.country ?? "",
         paymentPreference: entry.paymentPreference ?? "",
         vatId: entry.vatId ?? null,
-        lastHandoverMode: entry.lastHandoverMode,
+        handoverPreference: entry.handoverPreference,
       })) : [];
       setCustomers(nextCustomers);
       if (status.code !== "OK") { setMessage(status.message); setMailState("error"); return; }

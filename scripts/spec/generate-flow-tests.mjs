@@ -54,7 +54,7 @@ function customerSeedRows(datenlagen) {
       const customerNumber = `K-FLOW-${String(index + 1).padStart(3, "0")}`;
       const contactPerson = values.contact_person
         ?? ([values.first_name, values.last_name].filter(Boolean).join(" ") || null);
-      const country = { DE: "Deutschland", AT: "Österreich", CH: "Schweiz" }[values.country] ?? values.country ?? null;
+      const country = values.country ?? null;
       const shippingPreference = values.handover_preference === "versand"
         ? "versand"
         : values.handover_preference === "abholung"
@@ -83,7 +83,11 @@ function customerSeedRows(datenlagen) {
           zip_code: values.zip_code ?? null,
           city: values.city ?? null,
           country,
-          payment_preference: values.zahlungsbedingung === "rechnung" ? `rechnung_${values.ziel_tage ?? 14}` : values.zahlungsbedingung ?? null,
+          payment_preference: values.zahlungsbedingung ?? null,
+          handover_preference: values.handover_preference === "versand" ? "shipping" : values.handover_preference === "abholung" ? "pickup" : values.handover_preference ?? null,
+          auto_info: values.auto_info ?? true,
+          vorrang: values.vorrang ?? false,
+          notes: values.notiz ?? null,
           shipping_preference: shippingPreference,
           vat_id: values.vat_id ?? null,
           ziel_freigeschaltet: values.ziel_freigeschaltet ?? false,
@@ -150,30 +154,17 @@ function renderSeed(model) {
   for (const customer of customers) {
     const seedStart = lines.length;
     const c = customer.columns;
-    lines.push(
-      "INSERT INTO public.customers (id, tenant_id, customer_number, name, type, company_name, contact_person, phone, email, street, address, zip_code, city, country, payment_preference, shipping_preference, vat_id, ziel_freigeschaltet, ziel_tage, skonto_prozent, skonto_tage, source)",
-      `VALUES (${quoted(customer.id)}, 'galvanik-kreile', ${quoted(customer.customerNumber)}, ${quoted(c.name)}, ${quoted(c.type)}, ${quoted(c.company_name)}, ${quoted(c.contact_person)}, ${quoted(c.phone)}, ${quoted(c.email)}, ${quoted(c.street)}, ${quoted(c.address)}, ${quoted(c.zip_code)}, ${quoted(c.city)}, ${quoted(c.country)}, ${quoted(c.payment_preference)}, ${quoted(c.shipping_preference)}, ${quoted(c.vat_id)}, ${c.ziel_freigeschaltet ? "true" : "false"}, ${c.ziel_tage ?? "NULL"}, ${c.skonto_prozent ?? "NULL"}, ${c.skonto_tage ?? "NULL"}, 'flow-spec')`,
-      "ON CONFLICT (id) DO UPDATE SET customer_number = EXCLUDED.customer_number, name = EXCLUDED.name, type = EXCLUDED.type, company_name = EXCLUDED.company_name, contact_person = EXCLUDED.contact_person, phone = EXCLUDED.phone, email = EXCLUDED.email, street = EXCLUDED.street, address = EXCLUDED.address, zip_code = EXCLUDED.zip_code, city = EXCLUDED.city, country = EXCLUDED.country, payment_preference = EXCLUDED.payment_preference, shipping_preference = EXCLUDED.shipping_preference, vat_id = EXCLUDED.vat_id, ziel_freigeschaltet = EXCLUDED.ziel_freigeschaltet, ziel_tage = EXCLUDED.ziel_tage, skonto_prozent = EXCLUDED.skonto_prozent, skonto_tage = EXCLUDED.skonto_tage, source = 'flow-spec', updated_at = statement_timestamp();",
-    );
-    const optionalColumns = {
-      salutation: c.salutation,
-      first_name: c.first_name,
-      last_name: c.last_name,
-      contact_role: c.contact_role,
-      billing_email: c.billing_email,
-      website: c.website,
-      house_number: c.house_number,
+    const values = {
+      id: customer.id, tenant_id: "galvanik-kreile", customer_number: customer.customerNumber,
+      ...Object.fromEntries(Object.entries(c).filter(([key]) => !["contact_person", "shipping_preference", "address"].includes(key))),
+      source: "flow-spec",
     };
-    lines.push("DO $flow$ BEGIN");
-    for (const [column, value] of Object.entries(optionalColumns)) {
-      const update = `UPDATE public.customers SET ${column} = ${quoted(value)} WHERE id = ${quoted(customer.id)}::uuid AND tenant_id = 'galvanik-kreile'`;
-      lines.push(
-        `IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'customers' AND column_name = ${quoted(column)}) THEN`,
-        `  EXECUTE ${quoted(update)};`,
-        "END IF;",
-      );
-    }
-    lines.push("END $flow$;");
+    const columns = Object.keys(values);
+    lines.push(
+      `INSERT INTO public.customers (${columns.join(", ")})`,
+      `VALUES (${columns.map(key => key === "country" ? `private.kunde_land_schluessel(${quoted(values[key])})` : typeof values[key] === "boolean" ? String(values[key]) : quoted(values[key])).join(", ")})`,
+      `ON CONFLICT (id) DO UPDATE SET ${columns.filter(key => key !== "id" && key !== "tenant_id").map(key => `${key}=EXCLUDED.${key}`).join(", ")},updated_at=statement_timestamp();`,
+    );
     fixtureSql[customer.name] = lines.splice(seedStart).join("\n");
   }
   for (const [fixtureName, fixture] of Object.entries(model.datenlagen).filter(([, value]) => value.tabelle === "address_directory")) {

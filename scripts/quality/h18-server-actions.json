@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "75e20205f6eae5ab80ad9e0b590640eb1dc8f03c622c6d4f745da3725a77d8e2",
+  "inventorySha256": "24d8bd3294c56503362a299ce9e2ef343ef78be35f65cfe0c9b69ea7d5ad1fbb",
   "testedWriteActions": {
     "src/app/actions/eingang.actions.ts#erfasseAuftragAusEingangAction": [
       "src/test/acceptance/ap01_eingang_paket_persoenlich.integration.test.ts",
@@ -16,12 +16,7 @@
       "src/test/h18_invoice_actions.integration.test.ts"
     ],
     "src/app/actions/customers.actions.ts#createCustomerAction": [
-      "src/test/h18_customer_actions.integration.test.ts"
-    ],
-    "src/app/actions/customers.actions.ts#updateCustomerCommercialAction": [
-      "src/test/h18_customer_actions.integration.test.ts"
-    ],
-    "src/app/actions/customers.actions.ts#updateCustomerNoteAction": [
+      "src/test/acceptance/apk1_kunde_datenvertrag.integration.test.ts",
       "src/test/h18_customer_actions.integration.test.ts"
     ],
     "src/app/actions/goodsOut.actions.ts#recordGoodsOutAction": [
@@ -108,7 +103,11 @@
     "src/app/actions/today.actions.ts#saveTodayReminderAction": [
       "src/test/h18_settings_actions.integration.test.ts"
     ],
-    "src/app/warendurchlauf/actions.ts#createOrderIntakeAction": [
+    "src/app/actions/customers.actions.ts#updateCustomerAction": [
+      "src/test/acceptance/apk1_kunde_datenvertrag.integration.test.ts",
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#createOrderIntakeAction": [
       "src/test/h18_settings_actions.integration.test.ts"
     ]
   },

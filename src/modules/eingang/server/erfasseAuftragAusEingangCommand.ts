@@ -136,7 +136,7 @@ function validateCustomerPreflight(
       message: "Kundenstand konnte nicht sicher geprüft werden. Fehlercode: EINGANG_CUSTOMER_PREFLIGHT_MISSING.",
     };
   }
-  if (!preflight.readiness.ready) {
+  if (preflight.readiness.issues.length > 0) {
     return {
       code: "CUSTOMER_INCOMPLETE",
       message: `Kunde ist für den Auftrag unvollständig: ${preflight.readiness.issues.map((issue) => issue.message).join(", ")}. Bitte in der Kundenkarte ergänzen.`,

@@ -3,15 +3,17 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { logout } from "@/app/actions/auth";
-import { createCustomerAction, getCustomersDb, readCustomerCreateReceiptAction } from "@/app/actions/customers.actions";
+import { createCustomerAction, getCustomersDb, readCustomerCreateReceiptAction, readCustomerAddressAction } from "@/app/actions/customers.actions";
 import { erfasseAuftragAusEingangAction } from "@/app/actions/eingang.actions";
 import { convertQuoteToOrderAction, createQuoteAction, listOpenQuotesAction, readQuoteAction, readQuoteCreateReceiptAction, readQuoteConversionReceiptAction, readQuoteUpdateReceiptAction, updateQuoteAction } from "@/app/actions/quotes.actions";
 import { getOrderIntakeReceiptAction, getOrderIntakeSuggestionsAction, recognizeOrderIntakeTextAction, searchOrderIntakeCustomersAction } from "@/app/warendurchlauf/actions";
 import { getActiveCatalogAction } from "@/app/actions/catalog.actions";
 import {
-  GlobalCreateFlow,
+  GlobalCreateFlow,requestGlobalCreate,
   type GlobalCreateConversionResult,
   type GlobalCreateCustomerResult,
+  type GlobalCreateCustomerChoice,
+  type CustomerComparisonValue,
   type GlobalCreateQuoteReadResult,
   type GlobalCreateQuoteResult,
   type GlobalCreateOpenQuotesResult,
@@ -21,9 +23,17 @@ import {
   type CreateQuoteInput,
   type UpdateQuoteInput,
 } from "@/modules/eingang/public";
+
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { isAppRole } from "@/lib/auth/authorizationContract";
 import { useOverlayStore } from "@/lib/overlayStore";
+
+type ChoiceSource={contactPerson?:string|null;id:string;customerNumber?:string|null;name:string;customerType:string;companyName?:string|null;salutation?:"frau"|"herr"|"ohne"|null;firstName?:string|null;lastName?:string|null;contactRole?:string|null;email?:string|null;phone?:string|null;street?:string|null;houseNumber?:string|null;zipCode?:string|null;city?:string|null;country?:string|null;paymentPreference?:string|null;vatId?:string|null;handoverPreference?:"pickup"|"shipping"|null;autoInfo?:boolean;vorrang?:boolean;invoiceTermsEnabled?:boolean;invoiceTermDays?:number|null;duplicateMatch?:{kind:"exact"|"possible";by:string}|null};
+function customerChoice(source:ChoiceSource):GlobalCreateCustomerChoice {
+  if(source.customerType!=="business"&&source.customerType!=="privat"&&source.customerType!=="lieferant")throw new Error("CUSTOMER_TYPE_READMODEL_INVALID");
+  return {...source,customerNumber:source.customerNumber??null,customerType:source.customerType,companyName:source.companyName??null,
+    contactPerson:source.contactPerson??null,street:source.street??"",zipCode:source.zipCode??"",city:source.city??null,country:source.country??"",paymentPreference:source.paymentPreference??undefined};
+}
 
 type CreateCustomerInput = Parameters<typeof createCustomerAction>[0];
 
@@ -37,7 +47,7 @@ export function GlobalCreateAppAdapter() {
   const activeCustomerOverlayId = useOverlayStore((state) => {
     for (let index = state.stack.length - 1; index >= 0; index -= 1) {
       const overlay = state.stack[index];
-      if (overlay?.type === "customer") return overlay.id;
+      if (overlay?.type === "customer") return overlay.id.split("#")[0];
     }
     return null;
   });
@@ -75,6 +85,14 @@ export function GlobalCreateAppAdapter() {
     setResumeQuoteConversionId(clientEventId);
   };
 
+  useEffect(()=>{
+    const handler=(event:Event)=>{const {ziel,arg}=(event as CustomEvent<{ziel:string;arg?:unknown}>).detail??{};
+      if(ziel==="kundeneu"){requestGlobalCreate({intent:"CUSTOMER",prefill:typeof arg==="string"&&arg.endsWith("#lieferant")?{customerMode:"lieferant"}:undefined});return;}
+        if((ziel==="kunde"||ziel==="kundebearbeiten")&&typeof arg==="string")openCustomer(ziel==="kundebearbeiten"&&!arg.includes("#")?arg+"#bearbeiten":arg);
+    };
+    window.addEventListener("kreile:oeffne",handler);return()=>window.removeEventListener("kreile:oeffne",handler);
+  },[openCustomer]);
+
   // Keep one safe, typed intake boundary mounted for authenticated workshop roles.
   // Their request is denied by the same flow before any command can run.
   if (!role || !isAppRole(role)) return null;
@@ -83,6 +101,7 @@ export function GlobalCreateAppAdapter() {
     <GlobalCreateFlow
       ports={{
         canCreateCustomer,
+        canReadCustomers:hasArea("kunden"),
         canCreateOrder: hasArea("eingang"),
         canCreateQuote,
         canManageMoney: hasArea("geld"),
@@ -102,27 +121,12 @@ export function GlobalCreateAppAdapter() {
           }
           return {
             code: "OK" as const,
-            customers: result.data.map((customer) => ({
-              id: customer.id,
-              customerNumber: customer.customerNumber ?? null,
-              name: customer.name,
-              customerType: customer.type === "institution" || customer.type === "Institution" ? "institution" as const : customer.type === "private" || customer.type === "Privatkunde" ? "privat" as const : "business" as const,
-              companyName: customer.companyName ?? null,
-              contactPerson: customer.contactPerson ?? null,
-              email: customer.email ?? null,
-              phone: customer.phone ?? null,
-              street: customer.street ?? "",
-              zipCode: customer.zipCode ?? "",
-              city: customer.city ?? null,
-              country: customer.country ?? "",
-              paymentPreference: customer.paymentPreference,
-              vatId: customer.vatId ?? null,
-              lastHandoverMode: customer.lastHandoverMode,
-            })),
+            customers: result.data.map(customer=>customerChoice({...customer,customerType:customer.type})),
+
           };
         },
-        searchIntakeCustomers: async (query) => {
-          const result = await searchOrderIntakeCustomersAction({ query });
+        searchIntakeCustomers: async (query,candidate?:CustomerComparisonValue) => {
+          const result = await searchOrderIntakeCustomersAction(candidate?{query,candidate}:{query});
           if (!result.ok) {
             return {
               code: result.error === "FORBIDDEN" || result.error === "AUTH_ERROR" ? "DENIED" as const : "UNAVAILABLE" as const,
@@ -131,23 +135,8 @@ export function GlobalCreateAppAdapter() {
           }
           return {
             code: "OK" as const,
-            customers: result.data.customers.map((customer) => ({
-              id: customer.id,
-              customerNumber: customer.customerNumber,
-              name: customer.name,
-              customerType: customer.customerType === "institution" ? "institution" as const : customer.customerType === "privat" || customer.customerType === "private" ? "privat" as const : "business" as const,
-              companyName: customer.companyName,
-              contactPerson: customer.contactPerson,
-              email: customer.email,
-              phone: customer.phone,
-              street: customer.street ?? "",
-              zipCode: customer.zipCode ?? "",
-              city: customer.city,
-              country: customer.country ?? "",
-              paymentPreference: customer.paymentPreference ?? undefined,
-              vatId: customer.vatId,
-              lastHandoverMode: customer.lastHandoverMode,
-            })),
+            customers: result.data.customers.map(customerChoice),
+
           };
         },
         recognizeIntakeText: async (text) => {
@@ -171,6 +160,7 @@ export function GlobalCreateAppAdapter() {
           const result = await getActiveCatalogAction();
           return result.code === "OK" ? result : { code: result.code === "FORBIDDEN" ? "DENIED" as const : "UNAVAILABLE" as const, message: result.message };
         },
+        checkCustomerAddress: readCustomerAddressAction,
         createCustomer: async (input: CreateCustomerInput): Promise<GlobalCreateCustomerResult> => {
           const result = await createCustomerAction(input);
           if (result.code !== "OK") return result;
@@ -178,43 +168,13 @@ export function GlobalCreateAppAdapter() {
             code: "OK",
             replayed: result.replayed,
             receipt: result.receipt,
-            customer: {
-              id: result.customer.id,
-              customerNumber: result.customer.customerNumber,
-              name: result.customer.name,
-              customerType: result.customer.type === "institution" || result.customer.type === "Institution" ? "institution" as const : result.customer.type === "private" || result.customer.type === "Privatkunde" ? "privat" as const : "business" as const,
-              companyName: result.customer.companyName ?? null,
-              contactPerson: result.customer.contactPerson ?? null,
-              email: result.customer.email ?? null,
-              phone: result.customer.phone ?? null,
-              street: result.customer.street ?? "",
-              zipCode: result.customer.zipCode ?? "",
-              city: result.customer.city ?? null,
-              country: result.customer.country ?? "",
-              paymentPreference: result.customer.paymentPreference ?? undefined,
-              vatId: result.customer.vatId ?? null,
-            },
+            customer: customerChoice(result.customer),
           };
         },
         readCustomerCreateReceipt: async (input: CreateCustomerInput): Promise<GlobalCreateCustomerResult> => {
           const result = await readCustomerCreateReceiptAction(input);
           if (result.code !== "OK") return result;
-          return { code: "OK", replayed: true, receipt: result.receipt, customer: {
-            id: result.customer.id,
-            customerNumber: result.customer.customerNumber,
-            name: result.customer.name,
-            customerType: result.customer.type === "institution" || result.customer.type === "Institution" ? "institution" as const : result.customer.type === "private" || result.customer.type === "Privatkunde" ? "privat" as const : "business" as const,
-            companyName: result.customer.companyName ?? null,
-            contactPerson: result.customer.contactPerson ?? null,
-            email: result.customer.email ?? null,
-            phone: result.customer.phone ?? null,
-            street: result.customer.street ?? "",
-            zipCode: result.customer.zipCode ?? "",
-            city: result.customer.city ?? null,
-            country: result.customer.country ?? "",
-            paymentPreference: result.customer.paymentPreference ?? undefined,
-            vatId: result.customer.vatId ?? null,
-          } };
+          return {code:"OK",replayed:true,receipt:result.receipt,customer:customerChoice(result.customer)};
         },
         createQuote: async (input: CreateQuoteInput): Promise<GlobalCreateQuoteResult> => createQuoteAction(input),
         updateQuote: async (input: UpdateQuoteInput): Promise<GlobalCreateQuoteResult> => updateQuoteAction(input),

@@ -88,7 +88,7 @@ async function createFixture(): Promise<Fixture> {
     await transaction`
       INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
       SELECT ${KREILE_TENANT_SLUG}, ${actorId}::uuid, area, ${actorId}::uuid
-      FROM unnest(ARRAY['auftraege', 'kunden', 'geld']::text[]) area
+      FROM unnest(ARRAY['auftraege', 'kunden', 'geld', 'eingang']::text[]) area
     `;
   });
   const [clock] = await sql<{ updated_at_ms: string }[]>`
@@ -126,24 +126,22 @@ describe("H18 customer Server Actions against the real replay database", () => {
     const {
       createCustomerAction,
       getCustomerSummaryAction,
-      updateCustomerCommercialAction,
-      updateCustomerNoteAction,
+      updateCustomerAction,
     } = await import("@/app/actions/customers.actions");
 
     const created = await withSession(fixture, () => createCustomerAction({
       city: "Stuttgart",
       clientEventId: createClientEventId,
       companyName: "H18 Kundenanlage GmbH",
-      contactPerson: "Ada Kundin",
+      salutation:"ohne",firstName:"Ada",lastName:"Kundin",
       customerType: "business",
       email: "h18-kundenanlage@example.invalid",
-      name: "H18 Kundenanlage",
       notes: "H18 Erstnotiz",
       paymentPreference: "vorkasse",
       phone: "+49 711 5550190",
-      street: "Kundenweg 18",
+      street: "Kundenweg",houseNumber:"18",
       zipCode: "70176",
-      country: "Deutschland",
+      country: "DE",
       vatId: "DE123456789",
     }));
     expect(created.code).toBe("OK");
@@ -164,7 +162,7 @@ describe("H18 customer Server Actions against the real replay database", () => {
     `;
     expect(createdRow).toEqual({
       id: created.receipt.customerId,
-      name: "H18 Kundenanlage",
+      name: "H18 Kundenanlage GmbH",
       payment_preference: "vorkasse",
       event_type: "CUSTOMER_CREATED_V1",
       actor_id: fixture.actorId,
@@ -172,21 +170,20 @@ describe("H18 customer Server Actions against the real replay database", () => {
     const createdView = await withSession(fixture, () => getCustomerSummaryAction({ customerId: created.receipt.customerId }));
     expect(createdView).toMatchObject({
       code: "OK",
-      data: { id: created.receipt.customerId, name: "H18 Kundenanlage", paymentPreference: "vorkasse" },
+      data: { id: created.receipt.customerId, name: "H18 Kundenanlage GmbH", paymentPreference: "vorkasse" },
     });
 
-    const updated = await withSession(fixture, () => updateCustomerCommercialAction({
+    const updated = await withSession(fixture, () => updateCustomerAction({
       clientEventId: updateClientEventId,
       customerId: created.receipt.customerId,
-      name: "H18 Kunde bearbeitet",
       companyName: "H18 Kunde bearbeitet GmbH",
-      contactPerson: "Ada Bearbeitet",
+      salutation:"ohne",firstName:"Ada",lastName:"Bearbeitet",
       email: "h18-bearbeitet@example.invalid",
       phone: "+49 711 5550191",
-      street: "Bearbeitungsweg 19",
+      street: "Bearbeitungsweg",houseNumber:"19",
       zipCode: "70177",
       city: "Stuttgart",
-      country: "Deutschland",
+      country: "DE",
       paymentPreference: "bar",
       vatId: "DE987654321",
     }));
@@ -194,44 +191,44 @@ describe("H18 customer Server Actions against the real replay database", () => {
     if (updated.code !== "OK") throw new Error(`H18_CUSTOMER_UPDATE_FAILED:${updated.code}:${updated.message}`);
     const [updatedRow] = await sql<{
       name: string;
-      contact_person: string;
+      first_name:string;last_name:string;
       payment_preference: string;
       event_type: string;
     }[]>`
-      SELECT customer.name, customer.contact_person, customer.payment_preference, event.event_type
+      SELECT customer.name, customer.first_name, customer.last_name, customer.payment_preference, event.event_type
       FROM public.customers customer
       JOIN public.events event ON event.tenant_id=customer.tenant_id
         AND event.client_event_id=${updateClientEventId}::uuid
       WHERE customer.id=${created.receipt.customerId} AND customer.tenant_id=${KREILE_TENANT_SLUG}
     `;
     expect(updatedRow).toEqual({
-      name: "H18 Kunde bearbeitet",
-      contact_person: "Ada Bearbeitet",
+      name: "H18 Kunde bearbeitet GmbH",
+      first_name:"Ada",last_name:"Bearbeitet",
       payment_preference: "bar",
-      event_type: "CUSTOMER_COMMERCIAL_UPDATED_V1",
+      event_type: "CUSTOMER_UPDATED_V1",
     });
     const updatedView = await withSession(fixture, () => getCustomerSummaryAction({ customerId: created.receipt.customerId }));
     expect(updatedView).toMatchObject({
       code: "OK",
-      data: { name: "H18 Kunde bearbeitet", contactPerson: "Ada Bearbeitet", paymentPreference: "bar" },
+      data: { name: "H18 Kunde bearbeitet GmbH", salutation:"ohne",firstName:"Ada",lastName:"Bearbeitet", paymentPreference: "bar" },
     });
 
-    const note = await withSession(fixture, () => updateCustomerNoteAction({
+    const note = await withSession(fixture, () => updateCustomerAction({
       clientEventId: noteClientEventId,
       customerId: created.receipt.customerId,
-      note: "H18 Notiz bearbeitet",
+      notes: "H18 Notiz bearbeitet",
     }));
     expect(note.code).toBe("OK");
     if (note.code !== "OK") throw new Error(`H18_CUSTOMER_NOTE_FAILED:${note.code}:${note.message}`);
-    const [noteRow] = await sql<{ internal_notes: string; event_type: string }[]>`
-      SELECT customer.internal_notes, event.event_type
+    const [noteRow] = await sql<{ notes: string; event_type: string }[]>`
+      SELECT customer.notes, event.event_type
       FROM public.customers customer
       JOIN public.events event ON event.tenant_id=customer.tenant_id
         AND event.client_event_id=${noteClientEventId}::uuid
       WHERE customer.id=${created.receipt.customerId} AND customer.tenant_id=${KREILE_TENANT_SLUG}
     `;
-    expect(noteRow).toEqual({ internal_notes: "H18 Notiz bearbeitet", event_type: "CUSTOMER_NOTE_CHANGED_V1" });
+    expect(noteRow).toEqual({ notes: "H18 Notiz bearbeitet", event_type: "CUSTOMER_UPDATED_V1" });
     const noteView = await withSession(fixture, () => getCustomerSummaryAction({ customerId: created.receipt.customerId }));
-    expect(noteView).toMatchObject({ code: "OK", data: { internalNotes: "H18 Notiz bearbeitet" } });
+    expect(noteView).toMatchObject({ code: "OK", data: { notes: "H18 Notiz bearbeitet" } });
   });
 });

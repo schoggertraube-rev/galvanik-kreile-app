@@ -38,7 +38,7 @@ import { createFromFetch } from "next/dist/compiled/react-server-dom-turbopack/c
 // Manifest-basierte Action-ID-Aufloesung (keine Kandidaten, kein HTML-Scraping):
 //  - Liest .next/standalone/.next/server/server-reference-manifest.json
 //  - Sucht nach exportedName="loginWithPin" im node + edge Mapping mit filename=auth.actions.ts
-//  - Sucht nach exportedName="createOrderIntakeAction" mit filename=actions.ts (warendurchlauf)
+//  - Sucht nach exportedName="createOrderIntakeAction" mit filename=eingang.actions.ts
 //  - Require genau eine Match pro Action, sonst FATAL.
 //
 // Aufruf (nach "npm run build" + "npx next start -p 3100"):
@@ -255,12 +255,12 @@ function resolveActionIdsFromManifest() {
   }
   const loginWithPinId = [...loginIds.keys()][0];
 
-  // Resolve the real V5 GlobalCreate intake action from warendurchlauf/actions.ts (exact match only).
+  // Resolve the one intake action from eingang.actions.ts (exact match only).
   const intakeIds = new Map();
   for (const [id, entry] of Object.entries(manifest.node ?? {})) {
     if (
       entry.exportedName === "createOrderIntakeAction" &&
-      normalizeAndValidateFilename(entry.filename, "src/app/warendurchlauf/actions.ts")
+      normalizeAndValidateFilename(entry.filename, "src/app/actions/eingang.actions.ts")
     ) {
       intakeIds.set(id, entry);
     }
@@ -268,7 +268,7 @@ function resolveActionIdsFromManifest() {
   for (const [id, entry] of Object.entries(manifest.edge ?? {})) {
     if (
       entry.exportedName === "createOrderIntakeAction" &&
-      normalizeAndValidateFilename(entry.filename, "src/app/warendurchlauf/actions.ts")
+      normalizeAndValidateFilename(entry.filename, "src/app/actions/eingang.actions.ts")
     ) {
       intakeIds.set(id, entry); // Deduplicate by id
     }
@@ -300,9 +300,9 @@ function assertActionIsBoundToRoute({ manifestPath, routeWorker, actionId, expor
   const worker = entry?.workers?.[routeWorker];
   if (
     entry?.exportedName !== exportedName ||
-    entry?.filename !== "src/app/warendurchlauf/actions.ts" ||
+    entry?.filename !== "src/app/actions/eingang.actions.ts" ||
     worker?.exportedName !== exportedName ||
-    worker?.filename !== "src/app/warendurchlauf/actions.ts"
+    worker?.filename !== "src/app/actions/eingang.actions.ts"
   ) {
     throw new Error(
       `Route-Manifest ${manifestPath} bindet ${exportedName} nicht genau an ${routeWorker}.`
@@ -891,7 +891,7 @@ const INTAKE_AUTH_PROBE_INPUT = {
     zipCode: "60311",
     city: "Frankfurt am Main",
     country: "Deutschland",
-    paymentPreference: "rechnung_14",
+    paymentPreference: "vorkasse",
     vatId: null,
   },
   dueDate: "2026-09-16",
@@ -902,7 +902,7 @@ const INTAKE_AUTH_PROBE_INPUT = {
     name: "Probe",
     quantity: 1,
     material: null,
-    surfaceRequested: "Mattnickel",
+    surfaceRequested: "Vernickeln",
     executionRequested: "matt",
     unit: null,
     unitPriceCents: null,

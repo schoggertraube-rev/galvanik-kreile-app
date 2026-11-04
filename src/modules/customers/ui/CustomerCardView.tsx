@@ -1,17 +1,17 @@
 "use client";
 
 import { type ReactNode, useState, useSyncExternalStore } from "react";
-import type { CustomerCardState, UpdateCustomerCommercialInput } from "../server/types";
-import { CUSTOMER_PAYMENT_PREFERENCES } from "../paymentPreferenceContract";
+import type { CustomerCardState, UpdateCustomerInput } from "../server/types";
+import { kundeVollstaendigkeit } from "../orderReadiness";
+import { customerCountryLabel } from "../customerFormContract";
+import {customerPaymentLabel} from "../paymentPreferenceContract";
+import { CustomerEditor } from "./CustomerEditor";
+import type { CustomerAddressInput, CustomerAddressResult } from "../customerAddress";
 import {
   Auftragszeile,
   Button,
   Chip,
-  Dialog,
-  Eingabe,
   Fakten,
-  Feld,
-  FormRaster,
   Hinweis,
   Karte,
   KartenBlock,
@@ -22,6 +22,7 @@ import {
   Seitenblatt,
   Zustand,
   Verlauf,
+  Toast,
   type Geraet,
   type SchnellAktion,
 } from "@/ui/kr";
@@ -83,19 +84,28 @@ export function CustomerCardView({
   state,
   onOpenOrder,
   onClose,
-  onSaveCommercial,
+  onSaveCustomer,
   onNewOrder,
   documentsPanel,
+  canManageMoney=false,
+  canDecide=false,
+  initialEdit=false,
+  missingFirst=false,
+  checkAddress,
+  takeover,
 }: {
   state: CustomerCardState;
   onOpenOrder: (id: string) => void;
   onClose: () => void;
-  onSaveCommercial?: (input: UpdateCustomerCommercialInput) => Promise<{ ok: true } | { ok: false; message: string }>;
+  onSaveCustomer?: (input: UpdateCustomerInput) => Promise<{ ok: true } | { ok: false; message: string }>;
   onNewOrder?: () => void;
   documentsPanel?: ReactNode;
+  takeover?:unknown;
+  canManageMoney?:boolean;canDecide?:boolean;initialEdit?:boolean;missingFirst?:boolean;
+  checkAddress?:(input:CustomerAddressInput)=>Promise<{code:"OK";data:CustomerAddressResult}|{code:string;message:string}>;
 }) {
   const device = useSyncExternalStore(subscribeDevice, readDevice, readServerDevice);
-  const [editOpen, setEditOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(initialEdit);
   const [saveMessage, setSaveMessage] = useState("");
 
   if (state.kind !== "data") {
@@ -110,20 +120,8 @@ export function CustomerCardView({
   }
 
   const card = state.card;
-  const paymentPreferences = CUSTOMER_PAYMENT_PREFERENCES.filter((option) => (
-    !option.requiresInvoiceTerms || card.invoiceTermsEnabled
-  ));
-  const missingForOrder = [
-    !card.name.trim() ? "Name/Firma" : null,
-    !card.contactPerson?.trim() ? "Ansprechpartner" : null,
-    !card.phone?.trim() ? "Telefon" : null,
-    !card.email?.trim() ? "E-Mail" : null,
-    !card.address?.trim() ? "Straße" : null,
-    !card.zipCode?.trim() ? "PLZ" : null,
-    !card.city?.trim() ? "Ort" : null,
-    !card.country?.trim() ? "Land" : null,
-    !card.paymentPreference?.trim() ? "Zahlungsbedingung" : null,
-  ].filter((value): value is string => Boolean(value));
+  const readiness=kundeVollstaendigkeit({customerType:card.type==="privat"||card.type==="lieferant"?card.type:"business",companyName:card.companyName,firstName:card.firstName,lastName:card.lastName,phone:card.phone,email:card.email,street:card.address,houseNumber:card.houseNumber,zipCode:card.zipCode,city:card.city,country:card.country,paymentPreference:card.paymentPreference,invoiceTermsEnabled:card.invoiceTermsEnabled},{geld:canManageMoney});
+  const missingForOrder=readiness.fehlt;
   const active = card.orders.filter((order) => !isClosedStation(order.station));
   const history = card.orders.filter((order) => isClosedStation(order.station));
   const next = active.slice().sort((a, b) => {
@@ -138,7 +136,7 @@ export function CustomerCardView({
     ...(onNewOrder ? [{ key: "order", text: "Neuer Auftrag", icon: "plus" as const, primaer: true, onClick: onNewOrder }] : []),
     ...(card.phone ? [{ key: "phone", text: "Anrufen", icon: "phone" as const, onClick: openPhone }] : []),
     ...(card.email ? [{ key: "mail", text: "E-Mail", icon: "mail" as const, onClick: openMail }] : []),
-    ...(onSaveCommercial ? [{ key: "edit", text: "Bearbeiten", icon: "edit" as const, onClick: () => setEditOpen(true) }] : []),
+    ...(onSaveCustomer ? [{ key: "edit", text: "Bearbeiten", icon: "edit" as const, onClick: () => setEditOpen(true) }] : []),
   ];
 
   const head = <Kartenkopf
@@ -150,13 +148,13 @@ export function CustomerCardView({
       {card.contactPerson ? <Chip text={card.contactPerson} icon="user" ton="info" /> : null}
       {card.phone ? <Button art="leise" icon="phone" text={card.phone} onClick={openPhone} /> : null}
       {card.email ? <Button art="leise" icon="mail" text={card.email} onClick={openMail} /> : null}
-      {card.paymentPreference?.startsWith("rechnung") ? <Chip text="Rechnung auf Ziel" ton="ok" icon="receipt" /> : null}
+      {canManageMoney && card.paymentPreference==="rechnung" ? <Chip text="Rechnung auf Ziel" ton="ok" icon="receipt" /> : null}
     </>}
     onSchliessen={onClose}
   />;
 
   const main = <>
-    {missingForOrder.length ? <KartenBlock><Hinweis ton="warn">Unvollständig für Auftrag · fehlt: {missingForOrder.join(", ")}</Hinweis></KartenBlock> : null}
+    {missingForOrder.length ? <KartenBlock><Hinweis ton="warn">{readiness.text}</Hinweis></KartenBlock> : null}
     {next ? <KartenBlock><NaechsteAktion
       titel={`${next.orderNumber} · ${next.title} · Termin ${due(next.dueAt)}`}
       aktionen={<Button art="primaer" icon="open" text="Auftragskarte öffnen" onClick={() => onOpenOrder(next.id)} />}
@@ -181,13 +179,13 @@ export function CustomerCardView({
       {card.notes ? <Notiz text={card.notes} bezug={<Chip text="Kundennotiz" ton="teil" icon="phone" />} autor={`aktualisiert ${moment(card.updatedAt)}`} /> : <Zustand art="leer" text="Keine interne Kundennotiz hinterlegt." />}
       {card.tags.length ? <div className="kr-docs" style={{ marginTop: 8 }}>{card.tags.map((tag) => <Chip key={tag} text={tag} />)}</div> : null}
     </KartenBlock>
-    <KartenBlock label="Stammdaten" rechts={onSaveCommercial ? <Button art="leise" icon="edit" text="Bearbeiten" onClick={() => setEditOpen(true)} /> : undefined}>
+    <KartenBlock label="Stammdaten" rechts={onSaveCustomer ? <Button data-spec-id="kunde.bearbeiten" art="leise" icon="edit" text="Bearbeiten" onClick={() => setEditOpen(true)} /> : undefined}>
       <Fakten zeilen={[
         { k: "Ansprechpartner", v: card.contactPerson ?? "Nicht hinterlegt" },
         { k: "Telefon", v: card.phone ?? "Nicht hinterlegt" },
         { k: "E-Mail", v: card.email ?? "Nicht hinterlegt" },
-        { k: "Anschrift", v: [card.address, [card.zipCode, card.city].filter(Boolean).join(" "), card.country].filter(Boolean).join(", ") || "Nicht hinterlegt" },
-        { k: "Zahlungsbedingung", v: card.paymentPreference ?? "Nicht hinterlegt" },
+        { k: "Anschrift", v: [[card.address,card.houseNumber].filter(Boolean).join(" "), [card.zipCode, card.city].filter(Boolean).join(" "), customerCountryLabel(card.country)].filter(Boolean).join(", ") || "Nicht hinterlegt" },
+        ...(canManageMoney?[{ k: "Zahlungsbedingung", v: customerPaymentLabel(card.paymentPreference,{invoiceTermDays:card.invoiceTermDays}) }]:[]),
         { k: "USt-ID", v: card.vatId ?? "Nicht hinterlegt" },
       ]} />
     </KartenBlock>
@@ -209,8 +207,7 @@ export function CustomerCardView({
     <KartenBlock label="Kundenstand"><Fakten zeilen={[
       { k: "Aufträge gesamt", v: card.orderCount },
       { k: "Ware im Haus", v: card.wareImHausCount },
-      { k: "Umsatz aus Rechnungen", v: euro(card.invoiceRevenueCents) },
-      { k: "Offene Posten", v: euro(card.invoiceOpenCents) },
+      ...(canManageMoney?[{ k: "Umsatz aus Rechnungen", v: euro(card.invoiceRevenueCents) },{ k: "Offene Posten", v: euro(card.invoiceOpenCents) }]:[]),
       { k: "Klassifikation", v: card.classification ?? "Nicht hinterlegt" },
     ]} /></KartenBlock>
     <KartenBlock label="Kontaktverlauf"><Verlauf eintraege={[
@@ -219,49 +216,14 @@ export function CustomerCardView({
     ]} /></KartenBlock>
   </>;
   const footer = device === "desktop"
-    ? <footer className="kr-kartenfuss"><Button text="Schließen" onClick={onClose} /></footer>
+    ? <footer className="kr-kartenfuss"><Button data-spec-id="kunde.schliessen" text="Schließen" onClick={onClose} /></footer>
     : quickActions.length ? <Schnellaktionen aktionen={quickActions} als="dock" /> : undefined;
 
   return <>
-    <Seitenblatt titel={`Kundenkarte ${card.customerNumber ?? card.name}`} onSchliessen={onClose}>
+    <Seitenblatt dataSpecId="kunde" titel={`Kundenkarte ${card.customerNumber ?? card.name}`} onSchliessen={onClose}>
       <Karte kopf={head} haupt={main} rail={rail} fuss={footer} />
     </Seitenblatt>
-    {editOpen && onSaveCommercial ? <Dialog titel="Kundendaten bearbeiten" icon="edit" groesse="breit" onSchliessen={() => setEditOpen(false)}>
-      <form className="kr-stapel" onSubmit={(event) => {
-        event.preventDefault();
-        const form = new FormData(event.currentTarget);
-        const visibleName = String(form.get("name") ?? "").trim();
-        void onSaveCommercial({
-          clientEventId: crypto.randomUUID(), customerId: card.id,
-          name: card.companyName ? card.name : visibleName,
-          companyName: card.companyName ? visibleName : null,
-          contactPerson: String(form.get("contactPerson") ?? "").trim() || null,
-          email: String(form.get("email") ?? "").trim() || null,
-          phone: String(form.get("phone") ?? "").trim() || null,
-          street: String(form.get("street") ?? ""), zipCode: String(form.get("zipCode") ?? ""),
-          city: String(form.get("city") ?? ""), country: String(form.get("country") ?? ""),
-          paymentPreference: String(form.get("paymentPreference") ?? ""),
-          vatId: String(form.get("vatId") ?? "").trim() || null,
-        }).then((result) => {
-          setSaveMessage(result.ok ? "Stammdaten gespeichert." : result.message);
-          if (result.ok) setEditOpen(false);
-        });
-      }}>
-        <FormRaster>
-          <Feld label="Name / Firma"><Eingabe name="name" required defaultValue={card.companyName ?? card.name} /></Feld>
-          <Feld label="Ansprechpartner"><Eingabe name="contactPerson" required defaultValue={card.contactPerson ?? ""} /></Feld>
-          <Feld label="Telefon"><Eingabe name="phone" required defaultValue={card.phone ?? ""} /></Feld>
-          <Feld label="E-Mail"><Eingabe name="email" type="email" required defaultValue={card.email ?? ""} /></Feld>
-          <Feld label="Straße"><Eingabe name="street" required defaultValue={card.address ?? ""} /></Feld>
-          <Feld label="PLZ"><Eingabe name="zipCode" required defaultValue={card.zipCode ?? ""} /></Feld>
-          <Feld label="Ort"><Eingabe name="city" required defaultValue={card.city ?? ""} /></Feld>
-          <Feld label="Land"><Eingabe name="country" required defaultValue={card.country ?? ""} /></Feld>
-          <Feld label="Zahlungsbedingung"><select className="kr-auswahl" name="paymentPreference" required defaultValue={card.paymentPreference ?? ""}><option value="">Nicht festgelegt</option>{paymentPreferences.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></Feld>
-          <Feld label="USt-ID"><Eingabe name="vatId" defaultValue={card.vatId ?? ""} /></Feld>
-        </FormRaster>
-        {saveMessage ? <p role="status">{saveMessage}</p> : null}
-        <Button art="primaer" icon="check" text="Stammdaten speichern" type="submit" />
-      </form>
-    </Dialog> : null}
+    {editOpen && onSaveCustomer ? <CustomerEditor takeover={takeover} card={card} canManageMoney={canManageMoney} canDecide={canDecide} missingFirst={missingFirst} checkAddress={checkAddress} onSave={onSaveCustomer} onClose={()=>setEditOpen(false)} onSaved={message=>{setEditOpen(false);setSaveMessage(message)}}/>:null}
+    {saveMessage?<Toast text={saveMessage}/>:null}
   </>;
 }

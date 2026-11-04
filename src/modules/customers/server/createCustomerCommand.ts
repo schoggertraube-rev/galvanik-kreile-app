@@ -1,19 +1,10 @@
 import "server-only";
-
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import type {
-  CreateCustomerInput,
-  CustomerCommandContext,
-  CustomerCreateCommandResult,
-  CustomerCreateReceipt,
-  ReadCustomerCreateReceiptResult,
-} from "./types";
-import { isCustomerPaymentPreference } from "../paymentPreferenceContract";
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import { customerDatabaseFields, customerWriteDiagnostic, customerWriteObject, normaliseCustomerWrite, readCustomerProfile, CUSTOMER_UUID as UUID_PATTERN } from "./customerWriteContract";
+import { readCustomerAddress } from "./customerAddressRead";
+import type { CustomerCommandContext, CreateCustomerInput, CustomerCreateCommandResult, CustomerCreateReceipt, ReadCustomerCreateReceiptResult } from "./types";
 
 type ReceiptRow = {
   receipt_id: string;
@@ -42,98 +33,6 @@ type ReceiptRow = {
   integrity_ok: boolean;
 };
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
-  const actual = Object.keys(value).sort();
-  const expected = [...keys].sort();
-  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
-}
-
-function requiredText(value: unknown, min: number, max: number): string | null {
-  if (typeof value !== "string") return null;
-  const normalized = value.trim().replace(/\s+/g, " ");
-  return normalized.length >= min && normalized.length <= max ? normalized : null;
-}
-
-type NormalizedCreateCustomerInput = CreateCustomerInput & {
-  street: string | null; zipCode: string | null; city: string | null; country: string | null; paymentPreference: string | null; vatId: string | null; notes: string | null;
-};
-
-function optionalFormText(value: unknown, min: number, max: number): string | null | undefined {
-  if (value === null) return null;
-  if (typeof value !== "string") return undefined;
-  if (value.trim().length === 0) return null;
-  return requiredText(value, min, max) ?? undefined;
-}
-
-function normalizeInput(value: unknown): NormalizedCreateCustomerInput | null {
-  if (!isPlainObject(value) || !exactKeys(value, [
-    "city", "clientEventId", "companyName", "contactPerson", "country", "customerType", "email", "name", "notes", "paymentPreference", "phone", "street", "vatId", "zipCode",
-  ])) return null;
-  if (typeof value.clientEventId !== "string" || !UUID_PATTERN.test(value.clientEventId)) return null;
-  if (!(["business", "privat"] as const).includes(value.customerType as never)) return null;
-  const name = requiredText(value.name, 2, 160);
-  const companyName = optionalFormText(value.companyName, 2, 160);
-  const contactPerson = optionalFormText(value.contactPerson, 1, 160);
-  const email = optionalFormText(value.email, 3, 254);
-  const phone = optionalFormText(value.phone, 1, 80);
-  const street = optionalFormText(value.street, 2, 160);
-  const zipCode = optionalFormText(value.zipCode, 2, 20);
-  const city = optionalFormText(value.city, 1, 120);
-  const country = optionalFormText(value.country, 2, 120);
-  const paymentPreference = optionalFormText(value.paymentPreference, 3, 24);
-  const vatId = optionalFormText(value.vatId, 4, 40);
-  const notes = optionalFormText(value.notes, 1, 2000);
-  if (!name || !phone || companyName === undefined || contactPerson === undefined || email === undefined || street === undefined
-    || zipCode === undefined || city === undefined || country === undefined || paymentPreference === undefined || vatId === undefined || notes === undefined
-    || (paymentPreference !== null && !isCustomerPaymentPreference(paymentPreference, false))) return null;
-  if (email !== null && !EMAIL_PATTERN.test(email)) return null;
-  return {
-    clientEventId: value.clientEventId,
-    name,
-    customerType: value.customerType as CreateCustomerInput["customerType"],
-    companyName,
-    contactPerson,
-    email,
-    phone,
-    street, zipCode, city, country, paymentPreference, vatId, notes,
-  };
-}
-
-function intentHash(input: NormalizedCreateCustomerInput): string {
-  return createHash("sha256").update(JSON.stringify({
-    city: input.city,
-    clientEventId: input.clientEventId,
-    companyName: input.companyName,
-    contactPerson: input.contactPerson,
-    customerType: input.customerType,
-    email: input.email,
-    name: input.name,
-    phone: input.phone,
-    street: input.street,
-    zipCode: input.zipCode,
-    country: input.country,
-    paymentPreference: input.paymentPreference,
-    vatId: input.vatId,
-    notes: input.notes,
-  }), "utf8").digest("hex");
-}
-
-function diagnosticField(error: unknown, key: "message" | "details" | "hint"): string | null {
-  if (!error || typeof error !== "object") return null;
-  const record = error as Record<string, unknown>;
-  const source = record.cause && typeof record.cause === "object"
-    ? record.cause as Record<string, unknown>
-    : record;
-  const value = source[key] ?? (key === "details" ? source.detail : null);
-  if (typeof value !== "string") return null;
-  if (/\b(?:select|insert|update|delete)\b|params:/i.test(value)) return "DATABASE_OPERATION_FAILED";
-  return value.replace(/\s+/g, " ").slice(0, 500);
-}
-
 function receiptFromRow(
   row: ReceiptRow,
   expected: { tenantId: string; userId: string; clientEventId: string; intentSha256: string },
@@ -150,7 +49,7 @@ function receiptFromRow(
     || !UUID_PATTERN.test(row.customer_id)
     || !UUID_PATTERN.test(row.correlation_id)
     || !/^K-\d{4}-\d{4,}$/.test(row.customer_number)
-    || !(["business", "privat", "institution"] as const).includes(row.customer_type as never)
+    || !(["business", "privat", "lieferant"] as const).includes(row.customer_type as never)
     || !Number.isFinite(recordedAt.getTime())
   ) return null;
   return {
@@ -195,82 +94,79 @@ async function readReceipt(
   return receiptFromRow(rows[0], expected);
 }
 
-export async function createCustomerCommand(
-  authorization: CustomerCommandContext,
-  input: unknown,
-): Promise<CustomerCreateCommandResult> {
-  const normalized = normalizeInput(input);
-  if (!normalized) return { code: "VALIDATION_ERROR", message: "Kundendaten sind unvollständig oder ungültig." };
-  if (!authorization.capabilities.canCreateCustomer) {
-    return { code: "FORBIDDEN", message: "Kunden dürfen mit dieser Rolle nicht angelegt werden." };
-  }
-  const expected = {
-    tenantId: authorization.tenantId,
-    userId: authorization.userId,
-    clientEventId: normalized.clientEventId,
-    intentSha256: intentHash(normalized),
-  };
 
-  try {
-    return await withPrivilegedTenantTransaction(authorization, async (tx) => {
-      const outcomes = await tx.execute<{ result_code: string; result_receipt_id: string | null; replayed: boolean }>(sql`
-        SELECT * FROM private.create_customer_v1(
-          ${expected.tenantId}, ${expected.userId}::uuid, ${expected.clientEventId}::uuid,
-          ${expected.intentSha256}, ${normalized.name}, ${normalized.customerType},
-          ${normalized.companyName}, ${normalized.contactPerson}, ${normalized.email},
-          ${normalized.phone}, ${normalized.street}, ${normalized.zipCode}, ${normalized.city},
-          ${normalized.country}, ${normalized.paymentPreference}, ${normalized.vatId}, ${normalized.notes}
-        )
-      `);
-      const outcome = outcomes.length === 1 ? outcomes[0] : null;
-      if (!outcome || outcome.result_code !== "OK" || !outcome.result_receipt_id) {
-        if (outcome?.result_code === "CONFLICT") {
-          return { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
-        }
-        if (outcome?.result_code === "VALIDATION_ERROR") {
-          return { code: "VALIDATION_ERROR", message: "Kundendaten sind unvollständig oder ungültig." };
-        }
-        throw new Error("CUSTOMER_CREATE_RESULT_INVALID");
-      }
-      const receipt = await readReceipt(tx, expected);
-      if (!receipt || receipt.receiptId !== outcome.result_receipt_id) {
-        throw new Error("CUSTOMER_CREATE_READBACK_INVALID");
-      }
-      return { code: "OK", receipt, replayed: outcome.replayed };
-    });
-  } catch (error) {
-    console.error("customer_create_command_failed", {
-      message: diagnosticField(error, "message"),
-      details: diagnosticField(error, "details"),
-      hint: diagnosticField(error, "hint"),
-    });
-    return { code: "UNAVAILABLE", message: "Kunde konnte nicht sicher gespeichert werden." };
+async function prepare(tx: PrivilegedTenantTransaction, context: CustomerCommandContext, input: unknown) {
+  const raw = customerWriteObject(input);
+  if (!raw) return { code: "VALIDATION_ERROR" as const, message: "Kundendaten sind ungültig." };
+  if (raw.vorrang === true && !context.capabilities.canDecide) return { code: "FORBIDDEN" as const, message: "Vorrang benötigt das Recht Entscheiden." };
+  if (!context.capabilities.canManageMoney && (raw.customerType === "lieferant" || ["paymentPreference", "iban", "paymentTermDays"].some(key => raw[key] != null))) {
+    return { code: "FORBIDDEN" as const, message: "Zahlungsangaben und Lieferanten benötigen den Bereich Geld." };
+  }
+  const normalized = await normaliseCustomerWrite(tx, raw);
+  if (!context.capabilities.canManageMoney && !("paymentPreference" in raw) && normalized.value.customerType !== "lieferant") normalized.value.paymentPreference = "vorkasse";
+  const error = Object.values(normalized.errors)[0];
+  if (error) return { code: "VALIDATION_ERROR" as const, message: error, fields: normalized.errors };
+  const address = await readCustomerAddress(tx, normalized.value);
+  if (address.blocked) return { code: "VALIDATION_ERROR" as const, message: address.message };
+  const fields = { ...customerDatabaseFields(normalized.value), address_status: address.status };
+  if (fields.payment_preference === "rechnung") return { code: "VALIDATION_ERROR" as const, message: "Ziel nicht freigeschaltet." };
+  const clientEventId = String(raw.clientEventId);
+  const intentSha256 = createHash("sha256").update(JSON.stringify({ clientEventId, fields }), "utf8").digest("hex");
+  return { code: "OK" as const, fields, expected: { tenantId: context.tenantId, userId: context.userId, clientEventId, intentSha256 } };
+}
+
+/** Reused by the order command in its existing transaction: one RPC writer. */
+export async function createCustomerInTransaction(
+  tx: PrivilegedTenantTransaction, context: CustomerCommandContext, input: unknown,
+): Promise<CustomerCreateCommandResult> {
+  if (!context.capabilities.canCreateCustomer) return { code: "FORBIDDEN", message: "Kundenanlage ist nicht erlaubt." };
+  const prepared = await prepare(tx, context, input);
+  if (prepared.code !== "OK") return prepared;
+  const { fields, expected } = prepared;
+  const outcomes = await tx.execute<{ result_code: string; result_receipt_id: string | null; replayed: boolean }>(sql`
+    SELECT * FROM private.create_customer_v2(
+      ${expected.tenantId},${expected.userId}::uuid,${expected.clientEventId}::uuid,${expected.intentSha256},${JSON.stringify(fields)}::jsonb
+    )
+  `);
+  const outcome = outcomes.length === 1 ? outcomes[0] : null;
+  if (!outcome || outcome.result_code !== "OK" || !outcome.result_receipt_id) {
+    if (outcome?.result_code === "CONFLICT") return { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
+    if (outcome?.result_code === "FORBIDDEN") return { code: "FORBIDDEN", message: "Kundenanlage ist nicht erlaubt." };
+    if (outcome?.result_code === "VALIDATION_ERROR") return { code: "VALIDATION_ERROR", message: "Kundendaten sind ungültig." };
+    throw new Error("CUSTOMER_CREATE_RESULT_INVALID");
+  }
+  const receipt = await readReceipt(tx, expected);
+  if (!receipt || receipt.receiptId !== outcome.result_receipt_id) throw new Error("CUSTOMER_CREATE_READBACK_INVALID");
+  const customer = await readCustomerProfile(tx, context.tenantId, receipt.customerId);
+  if (!customer || customer.customerNumber !== receipt.customerNumber) throw new Error("CUSTOMER_CREATE_PROFILE_INVALID");
+  return { code: "OK", receipt, customer, replayed: outcome.replayed };
+}
+
+export async function createCustomerCommand(context: CustomerCommandContext, input: unknown): Promise<CustomerCreateCommandResult> {
+  if (!context.capabilities.canCreateCustomer) return {code:"FORBIDDEN",message:"Kundenanlage ist nicht erlaubt."};
+  if (!customerWriteObject(input)) return {code:"VALIDATION_ERROR",message:"Kundendaten sind ungültig."};
+  try { return await withPrivilegedTenantTransaction(context, tx => createCustomerInTransaction(tx, context, input)); }
+  catch (error) {
+    console.error("[CUSTOMER_CREATE_FAILED]", customerWriteDiagnostic(error));
+    return { code: "UNAVAILABLE", message: "Kunde konnte nicht sicher gespeichert werden. Code: CUSTOMER_CREATE_FAILED." };
   }
 }
 
-/** Read-only recovery path for an interrupted create with the original intent. */
-export async function readCustomerCreateReceiptCommand(
-  authorization: CustomerCommandContext,
-  input: unknown,
-): Promise<ReadCustomerCreateReceiptResult> {
-  const normalized = normalizeInput(input);
-  if (!normalized) return { code: "VALIDATION_ERROR", message: "Die gespeicherte Anfrage kann nicht sicher geprüft werden." };
-  if (!authorization.capabilities.canCreateCustomer) return { code: "FORBIDDEN", message: "Der gespeicherte Kundenstand darf mit dieser Rolle nicht gelesen werden." };
-  const expected = {
-    tenantId: authorization.tenantId,
-    userId: authorization.userId,
-    clientEventId: normalized.clientEventId,
-    intentSha256: intentHash(normalized),
-  };
+/** Read-only recovery using the original idempotency key and intent. */
+export async function readCustomerCreateReceiptCommand(context: CustomerCommandContext, input: unknown): Promise<ReadCustomerCreateReceiptResult> {
+  if (!context.capabilities.canCreateCustomer) return { code: "FORBIDDEN", message: "Kundenanlage ist nicht erlaubt." };
   try {
-    return await withPrivilegedTenantTransaction(authorization, async (tx) => {
-      const receipt = await readReceipt(tx, expected);
-      return receipt ? { code: "OK", receipt } : { code: "NOT_FOUND", message: "Zu dieser Anfrage wurde noch kein sicherer Kundenstand gefunden." };
+    return await withPrivilegedTenantTransaction(context, async tx => {
+      const prepared = await prepare(tx, context, input);
+      if (prepared.code !== "OK") return prepared;
+      const receipt = await readReceipt(tx, prepared.expected);
+      if (!receipt) return { code: "NOT_FOUND", message: "Kein sicherer Kundenbeleg gefunden." };
+      const customer = await readCustomerProfile(tx, context.tenantId, receipt.customerId);
+      if (!customer || customer.customerNumber !== receipt.customerNumber) throw new Error("CUSTOMER_CREATE_PROFILE_INVALID");
+      return { code: "OK", receipt, customer };
     });
   } catch (error) {
-    console.error("customer_create_receipt_read_failed", {
-      message: diagnosticField(error, "message"), details: diagnosticField(error, "details"), hint: diagnosticField(error, "hint"),
-    });
-    return { code: "UNAVAILABLE", message: "Der gespeicherte Kundenstand konnte nicht sicher gelesen werden." };
+    console.error("[CUSTOMER_CREATE_RECEIPT_READ_FAILED]", customerWriteDiagnostic(error));
+    return { code: "UNAVAILABLE", message: "Kundenbeleg konnte nicht sicher gelesen werden. Code: CUSTOMER_CREATE_RECEIPT_READ_FAILED." };
   }
 }

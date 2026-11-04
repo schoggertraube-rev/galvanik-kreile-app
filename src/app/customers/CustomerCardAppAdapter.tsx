@@ -1,41 +1,52 @@
 "use client";
+import {useCallback,useEffect,useState} from "react";
+import {useRouter} from "next/navigation";
+import {getCustomerSummaryAction,updateCustomerAction,readCustomerAddressAction} from "@/app/actions/customers.actions";
+import {CustomerCardView,type CustomerCardModel,type CustomerCardState,type UpdateCustomerInput} from "@/modules/customers/public";
+import {useOverlayStore} from "@/lib/overlayStore";
+import {usePermissions} from "@/lib/auth/PermissionsContext";
+import {requestGlobalCreate} from "@/components/layout/GlobalCreateFlow";
+import {DomainAttachmentPanel} from "@/components/attachments/DomainAttachmentPanel";
+import {CommunicationPanel} from "@/components/communication/CommunicationPanel";
 
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { getCustomerSummaryAction, updateCustomerCommercialAction } from "@/app/actions/customers.actions";
-import { CustomerCardView, type CustomerCardModel, type CustomerCardState, type UpdateCustomerCommercialInput } from "@/modules/customers/public";
-import { useOverlayStore } from "@/lib/overlayStore";
-import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
-import { DomainAttachmentPanel } from "@/components/attachments/DomainAttachmentPanel";
-import { CommunicationPanel } from "@/components/communication/CommunicationPanel";
-
-type CustomerSummaryData = Extract<Awaited<ReturnType<typeof getCustomerSummaryAction>>, { code: "OK" }>["data"];
-function toCard(c: CustomerSummaryData): CustomerCardModel {
-  return {
-    id:c.id, customerNumber:c.customerNumber, name:c.name, companyName:c.companyName, type:c.type,
-    contactPerson:c.contactPerson, email:c.email, phone:c.phone, address:c.street ?? c.address,
-    zipCode:c.zipCode, city:c.city, country:c.country, paymentPreference:c.paymentPreference,
-    invoiceTermsEnabled:c.invoiceTermsEnabled, vatId:c.vatId,
-    classification:c.classification, notes:c.internalNotes, tags:c.tags, createdAt:c.createdAt,
-    updatedAt:c.updatedAt, orderCount:c.orderCount, wareImHausCount:c.wareImHausCount,
-    invoiceRevenueCents:c.invoiceRevenueCents, invoiceOpenCents:c.invoiceOpenCents, orders:c.orders,
-  };
+type Summary=Extract<Awaited<ReturnType<typeof getCustomerSummaryAction>>,{code:"OK"}>["data"];
+function toCard(c:Summary):CustomerCardModel {
+  return {...c,type:c.customerType,contactPerson:c.contactPerson,address:c.street,notes:c.notes};
 }
-
-export function CustomerCardAppAdapter({customerId,onOpenOrder,onClose,fallbackHref}:{customerId:string;onOpenOrder?:(id:string)=>void;onClose?:()=>void;fallbackHref?:"/customers"}) {
-  const router=useRouter(); const storeOrder=useOverlayStore(s=>s.openOrder); const storeClose=useOverlayStore(s=>s.pop);
-  const[state,setState]=useState<CustomerCardState>({kind:"loading"});
-  const load = useCallback(async () => {
-    const result=await getCustomerSummaryAction({customerId});
-    if(result.code!=="OK") { const kind=result.code==="FORBIDDEN"||result.code==="UNAUTHENTICATED"?"denied":result.code==="NOT_FOUND"?"not-found":result.code==="VALIDATION_ERROR"?"conflict":"error"; setState({kind,message:result.message}); return; }
+export function CustomerCardAppAdapter({customerId,takeover,onOpenOrder,onClose,fallbackHref}:{customerId:string;takeover?:unknown;onOpenOrder?:(id:string)=>void;onClose?:()=>void;fallbackHref?:"/customers"}) {
+  const router=useRouter();
+  const storeOrder=useOverlayStore(state=>state.openOrder);
+  const storeClose=useOverlayStore(state=>state.pop);
+  const {hasArea}=usePermissions();
+  const [resolvedId,mode]=customerId.split("#");
+  const [state,setState]=useState<CustomerCardState>({kind:"loading"});
+  const load=useCallback(async()=>{
+    const result=await getCustomerSummaryAction({customerId:resolvedId});
+    if(result.code!=="OK"){
+      const kind=result.code==="FORBIDDEN"||result.code==="UNAUTHENTICATED"?"denied":result.code==="NOT_FOUND"?"not-found":result.code==="VALIDATION_ERROR"?"conflict":"error";
+      setState({kind,message:result.message});return;
+    }
     setState({kind:"data",card:toCard(result.data)});
-  },[customerId]);
-  useEffect(()=>{let active=true; const timer=window.setTimeout(()=>void load().catch(()=>{if(active)setState({kind:"error",message:"Kundenkarte konnte nicht sicher geladen werden."})}),0); return()=>{active=false;window.clearTimeout(timer)}},[load]);
-  const save = async (input: UpdateCustomerCommercialInput) => {
-    const result = await updateCustomerCommercialAction(input);
-    if (result.code !== "OK") return { ok:false as const, message:result.message };
-    setState({kind:"data",card:toCard(result.customer)}); return {ok:true as const};
+  },[resolvedId]);
+  useEffect(()=>{
+    let active=true;
+    const timer=window.setTimeout(()=>void load().catch(error=>{
+      console.error("[CUSTOMER_CARD_REQUEST_FAILED]",{errorName:error instanceof Error?error.name:"UnknownError"});
+      if(active)setState({kind:"error",message:"Kundenkarte konnte nicht sicher geladen werden. Code: CUSTOMER_CARD_REQUEST_FAILED."});
+    }),0);
+    return()=>{active=false;window.clearTimeout(timer)};
+  },[load]);
+  const save=async(input:UpdateCustomerInput)=>{
+    const result=await updateCustomerAction(input);
+    if(result.code!=="OK")return {ok:false as const,message:result.message};
+    const fresh=await getCustomerSummaryAction({customerId:resolvedId});
+    if(fresh.code!=="OK")return {ok:false as const,message:`Die Änderung wurde geschrieben, die Ansicht konnte noch nicht sicher gelesen werden. ${fresh.message}`};
+    setState({kind:"data",card:toCard(fresh.data)});return {ok:true as const};
   };
   const close=onClose??(fallbackHref?()=>router.replace(fallbackHref):storeClose);
-  return <CustomerCardView state={state} onOpenOrder={onOpenOrder??storeOrder} onClose={close} onSaveCommercial={save} onNewOrder={() => { close(); requestGlobalCreate({ intent: "DIRECT_INTAKE", prefill: { customerId } }); }} documentsPanel={state.kind === "data" ? <><DomainAttachmentPanel targetType="CUSTOMER" targetId={state.card.id} /><CommunicationPanel targetType="CUSTOMER" targetId={state.card.id} /></> : null}/>;
+  return <CustomerCardView key={customerId} state={state} onOpenOrder={onOpenOrder??storeOrder} onClose={close}
+    onSaveCustomer={hasArea("kunden")?save:undefined} canManageMoney={hasArea("geld")} canDecide={hasArea("entscheiden")}
+    takeover={takeover} initialEdit={mode==="fehlend"||mode==="uebernahme"||mode==="bearbeiten"} missingFirst={mode==="fehlend"} checkAddress={readCustomerAddressAction}
+    onNewOrder={hasArea("eingang")?()=>{close();requestGlobalCreate({intent:"DIRECT_INTAKE",prefill:{customerId:resolvedId}})}:undefined}
+    documentsPanel={state.kind==="data"?<><DomainAttachmentPanel targetType="CUSTOMER" targetId={state.card.id}/><CommunicationPanel targetType="CUSTOMER" targetId={state.card.id}/></>:null}/>;
 }

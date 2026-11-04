@@ -1,3 +1,4 @@
+// Fassung 2 (Planungschat 03.11.): eindeutiger Privatname (Vor- und Nachname teilbar, K1 Namensteilung).
 // @vitest-environment node
 // AP-01 Fassung 4.3: order-first, payment contract and private-customer booking against the replay DB.
 
@@ -113,7 +114,7 @@ beforeAll(async () => {
     contactPerson: null,
     customerType: "privat",
     email: `ap01d-${clientEventId}@example.invalid`,
-    name: "AP01D Gregor Privat",
+    name: "Gregor Privat",
     notes: "AP01D F43",
     paymentPreference: "vorkasse",
     phone: "+41 77 402 33 08",

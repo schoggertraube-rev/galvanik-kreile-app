@@ -5,7 +5,7 @@ import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 const { withTransaction, execute } = vi.hoisted(() => ({ withTransaction: vi.fn(), execute: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/server/privilegedDb", () => ({ withPrivilegedTenantTransaction: withTransaction }));
-vi.mock("drizzle-orm", () => ({ sql: (parts: TemplateStringsArray, ...values: unknown[]) => ({ text: parts.join("?"), values }) }));
+vi.mock("drizzle-orm", () => ({ sql: Object.assign((parts: TemplateStringsArray, ...values: unknown[]) => ({ text: parts.join("?"), values }),{join:(parts:Array<{text:string}>,separator:{text:string})=>({text:parts.map(part=>part.text).join(separator.text),values:[]})}) }));
 
 const authorization = { tenantId: KREILE_TENANT_SLUG, userId: "11111111-1111-4111-8111-111111111111" };
 const orderId = "22222222-2222-4222-8222-222222222222";
@@ -55,25 +55,30 @@ describe("order intake read ports", () => {
   });
 
   it("uses the private tenant customer view, caps results, and rejects malformed rows", async () => {
-    execute.mockResolvedValueOnce([{
+    const customerRow={
       id: "customer-a", tenant_id: KREILE_TENANT_SLUG, customer_number: "K-1", name: "Musterkunde",
-      company_name: null, customer_type: "business", contact_person: "Ada Beispiel", phone: "03012345",
-      email: "ada@example.test", street: "Testweg 1", zip_code: "10115", city: "Berlin", country: "Deutschland",
-      payment_preference: "vorkasse", vat_id: null, last_handover_mode: "shipping", orders_count: 3, integrity_ok: true,
-    }]);
+      company_name: null, customer_type: "business",salutation:null,first_name:"Ada",last_name:"Beispiel",contact_role:null,house_number:"1",handover_preference:"shipping",ziel_freigeschaltet:false,ziel_tage:null,auto_info:true,vorrang:false, phone: "03012345",
+      email: "ada@example.test", street: "Testweg 1", zip_code: "10115", city: "Berlin", country: "DE",
+      payment_preference: "vorkasse", vat_id: null,  orders_count: 3, integrity_ok: true,
+    };
+    execute.mockResolvedValueOnce([customerRow]);
     const { searchOrderIntakeCustomers } = await import("../orderIntakeRead");
     await expect(searchOrderIntakeCustomers(authorization, { query: "muster" })).resolves.toEqual([{
       id: "customer-a", customerNumber: "K-1", name: "Musterkunde", companyName: null,
-      customerType: "business", contactPerson: "Ada Beispiel", phone: "03012345", email: "ada@example.test",
-      street: "Testweg 1", zipCode: "10115", city: "Berlin", country: "Deutschland",
-      paymentPreference: "vorkasse", vatId: null, lastHandoverMode: "shipping", ordersCount: 3,
+      customerType: "business",salutation:null,firstName:"Ada",lastName:"Beispiel",contactRole:null,houseNumber:"1",invoiceTermsEnabled:false,invoiceTermDays:null,autoInfo:true,vorrang:false,duplicateMatch:null,contactPerson: "Ada Beispiel", phone: "03012345", email: "ada@example.test",
+      street: "Testweg 1", zipCode: "10115", city: "Berlin", country: "DE",
+      paymentPreference: "vorkasse", vatId: null, handoverPreference: "shipping", ordersCount: 3,
     }]);
     expect(execute.mock.calls[0]?.[0].text).toContain("private.v_order_intake_customers_v1");
-    expect(execute.mock.calls[0]?.[0].text).toContain("last_handover_mode");
-    expect(execute.mock.calls[0]?.[0].text).toContain("LIMIT 10");
+    expect(execute.mock.calls[0]?.[0].text).toContain("private.v_order_intake_customers_v1");
+    expect(execute.mock.calls[0]?.[0].text).toContain("customer.customer_type");
 
+    execute.mockResolvedValueOnce(Array.from({length:11},(_,index)=>({...customerRow,id:"customer-"+String(index).padStart(2,"0"),name:"Musterkunde "+String(index).padStart(2,"0")})));
+    const capped=await searchOrderIntakeCustomers(authorization,{query:"muster"});
+    expect(capped).toHaveLength(10);
+    expect(capped.map(row=>row.id)).toEqual(["customer-00","customer-01","customer-02","customer-03","customer-04","customer-05","customer-06","customer-07","customer-08","customer-09"]);
     execute.mockResolvedValueOnce([{ id: "foreign", tenant_id: "tenant-b", integrity_ok: true }]);
-    await expect(searchOrderIntakeCustomers(authorization, { query: "" })).rejects.toThrow("READMODEL_INVALID");
+    await expect(searchOrderIntakeCustomers(authorization, { query: "muster" })).rejects.toThrow("READMODEL_INVALID");
     await expect(searchOrderIntakeCustomers(authorization, { query: " x" })).rejects.toThrow("INPUT_INVALID");
   });
 

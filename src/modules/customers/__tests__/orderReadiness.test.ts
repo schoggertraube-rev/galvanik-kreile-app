@@ -1,46 +1,45 @@
 import { describe, expect, it } from "vitest";
-import { getOrderReadiness } from "../orderReadiness";
+import { kundeVollstaendigkeit } from "../orderReadiness";
 
 const complete = {
-  name: "Kreile GmbH",
+  companyName: "Kreile GmbH",firstName:"Sabrina",lastName:"Schmidt",houseNumber:"3",
   customerType: "business" as const,
   phone: "+49 711 5550303",
-  contactPerson: "Sabrina Schmidt",
   email: "sabrina@example.invalid",
-  street: "Bundesgasse 3",
+  street: "Bundesgasse",
   zipCode: "70176",
   city: "Stuttgart",
-  country: "Deutschland",
+  country: "DE",
   paymentPreference: "vorkasse",
 };
 
-describe("getOrderReadiness", () => {
+describe("kundeVollstaendigkeit", () => {
   it("accepts a complete existing customer", () => {
-    expect(getOrderReadiness(complete, { requirePaymentPreference: true })).toEqual({ ready: true, issues: [] });
+    expect(kundeVollstaendigkeit(complete, { geld: true })).toMatchObject({ vollstaendig: true, issues: [] });
   });
 
   it("names a country/postcode mismatch concretely", () => {
-    expect(getOrderReadiness({ ...complete, zipCode: "3013", city: "Bern" }).issues).toContainEqual({
+    expect(kundeVollstaendigkeit({ ...complete, zipCode: "3013", city: "Bern" }).issues).toContainEqual({
       field: "zipCode",
-      message: "PLZ 3013 passt nicht zu Deutschland",
+      message: "PLZ prüfen",
     });
   });
 
   it("only requires payment conditions for the money area", () => {
-    expect(getOrderReadiness({ ...complete, paymentPreference: null }).ready).toBe(true);
-    expect(getOrderReadiness({ ...complete, paymentPreference: null }, { requirePaymentPreference: true }).issues).toContainEqual({
+    expect(kundeVollstaendigkeit({ ...complete, paymentPreference: null })).toMatchObject({vollstaendig:false,issues:[],text:"Unvollständig – Zahlungsbedingung fehlt · Büro ergänzt"});
+    expect(kundeVollstaendigkeit({ ...complete, paymentPreference: null }, { geld: true }).issues).toContainEqual({
       field: "paymentPreference",
       message: "Zahlungsbedingung fehlt",
     });
   });
 
   it("requires a contact person for a company but not for a private customer", () => {
-    expect(getOrderReadiness({ ...complete, customerType: "privat", name: "Gregor Laucht", contactPerson: null })).toEqual({
-      ready: true,
+    expect(kundeVollstaendigkeit({ ...complete, customerType: "privat", firstName: "Gregor", lastName: "Laucht" })).toMatchObject({
+      vollstaendig: true,
       issues: [],
     });
-    expect(getOrderReadiness({ ...complete, customerType: "business", contactPerson: null }).issues).toContainEqual({
-      field: "contactPerson",
+    expect(kundeVollstaendigkeit({ ...complete, customerType: "business", lastName: null }).issues).toContainEqual({
+      field: "lastName",
       message: "Ansprechpartner fehlt",
     });
   });
