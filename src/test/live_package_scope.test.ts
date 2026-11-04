@@ -33,9 +33,9 @@ const b2cAnchorMission = {
   ...b2AnchorMission,
 };
 
-describe("P44/P47 TA-B2h: exact Web-Share and canonical messages entries", () => {
+describe("P44/P47/P52 TA-B2h: exact Web-Share, messages and What is new paths", () => {
   const branch = "codex/ta-b2h";
-  const baseSha = "6ce527da70bdf5a9b6104226af7bb1cafa92864d";
+  const baseSha = "b6d94bccad812883cddaefa1d050c1506c722d8b";
   const files = ["scripts/quality/check-live-package-scope.mjs", "src/test/live_package_scope.test.ts",
     "docs/evidence/live-line/b2/TRUST_ANCHOR_B2H.json", "docs/delivery/ABGABE_TA-B2H.md"];
 
@@ -54,6 +54,15 @@ describe("P44/P47 TA-B2h: exact Web-Share and canonical messages entries", () =>
       ".github/workflows/quality.yml", "docs/project/endversion/codex/BAUPLAN.json", "supabase/migrations/20261104000000_ein3_extra.sql"]){
       expect(checkTaB2hScopeForTest({files:[...files,path],mission:b2AnchorMission,branch,baseSha}),path)
         .toContain("TA_B2H_SCOPE:" + path);
+    }
+  });
+
+  it("allows each exact P52 file but denies neighboring content, authentication and containment paths", () => {
+    for(const path of ["src/lib/server/authBootstrap.ts","src/lib/server/__tests__/authBootstrap.test.ts","src/components/layout/WasIstNeu.tsx","src/components/layout/__tests__/WasIstNeu.test.tsx","src/content/was-ist-neu.json","src/app/buchhaltung/__tests__/w2c.activeRouteContainment.test.tsx"]){
+      expect(checkSalesStageB2ScopeForTest({files:[path],mission:b2Mission,branch:"kreile/b2-ein-0"}),path).toEqual([]);
+    }
+    for(const path of ["src/content/other.json","src/components/layout/WasIstNeuOther.tsx","src/components/layout/__tests__/WasIstNeuOther.test.tsx","src/lib/server/otherBootstrap.ts","src/lib/server/__tests__/otherBootstrap.test.ts","src/app/buchhaltung/__tests__/otherContainment.test.tsx"]){
+      expect(checkSalesStageB2ScopeForTest({files:[path],mission:b2Mission,branch:"kreile/b2-ein-0"}),path).toContain("SALES_STAGE_B2_SCOPE:"+path);
     }
   });
 
