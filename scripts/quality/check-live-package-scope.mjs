@@ -235,6 +235,26 @@ const TA_B2H_ANCHOR_ALLOWLIST = Object.freeze([
   TA_B2H_RECEIPT,
   "docs/delivery/ABGABE_TA-B2H.md",
 ]);
+const TA_B2I_BRANCH = "codex/ta-b2i";
+const TA_B2I_BASE_SHA = "7c475a72a582b412a95d73224e5a94581aa7b377";
+const TA_B2I_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2I.json";
+const TA_B2I_VALUES = Object.freeze({
+  schemaVersion: 1,
+  package: "B2-EINGANG-P55-ANCHOR",
+  headBranch: TA_B2I_BRANCH,
+  mainBaseSha: TA_B2I_BASE_SHA,
+  authorizedBy: "Siglinder",
+  authorizedAt: "2026-11-04",
+  scope: "P55/P56: zwei zweite Migrationen, XML-Paketdateien und zwei PIN-Reset-Pfade",
+  probeCandidateSha: "984a6caa64a84a89d38317db1deb50faf84a57dd",
+  probeResult: "PASS",
+});
+const TA_B2I_ANCHOR_ALLOWLIST = Object.freeze([
+  "scripts/quality/check-live-package-scope.mjs",
+  "src/test/live_package_scope.test.ts",
+  TA_B2I_RECEIPT,
+  "docs/delivery/ABGABE_TA-B2I.md",
+]);
 const PR154_REBASELINE_BASE_SHA = "1fa4920d6d06b02413c8c157ae6b739507105846";
 const PR154_REBASELINE_RECEIPT = "docs/evidence/live-line/pr154/REBASELINE.json";
 const PR154_REBASELINE_VALUES = Object.freeze({
@@ -621,6 +641,10 @@ const SALES_STAGE_B2_EXACT_ALLOWLIST = Object.freeze([
   "src/modules/fundament/server/systemSettingsPort.ts",
 ]);
 const SALES_STAGE_B2_ALLOWLIST = Object.freeze([
+  "package.json",
+  "package-lock.json",
+  "src/app/actions/start.actions.ts",
+  "src/app/actions/__tests__/publicStartActions.test.ts",
   "src/app/buchhaltung/__tests__/w2c.activeRouteContainment.test.tsx",
   "src/lib/server/authBootstrap.ts",
   "src/lib/server/__tests__/authBootstrap.test.ts",
@@ -1156,6 +1180,95 @@ export function checkTaB2hScopeForTest({ files, mission, branch, baseSha }) {
   return checkTaB2hScope(files, mission, branch, baseSha);
 }
 
+function checkTaB2iScope(files, mission, branch, baseSha) {
+  const errors = [];
+  if (branch !== TA_B2I_BRANCH) errors.push(`TA_B2I_BRANCH_INVALID:${branch}`);
+  if (baseSha !== TA_B2I_BASE_SHA) errors.push(`TA_B2I_BASE_INVALID:${baseSha}:${TA_B2I_BASE_SHA}`);
+  for (const rel of files) if (!TA_B2I_ANCHOR_ALLOWLIST.includes(rel)) errors.push(`TA_B2I_SCOPE:${rel}`);
+  if (mission.active_block !== "B2" || mission.phase !== "WRITING" || mission.branch !== SALES_STAGE_B2_BRANCH
+      || mission.started_from_sha !== TA_B2_BASE_SHA || mission.desktop_due_at !== "2026-11-08"
+      || mission.tablet_mobile_due_at !== "2026-11-08" || mission.handoff_path !== "docs/delivery/ABGABE_B2.md"
+      || mission.next_block !== "B3") errors.push("TA_B2I_MISSION_INVALID");
+  return errors;
+}
+
+function checkTaB2iAnchor(root, files, mission, branch, baseSha) {
+  const errors = checkTaB2iScope(files, mission, branch, baseSha);
+  for (const rel of TA_B2I_ANCHOR_ALLOWLIST) if (!files.includes(rel)) errors.push(`TA_B2I_REQUIRED_FILE_MISSING:${rel}`);
+  let receipt;
+  try { receipt = JSON.parse(readFileSync(path.join(root, TA_B2I_RECEIPT), "utf8")); }
+  catch { return [...errors, "TA_B2I_RECEIPT_UNREADABLE"]; }
+  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2I_VALUES).sort())) errors.push("TA_B2I_RECEIPT_SCHEMA");
+  for (const [key, value] of Object.entries(TA_B2I_VALUES)) if (receipt[key] !== value) errors.push(`TA_B2I_RECEIPT_VALUE:${key}`);
+  return errors;
+}
+
+export function checkTaB2iScopeForTest({ files, mission, branch, baseSha }) {
+  return checkTaB2iScope(files, mission, branch, baseSha);
+}
+
+export function checkB2iParserChangesForTest({ beforePackage, afterPackage, beforeLock, afterLock }) {
+  const errors = [];
+  const parse = (value) => typeof value === "string" ? JSON.parse(value) : value;
+  try {
+    const oldPkg = structuredClone(parse(beforePackage));
+    const newPkg = structuredClone(parse(afterPackage));
+    const oldLock = structuredClone(parse(beforeLock));
+    const newLock = structuredClone(parse(afterLock));
+    const version = newPkg.dependencies?.["fast-xml-parser"];
+    if (typeof version !== "string" || !/^\d+\.\d+\.\d+$/.test(version)) errors.push("B2I_XML_VERSION_NOT_PINNED");
+    if (oldPkg.dependencies) delete oldPkg.dependencies["fast-xml-parser"];
+    if (newPkg.dependencies) delete newPkg.dependencies["fast-xml-parser"];
+    if (JSON.stringify(oldPkg) !== JSON.stringify(newPkg)) errors.push("B2I_PACKAGE_UNRELATED_CHANGE");
+    const oldPackages = oldLock.packages, newPackages = newLock.packages;
+    if (!oldPackages || !newPackages || !oldPackages[""] || !newPackages[""]) return [...errors, "B2I_LOCK_SHAPE_INVALID"];
+    delete oldLock.packages; delete newLock.packages;
+    if (JSON.stringify(oldLock) !== JSON.stringify(newLock)) errors.push("B2I_LOCK_METADATA_CHANGED");
+    const oldRoot = structuredClone(oldPackages[""]), newRoot = structuredClone(newPackages[""]);
+    if (newRoot.dependencies?.["fast-xml-parser"] !== version) errors.push("B2I_LOCK_VERSION_MISMATCH");
+    if (oldRoot.dependencies) delete oldRoot.dependencies["fast-xml-parser"];
+    if (newRoot.dependencies) delete newRoot.dependencies["fast-xml-parser"];
+    if (JSON.stringify(oldRoot) !== JSON.stringify(newRoot)) errors.push("B2I_LOCK_ROOT_UNRELATED_CHANGE");
+    const first = "node_modules/fast-xml-parser";
+    if (!newPackages[first] || newPackages[first].version !== version) return [...errors, "B2I_LOCK_PARSER_MISSING"];
+    const reachable = new Set();
+    const pending = [first];
+    while (pending.length) {
+      const current = pending.pop();
+      if (reachable.has(current)) continue;
+      reachable.add(current);
+      const meta = newPackages[current];
+      if (!meta) return [...errors, `B2I_LOCK_DEPENDENCY_MISSING:${current}`];
+      const required = meta.dependencies ?? {};
+      for (const name of Object.keys({ ...required, ...(meta.optionalDependencies ?? {}) })) {
+        let parent = current;
+        let found = null;
+        for (;;) {
+          const candidate = `${parent}/node_modules/${name}`;
+          if (newPackages[candidate]) { found = candidate; break; }
+          const index = parent.lastIndexOf("/node_modules/");
+          if (index < 0) break;
+          parent = parent.slice(0, index);
+        }
+        if (!found && newPackages[`node_modules/${name}`]) found = `node_modules/${name}`;
+        if (found) pending.push(found);
+        else if (Object.hasOwn(required, name)) errors.push(`B2I_LOCK_DEPENDENCY_MISSING:${name}`);
+      }
+    }
+    for (const name of new Set([...Object.keys(oldPackages), ...Object.keys(newPackages)])) {
+      if (name === "") continue;
+      const before = oldPackages[name], after = newPackages[name];
+      if (!after) { errors.push(`B2I_LOCK_REMOVED:${name}`); continue; }
+      if (!before) { if (!reachable.has(name)) errors.push(`B2I_LOCK_UNRELATED_ADDITION:${name}`); continue; }
+      if (JSON.stringify(before) === JSON.stringify(after)) continue;
+      const a = structuredClone(before), b = structuredClone(after);
+      if (reachable.has(name)) { delete a.dev; delete b.dev; delete a.devOptional; delete b.devOptional; }
+      if (JSON.stringify(a) !== JSON.stringify(b)) errors.push(`B2I_LOCK_UNRELATED_CHANGE:${name}`);
+    }
+  } catch { errors.push("B2I_PARSER_MANIFEST_INVALID"); }
+  return errors;
+}
+
 function checkSalesStageB2Scope(files, entries, mission, branch) {
   const errors = [];
   if (branch !== SALES_STAGE_B2_BRANCH && !/^kreile\/b2-ein-(?:[0-6]|0b)$/.test(branch)) {
@@ -1168,13 +1281,16 @@ function checkSalesStageB2Scope(files, entries, mission, branch) {
     if (!covered(rel, SALES_STAGE_B2_ALLOWLIST)) errors.push(`SALES_STAGE_B2_SCOPE:${rel}`);
   }
   const migrations = entries.filter((entry) => entry.path.startsWith("supabase/migrations/"));
-  const migrationCounts = new Map();
+  const migrationFamilies = new Map();
   for (const entry of migrations) {
     const family = entry.path.match(/_(ap01_intake_item|ap_r_freitext_einheiten|b2_kunde_k1|ein[0-6])(?:_|\.sql)/)?.[1];
-    if (family) migrationCounts.set(family, (migrationCounts.get(family) ?? 0) + 1);
+    if (family) migrationFamilies.set(family, [...(migrationFamilies.get(family) ?? []), entry.path]);
   }
-  for (const count of migrationCounts.values()) {
-    if (count > 1) errors.push(`SALES_STAGE_B2_MIGRATION_COUNT:${count}`);
+  for (const [family, paths] of migrationFamilies) {
+    const exception = family === "ein2" ? /^supabase\/migrations\/\d{14}_ein2_fotoart\.sql$/
+      : family === "ein4" ? /^supabase\/migrations\/\d{14}_ein4_rechte\.sql$/ : null;
+    const allowedPair = paths.length === 2 && exception && paths.filter((rel) => exception.test(rel)).length === 1;
+    if (paths.length > 1 && !allowedPair) errors.push(`SALES_STAGE_B2_MIGRATION_COUNT:${paths.length}`);
   }
   for (const entry of migrations) {
     if (entry.status !== "A") errors.push(`SALES_STAGE_B2_MIGRATION_NOT_NEW:${entry.path}`);
@@ -1529,10 +1645,22 @@ export function checkLivePackageScope({ root, base, head, branch }) {
     if (branch === TA_B2E_BRANCH) return checkTaB2eAnchor(root, files, candidateMission, branch, baseSha);
     if (branch === TA_B2F_BRANCH) return checkTaB2fAnchor(root, files, candidateMission, branch, baseSha);
     if (branch === TA_B2H_BRANCH) return checkTaB2hAnchor(root, files, candidateMission, branch, baseSha);
+    if (branch === TA_B2I_BRANCH) return checkTaB2iAnchor(root, files, candidateMission, branch, baseSha);
     if (candidateMission.active_block !== "B2") {
       return [`SALES_STAGE_ACTIVE_BLOCK_INVALID:${candidateMission.active_block}`];
     }
-    return checkSalesStageB2Scope(files, changedEntries(root, base, head), candidateMission, branch);
+    const errors = checkSalesStageB2Scope(files, changedEntries(root, base, head), candidateMission, branch);
+    const manifestChanged = files.includes("package.json"), lockChanged = files.includes("package-lock.json");
+    if (manifestChanged !== lockChanged) errors.push("B2I_PARSER_MANIFEST_PAIR_REQUIRED");
+    if (manifestChanged && lockChanged) {
+      try {
+        errors.push(...checkB2iParserChangesForTest({
+          beforePackage: gitFile(root, base, "package.json"), afterPackage: gitFile(root, head, "package.json"),
+          beforeLock: gitFile(root, base, "package-lock.json"), afterLock: gitFile(root, head, "package-lock.json"),
+        }));
+      } catch { errors.push("B2I_PARSER_MANIFEST_UNREADABLE"); }
+    }
+    return errors;
   }
   try {
     const baseMission = parseMission(gitFile(root, base, MISSION_PATH));

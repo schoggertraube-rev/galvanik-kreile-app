@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "package": "B2-EINGANG-P55-ANCHOR",
+  "headBranch": "codex/ta-b2i",
+  "mainBaseSha": "7c475a72a582b412a95d73224e5a94581aa7b377",
+  "authorizedBy": "Siglinder",
+  "authorizedAt": "2026-11-04",
+  "scope": "P55/P56: zwei zweite Migrationen, XML-Paketdateien und zwei PIN-Reset-Pfade",
+  "probeCandidateSha": "984a6caa64a84a89d38317db1deb50faf84a57dd",
+  "probeResult": "PASS"
+}
