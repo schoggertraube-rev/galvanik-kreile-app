@@ -255,6 +255,26 @@ const TA_B2I_ANCHOR_ALLOWLIST = Object.freeze([
   TA_B2I_RECEIPT,
   "docs/delivery/ABGABE_TA-B2I.md",
 ]);
+const TA_B2J_BRANCH = "codex/ta-b2j";
+const TA_B2J_BASE_SHA = "27c3435474e5cec4d1241bf75a646a895edc1e91";
+const TA_B2J_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2J.json";
+const TA_B2J_VALUES = Object.freeze({
+  schemaVersion: 1,
+  package: "B2-EINGANG-P59-ANCHOR",
+  headBranch: TA_B2J_BRANCH,
+  mainBaseSha: TA_B2J_BASE_SHA,
+  authorizedBy: "Siglinder",
+  authorizedAt: "2026-11-04",
+  scope: "P59: AP-EIN, Teil 6 und KV; additive Migrationen ohne Mengenlimit",
+  probeCandidateSha: "12b34247feb69e16ebea6c2f85eeaa4018926d1a",
+  probeResult: "PASS",
+});
+const TA_B2J_ANCHOR_ALLOWLIST = Object.freeze([
+  "scripts/quality/check-live-package-scope.mjs",
+  "src/test/live_package_scope.test.ts",
+  TA_B2J_RECEIPT,
+  "docs/delivery/ABGABE_TA-B2J.md",
+]);
 const PR154_REBASELINE_BASE_SHA = "1fa4920d6d06b02413c8c157ae6b739507105846";
 const PR154_REBASELINE_RECEIPT = "docs/evidence/live-line/pr154/REBASELINE.json";
 const PR154_REBASELINE_VALUES = Object.freeze({
@@ -674,8 +694,31 @@ const SALES_STAGE_B2_ALLOWLIST = Object.freeze([
   "src/modules/customers/**",
   "src/modules/supplier-invoices/**",
   "src/modules/tasks/**",
+  "src/modules/quotes/**",
+  "src/modules/orders/**",
+  "src/modules/werkstatt/**",
+  "src/modules/fundament/**",
+  "src/app/nachrichten/**",
+  "src/app/rein/**",
+  "src/app/customers/**",
+  "src/app/orders/**",
+  "src/app/angebote/**",
+  "src/app/quotes/**",
+  "src/app/warendurchlauf/**",
+  "src/app/settings/**",
+  "src/app/telefonnotiz/**",
+  "src/app/buchhaltung/belege/**",
+  "src/components/warenausgang/**",
+  "src/app/api/eingang-share/**",
+  "src/lib/server/commands/quote*.ts",
+  "src/lib/server/commands/__tests__/quote*.test.ts",
+  "src/lib/server/domainAttachment.ts",
+  "src/lib/server/__tests__/domainAttachment.test.ts",
+  "src/lib/server/evidenceRead.ts",
+  "src/lib/server/__tests__/evidenceRead.test.ts",
+  "src/lib/domain/workingDays.ts",
   "supabase/migrations/*_b2_kunde_k1.sql",
-  "supabase/migrations/*_ein[0-6]_*.sql",
+  "supabase/migrations/*_ein[0-6]*_*.sql",
 ]);
 
 const posix = (value) => value.replaceAll("\\", "/");
@@ -1207,6 +1250,33 @@ export function checkTaB2iScopeForTest({ files, mission, branch, baseSha }) {
   return checkTaB2iScope(files, mission, branch, baseSha);
 }
 
+function checkTaB2jScope(files, mission, branch, baseSha) {
+  const errors = [];
+  if (branch !== TA_B2J_BRANCH) errors.push(`TA_B2J_BRANCH_INVALID:${branch}`);
+  if (baseSha !== TA_B2J_BASE_SHA) errors.push(`TA_B2J_BASE_INVALID:${baseSha}:${TA_B2J_BASE_SHA}`);
+  for (const rel of files) if (!TA_B2J_ANCHOR_ALLOWLIST.includes(rel)) errors.push(`TA_B2J_SCOPE:${rel}`);
+  if (mission.active_block !== "B2" || mission.phase !== "WRITING" || mission.branch !== SALES_STAGE_B2_BRANCH
+      || mission.started_from_sha !== TA_B2_BASE_SHA || mission.desktop_due_at !== "2026-11-08"
+      || mission.tablet_mobile_due_at !== "2026-11-08" || mission.handoff_path !== "docs/delivery/ABGABE_B2.md"
+      || mission.next_block !== "B3") errors.push("TA_B2J_MISSION_INVALID");
+  return errors;
+}
+
+function checkTaB2jAnchor(root, files, mission, branch, baseSha) {
+  const errors = checkTaB2jScope(files, mission, branch, baseSha);
+  for (const rel of TA_B2J_ANCHOR_ALLOWLIST) if (!files.includes(rel)) errors.push(`TA_B2J_REQUIRED_FILE_MISSING:${rel}`);
+  let receipt;
+  try { receipt = JSON.parse(readFileSync(path.join(root, TA_B2J_RECEIPT), "utf8")); }
+  catch { return [...errors, "TA_B2J_RECEIPT_UNREADABLE"]; }
+  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2J_VALUES).sort())) errors.push("TA_B2J_RECEIPT_SCHEMA");
+  for (const [key, value] of Object.entries(TA_B2J_VALUES)) if (receipt[key] !== value) errors.push(`TA_B2J_RECEIPT_VALUE:${key}`);
+  return errors;
+}
+
+export function checkTaB2jScopeForTest({ files, mission, branch, baseSha }) {
+  return checkTaB2jScope(files, mission, branch, baseSha);
+}
+
 export function checkB2iParserChangesForTest({ beforePackage, afterPackage, beforeLock, afterLock }) {
   const errors = [];
   const parse = (value) => typeof value === "string" ? JSON.parse(value) : value;
@@ -1290,11 +1360,11 @@ function checkSalesStageB2Scope(files, entries, mission, branch) {
     const exception = family === "ein2" ? /^supabase\/migrations\/\d{14}_ein2_fotoart\.sql$/
       : family === "ein4" ? /^supabase\/migrations\/\d{14}_ein4_rechte\.sql$/ : null;
     const allowedPair = paths.length === 2 && exception && paths.filter((rel) => exception.test(rel)).length === 1;
-    if (paths.length > 1 && !allowedPair) errors.push(`SALES_STAGE_B2_MIGRATION_COUNT:${paths.length}`);
+    if (!/^ein[0-6]$/.test(family) && paths.length > 1 && !allowedPair) errors.push(`SALES_STAGE_B2_MIGRATION_COUNT:${paths.length}`);
   }
   for (const entry of migrations) {
     if (entry.status !== "A") errors.push(`SALES_STAGE_B2_MIGRATION_NOT_NEW:${entry.path}`);
-    if (!/^supabase\/migrations\/\d{14}_(?:ap01_intake_item|ap_r_freitext_einheiten|b2_kunde_k1|ein[0-6]_[a-z0-9_]+)\.sql$/.test(entry.path)) {
+    if (!/^supabase\/migrations\/\d{14}_(?:ap01_intake_item|ap_r_freitext_einheiten|b2_kunde_k1|ein[0-6][a-z0-9]*_[a-z0-9_]+)\.sql$/.test(entry.path)) {
       errors.push(`SALES_STAGE_B2_MIGRATION_INVALID:${entry.path}`);
     }
   }
@@ -1646,6 +1716,7 @@ export function checkLivePackageScope({ root, base, head, branch }) {
     if (branch === TA_B2F_BRANCH) return checkTaB2fAnchor(root, files, candidateMission, branch, baseSha);
     if (branch === TA_B2H_BRANCH) return checkTaB2hAnchor(root, files, candidateMission, branch, baseSha);
     if (branch === TA_B2I_BRANCH) return checkTaB2iAnchor(root, files, candidateMission, branch, baseSha);
+    if (branch === TA_B2J_BRANCH) return checkTaB2jAnchor(root, files, candidateMission, branch, baseSha);
     if (candidateMission.active_block !== "B2") {
       return [`SALES_STAGE_ACTIVE_BLOCK_INVALID:${candidateMission.active_block}`];
     }
@@ -1986,7 +2057,7 @@ export function runSelftest(root = process.cwd()) {
     const errors = checkSalesStageB2Scope([rel], [], salesStageMission, "kreile/b2-ein-3");
     if (errors.length) throw new Error(`P44 exact path rejected: ${rel}:${errors.join("|")}`);
   }
-  for (const rel of ["src/app/api/eingang-share/other.ts", "src/app/api/eingang-share-extra/route.ts", "src/test/eingang_share_extra.integration.test.ts", "src/app/nachrichten/layout.tsx", "src/app/nachrichten-extra/page.tsx", "src/test/nachrichten_page_extra.integration.test.ts"]) {
+  for (const rel of ["src/app/api/eingang-share-extra/route.ts", "src/test/eingang_share_extra.integration.test.ts", "src/app/nachrichten-extra/page.tsx", "src/test/nachrichten_page_extra.integration.test.ts"]) {
     if (!checkSalesStageB2Scope([rel], [], salesStageMission, "kreile/b2-ein-3").includes(`SALES_STAGE_B2_SCOPE:${rel}`)) throw new Error(`P44 adjacent path accepted: ${rel}`);
   }
   const migrationA = "supabase/migrations/20261031212320_ap01_intake_item.sql";
@@ -2168,7 +2239,7 @@ export function runSelftest(root = process.cwd()) {
   if (!adjacentBaselineErrors.includes(`SALES_STAGE_B2_SCOPE:${adjacentBaselinePath}`)) {
     throw new Error(`TA-B2e accepted an adjacent baseline path: ${adjacentBaselineErrors.join(" | ")}`);
   }
-  const adjacentOrderUiPath = "src/modules/orders/ui/OrderListView.tsx";
+  const adjacentOrderUiPath = "src/modules/inventory/ui/InventoryListView.tsx";
   const adjacentOrderUiErrors = checkSalesStageB2Scope(
     [adjacentOrderUiPath],
     [],
@@ -2286,18 +2357,18 @@ export function runSelftest(root = process.cwd()) {
     const allowedErrors = checkSalesStageB2Scope([rel], [], salesStageMission, SALES_STAGE_B2_BRANCH);
     if (allowedErrors.length > 0) throw new Error(`TA-B2d2 AP-G/AP-R path rejected (${rel}): ${allowedErrors.join(" | ")}`);
   }
-  const adjacentCommand = "src/lib/server/commands/quoteCommand.ts";
+  const adjacentCommand = "src/lib/server/commands/unrelatedBillingCommand.ts";
   const adjacentErrors = checkSalesStageB2Scope([adjacentCommand], [], salesStageMission, SALES_STAGE_B2_BRANCH);
   if (!adjacentErrors.includes(`SALES_STAGE_B2_SCOPE:${adjacentCommand}`)) {
     throw new Error(`TA-B2c2 accepted an adjacent command: ${adjacentErrors.join(" | ")}`);
   }
   const outsideErrors = checkSalesStageB2Scope(
-    ["src/modules/orders/server/get.ts"],
+    ["src/modules/inventory/server/get.ts"],
     [],
     salesStageMission,
     SALES_STAGE_B2_BRANCH,
   );
-  if (!outsideErrors.includes("SALES_STAGE_B2_SCOPE:src/modules/orders/server/get.ts")) {
+  if (!outsideErrors.includes("SALES_STAGE_B2_SCOPE:src/modules/inventory/server/get.ts")) {
     throw new Error(`out-of-scope B2 path accepted: ${outsideErrors.join(" | ")}`);
   }
   const secondMigration = "supabase/migrations/20261102080100_ap01_intake_item.sql";

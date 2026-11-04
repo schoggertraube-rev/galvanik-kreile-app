@@ -11,6 +11,7 @@ import {
   checkTaB2fScopeForTest,
   checkTaB2hScopeForTest,
   checkTaB2iScopeForTest,
+  checkTaB2jScopeForTest,
   checkB2iParserChangesForTest,
   checkTaB2fBaselineChangeForTest,
   runSelftest,
@@ -35,6 +36,34 @@ const b2cAnchorMission = {
   ...b2AnchorMission,
 };
 
+describe("P59 TA-B2j: AP-EIN paths and additive migrations", () => {
+  const branch = "codex/ta-b2j";
+  const baseSha = "27c3435474e5cec4d1241bf75a646a895edc1e91";
+  const files = ["scripts/quality/check-live-package-scope.mjs", "src/test/live_package_scope.test.ts",
+    "docs/evidence/live-line/b2/TRUST_ANCHOR_B2J.json", "docs/delivery/ABGABE_TA-B2J.md"];
+  it("restricts the anchor to its four files, exact branch and main base", () => {
+    expect(checkTaB2jScopeForTest({files, mission:b2AnchorMission, branch, baseSha})).toEqual([]);
+    expect(checkTaB2jScopeForTest({files:[...files,"src/app/page.tsx"], mission:b2AnchorMission, branch, baseSha})).toContain("TA_B2J_SCOPE:src/app/page.tsx");
+    expect(checkTaB2jScopeForTest({files, mission:b2AnchorMission, branch:"codex/other", baseSha})).toContain("TA_B2J_BRANCH_INVALID:codex/other");
+    expect(checkTaB2jScopeForTest({files, mission:b2AnchorMission, branch, baseSha:"wrong"})).toContain(`TA_B2J_BASE_INVALID:wrong:${baseSha}`);
+  });
+  it("covers the inventoried modules, routes and original attachment and quote readers", () => {
+    const allowed = ["src/modules/quotes/server/quoteReads.ts", "src/modules/orders/ui/OrderCardView.tsx", "src/modules/werkstatt/ui/WerkstattView.tsx",
+      "src/modules/fundament/server/systemSettingsPort.ts", "src/app/nachrichten/page.tsx", "src/app/rein/page.tsx", "src/app/customers/page.tsx", "src/app/orders/page.tsx", "src/app/angebote/page.tsx", "src/app/quotes/page.tsx", "src/app/warendurchlauf/page.tsx", "src/app/settings/page.tsx", "src/app/telefonnotiz/layout.tsx", "src/app/buchhaltung/belege/BelegeClient.tsx", "src/components/warenausgang/WarenausgangQueue.tsx", "src/app/api/eingang-share/route.ts",
+      "src/lib/server/commands/quoteCommand.ts", "src/lib/server/commands/__tests__/quoteCommand.test.ts", "src/lib/server/domainAttachment.ts", "src/lib/server/__tests__/domainAttachment.test.ts", "src/lib/server/evidenceRead.ts", "src/lib/server/__tests__/evidenceRead.test.ts", "src/lib/domain/workingDays.ts"];
+    for (const file of allowed) expect(checkSalesStageB2ScopeForTest({files:[file], mission:b2Mission, branch:"kreile/b2-ein-3"}), file).toEqual([]);
+    for (const file of ["src/modules/inventory/public.ts", "src/lib/server/other.ts", "src/app/actions/start.other.ts", ".github/workflows/quality.yml"])
+      expect(checkSalesStageB2ScopeForTest({files:[file], mission:b2Mission, branch:"kreile/b2-ein-3"}), file).toContain(`SALES_STAGE_B2_SCOPE:${file}`);
+  });
+  it("permits multiple new files but rejects modified or invalid migrations", () => {
+    const files = ["supabase/migrations/20261104000000_ein3_a.sql", "supabase/migrations/20261104000001_ein3_b.sql", "supabase/migrations/20261104000002_ein3c_original.sql"];
+    expect(checkSalesStageB2ScopeForTest({files, entries:files.map(path=>({status:"A",path})), mission:b2Mission, branch:"kreile/b2-ein-3"})).toEqual([]);
+    expect(checkSalesStageB2ScopeForTest({files:[files[0]],entries:[{status:"M",path:files[0]}],mission:b2Mission,branch:"kreile/b2-ein-3"})).toContain(`SALES_STAGE_B2_MIGRATION_NOT_NEW:${files[0]}`);
+    const invalid = "supabase/migrations/20261104000000_ein7_other.sql";
+    expect(checkSalesStageB2ScopeForTest({files:[invalid],entries:[{status:"A",path:invalid}],mission:b2Mission,branch:"kreile/b2-ein-3"})).toContain(`SALES_STAGE_B2_MIGRATION_INVALID:${invalid}`);
+  });
+});
+
 describe("P55 TA-B2i: only the specified migration pairs and XML dependency", () => {
   const branch = "codex/ta-b2i";
   const baseSha = "7c475a72a582b412a95d73224e5a94581aa7b377";
@@ -49,13 +78,13 @@ describe("P55 TA-B2i: only the specified migration pairs and XML dependency", ()
     expect(checkTaB2iScopeForTest({ files, mission: b2AnchorMission, branch: "codex/other", baseSha })).toContain("TA_B2I_BRANCH_INVALID:codex/other");
     expect(checkTaB2iScopeForTest({ files, mission: b2AnchorMission, branch, baseSha: "wrong" })).toContain(`TA_B2I_BASE_INVALID:wrong:${baseSha}`);
   });
-  it("accepts only the designated extra migration for parts two and four", () => {
+  it("accepts additive AP-EIN migrations under the later P59 authorization", () => {
     const m = (name: string) => `supabase/migrations/20261104000000_${name}.sql`;
     expect(scope([m("ein2_main"), m("ein2_fotoart"), m("ein4_main"), m("ein4_rechte")])).toEqual([]);
-    expect(scope([m("ein2_main"), m("ein2_other")])).toContain("SALES_STAGE_B2_MIGRATION_COUNT:2");
-    expect(scope([m("ein4_main"), m("ein4_other")])).toContain("SALES_STAGE_B2_MIGRATION_COUNT:2");
-    expect(scope([m("ein4_main"), m("ein4_rechte"), m("ein4_third")])).toContain("SALES_STAGE_B2_MIGRATION_COUNT:3");
-    expect(scope([m("ein3_main"), m("ein3_other")])).toContain("SALES_STAGE_B2_MIGRATION_COUNT:2");
+    expect(scope([m("ein2_main"), m("ein2_other")])).toEqual([]);
+    expect(scope([m("ein4_main"), m("ein4_other")])).toEqual([]);
+    expect(scope([m("ein4_main"), m("ein4_rechte"), m("ein4_third")])).toEqual([]);
+    expect(scope([m("ein3_main"), m("ein3_other")])).toEqual([]);
   });
   it("allows exactly the two P56 PIN-reset paths without neighboring paths", () => {
     for (const rel of ["src/app/actions/start.actions.ts", "src/app/actions/__tests__/publicStartActions.test.ts"]) expect(scope([rel])).toEqual([]);
@@ -109,11 +138,11 @@ describe("P44/P47/P52 TA-B2h: exact Web-Share, messages and What is new paths", 
     }
   });
 
-  it("adds exactly both routes and their Replay integration tests, with no adjacent glob", () => {
+  it("allows the P59 route directories while rejecting neighboring routes and tests", () => {
     for(const path of ["src/app/api/eingang-share/route.ts", "src/test/eingang_share.integration.test.ts", "src/app/nachrichten/page.tsx", "src/test/nachrichten_page.integration.test.ts"]){
       expect(checkSalesStageB2ScopeForTest({files:[path],mission:b2Mission,branch:"kreile/b2-ein-3"}),path).toEqual([]);
     }
-    for(const path of ["src/app/api/eingang-share/other.ts", "src/app/api/eingang-share-extra/route.ts", "src/test/eingang_share_extra.integration.test.ts", "src/app/nachrichten/layout.tsx", "src/app/nachrichten-extra/page.tsx", "src/test/nachrichten_page_extra.integration.test.ts"]){
+    for(const path of ["src/app/api/eingang-share-extra/route.ts", "src/test/eingang_share_extra.integration.test.ts", "src/app/nachrichten-extra/page.tsx", "src/test/nachrichten_page_extra.integration.test.ts"]){
       expect(checkSalesStageB2ScopeForTest({files:[path],mission:b2Mission,branch:"kreile/b2-ein-3"}),path)
         .toContain("SALES_STAGE_B2_SCOPE:" + path);
     }
@@ -381,7 +410,7 @@ describe("Kreile live package scope", () => {
     ]) {
       expect(checkSalesStageB2ScopeForTest({ files: [path], mission: b2Mission, branch: "kreile/b2-eingang" }), path).toEqual([]);
     }
-    const adjacent = "src/lib/server/commands/quoteCommand.ts";
+    const adjacent = "src/lib/server/commands/unrelatedBillingCommand.ts";
     expect(checkSalesStageB2ScopeForTest({ files: [adjacent], mission: b2Mission, branch: "kreile/b2-eingang" }))
       .toContain(`SALES_STAGE_B2_SCOPE:${adjacent}`);
   });
@@ -485,7 +514,7 @@ describe("Kreile live package scope", () => {
       mission: b2Mission,
       branch: "kreile/b2-eingang",
     })).toContain(`SALES_STAGE_B2_SCOPE:${adjacentBaselinePath}`);
-    const adjacentOrderUiPath = "src/modules/orders/ui/OrderListView.tsx";
+    const adjacentOrderUiPath = "src/modules/inventory/ui/InventoryListView.tsx";
     expect(checkSalesStageB2ScopeForTest({
       files: [adjacentOrderUiPath],
       mission: b2Mission,
@@ -534,7 +563,11 @@ describe("Kreile live package scope", () => {
 ]) {
       expect(checkSalesStageB2ScopeForTest({files:[path],mission:b2Mission,branch:"kreile/b2-ein-3"}),path).toEqual([]);
       const adjacent = path.replace(/\.tsx?$/, ".outside.ts").replace(/\.json$/, ".outside.json");
-      expect(checkSalesStageB2ScopeForTest({files:[adjacent],mission:b2Mission,branch:"kreile/b2-ein-3"}),adjacent).toContain(`SALES_STAGE_B2_SCOPE:${adjacent}`);
+      if (path.startsWith("src/app/warendurchlauf/") || path.startsWith("src/modules/quotes/") || path.startsWith("src/modules/fundament/")) {
+        expect(checkSalesStageB2ScopeForTest({files:[adjacent],mission:b2Mission,branch:"kreile/b2-ein-3"}),adjacent).toEqual([]);
+      } else {
+        expect(checkSalesStageB2ScopeForTest({files:[adjacent],mission:b2Mission,branch:"kreile/b2-ein-3"}),adjacent).toContain(`SALES_STAGE_B2_SCOPE:${adjacent}`);
+      }
     }
     expect(checkSalesStageB2ScopeForTest({files:["eslint.config.mjs"],mission:b2Mission,branch:"kreile/b2-ein-3"})).toContain("SALES_STAGE_B2_SCOPE:eslint.config.mjs");
   });
@@ -633,13 +666,13 @@ describe("Kreile live package scope", () => {
     }
   });
 
-  it("accepts stacked parts but rejects a second migration in every individual part", () => {
+  it("accepts stacked parts and multiple new migrations in every individual part", () => {
     const files = ["supabase/migrations/20261103020000_b2_kunde_k1.sql",
       ...[0, 1, 2, 3, 4, 5, 6].map(part => "supabase/migrations/20261103030000_ein" + part + "_teil.sql")];
     expect(checkSalesStageB2ScopeForTest({files,entries:files.map(path=>({status:"A",path})),mission:b2Mission,branch:"kreile/b2-ein-5"})).toEqual([]);
     for (const part of [0, 1, 2, 3, 4, 5, 6]) {
       const duplicate = ["supabase/migrations/20261103030001_ein" + part + "_a.sql", "supabase/migrations/20261103030002_ein" + part + "_b.sql"];
-      expect(checkSalesStageB2ScopeForTest({files:duplicate,entries:duplicate.map(path=>({status:"A",path})),mission:b2Mission,branch:"kreile/b2-ein-5"})).toContain("SALES_STAGE_B2_MIGRATION_COUNT:2");
+      expect(checkSalesStageB2ScopeForTest({files:duplicate,entries:duplicate.map(path=>({status:"A",path})),mission:b2Mission,branch:"kreile/b2-ein-5"})).toEqual([]);
     }
   });
 
@@ -684,12 +717,12 @@ describe("Kreile live package scope", () => {
 
   it("rejects paths outside B2 and the former B1 branch", () => {
     expect(checkSalesStageB2ScopeForTest({
-      files: ["src/modules/orders/server/get.ts"],
+      files: ["src/modules/inventory/server/get.ts"],
       mission: b2Mission,
       branch: "kreile/b1-shell",
     })).toEqual(expect.arrayContaining([
       "SALES_STAGE_BRANCH_INVALID:kreile/b1-shell",
-      "SALES_STAGE_B2_SCOPE:src/modules/orders/server/get.ts",
+      "SALES_STAGE_B2_SCOPE:src/modules/inventory/server/get.ts",
     ]));
   });
 
