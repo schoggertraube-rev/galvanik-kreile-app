@@ -1439,14 +1439,13 @@ const cases = [
   }
 ] as unknown as FlowCase[];
 
-test.beforeEach(async () => { await prepareGeneratedSeed(); });
-
 test.describe("BAUPLAN Wege · rechnungein", () => {
   for (const flowCase of cases) {
     const packageTag = flowCase.paket ? `@${flowCase.paket}` : "@UNASSIGNED";
     test(`${flowCase.id || "OFFEN"} ${packageTag} · ${flowCase.titel || "noch nicht beschrieben"}`, async ({ page }) => {
       const red = expectedRed[flowCase.id as keyof typeof expectedRed];
       test.fail(Boolean(red), red ? `${red.paket}: ${red.grund}` : undefined);
+      await prepareGeneratedSeed(flowCase);
       await runGeneratedFlowCase(page, flowCase);
     });
   }

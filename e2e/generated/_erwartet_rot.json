@@ -1,4 +1,8 @@
 {
+  "E32": {
+    "paket": "AP-EIN-2",
+    "grund": "P50: Erfolg-Grün der erkannten Eingaben wird mit AP-EIN-2 geliefert"
+  },
   "E04": {
     "paket": "AP-EIN-2",
     "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
@@ -205,7 +209,7 @@
   },
   "TA14": {
     "paket": "AP-EIN-2",
-    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
+    "grund": "P50: sichtbarer Fehler beim Laden des Terminvorschlags gehört zu AP-EIN-2"
   },
   "TA15": {
     "paket": "AP-EIN-2",
@@ -1028,10 +1032,6 @@
     "grund": "termineinst außerhalb der 13 Paket-Seiten; Modell-Zuordnung AP-EIN"
   },
   "T05b": {
-    "paket": "AP-EIN",
-    "grund": "termineinst außerhalb der 13 Paket-Seiten; Modell-Zuordnung AP-EIN"
-  },
-  "T05c": {
     "paket": "AP-EIN",
     "grund": "termineinst außerhalb der 13 Paket-Seiten; Modell-Zuordnung AP-EIN"
   },

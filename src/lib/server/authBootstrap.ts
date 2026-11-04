@@ -1,4 +1,5 @@
 import "server-only";
+import {createPinLoginHandle} from './pinLoginHandle';
 
 import type {
   AccessArea,
@@ -12,6 +13,8 @@ import {
 } from "@/lib/server/authorization";
 
 export type AuthBootstrapUser = {
+  /** Public opaque login handle, reused only for this login's local reading marker. */
+  loginHandle?: string;
   role: AppRole;
   displayName: string;
   areas: readonly AccessArea[];
@@ -34,7 +37,8 @@ export type AuthBootstrapState =
 /**
  * Browser-minimaler Bootstrap. Derselbe serverseitige Chokepoint validiert
  * Sitzung, aktive DB-Nutzerzeile und Rolle; interne IDs verlassen den
- * Server dabei nicht. Rolle, Anzeigename und Faehigkeiten stammen aus genau
+ * Server dabei nicht. Der bereits öffentliche PIN-Login-Handle dient nur als
+ * lokaler Lesemarker, nie als Berechtigung. Rolle, Anzeigename und Faehigkeiten stammen aus genau
  * einer Aufloesung und werden deshalb atomar ausgeliefert.
  */
 export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
@@ -44,6 +48,7 @@ export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
     return {
       status: "authenticated",
       user: {
+        loginHandle:createPinLoginHandle(result.data.userId),
         role: result.data.role,
         displayName: result.data.displayName,
         areas: [...(result.data.areas ?? [])],
