@@ -1,10 +1,8 @@
 import type { Metadata, Viewport } from "next";
-import { Suspense } from "react";
+import { Suspense, type CSSProperties } from "react";
 import { fraunces, geistMono, inter } from "./fonts/localFonts";
 import "./globals.css";
-import "../styles/mock/mock-kreile-rolf-home.css";
-import "../styles/mock/mock-kreile-phillip-home.css";
-import "../styles/mock/mock-kreile-compat.css";
+import "../../docs/project/endversion/ui/endversion_design.css";
 
 export const viewport: Viewport = {
   themeColor: "#091223",
@@ -53,8 +51,9 @@ export default async function RootLayout({
     <html
       lang="de"
       className={`${fraunces.variable} ${inter.variable} ${geistMono.variable} h-full antialiased`}
+      style={{ "--sans": inter.style.fontFamily, "--serif": fraunces.style.fontFamily } as CSSProperties}
     >
-      <body>
+      <body className="h-full">
         <ServiceWorkerRegister />
         <ClientActionErrorBanner />
         <Suspense fallback={null}>

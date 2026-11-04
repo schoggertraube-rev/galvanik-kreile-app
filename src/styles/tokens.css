@@ -1,16 +1,27 @@
-/* Kompatibilitätsnamen für bestehenden Produktcode; Werte kommen ausschließlich aus V1.1. */
+/* Compatibility names resolve to the single Endversion token source. */
 :root {
-  /* Sichtbare V1.1-Flaechenwahrheit. Mock-Shells erben diese Werte und liefern keine eigenen Flaechenwerte. */
-  --ground:#F4F2EE;--surface:#FFFFFF;--line:#E4E0D8;--rand:#D5D0C7;--flaeche:#F7F6F3;--scrim:rgba(18,22,31,.55);
-  --bg-app:var(--ground);--bg-app-soft:var(--flaeche);--surface-card:var(--surface);
-  --surface-tinted:var(--flaeche);--surface-tinted-soft:var(--ground-rail);
-  --gold-600:var(--amber);--gold-500:var(--cream-500);--gold-100:var(--cream-300);
-  --accent-orange:var(--warn);--accent-orange-soft:var(--warn-bg);
-  --success-green:var(--succ);--success-green-soft:var(--succ-bg);--danger-red:var(--ral);
-  --neutral-gray-300:var(--rand);--neutral-gray-100:var(--line);--text-muted:var(--navy-400);
-  --font-display:var(--serif);--font-body:var(--sans);--font-mono:"JetBrains Mono",monospace;
-  --radius-sm:var(--r-s);--radius-md:var(--r-kachel);--radius-lg:20px;--radius-xl:28px;
-  --shadow-card:var(--sh-sm);--shadow-elevated:var(--sh-md);
-  --space-1:var(--a-1);--space-2:var(--a-3);--space-3:var(--a-5);--space-4:var(--a-7);
-  --space-5:var(--a-10);--space-6:32px;--space-7:48px;--space-8:64px;
+  --bg-app: var(--ground);
+  --bg-app-soft: var(--flaeche);
+  --surface-card: var(--surface);
+  --surface-tinted: var(--flaeche);
+  --surface-tinted-soft: var(--ground-rail);
+  --gold-600: var(--amber);
+  --gold-500: var(--cream-500);
+  --gold-100: var(--cream-300);
+  --accent-orange: var(--warn);
+  --accent-orange-soft: var(--warn-bg);
+  --success-green: var(--succ);
+  --success-green-soft: var(--succ-bg);
+  --danger-red: var(--ral);
+  --neutral-gray-300: var(--rand);
+  --neutral-gray-100: var(--line);
+  --text-muted: var(--navy-400);
+  --font-display: var(--serif);
+  --font-body: var(--sans);
+  --radius-sm: var(--r-s);
+  --radius-md: var(--r-m);
+  --radius-lg: var(--r-l);
+  --radius-xl: var(--r-dialog);
+  --shadow-card: var(--sh-sm);
+  --shadow-elevated: var(--sh-md);
 }

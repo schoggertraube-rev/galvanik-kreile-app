@@ -20,18 +20,15 @@ import styles from "./TargetShell.module.css";
 import {WasIstNeu} from './WasIstNeu';
 
 function readDevice(): Geraet {
-  if (window.innerWidth <= 699) return "handy";
-  if (window.innerWidth <= 1399 && window.matchMedia?.("(pointer: coarse)").matches) return "tablet";
+  if (window.innerWidth < 768) return "handy";
+  if (window.innerWidth < 1280) return "tablet";
   return "desktop";
 }
 
 function subscribeDevice(onChange: () => void) {
-  const coarse = window.matchMedia?.("(pointer: coarse)");
   window.addEventListener("resize", onChange);
-  coarse?.addEventListener("change", onChange);
   return () => {
     window.removeEventListener("resize", onChange);
-    coarse?.removeEventListener("change", onChange);
   };
 }
 
@@ -138,9 +135,9 @@ export function KreileAppShell({ children, globalCreate,loginHandle }: { childre
             {children}
           </AppShell>
           <EntityOverlayStack />
+          {globalCreate}
         </KrApp>
       </div>
-      {globalCreate}
     </>
   );
 }

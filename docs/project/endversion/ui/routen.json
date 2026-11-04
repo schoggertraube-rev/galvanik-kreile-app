@@ -1,0 +1,239 @@
+{
+  "login": {
+    "pfad": "/start",
+    "schritte": [
+      [
+        "click",
+        "[data-testid^=\"pin-user-card-\"]:has-text(\"{rolle_person}\")"
+      ],
+      [
+        "click",
+        "[data-spec-id=\"login.anmelden\"] button:text-is(\"{passwort_ziffer_1}\")"
+      ],
+      [
+        "click",
+        "[data-spec-id=\"login.anmelden\"] button:text-is(\"{passwort_ziffer_2}\")"
+      ],
+      [
+        "click",
+        "[data-spec-id=\"login.anmelden\"] button:text-is(\"{passwort_ziffer_3}\")"
+      ],
+      [
+        "click",
+        "[data-spec-id=\"login.anmelden\"] button:text-is(\"{passwort_ziffer_4}\")"
+      ],
+      [
+        "wait",
+        "1500"
+      ]
+    ]
+  },
+  "rollen": {
+    "meister": {
+      "env": "MEISTER"
+    },
+    "werkstatt": {
+      "env": "WERKSTATT"
+    }
+  },
+  "seiten": {
+    "tag": "/",
+    "werkstatt": "/warendurchlauf",
+    "auftraege": "/orders",
+    "kunden": "/customers",
+    "rein": {
+      "pfad": "/",
+      "schritte": [
+        [
+          "click",
+          "[data-spec-id=\"navigation.plus\"]"
+        ]
+      ]
+    },
+    "rein#eingang": {
+      "pfad": null,
+      "grund": "Echter Aufruf folgt mit AP-EIN-2; Ausgangsbericht weist die fehlende Route gelb aus."
+    },
+    "rein#eingangsfoto": {
+      "pfad": null,
+      "grund": "Echter Aufruf folgt mit AP-EIN-2; Ausgangsbericht weist die fehlende Route gelb aus."
+    },
+    "rein#visitenkarte": {
+      "pfad": null,
+      "grund": "Echter Aufruf folgt mit AP-EIN-2; Ausgangsbericht weist die fehlende Route gelb aus."
+    },
+    "rein#datei": {
+      "pfad": null,
+      "grund": "Echter Aufruf folgt mit AP-EIN-2; Ausgangsbericht weist die fehlende Route gelb aus."
+    },
+    "rein#uebergabe": {
+      "pfad": null,
+      "grund": "Echter Aufruf folgt mit AP-EIN-2; Ausgangsbericht weist die fehlende Route gelb aus."
+    },
+    "eingang": {
+      "pfad": "/",
+      "schritte": [
+        [
+          "click",
+          "[data-spec-id=\"navigation.plus\"]"
+        ],
+        [
+          "click",
+          "[data-spec-id=\"rein.auftrag-erfassen\"]"
+        ]
+      ]
+    },
+    "kundeneu": {
+      "pfad": "/",
+      "schritte": [
+        [
+          "click",
+          "[data-spec-id=\"navigation.plus\"]"
+        ],
+        [
+          "click",
+          "[data-spec-id=\"rein.kunde-anlegen\"]"
+        ]
+      ]
+    },
+    "kundeneu#lieferant": {
+      "pfad": null,
+      "grund": "Echter Aufruf folgt mit AP-EIN-1; Ausgangsbericht weist die fehlende Route gelb aus."
+    },
+    "kundebearbeiten": {
+      "pfad": "/customers",
+      "schritte": [
+        [
+          "click",
+          "main button.kr-zeile >> nth=0"
+        ],
+        [
+          "click",
+          "button:text-is(\"Bearbeiten\") >> nth=0"
+        ]
+      ]
+    },
+    "entwurf": {
+      "pfad": "/",
+      "schritte": [
+        [
+          "click",
+          "[data-spec-id=\"navigation.plus\"]"
+        ],
+        [
+          "click",
+          "[data-spec-id=\"rein.auftrag-erfassen\"]"
+        ],
+        [
+          "fill",
+          "[data-spec-id=\"eingang.erfassen-text\"]",
+          "Sichtprüfung: ungespeicherte Notiz"
+        ],
+        [
+          "press",
+          "Escape"
+        ]
+      ]
+    },
+    "ware": {
+      "pfad": null,
+      "grund": "Echter Aufruf folgt mit AP-EIN-3; Ausgangsbericht weist die fehlende Route gelb aus."
+    },
+    "mailein": {
+      "pfad": null,
+      "grund": "Echter Aufruf folgt mit AP-EIN-4; Ausgangsbericht weist die fehlende Route gelb aus."
+    },
+    "mailein#kein": {
+      "pfad": null,
+      "grund": "Echter Aufruf folgt mit AP-EIN-4; Ausgangsbericht weist die fehlende Route gelb aus."
+    },
+    "mailein#teilen": {
+      "pfad": null,
+      "grund": "Echter Aufruf folgt mit AP-EIN-4; Ausgangsbericht weist die fehlende Route gelb aus."
+    },
+    "rechnungein": {
+      "pfad": null,
+      "grund": "Echter Aufruf folgt mit AP-EIN-5; Ausgangsbericht weist die fehlende Route gelb aus."
+    },
+    "rechnungein#bezahlt": {
+      "pfad": null,
+      "grund": "Echter Aufruf folgt mit AP-EIN-5; Ausgangsbericht weist die fehlende Route gelb aus."
+    },
+    "original": {
+      "pfad": null,
+      "grund": "Echter Aufruf folgt mit AP-EIN-3; Ausgangsbericht weist die fehlende Route gelb aus."
+    },
+    "nachrichten": {
+      "pfad": null,
+      "grund": "Echter Aufruf folgt mit AP-EIN-4; Ausgangsbericht weist die fehlende Route gelb aus."
+    },
+    "aufgabe": {
+      "pfad": null,
+      "grund": "Echter Aufruf folgt mit AP-EIN-4; Ausgangsbericht weist die fehlende Route gelb aus."
+    },
+    "aufgabe#rueckruf": {
+      "pfad": null,
+      "grund": "Echter Aufruf folgt mit AP-EIN-4; Ausgangsbericht weist die fehlende Route gelb aus."
+    },
+    "aufgabe#frist": {
+      "pfad": null,
+      "grund": "Echter Aufruf folgt mit AP-EIN-4; Ausgangsbericht weist die fehlende Route gelb aus."
+    },
+    "aufgabe#aufgabe": {
+      "pfad": null,
+      "grund": "Echter Aufruf folgt mit AP-EIN-4; Ausgangsbericht weist die fehlende Route gelb aus."
+    },
+    "aufgabe#rechnung": {
+      "pfad": null,
+      "grund": "Echter Aufruf folgt mit AP-EIN-4; Ausgangsbericht weist die fehlende Route gelb aus."
+    },
+    "anliegenwahl": {
+      "pfad": null,
+      "grund": "Echter Aufruf folgt mit AP-EIN-2; Ausgangsbericht weist die fehlende Route gelb aus."
+    },
+    "reklamation": {
+      "pfad": null,
+      "grund": "Echter Aufruf folgt mit AP-EIN-4; Ausgangsbericht weist die fehlende Route gelb aus."
+    },
+    "reklamation#aufnehmen": {
+      "pfad": null,
+      "grund": "Echter Aufruf folgt mit AP-EIN-4; Ausgangsbericht weist die fehlende Route gelb aus."
+    },
+    "auftrag": {
+      "pfad": "/orders",
+      "schritte": [
+        [
+          "click",
+          "main button.kr-zeile >> nth=0"
+        ]
+      ]
+    },
+    "teil": {
+      "pfad": null,
+      "grund": "Aufruf für bestehenden Dialog wird vor seiner Sichtabnahme über die echte App ermittelt; kein Ersatzpfad."
+    },
+    "fertig": {
+      "pfad": null,
+      "grund": "Aufruf für bestehenden Dialog wird vor seiner Sichtabnahme über die echte App ermittelt; kein Ersatzpfad."
+    },
+    "mehrarbeit": {
+      "pfad": null,
+      "grund": "Aufruf für bestehenden Dialog wird vor seiner Sichtabnahme über die echte App ermittelt; kein Ersatzpfad."
+    },
+    "rauspruefen": {
+      "pfad": null,
+      "grund": "Echter Aufruf folgt mit AP-EIN-6; Ausgangsbericht weist die fehlende Route gelb aus."
+    },
+    "kunde": {
+      "pfad": "/customers",
+      "schritte": [
+        [
+          "click",
+          "main button.kr-zeile >> nth=0"
+        ]
+      ]
+    }
+  },
+  "muster": {},
+  "hinweis": "Nur echte UI-Aufrufe. Bestehende Kunden-/Auftragskarten werden über ihre vorhandenen Listen geöffnet, ohne erfundene IDs oder neue Datensätze. Login-Platzhalter werden nur in der nach C4 erlaubten temporären Kopie außerhalb des Repos aus der Umgebung eingesetzt. pfad=null ist eine offengelegte Ausgangslücke mit Teil-Zuordnung; spätere Teile ergänzen ihre echten Aufrufe."
+}
