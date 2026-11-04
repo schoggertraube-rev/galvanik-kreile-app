@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "package": "B2-EINGANG-SHARE-ANCHOR",
   "headBranch": "codex/ta-b2h",
-  "mainBaseSha": "6ce527da70bdf5a9b6104226af7bb1cafa92864d",
+  "mainBaseSha": "b6d94bccad812883cddaefa1d050c1506c722d8b",
   "authorizedBy": "Siglinder",
   "authorizedAt": "2026-11-04",
-  "scope": "P44/P47: bestehende Sitzung und Original-Schreibweg fuer Web-Share; kanonische Nachrichten-Seite",
-  "probeCandidateSha": "ad87b66b7f4281aa3a13b439171b0e82eabc273a",
+  "scope": "P52: sechs exakte Pfade fuer Was ist neu und JSON-Testaufloesung; P44/P47 unveraendert",
+  "probeCandidateSha": "f4d88b8e5024f8311e7533fe3619be010209f1b5",
   "probeResult": "PASS"
 }

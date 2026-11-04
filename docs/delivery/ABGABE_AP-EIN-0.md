@@ -1,6 +1,6 @@
 # AP-EIN Teil 0 – Replay-Fundament und „Was ist neu“ (P52)
 
-Status: #166 zur Prüfung; kein Merge durch Codex. Die Freigabe der sechs P52-Pfade erfolgt im Folge-Anker #174. Spätere Teile werden hier nicht fachlich abgenommen.
+Status: #166 zur Prüfung; kein Merge durch Codex. Die sechs P52-Pfade sind seit Owner-Merge #174 in main `824f47624f1e5a62bb17f3f92bdc3d938a5cb6e4` freigegeben. Dieser Branch übernimmt genau dessen vier Ankerdateien bytegleich. Spätere Teile werden hier nicht fachlich abgenommen.
 
 ## Stand und Produktbasis
 
@@ -32,6 +32,7 @@ Teil 0 liefert das Replay-Fundament und, zusätzlich auf ausdrücklichen Auftrag
 - E32: Die Modellkonvention verlangt Erfolg-Grün für erkannte Eingaben. Dieser ältere Produktstand liefert es noch nicht; P50 ordnet den Fall AP-EIN-2 zu. T05c besteht im vollständigen CI-Lauf und hat keinen Rot-Marker mehr. Die Liste enthält damit 268 tatsächlich noch rote Zukunftsfälle; sie wird pro gestapeltem Stand geführt.
 - Die vollständigen 306 Fälle laufen weiterhin in der CI. Die Check-Liste im PR nennt den wirklichen Stand; rot ist keine Abnahme.
 - #165 und #172 sind Owner-gemergt. ESLint-Regeln und Baseline werden in #166 nicht geändert. #174 ergänzt sechs exakte fehlende Pfade für P52 einschließlich des bestehenden JSON-Importtest-Gerüsts, keine Globs.
+- Main-Aktualisierung nach #174: vollständige 29-Pfade-Probe mit dem freigegebenen Main-Checker PASS, 22/22 A11 PASS. Die neue CI am aktualisierten Kandidaten wird einschließlich sämtlicher Jobs/Schritte in NACHTLAUF C belegt; historische Scope-Fehler unten sind keine Aussage über diesen neuen Lauf. Produktdateien bleiben gegenüber dem genannten Runtime-SHA unverändert.
 - P52: 11/11 gezielte Tests für Login-Trennung, vorhandene Bootstrap-Assertions, Navigation, Speicherfehler/7-Tage-Fallback und erneutes Lesen des Markers PASS; 22/22 lokale A11-Befehle PASS. Keine unveränderte Vollsuite zusätzlich zur CI.
 - Echter Preview-Lauf mit vorhandenem Phillip-Login: Änderungsliste Desktop/Tablet/Handy jeweils innerhalb des Viewports, neueste Einträge zuerst, Schließen und Lesemarker PASS. Bilder und Nachweis unter `C:/Users/Traube/.codex/visualizations/2026/11/03/01a1a122-06c4-7570-a4d3-dc1eedb311aa/ap-neu-2d3c2d76/`. Der gefundene Portalfehler ist gezielt im bestehenden App-Root korrigiert; keine CSS-Sonderregel.
 - CI-Unit-Befund: 1097/1098 Tests bestanden, einzig `w2c.activeRouteContainment.test.tsx` meldete den gültigen neuen JSON-Import als unaufgelöst (Job 126557271708, 11:59:58 UTC). Mechanischer Anschluss: tatsächliche TypeScript-Auflösung auch für `.json`, strikte JSON-Prüfung statt Ignorierliste; bestehende Assertions/Sperrziele unverändert, zusätzliche Negativfälle für fehlende und ungültige JSON-Daten.
