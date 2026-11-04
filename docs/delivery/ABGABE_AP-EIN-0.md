@@ -1,13 +1,12 @@
-# AP-EIN Teil 0 – Generator und Replay-Fundament, Runde 52
+# AP-EIN Teil 0 – Replay-Fundament und „Was ist neu“ (P52)
 
-Status: Draft zur Prüfung; kein Merge und keine fachliche Abnahme der späteren Teile.
+Status: #166 zur Prüfung; kein Merge durch Codex. Die Freigabe der fünf P52-Pfade erfolgt im Folge-Anker #174. Spätere Teile werden hier nicht fachlich abgenommen.
 
 ## Stand und Produktbasis
 
-Der Runtime-Produktbaum ist unverändert gegenüber `3060b2abed9312e49ce5617091a0d24a990e3061`.
-Dessen exakte Git-Preview ist READY: https://galvanik-kreile-werkstatt-gtx1aww3d.vercel.app .
-Teil 0 ändert ausschließlich Generator, Testgerüst, generierte Testdaten und diese Abgabe.
-Der genaue neue Testfundament-SHA, seine Git-Preview und die Check-Liste werden im PR #166 und im laufenden Protokoll zugeordnet.
+Produkt-SHA: `e6ee26c8c04d8d2fcee261c9e92fbdd9a1d9e076`.
+Exakte Git-Preview READY: https://galvanik-kreile-werkstatt-9nu8rmvrc.vercel.app . GitHub-Deployment 7544934856 und Vercel `dpl_2RTYj5mrPdb6LrVvqfopEQjWQSN4` bestätigen genau diesen SHA.
+Teil 0 liefert das Replay-Fundament und, zusätzlich auf ausdrücklichen Auftrag P52, die Anzeige „Was ist neu“. Eine folgende reine Abgabeänderung verändert diesen Produktbaum nicht.
 
 ## Umsetzung
 
@@ -18,6 +17,8 @@ Der genaue neue Testfundament-SHA, seine Git-Preview und die Check-Liste werden 
 - Modell-/Speichernamen stehen einmal im Generator. Das vorhandene `private.intake_drafts` wird im privaten Schema geprüft und befüllt; es entsteht keine zweite Tabelle.
 - Ergänzte Datums-/Wertplatzhalter, gezielte Netzwerkunterbrechung und erneutes Lesen sowie exakte Zeilen-/Delta-Prüfungen im Testgerüst.
 - Auswahlerwartungen behalten die vom Owner-Modell verlangte `aria-pressed`- und Erfolg-Grün-Prüfung. Optionsknöpfe werden über ihren exakten sichtbaren Text im bezeichneten Steuerelement gefunden; ein umgebendes HTML-Label kann ihren zugänglichen Namen verändern.
+- P52: Einzige Inhaltsquelle ist `src/content/was-ist-neu.json`, mit tatsächlichen PR-Einträgen für #164 und #166–#173. Nicht gelieferte Produktteile sind ausdrücklich als Vorschau beschrieben. Kopfknopf, Zähler, neueste Einträge zuerst und Links verwenden bestehende Navigation; ein auf diesem älteren Stand fehlender Nachrichten-Einstieg zeigt eine Erklärung statt einer 404.
+- Lesemarker ausschließlich im Browser pro bestehendem opakem Login-Handle; keine interne Nutzer-ID, PIN oder DB-Zeile im Marker. Gesperrter/voller Speicher bleibt nutzbar; dann zählen und erscheinen nur die letzten sieben Tage.
 
 ## Prüfungen und offene Befunde
 
@@ -30,8 +31,10 @@ Der genaue neue Testfundament-SHA, seine Git-Preview und die Check-Liste werden 
 - P50: Der vollständige CI-Lauf des Teil-0-SHA widerlegt den lokalen TA14-Einzelnachweis: Die Ladefehleranzeige fehlt an diesem älteren Produktstand. TA14 ist deshalb ausdrücklich AP-EIN-2 zugeordnet. Die Erwartung bleibt unverändert.
 - E32: Die Modellkonvention verlangt Erfolg-Grün für erkannte Eingaben. Dieser ältere Produktstand liefert es noch nicht; P50 ordnet den Fall AP-EIN-2 zu. T05c besteht im vollständigen CI-Lauf und hat keinen Rot-Marker mehr. Die Liste enthält damit 268 tatsächlich noch rote Zukunftsfälle; sie wird pro gestapeltem Stand geführt.
 - Die vollständigen 306 Fälle laufen weiterhin in der CI. Die Check-Liste im PR nennt den wirklichen Stand; rot ist keine Abnahme.
-- Der übergeordnete Anker #165 entfernt die unnötige alte ESLint-Ignore-Ausnahme; ESLint-Konfiguration und Baseline bleiben bytegleich main. Seine laufende CI wird gesondert mit Job und Schritt ausgewertet.
-- Sichtprüfung für Teil 0: nicht anwendbar, da keine Produktseite verändert wird. Die vollständige visuelle Ausgangsmessung folgt genau einmal in Teil 0b mit dem unveränderten Runde-52-Prüfer und Ausgabe außerhalb des Repositorys.
+- #165 und #172 sind Owner-gemergt. ESLint-Regeln und Baseline werden in #166 nicht geändert. #174 ergänzt genau fünf fehlende Pfade für P52, keine Globs.
+- P52: 11/11 gezielte Tests für Login-Trennung, vorhandene Bootstrap-Assertions, Navigation, Speicherfehler/7-Tage-Fallback und erneutes Lesen des Markers PASS; 22/22 lokale A11-Befehle PASS. Keine unveränderte Vollsuite zusätzlich zur CI.
+- CI am Produkt-SHA: `quality` scheitert im Scope-Schritt ausschließlich an den fünf P52-Pfaden (Run 41822715446, Job 126549595838, Log 11:40:52 UTC: `SALES_STAGE_B2_SCOPE:src/components/layout/WasIstNeu.tsx` plus die vier weiteren exakten Pfade). Das ist die Abhängigkeit zu #174, kein pauschaler erwarteter Rot-Claim. Die übrigen Jobs und Schritte werden nach ihrem tatsächlichen Abschluss in NACHTLAUF C belegt.
+- Das Testfundament hat keine eigene Modellseite. Die Ausgangsmessung der 117 Sichtzustände liegt im Teil 0b; dort dokumentierte Rot/Gelb werden nicht zu einer Sicht-Abnahme von Teil 0 umgedeutet. AP-NEU hat keinen eigenen Eintrag im eingefrorenen Sichtvertrag.
 
 ## Owner-Klickweg und DB-Soll
 
@@ -41,6 +44,8 @@ Weitere mechanische Anschlüsse: 5.2 benutzt den vorhandenen Knopf `kunde.bearbe
 
 Der exakte Auswahl-Farbvergleich wartet lediglich die gelieferte CSS-Transition ab; Sollfarbe und Auswahlzustand bleiben unverändert. `orders.geprueft` wird nach P39 direkt als Datenbankspalte gelesen, statt aus der bloßen Existenz eines Auftragsereignisses abgeleitet. Vor Lieferung dieser Spalte in Teil 2 bleiben entsprechende Zukunftsfälle rot.
 
-Teil 0 liefert keine neue sichtbare Produktfunktion. Die Preview oben zeigt die unveränderte Produktbasis; die Korrektur des roten Plus folgt in Teil 2 nach dem UI-Fundament und der Kundenoberfläche.
+P52 Owner-Klickweg: obigen Preview-Link öffnen, mit vorhandenem Login anmelden, „Was ist neu“ im Kopf öffnen, neuesten Eintrag lesen, Punkt antippen. Liste erneut öffnen: Zähler ist für diesen Login gelesen; anderer Login hat einen eigenen Lesestand. Auf Handy bleibt der Knopf mit zugänglichem Namen und Zahl erreichbar. Die überarbeiteten Eingang-Seiten folgen in ihren eigenen Teil-PRs.
 
-DB-Soll dieses Teils: ausschließlich synthetische Daten auf `127.0.0.1:54322`; vorhandene Produkt-, Auth- und Tenant-Verträge bleiben bestehen. Die sichtbaren Teile bekommen ihren eigenen Preview-/Sichtnachweis und ihren jeweiligen echten Action–DB–Ansicht-Nachweis.
+Bekannte Dev-Abhängigkeit P52: Rolf besitzt seit der freigegebenen Teil-1-Migration `entscheiden`; ältere Code-Stände #166/#169 kennen es noch nicht. Der Owner prüft bis zum Merge von Teil 1 dessen neuere Preview. Der Einstellungen-Leser prüft alle aktiven Nutzer vor dem Filtern und scheitert deshalb auch für Phillip an Rolfs unbekanntem Wert. READ-ONLY-Dev-Beleg mit drei aktiven Nutzern und Vergleich der tatsächlichen Enums: `.git/kreile-p52-settings-db-proof.json`. Kein Recht wird zurückgenommen oder ignoriert; Teil 1 enthält bereits den passenden Wert.
+
+DB-Soll dieses Teils: Testdaten ausschließlich synthetisch auf `127.0.0.1:54322`; „Was ist neu“ erzeugt keine DB-Schreibaktion. Vorhandene Produkt-, Auth- und Tenant-Verträge bleiben bestehen. Die sichtbaren Folgeteile bekommen ihren eigenen Preview-/Sichtnachweis und ihren jeweiligen echten Action–DB–Ansicht-Nachweis.
