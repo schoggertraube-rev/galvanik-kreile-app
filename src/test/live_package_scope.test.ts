@@ -33,7 +33,7 @@ const b2cAnchorMission = {
   ...b2AnchorMission,
 };
 
-describe("P44 TA-B2h: only the existing-session Web-Share entry", () => {
+describe("P44/P47 TA-B2h: exact Web-Share and canonical messages entries", () => {
   const branch = "codex/ta-b2h";
   const baseSha = "6ce527da70bdf5a9b6104226af7bb1cafa92864d";
   const files = ["scripts/quality/check-live-package-scope.mjs", "src/test/live_package_scope.test.ts",
@@ -50,18 +50,18 @@ describe("P44 TA-B2h: only the existing-session Web-Share entry", () => {
   });
 
   it("never carries product, migration, provider, workflow or baseline changes in the anchor", () => {
-    for(const path of ["src/app/api/eingang-share/route.ts", "src/app/page.tsx", "quality/eslint-baseline.json",
+    for(const path of ["src/app/api/eingang-share/route.ts", "src/app/nachrichten/page.tsx", "src/test/nachrichten_page.integration.test.ts", "src/app/page.tsx", "quality/eslint-baseline.json",
       ".github/workflows/quality.yml", "docs/project/endversion/codex/BAUPLAN.json", "supabase/migrations/20261104000000_ein3_extra.sql"]){
       expect(checkTaB2hScopeForTest({files:[...files,path],mission:b2AnchorMission,branch,baseSha}),path)
         .toContain("TA_B2H_SCOPE:" + path);
     }
   });
 
-  it("adds exactly the route and its Replay integration test, with no adjacent glob", () => {
-    for(const path of ["src/app/api/eingang-share/route.ts", "src/test/eingang_share.integration.test.ts"]){
+  it("adds exactly both routes and their Replay integration tests, with no adjacent glob", () => {
+    for(const path of ["src/app/api/eingang-share/route.ts", "src/test/eingang_share.integration.test.ts", "src/app/nachrichten/page.tsx", "src/test/nachrichten_page.integration.test.ts"]){
       expect(checkSalesStageB2ScopeForTest({files:[path],mission:b2Mission,branch:"kreile/b2-ein-3"}),path).toEqual([]);
     }
-    for(const path of ["src/app/api/eingang-share/other.ts", "src/app/api/eingang-share-extra/route.ts", "src/test/eingang_share_extra.integration.test.ts"]){
+    for(const path of ["src/app/api/eingang-share/other.ts", "src/app/api/eingang-share-extra/route.ts", "src/test/eingang_share_extra.integration.test.ts", "src/app/nachrichten/layout.tsx", "src/app/nachrichten-extra/page.tsx", "src/test/nachrichten_page_extra.integration.test.ts"]){
       expect(checkSalesStageB2ScopeForTest({files:[path],mission:b2Mission,branch:"kreile/b2-ein-3"}),path)
         .toContain("SALES_STAGE_B2_SCOPE:" + path);
     }

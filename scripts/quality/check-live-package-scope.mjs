@@ -224,9 +224,9 @@ const TA_B2H_VALUES = Object.freeze({
   headBranch: TA_B2H_BRANCH,
   mainBaseSha: TA_B2H_BASE_SHA,
   authorizedBy: "Siglinder",
-  authorizedAt: "2026-11-03",
-  scope: "P44: authentisierter Web-Share-POST ueber den vorhandenen Original-Schreibweg",
-  probeCandidateSha: "ecd08fcbcab7402a6e3ed0eb6d34510473c0f1e2",
+  authorizedAt: "2026-11-04",
+  scope: "P44/P47: bestehende Sitzung und Original-Schreibweg fuer Web-Share; kanonische Nachrichten-Seite",
+  probeCandidateSha: "ad87b66b7f4281aa3a13b439171b0e82eabc273a",
   probeResult: "PASS",
 });
 const TA_B2H_ANCHOR_ALLOWLIST = Object.freeze([
@@ -624,6 +624,8 @@ const SALES_STAGE_B2_ALLOWLIST = Object.freeze([
   ...SALES_STAGE_B2_EXACT_ALLOWLIST,
   "src/app/api/eingang-share/route.ts",
   "src/test/eingang_share.integration.test.ts",
+  "src/app/nachrichten/page.tsx",
+  "src/test/nachrichten_page.integration.test.ts",
   "docs/delivery/ABGABE_AP-*.md",
   "e2e/generated/**",
   "scripts/spec/**",
@@ -1846,11 +1848,11 @@ export function runSelftest(root = process.cwd()) {
   if (!covered("supabase/migrations/20261103030000_ein2_erfassung.sql", ["supabase/migrations/*_ein[1-5]_*.sql"])) throw new Error("glob character-class positive failed");
   if (covered("supabase/migrations/20261103030000_ein6_erfassung.sql", ["supabase/migrations/*_ein[1-5]_*.sql"])) throw new Error("glob character-class negative failed");
   const salesStageMission = { active_block: "B2", branch: SALES_STAGE_B2_BRANCH };
-  for (const rel of ["src/app/api/eingang-share/route.ts", "src/test/eingang_share.integration.test.ts"]) {
+  for (const rel of ["src/app/api/eingang-share/route.ts", "src/test/eingang_share.integration.test.ts", "src/app/nachrichten/page.tsx", "src/test/nachrichten_page.integration.test.ts"]) {
     const errors = checkSalesStageB2Scope([rel], [], salesStageMission, "kreile/b2-ein-3");
     if (errors.length) throw new Error(`P44 exact path rejected: ${rel}:${errors.join("|")}`);
   }
-  for (const rel of ["src/app/api/eingang-share/other.ts", "src/app/api/eingang-share-extra/route.ts", "src/test/eingang_share_extra.integration.test.ts"]) {
+  for (const rel of ["src/app/api/eingang-share/other.ts", "src/app/api/eingang-share-extra/route.ts", "src/test/eingang_share_extra.integration.test.ts", "src/app/nachrichten/layout.tsx", "src/app/nachrichten-extra/page.tsx", "src/test/nachrichten_page_extra.integration.test.ts"]) {
     if (!checkSalesStageB2Scope([rel], [], salesStageMission, "kreile/b2-ein-3").includes(`SALES_STAGE_B2_SCOPE:${rel}`)) throw new Error(`P44 adjacent path accepted: ${rel}`);
   }
   const migrationA = "supabase/migrations/20261031212320_ap01_intake_item.sql";
