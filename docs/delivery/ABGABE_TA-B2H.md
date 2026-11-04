@@ -1,32 +1,23 @@
-# TA-B2h – Web-Share und Nachrichten, P44/P47
+# TA-B2h – P52-Ergänzung „Was ist neu“
 
-Basis: `main` / `6ce527da70bdf5a9b6104226af7bb1cafa92864d` (#165). Eigener Anker-Branch `codex/ta-b2h`, Owner-Freigaben P44 vom 03.11., 22:05 und P47 vom 04.11., 03:35. Derselbe PR #172 wird ergänzt; kein neuer Anker und kein Produktcode.
+Basis: `origin/main` / `b6d94bccad812883cddaefa1d050c1506c722d8b` (Owner-Merge #172). Auftrag: NACHTLAUF P52, sofort wirksam über AKTUELLE_ANWEISUNG C. #172 wurde während der Produktarbeit geschlossen; die bereits beauftragte Ergänzung erhält daher einen Folge-PR auf demselben Anker-Branch `codex/ta-b2h`.
 
-Die B2-Allowlist erhält ausschließlich vier exakte Pfade:
+Die B2-Allowlist erhält genau fünf zusätzliche Pfade:
 
-- `src/app/api/eingang-share/route.ts`
-- `src/test/eingang_share.integration.test.ts`
-- `src/app/nachrichten/page.tsx`
-- `src/test/nachrichten_page.integration.test.ts`
+- `src/lib/server/authBootstrap.ts`
+- `src/lib/server/__tests__/authBootstrap.test.ts`
+- `src/components/layout/WasIstNeu.tsx`
+- `src/components/layout/__tests__/WasIstNeu.test.tsx`
+- `src/content/was-ist-neu.json`
 
-Der spätere POST verwendet die vorhandene App-Sitzung und den vorhandenen Original-Schreibweg. Die Nachrichten-Seite ist der kanonische Einstieg in 2.3, mit Test gegen die echte Replay-DB. Dieser Anker baut weder diese Einstiege noch einen Dateispeicher, Provider oder Schreibweg. Die unmittelbaren P44/P47-Freigaben bestimmen die Routen; die Testpfade sind ihre exakten technischen Ablagen. Neue Globs, Nachbarseiten und zusätzliche API-Routen bleiben gesperrt.
+Der Bootstrap liefert ausschließlich den bereits öffentlichen, opaken Login-Handle für den von P52 verlangten lokalen Lesemarker. Authentisierung, Rechte, Sitzung und DB werden dadurch nicht umgestellt. Diesen Produktcode enthält erst #166, nicht dieser Anker. Bereits freigegebene Layoutpfade reichen für die übrige Einbindung.
 
-Der Anker selbst ist auf vier Dateien, den freigegebenen Main-SHA, Branch und die unveränderte B2-Mission begrenzt: Scope-Checker, dessen bestehender Test, `docs/evidence/live-line/b2/TRUST_ANCHOR_B2H.json` und diese Abgabe. Benachbarte API-/Testpfade bleiben gesperrt. Kein Workflow, keine Baseline, kein anderer Checker, keine Planungs- oder UI-Quelldatei wird geändert.
+Ankerumfang unverändert genau vier Dateien: Scope-Checker, dessen bestehender Test, `docs/evidence/live-line/b2/TRUST_ANCHOR_B2H.json`, diese Abgabe. Die enge Ankerprüfung wird auf obige Main-Basis und den Produktkandidaten fortgeschrieben. Keine neuen Globs, kein Workflow, keine Baseline, kein anderer Checker und keine Planungs-/UI-Quelldatei. P44/P47-Pfade bleiben unverändert erlaubt.
 
-Probe: kompletter Teil-4-Stand `ad87b66b7f4281aa3a13b439171b0e82eabc273a` (206 Pfade) plus alle vier neuen Pfade gegen den neuen Checker: **PASS**, `newErrors: []`. Der unveränderte Main-Checker lehnt genau die vier neuen Pfade mit `SALES_STAGE_B2_SCOPE` ab. Originaler Bauplan bleibt SHA-256 `DF3E1AFEC7B6C3DED6DA51F22FDAADF8CFAB780DA9A4F619EDB42D3C2D6AC5C4`. Beleg: .git/kreile-ta-b2h-p47-probe.json.
+**Probe:** vollständiger Produktkandidat #166 `e6ee26c8c04d8d2fcee261c9e92fbdd9a1d9e076`, 28 Pfade gegen Main: vorher genau fünf `SALES_STAGE_B2_SCOPE`-Fehler für die obige Liste; mit diesem Checker **PASS**, `after: []`. Beleg `.git/kreile-p52-anchor-probe.json`. Der bestehende Scope-Test prüft jeden neuen Pfad sowie verbotene Nachbarpfade einzeln. Bauplan unverändert `DF3E1AFEC7B6C3DED6DA51F22FDAADF8CFAB780DA9A4F619EDB42D3C2D6AC5C4`.
 
-Lokale Prüfung:
+Lokal: Scope-Tests 23/23 PASS; 22/22 A11-Befehle einschließlich Selbsttests, Modul-/H18-/H16-Verträgen, No-Fake, Supabase-Grenze, Typprüfung, Lint und leerem `git diff --check origin/main` PASS. Beleg `.git/kreile-p52-anchor-a11.log`. Nach Branchwechsel wurden ausschließlich ignorierte Routentypen mit `npx next typegen` erneuert. Die exakte Ankerprüfung läuft zusätzlich nach dem Commit.
 
-| Prüfung | Ergebnis |
-|---|---|
-| Scope-Selbsttest einschließlich aller vier neuen Pfade und negativer Nachbarpfade | PASS |
-| Bestehende Scope-Tests einschließlich drei neuer P44-Fälle | 22/22 PASS |
-| A11: Authority/Delivery mit Selbsttests, Live-Regressions-Selbsttest, Module, H18, H16, No-Fake, F0-Dokument-/Schema-Verträge, Supabase-Grenze, Advance/Close | PASS |
-| `git diff --check origin/main` | leer / PASS |
-| `npm run lint:full` | PASS |
-| `npx tsc --noEmit --incremental false` | PASS nach Neugenerieren der lokalen Next-Routentypen |
-| Vollsuite | gemäß Owner-Freigabe parallel in CI |
+Der exakte PR-Check-Stand wird in NACHTLAUF C belegt. Volltests laufen gemäß Owner-Freigabe parallel in CI. Ein roter Check wird nur mit Run, Schritt und tatsächlicher Fehlerzeile eingeordnet; kein pauschaler Grün-Claim. Ein selbstreferenzieller Ratchet muss vom Planungschat geprüft werden. Keine eigenmächtige Hash-Anpassung und kein Merge durch Codex.
 
-Umgebungsbefund beim Branchwechsel: `.next/types/validator.ts` enthielt noch die Produkt-Routen `/rein` und `/api/device-file-changes`, die auf Main noch fehlen. `npx next typegen` hat ausschließlich die ignorierten generierten Routentypen erneuert; der anschließende identische Typprüfbefehl besteht. Keine `tsconfig`-/Produktänderung.
-
-Vor Merge: alle PR-Jobs mit Schritt und Fehlerzeile prüfen. Ein selbstreferenzieller Ratchet-Befund wird belegt gemeldet; keine weitere Hash-/Baseline-Anpassung ist enthalten. Main-Lauf nach Owner-Merge erforderlich. Kein Merge durch Codex.
+DB-Soll und Klickweg: dieser Anker verändert keine DB-Zeile und keine Oberfläche. Nach Owner-Merge wird der konkrete Produktstand #166 mit seinem READY-Link geprüft; dessen Hand-off verweist auf `src/content/was-ist-neu.json` als einzige Inhaltsquelle.

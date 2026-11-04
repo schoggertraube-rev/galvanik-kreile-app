@@ -216,7 +216,7 @@ const TA_B2F_VALUES = Object.freeze({
 });
 const PR154_REBASELINE_BRANCH = "kreile/s1-p2-eingang";
 const TA_B2H_BRANCH = "codex/ta-b2h";
-const TA_B2H_BASE_SHA = "6ce527da70bdf5a9b6104226af7bb1cafa92864d";
+const TA_B2H_BASE_SHA = "b6d94bccad812883cddaefa1d050c1506c722d8b";
 const TA_B2H_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2H.json";
 const TA_B2H_VALUES = Object.freeze({
   schemaVersion: 1,
@@ -225,8 +225,8 @@ const TA_B2H_VALUES = Object.freeze({
   mainBaseSha: TA_B2H_BASE_SHA,
   authorizedBy: "Siglinder",
   authorizedAt: "2026-11-04",
-  scope: "P44/P47: bestehende Sitzung und Original-Schreibweg fuer Web-Share; kanonische Nachrichten-Seite",
-  probeCandidateSha: "ad87b66b7f4281aa3a13b439171b0e82eabc273a",
+  scope: "P52: fuenf exakte Pfade fuer Was ist neu; P44/P47 unveraendert",
+  probeCandidateSha: "e6ee26c8c04d8d2fcee261c9e92fbdd9a1d9e076",
   probeResult: "PASS",
 });
 const TA_B2H_ANCHOR_ALLOWLIST = Object.freeze([
@@ -621,6 +621,11 @@ const SALES_STAGE_B2_EXACT_ALLOWLIST = Object.freeze([
   "src/modules/fundament/server/systemSettingsPort.ts",
 ]);
 const SALES_STAGE_B2_ALLOWLIST = Object.freeze([
+  "src/lib/server/authBootstrap.ts",
+  "src/lib/server/__tests__/authBootstrap.test.ts",
+  "src/components/layout/WasIstNeu.tsx",
+  "src/components/layout/__tests__/WasIstNeu.test.tsx",
+  "src/content/was-ist-neu.json",
   ...SALES_STAGE_B2_EXACT_ALLOWLIST,
   "src/app/api/eingang-share/route.ts",
   "src/test/eingang_share.integration.test.ts",
