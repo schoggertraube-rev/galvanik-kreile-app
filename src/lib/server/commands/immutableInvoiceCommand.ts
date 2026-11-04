@@ -1,4 +1,5 @@
 import "server-only";
+import {customerCountryLabel} from "@/modules/customers/public";
 
 import { createHash, randomUUID } from "node:crypto";
 import { renderToBuffer } from "@react-pdf/renderer";
@@ -649,7 +650,7 @@ function prepareInvoiceContent(
       street: masterDataText(source.customer_street, "INVOICE_CUSTOMER_STREET_INVALID"),
       zip: masterDataText(source.customer_zip, "INVOICE_CUSTOMER_ZIP_INVALID"),
       city: masterDataText(source.customer_city, "INVOICE_CUSTOMER_CITY_INVALID"),
-      country: masterDataText(source.customer_country, "INVOICE_CUSTOMER_COUNTRY_INVALID"),
+      country: customerCountryLabel(masterDataText(source.customer_country, "INVOICE_CUSTOMER_COUNTRY_INVALID")),
     },
     order: {
       orderId: order.id,

@@ -22,6 +22,7 @@ export type {
   CreateQuoteInput,
   GlobalCreateConversionResult,
   GlobalCreateCustomerResult,
+  GlobalCreateCustomerChoice,
   GlobalCreateDirectIntakeResult,
   GlobalCreateOpenQuotesResult,
   GlobalCreatePorts,
@@ -29,3 +30,5 @@ export type {
   GlobalCreateQuoteResult,
   UpdateQuoteInput,
 } from "./GlobalCreateFlow";
+
+export type {CustomerComparisonValue} from "@/modules/customers/public";

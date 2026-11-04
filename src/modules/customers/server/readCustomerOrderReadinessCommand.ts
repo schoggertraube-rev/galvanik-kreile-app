@@ -1,75 +1,22 @@
 import "server-only";
-
-import { sql } from "drizzle-orm";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import { getOrderReadiness } from "../orderReadiness";
-import type {
-  CustomerCommandContext,
-  ReadCustomerOrderReadinessInput,
-  ReadCustomerOrderReadinessResult,
-} from "./types";
-
-type CustomerOrderReadinessRow = {
-  name: string | null;
-  customer_type: "business" | "privat" | "institution";
-  phone: string | null;
-  contact_person: string | null;
-  email: string | null;
-  street: string | null;
-  zip_code: string | null;
-  city: string | null;
-  country: string | null;
-  payment_preference: string | null;
-};
+import { kundeVollstaendigkeit } from "../orderReadiness";
+import { readCustomerProfile } from "./customerWriteContract";
+import type { CustomerCommandContext, ReadCustomerOrderReadinessInput, ReadCustomerOrderReadinessResult } from "./types";
 
 export async function readCustomerOrderReadinessCommand(
-  context: Pick<CustomerCommandContext, "tenantId">,
-  input: ReadCustomerOrderReadinessInput,
+  context: Pick<CustomerCommandContext,"tenantId">,input: ReadCustomerOrderReadinessInput,
 ): Promise<ReadCustomerOrderReadinessResult> {
   try {
-    const rows = await withPrivilegedTenantTransaction(context, async (tx) => tx.execute<CustomerOrderReadinessRow>(sql`
-      SELECT
-        customer.name,
-        customer.type AS customer_type,
-        customer.phone,
-        customer.contact_person,
-        customer.email,
-        customer.street,
-        customer.zip_code,
-        customer.city,
-        customer.country,
-        customer.payment_preference
-      FROM public.customers customer
-      WHERE customer.tenant_id = ${context.tenantId}
-        AND customer.id = ${input.customerId}
-      LIMIT 2
-      FOR SHARE
-    `));
-    const customer = rows.length === 1 ? rows[0] : null;
-    if (!customer) return { code: "NOT_FOUND", message: "Der ausgewählte Kunde ist nicht verfügbar." };
-    return {
-      code: "OK",
-      readiness: getOrderReadiness({
-        name: customer.name,
-        customerType: customer.customer_type,
-        phone: customer.phone,
-        contactPerson: customer.contact_person,
-        email: customer.email,
-        street: customer.street,
-        zipCode: customer.zip_code,
-        city: customer.city,
-        country: customer.country,
-        paymentPreference: customer.payment_preference,
-      }, { requirePaymentPreference: input.requirePaymentPreference }),
-    };
-  } catch (error) {
-    console.error("[CUSTOMER_ORDER_READINESS_READ_FAILED]", {
-      errorName: error instanceof Error ? error.name : "UnknownError",
-      errorMessage: error instanceof Error ? error.message : "Unbekannter Serverfehler",
+    return await withPrivilegedTenantTransaction(context,async tx=>{
+      const customer=await readCustomerProfile(tx,context.tenantId,input.customerId);
+      if(!customer)return {code:"NOT_FOUND",message:"Der ausgewählte Kunde ist nicht verfügbar."};
+      const readiness=kundeVollstaendigkeit(customer,{geld:input.requirePaymentPreference});
+      if(customer.customerType==="lieferant")return {code:"OK",readiness:{...readiness,vollstaendig:false,issues:[{field:"customerType",message:"Lieferanten erhalten keine Aufträge."}]}};
+      return {code:"OK",readiness};
     });
-    return {
-      code: "UNAVAILABLE",
-      message: "Kundenstand konnte nicht sicher gelesen werden. Fehlercode: CUSTOMER_ORDER_READINESS_READ_FAILED.",
-    };
+  } catch(error) {
+    console.error("[CUSTOMER_ORDER_READINESS_READ_FAILED]",{errorName:error instanceof Error?error.name:"UnknownError"});
+    return {code:"UNAVAILABLE",message:"Kundenstand konnte nicht sicher gelesen werden. Fehlercode: CUSTOMER_ORDER_READINESS_READ_FAILED."};
   }
 }

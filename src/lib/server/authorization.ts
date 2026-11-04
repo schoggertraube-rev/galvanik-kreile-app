@@ -61,7 +61,7 @@ export function getAuthorizationActionGrants(
       && hasAuthorizationArea(authorization, "auftraege")
     ),
     editOrderContent: canManageOrders,
-    createCustomer: hasAuthorizationArea(authorization, "kunden"),
+    createCustomer: hasAuthorizationArea(authorization, "eingang"),
     createQuote: canManageOrders && canManageMoney,
   };
 }

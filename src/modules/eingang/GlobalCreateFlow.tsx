@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { FormEvent, KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { getOrderReadiness, type CreateCustomerInput } from "@/modules/customers/public";
+import { kundeVollstaendigkeit, KundeFormular, EMPTY_CUSTOMER_FORM, customerDisplayName, customerFieldError, kundeValidierung, type CustomerFormValue, type CreateCustomerInput, type CustomerAddressInput, type CustomerAddressResult, type CustomerComparisonValue } from "@/modules/customers/public";
 import type { CatalogService } from "@/modules/katalog/public";
 import {
   intakePaymentContract,
@@ -33,10 +33,13 @@ import {
   Feld,
   FormRaster,
   Hinweis,
+  KrApp,
+  PruefRail,
   SchrittNav,
   Segment,
   Textfeld,
   Toast,
+  useKrGeraet,
 } from "@/ui/kr";
 import type {
   ConvertQuoteInput,
@@ -74,7 +77,12 @@ export type GlobalCreateCustomerChoice = {
   id: string;
   customerNumber: string | null;
   name: string;
-  customerType?: "business" | "privat" | "institution";
+  customerType?: "business" | "privat" | "lieferant";
+  salutation?: "frau" | "herr" | "ohne" | null;
+  firstName?: string | null; lastName?: string | null; contactRole?: string | null; houseNumber?: string | null;
+  handoverPreference?: "pickup" | "shipping" | null; autoInfo?: boolean; vorrang?: boolean;
+  invoiceTermsEnabled?:boolean;invoiceTermDays?:number|null;
+  duplicateMatch?:{kind:"exact"|"possible";by:string}|null;
   companyName?: string | null;
   contactPerson?: string | null;
   email?: string | null;
@@ -85,7 +93,7 @@ export type GlobalCreateCustomerChoice = {
   country?: string;
   paymentPreference?: string;
   vatId?: string | null;
-  lastHandoverMode?: "pickup" | "shipping" | null;
+
 };
 
 export type GlobalCreateCustomerResult =
@@ -175,6 +183,7 @@ export type GlobalCreateDirectIntakeResult =
 
 export type GlobalCreatePorts = {
   canCreateCustomer: boolean;
+  canReadCustomers?:boolean;
   canCreateOrder: boolean;
   canCreateQuote: boolean;
   canManageMoney: boolean;
@@ -186,13 +195,14 @@ export type GlobalCreatePorts = {
     | { code: "OK"; customers: GlobalCreateCustomerChoice[] }
       | { code: "DENIED" | "UNAVAILABLE"; message: string }
   >;
-  searchIntakeCustomers: (query: string) => Promise<
+  searchIntakeCustomers: (query: string,candidate?:CustomerComparisonValue) => Promise<
     | { code: "OK"; customers: GlobalCreateCustomerChoice[] }
     | { code: "DENIED" | "UNAVAILABLE"; message: string }
   >;
   recognizeIntakeText: (text: string) => Promise<{ code: "OK"; data: IntakeTextRecognition } | Failure>;
   getIntakeSuggestions: (input: IntakeSuggestionsInput) => Promise<{ code: "OK"; data: IntakeSuggestions } | Failure>;
   listCatalog?: () => Promise<{ code:"OK"; services:CatalogService[] }|{ code:"DENIED"|"UNAVAILABLE"; message:string }>;
+  checkCustomerAddress?: (input: CustomerAddressInput) => Promise<{code:"OK";data:CustomerAddressResult}|{code:string;message:string}>;
   createCustomer: (input: CreateCustomerInput) => Promise<GlobalCreateCustomerResult>;
   readCustomerCreateReceipt: (input: CreateCustomerInput) => Promise<GlobalCreateCustomerResult | Failure>;
   createQuote: (input: CreateQuoteInput) => Promise<GlobalCreateQuoteResult>;
@@ -208,7 +218,7 @@ export type GlobalCreatePorts = {
   rememberQuote: (quoteId: string | null) => void;
   rememberQuoteConversion: (quoteId: string, clientEventId: string) => void;
   activeCustomerOverlayId?: string | null;
-  openCustomer: (customerId: string) => void;
+  openCustomer: (customerId: string,prefill?:Partial<CustomerFormValue>) => void;
   openOrder: (orderId: string) => void;
   refresh: () => void;
   switchProfile: () => Promise<void>;
@@ -220,7 +230,7 @@ type OpenQuotesState =
   | { kind: "idle" | "loading" | "empty" }
   | { kind: "data"; quotes: QuoteReadback[] }
   | { kind: "denied" | "error" | "unknown"; message: string; requestId?: string };
-type CustomerDraft = Omit<CreateCustomerInput, "clientEventId"|"street"|"zipCode"|"city"|"country"|"paymentPreference"|"vatId"|"notes"> & {street:string;zipCode:string;city:string;country:string;paymentPreference:string;vatId:string|null};
+type CustomerDraft = CustomerFormValue;
 type PositionDraft = {
   key: string;
   catalogServiceId: string;
@@ -247,80 +257,8 @@ type IntakeChecklistEntry = {
   pending?: boolean;
 };
 
-function CustomerFormFields({
-  value,
-  onChange,
-  customerType,
-  onCustomerType,
-  onlyMissing,
-  showPayment,
-  onPaymentChange,
-  autofocus = false,
-}: {
-  value: CustomerDraft;
-  onChange: (value: CustomerDraft) => void;
-  customerType: "" | "business" | "privat";
-  onCustomerType: (value: "business" | "privat") => void;
-  onlyMissing: boolean;
-  showPayment: boolean;
-  onPaymentChange: (value: string) => void;
-  autofocus?: boolean;
-}) {
-  const set = <K extends keyof CustomerDraft>(key: K, next: CustomerDraft[K]) => onChange({ ...value, [key]: next });
-  const missing = (value: string | null | undefined) => !value?.trim();
-  const show = (_key: keyof CustomerDraft, value: string | null | undefined) => !onlyMissing || missing(value);
-  const setName = (name: string) => onChange({
-    ...value,
-    name,
-    companyName: value.customerType === "privat" ? null : nullable(name),
-  });
-  return <div className="kr-stapel">
-    {!onlyMissing ? <div className="kr-feld kr-voll"><span className="kr-feld-label">Kundentyp</span><div data-spec-id="kundeneu.kundentyp"><Segment<"" | "business" | "privat"> label="Kundentyp" wert={customerType} optionen={[
-      { wert: "business", text: "Gewerbe" },
-      { wert: "privat", text: "Privat" },
-    ]} onWert={(next) => { if (next) onCustomerType(next); }} /></div></div> : null}
-    <FormRaster>
-      {show("name", value.name) ? <Feld label="Name / Firma" voll><Eingabe data-spec-id="kundeneu.name" data-autofocus={autofocus || undefined} required minLength={2} maxLength={160} value={value.name} onChange={(event) => setName(event.target.value)} /></Feld> : null}
-      {show("contactPerson", value.contactPerson) ? <Feld label="Ansprechpartner"><Eingabe data-spec-id="kundeneu.ansprechpartner" maxLength={120} value={value.contactPerson ?? ""} onChange={(event) => set("contactPerson", nullable(event.target.value))} /></Feld> : null}
-      {show("phone", value.phone) ? <Feld label="Telefon"><Eingabe data-spec-id="kundeneu.telefon" required type="tel" minLength={6} maxLength={20} value={value.phone ?? ""} onChange={(event) => set("phone", nullable(event.target.value))} /></Feld> : null}
-      {show("email", value.email) ? <Feld label="E-Mail"><Eingabe data-spec-id="kundeneu.email" type="email" maxLength={254} value={value.email ?? ""} onChange={(event) => set("email", nullable(event.target.value))} /></Feld> : null}
-      {show("street", value.street) ? <Feld label="Straße"><Eingabe data-spec-id="kundeneu.strasse" maxLength={160} value={value.street} onChange={(event) => set("street", event.target.value)} /></Feld> : null}
-      {show("zipCode", value.zipCode) ? <Feld label="PLZ"><Eingabe data-spec-id="kundeneu.plz" minLength={2} maxLength={10} value={value.zipCode} onChange={(event) => set("zipCode", event.target.value)} /></Feld> : null}
-      {show("city", value.city) ? <Feld label="Ort"><Eingabe data-spec-id="kundeneu.ort" maxLength={100} value={value.city} onChange={(event) => set("city", event.target.value)} /></Feld> : null}
-      {show("country", value.country) ? <Feld label="Land"><Auswahl data-spec-id="kundeneu.land" value={value.country} onChange={(event) => set("country", event.target.value)} optionen={[
-        { wert: "Deutschland", text: "Deutschland" },
-        { wert: "Österreich", text: "Österreich" },
-        { wert: "Schweiz", text: "Schweiz" },
-        { wert: "Anderes Land", text: "Anderes Land" },
-      ]} /></Feld> : null}
-      {showPayment && show("paymentPreference", value.paymentPreference) ? <Feld label="Zahlungsbedingung"><Auswahl data-spec-id="kundeneu.zahlungsbedingung" required value={value.paymentPreference || "vorkasse"} onChange={(event) => onPaymentChange(event.target.value)} optionen={[
-        { wert: "vorkasse", text: "Vorkasse" },
-        { wert: "bar", text: "Bar oder Karte bei Abholung" },
-      ]} /></Feld> : null}
-    </FormRaster>
-    {!onlyMissing && customerType === "business" ? <details><summary>Weitere Angaben</summary><Feld label="USt-ID"><Eingabe data-spec-id="kundeneu.ustid" maxLength={20} value={value.vatId ?? ""} onChange={(event) => set("vatId", nullable(event.target.value))} /></Feld></details> : null}
-  </div>;
-}
-
-const EMPTY_CUSTOMER: CustomerDraft = {
-  name: "",
-  customerType: "business",
-  companyName: null,
-  contactPerson: null,
-  email: null,
-  phone: null,
-  street: "",
-  zipCode: "",
-  city: "",
-  country: "Deutschland",
-  paymentPreference: "vorkasse",
-  vatId: null,
-};
-
-const EMPTY_INTAKE_CUSTOMER: CustomerDraft = {
-  ...EMPTY_CUSTOMER,
-  paymentPreference: "bar",
-};
+const EMPTY_CUSTOMER: CustomerDraft = EMPTY_CUSTOMER_FORM;
+const EMPTY_INTAKE_CUSTOMER: CustomerDraft = {...EMPTY_CUSTOMER_FORM,country:"",paymentPreference:""};
 
 const HANDY_QUERY = "(max-width: 699px)";
 const FREE_TEXT_SERVICE = "FREE_TEXT";
@@ -347,31 +285,19 @@ function useHandy(): boolean {
 }
 
 function customerChoiceToDraft(customer: GlobalCreateCustomerChoice): CustomerDraft {
-  return {
-    name: customer.name,
-    customerType: customer.customerType === "privat" ? "privat" : "business",
-    companyName: customer.companyName ?? null,
-    contactPerson: customer.contactPerson ?? null,
-    email: customer.email ?? null,
-    phone: customer.phone ?? null,
-    street: customer.street ?? "",
-    zipCode: customer.zipCode ?? "",
-    city: customer.city ?? "",
-    country: customer.country ?? "Deutschland",
-    paymentPreference: customer.paymentPreference ?? "",
-    vatId: customer.vatId ?? null,
-  };
+  return {...EMPTY_INTAKE_CUSTOMER,customerType:customer.customerType??"",companyName:customer.companyName??"",
+    salutation:customer.salutation??"",firstName:customer.firstName??"",lastName:customer.lastName??"",contactRole:customer.contactRole??"",
+    email:customer.email??"",phone:customer.phone??"",street:customer.street??"",houseNumber:customer.houseNumber??"",zipCode:customer.zipCode??"",
+    city:customer.city??"",country:customer.country??"",paymentPreference:customer.paymentPreference??"",vatId:customer.vatId??"",
+    handoverPreference:customer.handoverPreference??"",autoInfo:customer.autoInfo??true,vorrang:customer.vorrang??false};
 }
-
 function customerDraftFromSearch(query: string): CustomerDraft {
-  const value = query.trim();
-  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-    return { ...EMPTY_CUSTOMER, email: value.toLocaleLowerCase("de-DE") };
-  }
-  if (validPhone(value)) {
-    return { ...EMPTY_CUSTOMER, phone: value };
-  }
-  return { ...EMPTY_CUSTOMER, name: value, companyName: nullable(value) };
+  const value=query.trim();
+  if(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))return {...EMPTY_CUSTOMER,email:value.toLocaleLowerCase("de-DE")};
+  if(validPhone(value))return {...EMPTY_CUSTOMER,phone:value};
+  if(/\b(?:gmbh|ag|kg|ohg|gbr|e\.?k\.?|ug)\b/i.test(value))return {...EMPTY_CUSTOMER,customerType:"business",companyName:value};
+  const words=value.split(/\s+/).filter(Boolean);
+  return {...EMPTY_CUSTOMER,customerType:words.length>=2?"privat":"",firstName:words.slice(0,-1).join(" "),lastName:words.at(-1)??""};
 }
 
 function customerSearchFromRecognition(data: IntakeTextRecognition, text: string): string {
@@ -396,22 +322,7 @@ function customerSearchFromRecognition(data: IntakeTextRecognition, text: string
   return streetStartsAt >= 2 ? words.slice(0, streetStartsAt).join(" ") : "";
 }
 
-function validPhone(value: string | null | undefined): boolean {
-  const phone = value?.trim() ?? "";
-  return phone.length >= 6 && phone.length <= 20 && /^[0-9 +\-()/]+$/.test(phone) && phone.replace(/\D/g, "").length >= 6;
-}
-
-function validPostcode(country: string, value: string): boolean {
-  const postcode = value.trim();
-  if (!postcode) return true;
-  if (country === "Deutschland") return /^\d{5}$/.test(postcode);
-  if (country === "Österreich" || country === "Schweiz") return /^\d{4}$/.test(postcode);
-  return postcode.length >= 2 && postcode.length <= 10;
-}
-
-function customerOrderMissing(customer: CustomerDraft, includePayment: boolean): string[] {
-  return getOrderReadiness(customer, { requirePaymentPreference: includePayment }).issues.map((issue) => issue.message);
-}
+function validPhone(value:string|null|undefined){return Boolean(value?.trim())&&customerFieldError("phone",{...EMPTY_CUSTOMER_FORM,phone:value??""})===null;}
 
 const newPosition = (): PositionDraft => ({
   key: globalThis.crypto.randomUUID(),
@@ -504,6 +415,7 @@ function ReceiptFacts({ title, values }: { title: string; values: Array<[string,
 }
 
 export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
+  const geraet = useKrGeraet();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<Step>("choose");
   const [busy, setBusy] = useState(false);
@@ -512,10 +424,19 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [retryConfirmed, setRetryConfirmed] = useState(false);
   const [copied, setCopied] = useState(false);
   const [customerDraft, setCustomerDraft] = useState<CustomerDraft>(EMPTY_CUSTOMER);
-  const [customerType, setCustomerType] = useState<"" | "business" | "privat">("");
-  const [customerNote, setCustomerNote] = useState("");
+  const customerType=customerDraft.customerType;
+  const setCustomerType=(next:CustomerDraft["customerType"])=>setCustomerDraft(current=>({...current,customerType:next}));
+  const customerName=customerDisplayName(customerDraft);
+  const customerSaving=useRef(false);
+  const [customerAddress,setCustomerAddress]=useState<CustomerAddressResult|null>(null);
+  const customerNote=customerDraft.notes;
+  const setCustomerNote=(notes:string)=>setCustomerDraft(current=>({...current,notes}));
   const [customerBaseline, setCustomerBaseline] = useState({ customerType: "", customerDraft: EMPTY_CUSTOMER, customerNote: "" });
   const [customerClosePrompt, setCustomerClosePrompt] = useState(false);
+  const [supplierCustomerMode,setSupplierCustomerMode]=useState(false);
+  const customerLastFocus=useRef<HTMLElement|null>(null);
+  const [customerRecognitionText,setCustomerRecognitionText]=useState("");
+  const [customerOrigins,setCustomerOrigins]=useState<Partial<Record<keyof CustomerFormValue,string>>>({});
   const [intakeCustomerCreateOpen, setIntakeCustomerCreateOpen] = useState(false);
   const [customerDuplicateResults, setCustomerDuplicateResults] = useState<GlobalCreateCustomerChoice[]>([]);
   const [customerDuplicateState, setCustomerDuplicateState] = useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -577,12 +498,13 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const intakeCustomerOverlayWasOpen = useRef(false);
   const dialogRef = useRef<HTMLElement>(null);
   const confirmedOrderDueDateValid = isValidDateInput(confirmedOrderDueDate);
-  const customerCompleteForOrder = getOrderReadiness(customerDraft, { requirePaymentPreference: true }).ready;
+  const customerCompleteForOrder = kundeVollstaendigkeit(customerDraft, { geld: true }).vollstaendig;
   const isHandy = useHandy();
   const activeCustomerOverlayId = ports.activeCustomerOverlayId;
   const listCustomers = ports.listCustomers;
-  const customerOrderMissingFields = customerOrderMissing(customerDraft, ports.canManageMoney);
-  const directCustomerReadiness = getOrderReadiness(directCustomer, { requirePaymentPreference: ports.canManageMoney });
+  const customerReadiness=kundeVollstaendigkeit(customerDraft,{geld:ports.canManageMoney});
+  const customerOrderMissingFields = customerReadiness.fehlt;
+  const directCustomerReadiness = kundeVollstaendigkeit({...directCustomer,invoiceTermsEnabled:customerChoices.find(choice=>choice.id===directCustomerId)?.invoiceTermsEnabled}, { geld: ports.canManageMoney });
   const intakePaymentChoices = useMemo(() => {
     const unavailable = {
       vorkasse: { allowed: false, reason: "Zuerst Kunde und Übergabe wählen." },
@@ -593,6 +515,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     const check = (requestedMode: PaymentMode) => intakePaymentContract({
       customerMode: "EXISTING",
       paymentPreference: directCustomer.paymentPreference,
+      invoiceTermsEnabled:customerChoices.find(entry=>entry.id===directCustomerId)?.invoiceTermsEnabled,invoiceTermDays:customerChoices.find(entry=>entry.id===directCustomerId)?.invoiceTermDays,
       handoverMode: intakeHandover === "PICKUP" ? "pickup" : "shipping",
       requestedMode,
     });
@@ -604,15 +527,14 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         : { allowed: false, reason: contract.message };
     }
     return result;
-  }, [directCustomer.paymentPreference, directCustomerId, directCustomerMode, intakeHandover]);
-  const customerCoreComplete = Boolean(customerType)
-    && customerDraft.name.trim().length >= 2
-    && validPhone(customerDraft.phone);
+  }, [directCustomer.paymentPreference, directCustomerId, directCustomerMode, intakeHandover,customerChoices]);
+  const customerCoreComplete = Object.keys(kundeValidierung(customerDraft)).length===0;
   const customerChanged = JSON.stringify({ customerType, customerDraft, customerNote }) !== JSON.stringify(customerBaseline);
-  const customerDuplicateQueries = useMemo(() => [customerDraft.name, customerDraft.phone, customerDraft.email, customerDraft.city]
+  const customerDuplicateQueries = useMemo(() => [customerName, customerDraft.phone, customerDraft.email, customerDraft.city]
     .map((value) => value?.trim() ?? "")
-    .filter((value, index, values) => value.length >= 2 && values.indexOf(value) === index), [customerDraft.city, customerDraft.email, customerDraft.name, customerDraft.phone]);
-  const customerDuplicateQuery = customerDuplicateQueries.join("|");
+    .filter((value, index, values) => value.length >= 2 && values.indexOf(value) === index), [customerDraft.city, customerDraft.email, customerName, customerDraft.phone]);
+  const customerDuplicateCandidate=useMemo<CustomerComparisonValue>(()=>({customerType:customerDraft.customerType,companyName:customerDraft.companyName,firstName:customerDraft.firstName,lastName:customerDraft.lastName,phone:customerDraft.phone,email:customerDraft.email,street:customerDraft.street,houseNumber:customerDraft.houseNumber,zipCode:customerDraft.zipCode,city:customerDraft.city}),[customerDraft.customerType,customerDraft.companyName,customerDraft.firstName,customerDraft.lastName,customerDraft.phone,customerDraft.email,customerDraft.street,customerDraft.houseNumber,customerDraft.zipCode,customerDraft.city]);
+  const customerDuplicateQuery = customerDuplicateQueries.join("|")+JSON.stringify(customerDuplicateCandidate);
   const customerDuplicateOpen = customerDuplicateResults.length > 0
     && customerDuplicateAcceptedFor !== customerDuplicateQuery;
   const intakeSuggestionBasisKey = useMemo(() => JSON.stringify({
@@ -646,15 +568,19 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setStep(next);
   };
 
-  const changeCustomerType = (next: "business" | "privat") => {
-    setCustomerType(next);
-    setCustomerDraft((current) => ({
-      ...current,
-      customerType: next,
-      companyName: next === "privat" ? null : nullable(current.name),
-      vatId: next === "privat" ? null : current.vatId,
-    }));
-  };
+  useEffect(()=>{
+    if(!open||step!=="customer")return;
+    let active=true;
+    const timer=window.setTimeout(()=>{
+      const input={country:customerDraft.country,zipCode:customerDraft.zipCode,city:customerDraft.city,street:customerDraft.street,houseNumber:customerDraft.houseNumber};
+      if(!ports.checkCustomerAddress){setCustomerAddress({kind:"unavailable",message:"Prüfung gerade nicht möglich – wird beim Speichern geprüft",status:null,blocked:false,suggestions:[]});return;}
+      void ports.checkCustomerAddress(input).then(result=>{if(!active)return;if(result.code==="OK"&&"data" in result)setCustomerAddress(result.data);else setCustomerAddress({kind:"unavailable",message:"message" in result?result.message:"Adressprüfung nicht verfügbar",status:null,blocked:false,suggestions:[]});}).catch(error=>{
+        console.error("[CUSTOMER_ADDRESS_REQUEST_FAILED]",{errorName:error instanceof Error?error.name:"UnknownError"});
+        if(active)setCustomerAddress({kind:"unavailable",message:"Prüfung gerade nicht möglich – wird beim Speichern geprüft",status:null,blocked:false,suggestions:[]});
+      });
+    },250);
+    return()=>{active=false;window.clearTimeout(timer)};
+  },[open,step,ports,customerDraft.country,customerDraft.zipCode,customerDraft.city,customerDraft.street,customerDraft.houseNumber]);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -771,7 +697,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     const sequence = ++customerDuplicateSearchSeq.current;
     const timer = window.setTimeout(() => {
       setCustomerDuplicateState("loading");
-      void Promise.all(queries.map((query) => ports.searchIntakeCustomers(query))).then((results) => {
+      void Promise.all(queries.map((query) => ports.searchIntakeCustomers(query,customerDuplicateCandidate))).then((results) => {
         if (sequence !== customerDuplicateSearchSeq.current) return;
         if (results.some((result) => result.code !== "OK")) {
           setCustomerDuplicateResults([]);
@@ -781,14 +707,15 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         const customers = results.flatMap((result) => result.code === "OK" ? result.customers : []);
         setCustomerDuplicateResults(customers.filter((customer, index) => customers.findIndex((entry) => entry.id === customer.id) === index).slice(0, 10));
         setCustomerDuplicateState("ready");
-      }).catch(() => {
+      }).catch(error => {
+        console.error("[CUSTOMER_DUPLICATE_SEARCH_FAILED]",{errorName:error instanceof Error?error.name:"UnknownError"});
         if (sequence !== customerDuplicateSearchSeq.current) return;
         setCustomerDuplicateResults([]);
         setCustomerDuplicateState("error");
       });
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [customerDuplicateQueries, intakeCustomerCreateOpen, open, ports, step]);
+  }, [customerDuplicateQueries,customerDuplicateCandidate, intakeCustomerCreateOpen, open, ports, step]);
 
   useEffect(() => {
     if (!intakeToast) return;
@@ -815,7 +742,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
   const requestCustomerClose = () => {
     if (busy) return;
-    if (customerChanged) setCustomerClosePrompt(true);
+    if (customerChanged) {customerLastFocus.current=document.activeElement instanceof HTMLElement?document.activeElement:null;setCustomerClosePrompt(true);}
     else closeCustomerNow();
   };
 
@@ -961,6 +888,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   };
 
   function reset() {
+    setSupplierCustomerMode(false);setCustomerRecognitionText("");setCustomerOrigins({});setCustomerAddress(null);
     setStep("choose");
     setFeedback(null);
     setCustomerType("");
@@ -1022,9 +950,11 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     reset();
     setOpen(true);
     if (intent === "CUSTOMER") {
-      const initialCustomer = prefill
-        ? { ...EMPTY_CUSTOMER, name: prefill.name?.trim() ?? "", email: prefill.email?.trim().toLowerCase() ?? null }
-        : EMPTY_CUSTOMER;
+      if(prefill?.customerMode==="lieferant"&&!ports.canManageMoney){deny("customer");return;}
+      setSupplierCustomerMode(prefill?.customerMode==="lieferant");
+      const initialCustomer = prefill?.customerMode==="lieferant"
+        ? {...EMPTY_CUSTOMER,customerType:"lieferant" as const,paymentPreference:""}
+        : prefill ? { ...customerDraftFromSearch(prefill.name ?? ""), email: prefill.email?.trim().toLowerCase() ?? "" } : EMPTY_CUSTOMER;
       setCustomerType("");
       setCustomerClosePrompt(false);
       setCustomerDuplicateResults([]);
@@ -1160,7 +1090,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     const selected = customerChoices.find((entry) => entry.id === draft.customerId);
     setCustomer(selected ?? { id: draft.customerId, customerNumber: draft.customerNumber, name: draft.customerDisplayName, city: null });
     setAwardHandoverMode("pickup");
-    setAwardPaymentMode(paymentModeFromPreference(selected?.paymentPreference));
+    setAwardPaymentMode(paymentModeFromPreference(selected?.paymentPreference,"shipping",selected??undefined));
     setDueDate(draft.dueDate);
     setQuoteNote(draft.note ?? "");
     setPositions(draft.positions.map((position) => {
@@ -1189,45 +1119,30 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       deny("customer");
       return;
     }
-    const firstMissing = !customerType
-      ? { label: "Kundentyp", id: "kundeneu.kundentyp" }
-      : customerDraft.name.trim().length < 2
-        ? { label: "Name / Firma", id: "kundeneu.name" }
-        : !validPhone(customerDraft.phone)
-          ? { label: "Telefon", id: "kundeneu.telefon" }
-          : null;
-    if (firstMissing) {
-      setFeedback({ kind: "validation", message: `Noch offen: ${firstMissing.label}` });
-      document.querySelector<HTMLElement>(`[data-spec-id="${firstMissing.id}"]`)?.focus();
-      return;
+    if(customerSaving.current)return;
+    const errors=kundeValidierung(customerDraft);
+    const invalid=Object.entries(errors)[0];
+    if(invalid){
+      const ids:Record<string,string>={customerType:"kundentyp",companyName:"name",firstName:"vorname",lastName:"nachname",phone:"telefon",street:"strasse",houseNumber:"hausnummer",zipCode:"plz",city:"ort",country:"land"};
+      setFeedback({kind:"validation",message:invalid[0]==="customerType"?"Noch offen: Firma oder Privat":invalid[1]});
+      const root=document.querySelector<HTMLElement>(`[data-spec-id="kundeneu.${ids[invalid[0]]??invalid[0]}"]`);(root?.matches("input,textarea,select,button")?root:root?.querySelector<HTMLElement>("input,textarea,select,button"))?.focus();return;
     }
-    if (customerDraft.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerDraft.email)) {
-      setFeedback({ kind: "validation", message: "E-Mail ist ungültig." });
-      document.querySelector<HTMLElement>('[data-spec-id="kundeneu.email"]')?.focus();
-      return;
-    }
-    if (!validPostcode(customerDraft.country, customerDraft.zipCode)) {
-      setFeedback({ kind: "validation", message: "PLZ passt nicht zum gewählten Land." });
-      document.querySelector<HTMLElement>('[data-spec-id="kundeneu.plz"]')?.focus();
-      return;
-    }
-    if (customerDraft.vatId && !(/^DE\d{9}$/i.test(customerDraft.vatId) || (customerDraft.vatId.length >= 4 && customerDraft.vatId.length <= 20))) {
-      setFeedback({ kind: "validation", message: "USt-ID ist ungültig." });
-      document.querySelector<HTMLElement>('[data-spec-id="kundeneu.ustid"]')?.focus();
-      return;
-    }
+    if(customerAddress?.blocked){setFeedback({kind:"validation",message:"Adresse prüfen"});document.querySelector<HTMLElement>('[data-spec-id="kundeneu.adresse"]')?.focus();return;}
     if (customerDuplicateOpen) {
       setFeedback({ kind: "validation", message: "Bitte zuerst entscheiden, ob der ähnliche Kunde bereits vorhanden ist." });
+      document.querySelector<HTMLElement>('[data-spec-id="kundeneu.dublette"]')?.focus();
       return;
     }
     const id = requestId("customer");
+    setCustomerClosePrompt(false);
     setBusy(true);
     setFeedback(null);
-    const input: CreateCustomerInput = { ...customerDraft, clientEventId: id, notes: nullable(customerNote) };
+    const input=createInputForStatus();
+    customerSaving.current=true;
     try {
       const result = await ports.createCustomer(input);
       if (result.code !== "OK") {
-        setFeedback(requestFeedback(result, id));
+        setFeedback({kind:"save-failed",message:`Speichern fehlgeschlagen · alle Eingaben sind noch da · ${result.message}`,requestId:id});
         return;
       }
       if (intakeCustomerCreateOpen) {
@@ -1238,19 +1153,43 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         return;
       }
       setOpen(false);
+      setIntakeToast(`Kunde ${result.customer.customerNumber ?? result.customer.name} angelegt`);
       ports.openCustomer(result.customer.id);
-    } catch {
+    } catch (error) {
+      console.error("[CUSTOMER_CREATE_REQUEST_FAILED]",{errorName:error instanceof Error?error.name:"UnknownError"});
       setFeedback({
         kind: "unclear",
-        message: "Der Ausgang ist ungeklärt. Nicht neu beginnen: mit derselben Anfragekennung zuerst den gespeicherten Stand prüfen.",
+        message: "Speichern fehlgeschlagen · alle Eingaben sind noch da. Code: CUSTOMER_CREATE_REQUEST_FAILED. Mit gleicher Kennung erneut speichern.",
         requestId: id,
       });
     } finally {
       setBusy(false);
+      customerSaving.current=false;
     }
   };
 
-  const createInputForStatus = (): CreateCustomerInput => ({ ...customerDraft, clientEventId: requestId("customer"), notes: nullable(customerNote) });
+  const recognizeCustomer = async () => {
+    if(busy||!customerRecognitionText.trim())return;
+    setBusy(true);setFeedback(null);
+    try {
+      const result=await ports.recognizeIntakeText(customerRecognitionText);
+      if(result.code!=="OK"){setFeedback({kind:"error",message:result.message});return;}
+      const fields=result.data.fields.filter(field=>["companyName","phone","email","city","zipCode"].includes(field.field));
+      setCustomerDraft(current=>{
+        const next={...current};for(const field of fields){if(!next[field.field as keyof CustomerFormValue])Object.assign(next,{[field.field]:field.value});}
+        if(!next.customerType&&next.companyName)next.customerType="business";return next;
+      });
+      setCustomerOrigins(current=>({...current,...Object.fromEntries(fields.map(field=>[field.field,"erkannt · "+field.source]))}));
+    }catch(error){console.error("[CUSTOMER_RECOGNITION_FAILED]",{errorName:error instanceof Error?error.name:"UnknownError"});setFeedback({kind:"error",message:"Angaben konnten nicht gelesen werden. Code: CUSTOMER_RECOGNITION_FAILED."});}
+    finally{setBusy(false);}
+  };
+
+  const createInputForStatus = (): CreateCustomerInput => {
+    const {customerType:kind,salutation,handoverPreference,paymentTermDays,...fields}=customerDraft;
+    const input:CreateCustomerInput={...fields,customerType:kind as Exclude<CustomerDraft["customerType"],"">,clientEventId:requestId("customer"),salutation:salutation||null,handoverPreference:handoverPreference||null,paymentTermDays:paymentTermDays?Number(paymentTermDays):null};
+    if(!ports.canManageMoney){delete input.paymentPreference;delete input.iban;delete input.paymentTermDays;}
+    return input;
+  };
 
   const quoteInputForStatus = (): CreateQuoteInput | null => {
     if (!customer) return null;
@@ -1368,7 +1307,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     }
     resetAwardDateForQuoteContext();
     setAwardHandoverMode("pickup");
-    setAwardPaymentMode(paymentModeFromPreference(selected.paymentPreference));
+    setAwardPaymentMode(paymentModeFromPreference(selected.paymentPreference,"shipping",selected));
     setCustomer(selected);
     setQuote(null);
     setQuoteReceipt(null);
@@ -1701,13 +1640,19 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setDirectCustomerMode("EXISTING");
     setDirectCustomerId(selected.id);
     setDirectCustomer(draft);
+    if(!preserveIntakeChoices&&selected.handoverPreference){
+      const handover=selected.handoverPreference;
+      setIntakeHandover(handover==="pickup"?"PICKUP":"SHIPPING");
+      const payment=intakePaymentContract({customerMode:"EXISTING",paymentPreference:selected.paymentPreference,handoverMode:handover,invoiceTermsEnabled:selected.invoiceTermsEnabled,invoiceTermDays:selected.invoiceTermDays});
+      if(payment.ok){setIntakePaymentMode(payment.mode);setIntakePaymentOrigin("customer-card");}
+    }
     setCustomerChoices((current) => [selected, ...current.filter((entry) => entry.id !== selected.id)]);
     setIntakeCustomerQuery(selected.companyName ?? selected.name);
     setIntakeCustomerResults([]);
     if (preserveIntakeChoices && intakeHandover) {
       const payment = intakePaymentContract({
         customerMode: "EXISTING",
-        paymentPreference: selected.paymentPreference,
+        paymentPreference: selected.paymentPreference,invoiceTermsEnabled:selected.invoiceTermsEnabled,invoiceTermDays:selected.invoiceTermDays,
         handoverMode: intakeHandover === "PICKUP" ? "pickup" : "shipping",
       });
       if (payment.ok) {
@@ -1747,7 +1692,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       if (intakeHandover) {
         const payment = intakePaymentContract({
           customerMode: "EXISTING",
-          paymentPreference: refreshed.paymentPreference,
+          paymentPreference: refreshed.paymentPreference,invoiceTermsEnabled:refreshed.invoiceTermsEnabled,invoiceTermDays:refreshed.invoiceTermDays,
           handoverMode: intakeHandover === "PICKUP" ? "pickup" : "shipping",
         });
         if (payment.ok) {
@@ -1795,6 +1740,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     const payment = intakePaymentContract({
       customerMode: "EXISTING",
       paymentPreference: directCustomer.paymentPreference,
+      invoiceTermsEnabled: customerChoices.find(entry=>entry.id===directCustomerId)?.invoiceTermsEnabled,
+      invoiceTermDays: customerChoices.find(entry=>entry.id===directCustomerId)?.invoiceTermDays,
       handoverMode: value === "PICKUP" ? "pickup" : "shipping",
     });
     if (payment.ok) {
@@ -1842,7 +1789,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       vatRateBasisPoints: ports.canManageMoney ? item.vatRateBasisPoints : null,
     }));
     const validCustomer = directCustomerMode === "EXISTING" && customerKey.length > 0
-      && directCustomerReadiness.ready;
+      && (directCustomerReadiness.issues.length === 0);
     if (!validCustomer || !validDates || !intakeTermStatus || !intakeSource || !intakeHandover || (ports.canManageMoney && !intakePaymentMode)
       || items.length < 1 || items.length > 20 || !directItems.every(intakePositionComplete)) {
       setFeedback({ kind: "validation", message: "Bitte Kunde, Position, Termin, Terminstatus, Eingangsart, Übergabe und Zahlungsmodus vollständig angeben." });
@@ -2002,88 +1949,81 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       ) : null}
       {open && (step === "customer" || intakeCustomerCreateOpen) ? (() => {
         const customerDialog = <KrDialog
-          key={customerClosePrompt ? "customer-close-prompt" : "customer"}
+          key="customer"
           titel="Kunde anlegen"
           icon="user"
-          groesse="breit"
-          onSchliessen={customerClosePrompt ? () => setCustomerClosePrompt(false) : requestCustomerClose}
-          fuss={customerClosePrompt ? undefined : <>
+          groesse="werkbank"
+          unterzeile={supplierCustomerMode ? "Lieferant anlegen" : undefined}
+          schliessenSpecId="kundeneu.schliessen"
+          onSchliessen={requestCustomerClose} vorSchliessen={()=>{requestCustomerClose();return false;}}
+          fuss={<>
             <KrButton data-spec-id="kundeneu.abbrechen" text="Abbrechen" onClick={requestCustomerClose} />
-            <KrButton data-spec-id="kundeneu.kunde-speichern" form="kr-kunde-anlegen" type="submit" art="erledigen" icon="check" text="Kunde speichern" disabled={busy} />
+            <KrButton data-spec-id="kundeneu.kunde-speichern" form="kr-kunde-anlegen" type="submit" art="erledigen" icon="check" text={busy?"Wird gespeichert …":"Kunde speichern"} disabled={busy} />
           </>}
         >
-          {customerClosePrompt ? <div className="kr-stapel">
-            <h3>Eingaben verwerfen?</h3>
-            <p>Die Kundenanlage enthält noch nicht gespeicherte Eingaben.</p>
-            <div className="kr-stapel">
-              <KrButton art="primaer" text="Weiter bearbeiten" onClick={() => setCustomerClosePrompt(false)} />
-              <KrButton art="leise" text="Verwerfen" onClick={closeCustomerNow} />
-            </div>
-          </div> : <form id="kr-kunde-anlegen" className="kr-stapel" noValidate onSubmit={(event) => void submitCustomer(event)}>
-            {!customerCoreComplete && !customerDraft.name && !customerDraft.phone ? <Hinweis>Erst suchen – vielleicht gibt es den Kunden schon</Hinweis> : null}
-            <div className="kr-spalten">
+          <form id="kr-kunde-anlegen" className="kr-stapel" noValidate onSubmit={(event) => void submitCustomer(event)}>
+            {!customerCoreComplete && !customerName && !customerDraft.phone ? <div data-spec-id="kundeneu.zustand.leer"><Hinweis>Erst suchen – vielleicht gibt es den Kunden schon</Hinweis></div> : null}
+            <div className="ev-werkbank">
               <div className="kr-stapel">
-                <section className="kr-stapel" aria-label="Pflicht">
-                  <h3>Pflicht</h3>
-                  <CustomerFormFields
-                    value={customerDraft}
-                    onChange={setCustomerDraft}
-                    customerType={customerType}
-                    onCustomerType={changeCustomerType}
-                    onlyMissing={false}
-                    showPayment={ports.canManageMoney}
-                    onPaymentChange={(paymentPreference) => setCustomerDraft((current) => ({ ...current, paymentPreference }))}
-                    autofocus
-                  />
-                  <Feld label="Notiz"><Textfeld data-spec-id="kundeneu.notiz" rows={3} maxLength={2000} value={customerNote} onChange={(event) => setCustomerNote(event.target.value)} /></Feld>
+                <section className="ev-erfassen" aria-label="Schnell erfassen">
+                  <div className="ev-erf-kopf"><b>Schnell erfassen</b></div>
+                  <div className="ev-erf-text"><Textfeld data-spec-id="kundeneu.erfassen-text" aria-label="Schnell erfassen" rows={3} value={customerRecognitionText} onChange={event=>setCustomerRecognitionText(event.target.value)}/></div>
+                  <div className="ev-erf-werkzeuge"><KrButton data-spec-id="kundeneu.angaben-erkennen" text={busy ? "Wird gelesen …" : "Angaben erkennen"} onClick={()=>void recognizeCustomer()} disabled={busy}/><KrButton data-spec-id="kundeneu.internet-ergaenzen" art="sekundaer" text="Im Internet ergänzen · STUFE 4" disabled /></div>
+                  {Object.keys(customerOrigins).length ? <div className={`ev-erkannt${Object.values(customerOrigins).some(origin=>origin?.startsWith("erkannt")) ? "" : " ev-erkannt--ok"}`} aria-live="polite">
+                    <div className="ev-erkannt-kopf"><b>{Object.keys(customerOrigins).length} Angaben {Object.values(customerOrigins).some(origin=>origin?.startsWith("erkannt")) ? "erkannt und vorausgefüllt" : "bestätigt"}</b>
+                      {Object.values(customerOrigins).some(origin=>origin?.startsWith("erkannt")) ? <KrButton data-spec-id="kundeneu.alles-bestaetigen" className="kr-btn--ton-blau" icon="check" text="Alles bestätigen" onClick={()=>setCustomerOrigins(current=>Object.fromEntries(Object.entries(current).map(([key,origin])=>[key,origin?.replace(/^erkannt/,"bestätigt")])))} /> : null}
+                    </div><div className="ev-erk-chips">{Object.entries(customerOrigins).map(([key,origin])=><span className="ev-erk-chip" key={key}>{origin}<b>{String(customerDraft[key as keyof CustomerFormValue])}</b></span>)}</div>
+                  </div> : null}
                 </section>
-                {customerDuplicateState === "loading" ? <p aria-live="polite">Ähnliche Kunden werden gesucht …</p> : null}
-                {customerDuplicateState === "error" ? <Hinweis ton="warn">Dublettenprüfung ist gerade nicht verfügbar. Eingaben bleiben erhalten.</Hinweis> : null}
-                {customerDuplicateOpen ? <Hinweis ton="warn"><div className="kr-stapel" data-spec-id="kundeneu.dublette">
-                  <strong>Ähnlicher Kunde vorhanden: {customerDuplicateResults[0]?.companyName ?? customerDuplicateResults[0]?.name}</strong>
-                  <div className="kr-stapel">
-                    <KrButton data-spec-id="kundeneu.vorhandenen-oeffnen" art="sekundaer" text="Vorhandenen öffnen" onClick={() => {
-                      const match = customerDuplicateResults[0];
-                      if (!match) return;
-                      setOpen(false);
-                      ports.openCustomer(match.id);
-                    }} />
-                    <KrButton data-spec-id="kundeneu.trotzdem-neu" text="Trotzdem neu anlegen" onClick={() => setCustomerDuplicateAcceptedFor(customerDuplicateQuery)} />
-                  </div>
-                </div></Hinweis> : null}
-                {customerCoreComplete && customerOrderMissingFields.length > 0 ? <Hinweis><div className="kr-stapel" data-spec-id="kundeneu.teilweise">
+                <KundeFormular autofocusField="customerType" prefix="kundeneu" mode="create" value={customerDraft} supplierMode={supplierCustomerMode} onChange={setCustomerDraft} origins={customerOrigins} canManageMoney={ports.canManageMoney} addressSuggestions={customerAddress?.suggestions} addressMessage={customerAddress?{tone:customerAddress.kind==="found"?"ok":customerAddress.kind==="not-checked"?"neutral":"warn",text:customerAddress.message}:null}/>
+                {customerCoreComplete && customerOrderMissingFields.length > 0 ? <Hinweis><div className="kr-stapel" data-spec-id="kundeneu.zustand.teilweise">
                   <strong>Speicherbar als Interessent · für Auftrag fehlt: {customerOrderMissingFields.join(", ")}</strong>
                   <div className="kr-stapel">
                     <KrButton data-spec-id="kundeneu.als-interessent-speichern" art="primaer" text="Als Interessent speichern" onClick={() => void submitCustomer({ preventDefault() {} } as FormEvent)} />
                     <KrButton data-spec-id="kundeneu.weiter-ausfuellen" text="Weiter ausfüllen" onClick={() => {
-                      const ids: Record<string, string> = { Ansprechpartner: "ansprechpartner", "E-Mail": "email", Straße: "strasse", PLZ: "plz", Ort: "ort", Land: "land", Zahlungsbedingung: "zahlungsbedingung" };
+                      const ids: Record<string, string> = { Ansprechpartner: "nachname", Vorname:"vorname",Anschrift:"strasse", "E-Mail": "email", Straße: "strasse", PLZ: "plz", Ort: "ort", Land: "land", Zahlungsbedingung: "zahlungsbedingung" };
                       const id = ids[customerOrderMissingFields[0] ?? ""];
                       if (id) document.querySelector<HTMLElement>(`[data-spec-id="kundeneu.${id}"]`)?.focus();
                     }} />
                   </div>
                 </div></Hinweis> : null}
-                {feedback ? <>
-                  <Hinweis ton={feedback.kind === "validation" ? "warn" : undefined}><span><strong>{feedback.kind === "unclear" ? "Ausgang ungeklärt" : "Eingabe prüfen"}</strong><br />{feedback.message}</span></Hinweis>
-                  {feedback.kind === "unclear" ? <div className="kr-stapel">
-                    <KrButton art="sekundaer" text="Status mit gleicher Kennung prüfen" onClick={() => void checkUnclearStatus()} disabled={busy} />
-                    {statusChecked ? <KrButton text={retryConfirmed ? "Ja, jetzt erneut senden" : "Erneut senden vorbereiten"} onClick={retryAfterStatusCheck} disabled={busy} /> : null}
-                  </div> : null}
-                </> : null}
+                {feedback ? <div data-spec-id="kundeneu.zustand.fehler" role="alert"><Hinweis ton="warn">{feedback.message}</Hinweis>{feedback.kind!=="validation"?<KrButton data-spec-id="kundeneu.erneut-speichern" text="Erneut speichern" onClick={()=>void submitCustomer({preventDefault(){}} as FormEvent)} disabled={busy}/>:null}</div>:null}
               </div>
-              <aside className="kr-stapel" aria-label="Prüfliste">
-                <h3>Prüfliste</h3>
-                <Fakten zeilen={[
-                  { k: "Kundentyp", v: customerType ? "erfasst" : "fehlt" },
-                  { k: "Name / Firma", v: customerDraft.name.trim().length >= 2 ? "erfasst" : "fehlt" },
-                  { k: "Telefon", v: validPhone(customerDraft.phone) ? "erfasst" : "fehlt" },
-                  { k: "Für Aufträge", v: customerOrderMissingFields.length ? `fehlt: ${customerOrderMissingFields.join(", ")}` : "vollständig" },
-                  { k: "Kundennummer", v: "wird beim Speichern vergeben" },
-                ]} />
-              </aside>
+              <PruefRail offeneAngaben={customerReadiness.fehlt.length}>
+                {customerDuplicateState === "loading" ? <p aria-live="polite">Ähnliche Kunden werden gesucht …</p> : null}
+                {customerDuplicateState === "error" ? <Hinweis ton="warn">Dublettenprüfung ist gerade nicht verfügbar. Eingaben bleiben erhalten.</Hinweis> : null}
+                {customerDuplicateState === "ready" && !customerDuplicateResults.length ? <Hinweis ton="ok" icon="check">Keine Dublette gefunden · geprüft: Name, Telefon, E-Mail, Ort</Hinweis>:null}
+                {customerDuplicateOpen ? <div className={`ev-kf-dub${customerDuplicateResults.some(customer=>customer.duplicateMatch?.kind==="exact") ? " ev-kf-dub--sicher" : ""}`} data-spec-id="kundeneu.dublette" tabIndex={-1}>
+                  <header><strong>{customerDuplicateResults.some(customer=>customer.duplicateMatch?.kind==="exact")?"Diesen Kunden gibt es schon":"Ähnlicher Kunde vorhanden"}: {customerDuplicateResults[0]?.companyName ?? customerDuplicateResults[0]?.name}</strong></header>
+                  <div className="ev-kf-dub-k">
+                    {ports.canReadCustomers?<>
+                      <KrButton data-spec-id="kundeneu.diesen-kunden-bearbeiten" text="Diesen Kunden bearbeiten" onClick={()=>{
+                        const match=customerDuplicateResults[0];if(!match)return;
+                        const prefill=Object.fromEntries(Object.entries(customerDraft).filter(([key,value])=>value!==customerBaseline.customerDraft[key as keyof CustomerFormValue])) as Partial<CustomerFormValue>;
+                        setOpen(false);ports.openCustomer(match.id+"#uebernahme",prefill);
+                      }}/>
+                      <KrButton data-spec-id="kundeneu.vorhandenen-oeffnen" art="sekundaer" text="Vorhandenen öffnen" onClick={()=>{const match=customerDuplicateResults[0];if(match)ports.openCustomer(match.id)}}/>
+                    </> : null}
+                    <KrButton data-spec-id="kundeneu.ist-ein-anderer-kunde" text="Ist ein anderer Kunde" onClick={() => setCustomerDuplicateAcceptedFor(customerDuplicateQuery)} />
+                  </div>
+                </div> : null}
+                {customerAddress ? <div className="ev-kf-adrz" role="status">{customerAddress.message}</div> : null}
+                <section className="ev-kf-pl">
+                  <b>Prüfliste</b><small>Pflicht</small>
+                  {[{id:"kundentyp",label:"Firma oder Privat",value:customerType},{id:"name",label:"Name / Firma",value:customerName},{id:"telefon",label:"Telefon",value:customerDraft.phone}].map(row=><div className="ev-kf-pl-z" key={row.id} data-spec-id={"kundeneu.pruefliste."+row.id}><Chip text={row.value ? "ok" : "fehlt"} ton={row.value ? "ok" : "warn"}/>{row.label}</div>)}
+                  <small>Für Aufträge nötig</small>
+                  {[{id:"email",label:"E-Mail",value:customerDraft.email},{id:"anschrift",label:"Anschrift",value:customerAddress?.blocked?"prüfen":customerReadiness.fehlt.includes("Anschrift")?"":"OK"},...(ports.canManageMoney?[{id:"zahlungsbedingung",label:"Zahlungsbedingung",value:customerDraft.paymentPreference}]:[])].map(row=><div className="ev-kf-pl-z" key={row.id} data-spec-id={"kundeneu.pruefliste."+row.id}><Chip text={row.value === "prüfen" ? "prüfen" : row.value ? "ok" : "fehlt"} ton={row.value && row.value!=="prüfen" ? "ok" : "warn"}/>{row.label}</div>)}
+                  <small className="ev-kf-pl-i" data-spec-id="kundeneu.pruefliste.info">Kundennummer wird beim Speichern vergeben</small>
+                  <small className="ev-kf-pl-i">{customerReadiness.text}</small>
+                </section>
+              </PruefRail>
             </div>
-          </form>}
+          </form>
         </KrDialog>;
-        return intakeCustomerCreateOpen ? createPortal(customerDialog, document.body) : customerDialog;
+        const prompts=<>{customerDialog}{customerClosePrompt?<KrDialog titel="Eingaben noch nicht gespeichert" onSchliessen={()=>{setCustomerClosePrompt(false);requestAnimationFrame(()=>customerLastFocus.current?.focus())}}><div className="kr-stapel" data-spec-id="entwurf">
+          <KrButton data-spec-id="entwurf.verwerfen" text="Verwerfen" onClick={closeCustomerNow}/><KrButton data-spec-id="entwurf.weiter-bearbeiten" text="Weiter bearbeiten" onClick={()=>{setCustomerClosePrompt(false);requestAnimationFrame(()=>customerLastFocus.current?.focus())}}/><KrButton data-spec-id="entwurf.speichern" art="primaer" text="Speichern" onClick={()=>void submitCustomer({preventDefault(){}} as FormEvent)}/>
+        </div></KrDialog>:null}</>;
+        return intakeCustomerCreateOpen ? createPortal(<KrApp geraet={geraet}>{prompts}</KrApp>, document.body) : prompts;
       })() : null}
       {open && step === "direct-intake" ? (
         <KrDialog
@@ -2166,13 +2106,13 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                       {intakeCustomerResults.length > 0 ? <Hinweis ton="warn">Möglicher Doppelter vorhanden – bitte Treffer prüfen.</Hinweis> : null}
                       <KrButton data-spec-id="eingang.kunde-anlegen" art="sekundaer" text="Kunde anlegen" onClick={openIntakeCustomerCreate} />
                     </div> : <div className="kr-stapel" data-spec-id="eingang.kundenzeile">
-                      <Fakten zeilen={[{ k: "Name / Firma", v: directCustomer.companyName ?? directCustomer.name }, { k: "Kundennummer", v: customerChoices.find((entry) => entry.id === directCustomerId)?.customerNumber ?? "fehlt" }]} />
+                      <Fakten zeilen={[{ k: "Name / Firma", v: customerDisplayName(directCustomer) }, { k: "Kundennummer", v: customerChoices.find((entry) => entry.id === directCustomerId)?.customerNumber ?? "fehlt" }]} />
                       {intakeOrigin === "customer-card" ? <Chip text="aus der Kundenkarte" ton="info" /> : null}
                       <KrButton art="sekundaer" text="Anderer Kunde" onClick={() => selectIntakeCustomer("NONE")} />
                     </div>}
                   </Feld>
                 </FormRaster>
-                {directCustomerMode === "EXISTING" && !directCustomerReadiness.ready ? <div data-spec-id="eingang.zustand.teilweise_bestand"><Hinweis ton="warn"><div className="kr-stapel">
+                {directCustomerMode === "EXISTING" && !(directCustomerReadiness.issues.length === 0) ? <div data-spec-id="eingang.zustand.teilweise_bestand"><Hinweis ton="warn"><div className="kr-stapel">
                     <strong>Unvollständig – für Auftrag fehlt: {directCustomerReadiness.issues.map((issue) => ["street", "zipCode", "city", "country"].includes(issue.field) ? `Anschrift: ${issue.message}` : issue.message).join(", ")}</strong>
                     <span>Ergänzungen werden ausschließlich in der Kundenkarte gespeichert.</span>
                     <KrButton data-spec-id="eingang.kunde-erganzen" art="sekundaer" text="In Kundenkarte ergänzen" onClick={() => {
@@ -2180,7 +2120,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                      if (!customerId) return;
                      intakeCustomerOverlayWasOpen.current = false;
                      setIntakeCustomerOverlayId(customerId);
-                      ports.openCustomer(customerId);
+                      ports.openCustomer(customerId+"#fehlend");
                     }} />
                 </div></Hinweis></div> : null}
                 {intakeTermChoice ? <div className={styles.intakeSuggestion} data-spec-id="eingang.terminvorschlag">
@@ -2260,7 +2200,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 <FormRaster>
                   <Fakten zeilen={[
                     { k: "Art", v: "Auftrag" },
-                    { k: "Kunde", v: directCustomerMode === "NONE" ? "fehlt" : directCustomer.name || "fehlt" },
+                    { k: "Kunde", v: directCustomerMode === "NONE" ? "fehlt" : customerDisplayName(directCustomer) || "fehlt" },
                     { k: "Positionen", v: String(directItems.length) },
                     { k: "Wunschtermin", v: directWishDate || "fehlt" },
                     { k: "Übergabe", v: intakeHandover === "PICKUP" ? "Abholung" : intakeHandover === "SHIPPING" ? "Versand" : "fehlt" },

@@ -147,21 +147,15 @@ async function seedPrerequisites() {
     `;
     await transaction`
       INSERT INTO public.customers (
-        id, tenant_id, customer_number, name, company_name, type,
-        contact_person, email, phone, street, zip_code, city, country,
-        payment_preference, created_at, updated_at
-      ) VALUES
-        (
-          ${CUSTOMER}, ${TENANT}, 'F15-B2-001', 'F1.5 B2 Synthetic Customer',
-          'F1.5 B2 Synthetic Customer GmbH', 'business', 'Fiona Vertrag',
-          'f15-b2-customer@local.invalid', '+49 711 5550150', 'Kundenweg 2',
-          '70174', 'Stuttgart', 'Deutschland', 'vorkasse', now(), now()
-        ),
+        id, tenant_id, customer_number, name, company_name, type, contact_person, email, phone, street, zip_code, city, country, payment_preference, created_at, updated_at, first_name, last_name, salutation, house_number
+      ) VALUES (
+        ${CUSTOMER}, ${TENANT}, 'F15-B2-001', 'F1.5 B2 Synthetic Customer', 'F1.5 B2 Synthetic Customer GmbH', 'business', 'Fiona Vertrag', 'f15-b2-customer@local.invalid', '+49 711 5550150', (SELECT street FROM private.kunde_split_street('Kundenweg 2')), '70174', 'Stuttgart', private.kunde_land_schluessel('Deutschland'), 'vorkasse', now(), now(), (SELECT first_name FROM private.kunde_split_name('Fiona Vertrag')), (SELECT last_name FROM private.kunde_split_name('Fiona Vertrag')), (SELECT salutation FROM private.kunde_split_name('Fiona Vertrag')), (SELECT house_number FROM private.kunde_split_street('Kundenweg 2'))
+      ),
         (
           ${FOREIGN_CUSTOMER}, ${FOREIGN_TENANT}, 'F15-B2-F', 'F1.5 B2 Foreign Customer',
           'F1.5 B2 Foreign Customer GmbH', 'business', 'Fiona Fremd',
-          'f15-b2-foreign@local.invalid', '+49 40 5550150', 'Fremdweg 3',
-          '20095', 'Hamburg', 'Deutschland', 'vorkasse', now(), now()
+          'f15-b2-foreign@local.invalid', '+49 40 5550150', 'Fremdweg',
+          '20095', 'Hamburg', 'DE', 'vorkasse', now(), now(), 'Fiona', 'Fremd', 'ohne', '3'
         )
     `;
     await transaction`

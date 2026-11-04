@@ -1,4 +1,4 @@
-export type CustomerType = "private" | "business" | "institution" | "Privatkunde" | "Geschäftskunde" | "Institution";
+export type CustomerType = "privat" | "lieferant" | "private" | "business" | "institution" | "Privatkunde" | "Geschäftskunde" | "Institution";
 
 export type CustomerStatus =
   | "new"
@@ -148,6 +148,12 @@ export type Customer = {
   phone?: string;
   contactPerson?: string;
   companyName?: string;
+  salutation?: "frau"|"herr"|"ohne"|null;
+  firstName?: string|null; lastName?:string|null; contactRole?:string|null;
+  houseNumber?:string|null; billingEmail?:string|null;website?:string|null;
+  handoverPreference?:"pickup"|"shipping"|null;
+  invoiceTermsEnabled?:boolean;invoiceTermDays?:number|null;
+  autoInfo?:boolean;vorrang?:boolean;
   imageUrls?: string[];
 
   prefComm?: "E-Mail" | "Telefon" | "Brief / Post" | "whatsapp" | "unknown";
@@ -196,7 +202,7 @@ export type Customer = {
 
 export function isCompleteShippingAddress(customer?: Customer | null): boolean {
   if (!customer) return false;
-  
+
   const hasStreet = Boolean(customer.street && customer.street.trim().length > 0);
   const hasHouseNumber = Boolean(customer.street && /\d/.test(customer.street));
   const hasZipCode = Boolean(customer.zipCode && customer.zipCode.trim().length >= 4);

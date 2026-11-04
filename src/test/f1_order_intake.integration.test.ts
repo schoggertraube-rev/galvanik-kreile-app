@@ -53,7 +53,7 @@ const pool = {
   },
 };
 
-let actions: typeof import("@/app/warendurchlauf/actions");
+let actions: typeof import("@/app/warendurchlauf/actions") & typeof import("@/app/actions/eingang.actions");
 
 function setSession(userId: string, role: string, tenantId = TENANT_A) {
   readAppSessionSpy.mockResolvedValue({
@@ -105,7 +105,7 @@ beforeAll(async () => {
     );
   }
 
-  actions = await import("@/app/warendurchlauf/actions");
+  actions = {...await import("@/app/warendurchlauf/actions"),...await import("@/app/actions/eingang.actions")};
   await seedFixtures();
 }, 30_000);
 

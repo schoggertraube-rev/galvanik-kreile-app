@@ -5,6 +5,8 @@ import {
   type ErfasseAuftragResult,
 } from "@/modules/eingang/server-public";
 import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
+import {createCustomerInTransaction} from "@/modules/customers/server-public";
+import {createOrderIntake,type CreateOrderIntakeInput} from "@/lib/server/commands/orderIntakeCommand";
 import { readCustomerOrderReadinessCommand } from "@/modules/customers/server-public";
 
 function existingCustomerId(input: unknown): string | null {
@@ -33,7 +35,7 @@ export async function erfasseAuftragAusEingangAction(input: unknown): Promise<Er
       : { code: "CONFLICT", message: customer.message };
   }
   const readiness = customer.readiness;
-  if (!readiness.ready) {
+  if (readiness.issues.length > 0) {
     return {
       code: "CUSTOMER_INCOMPLETE",
       message: `Kunde ist für den Auftrag unvollständig: ${readiness.issues.map((issue) => issue.message).join(", ")}. Bitte in der Kundenkarte ergänzen.`,
@@ -41,4 +43,8 @@ export async function erfasseAuftragAusEingangAction(input: unknown): Promise<Er
     };
   }
   return erfasseAuftragAusEingangCommand(input, { customerId, readiness });
+}
+
+export async function createOrderIntakeAction(input:CreateOrderIntakeInput){
+  return createOrderIntake(input,createCustomerInTransaction);
 }

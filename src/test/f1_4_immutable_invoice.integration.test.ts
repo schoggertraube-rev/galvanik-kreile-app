@@ -206,12 +206,9 @@ async function insertPrerequisites() {
     `;
     await transaction`
       INSERT INTO public.customers (
-        id, tenant_id, customer_number, name, company_name, type,
-        street, zip_code, city, country, created_at, updated_at
+        id, tenant_id, customer_number, name, company_name, type, street, zip_code, city, country, created_at, updated_at, house_number
       ) VALUES (
-        ${CUSTOMER_ID}, ${TENANT_ID}, 'F14-COMMAND-001', 'F1.4 Synthetic Customer',
-        'F1.4 Synthetic Customer GmbH', 'business', 'Kundenweg 2',
-        '70174', 'Stuttgart', 'Deutschland', now(), now()
+        ${CUSTOMER_ID}, ${TENANT_ID}, 'F14-COMMAND-001', 'F1.4 Synthetic Customer', 'F1.4 Synthetic Customer GmbH', 'business', (SELECT street FROM private.kunde_split_street('Kundenweg 2')), '70174', 'Stuttgart', private.kunde_land_schluessel('Deutschland'), now(), now(), (SELECT house_number FROM private.kunde_split_street('Kundenweg 2'))
       )
     `;
     await transaction`
@@ -564,6 +561,16 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
 
       for (const variant of field.variants) {
         const label = `${field.table}.${field.column}/${variant.label}`;
+        if (field.table === "customers" && field.column === "country"
+          && typeof variant.value === "string" && !["DE", "AT", "CH", "andere"].includes(variant.value)) {
+          const before = await tenantState();
+          await expect(sql.unsafe(
+            `UPDATE public.customers SET country = $1 WHERE id = $2 AND tenant_id = $3`,
+            [variant.value, field.id, TENANT_ID],
+          )).rejects.toMatchObject({ code: "23514", constraint_name: "customers_country_k1_chk" });
+          expect(await tenantState()).toEqual(before);
+          continue;
+        }
         try {
           await sql.unsafe(
             `UPDATE public.${field.table} SET ${field.column} = $1

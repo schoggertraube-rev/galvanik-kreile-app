@@ -5,6 +5,7 @@ import { searchOrderIntakeCustomers } from "@/lib/server/orderIntakeRead";
 import { readTenantOperationalOrders } from "@/lib/server/orderStationRead";
 import {
   normalizeSearchQuery,
+  customerMatchField,
   searchTenant,
   type SearchTenantResult,
 } from "@/modules/suche/public";
@@ -40,7 +41,8 @@ export async function searchTenantAction(query: string): Promise<SearchTenantRes
   let authorization;
   try {
     authorization = await resolveAuthorization();
-  } catch {
+  } catch (error) {
+    console.error("[SEARCH_TENANT_AUTHORIZATION_FAILED]", { errorName: error instanceof Error ? error.name : "UnknownError" });
     return { code: "UNAVAILABLE", message: UNAVAILABLE_MESSAGE };
   }
   if (!authorization.ok) {
@@ -65,7 +67,7 @@ export async function searchTenantAction(query: string): Promise<SearchTenantRes
       try {
         const records = await searchOrderIntakeCustomers(authorization.data, { query: customerQuery });
         return {
-          records,
+          records: records.filter(customer => customerMatchField(customer, customerQuery) !== null),
           // The existing read port intentionally caps at 20. Reaching that cap
           // cannot prove completeness, so the reusable core must mark coverage.
           exhaustive: records.length < CUSTOMER_READ_PORT_LIMIT,

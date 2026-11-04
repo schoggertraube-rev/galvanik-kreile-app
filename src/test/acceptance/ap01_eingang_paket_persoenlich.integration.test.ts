@@ -1,3 +1,4 @@
+// Fassung 1b fuer AP-EIN Teil 1 (Planungschat 03.11.): nur Kunden-Seed mit Recht geld (K1 Punkt 6); sonst main.
 // @vitest-environment node
 // AP-01 Akzeptanztest - Kanal "Paket/persoenlich" (getippt -> Auftrag), eine Wahrheit.
 // Planungschat-Vertrag (U-221). Codex kopiert diese Datei bytegleich nach
@@ -122,10 +123,11 @@ beforeAll(async () => {
 
   eingangActor = await createFixture(["eingang", "auftraege", "kunden"]);
   ohneEingangActor = await createFixture(["auftraege", "kunden"]);
+  const seedActor = await createFixture(["eingang", "auftraege", "kunden", "geld"]);
 
   // Bestandskunde ueber den kanonischen, H18-belegten Weg (keine zweite Kundenanlage im Test).
   const { createCustomerAction } = await import("@/app/actions/customers.actions");
-  const created = await withSession(eingangActor, () => createCustomerAction({
+  const created = await withSession(seedActor, () => createCustomerAction({
     city: "Stuttgart",
     clientEventId: randomUUID(),
     companyName: `AP01 Bestandskunde ${RUN} GmbH`,

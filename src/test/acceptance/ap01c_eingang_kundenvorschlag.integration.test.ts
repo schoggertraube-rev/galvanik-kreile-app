@@ -1,3 +1,4 @@
+// Fassung 2 (Planungschat 03.11.): Fixture mit Recht geld, weil der Seed eine Zahlungsbedingung setzt (K1 Punkt 6).
 // @vitest-environment node
 // AP-01 Fassung 4.2: echte Namenserkennung ueber die kanonische Kundensuche gegen die Replay-DB.
 
@@ -88,7 +89,7 @@ async function createFixture(): Promise<Fixture> {
     await transaction`
       INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
       SELECT ${KREILE_TENANT_SLUG}, ${actorId}::uuid, area, ${actorId}::uuid
-      FROM unnest(${["eingang", "auftraege", "kunden"]}::text[]) area
+      FROM unnest(${["eingang", "auftraege", "kunden", "geld"]}::text[]) area
     `;
   });
   return { actorId, actorIssuedAt: Date.now() };

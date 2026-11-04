@@ -93,14 +93,9 @@ async function createFixture(): Promise<Fixture> {
     `;
     await transaction`
       INSERT INTO public.customers (
-        id, tenant_id, customer_number, name, company_name, type, contact_person,
-        email, phone, street, zip_code, city, country, payment_preference,
-        ziel_freigeschaltet, ziel_tage, source
+        id, tenant_id, customer_number, name, company_name, type, contact_person, email, phone, street, zip_code, city, country, payment_preference, ziel_freigeschaltet, ziel_tage, source, first_name, last_name, salutation, house_number
       ) VALUES (
-        ${customerId}, ${KREILE_TENANT_SLUG}, ${`H18-W-${customerId.slice(0, 8)}`},
-        'H18 Werkstattkunde', 'H18 Werkstattkunde GmbH', 'business', 'Ada Werkstatt',
-        ${`werkstatt-${customerId}@local.invalid`}, '+49 711 5550192', 'Werkstattweg 18',
-        '70178', 'Stuttgart', 'Deutschland', 'rechnung_14', true, 14, 'manual'
+        ${customerId}, ${KREILE_TENANT_SLUG}, ${`H18-W-${customerId.slice(0, 8)}`}, 'H18 Werkstattkunde', 'H18 Werkstattkunde GmbH', 'business', 'Ada Werkstatt', ${`werkstatt-${customerId}@local.invalid`}, '+49 711 5550192', (SELECT street FROM private.kunde_split_street('Werkstattweg 18')), '70178', 'Stuttgart', private.kunde_land_schluessel('Deutschland'), 'rechnung', true, 14, 'manual', (SELECT first_name FROM private.kunde_split_name('Ada Werkstatt')), (SELECT last_name FROM private.kunde_split_name('Ada Werkstatt')), (SELECT salutation FROM private.kunde_split_name('Ada Werkstatt')), (SELECT house_number FROM private.kunde_split_street('Werkstattweg 18'))
       )
     `;
   });
@@ -114,7 +109,7 @@ async function createFixture(): Promise<Fixture> {
 }
 
 async function createOrder(fixture: Fixture, label: string, paymentMode: "vorkasse" | "rechnung") {
-  const { createOrderIntakeAction } = await import("@/app/warendurchlauf/actions");
+  const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
   const result = await withSession(fixture, () => createOrderIntakeAction({
     clientEventId: randomUUID(),
     customer: { mode: "EXISTING", customerId: fixture.customerId },

@@ -1,0 +1,384 @@
+// Fassung 2 (Planungschat 03.11.): geldLogin zusaetzlich mit Recht entscheiden (BAUPLAN formulare.kunde.felder[vorrang]).
+// @vitest-environment node
+// AP-EIN Teil 1 Kunde, Akzeptanztest (aus AP-K1 F2, Planungschat 02.11.2026, BAUPLAN spec 21d0347a3319): Datenvertrag Kunde,
+// ein Schreibweg (createCustomerAction / updateCustomerAction), Land als Schluessel (A-87), Zahlungsbedingung (K5),
+// Lieferant, auto_info/vorrang, eine Vollstaendigkeitsfunktion. Planungschat-Vertrag (U-221). Codex kopiert diese Datei
+// bytegleich nach src/test/acceptance/apk1_kunde_datenvertrag.integration.test.ts und aendert sie nie.
+// Harness wie AP-01/H18. Adressverzeichnis ist in der Replay-DB leer -> Anschrift "ungeprueft" (address_status NULL).
+
+import { AsyncLocalStorage } from "node:async_hooks";
+import { randomUUID } from "node:crypto";
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
+import postgres from "postgres";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { KREILE_TENANT_SLUG } from "@/lib/tenant";
+import type { AppSession } from "@/lib/server/appSession";
+
+(globalThis as typeof globalThis & { AsyncLocalStorage: typeof AsyncLocalStorage }).AsyncLocalStorage = AsyncLocalStorage;
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
+
+const DATABASE_URL = process.env.DATABASE_URL;
+const EXPECTED_DATABASE_URL = process.env.H18_EXPECTED_DATABASE_URL;
+if (!DATABASE_URL || !EXPECTED_DATABASE_URL || DATABASE_URL !== EXPECTED_DATABASE_URL) {
+  throw new Error("APK1_LOCAL_REPLAY_REQUIRED: DATABASE_URL must equal H18_EXPECTED_DATABASE_URL");
+}
+const parsed = new URL(DATABASE_URL);
+if (parsed.protocol !== "postgresql:" || parsed.hostname !== "127.0.0.1" || parsed.pathname !== "/postgres" || parsed.username !== "postgres") {
+  throw new Error("APK1_LOCAL_REPLAY_REQUIRED: dedicated loopback Postgres expected");
+}
+if (process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error("APK1_LOCAL_REPLAY_REQUIRED: service role must be unset");
+
+const sql = postgres(DATABASE_URL, { max: 2, prepare: false });
+const originalSecret = process.env.APP_SESSION_SECRET;
+process.env.APP_SESSION_SECRET = "apk1-kunde-local-only";
+const RUN = randomUUID().slice(0, 8);
+
+type Fixture = { actorId: string; actorIssuedAt: number };
+
+async function withRequest<T>(cookie: string, work: () => Promise<T>): Promise<T> {
+  const { NextRequest } = await import("next/server");
+  const { createRequestStoreForAPI } = await import("next/dist/server/async-storage/request-store");
+  const { workAsyncStorage } = await import("next/dist/server/app-render/work-async-storage.external");
+  const { workUnitAsyncStorage } = await import("next/dist/server/app-render/work-unit-async-storage.external");
+  const request = new NextRequest("http://127.0.0.1/apk1-kunde", { headers: { cookie } });
+  const workStore = {
+    isStaticGeneration: false,
+    page: "/apk1-kunde",
+    route: "/apk1-kunde",
+    afterContext: {},
+    previouslyRevalidatedTags: [],
+    refreshTagsByCacheKind: new Map(),
+    shouldTrackFetchMetrics: false,
+    deploymentId: "test",
+    buildId: "test",
+    incrementalCache: {},
+    cacheComponentsEnabled: false,
+    runInCleanSnapshot: (fn: (...args: never[]) => unknown, ...args: never[]) => fn(...args),
+    reactServerErrorsByDigest: new Map(),
+  } as unknown as import("next/dist/server/app-render/work-async-storage.external").WorkStore;
+  const requestStore = createRequestStoreForAPI(
+    request,
+    { pathname: "/apk1-kunde", search: "" },
+    { tags: [], expirationsByCacheKind: new Map() },
+    undefined,
+    undefined as never,
+  );
+  return workAsyncStorage.run(workStore, () => workUnitAsyncStorage.run(requestStore, work));
+}
+
+async function withSession<T>(fixture: Fixture, work: () => Promise<T>): Promise<T> {
+  const { COOKIE_NAME, getSecretKey, signAppSession } = await import("@/lib/server/appSession");
+  const session: AppSession = {
+    userId: fixture.actorId,
+    tenantId: KREILE_TENANT_SLUG,
+    role: "meister",
+    displayName: "APK1 Kunde",
+    issuedAt: fixture.actorIssuedAt,
+    expiresAt: Date.now() + 5 * 60_000,
+  };
+  return withRequest(`${COOKIE_NAME}=${signAppSession(session, getSecretKey())}`, work);
+}
+
+async function createFixture(rights: string[]): Promise<Fixture> {
+  const actorId = randomUUID();
+  const updatedAt = new Date(Date.now() - 5_000).toISOString();
+  await sql.begin(async (transaction) => {
+    await transaction`
+      INSERT INTO public.app_users
+        (id, tenant_id, email, full_name, role, active, created_at, updated_at)
+      VALUES (
+        ${actorId}::uuid, ${KREILE_TENANT_SLUG}, ${`apk1-kunde-${actorId}@local.invalid`},
+        'APK1 Kunde', 'meister', true, ${updatedAt}::timestamptz, ${updatedAt}::timestamptz
+      )
+    `;
+    await transaction`
+      INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
+      SELECT ${KREILE_TENANT_SLUG}, ${actorId}::uuid, area, ${actorId}::uuid
+      FROM unnest(${rights}::text[]) area
+    `;
+  });
+  const [clock] = await sql<{ updated_at_ms: string }[]>`
+    SELECT floor(extract(epoch FROM updated_at) * 1000)::bigint::text AS updated_at_ms
+    FROM public.app_users WHERE id=${actorId}::uuid
+  `;
+  const actorIssuedAt = Date.now();
+  if (!clock || Number(clock.updated_at_ms) >= actorIssuedAt) throw new Error("APK1_SESSION_ORDER_INVALID");
+  return { actorId, actorIssuedAt };
+}
+
+let geldLogin: Fixture;
+let ohneGeld: Fixture;
+
+beforeAll(async () => {
+  const migrations = await sql<{ version: string }[]>`
+    SELECT version::text FROM supabase_migrations.schema_migrations ORDER BY version
+  `;
+  const repositoryMigrations = readdirSync(join(process.cwd(), "supabase", "migrations"))
+    .filter((file) => /^\d+_.+\.sql$/.test(file))
+    .map((file) => file.slice(0, file.indexOf("_")))
+    .sort();
+  expect(migrations.map((row) => row.version)).toEqual(repositoryMigrations);
+  geldLogin = await createFixture(["kunden", "geld", "eingang", "auftraege", "entscheiden"]);
+  ohneGeld = await createFixture(["kunden", "eingang", "auftraege"]);
+});
+
+afterAll(async () => {
+  await sql.end({ timeout: 1 });
+  if (originalSecret === undefined) delete process.env.APP_SESSION_SECRET;
+  else process.env.APP_SESSION_SECRET = originalSecret;
+});
+
+type Row = {
+  type: string; name: string; company_name: string | null; salutation: string | null; first_name: string | null;
+  last_name: string | null; contact_role: string | null; contact_person: string | null; street: string | null;
+  house_number: string | null; zip_code: string | null; city: string | null; country: string | null;
+  billing_email: string | null; website: string | null; address_status: string | null; customer_number: string | null;
+  payment_preference: string | null; handover_preference: string | null; iban: string | null; zahlungsziel_tage: number | null;
+  auto_info: boolean; vorrang: boolean;
+};
+
+async function zeile(customerId: string): Promise<Row | undefined> {
+  const [row] = await sql<Row[]>`
+    SELECT type, name, company_name, salutation, first_name, last_name, contact_role, contact_person, street,
+           house_number, zip_code, city, country, billing_email, website, address_status, customer_number,
+           payment_preference, handover_preference, iban, zahlungsziel_tage, auto_info, vorrang
+    FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${customerId}
+  `;
+  return row;
+}
+
+async function anzahl(email: string): Promise<number> {
+  const [row] = await sql<{ n: number }[]>`
+    SELECT count(*)::int AS n FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND email=${email}
+  `;
+  return row?.n ?? -1;
+}
+
+function firma(email: string) {
+  return {
+    clientEventId: randomUUID(),
+    customerType: "business" as const,
+    companyName: `APK1 Beschichtung ${RUN} GmbH`,
+    salutation: "frau" as const,
+    firstName: "Nora",
+    lastName: "Neu",
+    contactRole: "Einkauf",
+    phone: "+49 711 5550404",
+    email,
+    billingEmail: `rechnung-${email}`,
+    website: "apk1-beschichtung.example",
+    street: "Industriestrasse",
+    houseNumber: "7",
+    zipCode: "70176",
+    city: "Stuttgart",
+    country: "DE",
+    paymentPreference: "vorkasse",
+    handoverPreference: "shipping" as const,
+    vatId: null,
+    iban: null,
+    paymentTermDays: null,
+    notes: null,
+  };
+}
+
+function lieferant(email: string) {
+  return {
+    clientEventId: randomUUID(),
+    customerType: "lieferant" as const,
+    companyName: `APK1 Chemie ${RUN} AG`,
+    salutation: null,
+    firstName: null,
+    lastName: null,
+    contactRole: null,
+    phone: "+49 711 5550808",
+    email,
+    billingEmail: null,
+    website: null,
+    street: "Hafenweg",
+    houseNumber: "12",
+    zipCode: "70178",
+    city: "Stuttgart",
+    country: "DE",
+    paymentPreference: null,
+    handoverPreference: null,
+    vatId: null,
+    iban: "DE89 3704 0044 0532 0130 00",
+    paymentTermDays: 30,
+    notes: null,
+  };
+}
+
+describe("AP-K1 Fassung 2: Datenvertrag, ein Schreibweg", () => {
+  it("legt eine Firma mit getrennten Feldern an; Land als Schluessel; Anzeigename vom Server; contact_person leer", async () => {
+    const { createCustomerAction } = await import("@/app/actions/customers.actions");
+    const input = firma(`apk1-firma-${RUN}@example.invalid`);
+    const created = await withSession(geldLogin, () => createCustomerAction(input));
+    if (created.code !== "OK") throw new Error(`APK1_FIRMA_FAILED:${created.code}:${created.message}`);
+    const row = await zeile(created.receipt.customerId);
+    expect(row).toMatchObject({
+      type: "business", name: input.companyName, company_name: input.companyName,
+      salutation: "frau", first_name: "Nora", last_name: "Neu", contact_role: "Einkauf", contact_person: null,
+      street: "Industriestrasse", house_number: "7", zip_code: "70176", city: "Stuttgart", country: "DE",
+      billing_email: input.billingEmail, website: "apk1-beschichtung.example", address_status: null,
+      payment_preference: "vorkasse", handover_preference: "shipping", iban: null, zahlungsziel_tage: null,
+      auto_info: true, vorrang: false,
+    });
+    expect(row?.customer_number).toMatch(/^K-\d{4}-\d{4,}$/);
+  });
+
+  it("legt einen Privatkunden an: Anzeigename = Vorname Nachname, kein Firmenname", async () => {
+    const { createCustomerAction } = await import("@/app/actions/customers.actions");
+    const created = await withSession(geldLogin, () => createCustomerAction({
+      ...firma(`apk1-privat-${RUN}@example.invalid`),
+      customerType: "privat" as const, companyName: null, salutation: "herr" as const, firstName: "Paul",
+      lastName: "Privat", contactRole: null, billingEmail: null, website: null, handoverPreference: "pickup" as const,
+    }));
+    if (created.code !== "OK") throw new Error(`APK1_PRIVAT_FAILED:${created.code}:${created.message}`);
+    expect(await zeile(created.receipt.customerId)).toMatchObject({
+      type: "privat", name: "Paul Privat", company_name: null, first_name: "Paul", last_name: "Privat",
+      contact_role: null, contact_person: null, handover_preference: "pickup",
+    });
+  });
+
+  it("weist eine PLZ ab, die nicht zum Land passt, und schreibt nichts", async () => {
+    const { createCustomerAction } = await import("@/app/actions/customers.actions");
+    const email = `apk1-plz-${RUN}@example.invalid`;
+    const result = await withSession(geldLogin, () => createCustomerAction({ ...firma(email), zipCode: "3013", city: "Bern" }));
+    expect(result.code).toBe("VALIDATION_ERROR");
+    expect(await anzahl(email)).toBe(0);
+  });
+
+  it("normalisiert das alte Eingabeformat mit denselben Regeln wie die Migration (Name, Strasse, Land)", async () => {
+    const { createCustomerAction } = await import("@/app/actions/customers.actions");
+    const created = await withSession(geldLogin, () => createCustomerAction({
+      city: "Stuttgart",
+      clientEventId: randomUUID(),
+      companyName: `APK1 Alt ${RUN} GmbH`,
+      contactPerson: "Herr Max Mustermann",
+      customerType: "business",
+      email: `apk1-alt-${RUN}@example.invalid`,
+      name: `APK1 Alt ${RUN}`,
+      notes: "APK1 Altformat",
+      paymentPreference: "vorkasse",
+      phone: "+49 711 5550505",
+      street: "Hauptstrasse 5",
+      zipCode: "70176",
+      country: "Deutschland",
+      vatId: null,
+    }));
+    if (created.code !== "OK") throw new Error(`APK1_ALT_FAILED:${created.code}:${created.message}`);
+    expect(await zeile(created.receipt.customerId)).toMatchObject({
+      salutation: "herr", first_name: "Max", last_name: "Mustermann", contact_person: null,
+      street: "Hauptstrasse", house_number: "5", country: "DE",
+    });
+    const [split] = await sql<{ salutation: string | null; first_name: string | null; last_name: string; sicher: boolean }[]>`
+      SELECT salutation, first_name, last_name, sicher FROM private.kunde_split_name('Müller & Söhne')
+    `;
+    expect(split).toEqual({ salutation: null, first_name: null, last_name: "Müller & Söhne", sicher: false });
+    const [land] = await sql<{ ch: string; frei: string | null }[]>`
+      SELECT private.kunde_land_schluessel('Schweiz') AS ch, private.kunde_land_schluessel('') AS frei
+    `;
+    expect(land).toEqual({ ch: "CH", frei: null });
+  });
+
+  it("Zahlungsbedingung: rechnung nur mit Freischaltung; ohne Recht geld kein Wert und keine Aenderung", async () => {
+    const { createCustomerAction } = await import("@/app/actions/customers.actions");
+    const emailZiel = `apk1-ziel-${RUN}@example.invalid`;
+    const ziel = await withSession(geldLogin, () => createCustomerAction({ ...firma(emailZiel), paymentPreference: "rechnung" }));
+    expect(ziel.code).toBe("VALIDATION_ERROR");
+    expect(await anzahl(emailZiel)).toBe(0);
+
+    const emailVerboten = `apk1-ohnegeld-a-${RUN}@example.invalid`;
+    const verboten = await withSession(ohneGeld, () => createCustomerAction(firma(emailVerboten)));
+    expect(verboten.code).toBe("FORBIDDEN");
+    expect(await anzahl(emailVerboten)).toBe(0);
+
+    const ohne = await withSession(ohneGeld, () => createCustomerAction({
+      ...firma(`apk1-ohnegeld-b-${RUN}@example.invalid`), paymentPreference: null,
+    }));
+    if (ohne.code !== "OK") throw new Error(`APK1_OHNE_GELD_FAILED:${ohne.code}:${ohne.message}`);
+    expect(await zeile(ohne.receipt.customerId)).toMatchObject({ payment_preference: null });
+  });
+
+  it("Lieferant nur mit Recht geld; IBAN mit Pruefziffer, normalisiert; keine Zahlungsbedingung", async () => {
+    const { createCustomerAction } = await import("@/app/actions/customers.actions");
+    const created = await withSession(geldLogin, () => createCustomerAction(lieferant(`apk1-lief-${RUN}@example.invalid`)));
+    if (created.code !== "OK") throw new Error(`APK1_LIEFERANT_FAILED:${created.code}:${created.message}`);
+    expect(await zeile(created.receipt.customerId)).toMatchObject({
+      type: "lieferant", name: `APK1 Chemie ${RUN} AG`, iban: "DE89370400440532013000", zahlungsziel_tage: 30,
+      payment_preference: null, handover_preference: null,
+    });
+
+    const emailFalsch = `apk1-lief-iban-${RUN}@example.invalid`;
+    const falsch = await withSession(geldLogin, () => createCustomerAction({ ...lieferant(emailFalsch), iban: "DE89370400440532013001" }));
+    expect(falsch.code).toBe("VALIDATION_ERROR");
+    expect(await anzahl(emailFalsch)).toBe(0);
+
+    const emailOhne = `apk1-lief-ohnegeld-${RUN}@example.invalid`;
+    const ohne = await withSession(ohneGeld, () => createCustomerAction(lieferant(emailOhne)));
+    expect(ohne.code).toBe("FORBIDDEN");
+    expect(await anzahl(emailOhne)).toBe(0);
+  });
+
+  it("bearbeitet ueber den einen Schreibweg updateCustomerAction; die alten Bearbeiten-Actions gibt es nicht mehr", async () => {
+    const actions = await import("@/app/actions/customers.actions");
+    expect("updateCustomerCommercialAction" in actions).toBe(false);
+    expect("updateCustomerNoteAction" in actions).toBe(false);
+    const input = firma(`apk1-edit-${RUN}@example.invalid`);
+    const created = await withSession(geldLogin, () => actions.createCustomerAction(input));
+    if (created.code !== "OK") throw new Error(`APK1_EDIT_SEED_FAILED:${created.code}:${created.message}`);
+    const customerId = created.receipt.customerId;
+    const updated = await withSession(geldLogin, () => actions.updateCustomerAction({
+      ...input, clientEventId: randomUUID(), customerId, contactRole: "Geschaeftsfuehrung",
+      zipCode: "3013", city: "Bern", country: "CH", notes: "APK1 Notiz", autoInfo: false, vorrang: true,
+    }));
+    expect(updated.code).toBe("OK");
+    expect(await zeile(customerId)).toMatchObject({
+      contact_role: "Geschaeftsfuehrung", zip_code: "3013", city: "Bern", country: "CH", contact_person: null,
+      address_status: null, auto_info: false, vorrang: true,
+    });
+  });
+});
+
+describe("AP-K1 eine Vollstaendigkeitsfunktion (Client und Server)", () => {
+  it("nennt fehlende Angaben in fester Reihenfolge und die PLZ als Feld", async () => {
+    const { kundeVollstaendigkeit } = await import("@/modules/customers/public");
+    const result = kundeVollstaendigkeit({
+      customerType: "business", companyName: "APK1 Test GmbH", firstName: null, lastName: null,
+      phone: "+49 711 5550606", email: "x@example.invalid", street: "Bundesgasse", houseNumber: "3",
+      zipCode: "3013", city: "Bern", country: "DE", paymentPreference: "vorkasse",
+    }, { geld: true });
+    expect(result.vollstaendig).toBe(false);
+    expect(result.fehlt).toEqual(["Ansprechpartner", "Anschrift"]);
+    expect(result.felder).toEqual(expect.arrayContaining(["lastName", "zipCode"]));
+    expect(result.text).toBe("Unvollständig – für Auftrag fehlt: Ansprechpartner, Anschrift");
+  });
+
+  it("ohne Recht geld: Zahlungsbedingung nicht in der Liste, sondern als Hinweis am Ende", async () => {
+    const { kundeVollstaendigkeit } = await import("@/modules/customers/public");
+    const result = kundeVollstaendigkeit({
+      customerType: "privat", companyName: null, firstName: null, lastName: "Privat",
+      phone: "+49 711 5550707", email: "p@example.invalid", street: "Weg", houseNumber: "1",
+      zipCode: "70176", city: "Stuttgart", country: "DE", paymentPreference: null,
+    }, { geld: false });
+    expect(result.fehlt).toEqual(["Vorname"]);
+    expect(result.text).toBe("Unvollständig – für Auftrag fehlt: Vorname · Zahlungsbedingung fehlt · Büro ergänzt");
+  });
+
+  it("Lieferant ist mit Firmenname vollstaendig; leeres Land ist Anschrift unvollstaendig, kein Ausland", async () => {
+    const { kundeVollstaendigkeit } = await import("@/modules/customers/public");
+    expect(kundeVollstaendigkeit({
+      customerType: "lieferant", companyName: "APK1 Chemie AG", firstName: null, lastName: null,
+      phone: null, email: null, street: null, houseNumber: null, zipCode: null, city: null, country: null,
+      paymentPreference: null,
+    }, { geld: true }).vollstaendig).toBe(true);
+    const leer = kundeVollstaendigkeit({
+      customerType: "privat", companyName: null, firstName: "Lea", lastName: "Land",
+      phone: "+49 711 5550909", email: "l@example.invalid", street: "Weg", houseNumber: "1",
+      zipCode: "70176", city: "Stuttgart", country: null, paymentPreference: "bar",
+    }, { geld: true });
+    expect(leer.fehlt).toEqual(["Anschrift"]);
+    expect(leer.felder).toContain("country");
+  });
+});

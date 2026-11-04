@@ -4,42 +4,57 @@
   "owner": "Verkaufsstufe 1 Eingang (Paket/persoenlich)",
   "publicExports": [
     "@/modules/eingang/public#GLOBAL_CREATE_OPEN_EVENT",
+    "@/modules/eingang/public#requestGlobalCreate",
+    "@/modules/eingang/public#GlobalCreateIntent",
+    "@/modules/eingang/public#GlobalCreateRequest",
+    "@/modules/eingang/public#GlobalCreateFlow",
+    "@/modules/eingang/public#ORDER_INTAKE_FREE_TEXT_UNITS",
+    "@/modules/eingang/public#isOrderIntakeFreeTextUnit",
+    "@/modules/eingang/public#OrderIntakeFreeTextUnit",
+    "@/modules/eingang/public#findRecognizedCustomers",
+    "@/modules/eingang/public#RecognizedCustomerSuggestions",
+    "@/modules/eingang/public#TelefonnotizLayoutBoundary",
+    "@/modules/eingang/public#TelefonnotizLayoutBoundaryProps",
     "@/modules/eingang/public#DirectIntakeInput",
     "@/modules/eingang/public#ConvertQuoteInput",
     "@/modules/eingang/public#CreateQuoteInput",
     "@/modules/eingang/public#GlobalCreateConversionResult",
     "@/modules/eingang/public#GlobalCreateCustomerResult",
+    "@/modules/eingang/public#GlobalCreateCustomerChoice",
     "@/modules/eingang/public#GlobalCreateDirectIntakeResult",
-    "@/modules/eingang/public#GlobalCreateFlow",
-    "@/modules/eingang/public#GlobalCreateIntent",
     "@/modules/eingang/public#GlobalCreateOpenQuotesResult",
     "@/modules/eingang/public#GlobalCreatePorts",
     "@/modules/eingang/public#GlobalCreateQuoteReadResult",
     "@/modules/eingang/public#GlobalCreateQuoteResult",
-    "@/modules/eingang/public#GlobalCreateRequest",
-    "@/modules/eingang/public#ORDER_INTAKE_FREE_TEXT_UNITS",
-    "@/modules/eingang/public#OrderIntakeFreeTextUnit",
-    "@/modules/eingang/public#RecognizedCustomerSuggestions",
-    "@/modules/eingang/public#findRecognizedCustomers",
-    "@/modules/eingang/public#isOrderIntakeFreeTextUnit",
-    "@/modules/eingang/public#requestGlobalCreate",
-    "@/modules/eingang/public#TelefonnotizLayoutBoundary",
-    "@/modules/eingang/public#TelefonnotizLayoutBoundaryProps",
     "@/modules/eingang/public#UpdateQuoteInput",
-    "@/modules/eingang/server-public#ErfasseAuftragInput",
-    "@/modules/eingang/server-public#ErfasseAuftragResult",
+    "@/modules/eingang/public#CustomerComparisonValue",
+    "@/modules/eingang/server-public#erfasseAuftragAusEingangCommand",
     "@/modules/eingang/server-public#EingangCustomerPreflight",
-    "@/modules/eingang/server-public#erfasseAuftragAusEingangCommand"
+    "@/modules/eingang/server-public#ErfasseAuftragInput",
+    "@/modules/eingang/server-public#ErfasseAuftragResult"
   ],
-  "capabilities": ["eingang:auftrag-anlegen"],
-  "migrations": ["20261031212320_ap01_intake_item.sql"],
+  "capabilities": [
+    "eingang:auftrag-anlegen"
+  ],
+  "migrations": [
+    "20261031212320_ap01_intake_item.sql"
+  ],
   "viewsFunctions": [],
-  "ownsTables": ["public.intake_event", "public.intake_item"],
+  "ownsTables": [
+    "public.intake_event",
+    "public.intake_item"
+  ],
   "storagePurposes": [],
   "events": {
-    "emits": ["ORDER_INTAKE_CREATED_V1"],
+    "emits": [
+      "ORDER_INTAKE_CREATED_V1"
+    ],
     "consumes": []
   },
   "config": {},
-  "dependencies": ["customers", "orders", "quotes"]
+  "dependencies": [
+    "customers",
+    "orders",
+    "quotes"
+  ]
 }

@@ -21,5 +21,5 @@ export type {
   SearchSource,
   SearchTenantResult,
 } from "./server/types";
-export { normalizeSearchQuery, searchTenant } from "./server/searchTenant";
+export { customerMatchField, normalizeSearchQuery, searchTenant } from "./server/searchTenant";
 export { SearchDialog } from "./ui/SearchDialog";

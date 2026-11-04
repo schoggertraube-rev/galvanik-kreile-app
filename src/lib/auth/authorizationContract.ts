@@ -42,6 +42,7 @@ export const ACCESS_AREAS = [
   "geld",
   "kassieren",
   "mails",
+  "entscheiden",
   "einstellungen",
   "logins",
   "wartung",
@@ -56,6 +57,7 @@ export const ACCESS_AREA_LABELS: Record<AccessArea, { text: string; sub?: string
   geld: { text: "Geld, Preise & Buchhaltung", sub: "Beträge, Rechnungen, Zahlungen, Preise, Zahlungsbedingungen" },
   kassieren: { text: "Kassieren bei Abholung", sub: "Betrag sehen und bezahlt (bar / Karte) bestätigen – ohne Buchhaltung" },
   mails: { text: "Mails lesen & zuordnen" },
+  entscheiden: { text: "Abweichungen & Reklamationen entscheiden", sub: "Ware unbearbeitet zurückgeben, Abweichungen freigeben, Reklamation bewerten" },
   einstellungen: { text: "Firmen-Einstellungen", sub: "Firmendaten, Katalog, Stundensatz" },
   logins: { text: "Logins & Rechte verwalten" },
   wartung: { text: "Wartung, Stufen & Anbindungen" },
@@ -63,8 +65,8 @@ export const ACCESS_AREA_LABELS: Record<AccessArea, { text: string; sub?: string
 
 export const ROLE_ACCESS_AREA_TEMPLATES: Record<AppRole, readonly AccessArea[]> = {
   developer: ["einstellungen", "logins", "wartung"],
-  admin: ACCESS_AREAS.filter((area) => area !== "wartung"),
-  meister: ["auftraege", "eingang", "kunden", "geld", "mails", "einstellungen", "kassieren", "logins"],
+  admin: ACCESS_AREAS.filter((area) => area !== "wartung" && area !== "entscheiden"),
+  meister: ["auftraege", "eingang", "kunden", "geld", "mails", "einstellungen", "kassieren", "logins", "entscheiden"],
   buero: ["auftraege", "eingang", "kunden", "geld", "mails", "einstellungen"],
   werkstatt: ["auftraege", "eingang", "kunden"],
   readonly: [],
@@ -77,6 +79,7 @@ const DEVELOPER_BUSINESS_AREAS = [
   "geld",
   "kassieren",
   "mails",
+  "entscheiden",
 ] as const satisfies readonly AccessArea[];
 
 const BLOCKED_ACCESS_AREAS_BY_ROLE: Record<AppRole, readonly AccessArea[]> = {
@@ -125,6 +128,7 @@ const ACCESS_AREA_PERMISSIONS: Record<AccessArea, readonly PermissionKey[]> = {
   geld: ["perm_data_csv", "perm_view_prices"],
   kassieren: ["perm_cash_pickup"],
   mails: [],
+  entscheiden: [],
   einstellungen: ["perm_sys_toggles"],
   logins: ["perm_sys_users"],
   wartung: ["perm_sys_toggles", "perm_sys_diag"],

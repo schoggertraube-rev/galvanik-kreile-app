@@ -1,4 +1,5 @@
 // @vitest-environment node
+// Fassung 2 (Planungschat 02.11.2026, mit AP-K1 F2): Land als Schluessel (A-87), Korrektur ueber updateCustomerAction.
 // AP-01 Fassung 4 Akzeptanztest - Bestandskunde unvollstaendig/ungueltig: Server sperrt, kanonische Korrektur, dann Auftrag.
 // Planungschat-Vertrag (U-221/U-225). Codex kopiert diese Datei bytegleich nach
 // src/test/acceptance/ap01b_eingang_bestandskunde_unvollstaendig.integration.test.ts und aendert sie nie.
@@ -141,7 +142,7 @@ beforeAll(async () => {
   customerId = created.receipt.customerId;
   // Altbestand simulieren: Schweizer PLZ/Ort bei Land Deutschland (Befund Owner-Klicktest 01.11., K-2026-0011).
   await sql`
-    UPDATE public.customers SET zip_code='3013', city='Bern', country='Deutschland'
+    UPDATE public.customers SET zip_code='3013', city='Bern', country='DE'
     WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${customerId}
   `;
 });
@@ -199,28 +200,38 @@ describe("AP-01 Fassung 4: Bestandskunde fuer den Auftrag unvollstaendig", () =>
     if (result.code !== "CUSTOMER_INCOMPLETE") throw new Error("AP01B_EXPECTED_INCOMPLETE");
     expect(result.missing).toContain("zipCode");
     expect(await zaehle(clientKey)).toEqual({ items: 0, receipts: 0 });
-    expect(await kunde()).toEqual({ zip_code: "3013", city: "Bern", country: "Deutschland" });
+    expect(await kunde()).toEqual({ zip_code: "3013", city: "Bern", country: "DE" });
   });
 
   it("nach Korrektur ueber den kanonischen Kunden-Schreibweg entsteht genau ein Auftrag am korrigierten Kunden", async () => {
-    const { updateCustomerCommercialAction } = await import("@/app/actions/customers.actions");
-    const corrected = await withSession(actor, () => updateCustomerCommercialAction({
+    const { updateCustomerAction } = await import("@/app/actions/customers.actions");
+    const corrected = await withSession(actor, () => updateCustomerAction({
       clientEventId: randomUUID(),
       customerId,
-      name: SEED.name,
+      customerType: "business",
       companyName: SEED.companyName,
-      contactPerson: SEED.contactPerson,
-      email: SEED.email,
+      salutation: null,
+      firstName: "Sabrina",
+      lastName: "Schmidt",
+      contactRole: null,
       phone: SEED.phone,
-      street: SEED.street,
+      email: SEED.email,
+      billingEmail: null,
+      website: null,
+      street: "Bundesgasse",
+      houseNumber: "3",
       zipCode: "3013",
       city: "Bern",
-      country: "Schweiz",
+      country: "CH",
       paymentPreference: SEED.paymentPreference,
+      handoverPreference: null,
       vatId: null,
+      iban: null,
+      paymentTermDays: null,
+      notes: SEED.notes,
     }));
     expect(corrected.code).toBe("OK");
-    expect(await kunde()).toEqual({ zip_code: "3013", city: "Bern", country: "Schweiz" });
+    expect(await kunde()).toEqual({ zip_code: "3013", city: "Bern", country: "CH" });
 
     const { erfasseAuftragAusEingangAction } = await import("@/app/actions/eingang.actions");
     const clientKey = randomUUID();
@@ -241,6 +252,6 @@ describe("AP-01 Fassung 4: Bestandskunde fuer den Auftrag unvollstaendig", () =>
     `;
     expect(orders).toEqual([{ customer_id: customerId }]);
     expect(await zaehle(clientKey)).toEqual({ items: 1, receipts: 1 });
-    expect(await kunde()).toEqual({ zip_code: "3013", city: "Bern", country: "Schweiz" });
+    expect(await kunde()).toEqual({ zip_code: "3013", city: "Bern", country: "CH" });
   });
 });

@@ -99,14 +99,9 @@ async function createFixture(): Promise<Fixture> {
     `;
     await transaction`
       INSERT INTO public.customers (
-        id, tenant_id, customer_number, name, company_name, type, contact_person,
-        email, phone, street, zip_code, city, country, payment_preference,
-        ziel_freigeschaltet, ziel_tage, source
+        id, tenant_id, customer_number, name, company_name, type, contact_person, email, phone, street, zip_code, city, country, payment_preference, ziel_freigeschaltet, ziel_tage, source, first_name, last_name, salutation, house_number
       ) VALUES (
-        ${customerId}, ${KREILE_TENANT_SLUG}, ${`H18-O-${customerId.slice(0, 8)}`},
-        'H18 Auftragskunde', 'H18 Auftragskunde GmbH', 'business', 'Ada Auftrag',
-        ${`auftrag-${customerId}@local.invalid`}, '+49 711 5550193', 'Auftragsweg 18',
-        '70179', 'Stuttgart', 'Deutschland', 'rechnung_14', true, 14, 'manual'
+        ${customerId}, ${KREILE_TENANT_SLUG}, ${`H18-O-${customerId.slice(0, 8)}`}, 'H18 Auftragskunde', 'H18 Auftragskunde GmbH', 'business', 'Ada Auftrag', ${`auftrag-${customerId}@local.invalid`}, '+49 711 5550193', (SELECT street FROM private.kunde_split_street('Auftragsweg 18')), '70179', 'Stuttgart', private.kunde_land_schluessel('Deutschland'), 'rechnung', true, 14, 'manual', (SELECT first_name FROM private.kunde_split_name('Ada Auftrag')), (SELECT last_name FROM private.kunde_split_name('Ada Auftrag')), (SELECT salutation FROM private.kunde_split_name('Ada Auftrag')), (SELECT house_number FROM private.kunde_split_street('Auftragsweg 18'))
       )
     `;
   });
@@ -139,7 +134,7 @@ afterAll(async () => {
 describe("H18 order administration Server Actions against the real replay database", () => {
   it("persists assignment, content, extra work and freeze correction with event and view readback", async () => {
     const fixture = await createFixture();
-    const { createOrderIntakeAction } = await import("@/app/warendurchlauf/actions");
+    const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
     const intake = await withSession(fixture, "actor", () => createOrderIntakeAction({
       clientEventId: randomUUID(),
       customer: { mode: "EXISTING", customerId: fixture.customerId },

@@ -4,8 +4,8 @@ import { CustomerCardView, type CustomerCardModel } from "../public";
 
 const card: CustomerCardModel = {
   id: "customer-1", customerNumber: "K-1042", name: "Erika Muster", companyName: "Muster GmbH", type: "business",
-  contactPerson: "Erika Muster", email: "erika@example.invalid", phone: "+49 000", address: "Testweg 1", zipCode: "70173",
-  city: "Stuttgart", country: "Deutschland", invoiceTermsEnabled: false, classification: null, notes: "Rückruf vormittags", tags: [],
+  contactPerson: "Erika Muster", email: "erika@example.invalid", phone: "+49 000", address: "Testweg",houseNumber:"1",firstName:"Erika",lastName:"Muster", zipCode: "70173",
+  city: "Stuttgart", country: "DE", invoiceTermsEnabled: false, classification: null, notes: "Rückruf vormittags", tags: [],
   createdAt: "2026-09-15T08:00:00.000Z", updatedAt: "2026-09-16T08:00:00.000Z", orderCount: 1, wareImHausCount: 1,
   invoiceRevenueCents: 17850, invoiceOpenCents: 8925,
   orders: [{ id: "order-1", orderNumber: "A-2026-0042", title: "Geländer", station: "galvanik", status: "angenommen", dueAt: "2026-09-20", version: 1 }],
@@ -14,7 +14,7 @@ const card: CustomerCardModel = {
 describe("Customer card V2", () => {
   it("renders V2 contact context and opens its real active order", () => {
     const openOrder = vi.fn();
-    render(<CustomerCardView state={{ kind: "data", card }} onClose={vi.fn()} onOpenOrder={openOrder} />);
+    render(<CustomerCardView state={{ kind: "data", card }} onClose={vi.fn()} onOpenOrder={openOrder} canManageMoney={true} />);
     expect(screen.getByRole("dialog", { name: "Kundenkarte K-1042" })).toHaveTextContent("Muster GmbH");
     expect(screen.getByText("Rückruf vormittags")).toBeInTheDocument();
     expect(screen.getByText("178,50 €")).toBeInTheDocument();
@@ -44,29 +44,29 @@ describe("Customer card V2", () => {
         state={{ kind: "data", card: { ...card, country: null, paymentPreference: null, invoiceTermsEnabled: false } }}
         onClose={vi.fn()}
         onOpenOrder={vi.fn()}
-        onSaveCommercial={vi.fn()}
+        onSaveCustomer={vi.fn()} canManageMoney={true}
       />,
     );
     fireEvent.click(screen.getAllByRole("button", { name: "Bearbeiten" })[0]);
-    expect(screen.getByRole("textbox", { name: "Land" })).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: "Land" })).toHaveValue("");
     expect(screen.getByRole("combobox", { name: "Zahlungsbedingung" })).toHaveValue("");
-    expect(screen.queryByRole("option", { name: "Rechnung 14 Tage" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Rechnung auf Ziel · 14 Tage" })).not.toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Rechnung 30 Tage" })).not.toBeInTheDocument();
   });
 
   it("offers invoice terms only when the customer is approved for them", () => {
     render(
       <CustomerCardView
-        state={{ kind: "data", card: { ...card, paymentPreference: "rechnung_14", invoiceTermsEnabled: true } }}
+        state={{ kind: "data", card: { ...card, paymentPreference: "rechnung", invoiceTermsEnabled: true,invoiceTermDays:14 } }}
         onClose={vi.fn()}
         onOpenOrder={vi.fn()}
-        onSaveCommercial={vi.fn()}
+        onSaveCustomer={vi.fn()} canManageMoney={true}
       />,
     );
     fireEvent.click(screen.getAllByRole("button", { name: "Bearbeiten" })[0]);
-    expect(screen.getByRole("combobox", { name: "Zahlungsbedingung" })).toHaveValue("rechnung_14");
-    expect(screen.getByRole("option", { name: "Rechnung 14 Tage" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Rechnung 30 Tage" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Zahlungsbedingung" })).toHaveValue("rechnung");
+    expect(screen.getByRole("option", { name: "Rechnung auf Ziel · 14 Tage" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Rechnung auf Ziel · 30 Tage" })).not.toBeInTheDocument();
   });
 
   it.each(["denied", "not-found", "error", "conflict"] as const)("keeps %s fail-closed", (kind) => {

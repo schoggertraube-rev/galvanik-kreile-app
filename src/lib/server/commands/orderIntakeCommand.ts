@@ -5,7 +5,8 @@ import { sql } from "drizzle-orm";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { intakePaymentContract, type PaymentMode } from "@/lib/server/paymentContract";
-import { getOrderReadiness } from "@/modules/customers/public";
+import { kundeVollstaendigkeit } from "@/modules/customers/public";
+import type {CustomerCreateCommandResult} from "@/modules/customers/public";
 import { isOrderIntakeFreeTextUnit } from "@/modules/eingang/public";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 
@@ -131,20 +132,10 @@ type ExistingReceiptRow = {
 };
 
 type CustomerRow = {
-  id: string;
-  tenant_id: string;
-  type: string;
-  name: string;
-  company_name: string | null;
-  customer_number: string | null;
-  contact_person: string | null;
-  email: string | null;
-  phone: string | null;
-  street: string | null;
-  zip_code: string | null;
-  city: string | null;
-  country: string | null;
-  payment_preference: string | null;
+  id: string; tenant_id: string; type: "business" | "privat" | "lieferant"; name: string;
+  company_name: string | null; customer_number: string | null; first_name: string | null; last_name: string | null;
+  email: string | null; phone: string | null; street: string | null; house_number: string | null;
+  zip_code: string | null; city: string | null; country: string | null; payment_preference: string | null; ziel_freigeschaltet:boolean;ziel_tage:number|null;
 };
 
 type CountRow = { next_number: number | string; current_year: number | string };
@@ -196,7 +187,7 @@ function normalizeNewCustomer(value: Record<string, unknown>): Extract<Normalize
   const paymentPreference = normalizedText(value.paymentPreference, 3, 24);
   const vatId = normalizedOptionalText(value.vatId, 40, 4);
   if (!name || companyName === undefined || !contactPerson || !email || !/^\S+@\S+\.\S+$/.test(email) || !phone || !street || !zipCode || !city || !country
-    || !paymentPreference || !/^(?:rechnung_[1-9][0-9]{0,2}|vorkasse|bar)$/.test(paymentPreference) || vatId === undefined) return null;
+    || !paymentPreference || !/^(?:rechnung|vorkasse|bar)$/.test(paymentPreference) || vatId === undefined) return null;
   return {
     mode: "NEW", name, customerType: value.customerType, companyName, contactPerson, email, phone,
     street, zipCode, city, country, paymentPreference, vatId,
@@ -422,82 +413,30 @@ async function readReceipt(
   return receipt;
 }
 
-async function resolveCustomer(
-  tx: PrivilegedTenantTransaction,
-  tenantId: string,
-  actorId: string,
-  customer: NormalizedCustomer,
-): Promise<CustomerRow | null> {
-  if (customer.mode === "NEW") {
-    const clientEventId = randomUUID();
-    const customerIntentSha256 = createHash("sha256").update(JSON.stringify({
-      city: customer.city,
-      clientEventId,
-      companyName: customer.companyName,
-      contactPerson: customer.contactPerson,
-      customerType: customer.customerType,
-      email: customer.email,
-      name: customer.name,
-      phone: customer.phone,
-      street: customer.street,
-      zipCode: customer.zipCode,
-      country: customer.country,
-      paymentPreference: customer.paymentPreference,
-      vatId: customer.vatId,
-    }), "utf8").digest("hex");
-    const outcomes = await tx.execute<{ result_code: string; result_receipt_id: string | null }>(sql`
-      SELECT * FROM private.create_customer_v1(
-        ${tenantId}, ${actorId}::uuid, ${clientEventId}::uuid, ${customerIntentSha256},
-        ${customer.name}, ${customer.customerType}, ${customer.companyName}, ${customer.contactPerson},
-        ${customer.email}, ${customer.phone}, ${customer.street}, ${customer.zipCode}, ${customer.city},
-        ${customer.country}, ${customer.paymentPreference}, ${customer.vatId}, NULL::text
-      )
-    `);
-    const outcome = outcomes.length === 1 ? outcomes[0] : null;
-    if (!outcome || outcome.result_code !== "OK" || !outcome.result_receipt_id) return null;
-    const receipts = await tx.execute<{ customer_id: string }>(sql`
-      SELECT customer_id FROM private.v_customer_create_receipts_v1
-      WHERE receipt_id = ${outcome.result_receipt_id}::uuid
-        AND tenant_id = ${tenantId}
-        AND actor_id = ${actorId}::uuid
-      LIMIT 2
-    `);
-    if (receipts.length !== 1 || !receipts[0]) return null;
-    const rows = await tx.execute<CustomerRow>(sql`
-      SELECT id, tenant_id, customer_number, type, name, company_name, contact_person, email, phone,
-        street, zip_code, city, country, payment_preference
-      FROM public.customers
-      WHERE id = ${receipts[0].customer_id} AND tenant_id = ${tenantId}
-      FOR SHARE
-    `);
-    return rows.length === 1 ? rows[0] ?? null : null;
-  }
-  const rows = await tx.execute<CustomerRow>(sql`
-    SELECT id, tenant_id, customer_number, type, name, company_name, contact_person, email, phone,
-      street, zip_code, city, country, payment_preference
-    FROM public.customers
-    WHERE id = ${customer.customerId} AND tenant_id = ${tenantId}
-    FOR SHARE
+type CustomerWriter=(tx:PrivilegedTenantTransaction,context:{tenantId:string;userId:string;capabilities:{canCreateCustomer:boolean;canManageMoney:boolean}},input:unknown)=>Promise<CustomerCreateCommandResult>;
+
+async function resolveCustomer(tx: PrivilegedTenantTransaction,tenantId: string,actorId: string,customer: NormalizedCustomer,canManageMoney: boolean,createCustomer?:CustomerWriter): Promise<CustomerRow | null> {
+  let customerId: string;
+  if(customer.mode==="NEW") {
+    const {mode: _mode,...customerFields}=customer;
+    void _mode;
+    if(!createCustomer)throw new Error("ORDER_INTAKE_CUSTOMER_WRITER_REQUIRED");
+    const created=await createCustomer(tx,{tenantId,userId:actorId,capabilities:{canCreateCustomer:true,canManageMoney}},
+      {...customerFields,clientEventId:randomUUID(),notes:null});
+    if(created.code!=="OK")return null;
+    customerId=created.receipt.customerId;
+  } else customerId=customer.customerId;
+  const rows=await tx.execute<CustomerRow>(sql`
+    SELECT id,tenant_id,customer_number,type,name,company_name,first_name,last_name,email,phone,
+      street,house_number,zip_code,city,country,payment_preference,ziel_freigeschaltet,ziel_tage
+    FROM public.customers WHERE id=${customerId} AND tenant_id=${tenantId} FOR SHARE
   `);
-  const row = rows.length === 1 ? rows[0] : null;
-  if (!row || !row.customer_number) return null;
-  const readiness = getOrderReadiness({
-    name: row.name,
-    customerType: row.type === "privat" || row.type === "private" || row.type === "Privatkunde"
-      ? "privat"
-      : row.type === "institution" || row.type === "Institution"
-        ? "institution"
-        : "business",
-    phone: row.phone,
-    contactPerson: row.contact_person,
-    email: row.email,
-    street: row.street,
-    zipCode: row.zip_code,
-    city: row.city,
-    country: row.country,
-    paymentPreference: row.payment_preference,
-  });
-  if (!readiness.ready) return null;
+  const row=rows.length===1?rows[0]:null;
+  if(!row||!row.customer_number||row.type==="lieferant")return null;
+  const readiness=kundeVollstaendigkeit({customerType:row.type,companyName:row.company_name,firstName:row.first_name,lastName:row.last_name,
+    phone:row.phone,email:row.email,street:row.street,houseNumber:row.house_number,zipCode:row.zip_code,city:row.city,country:row.country,
+    paymentPreference:row.payment_preference,invoiceTermsEnabled:row.ziel_freigeschaltet},{geld:canManageMoney});
+  if(readiness.issues.length)return null;
   return row;
 }
 
@@ -524,7 +463,7 @@ async function allocateOrderNumber(tx: PrivilegedTenantTransaction): Promise<str
   return `A-${year}-${String(next).padStart(4, "0")}`;
 }
 
-export async function createOrderIntake(input: unknown): Promise<OrderIntakeCommandResult> {
+export async function createOrderIntake(input: unknown,createCustomer?:CustomerWriter): Promise<OrderIntakeCommandResult> {
   const normalized = normalizeInput(input);
   if (!normalized) return { code: "VALIDATION_ERROR", message: "Wareneingangsdaten sind unvollständig oder ungültig." };
 
@@ -615,7 +554,7 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
         return { code: "VALIDATION_ERROR", message: paymentContract.message };
       }
 
-      const customer = await resolveCustomer(tx, expected.tenantId, expected.actorId, normalized.customer);
+      const customer = await resolveCustomer(tx, expected.tenantId, expected.actorId, normalized.customer, canManageMoney, createCustomer);
       if (!customer || customer.tenant_id !== expected.tenantId) {
         if (normalized.customer.mode === "NEW") throw new Error("ORDER_INTAKE_NEW_CUSTOMER_INVALID");
         return { code: "VALIDATION_ERROR", message: "Der Kunde ist für einen Auftrag noch nicht vollständig." };
@@ -623,6 +562,7 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
       paymentContract ??= intakePaymentContract({
         customerMode: "EXISTING",
         paymentPreference: customer.payment_preference,
+        invoiceTermsEnabled:customer.ziel_freigeschaltet,invoiceTermDays:customer.ziel_tage,
         handoverMode: normalized.handoverMode,
         requestedMode: normalized.paymentMode ?? undefined,
       });

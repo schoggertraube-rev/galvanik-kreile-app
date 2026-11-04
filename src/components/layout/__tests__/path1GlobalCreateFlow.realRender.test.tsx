@@ -49,15 +49,15 @@ function quote(status: "draft" | "converted" = "draft", overrides: Partial<Quote
 
 function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
   return {
-    canCreateCustomer: true,
+    canCreateCustomer: true,canReadCustomers:true,
     canCreateOrder: true,
     canCreateQuote: true,
     canManageMoney: true,
     roleLabel: "Rolf",
     resumeQuoteId: null,
     resumeQuoteConversionId: null,
-    listCustomers: vi.fn().mockResolvedValue({ code: "OK", customers: [{ id: CUSTOMER_ID, customerNumber: "K-2026-0042", name: "SYNTHETISCH Musterkunde GmbH", customerType: "business", companyName: "SYNTHETISCH Musterkunde GmbH", contactPerson: "Testperson", email: "kunde@example.invalid", phone: "+49 221 123456", street: "Testweg 1", zipCode: "12345", city: "Teststadt", country: "Deutschland", paymentPreference: "vorkasse" }] }),
-    searchIntakeCustomers: vi.fn().mockImplementation(async (query: string) => ({ code: "OK", customers: query === "SYNTHETISCH" ? [{ id: CUSTOMER_ID, customerNumber: "K-2026-0042", name: "SYNTHETISCH Musterkunde GmbH", customerType: "business", companyName: "SYNTHETISCH Musterkunde GmbH", contactPerson: "Testperson", email: "kunde@example.invalid", phone: "+49 221 123456", street: "Testweg 1", zipCode: "12345", city: "Teststadt", country: "Deutschland", paymentPreference: "vorkasse" }] : [] })),
+    listCustomers: vi.fn().mockResolvedValue({ code: "OK", customers: [{ id: CUSTOMER_ID, customerNumber: "K-2026-0042", name: "SYNTHETISCH Musterkunde GmbH", customerType: "business", companyName: "SYNTHETISCH Musterkunde GmbH", contactPerson: "Testperson",firstName:"Test",lastName:"Testperson",houseNumber:"1", email: "kunde@example.invalid", phone: "+49 221 123456", street: "Testweg 1", zipCode: "12345", city: "Teststadt", country: "DE", paymentPreference: "vorkasse" }] }),
+    searchIntakeCustomers: vi.fn().mockImplementation(async (query: string) => ({ code: "OK", customers: query === "SYNTHETISCH" ? [{ id: CUSTOMER_ID, customerNumber: "K-2026-0042", name: "SYNTHETISCH Musterkunde GmbH", customerType: "business", companyName: "SYNTHETISCH Musterkunde GmbH", contactPerson: "Testperson",firstName:"Test",lastName:"Testperson",houseNumber:"1", email: "kunde@example.invalid", phone: "+49 221 123456", street: "Testweg 1", zipCode: "12345", city: "Teststadt", country: "DE", paymentPreference: "vorkasse" }] : [] })),
     recognizeIntakeText: vi.fn().mockResolvedValue({ code: "OK", data: { fields: [], positions: [] } }),
     getIntakeSuggestions: vi.fn().mockResolvedValue({ code: "OK", data: { term: null, prices: [] } }),
     listCatalog: vi.fn().mockResolvedValue({ code:"OK", services:[{id:"88888888-8888-4888-8888-888888888888",name:"Synthetischer Flansch",surface:"Verzinken",unit:"Stück",netPriceCents:12500,vatRateBasisPoints:1900,standardLeadTimeWorkingDays:5,active:true}] }),
@@ -75,9 +75,10 @@ function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
         recordedAt: "2026-09-14T10:00:00.000Z",
       },
       customer: {
+        ...input,
         id: CUSTOMER_ID,
         customerNumber: "K-2026-0042",
-        name: input.name,
+        name: input.customerType==="privat"?[input.firstName,input.lastName].filter(Boolean).join(" "):input.companyName,
         customerType: input.customerType,
         companyName: input.companyName,
         contactPerson: input.contactPerson,
@@ -89,7 +90,7 @@ function ports(overrides: Partial<GlobalCreatePorts> = {}): GlobalCreatePorts {
         country: input.country,
         paymentPreference: input.paymentPreference,
         vatId: input.vatId,
-        lastHandoverMode: null,
+        handoverPreference: null,
       },
     })),
     readCustomerCreateReceipt: vi.fn().mockResolvedValue({ code: "NOT_FOUND", message: "Kein Kundenstand gefunden." }),
@@ -237,18 +238,21 @@ async function openIntent(intent: "CUSTOMER" | "QUOTE") {
 }
 
 function fillRequiredCustomerAddress() {
-  fireEvent.change(screen.getByLabelText("Ansprechpartner"), { target: { value: "Testperson" } });
+  fireEvent.change(screen.getByLabelText("Vorname"), { target: { value: "Test" } });
+  fireEvent.change(screen.getByLabelText("Nachname"), { target: { value: "Testperson" } });
   fireEvent.change(screen.getByLabelText("E-Mail"), { target: { value: "kunde@example.invalid" } });
   fireEvent.change(screen.getByLabelText("Telefon"), { target: { value: "+49 221 123456" } });
-  fireEvent.change(screen.getByLabelText("Straße"), { target: { value: "Testweg 1" } });
+  fireEvent.change(screen.getByLabelText("Straße"), { target: { value: "Testweg" } });
+  fireEvent.change(screen.getByLabelText("Nr."), { target: { value: "1" } });
   fireEvent.change(screen.getByLabelText("PLZ"), { target: { value: "12345" } });
   fireEvent.change(screen.getByLabelText("Ort"), { target: { value: "Teststadt" } });
 }
 
 async function fillCustomer() {
-  fireEvent.click(screen.getByRole("button", { name: "Gewerbe" }));
-  fireEvent.change(screen.getByLabelText("Name / Firma"), { target: { value: "SYNTHETISCH Musterkunde GmbH" } });
-  fireEvent.change(screen.getByLabelText("Ansprechpartner"), { target: { value: "Testperson" } });
+  fireEvent.click(screen.getByRole("button", { name: "Firma" }));
+  fireEvent.change(screen.getByLabelText("Firmenname"), { target: { value: "SYNTHETISCH Musterkunde GmbH" } });
+  fireEvent.change(screen.getByLabelText("Vorname"), { target: { value: "Test" } });
+  fireEvent.change(screen.getByLabelText("Nachname"), { target: { value: "Testperson" } });
   fireEvent.change(screen.getByLabelText("E-Mail"), { target: { value: "kunde@example.invalid" } });
   fillRequiredCustomerAddress();
   fireEvent.click(screen.getByRole("button", { name: "Kunde speichern" }));
@@ -305,7 +309,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     render(<GlobalCreateFlow ports={ports()} />);
     fireEvent.click(screen.getByRole("button", { name: "Neu erfassen" }));
     fireEvent.keyDown(window, { key: "k" });
-    await waitFor(() => expect(screen.getByLabelText("Name / Firma")).toHaveFocus());
+    await waitFor(() => expect(within(screen.getByRole("group",{name:"Kundentyp"})).getByRole("button",{name:"Firma"})).toHaveFocus());
   });
 
   it("ignores the N shortcut without the eingang right", () => {
@@ -379,17 +383,17 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     render(<GlobalCreateFlow ports={value} />);
 
     await openIntent("CUSTOMER");
-    fireEvent.click(screen.getByRole("button", { name: "Gewerbe" }));
-    fireEvent.change(screen.getByLabelText("Name / Firma"), { target: { value: "SYNTHETISCH Interessent" } });
+    fireEvent.click(screen.getByRole("button", { name: "Firma" }));
+    fireEvent.change(screen.getByLabelText("Firmenname"), { target: { value: "SYNTHETISCH Interessent" } });
     fireEvent.change(screen.getByLabelText("Telefon"), { target: { value: "+49 221 998877" } });
     fireEvent.click(screen.getByRole("button", { name: "Kunde speichern" }));
 
     await waitFor(() => expect(value.openCustomer).toHaveBeenCalledWith(CUSTOMER_ID));
     expect(value.createCustomer).toHaveBeenCalledWith(expect.objectContaining({
-      name: "SYNTHETISCH Interessent",
+      companyName: "SYNTHETISCH Interessent",
       phone: "+49 221 998877",
-      contactPerson: null,
-      email: null,
+      firstName:"",lastName:"",
+      email: "",
       street: "",
       zipCode: "",
     }));
@@ -400,16 +404,21 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     render(<GlobalCreateFlow ports={ports()} />);
 
     await openIntent("CUSTOMER");
-    expect(screen.getAllByLabelText("Name / Firma")).toHaveLength(1);
+    expect(screen.queryByLabelText("Firmenname")).not.toBeInTheDocument();
     const customerType = screen.getByRole("group", { name: "Kundentyp" });
-    expect(within(customerType).getByRole("button", { name: "Gewerbe" })).toHaveAttribute("aria-pressed", "false");
+    expect(within(customerType).getByRole("button", { name: "Firma" })).toHaveAttribute("aria-pressed", "false");
     expect(within(customerType).getByRole("button", { name: "Privat" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.queryByRole("button", { name: "Institution" })).not.toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Land" })).toHaveValue("Deutschland");
+    fireEvent.click(within(customerType).getByRole("button",{name:"Firma"}));
+    expect(screen.getAllByLabelText("Firmenname")).toHaveLength(1);
+    expect(screen.getByLabelText("Vorname")).toBeInTheDocument();
+    expect(screen.getByLabelText("Nachname")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Land" })).toHaveValue("DE");
     expect(screen.getByLabelText("Zahlungsbedingung")).toHaveValue("vorkasse");
     expect(screen.queryByRole("option", { name: /Rechnung auf Ziel/ })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Abbrechen" }));
+    fireEvent.click(screen.getByRole("button",{name:"Verwerfen"}));
     openFlow();
     await searchAndSelectIntakeCustomer("SYNTHETISCH", /SYNTHETISCH Musterkunde GmbH.*übernehmen/);
     const paymentMode = screen.getByRole("combobox", { name: "Zahlungsmodus" });
@@ -429,13 +438,13 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
       name: "SYNTHETISCH Bar-Kunde",
       customerType: "business" as const,
       companyName: "SYNTHETISCH Bar-Kunde",
-      contactPerson: "Testperson",
+      contactPerson: "Testperson",firstName:"Test",lastName:"Testperson",houseNumber:"1",
       email: "bar@example.invalid",
       phone: "+49 221 123456",
       street: "Testweg 1",
       zipCode: "12345",
       city: "Teststadt",
-      country: "Deutschland",
+      country: "DE",
       paymentPreference: "bar",
     };
     const searchIntakeCustomers = vi.fn().mockResolvedValue({ code: "OK", customers: [barCustomer] });
@@ -461,14 +470,14 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     render(<GlobalCreateFlow ports={value} />);
 
     await openIntent("CUSTOMER");
-    fireEvent.click(screen.getByRole("button", { name: "Gewerbe" }));
-    fireEvent.change(screen.getByLabelText("Name / Firma"), { target: { value: "SYNTHETISCH Neu GmbH" } });
+    fireEvent.click(screen.getByRole("button", { name: "Firma" }));
+    fireEvent.change(screen.getByLabelText("Firmenname"), { target: { value: "SYNTHETISCH Neu GmbH" } });
     fireEvent.change(screen.getByLabelText("Telefon"), { target: { value: "+49 221 998877" } });
     expect(await screen.findByText(/Ähnlicher Kunde vorhanden: SYNTHETISCH Vorhanden GmbH/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Kunde speichern" }));
     expect(value.createCustomer).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Trotzdem neu anlegen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ist ein anderer Kunde" }));
     fireEvent.click(screen.getByRole("button", { name: "Kunde speichern" }));
     await waitFor(() => expect(value.createCustomer).toHaveBeenCalledTimes(1));
     expect(value.openCustomer).toHaveBeenCalledWith(CUSTOMER_ID);
@@ -485,14 +494,14 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     await waitFor(() => expect(searchIntakeCustomers).toHaveBeenCalledWith("SYNTHETISCH Neue Firma"));
     expect(await screen.findByText("Kein Kunde gefunden.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Kunde anlegen" })).toBeInTheDocument();
-    expect(screen.queryByLabelText("Name / Firma")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Firmenname")).not.toBeInTheDocument();
   });
 
   it("keeps customer creation visible while typing, below matches and below the empty result", async () => {
     const matchingCustomer = {
       id: CUSTOMER_ID,
       customerNumber: "K-2026-0043",
-      name: "Sabrina Schmidt",
+      name: "Sabrina Schmidt",firstName:"Sabrina",lastName:"Schmidt",houseNumber:"1",
       customerType: "privat" as const,
       companyName: null,
       contactPerson: null,
@@ -501,7 +510,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
       street: "Testweg 1",
       zipCode: "12345",
       city: "Teststadt",
-      country: "Deutschland",
+      country: "DE",
       paymentPreference: "vorkasse",
     };
     const searchIntakeCustomers = vi.fn<GlobalCreatePorts["searchIntakeCustomers"]>(async (query) => ({
@@ -527,7 +536,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     const privateCustomer = {
       id: CUSTOMER_ID,
       customerNumber: "K-2026-0013",
-      name: "gregor laucht",
+      name: "gregor laucht",firstName:"Gregor",lastName:"Laucht",houseNumber:"4",
       customerType: "privat" as const,
       companyName: null,
       contactPerson: null,
@@ -536,7 +545,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
       street: "Rembrücker Straße 4",
       zipCode: "63150",
       city: "Heusenstamm",
-      country: "Deutschland",
+      country: "DE",
       paymentPreference: "vorkasse",
     };
     render(<GlobalCreateFlow ports={ports({ searchIntakeCustomers: vi.fn().mockResolvedValue({ code: "OK", customers: [privateCustomer] }) })} />);
@@ -571,7 +580,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
       street: "Testweg 1",
       zipCode: "12345",
       city: "Teststadt",
-      country: "Deutschland",
+      country: "DE",
       paymentPreference: "vorkasse",
     };
     render(<GlobalCreateFlow ports={ports({ searchIntakeCustomers: vi.fn().mockResolvedValue({ code: "OK", customers: [companyCustomer] }) })} />);
@@ -589,13 +598,13 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
       name: "SYNTHETISCH Zielkunde GmbH",
       customerType: "business" as const,
       companyName: "SYNTHETISCH Zielkunde GmbH",
-      contactPerson: "Testperson",
+      contactPerson: "Testperson",firstName:"Test",lastName:"Testperson",houseNumber:"1",
       email: "zielkunde@example.invalid",
       phone: "+49 221 123456",
       street: "Testweg 1",
       zipCode: "3013",
       city: "Bern",
-      country: "Deutschland",
+      country: "DE",
       paymentPreference: "vorkasse",
       vatId: null,
     };
@@ -607,21 +616,21 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
 
     openFlow();
     await searchAndSelectIntakeCustomer("Zielkunde", /SYNTHETISCH Zielkunde GmbH.*übernehmen/);
-    expect(screen.getAllByText(/PLZ 3013 passt nicht zu Deutschland/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/PLZ prüfen/).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Wareneingang buchen" })).toBeEnabled();
     expect(screen.queryByLabelText("PLZ")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Land")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "In Kundenkarte ergänzen" }));
-    expect(value.openCustomer).toHaveBeenCalledWith(CUSTOMER_ID);
+    expect(value.openCustomer).toHaveBeenCalledWith(CUSTOMER_ID+"#fehlend");
   });
 
   it("keeps the intake below the customer card, rereads the customer after return, and preserves all input", async () => {
     const incompleteCustomer = {
       id: CUSTOMER_ID, customerNumber: "K-2026-0042", name: "SYNTHETISCH Zielkunde GmbH", customerType: "business" as const,
-      companyName: "SYNTHETISCH Zielkunde GmbH", contactPerson: "Testperson", email: "zielkunde@example.invalid", phone: "+49 221 123456",
-      street: "Testweg 1", zipCode: "3013", city: "Bern", country: "Deutschland", paymentPreference: "vorkasse", vatId: null,
+      companyName: "SYNTHETISCH Zielkunde GmbH", contactPerson: "Testperson",firstName:"Test",lastName:"Testperson",houseNumber:"1", email: "zielkunde@example.invalid", phone: "+49 221 123456",
+      street: "Testweg 1", zipCode: "3013", city: "Bern", country: "DE", paymentPreference: "vorkasse", vatId: null,
     };
-    const completeCustomer = { ...incompleteCustomer, country: "Schweiz" };
+    const completeCustomer = { ...incompleteCustomer, country: "CH" };
     let currentCustomer = incompleteCustomer;
     const listCustomers = vi.fn<GlobalCreatePorts["listCustomers"]>(async () => ({ code: "OK", customers: [currentCustomer] }));
     const base = ports({
@@ -634,7 +643,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     await searchAndSelectIntakeCustomer("Zielkunde", /SYNTHETISCH Zielkunde GmbH.*übernehmen/);
     fireEvent.change(screen.getByLabelText("Teil / Bezeichnung"), { target: { value: "SYNTHETISCH Eingabe bleibt" } });
     fireEvent.click(screen.getByRole("button", { name: "In Kundenkarte ergänzen" }));
-    expect(base.openCustomer).toHaveBeenCalledWith(CUSTOMER_ID);
+    expect(base.openCustomer).toHaveBeenCalledWith(CUSTOMER_ID+"#fehlend");
 
     rerender(<GlobalCreateFlow ports={{ ...base, activeCustomerOverlayId: CUSTOMER_ID }} />);
     fireEvent.keyDown(window, { key: "Escape" });
@@ -644,7 +653,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     currentCustomer = completeCustomer;
     rerender(<GlobalCreateFlow ports={{ ...base, activeCustomerOverlayId: null }} />);
     await waitFor(() => expect(listCustomers).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.queryByText(/PLZ 3013 passt nicht zu Deutschland/)).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText(/PLZ prüfen/)).not.toBeInTheDocument());
     expect(screen.getByLabelText("Teil / Bezeichnung")).toHaveValue("SYNTHETISCH Eingabe bleibt");
   });
 
@@ -664,7 +673,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(screen.queryByRole("textbox", { name: "Kunde suchen" })).not.toBeInTheDocument();
   });
 
-  it("checks an unclear customer result read-only and restores only a verified receipt", async () => {
+  it("recovers an unclear create using the same idempotency key and opens only its verified customer", async () => {
     const successfulCreate = ports().createCustomer;
     let attempt = 0;
     const createCustomer = vi.fn<GlobalCreatePorts["createCustomer"]>(async (input) => {
@@ -677,36 +686,35 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     render(<GlobalCreateFlow ports={value} />);
 
     await openIntent("CUSTOMER");
-    fireEvent.click(screen.getByRole("button", { name: "Gewerbe" }));
-    fireEvent.change(screen.getByLabelText("Name / Firma"), { target: { value: "SYNTHETISCH Bleibt erhalten" } });
+    fireEvent.click(screen.getByRole("button", { name: "Firma" }));
+    fireEvent.change(screen.getByLabelText("Firmenname"), { target: { value: "SYNTHETISCH Bleibt erhalten" } });
     fillRequiredCustomerAddress();
     fireEvent.click(screen.getByRole("button", { name: "Kunde speichern" }));
-    expect(await screen.findByText("Ausgang ungeklärt", { selector: "strong" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Name / Firma")).toHaveValue("SYNTHETISCH Bleibt erhalten");
-    fireEvent.click(screen.getByRole("button", { name: "Status mit gleicher Kennung prüfen" }));
+    expect(await screen.findByText(/Speichern fehlgeschlagen · alle Eingaben sind noch da/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Firmenname")).toHaveValue("SYNTHETISCH Bleibt erhalten");
+    fireEvent.click(screen.getByRole("button", { name: "Erneut speichern" }));
     await waitFor(() => expect(value.openCustomer).toHaveBeenCalledWith(CUSTOMER_ID));
-    expect(createCustomer).toHaveBeenCalledTimes(1);
-    expect(readCustomerCreateReceipt).toHaveBeenCalledTimes(1);
-    expect(readCustomerCreateReceipt.mock.calls[0][0].clientEventId).toBe(createCustomer.mock.calls[0][0].clientEventId);
+    expect(createCustomer).toHaveBeenCalledTimes(2);
+    expect(readCustomerCreateReceipt).not.toHaveBeenCalled();
+    expect(createCustomer.mock.calls[1][0].clientEventId).toBe(createCustomer.mock.calls[0][0].clientEventId);
   });
 
-  it("keeps an unknown result open and requires a separate confirmed retry", async () => {
+  it("keeps a failed retry visible and preserves the exact request key and form values", async () => {
     const createCustomer = vi.fn<GlobalCreatePorts["createCustomer"]>().mockRejectedValue(new Error("network"));
     const value = ports({ createCustomer, readCustomerCreateReceipt: vi.fn().mockResolvedValue({ code: "NOT_FOUND", message: "Kein Kundenstand gefunden." }) });
     render(<GlobalCreateFlow ports={value} />);
     await openIntent("CUSTOMER");
-    fireEvent.click(screen.getByRole("button", { name: "Gewerbe" }));
-    fireEvent.change(screen.getByLabelText("Name / Firma"), { target: { value: "SYNTHETISCH offen" } });
+    fireEvent.click(screen.getByRole("button", { name: "Firma" }));
+    fireEvent.change(screen.getByLabelText("Firmenname"), { target: { value: "SYNTHETISCH offen" } });
     fillRequiredCustomerAddress();
     fireEvent.click(screen.getByRole("button", { name: "Kunde speichern" }));
-    await screen.findByText("Ausgang ungeklärt", { selector: "strong" });
-    fireEvent.click(screen.getByRole("button", { name: "Status mit gleicher Kennung prüfen" }));
-    await screen.findByRole("button", { name: "Erneut senden vorbereiten" });
+    await screen.findByText(/Speichern fehlgeschlagen · alle Eingaben sind noch da/);
     expect(createCustomer).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("button", { name: "Erneut senden vorbereiten" }));
-    expect(createCustomer).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("button", { name: "Ja, jetzt erneut senden" }));
-    await waitFor(() => expect(createCustomer).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole("button",{name:"Erneut speichern"}));
+    await waitFor(()=>expect(createCustomer).toHaveBeenCalledTimes(2));
+    expect(createCustomer.mock.calls[1][0]).toEqual(createCustomer.mock.calls[0][0]);
+    expect(value.openCustomer).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Firmenname")).toHaveValue("SYNTHETISCH offen");
   });
 
   it("never calls commands for readonly and offers a safe profile switch", async () => {
@@ -846,7 +854,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.click(screen.getByRole("button", { name: "Angaben erkennen" }));
 
     await waitFor(() => expect(screen.getByLabelText("Liefertermin")).toHaveValue("2026-11-12"));
-    expect(screen.queryByLabelText("Name / Firma")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Firmenname")).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Kunde suchen" })).toHaveValue("gregor laucht");
     expect(screen.getByLabelText("Liefertermin")).toHaveValue("2026-11-12");
     expect(screen.getByLabelText("Teil / Bezeichnung")).toHaveValue("Flansch");
@@ -864,7 +872,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     const customer = {
       id: CUSTOMER_ID,
       customerNumber: "K-2026-0011",
-      name: "Sabrina Schmidt",
+      name: "Sabrina Schmidt",firstName:"Sabrina",lastName:"Schmidt",houseNumber:"1",
       customerType: "privat" as const,
       companyName: null,
       contactPerson: null,
@@ -873,7 +881,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
       street: "Testweg 1",
       zipCode: "12345",
       city: "Teststadt",
-      country: "Deutschland",
+      country: "DE",
       paymentPreference: "vorkasse",
     };
     const recognizeIntakeText = vi.fn<GlobalCreatePorts["recognizeIntakeText"]>().mockResolvedValue({ code: "OK", data: { fields: [], positions: [] } });
@@ -932,8 +940,10 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.click(screen.getByRole("button", { name: "Kunde anlegen" }));
     expect(await screen.findByRole("heading", { name: "Kunde anlegen" })).toBeInTheDocument();
     expect(screen.getAllByRole("dialog")).toHaveLength(2);
-    expect(screen.getByLabelText("Name / Firma")).toHaveValue("SYNTHETISCH Neuer Kunde");
-    fireEvent.click(screen.getByRole("button", { name: "Gewerbe" }));
+    expect(screen.getByLabelText("Vorname")).toHaveValue("SYNTHETISCH Neuer");
+    expect(screen.getByLabelText("Nachname")).toHaveValue("Kunde");
+    fireEvent.click(screen.getByRole("button", { name: "Firma" }));
+    fireEvent.change(screen.getByLabelText("Firmenname"),{target:{value:"SYNTHETISCH Neuer Kunde"}});
     fireEvent.change(screen.getByLabelText("Telefon"), { target: { value: "+49 221 123456" } });
     fillRequiredCustomerAddress();
     fireEvent.click(screen.getByRole("button", { name: "Kunde speichern" }));
@@ -1073,7 +1083,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     }));
     const listCustomers = vi.fn<GlobalCreatePorts["listCustomers"]>().mockResolvedValue({
       code: "OK",
-      customers: [{ id: CUSTOMER_ID, customerNumber: "K-2026-0042", name: "SYNTHETISCH Musterkunde GmbH", city: "Teststadt", lastHandoverMode: "shipping" }],
+      customers: [{ id: CUSTOMER_ID, customerNumber: "K-2026-0042", name: "SYNTHETISCH Musterkunde GmbH",customerType:"business",companyName:"SYNTHETISCH Musterkunde GmbH", city: "Teststadt", handoverPreference: null }],
     });
     render(<GlobalCreateFlow ports={ports({ getIntakeSuggestions, listCustomers })} />);
 
@@ -1161,7 +1171,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(await screen.findByText("Noch kein belegter Kunde")).toBeInTheDocument();
     expect(screen.getByText(/Kundenstamm ist geladen/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Kunde anlegen" }));
-    await waitFor(() => expect(screen.getByLabelText("Name / Firma")).toHaveFocus());
+    await waitFor(() => expect(within(screen.getByRole("group",{name:"Kundentyp"})).getByRole("button",{name:"Firma"})).toHaveFocus());
     expect(value.createQuote).not.toHaveBeenCalled();
   });
 
@@ -1178,12 +1188,12 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     const { unmount } = render(<GlobalCreateFlow ports={validationValue} />);
 
     await openIntent("CUSTOMER");
-    fireEvent.click(screen.getByRole("button", { name: "Gewerbe" }));
-    fireEvent.change(screen.getByLabelText("Name / Firma"), { target: { value: "SYNTHETISCH Eingabe bleibt" } });
+    fireEvent.click(screen.getByRole("button", { name: "Firma" }));
+    fireEvent.change(screen.getByLabelText("Firmenname"), { target: { value: "SYNTHETISCH Eingabe bleibt" } });
     fillRequiredCustomerAddress();
     fireEvent.click(screen.getByRole("button", { name: "Kunde speichern" }));
-    expect(await screen.findByText("Kundendaten sind nicht vollständig.")).toBeInTheDocument();
-    expect(screen.getByLabelText("Name / Firma")).toHaveValue("SYNTHETISCH Eingabe bleibt");
+    expect(await screen.findByText(/Kundendaten sind nicht vollständig/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Firmenname")).toHaveValue("SYNTHETISCH Eingabe bleibt");
     expect(screen.queryByRole("region", { name: "Kunden-Receipt" })).not.toBeInTheDocument();
 
     unmount();

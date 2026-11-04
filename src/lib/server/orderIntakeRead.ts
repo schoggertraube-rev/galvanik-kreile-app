@@ -7,13 +7,15 @@ import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type { OrderIntakeExecutionRequested, OrderIntakeReceipt, OrderIntakeReceiptItem, OrderIntakeSource, OrderIntakeTermStatus } from "@/lib/server/commands/orderIntakeCommand";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
+import { customerContactLabel, normaliseCustomerName, normaliseCustomerPhone, customerDuplicateMatch, customerSortKey, type CustomerComparisonValue } from "@/modules/customers/public";
+
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const EXECUTION_REQUESTED_VALUES: readonly OrderIntakeExecutionRequested[] = ["hochglanz", "glaenzend", "matt", "gelb_passiviert", "blau_passiviert", "offen"];
 const TERM_STATUS_VALUES: readonly OrderIntakeTermStatus[] = ["wunsch", "bestaetigt", "verschoben"];
 const INTAKE_SOURCE_VALUES: readonly OrderIntakeSource[] = ["persoenlich", "versand", "abholung_firma", "anfrage_mail", "anfrage_telefon"];
 
-export type OrderIntakeCustomerSearchInput = { query: string };
+export type OrderIntakeCustomerSearchInput = { query: string; candidate?: CustomerComparisonValue };
 export type OrderIntakeReceiptReadInput = { orderId: string; clientEventId: string };
 
 export type OrderIntakeCustomerOption = {
@@ -21,7 +23,10 @@ export type OrderIntakeCustomerOption = {
   customerNumber: string | null;
   name: string;
   companyName: string | null;
-  customerType: string;
+  customerType: "business"|"privat"|"lieferant";
+  salutation: "frau"|"herr"|"ohne"|null; firstName:string|null; lastName:string|null; contactRole:string|null; houseNumber:string|null;
+  handoverPreference:"pickup"|"shipping"|null; invoiceTermsEnabled:boolean; invoiceTermDays:number|null; autoInfo:boolean; vorrang:boolean;
+  duplicateMatch?: {kind:"exact"|"possible";by:string}|null;
   contactPerson: string | null;
   phone: string | null;
   email: string | null;
@@ -31,7 +36,7 @@ export type OrderIntakeCustomerOption = {
   country: string | null;
   paymentPreference: string | null;
   vatId: string | null;
-  lastHandoverMode: "pickup" | "shipping" | null;
+
   ordersCount: number;
 };
 
@@ -42,7 +47,8 @@ type CustomerRow = {
   name: string;
   company_name: string | null;
   customer_type: string;
-  contact_person: string | null;
+  salutation:"frau"|"herr"|"ohne"|null;first_name:string|null;last_name:string|null;contact_role:string|null;house_number:string|null;
+  handover_preference:"pickup"|"shipping"|null;ziel_freigeschaltet:boolean;ziel_tage:number|null;auto_info:boolean;vorrang:boolean;
   phone: string | null;
   email: string | null;
   street: string | null;
@@ -51,7 +57,7 @@ type CustomerRow = {
   country: string | null;
   payment_preference: string | null;
   vat_id: string | null;
-  last_handover_mode: string | null;
+
   orders_count: number | string;
   integrity_ok: boolean;
 };
@@ -101,8 +107,8 @@ function optionalTrimmed(value: unknown, max: number): value is string | null {
 }
 
 function validSearchInput(input: unknown): input is OrderIntakeCustomerSearchInput {
-  return plainObject(input) && exactKeys(input, ["query"]) &&
-    typeof input.query === "string" && input.query === input.query.trim() && input.query.length <= 80;
+  return plainObject(input) && exactKeys(input, input.candidate === undefined ? ["query"] : ["query","candidate"]) &&
+    typeof input.query === "string" && input.query === input.query.trim() && input.query.length <= 254 && (input.candidate === undefined || (plainObject(input.candidate) && Object.values(input.candidate).every(value=>value===null||typeof value==="string"&&value.length<=254)));
 }
 
 function validReceiptInput(input: unknown): input is OrderIntakeReceiptReadInput {
@@ -121,12 +127,12 @@ function mapCustomer(row: CustomerRow, tenantId: string): OrderIntakeCustomerOpt
     row.tenant_id !== tenantId || row.integrity_ok !== true || !trimmed(row.id, 1, 128) ||
     !optionalTrimmed(row.customer_number, 50) || !trimmed(row.name, 2, 160) ||
     !optionalTrimmed(row.company_name, 160) || !trimmed(row.customer_type, 1, 50) ||
-    !optionalTrimmed(row.contact_person, 160) || !optionalTrimmed(row.phone, 80) ||
+    !optionalTrimmed(row.first_name,60) || !optionalTrimmed(row.last_name,160) || !optionalTrimmed(row.house_number,10) || !optionalTrimmed(row.phone, 80) ||
     !optionalTrimmed(row.email, 254) || !optionalTrimmed(row.street, 160) ||
     !optionalTrimmed(row.zip_code, 20) || !optionalTrimmed(row.city, 120) ||
     !optionalTrimmed(row.country, 120) || !optionalTrimmed(row.payment_preference, 24) ||
     !optionalTrimmed(row.vat_id, 40) ||
-    (row.last_handover_mode !== null && row.last_handover_mode !== "pickup" && row.last_handover_mode !== "shipping") ||
+    !["business","privat","lieferant"].includes(row.customer_type) || typeof row.ziel_freigeschaltet !== "boolean" || typeof row.auto_info !== "boolean" || typeof row.vorrang !== "boolean" ||
     ordersCount === null
   ) return null;
   return {
@@ -134,8 +140,10 @@ function mapCustomer(row: CustomerRow, tenantId: string): OrderIntakeCustomerOpt
     customerNumber: row.customer_number,
     name: row.name,
     companyName: row.company_name,
-    customerType: row.customer_type,
-    contactPerson: row.contact_person,
+    customerType: row.customer_type as OrderIntakeCustomerOption["customerType"],
+    salutation:row.salutation,firstName:row.first_name,lastName:row.last_name,contactRole:row.contact_role,houseNumber:row.house_number,
+    handoverPreference:row.handover_preference,invoiceTermsEnabled:row.ziel_freigeschaltet,invoiceTermDays:row.ziel_tage,autoInfo:row.auto_info,vorrang:row.vorrang,
+    contactPerson: customerContactLabel({customerType:row.customer_type,salutation:row.salutation,firstName:row.first_name,lastName:row.last_name,contactRole:row.contact_role}),
     phone: row.phone,
     email: row.email,
     street: row.street,
@@ -144,7 +152,6 @@ function mapCustomer(row: CustomerRow, tenantId: string): OrderIntakeCustomerOpt
     country: row.country,
     paymentPreference: row.payment_preference,
     vatId: row.vat_id,
-    lastHandoverMode: row.last_handover_mode,
     ordersCount,
   };
 }
@@ -239,34 +246,30 @@ function mapReceipt(
 }
 
 export async function searchOrderIntakeCustomers(
-  authorization: Pick<AuthorizationSnapshot, "tenantId">,
-  input: unknown,
-): Promise<OrderIntakeCustomerOption[]> {
-  if (!validSearchInput(input)) throw new Error("ORDER_INTAKE_CUSTOMER_SEARCH_INPUT_INVALID");
-  return withPrivilegedTenantTransaction(authorization, async (tx) => {
-    const rows = await tx.execute<CustomerRow>(sql`
-      SELECT customer.*, (
-        SELECT intake_order.handover_mode
-        FROM public.orders intake_order
-        WHERE intake_order.tenant_id = customer.tenant_id
-          AND intake_order.customer_id = customer.id
-          AND intake_order.handover_mode IN ('pickup', 'shipping')
-          AND coalesce(intake_order.source, '') NOT IN ('seed', 'test', 'demo', 'integration-test')
-        ORDER BY coalesce(intake_order.intake_date, intake_order.created_at) DESC,
-                 intake_order.created_at DESC,
-                 intake_order.id DESC
-        LIMIT 1
-      ) AS last_handover_mode
-      FROM private.v_order_intake_customers_v1 customer
-      WHERE ${input.query} = '' OR strpos(customer.search_text, lower(${input.query})) > 0
-      ORDER BY customer.orders_count DESC, lower(coalesce(customer.company_name, customer.name)), customer.id
-      LIMIT 10
+  authorization: Pick<AuthorizationSnapshot,"tenantId"> & Partial<Pick<AuthorizationSnapshot,"areas">>,input:unknown,
+):Promise<OrderIntakeCustomerOption[]> {
+  if(!validSearchInput(input))throw new Error("ORDER_INTAKE_CUSTOMER_SEARCH_INPUT_INVALID");
+  if(input.query.length<2)return [];
+  const tokens=normaliseCustomerName(input.query).split(" ").filter(Boolean);
+  const phone=normaliseCustomerPhone(input.query);
+  const national=phone.startsWith("0")?phone.slice(1):phone;
+  return withPrivilegedTenantTransaction(authorization,async tx=>{
+    const textSearch=tokens.length?sql.join(tokens.map(token=>sql`strpos(customer.search_text,${token})>0`),sql` OR `):sql`false`;
+    const rows=await tx.execute<CustomerRow>(sql`
+      SELECT customer.* FROM private.v_order_intake_customers_v1 customer
+      WHERE (customer.customer_type <> 'lieferant' OR ${authorization.areas?.includes("geld")===true})
+        AND (${textSearch} OR (${national.length>=2} AND regexp_replace(coalesce(customer.phone,''),'[^0-9]','','g') LIKE ${'%'+national+'%'}))
     `);
-    return rows.map((row) => {
-      const customer = mapCustomer(row, authorization.tenantId);
-      if (!customer) throw new Error("ORDER_INTAKE_CUSTOMER_READMODEL_INVALID");
-      return customer;
+    const mapped=rows.map(row=>{const value=mapCustomer(row,authorization.tenantId);if(!value)throw new Error("ORDER_INTAKE_CUSTOMER_READMODEL_INVALID");return value;});
+    const query=input.query.toLocaleLowerCase("de-DE");
+    const values=mapped.map(customer=>({...customer,duplicateMatch:input.candidate?customerDuplicateMatch(customer,input.candidate):null})).filter(customer=>{
+      if(input.candidate)return customer.duplicateMatch!==null;
+      const fields=[customer.name,customer.companyName,customer.firstName,customer.lastName,customerContactLabel(customer),customer.email,customer.city,customer.customerNumber];
+      return fields.some(value=>value?.toLocaleLowerCase("de-DE").includes(query)) || national.length>=2&&normaliseCustomerPhone(customer.phone).includes(national)
+        || tokens.length>0&&tokens.every(token=>normaliseCustomerName(fields.filter(Boolean).join(" ")).includes(token));
     });
+
+    return values.sort((a,b)=>(a.duplicateMatch?.kind==="exact"?0:1)-(b.duplicateMatch?.kind==="exact"?0:1)||customerSortKey(a).localeCompare(customerSortKey(b),"de")||a.id.localeCompare(b.id)).slice(0,10);
   });
 }
 

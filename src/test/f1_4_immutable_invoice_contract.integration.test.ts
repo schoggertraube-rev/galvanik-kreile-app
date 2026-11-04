@@ -204,13 +204,10 @@ async function seedFrozenOrder(transaction: Tx, params: {
 }): Promise<void> {
   await transaction`
     INSERT INTO public.customers (
-      id, tenant_id, customer_number, name, company_name, type,
-      street, zip_code, city, country, created_at, updated_at
-    ) VALUES (
-      ${params.customerId}, ${params.tenantId}, ${params.customerNumber},
-      'F1.4 Synthetic Customer', 'F1.4 Synthetic Customer GmbH', 'business',
-      'Kundenweg 2', '70174', 'Stuttgart', 'Deutschland', now(), now()
-    )
+        id, tenant_id, customer_number, name, company_name, type, street, zip_code, city, country, created_at, updated_at, house_number
+      ) VALUES (
+        ${params.customerId}, ${params.tenantId}, ${params.customerNumber}, 'F1.4 Synthetic Customer', 'F1.4 Synthetic Customer GmbH', 'business', (SELECT street FROM private.kunde_split_street('Kundenweg 2')), '70174', 'Stuttgart', private.kunde_land_schluessel('Deutschland'), now(), now(), (SELECT house_number FROM private.kunde_split_street('Kundenweg 2'))
+      )
   `;
   await transaction`
     INSERT INTO public.orders (
@@ -465,13 +462,10 @@ describe("F1.4 immutable invoice database contract", () => {
         `;
         await transaction`
           INSERT INTO public.customers (
-            id, tenant_id, customer_number, name, company_name, type,
-            street, zip_code, city, country, created_at, updated_at
-          ) VALUES (
-            ${customerId}, ${tenantId}, ${`F14-${suffix}`}, 'F1.4 Synthetic Customer',
-            'F1.4 Synthetic Customer GmbH', 'business', 'Kundenweg 2',
-            '70174', 'Stuttgart', 'Deutschland', now(), now()
-          )
+        id, tenant_id, customer_number, name, company_name, type, street, zip_code, city, country, created_at, updated_at, house_number
+      ) VALUES (
+        ${customerId}, ${tenantId}, ${`F14-${suffix}`}, 'F1.4 Synthetic Customer', 'F1.4 Synthetic Customer GmbH', 'business', (SELECT street FROM private.kunde_split_street('Kundenweg 2')), '70174', 'Stuttgart', private.kunde_land_schluessel('Deutschland'), now(), now(), (SELECT house_number FROM private.kunde_split_street('Kundenweg 2'))
+      )
         `;
         await transaction`
           INSERT INTO public.orders (
@@ -1845,13 +1839,10 @@ describe("F1.4 immutable invoice database contract", () => {
         `;
         await transaction`
           INSERT INTO public.customers (
-            id, tenant_id, customer_number, name, company_name, type,
-            street, zip_code, city, country, created_at, updated_at
-          ) VALUES (
-            ${customerId}, ${tenantId}, ${`MATRIX-${suffix}`}, 'F1.4 Synthetic Customer',
-            'F1.4 Synthetic Customer GmbH', 'business', 'Kundenweg 2',
-            '70174', 'Stuttgart', 'Deutschland', now(), now()
-          )
+        id, tenant_id, customer_number, name, company_name, type, street, zip_code, city, country, created_at, updated_at, house_number
+      ) VALUES (
+        ${customerId}, ${tenantId}, ${`MATRIX-${suffix}`}, 'F1.4 Synthetic Customer', 'F1.4 Synthetic Customer GmbH', 'business', (SELECT street FROM private.kunde_split_street('Kundenweg 2')), '70174', 'Stuttgart', private.kunde_land_schluessel('Deutschland'), now(), now(), (SELECT house_number FROM private.kunde_split_street('Kundenweg 2'))
+      )
         `;
         await transaction`
           INSERT INTO public.orders (

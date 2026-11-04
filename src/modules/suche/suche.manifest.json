@@ -23,6 +23,7 @@
     "@/modules/suche/public#SearchProviderBatch",
     "@/modules/suche/public#SearchSource",
     "@/modules/suche/public#SearchTenantResult",
+    "@/modules/suche/public#customerMatchField",
     "@/modules/suche/public#normalizeSearchQuery",
     "@/modules/suche/public#searchTenant"
   ],

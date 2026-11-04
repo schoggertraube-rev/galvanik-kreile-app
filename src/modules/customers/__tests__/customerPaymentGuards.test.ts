@@ -15,23 +15,10 @@ vi.mock("drizzle-orm", () => ({
 const context = {
   tenantId: KREILE_TENANT_SLUG,
   userId: "11111111-1111-4111-8111-111111111111",
-  capabilities: { canCreateCustomer: true, canManageMoney: false },
+  capabilities: { canCreateCustomer: true,canEditCustomer:true, canManageMoney: false },
 };
-const updateInput = {
-  clientEventId: "22222222-2222-4222-8222-222222222222",
-  customerId: "customer-1",
-  name: "Synthetischer Kunde",
-  companyName: "Synthetik GmbH",
-  contactPerson: "Test Person",
-  email: "test@example.invalid",
-  phone: "+49 000 123456",
-  street: "Testweg 1",
-  zipCode: "12345",
-  city: "Teststadt",
-  country: "Deutschland",
-  paymentPreference: "rechnung_14",
-  vatId: "DE123456789",
-};
+const profile={id:"customer-1",customerNumber:"K-2026-0001",name:"Synthetik GmbH",customerType:"business",companyName:"Synthetik GmbH",salutation:"ohne",firstName:"Test",lastName:"Person",contactRole:null,email:"test@example.invalid",phone:"0711 123456",street:"Testweg",houseNumber:"1",zipCode:"12345",city:"Teststadt",country:"DE",paymentPreference:"vorkasse",iban:null,paymentTermDays:null,autoInfo:true,vorrang:false,invoiceTermsEnabled:false,invoiceTermDays:null,addressStatus:null,billingEmail:null,website:null,vatId:null,notes:null};
+const updateInput={clientEventId:"22222222-2222-4222-8222-222222222222",customerId:"customer-1",paymentPreference:"rechnung"};
 
 describe("customer payment guards", () => {
   beforeEach(() => {
@@ -40,32 +27,33 @@ describe("customer payment guards", () => {
   });
 
   it("lehnt ohne Bereich Geld jede Ã„nderung der Zahlungsbedingung ab", async () => {
-    execute.mockResolvedValueOnce([{ payment_preference: "vorkasse", ziel_freigeschaltet: false }]);
-    const { updateCustomerCommercialCommand } = await import("../server/updateCustomerCommercialCommand");
-    await expect(updateCustomerCommercialCommand(context, { ...updateInput, paymentPreference: "bar" }))
+    execute.mockResolvedValueOnce([profile]);
+    const { updateCustomerCommand } = await import("../server/updateCustomerCommand");
+    await expect(updateCustomerCommand(context, { ...updateInput, paymentPreference: "bar" }))
       .resolves.toMatchObject({ code: "FORBIDDEN" });
-    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute).not.toHaveBeenCalled();
   });
 
   it("lehnt auch mit Bereich Geld vorkasse zu Rechnung ohne Freischalt-Command ab", async () => {
-    execute.mockResolvedValueOnce([{ payment_preference: "vorkasse", ziel_freigeschaltet: false }]);
-    const { updateCustomerCommercialCommand } = await import("../server/updateCustomerCommercialCommand");
-    await expect(updateCustomerCommercialCommand({
+    execute.mockResolvedValueOnce([profile]);
+    const { updateCustomerCommand } = await import("../server/updateCustomerCommand");
+    await expect(updateCustomerCommand({
       ...context,
-      capabilities: { canCreateCustomer: true, canManageMoney: true },
-    }, updateInput)).resolves.toMatchObject({ code: "FORBIDDEN", message: expect.stringContaining("Ziel nicht freigeschaltet") });
+      capabilities: { canCreateCustomer: true,canEditCustomer:true, canManageMoney: true },
+    }, updateInput)).resolves.toMatchObject({ code: "VALIDATION_ERROR", message: expect.stringContaining("Ziel nicht freigeschaltet") });
     expect(execute).toHaveBeenCalledTimes(1);
   });
 
   it("accepts an invoice preference only with the stored approval", async () => {
     execute
-      .mockResolvedValueOnce([{ payment_preference: "rechnung_14", ziel_freigeschaltet: true }])
-      .mockResolvedValueOnce([{ result_code: "OK", replayed: false }]);
-    const { updateCustomerCommercialCommand } = await import("../server/updateCustomerCommercialCommand");
-    await expect(updateCustomerCommercialCommand({
+      .mockResolvedValueOnce([{...profile,paymentPreference:"rechnung",invoiceTermsEnabled:true,invoiceTermDays:14}])
+      .mockResolvedValueOnce([{ result_code: "OK", replayed: false }])
+      .mockResolvedValueOnce([{...profile,paymentPreference:"rechnung",invoiceTermsEnabled:true,invoiceTermDays:14}]);
+    const { updateCustomerCommand } = await import("../server/updateCustomerCommand");
+    await expect(updateCustomerCommand({
       ...context,
-      capabilities: { canCreateCustomer: true, canManageMoney: true },
-    }, updateInput)).resolves.toEqual({ code: "OK", replayed: false });
+      capabilities: { canCreateCustomer: true,canEditCustomer:true, canManageMoney: true },
+    }, updateInput)).resolves.toMatchObject({ code: "OK", replayed: false, customer:{id:profile.id,paymentPreference:"rechnung"} });
   });
 
   it("stellt Rechnung auf Ziel ausschlieÃŸlich Ã¼ber den Geld-Command frei", async () => {
@@ -83,7 +71,7 @@ describe("customer payment guards", () => {
     execute.mockResolvedValueOnce([{ result_code: "OK", replayed: false }]);
     await expect(enableCustomerInvoiceTermsCommand({
       ...context,
-      capabilities: { canCreateCustomer: true, canManageMoney: true },
+      capabilities: { canCreateCustomer: true,canEditCustomer:true, canManageMoney: true },
     }, input)).resolves.toMatchObject({ code: "OK", replayed: false });
     expect(execute.mock.calls[0]?.[0].text).toContain("private.enable_customer_invoice_terms_v1");
   });

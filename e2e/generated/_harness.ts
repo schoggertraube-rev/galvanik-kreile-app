@@ -503,7 +503,8 @@ async function select(locator: Locator, label: string) {
 
 function choiceButton(locator: Locator, label: string): Locator {
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return locator.locator("button").filter({ hasText: new RegExp(`^\\s*${escaped}\\s*$`) });
+  return locator.getByRole("button", { name: label, exact: true })
+    .or(locator.locator("button").filter({ hasText: new RegExp(`^\\s*${escaped}\\s*$`) }));
 }
 
 async function interruptNextServerAction(page: Page) {
@@ -515,11 +516,13 @@ async function interruptNextLoad(page: Page) {
   let handled = false;
   const handler = async (route: import("@playwright/test").Route) => {
     const request = route.request();
-    const isLoad = request.method() === "GET" && ["document", "fetch", "xhr"].includes(request.resourceType());
+    // App Router also transports read Server Actions with POST + Next-Action.
+    const isLoad = ["document", "fetch", "xhr"].includes(request.resourceType())
+      && (request.method() === "GET" || (request.method() === "POST" && Boolean(request.headers()["next-action"])));
     if (!handled && isLoad) {
       handled = true;
-      await page.unroute(matcher, handler);
       await route.abort("failed");
+      await page.unroute(matcher, handler);
       return;
     }
     await route.continue();
@@ -647,11 +650,6 @@ async function openTarget(page: Page, target: string, arg: unknown) {
     const [customerId, fragment] = String(arg ?? "").split("#", 2);
     if (!customerId) throw new Error("FLOW_OPEN_CUSTOMER_REQUIRED");
     if (fragment && !["fehlend", "uebernahme", "bearbeiten"].includes(fragment)) throw new Error(`FLOW_CUSTOMER_MODE_UNSUPPORTED:${fragment}`);
-    // The existing adapter receives the complete customer argument, including mode.
-    // A URL fragment is never delivered to the server route's id parameter.
-    await page.goto(`/customers/${encodeURIComponent(String(arg))}`);
-    if (!fragment) await dataSpec(page, "kunde.bearbeiten").click({ timeout: 5_000 });
-    return;
   }
   await page.evaluate(({ ziel, argument }) => {
     window.dispatchEvent(new CustomEvent("kreile:oeffne", { detail: { ziel, arg: argument } }));
@@ -684,7 +682,10 @@ async function assertExpectation(page: Page, expectation: FlowExpectation, state
   }
   if (expectation.oben) {
     const dialog = await topDialog(page);
-    await expect(dialog.locator(`[data-spec-id="${expectation.oben}"]`)).toBeVisible();
+    // The card's loading layer is replaced asynchronously. Keep the same
+    // top-layer assertion live while its root receives the object identifier.
+    await expect(dialog.and(page.locator(`[data-spec-id="${expectation.oben}"]`))
+      .or(dialog.locator(`[data-spec-id="${expectation.oben}"]`))).toBeVisible();
     return;
   }
   if (expectation.toast) {

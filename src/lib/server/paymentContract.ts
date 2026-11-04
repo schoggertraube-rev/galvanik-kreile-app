@@ -162,10 +162,11 @@ export function isPaymentMode(value: unknown): value is PaymentMode {
 export function paymentModeFromPreference(
   preference: string | null | undefined,
   handoverMode: "pickup" | "shipping" = "shipping",
+  terms?: { invoiceTermsEnabled?: boolean; invoiceTermDays?: number | null },
 ): PaymentMode {
   if (preference === "bar") return handoverMode === "pickup" ? "abholung" : "vorkasse";
-  if (typeof preference === "string" && /^rechnung_[1-9][0-9]{0,2}$/.test(preference)) return "rechnung";
-  return handoverMode === "pickup" && !preference ? "abholung" : "vorkasse";
+  if (preference === "rechnung" && terms?.invoiceTermsEnabled && Number.isInteger(terms.invoiceTermDays) && Number(terms.invoiceTermDays) >= 1 && Number(terms.invoiceTermDays) <= 90) return "rechnung";
+  return handoverMode === "pickup" && (!preference || preference === "rechnung") ? "abholung" : "vorkasse";
 }
 
 export function intakePaymentContract(input: {
@@ -173,12 +174,14 @@ export function intakePaymentContract(input: {
   paymentPreference: string | null | undefined;
   handoverMode: "pickup" | "shipping";
   requestedMode?: PaymentMode;
+  invoiceTermsEnabled?: boolean;
+  invoiceTermDays?: number | null;
 }): { ok: true; mode: PaymentMode } | { ok: false; message: string } {
   const mode = input.requestedMode
-    ?? paymentModeFromPreference(input.paymentPreference, input.handoverMode);
+    ?? paymentModeFromPreference(input.paymentPreference, input.handoverMode, input);
   const targetEnabled = input.customerMode === "EXISTING"
-    && typeof input.paymentPreference === "string"
-    && /^rechnung_[1-9][0-9]{0,2}$/.test(input.paymentPreference);
+    && input.paymentPreference === "rechnung" && input.invoiceTermsEnabled === true
+    && Number.isInteger(input.invoiceTermDays) && Number(input.invoiceTermDays) >= 1 && Number(input.invoiceTermDays) <= 90;
   if (mode === "rechnung" && !targetEnabled) {
     return { ok: false, message: "Ziel nicht freigeschaltet." };
   }

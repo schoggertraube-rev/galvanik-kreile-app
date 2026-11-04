@@ -28,8 +28,8 @@ import {
   getGalvanikHandoffAttachmentsAction,
   getOrderStationReceiptAction,
   reserveGalvanikHandoffAttachmentAction,
-  createOrderIntakeAction,
 } from "@/app/warendurchlauf/actions";
+import {createOrderIntakeAction} from "@/app/actions/eingang.actions";
 import { uploadSignedOrderAttachment } from "@/app/warendurchlauf/galvanik/GalvanikHandoffAttachmentAppAdapter";
 import { DomainAttachmentPanel } from "@/components/attachments/DomainAttachmentPanel";
 import { CommunicationPanel } from "@/components/communication/CommunicationPanel";

@@ -14,13 +14,15 @@ import {
 } from "@/lib/server/authorization";
 import { readCustomerSummary } from "@/lib/server/customerSummaryRead";
 import { readInvoiceTruth } from "@/lib/server/invoiceTruthRead";
+import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import {customerContactLabel,customerSortKey,type CustomerAddressInput} from "@/modules/customers/public";
 import {
   createCustomerCommand,
   readCustomerCreateReceiptCommand,
-  updateCustomerCommercialCommand,
-  updateCustomerNoteCommand,
+  updateCustomerCommand,
+  readCustomerAddress,
   type CreateCustomerInput,
-  type UpdateCustomerCommercialInput,
+  type UpdateCustomerInput,
 } from "@/modules/customers/server-public";
 
 export async function getCustomerSummaryAction(input: { customerId: string }) {
@@ -28,7 +30,8 @@ export async function getCustomerSummaryAction(input: { customerId: string }) {
   let authorization;
   try {
     authorization = await resolveAuthorization();
-  } catch {
+  } catch (error) {
+    console.error("[CUSTOMER_SUMMARY_AUTHORIZATION_FAILED]", { errorName: error instanceof Error ? error.name : "UnknownError" });
     return { code: "UNAVAILABLE" as const, message: "Kundenkarte ist derzeit nicht verfügbar." };
   }
   if (!authorization.ok) {
@@ -39,100 +42,60 @@ export async function getCustomerSummaryAction(input: { customerId: string }) {
   return readCustomerSummary(authorization.data, input);
 }
 
-export async function createCustomerAction(input: CreateCustomerInput) {
-  let authorization;
-  try {
-    authorization = await resolveAuthorization();
-  } catch {
-    return { code: "UNAVAILABLE" as const, message: "Kunde konnte nicht sicher gespeichert werden." };
+async function customerAuthorization() {
+  try { return await resolveAuthorization(); }
+  catch (error) {
+    console.error("[CUSTOMER_AUTHORIZATION_UNAVAILABLE]", { errorName: error instanceof Error ? error.name : "UnknownError" });
+    return null;
   }
-  if (!authorization.ok) {
-    return authorization.reason === "AUTHORIZATION_UNAVAILABLE"
-      ? { code: "UNAVAILABLE" as const, message: "Kunde konnte nicht sicher gespeichert werden." }
-      : { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
-  }
-
-  const command = await createCustomerCommand({
-    tenantId: authorization.data.tenantId,
-    userId: authorization.data.userId,
-    capabilities: {
-      canCreateCustomer: getAuthorizationActionGrants(authorization.data).createCustomer,
-      canManageMoney: authorization.data.areas?.includes("geld") ?? false,
-    },
-  }, input);
-  if (command.code !== "OK") return command;
-  const readback = await readCustomerSummary(authorization.data, { customerId: command.receipt.customerId });
-  if (readback.code !== "OK" || readback.data.customerNumber !== command.receipt.customerNumber) {
-    return { code: "UNAVAILABLE" as const, message: "Kunde wurde gespeichert, der sichere Readback ist noch nicht verfügbar." };
-  }
-  revalidatePath("/customers");
-  revalidatePath(`/customers/${command.receipt.customerId}`);
-  return { ...command, customer: readback.data };
 }
-
-/** Read-only recovery for an interrupted customer command; it never writes. */
+function customerContext(authorization: Extract<Awaited<ReturnType<typeof resolveAuthorization>>, {ok:true}>["data"]) {
+  return {
+    tenantId: authorization.tenantId, userId: authorization.userId,
+    capabilities: {
+      canCreateCustomer: getAuthorizationActionGrants(authorization).createCustomer,
+      canEditCustomer: hasAuthorizationArea(authorization,"kunden"),
+      canManageMoney: hasAuthorizationArea(authorization,"geld"),
+      canDecide: hasAuthorizationArea(authorization,"entscheiden"),
+    },
+  };
+}
+export async function readCustomerAddressAction(input: CustomerAddressInput) {
+  const authorization=await customerAuthorization();
+  if(!authorization?.ok || (!hasAuthorizationArea(authorization.data,"eingang")&&!hasAuthorizationArea(authorization.data,"kunden"))) {
+    return {code:"FORBIDDEN" as const,message:"Adressprüfung ist nicht erlaubt."};
+  }
+  if(!input || ["country","zipCode","city","street","houseNumber"].some(key=>typeof input[key as keyof CustomerAddressInput]!=="string") || Object.values(input).some(value=>value.length>254)) {
+    return {code:"VALIDATION_ERROR" as const,message:"Anschrift ist ungültig."};
+  }
+  try { return {code:"OK" as const,data:await withPrivilegedTenantTransaction(authorization.data,tx=>readCustomerAddress(tx,input))}; }
+  catch(error) {
+    console.error("[CUSTOMER_ADDRESS_READ_FAILED]",{errorName:error instanceof Error?error.name:"UnknownError"});
+    return {code:"UNAVAILABLE" as const,message:"Adressprüfung gerade nicht möglich. Code: CUSTOMER_ADDRESS_READ_FAILED."};
+  }
+}
+export async function createCustomerAction(input: CreateCustomerInput) {
+  const authorization=await customerAuthorization();
+  if(!authorization?.ok)return {code:"UNAVAILABLE" as const,message:"Kunde konnte nicht sicher gespeichert werden. Code: CUSTOMER_AUTHORIZATION_UNAVAILABLE."};
+  const result=await createCustomerCommand(customerContext(authorization.data),input);
+  if(result.code!=="OK")return result;
+  revalidatePath("/customers");
+  revalidatePath(`/customers/${result.receipt.customerId}`);
+  return result;
+}
 export async function readCustomerCreateReceiptAction(input: CreateCustomerInput) {
   noStore();
-  let authorization;
-  try {
-    authorization = await resolveAuthorization();
-  } catch {
-    return { code: "UNAVAILABLE" as const, message: "Der gespeicherte Kundenstand konnte nicht sicher gelesen werden." };
-  }
-  if (!authorization.ok) return authorization.reason === "AUTHORIZATION_UNAVAILABLE"
-    ? { code: "UNAVAILABLE" as const, message: "Der gespeicherte Kundenstand konnte nicht sicher gelesen werden." }
-    : { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
-  const result = await readCustomerCreateReceiptCommand({
-    tenantId: authorization.data.tenantId, userId: authorization.data.userId,
-    capabilities: {
-      canCreateCustomer: getAuthorizationActionGrants(authorization.data).createCustomer,
-      canManageMoney: authorization.data.areas?.includes("geld") ?? false,
-    },
-  }, input);
-  if (result.code !== "OK") return result;
-  const readback = await readCustomerSummary(authorization.data, { customerId: result.receipt.customerId });
-  if (readback.code !== "OK" || readback.data.customerNumber !== result.receipt.customerNumber) {
-    return { code: "UNAVAILABLE" as const, message: "Ein Kundenbeleg wurde gefunden, der fachliche Stand ist aber noch nicht sicher lesbar." };
-  }
-  return { code: "OK" as const, receipt: result.receipt, customer: readback.data };
+  const authorization=await customerAuthorization();
+  if(!authorization?.ok)return {code:"UNAVAILABLE" as const,message:"Kundenbeleg konnte nicht sicher gelesen werden. Code: CUSTOMER_AUTHORIZATION_UNAVAILABLE."};
+  return readCustomerCreateReceiptCommand(customerContext(authorization.data),input);
 }
-
-export async function updateCustomerCommercialAction(input: UpdateCustomerCommercialInput) {
-  const authorization = await resolveAuthorization();
-  if (!authorization.ok) return { code: "UNAVAILABLE" as const, message: authorization.message };
-  const result = await updateCustomerCommercialCommand({
-    tenantId: authorization.data.tenantId,
-    userId: authorization.data.userId,
-    capabilities: {
-      canCreateCustomer: getAuthorizationActionGrants(authorization.data).createCustomer,
-      canManageMoney: authorization.data.areas?.includes("geld") ?? false,
-    },
-  }, input);
-  if (result.code !== "OK") return result;
-  const readback = await readCustomerSummary(authorization.data, { customerId: input.customerId });
-  if (readback.code !== "OK" || !readback.data.customerNumber || readback.data.name !== input.name || readback.data.contactPerson !== input.contactPerson ||
-    readback.data.email !== input.email || readback.data.phone !== input.phone || readback.data.street !== input.street ||
-    readback.data.paymentPreference !== input.paymentPreference) return { code: "UNAVAILABLE" as const, message: "Änderung konnte nicht frisch bestätigt werden." };
+export async function updateCustomerAction(input: UpdateCustomerInput) {
+  const authorization=await customerAuthorization();
+  if(!authorization?.ok)return {code:"UNAVAILABLE" as const,message:"Kunde konnte nicht sicher gespeichert werden. Code: CUSTOMER_AUTHORIZATION_UNAVAILABLE."};
+  const result=await updateCustomerCommand(customerContext(authorization.data),input);
+  if(result.code!=="OK")return result;
   revalidatePath("/customers"); revalidatePath(`/customers/${input.customerId}`);
-  return { code: "OK" as const, customer: readback.data };
-}
-
-export async function updateCustomerNoteAction(input: { clientEventId: string; customerId: string; note: string }) {
-  const authorization = await resolveAuthorization();
-  if (!authorization.ok) return { code: "UNAVAILABLE" as const, message: authorization.message };
-  const result = await updateCustomerNoteCommand({
-    tenantId: authorization.data.tenantId,
-    userId: authorization.data.userId,
-    capabilities: {
-      canCreateCustomer: getAuthorizationActionGrants(authorization.data).createCustomer,
-      canManageMoney: authorization.data.areas?.includes("geld") ?? false,
-    },
-  }, input);
-  if (result.code !== "OK") return result;
-  const readback = await readCustomerSummary(authorization.data, { customerId: input.customerId });
-  if (readback.code !== "OK" || (readback.data.internalNotes ?? "") !== input.note) return { code: "UNAVAILABLE" as const, message: "Kundennotiz wurde geschrieben, aber noch nicht sicher zurückgelesen." };
-  revalidatePath("/customers"); revalidatePath(`/customers/${input.customerId}`);
-  return { code: "OK" as const };
+  return result;
 }
 
 type DbCustomer = InferSelectModel<typeof customers>;
@@ -140,11 +103,13 @@ type DbCustomer = InferSelectModel<typeof customers>;
 function mapDbCustomer(c: DbCustomer): Customer {
   return {
     id: c.id,
-    customerNumber: c.customerNumber || c.id.substring(0, 8),
+    customerNumber: c.customerNumber ?? "",
     name: c.name,
     companyName: c.companyName || undefined,
     type: c.type as import("@/lib/types/customer").CustomerType,
-    contactPerson: c.contactPerson || undefined,
+    contactPerson: customerContactLabel({customerType:c.type,salutation:c.salutation,firstName:c.firstName,lastName:c.lastName,contactRole:c.contactRole}) ?? undefined,
+    salutation:c.salutation as Customer["salutation"],firstName:c.firstName,lastName:c.lastName,contactRole:c.contactRole,houseNumber:c.houseNumber,billingEmail:c.billingEmail,website:c.website,
+    handoverPreference:c.handoverPreference as Customer["handoverPreference"],invoiceTermsEnabled:c.invoiceTermsEnabled,invoiceTermDays:c.invoiceTermDays,autoInfo:c.autoInfo,vorrang:c.vorrang,
     email: c.email || undefined,
     phone: c.phone || undefined,
     paymentProfile: c.paymentProfile || undefined,
@@ -158,7 +123,7 @@ function mapDbCustomer(c: DbCustomer): Customer {
     tags: (c.tags as string[]) || [],
     creditRating: c.creditRating || undefined,
     imageUrls: (c.imageUrls as string[]) || [],
-    address: c.address || c.street || undefined, // fallback for legacy
+    address: [c.street,c.houseNumber].filter(Boolean).join(" ") || undefined,
     street: c.street || undefined,
     city: c.city || undefined,
     zipCode: c.zipCode || undefined,
@@ -170,7 +135,6 @@ function mapDbCustomer(c: DbCustomer): Customer {
 
 export async function getCustomersDb(): Promise<ActionResult<Array<Customer & {
   activeOrderCount: number;
-  lastHandoverMode: "pickup" | "shipping" | null;
 }>>> {
   noStore();
   const auth = await checkAppAuth();
@@ -184,7 +148,7 @@ export async function getCustomersDb(): Promise<ActionResult<Array<Customer & {
   const tenantId = authRes.data.tenantId;
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
-  
+
   try {
     const dbCustomers = await db.select().from(customers).where(
       and(
@@ -201,26 +165,11 @@ export async function getCustomersDb(): Promise<ActionResult<Array<Customer & {
       sql`coalesce(${orders.station}, '') not in ('abgeholt', 'versendet', 'raus')`,
       sql`coalesce(${orders.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`,
     )).groupBy(orders.customerId);
-    const handoverHistory = await db.select({
-      customerId: orders.customerId,
-      handoverMode: orders.handoverMode,
-    }).from(orders).where(and(
-      eq(orders.tenantId, tenantId),
-      sql`${orders.handoverMode} in ('pickup', 'shipping')`,
-      sql`coalesce(${orders.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`,
-    )).orderBy(sql`coalesce(${orders.intakeDate}, ${orders.createdAt}) desc, ${orders.createdAt} desc, ${orders.id} desc`);
     const countByCustomer = new Map(activeCounts.map((entry) => [entry.customerId, Number(entry.count)]));
-    const handoverByCustomer = new Map<string, "pickup" | "shipping">();
-    for (const entry of handoverHistory) {
-      if (!handoverByCustomer.has(entry.customerId) && (entry.handoverMode === "pickup" || entry.handoverMode === "shipping")) {
-        handoverByCustomer.set(entry.customerId, entry.handoverMode);
-      }
-    }
     const data = dbCustomers.map((customer) => ({
       ...mapDbCustomer(customer),
       activeOrderCount: countByCustomer.get(customer.id) ?? 0,
-      lastHandoverMode: handoverByCustomer.get(customer.id) ?? null,
-    })).reverse(); // Order by createdAt desc
+    })).filter(customer=>customer.type!=="lieferant"||hasAuthorizationArea(authRes.data,"geld")).sort((a,b)=>customerSortKey({...a,customerType:a.type}).localeCompare(customerSortKey({...b,customerType:b.type}),"de")||a.id.localeCompare(b.id));
     return { ok: true, data };
   } catch (error) {
     console.error("Failed to get customers from DB:", error);
@@ -238,7 +187,7 @@ export async function getCustomerByIdDb(id: string): Promise<ActionResult<Custom
   const tenantId = authRes.data.tenantId;
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
-  
+
   try {
     const dbCustomers = await db.select().from(customers).where(
       and(
@@ -248,7 +197,7 @@ export async function getCustomerByIdDb(id: string): Promise<ActionResult<Custom
       )
     ).limit(1);
     if (dbCustomers.length === 0) return { ok: true, data: null };
-    
+
     return { ok: true, data: mapDbCustomer(dbCustomers[0]) };
   } catch (error) {
     console.error("Failed to get customer by id from DB:", error);
@@ -277,11 +226,11 @@ export async function searchCustomersDb(query: string): Promise<ActionResult<Cus
   const tenantId = authRes.data.tenantId;
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
-  
+
   if (!query || query.trim() === "") {
     return { ok: true, data: [] };
   }
-  
+
   try {
     const searchPattern = `%${query.trim()}%`;
     const dbCustomers = await db.select().from(customers).where(
@@ -296,7 +245,7 @@ export async function searchCustomersDb(query: string): Promise<ActionResult<Cus
         sql`coalesce(${customers.name}, '') NOT LIKE 'Capture%'`
       )
     );
-    
+
     return { ok: true, data: dbCustomers.map(mapDbCustomer) };
   } catch (error) {
     console.error("Failed to search customers in DB:", error);
