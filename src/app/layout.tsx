@@ -62,7 +62,7 @@ export default async function RootLayout({
             <PermissionsProvider initialAuthState={authState}>
               <DiagnosticsProvider>
                 <FeatureFlagProvider>
-                  <KreileAppShell globalCreate={<GlobalCreateAppAdapter />}>
+                  <KreileAppShell loginHandle={authState.status==='authenticated'?authState.user.loginHandle:undefined} globalCreate={<GlobalCreateAppAdapter />}>
                     {children}
                   </KreileAppShell>
                 </FeatureFlagProvider>

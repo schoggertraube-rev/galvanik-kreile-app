@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll,beforeEach, describe, expect, it, vi } from "vitest";
 
 const ports = vi.hoisted(() => ({
   resolveAuthorization: vi.fn(),
@@ -17,6 +17,10 @@ vi.mock("../authorization", () => ({
 }));
 
 import { getAuthBootstrapState } from "../authBootstrap";
+import {createPinLoginHandle} from '../pinLoginHandle';
+const previousSecret=process.env.APP_SESSION_SECRET;
+process.env.APP_SESSION_SECRET='synthetic-bootstrap-local-ui-marker-test-only';
+afterAll(()=>{if(previousSecret===undefined)delete process.env.APP_SESSION_SECRET;else process.env.APP_SESSION_SECRET=previousSecret;});
 
 const gregorAuthorization = {
   ok: true as const,
@@ -44,6 +48,7 @@ describe("getAuthBootstrapState()", () => {
     expect(firstLoad).toEqual({
       status: "authenticated",
       user: {
+        loginHandle:createPinLoginHandle(gregorAuthorization.data.userId),
         role: "developer",
         displayName: "Gregor",
         areas: ["logins", "wartung"],

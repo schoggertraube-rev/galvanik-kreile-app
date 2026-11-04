@@ -11,7 +11,7 @@ export interface AppShellProps {
   aktiv: Bereich; kuerzel: string; datum?: ReactNode;
   /** vom Admin je Person gesperrte Bereiche (OE-2609-09) werden nicht angezeigt */
   ausgeblendet?: Bereich[]; badges?: Partial<Record<Bereich, { n: number; rot?: boolean }>>;
-  suche: ReactNode; plus: ReactNode;
+  suche: ReactNode; plus: ReactNode; neuigkeiten?:ReactNode;
   onNav: (b: Bereich | 'mehr') => void; onStart: () => void; onKonto: () => void;
   onNeuerEingang?: () => void; onWareRaus?: () => void;
   /** nur variante=werkstatt */ onAuftragOeffnen?: () => void; onMehrarbeit?: () => void; onFertigMelden?: () => void;
@@ -32,6 +32,7 @@ export function AppShell(p: AppShellProps) {
     <header className="kr-kopf">
       <button type="button" className="kr-marke" aria-label="Startseite" onClick={p.onStart}><span className="kr-logo">GK</span><span className="kr-marke-name">KREILE</span></button>
       {p.suche}
+      {p.neuigkeiten}
       {p.datum && p.geraet === 'desktop' && <span className="kr-datum">{p.datum}</span>}
       {p.plus}
       <button type="button" className="kr-avatar" aria-label="Konto" onClick={p.onKonto}>{p.kuerzel}</button>

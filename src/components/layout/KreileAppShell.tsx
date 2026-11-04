@@ -17,6 +17,7 @@ import { GlobalSearch } from "./GlobalSearch";
 import { MoreMenu } from "./MoreMenu";
 import { requestGlobalCreate } from "./GlobalCreateFlow";
 import styles from "./TargetShell.module.css";
+import {WasIstNeu} from './WasIstNeu';
 
 function readDevice(): Geraet {
   if (window.innerWidth <= 699) return "handy";
@@ -63,7 +64,7 @@ function berlinDate() {
   }).format(new Date());
 }
 
-export function KreileAppShell({ children, globalCreate }: { children: React.ReactNode; globalCreate?: React.ReactNode }) {
+export function KreileAppShell({ children, globalCreate,loginHandle }: { children: React.ReactNode; globalCreate?: React.ReactNode;loginHandle?:string }) {
   const pathname = usePathname();
   const router = useRouter();
   const permissions = usePermissions();
@@ -114,6 +115,11 @@ export function KreileAppShell({ children, globalCreate }: { children: React.Rea
           datum={berlinDate()}
           ausgeblendet={hidden}
           suche={canUseShell ? <SuchKopf onOeffnen={() => setSearchOpen(true)} /> : <span />}
+          neuigkeiten={canUseShell&&loginHandle?<WasIstNeu key={loginHandle} loginHandle={loginHandle} geraet={device} onNavigate={path=>{
+            if(path==='rein'){requestGlobalCreate();return true;}
+            if(path==='/nachrichten'){const event=new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'nachrichten'}});return !window.dispatchEvent(event);}
+            router.push(path);return true;
+          }}/>:null}
           plus={canUseShell && canCreate ? (
             <GlobalesPlus
               onOeffnen={() => requestGlobalCreate()}
