@@ -10,6 +10,8 @@ import {
   checkTaB2eScopeForTest,
   checkTaB2fScopeForTest,
   checkTaB2hScopeForTest,
+  checkTaB2iScopeForTest,
+  checkB2iParserChangesForTest,
   checkTaB2fBaselineChangeForTest,
   runSelftest,
 } from "../../scripts/quality/check-live-package-scope.mjs";
@@ -32,6 +34,47 @@ const b2AnchorMission = {
 const b2cAnchorMission = {
   ...b2AnchorMission,
 };
+
+describe("P55 TA-B2i: only the specified migration pairs and XML dependency", () => {
+  const branch = "codex/ta-b2i";
+  const baseSha = "7c475a72a582b412a95d73224e5a94581aa7b377";
+  const files = ["scripts/quality/check-live-package-scope.mjs", "src/test/live_package_scope.test.ts",
+    "docs/evidence/live-line/b2/TRUST_ANCHOR_B2I.json", "docs/delivery/ABGABE_TA-B2I.md"];
+  const scope = (paths: string[]) => checkSalesStageB2ScopeForTest({
+    files: paths, entries: paths.map((path) => ({ status: "A", path })), mission: b2Mission, branch: "kreile/b2-ein-6",
+  });
+  it("restricts the anchor to its exact files, branch and base", () => {
+    expect(checkTaB2iScopeForTest({ files, mission: b2AnchorMission, branch, baseSha })).toEqual([]);
+    expect(checkTaB2iScopeForTest({ files: [...files, "package.json"], mission: b2AnchorMission, branch, baseSha })).toContain("TA_B2I_SCOPE:package.json");
+    expect(checkTaB2iScopeForTest({ files, mission: b2AnchorMission, branch: "codex/other", baseSha })).toContain("TA_B2I_BRANCH_INVALID:codex/other");
+    expect(checkTaB2iScopeForTest({ files, mission: b2AnchorMission, branch, baseSha: "wrong" })).toContain(`TA_B2I_BASE_INVALID:wrong:${baseSha}`);
+  });
+  it("accepts only the designated extra migration for parts two and four", () => {
+    const m = (name: string) => `supabase/migrations/20261104000000_${name}.sql`;
+    expect(scope([m("ein2_main"), m("ein2_fotoart"), m("ein4_main"), m("ein4_rechte")])).toEqual([]);
+    expect(scope([m("ein2_main"), m("ein2_other")])).toContain("SALES_STAGE_B2_MIGRATION_COUNT:2");
+    expect(scope([m("ein4_main"), m("ein4_other")])).toContain("SALES_STAGE_B2_MIGRATION_COUNT:2");
+    expect(scope([m("ein4_main"), m("ein4_rechte"), m("ein4_third")])).toContain("SALES_STAGE_B2_MIGRATION_COUNT:3");
+    expect(scope([m("ein3_main"), m("ein3_other")])).toContain("SALES_STAGE_B2_MIGRATION_COUNT:2");
+  });
+  it("allows exactly the two P56 PIN-reset paths without neighboring paths", () => {
+    for (const rel of ["src/app/actions/start.actions.ts", "src/app/actions/__tests__/publicStartActions.test.ts"]) expect(scope([rel])).toEqual([]);
+    for (const rel of ["src/app/actions/start.other.ts", "src/app/actions/__tests__/publicStartActions.other.test.ts"]) expect(scope([rel])).toContain(`SALES_STAGE_B2_SCOPE:${rel}`);
+  });
+  it("allows only an exact pinned parser and its lockfile dependency closure", () => {
+    const beforePackage = { name: "example", dependencies: { existing: "1.0.0" } };
+    const afterPackage = { name: "example", dependencies: { existing: "1.0.0", "fast-xml-parser": "5.12.0" } };
+    const beforeLock = { lockfileVersion: 3, packages: { "": { dependencies: { existing: "1.0.0" } }, "node_modules/existing": { version: "1.0.0" } } };
+    const afterLock = { lockfileVersion: 3, packages: { "": { dependencies: { existing: "1.0.0", "fast-xml-parser": "5.12.0" } },
+      "node_modules/existing": { version: "1.0.0" }, "node_modules/fast-xml-parser": { version: "5.12.0", dependencies: { child: "1.0.0" } },
+      "node_modules/child": { version: "1.0.0" } } };
+    const input = { beforePackage, afterPackage, beforeLock, afterLock };
+    expect(checkB2iParserChangesForTest(input)).toEqual([]);
+    expect(checkB2iParserChangesForTest({ ...input, afterPackage: { ...afterPackage, dependencies: { ...afterPackage.dependencies, evil: "1.0.0" } } })).toContain("B2I_PACKAGE_UNRELATED_CHANGE");
+    expect(checkB2iParserChangesForTest({ ...input, afterPackage: { ...afterPackage, dependencies: { ...afterPackage.dependencies, "fast-xml-parser": "^5.12.0" } } })).toContain("B2I_XML_VERSION_NOT_PINNED");
+    expect(checkB2iParserChangesForTest({ ...input, afterLock: { ...afterLock, packages: { ...afterLock.packages, "node_modules/evil": { version: "1.0.0" } } } })).toContain("B2I_LOCK_UNRELATED_ADDITION:node_modules/evil");
+  });
+});
 
 describe("P44/P47/P52 TA-B2h: exact Web-Share, messages and What is new paths", () => {
   const branch = "codex/ta-b2h";
