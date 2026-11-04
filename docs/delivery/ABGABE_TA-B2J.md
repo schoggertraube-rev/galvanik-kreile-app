@@ -6,4 +6,6 @@ P59 erlaubt die inventarisierten Modul- und Routenpfade für Eingang, Nachrichte
 
 Für `ein0` bis `ein6` gibt es keine Anzahlgrenze für neue, regelkonform benannte Migrationen. Bereits vorhandene Migrationen bleiben gegen Änderungen gesperrt; die Grenzen für andere Migrationsfamilien bleiben bestehen. Tests prüfen freigegebene und gesperrte Pfade, mehrere neue Migrationen, Änderungen bestehender Migrationen und ungültige Namen. Keine anderen Gates oder Workflows geändert.
 
+Für den nach Teil 6 vorgesehenen separaten KV-Schritt erlaubt der Branchfilter zusätzlich genau `kreile/b2-ein-2b`; benachbarte Branchnamen bleiben gesperrt.
+
 DB-Soll: keine Datenänderung. CI und Prüfnachweise des konkreten PR-Kopfes stehen im NACHTLAUF Abschnitt C. Kein Merge und kein Produktions-Deploy durch Codex.

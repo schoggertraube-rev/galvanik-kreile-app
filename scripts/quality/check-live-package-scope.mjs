@@ -1341,7 +1341,7 @@ export function checkB2iParserChangesForTest({ beforePackage, afterPackage, befo
 
 function checkSalesStageB2Scope(files, entries, mission, branch) {
   const errors = [];
-  if (branch !== SALES_STAGE_B2_BRANCH && !/^kreile\/b2-ein-(?:[0-6]|0b)$/.test(branch)) {
+  if (branch !== SALES_STAGE_B2_BRANCH && !/^kreile\/b2-ein-(?:[0-6]|0b|2b)$/.test(branch)) {
     errors.push(`SALES_STAGE_BRANCH_INVALID:${branch}`);
   }
   if (mission.active_block !== "B2" || mission.branch !== SALES_STAGE_B2_BRANCH) {

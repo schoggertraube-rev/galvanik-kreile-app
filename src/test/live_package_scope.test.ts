@@ -62,6 +62,11 @@ describe("P59 TA-B2j: AP-EIN paths and additive migrations", () => {
     const invalid = "supabase/migrations/20261104000000_ein7_other.sql";
     expect(checkSalesStageB2ScopeForTest({files:[invalid],entries:[{status:"A",path:invalid}],mission:b2Mission,branch:"kreile/b2-ein-3"})).toContain(`SALES_STAGE_B2_MIGRATION_INVALID:${invalid}`);
   });
+  it("accepts the separate P59 KV branch without accepting adjacent branch names", () => {
+    const files = ["src/modules/quotes/server/quoteCommands.ts"];
+    expect(checkSalesStageB2ScopeForTest({files, mission:b2Mission, branch:"kreile/b2-ein-2b"})).toEqual([]);
+    expect(checkSalesStageB2ScopeForTest({files, mission:b2Mission, branch:"kreile/b2-ein-2c"})).toContain("SALES_STAGE_BRANCH_INVALID:kreile/b2-ein-2c");
+  });
 });
 
 describe("P55 TA-B2i: only the specified migration pairs and XML dependency", () => {
