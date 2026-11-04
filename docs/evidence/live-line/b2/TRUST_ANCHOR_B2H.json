@@ -5,7 +5,7 @@
   "mainBaseSha": "b6d94bccad812883cddaefa1d050c1506c722d8b",
   "authorizedBy": "Siglinder",
   "authorizedAt": "2026-11-04",
-  "scope": "P52: fuenf exakte Pfade fuer Was ist neu; P44/P47 unveraendert",
-  "probeCandidateSha": "e6ee26c8c04d8d2fcee261c9e92fbdd9a1d9e076",
+  "scope": "P52: sechs exakte Pfade fuer Was ist neu und JSON-Testaufloesung; P44/P47 unveraendert",
+  "probeCandidateSha": "f4d88b8e5024f8311e7533fe3619be010209f1b5",
   "probeResult": "PASS"
 }

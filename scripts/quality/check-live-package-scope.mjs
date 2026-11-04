@@ -225,8 +225,8 @@ const TA_B2H_VALUES = Object.freeze({
   mainBaseSha: TA_B2H_BASE_SHA,
   authorizedBy: "Siglinder",
   authorizedAt: "2026-11-04",
-  scope: "P52: fuenf exakte Pfade fuer Was ist neu; P44/P47 unveraendert",
-  probeCandidateSha: "e6ee26c8c04d8d2fcee261c9e92fbdd9a1d9e076",
+  scope: "P52: sechs exakte Pfade fuer Was ist neu und JSON-Testaufloesung; P44/P47 unveraendert",
+  probeCandidateSha: "f4d88b8e5024f8311e7533fe3619be010209f1b5",
   probeResult: "PASS",
 });
 const TA_B2H_ANCHOR_ALLOWLIST = Object.freeze([
@@ -621,6 +621,7 @@ const SALES_STAGE_B2_EXACT_ALLOWLIST = Object.freeze([
   "src/modules/fundament/server/systemSettingsPort.ts",
 ]);
 const SALES_STAGE_B2_ALLOWLIST = Object.freeze([
+  "src/app/buchhaltung/__tests__/w2c.activeRouteContainment.test.tsx",
   "src/lib/server/authBootstrap.ts",
   "src/lib/server/__tests__/authBootstrap.test.ts",
   "src/components/layout/WasIstNeu.tsx",

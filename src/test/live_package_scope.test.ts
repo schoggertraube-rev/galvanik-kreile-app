@@ -57,11 +57,11 @@ describe("P44/P47/P52 TA-B2h: exact Web-Share, messages and What is new paths", 
     }
   });
 
-  it("allows each exact P52 file but denies neighboring content and authentication paths", () => {
-    for(const path of ["src/lib/server/authBootstrap.ts","src/lib/server/__tests__/authBootstrap.test.ts","src/components/layout/WasIstNeu.tsx","src/components/layout/__tests__/WasIstNeu.test.tsx","src/content/was-ist-neu.json"]){
+  it("allows each exact P52 file but denies neighboring content, authentication and containment paths", () => {
+    for(const path of ["src/lib/server/authBootstrap.ts","src/lib/server/__tests__/authBootstrap.test.ts","src/components/layout/WasIstNeu.tsx","src/components/layout/__tests__/WasIstNeu.test.tsx","src/content/was-ist-neu.json","src/app/buchhaltung/__tests__/w2c.activeRouteContainment.test.tsx"]){
       expect(checkSalesStageB2ScopeForTest({files:[path],mission:b2Mission,branch:"kreile/b2-ein-0"}),path).toEqual([]);
     }
-    for(const path of ["src/content/other.json","src/components/layout/WasIstNeuOther.tsx","src/components/layout/__tests__/WasIstNeuOther.test.tsx","src/lib/server/otherBootstrap.ts","src/lib/server/__tests__/otherBootstrap.test.ts"]){
+    for(const path of ["src/content/other.json","src/components/layout/WasIstNeuOther.tsx","src/components/layout/__tests__/WasIstNeuOther.test.tsx","src/lib/server/otherBootstrap.ts","src/lib/server/__tests__/otherBootstrap.test.ts","src/app/buchhaltung/__tests__/otherContainment.test.tsx"]){
       expect(checkSalesStageB2ScopeForTest({files:[path],mission:b2Mission,branch:"kreile/b2-ein-0"}),path).toContain("SALES_STAGE_B2_SCOPE:"+path);
     }
   });
