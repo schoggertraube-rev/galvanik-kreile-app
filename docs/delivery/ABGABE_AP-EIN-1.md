@@ -1,8 +1,8 @@
 # AP-EIN Teil 1 · Kunde, Runde 52
 
-Draft #167 auf Teil 0b. **Noch nicht merge-reif.** Produkt-SHA: `3818e7345b4eacc1169d5f08de9250988d28af2e`.
+Draft #167 auf main `0d9dcd74b5f4bb9380c924afa1478bf64c855ff9`. **Noch nicht merge-reif.** Letzter geprüfter Produkt-SHA: `feca9bfb313cd92535718a2395e0ed3625c98e1f`.
 
-READY-Preview genau dieses Produkt-SHA: https://galvanik-kreile-werkstatt-qambwh8d2.vercel.app (Vercel `dpl_BeDHcbnuatiH24pFSXgAhUw8vXZA`, GitHub-Deployment `7539578678`). Kein Merge und kein Production-Deploy durch Codex.
+READY-Preview genau dieses Produkt-SHA: https://galvanik-kreile-werkstatt-3tgogqcgf.vercel.app (Vercel `dpl_2QgzUoE5EPy8UhTjFGz7r2Wdq4dw`; Projekt und SHA anhand der Deployment-Metadaten überprüft). Der aktuelle PR-Commit, die laufenden CI-Prüfungen und eventuelle reine Abgabe-Folgecommits stehen im PR und in NACHTLAUF C. Kein Merge und kein Production-Deploy durch Codex.
 
 ## Sichtbare Umsetzung
 
@@ -20,7 +20,9 @@ DB-Soll: Kundenzeile und zugehöriges Ereignis entstehen einmal, danach wird die
 
 ## Prüfungen und Grenzen
 
-P50: Auf Teil 0b `c80cd496` neu gestapelt. K22 ist wie E09 mit `Endversion-Angleich U-240` eingeordnet; K24 gehört zur bereits im Folgeteil implementierten echten Visitenkartenaufnahme (AP-EIN-2). TA14 bleibt an diesem Teil-1-Stand ohne Marker: Der vollständige CI-Lauf `41785967514` bestand ihn bereits. Keine neue Produktdatei oder Fall-Assertion wurde für diese Einordnung geändert. Der unveränderte Original-Sichtbericht unten bleibt 3× Rot: Er prüft bedingte Erkannt-/Typ-Felder am leeren Formular. Der Konflikt mit der nach P50 erlaubten Gelb-Begründung `Zustand leer vs. Prüfbild-Beispiel` ist in NACHTLAUF C gemeldet; kein künstliches Vorbelegen und keine Ersatzknöpfe.
+P50/P53: Der Kundenstand wurde auf den gemergten UI-Fundamentstand übertragen. K22 ist wie E09 mit `Endversion-Angleich U-240` eingeordnet; K24 gehört zur bereits im Folgeteil implementierten echten Visitenkartenaufnahme (AP-EIN-2). TA14 bleibt ohne Marker: Der vollständige frühere CI-Lauf `41785967514` bestand ihn bereits. Keine Fall-Assertion wurde für diese Einordnung geändert. Der historische Original-Sichtbericht zu `3818e734` bleibt 3× Rot: Er prüft bedingte Erkannt-/Typ-Felder am leeren Formular; der reale Scanweg fehlt in Teil 1. Bauplan-/Sichtzustand und die E04-Abhängigkeit wurden dem Planungschat in NACHTLAUF C zur Klärung vorgelegt. Kein künstliches Vorbelegen, kein Ersatzknopf und kein als grün behaupteter neuer Sichtlauf.
+
+- Nach Übernahme auf main: A11-Wächter 22/22 PASS, Scope PASS, Kunden-realRender 46/46 PASS, echter lokaler Replay mit 69 Migrationen und unveränderte Kunden-/Eingangs-Akzeptanztests 19/19 PASS. Der Eintrag zu #167 in „Was ist neu“ ist angepasst und gezielt 5/5 getestet. CI läuft für den aktuellen PR-Kopf; historisches CI-Grün wird nicht übertragen.
 
 - Frischer lokaler Supabase-Replay und Produktions-Build: PASS; Test-Ziel ausschließlich 127.0.0.1:54322. P47 erlaubt die additive Dev-Migration vor dem Merge: Die K1-/ein1-Dateien wurden nach erzwungenem Rollback-Probelauf unverändert angewendet und sind eingefroren. Dev hat 70 Migrationen einschließlich des nachfolgenden Teil-2-Schemas; alle 69 Migrationen dieses Teil-1-Branches sind enthalten. Der Gleichstand 70/70 wurde am Teil-2-Branch belegt. Kunden/Aufträge/Positionen/Eingänge blieben bei 13/12/14/8, keine Testbuchung auf Dev.
 - Unveränderter fester Kunden-Vertragstest: **10/10 PASS** (echte Actions, DB-Zeile, frisch gelesener Vertrag). Bestehende Kunden-/GlobalCreate-realRender-Fälle: **46/46 PASS**.
