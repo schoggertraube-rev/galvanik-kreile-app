@@ -12,6 +12,8 @@ Produkt-SHA: `bf9b1364b52d4f99f2120d726c7121726b4f8c98`. READY-Preview genau die
 
 ## Quellen und Prüfung
 
+P50: Auf den Teil-0-Kopf `47051a69` neu aufgesetzt. Die Rotliste dieses älteren Produktstands enthält E09 mit Grund `Endversion-Angleich U-240` sowie TA14 mit Ziel AP-EIN-2; T05c und E32 bestehen hier und haben keinen Marker. Keine erzeugte Fall-Assertion und keine Produktdatei wurde dafür geändert. Der neue komplette CI-Lauf entscheidet über die Merge-Reife; der Sichtbericht unten bleibt die offengelegte Ausgangsmessung vor den Seitenteilen.
+
 BAUPLAN DF3E1AFE (ee64f8882bb7), CSS 35146E45, Sichtvertrag B1A53EA6, unveränderter Prüfer FDA7C59C, Referenz 1509BE93. Bytebindung im Anker #165.
 
 A11: 22/22 PASS, Typprüfung, vollständiges Lint, Scope und git diff --check origin/main eingeschlossen. Volltests laufen nach Owner-Freigabe in CI. Der eine Enter-Korrekturversuch wurde gezielt gelintet.
