@@ -84,7 +84,7 @@ function resolveModuleTarget(entryPath: string, moduleSpecifier: string): string
   if (!isLocalSpecifier(moduleSpecifier)) return undefined;
   const result = ts.resolveModuleName(moduleSpecifier, entryPath, parsedTsconfig.options, ts.sys);
   const resolvedFileName = result.resolvedModule?.resolvedFileName;
-  if (!resolvedFileName || !/\.(?:ts|tsx|js|jsx|mts|cts)$/i.test(resolvedFileName)) return undefined;
+  if (!resolvedFileName || !/\.(?:ts|tsx|js|jsx|mts|cts|json)$/i.test(resolvedFileName)) return undefined;
   return canonicalExistingPath(resolvedFileName);
 }
 
@@ -93,6 +93,12 @@ function isIgnoredLocalNonSource(specifier: string): boolean {
 }
 
 function analyzeImports(entryPath: string, source: string, resolver: ModuleResolver = resolveModuleTarget): ImportAnalysis {
+  if (/\.json$/i.test(entryPath)) {
+    // Resolve real JSON dependencies rather than skipping their existence or validity.
+    // JSON strings are data, and cannot add executable import/require edges.
+    JSON.parse(source);
+    return { bindings: new Set(), moduleSpecifiers: new Set(), resolvedTargets: new Set(), edges: [] };
+  }
   const sourceFile = ts.createSourceFile(entryPath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const bindings = new Set<string>();
   const moduleSpecifiers = new Set<string>();
@@ -199,6 +205,22 @@ function memoryResolver(graph: Record<string, string>, entryPath: string, specif
 }
 
 describe('W2C accounting active-route containment', () => {
+  it('resolves existing JSON content as a real dependency while missing JSON still fails closed', () => {
+    const entry = resolve(srcRoot, 'components/layout/WasIstNeu.tsx');
+    const target = canonicalExistingPath(resolve(srcRoot, 'content/was-ist-neu.json'));
+    expect(resolveModuleTarget(entry, '@/content/was-ist-neu.json')).toBe(target);
+    expect(analyzeImports(entry, "import entries from '@/content/was-ist-neu.json';").edges)
+      .toEqual([{ specifier: '@/content/was-ist-neu.json', target }]);
+    expect(analyzeImports(entry, "import entries from '@/content/missing-synthetic-test.json';").edges)
+      .toEqual([{ specifier: '@/content/missing-synthetic-test.json', unresolved: true }]);
+  });
+
+  it('validates JSON data without interpreting its strings as code and rejects malformed data', () => {
+    const data = JSON.stringify({ synthetic: "require('@/app/buchhaltung/actions')" });
+    expect(analyzeImports('mem://synthetic-content.json', data).edges).toEqual([]);
+    expect(() => analyzeImports('mem://synthetic-invalid.json', '{')).toThrow(SyntaxError);
+  });
+
   it('keeps real paths case-preserving while comparison keys follow the filesystem contract', () => {
     expect(comparisonKey('C:\\Repo\\Src\\App.tsx', true)).toBe('C:/Repo/Src/App.tsx');
     expect(comparisonKey('C:\\Repo\\Src\\App.tsx', false)).toBe('c:/repo/src/app.tsx');

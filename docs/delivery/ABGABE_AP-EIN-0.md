@@ -1,11 +1,11 @@
 # AP-EIN Teil 0 – Replay-Fundament und „Was ist neu“ (P52)
 
-Status: #166 zur Prüfung; kein Merge durch Codex. Die Freigabe der fünf P52-Pfade erfolgt im Folge-Anker #174. Spätere Teile werden hier nicht fachlich abgenommen.
+Status: #166 zur Prüfung; kein Merge durch Codex. Die Freigabe der sechs P52-Pfade erfolgt im Folge-Anker #174. Spätere Teile werden hier nicht fachlich abgenommen.
 
 ## Stand und Produktbasis
 
-Produkt-SHA: `e6ee26c8c04d8d2fcee261c9e92fbdd9a1d9e076`.
-Exakte Git-Preview READY: https://galvanik-kreile-werkstatt-9nu8rmvrc.vercel.app . GitHub-Deployment 7544934856 und Vercel `dpl_2RTYj5mrPdb6LrVvqfopEQjWQSN4` bestätigen genau diesen SHA.
+Runtime-Produkt-SHA: `2d3c2d761eb15a4952ae7088118430496e6b98d6`.
+Exakte Git-Preview READY: https://galvanik-kreile-werkstatt-mutse2yfn.vercel.app . GitHub-Deployment 7545261480 und Vercel `dpl_FNZvsN4tyDsSGGuopmRZSM372BZq` bestätigen genau diesen SHA. Der folgende reine Testgerüst-/Abgabecommit verändert diesen Runtime-Produktbaum nicht.
 Teil 0 liefert das Replay-Fundament und, zusätzlich auf ausdrücklichen Auftrag P52, die Anzeige „Was ist neu“. Eine folgende reine Abgabeänderung verändert diesen Produktbaum nicht.
 
 ## Umsetzung
@@ -31,8 +31,10 @@ Teil 0 liefert das Replay-Fundament und, zusätzlich auf ausdrücklichen Auftrag
 - P50: Der vollständige CI-Lauf des Teil-0-SHA widerlegt den lokalen TA14-Einzelnachweis: Die Ladefehleranzeige fehlt an diesem älteren Produktstand. TA14 ist deshalb ausdrücklich AP-EIN-2 zugeordnet. Die Erwartung bleibt unverändert.
 - E32: Die Modellkonvention verlangt Erfolg-Grün für erkannte Eingaben. Dieser ältere Produktstand liefert es noch nicht; P50 ordnet den Fall AP-EIN-2 zu. T05c besteht im vollständigen CI-Lauf und hat keinen Rot-Marker mehr. Die Liste enthält damit 268 tatsächlich noch rote Zukunftsfälle; sie wird pro gestapeltem Stand geführt.
 - Die vollständigen 306 Fälle laufen weiterhin in der CI. Die Check-Liste im PR nennt den wirklichen Stand; rot ist keine Abnahme.
-- #165 und #172 sind Owner-gemergt. ESLint-Regeln und Baseline werden in #166 nicht geändert. #174 ergänzt genau fünf fehlende Pfade für P52, keine Globs.
+- #165 und #172 sind Owner-gemergt. ESLint-Regeln und Baseline werden in #166 nicht geändert. #174 ergänzt sechs exakte fehlende Pfade für P52 einschließlich des bestehenden JSON-Importtest-Gerüsts, keine Globs.
 - P52: 11/11 gezielte Tests für Login-Trennung, vorhandene Bootstrap-Assertions, Navigation, Speicherfehler/7-Tage-Fallback und erneutes Lesen des Markers PASS; 22/22 lokale A11-Befehle PASS. Keine unveränderte Vollsuite zusätzlich zur CI.
+- Echter Preview-Lauf mit vorhandenem Phillip-Login: Änderungsliste Desktop/Tablet/Handy jeweils innerhalb des Viewports, neueste Einträge zuerst, Schließen und Lesemarker PASS. Bilder und Nachweis unter `C:/Users/Traube/.codex/visualizations/2026/11/03/01a1a122-06c4-7570-a4d3-dc1eedb311aa/ap-neu-2d3c2d76/`. Der gefundene Portalfehler ist gezielt im bestehenden App-Root korrigiert; keine CSS-Sonderregel.
+- CI-Unit-Befund: 1097/1098 Tests bestanden, einzig `w2c.activeRouteContainment.test.tsx` meldete den gültigen neuen JSON-Import als unaufgelöst (Job 126557271708, 11:59:58 UTC). Mechanischer Anschluss: tatsächliche TypeScript-Auflösung auch für `.json`, strikte JSON-Prüfung statt Ignorierliste; bestehende Assertions/Sperrziele unverändert, zusätzliche Negativfälle für fehlende und ungültige JSON-Daten.
 - CI am Produkt-SHA: `quality` scheitert im Scope-Schritt ausschließlich an den fünf P52-Pfaden (Run 41822715446, Job 126549595838, Log 11:40:52 UTC: `SALES_STAGE_B2_SCOPE:src/components/layout/WasIstNeu.tsx` plus die vier weiteren exakten Pfade). Das ist die Abhängigkeit zu #174, kein pauschaler erwarteter Rot-Claim. Die übrigen Jobs und Schritte werden nach ihrem tatsächlichen Abschluss in NACHTLAUF C belegt.
 - Das Testfundament hat keine eigene Modellseite. Die Ausgangsmessung der 117 Sichtzustände liegt im Teil 0b; dort dokumentierte Rot/Gelb werden nicht zu einer Sicht-Abnahme von Teil 0 umgedeutet. AP-NEU hat keinen eigenen Eintrag im eingefrorenen Sichtvertrag.
 
