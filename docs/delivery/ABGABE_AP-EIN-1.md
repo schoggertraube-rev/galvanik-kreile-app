@@ -1,6 +1,6 @@
 # AP-EIN Teil 1 · Kunde, Runde 52
 
-Draft #167 auf main `0d9dcd74b5f4bb9380c924afa1478bf64c855ff9`. **Noch nicht merge-reif.** Letzter geprüfter Produkt-SHA: `feca9bfb313cd92535718a2395e0ed3625c98e1f`.
+Draft #167 auf main `0d9dcd74b5f4bb9380c924afa1478bf64c855ff9`. P54 erlaubt die dokumentierten zustandsbedingten Sichtbefunde; die vollständige CI ist vor der Mergefreigabe erforderlich. Letzter geprüfter Produkt-SHA: `feca9bfb313cd92535718a2395e0ed3625c98e1f`.
 
 READY-Preview genau dieses Produkt-SHA: https://galvanik-kreile-werkstatt-3tgogqcgf.vercel.app (Vercel `dpl_2QgzUoE5EPy8UhTjFGz7r2Wdq4dw`; Projekt und SHA anhand der Deployment-Metadaten überprüft). Der aktuelle PR-Commit, die laufenden CI-Prüfungen und eventuelle reine Abgabe-Folgecommits stehen im PR und in NACHTLAUF C. Kein Merge und kein Production-Deploy durch Codex.
 
@@ -20,11 +20,27 @@ DB-Soll: Kundenzeile und zugehöriges Ereignis entstehen einmal, danach wird die
 
 ## Prüfungen und Grenzen
 
-P50/P53: Der Kundenstand wurde auf den gemergten UI-Fundamentstand übertragen. K22 ist wie E09 mit `Endversion-Angleich U-240` eingeordnet; K24 gehört zur bereits im Folgeteil implementierten echten Visitenkartenaufnahme (AP-EIN-2). TA14 bleibt ohne Marker: Der vollständige frühere CI-Lauf `41785967514` bestand ihn bereits. Keine Fall-Assertion wurde für diese Einordnung geändert. Der historische Original-Sichtbericht zu `3818e734` bleibt 3× Rot: Er prüft bedingte Erkannt-/Typ-Felder am leeren Formular; der reale Scanweg fehlt in Teil 1. Bauplan-/Sichtzustand und die E04-Abhängigkeit wurden dem Planungschat in NACHTLAUF C zur Klärung vorgelegt. Kein künstliches Vorbelegen, kein Ersatzknopf und kein als grün behaupteter neuer Sichtlauf.
+P50/P53: Der Kundenstand wurde auf den gemergten UI-Fundamentstand übertragen. K22 ist wie E09 mit `Endversion-Angleich U-240` eingeordnet; K24 gehört zur bereits im Folgeteil implementierten echten Visitenkartenaufnahme (AP-EIN-2). TA14 bleibt ohne Marker: Der vollständige frühere CI-Lauf `41785967514` bestand ihn bereits. Keine Fall-Assertion wurde für diese Einordnung geändert. Der historische Original-Sichtbericht zu `3818e734` bleibt 3× Rot: Er prüft bedingte Erkannt-/Typ-Felder am leeren Formular; der reale Scanweg fehlt in Teil 1. Der Planungschat hat dies mit P54 eingeordnet; die betroffenen Kennungen sind unten einzeln dokumentiert. Kein künstliches Vorbelegen, kein Ersatzknopf und kein als grün behaupteter neuer Sichtlauf.
 
 - Nach Übernahme auf main: A11-Wächter 22/22 PASS, Scope PASS, Kunden-realRender 46/46 PASS, echter lokaler Replay mit 69 Migrationen und unveränderte Kunden-/Eingangs-Akzeptanztests 19/19 PASS. Der Eintrag zu #167 in „Was ist neu“ ist angepasst und gezielt 5/5 getestet. CI läuft für den aktuellen PR-Kopf; historisches CI-Grün wird nicht übertragen.
 
-- Frischer lokaler Supabase-Replay und Produktions-Build: PASS; Test-Ziel ausschließlich 127.0.0.1:54322. P47 erlaubt die additive Dev-Migration vor dem Merge: Die K1-/ein1-Dateien wurden nach erzwungenem Rollback-Probelauf unverändert angewendet und sind eingefroren. Dev hat 70 Migrationen einschließlich des nachfolgenden Teil-2-Schemas; alle 69 Migrationen dieses Teil-1-Branches sind enthalten. Der Gleichstand 70/70 wurde am Teil-2-Branch belegt. Kunden/Aufträge/Positionen/Eingänge blieben bei 13/12/14/8, keine Testbuchung auf Dev.
+### Einordnung der drei roten Sichtansichten nach P54
+
+Der historische Sichtbericht für `kundeneu` ist auf Desktop, Tablet und Handy jeweils rot. P54 erlaubt den Merge bei ausschließlich zustandsbedingten oder einem späteren Teil zugeordneten Punkten; strukturelle rote Befunde bleiben eine Sperre. Die folgenden Kennungen sind die roten Befunde je Größe:
+
+| Kennung | Ursache | Abschluss |
+|---|---|---|
+| `visitenkarte-scannen` | Die echte Aufnahme und Erkennung öffnet den Modus 3.0; dieser Weg ist in Teil 1 noch nicht vorhanden. | AP-EIN Teil 2. |
+| `alles-bestatigen` | Das Prüfbild zeigt erkannte Angaben; der reguläre Start ist leer. Die Aktion erscheint nach einer Erkennung. | Teil 1 im erkannten Zustand; Aufnahme aus Visitenkarte folgt in Teil 2. |
+| `frau` | Die Anrede erscheint erst nach Auswahl des Kundentyps; das Prüfbild zeigt bereits Firma. | Teil 1 nach Typauswahl. |
+| `herr` | Wie `frau`: bedingt durch die noch leere Typauswahl. | Teil 1 nach Typauswahl. |
+| `ohne` | Wie `frau`: bedingt durch die noch leere Typauswahl. | Teil 1 nach Typauswahl. |
+| `abholung` | Die Übergabeoption erscheint erst nach Auswahl des Kundentyps. | Teil 1 nach Typauswahl. |
+| `versand` | Wie `abholung`: bedingt durch die noch leere Typauswahl. | Teil 1 nach Typauswahl. |
+
+Diese Einordnung ersetzt keinen neuen Sichtlauf für andere Zustände. Weitere strukturelle Abweichungen wären weiterhin zu beheben; das Prüfwerkzeug und der Sichtvertrag bleiben unverändert.
+
+- Frischer lokaler Supabase-Replay: PASS; Test-Ziel ausschließlich 127.0.0.1:54322. Der Produktions-Build-PASS ist ein historischer Beleg zum früheren Kandidaten, kein neues Deployment. P47 erlaubte die additive Dev-Migration vor dem Merge: Die K1-/ein1-Dateien wurden nach erzwungenem Rollback-Probelauf unverändert angewendet und sind eingefroren. Bei der P49-Prüfung hatte Dev 70 Migrationen einschließlich des nachfolgenden Teil-2-Schemas; damals wurde der Gleichstand 70/70 am Teil-2-Branch belegt. Die damaligen Kunden-/Auftrags-/Positions-/Eingangszahlen blieben bei 13/12/14/8. Diese historischen Zahlen sind keine aktuelle Gleichstandsbehauptung; bei der jetzigen Abgabe erfolgte keine Testbuchung auf Dev.
 - Unveränderter fester Kunden-Vertragstest: **10/10 PASS** (echte Actions, DB-Zeile, frisch gelesener Vertrag). Bestehende Kunden-/GlobalCreate-realRender-Fälle: **46/46 PASS**.
 - A11: **22/22 PASS**. Nach den gezielten Änderungen Typprüfung und Lint der geänderten Dateien erneut PASS; unveränderte breite Läufe wurden nicht wiederholt.
 - P49: Ein vollständiger Lauf der **63** festen Kundenfälle ergab tatsächlich **52 grün / 11 rot**. Nach genau einer Korrektur der gefundenen Ursachen bestehen zusätzlich **B02, B03, B04, B09, Q05, K04, K08, K26 und KK02**; abschließender Karten-Ebenenlauf K08/KK02 nochmals 2/2 grün. Damit **61/63 grün, zwei offen**. Die Tests rufen die tatsächlichen Actions auf und prüfen die Replay-Zeilen und frisch gelesenen Ansichten; keine DB-Mocks.
