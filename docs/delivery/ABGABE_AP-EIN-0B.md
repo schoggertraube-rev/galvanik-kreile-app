@@ -1,6 +1,6 @@
 # AP-EIN Teil 0b – UI-Fundament Runde 52
 
-Produkt-SHA: `bf9b1364b52d4f99f2120d726c7121726b4f8c98`. READY-Preview genau dieses SHA: https://galvanik-kreile-werkstatt-otvtt1aw5.vercel.app. Draft #169, kein Merge. Dies ist die Ausgangsmessung vor dem Umbau der einzelnen Seiten; keine grüne UI-Abnahme.
+Runtime-Produkt-SHA: `f1973dac7b9fa8e7c47f3db552e3aa0e611504b9`. READY-Preview genau dieses SHA: https://galvanik-kreile-werkstatt-j7y6owafu.vercel.app (Vercel `dpl_DCAd6pb1B7FH4XqGLmytHXr9jzcv`, Metadaten-SHA geprüft). Draft #169, Basis #166 `f4d88b8e`. Gegenüber diesem Preview-SHA ändert der Rebase nur den bestehenden JSON-Importtest und Abgaben; alle Runtime-Dateien sind bytegleich. Nach Owner-Merge #166 wird auf main neu aufgesetzt und umgestellt; erst dann werden auch Quality/Fresh auf dieser Basis belegt. Kein Merge durch Codex.
 
 ## Gemeinsame Umsetzung
 
@@ -9,15 +9,17 @@ Produkt-SHA: `bf9b1364b52d4f99f2120d726c7121726b4f8c98`. READY-Preview genau die
 - Enter führt in Input/Select durch die sichtbaren Felder der obersten Ebene; letzte Pflichtangabe nutzt die vorhandene Hauptaktion samt Tor. Mehrzeilenfelder behalten Enter als Zeilenumbruch. Seitenbezogene Pflichtfelder und Tablet-Prüflisten folgen im jeweiligen Seitenteil.
 - routen.json enthält nur reale Aufrufe oder ausdrücklich fehlende Zukunftsrouten, keine PINs.
 - Keine Server-Action, Tabelle, Migration oder Daten-Schreibregel verändert.
+- P52 aus #166 übernommen: „Was ist neu“ im gemeinsamen Kopf. Einzige Inhaltsquelle `src/content/was-ist-neu.json`, einschließlich Eintrag für #169. Der Lesestand bleibt je Login im Browser; die Änderungsliste verwendet den vorhandenen App-Root und vorhandene Navigation, ohne eigenen Datenweg.
+- Echte READY-Preview am Runtime-SHA: vorhandene Anmeldung Phillip, Änderungsliste bei Desktop/Tablet/Handy im Viewport, neueste Einträge zuerst und Lesemarker PASS. Nachweis/Bilder außerhalb Repo: `C:/Users/Traube/.codex/visualizations/2026/11/03/01a1a122-06c4-7570-a4d3-dc1eedb311aa/ap-neu-f1973dac/`. Kein Geschäfts-Schreibknopf betätigt, keine Secrets gespeichert.
 
 ## Quellen und Prüfung
 
-P50: Auf den Teil-0-Kopf `47051a69` neu aufgesetzt. Die Rotliste dieses älteren Produktstands enthält E09 mit Grund `Endversion-Angleich U-240` sowie TA14 mit Ziel AP-EIN-2; T05c und E32 bestehen hier und haben keinen Marker. Keine erzeugte Fall-Assertion und keine Produktdatei wurde dafür geändert. Der neue komplette CI-Lauf entscheidet über die Merge-Reife; der Sichtbericht unten bleibt die offengelegte Ausgangsmessung vor den Seitenteilen.
+P50-Zuordnung unverändert auf den vollständigen Teil-0-Kopf `f4d88b8e` neu aufgesetzt. Die Rotliste dieses älteren Produktstands enthält E09 mit Grund `Endversion-Angleich U-240` sowie TA14 mit Ziel AP-EIN-2; T05c und E32 bestehen hier und haben keinen Marker. Keine erzeugte Fall-Assertion wurde umgeschrieben. Die bestehende, PIN-freie routen.json ist bytegleich zum bisherigen #169-Stand (Git-Blob `1a684e82e3ad2520dafcc14f95bbb23ad2d91b15`); offene Owner-Planungsänderungen bleiben unberührt. Der neue komplette CI-Lauf entscheidet über die Merge-Reife; der Sichtbericht unten bleibt die offengelegte historische Ausgangsmessung vor den Seitenteilen.
 
 BAUPLAN DF3E1AFE (ee64f8882bb7), CSS 35146E45, Sichtvertrag B1A53EA6, unveränderter Prüfer FDA7C59C, Referenz 1509BE93. Bytebindung im Anker #165.
 
-A11: 22/22 PASS, Typprüfung, vollständiges Lint, Scope und git diff --check origin/main eingeschlossen. Volltests laufen nach Owner-Freigabe in CI. Der eine Enter-Korrekturversuch wurde gezielt gelintet.
-Sichtlauf: 117/117 Einträge, **0 grün / 78 gelb / 39 rot**. Meister und Werkstatt wurden durch den unveränderten Originalprüfer tatsächlich angemeldet. Kein Speichern durch den Sichtlauf.
+A11 auf neuem Stapel: 22/22 PASS, Typprüfung, vollständiges Lint und leeres git diff --check origin/main eingeschlossen. Vollständige 39-Pfade-Probe mit dem Checker des Folge-Ankers #174: PASS. Auf altem main fehlen ausschließlich die sechs P52-Freigaben. Volltests laufen nach Owner-Freigabe in CI. Der eine Enter-Korrekturversuch wurde gezielt gelintet.
+Historischer Sichtlauf am unten genannten bf9b1364: 117/117 Einträge, **0 grün / 78 gelb / 39 rot**. Meister und Werkstatt wurden durch den unveränderten Originalprüfer tatsächlich angemeldet. Kein Speichern durch den Sichtlauf. Diese Messung wird nicht als neuer grüner Sichtlauf des aktuellen SHA ausgegeben.
 
 Originalbericht: [JSON](C:/Users/Traube/.codex/visualizations/2026/11/03/01a1a122-06c4-7570-a4d3-dc1eedb311aa/sicht-bf9b1364/pruefbericht.json), [Befunde](C:/Users/Traube/.codex/visualizations/2026/11/03/01a1a122-06c4-7570-a4d3-dc1eedb311aa/sicht-bf9b1364/pruefbericht.md), [SHA-Nachweis](C:/Users/Traube/.codex/visualizations/2026/11/03/01a1a122-06c4-7570-a4d3-dc1eedb311aa/sicht-bf9b1364/nachweis.json). App-Screenshots: C:/Users/Traube/.codex/visualizations/2026/11/03/01a1a122-06c4-7570-a4d3-dc1eedb311aa/sicht-bf9b1364/bilder/. Sämtliche Ausgaben außerhalb des Repositorys. Die temporäre Zugangskopie wurde gelöscht; Projekt-/Schutzeinstellungen unverändert.
 
@@ -55,4 +57,4 @@ Preview oben → Anmeldung → Fensterbreite Desktop/Tablet/Handy ändern → ro
 
 ## CI
 
-Der genaue aktuelle Check-Stand wird mit gh pr checks im PR/NACHTLAUF C ausgewiesen. P42 ist im übergeordneten Anker #165 umgesetzt. Dort verbleibt im Ratchet der tatsächliche Vergleich gegen den alten Main-Authority-Hash; die weiteren neuen Checks werden vollständig ausgewertet. Diese Abgabe behauptet keine grüne CI und keine Mergefreigabe.
+Der genaue aktuelle Check-Stand wird mit gh pr checks einschließlich aller Jobs/Schritte im PR/NACHTLAUF C ausgewiesen. #165 und #172 sind gemergt; die sechs P52-Pfade folgen mit #174. Solange #169 auf #166 gestapelt ist, ersetzt dessen Agentur-/H16-Lauf nicht die nach dem Retarget erforderlichen Quality-/Fresh-Nachweise. Diese Abgabe behauptet keine vollständige grüne CI und keine Mergefreigabe.
