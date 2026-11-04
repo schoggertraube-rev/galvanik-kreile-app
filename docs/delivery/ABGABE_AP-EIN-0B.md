@@ -1,6 +1,6 @@
 # AP-EIN Teil 0b – UI-Fundament Runde 52
 
-Runtime-Produkt-SHA: `f1973dac7b9fa8e7c47f3db552e3aa0e611504b9`. READY-Preview genau dieses SHA: https://galvanik-kreile-werkstatt-j7y6owafu.vercel.app (Vercel `dpl_DCAd6pb1B7FH4XqGLmytHXr9jzcv`, Metadaten-SHA geprüft). Draft #169, Basis #166 `f4d88b8e`. Gegenüber diesem Preview-SHA ändert der Rebase nur den bestehenden JSON-Importtest und Abgaben; alle Runtime-Dateien sind bytegleich. Nach Owner-Merge #166 wird auf main neu aufgesetzt und umgestellt; erst dann werden auch Quality/Fresh auf dieser Basis belegt. Kein Merge durch Codex.
+Runtime-Produkt-SHA: `f1973dac7b9fa8e7c47f3db552e3aa0e611504b9`. READY-Preview genau dieses SHA: https://galvanik-kreile-werkstatt-j7y6owafu.vercel.app (Vercel `dpl_DCAd6pb1B7FH4XqGLmytHXr9jzcv`, Metadaten-SHA geprüft). #166 ist durch den Owner gemergt; #169 ist frisch auf main `f82a7b48e7e89f0552bd091fd095bbad2c846a86` neu aufgesetzt. Gegenüber dem genannten Preview-SHA sind sämtliche Runtime-Dateien bytegleich; hinzu kommen der streng angeschlossene JSON-Importtest und die freigegebenen Anker-/Abgabendateien. Merge-Ziel wird main. Die neue vollständige CI einschließlich Quality/Fresh wird auf diesem Kandidaten belegt. Kein Merge durch Codex.
 
 ## Gemeinsame Umsetzung
 
@@ -57,4 +57,4 @@ Preview oben → Anmeldung → Fensterbreite Desktop/Tablet/Handy ändern → ro
 
 ## CI
 
-Der genaue aktuelle Check-Stand wird mit gh pr checks einschließlich aller Jobs/Schritte im PR/NACHTLAUF C ausgewiesen. #165 und #172 sind gemergt; die sechs P52-Pfade folgen mit #174. Solange #169 auf #166 gestapelt ist, ersetzt dessen Agentur-/H16-Lauf nicht die nach dem Retarget erforderlichen Quality-/Fresh-Nachweise. Diese Abgabe behauptet keine vollständige grüne CI und keine Mergefreigabe.
+Der genaue aktuelle Check-Stand wird mit gh pr checks einschließlich aller Jobs/Schritte im PR/NACHTLAUF C ausgewiesen. #165/#172/#174/#166 sind Owner-gemergt. Der vorherige Stapelstand c018e873 hatte alle dort vorhandenen Jobs/Schritte grün; diese ersetzen nicht die nach dem Retarget auf main erforderlichen Quality-/Fresh-Nachweise. A11 und reale Scope-Prüfung gegen frisches main bestehen. Die neue CI bekommt ihren eigenen SHA-/READY-Nachweis im PR und Protokoll, ohne Übertragung alter Grün-Claims.
