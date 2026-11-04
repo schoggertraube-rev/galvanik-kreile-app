@@ -1,4 +1,5 @@
-import {act,cleanup,fireEvent,render,screen,within} from '@testing-library/react';
+import {act,cleanup,fireEvent,render as renderWithoutRoot,screen,within} from '@testing-library/react';
+import type {ReactElement} from 'react';
 import {afterEach,beforeEach,describe,expect,it,vi} from 'vitest';
 import {WasIstNeu} from '../WasIstNeu';
 import entries from '@/content/was-ist-neu.json';
@@ -6,10 +7,14 @@ import entries from '@/content/was-ist-neu.json';
 beforeEach(()=>{localStorage.clear();vi.stubGlobal('matchMedia',vi.fn(()=>({matches:true,addEventListener:()=>{},removeEventListener:()=>{}} as unknown as MediaQueryList)));});
 afterEach(()=>{cleanup();vi.restoreAllMocks();vi.unstubAllGlobals();vi.useRealTimers();});
 const props={loginHandle:'synthetic-public-login-A',geraet:'desktop' as const,onNavigate:vi.fn(()=>true)};
+const render=(element:ReactElement)=>renderWithoutRoot(<div className="kr-app">{element}</div>);
 describe('AP-NEU P52 reading marker and real navigation boundary',()=>{
  it('keeps one login reading marker separate from another and shows newest entries first',()=>{
   const first=render(<WasIstNeu {...props}/>);expect(screen.getByRole('button',{name:/Was ist neu/})).toHaveTextContent(String(entries.length));
   fireEvent.click(screen.getByRole('button',{name:/Was ist neu/}));expect(screen.getByRole('dialog',{name:'Was ist neu'})).toBeVisible();
+  expect(screen.getByRole('dialog').parentElement?.className).toContain('kr-ebene');
+  expect(screen.getByRole('dialog').closest('.kr-app')).toBe(first.container.firstElementChild);
+  expect(document.body.querySelectorAll('.kr-app')).toHaveLength(1);
   expect(screen.getByRole('button',{name:/^Was ist neu(?: · \d+ ungelesen)?$/})).not.toHaveTextContent(String(entries.length));
   expect(within(screen.getByRole('dialog')).getAllByRole('heading',{level:3})[0]).toHaveTextContent('#173');
   const marker=localStorage.getItem('kreile:was-ist-neu:synthetic-public-login-A');expect(marker).toBeTruthy();first.unmount();
