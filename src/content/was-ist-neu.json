@@ -7,6 +7,6 @@
   {"datum":"2026-11-05","pr":168,"seite":"eingang","punkte":["Vorschau: Kamera auf Tablet und Handy direkt öffnen; Foto im festen Dialogfuß aufnehmen.","Vorschau: Gelesener Dokumenttext bleibt mit dem gesicherten Original verbunden.","Vorschau: Auftrag aus einem Eingang erfassen; fehlende Angaben gezielt ergänzen."],"ziel":"rein"},
   {"datum":"2026-11-04","pr":167,"seite":"kundeneu","punkte":["Kunde anlegen und Kundendaten in derselben Kartei bearbeiten."],"ziel":"/customers"},
   {"datum":"2026-11-04","pr":166,"seite":"rein","punkte":["Was ist neu zeigt Änderungen und merkt sich je Login, was bereits angesehen wurde.","Die vorgesehenen Eingang-Wege werden vor ihrer Freigabe geprüft."],"ziel":"rein"},
-  {"datum":"2026-11-03","pr":170,"seite":"ware","punkte":["Vorschau: Vorbereitung für Abholmitteilungen, Versand und die Freigabe zur Ausgabe."],"ziel":"/orders"},
+  {"datum":"2026-11-05","pr":170,"seite":"ware","punkte":["Vorschau: Vorbereitung für Abholmitteilungen, Versand und die Freigabe zur Ausgabe.","Unter Einstellungen → Firmendaten → Versand lassen sich Dienst, Nummernformat, Hinweis und Sendungsverfolgung speichern; fremde Änderungen werden zum Abgleich angezeigt."],"ziel":"/orders"},
   {"datum":"2026-11-03","pr":164,"seite":"rein","punkte":["Neu erfassen bündelt den Einstieg über das Plus.","Auftrag oder KV und Kunde anlegen starten von dort."],"ziel":"rein"}
 ]

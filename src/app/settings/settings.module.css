@@ -78,6 +78,11 @@
   color: var(--surface-card);
 }
 
+.page section > button:hover {
+  background: var(--navy-700);
+  color: var(--surface-card);
+}
+
 .page section {
   padding: var(--space-5);
   border: 1px solid var(--neutral-gray-100);

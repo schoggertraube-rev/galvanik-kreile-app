@@ -55,6 +55,16 @@ async function refreshSettingsSession(authorization: {
   });
 }
 
+export async function readShippingSettingsAction(){
+ const resolved=await settingsContext();if(!resolved)return {code:"UNAUTHENTICATED" as const,message:"Sitzung fehlt."};
+ const {readShippingSettings}=await import("@/modules/fundament/server-public");
+ return readShippingSettings({...resolved.context,canRead:resolved.context.canManageCompany===true||resolved.authorization.areas?.includes("auftraege")===true});
+}
+export async function saveShippingSettingsAction(input:unknown){
+ const resolved=await settingsContext();if(!resolved)return {code:"UNAUTHENTICATED" as const,message:"Sitzung fehlt."};
+ const {updateShippingSettings}=await import("@/modules/fundament/server-public");return updateShippingSettings(resolved.context,input);
+}
+
 export async function readSettingsAction() {
   noStore();
   const resolved = await settingsContext();

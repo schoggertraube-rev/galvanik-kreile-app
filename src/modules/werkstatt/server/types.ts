@@ -1,5 +1,6 @@
 /** Minimal real order surface injected by the route composition root. */
 export type WerkstattSurfaceOrder = {
+  ausgabeFrei?:boolean;
   id: string;
   orderNumber: string;
   customerName: string | null;
@@ -17,6 +18,7 @@ export type WerkstattSurfaceOrder = {
 
 export type WorkshopOrderCard = Pick<
   WerkstattSurfaceOrder,
+  | "ausgabeFrei"
   | "id"
   | "orderNumber"
   | "customerName"

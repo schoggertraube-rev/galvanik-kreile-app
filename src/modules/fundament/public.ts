@@ -14,6 +14,9 @@ export type CompanySettingsInput = {
 export type CompanySettingsSnapshot = {
   [Key in keyof CompanySettingsInput]: CompanySettingsInput[Key] | null;
 };
+export type ShippingSettings = {
+  service:string;numberPattern:string;numberHint:string;trackingUrl:string|null;labelApi:string|null;updatedAt:string;
+};
 export type ManagedUser = {
   id: string;
   email: string | null;
