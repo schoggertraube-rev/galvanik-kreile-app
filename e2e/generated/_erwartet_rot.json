@@ -115,10 +115,6 @@
     "paket": "AP-EIN-3",
     "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
   },
-  "F07": {
-    "paket": "AP-EIN-3",
-    "grund": "Erwartete-Ware-Annahme verwendet den einen vorhandenen Zielweg aus Teil 3 (P54/P63)"
-  },
   "M01": {
     "paket": "AP-EIN-4",
     "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
@@ -503,4 +499,4 @@
     "paket": "AP-EIN-2",
     "grund": "Endversion-Angleich U-240"
   }
-}
+}\n
