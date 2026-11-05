@@ -86,7 +86,28 @@
     "@/modules/eingang/server-public#retryIntakeRecognition",
     "@/modules/eingang/server-public#saveIntakeProspect",
     "@/modules/eingang/public#IntakeProspectInput",
-    "@/modules/eingang/public#IntakeProspectResult"
+    "@/modules/eingang/public#IntakeProspectResult",
+    "@/modules/eingang/public#parseGoodsReceiptInput",
+    "@/modules/eingang/public#goodsReceiptGaps",
+    "@/modules/eingang/public#goodsReceiptWare",
+    "@/modules/eingang/public#GoodsReceiptInput",
+    "@/modules/eingang/public#GoodsReceiptPhotoKind",
+    "@/modules/eingang/public#GoodsReceiptOrderRead",
+    "@/modules/eingang/public#GoodsReceiptRecord",
+    "@/modules/eingang/public#GoodsReceiptFailure",
+    "@/modules/eingang/public#GoodsReceiptReadResult",
+    "@/modules/eingang/public#IntakeObjectDialogs",
+    "@/modules/eingang/public#IntakeObjectPorts",
+    "@/modules/eingang/public#OriginalReadResult",
+    "@/modules/eingang/public#OriginalConfirmResult",
+    "@/modules/eingang/server-public#openIntakeOriginal",
+    "@/modules/eingang/server-public#confirmIntakeOriginal",
+    "@/modules/eingang/server-public#saveGoodsReceipt",
+    "@/modules/eingang/server-public#readGoodsReceipts",
+    "@/modules/eingang/server-public#createGoodsReceiptStationBinding",
+    "@/modules/eingang/server-public#writeCreatedOrderGoodsReceipt",
+    "@/modules/eingang/server-public#GoodsReceiptResult",
+    "@/modules/eingang/server-public#GoodsReceiptDependencies"
   ],
   "capabilities": [
     "eingang:auftrag-anlegen"
@@ -94,9 +115,12 @@
   "migrations": [
     "20261031212320_ap01_intake_item.sql",
     "20261103053000_ein2_erfassung.sql",
+    "20261103191000_ein3_warenpruefung.sql",
     "20261105095422_ein2_erwartete_ware.sql"
   ],
-  "viewsFunctions": ["public.v_intake_expected_goods_v1"],
+  "viewsFunctions": [
+    "public.v_intake_expected_goods_v1"
+  ],
   "ownsTables": [
     "public.intake_event",
     "public.intake_item",
@@ -104,12 +128,14 @@
     "public.intake_suggestion",
     "public.device_request",
     "public.outbox_mails",
-    "private.intake_drafts"
+    "private.intake_drafts",
+    "public.goods_receipt"
   ],
   "storagePurposes": [],
   "events": {
     "emits": [
-      "ORDER_INTAKE_CREATED_V1"
+      "ORDER_INTAKE_CREATED_V1",
+      "GOODS_RECEIPT_SAVED_V1"
     ],
     "consumes": []
   },

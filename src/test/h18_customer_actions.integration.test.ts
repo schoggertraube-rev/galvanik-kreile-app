@@ -328,7 +328,8 @@ describe("AP-EIN F05: real Actions, local Storage, DB and fresh read",()=>{
   const rows=await sql`SELECT item_id::text,dateiname,sha256,speicherpfad,lesbar,erkennung_status FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.fileId}::uuid`;
   expect(rows).toEqual([{item_id:input.itemId,dateiname:input.name,sha256:input.sha256,speicherpfad:KREILE_TENANT_SLUG+"/"+input.sha256,lesbar:false,erkennung_status:"fehler"}]);
   const events=await sql`SELECT art FROM public.intake_event WHERE item_id=${input.itemId}::uuid ORDER BY art`;
-  expect(events.map(row=>row.art)).toEqual(["angelegt","erkannt","original_gespeichert"]);
+  expect(events.map(row=>row.art)).toEqual(["angelegt","einsatz","erkannt","original_gespeichert"]);
+  expect(await sql`SELECT nachher->>'action' AS action FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${input.itemId}::uuid AND art='einsatz'`).toEqual([{action:'erkennung_gestartet'}]);
   // Decision 17: the authenticated transport exposes IDs/timestamps only; contents use the same read port.
   const { GET } = await import("@/app/api/device-file-changes/route");
   const query = new URLSearchParams({ since: new Date(Date.now()-60_000).toISOString() });
@@ -878,4 +879,120 @@ describe('AP-EIN M6/Nachrichten: canonical concern and use commands against real
   expect(await withSession(actor,()=>finishIntakeUseAction({items:[{itemId,version:1}],kind:'info',note:null,clientEventId:randomUUID()}))).toMatchObject({code:'INVOICE_REVIEW_REQUIRED',itemId});
   expect(await sql`SELECT anliegen_offen,einsatz,version FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`).toEqual([{anliegen_offen:['rechnung'],einsatz:'offen',version:1}]);
  });
+
+});
+
+async function goodsActorFixture(){
+ const actor=await createFixture();const {createCustomerAction}=await import('@/app/actions/customers.actions');
+ const created=await withSession(actor,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'business',companyName:'SYNTHETISCH Warenprüfung '+randomUUID().slice(0,8),salutation:'ohne',firstName:'Ada',lastName:'Testperson',email:'synthetic-goods@fixture.invalid',phone:'+49 711 5550190',street:'Kundenweg',houseNumber:'18',zipCode:'70176',city:'Stuttgart',country:'DE',paymentPreference:'vorkasse',vatId:null,notes:null}));
+ if(created.code!=='OK')throw Error('GOODS_CUSTOMER_FIXTURE:'+created.message);return {...actor,customerId:created.receipt.customerId};
+}
+
+// All expectations below come from the owner's W02/W13/W17/O02/O04/O07/O09 cases.
+// Only Azure's documented replay boundary is replaced. Actions, auth, SQL and Storage are real.
+import type {GoodsReceiptInput} from '@/modules/eingang/public';
+
+async function orderFixture(fixture:Fixture & {customerId:string}){
+ const {createOrderIntakeAction}=await import('@/app/actions/eingang.actions');
+ const result=await withSession(fixture,()=>createOrderIntakeAction({geprueft:false,clientEventId:randomUUID(),customer:{mode:'EXISTING',customerId:fixture.customerId},dueDate:'2027-05-15',termStatus:'bestaetigt',intakeSource:'anfrage_mail',handoverMode:'pickup',paymentMode:'vorkasse',note:'SYNTHETISCH Warenprüfung',items:[{catalogServiceId:null,name:'SYNTHETISCH Prüfteil',quantity:2,material:'Stahl',surfaceRequested:'verchromen',executionRequested:'offen',unit:'stueck',unitPriceCents:null,vatRateBasisPoints:null}]}));
+ if(result.code!=='OK')throw Error('GOODS_ORDER_FIXTURE:'+result.code+':'+result.message);return result.receipt;
+}
+const PNG=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aLp8AAAAASUVORK5CYII=','base64');
+async function originalFixture(fixture:Fixture,name='synthetic-original.png',mime='image/png',bytes=PNG){
+ const {prepareIntakeFileAction,finishIntakeFileAction}=await import('@/app/actions/eingang.actions');
+ const {uploadIntakeOriginal}=await import('@/modules/eingang/public');
+ const itemId=randomUUID(),fileId=randomUUID(),sha256=createHash('sha256').update(bytes).digest('hex');
+ const grant=await withSession(fixture,()=>prepareIntakeFileAction({itemId,fileId,name,mime,bytes:bytes.length,sha256}));
+ if(grant.code!=='OK')throw Error('GOODS_ORIGINAL_GRANT:'+grant.message);
+ if(grant.upload)expect((await uploadIntakeOriginal(grant.upload,new File([Uint8Array.from(bytes).buffer],name,{type:mime}))).ok).toBe(true);
+ const finished=await withSession(fixture,()=>finishIntakeFileAction(fileId));
+ if(finished.code!=='OK')throw Error('GOODS_ORIGINAL_FINISH:'+finished.message);
+ return {itemId,fileId,sha256};
+}
+describe('AP-EIN owner cases: goods and original Server Actions against the real replay database',()=>{
+ it('R52 warehouse gate: the canonical station Action rejects expected, unclear or returned goods without a row or event change',async()=>{
+  const actor=await goodsActorFixture();
+  const {transitionWareneingangToGalvanikAction}=await import('@/app/actions/orders.actions');
+  const {getGoodsReceiptsAction}=await import('@/app/actions/eingang.actions');
+  for(const ware of ['erwartet','abweichung','zurueck','storniert']){
+   const order=await orderFixture(actor),clientEventId=randomUUID();
+   // Deliberately inconsistent/stale states are confined to this isolated replay fixture.
+   await sql`UPDATE public.orders SET ware=${ware} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
+   expect(await withSession(actor,()=>transitionWareneingangToGalvanikAction({orderId:order.orderId,expectedVersion:1,clientEventId}))).toMatchObject({code:'VALIDATION_ERROR'});
+   expect(await sql`SELECT ware,station,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual([{ware,station:'angenommen',version:1}]);
+   expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${clientEventId}::uuid`).toEqual([]);
+   expect(await withSession(actor,()=>getGoodsReceiptsAction(order.orderId))).toMatchObject({code:'OK',order:{ware,station:'angenommen',version:1},receipts:[]});
+  }
+ });
+ it('R52 warehouse gate W08: the real partial receipt and station transition commit together and replay without a second event',async()=>withLocalReplayStorage(async()=>{
+  const actor=await goodsActorFixture(),order=await orderFixture(actor),file=await originalFixture(actor);
+  const {saveGoodsReceiptAction,getGoodsReceiptsAction}=await import('@/app/actions/eingang.actions');
+  const input:GoodsReceiptInput={id:randomUUID(),clientKey:randomUUID(),clientEventId:randomUUID(),itemId:file.itemId,orderId:order.orderId,expectedOrderVersion:1,expectedVersion:0,mode:'erwartet',command:'galvanik',card:3,packagesReceived:1,packagesTotal:2,condition:'teillieferung',deviations:[],foundUnattended:false,foundAt:null,procedure:null,procedureNote:null,photos:[{fileId:file.fileId,kind:'uebersicht'}],quantities:order.items.map(item=>({itemId:item.id,expected:item.quantity,received:1,confirmed:false,note:null}))};
+  const saved=await withSession(actor,()=>saveGoodsReceiptAction(input));
+  expect(saved).toMatchObject({code:'OK',receipt:{id:input.id,status:'galvanik'}});
+  expect(await sql`SELECT ware,station,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual([{ware:'teilweise',station:'galvanik',version:2}]);
+  expect(await withSession(actor,()=>getGoodsReceiptsAction(order.orderId))).toMatchObject({code:'OK',order:{ware:'teilweise',station:'galvanik',version:2},receipts:[{id:input.id,status:'galvanik',mengen:[{teil_id:order.items[0].id,erwartet:2,bestaetigt:1,geaendert:true}]}]});
+  expect(await withSession(actor,()=>saveGoodsReceiptAction(input))).toMatchObject({code:'OK',replayed:true,receipt:{id:input.id,status:'galvanik'}});
+  expect(await sql`SELECT id FROM public.goods_receipt WHERE tenant_id=${KREILE_TENANT_SLUG} AND auftrag_id=${order.orderId}`).toHaveLength(1);
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid AND event_type='ORDER_STATION_MOVED_V1'`).toHaveLength(1);
+  expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${file.itemId}::uuid AND befehl_id=${input.clientEventId}::uuid AND art='ware'`).toHaveLength(1);
+ }));
+ it('W13 → W02/W17: saves the receipt draft, associates its real photo, accepts through the existing station command and rereads; retry cannot write again',async()=>withLocalReplayStorage(async()=>{
+  const actor=await goodsActorFixture(),order=await orderFixture(actor),file=await originalFixture(actor);
+  const {saveGoodsReceiptAction,getGoodsReceiptsAction}=await import('@/app/actions/eingang.actions');
+  const input:GoodsReceiptInput={id:randomUUID(),clientKey:randomUUID(),clientEventId:randomUUID(),itemId:file.itemId,orderId:order.orderId,expectedOrderVersion:1,expectedVersion:0,mode:'erwartet',command:'draft',card:2,packagesReceived:1,packagesTotal:1,condition:'unauffaellig',deviations:[],foundUnattended:false,foundAt:null,procedure:null,procedureNote:null,photos:[{fileId:file.fileId,kind:'uebersicht'}],quantities:order.items.map(item=>({itemId:item.id,expected:item.quantity,received:null,confirmed:false,note:null}))};
+  const draft=await withSession(actor,()=>saveGoodsReceiptAction(input));
+  if(draft.code!=='OK')throw Error('GOODS_DRAFT_FAILED:'+draft.message);
+  const [row]=await sql`SELECT receipt.status,receipt.zustand,source.zuordnung,source.vorgang_id FROM public.goods_receipt receipt JOIN public.intake_item source ON source.id=receipt.item_id AND source.tenant_id=receipt.tenant_id WHERE receipt.tenant_id=${KREILE_TENANT_SLUG} AND receipt.id=${input.id}::uuid`;
+  expect(row).toEqual({status:'entwurf',zustand:'unauffaellig',zuordnung:'hand',vorgang_id:order.orderId});
+  expect(await withSession(actor,()=>saveGoodsReceiptAction(input))).toMatchObject({code:'OK',replayed:true,receipt:{id:input.id,version:1}});
+  const view=await withSession(actor,()=>getGoodsReceiptsAction(order.orderId));
+  expect(view).toMatchObject({code:'OK',order:{id:order.orderId,ware:'erwartet',version:1},receipts:[{id:input.id,version:1,status:'entwurf',zustand:'unauffaellig'}]});
+  const acceptance:GoodsReceiptInput={...input,clientEventId:randomUUID(),command:'galvanik',expectedVersion:draft.receipt.version,quantities:input.quantities.map(q=>({...q,confirmed:true}))};
+  const accepted=await withSession(actor,()=>saveGoodsReceiptAction(acceptance));
+  if(accepted.code!=='OK')throw Error('GOODS_ACCEPT_FAILED:'+accepted.message);
+  const [written]=await sql`SELECT orders.ware,orders.station,orders.version,receipt.status,(SELECT count(*)::int FROM public.events e WHERE e.tenant_id=orders.tenant_id AND e.order_id=orders.id AND e.event_type='ORDER_STATION_MOVED_V1') AS moves FROM public.orders orders JOIN public.goods_receipt receipt ON receipt.tenant_id=orders.tenant_id AND receipt.auftrag_id=orders.id WHERE orders.tenant_id=${KREILE_TENANT_SLUG} AND orders.id=${order.orderId}`;
+  expect(written).toEqual({ware:'da',station:'galvanik',version:2,status:'galvanik',moves:1});
+  const eventsBefore=await sql`SELECT id FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${file.itemId}::uuid ORDER BY id`;
+  expect(await withSession(actor,()=>saveGoodsReceiptAction(acceptance))).toEqual({...accepted,replayed:true});
+  expect(await withSession(actor,()=>saveGoodsReceiptAction({...acceptance,clientEventId:randomUUID(),command:'draft',expectedVersion:accepted.receipt.version,expectedOrderVersion:2}))).toMatchObject({code:'CONFLICT'});
+  expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${file.itemId}::uuid ORDER BY id`).toEqual(eventsBefore);
+  expect(await withSession(actor,()=>getGoodsReceiptsAction(order.orderId))).toMatchObject({code:'OK',order:{ware:'da',station:'galvanik',version:2},receipts:[{id:input.id,status:'galvanik',version:2}]});
+ }));
+ it('O02/O09: opens real unchanged bytes, then explicitly verifies suggestions once, with actor/event/readback',async()=>withLocalReplayStorage(async()=>{
+  const actor=await goodsActorFixture(),file=await originalFixture(actor);
+  const {openIntakeOriginalAction,confirmIntakeOriginalAction,getIntakeCaptureAction}=await import('@/app/actions/eingang.actions');
+  const suggestion=randomUUID();await sql`INSERT INTO public.intake_suggestion(id,tenant_id,item_id,file_id,feld,wert,sicherheit,fundstelle,status) VALUES(${suggestion}::uuid,${KREILE_TENANT_SLUG},${file.itemId}::uuid,${file.fileId}::uuid,'kunde','"SYNTHETISCH Vorschlag"'::jsonb,'unsicher','{"seite":1}'::jsonb,'offen')`;
+  const opened=await withSession(actor,()=>openIntakeOriginalAction({fileId:file.fileId,clientEventId:randomUUID()}));
+  expect(opened).toMatchObject({code:'OK',original:{id:file.fileId,sha256:file.sha256,restricted:false}});
+  const [unconfirmed]=await sql`SELECT geprueft_am FROM public.intake_suggestion WHERE id=${suggestion}::uuid`;expect(unconfirmed.geprueft_am).toBeNull();
+  const command={fileId:file.fileId,clientEventId:randomUUID()};
+  expect(await withSession(actor,()=>confirmIntakeOriginalAction(command))).toEqual({code:'OK',count:1,replayed:false});
+  const [verified]=await sql`SELECT geprueft_von::text,geprueft_am IS NOT NULL AS checked FROM public.intake_suggestion WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${suggestion}::uuid`;
+  expect(verified).toEqual({geprueft_von:actor.actorId,checked:true});
+  expect(await withSession(actor,()=>confirmIntakeOriginalAction(command))).toEqual({code:'OK',count:1,replayed:true});
+  const events=await sql`SELECT nachher->>'action' AS action FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${file.itemId}::uuid AND art='einsatz' AND nachher->>'action'='original_geprueft'`;expect(events).toEqual([{action:'original_geprueft'}]);
+  expect(await withSession(actor,()=>getIntakeCaptureAction(file.itemId))).toMatchObject({code:'OK',capture:{suggestions:[{id:suggestion,verifiedBy:actor.actorId,verifiedAt:expect.any(String),value:'SYNTHETISCH Vorschlag'}]}});
+ }));
+ it('O07: a login without mails gets metadata and checksum, never mail content or signed URLs',async()=>withLocalReplayStorage(async()=>{
+  const actor=await goodsActorFixture(),owner=await goodsActorFixture(),body=Buffer.from('From: synthetic@fixture.invalid\nSubject: SYNTHETISCH\n\nPrivate synthetic mail body.');
+  await sql`INSERT INTO public.app_user_rights(tenant_id,user_id,bereich,granted_by) VALUES(${KREILE_TENANT_SLUG},${owner.actorId}::uuid,'mails',${owner.actorId}::uuid)`;
+  const file=await originalFixture(owner,'synthetic.eml','message/rfc822',body);
+  await sql`UPDATE public.intake_item SET kanal='mail',text='Private synthetic mail body.' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${file.itemId}::uuid`;
+  const {openIntakeOriginalAction,getIntakeCaptureAction}=await import('@/app/actions/eingang.actions');
+  expect(await withSession(actor,()=>openIntakeOriginalAction({fileId:file.fileId,clientEventId:randomUUID()}))).toMatchObject({code:'OK',original:{restricted:true,sha256:file.sha256,url:null,downloadUrl:null}});
+  const before=await sql`SELECT row_to_json(source)::jsonb AS source FROM public.intake_item source WHERE source.tenant_id=${KREILE_TENANT_SLUG} AND source.id=${file.itemId}::uuid`;
+  const content=await withSession(actor,()=>getIntakeCaptureAction(file.itemId));
+  expect(content).toMatchObject({code:'FORBIDDEN'});
+  expect(JSON.stringify(content)).not.toContain('Private synthetic mail body.');
+  expect(await sql`SELECT row_to_json(source)::jsonb AS source FROM public.intake_item source WHERE source.tenant_id=${KREILE_TENANT_SLUG} AND source.id=${file.itemId}::uuid`).toEqual(before);
+  const [row]=await sql`SELECT geoeffnet FROM public.intake_file WHERE id=${file.fileId}::uuid`;expect(row.geoeffnet).toBe(false);
+ }));
+ it('O04: executable original is blocked and recorded once in the existing audit log',async()=>withLocalReplayStorage(async()=>{
+  const actor=await goodsActorFixture(),file=await originalFixture(actor,'synthetic.exe','application/octet-stream',Buffer.from('MZ synthetic blocked fixture'));
+  const {openIntakeOriginalAction}=await import('@/app/actions/eingang.actions');const input={fileId:file.fileId,clientEventId:randomUUID()};
+  expect(await withSession(actor,()=>openIntakeOriginalAction(input))).toMatchObject({code:'FILE_BLOCKED'});
+  expect(await withSession(actor,()=>openIntakeOriginalAction(input))).toMatchObject({code:'FILE_BLOCKED'});
+  expect(await sql`SELECT action FROM public.audit_log WHERE tenant_id=${KREILE_TENANT_SLUG} AND record_id=${file.fileId} AND action='FILE_BLOCKED'`).toEqual([{action:'FILE_BLOCKED'}]);
+ }));
 });

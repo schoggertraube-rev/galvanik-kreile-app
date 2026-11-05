@@ -65,6 +65,9 @@
       "private.v_extra_work_rate_receipts_v1",
       "private.v_order_item_extra_work_receipts_v1"
     ],
+    "src/lib/server/goodsReceiptOrderPort.ts": [
+      "private.v_quote_conversion_receipts_v1"
+    ],
     "src/lib/server/invoiceRead.ts": [
       "private.v_invoice_receipt_v1",
       "private.v_invoice_summary_v1"

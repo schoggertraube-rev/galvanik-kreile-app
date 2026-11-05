@@ -1,8 +1,8 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
-import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
-import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { hasAuthorizationArea, resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
+import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 
 const SOURCE_STATION = "angenommen";
@@ -83,6 +83,7 @@ type LockedOrder = {
   current_station_id: string | null;
   status: string | null;
   version: number;
+  ware: string | null;
 };
 
 type LockedCustomer = {
@@ -208,6 +209,10 @@ function hasExactStationValues(order: LockedOrder, station: string): boolean {
 
 export async function transitionWareneingangToGalvanik(
   input: OrderStationCommandInput,
+  binding?:{
+    before:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<void|{orderId:string;expectedVersion:number;ware:string}>;
+    after:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<void>;
+  },
 ): Promise<OrderStationCommandResult> {
   if (invalidInput(input)) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Auftragskennung oder Version." };
@@ -216,7 +221,8 @@ export async function transitionWareneingangToGalvanik(
   let authorization;
   try {
     authorization = await resolveAuthorization();
-  } catch {
+  } catch (error) {
+    console.error('[ORDER_STATION_MOVE_AUTH_FAILED]',error);
     return { code: "UNAVAILABLE", message: "Stationswechsel ist derzeit nicht verfügbar." };
   }
 
@@ -249,6 +255,9 @@ export async function transitionWareneingangToGalvanik(
         )
       `);
 
+      // The receipt preflight only reads and validates. Its warehouse state is
+      // committed together with this transition by after(), never ahead of it.
+      const inspectedGoods = await binding?.before(tx,authorization.data);
       const existingReceipts = await tx.execute<EventReceiptRow>(sql`
         SELECT
           id AS event_id,
@@ -285,11 +294,12 @@ export async function transitionWareneingangToGalvanik(
           return { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
         }
 
+        await binding?.after(tx,authorization.data);
         return { code: "OK", receipt: toReceipt(existingReceipt), replayed: true };
       }
 
       const lockedOrders = await tx.execute<LockedOrder>(sql`
-        SELECT id, tenant_id, customer_id, station, current_station, current_station_id, status, version
+        SELECT id, tenant_id, customer_id, station, current_station, current_station_id, status, version, ware
         FROM public.orders
         WHERE id = ${input.orderId} AND tenant_id = ${authorization.data.tenantId}
         FOR UPDATE
@@ -307,6 +317,18 @@ export async function transitionWareneingangToGalvanik(
 
       if (!hasExactStationValues(order, SOURCE_STATION) || order.status !== ORDER_LIFECYCLE_STATUS.ANGENOMMEN) {
         return { code: "VALIDATION_ERROR", message: "Auftrag kann nicht aus dem Wareneingang übergeben werden." };
+      }
+
+      if (inspectedGoods && (inspectedGoods.orderId !== order.id || inspectedGoods.expectedVersion !== order.version)) {
+        return { code: "CONFLICT", message: "Warenprüfung gehört nicht zu diesem Auftragsstand." };
+      }
+      const ware = inspectedGoods ? inspectedGoods.ware : order.ware;
+      if (ware !== "da" && ware !== "teilweise") {
+        const message = ware === "erwartet" ? "Erst Ware annehmen."
+          : ware === "abweichung" ? "Abweichung erst klären."
+          : ware === "zurueck" ? "Ware geht unbearbeitet zurück."
+          : "Warenstand erlaubt keine Übergabe in Galvanik.";
+        return { code: "VALIDATION_ERROR", message };
       }
 
       if (!order.customer_id) {
@@ -446,9 +468,11 @@ export async function transitionWareneingangToGalvanik(
         throw new Error("ORDER_STATION_EVENT_INSERT_FAILED");
       }
 
+      await binding?.after(tx,authorization.data);
       return { code: "OK", receipt: toReceipt(insertedReceipt), replayed: false };
     });
-  } catch {
+  } catch (error) {
+    console.error('[ORDER_STATION_MOVE_WRITE_FAILED]',error);
     return { code: "UNAVAILABLE", message: "Stationswechsel ist derzeit nicht verfügbar." };
   }
 }

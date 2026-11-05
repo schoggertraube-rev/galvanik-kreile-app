@@ -14,6 +14,22 @@ export async function getOpenIntakeMailsAction(){return readOpenIntakeMails();}
 import { processIntakeDeviceRequest, discardIntakeCapture, chooseIntakeCaptureKind } from "@/modules/eingang/server-public";
 export async function chooseIntakeCaptureKindAction(input: unknown) { return chooseIntakeCaptureKind(input); }
 import { readIntakeDrafts, writeIntakeDraft, discardIntakeDraft, retryIntakeRecognition } from "@/modules/eingang/server-public";
+import {saveGoodsReceipt,readGoodsReceipts,createGoodsReceiptStationBinding,type GoodsReceiptResult} from "@/modules/eingang/server-public";
+import {parseGoodsReceiptInput} from "@/modules/eingang/public";
+import {transitionWareneingangToGalvanik} from "@/lib/server/commands/orderStationCommand";
+import {openIntakeOriginal,confirmIntakeOriginal} from "@/modules/eingang/server-public";
+export async function openIntakeOriginalAction(input:unknown){return openIntakeOriginal(input);}
+export async function confirmIntakeOriginalAction(input:unknown){return confirmIntakeOriginal(input);}
+
+export async function getGoodsReceiptsAction(orderId:string){return readGoodsReceipts(orderId);}
+export async function saveGoodsReceiptAction(input:unknown):Promise<GoodsReceiptResult>{
+ const parsed=parseGoodsReceiptInput(input);if(!parsed)return {code:"VALIDATION_ERROR",message:"Warenprüfung ist unvollständig oder ungültig."};
+ if(parsed.command!=="galvanik")return saveGoodsReceipt(parsed);
+ const binding=createGoodsReceiptStationBinding(parsed);
+ const moved=await transitionWareneingangToGalvanik({orderId:parsed.orderId,expectedVersion:parsed.expectedOrderVersion,clientEventId:parsed.clientEventId},binding);
+ if(moved.code!=="OK"){const bound=binding.result();return bound&&bound.code!=="OK"?bound:moved;}
+ return binding.result()??{code:"UNAVAILABLE",message:"Warenbeleg wurde nicht sicher gelesen. Fehlercode: GOODS_RECEIPT_BINDING_MISSING."};
+}
 
 export async function getIntakeDraftsAction() { return readIntakeDrafts(); }
 export async function saveIntakeDraftAction(input:unknown) { return writeIntakeDraft(input); }

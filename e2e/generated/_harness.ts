@@ -360,6 +360,10 @@ async function seedSupplementalFixtures(fixtures: GeneratedFixture[]) {
       continue;
     }
     const value = resolvedFixture(fixture);
+    if(fixture.tabelle==='intake_file'){
+      await seedOriginalFixture(value,1);
+      continue;
+    }
     if (fixture.tabelle === "intake_drafts") {
       const actor = generatedFlowRuntime.logins[String(value.login) as keyof typeof generatedFlowRuntime.logins]
         ?? Object.values(generatedFlowRuntime.logins).find(login => login.id === value.login);
@@ -676,7 +680,17 @@ async function interruptNextLoad(page: Page) {
   await page.route(matcher, handler);
 }
 
-const settledServerActions = new Set(["eingang.buchen", "eingang.erneut-buchen", "eingang.angaben-erkennen"]);
+const settledServerActions = new Set(["eingang.buchen", "eingang.erneut-buchen", "eingang.angaben-erkennen",
+  "ware.annehmen","ware.nur-annehmen","ware.teil-warten","ware.rest-annehmen","ware.erneut",
+  "original.am-original-geprueft","original.erneut-lesen"]);
+
+/** Open the actual accordion before a user interaction; visibility assertions stay unchanged. */
+async function revealForInteraction(locator:Locator){
+  await locator.waitFor({state:"attached",timeout:5_000});
+  if(await locator.isVisible())return;
+  const section=locator.locator('xpath=ancestor::section[contains(concat(" ",normalize-space(@class)," ")," ev-schritt9 ")][1]');
+  if(await section.count())await section.locator('button.ev-schritt9-kopf').click({timeout:15_000});
+}
 
 async function waitForServerAction(page: Page, id: string) {
   await page.evaluate(() => new Promise<void>((resolve) => {
@@ -689,7 +703,7 @@ async function waitForServerAction(page: Page, id: string) {
       const element = elements[0];
       if (!element) return "settled";
       const busy = element.matches(":disabled") || element.getAttribute("aria-disabled") === "true"
-        || element.textContent?.includes("Wird gebucht");
+        || /Wird (?:gebucht|angenommen|gespeichert)|Foto wird gesichert/u.test(element.textContent??"");
       return busy ? "busy" : "settled";
     });
   }, { timeout: 15_000 }).toBe("settled");
@@ -705,6 +719,7 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
     return;
   }
   if (step.aktion === "erwarten") {
+    await captureDbResults(step.db??[],state);
     await assertExpectations(page, step.anzeige ?? [], state);
     await assertDb(step.db ?? [], state);
     return;
@@ -720,6 +735,7 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
   }
   const locator = step.id ? dataSpec(page, step.id, step.nr) : null;
   const value = resolveValue(step.wert, state);
+  if(locator&&step.aktion&&["datei","klicken","doppelklicken","tippen","waehlen","verlassen","taste"].includes(step.aktion))await revealForInteraction(locator);
   switch (step.aktion) {
     case "datei": {
       if (!locator) throw new Error("FLOW_STEP_ID_REQUIRED:datei");

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "a6e57df88388e1e783e181a5c85ad593587ae56953955e8321fe8168963225ef",
+  "inventorySha256": "79ed806e55409bec3b82cc28187dcc32473a041dc6cc54c72e86fab64061fdc7",
   "testedWriteActions": {
     "src/app/actions/eingang.actions.ts#saveIntakeDeviceRequestAction": [
       "src/test/h18_customer_actions.integration.test.ts"
@@ -66,7 +66,8 @@
       "src/test/h18_workshop_actions.integration.test.ts"
     ],
     "src/app/actions/orders.actions.ts#transitionWareneingangToGalvanikAction": [
-      "src/test/h18_workshop_actions.integration.test.ts"
+      "src/test/h18_workshop_actions.integration.test.ts",
+      "src/test/h18_customer_actions.integration.test.ts"
     ],
     "src/app/actions/payments.actions.ts#confirmPaymentAction": [
       "src/test/h18_settings_actions.integration.test.ts"
@@ -148,6 +149,15 @@
       "src/test/h18_customer_actions.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#chooseIntakeCaptureKindAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#saveGoodsReceiptAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#openIntakeOriginalAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#confirmIntakeOriginalAction": [
       "src/test/h18_customer_actions.integration.test.ts"
     ]
   },

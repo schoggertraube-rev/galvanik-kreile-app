@@ -373,7 +373,7 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
     const initialize = async () => { for (let attempt=0;attempt<3&&current;attempt+=1) { try {
       const result = await getCaptureScope();
       if (result.code !== "OK") throw new Error("INTAKE_PENDING_SCOPE_UNAVAILABLE");
-      const originals = await readPendingOriginals(result.scope);
+      const originals = (await readPendingOriginals(result.scope)).filter(original=>original.kind!=='file'||!original.context);
       if (current) {
         setScope(result.scope);
         setError(message=>message?.includes("INTAKE_PENDING_RESUME_FAILED")||message?.includes("Lokale Sicherung wird vorbereitet")?null:message);

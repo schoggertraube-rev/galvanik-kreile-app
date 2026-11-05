@@ -4,11 +4,32 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { OrderIntakeTransactionBinding } from "@/lib/server/commands/orderIntakeCommand";
 import { queueIntakeConfirmation } from "./intakeConfirmation";
-import { hasAuthorizationArea } from "@/lib/server/authorization";
+import { hasAuthorizationArea, type AuthorizationSnapshot } from "@/lib/server/authorization";
+import type { PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {readIntakeProspectReference,type IntakeProspectReference} from './intakeProspect';
 
 export type IntakeOrderSource = { id: string; version: number };
 type Row = { id:string; kanal:string; kunde_id:string|null; vorgang_art:string|null; vorgang_id:string|null; version:number; kennzeichen:string[]; erstellt_von:string; text:string|null };
+
+/** Shared association writer for booking and the receipt of an existing order. */
+export async function bindIntakeOriginalToOrder(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{itemId:string;orderId:string;customerId:string;clientEventId:string;complete:boolean}){
+  const rows=await tx.execute<Row&{einsatz:string;anliegen_offen:string[]}>(sql`SELECT id::text,kanal,kunde_id,vorgang_art,vorgang_id,version,kennzeichen,erstellt_von::text,text,einsatz,anliegen_offen
+    FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id=${input.itemId}::uuid FOR UPDATE`);
+  if(rows.length!==1)throw Error("INTAKE_CAPTURE_NOT_FOUND");
+  const row=rows[0];
+  if((row.kanal==='mail'||row.erstellt_von!==auth.userId)&&!hasAuthorizationArea(auth,'mails'))throw Error('INTAKE_CAPTURE_FORBIDDEN');
+  if(row.kennzeichen.includes('in_erfassung_verworfen')||row.kunde_id&&row.kunde_id!==input.customerId)throw Error('INTAKE_CAPTURE_CUSTOMER_CONFLICT');
+  if(row.vorgang_id&&(row.vorgang_art!=='auftrag'||row.vorgang_id!==input.orderId))throw Error('INTAKE_CAPTURE_ALREADY_ASSIGNED');
+  const usage=input.complete&&row.anliegen_offen.length===0?'erledigt':row.einsatz;
+  if(row.vorgang_id&&usage===row.einsatz)return;
+  const changed=await tx.execute(sql`UPDATE public.intake_item SET kunde_id=${input.customerId},vorgang_art='auftrag',vorgang_id=${input.orderId},zuordnung='hand',einsatz=${usage},
+    geaendert_von=${auth.userId}::uuid,geaendert_am=statement_timestamp(),updated_at=statement_timestamp(),version=version+1
+    WHERE tenant_id=${auth.tenantId} AND id=${input.itemId}::uuid AND version=${row.version} RETURNING id`);
+  if(changed.length!==1)throw Error('INTAKE_CAPTURE_ASSIGNMENT_CONFLICT');
+  await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,vorher,nachher)
+    VALUES(${auth.tenantId},${input.itemId}::uuid,${row.vorgang_id?'einsatz':'zugeordnet'},${input.clientEventId}::uuid,${auth.userId},${JSON.stringify(row)}::jsonb,
+      ${JSON.stringify({kundeId:input.customerId,vorgangArt:'auftrag',vorgangId:input.orderId,einsatz:usage})}::jsonb)`);
+}
 
 /** The one intake/order association writer, inside the existing order transaction. */
 export function createIntakeOrderBinding(input:{clientEventId:string;customerId:string|null;note:string|null;telefonNotiz?:string|null;sources?:IntakeOrderSource[];draftId?:string}): OrderIntakeTransactionBinding & { itemId:()=>string|null } {
@@ -80,18 +101,7 @@ export function createIntakeOrderBinding(input:{clientEventId:string;customerId:
       }
       for(const row of locked.length?locked:[null]){
       const id=row?.id??itemId;
-      if(row?.vorgang_id){
-        if(row.vorgang_art!=="auftrag"||row.vorgang_id!==receipt.orderId)throw Error("INTAKE_CAPTURE_ALREADY_ASSIGNED");
-        continue;
-      }
-      const rows=await tx.execute<{id:string;einsatz:string}>(sql`UPDATE public.intake_item SET kunde_id=${receipt.customerId},vorgang_art='auftrag',vorgang_id=${receipt.orderId},zuordnung='hand',
-        einsatz=CASE WHEN cardinality(anliegen_offen)>0 THEN 'offen' ELSE 'erledigt' END,
-        geaendert_von=${auth.userId}::uuid,geaendert_am=statement_timestamp(),updated_at=statement_timestamp(),version=version+1
-        WHERE tenant_id=${auth.tenantId} AND id=${id}::uuid AND vorgang_id IS NULL RETURNING id::text,einsatz`);
-      if(rows.length!==1)throw Error("INTAKE_CAPTURE_ASSIGNMENT_CONFLICT");
-      await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,vorher,nachher)
-        VALUES(${auth.tenantId},${id}::uuid,'zugeordnet',${input.clientEventId}::uuid,${auth.userId},${JSON.stringify(row)}::jsonb,
-          ${JSON.stringify({kundeId:receipt.customerId,vorgangArt:"auftrag",vorgangId:receipt.orderId,einsatz:rows[0].einsatz})}::jsonb)`);
+      await bindIntakeOriginalToOrder(tx,auth,{itemId:id!,customerId:receipt.customerId,orderId:receipt.orderId,clientEventId:input.clientEventId,complete:true});
       await tx.execute(sql`UPDATE public.intake_suggestion SET order_id=${receipt.orderId} WHERE tenant_id=${auth.tenantId} AND item_id=${id}::uuid AND order_id IS NULL`);
       }
       await queueIntakeConfirmation(tx,auth,receipt);

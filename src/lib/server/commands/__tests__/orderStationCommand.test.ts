@@ -34,7 +34,7 @@ const authorization = {
 const validOrder = {
   id: "order-1", tenant_id: "tenant-a", customer_id: "customer-a", station: "angenommen",
   current_station: "angenommen", current_station_id: "angenommen",
-  status: "angenommen", version: 1,
+  status: "angenommen", version: 1, ware: "da",
 };
 const CLIENT_EVENT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const CORRELATION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";

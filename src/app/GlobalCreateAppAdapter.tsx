@@ -6,13 +6,14 @@ import { logout } from "@/app/actions/auth";
 import { chooseIntakeCaptureKindAction } from "@/app/actions/eingang.actions";
 import { createCustomerAction, getCustomersDb, readCustomerCreateReceiptAction, readCustomerAddressAction } from "@/app/actions/customers.actions";
 import { erfasseAuftragAusEingangAction, getIntakeDraftsAction, saveIntakeDraftAction, discardIntakeDraftAction, getIntakePendingScopeAction, saveIntakeNoteAction, recognizeIntakeNoteAction, prepareIntakeFileAction, finishIntakeFileAction, getIntakeCaptureAction, saveIntakeDeviceRequestAction, discardIntakeCaptureAction } from "@/app/actions/eingang.actions";
+import {getGoodsReceiptsAction,saveGoodsReceiptAction,openIntakeOriginalAction,confirmIntakeOriginalAction,retryIntakeRecognitionAction} from "@/app/actions/eingang.actions";
 import { convertQuoteToOrderAction, createQuoteAction, listOpenQuotesAction, readQuoteAction, readQuoteCreateReceiptAction, readQuoteConversionReceiptAction, readQuoteUpdateReceiptAction, updateQuoteAction } from "@/app/actions/quotes.actions";
 import { getOrderIntakeReceiptAction, getOrderIntakeSuggestionsAction, recognizeOrderIntakeTextAction, searchOrderIntakeCustomersAction } from "@/app/warendurchlauf/actions";
 import { getIntakeCatalogAction } from "@/app/actions/catalog.actions";
 import {getOpenIntakeMailsAction,saveIntakeProspectAction} from "@/app/actions/eingang.actions";
 import { getOrderRegisterDb, getLiveOrderCardAction } from "@/app/actions/orders.actions";
 import {
-  GlobalCreateFlow,requestGlobalCreate,IntakeMessageDialogs,type MailSelectionPorts,
+  GlobalCreateFlow,requestGlobalCreate,IntakeMessageDialogs,type MailSelectionPorts,IntakeObjectDialogs,type IntakeObjectPorts,
   type GlobalCreateConversionResult,
   type GlobalCreateCustomerResult,
   type GlobalCreateCustomerChoice,
@@ -46,6 +47,7 @@ const PENDING_QUOTE_CONVERSION_KEY = "path1.global-create.pending-quote-conversi
 export function GlobalCreateAppAdapter() {
   const router = useRouter();
   const mailPorts=useMemo<MailSelectionPorts>(()=>({list:getOpenIntakeMailsAction,read:getIntakeCaptureAction}),[]);
+  const objectPorts=useMemo<IntakeObjectPorts>(()=>({goods:{scope:getIntakePendingScopeAction,read:getGoodsReceiptsAction,save:saveGoodsReceiptAction,prepareFile:prepareIntakeFileAction,finishFile:finishIntakeFileAction},original:{open:openIntakeOriginalAction,confirm:confirmIntakeOriginalAction,capture:getIntakeCaptureAction,retry:retryIntakeRecognitionAction}}),[]);
   const openCustomer = useOverlayStore((state) => state.openCustomer);
   const openOrder = useOverlayStore((state) => state.openOrder);
   const activeCustomerOverlayId = useOverlayStore((state) => {
@@ -109,7 +111,7 @@ export function GlobalCreateAppAdapter() {
   if (!role || !isAppRole(role)) return null;
 
   return (
-    <><IntakeMessageDialogs ports={mailPorts}/><GlobalCreateFlow
+    <><IntakeMessageDialogs ports={mailPorts}/><IntakeObjectDialogs ports={objectPorts} allowed={hasArea("eingang")} onRefresh={()=>router.refresh()}/><GlobalCreateFlow
       ports={{
         readIntakeOrderSource: async (orderId) => {
           const result = await getLiveOrderCardAction({ orderId });
