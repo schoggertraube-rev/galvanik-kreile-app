@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "package": "B2-EINGANG-P59-ANCHOR",
+  "headBranch": "codex/ta-b2j",
+  "mainBaseSha": "27c3435474e5cec4d1241bf75a646a895edc1e91",
+  "authorizedBy": "Siglinder",
+  "authorizedAt": "2026-11-04",
+  "scope": "P59: AP-EIN, Teil 6 und KV; additive Migrationen ohne Mengenlimit",
+  "probeCandidateSha": "12b34247feb69e16ebea6c2f85eeaa4018926d1a",
+  "probeResult": "PASS"
+}
