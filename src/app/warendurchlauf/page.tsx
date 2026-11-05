@@ -22,6 +22,7 @@ function render(view: WorkshopViewModel) {
 
 function toWerkstattSurfaceOrder(order: WarendurchlaufOrder): WerkstattSurfaceOrder {
   return {
+    ausgabeFrei:order.ausgabeFrei,
     id: order.id,
     orderNumber: order.orderNumber,
     customerName: order.customerName,

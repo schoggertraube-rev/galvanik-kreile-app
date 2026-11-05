@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { normaliseOrderPositionSurface, normaliseOrderPositionUnit, orderPositionQuantityError, orderPositionSurfaceLabel, orderPositionUnitLabel } from "@/lib/orderPositionContract";
 import {
   getAuthorizationActionGrants,
+  hasAuthorizationArea,
   resolveAuthorization,
 } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -48,6 +49,62 @@ type OrderRow = { id: string; customer_id: string; version: number; station: str
 type ItemRow = { id: string; catalog_service_id: string | null };
 type CatalogRow = { id: string; name: string; surface: string; unit: string; net_price_cents: number; vat_rate_basis_points: number; active: boolean };
 type EventRow = { id: string; user_id: string; aggregate_version: number; created_at: Date | string; payload: unknown; event_type: string; order_id: string };
+
+type PickupRow={id:string;version:number;station:string;status:string;pickup_by_name:string|null;pickup_by_note:string|null;pickup_by_source:string|null;pickup_by_at:Date|string|null;pickup_by_login:string|null;ausgabe_frei:boolean};
+
+export async function readOrderPickupNotice(input:unknown){
+  if(!input||typeof input!=="object"||Array.isArray(input)||typeof (input as Record<string,unknown>).orderId!=="string")return {code:"VALIDATION_ERROR" as const,message:"Auftragskennung fehlt."};
+  const orderId=(input as {orderId:string}).orderId;
+  const auth=await resolveAuthorization();
+  if(!auth.ok)return {code:"UNAUTHENTICATED" as const,message:auth.message};
+  if(!hasAuthorizationArea(auth.data,"eingang")&&!hasAuthorizationArea(auth.data,"auftraege"))return {code:"FORBIDDEN" as const,message:"Abholmitteilung ist nicht freigegeben."};
+  try{
+    const rows=await withPrivilegedTenantTransaction(auth.data,tx=>tx.execute<PickupRow>(sql`SELECT id,version,station,status,pickup_by_name,pickup_by_note,pickup_by_source,pickup_by_at,pickup_by_login::text,ausgabe_frei
+      FROM public.orders WHERE tenant_id=${auth.data.tenantId} AND id=${orderId}`));
+    if(rows.length!==1)return {code:"NOT_FOUND" as const,message:"Auftrag nicht verfügbar."};
+    return {code:"OK" as const,data:rows[0]};
+  }catch(error){console.error("[ORDER_PICKUP_READ_FAILED]",error);return {code:"UNAVAILABLE" as const,message:"Abholmitteilung konnte nicht geladen werden. Fehlercode: ORDER_PICKUP_READ_FAILED."};}
+}
+
+/** DA01/DA02: one explicit confirmation replaces the notice; the event preserves its predecessor. */
+export async function changeOrderPickupNotice(input:unknown){
+  if(!input||typeof input!=="object"||Array.isArray(input))return {code:"VALIDATION_ERROR" as const,message:"Abholmitteilung ist ungültig."};
+  const value=input as Record<string,unknown>;
+  if(Object.keys(value).sort().join(",")!=="clientEventId,expectedVersion,name,note,orderId,source"
+    ||!validBase({orderId:value.orderId,expectedVersion:value.expectedVersion,clientEventId:value.clientEventId})
+    ||!(value.name===null||typeof value.name==="string"&&value.name===value.name.trim()&&value.name.length>=1&&value.name.length<=160)
+    ||!(value.note===null||typeof value.note==="string"&&value.note===value.note.trim()&&value.note.length<=120)
+    ||!['mail','telefon','persoenlich','notiz'].includes(value.source as string))return {code:"VALIDATION_ERROR" as const,message:"Abholmitteilung ist unvollständig oder ungültig."};
+  const auth=await resolveAuthorization();if(!auth.ok)return {code:"UNAUTHENTICATED" as const,message:auth.message};
+  if(!hasAuthorizationArea(auth.data,"eingang")&&!hasAuthorizationArea(auth.data,"auftraege"))return {code:"FORBIDDEN" as const,message:"Abholmitteilung darf nicht geändert werden."};
+  const requestHash=hash({orderId:value.orderId,expectedVersion:value.expectedVersion,name:value.name,note:value.note,source:value.source});
+  try{
+    return await withPrivilegedTenantTransaction(auth.data,async tx=>{
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('order-pickup:'||${auth.data.tenantId}||':'||${value.clientEventId},0))`);
+      const prior=await tx.execute<EventRow>(sql`SELECT id,user_id::text,aggregate_version,created_at,payload,event_type,order_id FROM public.events
+        WHERE tenant_id=${auth.data.tenantId} AND client_event_id=${value.clientEventId}::uuid LIMIT 2`);
+      if(prior.length){const row=prior[0];return prior.length===1&&row.user_id===auth.data.userId&&row.event_type==='ORDER_PICKUP_NOTICE_CHANGED_V1'&&row.order_id===value.orderId
+        &&(row.payload as {requestHash?:unknown})?.requestHash===requestHash?{code:"OK" as const,receipt:receipt(row),replayed:true}
+        :{code:"CONFLICT" as const,message:"Diese Kennung wurde bereits anders verwendet."};}
+      const rows=await tx.execute<PickupRow>(sql`SELECT id,version,station,status,pickup_by_name,pickup_by_note,pickup_by_source,pickup_by_at,pickup_by_login::text,ausgabe_frei
+        FROM public.orders WHERE tenant_id=${auth.data.tenantId} AND id=${value.orderId} FOR UPDATE`);
+      const row=rows[0];if(rows.length!==1||!row)return {code:"NOT_FOUND" as const,message:"Auftrag nicht verfügbar."};
+      if(row.version!==value.expectedVersion)return {code:"CONFLICT" as const,message:"Abholmitteilung wurde inzwischen geändert. Bitte abgleichen und erneut bestätigen.",current:row};
+      if(row.station==='abgeholt'||row.status==='storniert')return {code:"CONFLICT" as const,message:"Dieser Auftrag ist bereits abgeschlossen."};
+      const updated=await tx.execute<{version:number}>(sql`UPDATE public.orders SET pickup_by_name=${value.name},pickup_by_note=${value.note},pickup_by_source=${value.source},
+        pickup_by_at=statement_timestamp(),pickup_by_login=${auth.data.userId}::uuid,version=version+1
+        WHERE tenant_id=${auth.data.tenantId} AND id=${value.orderId} AND version=${value.expectedVersion} RETURNING version`);
+      if(updated.length!==1)throw Error('ORDER_PICKUP_VERSION_CONFLICT');
+      const events=await tx.execute<EventRow>(sql`INSERT INTO public.events(id,tenant_id,order_id,event_type,description,payload,status,user_id,client_event_id,event_schema_version,aggregate_version,correlation_id)
+        VALUES(gen_random_uuid()::text,${auth.data.tenantId},${value.orderId},'ORDER_PICKUP_NOTICE_CHANGED_V1','Abholmitteilung geändert',
+          ${JSON.stringify({requestHash,before:{name:row.pickup_by_name,note:row.pickup_by_note,source:row.pickup_by_source},after:{name:value.name,note:value.note,source:value.source}})}::jsonb,
+          'success',${auth.data.userId}::uuid,${value.clientEventId}::uuid,1,${updated[0].version},gen_random_uuid())
+        RETURNING id,user_id::text,aggregate_version,created_at,payload,event_type,order_id`);
+      if(events.length!==1)throw Error('ORDER_PICKUP_EVENT_MISSING');
+      return {code:"OK" as const,receipt:receipt(events[0]),replayed:false};
+    });
+  }catch(error){console.error("[ORDER_PICKUP_WRITE_FAILED]",error);return {code:"UNAVAILABLE" as const,message:"Abholmitteilung konnte nicht sicher gespeichert werden. Fehlercode: ORDER_PICKUP_WRITE_FAILED."};}
+}
 
 function text(value: unknown, min: number, max: number): string | null {
   if (typeof value !== "string") return null;

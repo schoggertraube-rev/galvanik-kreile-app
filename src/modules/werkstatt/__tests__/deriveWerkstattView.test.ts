@@ -4,6 +4,7 @@ import type { WerkstattKpiSnapshot, WerkstattSurfaceOrder } from "../server/type
 
 function order(overrides: Partial<WerkstattSurfaceOrder> & { id: string; orderNumber: string }): WerkstattSurfaceOrder {
   return {
+    ausgabeFrei:overrides.ausgabeFrei,
     id: overrides.id,
     orderNumber: overrides.orderNumber,
     customerName: overrides.customerName ?? `Kunde ${overrides.id}`,
@@ -97,7 +98,7 @@ describe("buildWerkstattData", () => {
   it("offers only canonical fertig orders as goods-out candidates", () => {
     const wareneingang = order({ id: "we", orderNumber: "WE", station: "wareneingang" });
     const galvanik = order({ id: "ga", orderNumber: "GA", station: "galvanik" });
-    const fertig = order({ id: "fi", orderNumber: "FI", station: "fertig", status: "fertig" });
+    const fertig = order({ id: "fi", orderNumber: "FI", station: "fertig", status: "fertig", ausgabeFrei:true });
 
     const data = build({ wareneingang: [wareneingang], galvanik: [galvanik, fertig] });
 

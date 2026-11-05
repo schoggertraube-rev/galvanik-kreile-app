@@ -2,7 +2,7 @@ import "server-only";
 
 import bcrypt from "bcryptjs";
 import { sql } from "drizzle-orm";
-import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {
   ROLE_ACCESS_AREA_TEMPLATES,
   getFixedAccessAreasForRole,
@@ -16,6 +16,7 @@ import {
 import type {
   CompanySettingsInput,
   CompanySettingsSnapshot,
+  ShippingSettings,
   CreateManagedUserInput,
   ManagedUser,
   SetUserAreaInput,
@@ -35,6 +36,50 @@ export type SystemSettingsContext = {
 };
 export type CompanyDocumentContext = { tenantId: string; actorId: string; canRead: boolean };
 type CompanyRow = { company_name: string; street: string | null; zip: string | null; city: string | null; country: string | null; tax_id: string | null; iban: string | null; bic: string | null; bank_name: string | null; invoice_payment_term_days: number | null; logo_url: string | null };
+
+export async function readShippingSettingsInTransaction(tx:PrivilegedTenantTransaction,tenantId:string):Promise<ShippingSettings|null>{
+ const rows=await tx.execute<ShippingSettings>(sql`SELECT versand_dienst AS service,versand_nummer_format AS "numberPattern",versand_nummer_hinweis AS "numberHint",
+   versand_verfolgung_url AS "trackingUrl",versand_label_api AS "labelApi",to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "updatedAt"
+   FROM public.company_settings WHERE tenant_id=${tenantId} ORDER BY updated_at DESC LIMIT 2`);
+ if(!rows.length)return null;
+ if(rows.length!==1||!rows[0]||typeof rows[0].service!=="string"||!rows[0].service.trim())throw Error('SHIPPING_SETTINGS_INVALID');
+ return rows[0];
+}
+export async function readShippingSettings(context:CompanyDocumentContext){
+ if(!context.canRead)return {code:"FORBIDDEN" as const,message:"Versandangaben sind nicht freigegeben."};
+ try{const settings=await withPrivilegedTenantTransaction(context,tx=>readShippingSettingsInTransaction(tx,context.tenantId));
+  return settings?{code:"OK" as const,settings}:{code:"NOT_FOUND" as const,message:"Firmendaten fehlen. Fehlercode: SHIPPING_SETTINGS_MISSING."};
+ }catch(error){logSystemSettingsPortFailure('SHIPPING_SETTINGS_READ_FAILED',error);return {code:"UNAVAILABLE" as const,message:"Versandangaben konnten nicht geladen werden. Fehlercode: SHIPPING_SETTINGS_READ_FAILED."};}
+}
+export async function updateShippingSettings(context:SystemSettingsContext,input:unknown){
+ if(context.canManageCompany!==true)return {code:"FORBIDDEN" as const,message:"Versandangaben dürfen nicht geändert werden."};
+ if(!input||typeof input!=="object"||Array.isArray(input))return {code:"VALIDATION_ERROR" as const,message:"Versandangaben fehlen."};
+ const value=input as Record<string,unknown>;
+ if(Object.keys(value).sort().join(',')!=="expectedUpdatedAt,numberHint,numberPattern,service,trackingUrl"
+  ||typeof value.service!=="string"||value.service!==value.service.trim()||value.service.length<1||value.service.length>40
+  ||typeof value.numberPattern!=="string"||value.numberPattern.length>160||typeof value.numberHint!=="string"||value.numberHint.length>160
+  ||!(value.trackingUrl===null||typeof value.trackingUrl==="string"&&value.trackingUrl.length<=1000)
+  ||typeof value.expectedUpdatedAt!=="string"||!Number.isFinite(Date.parse(value.expectedUpdatedAt)))return {code:"VALIDATION_ERROR" as const,message:"Versandangaben sind ungültig."};
+ try{
+  if(value.numberPattern)new RegExp(value.numberPattern);
+  if(value.trackingUrl){const url=new URL((value.trackingUrl as string).replace('{nr}','0'));if(url.protocol!=="https:"||!(value.trackingUrl as string).includes('{nr}'))return {code:"VALIDATION_ERROR" as const,message:"Sendungsverfolgung benötigt eine HTTPS-Adresse mit {nr}."};}
+ }catch(error){console.error('[SHIPPING_FORMAT_INVALID]',error instanceof Error?error.name:'UnknownError');return {code:"VALIDATION_ERROR" as const,message:"Nummernformat oder Sendungsverfolgung ist ungültig."};}
+ try{
+  return await withPrivilegedTenantTransaction(context,async tx=>{
+   const current=await readShippingSettingsInTransaction(tx,context.tenantId);
+   if(!current)return {code:"NOT_FOUND" as const,message:"Firmendaten müssen zuerst gespeichert werden."};
+   const identical=current.service===value.service&&current.numberPattern===value.numberPattern&&current.numberHint===value.numberHint&&current.trackingUrl===value.trackingUrl;
+   if(identical)return {code:"OK" as const,settings:current,replayed:true};
+   if(current.updatedAt!==value.expectedUpdatedAt)return {code:"CONFLICT" as const,message:"Versandangaben wurden inzwischen geändert. Bitte abgleichen.",current};
+   const changed=await tx.execute(sql`UPDATE public.company_settings SET versand_dienst=${value.service},versand_nummer_format=${value.numberPattern},
+     versand_nummer_hinweis=${value.numberHint},versand_verfolgung_url=${value.trackingUrl},updated_at=statement_timestamp()
+     WHERE tenant_id=${context.tenantId} AND updated_at=${value.expectedUpdatedAt}::timestamptz RETURNING id`);
+   if(changed.length!==1)return {code:"CONFLICT" as const,message:"Versandangaben wurden inzwischen geändert. Bitte erneut abgleichen.",current:await readShippingSettingsInTransaction(tx,context.tenantId)};
+   await tx.execute(sql`INSERT INTO public.ui_events(tenant_id,event_type,payload) VALUES(${context.tenantId},'shipping_settings_updated',${JSON.stringify({actorId:context.actorId,before:current,after:{service:value.service,numberPattern:value.numberPattern,numberHint:value.numberHint,trackingUrl:value.trackingUrl}})}::jsonb)`);
+   return {code:"OK" as const,settings:await readShippingSettingsInTransaction(tx,context.tenantId),replayed:false};
+  });
+ }catch(error){logSystemSettingsPortFailure('SHIPPING_SETTINGS_WRITE_FAILED',error);return {code:"UNAVAILABLE" as const,message:"Versandangaben konnten nicht gespeichert werden. Fehlercode: SHIPPING_SETTINGS_WRITE_FAILED."};}
+}
 type UserRow = {
   id: string;
   email: string | null;

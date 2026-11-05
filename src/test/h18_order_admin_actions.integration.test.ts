@@ -364,3 +364,40 @@ describe("H18 order administration Server Actions against the real replay databa
     });
   });
 });
+
+// Owner model DA01/DA02, unchanged outcomes: explicit notice and explicit revocation.
+describe("AP-EIN Teil 6: DA01/DA02 real Actions and DB",()=>{
+ it("DA01 stores the confirmed collector; DA02 clears it and preserves both events",async()=>{
+  const fixture=await createFixture();
+  const {createOrderIntakeAction}=await import("@/app/actions/eingang.actions");
+  const created=await withSession(fixture,"actor",()=>createOrderIntakeAction({geprueft:true,clientEventId:randomUUID(),customer:{mode:"EXISTING",customerId:fixture.customerId},dueDate:"2027-05-20",termStatus:"bestaetigt",intakeSource:"persoenlich",handoverMode:"pickup",paymentMode:"rechnung",note:"SYNTHETISCH DA01",items:[{catalogServiceId:null,name:"SYNTHETISCH DA01 Teil",quantity:1,material:null,surfaceRequested:"verchromen",unit:"stueck",unitPriceCents:null,vatRateBasisPoints:null}]}));
+  expect(created.code).toBe("OK");if(created.code!=="OK")throw Error('DA01_ORDER_REQUIRED');
+  const {readTenantOperationalOrders}=await import('@/lib/server/orderStationRead');
+  const [release]=await sql`SELECT ausgabe_frei FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${created.receipt.orderId}`;
+  const queue=await readTenantOperationalOrders({tenantId:KREILE_TENANT_SLUG});
+  expect(queue.find(value=>value.id===created.receipt.orderId)?.ausgabeFrei).toBe(release.ausgabe_frei);
+  const {changeOrderPickupNoticeAction,getOrderPickupNoticeAction}=await import("@/app/actions/orders.actions");
+  const input={orderId:created.receipt.orderId,expectedVersion:1,clientEventId:randomUUID(),name:"Jens",note:"Mein Bruder holt ab",source:"notiz"};
+  expect(await withSession(fixture,"actor",()=>changeOrderPickupNoticeAction(input))).toMatchObject({code:"OK",replayed:false});
+  expect(await withSession(fixture,"actor",()=>changeOrderPickupNoticeAction(input))).toMatchObject({code:"OK",replayed:true});
+  expect(await sql`SELECT pickup_by_name,pickup_by_source,pickup_by_login::text FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.orderId}`).toEqual([{pickup_by_name:"Jens",pickup_by_source:"notiz",pickup_by_login:fixture.actorId}]);
+  expect(await withSession(fixture,"actor",()=>getOrderPickupNoticeAction({orderId:input.orderId}))).toMatchObject({code:"OK",data:{version:2,pickup_by_name:"Jens"}});
+  expect(await withSession(fixture,"actor",()=>changeOrderPickupNoticeAction({...input,expectedVersion:2,clientEventId:randomUUID(),name:null,note:"Ich komme selbst"}))).toMatchObject({code:"OK",replayed:false});
+  expect(await withSession(fixture,"actor",()=>getOrderPickupNoticeAction({orderId:input.orderId}))).toMatchObject({code:"OK",data:{version:3,pickup_by_name:null}});
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${input.orderId} AND event_type='ORDER_PICKUP_NOTICE_CHANGED_V1'`).toHaveLength(2);
+ });
+ it("shipping settings use the one company row and reread the configured service",async()=>{
+  const fixture=await createFixture();
+  const {saveCompanySettingsAction,readShippingSettingsAction,saveShippingSettingsAction}=await import("@/app/actions/settings.actions");
+  expect(await withSession(fixture,"actor",()=>saveCompanySettingsAction({companyName:"SYNTHETISCH Versand",street:"Prüfweg 18",zip:"70173",city:"Stuttgart",country:"DE",taxId:"DE000000001",iban:"DE02120300000000202051",bic:"BYLADEM1001",bankName:"SYNTHETISCH Bank",paymentTermDays:14,logoUrl:"https://example.invalid/logo.svg"}))).toMatchObject({code:"OK"});
+  const before=await withSession(fixture,"actor",()=>readShippingSettingsAction());
+  expect(before.code).toBe("OK");if(before.code!=="OK")throw Error('SHIPPING_SETTINGS_REQUIRED');
+  const input={service:"SYNTHETISCH Paket "+randomUUID().slice(0,8),numberPattern:"^T[0-9]{6}$",numberHint:"T und sechs Ziffern",trackingUrl:"https://example.invalid/track/{nr}",expectedUpdatedAt:before.settings.updatedAt};
+  expect(await withSession(fixture,"actor",()=>saveShippingSettingsAction(input))).toMatchObject({code:"OK",replayed:false});
+  expect(await withSession(fixture,"actor",()=>saveShippingSettingsAction(input))).toMatchObject({code:"OK",replayed:true});
+  expect(await withSession(fixture,"worker",()=>saveShippingSettingsAction(input))).toMatchObject({code:"FORBIDDEN"});
+  expect(await withSession(fixture,"actor",()=>readShippingSettingsAction())).toMatchObject({code:"OK",settings:{service:input.service,numberPattern:input.numberPattern,numberHint:input.numberHint,trackingUrl:input.trackingUrl}});
+  expect(await sql`SELECT versand_dienst,versand_nummer_format FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual([{versand_dienst:input.service,versand_nummer_format:input.numberPattern}]);
+  expect(await sql`SELECT id FROM public.ui_events WHERE tenant_id=${KREILE_TENANT_SLUG} AND event_type='shipping_settings_updated' AND payload->'after'->>'service'=${input.service}`).toHaveLength(1);
+ });
+});

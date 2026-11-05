@@ -472,7 +472,9 @@
         "createManagedUserAction",
         "setManagedUserAreaAction",
         "changeOwnPinAction",
-        "saveCatalogServiceAction"
+        "saveCatalogServiceAction",
+        "readShippingSettingsAction",
+        "saveShippingSettingsAction"
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "Stufe 1 P1 exposes tenant-bound administration for company settings, catalog services, and existing users. Package acceptance remains pending.",
@@ -601,6 +603,8 @@
         "handBackOrderTaskAction",
         "changeOrderPromisedDueDateAction",
         "changeOrderContentAction",
+        "getOrderPickupNoticeAction",
+        "changeOrderPickupNoticeAction",
         "setOrderItemFinishedAction",
         "configureExtraWorkCatalogPositionAction",
         "setExtraWorkHourlyRateAction",

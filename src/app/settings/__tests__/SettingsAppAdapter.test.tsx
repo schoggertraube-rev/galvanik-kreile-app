@@ -12,6 +12,8 @@ const ports = vi.hoisted(() => ({
   saveManagedUser: vi.fn(),
   createManagedUser: vi.fn(),
   setManagedUserArea: vi.fn(),
+  readShipping: vi.fn(),
+  saveShipping: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
@@ -28,6 +30,8 @@ vi.mock("@/app/actions/settings.actions", () => ({
   createManagedUserAction: ports.createManagedUser,
   setManagedUserAreaAction: ports.setManagedUserArea,
   changeOwnPinAction: ports.changeOwnPin,
+  readShippingSettingsAction: ports.readShipping,
+  saveShippingSettingsAction: ports.saveShipping,
 }));
 vi.mock("@/app/actions/orders.actions", () => ({ setExtraWorkHourlyRateAction: vi.fn() }));
 
@@ -50,6 +54,7 @@ function authorizationFor(role: "meister" | "admin" | "developer" | "buero") {
 describe("Gregor system administration composition", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    ports.readShipping.mockResolvedValue({code:"OK",settings:{service:"SYNTHETISCH Paket",numberPattern:"",numberHint:"",trackingUrl:null,labelApi:null,updatedAt:"2026-11-05T12:00:00.000000Z"}});
     ports.resolveAuthorization.mockResolvedValue(
       authorizationFor("admin"),
     );

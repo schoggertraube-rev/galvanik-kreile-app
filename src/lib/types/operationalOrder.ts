@@ -18,6 +18,7 @@ export type OperationalOrderItem = {
 };
 
 export type OperationalOrder = {
+  ausgabeFrei?:boolean;
   id: string;
   version: number;
   orderNumber: string;

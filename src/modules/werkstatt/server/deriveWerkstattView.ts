@@ -10,6 +10,7 @@ import type {
 
 function toWorkshopOrderCard(order: WerkstattSurfaceOrder): WorkshopOrderCard {
   return {
+    ausgabeFrei:order.ausgabeFrei,
     id: order.id,
     orderNumber: order.orderNumber,
     customerName: order.customerName,
@@ -159,7 +160,7 @@ export function buildWerkstattData(
     wipCount: input.kpis.wipCount,
     dueThisWeekCount: input.kpis.dueThisWeekCount,
     pickerOrders: combined,
-    goodsOutCandidates: combined.filter((order) => order.station === "fertig"),
+    goodsOutCandidates: combined.filter((order) => order.station === "fertig" && order.ausgabeFrei===true),
     canCreateOrder: input.canCreateOrder,
   };
 }

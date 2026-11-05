@@ -152,6 +152,9 @@ export const priceAgreements = pgTable("price_agreements", {
 // 4. Orders
 export const orders = pgTable("orders", {
   geprueft: boolean("geprueft"),
+  pickupByName:text("pickup_by_name"),pickupByNote:text("pickup_by_note"),pickupBySource:text("pickup_by_source"),
+  pickupByAt:timestamp("pickup_by_at",{withTimezone:true}),pickupByLogin:uuid("pickup_by_login"),
+  ausgabeFrei:boolean("ausgabe_frei").notNull().default(false),
   id: cuidPrimaryKey("id"),
   tenantId: varchar("tenant_id", { length: 50 }).default("galvanik-kreile"),
   orderNumber: text("order_number").notNull().unique(),
@@ -434,6 +437,8 @@ export const auditLog = pgTable("audit_log", {
 });
 
 export const companySettingsTable = pgTable("company_settings", {
+  shippingService:text("versand_dienst").notNull(),shippingNumberPattern:text("versand_nummer_format").notNull(),
+  shippingNumberHint:text("versand_nummer_hinweis").notNull(),shippingTrackingUrl:text("versand_verfolgung_url"),shippingLabelApi:text("versand_label_api"),
   id: text("id").primaryKey().default("default"),
   tenantId: text("tenant_id").notNull(),
   companyName: text("company_name").notNull().default(""),

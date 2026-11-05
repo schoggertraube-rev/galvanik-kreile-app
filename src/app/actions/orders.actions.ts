@@ -56,6 +56,8 @@ import type { EvidenceReadRecord } from "@/lib/server/evidenceRead";
 
 // DTO Typen (zur Vereinfachung)
 export type OrderResponse = OperationalOrder & { cardReadErrorCode?: string | null };
+export async function getOrderPickupNoticeAction(input:unknown){const {readOrderPickupNotice}=await import("@/lib/server/commands/orderContentCommand");return readOrderPickupNotice(input);}
+export async function changeOrderPickupNoticeAction(input:unknown){const {changeOrderPickupNotice}=await import("@/lib/server/commands/orderContentCommand");return changeOrderPickupNotice(input);}
 
 export type OrderRegisterFilter = "ALL" | "ORDER" | "QUOTE";
 

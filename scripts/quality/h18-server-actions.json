@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "69e271d3b2c42a2f3a40960444d9a5f2f8b38a0f65b58a34ecd203c05f8a5efb",
+  "inventorySha256": "e4b6bf111864518b17133f92b0d6cbf31ef610f91fa859abf1e67b60329838fa",
   "testedWriteActions": {
     "src/app/actions/eingang.actions.ts#saveIncomingInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
@@ -183,6 +183,12 @@
     ],
     "src/app/actions/eingang.actions.ts#chooseIntakeCaptureKindAction": [
       "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#changeOrderPickupNoticeAction": [
+      "src/test/h18_order_admin_actions.integration.test.ts"
+    ],
+    "src/app/actions/settings.actions.ts#saveShippingSettingsAction": [
+      "src/test/h18_order_admin_actions.integration.test.ts"
     ]
   },
   "writeActionOverrides": {

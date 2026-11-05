@@ -418,7 +418,7 @@ describe("W2C-B2M5J unavailable UI", () => {
       ok: true,
       data: [
         order("ga-out", "GA-OUT", "Galvanik Ausgang Sentinel", "galvanik"),
-        order("fi-out", "FI-OUT", "Fertiger Ausgang Sentinel", "fertig"),
+        { ...order("fi-out", "FI-OUT", "Fertiger Ausgang Sentinel", "fertig"), ausgabeFrei: true },
       ],
     });
     const { default: WarendurchlaufIndex } = await import("../page");
