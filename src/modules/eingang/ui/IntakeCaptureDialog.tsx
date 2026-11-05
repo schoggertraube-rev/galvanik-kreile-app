@@ -427,7 +427,7 @@ export function IntakeCaptureDialog({ ports, handoverToken, mode, onAdopt, onClo
     pendingNoteWrites.current = pendingNoteWrites.current.then(() => retainPendingOriginal(scope, { id: itemId, itemId, kind: "note", text, textstand: stand, dismissed: next }))
       .catch(cause => { console.error("[INTAKE_PENDING_CONCERN_FAILED]", cause); setError("Auswahl konnte lokal nicht gesichert werden. Bitte Lesen. Code: INTAKE_PENDING_CONCERN_FAILED."); });
   };
-  const modeTitle = mode ? { eingang: "Zettel lesen · für die Erfassung", eingangsfoto: "Eingangsfoto aufnehmen", visitenkarte: "Visitenkarte lesen", datei: "Datei lesen · für die Erfassung" }[mode] : receiving ? "Fotos für den PC" : undefined;
+  const modeTitle = receiving || photoRequest ? "Fotos für den PC" : mode ? { eingang: "Zettel lesen · für die Erfassung", eingangsfoto: "Eingangsfoto aufnehmen", visitenkarte: "Visitenkarte lesen", datei: "Datei lesen · für die Erfassung" }[mode] : undefined;
   const failedFile = capture?.files.some(file => file.status === "fehler") === true;
   const firstOriginal = capture?.files.find(file => file.secured === true);
   const showCamera = cameraAvailable && cameraRequested && !cameraError;

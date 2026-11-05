@@ -2287,6 +2287,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 </div>
                 <div className="ev-erf-werkzeuge">
                   <KrButton data-spec-id="eingang.aufnehmen" icon="camera" text="Aufnehmen" onClick={()=>setCaptureInIntake("eingang")} />
+                  <KrButton data-spec-id="eingang.datei" icon="upload" text="Datei" onClick={()=>setCaptureInIntake("datei")} />
                   {ports.canReadMails?<KrButton data-spec-id="eingang.aus-mail" icon="mail" text="Aus Mail" onClick={()=>{
                     const request=new CustomEvent('kreile:oeffne',{detail:{ziel:'mailein',arg:'auswahl#eingang'},cancelable:true});
                     if(window.dispatchEvent(request))setFeedback({kind:'validation',message:'Mail-Auswahl noch nicht verfügbar · Fehlercode: INTAKE_MAIL_SELECTION_NOT_CONNECTED.'});
