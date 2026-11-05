@@ -6,6 +6,7 @@
     "@/modules/customers/public#CustomerCardView",
     "@/modules/customers/public#kundeVollstaendigkeit",
     "@/modules/customers/public#CUSTOMER_COUNTRIES",
+    "@/modules/customers/public#CUSTOMER_FIELD_LABELS",
     "@/modules/customers/public#EMPTY_CUSTOMER_FORM",
     "@/modules/customers/public#customerCountryLabel",
     "@/modules/customers/public#customerDisplayName",
@@ -53,7 +54,9 @@
     "@/modules/customers/server-public#UpdateCustomerInput",
     "@/modules/customers/server-public#EnableCustomerInvoiceTermsInput",
     "@/modules/customers/server-public#ReadCustomerOrderReadinessInput",
-    "@/modules/customers/server-public#ReadCustomerOrderReadinessResult"
+    "@/modules/customers/server-public#ReadCustomerOrderReadinessResult",
+    "@/modules/customers/server-public#updateCustomerInTransaction",
+    "@/modules/customers/public#CustomerUpdateCommandResult"
   ],
   "capabilities": [
     "customers:create"

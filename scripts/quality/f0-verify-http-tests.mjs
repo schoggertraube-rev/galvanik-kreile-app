@@ -878,6 +878,7 @@ const INTAKE_INVALID_INPUT = { clientEventId: "invalid" };
 // It must never be written in V3/V4/V5 because those requests are unauthenticated,
 // tampered, or readonly respectively.
 const INTAKE_AUTH_PROBE_INPUT = {
+  geprueft: true,
   clientEventId: "6c68347a-f0be-4db5-9f5a-000000000001",
   customer: {
     mode: "NEW",

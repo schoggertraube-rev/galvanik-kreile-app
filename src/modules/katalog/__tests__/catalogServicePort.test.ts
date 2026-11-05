@@ -16,8 +16,8 @@ const context = {
 const row = {
   id: "11111111-1111-4111-8111-111111111111",
   name: "Verchromen",
-  surface: "Chrom glanz",
-  unit: "Stück",
+  surface: "verchromen",
+  unit: "stueck",
   net_price_cents: 12500,
   vat_rate_basis_points: 1900,
   standard_lead_time_working_days: 5,
@@ -71,5 +71,15 @@ describe("catalog service port", () => {
     })).resolves.toMatchObject({ code: "OK", service: { id: row.id, netPriceCents: 12500 } });
     expect(execute.mock.calls[0]?.[0].text).toContain("set_config('app.actor_id'");
     expect(execute.mock.calls[1]?.[0].text).toContain("catalog_services");
+  });
+
+  it("projects catalog metadata without querying or returning prices", async () => {
+    const metadata={id:row.id,name:row.name,surface:row.surface,unit:row.unit,standard_lead_time_working_days:row.standard_lead_time_working_days,active:row.active};
+    execute.mockResolvedValueOnce([metadata]);
+    const {listCatalogServices}=await import("../server/catalogServicePort");
+    const result=await listCatalogServices(context,false,"metadata");
+    expect(result).toEqual({code:"OK",services:[{id:row.id,name:row.name,surface:row.surface,unit:row.unit,standardLeadTimeWorkingDays:5,active:true}]});
+    expect(JSON.stringify(execute.mock.calls[0]?.[0])).not.toMatch(/net_price_cents|vat_rate_basis_points/);
+    expect(withTransaction.mock.calls[0]?.[0].tenantId).toBe(context.tenantId);
   });
 });

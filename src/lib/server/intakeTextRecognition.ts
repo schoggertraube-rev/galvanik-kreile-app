@@ -44,7 +44,8 @@ function nextDate(day: number, month: number, year: number | null, today: Date):
 }
 
 export function recognizeIntakeText(text: string, today = new Date()): IntakeTextRecognition {
-  const normalized = text.trim().slice(0, 6000);
+  if (text.length > 20_000) throw new Error("INTAKE_TEXT_TOO_LONG");
+  const normalized = text.trim();
   if (!normalized) return { fields: [], positions: [] };
   const fields: IntakeTextRecognitionField[] = [];
   const addField = (field: IntakeTextRecognitionField["field"], value: string, source: string) => {

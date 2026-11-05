@@ -95,7 +95,7 @@ describe("quotes command boundary", () => {
   });
 
   it("binds the conversion hash to the complete normalized order intake", async () => {
-    const orderInput = {
+    const orderInput = { geprueft: false,
       clientEventId: CLIENT,
       customer: { mode: "EXISTING" as const, customerId: CUSTOMER },
       dueDate: "2026-10-20",
@@ -109,7 +109,7 @@ describe("quotes command boundary", () => {
       termStatus: "bestaetigt" as const,
       intakeSource: "anfrage_mail" as const,
     };
-    const expectedOrderIntent = {
+    const expectedOrderIntent = { geprueft: false,
       clientEventId: orderInput.clientEventId,
       customer: orderInput.customer,
       dueDate: orderInput.dueDate,
@@ -133,7 +133,7 @@ describe("quotes command boundary", () => {
     const expectedOrderHash = createHash("sha256").update(JSON.stringify(expectedOrderIntent), "utf8").digest("hex");
     execute
       .mockResolvedValueOnce([quoteRow])
-      .mockResolvedValueOnce([{ result_code: "OK", order_input: {
+      .mockResolvedValueOnce([{ result_code: "OK", order_input: { geprueft: false,
         clientEventId: CLIENT,
         customer: { mode: "EXISTING", customerId: CUSTOMER },
         dueDate: input.dueDate,

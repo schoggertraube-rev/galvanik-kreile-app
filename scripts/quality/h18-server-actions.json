@@ -1,10 +1,14 @@
 {
   "version": 1,
-  "inventorySha256": "24d8bd3294c56503362a299ce9e2ef343ef78be35f65cfe0c9b69ea7d5ad1fbb",
+  "inventorySha256": "a6e57df88388e1e783e181a5c85ad593587ae56953955e8321fe8168963225ef",
   "testedWriteActions": {
+    "src/app/actions/eingang.actions.ts#saveIntakeDeviceRequestAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
     "src/app/actions/eingang.actions.ts#erfasseAuftragAusEingangAction": [
       "src/test/acceptance/ap01_eingang_paket_persoenlich.integration.test.ts",
-      "src/test/acceptance/ap01b_eingang_bestandskunde_unvollstaendig.integration.test.ts"
+      "src/test/acceptance/ap01b_eingang_bestandskunde_unvollstaendig.integration.test.ts",
+      "src/test/h18_customer_actions.integration.test.ts"
     ],
     "src/app/actions/invoices.actions.ts#cancelInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
@@ -109,6 +113,42 @@
     ],
     "src/app/actions/eingang.actions.ts#createOrderIntakeAction": [
       "src/test/h18_settings_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#saveIntakeNoteAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#prepareIntakeFileAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#finishIntakeFileAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#discardIntakeCaptureAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#saveIntakeDraftAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#discardIntakeDraftAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#retryIntakeRecognitionAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#saveIntakeProspectAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#selectIntakeConcernAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#finishIntakeUseAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#reopenIntakeAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#chooseIntakeCaptureKindAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
     ]
   },
   "writeActionOverrides": {

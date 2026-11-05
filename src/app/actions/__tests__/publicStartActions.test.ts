@@ -37,7 +37,7 @@ const mockTxSelect = vi.fn(() => {
   const result = selectResults.shift() ?? [];
   return {
     from: vi.fn(() => ({
-      where: vi.fn(() => ({
+      where: vi.fn(() => Object.assign(Promise.resolve(result), {
         limit: vi.fn().mockResolvedValue(result),
       })),
     })),

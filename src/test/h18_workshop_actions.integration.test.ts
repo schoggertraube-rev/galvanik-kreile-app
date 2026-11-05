@@ -110,7 +110,7 @@ async function createFixture(): Promise<Fixture> {
 
 async function createOrder(fixture: Fixture, label: string, paymentMode: "vorkasse" | "rechnung") {
   const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
-  const result = await withSession(fixture, () => createOrderIntakeAction({
+  const result = await withSession(fixture, () => createOrderIntakeAction({ geprueft: true,
     clientEventId: randomUUID(),
     customer: { mode: "EXISTING", customerId: fixture.customerId },
     dueDate: "2027-05-15",
@@ -124,7 +124,7 @@ async function createOrder(fixture: Fixture, label: string, paymentMode: "vorkas
       name: `H18 Werkstattteil ${label}`,
       quantity: 1,
       material: "Stahl",
-      surfaceRequested: "Hartchrom",
+      surfaceRequested: "Verchromen",
       executionRequested: "offen",
       unit: null,
       unitPriceCents: null,

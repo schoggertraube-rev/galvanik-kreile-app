@@ -1,5 +1,6 @@
 // @vitest-environment node
-// AP-R Akzeptanztest – Einheit je Freitext-Position (Planungschat 02.11.2026, BAUPLAN a887 formulare.position.felder[einheit]).
+// AP-R Akzeptanztest, Fassung 2 (AP-EIN Teil 2, Planungschat 02.11.2026, BAUPLAN 21d0347a formulare.position.felder[einheit].schluessel):
+// gespeichert wird der Schluessel, eingegeben werden darf Anzeigewert oder Schluessel (eine Normalisierung am Schreibweg).
 // Planungschat-Vertrag (U-221). Codex kopiert diese Datei bytegleich nach
 // src/test/acceptance/apr_freitext_einheiten.integration.test.ts und aendert sie nie.
 // Jede erlaubte Einheit wird ueber die echte Server-Action gebucht, in public.items gespeichert und vom Beleg als gueltig gelesen.
@@ -107,7 +108,7 @@ async function createFixture(rights: string[]): Promise<Fixture> {
 
 let customerId = "";
 let actor: Fixture;
-const EINHEITEN = ["Stück", "kg", "dm²", "Satz", "Std."] as const;
+const EINHEITEN = [["Stück", "stueck"], ["kg", "kg"], ["dm²", "dm2"], ["Satz", "satz"], ["Std.", "stunde"]] as const;
 
 beforeAll(async () => {
   const migrations = await sql<{ version: string }[]>`
@@ -148,6 +149,7 @@ afterAll(async () => {
 
 function auftragInput(clientKey: string, unit: string | null) {
   return {
+    geprueft: true,
     clientKey,
     text: "Freitext-Position mit Einheit",
     customer: { mode: "EXISTING" as const, customerId },
@@ -192,12 +194,12 @@ async function zaehle(clientKey: string) {
 }
 
 describe("AP-R: Einheit je Freitext-Position", () => {
-  it.each(EINHEITEN)("bucht Einheit %s, speichert sie an der Position und der Beleg bleibt gueltig", async (einheit) => {
+  it.each(EINHEITEN)("bucht Einheit %s, speichert den Schluessel %s und der Beleg bleibt gueltig", async (einheit, schluessel) => {
     const { erfasseAuftragAusEingangAction } = await import("@/app/actions/eingang.actions");
     const clientKey = randomUUID();
     const result = await withSession(actor, () => erfasseAuftragAusEingangAction(auftragInput(clientKey, einheit)));
     if (result.code !== "OK") throw new Error(`APR_BUCHEN_FAILED:${einheit}:${result.code}:${result.message}`);
-    expect(await beleg(result.orderNumber)).toEqual([{ unit: einheit, integrity_ok: true }]);
+    expect(await beleg(result.orderNumber)).toEqual([{ unit: schluessel, integrity_ok: true }]);
     expect(await zaehle(clientKey)).toEqual({ items: 1, receipts: 1 });
   });
 

@@ -533,7 +533,7 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
       { table: "items", id: ITEM_ID, column: "name", variants: REQUIRED_TEXT_VARIANTS },
       {
         table: "items", id: ITEM_ID, column: "quantity",
-        // NOT NULL with an integer default: only an unusable amount is storable.
+        // AP-EIN also rejects unusable amounts at the database boundary.
         variants: [
           { label: "zero", value: 0 as string | number | null },
           { label: "negative", value: -1 as string | number | null },
@@ -561,6 +561,13 @@ describe("F1.4 real DB/command/PDF integration — AUTH_ADAPTER_SYNTHETIC_NOT_AC
 
       for (const variant of field.variants) {
         const label = `${field.table}.${field.column}/${variant.label}`;
+        if(field.table==="items"&&field.column==="quantity"){
+          const before=await tenantState();
+          await expect(sql.unsafe(`UPDATE public.items SET quantity=$1 WHERE id=$2 AND tenant_id=$3`,[variant.value,field.id,TENANT_ID]))
+            .rejects.toMatchObject({code:"23514",constraint_name:"items_position_quantity_chk"});
+          expect(await tenantState()).toEqual(before);
+          continue;
+        }
         if (field.table === "customers" && field.column === "country"
           && typeof variant.value === "string" && !["DE", "AT", "CH", "andere"].includes(variant.value)) {
           const before = await tenantState();

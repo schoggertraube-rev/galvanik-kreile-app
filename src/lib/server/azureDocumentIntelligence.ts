@@ -5,7 +5,7 @@ type Environment = Record<string, string | undefined>;
 type FetchPort = typeof fetch;
 
 export type DocumentSuggestion = {
-  field: "CUSTOMER_NAME" | "CONTACT_PERSON" | "EMAIL" | "PHONE" | "ADDRESS" | "DUE_DATE" | "ITEM_DESCRIPTION" | "QUANTITY" | "MATERIAL" | "SURFACE" | "OTHER";
+  field: "CUSTOMER_NAME" | "CONTACT_PERSON" | "EMAIL" | "PHONE" | "ADDRESS" | "DUE_DATE" | "ITEM_DESCRIPTION" | "QUANTITY" | "MATERIAL" | "SURFACE" | "DOCUMENT_TEXT" | "OTHER";
   label: string;
   value: string;
   confidence: number;
@@ -39,8 +39,8 @@ function suggestions(payload: unknown): DocumentSuggestion[] {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return [];
   const result = (payload as Record<string, unknown>).analyzeResult;
   if (!result || typeof result !== "object" || Array.isArray(result)) return [];
-  const pairs = (result as Record<string, unknown>).keyValuePairs;
-  if (!Array.isArray(pairs)) return [];
+  const analysis = result as Record<string, unknown>;
+  const pairs = Array.isArray(analysis.keyValuePairs) ? analysis.keyValuePairs : [];
   const output: DocumentSuggestion[] = [];
   for (const pairValue of pairs) {
     if (!pairValue || typeof pairValue !== "object" || Array.isArray(pairValue)) continue;
@@ -57,6 +57,9 @@ function suggestions(payload: unknown): DocumentSuggestion[] {
     if (!label || !content || confidence < 0 || confidence > 1) continue;
     output.push({ field: classify(label), label, value: content, confidence, source: { page, polygon } });
   }
+  const text = typeof analysis.content === "string" ? analysis.content.trim().slice(0, 20_000) : "";
+  if (text) output.unshift({ field: "DOCUMENT_TEXT", label: "Dokumenttext", value: text, confidence: 0,
+    source: { page: 1, polygon: [] } });
   return output.slice(0, 80);
 }
 
@@ -70,7 +73,7 @@ export async function analyzeWithAzureDocumentIntelligence(
   const endpointValue = env.AZURE_DOCINTEL_ENDPOINT?.trim();
   const key = env.AZURE_DOCINTEL_KEY?.trim();
   if (!endpointValue || !key) return { code: "IN_KLAERUNG", message: "Azure Document Intelligence ist noch nicht für die Preview verbunden." };
-  if (bytes.byteLength < 1 || bytes.byteLength > 20 * 1024 * 1024 || !["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(mimeType)) {
+  if (bytes.byteLength < 1 || bytes.byteLength > 20 * 1024 * 1024 || !["application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"].includes(mimeType)) {
     return { code: "UNAVAILABLE", message: "Das Dokumentformat kann nicht sicher analysiert werden." };
   }
   try {
@@ -101,7 +104,8 @@ export async function analyzeWithAzureDocumentIntelligence(
       if (payload.status !== "running" && payload.status !== "notStarted") throw new Error("AZURE_STATUS_INVALID");
     }
     return { code: "UNAVAILABLE", message: "Die Dokumentanalyse läuft länger als erwartet. Bitte später erneut prüfen." };
-  } catch {
+  } catch (error) {
+    console.error("[AZURE_DOCUMENT_ANALYSIS_FAILED]", { code: error instanceof Error ? error.message : "UNKNOWN_ERROR" });
     return { code: "UNAVAILABLE", message: "Das Dokument konnte mit Azure nicht sicher analysiert werden." };
   }
 }

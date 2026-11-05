@@ -10,12 +10,14 @@ export const generatedFlowRuntime = {
         "terminstatus": "intake_term_status",
         "uebergabe": "handover_mode",
         "zahlungsmodus": "payment_mode",
-        "eingangsart": "intake_source"
+        "eingangsart": "intake_source",
+        "geprueft": "geprueft"
       },
       "transforms": {
         "art": "order_kind",
         "uebergabe": "handover",
-        "zahlungsmodus": "payment_mode"
+        "zahlungsmodus": "payment_mode",
+        "liefertermin": "berlin_date"
       }
     },
     "items": {
@@ -37,6 +39,13 @@ export const generatedFlowRuntime = {
         "zahlungsbedingung": "payment_preference",
         "notiz": "notes"
       },
+      "transforms": {
+        "handover_preference": "handover"
+      }
+    },
+    "order_events": {
+      "table": "events",
+      "columns": {},
       "transforms": {}
     },
     "intake_item": {
@@ -397,7 +406,7 @@ export const generatedFlowRuntime = {
       "zahlungsbedingung": "vorkasse"
     },
     "auftrag_quelle": {
-      "id": null,
+      "id": "20000000-0000-4000-8000-000000000011",
       "tabelle": "orders",
       "order_number": "A-2099-9001",
       "kunde": "{kunde_vollstaendig_firma}",
@@ -433,7 +442,7 @@ export const generatedFlowRuntime = {
       "fotos": 1
     },
     "auftrag_erwartet": {
-      "id": null,
+      "id": "20000000-0000-4000-8000-000000000012",
       "tabelle": "orders",
       "order_number": "A-2099-9002",
       "kunde": "{kunde_vollstaendig_firma}",
@@ -636,7 +645,7 @@ export const generatedFlowRuntime = {
       "dateien": []
     },
     "eingang_foto_offen": {
-      "id": null,
+      "id": "20000000-0000-4000-8000-000000000020",
       "tabelle": "intake_item",
       "kanal": "foto",
       "richtung": "rein",
@@ -1170,7 +1179,7 @@ export const generatedFlowRuntime = {
       ]
     },
     "entwurf_eigen": {
-      "id": null,
+      "id": "20000000-0000-4000-8000-000000000045",
       "tabelle": "intake_drafts",
       "login": "{login}",
       "art": "eingang",
@@ -1186,7 +1195,7 @@ export const generatedFlowRuntime = {
       "text": "Fremder Entwurf"
     },
     "auftrag_quelle_abholer": {
-      "id": null,
+      "id": "20000000-0000-4000-8000-000000000047",
       "tabelle": "orders",
       "order_number": "A-2099-9008",
       "kunde": "{kunde_vollstaendig_firma}",
@@ -1195,7 +1204,7 @@ export const generatedFlowRuntime = {
       "pickup_by_source": "notiz"
     },
     "eingang_foto_fehlgeschlagen": {
-      "id": null,
+      "id": "20000000-0000-4000-8000-000000000048",
       "tabelle": "intake_item",
       "kanal": "foto",
       "richtung": "rein",
@@ -1203,12 +1212,37 @@ export const generatedFlowRuntime = {
       "erkennung_grund": "provider_503"
     },
     "eingang_foto_verwaist": {
-      "id": null,
+      "id": "20000000-0000-4000-8000-000000000049",
       "tabelle": "intake_item",
       "kanal": "foto",
       "richtung": "rein",
       "erkennung_status": "laeuft",
       "erkennung_seit": "{jetzt:-3min}"
     }
+  },
+  "screenTypes": {
+    "login": "login",
+    "tag": "seite",
+    "nachrichten": "seite",
+    "einstellungen": "seite",
+    "spaeter": "menue",
+    "aufgabe": "dialog",
+    "hbmehr": "menue",
+    "anliegenwahl": "menue",
+    "rein": "dialog",
+    "eingang": "dialog",
+    "kundeneu": "dialog",
+    "kundebearbeiten": "dialog",
+    "picker": "dialog",
+    "reklamation": "dialog",
+    "hinweis": "dialog",
+    "mailein": "dialog",
+    "original": "dialog",
+    "rechnungein": "dialog",
+    "ware": "dialog",
+    "rechte": "dialog",
+    "entwurf": "dialog",
+    "meincode": "dialog",
+    "neuigkeiten": "seite"
   }
 } as const;

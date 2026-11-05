@@ -2,7 +2,10 @@ export type GlobalCreateIntent = "CUSTOMER" | "QUOTE" | "DIRECT_INTAKE";
 
 export type GlobalCreateRequest = {
   intent: GlobalCreateIntent;
+  handoverToken?: string;
+  draftId?: string;
   prefill?: {
+    orderCopyId?: string;
     customerId?: string;
     customerMode?:"lieferant";
     name?: string;

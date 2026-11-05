@@ -271,7 +271,7 @@ async function createCommandReadyOrder(
   issueInvoice: boolean,
 ): Promise<CommandReadyOrder> {
   const { createOrderIntake } = await import("@/lib/server/commands/orderIntakeCommand");
-  const intake = await withRealSession("admin", () => createOrderIntake({
+  const intake = await withRealSession("admin", () => createOrderIntake({ geprueft: true,
     clientEventId: randomUUID(),
     customer: { mode: "EXISTING", customerId: COMMAND_CUSTOMER },
     dueDate: "2026-09-30",
@@ -283,7 +283,7 @@ async function createCommandReadyOrder(
       name: label,
       quantity: 1,
       material: "Stahl",
-      surfaceRequested: "Galvanik",
+      surfaceRequested: "Verchromen",
       unit: null,
       unitPriceCents: null,
       vatRateBasisPoints: null,
@@ -337,7 +337,7 @@ async function createCommandReadyOrder(
     expectedVersion: frozen.receipt.aggregateVersion,
     clientEventId: randomUUID(),
   }));
-  expect(issued.code).toBe("OK");
+  expect(issued.code, JSON.stringify(issued)).toBe("OK");
   if (issued.code !== "OK") throw new Error(`INVOICE_FAILED:${issued.code}`);
   return {
     orderId: intake.receipt.orderId,

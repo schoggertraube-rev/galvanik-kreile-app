@@ -175,8 +175,8 @@ describe("H18 master-data Server Actions against the real replay database", () =
     const input = {
       id: null,
       name: `H18 Katalog ${randomUUID().slice(0, 8)}`,
-      surface: "Hartchrom",
-      unit: "Stueck",
+      surface: "Verchromen",
+      unit: "Stück",
       netPriceCents: 12800,
       vatRateBasisPoints: 1900 as const,
       standardLeadTimeWorkingDays: 6,
@@ -212,6 +212,28 @@ describe("H18 master-data Server Actions against the real replay database", () =
     expect(view).toMatchObject({ code: "OK" });
     if (view.code !== "OK") throw new Error(`H18_CATALOG_VIEW_FAILED:${view.code}`);
     expect(view.services).toContainEqual(result.service);
+
+    // AP-EIN / PositionZeile.rechte: the same catalog is usable without geld,
+    // while monetary fields must not be delivered to that login at all.
+    const { getIntakeCatalogAction } = await import("@/app/actions/catalog.actions");
+    expect(await withSession(fixture, getIntakeCatalogAction)).toMatchObject({code:"FORBIDDEN"});
+    await sql`INSERT INTO public.app_user_rights (tenant_id,user_id,bereich,granted_by)
+      VALUES (${KREILE_TENANT_SLUG},${fixture.actorId}::uuid,'eingang',${fixture.actorId}::uuid)`;
+    const intakeView = await withSession(fixture, getIntakeCatalogAction);
+    expect(intakeView.code).toBe("OK");
+    if (intakeView.code !== "OK") throw new Error(`H18_INTAKE_CATALOG_FAILED:${intakeView.code}`);
+    const choice = intakeView.services.find(service=>service.id===result.service.id);
+    expect(choice).toEqual({id:result.service.id,name:input.name,surface:"verchromen",unit:"stueck",standardLeadTimeWorkingDays:6,active:true});
+    expect(JSON.stringify(intakeView.services)).not.toMatch(/netPriceCents|vatRateBasisPoints|net_price_cents|vat_rate_basis_points/);
+    await sql`INSERT INTO public.app_user_rights (tenant_id,user_id,bereich,granted_by)
+      VALUES (${KREILE_TENANT_SLUG},${fixture.actorId}::uuid,'geld',${fixture.actorId}::uuid)`;
+    const pricedView = await withSession(fixture, getIntakeCatalogAction);
+    expect(pricedView.code).toBe("OK");
+    if (pricedView.code !== "OK") throw new Error(`H18_PRICED_CATALOG_FAILED:${pricedView.code}`);
+    expect(pricedView.services.find(service=>service.id===result.service.id)).toEqual(result.service);
+    const [unchanged] = await sql`SELECT net_price_cents,unit,surface FROM public.catalog_services
+      WHERE id=${result.service.id}::uuid AND tenant_id=${KREILE_TENANT_SLUG}`;
+    expect(unchanged).toEqual({net_price_cents:input.netPriceCents,unit:"stueck",surface:"verchromen"});
   });
 
   it("sets the hourly rate with DB, event and master-data-view readback", async () => {

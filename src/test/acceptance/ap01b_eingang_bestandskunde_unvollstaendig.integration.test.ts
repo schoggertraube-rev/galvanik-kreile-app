@@ -1,3 +1,4 @@
+// Fassung 3 fuer AP-EIN Teil 2 (Planungschat 03.11.): vorgang_id = orders.id (Entscheidung 16); sonst Fassung 2.
 // @vitest-environment node
 // Fassung 2 (Planungschat 02.11.2026, mit AP-K1 F2): Land als Schluessel (A-87), Korrektur ueber updateCustomerAction.
 // AP-01 Fassung 4 Akzeptanztest - Bestandskunde unvollstaendig/ungueltig: Server sperrt, kanonische Korrektur, dann Auftrag.
@@ -156,6 +157,7 @@ afterAll(async () => {
 function auftragInput(clientKey: string) {
   return {
     clientKey,
+    geprueft: true,
     text: "Bestandskunde bringt 4 Halter",
     customer: { mode: "EXISTING" as const, customerId },
     dueDate: "2027-06-11",
@@ -246,7 +248,7 @@ describe("AP-01 Fassung 4: Bestandskunde fuer den Auftrag unvollstaendig", () =>
     const items = await sql<{ kunde_id: string; vorgang_id: string }[]>`
       SELECT kunde_id, vorgang_id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${clientKey}
     `;
-    expect(items).toEqual([{ kunde_id: customerId, vorgang_id: first.orderNumber }]);
+    expect(items).toEqual([{ kunde_id: customerId, vorgang_id: first.orderId }]);
     const orders = await sql<{ customer_id: string }[]>`
       SELECT customer_id FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_number=${first.orderNumber}
     `;

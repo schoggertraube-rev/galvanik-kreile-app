@@ -54,6 +54,16 @@ describe("Customer card V2", () => {
     expect(screen.queryByRole("option", { name: "Rechnung 30 Tage" })).not.toBeInTheDocument();
   });
 
+  it("E26 shows an unapproved legacy invoice preference as missing without selecting a replacement", () => {
+    const save=vi.fn();
+    render(<CustomerCardView state={{kind:"data",card:{...card,paymentPreference:"rechnung",invoiceTermsEnabled:false}}}
+      onClose={vi.fn()} onOpenOrder={vi.fn()} onSaveCustomer={save} canManageMoney={true}/>);
+    fireEvent.click(screen.getAllByRole("button",{name:"Bearbeiten"})[0]);
+    expect(screen.getByRole("combobox",{name:"Zahlungsbedingung"})).toHaveValue("");
+    expect(screen.queryByRole("option",{name:/Rechnung auf Ziel/})).not.toBeInTheDocument();
+    expect(save).not.toHaveBeenCalled();
+  });
+
   it("offers invoice terms only when the customer is approved for them", () => {
     render(
       <CustomerCardView

@@ -135,7 +135,7 @@ describe("H18 order administration Server Actions against the real replay databa
   it("persists assignment, content, extra work and freeze correction with event and view readback", async () => {
     const fixture = await createFixture();
     const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
-    const intake = await withSession(fixture, "actor", () => createOrderIntakeAction({
+    const intake = await withSession(fixture, "actor", () => createOrderIntakeAction({ geprueft: true,
       clientEventId: randomUUID(),
       customer: { mode: "EXISTING", customerId: fixture.customerId },
       dueDate: "2027-05-20",
@@ -149,7 +149,7 @@ describe("H18 order administration Server Actions against the real replay databa
         name: "H18 Verwaltungsteil",
         quantity: 1,
         material: "Stahl",
-        surfaceRequested: "Hartchrom",
+        surfaceRequested: "Verchromen",
         executionRequested: "offen",
         unit: null,
         unitPriceCents: null,
@@ -230,7 +230,7 @@ describe("H18 order administration Server Actions against the real replay databa
         name: "H18 Verwaltungsteil bearbeitet",
         quantity: 2,
         material: "Stahl",
-        surface: "Hartchrom",
+        surface: "Verchromen",
         unit: null,
         unitPriceCents: null,
         vatRateBasisPoints: null,
@@ -240,7 +240,7 @@ describe("H18 order administration Server Actions against the real replay databa
     if (content.code !== "OK") throw new Error(`H18_ORDER_CONTENT_FAILED:${content.code}:${content.message}`);
     version = content.receipt.aggregateVersion;
     const [contentRow] = await sql<{ task: string; name: string; quantity: number; event_type: string }[]>`
-      SELECT orders.task, item.name, item.quantity, event.event_type
+      SELECT orders.task, item.name, item.quantity::double precision AS quantity, event.event_type
       FROM public.orders orders
       JOIN public.items item ON item.tenant_id=orders.tenant_id AND item.order_id=orders.id AND item.id=${itemId}
       JOIN public.events event ON event.tenant_id=orders.tenant_id AND event.client_event_id=${contentEventId}::uuid

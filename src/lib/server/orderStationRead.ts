@@ -1,6 +1,7 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
+import { orderPositionSurfaceLabel } from "@/lib/orderPositionContract";
 import { evaluateOrderPriority } from "@/lib/priority";
 import type { OperationalOrder, OperationalOrderItem } from "@/lib/types/operationalOrder";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
@@ -150,7 +151,7 @@ function parseParts(value: unknown, row: QueueRow): OperationalOrderItem[] {
       quantity: item.quantity,
       currentStationId: typeof item.currentStationId === "string" ? item.currentStationId : null,
       material: typeof item.material === "string" ? item.material : null,
-      surfaceRequested: typeof item.surfaceRequested === "string" ? item.surfaceRequested : null,
+      surfaceRequested: typeof item.surfaceRequested === "string" ? orderPositionSurfaceLabel(item.surfaceRequested) : null,
       photoIds: Array.isArray(item.photoIds) && item.photoIds.every((id) => typeof id === "string")
         ? item.photoIds
         : null,

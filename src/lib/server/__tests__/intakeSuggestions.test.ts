@@ -22,7 +22,7 @@ const history = (overrides: Partial<{
   name: string;
   catalogServiceId: string | null;
   surface: string;
-  unit: string;
+  unit: string | null;
   quantity: number;
   unitPriceCents: number;
   invoiceDate: string;
@@ -53,6 +53,7 @@ describe("intake suggestions", () => {
       positions: [{ ...position, unitPriceCents: 80_000 }],
       catalogById: new Map(),
       dailyOutputEur: 800,
+      settings:{handoverBufferDays:0,fitsPercent:80,tightPercent:100,priorityPercent:110},openOrders:[],priority:false,processingWeeks:1,
     });
 
     expect(result).toMatchObject({
@@ -81,5 +82,18 @@ describe("intake suggestions", () => {
     );
 
     expect(suggestion).toMatchObject({ source: "aehnlich", unitPriceCents: 1_100, caseCount: 3 });
+  });
+
+  it("preserves three-decimal quantities and rounds the net line to the same cent as SQL", () => {
+    const suggestion = choosePriceSuggestion({ ...position, quantity: 1.005, unit: "kg" }, null, [], {
+      id: "11111111-1111-4111-8111-111111111112", name: position.name, surface: "verzinken", unit: "kg",
+      net_price_cents: 100, standard_lead_time_working_days: 3,
+    });
+    expect(suggestion).toMatchObject({ unit: "kg", unitPriceCents: 100, lineTotalCents: 101 });
+  });
+
+  it("keeps a missing historic unit missing and does not invent Stück", () => {
+    const suggestion = choosePriceSuggestion({ ...position, unit: null }, "11111111-1111-4111-8111-111111111111", [history({ unit: null })], null);
+    expect(suggestion).toMatchObject({ source: "gleich", unit: null, lineTotalCents: 2400 });
   });
 });

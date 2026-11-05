@@ -11,6 +11,7 @@ const LEGACY_AUTH_COOKIES = ['bypass-auth', 'kreile_role'] as const
 const SALES_STAGE_ONE_ROUTES = [
   '/start',
   '/auth',
+  '/rein',
   '/warendurchlauf',
   '/orders',
   '/customers',

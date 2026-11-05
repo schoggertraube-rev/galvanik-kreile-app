@@ -213,7 +213,7 @@ describe("H18 invoice Server Actions against the real replay database", () => {
     `;
 
     const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
-    const intake = await withSession(fixture, () => createOrderIntakeAction({
+    const intake = await withSession(fixture, () => createOrderIntakeAction({ geprueft: true,
       clientEventId: intakeClientEventId,
       customer: { mode: "EXISTING", customerId: fixture.customerId },
       dueDate: "2027-03-31",
@@ -227,7 +227,7 @@ describe("H18 invoice Server Actions against the real replay database", () => {
         name: "H18 Rechnungsteil",
         quantity: 2,
         material: "Stahl",
-        surfaceRequested: "Hartchrom",
+        surfaceRequested: "Verchromen",
         executionRequested: "offen",
         unit: null,
         unitPriceCents: null,

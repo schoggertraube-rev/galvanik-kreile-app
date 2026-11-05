@@ -1,10 +1,12 @@
 import { expect, type Locator, type Page } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import postgres from "postgres";
 import { createPinLoginHandle } from "../../src/lib/server/pinLoginHandle";
 import { berlinCalendarDay, isWorkingDay, plusWorkingDays, previousWorkingDay } from "../../src/lib/domain/workingDays";
 import { generatedFlowRuntime } from "./_model";
+import { localReplayStorageEnvironment } from "../../src/test/localReplayStorage";
 
 export type FlowExpectation = {
   id?: string;
@@ -19,10 +21,10 @@ export type FlowExpectation = {
   option?: string;
 };
 
-export type FlowStep = {
+export type FlowStep = FlowExpectation & {
   id?: string;
   nr?: number;
-  aktion: string;
+  aktion?: string;
   wert?: unknown;
   arg?: unknown;
   anzeige?: FlowExpectation[];
@@ -54,7 +56,9 @@ type FlowRunState = {
   before: Map<string, number>;
   beforeIds: Map<string, Set<string>>;
   rows: Map<string, Record<string, unknown>>;
+  createdRows: Map<string, Record<string, unknown>[]>;
   restoreOnlineAfterWrite: boolean;
+  interruptionObserved?: Promise<boolean>;
   loginId: string;
 };
 
@@ -78,12 +82,22 @@ const sql = postgres(databaseUrl, { max: 1, prepare: false, onnotice: (notice) =
 
 export async function prepareGeneratedSeed(flowCase: FlowCase) {
   fixtureLoginId = generatedFlowRuntime.logins[flowCase.gegeben.login].id;
+  canonicalOrderIds.clear();
+  canonicalOrderSource = null;
+  const copySource = typeof flowCase.gegeben.aufruf.arg === "string"
+    ? /^\{([a-z_0-9]+)\}#kopie$/.exec(flowCase.gegeben.aufruf.arg)?.[1] : undefined;
+  if (copySource === "auftrag_quelle") {
+    const fixture = generatedFixtures[copySource];
+    if (!fixture || fixture.tabelle !== "orders") throw Error("FLOW_COPY_SOURCE_FIXTURE_INVALID");
+    canonicalOrderSource = { name: copySource, fixture };
+  }
   await resetGeneratedDomain();
   const seed = readFileSync(path.resolve(process.cwd(), "e2e/generated/_seed.sql"), "utf8");
   await sql.unsafe(seed);
   const names = selectedFixtureNames(flowCase.gegeben.datenlagen);
   const seeds = generatedFlowRuntime.fixtureSql as unknown as Record<string, string>;
   for (const name of names) {
+    if (name === canonicalOrderSource?.name) continue;
     if (seeds[name]) await sql.unsafe(seeds[name]);
     else await seedSupplementalFixtures([generatedFixtures[name]!]);
   }
@@ -96,6 +110,8 @@ type GeneratedFixture = {
   nummer?: string;
   [key: string]: unknown;
 };
+const canonicalOrderIds = new Map<string, { id: string; order_number: string }>();
+let canonicalOrderSource: { name: string; fixture: GeneratedFixture } | null = null;
 
 const generatedFixtures = generatedFlowRuntime.datenlagen as unknown as Record<string, GeneratedFixture>;
 const columnCache = new Map<string, Map<string, { column_name: string; data_type: string; udt_name: string }>>();
@@ -124,6 +140,11 @@ function selectedFixtureNames(requested: string[]) {
 
 async function resetGeneratedDomain() {
   if (baselineSettings === null) {
+    // The model assumes configured company settings. Use database delivery defaults
+    // for the isolated Replay baseline; never synthesize settings in product code.
+    const current=await sql`SELECT id FROM public.company_settings WHERE tenant_id=${TENANT}`;
+    if(current.length===0)await upsertFixture("company_settings",{id:"default",tenant_id:TENANT,company_name:"SYNTHETISCH Replay-Betrieb"});
+    if(current.length>1)throw Error("FLOW_REPLAY_BASE_SETTINGS_AMBIGUOUS");
     const rows = await sql<{ row: Record<string, unknown> }[]>`SELECT to_jsonb(settings) AS row FROM public.company_settings settings WHERE tenant_id = ${TENANT}`;
     baselineSettings = rows.map((row) => row.row);
   }
@@ -190,8 +211,8 @@ async function upsertFixture(table: string, values: Record<string, unknown>) {
 
 function resolvedFixture(fixture: GeneratedFixture) {
   const loginId = fixtureLoginId;
-  return resolveValue(fixture, {
-    before: new Map(), beforeIds: new Map(), rows: new Map(), restoreOnlineAfterWrite: false, loginId,
+  return resolveValue({ ...fixture, ...canonicalOrderIds.get(fixture.id) }, {
+    before: new Map(), beforeIds: new Map(), rows: new Map(), createdRows: new Map(), restoreOnlineAfterWrite: false, loginId,
   }) as GeneratedFixture;
 }
 
@@ -203,7 +224,8 @@ async function seedOrderFixture(fixture: GeneratedFixture, orderIndex: number) {
   const value = resolvedFixture(fixture);
   const positions = Array.isArray(value.positionen) ? value.positionen as Array<Record<string, unknown>> : [];
   const customerId = String(value.kunde ?? "");
-  const station = String(value.station ?? "angenommen");
+  // The model's in-progress fixture uses the existing physical workshop station.
+  const station = value.station === "in_arbeit" ? "galvanik" : String(value.station ?? "angenommen");
   await upsertFixture("orders", {
     id: value.id,
     tenant_id: TENANT,
@@ -248,6 +270,31 @@ async function seedOrderFixture(fixture: GeneratedFixture, orderIndex: number) {
   }
 }
 
+const syntheticJpeg=Buffer.from("/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAABAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k=","base64");
+
+/** Technical materialization of the model's given originals, in real loopback Storage. */
+async function seedOriginalFixture(file:Record<string,unknown>,sequence:number){
+  const name=String(file.dateiname??"");
+  const content=/\.jpe?g$/iu.test(name)?{mime:"image/jpeg",bytes:syntheticJpeg}
+    :/\.eml$/iu.test(name)?{mime:"message/rfc822",bytes:Buffer.from("From: synthetic@fixture.invalid\r\nSubject: SYNTHETISCHES Replay-Original\r\n\r\nIsolierter Testinhalt.\r\n")}
+    :/\.exe$/iu.test(name)?{mime:"application/octet-stream",bytes:Buffer.from("SYNTHETISCH: gesperrter Dateityp; keine ausfuehrbare Datei.")}:null;
+  if(!content)throw Error(`FLOW_ORIGINAL_BYTES_NOT_SUPPLIED:${name}`);
+  const sha256=createHash('sha256').update(content.bytes).digest('hex');
+  if(file.sha256&&file.sha256!==sha256)throw Error(`FLOW_ORIGINAL_FIXTURE_HASH_MISMATCH:${name}`);
+  const environment=localReplayStorageEnvironment(databaseUrl!);
+  const {createClient}=await import('@supabase/supabase-js');
+  const client=createClient(environment.NEXT_PUBLIC_SUPABASE_URL,environment.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
+  const storagePath=TENANT+'/'+sha256;
+  const uploaded=await client.storage.from('scans').upload(storagePath,content.bytes,{contentType:content.mime,upsert:true});
+  if(uploaded.error)throw Error('FLOW_ORIGINAL_STORAGE_FAILED:'+uploaded.error.message);
+  await upsertFixture('intake_file',{
+    ...file,tenant_id:TENANT,client_key:file.client_key??file.id,mime:file.mime??content.mime,
+    bytes:content.bytes.length,sha256,speicherpfad:storagePath,aufgenommen_am:new Date().toISOString(),
+    aufgenommen_von:fixtureLoginId,reihenfolge:sequence,lesbar:file.lesbar??true,
+    geoeffnet:file.geoeffnet??false,erkennung_status:file.erkennung_status??'fertig',
+  });
+}
+
 async function seedIntakeFixture(fixture: GeneratedFixture, fixtureIndex: number) {
   const value = resolvedFixture(fixture);
   const actorId = fixtureLoginId;
@@ -275,14 +322,16 @@ async function seedIntakeFixture(fixture: GeneratedFixture, fixtureIndex: number
     anliegen_offen: value.anliegen_offen,
   });
   const files = Array.isArray(value.dateien) ? value.dateien as Array<Record<string, unknown>> : [];
+  const fileIds:string[]=[];
   for (let index = 0; index < files.length; index += 1) {
     const file = files[index]!;
-    await upsertFixture("intake_file", {
-      id: `40000000-0000-4000-8000-${String(800000 + fixtureIndex * 100 + index).padStart(12, "0")}`,
-      tenant_id: TENANT,
+    const fileId=`40000000-0000-4000-8000-${String(800000 + fixtureIndex * 100 + index).padStart(12, "0")}`;
+    await seedOriginalFixture({
+      id:fileId,
       item_id: value.id,
       ...file,
-    });
+    },index+1);
+    fileIds.push(fileId);
   }
   const suggestions = Array.isArray(value.vorschlaege) ? value.vorschlaege as Array<Record<string, unknown>> : [];
   for (let index = 0; index < suggestions.length; index += 1) {
@@ -291,6 +340,7 @@ async function seedIntakeFixture(fixture: GeneratedFixture, fixtureIndex: number
       id: `50000000-0000-4000-8000-${String(900000 + fixtureIndex * 100 + index).padStart(12, "0")}`,
       tenant_id: TENANT,
       item_id: value.id,
+      file_id:suggestion.file_id??fileIds[0]??null,
       ...suggestion,
     });
   }
@@ -311,19 +361,28 @@ async function seedSupplementalFixtures(fixtures: GeneratedFixture[]) {
     }
     const value = resolvedFixture(fixture);
     if (fixture.tabelle === "intake_drafts") {
-      const actor = generatedFlowRuntime.logins[String(value.login) as keyof typeof generatedFlowRuntime.logins];
+      const actor = generatedFlowRuntime.logins[String(value.login) as keyof typeof generatedFlowRuntime.logins]
+        ?? Object.values(generatedFlowRuntime.logins).find(login => login.id === value.login);
       if (!actor) throw new Error(`FLOW_DRAFT_FIXTURE_LOGIN_UNKNOWN:${String(value.login)}`);
       await upsertFixture("intake_drafts", {
         id: value.id,
         tenant_id: TENANT,
         actor_id: actor.id,
-        payload: { art: value.art, text: value.text },
+        art: value.art,
+        zuletzt_feld: value.zuletzt_feld,
+        payload: { art: value.art, text: value.text, ...(value.kunde ? { kunde: value.kunde } : {}) },
         status: "open",
       });
       continue;
     }
     if (fixture.tabelle === "company_settings") {
-      await upsertFixture("company_settings", { ...value, id: "default", tenant_id: TENANT, company_name: "Galvanik Kreile" });
+      const baseline=baselineSettings?.[0];
+      if(!baseline||typeof baseline.id!=="string")throw Error("FLOW_REPLAY_BASE_SETTINGS_MISSING");
+      await upsertFixture("company_settings", { ...baseline,...value, id: baseline.id, tenant_id: TENANT });
+      continue;
+    }
+    if (fixture.tabelle === "intake_file") {
+      await seedOriginalFixture(value, 1);
       continue;
     }
     if (fixture.tabelle === "complaint") {
@@ -380,6 +439,87 @@ async function login(page: Page, loginName: keyof typeof generatedFlowRuntime.lo
   await navigation;
   await shellReady(page);
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+}
+
+/** Copy givens need the existing reader's genuine intake receipt, not an invented event. */
+async function materializeCanonicalOrderSource(page: Page) {
+  if (!canonicalOrderSource) return false;
+  const { fixture } = canonicalOrderSource;
+  const value = resolvedFixture(fixture);
+  const positions = value.positionen;
+  if (!Array.isArray(positions) || !positions.length) throw Error("FLOW_COPY_SOURCE_POSITIONS_MISSING");
+  await login(page, "login_meister");
+  const clientEventId = randomUUID();
+  const input = {
+    geprueft: value.geprueft, clientEventId,
+    customer: { mode: "EXISTING", customerId: value.kunde }, dueDate: value.liefertermin,
+    termStatus: value.terminstatus, intakeSource: value.eingangsart,
+    handoverMode: value.uebergabe === "versand" ? "shipping" : value.uebergabe === "abholung" ? "pickup" : value.uebergabe,
+    paymentMode: value.zahlungsmodus === "bar" ? "abholung" : value.zahlungsmodus,
+    note: "SYNTHETISCH: bestehender Kopierauftrag aus dem echten Anlagebefehl",
+    items: positions.map((position: Record<string, unknown>) => ({
+      name: position.bezeichnung, quantity: position.menge, material: position.material,
+      surfaceRequested: position.oberflaeche, executionRequested: position.ausfuehrung,
+      unit: position.einheit, catalogServiceId: null,
+      unitPriceCents: position.einzelpreis === null ? null : Math.round(Number(position.einzelpreis) * 100),
+      vatRateBasisPoints: position.einzelpreis === null ? null : 1900,
+    })),
+  };
+  const manifest = JSON.parse(readFileSync(path.join(process.cwd(), ".next/server/server-reference-manifest.json"), "utf8")) as {
+    node: Record<string, { workers: Record<string, { exportedName?: string; filename?: string }> }>;
+  };
+  const actions = Object.entries(manifest.node).filter(([, action]) => Object.values(action.workers).some(
+    worker => worker.exportedName === "createOrderIntakeAction" && worker.filename === "src/app/actions/eingang.actions.ts",
+  ));
+  if (actions.length !== 1) throw Error("FLOW_SOURCE_CREATE_ACTION_AMBIGUOUS");
+  const response = await page.evaluate(async ({ actionId, input }) => {
+    const reply = await fetch("/", { method: "POST", headers: {
+      "Next-Action": actionId, "Content-Type": "text/plain;charset=UTF-8", Accept: "text/x-component",
+    }, body: JSON.stringify([input]) });
+    return { status: reply.status, text: await reply.text() };
+  }, { actionId: actions[0]![0], input });
+  const receipts = await sql<{ order_id: string; order_number: string }[]>`
+    SELECT receipt.order_id,receipt.order_number FROM private.order_intake_receipts receipt
+    JOIN public.events event ON event.id=receipt.event_id AND event.tenant_id=receipt.tenant_id
+    WHERE receipt.tenant_id=${TENANT} AND receipt.client_event_id=${clientEventId}::uuid
+      AND event.event_type='ORDER_INTAKE_CREATED_V1' AND event.client_event_id=${clientEventId}::uuid`;
+  if (response.status !== 200 || receipts.length !== 1) throw Error("FLOW_SOURCE_REAL_ACTION_FAILED:" + response.text.slice(-1500));
+  const source = receipts[0]!;
+  // The given historical station remains the model's state; its intake record is real.
+  const station = value.station === "in_arbeit" ? "galvanik" : String(value.station);
+  await sql`UPDATE public.orders SET station=${station},current_station=${station},current_station_id=${station},
+    status=${station === "abgeschlossen" ? "completed" : "in_progress"},ware=${String(value.ware)}
+    WHERE tenant_id=${TENANT} AND id=${source.order_id}`;
+  await sql`UPDATE public.items SET current_station_id=${station} WHERE tenant_id=${TENANT} AND order_id=${source.order_id}`;
+  if (value.fotos !== undefined) {
+    if (!Number.isSafeInteger(value.fotos) || Number(value.fotos) < 0 || Number(value.fotos) > 20) throw Error("FLOW_SOURCE_PHOTO_COUNT_INVALID");
+    if (Number(value.fotos) > 0) {
+      const itemId = randomUUID(), photoIds: string[] = [];
+      await sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,text,kunde_id,vorgang_art,vorgang_id,zuordnung)
+        VALUES(${itemId}::uuid,${TENANT},${itemId},'notiz','intern','app',${generatedFlowRuntime.logins.login_meister.id}::uuid,
+          'SYNTHETISCH: Quellenfotos des Kopierauftrags',${String(value.kunde)},'auftrag',${source.order_id},'hand')`;
+      for (let index = 0; index < Number(value.fotos); index++) {
+        const fileId = randomUUID(); photoIds.push(fileId);
+        await seedOriginalFixture({ id: fileId, item_id: itemId, art: "foto", dateiname: `SYNTHETISCH-Quellfoto-${index + 1}.jpg` }, index + 1);
+        await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
+          SELECT ${TENANT},${itemId}::uuid,'original_gespeichert',${fileId}::uuid,${generatedFlowRuntime.logins.login_meister.id},
+            jsonb_build_object('fileId',file.id,'sha256',file.sha256,'bytes',file.bytes)
+          FROM public.intake_file file WHERE file.tenant_id=${TENANT} AND file.id=${fileId}::uuid
+            AND NOT EXISTS(SELECT 1 FROM public.intake_event prior WHERE prior.tenant_id=file.tenant_id AND prior.item_id=file.item_id AND prior.art='original_gespeichert' AND prior.befehl_id=${fileId}::uuid)`;
+      }
+      const sourceItems = await sql<{ id: string }[]>`SELECT id FROM public.items WHERE tenant_id=${TENANT} AND order_id=${source.order_id} ORDER BY id`;
+      if (!sourceItems.length) throw Error("FLOW_SOURCE_PHOTO_POSITION_MISSING");
+      await sql`UPDATE public.items SET photo_ids=${sql.json(photoIds)} WHERE tenant_id=${TENANT} AND id=${sourceItems[0]!.id}`;
+    }
+  }
+  const integrity = await sql.begin(async tx => {
+    await tx`SELECT set_config('app.tenant_id',${TENANT},true)`;
+    return tx<{ integrity_ok: boolean }[]>`SELECT integrity_ok FROM private.v_order_intake_receipts_v1 WHERE tenant_id=${TENANT} AND order_id=${source.order_id}`;
+  });
+  if (integrity.length !== 1 || integrity[0]!.integrity_ok !== true) throw Error("FLOW_SOURCE_RECEIPT_INTEGRITY_FAILED");
+  canonicalOrderIds.set(fixture.id, { id: source.order_id, order_number: source.order_number });
+  canonicalOrderSource = null;
+  return true;
 }
 
 async function shellReady(page: Page) {
@@ -479,7 +619,10 @@ function resolveString(value: string, state?: FlowRunState): string {
   result = result.replace(/\{([a-z_]+)(?:\.([a-z_]+))?\}/g, (match, fixtureName, field) => {
     const fixture = generatedFlowRuntime.datenlagen[fixtureName as keyof typeof generatedFlowRuntime.datenlagen];
     if (!fixture) return match;
-    const resolved = field ? fixture[field as keyof typeof fixture] : fixture.id;
+    const aliased = canonicalOrderIds.get(fixture.id);
+    let resolved = field ? fixture[field as keyof typeof fixture] : aliased?.id ?? fixture.id;
+    if (aliased && field === "id") resolved = aliased.id;
+    if (aliased && field === "order_number") resolved = aliased.order_number;
     if (resolved === null || resolved === undefined) return "";
     const text = String(resolved);
     return text.includes("{") ? resolveString(text, state) : text;
@@ -507,7 +650,10 @@ function choiceButton(locator: Locator, label: string): Locator {
     .or(locator.locator("button").filter({ hasText: new RegExp(`^\\s*${escaped}\\s*$`) }));
 }
 
-async function interruptNextServerAction(page: Page) {
+async function interruptNextServerAction(page: Page, state: FlowRunState) {
+  state.interruptionObserved=page.waitForEvent("requestfailed",{
+    predicate:request=>request.method()==="POST"&&Boolean(request.headers()["next-action"]),timeout:5_000,
+  }).then(()=>true,()=>false);
   await page.context().setOffline(true);
 }
 
@@ -550,6 +696,10 @@ async function waitForServerAction(page: Page, id: string) {
 }
 
 async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
+  if (!step.aktion && step.erwartung) {
+    await assertExpectation(page, step, state);
+    return;
+  }
   if (step.aktion === "oeffne") {
     await openTarget(page, String(step.wert), resolveValue(step.arg, state));
     return;
@@ -560,7 +710,7 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
     return;
   }
   if (step.aktion === "netz_unterbrechen") {
-    await interruptNextServerAction(page);
+    await interruptNextServerAction(page,state);
     state.restoreOnlineAfterWrite = true;
     return;
   }
@@ -592,6 +742,11 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
         const chooser = page.waitForEvent("filechooser", { timeout: 5_000 });
         await locator.click({ timeout: 5_000 });
         await (await chooser).setFiles(files);
+      }
+      if(state.restoreOnlineAfterWrite){
+        expect(await state.interruptionObserved,"file upload really encountered the requested server interruption").toBe(true);
+        await page.context().setOffline(false);
+        state.restoreOnlineAfterWrite=false;
       }
       break;
     }
@@ -681,6 +836,11 @@ async function assertExpectation(page: Page, expectation: FlowExpectation, state
     return;
   }
   if (expectation.oben) {
+    if (generatedFlowRuntime.screenTypes[expectation.oben as keyof typeof generatedFlowRuntime.screenTypes] === "seite") {
+      await expect(page.locator('[role="dialog"]:visible')).toHaveCount(0);
+      await expect(dataSpec(page, expectation.oben)).toBeVisible();
+      return;
+    }
     const dialog = await topDialog(page);
     // The card's loading layer is replaced asynchronously. Keep the same
     // top-layer assertion live while its root receives the object identifier.
@@ -694,7 +854,7 @@ async function assertExpectation(page: Page, expectation: FlowExpectation, state
   }
   const value = resolveValue(expectation.wert ?? expectation.text, state);
   if (!expectation.id) {
-    const dialog = await topDialog(page);
+    const dialog = await page.locator('[role="dialog"]:visible').count() ? await topDialog(page) : page.locator('main').first();
     if (expectation.erwartung === "toast") await expect(page.getByRole("status").last()).toBeVisible();
     else if (expectation.erwartung === "nicht_sichtbar") await expect(dialog.getByText(String(value), { exact: false })).toHaveCount(0);
     else if (expectation.erwartung === "text") await expect(dialog.getByText(String(value), { exact: true })).toBeVisible();
@@ -729,7 +889,10 @@ async function assertExpectation(page: Page, expectation: FlowExpectation, state
     case "gewaehlt": {
       const target = await control(locator);
       const tag = await target.evaluate((element) => element.tagName.toLowerCase());
-      if (tag === "select") {
+      if (tag === "button" && value === undefined) {
+        await expect(target).toHaveAttribute("aria-pressed","true");
+        await selectedColor(target,true);
+      } else if (tag === "select") {
         await expect(target.locator("option:checked")).toHaveText(String(value));
         await selectedColor(target, true);
       } else {
@@ -776,6 +939,7 @@ async function assertExpectation(page: Page, expectation: FlowExpectation, state
       }
       break;
     }
+    case "aktiv":
     case "aktiviert": await expect(await control(locator)).toBeEnabled(); break;
     case "fokus": await expect(await control(locator)).toBeFocused(); break;
     case "anzahl": await expect(locator).toHaveCount(Number(value)); break;
@@ -841,7 +1005,17 @@ async function readStorageRow(table: string, where: Record<string, unknown>) {
 
 async function captureDbResults(expectations: FlowDbExpectation[], state: FlowRunState) {
   for (const expectation of expectations) {
-    if (typeof expectation.neu !== 'number') continue;
+    if (typeof expectation.neu !== 'number') {
+      if (expectation.wo || state.rows.has(expectation.tabelle) || !Object.keys(expectation.werte ?? {}).length) continue;
+      const beforeIds = state.beforeIds.get(expectation.tabelle);
+      if (!beforeIds) throw new Error(`FLOW_DB_BASELINE_MISSING:${expectation.tabelle}`);
+      const created = (await tableIds(expectation.tabelle)).filter(id => !beforeIds.has(id));
+      // A value assertion without wo/neu still needs one exact Action-created row.
+      // Never pick a stale row or arbitrarily choose among several new rows.
+      expect(created, `one unambiguous new ${expectation.tabelle} assertion target`).toHaveLength(1);
+      state.rows.set(expectation.tabelle, await readStorageRow(expectation.tabelle, { id: created[0]! }));
+      continue;
+    }
     const before = state.before.get(expectation.tabelle);
     const beforeIds = state.beforeIds.get(expectation.tabelle);
     if (before === undefined || !beforeIds) throw new Error(`FLOW_DB_BASELINE_MISSING:${expectation.tabelle}`);
@@ -850,34 +1024,40 @@ async function captureDbResults(expectations: FlowDbExpectation[], state: FlowRu
     expect(afterIds.length - before).toBe(expectation.neu);
     const created = afterIds.filter((id) => !beforeIds.has(id));
     expect(created).toHaveLength(expectation.neu);
-    if (created.length === 1) state.rows.set(expectation.tabelle, await readStorageRow(expectation.tabelle, { id: created[0] }));
-    else if (created.length > 1 && Object.keys(expectation.werte ?? {}).length) throw new Error(`FLOW_DB_VALUE_NEW_ROW_AMBIGUOUS:${expectation.tabelle}`);
+    const rows=await Promise.all(created.map(id=>readStorageRow(expectation.tabelle,{id})));
+    state.createdRows.set(expectation.tabelle,rows);
+    if (rows.length === 1) state.rows.set(expectation.tabelle,rows[0]!);
   }
 }
 
 async function storageValue(table: string, row: Record<string, unknown>, field: string) {
   const transform = storageMapping(table).transforms[field];
-  if (transform === 'order_intake_event') {
-    const events = await sql<{ present: boolean }[]>`SELECT EXISTS (
-      SELECT 1 FROM public.events WHERE tenant_id = ${TENANT} AND order_id::text = ${String(row.id)} AND event_type = 'ORDER_INTAKE_CREATED_V1'
-    ) AS present`;
-    return events[0]!.present;
-  }
   const column = storageColumn(table, field);
   if (!Object.hasOwn(row, column)) throw new Error(`FLOW_DB_COLUMN_NOT_BUILT:${table}:${column}`);
   const value = row[column];
   if (transform === 'order_kind') return value === true ? 'kv' : 'auftrag';
   if (transform === 'handover') return value === 'pickup' ? 'abholung' : value === 'shipping' ? 'versand' : value;
   if (transform === 'payment_mode') return value === 'abholung' ? 'bar' : value;
+  if (transform === 'berlin_date') {
+    if (value === null) return null;
+    if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) throw new Error('FLOW_DB_CALENDAR_DATE_INVALID');
+    return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Berlin' }).format(new Date(value));
+  }
   if (transform) throw new Error(`FLOW_DB_TRANSFORM_UNSUPPORTED:${transform}`);
   return value;
 }
 
-async function assertDbValues(expectation: FlowDbExpectation, state: FlowRunState) {
+async function assertDbValues(expectation: FlowDbExpectation, state: FlowRunState, targetRow?: Record<string, unknown>) {
+  if(!targetRow&&!expectation.wo&&typeof expectation.neu==="number"&&expectation.neu>1){
+    const created=state.createdRows.get(expectation.tabelle);
+    expect(created).toHaveLength(expectation.neu);
+    for(const row of created!)await assertDbValues(expectation,state,row);
+    return;
+  }
   const where = resolveValue(expectation.wo, state) as Record<string, unknown> | undefined;
   const reference = state.rows.get(expectation.tabelle);
-  const row = where ? await readStorageRow(expectation.tabelle, where)
-    : reference ? await readStorageRow(expectation.tabelle, { id: reference.id }) : undefined;
+  const row = targetRow ?? (where ? await readStorageRow(expectation.tabelle, where)
+    : reference ? await readStorageRow(expectation.tabelle, { id: reference.id }) : undefined);
   if (!row) throw new Error(`FLOW_DB_NEW_ROW_REQUIRED:${expectation.tabelle}`);
   const values = Object.entries(resolveValue(expectation.werte ?? {}, state) as Record<string, unknown>);
   for (const [key, expected] of values) {
@@ -904,12 +1084,25 @@ async function assertDb(expectations: FlowDbExpectation[], state: FlowRunState) 
 }
 
 export async function runGeneratedFlowCase(page: Page, flowCase: FlowCase) {
+  try { await runGeneratedFlowCaseBody(page,flowCase); }
+  catch(error){
+    if(process.env.FLOW_DIAGNOSTICS==="1")try{
+      writeFileSync(path.resolve(".git",`flow-${flowCase.id}.txt`),await page.locator("body").innerText({timeout:1_000}),"utf8");
+      await page.screenshot({path:path.resolve(".git",`flow-${flowCase.id}.png`),timeout:3_000});
+    }catch(diagnosticError){console.error("[FLOW_FAILURE_DIAGNOSTICS_FAILED]",diagnosticError);}
+    throw error;
+  }
+}
+
+async function runGeneratedFlowCaseBody(page: Page, flowCase: FlowCase) {
   testTimeoutGuard(flowCase);
+  const sourceWasMaterialized = await materializeCanonicalOrderSource(page);
   const dbExpectations = flowCase.dann?.db ?? [];
   const state: FlowRunState = {
     before: new Map<string, number>(),
     beforeIds: new Map<string, Set<string>>(),
     rows: new Map<string, Record<string, unknown>>(),
+    createdRows: new Map<string, Record<string, unknown>[]>(),
     restoreOnlineAfterWrite: false,
     loginId: generatedFlowRuntime.logins[flowCase.gegeben.login].id,
   };
@@ -924,12 +1117,13 @@ export async function runGeneratedFlowCase(page: Page, flowCase: FlowCase) {
     ...(flowCase.wenn ?? []),
   ].filter((step) => step.aktion === "erwarten").flatMap((step) => step.db ?? []);
   for (const expectation of [...dbExpectations, ...stepExpectations]) {
-    if (typeof expectation.neu === "number" && !state.before.has(expectation.tabelle)) {
+    const needsNewRowReference = !expectation.wo && !state.rows.has(expectation.tabelle) && Object.keys(expectation.werte ?? {}).length > 0;
+    if ((typeof expectation.neu === "number" || needsNewRowReference) && !state.before.has(expectation.tabelle)) {
       state.before.set(expectation.tabelle, await tableCount(expectation.tabelle));
       state.beforeIds.set(expectation.tabelle, new Set(await tableIds(expectation.tabelle)));
     }
   }
-  await login(page, flowCase.gegeben.login);
+  if (!sourceWasMaterialized || flowCase.gegeben.login !== "login_meister") await login(page, flowCase.gegeben.login);
   await page.addInitScript(() => {
     const scope = window as unknown as Record<string, unknown>;
     scope.__flowPrintCount = 0;

@@ -2,6 +2,12 @@ export {
   GLOBAL_CREATE_OPEN_EVENT,
   requestGlobalCreate,
 } from "./requestGlobalCreate";
+export {INTAKE_MAIL_ADOPT_EVENT} from './mailSelectionContract';
+export type {IntakeMailSummary,IntakeMailSelectionResult} from './mailSelectionContract';
+export {IntakeMessageDialogs} from './ui/IntakeMessageDialogs';
+export type {MailSelectionPorts} from './ui/MailSelectionDialog';
+export type { IntakeCapture, IntakeCaptureResult, IntakeNoteInput, IntakeNoteReading, IntakeContext, IntakeConcern, IntakeCaptureKindInput } from "./captureContract";
+export { uploadIntakeOriginal } from "./intakeOriginalUpload";
 export type {
   GlobalCreateIntent,
   GlobalCreateRequest,
@@ -10,8 +16,17 @@ export { GlobalCreateFlow } from "./GlobalCreateFlow";
 export {
   ORDER_INTAKE_FREE_TEXT_UNITS,
   isOrderIntakeFreeTextUnit,
-} from "./orderIntakeUnits";
-export type { OrderIntakeFreeTextUnit } from "./orderIntakeUnits";
+  ORDER_POSITION_UNITS,
+  ORDER_POSITION_SURFACES,
+  normaliseOrderPositionUnit,
+  normaliseOrderPositionSurface,
+  orderPositionUnitLabel,
+  orderPositionSurfaceLabel,
+  orderPositionQuantityError,
+  orderPositionPriceError,
+  orderPositionEffortError,
+} from "@/lib/orderPositionContract";
+export type { OrderIntakeFreeTextUnit, OrderPositionUnit, OrderPositionSurface } from "@/lib/orderPositionContract";
 export { findRecognizedCustomers } from "./customerRecognition";
 export type { RecognizedCustomerSuggestions } from "./customerRecognition";
 export { TelefonnotizLayoutBoundary } from "./ui/TelefonnotizLayoutBoundary";
@@ -32,3 +47,8 @@ export type {
 } from "./GlobalCreateFlow";
 
 export type {CustomerComparisonValue} from "@/modules/customers/public";
+export { getIntakeDeviceId, type IntakeDeviceCommand, type IntakeDeviceRequest, type IntakeDeviceResult } from "./deviceContract";
+export { IntakeDirectEntry } from "./ui/IntakeDirectEntry";
+export { IntakeDraftList } from "./ui/IntakeDraftList";
+export type { IntakeDraft, IntakeDraftPorts, IntakeDraftResult } from "./draftContract";
+export type {IntakeProspectInput,IntakeProspectResult} from './prospectContract';

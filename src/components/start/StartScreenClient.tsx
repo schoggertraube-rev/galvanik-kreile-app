@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { login } from "@/app/actions/auth";
 import { loginWithPin } from "@/app/actions/auth.actions";
 import { usePageView } from "@/hooks/usePageView";
+import { useHydrated } from "@/hooks/useHydrated";
 import type { StartUserDto } from "@/lib/auth/userDtos";
 import styles from "./StartScreenClient.module.css";
 
@@ -30,6 +31,7 @@ function StartContent({
   maintenanceNotice?: boolean;
 }) {
   const searchParams = useSearchParams();
+  const interactive = useHydrated();
   const [selectedHandle, setSelectedHandle] = useState(users[0]?.loginHandle ?? "");
   const [pin, setPin] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -134,7 +136,7 @@ function StartContent({
             data-testid={`pin-user-card-${user.loginHandle}`}
             aria-pressed={selected?.loginHandle === user.loginHandle}
             onClick={() => selectUser(user.loginHandle)}
-            disabled={loginUnavailable || pinPending}
+            disabled={!interactive || loginUnavailable || pinPending}
           ><span>{user.shortCode}</span><small>{user.fullName.split(/\s+/)[0]}</small></button>)}
         </div>
         <div
@@ -153,20 +155,20 @@ function StartContent({
           {message ?? serverMessage ?? ""}
         </p>
         <div className={styles.keypad} data-spec-id="login.anmelden" aria-label="Ziffernblock">
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => <button key={digit} type="button" disabled={loginUnavailable || pinPending} onClick={() => void enterDigit(String(digit))}>{digit}</button>)}
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((digit) => <button key={digit} type="button" disabled={!interactive || loginUnavailable || pinPending} onClick={() => void enterDigit(String(digit))}>{digit}</button>)}
           <span aria-hidden="true" />
-          <button type="button" disabled={loginUnavailable || pinPending} onClick={() => void enterDigit("0")}>0</button>
-          <button type="button" disabled={loginUnavailable || pinPending} aria-label="Löschen" onClick={() => { setPin((value) => value.slice(0, -1)); setMessage(null); }}><Delete aria-hidden="true" /></button>
+          <button type="button" disabled={!interactive || loginUnavailable || pinPending} onClick={() => void enterDigit("0")}>0</button>
+          <button type="button" disabled={!interactive || loginUnavailable || pinPending} aria-label="Löschen" onClick={() => { setPin((value) => value.slice(0, -1)); setMessage(null); }}><Delete aria-hidden="true" /></button>
         </div>
-        {selected?.emailLoginAvailable ? <button className={styles.emailLink} data-spec-id="login.email" type="button" onClick={() => setMode("email")}>Mit E-Mail anmelden</button> : null}
+        {selected?.emailLoginAvailable ? <button className={styles.emailLink} data-spec-id="login.email" type="button" disabled={!interactive} onClick={() => setMode("email")}>Mit E-Mail anmelden</button> : null}
       </> : <form className={styles.emailForm} onSubmit={submitEmail}>
         <label htmlFor="email">E-Mail</label>
         <input id="email" name="email" type="email" autoComplete="username" required autoFocus onChange={() => setShowServerMessage(false)} />
         <label htmlFor="password">Passwort</label>
         <input id="password" name="password" type="password" autoComplete="current-password" required />
         {serverMessage ? <p className={styles.errorText} role="alert" aria-live="polite">{serverMessage}</p> : null}
-        <button className={styles.emailSubmit} data-spec-id="login.email-anmelden" type="submit" disabled={emailPending}>{emailPending ? "Anmeldung läuft …" : "Anmelden"}</button>
-        <button className={styles.emailLink} type="button" onClick={() => setMode("pin")}>Mit Code anmelden</button>
+        <button className={styles.emailSubmit} data-spec-id="login.email-anmelden" type="submit" disabled={!interactive || emailPending}>{emailPending ? "Anmeldung läuft …" : "Anmelden"}</button>
+        <button className={styles.emailLink} type="button" disabled={!interactive} onClick={() => setMode("pin")}>Mit Code anmelden</button>
       </form>}
     </section>
   </main>;

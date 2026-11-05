@@ -1,6 +1,6 @@
 export { CustomerCardView } from "./ui/CustomerCardView";
 export { kundeVollstaendigkeit } from "./orderReadiness";
-export { CUSTOMER_COUNTRIES, EMPTY_CUSTOMER_FORM, customerCountryLabel, customerDisplayName, customerContactLabel, customerFieldError, kundeValidierung } from "./customerFormContract";
+export { CUSTOMER_COUNTRIES, CUSTOMER_FIELD_LABELS, EMPTY_CUSTOMER_FORM, customerCountryLabel, customerDisplayName, customerContactLabel, customerFieldError, kundeValidierung } from "./customerFormContract";
 export { KundeFormular } from "./ui/KundeFormular";
 export type { CustomerFormValue, CustomerFormType } from "./customerFormContract";
 export type { CustomerAddressInput, CustomerAddressResult } from "./customerAddress";
@@ -15,6 +15,7 @@ export type {
 export type {
   CreateCustomerInput,
   CustomerCreateCommandResult,
+  CustomerUpdateCommandResult,
   CustomerCreateReceipt,
   CustomerStoredProfile,
   ReadCustomerCreateReceiptResult,

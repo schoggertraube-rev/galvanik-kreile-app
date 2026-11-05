@@ -4,6 +4,7 @@
   "owner": "Verkaufsstufe 1 Leistungskatalog",
   "publicExports": [
     "@/modules/katalog/public#CatalogService",
+    "@/modules/katalog/public#CatalogServiceChoice",
     "@/modules/katalog/public#SaveCatalogServiceInput",
     "@/modules/katalog/server-public#CatalogCommandContext",
     "@/modules/katalog/server-public#listCatalogServices",

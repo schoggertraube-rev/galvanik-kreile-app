@@ -21,6 +21,7 @@ import {
   type SystemSettingsSnapshot,
 } from "@/modules/fundament/public";
 import type { CatalogService } from "@/modules/katalog/public";
+import { orderPositionSurfaceLabel, orderPositionUnitLabel } from "@/lib/orderPositionContract";
 import { runServerAction } from "@/lib/client/runServerAction";
 import { Dialog, DialogAktionsmeldung, type DialogMeldung } from "@/ui/kr/Dialog";
 import { Toast } from "@/ui/kr/Toast";
@@ -375,7 +376,7 @@ export function SettingsAdminClient({
       <label>Steuersatz<select value={draft.vatRateBasisPoints} onChange={(event) => setDraft({ ...draft, vatRateBasisPoints: Number(event.target.value) as 0 | 700 | 1900 })}><option value="1900">19 %</option><option value="700">7 %</option><option value="0">0 %</option></select></label>
       <label>Standard-Durchlaufzeit<input type="number" min="0" max="365" value={draft.standardLeadTimeWorkingDays} onChange={(event) => setDraft({ ...draft, standardLeadTimeWorkingDays: Number(event.target.value) })} /></label>
       <label className={styles.check}><input type="checkbox" checked={draft.active} onChange={(event) => setDraft({ ...draft, active: event.target.checked })} />Aktiv</label>
-    </div><button disabled={pending} onClick={saveService}>Leistung speichern</button><div className={styles.list}>{services.map((service) => <button key={service.id} onClick={() => setDraft(service)}><strong>{service.name}</strong><span>{service.surface} · {(service.netPriceCents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" })} / {service.unit}</span></button>)}</div></section> : null}
+    </div><button disabled={pending} onClick={saveService}>Leistung speichern</button><div className={styles.list}>{services.map((service) => <button key={service.id} onClick={() => setDraft({...service,surface:orderPositionSurfaceLabel(service.surface),unit:orderPositionUnitLabel(service.unit)})}><strong>{service.name}</strong><span>{orderPositionSurfaceLabel(service.surface)} · {(service.netPriceCents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" })} / {orderPositionUnitLabel(service.unit)}</span></button>)}</div></section> : null}
 
     {(canManageLogins || currentUser) && tab === "users" ? <section data-spec-id="rechte.dialog">
       <div className={styles.sectionHeading}><div><h2>Logins & Rechte</h2><p>{canManageLogins ? "Rechte auswählen und anschließend speichern." : "Ihr Zugang und Ihr persönlicher Code."}</p></div><Link data-spec-id="rechte.schliessen" href={returnTo ?? "/"}>Schließen</Link></div>

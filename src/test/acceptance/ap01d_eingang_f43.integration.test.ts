@@ -1,3 +1,4 @@
+// Fassung 3 fuer AP-EIN Teil 2 (Planungschat 03.11.): vorgang_id = orders.id (Entscheidung 16); sonst Fassung 2.
 // Fassung 2 (Planungschat 03.11.): eindeutiger Privatname (Vor- und Nachname teilbar, K1 Namensteilung).
 // @vitest-environment node
 // AP-01 Fassung 4.3: order-first, payment contract and private-customer booking against the replay DB.
@@ -136,6 +137,7 @@ afterAll(async () => {
 function input(clientKey: string, overrides: Record<string, unknown> = {}) {
   return {
     clientKey,
+    geprueft: true,
     text: "AP01D F43 Paket",
     customer: { mode: "EXISTING" as const, customerId: privateCustomerId },
     dueDate: "2027-07-15",
@@ -179,14 +181,14 @@ describe("AP-01 Fassung 4.3: echte Server-Action gegen Replay-DB", () => {
     const [linked] = await sql<{ order_number: string; payment_mode: string; handover_mode: string; vorgang_id: string }[]>`
       SELECT orders.order_number, orders.payment_mode, orders.handover_mode, intake.vorgang_id
       FROM public.orders orders
-      JOIN public.intake_item intake ON intake.tenant_id=orders.tenant_id AND intake.vorgang_id=orders.order_number
+      JOIN public.intake_item intake ON intake.tenant_id=orders.tenant_id AND intake.vorgang_id::text=orders.id::text
       WHERE orders.tenant_id=${KREILE_TENANT_SLUG} AND orders.id=${result.orderId}
     `;
     expect(linked).toEqual({
       order_number: result.orderNumber,
       payment_mode: "abholung",
       handover_mode: "pickup",
-      vorgang_id: result.orderNumber,
+      vorgang_id: result.orderId,
     });
     expect(await counts(clientKey)).toEqual({ intakes: 1, receipts: 1, events: 1 });
   });

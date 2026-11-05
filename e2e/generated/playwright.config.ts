@@ -1,4 +1,7 @@
 import { defineConfig } from "@playwright/test";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { localReplayStorageEnvironment } from "../../src/test/localReplayStorage";
 
 process.env.APP_SESSION_SECRET ??= "flow-tests-local-session-secret-2026-11-02";
 
@@ -24,6 +27,15 @@ export default defineConfig({
       APP_SESSION_SECRET: process.env.APP_SESSION_SECRET ?? "flow-tests-local-session-secret-2026-11-02",
       DATABASE_URL: process.env.DATABASE_URL ?? "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
       KREILE_TENANT_SLUG: process.env.KREILE_TENANT_SLUG ?? "galvanik-kreile",
+      KREILE_GENERATED_REPLAY: "1",
+      AZURE_DOCINTEL_ENDPOINT: "https://azure-generated-replay.invalid",
+      AZURE_DOCINTEL_KEY: "generated-replay-only",
+      MS_GRAPH_TENANT_ID: "generated-replay",
+      MS_GRAPH_CLIENT_ID: "generated-replay",
+      MS_GRAPH_CLIENT_SECRET: "generated-replay-only",
+      MS_GRAPH_MAILBOX: "flow-replay@fixture.invalid",
+      NODE_OPTIONS: [process.env.NODE_OPTIONS, "--import=" + pathToFileURL(resolve("e2e/generated/_replayAdapters.mjs")).href].filter(Boolean).join(" "),
+      ...localReplayStorageEnvironment(process.env.DATABASE_URL ?? "postgresql://postgres:postgres@127.0.0.1:54322/postgres"),
     },
   },
 });

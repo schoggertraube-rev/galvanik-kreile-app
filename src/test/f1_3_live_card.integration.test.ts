@@ -138,7 +138,7 @@ describe("F1.3 DB-/Command-Vertragsintegration (Session-Port isoliert; kein Real
   it("runs intake to galvanik and persists per-item extra work with receipt and readback", async () => {
     setSession(ADMIN_ID, "admin");
     const { createOrderIntake } = await import("@/lib/server/commands/orderIntakeCommand");
-    const intake = await createOrderIntake({
+    const intake = await createOrderIntake({ geprueft: true,
       clientEventId: randomUUID(),
       customer: {
         mode: "NEW",

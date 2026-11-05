@@ -112,6 +112,7 @@ export function CustomerCardView({
     const text = state.kind === "loading" ? "Kundenkarte wird geladen." : state.message;
     const art = stateKind(state);
     return <Seitenblatt
+      dataSpecId="kunde"
       titel="Kundenkarte"
       onSchliessen={onClose}
       zustand={art}

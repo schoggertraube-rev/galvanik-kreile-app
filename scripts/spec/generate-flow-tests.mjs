@@ -11,9 +11,10 @@ const workQueuePath = path.join(root, "docs", "project", "arbeitspakete", "WORKQ
 
 // All model-to-storage names live here; the harness never guesses another column.
 const DATABASE_MAPPING = Object.freeze({
-  orders: { table: "orders", columns: { kunde: "customer_id", art: "is_quote", liefertermin: "promised_due_date", terminstatus: "intake_term_status", uebergabe: "handover_mode", zahlungsmodus: "payment_mode", eingangsart: "intake_source" }, transforms: { art: "order_kind", uebergabe: "handover", zahlungsmodus: "payment_mode" } },
+  orders: { table: "orders", columns: { kunde: "customer_id", art: "is_quote", liefertermin: "promised_due_date", terminstatus: "intake_term_status", uebergabe: "handover_mode", zahlungsmodus: "payment_mode", eingangsart: "intake_source", geprueft: "geprueft" }, transforms: { art: "order_kind", uebergabe: "handover", zahlungsmodus: "payment_mode", liefertermin: "berlin_date" } },
   items: { table: "items", columns: { auftrag: "order_id", bezeichnung: "name", menge: "quantity", einheit: "unit", oberflaeche: "surface_requested", ausfuehrung: "execution_requested" }, transforms: {} },
-  customers: { table: "customers", columns: { customer_type: "type", zahlungsbedingung: "payment_preference", notiz: "notes" }, transforms: {} },
+  customers: { table: "customers", columns: { customer_type: "type", zahlungsbedingung: "payment_preference", notiz: "notes" }, transforms: { handover_preference: "handover" } },
+  order_events: { table: "events", columns: {}, transforms: {} },
   intake_item: { table: "intake_item", columns: {}, transforms: {} },
   intake_file: { table: "intake_file", columns: {}, transforms: {} },
   intake_suggestion: { table: "intake_suggestion", columns: {}, transforms: {} },
@@ -99,7 +100,7 @@ function customerSeedRows(datenlagen) {
     });
 }
 
-function renderSeed(model) {
+function renderSeed(model, screens) {
   const loginIds = {
     login_meister: "10000000-0000-4000-8000-000000000001",
     login_werkstatt: "10000000-0000-4000-8000-000000000002",
@@ -204,6 +205,8 @@ function renderSeed(model) {
       tabelle: fixture.tabelle,
       ...generatedKeys,
       ...(fixture.werte ?? {}),
+      // null in a data scenario requests a deterministic technical identity.
+      id: fixture.werte?.id ?? `20000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
       ...(fixture.zeilen ? { zeilen: fixture.zeilen } : {}),
     }];
   }));
@@ -214,6 +217,7 @@ function renderSeed(model) {
       fixtureSql,
       logins: Object.fromEntries(users.map((user) => [user.name, { id: user.id, pin: user.pin }])),
       datenlagen: allFixtures,
+      screenTypes: Object.fromEntries(screens.map(screen => [screen.id, screen.typ])),
     },
   };
 }
@@ -278,7 +282,7 @@ function renderRuntime(runtime, sha) {
 function buildOutputs(raw, document) {
   if (!document.testmodell?.seiten) throw new Error("FLOW_GENERATOR_TESTMODELL_MISSING");
   const sha = createHash("sha256").update(raw).digest("hex").toUpperCase();
-  const seed = renderSeed(document.testmodell);
+  const seed = renderSeed(document.testmodell, document.screens);
   const outputs = new Map([
     ["_model.ts", renderRuntime(seed.runtime, sha)],
     ["_seed.sql", seed.sql],

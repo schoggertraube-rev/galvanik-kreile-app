@@ -1,8 +1,10 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
-import { isOrderIntakeFreeTextUnit } from "@/modules/eingang/public";
+import { isOrderIntakeFreeTextUnit, isOrderIntakeFreeTextPrice } from "@/lib/orderPositionContract";
+import { orderPositionQuantityError, orderPositionUnitLabel, orderPositionSurfaceLabel } from "@/lib/orderPositionContract";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
+import type { OrderIntakeExecutionRequested, OrderIntakeSource } from "@/lib/server/commands/orderIntakeCommand";
 import type {
   OrderTaskAssigneeOption,
   OrderTaskAssignmentState,
@@ -21,8 +23,8 @@ export type OrderCardExtraWork = {
   catalogPositionId: string;
   catalogPositionName: string;
   minutes: number;
-  hourlyRateCents: number;
-  amountCents: number;
+  hourlyRateCents: number | null;
+  amountCents: number | null;
   lineVersion: number;
   frozen: boolean;
   frozenAt: string | null;
@@ -35,6 +37,7 @@ export type OrderCardItem = {
   quantity: number;
   material: string | null;
   surfaceRequested: string;
+  executionRequested?: OrderIntakeExecutionRequested | null;
   catalogServiceId: string | null;
   unit: string | null;
   unitPriceCents: number | null;
@@ -49,6 +52,7 @@ export type LiveOrderCard = {
   orderNumber: string;
   customerId: string;
   customerName: string;
+  customerNumber?: string | null;
   customerPhone: string | null;
   title: string;
   note: string | null;
@@ -56,6 +60,7 @@ export type LiveOrderCard = {
   status: string;
   dueAt: string | null;
   intakeAt: string;
+  intakeSource?: OrderIntakeSource | null;
   assignment: OrderTaskAssignmentState | null;
   assignmentOptions: OrderTaskAssigneeOption[];
   dueDateChanges: Array<{
@@ -70,8 +75,8 @@ export type LiveOrderCard = {
   freeze: null | {
     freezeId: string;
     rateId: string;
-    hourlyRateCents: number;
-    totalAmountCents: number;
+    hourlyRateCents: number | null;
+    totalAmountCents: number | null;
     lineCount: number;
     frozenAt: string;
   };
@@ -118,6 +123,7 @@ type QueueRow = {
   due_date: Date | string | null;
   created_at: Date | string;
   tenant_integrity_ok: boolean;
+  intake_source: OrderIntakeSource | null;
 };
 
 type IntakeRow = {
@@ -137,6 +143,7 @@ type CurrentItemRow = {
   quantity: number;
   material: string | null;
   surface_requested: string | null;
+  execution_requested: OrderIntakeExecutionRequested | null;
   catalog_service_id: string | null;
   unit: string | null;
   unit_price_cents: number | string | null;
@@ -287,7 +294,7 @@ export function mapOrderCardIntakeItems(value: unknown): OrderCardItem[] {
       throw new Error("ORDER_CARD_INTAKE_ITEM_SHAPE_INVALID");
     }
     const position = toSafeInteger(entry.position, "ORDER_CARD_ITEM_POSITION_INVALID");
-    const quantity = toSafeInteger(entry.quantity, "ORDER_CARD_ITEM_QUANTITY_INVALID");
+    const quantity = typeof entry.quantity === "number" ? entry.quantity : Number.NaN;
     const currentCatalogItem = supportedCurrentShape
       && typeof entry.catalogServiceId === "string"
       && UUID_PATTERN.test(entry.catalogServiceId)
@@ -304,8 +311,7 @@ export function mapOrderCardIntakeItems(value: unknown): OrderCardItem[] {
         typeof entry.unit === "string"
         && isOrderIntakeFreeTextUnit(entry.unit)
       ))
-      && entry.unitPriceCents === null
-      && entry.vatRateBasisPoints === null;
+      && isOrderIntakeFreeTextPrice(entry.unitPriceCents, entry.vatRateBasisPoints);
     if (
       typeof entry.id !== "string"
       || !UUID_PATTERN.test(entry.id)
@@ -313,10 +319,9 @@ export function mapOrderCardIntakeItems(value: unknown): OrderCardItem[] {
       || position > 20
       || typeof entry.name !== "string"
       || entry.name.trim() !== entry.name
-      || entry.name.length < 2
-      || entry.name.length > 160
-      || quantity < 1
-      || quantity > 1_000_000
+      || entry.name.length < 1
+      || entry.name.length > 200
+      || orderPositionQuantityError(quantity, entry.unit as string|null) !== null
       || !(entry.material === null || (
         typeof entry.material === "string"
         && entry.material.trim() === entry.material
@@ -340,11 +345,12 @@ export function mapOrderCardIntakeItems(value: unknown): OrderCardItem[] {
       name: entry.name,
       quantity,
       material: entry.material,
-      surfaceRequested: entry.surfaceRequested,
+      surfaceRequested: orderPositionSurfaceLabel(entry.surfaceRequested),
+      ...(currentShapeWithExecution ? { executionRequested: entry.executionRequested as OrderIntakeExecutionRequested } : {}),
       catalogServiceId: currentCatalogItem ? entry.catalogServiceId as string : null,
-      unit: currentCatalogItem || currentFreeTextItem ? entry.unit as string | null : null,
-      unitPriceCents: currentCatalogItem ? toSafeInteger(entry.unitPriceCents, "ORDER_CARD_ITEM_PRICE_INVALID") : null,
-      vatRateBasisPoints: currentCatalogItem ? toSafeInteger(entry.vatRateBasisPoints, "ORDER_CARD_ITEM_VAT_INVALID") as 0 | 700 | 1900 : null,
+      unit: currentCatalogItem || currentFreeTextItem ? entry.unit===null?null:orderPositionUnitLabel(entry.unit as string) : null,
+      unitPriceCents: entry.unitPriceCents == null ? null : toSafeInteger(entry.unitPriceCents, "ORDER_CARD_ITEM_PRICE_INVALID"),
+      vatRateBasisPoints: entry.vatRateBasisPoints == null ? null : toSafeInteger(entry.vatRateBasisPoints, "ORDER_CARD_ITEM_VAT_INVALID") as 0 | 700 | 1900,
       finished: false,
       extraWork: [],
     } satisfies OrderCardItem;
@@ -359,18 +365,19 @@ function mapCurrentOrderItems(rows: CurrentItemRow[], positions: Map<string, num
   if (rows.length < 1 || rows.length > 20) throw new Error("ORDER_CARD_CURRENT_ITEMS_INVALID");
   const mapped = rows.map((row) => {
     const position = positions.get(row.id);
-    const quantity = toSafeInteger(row.quantity, "ORDER_CARD_ITEM_QUANTITY_INVALID");
+    const quantity = Number(row.quantity);
     const price = row.unit_price_cents === null ? null : toSafeInteger(row.unit_price_cents, "ORDER_CARD_ITEM_PRICE_INVALID");
-    if (!position || !UUID_PATTERN.test(row.id) || row.name.trim() !== row.name || row.name.length < 2 || row.name.length > 160
-      || quantity < 1 || quantity > 1_000_000 || !row.surface_requested || row.surface_requested.trim() !== row.surface_requested
+    if (!position || !UUID_PATTERN.test(row.id) || row.name.trim() !== row.name || row.name.length < 1 || row.name.length > 200
+      || orderPositionQuantityError(quantity, row.unit) !== null || !row.surface_requested || row.surface_requested.trim() !== row.surface_requested
       || row.surface_requested.length < 2 || row.surface_requested.length > 160
       || (row.catalog_service_id !== null && !UUID_PATTERN.test(row.catalog_service_id))
       || (row.catalog_service_id === null && row.unit !== null && !isOrderIntakeFreeTextUnit(row.unit))
       || (row.vat_rate_basis_points !== null && ![0, 700, 1900].includes(row.vat_rate_basis_points))) throw new Error("ORDER_CARD_CURRENT_ITEM_INVALID");
     return {
       id: row.id, position, name: row.name, quantity, material: row.material,
-      surfaceRequested: row.surface_requested, catalogServiceId: row.catalog_service_id,
-      unit: row.unit, unitPriceCents: price,
+      surfaceRequested: orderPositionSurfaceLabel(row.surface_requested), catalogServiceId: row.catalog_service_id,
+      executionRequested: row.execution_requested,
+      unit: row.unit===null?null:orderPositionUnitLabel(row.unit), unitPriceCents: price,
       vatRateBasisPoints: row.vat_rate_basis_points as 0 | 700 | 1900 | null,
       finished: row.current_station_id === "fertig",
       extraWork: [],
@@ -379,7 +386,7 @@ function mapCurrentOrderItems(rows: CurrentItemRow[], positions: Map<string, num
   return mapped.sort((left, right) => left.position - right.position);
 }
 
-function mapExtraWork(row: ExtraWorkRow, tenantId: string): OrderCardExtraWork {
+function mapExtraWork(row: ExtraWorkRow, tenantId: string): OrderCardExtraWork & { hourlyRateCents: number; amountCents: number } {
   const minutes = toSafeInteger(row.minutes, "ORDER_CARD_EXTRA_WORK_MINUTES_INVALID");
   const rate = toSafeInteger(row.hourly_rate_cents, "ORDER_CARD_EXTRA_WORK_RATE_INVALID");
   const amount = toSafeInteger(row.amount_cents, "ORDER_CARD_EXTRA_WORK_AMOUNT_INVALID");
@@ -512,8 +519,10 @@ export async function readLiveOrderCard(
       const queueRows = await tx.execute<QueueRow>(sql`
         SELECT id, tenant_id, version, order_number, customer_id, customer_name,
                title, task, station, current_station, current_station_id, status,
-               intake_date, due_date::date::text AS due_date, created_at, tenant_integrity_ok
-        FROM private.v_operational_station_queue_v1
+               intake_date, due_date::date::text AS due_date, created_at, tenant_integrity_ok,
+               (SELECT source.intake_source FROM public.orders source
+                WHERE source.id = queue.id AND source.tenant_id = queue.tenant_id) AS intake_source
+        FROM private.v_operational_station_queue_v1 queue
         WHERE id = ${input.orderId}
         LIMIT 2
       `);
@@ -577,7 +586,7 @@ export async function readLiveOrderCard(
       if (!contentEvent && intake.integrity_ok !== true) throw new Error("ORDER_CARD_INTAKE_RECEIPT_INVALID");
       const positions = new Map((eventItems ?? intakeItems).map((item) => [item.id, item.position]));
       const currentRows = await tx.execute<CurrentItemRow>(sql`
-        SELECT id, name, quantity, material, surface_requested,
+        SELECT id, name, quantity, material, surface_requested, execution_requested,
                catalog_service_id::text AS catalog_service_id, unit,
                CASE WHEN preis_netto IS NULL THEN NULL ELSE round(preis_netto * 100)::bigint END AS unit_price_cents,
                vat_rate_basis_points, current_station_id
@@ -601,8 +610,8 @@ export async function readLiveOrderCard(
         }
       }
 
-      const customerRows = await tx.execute<{ phone: string | null }>(sql`
-        SELECT phone FROM public.customers
+      const customerRows = await tx.execute<{ phone: string | null; customer_number: string | null }>(sql`
+        SELECT phone, customer_number FROM public.customers
         WHERE tenant_id = ${authorization.tenantId} AND id = ${queue.customer_id}
         LIMIT 2
       `);
@@ -659,12 +668,14 @@ export async function readLiveOrderCard(
         ORDER BY item_id, catalog_position_name, catalog_position_id
       `);
       const itemById = new Map(items.map((item) => [item.id, item]));
-      for (const row of extraRows) {
+      const extraLines = extraRows.map((row) => {
         if (row.order_id !== queue.id) throw new Error("ORDER_CARD_EXTRA_WORK_ORDER_INVALID");
         const item = itemById.get(row.item_id);
         if (!item) throw new Error("ORDER_CARD_EXTRA_WORK_ITEM_INVALID");
-        item.extraWork.push(mapExtraWork(row, authorization.tenantId));
-      }
+        const line = mapExtraWork(row, authorization.tenantId);
+        item.extraWork.push(line);
+        return line;
+      });
 
       const freezeRows = await tx.execute<FreezeRow>(sql`
         SELECT tenant_id, order_id, aggregate_version, freeze_id::text AS freeze_id,
@@ -688,7 +699,7 @@ export async function readLiveOrderCard(
         const hourlyRateCents = toSafeInteger(freeze.hourly_rate_cents, "ORDER_CARD_FREEZE_RATE_INVALID");
         const totalAmountCents = toSafeInteger(freeze.total_amount_cents, "ORDER_CARD_FREEZE_TOTAL_INVALID");
         const lineCount = toSafeInteger(freeze.line_count, "ORDER_CARD_FREEZE_COUNT_INVALID");
-        const actualLines = items.flatMap((item) => item.extraWork);
+        const actualLines = extraLines;
         if (
           freeze.integrity_ok !== true
           || freeze.tenant_id !== authorization.tenantId
@@ -711,12 +722,14 @@ export async function readLiveOrderCard(
         };
       }
 
+      const canReadMoney = authorization.permissions.includes("perm_view_prices");
       return {
         id: queue.id,
         version: queue.version,
         orderNumber: queue.order_number,
         customerId: queue.customer_id,
         customerName: queue.customer_name,
+        customerNumber: customerRows[0].customer_number,
         customerPhone: customerRows[0].phone,
         title: queue.title,
         note: queue.task,
@@ -724,11 +737,13 @@ export async function readLiveOrderCard(
         status: queue.status,
         dueAt: toNullableIso(queue.due_date),
         intakeAt: toIso(queue.intake_date ?? queue.created_at),
+        intakeSource: queue.intake_source,
         assignment,
         assignmentOptions,
         dueDateChanges,
-        items,
-        freeze: mappedFreeze,
+        items: canReadMoney ? items : items.map((item) => ({ ...item, unitPriceCents: null, vatRateBasisPoints: null,
+          extraWork: item.extraWork.map((line) => ({ ...line, hourlyRateCents: null, amountCents: null })) })),
+        freeze: canReadMoney || !mappedFreeze ? mappedFreeze : { ...mappedFreeze, hourlyRateCents: null, totalAmountCents: null },
       } satisfies LiveOrderCard;
     });
     return data === null

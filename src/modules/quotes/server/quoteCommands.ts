@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
+import { normaliseOrderPositionSurface, orderPositionSurfaceLabel, orderPositionUnitLabel, orderPositionQuantityError, orderPositionPriceError } from "@/lib/orderPositionContract";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import type {
   ConvertQuoteInput,
@@ -132,10 +133,10 @@ function normalizeCreate(value: unknown): CreateQuoteInput | null {
     if (!plainObject(candidate) || !exactKeys(candidate, ["material", "name", "quantity", "surfaceRequested", "unitPriceCents"])) return null;
     const name = text(candidate.name, 2, 160);
     const material = candidate.material === null ? null : text(candidate.material, 1, 120);
-    const surfaceRequested = text(candidate.surfaceRequested, 2, 160);
+    const surfaceRequested = normaliseOrderPositionSurface(candidate.surfaceRequested);
     if (!name || material === null && candidate.material !== null || !surfaceRequested
-      || typeof candidate.quantity !== "number" || !Number.isSafeInteger(candidate.quantity) || candidate.quantity < 1 || candidate.quantity > 1_000_000
-      || typeof candidate.unitPriceCents !== "number" || !Number.isSafeInteger(candidate.unitPriceCents) || candidate.unitPriceCents < 0 || candidate.unitPriceCents > 999_999_999) return null;
+      || typeof candidate.quantity !== "number" || orderPositionQuantityError(candidate.quantity, null) !== null
+      || typeof candidate.unitPriceCents !== "number" || orderPositionPriceError(candidate.unitPriceCents, true) !== null) return null;
     positions.push({ name, quantity: candidate.quantity, material, surfaceRequested, unitPriceCents: candidate.unitPriceCents });
   }
   return {
@@ -188,8 +189,16 @@ function hashIntent(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value), "utf8").digest("hex");
 }
 
+function hashQuoteWriteIntent(input: CreateQuoteInput | UpdateQuoteInput): string {
+  // Preserve existing immutable receipts while current position rows store keys.
+  return hashIntent({ ...input, positions: input.positions.map(position => ({
+    ...position, surfaceRequested: orderPositionSurfaceLabel(position.surfaceRequested),
+  })) });
+}
+
 function hashOrderIntent(input: QuoteOrderInput): string {
   return hashIntent({
+    geprueft: input.geprueft,
     clientEventId: input.clientEventId,
     customer: input.customer,
     dueDate: input.dueDate,
@@ -201,9 +210,9 @@ function hashOrderIntent(input: QuoteOrderInput): string {
       name: item.name,
       quantity: item.quantity,
       material: item.material,
-      surfaceRequested: item.surfaceRequested,
+      surfaceRequested: orderPositionSurfaceLabel(item.surfaceRequested),
       executionRequested: "offen",
-      unit: item.unit,
+      unit: item.unit === null ? null : orderPositionUnitLabel(item.unit),
       unitPriceCents: item.unitPriceCents,
       vatRateBasisPoints: item.vatRateBasisPoints,
     })),
@@ -293,7 +302,7 @@ export async function createQuoteCommand(authorization: QuoteCommandContext, inp
   const normalized = normalizeCreate(input);
   if (!normalized) return { code: "VALIDATION_ERROR", message: "KV-Daten sind unvollständig oder ungültig." };
   if (!authorization.capabilities.canCreateQuote) return { code: "FORBIDDEN", message: "KVs dürfen mit dieser Rolle nicht angelegt werden." };
-  const intentSha256 = hashIntent(normalized);
+  const intentSha256 = hashQuoteWriteIntent(normalized);
   try {
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const result = await tx.execute<{ result_code: string; result_quote_id: string | null; replayed: boolean }>(sql`
@@ -371,7 +380,7 @@ export async function updateQuoteCommand(authorization: QuoteCommandContext, inp
   const normalized = normalizeUpdate(input);
   if (!normalized) return { code: "VALIDATION_ERROR", message: "KV-Daten sind unvollständig oder ungültig." };
   if (!authorization.capabilities.canUpdateQuote) return { code: "FORBIDDEN", message: "KVs dürfen mit dieser Rolle nicht bearbeitet werden." };
-  const intentSha256 = hashIntent(normalized);
+  const intentSha256 = hashQuoteWriteIntent(normalized);
   try {
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const result = await tx.execute<{ result_code: string; result_quote_id: string | null; replayed: boolean }>(sql`
@@ -421,7 +430,7 @@ export async function readQuoteCreateReceiptCommand(
   const normalized = normalizeCreate(input);
   if (!normalized) return { code: "VALIDATION_ERROR", message: "Die gespeicherte KV-Anfrage kann nicht sicher geprüft werden." };
   if (!authorization.capabilities.canReadQuote) return { code: "FORBIDDEN", message: "Der gespeicherte KV-Stand darf mit dieser Rolle nicht gelesen werden." };
-  const intentSha256 = hashIntent(normalized);
+  const intentSha256 = hashQuoteWriteIntent(normalized);
   try {
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const rows = await tx.execute<CreateReceiptRow>(sql`
@@ -461,7 +470,7 @@ export async function readQuoteUpdateReceiptCommand(
   const normalized = normalizeUpdate(input);
   if (!normalized) return { code: "VALIDATION_ERROR", message: "Die gespeicherte KV-Änderung kann nicht sicher geprüft werden." };
   if (!authorization.capabilities.canReadQuote) return { code: "FORBIDDEN", message: "Der gespeicherte KV-Stand darf mit dieser Rolle nicht gelesen werden." };
-  const intentSha256 = hashIntent(normalized);
+  const intentSha256 = hashQuoteWriteIntent(normalized);
   try {
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const rows = await tx.execute<UpdateReceiptRow>(sql`
@@ -502,6 +511,8 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
       const quote = await readQuote(tx, authorization.tenantId, normalized.quoteId);
       if (!quote) return { code: "NOT_FOUND", message: "KV ist nicht verfügbar." };
       const sourceOrderInput: Omit<QuoteOrderInput, "handoverMode" | "paymentMode"> = {
+        // A released quote has not passed the goods inspection in 3.7.
+        geprueft: false,
         clientEventId: normalized.clientEventId,
         customer: { mode: "EXISTING", customerId: quote.customerId },
         dueDate: quote.dueDate,

@@ -78,7 +78,7 @@ describe("W2C-B2M5U operational mapper contract", () => {
           quantity: 1,
           currentStationId: "wareneingang",
           createdAt: "2026-08-01T12:00:00.000Z",
-          surfaceRequested: "Zink",
+          surfaceRequested: "Verzinken",
         }],
       }),
     ];
@@ -92,7 +92,7 @@ describe("W2C-B2M5U operational mapper contract", () => {
       expect(order.intakeDate).not.toContain("2026-08-01");
       expect(order.dueDate).not.toContain("2026-08-11");
     }
-    expect(result.find((order) => order.id === "invalid")?.parts).toMatchObject([{ id: "item-1", name: "Buchse", surfaceRequested: "Zink" }]);
+    expect(result.find((order) => order.id === "invalid")?.parts).toMatchObject([{ id: "item-1", name: "Buchse", surfaceRequested: "Verzinken" }]);
   });
 
   it("normalizes persisted ISO dates and retains their real priority", async () => {
