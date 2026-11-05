@@ -5,9 +5,11 @@ import { createHash, randomUUID } from "node:crypto";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import postgres from "postgres";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 import type { AppSession } from "@/lib/server/appSession";
+import {withLocalReplayStorage} from './localReplayStorage';
+import type {InvoiceSaveInput,InvoiceChangeInput} from '@/modules/eingang/public';
 
 (globalThis as typeof globalThis & { AsyncLocalStorage: typeof AsyncLocalStorage }).AsyncLocalStorage = AsyncLocalStorage;
 
@@ -153,6 +155,99 @@ afterAll(async () => {
   await sql.end({ timeout: 1 });
   if (originalSecret === undefined) delete process.env.APP_SESSION_SECRET;
   else process.env.APP_SESSION_SECRET = originalSecret;
+});
+
+/** AP-EIN R02/R04/R07/R08/R12/R13: fixed model outcomes, real actions and real Replay rows. */
+async function incomingFixture(){
+ const actor=await createFixture(),itemId=randomUUID(),fileId=randomUUID();
+ await sql`UPDATE public.customers SET type='lieferant',name='SYNTHETISCH Lieferant Rechnung',iban=NULL,zahlungsziel_tage=14,payment_preference=NULL,vat_id=NULL,billing_email=NULL,handover_preference=NULL WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${actor.customerId}`;
+ const bytes=Buffer.from('/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAABAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k=','base64');
+ const hash=createHash('sha256').update(bytes).digest('hex'),storagePath=KREILE_TENANT_SLUG+'/'+hash;
+ await withLocalReplayStorage(async()=>{const{createAdminClient}=await import('@/lib/supabase/admin');const upload=await createAdminClient().storage.from('scans').upload(storagePath,bytes,{contentType:'image/jpeg',upsert:true});if(upload.error)throw upload.error;});
+ await sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,kunde_id,zuordnung,anliegen,anliegen_offen)
+  VALUES(${itemId}::uuid,${KREILE_TENANT_SLUG},${itemId},'notiz','rein','app',${actor.actorId}::uuid,${actor.customerId},'hand',ARRAY['rechnung'],ARRAY['rechnung'])`;
+ await sql`INSERT INTO public.intake_file(id,tenant_id,item_id,client_key,art,dateiname,mime,bytes,sha256,speicherpfad,aufgenommen_am,aufgenommen_von,reihenfolge,lesbar,geoeffnet,erkennung_status)
+  VALUES(${fileId}::uuid,${KREILE_TENANT_SLUG},${itemId}::uuid,${fileId},'anhang','SYNTHETISCH-Rechnung.jpg','image/jpeg',${bytes.length},${hash},${storagePath},statement_timestamp(),${actor.actorId}::uuid,1,true,false,'fertig')`;
+ await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${KREILE_TENANT_SLUG},${itemId}::uuid,'original_gespeichert',${fileId}::uuid,${actor.actorId},${sql.json({fileId,sha256:hash,bytes:bytes.length})})`;
+ const input:InvoiceSaveInput={itemId,fileId,version:1,clientKey:randomUUID(),fields:{lieferantId:actor.customerId,nummer:'SYNTHETISCH-'+itemId,datum:'2026-11-01',netto:'100,00',ust:'19,00',brutto:'119,00',faelligAm:'2026-11-15',iban:'DE02120300000000202051',ibanGeprueft:true},status:'offen',paidDate:null,proofFileId:null,duplicateId:null,duplicateReason:null,unclearReason:null};
+ return {actor,input};
+}
+describe('AP-EIN incoming invoice real UI actions -> rows/events -> same read model',()=>{
+ it('3.8 Geld alone: original access stays limited to invoice attachments; new supplier uses the same customer/assignment writer',async()=>{
+  const {actor,input}=await incomingFixture();
+  await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${actor.actorId}::uuid AND bereich<>'geld'`;
+  await sql`UPDATE public.intake_item SET kanal='mail',text='SYNTHETISCH Mailinhalt bleibt geschützt',kunde_id=NULL,zuordnung='offen' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.itemId}::uuid`;
+  const {getIncomingInvoiceAction,openIntakeOriginalAction,confirmIntakeOriginalAction,createCustomerForIntakeAction,getIntakeCaptureAction,prepareIntakeFileAction,finishIntakeFileAction,saveIncomingInvoiceAction}=await import('@/app/actions/eingang.actions');
+  expect(await withSession(actor,()=>getIntakeCaptureAction(input.itemId))).toMatchObject({code:'FORBIDDEN'});
+  const opened=await withLocalReplayStorage(()=>withSession(actor,()=>openIntakeOriginalAction({fileId:input.fileId,clientEventId:randomUUID()})));
+  expect(opened).toMatchObject({code:'OK',original:{invoiceOnly:true,restricted:false,itemId:input.itemId,orderId:null,sha256:expect.any(String),url:expect.any(String)}});
+  expect(await sql`SELECT geoeffnet FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.fileId}::uuid`).toEqual([{geoeffnet:true}]);
+  const suggestionId=randomUUID();await sql`INSERT INTO public.intake_suggestion(id,tenant_id,item_id,file_id,feld,wert,sicherheit,status) VALUES(${suggestionId}::uuid,${KREILE_TENANT_SLUG},${input.itemId}::uuid,${input.fileId}::uuid,'rechnung.nummer',${sql.json(input.fields.nummer)},'unsicher','offen')`;
+  expect(await withSession(actor,()=>confirmIntakeOriginalAction({fileId:input.fileId,clientEventId:randomUUID()}))).toMatchObject({code:'OK',count:1});
+  expect(await sql`SELECT geprueft_von::text AS actor FROM public.intake_suggestion WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${suggestionId}::uuid`).toEqual([{actor:actor.actorId}]);
+  const create={itemId:input.itemId,version:1,customer:{clientEventId:randomUUID(),customerType:'lieferant',companyName:'SYNTHETISCH Neuer Lieferant '+input.itemId,country:'DE'}};
+  const saved=await withSession(actor,()=>createCustomerForIntakeAction(create));if(saved.code!=='OK')throw Error('INCOMING_SUPPLIER:'+JSON.stringify(saved));
+  expect(await sql`SELECT type FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${saved.customer.id}`).toEqual([{type:'lieferant'}]);
+  expect(await sql`SELECT kunde_id,version FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.itemId}::uuid`).toEqual([{kunde_id:saved.customer.id,version:2}]);
+  expect(await withSession(actor,()=>getIncomingInvoiceAction({id:input.itemId}))).toMatchObject({code:'OK',view:{supplier:{id:saved.customer.id},item:{version:2},uncertain:0}});
+  const [original]=await sql`SELECT sha256,bytes::int AS bytes FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.fileId}::uuid`,proofId=randomUUID();
+  const finished=await withLocalReplayStorage(async()=>{
+   expect(await withSession(actor,()=>prepareIntakeFileAction({itemId:randomUUID(),fileId:randomUUID(),name:'SYNTHETISCH-Nachweis.jpg',mime:'image/jpeg',bytes:original.bytes,sha256:original.sha256}))).toMatchObject({code:'FORBIDDEN'});
+   const grant=await withSession(actor,()=>prepareIntakeFileAction({itemId:input.itemId,fileId:proofId,name:'SYNTHETISCH-Nachweis.jpg',mime:'image/jpeg',bytes:original.bytes,sha256:original.sha256}));expect(grant).toMatchObject({code:'OK',upload:null});
+   return withSession(actor,()=>finishIntakeFileAction(proofId));
+  });expect(finished).toMatchObject({code:'OK',capture:{text:null,orderId:null,files:expect.arrayContaining([expect.objectContaining({id:proofId})])}});
+  expect(await sql`SELECT nachher->>'fileId' AS file FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${input.itemId}::uuid AND art='original_gespeichert' AND befehl_id=${proofId}::uuid`).toEqual([{file:proofId}]);
+  const booked=await withSession(actor,()=>saveIncomingInvoiceAction({...input,version:2,fields:{...input.fields,lieferantId:saved.customer.id},status:'bezahlt',paidDate:'2026-11-01',proofFileId:proofId}));
+  if(booked.code!=='OK')throw Error('INCOMING_GELD_ONLY_PROOF:'+JSON.stringify(booked));
+  expect(await sql`SELECT nachweis_file_id::text,zahlstatus FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${booked.invoice.id}::uuid`).toEqual([{nachweis_file_id:proofId,zahlstatus:'bezahlt'}]);
+  expect(await withSession(actor,()=>getIncomingInvoiceAction({id:booked.invoice.id}))).toMatchObject({code:'OK',view:{invoice:{nachweis_file_id:proofId,zahlstatus:'bezahlt'}}});
+ },60000);
+ it('R02/R08/R11 captures once, updates status on the same row, persists IBAN through the customer writer, and rereads',async()=>{
+  const {actor,input}=await incomingFixture();
+  const {saveIncomingInvoiceAction,getIncomingInvoiceAction,changeIncomingInvoiceStatusAction,searchInvoiceSuppliersAction}=await import('@/app/actions/eingang.actions');
+  const read=await withSession(actor,()=>getIncomingInvoiceAction({id:input.itemId}));expect(read).toMatchObject({code:'OK',view:{invoice:null,item:{id:input.itemId,version:1},supplier:{id:actor.customerId}}});
+  expect(await withSession(actor,()=>searchInvoiceSuppliersAction('SYNTHETISCH Lieferant Rechnung'))).toMatchObject({code:'OK',suppliers:expect.arrayContaining([expect.objectContaining({id:actor.customerId})])});
+  const saved=await withSession(actor,()=>saveIncomingInvoiceAction(input));if(saved.code!=='OK')throw Error('INCOMING_R02:'+JSON.stringify(saved));
+  expect(await sql`SELECT item_id::text,file_id::text,nummer,netto::text,ust::text,brutto::text,zahlstatus,version FROM public.supplier_invoice WHERE id=${saved.invoice.id}::uuid AND tenant_id=${KREILE_TENANT_SLUG}`).toEqual([{item_id:input.itemId,file_id:input.fileId,nummer:input.fields.nummer,netto:'100.00',ust:'19.00',brutto:'119.00',zahlstatus:'offen',version:1}]);
+  expect(await sql`SELECT einsatz,vorgang_art,vorgang_id,kunde_id FROM public.intake_item WHERE id=${input.itemId}::uuid AND tenant_id=${KREILE_TENANT_SLUG}`).toEqual([{einsatz:'erledigt',vorgang_art:'rechnung',vorgang_id:saved.invoice.id,kunde_id:actor.customerId}]);
+  expect(await sql`SELECT iban FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${actor.customerId}`).toEqual([{iban:input.fields.iban}]);
+  expect(await sql`SELECT art,nachher->>'command' AS command FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${input.itemId}::uuid AND befehl_id=${input.clientKey}::uuid`).toEqual([{art:'einsatz',command:'rechnung.erfassen'}]);
+  expect(await withSession(actor,()=>saveIncomingInvoiceAction(input))).toEqual({...saved,replayed:true});
+  const changed:InvoiceChangeInput={invoiceId:saved.invoice.id,version:1,clientKey:randomUUID(),result:'bezahlt',paidDate:'2026-11-01',proofFileId:input.fileId,duplicateId:null,reason:null,fields:null};
+  const paid=await withSession(actor,()=>changeIncomingInvoiceStatusAction(changed));expect(paid).toMatchObject({code:'OK',invoice:{id:saved.invoice.id,zahlstatus:'bezahlt',bezahlt_am:'2026-11-01',version:2}});
+  expect(await withSession(actor,()=>changeIncomingInvoiceStatusAction(changed))).toEqual({...paid,replayed:true});
+  expect(await sql`SELECT count(*)::int AS n FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${input.itemId}::uuid`).toEqual([{n:1}]);
+  expect(await withSession(actor,()=>getIncomingInvoiceAction({id:saved.invoice.id}))).toMatchObject({code:'OK',view:{invoice:{id:saved.invoice.id,zahlstatus:'bezahlt',version:2}}});
+  expect((await sql`SELECT text FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND kunde_id=${actor.customerId} AND verweis_item=${input.itemId}::uuid`).map(row=>row.text)).toEqual(expect.arrayContaining([expect.stringContaining('offen'),expect.stringContaining('bezahlt')]));
+ },60000);
+ it('R04/R07 unclear invoice and one Geld task are atomic; clarification completes that same task and records before/after',async()=>{
+  const {actor,input}=await incomingFixture();
+  const {saveIncomingInvoiceAction,clarifyIncomingInvoiceAction,getIncomingInvoiceAction,getIntakeTaskAction,completeIntakeTaskAction}=await import('@/app/actions/eingang.actions');
+  const saved=await withSession(actor,()=>saveIncomingInvoiceAction({...input,status:'unklar',unclearReason:'SYNTHETISCH Betrag am Original prüfen'}));if(saved.code!=='OK')throw Error('INCOMING_R04:'+JSON.stringify(saved));
+  expect(saved.invoice).toMatchObject({zahlstatus:'unklar',unklar_grund:'SYNTHETISCH Betrag am Original prüfen',aufgabe_id:expect.any(String)});
+  const taskId=saved.invoice.aufgabe_id!;
+  expect(await sql`SELECT art,fuer_bereich,status,bezug_typ,bezug_id FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${taskId}::uuid`).toEqual([{art:'rechnung',fuer_bereich:'geld',status:'offen',bezug_typ:'eingangsrechnung',bezug_id:saved.invoice.id}]);
+  expect(await withSession(actor,()=>getIntakeTaskAction({taskId}))).toMatchObject({code:'OK',canComplete:false,reference:{type:'eingangsrechnung',id:saved.invoice.id},task:{status:'offen'}});
+  expect(await withSession(actor,()=>completeIntakeTaskAction({taskId,version:1,note:null}))).toMatchObject({code:'FORBIDDEN'});
+  const change:InvoiceChangeInput={invoiceId:saved.invoice.id,version:1,clientKey:randomUUID(),result:'ungueltig',paidDate:null,proofFileId:null,duplicateId:null,reason:'SYNTHETISCH keine gültige Rechnung',fields:null};
+  const result=await withSession(actor,()=>clarifyIncomingInvoiceAction(change));if(result.code!=='OK')throw Error('INCOMING_R07:'+JSON.stringify(result));
+  expect(await sql`SELECT zahlstatus,ungueltig_grund,version FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${saved.invoice.id}::uuid`).toEqual([{zahlstatus:'ungueltig',ungueltig_grund:change.reason,version:2}]);
+  expect(await sql`SELECT status,version FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${taskId}::uuid`).toEqual([{status:'erledigt',version:2}]);
+  expect(await sql`SELECT vorher->>'zahlstatus' AS before,nachher->'invoice'->>'zahlstatus' AS after FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${input.itemId}::uuid AND befehl_id=${change.clientKey}::uuid`).toEqual([{before:'unklar',after:'ungueltig'}]);
+  expect(await withSession(actor,()=>clarifyIncomingInvoiceAction(change))).toEqual({...result,replayed:true});
+  expect(await withSession(actor,()=>getIncomingInvoiceAction({id:saved.invoice.id}))).toMatchObject({code:'OK',view:{invoice:{zahlstatus:'ungueltig',version:2}}});
+ },60000);
+ it('R03/R10 rejects missing fields and Geld-less calls before a row, source mutation, or event; stale data also remains intact',async()=>{
+  const {actor,input}=await incomingFixture();const {saveIncomingInvoiceAction,getIncomingInvoiceAction}=await import('@/app/actions/eingang.actions');
+  expect(await withSession(actor,()=>saveIncomingInvoiceAction({...input,fields:{...input.fields,nummer:''}}))).toMatchObject({code:'VALIDATION_ERROR',fields:{nummer:expect.any(String)}});
+  expect(await withSession(actor,()=>saveIncomingInvoiceAction({...input,version:2}))).toMatchObject({code:'CONFLICT'});
+  await sql`DELETE FROM public.app_user_rights WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${actor.actorId}::uuid AND bereich='geld'`;
+  expect(await withSession(actor,()=>saveIncomingInvoiceAction(input))).toMatchObject({code:'FORBIDDEN'});
+  expect(await withSession(actor,()=>getIncomingInvoiceAction({id:input.itemId}))).toMatchObject({code:'FORBIDDEN'});
+  expect(await sql`SELECT id FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${input.itemId}::uuid`).toHaveLength(0);
+  expect(await sql`SELECT version,einsatz FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.itemId}::uuid`).toEqual([{version:1,einsatz:'offen'}]);
+  expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${input.itemId}::uuid AND art<>'original_gespeichert'`).toHaveLength(0);
+ },60000);
 });
 
 describe("H18 invoice Server Actions against the real replay database", () => {
@@ -445,4 +540,51 @@ describe("H18 invoice Server Actions against the real replay database", () => {
     expect(cancellationBytes.equals(Buffer.from(cancelRow!.cancellation_pdf_content))).toBe(true);
     expect(createHash("sha256").update(cancellationBytes).digest("hex")).toBe(cancelRow!.cancellation_pdf_sha256);
   }, 60_000);
+});
+
+// P55/RT03: synthetic XML is stored through the real action and never sent to OCR.
+describe('P55 structured electronic invoice originals',()=>{
+ const ubl=`<?xml version="1.0" encoding="UTF-8"?><Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"><cbc:ID>SYNTH-UBL-1</cbc:ID><cbc:IssueDate>2026-11-04</cbc:IssueDate><cbc:DueDate>2026-11-18</cbc:DueDate><cbc:DocumentCurrencyCode>EUR</cbc:DocumentCurrencyCode><cac:TaxTotal><cbc:TaxAmount currencyID="EUR">19.00</cbc:TaxAmount></cac:TaxTotal><cac:LegalMonetaryTotal><cbc:TaxExclusiveAmount currencyID="EUR">100.00</cbc:TaxExclusiveAmount><cbc:TaxInclusiveAmount currencyID="EUR">119.00</cbc:TaxInclusiveAmount></cac:LegalMonetaryTotal></Invoice>`;
+ const cii=`<?xml version="1.0" encoding="UTF-8"?><rsm:CrossIndustryInvoice xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100" xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100" xmlns:udt="urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100"><rsm:ExchangedDocument><ram:ID>SYNTH-CII-1</ram:ID><ram:IssueDateTime><udt:DateTimeString format="102">20261104</udt:DateTimeString></ram:IssueDateTime></rsm:ExchangedDocument><rsm:SupplyChainTradeTransaction><ram:ApplicableHeaderTradeSettlement><ram:InvoiceCurrencyCode>EUR</ram:InvoiceCurrencyCode><ram:SpecifiedTradePaymentTerms><ram:DueDateDateTime><udt:DateTimeString format="102">20261118</udt:DateTimeString></ram:DueDateDateTime></ram:SpecifiedTradePaymentTerms><ram:SpecifiedTradeSettlementHeaderMonetarySummation><ram:TaxBasisTotalAmount>100.00</ram:TaxBasisTotalAmount><ram:TaxTotalAmount currencyID="EUR">19.00</ram:TaxTotalAmount><ram:GrandTotalAmount>119.00</ram:GrandTotalAmount></ram:SpecifiedTradeSettlementHeaderMonetarySummation></ram:ApplicableHeaderTradeSettlement></rsm:SupplyChainTradeTransaction></rsm:CrossIndustryInvoice>`;
+ it.each([['UBL',ubl,'SYNTH-UBL-1'],['CII',cii,'SYNTH-CII-1']])('%s uses XML fields and never OCR',async(_format,xml,number)=>withLocalReplayStorage(async()=>{
+  const fixture=await createFixture();const azure=await import('@/lib/server/azureDocumentIntelligence');const ocr=vi.spyOn(azure,'analyzeWithAzureDocumentIntelligence');
+  try{
+   const {prepareIntakeFileAction,finishIntakeFileAction,getIncomingInvoiceAction,getIntakeCaptureAction}=await import('@/app/actions/eingang.actions');
+   const {uploadIntakeOriginal}=await import('@/modules/eingang/public');const bytes=Buffer.from(xml,'utf8');
+   const input={itemId:randomUUID(),fileId:randomUUID(),name:'synthetisch-xrechnung.xml',mime:'application/xml',bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')};
+   const grant=await withSession(fixture,()=>prepareIntakeFileAction(input));if(grant.code!=='OK')throw Error('XML_GRANT:'+grant.message);
+   if(grant.upload)expect((await uploadIntakeOriginal(grant.upload,new File([Uint8Array.from(bytes).buffer],input.name,{type:input.mime}))).ok).toBe(true);
+   const saved=await withSession(fixture,()=>finishIntakeFileAction(input.fileId));expect(saved).toMatchObject({code:'OK',capture:{recognition:{kind:'rechnung'},files:[{id:input.fileId,status:'fertig'}]}});
+   expect(await withSession(fixture,()=>getIntakeCaptureAction(input.itemId))).toMatchObject({code:'OK',capture:{recognition:{kind:'rechnung'},concerns:['rechnung']}});
+   expect(ocr).not.toHaveBeenCalled();
+   expect(await sql`SELECT erkennung_status FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.fileId}::uuid`).toEqual([{erkennung_status:'fertig'}]);
+   expect(await withSession(fixture,()=>getIncomingInvoiceAction({id:input.itemId}))).toMatchObject({code:'OK',view:{fields:{nummer:number,datum:'2026-11-04',faelligAm:'2026-11-18',netto:'100.00',ust:'19.00',brutto:'119.00'}}});
+   expect(await sql`SELECT art FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${input.itemId}::uuid AND art='erkannt'`).toHaveLength(1);
+  }finally{ocr.mockRestore();}
+ }),60000);
+});
+
+describe('P55 missing supplier on the real invoice path',()=>{
+ it('keeps a real task, blocks payment, creates supplier in existing form command and resolves through versioned invoice writer',async()=>{
+  const {actor,input}=await incomingFixture();
+  await sql`UPDATE public.intake_item SET kunde_id=NULL,zuordnung='offen' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.itemId}::uuid`;
+  const {saveIncomingInvoiceAction,changeIncomingInvoiceStatusAction,clarifyIncomingInvoiceAction,createCustomerForIntakeAction,getIncomingInvoiceAction}=await import('@/app/actions/eingang.actions');
+  const missing={...input,fields:{...input.fields,lieferantId:''}};
+  const saved=await withSession(actor,()=>saveIncomingInvoiceAction(missing));if(saved.code!=='OK')throw Error('P55_MISSING:'+JSON.stringify(saved));
+  expect(saved.invoice).toMatchObject({lieferant_id:null,zahlstatus:'unklar',unklar_grund:'Lieferant fehlt',aufgabe_id:expect.any(String)});
+  expect(await sql`SELECT titel,status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${saved.invoice.aufgabe_id}::uuid`).toEqual([{titel:'Lieferant ergänzen',status:'offen'}]);
+  const payment:InvoiceChangeInput={invoiceId:saved.invoice.id,version:1,clientKey:randomUUID(),result:'bezahlt',paidDate:'2026-11-01',proofFileId:null,duplicateId:null,reason:null,fields:null};
+  expect(await withSession(actor,()=>changeIncomingInvoiceStatusAction(payment))).toMatchObject({code:'VALIDATION_ERROR'});
+  const view=await withSession(actor,()=>getIncomingInvoiceAction({id:input.itemId}));if(view.code!=='OK')throw Error('P55_READ:'+JSON.stringify(view));
+  const created=await withSession(actor,()=>createCustomerForIntakeAction({itemId:input.itemId,version:view.view.item.version,customer:{clientEventId:randomUUID(),customerType:'lieferant',companyName:'SYNTHETISCH P55 '+input.itemId,country:'DE'}}));
+  if(created.code!=='OK')throw Error('P55_SUPPLIER:'+JSON.stringify(created));
+  expect(await sql`SELECT lieferant_id FROM public.supplier_invoice WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${saved.invoice.id}::uuid`).toEqual([{lieferant_id:null}]);
+  const change:InvoiceChangeInput={invoiceId:saved.invoice.id,version:1,clientKey:randomUUID(),result:'offen',paidDate:null,proofFileId:null,duplicateId:null,reason:null,fields:{...missing.fields,lieferantId:created.customer.id}};
+  const resolved=await withSession(actor,()=>clarifyIncomingInvoiceAction(change));if(resolved.code!=='OK')throw Error('P55_RESOLVE:'+JSON.stringify(resolved));
+  expect(resolved.invoice).toMatchObject({lieferant_id:created.customer.id,zahlstatus:'offen',version:2});
+  expect(await sql`SELECT kunde_id,vorgang_id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.itemId}::uuid`).toEqual([{kunde_id:created.customer.id,vorgang_id:saved.invoice.id}]);
+  expect(await sql`SELECT status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${saved.invoice.aufgabe_id}::uuid`).toEqual([{status:'erledigt'}]);
+  expect(await sql`SELECT nachher->>'command' AS command FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${input.itemId}::uuid AND befehl_id=${change.clientKey}::uuid`).toEqual([{command:'rechnung.klaeren'}]);
+  expect(await withSession(actor,()=>getIncomingInvoiceAction({id:saved.invoice.id}))).toMatchObject({code:'OK',view:{supplier:{id:created.customer.id},invoice:{lieferant_id:created.customer.id,zahlstatus:'offen'}}});
+ },60000);
 });

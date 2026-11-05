@@ -15,6 +15,7 @@ type Station = "wareneingang" | "angenommen" | "galvanik";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 type QueueRow = {
+  ausgabe_frei:boolean;
   id: string;
   tenant_id: string;
   version: number;
@@ -211,6 +212,7 @@ function mapOperationalQueueRow(row: QueueRow, tenantId: string): OperationalOrd
   return {
     id: row.id,
     version: row.version,
+    ausgabeFrei:row.ausgabe_frei,
     orderNumber: row.order_number,
     customerId: row.customer_id,
     customerName: row.customer_name,

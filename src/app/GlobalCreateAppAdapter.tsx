@@ -2,7 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import {getIncomingInvoiceAction,saveIncomingInvoiceAction,changeIncomingInvoiceStatusAction,clarifyIncomingInvoiceAction,searchInvoiceSuppliersAction} from '@/app/actions/eingang.actions';
+import {IncomingInvoiceDialogs,type InvoicePorts} from '@/modules/eingang/public';
 import { logout } from "@/app/actions/auth";
+import {saveIntakeTaskAction,completeIntakeTaskAction,getIntakeTaskAction,createCustomerForIntakeAction,getIntakeAssignmentAction,assignIntakeCustomerAction,setIntakeNoBusinessAction} from '@/app/actions/eingang.actions';
+import type {TaskPorts,AssignmentPorts} from '@/modules/eingang/public';
 import { chooseIntakeCaptureKindAction } from "@/app/actions/eingang.actions";
 import { createCustomerAction, getCustomersDb, readCustomerCreateReceiptAction, readCustomerAddressAction } from "@/app/actions/customers.actions";
 import { erfasseAuftragAusEingangAction, getIntakeDraftsAction, saveIntakeDraftAction, discardIntakeDraftAction, getIntakePendingScopeAction, saveIntakeNoteAction, recognizeIntakeNoteAction, prepareIntakeFileAction, finishIntakeFileAction, getIntakeCaptureAction, saveIntakeDeviceRequestAction, discardIntakeCaptureAction } from "@/app/actions/eingang.actions";
@@ -58,6 +62,19 @@ export function GlobalCreateAppAdapter() {
     return null;
   });
   const { canAction, hasArea, name, role } = usePermissions();
+  const taskCanManageMoney=hasArea('geld');
+  const invoicePorts=useMemo<InvoicePorts>(()=>({read:getIncomingInvoiceAction,save:saveIncomingInvoiceAction,status:changeIncomingInvoiceStatusAction,clarify:clarifyIncomingInvoiceAction,searchSuppliers:searchInvoiceSuppliersAction,prepareFile:prepareIntakeFileAction,finishFile:finishIntakeFileAction,
+    openOriginal:(itemId,fileId)=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'original',arg:itemId+'#'+fileId}})),
+    openTask:taskId=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'aufgabe',arg:taskId}})),
+    createSupplier:async itemId=>{const source=await getIncomingInvoiceAction({id:itemId});if(source.code!=='OK')return source;requestGlobalCreate({intent:'CUSTOMER',prefill:{sourceItemId:itemId,sourceVersion:source.view.item.version,customerMode:'lieferant',name:source.view.item.sender??undefined}});return {code:'OK'};},
+  }),[]);
+  const taskPorts=useMemo<TaskPorts>(()=>({read:getIntakeTaskAction,save:saveIntakeTaskAction,complete:completeIntakeTaskAction,canManageMoney:taskCanManageMoney,referenceTargets:['kunde','auftrag'],openInvoice:id=>window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:'rechnungein',arg:id+'#klaeren'}})),openReference:reference=>{if(reference.type==='kunde'&&reference.id)openCustomer(reference.id);if(reference.type==='auftrag'&&reference.id)openOrder(reference.id);}}),[openCustomer,openOrder,taskCanManageMoney]);
+  const assignmentPorts=useMemo<AssignmentPorts>(()=>({read:getIntakeAssignmentAction,assign:assignIntakeCustomerAction,noBusiness:setIntakeNoBusinessAction,
+    search:async query=>{const result=await searchOrderIntakeCustomersAction({query});return result.ok?{code:'OK',customers:result.data.customers.map(customer=>({id:customer.id,name:customer.name}))}:{code:'UNAVAILABLE',message:result.message};},
+    openCustomer,openConversation:id=>router.push('/nachrichten?gruppe='+encodeURIComponent(id)),
+    openCapture:view=>requestGlobalCreate({intent:'DIRECT_INTAKE',prefill:{sourceItemId:view.itemId,intakeKind:hasArea('geld')?'kv':'auftrag',customerId:view.customer?.id??(view.proposals.length===1?view.proposals[0].id:undefined)}}),
+    openNewCustomer:(view,supplier)=>requestGlobalCreate({intent:'CUSTOMER',prefill:{sourceItemId:view.itemId,sourceVersion:view.version,name:view.senderName??undefined,email:view.senderAddress??undefined,...(supplier?{customerMode:'lieferant'}:{})}}),
+  }),[openCustomer,router,hasArea]);
   const [resumeQuoteId, setResumeQuoteId] = useState<string | null>(null);
   const [resumeQuoteConversionId, setResumeQuoteConversionId] = useState<string | null>(null);
   const canCreateCustomer = canAction("createCustomer");
@@ -92,7 +109,9 @@ export function GlobalCreateAppAdapter() {
   };
 
   useEffect(()=>{
-    const handler=(event:Event)=>{const {ziel,arg}=(event as CustomEvent<{ziel:string;arg?:unknown}>).detail??{};
+    const handler=(event:Event)=>{const {ziel,arg,sourceItemId}=(event as CustomEvent<{ziel:string;arg?:unknown;sourceItemId?:string}>).detail??{};
+      if(ziel==='nachrichten'){event.preventDefault();router.push('/nachrichten'+(typeof arg==='string'&&arg?'?gruppe='+encodeURIComponent(arg):''));return;}
+      if(ziel==='eingang'&&typeof sourceItemId==='string'){event.preventDefault();requestGlobalCreate({intent:'DIRECT_INTAKE',prefill:{sourceItemId,intakeKind:hasArea('geld')?'kv':'auftrag'}});return;}
       if(ziel==="kundeneu"){requestGlobalCreate({intent:"CUSTOMER",prefill:typeof arg==="string"&&arg.endsWith("#lieferant")?{customerMode:"lieferant"}:undefined});return;}
       if (ziel === "eingang" && typeof arg === "string" && arg.endsWith("#kopie")) {
         requestGlobalCreate({ intent: "DIRECT_INTAKE", prefill: { orderCopyId: arg.slice(0, -6) } }); return;
@@ -100,18 +119,18 @@ export function GlobalCreateAppAdapter() {
       if (ziel === "eingang" && (arg == null || typeof arg === "string" && !arg.includes("#"))) {
         requestGlobalCreate(typeof arg === "string" && arg ? { intent: "DIRECT_INTAKE", prefill: { customerId: arg } } : "DIRECT_INTAKE"); return;
       }
-      if (ziel === "auftrag" && typeof arg === "string") { openOrder(arg); return; }
+      if (ziel === "auftrag" && typeof arg === "string") { event.preventDefault();openOrder(arg); return; }
         if((ziel==="kunde"||ziel==="kundebearbeiten")&&typeof arg==="string")openCustomer(ziel==="kundebearbeiten"&&!arg.includes("#")?arg+"#bearbeiten":arg);
     };
     window.addEventListener("kreile:oeffne",handler);return()=>window.removeEventListener("kreile:oeffne",handler);
-  },[openCustomer,openOrder]);
+  },[openCustomer,openOrder,router,hasArea]);
 
   // Keep one safe, typed intake boundary mounted for authenticated workshop roles.
   // Their request is denied by the same flow before any command can run.
   if (!role || !isAppRole(role)) return null;
 
   return (
-    <><IntakeMessageDialogs ports={mailPorts}/><IntakeObjectDialogs ports={objectPorts} allowed={hasArea("eingang")} onRefresh={()=>router.refresh()}/><GlobalCreateFlow
+    <><IncomingInvoiceDialogs ports={invoicePorts} allowed={hasArea('geld')} onRefresh={()=>router.refresh()}/><IntakeMessageDialogs ports={mailPorts} taskPorts={taskPorts} assignmentPorts={assignmentPorts} onRefresh={()=>router.refresh()}/><IntakeObjectDialogs ports={objectPorts} allowed={hasArea("eingang")} originalAllowed={hasArea('eingang')||hasArea('geld')} onRefresh={()=>router.refresh()}/><GlobalCreateFlow
       ports={{
         readIntakeOrderSource: async (orderId) => {
           const result = await getLiveOrderCardAction({ orderId });
@@ -203,6 +222,11 @@ export function GlobalCreateAppAdapter() {
             receipt: result.receipt,
             customer: customerChoice(result.customer),
           };
+        },
+        createCustomerFromCapture:async(input,source)=>{
+          const result=await createCustomerForIntakeAction({customer:input,...source});
+          if(result.code!=='OK')return result;
+          return {code:'OK',replayed:result.replayed,receipt:result.receipt,customer:customerChoice(result.customer)};
         },
         readCustomerCreateReceipt: async (input: CreateCustomerInput): Promise<GlobalCreateCustomerResult> => {
           const result = await readCustomerCreateReceiptAction(input);

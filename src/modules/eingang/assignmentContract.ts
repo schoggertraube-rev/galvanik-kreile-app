@@ -1,0 +1,11 @@
+import type {AccessArea} from '@/lib/auth/authorizationContract';
+export type AssignmentMode='normal'|'rein'|'kein'|'umhaengen';
+export type AssignmentCustomer={id:string;name:string;type:string;reason:string|null};
+export type AssignmentView={itemId:string;version:number;channel:string;assignment:string;usage:string;senderName:string|null;senderAddress:string|null;subject:string|null;text:string|null;at:string;customer:AssignmentCustomer|null;proposals:AssignmentCustomer[];files:Array<{id:string;name:string}>;areas:AccessArea[];restricted:boolean;concerns:string[];duplicates:Array<{id:string;title:string|null;at:string}>};
+export type AssignmentFailure={code:'UNAUTHENTICATED'|'FORBIDDEN'|'NOT_FOUND'|'VALIDATION_ERROR'|'CONFLICT'|'UNAVAILABLE';message:string};
+export type AssignmentReadResult={code:'OK';view:AssignmentView}|AssignmentFailure;
+export type AssignmentInput={itemId:string;version:number;clientEventId:string;customerId:string;mode:'confirm'|'manual'|'move'};
+export type AssignmentResult={code:'OK';customer:AssignmentCustomer;version:number;additional:number;replayed:boolean}|{code:'ALREADY_ASSIGNED';customer:AssignmentCustomer|null}|AssignmentFailure;
+export type NoBusinessInput={itemId:string;version:number;clientEventId:string;reason:'werbung'|'privat'|'fehlzustellung'|'doppelt'|'info';originalId?:string};
+export type NoBusinessResult={code:'OK'}|{code:'INVOICE_REVIEW_REQUIRED';itemId:string;message:string}|AssignmentFailure;
+export type AssignmentPorts={read:(input:{itemId:string;mode:AssignmentMode})=>Promise<AssignmentReadResult>;assign:(input:AssignmentInput)=>Promise<AssignmentResult>;noBusiness:(input:NoBusinessInput)=>Promise<NoBusinessResult>;search:(query:string)=>Promise<{code:'OK';customers:Array<{id:string;name:string}>}|{code:'UNAVAILABLE'|'FORBIDDEN'|'VALIDATION_ERROR';message:string}>;openCustomer:(id:string)=>void;openCapture:(view:AssignmentView)=>void;openNewCustomer:(view:AssignmentView,supplier:boolean)=>void;openConversation:(id:string)=>void};

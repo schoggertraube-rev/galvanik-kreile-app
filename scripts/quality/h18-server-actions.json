@@ -1,7 +1,16 @@
 {
   "version": 1,
-  "inventorySha256": "79ed806e55409bec3b82cc28187dcc32473a041dc6cc54c72e86fab64061fdc7",
+  "inventorySha256": "e4b6bf111864518b17133f92b0d6cbf31ef610f91fa859abf1e67b60329838fa",
   "testedWriteActions": {
+    "src/app/actions/eingang.actions.ts#saveIncomingInvoiceAction": [
+      "src/test/h18_invoice_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#changeIncomingInvoiceStatusAction": [
+      "src/test/h18_invoice_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#clarifyIncomingInvoiceAction": [
+      "src/test/h18_invoice_actions.integration.test.ts"
+    ],
     "src/app/actions/eingang.actions.ts#saveIntakeDeviceRequestAction": [
       "src/test/h18_customer_actions.integration.test.ts"
     ],
@@ -148,9 +157,6 @@
     "src/app/actions/eingang.actions.ts#reopenIntakeAction": [
       "src/test/h18_customer_actions.integration.test.ts"
     ],
-    "src/app/actions/eingang.actions.ts#chooseIntakeCaptureKindAction": [
-      "src/test/h18_customer_actions.integration.test.ts"
-    ],
     "src/app/actions/eingang.actions.ts#saveGoodsReceiptAction": [
       "src/test/h18_customer_actions.integration.test.ts"
     ],
@@ -159,6 +165,30 @@
     ],
     "src/app/actions/eingang.actions.ts#confirmIntakeOriginalAction": [
       "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#saveIntakeTaskAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#completeIntakeTaskAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#assignIntakeCustomerAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#setIntakeNoBusinessAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#createCustomerForIntakeAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#chooseIntakeCaptureKindAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/orders.actions.ts#changeOrderPickupNoticeAction": [
+      "src/test/h18_order_admin_actions.integration.test.ts"
+    ],
+    "src/app/actions/settings.actions.ts#saveShippingSettingsAction": [
+      "src/test/h18_order_admin_actions.integration.test.ts"
     ]
   },
   "writeActionOverrides": {
@@ -177,9 +207,6 @@
     "src/app/actions/communications.actions.ts#attachOutlookMailAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/communications.actions.ts#sendCustomerMailAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/company.actions.ts#updateCompanySettings": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/complaints.actions.ts#createComplaint": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/complaints.actions.ts#resolveComplaint": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/complaints.actions.ts#updateComplaint": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/customers.actions.ts#createCustomerDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/customers.actions.ts#updateCustomerDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/domainAttachments.actions.ts#analyzeDomainAttachmentAction": "H18.8 Bestand ohne Replay-Action-Test",

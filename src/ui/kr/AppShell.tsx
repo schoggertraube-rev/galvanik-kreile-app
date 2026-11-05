@@ -6,7 +6,7 @@ import { Chip } from './Chip';
 import { useHydrated } from '@/hooks/useHydrated';
 import type { Geraet } from './typen';
 import { cx } from './typen';
-export type Bereich = 'tag' | 'werkstatt' | 'auftraege' | 'kunden' | 'geld' | 'einstellungen';
+export type Bereich = 'tag' | 'nachrichten' | 'werkstatt' | 'auftraege' | 'kunden' | 'geld' | 'einstellungen';
 export interface NavEintrag { id: Bereich; text: string; icon: IconName; badge?: { n: number; rot?: boolean }; }
 export interface AppShellProps {
   geraet: Geraet;
@@ -22,7 +22,7 @@ export interface AppShellProps {
   ebene?: ReactNode; children: ReactNode;
 }
 const NAV: NavEintrag[] = [
-  { id: 'tag', text: 'Der Tag', icon: 'sun' }, { id: 'werkstatt', text: 'Werkstatt', icon: 'flask' },
+  { id: 'tag', text: 'Der Tag', icon: 'sun' }, { id: 'nachrichten', text: 'Nachrichten', icon: 'mail' }, { id: 'werkstatt', text: 'Werkstatt', icon: 'flask' },
   { id: 'auftraege', text: 'Aufträge', icon: 'list' }, { id: 'kunden', text: 'Kunden & Kontakt', icon: 'users' },
   { id: 'geld', text: 'Geld & Rechnungen', icon: 'euro' }
 ];
@@ -55,7 +55,7 @@ export function AppShell(p: AppShellProps) {
   }
   if (p.geraet === 'desktop') {
     const nav = (n: NavEintrag) => { const b = p.badges?.[n.id]; return (
-      <button key={n.id} type="button" className={cx('kr-nav', p.aktiv === n.id && 'kr-nav--aktiv')} aria-current={p.aktiv === n.id ? 'page' : undefined} disabled={!interactive} onClick={() => p.onNav(n.id)}>
+      <button key={n.id} type="button" data-spec-id={`navigation.${n.id}`} className={cx('kr-nav', p.aktiv === n.id && 'kr-nav--aktiv')} aria-current={p.aktiv === n.id ? 'page' : undefined} disabled={!interactive} onClick={() => p.onNav(n.id)}>
         <Icon name={n.icon} /><span>{n.text}</span>{b && <span className={cx('kr-nav-badge', b.rot && 'kr-nav-badge--rot')}>{b.n}</span>}</button>); };
     return (<><div className="kr-streifen" /><div className="kr-shell">{kopf}
       <nav className="kr-seitenleiste kr-scroll" aria-label="Hauptnavigation">

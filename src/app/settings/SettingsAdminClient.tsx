@@ -26,6 +26,7 @@ import { runServerAction } from "@/lib/client/runServerAction";
 import { Dialog, DialogAktionsmeldung, type DialogMeldung } from "@/ui/kr/Dialog";
 import { Toast } from "@/ui/kr/Toast";
 import styles from "./settings.module.css";
+import { ShippingSettingsEditor } from "./ShippingSettingsEditor";
 
 type Tab = "company" | "catalog" | "users";
 type Result = { code: string; message?: string };
@@ -364,6 +365,7 @@ export function SettingsAdminClient({
       </div>
       <div id="company-data" className={styles.grid}>{field("companyName", "Firmenname")}{field("street", "Straße")}{field("zip", "PLZ")}{field("city", "Ort")}{field("country", "Land")}{field("taxId", "USt-ID / Steuernummer")}{field("iban", "IBAN")}{field("bic", "BIC")}{field("bankName", "Bank")}{field("paymentTermDays", "Zahlungsziel in Tagen", "number")}{field("logoUrl", "Logo-Pfad")}</div>
       <button disabled={pending} onClick={saveCompany}>Firmendaten speichern</button>
+      <ShippingSettingsEditor />
       <div id="extra-work-rate"><h3>Mehrarbeit</h3><div className={styles.grid}><label>Stundensatz Mehrarbeit (€/h)<input inputMode="decimal" value={hourlyRateEuro} onChange={(event) => setHourlyRateEuro(event.target.value)} placeholder="z. B. 85,00" /></label></div><button disabled={pending} onClick={saveHourlyRate}>Stundensatz speichern</button></div>
       <h3>Nummernkreise (systemverwaltet)</h3><dl className={styles.ranges}>{initialSnapshot.numberRanges.map((range) => <div key={range.label}><dt>{range.label}</dt><dd>{range.pattern}</dd></div>)}</dl>
     </section> : null}

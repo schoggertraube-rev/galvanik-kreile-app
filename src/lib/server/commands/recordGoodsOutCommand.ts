@@ -73,6 +73,7 @@ export type RecordGoodsOutResult =
   | { code: "UNAVAILABLE"; message: string };
 
 type LockedOrder = {
+  ausgabe_frei:boolean;
   id: string;
   tenant_id: string;
   customer_id: string | null;
@@ -194,7 +195,7 @@ async function readOrder(
 ): Promise<LockedOrder[]> {
   const query = sql`
     SELECT id, tenant_id, customer_id, station, current_station,
-      current_station_id, status, version, payment_mode
+      current_station_id, status, version, payment_mode,ausgabe_frei
     FROM public.orders
     WHERE id = ${orderId} AND tenant_id = ${tenantId}
     LIMIT 2
@@ -433,6 +434,8 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
       if (!order.customer_id || !isPaymentMode(order.payment_mode)) {
         return { code: "VALIDATION_ERROR", message: "Auftragsvertrag ist nicht verfügbar." };
       }
+
+      if(order.ausgabe_frei!==true)return {code:"CONFLICT",message:"Ausgabe ist noch nicht freigegeben. Zahlung oder Abschluss fehlt."};
 
       const invoices = await readActiveInvoice(tx, tenantId, order.id);
       if (invoices.length > 1) {

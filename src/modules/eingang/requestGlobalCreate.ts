@@ -6,6 +6,9 @@ export type GlobalCreateRequest = {
   draftId?: string;
   prefill?: {
     orderCopyId?: string;
+    sourceItemId?: string;
+    sourceVersion?: number;
+    intakeKind?: 'auftrag'|'kv';
     customerId?: string;
     customerMode?:"lieferant";
     name?: string;
