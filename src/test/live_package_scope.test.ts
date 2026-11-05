@@ -12,6 +12,7 @@ import {
   checkTaB2hScopeForTest,
   checkTaB2iScopeForTest,
   checkTaB2jScopeForTest,
+  checkTaB2k1ScopeForTest,
   checkB2iParserChangesForTest,
   checkTaB2fBaselineChangeForTest,
   runSelftest,
@@ -66,6 +67,40 @@ describe("P59 TA-B2j: AP-EIN paths and additive migrations", () => {
     const files = ["src/modules/quotes/server/quoteCommands.ts"];
     expect(checkSalesStageB2ScopeForTest({files, mission:b2Mission, branch:"kreile/b2-ein-2b"})).toEqual([]);
     expect(checkSalesStageB2ScopeForTest({files, mission:b2Mission, branch:"kreile/b2-ein-2c"})).toContain("SALES_STAGE_BRANCH_INVALID:kreile/b2-ein-2c");
+  });
+});
+
+describe("P68 TA-B2k1: only the exact Druck- and Nacharbeit paths", () => {
+  const branch = "codex/ta-b2k1";
+  const baseSha = "ce762422266089d694a12a94fe2129095003e82e";
+  const files = ["scripts/quality/check-live-package-scope.mjs", "src/test/live_package_scope.test.ts",
+    "docs/evidence/live-line/b2/TRUST_ANCHOR_B2K1.json", "docs/delivery/ABGABE_TA-B2K1.md"];
+  const allowedProductPaths = [
+    "src/lib/server/commands/__tests__/orderStationCommand.test.ts",
+    "src/app/actions/pdf.actions.ts",
+    "src/lib/pdf/OrderLabel.tsx",
+    "src/lib/pdf/__tests__/w2cB2m5u.orderLabelDateTruth.test.tsx",
+    "src/modules/orders/server/reworkOrderCommand.ts",
+    "src/modules/orders/server/__tests__/reworkOrderCommand.test.ts",
+    "src/modules/orders/server-public.ts",
+    "src/modules/orders/orders.manifest.json",
+  ];
+  it("restricts the anchor to its four files, exact branch and merged #168 base", () => {
+    expect(checkTaB2k1ScopeForTest({ files, mission: b2AnchorMission, branch, baseSha })).toEqual([]);
+    expect(checkTaB2k1ScopeForTest({ files: [...files, "docs/project/endversion/codex/BAUPLAN.json"], mission: b2AnchorMission, branch, baseSha }))
+      .toContain("TA_B2K1_SCOPE:docs/project/endversion/codex/BAUPLAN.json");
+    expect(checkTaB2k1ScopeForTest({ files, mission: b2AnchorMission, branch: "codex/other", baseSha }))
+      .toContain("TA_B2K1_BRANCH_INVALID:codex/other");
+    expect(checkTaB2k1ScopeForTest({ files, mission: b2AnchorMission, branch, baseSha: "wrong" }))
+      .toContain(`TA_B2K1_BASE_INVALID:wrong:${baseSha}`);
+  });
+  it("permits only the P68 follow-up paths and rejects an adjacent order path", () => {
+    for (const path of allowedProductPaths) {
+      expect(checkSalesStageB2ScopeForTest({ files: [path], mission: b2Mission, branch: "kreile/b2-ein-3" }), path).toEqual([]);
+    }
+    const adjacent = "src/app/actions/pdf-other.actions.ts";
+    expect(checkSalesStageB2ScopeForTest({ files: [adjacent], mission: b2Mission, branch: "kreile/b2-ein-3" }))
+      .toContain(`SALES_STAGE_B2_SCOPE:${adjacent}`);
   });
 });
 
