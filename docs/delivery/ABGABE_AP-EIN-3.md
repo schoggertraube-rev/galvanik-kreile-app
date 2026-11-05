@@ -76,3 +76,47 @@ Originalprüfer FDA7C59C und Sichtvertrag B1A53EA6 unverändert auf genau dem RE
 Weitere offene Arbeit: Integration des gemeinsamen Warenbausteins in die Erfassung; Restannahme/Druckweg; Aufgaben/Abweichungsantworten aus Teil 4; Stations-Fixture in_arbeit gegenüber kanonischem galvanik; domainAttachment-Verknüpfung nach P46 auf intake_file/file_id samt Bestandsmigration (zusätzliche Pfade bisher nicht freigegeben). Keine zweite Ablage, keine umbenannte Spaltenbedeutung, kein neuer Provider.
 
 Owner-Klickweg für den lesenden Zwischenstand: READY-Preview oben → vorhandenen Profilzugang → denselben vorhandenen Waren-Deep-Link öffnen → Fotos/Zustand/Inhalt ansehen. Speichern/Annehmen ist keine abgeschlossene Owner-Abnahme dieses Drafts; erst nach Schließen der offenen Fälle und grünem Sichtlauf. Kein Erfolg oder Livefähigkeit behauptet.
+
+## Finalisierung Runde 52 · 05.11. 19:35 CET
+
+Dieser Abschnitt ersetzt ausschließlich die älteren Zwischenstands-Aussagen zu
+Merge-Reife, CI und Preview weiter oben. Der festgeschriebene Teil-3-Umfang
+bleibt unverändert.
+
+- **Kandidat:** `1c499f03301f34ce7460c2f9b81c702977dc8137`
+- **Basis:** `main` `44a3ce3b27a065ef7955e66e0c4dd591b8f61df3`
+- **READY-Preview genau dieses SHA:** https://galvanik-kreile-werkstatt-o4uhwhy9k.vercel.app
+- **PR:** #171, AP-EIN Teil 3, Runde 52
+
+### Exakter Prüfstand
+
+| Nachweis | Ergebnis |
+|---|---|
+| Vercel und Vercel Preview Comments | PASS |
+| `agentur-gate` | PASS – Typecheck, H16, H18 und Unit-Tests grün |
+| `h16-schema` | PASS – frischer Migrations-Replay, H12-SQL-Verträge, H18 echte Server-Actions, alle Akzeptanztests und Generated-BAUPLAN-Flows gegen die Replay-DB grün |
+| Scope gegen die Main-Basis, TypeScript, vollständiges Lint, Whitespace | PASS |
+| Produkt-DB-Kette | PASS durch den exakten CI-Replay: Action → DB-Zeile/Event → erneuter Leser; der Teil nutzt weiterhin ausschließlich die bestehenden Stations-, Original- und Storage-Verträge |
+
+### Sichtnachweis
+
+Der unveränderte Runde-52-Prüfer und die unveränderte Runde-52-Routenbeschreibung
+liefen gegen die READY-Preview dieses SHA für `ware,original`:
+**0 grün / 6 gelb / 0 rot**. Bericht:
+`C:\Users\Traube\.codex\visualizations\2026\11\05\part3-1c499f03\sicht-r52-exact\pruefbericht.json`.
+
+Alle sechs gelben Zeilen sind bewusst offen gelegte, zustandsabhängige
+Routenlücken der Runde-52-`routen.json`: Für Ware und Original ist kein
+erfundener Aufruf oder Testdatensatz hinterlegt. Die Ausführung hat deshalb
+keine Produktseite vorgetäuscht und keinen Dev-Datensatz verändert. Es gibt
+keinen roten Struktur- oder Layoutbefund. Die kanonische Sicht-Verkabelung
+kommt als Folgearbeit mit der gebundenen Runde-53-Angleichung; sie wird wegen
+Regel 22 nicht nachträglich in diesen festen Teil-3-PR gezogen.
+
+### Merge-Einordnung
+
+Nach P68 sowie Regeln 22–24 ist #171 damit **merge-reif**: Die funktionalen
+Teil-3-Verträge sind auf dem exakten SHA vollständig über den CI-Replay belegt;
+die sechs Sicht-Gelb-Einträge sind transparent dokumentiert und erzeugen weder
+einen zweiten Produktweg noch einen erfundenen Preview-Zustand. Kein
+Production- oder Live-Erfolgsclaim ist damit verbunden.
