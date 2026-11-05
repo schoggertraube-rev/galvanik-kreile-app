@@ -3,10 +3,27 @@
 import { createHash } from "node:crypto";
 import { after } from "next/server";
 import { getAppSession } from "@/lib/server/appSession";
+import {readIntakeMessages} from '@/modules/eingang/server-public';
+export async function getIntakeMessagesAction(filter:unknown='offen'){return readIntakeMessages(filter);}
+import {readIntakeAssignment,assignIntakeCustomer,setIntakeNoBusiness,createCustomerForIntake} from '@/modules/eingang/server-public';
+export async function getIntakeAssignmentAction(input:unknown){return readIntakeAssignment(input,readCustomerProfile);}
+export async function assignIntakeCustomerAction(input:unknown){return assignIntakeCustomer(input,readCustomerProfile);}
+export async function setIntakeNoBusinessAction(input:unknown){return setIntakeNoBusiness(input);}
+export async function createCustomerForIntakeAction(input:unknown){return createCustomerForIntake(input,createCustomerInTransaction,readCustomerProfile);}
 import {selectIntakeConcern,finishIntakeUse,reopenIntake} from '@/modules/eingang/server-public';
 export async function selectIntakeConcernAction(input:unknown){return selectIntakeConcern(input);}
 export async function finishIntakeUseAction(input:unknown){return finishIntakeUse(input);}
 export async function reopenIntakeAction(input:unknown){return reopenIntake(input);}
+import {saveTask,completeTask,readTask,createMissingGoodsTask,type TaskEffectRequest} from '@/modules/tasks/server-public';
+import type {TaskOpenRequest} from '@/modules/tasks/public';
+import {recordIntakeTaskEffect} from '@/modules/eingang/server-public';
+import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import type {AuthorizationSnapshot} from '@/lib/server/authorization';
+const taskEffects={effect:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:TaskEffectRequest)=>recordIntakeTaskEffect(tx,auth,input,readCustomerProfile)};
+const goodsEffects={createMissingTask:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;missing:string[];clientKey:string})=>createMissingGoodsTask(tx,auth,input,taskEffects)};
+export async function saveIntakeTaskAction(input:unknown){return saveTask(input,taskEffects);}
+export async function completeIntakeTaskAction(input:unknown){return completeTask(input,taskEffects);}
+export async function getIntakeTaskAction(input:TaskOpenRequest){return readTask(input);}
 import {readOpenIntakeMails} from '@/modules/eingang/server-public';
 import {saveIntakeProspect} from '@/modules/eingang/server-public';
 export async function saveIntakeProspectAction(input:unknown){return saveIntakeProspect(input,createCustomerInTransaction,readCustomerProfile);}
@@ -24,8 +41,8 @@ export async function confirmIntakeOriginalAction(input:unknown){return confirmI
 export async function getGoodsReceiptsAction(orderId:string){return readGoodsReceipts(orderId);}
 export async function saveGoodsReceiptAction(input:unknown):Promise<GoodsReceiptResult>{
  const parsed=parseGoodsReceiptInput(input);if(!parsed)return {code:"VALIDATION_ERROR",message:"Warenprüfung ist unvollständig oder ungültig."};
- if(parsed.command!=="galvanik")return saveGoodsReceipt(parsed);
- const binding=createGoodsReceiptStationBinding(parsed);
+ if(parsed.command!=="galvanik")return saveGoodsReceipt(parsed,goodsEffects);
+ const binding=createGoodsReceiptStationBinding(parsed,goodsEffects);
  const moved=await transitionWareneingangToGalvanik({orderId:parsed.orderId,expectedVersion:parsed.expectedOrderVersion,clientEventId:parsed.clientEventId},binding);
  if(moved.code!=="OK"){const bound=binding.result();return bound&&bound.code!=="OK"?bound:moved;}
  return binding.result()??{code:"UNAVAILABLE",message:"Warenbeleg wurde nicht sicher gelesen. Fehlercode: GOODS_RECEIPT_BINDING_MISSING."};

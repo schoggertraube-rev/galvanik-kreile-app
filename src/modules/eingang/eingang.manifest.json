@@ -6,6 +6,8 @@
     "@/modules/eingang/server-public#selectIntakeConcern",
     "@/modules/eingang/server-public#finishIntakeUse",
     "@/modules/eingang/server-public#reopenIntake",
+    "@/modules/eingang/public#TaskPorts",
+    "@/modules/eingang/server-public#recordIntakeTaskEffect",
     "@/modules/eingang/public#IntakeMessageDialogs",
     "@/modules/eingang/public#MailSelectionPorts",
     "@/modules/eingang/public#INTAKE_MAIL_ADOPT_EVENT",
@@ -107,7 +109,15 @@
     "@/modules/eingang/server-public#createGoodsReceiptStationBinding",
     "@/modules/eingang/server-public#writeCreatedOrderGoodsReceipt",
     "@/modules/eingang/server-public#GoodsReceiptResult",
-    "@/modules/eingang/server-public#GoodsReceiptDependencies"
+    "@/modules/eingang/server-public#GoodsReceiptDependencies",
+    "@/modules/eingang/server-public#readIntakeMessages",
+    "@/modules/eingang/public#IntakeMessages",
+    "@/modules/eingang/public#IntakeMessagesPorts",
+    "@/modules/eingang/server-public#readIntakeAssignment",
+    "@/modules/eingang/server-public#assignIntakeCustomer",
+    "@/modules/eingang/server-public#setIntakeNoBusiness",
+    "@/modules/eingang/server-public#createCustomerForIntake",
+    "@/modules/eingang/public#AssignmentPorts"
   ],
   "capabilities": [
     "eingang:auftrag-anlegen"
@@ -116,10 +126,12 @@
     "20261031212320_ap01_intake_item.sql",
     "20261103053000_ein2_erfassung.sql",
     "20261103191000_ein3_warenpruefung.sql",
+    "20261104012000_ein4_nachrichten.sql",
     "20261105095422_ein2_erwartete_ware.sql"
   ],
   "viewsFunctions": [
-    "public.v_intake_expected_goods_v1"
+    "public.v_intake_expected_goods_v1",
+    "private.v_intake_message_contexts_v1"
   ],
   "ownsTables": [
     "public.intake_event",
@@ -141,6 +153,7 @@
   },
   "config": {},
   "dependencies": [
+    "tasks",
     "customers",
     "orders",
     "quotes"

@@ -6,13 +6,13 @@
   "tenant": "galvanik-kreile",
   "note": "Machine-readable capability inventory based on snapshot_sha; the immutable review SHA is recorded separately when the candidate is frozen. Every page route, API route, Server Action group, KPI definition, and provider connection must carry exactly one of: REAL_VERIFIED | REAL_PENDING_SECRET | PENDING_CONTRACT | TEST_ONLY | LEGACY_REMOVE",
   "summary": {
-    "page_routes": 14,
+    "page_routes": 15,
     "api_routes": 3,
     "server_action_groups": 48,
     "kpi_definitions": 7,
     "provider_connections": 16,
     "nav_links_without_page": 3,
-    "total": 91
+    "total": 92
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -340,13 +340,10 @@
       "entry_point": "src/app/actions/complaints.actions.ts",
       "exported_functions": [
         "getComplaints",
-        "getByOrder",
-        "createComplaint",
-        "updateComplaint",
-        "resolveComplaint"
+        "getByOrder"
       ],
       "classification": "PENDING_CONTRACT",
-      "open_reason": "Complaint/Reklamation management. Supabase-connected but no independent E2E evidence.",
+      "open_reason": "AP-EIN-4: tenant-authorized read facade replaces the legacy readers; new complaint workflow and independent exact-SHA acceptance remain pending.",
       "visible": false,
       "reachable": false
     },
@@ -418,6 +415,9 @@
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/eingang.actions.ts",
       "exported_functions": [
+        "saveIntakeTaskAction",
+        "completeIntakeTaskAction",
+        "getIntakeTaskAction",
         "saveIntakeNoteAction",
         "prepareIntakeFileAction",
         "finishIntakeFileAction",
@@ -442,7 +442,12 @@
         "getGoodsReceiptsAction",
         "saveGoodsReceiptAction",
         "openIntakeOriginalAction",
-        "confirmIntakeOriginalAction"
+        "confirmIntakeOriginalAction",
+        "getIntakeMessagesAction",
+        "getIntakeAssignmentAction",
+        "assignIntakeCustomerAction",
+        "setIntakeNoBusinessAction",
+        "createCustomerForIntakeAction"
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "AP-01 Eingang action is covered against the replay database; exact-SHA review and owner verification remain pending.",
@@ -1384,6 +1389,16 @@
       "reachable": true,
       "classification": "PENDING_CONTRACT",
       "open_reason": "AP-EIN decision 17: authenticated own-tenant IDs and timestamps; real replay Action/DB/read tested, independent exact-SHA review pending."
+    },
+    {
+      "stable_id": "page.nachrichten",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/nachrichten/page.tsx",
+      "route": "/nachrichten",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "AP-EIN Teil 4 canonical intake conversation; independent exact-SHA and visual acceptance pending."
     }
   ]
 }

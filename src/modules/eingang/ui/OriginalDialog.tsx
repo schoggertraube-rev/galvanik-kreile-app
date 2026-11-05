@@ -4,6 +4,7 @@ import Image from 'next/image';
 import {Button,Dialog,Hinweis,Kachel} from '@/ui/kr';
 import type {IntakeCapture,IntakeCaptureResult} from '../captureContract';
 import type {OriginalReadResult,OriginalConfirmResult} from '../originalContract';
+import {INTAKE_CHANGED_EVENT} from '../messageContract';
 
 export type OriginalPorts={open:(input:{fileId:string;clientEventId:string})=>Promise<OriginalReadResult>;confirm:(input:{fileId:string;clientEventId:string})=>Promise<OriginalConfirmResult>;capture:(itemId:string)=>Promise<IntakeCaptureResult>;retry:(input:{fileId:string;clientEventId:string})=>Promise<IntakeCaptureResult>};
 type Data=Extract<OriginalReadResult,{code:'OK'}>['original'];
@@ -20,6 +21,7 @@ export function OriginalDialog({fileId,ports,onClose,onAssign,onMessage}:{fileId
   finally{setLoading(false);}
  },[fileId,ports]);
  useEffect(()=>{const timer=setTimeout(()=>void load(),0);return()=>clearTimeout(timer);},[load]);
+ useEffect(()=>{const changed=()=>void load();window.addEventListener(INTAKE_CHANGED_EVENT,changed);return()=>window.removeEventListener(INTAKE_CHANGED_EVENT,changed);},[load]);
  const confirm=async()=>{
   if(working.current||!data||data.restricted)return;working.current=true;setBusy(true);setMessage(null);
   try{const result=await ports.confirm({fileId,clientEventId:confirmKey.current});if(result.code!=='OK'){setMessage(result.message);return;}
