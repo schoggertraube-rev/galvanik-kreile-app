@@ -50,9 +50,9 @@ describe("P59 TA-B2j: AP-EIN paths and additive migrations", () => {
   it("covers the inventoried modules, routes and original attachment and quote readers", () => {
     const allowed = ["src/modules/quotes/server/quoteReads.ts", "src/modules/orders/ui/OrderCardView.tsx", "src/modules/werkstatt/ui/WerkstattView.tsx",
       "src/modules/fundament/server/systemSettingsPort.ts", "src/app/nachrichten/page.tsx", "src/app/rein/page.tsx", "src/app/customers/page.tsx", "src/app/orders/page.tsx", "src/app/angebote/page.tsx", "src/app/quotes/page.tsx", "src/app/warendurchlauf/page.tsx", "src/app/settings/page.tsx", "src/app/telefonnotiz/layout.tsx", "src/app/buchhaltung/belege/BelegeClient.tsx", "src/components/warenausgang/WarenausgangQueue.tsx", "src/app/api/eingang-share/route.ts",
-      "src/lib/server/commands/quoteCommand.ts", "src/lib/server/commands/__tests__/quoteCommand.test.ts", "src/lib/server/domainAttachment.ts", "src/lib/server/__tests__/domainAttachment.test.ts", "src/lib/server/evidenceRead.ts", "src/lib/server/__tests__/evidenceRead.test.ts", "src/lib/domain/workingDays.ts"];
+      "src/lib/server/commands/quoteCommand.ts", "src/lib/server/commands/__tests__/quoteCommand.test.ts", "src/lib/server/domainAttachment.ts", "src/lib/server/__tests__/domainAttachment.test.ts", "src/lib/server/evidenceRead.ts", "src/lib/server/__tests__/evidenceRead.test.ts", "src/lib/domain/workingDays.ts", "src/components/start/StartScreenClient.tsx"];
     for (const file of allowed) expect(checkSalesStageB2ScopeForTest({files:[file], mission:b2Mission, branch:"kreile/b2-ein-3"}), file).toEqual([]);
-    for (const file of ["src/modules/inventory/public.ts", "src/lib/server/other.ts", "src/app/actions/start.other.ts", ".github/workflows/quality.yml"])
+    for (const file of ["src/modules/inventory/public.ts", "src/lib/server/other.ts", "src/app/actions/start.other.ts", "src/components/start/StartScreenOther.tsx", ".github/workflows/quality.yml"])
       expect(checkSalesStageB2ScopeForTest({files:[file], mission:b2Mission, branch:"kreile/b2-ein-3"}), file).toContain(`SALES_STAGE_B2_SCOPE:${file}`);
   });
   it("permits multiple new files but rejects modified or invalid migrations", () => {

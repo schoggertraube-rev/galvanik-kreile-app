@@ -8,4 +8,6 @@ Für `ein0` bis `ein6` gibt es keine Anzahlgrenze für neue, regelkonform benann
 
 Für den nach Teil 6 vorgesehenen separaten KV-Schritt erlaubt der Branchfilter zusätzlich genau `kreile/b2-ein-2b`; benachbarte Branchnamen bleiben gesperrt.
 
+P61 ergänzt genau `src/components/start/StartScreenClient.tsx` für die produktseitige Hydrationssperre beim Login; benachbarte Start-Dateien bleiben außerhalb des Scopes. Authentifizierung, Sitzungen und Rechte werden dadurch nicht freigegeben oder verändert.
+
 DB-Soll: keine Datenänderung. CI und Prüfnachweise des konkreten PR-Kopfes stehen im NACHTLAUF Abschnitt C. Kein Merge und kein Produktions-Deploy durch Codex.

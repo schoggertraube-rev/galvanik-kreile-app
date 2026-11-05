@@ -717,6 +717,7 @@ const SALES_STAGE_B2_ALLOWLIST = Object.freeze([
   "src/lib/server/evidenceRead.ts",
   "src/lib/server/__tests__/evidenceRead.test.ts",
   "src/lib/domain/workingDays.ts",
+  "src/components/start/StartScreenClient.tsx",
   "supabase/migrations/*_b2_kunde_k1.sql",
   "supabase/migrations/*_ein[0-6]*_*.sql",
 ]);
