@@ -38,8 +38,7 @@ export async function notifyAdminPinReset(loginHandle: string) {
             eq(appUsers.active, true),
             ne(appUsers.role, "developer"),
           ),
-        )
-        .limit(32);
+        );
       const user = resolvePinLoginCandidate(loginHandle, candidates);
 
       if (!user) {

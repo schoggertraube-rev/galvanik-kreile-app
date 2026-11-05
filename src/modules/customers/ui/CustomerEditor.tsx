@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Dialog, Hinweis } from "@/ui/kr";
+import { Rueckfrage } from "@/ui/kr/Dialog";
 import { KundeFormular } from "./KundeFormular";
 import { CUSTOMER_FIELD_LABELS, EMPTY_CUSTOMER_FORM, kundeValidierung, projectCustomerTransfer, type CustomerFormValue } from "../customerFormContract";
 import { kundeVollstaendigkeit } from "../orderReadiness";
@@ -122,6 +123,8 @@ export function CustomerEditor({card,takeover,canManageMoney,canDecide=false,mis
     </Dialog>
     {partialPrompt?<Dialog titel="Unvollständig für Auftrag" onSchliessen={()=>setPartialPrompt(false)}><div data-spec-id="kundebearbeiten.zustand.teilweise"><p>Für Auftrag fehlt noch: {readiness.fehlt.join(", ")}</p>
       <Button data-spec-id="kundebearbeiten.trotzdem-speichern" art="primaer" text="Trotzdem speichern" onClick={()=>void save(true)}/><Button data-spec-id="kundebearbeiten.weiter-ausfuellen" text="Weiter ausfüllen" onClick={()=>{setPartialPrompt(false);focus(readiness.felder[0])}}/></div></Dialog>:null}
-    {closePrompt?<Dialog titel="Änderungen noch nicht gespeichert" onSchliessen={continueEditing}><div data-spec-id="entwurf"><p>Geändert: {(Object.keys(value) as Array<keyof CustomerFormValue>).filter(key=>value[key]!==baseline[key]).map(key=>CUSTOMER_FIELD_LABELS[key]).join(", ")}</p><Button data-spec-id="entwurf.verwerfen" text="Verwerfen" onClick={onClose}/><Button data-spec-id="entwurf.weiter-bearbeiten" text="Weiter bearbeiten" onClick={continueEditing}/><Button data-spec-id="entwurf.speichern" art="primaer" text="Speichern" onClick={()=>void save()}/></div></Dialog>:null}
+    {closePrompt?<Rueckfrage felder={(Object.keys(value) as Array<keyof CustomerFormValue>).filter(key=>value[key]!==baseline[key]).map(key=>CUSTOMER_FIELD_LABELS[key])}
+      hauptaktion={{text:"Speichern",lauftext:"Wird gespeichert …",ausfuehren:()=>void save()}} beschaeftigt={busy}
+      fehler={failure||Object.values(errors).filter(Boolean).join(" · ")||null} onVerwerfen={onClose} onWeiter={continueEditing}/>:null}
   </>;
 }

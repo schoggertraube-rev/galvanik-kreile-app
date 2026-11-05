@@ -87,7 +87,7 @@ afterAll(async () => {
 describe("Path-1 P3 tenant search real database contract", () => {
   it("finds F1.1 order/customer facts and fails closed across session and tenant boundaries", async () => {
     const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
-    const intake = await withSession(() => createOrderIntakeAction({
+    const intake = await withSession(() => createOrderIntakeAction({ geprueft: true,
       clientEventId: randomUUID(),
       customer: {
         mode: "NEW",
@@ -113,7 +113,7 @@ describe("Path-1 P3 tenant search real database contract", () => {
         name: `Pruefbolzen ${suffix} GmbH Nordlicht`,
         quantity: 2,
         material: `Titan ${suffix}`,
-        surfaceRequested: `Hartchrom ${suffix}`,
+        surfaceRequested: "Verchromen",
         unit: null,
         unitPriceCents: null,
         vatRateBasisPoints: null,
@@ -125,7 +125,7 @@ describe("Path-1 P3 tenant search real database contract", () => {
     const { searchTenantAction } = await import("@/app/actions/search.actions");
     for (const [query, matchField] of [
       [intake.receipt.orderNumber, "orderNumber"], [`Pruefbolzen ${suffix}`, "part"],
-      [`Titan ${suffix}`, "material"], [`Hartchrom ${suffix}`, "surface"], ["19.11.2026", "dueDate"],
+      [`Titan ${suffix}`, "material"], ["Verchromen", "surface"], ["19.11.2026", "dueDate"],
     ] as const) {
       const result = await withSession(() => searchTenantAction(query));
       expect(result.code).toBe("OK");

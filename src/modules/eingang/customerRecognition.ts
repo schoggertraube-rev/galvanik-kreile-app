@@ -1,3 +1,5 @@
+import { normaliseCustomerPhone } from "@/modules/customers/public";
+
 const NAME_EXCLUSIONS = new Set([
   "autohaus",
   "metallbau",
@@ -21,6 +23,8 @@ type SearchableCustomer = {
   name: string;
   companyName?: string | null;
   contactPerson?: string | null;
+  phone?: string | null;
+  email?: string | null;
 };
 
 type CustomerSearchResult<TCustomer extends SearchableCustomer> =
@@ -28,7 +32,7 @@ type CustomerSearchResult<TCustomer extends SearchableCustomer> =
   | { code: "DENIED" | "UNAVAILABLE"; message: string };
 
 export type RecognizedCustomerSuggestions<TCustomer extends SearchableCustomer> =
-  | { code: "OK"; query: string; customers: TCustomer[] }
+  | { code: "OK"; query: string; customers: TCustomer[]; confirmedCustomerId?: string }
   | { code: "DENIED" | "UNAVAILABLE"; message: string };
 
 function words(value: string): string[] {
@@ -78,7 +82,21 @@ function recognizedQuery<TCustomer extends SearchableCustomer>(
 export async function findRecognizedCustomers<TCustomer extends SearchableCustomer>(
   text: string,
   search: (query: string) => Promise<CustomerSearchResult<TCustomer>>,
+  identifiers?: { phone?: string; email?: string },
 ): Promise<RecognizedCustomerSuggestions<TCustomer>> {
+  const phone = normaliseCustomerPhone(identifiers?.phone);
+  const email = identifiers?.email?.trim().toLocaleLowerCase("de-DE") ?? "";
+  const identityQuery = email || (phone.length >= 6 ? identifiers?.phone?.trim() : "");
+  if (identityQuery) {
+    const result = await search(identityQuery);
+    if (result.code !== "OK") return result;
+    const exact = result.customers.filter(customer => (!email || customer.email?.trim().toLocaleLowerCase("de-DE") === email)
+      && (phone.length < 6 || normaliseCustomerPhone(customer.phone) === phone));
+    if (exact.length) return {
+      code: "OK", query: identityQuery, customers: exact.slice(0, 3),
+      ...(exact.length === 1 ? { confirmedCustomerId: exact[0].id } : {}),
+    };
+  }
   const textWords = words(text);
   const textWordSet = new Set(textWords);
   const candidates = textWords

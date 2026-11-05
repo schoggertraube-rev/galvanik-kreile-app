@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
+import { normaliseOrderPositionSurface, normaliseOrderPositionUnit, orderPositionQuantityError, orderPositionSurfaceLabel, orderPositionUnitLabel } from "@/lib/orderPositionContract";
 import {
   getAuthorizationActionGrants,
   resolveAuthorization,
@@ -75,12 +76,12 @@ function normalizeItems(value: unknown): OrderContentItemInput[] | null {
     if (Object.keys(item).sort().join(",") !== "catalogServiceId,id,material,name,quantity,surface,unit,unitPriceCents,vatRateBasisPoints") return null;
     const name = text(item.name, 2, 160);
     const material = optionalText(item.material, 120);
-    const surface = text(item.surface, 2, 160);
-    const unit = optionalText(item.unit, 40);
+    const surface = normaliseOrderPositionSurface(item.surface);
+    const unit = item.unit===null?null:normaliseOrderPositionUnit(item.unit);
     if (!UUID.test(String(item.id)) || (item.catalogServiceId !== null && !UUID.test(String(item.catalogServiceId)))
       || !name || material === undefined || !surface
-      || typeof item.quantity !== "number" || !Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.quantity > 1_000_000
-      || unit === undefined
+      || typeof item.quantity !== "number" || orderPositionQuantityError(item.quantity,unit)!==null
+      || item.unit!==null&&unit===null
       || (item.unitPriceCents !== null && (typeof item.unitPriceCents !== "number" || !Number.isSafeInteger(item.unitPriceCents) || item.unitPriceCents < 0 || item.unitPriceCents > 999_999_999))
       || (item.vatRateBasisPoints !== null && !VAT.has(Number(item.vatRateBasisPoints)))) return null;
     items.push({
@@ -126,7 +127,8 @@ export async function changeOrderContent(input: ChangeOrderContentInput): Promis
   if (note === undefined || !items) return { code: "VALIDATION_ERROR", message: "Notiz oder Positionen sind unvollständig oder ungültig." };
   const auth = await authorization("content");
   if (!auth.ok) return auth.result;
-  const requestHash = hash({ orderId: input.orderId, expectedVersion: input.expectedVersion, note, items });
+  const requestHash = hash({ orderId: input.orderId, expectedVersion: input.expectedVersion, note,
+    items:items.map(item=>({...item,surface:orderPositionSurfaceLabel(item.surface),unit:item.unit===null?null:orderPositionUnitLabel(item.unit)})) });
 
   try {
     return await withPrivilegedTenantTransaction(auth.data, async (tx) => {

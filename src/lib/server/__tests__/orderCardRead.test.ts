@@ -10,7 +10,7 @@ const base = {
   name: "Stoßstange",
   quantity: 1,
   material: "Stahl",
-  surfaceRequested: "Chrom",
+  surfaceRequested: "Verchromen",
 };
 
 describe("order card intake snapshot contract", () => {
@@ -36,7 +36,7 @@ describe("order card intake snapshot contract", () => {
       unit: null,
       unitPriceCents: null,
       vatRateBasisPoints: null,
-    }])).toEqual([{ ...base, catalogServiceId: null, unit: null, unitPriceCents: null, vatRateBasisPoints: null, finished: false, extraWork: [] }]);
+    }])).toEqual([{ ...base, executionRequested: "offen", catalogServiceId: null, unit: null, unitPriceCents: null, vatRateBasisPoints: null, finished: false, extraWork: [] }]);
   });
 
   it("reads a current free-text snapshot with an allowed intake unit", () => {
@@ -47,7 +47,14 @@ describe("order card intake snapshot contract", () => {
       unit: "dm²",
       unitPriceCents: null,
       vatRateBasisPoints: null,
-    }])).toEqual([{ ...base, catalogServiceId: null, unit: "dm²", unitPriceCents: null, vatRateBasisPoints: null, finished: false, extraWork: [] }]);
+    }])).toEqual([{ ...base, executionRequested: "offen", catalogServiceId: null, unit: "dm²", unitPriceCents: null, vatRateBasisPoints: null, finished: false, extraWork: [] }]);
+  });
+
+  it("preserves entered free-text price and execution for the canonical order-copy reader", () => {
+    expect(mapOrderCardIntakeItems([{ ...base, catalogServiceId: null, executionRequested: "hochglanz", unit: "stueck", unitPriceCents: 3740, vatRateBasisPoints: 1900 }]))
+      .toEqual([{ ...base, executionRequested: "hochglanz", catalogServiceId: null, unit: "Stück", unitPriceCents: 3740, vatRateBasisPoints: 1900, finished: false, extraWork: [] }]);
+    expect(() => mapOrderCardIntakeItems([{ ...base, catalogServiceId: null, executionRequested: "hochglanz", unit: "stueck", unitPriceCents: 3740, vatRateBasisPoints: null }]))
+      .toThrow("ORDER_CARD_INTAKE_ITEM_INVALID");
   });
 
   it("rejects a current free-text snapshot with a unit outside the intake contract", () => {

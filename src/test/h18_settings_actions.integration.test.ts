@@ -381,7 +381,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
     const fixture = await createFixture("due-date");
     const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
     const { changeOrderPromisedDueDateAction, getLiveOrderCardAction } = await import("@/app/actions/orders.actions");
-    const intake = await withSession(fixture, () => createOrderIntakeAction({
+    const intake = await withSession(fixture, () => createOrderIntakeAction({ geprueft: true,
       clientEventId: randomUUID(),
       customer: { mode: "EXISTING", customerId: fixture.customerId },
       dueDate: "2026-12-08",
@@ -395,7 +395,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
         name: "H18 Prüfkörper",
         quantity: 1,
         material: "Stahl",
-        surfaceRequested: "Hartchrom",
+        surfaceRequested: "Verchromen",
         executionRequested: "offen",
         unit: null,
         unitPriceCents: null,
@@ -433,7 +433,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
   it("H18.7 keeps an order with a card read error in getOrdersDb and exposes its code", async () => {
     const fixture = await createFixture("read-error");
     const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
-    const intake = await withSession(fixture, () => createOrderIntakeAction({
+    const intake = await withSession(fixture, () => createOrderIntakeAction({ geprueft: true,
       clientEventId: randomUUID(),
       customer: { mode: "EXISTING", customerId: fixture.customerId },
       dueDate: "2026-12-09",
@@ -476,7 +476,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
   it("C1a.3 invokes getOrdersDb and distinguishes an existing order without a current action", async () => {
     const fixture = await createFixture("today-no-action");
     const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
-    const intake = await withSession(fixture, () => createOrderIntakeAction({
+    const intake = await withSession(fixture, () => createOrderIntakeAction({ geprueft: true,
       clientEventId: randomUUID(),
       customer: { mode: "EXISTING", customerId: fixture.customerId },
       dueDate: "2027-03-31",
@@ -490,7 +490,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
         name: "C1a ruhender Prüfkörper",
         quantity: 1,
         material: "Stahl",
-        surfaceRequested: "Hartchrom",
+        surfaceRequested: "Verchromen",
         executionRequested: "offen",
         unit: null,
         unitPriceCents: null,
@@ -531,7 +531,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
     const invoiceSerial = 10_000 + Number.parseInt(invoiceId.slice(0, 7), 16);
     const invoiceNumber = `R-2099-${invoiceSerial}`;
     const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
-    const intake = await withSession(fixture, () => createOrderIntakeAction({
+    const intake = await withSession(fixture, () => createOrderIntakeAction({ geprueft: true,
       clientEventId: randomUUID(),
       customer: { mode: "EXISTING", customerId: fixture.customerId },
       dueDate: "2026-12-18",
@@ -635,7 +635,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
     const scanId = `c1a-legacy-${randomUUID()}`;
     const uploadedAt = new Date().toISOString();
     const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
-    const intake = await withSession(fixture, () => createOrderIntakeAction({
+    const intake = await withSession(fixture, () => createOrderIntakeAction({ geprueft: true,
       clientEventId: randomUUID(),
       customer: { mode: "EXISTING", customerId: fixture.customerId },
       dueDate: "2026-12-19",
@@ -715,7 +715,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
       ON CONFLICT (tenant_id, user_id, bereich) DO NOTHING
     `;
     const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
-    const createOrder = (label: string) => withSession(fixture, () => createOrderIntakeAction({
+    const createOrder = (label: string) => withSession(fixture, () => createOrderIntakeAction({ geprueft: true,
       clientEventId: randomUUID(),
       customer: { mode: "EXISTING" as const, customerId: fixture.customerId },
       dueDate: "2026-12-20",
@@ -841,6 +841,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
       clientEventId: randomUUID(),
       customer: { mode: "EXISTING", customerId: fixture.customerId },
       dueDate,
+      geprueft: true,
       termStatus: "bestaetigt",
       intakeSource: "persoenlich",
       handoverMode: "pickup",
@@ -851,7 +852,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
         name: "H18 Erinnerungsteil",
         quantity: 1,
         material: "Stahl",
-        surfaceRequested: "Hartchrom",
+        surfaceRequested: "Verchromen",
         executionRequested: "offen",
         unit: null,
         unitPriceCents: null,

@@ -1,5 +1,6 @@
-// Fassung 1b fuer AP-EIN Teil 1 (Planungschat 03.11.): nur Kunden-Seed mit Recht geld (K1 Punkt 6); sonst main.
+// Fassung 3 (Planungschat 03.11.): Kunden-Seed mit Recht geld (K1 Punkt 6); vorgang_id = orders.id (BAUPLAN E07).
 // @vitest-environment node
+// Fassung 2 (Planungschat 02.11.2026, AP-EIN Teil 2, BAUPLAN 21d0347a eingang.daten.richtung): eine getippte Notiz ist richtung intern.
 // AP-01 Akzeptanztest - Kanal "Paket/persoenlich" (getippt -> Auftrag), eine Wahrheit.
 // Planungschat-Vertrag (U-221). Codex kopiert diese Datei bytegleich nach
 // src/test/acceptance/ap01_eingang_paket_persoenlich.integration.test.ts und aendert sie nie.
@@ -156,6 +157,7 @@ afterAll(async () => {
 function auftragInput(clientKey: string) {
   return {
     clientKey,
+    geprueft: true,
     text: "2 Stueck Flansch verzinken, bis naechste Woche",
     customer: { mode: "EXISTING" as const, customerId },
     dueDate: "2027-04-30",
@@ -193,8 +195,8 @@ describe("AP-01 Kanal Paket/persoenlich: getippt -> Auftrag (Bestandskunde), ech
       FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_key=${clientKey}
     `;
     expect(items).toEqual([{
-      id: result.intakeItemId, kanal: "notiz", richtung: "rein", quelle: "geraet", kunde_id: customerId,
-      vorgang_art: "auftrag", vorgang_id: result.orderNumber, zuordnung: "hand", erstellt_von: eingangActor.actorId,
+      id: result.intakeItemId, kanal: "notiz", richtung: "intern", quelle: "geraet", kunde_id: customerId,
+      vorgang_art: "auftrag", vorgang_id: result.orderId, zuordnung: "hand", erstellt_von: eingangActor.actorId,
     }]);
 
     const orders = await sql<{ id: string }[]>`

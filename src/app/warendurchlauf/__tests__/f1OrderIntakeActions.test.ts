@@ -16,7 +16,8 @@ vi.mock("@/lib/server/orderStationRead", () => ({
   readTenantOrderStationReceipt: vi.fn(), readTenantStationOrders: vi.fn(),
 }));
 vi.mock("@/lib/server/commands/orderIntakeCommand", () => ({ createOrderIntake: ports.create }));
-vi.mock("@/lib/server/orderIntakeRead", () => ({
+vi.mock("@/lib/server/orderIntakeRead", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/server/orderIntakeRead")>(),
   searchOrderIntakeCustomers: ports.search,
   readOrderIntakeReceipt: ports.receipt,
 }));
@@ -42,12 +43,12 @@ describe("F1 order intake actions", () => {
     ]));
     ports.search.mockResolvedValue([]);
     ports.receipt.mockResolvedValue(null);
-    ports.create.mockResolvedValue({ code: "OK", receipt: { orderId: "order" }, replayed: false });
+    ports.create.mockResolvedValue({ code: "OK", receipt: { orderId: "order", items: [] }, replayed: false });
   });
 
   it("delegates the command without accepting client authorization or tenant fields", async () => {
     const { createOrderIntakeAction } = await import("@/app/actions/eingang.actions");
-    const input = { clientEventId: "x", customer: {}, dueDate: "x", note: null, items: [] } as never;
+    const input = { geprueft: true, clientEventId: "x", customer: {}, dueDate: "x", note: null, items: [] } as never;
     await expect(createOrderIntakeAction(input)).resolves.toMatchObject({ code: "OK" });
     expect(ports.create).toHaveBeenCalledWith(input,expect.any(Function));
     expect(ports.create.mock.calls[0][1].name).toBe("createCustomerInTransaction");

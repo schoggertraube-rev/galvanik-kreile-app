@@ -1,7 +1,7 @@
 import "server-only";
 
 export { createCustomerCommand, createCustomerInTransaction, readCustomerCreateReceiptCommand } from "./server/createCustomerCommand";
-export { updateCustomerCommand } from "./server/updateCustomerCommand";
+export { updateCustomerInTransaction, updateCustomerCommand } from "./server/updateCustomerCommand";
 export { readCustomerAddress } from "./server/customerAddressRead";
 export { readCustomerProfile } from "./server/customerWriteContract";
 export { enableCustomerInvoiceTermsCommand } from "./server/enableCustomerInvoiceTermsCommand";

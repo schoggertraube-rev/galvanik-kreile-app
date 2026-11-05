@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { logout } from "@/app/actions/auth";
 import { createCustomerAction, getCustomersDb, readCustomerCreateReceiptAction, readCustomerAddressAction } from "@/app/actions/customers.actions";
-import { erfasseAuftragAusEingangAction } from "@/app/actions/eingang.actions";
+import { erfasseAuftragAusEingangAction, getIntakeDraftsAction, saveIntakeDraftAction, discardIntakeDraftAction, getIntakePendingScopeAction, saveIntakeNoteAction, recognizeIntakeNoteAction, prepareIntakeFileAction, finishIntakeFileAction, getIntakeCaptureAction, saveIntakeDeviceRequestAction, discardIntakeCaptureAction } from "@/app/actions/eingang.actions";
 import { convertQuoteToOrderAction, createQuoteAction, listOpenQuotesAction, readQuoteAction, readQuoteCreateReceiptAction, readQuoteConversionReceiptAction, readQuoteUpdateReceiptAction, updateQuoteAction } from "@/app/actions/quotes.actions";
 import { getOrderIntakeReceiptAction, getOrderIntakeSuggestionsAction, recognizeOrderIntakeTextAction, searchOrderIntakeCustomersAction } from "@/app/warendurchlauf/actions";
-import { getActiveCatalogAction } from "@/app/actions/catalog.actions";
+import { getIntakeCatalogAction } from "@/app/actions/catalog.actions";
+import {getOpenIntakeMailsAction,saveIntakeProspectAction} from "@/app/actions/eingang.actions";
+import { getOrderRegisterDb, getLiveOrderCardAction } from "@/app/actions/orders.actions";
 import {
-  GlobalCreateFlow,requestGlobalCreate,
+  GlobalCreateFlow,requestGlobalCreate,IntakeMessageDialogs,type MailSelectionPorts,
   type GlobalCreateConversionResult,
   type GlobalCreateCustomerResult,
   type GlobalCreateCustomerChoice,
@@ -42,6 +44,7 @@ const PENDING_QUOTE_CONVERSION_KEY = "path1.global-create.pending-quote-conversi
 
 export function GlobalCreateAppAdapter() {
   const router = useRouter();
+  const mailPorts=useMemo<MailSelectionPorts>(()=>({list:getOpenIntakeMailsAction,read:getIntakeCaptureAction}),[]);
   const openCustomer = useOverlayStore((state) => state.openCustomer);
   const openOrder = useOverlayStore((state) => state.openOrder);
   const activeCustomerOverlayId = useOverlayStore((state) => {
@@ -88,23 +91,49 @@ export function GlobalCreateAppAdapter() {
   useEffect(()=>{
     const handler=(event:Event)=>{const {ziel,arg}=(event as CustomEvent<{ziel:string;arg?:unknown}>).detail??{};
       if(ziel==="kundeneu"){requestGlobalCreate({intent:"CUSTOMER",prefill:typeof arg==="string"&&arg.endsWith("#lieferant")?{customerMode:"lieferant"}:undefined});return;}
+      if (ziel === "eingang" && typeof arg === "string" && arg.endsWith("#kopie")) {
+        requestGlobalCreate({ intent: "DIRECT_INTAKE", prefill: { orderCopyId: arg.slice(0, -6) } }); return;
+      }
+      if (ziel === "eingang" && (arg == null || typeof arg === "string" && !arg.includes("#"))) {
+        requestGlobalCreate(typeof arg === "string" && arg ? { intent: "DIRECT_INTAKE", prefill: { customerId: arg } } : "DIRECT_INTAKE"); return;
+      }
+      if (ziel === "auftrag" && typeof arg === "string") { openOrder(arg); return; }
         if((ziel==="kunde"||ziel==="kundebearbeiten")&&typeof arg==="string")openCustomer(ziel==="kundebearbeiten"&&!arg.includes("#")?arg+"#bearbeiten":arg);
     };
     window.addEventListener("kreile:oeffne",handler);return()=>window.removeEventListener("kreile:oeffne",handler);
-  },[openCustomer]);
+  },[openCustomer,openOrder]);
 
   // Keep one safe, typed intake boundary mounted for authenticated workshop roles.
   // Their request is denied by the same flow before any command can run.
   if (!role || !isAppRole(role)) return null;
 
   return (
-    <GlobalCreateFlow
+    <><IntakeMessageDialogs ports={mailPorts}/><GlobalCreateFlow
       ports={{
+        readIntakeOrderSource: async (orderId) => {
+          const result = await getLiveOrderCardAction({ orderId });
+          if (result.code !== "OK") return result;
+          return { code: "OK", source: { orderNumber: result.data.card.orderNumber, customerId: result.data.card.customerId,
+            customerQuery: result.data.card.customerNumber ?? result.data.card.customerName,
+            intakeSource: result.data.card.intakeSource, items: result.data.card.items } };
+        },
+        saveProspect:saveIntakeProspectAction,
+        drafts: { readDrafts: getIntakeDraftsAction, saveDraft: saveIntakeDraftAction, discardDraft: discardIntakeDraftAction },
         canCreateCustomer,
         canReadCustomers:hasArea("kunden"),
+        canReadMails: hasArea("mails"),
+        getCaptureScope: getIntakePendingScopeAction,
+        getCapture: getIntakeCaptureAction,
+        discardCapture: discardIntakeCaptureAction,
+        deviceRequest: saveIntakeDeviceRequestAction,
+        saveCaptureNote: saveIntakeNoteAction,
+        readCaptureNote: recognizeIntakeNoteAction,
+        prepareCaptureFile: prepareIntakeFileAction,
+        finishCaptureFile: finishIntakeFileAction,
         canCreateOrder: hasArea("eingang"),
         canCreateQuote,
         canManageMoney: hasArea("geld"),
+        canDecide:hasArea("entscheiden"),
         showPrimaryTrigger: false,
         roleLabel,
         resumeQuoteId,
@@ -156,8 +185,7 @@ export function GlobalCreateAppAdapter() {
           };
         },
         listCatalog: async () => {
-          if (!hasArea("geld")) return { code: "OK" as const, services: [] };
-          const result = await getActiveCatalogAction();
+          const result = await getIntakeCatalogAction();
           return result.code === "OK" ? result : { code: result.code === "FORBIDDEN" ? "DENIED" as const : "UNAVAILABLE" as const, message: result.message };
         },
         checkCustomerAddress: readCustomerAddressAction,
@@ -194,12 +222,14 @@ export function GlobalCreateAppAdapter() {
           return result.code === "OK" ? { ...result, replayed: true } : result;
         },
         createDirectIntake: async (input: DirectIntakeInput): Promise<GlobalCreateDirectIntakeResult> => {
-          if (input.customer.mode !== "EXISTING") {
-            return { code: "VALIDATION_ERROR", message: "AP-01 verarbeitet Aufträge nur für Bestandskunden." };
-          }
           const result = await erfasseAuftragAusEingangAction({
+            geprueft: input.geprueft,
+            ...(input.wishDate!==undefined?{wishDate:input.wishDate}:{}),...(input.termOrigin!==undefined?{termOrigin:input.termOrigin}:{}),...(input.processingWeeks!==undefined?{processingWeeks:input.processingWeeks}:{}),
+            ...(input.draftId ? {draftId:input.draftId} : {}),
+            ...(input.sourceCaptures?{sourceCaptures:input.sourceCaptures}:{}),
             clientKey: input.clientEventId,
-            text: input.note,
+            text: null,
+            telefonNotiz: input.intakeSource === "anfrage_telefon" ? input.note : null,
             customer: input.customer,
             dueDate: input.dueDate,
             items: input.items,
@@ -217,7 +247,7 @@ export function GlobalCreateAppAdapter() {
             };
           }
           if (!readback.data) return { code: "UNAVAILABLE", message: "Der gespeicherte Eingang konnte nicht sicher gelesen werden." };
-          return { code: "OK", replayed: result.replayed, receipt: readback.data };
+          return { code: "OK", replayed: result.replayed, receipt: readback.data, confirmationMessage: result.confirmationMessage };
         },
         readDirectIntakeReceipt: async ({ orderId, clientEventId }): Promise<GlobalCreateDirectIntakeResult> => {
           const result = await getOrderIntakeReceiptAction({ orderId, clientEventId });
@@ -233,6 +263,22 @@ export function GlobalCreateAppAdapter() {
         rememberQuote,
         rememberQuoteConversion,
         activeCustomerOverlayId,
+        getCreateContext: async () => {
+          const overlay = [...useOverlayStore.getState().stack].reverse().find(entry => entry.type === "customer" || entry.type === "order");
+          if (!overlay || (overlay.type !== "customer" && overlay.type !== "order")) return { code: "OK", context: null };
+          if (overlay.type === "order") {
+            const result = await getOrderRegisterDb({ filter: "ORDER" });
+            if (!result.ok) return { code: "UNAVAILABLE", message: result.message };
+            const order = result.data.find(entry => entry.id === overlay.id.split("#")[0]);
+            return order ? { code: "OK", context: { customerId: order.customerId, label: `${order.reference} · ${order.customerName}` } }
+              : { code: "NOT_FOUND", message: "Auftrag des geöffneten Kontexts wurde nicht gefunden." };
+          }
+          const result = await getCustomersDb();
+          if (!result.ok) return { code: "UNAVAILABLE", message: "Kundenkontext konnte nicht sicher gelesen werden." };
+          const customer = result.data.find(entry => entry.id === overlay.id.split("#")[0]);
+          return customer ? { code: "OK", context: { customerId: customer.id, label: customer.name } }
+            : { code: "NOT_FOUND", message: "Kunde des geöffneten Kontexts wurde nicht gefunden." };
+        },
         openCustomer,
         openOrder,
         refresh: () => router.refresh(),
@@ -242,6 +288,6 @@ export function GlobalCreateAppAdapter() {
           router.refresh();
         },
       }}
-    />
+    /></>
   );
 }

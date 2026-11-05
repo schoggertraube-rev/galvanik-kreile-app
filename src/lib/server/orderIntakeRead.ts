@@ -1,7 +1,8 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
-import { isOrderIntakeFreeTextUnit } from "@/modules/eingang/public";
+import { isOrderIntakeFreeTextUnit, isOrderIntakeFreeTextPrice } from "@/lib/orderPositionContract";
+import { orderPositionQuantityError } from "@/lib/orderPositionContract";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type { OrderIntakeExecutionRequested, OrderIntakeReceipt, OrderIntakeReceiptItem, OrderIntakeSource, OrderIntakeTermStatus } from "@/lib/server/commands/orderIntakeCommand";
@@ -12,11 +13,24 @@ import { customerContactLabel, normaliseCustomerName, normaliseCustomerPhone, cu
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const EXECUTION_REQUESTED_VALUES: readonly OrderIntakeExecutionRequested[] = ["hochglanz", "glaenzend", "matt", "gelb_passiviert", "blau_passiviert", "offen"];
-const TERM_STATUS_VALUES: readonly OrderIntakeTermStatus[] = ["wunsch", "bestaetigt", "verschoben"];
+const TERM_STATUS_VALUES: readonly OrderIntakeTermStatus[] = ["wunsch", "bestaetigt", "verschoben", "gegenvorschlag"];
 const INTAKE_SOURCE_VALUES: readonly OrderIntakeSource[] = ["persoenlich", "versand", "abholung_firma", "anfrage_mail", "anfrage_telefon"];
 
 export type OrderIntakeCustomerSearchInput = { query: string; candidate?: CustomerComparisonValue };
 export type OrderIntakeReceiptReadInput = { orderId: string; clientEventId: string };
+
+export type OrderIntakeReceiptView = Omit<OrderIntakeReceipt,"items"> & {
+  items: Array<Omit<OrderIntakeReceiptItem,"unitPriceCents"|"vatRateBasisPoints"> &
+    Partial<Pick<OrderIntakeReceiptItem,"unitPriceCents"|"vatRateBasisPoints">>>;
+};
+export function presentOrderIntakeReceipt(receipt:OrderIntakeReceipt,canReadMoney:boolean):OrderIntakeReceiptView {
+  if(canReadMoney)return receipt;
+  return {...receipt,items:receipt.items.map(item=>({
+    id:item.id,position:item.position,catalogServiceId:item.catalogServiceId,name:item.name,
+    quantity:item.quantity,material:item.material,surfaceRequested:item.surfaceRequested,
+    executionRequested:item.executionRequested,unit:item.unit,
+  }))};
+}
 
 export type OrderIntakeCustomerOption = {
   id: string;
@@ -26,6 +40,7 @@ export type OrderIntakeCustomerOption = {
   customerType: "business"|"privat"|"lieferant";
   salutation: "frau"|"herr"|"ohne"|null; firstName:string|null; lastName:string|null; contactRole:string|null; houseNumber:string|null;
   handoverPreference:"pickup"|"shipping"|null; invoiceTermsEnabled:boolean; invoiceTermDays:number|null; autoInfo:boolean; vorrang:boolean;
+  lastHandoverMode:"pickup"|"shipping"|null;
   duplicateMatch?: {kind:"exact"|"possible";by:string}|null;
   contactPerson: string | null;
   phone: string | null;
@@ -49,6 +64,7 @@ type CustomerRow = {
   customer_type: string;
   salutation:"frau"|"herr"|"ohne"|null;first_name:string|null;last_name:string|null;contact_role:string|null;house_number:string|null;
   handover_preference:"pickup"|"shipping"|null;ziel_freigeschaltet:boolean;ziel_tage:number|null;auto_info:boolean;vorrang:boolean;
+  last_handover_mode:"pickup"|"shipping"|null;
   phone: string | null;
   email: string | null;
   street: string | null;
@@ -63,6 +79,7 @@ type CustomerRow = {
 };
 
 type ReceiptRow = {
+  geprueft: boolean | null;
   receipt_id: string;
   event_id: string;
   tenant_id: string;
@@ -132,7 +149,7 @@ function mapCustomer(row: CustomerRow, tenantId: string): OrderIntakeCustomerOpt
     !optionalTrimmed(row.zip_code, 20) || !optionalTrimmed(row.city, 120) ||
     !optionalTrimmed(row.country, 120) || !optionalTrimmed(row.payment_preference, 24) ||
     !optionalTrimmed(row.vat_id, 40) ||
-    !["business","privat","lieferant"].includes(row.customer_type) || typeof row.ziel_freigeschaltet !== "boolean" || typeof row.auto_info !== "boolean" || typeof row.vorrang !== "boolean" ||
+    !["business","privat","lieferant"].includes(row.customer_type) || ![null,"pickup","shipping"].includes(row.last_handover_mode) || typeof row.ziel_freigeschaltet !== "boolean" || typeof row.auto_info !== "boolean" || typeof row.vorrang !== "boolean" ||
     ordersCount === null
   ) return null;
   return {
@@ -142,7 +159,7 @@ function mapCustomer(row: CustomerRow, tenantId: string): OrderIntakeCustomerOpt
     companyName: row.company_name,
     customerType: row.customer_type as OrderIntakeCustomerOption["customerType"],
     salutation:row.salutation,firstName:row.first_name,lastName:row.last_name,contactRole:row.contact_role,houseNumber:row.house_number,
-    handoverPreference:row.handover_preference,invoiceTermsEnabled:row.ziel_freigeschaltet,invoiceTermDays:row.ziel_tage,autoInfo:row.auto_info,vorrang:row.vorrang,
+    handoverPreference:row.handover_preference,lastHandoverMode:row.last_handover_mode,invoiceTermsEnabled:row.ziel_freigeschaltet,invoiceTermDays:row.ziel_tage,autoInfo:row.auto_info,vorrang:row.vorrang,
     contactPerson: customerContactLabel({customerType:row.customer_type,salutation:row.salutation,firstName:row.first_name,lastName:row.last_name,contactRole:row.contact_role}),
     phone: row.phone,
     email: row.email,
@@ -166,8 +183,8 @@ function parseItems(value: unknown): OrderIntakeReceiptItem[] | null {
     const executionRequested = hasExecutionRequested ? candidate.executionRequested : "offen";
     if (
       typeof candidate.id !== "string" || !UUID_PATTERN.test(candidate.id) || candidate.position !== index + 1 ||
-      !trimmed(candidate.name, 2, 160) || typeof candidate.quantity !== "number" ||
-      !Number.isSafeInteger(candidate.quantity) || candidate.quantity < 1 || candidate.quantity > 1_000_000 ||
+      !trimmed(candidate.name, 1, 200) || typeof candidate.quantity !== "number" ||
+      orderPositionQuantityError(candidate.quantity, candidate.unit as string|null) !== null ||
       !(candidate.catalogServiceId === null || (typeof candidate.catalogServiceId === "string" && UUID_PATTERN.test(candidate.catalogServiceId))) ||
       !optionalTrimmed(candidate.material, 120) || !trimmed(candidate.surfaceRequested, 2, 160) ||
       typeof executionRequested !== "string" || !EXECUTION_REQUESTED_VALUES.includes(executionRequested as OrderIntakeExecutionRequested) ||
@@ -175,8 +192,8 @@ function parseItems(value: unknown): OrderIntakeReceiptItem[] | null {
       !(candidate.unitPriceCents === null || (typeof candidate.unitPriceCents === "number" && Number.isSafeInteger(candidate.unitPriceCents) && candidate.unitPriceCents >= 0)) ||
       !(candidate.vatRateBasisPoints === null || (typeof candidate.vatRateBasisPoints === "number" && [0,700,1900].includes(candidate.vatRateBasisPoints))) ||
       !(
-        (candidate.catalogServiceId !== null && candidate.unit !== null && candidate.unitPriceCents !== null && candidate.vatRateBasisPoints !== null)
-        || (candidate.catalogServiceId === null && candidate.unitPriceCents === null && candidate.vatRateBasisPoints === null
+        (candidate.catalogServiceId !== null && candidate.unit !== null && candidate.vatRateBasisPoints !== null)
+        || (candidate.catalogServiceId === null && isOrderIntakeFreeTextPrice(candidate.unitPriceCents,candidate.vatRateBasisPoints)
           && (candidate.unit === null || (typeof candidate.unit === "string" && isOrderIntakeFreeTextUnit(candidate.unit))))
       )
     ) throw new Error("ORDER_INTAKE_RECEIPT_INVALID");
@@ -204,6 +221,7 @@ function mapReceipt(
   const recorded = new Date(row.recorded_at);
   const dueDate = row.due_date instanceof Date ? row.due_date.toISOString().slice(0, 10) : row.due_date?.slice(0, 10);
   if (
+    (row.geprueft !== null && typeof row.geprueft !== "boolean") ||
     row.integrity_ok !== true || row.tenant_id !== authorization.tenantId || row.actor_id !== authorization.userId ||
     row.order_id !== input.orderId || row.client_event_id !== input.clientEventId ||
     !UUID_PATTERN.test(row.receipt_id) || !UUID_PATTERN.test(row.event_id) || !UUID_PATTERN.test(row.order_id) ||
@@ -221,6 +239,7 @@ function mapReceipt(
   const items = parseItems(row.items_snapshot);
   if (!items) return null;
   return {
+    geprueft: row.geprueft,
     receiptId: row.receipt_id,
     eventId: row.event_id,
     orderId: row.order_id,
@@ -285,7 +304,7 @@ export async function readOrderIntakeReceipt(
              customer_display_name, due_date, intake_term_status, intake_source,
              note, items_snapshot, recorded_at,
              current_order_version, current_station, current_status,
-             handover_mode, payment_mode, integrity_ok
+             handover_mode, payment_mode, geprueft, integrity_ok
       FROM private.v_order_intake_receipts_v1
       WHERE order_id = ${input.orderId}
         AND actor_id = ${authorization.userId}

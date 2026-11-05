@@ -1,12 +1,12 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import {type PrivilegedTenantTransaction, withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { customerDatabaseFields, customerWriteDiagnostic, customerWriteObject, normaliseCustomerWrite, readCustomerProfile } from "./customerWriteContract";
 import type { CustomerCommandContext } from "./types";
 import { readCustomerAddress } from "./customerAddressRead";
 
-export async function updateCustomerCommand(context: CustomerCommandContext, input: unknown) {
+export async function updateCustomerInTransaction(tx:PrivilegedTenantTransaction,context: CustomerCommandContext, input: unknown) {
   if (!context.capabilities.canEditCustomer) return { code: "FORBIDDEN" as const, message: "Kunden bearbeiten ist nicht erlaubt." };
   const raw = customerWriteObject(input, true);
   if (!raw) return { code: "VALIDATION_ERROR" as const, message: "Kundendaten sind ungültig." };
@@ -15,8 +15,7 @@ export async function updateCustomerCommand(context: CustomerCommandContext, inp
   }
   const writable = { ...raw };
   if (!context.capabilities.canManageMoney) for (const field of ["paymentPreference", "iban", "paymentTermDays"]) delete writable[field];
-  try {
-    return await withPrivilegedTenantTransaction(context, async tx => {
+
       const customerId = String(raw.customerId);
       const current = await readCustomerProfile(tx, context.tenantId, customerId, true);
       if (!current) return { code: "NOT_FOUND" as const, message: "Kunde ist nicht verfügbar." };
@@ -47,8 +46,11 @@ export async function updateCustomerCommand(context: CustomerCommandContext, inp
       const customer = await readCustomerProfile(tx, context.tenantId, customerId);
       if (!customer) throw new Error("CUSTOMER_UPDATE_READBACK_INVALID");
       return { code: "OK" as const, customer, replayed: result.replayed };
-    });
-  } catch (error) {
+}
+
+export async function updateCustomerCommand(context: CustomerCommandContext, input: unknown) {
+  try {return await withPrivilegedTenantTransaction(context,tx=>updateCustomerInTransaction(tx,context,input));}
+  catch (error) {
     console.error("[CUSTOMER_UPDATE_FAILED]", customerWriteDiagnostic(error));
     return { code: "UNAVAILABLE" as const, message: "Kunde konnte nicht sicher gespeichert werden. Code: CUSTOMER_UPDATE_FAILED." };
   }

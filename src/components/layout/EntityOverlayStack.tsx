@@ -15,5 +15,5 @@ export function EntityOverlayStack(){
  if(!top||(top.type!=="order"&&top.type!=="customer")||typeof document==="undefined")return null;
  const card=top.type==="order"?<OrderCardAppAdapter key={top.id} orderId={top.id} onOpenCustomer={openCustomer} onClose={pop}/>:<CustomerCardAppAdapter key={top.id} customerId={top.id} takeover={top.prefill} onOpenOrder={openOrder} onClose={pop}/>;
  // One existing stack, mounted above the invoking dialog; its state stays underneath.
- return createPortal(<KrApp geraet={device}>{card}</KrApp>,document.body);
+ return createPortal(<KrApp geraet={device} portal>{card}</KrApp>,document.body);
 }

@@ -18,3 +18,20 @@ export async function getActiveCatalogAction() {
     return { code: "UNAVAILABLE" as const, message: "Leistungskatalog ist derzeit nicht verfügbar." };
   }
 }
+
+/** Intake uses the existing catalog port; prices never enter an unprivileged payload. */
+export async function getIntakeCatalogAction() {
+  noStore();
+  try {
+    const authorization = await resolveAuthorization();
+    if (!authorization.ok) return { code: "UNAVAILABLE" as const, message: "Leistungskatalog ist derzeit nicht verfügbar." };
+    if (!authorization.data.areas?.includes("eingang")) return { code: "FORBIDDEN" as const, message: "Auftragseingang ist für dieses Profil nicht freigegeben." };
+    const context = { tenantId: authorization.data.tenantId, actorId: authorization.data.userId, canRead: true, canManage: false };
+    return authorization.data.areas.includes("geld")
+      ? await listCatalogServices(context)
+      : await listCatalogServices(context, false, "metadata");
+  } catch (error) {
+    console.error("[INTAKE_CATALOG_ACTION_ERROR]", {message:error instanceof Error?error.message.slice(0,200):"UNKNOWN"});
+    return { code: "UNAVAILABLE" as const, message: "Leistungskatalog ist derzeit nicht verfügbar." };
+  }
+}

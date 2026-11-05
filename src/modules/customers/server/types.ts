@@ -78,6 +78,10 @@ export type CustomerCreateCommandResult =
   | { code: "OK"; receipt: CustomerCreateReceipt; customer: CustomerStoredProfile; replayed: boolean }
   | { code: "FORBIDDEN" | "CONFLICT" | "VALIDATION_ERROR" | "UNAVAILABLE"; message: string };
 
+export type CustomerUpdateCommandResult=
+ | {code:"OK";customer:CustomerStoredProfile;replayed:boolean}
+ | {code:"FORBIDDEN"|"CONFLICT"|"VALIDATION_ERROR"|"UNAVAILABLE"|"NOT_FOUND";message:string;fields?:Record<string,string>};
+
 export type ReadCustomerCreateReceiptResult =
   | { code: "OK"; receipt: CustomerCreateReceipt; customer: CustomerStoredProfile }
   | { code: "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_ERROR" | "UNAVAILABLE"; message: string };

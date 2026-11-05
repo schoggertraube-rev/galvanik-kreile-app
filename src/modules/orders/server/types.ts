@@ -14,7 +14,7 @@ export type OrderCardExtraWork = {
   lineId: string;
   name: string;
   minutes: number;
-  amountCents: number;
+  amountCents: number | null;
   frozen: boolean;
 };
 export type OrderCardItem = {

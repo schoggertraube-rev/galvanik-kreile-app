@@ -3,6 +3,7 @@ import "server-only";
 import { Document, Page, StyleSheet, Text, View, type DocumentProps } from "@react-pdf/renderer";
 import type { ReactElement } from "react";
 import { customerCountryLabel } from "@/modules/customers/public";
+import { orderPositionSurfaceLabel } from "@/lib/orderPositionContract";
 import type { CustomerSummary } from "@/lib/server/customerSummaryRead";
 import type { CompanySettingsInput } from "@/modules/fundament/public";
 import type { QuoteReadback } from "@/modules/quotes/public";
@@ -82,7 +83,7 @@ export function createQuotePdfDocument(input: {
           {quote.positions.map((position) => (
             <View key={position.id} style={styles.row} wrap={false}>
               <Text style={styles.pos}>{position.position}</Text>
-              <View style={styles.description}><Text>{position.name}</Text><Text>{position.surfaceRequested}{position.material ? ` · ${position.material}` : ""}</Text></View>
+              <View style={styles.description}><Text>{position.name}</Text><Text>{orderPositionSurfaceLabel(position.surfaceRequested)}{position.material ? ` · ${position.material}` : ""}</Text></View>
               <Text style={styles.quantity}>{position.quantity}</Text>
               <Text style={styles.price}>{money(position.unitPriceCents)}</Text>
               <Text style={styles.total}>{money(position.lineTotalCents)}</Text>

@@ -3,6 +3,7 @@ import { createContext, useContext, type ReactNode } from 'react';
 import { weiterMitEnter } from './tastatur';
 import { Icon, type IconName } from './Icon';
 import { Chip } from './Chip';
+import { useHydrated } from '@/hooks/useHydrated';
 import type { Geraet } from './typen';
 import { cx } from './typen';
 export type Bereich = 'tag' | 'werkstatt' | 'auftraege' | 'kunden' | 'geld' | 'einstellungen';
@@ -31,14 +32,15 @@ const DOCK: Array<{ id: Bereich | 'mehr'; text: string; icon: IconName }> = [
 ];
 /** Navigation nach Gerät, nicht nach Rolle. Aktionsleiste NUR variante=werkstatt – nie auf Büro-Desktop (G3/G4). Kalender-Menüpunkt erst nach M365-Abnahme. */
 export function AppShell(p: AppShellProps) {
+  const interactive = useHydrated();
   const kopf = (
     <header className="kr-kopf">
-      <button type="button" className="kr-marke" aria-label="Startseite" onClick={p.onStart}><span className="kr-logo">GK</span><span className="kr-marke-name">KREILE</span></button>
+      <button type="button" className="kr-marke" aria-label="Startseite" disabled={!interactive} onClick={p.onStart}><span className="kr-logo">GK</span><span className="kr-marke-name">KREILE</span></button>
       {p.suche}
       {p.neuigkeiten}
       {p.datum && p.geraet === 'desktop' && <span className="kr-datum">{p.datum}</span>}
       {p.plus}
-      <button type="button" className="kr-avatar" aria-label="Konto" onClick={p.onKonto}>{p.kuerzel}</button>
+      <button type="button" className="kr-avatar" aria-label="Konto" disabled={!interactive} onClick={p.onKonto}>{p.kuerzel}</button>
     </header>
   );
   const aus = p.ausgeblendet ?? [];
@@ -49,16 +51,16 @@ export function AppShell(p: AppShellProps) {
       ['Mehrarbeit', 'Mehrarbeit', 'layers', p.onMehrarbeit, 'kr-aktion'], ['Fertig melden', 'Fertig', 'check', p.onFertigMelden, 'kr-aktion'],
       ['Neu erfassen', 'Erfassen', 'inbox', p.onNeuerEingang, 'kr-aktion kr-aktion--ruhig'], ['Ware raus', 'Raus', 'truck', p.onWareRaus, 'kr-aktion kr-aktion--ruhig']];
     return (<><div className="kr-streifen" /><div className="kr-tshell kr-wshell">{kopf}<main className="kr-inhalt">{p.children}</main>
-      <nav className="kr-aktionsleiste" aria-label="Werkstatt-Aktionen">{A.filter(([, , , f]) => Boolean(f)).map(([t, k, ic, f, c]) => <button key={t} type="button" className={c} onClick={f}><Icon name={ic} />{handy ? k : t}</button>)}</nav></div>{p.ebene}</>);
+      <nav className="kr-aktionsleiste" aria-label="Werkstatt-Aktionen">{A.filter(([, , , f]) => Boolean(f)).map(([t, k, ic, f, c]) => <button key={t} type="button" className={c} disabled={!interactive} onClick={f}><Icon name={ic} />{handy ? k : t}</button>)}</nav></div>{p.ebene}</>);
   }
   if (p.geraet === 'desktop') {
     const nav = (n: NavEintrag) => { const b = p.badges?.[n.id]; return (
-      <button key={n.id} type="button" className={cx('kr-nav', p.aktiv === n.id && 'kr-nav--aktiv')} aria-current={p.aktiv === n.id ? 'page' : undefined} onClick={() => p.onNav(n.id)}>
+      <button key={n.id} type="button" className={cx('kr-nav', p.aktiv === n.id && 'kr-nav--aktiv')} aria-current={p.aktiv === n.id ? 'page' : undefined} disabled={!interactive} onClick={() => p.onNav(n.id)}>
         <Icon name={n.icon} /><span>{n.text}</span>{b && <span className={cx('kr-nav-badge', b.rot && 'kr-nav-badge--rot')}>{b.n}</span>}</button>); };
     return (<><div className="kr-streifen" /><div className="kr-shell">{kopf}
       <nav className="kr-seitenleiste kr-scroll" aria-label="Hauptnavigation">
-        {p.onNeuerEingang && <button type="button" className="kr-nav kr-nav--schnell" onClick={p.onNeuerEingang}><Icon name="inbox" /><span>Neu erfassen</span></button>}
-        {p.onWareRaus && <button type="button" className="kr-nav kr-nav--schnell" onClick={p.onWareRaus}><Icon name="truck" /><span>Ware raus</span></button>}
+        {p.onNeuerEingang && <button type="button" className="kr-nav kr-nav--schnell" disabled={!interactive} onClick={p.onNeuerEingang}><Icon name="inbox" /><span>Neu erfassen</span></button>}
+        {p.onWareRaus && <button type="button" className="kr-nav kr-nav--schnell" disabled={!interactive} onClick={p.onWareRaus}><Icon name="truck" /><span>Ware raus</span></button>}
         <div className="kr-nav-trenner" />
         {NAV.filter(n => !aus.includes(n.id)).map(nav)}
         <div className="kr-nav-trenner kr-nav-unten" />
@@ -68,7 +70,7 @@ export function AppShell(p: AppShellProps) {
   }
   return (<><div className="kr-streifen" /><div className="kr-tshell">{kopf}<main className="kr-inhalt">{p.children}</main>
     <nav className="kr-dock" aria-label="Hauptnavigation">{DOCK.filter(d => d.id === 'mehr' || !aus.includes(d.id as Bereich)).map(d => { const b = d.id !== 'mehr' ? p.badges?.[d.id] : undefined; return (
-      <button key={d.id} type="button" className={cx('kr-dock-el', p.aktiv === d.id && 'kr-dock-el--aktiv')} onClick={() => p.onNav(d.id)}><Icon name={d.icon} />{d.text}{b?.rot && <span className="kr-dock-badge">{b.n}</span>}</button>); })}</nav></div>{p.ebene}</>);
+      <button key={d.id} type="button" className={cx('kr-dock-el', p.aktiv === d.id && 'kr-dock-el--aktiv')} disabled={!interactive} onClick={() => p.onNav(d.id)}><Icon name={d.icon} />{d.text}{b?.rot && <span className="kr-dock-badge">{b.n}</span>}</button>); })}</nav></div>{p.ebene}</>);
 }
 export interface SeitenKopfProps { titel: string; werkzeug?: ReactNode; }
 /** Genau EINE Überschrift je Seite (G5). Keine Overline, keine Unterzeile. */
@@ -76,9 +78,9 @@ export function SeitenKopf({ titel, werkzeug }: SeitenKopfProps) {
   return <div className="kr-seite-kopf"><h1 className="kr-seite-titel">{titel}</h1>{werkzeug && <div className="kr-seite-werkzeug">{werkzeug}</div>}</div>;
 }
 /** Runde 52: ein Größenkontext für Seite und alle darüber geöffneten Ebenen. */
-export function KrApp({ geraet, children }: { geraet: Geraet; children: ReactNode }) {
+export function KrApp({ geraet, children, portal = false }: { geraet: Geraet; children: ReactNode; portal?: boolean }) {
   const groesse = geraet === 'desktop' ? 'v11' : geraet === 'tablet' ? 'dicht' : 'v8';
-  return <GeraetContext.Provider value={geraet}><div className="kr-app" data-geraet={geraet} data-groesse={groesse} onKeyDown={weiterMitEnter}>{children}</div></GeraetContext.Provider>;
+  return <GeraetContext.Provider value={geraet}><div className="kr-app" data-geraet={geraet} data-groesse={groesse} onKeyDown={weiterMitEnter} style={portal ? { position: 'fixed', inset: 0, height: '100dvh', zIndex: 50, background: 'transparent', pointerEvents:'none' } : undefined}>{children}</div></GeraetContext.Provider>;
 }
 
 const GeraetContext = createContext<Geraet>('desktop');
@@ -87,10 +89,10 @@ export const useKrGeraet = () => useContext(GeraetContext);
 /** Runde 52: dieselben tatsächlichen Hinweise auf Tablet oberhalb einklappbar. */
 export function PruefRail({ children, offeneAngaben }: { children: ReactNode; offeneAngaben: number }) {
   const geraet = useKrGeraet();
-  return <aside className="ev-wb-rail kr-stapel" aria-label="Prüfliste">
+  return <div className="ev-wb-rail kr-stapel">
     {geraet === 'tablet' ? <details className="r52-rail">
       <summary><Icon name="check" /><b>Prüfliste &amp; Hinweise</b><Chip text={offeneAngaben ? `${offeneAngaben} offen` : 'alles da'} ton={offeneAngaben ? 'warn' : 'ok'} /><em><Icon name="chevron-down" /></em></summary>
       <div className="r52-rail-inhalt">{children}</div>
     </details> : children}
-  </aside>;
+  </div>;
 }

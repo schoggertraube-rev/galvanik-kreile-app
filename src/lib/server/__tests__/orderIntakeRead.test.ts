@@ -10,7 +10,7 @@ vi.mock("drizzle-orm", () => ({ sql: Object.assign((parts: TemplateStringsArray,
 const authorization = { tenantId: KREILE_TENANT_SLUG, userId: "11111111-1111-4111-8111-111111111111" };
 const orderId = "22222222-2222-4222-8222-222222222222";
 const clientEventId = "33333333-3333-4333-8333-333333333333";
-const receiptRow = {
+const receiptRow = { geprueft: true,
   receipt_id: "44444444-4444-4444-8444-444444444444",
   event_id: "55555555-5555-4555-8555-555555555555",
   tenant_id: KREILE_TENANT_SLUG,
@@ -57,7 +57,7 @@ describe("order intake read ports", () => {
   it("uses the private tenant customer view, caps results, and rejects malformed rows", async () => {
     const customerRow={
       id: "customer-a", tenant_id: KREILE_TENANT_SLUG, customer_number: "K-1", name: "Musterkunde",
-      company_name: null, customer_type: "business",salutation:null,first_name:"Ada",last_name:"Beispiel",contact_role:null,house_number:"1",handover_preference:"shipping",ziel_freigeschaltet:false,ziel_tage:null,auto_info:true,vorrang:false, phone: "03012345",
+      company_name: null, customer_type: "business",salutation:null,first_name:"Ada",last_name:"Beispiel",contact_role:null,house_number:"1",handover_preference:"shipping",last_handover_mode:null,ziel_freigeschaltet:false,ziel_tage:null,auto_info:true,vorrang:false, phone: "03012345",
       email: "ada@example.test", street: "Testweg 1", zip_code: "10115", city: "Berlin", country: "DE",
       payment_preference: "vorkasse", vat_id: null,  orders_count: 3, integrity_ok: true,
     };
@@ -67,7 +67,7 @@ describe("order intake read ports", () => {
       id: "customer-a", customerNumber: "K-1", name: "Musterkunde", companyName: null,
       customerType: "business",salutation:null,firstName:"Ada",lastName:"Beispiel",contactRole:null,houseNumber:"1",invoiceTermsEnabled:false,invoiceTermDays:null,autoInfo:true,vorrang:false,duplicateMatch:null,contactPerson: "Ada Beispiel", phone: "03012345", email: "ada@example.test",
       street: "Testweg 1", zipCode: "10115", city: "Berlin", country: "DE",
-      paymentPreference: "vorkasse", vatId: null, handoverPreference: "shipping", ordersCount: 3,
+      paymentPreference: "vorkasse", vatId: null, handoverPreference: "shipping", lastHandoverMode:null, ordersCount: 3,
     }]);
     expect(execute.mock.calls[0]?.[0].text).toContain("private.v_order_intake_customers_v1");
     expect(execute.mock.calls[0]?.[0].text).toContain("private.v_order_intake_customers_v1");

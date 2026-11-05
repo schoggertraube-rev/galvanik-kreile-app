@@ -24,7 +24,7 @@ const CORRELATION = "55555555-5555-4555-8555-555555555555";
 const ITEM = "66666666-6666-4666-8666-666666666666";
 const RECEIPT = "77777777-7777-4777-8777-777777777777";
 const SERVICE = "88888888-8888-4888-8888-888888888888";
-const input = {
+const input = { geprueft: true,
   clientEventId: CLIENT,
   customer: { mode: "EXISTING" as const, customerId: CUSTOMER },
   dueDate: "2026-08-30",
@@ -33,9 +33,9 @@ const input = {
   handoverMode: "pickup" as const,
   paymentMode: "abholung" as const,
   note: "Eilige Annahme",
-  items: [{ catalogServiceId:SERVICE, name:"Grundplatte", quantity:2, material:"Stahl", surfaceRequested:"Glanzverchromen", executionRequested:"hochglanz" as const, unit:"Stück", unitPriceCents:1250, vatRateBasisPoints:1900 as const }],
+  items: [{ catalogServiceId:SERVICE, name:"Grundplatte", quantity:2, material:"Stahl", surfaceRequested:"Verchromen", executionRequested:"hochglanz" as const, unit:"Stück", unitPriceCents:1250, vatRateBasisPoints:1900 as const }],
 };
-const intentSha256 = createHash("sha256").update(JSON.stringify({
+const intentSha256 = createHash("sha256").update(JSON.stringify({ geprueft: true,
   clientEventId: CLIENT,
   customer: input.customer,
   dueDate: input.dueDate,
@@ -47,7 +47,7 @@ const intentSha256 = createHash("sha256").update(JSON.stringify({
   paymentMode: input.paymentMode,
 })).digest("hex");
 const itemSnapshot = [{ id: ITEM, position: 1, ...input.items[0] }];
-const receiptRow = {
+const receiptRow = { geprueft: true,
   receipt_id: RECEIPT,
   event_id: EVENT,
   tenant_id: KREILE_TENANT_SLUG,
@@ -328,7 +328,7 @@ describe("createOrderIntake", () => {
         country: "DE",
         payment_preference: "bar",
       }]);
-      if (query.text.includes("FROM public.catalog_services")) return Promise.resolve([{ id:SERVICE, name:"Grundplatte", surface:"Glanzverchromen", unit:"Stück", net_price_cents:1250, vat_rate_basis_points:1900 }]);
+      if (query.text.includes("FROM public.catalog_services")) return Promise.resolve([{ id:SERVICE, name:"Grundplatte", surface:"verchromen", unit:"stueck", net_price_cents:1250, vat_rate_basis_points:1900 }]);
       if (query.text.includes("next_number")) return Promise.resolve([{ current_year: 2026, next_number: 42 }]);
       if (query.text.includes("INSERT INTO public.orders")) {
         created.orderId = String(query.values[0]);
@@ -369,7 +369,7 @@ describe("createOrderIntake", () => {
     expect(result).toEqual({
       code: "OK",
       replayed: false,
-      receipt: {
+      receipt: { geprueft: true,
         receiptId: created.receiptId,
         eventId: created.eventId,
         orderId: created.orderId,

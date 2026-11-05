@@ -15,9 +15,7 @@ import type {
   OrderStationCorrectionReceipt,
 } from "@/lib/server/commands/orderStationCommand";
 import type {
-  OrderIntakeReceipt,
-} from "@/lib/server/commands/orderIntakeCommand";
-import type {
+  OrderIntakeReceiptView,
   OrderIntakeCustomerOption,
   OrderIntakeCustomerSearchInput,
   OrderIntakeReceiptReadInput,
@@ -242,7 +240,7 @@ export async function searchOrderIntakeCustomersAction(
 
 export async function getOrderIntakeReceiptAction(
   input: OrderIntakeReceiptReadInput,
-): Promise<WarendurchlaufActionResult<OrderIntakeReceipt | null>> {
+): Promise<WarendurchlaufActionResult<OrderIntakeReceiptView | null>> {
   noStore();
   const authorization = await resolveAuthorization();
   if (!authorization.ok) {
@@ -255,8 +253,10 @@ export async function getOrderIntakeReceiptAction(
   }
   try {
     const domain = await import("@/lib/server/orderIntakeRead");
-    return { ok: true, data: await domain.readOrderIntakeReceipt(authorization.data, input) };
-  } catch {
+    const receipt=await domain.readOrderIntakeReceipt(authorization.data, input);
+    return { ok: true, data: receipt?domain.presentOrderIntakeReceipt(receipt,hasAuthorizationArea(authorization.data,"geld")):null };
+  } catch (error) {
+    console.error("[ORDER_INTAKE_RECEIPT_READ_FAILED]",error);
     return { ok: false, error: "QUERY_ERROR", message: "Wareneingangsbeleg konnte nicht sicher geladen werden." };
   }
 }

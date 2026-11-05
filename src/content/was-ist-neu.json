@@ -3,7 +3,7 @@
   {"datum":"2026-11-04","pr":172,"seite":"rein","punkte":["Vorbereitung für Nachrichten und Teilen an die App."],"ziel":"rein"},
   {"datum":"2026-11-04","pr":171,"seite":"ware","punkte":["Vorschau: Ware am Auftrag prüfen und annehmen.","Vorschau: Gespeicherte Originale ansehen und prüfen."],"ziel":"/orders"},
   {"datum":"2026-11-04","pr":169,"seite":"rein","punkte":["Vorschau: Die Eingang-Seiten erhalten die freigegebene Darstellung für Desktop, Tablet und Handy."],"ziel":"rein"},
-  {"datum":"2026-11-04","pr":168,"seite":"eingang","punkte":["Vorschau: Auftrag oder KV aus einem Eingang erfassen.","Vorschau: Fehlende Angaben gezielt ergänzen und Entwürfe wieder aufnehmen."],"ziel":"rein"},
+  {"datum":"2026-11-04","pr":168,"seite":"eingang","punkte":["Vorschau: Auftrag aus einem Eingang erfassen.","Vorschau: Fehlende Angaben gezielt ergänzen und Entwürfe wieder aufnehmen."],"ziel":"rein"},
   {"datum":"2026-11-04","pr":167,"seite":"kundeneu","punkte":["Kunde anlegen und Kundendaten in derselben Kartei bearbeiten."],"ziel":"/customers"},
   {"datum":"2026-11-04","pr":166,"seite":"rein","punkte":["Was ist neu zeigt Änderungen und merkt sich je Login, was bereits angesehen wurde.","Die vorgesehenen Eingang-Wege werden vor ihrer Freigabe geprüft."],"ziel":"rein"},
   {"datum":"2026-11-03","pr":170,"seite":"ware","punkte":["Vorschau: Vorbereitung für Abholmitteilungen, Versand und die Freigabe zur Ausgabe."],"ziel":"/orders"},

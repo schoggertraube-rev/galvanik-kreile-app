@@ -8,7 +8,8 @@ export function Feld({ label, fehler, voll, className, children }: FeldProps) {
 export function Eingabe(p: InputHTMLAttributes<HTMLInputElement>) { return <input {...p} className={cx('kr-eingabe', p.className)} />; }
 export interface AuswahlOption { wert: string; text: string; gesperrt?: boolean; }
 export function Auswahl({ optionen, ...p }: SelectHTMLAttributes<HTMLSelectElement> & { optionen: AuswahlOption[] }) {
-  return <select {...p} className={cx('kr-auswahl', p.className)}>{optionen.map(o => <option key={o.wert} value={o.wert} disabled={o.gesperrt}>{o.text}</option>)}</select>;
+  const gewaehlt = p.value !== undefined && p.value !== '' && optionen.some(option => option.wert === String(p.value) && !option.gesperrt);
+  return <select {...p} className={cx('kr-auswahl', p.className)} style={{ ...p.style, ...(gewaehlt ? { background: 'var(--succ)', borderColor: 'var(--succ-d)', color: 'var(--surface)' } : {}) }}>{optionen.map(o => <option key={o.wert} value={o.wert} disabled={o.gesperrt}>{o.text}</option>)}</select>;
 }
 export function Textfeld(p: TextareaHTMLAttributes<HTMLTextAreaElement>) { return <textarea {...p} className={cx('kr-textfeld', p.className)} />; }
 export interface CheckboxProps { checked: boolean; onChange: (v: boolean) => void; children: ReactNode; disabled?: boolean; }

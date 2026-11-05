@@ -14,6 +14,7 @@ const ports = vi.hoisted(() => ({
 vi.mock("@/lib/overlayStore", () => ({ useOverlayStore: (selector: (state: { openOrder: typeof ports.openOrder; openInvoice: typeof ports.openInvoice }) => unknown) => selector({ openOrder: ports.openOrder, openInvoice: ports.openInvoice }) }));
 vi.mock("@/components/layout/GlobalCreateFlow", () => ({ requestGlobalCreate: ports.requestCreate }));
 vi.mock("@/app/actions/communications.actions", () => ({ listOutlookInboxAction: ports.listInbox }));
+vi.mock("@/app/actions/eingang.actions",()=>({getIntakeDraftsAction:vi.fn(async()=>({code:"OK",drafts:[]})),discardIntakeDraftAction:vi.fn(async()=>({code:"OK",drafts:[]}))}));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: ports.push, refresh: ports.refresh }) }));
 vi.mock("@/lib/auth/PermissionsContext", () => ({
   usePermissions: () => ({

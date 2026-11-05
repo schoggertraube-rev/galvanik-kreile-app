@@ -34,14 +34,16 @@ export function KundeFormular({
   proposals,
   onAcceptProposal,
   priorityFields = [],
+  onlyFields,
 }: {
   value: CustomerFormValue;
   onChange: (value: CustomerFormValue) => void;
-  prefix: "kundeneu" | "kundebearbeiten";
+  prefix: "kundeneu" | "kundebearbeiten" | "eingang";
   canManageMoney: boolean;
   invoiceTermsEnabled?: boolean;
   invoiceTermDays?: number | null;
-  mode: "create" | "edit";
+  mode: "create" | "edit" | "inline";
+  onlyFields?:readonly CustomerField[];
   supplierMode?: boolean;
   canDecide?: boolean;
   previous?: CustomerFormValue;
@@ -72,7 +74,7 @@ export function KundeFormular({
 
   const set = <K extends CustomerField>(key: K, next: CustomerFormValue[K]) => onChange({ ...value, [key]: next });
   const blur = (field: CustomerField) => setTouched((current) => new Set(current).add(field));
-  const validation = kundeValidierung(value,previous);
+  const validation = kundeValidierung(value,previous,{invoiceTermsEnabled});
   const error = (field: CustomerField) => errors?.[field] ?? (touched.has(field) ? validation[field] : null);
   const metadata=(key:CustomerField)=> <>
     {origins?.[key]?<small data-spec-id={`${prefix}.${fieldSpecId(key)}.herkunft`}>{origins[key]}</small>:null}
@@ -125,13 +127,14 @@ export function KundeFormular({
   const isPrivate = value.customerType === "privat";
   const isSupplier = value.customerType === "lieferant";
   const paymentOptions = [
-    ...(!value.paymentPreference ? [{ wert: "", text: "Bitte wählen" }] : []),
     { wert: "vorkasse", text: "Vorkasse" },
     { wert: "bar", text: "Bar oder Karte bei Abholung" },
     ...(invoiceTermsEnabled && invoiceTermDays
       ? [{ wert: "rechnung", text: customerPaymentLabel("rechnung",{invoiceTermDays}) }]
       : []),
   ];
+  const paymentValue = paymentOptions.some(option => option.wert === value.paymentPreference) ? value.paymentPreference : "";
+  if (!paymentValue) paymentOptions.unshift({ wert: "", text: "Bitte wählen" });
   const countryOptions = [...(!value.country ? [{ wert: "", text: "Bitte wählen" }] : []), ...CUSTOMER_COUNTRIES.map(option => ({wert: option.value,text: option.label}))];
 
   const customerType = <div className="ev-kf-typ">
@@ -171,7 +174,7 @@ export function KundeFormular({
     </div> : null}
   </div> : null;
   const payment = value.customerType ? <>
-    {canManageMoney && !isSupplier ? place("paymentPreference", <Feld label="Zahlungsbedingung"><Auswahl data-spec-id={`${prefix}.zahlungsbedingung`} value={value.paymentPreference} style={value.paymentPreference ? { backgroundColor: "var(--succ)", color: "var(--surface)" } : undefined} onChange={(event) => set("paymentPreference", event.target.value)} optionen={paymentOptions} />{metadata("paymentPreference")}</Feld>) : null}
+    {canManageMoney && !isSupplier ? place("paymentPreference", <Feld label="Zahlungsbedingung"><Auswahl data-spec-id={`${prefix}.zahlungsbedingung`} value={paymentValue} style={paymentValue ? { backgroundColor: "var(--succ)", color: "var(--surface)" } : undefined} onChange={(event) => set("paymentPreference", event.target.value)} optionen={paymentOptions} />{metadata("paymentPreference")}</Feld>) : null}
     {!isSupplier ? <Feld label="Übergabe bevorzugt"><div data-spec-id={`${prefix}.uebergabe`}><Segment label="Übergabe bevorzugt" wert={value.handoverPreference} optionen={[
       { wert: "pickup", text: "Abholung" }, { wert: "shipping", text: "Versand" },
     ]} onWert={(next) => set("handoverPreference", next)} /></div>{metadata("handoverPreference")}</Feld> : null}
@@ -181,9 +184,9 @@ export function KundeFormular({
   const more = value.customerType ? <>
     {isBusiness ? field("vatId", "USt-ID", { maxLength: 20 }) : null}
     {(isBusiness || isSupplier) ? field("website", "Website", { maxLength: 120 }) : null}
-    <Feld label="Notiz / Telefonnotiz" voll><Textfeld data-spec-id={`${prefix}.notiz`} rows={3} maxLength={2000} value={value.notes} onChange={(event) => set("notes", event.target.value)} onBlur={() => blur("notes")} />{metadata("notes")}</Feld>
+    {mode!=="inline"?<Feld label="Notiz / Telefonnotiz" voll><Textfeld data-spec-id={`${prefix}.notiz`} rows={3} maxLength={2000} value={value.notes} onChange={(event) => set("notes", event.target.value)} onBlur={() => blur("notes")} />{metadata("notes")}</Feld>:null}
   </> : null;
-  const defaults = !isSupplier && value.customerType ? <section className="kr-stapel" aria-label="Standard für Aufträge">
+  const defaults = mode!=="inline" && !isSupplier && value.customerType ? <section className="kr-stapel" aria-label="Standard für Aufträge">
     <h4 className="ev-kf-unter">Standard für Aufträge</h4>
     <FormRaster>
       <Feld label="Kunde automatisch informieren"><div data-spec-id={`${prefix}.auto_info`}><Segment label="Kunde automatisch informieren" wert={value.autoInfo ? "ja" : "nein"} optionen={[{ wert: "ja", text: "Ja" }, { wert: "nein", text: "Nein" }]} onWert={next => set("autoInfo", next === "ja")} /></div>{metadata("autoInfo")}</Feld>
@@ -194,13 +197,13 @@ export function KundeFormular({
     <h3 className="ev-abs-kopf"><span className="ev-nrkreis">{number}</span>{title}</h3><FormRaster>{children}</FormRaster>
   </section>;
 
-  return <div ref={root} className="kr-stapel" data-spec-id={prefix} onKeyDownCapture={event => { if (pendingType && event.key === "Escape") { event.preventDefault(); event.stopPropagation(); event.nativeEvent.stopImmediatePropagation(); setPendingType(null); setLosses([]); } }}>
+  return <div ref={root} className="kr-stapel" data-spec-id={mode==="inline"?`${prefix}.kundenfelder`:prefix} onKeyDownCapture={event => { if (pendingType && event.key === "Escape") { event.preventDefault(); event.stopPropagation(); event.nativeEvent.stopImmediatePropagation(); setPendingType(null); setLosses([]); } }}>
     {pendingType ? <Hinweis ton="warn"><div className="kr-stapel" data-spec-id={`${prefix}.zustand.typwechsel`}>
       <strong>{losses.length} Angaben entfallen: {losses.join(", ")} – wechseln?</strong>
       <div className="kr-schnellleiste"><Button data-spec-id={`${prefix}.typ-wechseln`} art="primaer" text="Wechseln" onClick={applyType} /><Button data-spec-id={`${prefix}.typ-wechsel-abbrechen`} text="Abbrechen" onClick={() => { setPendingType(null); setLosses([]); }} /></div>
     </div></Hinweis> : null}
     {mode === "edit" && priorityFields.length ? <section className="kr-stapel" aria-label="Für Aufträge ergänzen"><h3 className="ev-kf-unter">Für Aufträge ergänzen</h3><FormRaster>{priorityFields.map(key => <Fragment key={key}>{fieldNodes.get(key)}</Fragment>)}</FormRaster></section> : null}
-    {mode === "create" ? <>
+    {onlyFields ? <FormRaster>{onlyFields.map(key=><Fragment key={key}>{fieldNodes.get(key)}</Fragment>)}</FormRaster> : mode === "create" ? <>
       {section(1, "Wer?", <>{customerType}{person}</>)}
       {section(2, "Kontakt", contact)}
       {value.customerType ? <>

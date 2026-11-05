@@ -2,8 +2,9 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
+import { normaliseOrderPositionSurface, normaliseOrderPositionUnit } from "@/lib/orderPositionContract";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import type { CatalogService, SaveCatalogServiceInput } from "../public";
+import type { CatalogService, CatalogServiceChoice, SaveCatalogServiceInput } from "../public";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 export type CatalogCommandContext = { tenantId: string; actorId: string; canRead: boolean; canManage: boolean };
@@ -26,7 +27,7 @@ function normalize(input: unknown): SaveCatalogServiceInput | null {
   const keys = Object.keys(value).sort().join(",");
   if (keys !== "active,id,name,netPriceCents,standardLeadTimeWorkingDays,surface,unit,vatRateBasisPoints") return null;
   const clean = (candidate: unknown, min: number, max: number) => typeof candidate === "string" && candidate.trim().length >= min && candidate.trim().length <= max ? candidate.trim().replace(/\s+/g, " ") : null;
-  const name = clean(value.name, 2, 160); const surface = clean(value.surface, 2, 160); const unit = clean(value.unit, 1, 40);
+  const name = clean(value.name, 2, 160); const surface = normaliseOrderPositionSurface(value.surface); const unit = normaliseOrderPositionUnit(value.unit);
   if ((value.id !== null && (typeof value.id !== "string" || !UUID.test(value.id))) || !name || !surface || !unit
     || typeof value.netPriceCents !== "number" || !Number.isSafeInteger(value.netPriceCents) || value.netPriceCents < 0 || value.netPriceCents > 999_999_999
     || ![0, 700, 1900].includes(Number(value.vatRateBasisPoints))
@@ -35,12 +36,20 @@ function normalize(input: unknown): SaveCatalogServiceInput | null {
   return { id: value.id as string | null, name, surface, unit, netPriceCents: value.netPriceCents, vatRateBasisPoints: value.vatRateBasisPoints as 0 | 700 | 1900, standardLeadTimeWorkingDays: value.standardLeadTimeWorkingDays, active: value.active };
 }
 
-export async function listCatalogServices(context: CatalogCommandContext, includeInactive = false) {
+type CatalogReadFailure = { code: "FORBIDDEN" | "UNAVAILABLE"; message: string };
+export function listCatalogServices(context: CatalogCommandContext, includeInactive?: boolean): Promise<{ code: "OK"; services: CatalogService[] } | CatalogReadFailure>;
+export function listCatalogServices(context: CatalogCommandContext, includeInactive: boolean, visibility: "metadata"): Promise<{ code: "OK"; services: CatalogServiceChoice[] } | CatalogReadFailure>;
+export async function listCatalogServices(context: CatalogCommandContext, includeInactive = false, visibility: "prices" | "metadata" = "prices") {
   if (!context.canRead) return { code: "FORBIDDEN" as const, message: "Leistungskatalog ist nicht erlaubt." };
   try {
     const services = await withPrivilegedTenantTransaction(context, async (tx) => {
-      const rows = await tx.execute<Row>(sql`SELECT id, name, surface, unit, net_price_cents, vat_rate_basis_points, standard_lead_time_working_days, active FROM public.catalog_services WHERE tenant_id = ${context.tenantId} AND (${includeInactive} OR active) ORDER BY active DESC, name, surface`);
-      return rows.map(map);
+      const prices = visibility === "prices" ? sql`, net_price_cents, vat_rate_basis_points` : sql``;
+      const rows = await tx.execute<Row>(sql`SELECT id, name, surface, unit, standard_lead_time_working_days, active ${prices} FROM public.catalog_services WHERE tenant_id = ${context.tenantId} AND (${includeInactive} OR active) ORDER BY active DESC, name, surface`);
+      return rows.map(row => {
+        if (visibility === "prices") return map(row);
+        if (!UUID.test(row.id)) throw new Error("CATALOG_READBACK_INVALID");
+        return {id:row.id,name:row.name,surface:row.surface,unit:row.unit,standardLeadTimeWorkingDays:row.standard_lead_time_working_days,active:row.active};
+      });
     });
     return { code: "OK" as const, services };
   } catch (error) {

@@ -1,4 +1,5 @@
-import { pgTable, bigserial, text, timestamp, boolean, integer, jsonb, uuid, varchar, numeric, primaryKey } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { pgTable, bigserial, text, timestamp, boolean, integer, jsonb, uuid, varchar, numeric, primaryKey, pgSchema, date, bigint, foreignKey, unique, index } from "drizzle-orm/pg-core";
 import { createId } from "@paralleldrive/cuid2";
 
 // Helper for CUID primary keys
@@ -125,6 +126,7 @@ export const priceAgreements = pgTable("price_agreements", {
 
 // 4. Orders
 export const orders = pgTable("orders", {
+  geprueft: boolean("geprueft"),
   id: cuidPrimaryKey("id"),
   tenantId: varchar("tenant_id", { length: 50 }).default("galvanik-kreile"),
   orderNumber: text("order_number").notNull().unique(),
@@ -165,7 +167,13 @@ export const orders = pgTable("orders", {
   quoteStatus: text("quote_status"),
   quoteConvertedOrderId: text("quote_converted_order_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+  ware: text("ware").notNull().default(sql`'da'::text`),
+  wareSeit: timestamp("ware_seit", { withTimezone: true }),
+  wunschtermin: date("wunschtermin", { mode: "string" }),
+  terminHerkunft: text("termin_herkunft"),
+  terminstatusSeit: timestamp("terminstatus_seit", { withTimezone: true }),
+  processingWeeks: integer("processing_weeks"),
+}, table => [unique("orders_tenant_id_identity_key").on(table.tenantId, table.id)]);
 
 // 4.5 Calendar Events
 export const calendarEvents = pgTable("calendar_events", {
@@ -191,7 +199,7 @@ export const items = pgTable("items", {
   orderId: text("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
   customerId: text("customer_id").notNull().references(() => customers.id),
   name: text("name").notNull(),
-  quantity: integer("quantity").notNull().default(1),
+  quantity: numeric("quantity", { mode: "number" }).notNull().default(1),
   currentStationId: varchar("current_station_id", { length: 100 }).default("angenommen"),
   material: text("material"),
   surfaceRequested: text("surface_requested"),
@@ -207,6 +215,7 @@ export const items = pgTable("items", {
   currentStep: integer("current_step").default(0),
   internalNotes: text("internal_notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  aufwandMin: integer("aufwand_min"),
 });
 
 // 5. Events / Timeline
@@ -402,6 +411,7 @@ export const companySettingsTable = pgTable("company_settings", {
   id: text("id").primaryKey().default("default"),
   tenantId: text("tenant_id").notNull(),
   companyName: text("company_name").notNull().default(""),
+  openingHours: text("oeffnungszeiten"),
   tagline: text("tagline").default(""),
   street: text("street").default(""),
   zip: text("zip").default(""),
@@ -425,6 +435,11 @@ export const companySettingsTable = pgTable("company_settings", {
   emailFooter: text("email_footer").default("Mit freundlichen Gruessen, Ihr Team von Galvanik Kreile"),
   emailAdditionalNotes: text("email_additional_notes").default(""),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  uebergabepufferTage: integer("uebergabepuffer_tage").notNull().default(1),
+  auslastungPasstPct: integer("auslastung_passt_pct").notNull().default(80),
+  auslastungKnappPct: integer("auslastung_knapp_pct").notNull().default(100),
+  auslastungWenigPct: integer("auslastung_wenig_pct").notNull().default(50),
+  auslastungVorrangPct: integer("auslastung_vorrang_pct").notNull().default(110),
 });
 
 export const catalogServices = pgTable("catalog_services", {
@@ -614,3 +629,197 @@ export const payments = pgTable("payments", {
   receiptUrl: text("receipt_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+
+// AP-EIN: canonical intake tables. SQL constraints and RLS remain migration-owned.
+const intakePrivateSchema = pgSchema("private");
+export const intakeDrafts = intakePrivateSchema.table("intake_drafts", {
+  id:uuid("id").primaryKey().defaultRandom(),tenantId:text("tenant_id").notNull(),actorId:uuid("actor_id").notNull(),
+  art:text("art"),payload:jsonb("payload").notNull(),status:text("status").notNull().default("open"),zuletztFeld:text("zuletzt_feld"),
+  createdAt:timestamp("created_at",{withTimezone:true}).notNull().default(sql`statement_timestamp()`),
+  updatedAt:timestamp("updated_at",{withTimezone:true}).notNull().default(sql`statement_timestamp()`),
+});
+// Identity anchor for the unchanged existing parent of quote_positions.
+const privateQuoteIdentity = intakePrivateSchema.table("quotes", { id: uuid("id").primaryKey() });
+
+export const intakeItems = pgTable("intake_item", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  clientKey: text("client_key").notNull(),
+  kanal: text("kanal").notNull(),
+  richtung: text("richtung").notNull().default(sql`'rein'::text`),
+  quelle: text("quelle").notNull(),
+  erstelltAm: timestamp("erstellt_am", { withTimezone: true }).notNull().default(sql`statement_timestamp()`),
+  erstelltVon: uuid("erstellt_von").notNull(),
+  erstelltAuf: text("erstellt_auf"),
+  empfangenAm: timestamp("empfangen_am", { withTimezone: true }),
+  absenderName: text("absender_name"),
+  absenderAdresse: text("absender_adresse"),
+  betreff: text("betreff"),
+  text: text("text"),
+  textSprache: text("text_sprache"),
+  kundeId: text("kunde_id"),
+  vorgangArt: text("vorgang_art"),
+  vorgangId: text("vorgang_id"),
+  zuordnung: text("zuordnung").notNull().default(sql`'offen'::text`),
+  zuordnungGrund: text("zuordnung_grund"),
+  einsatz: text("einsatz").notNull().default(sql`'offen'::text`),
+  geaendertVon: uuid("geaendert_von"),
+  geaendertAm: timestamp("geaendert_am", { withTimezone: true }),
+  version: integer("version").notNull().default(1),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().default(sql`statement_timestamp()`),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`statement_timestamp()`),
+  absenderTelefon: text("absender_telefon"),
+  absenderBestaetigt: boolean("absender_bestaetigt").notNull().default(false),
+  an: text("an").array().notNull().default(sql`'{}'::text[]`),
+  cc: text("cc").array().notNull().default(sql`'{}'::text[]`),
+  gruppeAdresse: text("gruppe_adresse"),
+  kennzeichen: text("kennzeichen").array().notNull().default(sql`'{}'::text[]`),
+  zuordnungRegel: text("zuordnung_regel"),
+  anliegen: text("anliegen").array().notNull().default(sql`'{}'::text[]`),
+  anliegenAbgewaehlt:text("anliegen_abgewaehlt").array().notNull().default(sql`'{}'::text[]`),
+  anliegenHaupt: text("anliegen_haupt"),
+  anliegenOffen: text("anliegen_offen").array().notNull().default(sql`'{}'::text[]`),
+  teilVon: uuid("teil_von"),
+  verweisItem: uuid("verweis_item"),
+  einsatzAktion: text("einsatz_aktion"),
+  einsatzVermerk: text("einsatz_vermerk"),
+  einsatzAm: timestamp("einsatz_am", { withTimezone: true }),
+  einsatzVon: uuid("einsatz_von"),
+  wartetSeit: timestamp("wartet_seit", { withTimezone: true }),
+  graphMessageId: text("graph_message_id"),
+  internetMessageId: text("internet_message_id"),
+  conversationId: text("conversation_id"),
+  inReplyTo: text("in_reply_to"),
+  references: text("references").array().notNull().default(sql`'{}'::text[]`),
+  antwortAufItem: uuid("antwort_auf_item"),
+  sendestatus: text("sendestatus"),
+  sendefehler: text("sendefehler"),
+  gesendetAm: timestamp("gesendet_am", { withTimezone: true }),
+  aussortiert: text("aussortiert"),
+  infoAutomatisch: boolean("info_automatisch").notNull().default(false),
+}, (table) => [
+  unique("intake_item_tenant_id_key").on(table.tenantId, table.id),
+  unique("intake_item_client_key_uidx").on(table.tenantId, table.clientKey),
+  foreignKey({ columns: [table.tenantId, table.teilVon], foreignColumns: [table.tenantId, table.id] }).onDelete("restrict"),
+  foreignKey({ columns: [table.tenantId, table.verweisItem], foreignColumns: [table.tenantId, table.id] }).onDelete("restrict"),
+  foreignKey({ columns: [table.tenantId, table.antwortAufItem], foreignColumns: [table.tenantId, table.id] }).onDelete("restrict"),
+]);
+
+export const intakeEvents = pgTable("intake_event", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  itemId: uuid("item_id").notNull(),
+  zeit: timestamp("zeit", { withTimezone: true }).notNull().default(sql`statement_timestamp()`),
+  art: text("art").notNull(),
+  befehlId: uuid("befehl_id").notNull(),
+  von: text("von").notNull(),
+  vorher: jsonb("vorher"),
+  nachher: jsonb("nachher"),
+  geraetId: text("geraet_id"),
+}, (table) => [
+  foreignKey({ columns: [table.itemId], foreignColumns: [intakeItems.id] }).onDelete("restrict"),
+  index("intake_event_live_files_idx").on(table.tenantId, table.zeit, table.id).where(sql`${table.art} IN ('original_gespeichert','erkannt')`),
+]);
+
+export const intakeFiles = pgTable("intake_file", {
+  id: uuid("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  itemId: uuid("item_id").notNull(),
+  clientKey: text("client_key").notNull(),
+  art: text("art").notNull(),
+  abgeleitetVon: text("abgeleitet_von").array().notNull().default(sql`'{}'::text[]`),
+  fotoArt: text("foto_art"),
+  dateiname: text("dateiname").notNull(),
+  mime: text("mime").notNull(),
+  bytes: bigint("bytes", { mode: "number" }).notNull(),
+  sha256: text("sha256").notNull(),
+  speicherpfad: text("speicherpfad").notNull(),
+  vorschauPfad: text("vorschau_pfad"),
+  aufgenommenAm: timestamp("aufgenommen_am", { withTimezone: true }).notNull(),
+  aufgenommenVon: uuid("aufgenommen_von").notNull(),
+  aufgenommenAuf: text("aufgenommen_auf"),
+  reihenfolge: integer("reihenfolge").notNull(),
+  lesbar: boolean("lesbar").notNull(),
+  erkennungStatus: text("erkennung_status").notNull(),
+  erkannterText: text("erkannter_text"),
+  sprache: text("sprache"),
+  geoeffnet: boolean("geoeffnet").notNull(),
+}, (table) => [
+  unique().on(table.tenantId, table.id),
+  unique().on(table.tenantId, table.clientKey),
+  foreignKey({ columns: [table.tenantId, table.itemId], foreignColumns: [intakeItems.tenantId, intakeItems.id] }).onDelete("restrict"),
+]);
+
+export const intakeSuggestions = pgTable("intake_suggestion", {
+  orderId:text("order_id"),
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  itemId: uuid("item_id").notNull(),
+  fileId: uuid("file_id"),
+  feld: text("feld").notNull(),
+  wert: jsonb("wert").notNull(),
+  sicherheit: text("sicherheit").notNull(),
+  regel: text("regel"),
+  grund: text("grund"),
+  fundstelle: jsonb("fundstelle"),
+  status: text("status").notNull(),
+  entschiedenVon: text("entschieden_von"),
+  entschiedenAm: timestamp("entschieden_am", { withTimezone: true }),
+  geprueftVon: uuid("geprueft_von"),
+  geprueftAm: timestamp("geprueft_am", { withTimezone: true }),
+}, (table) => [
+  foreignKey({ columns: [table.tenantId, table.itemId], foreignColumns: [intakeItems.tenantId, intakeItems.id] }).onDelete("restrict"),
+  foreignKey({ columns: [table.tenantId, table.fileId], foreignColumns: [intakeFiles.tenantId, intakeFiles.id] }).onDelete("restrict"),
+]);
+
+export const deviceRequests = pgTable("device_request", {
+  id: uuid("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  loginId: uuid("login_id").notNull(),
+  itemId: uuid("item_id").notNull(),
+  zweck: text("zweck").notNull(),
+  kontext: jsonb("kontext"),
+  tokenHash: text("token_hash").notNull(),
+  tokenSitzung: text("token_sitzung").notNull(),
+  status: text("status").notNull(),
+  beendetArt: text("beendet_art"),
+  angenommenAuf: text("angenommen_auf").array().notNull().default(sql`'{}'::text[]`),
+  fertigAuf: text("fertig_auf").array().notNull().default(sql`'{}'::text[]`),
+  erstelltAm: timestamp("erstellt_am", { withTimezone: true }).notNull().default(sql`statement_timestamp()`),
+  ablaufAm: timestamp("ablauf_am", { withTimezone: true }).notNull(),
+}, (table) => [
+  foreignKey({ columns: [table.tenantId, table.itemId], foreignColumns: [intakeItems.tenantId, intakeItems.id] }).onDelete("restrict"),
+]);
+
+export const outboxMails = pgTable("outbox_mails", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  objekt: text("objekt").notNull(),
+  vorlage: text("vorlage").notNull(),
+  an: text("an").notNull(),
+  status: text("status").notNull(),
+  fehlerCode: text("fehler_code"),
+  erstelltAm: timestamp("erstellt_am", { withTimezone: true }).notNull().default(sql`statement_timestamp()`),
+  gesendetAm: timestamp("gesendet_am", { withTimezone: true }),
+}, (table) => [
+  foreignKey({ columns: [table.tenantId, table.objekt], foreignColumns: [orders.tenantId, orders.id] }).onDelete("restrict"),
+]);
+
+export const quotePositions = intakePrivateSchema.table("quote_positions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  quoteId: uuid("quote_id").notNull(),
+  position: integer("position").notNull(),
+  name: text("name").notNull(),
+  quantity: integer("quantity").notNull(),
+  material: text("material"),
+  surfaceRequested: text("surface_requested").notNull(),
+  unitPriceCents: bigint("unit_price_cents", { mode: "number" }).notNull(),
+  lineTotalCents: bigint("line_total_cents", { mode: "number" }).generatedAlwaysAs(sql`((quantity)::bigint * unit_price_cents)`),
+  revision: integer("revision").notNull().default(1),
+  unit: text("unit"),
+  aufwandMin: integer("aufwand_min"),
+}, (table) => [
+  foreignKey({ columns: [table.quoteId], foreignColumns: [privateQuoteIdentity.id] }).onDelete("restrict"),
+]);

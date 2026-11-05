@@ -26,7 +26,7 @@ export type CreateQuoteInput = {
   note: string | null;
   positions: QuotePositionInput[];
   validUntil?: string | null;
-  termStatus?: "wunsch" | "bestaetigt" | "verschoben" | null;
+  termStatus?: "wunsch" | "bestaetigt" | "verschoben" | "gegenvorschlag" | null;
   intakeSource?: "persoenlich" | "versand" | "abholung_firma" | "anfrage_mail" | "anfrage_telefon" | null;
 };
 
@@ -67,7 +67,7 @@ export type QuoteReadback = {
   currency: "EUR";
   dueDate: string;
   validUntil: string | null;
-  termStatus: "wunsch" | "bestaetigt" | "verschoben" | null;
+  termStatus: "wunsch" | "bestaetigt" | "verschoben" | "gegenvorschlag" | null;
   intakeSource: "persoenlich" | "versand" | "abholung_firma" | "anfrage_mail" | "anfrage_telefon" | null;
   note: string | null;
   totalNetCents: number;
@@ -148,10 +148,11 @@ export type ReadQuoteUpdateReceiptResult =
   | QuoteCommandFailure;
 
 export type QuoteOrderInput = {
+  geprueft: false;
   clientEventId: string;
   customer: { mode: "EXISTING"; customerId: string };
   dueDate: string;
-  termStatus: "wunsch" | "bestaetigt" | "verschoben" | null;
+  termStatus: "wunsch" | "bestaetigt" | "verschoben" | "gegenvorschlag" | null;
   intakeSource: "persoenlich" | "versand" | "abholung_firma" | "anfrage_mail" | "anfrage_telefon" | null;
   handoverMode: "pickup" | "shipping";
   paymentMode: "vorkasse" | "abholung" | "rechnung";

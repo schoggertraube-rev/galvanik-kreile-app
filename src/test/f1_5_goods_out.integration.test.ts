@@ -131,7 +131,7 @@ type ReadyOrder = {
 async function createReadyOrder(label: string, paymentMode: PaymentMode): Promise<ReadyOrder> {
   setSession(USERS.admin, "admin");
   const { createOrderIntake } = await import("@/lib/server/commands/orderIntakeCommand");
-  const intake = await createOrderIntake({
+  const intake = await createOrderIntake({ geprueft: true,
     clientEventId: randomUUID(),
     customer: { mode: "EXISTING", customerId: CUSTOMER },
     dueDate: "2026-09-30",

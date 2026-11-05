@@ -192,7 +192,7 @@ describe("H11 fixed action matrix against real server commands", () => {
             expectedVersion: 1,
             clientEventId: CONTENT_EVENTS[user],
             note: "TEST H11",
-            items: [{ id: CONTENT_ITEM_ID, catalogServiceId: null, name: "TEST H11 Teil", quantity: 1, material: null, surface: "TEST H11 Oberfläche", unit: null, unitPriceCents: null, vatRateBasisPoints: null }],
+            items: [{ id: CONTENT_ITEM_ID, catalogServiceId: null, name: "TEST H11 Teil", quantity: 1, material: null, surface: "Verzinken", unit: null, unitPriceCents: null, vatRateBasisPoints: null }],
           });
         },
       },
@@ -212,7 +212,7 @@ describe("H11 fixed action matrix against real server commands", () => {
           termStatus: "wunsch",
           intakeSource: "anfrage_telefon",
           note: "TEST H11 Aktionsmatrix",
-          positions: [{ name: "TEST H11 Position", quantity: 1, material: "Stahl", surfaceRequested: "Zink", unitPriceCents: 1000 }],
+          positions: [{ name: "TEST H11 Position", quantity: 1, material: "Stahl", surfaceRequested: "Verzinken", unitPriceCents: 1000 }],
         }),
       },
     ];

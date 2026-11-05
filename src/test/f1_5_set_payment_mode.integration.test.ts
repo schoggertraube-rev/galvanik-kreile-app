@@ -258,7 +258,7 @@ describe("F1.5 D-F15-002 real intake/payment-mode contract — AUTH_ADAPTER_SYNT
 
     setSession(USERS.admin, "admin");
     const { createOrderIntake } = await import("@/lib/server/commands/orderIntakeCommand");
-    const intake = await createOrderIntake({
+    const intake = await createOrderIntake({ geprueft: true,
       clientEventId: INTAKE_EVENT,
       customer: { mode: "EXISTING", customerId: CUSTOMER },
       dueDate: "2026-09-30",
@@ -270,7 +270,7 @@ describe("F1.5 D-F15-002 real intake/payment-mode contract — AUTH_ADAPTER_SYNT
         name: "F1.5 B2 Werkstück",
         quantity: 1,
         material: "Stahl",
-        surfaceRequested: "Galvanik",
+        surfaceRequested: "Verchromen",
         unit: null,
         unitPriceCents: null,
         vatRateBasisPoints: null,
