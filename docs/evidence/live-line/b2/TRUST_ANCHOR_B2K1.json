@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "package": "B2-EINGANG-P68-PATH-ANCHOR",
+  "headBranch": "codex/ta-b2k1",
+  "mainBaseSha": "ce762422266089d694a12a94fe2129095003e82e",
+  "authorizedBy": "Siglinder",
+  "authorizedAt": "2026-11-05",
+  "scope": "P68: nur Druck- und Nacharbeitspfade fuer offene Runde-52-Teile; keine Runde-53-Bindung",
+  "probeResult": "PASS"
+}
