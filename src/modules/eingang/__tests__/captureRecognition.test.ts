@@ -11,4 +11,15 @@ describe("P63: result derived from the one saved capture", () => {
   it("keeps a genuinely empty recognition unclear", () => {
     expect(captureRecognition(base)).toEqual({ kind: "unklar", text: "" });
   });
+  it("uses the persisted routing decision without presenting it as OCR text", () => {
+    expect(captureRecognition({ ...base, suggestions: [{ field: "art", value: "anfrage", status: "uebernommen" }] }))
+      .toEqual({ kind: "anfrage", text: "", source: "hand" });
+  });
+  it("keeps partial original text and ignores a discarded routing decision", () => {
+    expect(captureRecognition({ ...base, suggestions: [
+      { field: "art", value: "rechnung", status: "verworfen" },
+      { field: "art", value: "ware", status: "uebernommen" },
+      { field: "DOCUMENT_TEXT", value: "SYNTHETISCH unvollständige Anschrift", status: "offen" },
+    ] })).toEqual({ kind: "ware", text: "SYNTHETISCH unvollständige Anschrift", source: "hand" });
+  });
 });

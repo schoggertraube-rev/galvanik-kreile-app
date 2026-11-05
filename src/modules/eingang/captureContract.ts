@@ -8,13 +8,14 @@ export type IntakeCapture = {
   orderId: string | null; assignment: string; usage: string; concerns: string[];
   dismissedConcerns?: string[];
   openConcerns?: string[];
-  recognition?: { kind: CaptureKind; text: string };
+  recognition?: { kind: CaptureKind; text: string; source?: "hand" };
   expectedOrders?: Array<{ id: string; number: string; customerId: string; customerName: string | null; title: string | null; since: string | null }>;
-  files: Array<{ id: string; name: string; mime: string; bytes: number; readable: boolean; status: string; errorCode?: string | null; captureOrigin?: "warenfoto" | "dokument" }>;
+  files: Array<{ id: string; name: string; mime: string; bytes: number; readable: boolean; status: string; secured?: boolean; errorCode?: string | null; captureOrigin?: "warenfoto" | "dokument" }>;
   suggestions?: Array<{ id:string; fileId:string|null; orderId:string|null; field:string; value:unknown; confidence:string; rule:string|null; reason:string|null; source:unknown; status:string }>;
 };
 export type IntakeCaptureResult = { code: "OK"; capture: IntakeCapture }
   | { code: "UNAUTHENTICATED" | "FORBIDDEN" | "VALIDATION_ERROR" | "NOT_FOUND" | "CONFLICT" | "UNAVAILABLE"; message: string };
+export type IntakeCaptureKindInput = { itemId: string; version: number; clientEventId: string; kind: Exclude<CaptureKind, "unklar"> };
 export type IntakeNoteInput = {
   itemId: string; textstand: string; text: string; context?: IntakeContext; concerns?: string[];
 };

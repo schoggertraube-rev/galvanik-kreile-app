@@ -11,7 +11,8 @@ import {readOpenIntakeMails} from '@/modules/eingang/server-public';
 import {saveIntakeProspect} from '@/modules/eingang/server-public';
 export async function saveIntakeProspectAction(input:unknown){return saveIntakeProspect(input,createCustomerInTransaction,readCustomerProfile);}
 export async function getOpenIntakeMailsAction(){return readOpenIntakeMails();}
-import { processIntakeDeviceRequest, discardIntakeCapture } from "@/modules/eingang/server-public";
+import { processIntakeDeviceRequest, discardIntakeCapture, chooseIntakeCaptureKind } from "@/modules/eingang/server-public";
+export async function chooseIntakeCaptureKindAction(input: unknown) { return chooseIntakeCaptureKind(input); }
 import { readIntakeDrafts, writeIntakeDraft, discardIntakeDraft, retryIntakeRecognition } from "@/modules/eingang/server-public";
 
 export async function getIntakeDraftsAction() { return readIntakeDrafts(); }

@@ -69,6 +69,8 @@
     "@/modules/eingang/server-public#readIntakeNoteText",
     "@/modules/eingang/server-public#readIntakePendingScope",
     "@/modules/eingang/server-public#discardIntakeCapture",
+    "@/modules/eingang/server-public#chooseIntakeCaptureKind",
+    "@/modules/eingang/public#IntakeCaptureKindInput",
     "@/modules/eingang/server-public#prepareIntakeFile",
     "@/modules/eingang/server-public#finishIntakeFile",
     "@/modules/eingang/server-public#erfasseAuftragAusEingangCommand",

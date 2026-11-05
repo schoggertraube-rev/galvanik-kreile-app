@@ -55,7 +55,7 @@ import {IntakeTermBlock,type IntakeTermSelection} from "./ui/IntakeTermBlock";
 import type {IntakeTermOrigin} from "@/lib/intakeSuggestionsContract";
 import { IntakeCaptureDialog } from "./ui/IntakeCaptureDialog";
 import { Rueckfrage } from "@/ui/kr/Dialog";
-import type { IntakeCapture, IntakeCaptureResult, IntakeNoteInput, IntakeNoteReading, IntakeFileInput, IntakeFileGrant } from "./captureContract";
+import type { IntakeCapture, IntakeCaptureResult, IntakeNoteInput, IntakeNoteReading, IntakeFileInput, IntakeFileGrant, IntakeCaptureKindInput } from "./captureContract";
 import { recognizeNoteConcerns } from "./captureContract";
 import { findRecognizedCustomers } from "./customerRecognition";
 import { ORDER_POSITION_UNITS, ORDER_POSITION_SURFACES, normaliseOrderPositionUnit, normaliseOrderPositionSurface, orderPositionQuantityError, orderPositionPriceError, FREE_TEXT_VAT_RATE_BASIS_POINTS } from "@/lib/orderPositionContract";
@@ -212,6 +212,7 @@ export type GlobalCreatePorts = {
   readCaptureNote?: (text: string) => Promise<{ code: "OK"; data: IntakeNoteReading } | { code: "FORBIDDEN" | "VALIDATION_ERROR"; message: string }>;
   prepareCaptureFile?: (input: IntakeFileInput) => Promise<IntakeFileGrant>;
   finishCaptureFile?: (id: string) => Promise<IntakeCaptureResult>;
+  chooseCaptureKind?: (input: IntakeCaptureKindInput) => Promise<IntakeCaptureResult>;
   openCaptureObject?: (target: "mailein" | "original" | "ware" | "rechnungein", arg: string) => boolean;
   canCreateOrder: boolean;
   canCreateQuote: boolean;
@@ -413,7 +414,7 @@ function captureRecognitionText(capture:IntakeCapture):string {
   if(capture.recognition?.text)return capture.recognition.text;
   if(capture.text)return capture.text;
   const labels:Record<string,string>={CUSTOMER_NAME:"Firma",CONTACT_PERSON:"Ansprechpartner",EMAIL:"E-Mail",PHONE:"Telefon",ADDRESS:"Adresse",DUE_DATE:"Liefertermin",ITEM_DESCRIPTION:"Teil",QUANTITY:"Menge",MATERIAL:"Material",SURFACE:"Oberfläche"};
-  return (capture.suggestions??[]).filter(value=>typeof value.value==="string"&&value.status!=="abgelehnt")
+  return (capture.suggestions??[]).filter(value=>typeof value.value==="string"&&value.status!=="verworfen"&&value.field!=="art")
     .map(value=>(labels[value.field]??value.field)+": "+String(value.value)).join("\n");
 }
 
@@ -900,15 +901,15 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     }
   };
 
-  const loadDirectIntake = async (preselectedCustomerId?: string, fromCustomerCard = false, orderCopyId?: string) => {
+  const loadDirectIntake = async (preselectedCustomerId?: string, fromCustomerCard = false, orderCopyId?: string, sourceCapture?: IntakeCapture) => {
     if (!ports.canCreateOrder) {
       deny("quote");
       return;
     }
     setIntakeChecked(false);setActiveDraft(null);draftOperation.current=null;
-    const initial:IntakeComparison={text:"",customerId:"",query:"",items:[newIntakePosition()],kind:fromCustomerCard?"auftrag":"",date:"",confirmed:"",term:"",handover:"",payment:"",source:"",note:"",documents:[]};
-    setDirectItems(initial.items);setDirectWishDate("");setDirectConfirmedDate("");setDirectNote("");setIntakeRecognitionText("");setLastRecognizedText("");setRecognitionMarkers([]);setRecognitionConfirmed(false);setIntakeSuggestionState({kind:"idle"});setIntakeTermChoice(null);
-    setCaptureInIntake(false);setIntakeSourceCaptures([]);
+    const initial:IntakeComparison={text:sourceCapture?captureRecognitionText(sourceCapture):"",customerId:"",query:"",items:[newIntakePosition()],kind:fromCustomerCard?"auftrag":"",date:"",confirmed:"",term:"",handover:"",payment:"",source:"",note:"",documents:sourceCapture?[sourceCapture.id]:[]};
+    setDirectItems(initial.items);setDirectWishDate("");setDirectConfirmedDate("");setDirectNote("");setIntakeRecognitionText(initial.text);setLastRecognizedText("");setRecognitionMarkers([]);setRecognitionConfirmed(false);setIntakeSuggestionState({kind:"idle"});setIntakeTermChoice(null);
+    setCaptureInIntake(false);setIntakeSourceCaptures(sourceCapture?[sourceCapture]:[]);
     setDirectCustomerMode("NONE");
     setDirectCustomerId("");
     setDirectCustomer(EMPTY_INTAKE_CUSTOMER);
@@ -2179,9 +2180,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       {ports.showPrimaryTrigger !== false ? <button type="button" className={styles.globalCreateButton} onClick={() => openWithIntent("DIRECT_INTAKE")} aria-label="Neu erfassen" aria-haspopup="dialog" aria-expanded={open}>
         <span className={styles.globalCreatePlus} aria-hidden="true">＋</span><span>Neu erfassen</span>
       </button> : null}
-      {open && step === "choose" ? aboveCards(<IntakeCaptureDialog ports={ports} handoverToken={handoverToken} onClose={(message)=>{closeNow();if(message)setIntakeToast(message);}} onOrder={(customerId,source)=>void loadDirectIntake(customerId, Boolean(customerId)).then(()=>{
-        if(source){setIntakeSourceCaptures([source]);setIntakeRecognitionText(captureRecognitionText(source));setRecognitionConfirmed(false);}
-      })} onCustomer={(source)=>{
+      {open && step === "choose" ? aboveCards(<IntakeCaptureDialog ports={ports} handoverToken={handoverToken} onClose={(message)=>{closeNow();if(message)setIntakeToast(message);}} onOrder={(customerId,source)=>void loadDirectIntake(customerId, Boolean(customerId)&&!source, undefined, source)} onCustomer={(source)=>{
         if(!ports.canCreateCustomer){deny("customer");return;}
         if(source&&!ports.createCustomerFromCapture)return "Kunde und Original können in diesem Stand noch nicht gemeinsam gespeichert werden · Code: CUSTOMER_INTAKE_PORT_MISSING.";
         navigate("customer");setCustomerSource(source?{itemId:source.id,version:source.version}:null);if(source){setIntakeSourceCaptures([source]);setCustomerRecognitionText(captureRecognitionText(source));}

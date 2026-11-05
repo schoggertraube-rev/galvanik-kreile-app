@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "69cfae9d42b8d9e7e801238a2709faf6153b6983d9d58b2b835cee9e9f7917de",
+  "inventorySha256": "a6e57df88388e1e783e181a5c85ad593587ae56953955e8321fe8168963225ef",
   "testedWriteActions": {
     "src/app/actions/eingang.actions.ts#saveIntakeDeviceRequestAction": [
       "src/test/h18_customer_actions.integration.test.ts"
@@ -145,6 +145,9 @@
       "src/test/h18_customer_actions.integration.test.ts"
     ],
     "src/app/actions/eingang.actions.ts#reopenIntakeAction": [
+      "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#chooseIntakeCaptureKindAction": [
       "src/test/h18_customer_actions.integration.test.ts"
     ]
   },

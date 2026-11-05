@@ -430,6 +430,7 @@
         "erfasseAuftragAusEingangAction",
         "createOrderIntakeAction",
         "discardIntakeCaptureAction",
+        "chooseIntakeCaptureKindAction",
         "getIntakeDraftsAction",
         "saveIntakeDraftAction",
         "discardIntakeDraftAction",
