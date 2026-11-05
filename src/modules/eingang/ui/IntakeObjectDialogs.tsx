@@ -8,12 +8,12 @@ import{INTAKE_CHANGED_EVENT}from'../messageContract';
 type Entry={screen:'ware'|'original';arg:string;key:string};
 export type IntakeObjectPorts={goods:GoodsReceiptPorts;original:OriginalPorts};
 /** The existing navigation bus opens object dialogs, never another creation flow. */
-export function IntakeObjectDialogs({ports,allowed,onRefresh}:{ports:IntakeObjectPorts;allowed:boolean;onRefresh:()=>void}){
+export function IntakeObjectDialogs({ports,allowed,originalAllowed=allowed,onRefresh}:{ports:IntakeObjectPorts;allowed:boolean;originalAllowed?:boolean;onRefresh:()=>void}){
  const device=useKrGeraet(),[stack,setStack]=useState<Entry[]>([]),[message,setMessage]=useState<string|null>(null);
  const open=useCallback((screen:Entry['screen'],arg:string)=>{
-  if(!allowed){setMessage('Eingang ist nicht freigegeben.');return;}
+  if(!(screen==='original'?originalAllowed:allowed)){setMessage('Eingang ist nicht freigegeben.');return;}
   setStack(previous=>previous.at(-1)?.screen===screen&&previous.at(-1)?.arg===arg?previous:[...previous,{screen,arg,key:crypto.randomUUID()}]);
- },[allowed]);
+ },[allowed,originalAllowed]);
  useEffect(()=>{
   const handler=(event:Event)=>{const value=(event as CustomEvent<{ziel?:string;arg?:unknown}>).detail;if((value?.ziel==='ware'||value?.ziel==='original')&&typeof value.arg==='string'){if(allowed)event.preventDefault();open(value.ziel,value.arg);}};
   const fromHash=()=>{const match=/^#(ware|original):(.+)$/u.exec(location.hash);if(match)open(match[1] as Entry['screen'],decodeURIComponent(match[2]));};

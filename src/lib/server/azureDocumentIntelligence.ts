@@ -105,7 +105,7 @@ export async function analyzeWithAzureDocumentIntelligence(
     }
     return { code: "UNAVAILABLE", message: "Die Dokumentanalyse läuft länger als erwartet. Bitte später erneut prüfen." };
   } catch (error) {
-    console.error("[AZURE_DOCUMENT_ANALYSIS_FAILED]", { code: error instanceof Error ? error.message : "UNKNOWN_ERROR" });
+    console.error('[AZURE_DOCUMENT_INTELLIGENCE_FAILED]',{code:error instanceof Error&&/^AZURE_[A-Z0-9_]+$/.test(error.message)?error.message:'AZURE_DOCUMENT_INTELLIGENCE_FAILED'});
     return { code: "UNAVAILABLE", message: "Das Dokument konnte mit Azure nicht sicher analysiert werden." };
   }
 }

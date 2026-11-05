@@ -22,4 +22,12 @@ describe("P63: result derived from the one saved capture", () => {
       { field: "DOCUMENT_TEXT", value: "SYNTHETISCH unvollständige Anschrift", status: "offen" },
     ] })).toEqual({ kind: "ware", text: "SYNTHETISCH unvollständige Anschrift", source: "hand" });
   });
+  it("keeps a structured invoice in the invoice flow without relying on OCR words", () => {
+    expect(captureRecognition({ ...base, suggestions: [{ field: "rechnung.nummer", value: "SYNTHETISCH-XML-1", status: "offen" }] }))
+      .toEqual({ kind: "rechnung", text: "SYNTHETISCH-XML-1" });
+  });
+  it("does not hide a saved invoice concern behind an earlier manual routing choice", () => {
+    expect(captureRecognition({ ...base, concerns: ["rechnung"], suggestions: [{ field: "art", value: "anfrage", status: "uebernommen" }] }))
+      .toEqual({ kind: "rechnung", text: "" });
+  });
 });

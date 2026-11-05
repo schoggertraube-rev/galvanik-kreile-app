@@ -415,6 +415,11 @@
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/eingang.actions.ts",
       "exported_functions": [
+        "getIncomingInvoiceAction",
+        "saveIncomingInvoiceAction",
+        "changeIncomingInvoiceStatusAction",
+        "clarifyIncomingInvoiceAction",
+        "searchInvoiceSuppliersAction",
         "saveIntakeTaskAction",
         "completeIntakeTaskAction",
         "getIntakeTaskAction",
