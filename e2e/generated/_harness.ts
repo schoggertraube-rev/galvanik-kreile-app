@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 import { readFileSync, writeFileSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import postgres from "postgres";
 import { createPinLoginHandle } from "../../src/lib/server/pinLoginHandle";
@@ -82,12 +82,22 @@ const sql = postgres(databaseUrl, { max: 1, prepare: false, onnotice: (notice) =
 
 export async function prepareGeneratedSeed(flowCase: FlowCase) {
   fixtureLoginId = generatedFlowRuntime.logins[flowCase.gegeben.login].id;
+  canonicalOrderIds.clear();
+  canonicalOrderSource = null;
+  const copySource = typeof flowCase.gegeben.aufruf.arg === "string"
+    ? /^\{([a-z_0-9]+)\}#kopie$/.exec(flowCase.gegeben.aufruf.arg)?.[1] : undefined;
+  if (copySource === "auftrag_quelle") {
+    const fixture = generatedFixtures[copySource];
+    if (!fixture || fixture.tabelle !== "orders") throw Error("FLOW_COPY_SOURCE_FIXTURE_INVALID");
+    canonicalOrderSource = { name: copySource, fixture };
+  }
   await resetGeneratedDomain();
   const seed = readFileSync(path.resolve(process.cwd(), "e2e/generated/_seed.sql"), "utf8");
   await sql.unsafe(seed);
   const names = selectedFixtureNames(flowCase.gegeben.datenlagen);
   const seeds = generatedFlowRuntime.fixtureSql as unknown as Record<string, string>;
   for (const name of names) {
+    if (name === canonicalOrderSource?.name) continue;
     if (seeds[name]) await sql.unsafe(seeds[name]);
     else await seedSupplementalFixtures([generatedFixtures[name]!]);
   }
@@ -100,6 +110,8 @@ type GeneratedFixture = {
   nummer?: string;
   [key: string]: unknown;
 };
+const canonicalOrderIds = new Map<string, { id: string; order_number: string }>();
+let canonicalOrderSource: { name: string; fixture: GeneratedFixture } | null = null;
 
 const generatedFixtures = generatedFlowRuntime.datenlagen as unknown as Record<string, GeneratedFixture>;
 const columnCache = new Map<string, Map<string, { column_name: string; data_type: string; udt_name: string }>>();
@@ -199,7 +211,7 @@ async function upsertFixture(table: string, values: Record<string, unknown>) {
 
 function resolvedFixture(fixture: GeneratedFixture) {
   const loginId = fixtureLoginId;
-  return resolveValue(fixture, {
+  return resolveValue({ ...fixture, ...canonicalOrderIds.get(fixture.id) }, {
     before: new Map(), beforeIds: new Map(), rows: new Map(), createdRows: new Map(), restoreOnlineAfterWrite: false, loginId,
   }) as GeneratedFixture;
 }
@@ -429,6 +441,87 @@ async function login(page: Page, loginName: keyof typeof generatedFlowRuntime.lo
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
 }
 
+/** Copy givens need the existing reader's genuine intake receipt, not an invented event. */
+async function materializeCanonicalOrderSource(page: Page) {
+  if (!canonicalOrderSource) return false;
+  const { fixture } = canonicalOrderSource;
+  const value = resolvedFixture(fixture);
+  const positions = value.positionen;
+  if (!Array.isArray(positions) || !positions.length) throw Error("FLOW_COPY_SOURCE_POSITIONS_MISSING");
+  await login(page, "login_meister");
+  const clientEventId = randomUUID();
+  const input = {
+    geprueft: value.geprueft, clientEventId,
+    customer: { mode: "EXISTING", customerId: value.kunde }, dueDate: value.liefertermin,
+    termStatus: value.terminstatus, intakeSource: value.eingangsart,
+    handoverMode: value.uebergabe === "versand" ? "shipping" : value.uebergabe === "abholung" ? "pickup" : value.uebergabe,
+    paymentMode: value.zahlungsmodus === "bar" ? "abholung" : value.zahlungsmodus,
+    note: "SYNTHETISCH: bestehender Kopierauftrag aus dem echten Anlagebefehl",
+    items: positions.map((position: Record<string, unknown>) => ({
+      name: position.bezeichnung, quantity: position.menge, material: position.material,
+      surfaceRequested: position.oberflaeche, executionRequested: position.ausfuehrung,
+      unit: position.einheit, catalogServiceId: null,
+      unitPriceCents: position.einzelpreis === null ? null : Math.round(Number(position.einzelpreis) * 100),
+      vatRateBasisPoints: position.einzelpreis === null ? null : 1900,
+    })),
+  };
+  const manifest = JSON.parse(readFileSync(path.join(process.cwd(), ".next/server/server-reference-manifest.json"), "utf8")) as {
+    node: Record<string, { workers: Record<string, { exportedName?: string; filename?: string }> }>;
+  };
+  const actions = Object.entries(manifest.node).filter(([, action]) => Object.values(action.workers).some(
+    worker => worker.exportedName === "createOrderIntakeAction" && worker.filename === "src/app/actions/eingang.actions.ts",
+  ));
+  if (actions.length !== 1) throw Error("FLOW_SOURCE_CREATE_ACTION_AMBIGUOUS");
+  const response = await page.evaluate(async ({ actionId, input }) => {
+    const reply = await fetch("/", { method: "POST", headers: {
+      "Next-Action": actionId, "Content-Type": "text/plain;charset=UTF-8", Accept: "text/x-component",
+    }, body: JSON.stringify([input]) });
+    return { status: reply.status, text: await reply.text() };
+  }, { actionId: actions[0]![0], input });
+  const receipts = await sql<{ order_id: string; order_number: string }[]>`
+    SELECT receipt.order_id,receipt.order_number FROM private.order_intake_receipts receipt
+    JOIN public.events event ON event.id=receipt.event_id AND event.tenant_id=receipt.tenant_id
+    WHERE receipt.tenant_id=${TENANT} AND receipt.client_event_id=${clientEventId}::uuid
+      AND event.event_type='ORDER_INTAKE_CREATED_V1' AND event.client_event_id=${clientEventId}::uuid`;
+  if (response.status !== 200 || receipts.length !== 1) throw Error("FLOW_SOURCE_REAL_ACTION_FAILED:" + response.text.slice(-1500));
+  const source = receipts[0]!;
+  // The given historical station remains the model's state; its intake record is real.
+  const station = value.station === "in_arbeit" ? "galvanik" : String(value.station);
+  await sql`UPDATE public.orders SET station=${station},current_station=${station},current_station_id=${station},
+    status=${station === "abgeschlossen" ? "completed" : "in_progress"},ware=${String(value.ware)}
+    WHERE tenant_id=${TENANT} AND id=${source.order_id}`;
+  await sql`UPDATE public.items SET current_station_id=${station} WHERE tenant_id=${TENANT} AND order_id=${source.order_id}`;
+  if (value.fotos !== undefined) {
+    if (!Number.isSafeInteger(value.fotos) || Number(value.fotos) < 0 || Number(value.fotos) > 20) throw Error("FLOW_SOURCE_PHOTO_COUNT_INVALID");
+    if (Number(value.fotos) > 0) {
+      const itemId = randomUUID(), photoIds: string[] = [];
+      await sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,text,kunde_id,vorgang_art,vorgang_id,zuordnung)
+        VALUES(${itemId}::uuid,${TENANT},${itemId},'notiz','intern','app',${generatedFlowRuntime.logins.login_meister.id}::uuid,
+          'SYNTHETISCH: Quellenfotos des Kopierauftrags',${String(value.kunde)},'auftrag',${source.order_id},'hand')`;
+      for (let index = 0; index < Number(value.fotos); index++) {
+        const fileId = randomUUID(); photoIds.push(fileId);
+        await seedOriginalFixture({ id: fileId, item_id: itemId, art: "foto", dateiname: `SYNTHETISCH-Quellfoto-${index + 1}.jpg` }, index + 1);
+        await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
+          SELECT ${TENANT},${itemId}::uuid,'original_gespeichert',${fileId}::uuid,${generatedFlowRuntime.logins.login_meister.id},
+            jsonb_build_object('fileId',file.id,'sha256',file.sha256,'bytes',file.bytes)
+          FROM public.intake_file file WHERE file.tenant_id=${TENANT} AND file.id=${fileId}::uuid
+            AND NOT EXISTS(SELECT 1 FROM public.intake_event prior WHERE prior.tenant_id=file.tenant_id AND prior.item_id=file.item_id AND prior.art='original_gespeichert' AND prior.befehl_id=${fileId}::uuid)`;
+      }
+      const sourceItems = await sql<{ id: string }[]>`SELECT id FROM public.items WHERE tenant_id=${TENANT} AND order_id=${source.order_id} ORDER BY id`;
+      if (!sourceItems.length) throw Error("FLOW_SOURCE_PHOTO_POSITION_MISSING");
+      await sql`UPDATE public.items SET photo_ids=${sql.json(photoIds)} WHERE tenant_id=${TENANT} AND id=${sourceItems[0]!.id}`;
+    }
+  }
+  const integrity = await sql.begin(async tx => {
+    await tx`SELECT set_config('app.tenant_id',${TENANT},true)`;
+    return tx<{ integrity_ok: boolean }[]>`SELECT integrity_ok FROM private.v_order_intake_receipts_v1 WHERE tenant_id=${TENANT} AND order_id=${source.order_id}`;
+  });
+  if (integrity.length !== 1 || integrity[0]!.integrity_ok !== true) throw Error("FLOW_SOURCE_RECEIPT_INTEGRITY_FAILED");
+  canonicalOrderIds.set(fixture.id, { id: source.order_id, order_number: source.order_number });
+  canonicalOrderSource = null;
+  return true;
+}
+
 async function shellReady(page: Page) {
   await page.getByRole("button", { name: "Konto", exact: true }).waitFor({ state: "visible", timeout: 5_000 });
   await page.evaluate(() => new Promise<void>((resolve) => {
@@ -526,7 +619,10 @@ function resolveString(value: string, state?: FlowRunState): string {
   result = result.replace(/\{([a-z_]+)(?:\.([a-z_]+))?\}/g, (match, fixtureName, field) => {
     const fixture = generatedFlowRuntime.datenlagen[fixtureName as keyof typeof generatedFlowRuntime.datenlagen];
     if (!fixture) return match;
-    const resolved = field ? fixture[field as keyof typeof fixture] : fixture.id;
+    const aliased = canonicalOrderIds.get(fixture.id);
+    let resolved = field ? fixture[field as keyof typeof fixture] : aliased?.id ?? fixture.id;
+    if (aliased && field === "id") resolved = aliased.id;
+    if (aliased && field === "order_number") resolved = aliased.order_number;
     if (resolved === null || resolved === undefined) return "";
     const text = String(resolved);
     return text.includes("{") ? resolveString(text, state) : text;
@@ -1000,6 +1096,7 @@ export async function runGeneratedFlowCase(page: Page, flowCase: FlowCase) {
 
 async function runGeneratedFlowCaseBody(page: Page, flowCase: FlowCase) {
   testTimeoutGuard(flowCase);
+  const sourceWasMaterialized = await materializeCanonicalOrderSource(page);
   const dbExpectations = flowCase.dann?.db ?? [];
   const state: FlowRunState = {
     before: new Map<string, number>(),
@@ -1026,7 +1123,7 @@ async function runGeneratedFlowCaseBody(page: Page, flowCase: FlowCase) {
       state.beforeIds.set(expectation.tabelle, new Set(await tableIds(expectation.tabelle)));
     }
   }
-  await login(page, flowCase.gegeben.login);
+  if (!sourceWasMaterialized || flowCase.gegeben.login !== "login_meister") await login(page, flowCase.gegeben.login);
   await page.addInitScript(() => {
     const scope = window as unknown as Record<string, unknown>;
     scope.__flowPrintCount = 0;

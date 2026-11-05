@@ -3,21 +3,9 @@
     "paket": "AP-EIN-2b",
     "grund": "KV nach Teil 6 gemaess P59"
   },
-  "C06": {
-    "paket": "AP-EIN-2",
-    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
-  },
   "C07": {
     "paket": "AP-EIN-2b",
     "grund": "KV nach Teil 6 gemaess P59"
-  },
-  "C08": {
-    "paket": "AP-EIN-2",
-    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
-  },
-  "C09": {
-    "paket": "AP-EIN-2",
-    "grund": "eingang nach Runde 52 wird mit AP-EIN-2 geliefert"
   },
   "Q01": {
     "paket": "AP-EIN-2b",
@@ -156,8 +144,8 @@
     "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
   },
   "F07": {
-    "paket": "AP-EIN-2",
-    "grund": "rein nach Runde 52 wird mit AP-EIN-2 geliefert"
+    "paket": "AP-EIN-3",
+    "grund": "Erwartete-Ware-Annahme verwendet den einen vorhandenen Zielweg aus Teil 3 (P54/P63)"
   },
   "M01": {
     "paket": "AP-EIN-4",
@@ -536,8 +524,8 @@
     "grund": "termineinst außerhalb der 13 Paket-Seiten; Modell-Zuordnung AP-EIN"
   },
   "D04": {
-    "paket": "AP-EIN-2",
-    "grund": "entwurf nach Runde 52 wird mit AP-EIN-2 geliefert"
+    "paket": "AP-EIN-4",
+    "grund": "Nachrichten-Ziel und Menuewechsel werden gemaess P48/P50 mit Teil 4 abgenommen"
   },
   "D06": {
     "paket": "AP-EIN-2",

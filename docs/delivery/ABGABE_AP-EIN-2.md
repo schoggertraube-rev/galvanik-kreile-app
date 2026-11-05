@@ -1,5 +1,22 @@
 # AP-EIN Teil 2 · Erfassung, Runde 52
 
+## Restprüfung vor dem Owner-Neustart (05.11.)
+
+Noch keine Mergefreigabe. Der bisherige PR-Kopf ist `003a6a6824f077b8c294abe328cadbb3706fee3d`, [READY-Preview](https://galvanik-kreile-werkstatt-bvpmba32r.vercel.app). Dort sind alle neun CI-Checks grün; die noch roten eigenen Modellfälle werden dadurch nicht als bestanden ausgegeben. Diese Ergänzung enthält ausschließlich die unten beschriebenen Kopier-Fixture-/Kennungskorrekturen, Rotlisten-Hygiene und diese Abgabe. Kandidaten-SHA, aktuelle Check-Liste und Git-Preview werden exakt im PR und NACHTLAUF C nachgewiesen.
+
+- C06/C08/C09 bestehen gegen echten lokalen Server, Datenbank und Storage. Der Quellauftrag wird mit der bestehenden `createOrderIntakeAction` angelegt, einschließlich echtem `ORDER_INTAKE_CREATED_V1` und privatem Receipt. Der historische gegebene Zustand und das Quellenfoto sind ausdrücklich synthetische, isolierte Fixtures. Die Assertion prüft die echte neu zugeteilte Quell-ID statt eines erfundenen Receipts. C09 bucht genau einen neuen Auftrag und prüft den unveränderten Ursprung. Keine Produktregel, Assertion oder Server-Autorisierung gelockert.
+- C06: Das bereits korrekt übernommene Materialfeld trug `eingang.position.material` statt der vom Modell verlangten Kennung `eingang.material`. Nur die Kennung wurde korrigiert; der unveränderte Browserfall besteht tatsächlich (XPASS vor Entfernen des veralteten Markers). Alle drei Kopier-Marker sind nach belegtem Erfolg entfernt.
+- D04 braucht das Nachrichten-Ziel aus Teil 4. Einordnung der bestehenden Erwartung nach P48/P50/P54 auf AP-EIN-4; keine zweite Navigation in Teil 2.
+- AB02 bleibt offen: Nach der Response verarbeitet Next-after die reale Outbox bereits von `wartet` zu `gesendet`. Der Modellfall verlangt beim späteren Browser-DB-Lesen noch `wartet`. Der vorhandene echte Action-Test belegt Warteschlange vor und Versand nach der Response; Versand wird nicht künstlich angehalten. Zeitbindung des Browserfalls ist dem Planungschat vorgelegt.
+- D06 bleibt offen: Das gelieferte `entwurf_eigen` enthält keinen vollständigen versionierten Erfassungs-Snapshot. Ein solcher Alt-Payload darf nicht durch erfundene Pflichtwerte buchungsfähig werden. Vollständiges Fixture ist dem Planungschat vorgelegt; der sichere Produkt-Lesefehler bleibt erhalten.
+- Runde 53 wurde während dieser Prüfung geliefert. P66(0) bestätigt den direkten Owner-Auftrag: erst #168, danach Automatik pausieren und Rechner-Neustart. TA-B2k, R53-Angleich und weitere Pakete folgen erst nach diesem Neustart. Fremde Planungs-/UI-Dateien bleiben unberührt.
+
+Lokaler Abschluss dieses Schritts: Produktionsbuild und Typprüfung PASS. A11 nach mechanischer Typkorrektur **19/22 PASS**; die drei übrigen Ausfälle sind authority-selftest, authority-gate und der daran abbrechende module-gate durch die fremden R53-Bindungsdateien im Arbeitsbaum (TA-B2k laut P66 nach Neustart). Kein Checker, Hash oder fremder Quellstand wurde dafür geändert. R52-Generator, Scope gegen origin/main, Delivery, F0-Dokuwahrheit, Whitespace und vollständiger Lint-Lauf PASS. Gezielter Lint-Lauf für beide mechanisch korrigierten Dateien ebenfalls PASS; neue CI und Preview bleiben erforderlich.
+
+Konkreter C09-DB-Beleg (nur isolierter Replay): Quelle `b1077404-c37a-4afe-96a9-0e4aec571e22` / A-2026-0001 und Kopie `20798b0d-f264-4a26-a81d-be01e51d4596` / A-2026-0002, jeweils zwei Positionen, genau ein `ORDER_INTAKE_CREATED_V1` und `integrity_ok=true`. Quelle bleibt abgeschlossen; Kopie steht auf angenommen. Datei außerhalb Repo: `C:/Users/Traube/.codex/visualizations/2026/11/04/01a1a6e4-4199-7bb0-80cf-d86e82e8c3cb/p65-copy-source/copy-final-db-proof.json`.
+
+Die folgenden Abschnitte enthalten historische Einzelbelege und offene Restpunkte; sie sind keine unabhängige Gesamt-Abnahme.
+
 ## Einordnung nach P59
 
 ### P63 · neue Owner-Befunde, 05.11. · noch nicht abgenommen
