@@ -1,8 +1,8 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
-import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
-import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { hasAuthorizationArea, resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
+import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 
 const SOURCE_STATION = "angenommen";
@@ -208,6 +208,7 @@ function hasExactStationValues(order: LockedOrder, station: string): boolean {
 
 export async function transitionWareneingangToGalvanik(
   input: OrderStationCommandInput,
+  binding?:{before:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<void>;after:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>Promise<void>},
 ): Promise<OrderStationCommandResult> {
   if (invalidInput(input)) {
     return { code: "VALIDATION_ERROR", message: "Ungültige Auftragskennung oder Version." };
@@ -216,7 +217,8 @@ export async function transitionWareneingangToGalvanik(
   let authorization;
   try {
     authorization = await resolveAuthorization();
-  } catch {
+  } catch (error) {
+    console.error('[ORDER_STATION_MOVE_AUTH_FAILED]',error);
     return { code: "UNAVAILABLE", message: "Stationswechsel ist derzeit nicht verfügbar." };
   }
 
@@ -249,6 +251,7 @@ export async function transitionWareneingangToGalvanik(
         )
       `);
 
+      await binding?.before(tx,authorization.data);
       const existingReceipts = await tx.execute<EventReceiptRow>(sql`
         SELECT
           id AS event_id,
@@ -285,6 +288,7 @@ export async function transitionWareneingangToGalvanik(
           return { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
         }
 
+        await binding?.after(tx,authorization.data);
         return { code: "OK", receipt: toReceipt(existingReceipt), replayed: true };
       }
 
@@ -446,9 +450,11 @@ export async function transitionWareneingangToGalvanik(
         throw new Error("ORDER_STATION_EVENT_INSERT_FAILED");
       }
 
+      await binding?.after(tx,authorization.data);
       return { code: "OK", receipt: toReceipt(insertedReceipt), replayed: false };
     });
-  } catch {
+  } catch (error) {
+    console.error('[ORDER_STATION_MOVE_WRITE_FAILED]',error);
     return { code: "UNAVAILABLE", message: "Stationswechsel ist derzeit nicht verfügbar." };
   }
 }

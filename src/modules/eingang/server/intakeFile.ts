@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {hasAuthorizationArea} from "@/lib/server/authorization";
 import { analyzeWithAzureDocumentIntelligence } from "@/lib/server/azureDocumentIntelligence";
 import type { IntakeCaptureResult, IntakeFileInput, IntakeFileGrant } from "../captureContract";
 import { authorizedIntakeContext, intakeCaptureSnapshot } from "./intakeCapture";
@@ -12,6 +13,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const BUCKET = "scans";
 type Failure = Exclude<IntakeCaptureResult, { code: "OK" }>;
 type FileRow = { id: string; item_id: string; dateiname: string; mime: string; bytes: string; sha256: string; speicherpfad: string; erkennung_status: string; aufgenommen_auf: string | null; aufnahme_herkunft: "warenfoto" | "dokument" };
+function recognitionClaimKey(attempt:string){const bytes=createHash('sha1').update('intake-recognition-start-v1:'+attempt).digest();bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;const hex=bytes.subarray(0,16).toString('hex');return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;}
 function inputFile(value: unknown): value is IntakeFileInput {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
@@ -28,10 +30,12 @@ export async function prepareIntakeFile(input: unknown): Promise<IntakeFileGrant
   if (!inputFile(input)) return { code: "VALIDATION_ERROR", message: "Datei benötigt Name, Typ, SHA-256 und 1 bis 150 MB Inhalt." };
   const auth = await authorizedIntakeContext();
   if ("code" in auth) return auth as Failure;
+  if((input.mime==='message/rfc822'||input.name.toLowerCase().endsWith('.eml'))&&!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN',message:'Mail-Originale erfordern zusätzlich das Recht Mails.'};
   try {
     const pending = await withPrivilegedTenantTransaction(auth, async tx => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake:'||${auth.tenantId}||':'||${input.itemId},0))`);
-      const items = await tx.execute<{ id: string }>(sql`SELECT id::text FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id=${input.itemId}::uuid FOR UPDATE`);
+      const items = await tx.execute<{ id: string;kanal:string }>(sql`SELECT id::text,kanal FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id=${input.itemId}::uuid FOR UPDATE`);
+      if(items[0]?.kanal==='mail'&&!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN' as const,message:'Mail-Originale erfordern zusätzlich das Recht Mails.'};
       if (!items.length) {
         await tx.execute(sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von) VALUES
           (${input.itemId}::uuid,${auth.tenantId},${input.itemId},${input.mime.startsWith("image/") ? "foto" : "datei"},'rein','geraet',${auth.userId}::uuid)`);
@@ -49,6 +53,7 @@ export async function prepareIntakeFile(input: unknown): Promise<IntakeFileGrant
       if (files.length !== 1 || row.item_id !== input.itemId || row.dateiname !== input.name || row.mime !== input.mime || Number(row.bytes) !== input.bytes || row.sha256 !== input.sha256 || row.aufgenommen_auf !== (input.deviceId ?? null) || row.aufnahme_herkunft !== (input.captureOrigin ?? "dokument")) throw new Error("INTAKE_FILE_CLIENT_KEY_CONFLICT");
       return row;
     });
+    if('code' in pending)return pending;
     if (["fertig", "fehler"].includes(pending.erkennung_status)) return { code: "OK", upload: null };
     const existing = await createAdminClient().storage.from(BUCKET).info(pending.speicherpfad);
     if (!existing.error && existing.data) return { code: "OK", upload: null };
@@ -64,16 +69,21 @@ export async function finishIntakeFile(fileId: string, retryKey?: string): Promi
   if (!UUID.test(fileId)) return { code: "VALIDATION_ERROR", message: "Ungültige Dateikennung." };
   const auth = await authorizedIntakeContext();
   if ("code" in auth) return auth;
+  const claimKey=recognitionClaimKey(retryKey??fileId);let claimOwned=false;
   try {
-    const files = await withPrivilegedTenantTransaction(auth, tx => tx.execute<FileRow>(sql`SELECT id::text,item_id::text,dateiname,mime,bytes::text,sha256,speicherpfad,erkennung_status,aufgenommen_auf,aufnahme_herkunft FROM public.intake_file WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid`));
+    const files = await withPrivilegedTenantTransaction(auth, tx => tx.execute<FileRow&{kanal:string}>(sql`SELECT file.id::text,file.item_id::text,file.dateiname,file.mime,file.bytes::text,file.sha256,file.speicherpfad,file.erkennung_status,file.aufgenommen_auf,file.aufnahme_herkunft,source.kanal FROM public.intake_file file JOIN public.intake_item source ON source.tenant_id=file.tenant_id AND source.id=file.item_id WHERE file.tenant_id=${auth.tenantId} AND file.id=${fileId}::uuid`));
     if (files.length !== 1) return { code: "NOT_FOUND", message: "Datei wurde nicht gefunden." };
     const file = files[0];
+    if((file.kanal==='mail'||file.mime==='message/rfc822'||file.dateiname.toLowerCase().endsWith('.eml'))&&!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN',message:'Mail-Originale erfordern zusätzlich das Recht Mails.'};
     if(retryKey){
       const retry=await withPrivilegedTenantTransaction(auth,async tx=>{
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
         const prior=await tx.execute(sql`SELECT id FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid AND art='erkannt' AND befehl_id=${retryKey}::uuid`);
         if(prior.length)return false;
-        const rows=await tx.execute(sql`UPDATE public.intake_file SET erkennung_status='wartet' WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid AND erkennung_status='fehler' RETURNING id`);
+        const rows=await tx.execute(sql`UPDATE public.intake_file file SET erkennung_status='wartet' WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid AND
+          (erkennung_status IN ('fehler','fertig') OR erkennung_status='laeuft' AND
+            coalesce((SELECT max(event.zeit) FROM public.intake_event event WHERE event.tenant_id=file.tenant_id AND event.item_id=file.item_id AND event.nachher->>'fileId'=file.id::text
+              AND (event.art='original_gespeichert' OR event.art='einsatz' AND event.nachher->>'action'='erkennung_gestartet')),file.aufgenommen_am)<statement_timestamp()-interval '2 minutes') RETURNING id`);
         return rows.length===1;
       });
       if(!retry)return intakeCaptureSnapshot(auth,file.item_id);
@@ -94,6 +104,8 @@ export async function finishIntakeFile(fileId: string, retryKey?: string): Promi
         WHERE tenant_id=${auth.tenantId} AND login_id=${auth.userId}::uuid AND item_id=${file.item_id}::uuid
           AND status='angenommen' AND angenommen_auf @> ARRAY[${file.aufgenommen_auf}]::text[]`);
       const updated = await tx.execute<{ id: string }>(sql`UPDATE public.intake_file SET erkennung_status='laeuft' WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid AND erkennung_status='wartet' RETURNING id::text`);
+      if(updated.length===1&&file.aufnahme_herkunft!=="warenfoto")await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
+        VALUES(${auth.tenantId},${file.item_id}::uuid,'einsatz',${claimKey}::uuid,${auth.userId},${JSON.stringify({action:'erkennung_gestartet',fileId,attemptKey:retryKey??fileId})}::jsonb) ON CONFLICT DO NOTHING`);
       return updated.length === 1;
     });
     if (!claimed) return intakeCaptureSnapshot(auth, file.item_id);
@@ -102,6 +114,7 @@ export async function finishIntakeFile(fileId: string, retryKey?: string): Promi
         WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid AND erkennung_status='laeuft'`));
       return intakeCaptureSnapshot(auth, file.item_id);
     }
+    claimOwned=true;
     // Structured XML belongs to the one invoice parser, never to the OCR provider.
     const canRead = bytes.byteLength <= 20 * 1024 * 1024 && ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"].includes(file.mime);
     const deadline = AbortSignal.timeout(30_000);
@@ -111,11 +124,16 @@ export async function finishIntakeFile(fileId: string, retryKey?: string): Promi
     const kind = recognized?.code === "OK" ? captureRecognition({ text: null, suggestions: recognized.data.suggestions }).kind : null;
     await withPrivilegedTenantTransaction(auth, async tx => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
+      const active=await tx.execute<{befehl_id:string}>(sql`SELECT befehl_id::text FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid
+        AND art='einsatz' AND nachher->>'action'='erkennung_gestartet' AND nachher->>'fileId'=${fileId} ORDER BY zeit DESC,id DESC LIMIT 1`);
+      if(active[0]?.befehl_id!==claimKey){console.info('[INTAKE_RECOGNITION_SUPERSEDED]',{fileId});return;}
       await tx.execute(sql`UPDATE public.intake_file SET lesbar=${canRead},erkennung_status=${recognized?.code === "OK" ? "fertig" : "fehler"}
         WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid`);
+      if(recognized?.code==='OK')await tx.execute(sql`UPDATE public.intake_suggestion SET status='verworfen' WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid AND status='offen' AND geprueft_am IS NULL`);
       if (recognized?.code === "OK") for (const suggestion of recognized.data.suggestions) {
         await tx.execute(sql`INSERT INTO public.intake_suggestion(tenant_id,item_id,file_id,feld,wert,sicherheit,regel,grund,fundstelle,status)
-          VALUES(${auth.tenantId},${file.item_id}::uuid,${fileId}::uuid,${suggestion.field},${JSON.stringify(suggestion.value)}::jsonb,'vorschlag','datei','Dokumenterkennung',${JSON.stringify(suggestion.source)}::jsonb,'offen')`);
+          SELECT ${auth.tenantId},${file.item_id}::uuid,${fileId}::uuid,${suggestion.field},${JSON.stringify(suggestion.value)}::jsonb,'vorschlag','datei','Dokumenterkennung',${JSON.stringify(suggestion.source)}::jsonb,'offen'
+          WHERE NOT EXISTS(SELECT 1 FROM public.intake_suggestion WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid AND feld=${suggestion.field} AND geprueft_am IS NOT NULL AND status<>'verworfen')`);
       }
       if (kind === "rechnung") await tx.execute(sql`UPDATE public.intake_item
         SET anliegen=array_append(anliegen,'rechnung'), anliegen_offen=CASE WHEN 'rechnung'=ANY(anliegen_offen) THEN anliegen_offen ELSE array_append(anliegen_offen,'rechnung') END,
@@ -130,8 +148,11 @@ export async function finishIntakeFile(fileId: string, retryKey?: string): Promi
     console.error("[INTAKE_FILE_FINISH_FAILED]", { message: error instanceof Error ? error.message : "UnknownError", fileId });
     try {
       await withPrivilegedTenantTransaction(auth,async tx=>{
-        await tx.execute(sql`UPDATE public.intake_file SET erkennung_status='fehler' WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid AND erkennung_status IN ('wartet','laeuft')`);
-        await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
+        const changed=await tx.execute(sql`UPDATE public.intake_file file SET erkennung_status='fehler' WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid
+          AND (erkennung_status='wartet' OR erkennung_status='laeuft' AND ${claimOwned} AND (SELECT event.befehl_id FROM public.intake_event event
+            WHERE event.tenant_id=file.tenant_id AND event.item_id=file.item_id AND event.art='einsatz' AND event.nachher->>'action'='erkennung_gestartet' AND event.nachher->>'fileId'=file.id::text ORDER BY event.zeit DESC,event.id DESC LIMIT 1)=${claimKey}::uuid) RETURNING id`);
+        if(changed.length)await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
           SELECT ${auth.tenantId},item_id,'erkannt',${retryKey??fileId}::uuid,${auth.userId},${JSON.stringify({fileId,code:"INTAKE_FILE_FINISH_FAILED"})}::jsonb
           FROM public.intake_file WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid
           ON CONFLICT DO NOTHING`);

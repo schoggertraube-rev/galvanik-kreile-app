@@ -633,6 +633,13 @@ export const payments = pgTable("payments", {
 
 // AP-EIN: canonical intake tables. SQL constraints and RLS remain migration-owned.
 const intakePrivateSchema = pgSchema("private");
+export const goodsReceipts=pgTable("goods_receipt",{
+ id:uuid("id").primaryKey(),tenantId:text("tenant_id").notNull(),clientKey:uuid("client_key").notNull(),itemId:uuid("item_id"),orderId:text("auftrag_id").notNull(),
+ mode:text("modus").notNull(),status:text("status").notNull(),card:integer("karte").notNull(),packagesReceived:integer("packstuecke_da"),packagesTotal:integer("packstuecke_gesamt"),condition:text("zustand"),
+ deviations:text("abweichung").array().notNull(),foundUnattended:boolean("abgestellt").notNull(),foundAt:timestamp("fund_zeit",{withTimezone:true}),procedure:text("verfahren_wie_kv"),procedureNote:text("verfahren_abweichung"),
+ photos:jsonb("fotos").notNull(),quantities:jsonb("mengen").notNull(),open:text("offen").array().notNull(),taskId:uuid("aufgabe_id"),confirmedBy:uuid("bestaetigt_von"),confirmedAt:timestamp("bestaetigt_am",{withTimezone:true}),version:integer("version").notNull().default(1),
+ createdAt:timestamp("erstellt_am",{withTimezone:true}).notNull().default(sql`statement_timestamp()`),updatedAt:timestamp("geaendert_am",{withTimezone:true}).notNull().default(sql`statement_timestamp()`),
+},table=>[unique().on(table.tenantId,table.id),unique().on(table.tenantId,table.clientKey),foreignKey({columns:[table.tenantId,table.orderId],foreignColumns:[orders.tenantId,orders.id]}).onDelete('restrict')]);
 export const intakeDrafts = intakePrivateSchema.table("intake_drafts", {
   id:uuid("id").primaryKey().defaultRandom(),tenantId:text("tenant_id").notNull(),actorId:uuid("actor_id").notNull(),
   art:text("art"),payload:jsonb("payload").notNull(),status:text("status").notNull().default("open"),zuletztFeld:text("zuletzt_feld"),

@@ -35,23 +35,11 @@
     "paket": "AP-EIN-1",
     "grund": "Endversion-Angleich U-240"
   },
-  "W01": {
-    "paket": "AP-EIN-3",
-    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
-  },
   "W02": {
     "paket": "AP-EIN-3",
     "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
   },
-  "W03": {
-    "paket": "AP-EIN-3",
-    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
-  },
   "W04": {
-    "paket": "AP-EIN-3",
-    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
-  },
-  "W05": {
     "paket": "AP-EIN-3",
     "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
   },
@@ -75,15 +63,7 @@
     "paket": "AP-EIN-3",
     "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
   },
-  "W11": {
-    "paket": "AP-EIN-3",
-    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
-  },
   "W12": {
-    "paket": "AP-EIN-3",
-    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
-  },
-  "W13": {
     "paket": "AP-EIN-3",
     "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
   },
@@ -92,14 +72,6 @@
     "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
   },
   "Q06": {
-    "paket": "AP-EIN-3",
-    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
-  },
-  "W15": {
-    "paket": "AP-EIN-3",
-    "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
-  },
-  "W16": {
     "paket": "AP-EIN-3",
     "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
   },
@@ -292,10 +264,6 @@
     "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
   },
   "O06": {
-    "paket": "AP-EIN-3",
-    "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
-  },
-  "O07": {
     "paket": "AP-EIN-3",
     "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
   },

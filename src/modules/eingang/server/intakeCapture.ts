@@ -40,7 +40,7 @@ export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot, itemId:
           AND event.art='erkannt' AND event.nachher->>'fileId'=file.id::text ORDER BY event.zeit DESC,event.id DESC LIMIT 1) AS "errorCode"
       FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${itemId}::uuid ORDER BY file.reihenfolge,file.id`);
     const suggestions=await tx.execute<NonNullable<IntakeCapture["suggestions"]>[number]>(sql`SELECT id::text,file_id::text AS "fileId",order_id AS "orderId",
-      feld AS field,wert AS value,sicherheit AS confidence,regel AS rule,grund AS reason,fundstelle AS source,status
+      feld AS field,wert AS value,sicherheit AS confidence,regel AS rule,grund AS reason,fundstelle AS source,status,geprueft_von::text AS "verifiedBy",geprueft_am::text AS "verifiedAt"
       FROM public.intake_suggestion WHERE tenant_id=${auth.tenantId} AND item_id=${itemId}::uuid ORDER BY id`);
     const capture: IntakeCapture = { id: row.id, version: row.version, text: row.text, customerId: row.kunde_id,
       orderId: row.vorgang_id, assignment: row.zuordnung, usage: row.einsatz, concerns: row.anliegen,dismissedConcerns:row.anliegen_abgewaehlt,openConcerns:row.anliegen_offen,
@@ -114,9 +114,10 @@ export async function discardIntakeCapture(input:unknown):Promise<IntakeCaptureR
   try{
     const result=await withPrivilegedTenantTransaction(auth,async tx=>{
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake:'||${auth.tenantId}||':'||${input.itemId},0))`);
-      const rows=await tx.execute<{version:number;vorgang_id:string|null;kennzeichen:string[];einsatz:string}>(sql`SELECT version,vorgang_id,kennzeichen,einsatz FROM public.intake_item
+      const rows=await tx.execute<{version:number;vorgang_id:string|null;kennzeichen:string[];einsatz:string;kanal:string}>(sql`SELECT version,vorgang_id,kennzeichen,einsatz,kanal FROM public.intake_item
         WHERE tenant_id=${auth.tenantId} AND id=${input.itemId}::uuid FOR UPDATE`);
       const row=rows[0];if(rows.length!==1)return failure("NOT_FOUND","Aufnahme wurde nicht gefunden.");
+      if(row.kanal==='mail')return failure('FORBIDDEN','Mail-Original bleibt erhalten. Die Erfassung kann nur ihren Bezug entfernen.');
       const repeated=await tx.execute(sql`SELECT id FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${input.itemId}::uuid AND art='einsatz' AND befehl_id=${input.clientEventId}::uuid`);
       if(repeated.length)return row.einsatz==="info"&&row.kennzeichen.includes("in_erfassung_verworfen")?null:failure("CONFLICT","Aufnahme wurde inzwischen anders verwendet.");
       if(row.vorgang_id||row.version!==input.version)return failure("CONFLICT","Aufnahme wurde inzwischen geändert. Originale bleiben erhalten.");
@@ -184,6 +185,7 @@ export async function writeIntakeNoteInTransaction(
   const existing = await tx.execute<Row>(sql`SELECT id::text,kanal,version,text,kunde_id,vorgang_id,zuordnung,einsatz,anliegen,anliegen_abgewaehlt FROM public.intake_item
     WHERE tenant_id=${auth.tenantId} AND id=${note.itemId}::uuid FOR UPDATE`);
   if(existing[0]&&!mayAccessCaptureContent(auth,existing[0].kanal))return failure('FORBIDDEN','Mail-Inhalte benötigen das Recht Mails.');
+  if(existing[0]?.kanal==='mail')return failure('FORBIDDEN','Mail-Original bleibt unverändert. Bitte eine eigene Notiz anlegen.');
   const declined=note.concerns?recognized.filter(value=>!note.concerns!.includes(value.id)).map(value=>value.id):existing[0]?.text===note.text?existing[0].anliegen_abgewaehlt:[];
   const declinedSql=sql`ARRAY[${sql.join(declined.map(value=>sql`${value}`),sql`, `)}]::text[]`;
   const selected = note.concerns ?? recognized.filter(value=>!declined.includes(value.id)).map(value => value.id);

@@ -438,7 +438,11 @@
         "saveIntakeProspectAction",
         "selectIntakeConcernAction",
         "finishIntakeUseAction",
-        "reopenIntakeAction"
+        "reopenIntakeAction",
+        "getGoodsReceiptsAction",
+        "saveGoodsReceiptAction",
+        "openIntakeOriginalAction",
+        "confirmIntakeOriginalAction"
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "AP-01 Eingang action is covered against the replay database; exact-SHA review and owner verification remain pending.",
