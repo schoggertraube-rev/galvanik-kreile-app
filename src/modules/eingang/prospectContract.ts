@@ -5,7 +5,7 @@ export type IntakeProspectInput={
   customer:Omit<CreateCustomerInput,'clientEventId'>;
   text:string;
   draft:Record<string,unknown>;
-  activeDraft?:{id:string;updatedAt:string};
+  activeDraft?:{id:string;version:number};
 };
 export type IntakeProspectResult=
  |{code:'OK';customerId:string;customerNumber:string;intakeItemId:string;draftId:string;replayed:boolean}

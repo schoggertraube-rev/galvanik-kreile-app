@@ -826,7 +826,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       if(!ports.drafts){setFeedback({kind:"error",message:"Entwurf ist nicht verbunden. Code: INTAKE_DRAFT_PORT_UNAVAILABLE."});return;}
       draftWorking.current=true;setBusy(true);
       try {
-        const result=await ports.drafts.discardDraft({id:activeDraft.id,clientEventId:draftOperation.current??=crypto.randomUUID(),expectedUpdatedAt:activeDraft.updated_at});
+        const result=await ports.drafts.discardDraft({id:activeDraft.id,clientEventId:draftOperation.current??=crypto.randomUUID(),expectedVersion:activeDraft.version});
         if(result.code!=="OK"){setFeedback({kind:"error",message:result.message});return;}
         window.dispatchEvent(new Event("kreile:intake-drafts-changed"));
       }catch(cause){console.error("[INTAKE_DRAFT_DISCARD_REQUEST_FAILED]",cause);setFeedback({kind:"error",message:"Entwurf konnte nicht verworfen werden. Code: INTAKE_DRAFT_DISCARD_REQUEST_FAILED."});return;}
@@ -1100,7 +1100,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       const originals=await saveIntakeTextOriginal();
       const payload={...draftPayload(),documents:originals.map(value=>value.id)};
       const result=await ports.drafts.saveDraft({id,clientEventId:draftOperation.current??=crypto.randomUUID(),art:"eingang",payload,
-        lastField:intakeLastFocus.current?.getAttribute("data-spec-id")??null,expectedUpdatedAt:activeDraft?.updated_at??null});
+        lastField:intakeLastFocus.current?.getAttribute("data-spec-id")??null,expectedVersion:activeDraft?.version??null});
       if(result.code!=="OK"){setFeedback({kind:"error",message:"Entwurf nicht gespeichert · alle Eingaben sind noch da. "+result.message});return;}
       window.dispatchEvent(new Event("kreile:intake-drafts-changed"));
       reset();setOpen(false);setIntakeToast("Entwurf gespeichert · steht auf Der Tag");
@@ -2011,7 +2011,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         const ids:Record<string,string>={customerType:'kundentyp',companyName:'name',firstName:'vorname',lastName:'nachname',phone:'telefon',street:'strasse',houseNumber:'hausnummer',zipCode:'plz',city:'ort',country:'land'};
         setFeedback({kind:'validation',message:invalid[1]});jumpToIntakeCheck({id:'kunde',label:'Kunde',detail:invalid[1],complete:false,step:1,target:'eingang.'+(ids[invalid[0]]??invalid[0])});return;
       }
-      prospectPending.current={clientKey:intakeClientKey,customer:inlineCustomerInput(),text:intakeRecognitionText,draft:draftPayload(),...(activeDraft?{activeDraft:{id:activeDraft.id,updatedAt:activeDraft.updated_at}}:{})};
+      prospectPending.current={clientKey:intakeClientKey,customer:inlineCustomerInput(),text:intakeRecognitionText,draft:draftPayload(),...(activeDraft?{activeDraft:{id:activeDraft.id,version:activeDraft.version}}:{})};
     }
     setLastIntakeAction('prospect');directIntakeInFlight.current=true;setBusy(true);setFeedback(null);
     try{

@@ -363,7 +363,7 @@ describe("AP-EIN werkbank.buchen: inline customer in the canonical transaction",
   const customer={customerType:'business' as const,companyName,phone:'+49 711 5550190'};
   const item={key:randomUUID(),catalogServiceId:'FREE_TEXT',name:'SYNTHETISCH Vorgemerktes Teil',quantity:'2',unit:'stueck',surfaceRequested:'verzinken',surfaceTouched:false,executionRequested:'offen',material:'',unitPriceCents:null,vatRateBasisPoints:null};
   const input={clientKey,customer,text:'SYNTHETISCH Gesprächsangaben',draft:{version:1,clientKey,customerMode:'NEW',customerFields:{...EMPTY_CUSTOMER_FORM,...customer},customerName:'',customerId:'',query:customer.phone,text:'SYNTHETISCH Gesprächsangaben',items:[item],kind:'auftrag',date:'',confirmed:'',term:'',handover:'',payment:'',source:'',note:'SYNTHETISCH Rücksprache',geprueft:false,documents:[],recognitionMarkers:[],recognitionConfirmed:false,lastRecognizedText:'',intakeWishDateOrigin:'empty',intakeHandoverOrigin:null,intakePaymentOrigin:null,intakeOrigin:null,intakeTermChoice:null}};
-  const failed=await withSession(actor,()=>saveIntakeProspectAction({...input,activeDraft:{id:randomUUID(),updatedAt:new Date().toISOString()}}));
+  const failed=await withSession(actor,()=>saveIntakeProspectAction({...input,activeDraft:{id:randomUUID(),version:0}}));
   expect(failed.code).toBe('CONFLICT');
   expect(await sql`SELECT id FROM public.customers WHERE tenant_id=${KREILE_TENANT_SLUG} AND company_name=${companyName}`).toHaveLength(0);
   const saved=await withSession(actor,()=>saveIntakeProspectAction(input));
@@ -771,7 +771,7 @@ describe("AP-EIN adopted originals remain on the single order path",()=>{
    const {saveIntakeNoteAction,erfasseAuftragAusEingangAction,getIntakeCaptureAction,saveIntakeDraftAction}=await import("@/app/actions/eingang.actions");
    // Owner model D06: successful booking removes the same login's draft atomically.
    const draftId=randomUUID();
-   expect(await withSession(fixture,()=>saveIntakeDraftAction({id:draftId,clientEventId:randomUUID(),art:"eingang",payload:{clientKey:randomUUID(),text:"SYNTHETISCH D06"},lastField:"eingang.menge",expectedUpdatedAt:null}))).toMatchObject({code:"OK"});
+   expect(await withSession(fixture,()=>saveIntakeDraftAction({id:draftId,clientEventId:randomUUID(),art:"eingang",payload:{clientKey:randomUUID(),text:"SYNTHETISCH D06"},lastField:"eingang.menge",expectedVersion:null}))).toMatchObject({code:"OK"});
   const itemId=randomUUID();
   const source=await withSession(fixture,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:"Synthetisch zwei Teile",concerns:[]}));
   expect(source.code).toBe("OK");if(source.code!=="OK")throw Error("CAPTURE_BINDING_ORIGINAL_REQUIRED");
@@ -798,19 +798,41 @@ describe("Owner model D05/D07: draft actions against real Replay DB",()=>{
  it("D05 saves and rereads the exact draft; D07 never exposes another login's draft",async()=>{
   const owner=await createFixture();const other=await createFixture("werkstatt",["eingang"]);
   const {saveIntakeDraftAction,getIntakeDraftsAction,discardIntakeDraftAction}=await import("@/app/actions/eingang.actions");
-  const input={id:randomUUID(),clientEventId:randomUUID(),art:"eingang",payload:{clientKey:randomUUID(),text:"SYNTHETISCH D05 Prüfnotiz Entwurf"},lastField:"eingang.kundensuche",expectedUpdatedAt:null};
+  const input={id:randomUUID(),clientEventId:randomUUID(),art:"eingang",payload:{clientKey:randomUUID(),text:"SYNTHETISCH D05 Prüfnotiz Entwurf"},lastField:"eingang.kundensuche",expectedVersion:null};
   const saved=await withSession(owner,()=>saveIntakeDraftAction(input));
-  expect(saved).toMatchObject({code:"OK",drafts:[{id:input.id,art:"eingang",payload:input.payload,zuletzt_feld:input.lastField}]});
+  expect(saved).toMatchObject({code:"OK",drafts:[{id:input.id,art:"eingang",payload:input.payload,zuletzt_feld:input.lastField,version:0}]});
   expect(await withSession(owner,()=>saveIntakeDraftAction(input))).toMatchObject({code:"OK",drafts:[{id:input.id}]});
-  const [row]=await sql`SELECT art,payload,zuletzt_feld,to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at FROM private.intake_drafts WHERE tenant_id=${KREILE_TENANT_SLUG} AND actor_id=${owner.actorId}::uuid AND id=${input.id}::uuid`;
-  expect(row).toMatchObject({art:"eingang",payload:input.payload,zuletzt_feld:input.lastField});
+  const [row]=await sql`SELECT art,payload,zuletzt_feld,version FROM private.intake_drafts WHERE tenant_id=${KREILE_TENANT_SLUG} AND actor_id=${owner.actorId}::uuid AND id=${input.id}::uuid`;
+  expect(row).toMatchObject({art:"eingang",payload:input.payload,zuletzt_feld:input.lastField,version:0});
   expect(await withSession(other,()=>getIntakeDraftsAction())).toMatchObject({code:"OK",drafts:[]});
   expect(await withSession(owner,()=>getIntakeDraftsAction())).toMatchObject({code:"OK",drafts:[{id:input.id,payload:input.payload}]});
-  const deletion={id:input.id,clientEventId:randomUUID(),expectedUpdatedAt:row.updated_at};
+  const deletion={id:input.id,clientEventId:randomUUID(),expectedVersion:row.version};
   expect(await withSession(owner,()=>discardIntakeDraftAction(deletion))).toMatchObject({code:"OK",drafts:[]});
   expect(await withSession(owner,()=>discardIntakeDraftAction(deletion))).toMatchObject({code:"OK",drafts:[]});
   expect(await sql`SELECT id FROM private.intake_drafts WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.id}::uuid`).toHaveLength(0);
   expect(await sql`SELECT event_type FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${owner.actorId}::uuid AND client_event_id IN (${input.clientEventId}::uuid,${deletion.clientEventId}::uuid)`).toHaveLength(2);
+ });
+
+ it("P66 keeps the newer draft when an older browser session saves later",async()=>{
+  const owner=await createFixture();
+  const {saveIntakeDraftAction,getIntakeDraftsAction}=await import("@/app/actions/eingang.actions");
+  const id=randomUUID(),clientKey=randomUUID();
+  const first=await withSession(owner,()=>saveIntakeDraftAction({id,clientEventId:randomUUID(),art:"eingang",payload:{clientKey,text:"SYNTHETISCH erster Stand"},lastField:"eingang.erfassen-text",expectedVersion:null}));
+  expect(first.code).toBe("OK");if(first.code!=="OK")throw Error("DRAFT_FIRST_SAVE_REQUIRED");
+  const firstTab=first.drafts.find(draft=>draft.id===id);
+  const secondTab=(await withSession(owner,()=>getIntakeDraftsAction()));
+  expect(secondTab.code).toBe("OK");if(!firstTab||secondTab.code!=="OK")throw Error("DRAFT_TWO_TABS_REQUIRED");
+  const secondSnapshot=secondTab.drafts.find(draft=>draft.id===id);
+  if(!secondSnapshot)throw Error("DRAFT_SECOND_TAB_REQUIRED");
+  expect(firstTab.version).toBe(0);expect(secondSnapshot.version).toBe(0);
+
+  const newer={id,clientEventId:randomUUID(),art:"eingang" as const,payload:{clientKey,text:"SYNTHETISCH neuer Stand"},lastField:"eingang.erfassen-text",expectedVersion:secondSnapshot.version};
+  expect(await withSession(owner,()=>saveIntakeDraftAction(newer))).toMatchObject({code:"OK",drafts:[{id,version:1,payload:newer.payload}]});
+
+  const stale={id,clientEventId:randomUUID(),art:"eingang" as const,payload:{clientKey,text:"SYNTHETISCH alter Tab"},lastField:"eingang.erfassen-text",expectedVersion:firstTab.version};
+  expect(await withSession(owner,()=>saveIntakeDraftAction(stale))).toMatchObject({code:"CONFLICT",message:"Entwurf wurde inzwischen geändert · Eingaben bleiben erhalten."});
+  const [stored]=await sql`SELECT version,payload FROM private.intake_drafts WHERE tenant_id=${KREILE_TENANT_SLUG} AND actor_id=${owner.actorId}::uuid AND id=${id}::uuid`;
+  expect(stored).toEqual({version:1,payload:newer.payload});
  });
 });
 

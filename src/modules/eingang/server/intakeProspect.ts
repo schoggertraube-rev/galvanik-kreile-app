@@ -38,8 +38,8 @@ function valid(input:unknown):input is IntakeProspectInput{
     &&typeof input.text==='string'&&input.text.length<=20_000&&object(input.draft)&&input.draft.clientKey===input.clientKey
     &&Array.isArray(input.draft.items)&&input.draft.items.length<=20&&input.draft.items.every(object)
     &&JSON.stringify(input.draft).length<=250_000
-    &&(input.activeDraft===undefined||object(input.activeDraft)&&Object.keys(input.activeDraft).sort().join(',')==='id,updatedAt'
-      &&typeof input.activeDraft.id==='string'&&UUID.test(input.activeDraft.id)&&typeof input.activeDraft.updatedAt==='string'&&Number.isFinite(Date.parse(input.activeDraft.updatedAt)));
+    &&(input.activeDraft===undefined||object(input.activeDraft)&&Object.keys(input.activeDraft).sort().join(',')==='id,version'
+      &&typeof input.activeDraft.id==='string'&&UUID.test(input.activeDraft.id)&&typeof input.activeDraft.version==='number'&&Number.isSafeInteger(input.activeDraft.version)&&input.activeDraft.version>=0);
 }
 
 function originalText(input:IntakeProspectInput,name:string):string{
@@ -82,7 +82,7 @@ export async function saveIntakeProspect(input:unknown,createCustomer:CustomerWr
       const draft=await writeIntakeDraftInTransaction(tx,auth,{id:draftId,clientEventId:randomUUID(),art:'eingang',
         payload:{...input.draft,clientKey:draftClientKey,customerMode:'EXISTING',customerId:created.receipt.customerId,customerName:created.receipt.name,
           documents:[...new Set([...(Array.isArray(input.draft.documents)?input.draft.documents:[]),itemId])]},
-        lastField:null,expectedUpdatedAt:input.activeDraft?.updatedAt??null});
+        lastField:null,expectedVersion:input.activeDraft?.version??null});
       if(draft)throw new Rejected(draft);
       await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
         VALUES(${auth.tenantId},${itemId}::uuid,'zugeordnet',${input.clientKey}::uuid,${auth.userId},
