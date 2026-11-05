@@ -1186,7 +1186,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       if(prefill?.customerMode==="lieferant"&&!ports.canManageMoney){deny("customer");return;}
       setSupplierCustomerMode(prefill?.customerMode==="lieferant");
       const initialCustomer = prefill?.customerMode==="lieferant"
-        ? {...EMPTY_CUSTOMER,customerType:"lieferant" as const,paymentPreference:""}
+        ? {...EMPTY_CUSTOMER,customerType:"lieferant" as const,paymentPreference:"",companyName:prefill.name?.trim()??'',email:prefill.email?.trim().toLowerCase()??''}
         : prefill ? { ...customerDraftFromSearch(prefill.name ?? ""), email: prefill.email?.trim().toLowerCase() ?? "" } : EMPTY_CUSTOMER;
       setCustomerType("");
       setCustomerClosePrompt(false);
@@ -1194,7 +1194,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       setCustomerDuplicateAcceptedFor("");
       setCustomerDraft(initialCustomer);
       setCustomerBaseline({ customerType: initialCustomer.customerType, customerDraft: initialCustomer, customerNote: "" });
-      if (ports.canCreateCustomer) navigate("customer");
+      if (ports.canCreateCustomer||prefill?.customerMode==='lieferant'&&prefill.sourceItemId&&Number.isSafeInteger(prefill.sourceVersion)&&ports.canManageMoney) navigate("customer");
       else deny("customer");
       return;
     }
@@ -1349,7 +1349,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
   const submitCustomer = async (event: FormEvent) => {
     event.preventDefault();
-    if (!ports.canCreateCustomer) {
+    if (!ports.canCreateCustomer&&!(supplierCustomerMode&&customerSource&&ports.canManageMoney)) {
       deny("customer");
       return;
     }
@@ -1383,9 +1383,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       }
       setOpen(false);
       setIntakeToast(`Kunde ${result.customer.customerNumber ?? result.customer.name} angelegt`);
-      if(customerSource)window.dispatchEvent(new Event(INTAKE_CHANGED_EVENT));
+      if(customerSource)window.dispatchEvent(new CustomEvent(INTAKE_CHANGED_EVENT,{detail:{itemId:customerSource.itemId,customerId:result.customer.id,customerName:result.customer.name}}));
       ports.refresh();
-      ports.openCustomer(result.customer.id);
+      if(!(customerSource&&supplierCustomerMode))ports.openCustomer(result.customer.id);
     } catch (error) {
       console.error("[CUSTOMER_CREATE_REQUEST_FAILED]",{errorName:error instanceof Error?error.name:"UnknownError"});
       setFeedback({

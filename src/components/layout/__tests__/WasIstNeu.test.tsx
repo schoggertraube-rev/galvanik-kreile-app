@@ -16,7 +16,7 @@ describe('AP-NEU P52 reading marker and real navigation boundary',()=>{
   expect(screen.getByRole('dialog').closest('.kr-app')).toBe(first.container.firstElementChild);
   expect(document.body.querySelectorAll('.kr-app')).toHaveLength(1);
   expect(screen.getByRole('button',{name:/^Was ist neu(?: · \d+ ungelesen)?$/})).not.toHaveTextContent(String(entries.length));
-  expect(within(screen.getByRole('dialog')).getAllByRole('heading',{level:3})[0]).toHaveTextContent('#173');
+  expect(within(screen.getByRole('dialog')).getAllByRole('heading',{level:3})[0]).toHaveTextContent('#175');
   const marker=localStorage.getItem('kreile:was-ist-neu:synthetic-public-login-A');expect(marker).toBeTruthy();first.unmount();
   render(<WasIstNeu {...props} loginHandle="synthetic-public-login-B"/>);expect(screen.getByRole('button',{name:/Was ist neu/})).toHaveTextContent(String(entries.length));
   expect(localStorage.getItem('kreile:was-ist-neu:synthetic-public-login-B')).toBeNull();

@@ -111,70 +111,6 @@
     "paket": "AP-EIN-3",
     "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
   },
-  "R01": {
-    "paket": "AP-EIN-5",
-    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
-  },
-  "R02": {
-    "paket": "AP-EIN-5",
-    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
-  },
-  "R03": {
-    "paket": "AP-EIN-5",
-    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
-  },
-  "R04": {
-    "paket": "AP-EIN-5",
-    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
-  },
-  "R05": {
-    "paket": "AP-EIN-5",
-    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
-  },
-  "R06": {
-    "paket": "AP-EIN-5",
-    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
-  },
-  "R07": {
-    "paket": "AP-EIN-5",
-    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
-  },
-  "R08": {
-    "paket": "AP-EIN-5",
-    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
-  },
-  "R06b": {
-    "paket": "AP-EIN-5",
-    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
-  },
-  "R09": {
-    "paket": "AP-EIN-5",
-    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
-  },
-  "R10": {
-    "paket": "AP-EIN-5",
-    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
-  },
-  "R11": {
-    "paket": "AP-EIN-5",
-    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
-  },
-  "R12": {
-    "paket": "AP-EIN-5",
-    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
-  },
-  "R13": {
-    "paket": "AP-EIN-5",
-    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
-  },
-  "R14": {
-    "paket": "AP-EIN-5",
-    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
-  },
-  "R15": {
-    "paket": "AP-EIN-5",
-    "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
-  },
   "O02": {
     "paket": "AP-EIN-3",
     "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
@@ -186,14 +122,6 @@
   "O09": {
     "paket": "AP-EIN-3",
     "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
-  },
-  "G08": {
-    "paket": "AP-EIN-4",
-    "grund": "aufgabe nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "G11": {
-    "paket": "AP-EIN-4",
-    "grund": "aufgabe nach Runde 52 wird mit AP-EIN-4 geliefert"
   },
   "L01": {
     "paket": "AP-EIN-4",

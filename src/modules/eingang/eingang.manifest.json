@@ -3,6 +3,25 @@
   "version": "1.0.0",
   "owner": "Verkaufsstufe 1 Eingang (Paket/persoenlich)",
   "publicExports": [
+    "@/modules/eingang/server-public#readInvoiceTaskContext",
+    "@/modules/eingang/public#IncomingInvoiceDialogs",
+    "@/modules/eingang/server-public#readIncomingInvoice",
+    "@/modules/eingang/server-public#saveIncomingInvoice",
+    "@/modules/eingang/server-public#changeIncomingInvoice",
+    "@/modules/eingang/server-public#InvoiceDependencies",
+    "@/modules/eingang/public#invoiceCents",
+    "@/modules/eingang/public#invoiceDate",
+    "@/modules/eingang/public#invoiceFieldErrors",
+    "@/modules/eingang/public#invoiceWarnings",
+    "@/modules/eingang/public#EMPTY_INVOICE_FIELDS",
+    "@/modules/eingang/public#InvoicePorts",
+    "@/modules/eingang/public#InvoiceFields",
+    "@/modules/eingang/public#InvoiceView",
+    "@/modules/eingang/public#InvoiceResult",
+    "@/modules/eingang/public#InvoiceReadResult",
+    "@/modules/eingang/public#InvoiceSupplier",
+    "@/modules/eingang/public#InvoiceChangeInput",
+    "@/modules/eingang/public#InvoiceSaveInput",
     "@/modules/eingang/server-public#selectIntakeConcern",
     "@/modules/eingang/server-public#finishIntakeUse",
     "@/modules/eingang/server-public#reopenIntake",
@@ -127,6 +146,8 @@
     "20261103053000_ein2_erfassung.sql",
     "20261103191000_ein3_warenpruefung.sql",
     "20261104012000_ein4_nachrichten.sql",
+    "20261104091240_ein4_rechte.sql",
+    "20261104100455_ein5_eingangsrechnungen.sql",
     "20261105095422_ein2_erwartete_ware.sql"
   ],
   "viewsFunctions": [
@@ -141,7 +162,8 @@
     "public.device_request",
     "public.outbox_mails",
     "private.intake_drafts",
-    "public.goods_receipt"
+    "public.goods_receipt",
+    "public.supplier_invoice"
   ],
   "storagePurposes": [],
   "events": {

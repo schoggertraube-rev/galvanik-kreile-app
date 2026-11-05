@@ -288,11 +288,14 @@ async function seedOriginalFixture(file:Record<string,unknown>,sequence:number){
   const uploaded=await client.storage.from('scans').upload(storagePath,content.bytes,{contentType:content.mime,upsert:true});
   if(uploaded.error)throw Error('FLOW_ORIGINAL_STORAGE_FAILED:'+uploaded.error.message);
   await upsertFixture('intake_file',{
-    ...file,tenant_id:TENANT,client_key:file.client_key??file.id,mime:file.mime??content.mime,
+    ...file,tenant_id:TENANT,client_key:file.client_key??file.id,art:file.art??'anhang',mime:file.mime??content.mime,
     bytes:content.bytes.length,sha256,speicherpfad:storagePath,aufgenommen_am:new Date().toISOString(),
     aufgenommen_von:fixtureLoginId,reihenfolge:sequence,lesbar:file.lesbar??true,
     geoeffnet:file.geoeffnet??false,erkennung_status:file.erkennung_status??'fertig',
   });
+  await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
+    SELECT ${TENANT},${String(file.item_id)}::uuid,'original_gespeichert',${String(file.id)}::uuid,${fixtureLoginId},${sql.json({fileId:String(file.id),sha256,bytes:content.bytes.length})}
+    WHERE NOT EXISTS(SELECT 1 FROM public.intake_event WHERE tenant_id=${TENANT} AND item_id=${String(file.item_id)}::uuid AND art='original_gespeichert' AND befehl_id=${String(file.id)}::uuid)`;
 }
 
 async function seedIntakeFixture(fixture: GeneratedFixture, fixtureIndex: number) {
@@ -364,6 +367,19 @@ async function seedSupplementalFixtures(fixtures: GeneratedFixture[]) {
       await seedOriginalFixture(value,1);
       continue;
     }
+    if(fixture.tabelle==='supplier_invoice'){
+      // The model supplies a nested source/original for an already recorded invoice.
+      // Materialize that relationship in the real Replay DB and Storage, without changing its assertions.
+      if(!value.eingang||typeof value.eingang!=='object'||Array.isArray(value.eingang))throw Error('FLOW_INVOICE_SOURCE_NOT_SUPPLIED');
+      const digest=createHash('sha256').update('synthetic-replay-invoice-source:'+value.id).digest();digest[6]=(digest[6]&15)|64;digest[8]=(digest[8]&63)|128;
+      const hex=digest.subarray(0,16).toString('hex'),itemId=`${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+      const nested=value.eingang as Record<string,unknown>;
+      await seedIntakeFixture({id:itemId,tabelle:'intake_item',...nested,kunde_id:value.lieferant_id,zuordnung:'hand',vorgang_art:'rechnung',vorgang_id:value.id},fixtureIndex+1000);
+      const files=await sql<{id:string}[]>`SELECT id::text FROM public.intake_file WHERE tenant_id=${TENANT} AND item_id=${itemId}::uuid ORDER BY reihenfolge,id`;
+      if(!files.length)throw Error('FLOW_INVOICE_ORIGINAL_NOT_SUPPLIED');
+      await upsertFixture('supplier_invoice',{...value,tenant_id:TENANT,nummer_intern:'ER-'+new Date().getUTCFullYear()+'-'+String(8000+fixtureIndex),item_id:itemId,file_id:files[0]!.id,erfasst_von:fixtureLoginId,version:1});
+      continue;
+    }
     if (fixture.tabelle === "intake_drafts") {
       const actor = generatedFlowRuntime.logins[String(value.login) as keyof typeof generatedFlowRuntime.logins]
         ?? Object.values(generatedFlowRuntime.logins).find(login => login.id === value.login);
@@ -404,6 +420,7 @@ async function seedSupplementalFixtures(fixtures: GeneratedFixture[]) {
     }
     if(fixture.tabelle==='task'){
       await upsertFixture('tasks',{client_key:value.id,erstellt_von:generatedFlowRuntime.logins.login_meister.id,version:1,...value,id:value.id,tenant_id:TENANT});
+      if(value.art==='rechnung'&&value.bezug_typ==='eingangsrechnung')await sql`UPDATE public.supplier_invoice SET aufgabe_id=${value.id}::uuid WHERE tenant_id=${TENANT} AND id=${String(value.bezug_id)}::uuid`;
       continue;
     }
     const table = fixture.tabelle === "task" ? "tasks" : fixture.tabelle;
@@ -719,7 +736,8 @@ async function interruptNextLoad(page: Page) {
 const settledServerActions = new Set(["eingang.buchen", "eingang.erneut-buchen", "eingang.angaben-erkennen",
   "ware.annehmen","ware.nur-annehmen","ware.teil-warten","ware.rest-annehmen","ware.erneut",
   "original.am-original-geprueft","original.erneut-lesen","nachrichten.vorschlag-ja","nachrichten.erneut",
-  "nachrichten.erledigt","nachrichten.nur-info","nachrichten.wieder-speichern"]);
+  "nachrichten.erledigt","nachrichten.nur-info","nachrichten.wieder-speichern",
+  "rechnungein.offen","rechnungein.unklar-speichern","rechnungein.bezahlt-speichern","rechnungein.als-bezahlt","rechnungein.klaerung-speichern","rechnungein.doppelt-ablegen"]);
 
 /** Open the actual accordion before a user interaction; visibility assertions stay unchanged. */
 async function revealForInteraction(locator:Locator){

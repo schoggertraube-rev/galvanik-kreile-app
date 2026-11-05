@@ -10,7 +10,7 @@ import { CAPTURE_KINDS, captureRecognition } from "../captureRecognition";
 import { intakeInvoiceReviewRequired } from "../intakeLifecycleContract";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-type Row = { id: string; kanal:string; version: number; text: string | null; kunde_id: string | null; vorgang_id: string | null; zuordnung: string; einsatz: string; anliegen: string[]; anliegen_abgewaehlt:string[];anliegen_offen?:string[] };
+type Row = { id: string; kanal:string; version: number; text: string | null; kunde_id: string | null; vorgang_id: string | null; vorgang_art?:string|null; zuordnung: string; einsatz: string; anliegen: string[]; anliegen_abgewaehlt:string[];anliegen_offen?:string[] };
 function failure(code: Exclude<IntakeCaptureResult, { code: "OK" }>["code"], message: string): Exclude<IntakeCaptureResult, { code: "OK" }> { return { code, message }; }
 function record(input: unknown): input is Record<string, unknown> { return input !== null && typeof input === "object" && !Array.isArray(input); }
 function mayAccessCaptureContent(auth:AuthorizationSnapshot,channel:string){return channel!=='mail'||hasAuthorizationArea(auth,'mails');}
@@ -25,28 +25,31 @@ export async function authorizedIntakeContext(ctx?: IntakeContext): Promise<Auth
   if (!hasAuthorizationArea(result.data, area)) return failure("FORBIDDEN", `Bereich ${area} ist nicht freigegeben.`);
   return result.data;
 }
-export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot, itemId: string, ctx?: IntakeContext): Promise<IntakeCaptureResult> {
+export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot, itemId: string, ctx?: IntakeContext,invoiceOnly=false): Promise<IntakeCaptureResult> {
   return withPrivilegedTenantTransaction(auth, async tx => {
-    const rows = await tx.execute<Row>(sql`SELECT id::text,kanal, version, text, kunde_id, vorgang_id, zuordnung, einsatz, anliegen,anliegen_abgewaehlt,anliegen_offen
+    const rows = await tx.execute<Row>(sql`SELECT id::text,kanal, version, text, kunde_id, vorgang_id,vorgang_art, zuordnung, einsatz, anliegen,anliegen_abgewaehlt,anliegen_offen
       FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id=${itemId}::uuid`);
     if (rows.length !== 1) return failure("NOT_FOUND", "Eingang wurde nicht gefunden.");
     const row = rows[0];
-    if(!mayAccessCaptureContent(auth,row.kanal))return failure('FORBIDDEN','Mail-Inhalte benötigen das Recht Mails.');
+    if(invoiceOnly&&(!hasAuthorizationArea(auth,'geld')||!row.anliegen.includes('rechnung')&&row.vorgang_art!=='rechnung'))return failure('FORBIDDEN','Rechnungsbezug für den Beleg fehlt.');
+    if(!invoiceOnly&&!mayAccessCaptureContent(auth,row.kanal))return failure('FORBIDDEN','Mail-Inhalte benötigen das Recht Mails.');
     if (ctx?.customerId && row.kunde_id !== ctx.customerId || ctx?.orderId && row.vorgang_id !== ctx.orderId) return failure("FORBIDDEN", "Eingang gehört nicht zu diesem Kontext.");
     const files = await tx.execute<{ id: string; name: string; mime: string; bytes: string; readable: boolean; status: string; secured: boolean; errorCode:string|null; captureOrigin:"warenfoto"|"dokument" }>(sql`
       SELECT file.id::text,file.dateiname AS name,file.mime,file.bytes::text,file.lesbar AS readable,file.erkennung_status AS status,file.aufnahme_herkunft AS "captureOrigin",
         EXISTS(SELECT 1 FROM public.intake_event original WHERE original.tenant_id=file.tenant_id AND original.item_id=file.item_id AND original.art='original_gespeichert' AND original.nachher->>'fileId'=file.id::text) AS secured,
         (SELECT event.nachher->>'code' FROM public.intake_event event WHERE event.tenant_id=file.tenant_id AND event.item_id=file.item_id
           AND event.art='erkannt' AND event.nachher->>'fileId'=file.id::text ORDER BY event.zeit DESC,event.id DESC LIMIT 1) AS "errorCode"
-      FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${itemId}::uuid ORDER BY file.reihenfolge,file.id`);
+      FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${itemId}::uuid
+      AND (${!invoiceOnly} OR file.art<>'mime' AND file.mime<>'message/rfc822' AND lower(file.dateiname) NOT LIKE '%.eml') ORDER BY file.reihenfolge,file.id`);
     const suggestions=await tx.execute<NonNullable<IntakeCapture["suggestions"]>[number]>(sql`SELECT id::text,file_id::text AS "fileId",order_id AS "orderId",
       feld AS field,wert AS value,sicherheit AS confidence,regel AS rule,grund AS reason,fundstelle AS source,status,geprueft_von::text AS "verifiedBy",geprueft_am::text AS "verifiedAt"
-      FROM public.intake_suggestion WHERE tenant_id=${auth.tenantId} AND item_id=${itemId}::uuid ORDER BY id`);
-    const capture: IntakeCapture = { id: row.id, version: row.version, text: row.text, customerId: row.kunde_id,
-      orderId: row.vorgang_id, assignment: row.zuordnung, usage: row.einsatz, concerns: row.anliegen,dismissedConcerns:row.anliegen_abgewaehlt,openConcerns:row.anliegen_offen,
-      files: files.map(file => ({ ...file, bytes: Number(file.bytes) })),suggestions };
-    capture.recognition = captureRecognition(capture);
-    if (capture.recognition.kind === "unklar" || capture.recognition.kind === "ware") {
+      FROM public.intake_suggestion WHERE tenant_id=${auth.tenantId} AND item_id=${itemId}::uuid AND (${!invoiceOnly} OR feld LIKE 'rechnung.%') ORDER BY id`);
+    const contentAllowed=!invoiceOnly&&(row.kanal!=='mail'||hasAuthorizationArea(auth,'mails'));
+    const capture: IntakeCapture = { id: row.id, version: row.version, text: contentAllowed?row.text:null, customerId: row.kunde_id,
+      orderId: invoiceOnly?null:row.vorgang_id, assignment: row.zuordnung, usage: row.einsatz, concerns: invoiceOnly?row.anliegen.filter(value=>value==='rechnung'):contentAllowed?row.anliegen:[],dismissedConcerns:contentAllowed?row.anliegen_abgewaehlt:[],openConcerns:contentAllowed?row.anliegen_offen:[],
+      files: files.map(file => ({ ...file, bytes: Number(file.bytes) })),suggestions:contentAllowed||invoiceOnly?suggestions:[] };
+    capture.recognition = invoiceOnly ? { kind: "rechnung", text: "" } : captureRecognition(capture);
+    if (!invoiceOnly && (capture.recognition.kind === "unklar" || capture.recognition.kind === "ware")) {
       capture.expectedOrders = await tx.execute<NonNullable<IntakeCapture["expectedOrders"]>[number]>(sql`
         SELECT o.id::text, o.order_number AS number, o.customer_id AS "customerId", o.customer_name AS "customerName",
           o.title, o.ware_seit::text AS since

@@ -1,7 +1,16 @@
 {
   "version": 1,
-  "inventorySha256": "db105c7230939fa494e26dc62fe18bd065f60ed9095c1ae98902cf007522be93",
+  "inventorySha256": "69e271d3b2c42a2f3a40960444d9a5f2f8b38a0f65b58a34ecd203c05f8a5efb",
   "testedWriteActions": {
+    "src/app/actions/eingang.actions.ts#saveIncomingInvoiceAction": [
+      "src/test/h18_invoice_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#changeIncomingInvoiceStatusAction": [
+      "src/test/h18_invoice_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#clarifyIncomingInvoiceAction": [
+      "src/test/h18_invoice_actions.integration.test.ts"
+    ],
     "src/app/actions/eingang.actions.ts#saveIntakeDeviceRequestAction": [
       "src/test/h18_customer_actions.integration.test.ts"
     ],

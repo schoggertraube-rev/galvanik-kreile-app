@@ -17,9 +17,32 @@ export async function reopenIntakeAction(input:unknown){return reopenIntake(inpu
 import {saveTask,completeTask,readTask,createMissingGoodsTask,type TaskEffectRequest} from '@/modules/tasks/server-public';
 import type {TaskOpenRequest} from '@/modules/tasks/public';
 import {recordIntakeTaskEffect} from '@/modules/eingang/server-public';
-import type {PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
+import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {AuthorizationSnapshot} from '@/lib/server/authorization';
 const taskEffects={effect:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:TaskEffectRequest)=>recordIntakeTaskEffect(tx,auth,input,readCustomerProfile)};
+import {createInvoiceClarificationTask,resolveInvoiceClarificationTask} from '@/modules/tasks/server-public';
+import {readIncomingInvoice,saveIncomingInvoice,changeIncomingInvoice,readInvoiceTaskContext} from '@/modules/eingang/server-public';
+import {searchOrderIntakeCustomers} from '@/lib/server/orderIntakeRead';
+const invoiceTaskEffects={...taskEffects,readInvoice:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,id:string)=>readInvoiceTaskContext(tx,auth,id,readCustomerProfile)};
+const invoiceEffects={readCustomer:readCustomerProfile,updateCustomer:updateCustomerInTransaction,
+ createTask:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{invoiceId:string;clientKey:string;reason:string})=>createInvoiceClarificationTask(tx,auth,input,invoiceTaskEffects),
+ resolveTask:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{invoiceId:string;taskId:string;note:string})=>resolveInvoiceClarificationTask(tx,auth,input,invoiceTaskEffects)};
+export async function getIncomingInvoiceAction(input:unknown){return readIncomingInvoice(input,invoiceEffects);}
+export async function saveIncomingInvoiceAction(input:unknown){return saveIncomingInvoice(input,invoiceEffects);}
+export async function changeIncomingInvoiceStatusAction(input:unknown){return changeIncomingInvoice(input,invoiceEffects);}
+export async function clarifyIncomingInvoiceAction(input:unknown){return changeIncomingInvoice(input,invoiceEffects,true);}
+/** Supplier selection uses the same canonical customer search and stored profiles. */
+export async function searchInvoiceSuppliersAction(query:string){
+ const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:'Sitzung nicht verfügbar.'};
+ if(!hasAuthorizationArea(auth.data,'geld'))return {code:'FORBIDDEN' as const,message:'Recht Geld fehlt.'};
+ if(typeof query!=='string'||query.length>200)return {code:'VALIDATION_ERROR' as const,message:'Suchtext ist ungültig.'};
+ try{
+  const candidates=await searchOrderIntakeCustomers(auth.data,{query});
+  const suppliers=await withPrivilegedTenantTransaction(auth.data,async tx=>{
+   const values=[];for(const candidate of candidates){if(candidate.customerType!=='lieferant')continue;const value=await readCustomerProfile(tx,auth.data.tenantId,candidate.id);if(value)values.push({id:value.id,name:value.name,iban:value.iban,paymentTermDays:value.paymentTermDays});}return values;
+  });return {code:'OK' as const,suppliers};
+ }catch(error){console.error('[INVOICE_SUPPLIER_SEARCH_FAILED]',{code:error instanceof Error?error.name:'INVOICE_SUPPLIER_SEARCH_FAILED'});return {code:'UNAVAILABLE' as const,message:'Lieferantensuche nicht verfügbar · Fehlercode: INVOICE_SUPPLIER_SEARCH_FAILED.'};}
+}
 const goodsEffects={createMissingTask:(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:{orderId:string;missing:string[];clientKey:string})=>createMissingGoodsTask(tx,auth,input,taskEffects)};
 export async function saveIntakeTaskAction(input:unknown){return saveTask(input,taskEffects);}
 export async function completeIntakeTaskAction(input:unknown){return completeTask(input,taskEffects);}
