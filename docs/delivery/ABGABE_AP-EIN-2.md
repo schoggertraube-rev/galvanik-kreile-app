@@ -1,21 +1,49 @@
 # AP-EIN Teil 2 · Erfassung, Runde 52
 
-## Restprüfung vor dem Owner-Neustart (05.11.)
+## Restprüfung vor dem Owner-Neustart (05.11., P67)
 
-Noch keine Mergefreigabe. Der bisherige PR-Kopf ist `003a6a6824f077b8c294abe328cadbb3706fee3d`, [READY-Preview](https://galvanik-kreile-werkstatt-bvpmba32r.vercel.app). Dort sind alle neun CI-Checks grün; die noch roten eigenen Modellfälle werden dadurch nicht als bestanden ausgegeben. Diese Ergänzung enthält ausschließlich die unten beschriebenen Kopier-Fixture-/Kennungskorrekturen, Rotlisten-Hygiene und diese Abgabe. Kandidaten-SHA, aktuelle Check-Liste und Git-Preview werden exakt im PR und NACHTLAUF C nachgewiesen.
+**Noch Draft, bis die abschließende CI des neuen Kandidaten grün ist.** Die zuletzt geprüfte Git-Preview gehört zu Produkt-SHA `46340e67888012ae1cf7b797f3f98641e6ce513d`: https://galvanik-kreile-werkstatt-hytnjpk91.vercel.app (READY per Vercel-API). Der abschließende P67-Commit, seine exakte Preview und Check-Liste werden im PR und NACHTLAUF C nachgeführt. Die folgenden älteren Einzelstände sind ausdrücklich historische Belege.
 
-- C06/C08/C09 bestehen gegen echten lokalen Server, Datenbank und Storage. Der Quellauftrag wird mit der bestehenden `createOrderIntakeAction` angelegt, einschließlich echtem `ORDER_INTAKE_CREATED_V1` und privatem Receipt. Der historische gegebene Zustand und das Quellenfoto sind ausdrücklich synthetische, isolierte Fixtures. Die Assertion prüft die echte neu zugeteilte Quell-ID statt eines erfundenen Receipts. C09 bucht genau einen neuen Auftrag und prüft den unveränderten Ursprung. Keine Produktregel, Assertion oder Server-Autorisierung gelockert.
-- C06: Das bereits korrekt übernommene Materialfeld trug `eingang.position.material` statt der vom Modell verlangten Kennung `eingang.material`. Nur die Kennung wurde korrigiert; der unveränderte Browserfall besteht tatsächlich (XPASS vor Entfernen des veralteten Markers). Alle drei Kopier-Marker sind nach belegtem Erfolg entfernt.
-- D04 braucht das Nachrichten-Ziel aus Teil 4. Einordnung der bestehenden Erwartung nach P48/P50/P54 auf AP-EIN-4; keine zweite Navigation in Teil 2.
-- AB02 bleibt offen: Nach der Response verarbeitet Next-after die reale Outbox bereits von `wartet` zu `gesendet`. Der Modellfall verlangt beim späteren Browser-DB-Lesen noch `wartet`. Der vorhandene echte Action-Test belegt Warteschlange vor und Versand nach der Response; Versand wird nicht künstlich angehalten. Zeitbindung des Browserfalls ist dem Planungschat vorgelegt.
-- D06 bleibt offen: Das gelieferte `entwurf_eigen` enthält keinen vollständigen versionierten Erfassungs-Snapshot. Ein solcher Alt-Payload darf nicht durch erfundene Pflichtwerte buchungsfähig werden. Vollständiges Fixture ist dem Planungschat vorgelegt; der sichere Produkt-Lesefehler bleibt erhalten.
-- Runde 53 wurde während dieser Prüfung geliefert. P66(0) bestätigt den direkten Owner-Auftrag: erst #168, danach Automatik pausieren und Rechner-Neustart. TA-B2k, R53-Angleich und weitere Pakete folgen erst nach diesem Neustart. Fremde Planungs-/UI-Dateien bleiben unberührt.
+- **C06/C08/C09 PASS:** Quellauftrag durch die vorhandene createOrderIntakeAction mit echtem ORDER_INTAKE_CREATED_V1 und privatem Receipt. Nur die Material-Feldkennung wurde korrigiert. Alle drei belegten XPASS-Marker entfernt; Modell-/Akzeptanz-Assertions unverändert. Konkreter C09-DB-Beleg: Quelle `b1077404-c37a-4afe-96a9-0e4aec571e22` / A-2026-0001 und Kopie `20798b0d-f264-4a26-a81d-be01e51d4596` / A-2026-0002, jeweils zwei Positionen, ein Intake-Event, integrity_ok=true. Quelle bleibt abgeschlossen, Kopie angenommen. Ausschließlich isolierter Replay.
+- **AB02 nach P67 entschieden:** Produkt korrekt. Die echte Action-Prüfung in `src/test/h18_customer_actions.integration.test.ts`, Fall „creates one customer, order, original and event, rereads and replays the same request“, prüft Outbox `wartet` und kein Versandereignis vor der Response; danach `gesendet`, genau ein Versandereignis, erneutes Lesen und idempotente Wiederholung. Browserfall bis zur zeitpunktfesten Endversion: `Endversion-Angleich AB02 Zeitpunkt`. Kein künstliches Warten im Produkt.
+- **D06 nach P67 korrigiert:** Entwürfe ohne Payload-Version oder mit Version 0 öffnen dieselbe Erfassung. Gespeicherter Text/Kunde werden übernommen, das zuletzt bearbeitete Feld erhält den Fokus. Menge, Einheit, Oberfläche, Art, Liefertermin, Übergabe und Terminstatus bleiben bei fehlendem Wert leer; keine automatische Prüfung oder Buchung. Keine zweite Speicherung/Erfassungsstrecke. Ein absichtlicher Buchungsversuch mit Lücken belässt den Entwurf unverändert. Der generierte D06-Fall verlangt zusätzlich Buchungsfähigkeit aus fehlenden Daten und bleibt daher gemäß P67 `Endversion-Angleich D06 Fixture`.
+- **D06-Nachweis:** Echter Browser → bestehende readDrafts-Server-Action → Replay-DB. Text und Kunde geladen, Fokus korrekt, Pflichtwerte leer. Payload, updated_at und zuletzt_feld vor/nach identisch; 0 Aufträge und unverändert 1 Ereignis (USER_LAST_SEEN_RECORDED_V1 aus dem echten Login, vor der Messung). Zwei RealRender-Fälle für fehlende Version und explizite Version 0 PASS. Im ersten Messaufbau lag die Event-Baseline vor dem Login; die Messgrenze wurde mechanisch hinter den echten Login verschoben. Kein Produktfehler oder abgeschwächte Buchungserwartung.
+- **D04/F07:** Einordnung auf Nachrichten Teil 4 bzw. Warenannahme Teil 3 durch P67 bestätigt. KV bleibt bis AP-KV zurückgestellt. Die Rot-Liste ist insgesamt geschrumpft; keine neue Ausnahme hinzugefügt.
 
-Lokaler Abschluss dieses Schritts: Produktionsbuild und Typprüfung PASS. A11 nach mechanischer Typkorrektur **19/22 PASS**; die drei übrigen Ausfälle sind authority-selftest, authority-gate und der daran abbrechende module-gate durch die fremden R53-Bindungsdateien im Arbeitsbaum (TA-B2k laut P66 nach Neustart). Kein Checker, Hash oder fremder Quellstand wurde dafür geändert. R52-Generator, Scope gegen origin/main, Delivery, F0-Dokuwahrheit, Whitespace und vollständiger Lint-Lauf PASS. Gezielter Lint-Lauf für beide mechanisch korrigierten Dateien ebenfalls PASS; neue CI und Preview bleiben erforderlich.
+Lokaler P67-Abschluss: Produktionsbuild, Typprüfung, voller Lint und zwei RealRender-Fälle PASS. A11 **19/22 PASS**; die drei Ausfälle betreffen nur fremde R53-Bindungsdateien (authority-selftest, authority-gate, dadurch module-gate) im Arbeitsbaum. Kein Checker/Hash geändert und keine fremde Datei übernommen. Generator/Scope/Delivery/Whitespace bleiben bindend.
 
-Konkreter C09-DB-Beleg (nur isolierter Replay): Quelle `b1077404-c37a-4afe-96a9-0e4aec571e22` / A-2026-0001 und Kopie `20798b0d-f264-4a26-a81d-be01e51d4596` / A-2026-0002, jeweils zwei Positionen, genau ein `ORDER_INTAKE_CREATED_V1` und `integrity_ok=true`. Quelle bleibt abgeschlossen; Kopie steht auf angenommen. Datei außerhalb Repo: `C:/Users/Traube/.codex/visualizations/2026/11/04/01a1a6e4-4199-7bb0-80cf-d86e82e8c3cb/p65-copy-source/copy-final-db-proof.json`.
+Unveränderter R52-Sichtlauf am exakten SHA 46340e67: **27 Ansichten, 2 grün / 22 gelb / 3 rot**. Neu erfassen in allen gebundenen Modi ohne Rot; Entwurf Desktop/Tablet grün. Die drei roten leeren Erfassungen werden nach P54 einzeln eingeordnet; kein pauschaler Sicht-Grünclaim. Alle Kennungen, Ursachen und Bildpaare bleiben im Originalbericht außerhalb Repo erhalten: `C:/Users/Traube/.codex/visualizations/2026/11/03/01a1a122-06c4-7570-a4d3-dc1eedb311aa/sicht-46340e67-rein-eingang-entwurf-anliegenwahl/pruefbericht.json`. Kopier-/Entwurfsbelege: `C:/Users/Traube/.codex/visualizations/2026/11/04/01a1a6e4-4199-7bb0-80cf-d86e82e8c3cb/p65-copy-source/copy-final-db-proof.json` und `p67-draft/proof.json`.
 
-Die folgenden Abschnitte enthalten historische Einzelbelege und offene Restpunkte; sie sind keine unabhängige Gesamt-Abnahme.
+P67 bestätigt: Nach dem nachgewiesenen Owner-Merge #168 Stand sichern, Writer-Automation pausieren und für den Rechner-Neustart stoppen. TA-B2k/R53 und weitere Pakete folgen erst danach (P66).
+
+### Einzel-Einordnung der roten Sichtkennungen nach P54
+
+Die unveränderte Messung bleibt 3 rot; folgende Zuordnung dokumentiert deren Zustand bzw. Folge-Teil und ist keine Änderung am Prüfer. Keine Beispieldaten oder wirkungslosen Knöpfe ergänzt.
+
+| Kennung | Größen | Ursache / zuständiger Teil |
+|---|---|---|
+| `alles-bestatigen` | desktop, tablet, handy | Erkennungszustand der Vorlage; leere Erfassung hat keine erkannten Angaben. |
+| `kundenkarte` | desktop, tablet, handy | Kein Kunde ausgewählt; erscheint nach Kundenwahl. |
+| `gleicher-kunde-ost-30-turgriffe-verzinkt` | desktop, tablet, handy | Vorlage enthält eine konkrete Kundenhistorie; ohne gewählten Kunden keine Historie. |
+| `leistungskatalog-verzinken-gelb-passivie` | desktop, tablet, handy | Vorlage hat erkannte Leistung; ohne Erkennung/Leistung keine datenabhängige Katalogempfehlung. |
+| `ubernehmen` | desktop, tablet, handy | Aktion eines vorhandenen Vorschlags; im leeren Zustand kein Vorschlag. |
+| `1-woche` | desktop, tablet, handy | Terminlage erst nach Übergabe und den benötigten Auftragsangaben. |
+| `2-wochen` | desktop, tablet, handy | Terminlage erst nach Übergabe und den benötigten Auftragsangaben. |
+| `3-wochen` | desktop, tablet, handy | Terminlage erst nach Übergabe und den benötigten Auftragsangaben. |
+| `5-wochen` | desktop, tablet, handy | Terminlage erst nach Übergabe und den benötigten Auftragsangaben. |
+| `fr-02-10-anbieten` | desktop, tablet, handy | Vorlage hat berechneten Gegentermin; leere Erfassung ohne Wunschdatum/Terminlage. |
+| `wunsch-trotzdem-zusagen` | desktop, tablet, handy | Vorlage hat einen zu knappen Wunsch; im leeren Zustand kein Wunschtermin. |
+| `schnell` | desktop, tablet, handy | Terminlage/Vorschläge brauchen die fehlenden Auftragsangaben und Übergabe. |
+| `empfohlen` | desktop, tablet, handy | Terminlage/Vorschläge brauchen die fehlenden Auftragsangaben und Übergabe. |
+| `entspannt` | desktop, tablet, handy | Terminlage/Vorschläge brauchen die fehlenden Auftragsangaben und Übergabe. |
+| `kv` | desktop, tablet, handy | Zurückgestellter KV-Weg, AP-KV gemäß P66/P67. |
+| `gegenvorschlag` | desktop, tablet, handy | Nur bei tatsächlichem gewählten Gegenvorschlag; Terminstatus ist leer. |
+| `eingangsfoto` | desktop, tablet, handy | Ohne gewählte Eingangsart noch keine vorhandene Ware/Fotopflicht; Warenannahme selbst Teil 3. |
+| `rest-kommt-noch` | desktop, tablet, handy | Warenannahme/Zustandsprüfung im bestehenden Folgeteil 3, kein zweiter Warenweg in Teil 2. |
+| `unauffallig` | desktop, tablet, handy | Warenannahme/Zustandsprüfung im bestehenden Folgeteil 3, kein zweiter Warenweg in Teil 2. |
+| `abweichung` | desktop, tablet, handy | Warenannahme/Zustandsprüfung im bestehenden Folgeteil 3, kein zweiter Warenweg in Teil 2. |
+| `termin-ist` | desktop, handy | Erkannter Termin-Chip aus dem Vorlagenzustand (R52-Referenz geprüft); ohne Erkennung kein Chip. |
+| `ware-gemeinsam-gepruft` | desktop, handy | Keine Eingangsart gewählt, daher keine vorhandene Ware zur Prüfung. |
 
 ## Einordnung nach P59
 

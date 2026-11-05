@@ -1103,7 +1103,19 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       if(result.code!=="OK")throw Error(result.message);
       const draft=result.drafts.find(value=>value.id===id);
       if(!draft||draft.art!=="eingang")throw Error("INTAKE_DRAFT_NOT_FOUND");
-      const p=draft.payload;
+      const raw=draft.payload;
+      // P67: version 0 remains editable. Missing business fields stay empty;
+      // the stored payload is only changed by an explicit save or valid booking.
+      const p:Record<string,unknown>=raw.version===undefined||raw.version===0?{
+        clientKey:draft.id,customerId:raw.customerId??raw.kunde??"",
+        customerMode:raw.customerId||raw.kunde?"EXISTING":"NONE",
+        query:"",text:"",items:[{...newIntakePosition(),quantity:"",surfaceRequested:""}],
+        kind:"",date:"",confirmed:"",term:"",handover:"",payment:"",source:"",note:"",
+        geprueft:false,documents:[],recognitionMarkers:[],recognitionConfirmed:false,lastRecognizedText:"",
+        intakeWishDateOrigin:null,intakeHandoverOrigin:null,intakePaymentOrigin:null,intakeOrigin:null,
+        intakeSourceOrigin:null,intakeTermChoice:null,intakeProcessingWeeks:null,intakeTermOrigin:null,intakeTermExpired:false,
+        ...raw,version:1,
+      }:raw;
       if(p.version!==1||typeof p.clientKey!=="string"||typeof p.customerId!=="string"||typeof p.text!=="string"
         ||p.dismissedConcerns!==undefined&&(!Array.isArray(p.dismissedConcerns)||p.dismissedConcerns.some(value=>typeof value!=="string"||!recognizeNoteConcerns(p.text as string).some(concern=>concern.id===value)))
         ||!Array.isArray(p.items)||!p.items.length||p.items.some(item=>!item||typeof item!=="object"||typeof item.key!=="string"||typeof item.name!=="string"||typeof item.quantity!=="string")

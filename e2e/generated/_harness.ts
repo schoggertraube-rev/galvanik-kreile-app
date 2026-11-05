@@ -370,7 +370,7 @@ async function seedSupplementalFixtures(fixtures: GeneratedFixture[]) {
         actor_id: actor.id,
         art: value.art,
         zuletzt_feld: value.zuletzt_feld,
-        payload: { art: value.art, text: value.text },
+        payload: { art: value.art, text: value.text, ...(value.kunde ? { kunde: value.kunde } : {}) },
         status: "open",
       });
       continue;

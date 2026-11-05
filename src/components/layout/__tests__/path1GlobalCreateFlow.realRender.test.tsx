@@ -1370,6 +1370,25 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(document.querySelector('[data-spec-id="eingang.pruefliste.geprueft"]')).toHaveTextContent("fehlt");
   });
 
+  it.each([undefined,0])("P67 resumes legacy draft version %s without inventing required values or writing",async(version)=>{
+    const draft={id:ORDER_ID,art:"eingang" as const,payload:{art:"eingang",text:"SYNTHETISCH unvollständiger Entwurf",kunde:CUSTOMER_ID,...(version===undefined?{}:{version})},zuletzt_feld:"eingang.erfassen-text",updated_at:"2026-11-05T12:00:00Z"};
+    const drafts={readDrafts:vi.fn().mockResolvedValue({code:"OK",drafts:[draft]}),saveDraft:vi.fn(),discardDraft:vi.fn()};
+    const api=ports({drafts});render(<GlobalCreateFlow ports={api}/>);
+    await act(async()=>{window.dispatchEvent(new CustomEvent("path1:global-create-open",{detail:{intent:"DIRECT_INTAKE",draftId:ORDER_ID}}));});
+    const note=await screen.findByDisplayValue("SYNTHETISCH unvollständiger Entwurf");
+    await waitFor(()=>expect(note).toHaveFocus());
+    expect(document.querySelector('[data-spec-id="eingang"]')).toHaveTextContent("SYNTHETISCH Musterkunde GmbH");
+    expect(document.querySelector('[data-spec-id="eingang.kundenkarte"]')).toBeInTheDocument();
+    expect(document.querySelector('[data-spec-id="eingang.menge"]')).toHaveValue(null);
+    expect(document.querySelector('[data-spec-id="eingang.liefertermin"]')).toHaveValue("");
+    expect(document.querySelector('[data-spec-id="eingang.einheit"]')).toHaveValue("");
+    expect(document.querySelector('[data-spec-id="eingang.oberflaeche"]')).toHaveValue("");
+    fireEvent.click(screen.getByRole("button",{name:"Wareneingang buchen"}));
+    expect(api.createDirectIntake).not.toHaveBeenCalled();
+    expect(drafts.saveDraft).not.toHaveBeenCalled();expect(drafts.discardDraft).not.toHaveBeenCalled();
+    expect(note).toHaveValue("SYNTHETISCH unvollständiger Entwurf");
+  });
+
   it.each([true, false])("C06/C08 copies canonical order fields without dates, files or a checked goods receipt (geld=%s)", async (canManageMoney) => {
     const api=ports({ canManageMoney, readIntakeOrderSource:vi.fn().mockResolvedValue({code:"OK",source:{
       customerId:CUSTOMER_ID,customerQuery:"SYNTHETISCH",orderNumber:"SYNTHETISCH-A-42",intakeSource:"versand",items:[
