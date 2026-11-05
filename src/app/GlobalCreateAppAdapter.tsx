@@ -130,6 +130,7 @@ export function GlobalCreateAppAdapter() {
         readCaptureNote: recognizeIntakeNoteAction,
         prepareCaptureFile: prepareIntakeFileAction,
         finishCaptureFile: finishIntakeFileAction,
+        openCaptureObject: (ziel, arg) => !window.dispatchEvent(new CustomEvent("kreile:oeffne", { detail: { ziel, arg }, cancelable: true })),
         canCreateOrder: hasArea("eingang"),
         canCreateQuote,
         canManageMoney: hasArea("geld"),

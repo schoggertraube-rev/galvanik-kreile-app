@@ -1,4 +1,5 @@
 import type { IntakeTextRecognition } from "@/lib/server/intakeTextRecognition";
+import type { CaptureKind } from "./captureRecognition";
 
 export type IntakeContext = { customerId?: string; orderId?: string };
 export type IntakeConcern = { id: string; label: string };
@@ -7,6 +8,8 @@ export type IntakeCapture = {
   orderId: string | null; assignment: string; usage: string; concerns: string[];
   dismissedConcerns?: string[];
   openConcerns?: string[];
+  recognition?: { kind: CaptureKind; text: string };
+  expectedOrders?: Array<{ id: string; number: string; customerId: string; customerName: string | null; title: string | null; since: string | null }>;
   files: Array<{ id: string; name: string; mime: string; bytes: number; readable: boolean; status: string; errorCode?: string | null; captureOrigin?: "warenfoto" | "dokument" }>;
   suggestions?: Array<{ id:string; fileId:string|null; orderId:string|null; field:string; value:unknown; confidence:string; rule:string|null; reason:string|null; source:unknown; status:string }>;
 };

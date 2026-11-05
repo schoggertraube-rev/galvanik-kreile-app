@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { analyzeWithAzureDocumentIntelligence } from "@/lib/server/azureDocumentIntelligence";
 import type { IntakeCaptureResult, IntakeFileInput, IntakeFileGrant } from "../captureContract";
 import { authorizedIntakeContext, intakeCaptureSnapshot } from "./intakeCapture";
+import { captureRecognition } from "../captureRecognition";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const BUCKET = "scans";
@@ -101,11 +102,13 @@ export async function finishIntakeFile(fileId: string, retryKey?: string): Promi
         WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid AND erkennung_status='laeuft'`));
       return intakeCaptureSnapshot(auth, file.item_id);
     }
-    const canRead = bytes.byteLength <= 20 * 1024 * 1024 && ["image/jpeg", "image/png", "image/webp", "image/heic", "application/pdf", "application/xml", "text/xml"].includes(file.mime);
+    // Structured XML belongs to the one invoice parser, never to the OCR provider.
+    const canRead = bytes.byteLength <= 20 * 1024 * 1024 && ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"].includes(file.mime);
     const deadline = AbortSignal.timeout(30_000);
     const recognized = canRead ? await analyzeWithAzureDocumentIntelligence(bytes, file.mime, process.env,
       (url, options) => fetch(url, { ...options, signal: AbortSignal.any([deadline, AbortSignal.timeout(12_000)]) })) : null;
     if (recognized && recognized.code !== "OK") console.error("[INTAKE_FILE_RECOGNITION_UNAVAILABLE]", { fileId, code: recognized.code });
+    const kind = recognized?.code === "OK" ? captureRecognition({ text: null, suggestions: recognized.data.suggestions }).kind : null;
     await withPrivilegedTenantTransaction(auth, async tx => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
       await tx.execute(sql`UPDATE public.intake_file SET lesbar=${canRead},erkennung_status=${recognized?.code === "OK" ? "fertig" : "fehler"}
@@ -114,8 +117,12 @@ export async function finishIntakeFile(fileId: string, retryKey?: string): Promi
         await tx.execute(sql`INSERT INTO public.intake_suggestion(tenant_id,item_id,file_id,feld,wert,sicherheit,regel,grund,fundstelle,status)
           VALUES(${auth.tenantId},${file.item_id}::uuid,${fileId}::uuid,${suggestion.field},${JSON.stringify(suggestion.value)}::jsonb,'vorschlag','datei','Dokumenterkennung',${JSON.stringify(suggestion.source)}::jsonb,'offen')`);
       }
+      if (kind === "rechnung") await tx.execute(sql`UPDATE public.intake_item
+        SET anliegen=array_append(anliegen,'rechnung'), anliegen_offen=CASE WHEN 'rechnung'=ANY(anliegen_offen) THEN anliegen_offen ELSE array_append(anliegen_offen,'rechnung') END,
+          version=version+1, geaendert_von=${auth.userId}::uuid, geaendert_am=statement_timestamp(), updated_at=statement_timestamp()
+        WHERE tenant_id=${auth.tenantId} AND id=${file.item_id}::uuid AND NOT ('rechnung'=ANY(anliegen))`);
       await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
-        SELECT ${auth.tenantId},${file.item_id}::uuid,'erkannt',${retryKey??fileId}::uuid,${auth.userId},${JSON.stringify({ fileId, code: recognized?.code ?? (bytes.byteLength>20*1024*1024?"INTAKE_RECOGNITION_TOO_LARGE":"UNSUPPORTED_DOCUMENT_TYPE") })}::jsonb
+        SELECT ${auth.tenantId},${file.item_id}::uuid,'erkannt',${retryKey??fileId}::uuid,${auth.userId},${JSON.stringify({ fileId, kind, code: recognized?.code ?? (bytes.byteLength>20*1024*1024?"INTAKE_RECOGNITION_TOO_LARGE":"UNSUPPORTED_DOCUMENT_TYPE") })}::jsonb
         WHERE NOT EXISTS(SELECT 1 FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid AND art='erkannt' AND befehl_id=${retryKey??fileId}::uuid)`);
     });
     return intakeCaptureSnapshot(auth, file.item_id);

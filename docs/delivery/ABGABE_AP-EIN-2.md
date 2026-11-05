@@ -2,6 +2,18 @@
 
 ## Einordnung nach P59
 
+### P63 · neue Owner-Befunde, 05.11. · noch nicht abgenommen
+
+- Kamera auf Tablet/Handy wird unmittelbar angefordert. Der eine Auslöser „Foto“ steht in der festen Dialogfußzeile; Tastatur und Mehrseitenaufnahme verwenden denselben Upload. Original, SHA-256 und Kennungen bleiben auf dem vorhandenen Dateischreibweg.
+- Ursache der falschen Anzeige „unklar“: Die bisherige Ergebniszeile prüfte nur den Notiztext. Gleichzeitig verwarf der Azure-Adapter gelesenen Dokumenttext, sobald keine Schlüssel-Wert-Paare vorhanden waren, und lehnte HEIC vor dem Provideraufruf ab. Der Adapter bewahrt den tatsächlichen Text als `DOCUMENT_TEXT` in den vorhandenen Vorschlägen. Der erneute Capture-Leser leitet die Anzeige aus diesen gespeicherten Quellen ab. XML wird nicht an OCR geschickt; der strukturierte Parser gehört zum vorhandenen Rechnungsweg in Teil 5.
+- Eine erkannte Rechnung erhält das offene Anliegen `rechnung` im selben bestehenden Eingang. Der echte Replay-Test ruft Prepare/Finish wie die Oberfläche auf, überträgt ein Original in den lokalen Storage, prüft Vorschlag, Anliegen, erneuten Leser und genau ein Original-/Erkennungsereignis auch nach Wiederholung. Synthetische Daten ausschließlich im isolierten Replay; die Providergrenze ist dort wie vorgesehen ersetzt.
+- Die Ergebnisaktionen verwenden den bestehenden Navigationsbus. Ihre Zielansichten und die atomare Kundenanlage mit Original werden aus den vorhandenen Teilen 3/4/5 übernommen, ohne zweite Ansicht oder zweiten Writer. Diese Anbindung ist noch nicht abgenommen; ohne tatsächlichen Empfänger bleibt der Eingang mit sichtbarem Fehler offen. Eine Kundenanlage aus einem Original darf nicht über den gewöhnlichen Kundenaufruf ohne Originalbindung erfolgen.
+- Erwartete Ware kommt mandantengebunden aus den vorhandenen Aufträgen (`ware = erwartet | teilweise`), ohne Ersatzdaten. Die Annahmeansicht bleibt dieselbe aus Teil 3.
+- F02 und F05 bestanden im unveränderten 13-Fälle-Lauf tatsächlich und wurden als veraltete erwartete Fehler entfernt (P50/Regel 20b). F07 bleibt offen bis zur angebundenen Annahmeansicht. Der Lauf meldete dadurch zwei XPASS und elf durch den Runner akzeptierte Ergebnisse; dies ist kein Nachweis aller Funktionen.
+- Bestehende Assertion alt → neu: „Was ist neu“ erwartete den Eintrag #173 zuerst; nach dem ausdrücklich verlangten neuen P63-Eintrag vom 05.11. wird #168 zuerst erwartet. Sortierung nach neuestem Datum und Reihenfolgeprüfung bleiben erhalten. Keine generierte Fall-Assertion geändert.
+
+Neuer Kandidaten-SHA, exakte READY-Preview, CI und Browserbelege folgen nach dem abgeschlossenen P63-Schritt im PR und NACHTLAUF C. Der frühere grüne Stand `5d3d347e` ersetzt diese Prüfung nicht. **#168 bleibt Draft.**
+
 05.11.: Nach dem verifizierten Owner-Merge von #177 wird dieser Kandidat auf `main` `780c0bc43dd45e6032e3c36ea767dfef32f2d623` übertragen. Gegenüber dem zuvor geprüften Produktstand `1de97584` werden ausschließlich der gemergte Anker und diese Abgabe übernommen; Produktcode und Fall-Assertions bleiben bytegleich. Die bisherigen roten Scope-Checks werden durch neue CI am übertragenen SHA geprüft. Aktueller SHA, exakte Git-Preview und vollständige Check-Liste folgen im PR und im NACHTLAUF C; keine vorweggenommene Merge- oder Sichtfreigabe.
 
 KV (E38, Q01, C07, TA11) ist aus diesem Schritt herausgenommen und für `AP-EIN-2b` nach Teil 6 auf der Erwartungsliste. Die übrigen hier dokumentierten offenen Fälle und der Sichtnachweis sind damit nicht automatisch erledigt. Der tatsächliche aktuelle PR-Kopf, seine Git-Preview und die Prüfergebnisse stehen im NACHTLAUF Abschnitt C; frühere SHA- und DB-Belege unten gelten jeweils nur für den dort benannten Stand.

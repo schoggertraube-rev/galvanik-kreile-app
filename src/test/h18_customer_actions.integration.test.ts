@@ -481,6 +481,49 @@ describe("E28: a handover change keeps the one existing customer condition",()=>
 });
 
 describe("P55 E40: phone and photograph provenance",()=>{
+ it("P63: an unreadable label rereads the two actual expected orders through the tenant-bound view",async()=>withLocalReplayStorage(async()=>{
+  const actor=await createFixture();
+  const {createCustomerAction}=await import('@/app/actions/customers.actions');
+  const created=await withSession(actor,()=>createCustomerAction({clientEventId:randomUUID(),customerType:'business',companyName:'SYNTHETISCH P63 '+randomUUID(),salutation:'ohne',firstName:'Ada',lastName:'Prüfung',phone:'+49 711 5550190',email:'p63@example.invalid',street:'Kundenweg',houseNumber:'1',zipCode:'70176',city:'Stuttgart',country:'DE',paymentPreference:'vorkasse'}));
+  if(created.code!=='OK')throw Error('P63_EXPECTED_CUSTOMER:'+created.message);
+  const {erfasseAuftragAusEingangAction,prepareIntakeFileAction,finishIntakeFileAction,getIntakeCaptureAction}=await import('@/app/actions/eingang.actions');
+  const orderIds:string[]=[];
+  for(let index=0;index<2;index++){
+   const booked=await withSession(actor,()=>erfasseAuftragAusEingangAction({geprueft:false,clientKey:randomUUID(),text:null,telefonNotiz:'SYNTHETISCH P63',customer:{mode:'EXISTING',customerId:created.customer.id},dueDate:'2026-11-20',termStatus:'bestaetigt',intakeSource:'anfrage_telefon',handoverMode:'pickup',paymentMode:'vorkasse',items:[{catalogServiceId:null,name:'SYNTHETISCH P63 Teil '+index,quantity:1,material:null,surfaceRequested:'verzinken',executionRequested:'offen',unit:'stueck',unitPriceCents:null,vatRateBasisPoints:null}]}));
+   if(booked.code!=='OK')throw Error('P63_EXPECTED_ORDER:'+booked.message);orderIds.push(booked.orderId);
+  }
+  // Other H18 cases keep their orders. These two deliberately oldest fixtures must be first, not the only tenant orders.
+  await sql`UPDATE public.orders SET ware='erwartet',ware_seit='2000-01-01T00:00:00Z'::timestamptz WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=ANY(${orderIds}::text[])`;
+  const {analyzeWithAzureDocumentIntelligence}=await import('@/lib/server/azureDocumentIntelligence');
+  vi.mocked(analyzeWithAzureDocumentIntelligence).mockResolvedValueOnce({code:'OK',data:{suggestions:[]}});
+  const {uploadIntakeOriginal}=await import('@/modules/eingang/public');
+  const bytes=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aLp8AAAAASUVORK5CYII=','base64');
+  const input={itemId:randomUUID(),fileId:randomUUID(),name:'synthetisch-p63-unklar.png',mime:'image/png',bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),captureOrigin:'dokument' as const};
+  const grant=await withSession(actor,()=>prepareIntakeFileAction(input));if(grant.code!=='OK')throw Error('P63_EXPECTED_GRANT:'+grant.message);
+  if(grant.upload)expect((await uploadIntakeOriginal(grant.upload,new File([Uint8Array.from(bytes).buffer],input.name,{type:input.mime}))).ok).toBe(true);
+  expect(await withSession(actor,()=>finishIntakeFileAction(input.fileId))).toMatchObject({code:'OK',capture:{recognition:{kind:'unklar'}}});
+  const read=await withSession(actor,()=>getIntakeCaptureAction(input.itemId));if(read.code!=='OK')throw Error('P63_EXPECTED_READ:'+read.message);
+  expect(read.capture.expectedOrders?.slice(0,2).map(order=>order.id).sort()).toEqual(orderIds.sort());
+ }));
+ it("P63: secures one original, persists the recognized text and rereads its actual kind without duplicating events",async()=>withLocalReplayStorage(async()=>{
+  const actor=await createFixture();
+  const {analyzeWithAzureDocumentIntelligence}=await import('@/lib/server/azureDocumentIntelligence');
+  const content='SYNTHETISCH · Rechnung · Rechnungsnummer TEST-P63';
+  vi.mocked(analyzeWithAzureDocumentIntelligence).mockResolvedValueOnce({code:'OK',data:{suggestions:[{field:'DOCUMENT_TEXT',label:'Dokumenttext',value:content,confidence:0,source:{page:1,polygon:[]}}]}});
+  const {prepareIntakeFileAction,finishIntakeFileAction,getIntakeCaptureAction}=await import('@/app/actions/eingang.actions');
+  const {uploadIntakeOriginal}=await import('@/modules/eingang/public');
+  const bytes=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aLp8AAAAASUVORK5CYII=','base64');
+  const input={itemId:randomUUID(),fileId:randomUUID(),name:'synthetisch-p63.png',mime:'image/png',bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),captureOrigin:'dokument' as const};
+  const grant=await withSession(actor,()=>prepareIntakeFileAction(input));if(grant.code!=='OK')throw Error('P63_FILE_GRANT:'+grant.message);
+  if(grant.upload)expect((await uploadIntakeOriginal(grant.upload,new File([Uint8Array.from(bytes).buffer],input.name,{type:input.mime}))).ok).toBe(true);
+  expect(await withSession(actor,()=>finishIntakeFileAction(input.fileId))).toMatchObject({code:'OK',capture:{recognition:{kind:'rechnung',text:content}}});
+  expect(await sql`SELECT feld,wert FROM public.intake_suggestion WHERE tenant_id=${KREILE_TENANT_SLUG} AND file_id=${input.fileId}::uuid`).toEqual([{feld:'DOCUMENT_TEXT',wert:content}]);
+  expect(await sql`SELECT anliegen,anliegen_offen FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.itemId}::uuid`).toEqual([{anliegen:['rechnung'],anliegen_offen:['rechnung']}]);
+  expect(await withSession(actor,()=>getIntakeCaptureAction(input.itemId))).toMatchObject({code:'OK',capture:{recognition:{kind:'rechnung',text:content},files:[{id:input.fileId,status:'fertig'}]}});
+  expect(await withSession(actor,()=>finishIntakeFileAction(input.fileId))).toMatchObject({code:'OK'});
+  expect(await sql`SELECT art,count(*)::int AS count FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${input.itemId}::uuid AND art IN ('original_gespeichert','erkannt') GROUP BY art ORDER BY art`)
+   .toEqual([{art:'erkannt',count:1},{art:'original_gespeichert',count:1}]);
+ }));
  it("stores a phone note only for telephone intake and rereads it without duplication",async()=>{
   const actor=await createFixture();
   const {createCustomerAction}=await import('@/app/actions/customers.actions');

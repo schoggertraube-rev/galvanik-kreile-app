@@ -6,6 +6,7 @@ import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } fro
 import { recognizeIntakeText } from "@/lib/server/intakeTextRecognition";
 import { readLiveOrderCard } from "@/lib/server/orderCardRead";
 import { recognizeNoteConcerns, type IntakeCapture, type IntakeCaptureResult, type IntakeContext, type IntakeNoteInput } from "../captureContract";
+import { captureRecognition } from "../captureRecognition";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 type Row = { id: string; kanal:string; version: number; text: string | null; kunde_id: string | null; vorgang_id: string | null; zuordnung: string; einsatz: string; anliegen: string[]; anliegen_abgewaehlt:string[];anliegen_offen?:string[] };
@@ -42,6 +43,15 @@ export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot, itemId:
     const capture: IntakeCapture = { id: row.id, version: row.version, text: row.text, customerId: row.kunde_id,
       orderId: row.vorgang_id, assignment: row.zuordnung, usage: row.einsatz, concerns: row.anliegen,dismissedConcerns:row.anliegen_abgewaehlt,openConcerns:row.anliegen_offen,
       files: files.map(file => ({ ...file, bytes: Number(file.bytes) })),suggestions };
+    capture.recognition = captureRecognition(capture);
+    if (capture.recognition.kind === "unklar" || capture.recognition.kind === "ware") {
+      capture.expectedOrders = await tx.execute<NonNullable<IntakeCapture["expectedOrders"]>[number]>(sql`
+        SELECT o.id::text, o.order_number AS number, o.customer_id AS "customerId", o.customer_name AS "customerName",
+          o.title, o.ware_seit::text AS since
+        FROM public.v_intake_expected_goods_v1 o
+        WHERE o.tenant_id=${auth.tenantId} AND o.ware IN ('erwartet','teilweise')
+        ORDER BY (o.customer_id=${row.kunde_id}) DESC NULLS LAST, o.ware_seit ASC NULLS LAST, o.id LIMIT 8`);
+    }
     return { code: "OK", capture };
   });
 }

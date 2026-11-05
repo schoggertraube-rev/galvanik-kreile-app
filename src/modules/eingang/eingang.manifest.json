@@ -91,9 +91,10 @@
   ],
   "migrations": [
     "20261031212320_ap01_intake_item.sql",
-    "20261103053000_ein2_erfassung.sql"
+    "20261103053000_ein2_erfassung.sql",
+    "20261105095422_ein2_erwartete_ware.sql"
   ],
-  "viewsFunctions": [],
+  "viewsFunctions": ["public.v_intake_expected_goods_v1"],
   "ownsTables": [
     "public.intake_event",
     "public.intake_item",
