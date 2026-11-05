@@ -1,5 +1,19 @@
 # AP-EIN Teil 3 · Warenprüfung und Original, Runde 52
 
+## Stationsprüfung · 05.11.
+
+Ursache: Der bestehende Stationsbefehl las `orders.ware` nicht. Ein direkter Action-Aufruf konnte erwartete Ware übergeben; gleichzeitig blockierte der Warenprüfungsadapter eine im Bauplan ausdrücklich erlaubte Teillieferung mit `GOODS_PARTIAL_STATION_CONTRACT_MISSING`.
+
+Eine Prüfung im vorhandenen `orderStationCommand.ts` erlaubt jetzt ausschließlich `da` oder `teilweise`. Erwartete, ungeklärte und zurückgehende Ware bleibt ohne Stations-/Versions-/Eventänderung. Die bestehende Warenprüfung liefert nur ihren lesend validierten Zustand mit Auftrags-ID und Version an denselben Befehl; Beleg, Warenstand, Stationswechsel und Verlauf werden weiterhin zusammen in dessen Transaktion geschrieben. Kein zweiter Schreibweg, keine vorgezogene Warenstandsänderung, keine Migration.
+
+Nachweis auf dem frischen lokalen Teil-3-Replay, 73 Migrationen: beide zusätzlichen Prüfungen zunächst tatsächlich rot (`OK` statt Sperre; `UNAVAILABLE` statt Teilannahme), danach **3/3 echte Actions → DB/Event → Leser grün**, inklusive bestehender vollständiger Annahme W13. Vollständige betroffene Kunden-/Waren-/Werkstattdateien anschließend **31/31 grün**, bestehender Stationsbefehl **23/23 grün**. Der Teillieferungsfall prüft `ware=teilweise`, `station=galvanik`, `version=2`, ursprüngliche Sollmenge 2 und bestätigte Istmenge 1 sowie genau einen Beleg und je ein Stations-/Eingangsereignis auch nach Wiederholung. Die gesperrten Zustände bleiben bei Version 1 ohne Ereignis.
+
+Bestehende Assertions unverändert. Einzige mechanische Fixture-Ergänzung: der bereits gültige alte Stationsauftrag erhält ausdrücklich `ware: "da"`. H18 weist für die direkte Stations-Action zusätzlich auf denselben echten Integrationstest. Die zusätzlichen Tests sind Regressionsbelege zur vorgegebenen Bauplan-Regel, keine unabhängige Paketabnahme.
+
+Pfad-Probe am vollständigen Kandidaten: `SALES_STAGE_B2_SCOPE:src/lib/server/commands/__tests__/orderStationCommand.test.ts`. Der vorhandene Produktbefehl ist freigegeben, seine bestehende Unit-Fixture-Datei fehlt in der exakten Allowlist. Die benötigte Ergänzung dieses einen Pfads ist in NACHTLAUF C angefordert; Checker unverändert, kein Ausweichen oder Weglassen der Warenprüfung. Der Kandidat wird nach Regel 16 trotzdem für die Prüfung gepusht; bis zum Anker ist kein Scope-PASS behauptet.
+
+Build, Typen, vollständiges Lint, Whitespace und H18 grün. A11 vollständig ausgeführt: **19 PASS / 3 FAIL**, ausschließlich die bereits gemeldeten Authority-/Modul-Bindungsfehler des fremden, noch ungebundenen Runde-53-UI-Bündels. Volltests laufen gemäß Owner parallel in CI. Fremde Quellen und geschützte Prüfer bleiben unverändert; Push nach Regel 16. Ein lokaler Build mit diesem Bündel ist kein exakter Runde-52-Sichtbeleg. Die neue CI und READY-Preview dieses Nachtrags stehen noch aus; der vorherige Kopf `b0b44475` bestand alle vorhandenen CI-Jobs. Teil 3 bleibt Draft; Druckweg, Restannahme und Altanhang-Zuordnung werden damit nicht als fertig behauptet.
+
 ## Aktualisierung P63/P64 · 05.11.
 
 Teil 3 übernimmt die Eingangskorrekturen aus #168 einschließlich `003a6a68` (Datei-Einstieg und PC-QR-Unterzeile). Der vorhandene Original-/Waren-Dialog bestätigt nun dem bestehenden Navigationsbus, dass er tatsächlich geöffnet wurde. Dadurch kann 3.0 seine Ebene bei „Original ansehen“ behalten und bei der Warenannahme gezielt schließen; ohne Empfänger bleibt ein sichtbarer Fehler. Keine zweite Originalansicht oder Erfassung.

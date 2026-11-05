@@ -910,6 +910,33 @@ async function originalFixture(fixture:Fixture,name='synthetic-original.png',mim
  return {itemId,fileId,sha256};
 }
 describe('AP-EIN owner cases: goods and original Server Actions against the real replay database',()=>{
+ it('R52 warehouse gate: the canonical station Action rejects expected, unclear or returned goods without a row or event change',async()=>{
+  const actor=await goodsActorFixture();
+  const {transitionWareneingangToGalvanikAction}=await import('@/app/actions/orders.actions');
+  const {getGoodsReceiptsAction}=await import('@/app/actions/eingang.actions');
+  for(const ware of ['erwartet','abweichung','zurueck','storniert']){
+   const order=await orderFixture(actor),clientEventId=randomUUID();
+   // Deliberately inconsistent/stale states are confined to this isolated replay fixture.
+   await sql`UPDATE public.orders SET ware=${ware} WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`;
+   expect(await withSession(actor,()=>transitionWareneingangToGalvanikAction({orderId:order.orderId,expectedVersion:1,clientEventId}))).toMatchObject({code:'VALIDATION_ERROR'});
+   expect(await sql`SELECT ware,station,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual([{ware,station:'angenommen',version:1}]);
+   expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${clientEventId}::uuid`).toEqual([]);
+   expect(await withSession(actor,()=>getGoodsReceiptsAction(order.orderId))).toMatchObject({code:'OK',order:{ware,station:'angenommen',version:1},receipts:[]});
+  }
+ });
+ it('R52 warehouse gate W08: the real partial receipt and station transition commit together and replay without a second event',async()=>withLocalReplayStorage(async()=>{
+  const actor=await goodsActorFixture(),order=await orderFixture(actor),file=await originalFixture(actor);
+  const {saveGoodsReceiptAction,getGoodsReceiptsAction}=await import('@/app/actions/eingang.actions');
+  const input:GoodsReceiptInput={id:randomUUID(),clientKey:randomUUID(),clientEventId:randomUUID(),itemId:file.itemId,orderId:order.orderId,expectedOrderVersion:1,expectedVersion:0,mode:'erwartet',command:'galvanik',card:3,packagesReceived:1,packagesTotal:2,condition:'teillieferung',deviations:[],foundUnattended:false,foundAt:null,procedure:null,procedureNote:null,photos:[{fileId:file.fileId,kind:'uebersicht'}],quantities:order.items.map(item=>({itemId:item.id,expected:item.quantity,received:1,confirmed:false,note:null}))};
+  const saved=await withSession(actor,()=>saveGoodsReceiptAction(input));
+  expect(saved).toMatchObject({code:'OK',receipt:{id:input.id,status:'galvanik'}});
+  expect(await sql`SELECT ware,station,version FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${order.orderId}`).toEqual([{ware:'teilweise',station:'galvanik',version:2}]);
+  expect(await withSession(actor,()=>getGoodsReceiptsAction(order.orderId))).toMatchObject({code:'OK',order:{ware:'teilweise',station:'galvanik',version:2},receipts:[{id:input.id,status:'galvanik',mengen:[{teil_id:order.items[0].id,erwartet:2,bestaetigt:1,geaendert:true}]}]});
+  expect(await withSession(actor,()=>saveGoodsReceiptAction(input))).toMatchObject({code:'OK',replayed:true,receipt:{id:input.id,status:'galvanik'}});
+  expect(await sql`SELECT id FROM public.goods_receipt WHERE tenant_id=${KREILE_TENANT_SLUG} AND auftrag_id=${order.orderId}`).toHaveLength(1);
+  expect(await sql`SELECT id FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid AND event_type='ORDER_STATION_MOVED_V1'`).toHaveLength(1);
+  expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${file.itemId}::uuid AND befehl_id=${input.clientEventId}::uuid AND art='ware'`).toHaveLength(1);
+ }));
  it('W13 → W02/W17: saves the receipt draft, associates its real photo, accepts through the existing station command and rereads; retry cannot write again',async()=>withLocalReplayStorage(async()=>{
   const actor=await goodsActorFixture(),order=await orderFixture(actor),file=await originalFixture(actor);
   const {saveGoodsReceiptAction,getGoodsReceiptsAction}=await import('@/app/actions/eingang.actions');

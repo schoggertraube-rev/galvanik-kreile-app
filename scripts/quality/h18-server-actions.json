@@ -66,7 +66,8 @@
       "src/test/h18_workshop_actions.integration.test.ts"
     ],
     "src/app/actions/orders.actions.ts#transitionWareneingangToGalvanikAction": [
-      "src/test/h18_workshop_actions.integration.test.ts"
+      "src/test/h18_workshop_actions.integration.test.ts",
+      "src/test/h18_customer_actions.integration.test.ts"
     ],
     "src/app/actions/payments.actions.ts#confirmPaymentAction": [
       "src/test/h18_settings_actions.integration.test.ts"

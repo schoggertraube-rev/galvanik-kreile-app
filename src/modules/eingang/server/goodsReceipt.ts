@@ -63,8 +63,7 @@ async function prepare(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot
  const packaging=input.condition==='abweichung'&&ware==='da';
  if(input.command!=='draft'){
   if(!input.condition)fail('VALIDATION_ERROR','Zustand fehlt.');
-  if(input.command==='galvanik'&&(gaps.length||ware==='abweichung'))fail('VALIDATION_ERROR',gaps.length?'Noch offen: '+gaps.join(', '):'Abweichung muss zuerst geklärt werden. Nicht in Galvanik.');
-  if(input.command==='galvanik'&&ware==='teilweise')fail('UNAVAILABLE','Teillieferung bleibt erhalten; der Vertrag für den teilweisen Galvanik-Start ist noch offen. Fehlercode: GOODS_PARTIAL_STATION_CONTRACT_MISSING.');
+  if(input.command==='galvanik'&&gaps.length)fail('VALIDATION_ERROR','Noch offen: '+gaps.join(', '));
   if(gaps.length&&!deps.createMissingTask)fail('UNAVAILABLE','Fehlende Angaben müssen als Aufgabe gesichert werden. Fehlercode: GOODS_MISSING_TASK_CONTRACT_PENDING.');
   if(packaging&&!deps.createDeviationReply)fail('UNAVAILABLE','Der Antwortvorschlag zur Verpackungsabweichung fehlt. Fehlercode: GOODS_DEVIATION_REPLY_CONTRACT_PENDING.');
  }
@@ -107,7 +106,7 @@ export async function saveGoodsReceipt(input:unknown,deps:GoodsReceiptDependenci
 }
 export function createGoodsReceiptStationBinding(input:GoodsReceiptInput,deps:GoodsReceiptDependencies={}){
  let prepared:Prepared|null=null;let result:GoodsReceiptResult|null=null;
- return {before:async(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>{try{if(!hasAuthorizationArea(auth,'eingang'))fail('FORBIDDEN','Warenannahme erfordert Eingang.');prepared=await prepare(tx,auth,input,deps);}catch(error){if(error instanceof InspectionFailure)result=error.result;throw error;}},
+ return {before:async(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>{try{if(!hasAuthorizationArea(auth,'eingang'))fail('FORBIDDEN','Warenannahme erfordert Eingang.');prepared=await prepare(tx,auth,input,deps);if(prepared.order)return {orderId:prepared.order.id,expectedVersion:prepared.order.version,ware:prepared.ware};}catch(error){if(error instanceof InspectionFailure)result=error.result;throw error;}},
   after:async(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot)=>{try{if(!prepared)throw Error('GOODS_RECEIPT_PREFLIGHT_MISSING');result=await write(tx,auth,prepared,deps,'station');}catch(error){if(error instanceof InspectionFailure)result=error.result;throw error;}},result:()=>result};
 }
 /** Used by the existing intake command after it created the order, in that same transaction. */
