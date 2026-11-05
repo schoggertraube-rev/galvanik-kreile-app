@@ -19,10 +19,6 @@
     "paket": "AP-EIN-2",
     "grund": "Endversion-Angleich AB02 Zeitpunkt"
   },
-  "AB03": {
-    "paket": "AP-EIN-4",
-    "grund": "Mail-Einstieg wird nach Paket Fassung 3 in Teil 4 angebunden"
-  },
   "DA01": {
     "paket": "AP-EIN-6",
     "grund": "Abholer-Mitteilung wird nach Paket Fassung 3 in Teil 6 abgenommen"
@@ -115,62 +111,6 @@
     "paket": "AP-EIN-3",
     "grund": "ware nach Runde 52 wird mit AP-EIN-3 geliefert"
   },
-  "M01": {
-    "paket": "AP-EIN-4",
-    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "M02": {
-    "paket": "AP-EIN-4",
-    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "M03": {
-    "paket": "AP-EIN-4",
-    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "M04": {
-    "paket": "AP-EIN-4",
-    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "M05": {
-    "paket": "AP-EIN-4",
-    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "M06": {
-    "paket": "AP-EIN-4",
-    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "M07": {
-    "paket": "AP-EIN-4",
-    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "M08a": {
-    "paket": "AP-EIN-4",
-    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "M09": {
-    "paket": "AP-EIN-4",
-    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "M10": {
-    "paket": "AP-EIN-4",
-    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "M11": {
-    "paket": "AP-EIN-4",
-    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "M12": {
-    "paket": "AP-EIN-4",
-    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "M13": {
-    "paket": "AP-EIN-4",
-    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "M14": {
-    "paket": "AP-EIN-4",
-    "grund": "mailein nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
   "R01": {
     "paket": "AP-EIN-5",
     "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
@@ -235,27 +175,7 @@
     "paket": "AP-EIN-5",
     "grund": "rechnungein nach Runde 52 wird mit AP-EIN-5 geliefert"
   },
-  "O01": {
-    "paket": "AP-EIN-3",
-    "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
-  },
   "O02": {
-    "paket": "AP-EIN-3",
-    "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
-  },
-  "O03a": {
-    "paket": "AP-EIN-3",
-    "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
-  },
-  "O03b": {
-    "paket": "AP-EIN-3",
-    "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
-  },
-  "O04": {
-    "paket": "AP-EIN-3",
-    "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
-  },
-  "O05": {
     "paket": "AP-EIN-3",
     "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
   },
@@ -263,141 +183,17 @@
     "paket": "AP-EIN-3",
     "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
   },
-  "O08": {
-    "paket": "AP-EIN-3",
-    "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
-  },
   "O09": {
     "paket": "AP-EIN-3",
     "grund": "original nach Runde 52 wird mit AP-EIN-3 geliefert"
   },
-  "N01": {
-    "paket": "AP-EIN-4",
-    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "N03": {
-    "paket": "AP-EIN-4",
-    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "N04": {
-    "paket": "AP-EIN-4",
-    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "N05": {
-    "paket": "AP-EIN-4",
-    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "N06": {
-    "paket": "AP-EIN-4",
-    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "N07": {
-    "paket": "AP-EIN-4",
-    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "N08": {
-    "paket": "AP-EIN-4",
-    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "N09": {
-    "paket": "AP-EIN-4",
-    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "N10": {
-    "paket": "AP-EIN-4",
-    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "N11": {
-    "paket": "AP-EIN-4",
-    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "N12": {
-    "paket": "AP-EIN-4",
-    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "N13": {
-    "paket": "AP-EIN-4",
-    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "N14": {
-    "paket": "AP-EIN-4",
-    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "N15": {
-    "paket": "AP-EIN-4",
-    "grund": "nachrichten nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "G01": {
-    "paket": "AP-EIN-4",
-    "grund": "aufgabe nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "G02": {
-    "paket": "AP-EIN-4",
-    "grund": "aufgabe nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "G03": {
-    "paket": "AP-EIN-4",
-    "grund": "aufgabe nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "G04": {
-    "paket": "AP-EIN-4",
-    "grund": "aufgabe nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "G05": {
-    "paket": "AP-EIN-4",
-    "grund": "aufgabe nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "G06": {
-    "paket": "AP-EIN-4",
-    "grund": "aufgabe nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "G07": {
-    "paket": "AP-EIN-4",
-    "grund": "aufgabe nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
   "G08": {
-    "paket": "AP-EIN-4",
-    "grund": "aufgabe nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "G09": {
-    "paket": "AP-EIN-4",
-    "grund": "aufgabe nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "G10": {
     "paket": "AP-EIN-4",
     "grund": "aufgabe nach Runde 52 wird mit AP-EIN-4 geliefert"
   },
   "G11": {
     "paket": "AP-EIN-4",
     "grund": "aufgabe nach Runde 52 wird mit AP-EIN-4 geliefert"
-  },
-  "A01": {
-    "paket": "AP-EIN-4",
-    "grund": "M6-Anliegenwahl wird nach P48 mit Teil 4 abgenommen"
-  },
-  "A02": {
-    "paket": "AP-EIN-4",
-    "grund": "M6-Anliegenwahl wird nach P48 mit Teil 4 abgenommen"
-  },
-  "A03": {
-    "paket": "AP-EIN-4",
-    "grund": "M6-Anliegenwahl wird nach P48 mit Teil 4 abgenommen"
-  },
-  "A04": {
-    "paket": "AP-EIN-4",
-    "grund": "M6-Anliegenwahl wird nach P48 mit Teil 4 abgenommen"
-  },
-  "A05a": {
-    "paket": "AP-EIN-4",
-    "grund": "M6-Anliegenwahl wird nach P48 mit Teil 4 abgenommen"
-  },
-  "A05b": {
-    "paket": "AP-EIN-4",
-    "grund": "M6-Anliegenwahl wird nach P48 mit Teil 4 abgenommen"
-  },
-  "A06": {
-    "paket": "AP-EIN-4",
-    "grund": "M6-Anliegenwahl wird nach P48 mit Teil 4 abgenommen"
   },
   "L01": {
     "paket": "AP-EIN-4",

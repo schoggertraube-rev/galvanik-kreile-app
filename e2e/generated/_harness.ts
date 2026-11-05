@@ -402,6 +402,10 @@ async function seedSupplementalFixtures(fixtures: GeneratedFixture[]) {
       });
       continue;
     }
+    if(fixture.tabelle==='task'){
+      await upsertFixture('tasks',{client_key:value.id,erstellt_von:generatedFlowRuntime.logins.login_meister.id,version:1,...value,id:value.id,tenant_id:TENANT});
+      continue;
+    }
     const table = fixture.tabelle === "task" ? "tasks" : fixture.tabelle;
     await upsertFixture(table, { ...value, id: value.id, tenant_id: TENANT });
   }
@@ -654,11 +658,42 @@ function choiceButton(locator: Locator, label: string): Locator {
     .or(locator.locator("button").filter({ hasText: new RegExp(`^\\s*${escaped}\\s*$`) }));
 }
 
-async function interruptNextServerAction(page: Page, state: FlowRunState) {
+function interruptedActionId(controlId: string | undefined): string | undefined {
+  const actions: Record<string, { exportedName: string; filename: string }> = {
+    "nachrichten.vorschlag-ja": { exportedName: "assignIntakeCustomerAction", filename: "src/app/actions/eingang.actions.ts" },
+    "aufgabe.speichern": { exportedName: "saveIntakeTaskAction", filename: "src/app/actions/eingang.actions.ts" },
+    "kundebearbeiten.speichern": { exportedName: "updateCustomerAction", filename: "src/app/actions/customers.actions.ts" },
+  };
+  const target = controlId ? actions[controlId] : undefined;
+  if (!target) return undefined;
+  const manifest = JSON.parse(readFileSync(path.join(process.cwd(), ".next/server/server-reference-manifest.json"), "utf8")) as {
+    node: Record<string, { workers: Record<string, { exportedName?: string; filename?: string }> }>;
+  };
+  const matches = Object.entries(manifest.node).filter(([, action]) => Object.values(action.workers).some(
+    (worker) => worker.exportedName === target.exportedName && worker.filename === target.filename,
+  ));
+  if (matches.length !== 1) throw new Error(`FLOW_WRITE_ACTION_ID_AMBIGUOUS:${controlId}:${matches.length}`);
+  return matches[0][0];
+}
+
+async function interruptNextServerAction(page: Page, state: FlowRunState, controlId?: string) {
+  const targetAction = interruptedActionId(controlId);
   state.interruptionObserved=page.waitForEvent("requestfailed",{
-    predicate:request=>request.method()==="POST"&&Boolean(request.headers()["next-action"]),timeout:5_000,
+    predicate:request=>request.method()==="POST"&&Boolean(request.headers()["next-action"])&&(!targetAction||request.headers()["next-action"]===targetAction),timeout:5_000,
   }).then(()=>true,()=>false);
-  await page.context().setOffline(true);
+  const matcher="**/*";
+  let interrupted=false;
+  const handler=async(route:import("@playwright/test").Route)=>{
+    const request=route.request();
+    if(!interrupted&&request.method()==="POST"&&request.headers()["next-action"]&&(!targetAction||request.headers()["next-action"]===targetAction)){
+      interrupted=true;
+      await route.abort("failed");
+      await page.unroute(matcher,handler);
+      return;
+    }
+    await route.continue();
+  };
+  await page.route(matcher,handler);
 }
 
 async function interruptNextLoad(page: Page) {
@@ -667,8 +702,9 @@ async function interruptNextLoad(page: Page) {
   const handler = async (route: import("@playwright/test").Route) => {
     const request = route.request();
     // App Router also transports read Server Actions with POST + Next-Action.
-    const isLoad = ["document", "fetch", "xhr"].includes(request.resourceType())
-      && (request.method() === "GET" || (request.method() === "POST" && Boolean(request.headers()["next-action"])));
+    // Keep App Router navigation/asset requests online; fail the actual data read.
+    const isLoad = request.method() === "POST" && Boolean(request.headers()["next-action"])
+      || ["fetch", "xhr"].includes(request.resourceType()) && request.method() === "GET" && !request.headers().rsc;
     if (!handled && isLoad) {
       handled = true;
       await route.abort("failed");
@@ -682,7 +718,8 @@ async function interruptNextLoad(page: Page) {
 
 const settledServerActions = new Set(["eingang.buchen", "eingang.erneut-buchen", "eingang.angaben-erkennen",
   "ware.annehmen","ware.nur-annehmen","ware.teil-warten","ware.rest-annehmen","ware.erneut",
-  "original.am-original-geprueft","original.erneut-lesen"]);
+  "original.am-original-geprueft","original.erneut-lesen","nachrichten.vorschlag-ja","nachrichten.erneut",
+  "nachrichten.erledigt","nachrichten.nur-info","nachrichten.wieder-speichern"]);
 
 /** Open the actual accordion before a user interaction; visibility assertions stay unchanged. */
 async function revealForInteraction(locator:Locator){
@@ -696,6 +733,7 @@ async function waitForServerAction(page: Page, id: string) {
   await page.evaluate(() => new Promise<void>((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
   }));
+  if(id.startsWith('nachrichten.'))await expect.poll(async()=>page.locator('[data-spec-id="nachrichten"]').getAttribute('aria-busy'),{timeout:15_000}).not.toBe('true');
   await expect.poll(async () => {
     const action = page.locator(`[data-spec-id="${id}"]`).first();
     // Recognition removes this button; inspect its state in one DOM snapshot.
@@ -715,7 +753,7 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
     return;
   }
   if (step.aktion === "oeffne") {
-    await openTarget(page, String(step.wert), resolveValue(step.arg, state));
+    await openTarget(page, String(step.wert), resolveValue(step.arg, state),state);
     return;
   }
   if (step.aktion === "erwarten") {
@@ -725,7 +763,6 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
     return;
   }
   if (step.aktion === "netz_unterbrechen") {
-    await interruptNextServerAction(page,state);
     state.restoreOnlineAfterWrite = true;
     return;
   }
@@ -736,6 +773,8 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
   const locator = step.id ? dataSpec(page, step.id, step.nr) : null;
   const value = resolveValue(step.wert, state);
   if(locator&&step.aktion&&["datei","klicken","doppelklicken","tippen","waehlen","verlassen","taste"].includes(step.aktion))await revealForInteraction(locator);
+  // Arm only after the actual control has loaded; unrelated RSC/asset reads stay online.
+  if(state.restoreOnlineAfterWrite&&["datei","klicken","doppelklicken"].includes(step.aktion??""))await interruptNextServerAction(page,state,step.id);
   switch (step.aktion) {
     case "datei": {
       if (!locator) throw new Error("FLOW_STEP_ID_REQUIRED:datei");
@@ -761,7 +800,6 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
       }
       if(state.restoreOnlineAfterWrite){
         expect(await state.interruptionObserved,"file upload really encountered the requested server interruption").toBe(true);
-        await page.context().setOffline(false);
         state.restoreOnlineAfterWrite=false;
       }
       break;
@@ -771,7 +809,7 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
       await locator.click({ timeout: 5_000 });
       if (step.id && settledServerActions.has(step.id)) await waitForServerAction(page, step.id);
       if (state.restoreOnlineAfterWrite) {
-        await page.context().setOffline(false);
+        expect(await state.interruptionObserved,"write really encountered the requested server interruption").toBe(true);
         state.restoreOnlineAfterWrite = false;
       }
       break;
@@ -780,7 +818,7 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
       await locator.dblclick({ timeout: 5_000 });
       if (step.id && settledServerActions.has(step.id)) await waitForServerAction(page, step.id);
       if (state.restoreOnlineAfterWrite) {
-        await page.context().setOffline(false);
+        expect(await state.interruptionObserved,"write really encountered the requested server interruption").toBe(true);
         state.restoreOnlineAfterWrite = false;
       }
       break;
@@ -816,15 +854,19 @@ async function topDialog(page: Page) {
   return page.locator('[role="dialog"]:visible').last();
 }
 
-async function openTarget(page: Page, target: string, arg: unknown) {
+async function openTarget(page: Page, target: string, arg: unknown, state?:FlowRunState) {
   if (target === "kundebearbeiten") {
     const [customerId, fragment] = String(arg ?? "").split("#", 2);
     if (!customerId) throw new Error("FLOW_OPEN_CUSTOMER_REQUIRED");
     if (fragment && !["fehlend", "uebernahme", "bearbeiten"].includes(fragment)) throw new Error(`FLOW_CUSTOMER_MODE_UNSUPPORTED:${fragment}`);
   }
-  await page.evaluate(({ ziel, argument }) => {
-    window.dispatchEvent(new CustomEvent("kreile:oeffne", { detail: { ziel, arg: argument } }));
-  }, { ziel: target, argument: arg ?? null });
+  // The UI knows its source channel. Carry the same real fixture metadata; no model/assertion changes.
+  const sourceId=typeof arg==='string'?arg.split('#',1)[0]:null;
+  const source=sourceId?([...(state?.rows.values()??[])].find(row=>row.id===sourceId)??Object.values(generatedFixtures).find(row=>row.id===sourceId)):undefined;
+  const sourceChannel=typeof source?.kanal==='string'?source.kanal:undefined;
+  await page.evaluate(({ ziel, argument,sourceChannel }) => {
+    window.dispatchEvent(new CustomEvent("kreile:oeffne", { detail: { ziel, arg: argument,sourceChannel } }));
+  }, { ziel: target, argument: arg ?? null,sourceChannel });
 }
 
 async function selectedColor(locator: Locator, selected: boolean) {
@@ -1152,7 +1194,7 @@ async function runGeneratedFlowCaseBody(page: Page, flowCase: FlowCase) {
   });
   const route = flowCase.gegeben.aufruf;
   if (route.weg === "oeffne") {
-    await openTarget(page, route.seite, resolveValue(route.arg, state));
+    await openTarget(page, route.seite, resolveValue(route.arg, state),state);
   } else {
     for (const step of route.weg ?? []) await executeStep(page, step, state);
   }

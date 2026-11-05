@@ -1,3 +1,7 @@
+export type {TaskPorts} from '@/modules/tasks/public';
+export {IntakeMessages} from './ui/IntakeMessages';
+export type {IntakeMessagesPorts} from './messageContract';
+export type {AssignmentPorts} from './assignmentContract';
 export {
   GLOBAL_CREATE_OPEN_EVENT,
   requestGlobalCreate,
