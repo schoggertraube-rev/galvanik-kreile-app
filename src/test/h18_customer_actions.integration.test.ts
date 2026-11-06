@@ -1211,7 +1211,10 @@ describe('AP-EIN 3.4: assignment and source customer against the real replay DB'
 
 describe("AP-ABS agreement actions: real Action, database event and reread", () => {
   it("ABS-02, ABS-06 and ABS-18: saves, replays and revokes one typed agreement only with Geld", async () => {
-    const moneyActor = await createFixture("meister", ["kunden", "geld"]);
+    // The fixture creates its own customer through the canonical customer action;
+    // that action is intentionally granted by Eingang, while the agreement itself
+    // remains guarded by Geld below.
+    const moneyActor = await createFixture("meister", ["kunden", "geld", "eingang"]);
     const noMoneyActor = await createFixture("meister", ["kunden"]);
     const { createCustomerAction, saveCustomerAgreementAction, revokeCustomerAgreementAction } = await import("@/app/actions/customers.actions");
     const customer = await withSession(moneyActor, () => createCustomerAction({
@@ -1223,12 +1226,12 @@ describe("AP-ABS agreement actions: real Action, database event and reread", () 
       lastName: "Absprache",
       phone: "+49 711 5550190",
       email: `agreement-${randomUUID()}@fixture.invalid`,
-      street: "Prüfweg",
+      street: "Kundenweg",
       houseNumber: "20",
       zipCode: "70176",
       city: "Stuttgart",
       country: "DE",
-      paymentPreference: "rechnung",
+      paymentPreference: "bar",
     }));
     if (customer.code !== "OK") throw new Error(`ABS_CUSTOMER_CREATE_FAILED:${customer.code}:${customer.message}`);
 

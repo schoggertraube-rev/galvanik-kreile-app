@@ -126,6 +126,7 @@ SELECT
   agreement.order_id,
   agreement.position,
   agreement.bezeichnung,
+  agreement.wert,
   agreement.typ,
   agreement.ziel_tage,
   agreement.geld,
@@ -199,6 +200,7 @@ BEGIN
       AND (v_event.payload->>'agreementId') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
     THEN
       RETURN QUERY SELECT 'OK'::text, (v_event.payload->>'agreementId')::uuid, true, NULL::text;
+      RETURN;
     ELSE
       RETURN QUERY SELECT 'CONFLICT'::text, NULL::uuid, false, 'Anfragekennung wurde bereits anders verwendet.'::text;
       RETURN;
@@ -365,6 +367,7 @@ BEGIN
       AND (v_event.payload->>'agreementId') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
     THEN
       RETURN QUERY SELECT 'OK'::text, (v_event.payload->>'agreementId')::uuid, true, NULL::text;
+      RETURN;
     ELSE
       RETURN QUERY SELECT 'CONFLICT'::text, NULL::uuid, false, 'Anfragekennung wurde bereits anders verwendet.'::text;
       RETURN;

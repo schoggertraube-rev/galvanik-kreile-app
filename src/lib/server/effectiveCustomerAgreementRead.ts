@@ -36,6 +36,7 @@ type AgreementRow = {
   order_id: string | null;
   position: number | string;
   bezeichnung: string;
+  wert: string | null;
   typ: string;
   ziel_tage: number | string | null;
   geld: boolean;
@@ -109,6 +110,11 @@ function mapAgreement(
     || row.bezeichnung.trim() !== row.bezeichnung
     || row.bezeichnung.length < 1
     || row.bezeichnung.length > 160
+    || (row.wert !== null && (
+      typeof row.wert !== "string"
+      || row.wert.trim() !== row.wert
+      || row.wert.length > 200
+    ))
     || type === null
     || row.geld !== true
     || typeof row.hinweis !== "boolean"
@@ -127,6 +133,7 @@ function mapAgreement(
     orderId: row.order_id,
     position,
     label: row.bezeichnung,
+    value: row.wert,
     type,
     targetDays,
     money: row.geld,
@@ -154,7 +161,7 @@ export async function readEffectiveCustomerAgreement(
     throw new Error("CUSTOMER_AGREEMENT_EFFECTIVE_INPUT_INVALID");
   }
   const base = sql`
-    SELECT id::text, tenant_id, customer_id, order_id, position, bezeichnung, typ,
+    SELECT id::text, tenant_id, customer_id, order_id, position, bezeichnung, wert, typ,
       ziel_tage, geld, hinweis, gueltig_bis, grund, version, created_at, created_by_name
     FROM private.v_customer_effective_agreement_v1
     WHERE tenant_id = ${input.tenantId}
@@ -170,7 +177,7 @@ export async function readEffectiveCustomerAgreement(
   // command. The public helper remains the one application reader.
   const locked = sql`
     SELECT agreement.id::text, agreement.tenant_id, agreement.customer_id,
-      agreement.order_id, agreement.position, agreement.bezeichnung,
+      agreement.order_id, agreement.position, agreement.bezeichnung, agreement.wert,
       agreement.typ, agreement.ziel_tage, agreement.geld, agreement.hinweis,
       agreement.gueltig_bis, agreement.grund, agreement.version,
       agreement.created_at, NULL::text AS created_by_name

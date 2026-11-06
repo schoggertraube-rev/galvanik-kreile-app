@@ -27,8 +27,13 @@ export type FlowStep = FlowExpectation & {
   aktion?: string;
   wert?: unknown;
   arg?: unknown;
+  daten?: Record<string, unknown>;
+  tabelle?: string;
+  wo?: Record<string, unknown>;
+  werte?: Record<string, unknown>;
   anzeige?: FlowExpectation[];
   db?: FlowDbExpectation[];
+  server?: { fehler?: string };
 };
 
 export type FlowDbExpectation = {
@@ -49,7 +54,7 @@ export type FlowCase = {
     geraet: string;
   };
   wenn?: FlowStep[];
-  dann?: { anzeige?: FlowExpectation[]; db?: FlowDbExpectation[] };
+  dann?: { anzeige?: FlowExpectation[]; db?: FlowDbExpectation[]; server?: { fehler?: string } };
 };
 
 type FlowRunState = {
@@ -60,6 +65,8 @@ type FlowRunState = {
   restoreOnlineAfterWrite: boolean;
   interruptionObserved?: Promise<boolean>;
   loginId: string;
+  loginName: keyof typeof generatedFlowRuntime.logins;
+  serverResult?: { code?: unknown; message?: unknown };
 };
 
 const TENANT = "galvanik-kreile";
@@ -117,6 +124,39 @@ const generatedFixtures = generatedFlowRuntime.datenlagen as unknown as Record<s
 const columnCache = new Map<string, Map<string, { column_name: string; data_type: string; udt_name: string }>>();
 let baselineSettings: Record<string, unknown>[] | null = null;
 
+/**
+ * The isolated replay database may start without operational invoice master
+ * data. Browser flows that explicitly exercise a real invoice must not turn
+ * that infrastructure gap into a product false negative. These values exist
+ * only in the generated replay seed and are deliberately recognisable as
+ * synthetic; an explicit `company_settings` fixture can still replace them
+ * for a fail-closed master-data case.
+ */
+function completeSyntheticReplaySettings(row: Record<string, unknown>) {
+  const text = (key: string, fallback: string) => {
+    const value = row[key];
+    return typeof value === "string" && value.trim().length > 0 ? value : fallback;
+  };
+  const paymentTerm = row.invoice_payment_term_days;
+  const vatRate = row.invoice_vat_rate_basis_points;
+  return {
+    ...row,
+    company_name: text("company_name", "SYNTHETISCH Replay-Betrieb"),
+    street: text("street", "Replaystraße 1"),
+    zip: text("zip", "99099"),
+    city: text("city", "Replaystadt"),
+    country: text("country", "DE"),
+    tax_id: text("tax_id", "DE999999999"),
+    iban: text("iban", "DE89370400440532013000"),
+    bic: text("bic", "COBADEFFXXX"),
+    bank_name: text("bank_name", "SYNTHETISCH Replaybank"),
+    invoice_vat_rate_basis_points: vatRate === 700 || vatRate === 1900 ? vatRate : 1900,
+    invoice_payment_term_days: typeof paymentTerm === "number" && Number.isInteger(paymentTerm) && paymentTerm >= 1 && paymentTerm <= 365
+      ? paymentTerm
+      : 30,
+  };
+}
+
 function selectedFixtureNames(requested: string[]) {
   const selected: string[] = [];
   const visiting = new Set<string>();
@@ -146,7 +186,7 @@ async function resetGeneratedDomain() {
     if(current.length===0)await upsertFixture("company_settings",{id:"default",tenant_id:TENANT,company_name:"SYNTHETISCH Replay-Betrieb"});
     if(current.length>1)throw Error("FLOW_REPLAY_BASE_SETTINGS_AMBIGUOUS");
     const rows = await sql<{ row: Record<string, unknown> }[]>`SELECT to_jsonb(settings) AS row FROM public.company_settings settings WHERE tenant_id = ${TENANT}`;
-    baselineSettings = rows.map((row) => row.row);
+    baselineSettings = rows.map((row) => completeSyntheticReplaySettings(row.row));
   }
   const names = [...new Set([...Object.values(databaseMapping).map((entry) => `${entry.schema ?? "public"}.${entry.table}`), "public.events"])];
   const present = await sql<{ schema: string; name: string }[]>`SELECT schemaname AS schema, tablename AS name FROM pg_tables WHERE schemaname || '.' || tablename = ANY(${names}::text[]) ORDER BY schemaname, tablename`;
@@ -212,7 +252,8 @@ async function upsertFixture(table: string, values: Record<string, unknown>) {
 function resolvedFixture(fixture: GeneratedFixture) {
   const loginId = fixtureLoginId;
   return resolveValue({ ...fixture, ...canonicalOrderIds.get(fixture.id) }, {
-    before: new Map(), beforeIds: new Map(), rows: new Map(), createdRows: new Map(), restoreOnlineAfterWrite: false, loginId,
+    before: new Map(), beforeIds: new Map(), rows: new Map(), createdRows: new Map(), restoreOnlineAfterWrite: false,
+    loginId, loginName: "login_meister",
   }) as GeneratedFixture;
 }
 
@@ -220,12 +261,62 @@ function unitLabel(value: unknown) {
   return value === "stueck" ? "Stück" : value === "dm2" ? "dm²" : value;
 }
 
+function fixtureUuid(seed: string) {
+  const digest = createHash("sha256").update(`flow-replay:${seed}`).digest();
+  digest[6] = (digest[6]! & 0x0f) | 0x40;
+  digest[8] = (digest[8]! & 0x3f) | 0x80;
+  const hex = digest.subarray(0, 16).toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 async function seedOrderFixture(fixture: GeneratedFixture, orderIndex: number) {
   const value = resolvedFixture(fixture);
-  const positions = Array.isArray(value.positionen) ? value.positionen as Array<Record<string, unknown>> : [];
+  const declaredPositions = Array.isArray(value.positionen) ? value.positionen as Array<Record<string, unknown>> : [];
+  // A persisted order is only a valid product state with at least one intake
+  // position. The BAUPLAN can omit positions when a flow only cares about the
+  // delivery state, so complete that minimal *test-only* contract here.
+  const positions = declaredPositions.length > 0
+    ? declaredPositions
+    : [{
+        bezeichnung: "Flow-Prüfteil",
+        menge: 1,
+        material: null,
+        oberflaeche: "offen",
+        ausfuehrung: "offen",
+        // A real invoice requires a persisted base-line price. This is only
+        // for model cases that intentionally omit item details because their
+        // assertion is about a later lifecycle step.
+        einzelpreis: 10,
+      }];
   const customerId = String(value.kunde ?? "");
-  // The model's in-progress fixture uses the existing physical workshop station.
-  const station = value.station === "in_arbeit" ? "galvanik" : String(value.station ?? "angenommen");
+  if (!customerId) throw new Error("FLOW_ORDER_CUSTOMER_REQUIRED");
+  // The model names business states; the database stores the canonical station.
+  const station = value.status === "fertig"
+    ? "fertig"
+    : value.status === "uebergeben"
+      ? "abgeholt"
+      : value.station === "in_arbeit"
+        ? "galvanik"
+        : String(value.station ?? "angenommen");
+  const frozen = station === "fertig" || station === "abgeholt";
+  const freezeVersion = frozen ? 2 : 1;
+  // A non-catalog price becomes valid only through the existing immutable
+  // price receipt, which follows the freeze and advances the order version.
+  // Mirror that real lifecycle in this isolated direct fixture.
+  const hasPersistedPrice = frozen && positions.some((position) => (
+    typeof position.einzelpreis === "number"
+    && Number.isFinite(position.einzelpreis)
+    && position.einzelpreis > 0
+  ));
+  const orderVersion = hasPersistedPrice ? freezeVersion + 1 : freezeVersion;
+  // The real intake contract validates its immutable receipt against the
+  // canonical promised date. Some BAUPLAN flow states deliberately omit a
+  // date because it is irrelevant to their assertion; complete that required
+  // test-only contract field deterministically on both sides of the receipt.
+  const dueDate = typeof value.liefertermin === "string" && value.liefertermin.trim()
+    ? value.liefertermin
+    : "2099-12-31";
+  const geprueft = value.geprueft === true;
   await upsertFixture("orders", {
     id: value.id,
     tenant_id: TENANT,
@@ -236,37 +327,276 @@ async function seedOrderFixture(fixture: GeneratedFixture, orderIndex: number) {
     station,
     current_station: station,
     current_station_id: station,
-    status: station === "abgeschlossen" ? "completed" : "in_progress",
+    status: value.status === "fertig" ? "fertig" : value.status === "uebergeben" ? "abgeholt" : station === "abgeschlossen" ? "completed" : "in_progress",
+    version: orderVersion,
     parts: positions,
     intake_date: value.angenommen_am ?? new Date().toISOString(),
-    due_date: value.liefertermin,
-    promised_due_date: value.liefertermin,
-    payment_mode: value.zahlungsmodus === "bar" ? "abholung" : value.zahlungsmodus,
+    due_date: dueDate,
+    promised_due_date: dueDate,
+    payment_mode: value.zahlungsmodus === "bar" || value.zahlungsmodus === "bar_karte" ? "abholung" : value.zahlungsmodus,
     handover_mode: value.uebergabe === "abholung" ? "pickup" : value.uebergabe === "versand" ? "shipping" : value.uebergabe,
     intake_term_status: value.terminstatus,
     intake_source: value.eingangsart,
-    source: "FLOW_SPEC",
+    source: "F1_ORDER_INTAKE",
     source_ref: value.id,
     ware: value.ware,
     angenommen_am: value.angenommen_am,
+    geprueft,
   });
+  const snapshot: Array<Record<string, unknown>> = [];
+  const priceEntries: Array<{ itemId: string; unitPriceCents: number }> = [];
   for (let positionIndex = 0; positionIndex < positions.length; positionIndex += 1) {
     const position = positions[positionIndex]!;
     const suffix = String(700000 + orderIndex * 100 + positionIndex).padStart(12, "0");
+    const itemId = `30000000-0000-4000-8000-${suffix}`;
+    const name = typeof position.bezeichnung === "string" && position.bezeichnung.trim().length >= 2
+      ? position.bezeichnung.trim()
+      : `Flow-Prüfteil ${positionIndex + 1}`;
+    const quantity = typeof position.menge === "number" && Number.isInteger(position.menge) && position.menge > 0
+      ? position.menge
+      : 1;
+    const material = typeof position.material === "string" && position.material.trim().length > 0
+      ? position.material.trim()
+      : null;
+    const surfaceRequested = typeof position.oberflaeche === "string" && position.oberflaeche.trim().length >= 2
+      ? position.oberflaeche.trim()
+      : "offen";
     await upsertFixture("items", {
-      id: `30000000-0000-4000-8000-${suffix}`,
+      id: itemId,
       tenant_id: TENANT,
       order_id: value.id,
       customer_id: customerId,
-      name: position.bezeichnung,
-      quantity: position.menge ?? 1,
+      name,
+      quantity,
       current_station_id: station,
-      material: position.material,
-      surface_requested: position.oberflaeche,
+      material,
+      surface_requested: surfaceRequested,
       execution_requested: position.ausfuehrung ?? "offen",
       unit: unitLabel(position.einheit),
       preis_netto: position.einzelpreis,
     });
+    if (typeof position.einzelpreis === "number"
+      && Number.isFinite(position.einzelpreis)
+      && position.einzelpreis > 0) {
+      priceEntries.push({ itemId, unitPriceCents: Math.round(position.einzelpreis * 100) });
+    }
+    snapshot.push({
+      id: itemId,
+      position: positionIndex + 1,
+      name,
+      quantity,
+      material,
+      surfaceRequested,
+    });
+  }
+
+  const customers = await sql<{ name: string; company_name: string | null }[]>`
+    SELECT name, company_name
+    FROM public.customers
+    WHERE tenant_id = ${TENANT} AND id = ${customerId}
+    LIMIT 2
+  `;
+  const customer = customers[0];
+  const customerDisplayName = customer?.company_name?.trim() || customer?.name?.trim();
+  if (customers.length !== 1 || !customerDisplayName || customerDisplayName.length < 2) {
+    throw new Error("FLOW_ORDER_CUSTOMER_READBACK_INVALID");
+  }
+
+  const intakeEventId = fixtureUuid(`${value.id}:intake:event`);
+  const intakeClientEventId = fixtureUuid(`${value.id}:intake:client`);
+  const intakeCorrelationId = fixtureUuid(`${value.id}:intake:correlation`);
+  const intentSha256 = createHash("sha256").update(`flow-replay:intake:${value.id}`).digest("hex");
+  await upsertFixture("events", {
+    id: intakeEventId,
+    tenant_id: TENANT,
+    order_id: value.id,
+    item_id: null,
+    event_type: "ORDER_INTAKE_CREATED_V1",
+    description: "Flow-Replay Auftrag angelegt",
+    user_id: fixtureLoginId,
+    payload: { intentSha256 },
+    status: "success",
+    station: "wareneingang",
+    client_event_id: intakeClientEventId,
+    event_schema_version: 1,
+    correlation_id: intakeCorrelationId,
+    aggregate_version: 1,
+    from_station: null,
+  });
+  await upsertFixture("order_intake_receipts", {
+    id: fixtureUuid(`${value.id}:intake:receipt`),
+    event_id: intakeEventId,
+    tenant_id: TENANT,
+    order_id: value.id,
+    customer_id: customerId,
+    actor_id: fixtureLoginId,
+    client_event_id: intakeClientEventId,
+    correlation_id: intakeCorrelationId,
+    intent_sha256: intentSha256,
+    customer_mode: "EXISTING",
+    order_number: value.order_number,
+    customer_display_name: customerDisplayName,
+    due_date: dueDate,
+    note: null,
+    geprueft,
+    items_snapshot: snapshot,
+  });
+
+  if (!frozen) return;
+
+  const rateId = fixtureUuid(`${value.id}:freeze:rate`);
+  const freezeId = fixtureUuid(`${value.id}:freeze:id`);
+  const freezeEventId = fixtureUuid(`${value.id}:freeze:event`);
+  const freezeClientEventId = fixtureUuid(`${value.id}:freeze:client`);
+  const freezeCorrelationId = fixtureUuid(`${value.id}:freeze:correlation`);
+  const hourlyRateCents = 12_000;
+  await upsertFixture("extra_work_hourly_rates", {
+    id: rateId,
+    tenant_id: TENANT,
+    hourly_rate_cents: hourlyRateCents,
+    version: 900_000 + orderIndex,
+    created_by: fixtureLoginId,
+    effective_at: new Date().toISOString(),
+  });
+  await upsertFixture("events", {
+    id: freezeEventId,
+    tenant_id: TENANT,
+    order_id: value.id,
+    item_id: null,
+    event_type: "ORDER_FROZEN_V1",
+    description: "Flow-Replay Auftrag fertiggestellt",
+    user_id: fixtureLoginId,
+    payload: {
+      freezeId,
+      rateId,
+      hourlyRateCents,
+      totalAmountCents: 0,
+      lineCount: 0,
+    },
+    status: "success",
+    station: "fertig",
+    client_event_id: freezeClientEventId,
+    event_schema_version: 1,
+    correlation_id: freezeCorrelationId,
+    aggregate_version: freezeVersion,
+    from_station: "galvanik",
+  });
+  await upsertFixture("order_freezes", {
+    id: freezeId,
+    tenant_id: TENANT,
+    order_id: value.id,
+    event_id: freezeEventId,
+    hourly_rate_id: rateId,
+    hourly_rate_cents: hourlyRateCents,
+    total_amount_cents: 0,
+    line_count: 0,
+    order_version: freezeVersion,
+    frozen_by: fixtureLoginId,
+  });
+
+  if (!hasPersistedPrice || priceEntries.length === 0) return;
+
+  const priceEventId = fixtureUuid(`${value.id}:price:event`);
+  const priceClientEventId = fixtureUuid(`${value.id}:price:client`);
+  const requestHash = createHash("sha256").update(`flow-replay:price:${value.id}`).digest("hex");
+  await upsertFixture("events", {
+    id: priceEventId,
+    tenant_id: TENANT,
+    order_id: value.id,
+    item_id: null,
+    event_type: "ORDER_INVOICE_PRICES_SET_V1",
+    description: "Rechnungspreise ergänzt",
+    user_id: fixtureLoginId,
+    payload: { requestHash, prices: priceEntries },
+    status: "success",
+    station: "fertig",
+    client_event_id: priceClientEventId,
+    event_schema_version: 1,
+    aggregate_version: orderVersion,
+    from_station: null,
+  });
+}
+
+const agreementLabel = (type: unknown) => type === "ausgabe_ohne_zahlung"
+  ? "Übergabe ohne Zahlung · Rechnung folgt"
+  : type === "sammelrechnung"
+    ? "Sammelrechnung monatlich"
+    : type === "zahlungsziel"
+      ? "Zahlungsziel in Tagen"
+      : null;
+
+async function nextAgreementPosition(customerId: string): Promise<number> {
+  const rows = await sql<{ position: number }[]>`
+    SELECT candidate::integer AS position
+    FROM generate_series(1, 20) AS candidate
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM public.customer_agreements agreement
+      WHERE agreement.tenant_id = ${TENANT}
+        AND agreement.customer_id = ${customerId}
+        AND agreement.position = candidate
+        AND agreement.widerrufen_am IS NULL
+    )
+    ORDER BY candidate
+    LIMIT 1
+  `;
+  if (rows.length !== 1) throw new Error("FLOW_AGREEMENT_POSITION_UNAVAILABLE");
+  return rows[0]!.position;
+}
+
+async function seedAgreementFixture(fixture: GeneratedFixture) {
+  const value = resolvedFixture(fixture);
+  const customerId = typeof value.kunde === "string" ? value.kunde : "";
+  const type = typeof value.typ === "string" ? value.typ : null;
+  const label = agreementLabel(type);
+  if (!customerId || (type !== null && !label)) throw new Error("FLOW_AGREEMENT_FIXTURE_INVALID");
+  const targetDays = typeof value.ziel_tage === "number" ? value.ziel_tage : null;
+  await upsertFixture("customer_agreements", {
+    id: value.id,
+    tenant_id: TENANT,
+    customer_id: customerId,
+    position: await nextAgreementPosition(customerId),
+    bezeichnung: typeof value.bezeichnung === "string" ? value.bezeichnung : label ?? `Freitext ${String(value.id).slice(-4)}`,
+    wert: value.wert ?? (targetDays === null ? null : `${targetDays} Tage`),
+    geld: typeof value.geld === "boolean" ? value.geld : type !== null,
+    hinweis: typeof value.hinweis === "boolean" ? value.hinweis : false,
+    gueltig_bis: value.gueltig_bis ?? null,
+    typ: type,
+    order_id: value.order_id ?? null,
+    ziel_tage: targetDays,
+    grund: value.grund ?? null,
+    version: typeof value.version === "number" ? value.version : 1,
+    client_key: null,
+    created_by: fixtureLoginId,
+  });
+}
+
+async function seedInvoiceCollectionFixture(fixture: GeneratedFixture) {
+  const value = resolvedFixture(fixture);
+  const customerId = typeof value.kunde === "string" ? value.kunde : "";
+  const month = typeof value.monat === "string" ? value.monat : "";
+  const targetDays = typeof value.ziel_tage === "number" ? value.ziel_tage : null;
+  const orderIds = Array.isArray(value.auftraege) && value.auftraege.every((orderId) => typeof orderId === "string")
+    ? value.auftraege as string[]
+    : [];
+  if (!customerId || !month || targetDays === null || orderIds.length === 0) throw new Error("FLOW_COLLECTION_FIXTURE_INVALID");
+  await upsertFixture("invoice_collections", {
+    id: value.id,
+    tenant_id: TENANT,
+    customer_id: customerId,
+    monat: month,
+    ziel_tage: targetDays,
+    status: value.status ?? "offen",
+    invoice_id: value.invoice_id ?? null,
+    version: typeof value.version === "number" ? value.version : 1,
+    created_by: fixtureLoginId,
+  });
+  for (const orderId of orderIds) {
+    await sql`
+      INSERT INTO public.invoice_collection_orders (collection_id, tenant_id, order_id)
+      VALUES (${String(value.id)}::uuid, ${TENANT}, ${orderId})
+      ON CONFLICT (order_id) DO UPDATE SET collection_id = EXCLUDED.collection_id
+    `;
   }
 }
 
@@ -360,6 +690,14 @@ async function seedSupplementalFixtures(fixtures: GeneratedFixture[]) {
     }
     if (fixture.tabelle === "intake_item") {
       await seedIntakeFixture(fixture, fixtureIndex);
+      continue;
+    }
+    if (fixture.tabelle === "customer_agreements") {
+      await seedAgreementFixture(fixture);
+      continue;
+    }
+    if (fixture.tabelle === "invoice_collections") {
+      await seedInvoiceCollectionFixture(fixture);
       continue;
     }
     const value = resolvedFixture(fixture);
@@ -580,6 +918,7 @@ function formattedDate(date: Date, format?: string) {
   if (!format) return dateIso(date);
   const short = `${String(date.getUTCDate()).padStart(2, "0")}.${String(date.getUTCMonth() + 1).padStart(2, "0")}.`;
   if (format === "TT.MM.") return short;
+  if (format === "TT.MM.JJJJ") return `${short}${date.getUTCFullYear()}`;
   if (format === "WT TT.MM.") return `${["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"][date.getUTCDay()]} ${short}`;
   throw new Error(`FLOW_DATE_FORMAT_UNSUPPORTED:${format}`);
 }
@@ -623,14 +962,22 @@ function resolveString(value: string, state?: FlowRunState): string {
     if (!resolved) return match;
     return resolved;
   });
-  result = result.replace(/\{arbeitstag:([+-]\d+)(?:\|(TT\.MM\.|WT TT\.MM\.))?\}/g, (_, raw, format) => {
+  result = result.replace(/\{arbeitstag:([+-]\d+)(?:\|(TT\.MM\.JJJJ|TT\.MM\.|WT TT\.MM\.))?\}/g, (_, raw, format) => {
     const date = addWorkdays(today(), Number(raw));
     return formattedDate(date, format);
   });
-  result = result.replace(/\{heute:([+-]\d+)(?:\|(TT\.MM\.|WT TT\.MM\.))?\}/g, (_, raw, format) => {
+  result = result.replace(/\{heute:([+-]\d+)(?:\|(TT\.MM\.JJJJ|TT\.MM\.|WT TT\.MM\.))?\}/g, (_, raw, format) => {
     const date = today();
     date.setUTCDate(date.getUTCDate() + Number(raw));
     return formattedDate(date, format);
+  });
+  result = result.replace(/\{jetzt:([+-]\d+)min\}/g, (_, raw) => {
+    return new Date(Date.now() + Number(raw) * 60_000).toISOString();
+  });
+  result = result.replace(/\{monat:([+-]\d+)\}/g, (_, raw) => {
+    const date = today();
+    date.setUTCMonth(date.getUTCMonth() + Number(raw), 1);
+    return dateIso(date);
   });
   result = result.replace(/\{kw_ende:([+-]\d+)\}/g, (_, raw) => {
     return dateIso(calendarWeekEnd(addWorkdays(today(), Number(raw))));
@@ -765,6 +1112,67 @@ async function waitForServerAction(page: Page, id: string) {
   }, { timeout: 15_000 }).toBe("settled");
 }
 
+function readFlightActionResult(text: string): { code?: unknown; message?: unknown } {
+  for (const line of text.split("\n")) {
+    const separator = line.indexOf(":");
+    if (separator < 0) continue;
+    try {
+      const value = JSON.parse(line.slice(separator + 1)) as unknown;
+      if (value && typeof value === "object" && "code" in value) {
+        const record = value as { code?: unknown; message?: unknown };
+        return { code: record.code, message: record.message };
+      }
+    } catch {
+      // React Flight carries non-JSON instruction lines beside the action value.
+    }
+  }
+  throw new Error("FLOW_COMMAND_RESPONSE_UNREADABLE");
+}
+
+async function executeServerCommand(page: Page, step: FlowStep, state: FlowRunState) {
+  const command = resolveString(String(step.wert ?? ""), state);
+  const data = resolveValue(step.daten ?? {}, state);
+  if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("FLOW_COMMAND_DATA_INVALID");
+  if (command !== "absprache.speichern") throw new Error(`FLOW_COMMAND_UNSUPPORTED:${command}`);
+  const inputData = data as Record<string, unknown>;
+  const customerId = typeof inputData.customer_id === "string" ? inputData.customer_id : "";
+  const type = typeof inputData.typ === "string" ? inputData.typ : "";
+  const reason = typeof inputData.grund === "string" ? inputData.grund : "";
+  const targetDays = typeof inputData.ziel_tage === "number" ? inputData.ziel_tage : null;
+  const validUntil = typeof inputData.gueltig_bis === "string" ? inputData.gueltig_bis : null;
+  const orderId = typeof inputData.order_id === "string" ? inputData.order_id : null;
+  if (!customerId || !["ausgabe_ohne_zahlung", "sammelrechnung", "zahlungsziel"].includes(type) || !reason) {
+    throw new Error("FLOW_COMMAND_INPUT_INVALID");
+  }
+  const input = {
+    clientKey: randomUUID(),
+    customerId,
+    orderId,
+    type: type as "ausgabe_ohne_zahlung" | "sammelrechnung" | "zahlungsziel",
+    targetDays,
+    validUntil,
+    reason,
+    version: null,
+  };
+  const manifest = JSON.parse(readFileSync(path.join(process.cwd(), ".next/server/server-reference-manifest.json"), "utf8")) as {
+    node: Record<string, { workers: Record<string, { exportedName?: string; filename?: string }> }>;
+  };
+  const actions = Object.entries(manifest.node).filter(([, action]) => Object.values(action.workers).some(
+    worker => worker.exportedName === "saveCustomerAgreementAction" && worker.filename === "src/app/actions/customers.actions.ts",
+  ));
+  if (actions.length !== 1) throw new Error("FLOW_COMMAND_ACTION_AMBIGUOUS");
+  const response = await page.evaluate(async ({ actionId, input }) => {
+    const reply = await fetch("/", {
+      method: "POST",
+      headers: { "Next-Action": actionId, "Content-Type": "text/plain;charset=UTF-8", Accept: "text/x-component" },
+      body: JSON.stringify([input]),
+    });
+    return { status: reply.status, text: await reply.text() };
+  }, { actionId: actions[0]![0], input });
+  if (response.status !== 200) throw new Error(`FLOW_COMMAND_HTTP_${response.status}`);
+  state.serverResult = readFlightActionResult(response.text);
+}
+
 async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
   if (!step.aktion && step.erwartung) {
     await assertExpectation(page, step, state);
@@ -778,6 +1186,7 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
     await captureDbResults(step.db??[],state);
     await assertExpectations(page, step.anzeige ?? [], state);
     await assertDb(step.db ?? [], state);
+    assertServer(step.server, state);
     return;
   }
   if (step.aktion === "netz_unterbrechen") {
@@ -786,6 +1195,14 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
   }
   if (step.aktion === "netz_laden") {
     await interruptNextLoad(page);
+    return;
+  }
+  if (step.aktion === "db_setzen") {
+    await setReplayDbRow(step, state);
+    return;
+  }
+  if (step.aktion === "befehl") {
+    await executeServerCommand(page, step, state);
     return;
   }
   const locator = step.id ? dataSpec(page, step.id, step.nr) : null;
@@ -842,7 +1259,15 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
       break;
     case "tippen":
       if (!locator) throw new Error("FLOW_STEP_ID_REQUIRED:tippen");
-      await (await control(locator)).fill(String(value ?? ""), { timeout: 5_000 });
+      {
+        const target = await control(locator);
+        const inputType = await target.getAttribute("type");
+        const text = String(value ?? "");
+        // The BAUPLAN models German calendar text; Playwright requires ISO for
+        // a native date input. This normalizes only the browser transport.
+        const date = inputType === "date" ? /^(\d{2})\.(\d{2})\.(\d{4})$/u.exec(text) : null;
+        await target.fill(date ? `${date[3]}-${date[2]}-${date[1]}` : text, { timeout: 5_000 });
+      }
       break;
     case "waehlen":
       if (!locator) throw new Error("FLOW_STEP_ID_REQUIRED:waehlen");
@@ -882,9 +1307,22 @@ async function openTarget(page: Page, target: string, arg: unknown, state?:FlowR
   const sourceId=typeof arg==='string'?arg.split('#',1)[0]:null;
   const source=sourceId?([...(state?.rows.values()??[])].find(row=>row.id===sourceId)??Object.values(generatedFixtures).find(row=>row.id===sourceId)):undefined;
   const sourceChannel=typeof source?.kanal==='string'?source.kanal:undefined;
+  // „rauspruefen“ is the goods-out state of the one canonical order card,
+  // and „absprache“ is its existing customer-card dialog. Neither is a
+  // second route, so open the one canonical surface and its real entry point.
+  const ziel = target === "rauspruefen" ? "auftrag" : target === "absprache" ? "kunde" : target;
   await page.evaluate(({ ziel, argument,sourceChannel }) => {
     window.dispatchEvent(new CustomEvent("kreile:oeffne", { detail: { ziel, arg: argument,sourceChannel } }));
-  }, { ziel: target, argument: arg ?? null,sourceChannel });
+  }, { ziel, argument: arg ?? null,sourceChannel });
+  if (target === "rauspruefen") {
+    const card = page.getByRole("dialog", { name: /^Auftragskarte / });
+    await card.getByRole("button", { name: "Ware raus", exact: true }).last().click({ timeout: 15_000 });
+  }
+  if (target === "absprache") {
+    const entry = dataSpec(page, "kunde.absprache");
+    await revealForInteraction(entry);
+    await entry.click({ timeout: 15_000 });
+  }
 }
 
 async function selectedColor(locator: Locator, selected: boolean) {
@@ -1008,7 +1446,9 @@ async function assertExpectation(page: Page, expectation: FlowExpectation, state
         await expect(option).toHaveCount(1);
         await expect(option).toContainText(String(value));
       } else {
-        const option = locator.getByRole("button", { name: label, exact: false });
+        const option = await target.evaluate((element) => element.tagName.toLowerCase()) === "button"
+          ? target
+          : locator.getByRole("button", { name: label, exact: false });
         await expect(option).toBeDisabled();
         const reason = locator.getByText(String(value), { exact: false });
         await expect(reason).toBeVisible();
@@ -1017,7 +1457,16 @@ async function assertExpectation(page: Page, expectation: FlowExpectation, state
     }
     case "aktiv":
     case "aktiviert": await expect(await control(locator)).toBeEnabled(); break;
-    case "fokus": await expect(await control(locator)).toBeFocused(); break;
+    case "fokus": {
+      const target = await control(locator);
+      const active = await target.evaluate((element) => {
+        const current = element.ownerDocument.activeElement;
+        if (!(current instanceof HTMLElement)) return String(current);
+        return `${current.tagName.toLowerCase()}[data-spec-id=${current.dataset.specId ?? ""}]`;
+      });
+      await expect(target, `active element before focus assertion: ${active}`).toBeFocused();
+      break;
+    }
     case "anzahl": await expect(locator).toHaveCount(Number(value)); break;
     case "anzahl_min": await expect.poll(() => locator.count()).toBeGreaterThanOrEqual(Number(value)); break;
     case "anzahl_max": await expect.poll(() => locator.count()).toBeLessThanOrEqual(Number(value)); break;
@@ -1057,7 +1506,8 @@ function storageColumn(table: string, field: string) {
 
 async function tableIds(table: string): Promise<string[]> {
   const actual = storageMapping(table).table;
-  const rows = await sql.unsafe<{ id: string }[]>(`SELECT id::text AS id FROM ${qualifiedStorageTable(actual)} WHERE tenant_id = $1`, [TENANT]);
+  const identity = storageColumn(table, "id");
+  const rows = await sql.unsafe<{ id: string }[]>(`SELECT "${identity}"::text AS id FROM ${qualifiedStorageTable(actual)} WHERE tenant_id = $1`, [TENANT]);
   return rows.map((row) => row.id);
 }
 
@@ -1079,6 +1529,50 @@ async function readStorageRow(table: string, where: Record<string, unknown>) {
   return rows[0]!.row;
 }
 
+/** Test-model concurrency step; executed only against the locked loopback Replay DB. */
+async function setReplayDbRow(step: FlowStep, state: FlowRunState) {
+  if (!step.tabelle || !step.wo || !step.werte) throw new Error("FLOW_DB_SET_CONTRACT_INVALID");
+  const table = step.tabelle;
+  const where = resolveValue(step.wo, state) as Record<string, unknown>;
+  const values = resolveValue(step.werte, state) as Record<string, unknown>;
+  if (!where || !values || Object.keys(values).length === 0) throw new Error("FLOW_DB_SET_VALUES_INVALID");
+  const actual = storageMapping(table).table;
+  const contractValues = { ...values };
+  // The model names the concurrent state change, not the bookkeeping columns
+  // required by the table's immutable revocation contract. Complete those
+  // companions only for this Replay fixture mutation so it remains a valid
+  // state that production readers could actually observe.
+  if (table === "customer_agreements" && contractValues.widerrufen_am !== undefined && contractValues.widerrufen_am !== null) {
+    contractValues.widerrufen_von ??= state.loginId;
+    contractValues.widerruf_grund ??= "SYNTHETISCH: Replay-Widerruf";
+  }
+  const columns = Object.keys(contractValues).map((field) => storageColumn(table, field));
+  const patch = Object.fromEntries(Object.entries(contractValues).map(([field, value]) => [storageColumn(table, field), value]));
+  // postgres.js serializes a JavaScript object as JSON. Passing a pre-stringified
+  // value would turn it into a JSON scalar, which `jsonb_populate_record` rightly
+  // rejects. This is test-transport only; the model's row contract stays intact.
+  const params: unknown[] = [patch, TENANT];
+  const clauses = ["record.tenant_id = $2"];
+  for (const [field, value] of Object.entries(where)) {
+    params.push(storageColumn(table, field), JSON.stringify(value));
+    clauses.push(`(to_jsonb(record) -> $${params.length - 1}::text) IS NOT DISTINCT FROM $${params.length}::text::jsonb`);
+  }
+  const quotedColumns = columns.map((column) => `"${column}"`);
+  const tableName = qualifiedStorageTable(actual);
+  const identity = storageColumn(table, "id");
+  const rows = await sql.unsafe<{ id: string }[]>(`
+    WITH patch AS (
+      SELECT * FROM jsonb_populate_record(NULL::${tableName}, $1::jsonb)
+    )
+    UPDATE ${tableName} AS record
+    SET ${quotedColumns.map((column) => `${column} = patch.${column}`).join(", ")}
+    FROM patch
+    WHERE ${clauses.join(" AND ")}
+    RETURNING record."${identity}"::text AS id
+  `, params as never[]);
+  expect(rows, `one local replay ${table} row for db_setzen`).toHaveLength(1);
+}
+
 async function captureDbResults(expectations: FlowDbExpectation[], state: FlowRunState) {
   for (const expectation of expectations) {
     if (typeof expectation.neu !== 'number') {
@@ -1092,6 +1586,10 @@ async function captureDbResults(expectations: FlowDbExpectation[], state: FlowRu
       state.rows.set(expectation.tabelle, await readStorageRow(expectation.tabelle, { id: created[0]! }));
       continue;
     }
+    // A case can create one agreement while independently asserting that an
+    // existing agreement was changed in place. The latter is not a claim that
+    // the table total stays zero; assert it through its explicit `wo` row.
+    if (expectation.neu === 0 && expectations.some((other) => other.tabelle === expectation.tabelle && (other.neu ?? 0) > 0)) continue;
     const before = state.before.get(expectation.tabelle);
     const beforeIds = state.beforeIds.get(expectation.tabelle);
     if (before === undefined || !beforeIds) throw new Error(`FLOW_DB_BASELINE_MISSING:${expectation.tabelle}`);
@@ -1132,8 +1630,10 @@ async function assertDbValues(expectation: FlowDbExpectation, state: FlowRunStat
   }
   const where = resolveValue(expectation.wo, state) as Record<string, unknown> | undefined;
   const reference = state.rows.get(expectation.tabelle);
+  const identity = storageColumn(expectation.tabelle, "id");
+  const referenceId = reference?.[identity];
   const row = targetRow ?? (where ? await readStorageRow(expectation.tabelle, where)
-    : reference ? await readStorageRow(expectation.tabelle, { id: reference.id }) : undefined);
+    : reference && referenceId !== undefined ? await readStorageRow(expectation.tabelle, { id: referenceId }) : undefined);
   if (!row) throw new Error(`FLOW_DB_NEW_ROW_REQUIRED:${expectation.tabelle}`);
   const values = Object.entries(resolveValue(expectation.werte ?? {}, state) as Record<string, unknown>);
   for (const [key, expected] of values) {
@@ -1151,12 +1651,21 @@ async function assertDbValues(expectation: FlowDbExpectation, state: FlowRunStat
 async function assertDb(expectations: FlowDbExpectation[], state: FlowRunState) {
   for (const expectation of expectations) {
     if (typeof expectation.neu === 'number') {
+      if (expectation.neu === 0 && expectations.some((other) => other.tabelle === expectation.tabelle && (other.neu ?? 0) > 0)) {
+        if (Object.keys(expectation.werte ?? {}).length) await assertDbValues(expectation, state);
+        continue;
+      }
       const before = state.before.get(expectation.tabelle);
       if (before === undefined) throw new Error(`FLOW_DB_BASELINE_MISSING:${expectation.tabelle}`);
       expect((await tableCount(expectation.tabelle)) - before).toBe(expectation.neu);
     }
     if (Object.keys(expectation.werte ?? {}).length) await assertDbValues(expectation, state);
   }
+}
+
+function assertServer(expectation: { fehler?: string } | undefined, state: FlowRunState) {
+  if (!expectation?.fehler) return;
+  expect(state.serverResult, "server command result").toMatchObject({ code: expectation.fehler });
 }
 
 export async function runGeneratedFlowCase(page: Page, flowCase: FlowCase) {
@@ -1181,6 +1690,7 @@ async function runGeneratedFlowCaseBody(page: Page, flowCase: FlowCase) {
     createdRows: new Map<string, Record<string, unknown>[]>(),
     restoreOnlineAfterWrite: false,
     loginId: generatedFlowRuntime.logins[flowCase.gegeben.login].id,
+    loginName: flowCase.gegeben.login,
   };
   for (const name of selectedFixtureNames(flowCase.gegeben.datenlagen)) {
     const fixture = generatedFixtures[name]!;
@@ -1220,6 +1730,7 @@ async function runGeneratedFlowCaseBody(page: Page, flowCase: FlowCase) {
   await captureDbResults(dbExpectations, state);
   await assertExpectations(page, flowCase.dann?.anzeige ?? [], state);
   await assertDb(dbExpectations, state);
+  assertServer(flowCase.dann?.server, state);
 }
 
 function testTimeoutGuard(flowCase: FlowCase) {

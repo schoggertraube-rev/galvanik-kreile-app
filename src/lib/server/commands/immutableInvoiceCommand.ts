@@ -1050,13 +1050,20 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
       }
 
       const sourcePaymentTermDays = toSafeInteger(source.invoice_payment_term_days, "INVOICE_PAYMENT_TERM_INVALID");
-      const paymentTermDays = agreement?.type === "zahlungsziel"
+      const requestedPaymentTermDays = agreement?.type === "zahlungsziel"
         ? agreement.targetDays
         : sourcePaymentTermDays;
       const vatRateBasisPoints = toSafeInteger(source.invoice_vat_rate_basis_points, "INVOICE_VAT_RATE_INVALID");
-      if (!Number.isSafeInteger(paymentTermDays) || paymentTermDays < 1 || paymentTermDays > 365 || ![700, 1900].includes(vatRateBasisPoints)) {
+      if (
+        typeof requestedPaymentTermDays !== "number"
+        || !Number.isSafeInteger(requestedPaymentTermDays)
+        || requestedPaymentTermDays < 1
+        || requestedPaymentTermDays > 365
+        || ![700, 1900].includes(vatRateBasisPoints)
+      ) {
         return { code: "VALIDATION_ERROR", message: "Stammdaten für die Rechnungsausgabe sind unvollständig." };
       }
+      const paymentTermDays = requestedPaymentTermDays;
 
       // Every master-data dependent value is built before a number exists, so
       // an incomplete tenant, customer, order or position cannot consume one.

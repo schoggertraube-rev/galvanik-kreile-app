@@ -202,7 +202,7 @@ export function CustomerEditor({card,takeover,canManageMoney,canDecide=false,mis
               <Button data-spec-id="kundebearbeiten.absprache.entfernen" art="leise" text="Entfernen" onClick={()=>removeAgreement(index)}/>
             </div>
           </div>)}
-          {agreements.length===0?<Hinweis ton="neutral">Noch keine Absprachen hinterlegt.</Hinweis>:null}
+          {agreements.length===0?<Hinweis>Noch keine Absprachen hinterlegt.</Hinweis>:null}
           {agreementLimitReached?<Hinweis ton="warn">Höchstens 20 Absprachen möglich.</Hinweis>:null}
           <Button data-spec-id="kundebearbeiten.absprache-hinzufuegen" icon="plus" text="Absprache hinzufügen" disabled={agreementLimitReached} onClick={addAgreement}/>
         </section>

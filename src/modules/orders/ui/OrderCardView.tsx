@@ -426,7 +426,7 @@ function GoodsOutDialog({
         data-spec-id={agreementSpecId}
         art={paymentAtPickup ? "sekundaer" : "primaer"}
         icon="truck"
-        text={agreementButton}
+        text={agreementButton ?? ""}
         disabled={busy || mode === null}
         onClick={() => void record()}
       /> : null}

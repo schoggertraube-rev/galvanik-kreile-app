@@ -14,6 +14,7 @@ import type { CustomerAgreementRecord } from "@/modules/customers/public";
 import {
   readEffectiveCustomerAgreement,
   readInactiveCustomerAgreementHint,
+  type InactiveCustomerAgreementHint,
 } from "@/lib/server/effectiveCustomerAgreementRead";
 
 const MAX_ID_LENGTH = 128;
@@ -87,6 +88,7 @@ export type LiveOrderCard = {
     frozenAt: string;
   };
   agreement: CustomerAgreementRecord | null;
+  agreementHint: InactiveCustomerAgreementHint | null;
 };
 
 export type ExtraWorkMasterData = {

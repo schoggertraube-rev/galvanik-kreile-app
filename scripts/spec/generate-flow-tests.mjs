@@ -24,6 +24,15 @@ const DATABASE_MAPPING = Object.freeze({
   task: { table: "tasks", columns: {}, transforms: {} },
   complaint: { table: "complaints", columns: { auftrag_id: "order_id", kunde_id: "customer_id", mangel: "reason" }, transforms: {} },
   supplier_invoice: { table: "supplier_invoice", columns: {}, transforms: {} },
+  invoices: { table: "invoices", columns: { auftrag: "order_id", kunde: "customer_id", faellig: "due_date" }, transforms: {} },
+  customer_agreements: { table: "customer_agreements", columns: { kunde: "customer_id" }, transforms: {} },
+  invoice_collections: { table: "invoice_collections", columns: { kunde: "customer_id" }, transforms: {} },
+  invoice_collection_orders: { table: "invoice_collection_orders", columns: { id: "order_id" }, transforms: {} },
+  // Test-only contract rows needed to materialize a real order-card state in
+  // the isolated Replay DB. They are never product fixtures or UI data.
+  order_intake_receipts: { schema: "private", table: "order_intake_receipts", columns: {}, transforms: {} },
+  order_freezes: { schema: "private", table: "order_freezes", columns: {}, transforms: {} },
+  extra_work_hourly_rates: { schema: "private", table: "extra_work_hourly_rates", columns: {}, transforms: {} },
 });
 
 function parseArguments(argv) {

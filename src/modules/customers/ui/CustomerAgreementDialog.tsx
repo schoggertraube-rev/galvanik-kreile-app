@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Button, Dialog, Eingabe, Feld, FormRaster, Hinweis, Rueckfrage, Segment, Textfeld } from "@/ui/kr";
 import type {
   CustomerAgreementCommandResult,
@@ -32,6 +32,20 @@ type Draft = {
   targetDays: string;
   validUntil: string;
   reason: string;
+};
+
+type FocusTarget = "type" | "targetDays" | "validUntil" | "reason";
+
+type FocusRequest = {
+  target: FocusTarget;
+  requestId: number;
+};
+
+const FOCUS_SPEC_ID: Readonly<Record<FocusTarget, string>> = {
+  type: "absprache.typ",
+  targetDays: "absprache.tage",
+  validUntil: "absprache.gueltig_bis",
+  reason: "absprache.grund",
 };
 
 type SavedOutcome = {
@@ -66,13 +80,21 @@ function labelForType(type: CustomerAgreementType | "") {
   return TYPE_OPTIONS.find((option) => option.wert === type)?.text ?? "Typ fehlt";
 }
 
-function initialDraft(target: CustomerAgreementTarget, agreement: CustomerAgreementRecord | null | undefined, initialReason?: string): Draft {
+function initialDraft(
+  target: CustomerAgreementTarget,
+  agreement: CustomerAgreementRecord | null | undefined,
+  initialReason?: string,
+  mode: AgreementMode = "new",
+): Draft {
   return {
     type: agreement?.type ?? "",
     scope: agreement?.orderId ? "order" : target.order ? "order" : "customer",
     targetDays: agreement?.targetDays === null || agreement?.targetDays === undefined ? "" : String(agreement.targetDays),
     validUntil: agreement?.validUntil ?? "",
-    reason: agreement?.reason ?? initialReason ?? "",
+    // A revocation needs its own accountable reason.  Reusing the reason for
+    // the original agreement would silently submit a revocation on the first
+    // click and makes the mandatory revocation reason meaningless.
+    reason: mode === "revoke" ? "" : agreement?.reason ?? initialReason ?? "",
   };
 }
 
@@ -103,15 +125,21 @@ export function CustomerAgreementDialog({
   onSaved,
   onReload,
 }: CustomerAgreementDialogProps) {
-  const [baseline] = useState(() => initialDraft(target, agreement, initialReason));
-  const [draft, setDraft] = useState(() => initialDraft(target, agreement, initialReason));
+  const [baseline] = useState(() => initialDraft(target, agreement, initialReason, mode));
+  const [draft, setDraft] = useState(() => initialDraft(target, agreement, initialReason, mode));
   const [errors, setErrors] = useState<Partial<Record<"type" | "targetDays" | "validUntil" | "reason", string>>>({});
   const [failure, setFailure] = useState<string | null>(null);
   const [savedOutcome, setSavedOutcome] = useState<SavedOutcome | null>(null);
   const [busy, setBusy] = useState(false);
   const [closePrompt, setClosePrompt] = useState(false);
+  const [focusRequest, setFocusRequest] = useState<FocusRequest>(() => ({
+    target: mode === "revoke" ? "reason" : "type",
+    requestId: 0,
+  }));
   const requestKey = useRef<string | null>(null);
   const working = useRef(false);
+  const nextFocusRequestId = useRef(1);
+  const handledFocusRequestId = useRef<number | null>(null);
 
   const isRevoke = mode === "revoke";
   const dirty = JSON.stringify(draft) !== JSON.stringify(baseline);
@@ -128,12 +156,20 @@ export function CustomerAgreementDialog({
     setSavedOutcome(null);
   };
 
-  const focus = (id: string) => {
-    requestAnimationFrame(() => {
-      const field = document.querySelector<HTMLElement>(`[data-spec-id="absprache.${id}"]`);
-      field?.scrollIntoView({ block: "nearest" });
-      field?.focus();
-    });
+  // Commit focus after the error state and conditional fields have rendered.
+  // This is deliberately state-driven: a click's native focus must never win
+  // over the first invalid field in the completed dialog update.
+  useLayoutEffect(() => {
+    if (handledFocusRequestId.current === focusRequest.requestId) return;
+    const field = document.querySelector<HTMLElement>(`[data-spec-id="${FOCUS_SPEC_ID[focusRequest.target]}"]`);
+    if (!field || field.matches(":disabled")) return;
+    field.scrollIntoView({ block: "nearest" });
+    field.focus();
+    handledFocusRequestId.current = focusRequest.requestId;
+  }, [focusRequest, draft.type]);
+
+  const requestFocus = (target: FocusTarget) => {
+    setFocusRequest({ target, requestId: nextFocusRequestId.current++ });
   };
 
   const validate = () => {
@@ -147,7 +183,7 @@ export function CustomerAgreementDialog({
     if (draft.reason.trim().length < 3 || draft.reason.trim().length > 200) next.reason = "Bitte Grund angeben";
     setErrors(next);
     const first = ["type", "targetDays", "validUntil", "reason"].find((key) => next[key as keyof typeof next]);
-    if (first) focus(first);
+    if (first) requestFocus(first as FocusTarget);
     return Object.keys(next).length === 0;
   };
 

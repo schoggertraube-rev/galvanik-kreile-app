@@ -173,8 +173,9 @@ export function CustomerCardView({
   const history = card.orders.filter((order) => isClosedStation(order.station));
   const today = berlinDay();
   const customerAgreements = (card.agreements ?? []).filter((agreement) => agreement.orderId === null);
-  const activeAgreement = customerAgreements.find((agreement) => isTypedAgreement(agreement) && isCurrentAgreement(agreement, today)) ?? null;
-  const earlierAgreements = customerAgreements.filter((agreement) => isTypedAgreement(agreement) && !isCurrentAgreement(agreement, today));
+  const typedCustomerAgreements = customerAgreements.filter(isTypedAgreement);
+  const activeAgreement = typedCustomerAgreements.find((agreement) => isCurrentAgreement(agreement, today)) ?? null;
+  const earlierAgreements = typedCustomerAgreements.filter((agreement) => !isCurrentAgreement(agreement, today));
   const untypedMoneyAgreement = customerAgreements.find((agreement) => agreement.type === null && agreement.money && isCurrentAgreement(agreement, today)) ?? null;
   const agreementNotices = customerAgreements.filter((agreement) => agreement.type === null && agreement.notice && agreement.revokedAt === null);
   const canManageAgreement = canManageMoney && Boolean(onSaveAgreement && onRevokeAgreement);
