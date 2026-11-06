@@ -147,7 +147,9 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
             ON customer.tenant_id=collection.tenant_id AND customer.id=collection.customer_id
           JOIN public.invoice_collection_orders collection_order
             ON collection_order.tenant_id=collection.tenant_id AND collection_order.collection_id=collection.id
-          WHERE collection.tenant_id=${auth.tenantId} AND collection.status='offen'
+          WHERE collection.tenant_id=${auth.tenantId}
+            AND collection.status='offen'
+            AND collection.monat < date_trunc('month', timezone('Europe/Berlin', clock_timestamp()))::date
           GROUP BY collection.id, collection.monat, customer.name
           HAVING count(collection_order.order_id)>0
           ORDER BY collection.monat, customer.name, collection.id
