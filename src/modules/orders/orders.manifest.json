@@ -10,6 +10,8 @@
     "@/modules/orders/public#OrderCardActionFeedback",
     "@/modules/orders/public#OrderCardAgreementPorts",
     "@/modules/orders/public#OrderCardActionPorts",
+    "@/modules/orders/public#OrderCardGoodsOutAgreement",
+    "@/modules/orders/public#OrderCardGoodsOutMode",
     "@/modules/orders/public#OrderCardModel",
     "@/modules/orders/public#OrderCardPayment",
     "@/modules/orders/public#OrderCardPaymentContext",
@@ -28,6 +30,8 @@
     "@/modules/orders/public#OrdersHomeSource",
     "@/modules/orders/public#Urgency",
     "@/modules/orders/public#buildOrdersHomeProjection",
+    "@/modules/orders/public#goodsOutAgreementButtonText",
+    "@/modules/orders/public#goodsOutAgreementReceiptText",
     "@/modules/orders/public#getUrgency",
     "@/modules/orders/public#isOrderLifecycleStatus"
   ],
