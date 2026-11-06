@@ -1208,3 +1208,121 @@ describe('AP-EIN 3.4: assignment and source customer against the real replay DB'
   expect(await withSession(actor,()=>getIntakeAssignmentAction({itemId,mode:'normal'}))).toMatchObject({code:'OK',view:{customer:{id:saved.customer.id,name:input.customer.companyName},assignment:'hand',version:2}});
  });
 });
+
+describe("AP-ABS agreement actions: real Action, database event and reread", () => {
+  it("ABS-02, ABS-06 and ABS-18: saves, replays and revokes one typed agreement only with Geld", async () => {
+    const moneyActor = await createFixture("meister", ["kunden", "geld"]);
+    const noMoneyActor = await createFixture("meister", ["kunden"]);
+    const { createCustomerAction, saveCustomerAgreementAction, revokeCustomerAgreementAction } = await import("@/app/actions/customers.actions");
+    const customer = await withSession(moneyActor, () => createCustomerAction({
+      clientEventId: randomUUID(),
+      customerType: "business",
+      companyName: `SYNTHETISCH Absprache ${randomUUID().slice(0, 8)}`,
+      salutation: "ohne",
+      firstName: "Ada",
+      lastName: "Absprache",
+      phone: "+49 711 5550190",
+      email: `agreement-${randomUUID()}@fixture.invalid`,
+      street: "Prüfweg",
+      houseNumber: "20",
+      zipCode: "70176",
+      city: "Stuttgart",
+      country: "DE",
+      paymentPreference: "rechnung",
+    }));
+    if (customer.code !== "OK") throw new Error(`ABS_CUSTOMER_CREATE_FAILED:${customer.code}:${customer.message}`);
+
+    const saveInput = {
+      clientKey: randomUUID(),
+      customerId: customer.receipt.customerId,
+      orderId: null,
+      type: "ausgabe_ohne_zahlung" as const,
+      targetDays: null,
+      validUntil: null,
+      reason: "Synthetischer Prüfgrund für Rechnung folgt",
+      version: null,
+    };
+    const beforeDenied = await sql`SELECT count(*)::integer AS count FROM public.customer_agreements WHERE tenant_id=${KREILE_TENANT_SLUG}`;
+    expect(await withSession(noMoneyActor, () => saveCustomerAgreementAction({ ...saveInput, clientKey: randomUUID() }))).toMatchObject({ code: "FORBIDDEN" });
+    expect(await sql`SELECT count(*)::integer AS count FROM public.customer_agreements WHERE tenant_id=${KREILE_TENANT_SLUG}`).toEqual(beforeDenied);
+
+    const saved = await withSession(moneyActor, () => saveCustomerAgreementAction(saveInput));
+    if (saved.code !== "OK") throw new Error(`ABS_SAVE_FAILED:${saved.code}:${saved.message}`);
+    expect(saved).toMatchObject({
+      code: "OK",
+      replayed: false,
+      agreement: {
+        customerId: customer.receipt.customerId,
+        orderId: null,
+        type: "ausgabe_ohne_zahlung",
+        targetDays: null,
+        reason: saveInput.reason,
+        version: 1,
+        revokedAt: null,
+      },
+    });
+    expect(await sql`
+      SELECT agreement.customer_id, agreement.typ, agreement.geld, agreement.grund,
+        agreement.version, event.event_type, event.user_id::text AS actor_id,
+        event.payload->>'agreementId' AS event_agreement_id
+      FROM public.customer_agreements agreement
+      JOIN public.events event ON event.tenant_id=agreement.tenant_id
+        AND event.client_event_id=${saveInput.clientKey}::uuid
+      WHERE agreement.tenant_id=${KREILE_TENANT_SLUG} AND agreement.id=${saved.agreement.id}::uuid
+    `).toEqual([{
+      customer_id: customer.receipt.customerId,
+      typ: "ausgabe_ohne_zahlung",
+      geld: true,
+      grund: saveInput.reason,
+      version: 1,
+      event_type: "CUSTOMER_AGREEMENT_SAVED_V1",
+      actor_id: moneyActor.actorId,
+      event_agreement_id: saved.agreement.id,
+    }]);
+    expect(await withSession(moneyActor, () => saveCustomerAgreementAction(saveInput))).toMatchObject({
+      code: "OK",
+      replayed: true,
+      agreement: { id: saved.agreement.id, version: 1 },
+    });
+
+    const revokeInput = {
+      clientKey: randomUUID(),
+      agreementId: saved.agreement.id,
+      reason: "Synthetischer Widerruf nach Prüfung",
+      version: saved.agreement.version,
+    };
+    const revoked = await withSession(moneyActor, () => revokeCustomerAgreementAction(revokeInput));
+    if (revoked.code !== "OK") throw new Error(`ABS_REVOKE_FAILED:${revoked.code}:${revoked.message}`);
+    expect(revoked).toMatchObject({
+      code: "OK",
+      replayed: false,
+      agreement: {
+        id: saved.agreement.id,
+        version: 2,
+        revokeReason: revokeInput.reason,
+        revokedBy: moneyActor.actorId,
+        revokedAt: expect.any(String),
+      },
+    });
+    expect(await sql`
+      SELECT agreement.widerrufen_am IS NOT NULL AS revoked, agreement.widerrufen_von::text AS revoked_by,
+        agreement.widerruf_grund, agreement.version, event.event_type, event.payload->>'agreementId' AS event_agreement_id
+      FROM public.customer_agreements agreement
+      JOIN public.events event ON event.tenant_id=agreement.tenant_id
+        AND event.client_event_id=${revokeInput.clientKey}::uuid
+      WHERE agreement.tenant_id=${KREILE_TENANT_SLUG} AND agreement.id=${saved.agreement.id}::uuid
+    `).toEqual([{
+      revoked: true,
+      revoked_by: moneyActor.actorId,
+      widerruf_grund: revokeInput.reason,
+      version: 2,
+      event_type: "CUSTOMER_AGREEMENT_REVOKED_V1",
+      event_agreement_id: saved.agreement.id,
+    }]);
+    expect(await withSession(moneyActor, () => revokeCustomerAgreementAction(revokeInput))).toMatchObject({
+      code: "OK",
+      replayed: true,
+      agreement: { id: saved.agreement.id, version: 2, revokeReason: revokeInput.reason },
+    });
+  });
+});

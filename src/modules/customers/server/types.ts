@@ -109,6 +109,54 @@ export type EnableCustomerInvoiceTermsInput = {
   cashDiscountDays: number;
 };
 
+export const CUSTOMER_AGREEMENT_TYPES = [
+  "ausgabe_ohne_zahlung",
+  "sammelrechnung",
+  "zahlungsziel",
+] as const;
+
+export type CustomerAgreementType = (typeof CUSTOMER_AGREEMENT_TYPES)[number];
+
+export type SaveCustomerAgreementInput = {
+  clientKey: string;
+  customerId: string;
+  orderId?: string | null;
+  type: CustomerAgreementType;
+  targetDays?: number | null;
+  validUntil?: string | null;
+  reason: string;
+  /** Version der aktuell gültigen Absprache derselben Geltung, sonst null. */
+  version?: number | null;
+};
+
+export type RevokeCustomerAgreementInput = {
+  clientKey: string;
+  agreementId: string;
+  reason: string;
+  version: number;
+};
+
+export type CustomerAgreementRecord = {
+  id: string;
+  customerId: string;
+  orderId: string | null;
+  position: number;
+  type: CustomerAgreementType;
+  targetDays: number | null;
+  validUntil: string | null;
+  reason: string;
+  version: number;
+  revokedAt: string | null;
+  revokedBy: string | null;
+  revokeReason: string | null;
+  createdAt: string;
+  createdBy: string | null;
+};
+
+export type CustomerAgreementCommandResult =
+  | { code: "OK"; agreement: CustomerAgreementRecord; replayed: boolean }
+  | { code: "FORBIDDEN" | "CONFLICT" | "VALIDATION_ERROR" | "NOT_FOUND" | "UNAVAILABLE"; message: string };
+
 export type ReadCustomerOrderReadinessInput = {
   customerId: string;
   requirePaymentPreference: boolean;

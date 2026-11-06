@@ -1,5 +1,6 @@
 export { CustomerCardView } from "./ui/CustomerCardView";
 export { kundeVollstaendigkeit } from "./orderReadiness";
+export { CUSTOMER_AGREEMENT_TYPES } from "./server/types";
 export { CUSTOMER_COUNTRIES, CUSTOMER_FIELD_LABELS, EMPTY_CUSTOMER_FORM, customerCountryLabel, customerDisplayName, customerContactLabel, customerFieldError, kundeValidierung } from "./customerFormContract";
 export { KundeFormular } from "./ui/KundeFormular";
 export type { CustomerFormValue, CustomerFormType } from "./customerFormContract";
@@ -22,6 +23,11 @@ export type {
   ReadCustomerCreateReceiptResult,
   UpdateCustomerInput,
   EnableCustomerInvoiceTermsInput,
+  CustomerAgreementType,
+  SaveCustomerAgreementInput,
+  RevokeCustomerAgreementInput,
+  CustomerAgreementRecord,
+  CustomerAgreementCommandResult,
 } from "./server/types";
 export type {
   CustomerCardModel,

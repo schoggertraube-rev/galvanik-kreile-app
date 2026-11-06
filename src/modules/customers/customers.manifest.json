@@ -5,6 +5,7 @@
   "publicExports": [
     "@/modules/customers/public#CustomerCardView",
     "@/modules/customers/public#kundeVollstaendigkeit",
+    "@/modules/customers/public#CUSTOMER_AGREEMENT_TYPES",
     "@/modules/customers/public#CUSTOMER_COUNTRIES",
     "@/modules/customers/public#CUSTOMER_FIELD_LABELS",
     "@/modules/customers/public#EMPTY_CUSTOMER_FORM",
@@ -36,6 +37,11 @@
     "@/modules/customers/public#ReadCustomerCreateReceiptResult",
     "@/modules/customers/public#UpdateCustomerInput",
     "@/modules/customers/public#EnableCustomerInvoiceTermsInput",
+    "@/modules/customers/public#CustomerAgreementType",
+    "@/modules/customers/public#SaveCustomerAgreementInput",
+    "@/modules/customers/public#RevokeCustomerAgreementInput",
+    "@/modules/customers/public#CustomerAgreementRecord",
+    "@/modules/customers/public#CustomerAgreementCommandResult",
     "@/modules/customers/public#CustomerCardModel",
     "@/modules/customers/public#CustomerCardState",
     "@/modules/customers/public#CustomerListItem",
@@ -47,6 +53,9 @@
     "@/modules/customers/server-public#readCustomerAddress",
     "@/modules/customers/server-public#readCustomerProfile",
     "@/modules/customers/server-public#enableCustomerInvoiceTermsCommand",
+    "@/modules/customers/server-public#saveCustomerAgreementCommand",
+    "@/modules/customers/server-public#revokeCustomerAgreementCommand",
+    "@/modules/customers/server-public#CUSTOMER_AGREEMENT_TYPES",
     "@/modules/customers/server-public#readCustomerOrderReadinessCommand",
     "@/modules/customers/server-public#CreateCustomerInput",
     "@/modules/customers/server-public#CustomerCommandCapabilities",
@@ -55,6 +64,11 @@
     "@/modules/customers/server-public#ReadCustomerCreateReceiptResult",
     "@/modules/customers/server-public#UpdateCustomerInput",
     "@/modules/customers/server-public#EnableCustomerInvoiceTermsInput",
+    "@/modules/customers/server-public#CustomerAgreementType",
+    "@/modules/customers/server-public#SaveCustomerAgreementInput",
+    "@/modules/customers/server-public#RevokeCustomerAgreementInput",
+    "@/modules/customers/server-public#CustomerAgreementRecord",
+    "@/modules/customers/server-public#CustomerAgreementCommandResult",
     "@/modules/customers/server-public#ReadCustomerOrderReadinessInput",
     "@/modules/customers/server-public#ReadCustomerOrderReadinessResult",
     "@/modules/customers/server-public#updateCustomerInTransaction",
@@ -70,7 +84,8 @@
     "20261028014500_customer_create_notes_and_invoice_terms.sql",
     "20261028234500_h13_clear_customer_payment_preferences.sql",
     "20261103032000_b2_kunde_k1.sql",
-    "20261103032001_ein1_kunde_schreibweg.sql"
+    "20261103032001_ein1_kunde_schreibweg.sql",
+    "20261106013106_abs_absprachen.sql"
   ],
   "viewsFunctions": [
     "private.allocate_customer_number",
@@ -81,20 +96,27 @@
     "private.update_customer_v1",
     "private.kunde_split_name",
     "private.kunde_split_street",
-    "private.kunde_land_schluessel"
+    "private.kunde_land_schluessel",
+    "private.save_customer_agreement_v1",
+    "private.revoke_customer_agreement_v1"
   ],
   "ownsTables": [
     "private.customer_create_receipts",
     "private.customer_number_counters",
     "public.customers",
-    "public.address_directory"
+    "public.address_directory",
+    "public.customer_agreements",
+    "public.invoice_collections",
+    "public.invoice_collection_orders"
   ],
   "storagePurposes": [],
   "events": {
     "emits": [
       "CUSTOMER_CREATED_V1",
       "CUSTOMER_INVOICE_TERMS_ENABLED_V1",
-      "CUSTOMER_UPDATED_V1"
+      "CUSTOMER_UPDATED_V1",
+      "CUSTOMER_AGREEMENT_SAVED_V1",
+      "CUSTOMER_AGREEMENT_REVOKED_V1"
     ],
     "consumes": []
   },

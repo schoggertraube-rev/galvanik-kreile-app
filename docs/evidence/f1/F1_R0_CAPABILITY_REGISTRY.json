@@ -362,7 +362,9 @@
         "searchCustomersDb",
         "getTopKunden",
         "updateCustomerAction",
-        "readCustomerAddressAction"
+        "readCustomerAddressAction",
+        "saveCustomerAgreementAction",
+        "revokeCustomerAgreementAction"
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "Customer CRUD. The read-only customer receipt action supports safe recovery of an interrupted V5 command; it never starts a mutation. Remaining CRUD evidence is still package-bound.",
