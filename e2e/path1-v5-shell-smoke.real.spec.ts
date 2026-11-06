@@ -152,7 +152,11 @@ async function navigateAndWaitForContent(page: Page, target: ReturnType<Page["lo
   } else {
     const reached = page.waitForURL((url) => url.pathname === requestedPath, { waitUntil: "commit", timeout: NAVIGATION_TIMEOUT });
     await target.click({ timeout: NAVIGATION_TIMEOUT });
-    await reached;
+    try {
+      await reached;
+    } catch (error) {
+      throw new Error(`PATH1_V5_NAVIGATION_FAILED: expected=${requestedPath} actual=${new URL(page.url()).pathname}`, { cause: error });
+    }
   }
 
   if (renderedPath !== requestedPath) {

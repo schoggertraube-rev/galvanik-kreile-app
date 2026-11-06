@@ -6,8 +6,8 @@ import { localReplayStorageEnvironment } from "../../src/test/localReplayStorage
 
 process.env.APP_SESSION_SECRET ??= "flow-tests-local-session-secret-2026-11-02";
 
-// PRs can opt into their pages while keeping the first case of every other page.
-// An absent or empty selection always keeps the entire regression suite.
+// PRs run their selected pages plus the first case of every other page.
+// A missing selection keeps the entire suite; an empty one runs the smoke cases.
 function prSelection(): RegExp | undefined {
   if (process.env.GITHUB_EVENT_NAME !== "pull_request") return undefined;
   const scopePath = resolve("e2e/generated/_pr_scope.json");
@@ -16,7 +16,6 @@ function prSelection(): RegExp | undefined {
   if (!Array.isArray(scope) || scope.some(page => typeof page !== "string")) {
     throw new Error("FLOW_PR_SCOPE_INVALID");
   }
-  if (scope.length === 0) return undefined;
   const model = JSON.parse(readFileSync(resolve("docs/project/endversion/codex/BAUPLAN.json"), "utf8"));
   const pages = model?.testmodell?.seiten as Record<string, { faelle?: Array<{ id?: string }> }> | undefined;
   if (!pages || scope.some(page => !Object.hasOwn(pages, page))) throw new Error("FLOW_PR_SCOPE_UNKNOWN_PAGE");
