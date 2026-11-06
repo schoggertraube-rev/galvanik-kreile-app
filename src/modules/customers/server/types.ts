@@ -86,7 +86,25 @@ export type ReadCustomerCreateReceiptResult =
   | { code: "OK"; receipt: CustomerCreateReceipt; customer: CustomerStoredProfile }
   | { code: "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_ERROR" | "UNAVAILABLE"; message: string };
 
-export type UpdateCustomerInput = Partial<Omit<CreateCustomerInput, "clientEventId">> & { clientEventId: string; customerId: string };
+/**
+ * The editable, untyped part of the single customer_agreements truth.
+ * A null id denotes a new row; existing rows always carry their database id.
+ */
+export type CustomerFreeTextAgreementInput = {
+  id: string | null;
+  bezeichnung: string;
+  wert: string;
+  geld: boolean;
+  hinweis: boolean;
+  gueltigBis: string | null;
+};
+
+export type UpdateCustomerInput = Partial<Omit<CreateCustomerInput, "clientEventId">> & {
+  clientEventId: string;
+  customerId: string;
+  /** Only Kunde bearbeiten sends the complete visible free-text list. */
+  agreements?: CustomerFreeTextAgreementInput[];
+};
 export type CustomerStoredProfile = {
   id: string; customerNumber: string | null; name: string;
   customerType: CreateCustomerInput["customerType"];
@@ -124,6 +142,7 @@ export type CustomerAgreementSummary = {
   orderId: string | null;
   position: number;
   label: string;
+  value: string | null;
   type: CustomerAgreementType | null;
   targetDays: number | null;
   money: boolean;

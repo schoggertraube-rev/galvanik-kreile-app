@@ -7,6 +7,47 @@ import type { CustomerStoredProfile } from "./types";
 export const CUSTOMER_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const fieldNames = Object.keys(EMPTY_CUSTOMER_FORM);
 const legacyNames = ["name", "contactPerson"];
+const freeTextAgreementKeys = ["id", "bezeichnung", "wert", "geld", "hinweis", "gueltigBis"] as const;
+
+export type CustomerFreeTextAgreementWrite = {
+  id: string | null;
+  bezeichnung: string;
+  wert: string;
+  geld: boolean;
+  hinweis: boolean;
+  gueltigBis: string | null;
+};
+
+function isDateOnly(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+/** The update command accepts exactly the complete, ordered visible free-text list. */
+export function parseCustomerFreeTextAgreements(value: unknown): CustomerFreeTextAgreementWrite[] | null {
+  if (!Array.isArray(value) || value.length > 20) return null;
+  const seen = new Set<string>();
+  const entries: CustomerFreeTextAgreementWrite[] = [];
+  for (const candidate of value) {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return null;
+    const row = candidate as Record<string, unknown>;
+    const keys = Object.keys(row).sort();
+    if (keys.length !== freeTextAgreementKeys.length || keys.some((key, index) => key !== [...freeTextAgreementKeys].sort()[index])) return null;
+    const id = row.id;
+    if (id !== null && (typeof id !== "string" || !CUSTOMER_UUID.test(id) || seen.has(id))) return null;
+    if (typeof id === "string") seen.add(id);
+    const bezeichnung = typeof row.bezeichnung === "string" ? row.bezeichnung.trim().replace(/\s+/g, " ") : "";
+    const wert = typeof row.wert === "string" ? row.wert.trim().replace(/\s+/g, " ") : "";
+    const gueltigBis = row.gueltigBis;
+    if (!bezeichnung || bezeichnung.length > 40 || !wert || wert.length > 200
+      || typeof row.geld !== "boolean" || typeof row.hinweis !== "boolean"
+      || (gueltigBis !== null && (typeof gueltigBis !== "string" || !isDateOnly(gueltigBis)))) return null;
+    entries.push({ id, bezeichnung, wert, geld: row.geld, hinweis: row.hinweis, gueltigBis });
+  }
+  return entries;
+}
+
 export function customerWriteDiagnostic(error: unknown) {
   const outer = error && typeof error === "object" ? error as Record<string, unknown> : {};
   const cause = outer.cause && typeof outer.cause === "object" ? outer.cause as Record<string, unknown> : outer;
@@ -17,10 +58,11 @@ export function customerWriteDiagnostic(error: unknown) {
 export function customerWriteObject(input: unknown, update = false): Record<string, unknown> | null {
   if (!input || typeof input !== "object" || Array.isArray(input)) return null;
   const value = input as Record<string, unknown>;
-  if (Object.keys(value).some(key => ![...fieldNames, ...legacyNames, "clientEventId", ...(update ? ["customerId"] : [])].includes(key))) return null;
+  if (Object.keys(value).some(key => ![...fieldNames, ...legacyNames, "clientEventId", ...(update ? ["customerId", "agreements"] : [])].includes(key))) return null;
   if (typeof value.clientEventId !== "string" || !CUSTOMER_UUID.test(value.clientEventId)) return null;
   if (update && (typeof value.customerId !== "string" || !value.customerId.trim() || value.customerId.length > 128)) return null;
   for (const [key, candidate] of Object.entries(value)) {
+    if (key === "agreements") { if (!update || !parseCustomerFreeTextAgreements(candidate)) return null; continue; }
     if (key === "autoInfo" || key === "vorrang") { if (typeof candidate !== "boolean") return null; }
     else if (key === "paymentTermDays") { if (candidate !== null && (!Number.isInteger(candidate) || Number(candidate) < 0 || Number(candidate) > 120)) return null; }
     else if (candidate !== null && typeof candidate !== "string") return null;

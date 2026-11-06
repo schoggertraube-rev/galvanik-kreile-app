@@ -2,7 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import {type PrivilegedTenantTransaction, withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import { customerDatabaseFields, customerWriteDiagnostic, customerWriteObject, normaliseCustomerWrite, readCustomerProfile } from "./customerWriteContract";
+import { customerDatabaseFields, customerWriteDiagnostic, customerWriteObject, normaliseCustomerWrite, parseCustomerFreeTextAgreements, readCustomerProfile } from "./customerWriteContract";
 import type { CustomerCommandContext } from "./types";
 import { readCustomerAddress } from "./customerAddressRead";
 
@@ -10,10 +10,17 @@ export async function updateCustomerInTransaction(tx:PrivilegedTenantTransaction
   if (!context.capabilities.canEditCustomer) return { code: "FORBIDDEN" as const, message: "Kunden bearbeiten ist nicht erlaubt." };
   const raw = customerWriteObject(input, true);
   if (!raw) return { code: "VALIDATION_ERROR" as const, message: "Kundendaten sind ungültig." };
+  const hasAgreements = Object.hasOwn(raw, "agreements");
+  const agreements = hasAgreements ? parseCustomerFreeTextAgreements(raw.agreements) : undefined;
+  if (hasAgreements && !agreements) return { code: "VALIDATION_ERROR" as const, message: "Absprachen sind ungültig." };
   if (!context.capabilities.canManageMoney && ["paymentPreference", "iban", "paymentTermDays"].some(key => raw[key] != null)) {
     return { code: "FORBIDDEN" as const, message: "Zahlungsangaben benötigen den Bereich Geld." };
   }
+  if (!context.capabilities.canManageMoney && agreements?.some((agreement) => agreement.geld)) {
+    return { code: "FORBIDDEN" as const, message: "Geld-Absprachen benötigen den Bereich Geld." };
+  }
   const writable = { ...raw };
+  delete writable.agreements;
   if (!context.capabilities.canManageMoney) for (const field of ["paymentPreference", "iban", "paymentTermDays"]) delete writable[field];
 
       const customerId = String(raw.customerId);
@@ -29,7 +36,11 @@ export async function updateCustomerInTransaction(tx:PrivilegedTenantTransaction
       const addressChanged = (["country","zipCode","city","street","houseNumber"] as const).some(key => (current[key] ?? "") !== normalized.value[key]);
       const address = addressChanged ? await readCustomerAddress(tx,normalized.value) : null;
       if(address?.blocked)return {code:"VALIDATION_ERROR" as const,message:address.message};
-      const fields = {...customerDatabaseFields(normalized.value),address_status:address ? address.status : current.addressStatus};
+      const fields = {
+        ...customerDatabaseFields(normalized.value),
+        address_status: address ? address.status : current.addressStatus,
+        ...(agreements ? { agreements } : {}),
+      };
       if (fields.payment_preference === "rechnung" && !current.invoiceTermsEnabled) return { code: "VALIDATION_ERROR" as const, message: "Ziel nicht freigeschaltet." };
       const intentSha256 = createHash("sha256").update(JSON.stringify({ customerId, fields }), "utf8").digest("hex");
       const rows = await tx.execute<{ result_code: string; replayed: boolean }>(sql`
