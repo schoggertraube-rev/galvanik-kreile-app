@@ -13,6 +13,7 @@ import {
   checkTaB2iScopeForTest,
   checkTaB2jScopeForTest,
   checkTaB2k1ScopeForTest,
+  checkTaB2k1bScopeForTest,
   checkB2iParserChangesForTest,
   checkTaB2fBaselineChangeForTest,
   runSelftest,
@@ -100,6 +101,29 @@ describe("P68 TA-B2k1: only the exact Druck- and Nacharbeit paths", () => {
     }
     const adjacent = "src/app/actions/pdf-other.actions.ts";
     expect(checkSalesStageB2ScopeForTest({ files: [adjacent], mission: b2Mission, branch: "kreile/b2-ein-3" }))
+      .toContain(`SALES_STAGE_B2_SCOPE:${adjacent}`);
+  });
+});
+
+describe("P78 TA-B2k1b: only the exact shell-smoke path", () => {
+  const branch = "codex/ta-b2k1b";
+  const baseSha = "5e9d5f4626f88f321982866686b4536ad47377a4";
+  const files = ["scripts/quality/check-live-package-scope.mjs", "src/test/live_package_scope.test.ts",
+    "docs/evidence/live-line/b2/TRUST_ANCHOR_B2K1B.json", "docs/delivery/ABGABE_TA-B2K1B.md"];
+  const allowedProductPath = "e2e/path1-v5-shell-smoke.real.spec.ts";
+  it("restricts the anchor to its four files, exact branch and current main base", () => {
+    expect(checkTaB2k1bScopeForTest({ files, mission: b2AnchorMission, branch, baseSha })).toEqual([]);
+    expect(checkTaB2k1bScopeForTest({ files: [...files, "docs/project/endversion/codex/BAUPLAN.json"], mission: b2AnchorMission, branch, baseSha }))
+      .toContain("TA_B2K1B_SCOPE:docs/project/endversion/codex/BAUPLAN.json");
+    expect(checkTaB2k1bScopeForTest({ files, mission: b2AnchorMission, branch: "codex/other", baseSha }))
+      .toContain("TA_B2K1B_BRANCH_INVALID:codex/other");
+    expect(checkTaB2k1bScopeForTest({ files, mission: b2AnchorMission, branch, baseSha: "wrong" }))
+      .toContain(`TA_B2K1B_BASE_INVALID:wrong:${baseSha}`);
+  });
+  it("permits the /nachrichten shell-smoke assertion and rejects its adjacent path", () => {
+    expect(checkSalesStageB2ScopeForTest({ files: [allowedProductPath], mission: b2Mission, branch: "kreile/b2-ein-6" })).toEqual([]);
+    const adjacent = "e2e/path1-v5-shell-smoke-other.real.spec.ts";
+    expect(checkSalesStageB2ScopeForTest({ files: [adjacent], mission: b2Mission, branch: "kreile/b2-ein-6" }))
       .toContain(`SALES_STAGE_B2_SCOPE:${adjacent}`);
   });
 });
@@ -195,6 +219,7 @@ const ap01ExactPaths = [
   "e2e/f1-4-immutable-invoice.real.spec.ts",
   "e2e/path1-ui-convergence-v5-global-create.spec.ts",
   "e2e/path1-ui-convergence-v5-p3.real.spec.ts",
+  "e2e/path1-v5-shell-smoke.real.spec.ts",
   "scripts/quality/h18-server-actions.json",
   "src/app/GlobalCreateAppAdapter.tsx",
   "src/app/actions/eingang.actions.ts",
