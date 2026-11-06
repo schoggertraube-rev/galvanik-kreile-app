@@ -4,6 +4,7 @@
   "owner": "Path-1 Customers (Kundenkarte V2)",
   "publicExports": [
     "@/modules/customers/public#CustomerCardView",
+    "@/modules/customers/public#CustomerAgreementDialog",
     "@/modules/customers/public#kundeVollstaendigkeit",
     "@/modules/customers/public#CUSTOMER_AGREEMENT_TYPES",
     "@/modules/customers/public#CUSTOMER_COUNTRIES",
@@ -47,6 +48,8 @@
     "@/modules/customers/public#CustomerCardState",
     "@/modules/customers/public#CustomerListItem",
     "@/modules/customers/public#CustomersViewState",
+    "@/modules/customers/public#CustomerAgreementDialogProps",
+    "@/modules/customers/public#CustomerAgreementTarget",
     "@/modules/customers/server-public#createCustomerCommand",
     "@/modules/customers/server-public#createCustomerInTransaction",
     "@/modules/customers/server-public#readCustomerCreateReceiptCommand",

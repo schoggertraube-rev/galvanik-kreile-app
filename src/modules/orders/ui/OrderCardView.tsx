@@ -124,6 +124,7 @@ export function OrderCardView({
   actions,
   attachmentPanel,
   documentsPanel,
+  agreementMessage,
   onOpenCustomer,
   onClose,
 }: {
@@ -131,6 +132,7 @@ export function OrderCardView({
   actions: OrderCardActionPorts;
   attachmentPanel?: ReactNode;
   documentsPanel?: ReactNode;
+  agreementMessage?: string | null;
   onOpenCustomer: (id: string) => void;
   onClose: () => void;
 }) {
@@ -269,6 +271,17 @@ export function OrderCardView({
       {card.evidence.length ? <div className="kr-docs">{card.evidence.map((entry) => <span className="kr-doc" key={entry.key}>{evidenceLabel(entry)}</span>)}</div> : <Zustand art="leer" text="Noch keine Dokumente oder Fotos vorhanden." />}
       {documentsPanel}
     </KartenBlock>
+    {actions.agreement?.visible ? <KartenBlock label="Zahlungsabsprache">
+      {card.agreement ? <div data-spec-id="auftrag.absprache-zeile" className="kr-stapel">
+        <strong>Zahlungsabsprache · {card.agreement.label} · {card.agreement.orderId === card.id ? "gilt für diesen Auftrag" : "gilt für ganzen Kunden"}</strong>
+      </div> : <Zustand art="leer" text="Keine Zahlungsabsprache für diesen Auftrag festgelegt." />}
+      <div className="kr-schnellleiste">
+        <Button data-spec-id="auftrag.absprache" art="sekundaer" icon="receipt" text="Absprache nur für diesen Auftrag" disabled={!actions.agreement.enabled} onClick={actions.agreement.onCreate} />
+        {actions.agreement.onEdit ? <Button data-spec-id="auftrag.absprache-aendern" art="sekundaer" icon="edit" text="Absprache ändern" disabled={!actions.agreement.enabled} onClick={actions.agreement.onEdit} /> : null}
+        {actions.agreement.onRevoke ? <Button data-spec-id="auftrag.absprache-widerrufen" art="leise" icon="x" text="Absprache widerrufen" disabled={!actions.agreement.enabled} onClick={actions.agreement.onRevoke} /> : null}
+      </div>
+      {agreementMessage ? <Hinweis ton="ok">{agreementMessage}</Hinweis> : null}
+    </KartenBlock> : null}
     {card.payment.kind === "available" ? <KartenBlock label="Rechnung"><Fakten zeilen={[{ k: "Zahlungsmodus", v: payment ? paymentModeLabel(payment.mode) : "Nicht belegt" }, { k: "Rechnung", v: payment?.invoiceState === "issued" ? payment.invoiceNumber ?? payment.status ?? "ausgestellt" : "noch nicht ausgestellt" }, { k: payment?.status === "bezahlt" ? "Bezahlt" : payment?.status === "teilbezahlt" ? "Noch offen" : "Offen", v: money(payment?.openAmountCents ?? null), warn: Boolean(payment?.openAmountCents) }]} />{payment?.invoiceState === "issued" && payment.invoiceId ? <Button art="sekundaer" icon="file" text="Rechnungs-PDF öffnen" onClick={openInvoicePdf} /> : null}</KartenBlock> : <KartenBlock label="Rechnung"><Zustand art={card.payment.kind === "restricted" ? "gesperrt" : "fehler"} text={card.payment.message} /></KartenBlock>}
     {actions.freeze.visible && !actions.freeze.enabled && actions.freeze.reason?.includes("Stundensatz") ? <Hinweis ton="warn">{actions.freeze.reason} <a href={`/settings?returnTo=${encodeURIComponent(`/orders/${card.id}`)}#extra-work-rate`}>Stundensatz jetzt einrichten</a>.</Hinweis> : null}
     {actions.feedback.kind !== "idle" ? actions.feedback.kind === "submitting" ? <Zustand art="laedt" text={actions.feedback.message} /> : <Hinweis ton={actions.feedback.kind === "success" ? "ok" : "warn"}>{actions.feedback.message}{actions.feedback.kind === "conflict" ? <Button art="sekundaer" icon="refresh" text="Neu laden" onClick={() => void actions.onReload()} /> : null}</Hinweis> : null}

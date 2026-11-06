@@ -1,4 +1,6 @@
 export { OrderCardView } from "./ui/OrderCardView";
+export { CustomerAgreementDialog } from "@/modules/customers/public";
+export type { CustomerAgreementRecord } from "@/modules/customers/public";
 export { OrderQueueRow } from "./ui/OrderQueueRow";
 export type { OrderQueueRowModel } from "./ui/OrderQueueRow";
 export { OrderStationAttachmentPanel } from "./ui/OrderStationAttachmentPanel";
@@ -22,6 +24,7 @@ export type {
 } from "./domain/orderLifecycleContract";
 export type {
   OrderCardActionFeedback,
+  OrderCardAgreementPorts,
   OrderCardActionPorts,
   OrderCardModel,
   OrderCardPayment,

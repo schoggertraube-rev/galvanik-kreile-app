@@ -1,4 +1,5 @@
 export { CustomerCardView } from "./ui/CustomerCardView";
+export { CustomerAgreementDialog } from "./ui/CustomerAgreementDialog";
 export { kundeVollstaendigkeit } from "./orderReadiness";
 export { CUSTOMER_AGREEMENT_TYPES } from "./server/types";
 export { CUSTOMER_COUNTRIES, CUSTOMER_FIELD_LABELS, EMPTY_CUSTOMER_FORM, customerCountryLabel, customerDisplayName, customerContactLabel, customerFieldError, kundeValidierung } from "./customerFormContract";
@@ -30,6 +31,10 @@ export type {
   CustomerAgreementRecord,
   CustomerAgreementCommandResult,
 } from "./server/types";
+export type {
+  CustomerAgreementDialogProps,
+  CustomerAgreementTarget,
+} from "./ui/CustomerAgreementDialog";
 export type {
   CustomerCardModel,
   CustomerCardState,

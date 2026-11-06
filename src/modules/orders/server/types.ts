@@ -1,3 +1,5 @@
+import type { CustomerAgreementRecord } from "@/modules/customers/public";
+
 export type OrdersListItem = {
   id: string;
   orderNumber: string;
@@ -78,6 +80,11 @@ export type OrderCardActionAvailability = {
   enabled: boolean;
   reason: string | null;
 };
+export type OrderCardAgreementPorts = OrderCardActionAvailability & {
+  onCreate: () => void;
+  onEdit?: () => void;
+  onRevoke?: () => void;
+};
 export type OrderCardActionPorts = {
   dueDate?: OrderCardActionAvailability;
   content?: OrderCardActionAvailability;
@@ -90,6 +97,7 @@ export type OrderCardActionPorts = {
   invoice: OrderCardActionAvailability;
   payment: OrderCardActionAvailability;
   goodsOut: OrderCardActionAvailability;
+  agreement?: OrderCardAgreementPorts;
   feedback: OrderCardActionFeedback;
   onSaveContent?: (input: {
     note: string | null;
@@ -150,6 +158,7 @@ export type OrderCardModel = {
   evidence: OrderCardEvidence[];
   frozenAt: string | null;
   totalAmountCents: number | null;
+  agreement?: CustomerAgreementRecord | null;
   payment: OrderCardPaymentContext;
   catalog?: Array<{
     id: string;
