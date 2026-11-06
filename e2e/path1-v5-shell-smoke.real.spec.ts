@@ -43,6 +43,7 @@ function expectedHeading(pagePath: string): string {
   if (pagePath === "/orders") return "Aufträge";
   if (pagePath === "/customers") return "Kunden & Kontakt";
   if (pagePath === "/buchhaltung/rechnungen") return "Rechnungen";
+  if (pagePath === "/nachrichten") return "Nachrichten";
   if (pagePath === "/settings") return "Arbeitsplatz & Zugänge";
   throw new Error(`PATH1_V5_SHELL_SMOKE_HEADING_MISSING:${pagePath}`);
 }
