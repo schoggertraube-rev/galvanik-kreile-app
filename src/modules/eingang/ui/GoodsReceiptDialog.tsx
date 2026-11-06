@@ -1,6 +1,7 @@
 "use client";
 import{useCallback,useEffect,useRef,useState}from'react';
 import{Button,Dialog,Hinweis}from'@/ui/kr';
+import{generateOrderLabel}from'@/app/actions/pdf.actions';
 import{uploadIntakeOriginal}from'../intakeOriginalUpload';
 import{getIntakeDeviceId}from'../deviceContract';
 import{goodsReceiptGaps,goodsReceiptWare,type GoodsReceiptInput,type GoodsReceiptRecord,type GoodsReceiptReadResult,type GoodsReceiptFailure}from'../goodsReceiptContract';
@@ -26,6 +27,7 @@ export function GoodsReceiptDialog({orderId,sourceId,ports,onClose,onOriginal,on
  const pending=useRef<GoodsReceiptInput|null>(null),pendingSource=useRef<GoodsReceiptInput|null>(null);
  const closeAfterUpload=useRef(false);
  const scope=useRef<string|null>(null),persistedPhotos=useRef(new Set<string>()),resumeUploads=useRef<()=>void>(()=>{});
+ const acceptedReceipt=useRef<{id:string;replayed:boolean}|null>(null),[labelRetryOrderId,setLabelRetryOrderId]=useState<string|null>(null);
  const load=useCallback(async()=>{
   setLoading(true);setError(null);
   try{const result=await ports.read(orderId);if(result.code!=='OK'){setError(result.message);return;}
@@ -49,7 +51,8 @@ export function GoodsReceiptDialog({orderId,sourceId,ports,onClose,onOriginal,on
    pending.current=payload;
    setPendingCommand(payload.command);
    try{const result=await ports.save(payload);if(result.code!=='OK'){setError('Nicht gespeichert · alle Eingaben sind noch da · '+result.message);return false;}
-    version.current=result.receipt.version;
+     version.current=result.receipt.version;
+     if(payload.command!=='draft')acceptedReceipt.current={id:result.receipt.id,replayed:result.replayed};
     persistedPhotos.current=new Set(result.receipt.fotos.map(photo=>photo.fileId));
     setError(null);if(current.current===pendingSource.current)dirty.current=false;
     if(payload.command==='draft'){
@@ -114,6 +117,24 @@ export function GoodsReceiptDialog({orderId,sourceId,ports,onClose,onOriginal,on
   const selector=first==='Zustand'?'[data-spec-id="ware.warenzustand"] button':first==='Abweichungsgrund'?'[data-spec-id="ware.grund"] button':first.includes('Abweichung')?'[data-spec-id="ware.foto.abweichung"]':first.includes('Foto')?'[data-spec-id="ware.foto.paket"]':first==='Packstücke'?'[data-spec-id="ware.packstuecke-plus"]':first==='Verfahren/Termin wie im KV'?'[data-spec-id="ware.verfahren"] button':'[data-spec-id="ware.position.stimmt"]';
   requestAnimationFrame(()=>{const field=document.querySelector<HTMLElement>(selector);field?.scrollIntoView({block:'nearest'});field?.focus();});
  };
+  const openLabelPrint=async(receiptOrderId:string,target:Window|null)=>{
+   if(!target)throw Error('LABEL_PRINT_WINDOW_BLOCKED');
+   try{
+    target.opener=null;target.document.title='Laufzettel.pdf';target.document.body.replaceChildren();target.document.body.style.margin='0';
+    const base64=await generateOrderLabel(receiptOrderId);if(!base64)throw Error('LABEL_PDF_EMPTY');
+    const frame=target.document.createElement('iframe');frame.title='Laufzettel';frame.style.border='0';frame.style.width='100%';frame.style.height='100vh';
+    const loaded=new Promise<void>((resolve,reject)=>{const timeout=window.setTimeout(()=>reject(Error('LABEL_PDF_LOAD_TIMEOUT')),10_000);frame.addEventListener('load',()=>{window.clearTimeout(timeout);resolve();},{once:true});frame.addEventListener('error',()=>{window.clearTimeout(timeout);reject(Error('LABEL_PDF_LOAD_FAILED'));},{once:true});});
+    frame.src=`data:application/pdf;base64,${base64}`;target.document.body.append(frame);await loaded;
+    target.addEventListener('afterprint',()=>{onMessage('Laufzettel: Druck aufgerufen');target.close();},{once:true});target.focus();target.print();
+   }catch(cause){console.error('[GOODS_LABEL_PRINT_FAILED]',{orderId:receiptOrderId,code:cause instanceof Error?cause.message:'GOODS_LABEL_PRINT_FAILED'});try{target.close();}catch(closeCause){console.error('[GOODS_LABEL_PRINT_CLOSE_FAILED]',closeCause);}throw cause;}
+  };
+  const retryLabel=async()=>{
+   if(!labelRetryOrderId||busy)return;setBusy(true);setError(null);
+   const target=window.open('','_blank');
+   try{await openLabelPrint(labelRetryOrderId,target);setLabelRetryOrderId(null);onClose();}
+   catch(cause){setError('Ware wurde angenommen · Laufzettel nicht gedruckt · Erneut drucken. Fehlercode: '+(cause instanceof Error?cause.message:'GOODS_LABEL_PRINT_FAILED'));}
+   finally{setBusy(false);}
+  };
  const accept=async(primary:boolean)=>{
   if(submitting.current||!data||!current.current)return;const value=current.current;
   const gaps=primary&&data.canStartGalvanik?goodsReceiptGaps(value,data.order.fromQuote):value.condition?[]:['Zustand'];
@@ -121,10 +142,17 @@ export function GoodsReceiptDialog({orderId,sourceId,ports,onClose,onOriginal,on
   submitting.current=true;setBusy(true);
   try{const derived=goodsReceiptWare(value),packaging=value.condition==='abweichung'&&derived==='da';
    const command=primary&&data.canStartGalvanik&&(value.condition!=='abweichung'||packaging)?'galvanik':'accept';
-   if(!await persist(command))return;
-   const read=await ports.read(orderId);if(read.code!=='OK'){setError(read.message);return;}const stored=read.receipts.find(receipt=>receipt.id===value.id);
-   if(!stored||stored.status==='entwurf'){setError('Warenannahme konnte nicht sicher erneut gelesen werden. Code: GOODS_RECEIPT_READBACK_FAILED.');return;}
-   onMessage(`Ware ${read.order.number??read.order.id} angenommen · ${stored.status==='galvanik'?'in Galvanik':'Wareneingang'}`);onClose();
+    const labelWindow=window.open('','_blank');
+    if(!await persist(command)){labelWindow?.close();return;}
+    const read=await ports.read(orderId);if(read.code!=='OK'){labelWindow?.close();setError(read.message);return;}const stored=read.receipts.find(receipt=>receipt.id===value.id);
+    if(!stored||stored.status==='entwurf'){labelWindow?.close();setError('Warenannahme konnte nicht sicher erneut gelesen werden. Code: GOODS_RECEIPT_READBACK_FAILED.');return;}
+    pending.current=null;pendingSource.current=null;setPendingCommand(null);
+    const printedReceipt=acceptedReceipt.current;
+    if(printedReceipt?.id===stored.id&&!printedReceipt.replayed){
+     try{await openLabelPrint(orderId,labelWindow);}
+     catch(cause){setLabelRetryOrderId(orderId);setError('Ware wurde angenommen · Laufzettel nicht gedruckt · Erneut drucken. Fehlercode: '+(cause instanceof Error?cause.message:'GOODS_LABEL_PRINT_FAILED'));return;}
+    }else labelWindow?.close();
+    onMessage(`Ware ${read.order.number??read.order.id} angenommen · ${stored.status==='galvanik'?'in Galvanik':'Wareneingang'}`);onClose();
   }catch(cause){console.error('[GOODS_DIALOG_ACCEPT_READBACK_FAILED]',cause);setError('Nicht gespeichert oder noch nicht sicher bestätigt · alle Eingaben sind noch da · Fehlercode: GOODS_DIALOG_ACCEPT_READBACK_FAILED.');}
   finally{submitting.current=false;setBusy(false);}
  };
@@ -140,7 +168,7 @@ export function GoodsReceiptDialog({orderId,sourceId,ports,onClose,onOriginal,on
    <dl className="kr-fakten"><div><dt>Erwartet</dt><dd>{data.order.ware} · {data.order.fromQuote?'aus KV':'direkt beauftragt'}</dd></div><div><dt>Positionen</dt><dd>{data.order.items.length}</dd></div></dl>
    <GoodsInspectionForm value={input} order={data.order} busy={busy} onChange={change} onFile={addFiles} onOriginal={fileId=>{if(input.itemId)onOriginal(input.itemId,fileId);}}/>
   </>:null}
-  {error?<div role="alert" data-spec-id={error.startsWith('Noch offen:')?'ware.zustand.teilweise':'ware.zustand.fehler'}><Hinweis ton="warn">{error}</Hinweis>{data?<>{pendingCommand?<Button text="Erneut" data-spec-id="ware.erneut" disabled={busy} onClick={()=>void (pendingCommand==='draft'?persist('draft'):accept(pendingCommand==='galvanik'))}/>:null}{error.startsWith('Noch offen:')?<Button text="Zur Lücke" data-spec-id="ware.zur-luecke" onClick={()=>{focusGap(error.slice('Noch offen: '.length));setError(null);}}/>:null}</>:<Button text="Erneut laden" onClick={()=>void load()}/>}</div>:null}
+   {error?<div role="alert" data-spec-id={error.startsWith('Noch offen:')?'ware.zustand.teilweise':'ware.zustand.fehler'}><Hinweis ton="warn">{error}</Hinweis>{data?<>{pendingCommand?<Button text="Erneut" data-spec-id="ware.erneut" disabled={busy} onClick={()=>void (pendingCommand==='draft'?persist('draft'):accept(pendingCommand==='galvanik'))}/>:null}{labelRetryOrderId?<Button text="Erneut drucken" data-spec-id="ware.laufzettel.erneut" disabled={busy} onClick={()=>void retryLabel()}/>:null}{error.startsWith('Noch offen:')?<Button text="Zur Lücke" data-spec-id="ware.zur-luecke" onClick={()=>{focusGap(error.slice('Noch offen: '.length));setError(null);}}/>:null}</>:<Button text="Erneut laden" onClick={()=>void load()}/>}</div>:null}
   {remainingUploads&&!busy?<Button text="Erneut übertragen" onClick={()=>void upload()}/>:null}
  </div></Dialog>;
 }
