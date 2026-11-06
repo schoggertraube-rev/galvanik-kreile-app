@@ -222,5 +222,109 @@
   "E09": {
     "paket": "AP-EIN-2",
     "grund": "Endversion-Angleich U-240"
+  },
+  "ABS-01": {
+    "paket": "AP-ABS",
+    "grund": "AP-ABS nach Runde 53 wird mit AP-ABS geliefert"
+  },
+  "ABS-02": {
+    "paket": "AP-ABS",
+    "grund": "AP-ABS nach Runde 53 wird mit AP-ABS geliefert"
+  },
+  "ABS-03": {
+    "paket": "AP-ABS",
+    "grund": "AP-ABS nach Runde 53 wird mit AP-ABS geliefert"
+  },
+  "ABS-04": {
+    "paket": "AP-ABS",
+    "grund": "AP-ABS nach Runde 53 wird mit AP-ABS geliefert"
+  },
+  "ABS-05": {
+    "paket": "AP-ABS",
+    "grund": "AP-ABS nach Runde 53 wird mit AP-ABS geliefert"
+  },
+  "ABS-06": {
+    "paket": "AP-ABS",
+    "grund": "AP-ABS nach Runde 53 wird mit AP-ABS geliefert"
+  },
+  "ABS-07": {
+    "paket": "AP-ABS",
+    "grund": "AP-ABS nach Runde 53 wird mit AP-ABS geliefert"
+  },
+  "ABS-08": {
+    "paket": "AP-ABS",
+    "grund": "AP-ABS nach Runde 53 wird mit AP-ABS geliefert"
+  },
+  "ABS-09": {
+    "paket": "AP-ABS",
+    "grund": "AP-ABS nach Runde 53 wird mit AP-ABS geliefert"
+  },
+  "ABS-10": {
+    "paket": "AP-ABS",
+    "grund": "AP-ABS nach Runde 53 wird mit AP-ABS geliefert"
+  },
+  "ABS-11": {
+    "paket": "AP-ABS",
+    "grund": "AP-ABS nach Runde 53 wird mit AP-ABS geliefert"
+  },
+  "ABS-12": {
+    "paket": "AP-ABS",
+    "grund": "AP-ABS nach Runde 53 wird mit AP-ABS geliefert"
+  },
+  "ABS-13": {
+    "paket": "AP-ABS",
+    "grund": "AP-ABS nach Runde 53 wird mit AP-ABS geliefert"
+  },
+  "ABS-14": {
+    "paket": "AP-ABS",
+    "grund": "AP-ABS nach Runde 53 wird mit AP-ABS geliefert"
+  },
+  "ABS-15": {
+    "paket": "AP-ABS",
+    "grund": "AP-ABS nach Runde 53 wird mit AP-ABS geliefert"
+  },
+  "ABS-16": {
+    "paket": "AP-ABS",
+    "grund": "AP-ABS nach Runde 53 wird mit AP-ABS geliefert"
+  },
+  "ABS-17": {
+    "paket": "AP-ABS",
+    "grund": "AP-ABS nach Runde 53 wird mit AP-ABS geliefert"
+  },
+  "ABS-18": {
+    "paket": "AP-ABS",
+    "grund": "AP-ABS nach Runde 53 wird mit AP-ABS geliefert"
+  },
+  "ABS-19": {
+    "paket": "AP-ABS",
+    "grund": "AP-ABS nach Runde 53 wird mit AP-ABS geliefert"
+  },
+  "ABS-20": {
+    "paket": "AP-ABS",
+    "grund": "AP-ABS nach Runde 53 wird mit AP-ABS geliefert"
+  },
+  "RT04-12": {
+    "paket": "AP-EIN",
+    "grund": "R53-Angleich"
+  },
+  "RT04-13": {
+    "paket": "AP-EIN",
+    "grund": "R53-Angleich"
+  },
+  "RT04-15": {
+    "paket": "AP-EIN",
+    "grund": "R53-Angleich"
+  },
+  "U241-01": {
+    "paket": "AP-EIN",
+    "grund": "R53-Angleich"
+  },
+  "U241-02": {
+    "paket": "AP-EIN",
+    "grund": "R53-Angleich"
+  },
+  "U241-03": {
+    "paket": "AP-EIN",
+    "grund": "R53-Angleich"
   }
 }

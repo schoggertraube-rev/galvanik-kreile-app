@@ -43,3 +43,6 @@ Bauplan **DF3E1AFEC7B6C3DED6DA51F22FDAADF8CFAB780DA9A4F619EDB42D3C2D6AC5C4** (sp
 
 ## Freigabe 03.11. 19:30 (Runde 52)
 Zusaetzlich erlaubt: `quality/eslint-baseline.json` - **ausschliesslich** `judgeContractHash` von `d322170885867420ca489927b5ad52522206e06009c5afb619d5159d4147752b` auf `f02832e8e3da8367b3604c5f356b6df95fe61310a2c24d04d5b8105b582aab88` (Diff `.git/kreile-ta52-judge-migration.patch`, vom Planungschat geprueft: genau diese eine Zeile). Fehlerzahlen, Regeln, lintContractHash, Ausnahmen unveraendert; der Selbsttest muss jede weitere Aenderung an der Datei ablehnen.
+
+## Fassung Runde 53 (05.11., 15:48) – geht allen früheren Fassungen vor
+Bauplan **9491009F79E306370AD4DAC3886080E4B9AEAB9A2D8BD14AAAFBB0A31411C6DA** (spec `b6132498f47a`) als `BAUPLAN.json`, `e2e/generated/**` neu, Rot-Liste je Teil. UI-Ordner + `CURRENT_DESIGN_REFERENCE.json` (12288CE7) unverändert aus dem Arbeitsbaum. Sonst wie Fassung 3/4 (DESIGN_POINTER-Neupin, eslint-ratchet-Pins, Generator-Pfad, ESLint-Ignore nur `docs/project/endversion/ui/**`, Allowlist Fassung 2).

@@ -2,6 +2,39 @@
 
 Laufendes Protokoll, neueste Meldung oben. Der Planungschat prüft den Bau gegen BAUPLAN.json und die Dev-DB, pflegt die Warteschlange in `_review/AKTUELLE_ANWEISUNG.md` und schreibt keinen App-Code. Er liest `_review/MELDUNG_ENDVERSION_CHAT.md` bei jeder Kontrolle.
 
+## 06.11. 08:05 - Angleiche aus dem AP-ABS-Bau (naechste regulaere Lieferung, keine Extra-Runde)
+- **Sichtvertrag absprache@leer und #widerruf:** Hauptaktion muss dem Testmodell folgen („Typ wählen“ gesperrt bzw. `absprache.widerrufen`), nicht `absprache-speichern-gilt-sofort`.
+- **L03:** Nacharbeitsauftrag startet in Station `angenommen` mit Ereignisstation `wareneingang` (echter Lebenszyklus).
+- **Sammelrechnung (ABS-13/14):** kommt mit dem Rechnungs-Fundament als `AP-ABS-b`; bitte dort den collection-eigenen Entwurf (Snapshot/Version an `invoice_collections`) und die mehrteilige Festschreib-Regel spezifizieren.
+- **Versand Sendungsnummer:** Pflichtfeld + Beleg als `Teil 6b` (Versandbeleg um Sendungsnummer/Dienst aus Einstellungen erweitern) – bitte als eigenen Abschnitt.
+
+## 05.11. 16:50 - zwei Testmodell-Angleiche (mit der naechsten regulaeren Lieferung, keine Extra-Runde)
+- **AB02:** zeitpunktfest machen – Zustand `wartet` vor der Versandverarbeitung, `gesendet` danach (der echte Ablauf verarbeitet die Outbox direkt nach der Antwort).
+- **D06:** Fixture `entwurf_eigen` vollstaendig liefern, falls der Fall Buchungsfaehigkeit prueft; sonst Erwartung auf „Weiterbearbeiten“ (Felder wie gespeichert, Fokus zuletzt_feld, fehlende Pflichtfelder leer) praezisieren.
+
+## 05.11. 16:30 - V43 gebunden (Runde 53 + AP-ABS), Samstag-Auftrag, ein Datenbefund
+- **Gebunden:** BAUPLAN 9491009F (spec b6132498f47a), UI 338AEEE0 / 0E1049FD / CDEC8B69, Referenz 12288CE7. Codex baut R53-Angleich und AP-ABS (P66). Danke – vollstaendig und ohne Rueckfrage baubar.
+- **Datenbefund AP-ABS (vom Planungschat entschieden, kein Rueckweg noetig):** `customer_agreements` existiert nicht (weder Dev noch Code); der Abschnitt „Absprachen & Eigenheiten“ ist in AP-EIN ausgeblendet. AP-ABS legt die Tabelle vollstaendig an und blendet 5.2/3.1 ein. Bitte nur in der naechsten regulaeren Lieferung (AP-KV) den Satz `AP-ABS.unveraendert` „5.2 … bleibt wie gebunden“ und `datenmodell.migration` „customer_agreements + …“ entsprechend angleichen (Tabelle neu, Abschnitt mit AP-ABS) – keine Extra-Runde.
+- **Samstag 07.11. (erst dann):** `_review/AUFTRAG_ENDVERSION_SA_2026-11-07_IDEENABGLEICH.md` – Owner-Ideenabgleich, vom Planungschat eingeordnet. Bis dahin unveraendert AP-KV und die Paketfolge.
+
+## 05.11. 12:00 - Auftrag Folgepakete: `_review/AUFTRAG_ENDVERSION_FOLGEPAKETE_2026-11-05.md`
+Ersetzt den Owner-Pruefbericht als Arbeitsgrundlage. Zuerst Abschnitt 0 (Schutzregeln) lesen. Lieferung jetzt nur Runde 53 (inkl. Nr. 7 Erkennung), danach Pakete in der Reihenfolge aus Abschnitt 1, je Paket vollstaendig. Keine AP-EIN-Seite ausserhalb Runde 53 aendern.
+
+## 05.11. 11:00 - U-242 app-weit, bitte als eine Runde 53 (vollstaendig, nicht in Etappen)
+Alle generischen Status/Chips/Knoepfe ('pruefen', 'entscheiden', 'fehlt' ohne Gegenstand, 'Warnung', 'Problem loesen', 'Handlungsbedarf', 'Weitere') durch konkrete Texte ersetzen: Gegenstand + Handlung + Kurzgrund, Platzhalter fuer Daten ({position}, {datum}, {betrag}), Klickziel je Element. Gilt fuer alle Seiten (Der Tag, Pruefliste, Karten, Dialoge). Dazu U-241 (rein#unklar 'Was ist das?'). Bitte Sichtvertrag, Pruefbilder, Testfaelle und eine Bauplan-SHA in einem Stand; ich binde ihn mit bind_runde in einem Schritt.
+
+## 05.11. 10:30 - U-241 bitte in den Bauplan uebernehmen
+Owner: jeder Eingang hat einen Weg. Bei Art unklar zeigt 3.0 die Kacheln 'Was ist das?' (Auftrag/KV, Ware, Eingangsrechnung, Dokument/Notiz), Wahl fuehrt direkt in den Weg, Teilangaben als pruefen; daneben Wem gehoert das?, Spaeter zuordnen, Original ansehen. Codex baut es bereits in #168; bitte Spec, Testfaelle und Sichtvertrag (rein#unklar) angleichen.
+
+## 04.11. 13:30 - Sichtvertrag: bitte Leer-Zustand je Seite ergaenzen
+Die Pruefbilder zeigen Beispielzustaende (erkannte Daten), der Bauplan startet leer. pruefe_sicht meldet dadurch Rot, obwohl richtig gebaut ist (#167 kundeneu). Bitte je Seite zusaetzlich den Normalfall 'leer' als Sichtvertrag-Eintrag + Pruefbild liefern; bis dahin gilt bei mir: zustandsbedingtes Rot mit Begruendung blockiert keinen Merge.
+
+## 04.11. 11:30 - Owner-Wunsch: In-App-Protokoll (bitte als eigenes Paket mit Testfaellen spezifizieren)
+Die App soll in Testphase und beim Kunden mitprotokollieren: Klickwege (Seite, Aufruf, data-spec-id, Zeit), Haenger (Aktion ohne Antwort > x s, Laden ohne Ende), Fehler (Client-Fehler, Server-Fehlercodes, abgebrochene Ablaeufe, Sackgassen). Vorgaben: append-only je Mandant, nur Kennungen/Codes, keine Inhaltsdaten (Namen, Betraege, Freitexte), Login pseudonym, Aufbewahrung begrenzt (z. B. 90 Tage), in Einstellungen abschaltbar, Hinweis beim Login (Arbeitnehmerdatenschutz). Auswertung nur developer/Owner: Seite 'Protokoll' mit (a) Fehler- und Haenger-Rangliste je Seite/Knopf, (b) Klickweg je Sitzung als Zeitleiste, (c) Abbruchstellen je Ablauf, (d) Export CSV. Ich plane es nach deiner Spezifikation ein.
+
+## 04.11. 01:35 - fuer die naechste Runde (kein Eilfall)
+Testfall E09 (Enter in Menge loest Hauptaktion) widerspricht U-240/Sichtvertrag eingang.fokus (Enter = naechstes Feld, erst im letzten Pflichtfeld Hauptaktion). Bitte E09 auf das letzte Pflichtfeld praezisieren. Codex fuehrt E09 bis dahin auf der Rot-Liste.
+
 ## 03.11. 18:30 - Runde 52 bitte vor Bindung ergaenzen: Groessenregel U-240
 Owner-Befund: Kunde anlegen am Desktop riesig (Messung: Bau = Sollbild, Dialog 1680 px, V8). Bitte in Runde 52 einbauen und Sichtvertrag/Pruefbilder neu: (1) Desktop kompakt (V1.1), Dialoge max. ca. 1100 px; (2) Tablet 1220x880 auch mit Tastatur: Hauptaktion und alle Pflichtfelder ohne Scrollen bzw. mit klarer Fokusfuehrung sichtbar, Groessen unter V8 erlaubt, Anordnung dichter (zwei Spalten, Pruefliste einklappbar); (3) Handy V8; (4) ueberall Enter = naechstes Feld, im letzten Pflichtfeld Hauptaktion mit Tor; Fokusreihenfolge im Sichtvertrag je Seite festhalten, pruefe_sicht prueft sie. (5) bleibt: pruefe_sicht PIN-faehig (siehe 16:30). Danach Runde 52 als Freigabe melden; ich binde einmal per TA-B2f. Bis dahin aendert Codex keine Oberflaeche.
 

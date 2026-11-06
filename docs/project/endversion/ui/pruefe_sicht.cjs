@@ -23,7 +23,8 @@ const APP = arg('app'); const ROUTEN = JSON.parse(fs.readFileSync(arg('routen', 
 const NUR = (arg('nur', '') || '').split(',').filter(Boolean); const AUS = arg('aus', path.join(H, 'pruefbericht.json'));
 if (!APP) { console.error('--app fehlt'); process.exit(2); }
 const V = JSON.parse(fs.readFileSync(path.join(H, 'SICHTVERTRAG.json'), 'utf8'));
-const routeFuer = s => ROUTEN.seiten[s.modus ? s.screen + '#' + s.modus : s.screen] || (s.modus ? null : undefined);
+// Runde 53: Paket-Seiten haben zwei Normalfälle – zustand „leer“ (Route = Seiten-ID, so startet die App) und „beispiel“ (Route = „{id}@beispiel“, optional)
+const routeFuer = s => ROUTEN.seiten[s.modus ? s.screen + '#' + s.modus : s.zustand === 'beispiel' ? s.screen + '@beispiel' : s.screen] || (s.modus || s.zustand === 'beispiel' ? null : undefined);
 const pfad = (s) => { let p = routeFuer(s); if (p && typeof p === 'object') p = p.pfad; if (!p) return null; for (const [k, v] of Object.entries(ROUTEN.muster || {})) p = p.replace(`{${k}}`, v); return p; };
 const PRUEFBAR = e => ['button', 'input', 'select', 'textarea', 'h1', 'h2', 'h3'].includes(e.tag) && e.kennung;
 const b = await chromium.launch(); const bericht = { app: APP, zeit: new Date().toISOString(), seiten: [], summe: { gruen: 0, gelb: 0, rot: 0 } };
@@ -45,12 +46,12 @@ async function kontext(rolle) {
 }
 for (const s of V.seiten) {
   if (NUR.length && !NUR.includes(s.screen)) continue;
-  const pf = pfad(s); const z = { screen: s.screen, ...(s.modus ? { modus: s.modus } : {}), rolle: s.rolle, groesse: s.groesse, befunde: [] };
+  const pf = pfad(s); const z = { screen: s.screen, ...(s.modus ? { modus: s.modus } : {}), ...(s.zustand ? { zustand: s.zustand } : {}), rolle: s.rolle, groesse: s.groesse, befunde: [] };
   if (!pf) { const r0 = routeFuer(s); z.befunde.push({ stufe: 'gelb', was: r0 && typeof r0 === 'object' && r0.grund ? 'keine Route: ' + r0.grund : 'keine Route in routen.json' }); z.ampel = 'gelb'; bericht.seiten.push(z); bericht.summe.gelb++; continue; }
   const ctx = await kontext(s.rolle); const g = V.groessen[s.groesse]; const p = await ctx.newPage(); await p.setViewportSize({ width: g.breite, height: g.hoehe });
   try {
     await p.goto(APP + pf, { waitUntil: 'networkidle' }); await p.waitForTimeout(400);
-    if (ROUTEN.vor) { await p.evaluate(new Function('a', 'return (' + ROUTEN.vor + ')(a)'), { screen: s.screen, modus: s.modus || null, rolle: s.rolle, groesse: s.groesse, muster: ROUTEN.muster || {} }); await p.waitForTimeout(400); }
+    if (ROUTEN.vor) { await p.evaluate(new Function('a', 'return (' + ROUTEN.vor + ')(a)'), { screen: s.screen, modus: s.modus || null, zustand: s.zustand || null, rolle: s.rolle, groesse: s.groesse, muster: ROUTEN.muster || {} }); await p.waitForTimeout(400); }
     const R = routeFuer(s); // Seiten, die erst nach einer Bedienung erscheinen (z. B. Rückfrage „Entwurf“): schritte [["fill",sel,wert],["click",sel],["press","Escape"],["wait",ms]]
     for (const [was, sel, wert] of (R && typeof R === 'object' && R.schritte) || []) { if (was === 'fill') await p.fill(sel, wert); else if (was === 'click') await p.click(sel); else if (was === 'press') await p.keyboard.press(sel); else if (was === 'wait') await p.waitForTimeout(+sel); }
     if (R && typeof R === 'object' && R.schritte) await p.waitForTimeout(300);
@@ -95,12 +96,12 @@ for (const s of V.seiten) {
       else for (let n = 1; n <= bis; n++) { await p.keyboard.press('Enter'); await p.waitForTimeout(90); const k = await kennung();
         if (!k || !muster(fl[n].kennung).test(k)) { z.befunde.push({ stufe: 'rot', was: `Fokusreihenfolge: nach „${fl[n - 1].kennung}“ springt Enter auf „${k || 'nichts'}“ statt „${fl[n].kennung}“`, kennung: fl[n].kennung }); break; } } }
     z.soll = soll.length; z.gefunden = soll.length - z.befunde.filter(x => x.was === 'fehlt').length;
-    await p.screenshot({ path: path.join(H, 'pruefbilder_app', `${s.screen}_${s.rolle}_${s.groesse}.png`) }).catch(() => {});
+    await p.screenshot({ path: path.join(H, 'pruefbilder_app', `${s.screen}${s.modus ? '__' + s.modus : ''}${s.zustand === 'leer' ? '__leer' : ''}_${s.rolle}_${s.groesse}.png`) }).catch(() => {});
   } catch (err) { z.befunde.push({ stufe: 'rot', was: 'Seite nicht ladbar: ' + err.message.split('\n')[0] }); }
   await p.close();
   const rot = z.befunde.filter(x => x.stufe === 'rot').length, gelb = z.befunde.filter(x => x.stufe === 'gelb').length;
   z.ampel = rot ? 'rot' : gelb ? 'gelb' : 'gruen'; bericht.summe[z.ampel]++; bericht.seiten.push(z);
-  console.log(z.ampel.toUpperCase().padEnd(5), `${s.screen}${s.modus ? '#' + s.modus : ''}/${s.rolle}/${s.groesse}`, `${z.gefunden ?? 0}/${z.soll ?? 0}`, rot ? `rot ${rot}` : '', gelb ? `gelb ${gelb}` : '');
+  console.log(z.ampel.toUpperCase().padEnd(5), `${s.screen}${s.modus ? '#' + s.modus : ''}${s.zustand ? '@' + s.zustand : ''}/${s.rolle}/${s.groesse}`, `${z.gefunden ?? 0}/${z.soll ?? 0}`, rot ? `rot ${rot}` : '', gelb ? `gelb ${gelb}` : '');
 }
 await b.close();
 fs.mkdirSync(path.join(H, 'pruefbilder_app'), { recursive: true }); fs.writeFileSync(AUS, JSON.stringify(bericht, null, 1));

@@ -1,4 +1,4 @@
-// Generated from BAUPLAN SHA-256 DF3E1AFEC7B6C3DED6DA51F22FDAADF8CFAB780DA9A4F619EDB42D3C2D6AC5C4. Do not edit.
+// Generated from BAUPLAN SHA-256 9491009F79E306370AD4DAC3886080E4B9AEAB9A2D8BD14AAAFBB0A31411C6DA. Do not edit.
 export const generatedFlowRuntime = {
   "database": {
     "orders": {
@@ -1218,6 +1218,112 @@ export const generatedFlowRuntime = {
       "richtung": "rein",
       "erkennung_status": "laeuft",
       "erkennung_seit": "{jetzt:-3min}"
+    },
+    "kunde_absprache_rechnung_folgt": {
+      "id": "20000000-0000-4000-8000-000000000050",
+      "tabelle": "customer_agreements",
+      "kunde": "{kunde_bedingung_bar}",
+      "typ": "ausgabe_ohne_zahlung",
+      "order_id": null,
+      "gueltig_bis": null,
+      "grund": "Prüfgrund eins"
+    },
+    "kunde_absprache_sammel": {
+      "id": "20000000-0000-4000-8000-000000000051",
+      "tabelle": "customer_agreements",
+      "kunde": "{kunde_bedingung_bar}",
+      "typ": "sammelrechnung",
+      "order_id": null,
+      "gueltig_bis": null,
+      "grund": "Prüfgrund zwei",
+      "ziel_tage": 14
+    },
+    "kunde_absprache_freitext": {
+      "id": "20000000-0000-4000-8000-000000000052",
+      "tabelle": "customer_agreements",
+      "kunde": "{kunde_bedingung_bar}",
+      "typ": null,
+      "geld": true,
+      "bezeichnung": "Abholung ohne Zahlung",
+      "wert": "Prüftext Rechnung folgt"
+    },
+    "kunde_absprache_abgelaufen": {
+      "id": "20000000-0000-4000-8000-000000000053",
+      "tabelle": "customer_agreements",
+      "kunde": "{kunde_bedingung_bar}",
+      "typ": "ausgabe_ohne_zahlung",
+      "gueltig_bis": "{arbeitstag:-1}",
+      "grund": "Prüfgrund drei"
+    },
+    "auftrag_fertig_unbezahlt": {
+      "id": "20000000-0000-4000-8000-000000000054",
+      "tabelle": "orders",
+      "order_number": "A-2099-9009",
+      "kunde": "{kunde_bedingung_bar}",
+      "art": "auftrag",
+      "status": "fertig",
+      "uebergabe": "abholung",
+      "zahlungsmodus": "bar_karte"
+    },
+    "kunde_absprache_zahlungsziel": {
+      "id": "20000000-0000-4000-8000-000000000055",
+      "tabelle": "customer_agreements",
+      "kunde": "{kunde_bedingung_bar}",
+      "typ": "zahlungsziel",
+      "ziel_tage": 30,
+      "order_id": null,
+      "gueltig_bis": null,
+      "grund": "Prüfgrund sechs"
+    },
+    "auftrag_absprache_sammel": {
+      "id": "20000000-0000-4000-8000-000000000056",
+      "tabelle": "customer_agreements",
+      "kunde": "{kunde_bedingung_bar}",
+      "typ": "sammelrechnung",
+      "ziel_tage": 14,
+      "order_id": "{auftrag_fertig_unbezahlt}",
+      "gueltig_bis": null,
+      "grund": "Prüfgrund sieben"
+    },
+    "auftrag_uebergeben_sammel": {
+      "id": "20000000-0000-4000-8000-000000000057",
+      "tabelle": "orders",
+      "order_number": "A-2099-9010",
+      "kunde": "{kunde_bedingung_bar}",
+      "art": "auftrag",
+      "status": "uebergeben",
+      "warenausgang_am": "{monat:-1}",
+      "uebergabe": "abholung",
+      "positionen": [
+        {
+          "bezeichnung": "Prüfteil eins",
+          "menge": 1,
+          "einheit": "stueck",
+          "einzelpreis": 10,
+          "steuersatz": 19
+        }
+      ]
+    },
+    "sammelliste_vormonat": {
+      "id": "20000000-0000-4000-8000-000000000058",
+      "tabelle": "invoice_collections",
+      "kunde": "{kunde_bedingung_bar}",
+      "monat": "{monat:-1}",
+      "ziel_tage": 14,
+      "status": "offen",
+      "auftraege": [
+        "{auftrag_uebergeben_sammel}"
+      ]
+    },
+    "auftrag_fertig_versand": {
+      "id": "20000000-0000-4000-8000-000000000059",
+      "tabelle": "orders",
+      "order_number": "A-2099-9011",
+      "kunde": "{kunde_bedingung_bar}",
+      "art": "auftrag",
+      "status": "fertig",
+      "uebergabe": "versand",
+      "zahlungsmodus": "bar_karte"
     }
   },
   "screenTypes": {
@@ -1243,6 +1349,7 @@ export const generatedFlowRuntime = {
     "rechte": "dialog",
     "entwurf": "dialog",
     "meincode": "dialog",
-    "neuigkeiten": "seite"
+    "neuigkeiten": "seite",
+    "absprache": "dialog"
   }
 } as const;

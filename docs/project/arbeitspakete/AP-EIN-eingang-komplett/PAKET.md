@@ -90,3 +90,10 @@ Der Planungschat legt den Klickweg je Teil vor, nachdem er ihn selbst auf der Pr
 
 ### Bindung Runde 52 (03.11., 19:07) – ersetzt alle früheren Bindungen
 BAUPLAN **DF3E1AFEC7B6C3DED6DA51F22FDAADF8CFAB780DA9A4F619EDB42D3C2D6AC5C4** (spec `ee64f8882bb7`), UI: Bündel 35146E45, Sichtvertrag B1A53EA6, Prüfskript FDA7C59C, Referenz 1509BE93. Größenregel U-240 und Enter-Fokusführung gehören zur Abnahme (Sichtvertrag).
+
+### Nachtrag 04.11. 05:05
+- complaints: Bauplan complaint.item_id = neue Spalte `intake_item_id` (uuid, FK intake_item); bestehendes `item_id` bleibt Positionsbezug (keine Umdeutung).
+- M6-Abnahmen A01-A06 gehoeren zu Teil 4 (Einstieg nachrichten/aufgabe); M6-Serverbefehle in Teil 2.
+
+### Bindung Runde 53 (05.11., 15:48) – ersetzt alle früheren Bindungen
+BAUPLAN **9491009F79E306370AD4DAC3886080E4B9AEAB9A2D8BD14AAAFBB0A31411C6DA** (spec `b6132498f47a`), UI: Bündel 338AEEE0, Sichtvertrag 0E1049FD, Prüfskript CDEC8B69, Referenz 12288CE7. Größenregel U-240 und Enter-Fokusführung gehören zur Abnahme (Sichtvertrag).

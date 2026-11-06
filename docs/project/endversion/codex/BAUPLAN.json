@@ -19,23 +19,27 @@
   "F5a Kunde bearbeiten": {
    "baureif": true,
    "darf": "App-Basis: Korrekturen aus „korrekturen“ ausführen und die Seiten dieses Abschnitts nach diesem Plan stabil fertigstellen – kein Neubau anderer Seiten oder Funktionen (Owner 28.10., H8)"
+  },
+  "AP-ABS Absprachen": {
+   "baureif": true,
+   "darf": "App-Basis: Korrekturen aus „korrekturen“ ausführen und die Seiten dieses Abschnitts nach diesem Plan stabil fertigstellen – kein Neubau anderer Seiten oder Funktionen (Owner 28.10., H8)"
   }
  },
  "bauplan": {
-  "erzeugt": "2026-11-03T17:54:20.526Z",
-  "spec_sha": "ee64f8882bb7",
+  "erzeugt": "2026-11-05T14:27:30.364Z",
+  "spec_sha": "b6132498f47a",
   "ui": {
    "regel": "Einzige UI-Wahrheit ist die Endversion: ui/endversion_design.css einbinden (ersetzt designsystem_v1_1/komponenten.css und eigene Nachbauten), Klassen und data-spec-id wie im Sichtvertrag, Hauptaktion in Dialogen in der Fußzeile ohne Scrollen sichtbar (3 Größen); Größen je Gerät nach verhalten_appweit.groessenregel (U-240: data-geraet + data-groesse v11 | dicht | v8; Desktop-Dialoge ≤ ca. 1100 px, Knöpfe Desktop ≥ 40 px, Tablet/Handy ≥ 44 px); Enter = nächstes Feld in der Fokusreihenfolge des Sichtvertrags (seiten[].fokus). Prüfung vor jedem Merge: node ui/pruefe_sicht.cjs – Rot = nicht mergen. Abweichung nur mit Grund in der Abgabe.",
    "ordner": "docs/project/endversion/ui/",
    "liesmich": "LIESMICH.md",
    "design_css": {
     "datei": "endversion_design.css",
-    "sha256": "35146E45B96F84D7CB30D38F403F1DC0AE9D9232B7F1F7B4C5ED8D950B4537AB"
+    "sha256": "338AEEE031FEAB95130782AE7865005E1803EBA85F8AD6CFE079AAA49827D03B"
    },
    "sichtvertrag": {
     "datei": "SICHTVERTRAG.json",
-    "sha256": "B1A53EA675F52B999CD034C5C5D6D0F4D4B1CC131AB40E818DF3BDD138B6EB4C",
-    "seiten": 117,
+    "sha256": "0E1049FD2845D66998A22BD8FB943055F34C26D74EC45F752759122BCA73F307",
+    "seiten": 162,
     "groessen": {
      "desktop": {
       "breite": 1914,
@@ -53,7 +57,7 @@
    },
    "pruefskript": {
     "datei": "pruefe_sicht.cjs",
-    "sha256": "FDA7C59C0E3EF9FEC0C0F81B98975F712D8438DE7236D75D0B8D03897F6A052C",
+    "sha256": "CDEC8B69B6C477D50A80C866A7132374987FE56839B216479AFE44B825811291",
     "routen": "routen.json (PL/Codex füllt; Beispiel routen.beispiel.json)"
    },
    "pruefbilder": "pruefbilder/<screen>_<rolle>_<groesse>.png (75)",
@@ -70,7 +74,8 @@
    "F0 Fundament: einstellbare Rechte",
    "F1 Neuer Eingang",
    "F2 Der Tag",
-   "F5a Kunde bearbeiten"
+   "F5a Kunde bearbeiten",
+   "AP-ABS Absprachen"
   ]
  },
  "paket": {
@@ -172,6 +177,11 @@
        "modus": "uebergabe",
        "unterzeile": "Fotos für den PC",
        "aufruf": "„Fotos mit Tablet/Handy“ am PC"
+      },
+      {
+       "modus": "unklar",
+       "unterzeile": "Was ist das? · Art unklar",
+       "aufruf": "Erkennung ohne Art (nichts gelesen / Art unklar)"
       }
      ]
     },
@@ -607,6 +617,779 @@
     "quelle": "PL 03.11. 16:30 / 18:30",
     "regel": "pruefe_sicht.cjs meldet per PIN an: routen.json login.schritte mit Platzhaltern im Selektor ({rolle_person} = <ROLLE>_NAME, {passwort_ziffer_n} = n-te Stelle von <ROLLE>_PASSWORT) oder Schritt „tippen“ (PIN Ziffer für Ziffer); Vercel-Freigabe aus Umgebungsvariable (routen.share_env, Standard VERCEL_SHARE) beim ersten Aufruf; Seiten mit pfad null + grund = gelb mit Grund; prüft Fokusreihenfolge per Enter. Ohne require() (import()), keine unbenutzten Variablen."
    }
+  },
+  "runde53": {
+   "quelle": "Runde 53 (Owner/PL 05.11.)",
+   "leer_zustand": "Sichtvertrag je Paket-Seite zwei Einträge im Normalfall: zustand „leer“ (so öffnet die App die Seite, Route = Seiten-ID) und zustand „beispiel“ (mit Musterdaten, Route = „{id}@beispiel“, optional; ohne Route gelb). Ausgenommen 3.0 (Normalfall ist schon leer), 3.6 (Rückfrage) und M6 (öffnet nur aus einer Nachricht). Prüfbilder: {screen}__leer_{rolle}_{groesse}.png.",
+   "texte_konkret": {
+    "quelle": "Runde 53 (Owner/PL 05.11.) · U-242",
+    "regel": "Kein Status, Chip oder Knopf mit Floskel. Jeder sichtbare Text nennt Gegenstand + Handlung + Kurzgrund mit Platzhaltern für Daten ({position}, {datum}, {betrag}, {auftrag}, {kunde}) und hat ein Klickziel. Die App weiß, was fehlt und was zu tun ist – sie sagt es.",
+    "verboten_allein": [
+     "prüfen",
+     "entscheiden",
+     "Entscheidung",
+     "Warnung",
+     "Konflikt",
+     "Problem lösen",
+     "Handlungsbedarf",
+     "Weitere",
+     "„fehlt“ ohne Gegenstand"
+    ],
+    "muster": [
+     "„Foto {teil} fehlt · Fertigmeldung gesperrt“ statt „Konflikt“",
+     "„KV-Preis freigeben“ statt „Prüfen & freigeben“",
+     "„Eingangsrechnung {absender} · {betrag} mit Bestellung abgleichen“ statt „Rechnung prüfen“",
+     "„Einheit wählen“ statt „fehlt“",
+     "„{feld} {wert} · erkannt, bestätigen“ statt „prüfen“"
+    ],
+    "arten_der_tag": {
+     "konflikt": "blockiert (Zähler „{n} blockiert“)",
+     "entscheidung": "wartet auf dich (Zähler „{n} warten auf dich“)",
+     "warnung": "wird knapp (Zähler „{n} werden knapp“)"
+    },
+    "ausnahmen": "Seitennamen aus paket.seitenkatalog (Runde 51 gebunden, z. B. 3.8 „Rechnung prüfen“) und Namen von Rechten (z. B. „Abweichungen & Reklamationen entscheiden“) bleiben; sie sind Namen, keine Statusmeldung.",
+    "pruefung": "Floskel-Gate der Endversion: jeder sichtbare Text der Vorschau (alle Seiten, Dialoge, Modi, drei Größen) und jeder Text im Bauplan – eine Floskel allein oder als letzter Teil ohne Gegenstand = rot.",
+    "pruefliste": "Prüfliste (3, 3.1, 3.7, 3.8): erkannter Wert = „{feld} {wert} · erkannt, bestätigen“ (Tipp springt ins Feld), fehlender Pflichtwert = „{feld} eintragen“ bzw. „{feld} wählen“ (Tipp springt ins Feld), Terminlage = „Termin wählen · Wunsch zu knapp“. Nie nur „prüfen“, „fehlt“, „entscheiden“."
+   },
+   "was_ist_das": {
+    "quelle": "Runde 53 (Owner/PL 05.11.) · U-241 (Owner: jeder Eingang hat einen Weg)",
+    "wann": "Erkennung ohne Art (nichts gelesen oder Art unklar) – nie eine Sackgasse",
+    "kacheln": [
+     {
+      "id": "unklar.auftrag",
+      "text": "Auftrag oder KV",
+      "unter": "Kunde will etwas beschichtet haben",
+      "ziel": "eingang",
+      "arg": "{eingang}"
+     },
+     {
+      "id": "unklar.ware",
+      "text": "Ware",
+      "unter": "Teile sind angekommen",
+      "ziel": "eingang",
+      "arg": "{eingang}#ware",
+      "hinweis": "erwartete Aufträge stehen als Kacheln „Erwartete Ware“ darüber → 3.7"
+     },
+     {
+      "id": "unklar.rechnung",
+      "text": "Eingangsrechnung",
+      "unter": "Lieferant will Geld",
+      "ziel": "rechnungein",
+      "arg": "{eingang}"
+     },
+     {
+      "id": "unklar.dokument",
+      "text": "Dokument oder Notiz",
+      "unter": "nur ablegen · am Kunden oder Auftrag",
+      "ziel": "mailein",
+      "arg": "{eingang}",
+      "hinweis": "3.4 Wem gehört das? zum Ablegen am Vorgang/Kunden"
+     }
+    ],
+    "aufbau": "Rechte Spalte von oben: Kopf „Erkannt · Unklar · nichts gelesen“ → Abschnitt „Was ist das?“ (4 Kacheln, 2 je Reihe) → Hauptknopf „Später zuordnen“ → feste Wege. Keine Erkannt-Zeilen und keine Kacheln „Erwartete Ware“ (die zeigt erst 3.7 nach Kachel Ware).",
+    "daneben_immer": [
+     "Wem gehört das? (3.4)",
+     "Später zuordnen",
+     "Original ansehen (3.9)"
+    ],
+    "teilangaben": "Was die Erkennung trotzdem gelesen hat (Absender, Datum, Nummern), steht im Ziel vorbelegt mit Herkunft „{feld} {wert} · erkannt, bestätigen“.",
+    "kein_hauptknopf": "Die Kacheln sind die Wahl; der Fuß zeigt nur „Später zuordnen“.",
+    "abnahme": [
+     "Gegeben ein Foto ohne lesbaren Inhalt · Dann 3.0 zeigt „Was ist das?“ mit 4 Kacheln, daneben Wem gehört das?, Später zuordnen, Original ansehen.",
+     "Gegeben „Was ist das?“ · Wenn „Eingangsrechnung“ gewählt · Dann öffnet 3.8 mit dem Original."
+    ]
+   },
+   "erkennung": {
+    "quelle": "Runde 53 (Owner/PL 05.11.) · Prüfbericht Nr. 7",
+    "regeln": [
+     "Verneinung mit Ersatz: „nicht X, nur Y“ / „kein X, sondern Y“ → Y wird übernommen, X verworfen (je Leistung, Oberfläche, Menge, Termin).",
+     "Zahlwörter: eins–zwölf, zwanzig, dreißig, hundert, „ein Dutzend“ (12), „ein paar“ / „einige“ = keine Menge (Feld leer, Prüflisten-Text „Menge eintragen“).",
+     "Datum: Liefertermin = das Wunschdatum im Satz („bis Mittwoch“, „nächste Woche Freitag“, „zum 12.11.“); Mail-/Briefdatum und Datum in Signaturen zählen nie als Liefertermin.",
+     "Mehr als 20 Positionen: die ersten 20 werden übernommen, sichtbarer Hinweis „{n} Positionen erkannt · 20 übernommen · Rest als zweiter Beleg {eingang}-2“ mit Knopf „Rest als zweiten Beleg anlegen“.",
+     "Eingebettete Bilder einer Mail: als Foto-Kandidat am Vorgang („Bild aus der Mail als Foto übernehmen“), nicht pauschal verwerfen; ausgenommen Signatur-Logos (< 10 KB oder in mehreren Mails gleich)."
+    ],
+    "testfaelle": "testmodell.seiten.eingang RT04-11 … RT04-15"
+   },
+   "aenderungsliste": [
+    {
+     "wo": "nachrichten",
+     "feld": "text",
+     "alt": "Zahlung prüfen",
+     "neu": "Zahlung zuordnen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "nachrichten",
+     "feld": "text",
+     "alt": "Rechnung prüfen",
+     "neu": "Eingangsrechnung erfassen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "nachrichten",
+     "feld": "text",
+     "alt": "Anbindung prüfen",
+     "neu": "Verbindung testen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "werkstatt",
+     "feld": "text",
+     "alt": "Entscheiden",
+     "neu": "Ergebnis festlegen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "backend",
+     "feld": "text",
+     "alt": "Anbindungen prüfen",
+     "neu": "Verbindungen testen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "backend",
+     "feld": "text",
+     "alt": "Anbindungen prüfen",
+     "neu": "Verbindungen testen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "datenkiste",
+     "feld": "chip",
+     "alt": "prüfen",
+     "neu": "erkannt · bestätigen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "datenkiste",
+     "feld": "chip",
+     "alt": "prüfen",
+     "neu": "erkannt · bestätigen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "datenkiste",
+     "feld": "text",
+     "alt": "Prüfen und übernehmen (Seitenaktion)",
+     "neu": "Vorschläge übernehmen ({n}) (Seitenaktion)",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "datenkiste",
+     "feld": "text",
+     "alt": "Prüfen und übernehmen",
+     "neu": "Vorschläge übernehmen ({n})",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "datenkiste",
+     "feld": "text",
+     "alt": "Doppelte prüfen",
+     "neu": "{n} Doppelte zusammenführen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "datenkiste",
+     "feld": "text",
+     "alt": "Prüfen und übernehmen",
+     "neu": "Vorschläge übernehmen ({n})",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "anliegenwahl",
+     "feld": "text",
+     "alt": "Zahlung prüfen",
+     "neu": "Zahlung zuordnen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "anliegenwahl",
+     "feld": "text",
+     "alt": "Rechnung prüfen",
+     "neu": "Eingangsrechnung erfassen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "anliegenwahl",
+     "feld": "text",
+     "alt": "Weitere Anliegen",
+     "neu": "Anderes Anliegen wählen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "rein",
+     "feld": "text",
+     "alt": "Rechnung prüfen",
+     "neu": "Eingangsrechnung erfassen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "rein",
+     "feld": "text",
+     "alt": "Zahlung prüfen",
+     "neu": "Zahlung zuordnen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "rein",
+     "feld": "text",
+     "alt": "Weitere Seite",
+     "neu": "Nächste Seite fotografieren",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "rein",
+     "feld": "text",
+     "alt": "Weitere Seite",
+     "neu": "Nächste Seite fotografieren",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "eingang",
+     "feld": "text",
+     "alt": "Lesen und entscheiden",
+     "neu": "Lesen und zuordnen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "eingang",
+     "feld": "text",
+     "alt": "Zahlung prüfen",
+     "neu": "Zahlung zuordnen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "eingang",
+     "feld": "text",
+     "alt": "Rechnung prüfen",
+     "neu": "Eingangsrechnung erfassen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "kundeneu",
+     "feld": "titel",
+     "alt": "Weitere Angaben",
+     "neu": "Ansprechpartner, Website, Notiz",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "auftrag",
+     "feld": "titel",
+     "alt": "KV prüfen und freigeben",
+     "neu": "KV-Preis freigeben",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "reklamation",
+     "feld": "titel",
+     "alt": "Entscheidung",
+     "neu": "Ergebnis der Reklamation",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "reklamation",
+     "feld": "text",
+     "alt": "Entscheidung speichern",
+     "neu": "Ergebnis speichern",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "mail",
+     "feld": "text",
+     "alt": "Senden nicht bestätigt · bitte im Postfach unter „Gesendete Elemente“ prüfen",
+     "neu": "Senden nicht bestätigt · im Postfach unter „Gesendete Elemente“ nachsehen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "rechnungein",
+     "feld": "text",
+     "alt": "{n} Felder unsicher · am Original prüfen",
+     "neu": "{n} Felder unsicher · mit dem Original vergleichen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "ware",
+     "feld": "text",
+     "alt": "Rest prüfen",
+     "neu": "Rest zählen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "tagkonfig",
+     "feld": "titel",
+     "alt": "Handlungsbedarf",
+     "neu": "Heute zu tun",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "tagkonfig",
+     "feld": "text",
+     "alt": "Prüfen & freigeben",
+     "neu": "KV-Preis freigeben",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "tagkonfig",
+     "feld": "text",
+     "alt": "Prüfen & freigeben",
+     "neu": "KV-Preis freigeben",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "tagkonfig",
+     "feld": "titel",
+     "alt": "Reklamation {auftrag} · entscheiden",
+     "neu": "Reklamation {auftrag} · {befund} · Ergebnis festlegen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "tagkonfig",
+     "feld": "text",
+     "alt": "Entscheiden",
+     "neu": "Ergebnis festlegen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "tagkonfig",
+     "feld": "text",
+     "alt": "Entscheiden",
+     "neu": "Ergebnis festlegen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "tagkonfig",
+     "feld": "titel",
+     "alt": "Rechnung prüfen · {absender}",
+     "neu": "Eingangsrechnung {absender} · {betrag} mit Bestellung abgleichen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "tagkonfig",
+     "feld": "text",
+     "alt": "Prüfen",
+     "neu": "Mit Bestellung abgleichen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "tagkonfig",
+     "feld": "text",
+     "alt": "Prüfen",
+     "neu": "Mit Bestellung abgleichen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "tagkonfig",
+     "feld": "text",
+     "alt": "Entscheiden",
+     "neu": "Ergebnis festlegen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "eingang.anliegen",
+     "feld": "text",
+     "alt": "Zahlung prüfen",
+     "neu": "Zahlung zuordnen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "eingang.anliegen",
+     "feld": "text",
+     "alt": "Rechnung prüfen",
+     "neu": "Eingangsrechnung erfassen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "eingang.anliegen",
+     "feld": "text",
+     "alt": "Lesen und entscheiden",
+     "neu": "Lesen und zuordnen",
+     "grund": "U-242 (Owner 05.11.): Gegenstand + Handlung + Kurzgrund statt Floskel"
+    },
+    {
+     "wo": "verhalten_appweit.fehlt",
+     "feld": "regel",
+     "alt": "zeigt „fehlt“ mit Sprung",
+     "neu": "„{feld} eintragen/wählen“ bzw. „{gegenstand} fehlt · {folge}“ mit Sprung",
+     "grund": "U-242 verfeinert U-216"
+    },
+    {
+     "wo": "tag (Lage-Leiste, Zeilen-Chip)",
+     "feld": "text",
+     "alt": "Konflikt(e) · Warnung(en) · Entscheidung(en)",
+     "neu": "blockiert · wird knapp / werden knapp · wartet auf dich / warten auf dich",
+     "grund": "U-242"
+    },
+    {
+     "wo": "Vorschau-Beispiel",
+     "feld": "text",
+     "alt": "dieselben Floskeln in den Beispieltexten",
+     "neu": "dieselben Ersetzungen mit Platzhaltern",
+     "grund": "U-242"
+    },
+    {
+     "wo": "eingang/kundeneu/ware/rechnungein (Prüfliste)",
+     "feld": "chip",
+     "alt": "prüfen · fehlt · entscheiden",
+     "neu": "{feld} {wert} · erkannt, bestätigen · {feld} eintragen/wählen · Termin wählen · Wunsch zu knapp",
+     "grund": "U-242"
+    },
+    {
+     "wo": "rein (3.0) Zustand Art unklar",
+     "feld": "aufbau",
+     "alt": "nur „Später zuordnen“ als Hauptknopf",
+     "neu": "Kacheln „Was ist das?“ (Auftrag oder KV · Ware · Eingangsrechnung · Dokument oder Notiz) + Wem gehört das? · Später zuordnen · Original ansehen",
+     "grund": "U-241"
+    },
+    {
+     "wo": "testmodell eingang E09",
+     "feld": "wenn",
+     "alt": "Enter im Feld Menge löst den Hauptknopf aus",
+     "neu": "Enter im letzten Pflichtfeld (Eingangsart) löst den Hauptknopf mit Tor aus",
+     "grund": "U-240 / PL 04.11. 01:35"
+    }
+   ]
+  }
+ },
+ "paket_folge": {
+  "entscheide_05_11": {
+   "quelle": "Owner 05.11.",
+   "AP-MSG": {
+    "stufe": 4,
+    "was": "WhatsApp, Instagram (weitere Kanäle später)",
+    "regel": "Alle Nachrichten – heute Mail, später WhatsApp, Instagram usw. – laufen in EINER Oberfläche zusammen (2.3 Nachrichten, Eingang, Der Tag). Der Kanal ist nur ein Merkmal mit Filter („Mail · WhatsApp · Instagram“), keine eigene Seite. Verarbeitung (Anliegen, Wem gehört das?, Erkennung, Entwurf, Zuordnung) ist für jeden Kanal gleich; dem Kunden ist der Kanal egal, es zählt die Aufbereitung des Inhalts.",
+    "bau": "kein Bau-Abschnitt bis Stufe 4 freigeschaltet; neue Kanäle docken an dieselbe Nachrichten-Pipeline an (kanal als Feld, keine zweite Liste)."
+   },
+   "AP-KOST": {
+    "stufe": 4,
+    "was": "Kostenbasis, gleiches Teil, Verlustanalyse",
+    "bau": "kein Bau-Abschnitt; jetzt nur nötige Ereignisse mitschreiben (AP-PROT)."
+   }
+  },
+  "regel": "Pakete nach AP-EIN, in dieser Reihenfolge. „bereit“ = vollständig nach Auftrag 0.3 (Paketabschnitt, Testfälle, Sichtvertrag + Prüfbilder leer und Beispiel, Änderungsliste, eine Bauplan-SHA) – Planungschat gibt es als P-Eintrag an Codex. „vorgemerkt“ = Kern und Grenzen stehen fest, der vollständige Abschnitt folgt als eigene Lieferung, wenn das Paket davor gebunden ist. Kein Paket ändert eine AP-EIN-Seite.",
+  "reihenfolge": [
+   [
+    "AP-ABS",
+    "bereit"
+   ],
+   [
+    "AP-KV",
+    "vorgemerkt"
+   ],
+   [
+    "Picker",
+    "vorgemerkt"
+   ],
+   [
+    "Der Tag R36",
+    "vorgemerkt"
+   ],
+   [
+    "8.11 Termine",
+    "vorgemerkt"
+   ],
+   [
+    "AP-PROT",
+    "vorgemerkt"
+   ],
+   [
+    "AP-OCR",
+    "vorgemerkt"
+   ],
+   [
+    "AP-DK",
+    "vorgemerkt"
+   ],
+   [
+    "AP-MSG",
+    "Stufe 4 · nur Anforderung"
+   ],
+   [
+    "AP-KOST",
+    "Stufe 4 · nur Anforderung"
+   ]
+  ],
+  "AP-ABS": {
+   "titel": "Absprachen als Typ",
+   "status": "bereit",
+   "quelle": "Runde 54 · AP-ABS (Owner/PL 05.11.) · Prüfbericht Nr. 1–2 · U-237",
+   "bau_abschnitt": "baustand.abschnitte[\"AP-ABS Absprachen\"]",
+   "seiten": [
+    "absprache"
+   ],
+   "eingriffe": {
+    "regel": "Einzige Quelle für die Änderungen an Seiten außerhalb von 5.4 (die Seiten selbst stehen nicht in diesem Bauplan; Codex ändert dort nur das hier Genannte). Kennungen = data-spec-id.",
+    "kunde": {
+     "nr": "5.1",
+     "knopf": {
+      "id": "zahlungsabsprache-festlegen",
+      "kennung": "kunde.absprache",
+      "text": "Zahlungsabsprache festlegen",
+      "ziel": "5.4 mit {kunde} (bei bestehender Kunden-Absprache im Modus aendern)",
+      "recht": "geld",
+      "lage": "nur Fuß von 5.1 vor „Schließen“, immer mit Recht geld"
+     },
+     "regel": "Geld-Bereich 5.1 (nur Recht geld): Zeile „Zahlungsabsprache · {typ} · gilt für {geltung} · bis {datum | auf Widerruf}“ (Kennung kunde.absprache-zeile) mit Knöpfen „Absprache ändern“ (kunde.absprache-aendern → 5.4 #aendern) und „Absprache widerrufen“ (kunde.absprache-widerrufen → 5.4 #widerruf); Darunter eingeklappt „Frühere Absprachen · {n}“ (kunde.absprache-frueher) (widerrufen/abgelaufen, mit Grund und Login). Freitext-Eintrag mit geld = true: „Absprache {bezeichnung} · Typ festlegen“ (kunde.absprache-typ-festlegen)."
+    },
+    "auftrag": {
+     "nr": "4.1",
+     "kennungen": {
+      "auftrag.absprache-zeile": "Zeile „Zahlungsabsprache · {typ} · {geltung}“ (nur wenn eine gilt)",
+      "auftrag.absprache": "Knopf „Absprache nur für diesen Auftrag“ → 5.4 mit {auftrag}, immer mit Recht geld",
+      "auftrag.absprache-aendern": "→ 5.4 {auftrag}#aendern (nur bei Auftrags-Absprache)",
+      "auftrag.absprache-widerrufen": "→ 5.4 {auftrag}#widerruf (nur bei Auftrags-Absprache)"
+     },
+     "regel": "Geld-Bereich 4.1 (nur Recht geld): gilt eine Absprache für diesen Auftrag oder seinen Kunden, steht „Zahlungsabsprache · {typ} · {geltung}“; Knopf „Absprache nur für diesen Auftrag“ → 5.4 mit {auftrag}."
+    },
+    "rauspruefen": {
+     "nr": "10.1",
+     "abgeloest": "Abgelöst (AP-ABS): die Erkennung einer Sondervereinbarung über geld = true und Freitext. Es wirkt nur eine gültige Absprache mit Typ (typ gesetzt, nicht widerrufen, gueltig_bis leer oder ≥ heute, Geltung Kunde oder dieser Auftrag; Auftrag vor Kunde).",
+     "knopf_regel": "Eine Regel: Typ sammelrechnung → Knopf „Übergeben · Sammelrechnung {monat}“ (keine Einzelrechnung). Typ ausgabe_ohne_zahlung → „Übergeben · Rechnung folgt“ (erzeugt die Rechnung). Typ zahlungsziel → „Übergeben · Rechnung folgt · Ziel {tage} Tage“. Bei Zahlungsart „Bar oder Karte bei Abholung“ bleiben „Bar bezahlt · übergeben“ und „Karte bezahlt · übergeben“ die Hauptwege und der Absprache-Knopf ist Nebenknopf (Runde 52 unverändert); sonst ist er die Hauptaktion.",
+     "kasten": "Gelber Kasten über der Hauptaktion: „Zahlungsabsprache · {typ} · gilt für {geltung} · bis {datum | auf Widerruf}“, darunter „angelegt {datum} von {login} · Grund {grund}“. Ohne Recht geld: Kasten ohne Beträge, Knopf benutzbar mit Recht „Aufträge & Werkstatt“.",
+     "ohne": "Keine gültige Absprache und keine Zahlung: wie Runde 48 („Zahlung fehlt“). Zusätzlich mit Recht geld Nebenknopf „Absprache festlegen“ → 5.4 mit {auftrag}; nach Speichern kehrt 10.1 zurück und zeigt den Absprache-Knopf. Abgelaufen/widerrufen: Hinweis „Absprache {typ} abgelaufen am {datum}“ bzw. „widerrufen am {datum}“.",
+     "server": "recordGoodsOutCommand prüft die Absprache erneut (Typ, Geltung, gültig, nicht widerrufen, Version); sonst VALIDATION_ERROR „Zahlung fehlt“ mit dem Hinweistext der Oberfläche. Freitext und geld-Flag allein zählen nie.",
+     "kennungen": {
+      "rauspruefen.absprache-kasten": "Zahlungsabsprache · {typ}",
+      "rauspruefen.uebergeben-rechnung-folgt": "Übergeben · Rechnung folgt",
+      "rauspruefen.uebergeben-sammelrechnung": "Übergeben · Sammelrechnung {monat}",
+      "rauspruefen.uebergeben-zahlungsziel": "Übergeben · Rechnung folgt · Ziel {tage} Tage",
+      "rauspruefen.absprache-hinweis": "Absprache {typ} abgelaufen am {datum} / widerrufen am {datum}",
+      "rauspruefen.absprache-festlegen": "Absprache festlegen"
+     }
+    },
+    "tag": "siehe sammelrechnung.der_tag (Kennung tag.sammelrechnung-erstellen)",
+    "rechnung": {
+     "nr": "7.1",
+     "regel": "Sammelrechnung-Entwurf: je Auftrag ein Positionsblock „{auftrag} · {datum Warenausgang}“ mit dessen Positionen; Fälligkeit = Rechnungsdatum + invoice_collections.ziel_tage. Festschreiben (Kennung rechnung.festschreiben) läuft wie bei jeder Rechnung ohne weitere Zwischenschritte und setzt für den Entwurf mit invoice_collections.invoice_id den status = abgerechnet."
+    },
+    "appweit": "verhalten_appweit.uebergabe_ohne_zahlung.ap_abs"
+   },
+   "reihenfolge_bau": [
+    "Migration (additiv) + RLS",
+    "Befehle absprache.speichern / absprache.widerrufen mit Protokoll",
+    "5.4 Dialog",
+    "Einstieg 5.1 + Geld-Bereich 5.1/4.1",
+    "recordGoodsOutCommand-Prüfung + 10.1 Knopfregel",
+    "Sammelliste + Der-Tag-Zeile + sammelrechnung.erstellen (7.1)",
+    "Tests aus testmodell.seiten.absprache"
+   ],
+   "unveraendert": [
+    "5.2 „Absprachen & Eigenheiten“ (Freitext, AP-EIN) bleibt wie gebunden – wirkt nie auf Sperren",
+    "Runde 52: Bar/Karte bleiben Hauptwege bei „Bar oder Karte bei Abholung“",
+    "Runde 48: ohne Absprache „Zahlung fehlt“, „Zahlung zuordnen lassen“ ohne Recht geld"
+   ],
+   "typen": [
+    {
+     "id": "ausgabe_ohne_zahlung",
+     "text": "Übergabe ohne Zahlung · Rechnung folgt",
+     "knopf": "Übergeben · Rechnung folgt",
+     "wirkung": "Warenausgang + Rechnung festschreiben + Rechnungsmail (Empfängerregel); Zahlung offen, fällig nach Zahlungsbedingung des Kunden (zielfrei 8.6)."
+    },
+    {
+     "id": "sammelrechnung",
+     "text": "Sammelrechnung monatlich",
+     "knopf": "Übergeben · Sammelrechnung {monat}",
+     "wirkung": "Warenausgang ohne Einzelrechnung; der Auftrag kommt in die Sammelliste {kunde} · {monat}. Am Monatsersten zeigt Der Tag „Sammelrechnung {kunde} {monat} erstellen · {n} Aufträge“ (Recht geld) → 7.1 mit allen Aufträgen der Liste als Positionsblöcke; danach sind sie abgerechnet."
+    },
+    {
+     "id": "zahlungsziel",
+     "text": "Zahlungsziel in Tagen",
+     "knopf": "Übergeben · Rechnung folgt · Ziel {tage} Tage",
+     "wirkung": "Wie Übergabe ohne Zahlung, aber Fälligkeit = Rechnungsdatum + {tage} Tage (statt Zahlungsbedingung des Kunden)."
+    }
+   ],
+   "sammelrechnung": {
+    "anlegen": "recordGoodsOutCommand mit gültiger Absprache sammelrechnung legt invoice_collections (Kunde, Monat) an oder findet sie und hängt den Auftrag an (invoice_collection_orders); keine Rechnung.",
+    "monat": "Kalendermonat des Warenausgangs in Europe/Berlin; Anzeige „{Monatsname} {JJJJ}“, z. B. „November 2026“.",
+    "der_tag": "Ab dem 1. des Folgemonats steht die Zeile „Sammelrechnung {kunde} {monat} erstellen · {n} Aufträge“ (Kennung tag.sammelrechnung-erstellen, Art wartet auf dich, nur Recht geld) und bleibt, bis die Rechnung festgeschrieben ist.",
+    "erstellen": "Klick → sammelrechnung.erstellen legt den Rechnungsentwurf in 7.1 an (je Auftrag ein Positionsblock „{auftrag} · {datum Warenausgang}“, Fälligkeit = Rechnungsdatum + invoice_collections.ziel_tage) und setzt invoice_id; 7.1 öffnet den Entwurf. Eine Sammelliste je Kunde und Monat; ihr ziel_tage gilt für alle ihre Aufträge, auch wenn die Absprache später widerrufen oder ersetzt wurde.",
+    "abgerechnet": "status = abgerechnet beim Festschreiben der Rechnung in 7.1 (Kennung rechnung.festschreiben); vorher bleibt die Zeile in Der Tag stehen.",
+    "nach_widerruf": "Ein Widerruf beendet nur neue Zuordnungen; die offene Sammelliste wird weiter abgerechnet."
+   },
+   "versand": "Übergabe „Versand“: gleiche Regel und dieselben Kennungen (rauspruefen.uebergeben-*), nur der Text wechselt; der Absprache-Knopf ist die Hauptaktion mit „Versendet · Rechnung folgt“ bzw. „Versendet · Sammelrechnung {monat}“ bzw. „Versendet · Rechnung folgt · Ziel {tage} Tage“; Sendungsnummer-Pflicht bleibt (Runde 49).",
+   "nach_uebergabe": "10.1 schließt mit Meldung „{auftrag} übergeben · {zusatz des Knopfs}“ und kehrt zur aufrufenden Seite zurück.",
+   "datenmodell": {
+    "migration": "additiv: customer_agreements + typ (text, null = Freitext), order_id (uuid null; gesetzt = Geltung Auftrag), ziel_tage (int null), widerrufen_am (timestamptz null), widerrufen_von (uuid null), grund (text null), widerruf_grund (text null), version (int not null default 1), client_key (uuid null, unique je tenant); gueltig_bis besteht (Runde 48). Neue Tabelle invoice_collections (id, tenant_id, customer_id, monat date = Monatserster, ziel_tage int (beim ersten Anlegen aus der greifenden Absprache festgeschrieben), status offen|abgerechnet, invoice_id null, version int, unique (tenant_id, customer_id, monat)) und invoice_collection_orders (collection_id, order_id unique).",
+    "uebernahme": "Bestehende Einträge mit geld = true werden NICHT automatisch typisiert (Freitext wirkt nie). 5.1 zeigt bei solchen Einträgen „Absprache {bezeichnung} · Typ festlegen“ (Recht geld) → 5.4 #aendern vorbelegt.",
+    "rls": "tenant_id wie customers. customer_agreements schreiben nur absprache.speichern / absprache.widerrufen (Recht geld). invoice_collections / invoice_collection_orders schreiben recordGoodsOutCommand (Recht auftraege, Anlegen-oder-Finden) und sammelrechnung.erstellen (Recht geld).",
+    "pruefreihenfolge": "Server prüft in jedem Befehl zuerst das Recht (FORBIDDEN), dann die Version (CONFLICT), dann die Felder (VALIDATION_ERROR).",
+    "version": "absprache.speichern: version der ersetzten gültigen Absprache derselben Geltung (null, wenn keine); abweichend → CONFLICT. absprache.widerrufen: version der Zeile. sammelrechnung.erstellen: version der Sammelliste."
+   },
+   "rechte": "Anlegen, Ändern, Widerrufen, Sammelrechnung erstellen: Recht „geld“ (Runde 48, unverändert). Übergeben mit gültiger Absprache: Recht „Aufträge & Werkstatt“.",
+   "befehle": [
+    "absprache.speichern(customer_id, order_id?, typ, ziel_tage?, gueltig_bis?, grund, version?, client_key)",
+    "absprache.widerrufen(id, grund, version, client_key)",
+    "sammelrechnung.erstellen(collection_id, version, client_key)",
+    "recordGoodsOutCommand prüft Absprache (screens[rauspruefen].ap_abs.server)"
+   ],
+   "protokoll": "Jeder Befehl schreibt einen Protokolleintrag (wer, wann, alt → neu, Grund).",
+   "testfaelle": "testmodell.seiten.absprache ABS-01 … ABS-20",
+   "sichtvertrag": "SICHTVERTRAG.json Einträge absprache (leer), absprache@beispiel, absprache#widerruf; Prüfbilder absprache__leer_*, absprache_*, absprache__widerruf_*",
+   "owner_fragen": [],
+   "aenderungsliste": [
+    {
+     "wo": "screens",
+     "feld": "neu",
+     "alt": "–",
+     "neu": "5.4 Absprache festlegen (Dialog)",
+     "grund": "AP-ABS Nr. 1"
+    },
+    {
+     "wo": "kunde (5.1)",
+     "feld": "aktionen",
+     "alt": "Schließen",
+     "neu": "+ „Zahlungsabsprache festlegen“ (Recht geld) vor Schließen",
+     "grund": "AP-ABS"
+    },
+    {
+     "wo": "rauspruefen (10.1)",
+     "feld": "Sondervereinbarung",
+     "alt": "Freitext/geld-Flag erlaubt Übergabe ohne Zahlung",
+     "neu": "nur Absprache mit Typ; Knopf je Typ (Sammelrechnung {monat} · Rechnung folgt · Ziel {tage} Tage)",
+     "grund": "AP-ABS Nr. 1–2"
+    },
+    {
+     "wo": "rauspruefen (10.1)",
+     "feld": "ohne Absprache",
+     "alt": "Zahlung fehlt",
+     "neu": "Zahlung fehlt + Nebenknopf „Absprache festlegen“ (Recht geld)",
+     "grund": "AP-ABS, U-241 kein Ende ohne Weg"
+    },
+    {
+     "wo": "kunde (5.1) / auftrag (4.1)",
+     "feld": "Geld-Bereich",
+     "alt": "–",
+     "neu": "Zeile Zahlungsabsprache + Ändern/Widerrufen",
+     "grund": "AP-ABS"
+    }
+   ]
+  },
+  "AP-KV": {
+   "titel": "Auftragskarte inkl. KV",
+   "status": "vorgemerkt",
+   "quelle": "AUFTRAG_ENDVERSION_FOLGEPAKETE_2026-11-05 Abschnitt 2/3",
+   "kern": [
+    "„KV annehmen → Auftrag“ als Hauptaktion der KV-Karte",
+    "Umwandlung übernimmt Katalog, Einheit, Preis, Steuer, Bilder, Quelle und angenommene Fassung; Versions- und Doppelbuchungsschutz bleiben",
+    "KV-Liste mit Status offen · versandt · abgelehnt · abgelaufen · umgewandelt + Link zum Auftrag",
+    "Ohne Recht geld bleibt die Art KV; „Preis eintragen · {kv}“ geht an Logins mit geld",
+    "Korrektur K3 (Fehler im Code): Mehrarbeit-Satz wird bei Erfassung je Eintrag festgeschrieben; Änderungen gelten nur für neue Einträge"
+   ],
+   "seiten_betroffen": [
+    "auftrag",
+    "mehrarbeit",
+    "auftraege"
+   ],
+   "abhaengig": "AP-ABS gebunden",
+   "liefern_als": "wie AP-ABS: Paketabschnitt, Testfälle, Sichtvertrag + Prüfbilder (leer und Beispiel), Änderungsliste, eine Bauplan-SHA"
+  },
+  "Picker": {
+   "titel": "Eine Auswahlregel",
+   "status": "vorgemerkt",
+   "quelle": "AUFTRAG_ENDVERSION_FOLGEPAKETE_2026-11-05 Abschnitt 2/3",
+   "kern": [
+    "eine Regel für alle drei Picker: aktive und abgeschlossene Vorgänge wählbar, abgeschlossene gekennzeichnet",
+    "leere Suche bietet „Neuen Vorgang anlegen“, „Kunde anlegen“, „Als Notiz am Kunden“",
+    "Vorschau zeigt das offene Anliegen, nicht die letzte Nachricht (Nr. 15)"
+   ],
+   "seiten_betroffen": [
+    "picker"
+   ],
+   "abhaengig": "AP-KV",
+   "liefern_als": "wie AP-ABS: Paketabschnitt, Testfälle, Sichtvertrag + Prüfbilder (leer und Beispiel), Änderungsliste, eine Bauplan-SHA"
+  },
+  "Der Tag R36": {
+   "titel": "Der Tag: Aufgabe statt Zähler",
+   "status": "vorgemerkt",
+   "quelle": "AUFTRAG_ENDVERSION_FOLGEPAKETE_2026-11-05 Abschnitt 2/3",
+   "kern": [
+    "je Zeile Gegenstand + Handlung (U-242)",
+    "Dringlichkeit aus Art (Storno, Änderung, Abholänderung sofort) vor Alter",
+    "kein „Termin klären“ ohne Gegenstand"
+   ],
+   "seiten_betroffen": [
+    "tag",
+    "spaeter",
+    "hbmehr"
+   ],
+   "abhaengig": "Picker",
+   "liefern_als": "wie AP-ABS: Paketabschnitt, Testfälle, Sichtvertrag + Prüfbilder (leer und Beispiel), Änderungsliste, eine Bauplan-SHA"
+  },
+  "8.11 Termine": {
+   "titel": "Terminvorschlag",
+   "status": "vorgemerkt",
+   "quelle": "AUFTRAG_ENDVERSION_FOLGEPAKETE_2026-11-05 Abschnitt 2/3",
+   "kern": [
+    "Start = späteres von Wareneingang und Freigabe",
+    "Kapazität nach Aufwand in Stunden, nicht nur Euro; unbepreiste Arbeit zählt"
+   ],
+   "seiten_betroffen": [
+    "termineinst",
+    "termin"
+   ],
+   "abhaengig": "Der Tag R36",
+   "liefern_als": "wie AP-ABS: Paketabschnitt, Testfälle, Sichtvertrag + Prüfbilder (leer und Beispiel), Änderungsliste, eine Bauplan-SHA"
+  },
+  "AP-PROT": {
+   "titel": "In-App-Protokoll",
+   "status": "vorgemerkt",
+   "quelle": "AUFTRAG_ENDVERSION_FOLGEPAKETE_2026-11-05 Abschnitt 2/3",
+   "kern": [
+    "Klickweg je Vorgang, Abbruch/Rückkehr, Hänger, Fehler, Korrektur eines App-Vorschlags (alt → neu)",
+    "Datenschutz: append-only je Mandant, nur Kennungen, Login pseudonym, 90 Tage, abschaltbar, Hinweis beim Login",
+    "Auswertung nur developer/Owner, Export; Testphase Knopf „Hier hakt es · Notiz an Entwicklung“"
+   ],
+   "seiten_betroffen": [
+    "protokoll",
+    "backend"
+   ],
+   "abhaengig": "8.11",
+   "liefern_als": "wie AP-ABS: Paketabschnitt, Testfälle, Sichtvertrag + Prüfbilder (leer und Beispiel), Änderungsliste, eine Bauplan-SHA"
+  },
+  "AP-OCR": {
+   "titel": "Beleg mit Bestellung verknüpfen",
+   "status": "vorgemerkt",
+   "quelle": "AUFTRAG_ENDVERSION_FOLGEPAKETE_2026-11-05 Abschnitt 2/3",
+   "kern": [
+    "Nummern, Lieferant/Kunde, Positionen, Mengen, Datum aus Lieferschein, Etikett, Paketschein, AB, Lieferantenrechnung",
+    "Abgleich mit ein- und ausgehenden Bestellungen per Mail und bestehenden Vorgängen; Nummer zuerst",
+    "Ergebnis-Karte „Gehört zu {vorgang} · {grund}“ mit einem Hauptknopf je Lage; nicht aktive Stufe: sichtbarer Hinweis",
+    "kein Treffer: Vorschlag, Picker oder „Neu anlegen als …“; Rückgängig je Verknüpfung"
+   ],
+   "seiten_betroffen": [
+    "ware",
+    "rechnungein",
+    "original"
+   ],
+   "abhaengig": "AP-PROT",
+   "liefern_als": "wie AP-ABS: Paketabschnitt, Testfälle, Sichtvertrag + Prüfbilder (leer und Beispiel), Änderungsliste, eine Bauplan-SHA"
+  },
+  "AP-DK": {
+   "titel": "Datenkiste (Massen-Drop)",
+   "status": "vorgemerkt",
+   "quelle": "AUFTRAG_ENDVERSION_FOLGEPAKETE_2026-11-05 Abschnitt 2/3",
+   "kern": [
+    "beliebig viele Dateien, Original zuerst gesichert, Doppelte per Prüfsumme nur verlinkt",
+    "sicher erkannt → automatisch verteilt mit Beleg und Rückgängig (Schwelle Owner-Einstellung, Start konservativ)",
+    "unklar → Prüfliste mit Vorschlag und Freifeld „Anweisung“ (wird Vorschlag, nie direkt ausgeführt)",
+    "Sammelaktionen, Fortschritt, unterbrechbar, Bericht am Ende"
+   ],
+   "seiten_betroffen": [
+    "datenkiste"
+   ],
+   "abhaengig": "AP-OCR",
+   "liefern_als": "wie AP-ABS: Paketabschnitt, Testfälle, Sichtvertrag + Prüfbilder (leer und Beispiel), Änderungsliste, eine Bauplan-SHA"
+  },
+  "AP-MSG": {
+   "status": "Stufe 4 · nur Anforderung",
+   "quelle": "Owner 05.11.",
+   "regel": "kein Bau-Abschnitt, bis die Owner die Stufe freigibt",
+   "siehe": "paket_folge.entscheide_05_11.AP-MSG"
+  },
+  "AP-KOST": {
+   "status": "Stufe 4 · nur Anforderung",
+   "quelle": "Owner 05.11.",
+   "regel": "kein Bau-Abschnitt, bis die Owner die Stufe freigibt",
+   "siehe": "paket_folge.entscheide_05_11.AP-KOST"
   }
  },
  "abschnitte": {
@@ -1059,6 +1842,26 @@
     "ergebnis": "R1 5 Blocker/8 wichtig/8 klein · R2 2/2/4 · R3 1/2/2 · R4 0 – alle Punkte in Runde 26 eingearbeitet (_klaerungen_52, _r2, _r3)",
     "pruefer": "unabhängiger Agent, nur BAUPLAN.json (Prüf-Export)"
    }
+  },
+  "AP-ABS Absprachen": {
+   "screens": [
+    "absprache"
+   ],
+   "status": "bau-frei",
+   "reihenfolge": 6,
+   "quelle": "Runde 54 · AP-ABS (Owner/PL 05.11.)",
+   "umfang": "Absprache als Typ (Übergabe ohne Zahlung · Sammelrechnung · Zahlungsziel), Geltung Kunde/Auftrag, gilt bis, Widerruf; Wirkung in 10.1 und Server; Einstiege 5.1/4.1/10.1 nach paket_folge.AP-ABS.eingriffe",
+   "bauhinweise": [
+    "K2",
+    "K21"
+   ],
+   "owner": "Owner-Auftrag 05.11. (Reihenfolge Runde 53 → AP-ABS)",
+   "gegenpruefung": {
+    "ok": true,
+    "runden": 3,
+    "ergebnis": "Runde 1: 5 blockierend + 20 wichtig/klein, alle eingearbeitet (Tor, Rückkehr, db wo, db_setzen, Sammelrechnung-Ablauf, Version, RLS, Kennungen, Ändern, Versand). Runde 2: 2 blockierend (Erwartung „fehlt“, Fälligkeit Sammelrechnung) + 6 wichtig, alle eingearbeitet (nicht_sichtbar, ziel_tage an der Sammelliste, {monat:±n}, Datenlage übergeben, 7.1-Festschreiben, Prüfreihenfolge, TT.MM.JJJJ, Versand-Kennungen + ABS-20).",
+    "pruefer": "unabhängiger Agent, nur Bauplan-Auszug AP-ABS"
+   }
   }
  },
  "verhalten_appweit": {
@@ -1105,7 +1908,7 @@
   "faelligkeit": "Rechnungen (A-75, A-73): Rechnungsdatum = Festschreibtag (Europe/Berlin). Zahlungsmodus des Auftrags „rechnung“: fällig = Rechnungsdatum + ziel_tage in Kalendertagen; bei skonto_prozent p > 0 Skontodatum = Rechnungsdatum + skonto_tage (Kalendertage), Skontobetrag = Brutto × (1 − p/100), kaufmännisch auf Cent. ziel_tage, skonto_prozent, skonto_tage = die in diesem Moment am Kunden gespeicherten Werte (auch nach „Freischaltung aufheben“); sie werden beim Festschreiben in die Rechnung kopiert und gelten danach unverändert. Zahlungsmodus „vorkasse“ oder „bar“: fällig = Rechnungsdatum, kein Skonto. Überfällig ab dem Folgetag der Fälligkeit; „{n} Tage überfällig“ in Kalendertagen. Ausdrückliche Ausnahme zu „zeit“ (dort Arbeitstage). Wertebereich: Zahlungsmodus des Auftrags ∈ vorkasse | bar | rechnung – derselbe Wertebereich wie die Kunden-Zahlungsbedingung (dort zusätzlich NULL), bauhinweise K5 / bausteine_vertraege.werkbank.schluessel. F1: Zahlungsmodus „keiner“ (nur Nacharbeitsauftrag): keine Rechnung, keine Fälligkeit.",
   "befehle_geld_mail": "Jeder schreibende Befehl der Abschnitte F5–F7 (Kunde speichern, Notiz, Mail senden, Rechnung festschreiben, Zahlung buchen, Storno, Ziel freischalten/aufheben, Einstellungen speichern inkl. Ersteinrichtung) trägt eine Request-ID. Der Client erzeugt sie beim Öffnen des Dialogs und nach jeder Änderung einer Eingabe neu; bei „Notiz speichern“ (kein Dialog) je Absenden. Der Server speichert nur einen erfolgreichen Ausgang je Request-ID und liefert bei Wiederholung derselben ID dieses gespeicherte Ergebnis (keine zweite Ausführung). Fehler und Rollback (Validierung, gesperrt, Firmendaten fehlen, PDF-Fehler, CONFLICT) verbrauchen die ID nicht: eine Wiederholung führt erneut aus. Dieselbe ID mit anderem Inhalt lehnt der Server mit CONFLICT ab. „Erneut …“ sendet dieselben Eingaben mit derselben ID; wurde vorher eine Eingabe geändert, ist es bereits eine neue ID. Festschreiben (7.1, 7.2 ohne Rechnung, 7.4) ist eine Transaktion: Preise der Positionen, Mehrarbeit-Beträge, Nummer, Rechnungsdaten, PDF und Akte-Eintrag; schlägt ein Teil fehl, wird alles zurückgerollt und keine Nummer verbraucht. Mail senden: kein automatisches Wiederholen; ist der Ausgang unklar (Zeitüberschreitung beim Postfach), meldet 5.3 den Zustand „unklar“ und sendet erst nach ausdrücklicher Bestätigung mit neuer Request-ID.",
   "laden": "Ladezustand (appweit): Bis die Daten einer Seite, Karte oder eines Dialogs da sind, steht an ihrer Stelle ein Platzhalter ohne Inhalt („Wird geladen …“, Kopf mit Titel sichtbar, Knöpfe noch nicht bedienbar); nach 10 s ohne Antwort gilt der Ladefehler der Seite (zustaende.fehler bzw. ladefehler) mit „Erneut laden“. Neuladen im Hintergrund (verhalten_appweit.gleichzeitig) zeigt keinen Platzhalter, der bisherige Stand bleibt sichtbar.",
-  "fehlt": "U-216 (Owner 28.10.): Fehlt ein Wert, zeigt jede Stelle „fehlt“ mit Link bzw. Sprung zur Stelle, wo er eingetragen wird – nie ein Ersatzwert (kein erfundenes 19 % USt, 14 Tage, „Deutschland“, „Stück“). Vom Owner festgelegte, sichtbare und änderbare Vorbelegungen (z. B. U-110 Neukunde Vorkasse) sind keine Ersatzwerte. Jede Seite führt dafür den Zustand fehlt, wo ein Pflichtwert aus anderen Daten kommt. Festgelegte Regeln sind keine Ersatzwerte: A-71 (Owner bestätigt) gibt Freitext- und Mehrarbeit-Positionen 19 %. Eine Katalogposition übernimmt Einheit und Steuersatz ihrer Katalogleistung (Pflichtfelder in 8.3); fehlt einer davon (Altdaten), zeigt die Position „{feld} fehlt“ mit Sprung zur Leistung (8.3) – nie 19 % oder „Stück“.",
+  "fehlt": "U-216 (Owner 28.10.): Fehlt ein Wert, zeigt jede Stelle „fehlt“ mit Link bzw. Sprung zur Stelle, wo er eingetragen wird – nie ein Ersatzwert (kein erfundenes 19 % USt, 14 Tage, „Deutschland“, „Stück“). Vom Owner festgelegte, sichtbare und änderbare Vorbelegungen (z. B. U-110 Neukunde Vorkasse) sind keine Ersatzwerte. Jede Seite führt dafür den Zustand fehlt, wo ein Pflichtwert aus anderen Daten kommt. Festgelegte Regeln sind keine Ersatzwerte: A-71 (Owner bestätigt) gibt Freitext- und Mehrarbeit-Positionen 19 %. Eine Katalogposition übernimmt Einheit und Steuersatz ihrer Katalogleistung (Pflichtfelder in 8.3); fehlt einer davon (Altdaten), zeigt die Position „{feld} fehlt“ mit Sprung zur Leistung (8.3) – nie 19 % oder „Stück“. U-242 (Owner 05.11.): „fehlt“ steht nie allein, sondern mit Gegenstand und Handlung – „{feld} eintragen“ bzw. „{feld} wählen“ (Prüfliste) oder „{gegenstand} fehlt · {folge}“ (Status, z. B. Sperre) – immer mit Sprung zur Stelle.",
   "auswahl": {
    "regel": "Jede Formular-Auswahl zeigt den gewählten Wert grün gefüllt mit Haken (Erfolg-Grün, weiße Schrift); nicht gewählte Optionen bleiben neutral. Gilt überall gleich: Segmente (Übergabe, Termin ist, Art, Anrede), Auswahl-Chips, Kacheln (Firma/Privat, Terminvorschläge, Bearbeitungszeit), „Bezahlt bei Abholung“. Ohne Wahl ist nichts grün – so sieht man auf einen Blick, was erledigt ist und was noch fehlt.",
    "vorbelegt": "Ein vorbelegter Wert (aus Kundenkarte, letzter Auftrag, Erkennung) ist grün und trägt seine Herkunft als kleine Zeile („aus Kundenkarte“); ein Klick auf eine andere Option ändert ihn.",
@@ -1456,7 +2259,8 @@
     "Gegeben B, Login ohne Recht geld · Wenn „Zahlung prüfen lassen“ · Dann Aufgabe an Recht geld mit Rechnung; meister bucht die Zahlung in 7.1 · Dann aktualisiert sich das offene 10.1 (Version) und „Übergeben“ wird frei; Server prüft beim Buchen erneut.",
     "Gegeben C, Sondervereinbarung läuft heute ab (gueltig_bis gestern) · Dann wie B, Hinweis „Sondervereinbarung abgelaufen am {datum}“."
    ],
-   "gilt": "appweit: 10.1, Werkstatt, Der Tag, Auftragskarte – Runde 48 (Owner 03.11.)"
+   "gilt": "appweit: 10.1, Werkstatt, Der Tag, Auftragskarte – Runde 48 (Owner 03.11.)",
+   "ap_abs": "Abgelöst (AP-ABS): die Erkennung einer Sondervereinbarung über geld = true und Freitext. Es wirkt nur eine gültige Absprache mit Typ (typ gesetzt, nicht widerrufen, gueltig_bis leer oder ≥ heute, Geltung Kunde oder dieser Auftrag; Auftrag vor Kunde). Regel und Knöpfe: baustand.paket_folge.AP-ABS.eingriffe.rauspruefen."
   },
   "gesperrt_katalog": {
    "quelle": "Runde 48 (Owner 03.11.) (RT06)",
@@ -1615,6 +2419,36 @@
    "reihenfolge": "Fokusreihenfolge = Reihenfolge der Felder im Sichtvertrag (seiten[].fokus.felder); enter_bis = letztes Pflichtfeld. Tab folgt derselben Reihenfolge.",
    "pruefung": "pruefe_sicht.cjs drückt je Seite Enter vom ersten Feld bis zum letzten Pflichtfeld und vergleicht das fokussierte Feld mit dem Sichtvertrag – Abweichung = rot."
   },
+  "texte_konkret": {
+   "quelle": "Runde 53 (Owner/PL 05.11.) · U-242",
+   "regel": "Kein Status, Chip oder Knopf mit Floskel. Jeder sichtbare Text nennt Gegenstand + Handlung + Kurzgrund mit Platzhaltern für Daten ({position}, {datum}, {betrag}, {auftrag}, {kunde}) und hat ein Klickziel. Die App weiß, was fehlt und was zu tun ist – sie sagt es.",
+   "verboten_allein": [
+    "prüfen",
+    "entscheiden",
+    "Entscheidung",
+    "Warnung",
+    "Konflikt",
+    "Problem lösen",
+    "Handlungsbedarf",
+    "Weitere",
+    "„fehlt“ ohne Gegenstand"
+   ],
+   "muster": [
+    "„Foto {teil} fehlt · Fertigmeldung gesperrt“ statt „Konflikt“",
+    "„KV-Preis freigeben“ statt „Prüfen & freigeben“",
+    "„Eingangsrechnung {absender} · {betrag} mit Bestellung abgleichen“ statt „Rechnung prüfen“",
+    "„Einheit wählen“ statt „fehlt“",
+    "„{feld} {wert} · erkannt, bestätigen“ statt „prüfen“"
+   ],
+   "arten_der_tag": {
+    "konflikt": "blockiert (Zähler „{n} blockiert“)",
+    "entscheidung": "wartet auf dich (Zähler „{n} warten auf dich“)",
+    "warnung": "wird knapp (Zähler „{n} werden knapp“)"
+   },
+   "ausnahmen": "Seitennamen aus paket.seitenkatalog (Runde 51 gebunden, z. B. 3.8 „Rechnung prüfen“) und Namen von Rechten (z. B. „Abweichungen & Reklamationen entscheiden“) bleiben; sie sind Namen, keine Statusmeldung.",
+   "pruefung": "Floskel-Gate der Endversion: jeder sichtbare Text der Vorschau (alle Seiten, Dialoge, Modi, drei Größen) und jeder Text im Bauplan – eine Floskel allein oder als letzter Teil ohne Gegenstand = rot.",
+   "pruefliste": "Prüfliste (3, 3.1, 3.7, 3.8): erkannter Wert = „{feld} {wert} · erkannt, bestätigen“ (Tipp springt ins Feld), fehlender Pflichtwert = „{feld} eintragen“ bzw. „{feld} wählen“ (Tipp springt ins Feld), Terminlage = „Termin wählen · Wunsch zu knapp“. Nie nur „prüfen“, „fehlt“, „entscheiden“."
+  },
   "grundzustand": "„zustand:daten“ = Grundzustand eines Fensters bzw. einer Seite: die normale Ansicht mit Daten (kein Sonderzustand aus zustaende); „Erneut“, „Zurück“, „Zur Lücke“ führen dorthin, Eingaben bleiben erhalten (Befund 40).",
   "entscheidung_fuehren": "Blickführung durch Farbe: Je Ansicht genau EIN empfohlener Hauptknopf in der Akzentfarbe (Primär, blau); alle weiteren Aktionen ruhig (sekundär/leise, ohne Füllfarbe). Der empfohlene Weg ist der, den der Zustand bzw. das erkannte Anliegen nahelegt; nie zwei konkurrierende Primärknöpfe. Der blaue Knopf zieht das Auge zuerst und sitzt in Daumennähe (Tablet) bzw. als Hauptknopf unten/rechts (Desktop).",
   "hervorhebung": "Zentrale Eingabe-/Pflichtfelder und der jeweils wichtigste Block werden farblich hervorgehoben (eigener Hintergrund/Rahmen in einer ruhigen Akzenttönung), damit der Blick sie zuerst findet; rein informierende Felder bleiben neutral. Farbe ersetzt nie einen Wert (U-216 gilt: fehlt → „fehlt“ mit Sprung zur Stelle).",
@@ -1629,7 +2463,8 @@
   "abschluss_zahlung": "Zahlung gebucht (7.2; ab Bankabgleich automatisch) → bei Vorkasse wird der Auftrag sofort „bereit“: Versand → 10.1 „Versenden“ als Primärknopf und Der Tag „Zahlung eingegangen · jetzt versenden“; Abholung → Kundeninfo „abholbereit“ (wenn automatisch informieren).",
   "pflicht_grund": "Pflicht-Grund bzw. Pflicht-Notiz leer: Knopf bleibt aktiv; Klick zeigt den Feldfehler rot am Feld („Bitte Grund angeben“, 3–200 Zeichen) und setzt den Fokus dorthin – nie „Noch offen“. Die Länge gilt laut Feld (z. B. complaint.begruendung 3–1000); 3–200 nur, wo das Feld nichts sagt.",
   "kundenkarte_im_eingang": "Runde 43: Die Kundenkarte (5.1) öffnet aus 3, 3.1 („Vorhandenen öffnen“), 3.4 und 2.3 als Ebene über dem aktuellen Fenster (×/Esc zurück, Eingaben darunter bleiben); nie als neuer Tab.",
-  "seitenkopf": "Runde 51 (Owner 03.11.): Im Seitenkopf wird der Seitenname nie zusammengedrückt oder überdeckt; Werkzeuge (Reiter, Filter-Chips, Knöpfe) brechen in eine zweite Zeile um. Gilt für alle Seiten (Befund 2.3 Nachrichten: Reiter überdeckten „Nachrichten“)."
+  "seitenkopf": "Runde 51 (Owner 03.11.): Im Seitenkopf wird der Seitenname nie zusammengedrückt oder überdeckt; Werkzeuge (Reiter, Filter-Chips, Knöpfe) brechen in eine zweite Zeile um. Gilt für alle Seiten (Befund 2.3 Nachrichten: Reiter überdeckten „Nachrichten“).",
+  "nachrichten_ein_eingang": "Owner 05.11.: eine Nachrichten-Oberfläche für alle Kanäle; Kanal = Filter/Chip, keine eigene Seite, gleiche Verarbeitung (baustand.paket_folge.entscheide_05_11.AP-MSG)."
  },
  "annahmen": {
   "regel": "Annahmen des Endversion-Chats zu Produktfragen, die in den Dokumenten nicht entschieden sind (Owner schlief). Gelten für den Bau, bis die Owner sie bestätigt oder ändert. Jede Annahme hat eine Empfehlungsbegründung.",
@@ -3692,7 +4527,7 @@
   "bausteine": [
    {
     "id": "hb",
-    "titel": "Handlungsbedarf",
+    "titel": "Heute zu tun",
     "fest": true,
     "block": {
      "typ": "hb",
@@ -3818,8 +4653,8 @@
         "grund": "{kunde} · KV wartet seit {n} Tagen (seit Versand)",
         "sortzeit": "KV-Versand",
         "aktion": {
-         "id": "prufen-freigeben",
-         "text": "Prüfen & freigeben",
+         "id": "kv-preis-freigeben",
+         "text": "KV-Preis freigeben",
          "ziel": "auftrag",
          "arg": "{kv}"
         },
@@ -3883,8 +4718,8 @@
         "grund": "{kunde} · {Minuten} Min. über KV-Spielraum · {betrag}",
         "sortzeit": "Erfassung der ältesten offenen Mehrarbeit",
         "aktion": {
-         "id": "prufen-freigeben",
-         "text": "Prüfen & freigeben",
+         "id": "kv-preis-freigeben",
+         "text": "KV-Preis freigeben",
          "ziel": "auftrag",
          "arg": "{auftrag}"
         },
@@ -3920,12 +4755,12 @@
         "art": "entscheidung",
         "recht": "entscheiden",
         "wann": "Reklamation im Stand aufgenommen (prozesse.reklamation)",
-        "titel": "Reklamation {auftrag} · entscheiden",
+        "titel": "Reklamation {auftrag} · {befund} · Ergebnis festlegen",
         "grund": "{kunde} · {mangel} · seit {n} Tagen",
         "sortzeit": "Aufnahme",
         "aktion": {
-         "id": "entscheiden",
-         "text": "Entscheiden",
+         "id": "ergebnis-festlegen",
+         "text": "Ergebnis festlegen",
          "ziel": "reklamation",
          "arg": "{reklamation}"
         }
@@ -4031,8 +4866,8 @@
          "wann": "ware = teilweise seit mehr als 7 Arbeitstagen",
          "titel": "Rest fehlt seit {n} Tagen · {auftrag}",
          "aktion": {
-          "id": "entscheiden",
-          "text": "Entscheiden",
+          "id": "ergebnis-festlegen",
+          "text": "Ergebnis festlegen",
           "ziel": "auftrag",
           "arg": "{auftrag}#rest_kommt_nicht",
           "recht": "entscheiden",
@@ -4051,12 +4886,12 @@
         "art": "entscheidung",
         "recht": "geld",
         "wann": "Eingang mit Art rechnung, nicht erfasst (prozesse.eingangsrechnung.pruefen) – sofort",
-        "titel": "Rechnung prüfen · {absender}",
+        "titel": "Eingangsrechnung {absender} · {betrag} mit Bestellung abgleichen",
         "grund": "{betrag} · eingegangen {datum}",
         "sortzeit": "Eingang",
         "aktion": {
-         "id": "prufen",
-         "text": "Prüfen",
+         "id": "mit-bestellung-abgleichen",
+         "text": "Mit Bestellung abgleichen",
          "ziel": "rechnungein",
          "arg": "{eingang}"
         }
@@ -4070,8 +4905,8 @@
         "grund": "{betrag} · Grund: {grund} · {login}",
         "sortzeit": "Ablage",
         "aktion": {
-         "id": "prufen",
-         "text": "Prüfen",
+         "id": "mit-bestellung-abgleichen",
+         "text": "Mit Bestellung abgleichen",
          "ziel": "rechnungein",
          "arg": "{eingang}#ohne_rechnung"
         },
@@ -4131,8 +4966,8 @@
          "wann": "Erinnerung gesendet und 5 Arbeitstage später noch keine Ware",
          "titel": "Ware fehlt seit {n} Tagen · erinnert am {datum}",
          "aktion": {
-          "id": "entscheiden",
-          "text": "Entscheiden",
+          "id": "ergebnis-festlegen",
+          "text": "Ergebnis festlegen",
           "ziel": "auftrag",
           "arg": "{auftrag}#ohne_ware",
           "recht": "entscheiden",
@@ -5101,6 +5936,17 @@
      }
     ]
    },
+   "ap_abs": {
+    "quelle": "Runde 54 · AP-ABS (Owner/PL 05.11.)",
+    "siehe": "baustand.paket_folge.AP-ABS.eingriffe.tag",
+    "aufbau": "Eine Zeile in der Liste von Der Tag, Art „wartet auf dich“, nur für Logins mit Recht geld: Gegenstand „Sammelrechnung {kunde} {monat}“, Handlung „erstellen · {n} Aufträge“; Klick führt sammelrechnung.erstellen aus und öffnet 7.1 mit dem Entwurf (Regeln: baustand.paket_folge.AP-ABS.sammelrechnung).",
+    "elemente": [
+     {
+      "id": "sammelrechnung-erstellen",
+      "text": "Sammelrechnung {kunde} {monat} erstellen · {n} Aufträge"
+     }
+    ]
+   },
    "aenderung_je_element": [
     {
      "element": "Handlungsbedarf / In Arbeit / Heute&Woche",
@@ -5282,7 +6128,7 @@
       },
       {
        "id": "zahlung_pruefen",
-       "text": "Zahlung prüfen",
+       "text": "Zahlung zuordnen",
        "icon": "euro",
        "ziel": "zahlung",
        "arg": "{auftrag}#{eingang}",
@@ -5324,7 +6170,7 @@
       },
       {
        "id": "rechnungein",
-       "text": "Rechnung prüfen",
+       "text": "Eingangsrechnung erfassen",
        "icon": "receipt",
        "ziel": "rechnungein",
        "arg": "{eingang}",
@@ -5608,7 +6454,7 @@
       },
       {
        "id": "anbindung",
-       "text": "Anbindung prüfen",
+       "text": "Verbindung testen",
        "ziel": "anbindung",
        "recht": "wartung"
       }
@@ -6835,7 +7681,7 @@
     },
     {
      "id": "zahlung_pruefen",
-     "text": "Zahlung prüfen",
+     "text": "Zahlung zuordnen",
      "icon": "euro",
      "ziel": "zahlung",
      "arg": "{auftrag}#{eingang}",
@@ -6875,7 +7721,7 @@
     },
     {
      "id": "rechnungein",
-     "text": "Rechnung prüfen",
+     "text": "Eingangsrechnung erfassen",
      "icon": "receipt",
      "ziel": "rechnungein",
      "arg": "{eingang}",
@@ -6963,7 +7809,7 @@
     },
     {
      "id": "weitere",
-     "text": "Weitere Anliegen",
+     "text": "Anderes Anliegen wählen",
      "icon": "chevdown",
      "art": "sekundaer",
      "ziel": "zustand:daten",
@@ -7038,7 +7884,8 @@
     "eingangsfoto": "Eingangsfoto aufnehmen",
     "visitenkarte": "Visitenkarte lesen",
     "datei": "Datei lesen · für die Erfassung",
-    "uebergabe": "Fotos für den PC"
+    "uebergabe": "Fotos für den PC",
+    "unklar": "Was ist das? · Art unklar"
    },
    "inhalt": [
     {
@@ -7213,7 +8060,7 @@
        "wann": "Rechnung erkannt (PDF, Bild, XRechnung, ZUGFeRD)",
        "haupt": {
         "id": "rechnung-pruefen",
-        "text": "Rechnung prüfen",
+        "text": "Eingangsrechnung erfassen",
         "icon": "receipt",
         "ziel": "rechnungein",
         "arg": "{eingang}",
@@ -7336,7 +8183,7 @@
         },
         {
          "id": "zahlung_pruefen",
-         "text": "Zahlung prüfen",
+         "text": "Zahlung zuordnen",
          "icon": "euro",
          "ziel": "zahlung",
          "arg": "{auftrag}#{eingang}",
@@ -7435,7 +8282,7 @@
       },
       {
        "id": "weitere-seite",
-       "text": "Weitere Seite",
+       "text": "Nächste Seite fotografieren",
        "icon": "camera",
        "ziel": "zustand:seiten",
        "geraete": [
@@ -7642,7 +8489,7 @@
      "aktionen": [
       {
        "id": "weitere-seite",
-       "text": "Weitere Seite",
+       "text": "Nächste Seite fotografieren",
        "ziel": "zustand:seiten",
        "taste": "Leertaste"
       },
@@ -7715,6 +8562,89 @@
     "Runde 51 (Owner 03.11.): Gegeben 3.0 im Modus eingang (aus 3 „Aufnehmen“) · Dann gibt es weder „Wem gehört das?“ noch „Später zuordnen“, leer nur „Schließen“, mit Inhalt „Übernehmen“; der Kopf lautet „Neu erfassen“, Unterzeile „Zettel lesen · für die Erfassung“."
    ],
    "darstellung": "Ein Eingabefeld für alles („Schreib, füge ein oder zieh eine Datei hierher …“, Diktat-Mikrofon); die Erkennung läuft beim Tippen (eingang.erkennung.notiz) und zeigt unter dem Feld die Zeile ERKANNT mit Chips (Kunde, Vorgang, Anliegen). Rechts zwei große Karten: „Datei“ (hierher ziehen oder auswählen) und „Fotos mit Tablet/Handy“ (Kamera öffnet auf deinem Tablet oder Handy, E14). Fuß: links leise „Später zuordnen“ (gespeichert, wartet unter Nachrichten › Zuordnen), rechts genau ein Hauptknopf – „Zuordnen“ (öffnet 3.4) bzw. „Zu {kunde} speichern“, sobald ein Kunde sicher erkannt ist. Tablet/Handy: Kamera-Sucher statt Ziehfläche, gleiche Karten darunter.",
+   "runde53_unklar": {
+    "quelle": "Runde 53 (Owner/PL 05.11.) · U-241 (Owner: jeder Eingang hat einen Weg)",
+    "wann": "Erkennung ohne Art (nichts gelesen oder Art unklar) – nie eine Sackgasse",
+    "kacheln": [
+     {
+      "id": "unklar.auftrag",
+      "text": "Auftrag oder KV",
+      "unter": "Kunde will etwas beschichtet haben",
+      "ziel": "eingang",
+      "arg": "{eingang}"
+     },
+     {
+      "id": "unklar.ware",
+      "text": "Ware",
+      "unter": "Teile sind angekommen",
+      "ziel": "eingang",
+      "arg": "{eingang}#ware",
+      "hinweis": "erwartete Aufträge stehen als Kacheln „Erwartete Ware“ darüber → 3.7"
+     },
+     {
+      "id": "unklar.rechnung",
+      "text": "Eingangsrechnung",
+      "unter": "Lieferant will Geld",
+      "ziel": "rechnungein",
+      "arg": "{eingang}"
+     },
+     {
+      "id": "unklar.dokument",
+      "text": "Dokument oder Notiz",
+      "unter": "nur ablegen · am Kunden oder Auftrag",
+      "ziel": "mailein",
+      "arg": "{eingang}",
+      "hinweis": "3.4 Wem gehört das? zum Ablegen am Vorgang/Kunden"
+     }
+    ],
+    "aufbau": "Rechte Spalte von oben: Kopf „Erkannt · Unklar · nichts gelesen“ → Abschnitt „Was ist das?“ (4 Kacheln, 2 je Reihe) → Hauptknopf „Später zuordnen“ → feste Wege. Keine Erkannt-Zeilen und keine Kacheln „Erwartete Ware“ (die zeigt erst 3.7 nach Kachel Ware).",
+    "daneben_immer": [
+     "Wem gehört das? (3.4)",
+     "Später zuordnen",
+     "Original ansehen (3.9)"
+    ],
+    "teilangaben": "Was die Erkennung trotzdem gelesen hat (Absender, Datum, Nummern), steht im Ziel vorbelegt mit Herkunft „{feld} {wert} · erkannt, bestätigen“.",
+    "kein_hauptknopf": "Die Kacheln sind die Wahl; der Fuß zeigt nur „Später zuordnen“.",
+    "abnahme": [
+     "Gegeben ein Foto ohne lesbaren Inhalt · Dann 3.0 zeigt „Was ist das?“ mit 4 Kacheln, daneben Wem gehört das?, Später zuordnen, Original ansehen.",
+     "Gegeben „Was ist das?“ · Wenn „Eingangsrechnung“ gewählt · Dann öffnet 3.8 mit dem Original."
+    ]
+   },
+   "elemente_runde53": {
+    "quelle": "Runde 53 (Owner/PL 05.11.)",
+    "liste": [
+     {
+      "id": "unklar.auftrag",
+      "text": "Auftrag oder KV",
+      "art": "kachel",
+      "ziel": "eingang"
+     },
+     {
+      "id": "unklar.ware",
+      "text": "Ware",
+      "art": "kachel",
+      "ziel": "eingang"
+     },
+     {
+      "id": "unklar.rechnung",
+      "text": "Eingangsrechnung",
+      "art": "kachel",
+      "ziel": "rechnungein"
+     },
+     {
+      "id": "unklar.dokument",
+      "text": "Dokument oder Notiz",
+      "art": "kachel",
+      "ziel": "mailein"
+     },
+     {
+      "id": "original-ansehen",
+      "text": "Original ansehen",
+      "art": "sekundaer",
+      "ziel": "original"
+     }
+    ]
+   },
    "aenderung_je_element": []
   },
   {
@@ -8479,7 +9409,7 @@
      },
      {
       "id": "anliegen.lesen",
-      "text": "Lesen und entscheiden",
+      "text": "Lesen und zuordnen",
       "art": "chip"
      },
      {
@@ -8619,7 +9549,7 @@
      },
      {
       "id": "anliegen.zahlung_pruefen",
-      "text": "Zahlung prüfen",
+      "text": "Zahlung zuordnen",
       "art": "knopf"
      },
      {
@@ -8639,7 +9569,7 @@
      },
      {
       "id": "anliegen.rechnungein",
-      "text": "Rechnung prüfen",
+      "text": "Eingangsrechnung erfassen",
       "art": "knopf"
      },
      {
@@ -9319,7 +10249,7 @@
       {
        "typ": "abschnitt",
        "nr": 5,
-       "titel": "Weitere Angaben",
+       "titel": "Ansprechpartner, Website, Notiz",
        "felder": [
         {
          "id": "ustid",
@@ -10279,7 +11209,7 @@
     {
      "typ": "abschnitt",
      "nr": 2,
-     "titel": "Entscheidung",
+     "titel": "Ergebnis der Reklamation",
      "wann": "ab Stand aufgenommen",
      "recht": "entscheiden",
      "felder": [
@@ -10387,7 +11317,7 @@
     },
     {
      "id": "entscheiden",
-     "text": "Entscheidung speichern",
+     "text": "Ergebnis speichern",
      "icon": "check",
      "ziel": "zurueck",
      "haupt": true,
@@ -11713,7 +12643,7 @@
      "na": "öffnet nur mit einem Eingang bzw. einer Eingangsrechnung"
     },
     "teilweise": {
-     "text": "{n} Felder unsicher · am Original prüfen",
+     "text": "{n} Felder unsicher · mit dem Original vergleichen",
      "aktionen": [
       {
        "id": "geprueft",
@@ -12328,7 +13258,7 @@
       },
       {
        "id": "rest-pruefen",
-       "text": "Rest prüfen",
+       "text": "Rest zählen",
        "ziel": "zustand:daten",
        "verhalten": "Warenprüfung für den Rest; angenommen wird mit dem Hauptknopf (ware.annehmen)"
       },
@@ -13213,6 +14143,187 @@
     "Gegeben alle Punkte angesehen · Dann zeigt der Menüpunkt keinen Zähler und die Seite „Alles angesehen“.",
     "Gegeben Login mit Recht entscheiden · Wenn „Problem“ mit Notiz · Dann entsteht eine Aufgabe für Wartung mit Link zur Stelle, der Punkt ist rot.",
     "Runde 50 (Owner 03.11.: kein Zurück-Balken): Gegeben eine Stelle aus dieser Liste geöffnet · Dann gibt es oben keinen Balken „zurück zu …“ · Wenn Schließen/Esc/Speichern · Dann steht die Liste wieder genau so da wie verlassen (Reiter, Filter, Scrollposition), der Eintrag ist markiert."
+   ],
+   "aenderung_je_element": []
+  },
+  {
+   "id": "absprache",
+   "nr": "5.4",
+   "typ": "dialog",
+   "groesse": "schmal",
+   "titel": "Absprache festlegen",
+   "icon": "check",
+   "funktion": [
+    "A06"
+   ],
+   "quelle": [
+    "Runde 54 · AP-ABS (Owner/PL 05.11.)"
+   ],
+   "rollen": [
+    "meister"
+   ],
+   "recht": "geld",
+   "arg_ist": "{kunde} (5.1 „Zahlungsabsprache festlegen“) · {auftrag} (4.1 Geld-Bereich und 10.1 „Zahlung fehlt“: Geltung „nur dieser Auftrag“ vorgewählt) · {kunde}#aendern / {kunde}#widerruf (Absprache des ganzen Kunden) · {auftrag}#aendern / {auftrag}#widerruf (Absprache nur dieses Auftrags). Argument von oeffne ist die Zeilen-ID (Testmodell-Konvention).",
+   "modi": {
+    "aendern": "Absprache ändern",
+    "widerruf": "Absprache widerrufen"
+   },
+   "inhalt": [
+    {
+     "typ": "abschnitt",
+     "nr": 0,
+     "felder": [
+      {
+       "id": "typ",
+       "label": "Was gilt?",
+       "typ": "kacheln",
+       "pflicht": "immer",
+       "optionen": [
+        "Übergabe ohne Zahlung · Rechnung folgt",
+        "Sammelrechnung monatlich",
+        "Zahlungsziel in Tagen"
+       ],
+       "optionen_quelle": "paket_folge.AP-ABS.typen",
+       "vorbelegung": "keine (leer) · im Modus aendern der bestehende Typ"
+      },
+      {
+       "id": "geltung",
+       "label": "Gilt für",
+       "typ": "segment",
+       "pflicht": "immer",
+       "optionen": [
+        "ganzer Kunde {kunde}",
+        "nur Auftrag {auftrag}"
+       ],
+       "vorbelegung": "mit {auftrag}: „nur Auftrag {auftrag}“, sonst „ganzer Kunde {kunde}“; ohne Auftrag ist „nur Auftrag“ nicht wählbar"
+      },
+      {
+       "id": "tage",
+       "label": "Zahlungsziel",
+       "typ": "zahl",
+       "einheit": "Tage",
+       "pflicht": "bei Typ Zahlungsziel und Sammelrechnung",
+       "pruefung": "1–120 ganze Tage",
+       "nur_wenn": "typ = zahlungsziel oder sammelrechnung (Sammelrechnung: Zahlungsziel der Sammelrechnung)",
+       "fehlertext": "Tage eintragen · 1 bis 120"
+      },
+      {
+       "id": "gueltig_bis",
+       "label": "Gilt bis",
+       "typ": "datum",
+       "pflicht": false,
+       "pruefung": "leer = bis auf Widerruf; sonst ≥ heute; Eingabe TT.MM.JJJJ",
+       "fehlertext": "Datum heute oder später wählen",
+       "anzeige_abgelaufen": "„abgelaufen am {gueltig_bis}“ (gilt bis einschließlich gueltig_bis)"
+      },
+      {
+       "id": "grund",
+       "label": "Grund",
+       "typ": "textfeld",
+       "pflicht": "immer",
+       "pruefung": "3–200 Zeichen (appweite Grund-Regel)",
+       "fehlertext": "Bitte Grund angeben"
+      }
+     ],
+     "hinweise": [
+      {
+       "id": "zustand.leer",
+       "text": "Typ wählen · dann Geltung und Grund",
+       "nur_wenn": "kein Typ gewählt"
+      }
+     ]
+    }
+   ],
+   "aktionen": [
+    {
+     "id": "abbrechen",
+     "text": "Abbrechen",
+     "ziel": "zurueck",
+     "taste": "Esc"
+    },
+    {
+     "id": "speichern",
+     "text": "Absprache speichern · gilt sofort",
+     "icon": "check",
+     "ziel": "zurueck",
+     "haupt": true,
+     "meldung": "Absprache {typ} gilt ab sofort für {geltung}",
+     "befehl": "absprache.speichern",
+     "tor": "nur Typ: ohne Typ gesperrt mit Grund „Typ wählen“. Übrige Pflichtfelder lassen den Knopf aktiv; ein Klick zeigt den Feldfehler und setzt den Fokus ins erste fehlerhafte Feld.",
+     "nach_erfolg": "schließt 5.4, zurück zur aufrufenden Seite (5.1, 4.1 oder 10.1), die neu lädt"
+    }
+   ],
+   "modus_widerruf": {
+    "felder": [
+     "grund"
+    ],
+    "haupt": {
+     "id": "widerrufen",
+     "text": "Absprache widerrufen · gilt sofort",
+     "befehl": "absprache.widerrufen",
+     "meldung": "Absprache {typ} widerrufen · offene Übergaben brauchen wieder eine Zahlung"
+    },
+    "regel": "Grund Pflicht. Bereits gebuchte Übergaben und Rechnungen bleiben; offene 10.1 aktualisieren sich (Version). Eintrag bleibt mit widerrufen_am/widerrufen_von im Protokoll sichtbar (5.1 „Frühere Absprachen“)."
+   },
+   "zustaende": {
+    "leer": {
+     "text": "Typ wählen · dann Geltung und Grund",
+     "na": "öffnet immer mit Kunde oder Auftrag; Hauptknopf mit Tor „Typ wählen“, keine eigene Aktion"
+    },
+    "teilweise": {
+     "na": "Tor im Hauptknopf"
+    },
+    "fehler": {
+     "text": "Nicht gespeichert · Eingaben sind noch da",
+     "aktionen": [
+      {
+       "id": "erneut",
+       "text": "Erneut speichern",
+       "ziel": "zustand:daten",
+       "regel": "wiederholt den Befehl mit demselben client_key"
+      }
+     ],
+     "je_code": {
+      "FORBIDDEN": "Nur mit Recht „Geld, Preise & Buchhaltung“",
+      "CONFLICT": "Absprache wurde inzwischen geändert · neu laden",
+      "VALIDATION_ERROR": "Feldfehler am Feld (Texte wie oben)",
+      "NETZ": "Nicht gespeichert · Eingaben sind noch da"
+     }
+    },
+    "erfolg": {
+     "na": "schließt mit Meldung"
+    },
+    "fehlt": {
+     "na": "öffnet immer mit Kunde oder Auftrag"
+    },
+    "gesperrt": {
+     "text": "Nur mit Recht „Geld, Preise & Buchhaltung“",
+     "na": "ohne Recht geld gibt es keinen Einstieg (Knopf unsichtbar)"
+    }
+   },
+   "fokus": {
+    "felder": [
+     "typ",
+     "geltung",
+     "tage",
+     "gueltig_bis",
+     "grund"
+    ],
+    "enter_bis": "grund"
+   },
+   "regeln": [
+    "Höchstens eine gültige Zahlungsabsprache je Kunde und eine je Auftrag; eine neue ersetzt die alte (alte bekommt widerrufen_am = jetzt, widerruf_grund „ersetzt durch {typtext der neuen}“). Ändern (#aendern) = genau das: neue Zeile, alte widerrufen; nie Zeile überschreiben.",
+    "Freitext-Einträge (typ null) bleiben unverändert; „Typ festlegen“ in 5.1 öffnet 5.4 #aendern vorbelegt mit bezeichnung/wert als Grund und legt eine neue typisierte Zeile an.",
+    "Typisierte Zeile: geld = true, bezeichnung = Typtext, wert = null.",
+    "Keine Live-Aktualisierung offener Seiten: 10.1 prüft beim Klick am Server (recordGoodsOutCommand) und lädt danach neu.",
+    "Vorrang: Absprache des Auftrags vor Absprache des Kunden.",
+    "Freitext-Absprachen und Notizen (5.2 „Absprachen & Eigenheiten“) heben nie eine Sperre auf – nur eine Absprache mit Typ wirkt."
+   ],
+   "abnahme": [
+    "Gegeben Kunde ohne Absprache · Wenn 5.1 „Zahlungsabsprache festlegen“ · Dann öffnet 5.4 leer: kein Typ gewählt, Geltung „ganzer Kunde“, Hauptknopf gesperrt mit Grund „Typ wählen“.",
+    "Gegeben Typ Zahlungsziel ohne Tage · Wenn speichern · Dann bleibt der Dialog offen, Fokus in Tage, Text „Tage eintragen · 1 bis 120“.",
+    "Gegeben gueltig_bis gestern · Dann „Datum heute oder später wählen“, nichts gespeichert.",
+    "Gegeben Login ohne Recht geld · Dann gibt es weder in 5.1 noch in 4.1 noch in 10.1 einen Knopf zu 5.4; der Server lehnt absprache.speichern ab (FORBIDDEN)."
    ],
    "aenderung_je_element": []
   }
@@ -16510,7 +17621,7 @@
     ],
     "aktion": {
      "id": "zahlung_pruefen",
-     "text": "Zahlung prüfen",
+     "text": "Zahlung zuordnen",
      "icon": "euro",
      "ziel": "zahlung",
      "arg": "{auftrag}#{eingang}",
@@ -16626,7 +17737,7 @@
     "kontext": "Lieferant zugeordnet oder Anhang als Rechnung erkannt",
     "aktion": {
      "id": "rechnungein",
-     "text": "Rechnung prüfen",
+     "text": "Eingangsrechnung erfassen",
      "icon": "receipt",
      "ziel": "rechnungein",
      "arg": "{eingang}",
@@ -16822,7 +17933,7 @@
    },
    {
     "id": "lesen",
-    "text": "Lesen und entscheiden",
+    "text": "Lesen und zuordnen",
     "kurz": "Neu",
     "ton": "navy",
     "rang": 11,
@@ -17279,6 +18390,17 @@
     "xml": "XML geht nie in die OCR: ZUGFeRD/XRechnung → strukturierter Leser (screens[rechnung].runde39.e_rechnung, 3.8); anderes XML → format_nicht_unterstuetzt „Als Datei ablegen“.",
     "leer": "OCR-Antwort ohne Felder = Zustand nichts_erkannt (eigener Zustand, nicht „erfolgreich“).",
     "testdateien": "Synthetisch beschriftete Fixtures im Repo (tests/fixtures/eingang): paketetikett.jpg (DPD-Etikett mit Absender), visitenkarte.jpg, zettel_handschrift.jpg, beleg_mehrseitig.pdf (2 Seiten), rechnung_zugferd.pdf, rechnung_xrechnung.xml, foto.heic, grenze_20mb.jpg (genau 20 MB), zu_gross.jpg (21 MB), unlesbar.jpg (Unschärfe). Je Datei: Quelle gesichert, Formatweg, erkannte Inhalte, Folgeweg (Zustand), Fehlerhilfe. Eine OCR-Testantwort mit leeren Feldern besteht diese Prüfung nicht."
+   },
+   "runde53": {
+    "quelle": "Runde 53 (Owner/PL 05.11.) · Prüfbericht Nr. 7",
+    "regeln": [
+     "Verneinung mit Ersatz: „nicht X, nur Y“ / „kein X, sondern Y“ → Y wird übernommen, X verworfen (je Leistung, Oberfläche, Menge, Termin).",
+     "Zahlwörter: eins–zwölf, zwanzig, dreißig, hundert, „ein Dutzend“ (12), „ein paar“ / „einige“ = keine Menge (Feld leer, Prüflisten-Text „Menge eintragen“).",
+     "Datum: Liefertermin = das Wunschdatum im Satz („bis Mittwoch“, „nächste Woche Freitag“, „zum 12.11.“); Mail-/Briefdatum und Datum in Signaturen zählen nie als Liefertermin.",
+     "Mehr als 20 Positionen: die ersten 20 werden übernommen, sichtbarer Hinweis „{n} Positionen erkannt · 20 übernommen · Rest als zweiter Beleg {eingang}-2“ mit Knopf „Rest als zweiten Beleg anlegen“.",
+     "Eingebettete Bilder einer Mail: als Foto-Kandidat am Vorgang („Bild aus der Mail als Foto übernehmen“), nicht pauschal verwerfen; ausgenommen Signatur-Logos (< 10 KB oder in mehreren Mails gleich)."
+    ],
+    "testfaelle": "testmodell.seiten.eingang RT04-11 … RT04-15"
    }
   },
   "zustaende": {
@@ -20342,6 +21464,9 @@
   },
   "kundebearbeiten": {
    "status": "offen"
+  },
+  "absprache": {
+   "status": "offen"
   }
  },
  "korrekturen": [
@@ -21005,7 +22130,9 @@
     "erwarten": "Zwischenprüfung (anzeige/db wie dann) mitten im Weg",
     "datei": "Element (Foto-Platz bzw. Dateiwahl) anklicken und die Testdatei wert aus den Test-Fixtures übergeben (Kamera bzw. Dateiauswahl); ein echtes Original entsteht (screens[ware].foto_gate); wert darf eine Liste mehrerer Testdateien sein (eine Auswahl, ein Eingang)",
     "oeffne": "mitten im Weg erneut oeffne(wert, arg) aufrufen (z. B. 3.7 nach Abbrechen wieder öffnen)",
-    "netz_laden": "der nächste Ladeaufruf (Lesen), den der folgende Schritt auslöst, scheitert als Netzfehler, bevor er den Server erreicht; spätere Ladeaufrufe gehen wieder"
+    "netz_laden": "der nächste Ladeaufruf (Lesen), den der folgende Schritt auslöst, scheitert als Netzfehler, bevor er den Server erreicht; spätere Ladeaufrufe gehen wieder",
+    "befehl": "Befehl wert direkt an den Server senden (wie die Oberfläche, mit Login des Gegeben) mit daten; client_key setzt der Harness (neue UUID je Schritt); Antwort in dann.server.fehler (Code) prüfen",
+    "db_setzen": "Testdaten mitten im Weg direkt ändern wie eine zweite Sitzung: tabelle, wo (Spalten → Werte), werte; danach keine Aktualisierung der offenen Seite (verhalten: Server-Recheck beim nächsten Befehl)"
    },
    "erwartungen": {
     "sichtbar": "",
@@ -21054,7 +22181,9 @@
     "{kw_folge_anfang:±n}": "erster Arbeitstag ab Montag der Folge-KW (Feiertage/Betriebsruhe übersprungen); ±n wie {arbeitstag}",
     "{fehler}": "Fehlertext der Meldung (Inhalt frei); der Harness prüft nur den festen Teil des Toasts",
     "{jetzt:-3min}": "Zeitpunkt jetzt minus 3 Minuten",
-    "{fixture_visitenkarte.firma}": "Firmenname aus der synthetischen Fixture visitenkarte.jpg"
+    "{fixture_visitenkarte.firma}": "Firmenname aus der synthetischen Fixture visitenkarte.jpg",
+    "{monat:±n}": "Monatserster des Kalendermonats ±n ab heute (Europe/Berlin), Datum JJJJ-MM-TT",
+    "|TT.MM.JJJJ": "Datum als TT.MM.JJJJ (Eingabe in Datumsfelder)"
    },
    "luecken": [
     "Warenprüfung (Abschnitt 4 in 3): Zustand Unauffällig | Abweichung hat keine Vorbelegung; Kennung <screen>.warenzustand seit Runde 28 – orders.ware wird in den Buchungsfällen von eingang trotzdem nicht geprüft (Abschnitt 4 gehört zu AP-W/AP-O).",
@@ -22330,6 +23459,129 @@
      "erkennung_seit": "{jetzt:-3min}",
      "id": null
     }
+   },
+   "kunde_absprache_rechnung_folgt": {
+    "tabelle": "customer_agreements",
+    "zweck": "gültige Absprache Übergabe ohne Zahlung · Kunde",
+    "werte": {
+     "kunde": "{kunde_bedingung_bar}",
+     "typ": "ausgabe_ohne_zahlung",
+     "order_id": null,
+     "gueltig_bis": null,
+     "grund": "Prüfgrund eins"
+    }
+   },
+   "kunde_absprache_sammel": {
+    "tabelle": "customer_agreements",
+    "zweck": "gültige Absprache Sammelrechnung · Kunde",
+    "werte": {
+     "kunde": "{kunde_bedingung_bar}",
+     "typ": "sammelrechnung",
+     "order_id": null,
+     "gueltig_bis": null,
+     "grund": "Prüfgrund zwei",
+     "ziel_tage": 14
+    }
+   },
+   "kunde_absprache_freitext": {
+    "tabelle": "customer_agreements",
+    "zweck": "nur Freitext mit geld = true, ohne Typ",
+    "werte": {
+     "kunde": "{kunde_bedingung_bar}",
+     "typ": null,
+     "geld": true,
+     "bezeichnung": "Abholung ohne Zahlung",
+     "wert": "Prüftext Rechnung folgt"
+    }
+   },
+   "kunde_absprache_abgelaufen": {
+    "tabelle": "customer_agreements",
+    "zweck": "Absprache abgelaufen",
+    "werte": {
+     "kunde": "{kunde_bedingung_bar}",
+     "typ": "ausgabe_ohne_zahlung",
+     "gueltig_bis": "{arbeitstag:-1}",
+     "grund": "Prüfgrund drei"
+    }
+   },
+   "auftrag_fertig_unbezahlt": {
+    "tabelle": "orders",
+    "zweck": "fertig, Abholung, Bar oder Karte bei Abholung, keine Zahlung",
+    "werte": {
+     "kunde": "{kunde_bedingung_bar}",
+     "art": "auftrag",
+     "status": "fertig",
+     "uebergabe": "abholung",
+     "zahlungsmodus": "bar_karte"
+    }
+   },
+   "kunde_absprache_zahlungsziel": {
+    "tabelle": "customer_agreements",
+    "zweck": "gültige Absprache Zahlungsziel 30 Tage · Kunde",
+    "werte": {
+     "kunde": "{kunde_bedingung_bar}",
+     "typ": "zahlungsziel",
+     "ziel_tage": 30,
+     "order_id": null,
+     "gueltig_bis": null,
+     "grund": "Prüfgrund sechs"
+    }
+   },
+   "auftrag_absprache_sammel": {
+    "tabelle": "customer_agreements",
+    "zweck": "Sammelrechnung nur für auftrag_fertig_unbezahlt (Vorrang vor Kunde)",
+    "werte": {
+     "kunde": "{kunde_bedingung_bar}",
+     "typ": "sammelrechnung",
+     "ziel_tage": 14,
+     "order_id": "{auftrag_fertig_unbezahlt}",
+     "gueltig_bis": null,
+     "grund": "Prüfgrund sieben"
+    }
+   },
+   "auftrag_uebergeben_sammel": {
+    "tabelle": "orders",
+    "zweck": "im Vormonat übergeben, eine Position mit Preis, Sammelrechnung offen",
+    "werte": {
+     "kunde": "{kunde_bedingung_bar}",
+     "art": "auftrag",
+     "status": "uebergeben",
+     "warenausgang_am": "{monat:-1}",
+     "uebergabe": "abholung",
+     "positionen": [
+      {
+       "bezeichnung": "Prüfteil eins",
+       "menge": 1,
+       "einheit": "stueck",
+       "einzelpreis": 10,
+       "steuersatz": 19
+      }
+     ]
+    }
+   },
+   "sammelliste_vormonat": {
+    "tabelle": "invoice_collections",
+    "zweck": "offene Sammelliste des Vormonats mit auftrag_uebergeben_sammel",
+    "werte": {
+     "kunde": "{kunde_bedingung_bar}",
+     "monat": "{monat:-1}",
+     "ziel_tage": 14,
+     "status": "offen",
+     "auftraege": [
+      "{auftrag_uebergeben_sammel}"
+     ]
+    }
+   },
+   "auftrag_fertig_versand": {
+    "tabelle": "orders",
+    "zweck": "fertig, Versand, keine Zahlung",
+    "werte": {
+     "kunde": "{kunde_bedingung_bar}",
+     "art": "auftrag",
+     "status": "fertig",
+     "uebergabe": "versand",
+     "zahlungsmodus": "bar_karte"
+    }
    }
   },
   "seiten": {
@@ -23001,11 +24253,13 @@
      },
      {
       "id": "E09",
-      "titel": "Enter im Feld Menge löst den Hauptknopf mit seinem Tor aus",
+      "titel": "Enter springt Feld für Feld; erst im letzten Pflichtfeld (Eingangsart) löst Enter den Hauptknopf mit seinem Tor aus",
       "paket": "AP-EIN",
       "quelle": [
        "bausteine_vertraege.werkbank.geraete",
-       "screens[eingang].abnahme[53]"
+       "screens[eingang].abnahme[53]",
+       "verhalten_appweit.tastatur_enter",
+       "SICHTVERTRAG eingang.fokus"
       ],
       "deckt": [],
       "gegeben": {
@@ -23079,7 +24333,7 @@
        {
         "aktion": "taste",
         "wert": "Enter",
-        "id": "eingang.menge"
+        "id": "eingang.eingangsart"
        }
       ],
       "dann": {
@@ -31526,6 +32780,246 @@
         }
        ]
       }
+     },
+     {
+      "id": "RT04-11",
+      "titel": "„Nicht verchromen, nur vernickeln“ → Oberfläche Vernickeln",
+      "paket": "AP-EIN",
+      "quelle": [
+       "eingang.erkennung.runde53"
+      ],
+      "deckt": [
+       "eingang.erkennung"
+      ],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [
+        "kunde_vollstaendig_firma"
+       ],
+       "aufruf": {
+        "seite": "eingang",
+        "arg": "(leer)",
+        "weg": [
+         {
+          "id": "navigation.plus",
+          "aktion": "klicken"
+         },
+         {
+          "id": "rein.auftrag-erfassen",
+          "aktion": "klicken"
+         }
+        ],
+        "quelle": "werkbank.interaktion[aufruf-leer] · rein.inhalt.ohne_vorlage[auftrag-erfassen]"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [
+       {
+        "id": "eingang.erfassen-text",
+        "aktion": "tippen",
+        "wert": "Bitte 12 Teile nicht verchromen, nur vernickeln."
+       }
+      ],
+      "dann": {
+       "anzeige": [
+        {
+         "text": "Vernickeln",
+         "erwartung": "sichtbar"
+        }
+       ]
+      }
+     },
+     {
+      "id": "RT04-12",
+      "titel": "Zahlwort „zwölf“ → Menge 12",
+      "paket": "AP-EIN",
+      "quelle": [
+       "eingang.erkennung.runde53"
+      ],
+      "deckt": [
+       "eingang.erkennung"
+      ],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [
+        "kunde_vollstaendig_firma"
+       ],
+       "aufruf": {
+        "seite": "eingang",
+        "arg": "(leer)",
+        "weg": [
+         {
+          "id": "navigation.plus",
+          "aktion": "klicken"
+         },
+         {
+          "id": "rein.auftrag-erfassen",
+          "aktion": "klicken"
+         }
+        ],
+        "quelle": "werkbank.interaktion[aufruf-leer] · rein.inhalt.ohne_vorlage[auftrag-erfassen]"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [
+       {
+        "id": "eingang.erfassen-text",
+        "aktion": "tippen",
+        "wert": "Zwölf Teile verzinken, gelb passiviert."
+       }
+      ],
+      "dann": {
+       "anzeige": [
+        {
+         "text": "12",
+         "erwartung": "sichtbar"
+        }
+       ]
+      }
+     },
+     {
+      "id": "RT04-13",
+      "titel": "„ein paar Teile“ → keine Menge, Prüfliste „Menge eintragen“",
+      "paket": "AP-EIN",
+      "quelle": [
+       "eingang.erkennung.runde53"
+      ],
+      "deckt": [
+       "eingang.erkennung"
+      ],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [
+        "kunde_vollstaendig_firma"
+       ],
+       "aufruf": {
+        "seite": "eingang",
+        "arg": "(leer)",
+        "weg": [
+         {
+          "id": "navigation.plus",
+          "aktion": "klicken"
+         },
+         {
+          "id": "rein.auftrag-erfassen",
+          "aktion": "klicken"
+         }
+        ],
+        "quelle": "werkbank.interaktion[aufruf-leer] · rein.inhalt.ohne_vorlage[auftrag-erfassen]"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [
+       {
+        "id": "eingang.erfassen-text",
+        "aktion": "tippen",
+        "wert": "Ein paar Teile verzinken."
+       }
+      ],
+      "dann": {
+       "anzeige": [
+        {
+         "text": "Menge eintragen",
+         "erwartung": "sichtbar"
+        }
+       ]
+      }
+     },
+     {
+      "id": "RT04-14",
+      "titel": "Wunschdatum im Satz statt Mail-Datum",
+      "paket": "AP-EIN",
+      "quelle": [
+       "eingang.erkennung.runde53"
+      ],
+      "deckt": [
+       "eingang.erkennung"
+      ],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [
+        "kunde_vollstaendig_firma"
+       ],
+       "aufruf": {
+        "seite": "eingang",
+        "arg": "(leer)",
+        "weg": [
+         {
+          "id": "navigation.plus",
+          "aktion": "klicken"
+         },
+         {
+          "id": "rein.auftrag-erfassen",
+          "aktion": "klicken"
+         }
+        ],
+        "quelle": "werkbank.interaktion[aufruf-leer] · rein.inhalt.ohne_vorlage[auftrag-erfassen]"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [
+       {
+        "id": "eingang.erfassen-text",
+        "aktion": "tippen",
+        "wert": "Mail vom 01.11.: Brauche die Teile bis Mittwoch."
+       }
+      ],
+      "dann": {
+       "anzeige": [
+        {
+         "text": "Mi",
+         "erwartung": "sichtbar"
+        }
+       ]
+      }
+     },
+     {
+      "id": "RT04-15",
+      "titel": "Mehr als 20 Positionen → Hinweis und zweiter Beleg",
+      "paket": "AP-EIN",
+      "quelle": [
+       "eingang.erkennung.runde53"
+      ],
+      "deckt": [
+       "eingang.erkennung"
+      ],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [
+        "kunde_vollstaendig_firma"
+       ],
+       "aufruf": {
+        "seite": "eingang",
+        "arg": "(leer)",
+        "weg": [
+         {
+          "id": "navigation.plus",
+          "aktion": "klicken"
+         },
+         {
+          "id": "rein.auftrag-erfassen",
+          "aktion": "klicken"
+         }
+        ],
+        "quelle": "werkbank.interaktion[aufruf-leer] · rein.inhalt.ohne_vorlage[auftrag-erfassen]"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [
+       {
+        "id": "eingang.erfassen-text",
+        "aktion": "tippen",
+        "wert": "{text_mit_23_positionen}"
+       }
+      ],
+      "dann": {
+       "anzeige": [
+        {
+         "text": "Rest als zweiten Beleg anlegen",
+         "erwartung": "sichtbar"
+        }
+       ]
+      }
      }
     ],
     "abdeckung": {
@@ -39624,6 +41118,160 @@
           "zuordnung": "offen",
           "einsatz": "offen"
          }
+        }
+       ]
+      }
+     },
+     {
+      "id": "U241-01",
+      "titel": "Nichts gelesen → „Was ist das?“ mit 4 Kacheln und drei festen Wegen",
+      "paket": "AP-EIN",
+      "quelle": [
+       "screens[rein].runde53_unklar"
+      ],
+      "deckt": [],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [],
+       "aufruf": {
+        "seite": "tag",
+        "arg": "(leer)",
+        "weg": [],
+        "hinweis": "Startseite des Logins nach der Anmeldung (rollen[].start)"
+       },
+       "geraet": "desktop",
+       "erkennung": "nichts"
+      },
+      "wenn": [
+       {
+        "id": "navigation.plus",
+        "aktion": "klicken"
+       },
+       {
+        "id": "rein.datei",
+        "aktion": "datei",
+        "wert": [
+         "pruef_foto.jpg",
+         "pruef_foto_2.jpg"
+        ]
+       }
+      ],
+      "dann": {
+       "anzeige": [
+        {
+         "oben": "rein"
+        },
+        {
+         "id": "rein.unklar.auftrag",
+         "erwartung": "sichtbar"
+        },
+        {
+         "id": "rein.unklar.ware",
+         "erwartung": "sichtbar"
+        },
+        {
+         "id": "rein.unklar.rechnung",
+         "erwartung": "sichtbar"
+        },
+        {
+         "id": "rein.unklar.dokument",
+         "erwartung": "sichtbar"
+        },
+        {
+         "id": "rein.original-ansehen",
+         "erwartung": "sichtbar"
+        }
+       ]
+      }
+     },
+     {
+      "id": "U241-02",
+      "titel": "„Was ist das?“ · Eingangsrechnung → 3.8 mit dem Original",
+      "paket": "AP-EIN",
+      "quelle": [
+       "screens[rein].runde53_unklar"
+      ],
+      "deckt": [],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [],
+       "aufruf": {
+        "seite": "tag",
+        "arg": "(leer)",
+        "weg": [],
+        "hinweis": "Startseite des Logins nach der Anmeldung (rollen[].start)"
+       },
+       "geraet": "desktop",
+       "erkennung": "nichts"
+      },
+      "wenn": [
+       {
+        "id": "navigation.plus",
+        "aktion": "klicken"
+       },
+       {
+        "id": "rein.datei",
+        "aktion": "datei",
+        "wert": [
+         "pruef_foto.jpg",
+         "pruef_foto_2.jpg"
+        ]
+       },
+       {
+        "id": "rein.unklar.rechnung",
+        "aktion": "klicken"
+       }
+      ],
+      "dann": {
+       "anzeige": [
+        {
+         "oben": "rechnungein"
+        }
+       ]
+      }
+     },
+     {
+      "id": "U241-03",
+      "titel": "„Was ist das?“ · Auftrag oder KV → Erfassung vorbelegt",
+      "paket": "AP-EIN",
+      "quelle": [
+       "screens[rein].runde53_unklar"
+      ],
+      "deckt": [],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [],
+       "aufruf": {
+        "seite": "tag",
+        "arg": "(leer)",
+        "weg": [],
+        "hinweis": "Startseite des Logins nach der Anmeldung (rollen[].start)"
+       },
+       "geraet": "desktop",
+       "erkennung": "nichts"
+      },
+      "wenn": [
+       {
+        "id": "navigation.plus",
+        "aktion": "klicken"
+       },
+       {
+        "id": "rein.datei",
+        "aktion": "datei",
+        "wert": [
+         "pruef_foto.jpg",
+         "pruef_foto_2.jpg"
+        ]
+       },
+       {
+        "id": "rein.unklar.auftrag",
+        "aktion": "klicken"
+       }
+      ],
+      "dann": {
+       "anzeige": [
+        {
+         "oben": "eingang"
         }
        ]
       }
@@ -47925,6 +49573,1115 @@
      ],
      "zustand.fehlt": "offen: n. z. – Stufe 2 (Entwurfsstand)"
     }
+   },
+   "absprache": {
+    "nr": "5.4",
+    "faelle": [
+     {
+      "id": "ABS-01",
+      "titel": "5.1 → 5.4 öffnet leer, Hauptknopf gesperrt „Typ wählen“",
+      "paket": "AP-ABS",
+      "quelle": [
+       "screens[absprache].abnahme[0]"
+      ],
+      "deckt": [],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [
+        "kunde_bedingung_bar"
+       ],
+       "aufruf": {
+        "seite": "kunde",
+        "arg": "{kunde_bedingung_bar}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – arg ist die Zeilen-ID der Datenlage"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [
+       {
+        "id": "kunde.absprache",
+        "aktion": "klicken"
+       }
+      ],
+      "dann": {
+       "anzeige": [
+        {
+         "oben": "absprache"
+        },
+        {
+         "id": "absprache.zustand.leer",
+         "erwartung": "sichtbar"
+        },
+        {
+         "id": "absprache.speichern",
+         "erwartung": "gesperrt",
+         "wert": "Typ wählen"
+        }
+       ]
+      }
+     },
+     {
+      "id": "ABS-02",
+      "titel": "Übergabe ohne Zahlung für den Kunden speichern, zurück in 5.1",
+      "paket": "AP-ABS",
+      "quelle": [
+       "screens[absprache].aktionen[speichern]"
+      ],
+      "deckt": [],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [
+        "kunde_bedingung_bar"
+       ],
+       "aufruf": {
+        "seite": "kunde",
+        "arg": "{kunde_bedingung_bar}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – arg ist die Zeilen-ID der Datenlage"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [
+       {
+        "id": "kunde.absprache",
+        "aktion": "klicken"
+       },
+       {
+        "id": "absprache.typ",
+        "aktion": "waehlen",
+        "wert": "Übergabe ohne Zahlung · Rechnung folgt"
+       },
+       {
+        "id": "absprache.grund",
+        "aktion": "tippen",
+        "wert": "Prüfgrund eins"
+       },
+       {
+        "id": "absprache.speichern",
+        "aktion": "klicken"
+       }
+      ],
+      "dann": {
+       "anzeige": [
+        {
+         "oben": "kunde"
+        },
+        {
+         "id": "kunde.absprache-zeile",
+         "erwartung": "text_enthaelt",
+         "wert": "Übergabe ohne Zahlung · Rechnung folgt"
+        }
+       ],
+       "db": [
+        {
+         "tabelle": "customer_agreements",
+         "neu": 1,
+         "werte": {
+          "kunde": "{kunde_bedingung_bar}",
+          "typ": "ausgabe_ohne_zahlung",
+          "order_id": null,
+          "geld": true,
+          "bezeichnung": "Übergabe ohne Zahlung · Rechnung folgt",
+          "grund": "Prüfgrund eins"
+         }
+        }
+       ]
+      }
+     },
+     {
+      "id": "ABS-03",
+      "titel": "Zahlungsziel ohne Tage → Fokus in Tage, nichts gespeichert",
+      "paket": "AP-ABS",
+      "quelle": [
+       "screens[absprache].abnahme[1]",
+       "screens[absprache].aktionen[speichern].tor"
+      ],
+      "deckt": [],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [
+        "kunde_bedingung_bar"
+       ],
+       "aufruf": {
+        "seite": "absprache",
+        "arg": "{kunde_bedingung_bar}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – arg ist die Zeilen-ID der Datenlage"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [
+       {
+        "id": "absprache.typ",
+        "aktion": "waehlen",
+        "wert": "Zahlungsziel in Tagen"
+       },
+       {
+        "id": "absprache.grund",
+        "aktion": "tippen",
+        "wert": "Prüfgrund zwei"
+       },
+       {
+        "id": "absprache.speichern",
+        "aktion": "klicken"
+       }
+      ],
+      "dann": {
+       "anzeige": [
+        {
+         "oben": "absprache"
+        },
+        {
+         "id": "absprache.tage",
+         "erwartung": "fokus"
+        },
+        {
+         "text": "Tage eintragen · 1 bis 120",
+         "erwartung": "sichtbar"
+        }
+       ],
+       "db": [
+        {
+         "tabelle": "customer_agreements",
+         "neu": 0
+        }
+       ]
+      }
+     },
+     {
+      "id": "ABS-04",
+      "titel": "Gilt bis in der Vergangenheit → Fehlertext",
+      "paket": "AP-ABS",
+      "quelle": [
+       "screens[absprache].abnahme[2]"
+      ],
+      "deckt": [],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [
+        "kunde_bedingung_bar"
+       ],
+       "aufruf": {
+        "seite": "absprache",
+        "arg": "{kunde_bedingung_bar}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – arg ist die Zeilen-ID der Datenlage"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [
+       {
+        "id": "absprache.typ",
+        "aktion": "waehlen",
+        "wert": "Übergabe ohne Zahlung · Rechnung folgt"
+       },
+       {
+        "id": "absprache.gueltig_bis",
+        "aktion": "tippen",
+        "wert": "{heute:-1|TT.MM.JJJJ}"
+       },
+       {
+        "id": "absprache.grund",
+        "aktion": "tippen",
+        "wert": "Prüfgrund drei"
+       },
+       {
+        "id": "absprache.speichern",
+        "aktion": "klicken"
+       }
+      ],
+      "dann": {
+       "anzeige": [
+        {
+         "id": "absprache.gueltig_bis",
+         "erwartung": "fokus"
+        },
+        {
+         "text": "Datum heute oder später wählen",
+         "erwartung": "sichtbar"
+        }
+       ],
+       "db": [
+        {
+         "tabelle": "customer_agreements",
+         "neu": 0
+        }
+       ]
+      }
+     },
+     {
+      "id": "ABS-05",
+      "titel": "Ohne Recht geld kein Einstieg in 5.1 und 10.1",
+      "paket": "AP-ABS",
+      "quelle": [
+       "screens[absprache].abnahme[3]"
+      ],
+      "deckt": [],
+      "gegeben": {
+       "login": "login_buero_ohne_geld",
+       "datenlagen": [
+        "kunde_bedingung_bar",
+        "auftrag_fertig_unbezahlt"
+       ],
+       "aufruf": {
+        "seite": "kunde",
+        "arg": "{kunde_bedingung_bar}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – arg ist die Zeilen-ID der Datenlage"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [
+       {
+        "aktion": "erwarten",
+        "anzeige": [
+         {
+          "id": "kunde.absprache",
+          "erwartung": "nicht_sichtbar"
+         }
+        ]
+       },
+       {
+        "aktion": "oeffne",
+        "wert": "rauspruefen",
+        "arg": "{auftrag_fertig_unbezahlt}"
+       }
+      ],
+      "dann": {
+       "anzeige": [
+        {
+         "oben": "rauspruefen"
+        },
+        {
+         "id": "rauspruefen.absprache-festlegen",
+         "erwartung": "nicht_sichtbar"
+        }
+       ]
+      }
+     },
+     {
+      "id": "ABS-06",
+      "titel": "Widerruf braucht Grund und gilt sofort",
+      "paket": "AP-ABS",
+      "quelle": [
+       "screens[absprache].modus_widerruf"
+      ],
+      "deckt": [],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [
+        "kunde_bedingung_bar",
+        "kunde_absprache_rechnung_folgt"
+       ],
+       "aufruf": {
+        "seite": "kunde",
+        "arg": "{kunde_bedingung_bar}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – arg ist die Zeilen-ID der Datenlage"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [
+       {
+        "id": "kunde.absprache-widerrufen",
+        "aktion": "klicken"
+       },
+       {
+        "id": "absprache.widerrufen",
+        "aktion": "klicken"
+       },
+       {
+        "aktion": "erwarten",
+        "anzeige": [
+         {
+          "id": "absprache.grund",
+          "erwartung": "fokus"
+         },
+         {
+          "text": "Bitte Grund angeben",
+          "erwartung": "sichtbar"
+         }
+        ]
+       },
+       {
+        "id": "absprache.grund",
+        "aktion": "tippen",
+        "wert": "Prüfgrund vier"
+       },
+       {
+        "id": "absprache.widerrufen",
+        "aktion": "klicken"
+       }
+      ],
+      "dann": {
+       "anzeige": [
+        {
+         "oben": "kunde"
+        },
+        {
+         "id": "kunde.absprache-zeile",
+         "erwartung": "nicht_sichtbar"
+        }
+       ],
+       "db": [
+        {
+         "tabelle": "customer_agreements",
+         "neu": 0,
+         "wo": {
+          "id": "{kunde_absprache_rechnung_folgt}"
+         },
+         "werte": {
+          "widerrufen_am": "{gesetzt}",
+          "widerrufen_von": "{login}",
+          "widerruf_grund": "Prüfgrund vier"
+         }
+        }
+       ]
+      }
+     },
+     {
+      "id": "ABS-07",
+      "titel": "10.1 Sammelrechnung: Knopf mit Monat, keine Einzelrechnung, Auftrag in Sammelliste",
+      "paket": "AP-ABS",
+      "quelle": [
+       "baustand.paket_folge.AP-ABS.eingriffe.rauspruefen.knopf_regel",
+       "baustand.paket_folge.AP-ABS.sammelrechnung.anlegen"
+      ],
+      "deckt": [],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [
+        "kunde_bedingung_bar",
+        "auftrag_fertig_unbezahlt",
+        "kunde_absprache_sammel"
+       ],
+       "aufruf": {
+        "seite": "rauspruefen",
+        "arg": "{auftrag_fertig_unbezahlt}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – arg ist die Zeilen-ID der Datenlage"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [
+       {
+        "aktion": "erwarten",
+        "anzeige": [
+         {
+          "id": "rauspruefen.absprache-kasten",
+          "erwartung": "sichtbar"
+         },
+         {
+          "id": "rauspruefen.uebergeben-sammelrechnung",
+          "erwartung": "sichtbar"
+         }
+        ]
+       },
+       {
+        "id": "rauspruefen.uebergeben-sammelrechnung",
+        "aktion": "klicken"
+       }
+      ],
+      "dann": {
+       "anzeige": [],
+       "db": [
+        {
+         "tabelle": "invoices",
+         "neu": 0
+        },
+        {
+         "tabelle": "invoice_collections",
+         "neu": 1,
+         "werte": {
+          "kunde": "{kunde_bedingung_bar}",
+          "status": "offen"
+         }
+        },
+        {
+         "tabelle": "invoice_collection_orders",
+         "neu": 1,
+         "werte": {
+          "order_id": "{auftrag_fertig_unbezahlt}"
+         }
+        }
+       ]
+      }
+     },
+     {
+      "id": "ABS-08",
+      "titel": "10.1 Rechnung folgt: Knopf erzeugt die Rechnung",
+      "paket": "AP-ABS",
+      "quelle": [
+       "baustand.paket_folge.AP-ABS.eingriffe.rauspruefen.knopf_regel"
+      ],
+      "deckt": [],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [
+        "kunde_bedingung_bar",
+        "auftrag_fertig_unbezahlt",
+        "kunde_absprache_rechnung_folgt"
+       ],
+       "aufruf": {
+        "seite": "rauspruefen",
+        "arg": "{auftrag_fertig_unbezahlt}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – arg ist die Zeilen-ID der Datenlage"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [
+       {
+        "id": "rauspruefen.uebergeben-rechnung-folgt",
+        "aktion": "klicken"
+       }
+      ],
+      "dann": {
+       "anzeige": [],
+       "db": [
+        {
+         "tabelle": "invoices",
+         "neu": 1,
+         "werte": {
+          "auftrag": "{auftrag_fertig_unbezahlt}"
+         }
+        }
+       ]
+      }
+     },
+     {
+      "id": "ABS-09",
+      "titel": "Freitext mit geld = true hebt die Sperre nicht auf",
+      "paket": "AP-ABS",
+      "quelle": [
+       "baustand.paket_folge.AP-ABS.eingriffe.rauspruefen.abgeloest",
+       "screens[absprache].regeln[5]"
+      ],
+      "deckt": [],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [
+        "kunde_bedingung_bar",
+        "auftrag_fertig_unbezahlt",
+        "kunde_absprache_freitext"
+       ],
+       "aufruf": {
+        "seite": "rauspruefen",
+        "arg": "{auftrag_fertig_unbezahlt}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – arg ist die Zeilen-ID der Datenlage"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [],
+      "dann": {
+       "anzeige": [
+        {
+         "id": "rauspruefen.uebergeben-rechnung-folgt",
+         "erwartung": "nicht_sichtbar"
+        },
+        {
+         "text": "Zahlung fehlt",
+         "erwartung": "sichtbar"
+        },
+        {
+         "id": "rauspruefen.absprache-festlegen",
+         "erwartung": "sichtbar"
+        }
+       ]
+      }
+     },
+     {
+      "id": "ABS-10",
+      "titel": "Abgelaufene Absprache: Hinweis und Zahlung fehlt",
+      "paket": "AP-ABS",
+      "quelle": [
+       "baustand.paket_folge.AP-ABS.eingriffe.rauspruefen.ohne"
+      ],
+      "deckt": [],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [
+        "kunde_bedingung_bar",
+        "auftrag_fertig_unbezahlt",
+        "kunde_absprache_abgelaufen"
+       ],
+       "aufruf": {
+        "seite": "rauspruefen",
+        "arg": "{auftrag_fertig_unbezahlt}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – arg ist die Zeilen-ID der Datenlage"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [],
+      "dann": {
+       "anzeige": [
+        {
+         "id": "rauspruefen.absprache-hinweis",
+         "erwartung": "text_enthaelt",
+         "wert": "abgelaufen am"
+        },
+        {
+         "id": "rauspruefen.uebergeben-rechnung-folgt",
+         "erwartung": "nicht_sichtbar"
+        }
+       ]
+      }
+     },
+     {
+      "id": "ABS-11",
+      "titel": "10.1 ohne Absprache → „Absprache festlegen“ → zurück mit Absprache-Knopf",
+      "paket": "AP-ABS",
+      "quelle": [
+       "baustand.paket_folge.AP-ABS.eingriffe.rauspruefen.ohne"
+      ],
+      "deckt": [],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [
+        "kunde_bedingung_bar",
+        "auftrag_fertig_unbezahlt"
+       ],
+       "aufruf": {
+        "seite": "rauspruefen",
+        "arg": "{auftrag_fertig_unbezahlt}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – arg ist die Zeilen-ID der Datenlage"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [
+       {
+        "id": "rauspruefen.absprache-festlegen",
+        "aktion": "klicken"
+       },
+       {
+        "id": "absprache.typ",
+        "aktion": "waehlen",
+        "wert": "Übergabe ohne Zahlung · Rechnung folgt"
+       },
+       {
+        "id": "absprache.grund",
+        "aktion": "tippen",
+        "wert": "Prüfgrund fünf"
+       },
+       {
+        "id": "absprache.speichern",
+        "aktion": "klicken"
+       }
+      ],
+      "dann": {
+       "anzeige": [
+        {
+         "oben": "rauspruefen"
+        },
+        {
+         "id": "rauspruefen.uebergeben-rechnung-folgt",
+         "erwartung": "sichtbar"
+        }
+       ],
+       "db": [
+        {
+         "tabelle": "customer_agreements",
+         "neu": 1,
+         "werte": {
+          "order_id": "{auftrag_fertig_unbezahlt}",
+          "typ": "ausgabe_ohne_zahlung"
+         }
+        }
+       ]
+      }
+     },
+     {
+      "id": "ABS-12",
+      "titel": "Server lehnt Übergabe ab, wenn die Absprache inzwischen widerrufen ist",
+      "paket": "AP-ABS",
+      "quelle": [
+       "baustand.paket_folge.AP-ABS.eingriffe.rauspruefen.server",
+       "screens[absprache].regeln[3]"
+      ],
+      "deckt": [],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [
+        "kunde_bedingung_bar",
+        "auftrag_fertig_unbezahlt",
+        "kunde_absprache_rechnung_folgt"
+       ],
+       "aufruf": {
+        "seite": "rauspruefen",
+        "arg": "{auftrag_fertig_unbezahlt}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – arg ist die Zeilen-ID der Datenlage"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [
+       {
+        "aktion": "erwarten",
+        "anzeige": [
+         {
+          "id": "rauspruefen.uebergeben-rechnung-folgt",
+          "erwartung": "sichtbar"
+         }
+        ]
+       },
+       {
+        "aktion": "db_setzen",
+        "tabelle": "customer_agreements",
+        "wo": {
+         "id": "{kunde_absprache_rechnung_folgt}"
+        },
+        "werte": {
+         "widerrufen_am": "{jetzt:-3min}"
+        }
+       },
+       {
+        "id": "rauspruefen.uebergeben-rechnung-folgt",
+        "aktion": "klicken"
+       }
+      ],
+      "dann": {
+       "anzeige": [
+        {
+         "text": "Zahlung fehlt",
+         "erwartung": "sichtbar"
+        },
+        {
+         "id": "rauspruefen.absprache-hinweis",
+         "erwartung": "text_enthaelt",
+         "wert": "widerrufen am"
+        }
+       ],
+       "db": [
+        {
+         "tabelle": "invoices",
+         "neu": 0
+        }
+       ]
+      }
+     },
+     {
+      "id": "ABS-13",
+      "titel": "Der Tag: Sammelrechnung des Vormonats erstellen → Entwurf in 7.1",
+      "paket": "AP-ABS",
+      "quelle": [
+       "baustand.paket_folge.AP-ABS.sammelrechnung.der_tag",
+       "baustand.paket_folge.AP-ABS.sammelrechnung.erstellen"
+      ],
+      "deckt": [],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [
+        "kunde_bedingung_bar",
+        "kunde_absprache_sammel",
+        "auftrag_uebergeben_sammel",
+        "sammelliste_vormonat"
+       ],
+       "aufruf": {
+        "seite": "tag",
+        "arg": "(leer)",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – arg ist die Zeilen-ID der Datenlage"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [
+       {
+        "id": "tag.sammelrechnung-erstellen",
+        "aktion": "klicken"
+       }
+      ],
+      "dann": {
+       "anzeige": [
+        {
+         "oben": "rechnung"
+        }
+       ],
+       "db": [
+        {
+         "tabelle": "invoices",
+         "neu": 1,
+         "werte": {
+          "kunde": "{kunde_bedingung_bar}"
+         }
+        },
+        {
+         "tabelle": "invoice_collections",
+         "neu": 0,
+         "wo": {
+          "id": "{sammelliste_vormonat}"
+         },
+         "werte": {
+          "status": "offen",
+          "invoice_id": "{neu:invoices}"
+         }
+        }
+       ]
+      }
+     },
+     {
+      "id": "ABS-14",
+      "titel": "Festschreiben setzt die Sammelliste auf abgerechnet, Zeile verschwindet",
+      "paket": "AP-ABS",
+      "quelle": [
+       "baustand.paket_folge.AP-ABS.sammelrechnung.abgerechnet"
+      ],
+      "deckt": [],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [
+        "kunde_bedingung_bar",
+        "kunde_absprache_sammel",
+        "auftrag_uebergeben_sammel",
+        "sammelliste_vormonat"
+       ],
+       "aufruf": {
+        "seite": "tag",
+        "arg": "(leer)",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – arg ist die Zeilen-ID der Datenlage"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [
+       {
+        "id": "tag.sammelrechnung-erstellen",
+        "aktion": "klicken"
+       },
+       {
+        "id": "rechnung.festschreiben",
+        "aktion": "klicken"
+       },
+       {
+        "aktion": "oeffne",
+        "wert": "tag",
+        "arg": "(leer)"
+       }
+      ],
+      "dann": {
+       "anzeige": [
+        {
+         "id": "tag.sammelrechnung-erstellen",
+         "erwartung": "nicht_sichtbar"
+        }
+       ],
+       "db": [
+        {
+         "tabelle": "invoice_collections",
+         "neu": 0,
+         "wo": {
+          "id": "{sammelliste_vormonat}"
+         },
+         "werte": {
+          "status": "abgerechnet"
+         }
+        }
+       ]
+      }
+     },
+     {
+      "id": "ABS-15",
+      "titel": "Ändern legt neue Zeile an und widerruft die alte",
+      "paket": "AP-ABS",
+      "quelle": [
+       "screens[absprache].regeln[0]"
+      ],
+      "deckt": [],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [
+        "kunde_bedingung_bar",
+        "kunde_absprache_rechnung_folgt"
+       ],
+       "aufruf": {
+        "seite": "kunde",
+        "arg": "{kunde_bedingung_bar}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – arg ist die Zeilen-ID der Datenlage"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [
+       {
+        "id": "kunde.absprache-aendern",
+        "aktion": "klicken"
+       },
+       {
+        "id": "absprache.typ",
+        "aktion": "waehlen",
+        "wert": "Sammelrechnung monatlich"
+       },
+       {
+        "id": "absprache.tage",
+        "aktion": "tippen",
+        "wert": "14"
+       },
+       {
+        "id": "absprache.grund",
+        "aktion": "tippen",
+        "wert": "Prüfgrund acht"
+       },
+       {
+        "id": "absprache.speichern",
+        "aktion": "klicken"
+       }
+      ],
+      "dann": {
+       "anzeige": [
+        {
+         "oben": "kunde"
+        }
+       ],
+       "db": [
+        {
+         "tabelle": "customer_agreements",
+         "neu": 1,
+         "werte": {
+          "typ": "sammelrechnung",
+          "ziel_tage": 14
+         }
+        },
+        {
+         "tabelle": "customer_agreements",
+         "neu": 0,
+         "wo": {
+          "id": "{kunde_absprache_rechnung_folgt}"
+         },
+         "werte": {
+          "widerrufen_am": "{gesetzt}",
+          "widerruf_grund": "ersetzt durch Sammelrechnung monatlich"
+         }
+        }
+       ]
+      }
+     },
+     {
+      "id": "ABS-16",
+      "titel": "10.1 Zahlungsziel: Knopf mit Tagen, Fälligkeit = Rechnungsdatum + 30",
+      "paket": "AP-ABS",
+      "quelle": [
+       "baustand.paket_folge.AP-ABS.eingriffe.rauspruefen.knopf_regel",
+       "baustand.paket_folge.AP-ABS.typen[2]"
+      ],
+      "deckt": [],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [
+        "kunde_bedingung_bar",
+        "auftrag_fertig_unbezahlt",
+        "kunde_absprache_zahlungsziel"
+       ],
+       "aufruf": {
+        "seite": "rauspruefen",
+        "arg": "{auftrag_fertig_unbezahlt}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – arg ist die Zeilen-ID der Datenlage"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [
+       {
+        "id": "rauspruefen.uebergeben-zahlungsziel",
+        "aktion": "klicken"
+       }
+      ],
+      "dann": {
+       "anzeige": [],
+       "db": [
+        {
+         "tabelle": "invoices",
+         "neu": 1,
+         "werte": {
+          "auftrag": "{auftrag_fertig_unbezahlt}",
+          "faellig": "{heute:+30}"
+         }
+        }
+       ]
+      }
+     },
+     {
+      "id": "ABS-17",
+      "titel": "Vorrang: Absprache des Auftrags vor der des Kunden",
+      "paket": "AP-ABS",
+      "quelle": [
+       "screens[absprache].regeln[4]"
+      ],
+      "deckt": [],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [
+        "kunde_bedingung_bar",
+        "auftrag_fertig_unbezahlt",
+        "kunde_absprache_rechnung_folgt",
+        "auftrag_absprache_sammel"
+       ],
+       "aufruf": {
+        "seite": "rauspruefen",
+        "arg": "{auftrag_fertig_unbezahlt}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – arg ist die Zeilen-ID der Datenlage"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [],
+      "dann": {
+       "anzeige": [
+        {
+         "id": "rauspruefen.uebergeben-sammelrechnung",
+         "erwartung": "sichtbar"
+        },
+        {
+         "id": "rauspruefen.uebergeben-rechnung-folgt",
+         "erwartung": "nicht_sichtbar"
+        }
+       ]
+      }
+     },
+     {
+      "id": "ABS-18",
+      "titel": "Server lehnt absprache.speichern ohne Recht geld ab",
+      "paket": "AP-ABS",
+      "quelle": [
+       "screens[absprache].abnahme[3]",
+       "screens[absprache].zustaende.fehler.je_code"
+      ],
+      "deckt": [],
+      "gegeben": {
+       "login": "login_buero_ohne_geld",
+       "datenlagen": [
+        "kunde_bedingung_bar"
+       ],
+       "aufruf": {
+        "seite": "kunde",
+        "arg": "{kunde_bedingung_bar}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – arg ist die Zeilen-ID der Datenlage"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [
+       {
+        "aktion": "befehl",
+        "wert": "absprache.speichern",
+        "daten": {
+         "customer_id": "{kunde_bedingung_bar}",
+         "typ": "ausgabe_ohne_zahlung",
+         "grund": "Prüfgrund neun"
+        }
+       }
+      ],
+      "dann": {
+       "anzeige": [],
+       "server": {
+        "fehler": "FORBIDDEN"
+       },
+       "db": [
+        {
+         "tabelle": "customer_agreements",
+         "neu": 0
+        }
+       ]
+      }
+     },
+     {
+      "id": "ABS-19",
+      "titel": "Ohne Recht geld: Kasten ohne Beträge, Übergeben mit Absprache möglich",
+      "paket": "AP-ABS",
+      "quelle": [
+       "baustand.paket_folge.AP-ABS.eingriffe.rauspruefen.kasten"
+      ],
+      "deckt": [],
+      "gegeben": {
+       "login": "login_buero_ohne_geld",
+       "datenlagen": [
+        "kunde_bedingung_bar",
+        "auftrag_fertig_unbezahlt",
+        "kunde_absprache_rechnung_folgt"
+       ],
+       "aufruf": {
+        "seite": "rauspruefen",
+        "arg": "{auftrag_fertig_unbezahlt}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – arg ist die Zeilen-ID der Datenlage"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [
+       {
+        "aktion": "erwarten",
+        "anzeige": [
+         {
+          "id": "rauspruefen.absprache-kasten",
+          "erwartung": "sichtbar"
+         },
+         {
+          "text": "€",
+          "erwartung": "nicht_sichtbar"
+         }
+        ]
+       },
+       {
+        "id": "rauspruefen.uebergeben-rechnung-folgt",
+        "aktion": "klicken"
+       }
+      ],
+      "dann": {
+       "anzeige": [],
+       "db": [
+        {
+         "tabelle": "invoices",
+         "neu": 1,
+         "werte": {
+          "auftrag": "{auftrag_fertig_unbezahlt}"
+         }
+        }
+       ]
+      }
+     },
+     {
+      "id": "ABS-20",
+      "titel": "Versand mit Absprache: gleicher Knopf, Text „Versendet · Rechnung folgt“",
+      "paket": "AP-ABS",
+      "quelle": [
+       "baustand.paket_folge.AP-ABS.versand"
+      ],
+      "deckt": [],
+      "gegeben": {
+       "login": "login_meister",
+       "datenlagen": [
+        "kunde_bedingung_bar",
+        "auftrag_fertig_versand",
+        "kunde_absprache_rechnung_folgt"
+       ],
+       "aufruf": {
+        "seite": "rauspruefen",
+        "arg": "{auftrag_fertig_versand}",
+        "weg": "oeffne",
+        "quelle": "verhalten_appweit.navigation: oeffne(ziel, arg) – arg ist die Zeilen-ID der Datenlage"
+       },
+       "geraet": "desktop"
+      },
+      "wenn": [],
+      "dann": {
+       "anzeige": [
+        {
+         "id": "rauspruefen.uebergeben-rechnung-folgt",
+         "erwartung": "text_enthaelt",
+         "wert": "Versendet · Rechnung folgt"
+        }
+       ]
+      }
+     }
+    ],
+    "daten": "testmodell.datenlagen (kunde_absprache_*, auftrag_fertig_unbezahlt)",
+    "logins": [
+     "login_meister",
+     "login_buero_ohne_geld"
+    ],
+    "abdeckung": "Typen, Geltung, Fehler, Rechte (Oberfläche + Server), Widerruf, Ändern/Ersetzen, Vorrang Auftrag vor Kunde, 10.1-Knopfregel je Typ, Freitext, Ablauf, Rückkehr, Server-Recheck, Sammelrechnung erstellen + festschreiben"
    }
   }
  }

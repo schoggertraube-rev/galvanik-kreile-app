@@ -156,8 +156,8 @@
       "titel": "Eingang komplett (13 Seiten, 272 Faelle), sechs Teil-PRs 0-5",
       "reihenfolge": 4,
       "status": "bereit",
-      "spec": "ee64f8882bb7",
-      "bauplan_sha256": "DF3E1AFEC7B6C3DED6DA51F22FDAADF8CFAB780DA9A4F619EDB42D3C2D6AC5C4",
+      "spec": "b6132498f47a",
+      "bauplan_sha256": "9491009F79E306370AD4DAC3886080E4B9AEAB9A2D8BD14AAAFBB0A31411C6DA",
       "voraussetzung": "TA-B2f gemergt (Vorbau lokal ab sofort)",
       "teile": [
         "0 Fundament (Generator, 306 Faelle gegen AFB3D838)",
@@ -226,12 +226,12 @@
       "hinweis": "Entscheidungen 02.11. 23:00 im PAKET gelten vor der Inventur; Schluessel Einheit/Oberflaeche in Teil 2 (AP-U entfaellt)",
       "ui": {
         "ordner": "docs/project/endversion/ui/",
-        "design_css": "35146E45",
-        "sichtvertrag": "B1A53EA6",
-        "pruefe_sicht": "FDA7C59C",
-        "design_reference": "1509BE93",
+        "design_css": "338AEEE0",
+        "sichtvertrag": "0E1049FD",
+        "pruefe_sicht": "CDEC8B69",
+        "design_reference": "12288CE7",
         "gate": "pruefe_sicht gruen fuer die Seiten des Teils vor jedem Merge (U-239)",
-        "stand": "Runde 52 (03.11., 19:07)"
+        "stand": "Runde 53 (05.11., 15:48)"
       },
       "fassung": "3 (03.11. 15:30, PAKET.md Abschnitt Fassung 3)"
     },
@@ -289,6 +289,29 @@
       "migration": "keine",
       "spec": "5ac4d4b5ea34",
       "aufgegangen_in": "AP-EIN Teil 2"
+    },
+    {
+      "id": "AP-ABS",
+      "titel": "Absprachen als Typ (Übergabe ohne Zahlung, Sammelrechnung, Zahlungsziel)",
+      "status": "bereit",
+      "spec": "b6132498f47a",
+      "bauplan_sha256": "9491009F79E306370AD4DAC3886080E4B9AEAB9A2D8BD14AAAFBB0A31411C6DA",
+      "bauplan_abschnitt": "paket_folge.AP-ABS",
+      "ui": {
+        "ordner": "docs/project/endversion/ui/",
+        "design_css": "338AEEE0",
+        "sichtvertrag": "0E1049FD",
+        "pruefe_sicht": "CDEC8B69",
+        "design_reference": "12288CE7",
+        "gate": "pruefe_sicht gruen fuer die Seiten des Teils vor jedem Merge (U-239)",
+        "stand": "Runde 53 (05.11., 15:48)"
+      },
+      "basis": "main nach Merge AP-EIN Teil 6 (bis dahin auf kreile/b2-ein-6 gestapelt)",
+      "branch": "kreile/b3-abs",
+      "migration": "supabase/migrations/*_abs_absprachen.sql (eine Datei, P66 Punkt 4)",
+      "tests": "testmodell.seiten.absprache ABS-01..ABS-20 (Generator)",
+      "anker": "TA-B2k (P66)",
+      "entscheidungen": "P66"
     }
   ],
   "folgepakete_reihenfolge": [

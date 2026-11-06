@@ -49,7 +49,22 @@
   "aufgabe#frist": "/index.html",
   "aufgabe#aufgabe": "/index.html",
   "aufgabe#rechnung": "/index.html",
-  "reklamation#aufnehmen": "/index.html"
+  "reklamation#aufnehmen": "/index.html",
+  "eingang@beispiel": "/index.html",
+  "kundeneu@beispiel": "/index.html",
+  "kundebearbeiten@beispiel": "/index.html",
+  "ware@beispiel": "/index.html",
+  "mailein@beispiel": "/index.html",
+  "rechnungein@beispiel": "/index.html",
+  "original@beispiel": "/index.html",
+  "nachrichten@beispiel": "/index.html",
+  "aufgabe@beispiel": "/index.html",
+  "reklamation@beispiel": "/index.html",
+  "rein#unklar": "/index.html",
+  "absprache": "/index.html",
+  "absprache@beispiel": "/index.html",
+  "absprache#aendern": "/index.html",
+  "absprache#widerruf": "/index.html"
  },
  "muster": {
   "auftrag": "A-2026-0101",
@@ -62,6 +77,6 @@
   "ware": "A-2026-0110#M-13",
   "rauspruefen": "A-2026-0106"
  },
- "vor": "(a) => { const st = document.createElement('style'); st.textContent = '#leiste{display:none!important}'; document.head.appendChild(st); S.regeln = false; S.rolle = a.rolle; S.geraet = a.groesse; S.eingeloggt = true; S.loginZ = 'daten'; S.ebenen = []; S.toast = null; S.r36Schritt = null; S.screen = a.rolle === 'werkstatt' ? 'werkstatt' : 'tag'; render(); const arg = { auftrag: a.muster.auftrag, teil: a.muster.teil, mehrarbeit: a.muster.auftrag, fertig: a.muster.auftrag, rauspruefen: a.muster.rauspruefen, kunde: a.muster.kunde }; const sc = SC(a.screen); if (sc && sc.typ === 'seite' && !SPEC.baustand.paket_eingang.seiten.includes(a.screen)) { S.screen = a.screen; render(); } else if (SPEC.baustand.paket_eingang.seiten.includes(a.screen)) { if (a.screen === 'entwurf') { springe('eingang'); } else springe(a.modus ? a.screen + '#' + a.modus : a.screen); } else geh(a.screen, arg[a.screen]); }",
+ "vor": "(a) => { const st = document.createElement('style'); st.textContent = '#leiste{display:none!important}'; document.head.appendChild(st); S.regeln = false; S.rolle = a.rolle; S.geraet = a.groesse; S.eingeloggt = true; S.loginZ = 'daten'; S.ebenen = []; S.toast = null; S.r36Schritt = null; S.screen = a.rolle === 'werkstatt' ? 'werkstatt' : 'tag'; render(); const PK = [...SPEC.baustand.paket_eingang.seiten, ...Object.values(SPEC.baustand.paket_folge || {}).filter(p => p && p.status === 'bereit').flatMap(p => p.seiten || [])]; const arg = { auftrag: a.muster.auftrag, teil: a.muster.teil, mehrarbeit: a.muster.auftrag, fertig: a.muster.auftrag, rauspruefen: a.muster.rauspruefen, kunde: a.muster.kunde }; const sc = SC(a.screen); if (sc && sc.typ === 'seite' && !PK.includes(a.screen)) { S.screen = a.screen; render(); } else if (PK.includes(a.screen)) { if (a.screen === 'entwurf') { springe('eingang'); } else springe(a.modus ? a.screen + '#' + a.modus : a.screen); if (a.zustand === 'leer') { if (S.ebenen.length) S.ebenen[S.ebenen.length - 1].zustand = 'leer'; else S.seiteZ = 'leer'; render(); } } else geh(a.screen, arg[a.screen]); }",
  "hinweis": "Beispiel = Selbsttest gegen die Vorschau. Für die gebaute App: je Seite und je Modus („id#modus“) den echten Pfad eintragen; Modus-Seiten ohne Eintrag werden gelb gemeldet."
 }

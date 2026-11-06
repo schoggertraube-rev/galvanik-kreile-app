@@ -2119,6 +2119,16 @@ html,body{margin:0;background:var(--cream-300);font-family:var(--sans);color:var
 
 .kr-app .kr-eingabe:focus-visible,.kr-app .kr-auswahl:focus-visible,.kr-app .kr-textfeld:focus-visible{outline:3px solid var(--info-fg,#2563eb);outline-offset:1px}
 
+.r53-wasist{border:1px solid var(--line);border-radius:14px;background:var(--surface);padding:14px 16px;margin:0 0 12px}
+.r53-wasist h3{display:flex;align-items:center;gap:8px;margin:0 0 4px;font-size:15px}
+.r53-wasist p{margin:0 0 10px;color:var(--navy-600);font-size:13px}
+.r53-kacheln{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.r53-kachel{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-height:72px;padding:12px;border:1px solid var(--rand);border-radius:12px;background:var(--surface);text-align:left;cursor:pointer}
+.r53-kachel:hover{border-color:var(--navy-600)}
+.r53-kachel b{font-size:14px;overflow-wrap:anywhere}.r53-kachel small{font-size:11.5px;color:var(--navy-600)}
+.r53-wege{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.kr-app[data-geraet="handy"] .ev-erg>.r53-wasist,[data-geraet="handy"] .ev-erg>.r53-wasist{order:1}
+
 /* ===== inline:vorschau-neu ===== */
 .ev-neu{position:relative;margin:0 0 16px;background:var(--surface);border:1px solid #C9D6EA;border-radius:var(--r-kachel,14px);box-shadow:var(--sh-md);overflow:hidden;animation:evNeuAuf .22s var(--ease,ease-out)}
 .ev-neu::before{content:"";position:absolute;inset:0 0 auto;height:3px;background:var(--grad)}
@@ -2187,3 +2197,6 @@ html,body{margin:0;background:var(--cream-300);font-family:var(--sans);color:var
 .ev-neu-t--ok{background:var(--succ);border-color:var(--succ-d);color:#fff}
 .ev-neu-t--pr{background:#F6DCE7;border-color:#C2185B;color:#8E1449}
 .ev-neu-navb{margin-left:auto;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:#C2185B;color:#fff;font-size:11px;display:inline-flex;align-items:center;justify-content:center}
+
+
+.ev-neu-navb--ruhig{background:#EAF0F8;color:#1F3A66}

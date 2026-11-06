@@ -2,6 +2,65 @@
 
 Laufendes Protokoll (neueste oben). Der Endversion-Chat pflegt spec.json und erzeugt daraus `docs/project/endversion/codex/BAUPLAN.json`. Er schreibt nicht in den App-Code.
 
+## 05.11. 15:30 · Endversion → PL · AP-ABS bereit · Paketfolge vollständig · V43 · spec b6132498f47a
+
+Stand: spec **b6132498f47a** · Bauplan `codex/BAUPLAN.next.json` 9491009f79e3 (neuer Abschnitt „AP-ABS Absprachen“, bau-frei, Gegenprüfung ok) · css 338AEEE0 · Sichtvertrag 0E1049FD · pruefe_sicht.cjs cdec8b69b6c4 (unverändert) · routen.beispiel.json 1f6a8c3a2c05. Archiv V43. Keine AP-EIN-Seite geändert (Regel 0.2).
+
+**(a) Status**
+- AP-ABS (Prüfbericht Nr. 1–2): bestätigt, vollständig nach 0.3 → bitte als P-Eintrag an Codex.
+- Paketfolge: AP-KV, Picker, Der Tag R36, 8.11, AP-PROT, AP-OCR, AP-DK „vorgemerkt“ (Kern, Seiten, Abhängigkeit, Reihenfolge); AP-MSG/AP-KOST Stufe 4, nur Anforderung. K3 (Mehrarbeit-Satz festschreiben) liegt in AP-KV.
+- Vorschau „Was ist neu?“: Zahl ≠ Liste behoben (nur Vorschau, nicht für Codex).
+
+**(b) Lösung im Kontext** (eine Quelle: `baustand.paket_folge.AP-ABS`)
+- Neue Seite 5.4 „Absprache festlegen“ (Dialog, Recht geld): Typ (Übergabe ohne Zahlung · Rechnung folgt / Sammelrechnung monatlich / Zahlungsziel in Tagen), Geltung (ganzer Kunde / nur Auftrag), Tage (Zahlungsziel und Sammelrechnung), gilt bis, Grund. Modi `aendern` (neue Zeile, alte widerrufen) und `widerruf` (Grund Pflicht). Tor nur „Typ wählen“.
+- Wirkung 10.1 (`eingriffe.rauspruefen`): nur typisierte, gültige Absprache wirkt; Auftrag vor Kunde. Sammelrechnung → „Übergeben · Sammelrechnung {monat}“ ohne Einzelrechnung; sonst „Übergeben · Rechnung folgt“ (erzeugt Rechnung) bzw. „… · Ziel {tage} Tage“. Bar/Karte bleiben Hauptwege bei „Bar oder Karte bei Abholung“. Versand: gleiche Kennungen, Text „Versendet · …“. Ohne Absprache „Zahlung fehlt“ + „Absprache festlegen“ (Recht geld).
+- Freitext (5.2 „Absprachen & Eigenheiten“, geld = true ohne Typ) hebt nie eine Sperre auf – Runde-48-Erkennung abgelöst. Keine automatische Typisierung von Altbeständen; 5.1 bietet „Typ festlegen“.
+- Sammelrechnung: Liste je Kunde+Monat (Warenausgang, Europe/Berlin), ziel_tage an der Liste festgeschrieben; Der Tag ab 1. des Folgemonats „Sammelrechnung {kunde} {monat} erstellen · {n} Aufträge“ → 7.1 Entwurf; abgerechnet beim Festschreiben.
+- Datenmodell additiv: customer_agreements + typ, order_id, ziel_tage, widerrufen_am/_von, grund, widerruf_grund, version, client_key; neu invoice_collections, invoice_collection_orders. RLS, Prüfreihenfolge Recht → Version → Felder, Fehlertexte je Code.
+- Einstiege: 5.1 Fuß „Zahlungsabsprache festlegen“ + Geld-Bereich (Ändern/Widerrufen/Frühere/Typ festlegen), 4.1 Geld-Bereich, 10.1, Der Tag – mit Kennungen.
+- **Unverändert:** alle AP-EIN-Seiten inkl. 5.2; Runde 48 „Zahlung fehlt“-Weg; Runde 52 Bar/Karte-Hauptwege; Rechte geld/auftraege.
+
+**(c) Belegwege**
+- Testfälle `testmodell.seiten.absprache` ABS-01 … ABS-20: Leer/Tor, Speichern + Rückkehr, Feldfehler (Tage, Datum, Grund), Rechte Oberfläche + Server (FORBIDDEN), Widerruf, Ändern/Ersetzen, Vorrang, Knopf je Typ, Freitext, Ablauf, Rückkehr aus 10.1, Server-Recheck nach Widerruf (neuer Schritt `db_setzen`), Sammelrechnung erstellen/festschreiben, Versand. Neue Konventionen: Schritte `befehl`, `db_setzen`; Platzhalter `{monat:±n}`, `|TT.MM.JJJJ`.
+- Sichtvertrag + Prüfbilder: absprache (leer), absprache@beispiel, #aendern, #widerruf je Desktop/Tablet/Handy (12 neu, gesamt 162).
+- Gegenprüfung (unabhängiger Agent, nur Bauplan-Auszug): Runde 1 – 5 blockierend, Runde 2 – 2 blockierend, alle geschlossen.
+- Gates grün: Was-ist-neu, Stand, Referenz, UI 162, Seiten 62×2 (neu: Was-ist-neu-Zahl = Liste), Selbsttest 162/162, Musterdaten, Klick 1385 (1 Ledger: A-2026-0105 Knopftext), Floskel, Baureife 6 Abschnitte.
+
+**(d) Owner-Entscheidungen**
+- Owner-Haken 5.4 auf Owner-Auftrag 05.11. gesetzt (meta.owner_haken.protokoll) – nur widersprechen, falls nicht gewollt.
+
+Nächstes Paket: AP-KV (vollständige Lieferung, sobald AP-ABS gebunden ist).
+
+## 05.11. 13:20 · Endversion → PL · Runde 53 · eine SHA · V42 · spec 3de0a1d995b8
+
+Stand: spec **3de0a1d995b8** · Bauplan `codex/BAUPLAN.next.json` 5563ab711253 · css E934666E · Sichtvertrag CDBAED07 · pruefe_sicht.cjs cdec8b69b6c4 · routen.beispiel.json 0de6c84db45b. Archiv V42. Nur AP-EIN-Inhalte aus Auftrag Abschnitt 0.2 (U-241, U-242, Nr. 7); sonst nichts geändert.
+
+**(a) Status**
+- U-241 „Was ist das?“: bestätigt, umgesetzt.
+- U-242 konkrete Texte: bestätigt, umgesetzt (48 Einträge Änderungsliste).
+- Nr. 7 Erkennung: bestätigt, umgesetzt.
+- Leer-Zustand im Sichtvertrag (PL 04.11. 13:30): umgesetzt.
+- E09 präzisiert: umgesetzt.
+
+**(b) Lösung im Kontext**
+- U-241: 3.0 Modus `unklar` (Unterzeile „Was ist das? · Art unklar“, Route `rein#unklar`). Rechte Spalte: Kopf → 4 Kacheln Auftrag oder KV → 3 · Ware → 3.7 · Eingangsrechnung → 3.8 · Dokument oder Notiz → 3.4 (2 je Reihe) → „Später zuordnen“ → „Original ansehen“. Gelesene Teilangaben werden im Ziel vorbelegt. `screens[rein].runde53_unklar` (+ `aufbau`), `elemente_runde53`, Seitenkatalog-Modus.
+- U-242: `verhalten_appweit.texte_konkret` (verboten allein, Muster, Ausnahmen, Prüfliste). Der Tag: blockiert · wird knapp · wartet auf dich (Zähler Singular/Plural). Knöpfe/Chips: z. B. „KV-Preis freigeben“, „Mit Bestellung abgleichen“, „Ergebnis festlegen“, „Eingangsrechnung erfassen“, „Zahlung zuordnen“, „Nächste Seite fotografieren“, „Heute zu tun“. Prüfliste: „{feld} {wert} · erkannt, bestätigen“ / „{feld} eintragen|wählen“. U-216 `fehlt` verfeinert: nie allein, sondern „{feld} eintragen/wählen“ oder „{gegenstand} fehlt · {folge}“. Vollständige Liste alt → neu: `baustand.paket_eingang.runde53.aenderungsliste`.
+- Nr. 7: `eingang.erkennung.runde53` – Verneinung („nicht X, nur Y“ → Y), Zahlwörter, Wunschdatum statt Mail-/Briefdatum, > 20 Positionen → Hinweis + zweiter Beleg, Mailbilder = Foto-Kandidaten.
+- Leer-Zustand: je Paket-Seite Sichtvertrag `zustand: leer` (Route = Seiten-ID, Pflicht) und `zustand: beispiel` (Route `{id}@beispiel`, optional, sonst gelb). Ausgenommen 3.0, 3.6, M6. Prüfbilder `{screen}__leer_*`.
+- E09: Enter springt Feld für Feld; erst im letzten Pflichtfeld `eingang.eingangsart` löst Enter den Hauptknopf mit Tor aus.
+- Owner 05.11. (in `paket_folge.entscheide_05_11` und `verhalten_appweit.nachrichten_ein_eingang`): AP-MSG (Instagram, WhatsApp) und AP-KOST → Stufe 4. Alle Nachrichten jetzt und später in **einer** Oberfläche; Kanal nur Filter, gleiche Aufbereitung und Verarbeitung.
+- **Unverändert:** Seitennamen (Runde 51, z. B. 3.8 „Rechnung prüfen“), Namen von Rechten, alle Ziele und Wege von V41 (Klick-Gate 1383/1383), Größenregel U-240, PIN-Prüfskript.
+
+**(c) Belegwege**
+- Testfälle: eingang RT04-11 … RT04-15 (Verneinung, Zahlwort, „ein paar“ ohne Menge → „Menge eintragen“, Wunschdatum, > 20 Positionen), rein U241-01 … 03 (nichts gelesen → 4 Kacheln; Kachel Rechnung → 3.8; Kachel Auftrag → 3 vorbelegt), E09.
+- Fehler/Unterbrechung/Rückkehr: „Später zuordnen“ legt den Eingang unter „Später“ ab; „Original ansehen“ und Zurück kehren nach 3.0 `unklar` zurück; Abbruch verwirft nichts (Original gesichert).
+- Gates vor Lieferung alle grün: Was-ist-neu, Stand, Referenz, UI (150), Seiten (56×2), Selbsttest pruefe_sicht 150/150, Musterdaten (auch im Bauplan), Klick (1383 Wege V41), **neu Floskel-Gate** (Sichtvertrag + Klick-Inventar, U-242), Baureife.
+
+**(d) Owner-Entscheidungen**
+- keine offen.
+
+Nächstes Paket: AP-ABS (nur `paket_folge`, keine AP-EIN-Seite).
+
 ## 03.11. 19:00 – Runde 52 · Freigabe (ersetzt den Eintrag 17:40; enthält U-240 aus 18:30 und das PIN-Prüfskript aus 16:30) · bitte einmal binden (TA-B2f)
 
 ### 1 · Gültiger Stand (eine Wahrheit)
