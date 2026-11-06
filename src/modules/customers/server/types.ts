@@ -3,7 +3,7 @@ import type { OrderReadiness } from "../orderReadiness";
 export type CustomerListItem={id:string;customerNumber:string;name:string;type:string;city:string|null;activeOrderCount:number};
 export type CustomersViewState={kind:"loading"}|{kind:"denied"|"error"|"conflict";message:string}|{kind:"data";customers:CustomerListItem[]};
 export type CustomerOrderItem={id:string;orderNumber:string;title:string;station:string;status:string;dueAt:string|null;version:number};
-export type CustomerCardModel=Partial<Pick<CustomerStoredProfile,"salutation"|"firstName"|"lastName"|"contactRole"|"houseNumber"|"billingEmail"|"website"|"handoverPreference"|"iban"|"paymentTermDays"|"autoInfo"|"vorrang"|"addressStatus"|"invoiceTermDays">>&{id:string;customerNumber:string|null;name:string;companyName:string|null;type:string;contactPerson:string|null;email:string|null;phone:string|null;address:string|null;zipCode:string|null;city:string|null;country:string|null;paymentPreference?:string|null;invoiceTermsEnabled:boolean;vatId?:string|null;classification:string|null;notes:string|null;tags:string[];createdAt:string;updatedAt:string;orderCount:number;wareImHausCount:number;invoiceRevenueCents:number;invoiceOpenCents:number;orders:CustomerOrderItem[]};
+export type CustomerCardModel=Partial<Pick<CustomerStoredProfile,"salutation"|"firstName"|"lastName"|"contactRole"|"houseNumber"|"billingEmail"|"website"|"handoverPreference"|"iban"|"paymentTermDays"|"autoInfo"|"vorrang"|"addressStatus"|"invoiceTermDays">>&{id:string;customerNumber:string|null;name:string;companyName:string|null;type:string;contactPerson:string|null;email:string|null;phone:string|null;address:string|null;zipCode:string|null;city:string|null;country:string|null;paymentPreference?:string|null;invoiceTermsEnabled:boolean;vatId?:string|null;classification:string|null;notes:string|null;tags:string[];createdAt:string;updatedAt:string;orderCount:number;wareImHausCount:number;invoiceRevenueCents:number;invoiceOpenCents:number;agreements?:CustomerAgreementSummary[];orders:CustomerOrderItem[]};
 export type CustomerCardState={kind:"loading"}|{kind:"denied"|"not-found"|"error"|"conflict";message:string}|{kind:"data";card:CustomerCardModel};
 
 export type CreateCustomerInput = {
@@ -117,6 +117,27 @@ export const CUSTOMER_AGREEMENT_TYPES = [
 
 export type CustomerAgreementType = (typeof CUSTOMER_AGREEMENT_TYPES)[number];
 
+/** Read model for the one customer_agreements truth. Free-text rows deliberately keep type null. */
+export type CustomerAgreementSummary = {
+  id: string;
+  customerId: string;
+  orderId: string | null;
+  position: number;
+  label: string;
+  type: CustomerAgreementType | null;
+  targetDays: number | null;
+  money: boolean;
+  notice: boolean;
+  validUntil: string | null;
+  reason: string | null;
+  version: number;
+  revokedAt: string | null;
+  revokedBy: string | null;
+  revokeReason: string | null;
+  createdAt: string;
+  createdBy: string | null;
+};
+
 export type SaveCustomerAgreementInput = {
   clientKey: string;
   customerId: string;
@@ -136,21 +157,9 @@ export type RevokeCustomerAgreementInput = {
   version: number;
 };
 
-export type CustomerAgreementRecord = {
-  id: string;
-  customerId: string;
-  orderId: string | null;
-  position: number;
+export type CustomerAgreementRecord = Omit<CustomerAgreementSummary, "type" | "reason"> & {
   type: CustomerAgreementType;
-  targetDays: number | null;
-  validUntil: string | null;
   reason: string;
-  version: number;
-  revokedAt: string | null;
-  revokedBy: string | null;
-  revokeReason: string | null;
-  createdAt: string;
-  createdBy: string | null;
 };
 
 export type CustomerAgreementCommandResult =

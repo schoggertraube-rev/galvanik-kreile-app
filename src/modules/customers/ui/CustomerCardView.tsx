@@ -1,11 +1,20 @@
 "use client";
 
 import { type ReactNode, useState, useSyncExternalStore } from "react";
-import type { CustomerCardState, UpdateCustomerInput } from "../server/types";
+import type {
+  CustomerAgreementCommandResult,
+  CustomerAgreementRecord,
+  CustomerAgreementSummary,
+  CustomerCardState,
+  RevokeCustomerAgreementInput,
+  SaveCustomerAgreementInput,
+  UpdateCustomerInput,
+} from "../server/types";
 import { kundeVollstaendigkeit } from "../orderReadiness";
 import { customerCountryLabel } from "../customerFormContract";
 import {customerPaymentLabel} from "../paymentPreferenceContract";
 import { CustomerEditor } from "./CustomerEditor";
+import { CustomerAgreementDialog } from "./CustomerAgreementDialog";
 import type { CustomerAddressInput, CustomerAddressResult } from "../customerAddress";
 import {
   Auftragszeile,
@@ -45,6 +54,36 @@ function moment(value: string) {
 function euro(cents: number) {
   return (cents / 100).toLocaleString("de-DE", { style: "currency", currency: "EUR" });
 }
+
+function berlinDay() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Berlin",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const byType = new Map(parts.map((part) => [part.type, part.value]));
+  return `${byType.get("year")}-${byType.get("month")}-${byType.get("day")}`;
+}
+
+function day(value: string) {
+  const [year, month, date] = value.split("-");
+  return year && month && date ? `${date}.${month}.${year}` : "Datum fehlt";
+}
+
+function isTypedAgreement(agreement: CustomerAgreementSummary): agreement is CustomerAgreementRecord {
+  return agreement.type !== null && typeof agreement.reason === "string";
+}
+
+function isCurrentAgreement(agreement: CustomerAgreementSummary, today: string) {
+  return agreement.revokedAt === null && (agreement.validUntil === null || agreement.validUntil >= today);
+}
+
+type AgreementDialogState = {
+  mode: "new" | "edit" | "revoke";
+  agreement?: CustomerAgreementRecord;
+  initialReason?: string;
+};
 
 function readDevice(): Geraet {
   if (window.innerWidth <= 699) return "handy";
@@ -93,6 +132,9 @@ export function CustomerCardView({
   missingFirst=false,
   checkAddress,
   takeover,
+  onSaveAgreement,
+  onRevokeAgreement,
+  onReload,
 }: {
   state: CustomerCardState;
   onOpenOrder: (id: string) => void;
@@ -103,10 +145,14 @@ export function CustomerCardView({
   takeover?:unknown;
   canManageMoney?:boolean;canDecide?:boolean;initialEdit?:boolean;missingFirst?:boolean;
   checkAddress?:(input:CustomerAddressInput)=>Promise<{code:"OK";data:CustomerAddressResult}|{code:string;message:string}>;
+  onSaveAgreement?: (input: SaveCustomerAgreementInput) => Promise<CustomerAgreementCommandResult>;
+  onRevokeAgreement?: (input: RevokeCustomerAgreementInput) => Promise<CustomerAgreementCommandResult>;
+  onReload?: () => Promise<void>;
 }) {
   const device = useSyncExternalStore(subscribeDevice, readDevice, readServerDevice);
   const [editOpen, setEditOpen] = useState(initialEdit);
   const [saveMessage, setSaveMessage] = useState("");
+  const [agreementDialog, setAgreementDialog] = useState<AgreementDialogState | null>(null);
 
   if (state.kind !== "data") {
     const text = state.kind === "loading" ? "Kundenkarte wird geladen." : state.message;
@@ -125,6 +171,12 @@ export function CustomerCardView({
   const missingForOrder=readiness.fehlt;
   const active = card.orders.filter((order) => !isClosedStation(order.station));
   const history = card.orders.filter((order) => isClosedStation(order.station));
+  const today = berlinDay();
+  const customerAgreements = (card.agreements ?? []).filter((agreement) => agreement.orderId === null);
+  const activeAgreement = customerAgreements.find((agreement) => isTypedAgreement(agreement) && isCurrentAgreement(agreement, today)) ?? null;
+  const earlierAgreements = customerAgreements.filter((agreement) => isTypedAgreement(agreement) && !isCurrentAgreement(agreement, today));
+  const untypedMoneyAgreement = customerAgreements.find((agreement) => agreement.type === null && agreement.money && isCurrentAgreement(agreement, today)) ?? null;
+  const canManageAgreement = canManageMoney && Boolean(onSaveAgreement && onRevokeAgreement);
   const next = active.slice().sort((a, b) => {
     const at = a.dueAt ? new Date(a.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
     const bt = b.dueAt ? new Date(b.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
@@ -139,6 +191,15 @@ export function CustomerCardView({
     ...(card.email ? [{ key: "mail", text: "E-Mail", icon: "mail" as const, onClick: openMail }] : []),
     ...(onSaveCustomer ? [{ key: "edit", text: "Bearbeiten", icon: "edit" as const, onClick: () => setEditOpen(true) }] : []),
   ];
+  const agreementAction: SchnellAktion | null = canManageAgreement
+    ? {
+      key: "agreement",
+      dataSpecId: "kunde.absprache",
+      text: "Zahlungsabsprache festlegen",
+      icon: "receipt",
+      onClick: () => setAgreementDialog({ mode: activeAgreement ? "edit" : "new", agreement: activeAgreement ?? undefined }),
+    }
+    : null;
 
   const head = <Kartenkopf
     nummer={card.customerNumber ?? "Ohne Kundennummer"}
@@ -180,6 +241,27 @@ export function CustomerCardView({
       {card.notes ? <Notiz text={card.notes} bezug={<Chip text="Kundennotiz" ton="teil" icon="phone" />} autor={`aktualisiert ${moment(card.updatedAt)}`} /> : <Zustand art="leer" text="Keine interne Kundennotiz hinterlegt." />}
       {card.tags.length ? <div className="kr-docs" style={{ marginTop: 8 }}>{card.tags.map((tag) => <Chip key={tag} text={tag} />)}</div> : null}
     </KartenBlock>
+    {canManageMoney ? <KartenBlock label="Zahlungsabsprache">
+      {activeAgreement ? <div data-spec-id="kunde.absprache-zeile" className="kr-stapel">
+        <strong>Zahlungsabsprache · {activeAgreement.label} · gilt für ganzer Kunde {card.companyName ?? card.name} · bis {activeAgreement.validUntil ? day(activeAgreement.validUntil) : "auf Widerruf"}</strong>
+        <span>Grund {activeAgreement.reason} · angelegt {moment(activeAgreement.createdAt)} von {activeAgreement.createdBy ?? "Login fehlt"}</span>
+        {canManageAgreement ? <div className="kr-schnellleiste">
+          <Button data-spec-id="kunde.absprache-aendern" art="sekundaer" icon="edit" text="Absprache ändern" onClick={() => setAgreementDialog({ mode: "edit", agreement: activeAgreement })} />
+          <Button data-spec-id="kunde.absprache-widerrufen" art="leise" icon="x" text="Absprache widerrufen" onClick={() => setAgreementDialog({ mode: "revoke", agreement: activeAgreement })} />
+        </div> : null}
+      </div> : untypedMoneyAgreement ? <div className="kr-stapel">
+        <strong>Absprache {untypedMoneyAgreement.label} · Typ festlegen</strong>
+        {canManageAgreement ? <Button data-spec-id="kunde.absprache-typ-festlegen" art="sekundaer" icon="edit" text="Typ festlegen" onClick={() => setAgreementDialog({ mode: "new", initialReason: untypedMoneyAgreement.reason ?? untypedMoneyAgreement.label })} /> : null}
+      </div> : <Zustand art="leer" text="Keine Zahlungsabsprache festgelegt." />}
+      {earlierAgreements.length ? <details data-spec-id="kunde.absprache-frueher">
+        <summary>Frühere Absprachen · {earlierAgreements.length}</summary>
+        <div className="kr-stapel">
+          {earlierAgreements.map((agreement) => <p key={agreement.id}>
+            {agreement.label} · {agreement.revokedAt ? `widerrufen ${moment(agreement.revokedAt)} von ${agreement.revokedBy ?? "Login fehlt"}` : `abgelaufen am ${agreement.validUntil ? day(agreement.validUntil) : "Datum fehlt"}`} · Grund {agreement.revokeReason ?? agreement.reason ?? "fehlt"}
+          </p>)}
+        </div>
+      </details> : null}
+    </KartenBlock> : null}
     <KartenBlock label="Stammdaten" rechts={onSaveCustomer ? <Button data-spec-id="kunde.bearbeiten" art="leise" icon="edit" text="Bearbeiten" onClick={() => setEditOpen(true)} /> : undefined}>
       <Fakten zeilen={[
         { k: "Ansprechpartner", v: card.contactPerson ?? "Nicht hinterlegt" },
@@ -217,14 +299,25 @@ export function CustomerCardView({
     ]} /></KartenBlock>
   </>;
   const footer = device === "desktop"
-    ? <footer className="kr-kartenfuss"><Button data-spec-id="kunde.schliessen" text="Schließen" onClick={onClose} /></footer>
-    : quickActions.length ? <Schnellaktionen aktionen={quickActions} als="dock" /> : undefined;
+    ? <footer className="kr-kartenfuss">{agreementAction ? <Button data-spec-id="kunde.absprache" art="primaer" icon="receipt" text="Zahlungsabsprache festlegen" onClick={agreementAction.onClick} /> : null}<Button data-spec-id="kunde.schliessen" text="Schließen" onClick={onClose} /></footer>
+    : agreementAction || quickActions.length ? <Schnellaktionen aktionen={agreementAction ? [agreementAction, ...quickActions] : quickActions} als="dock" /> : undefined;
 
   return <>
     <Seitenblatt dataSpecId="kunde" titel={`Kundenkarte ${card.customerNumber ?? card.name}`} onSchliessen={onClose}>
       <Karte kopf={head} haupt={main} rail={rail} fuss={footer} />
     </Seitenblatt>
     {editOpen && onSaveCustomer ? <CustomerEditor takeover={takeover} card={card} canManageMoney={canManageMoney} canDecide={canDecide} missingFirst={missingFirst} checkAddress={checkAddress} onSave={onSaveCustomer} onClose={()=>setEditOpen(false)} onSaved={message=>{setEditOpen(false);setSaveMessage(message)}}/>:null}
+    {agreementDialog && onSaveAgreement && onRevokeAgreement ? <CustomerAgreementDialog
+      target={{customerId:card.id,customerNumber:card.customerNumber,customerName:card.companyName ?? card.name}}
+      mode={agreementDialog.mode}
+      agreement={agreementDialog.agreement}
+      initialReason={agreementDialog.initialReason}
+      onSave={onSaveAgreement}
+      onRevoke={onRevokeAgreement}
+      onReload={onReload}
+      onClose={() => setAgreementDialog(null)}
+      onMessage={setSaveMessage}
+    /> : null}
     {saveMessage?<Toast text={saveMessage}/>:null}
   </>;
 }

@@ -68,9 +68,9 @@ export interface VerlaufEintrag { key: string; zeit: string; text: string; icon?
 export function Verlauf({ eintraege }: { eintraege: VerlaufEintrag[] }) {
   return <div className="kr-verlauf">{eintraege.map(e => <div key={e.key} className="kr-verlauf-el"><span className={cx('kr-verlauf-d', e.ton && 'kr-verlauf-d--' + e.ton)}><Icon name={e.icon ?? 'check'} /></span><div><div className="kr-verlauf-z">{e.zeit}</div><div className="kr-verlauf-t">{e.text}</div></div></div>)}</div>;
 }
-export interface SchnellAktion { key: string; text: string; icon: IconName; primaer?: boolean; erledigen?: boolean; onClick: () => void; }
+export interface SchnellAktion { key: string; dataSpecId?: string; text: string; icon: IconName; primaer?: boolean; erledigen?: boolean; onClick: () => void; }
 /** Desktop: Raster in der Rail · Tablet/Handy: Kartendock unten (max. 5) */
 export function Schnellaktionen({ aktionen, als }: { aktionen: SchnellAktion[]; als: 'raster' | 'dock' }) {
-  const b = aktionen.map(a => <button key={a.key} type="button" className={cx('kr-qa', a.primaer && 'kr-qa--primaer', a.erledigen && 'kr-qa--erledigen')} onClick={a.onClick}><Icon name={a.icon} />{a.text}</button>);
+  const b = aktionen.map(a => <button key={a.key} data-spec-id={a.dataSpecId} type="button" className={cx('kr-qa', a.primaer && 'kr-qa--primaer', a.erledigen && 'kr-qa--erledigen')} onClick={a.onClick}><Icon name={a.icon} />{a.text}</button>);
   return als === 'raster' ? <div className="kr-qa-raster">{b}</div> : <nav className="kr-kartendock">{b.slice(0, 5)}</nav>;
 }

@@ -1,7 +1,13 @@
 "use client";
 import {useCallback,useEffect,useState} from "react";
 import {useRouter} from "next/navigation";
-import {getCustomerSummaryAction,updateCustomerAction,readCustomerAddressAction} from "@/app/actions/customers.actions";
+import {
+  getCustomerSummaryAction,
+  readCustomerAddressAction,
+  revokeCustomerAgreementAction,
+  saveCustomerAgreementAction,
+  updateCustomerAction,
+} from "@/app/actions/customers.actions";
 import {CustomerCardView,type CustomerCardModel,type CustomerCardState,type UpdateCustomerInput} from "@/modules/customers/public";
 import {useOverlayStore} from "@/lib/overlayStore";
 import {usePermissions} from "@/lib/auth/PermissionsContext";
@@ -20,13 +26,14 @@ export function CustomerCardAppAdapter({customerId,takeover,onOpenOrder,onClose,
   const {hasArea}=usePermissions();
   const [resolvedId,mode]=customerId.split("#");
   const [state,setState]=useState<CustomerCardState>({kind:"loading"});
-  const load=useCallback(async()=>{
+  const load=useCallback(async():Promise<boolean>=>{
     const result=await getCustomerSummaryAction({customerId:resolvedId});
     if(result.code!=="OK"){
       const kind=result.code==="FORBIDDEN"||result.code==="UNAUTHENTICATED"?"denied":result.code==="NOT_FOUND"?"not-found":result.code==="VALIDATION_ERROR"?"conflict":"error";
-      setState({kind,message:result.message});return;
+      setState({kind,message:result.message});return false;
     }
     setState({kind:"data",card:toCard(result.data)});
+    return true;
   },[resolvedId]);
   useEffect(()=>{
     let active=true;
@@ -39,14 +46,19 @@ export function CustomerCardAppAdapter({customerId,takeover,onOpenOrder,onClose,
   const save=async(input:UpdateCustomerInput)=>{
     const result=await updateCustomerAction(input);
     if(result.code!=="OK")return {ok:false as const,message:result.message};
-    const fresh=await getCustomerSummaryAction({customerId:resolvedId});
-    if(fresh.code!=="OK")return {ok:false as const,message:`Die Änderung wurde geschrieben, die Ansicht konnte noch nicht sicher gelesen werden. ${fresh.message}`};
-    setState({kind:"data",card:toCard(fresh.data)});return {ok:true as const};
+    if(!await load())return {ok:false as const,message:"Die Änderung wurde geschrieben, die Ansicht konnte noch nicht sicher gelesen werden."};
+    return {ok:true as const};
   };
+  const reloadAgreement=useCallback(async()=>{
+    if(!await load())throw new Error("CUSTOMER_AGREEMENT_SUMMARY_RELOAD_FAILED");
+  },[load]);
   const close=onClose??(fallbackHref?()=>router.replace(fallbackHref):storeClose);
   return <CustomerCardView key={customerId} state={state} onOpenOrder={onOpenOrder??storeOrder} onClose={close}
     onSaveCustomer={hasArea("kunden")?save:undefined} canManageMoney={hasArea("geld")} canDecide={hasArea("entscheiden")}
     takeover={takeover} initialEdit={mode==="fehlend"||mode==="uebernahme"||mode==="bearbeiten"} missingFirst={mode==="fehlend"} checkAddress={readCustomerAddressAction}
+    onSaveAgreement={hasArea("geld")?saveCustomerAgreementAction:undefined}
+    onRevokeAgreement={hasArea("geld")?revokeCustomerAgreementAction:undefined}
+    onReload={hasArea("geld")?reloadAgreement:undefined}
     onNewOrder={hasArea("eingang")?()=>{close();requestGlobalCreate({intent:"DIRECT_INTAKE",prefill:{customerId:resolvedId}})}:undefined}
     documentsPanel={state.kind==="data"?<><DomainAttachmentPanel targetType="CUSTOMER" targetId={state.card.id}/><CommunicationPanel targetType="CUSTOMER" targetId={state.card.id}/></>:null}/>;
 }

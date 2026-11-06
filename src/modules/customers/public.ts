@@ -24,6 +24,7 @@ export type {
   UpdateCustomerInput,
   EnableCustomerInvoiceTermsInput,
   CustomerAgreementType,
+  CustomerAgreementSummary,
   SaveCustomerAgreementInput,
   RevokeCustomerAgreementInput,
   CustomerAgreementRecord,

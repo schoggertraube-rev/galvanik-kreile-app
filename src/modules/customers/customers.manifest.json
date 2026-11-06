@@ -38,6 +38,7 @@
     "@/modules/customers/public#UpdateCustomerInput",
     "@/modules/customers/public#EnableCustomerInvoiceTermsInput",
     "@/modules/customers/public#CustomerAgreementType",
+    "@/modules/customers/public#CustomerAgreementSummary",
     "@/modules/customers/public#SaveCustomerAgreementInput",
     "@/modules/customers/public#RevokeCustomerAgreementInput",
     "@/modules/customers/public#CustomerAgreementRecord",

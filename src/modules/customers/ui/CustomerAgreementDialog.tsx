@@ -34,10 +34,17 @@ type Draft = {
   reason: string;
 };
 
+type SavedOutcome = {
+  agreement: CustomerAgreementRecord;
+  kind: "saved" | "revoked";
+  message: string;
+};
+
 export type CustomerAgreementDialogProps = {
   target: CustomerAgreementTarget;
   mode?: AgreementMode;
   agreement?: CustomerAgreementRecord | null;
+  initialReason?: string;
   onSave: (input: SaveCustomerAgreementInput) => Promise<CustomerAgreementCommandResult>;
   onRevoke: (input: RevokeCustomerAgreementInput) => Promise<CustomerAgreementCommandResult>;
   onClose: () => void;
@@ -59,13 +66,13 @@ function labelForType(type: CustomerAgreementType | "") {
   return TYPE_OPTIONS.find((option) => option.wert === type)?.text ?? "Typ fehlt";
 }
 
-function initialDraft(target: CustomerAgreementTarget, agreement: CustomerAgreementRecord | null | undefined): Draft {
+function initialDraft(target: CustomerAgreementTarget, agreement: CustomerAgreementRecord | null | undefined, initialReason?: string): Draft {
   return {
     type: agreement?.type ?? "",
     scope: agreement?.orderId ? "order" : target.order ? "order" : "customer",
     targetDays: agreement?.targetDays === null || agreement?.targetDays === undefined ? "" : String(agreement.targetDays),
     validUntil: agreement?.validUntil ?? "",
-    reason: agreement?.reason ?? "",
+    reason: agreement?.reason ?? initialReason ?? "",
   };
 }
 
@@ -88,6 +95,7 @@ export function CustomerAgreementDialog({
   target,
   mode = "new",
   agreement = null,
+  initialReason,
   onSave,
   onRevoke,
   onClose,
@@ -95,10 +103,11 @@ export function CustomerAgreementDialog({
   onSaved,
   onReload,
 }: CustomerAgreementDialogProps) {
-  const [baseline] = useState(() => initialDraft(target, agreement));
-  const [draft, setDraft] = useState(() => initialDraft(target, agreement));
+  const [baseline] = useState(() => initialDraft(target, agreement, initialReason));
+  const [draft, setDraft] = useState(() => initialDraft(target, agreement, initialReason));
   const [errors, setErrors] = useState<Partial<Record<"type" | "targetDays" | "validUntil" | "reason", string>>>({});
   const [failure, setFailure] = useState<string | null>(null);
+  const [savedOutcome, setSavedOutcome] = useState<SavedOutcome | null>(null);
   const [busy, setBusy] = useState(false);
   const [closePrompt, setClosePrompt] = useState(false);
   const requestKey = useRef<string | null>(null);
@@ -116,6 +125,7 @@ export function CustomerAgreementDialog({
     setDraft((value) => ({ ...value, ...patch }));
     setErrors({});
     setFailure(null);
+    setSavedOutcome(null);
   };
 
   const focus = (id: string) => {
@@ -176,11 +186,23 @@ export function CustomerAgreementDialog({
         setFailure(visibleFailure(result));
         return;
       }
-      const message = isRevoke
+      const outcome: SavedOutcome = {
+        agreement: result.agreement,
+        kind: isRevoke ? "revoked" : "saved",
+        message: isRevoke
         ? `Absprache ${typeLabel} widerrufen · offene Übergaben brauchen wieder eine Zahlung`
-        : `Absprache ${typeLabel} gilt ab sofort für ${scopeLabel}`;
-      onSaved?.(result.agreement, isRevoke ? "revoked" : "saved");
-      onMessage?.(message);
+        : `Absprache ${typeLabel} gilt ab sofort für ${scopeLabel}`,
+      };
+      try {
+        await onReload?.();
+      } catch (error) {
+        console.error("[CUSTOMER_AGREEMENT_DIALOG_RELOAD_FAILED]", { errorName: error instanceof Error ? error.name : "UnknownError" });
+        setSavedOutcome(outcome);
+        setFailure("Absprache wurde gespeichert · Kundenkarte konnte nicht neu geladen werden. Code: CUSTOMER_AGREEMENT_DIALOG_RELOAD_FAILED.");
+        return;
+      }
+      onSaved?.(outcome.agreement, outcome.kind);
+      onMessage?.(outcome.message);
       onClose();
     } catch (error) {
       console.error("[CUSTOMER_AGREEMENT_DIALOG_REQUEST_FAILED]", { errorName: error instanceof Error ? error.name : "UnknownError" });
@@ -193,6 +215,10 @@ export function CustomerAgreementDialog({
 
   const requestClose = () => {
     if (busy) return;
+    if (savedOutcome) {
+      onClose();
+      return;
+    }
     if (dirty) {
       setClosePrompt(true);
       return;
@@ -207,6 +233,11 @@ export function CustomerAgreementDialog({
       await onReload();
       requestKey.current = null;
       setFailure(null);
+      if (savedOutcome) {
+        onSaved?.(savedOutcome.agreement, savedOutcome.kind);
+        onMessage?.(savedOutcome.message);
+        onClose();
+      }
     } catch (error) {
       console.error("[CUSTOMER_AGREEMENT_DIALOG_RELOAD_FAILED]", { errorName: error instanceof Error ? error.name : "UnknownError" });
       setFailure("Absprache konnte nicht neu geladen werden. Code: CUSTOMER_AGREEMENT_DIALOG_RELOAD_FAILED.");
@@ -218,6 +249,7 @@ export function CustomerAgreementDialog({
   const required = (text: string) => <>{text} <small aria-hidden="true" className="ev-pflicht">Pflicht</small></>;
   const closeGuard = () => {
     if (busy) return false;
+    if (savedOutcome) return true;
     if (dirty) {
       setClosePrompt(true);
       return false;
@@ -296,8 +328,8 @@ export function CustomerAgreementDialog({
         {failure ? <div data-spec-id="absprache.zustand.fehler" role="alert" className="kr-stapel">
           <Hinweis ton="warn">{failure}</Hinweis>
           <div>
-            {failure.includes("neu laden") && onReload ? <Button data-spec-id="absprache.neu-laden" text="Neu laden" disabled={busy} onClick={() => void reload()} /> : null}
-            <Button data-spec-id="absprache.erneut" text={isRevoke ? "Erneut widerrufen" : "Erneut speichern"} disabled={busy} onClick={() => void submit()} />
+            {(savedOutcome || failure.includes("neu laden")) && onReload ? <Button data-spec-id="absprache.neu-laden" text="Neu laden" disabled={busy} onClick={() => void reload()} /> : null}
+            {!savedOutcome ? <Button data-spec-id="absprache.erneut" text={isRevoke ? "Erneut widerrufen" : "Erneut speichern"} disabled={busy} onClick={() => void submit()} /> : null}
           </div>
         </div> : null}
       </form>

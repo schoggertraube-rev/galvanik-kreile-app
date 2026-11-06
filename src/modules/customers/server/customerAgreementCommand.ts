@@ -20,8 +20,11 @@ type AgreementRow = {
   customer_id: string;
   order_id: string | null;
   position: number;
+  bezeichnung: string;
   typ: string | null;
   ziel_tage: number | null;
+  geld: boolean;
+  hinweis: boolean;
   gueltig_bis: Date | string | null;
   grund: string | null;
   version: number;
@@ -124,7 +127,7 @@ function day(value: Date | string | null): string | null {
 }
 
 function record(row: AgreementRow): CustomerAgreementRecord {
-  if (!UUID.test(row.id) || !id(row.customer_id) || !Number.isInteger(row.position) || row.position < 1 || row.position > 20 || !row.typ || !TYPES.has(row.typ) || !Number.isInteger(row.version) || row.version < 1) {
+  if (!UUID.test(row.id) || !id(row.customer_id) || !Number.isInteger(row.position) || row.position < 1 || row.position > 20 || typeof row.bezeichnung !== "string" || row.bezeichnung.trim().length < 1 || !row.typ || !TYPES.has(row.typ) || typeof row.geld !== "boolean" || typeof row.hinweis !== "boolean" || !Number.isInteger(row.version) || row.version < 1) {
     throw new Error("CUSTOMER_AGREEMENT_ROW_INVALID");
   }
   const createdAt = iso(row.created_at);
@@ -136,8 +139,11 @@ function record(row: AgreementRow): CustomerAgreementRecord {
     customerId: row.customer_id,
     orderId: row.order_id,
     position: row.position,
+    label: row.bezeichnung,
     type: row.typ as CustomerAgreementType,
     targetDays: row.ziel_tage,
+    money: row.geld,
+    notice: row.hinweis,
     validUntil,
     reason: row.grund ?? "",
     version: row.version,
@@ -155,7 +161,7 @@ function intentHash(value: unknown) {
 
 async function readAgreement(tx: PrivilegedTenantTransaction, context: CustomerCommandContext, agreementId: string): Promise<CustomerAgreementRecord> {
   const rows = await tx.execute<AgreementRow>(sql`
-    SELECT id::text, customer_id, order_id, position, typ, ziel_tage, gueltig_bis,
+    SELECT id::text, customer_id, order_id, position, bezeichnung, typ, ziel_tage, geld, hinweis, gueltig_bis,
       grund, version, widerrufen_am, widerrufen_von::text, widerruf_grund,
       created_at, created_by::text
     FROM public.customer_agreements
