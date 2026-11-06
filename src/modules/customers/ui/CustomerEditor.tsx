@@ -81,6 +81,8 @@ export function CustomerEditor({card,takeover,canManageMoney,canDecide=false,mis
   const [partialPrompt,setPartialPrompt]=useState(false);
   const [address,setAddress]=useState<CustomerAddressResult|null>(null);
   const focused=useRef<string|null>(null);
+  const agreementSlotsAvailable=Math.max(0,Math.min(20,card.agreementSlotsAvailable??20));
+  const agreementLimitReached=agreements.length>=agreementSlotsAvailable;
   const agreementsChanged=JSON.stringify(agreements)!==JSON.stringify(baselineAgreements);
   const changed=JSON.stringify(value)!==JSON.stringify(baseline) || agreementsChanged;
   const readiness=kundeVollstaendigkeit({...value,invoiceTermsEnabled:card.invoiceTermsEnabled},{geld:canManageMoney});
@@ -98,7 +100,7 @@ export function CustomerEditor({card,takeover,canManageMoney,canDecide=false,mis
   };
   const removeAgreement=(index:number)=>setAgreements(current=>current.filter((_,entryIndex)=>entryIndex!==index));
   const addAgreement=()=>{
-    if(agreements.length>=20)return;
+    if(agreementLimitReached)return;
     setAgreements(current=>[...current,{id:null,bezeichnung:"",wert:"",geld:false,hinweis:false,gueltigBis:null}]);
   };
   const focus=useCallback((field:keyof CustomerFormValue|undefined)=>{
@@ -143,7 +145,7 @@ export function CustomerEditor({card,takeover,canManageMoney,canDecide=false,mis
     const invalidAgreementIndex=agreements.findIndex(agreementHasError);
     if(invalidAgreementIndex>=0){
       setShowAgreementErrors(true);
-      requestAnimationFrame(()=>document.querySelector<HTMLElement>(`[data-spec-id="kundebearbeiten.absprachen.${invalidAgreementIndex}.bezeichnung"]`)?.focus());
+      requestAnimationFrame(()=>document.querySelectorAll<HTMLElement>(`[data-spec-id="kundebearbeiten.absprache.bezeichnung"]`)[invalidAgreementIndex]?.focus());
       return;
     }
     if(address?.blocked){setFailure(address.message);return;}
@@ -173,36 +175,36 @@ export function CustomerEditor({card,takeover,canManageMoney,canDecide=false,mis
         <KundeFormular prefix="kundebearbeiten" mode="edit" value={value} previous={baseline} priorityFields={priorityFields} errors={errors} onChange={changeValue} canManageMoney={canManageMoney} canDecide={canDecide}
           origins={initial.origins} proposals={proposals} onAcceptProposal={(field,next)=>{setValue(current=>({...current,[field]:next}));setProposals(current=>{const nextProposals={...current};delete nextProposals[field];return nextProposals})}}
           invoiceTermsEnabled={card.invoiceTermsEnabled} invoiceTermDays={card.invoiceTermDays} addressSuggestions={address?.suggestions} addressMessage={address?{tone:address.kind==="found"?"ok":address.kind==="not-checked"?"neutral":"warn",text:address.message}:null}/>
-        <section className="kr-stapel" data-spec-id="kundebearbeiten.absprachen" aria-label="Absprachen & Eigenheiten">
+        <section className="kr-stapel" data-spec-id="kundebearbeiten.absprache" aria-label="Absprachen & Eigenheiten">
           <h3 className="ev-kf-unter">Absprachen & Eigenheiten</h3>
-          {agreements.map((agreement,index)=><div key={agreement.id ?? `new-${index}`} className="kr-stapel" data-spec-id={`kundebearbeiten.absprachen.${index}`}>
+          {agreements.map((agreement,index)=><div key={agreement.id ?? `new-${index}`} className="kr-stapel" data-spec-id="kundebearbeiten.absprache">
             <strong>{index+1}. Absprache</strong>
             <FormRaster>
               <Feld label="Bezeichnung" fehler={showAgreementErrors?agreementFieldError(agreement,"bezeichnung") ?? undefined:undefined}>
-                <Eingabe data-spec-id={`kundebearbeiten.absprachen.${index}.bezeichnung`} maxLength={40} value={agreement.bezeichnung} onChange={event=>changeAgreement(index,{bezeichnung:event.target.value})}/>
+                <Eingabe data-spec-id="kundebearbeiten.absprache.bezeichnung" maxLength={40} value={agreement.bezeichnung} onChange={event=>changeAgreement(index,{bezeichnung:event.target.value})}/>
               </Feld>
               <Feld label="Absprache" fehler={showAgreementErrors?agreementFieldError(agreement,"wert") ?? undefined:undefined}>
-                <Eingabe data-spec-id={`kundebearbeiten.absprachen.${index}.wert`} maxLength={200} value={agreement.wert} onChange={event=>changeAgreement(index,{wert:event.target.value})}/>
+                <Eingabe data-spec-id="kundebearbeiten.absprache.wert" maxLength={200} value={agreement.wert} onChange={event=>changeAgreement(index,{wert:event.target.value})}/>
               </Feld>
               <Feld label="Gültig bis" fehler={showAgreementErrors?agreementFieldError(agreement,"gueltigBis") ?? undefined:undefined}>
-                <Eingabe data-spec-id={`kundebearbeiten.absprachen.${index}.gueltig_bis`} type="date" value={agreement.gueltigBis ?? ""} onChange={event=>changeAgreement(index,{gueltigBis:event.target.value||null})}/>
+                <Eingabe data-spec-id="kundebearbeiten.absprache.gueltig-bis" type="date" value={agreement.gueltigBis ?? ""} onChange={event=>changeAgreement(index,{gueltigBis:event.target.value||null})}/>
               </Feld>
               <Feld label="Anzeige">
                 <div className="kr-stapel" style={{gap:8}}>
-                  {canManageMoney?<div data-spec-id={`kundebearbeiten.absprachen.${index}.geld`}><Checkbox checked={agreement.geld} onChange={geld=>changeAgreement(index,{geld})}>Geld (Preis, Zahlung)</Checkbox></div>:null}
-                  <div data-spec-id={`kundebearbeiten.absprachen.${index}.hinweis`}><Checkbox checked={agreement.hinweis} onChange={hinweis=>changeAgreement(index,{hinweis})}>Als Hinweis zeigen</Checkbox></div>
+                  {canManageMoney?<div data-spec-id="kundebearbeiten.absprache.geld"><Checkbox checked={agreement.geld} onChange={geld=>changeAgreement(index,{geld})}>Geld (Preis, Zahlung)</Checkbox></div>:null}
+                  <div data-spec-id="kundebearbeiten.absprache.hinweis"><Checkbox checked={agreement.hinweis} onChange={hinweis=>changeAgreement(index,{hinweis})}>Als Hinweis zeigen</Checkbox></div>
                 </div>
               </Feld>
             </FormRaster>
             <div className="kr-schnellleiste">
-              <Button data-spec-id={`kundebearbeiten.absprachen.${index}.hoch`} text="Hoch" disabled={index===0} onClick={()=>moveAgreement(index,-1)}/>
-              <Button data-spec-id={`kundebearbeiten.absprachen.${index}.runter`} text="Runter" disabled={index===agreements.length-1} onClick={()=>moveAgreement(index,1)}/>
-              <Button data-spec-id={`kundebearbeiten.absprachen.${index}.entfernen`} art="leise" text="Entfernen" onClick={()=>removeAgreement(index)}/>
+              <Button data-spec-id="kundebearbeiten.absprache.hoch" text="Hoch" disabled={index===0} onClick={()=>moveAgreement(index,-1)}/>
+              <Button data-spec-id="kundebearbeiten.absprache.runter" text="Runter" disabled={index===agreements.length-1} onClick={()=>moveAgreement(index,1)}/>
+              <Button data-spec-id="kundebearbeiten.absprache.entfernen" art="leise" text="Entfernen" onClick={()=>removeAgreement(index)}/>
             </div>
           </div>)}
           {agreements.length===0?<Hinweis ton="neutral">Noch keine Absprachen hinterlegt.</Hinweis>:null}
-          {agreements.length>=20?<Hinweis ton="warn">Höchstens 20 Absprachen möglich.</Hinweis>:null}
-          <Button data-spec-id="kundebearbeiten.absprachen.hinzufuegen" icon="plus" text="Absprache hinzufügen" disabled={agreements.length>=20} onClick={addAgreement}/>
+          {agreementLimitReached?<Hinweis ton="warn">Höchstens 20 Absprachen möglich.</Hinweis>:null}
+          <Button data-spec-id="kundebearbeiten.absprache-hinzufuegen" icon="plus" text="Absprache hinzufügen" disabled={agreementLimitReached} onClick={addAgreement}/>
         </section>
         {failure?<div data-spec-id="kundebearbeiten.zustand.fehler" role="alert"><Hinweis ton="warn">{failure}</Hinweis><Button data-spec-id="kundebearbeiten.erneut-speichern" text="Erneut speichern" onClick={()=>void save(true)}/></div>:null}</div>
       </form>

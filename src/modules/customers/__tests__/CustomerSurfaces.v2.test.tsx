@@ -81,7 +81,7 @@ describe("Customer card V2", () => {
 
   it("edits free-text agreements through the one existing customer save path", async () => {
     const save = vi.fn().mockResolvedValue({ ok: true });
-    render(
+    const { container } = render(
       <CustomerCardView
         state={{ kind: "data", card: {
           ...card,
@@ -99,6 +99,7 @@ describe("Customer card V2", () => {
     expect(screen.getByText("Verpackung: Bitte stoßfest verpacken")).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("button", { name: "Bearbeiten" })[0]);
     expect(screen.getAllByRole("heading", { name: "Absprachen & Eigenheiten" })).toHaveLength(2);
+    expect(container.querySelector('[data-spec-id="kundebearbeiten.absprache.wert"]')).toBeTruthy();
     fireEvent.change(screen.getByDisplayValue("Bitte stoßfest verpacken"), { target: { value: "Bitte gepolstert verpacken" } });
     fireEvent.click(screen.getByRole("button", { name: "Speichern" }));
     const forceSave = screen.queryByRole("button", { name: "Trotzdem speichern" });
@@ -106,6 +107,19 @@ describe("Customer card V2", () => {
     await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({
       agreements: [expect.objectContaining({ id: "agreement-1", wert: "Bitte gepolstert verpacken", geld: false, hinweis: true })],
     })));
+  });
+
+  it("keeps hidden money agreements counted without exposing them", () => {
+    render(
+      <CustomerCardView
+        state={{ kind: "data", card: { ...card, agreements: [], agreementSlotsAvailable: 0 } }}
+        onClose={vi.fn()} onOpenOrder={vi.fn()} onSaveCustomer={vi.fn()} canManageMoney={false}
+      />,
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Bearbeiten" })[0]);
+    expect(screen.queryByText("Geld (Preis, Zahlung)")).not.toBeInTheDocument();
+    expect(screen.getByText("Höchstens 20 Absprachen möglich.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Absprache hinzufügen" })).toBeDisabled();
   });
 
   it.each(["denied", "not-found", "error", "conflict"] as const)("keeps %s fail-closed", (kind) => {

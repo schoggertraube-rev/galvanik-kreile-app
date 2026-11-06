@@ -54,6 +54,7 @@ export type CustomerSummary = CustomerStoredProfile & {
   invoiceRevenueCents: number;
   invoiceOpenCents: number;
   agreements: CustomerAgreementSummary[];
+  agreementSlotsAvailable: number;
   orders: CustomerSummaryOrder[];
 };
 
@@ -263,11 +264,33 @@ async function readCustomerAgreements(
   return rows.map(mapAgreement);
 }
 
+async function readCustomerAgreementSlots(
+  tx: PrivilegedTenantTransaction,
+  tenantId: string,
+  customerId: string,
+): Promise<number> {
+  const rows = await tx.execute<{ count: number | string }>(sql`
+    SELECT count(*)::integer AS count
+    FROM public.customer_agreements agreement
+    WHERE agreement.tenant_id = ${tenantId}
+      AND agreement.customer_id = ${customerId}
+      AND agreement.order_id IS NULL
+      AND agreement.typ IS NULL
+      AND agreement.widerrufen_am IS NULL
+  `);
+  const count = Number(rows[0]?.count);
+  if (rows.length !== 1 || !Number.isSafeInteger(count) || count < 0 || count > 20) {
+    throw new Error("CUSTOMER_SUMMARY_AGREEMENT_CAPACITY_INVALID");
+  }
+  return 20 - count;
+}
+
 function mapSummary(
   row: SummaryRow,
   authorization: AuthorizationSnapshot,
   profile: CustomerStoredProfile,
   agreements: CustomerAgreementSummary[],
+  agreementSlotsAvailable: number,
 ): CustomerSummary {
   const orders = mapOrders(row.orders);
   const invoiceRevenueCents = Number(row.invoice_revenue_cents);
@@ -318,6 +341,7 @@ function mapSummary(
     invoiceRevenueCents,
     invoiceOpenCents,
     agreements,
+    agreementSlotsAvailable,
     orders,
   };
 }
@@ -364,7 +388,8 @@ export async function readCustomerSummary(
          input.customerId,
          hasAuthorizationArea(authorization, "geld"),
        );
-       return mapSummary(rows[0],authorization,profile,agreements);
+       const agreementSlotsAvailable = await readCustomerAgreementSlots(tx, authorization.tenantId, input.customerId);
+       return mapSummary(rows[0],authorization,profile,agreements,agreementSlotsAvailable);
     });
     return data
       ? { code: "OK", data }

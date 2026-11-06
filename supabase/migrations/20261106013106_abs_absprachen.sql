@@ -629,6 +629,7 @@ DECLARE
   v_existing public.customer_agreements%ROWTYPE;
   v_position integer;
   v_used_positions integer[] := ARRAY[]::integer[];
+  v_editable_ids uuid[] := ARRAY[]::uuid[];
   v_seen_ids uuid[] := ARRAY[]::uuid[];
   v_valid_until date;
 BEGIN
@@ -684,7 +685,17 @@ BEGIN
     INTO v_used_positions
     FROM public.customer_agreements agreement
     WHERE agreement.tenant_id=p_tenant_id AND agreement.customer_id=p_customer_id AND agreement.widerrufen_am IS NULL
-      AND (agreement.typ IS NOT NULL OR (NOT v_money AND agreement.typ IS NULL AND agreement.geld));
+      AND agreement.typ IS NULL AND NOT v_money AND agreement.geld;
+    SELECT coalesce(array_agg(agreement.id ORDER BY agreement.position), ARRAY[]::uuid[])
+    INTO v_editable_ids
+    FROM public.customer_agreements agreement
+    WHERE agreement.tenant_id=p_tenant_id AND agreement.customer_id=p_customer_id AND agreement.typ IS NULL
+      AND agreement.widerrufen_am IS NULL AND (v_money OR NOT agreement.geld);
+    -- The partial unique index covers active free-text rows. Temporarily mark exactly the
+    -- editable rows revoked so a full 1..20 list can be reordered without a swap collision.
+    UPDATE public.customer_agreements agreement SET widerrufen_am=statement_timestamp(),widerrufen_von=p_actor_id,
+      widerruf_grund='wird in Kundenkarte neu sortiert'
+    WHERE agreement.tenant_id=p_tenant_id AND agreement.id = ANY(v_editable_ids);
     FOR v_entry IN SELECT value FROM jsonb_array_elements(v_agreements) LOOP
       IF jsonb_typeof(v_entry) IS DISTINCT FROM 'object'
         OR NOT (v_entry ?& ARRAY['id','bezeichnung','wert','geld','hinweis','gueltigBis'])
@@ -719,7 +730,7 @@ BEGIN
         v_existing := NULL;
         SELECT * INTO v_existing FROM public.customer_agreements agreement
           WHERE agreement.tenant_id=p_tenant_id AND agreement.id=v_entry_id AND agreement.customer_id=p_customer_id
-            AND agreement.typ IS NULL AND agreement.widerrufen_am IS NULL FOR UPDATE;
+            AND agreement.typ IS NULL AND agreement.id = ANY(v_editable_ids) FOR UPDATE;
         IF NOT FOUND THEN RETURN QUERY SELECT 'VALIDATION_ERROR'::text,false; RETURN; END IF;
         IF NOT v_money AND v_existing.geld THEN RETURN QUERY SELECT 'FORBIDDEN'::text,false; RETURN; END IF;
         IF v_entry_id = ANY(v_seen_ids) THEN RETURN QUERY SELECT 'VALIDATION_ERROR'::text,false; RETURN; END IF;
@@ -727,9 +738,13 @@ BEGIN
           IS DISTINCT FROM (v_position,btrim(v_entry->>'bezeichnung'),btrim(v_entry->>'wert'),(v_entry->>'geld')::boolean,(v_entry->>'hinweis')::boolean,v_valid_until)
         THEN
           UPDATE public.customer_agreements SET position=v_position,bezeichnung=btrim(v_entry->>'bezeichnung'),wert=btrim(v_entry->>'wert'),
-            geld=(v_entry->>'geld')::boolean,hinweis=(v_entry->>'hinweis')::boolean,gueltig_bis=v_valid_until,version=version+1
+            geld=(v_entry->>'geld')::boolean,hinweis=(v_entry->>'hinweis')::boolean,gueltig_bis=v_valid_until,
+            widerrufen_am=NULL,widerrufen_von=NULL,widerruf_grund=NULL,version=version+1
           WHERE tenant_id=p_tenant_id AND id=v_entry_id AND version=v_existing.version;
           IF NOT FOUND THEN RETURN QUERY SELECT 'CONFLICT'::text,false; RETURN; END IF;
+        ELSE
+          UPDATE public.customer_agreements SET widerrufen_am=NULL,widerrufen_von=NULL,widerruf_grund=NULL
+          WHERE tenant_id=p_tenant_id AND id=v_entry_id AND version=v_existing.version;
         END IF;
       END IF;
       v_seen_ids := array_append(v_seen_ids,v_entry_id);
@@ -737,8 +752,8 @@ BEGIN
     END LOOP;
     UPDATE public.customer_agreements agreement SET widerrufen_am=statement_timestamp(),widerrufen_von=p_actor_id,
       widerruf_grund='aus Kundenkarte entfernt',version=version+1
-    WHERE agreement.tenant_id=p_tenant_id AND agreement.customer_id=p_customer_id AND agreement.typ IS NULL
-      AND agreement.widerrufen_am IS NULL AND (v_money OR NOT agreement.geld) AND NOT (agreement.id = ANY(v_seen_ids));
+    WHERE agreement.tenant_id=p_tenant_id AND agreement.id = ANY(v_editable_ids)
+      AND NOT (agreement.id = ANY(v_seen_ids));
     SELECT coalesce(jsonb_agg(jsonb_build_object(
       'id', agreement.id::text, 'position', agreement.position, 'bezeichnung', agreement.bezeichnung,
       'wert', agreement.wert, 'geld', agreement.geld, 'hinweis', agreement.hinweis,
