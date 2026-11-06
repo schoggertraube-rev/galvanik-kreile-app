@@ -148,7 +148,8 @@
     "20261104012000_ein4_nachrichten.sql",
     "20261104091240_ein4_rechte.sql",
     "20261104100455_ein5_eingangsrechnungen.sql",
-    "20261105095422_ein2_erwartete_ware.sql"
+    "20261105095422_ein2_erwartete_ware.sql",
+    "20261105224000_ein2_entwurf_version.sql"
   ],
   "viewsFunctions": [
     "public.v_intake_expected_goods_v1",

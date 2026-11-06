@@ -1371,7 +1371,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
   });
 
   it.each([undefined,0])("P67 resumes legacy draft version %s without inventing required values or writing",async(version)=>{
-    const draft={id:ORDER_ID,art:"eingang" as const,payload:{art:"eingang",text:"SYNTHETISCH unvollständiger Entwurf",kunde:CUSTOMER_ID,...(version===undefined?{}:{version})},zuletzt_feld:"eingang.erfassen-text",updated_at:"2026-11-05T12:00:00Z"};
+    const draft={id:ORDER_ID,art:"eingang" as const,payload:{art:"eingang",text:"SYNTHETISCH unvollständiger Entwurf",kunde:CUSTOMER_ID,...(version===undefined?{}:{version})},zuletzt_feld:"eingang.erfassen-text",version:0,updated_at:"2026-11-05T12:00:00Z"};
     const drafts={readDrafts:vi.fn().mockResolvedValue({code:"OK",drafts:[draft]}),saveDraft:vi.fn(),discardDraft:vi.fn()};
     const api=ports({drafts});render(<GlobalCreateFlow ports={api}/>);
     await act(async()=>{window.dispatchEvent(new CustomEvent("path1:global-create-open",{detail:{intent:"DIRECT_INTAKE",draftId:ORDER_ID}}));});
@@ -1387,6 +1387,26 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(api.createDirectIntake).not.toHaveBeenCalled();
     expect(drafts.saveDraft).not.toHaveBeenCalled();expect(drafts.discardDraft).not.toHaveBeenCalled();
     expect(note).toHaveValue("SYNTHETISCH unvollständiger Entwurf");
+  });
+
+  it("P66 retains a stale tab's local input and reports the draft version conflict",async()=>{
+    const draft={id:ORDER_ID,art:"eingang" as const,payload:{art:"eingang",text:"SYNTHETISCH gespeicherter Entwurf",kunde:CUSTOMER_ID},zuletzt_feld:"eingang.erfassen-text",version:0,updated_at:"2026-11-05T12:00:00Z"};
+    const drafts={
+      readDrafts:vi.fn().mockResolvedValue({code:"OK",drafts:[draft]}),
+      saveDraft:vi.fn().mockResolvedValue({code:"CONFLICT",message:"Entwurf wurde inzwischen geändert · Eingaben bleiben erhalten."}),
+      discardDraft:vi.fn(),
+    };
+    const api=ports({drafts});render(<GlobalCreateFlow ports={api}/>);
+    await act(async()=>{window.dispatchEvent(new CustomEvent("path1:global-create-open",{detail:{intent:"DIRECT_INTAKE",draftId:ORDER_ID}}));});
+    const note=await screen.findByDisplayValue("SYNTHETISCH gespeicherter Entwurf");
+    fireEvent.change(note,{target:{value:"SYNTHETISCH nur in diesem Tab"}});
+    fireEvent.click(screen.getByRole("button",{name:"Abbrechen"}));
+    const prompt=await screen.findByRole("dialog",{name:"Änderungen nicht gespeichert"});
+    fireEvent.click(within(prompt).getByRole("button",{name:"Als Entwurf ablegen"}));
+    await waitFor(()=>expect(drafts.saveDraft).toHaveBeenCalledWith(expect.objectContaining({id:ORDER_ID,expectedVersion:0})));
+    expect(note).toHaveValue("SYNTHETISCH nur in diesem Tab");
+    expect(await screen.findByText("Entwurf wurde inzwischen geändert · Eingaben bleiben erhalten.")).toBeInTheDocument();
+    expect(screen.getByRole("dialog",{name:"Änderungen nicht gespeichert"})).toBeInTheDocument();
   });
 
   it.each([true, false])("C06/C08 copies canonical order fields without dates, files or a checked goods receipt (geld=%s)", async (canManageMoney) => {

@@ -36,7 +36,7 @@ export function IntakeDraftList({ readDrafts, discardDraft }: Pick<IntakeDraftPo
     const operation = { id: draft.id, key: crypto.randomUUID() };
     deletion.current = operation; setBusy(draft.id);
     try {
-      const result = await discardDraft({ id: draft.id, clientEventId: operation.key, expectedUpdatedAt: draft.updated_at });
+      const result = await discardDraft({ id: draft.id, clientEventId: operation.key, expectedVersion: draft.version });
       if (result.code !== "OK") { setError(result.message); return; }
       setDrafts(result.drafts); setError(null);
     } catch (cause) {
