@@ -294,6 +294,25 @@ const TA_B2K1_ANCHOR_ALLOWLIST = Object.freeze([
   TA_B2K1_RECEIPT,
   "docs/delivery/ABGABE_TA-B2K1.md",
 ]);
+const TA_B2K1B_BRANCH = "codex/ta-b2k1b";
+const TA_B2K1B_BASE_SHA = "5e9d5f4626f88f321982866686b4536ad47377a4";
+const TA_B2K1B_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2K1B.json";
+const TA_B2K1B_VALUES = Object.freeze({
+  schemaVersion: 1,
+  package: "B2-EINGANG-P78-SMOKE-PATH-ANCHOR",
+  headBranch: TA_B2K1B_BRANCH,
+  mainBaseSha: TA_B2K1B_BASE_SHA,
+  authorizedBy: "Siglinder",
+  authorizedAt: "2026-11-06",
+  scope: "P78: genau e2e/path1-v5-shell-smoke.real.spec.ts fuer die /nachrichten-Ueberschrift; keine Produkt- oder Runde-53-Bindung",
+  probeResult: "PASS",
+});
+const TA_B2K1B_ANCHOR_ALLOWLIST = Object.freeze([
+  "scripts/quality/check-live-package-scope.mjs",
+  "src/test/live_package_scope.test.ts",
+  TA_B2K1B_RECEIPT,
+  "docs/delivery/ABGABE_TA-B2K1B.md",
+]);
 const PR154_REBASELINE_BASE_SHA = "1fa4920d6d06b02413c8c157ae6b739507105846";
 const PR154_REBASELINE_RECEIPT = "docs/evidence/live-line/pr154/REBASELINE.json";
 const PR154_REBASELINE_VALUES = Object.freeze({
@@ -534,6 +553,7 @@ const SALES_STAGE_B2_EXACT_ALLOWLIST = Object.freeze([
   "e2e/f1-4-immutable-invoice.real.spec.ts",
   "e2e/path1-ui-convergence-v5-global-create.spec.ts",
   "e2e/path1-ui-convergence-v5-p3.real.spec.ts",
+  "e2e/path1-v5-shell-smoke.real.spec.ts",
   "scripts/quality/h18-server-actions.json",
   "src/app/actions/eingang.actions.ts",
   "src/app/GlobalCreateAppAdapter.tsx",
@@ -1332,6 +1352,33 @@ export function checkTaB2k1ScopeForTest({ files, mission, branch, baseSha }) {
   return checkTaB2k1Scope(files, mission, branch, baseSha);
 }
 
+function checkTaB2k1bScope(files, mission, branch, baseSha) {
+  const errors = [];
+  if (branch !== TA_B2K1B_BRANCH) errors.push(`TA_B2K1B_BRANCH_INVALID:${branch}`);
+  if (baseSha !== TA_B2K1B_BASE_SHA) errors.push(`TA_B2K1B_BASE_INVALID:${baseSha}:${TA_B2K1B_BASE_SHA}`);
+  for (const rel of files) if (!TA_B2K1B_ANCHOR_ALLOWLIST.includes(rel)) errors.push(`TA_B2K1B_SCOPE:${rel}`);
+  if (mission.active_block !== "B2" || mission.phase !== "WRITING" || mission.branch !== SALES_STAGE_B2_BRANCH
+      || mission.started_from_sha !== TA_B2_BASE_SHA || mission.desktop_due_at !== "2026-11-08"
+      || mission.tablet_mobile_due_at !== "2026-11-08" || mission.handoff_path !== "docs/delivery/ABGABE_B2.md"
+      || mission.next_block !== "B3") errors.push("TA_B2K1B_MISSION_INVALID");
+  return errors;
+}
+
+function checkTaB2k1bAnchor(root, files, mission, branch, baseSha) {
+  const errors = checkTaB2k1bScope(files, mission, branch, baseSha);
+  for (const rel of TA_B2K1B_ANCHOR_ALLOWLIST) if (!files.includes(rel)) errors.push(`TA_B2K1B_REQUIRED_FILE_MISSING:${rel}`);
+  let receipt;
+  try { receipt = JSON.parse(readFileSync(path.join(root, TA_B2K1B_RECEIPT), "utf8")); }
+  catch { return [...errors, "TA_B2K1B_RECEIPT_UNREADABLE"]; }
+  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2K1B_VALUES).sort())) errors.push("TA_B2K1B_RECEIPT_SCHEMA");
+  for (const [key, value] of Object.entries(TA_B2K1B_VALUES)) if (receipt[key] !== value) errors.push(`TA_B2K1B_RECEIPT_VALUE:${key}`);
+  return errors;
+}
+
+export function checkTaB2k1bScopeForTest({ files, mission, branch, baseSha }) {
+  return checkTaB2k1bScope(files, mission, branch, baseSha);
+}
+
 export function checkB2iParserChangesForTest({ beforePackage, afterPackage, beforeLock, afterLock }) {
   const errors = [];
   const parse = (value) => typeof value === "string" ? JSON.parse(value) : value;
@@ -1773,6 +1820,7 @@ export function checkLivePackageScope({ root, base, head, branch }) {
     if (branch === TA_B2I_BRANCH) return checkTaB2iAnchor(root, files, candidateMission, branch, baseSha);
     if (branch === TA_B2J_BRANCH) return checkTaB2jAnchor(root, files, candidateMission, branch, baseSha);
     if (branch === TA_B2K1_BRANCH) return checkTaB2k1Anchor(root, files, candidateMission, branch, baseSha);
+    if (branch === TA_B2K1B_BRANCH) return checkTaB2k1bAnchor(root, files, candidateMission, branch, baseSha);
     if (candidateMission.active_block !== "B2") {
       return [`SALES_STAGE_ACTIVE_BLOCK_INVALID:${candidateMission.active_block}`];
     }

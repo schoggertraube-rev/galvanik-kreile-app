@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "package": "B2-EINGANG-P78-SMOKE-PATH-ANCHOR",
+  "headBranch": "codex/ta-b2k1b",
+  "mainBaseSha": "5e9d5f4626f88f321982866686b4536ad47377a4",
+  "authorizedBy": "Siglinder",
+  "authorizedAt": "2026-11-06",
+  "scope": "P78: genau e2e/path1-v5-shell-smoke.real.spec.ts fuer die /nachrichten-Ueberschrift; keine Produkt- oder Runde-53-Bindung",
+  "probeResult": "PASS"
+}
