@@ -288,11 +288,14 @@ async function seedOriginalFixture(file:Record<string,unknown>,sequence:number){
   const uploaded=await client.storage.from('scans').upload(storagePath,content.bytes,{contentType:content.mime,upsert:true});
   if(uploaded.error)throw Error('FLOW_ORIGINAL_STORAGE_FAILED:'+uploaded.error.message);
   await upsertFixture('intake_file',{
-    ...file,tenant_id:TENANT,client_key:file.client_key??file.id,mime:file.mime??content.mime,
+    ...file,tenant_id:TENANT,client_key:file.client_key??file.id,art:file.art??'anhang',mime:file.mime??content.mime,
     bytes:content.bytes.length,sha256,speicherpfad:storagePath,aufgenommen_am:new Date().toISOString(),
     aufgenommen_von:fixtureLoginId,reihenfolge:sequence,lesbar:file.lesbar??true,
     geoeffnet:file.geoeffnet??false,erkennung_status:file.erkennung_status??'fertig',
   });
+  await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
+    SELECT ${TENANT},${String(file.item_id)}::uuid,'original_gespeichert',${String(file.id)}::uuid,${fixtureLoginId},${sql.json({fileId:String(file.id),sha256,bytes:content.bytes.length})}
+    WHERE NOT EXISTS(SELECT 1 FROM public.intake_event WHERE tenant_id=${TENANT} AND item_id=${String(file.item_id)}::uuid AND art='original_gespeichert' AND befehl_id=${String(file.id)}::uuid)`;
 }
 
 async function seedIntakeFixture(fixture: GeneratedFixture, fixtureIndex: number) {
@@ -364,6 +367,19 @@ async function seedSupplementalFixtures(fixtures: GeneratedFixture[]) {
       await seedOriginalFixture(value,1);
       continue;
     }
+    if(fixture.tabelle==='supplier_invoice'){
+      // The model supplies a nested source/original for an already recorded invoice.
+      // Materialize that relationship in the real Replay DB and Storage, without changing its assertions.
+      if(!value.eingang||typeof value.eingang!=='object'||Array.isArray(value.eingang))throw Error('FLOW_INVOICE_SOURCE_NOT_SUPPLIED');
+      const digest=createHash('sha256').update('synthetic-replay-invoice-source:'+value.id).digest();digest[6]=(digest[6]&15)|64;digest[8]=(digest[8]&63)|128;
+      const hex=digest.subarray(0,16).toString('hex'),itemId=`${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+      const nested=value.eingang as Record<string,unknown>;
+      await seedIntakeFixture({id:itemId,tabelle:'intake_item',...nested,kunde_id:value.lieferant_id,zuordnung:'hand',vorgang_art:'rechnung',vorgang_id:value.id},fixtureIndex+1000);
+      const files=await sql<{id:string}[]>`SELECT id::text FROM public.intake_file WHERE tenant_id=${TENANT} AND item_id=${itemId}::uuid ORDER BY reihenfolge,id`;
+      if(!files.length)throw Error('FLOW_INVOICE_ORIGINAL_NOT_SUPPLIED');
+      await upsertFixture('supplier_invoice',{...value,tenant_id:TENANT,nummer_intern:'ER-'+new Date().getUTCFullYear()+'-'+String(8000+fixtureIndex),item_id:itemId,file_id:files[0]!.id,erfasst_von:fixtureLoginId,version:1});
+      continue;
+    }
     if (fixture.tabelle === "intake_drafts") {
       const actor = generatedFlowRuntime.logins[String(value.login) as keyof typeof generatedFlowRuntime.logins]
         ?? Object.values(generatedFlowRuntime.logins).find(login => login.id === value.login);
@@ -400,6 +416,11 @@ async function seedSupplementalFixtures(fixtures: GeneratedFixture[]) {
         description: value.beschreibung ?? "",
         status: value.stand === "abgeschlossen" ? "resolved" : "open",
       });
+      continue;
+    }
+    if(fixture.tabelle==='task'){
+      await upsertFixture('tasks',{client_key:value.id,erstellt_von:generatedFlowRuntime.logins.login_meister.id,version:1,...value,id:value.id,tenant_id:TENANT});
+      if(value.art==='rechnung'&&value.bezug_typ==='eingangsrechnung')await sql`UPDATE public.supplier_invoice SET aufgabe_id=${value.id}::uuid WHERE tenant_id=${TENANT} AND id=${String(value.bezug_id)}::uuid`;
       continue;
     }
     const table = fixture.tabelle === "task" ? "tasks" : fixture.tabelle;
@@ -654,11 +675,42 @@ function choiceButton(locator: Locator, label: string): Locator {
     .or(locator.locator("button").filter({ hasText: new RegExp(`^\\s*${escaped}\\s*$`) }));
 }
 
-async function interruptNextServerAction(page: Page, state: FlowRunState) {
+function interruptedActionId(controlId: string | undefined): string | undefined {
+  const actions: Record<string, { exportedName: string; filename: string }> = {
+    "nachrichten.vorschlag-ja": { exportedName: "assignIntakeCustomerAction", filename: "src/app/actions/eingang.actions.ts" },
+    "aufgabe.speichern": { exportedName: "saveIntakeTaskAction", filename: "src/app/actions/eingang.actions.ts" },
+    "kundebearbeiten.speichern": { exportedName: "updateCustomerAction", filename: "src/app/actions/customers.actions.ts" },
+  };
+  const target = controlId ? actions[controlId] : undefined;
+  if (!target) return undefined;
+  const manifest = JSON.parse(readFileSync(path.join(process.cwd(), ".next/server/server-reference-manifest.json"), "utf8")) as {
+    node: Record<string, { workers: Record<string, { exportedName?: string; filename?: string }> }>;
+  };
+  const matches = Object.entries(manifest.node).filter(([, action]) => Object.values(action.workers).some(
+    (worker) => worker.exportedName === target.exportedName && worker.filename === target.filename,
+  ));
+  if (matches.length !== 1) throw new Error(`FLOW_WRITE_ACTION_ID_AMBIGUOUS:${controlId}:${matches.length}`);
+  return matches[0][0];
+}
+
+async function interruptNextServerAction(page: Page, state: FlowRunState, controlId?: string) {
+  const targetAction = interruptedActionId(controlId);
   state.interruptionObserved=page.waitForEvent("requestfailed",{
-    predicate:request=>request.method()==="POST"&&Boolean(request.headers()["next-action"]),timeout:5_000,
+    predicate:request=>request.method()==="POST"&&Boolean(request.headers()["next-action"])&&(!targetAction||request.headers()["next-action"]===targetAction),timeout:5_000,
   }).then(()=>true,()=>false);
-  await page.context().setOffline(true);
+  const matcher="**/*";
+  let interrupted=false;
+  const handler=async(route:import("@playwright/test").Route)=>{
+    const request=route.request();
+    if(!interrupted&&request.method()==="POST"&&request.headers()["next-action"]&&(!targetAction||request.headers()["next-action"]===targetAction)){
+      interrupted=true;
+      await route.abort("failed");
+      await page.unroute(matcher,handler);
+      return;
+    }
+    await route.continue();
+  };
+  await page.route(matcher,handler);
 }
 
 async function interruptNextLoad(page: Page) {
@@ -667,8 +719,9 @@ async function interruptNextLoad(page: Page) {
   const handler = async (route: import("@playwright/test").Route) => {
     const request = route.request();
     // App Router also transports read Server Actions with POST + Next-Action.
-    const isLoad = ["document", "fetch", "xhr"].includes(request.resourceType())
-      && (request.method() === "GET" || (request.method() === "POST" && Boolean(request.headers()["next-action"])));
+    // Keep App Router navigation/asset requests online; fail the actual data read.
+    const isLoad = request.method() === "POST" && Boolean(request.headers()["next-action"])
+      || ["fetch", "xhr"].includes(request.resourceType()) && request.method() === "GET" && !request.headers().rsc;
     if (!handled && isLoad) {
       handled = true;
       await route.abort("failed");
@@ -682,7 +735,9 @@ async function interruptNextLoad(page: Page) {
 
 const settledServerActions = new Set(["eingang.buchen", "eingang.erneut-buchen", "eingang.angaben-erkennen",
   "ware.annehmen","ware.nur-annehmen","ware.teil-warten","ware.rest-annehmen","ware.erneut",
-  "original.am-original-geprueft","original.erneut-lesen"]);
+  "original.am-original-geprueft","original.erneut-lesen","nachrichten.vorschlag-ja","nachrichten.erneut",
+  "nachrichten.erledigt","nachrichten.nur-info","nachrichten.wieder-speichern",
+  "rechnungein.offen","rechnungein.unklar-speichern","rechnungein.bezahlt-speichern","rechnungein.als-bezahlt","rechnungein.klaerung-speichern","rechnungein.doppelt-ablegen"]);
 
 /** Open the actual accordion before a user interaction; visibility assertions stay unchanged. */
 async function revealForInteraction(locator:Locator){
@@ -696,6 +751,7 @@ async function waitForServerAction(page: Page, id: string) {
   await page.evaluate(() => new Promise<void>((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
   }));
+  if(id.startsWith('nachrichten.'))await expect.poll(async()=>page.locator('[data-spec-id="nachrichten"]').getAttribute('aria-busy'),{timeout:15_000}).not.toBe('true');
   await expect.poll(async () => {
     const action = page.locator(`[data-spec-id="${id}"]`).first();
     // Recognition removes this button; inspect its state in one DOM snapshot.
@@ -715,7 +771,7 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
     return;
   }
   if (step.aktion === "oeffne") {
-    await openTarget(page, String(step.wert), resolveValue(step.arg, state));
+    await openTarget(page, String(step.wert), resolveValue(step.arg, state),state);
     return;
   }
   if (step.aktion === "erwarten") {
@@ -725,7 +781,6 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
     return;
   }
   if (step.aktion === "netz_unterbrechen") {
-    await interruptNextServerAction(page,state);
     state.restoreOnlineAfterWrite = true;
     return;
   }
@@ -736,6 +791,8 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
   const locator = step.id ? dataSpec(page, step.id, step.nr) : null;
   const value = resolveValue(step.wert, state);
   if(locator&&step.aktion&&["datei","klicken","doppelklicken","tippen","waehlen","verlassen","taste"].includes(step.aktion))await revealForInteraction(locator);
+  // Arm only after the actual control has loaded; unrelated RSC/asset reads stay online.
+  if(state.restoreOnlineAfterWrite&&["datei","klicken","doppelklicken"].includes(step.aktion??""))await interruptNextServerAction(page,state,step.id);
   switch (step.aktion) {
     case "datei": {
       if (!locator) throw new Error("FLOW_STEP_ID_REQUIRED:datei");
@@ -761,7 +818,6 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
       }
       if(state.restoreOnlineAfterWrite){
         expect(await state.interruptionObserved,"file upload really encountered the requested server interruption").toBe(true);
-        await page.context().setOffline(false);
         state.restoreOnlineAfterWrite=false;
       }
       break;
@@ -771,7 +827,7 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
       await locator.click({ timeout: 5_000 });
       if (step.id && settledServerActions.has(step.id)) await waitForServerAction(page, step.id);
       if (state.restoreOnlineAfterWrite) {
-        await page.context().setOffline(false);
+        expect(await state.interruptionObserved,"write really encountered the requested server interruption").toBe(true);
         state.restoreOnlineAfterWrite = false;
       }
       break;
@@ -780,7 +836,7 @@ async function executeStep(page: Page, step: FlowStep, state: FlowRunState) {
       await locator.dblclick({ timeout: 5_000 });
       if (step.id && settledServerActions.has(step.id)) await waitForServerAction(page, step.id);
       if (state.restoreOnlineAfterWrite) {
-        await page.context().setOffline(false);
+        expect(await state.interruptionObserved,"write really encountered the requested server interruption").toBe(true);
         state.restoreOnlineAfterWrite = false;
       }
       break;
@@ -816,15 +872,19 @@ async function topDialog(page: Page) {
   return page.locator('[role="dialog"]:visible').last();
 }
 
-async function openTarget(page: Page, target: string, arg: unknown) {
+async function openTarget(page: Page, target: string, arg: unknown, state?:FlowRunState) {
   if (target === "kundebearbeiten") {
     const [customerId, fragment] = String(arg ?? "").split("#", 2);
     if (!customerId) throw new Error("FLOW_OPEN_CUSTOMER_REQUIRED");
     if (fragment && !["fehlend", "uebernahme", "bearbeiten"].includes(fragment)) throw new Error(`FLOW_CUSTOMER_MODE_UNSUPPORTED:${fragment}`);
   }
-  await page.evaluate(({ ziel, argument }) => {
-    window.dispatchEvent(new CustomEvent("kreile:oeffne", { detail: { ziel, arg: argument } }));
-  }, { ziel: target, argument: arg ?? null });
+  // The UI knows its source channel. Carry the same real fixture metadata; no model/assertion changes.
+  const sourceId=typeof arg==='string'?arg.split('#',1)[0]:null;
+  const source=sourceId?([...(state?.rows.values()??[])].find(row=>row.id===sourceId)??Object.values(generatedFixtures).find(row=>row.id===sourceId)):undefined;
+  const sourceChannel=typeof source?.kanal==='string'?source.kanal:undefined;
+  await page.evaluate(({ ziel, argument,sourceChannel }) => {
+    window.dispatchEvent(new CustomEvent("kreile:oeffne", { detail: { ziel, arg: argument,sourceChannel } }));
+  }, { ziel: target, argument: arg ?? null,sourceChannel });
 }
 
 async function selectedColor(locator: Locator, selected: boolean) {
@@ -1152,7 +1212,7 @@ async function runGeneratedFlowCaseBody(page: Page, flowCase: FlowCase) {
   });
   const route = flowCase.gegeben.aufruf;
   if (route.weg === "oeffne") {
-    await openTarget(page, route.seite, resolveValue(route.arg, state));
+    await openTarget(page, route.seite, resolveValue(route.arg, state),state);
   } else {
     for (const step of route.weg ?? []) await executeStep(page, step, state);
   }

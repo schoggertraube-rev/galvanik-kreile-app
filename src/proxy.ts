@@ -12,6 +12,7 @@ const SALES_STAGE_ONE_ROUTES = [
   '/start',
   '/auth',
   '/rein',
+  '/nachrichten',
   '/warendurchlauf',
   '/orders',
   '/customers',

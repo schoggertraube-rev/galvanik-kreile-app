@@ -3,16 +3,18 @@ import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import { createAdminClient } from "@/lib/supabase/admin";
-import {hasAuthorizationArea} from "@/lib/server/authorization";
+import {hasAuthorizationArea,resolveAuthorization} from "@/lib/server/authorization";
 import { analyzeWithAzureDocumentIntelligence } from "@/lib/server/azureDocumentIntelligence";
+import {recognizeInvoiceFields,recognizeInvoiceXml} from './invoiceRecognition';
 import type { IntakeCaptureResult, IntakeFileInput, IntakeFileGrant } from "../captureContract";
-import { authorizedIntakeContext, intakeCaptureSnapshot } from "./intakeCapture";
+import { intakeCaptureSnapshot } from "./intakeCapture";
 import { captureRecognition } from "../captureRecognition";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const BUCKET = "scans";
 type Failure = Exclude<IntakeCaptureResult, { code: "OK" }>;
 type FileRow = { id: string; item_id: string; dateiname: string; mime: string; bytes: string; sha256: string; speicherpfad: string; erkennung_status: string; aufgenommen_auf: string | null; aufnahme_herkunft: "warenfoto" | "dokument" };
+async function fileAuthorization(){const result=await resolveAuthorization();if(!result.ok)return {code:'UNAUTHENTICATED' as const,message:'Sitzung ist nicht verfügbar.'};if(!hasAuthorizationArea(result.data,'eingang')&&!hasAuthorizationArea(result.data,'geld'))return {code:'FORBIDDEN' as const,message:'Originale benötigen Eingang oder einen Rechnungsbezug mit Geld.'};return result.data;}
 function recognitionClaimKey(attempt:string){const bytes=createHash('sha1').update('intake-recognition-start-v1:'+attempt).digest();bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;const hex=bytes.subarray(0,16).toString('hex');return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;}
 function inputFile(value: unknown): value is IntakeFileInput {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
@@ -28,14 +30,16 @@ function inputFile(value: unknown): value is IntakeFileInput {
 }
 export async function prepareIntakeFile(input: unknown): Promise<IntakeFileGrant | Failure> {
   if (!inputFile(input)) return { code: "VALIDATION_ERROR", message: "Datei benötigt Name, Typ, SHA-256 und 1 bis 150 MB Inhalt." };
-  const auth = await authorizedIntakeContext();
+  const auth = await fileAuthorization();
   if ("code" in auth) return auth as Failure;
   if((input.mime==='message/rfc822'||input.name.toLowerCase().endsWith('.eml'))&&!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN',message:'Mail-Originale erfordern zusätzlich das Recht Mails.'};
   try {
     const pending = await withPrivilegedTenantTransaction(auth, async tx => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake:'||${auth.tenantId}||':'||${input.itemId},0))`);
-      const items = await tx.execute<{ id: string;kanal:string }>(sql`SELECT id::text,kanal FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id=${input.itemId}::uuid FOR UPDATE`);
-      if(items[0]?.kanal==='mail'&&!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN' as const,message:'Mail-Originale erfordern zusätzlich das Recht Mails.'};
+      const items = await tx.execute<{ id: string;kanal:string;invoice_context:boolean }>(sql`SELECT id::text,kanal,(anliegen @> ARRAY['rechnung']::text[] OR vorgang_art='rechnung') AS invoice_context FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id=${input.itemId}::uuid FOR UPDATE`);
+      const invoiceAccess=hasAuthorizationArea(auth,'geld')&&items[0]?.invoice_context===true&&input.mime!=='message/rfc822'&&!input.name.toLowerCase().endsWith('.eml');
+      if(!hasAuthorizationArea(auth,'eingang')&&!invoiceAccess)return {code:'FORBIDDEN' as const,message:'Geld erlaubt Dateien ausschließlich am vorhandenen Rechnungseingang.'};
+      if(items[0]?.kanal==='mail'&&!hasAuthorizationArea(auth,'mails')&&!invoiceAccess)return {code:'FORBIDDEN' as const,message:'Mail-Originale erfordern zusätzlich das Recht Mails.'};
       if (!items.length) {
         await tx.execute(sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von) VALUES
           (${input.itemId}::uuid,${auth.tenantId},${input.itemId},${input.mime.startsWith("image/") ? "foto" : "datei"},'rein','geraet',${auth.userId}::uuid)`);
@@ -67,14 +71,17 @@ export async function prepareIntakeFile(input: unknown): Promise<IntakeFileGrant
 }
 export async function finishIntakeFile(fileId: string, retryKey?: string): Promise<IntakeCaptureResult> {
   if (!UUID.test(fileId)) return { code: "VALIDATION_ERROR", message: "Ungültige Dateikennung." };
-  const auth = await authorizedIntakeContext();
+  const auth = await fileAuthorization();
   if ("code" in auth) return auth;
   const claimKey=recognitionClaimKey(retryKey??fileId);let claimOwned=false;
   try {
-    const files = await withPrivilegedTenantTransaction(auth, tx => tx.execute<FileRow&{kanal:string}>(sql`SELECT file.id::text,file.item_id::text,file.dateiname,file.mime,file.bytes::text,file.sha256,file.speicherpfad,file.erkennung_status,file.aufgenommen_auf,file.aufnahme_herkunft,source.kanal FROM public.intake_file file JOIN public.intake_item source ON source.tenant_id=file.tenant_id AND source.id=file.item_id WHERE file.tenant_id=${auth.tenantId} AND file.id=${fileId}::uuid`));
+    const files = await withPrivilegedTenantTransaction(auth, tx => tx.execute<FileRow&{kanal:string;invoice_context:boolean}>(sql`SELECT file.id::text,file.item_id::text,file.dateiname,file.mime,file.bytes::text,file.sha256,file.speicherpfad,file.erkennung_status,file.aufgenommen_auf,file.aufnahme_herkunft,source.kanal,(source.anliegen @> ARRAY['rechnung']::text[] OR source.vorgang_art='rechnung') AS invoice_context FROM public.intake_file file JOIN public.intake_item source ON source.tenant_id=file.tenant_id AND source.id=file.item_id WHERE file.tenant_id=${auth.tenantId} AND file.id=${fileId}::uuid`));
     if (files.length !== 1) return { code: "NOT_FOUND", message: "Datei wurde nicht gefunden." };
     const file = files[0];
-    if((file.kanal==='mail'||file.mime==='message/rfc822'||file.dateiname.toLowerCase().endsWith('.eml'))&&!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN',message:'Mail-Originale erfordern zusätzlich das Recht Mails.'};
+    const mailOriginal=file.mime==='message/rfc822'||file.dateiname.toLowerCase().endsWith('.eml'),invoiceAccess=hasAuthorizationArea(auth,'geld')&&file.invoice_context===true&&!mailOriginal;
+    if(!hasAuthorizationArea(auth,'eingang')&&!invoiceAccess)return {code:'FORBIDDEN',message:'Geld erlaubt Dateien ausschließlich am vorhandenen Rechnungseingang.'};
+    if((file.kanal==='mail'&&!invoiceAccess||mailOriginal)&&!hasAuthorizationArea(auth,'mails'))return {code:'FORBIDDEN',message:'Mail-Originale erfordern zusätzlich das Recht Mails.'};
+    const snapshot=()=>intakeCaptureSnapshot(auth,file.item_id,undefined,invoiceAccess&&(!hasAuthorizationArea(auth,'eingang')||file.kanal==='mail'&&!hasAuthorizationArea(auth,'mails')));
     if(retryKey){
       const retry=await withPrivilegedTenantTransaction(auth,async tx=>{
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
@@ -86,10 +93,10 @@ export async function finishIntakeFile(fileId: string, retryKey?: string): Promi
               AND (event.art='original_gespeichert' OR event.art='einsatz' AND event.nachher->>'action'='erkennung_gestartet')),file.aufgenommen_am)<statement_timestamp()-interval '2 minutes') RETURNING id`);
         return rows.length===1;
       });
-      if(!retry)return intakeCaptureSnapshot(auth,file.item_id);
+      if(!retry)return snapshot();
       file.erkennung_status='wartet';
     }
-    if (["fertig", "fehler"].includes(file.erkennung_status)) return intakeCaptureSnapshot(auth, file.item_id);
+    if (["fertig", "fehler"].includes(file.erkennung_status)) return snapshot();
     const stored = await createAdminClient().storage.from(BUCKET).download(file.speicherpfad);
     if (stored.error || !stored.data) throw new Error("INTAKE_FILE_UPLOAD_INCOMPLETE");
     const bytes = new Uint8Array(await stored.data.arrayBuffer());
@@ -108,31 +115,36 @@ export async function finishIntakeFile(fileId: string, retryKey?: string): Promi
         VALUES(${auth.tenantId},${file.item_id}::uuid,'einsatz',${claimKey}::uuid,${auth.userId},${JSON.stringify({action:'erkennung_gestartet',fileId,attemptKey:retryKey??fileId})}::jsonb) ON CONFLICT DO NOTHING`);
       return updated.length === 1;
     });
-    if (!claimed) return intakeCaptureSnapshot(auth, file.item_id);
+    if (!claimed) return snapshot();
     if (file.aufnahme_herkunft === "warenfoto") {
       await withPrivilegedTenantTransaction(auth, tx => tx.execute(sql`UPDATE public.intake_file SET lesbar=false,erkennung_status='fertig'
         WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid AND erkennung_status='laeuft'`));
-      return intakeCaptureSnapshot(auth, file.item_id);
+      return snapshot();
     }
     claimOwned=true;
-    // Structured XML belongs to the one invoice parser, never to the OCR provider.
-    const canRead = bytes.byteLength <= 20 * 1024 * 1024 && ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"].includes(file.mime);
+// Structured XML uses the existing parser; images and PDF use the existing OCR adapter.
+    const prefix=Buffer.from(bytes.subarray(0,512)).toString('utf8').replace(/^\uFEFF/u,'').trimStart();
+    const isXml=/xml(?:$|[;+])/iu.test(file.mime)||/\.xml$/iu.test(file.dateiname)||prefix.startsWith('<');
+    const xmlResult=isXml?recognizeInvoiceXml(bytes):null;
+    const canRead = isXml ? xmlResult?.code==='OK' : bytes.byteLength <= 20 * 1024 * 1024 && ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"].includes(file.mime);
     const deadline = AbortSignal.timeout(30_000);
-    const recognized = canRead ? await analyzeWithAzureDocumentIntelligence(bytes, file.mime, process.env,
+    const recognized = !isXml && canRead ? await analyzeWithAzureDocumentIntelligence(bytes, file.mime, process.env,
       (url, options) => fetch(url, { ...options, signal: AbortSignal.any([deadline, AbortSignal.timeout(12_000)]) })) : null;
     if (recognized && recognized.code !== "OK") console.error("[INTAKE_FILE_RECOGNITION_UNAVAILABLE]", { fileId, code: recognized.code });
-    const kind = recognized?.code === "OK" ? captureRecognition({ text: null, suggestions: recognized.data.suggestions }).kind : null;
+    const kind = xmlResult?.code === "OK" ? "rechnung" : recognized?.code === "OK" ? captureRecognition({ text: null, suggestions: recognized.data.suggestions }).kind : null;
     await withPrivilegedTenantTransaction(auth, async tx => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-file:'||${auth.tenantId}||':'||${fileId},0))`);
       const active=await tx.execute<{befehl_id:string}>(sql`SELECT befehl_id::text FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid
         AND art='einsatz' AND nachher->>'action'='erkennung_gestartet' AND nachher->>'fileId'=${fileId} ORDER BY zeit DESC,id DESC LIMIT 1`);
       if(active[0]?.befehl_id!==claimKey){console.info('[INTAKE_RECOGNITION_SUPERSEDED]',{fileId});return;}
-      await tx.execute(sql`UPDATE public.intake_file SET lesbar=${canRead},erkennung_status=${recognized?.code === "OK" ? "fertig" : "fehler"}
+      const successful=recognized?.code==='OK'||xmlResult?.code==='OK';
+      await tx.execute(sql`UPDATE public.intake_file SET lesbar=${canRead},erkennung_status=${successful ? "fertig" : "fehler"}
         WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid`);
-      if(recognized?.code==='OK')await tx.execute(sql`UPDATE public.intake_suggestion SET status='verworfen' WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid AND status='offen' AND geprueft_am IS NULL`);
-      if (recognized?.code === "OK") for (const suggestion of recognized.data.suggestions) {
+      if(successful)await tx.execute(sql`UPDATE public.intake_suggestion SET status='verworfen' WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid AND status='offen' AND geprueft_am IS NULL`);
+      const suggestions=xmlResult?.code==='OK'?xmlResult.suggestions:recognized?.code==='OK'?[...recognized.data.suggestions,...recognizeInvoiceFields(recognized.data.suggestions)]:[];
+      for (const suggestion of suggestions) {
         await tx.execute(sql`INSERT INTO public.intake_suggestion(tenant_id,item_id,file_id,feld,wert,sicherheit,regel,grund,fundstelle,status)
-          SELECT ${auth.tenantId},${file.item_id}::uuid,${fileId}::uuid,${suggestion.field},${JSON.stringify(suggestion.value)}::jsonb,'vorschlag','datei','Dokumenterkennung',${JSON.stringify(suggestion.source)}::jsonb,'offen'
+            SELECT ${auth.tenantId},${file.item_id}::uuid,${fileId}::uuid,${suggestion.field},${JSON.stringify(suggestion.value)}::jsonb,${suggestion.field.startsWith('rechnung.')?(suggestion.confidence>=0.9?'sicher':'unsicher'):'vorschlag'},'datei',${isXml?'Strukturiertes XML':'Dokumenterkennung'},${JSON.stringify(suggestion.source)}::jsonb,'offen'
           WHERE NOT EXISTS(SELECT 1 FROM public.intake_suggestion WHERE tenant_id=${auth.tenantId} AND file_id=${fileId}::uuid AND feld=${suggestion.field} AND geprueft_am IS NOT NULL AND status<>'verworfen')`);
       }
       if (kind === "rechnung") await tx.execute(sql`UPDATE public.intake_item
@@ -140,10 +152,10 @@ export async function finishIntakeFile(fileId: string, retryKey?: string): Promi
           version=version+1, geaendert_von=${auth.userId}::uuid, geaendert_am=statement_timestamp(), updated_at=statement_timestamp()
         WHERE tenant_id=${auth.tenantId} AND id=${file.item_id}::uuid AND NOT ('rechnung'=ANY(anliegen))`);
       await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
-        SELECT ${auth.tenantId},${file.item_id}::uuid,'erkannt',${retryKey??fileId}::uuid,${auth.userId},${JSON.stringify({ fileId, kind, code: recognized?.code ?? (bytes.byteLength>20*1024*1024?"INTAKE_RECOGNITION_TOO_LARGE":"UNSUPPORTED_DOCUMENT_TYPE") })}::jsonb
+        SELECT ${auth.tenantId},${file.item_id}::uuid,'erkannt',${retryKey??fileId}::uuid,${auth.userId},${JSON.stringify({ fileId, kind, code: xmlResult?.code==='OK'?'OK':isXml?'UNSUPPORTED_XML':recognized?.code ?? (bytes.byteLength>20*1024*1024?"INTAKE_RECOGNITION_TOO_LARGE":"UNSUPPORTED_DOCUMENT_TYPE") })}::jsonb
         WHERE NOT EXISTS(SELECT 1 FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid AND art='erkannt' AND befehl_id=${retryKey??fileId}::uuid)`);
     });
-    return intakeCaptureSnapshot(auth, file.item_id);
+    return snapshot();
   } catch (error) {
     console.error("[INTAKE_FILE_FINISH_FAILED]", { message: error instanceof Error ? error.message : "UnknownError", fileId });
     try {

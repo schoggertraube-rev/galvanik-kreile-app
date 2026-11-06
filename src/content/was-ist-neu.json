@@ -1,11 +1,12 @@
 [
-  {"datum":"2026-11-04","pr":173,"seite":"nachrichten","punkte":["Vorschau: Nachrichten lassen sich einem Kunden zuordnen, erledigen und mit Grund wieder öffnen.","Vorschau: Aufgaben bleiben mit ihrem Anlass und dem Verlauf verbunden."],"ziel":"/nachrichten"},
+  {"datum":"2026-11-05","pr":175,"seite":"rechnungein","punkte":["Vorschau: Über Neu erfassen Eingangsrechnungen mit Original prüfen.","Vorschau: Fehlende Lieferanten über eine Aufgabe ergänzen."],"ziel":"rein"},
+  {"datum":"2026-11-05","pr":173,"seite":"nachrichten","punkte":["Vorschau: Nachrichten lassen sich einem Kunden zuordnen, erledigen und mit Grund wieder öffnen.","Vorschau: Aufgaben bleiben mit ihrem Anlass und dem Verlauf verbunden.","Vorschau: Ein geöffnetes Original einem Kunden zuordnen und zur erhaltenen Erfassung zurückkehren.","Nach einem Speicherfehler kehrt Erneut zur erhaltenen Aufgabe zurück. Erst Auf Der Tag speichert erneut."],"ziel":"/nachrichten"},
   {"datum":"2026-11-04","pr":172,"seite":"rein","punkte":["Vorbereitung für Nachrichten und Teilen an die App."],"ziel":"rein"},
   {"datum":"2026-11-04","pr":171,"seite":"ware","punkte":["Vorschau: Ware am Auftrag prüfen und annehmen.","Vorschau: Gespeicherte Originale ansehen und prüfen.","Erwartete oder ungeklärte Ware bleibt vor der Galvanik gesperrt; geprüfte Teillieferungen lassen sich gemeinsam mit dem Stationswechsel buchen."],"ziel":"/orders"},
   {"datum":"2026-11-04","pr":169,"seite":"rein","punkte":["Vorschau: Die Eingang-Seiten erhalten die freigegebene Darstellung für Desktop, Tablet und Handy."],"ziel":"rein"},
   {"datum":"2026-11-05","pr":168,"seite":"eingang","punkte":["Vorschau: Kamera auf Tablet und Handy direkt öffnen; Foto im festen Dialogfuß aufnehmen.","Vorschau: Gelesener Dokumenttext bleibt mit dem gesicherten Original verbunden.","Vorschau: Auftrag aus einem Eingang erfassen; fehlende Angaben gezielt ergänzen."],"ziel":"rein"},
   {"datum":"2026-11-04","pr":167,"seite":"kundeneu","punkte":["Kunde anlegen und Kundendaten in derselben Kartei bearbeiten."],"ziel":"/customers"},
   {"datum":"2026-11-04","pr":166,"seite":"rein","punkte":["Was ist neu zeigt Änderungen und merkt sich je Login, was bereits angesehen wurde.","Die vorgesehenen Eingang-Wege werden vor ihrer Freigabe geprüft."],"ziel":"rein"},
-  {"datum":"2026-11-03","pr":170,"seite":"ware","punkte":["Vorschau: Vorbereitung für Abholmitteilungen, Versand und die Freigabe zur Ausgabe."],"ziel":"/orders"},
+  {"datum":"2026-11-05","pr":170,"seite":"ware","punkte":["Vorschau: Vorbereitung für Abholmitteilungen, Versand und die Freigabe zur Ausgabe.","Unter Einstellungen → Firmendaten → Versand lassen sich Dienst, Nummernformat, Hinweis und Sendungsverfolgung speichern; fremde Änderungen werden zum Abgleich angezeigt."],"ziel":"/orders"},
   {"datum":"2026-11-03","pr":164,"seite":"rein","punkte":["Neu erfassen bündelt den Einstieg über das Plus.","Auftrag oder KV und Kunde anlegen starten von dort."],"ziel":"rein"}
 ]

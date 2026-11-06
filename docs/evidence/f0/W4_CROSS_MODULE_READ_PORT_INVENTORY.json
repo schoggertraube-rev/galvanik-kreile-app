@@ -124,12 +124,19 @@
     "src/modules/customers/server/createCustomerCommand.ts": [
       "private.v_customer_create_receipts_v1"
     ],
+    "src/modules/eingang/server/intakeMessages.ts": [
+      "private.v_intake_message_contexts_v1"
+    ],
     "src/modules/quotes/server/quoteCommands.ts": [
       "private.v_open_quotes_v1",
       "private.v_quote_conversion_receipts_v1",
       "private.v_quote_create_receipts_v1",
       "private.v_quote_update_receipts_v1",
       "private.v_quotes_v1"
+    ],
+    "src/modules/tasks/server/taskService.ts": [
+      "private.v_task_contexts_v1",
+      "private.v_task_recipients_v1"
     ]
   },
   "commandOwners": {
@@ -267,6 +274,15 @@
         "private.v_quote_conversion_receipts_v1",
         "private.v_quote_update_receipts_v1",
         "private.v_quotes_v1"
+      ],
+      "requiredLegacySource": null
+    },
+    {
+      "path": "supabase/migrations/20261104012000_ein4_nachrichten.sql",
+      "requiredSecurityInvokerViews": [
+        "private.v_intake_message_contexts_v1",
+        "private.v_task_contexts_v1",
+        "private.v_task_recipients_v1"
       ],
       "requiredLegacySource": null
     }

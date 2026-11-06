@@ -35,18 +35,35 @@
     "@/modules/fundament/server-public#TenantFeatureContext",
     "@/modules/fundament/server-public#isFeatureEnabled",
     "@/modules/fundament/server-public#readTenantFeatures",
-    "@/modules/fundament/server-public#setTenantFeature"
+    "@/modules/fundament/server-public#setTenantFeature",
+    "@/modules/fundament/public#ShippingSettings",
+    "@/modules/fundament/server-public#readShippingSettings",
+    "@/modules/fundament/server-public#readShippingSettingsInTransaction",
+    "@/modules/fundament/server-public#updateShippingSettings"
   ],
   "capabilities": [
     "product-actors:fail-closed-status",
     "system-admin:session-status",
     "system-admin:settings-manage"
   ],
-  "migrations": ["20261025182920_s1_p1_datenfundament.sql", "20261026190000_s1_p2_feature_switch.sql", "20261028163707_h11_align_access_rights.sql"],
+  "migrations": [
+    "20261025182920_s1_p1_datenfundament.sql",
+    "20261026190000_s1_p2_feature_switch.sql",
+    "20261028163707_h11_align_access_rights.sql"
+  ],
   "viewsFunctions": [],
-  "ownsTables": ["public.app_user_rights", "public.app_users", "public.company_settings", "public.tenant_features", "public.ui_events"],
+  "ownsTables": [
+    "public.app_user_rights",
+    "public.app_users",
+    "public.company_settings",
+    "public.tenant_features",
+    "public.ui_events"
+  ],
   "storagePurposes": [],
-  "events": { "emits": [], "consumes": [] },
+  "events": {
+    "emits": [],
+    "consumes": []
+  },
   "config": {
     "KREILE_ROLF_APP_USER_ID": "Server-only exact office AppUser binding",
     "KREILE_PHILLIP_APP_USER_ID": "Server-only exact workshop AppUser binding",

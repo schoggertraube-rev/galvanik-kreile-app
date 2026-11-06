@@ -35,6 +35,7 @@ function subscribeDevice(onChange: () => void) {
 const readServerDevice = (): Geraet => "desktop";
 
 function areaForPath(pathname: string): Bereich {
+  if (pathname.startsWith("/nachrichten")) return "nachrichten";
   if (pathname.startsWith("/warendurchlauf")) return "werkstatt";
   if (pathname.startsWith("/orders")) return "auftraege";
   if (pathname.startsWith("/customers")) return "kunden";
@@ -45,6 +46,7 @@ function areaForPath(pathname: string): Bereich {
 
 const ROUTES: Record<Bereich, string> = {
   tag: "/",
+  nachrichten: "/nachrichten",
   werkstatt: "/warendurchlauf",
   auftraege: "/orders",
   kunden: "/customers",
@@ -79,6 +81,7 @@ export function KreileAppShell({ children, globalCreate,loginHandle }: { childre
   const canUseShell = permissions.status === "authenticated";
   const canCreate = permissions.hasArea("eingang");
   const hidden: Bereich[] = [];
+  if (!permissions.hasArea("mails")) hidden.push("nachrichten");
   if (!permissions.hasPermission("perm_view_leitstand")) hidden.push("werkstatt", "auftraege");
   if (!permissions.hasPermission("perm_view_customers")) hidden.push("kunden");
   if (!permissions.hasPermission("perm_view_prices")) hidden.push("geld");

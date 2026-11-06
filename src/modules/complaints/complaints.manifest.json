@@ -1,0 +1,20 @@
+{
+  "moduleId": "complaints",
+  "version": "1.0.0",
+  "owner": "AP-EIN Teil 4 – Reklamation",
+  "publicExports": [
+    "@/modules/complaints/public#Complaint",
+    "@/modules/complaints/public#ComplaintFilter",
+    "@/modules/complaints/public#ComplaintReadResult",
+    "@/modules/complaints/public#createComplaintRepository",
+    "@/modules/complaints/server-public#readComplaints"
+  ],
+  "capabilities": ["reklamation:lesen"],
+  "migrations": ["20261104012000_ein4_nachrichten.sql"],
+  "viewsFunctions": [],
+  "ownsTables": ["public.complaints"],
+  "storagePurposes": [],
+  "events": {"emits": [], "consumes": []},
+  "config": {},
+  "dependencies": []
+}

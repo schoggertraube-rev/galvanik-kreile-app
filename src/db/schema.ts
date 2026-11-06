@@ -1,6 +1,31 @@
 import { sql } from "drizzle-orm";
-import { pgTable, bigserial, text, timestamp, boolean, integer, jsonb, uuid, varchar, numeric, primaryKey, pgSchema, date, bigint, foreignKey, unique, index } from "drizzle-orm/pg-core";
+import { pgTable, bigserial, text, timestamp, time, boolean, integer, jsonb, uuid, varchar, numeric, primaryKey, pgSchema, date, bigint, foreignKey, unique, index } from "drizzle-orm/pg-core";
 import { createId } from "@paralleldrive/cuid2";
+
+// AP-EIN Teil 4: eigenständige Aufgaben; orders.task bleibt die Auftragsbeschreibung.
+export const tasks = pgTable("tasks", {
+  id: uuid("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  clientKey: uuid("client_key").notNull(),
+  art: text("art").notNull(),
+  titel: text("titel").notNull(),
+  faelligAm: date("faellig_am").notNull(),
+  uhrzeit: time("uhrzeit"),
+  vorlaufTage: integer("vorlauf_tage").notNull(),
+  fuerLogin: uuid("fuer_login").references(()=>appUsers.id),
+  fuerBereich: text("fuer_bereich"),
+  bezugTyp: text("bezug_typ").notNull(),
+  bezugId: text("bezug_id"),
+  itemId: uuid("item_id"),
+  notiz: text("notiz"),
+  status: text("status").notNull(),
+  erledigtVon: uuid("erledigt_von").references(()=>appUsers.id),
+  erledigtAm: timestamp("erledigt_am", { withTimezone: true }),
+  erledigtNotiz: text("erledigt_notiz"),
+  erstelltVon: uuid("erstellt_von").notNull().references(()=>appUsers.id),
+  erstelltAm: timestamp("erstellt_am", { withTimezone: true }).notNull(),
+  version: integer("version").notNull(),
+}, (table) => [unique("tasks_tenant_client_key").on(table.tenantId, table.clientKey),unique("tasks_tenant_id").on(table.tenantId,table.id),foreignKey({columns:[table.tenantId,table.itemId],foreignColumns:[intakeItems.tenantId,intakeItems.id]}).onDelete('restrict')]);
 
 // Helper for CUID primary keys
 const cuidPrimaryKey = (name: string) => text(name).primaryKey().$defaultFn(() => createId());
@@ -127,6 +152,9 @@ export const priceAgreements = pgTable("price_agreements", {
 // 4. Orders
 export const orders = pgTable("orders", {
   geprueft: boolean("geprueft"),
+  pickupByName:text("pickup_by_name"),pickupByNote:text("pickup_by_note"),pickupBySource:text("pickup_by_source"),
+  pickupByAt:timestamp("pickup_by_at",{withTimezone:true}),pickupByLogin:uuid("pickup_by_login"),
+  ausgabeFrei:boolean("ausgabe_frei").notNull().default(false),
   id: cuidPrimaryKey("id"),
   tenantId: varchar("tenant_id", { length: 50 }).default("galvanik-kreile"),
   orderNumber: text("order_number").notNull().unique(),
@@ -247,6 +275,7 @@ export const complaints = pgTable("complaints", {
   orderId: text("order_id").notNull().references(() => orders.id),
   customerId: text("customer_id").notNull().references(() => customers.id),
   itemId: text("item_id"),
+  intakeItemId: uuid("intake_item_id"),
   reason: text("reason").notNull(),
   stationId: text("station_id"),
   description: text("description").notNull().default(''),
@@ -255,7 +284,7 @@ export const complaints = pgTable("complaints", {
   resolvedAt: timestamp("resolved_at"),
   resolution: text("resolution"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [foreignKey({name:'complaints_intake_tenant_fk',columns:[table.tenantId,table.intakeItemId],foreignColumns:[intakeItems.tenantId,intakeItems.id]}).onDelete('restrict')]);
 
 // 7. Inventory & Baths
 export const bathsOld = pgTable("baths", {
@@ -408,6 +437,8 @@ export const auditLog = pgTable("audit_log", {
 });
 
 export const companySettingsTable = pgTable("company_settings", {
+  shippingService:text("versand_dienst").notNull(),shippingNumberPattern:text("versand_nummer_format").notNull(),
+  shippingNumberHint:text("versand_nummer_hinweis").notNull(),shippingTrackingUrl:text("versand_verfolgung_url"),shippingLabelApi:text("versand_label_api"),
   id: text("id").primaryKey().default("default"),
   tenantId: text("tenant_id").notNull(),
   companyName: text("company_name").notNull().default(""),
@@ -639,7 +670,7 @@ export const goodsReceipts=pgTable("goods_receipt",{
  deviations:text("abweichung").array().notNull(),foundUnattended:boolean("abgestellt").notNull(),foundAt:timestamp("fund_zeit",{withTimezone:true}),procedure:text("verfahren_wie_kv"),procedureNote:text("verfahren_abweichung"),
  photos:jsonb("fotos").notNull(),quantities:jsonb("mengen").notNull(),open:text("offen").array().notNull(),taskId:uuid("aufgabe_id"),confirmedBy:uuid("bestaetigt_von"),confirmedAt:timestamp("bestaetigt_am",{withTimezone:true}),version:integer("version").notNull().default(1),
  createdAt:timestamp("erstellt_am",{withTimezone:true}).notNull().default(sql`statement_timestamp()`),updatedAt:timestamp("geaendert_am",{withTimezone:true}).notNull().default(sql`statement_timestamp()`),
-},table=>[unique().on(table.tenantId,table.id),unique().on(table.tenantId,table.clientKey),foreignKey({columns:[table.tenantId,table.orderId],foreignColumns:[orders.tenantId,orders.id]}).onDelete('restrict')]);
+},table=>[unique().on(table.tenantId,table.id),unique().on(table.tenantId,table.clientKey),foreignKey({columns:[table.tenantId,table.orderId],foreignColumns:[orders.tenantId,orders.id]}).onDelete('restrict'),foreignKey({name:'goods_receipt_task_tenant_fk',columns:[table.tenantId,table.taskId],foreignColumns:[tasks.tenantId,tasks.id]}).onDelete('restrict')]);
 export const intakeDrafts = intakePrivateSchema.table("intake_drafts", {
   id:uuid("id").primaryKey().defaultRandom(),tenantId:text("tenant_id").notNull(),actorId:uuid("actor_id").notNull(),
   art:text("art"),payload:jsonb("payload").notNull(),status:text("status").notNull().default("open"),zuletztFeld:text("zuletzt_feld"),

@@ -61,6 +61,7 @@ import { findRecognizedCustomers } from "./customerRecognition";
 import { ORDER_POSITION_UNITS, ORDER_POSITION_SURFACES, normaliseOrderPositionUnit, normaliseOrderPositionSurface, orderPositionQuantityError, orderPositionPriceError, FREE_TEXT_VAT_RATE_BASIS_POINTS } from "@/lib/orderPositionContract";
 import { GLOBAL_CREATE_OPEN_EVENT, type GlobalCreateIntent, type GlobalCreateRequest } from "./requestGlobalCreate";
 import {INTAKE_MAIL_ADOPT_EVENT} from './mailSelectionContract';
+import {INTAKE_CHANGED_EVENT} from './messageContract';
 import type { IntakeDeviceCommand, IntakeDeviceResult } from "./deviceContract";
 import type {ErfasseAuftragInput} from "./types";
 import type { IntakeDraft, IntakeDraftPorts } from "./draftContract";
@@ -511,6 +512,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [intakeHandover, setIntakeHandover] = useState<"" | "PICKUP" | "SHIPPING">("");
   const [intakeHandoverOrigin, setIntakeHandoverOrigin] = useState<"customer-card" | "last-order" | null>(null);
   const [intakeKind, setIntakeKind] = useState<"" | "auftrag" | "kv">("");
+
   const [intakeTermStatus, setIntakeTermStatus] = useState<"" | "wish" | "confirmed" | "counter">("");
   const [intakeSource, setIntakeSource] = useState<"" | "persoenlich" | "versand" | "abholung_firma" | "anfrage_mail" | "anfrage_telefon">("");
   const [directCustomer, setDirectCustomer] = useState<CustomerDraft>(EMPTY_INTAKE_CUSTOMER);
@@ -901,7 +903,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     }
   };
 
-  const loadDirectIntake = async (preselectedCustomerId?: string, fromCustomerCard = false, orderCopyId?: string, sourceCapture?: IntakeCapture) => {
+  const loadDirectIntake = async (preselectedCustomerId?: string, fromCustomerCard = false, orderCopyId?: string, sourceCapture?: IntakeCapture, sourceEntry?:{itemId:string;kind:'auftrag'|'kv'}) => {
     if (!ports.canCreateOrder) {
       deny("quote");
       return;
@@ -935,6 +937,12 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setCustomerLoad("loading");
     const seq = ++customerRequestSeq.current;
     try {
+      let loadedSourceCapture:IntakeCapture|null=sourceCapture??null;
+      if(sourceEntry){
+        const read=await ports.getCapture?.(sourceEntry.itemId);if(seq!==customerRequestSeq.current)return;
+        if(!read||read.code!=='OK'){setCustomerLoad('error');setFeedback({kind:'error',message:read?.message??'Original ist nicht lesbar · INTAKE_SOURCE_CAPTURE_UNAVAILABLE.'});return;}
+        loadedSourceCapture=read.capture;preselectedCustomerId=loadedSourceCapture.customerId??preselectedCustomerId;
+      }
       let source: Extract<Awaited<ReturnType<NonNullable<GlobalCreatePorts["readIntakeOrderSource"]>>>, { code: "OK" }>["source"] | null = null;
       if (orderCopyId) {
         const read = await ports.readIntakeOrderSource?.(orderCopyId);
@@ -970,6 +978,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       setCatalogServices(normaliseIntakeCatalog(catalog.services));
       setCustomerChoices(result.customers);
       setCustomerLoad(result.customers.length ? "ready" : "empty");
+      const captureInitial=loadedSourceCapture?{text:captureRecognitionText(loadedSourceCapture),documents:[loadedSourceCapture.id],...(sourceEntry?{kind:sourceEntry.kind==='kv'&&ports.canManageMoney?'kv' as const:'auftrag' as const}:{})}:{};
+      if(loadedSourceCapture){setIntakeSourceCaptures([loadedSourceCapture]);setIntakeRecognitionText(captureRecognitionText(loadedSourceCapture));setRecognitionConfirmed(false);if(sourceEntry)setIntakeKind(sourceEntry.kind==='kv'&&ports.canManageMoney?'kv':'auftrag');}
       const copiedItems = source?.items.map((item) => ({ ...newIntakePosition(),
         catalogServiceId: item.catalogServiceId ?? FREE_TEXT_SERVICE, name: item.name, quantity: String(item.quantity),
         material: item.material ?? "", surfaceRequested: normaliseOrderPositionSurface(item.surfaceRequested)!, surfaceTouched: true,
@@ -1006,10 +1016,12 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         setIntakeHandoverOrigin(initialHandover ? preselected.handoverPreference ? "customer-card" : "last-order" : null);
         setIntakePaymentMode(initialPayment);
         setIntakePaymentOrigin(initialPayment ? "customer-card" : null);
-        setIntakeBaseline(intakeComparison({...initial,customerId:preselected.id,handover:initialHandover,payment:ports.canManageMoney?initialPayment:"",
+        setIntakeBaseline(intakeComparison({...initial,...captureInitial,customerId:preselected.id,handover:initialHandover,payment:ports.canManageMoney?initialPayment:"",
           ...(source && copiedItems ? {items:copiedItems,kind:"auftrag",source:source.intakeSource ?? ""} : {})}));
       } else if (source) {
         setFeedback({ kind: "error", message: "Kunde des Ursprungsauftrags ist nicht lesbar · ORDER_COPY_CUSTOMER_UNAVAILABLE." });
+      } else if(loadedSourceCapture){
+        setIntakeBaseline(intakeComparison({...initial,...captureInitial}));
       }
     } catch (error) {
       console.error("[INTAKE_SOURCE_LOAD_FAILED]", { code: "INTAKE_SOURCE_LOAD_FAILED", errorName: error instanceof Error ? error.name : "UNKNOWN" });
@@ -1150,6 +1162,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
   async function saveIntakeTextOriginal():Promise<IntakeCapture[]>{
     if(!intakeRecognitionText.trim())return intakeSourceCaptures;
+    // Unchanged source text is already an original; never manufacture a copied note.
+    if(intakeSourceCaptures.some(value=>value.id!==intakeClientKey&&value.text?.trim()===intakeRecognitionText.trim()))return intakeSourceCaptures;
     const selectedConcerns=intakeConcerns.map(value=>value.id);
     if(intakeSourceCaptures.some(value=>value.id===intakeClientKey&&value.text===intakeRecognitionText.trim()
       &&JSON.stringify(value.concerns)===JSON.stringify(selectedConcerns)))return intakeSourceCaptures;
@@ -1168,18 +1182,19 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setOpen(true);
     if(typeof request!=="string"&&request.draftId){void restoreIntakeDraft(request.draftId);return;}
     if (intent === "CUSTOMER") {
+      if(prefill?.sourceItemId&&Number.isSafeInteger(prefill.sourceVersion)&&(prefill.sourceVersion??0)>0)setCustomerSource({itemId:prefill.sourceItemId,version:prefill.sourceVersion!});
       if(prefill?.customerMode==="lieferant"&&!ports.canManageMoney){deny("customer");return;}
       setSupplierCustomerMode(prefill?.customerMode==="lieferant");
       const initialCustomer = prefill?.customerMode==="lieferant"
-        ? {...EMPTY_CUSTOMER,customerType:"lieferant" as const,paymentPreference:""}
+        ? {...EMPTY_CUSTOMER,customerType:"lieferant" as const,paymentPreference:"",companyName:prefill.name?.trim()??'',email:prefill.email?.trim().toLowerCase()??''}
         : prefill ? { ...customerDraftFromSearch(prefill.name ?? ""), email: prefill.email?.trim().toLowerCase() ?? "" } : EMPTY_CUSTOMER;
       setCustomerType("");
       setCustomerClosePrompt(false);
       setCustomerDuplicateResults([]);
       setCustomerDuplicateAcceptedFor("");
       setCustomerDraft(initialCustomer);
-      setCustomerBaseline({ customerType: "", customerDraft: initialCustomer, customerNote: "" });
-      if (ports.canCreateCustomer) navigate("customer");
+      setCustomerBaseline({ customerType: initialCustomer.customerType, customerDraft: initialCustomer, customerNote: "" });
+      if (ports.canCreateCustomer||prefill?.customerMode==='lieferant'&&prefill.sourceItemId&&Number.isSafeInteger(prefill.sourceVersion)&&ports.canManageMoney) navigate("customer");
       else deny("customer");
       return;
     }
@@ -1203,7 +1218,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       navigate("choose");
       return;
     }
-    void loadDirectIntake(prefill?.customerId, Boolean(prefill?.customerId), prefill?.orderCopyId);
+    void loadDirectIntake(prefill?.customerId, Boolean(prefill?.customerId), prefill?.orderCopyId,undefined,prefill?.sourceItemId?{itemId:prefill.sourceItemId,kind:prefill.intakeKind??'auftrag'}:undefined);
   };
 
   useEffect(() => {
@@ -1334,7 +1349,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
   const submitCustomer = async (event: FormEvent) => {
     event.preventDefault();
-    if (!ports.canCreateCustomer) {
+    if (!ports.canCreateCustomer&&!(supplierCustomerMode&&customerSource&&ports.canManageMoney)) {
       deny("customer");
       return;
     }
@@ -1368,7 +1383,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       }
       setOpen(false);
       setIntakeToast(`Kunde ${result.customer.customerNumber ?? result.customer.name} angelegt`);
-      ports.openCustomer(result.customer.id);
+      if(customerSource)window.dispatchEvent(new CustomEvent(INTAKE_CHANGED_EVENT,{detail:{itemId:customerSource.itemId,customerId:result.customer.id,customerName:result.customer.name}}));
+      ports.refresh();
+      if(!(customerSource&&supplierCustomerMode))ports.openCustomer(result.customer.id);
     } catch (error) {
       console.error("[CUSTOMER_CREATE_REQUEST_FAILED]",{errorName:error instanceof Error?error.name:"UnknownError"});
       setFeedback({
@@ -1940,7 +1957,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setCustomerType("");
     setCustomerDraft(initialCustomer);
     setCustomerNote("");
-    setCustomerBaseline({ customerType: "", customerDraft: initialCustomer, customerNote: "" });
+    setCustomerBaseline({ customerType: initialCustomer.customerType, customerDraft: initialCustomer, customerNote: "" });
     setCustomerClosePrompt(false);
     setCustomerDuplicateResults([]);
     setCustomerDuplicateState("idle");
