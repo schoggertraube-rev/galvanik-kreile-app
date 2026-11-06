@@ -8,6 +8,9 @@ on:
   push:
     branches:
       - main
+  # Both UTC offsets are scheduled; berlin-clock selects 02:30 local time.
+  schedule:
+    - cron: '30 0,1 * * *'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -17,8 +20,24 @@ permissions:
   contents: read
 
 jobs:
+  berlin-clock:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.clock.outputs.run }}
+    steps:
+      - name: Select 02:30 Europe/Berlin
+        id: clock
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" != schedule ] || [ "$(TZ=Europe/Berlin date +%H)" = 02 ]; then
+            echo 'run=yes' >> "$GITHUB_OUTPUT"
+          else
+            echo 'run=no' >> "$GITHUB_OUTPUT"
+          fi
   agentur-gate:
     name: agentur-gate
+    needs: berlin-clock
+    if: needs.berlin-clock.outputs.run == 'yes'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -66,6 +85,8 @@ jobs:
 
   h16-schema:
     name: h16-schema
+    needs: berlin-clock
+    if: needs.berlin-clock.outputs.run == 'yes'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -107,30 +128,6 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ""
         run: npx vitest run src/test/acceptance/ --passWithNoTests --maxWorkers=1 --no-file-parallelism
 
-      - name: Resolve Playwright version
-        id: playwright-version
-        shell: bash
-        run: |
-          version="$(node -e 'const p=require("./package-lock.json"); process.stdout.write(p.packages["node_modules/@playwright/test"].version)')"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-      - name: Restore Playwright browsers
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
-
-      - name: Install Playwright Chromium
-        timeout-minutes: 12
-        shell: bash
-        run: |
-          set -euo pipefail
-          for attempt in 1 2; do
-            if npx playwright install --with-deps chromium; then exit 0; fi
-            if [ "$attempt" -eq 2 ]; then exit 1; fi
-            echo "Playwright installation failed; retrying once."
-          done
-
       - name: Generated BAUPLAN flows against replay DB
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
@@ -139,9 +136,16 @@ jobs:
           APP_SESSION_SECRET: generated-flow-tests-local-only
           SUPABASE_SERVICE_ROLE_KEY: ""
         run: |
+          test "$(node -p 'require("./package-lock.json").packages["node_modules/@playwright/test"].version')" = '1.60.0'
           npm run build
           node scripts/spec/generate-flow-tests.mjs --check
-          npx playwright test -c e2e/generated/playwright.config.ts
+          docker run --rm --network host --user "$(id -u):$(id -g)" \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE" \
+            -e HOME=/tmp -e CI -e GITHUB_EVENT_NAME -e DATABASE_URL \
+            -e NEXT_PUBLIC_SUPABASE_URL -e NEXT_PUBLIC_SUPABASE_ANON_KEY \
+            -e APP_SESSION_SECRET -e SUPABASE_SERVICE_ROLE_KEY \
+            mcr.microsoft.com/playwright:v1.60.0-jammy \
+            npx playwright test -c e2e/generated/playwright.config.ts
 
       - name: Stop local database
         if: always()

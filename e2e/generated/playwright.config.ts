@@ -1,9 +1,34 @@
 import { defineConfig } from "@playwright/test";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { localReplayStorageEnvironment } from "../../src/test/localReplayStorage";
 
 process.env.APP_SESSION_SECRET ??= "flow-tests-local-session-secret-2026-11-02";
+
+// PRs can opt into their pages while keeping the first case of every other page.
+// An absent or empty selection always keeps the entire regression suite.
+function prSelection(): RegExp | undefined {
+  if (process.env.GITHUB_EVENT_NAME !== "pull_request") return undefined;
+  const scopePath = resolve("e2e/generated/_pr_scope.json");
+  if (!existsSync(scopePath)) return undefined;
+  const scope: unknown = JSON.parse(readFileSync(scopePath, "utf8"));
+  if (!Array.isArray(scope) || scope.some(page => typeof page !== "string")) {
+    throw new Error("FLOW_PR_SCOPE_INVALID");
+  }
+  if (scope.length === 0) return undefined;
+  const model = JSON.parse(readFileSync(resolve("docs/project/endversion/codex/BAUPLAN.json"), "utf8"));
+  const pages = model?.testmodell?.seiten as Record<string, { faelle?: Array<{ id?: string }> }> | undefined;
+  if (!pages || scope.some(page => !Object.hasOwn(pages, page))) throw new Error("FLOW_PR_SCOPE_UNKNOWN_PAGE");
+  const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const patterns = Object.entries(pages).map(([page, data]) => {
+    if (scope.includes(page)) return `BAUPLAN Wege · ${escape(page)} `;
+    const id = data.faelle?.[0]?.id;
+    if (!id) throw new Error(`FLOW_PR_SMOKE_MISSING:${page}`);
+    return `BAUPLAN Wege · ${escape(page)} ${escape(id)} `;
+  });
+  return new RegExp(patterns.join("|"));
+}
 
 export default defineConfig({
   testDir: ".",
@@ -11,6 +36,7 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   reporter: "line",
+  grep: prSelection(),
   use: {
     baseURL: "http://127.0.0.1:3001",
     viewport: { width: 1914, height: 917 },
