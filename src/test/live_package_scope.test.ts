@@ -20,6 +20,7 @@ import {
   checkTaB2k3ScopeForTest,
   checkTaB2k4ScopeForTest,
   checkTaB2k4BaselineChangeForTest,
+  checkB3ScopeForTest,
   checkB2iParserChangesForTest,
   checkTaB2fBaselineChangeForTest,
   runSelftest,
@@ -43,6 +44,33 @@ const b2AnchorMission = {
 const b2cAnchorMission = {
   ...b2AnchorMission,
 };
+
+describe("TA-B3 protected sources", () => {
+  it("permits product, workflow, checker and new migration paths without branch rules", () => {
+    expect(checkB3ScopeForTest({ entries: [
+      { status: "M", path: ".github/workflows/quality.yml" },
+      { status: "M", path: "scripts/quality/check-eslint-ratchet.ts" },
+      { status: "M", path: "src/app/page.tsx" },
+      { status: "A", path: "supabase/migrations/20261107000000_example.sql" },
+    ] })).toEqual([]);
+  });
+  it("rejects modification or deletion of existing migrations and protected planning sources", () => {
+    const entries = [
+      { status: "M", path: "supabase/migrations/20261101000000_existing.sql" },
+      { status: "D", path: "supabase/migrations/20261102000000_existing.sql" },
+      { status: "M", path: "docs/project/endversion/codex/BAUPLAN.json" },
+      { status: "M", path: "docs/project/endversion/ui/SICHTVERTRAG.json" },
+      { status: "M", path: "_review/AKTUELLE_ANWEISUNG.md" },
+    ];
+    expect(checkB3ScopeForTest({ entries })).toEqual([
+      "B3_EXISTING_MIGRATION_IMMUTABLE:supabase/migrations/20261101000000_existing.sql",
+      "B3_EXISTING_MIGRATION_IMMUTABLE:supabase/migrations/20261102000000_existing.sql",
+      "B3_BOUND_SOURCE_PROTECTED:docs/project/endversion/codex/BAUPLAN.json",
+      "B3_BOUND_SOURCE_PROTECTED:docs/project/endversion/ui/SICHTVERTRAG.json",
+      "B3_BOUND_SOURCE_PROTECTED:_review/AKTUELLE_ANWEISUNG.md",
+    ]);
+  });
+});
 
 describe("P96 scoped browser anchor", () => {
   const branch = "codex/ta-b2k4";

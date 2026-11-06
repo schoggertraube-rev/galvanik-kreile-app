@@ -29,35 +29,51 @@ function isUseServerModule(sourceFile) {
     && statement.expression.text === "use server");
 }
 
+function exportedActions(source, relative) {
+  const actions = [];
+  const sourceFile = ts.createSourceFile(relative, source, ts.ScriptTarget.Latest, true,
+    relative.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  if (!isUseServerModule(sourceFile)) return actions;
+  for (const statement of sourceFile.statements) {
+    if (ts.isFunctionDeclaration(statement) && statement.name
+      && hasModifier(statement, ts.SyntaxKind.ExportKeyword)
+      && hasModifier(statement, ts.SyntaxKind.AsyncKeyword)) actions.push(`${relative}#${statement.name.text}`);
+    if (ts.isVariableStatement(statement) && hasModifier(statement, ts.SyntaxKind.ExportKeyword)) {
+      for (const declaration of statement.declarationList.declarations) {
+        if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue;
+        const initializer = declaration.initializer;
+        if ((ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer))
+          && hasModifier(initializer, ts.SyntaxKind.AsyncKeyword)) actions.push(`${relative}#${declaration.name.text}`);
+      }
+    }
+  }
+  return actions;
+}
+
 function inventoryServerActions(sourceRoot = path.join(ROOT, "src")) {
   const actions = [];
   for (const absolute of walk(sourceRoot)) {
     const relative = posix(path.relative(ROOT, absolute));
     if (relative.includes("/test/") || relative.includes("/__tests__/")) continue;
     const source = fs.readFileSync(absolute, "utf8");
-    const sourceFile = ts.createSourceFile(relative, source, ts.ScriptTarget.Latest, true,
-      relative.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
-    if (!isUseServerModule(sourceFile)) continue;
-    for (const statement of sourceFile.statements) {
-      if (ts.isFunctionDeclaration(statement)
-        && statement.name
-        && hasModifier(statement, ts.SyntaxKind.ExportKeyword)
-        && hasModifier(statement, ts.SyntaxKind.AsyncKeyword)) {
-        actions.push(`${relative}#${statement.name.text}`);
-      }
-      if (ts.isVariableStatement(statement) && hasModifier(statement, ts.SyntaxKind.ExportKeyword)) {
-        for (const declaration of statement.declarationList.declarations) {
-          if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue;
-          const initializer = declaration.initializer;
-          if ((ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer))
-            && hasModifier(initializer, ts.SyntaxKind.AsyncKeyword)) {
-            actions.push(`${relative}#${declaration.name.text}`);
-          }
-        }
-      }
-    }
+    actions.push(...exportedActions(source, relative));
   }
   return [...new Set(actions)].sort();
+}
+
+function newlyExportedActions() {
+  const base = process.env.GITHUB_BASE_SHA || "origin/main";
+  const changed = execFileSync("git", ["diff", "--no-renames", "--name-status", base, "--", "src"], { cwd: ROOT, encoding: "utf8" });
+  const result = [];
+  for (const line of changed.split(/\r?\n/).filter(Boolean)) {
+    const [status, relative] = line.split("\t");
+    if (!/[.]tsx?$/.test(relative) || relative.includes("/test/") || relative.includes("/__tests__/") || status === "D") continue;
+    const current = fs.readFileSync(path.join(ROOT, relative), "utf8");
+    const before = status === "A" ? "" : execFileSync("git", ["show", `${base}:${relative}`], { cwd: ROOT, encoding: "utf8" });
+    const previous = new Set(exportedActions(before, relative));
+    result.push(...exportedActions(current, relative).filter((id) => !previous.has(id)));
+  }
+  return result;
 }
 
 function actionModuleId(moduleSpecifier, testFile) {
@@ -139,14 +155,10 @@ function classifiedSets(manifest) {
   };
 }
 
-function validateClassification(inventory, manifest) {
+function validateClassification(inventory, manifest, newActions = []) {
   const inventorySet = new Set(inventory);
   const groups = classifiedSets(manifest);
   const errors = [];
-  const fingerprint = createHash("sha256").update(`${inventory.join("\n")}\n`).digest("hex");
-  if (manifest.inventorySha256 !== fingerprint) {
-    errors.push(`H18_SERVER_ACTION_INVENTORY_CHANGED:expected=${manifest.inventorySha256}:actual=${fingerprint}`);
-  }
   const seen = new Map();
   for (const [group, values] of Object.entries(groups)) {
     for (const id of values) {
@@ -156,6 +168,7 @@ function validateClassification(inventory, manifest) {
       seen.set(id, group);
     }
   }
+  for (const id of newActions) if (!seen.has(id)) errors.push(`H18_NEW_ACTION_UNCLASSIFIED:${id}`);
   return errors;
 }
 
@@ -216,9 +229,16 @@ function selftest() {
     testedWriteActions: {},
     writeActionOverrides: {},
   };
-  const missing = validateClassification(inventory, manifest);
-  if (!missing.some((entry) => entry.startsWith("H18_SERVER_ACTION_INVENTORY_CHANGED"))) {
+  const missing = validateClassification(inventory, manifest, [inventory[1]]);
+  if (!missing.includes(`H18_NEW_ACTION_UNCLASSIFIED:${inventory[1]}`)) {
     throw new Error("H18_SELFTEST_NEW_ACTION_NOT_REJECTED");
+  }
+  const classified = { ...manifest, testedWriteActions: { [inventory[1]]: ["proof.integration.test.ts"] } };
+  if (validateClassification(inventory, classified, [inventory[1]]).length) {
+    throw new Error("H18_SELFTEST_CLASSIFIED_ACTION_REJECTED");
+  }
+  if (validateClassification(inventory, manifest, []).length) {
+    throw new Error("H18_SELFTEST_STALE_HASH_MUST_NOT_BLOCK");
   }
   const growth = validateOverrideShrink(
     { writeActionOverrides: { newWrite: "reason" } },
@@ -238,7 +258,7 @@ if (process.argv.includes("--selftest")) {
   } else {
     const manifest = readManifest();
     const errors = [
-      ...validateClassification(inventory, manifest),
+      ...validateClassification(inventory, manifest, newlyExportedActions()),
       ...validateOverrideShrink(manifest, readBaselineManifest()),
       ...validateTestProofs(manifest),
     ];

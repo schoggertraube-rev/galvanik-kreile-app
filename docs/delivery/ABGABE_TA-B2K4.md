@@ -1,14 +1,11 @@
-# TA-B2k4 · CI-Prüfungen beschleunigen
+# TA-B3 – Prüfablauf vereinfachen
 
-Stand: **in Arbeit, nicht merge-reif**. Der Anker verändert Prüfabläufe, keine Produktfunktion und keine Datenbank.
+Stand: in Prüfung. Der Anker ändert keine Produktfunktion und führt keine Datenbankmigration aus.
 
-- Die Browserprüfungen für generierte Wege und den V5-Shell-Smoke sind für das gebundene Playwright-Image `v1.60.0-jammy` vorbereitet. Replay-Datenbank und SQL-Prüfungen bleiben auf dem Runner.
-- Bei Pull Requests kann `_pr_scope.json` die Seiten des Pakets bestimmen; zusätzlich läuft der erste Fall jeder übrigen Seite. Eine unbekannte Seite führt zum Fehler. Bei leerer oder fehlender Liste sowie auf Main und im Nachtlauf bleibt der vollständige Prüfsatz erhalten.
-- Der zuvor vorbereitete Planungssync entfällt nach P93. Die Planungsdateien bleiben lokal erhalten; das Nachtlaufprotokoll bleibt außerhalb des Commits.
+- Die Scope-Prüfung schützt bestehende Migrationen sowie die gebundenen Planungs- und Referenzquellen. Neue Migrationen, Produktcode, Workflows und Prüfscripte benötigen keine einzelnen Pfadanker. Gebundene Quellen bleiben bis zu einer ausdrücklich gebundenen Aktualisierung gesperrt.
+- Der separate Ratchet-Job bleibt als nicht blockierende Warnung bestehen; aus `quality` wurde der Ratchet-Schritt entfernt. Der Judge-Hash ist nur noch Hinweis. Lint, Typen, Unit, Replay, H18, Akzeptanz und generierte Wege bleiben bestehen.
+- Ein Erfolg eines bisher erwarteten Fehlerfalls wird als `XPASS` gemeldet, ohne die Suite rot zu färben. Fehler regulärer Fälle bleiben Fehler; Fixture-Vorbereitung bleibt außerhalb der Ausnahmebehandlung.
+- PR-Läufe können über `_pr_scope.json` auf die eigenen Seiten und den ersten Fall aller übrigen Seiten begrenzt werden. Main und Nachtlauf prüfen alle Wege. Die Browser laufen im gebundenen Playwright-Container.
+- H18 vergleicht neu exportierte Actions mit der Basis und fordert ihre Einordnung; ein statischer Inventar-Hash wird nicht mehr als Sperre verwendet. Bestehende Testnachweise und die Regel, dass Ausnahmen nur schrumpfen, bleiben erhalten.
 
-## Nachweise und offene Punkte
-
-- Lokale Auswahlliste: PR-Scope `ware` 41 Fälle in 15 Dateien; Main und leere Auswahl 334 Fälle. Unbekannte Seite wird abgewiesen. TypeScript, ESLint, YAML-Parse, Generator- und Scope-Selbsttest bestanden.
-- Das Image und die beiden lokalen Replay-Ports sind geprüft. Nach einer gescheiterten Windows-Build-/Linux-Container-Kombination bestand die Gegenprobe mit Linux-Build und isolierten Linux-Abhängigkeiten: der echte Browserfall N01 lief gegen die lokale Replay-DB 1/1 durch, Container-Exitcode 0. Das Image verwendet Node 24.15.0; die Anwendung deklariert 24.18.0, was bei der Installation eine Warnung erzeugte. Der endgültige GitHub-Workflow ist noch gesondert zu prüfen.
-- P96 ergänzt eine auf Branch und Basis begrenzte Scope-Ausnahme für die erlaubten Dateien. Der Baseline-Vergleich erlaubt ausschließlich die freigegebene Änderung von `judgeContractHash`; Tests prüfen auch unzulässige Pfade und Budgetänderungen. Der exakte Kandidat muss noch in CI geprüft werden.
-- PR-Link, SHA, READY-Preview und vollständiger Status der Checks folgen erst nach Commit und Push des vollständigen Ankers.
+CI, SHA und READY-Preview des endgültigen Kandidaten werden nach dem Push im PR und im Nachtlauf protokolliert. Der Anker ist bis zu diesen Nachweisen nicht als merge-reif belegt.

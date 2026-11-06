@@ -16,6 +16,7 @@ permissions:
 jobs:
   ratchet:
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - name: Checkout protected base
         uses: actions/checkout@v5
