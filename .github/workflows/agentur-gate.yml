@@ -110,7 +110,9 @@ jobs:
       - name: Resolve Playwright version
         id: playwright-version
         shell: bash
-        run: echo "version=$(node -p \"require('./package-lock.json').packages['node_modules/@playwright/test'].version\")" >> "$GITHUB_OUTPUT"
+        run: |
+          version="$(node -e 'const p=require("./package-lock.json"); process.stdout.write(p.packages["node_modules/@playwright/test"].version)')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Restore Playwright browsers
         uses: actions/cache@v4
