@@ -414,6 +414,33 @@ const TA_B2K3_ANCHOR_ALLOWLIST = Object.freeze([
   TA_B2K3_RECEIPT,
   "docs/delivery/ABGABE_TA-B2K3.md",
 ]);
+const TA_B2K4_BRANCH = "codex/ta-b2k4";
+const TA_B2K4_BASE_SHA = "2ebf143bd99a0f131e7cf31293ffede5d9860061";
+const TA_B2K4_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2K4.json";
+const TA_B2K4_VALUES = Object.freeze({
+  schemaVersion: 1,
+  package: "B2-PLAYWRIGHT-REPLAY-ANCHOR",
+  headBranch: TA_B2K4_BRANCH,
+  mainBaseSha: TA_B2K4_BASE_SHA,
+  authorizedBy: "Planungschat P91/P92/P94/P96",
+  authorizedAt: "2026-11-06",
+  scope: "Browser im Playwright-Container; PR-Seitenauswahl mit Smoke; vollstaendiger Main- und Nachtlauf; eng begrenzte Checker- und Hashmigration",
+});
+const TA_B2K4_REQUIRED_FILES = Object.freeze([
+  ".github/workflows/agentur-gate.yml",
+  ".github/workflows/quality.yml",
+  "quality/eslint-baseline.json",
+  "e2e/generated/playwright.config.ts",
+  "e2e/generated/_pr_scope.json",
+  "scripts/quality/check-live-package-scope.mjs",
+  "src/test/live_package_scope.test.ts",
+  TA_B2K4_RECEIPT,
+  "docs/delivery/ABGABE_TA-B2K4.md",
+]);
+const TA_B2K4_ALLOWED_FILES = Object.freeze([
+  ...TA_B2K4_REQUIRED_FILES,
+  "scripts/spec/generate-flow-tests.mjs",
+]);
 const PR154_REBASELINE_BASE_SHA = "1fa4920d6d06b02413c8c157ae6b739507105846";
 const PR154_REBASELINE_RECEIPT = "docs/evidence/live-line/pr154/REBASELINE.json";
 const PR154_REBASELINE_VALUES = Object.freeze({
@@ -1480,6 +1507,45 @@ export function checkTaB2k3ScopeForTest({ files, mission, branch, baseSha }) {
   return checkTaB2k3Scope(files, mission, branch, baseSha);
 }
 
+function checkTaB2k4Scope(files, mission, branch, baseSha) {
+  const errors = [];
+  if (branch !== TA_B2K4_BRANCH) errors.push(`TA_B2K4_BRANCH_INVALID:${branch}`);
+  if (baseSha !== TA_B2K4_BASE_SHA) errors.push(`TA_B2K4_BASE_INVALID:${baseSha}:${TA_B2K4_BASE_SHA}`);
+  for (const rel of files) if (!TA_B2K4_ALLOWED_FILES.includes(rel)) errors.push(`TA_B2K4_SCOPE:${rel}`);
+  if (mission.active_block !== "B2" || mission.phase !== "WRITING" || mission.branch !== SALES_STAGE_B2_BRANCH
+      || mission.started_from_sha !== TA_B2_BASE_SHA || mission.desktop_due_at !== "2026-11-08"
+      || mission.tablet_mobile_due_at !== "2026-11-08" || mission.handoff_path !== "docs/delivery/ABGABE_B2.md"
+      || mission.next_block !== "B3") errors.push("TA_B2K4_MISSION_INVALID");
+  return errors;
+}
+
+export function checkTaB2k4BaselineChangeForTest({ before, after }) {
+  const oldField = '"judgeContractHash": "eb0f91e2bd47b90a75f108018e42e5d8dd460c3c00d13352a98e8bcb1f2c4416"';
+  const newField = '"judgeContractHash": "a4de74a691114e64835c96e3199256e72d24ac904572859c7a1dc85ee96d2842"';
+  return before.split(oldField).length === 2 && after === before.replace(oldField, newField)
+    ? [] : ["TA_B2K4_BASELINE_CHANGE_NOT_AUTHORIZED"];
+}
+
+function checkTaB2k4Anchor(root, files, mission, branch, baseSha) {
+  const errors = checkTaB2k4Scope(files, mission, branch, baseSha);
+  for (const rel of TA_B2K4_REQUIRED_FILES) if (!files.includes(rel)) errors.push(`TA_B2K4_REQUIRED_FILE_MISSING:${rel}`);
+  let receipt;
+  try { receipt = JSON.parse(readFileSync(path.join(root, TA_B2K4_RECEIPT), "utf8")); }
+  catch { return [...errors, "TA_B2K4_RECEIPT_UNREADABLE"]; }
+  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2K4_VALUES).sort())) errors.push("TA_B2K4_RECEIPT_SCHEMA");
+  for (const [key, value] of Object.entries(TA_B2K4_VALUES)) if (receipt[key] !== value) errors.push(`TA_B2K4_RECEIPT_VALUE:${key}`);
+  try {
+    const before = execFileSync("git", ["-C", root, "show", TA_B2K4_BASE_SHA + ":quality/eslint-baseline.json"], { encoding: "utf8", maxBuffer: 8_000_000 });
+    const after = readFileSync(path.join(root, "quality/eslint-baseline.json"), "utf8");
+    errors.push(...checkTaB2k4BaselineChangeForTest({ before, after }));
+  } catch { errors.push("TA_B2K4_BASELINE_UNREADABLE"); }
+  return errors;
+}
+
+export function checkTaB2k4ScopeForTest({ files, mission, branch, baseSha }) {
+  return checkTaB2k4Scope(files, mission, branch, baseSha);
+}
+
 export function checkB2iParserChangesForTest({ beforePackage, afterPackage, beforeLock, afterLock }) {
   const errors = [];
   const parse = (value) => typeof value === "string" ? JSON.parse(value) : value;
@@ -2037,6 +2103,7 @@ export function checkLivePackageScope({ root, base, head, branch }) {
     if (branch === TA_B2K1B_BRANCH) return checkTaB2k1bAnchor(root, files, candidateMission, branch, baseSha);
     if (branch === TA_B2K2_BRANCH) return checkTaB2k2Anchor(root, files, candidateMission, branch, baseSha);
     if (branch === TA_B2K3_BRANCH) return checkTaB2k3Anchor(root, files, candidateMission, branch, baseSha);
+    if (branch === TA_B2K4_BRANCH) return checkTaB2k4Anchor(root, files, candidateMission, branch, baseSha);
     if (candidateMission.active_block !== "B2") {
       return [`SALES_STAGE_ACTIVE_BLOCK_INVALID:${candidateMission.active_block}`];
     }
@@ -2630,6 +2697,17 @@ export function runSelftest(root = process.cwd()) {
   if (!taB2k3Outside.includes("TA_B2K3_SCOPE:src/app/page.tsx")) {
     throw new Error("TA-B2k3 accepted an out-of-anchor file: " + taB2k3Outside.join(" | "));
   }
+  const validTaB2k4 = checkTaB2k4Scope(TA_B2K4_REQUIRED_FILES, taB2cMission, TA_B2K4_BRANCH, TA_B2K4_BASE_SHA);
+  if (validTaB2k4.length > 0) throw new Error("valid TA-B2k4 scope rejected: " + validTaB2k4.join(" | "));
+  for (const rel of ["src/app/page.tsx", "quality/eslint-config.json", "docs/project/arbeitspakete/TRUST_ANCHOR_B2K4.md"]) {
+    if (!checkTaB2k4Scope([rel], taB2cMission, TA_B2K4_BRANCH, TA_B2K4_BASE_SHA).includes(`TA_B2K4_SCOPE:${rel}`)) {
+      throw new Error(`TA-B2k4 accepted an out-of-anchor file: ${rel}`);
+    }
+  }
+  const k4Before = '{"judgeContractHash": "eb0f91e2bd47b90a75f108018e42e5d8dd460c3c00d13352a98e8bcb1f2c4416", "errors": 0}';
+  const k4After = k4Before.replace("eb0f91e2bd47b90a75f108018e42e5d8dd460c3c00d13352a98e8bcb1f2c4416", "a4de74a691114e64835c96e3199256e72d24ac904572859c7a1dc85ee96d2842");
+  if (checkTaB2k4BaselineChangeForTest({ before: k4Before, after: k4After }).length) throw new Error("TA-B2k4 rejected its one-field hash migration");
+  if (!checkTaB2k4BaselineChangeForTest({ before: k4Before, after: k4After.replace('"errors": 0', '"errors": 1') }).length) throw new Error("TA-B2k4 accepted a baseline debt change");
   const additiveH18Before = {
     version: 1,
     inventorySha256: "a".repeat(64),

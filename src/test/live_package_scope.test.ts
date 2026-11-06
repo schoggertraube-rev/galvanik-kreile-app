@@ -18,6 +18,8 @@ import {
   checkTaB2k1bScopeForTest,
   checkTaB2k2ScopeForTest,
   checkTaB2k3ScopeForTest,
+  checkTaB2k4ScopeForTest,
+  checkTaB2k4BaselineChangeForTest,
   checkB2iParserChangesForTest,
   checkTaB2fBaselineChangeForTest,
   runSelftest,
@@ -41,6 +43,32 @@ const b2AnchorMission = {
 const b2cAnchorMission = {
   ...b2AnchorMission,
 };
+
+describe("P96 scoped browser anchor", () => {
+  const branch = "codex/ta-b2k4";
+  const baseSha = "2ebf143bd99a0f131e7cf31293ffede5d9860061";
+  const files = [
+    ".github/workflows/agentur-gate.yml", ".github/workflows/quality.yml",
+    "quality/eslint-baseline.json", "e2e/generated/playwright.config.ts",
+    "e2e/generated/_pr_scope.json", "scripts/quality/check-live-package-scope.mjs",
+    "src/test/live_package_scope.test.ts", "docs/evidence/live-line/b2/TRUST_ANCHOR_B2K4.json",
+    "docs/delivery/ABGABE_TA-B2K4.md",
+  ];
+  it("allows only the bound branch, base, mission and exact paths", () => {
+    expect(checkTaB2k4ScopeForTest({ files, mission: b2AnchorMission, branch, baseSha })).toEqual([]);
+    for (const file of ["src/app/page.tsx", "quality/eslint-config.json", "docs/project/arbeitspakete/TRUST_ANCHOR_B2K4.md"]) {
+      expect(checkTaB2k4ScopeForTest({ files: [...files, file], mission: b2AnchorMission, branch, baseSha })).toContain(`TA_B2K4_SCOPE:${file}`);
+    }
+    expect(checkTaB2k4ScopeForTest({ files, mission: b2AnchorMission, branch: "codex/other", baseSha })).toContain("TA_B2K4_BRANCH_INVALID:codex/other");
+    expect(checkTaB2k4ScopeForTest({ files, mission: b2AnchorMission, branch, baseSha: "wrong" })).toContain(`TA_B2K4_BASE_INVALID:wrong:${baseSha}`);
+  });
+  it("permits exactly the judge hash replacement and no budget or rule change", () => {
+    const before = '{"judgeContractHash": "eb0f91e2bd47b90a75f108018e42e5d8dd460c3c00d13352a98e8bcb1f2c4416", "errors": 0}';
+    const after = before.replace("eb0f91e2bd47b90a75f108018e42e5d8dd460c3c00d13352a98e8bcb1f2c4416", "a4de74a691114e64835c96e3199256e72d24ac904572859c7a1dc85ee96d2842");
+    expect(checkTaB2k4BaselineChangeForTest({ before, after })).toEqual([]);
+    expect(checkTaB2k4BaselineChangeForTest({ before, after: after.replace('"errors": 0', '"errors": 1') })).toEqual(["TA_B2K4_BASELINE_CHANGE_NOT_AUTHORIZED"]);
+  });
+});
 
 describe("P86 additive write-contract anchor", () => {
   const branch = "codex/ta-b2k3";
