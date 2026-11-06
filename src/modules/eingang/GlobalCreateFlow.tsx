@@ -1101,7 +1101,12 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       const payload={...draftPayload(),documents:originals.map(value=>value.id)};
       const result=await ports.drafts.saveDraft({id,clientEventId:draftOperation.current??=crypto.randomUUID(),art:"eingang",payload,
         lastField:intakeLastFocus.current?.getAttribute("data-spec-id")??null,expectedVersion:activeDraft?.version??null});
-      if(result.code!=="OK"){setFeedback({kind:"error",message:"Entwurf nicht gespeichert · alle Eingaben sind noch da. "+result.message});return;}
+      if(result.code!=="OK"){
+        setFeedback(result.code==="CONFLICT"
+          ? {kind:"conflict",message:result.message}
+          : {kind:"error",message:"Entwurf nicht gespeichert · alle Eingaben sind noch da. "+result.message});
+        return;
+      }
       window.dispatchEvent(new Event("kreile:intake-drafts-changed"));
       reset();setOpen(false);setIntakeToast("Entwurf gespeichert · steht auf Der Tag");
     }catch(cause){console.error("[INTAKE_DRAFT_SAVE_REQUEST_FAILED]",cause);setFeedback({kind:"error",message:"Entwurf nicht gespeichert · alle Eingaben sind noch da. Code: INTAKE_DRAFT_SAVE_REQUEST_FAILED."});}
