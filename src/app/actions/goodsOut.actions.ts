@@ -32,6 +32,7 @@ export async function recordGoodsOutAction(
   const { recordGoodsOut } = await import("@/lib/server/commands/recordGoodsOutCommand");
   const result = await recordGoodsOut(input);
   if (result.code === "OK") {
+    revalidatePath("/");
     revalidatePath("/warendurchlauf");
     revalidatePath("/buchhaltung/rechnungen");
   }
