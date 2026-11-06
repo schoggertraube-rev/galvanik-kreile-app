@@ -10,7 +10,8 @@ const CONFIG_PATH = "quality/authoritative-sources.json";
 const AUTHORITY_CHECKER_PATH = "scripts/quality/check-authoritative-sources.mjs";
 const RATCHET_WORKFLOW_PATH = ".github/workflows/eslint-ratchet.yml";
 const DESIGN_POINTER_PATH = "docs/project/linie/ui/CURRENT_DESIGN_REFERENCE.json";
-const DESIGN_POINTER_SHA256 = "1509BE93E71B486728A49D1786CD60826943C6CBE954FC7BFF2EE1D3120A8FCE";
+const DESIGN_POINTER_SHA256 = "12288CE7AD6F707BA2D4942843BCBE45DC0351FCB6092281FE640B860417BF7F";
+const DESIGN_POINTER_PAGE_COUNT = 162;
 const ENDVERSION_UI_PATH = "docs/project/endversion/ui";
 const TRUTH_SOURCE_CONTRACT = Object.freeze({
   project_rules: "AGENTS.md",
@@ -187,8 +188,9 @@ function checkEndversionPointer(pointer, pointerBytes, binding) {
   if (!pinned || !artifactMatches(ui?.sightContract, "SICHTVERTRAG.json")
     || !artifactMatches(ui?.checkScript, "pruefe_sicht.cjs")) errors.push("DESIGN_POINTER_FLOW_BINDING");
   if (!pinned || ui?.referenceImages !== `${ENDVERSION_UI_PATH}/pruefbilder/`
-    || binding.expectedImages.length !== 117
-    || new Set(binding.expectedImages).size !== 117
+    || ui?.sightContract?.entries !== DESIGN_POINTER_PAGE_COUNT
+    || binding.expectedImages.length !== DESIGN_POINTER_PAGE_COUNT
+    || new Set(binding.expectedImages).size !== DESIGN_POINTER_PAGE_COUNT
     || !sameSet(binding.images, binding.expectedImages)) errors.push("DESIGN_POINTER_PAGE_BINDING");
   return errors;
 }

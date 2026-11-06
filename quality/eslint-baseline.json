@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "eslintVersion": "9.39.4",
-  "lintContractHash": "242a5417463fe83bac8dd05764b4f54759106e1670bc4f55af58caa0710b6adb",
-  "judgeContractHash": "f02832e8e3da8367b3604c5f356b6df95fe61310a2c24d04d5b8105b582aab88",
+  "lintContractHash": "f6843c39abffe35426ce5b4269bc82ba6f5489b9ac41438f0d9613d1c451b717",
+  "judgeContractHash": "61ccd79ed372b8b6453fe27e4ea5fdfff9b1f543cf86d4fa491f5231da08b83e",
   "totals": {
     "filesWithIssues": 0,
     "errors": 0,
@@ -13,6 +13,10 @@
     {
       "file": "create_migrate.js",
       "contentHash": "67601e6562394c2ba3cf229f25b759dc3a1ba4b0f825855a1ebc5a7570749de8"
+    },
+    {
+      "file": "docs/project/endversion/ui/pruefe_sicht.cjs",
+      "contentHash": "cdec8b69b6c477d50a80c866a7132374987fe56839b216479afe44b825811291"
     },
     {
       "file": "docs/project/history/controls/2026-10-11/claude-legacy/hooks/guard-destructive.mjs",

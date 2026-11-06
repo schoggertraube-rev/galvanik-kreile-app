@@ -14,6 +14,7 @@ import {
   checkTaB2jScopeForTest,
   checkTaB2k1ScopeForTest,
   checkTaB2k1bScopeForTest,
+  checkTaB2k2ScopeForTest,
   checkB2iParserChangesForTest,
   checkTaB2fBaselineChangeForTest,
   runSelftest,
@@ -64,10 +65,11 @@ describe("P59 TA-B2j: AP-EIN paths and additive migrations", () => {
     const invalid = "supabase/migrations/20261104000000_ein7_other.sql";
     expect(checkSalesStageB2ScopeForTest({files:[invalid],entries:[{status:"A",path:invalid}],mission:b2Mission,branch:"kreile/b2-ein-3"})).toContain(`SALES_STAGE_B2_MIGRATION_INVALID:${invalid}`);
   });
-  it("accepts the separate P59 KV branch without accepting adjacent branch names", () => {
+  it("accepts the authorized B2 follow-up branch family but rejects malformed branch names", () => {
     const files = ["src/modules/quotes/server/quoteCommands.ts"];
     expect(checkSalesStageB2ScopeForTest({files, mission:b2Mission, branch:"kreile/b2-ein-2b"})).toEqual([]);
-    expect(checkSalesStageB2ScopeForTest({files, mission:b2Mission, branch:"kreile/b2-ein-2c"})).toContain("SALES_STAGE_BRANCH_INVALID:kreile/b2-ein-2c");
+    expect(checkSalesStageB2ScopeForTest({files, mission:b2Mission, branch:"kreile/b2-ein-2c"})).toEqual([]);
+    expect(checkSalesStageB2ScopeForTest({files, mission:b2Mission, branch:"kreile/b2-ein_2c"})).toContain("SALES_STAGE_BRANCH_INVALID:kreile/b2-ein_2c");
   });
 });
 
@@ -125,6 +127,54 @@ describe("P78 TA-B2k1b: only the exact shell-smoke path", () => {
     const adjacent = "e2e/path1-v5-shell-smoke-other.real.spec.ts";
     expect(checkSalesStageB2ScopeForTest({ files: [adjacent], mission: b2Mission, branch: "kreile/b2-ein-6" }))
       .toContain(`SALES_STAGE_B2_SCOPE:${adjacent}`);
+  });
+});
+
+describe("P76 TA-B2k2: Runde-53 binding and AP-ABS path boundary", () => {
+  const branch = "codex/ta-b2k2";
+  const baseSha = "4593e8f6eaa3215033898a53d4168581b5bfc4c8";
+  const files = [
+    "scripts/quality/check-live-package-scope.mjs",
+    "src/test/live_package_scope.test.ts",
+    "docs/project/arbeitspakete/TRUST_ANCHOR_B2K2.md",
+    "docs/evidence/live-line/b2/TRUST_ANCHOR_B2K2.json",
+    "docs/delivery/ABGABE_TA-B2K2.md",
+    "docs/project/endversion/codex/BAUPLAN.json",
+    "e2e/generated/absprache.flow.spec.ts",
+  ];
+
+  it("restricts the anchor to the bound source set and provisional Teil-6 base", () => {
+    expect(checkTaB2k2ScopeForTest({ files, mission: b2AnchorMission, branch, baseSha })).toEqual([]);
+    expect(checkTaB2k2ScopeForTest({
+      files: [...files, "src/app/page.tsx"],
+      mission: b2AnchorMission,
+      branch,
+      baseSha,
+    })).toContain("TA_B2K2_SCOPE:src/app/page.tsx");
+    expect(checkTaB2k2ScopeForTest({ files, mission: b2AnchorMission, branch: "codex/other", baseSha }))
+      .toContain("TA_B2K2_BRANCH_INVALID:codex/other");
+    expect(checkTaB2k2ScopeForTest({ files, mission: b2AnchorMission, branch, baseSha: "wrong" }))
+      .toContain("TA_B2K2_BASE_INVALID:wrong:" + baseSha);
+  });
+
+  it("allows only the new AP-ABS reader, migration family and designated b3 branch", () => {
+    const migration = "supabase/migrations/20261106013106_abs_absprachen.sql";
+    expect(checkSalesStageB2ScopeForTest({
+      files: ["src/lib/server/effectiveCustomerAgreementRead.ts", migration],
+      entries: [{ status: "A", path: migration }],
+      mission: b2Mission,
+      branch: "kreile/b3-abs",
+    })).toEqual([]);
+    expect(checkSalesStageB2ScopeForTest({
+      files: ["src/lib/server/effectiveCustomerAgreementWrite.ts"],
+      mission: b2Mission,
+      branch: "kreile/b3-abs",
+    })).toContain("SALES_STAGE_B2_SCOPE:src/lib/server/effectiveCustomerAgreementWrite.ts");
+    expect(checkSalesStageB2ScopeForTest({
+      files: ["src/lib/server/effectiveCustomerAgreementRead.ts"],
+      mission: b2Mission,
+      branch: "kreile/b3b-abs",
+    })).toContain("SALES_STAGE_BRANCH_INVALID:kreile/b3b-abs");
   });
 });
 

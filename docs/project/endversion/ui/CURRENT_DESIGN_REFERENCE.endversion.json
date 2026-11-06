@@ -7,7 +7,7 @@
     "role": "SINGLE_UI_TRUTH_LOOK_LAYOUT_ORDER_SIZES",
     "designCss": {
       "path": "docs/project/endversion/ui/endversion_design.css",
-      "sha256": "35146E45B96F84D7CB30D38F403F1DC0AE9D9232B7F1F7B4C5ED8D950B4537AB",
+      "sha256": "338AEEE031FEAB95130782AE7865005E1803EBA85F8AD6CFE079AAA49827D03B",
       "replaces": [
         "docs/project/linie/ui/designsystem_v1_1/komponenten.css",
         "src/app/globals.css eigene kr-* Nachbauten"
@@ -16,7 +16,7 @@
     },
     "sightContract": {
       "path": "docs/project/endversion/ui/SICHTVERTRAG.json",
-      "sha256": "B1A53EA675F52B999CD034C5C5D6D0F4D4B1CC131AB40E818DF3BDD138B6EB4C",
+      "sha256": "0E1049FD2845D66998A22BD8FB943055F34C26D74EC45F752759122BCA73F307",
       "sizes": {
         "desktop": [
           1914,
@@ -31,11 +31,11 @@
           844
         ]
       },
-      "entries": 117
+      "entries": 162
     },
     "checkScript": {
       "path": "docs/project/endversion/ui/pruefe_sicht.cjs",
-      "sha256": "FDA7C59C0E3EF9FEC0C0F81B98975F712D8438DE7236D75D0B8D03897F6A052C",
+      "sha256": "CDEC8B69B6C477D50A80C866A7132374987FE56839B216479AFE44B825811291",
       "routes": "docs/project/endversion/ui/routen.json",
       "gate": "Rot = kein Merge; Gelb nur mit Grund in docs/delivery/ABGABE_*.md"
     },

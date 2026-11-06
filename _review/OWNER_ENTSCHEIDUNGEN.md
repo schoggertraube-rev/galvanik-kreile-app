@@ -258,3 +258,17 @@ Neueste vom Owner freigegebene Version (27.09.2026, `_DESIGN_VERBINDLICH/FREIGAB
 - Tablet (1220x880, auch mit Tastatur): alles ohne Scrollen der Hauptaktion sichtbar; dafuer duerfen Knoepfe/Felder kleiner sein als V8 (Abstriche erlaubt), Felder und Knoepfe dichter und sinnvoller angeordnet (z. B. zwei Spalten, Pruefliste einklappbar). Handy bleibt V8 (Touch >= 48 px).
 - Ueberall: Enter springt ins naechste Feld (Fokusreihenfolge = Lesereihenfolge), Enter im letzten Pflichtfeld loest die Hauptaktion mit ihrem Tor aus; Auswahlfelder per Tastatur bedienbar.
 - Owner-Autorisierung: Siglinder (Antwort 03.11.: Tablet muss alles zeigen und Tastatur koennen, Abstriche ok, besser anordnen, automatisch ins naechste Feld mit Enter).
+
+## U-241 - Jeder Eingang hat einen Weg (05.11.2026)
+- Owner: Foto/Datei wird sofort gelesen, die App schlaegt die Aktion vor, man nimmt sie an und ergaenzt hoechstens undeutliche Angaben. Die App muss immer wissen, was mit dem Dokument/Bild zu tun ist - alles andere ist eine Sackgasse.
+- Folge: Auch bei Art unklar (nichts sicher gelesen) zeigt 3.0 nie nur Schliessen/Spaeter zuordnen, sondern die Frage 'Was ist das?' mit den Arten als Kacheln (Auftrag/KV, Ware, Eingangsrechnung, Dokument/Notiz zum Kunden); die Wahl fuehrt direkt in den Weg dieser Art, gelesene Teilangaben werden mitgenommen und als pruefen markiert. 'Wem gehoert das?', 'Spaeter zuordnen' und 'Original ansehen' bleiben daneben.
+- Owner-Autorisierung: Siglinder.
+
+## U-242 - Keine Floskeln, jede Anzeige sagt was fehlt und was zu tun ist (05.11.2026, app-weit)
+- Owner: Woerter wie 'pruefen', 'entscheiden', 'Warnung', 'Problem loesen', 'Handlungsbedarf' verschwinden aus der ganzen App. Die App weiss, was fehlt und was zu tun ist - das steht konkret auf dem Knopf/Chip.
+- Regel: Jeder Status, Chip und Knopf nennt Gegenstand + konkrete Handlung + Grund in Kurzform, z. B. 'Einheit waehlen · Position 1', 'Liefertermin bestaetigen: Mi 12.11. (Wunsch)', 'Zahlung fehlt · R-2026-0102 offen 438,60 EUR', 'Kunde zuordnen · Absender unbekannt'. Ein Klick fuehrt direkt an die Stelle bzw. fuehrt die Handlung aus. Kein Element ohne benannte Folgehandlung.
+- Gilt app-weit auf einmal (alle Seiten, Dialoge, Pruefliste, Der Tag, Karten).
+- Owner-Autorisierung: Siglinder.
+
+## U-243 (05.11. 17:50, Owner direkt) – Aufnahme-Ergebnis neu
+Darstellung und Weiterverarbeitung nach Foto/Datei in `rein` sind unzureichend und werden neu geplant: Ergebniskarte (Vorschaubild, Art, erkannte Felder, Treffer mit Grund, genau ein konkreter Hauptknopf, Rohtext eingeklappt, Fehler in Worten). Planung Endversion am Samstag 07.11. (AUFTRAG_ENDVERSION_SA Abschnitt 6), Reparatur danach als Teil 2b. Bis dahin keine Unterbrechung der laufenden Arbeit.

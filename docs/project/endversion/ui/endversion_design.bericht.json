@@ -1,7 +1,7 @@
 {
  "datei": "ui/endversion_design.css",
- "sha256": "35146E45B96F84D7CB30D38F403F1DC0AE9D9232B7F1F7B4C5ED8D950B4537AB",
- "bytes": 194916,
+ "sha256": "338AEEE031FEAB95130782AE7865005E1803EBA85F8AD6CFE079AAA49827D03B",
+ "bytes": 195864,
  "quellen": [
   {
    "quelle": "tokens.css",
@@ -47,15 +47,15 @@
   },
   {
    "quelle": "inline:auftragsweg",
-   "bytes_roh": 46186,
-   "bytes_buendel": 45307,
+   "bytes_roh": 47078,
+   "bytes_buendel": 46199,
    "entfernte_vorschau_regeln": 12
   },
   {
    "quelle": "inline:vorschau-neu",
-   "bytes_roh": 7543,
-   "bytes_buendel": 6627,
-   "entfernte_vorschau_regeln": 10
+   "bytes_roh": 7651,
+   "bytes_buendel": 6683,
+   "entfernte_vorschau_regeln": 11
   }
  ],
  "musterdaten_treffer": 0
