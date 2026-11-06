@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "package": "B2-PLAYWRIGHT-REPLAY-ANCHOR",
+  "headBranch": "codex/ta-b2k4",
+  "mainBaseSha": "2ebf143bd99a0f131e7cf31293ffede5d9860061",
+  "authorizedBy": "Planungschat P91/P92",
+  "authorizedAt": "2026-11-06",
+  "scope": "Browser im Playwright-Container; PR-Seitenauswahl mit Smoke; vollstaendiger Main- und Nachtlauf; unveraenderter Planungssync"
+}
