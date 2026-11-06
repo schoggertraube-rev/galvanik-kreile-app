@@ -7,8 +7,6 @@ import { sql } from "drizzle-orm";
 import QRCode from "qrcode";
 import { createOrderLabelPdfDocument } from "@/lib/pdf/OrderLabel";
 import { normaliseOrderPositionUnit, orderPositionUnitLabel } from "@/lib/orderPositionContract";
-import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
-import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
 type OrderLabelRow = {
   id: string;
@@ -57,6 +55,10 @@ function positionSummary(value: unknown): string {
 
 export async function generateOrderLabel(orderIds: string | string[]): Promise<string> {
   const orderId = singleOrderId(orderIds);
+  // Server ports are loaded only when this action is invoked. Importing this action from
+  // an interactive order view must not require a database connection during render.
+  const { hasAuthorizationArea, resolveAuthorization } = await import("@/lib/server/authorization");
+  const { withPrivilegedTenantTransaction } = await import("@/lib/server/privilegedDb");
   const authorization = await resolveAuthorization();
   if (!authorization.ok) {
     if (authorization.reason === "AUTHORIZATION_UNAVAILABLE") console.error("[ORDER_LABEL_AUTHORIZATION_UNAVAILABLE]", { orderId, reason: authorization.reason });

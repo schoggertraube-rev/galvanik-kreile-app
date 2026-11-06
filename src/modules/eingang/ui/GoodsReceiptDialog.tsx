@@ -1,8 +1,6 @@
 "use client";
 import{useCallback,useEffect,useRef,useState}from'react';
 import{Button,Dialog,Hinweis}from'@/ui/kr';
-import{generateOrderLabel}from'@/app/actions/pdf.actions';
-import{recordOrderLabelPrintAction}from'@/app/actions/orders.actions';
 import{uploadIntakeOriginal}from'../intakeOriginalUpload';
 import{getIntakeDeviceId}from'../deviceContract';
 import{goodsReceiptGaps,goodsReceiptWare,type GoodsReceiptInput,type GoodsReceiptRecord,type GoodsReceiptReadResult,type GoodsReceiptFailure}from'../goodsReceiptContract';
@@ -123,11 +121,12 @@ export function GoodsReceiptDialog({orderId,sourceId,ports,onClose,onOriginal,on
    const clientEventId=crypto.randomUUID();
    try{
     target.opener=null;target.document.title='Laufzettel.pdf';target.document.body.replaceChildren();target.document.body.style.margin='0';
+    const {generateOrderLabel}=await import('@/app/actions/pdf.actions');
     const base64=await generateOrderLabel(receiptOrderId);if(!base64)throw Error('LABEL_PDF_EMPTY');
     const frame=target.document.createElement('iframe');frame.title='Laufzettel';frame.style.border='0';frame.style.width='100%';frame.style.height='100vh';
     const loaded=new Promise<void>((resolve,reject)=>{const timeout=window.setTimeout(()=>reject(Error('LABEL_PDF_LOAD_TIMEOUT')),10_000);frame.addEventListener('load',()=>{window.clearTimeout(timeout);resolve();},{once:true});frame.addEventListener('error',()=>{window.clearTimeout(timeout);reject(Error('LABEL_PDF_LOAD_FAILED'));},{once:true});});
     frame.src=`data:application/pdf;base64,${base64}`;target.document.body.append(frame);await loaded;
-    target.addEventListener('afterprint',()=>{void(async()=>{try{const result=await recordOrderLabelPrintAction({orderId:receiptOrderId,clientEventId});if(result.code!=='OK'){console.error('[GOODS_LABEL_PRINT_EVENT_FAILED]',{orderId:receiptOrderId,code:result.code});onMessage('Laufzettel wird gedruckt · Verlauf konnte nicht gespeichert werden.');return;}onMessage('Laufzettel wird gedruckt');}catch(cause){console.error('[GOODS_LABEL_PRINT_EVENT_FAILED]',{orderId:receiptOrderId,code:cause instanceof Error?cause.message:'GOODS_LABEL_PRINT_EVENT_FAILED'});onMessage('Laufzettel wird gedruckt · Verlauf konnte nicht gespeichert werden.');}finally{target.close();}})();},{once:true});target.focus();target.print();
+    target.addEventListener('afterprint',()=>{void(async()=>{try{const {recordOrderLabelPrintAction}=await import('@/app/actions/orders.actions');const result=await recordOrderLabelPrintAction({orderId:receiptOrderId,clientEventId});if(result.code!=='OK'){console.error('[GOODS_LABEL_PRINT_EVENT_FAILED]',{orderId:receiptOrderId,code:result.code});onMessage('Laufzettel wird gedruckt · Verlauf konnte nicht gespeichert werden.');return;}onMessage('Laufzettel wird gedruckt');}catch(cause){console.error('[GOODS_LABEL_PRINT_EVENT_FAILED]',{orderId:receiptOrderId,code:cause instanceof Error?cause.message:'GOODS_LABEL_PRINT_EVENT_FAILED'});onMessage('Laufzettel wird gedruckt · Verlauf konnte nicht gespeichert werden.');}finally{target.close();}})();},{once:true});target.focus();target.print();
    }catch(cause){console.error('[GOODS_LABEL_PRINT_FAILED]',{orderId:receiptOrderId,code:cause instanceof Error?cause.message:'GOODS_LABEL_PRINT_FAILED'});try{target.close();}catch(closeCause){console.error('[GOODS_LABEL_PRINT_CLOSE_FAILED]',closeCause);}throw cause;}
   };
   const retryLabel=async()=>{
