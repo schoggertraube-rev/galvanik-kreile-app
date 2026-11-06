@@ -5,6 +5,7 @@ Stand 06.11.2026: **Prüfung noch nicht abgeschlossen; nicht als merge-reif meld
 - Geprüfter Produktstand: `0111464516fbbe8e00685c21f299abb686aa74c7`.
 - READY-Preview dieses Produktstands: https://galvanik-kreile-werkstatt-ccsve4ohs.vercel.app
 - Die Preview zeigt den genannten Produktstand; der später veröffentlichte PR-Kopf und seine Prüfungen sind gesondert gegen dessen SHA nachzuweisen.
+- Zuletzt veröffentlichter Prüfkopf vor diesem Nachtrag: `de717840b0a6592fb418b8bcd7f1919ef8d0ef5a`, READY-Preview https://galvanik-kreile-werkstatt-i4xsnxhlj.vercel.app. Der Produktcode ist gegenüber `01114645` unverändert; seitdem wurden Nachweise ergänzt.
 - Die AP-ABS-Migration wurde nach Owner-Freigabe und erfolgreicher Abbruchprobe auf Dev angewendet. Der Versionsabgleich ist vollständig; der fachliche Sichtlauf steht noch aus.
 
 ## Änderung
@@ -18,7 +19,10 @@ Die Kundenkarte bietet Absprachen und Eigenheiten. Typisierte Absprachen für Za
 - Der bestehende Lieferanten-Schreibweg mit ausschließlich Geld-Recht wurde in der noch nicht auf Dev angewendeten Migration erhalten. Der unveränderte H18-Fall „3.8 Geld alone“ bestand lokal gegen Replay-DB inklusive Rücklesen.
 - CI am Produktstand: Quality, agentur-gate, Fresh Supabase replay, Ratchet und Vercel bestanden. H16: 79/79 H18-Tests und 26/26 Akzeptanztests bestanden; im generierten Gesamtlauf 333/334, G04 hatte einen Locator-Timeout. Ein einmaliger H16-Neustart desselben SHA läuft. Lokal bestand G04 im gezielten Nachlauf; ein Eintrag als erwarteter Fehler wurde deshalb nicht übernommen.
 - ABS-01–20 wurden lokal auf einem früheren Kandidaten mit frischem Build geprüft; die endgültige Einordnung und der Sichtnachweis am PR-Kopf stehen noch aus. ABS-13/14 sind gemäß P79 dem Folgepaket AP-ABS-b zugeordnet.
-- Der gebundene Sichtprüfer hat derzeit keinen Routeintrag für `absprache`; ein vollständiger Sichtnachweis für die betroffenen Bereiche steht aus. Die Abweichung der Hauptaktion in Leer- und Widerrufszustand ist gemäß P80 als `Endversion-Angleich absprache Hauptaktion` einzuordnen.
+- Der lokale Sichtlauf nutzt einen frischen App-Build, eine isolierte Replay-Datenbank und synthetische Nutzer. Die temporären Aufrufrouten öffnen die vorhandenen Kunden-, Auftrags- und Warenausgangsansichten; es wurden keine Dev-Daten verwendet.
+- Kundenbearbeitung: In beiden geprüften Zuständen und allen drei Größen wurden 15 von 15 Elementen gefunden, jeweils ohne roten Befund; die gelben Befunde betreffen Auswahlfarben und Fokusreihenfolge.
+- Absprache: Für den Leerzustand und für bestehende Absprachen wurden getrennte synthetische Kunden verwendet. Der Prüfer sucht beim Knopf `ganzer-kunde-kunde-west` den festen Beispielnamen aus dem Sichtvertrag; die App zeigt stattdessen den tatsächlichen Kundennamen. Die Abweichung der Hauptaktion in Leer- und Widerrufszustand ist gemäß P80 als `Endversion-Angleich absprache Hauptaktion` einzuordnen.
+- Kundenkarte, Auftragskarte und Warenausgang wurden ebenfalls geöffnet; der vollständige Sichtvertrag meldet dort weitere rote Kennungen. Ihre Zuordnung zum geänderten Paketumfang beziehungsweise zum späteren R53-Angleich ist noch offen. Diese Ansichten gelten damit noch nicht als abgenommen.
 
 ## Owner-Klickweg nach Abschluss der Prüfungen
 
