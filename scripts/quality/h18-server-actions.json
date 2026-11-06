@@ -32,6 +32,9 @@
       "src/test/acceptance/apk1_kunde_datenvertrag.integration.test.ts",
       "src/test/h18_customer_actions.integration.test.ts"
     ],
+    "src/app/actions/complaints.actions.ts#nacharbeitAnlegenAction": [
+      "src/test/h18_workshop_actions.integration.test.ts"
+    ],
     "src/app/actions/goodsOut.actions.ts#recordGoodsOutAction": [
       "src/test/h18_workshop_actions.integration.test.ts"
     ],

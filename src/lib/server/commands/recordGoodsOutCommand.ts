@@ -6,9 +6,10 @@ import { readEffectiveCustomerAgreement } from "@/lib/server/effectiveCustomerAg
 import { ORDER_LIFECYCLE_STATUS } from "@/modules/orders/public";
 import {
   PAYMENT_CONTRACT_VERSION,
+  isOrderPaymentMode,
   isPaymentMode,
   mapPaymentSummaryRow,
-  type PaymentMode,
+  type OrderPaymentMode,
   type PaymentStatus,
   type PaymentSummaryRow,
 } from "@/lib/server/paymentContract";
@@ -22,6 +23,7 @@ import { KREILE_TENANT_SLUG } from "@/lib/tenant";
 const EVENT_TYPE_V1 = "ORDER_PICKED_UP_V1" as const;
 const EVENT_TYPE_V2 = "ORDER_PICKED_UP_V2" as const;
 const EVENT_TYPE_V3 = "ORDER_PICKED_UP_V3" as const;
+const EVENT_TYPE_V4 = "ORDER_PICKED_UP_V4" as const;
 const SOURCE_STATION = ORDER_LIFECYCLE_STATUS.FERTIG;
 const TARGET_STATION = ORDER_LIFECYCLE_STATUS.ABGEHOLT;
 const GOODS_OUT_MODES = ["versand", "abholung"] as const;
@@ -53,7 +55,7 @@ type GoodsOutReceiptBase = {
   fromStation: "fertig";
   toStation: "abgeholt";
   mode: GoodsOutMode;
-  paymentMode: PaymentMode;
+  paymentMode: OrderPaymentMode;
   actorId: string;
   occurredAt: string;
 };
@@ -76,7 +78,14 @@ export type GoodsOutReceiptV3 = GoodsOutReceiptBase & {
   settlement: "invoice" | "collection";
 };
 
-export type GoodsOutReceipt = GoodsOutReceiptV1 | GoodsOutReceiptV2 | GoodsOutReceiptV3;
+export type GoodsOutReceiptV4 = GoodsOutReceiptBase & {
+  eventSchemaVersion: 4;
+  paymentMode: "keiner";
+  invoiceState: "not_issued";
+  reworkComplaintId: string;
+};
+
+export type GoodsOutReceipt = GoodsOutReceiptV1 | GoodsOutReceiptV2 | GoodsOutReceiptV3 | GoodsOutReceiptV4;
 
 export type RecordGoodsOutResult =
   | { code: "OK"; receipt: GoodsOutReceipt; replayed: boolean }
@@ -98,6 +107,14 @@ type LockedOrder = {
   status: string | null;
   version: number | string;
   payment_mode: string | null;
+  nacharbeit_zu: string | null;
+};
+
+type ReworkComplaint = {
+  complaint_id: string;
+  stand: string | null;
+  nacharbeit_auftrag_id: string | null;
+  version: number | string | null;
 };
 
 type LockedInvoice = {
@@ -161,6 +178,13 @@ function isGoodsOutAgreement(value: unknown): value is GoodsOutAgreement {
     && (agreement.type === "ausgabe_ohne_zahlung"
       || agreement.type === "sammelrechnung"
       || agreement.type === "zahlungsziel");
+}
+
+function isCanonicalTextId(value: unknown): value is string {
+  return typeof value === "string"
+    && value.trim() === value
+    && value.length >= 1
+    && value.length <= 128;
 }
 
 function toNonNegativeInteger(value: unknown): number | null {
@@ -241,7 +265,7 @@ async function readOrder(
 ): Promise<LockedOrder[]> {
   const query = sql`
     SELECT id, tenant_id, customer_id, station, current_station,
-      current_station_id, status, version, payment_mode,ausgabe_frei
+      current_station_id, status, version, payment_mode, nacharbeit_zu, ausgabe_frei
     FROM public.orders
     WHERE id = ${orderId} AND tenant_id = ${tenantId}
     LIMIT 2
@@ -299,13 +323,16 @@ function parseEvent(row: GoodsOutEventRow, tenantId: string): GoodsOutReceipt {
   const eventSchemaVersion = toNonNegativeInteger(row.event_schema_version);
   const occurredAt = toIso(row.occurred_at);
   if (
-    (row.event_type !== EVENT_TYPE_V1 && row.event_type !== EVENT_TYPE_V2 && row.event_type !== EVENT_TYPE_V3)
+    (row.event_type !== EVENT_TYPE_V1 && row.event_type !== EVENT_TYPE_V2 && row.event_type !== EVENT_TYPE_V3 && row.event_type !== EVENT_TYPE_V4)
     || row.tenant_id !== tenantId
     || row.status !== "success"
     || row.from_station !== SOURCE_STATION
     || row.station !== TARGET_STATION
     || eventSchemaVersion === null
-    || (row.event_type === EVENT_TYPE_V1 ? eventSchemaVersion !== 1 : row.event_type === EVENT_TYPE_V2 ? eventSchemaVersion !== 2 : eventSchemaVersion !== 3)
+    || (row.event_type === EVENT_TYPE_V1 && eventSchemaVersion !== 1)
+    || (row.event_type === EVENT_TYPE_V2 && eventSchemaVersion !== 2)
+    || (row.event_type === EVENT_TYPE_V3 && eventSchemaVersion !== 3)
+    || (row.event_type === EVENT_TYPE_V4 && eventSchemaVersion !== 4)
     || eventVersion === null
     || orderVersion === null
     || orderVersion !== eventVersion
@@ -323,7 +350,7 @@ function parseEvent(row: GoodsOutEventRow, tenantId: string): GoodsOutReceipt {
     || occurredAt === null
     || payload.orderId !== row.order_id
     || !isGoodsOutMode(payload.mode)
-    || !isPaymentMode(payload.paymentMode)
+    || !isOrderPaymentMode(payload.paymentMode)
     || payload.gateAllowed !== true
   ) throw new Error("GOODS_OUT_RECEIPT_INVALID");
 
@@ -341,6 +368,29 @@ function parseEvent(row: GoodsOutEventRow, tenantId: string): GoodsOutReceipt {
     actorId: row.actor_id,
     occurredAt,
   };
+
+  if (row.event_type === EVENT_TYPE_V4) {
+    const expectedKeys = [
+      "complaintStateAfter", "complaintStateBefore", "gateAllowed", "invoiceState", "mode",
+      "orderId", "orderVersion", "paymentMode", "reworkComplaintId",
+    ];
+    if (
+      actualKeys.length !== expectedKeys.length
+      || !actualKeys.every((key, index) => key === expectedKeys[index])
+      || payload.paymentMode !== "keiner"
+      || payload.invoiceState !== "not_issued"
+      || payload.complaintStateBefore !== "massnahme_nacharbeit"
+      || payload.complaintStateAfter !== "abgeschlossen"
+      || !isCanonicalTextId(payload.reworkComplaintId)
+    ) throw new Error("GOODS_OUT_RECEIPT_INVALID");
+    return {
+      ...base,
+      eventSchemaVersion: 4,
+      paymentMode: "keiner",
+      invoiceState: "not_issued",
+      reworkComplaintId: payload.reworkComplaintId,
+    };
+  }
 
   if (row.event_type === EVENT_TYPE_V2) {
     const expectedKeys = ["gateAllowed", "invoiceState", "mode", "orderId", "orderVersion", "paymentMode"];
@@ -393,6 +443,7 @@ function parseEvent(row: GoodsOutEventRow, tenantId: string): GoodsOutReceipt {
     actualKeys.length !== expectedKeys.length
     || !actualKeys.every((key, index) => key === expectedKeys[index])
     || openAmountCents === null
+    || !isPaymentMode(payload.paymentMode)
     || (payload.paymentStatus !== "offen" && payload.paymentStatus !== "teilbezahlt" && payload.paymentStatus !== "bezahlt")
     || (payload.paymentMode !== "rechnung" && payload.paymentMode !== "abholung"
       && (payload.paymentStatus !== "bezahlt" || openAmountCents !== 0))
@@ -575,6 +626,7 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
             existingEvents[0].event_type !== EVENT_TYPE_V1
             && existingEvents[0].event_type !== EVENT_TYPE_V2
             && existingEvents[0].event_type !== EVENT_TYPE_V3
+            && existingEvents[0].event_type !== EVENT_TYPE_V4
           )
         ) {
           return { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
@@ -607,7 +659,13 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
       ) {
         return { code: "VALIDATION_ERROR", message: "Nur fertige Ware kann ausgegeben werden." };
       }
-      if (!order.customer_id || !isPaymentMode(order.payment_mode)) {
+      const isRework = order.payment_mode === "keiner";
+      if (
+        !order.customer_id
+        || (!isPaymentMode(order.payment_mode) && !isRework)
+        || (isRework && !isCanonicalTextId(order.nacharbeit_zu))
+        || (isRework && input.agreement !== undefined)
+      ) {
         return { code: "VALIDATION_ERROR", message: "Auftragsvertrag ist nicht verfügbar." };
       }
 
@@ -661,11 +719,13 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
           return { code: "VALIDATION_ERROR", message: "Rechnung fehlt." };
         }
       } else if (invoiceNotIssued) {
-        if (order.payment_mode !== "rechnung") {
+        if (!isRework && order.payment_mode !== "rechnung") {
           return { code: "CONFLICT", message: "Warenausgang erfordert eine gültige Rechnung." };
         }
       } else {
         if (
+          isRework
+          ||
           !invoice
           || invoice.tenant_id !== tenantId
           || invoice.order_id !== order.id
@@ -684,6 +744,27 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
         if (summary.mode !== order.payment_mode || !summary.goodsOutAllowed) {
           return { code: "CONFLICT", message: "Zahlung ist für den Warenausgang noch offen." };
         }
+      }
+
+      let reworkComplaint: ReworkComplaint | null = null;
+      if (isRework) {
+        const complaintRows = await tx.execute<ReworkComplaint>(sql`
+          SELECT complaint_id, stand, nacharbeit_auftrag_id, version
+          FROM public.v_complaint_rework_context_v1
+          WHERE complaint_id = ${order.nacharbeit_zu}
+          LIMIT 2
+        `);
+        const complaint = complaintRows[0];
+        if (
+          complaintRows.length !== 1 || !complaint
+          || complaint.complaint_id !== order.nacharbeit_zu
+          || complaint.stand !== "massnahme_nacharbeit"
+          || complaint.nacharbeit_auftrag_id !== order.id
+          || toNonNegativeInteger(complaint.version) === null
+        ) {
+          return { code: "CONFLICT", message: "Nacharbeit ist nicht ausgabefähig." };
+        }
+        reworkComplaint = complaint;
       }
 
       const items = await tx.execute<LockedItem>(sql`
@@ -746,13 +827,23 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
       }
 
       const correlationId = randomUUID();
-      const eventType = agreement === null
+      const eventType = isRework ? EVENT_TYPE_V4 : agreement === null
         ? invoiceNotIssued ? EVENT_TYPE_V2 : EVENT_TYPE_V1
         : EVENT_TYPE_V3;
-      const eventSchemaVersion = agreement === null
+      const eventSchemaVersion = isRework ? 4 : agreement === null
         ? invoiceNotIssued ? 2 : 1
         : 3;
-      const payload = agreement !== null ? {
+      const payload = isRework ? {
+        complaintStateAfter: "abgeschlossen" as const,
+        complaintStateBefore: "massnahme_nacharbeit" as const,
+        gateAllowed: true,
+        invoiceState: "not_issued" as const,
+        mode: input.mode,
+        orderId: order.id,
+        orderVersion: nextVersion,
+        paymentMode: "keiner" as const,
+        reworkComplaintId: reworkComplaint!.complaint_id,
+      } : agreement !== null ? {
         orderId: order.id,
         mode: input.mode,
         orderVersion: nextVersion,
@@ -794,6 +885,30 @@ export async function recordGoodsOut(input: unknown): Promise<RecordGoodsOutResu
       `);
       if (inserted.length !== 1 || typeof inserted[0]?.event_id !== "string") {
         throw new Error("GOODS_OUT_EVENT_INSERT_FAILED");
+      }
+
+      if (reworkComplaint) {
+        const expectedComplaintVersion = toNonNegativeInteger(reworkComplaint.version);
+        if (expectedComplaintVersion === null) throw new Error("REWORK_GOODS_OUT_COMPLAINT_VERSION_INVALID");
+        const closed = await tx.execute<{ complaint_id: string; version: number | string }>(sql`
+          UPDATE public.v_complaint_rework_context_v1
+          SET stand = 'abgeschlossen',
+              abschluss_art = 'nacharbeit_raus',
+              abschluss_notiz = NULL,
+              abgeschlossen_am = statement_timestamp() AT TIME ZONE 'UTC',
+              abgeschlossen_von = ${actorId}::uuid,
+              version = version + 1
+          WHERE complaint_id = ${reworkComplaint.complaint_id}
+            AND stand = 'massnahme_nacharbeit'
+            AND nacharbeit_auftrag_id = ${order.id}
+            AND version = ${expectedComplaintVersion}
+          RETURNING complaint_id, version
+        `);
+        if (
+          closed.length !== 1
+          || closed[0]?.complaint_id !== reworkComplaint.complaint_id
+          || toNonNegativeInteger(closed[0]?.version) !== expectedComplaintVersion + 1
+        ) throw new Error("REWORK_GOODS_OUT_COMPLAINT_CLOSE_FAILED");
       }
 
       const persistedEvents = await readEventsByClientId(tx, tenantId, input.clientEventId);

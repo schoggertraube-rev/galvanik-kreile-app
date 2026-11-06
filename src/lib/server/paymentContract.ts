@@ -3,8 +3,10 @@ import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 
 export const PAYMENT_CONTRACT_VERSION = 1 as const;
 export const PAYMENT_MODES = ["vorkasse", "abholung", "rechnung"] as const;
+export const ORDER_PAYMENT_MODES = ["vorkasse", "abholung", "rechnung", "keiner"] as const;
 
 export type PaymentMode = (typeof PAYMENT_MODES)[number];
+export type OrderPaymentMode = (typeof ORDER_PAYMENT_MODES)[number];
 export type PaymentStatus = "offen" | "teilbezahlt" | "bezahlt";
 export type PaymentMethod = "bar" | "ueberweisung" | "karte";
 export type PaymentCurrency = "EUR";
@@ -58,7 +60,7 @@ export type GoodsOutReadback = {
   eventId: string;
   clientEventId: string;
   correlationId: string;
-  eventSchemaVersion: 1 | 2 | 3;
+  eventSchemaVersion: 1 | 2 | 3 | 4;
   orderVersion: number;
   actorId: string;
   occurredAt: string;
@@ -70,7 +72,7 @@ export type OrderPaymentState = {
   orderNumber: string;
   orderVersion: number;
   physicalStatus: string;
-  mode: PaymentMode;
+  mode: OrderPaymentMode;
   paymentModeVersion: number;
   invoiceState: "not_issued" | "issued";
   payment: PaymentSummary | null;
@@ -120,6 +122,7 @@ export type OrderPaymentStateRow = {
   goods_out_mode: string | null;
   goods_out_allowed: boolean;
   integrity_ok: boolean;
+  rework_complaint_id?: string | null;
 };
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -157,6 +160,10 @@ function toIsoTimestamp(value: unknown): string {
 
 export function isPaymentMode(value: unknown): value is PaymentMode {
   return PAYMENT_MODES.includes(value as PaymentMode);
+}
+
+export function isOrderPaymentMode(value: unknown): value is OrderPaymentMode {
+  return ORDER_PAYMENT_MODES.includes(value as OrderPaymentMode);
 }
 
 export function paymentModeFromPreference(
@@ -309,6 +316,8 @@ export function mapOrderPaymentStateRow(
   );
   const mode = row.payment_mode;
   const invoiceState = row.invoice_state;
+  const reworkComplaintId = row.rework_complaint_id ?? null;
+  const isRework = mode === "keiner";
   const canonicalIntakeAxes = row.station === "wareneingang"
     && row.current_station === "wareneingang"
     && row.current_station_id === "wareneingang"
@@ -332,13 +341,19 @@ export function mapOrderPaymentStateRow(
     || !isCanonicalTextId(row.order_status)
     || row.station !== row.current_station
     || row.station !== row.current_station_id
-    || !isPaymentMode(mode)
+    || !isOrderPaymentMode(mode)
     || paymentModeVersion < 0
     || (invoiceState !== "not_issued" && invoiceState !== "issued")
     || activeInvoiceCount !== (invoiceState === "issued" ? 1 : 0)
     || typeof row.goods_out_allowed !== "boolean"
     || goodsOutEventCount < 0
     || goodsOutEventCount > 1
+    || (isRework && (
+      !isCanonicalTextId(reworkComplaintId)
+      || invoiceState !== "not_issued"
+      || activeInvoiceCount !== 0
+    ))
+    || (!isRework && reworkComplaintId !== null)
   ) {
     throw new Error("ORDER_PAYMENT_STATE_INTEGRITY_INVALID");
   }
@@ -346,6 +361,8 @@ export function mapOrderPaymentStateRow(
   let payment: PaymentSummary | null = null;
   if (invoiceState === "issued") {
     if (
+      isRework
+      ||
       row.invoice_id === null
       || row.invoice_number === null
       || row.payment_goods_out_allowed === null
@@ -414,7 +431,9 @@ export function mapOrderPaymentStateRow(
       || !UUID_PATTERN.test(row.goods_out_client_event_id)
       || typeof row.goods_out_correlation_id !== "string"
       || !UUID_PATTERN.test(row.goods_out_correlation_id)
-      || (eventSchemaVersion !== 1 && eventSchemaVersion !== 2 && eventSchemaVersion !== 3)
+      || (eventSchemaVersion !== 1 && eventSchemaVersion !== 2 && eventSchemaVersion !== 3 && eventSchemaVersion !== 4)
+      || (isRework && eventSchemaVersion !== 4)
+      || (!isRework && eventSchemaVersion === 4)
       || goodsOutOrderVersion !== orderVersion
       || typeof row.goods_out_actor_id !== "string"
       || !UUID_PATTERN.test(row.goods_out_actor_id)

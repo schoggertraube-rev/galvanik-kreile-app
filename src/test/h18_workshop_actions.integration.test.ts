@@ -89,7 +89,7 @@ async function createFixture(): Promise<Fixture> {
     await transaction`
       INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
       SELECT ${KREILE_TENANT_SLUG}, ${actorId}::uuid, area, ${actorId}::uuid
-      FROM unnest(ARRAY['eingang', 'auftraege', 'kunden', 'geld', 'kassieren']::text[]) area
+      FROM unnest(ARRAY['eingang', 'auftraege', 'kunden', 'geld', 'kassieren', 'entscheiden']::text[]) area
     `;
     await transaction`
       INSERT INTO public.customers (
@@ -133,6 +133,30 @@ async function createOrder(fixture: Fixture, label: string, paymentMode: "vorkas
   }));
   if (result.code !== "OK") throw new Error(`H18_WORKSHOP_INTAKE_FAILED:${result.code}:${result.message}`);
   return result.receipt;
+}
+
+async function createReworkComplaint(
+  fixture: Fixture,
+  order: { orderId: string; items: Array<{ id: string }> },
+): Promise<{ complaintId: string; version: number }> {
+  const sourceItem = order.items[0];
+  if (!sourceItem) throw new Error("H18_REWORK_SOURCE_ITEM_MISSING");
+  const complaintId = randomUUID();
+  await sql`
+    INSERT INTO public.complaints (
+      id, tenant_id, order_id, customer_id, item_id, reason, description, status,
+      nummer, client_key, teile, mangel, fotos, ware_zurueck, stand, version,
+      erstellt_von, erstellt_am
+    ) VALUES (
+      ${complaintId}, ${KREILE_TENANT_SLUG}, ${order.orderId}, ${fixture.customerId}, ${sourceItem.id},
+      'H18 Reklamation', 'H18 Nacharbeit pruefen', 'open',
+      ${`RK-H18-${complaintId.slice(0, 8)}`}, ${randomUUID()}::uuid,
+      ${JSON.stringify([{ position_id: sourceItem.id, menge: 1 }])}::jsonb,
+      'H18 Mangel', '[]'::jsonb, 'ja', 'aufgenommen', 1,
+      ${fixture.actorId}::uuid, statement_timestamp() AT TIME ZONE 'UTC'
+    )
+  `;
+  return { complaintId, version: 1 };
 }
 
 beforeAll(async () => {
@@ -500,5 +524,207 @@ describe("H18 workshop Server Actions against the real replay database", () => {
     `).toEqual([{ count: 1 }]);
     expect(await withSession(fixture, () => getLiveOrderCardAction({ orderId: order.orderId })))
       .toMatchObject({ code: "OK", data: { card: { id: order.orderId, station: "abgeholt", status: "abgeholt", version: 5 } } });
+  });
+
+  it("creates and closes rework through real actions with DB, event and order-card readback", async () => {
+    const fixture = await createFixture();
+    const source = await createOrder(fixture, "REWORK", "vorkasse");
+    const complaint = await createReworkComplaint(fixture, source);
+    const { nacharbeitAnlegenAction } = await import("@/app/actions/complaints.actions");
+    const { saveGoodsReceiptAction } = await import("@/app/actions/eingang.actions");
+    const {
+      freezeOrderAction,
+      getLiveOrderCardAction,
+      setOrderItemFinishedAction,
+      transitionWareneingangToGalvanikAction,
+    } = await import("@/app/actions/orders.actions");
+    const { recordGoodsOutAction } = await import("@/app/actions/goodsOut.actions");
+
+    const created = await withSession(fixture, () => nacharbeitAnlegenAction({
+      reklamationId: complaint.complaintId,
+      bewertung: "berechtigt",
+      massnahme: "nacharbeit",
+      liefertermin: "2027-05-20",
+      version: complaint.version,
+    }));
+    expect(created.code).toBe("OK");
+    if (created.code !== "OK") throw new Error(`H18_REWORK_CREATE_FAILED:${created.code}:${created.message}`);
+
+    const replay = await withSession(fixture, () => nacharbeitAnlegenAction({
+      reklamationId: complaint.complaintId,
+      bewertung: "berechtigt",
+      massnahme: "nacharbeit",
+      liefertermin: "2027-05-20",
+      version: complaint.version,
+    }));
+    expect(replay).toMatchObject({ code: "OK", replayed: true, receipt: { orderId: created.receipt.orderId } });
+
+    const [createdRow] = await sql<{
+      payment_mode: string;
+      nacharbeit_zu: string;
+      ware: string;
+      geprueft: boolean;
+      handover_mode: string;
+      complaint_stand: string;
+      complaint_massnahme: string;
+      complaint_legacy_reason: string;
+      complaint_legacy_description: string;
+      complaint_legacy_status: string;
+      event_type: string;
+    }[]>`
+      SELECT
+        orders.payment_mode, orders.nacharbeit_zu, orders.ware, orders.geprueft, orders.handover_mode,
+        complaint.stand AS complaint_stand, complaint.massnahme AS complaint_massnahme,
+        complaint.reason AS complaint_legacy_reason,
+        complaint.description AS complaint_legacy_description,
+        complaint.status AS complaint_legacy_status,
+        event.event_type
+      FROM public.orders orders
+      JOIN public.complaints complaint
+        ON complaint.tenant_id=orders.tenant_id AND complaint.id=orders.nacharbeit_zu
+      JOIN public.events event
+        ON event.tenant_id=orders.tenant_id AND event.order_id=orders.id
+      WHERE orders.tenant_id=${KREILE_TENANT_SLUG}
+        AND orders.id=${created.receipt.orderId}
+        AND event.id=${created.receipt.eventId}
+    `;
+    expect(createdRow).toEqual({
+      payment_mode: "keiner",
+      nacharbeit_zu: complaint.complaintId,
+      ware: "erwartet",
+      geprueft: false,
+      handover_mode: "pickup",
+      complaint_stand: "massnahme_nacharbeit",
+      complaint_massnahme: "nacharbeit",
+      complaint_legacy_reason: "H18 Reklamation",
+      complaint_legacy_description: "H18 Nacharbeit pruefen",
+      complaint_legacy_status: "open",
+      event_type: "ORDER_REWORK_CREATED_V1",
+    });
+    const createdView = await withSession(fixture, () => getLiveOrderCardAction({ orderId: created.receipt.orderId }));
+    expect(createdView).toMatchObject({ code: "OK", data: { card: { id: created.receipt.orderId } } });
+
+    const [receivedItem] = await sql<{ id: string; quantity: number | string; version: number }[]>`
+      SELECT item.id, item.quantity, orders.version
+      FROM public.items item
+      JOIN public.orders orders ON orders.id=item.order_id AND orders.tenant_id=item.tenant_id
+      WHERE item.tenant_id=${KREILE_TENANT_SLUG} AND item.order_id=${created.receipt.orderId}
+    `;
+    if (!receivedItem || !Number.isFinite(Number(receivedItem.quantity))) {
+      throw new Error("H18_REWORK_CREATED_ITEM_MISSING");
+    }
+    const goodsReceipt = await withSession(fixture, () => saveGoodsReceiptAction({
+      id: randomUUID(),
+      clientKey: randomUUID(),
+      clientEventId: randomUUID(),
+      itemId: null,
+      orderId: created.receipt.orderId,
+      expectedOrderVersion: receivedItem.version,
+      expectedVersion: 0,
+      mode: "erwartet",
+      command: "accept",
+      card: 0,
+      packagesReceived: 1,
+      packagesTotal: 1,
+      condition: "unauffaellig",
+      deviations: [],
+      foundUnattended: false,
+      foundAt: null,
+      procedure: null,
+      procedureNote: null,
+      photos: [],
+      quantities: [{
+        itemId: receivedItem.id,
+        expected: Number(receivedItem.quantity),
+        received: null,
+        confirmed: true,
+        note: null,
+      }],
+    }));
+    expect(goodsReceipt.code).toBe("OK");
+    if (goodsReceipt.code !== "OK") throw new Error(`H18_REWORK_GOODS_RECEIPT_FAILED:${goodsReceipt.code}:${goodsReceipt.message}`);
+    const [receivedOrder] = await sql<{ version: number; ware: string }[]>`
+      SELECT version, ware FROM public.orders
+      WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${created.receipt.orderId}
+    `;
+    expect(receivedOrder?.ware).toBe("da");
+    if (!receivedOrder) throw new Error("H18_REWORK_RECEIVED_ORDER_MISSING");
+    const moved = await withSession(fixture, () => transitionWareneingangToGalvanikAction({
+      orderId: created.receipt.orderId,
+      expectedVersion: receivedOrder.version,
+      clientEventId: randomUUID(),
+    }));
+    expect(moved.code).toBe("OK");
+    if (moved.code !== "OK") throw new Error(`H18_REWORK_STATION_MOVE_FAILED:${moved.code}:${moved.message}`);
+    const finished = await withSession(fixture, () => setOrderItemFinishedAction({
+      orderId: created.receipt.orderId,
+      itemId: receivedItem.id,
+      expectedVersion: moved.receipt.aggregateVersion,
+      clientEventId: randomUUID(),
+      finished: true,
+    }));
+    expect(finished.code).toBe("OK");
+    if (finished.code !== "OK") throw new Error(`H18_REWORK_ITEM_FINISHED_FAILED:${finished.code}:${finished.message}`);
+    const rateId = randomUUID();
+    await sql`
+      INSERT INTO private.extra_work_hourly_rates
+        (id, tenant_id, hourly_rate_cents, version, created_by, effective_at)
+      SELECT ${rateId}::uuid, ${KREILE_TENANT_SLUG}, 12000,
+        coalesce(max(version), 0) + 1, ${fixture.actorId}::uuid, now()
+      FROM private.extra_work_hourly_rates
+      WHERE tenant_id=${KREILE_TENANT_SLUG}
+    `;
+    const [ready] = await sql<{ version: number }[]>`
+      SELECT version FROM public.orders
+      WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${created.receipt.orderId}
+    `;
+    if (!ready) throw new Error("H18_REWORK_READY_ORDER_MISSING");
+    const frozen = await withSession(fixture, () => freezeOrderAction({
+      orderId: created.receipt.orderId,
+      freezeId: randomUUID(),
+      expectedVersion: ready.version,
+      clientEventId: randomUUID(),
+    }));
+    expect(frozen.code).toBe("OK");
+    if (frozen.code !== "OK") throw new Error(`H18_REWORK_FREEZE_FAILED:${frozen.code}:${frozen.message}`);
+    const [frozenOrder] = await sql<{ version: number; ausgabe_frei: boolean }[]>`
+      SELECT version, ausgabe_frei FROM public.orders
+      WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${created.receipt.orderId}
+    `;
+    expect(frozenOrder?.ausgabe_frei).toBe(true);
+    if (!frozenOrder) throw new Error("H18_REWORK_FROZEN_ORDER_MISSING");
+
+    const goodsOut = await withSession(fixture, () => recordGoodsOutAction({
+      orderId: created.receipt.orderId,
+      mode: "abholung",
+      expectedVersion: frozenOrder.version,
+      clientEventId: randomUUID(),
+    }));
+    expect(goodsOut.code).toBe("OK");
+    if (goodsOut.code !== "OK") throw new Error(`H18_REWORK_GOODS_OUT_FAILED:${goodsOut.code}:${goodsOut.message}`);
+    const [closedRow] = await sql<{
+      station: string;
+      complaint_stand: string;
+      abschluss_art: string;
+      event_type: string;
+    }[]>`
+      SELECT orders.station, complaint.stand AS complaint_stand, complaint.abschluss_art, event.event_type
+      FROM public.orders orders
+      JOIN public.complaints complaint
+        ON complaint.tenant_id=orders.tenant_id AND complaint.id=orders.nacharbeit_zu
+      JOIN public.events event
+        ON event.tenant_id=orders.tenant_id AND event.order_id=orders.id
+      WHERE orders.tenant_id=${KREILE_TENANT_SLUG}
+        AND orders.id=${created.receipt.orderId}
+        AND event.client_event_id=${goodsOut.code === "OK" ? goodsOut.receipt.clientEventId : ""}::uuid
+    `;
+    expect(closedRow).toEqual({
+      station: "abgeholt",
+      complaint_stand: "abgeschlossen",
+      abschluss_art: "nacharbeit_raus",
+      event_type: "ORDER_PICKED_UP_V4",
+    });
+    const closedView = await withSession(fixture, () => getLiveOrderCardAction({ orderId: created.receipt.orderId }));
+    expect(closedView).toMatchObject({ code: "OK", data: { card: { id: created.receipt.orderId, station: "abgeholt" } } });
   });
 });

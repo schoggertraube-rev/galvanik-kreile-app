@@ -96,9 +96,10 @@ function actionStatus(index: number, current: number): SchrittStatus {
   return "warten";
 }
 
-function paymentModeLabel(mode: "vorkasse" | "abholung" | "rechnung"): string {
+function paymentModeLabel(mode: "vorkasse" | "abholung" | "rechnung" | "keiner"): string {
   if (mode === "vorkasse") return "Vorkasse";
   if (mode === "abholung") return "Abholung";
+  if (mode === "keiner") return "Ohne Berechnung · Nacharbeit";
   return "Rechnung";
 }
 
@@ -197,7 +198,7 @@ export function OrderCardView({
   const payment = card.payment.kind === "available" ? card.payment.value : null;
   const current = card.station === "abgeholt" ? 4 : payment?.status === "bezahlt" ? 3 : Math.max(0, STATIONS.indexOf(card.station as (typeof STATIONS)[number]));
   const deadline = dueStatus(card.dueAt);
-  const paymentFree = payment?.status === "bezahlt" || payment?.mode === "rechnung";
+  const paymentFree = payment?.status === "bezahlt" || payment?.mode === "rechnung" || payment?.mode === "keiner";
   const missingInvoicePrices = card.items.filter((item) => item.unitPriceCents === null || item.unitPriceCents === undefined);
   const contentEnabled = Boolean(actions.content?.enabled && actions.onSaveContent);
   const contentItems = card.items.map((item) => ({
