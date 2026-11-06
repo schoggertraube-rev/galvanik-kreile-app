@@ -57,6 +57,9 @@
     "src/lib/server/customerSummaryRead.ts": [
       "private.v_customer_summary_v1"
     ],
+    "src/lib/server/effectiveCustomerAgreementRead.ts": [
+      "private.v_customer_effective_agreement_v1"
+    ],
     "src/lib/server/evidenceRead.ts": [
       "private.v_evidence_records_v2"
     ],
