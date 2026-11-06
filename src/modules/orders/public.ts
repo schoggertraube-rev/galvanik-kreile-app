@@ -26,9 +26,15 @@ export type {
   OrderCardActionFeedback,
   OrderCardAgreementPorts,
   OrderCardActionPorts,
+  OrderCardGoodsOutAgreement,
+  OrderCardGoodsOutMode,
   OrderCardModel,
   OrderCardPayment,
   OrderCardPaymentContext,
   OrderCardState,
   OrdersListItem,
+} from "./server/types";
+export {
+  goodsOutAgreementButtonText,
+  goodsOutAgreementReceiptText,
 } from "./server/types";

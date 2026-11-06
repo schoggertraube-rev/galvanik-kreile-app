@@ -48,10 +48,12 @@ import type { EvidenceReadRecord } from "@/lib/server/evidenceRead";
 import type { OrderPaymentState } from "@/lib/server/paymentContract";
 import {
   CustomerAgreementDialog,
+  goodsOutAgreementReceiptText,
   OrderCardView,
   OrderStationAttachmentPanel,
   type OrderCardActionFeedback,
   type OrderCardActionPorts,
+  type OrderCardGoodsOutAgreement,
   type CustomerAgreementRecord,
   type OrderCardModel,
   type OrderCardPaymentContext,
@@ -212,6 +214,8 @@ function mapCard(
     frozenAt: card.freeze?.frozenAt ?? null,
     totalAmountCents: card.freeze?.totalAmountCents ?? null,
     agreement: card.agreement,
+    agreementHint: card.agreementHint,
+    handoverMode: card.handoverMode,
     payment,
     catalog,
   };
@@ -601,8 +605,11 @@ export function OrderCardAppAdapter({
     [fail, load, snapshot, success],
   );
   const onRecordGoodsOut = useCallback(
-    async (mode: "versand" | "abholung") => {
-      if (!snapshot) return;
+    async (
+      mode: "versand" | "abholung",
+      agreement?: OrderCardGoodsOutAgreement,
+    ): Promise<boolean> => {
+      if (!snapshot) return false;
       setFeedback({
         kind: "submitting",
         message: "Warenausgang wird sicher gebucht.",
@@ -613,10 +620,20 @@ export function OrderCardAppAdapter({
         expectedVersion: snapshot.card.version,
         mode,
         clientEventId,
+        ...(agreement ? {
+          agreement: {
+            id: agreement.id,
+            type: agreement.type,
+            version: agreement.version,
+          },
+        } : {}),
       });
       if (result.code !== "OK") {
         await fail(result);
-        return;
+        if (agreement && result.code === "VALIDATION_ERROR" && result.message === "Zahlung fehlt.") {
+          await load(true);
+        }
+        return false;
       }
       const fresh = await load(true);
       if (
@@ -629,7 +646,7 @@ export function OrderCardAppAdapter({
           message:
             "Der Warenausgang konnte nicht sicher bestätigt werden. Bitte den Auftragsstand neu laden.",
         });
-        return;
+        return false;
       }
       success(
         "goods-out",
@@ -639,8 +656,11 @@ export function OrderCardAppAdapter({
           eventId: result.receipt.eventId,
           receiptId: `goods-out://${orderId}/${result.receipt.orderVersion}`,
         },
-        "Warenausgang wurde sicher bestätigt.",
+        `${snapshot.card.orderNumber} übergeben · ${agreement
+          ? goodsOutAgreementReceiptText(agreement, mode)
+          : mode === "versand" ? "Versendet" : "Abholung bestätigt"}`,
       );
+      return true;
     },
     [fail, load, orderId, snapshot, success],
   );
@@ -731,10 +751,6 @@ export function OrderCardAppAdapter({
     const paymentReady =
       payment?.invoiceState === "issued" &&
       Boolean(payment.payment && payment.payment.openAmountCents > 0);
-    const goodsGate =
-      payment?.mode === "rechnung" ||
-      payment?.mode === "abholung" ||
-      payment?.payment?.status === "bezahlt";
     return {
       content: availability(Boolean(card), editContent && !card?.freeze, !editContent ? "Ihre Rolle darf Auftragsinhalte nicht ändern." : card?.freeze ? "Der Auftrag ist bereits fertig gemeldet." : null),
       itemStatus: availability(Boolean(card), canPhoto && !card?.freeze, !canPhoto ? "Ihre Rolle darf den Teilstatus nicht ändern." : card?.freeze ? "Der Auftrag ist bereits fertig gemeldet." : null),
@@ -776,12 +792,10 @@ export function OrderCardAppAdapter({
       ),
       goodsOut: availability(
         card?.station === "fertig",
-        goods && Boolean(goodsGate),
+        goods,
         !goods
           ? "Ihre Rolle darf keinen Warenausgang buchen."
-          : !goodsGate
-            ? "Der Zahlungsstand erlaubt den Warenausgang noch nicht."
-            : null,
+          : null,
       ),
       agreement: card && canManageAgreement
         ? {

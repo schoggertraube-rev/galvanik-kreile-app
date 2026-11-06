@@ -22,6 +22,13 @@ export type EffectiveCustomerAgreementReadInput = {
   lock?: boolean;
 };
 
+export type InactiveCustomerAgreementHint = {
+  label: string;
+  type: CustomerAgreementType;
+  state: "expired" | "revoked";
+  date: string;
+};
+
 type AgreementRow = {
   id: string;
   tenant_id: string;
@@ -38,6 +45,16 @@ type AgreementRow = {
   version: number | string;
   created_at: Date | string;
   created_by_name: string | null;
+};
+
+type InactiveAgreementRow = {
+  tenant_id: string;
+  customer_id: string;
+  order_id: string | null;
+  bezeichnung: string;
+  typ: string | null;
+  gueltig_bis: Date | string | null;
+  widerrufen_am: Date | string | null;
 };
 
 function textId(value: unknown): value is string {
@@ -184,4 +201,59 @@ export async function readEffectiveCustomerAgreement(
     || agreements.length !== orderAgreements.length + customerAgreements.length
   ) throw new Error("CUSTOMER_AGREEMENT_EFFECTIVE_AMBIGUOUS");
   return orderAgreements[0] ?? customerAgreements[0] ?? null;
+}
+
+/**
+ * 10.1 needs to explain why a formerly typed agreement no longer unlocks
+ * goods-out.  This remains a read of the same canonical agreement rows; it
+ * never promotes a historical row into an effective agreement.
+ */
+export async function readInactiveCustomerAgreementHint(
+  tx: PrivilegedTenantTransaction,
+  input: Omit<EffectiveCustomerAgreementReadInput, "lock">,
+): Promise<InactiveCustomerAgreementHint | null> {
+  if (!textId(input.tenantId) || !textId(input.customerId) || !textId(input.orderId)) {
+    throw new Error("CUSTOMER_AGREEMENT_INACTIVE_INPUT_INVALID");
+  }
+  const rows = await tx.execute<InactiveAgreementRow>(sql`
+    SELECT tenant_id, customer_id, order_id, bezeichnung, typ, gueltig_bis, widerrufen_am
+    FROM public.customer_agreements
+    WHERE tenant_id = ${input.tenantId}
+      AND customer_id = ${input.customerId}
+      AND (order_id IS NULL OR order_id = ${input.orderId})
+      AND typ IS NOT NULL
+      AND (
+        widerrufen_am IS NOT NULL
+        OR gueltig_bis < timezone('Europe/Berlin', now())::date
+      )
+    ORDER BY CASE WHEN order_id = ${input.orderId} THEN 0 ELSE 1 END,
+      COALESCE(widerrufen_am, gueltig_bis::timestamptz, '-infinity'::timestamptz) DESC,
+      id DESC
+    LIMIT 2
+  `);
+  if (rows.length === 0) return null;
+  const row = rows[0];
+  const type = row?.typ && TYPES.has(row.typ as CustomerAgreementType)
+    ? row.typ as CustomerAgreementType
+    : null;
+  if (
+    rows.length > 2
+    || !row
+    || row.tenant_id !== input.tenantId
+    || row.customer_id !== input.customerId
+    || (row.order_id !== null && row.order_id !== input.orderId)
+    || typeof row.bezeichnung !== "string"
+    || row.bezeichnung.trim() !== row.bezeichnung
+    || row.bezeichnung.length < 1
+    || row.bezeichnung.length > 160
+    || type === null
+  ) {
+    throw new Error("CUSTOMER_AGREEMENT_INACTIVE_ROW_INVALID");
+  }
+  if (row.widerrufen_am !== null) {
+    return { label: row.bezeichnung, type, state: "revoked", date: iso(row.widerrufen_am) };
+  }
+  const validUntil = dateOnly(row.gueltig_bis);
+  if (validUntil === null) throw new Error("CUSTOMER_AGREEMENT_INACTIVE_DATE_INVALID");
+  return { label: row.bezeichnung, type, state: "expired", date: validUntil };
 }
