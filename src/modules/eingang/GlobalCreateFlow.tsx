@@ -2486,7 +2486,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 </div> : null}
               </aside></PruefRail></div>
 
-              {feedback ? <>
+              {feedback && !intakeClosePrompt ? <>
                 <div data-spec-id={feedback.kind === "save-failed" ? "eingang.zustand.fehler" : undefined}><Hinweis ton={feedback.kind === "validation" ? "warn" : undefined}><span><strong>{feedback.kind === "save-failed" ? "Speichern fehlgeschlagen · alle Eingaben sind noch da" : feedback.kind === "unclear" ? "Ausgang ungeklärt" : "Eingabe prüfen"}</strong><br />{feedback.message}</span></Hinweis></div>
                 {feedback.kind === "save-failed" ? <KrButton data-spec-id="eingang.erneut-buchen" art="primaer" text={busy ? lastIntakeAction==='prospect'?"Wird gespeichert …":"Wird gebucht …" : lastIntakeAction==='prospect'?'Erneut speichern':"Erneut buchen"} onClick={() => lastIntakeAction==='prospect'?void saveProspect():void submitDirectIntake({ preventDefault() {} } as FormEvent)} disabled={busy} /> : null}
                 {feedback.kind === "unclear" ? <div className="kr-stapel">
