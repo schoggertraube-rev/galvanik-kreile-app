@@ -58,7 +58,7 @@ export type GoodsOutReadback = {
   eventId: string;
   clientEventId: string;
   correlationId: string;
-  eventSchemaVersion: 1 | 2;
+  eventSchemaVersion: 1 | 2 | 3;
   orderVersion: number;
   actorId: string;
   occurredAt: string;
@@ -414,7 +414,7 @@ export function mapOrderPaymentStateRow(
       || !UUID_PATTERN.test(row.goods_out_client_event_id)
       || typeof row.goods_out_correlation_id !== "string"
       || !UUID_PATTERN.test(row.goods_out_correlation_id)
-      || (eventSchemaVersion !== 1 && eventSchemaVersion !== 2)
+      || (eventSchemaVersion !== 1 && eventSchemaVersion !== 2 && eventSchemaVersion !== 3)
       || goodsOutOrderVersion !== orderVersion
       || typeof row.goods_out_actor_id !== "string"
       || !UUID_PATTERN.test(row.goods_out_actor_id)

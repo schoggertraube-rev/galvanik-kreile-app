@@ -5,6 +5,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { sql } from "drizzle-orm";
 import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
+import { readEffectiveCustomerAgreement } from "@/lib/server/effectiveCustomerAgreementRead";
 import {
   withPrivilegedTenantTransaction,
   type PrivilegedTenantTransaction,
@@ -44,6 +45,11 @@ export type CreateInvoiceInput = {
   orderId: string;
   expectedVersion: number;
   clientEventId: string;
+  agreement?: {
+    id: string;
+    version: number;
+    type: "ausgabe_ohne_zahlung" | "zahlungsziel";
+  };
 };
 
 type ImmutableInvoiceReceiptBase = {
@@ -256,9 +262,14 @@ function isValidInput(input: unknown): input is CreateInvoiceInput {
   if (!input || typeof input !== "object" || Array.isArray(input)) return false;
   const value = input as Record<string, unknown>;
   const expected = ["clientEventId", "expectedVersion", "orderId"];
+  const expectedWithAgreement = ["agreement", ...expected].sort();
   const actual = Object.keys(value).sort();
-  return actual.length === expected.length
-    && actual.every((key, index) => key === expected[index])
+  const hasAgreement = actual.length === expectedWithAgreement.length
+    && actual.every((key, index) => key === expectedWithAgreement[index]);
+  const agreement = value.agreement;
+  return (actual.length === expected.length
+      && actual.every((key, index) => key === expected[index])
+      || hasAgreement)
     && typeof value.orderId === "string"
     && value.orderId.trim() === value.orderId
     && value.orderId.length > 0
@@ -267,7 +278,20 @@ function isValidInput(input: unknown): input is CreateInvoiceInput {
     && UUID_PATTERN.test(value.clientEventId)
     && typeof value.expectedVersion === "number"
     && Number.isSafeInteger(value.expectedVersion)
-    && value.expectedVersion > 0;
+    && value.expectedVersion > 0
+    && (!hasAgreement || (
+      agreement !== null
+      && typeof agreement === "object"
+      && !Array.isArray(agreement)
+      && Object.keys(agreement as Record<string, unknown>).sort().join(",") === "id,type,version"
+      && typeof (agreement as Record<string, unknown>).id === "string"
+      && UUID_PATTERN.test((agreement as Record<string, unknown>).id as string)
+      && typeof (agreement as Record<string, unknown>).version === "number"
+      && Number.isSafeInteger((agreement as Record<string, unknown>).version)
+      && ((agreement as Record<string, unknown>).version as number) > 0
+      && ((agreement as Record<string, unknown>).type === "ausgabe_ohne_zahlung"
+        || (agreement as Record<string, unknown>).type === "zahlungsziel")
+    ));
 }
 
 function isValidCancelInput(input: unknown): input is CancelInvoiceInput {
@@ -900,9 +924,9 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
       ? { code: "UNAVAILABLE", message: "Rechnung konnte nicht sicher ausgestellt werden." }
       : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
-  if (
-    !hasAuthorizationArea(authorization.data, "geld")
-  ) {
+  const agreementDelegation = input.agreement !== undefined
+    && hasAuthorizationArea(authorization.data, "auftraege");
+  if (!hasAuthorizationArea(authorization.data, "geld") && !agreementDelegation) {
     return { code: "FORBIDDEN", message: "Geld, Preise & Buchhaltung ist nicht freigegeben." };
   }
 
@@ -966,6 +990,25 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
       ) {
         return { code: "VALIDATION_ERROR", message: "Zahlungsmodus des Auftrags ist nicht verfügbar." };
       }
+      const agreement = input.agreement === undefined
+        ? null
+        : await readEffectiveCustomerAgreement(tx, {
+            tenantId,
+            customerId: order.customer_id,
+            orderId: order.id,
+            lock: true,
+          });
+      if (
+        input.agreement !== undefined
+        && (
+          agreement === null
+          || agreement.id !== input.agreement.id
+          || agreement.version !== input.agreement.version
+          || agreement.type !== input.agreement.type
+        )
+      ) {
+        return { code: "VALIDATION_ERROR", message: "Zahlung fehlt." };
+      }
       const afterGoodsOut = order.station === "abgeholt" && order.status === "abgeholt";
       if (
         (order.station !== STATION || order.status !== STATION)
@@ -1006,9 +1049,12 @@ export async function createInvoice(input: unknown): Promise<CreateInvoiceResult
         return { code: "VALIDATION_ERROR", message: "Stammdaten für die Rechnungsausgabe sind unvollständig." };
       }
 
-      const paymentTermDays = toSafeInteger(source.invoice_payment_term_days, "INVOICE_PAYMENT_TERM_INVALID");
+      const sourcePaymentTermDays = toSafeInteger(source.invoice_payment_term_days, "INVOICE_PAYMENT_TERM_INVALID");
+      const paymentTermDays = agreement?.type === "zahlungsziel"
+        ? agreement.targetDays
+        : sourcePaymentTermDays;
       const vatRateBasisPoints = toSafeInteger(source.invoice_vat_rate_basis_points, "INVOICE_VAT_RATE_INVALID");
-      if (paymentTermDays < 1 || paymentTermDays > 365 || ![700, 1900].includes(vatRateBasisPoints)) {
+      if (!Number.isSafeInteger(paymentTermDays) || paymentTermDays < 1 || paymentTermDays > 365 || ![700, 1900].includes(vatRateBasisPoints)) {
         return { code: "VALIDATION_ERROR", message: "Stammdaten für die Rechnungsausgabe sind unvollständig." };
       }
 

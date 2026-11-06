@@ -3,18 +3,15 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { isOrderIntakeFreeTextUnit, isOrderIntakeFreeTextPrice } from "@/lib/orderPositionContract";
 import { orderPositionQuantityError, orderPositionUnitLabel, orderPositionSurfaceLabel } from "@/lib/orderPositionContract";
-import { hasAuthorizationArea, type AuthorizationSnapshot } from "@/lib/server/authorization";
+import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type { OrderIntakeExecutionRequested, OrderIntakeSource } from "@/lib/server/commands/orderIntakeCommand";
 import type {
   OrderTaskAssigneeOption,
   OrderTaskAssignmentState,
 } from "@/lib/server/orderTaskAssignmentRead";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import {
-  CUSTOMER_AGREEMENT_TYPES,
-  type CustomerAgreementRecord,
-  type CustomerAgreementType,
-} from "@/modules/customers/public";
+import type { CustomerAgreementRecord } from "@/modules/customers/public";
+import { readEffectiveCustomerAgreement } from "@/lib/server/effectiveCustomerAgreementRead";
 
 const MAX_ID_LENGTH = 128;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -22,7 +19,6 @@ const LEGACY_ITEM_KEYS = ["id", "position", "name", "quantity", "material", "sur
 const CURRENT_ITEM_KEYS = ["catalogServiceId", "id", "material", "name", "position", "quantity", "surfaceRequested", "unit", "unitPriceCents", "vatRateBasisPoints"] as const;
 const CURRENT_ITEM_WITH_EXECUTION_KEYS = [...CURRENT_ITEM_KEYS, "executionRequested"] as const;
 const EXECUTION_REQUESTED_VALUES = ["hochglanz", "glaenzend", "matt", "gelb_passiviert", "blau_passiviert", "offen"] as const;
-const AGREEMENT_TYPES = new Set<string>(CUSTOMER_AGREEMENT_TYPES);
 
 export type OrderCardExtraWork = {
   lineId: string;
@@ -197,25 +193,6 @@ type FreezeRow = {
   integrity_ok: boolean;
 };
 
-type AgreementRow = {
-  id: string;
-  tenant_id: string;
-  customer_id: string;
-  order_id: string | null;
-  position: number;
-  bezeichnung: string;
-  typ: string;
-  ziel_tage: number | null;
-  geld: boolean;
-  hinweis: boolean;
-  gueltig_bis: Date | string | null;
-  grund: string;
-  version: number;
-  widerrufen_am: Date | string | null;
-  created_at: Date | string;
-  created_by_name: string | null;
-};
-
 type AssignmentRow = {
   id: string;
   tenant_id: string;
@@ -306,73 +283,6 @@ function toSafeInteger(value: unknown, error: string): number {
   const parsed = typeof value === "number" ? value : Number(value);
   if (!Number.isSafeInteger(parsed)) throw new Error(error);
   return parsed;
-}
-
-function agreementPersonName(value: unknown): string | null {
-  if (value === null) return null;
-  if (typeof value !== "string" || value.trim() !== value || value.length < 1 || value.length > 200) {
-    throw new Error("ORDER_CARD_AGREEMENT_LOGIN_INVALID");
-  }
-  return value;
-}
-
-function mapCurrentAgreement(
-  row: AgreementRow,
-  tenantId: string,
-  customerId: string,
-  orderId: string,
-): CustomerAgreementRecord {
-  const type = AGREEMENT_TYPES.has(row.typ)
-    ? row.typ as CustomerAgreementType
-    : undefined;
-  const validUntil = row.gueltig_bis === null
-    ? null
-    : toNullableIso(row.gueltig_bis)?.slice(0, 10) ?? null;
-  if (
-    !validId(row.id)
-    || row.tenant_id !== tenantId
-    || row.customer_id !== customerId
-    || (row.order_id !== null && row.order_id !== orderId)
-    || !Number.isInteger(row.position)
-    || row.position < 1
-    || row.position > 20
-    || typeof row.bezeichnung !== "string"
-    || row.bezeichnung.trim() !== row.bezeichnung
-    || row.bezeichnung.length < 1
-    || row.bezeichnung.length > 400
-    || type === undefined
-    || !Number.isInteger(row.version)
-    || row.version < 1
-    || row.geld !== true
-    || typeof row.hinweis !== "boolean"
-    || (row.ziel_tage !== null && (!Number.isInteger(row.ziel_tage) || row.ziel_tage < 1 || row.ziel_tage > 120))
-    || (["sammelrechnung", "zahlungsziel"].includes(type) !== (row.ziel_tage !== null))
-    || typeof row.grund !== "string"
-    || row.grund.trim() !== row.grund
-    || row.grund.length < 3
-    || row.grund.length > 400
-    || row.widerrufen_am !== null
-    || (row.gueltig_bis !== null && !validUntil)
-  ) throw new Error("ORDER_CARD_AGREEMENT_INVALID");
-  return {
-    id: row.id,
-    customerId: row.customer_id,
-    orderId: row.order_id,
-    position: row.position,
-    label: row.bezeichnung,
-    type,
-    targetDays: row.ziel_tage,
-    money: row.geld,
-    notice: row.hinweis,
-    validUntil,
-    reason: row.grund,
-    version: row.version,
-    revokedAt: null,
-    revokedBy: null,
-    revokeReason: null,
-    createdAt: toIso(row.created_at),
-    createdBy: agreementPersonName(row.created_by_name),
-  };
 }
 
 export function mapOrderCardIntakeItems(value: unknown): OrderCardItem[] {
@@ -710,42 +620,14 @@ export async function readLiveOrderCard(
       `);
       if (customerRows.length !== 1 || !customerRows[0]) throw new Error("ORDER_CARD_CUSTOMER_INVALID");
 
-      const agreementRows = hasAuthorizationArea(authorization, "geld")
-        ? await tx.execute<AgreementRow>(sql`
-            SELECT agreement.id::text AS id, agreement.tenant_id, agreement.customer_id,
-              agreement.order_id, agreement.position, agreement.bezeichnung, agreement.typ,
-              agreement.ziel_tage, agreement.geld, agreement.hinweis, agreement.gueltig_bis,
-              agreement.grund, agreement.version, agreement.widerrufen_am, agreement.created_at,
-              creator.full_name AS created_by_name
-            FROM public.customer_agreements agreement
-            LEFT JOIN public.app_users creator
-              ON creator.tenant_id = agreement.tenant_id AND creator.id = agreement.created_by
-            WHERE agreement.tenant_id = ${authorization.tenantId}
-              AND agreement.customer_id = ${queue.customer_id}
-              AND agreement.typ IS NOT NULL
-              AND agreement.widerrufen_am IS NULL
-              AND (agreement.gueltig_bis IS NULL OR agreement.gueltig_bis >= timezone('Europe/Berlin', now())::date)
-              AND (agreement.order_id IS NULL OR agreement.order_id = ${queue.id})
-            ORDER BY CASE WHEN agreement.order_id = ${queue.id} THEN 0 ELSE 1 END,
-              agreement.created_at DESC, agreement.id
-            LIMIT 3
-          `)
-        : [];
-      const currentAgreements = agreementRows.map((row) => mapCurrentAgreement(
-        row,
-        authorization.tenantId,
-        queue.customer_id,
-        queue.id,
-      ));
-      const orderAgreements = currentAgreements.filter((agreement) => agreement.orderId === queue.id);
-      const customerAgreements = currentAgreements.filter((agreement) => agreement.orderId === null);
-      if (
-        currentAgreements.length !== agreementRows.length
-        || orderAgreements.length > 1
-        || customerAgreements.length > 1
-        || currentAgreements.length !== orderAgreements.length + customerAgreements.length
-      ) throw new Error("ORDER_CARD_AGREEMENT_AMBIGUOUS");
-      const agreement = orderAgreements[0] ?? customerAgreements[0] ?? null;
+      // The valid typed agreement is operational state, not a money amount:
+      // 10.1 must still be able to offer the goods-out route to users without
+      // the `geld` area. Money-specific controls remain gated in the adapter.
+      const agreement = await readEffectiveCustomerAgreement(tx, {
+        tenantId: authorization.tenantId,
+        customerId: queue.customer_id,
+        orderId: queue.id,
+      });
 
       const assignmentRows = await tx.execute<AssignmentRow>(sql`
         SELECT id::text AS id, tenant_id, order_id,

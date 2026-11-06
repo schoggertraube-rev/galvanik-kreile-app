@@ -116,6 +116,38 @@ CREATE POLICY invoice_collection_orders_tenant_isolation ON public.invoice_colle
   USING (tenant_id = nullif(btrim(current_setting('app.tenant_id', true)), ''))
   WITH CHECK (tenant_id = nullif(btrim(current_setting('app.tenant_id', true)), ''));
 
+CREATE OR REPLACE VIEW private.v_customer_effective_agreement_v1
+WITH (security_invoker = true)
+AS
+SELECT
+  agreement.id,
+  agreement.tenant_id,
+  agreement.customer_id,
+  agreement.order_id,
+  agreement.position,
+  agreement.bezeichnung,
+  agreement.typ,
+  agreement.ziel_tage,
+  agreement.geld,
+  agreement.hinweis,
+  agreement.gueltig_bis,
+  agreement.grund,
+  agreement.version,
+  agreement.created_at,
+  creator.full_name AS created_by_name
+FROM public.customer_agreements agreement
+LEFT JOIN public.app_users creator
+  ON creator.tenant_id = agreement.tenant_id
+ AND creator.id = agreement.created_by
+WHERE agreement.tenant_id = nullif(btrim(current_setting('app.tenant_id', true)), '')
+  AND agreement.typ IS NOT NULL
+  AND agreement.geld = true
+  AND agreement.widerrufen_am IS NULL
+  AND (agreement.gueltig_bis IS NULL OR agreement.gueltig_bis >= timezone('Europe/Berlin', now())::date);
+
+REVOKE ALL ON TABLE private.v_customer_effective_agreement_v1 FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON TABLE private.v_customer_effective_agreement_v1 TO service_role;
+
 -- The application writes exclusively through tenant-bound server commands.
 REVOKE ALL ON TABLE public.customer_agreements, public.invoice_collections, public.invoice_collection_orders
   FROM PUBLIC, anon, authenticated, service_role;
@@ -416,3 +448,285 @@ GRANT EXECUTE ON FUNCTION private.save_customer_agreement_v1(text, uuid, uuid, t
   TO service_role;
 GRANT EXECUTE ON FUNCTION private.revoke_customer_agreement_v1(text, uuid, uuid, uuid, text, integer, text)
   TO service_role;
+
+-- V3 records the one typed-agreement exception without weakening either
+-- legacy goods-out receipt.  The trigger rechecks the agreement at the write
+-- boundary so a stale dialog cannot hand over goods after a revoke.
+ALTER TABLE public.events
+  ADD CONSTRAINT events_order_picked_up_v3_contract_chk
+  CHECK (
+    event_type <> 'ORDER_PICKED_UP_V3'
+    OR coalesce((
+      tenant_id IS NOT NULL
+      AND order_id IS NOT NULL
+      AND item_id IS NULL
+      AND user_id IS NOT NULL
+      AND client_event_id IS NOT NULL
+      AND correlation_id IS NOT NULL
+      AND event_schema_version = 3
+      AND aggregate_version > 0
+      AND status = 'success'
+      AND from_station = 'fertig'
+      AND station = 'abgeholt'
+      AND jsonb_typeof(payload) = 'object'
+      AND payload = jsonb_build_object(
+        'agreementId', payload->'agreementId',
+        'agreementType', payload->'agreementType',
+        'agreementVersion', payload->'agreementVersion',
+        'gateAllowed', payload->'gateAllowed',
+        'mode', payload->'mode',
+        'orderId', payload->'orderId',
+        'orderVersion', payload->'orderVersion',
+        'paymentMode', payload->'paymentMode',
+        'settlement', payload->'settlement'
+      )
+      AND coalesce(payload->>'agreementId', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+      AND payload->>'agreementType' IN ('ausgabe_ohne_zahlung', 'sammelrechnung', 'zahlungsziel')
+      AND jsonb_typeof(payload->'agreementVersion') = 'number'
+      AND (payload->>'agreementVersion') ~ '^[0-9]+$'
+      AND (payload->>'agreementVersion')::integer > 0
+      AND jsonb_typeof(payload->'gateAllowed') = 'boolean'
+      AND payload->>'gateAllowed' = 'true'
+      AND payload->>'mode' IN ('versand', 'abholung')
+      AND payload->>'paymentMode' IN ('vorkasse', 'abholung', 'rechnung')
+      AND payload->>'orderId' = order_id
+      AND jsonb_typeof(payload->'orderVersion') = 'number'
+      AND (payload->>'orderVersion') ~ '^[0-9]+$'
+      AND (payload->>'orderVersion')::integer = aggregate_version
+      AND payload->>'settlement' IN ('invoice', 'collection')
+      AND ((payload->>'agreementType' = 'sammelrechnung') = (payload->>'settlement' = 'collection'))
+    ), false)
+  ) NOT VALID;
+
+CREATE FUNCTION private.validate_abs_goods_out_v3_event_insert()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_order public.orders%ROWTYPE;
+  v_agreement public.customer_agreements%ROWTYPE;
+  v_collection_count integer;
+BEGIN
+  IF NEW.event_type <> 'ORDER_PICKED_UP_V3' THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT * INTO v_order
+  FROM public.orders orders
+  WHERE orders.tenant_id = NEW.tenant_id
+    AND orders.id = NEW.order_id
+  FOR UPDATE;
+  IF NOT FOUND
+    OR v_order.version <> NEW.aggregate_version
+    OR v_order.station <> 'abgeholt'
+    OR v_order.current_station <> 'abgeholt'
+    OR v_order.current_station_id <> 'abgeholt'
+    OR v_order.status <> 'abgeholt'
+    OR v_order.payment_mode <> NEW.payload->>'paymentMode'
+  THEN
+    RAISE EXCEPTION 'ABS_GOODS_OUT_ORDER_INVALID' USING ERRCODE = '23514';
+  END IF;
+
+  SELECT * INTO v_agreement
+  FROM public.customer_agreements agreement
+  WHERE agreement.tenant_id = NEW.tenant_id
+    AND agreement.id::text = NEW.payload->>'agreementId'
+    AND agreement.customer_id = v_order.customer_id
+    AND (agreement.order_id IS NULL OR agreement.order_id = NEW.order_id)
+  FOR UPDATE;
+  IF NOT FOUND
+    OR v_agreement.typ <> NEW.payload->>'agreementType'
+    OR v_agreement.version <> (NEW.payload->>'agreementVersion')::integer
+    OR v_agreement.geld IS DISTINCT FROM true
+    OR v_agreement.widerrufen_am IS NOT NULL
+    OR (v_agreement.gueltig_bis IS NOT NULL AND v_agreement.gueltig_bis < timezone('Europe/Berlin', NEW.created_at)::date)
+  THEN
+    RAISE EXCEPTION 'ABS_GOODS_OUT_AGREEMENT_INVALID' USING ERRCODE = '23514';
+  END IF;
+
+  IF v_agreement.typ = 'sammelrechnung' THEN
+    SELECT count(*)::integer INTO v_collection_count
+    FROM public.invoice_collection_orders collection_order
+    JOIN public.invoice_collections collection
+      ON collection.tenant_id = collection_order.tenant_id
+     AND collection.id = collection_order.collection_id
+    WHERE collection_order.tenant_id = NEW.tenant_id
+      AND collection_order.order_id = NEW.order_id
+      AND collection.customer_id = v_order.customer_id
+      AND collection.monat = date_trunc('month', timezone('Europe/Berlin', NEW.created_at))::date
+      AND collection.status = 'offen'
+      AND collection.ziel_tage = v_agreement.ziel_tage;
+    IF v_collection_count <> 1 OR EXISTS (
+      SELECT 1
+      FROM public.invoices invoice
+      WHERE invoice.tenant_id = NEW.tenant_id
+        AND invoice.order_id = NEW.order_id
+        AND invoice.status = 'issued'
+    ) THEN
+      RAISE EXCEPTION 'ABS_GOODS_OUT_COLLECTION_INVALID' USING ERRCODE = '23514';
+    END IF;
+  ELSIF NOT EXISTS (
+    SELECT 1
+    FROM public.invoices invoice
+    WHERE invoice.tenant_id = NEW.tenant_id
+      AND invoice.order_id = NEW.order_id
+      AND invoice.status = 'issued'
+  ) THEN
+    RAISE EXCEPTION 'ABS_GOODS_OUT_INVOICE_MISSING' USING ERRCODE = '23514';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION private.validate_abs_goods_out_v3_event_insert()
+  FROM PUBLIC, anon, authenticated;
+
+CREATE TRIGGER events_abs_goods_out_v3_insert_guard
+  BEFORE INSERT ON public.events
+  FOR EACH ROW
+  WHEN (NEW.event_type = 'ORDER_PICKED_UP_V3')
+  EXECUTE FUNCTION private.validate_abs_goods_out_v3_event_insert();
+
+CREATE TRIGGER events_abs_goods_out_v3_update_guard
+  BEFORE UPDATE ON public.events
+  FOR EACH ROW
+  WHEN (OLD.event_type = 'ORDER_PICKED_UP_V3' OR NEW.event_type = 'ORDER_PICKED_UP_V3')
+  EXECUTE FUNCTION public.prevent_audit_mutation();
+
+CREATE TRIGGER events_abs_goods_out_v3_delete_guard
+  BEFORE DELETE ON public.events
+  FOR EACH ROW
+  WHEN (OLD.event_type = 'ORDER_PICKED_UP_V3')
+  EXECUTE FUNCTION public.prevent_audit_mutation();
+
+CREATE UNIQUE INDEX events_goods_out_client_event_v3_uidx
+  ON public.events (tenant_id, client_event_id)
+  WHERE event_type = 'ORDER_PICKED_UP_V3';
+CREATE UNIQUE INDEX events_goods_out_order_version_v3_uidx
+  ON public.events (tenant_id, order_id, aggregate_version)
+  WHERE event_type = 'ORDER_PICKED_UP_V3';
+
+-- Keep the established read port authoritative after a typed-agreement
+-- handover. All legacy columns retain their former meaning; V3 only extends
+-- the recognised immutable event family.
+CREATE OR REPLACE VIEW private.v_goods_out_ui_state_v1
+WITH (security_invoker = true)
+AS
+SELECT
+  orders.id AS order_id,
+  orders.tenant_id,
+  orders.order_number,
+  orders.version AS order_version,
+  orders.station,
+  orders.current_station,
+  orders.current_station_id,
+  orders.status AS order_status,
+  orders.payment_mode,
+  orders.payment_mode_version,
+  CASE WHEN invoice_state.active_invoice_count = 0 THEN 'not_issued' ELSE 'issued' END AS invoice_state,
+  invoice_state.active_invoice_count,
+  payment.invoice_id,
+  payment.invoice_number,
+  payment.total_amount_cents,
+  payment.payment_contract_version,
+  payment.payment_status,
+  payment.payment_open_amount_cents,
+  payment.payment_paid_amount_cents,
+  payment.payment_currency,
+  payment.payment_method,
+  payment.payment_paid_at,
+  payment.payment_receipt_id,
+  payment.payment_event_id,
+  payment.payment_correlation_id,
+  payment.payment_version,
+  payment.goods_out_allowed AS payment_goods_out_allowed,
+  payment.integrity_ok AS payment_integrity_ok,
+  payment_actor.user_id AS payment_actor_id,
+  coalesce(goods_out.event_count, 0) AS goods_out_event_count,
+  goods_out.event_id AS goods_out_event_id,
+  goods_out.client_event_id AS goods_out_client_event_id,
+  goods_out.correlation_id AS goods_out_correlation_id,
+  goods_out.event_schema_version AS goods_out_event_schema_version,
+  goods_out.aggregate_version AS goods_out_order_version,
+  goods_out.user_id AS goods_out_actor_id,
+  to_char(goods_out.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS goods_out_occurred_at,
+  goods_out.payload->>'mode' AS goods_out_mode,
+  (
+    orders.station = 'fertig'
+    AND orders.current_station = 'fertig'
+    AND orders.current_station_id = 'fertig'
+    AND orders.status = 'fertig'
+    AND (
+      (invoice_state.active_invoice_count = 0 AND orders.payment_mode = 'rechnung')
+      OR (invoice_state.active_invoice_count = 1 AND payment.goods_out_allowed = true)
+    )
+  ) AS goods_out_allowed,
+  coalesce(
+    orders.tenant_id = nullif(btrim(current_setting('app.tenant_id', true)), '')
+    AND orders.payment_mode IN ('vorkasse', 'abholung', 'rechnung')
+    AND orders.payment_mode_version >= 0
+    AND orders.station = orders.current_station
+    AND orders.station = orders.current_station_id
+    AND orders.station = orders.status
+    AND invoice_state.active_invoice_count IN (0, 1)
+    AND (
+      (invoice_state.active_invoice_count = 0 AND payment.invoice_id IS NULL)
+      OR (
+        invoice_state.active_invoice_count = 1
+        AND payment.invoice_id IS NOT NULL
+        AND payment.integrity_ok = true
+        AND payment.payment_mode = orders.payment_mode
+        AND payment.payment_mode_version = orders.payment_mode_version
+        AND (payment_actor.user_id IS NOT NULL OR payment.payment_event_id IS NULL)
+      )
+    )
+    AND (
+      coalesce(goods_out.event_count, 0) = 0
+      OR (
+        goods_out.event_count = 1
+        AND goods_out.event_id IS NOT NULL
+        AND goods_out.user_id IS NOT NULL
+        AND goods_out.aggregate_version = orders.version
+        AND goods_out.payload->>'orderId' = orders.id
+        AND goods_out.payload->>'paymentMode' = orders.payment_mode
+        AND goods_out.payload->>'orderVersion' = orders.version::text
+        AND goods_out.payload->>'mode' IN ('versand', 'abholung')
+      )
+    )
+  , false) AS integrity_ok
+FROM public.orders orders
+LEFT JOIN LATERAL (
+  SELECT count(*)::integer AS active_invoice_count
+  FROM public.invoices invoice
+  WHERE invoice.tenant_id = orders.tenant_id
+    AND invoice.order_id = orders.id
+    AND invoice.status = 'issued'
+) invoice_state ON true
+LEFT JOIN private.v_payment_summary_v1 payment
+  ON payment.tenant_id = orders.tenant_id AND payment.order_id = orders.id
+LEFT JOIN public.events payment_actor
+  ON payment_actor.tenant_id = orders.tenant_id
+ AND payment_actor.order_id = orders.id
+ AND payment_actor.id = payment.payment_event_id
+ AND payment_actor.event_type = 'PAYMENT_CONFIRMED_V1'
+LEFT JOIN LATERAL (
+  SELECT count(*) OVER ()::integer AS event_count,
+    event.id AS event_id, event.client_event_id, event.correlation_id,
+    event.event_schema_version, event.aggregate_version, event.user_id,
+    event.created_at, event.payload
+  FROM public.events event
+  WHERE event.tenant_id = orders.tenant_id
+    AND event.order_id = orders.id
+    AND event.event_type IN ('ORDER_PICKED_UP_V1', 'ORDER_PICKED_UP_V2', 'ORDER_PICKED_UP_V3')
+    AND event.status = 'success'
+  ORDER BY event.created_at DESC, event.id DESC
+  LIMIT 1
+) goods_out ON true
+WHERE nullif(btrim(current_setting('app.tenant_id', true)), '') IS NOT NULL
+  AND orders.tenant_id = nullif(btrim(current_setting('app.tenant_id', true)), '');
+
+COMMENT ON VIEW private.v_goods_out_ui_state_v1 IS
+  'Q5 plus AP-ABS: tenant-bound goods-out state including typed-agreement V3 receipts.';
