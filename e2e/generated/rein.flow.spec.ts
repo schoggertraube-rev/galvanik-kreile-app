@@ -1,4 +1,4 @@
-// Generated from BAUPLAN SHA-256 DF3E1AFEC7B6C3DED6DA51F22FDAADF8CFAB780DA9A4F619EDB42D3C2D6AC5C4. Do not edit.
+// Generated from BAUPLAN SHA-256 9491009F79E306370AD4DAC3886080E4B9AEAB9A2D8BD14AAAFBB0A31411C6DA. Do not edit.
 import { test } from "@playwright/test";
 import expectedRed from "./_erwartet_rot.json";
 import { prepareGeneratedSeed, runGeneratedFlowCase, type FlowCase } from "./_harness";
@@ -870,6 +870,160 @@ const cases = [
             "zuordnung": "offen",
             "einsatz": "offen"
           }
+        }
+      ]
+    }
+  },
+  {
+    "id": "U241-01",
+    "titel": "Nichts gelesen → „Was ist das?“ mit 4 Kacheln und drei festen Wegen",
+    "paket": "AP-EIN",
+    "quelle": [
+      "screens[rein].runde53_unklar"
+    ],
+    "deckt": [],
+    "gegeben": {
+      "login": "login_meister",
+      "datenlagen": [],
+      "aufruf": {
+        "seite": "tag",
+        "arg": "(leer)",
+        "weg": [],
+        "hinweis": "Startseite des Logins nach der Anmeldung (rollen[].start)"
+      },
+      "geraet": "desktop",
+      "erkennung": "nichts"
+    },
+    "wenn": [
+      {
+        "id": "navigation.plus",
+        "aktion": "klicken"
+      },
+      {
+        "id": "rein.datei",
+        "aktion": "datei",
+        "wert": [
+          "pruef_foto.jpg",
+          "pruef_foto_2.jpg"
+        ]
+      }
+    ],
+    "dann": {
+      "anzeige": [
+        {
+          "oben": "rein"
+        },
+        {
+          "id": "rein.unklar.auftrag",
+          "erwartung": "sichtbar"
+        },
+        {
+          "id": "rein.unklar.ware",
+          "erwartung": "sichtbar"
+        },
+        {
+          "id": "rein.unklar.rechnung",
+          "erwartung": "sichtbar"
+        },
+        {
+          "id": "rein.unklar.dokument",
+          "erwartung": "sichtbar"
+        },
+        {
+          "id": "rein.original-ansehen",
+          "erwartung": "sichtbar"
+        }
+      ]
+    }
+  },
+  {
+    "id": "U241-02",
+    "titel": "„Was ist das?“ · Eingangsrechnung → 3.8 mit dem Original",
+    "paket": "AP-EIN",
+    "quelle": [
+      "screens[rein].runde53_unklar"
+    ],
+    "deckt": [],
+    "gegeben": {
+      "login": "login_meister",
+      "datenlagen": [],
+      "aufruf": {
+        "seite": "tag",
+        "arg": "(leer)",
+        "weg": [],
+        "hinweis": "Startseite des Logins nach der Anmeldung (rollen[].start)"
+      },
+      "geraet": "desktop",
+      "erkennung": "nichts"
+    },
+    "wenn": [
+      {
+        "id": "navigation.plus",
+        "aktion": "klicken"
+      },
+      {
+        "id": "rein.datei",
+        "aktion": "datei",
+        "wert": [
+          "pruef_foto.jpg",
+          "pruef_foto_2.jpg"
+        ]
+      },
+      {
+        "id": "rein.unklar.rechnung",
+        "aktion": "klicken"
+      }
+    ],
+    "dann": {
+      "anzeige": [
+        {
+          "oben": "rechnungein"
+        }
+      ]
+    }
+  },
+  {
+    "id": "U241-03",
+    "titel": "„Was ist das?“ · Auftrag oder KV → Erfassung vorbelegt",
+    "paket": "AP-EIN",
+    "quelle": [
+      "screens[rein].runde53_unklar"
+    ],
+    "deckt": [],
+    "gegeben": {
+      "login": "login_meister",
+      "datenlagen": [],
+      "aufruf": {
+        "seite": "tag",
+        "arg": "(leer)",
+        "weg": [],
+        "hinweis": "Startseite des Logins nach der Anmeldung (rollen[].start)"
+      },
+      "geraet": "desktop",
+      "erkennung": "nichts"
+    },
+    "wenn": [
+      {
+        "id": "navigation.plus",
+        "aktion": "klicken"
+      },
+      {
+        "id": "rein.datei",
+        "aktion": "datei",
+        "wert": [
+          "pruef_foto.jpg",
+          "pruef_foto_2.jpg"
+        ]
+      },
+      {
+        "id": "rein.unklar.auftrag",
+        "aktion": "klicken"
+      }
+    ],
+    "dann": {
+      "anzeige": [
+        {
+          "oben": "eingang"
         }
       ]
     }

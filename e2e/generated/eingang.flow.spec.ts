@@ -1,4 +1,4 @@
-// Generated from BAUPLAN SHA-256 DF3E1AFEC7B6C3DED6DA51F22FDAADF8CFAB780DA9A4F619EDB42D3C2D6AC5C4. Do not edit.
+// Generated from BAUPLAN SHA-256 9491009F79E306370AD4DAC3886080E4B9AEAB9A2D8BD14AAAFBB0A31411C6DA. Do not edit.
 import { test } from "@playwright/test";
 import expectedRed from "./_erwartet_rot.json";
 import { prepareGeneratedSeed, runGeneratedFlowCase, type FlowCase } from "./_harness";
@@ -645,11 +645,13 @@ const cases = [
   },
   {
     "id": "E09",
-    "titel": "Enter im Feld Menge löst den Hauptknopf mit seinem Tor aus",
+    "titel": "Enter springt Feld für Feld; erst im letzten Pflichtfeld (Eingangsart) löst Enter den Hauptknopf mit seinem Tor aus",
     "paket": "AP-EIN",
     "quelle": [
       "bausteine_vertraege.werkbank.geraete",
-      "screens[eingang].abnahme[53]"
+      "screens[eingang].abnahme[53]",
+      "verhalten_appweit.tastatur_enter",
+      "SICHTVERTRAG eingang.fokus"
     ],
     "deckt": [],
     "gegeben": {
@@ -723,7 +725,7 @@ const cases = [
       {
         "aktion": "taste",
         "wert": "Enter",
-        "id": "eingang.menge"
+        "id": "eingang.eingangsart"
       }
     ],
     "dann": {
@@ -9167,6 +9169,246 @@ const cases = [
               "rueckruf"
             ]
           }
+        }
+      ]
+    }
+  },
+  {
+    "id": "RT04-11",
+    "titel": "„Nicht verchromen, nur vernickeln“ → Oberfläche Vernickeln",
+    "paket": "AP-EIN",
+    "quelle": [
+      "eingang.erkennung.runde53"
+    ],
+    "deckt": [
+      "eingang.erkennung"
+    ],
+    "gegeben": {
+      "login": "login_meister",
+      "datenlagen": [
+        "kunde_vollstaendig_firma"
+      ],
+      "aufruf": {
+        "seite": "eingang",
+        "arg": "(leer)",
+        "weg": [
+          {
+            "id": "navigation.plus",
+            "aktion": "klicken"
+          },
+          {
+            "id": "rein.auftrag-erfassen",
+            "aktion": "klicken"
+          }
+        ],
+        "quelle": "werkbank.interaktion[aufruf-leer] · rein.inhalt.ohne_vorlage[auftrag-erfassen]"
+      },
+      "geraet": "desktop"
+    },
+    "wenn": [
+      {
+        "id": "eingang.erfassen-text",
+        "aktion": "tippen",
+        "wert": "Bitte 12 Teile nicht verchromen, nur vernickeln."
+      }
+    ],
+    "dann": {
+      "anzeige": [
+        {
+          "text": "Vernickeln",
+          "erwartung": "sichtbar"
+        }
+      ]
+    }
+  },
+  {
+    "id": "RT04-12",
+    "titel": "Zahlwort „zwölf“ → Menge 12",
+    "paket": "AP-EIN",
+    "quelle": [
+      "eingang.erkennung.runde53"
+    ],
+    "deckt": [
+      "eingang.erkennung"
+    ],
+    "gegeben": {
+      "login": "login_meister",
+      "datenlagen": [
+        "kunde_vollstaendig_firma"
+      ],
+      "aufruf": {
+        "seite": "eingang",
+        "arg": "(leer)",
+        "weg": [
+          {
+            "id": "navigation.plus",
+            "aktion": "klicken"
+          },
+          {
+            "id": "rein.auftrag-erfassen",
+            "aktion": "klicken"
+          }
+        ],
+        "quelle": "werkbank.interaktion[aufruf-leer] · rein.inhalt.ohne_vorlage[auftrag-erfassen]"
+      },
+      "geraet": "desktop"
+    },
+    "wenn": [
+      {
+        "id": "eingang.erfassen-text",
+        "aktion": "tippen",
+        "wert": "Zwölf Teile verzinken, gelb passiviert."
+      }
+    ],
+    "dann": {
+      "anzeige": [
+        {
+          "text": "12",
+          "erwartung": "sichtbar"
+        }
+      ]
+    }
+  },
+  {
+    "id": "RT04-13",
+    "titel": "„ein paar Teile“ → keine Menge, Prüfliste „Menge eintragen“",
+    "paket": "AP-EIN",
+    "quelle": [
+      "eingang.erkennung.runde53"
+    ],
+    "deckt": [
+      "eingang.erkennung"
+    ],
+    "gegeben": {
+      "login": "login_meister",
+      "datenlagen": [
+        "kunde_vollstaendig_firma"
+      ],
+      "aufruf": {
+        "seite": "eingang",
+        "arg": "(leer)",
+        "weg": [
+          {
+            "id": "navigation.plus",
+            "aktion": "klicken"
+          },
+          {
+            "id": "rein.auftrag-erfassen",
+            "aktion": "klicken"
+          }
+        ],
+        "quelle": "werkbank.interaktion[aufruf-leer] · rein.inhalt.ohne_vorlage[auftrag-erfassen]"
+      },
+      "geraet": "desktop"
+    },
+    "wenn": [
+      {
+        "id": "eingang.erfassen-text",
+        "aktion": "tippen",
+        "wert": "Ein paar Teile verzinken."
+      }
+    ],
+    "dann": {
+      "anzeige": [
+        {
+          "text": "Menge eintragen",
+          "erwartung": "sichtbar"
+        }
+      ]
+    }
+  },
+  {
+    "id": "RT04-14",
+    "titel": "Wunschdatum im Satz statt Mail-Datum",
+    "paket": "AP-EIN",
+    "quelle": [
+      "eingang.erkennung.runde53"
+    ],
+    "deckt": [
+      "eingang.erkennung"
+    ],
+    "gegeben": {
+      "login": "login_meister",
+      "datenlagen": [
+        "kunde_vollstaendig_firma"
+      ],
+      "aufruf": {
+        "seite": "eingang",
+        "arg": "(leer)",
+        "weg": [
+          {
+            "id": "navigation.plus",
+            "aktion": "klicken"
+          },
+          {
+            "id": "rein.auftrag-erfassen",
+            "aktion": "klicken"
+          }
+        ],
+        "quelle": "werkbank.interaktion[aufruf-leer] · rein.inhalt.ohne_vorlage[auftrag-erfassen]"
+      },
+      "geraet": "desktop"
+    },
+    "wenn": [
+      {
+        "id": "eingang.erfassen-text",
+        "aktion": "tippen",
+        "wert": "Mail vom 01.11.: Brauche die Teile bis Mittwoch."
+      }
+    ],
+    "dann": {
+      "anzeige": [
+        {
+          "text": "Mi",
+          "erwartung": "sichtbar"
+        }
+      ]
+    }
+  },
+  {
+    "id": "RT04-15",
+    "titel": "Mehr als 20 Positionen → Hinweis und zweiter Beleg",
+    "paket": "AP-EIN",
+    "quelle": [
+      "eingang.erkennung.runde53"
+    ],
+    "deckt": [
+      "eingang.erkennung"
+    ],
+    "gegeben": {
+      "login": "login_meister",
+      "datenlagen": [
+        "kunde_vollstaendig_firma"
+      ],
+      "aufruf": {
+        "seite": "eingang",
+        "arg": "(leer)",
+        "weg": [
+          {
+            "id": "navigation.plus",
+            "aktion": "klicken"
+          },
+          {
+            "id": "rein.auftrag-erfassen",
+            "aktion": "klicken"
+          }
+        ],
+        "quelle": "werkbank.interaktion[aufruf-leer] · rein.inhalt.ohne_vorlage[auftrag-erfassen]"
+      },
+      "geraet": "desktop"
+    },
+    "wenn": [
+      {
+        "id": "eingang.erfassen-text",
+        "aktion": "tippen",
+        "wert": "{text_mit_23_positionen}"
+      }
+    ],
+    "dann": {
+      "anzeige": [
+        {
+          "text": "Rest als zweiten Beleg anlegen",
+          "erwartung": "sichtbar"
         }
       ]
     }
