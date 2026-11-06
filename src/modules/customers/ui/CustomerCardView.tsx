@@ -176,6 +176,7 @@ export function CustomerCardView({
   const activeAgreement = customerAgreements.find((agreement) => isTypedAgreement(agreement) && isCurrentAgreement(agreement, today)) ?? null;
   const earlierAgreements = customerAgreements.filter((agreement) => isTypedAgreement(agreement) && !isCurrentAgreement(agreement, today));
   const untypedMoneyAgreement = customerAgreements.find((agreement) => agreement.type === null && agreement.money && isCurrentAgreement(agreement, today)) ?? null;
+  const agreementNotices = customerAgreements.filter((agreement) => agreement.type === null && agreement.notice && agreement.revokedAt === null);
   const canManageAgreement = canManageMoney && Boolean(onSaveAgreement && onRevokeAgreement);
   const next = active.slice().sort((a, b) => {
     const at = a.dueAt ? new Date(a.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
@@ -241,6 +242,11 @@ export function CustomerCardView({
       {card.notes ? <Notiz text={card.notes} bezug={<Chip text="Kundennotiz" ton="teil" icon="phone" />} autor={`aktualisiert ${moment(card.updatedAt)}`} /> : <Zustand art="leer" text="Keine interne Kundennotiz hinterlegt." />}
       {card.tags.length ? <div className="kr-docs" style={{ marginTop: 8 }}>{card.tags.map((tag) => <Chip key={tag} text={tag} />)}</div> : null}
     </KartenBlock>
+    {agreementNotices.length ? <KartenBlock label="Absprachen & Eigenheiten">
+      <div className="kr-stapel">
+        {agreementNotices.map((agreement) => <div key={agreement.id} data-spec-id="kunde.absprache-hinweis"><Hinweis ton="warn">{agreement.label}: {agreement.value ?? "fehlt"}</Hinweis></div>)}
+      </div>
+    </KartenBlock> : null}
     {canManageMoney ? <KartenBlock label="Zahlungsabsprache">
       {activeAgreement ? <div data-spec-id="kunde.absprache-zeile" className="kr-stapel">
         <strong>Zahlungsabsprache · {activeAgreement.label} · gilt für ganzer Kunde {card.companyName ?? card.name} · bis {activeAgreement.validUntil ? day(activeAgreement.validUntil) : "auf Widerruf"}</strong>

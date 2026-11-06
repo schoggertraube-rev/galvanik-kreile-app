@@ -1,11 +1,11 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Button, Dialog, Hinweis } from "@/ui/kr";
+import { Button, Checkbox, Dialog, Eingabe, Feld, FormRaster, Hinweis } from "@/ui/kr";
 import { Rueckfrage } from "@/ui/kr/Dialog";
 import { KundeFormular } from "./KundeFormular";
 import { CUSTOMER_FIELD_LABELS, EMPTY_CUSTOMER_FORM, kundeValidierung, projectCustomerTransfer, type CustomerFormValue } from "../customerFormContract";
 import { kundeVollstaendigkeit } from "../orderReadiness";
-import type { CustomerCardModel, UpdateCustomerInput } from "../server/types";
+import type { CustomerCardModel, CustomerFreeTextAgreementInput, UpdateCustomerInput } from "../server/types";
 import type { CustomerAddressInput, CustomerAddressResult } from "../customerAddress";
 
 function initialForm(card: CustomerCardModel): CustomerFormValue {
@@ -14,6 +14,37 @@ function initialForm(card: CustomerCardModel): CustomerFormValue {
     phone:card.phone??"",email:card.email??"",billingEmail:card.billingEmail??"",website:card.website??"",street:card.address??"",houseNumber:card.houseNumber??"",
     zipCode:card.zipCode??"",city:card.city??"",country:card.country??"",paymentPreference:card.paymentPreference??"",vatId:card.vatId??"",notes:card.notes??"",
     handoverPreference:card.handoverPreference??"",iban:card.iban??"",paymentTermDays:card.paymentTermDays==null?"":String(card.paymentTermDays),autoInfo:card.autoInfo??true,vorrang:card.vorrang??false};
+}
+
+function initialAgreements(card: CustomerCardModel, canManageMoney: boolean): CustomerFreeTextAgreementInput[] {
+  return (card.agreements ?? [])
+    .filter((agreement) => agreement.orderId === null && agreement.type === null && agreement.revokedAt === null && (canManageMoney || !agreement.money))
+    .sort((left, right) => left.position - right.position)
+    .map((agreement) => ({
+      id: agreement.id,
+      bezeichnung: agreement.label,
+      wert: agreement.value ?? "",
+      geld: agreement.money,
+      hinweis: agreement.notice,
+      gueltigBis: agreement.validUntil,
+    }));
+}
+
+function validDateOnly(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function agreementFieldError(agreement: CustomerFreeTextAgreementInput, field: "bezeichnung" | "wert" | "gueltigBis") {
+  if (field === "bezeichnung" && (agreement.bezeichnung.trim().length < 1 || agreement.bezeichnung.trim().length > 40)) return "Bezeichnung 1–40 Zeichen";
+  if (field === "wert" && (agreement.wert.trim().length < 1 || agreement.wert.trim().length > 200)) return "Absprache 1–200 Zeichen";
+  if (field === "gueltigBis" && agreement.gueltigBis && !validDateOnly(agreement.gueltigBis)) return "Datum prüfen";
+  return null;
+}
+
+function agreementHasError(agreement: CustomerFreeTextAgreementInput) {
+  return Boolean(agreementFieldError(agreement, "bezeichnung") || agreementFieldError(agreement, "wert") || agreementFieldError(agreement, "gueltigBis"));
 }
 const fieldIds:Partial<Record<keyof CustomerFormValue,string>>={customerType:"kundentyp",companyName:"name",firstName:"vorname",lastName:"nachname",contactRole:"funktion",phone:"telefon",street:"strasse",houseNumber:"hausnummer",zipCode:"plz",city:"ort",country:"land",paymentPreference:"zahlungsbedingung"};
 function transferState(card:CustomerCardModel,input:unknown) {
@@ -33,9 +64,12 @@ export function CustomerEditor({card,takeover,canManageMoney,canDecide=false,mis
   onSave:(input:UpdateCustomerInput)=>Promise<{ok:true}|{ok:false;message:string}>;
   checkAddress?:(input:CustomerAddressInput)=>Promise<{code:"OK";data:CustomerAddressResult}|{code:string;message:string}>;
 }) {
-  const [initial]=useState(()=>transferState(card,takeover));
+  const [initial]=useState(()=>({...transferState(card,takeover),agreements:initialAgreements(card,canManageMoney)}));
   const baseline=initial.baseline;
+  const baselineAgreements=initial.agreements;
   const [value,setValue]=useState(initial.value);
+  const [agreements,setAgreements]=useState<CustomerFreeTextAgreementInput[]>(baselineAgreements);
+  const [showAgreementErrors,setShowAgreementErrors]=useState(false);
   const [priorityFields,setPriorityFields]=useState(()=>missingFirst ? kundeVollstaendigkeit({...initial.value,invoiceTermsEnabled:card.invoiceTermsEnabled},{geld:canManageMoney}).felder : []);
   const [proposals,setProposals]=useState(initial.proposals);
   const [clientEventId]=useState(()=>crypto.randomUUID());
@@ -47,11 +81,25 @@ export function CustomerEditor({card,takeover,canManageMoney,canDecide=false,mis
   const [partialPrompt,setPartialPrompt]=useState(false);
   const [address,setAddress]=useState<CustomerAddressResult|null>(null);
   const focused=useRef<string|null>(null);
-  const changed=JSON.stringify(value)!==JSON.stringify(baseline);
+  const agreementsChanged=JSON.stringify(agreements)!==JSON.stringify(baselineAgreements);
+  const changed=JSON.stringify(value)!==JSON.stringify(baseline) || agreementsChanged;
   const readiness=kundeVollstaendigkeit({...value,invoiceTermsEnabled:card.invoiceTermsEnabled},{geld:canManageMoney});
   const changeValue=(next:CustomerFormValue)=>{
     if(missingFirst && next.customerType!==value.customerType)setPriorityFields(kundeVollstaendigkeit({...next,invoiceTermsEnabled:card.invoiceTermsEnabled},{geld:canManageMoney}).felder);
     setValue(next);
+  };
+  const changeAgreement=(index:number,patch:Partial<CustomerFreeTextAgreementInput>)=>{
+    setAgreements(current=>current.map((agreement,entryIndex)=>entryIndex===index?{...agreement,...patch}:agreement));
+  };
+  const moveAgreement=(index:number,direction:-1|1)=>{
+    const nextIndex=index+direction;
+    if(nextIndex<0||nextIndex>=agreements.length)return;
+    setAgreements(current=>{const next=[...current];const [entry]=next.splice(index,1);if(!entry)return current;next.splice(nextIndex,0,entry);return next;});
+  };
+  const removeAgreement=(index:number)=>setAgreements(current=>current.filter((_,entryIndex)=>entryIndex!==index));
+  const addAgreement=()=>{
+    if(agreements.length>=20)return;
+    setAgreements(current=>[...current,{id:null,bezeichnung:"",wert:"",geld:false,hinweis:false,gueltigBis:null}]);
   };
   const focus=useCallback((field:keyof CustomerFormValue|undefined)=>{
     if(!field)return;
@@ -92,12 +140,19 @@ export function CustomerEditor({card,takeover,canManageMoney,canDecide=false,mis
     setErrors(invalid);
     const first=Object.keys(invalid)[0] as keyof CustomerFormValue|undefined;
     if(first){focus(first);return;}
+    const invalidAgreementIndex=agreements.findIndex(agreementHasError);
+    if(invalidAgreementIndex>=0){
+      setShowAgreementErrors(true);
+      requestAnimationFrame(()=>document.querySelector<HTMLElement>(`[data-spec-id="kundebearbeiten.absprachen.${invalidAgreementIndex}.bezeichnung"]`)?.focus());
+      return;
+    }
     if(address?.blocked){setFailure(address.message);return;}
     if(readiness.fehlt.length&&!forcePartial){setPartialPrompt(true);return;}
     saving.current=true;setBusy(true);setFailure("");setPartialPrompt(false);setClosePrompt(false);
     const {customerType,salutation,handoverPreference,paymentTermDays,...fields}=value;
     const input:UpdateCustomerInput={...fields,clientEventId,customerId:card.id,customerType:customerType as Exclude<CustomerFormValue["customerType"],"">,
-      salutation:salutation||null,handoverPreference:handoverPreference||null,paymentTermDays:paymentTermDays?Number(paymentTermDays):null};
+      salutation:salutation||null,handoverPreference:handoverPreference||null,paymentTermDays:paymentTermDays?Number(paymentTermDays):null,
+      agreements};
     if(!canManageMoney){delete input.paymentPreference;delete input.iban;delete input.paymentTermDays;}
     try {
       const result=await onSave(input);
@@ -118,12 +173,43 @@ export function CustomerEditor({card,takeover,canManageMoney,canDecide=false,mis
         <KundeFormular prefix="kundebearbeiten" mode="edit" value={value} previous={baseline} priorityFields={priorityFields} errors={errors} onChange={changeValue} canManageMoney={canManageMoney} canDecide={canDecide}
           origins={initial.origins} proposals={proposals} onAcceptProposal={(field,next)=>{setValue(current=>({...current,[field]:next}));setProposals(current=>{const nextProposals={...current};delete nextProposals[field];return nextProposals})}}
           invoiceTermsEnabled={card.invoiceTermsEnabled} invoiceTermDays={card.invoiceTermDays} addressSuggestions={address?.suggestions} addressMessage={address?{tone:address.kind==="found"?"ok":address.kind==="not-checked"?"neutral":"warn",text:address.message}:null}/>
+        <section className="kr-stapel" data-spec-id="kundebearbeiten.absprachen" aria-label="Absprachen & Eigenheiten">
+          <h3 className="ev-kf-unter">Absprachen & Eigenheiten</h3>
+          {agreements.map((agreement,index)=><div key={agreement.id ?? `new-${index}`} className="kr-stapel" data-spec-id={`kundebearbeiten.absprachen.${index}`}>
+            <strong>{index+1}. Absprache</strong>
+            <FormRaster>
+              <Feld label="Bezeichnung" fehler={showAgreementErrors?agreementFieldError(agreement,"bezeichnung") ?? undefined:undefined}>
+                <Eingabe data-spec-id={`kundebearbeiten.absprachen.${index}.bezeichnung`} maxLength={40} value={agreement.bezeichnung} onChange={event=>changeAgreement(index,{bezeichnung:event.target.value})}/>
+              </Feld>
+              <Feld label="Absprache" fehler={showAgreementErrors?agreementFieldError(agreement,"wert") ?? undefined:undefined}>
+                <Eingabe data-spec-id={`kundebearbeiten.absprachen.${index}.wert`} maxLength={200} value={agreement.wert} onChange={event=>changeAgreement(index,{wert:event.target.value})}/>
+              </Feld>
+              <Feld label="Gültig bis" fehler={showAgreementErrors?agreementFieldError(agreement,"gueltigBis") ?? undefined:undefined}>
+                <Eingabe data-spec-id={`kundebearbeiten.absprachen.${index}.gueltig_bis`} type="date" value={agreement.gueltigBis ?? ""} onChange={event=>changeAgreement(index,{gueltigBis:event.target.value||null})}/>
+              </Feld>
+              <Feld label="Anzeige">
+                <div className="kr-stapel" style={{gap:8}}>
+                  {canManageMoney?<div data-spec-id={`kundebearbeiten.absprachen.${index}.geld`}><Checkbox checked={agreement.geld} onChange={geld=>changeAgreement(index,{geld})}>Geld (Preis, Zahlung)</Checkbox></div>:null}
+                  <div data-spec-id={`kundebearbeiten.absprachen.${index}.hinweis`}><Checkbox checked={agreement.hinweis} onChange={hinweis=>changeAgreement(index,{hinweis})}>Als Hinweis zeigen</Checkbox></div>
+                </div>
+              </Feld>
+            </FormRaster>
+            <div className="kr-schnellleiste">
+              <Button data-spec-id={`kundebearbeiten.absprachen.${index}.hoch`} text="Hoch" disabled={index===0} onClick={()=>moveAgreement(index,-1)}/>
+              <Button data-spec-id={`kundebearbeiten.absprachen.${index}.runter`} text="Runter" disabled={index===agreements.length-1} onClick={()=>moveAgreement(index,1)}/>
+              <Button data-spec-id={`kundebearbeiten.absprachen.${index}.entfernen`} art="leise" text="Entfernen" onClick={()=>removeAgreement(index)}/>
+            </div>
+          </div>)}
+          {agreements.length===0?<Hinweis ton="neutral">Noch keine Absprachen hinterlegt.</Hinweis>:null}
+          {agreements.length>=20?<Hinweis ton="warn">Höchstens 20 Absprachen möglich.</Hinweis>:null}
+          <Button data-spec-id="kundebearbeiten.absprachen.hinzufuegen" icon="plus" text="Absprache hinzufügen" disabled={agreements.length>=20} onClick={addAgreement}/>
+        </section>
         {failure?<div data-spec-id="kundebearbeiten.zustand.fehler" role="alert"><Hinweis ton="warn">{failure}</Hinweis><Button data-spec-id="kundebearbeiten.erneut-speichern" text="Erneut speichern" onClick={()=>void save(true)}/></div>:null}</div>
       </form>
     </Dialog>
     {partialPrompt?<Dialog titel="Unvollständig für Auftrag" onSchliessen={()=>setPartialPrompt(false)}><div data-spec-id="kundebearbeiten.zustand.teilweise"><p>Für Auftrag fehlt noch: {readiness.fehlt.join(", ")}</p>
       <Button data-spec-id="kundebearbeiten.trotzdem-speichern" art="primaer" text="Trotzdem speichern" onClick={()=>void save(true)}/><Button data-spec-id="kundebearbeiten.weiter-ausfuellen" text="Weiter ausfüllen" onClick={()=>{setPartialPrompt(false);focus(readiness.felder[0])}}/></div></Dialog>:null}
-    {closePrompt?<Rueckfrage felder={(Object.keys(value) as Array<keyof CustomerFormValue>).filter(key=>value[key]!==baseline[key]).map(key=>CUSTOMER_FIELD_LABELS[key])}
+    {closePrompt?<Rueckfrage felder={[...(Object.keys(value) as Array<keyof CustomerFormValue>).filter(key=>value[key]!==baseline[key]).map(key=>CUSTOMER_FIELD_LABELS[key]),...(agreementsChanged?["Absprachen & Eigenheiten"]:[])]}
       hauptaktion={{text:"Speichern",lauftext:"Wird gespeichert …",ausfuehren:()=>void save()}} beschaeftigt={busy}
       fehler={failure||Object.values(errors).filter(Boolean).join(" · ")||null} onVerwerfen={onClose} onWeiter={continueEditing}/>:null}
   </>;

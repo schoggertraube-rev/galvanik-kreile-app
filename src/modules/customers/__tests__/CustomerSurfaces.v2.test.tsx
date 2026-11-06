@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { CustomerCardView, type CustomerCardModel } from "../public";
 
@@ -77,6 +77,35 @@ describe("Customer card V2", () => {
     expect(screen.getByRole("combobox", { name: "Zahlungsbedingung" })).toHaveValue("rechnung");
     expect(screen.getByRole("option", { name: "Rechnung auf Ziel · 14 Tage" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Rechnung auf Ziel · 30 Tage" })).not.toBeInTheDocument();
+  });
+
+  it("edits free-text agreements through the one existing customer save path", async () => {
+    const save = vi.fn().mockResolvedValue({ ok: true });
+    render(
+      <CustomerCardView
+        state={{ kind: "data", card: {
+          ...card,
+          paymentPreference: "bar",
+          agreements: [{
+            id: "agreement-1", customerId: card.id, orderId: null, position: 1,
+            label: "Verpackung", value: "Bitte stoßfest verpacken", type: null, targetDays: null,
+            money: false, notice: true, validUntil: null, reason: null, version: 1,
+            revokedAt: null, revokedBy: null, revokeReason: null, createdAt: "2026-09-16T08:00:00.000Z", createdBy: "Rolf",
+          }],
+        } }}
+        onClose={vi.fn()} onOpenOrder={vi.fn()} onSaveCustomer={save} canManageMoney={true}
+      />,
+    );
+    expect(screen.getByText("Verpackung: Bitte stoßfest verpacken")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Bearbeiten" })[0]);
+    expect(screen.getAllByRole("heading", { name: "Absprachen & Eigenheiten" })).toHaveLength(2);
+    fireEvent.change(screen.getByDisplayValue("Bitte stoßfest verpacken"), { target: { value: "Bitte gepolstert verpacken" } });
+    fireEvent.click(screen.getByRole("button", { name: "Speichern" }));
+    const forceSave = screen.queryByRole("button", { name: "Trotzdem speichern" });
+    if (forceSave) fireEvent.click(forceSave);
+    await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({
+      agreements: [expect.objectContaining({ id: "agreement-1", wert: "Bitte gepolstert verpacken", geld: false, hinweis: true })],
+    })));
   });
 
   it.each(["denied", "not-found", "error", "conflict"] as const)("keeps %s fail-closed", (kind) => {

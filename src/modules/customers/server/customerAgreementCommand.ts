@@ -21,6 +21,7 @@ type AgreementRow = {
   order_id: string | null;
   position: number;
   bezeichnung: string;
+  wert: string | null;
   typ: string | null;
   ziel_tage: number | null;
   geld: boolean;
@@ -140,6 +141,7 @@ function record(row: AgreementRow): CustomerAgreementRecord {
     orderId: row.order_id,
     position: row.position,
     label: row.bezeichnung,
+    value: row.wert,
     type: row.typ as CustomerAgreementType,
     targetDays: row.ziel_tage,
     money: row.geld,
@@ -161,7 +163,7 @@ function intentHash(value: unknown) {
 
 async function readAgreement(tx: PrivilegedTenantTransaction, context: CustomerCommandContext, agreementId: string): Promise<CustomerAgreementRecord> {
   const rows = await tx.execute<AgreementRow>(sql`
-    SELECT id::text, customer_id, order_id, position, bezeichnung, typ, ziel_tage, geld, hinweis, gueltig_bis,
+    SELECT id::text, customer_id, order_id, position, bezeichnung, wert, typ, ziel_tage, geld, hinweis, gueltig_bis,
       grund, version, widerrufen_am, widerrufen_von::text, widerruf_grund,
       created_at, created_by::text
     FROM public.customer_agreements

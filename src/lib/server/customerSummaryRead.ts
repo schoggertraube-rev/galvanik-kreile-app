@@ -102,6 +102,7 @@ type AgreementSummaryRow = {
   order_id: string | null;
   position: number;
   bezeichnung: string;
+  wert: string | null;
   typ: string | null;
   ziel_tage: number | null;
   geld: boolean;
@@ -204,6 +205,7 @@ function mapAgreement(row: AgreementSummaryRow): CustomerAgreementSummary {
     || row.bezeichnung.trim() !== row.bezeichnung
     || row.bezeichnung.length < 1
     || row.bezeichnung.length > 400
+    || (row.wert !== null && (typeof row.wert !== "string" || row.wert.trim() !== row.wert || row.wert.length > 200))
     || type === undefined
     || !Number.isInteger(row.version)
     || row.version < 1
@@ -219,6 +221,7 @@ function mapAgreement(row: AgreementSummaryRow): CustomerAgreementSummary {
     orderId: row.order_id,
     position: row.position,
     label: row.bezeichnung,
+    value: row.wert,
     type,
     targetDays: row.ziel_tage,
     money: row.geld,
@@ -238,10 +241,11 @@ async function readCustomerAgreements(
   tx: PrivilegedTenantTransaction,
   tenantId: string,
   customerId: string,
+  includeMoney: boolean,
 ): Promise<CustomerAgreementSummary[]> {
   const rows = await tx.execute<AgreementSummaryRow>(sql`
     SELECT agreement.id::text, agreement.customer_id, agreement.order_id, agreement.position,
-      agreement.bezeichnung, agreement.typ, agreement.ziel_tage, agreement.geld, agreement.hinweis,
+      agreement.bezeichnung, agreement.wert, agreement.typ, agreement.ziel_tage, agreement.geld, agreement.hinweis,
       agreement.gueltig_bis, agreement.grund, agreement.version, agreement.widerrufen_am,
       agreement.widerruf_grund, agreement.created_at,
       creator.full_name AS created_by_name, revoker.full_name AS widerrufen_von_name
@@ -253,7 +257,8 @@ async function readCustomerAgreements(
     WHERE agreement.tenant_id = ${tenantId}
       AND agreement.customer_id = ${customerId}
       AND agreement.order_id IS NULL
-    ORDER BY agreement.created_at DESC, agreement.id
+      AND (${includeMoney} OR NOT agreement.geld)
+    ORDER BY agreement.position ASC, agreement.created_at ASC, agreement.id
   `);
   return rows.map(mapAgreement);
 }
@@ -353,9 +358,12 @@ export async function readCustomerSummary(
       if(!rows[0])return null;
        const profile=await readCustomerProfile(tx,authorization.tenantId,input.customerId);
       if(!profile)throw new Error("CUSTOMER_PROFILE_UNAVAILABLE");
-       const agreements = hasAuthorizationArea(authorization, "geld")
-         ? await readCustomerAgreements(tx, authorization.tenantId, input.customerId)
-         : [];
+       const agreements = await readCustomerAgreements(
+         tx,
+         authorization.tenantId,
+         input.customerId,
+         hasAuthorizationArea(authorization, "geld"),
+       );
        return mapSummary(rows[0],authorization,profile,agreements);
     });
     return data
