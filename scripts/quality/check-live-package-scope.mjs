@@ -105,11 +105,16 @@ const SALES_STAGE_B2_BRANCH = "kreile/b2-eingang";
 const SALES_STAGE_B2_PROTECTED_PATTERNS = Object.freeze([
   ".github/**",
   "scripts/quality/**",
+  "docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json",
   "src/test/live_package_scope.test.ts",
   "docs/project/**",
   "_review/**",
   "quality/eslint-baseline.json",
   "docs/project/endversion/codex/BAUPLAN.json",
+]);
+const SALES_STAGE_B2_ADDITIVE_CONTRACT_PATHS = Object.freeze([
+  "scripts/quality/h18-server-actions.json",
+  "docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json",
 ]);
 const TA_B2_BRANCH = "codex/ta-b2";
 const TA_B2_BASE_SHA = "ae79c12fb6bea83b8ac68fa065af4671f4bf09b5";
@@ -390,6 +395,24 @@ const TA_B2K2_REQUIRED_FILES = Object.freeze([
   "scripts/quality/check-live-package-scope.mjs",
   "playwright.config.ts",
   "src/test/live_package_scope.test.ts",
+]);
+const TA_B2K3_BRANCH = "codex/ta-b2k3";
+const TA_B2K3_BASE_SHA = "cc541f80e0d28d2ab52ba5b2396bafff172fa874";
+const TA_B2K3_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2K3.json";
+const TA_B2K3_VALUES = Object.freeze({
+  schemaVersion: 1,
+  package: "B2-H18-REGISTRY-ADDITIVE-ANCHOR",
+  headBranch: TA_B2K3_BRANCH,
+  mainBaseSha: TA_B2K3_BASE_SHA,
+  authorizedBy: "Siglinder",
+  authorizedAt: "2026-11-06",
+  scope: "P86: nur additive H18- und F1-Registry-Ergaenzungen fuer neue Server-Actions",
+});
+const TA_B2K3_ANCHOR_ALLOWLIST = Object.freeze([
+  "scripts/quality/check-live-package-scope.mjs",
+  "src/test/live_package_scope.test.ts",
+  TA_B2K3_RECEIPT,
+  "docs/delivery/ABGABE_TA-B2K3.md",
 ]);
 const PR154_REBASELINE_BASE_SHA = "1fa4920d6d06b02413c8c157ae6b739507105846";
 const PR154_REBASELINE_RECEIPT = "docs/evidence/live-line/pr154/REBASELINE.json";
@@ -1430,6 +1453,33 @@ export function checkTaB2k2ScopeForTest({ files, mission, branch, baseSha }) {
   return checkTaB2k2Scope(files, mission, branch, baseSha);
 }
 
+function checkTaB2k3Scope(files, mission, branch, baseSha) {
+  const errors = [];
+  if (branch !== TA_B2K3_BRANCH) errors.push(`TA_B2K3_BRANCH_INVALID:${branch}`);
+  if (baseSha !== TA_B2K3_BASE_SHA) errors.push(`TA_B2K3_BASE_INVALID:${baseSha}:${TA_B2K3_BASE_SHA}`);
+  for (const rel of files) if (!TA_B2K3_ANCHOR_ALLOWLIST.includes(rel)) errors.push(`TA_B2K3_SCOPE:${rel}`);
+  if (mission.active_block !== "B2" || mission.phase !== "WRITING" || mission.branch !== SALES_STAGE_B2_BRANCH
+      || mission.started_from_sha !== TA_B2_BASE_SHA || mission.desktop_due_at !== "2026-11-08"
+      || mission.tablet_mobile_due_at !== "2026-11-08" || mission.handoff_path !== "docs/delivery/ABGABE_B2.md"
+      || mission.next_block !== "B3") errors.push("TA_B2K3_MISSION_INVALID");
+  return errors;
+}
+
+function checkTaB2k3Anchor(root, files, mission, branch, baseSha) {
+  const errors = checkTaB2k3Scope(files, mission, branch, baseSha);
+  for (const rel of TA_B2K3_ANCHOR_ALLOWLIST) if (!files.includes(rel)) errors.push(`TA_B2K3_REQUIRED_FILE_MISSING:${rel}`);
+  let receipt;
+  try { receipt = JSON.parse(readFileSync(path.join(root, TA_B2K3_RECEIPT), "utf8")); }
+  catch { return [...errors, "TA_B2K3_RECEIPT_UNREADABLE"]; }
+  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2K3_VALUES).sort())) errors.push("TA_B2K3_RECEIPT_SCHEMA");
+  for (const [key, value] of Object.entries(TA_B2K3_VALUES)) if (receipt[key] !== value) errors.push(`TA_B2K3_RECEIPT_VALUE:${key}`);
+  return errors;
+}
+
+export function checkTaB2k3ScopeForTest({ files, mission, branch, baseSha }) {
+  return checkTaB2k3Scope(files, mission, branch, baseSha);
+}
+
 export function checkB2iParserChangesForTest({ beforePackage, afterPackage, beforeLock, afterLock }) {
   const errors = [];
   const parse = (value) => typeof value === "string" ? JSON.parse(value) : value;
@@ -1502,6 +1552,7 @@ function checkSalesStageB2Scope(files, entries, mission, branch) {
   }
   const changedByPath = new Map(entries.map((entry) => [entry.path, entry]));
   for (const rel of files) {
+    if (SALES_STAGE_B2_ADDITIVE_CONTRACT_PATHS.includes(rel)) continue;
     if (covered(rel, SALES_STAGE_B2_PROTECTED_PATTERNS)) {
       errors.push(`SALES_STAGE_B2_SCOPE:${rel}`);
       continue;
@@ -1510,6 +1561,127 @@ function checkSalesStageB2Scope(files, entries, mission, branch) {
       const entry = changedByPath.get(rel);
       if (!entry) errors.push(`SALES_STAGE_B2_MIGRATION_STATUS_MISSING:${rel}`);
       else if (entry.status !== "A") errors.push(`SALES_STAGE_B2_MIGRATION_NOT_NEW:${rel}`);
+    }
+  }
+  return errors;
+}
+
+function asJson(value) {
+  return typeof value === "string" ? JSON.parse(value) : structuredClone(value);
+}
+
+function jsonEqual(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+export function checkB2AdditiveH18ChangeForTest({ before, after }) {
+  const errors = [];
+  let previous;
+  let candidate;
+  try {
+    previous = asJson(before);
+    candidate = asJson(after);
+  } catch {
+    return ["B2_H18_ADDITIVE_MANIFEST_UNREADABLE"];
+  }
+  const previousActions = previous?.testedWriteActions;
+  const candidateActions = candidate?.testedWriteActions;
+  if (!previousActions || !candidateActions || typeof previousActions !== "object" || typeof candidateActions !== "object") {
+    return ["B2_H18_ADDITIVE_TESTED_ACTIONS_INVALID"];
+  }
+  if (previous.version !== candidate.version || !/^[a-f0-9]{64}$/.test(candidate.inventorySha256 ?? "")) {
+    errors.push("B2_H18_ADDITIVE_METADATA_INVALID");
+  }
+  if (previous.inventorySha256 === candidate.inventorySha256) errors.push("B2_H18_ADDITIVE_INVENTORY_HASH_UNCHANGED");
+  const previousRest = structuredClone(previous);
+  const candidateRest = structuredClone(candidate);
+  delete previousRest.inventorySha256;
+  delete candidateRest.inventorySha256;
+  delete previousRest.testedWriteActions;
+  delete candidateRest.testedWriteActions;
+  if (!jsonEqual(previousRest, candidateRest)) errors.push("B2_H18_ADDITIVE_NON_ACTION_MUTATION");
+  for (const [action, tests] of Object.entries(previousActions)) {
+    if (!Object.hasOwn(candidateActions, action)) errors.push(`B2_H18_ADDITIVE_ACTION_REMOVED:${action}`);
+    else if (!jsonEqual(tests, candidateActions[action])) errors.push(`B2_H18_ADDITIVE_ACTION_MUTATED:${action}`);
+  }
+  const additions = Object.keys(candidateActions).filter((action) => !Object.hasOwn(previousActions, action));
+  if (additions.length === 0) errors.push("B2_H18_ADDITIVE_ACTION_MISSING");
+  for (const action of additions) {
+    const tests = candidateActions[action];
+    if (!Array.isArray(tests) || tests.length === 0 || new Set(tests).size !== tests.length) {
+      errors.push(`B2_H18_ADDITIVE_PROOF_INVALID:${action}`);
+    }
+  }
+  return errors;
+}
+
+export function checkB2AdditiveF1RegistryChangeForTest({ before, after }) {
+  const errors = [];
+  let previous;
+  let candidate;
+  try {
+    previous = asJson(before);
+    candidate = asJson(after);
+  } catch {
+    return ["B2_F1_ADDITIVE_REGISTRY_UNREADABLE"];
+  }
+  if (!Array.isArray(previous?.capabilities) || !Array.isArray(candidate?.capabilities)) {
+    return ["B2_F1_ADDITIVE_CAPABILITIES_INVALID"];
+  }
+  const previousRest = structuredClone(previous);
+  const candidateRest = structuredClone(candidate);
+  delete previousRest.capabilities;
+  delete candidateRest.capabilities;
+  if (!jsonEqual(previousRest, candidateRest)) errors.push("B2_F1_ADDITIVE_METADATA_MUTATED");
+  const byStableId = new Map(candidate.capabilities.map((entry) => [entry?.stable_id, entry]));
+  if (byStableId.size !== candidate.capabilities.length || byStableId.has(undefined)) errors.push("B2_F1_ADDITIVE_STABLE_ID_INVALID");
+  let additions = 0;
+  for (const entry of previous.capabilities) {
+    const stableId = entry?.stable_id;
+    const next = byStableId.get(stableId);
+    if (!next) {
+      errors.push(`B2_F1_ADDITIVE_ENTRY_REMOVED:${stableId}`);
+      continue;
+    }
+    const priorFunctions = entry.exported_functions;
+    const nextFunctions = next.exported_functions;
+    const priorRest = structuredClone(entry);
+    const nextRest = structuredClone(next);
+    delete priorRest.exported_functions;
+    delete nextRest.exported_functions;
+    if (!jsonEqual(priorRest, nextRest)) {
+      errors.push(`B2_F1_ADDITIVE_ENTRY_MUTATED:${stableId}`);
+      continue;
+    }
+    if (priorFunctions === undefined && nextFunctions === undefined) continue;
+    if (!Array.isArray(priorFunctions) || !Array.isArray(nextFunctions)
+      || !priorFunctions.every((value, index) => nextFunctions[index] === value)
+      || new Set(nextFunctions).size !== nextFunctions.length) {
+      errors.push(`B2_F1_ADDITIVE_FUNCTIONS_MUTATED:${stableId}`);
+      continue;
+    }
+    additions += nextFunctions.length - priorFunctions.length;
+  }
+  const previousIds = new Set(previous.capabilities.map((entry) => entry.stable_id));
+  for (const entry of candidate.capabilities) {
+    if (!previousIds.has(entry.stable_id)) errors.push(`B2_F1_ADDITIVE_NEW_GROUP_FORBIDDEN:${entry.stable_id}`);
+  }
+  if (additions === 0) errors.push("B2_F1_ADDITIVE_FUNCTION_MISSING");
+  return errors;
+}
+
+function checkB2AdditiveContractChanges(root, base, head, files) {
+  const errors = [];
+  const checks = [
+    ["scripts/quality/h18-server-actions.json", checkB2AdditiveH18ChangeForTest],
+    ["docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json", checkB2AdditiveF1RegistryChangeForTest],
+  ];
+  for (const [rel, check] of checks) {
+    if (!files.includes(rel)) continue;
+    try {
+      errors.push(...check({ before: gitFile(root, base, rel), after: gitFile(root, head, rel) }));
+    } catch {
+      errors.push(`B2_ADDITIVE_CONTRACT_UNREADABLE:${rel}`);
     }
   }
   return errors;
@@ -1864,10 +2036,12 @@ export function checkLivePackageScope({ root, base, head, branch }) {
     if (branch === TA_B2K1_BRANCH) return checkTaB2k1Anchor(root, files, candidateMission, branch, baseSha);
     if (branch === TA_B2K1B_BRANCH) return checkTaB2k1bAnchor(root, files, candidateMission, branch, baseSha);
     if (branch === TA_B2K2_BRANCH) return checkTaB2k2Anchor(root, files, candidateMission, branch, baseSha);
+    if (branch === TA_B2K3_BRANCH) return checkTaB2k3Anchor(root, files, candidateMission, branch, baseSha);
     if (candidateMission.active_block !== "B2") {
       return [`SALES_STAGE_ACTIVE_BLOCK_INVALID:${candidateMission.active_block}`];
     }
     const errors = checkSalesStageB2Scope(files, changedEntries(root, base, head), candidateMission, branch);
+    errors.push(...checkB2AdditiveContractChanges(root, base, head, files));
     const manifestChanged = files.includes("package.json"), lockChanged = files.includes("package-lock.json");
     if (manifestChanged !== lockChanged) errors.push("B2I_PARSER_MANIFEST_PAIR_REQUIRED");
     if (manifestChanged && lockChanged) {
@@ -2449,6 +2623,48 @@ export function runSelftest(root = process.cwd()) {
   const taB2k2Outside = checkTaB2k2Scope(["src/app/page.tsx"], taB2cMission, TA_B2K2_BRANCH, TA_B2K2_BASE_SHA);
   if (!taB2k2Outside.includes("TA_B2K2_SCOPE:src/app/page.tsx")) {
     throw new Error("TA-B2k2 accepted an out-of-anchor file: " + taB2k2Outside.join(" | "));
+  }
+  const validTaB2k3 = checkTaB2k3Scope(TA_B2K3_ANCHOR_ALLOWLIST, taB2cMission, TA_B2K3_BRANCH, TA_B2K3_BASE_SHA);
+  if (validTaB2k3.length > 0) throw new Error("valid TA-B2k3 scope rejected: " + validTaB2k3.join(" | "));
+  const taB2k3Outside = checkTaB2k3Scope(["src/app/page.tsx"], taB2cMission, TA_B2K3_BRANCH, TA_B2K3_BASE_SHA);
+  if (!taB2k3Outside.includes("TA_B2K3_SCOPE:src/app/page.tsx")) {
+    throw new Error("TA-B2k3 accepted an out-of-anchor file: " + taB2k3Outside.join(" | "));
+  }
+  const additiveH18Before = {
+    version: 1,
+    inventorySha256: "a".repeat(64),
+    testedWriteActions: { "src/app/actions/a.ts#existing": ["src/test/a.integration.test.ts"] },
+    writeActionOverrides: {},
+  };
+  const additiveH18After = {
+    ...additiveH18Before,
+    inventorySha256: "b".repeat(64),
+    testedWriteActions: {
+      ...additiveH18Before.testedWriteActions,
+      "src/app/actions/a.ts#new": ["src/test/a.integration.test.ts"],
+    },
+  };
+  if (checkB2AdditiveH18ChangeForTest({ before: additiveH18Before, after: additiveH18After }).length) {
+    throw new Error("P86 valid H18 append rejected");
+  }
+  const additiveRegistryBefore = {
+    schema_version: "1.0",
+    capabilities: [{ stable_id: "server-actions.a", kind: "SERVER_ACTION_GROUP", exported_functions: ["existing"] }],
+  };
+  const additiveRegistryAfter = {
+    ...additiveRegistryBefore,
+    capabilities: [{ ...additiveRegistryBefore.capabilities[0], exported_functions: ["existing", "new"] }],
+  };
+  if (checkB2AdditiveF1RegistryChangeForTest({ before: additiveRegistryBefore, after: additiveRegistryAfter }).length) {
+    throw new Error("P86 valid F1 append rejected");
+  }
+  const additiveRegistryMutation = {
+    ...additiveRegistryAfter,
+    capabilities: [{ ...additiveRegistryAfter.capabilities[0], kind: "PAGE_ROUTE" }],
+  };
+  if (!checkB2AdditiveF1RegistryChangeForTest({ before: additiveRegistryBefore, after: additiveRegistryMutation })
+    .includes("B2_F1_ADDITIVE_ENTRY_MUTATED:server-actions.a")) {
+    throw new Error("P86 accepted a non-additive F1 registry mutation");
   }
   const apAbsMigration = "supabase/migrations/20261106013106_abs_absprachen.sql";
   const apAbsErrors = checkSalesStageB2Scope(

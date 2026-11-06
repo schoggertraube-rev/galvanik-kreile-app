@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "package": "B2-H18-REGISTRY-ADDITIVE-ANCHOR",
+  "headBranch": "codex/ta-b2k3",
+  "mainBaseSha": "cc541f80e0d28d2ab52ba5b2396bafff172fa874",
+  "authorizedBy": "Siglinder",
+  "authorizedAt": "2026-11-06",
+  "scope": "P86: nur additive H18- und F1-Registry-Ergaenzungen fuer neue Server-Actions"
+}

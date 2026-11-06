@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  checkB2AdditiveF1RegistryChangeForTest,
+  checkB2AdditiveH18ChangeForTest,
   checkSalesStageB2ScopeForTest,
   checkTaB2bScopeForTest,
   checkTaB2c2ScopeForTest,
@@ -15,6 +17,7 @@ import {
   checkTaB2k1ScopeForTest,
   checkTaB2k1bScopeForTest,
   checkTaB2k2ScopeForTest,
+  checkTaB2k3ScopeForTest,
   checkB2iParserChangesForTest,
   checkTaB2fBaselineChangeForTest,
   runSelftest,
@@ -38,6 +41,59 @@ const b2AnchorMission = {
 const b2cAnchorMission = {
   ...b2AnchorMission,
 };
+
+describe("P86 additive write-contract anchor", () => {
+  const branch = "codex/ta-b2k3";
+  const baseSha = "cc541f80e0d28d2ab52ba5b2396bafff172fa874";
+  const files = [
+    "scripts/quality/check-live-package-scope.mjs",
+    "src/test/live_package_scope.test.ts",
+    "docs/evidence/live-line/b2/TRUST_ANCHOR_B2K3.json",
+    "docs/delivery/ABGABE_TA-B2K3.md",
+  ];
+
+  it("keeps the anchor exact and rejects unrelated files", () => {
+    expect(checkTaB2k3ScopeForTest({ files, mission: b2AnchorMission, branch, baseSha })).toEqual([]);
+    expect(checkTaB2k3ScopeForTest({ files: [...files, "src/app/page.tsx"], mission: b2AnchorMission, branch, baseSha }))
+      .toContain("TA_B2K3_SCOPE:src/app/page.tsx");
+  });
+
+  it("permits only additive H18 actions and F1 exported functions", () => {
+    const h18Before = {
+      version: 1,
+      inventorySha256: "a".repeat(64),
+      testedWriteActions: { "src/app/actions/a.ts#existing": ["src/test/a.integration.test.ts"] },
+      writeActionOverrides: {},
+    };
+    const h18After = {
+      ...h18Before,
+      inventorySha256: "b".repeat(64),
+      testedWriteActions: {
+        ...h18Before.testedWriteActions,
+        "src/app/actions/a.ts#new": ["src/test/a.integration.test.ts"],
+      },
+    };
+    expect(checkB2AdditiveH18ChangeForTest({ before: h18Before, after: h18After })).toEqual([]);
+    expect(checkB2AdditiveH18ChangeForTest({
+      before: h18Before,
+      after: { ...h18After, testedWriteActions: { ...h18After.testedWriteActions, "src/app/actions/a.ts#existing": [] } },
+    })).toContain("B2_H18_ADDITIVE_ACTION_MUTATED:src/app/actions/a.ts#existing");
+
+    const registryBefore = {
+      schema_version: "1.0",
+      capabilities: [{ stable_id: "server-actions.a", kind: "SERVER_ACTION_GROUP", exported_functions: ["existing"], visible: false }],
+    };
+    const registryAfter = {
+      ...registryBefore,
+      capabilities: [{ ...registryBefore.capabilities[0], exported_functions: ["existing", "new"] }],
+    };
+    expect(checkB2AdditiveF1RegistryChangeForTest({ before: registryBefore, after: registryAfter })).toEqual([]);
+    expect(checkB2AdditiveF1RegistryChangeForTest({
+      before: registryBefore,
+      after: { ...registryAfter, capabilities: [{ ...registryAfter.capabilities[0], visible: true }] },
+    })).toContain("B2_F1_ADDITIVE_ENTRY_MUTATED:server-actions.a");
+  });
+});
 
 describe("P59/P83 product scope: protected controls and additive migrations", () => {
   const branch = "codex/ta-b2j";
