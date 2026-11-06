@@ -29,8 +29,21 @@ export type TodayItem = {
   primaryActionLabel?: TodayOrderGuidance["primaryActionLabel"] | "Erinnern" | "Zahlung bestätigen" | "Bündel öffnen";
 };
 
+export type TodayCollectionNotice = {
+  id: string;
+  customerName: string;
+  month: string;
+  orderCount: number;
+};
+
 export type TodayDashboard = {
   items: TodayItem[];
+  /**
+   * Open collections are deliberately not actions until AP-ABS-b provides the
+   * invoice-draft contract.  The optional property keeps older read-only
+   * render fixtures compatible while the server reader always supplies it.
+   */
+  collectionNotices?: TodayCollectionNotice[];
   visibleFields: TodayVisibleField[];
   layout: TodayLayoutItem[];
   defaultLayout: TodayLayoutItem[];
@@ -46,6 +59,7 @@ type PrepaymentRow = { order_id: string; order_number: string; customer_name: st
 type UserRow = { id: string; full_name: string };
 type GraphThreadRow = { source: string };
 type AssignmentRow = { order_id: string; assigned_to_name: string; current_order_version: number };
+type CollectionRow = { id: string; customer_name: string; monat: Date | string; order_count: number | string };
 
 const DEFAULT_FIELDS: TodayVisibleField[] = ["today", "assign", "money", "bundle"];
 const STAGE2_TODAY_FEATURES = new Set<"bundle">();
@@ -68,6 +82,21 @@ function euro(cents: number | string) {
   return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(Number(cents) / 100);
 }
 
+function formatCollectionMonth(value: Date | string) {
+  const month = dateOnly(value);
+  if (!/^\d{4}-\d{2}-01$/.test(month)) throw new Error("TODAY_COLLECTION_MONTH_INVALID");
+  return new Intl.DateTimeFormat("de-DE", {
+    month: "long",
+    year: "numeric",
+    timeZone: "Europe/Berlin",
+  }).format(new Date(`${month}T12:00:00.000Z`));
+}
+
+function toPositiveInteger(value: number | string) {
+  const normalized = Number(value);
+  return Number.isSafeInteger(normalized) && normalized > 0 ? normalized : null;
+}
+
 export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<TodayDashboard> {
   const ordersAllowed = hasAuthorizationArea(auth, "auftraege");
   const graphAllowed = hasAuthorizationArea(auth, "mails");
@@ -76,7 +105,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
     ordersAllowed ? getOperationalOrders(auth) : Promise.resolve([]),
     graphAllowed ? listMicrosoftGraphInbox() : Promise.resolve({ code: "IN_KLAERUNG" as const, message: "Outlook ist für dieses Profil nicht eingeblendet." }),
     withPrivilegedTenantTransaction(auth, async (tx) => {
-      const [preferences, reminders, invoices, prepayments, delegationTargets, graphThreads, assignments] = await Promise.all([
+      const [preferences, reminders, invoices, prepayments, collections, delegationTargets, graphThreads, assignments] = await Promise.all([
         tx.execute<PreferenceRow>(sql`SELECT preference.visible_fields, to_jsonb(preference)->'layout' AS layout FROM private.today_preferences preference WHERE preference.tenant_id=${auth.tenantId} AND preference.actor_id=${auth.userId}::uuid LIMIT 1`),
         tx.execute<ReminderRow>(sql`SELECT item_key, reminder_until FROM private.today_reminders WHERE tenant_id=${auth.tenantId} AND actor_id=${auth.userId}::uuid`),
         moneyAllowed ? tx.execute<InvoiceRow>(sql`
@@ -110,6 +139,20 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
           ORDER BY orders.due_date NULLS LAST, payment.order_number
           LIMIT 20
         `) : Promise.resolve([]),
+        moneyAllowed ? tx.execute<CollectionRow>(sql`
+          SELECT collection.id::text, customer.name AS customer_name, collection.monat,
+                 count(collection_order.order_id)::integer AS order_count
+          FROM public.invoice_collections collection
+          JOIN public.customers customer
+            ON customer.tenant_id=collection.tenant_id AND customer.id=collection.customer_id
+          JOIN public.invoice_collection_orders collection_order
+            ON collection_order.tenant_id=collection.tenant_id AND collection_order.collection_id=collection.id
+          WHERE collection.tenant_id=${auth.tenantId} AND collection.status='offen'
+          GROUP BY collection.id, collection.monat, customer.name
+          HAVING count(collection_order.order_id)>0
+          ORDER BY collection.monat, customer.name, collection.id
+          LIMIT 20
+        `) : Promise.resolve([]),
         ordersAllowed ? tx.execute<UserRow>(sql`
           SELECT users.id, users.full_name
           FROM public.app_users users
@@ -133,7 +176,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
             AND active=true
         `) : Promise.resolve([]),
       ]);
-      return { preferences, reminders, invoices, prepayments, delegationTargets, graphThreads, assignments };
+      return { preferences, reminders, invoices, prepayments, collections, delegationTargets, graphThreads, assignments };
     }),
   ]);
 
@@ -174,6 +217,18 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
     add({ key: `prepayment:${prepayment.order_id}`, field: "money", kind: "order", title: `${prepayment.order_number} · Vorkasse offen`, meta: `${prepayment.customer_name} · ${amount} · Versand gesperrt`, urgency: "warning", orderId: prepayment.order_id, invoiceId: prepayment.invoice_id ?? undefined, dueDate: dueDate ?? undefined, primaryActionLabel: "Zahlung bestätigen" });
   }
 
+  const collectionNotices = support.collections.map((collection) => {
+    const customerName = collection.customer_name.trim();
+    const orderCount = toPositiveInteger(collection.order_count);
+    if (!collection.id || !customerName || orderCount === null) throw new Error("TODAY_COLLECTION_ROW_INVALID");
+    return {
+      id: collection.id,
+      customerName,
+      month: formatCollectionMonth(collection.monat),
+      orderCount,
+    };
+  });
+
   const surfaces = new Map<string, typeof orders>();
   for (const order of orders) {
     if (!isBundleStationForToday(order.station)) continue;
@@ -188,6 +243,7 @@ export async function readTodayDashboard(auth: AuthorizationSnapshot): Promise<T
 
   return {
     items,
+    collectionNotices,
     visibleFields: selected,
     layout,
     defaultLayout: suggestedLayout,

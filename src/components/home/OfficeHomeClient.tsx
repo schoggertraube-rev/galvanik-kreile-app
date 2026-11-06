@@ -100,6 +100,8 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
   const canDelegate = model.canDelegate && canWorkOrders;
   const companyHasOrders = model.projection.orders.length > 0;
   const filtered = filter === "alle" ? model.dashboard.items : model.dashboard.items.filter((item) => actionType(item) === filter);
+  const collectionNotices = model.dashboard.collectionNotices ?? [];
+  const dashboardHasVisibleContent = model.dashboard.items.length > 0 || collectionNotices.length > 0;
   const counts = model.dashboard.items.filter((item) => item.field === "action" && !item.assignedToName && !delegated[item.key]).reduce<Record<HandlungsArt, number>>((sum, item) => { sum[actionType(item)] += 1; return sum; }, { konflikt: 0, entscheidung: 0, warnung: 0 });
   const primaryLabel = (item: TodayItem) => item.primaryActionLabel ?? (item.kind === "order" && item.field === "today" ? "Ware raus" : item.kind === "order" ? "Auftrag öffnen" : item.kind === "mail" ? "Mail ansehen" : item.kind === "invoice" ? "Geld einfordern" : "Bündel öffnen");
   const undoDelegation = async (item: TodayItem, version: number) => { if (!item.orderId) return; setBusy(true); const result = await ports.handBackOrder({ orderId: item.orderId, expectedVersion: version, clientEventId: crypto.randomUUID() }); setBusy(false); if (result.code === "OK") { setDelegated((current) => { const next = { ...current }; delete next[item.key]; return next; }); setMessage("Zurückgeholt"); router.refresh(); } else setMessage(result.message ?? "Weitergabe nicht zurückgeholt."); };
@@ -122,7 +124,8 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
       router.refresh();
     } else setMessage(result.message ?? "Zuweisung nicht gespeichert.");
   };
-  const focusField = (["action", "today", "assign", "money", "bundle"] as const).find((field) => entries(field).length > 0);
+  const fieldHasContent = (field: TodayItem["field"]) => entries(field).length > 0 || (field === "money" && collectionNotices.length > 0);
+  const focusField = (["action", "today", "assign", "money", "bundle"] as const).find((field) => fieldHasContent(field));
   const activeLayout = customize ? layout : model.dashboard.layout;
   const moveField = (field: TodayItem["field"], direction: -1 | 1) => setLayout((current) => {
     const index = current.findIndex((item) => item.field === field);
@@ -135,7 +138,10 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
   const removeField = (field: TodayVisibleField) => setLayout((current) => current.filter((item) => item.field !== field).map((item, order) => ({ ...item, order })));
   const addField = (field: TodayVisibleField) => setLayout((current) => [...current, { field, column: model.dashboard.defaultLayout.find((item) => item.field === field)?.column ?? "left", order: current.length }]);
   const partialMailState = <Hinweis ton="warn"><span>Mails nicht erreichbar · Zuordnen ohne Mails</span><Button data-spec-id="tag.erneut-laden" art="leise" icon="refresh" text="Erneut laden" onClick={() => router.refresh()} /></Hinweis>;
-  const fieldCard = (item: TodayLayoutItem) => <Kachel key={item.field} titel={FIELD_LABELS[item.field]} icon={item.field === "money" ? "euro" : item.field === "bundle" ? "layers" : item.field === "assign" ? "mail" : "clock"} iconTon={item.field === "action" ? "warn" : "info"}>
+  const fieldCard = (item: TodayLayoutItem) => {
+    const fieldEntries = entries(item.field);
+    const hasCollectionNotices = item.field === "money" && collectionNotices.length > 0;
+    return <Kachel key={item.field} titel={FIELD_LABELS[item.field]} icon={item.field === "money" ? "euro" : item.field === "bundle" ? "layers" : item.field === "assign" ? "mail" : "clock"} iconTon={item.field === "action" ? "warn" : "info"}>
     {customize ? <div className="kr-schnellleiste">
       <Button text="Hoch" icon="arrow" disabled={item.order === 0 || item.order === 1} onClick={() => moveField(item.field, -1)} />
       <Button text="Runter" icon="arrow" disabled={item.field === "action" || item.order === layout.length - 1} onClick={() => moveField(item.field, 1)} />
@@ -143,8 +149,15 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
       {item.field !== "action" ? <Button text="Entfernen" icon="x" onClick={() => removeField(item.field as TodayVisibleField)} /> : null}
     </div> : null}
     {item.field === "assign" && model.dashboard.outlookMessage ? partialMailState : null}
-    {entries(item.field).length ? <HandlungsListe eintraege={entries(item.field)} geraet={device} fokus={item.field === focusField} auswahl={item.field === "action" ? keyboardSelection : -1} /> : item.field === "assign" && model.dashboard.outlookMessage ? null : <Zustand art="leer" text="Keine Einträge." />}
+    {fieldEntries.length ? <HandlungsListe eintraege={fieldEntries} geraet={device} fokus={item.field === focusField} auswahl={item.field === "action" ? keyboardSelection : -1} /> : null}
+    {hasCollectionNotices ? <div className="kr-stapel">
+      {collectionNotices.map((notice) => <div key={notice.id} className="kr-zeile r36-k--geplant" data-spec-id="tag.sammelrechnung-erstellen" aria-label={`Sammelrechnung ${notice.customerName} ${notice.month} · ${notice.orderCount} Aufträge · kommt mit Rechnungen`}>
+        <div className="kr-zeile-main"><p className="kr-zeile-s">Sammelrechnung {notice.customerName} {notice.month} · {notice.orderCount} Aufträge · kommt mit Rechnungen</p></div>
+      </div>)}
+    </div> : null}
+    {!fieldEntries.length && !hasCollectionNotices && (item.field === "assign" && model.dashboard.outlookMessage ? null : <Zustand art="leer" text="Keine Einträge." />)}
   </Kachel>;
+  };
 
   return <section data-testid="rolf-v11-home" data-spec-id="tag">
     <IntakeDraftList readDrafts={getIntakeDraftsAction} discardDraft={discardIntakeDraftAction} />
@@ -153,8 +166,8 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
     {model.dashboard.outlookMessage && !activeLayout.some((item) => item.field === "assign") ? partialMailState : null}
     {message ? <Hinweis ton="ok">{message}</Hinweis> : null}
     {customize ? <Kachel titel="Felder zuordnen" icon="grid" iconTon="info"><div className="kr-stapel"><p>Handlungsbedarf bleibt immer Feld 1. Du kannst erlaubte Felder hinzufügen, entfernen, verschieben und am Desktop die Spalte wechseln.</p><div className="kr-schnellleiste">{model.dashboard.allowedFields.filter((field) => !layout.some((item) => item.field === field)).map((field) => <Button key={field} text={`${FIELD_LABELS[field]} hinzufügen`} icon="plus" onClick={() => addField(field)} />)}</div><div className="kr-schnellleiste"><Button data-spec-id="tag.vorschlag-ubernehmen" text="Vorschlag übernehmen" icon="grid" onClick={() => setLayout(model.dashboard.defaultLayout)} /><Button data-spec-id="tag.abbrechen" text="Abbrechen" onClick={() => { setCustomize(false); setLayout([]); }} /><Button data-spec-id="tag.fertig" art="primaer" icon="check" text="Fertig" disabled={busy} onClick={() => void (async () => { setBusy(true); const result = await ports.savePreferences(layout); setBusy(false); if (result.code === "OK") { setCustomize(false); setMessage("Der Tag gespeichert"); router.refresh(); } else setMessage(result.message ?? "Anordnung nicht gespeichert."); })()} /></div></div></Kachel> : null}
-    {model.dashboard.items.length === 0 && !customize && !model.dashboard.outlookMessage ? <Zustand art="leer" text={companyHasOrders ? "Nichts offen" : "Noch keine Aufträge erfasst."} aktion={!companyHasOrders && canStartOrder ? { text: "Neu erfassen", icon: "inbox", onClick: () => requestGlobalCreate("DIRECT_INTAKE") } : undefined} /> : <div className="kr-stapel">
-      {device === "desktop" ? <div className="kr-spalten"><div className="kr-stapel">{activeLayout.filter((item) => item.column === "left" && (customize || entries(item.field).length || (item.field === "assign" && model.dashboard.outlookMessage))).map(fieldCard)}</div><div className="kr-stapel">{activeLayout.filter((item) => item.column === "right" && (customize || entries(item.field).length || (item.field === "assign" && model.dashboard.outlookMessage))).map(fieldCard)}</div></div> : activeLayout.filter((item) => customize || entries(item.field).length || (item.field === "assign" && model.dashboard.outlookMessage)).map(fieldCard)}
+    {!dashboardHasVisibleContent && !customize && !model.dashboard.outlookMessage ? <Zustand art="leer" text={companyHasOrders ? "Nichts offen" : "Noch keine Aufträge erfasst."} aktion={!companyHasOrders && canStartOrder ? { text: "Neu erfassen", icon: "inbox", onClick: () => requestGlobalCreate("DIRECT_INTAKE") } : undefined} /> : <div className="kr-stapel">
+      {device === "desktop" ? <div className="kr-spalten"><div className="kr-stapel">{activeLayout.filter((item) => item.column === "left" && (customize || fieldHasContent(item.field) || (item.field === "assign" && model.dashboard.outlookMessage))).map(fieldCard)}</div><div className="kr-stapel">{activeLayout.filter((item) => item.column === "right" && (customize || fieldHasContent(item.field) || (item.field === "assign" && model.dashboard.outlookMessage))).map(fieldCard)}</div></div> : activeLayout.filter((item) => customize || fieldHasContent(item.field) || (item.field === "assign" && model.dashboard.outlookMessage)).map(fieldCard)}
       {device !== "desktop" && (canStartOrder || canWorkOrders) ? <div className="kr-schnellleiste">{canStartOrder ? <Button art="primaer" icon="inbox" text="Neu erfassen" onClick={() => requestGlobalCreate("DIRECT_INTAKE")} /> : null}{canWorkOrders ? <Button icon="truck" text="Ware raus" onClick={() => router.push("/orders?station=fertig")} /> : null}</div> : null}
     </div>}
     {later ? <Dialog titel="Später erinnern" icon="clock" groesse="schmal" onSchliessen={() => setLater(null)}><div className="kr-stapel">{deriveTodayReminder("afternoon", later.dueDate) ? <Button data-spec-id="spaeter.heute-nachmittag" text="heute Nachmittag" icon="clock" disabled={busy} onClick={() => void saveReminder("afternoon")} /> : null}{deriveTodayReminder("tomorrow", later.dueDate) ? <Button data-spec-id="spaeter.morgen-fruh" text="morgen früh" icon="clock" disabled={busy} onClick={() => void saveReminder("tomorrow")} /> : null}{deriveTodayReminder("after_due", later.dueDate) ? <Button data-spec-id="spaeter.nach-dem-termin" text="nach dem Termin" icon="clock" disabled={busy} onClick={() => void saveReminder("after_due")} /> : null}<Button data-spec-id="spaeter.schliessen" art="leise" text="Schließen" onClick={() => setLater(null)} />{message ? <Hinweis ton="warn">{message}</Hinweis> : null}</div></Dialog> : null}
