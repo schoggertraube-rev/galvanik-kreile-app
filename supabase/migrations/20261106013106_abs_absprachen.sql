@@ -650,6 +650,9 @@ BEGIN
     OR NOT EXISTS (SELECT 1 FROM public.app_users actor WHERE actor.tenant_id=p_tenant_id AND actor.id=p_actor_id AND actor.active)
   THEN RETURN QUERY SELECT 'VALIDATION_ERROR'::text,false; RETURN; END IF;
   IF NOT EXISTS (SELECT 1 FROM public.app_user_rights WHERE tenant_id=p_tenant_id AND user_id=p_actor_id AND bereich='kunden')
+    AND NOT (NOT v_agreements_present AND v_customer_fields->>'type'='lieferant'
+      AND EXISTS (SELECT 1 FROM public.app_user_rights WHERE tenant_id=p_tenant_id AND user_id=p_actor_id AND bereich='geld')
+      AND EXISTS (SELECT 1 FROM public.customers WHERE tenant_id=p_tenant_id AND id=p_customer_id AND type='lieferant'))
   THEN RETURN QUERY SELECT 'FORBIDDEN'::text,false; RETURN; END IF;
   v_money := EXISTS (SELECT 1 FROM public.app_user_rights WHERE tenant_id=p_tenant_id AND user_id=p_actor_id AND bereich='geld');
   PERFORM pg_advisory_xact_lock(hashtextextended('s1:customer-update:'||p_tenant_id||':'||p_actor_id||':'||p_client_event_id,0));
