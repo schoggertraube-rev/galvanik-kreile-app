@@ -314,5 +314,17 @@
   "RT04-15": {
     "paket": "AP-EIN",
     "grund": "R53-Angleich"
+  },
+  "U241-01": {
+    "paket": "AP-EIN",
+    "grund": "R53-Angleich"
+  },
+  "U241-02": {
+    "paket": "AP-EIN",
+    "grund": "R53-Angleich"
+  },
+  "U241-03": {
+    "paket": "AP-EIN",
+    "grund": "R53-Angleich"
   }
 }
