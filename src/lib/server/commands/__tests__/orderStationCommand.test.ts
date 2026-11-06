@@ -344,7 +344,10 @@ describe("transitionWareneingangToGalvanik", () => {
     // racing into a unique-index failure (UNAVAILABLE).
     expect(source).not.toContain("w4:order-station-correction:client-event:");
     expect(source.match(/'w4:order-station:client-event:'/g)).toHaveLength(2);
-    expect(source.match(/pg_advisory_xact_lock/g)).toHaveLength(2);
+    // The two station commands share their mutex. Label prints use the same
+    // tenant-bound event table, but have an independent idempotency namespace.
+    expect(source.match(/pg_advisory_xact_lock/g)).toHaveLength(3);
+    expect(source).toContain("w4:order-label-print:client-event:");
     expect(source).toContain("INSERT INTO public.events");
     expect(source).not.toMatch(/\.insert\(|rpc\(|createClient|supabase/i);
     expect(source).toContain("ORDER_STATION_EVENT_INSERT_FAILED");
@@ -365,6 +368,98 @@ describe("transitionWareneingangToGalvanik", () => {
     expect(itemLock).not.toContain("AND tenant_id");
     expect(source).toContain("item.tenant_id !== authorization.data.tenantId");
     expect(source).toContain("item.customer_id !== order.customer_id");
+  });
+});
+
+describe("recordOrderLabelPrint", () => {
+  const labelInput = (orderId = "order-1", clientEventId = CLIENT_EVENT_ID) => ({ orderId, clientEventId });
+  const labelOrder = {
+    id: "order-1", tenant_id: "tenant-a", station: "angenommen", status: "angenommen", version: 1,
+  };
+  const labelReceipt = {
+    event_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    tenant_id: "tenant-a",
+    order_id: "order-1",
+    client_event_id: CLIENT_EVENT_ID,
+    correlation_id: CORRELATION_ID,
+    event_schema_version: 1,
+    aggregate_version: 1,
+    from_station: null,
+    to_station: "angenommen",
+    actor_id: ACTOR_ID,
+    status: "success",
+    description: "Laufzettel gedruckt",
+    occurred_at: "2026-08-18T09:00:00.000Z",
+    event_type: "laufzettel_gedruckt",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resolveAuthorizationSpy.mockResolvedValue(authorization);
+    receiptLookupSpy.mockResolvedValue([]);
+    withTransactionSpy.mockImplementation(async (_authorization, work) => work({
+      execute: (query: { text: string }) => {
+        if (query.text.includes("pg_advisory_xact_lock")) return Promise.resolve([]);
+        if (query.text.includes("FROM public.events") && query.text.includes("client_event_id")) {
+          return receiptLookupSpy(query);
+        }
+        return executeSpy(query);
+      },
+    }));
+  });
+
+  it("rejects malformed input before authorization or a database transaction", async () => {
+    const { recordOrderLabelPrint } = await import("../orderStationCommand");
+    await expect(recordOrderLabelPrint(undefined as never)).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(recordOrderLabelPrint({ orderId: "order-1", clientEventId: "not-a-uuid" } as never)).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(recordOrderLabelPrint({ ...labelInput(), extra: "no" } as never)).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(resolveAuthorizationSpy).not.toHaveBeenCalled();
+    expect(withTransactionSpy).not.toHaveBeenCalled();
+  });
+
+  it("writes one immutable label event and replays the same client event without another write", async () => {
+    executeSpy
+      .mockResolvedValueOnce([labelOrder])
+      .mockResolvedValueOnce([labelReceipt]);
+    const { recordOrderLabelPrint } = await import("../orderStationCommand");
+
+    await expect(recordOrderLabelPrint(labelInput())).resolves.toEqual({
+      code: "OK",
+      replayed: false,
+      receipt: {
+        eventId: labelReceipt.event_id,
+        clientEventId: CLIENT_EVENT_ID,
+        correlationId: CORRELATION_ID,
+        eventSchemaVersion: 1,
+        orderId: "order-1",
+        aggregateVersion: 1,
+        actorId: ACTOR_ID,
+        occurredAt: "2026-08-18T09:00:00.000Z",
+      },
+    });
+    expect(executeSpy.mock.calls[0]?.[0].text).toContain("FROM public.orders");
+    expect(executeSpy.mock.calls[1]?.[0].text).toContain("INSERT INTO public.events");
+    expect(executeSpy.mock.calls[1]?.[0].values).toContain("laufzettel_gedruckt");
+    expect(executeSpy.mock.calls[1]?.[0].values).toContain("Laufzettel gedruckt");
+
+    receiptLookupSpy.mockResolvedValueOnce([labelReceipt]);
+    await expect(recordOrderLabelPrint(labelInput())).resolves.toMatchObject({
+      code: "OK",
+      replayed: true,
+      receipt: { eventId: labelReceipt.event_id },
+    });
+    expect(executeSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not create an event for a completed order", async () => {
+    executeSpy.mockResolvedValueOnce([{ ...labelOrder, station: "abgeholt", status: "abgeschlossen" }]);
+    const { recordOrderLabelPrint } = await import("../orderStationCommand");
+
+    await expect(recordOrderLabelPrint(labelInput())).resolves.toEqual({
+      code: "VALIDATION_ERROR",
+      message: "Laufzettel kann für abgeschlossene Aufträge nicht gedruckt werden.",
+    });
+    expect(executeSpy).toHaveBeenCalledTimes(1);
   });
 });
 

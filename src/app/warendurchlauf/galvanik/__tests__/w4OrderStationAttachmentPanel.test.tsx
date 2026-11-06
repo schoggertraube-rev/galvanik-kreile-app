@@ -1699,12 +1699,14 @@ describe("W4 V8 order-card placement", () => {
           invoice: { visible: false, enabled: false, reason: null },
           payment: { visible: false, enabled: false, reason: null },
           goodsOut: { visible: false, enabled: false, reason: null },
+          label: { visible: false, enabled: false, reason: null },
           feedback: { kind: "idle", message: "" },
           onHandoff: vi.fn(),
           onFreeze: vi.fn(),
           onIssueInvoice: vi.fn(),
           onConfirmPayment: vi.fn(),
           onRecordGoodsOut: vi.fn(),
+          onPrintLabel: vi.fn(),
           onReload: vi.fn(),
         }}
         attachmentPanel={

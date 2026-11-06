@@ -109,7 +109,7 @@ export type OrderCardPaymentContext =
   | { kind: "available"; value: OrderCardPayment }
   | { kind: "restricted" | "unavailable"; message: string };
 export type OrderCardActionReceipt = {
-  kind: "handoff" | "evidence" | "freeze" | "invoice" | "payment" | "goods-out" | "due-date" | "content" | "item-finished" | "duplicate";
+  kind: "handoff" | "evidence" | "freeze" | "invoice" | "payment" | "goods-out" | "due-date" | "content" | "item-finished" | "duplicate" | "label";
   actorId: string;
   occurredAt: string;
   eventId: string;
@@ -142,6 +142,7 @@ export type OrderCardActionPorts = {
   payment: OrderCardActionAvailability;
   goodsOut: OrderCardActionAvailability;
   agreement?: OrderCardAgreementPorts;
+  label: OrderCardActionAvailability;
   feedback: OrderCardActionFeedback;
   onSaveContent?: (input: {
     note: string | null;
@@ -177,6 +178,7 @@ export type OrderCardActionPorts = {
     mode: OrderCardGoodsOutMode,
     agreement?: OrderCardGoodsOutAgreement,
   ) => Promise<boolean>;
+  onPrintLabel: () => void | Promise<void>;
   onReload: () => void | Promise<void>;
 };
 export type OrderCardModel = {
@@ -200,6 +202,10 @@ export type OrderCardModel = {
     changedAt: string;
     changedBy: string;
     aggregateVersion: number;
+  }>;
+  labelPrints?: Array<{
+    eventId: string;
+    occurredAt: string;
   }>;
   items: OrderCardItem[];
   evidence: OrderCardEvidence[];

@@ -78,6 +78,10 @@ export type LiveOrderCard = {
     changedBy: string;
     aggregateVersion: number;
   }>;
+  labelPrints: Array<{
+    eventId: string;
+    occurredAt: string;
+  }>;
   items: OrderCardItem[];
   freeze: null | {
     freezeId: string;
@@ -260,6 +264,21 @@ type DueDateChangeRow = {
   actor_id: string;
   aggregate_version: number;
   event_schema_version: number;
+};
+
+type LabelPrintRow = {
+  event_id: string;
+  tenant_id: string;
+  order_id: string;
+  client_event_id: string;
+  correlation_id: string;
+  event_schema_version: number;
+  aggregate_version: number;
+  actor_id: string;
+  occurred_at: Date | string;
+  event_type: string;
+  status: string;
+  description: string | null;
 };
 
 function validId(value: unknown): value is string {
@@ -509,6 +528,24 @@ function mapDueDateChange(row: DueDateChangeRow, tenantId: string, orderId: stri
   };
 }
 
+function mapLabelPrint(row: LabelPrintRow, tenantId: string, orderId: string) {
+  if (
+    row.tenant_id !== tenantId
+    || row.order_id !== orderId
+    || row.event_type !== "laufzettel_gedruckt"
+    || row.status !== "success"
+    || row.description !== "Laufzettel gedruckt"
+    || row.event_schema_version !== 1
+    || !UUID_PATTERN.test(row.event_id)
+    || !UUID_PATTERN.test(row.client_event_id)
+    || !UUID_PATTERN.test(row.correlation_id)
+    || !UUID_PATTERN.test(row.actor_id)
+    || !Number.isSafeInteger(row.aggregate_version)
+    || row.aggregate_version < 0
+  ) throw new Error("ORDER_CARD_LABEL_PRINT_INVALID");
+  return { eventId: row.event_id, occurredAt: toIso(row.occurred_at) };
+}
+
 function canView(authorization: AuthorizationSnapshot): boolean {
   return authorization.permissions.includes("perm_view_leitstand");
 }
@@ -689,6 +726,29 @@ export async function readLiveOrderCard(
         LIMIT 50
       `)).map((row) => mapDueDateChange(row, authorization.tenantId, queue.id));
 
+      const labelPrints = (await tx.execute<LabelPrintRow>(sql`
+        SELECT
+          event.id AS event_id,
+          event.tenant_id,
+          event.order_id,
+          event.client_event_id,
+          event.correlation_id::text AS correlation_id,
+          event.event_schema_version,
+          event.aggregate_version,
+          event.user_id::text AS actor_id,
+          event.created_at AS occurred_at,
+          event.event_type,
+          event.status,
+          event.description
+        FROM public.events event
+        WHERE event.tenant_id = ${authorization.tenantId}
+          AND event.order_id = ${input.orderId}
+          AND event.event_type = 'laufzettel_gedruckt'
+          AND event.status = 'success'
+        ORDER BY event.created_at DESC, event.id DESC
+        LIMIT 50
+      `)).map((row) => mapLabelPrint(row, authorization.tenantId, queue.id));
+
       const extraRows = await tx.execute<ExtraWorkRow>(sql`
         SELECT tenant_id, order_id, item_id, line_id::text AS line_id,
                catalog_position_id::text AS catalog_position_id,
@@ -773,6 +833,7 @@ export async function readLiveOrderCard(
         assignment,
         assignmentOptions,
         dueDateChanges,
+        labelPrints,
         items: canReadMoney ? items : items.map((item) => ({ ...item, unitPriceCents: null, vatRateBasisPoints: null,
           extraWork: item.extraWork.map((line) => ({ ...line, hourlyRateCents: null, amountCents: null })) })),
         freeze: canReadMoney || !mappedFreeze ? mappedFreeze : { ...mappedFreeze, hourlyRateCents: null, totalAmountCents: null },

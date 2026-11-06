@@ -598,6 +598,7 @@
       "exported_functions": [
         "transitionWareneingangToGalvanikAction",
         "correctGalvanikToWareneingangAction",
+        "recordOrderLabelPrintAction",
         "changeOrderItemExtraWorkAction",
         "freezeOrderAction",
         "reopenFrozenOrderAction",

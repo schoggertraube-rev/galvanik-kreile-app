@@ -9,6 +9,8 @@ const SOURCE_STATION = "angenommen";
 const TARGET_STATION = "galvanik";
 const EVENT_TYPE = "ORDER_STATION_MOVED_V1";
 const CORRECTION_EVENT_TYPE = "ORDER_STATION_CORRECTED_V1";
+const LABEL_PRINT_EVENT_TYPE = "laufzettel_gedruckt";
+const LABEL_PRINT_EVENT_DESCRIPTION = "Laufzettel gedruckt";
 const EVENT_SCHEMA_VERSION = 1 as const;
 const MAX_ORDER_ID_LENGTH = 128;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -26,6 +28,12 @@ export type OrderStationCorrectionCommandInput = {
   expectedVersion: number;
   clientEventId: string;
   reason: string;
+};
+
+/** An immutable audit receipt for a browser-confirmed label print. */
+export type OrderLabelPrintCommandInput = {
+  orderId: string;
+  clientEventId: string;
 };
 
 export type OrderStationTransitionReceipt = {
@@ -74,6 +82,26 @@ export type OrderStationCorrectionCommandResult =
   | { code: "VALIDATION_ERROR"; message: string }
   | { code: "UNAVAILABLE"; message: string };
 
+export type OrderLabelPrintReceipt = {
+  eventId: string;
+  clientEventId: string;
+  correlationId: string;
+  eventSchemaVersion: typeof EVENT_SCHEMA_VERSION;
+  orderId: string;
+  aggregateVersion: number;
+  actorId: string;
+  occurredAt: string;
+};
+
+export type OrderLabelPrintCommandResult =
+  | { code: "OK"; receipt: OrderLabelPrintReceipt; replayed: boolean }
+  | { code: "UNAUTHENTICATED"; message: string }
+  | { code: "FORBIDDEN"; message: string }
+  | { code: "NOT_FOUND"; message: string }
+  | { code: "CONFLICT"; message: string }
+  | { code: "VALIDATION_ERROR"; message: string }
+  | { code: "UNAVAILABLE"; message: string };
+
 type LockedOrder = {
   id: string;
   tenant_id: string | null;
@@ -115,6 +143,16 @@ type EventReceiptRow = {
   status: string | null;
   occurred_at: Date | string;
   event_type: string;
+};
+
+type LabelPrintEventReceiptRow = EventReceiptRow & { description: string | null };
+
+type LockedLabelPrintOrder = {
+  id: string;
+  tenant_id: string | null;
+  station: string | null;
+  status: string | null;
+  version: number;
 };
 
 function invalidInput(input: unknown): boolean {
@@ -197,6 +235,245 @@ function toReceipt(row: EventReceiptRow): OrderStationTransitionReceipt {
     actorId: row.actor_id,
     occurredAt,
   };
+}
+
+function invalidLabelPrintInput(input: unknown): boolean {
+  if (input === null || typeof input !== "object") return true;
+  const candidate = input as Partial<OrderLabelPrintCommandInput>;
+  const keys = Object.keys(input).sort();
+  return (
+    keys.length !== 2
+    || keys[0] !== "clientEventId"
+    || keys[1] !== "orderId"
+    || typeof candidate.orderId !== "string"
+    || candidate.orderId.trim().length === 0
+    || candidate.orderId.length > MAX_ORDER_ID_LENGTH
+    || typeof candidate.clientEventId !== "string"
+    || !UUID_PATTERN.test(candidate.clientEventId)
+  );
+}
+
+function labelPrintReceiptMatchesIntent(
+  row: LabelPrintEventReceiptRow,
+  input: OrderLabelPrintCommandInput,
+  tenantId: string,
+  actorId: string,
+): boolean {
+  return (
+    row.event_type === LABEL_PRINT_EVENT_TYPE
+    && row.tenant_id === tenantId
+    && row.order_id === input.orderId
+    && row.client_event_id === input.clientEventId
+    && row.actor_id === actorId
+    && row.event_schema_version === EVENT_SCHEMA_VERSION
+    && Number.isSafeInteger(row.aggregate_version)
+    && (row.aggregate_version ?? -1) >= 0
+    && row.status === "success"
+    && row.description === LABEL_PRINT_EVENT_DESCRIPTION
+    && typeof row.event_id === "string"
+    && UUID_PATTERN.test(row.event_id)
+    && typeof row.correlation_id === "string"
+    && UUID_PATTERN.test(row.correlation_id)
+    && toIsoString(row.occurred_at) !== null
+  );
+}
+
+function toLabelPrintReceipt(row: LabelPrintEventReceiptRow): OrderLabelPrintReceipt {
+  const occurredAt = toIsoString(row.occurred_at);
+  if (
+    !occurredAt
+    || !row.order_id
+    || !row.client_event_id
+    || !row.correlation_id
+    || !Number.isSafeInteger(row.aggregate_version)
+    || row.aggregate_version === null
+    || !row.actor_id
+  ) {
+    throw new Error("ORDER_LABEL_PRINT_RECEIPT_INVALID");
+  }
+  return {
+    eventId: row.event_id,
+    clientEventId: row.client_event_id,
+    correlationId: row.correlation_id,
+    eventSchemaVersion: EVENT_SCHEMA_VERSION,
+    orderId: row.order_id,
+    aggregateVersion: row.aggregate_version,
+    actorId: row.actor_id,
+    occurredAt,
+  };
+}
+
+/**
+ * Persists the audit event only after the browser has confirmed the print dialog
+ * via `afterprint`. It does not mutate the order aggregate or introduce a
+ * second print queue; `public.events` remains the single order timeline.
+ */
+export async function recordOrderLabelPrint(
+  input: OrderLabelPrintCommandInput,
+): Promise<OrderLabelPrintCommandResult> {
+  if (invalidLabelPrintInput(input)) {
+    return { code: "VALIDATION_ERROR", message: "Ungültige Auftrags- oder Druckkennung." };
+  }
+
+  let authorization;
+  try {
+    authorization = await resolveAuthorization();
+  } catch (error) {
+    console.error("[ORDER_LABEL_PRINT_AUTH_FAILED]", error);
+    return { code: "UNAVAILABLE", message: "Laufzettel kann derzeit nicht im Verlauf gespeichert werden." };
+  }
+
+  if (!authorization.ok) {
+    if (authorization.reason === "AUTHORIZATION_UNAVAILABLE") {
+      return { code: "UNAVAILABLE", message: "Laufzettel kann derzeit nicht im Verlauf gespeichert werden." };
+    }
+    return { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+  }
+
+  if (
+    !hasAuthorizationArea(authorization.data, "eingang")
+    && !hasAuthorizationArea(authorization.data, "auftraege")
+  ) {
+    return { code: "FORBIDDEN", message: "Laufzettel drucken ist nicht erlaubt." };
+  }
+
+  try {
+    return await withPrivilegedTenantTransaction(authorization.data, async (tx) => {
+      await tx.execute(sql`
+        SELECT pg_advisory_xact_lock(
+          hashtextextended(
+            'w4:order-label-print:client-event:' || ${authorization.data.tenantId} || ':' || ${input.clientEventId},
+            0
+          )
+        )
+      `);
+
+      const existingReceipts = await tx.execute<LabelPrintEventReceiptRow>(sql`
+        SELECT
+          id AS event_id,
+          tenant_id,
+          order_id,
+          client_event_id,
+          correlation_id,
+          event_schema_version,
+          aggregate_version,
+          from_station,
+          station AS to_station,
+          user_id AS actor_id,
+          status,
+          description,
+          created_at AS occurred_at,
+          event_type
+        FROM public.events
+        WHERE tenant_id = ${authorization.data.tenantId}
+          AND client_event_id = ${input.clientEventId}
+        LIMIT 2
+      `);
+      if (existingReceipts.length > 0) {
+        const existingReceipt = existingReceipts[0];
+        if (
+          existingReceipts.length !== 1
+          || !existingReceipt
+          || !labelPrintReceiptMatchesIntent(
+            existingReceipt,
+            input,
+            authorization.data.tenantId,
+            authorization.data.userId,
+          )
+        ) {
+          return { code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." };
+        }
+        return { code: "OK", receipt: toLabelPrintReceipt(existingReceipt), replayed: true };
+      }
+
+      const lockedOrders = await tx.execute<LockedLabelPrintOrder>(sql`
+        SELECT id, tenant_id, station, status, version
+        FROM public.orders
+        WHERE id = ${input.orderId}
+          AND tenant_id = ${authorization.data.tenantId}
+        FOR UPDATE
+      `);
+      const order = lockedOrders[0];
+      if (!order) return { code: "NOT_FOUND", message: "Auftrag nicht verfügbar." };
+      if (order.tenant_id !== authorization.data.tenantId) {
+        return { code: "NOT_FOUND", message: "Auftrag nicht verfügbar." };
+      }
+      if (order.station === "abgeholt" || order.status === "abgeschlossen") {
+        return { code: "VALIDATION_ERROR", message: "Laufzettel kann für abgeschlossene Aufträge nicht gedruckt werden." };
+      }
+
+      const insertedReceipts = await tx.execute<LabelPrintEventReceiptRow>(sql`
+        INSERT INTO public.events (
+          id,
+          tenant_id,
+          order_id,
+          item_id,
+          event_type,
+          description,
+          status,
+          user_id,
+          station,
+          created_at,
+          client_event_id,
+          event_schema_version,
+          correlation_id,
+          aggregate_version,
+          payload
+        ) VALUES (
+          gen_random_uuid()::text,
+          ${authorization.data.tenantId},
+          ${order.id},
+          NULL,
+          ${LABEL_PRINT_EVENT_TYPE},
+          ${LABEL_PRINT_EVENT_DESCRIPTION},
+          'success',
+          ${authorization.data.userId},
+          ${order.station},
+          clock_timestamp() AT TIME ZONE 'UTC',
+          ${input.clientEventId},
+          ${EVENT_SCHEMA_VERSION},
+          gen_random_uuid(),
+          ${order.version},
+          jsonb_build_object('orderId', ${order.id}, 'orderVersion', ${order.version})
+        )
+        RETURNING
+          id AS event_id,
+          tenant_id,
+          order_id,
+          client_event_id,
+          correlation_id,
+          event_schema_version,
+          aggregate_version,
+          from_station,
+          station AS to_station,
+          user_id AS actor_id,
+          status,
+          description,
+          created_at AS occurred_at,
+          event_type
+      `);
+      const insertedReceipt = insertedReceipts[0];
+      if (
+        insertedReceipts.length !== 1
+        || !insertedReceipt
+        || !labelPrintReceiptMatchesIntent(
+          insertedReceipt,
+          input,
+          authorization.data.tenantId,
+          authorization.data.userId,
+        )
+      ) {
+        throw new Error("ORDER_LABEL_PRINT_EVENT_INSERT_FAILED");
+      }
+      return { code: "OK", receipt: toLabelPrintReceipt(insertedReceipt), replayed: false };
+    });
+  } catch (error) {
+    console.error("[ORDER_LABEL_PRINT_WRITE_FAILED]", {
+      orderId: input.orderId,
+      code: error instanceof Error ? error.message : "ORDER_LABEL_PRINT_WRITE_FAILED",
+    });
+    return { code: "UNAVAILABLE", message: "Laufzettel kann derzeit nicht im Verlauf gespeichert werden." };
+  }
 }
 
 function hasExactStationValues(order: LockedOrder, station: string): boolean {
