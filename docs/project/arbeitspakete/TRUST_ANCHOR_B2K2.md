@@ -16,3 +16,12 @@ Ein PR auf Branch `codex/ta-b2k2` von main (nach Merge #180), Owner merged. Ratc
 - **Entwurfsschutz (#179):** seine Pfade, falls #179 sie noch braucht.
 - **AP-ABS:** `supabase/migrations/*_abs_*.sql` und alle Pfade aus deiner lesenden Inventur von `paket_folge.AP-ABS` (5.4-Dialog, Befehle `absprache.speichern/widerrufen`, `sammelrechnung.erstellen`, `recordGoodsOutCommand` + Leser 10.1/4.1/5.1/5.2, Der-Tag-Zeile, 7.1-Entwurf) als Globs wie TA-B2j; vollständige Liste in der Abgabe.
 Danach braucht kein offener Folge-PR und AP-ABS einen weiteren Anker.
+
+## 4. Schnell-Teil (Owner 06.11. 13:00: „Prozesse verschlanken“) – im selben PR, damit nur ein Merge
+**a) CI ohne Doppel- und Hängeläufe** (`.github/workflows/*`):
+- `agentur-gate.yml`: `push` nur noch für `main` (Branches laufen über `pull_request`) – heute läuft jeder Push zweimal.
+- Alle drei Workflows: `concurrency: { group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}, cancel-in-progress: ${{ github.ref != 'refs/heads/main' }} }` – veraltete Läufe werden abgebrochen.
+- Playwright: Browser-Cache (`~/.cache/ms-playwright`, Schlüssel = Playwright-Version), Install-Schritt `timeout-minutes: 12` mit einem Wiederholungsversuch (P70).
+- Playwright-Konfiguration: `retries: process.env.CI ? 1 : 0` (Zeit-Aussetzer wie A03 brauchen keinen Neustart des ganzen Jobs); Assertions unverändert.
+**b) Scope-Prüfung als Schutzliste statt Einzelpfad-Erlaubnis:** erlaubt ist alles außer: `.github/**`, `scripts/quality/**`, `src/test/live_package_scope.test.ts`, `docs/project/**`, `_review/**`, `quality/eslint-baseline.json`, `docs/project/endversion/codex/BAUPLAN.json` (nur per Bindungs-Anker), Änderungen an **bestehenden** Dateien unter `supabase/migrations/**` (neue Dateien erlaubt). Branch-Muster `kreile/*`, `codex/*`. Alle übrigen Gates (H16, H18, No-Fake, Modul-Gates, Ratchet) bleiben unverändert. **Ab dann braucht neue Produktarbeit keinen Pfad-Anker mehr**; Anker nur noch für Bindung, Workflows, Prüfwerkzeuge.
+**c) Repo-Einstellungen (vom Planungschat am 06.11. 13:00 gesetzt):** `strict` (Branch muss aktuell sein) aus → nach einem Merge kein Pflicht-Rebase mehr; Auto-Merge erlaubt; Branch wird nach Merge gelöscht (gestapelte PRs springen dann automatisch auf main).

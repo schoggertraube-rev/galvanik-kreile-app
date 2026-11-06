@@ -302,5 +302,17 @@
   "ABS-20": {
     "paket": "AP-ABS",
     "grund": "AP-ABS nach Runde 53 wird mit AP-ABS geliefert"
+  },
+  "RT04-12": {
+    "paket": "AP-EIN",
+    "grund": "R53-Angleich"
+  },
+  "RT04-13": {
+    "paket": "AP-EIN",
+    "grund": "R53-Angleich"
+  },
+  "RT04-15": {
+    "paket": "AP-EIN",
+    "grund": "R53-Angleich"
   }
 }

@@ -5,7 +5,7 @@
   "mainBaseSha": "4593e8f6eaa3215033898a53d4168581b5bfc4c8",
   "authorizedBy": "Siglinder",
   "authorizedAt": "2026-11-06",
-  "scope": "Runde 53 Bindung sowie AP-EIN-Folgepfade, Entwurfsschutz und AP-ABS",
+  "scope": "Runde 53 Bindung, AP-EIN-Folgepfade, Entwurfsschutz, AP-ABS und CI-Durchsatzschutz",
   "bauplanSha256": "9491009F79E306370AD4DAC3886080E4B9AEAB9A2D8BD14AAAFBB0A31411C6DA",
   "probeResult": "PASS"
 }

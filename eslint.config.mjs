@@ -274,7 +274,11 @@ const eslintConfig = defineConfig([
     "supabase/.temp/**",
     // Gebundene Referenzquellen und Historie sind Bauinput/Evidence, nicht Produktcode.
     "docs/project/linie/ui/designsystem_v1_1/**",
-    "docs/project/endversion/ui/**",
+    "docs/project/endversion/ui/**/*",
+    // The bound sight checker is executable verification code, not a presentation
+    // reference. Keep it in the normal lint contract while the source assets stay
+    // byte-bound and ignored.
+    "!docs/project/endversion/ui/pruefe_sicht.cjs",
     "docs/project/history/**",
     // Standalone maintenance and local verification CLIs; none are part of the Next.js build.
     "create_migrate.js",

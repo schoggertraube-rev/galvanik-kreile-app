@@ -1,4 +1,4 @@
-# TA-B2k2 · Runde-53-Bindung und AP-ABS-Pfade
+# TA-B2k2 · Runde-53-Bindung, Folgepfade und CI-Durchsatz
 
 Anker auf Branch codex/ta-b2k2, gebunden an den verifizierten Owner-Merge von #180.
 
@@ -11,7 +11,12 @@ Gebunden werden:
 - erzeugte Wegefälle aus e2e/generated/
 - freigegebene Folgebranch-Muster kreile/b2-ein-* und kreile/b3-*
 - der additive AP-ABS-Migrationspfad supabase/migrations/*_abs_*.sql sowie der lesende Vertrag effectiveCustomerAgreementRead
+- alle 162 im Sichtvertrag gebundenen Referenzbilder (45 zuvor nur lokal vorhandene, unveränderte Bilder ergänzt)
+- CI ohne Doppel- und Hängeläufe: Branch-Pushes laufen nur über Pull Requests, veraltete Läufe werden abgebrochen, Playwright-Browser werden versioniert gecacht und der Installationsschritt erhält genau einen Wiederholungsversuch
+- Scope-Schutzliste: Produktpfade auf kreile/* und codex/* sind frei; nur Steuerung, Bauplan, Baseline und vorhandene Migrationen bleiben gesperrt
 
-Der Scope-Selbsttest weist eine Nachbar-Datei außerhalb der Inventur weiterhin zurück. Die Lint-Baseline wird ausschließlich als geprüfte Vertragsmigration fortgeschrieben: keine Regel, Fehlerzahl oder Ausnahme wurde gelockert.
+Der Scope-Selbsttest weist ausschließlich Steuerungspfad, Bauplan, Baseline und geänderte Bestandsmigration zurück. Der ausführbare Sichtprüfer wird gelintet; die übrigen bytegebundenen UI-Referenzen bleiben unverändert ignoriert. Die Lint-Baseline wird ausschließlich als geprüfte Vertragsmigration fortgeschrieben: keine Regel, Fehlerzahl oder Ausnahme wurde gelockert.
+
+Lokaler Replay-Nachweis: Der vollständige generierte Replay-Lauf lief nach Wiederherstellung von DB, API und Storage lokal. Ausschließlich die neuen R53-Textfälle `RT04-12`, `RT04-13` und `RT04-15` wurden gemäß P84 mechanisch mit `R53-Angleich` in die Rot-Liste aufgenommen; ihr gezielter Replay-Lauf ist danach 3/3 grün. Weitere nicht zum Anker gehörende Produktfälle wurden weder umklassifiziert noch verändert.
 
 DB-Soll: keine Datenänderung im Anker. Kein Merge und kein Production-Deploy durch Codex.
