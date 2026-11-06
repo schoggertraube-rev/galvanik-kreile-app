@@ -339,4 +339,130 @@ describe("H18 workshop Server Actions against the real replay database", () => {
     const view = await withSession(fixture, () => getLiveOrderCardAction({ orderId: order.orderId }));
     expect(view).toMatchObject({ code: "OK", data: { card: { id: order.orderId, station: "abgeholt", status: "abgeholt", version: 5 } } });
   });
+
+  it("ABS-07 records a collection goods-out once through the action with collection, event and card reread", async () => {
+    const fixture = await createFixture();
+    const order = await createOrder(fixture, "Sammelrechnung", "rechnung");
+    const itemId = order.items[0]?.id;
+    if (!itemId) throw new Error("H18_COLLECTION_ITEM_MISSING");
+    const agreementClientKey = randomUUID();
+    const stationClientEventId = randomUUID();
+    const finishedClientEventId = randomUUID();
+    const freezeClientEventId = randomUUID();
+    const goodsOutClientEventId = randomUUID();
+    const freezeId = randomUUID();
+    const rateId = randomUUID();
+    const { saveCustomerAgreementAction } = await import("@/app/actions/customers.actions");
+    const { recordGoodsOutAction } = await import("@/app/actions/goodsOut.actions");
+    const {
+      freezeOrderAction,
+      getLiveOrderCardAction,
+      setOrderItemFinishedAction,
+      transitionWareneingangToGalvanikAction,
+    } = await import("@/app/actions/orders.actions");
+
+    const agreement = await withSession(fixture, () => saveCustomerAgreementAction({
+      clientKey: agreementClientKey,
+      customerId: fixture.customerId,
+      orderId: null,
+      type: "sammelrechnung",
+      targetDays: 30,
+      validUntil: null,
+      reason: "Synthetischer ABS-07-Sammelrechnungslauf",
+      version: null,
+    }));
+    if (agreement.code !== "OK") throw new Error(`H18_COLLECTION_AGREEMENT_FAILED:${agreement.code}:${agreement.message}`);
+
+    await sql`
+      INSERT INTO private.extra_work_hourly_rates
+        (id, tenant_id, hourly_rate_cents, version, created_by, effective_at)
+      SELECT ${rateId}::uuid, ${KREILE_TENANT_SLUG}, 12000,
+        coalesce(max(version), 0) + 1, ${fixture.actorId}::uuid, now()
+      FROM private.extra_work_hourly_rates
+      WHERE tenant_id=${KREILE_TENANT_SLUG}
+    `;
+    expect(await withSession(fixture, () => transitionWareneingangToGalvanikAction({
+      orderId: order.orderId,
+      expectedVersion: 1,
+      clientEventId: stationClientEventId,
+    }))).toMatchObject({ code: "OK" });
+    expect(await withSession(fixture, () => setOrderItemFinishedAction({
+      orderId: order.orderId,
+      itemId,
+      expectedVersion: 2,
+      clientEventId: finishedClientEventId,
+      finished: true,
+    }))).toMatchObject({ code: "OK" });
+    expect(await withSession(fixture, () => freezeOrderAction({
+      orderId: order.orderId,
+      freezeId,
+      expectedVersion: 3,
+      clientEventId: freezeClientEventId,
+    }))).toMatchObject({ code: "OK" });
+
+    const input = {
+      orderId: order.orderId,
+      mode: "abholung" as const,
+      expectedVersion: 4,
+      clientEventId: goodsOutClientEventId,
+      agreement: {
+        id: agreement.agreement.id,
+        type: "sammelrechnung" as const,
+        version: agreement.agreement.version,
+      },
+    };
+    const booked = await withSession(fixture, () => recordGoodsOutAction(input));
+    expect(booked).toMatchObject({
+      code: "OK",
+      replayed: false,
+      receipt: {
+        eventSchemaVersion: 3,
+        settlement: "collection",
+        agreement: input.agreement,
+      },
+    });
+    expect(await sql<{
+      customer_id: string;
+      current_month: boolean;
+      target_days: number;
+      status: string;
+      order_id: string;
+      event_type: string;
+      settlement: string;
+      invoice_count: number;
+    }[]>`
+      SELECT collection.customer_id,
+        collection.monat = date_trunc('month', timezone('Europe/Berlin', now()))::date AS current_month,
+        collection.ziel_tage AS target_days,
+        collection.status,
+        link.order_id,
+        event.event_type,
+        event.payload->>'settlement' AS settlement,
+        (SELECT count(*)::integer FROM public.invoices invoice
+          WHERE invoice.tenant_id=collection.tenant_id AND invoice.order_id=link.order_id) AS invoice_count
+      FROM public.invoice_collections collection
+      JOIN public.invoice_collection_orders link
+        ON link.tenant_id=collection.tenant_id AND link.collection_id=collection.id
+      JOIN public.events event
+        ON event.tenant_id=collection.tenant_id AND event.client_event_id=${goodsOutClientEventId}::uuid
+      WHERE collection.tenant_id=${KREILE_TENANT_SLUG} AND link.order_id=${order.orderId}
+    `).toEqual([{
+      customer_id: fixture.customerId,
+      current_month: true,
+      target_days: 30,
+      status: "offen",
+      order_id: order.orderId,
+      event_type: "ORDER_PICKED_UP_V3",
+      settlement: "collection",
+      invoice_count: 0,
+    }]);
+    expect(await withSession(fixture, () => recordGoodsOutAction(input))).toMatchObject({ code: "OK", replayed: true });
+    expect(await sql<{ count: number }[]>`
+      SELECT count(*)::integer AS count
+      FROM public.invoice_collection_orders
+      WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${order.orderId}
+    `).toEqual([{ count: 1 }]);
+    expect(await withSession(fixture, () => getLiveOrderCardAction({ orderId: order.orderId })))
+      .toMatchObject({ code: "OK", data: { card: { id: order.orderId, station: "abgeholt", status: "abgeholt", version: 5 } } });
+  });
 });
