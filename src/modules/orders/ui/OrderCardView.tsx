@@ -409,10 +409,6 @@ function GoodsOutDialog({
   const genericButton = mode === "versand" ? "Versendet" : "Übergeben";
   const agreementValid = Boolean(agreement && agreementButton);
   const noPaymentPath = !agreementValid && !paymentAllowsGoodsOut && !paymentAtPickup;
-  // The command deliberately has no tracking-number envelope.  Showing this
-  // state as unavailable is safer than allowing a shipment that cannot be
-  // reconstructed from the order event.
-  const shippingBlocked = mode === "versand";
 
   return <Dialog
     titel="Warenausgang"
@@ -431,14 +427,14 @@ function GoodsOutDialog({
         art={paymentAtPickup ? "sekundaer" : "primaer"}
         icon="truck"
         text={agreementButton}
-        disabled={busy || mode === null || shippingBlocked}
+        disabled={busy || mode === null}
         onClick={() => void record()}
       /> : null}
       {!agreementValid && paymentAllowsGoodsOut && mode ? <Button
         art="primaer"
         icon="truck"
         text={genericButton}
-        disabled={busy || shippingBlocked}
+        disabled={busy}
         onClick={() => void record()}
       /> : null}
     </>}
@@ -465,7 +461,6 @@ function GoodsOutDialog({
         {inactiveText ? <Hinweis ton="warn"><span data-spec-id="rauspruefen.absprache-hinweis">{inactiveText}</span></Hinweis> : null}
         {noPaymentPath ? <Hinweis ton="warn">Zahlung fehlt</Hinweis> : null}
         {mode === null ? <Hinweis ton="warn">Übergabeweg fehlt</Hinweis> : null}
-        {shippingBlocked ? <Hinweis ton="warn">Sendungsnummer fehlt</Hinweis> : null}
         {noPaymentPath && actions.agreement?.visible ? <Button
           data-spec-id="rauspruefen.absprache-festlegen"
           art="sekundaer"
