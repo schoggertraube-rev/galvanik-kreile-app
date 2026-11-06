@@ -74,4 +74,13 @@ describe("Shipping settings UI connects to the existing versioned Action", () =>
     fireEvent.click(screen.getByRole("button", { name: "Versandangaben erneut lesen" }));
     expect(await screen.findByDisplayValue(stored.service)).toBeVisible(); expect(ports.save).not.toHaveBeenCalled();
   });
+
+  it("shows missing company data as a visible setup state without an alert or write", async () => {
+    ports.read.mockResolvedValueOnce({ code: "NOT_FOUND", message: "Firmendaten fehlen. Fehlercode: SHIPPING_SETTINGS_MISSING." });
+    render(<ShippingSettingsEditor />);
+    expect(await screen.findByText("Firmendaten zuerst speichern. Versandangaben können danach ergänzt werden.")).toBeVisible();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByLabelText("Versanddienst")).toBeNull();
+    expect(ports.save).not.toHaveBeenCalled();
+  });
 });

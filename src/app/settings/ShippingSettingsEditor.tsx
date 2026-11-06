@@ -25,10 +25,15 @@ export function ShippingSettingsEditor() {
 
   const load = useCallback(async (signal?: AbortSignal) => {
     const request = ++readId.current;
-    setLoading(true); setError(null);
+    setLoading(true); setError(null); setMessage(null);
     try {
       const result = await readShippingSettingsAction();
       if (request !== readId.current || signal?.aborted) return;
+      if (result.code === "NOT_FOUND") {
+        setSaved(null); setDraft(null); setConflict(null);
+        setMessage("Firmendaten zuerst speichern. Versandangaben können danach ergänzt werden.");
+        return;
+      }
       if (result.code !== "OK") { setError(result.message); return; }
       setSaved(result.settings); setDraft(fields(result.settings)); setConflict(null);
     } catch (failure) {
