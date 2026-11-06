@@ -9,7 +9,7 @@ BEGIN
    AND EXISTS(SELECT 1 FROM private.v_order_freeze_state_v1 freeze_state
      WHERE freeze_state.tenant_id=p_tenant AND freeze_state.order_id=orders.id AND freeze_state.active AND freeze_state.integrity_ok)
    AND (
-     orders.payment_mode='rechnung'
+     orders.payment_mode IN ('abholung', 'rechnung')
      OR (
        orders.payment_mode='keiner'
        AND EXISTS(
