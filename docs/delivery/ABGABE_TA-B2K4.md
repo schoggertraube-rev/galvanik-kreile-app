@@ -4,7 +4,7 @@ Stand: **in Arbeit, nicht merge-reif**. Der Anker verändert Prüfabläufe, kein
 
 - Die Browserprüfungen für generierte Wege und den V5-Shell-Smoke sind für das gebundene Playwright-Image `v1.60.0-jammy` vorbereitet. Replay-Datenbank und SQL-Prüfungen bleiben auf dem Runner.
 - Bei Pull Requests kann `_pr_scope.json` die Seiten des Pakets bestimmen; zusätzlich läuft der erste Fall jeder übrigen Seite. Eine unbekannte Seite führt zum Fehler. Bei leerer oder fehlender Liste sowie auf Main und im Nachtlauf bleibt der vollständige Prüfsatz erhalten.
-- Die unveränderten Planungsdateien werden gemäß P91 gesichert und im Anker übernommen; das Nachtlaufprotokoll bleibt außerhalb des Commits.
+- Der zuvor vorbereitete Planungssync entfällt nach P93. Die Planungsdateien bleiben lokal erhalten; das Nachtlaufprotokoll bleibt außerhalb des Commits.
 
 ## Nachweise und offene Punkte
 
