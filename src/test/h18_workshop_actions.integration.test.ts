@@ -151,7 +151,7 @@ async function createReworkComplaint(
       ${complaintId}, ${KREILE_TENANT_SLUG}, ${order.orderId}, ${fixture.customerId}, ${sourceItem.id},
       'H18 Reklamation', 'H18 Nacharbeit pruefen', 'open',
       ${`RK-H18-${complaintId.slice(0, 8)}`}, ${randomUUID()}::uuid,
-      ${JSON.stringify([{ position_id: sourceItem.id, menge: 1 }])}::jsonb,
+      ${sql.json([{ position_id: sourceItem.id, menge: 1 }])}::jsonb,
       'H18 Mangel', '[]'::jsonb, 'ja', 'aufgenommen', 1,
       ${fixture.actorId}::uuid, statement_timestamp() AT TIME ZONE 'UTC'
     )

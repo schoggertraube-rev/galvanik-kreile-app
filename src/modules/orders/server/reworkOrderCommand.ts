@@ -384,7 +384,7 @@ export async function nacharbeitAnlegen(input: unknown): Promise<NacharbeitAnleg
           ${ORDER_STATION}, ${ORDER_STATION}, 1, ${ORDER_LIFECYCLE_STATUS.ANGENOMMEN}, 'green', 'green',
           statement_timestamp() AT TIME ZONE 'UTC', ${input.liefertermin}::date, ${input.liefertermin}::date, 'wunsch', ${context.source_intake_source},
           'REKLAMATION_NACHARBEIT', ${context.complaint_id}, ${hint}, ${context.source_handover_mode}, 'keiner', 0,
-          false, 'erwartet', statement_timestamp() AT TIME ZONE 'UTC', ${input.liefertermin}::date, 'reklamation', statement_timestamp() AT TIME ZONE 'UTC',
+          false, 'erwartet', statement_timestamp() AT TIME ZONE 'UTC', ${input.liefertermin}::date, 'vorschlag', statement_timestamp() AT TIME ZONE 'UTC',
           ${context.complaint_id}, ${hint}, statement_timestamp() AT TIME ZONE 'UTC'
         )
         RETURNING id, tenant_id, order_number, version

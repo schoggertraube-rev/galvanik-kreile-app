@@ -151,6 +151,12 @@ type IntakeRow = {
   integrity_ok: boolean;
 };
 
+type OrderOriginRow = {
+  tenant_id: string;
+  source: string | null;
+  nacharbeit_zu: string | null;
+};
+
 type CurrentItemRow = {
   id: string;
   name: string;
@@ -594,6 +600,35 @@ export async function readLiveOrderCard(
           && queue.handover_mode !== "shipping")
       ) throw new Error("ORDER_CARD_QUEUE_INVALID");
 
+      const originRows = await tx.execute<OrderOriginRow>(sql`
+        SELECT tenant_id, source, nacharbeit_zu
+        FROM public.orders
+        WHERE tenant_id = ${authorization.tenantId}
+          AND id = ${input.orderId}
+        LIMIT 2
+      `);
+      const origin = originRows[0];
+      if (
+        originRows.length !== 1
+        || !origin
+        || origin.tenant_id !== authorization.tenantId
+      ) throw new Error("ORDER_CARD_ORIGIN_INVALID");
+      const isReworkOrder = origin.source === "REKLAMATION_NACHARBEIT";
+      if (isReworkOrder && !validId(origin.nacharbeit_zu)) {
+        throw new Error("ORDER_CARD_REWORK_LINK_INVALID");
+      }
+
+      const currentRows = await tx.execute<CurrentItemRow>(sql`
+        SELECT id, name, quantity, material, surface_requested, execution_requested,
+               catalog_service_id::text AS catalog_service_id, unit,
+               CASE WHEN preis_netto IS NULL THEN NULL ELSE round(preis_netto * 100)::bigint END AS unit_price_cents,
+               vat_rate_basis_points, current_station_id
+        FROM public.items
+        WHERE tenant_id = ${authorization.tenantId}
+          AND order_id = ${input.orderId}
+        ORDER BY created_at, id
+      `);
+
       const intakeRows = await tx.execute<IntakeRow>(sql`
         SELECT tenant_id, order_id, customer_id, items_snapshot,
                current_order_version, current_station, current_status, integrity_ok
@@ -604,16 +639,19 @@ export async function readLiveOrderCard(
       `);
       const intake = intakeRows[0];
       if (
-        intakeRows.length !== 1
-        || !intake
-        || intake.tenant_id !== authorization.tenantId
-        || intake.order_id !== queue.id
-        || intake.customer_id !== queue.customer_id
-        || intake.current_order_version !== queue.version
-        || intake.current_station !== queue.station
-        || intake.current_status !== queue.status
+        (isReworkOrder && intakeRows.length !== 0)
+        || (!isReworkOrder && (
+          intakeRows.length !== 1
+          || !intake
+          || intake.tenant_id !== authorization.tenantId
+          || intake.order_id !== queue.id
+          || intake.customer_id !== queue.customer_id
+          || intake.current_order_version !== queue.version
+          || intake.current_station !== queue.station
+          || intake.current_status !== queue.status
+        ))
       ) throw new Error("ORDER_CARD_INTAKE_RECEIPT_INVALID");
-      const intakeItems = mapOrderCardIntakeItems(intake.items_snapshot);
+      const intakeItems = isReworkOrder ? null : mapOrderCardIntakeItems(intake!.items_snapshot);
       const contentEvents = await tx.execute<ContentEventRow>(sql`
         SELECT tenant_id, order_id, event_type, event_schema_version,
                aggregate_version, status, payload
@@ -635,18 +673,9 @@ export async function readLiveOrderCard(
         || contentEvent.aggregate_version > queue.version
         || !(eventPayload?.note === null || typeof eventPayload?.note === "string")
       )) throw new Error("ORDER_CARD_CONTENT_EVENT_INVALID");
-      if (!contentEvent && intake.integrity_ok !== true) throw new Error("ORDER_CARD_INTAKE_RECEIPT_INVALID");
-      const positions = new Map((eventItems ?? intakeItems).map((item) => [item.id, item.position]));
-      const currentRows = await tx.execute<CurrentItemRow>(sql`
-        SELECT id, name, quantity, material, surface_requested, execution_requested,
-               catalog_service_id::text AS catalog_service_id, unit,
-               CASE WHEN preis_netto IS NULL THEN NULL ELSE round(preis_netto * 100)::bigint END AS unit_price_cents,
-               vat_rate_basis_points, current_station_id
-        FROM public.items
-        WHERE tenant_id = ${authorization.tenantId}
-          AND order_id = ${input.orderId}
-        ORDER BY created_at, id
-      `);
+      if (!isReworkOrder && !contentEvent && intake!.integrity_ok !== true) throw new Error("ORDER_CARD_INTAKE_RECEIPT_INVALID");
+      const sourcePositions = eventItems ?? intakeItems ?? currentRows.map((item, index) => ({ id: item.id, position: index + 1 }));
+      const positions = new Map(sourcePositions.map((item) => [item.id, item.position]));
       const items = mapCurrentOrderItems(currentRows, positions);
       if (eventItems) {
         const shape = (item: OrderCardItem) => ({
