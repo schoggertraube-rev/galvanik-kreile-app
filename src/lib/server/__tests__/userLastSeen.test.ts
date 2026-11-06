@@ -168,6 +168,200 @@ describe("F1.3 L2 user last-seen contract", () => {
     await expect(readUserLastSeen(authorization)).resolves.toMatchObject({ code: "UNAVAILABLE" });
   });
 
+  describe("KR-22P login path: one resolve on success, fresh resolve only before a CONFLICT retry", () => {
+    type Query = { text: string; values: unknown[] };
+    type Step = unknown[] | ((query: Query) => unknown[]);
+    const earlierSeenAt = "2026-08-19T08:00:00.000Z";
+
+    function script(steps: Step[]) {
+      for (const step of steps) {
+        executeSpy.mockImplementationOnce(async (query: Query) =>
+          typeof step === "function" ? step(query) : step);
+      }
+    }
+
+    function readbackFor(overrides: Record<string, unknown>) {
+      return (query: Query) => {
+        expect(query.text).toContain("private.v_user_last_seen_receipts_v1");
+        const issuedClientEventId = query.values[1];
+        return [{ ...receiptRow, ...overrides, client_event_id: issuedClientEventId }];
+      };
+    }
+
+    function receiptLookupClientIds(): unknown[] {
+      return executeSpy.mock.calls
+        .map(([query]) => query as Query)
+        .filter((query) => query.text.includes("receipt.client_event_id"))
+        .map((query) => query.values[0]);
+    }
+
+    it("first login: one resolve, version 0 -> insert, event and receipt readback", async () => {
+      script([
+        [],
+        [],
+        [],
+        [],
+        [],
+        [{ tenant_id: authorization.tenantId, user_id: authorization.userId, last_seen_at: lastSeenAt, version: 1 }],
+        [],
+        readbackFor({ aggregate_version: 1, previous_seen_at: null, last_seen_at: lastSeenAt }),
+      ]);
+
+      const { recordUserLastSeenForLogin } = await import("../userLastSeen");
+      const result = await recordUserLastSeenForLogin();
+
+      expect(resolveAuthorizationSpy).toHaveBeenCalledTimes(1);
+      expect(result).toMatchObject({
+        code: "OK",
+        replayed: false,
+        receipt: {
+          eventId: receiptRow.event_id,
+          actorId: authorization.userId,
+          aggregateVersion: 1,
+          previousSeenAt: null,
+          lastSeenAt,
+          eventSchemaVersion: 1,
+        },
+      });
+      const issued = receiptLookupClientIds();
+      expect(issued).toHaveLength(1);
+      expect(result.code === "OK" && result.receipt.clientEventId).toBe(issued[0]);
+      expect(withTransactionSpy).toHaveBeenCalledTimes(2);
+      for (const [snapshot] of withTransactionSpy.mock.calls) expect(snapshot).toBe(authorization);
+      const queries = executeSpy.mock.calls.map(([query]) => (query as Query).text);
+      expect(queries).toHaveLength(8);
+      expect(queries[0]).toContain("private.v_user_last_seen_v1");
+      expect(queries[5]).toContain("INSERT INTO private.user_last_seen");
+      expect(queries[6]).toContain("INSERT INTO public.events");
+    });
+
+    it("CONFLICT retry: re-resolves once, retry read+write use only the fresh snapshot, same clientEventId", async () => {
+      const freshAuthorization = { ...authorization };
+      resolveAuthorizationSpy
+        .mockResolvedValueOnce({ ok: true, data: authorization })
+        .mockResolvedValueOnce({ ok: true, data: freshAuthorization });
+      script([
+        // attempt 1: read v0, but a concurrent login already wrote v1
+        [],
+        [],
+        [],
+        [],
+        [{ tenant_id: authorization.tenantId, user_id: authorization.userId, last_seen_at: earlierSeenAt, version: 1 }],
+        // attempt 2: read v1 -> update to v2
+        [{ tenant_id: authorization.tenantId, user_id: authorization.userId, last_seen_at: earlierSeenAt, version: 1, integrity_ok: true }],
+        [],
+        [],
+        [],
+        [{ tenant_id: authorization.tenantId, user_id: authorization.userId, last_seen_at: earlierSeenAt, version: 1 }],
+        [{ tenant_id: authorization.tenantId, user_id: authorization.userId, last_seen_at: lastSeenAt, version: 2 }],
+        [],
+        readbackFor({ aggregate_version: 2, previous_seen_at: earlierSeenAt, last_seen_at: lastSeenAt }),
+      ]);
+
+      const { recordUserLastSeenForLogin } = await import("../userLastSeen");
+      const result = await recordUserLastSeenForLogin();
+
+      expect(resolveAuthorizationSpy).toHaveBeenCalledTimes(2);
+      expect(result).toMatchObject({
+        code: "OK",
+        replayed: false,
+        receipt: { aggregateVersion: 2, previousSeenAt: earlierSeenAt, lastSeenAt },
+      });
+      const issued = receiptLookupClientIds();
+      expect(issued).toHaveLength(2);
+      expect(issued[0]).toBe(issued[1]);
+      expect(result.code === "OK" && result.receipt.clientEventId).toBe(issued[0]);
+      expect(withTransactionSpy).toHaveBeenCalledTimes(4);
+      const snapshots = withTransactionSpy.mock.calls.map(([snapshot]) => snapshot);
+      expect(snapshots[0]).toBe(authorization);
+      expect(snapshots[1]).toBe(authorization);
+      expect(snapshots[2]).toBe(freshAuthorization);
+      expect(snapshots[3]).toBe(freshAuthorization);
+      expect(executeSpy.mock.calls.some(([query]) =>
+        (query as Query).text.includes("UPDATE private.user_last_seen"))).toBe(true);
+    });
+
+    it("returns the second CONFLICT unchanged after exactly one retry and two resolves", async () => {
+      const staleState = [{ tenant_id: authorization.tenantId, user_id: authorization.userId, last_seen_at: earlierSeenAt, version: 5 }];
+      script([[], [], [], [], staleState, [], [], [], [], staleState]);
+
+      const { recordUserLastSeenForLogin } = await import("../userLastSeen");
+      await expect(recordUserLastSeenForLogin()).resolves.toMatchObject({ code: "CONFLICT" });
+      expect(resolveAuthorizationSpy).toHaveBeenCalledTimes(2);
+      expect(withTransactionSpy).toHaveBeenCalledTimes(4);
+    });
+
+    // attempt 1: read v0, then the locked state shows a concurrent v1 -> CONFLICT
+    const conflictingFirstAttempt: Step[] = [
+      [],
+      [],
+      [],
+      [],
+      [{ tenant_id: authorization.tenantId, user_id: authorization.userId, last_seen_at: earlierSeenAt, version: 1 }],
+    ];
+
+    for (const reason of ["NO_SESSION", "INVALID_SESSION", "SESSION_REVOKED"] as const) {
+      it(`CONFLICT then ${reason} on re-resolve -> UNAUTHENTICATED, no retry read, write or receipt`, async () => {
+        resolveAuthorizationSpy
+          .mockResolvedValueOnce({ ok: true, data: authorization })
+          .mockResolvedValueOnce({ ok: false, reason });
+        script(conflictingFirstAttempt);
+
+        const { recordUserLastSeenForLogin } = await import("../userLastSeen");
+        await expect(recordUserLastSeenForLogin()).resolves.toMatchObject({ code: "UNAUTHENTICATED" });
+
+        expect(resolveAuthorizationSpy).toHaveBeenCalledTimes(2);
+        expect(withTransactionSpy).toHaveBeenCalledTimes(2);
+        for (const [snapshot] of withTransactionSpy.mock.calls) expect(snapshot).toBe(authorization);
+        expect(executeSpy).toHaveBeenCalledTimes(conflictingFirstAttempt.length);
+        expect(receiptLookupClientIds()).toHaveLength(1);
+        const texts = executeSpy.mock.calls.map(([query]) => (query as Query).text);
+        expect(texts.some((text) => text.includes("INSERT INTO") || text.includes("UPDATE private.user_last_seen"))).toBe(false);
+        expect(texts.filter((text) => text.includes("private.v_user_last_seen_receipts_v1"))).toHaveLength(1);
+      });
+    }
+
+    it("CONFLICT then infrastructure failure on re-resolve -> UNAVAILABLE, no retry transaction", async () => {
+      const { recordUserLastSeenForLogin } = await import("../userLastSeen");
+
+      resolveAuthorizationSpy
+        .mockResolvedValueOnce({ ok: true, data: authorization })
+        .mockResolvedValueOnce({ ok: false, reason: "AUTHORIZATION_UNAVAILABLE" });
+      script(conflictingFirstAttempt);
+      await expect(recordUserLastSeenForLogin()).resolves.toMatchObject({ code: "UNAVAILABLE" });
+      expect(withTransactionSpy).toHaveBeenCalledTimes(2);
+
+      resolveAuthorizationSpy
+        .mockResolvedValueOnce({ ok: true, data: authorization })
+        .mockRejectedValueOnce(new Error("down"));
+      script(conflictingFirstAttempt);
+      await expect(recordUserLastSeenForLogin()).resolves.toMatchObject({ code: "UNAVAILABLE" });
+
+      expect(resolveAuthorizationSpy).toHaveBeenCalledTimes(4);
+      expect(withTransactionSpy).toHaveBeenCalledTimes(4);
+      const texts = executeSpy.mock.calls.map(([query]) => (query as Query).text);
+      expect(texts).toHaveLength(conflictingFirstAttempt.length * 2);
+      expect(texts.some((text) => text.includes("INSERT INTO") || text.includes("UPDATE private.user_last_seen"))).toBe(false);
+    });
+
+    it("rejects without session/authorization and never opens a transaction", async () => {
+      const { recordUserLastSeenForLogin } = await import("../userLastSeen");
+
+      resolveAuthorizationSpy.mockResolvedValueOnce({ ok: false, reason: "NO_SESSION" });
+      await expect(recordUserLastSeenForLogin()).resolves.toMatchObject({ code: "UNAUTHENTICATED" });
+
+      resolveAuthorizationSpy.mockResolvedValueOnce({ ok: false, reason: "AUTHORIZATION_UNAVAILABLE" });
+      await expect(recordUserLastSeenForLogin()).resolves.toMatchObject({ code: "UNAVAILABLE" });
+
+      resolveAuthorizationSpy.mockRejectedValueOnce(new Error("down"));
+      await expect(recordUserLastSeenForLogin()).resolves.toMatchObject({ code: "UNAVAILABLE" });
+
+      expect(resolveAuthorizationSpy).toHaveBeenCalledTimes(3);
+      expect(withTransactionSpy).not.toHaveBeenCalled();
+      expect(executeSpy).not.toHaveBeenCalled();
+    });
+  });
+
   it("contains no client-supplied tenant, Supabase client, RPC, or non-versioned event path", async () => {
     const sourcePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../userLastSeen.ts");
     const source = await readFile(sourcePath, "utf8");

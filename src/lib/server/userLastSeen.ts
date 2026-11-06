@@ -233,6 +233,24 @@ export async function markUserLastSeen(
     return { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
 
+  return markUserLastSeenAuthorized(authorization.data, input);
+}
+
+/**
+ * Transaction body of `markUserLastSeen`. Not exported: callers must pass a
+ * server-resolved authorization snapshot (never client-supplied actor/tenant).
+ * The input is re-validated defensively so the internal path cannot widen the
+ * accepted input space of the public command.
+ */
+async function markUserLastSeenAuthorized(
+  authorizationData: AuthorizationSnapshot,
+  input: MarkUserLastSeenInput,
+): Promise<MarkUserLastSeenResult> {
+  if (!isValidInput(input)) {
+    return { code: "VALIDATION_ERROR", message: "Ungültige Version oder Anfragekennung." };
+  }
+  const authorization = { data: authorizationData };
+
   try {
     return await withPrivilegedTenantTransaction(authorization.data, async (tx) => {
       await tx.execute(sql`
@@ -393,31 +411,50 @@ export async function markUserLastSeen(
   }
 }
 
-/**
- * Records exactly one confirmed login view without accepting tenant, actor or
- * version data from the client. The canonical session is resolved first; a
- * single optimistic retry covers two concurrent logins for the same user.
- */
-export async function recordUserLastSeenForLogin(): Promise<MarkUserLastSeenResult> {
+type LoginAuthorization =
+  | { ok: true; data: AuthorizationSnapshot }
+  | { ok: false; denial: CommandDenial };
+
+async function resolveLoginAuthorization(): Promise<LoginAuthorization> {
   let authorization;
   try {
     authorization = await resolveAuthorization();
   } catch {
-    return { code: "UNAVAILABLE", message: "Letzter Blick konnte nicht gespeichert werden." };
+    return {
+      ok: false,
+      denial: { code: "UNAVAILABLE", message: "Letzter Blick konnte nicht gespeichert werden." },
+    };
   }
   if (!authorization.ok) {
-    return authorization.reason === "AUTHORIZATION_UNAVAILABLE"
-      ? { code: "UNAVAILABLE", message: "Letzter Blick konnte nicht gespeichert werden." }
-      : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+    return {
+      ok: false,
+      denial: authorization.reason === "AUTHORIZATION_UNAVAILABLE"
+        ? { code: "UNAVAILABLE", message: "Letzter Blick konnte nicht gespeichert werden." }
+        : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." },
+    };
   }
+  return { ok: true, data: authorization.data };
+}
 
+/**
+ * Records exactly one confirmed login view without accepting tenant, actor or
+ * version data from the client. The canonical session is resolved first; a
+ * single optimistic retry covers two concurrent logins for the same user.
+ * Success without conflict resolves the session exactly once. Only after a
+ * CONFLICT is the session resolved again, and the retry read and write use
+ * exclusively that fresh snapshot, so a session revoked in between fails closed.
+ */
+export async function recordUserLastSeenForLogin(): Promise<MarkUserLastSeenResult> {
   const clientEventId = randomUUID();
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    const authorization = await resolveLoginAuthorization();
+    if (!authorization.ok) return authorization.denial;
+
     const current = await readUserLastSeen(authorization.data);
     if (current.code !== "OK") {
       return { code: "UNAVAILABLE", message: "Letzter Blick konnte nicht gespeichert werden." };
     }
-    const result = await markUserLastSeen({
+    const result = await markUserLastSeenAuthorized(authorization.data, {
       expectedVersion: current.data.version,
       clientEventId,
     });
