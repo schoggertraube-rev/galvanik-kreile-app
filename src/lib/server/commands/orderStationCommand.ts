@@ -434,7 +434,7 @@ export async function recordOrderLabelPrint(
           ${EVENT_SCHEMA_VERSION},
           gen_random_uuid(),
           ${order.version},
-          jsonb_build_object('orderId', ${order.id}, 'orderVersion', ${order.version})
+          jsonb_build_object('orderId', ${order.id}::text, 'orderVersion', ${order.version}::integer)
         )
         RETURNING
           id AS event_id,
@@ -468,9 +468,17 @@ export async function recordOrderLabelPrint(
       return { code: "OK", receipt: toLabelPrintReceipt(insertedReceipt), replayed: false };
     });
   } catch (error) {
+    const cause = error instanceof Error && "cause" in error ? error.cause : null;
+    const databaseCause = cause && typeof cause === "object"
+      ? cause as { code?: unknown; constraint?: unknown; detail?: unknown; table?: unknown }
+      : null;
     console.error("[ORDER_LABEL_PRINT_WRITE_FAILED]", {
       orderId: input.orderId,
       code: error instanceof Error ? error.message : "ORDER_LABEL_PRINT_WRITE_FAILED",
+      databaseCode: typeof databaseCause?.code === "string" ? databaseCause.code : null,
+      constraint: typeof databaseCause?.constraint === "string" ? databaseCause.constraint : null,
+      detail: typeof databaseCause?.detail === "string" ? databaseCause.detail : null,
+      table: typeof databaseCause?.table === "string" ? databaseCause.table : null,
     });
     return { code: "UNAVAILABLE", message: "Laufzettel kann derzeit nicht im Verlauf gespeichert werden." };
   }
