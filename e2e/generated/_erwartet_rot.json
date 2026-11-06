@@ -222,5 +222,9 @@
   "E09": {
     "paket": "AP-EIN-2",
     "grund": "Endversion-Angleich U-240"
+  },
+  "G09": {
+    "paket": "AP-EIN-4b",
+    "grund": "Folge-PR Teil 4b G09"
   }
 }
