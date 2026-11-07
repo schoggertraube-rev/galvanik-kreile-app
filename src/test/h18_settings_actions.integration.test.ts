@@ -509,7 +509,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
       const authorization = await resolveAuthorization();
       if (!authorization.ok) throw new Error(`C1A_AUTH_FAILED:${authorization.reason}`);
       const { readTodayDashboard } = await import("@/lib/server/todayDashboard");
-      return readTodayDashboard(authorization.data);
+      return readTodayDashboard(authorization.data,async()=>{const{getComplaints}=await import('@/app/actions/complaints.actions');return getComplaints();});
     });
     expect(dashboard.items.some((item) => item.orderId === intake.receipt.orderId)).toBe(false);
 
@@ -823,7 +823,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
       const authorization = await resolveAuthorization();
       if (!authorization.ok) throw new Error(`H18_TODAY_PREFERENCES_AUTH_FAILED:${authorization.reason}`);
       const { readTodayDashboard } = await import("@/lib/server/todayDashboard");
-      return readTodayDashboard(authorization.data);
+      return readTodayDashboard(authorization.data,async()=>{const{getComplaints}=await import('@/app/actions/complaints.actions');return getComplaints();});
     });
     expect(dashboard.layout).toEqual(layout);
   }, 30_000);
@@ -865,7 +865,7 @@ describe("H18 settings Server Actions against the real replay database", () => {
       const authorization = await resolveAuthorization();
       if (!authorization.ok) throw new Error(`H18_TODAY_REMINDER_AUTH_FAILED:${authorization.reason}`);
       const { readTodayDashboard } = await import("@/lib/server/todayDashboard");
-      return readTodayDashboard(authorization.data);
+      return readTodayDashboard(authorization.data,async()=>{const{getComplaints}=await import('@/app/actions/complaints.actions');return getComplaints();});
     });
     const before = await readDashboard();
     const item = before.items.find((entry) => entry.orderId === intake.receipt.orderId);

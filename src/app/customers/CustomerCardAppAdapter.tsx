@@ -14,6 +14,8 @@ import {usePermissions} from "@/lib/auth/PermissionsContext";
 import {requestGlobalCreate} from "@/components/layout/GlobalCreateFlow";
 import {DomainAttachmentPanel} from "@/components/attachments/DomainAttachmentPanel";
 import {CommunicationPanel} from "@/components/communication/CommunicationPanel";
+import {ComplaintPanel} from '@/modules/customers/public';
+import {getComplaints} from '@/app/actions/complaints.actions';
 
 type Summary=Extract<Awaited<ReturnType<typeof getCustomerSummaryAction>>,{code:"OK"}>["data"];
 function toCard(c:Summary):CustomerCardModel {
@@ -54,6 +56,7 @@ export function CustomerCardAppAdapter({customerId,takeover,onOpenOrder,onClose,
   },[load]);
   const close=onClose??(fallbackHref?()=>router.replace(fallbackHref):storeClose);
   return <CustomerCardView key={customerId} state={state} onOpenOrder={onOpenOrder??storeOrder} onClose={close}
+    complaintsPanel={state.kind==='data'?<ComplaintPanel filter={{customerId:resolvedId}} read={getComplaints}/>:null}
     onSaveCustomer={hasArea("kunden")?save:undefined} canManageMoney={hasArea("geld")} canDecide={hasArea("entscheiden")}
     takeover={takeover} initialEdit={mode==="fehlend"||mode==="uebernahme"||mode==="bearbeiten"} missingFirst={mode==="fehlend"} checkAddress={readCustomerAddressAction}
     onSaveAgreement={hasArea("geld")?saveCustomerAgreementAction:undefined}
