@@ -7,7 +7,7 @@ export {selectIntakeConcern,finishIntakeUse,reopenIntake} from './server/intakeL
 export {recordIntakeTaskEffect} from './server/intakeTaskEffect';
 export {saveIntakeProspect} from './server/intakeProspect';
 export {readOpenIntakeMails} from "./server/intakeMailRead";
-export {openIntakeOriginal,confirmIntakeOriginal} from "./server/intakeOriginal";
+export {openIntakeOriginal,confirmIntakeOriginal,readOrderIntakeOriginals} from "./server/intakeOriginal";
 export { saveGoodsReceipt,readGoodsReceipts,createGoodsReceiptStationBinding,writeCreatedOrderGoodsReceipt } from "./server/goodsReceipt";
 export type { GoodsReceiptResult,GoodsReceiptDependencies } from "./server/goodsReceipt";
 export { readIntakeDrafts, writeIntakeDraft, discardIntakeDraft, createIntakeContinuation } from "./server/intakeDraft";

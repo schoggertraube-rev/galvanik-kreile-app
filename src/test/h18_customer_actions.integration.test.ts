@@ -899,6 +899,19 @@ describe("Owner model D05/D07: draft actions against real Replay DB",()=>{
   if(messages.code!=="OK")throw Error("P102_MESSAGE_READ_FAILED:"+messages.message);
   expect(messages.messages.find(row=>row.id===thirdId)).toMatchObject({text,fileIds:[fileId]});
   expect(await withSession(actor,()=>openIntakeOriginalAction({fileId,clientEventId:randomUUID()}))).toMatchObject({code:"OK",original:{id:fileId,sha256:file.sha256,restricted:false}});
+  const {erfasseAuftragAusEingangAction}=await import('@/app/actions/eingang.actions');
+  const {getDomainAttachmentsAction}=await import('@/app/actions/domainAttachments.actions');
+  const position={catalogServiceId:null,name:'SYNTHETISCH Position',quantity:1,material:null,surfaceRequested:'verzinken',executionRequested:'offen' as const,unit:'stueck',unitPriceCents:null,vatRateBasisPoints:null};
+  const booked=await withSession(actor,()=>erfasseAuftragAusEingangAction({geprueft:true,text,dueDate:'2026-11-19',termStatus:'bestaetigt',intakeSource:'persoenlich',handoverMode:'pickup',paymentMode:'vorkasse',items:[position],clientKey:thirdId,draftId:thirdDraftId,sourceCaptures:[{id:thirdId,version:1}],customer:{mode:'NEW',customerType:'business',companyName:'SYNTHETISCH Original '+randomUUID(),salutation:'ohne',firstName:'Ada',lastName:'Prüferin',email:'original@example.invalid',phone:'+49 711 5550190',street:'Kundenweg',houseNumber:'7',zipCode:'70176',city:'Stuttgart',country:'DE',paymentPreference:'vorkasse'}}));
+  if(booked.code!=='OK')throw Error('P103_ORDER_BOOK_FAILED:'+booked.message);
+  const orderOnly=await createFixture('werkstatt',['auftraege']);
+  const listed=await withSession(orderOnly,()=>getDomainAttachmentsAction({targetType:'ORDER',targetId:booked.orderId}));
+  expect(listed).toMatchObject({code:'OK',data:expect.arrayContaining([{attachmentId:fileId,intakeOriginal:true,intakePart:3,intakeTotal:3,intakeSecured:true}])});
+  expect(await withSession(orderOnly,()=>openIntakeOriginalAction({fileId,orderId:booked.orderId,clientEventId:randomUUID()}))).toMatchObject({code:'OK',original:{id:fileId,sha256:file.sha256,restricted:false}});
+  const noRights=await createFixture('werkstatt',[]);
+  expect(await withSession(noRights,()=>openIntakeOriginalAction({fileId,orderId:booked.orderId,clientEventId:randomUUID()}))).toMatchObject({code:'FORBIDDEN'});
+  expect(await withSession(orderOnly,()=>openIntakeOriginalAction({fileId,orderId:randomUUID(),clientEventId:randomUUID()}))).not.toMatchObject({code:'OK'});
+  expect(await sql`SELECT item_id::text FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fileId}::uuid`).toEqual([{item_id:parentId}]);
  }));
 
  it("P66 keeps the newer draft when an older browser session saves later",async()=>{
