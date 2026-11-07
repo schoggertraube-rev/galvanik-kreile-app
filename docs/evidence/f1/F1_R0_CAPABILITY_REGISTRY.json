@@ -340,7 +340,8 @@
       "entry_point": "src/app/actions/complaints.actions.ts",
       "exported_functions": [
         "getComplaints",
-        "getByOrder"
+        "getByOrder",
+        "nacharbeitAnlegenAction"
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "AP-EIN-4: tenant-authorized read facade replaces the legacy readers; new complaint workflow and independent exact-SHA acceptance remain pending.",
