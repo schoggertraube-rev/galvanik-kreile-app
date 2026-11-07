@@ -16,6 +16,7 @@ Der frühere Plan `docs/delivery/KREILE_VERKAUFSSTUFE_1.md` bleibt ausschließli
 
 - Keine zusätzlichen Clones, Worktrees oder Writer; fremde Änderungen bewahren.
 - Vorhandene Tabellen, Befehle und öffentliche Modul-Ports nutzen; keine zweite fachliche Wahrheit.
+- Bestehende Modulgrenzen aus `docs/project/linie/ARCHITEKTUR_MODULE_PATH1.md` bleiben erhalten; die Arbeitssteuerung erfolgt ausschließlich durch BAUREGELN.
 - Kein Merge oder Production-Deploy durch Codex; keine Secrets in Dateien.
 - Technische Entscheidungen innerhalb des Auftrags selbst treffen. Produktkonflikte gemäß BAUREGELN an den Planungschat melden und am ausführbaren Rest weiterarbeiten.
 - Die Owner erhält je PR genau eine Merge-Bitte nach den Kriterien der BAUREGELN.
