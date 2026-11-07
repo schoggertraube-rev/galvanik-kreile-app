@@ -330,6 +330,9 @@ export async function nacharbeitAnlegen(input: unknown): Promise<NacharbeitAnleg
       if (persistedVersion !== input.version) {
         return { code: "CONFLICT", message: "Reklamation wurde bereits geändert." };
       }
+      if (context.nacharbeit_auftrag_id) {
+        return { code: "VALIDATION_ERROR", message: "Zu dieser Reklamation besteht bereits eine Nacharbeit. Neue Reklamation zum Nacharbeitsauftrag aufnehmen." };
+      }
       if (!["ja", "offen"].includes(context.ware_zurueck ?? "")) {
         return { code: "VALIDATION_ERROR", message: "Nacharbeit braucht die Teile." };
       }
