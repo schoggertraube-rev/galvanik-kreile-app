@@ -968,6 +968,69 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(screen.queryByText(/Oberfläche noch zu klären · erkannt/)).not.toBeInTheDocument();
   });
 
+  it.each(["text","position"] as const)("verwirft überholte Erkennung nach neuer %s-Eingabe",async changed=>{
+    let resolveRecognition!:(value:Awaited<ReturnType<GlobalCreatePorts["recognizeIntakeText"]>>)=>void;
+    const recognizeIntakeText=vi.fn<GlobalCreatePorts["recognizeIntakeText"]>(()=>new Promise(resolve=>{resolveRecognition=resolve;}));
+    render(<GlobalCreateFlow ports={ports({recognizeIntakeText})}/>);openFlow();
+    const text=await screen.findByRole("textbox",{name:"Schnell erfassen"});
+    fireEvent.change(text,{target:{value:"2 Stück alter Halter verzinken"}});
+    fireEvent.click(screen.getByRole("button",{name:"Angaben erkennen"}));
+    await waitFor(()=>expect(recognizeIntakeText).toHaveBeenCalledTimes(1));
+    if(changed==="text")fireEvent.change(text,{target:{value:"3 Stück neue Mutter vernickeln"}});
+    else fireEvent.change(screen.getByLabelText("Teil / Leistung"),{target:{value:"SYNTHETISCH manuell"}});
+    await act(async()=>resolveRecognition({code:"OK",data:{fields:[],positions:[{name:"SYNTHETISCH alter Halter",quantity:"2",unit:"Stück",surfaceRequested:"Verzinken",executionRequested:"offen",source:"Text"}]}}));
+    expect(screen.queryByDisplayValue("SYNTHETISCH alter Halter")).not.toBeInTheDocument();
+    if(changed==="text")expect(text).toHaveValue("3 Stück neue Mutter vernickeln");
+    else expect(screen.getByLabelText("Teil / Leistung")).toHaveValue("SYNTHETISCH manuell");
+  });
+
+  it("bricht eine laufende Erkennung ab und übernimmt die späte Antwort nicht",async()=>{
+    let resolveRecognition!:(value:Awaited<ReturnType<GlobalCreatePorts["recognizeIntakeText"]>>)=>void;
+    const recognizeIntakeText=vi.fn<GlobalCreatePorts["recognizeIntakeText"]>(()=>new Promise(resolve=>{resolveRecognition=resolve;}));
+    render(<GlobalCreateFlow ports={ports({recognizeIntakeText})}/>);openFlow();
+    const text=await screen.findByRole("textbox",{name:"Schnell erfassen"});
+    fireEvent.change(text,{target:{value:"2 Stück Halter verzinken"}});
+    fireEvent.click(screen.getByRole("button",{name:"Angaben erkennen"}));
+    await waitFor(()=>expect(recognizeIntakeText).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button",{name:"Erkennung abbrechen"}));
+    expect(screen.getByRole("button",{name:"Angaben erkennen"})).toBeEnabled();
+    await act(async()=>resolveRecognition({code:"OK",data:{fields:[],positions:[{name:"SYNTHETISCH abgebrochen",quantity:"2",unit:"Stück",surfaceRequested:"Verzinken",executionRequested:"offen",source:"Text"}]}}));
+    expect(screen.queryByDisplayValue("SYNTHETISCH abgebrochen")).not.toBeInTheDocument();
+    expect(text).toHaveValue("2 Stück Halter verzinken");
+  });
+
+  it("löst eine hängende Erkennung nach 60 Sekunden und behält die Eingaben",async()=>{
+    const recognizeIntakeText=vi.fn<GlobalCreatePorts["recognizeIntakeText"]>(()=>new Promise(()=>{}));
+    render(<GlobalCreateFlow ports={ports({recognizeIntakeText})}/>);openFlow();
+    const text=await screen.findByRole("textbox",{name:"Schnell erfassen"});
+    fireEvent.change(text,{target:{value:"2 Stück Halter verzinken"}});
+    vi.useFakeTimers();
+    try{
+      await act(async()=>{fireEvent.click(screen.getByRole("button",{name:"Angaben erkennen"}));await Promise.resolve();await Promise.resolve();});
+      expect(recognizeIntakeText).toHaveBeenCalledTimes(1);
+      await act(async()=>{await vi.advanceTimersByTimeAsync(60_000);});
+      expect(screen.getByText(/Erkennung dauert zu lange/)).toBeInTheDocument();
+      expect(text).toHaveValue("2 Stück Halter verzinken");
+      expect(screen.getByRole("button",{name:"Angaben erkennen"})).toBeEnabled();
+    }finally{vi.useRealTimers();}
+  });
+
+  it("verwirft überholte Angaben auch während der Bestandssuche",async()=>{
+    let resolveSearch!:(value:Awaited<ReturnType<GlobalCreatePorts["searchIntakeCustomers"]>>)=>void;
+    let firstSearch=true;
+    const searchIntakeCustomers=vi.fn<GlobalCreatePorts["searchIntakeCustomers"]>(()=>{if(firstSearch){firstSearch=false;return new Promise(resolve=>{resolveSearch=resolve;});}return Promise.resolve({code:"OK",customers:[]});});
+    const recognizeIntakeText=vi.fn<GlobalCreatePorts["recognizeIntakeText"]>().mockResolvedValue({code:"OK",data:{fields:[{field:"email",value:"synthetic@example.invalid",source:"Text"}],positions:[{name:"SYNTHETISCH alt",quantity:"2",unit:"Stück",surfaceRequested:"Verzinken",executionRequested:"offen",source:"Text"}]}});
+    render(<GlobalCreateFlow ports={ports({recognizeIntakeText,searchIntakeCustomers})}/>);openFlow();
+    fireEvent.change(await screen.findByRole("textbox",{name:"Schnell erfassen"}),{target:{value:"synthetic@example.invalid 2 Stück alt"}});
+    fireEvent.click(screen.getByRole("button",{name:"Angaben erkennen"}));
+    await waitFor(()=>expect(searchIntakeCustomers).toHaveBeenCalled());
+    fireEvent.change(screen.getByLabelText("Teil / Leistung"),{target:{value:"SYNTHETISCH neu"}});
+    await act(async()=>resolveSearch({code:"OK",customers:[]}));
+    await waitFor(()=>expect(screen.getByRole("button",{name:"Angaben erkennen"})).toBeEnabled());
+    expect(screen.getByLabelText("Teil / Leistung")).toHaveValue("SYNTHETISCH neu");
+    expect(screen.queryByDisplayValue("SYNTHETISCH alt")).not.toBeInTheDocument();
+  });
+
   it("uses a name-only quick capture as the customer search and offers the matching customer", async () => {
     const customer = {
       id: CUSTOMER_ID,

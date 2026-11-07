@@ -10,7 +10,7 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
-import { FormEvent, KeyboardEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, type ReactNode, type SetStateAction, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { kundeVollstaendigkeit, customerPaymentLabel, CUSTOMER_FIELD_LABELS, KundeFormular, EMPTY_CUSTOMER_FORM, customerDisplayName, customerFieldError, kundeValidierung, type CustomerFormValue, type CreateCustomerInput, type CustomerAddressInput, type CustomerAddressResult, type CustomerComparisonValue } from "@/modules/customers/public";
 import type { CatalogServiceChoice } from "@/modules/katalog/public";
@@ -536,7 +536,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [intakeWishDateOrigin, setIntakeWishDateOrigin] = useState<"empty" | "recognized" | "manual">("empty");
   const [directConfirmedDate, setDirectConfirmedDate] = useState("");
   const [directNote, setDirectNote] = useState("");
-  const [intakeRecognitionText, setIntakeRecognitionText] = useState("");
+  const [intakeRecognitionText, setIntakeRecognitionTextState] = useState("");
+  const intakeRecognitionGeneration=useRef(0),intakeRecognitionRun=useRef(0),intakeRecognitionAbort=useRef<AbortController|null>(null);
+  const setIntakeRecognitionText=useCallback((value:SetStateAction<string>)=>{intakeRecognitionGeneration.current+=1;intakeRecognitionAbort.current?.abort();setIntakeRecognitionTextState(value);},[]);
   const [intakeDismissedConcerns, setIntakeDismissedConcerns] = useState<string[]>([]);
   const intakeConcerns = recognizeNoteConcerns(intakeRecognitionText).filter(concern => !intakeDismissedConcerns.includes(concern.id));
   const [lastRecognizedText, setLastRecognizedText] = useState("");
@@ -1186,7 +1188,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     geprueft:intakeChecked,dismissedConcerns:intakeDismissedConcerns,documents:intakeSourceCaptures.map(capture=>capture.id),recognitionMarkers,recognitionConfirmed,lastRecognizedText,remainingRecognizedPositions,overflowPositions,
     intakeWishDateOrigin,intakeHandoverOrigin,intakePaymentOrigin,intakeOrigin,intakeSourceOrigin,intakeTermChoice,intakeProcessingWeeks,intakeTermOrigin,intakeTermExpired};}
 
-  async function saveIntakeTextOriginal():Promise<IntakeCapture[]>{
+  async function saveIntakeTextOriginal(shouldUpdateState?:()=>boolean):Promise<IntakeCapture[]>{
     if(!intakeRecognitionText.trim())return intakeSourceCaptures;
     // Unchanged source text is already an original; never manufacture a copied note.
     if(intakeSourceCaptures.some(value=>value.id!==intakeClientKey&&value.text===intakeRecognitionText))return intakeSourceCaptures;
@@ -1197,7 +1199,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     const saved=await ports.saveCaptureNote({itemId:intakeClientKey,textstand:intakeTextStand.current,text:intakeRecognitionText,concerns:selectedConcerns});
     if(saved.code!=="OK")throw Error(saved.message);
     const sources=[...intakeSourceCaptures.filter(value=>value.id!==saved.capture.id),saved.capture];
-    setIntakeSourceCaptures(sources);return sources;
+    if(!shouldUpdateState||shouldUpdateState())setIntakeSourceCaptures(sources);return sources;
   }
 
   async function createContinuationDraft() {
@@ -1807,18 +1809,33 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const recognizeDirectIntakeText = async () => {
     if (!intakeRecognitionText.trim()) return;
     if (remainingRecognizedPositions) { setFeedback({kind:"validation",message:"Nicht alle Positionen sind übernommen. Das Original bleibt erhalten; die Aufteilung ist noch nicht bestätigt."}); return; }
+    const generation=intakeRecognitionGeneration.current,run=++intakeRecognitionRun.current,controller=new AbortController();
+    let timedOut=false;
+    const timeout=setTimeout(()=>{timedOut=true;controller.abort();},60_000);
+    intakeRecognitionAbort.current=controller;
+    const isCurrent=()=>!controller.signal.aborted&&generation===intakeRecognitionGeneration.current&&run===intakeRecognitionRun.current;
+    const beforeDeadline=async<T,>(operation:Promise<T>):Promise<T>=>{
+      let onAbort:(()=>void)|undefined;
+      try{return await Promise.race([operation,new Promise<never>((_,reject)=>{
+        onAbort=()=>reject(Error("INTAKE_RECOGNITION_ABORTED"));
+        if(controller.signal.aborted)onAbort();else controller.signal.addEventListener("abort",onAbort,{once:true});
+      })]);}finally{if(onAbort)controller.signal.removeEventListener("abort",onAbort);}
+    };
     setRecognitionBusy(true);
     setFeedback(null);
     try {
-      await saveIntakeTextOriginal();
-      const result = await ports.recognizeIntakeText(intakeRecognitionText);
+      await beforeDeadline(saveIntakeTextOriginal(isCurrent));
+      if(!isCurrent())return;
+      const result = await beforeDeadline(ports.recognizeIntakeText(intakeRecognitionText));
+      if(!isCurrent())return;
       if (result.code !== "OK") {
         setFeedback({ kind: "error", message: "Erkennung nicht möglich · bitte von Hand ausfüllen" });
         return;
       }
       const values = Object.fromEntries(result.data.fields.map((field) => [field.field, field.value]));
+      const recognizedCustomers = await beforeDeadline(findRecognizedCustomers(intakeRecognitionText, ports.searchIntakeCustomers, { phone: values.phone, email: values.email }));
+      if(!isCurrent())return;
       setRemainingRecognizedPositions(0);
-      const recognizedCustomers = await findRecognizedCustomers(intakeRecognitionText, ports.searchIntakeCustomers, { phone: values.phone, email: values.email });
       if (recognizedCustomers.code !== "OK") {
         setIntakeCustomerResults([]);
         setIntakeCustomerSearchState("error");
@@ -1889,10 +1906,15 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       setIntakeSuggestionState({ kind: "idle" });
       setIntakeTermChoice(null);
     } catch (error) {
+      if(error instanceof Error&&error.message==="INTAKE_RECOGNITION_ABORTED"){
+        if(timedOut&&generation===intakeRecognitionGeneration.current&&run===intakeRecognitionRun.current)setFeedback({kind:"error",message:"Erkennung dauert zu lange · Eingaben bleiben erhalten. Code: INTAKE_RECOGNITION_TIMEOUT."});
+        return;
+      }
       console.error("[INTAKE_RECOGNITION_FAILED]", { name: error instanceof Error ? error.name : "UnknownError" });
-      setFeedback({ kind: "error", message: "Erkennung nicht möglich · bitte von Hand ausfüllen. Code: INTAKE_RECOGNITION_FAILED." });
+      if(isCurrent())setFeedback({ kind: "error", message: "Erkennung nicht möglich · bitte von Hand ausfüllen. Code: INTAKE_RECOGNITION_FAILED." });
     } finally {
-      setRecognitionBusy(false);
+      clearTimeout(timeout);
+      if(run===intakeRecognitionRun.current){intakeRecognitionAbort.current=null;setRecognitionBusy(false);}
     }
   };
 
@@ -2004,7 +2026,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       setFeedback(null);setIntakeToast('Mail übernommen · Eingaben bleiben erhalten');
     };
     window.addEventListener(INTAKE_MAIL_ADOPT_EVENT,adopt);return()=>window.removeEventListener(INTAKE_MAIL_ADOPT_EVENT,adopt);
-  },[open,step,customerChoices,selectIntakeCustomer]);
+  },[open,step,customerChoices,selectIntakeCustomer,setIntakeRecognitionText]);
 
   useEffect(() => {
     if (!intakeCustomerOverlayId) return;
@@ -2427,7 +2449,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
           onSchliessen={closeNow}
           fuss={<><KrButton data-spec-id="eingang.abbrechen" text="Abbrechen" onClick={requestClose} /><KrButton data-spec-id="eingang.buchen" form="kr-neuer-eingang" type="submit" art="erledigen" icon="check" text={busy ? lastIntakeAction==='prospect'?"Wird gespeichert …":"Wird gebucht …" : "Wareneingang buchen"} disabled={busy} /></>}
         >
-          <form data-spec-id="eingang" id="kr-neuer-eingang" className="kr-stapel" noValidate onSubmit={(event) => void submitIntakePage(event)}>
+          <form data-spec-id="eingang" id="kr-neuer-eingang" className="kr-stapel" noValidate onSubmit={(event) => void submitIntakePage(event)}
+            onChangeCapture={()=>{if(recognitionBusy){intakeRecognitionGeneration.current+=1;intakeRecognitionAbort.current?.abort();}}}
+            onClickCapture={event=>{if(recognitionBusy&&(event.target as Element).closest("button")){intakeRecognitionGeneration.current+=1;intakeRecognitionAbort.current?.abort();}}}>
               {ports.resumeQuoteId ? <Hinweis><KrButton art="sekundaer" icon="arrow" text="Gespeicherten KV fortsetzen" disabled={busy} onClick={() => void resumeQuote()} /></Hinweis> : null}
               <div className="ev-werkbank"><div className="kr-stapel">
               <section className="ev-erfassen" aria-labelledby="quick-capture-title">
@@ -2435,6 +2459,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 <div className="ev-erf-text"><Textfeld data-spec-id="eingang.erfassen-text" aria-label="Schnell erfassen" rows={3} maxLength={6000} value={intakeRecognitionText} onChange={(event) => { if(event.target.value.trim()!==intakeRecognitionText.trim())setIntakeDismissedConcerns([]);intakeTextStand.current=crypto.randomUUID();setIntakeRecognitionText(event.target.value); setRecognitionConfirmed(false); }} placeholder="Schreib oder füge Angaben ein …" /></div>
                 <div className="ev-erf-werkzeuge">
                   {(!lastRecognizedText || intakeRecognitionText !== lastRecognizedText) ? <KrButton data-spec-id="eingang.angaben-erkennen" art={intakeRecognitionText.trim() ? "primaer" : "sekundaer"} text={recognitionBusy ? "Angaben werden erkannt …" : "Angaben erkennen"} disabled={recognitionBusy || !intakeRecognitionText.trim()} onClick={() => void recognizeDirectIntakeText()} /> : null}
+                  {recognitionBusy ? <KrButton data-spec-id="eingang.erkennung-abbrechen" text="Erkennung abbrechen" onClick={()=>{intakeRecognitionGeneration.current+=1;intakeRecognitionRun.current+=1;intakeRecognitionAbort.current?.abort();intakeRecognitionAbort.current=null;setRecognitionBusy(false);}} /> : null}
                 </div>
                 <div className="ev-erf-werkzeuge">
                   <KrButton data-spec-id="eingang.aufnehmen" icon="camera" text="Aufnehmen" onClick={()=>setCaptureInIntake("eingang")} />
