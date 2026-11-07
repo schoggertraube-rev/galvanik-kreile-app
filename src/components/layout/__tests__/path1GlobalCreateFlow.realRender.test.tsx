@@ -1522,8 +1522,8 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
 
   it('retains confirmed positions and marks them confirmed after recognizing the changed text',async()=>{
     const line=(quantity:string)=>({name:'SYNTHETISCH A',quantity,source:'Text Abschnitt 1',unit:'Stück' as const,surfaceRequested:'Verzinken',executionRequested:'offen' as const});
-    const recognizeIntakeText=vi.fn().mockResolvedValueOnce({code:'OK',data:{fields:[],positions:[line('1')]}})
-      .mockResolvedValueOnce({code:'OK',data:{fields:[],positions:[line('4')]}});
+    const recognizeIntakeText=vi.fn().mockResolvedValueOnce({code:'OK',data:{fields:[{field:'dueDate',value:'2026-12-01',source:'Text Abschnitt 1'}],positions:[line('1')]}})
+      .mockResolvedValueOnce({code:'OK',data:{fields:[{field:'dueDate',value:'2026-12-02',source:'Text Abschnitt 1'}],positions:[line('4')]}});
     render(<GlobalCreateFlow ports={ports({recognizeIntakeText})}/>);openFlow();
     const text=await screen.findByRole('textbox',{name:'Schnell erfassen'});
     fireEvent.change(text,{target:{value:'SYNTHETISCH Ausgangstext'}});fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
@@ -1534,6 +1534,7 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     await waitFor(()=>expect(screen.queryByRole('button',{name:'Angaben erkennen'})).not.toBeInTheDocument());
     await waitFor(()=>expect(screen.getByRole('spinbutton',{name:'Menge'})).toHaveValue(1));
     expect(screen.getAllByRole('spinbutton',{name:'Menge'})).toHaveLength(1);
+    expect(screen.getByLabelText('Liefertermin')).toHaveValue('2026-12-01');
     expect(document.querySelector('[data-spec-id="eingang.menge.herkunft"]')).toHaveTextContent('bestätigt');
   });
 
