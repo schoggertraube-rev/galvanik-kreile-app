@@ -228,6 +228,7 @@ function renderPage(pageName, page, bauplanSha) {
     + `import { test } from "@playwright/test";\n`
     + `import expectedRed from "./_erwartet_rot.json";\n`
     + `import { prepareGeneratedSeed, runGeneratedFlowCase, type FlowCase } from "./_harness";\n\n`
+    + `import { runWithExpectedRed } from "./_expectedRed";\n`
     + `const cases = ${cases} as unknown as FlowCase[];\n\n`
 
     + `test.describe(${JSON.stringify(`BAUPLAN Wege · ${pageName}`)}, () => {\n`
@@ -235,9 +236,8 @@ function renderPage(pageName, page, bauplanSha) {
     + `    const packageTag = flowCase.paket ? \`@\${flowCase.paket}\` : "@UNASSIGNED";\n`
     + `    test(\`\${flowCase.id || "OFFEN"} \${packageTag} · \${flowCase.titel || "noch nicht beschrieben"}\`, async ({ page }) => {\n`
     + `      const red = expectedRed[flowCase.id as keyof typeof expectedRed];\n`
-    + `      test.fail(Boolean(red), red ? \`\${red.paket}: \${red.grund}\` : undefined);\n`
     + `      await prepareGeneratedSeed(flowCase);\n`
-    + `      await runGeneratedFlowCase(page, flowCase);\n`
+    + `      await runWithExpectedRed(flowCase.id, red, () => runGeneratedFlowCase(page, flowCase));\n`
     + `    });\n`
     + `  }\n`
     + `});\n`;

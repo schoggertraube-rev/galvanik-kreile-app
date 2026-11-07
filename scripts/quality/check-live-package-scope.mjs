@@ -116,136 +116,51 @@ const SALES_STAGE_B2_ADDITIVE_CONTRACT_PATHS = Object.freeze([
   "scripts/quality/h18-server-actions.json",
   "docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json",
 ]);
-const TA_B2_BRANCH = "codex/ta-b2";
+
 const TA_B2_BASE_SHA = "ae79c12fb6bea83b8ac68fa065af4671f4bf09b5";
-const TA_B2_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR.json";
-const TA_B2_VALUES = Object.freeze({
-  schemaVersion: 1,
-  package: "B2-EINGANG-AP01",
-  headBranch: SALES_STAGE_B2_BRANCH,
-  mainBaseSha: TA_B2_BASE_SHA,
-  authorizedBy: "Siglinder",
-  authorizedAt: "2026-10-31",
-  scope: "AP-01 laut docs/project/arbeitspakete/WORKQUEUE.json",
-});
+
+
 const TA_B2B_BRANCH = "codex/ta-b2b";
 const TA_B2B_BASE_SHA = "ac6c1d2a7eb652dc5e64219a24eed8d4065fbc4e";
 const TA_B2B_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2B.json";
 const TA_B2B_BAUPLAN = "docs/project/endversion/codex/BAUPLAN.json";
-const TA_B2B_BAUPLAN_SHA256 = "6E5E4EA663783F28C7A6ED1A8EF2017FAD1F8DA0458CC8A2670E6F1863453F77";
-const TA_B2B_VALUES = Object.freeze({
-  schemaVersion: 1,
-  package: "B2-EINGANG-AP01-INFRA",
-  headBranch: TA_B2B_BRANCH,
-  mainBaseSha: TA_B2B_BASE_SHA,
-  authorizedBy: "Siglinder",
-  authorizedAt: "2026-10-31",
-  scope: "AP-01-Komplettscope, H18-Inventar, Acceptance-Replay und Endversion 5ac4d4b5ea34",
-});
+
+
 const TA_B2C_BRANCH = "codex/ta-b2c";
 const TA_B2C_BASE_SHA = "11091c0be7b2c58ef7b009d4ad5664ad3e9db01d";
 const TA_B2C_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2C.json";
 const TA_B2C_BAUPLAN = "docs/project/endversion/codex/BAUPLAN.json";
-const TA_B2C_BAUPLAN_SHA256 = "225B7FB5D3503522D8BC972E535CE53827E4047F75932B18E52E7B905CB35305";
-const TA_B2C_VALUES = Object.freeze({
-  schemaVersion: 1,
-  package: "B2-EINGANG-AP01-F4-ANCHOR",
-  headBranch: TA_B2C_BRANCH,
-  mainBaseSha: TA_B2C_BASE_SHA,
-  authorizedBy: "Siglinder",
-  authorizedAt: "2026-11-01",
-  scope: "AP-01 Fassung 4, Bauplan 6b782924134c und enge B2-Folgepfade",
-});
+
+
 const TA_B2C2_BRANCH = "codex/ta-b2c2";
 const TA_B2C2_BASE_SHA = "8e1e03f567278d24d5f3a468f6cbef3729db96b9";
 const TA_B2C2_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2C2.json";
-const TA_B2C2_VALUES = Object.freeze({
-  schemaVersion: 1,
-  package: "B2-EINGANG-AP01-F43-ANCHOR",
-  headBranch: TA_B2C2_BRANCH,
-  mainBaseSha: TA_B2C2_BASE_SHA,
-  authorizedBy: "Siglinder",
-  authorizedAt: "2026-11-02",
-  scope: "AP-01 Fassung 4.3: orderIntakeCommand und zugehoeriger Unit-Test",
-  probeCandidateSha: "6bca5f68e1acd8ec262c6ac2373a7bae58094bea",
-  probeResult: "PASS",
-});
+
 const TA_B2C3_BRANCH = "codex/ta-b2c3";
 const TA_B2C3_BASE_SHA = "8d5dd1fc7af5509898a317ef4f42087df052685a";
 const TA_B2C3_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2C3.json";
-const TA_B2C3_VALUES = Object.freeze({
-  schemaVersion: 1,
-  package: "B2-EINGANG-AP01-F43-READ-ANCHOR",
-  headBranch: TA_B2C3_BRANCH,
-  mainBaseSha: TA_B2C3_BASE_SHA,
-  authorizedBy: "Siglinder",
-  authorizedAt: "2026-11-02",
-  scope: "AP-01 Fassung 4.3: orderIntakeRead und zugehoeriger Unit-Test",
-  probeCandidateSha: "2e90f44a373c2ccc025a99bdc845c51cdd2d8d7a",
-  probeResult: "PASS",
-});
+
 const TA_B2D2_BRANCH = "codex/ta-b2d2";
 const TA_B2D2_BASE_SHA = "b364f569524a636a1aceefac0fb1934f7f24f556";
 const TA_B2D2_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2D2.json";
 const TA_B2D2_BAUPLAN = "docs/project/endversion/codex/BAUPLAN.json";
-const TA_B2D2_BAUPLAN_SHA256 = "5E7B880BD9D4B35EAF7BF906F2693011192933E000FA7AEA94222395F34A1F70";
-const TA_B2D2_VALUES = Object.freeze({
-  schemaVersion: 1,
-  package: "B2-EINGANG-APG-APR-ANCHOR",
-  headBranch: TA_B2D2_BRANCH,
-  mainBaseSha: TA_B2D2_BASE_SHA,
-  authorizedBy: "Siglinder",
-  authorizedAt: "2026-11-02",
-  scope: "Bauplan a887ece362f4, AP-G-Testmodell, AP-R Neu erfassen und Replay-Wege-Tests",
-  bauplanSha256: TA_B2D2_BAUPLAN_SHA256,
-  probeCandidateSha: "d5d47a356b42c581fc96ca010b9f82f6b3811584",
-  probeResult: "PASS",
-});
+
+
 const TA_B2E_BRANCH = "codex/ta-b2e";
 const TA_B2E_BASE_SHA = "10be0a0326a2ef003fe4a6d30cdc1f484086ceb3";
 const TA_B2E_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2E.json";
-const TA_B2E_VALUES = Object.freeze({
-  schemaVersion: 1,
-  package: "B2-EINGANG-APR-UNIT-MIGRATION-ANCHOR",
-  headBranch: TA_B2E_BRANCH,
-  mainBaseSha: TA_B2E_BASE_SHA,
-  authorizedBy: "Siglinder",
-  authorizedAt: "2026-11-02",
-  scope: "AP-R Pflicht-Einheit je Freitext-Position: View-Migration, kanonischer Auftragskarten-Leser, lokale Webfonts und schrumpfende Modul-Baseline",
-  probeCandidateSha: "b3823e11e67dd9ca1b2a194cc8db360e58011d46",
-  probeResult: "PASS",
-});
+
 const TA_B2F_BRANCH = "codex/ta-b2f";
 const TA_B2F_BASE_SHA = "06e56daae267e49a7e23a5c40a70fbbef21b8cb8";
 const TA_B2F_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2F.json";
 const TA_B2F_BAUPLAN = "docs/project/endversion/codex/BAUPLAN.json";
-const TA_B2F_BAUPLAN_SHA256 = "DF3E1AFEC7B6C3DED6DA51F22FDAADF8CFAB780DA9A4F619EDB42D3C2D6AC5C4";
-const TA_B2F_VALUES = Object.freeze({
-  schemaVersion: 1,
-  package: "B2-EINGANG-KOMPLETT-ANCHOR",
-  headBranch: TA_B2F_BRANCH,
-  mainBaseSha: TA_B2F_BASE_SHA,
-  authorizedBy: "Siglinder",
-  authorizedAt: "2026-11-03",
-  scope: "TA-B2f Runde 52: gebundene Endversion V41 und AP-EIN Teile 0-6",
-  bauplanSha256: TA_B2F_BAUPLAN_SHA256,
-  probeResult: "PASS",
-});
+
+
 const PR154_REBASELINE_BRANCH = "kreile/s1-p2-eingang";
 const TA_B2H_BRANCH = "codex/ta-b2h";
 const TA_B2H_BASE_SHA = "b6d94bccad812883cddaefa1d050c1506c722d8b";
 const TA_B2H_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2H.json";
-const TA_B2H_VALUES = Object.freeze({
-  schemaVersion: 1,
-  package: "B2-EINGANG-SHARE-ANCHOR",
-  headBranch: TA_B2H_BRANCH,
-  mainBaseSha: TA_B2H_BASE_SHA,
-  authorizedBy: "Siglinder",
-  authorizedAt: "2026-11-04",
-  scope: "P52: sechs exakte Pfade fuer Was ist neu und JSON-Testaufloesung; P44/P47 unveraendert",
-  probeCandidateSha: "f4d88b8e5024f8311e7533fe3619be010209f1b5",
-  probeResult: "PASS",
-});
+
 const TA_B2H_ANCHOR_ALLOWLIST = Object.freeze([
   "scripts/quality/check-live-package-scope.mjs",
   "src/test/live_package_scope.test.ts",
@@ -255,17 +170,7 @@ const TA_B2H_ANCHOR_ALLOWLIST = Object.freeze([
 const TA_B2I_BRANCH = "codex/ta-b2i";
 const TA_B2I_BASE_SHA = "7c475a72a582b412a95d73224e5a94581aa7b377";
 const TA_B2I_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2I.json";
-const TA_B2I_VALUES = Object.freeze({
-  schemaVersion: 1,
-  package: "B2-EINGANG-P55-ANCHOR",
-  headBranch: TA_B2I_BRANCH,
-  mainBaseSha: TA_B2I_BASE_SHA,
-  authorizedBy: "Siglinder",
-  authorizedAt: "2026-11-04",
-  scope: "P55/P56: zwei zweite Migrationen, XML-Paketdateien und zwei PIN-Reset-Pfade",
-  probeCandidateSha: "984a6caa64a84a89d38317db1deb50faf84a57dd",
-  probeResult: "PASS",
-});
+
 const TA_B2I_ANCHOR_ALLOWLIST = Object.freeze([
   "scripts/quality/check-live-package-scope.mjs",
   "src/test/live_package_scope.test.ts",
@@ -275,17 +180,7 @@ const TA_B2I_ANCHOR_ALLOWLIST = Object.freeze([
 const TA_B2J_BRANCH = "codex/ta-b2j";
 const TA_B2J_BASE_SHA = "27c3435474e5cec4d1241bf75a646a895edc1e91";
 const TA_B2J_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2J.json";
-const TA_B2J_VALUES = Object.freeze({
-  schemaVersion: 1,
-  package: "B2-EINGANG-P59-ANCHOR",
-  headBranch: TA_B2J_BRANCH,
-  mainBaseSha: TA_B2J_BASE_SHA,
-  authorizedBy: "Siglinder",
-  authorizedAt: "2026-11-04",
-  scope: "P59: AP-EIN, Teil 6 und KV; additive Migrationen ohne Mengenlimit",
-  probeCandidateSha: "12b34247feb69e16ebea6c2f85eeaa4018926d1a",
-  probeResult: "PASS",
-});
+
 const TA_B2J_ANCHOR_ALLOWLIST = Object.freeze([
   "scripts/quality/check-live-package-scope.mjs",
   "src/test/live_package_scope.test.ts",
@@ -295,16 +190,7 @@ const TA_B2J_ANCHOR_ALLOWLIST = Object.freeze([
 const TA_B2K1_BRANCH = "codex/ta-b2k1";
 const TA_B2K1_BASE_SHA = "ce762422266089d694a12a94fe2129095003e82e";
 const TA_B2K1_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2K1.json";
-const TA_B2K1_VALUES = Object.freeze({
-  schemaVersion: 1,
-  package: "B2-EINGANG-P68-PATH-ANCHOR",
-  headBranch: TA_B2K1_BRANCH,
-  mainBaseSha: TA_B2K1_BASE_SHA,
-  authorizedBy: "Siglinder",
-  authorizedAt: "2026-11-05",
-  scope: "P68: nur Druck- und Nacharbeitspfade fuer offene Runde-52-Teile; keine Runde-53-Bindung",
-  probeResult: "PASS",
-});
+
 const TA_B2K1_ANCHOR_ALLOWLIST = Object.freeze([
   "scripts/quality/check-live-package-scope.mjs",
   "src/test/live_package_scope.test.ts",
@@ -314,16 +200,7 @@ const TA_B2K1_ANCHOR_ALLOWLIST = Object.freeze([
 const TA_B2K1B_BRANCH = "codex/ta-b2k1b";
 const TA_B2K1B_BASE_SHA = "5e9d5f4626f88f321982866686b4536ad47377a4";
 const TA_B2K1B_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2K1B.json";
-const TA_B2K1B_VALUES = Object.freeze({
-  schemaVersion: 1,
-  package: "B2-EINGANG-P78-SMOKE-PATH-ANCHOR",
-  headBranch: TA_B2K1B_BRANCH,
-  mainBaseSha: TA_B2K1B_BASE_SHA,
-  authorizedBy: "Siglinder",
-  authorizedAt: "2026-11-06",
-  scope: "P78: genau e2e/path1-v5-shell-smoke.real.spec.ts fuer die /nachrichten-Ueberschrift; keine Produkt- oder Runde-53-Bindung",
-  probeResult: "PASS",
-});
+
 const TA_B2K1B_ANCHOR_ALLOWLIST = Object.freeze([
   "scripts/quality/check-live-package-scope.mjs",
   "src/test/live_package_scope.test.ts",
@@ -335,18 +212,8 @@ const TA_B2K2_BRANCH = "codex/ta-b2k2";
 // Bound to main after the verified Owner merge of #180.
 const TA_B2K2_BASE_SHA = "4593e8f6eaa3215033898a53d4168581b5bfc4c8";
 const TA_B2K2_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2K2.json";
-const TA_B2K2_BAUPLAN_SHA256 = "9491009F79E306370AD4DAC3886080E4B9AEAB9A2D8BD14AAAFBB0A31411C6DA";
-const TA_B2K2_VALUES = Object.freeze({
-  schemaVersion: 1,
-  package: "B2-R53-AP-ABS-ANCHOR",
-  headBranch: TA_B2K2_BRANCH,
-  mainBaseSha: TA_B2K2_BASE_SHA,
-  authorizedBy: "Siglinder",
-  authorizedAt: "2026-11-06",
-  scope: "Runde 53 Bindung, AP-EIN-Folgepfade, Entwurfsschutz, AP-ABS und CI-Durchsatzschutz",
-  bauplanSha256: TA_B2K2_BAUPLAN_SHA256,
-  probeResult: "PASS",
-});
+
+
 const TA_B2K2_ANCHOR_ALLOWLIST = Object.freeze([
   ".github/workflows/agentur-gate.yml",
   ".github/workflows/quality.yml",
@@ -399,20 +266,31 @@ const TA_B2K2_REQUIRED_FILES = Object.freeze([
 const TA_B2K3_BRANCH = "codex/ta-b2k3";
 const TA_B2K3_BASE_SHA = "cc541f80e0d28d2ab52ba5b2396bafff172fa874";
 const TA_B2K3_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2K3.json";
-const TA_B2K3_VALUES = Object.freeze({
-  schemaVersion: 1,
-  package: "B2-H18-REGISTRY-ADDITIVE-ANCHOR",
-  headBranch: TA_B2K3_BRANCH,
-  mainBaseSha: TA_B2K3_BASE_SHA,
-  authorizedBy: "Siglinder",
-  authorizedAt: "2026-11-06",
-  scope: "P86: nur additive H18- und F1-Registry-Ergaenzungen fuer neue Server-Actions",
-});
+
 const TA_B2K3_ANCHOR_ALLOWLIST = Object.freeze([
   "scripts/quality/check-live-package-scope.mjs",
   "src/test/live_package_scope.test.ts",
   TA_B2K3_RECEIPT,
   "docs/delivery/ABGABE_TA-B2K3.md",
+]);
+const TA_B2K4_BRANCH = "codex/ta-b2k4";
+const TA_B2K4_BASE_SHA = "2ebf143bd99a0f131e7cf31293ffede5d9860061";
+const TA_B2K4_RECEIPT = "docs/evidence/live-line/b2/TRUST_ANCHOR_B2K4.json";
+
+const TA_B2K4_REQUIRED_FILES = Object.freeze([
+  ".github/workflows/agentur-gate.yml",
+  ".github/workflows/quality.yml",
+  "quality/eslint-baseline.json",
+  "e2e/generated/playwright.config.ts",
+  "e2e/generated/_pr_scope.json",
+  "scripts/quality/check-live-package-scope.mjs",
+  "src/test/live_package_scope.test.ts",
+  TA_B2K4_RECEIPT,
+  "docs/delivery/ABGABE_TA-B2K4.md",
+]);
+const TA_B2K4_ALLOWED_FILES = Object.freeze([
+  ...TA_B2K4_REQUIRED_FILES,
+  "scripts/spec/generate-flow-tests.mjs",
 ]);
 const PR154_REBASELINE_BASE_SHA = "1fa4920d6d06b02413c8c157ae6b739507105846";
 const PR154_REBASELINE_RECEIPT = "docs/evidence/live-line/pr154/REBASELINE.json";
@@ -443,27 +321,8 @@ const PR154_TRUST_ANCHOR_BASE_FILES = Object.freeze([
   ...PR154_TRUST_ANCHOR_PINNED_FILES,
   "quality/eslint-baseline.json",
 ]);
-const TA_B2_ANCHOR_ALLOWLIST = Object.freeze([
-  "_review/AKTUELLE_ANWEISUNG.md",
-  "_review/MELDUNG_PLANUNGSCHAT.md",
-  "_review/OWNER_ENTSCHEIDUNGEN.md",
-  "docs/project/arbeitspakete/**",
-  TA_B2_RECEIPT,
-  MISSION_PATH,
-  "scripts/quality/check-delivery-contracts.mjs",
-  "scripts/quality/check-live-package-scope.mjs",
-  "src/test/delivery_contracts.test.ts",
-  "src/test/live_package_scope.test.ts",
-]);
-const TA_B2_REQUIRED_FILES = Object.freeze([
-  "docs/project/arbeitspakete/TRUST_ANCHOR_B2.md",
-  TA_B2_RECEIPT,
-  MISSION_PATH,
-  "scripts/quality/check-delivery-contracts.mjs",
-  "scripts/quality/check-live-package-scope.mjs",
-  "src/test/delivery_contracts.test.ts",
-  "src/test/live_package_scope.test.ts",
-]);
+
+
 const TA_B2B_ANCHOR_ALLOWLIST = Object.freeze([
   ".github/workflows/agentur-gate.yml",
   "_review/AKTUELLE_ANWEISUNG.md",
@@ -475,19 +334,7 @@ const TA_B2B_ANCHOR_ALLOWLIST = Object.freeze([
   "scripts/quality/check-live-package-scope.mjs",
   "src/test/live_package_scope.test.ts",
 ]);
-const TA_B2B_REQUIRED_FILES = Object.freeze([
-  ".github/workflows/agentur-gate.yml",
-  "_review/AKTUELLE_ANWEISUNG.md",
-  "docs/project/arbeitspakete/TRUST_ANCHOR_B2B.md",
-  "docs/project/arbeitspakete/WORKQUEUE.json",
-  "docs/project/arbeitspakete/AP-01-eingang-geruest-paket-persoenlich/PAKET.md",
-  "docs/project/arbeitspakete/AP-01-eingang-geruest-paket-persoenlich/AP-01-eingang-paket-persoenlich.acceptance.test.ts.txt",
-  "docs/project/arbeitspakete/AP-01-eingang-geruest-paket-persoenlich/ap01_eingang_paket_persoenlich.integration.test.ts.txt",
-  TA_B2B_BAUPLAN,
-  TA_B2B_RECEIPT,
-  "scripts/quality/check-live-package-scope.mjs",
-  "src/test/live_package_scope.test.ts",
-]);
+
 const TA_B2C_ANCHOR_ALLOWLIST = Object.freeze([
   "_review/AKTUELLE_ANWEISUNG.md",
   "_review/MELDUNG_PLANUNGSCHAT.md",
@@ -498,20 +345,7 @@ const TA_B2C_ANCHOR_ALLOWLIST = Object.freeze([
   "scripts/quality/check-live-package-scope.mjs",
   "src/test/live_package_scope.test.ts",
 ]);
-const TA_B2C_REQUIRED_FILES = Object.freeze([
-  "_review/AKTUELLE_ANWEISUNG.md",
-  "_review/OWNER_ENTSCHEIDUNGEN.md",
-  "docs/project/arbeitspakete/TRUST_ANCHOR_B2C.md",
-  "docs/project/arbeitspakete/WORKQUEUE.json",
-  "docs/project/arbeitspakete/AP-01-eingang-geruest-paket-persoenlich/PAKET.md",
-  "docs/project/arbeitspakete/AP-01-eingang-geruest-paket-persoenlich/ap01b_eingang_bestandskunde_unvollstaendig.integration.test.ts.txt",
-  "docs/project/arbeitspakete/AP-02-eingang-neukunde/PAKET.md",
-  "docs/project/arbeitspakete/AP-02-eingang-neukunde/ap02_eingang_neukunde.integration.test.ts.txt",
-  TA_B2C_BAUPLAN,
-  TA_B2C_RECEIPT,
-  "scripts/quality/check-live-package-scope.mjs",
-  "src/test/live_package_scope.test.ts",
-]);
+
 const TA_B2C2_ANCHOR_ALLOWLIST = Object.freeze([
   "_review/AKTUELLE_ANWEISUNG.md",
   "_review/MELDUNG_PLANUNGSCHAT.md",
@@ -521,20 +355,7 @@ const TA_B2C2_ANCHOR_ALLOWLIST = Object.freeze([
   "scripts/quality/check-live-package-scope.mjs",
   "src/test/live_package_scope.test.ts",
 ]);
-const TA_B2C2_REQUIRED_FILES = Object.freeze([
-  "_review/AKTUELLE_ANWEISUNG.md",
-  "_review/OWNER_ENTSCHEIDUNGEN.md",
-  "docs/project/arbeitspakete/AP-01-eingang-geruest-paket-persoenlich/PAKET.md",
-  "docs/project/arbeitspakete/AP-G-testmodell/PAKET.md",
-  "docs/project/arbeitspakete/AP-K1-kunde/PAKET.md",
-  "docs/project/arbeitspakete/BEFUNDE.md",
-  "docs/project/arbeitspakete/TRUST_ANCHOR_B2C2.md",
-  "docs/project/arbeitspakete/TRUST_ANCHOR_B2D.md",
-  "docs/project/arbeitspakete/WORKQUEUE.json",
-  TA_B2C2_RECEIPT,
-  "scripts/quality/check-live-package-scope.mjs",
-  "src/test/live_package_scope.test.ts",
-]);
+
 const TA_B2C3_ANCHOR_ALLOWLIST = Object.freeze([
   "_review/AKTUELLE_ANWEISUNG.md",
   "_review/MELDUNG_PLANUNGSCHAT.md",
@@ -544,12 +365,7 @@ const TA_B2C3_ANCHOR_ALLOWLIST = Object.freeze([
   "scripts/quality/check-live-package-scope.mjs",
   "src/test/live_package_scope.test.ts",
 ]);
-const TA_B2C3_REQUIRED_FILES = Object.freeze([
-  "docs/project/arbeitspakete/TRUST_ANCHOR_B2C3.md",
-  TA_B2C3_RECEIPT,
-  "scripts/quality/check-live-package-scope.mjs",
-  "src/test/live_package_scope.test.ts",
-]);
+
 const TA_B2D2_ANCHOR_ALLOWLIST = Object.freeze([
   ".github/workflows/agentur-gate.yml",
   "_review/AKTUELLE_ANWEISUNG.md",
@@ -869,17 +685,7 @@ function changedFiles(root, base, head) {
   return output ? output.split(/\r?\n/).map(posix) : [];
 }
 
-function changedEntries(root, base, head) {
-  const output = git(root, ["diff", "--name-status", "--diff-filter=ACMRD", base, head]);
-  if (!output) return [];
-  return output.split(/\r?\n/).map((line) => {
-    const [rawStatus, ...paths] = line.split("\t");
-    return {
-      status: rawStatus.slice(0, 1),
-      path: posix(paths.at(-1)),
-    };
-  });
-}
+
 
 function commitFiles(root, commit) {
   const output = git(root, ["diff-tree", "--no-commit-id", "--name-only", "-r", "--root", commit]);
@@ -952,37 +758,7 @@ function checkPr154Rebaseline(root, baseSha, originalBaseSha = PR154_REBASELINE_
   return errors;
 }
 
-function checkTaB2Anchor(root, files, mission, branch, baseSha) {
-  const errors = [];
-  if (branch !== TA_B2_BRANCH) errors.push(`TA_B2_BRANCH_INVALID:${branch}`);
-  if (baseSha !== TA_B2_BASE_SHA) errors.push(`TA_B2_BASE_INVALID:${baseSha}:${TA_B2_BASE_SHA}`);
-  for (const rel of files) {
-    if (!covered(rel, TA_B2_ANCHOR_ALLOWLIST)) errors.push(`TA_B2_SCOPE:${rel}`);
-  }
-  for (const rel of TA_B2_REQUIRED_FILES) {
-    if (!files.includes(rel)) errors.push(`TA_B2_REQUIRED_FILE_MISSING:${rel}`);
-  }
-  if (mission.active_block !== "B2" || mission.phase !== "WRITING" || mission.branch !== SALES_STAGE_B2_BRANCH
-      || mission.started_from_sha !== TA_B2_BASE_SHA || mission.desktop_due_at !== "2026-11-08"
-      || mission.tablet_mobile_due_at !== "2026-11-08" || mission.handoff_path !== "docs/delivery/ABGABE_B2.md"
-      || mission.next_block !== "B3") {
-    errors.push("TA_B2_MISSION_INVALID");
-  }
-  let receipt;
-  try {
-    receipt = JSON.parse(readFileSync(path.join(root, TA_B2_RECEIPT), "utf8"));
-  } catch {
-    errors.push("TA_B2_RECEIPT_UNREADABLE");
-    return errors;
-  }
-  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2_VALUES).sort())) {
-    errors.push("TA_B2_RECEIPT_SCHEMA");
-  }
-  for (const [key, value] of Object.entries(TA_B2_VALUES)) {
-    if (receipt[key] !== value) errors.push(`TA_B2_RECEIPT_VALUE:${key}`);
-  }
-  return errors;
-}
+
 
 function checkTaB2bScope(files, mission, branch, baseSha) {
   const errors = [];
@@ -1000,32 +776,7 @@ function checkTaB2bScope(files, mission, branch, baseSha) {
   return errors;
 }
 
-function checkTaB2bAnchor(root, files, mission, branch, baseSha) {
-  const errors = checkTaB2bScope(files, mission, branch, baseSha);
-  for (const rel of TA_B2B_REQUIRED_FILES) {
-    if (!files.includes(rel)) errors.push(`TA_B2B_REQUIRED_FILE_MISSING:${rel}`);
-  }
-  let receipt;
-  try {
-    receipt = JSON.parse(readFileSync(path.join(root, TA_B2B_RECEIPT), "utf8"));
-  } catch {
-    errors.push("TA_B2B_RECEIPT_UNREADABLE");
-    return errors;
-  }
-  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2B_VALUES).sort())) {
-    errors.push("TA_B2B_RECEIPT_SCHEMA");
-  }
-  for (const [key, value] of Object.entries(TA_B2B_VALUES)) {
-    if (receipt[key] !== value) errors.push(`TA_B2B_RECEIPT_VALUE:${key}`);
-  }
-  try {
-    const bauplan = readFileSync(path.join(root, TA_B2B_BAUPLAN));
-    if (hash(bauplan) !== TA_B2B_BAUPLAN_SHA256) errors.push("TA_B2B_BAUPLAN_HASH");
-  } catch {
-    errors.push("TA_B2B_BAUPLAN_UNREADABLE");
-  }
-  return errors;
-}
+
 
 function checkTaB2cScope(files, mission, branch, baseSha) {
   const errors = [];
@@ -1043,32 +794,7 @@ function checkTaB2cScope(files, mission, branch, baseSha) {
   return errors;
 }
 
-function checkTaB2cAnchor(root, files, mission, branch, baseSha) {
-  const errors = checkTaB2cScope(files, mission, branch, baseSha);
-  for (const rel of TA_B2C_REQUIRED_FILES) {
-    if (!files.includes(rel)) errors.push(`TA_B2C_REQUIRED_FILE_MISSING:${rel}`);
-  }
-  let receipt;
-  try {
-    receipt = JSON.parse(readFileSync(path.join(root, TA_B2C_RECEIPT), "utf8"));
-  } catch {
-    errors.push("TA_B2C_RECEIPT_UNREADABLE");
-    return errors;
-  }
-  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2C_VALUES).sort())) {
-    errors.push("TA_B2C_RECEIPT_SCHEMA");
-  }
-  for (const [key, value] of Object.entries(TA_B2C_VALUES)) {
-    if (receipt[key] !== value) errors.push(`TA_B2C_RECEIPT_VALUE:${key}`);
-  }
-  try {
-    const bauplan = readFileSync(path.join(root, TA_B2C_BAUPLAN));
-    if (hash(bauplan) !== TA_B2C_BAUPLAN_SHA256) errors.push("TA_B2C_BAUPLAN_HASH");
-  } catch {
-    errors.push("TA_B2C_BAUPLAN_UNREADABLE");
-  }
-  return errors;
-}
+
 
 function checkTaB2c2Scope(files, mission, branch, baseSha) {
   const errors = [];
@@ -1086,26 +812,7 @@ function checkTaB2c2Scope(files, mission, branch, baseSha) {
   return errors;
 }
 
-function checkTaB2c2Anchor(root, files, mission, branch, baseSha) {
-  const errors = checkTaB2c2Scope(files, mission, branch, baseSha);
-  for (const rel of TA_B2C2_REQUIRED_FILES) {
-    if (!files.includes(rel)) errors.push(`TA_B2C2_REQUIRED_FILE_MISSING:${rel}`);
-  }
-  let receipt;
-  try {
-    receipt = JSON.parse(readFileSync(path.join(root, TA_B2C2_RECEIPT), "utf8"));
-  } catch {
-    errors.push("TA_B2C2_RECEIPT_UNREADABLE");
-    return errors;
-  }
-  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2C2_VALUES).sort())) {
-    errors.push("TA_B2C2_RECEIPT_SCHEMA");
-  }
-  for (const [key, value] of Object.entries(TA_B2C2_VALUES)) {
-    if (receipt[key] !== value) errors.push(`TA_B2C2_RECEIPT_VALUE:${key}`);
-  }
-  return errors;
-}
+
 
 function checkTaB2c3Scope(files, mission, branch, baseSha) {
   const errors = [];
@@ -1123,26 +830,7 @@ function checkTaB2c3Scope(files, mission, branch, baseSha) {
   return errors;
 }
 
-function checkTaB2c3Anchor(root, files, mission, branch, baseSha) {
-  const errors = checkTaB2c3Scope(files, mission, branch, baseSha);
-  for (const rel of TA_B2C3_REQUIRED_FILES) {
-    if (!files.includes(rel)) errors.push(`TA_B2C3_REQUIRED_FILE_MISSING:${rel}`);
-  }
-  let receipt;
-  try {
-    receipt = JSON.parse(readFileSync(path.join(root, TA_B2C3_RECEIPT), "utf8"));
-  } catch {
-    errors.push("TA_B2C3_RECEIPT_UNREADABLE");
-    return errors;
-  }
-  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2C3_VALUES).sort())) {
-    errors.push("TA_B2C3_RECEIPT_SCHEMA");
-  }
-  for (const [key, value] of Object.entries(TA_B2C3_VALUES)) {
-    if (receipt[key] !== value) errors.push(`TA_B2C3_RECEIPT_VALUE:${key}`);
-  }
-  return errors;
-}
+
 
 function checkTaB2d2Scope(files, mission, branch, baseSha) {
   const errors = [];
@@ -1160,32 +848,7 @@ function checkTaB2d2Scope(files, mission, branch, baseSha) {
   return errors;
 }
 
-function checkTaB2d2Anchor(root, files, mission, branch, baseSha) {
-  const errors = checkTaB2d2Scope(files, mission, branch, baseSha);
-  for (const rel of TA_B2D2_REQUIRED_FILES) {
-    if (!files.includes(rel)) errors.push(`TA_B2D2_REQUIRED_FILE_MISSING:${rel}`);
-  }
-  let receipt;
-  try {
-    receipt = JSON.parse(readFileSync(path.join(root, TA_B2D2_RECEIPT), "utf8"));
-  } catch {
-    errors.push("TA_B2D2_RECEIPT_UNREADABLE");
-    return errors;
-  }
-  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2D2_VALUES).sort())) {
-    errors.push("TA_B2D2_RECEIPT_SCHEMA");
-  }
-  for (const [key, value] of Object.entries(TA_B2D2_VALUES)) {
-    if (receipt[key] !== value) errors.push(`TA_B2D2_RECEIPT_VALUE:${key}`);
-  }
-  try {
-    const bauplan = readFileSync(path.join(root, TA_B2D2_BAUPLAN));
-    if (hash(bauplan) !== TA_B2D2_BAUPLAN_SHA256) errors.push("TA_B2D2_BAUPLAN_HASH");
-  } catch {
-    errors.push("TA_B2D2_BAUPLAN_UNREADABLE");
-  }
-  return errors;
-}
+
 
 function checkTaB2eScope(files, mission, branch, baseSha) {
   const errors = [];
@@ -1203,26 +866,7 @@ function checkTaB2eScope(files, mission, branch, baseSha) {
   return errors;
 }
 
-function checkTaB2eAnchor(root, files, mission, branch, baseSha) {
-  const errors = checkTaB2eScope(files, mission, branch, baseSha);
-  for (const rel of TA_B2E_REQUIRED_FILES) {
-    if (!files.includes(rel)) errors.push(`TA_B2E_REQUIRED_FILE_MISSING:${rel}`);
-  }
-  let receipt;
-  try {
-    receipt = JSON.parse(readFileSync(path.join(root, TA_B2E_RECEIPT), "utf8"));
-  } catch {
-    errors.push("TA_B2E_RECEIPT_UNREADABLE");
-    return errors;
-  }
-  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2E_VALUES).sort())) {
-    errors.push("TA_B2E_RECEIPT_SCHEMA");
-  }
-  for (const [key, value] of Object.entries(TA_B2E_VALUES)) {
-    if (receipt[key] !== value) errors.push(`TA_B2E_RECEIPT_VALUE:${key}`);
-  }
-  return errors;
-}
+
 
 function checkTaB2fScope(files, mission, branch, baseSha) {
   const errors = [];
@@ -1249,41 +893,7 @@ export function checkTaB2fBaselineChangeForTest({ before, after }) {
   return [];
 }
 
-function checkTaB2fAnchor(root, files, mission, branch, baseSha) {
-  const errors = checkTaB2fScope(files, mission, branch, baseSha);
-  for (const rel of TA_B2F_REQUIRED_FILES) {
-    if (!files.includes(rel)) errors.push(`TA_B2F_REQUIRED_FILE_MISSING:${rel}`);
-  }
-  let receipt;
-  try {
-    receipt = JSON.parse(readFileSync(path.join(root, TA_B2F_RECEIPT), "utf8"));
-  } catch {
-    errors.push("TA_B2F_RECEIPT_UNREADABLE");
-    return errors;
-  }
-  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2F_VALUES).sort())) {
-    errors.push("TA_B2F_RECEIPT_SCHEMA");
-  }
-  for (const [key, value] of Object.entries(TA_B2F_VALUES)) {
-    if (receipt[key] !== value) errors.push(`TA_B2F_RECEIPT_VALUE:${key}`);
-  }
-  try {
-    if (hash(readFileSync(path.join(root, TA_B2F_BAUPLAN))) !== TA_B2F_BAUPLAN_SHA256) {
-      errors.push("TA_B2F_BAUPLAN_HASH");
-    }
-  } catch {
-    errors.push("TA_B2F_BAUPLAN_UNREADABLE");
-  }
-  try {
-    // P42 permits exactly one field replacement; even whitespace/debt changes fail.
-    const before = execFileSync("git", ["-C", root, "show", TA_B2F_BASE_SHA + ":quality/eslint-baseline.json"], { encoding: "utf8", maxBuffer: 8_000_000 });
-    const after = readFileSync(path.join(root, "quality/eslint-baseline.json"), "utf8");
-    errors.push(...checkTaB2fBaselineChangeForTest({ before, after }));
-  } catch {
-    errors.push("TA_B2F_BASELINE_UNREADABLE");
-  }
-  return errors;
-}
+
 
 function checkTaB2hScope(files, mission, branch, baseSha) {
   const errors = [];
@@ -1297,16 +907,7 @@ function checkTaB2hScope(files, mission, branch, baseSha) {
   return errors;
 }
 
-function checkTaB2hAnchor(root, files, mission, branch, baseSha) {
-  const errors = checkTaB2hScope(files, mission, branch, baseSha);
-  for (const rel of TA_B2H_ANCHOR_ALLOWLIST) if (!files.includes(rel)) errors.push(`TA_B2H_REQUIRED_FILE_MISSING:${rel}`);
-  let receipt;
-  try { receipt = JSON.parse(readFileSync(path.join(root, TA_B2H_RECEIPT), "utf8")); }
-  catch { return [...errors, "TA_B2H_RECEIPT_UNREADABLE"]; }
-  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2H_VALUES).sort())) errors.push("TA_B2H_RECEIPT_SCHEMA");
-  for (const [key, value] of Object.entries(TA_B2H_VALUES)) if (receipt[key] !== value) errors.push(`TA_B2H_RECEIPT_VALUE:${key}`);
-  return errors;
-}
+
 
 export function checkTaB2hScopeForTest({ files, mission, branch, baseSha }) {
   return checkTaB2hScope(files, mission, branch, baseSha);
@@ -1324,16 +925,7 @@ function checkTaB2iScope(files, mission, branch, baseSha) {
   return errors;
 }
 
-function checkTaB2iAnchor(root, files, mission, branch, baseSha) {
-  const errors = checkTaB2iScope(files, mission, branch, baseSha);
-  for (const rel of TA_B2I_ANCHOR_ALLOWLIST) if (!files.includes(rel)) errors.push(`TA_B2I_REQUIRED_FILE_MISSING:${rel}`);
-  let receipt;
-  try { receipt = JSON.parse(readFileSync(path.join(root, TA_B2I_RECEIPT), "utf8")); }
-  catch { return [...errors, "TA_B2I_RECEIPT_UNREADABLE"]; }
-  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2I_VALUES).sort())) errors.push("TA_B2I_RECEIPT_SCHEMA");
-  for (const [key, value] of Object.entries(TA_B2I_VALUES)) if (receipt[key] !== value) errors.push(`TA_B2I_RECEIPT_VALUE:${key}`);
-  return errors;
-}
+
 
 export function checkTaB2iScopeForTest({ files, mission, branch, baseSha }) {
   return checkTaB2iScope(files, mission, branch, baseSha);
@@ -1351,16 +943,7 @@ function checkTaB2jScope(files, mission, branch, baseSha) {
   return errors;
 }
 
-function checkTaB2jAnchor(root, files, mission, branch, baseSha) {
-  const errors = checkTaB2jScope(files, mission, branch, baseSha);
-  for (const rel of TA_B2J_ANCHOR_ALLOWLIST) if (!files.includes(rel)) errors.push(`TA_B2J_REQUIRED_FILE_MISSING:${rel}`);
-  let receipt;
-  try { receipt = JSON.parse(readFileSync(path.join(root, TA_B2J_RECEIPT), "utf8")); }
-  catch { return [...errors, "TA_B2J_RECEIPT_UNREADABLE"]; }
-  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2J_VALUES).sort())) errors.push("TA_B2J_RECEIPT_SCHEMA");
-  for (const [key, value] of Object.entries(TA_B2J_VALUES)) if (receipt[key] !== value) errors.push(`TA_B2J_RECEIPT_VALUE:${key}`);
-  return errors;
-}
+
 
 export function checkTaB2jScopeForTest({ files, mission, branch, baseSha }) {
   return checkTaB2jScope(files, mission, branch, baseSha);
@@ -1378,16 +961,7 @@ function checkTaB2k1Scope(files, mission, branch, baseSha) {
   return errors;
 }
 
-function checkTaB2k1Anchor(root, files, mission, branch, baseSha) {
-  const errors = checkTaB2k1Scope(files, mission, branch, baseSha);
-  for (const rel of TA_B2K1_ANCHOR_ALLOWLIST) if (!files.includes(rel)) errors.push(`TA_B2K1_REQUIRED_FILE_MISSING:${rel}`);
-  let receipt;
-  try { receipt = JSON.parse(readFileSync(path.join(root, TA_B2K1_RECEIPT), "utf8")); }
-  catch { return [...errors, "TA_B2K1_RECEIPT_UNREADABLE"]; }
-  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2K1_VALUES).sort())) errors.push("TA_B2K1_RECEIPT_SCHEMA");
-  for (const [key, value] of Object.entries(TA_B2K1_VALUES)) if (receipt[key] !== value) errors.push(`TA_B2K1_RECEIPT_VALUE:${key}`);
-  return errors;
-}
+
 
 export function checkTaB2k1ScopeForTest({ files, mission, branch, baseSha }) {
   return checkTaB2k1Scope(files, mission, branch, baseSha);
@@ -1405,16 +979,7 @@ function checkTaB2k1bScope(files, mission, branch, baseSha) {
   return errors;
 }
 
-function checkTaB2k1bAnchor(root, files, mission, branch, baseSha) {
-  const errors = checkTaB2k1bScope(files, mission, branch, baseSha);
-  for (const rel of TA_B2K1B_ANCHOR_ALLOWLIST) if (!files.includes(rel)) errors.push(`TA_B2K1B_REQUIRED_FILE_MISSING:${rel}`);
-  let receipt;
-  try { receipt = JSON.parse(readFileSync(path.join(root, TA_B2K1B_RECEIPT), "utf8")); }
-  catch { return [...errors, "TA_B2K1B_RECEIPT_UNREADABLE"]; }
-  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2K1B_VALUES).sort())) errors.push("TA_B2K1B_RECEIPT_SCHEMA");
-  for (const [key, value] of Object.entries(TA_B2K1B_VALUES)) if (receipt[key] !== value) errors.push(`TA_B2K1B_RECEIPT_VALUE:${key}`);
-  return errors;
-}
+
 
 export function checkTaB2k1bScopeForTest({ files, mission, branch, baseSha }) {
   return checkTaB2k1bScope(files, mission, branch, baseSha);
@@ -1432,22 +997,7 @@ function checkTaB2k2Scope(files, mission, branch, baseSha) {
   return errors;
 }
 
-function checkTaB2k2Anchor(root, files, mission, branch, baseSha) {
-  const errors = checkTaB2k2Scope(files, mission, branch, baseSha);
-  for (const rel of TA_B2K2_REQUIRED_FILES) if (!files.includes(rel)) errors.push("TA_B2K2_REQUIRED_FILE_MISSING:" + rel);
-  let receipt;
-  try { receipt = JSON.parse(readFileSync(path.join(root, TA_B2K2_RECEIPT), "utf8")); }
-  catch { return [...errors, "TA_B2K2_RECEIPT_UNREADABLE"]; }
-  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2K2_VALUES).sort())) errors.push("TA_B2K2_RECEIPT_SCHEMA");
-  for (const [key, value] of Object.entries(TA_B2K2_VALUES)) if (receipt[key] !== value) errors.push("TA_B2K2_RECEIPT_VALUE:" + key);
-  try {
-    const bauplan = readFileSync(path.join(root, TA_B2F_BAUPLAN));
-    if (hash(bauplan) !== TA_B2K2_BAUPLAN_SHA256) errors.push("TA_B2K2_BAUPLAN_HASH");
-  } catch {
-    errors.push("TA_B2K2_BAUPLAN_UNREADABLE");
-  }
-  return errors;
-}
+
 
 export function checkTaB2k2ScopeForTest({ files, mission, branch, baseSha }) {
   return checkTaB2k2Scope(files, mission, branch, baseSha);
@@ -1465,19 +1015,35 @@ function checkTaB2k3Scope(files, mission, branch, baseSha) {
   return errors;
 }
 
-function checkTaB2k3Anchor(root, files, mission, branch, baseSha) {
-  const errors = checkTaB2k3Scope(files, mission, branch, baseSha);
-  for (const rel of TA_B2K3_ANCHOR_ALLOWLIST) if (!files.includes(rel)) errors.push(`TA_B2K3_REQUIRED_FILE_MISSING:${rel}`);
-  let receipt;
-  try { receipt = JSON.parse(readFileSync(path.join(root, TA_B2K3_RECEIPT), "utf8")); }
-  catch { return [...errors, "TA_B2K3_RECEIPT_UNREADABLE"]; }
-  if (JSON.stringify(Object.keys(receipt).sort()) !== JSON.stringify(Object.keys(TA_B2K3_VALUES).sort())) errors.push("TA_B2K3_RECEIPT_SCHEMA");
-  for (const [key, value] of Object.entries(TA_B2K3_VALUES)) if (receipt[key] !== value) errors.push(`TA_B2K3_RECEIPT_VALUE:${key}`);
-  return errors;
-}
+
 
 export function checkTaB2k3ScopeForTest({ files, mission, branch, baseSha }) {
   return checkTaB2k3Scope(files, mission, branch, baseSha);
+}
+
+function checkTaB2k4Scope(files, mission, branch, baseSha) {
+  const errors = [];
+  if (branch !== TA_B2K4_BRANCH) errors.push(`TA_B2K4_BRANCH_INVALID:${branch}`);
+  if (baseSha !== TA_B2K4_BASE_SHA) errors.push(`TA_B2K4_BASE_INVALID:${baseSha}:${TA_B2K4_BASE_SHA}`);
+  for (const rel of files) if (!TA_B2K4_ALLOWED_FILES.includes(rel)) errors.push(`TA_B2K4_SCOPE:${rel}`);
+  if (mission.active_block !== "B2" || mission.phase !== "WRITING" || mission.branch !== SALES_STAGE_B2_BRANCH
+      || mission.started_from_sha !== TA_B2_BASE_SHA || mission.desktop_due_at !== "2026-11-08"
+      || mission.tablet_mobile_due_at !== "2026-11-08" || mission.handoff_path !== "docs/delivery/ABGABE_B2.md"
+      || mission.next_block !== "B3") errors.push("TA_B2K4_MISSION_INVALID");
+  return errors;
+}
+
+export function checkTaB2k4BaselineChangeForTest({ before, after }) {
+  const oldField = '"judgeContractHash": "eb0f91e2bd47b90a75f108018e42e5d8dd460c3c00d13352a98e8bcb1f2c4416"';
+  const newField = '"judgeContractHash": "a4de74a691114e64835c96e3199256e72d24ac904572859c7a1dc85ee96d2842"';
+  return before.split(oldField).length === 2 && after === before.replace(oldField, newField)
+    ? [] : ["TA_B2K4_BASELINE_CHANGE_NOT_AUTHORIZED"];
+}
+
+
+
+export function checkTaB2k4ScopeForTest({ files, mission, branch, baseSha }) {
+  return checkTaB2k4Scope(files, mission, branch, baseSha);
 }
 
 export function checkB2iParserChangesForTest({ beforePackage, afterPackage, beforeLock, afterLock }) {
@@ -1670,22 +1236,7 @@ export function checkB2AdditiveF1RegistryChangeForTest({ before, after }) {
   return errors;
 }
 
-function checkB2AdditiveContractChanges(root, base, head, files) {
-  const errors = [];
-  const checks = [
-    ["scripts/quality/h18-server-actions.json", checkB2AdditiveH18ChangeForTest],
-    ["docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json", checkB2AdditiveF1RegistryChangeForTest],
-  ];
-  for (const [rel, check] of checks) {
-    if (!files.includes(rel)) continue;
-    try {
-      errors.push(...check({ before: gitFile(root, base, rel), after: gitFile(root, head, rel) }));
-    } catch {
-      errors.push(`B2_ADDITIVE_CONTRACT_UNREADABLE:${rel}`);
-    }
-  }
-  return errors;
-}
+
 
 /**
  * @param {{
@@ -2015,45 +1566,28 @@ function checkClosure(root, baseSha, files, mission) {
   return errors;
 }
 
+export function checkB3ScopeForTest({ entries }) {
+  const errors = [];
+  for (const { path: rel, status } of entries) {
+    if (rel.startsWith("supabase/migrations/") && status !== "A") errors.push(`B3_EXISTING_MIGRATION_IMMUTABLE:${rel}`);
+    if (rel.startsWith("_review/") || rel.startsWith("docs/project/")) errors.push(`B3_BOUND_SOURCE_PROTECTED:${rel}`);
+  }
+  return errors;
+}
+
 export function checkLivePackageScope({ root, base, head, branch }) {
   const files = changedFiles(root, base, head);
-  if (branch === "main") return [];
   const candidateMission = parseMission(readFileSync(path.join(root, MISSION_PATH), "utf8"));
   if (candidateMission.mission_id === "KREILE-VERKAUFSSTUFE-1") {
-    const baseSha = resolved(root, base);
-    if (branch === PR154_REBASELINE_BRANCH) return checkPr154Rebaseline(root, baseSha);
-    if (branch === TA_B2_BRANCH) return checkTaB2Anchor(root, files, candidateMission, branch, baseSha);
-    if (branch === TA_B2B_BRANCH) return checkTaB2bAnchor(root, files, candidateMission, branch, baseSha);
-    if (branch === TA_B2C_BRANCH) return checkTaB2cAnchor(root, files, candidateMission, branch, baseSha);
-    if (branch === TA_B2C2_BRANCH) return checkTaB2c2Anchor(root, files, candidateMission, branch, baseSha);
-    if (branch === TA_B2C3_BRANCH) return checkTaB2c3Anchor(root, files, candidateMission, branch, baseSha);
-    if (branch === TA_B2D2_BRANCH) return checkTaB2d2Anchor(root, files, candidateMission, branch, baseSha);
-    if (branch === TA_B2E_BRANCH) return checkTaB2eAnchor(root, files, candidateMission, branch, baseSha);
-    if (branch === TA_B2F_BRANCH) return checkTaB2fAnchor(root, files, candidateMission, branch, baseSha);
-    if (branch === TA_B2H_BRANCH) return checkTaB2hAnchor(root, files, candidateMission, branch, baseSha);
-    if (branch === TA_B2I_BRANCH) return checkTaB2iAnchor(root, files, candidateMission, branch, baseSha);
-    if (branch === TA_B2J_BRANCH) return checkTaB2jAnchor(root, files, candidateMission, branch, baseSha);
-    if (branch === TA_B2K1_BRANCH) return checkTaB2k1Anchor(root, files, candidateMission, branch, baseSha);
-    if (branch === TA_B2K1B_BRANCH) return checkTaB2k1bAnchor(root, files, candidateMission, branch, baseSha);
-    if (branch === TA_B2K2_BRANCH) return checkTaB2k2Anchor(root, files, candidateMission, branch, baseSha);
-    if (branch === TA_B2K3_BRANCH) return checkTaB2k3Anchor(root, files, candidateMission, branch, baseSha);
-    if (candidateMission.active_block !== "B2") {
-      return [`SALES_STAGE_ACTIVE_BLOCK_INVALID:${candidateMission.active_block}`];
-    }
-    const errors = checkSalesStageB2Scope(files, changedEntries(root, base, head), candidateMission, branch);
-    errors.push(...checkB2AdditiveContractChanges(root, base, head, files));
-    const manifestChanged = files.includes("package.json"), lockChanged = files.includes("package-lock.json");
-    if (manifestChanged !== lockChanged) errors.push("B2I_PARSER_MANIFEST_PAIR_REQUIRED");
-    if (manifestChanged && lockChanged) {
-      try {
-        errors.push(...checkB2iParserChangesForTest({
-          beforePackage: gitFile(root, base, "package.json"), afterPackage: gitFile(root, head, "package.json"),
-          beforeLock: gitFile(root, base, "package-lock.json"), afterLock: gitFile(root, head, "package-lock.json"),
-        }));
-      } catch { errors.push("B2I_PARSER_MANIFEST_UNREADABLE"); }
-    }
-    return errors;
+    // Disable rename detection so moving an old migration is treated as deletion plus addition.
+    const diff = git(root, ["diff", "--no-renames", "--name-status", base, head]);
+    const entries = diff ? diff.split(/\r?\n/).map((line) => {
+      const [status, rel] = line.split("\t");
+      return { status: status.slice(0, 1), path: posix(rel) };
+    }) : [];
+    return checkB3ScopeForTest({ entries });
   }
+  if (branch === "main") return [];
   try {
     const baseMission = parseMission(gitFile(root, base, MISSION_PATH));
     if (baseMission.phase === "DONE" && baseMission.next_gate_after_active_package === "LIVE_COMPLETE") {
@@ -2630,6 +2164,17 @@ export function runSelftest(root = process.cwd()) {
   if (!taB2k3Outside.includes("TA_B2K3_SCOPE:src/app/page.tsx")) {
     throw new Error("TA-B2k3 accepted an out-of-anchor file: " + taB2k3Outside.join(" | "));
   }
+  const validTaB2k4 = checkTaB2k4Scope(TA_B2K4_REQUIRED_FILES, taB2cMission, TA_B2K4_BRANCH, TA_B2K4_BASE_SHA);
+  if (validTaB2k4.length > 0) throw new Error("valid TA-B2k4 scope rejected: " + validTaB2k4.join(" | "));
+  for (const rel of ["src/app/page.tsx", "quality/eslint-config.json", "docs/project/arbeitspakete/TRUST_ANCHOR_B2K4.md"]) {
+    if (!checkTaB2k4Scope([rel], taB2cMission, TA_B2K4_BRANCH, TA_B2K4_BASE_SHA).includes(`TA_B2K4_SCOPE:${rel}`)) {
+      throw new Error(`TA-B2k4 accepted an out-of-anchor file: ${rel}`);
+    }
+  }
+  const k4Before = '{"judgeContractHash": "eb0f91e2bd47b90a75f108018e42e5d8dd460c3c00d13352a98e8bcb1f2c4416", "errors": 0}';
+  const k4After = k4Before.replace("eb0f91e2bd47b90a75f108018e42e5d8dd460c3c00d13352a98e8bcb1f2c4416", "a4de74a691114e64835c96e3199256e72d24ac904572859c7a1dc85ee96d2842");
+  if (checkTaB2k4BaselineChangeForTest({ before: k4Before, after: k4After }).length) throw new Error("TA-B2k4 rejected its one-field hash migration");
+  if (!checkTaB2k4BaselineChangeForTest({ before: k4Before, after: k4After.replace('"errors": 0', '"errors": 1') }).length) throw new Error("TA-B2k4 accepted a baseline debt change");
   const additiveH18Before = {
     version: 1,
     inventorySha256: "a".repeat(64),

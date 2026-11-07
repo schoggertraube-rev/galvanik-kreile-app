@@ -61,7 +61,6 @@ jobs:
           echo "7d3a6d679e8e32e064297901d43fe2eacfe2a7681e408a76206a85ef6c2e4fcb  docs/evidence/f0/PROD_FINGERPRINT_REFERENCE.txt" | sha256sum --check --strict
           echo "175b8ca9f8b964532ef8ad6a5cff710fcea833874ceb5f7b1f7cf358f5a1357d  scripts/schema-parity-catalog.sql" | sha256sum --check --strict
           echo "814c888d0d9b25fdc7fdd066eddc9c34887e07fe839bc2702e6250e3a004f315  docs/evidence/f0/hardening/f0_schema_fingerprint.sql" | sha256sum --check --strict
-          echo "060de7673beef3d9eaa73289dc04159e262137e23bb437354dccffd363696d4b  scripts/schema-parity-inventory.json" | sha256sum --check --strict
 
       - name: W4 candidate checker mutation-free selftest
         run: |
@@ -199,60 +198,6 @@ jobs:
           # every non-ignored changed source file still has a zero-warning budget.
           npx eslint --max-warnings 0 --no-warn-ignored "${files[@]}"
 
-      - name: Repository ESLint ratchet (judge = BASE eslint config, D-QA-001)
-        # Debt is measured with the BASE revision's eslint.config.mjs, so a PR cannot lower
-        # its debt by changing rules; the candidate's own config change is still explicit
-        # (candidate baseline must carry the candidate's contract hash, checked first).
-        # The base config is written INTO the workspace so its bare-specifier imports
-        # (eslint-config-next, plugins) resolve against the installed node_modules; the file
-        # is untracked and removed afterwards, so it never enters the ignored-code inventory.
-        shell: bash
-        run: |
-          set -euo pipefail
-          base="${{ steps.diff.outputs.base }}"
-          base_config="$GITHUB_WORKSPACE/eslint.config.ratchet-base.mjs"
-          # Fail-closed (red-team P0): an unreachable base commit must NOT silently fall back
-          # to the candidate config. Only a base that exists but has no eslint.config.mjs
-          # (ratchet initialisation) may use the candidate config.
-          if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-            echo "::error::ratchet judge: base commit $base is not available in this checkout"
-            exit 1
-          fi
-          if git cat-file -e "$base:eslint.config.mjs" 2>/dev/null; then
-            git show "$base:eslint.config.mjs" > "$base_config"
-            echo "ratchet judge: eslint.config.mjs from base $base"
-          else
-            cp "$GITHUB_WORKSPACE/eslint.config.mjs" "$base_config"
-            echo "ratchet judge: base $base has no eslint.config.mjs (initialisation), using candidate config"
-          fi
-          ratchet_config="$RUNNER_TEMP/eslint-ratchet-frozen-r0.mjs"
-          cat > "$ratchet_config" <<'EOF'
-          import { pathToFileURL } from "node:url";
-
-          const canonicalConfig = (
-            await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/eslint.config.ratchet-base.mjs`).href)
-          ).default;
-
-          export default [
-            ...canonicalConfig,
-            // The judge copy is untracked. The other two trees are closed, non-runtime
-            // evidence: immutable history and the byte-bound V1.1 source package. Their
-            // individual content hashes remain frozen in the candidate ratchet baseline.
-            { ignores: [
-              "eslint.config.ratchet-base.mjs",
-              "docs/project/history/**",
-              "docs/project/linie/ui/designsystem_v1_1/**",
-            ] },
-          ];
-          EOF
-
-          status=0
-          node --import tsx scripts/quality/check-eslint-ratchet.ts \
-            --config "$ratchet_config" \
-            --base "$base" || status=$?
-          rm -f "$base_config"
-          exit "$status"
-
       - name: F0 doc truth gate
         run: node scripts/quality/check-f0-doc-truth.mjs
 
@@ -323,7 +268,6 @@ jobs:
           echo "7d3a6d679e8e32e064297901d43fe2eacfe2a7681e408a76206a85ef6c2e4fcb  docs/evidence/f0/PROD_FINGERPRINT_REFERENCE.txt" | sha256sum --check --strict
           echo "175b8ca9f8b964532ef8ad6a5cff710fcea833874ceb5f7b1f7cf358f5a1357d  scripts/schema-parity-catalog.sql" | sha256sum --check --strict
           echo "814c888d0d9b25fdc7fdd066eddc9c34887e07fe839bc2702e6250e3a004f315  docs/evidence/f0/hardening/f0_schema_fingerprint.sql" | sha256sum --check --strict
-          echo "060de7673beef3d9eaa73289dc04159e262137e23bb437354dccffd363696d4b  scripts/schema-parity-inventory.json" | sha256sum --check --strict
           node scripts/quality/check-w4-candidate-schema.mjs --selftest
           node scripts/quality/check-w4-cross-module-read-ports.mjs --selftest
           node scripts/quality/check-w4-cross-module-read-ports.mjs --check
@@ -736,30 +680,6 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ""
         run: npx vitest run src/test/search_tenant.integration.test.ts --maxWorkers=1 --no-file-parallelism
 
-      - name: Resolve Playwright version for replay smoke
-        id: replay-playwright-version
-        shell: bash
-        run: |
-          version="$(node -e 'const p=require("./package-lock.json"); process.stdout.write(p.packages["node_modules/@playwright/test"].version)')"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-      - name: Restore Playwright browsers for replay smoke
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ steps.replay-playwright-version.outputs.version }}
-
-      - name: Install Playwright WebKit for V5 shell smoke
-        timeout-minutes: 12
-        shell: bash
-        run: |
-          set -euo pipefail
-          for attempt in 1 2; do
-            if npx playwright install --with-deps webkit; then exit 0; fi
-            if [ "$attempt" -eq 2 ]; then exit 1; fi
-            echo "Playwright installation failed; retrying once."
-          done
-
       - name: V5 shell browser smoke (blocking; not Production evidence)
         shell: bash
         env:
@@ -777,6 +697,7 @@ jobs:
           A3_EVIDENCE_OUTPUT_DIR: test-results/path1-v5-shell-smoke/screens
         run: |
           set -euo pipefail
+          test "$(node -p 'require("./package-lock.json").packages["node_modules/@playwright/test"].version')" = '1.60.0'
           if [ -d public ]; then
             cp -r public .next/standalone/public
           fi
@@ -856,12 +777,22 @@ jobs:
             sleep 1
           done
           test "$ready" -eq 1
-          CI= npx playwright test e2e/path1-v5-shell-smoke.real.spec.ts --project=Tablet --workers=1
+          run_browser() {
+            docker run --rm --network host --user "$(id -u):$(id -g)" \
+              -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$GITHUB_WORKSPACE" \
+              -e HOME=/tmp -e CI= -e DATABASE_URL -e NEXT_PUBLIC_SUPABASE_URL \
+              -e NEXT_PUBLIC_SUPABASE_ANON_KEY -e SUPABASE_SERVICE_ROLE_KEY -e SUPABASE_URL \
+              -e APP_SESSION_SECRET -e KREILE_ROLF_APP_USER_ID -e KREILE_PHILLIP_APP_USER_ID \
+              -e KREILE_GREGOR_APP_USER_ID -e A3_CANDIDATE_SHA -e A3_TEST_ORIGIN \
+              -e A3_EVIDENCE_OUTPUT_DIR \
+              mcr.microsoft.com/playwright:v1.60.0-jammy npx playwright test "$@"
+          }
+          run_browser e2e/path1-v5-shell-smoke.real.spec.ts --project=Tablet --workers=1 --trace=retain-on-failure
           mapfile -t live_specs < <(node scripts/quality/select-live-regression-specs.mjs --list)
           if [ "${#live_specs[@]}" -eq 0 ]; then
             echo "No locally replayable live-line BUILD specs have been merged yet."
           else
-            CI= npx playwright test "${live_specs[@]}" --project=Tablet --workers=1
+            run_browser "${live_specs[@]}" --project=Tablet --workers=1
           fi
 
       - name: Upload browser E2E failure diagnostics

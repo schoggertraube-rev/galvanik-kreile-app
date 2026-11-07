@@ -3,6 +3,7 @@ import { test } from "@playwright/test";
 import expectedRed from "./_erwartet_rot.json";
 import { prepareGeneratedSeed, runGeneratedFlowCase, type FlowCase } from "./_harness";
 
+import { runWithExpectedRed } from "./_expectedRed";
 const cases = [
   {
     "id": "R01",
@@ -1444,9 +1445,8 @@ test.describe("BAUPLAN Wege · rechnungein", () => {
     const packageTag = flowCase.paket ? `@${flowCase.paket}` : "@UNASSIGNED";
     test(`${flowCase.id || "OFFEN"} ${packageTag} · ${flowCase.titel || "noch nicht beschrieben"}`, async ({ page }) => {
       const red = expectedRed[flowCase.id as keyof typeof expectedRed];
-      test.fail(Boolean(red), red ? `${red.paket}: ${red.grund}` : undefined);
       await prepareGeneratedSeed(flowCase);
-      await runGeneratedFlowCase(page, flowCase);
+      await runWithExpectedRed(flowCase.id, red, () => runGeneratedFlowCase(page, flowCase));
     });
   }
 });
