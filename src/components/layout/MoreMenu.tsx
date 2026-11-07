@@ -18,8 +18,8 @@ export function MoreMenu({ open, onClose }: { open: boolean; onClose: () => void
   const settingsVisible = hasPermission("perm_sys_toggles") || hasPermission("perm_sys_users") || hasPermission("perm_sys_diag");
   const supportedProfile = status === "authenticated";
 
-  // Keep the initiating Next Link mounted until its navigation commits. Closing
-  // during onNavigate removes that link before the asynchronous route settles.
+  // Keep the initiating link mounted until navigation commits. Settings uses a
+  // native document navigation, consistent with the desktop settings entry.
   useEffect(()=>{
     if(!open){openedAtPath.current=pathname;return;}
     if(pathname!==openedAtPath.current)onClose();
@@ -56,9 +56,9 @@ export function MoreMenu({ open, onClose }: { open: boolean; onClose: () => void
             <PackageCheck aria-hidden="true" /><strong>Werkstatt</strong>
           </Link> : null}
           {settingsVisible ? (
-            <Link className={styles.moreTile} href="/settings" prefetch={false} onNavigate={()=>closeIfCurrentRoute('/settings')}>
+            <a className={styles.moreTile} href="/settings" onClick={event=>{if(pathname==='/settings'){event.preventDefault();onClose();}}}>
               <Settings aria-hidden="true" /><strong>Einstellungen</strong>
-            </Link>
+            </a>
           ) : null}
           <button type="button" className={styles.moreTile} onClick={() => void signOut()} disabled={busy}>
             <LogOut aria-hidden="true" /><strong>Abmelden</strong>

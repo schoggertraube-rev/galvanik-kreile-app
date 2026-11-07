@@ -12,7 +12,9 @@ afterEach(()=>{cleanup();state.path='/';vi.clearAllMocks();});
 describe('Mehr menu route completion',()=>{
  it('keeps a settings navigation mounted until the pathname confirms the destination',()=>{
   const close=vi.fn();const view=render(<MoreMenu open onClose={close}/>);
-  fireEvent.click(screen.getByRole('link',{name:'Einstellungen'}));
+  const link=screen.getByRole('link',{name:'Einstellungen'});
+  expect(link).toHaveAttribute('href','/settings');
+  expect(fireEvent.click(link)).toBe(true);
   expect(close).not.toHaveBeenCalled();
   expect(screen.getByRole('link',{name:'Einstellungen'})).toBeInTheDocument();
   state.path='/settings';view.rerender(<MoreMenu open onClose={close}/>);
