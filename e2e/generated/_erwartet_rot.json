@@ -1,4 +1,22 @@
 {
+  "E25": {
+    "paket": "AP-EIN",
+    "grund": "Endversion-Angleich U-242: Zahlungsbedingung wählen ersetzt fehlt: Zahlungsbedingung",
+    "erwarteterWert": "fehlt: Zahlungsbedingung",
+    "tatsaechlicherWertEnthaelt": "Zahlungsbedingung wählen"
+  },
+  "E26": {
+    "paket": "AP-EIN",
+    "grund": "Endversion-Angleich U-242: Zahlungsbedingung wählen ersetzt fehlt: Zahlungsbedingung",
+    "erwarteterWert": "fehlt: Zahlungsbedingung",
+    "tatsaechlicherWertEnthaelt": "Zahlungsbedingung wählen"
+  },
+  "E46": {
+    "paket": "AP-R",
+    "grund": "Endversion-Angleich U-242: Einheit wählen · Position 1 ersetzt Position 1 fehlt",
+    "erwarteterWert": "Position 1 fehlt",
+    "tatsaechlicherWertEnthaelt": "Einheit wählen · Position 1"
+  },
   "E38": {
     "paket": "AP-EIN-2b",
     "grund": "KV nach Teil 6 gemaess P59"

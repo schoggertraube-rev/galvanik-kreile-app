@@ -62,6 +62,17 @@ Sichtlauf und die CI-Prüfungen des PR-Kopfs stehen noch aus.
   verfälschen dort die Quellen-Bindungsprüfung; sie sind nicht Teil des PRs.
 - RT04-11/12/14/15 sind nach P103 als `Endversion-Angleich Testmodell RT04`
   eingeordnet; ihre Assertions wurden nicht verändert.
+- Der abgebrochene 269-Fälle-Lauf auf `5dcee3ce` erreichte 251 Fälle und
+  lieferte fünf Befunde: E25, E26 und E46 fordern ältere Formulierungen, die
+  U-242 widersprechen; nur die konkret benannten Textunterschiede stehen auf
+  der Rot-Liste. Die generierten Assertions sind unverändert; die weiteren
+  Folgen der drei Fälle sind ergänzend durch realRender belegt. K26 wurde bei
+  einer beanstandeten Anschrift auf den Status `pending` korrigiert und die
+  Speichersperre getestet. E08 meldete einen Datenbank-Deadlock während des
+  Teststarts; sein genauer Ort ist noch nicht belegt. Die Bereinigung der
+  isolierten Replay-Fixtures wiederholt ausschließlich eine abgebrochene
+  Deadlock-Transaktion einmal mit Log; jeder andere oder erneute Fehler bleibt
+  sichtbar. Ein vollständiger Lauf auf dem endgültigen Kopf ist noch offen.
 
 ## Vorgesehener Owner-Klickweg
 

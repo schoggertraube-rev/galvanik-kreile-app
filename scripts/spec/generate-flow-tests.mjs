@@ -280,6 +280,11 @@ function readAndValidateExpectedRed(document) {
     if (typeof entry.paket !== "string" || !entry.paket.startsWith("AP-")) throw new Error(`FLOW_EXPECTED_RED_PACKAGE_REQUIRED:${id}`);
     if (acceptedPackages.has(entry.paket)) throw new Error(`FLOW_EXPECTED_RED_ACCEPTED_PACKAGE:${id}:${entry.paket}`);
     if (typeof entry.grund !== "string" || entry.grund.trim().length === 0) throw new Error(`FLOW_EXPECTED_RED_REASON_REQUIRED:${id}`);
+    if ((entry.erwarteterWert !== undefined || entry.tatsaechlicherWertEnthaelt !== undefined)
+      && (typeof entry.erwarteterWert !== "string" || !entry.erwarteterWert.trim()
+        || typeof entry.tatsaechlicherWertEnthaelt !== "string" || !entry.tatsaechlicherWertEnthaelt.trim())) {
+      throw new Error(`FLOW_EXPECTED_RED_TEXT_DIFFERENCE_INVALID:${id}`);
+    }
   }
   return expectedRed;
 }

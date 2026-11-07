@@ -2366,7 +2366,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
           const pending = row.origin?.startsWith("erkannt") && row.value && !row.invalid;
           const complete = Boolean(row.value) && !row.invalid && !pending;
           const text = pending ? `${row.label} ${row.value} · erkannt, bestätigen` : complete ? `${row.label} ${row.value} · vorhanden` : row.instruction ?? `${row.label} ${row.id === "kundentyp" || row.id === "zahlungsbedingung" ? "wählen" : "eintragen"}`;
-          return <button type="button" className={`ev-kf-pl-z ${styles.customerChecklistRow}`} key={row.id} data-spec-id={`kundeneu.pruefliste.${row.id}`} data-state={complete ? "ok" : pending ? "pending" : "open"} onClick={() => focusCustomerField(row.target)}><Chip text={pending ? "erkannt" : complete ? "ok" : "offen"} ton={complete ? "ok" : "warn"}/><span>{text}</span></button>;
+          return <button type="button" className={`ev-kf-pl-z ${styles.customerChecklistRow}`} key={row.id} data-spec-id={`kundeneu.pruefliste.${row.id}`} data-state={complete ? "ok" : pending || row.instruction ? "pending" : "open"} onClick={() => focusCustomerField(row.target)}><Chip text={pending ? "erkannt" : complete ? "ok" : "offen"} ton={complete ? "ok" : "warn"}/><span>{text}</span></button>;
         };
         const addressTarget = ({ street:"strasse", houseNumber:"hausnummer", zipCode:"plz", city:"ort", country:"land" } as const)[customerReadiness.felder.find((field): field is "street" | "houseNumber" | "zipCode" | "city" | "country" => ["street", "houseNumber", "zipCode", "city", "country"].includes(field)) ?? "street"];
         const customerDialog = <KrDialog

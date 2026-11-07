@@ -326,6 +326,28 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(email).toHaveAttribute("data-state", "ok");
   });
 
+  it("K26 marks an address needing correction as pending and keeps it unsaved", async () => {
+    const api = ports({
+      checkCustomerAddress: vi.fn().mockResolvedValue({ code: "OK", data: {
+        kind: "review", message: "PLZ 12345 gehört zu Teststadt – nicht zu Falschort",
+        status: null, blocked: true, suggestions: [{ zipCode: "12345", city: "Teststadt", street: "Testweg" }],
+      } }),
+    });
+    render(<GlobalCreateFlow ports={api} />);
+    await openIntent("CUSTOMER");
+    fireEvent.click(screen.getByRole("button", { name: "Firma" }));
+    fireEvent.change(screen.getByLabelText("Firmenname"), { target: { value: "SYNTHETISCH K26" } });
+    fillRequiredCustomerAddress();
+    fireEvent.change(screen.getByLabelText("Ort"), { target: { value: "Falschort" } });
+
+    const address = document.querySelector('[data-spec-id="kundeneu.pruefliste.anschrift"]');
+    await waitFor(() => expect(address).toHaveAttribute("data-state", "pending"));
+    expect(address).toHaveTextContent("Anschrift mit den Vorschlägen abgleichen");
+    fireEvent.click(screen.getByRole("button", { name: "Kunde speichern" }));
+    expect(api.createCustomer).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Ort")).toHaveValue("Falschort");
+  });
+
   it("keeps the secured original reachable from a continuation and does not claim an unconfirmed file is saved",async()=>{
     const sourceId='1d3ebdf6-bd5d-4bb4-97e1-cc071cd6676e',fileId='9cb71504-2d70-43d2-b316-9b35635dc9ac';
     const capture:IntakeCapture={id:sourceId,version:1,text:'SYNTHETISCH Original',customerId:null,orderId:null,assignment:'offen',usage:'offen',concerns:[],continuation:{sourceId:'b9fef876-f146-41b8-85f3-d2a3aa091689',childIds:[]},files:[
@@ -1858,6 +1880,35 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     fireEvent.change(field!,{target:{value:'bar'}});
     expect(screen.getByRole('combobox',{name:'Zahlungsmodus'})).toHaveValue('abholung');
     expect(api.createCustomer).not.toHaveBeenCalled();expect(api.createDirectIntake).not.toHaveBeenCalled();
+  });
+
+  it("E26 treats an unapproved legacy invoice preference as missing", async () => {
+    const api = ports(), listed = await api.listCustomers();
+    if (listed.code !== "OK") throw Error("CUSTOMER_FIXTURE_REQUIRED");
+    api.searchIntakeCustomers = vi.fn().mockResolvedValue({ code: "OK", customers: listed.customers.map(customer => ({
+      ...customer, paymentPreference: "rechnung", invoiceTermsEnabled: false,
+    })) });
+    render(<GlobalCreateFlow ports={api} />); openFlow();
+    await searchAndSelectIntakeCustomer("SYNTHETISCH", /SYNTHETISCH Musterkunde GmbH.*übernehmen/);
+    fireEvent.click(screen.getByRole("button", { name: "Abholung" }));
+    expect(document.querySelector('[data-spec-id="eingang.pruefliste.kunde"]')).toHaveTextContent("Zahlungsbedingung wählen");
+    const mode = screen.getByRole("combobox", { name: "Zahlungsmodus" });
+    expect(mode).toHaveValue("");
+    expect(within(mode).getByRole("option", { name: /Rechnung auf Ziel/ })).toBeDisabled();
+    expect(api.createDirectIntake).not.toHaveBeenCalled();
+  });
+
+  it("E46 keeps the order unsaved and focuses the missing unit", async () => {
+    const api = ports();
+    render(<GlobalCreateFlow ports={api} />); openFlow();
+    await fillDirectIntakeForExistingCustomer();
+    const unit = screen.getByRole("combobox", { name: "Einheit" });
+    fireEvent.change(unit, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Wareneingang buchen" }));
+    expect(await screen.findByText("Noch offen: Einheit")).toBeInTheDocument();
+    await waitFor(() => expect(unit).toHaveFocus());
+    expect(document.querySelector('[data-spec-id="eingang.pruefliste.einheit"]')).toHaveTextContent("Einheit wählen · Position 1");
+    expect(api.createDirectIntake).not.toHaveBeenCalled();
   });
 
   it("moves focus into the dialog and closes the non-persistent intake with Escape", async () => {
