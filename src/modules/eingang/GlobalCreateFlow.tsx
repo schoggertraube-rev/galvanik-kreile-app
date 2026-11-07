@@ -1770,8 +1770,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       if (result.data.positions.length > 0) {
         const recognized = result.data.positions.map((position) => {
           const unit = normaliseOrderPositionUnit(position.unit);
-          const surface = normaliseOrderPositionSurface(position.surfaceRequested);
-          if (!unit || !surface) throw new Error("INTAKE_RECOGNITION_POSITION_INVALID");
+          const surface = position.surfaceRequested ? normaliseOrderPositionSurface(position.surfaceRequested) : "";
+          if (!unit || surface === null) throw new Error("INTAKE_RECOGNITION_POSITION_INVALID");
           return ({
           ...newIntakePosition(),
           catalogServiceId: FREE_TEXT_SERVICE,
@@ -1796,7 +1796,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
           { key: `position-${index+adoptedOffset}-name`, label: `Position ${index + adoptedOffset + 1}`, value: position.name, source: position.source },
           ...(position.quantity ? [{ key: `position-${index+adoptedOffset}-quantity`, label: "Menge", value: String(position.quantity), source: position.source }] : []),
           { key: `position-${index+adoptedOffset}-unit`, label: "Einheit", value: position.unit, source: position.source },
-          { key: `position-${index+adoptedOffset}-surface`, label: "Oberfläche", value: position.surfaceRequested, source: position.source },
+          ...(position.surfaceRequested ? [{ key: `position-${index+adoptedOffset}-surface`, label: "Oberfläche", value: position.surfaceRequested, source: position.source }] : []),
         ]),
       ]);
       setLastRecognizedText(intakeRecognitionText);

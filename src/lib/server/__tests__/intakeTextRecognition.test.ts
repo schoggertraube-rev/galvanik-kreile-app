@@ -39,6 +39,12 @@ describe("recognizeIntakeText", () => {
     ]);
   });
 
+  it("erfindet keine Oberfläche, wenn im Text keine genannt wird", () => {
+    expect(recognizeIntakeText("2 Stück Halter").positions).toEqual([
+      expect.objectContaining({ name: "Halter", quantity: "2", surfaceRequested: "" }),
+    ]);
+  });
+
   it("übernimmt bei unbestimmter Menge keine Zahl", () => {
     const result = recognizeIntakeText("Ein paar Teile verzinken.");
     expect(result.positions).toEqual([
