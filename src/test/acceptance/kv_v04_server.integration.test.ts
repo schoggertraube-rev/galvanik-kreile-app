@@ -442,3 +442,54 @@ it('KV-09 uses one canonical follow-up task and a protected quote projection, wi
  expect(await withSession(fixture,()=>getQuoteFollowupsForTodayAction())).toMatchObject({code:'OK',tasks:[]});
  expect((await sql`SELECT id::text,status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${expiryTask.id}::uuid`)[0]).toMatchObject({id:expiryTask.id,status:'offen'});
 });
+
+
+it('KV-01 prepares the saved original through real recognition and customer search, then creates one linked quote',async()=>{
+ const fixture=await createFixture();
+ // This isolated TEST customer name is deliberately the recognition target, not a product sample.
+ await sql`UPDATE public.customers SET name='TEST Schmidt',company_name='TEST Schmidt',contact_person='Sabrina Schmidt' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fixture.customerId}`;
+ const {saveIntakeNoteAction,selectIntakeConcernAction}=await import('@/app/actions/eingang.actions');
+ const {prepareQuoteFromIntakeAction,createQuoteAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
+ const itemId=randomUUID();
+ const original=await withSession(fixture,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'Schmidt, 4 Weber-Trompeten verchromen, KV, in zwei Wochen; Die alten Halter bitte erhalten.'}));
+ if(original.code!=='OK')throw Error('TEST_PREPARE_SOURCE:'+original.code);
+ const chosen=await withSession(fixture,()=>selectIntakeConcernAction({itemId,version:original.capture.version,clientEventId:randomUUID(),concern:'kv_anfrage'}));
+ if(chosen.code!=='OK')throw Error('TEST_PREPARE_CONCERN:'+chosen.code);
+ const prepared=await withSession(fixture,()=>prepareQuoteFromIntakeAction({sourceItemId:itemId}));
+ expect(prepared).toMatchObject({code:'OK',preparation:{source:{itemId,version:chosen.capture.version,message:false},customer:null,proposals:[{id:fixture.customerId,name:'TEST Schmidt'}],recognition:{positions:[{name:'Weber-Trompeten',quantity:'4',surfaceRequested:'Verchromen'}],deliveryWeeks:{value:2}},specialRequests:'Die alten Halter bitte erhalten.'}});
+ if(prepared.code!=='OK')throw Error('TEST_PREPARE_FAILED:'+prepared.code);
+ expect((await sql`SELECT count(*)::int n FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`)[0].n).toBe(0);
+ const part=prepared.preparation.recognition.positions[0];
+ const quote=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',note:prepared.preparation.text,source:prepared.preparation.source,specialRequests:prepared.preparation.specialRequests,deliveryWeeks:prepared.preparation.recognition.deliveryWeeks?.value,positions:[{name:part.name,quantity:Number(part.quantity),material:null,surfaceRequested:part.surfaceRequested,unitPriceCents:1000}]}));
+ expect(quote).toMatchObject({code:'OK',quote:{lifecycle:{sourceItemId:itemId,specialRequests:'Die alten Halter bitte erhalten.',deliveryWeeks:2}}});
+ if(quote.code!=='OK')throw Error('TEST_PREPARE_CREATE:'+quote.code);
+ expect(await withSession(fixture,()=>readQuoteAction({quoteId:quote.quote.quoteId}))).toMatchObject({code:'OK',quote:{positions:[{name:'Weber-Trompeten',quantity:4}],lifecycle:{sourceItemId:itemId}}});
+ expect((await sql`SELECT vorgang_art,vorgang_id,version FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`)[0]).toMatchObject({vorgang_art:'kv',vorgang_id:quote.quote.quoteId,version:chosen.capture.version+1});
+ expect((await sql`SELECT count(*)::int n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND nachher->>'action'='kv.angelegt'`)[0].n).toBe(1);
+});
+
+
+it('KV-02 prepares an existing TEST mail original with its file and active customer instruction, without another intake',async()=>{
+ const fixture=await createFixture();
+ await sql`INSERT INTO public.app_user_rights(tenant_id,user_id,bereich,granted_by) VALUES(${KREILE_TENANT_SLUG},${fixture.actorId}::uuid,'mails',${fixture.actorId}::uuid)`;
+ const {saveIntakeNoteAction,selectIntakeConcernAction}=await import('@/app/actions/eingang.actions');
+ const {prepareQuoteFromIntakeAction,createQuoteAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
+ const itemId=randomUUID(),fileId=randomUUID(),agreementId=randomUUID();
+ const original=await withSession(fixture,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'KV bitte: 4 Stück Halter verchromen; die alten Halter bitte erhalten.',context:{customerId:fixture.customerId}}));
+ if(original.code!=='OK')throw Error('TEST_MAIL_PREP_SOURCE:'+original.code);
+ // Existing imported-mail precondition, synthetic and isolated: no Graph/Storage delivery is claimed here.
+ await sql`UPDATE public.intake_item SET kanal='mail',richtung='rein',graph_message_id=${'TEST-kv-mail-'+itemId},absender_adresse='test-kv@example.invalid',betreff='TEST KV mit Originalfoto' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`;
+ await sql`INSERT INTO public.intake_file(id,tenant_id,item_id,client_key,art,dateiname,mime,bytes,sha256,speicherpfad,aufgenommen_am,aufgenommen_von,reihenfolge,lesbar,geoeffnet,erkennung_status) VALUES(${fileId}::uuid,${KREILE_TENANT_SLUG},${itemId}::uuid,${fileId}::uuid,'foto','TEST-Halter.jpg','image/jpeg',3,${'e'.repeat(64)},${KREILE_TENANT_SLUG+'/'+'e'.repeat(64)},statement_timestamp(),${fixture.actorId}::uuid,1,true,false,'fertig')`;
+ await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${KREILE_TENANT_SLUG},${itemId}::uuid,'original_gespeichert',${randomUUID()}::uuid,${fixture.actorId},${sql.json({fileId,sha256:'e'.repeat(64),syntheticFixture:true})}::jsonb)`;
+ await sql`INSERT INTO public.customer_agreements(id,tenant_id,customer_id,position,bezeichnung,wert,hinweis,created_by) VALUES(${agreementId}::uuid,${KREILE_TENANT_SLUG},${fixture.customerId},1,'TEST Bearbeitung','Originalteile erhalten',true,${fixture.actorId}::uuid)`;
+ const chosen=await withSession(fixture,()=>selectIntakeConcernAction({itemId,version:original.capture.version,clientEventId:randomUUID(),concern:'kv_anfrage'}));
+ if(chosen.code!=='OK')throw Error('TEST_MAIL_PREP_CONCERN:'+chosen.code);
+ const prepared=await withSession(fixture,()=>prepareQuoteFromIntakeAction({sourceItemId:itemId}));
+ expect(prepared).toMatchObject({code:'OK',preparation:{source:{itemId,message:true},customer:{id:fixture.customerId},files:[{id:fileId,name:'TEST-Halter.jpg'}],confirmedCustomerHints:['TEST Bearbeitung: Originalteile erhalten'],specialRequests:expect.stringContaining('die alten Halter bitte erhalten')}});
+ if(prepared.code!=='OK')throw Error('TEST_MAIL_PREPARE:'+prepared.code);
+ const quote=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',note:prepared.preparation.text,source:prepared.preparation.source,specialRequests:prepared.preparation.specialRequests,positions:[{name:'TEST Halter',quantity:4,material:null,surfaceRequested:'Verchromen',unitPriceCents:1000}]}));
+ if(quote.code!=='OK')throw Error('TEST_MAIL_PREP_CREATE:'+quote.code);
+ expect(await withSession(fixture,()=>readQuoteAction({quoteId:quote.quote.quoteId}))).toMatchObject({code:'OK',quote:{lifecycle:{sourceMessageId:itemId,specialRequests:expect.stringContaining('Originalteile erhalten')}}});
+ expect((await sql`SELECT source.vorgang_id,file.item_id::text FROM public.intake_file file JOIN public.intake_item source ON source.tenant_id=file.tenant_id AND source.id=file.item_id WHERE file.tenant_id=${KREILE_TENANT_SLUG} AND file.id=${fileId}::uuid`)[0]).toEqual({vorgang_id:quote.quote.quoteId,item_id:itemId});
+ expect((await sql`SELECT count(*)::int n FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND graph_message_id=${'TEST-kv-mail-'+itemId}`)[0].n).toBe(1);
+});

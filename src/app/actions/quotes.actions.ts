@@ -9,11 +9,14 @@ import {
   resolveAuthorization,
   type AuthorizationSnapshot,
 } from "@/lib/server/authorization";
-import { readCustomerSummary } from "@/lib/server/customerSummaryRead";
+import { readCustomerSummary,readCustomerListSignals } from "@/lib/server/customerSummaryRead";
+import {searchOrderIntakeCustomers} from '@/lib/server/orderIntakeRead';
+import {recognizeIntakeText} from '@/lib/server/intakeTextRecognition';
+import {findRecognizedCustomers} from '@/modules/eingang/public';
 import {withPrivilegedTenantTransaction} from "@/lib/server/privilegedDb";
 import { createOrderIntake } from "@/lib/server/commands/orderIntakeCommand";
 import { readOrderIntakeReceipt } from "@/lib/server/orderIntakeRead";
-import {recordIntakeQuoteEffect,bindQuoteGoodsReceiptToCreatedOrder,writeQuoteGoodsReceiptInTransaction,recordIntakeTaskEffect} from '@/modules/eingang/server-public';
+import {recordIntakeQuoteEffect,bindQuoteGoodsReceiptToCreatedOrder,writeQuoteGoodsReceiptInTransaction,recordIntakeTaskEffect,readIntakeAssignment} from '@/modules/eingang/server-public';
 import {parseQuoteGoodsReceiptInput} from '@/modules/eingang/public';
 import {syncQuoteFollowupTask,readQuoteFollowupTasksForToday} from '@/modules/tasks/server-public';
 import {readCustomerProfile} from '@/modules/customers/server-public';
@@ -329,4 +332,32 @@ export async function getQuoteFollowupsForTodayAction(){
   const tasks=await withPrivilegedTenantTransaction(auth.data,tx=>readQuoteFollowupTasksForToday(tx,auth.data));
   return {code:'OK' as const,tasks};
  }catch(error){console.error('[QUOTE_FOLLOWUP_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV-Nachfassaufgaben konnten nicht geladen werden.'};}
+}
+
+/** Preparation reads the existing original and search ports; it never creates or assigns a customer. */
+export async function prepareQuoteFromIntakeAction(input:{sourceItemId:string;customerId?:string}){
+ noStore();
+ if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(key=>!['sourceItemId','customerId'].includes(key))||typeof input.sourceItemId!=='string'||!input.sourceItemId||input.customerId!==undefined&&(typeof input.customerId!=='string'||!input.customerId||input.customerId.length>128))return {code:'VALIDATION_ERROR' as const,message:'Original oder gewählter Kunde fehlt.'};
+ try{
+  const result=await resolveAuthorization(),denied=authorizationFailure(result);if(denied||!result.ok)return denied!;
+  const auth=result.data;if(!quoteCommandContext(auth).capabilities.canCreateQuote)return {code:'FORBIDDEN' as const,message:'KV-Vorbereitung ist nicht freigegeben.'};
+  const original=await readIntakeAssignment({itemId:input.sourceItemId,mode:'rein'},readCustomerProfile);
+  if(original.code!=='OK')return original;
+  const source=original.view;
+  if(source.restricted)return {code:'FORBIDDEN' as const,message:'Nachrichten-Inhalte benötigen Mails.'};
+  const text=source.text;
+  if(!text?.trim())return {code:'VALIDATION_ERROR' as const,message:'Lesbarer Originaltext fehlt. Original prüfen oder Text ergänzen.'};
+  if(text.length>6000)return {code:'VALIDATION_ERROR' as const,message:'Der Originaltext ist für die schnelle Vorbereitung zu lang. Relevanten Text im bestehenden Eingang bestätigen.'};
+  if(input.customerId&&source.customer&&source.customer.id!==input.customerId)return {code:'CONFLICT' as const,message:'Das Original gehört einem anderen Kunden.'};
+  const recognition=recognizeIntakeText(text);
+  const identifiers={email:recognition.fields.find(field=>field.field==='email')?.value??source.senderAddress??undefined,phone:recognition.fields.find(field=>field.field==='phone')?.value};
+  const matches=await findRecognizedCustomers(text,async query=>({code:'OK',customers:await searchOrderIntakeCustomers(auth,{query})}),identifiers);
+  if(matches.code!=='OK')return matches;
+  const customerId=source.customer?.id??input.customerId??null;
+  const customer=customerId?await withPrivilegedTenantTransaction(auth,tx=>readCustomerProfile(tx,auth.tenantId,customerId)):null;
+  if(customerId&&!customer)return {code:'NOT_FOUND' as const,message:'Gewählter Kunde ist nicht verfügbar.'};
+  const hints=customerId?(await readCustomerListSignals(auth,[customerId])).get(customerId)?.hints.filter(hint=>hint.kind==='agreement').map(hint=>hint.text)??[]:[];
+  const specialRequests=[...hints,...(recognition.instructions??[]).map(value=>value.text)];
+  return {code:'OK' as const,preparation:{source:{itemId:source.itemId,version:source.version,message:source.channel==='mail'},text,files:source.files,customer:customer?{id:customer.id,name:customer.name}:null,customerQuery:matches.query,proposals:matches.customers.map(value=>({id:value.id,name:value.name,reason:'Treffer im Original: '+matches.query})),recognition,confirmedCustomerHints:hints,specialRequests:specialRequests.length?[...new Set(specialRequests)].join('\n'):null}};
+ }catch(error){console.error('[QUOTE_INTAKE_PREPARATION_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV-Vorbereitung konnte nicht sicher gelesen werden. Original bleibt erhalten.'};}
 }

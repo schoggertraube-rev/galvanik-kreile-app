@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "ebeef4890ae68c7f8abf872c7eb81df30be205c803aae3d3df130cfe883ac8c3",
+  "inventorySha256": "cfd74bccffe69c6e481fa2739410c8b068e00228c20d8f1379574d0c16635ffc",
   "testedWriteActions": {
     "src/app/actions/eingang.actions.ts#saveIncomingInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
@@ -246,6 +246,9 @@
       "src/test/acceptance/kv_v04_server.integration.test.ts"
     ],
     "src/app/actions/quotes.actions.ts#getQuoteFollowupsForTodayAction": [
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
+    ],
+    "src/app/actions/quotes.actions.ts#prepareQuoteFromIntakeAction": [
       "src/test/acceptance/kv_v04_server.integration.test.ts"
     ]
   },
