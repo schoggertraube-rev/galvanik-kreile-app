@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { Inbox, LogOut, Mail, PackageCheck, Settings, X } from "lucide-react";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect,useRef,useState } from "react";
+import { usePathname,useRouter } from "next/navigation";
 import { logout } from "@/app/actions/auth";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { requestGlobalCreate } from "./GlobalCreateFlow";
@@ -11,10 +11,20 @@ import styles from "./TargetShell.module.css";
 
 export function MoreMenu({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter();
+  const pathname=usePathname();
+  const openedAtPath=useRef(pathname);
   const { status, hasPermission, hasArea } = usePermissions();
   const [busy, setBusy] = useState(false);
   const settingsVisible = hasPermission("perm_sys_toggles") || hasPermission("perm_sys_users") || hasPermission("perm_sys_diag");
   const supportedProfile = status === "authenticated";
+
+  // Keep the initiating link mounted until navigation commits. Settings uses a
+  // native document navigation, consistent with the desktop settings entry.
+  useEffect(()=>{
+    if(!open){openedAtPath.current=pathname;return;}
+    if(pathname!==openedAtPath.current)onClose();
+  },[pathname,open,onClose]);
+  const closeIfCurrentRoute=(href:string)=>{if(pathname===href)onClose();};
 
   if (!open || !supportedProfile) return null;
 
@@ -36,19 +46,19 @@ export function MoreMenu({ open, onClose }: { open: boolean; onClose: () => void
           <button type="button" className={styles.moreClose} onClick={onClose} aria-label="Schließen"><X aria-hidden="true" /></button>
         </header>
         <div className={styles.moreGrid}>
-          {hasArea("mails") ? <Link className={styles.moreTile} data-spec-id="navigation.nachrichten" href="/nachrichten" prefetch={false} onNavigate={onClose}>
+          {hasArea("mails") ? <Link className={styles.moreTile} data-spec-id="navigation.nachrichten" href="/nachrichten" prefetch={false} onNavigate={()=>closeIfCurrentRoute('/nachrichten')}>
             <Mail aria-hidden="true" /><strong>Nachrichten</strong>
           </Link> : null}
           {hasPermission("perm_data_orders") ? <button type="button" className={styles.moreTile} onClick={() => { onClose(); requestGlobalCreate("DIRECT_INTAKE"); }}>
             <Inbox aria-hidden="true" /><strong>Neu erfassen</strong>
           </button> : null}
-          {hasPermission("perm_view_leitstand") ? <Link className={styles.moreTile} href="/warendurchlauf" prefetch={false} onNavigate={onClose}>
+          {hasPermission("perm_view_leitstand") ? <Link className={styles.moreTile} href="/warendurchlauf" prefetch={false} onNavigate={()=>closeIfCurrentRoute('/warendurchlauf')}>
             <PackageCheck aria-hidden="true" /><strong>Werkstatt</strong>
           </Link> : null}
           {settingsVisible ? (
-            <Link className={styles.moreTile} href="/settings" prefetch={false} onNavigate={onClose}>
+            <a className={styles.moreTile} href="/settings" onClick={event=>{if(pathname==='/settings'){event.preventDefault();onClose();}}}>
               <Settings aria-hidden="true" /><strong>Einstellungen</strong>
-            </Link>
+            </a>
           ) : null}
           <button type="button" className={styles.moreTile} onClick={() => void signOut()} disabled={busy}>
             <LogOut aria-hidden="true" /><strong>Abmelden</strong>

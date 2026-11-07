@@ -1,4 +1,5 @@
 export { CustomerCardView } from "./ui/CustomerCardView";
+export type {CustomerHint,CustomerListSignals} from './server/types';
 export { CustomerAgreementDialog } from "./ui/CustomerAgreementDialog";
 export { kundeVollstaendigkeit } from "./orderReadiness";
 export { CUSTOMER_AGREEMENT_TYPES } from "./server/types";

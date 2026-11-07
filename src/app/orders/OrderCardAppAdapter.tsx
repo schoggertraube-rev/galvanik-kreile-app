@@ -272,11 +272,13 @@ export function OrderCardAppAdapter({
   onOpenCustomer,
   onClose,
   fallbackHref,
+  initialFocus,
 }: {
   orderId: string;
   onOpenCustomer?: (id: string) => void;
   onClose?: () => void;
   fallbackHref?: "/orders";
+  initialFocus?:'photos';
 }) {
   const router = useRouter();
   const storeCustomer = useOverlayStore((s) => s.openCustomer);
@@ -977,6 +979,8 @@ export function OrderCardAppAdapter({
     onClose ?? (fallbackHref ? () => router.replace(fallbackHref) : storeClose);
   return <>
     <OrderCardView
+      initialPhotosOpen={initialFocus==='photos'}
+      photoPanel={state.kind==='data'?<div id={`order-documents-${state.card.id}`}><DomainAttachmentPanel targetType="ORDER" targetId={state.card.id}/></div>:null}
       state={state}
       actions={actions}
       attachmentPanel={
@@ -992,7 +996,7 @@ export function OrderCardAppAdapter({
           />
         ) : null
       }
-      documentsPanel={state.kind === "data" ? <><div id={`order-documents-${state.card.id}`}><DomainAttachmentPanel targetType="ORDER" targetId={state.card.id} /></div><div id={`order-communication-${state.card.id}`}><CommunicationPanel targetType="ORDER" targetId={state.card.id} /></div></> : null}
+      documentsPanel={state.kind === "data" ? <div id={`order-communication-${state.card.id}`}><CommunicationPanel targetType="ORDER" targetId={state.card.id} /></div> : null}
       agreementMessage={agreementMessage}
       onOpenCustomer={onOpenCustomer ?? storeCustomer}
       onClose={close}

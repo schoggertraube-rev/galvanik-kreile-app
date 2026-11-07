@@ -218,6 +218,7 @@ export function CustomerCardView({
   />;
 
   const main = <>
+    {card.hints?.length?<KartenBlock><div className="kr-stapel" aria-label="Kundenhinweise">{card.hints.map((hint,index)=><Hinweis key={hint.kind+':'+index} ton="warn"><span style={hint.urgent?{color:'var(--ral)'}:undefined}>{hint.text}</span></Hinweis>)}</div></KartenBlock>:null}
     {missingForOrder.length ? <KartenBlock><Hinweis ton="warn">{readiness.text}</Hinweis></KartenBlock> : null}
     {next ? <KartenBlock><NaechsteAktion
       titel={`${next.orderNumber} · ${next.title} · Termin ${due(next.dueAt)}`}

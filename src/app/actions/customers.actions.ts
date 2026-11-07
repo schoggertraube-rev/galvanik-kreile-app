@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/db";
-import { customers, orders } from "@/db/schema";
+import { customers } from "@/db/schema";
 import { eq, ilike, or, and, sql } from "drizzle-orm";
 import type { InferSelectModel } from "drizzle-orm";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
@@ -12,10 +12,10 @@ import {
   hasAuthorizationArea,
   resolveAuthorization,
 } from "@/lib/server/authorization";
-import { readCustomerSummary } from "@/lib/server/customerSummaryRead";
+import { readCustomerSummary,readCustomerListSignals } from "@/lib/server/customerSummaryRead";
 import { readInvoiceTruth } from "@/lib/server/invoiceTruthRead";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
-import {customerContactLabel,customerSortKey,type CustomerAddressInput} from "@/modules/customers/public";
+import {customerContactLabel,customerSortKey,kundeVollstaendigkeit,type CustomerAddressInput,type CustomerListSignals,type CustomerStoredProfile} from "@/modules/customers/public";
 import {
   createCustomerCommand,
   readCustomerCreateReceiptCommand,
@@ -161,6 +161,7 @@ function mapDbCustomer(c: DbCustomer): Customer {
 
 export async function getCustomersDb(): Promise<ActionResult<Array<Customer & {
   activeOrderCount: number;
+  activeQuoteCount:number;hints:CustomerListSignals['hints'];complete:boolean;
 }>>> {
   noStore();
   const auth = await checkAppAuth();
@@ -183,19 +184,13 @@ export async function getCustomersDb(): Promise<ActionResult<Array<Customer & {
         sql`coalesce(${customers.name}, '') NOT LIKE 'Capture%'`
       )
     ).orderBy(customers.createdAt);
-    const activeCounts = await db.select({
-      customerId: orders.customerId,
-      count: sql<number>`count(*)::int`,
-    }).from(orders).where(and(
-      eq(orders.tenantId, tenantId),
-      sql`coalesce(${orders.station}, '') not in ('abgeholt', 'versendet', 'raus')`,
-      sql`coalesce(${orders.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`,
-    )).groupBy(orders.customerId);
-    const countByCustomer = new Map(activeCounts.map((entry) => [entry.customerId, Number(entry.count)]));
-    const data = dbCustomers.map((customer) => ({
-      ...mapDbCustomer(customer),
-      activeOrderCount: countByCustomer.get(customer.id) ?? 0,
-    })).filter(customer=>customer.type!=="lieferant"||hasAuthorizationArea(authRes.data,"geld")).sort((a,b)=>customerSortKey({...a,customerType:a.type}).localeCompare(customerSortKey({...b,customerType:b.type}),"de")||a.id.localeCompare(b.id));
+    const signals=await readCustomerListSignals(authRes.data,dbCustomers.map(customer=>customer.id));
+    const data = dbCustomers.map((record) => {
+      const customer=mapDbCustomer(record),signal=signals.get(record.id);if(!signal)throw Error('CUSTOMER_SIGNALS_MISSING');
+      const readiness=kundeVollstaendigkeit({...customer,customerType:customer.type as CustomerStoredProfile['customerType']},{geld:hasAuthorizationArea(authRes.data,'geld')});
+      const hints=[...signal.hints,...(!readiness.vollstaendig?[{kind:'incomplete' as const,text:readiness.text.replace('Unvollständig – für Auftrag fehlt:','Für Auftrag fehlt:').replace('Unvollständig – ',''),urgent:false}]:[])];
+      return {...customer,...signal,hints,complete:readiness.vollstaendig};
+    }).filter(customer=>customer.type!=="lieferant"||hasAuthorizationArea(authRes.data,"geld")).sort((a,b)=>Number(b.hints.length>0)-Number(a.hints.length>0)||customerSortKey({...a,customerType:a.type}).localeCompare(customerSortKey({...b,customerType:b.type}),"de")||a.id.localeCompare(b.id));
     return { ok: true, data };
   } catch (error) {
     console.error("Failed to get customers from DB:", error);

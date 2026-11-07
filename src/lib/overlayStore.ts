@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 export type OverlayType =
-  | { type: 'order'; id: string }
+  | { type: 'order'; id: string;focus?:'photos' }
   | { type: 'customer'; id: string; prefill?: unknown }
   | { type: 'item'; orderId: string; itemId: string }
   | { type: 'invoice'; id: string }
@@ -10,7 +10,7 @@ export type OverlayType =
 interface OverlayState {
   stack: OverlayType[];
 
-  openOrder: (id: string) => void;
+  openOrder: (id: string,focus?:'photos') => void;
   openCustomer: (id: string,prefill?:unknown) => void;
   openItem: (orderId: string, itemId: string) => void;
   openInvoice: (id: string) => void;
@@ -31,8 +31,8 @@ export const useOverlayStore = create<OverlayState>((set) => {
   return {
     stack: [],
 
-    openOrder: (id) => set((state) => ({
-      stack: [...state.stack, { type: 'order', id }],
+    openOrder: (id,focus) => set((state) => ({
+      stack: [...state.stack, { type: 'order', id,...(focus?{focus}:{}) }],
       orderStack: [...state.orderStack, id]
     })),
     openCustomer: (id,prefill) => set((state) => ({ stack: [...state.stack, { type: 'customer', id, prefill }] })),

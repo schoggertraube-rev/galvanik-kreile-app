@@ -92,6 +92,12 @@ export function KreileAppShell({ children, globalCreate,loginHandle }: { childre
       setMoreOpen(true);
       return;
     }
+    // Enter settings as a complete document. WebKit can receive its Flight
+    // response without committing the client transition after repeated visits.
+    if (target === "einstellungen") {
+      window.location.assign(ROUTES[target]);
+      return;
+    }
     router.push(ROUTES[target]);
   };
 

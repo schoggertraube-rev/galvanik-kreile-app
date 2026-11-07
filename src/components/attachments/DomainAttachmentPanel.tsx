@@ -144,7 +144,7 @@ export function DomainAttachmentPanel({ targetType, targetId }: { targetType: "C
     } });
   };
 
-  return <section className={styles.panel} aria-label="Fotos und Dokumente">
+  return <section className={styles.panel} aria-label="Fotos und Dokumente" data-domain-uploading={state==='uploading'||analyzing!==null?'true':undefined}>
     <header><div><p>Privater Ablageort</p><h3>Fotos & Dokumente</h3></div><button type="button" onClick={() => input.current?.click()} disabled={state === "uploading"}><Paperclip />Hinzufügen</button></header>
     <input ref={input} className={styles.file} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => void choose(event.target.files?.[0])} />
     {state === "loading" || state === "uploading" ? <p className={styles.status} role="status"><Loader2 />{message || "Dokumente werden geladen …"}</p> : null}
