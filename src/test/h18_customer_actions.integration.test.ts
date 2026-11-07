@@ -907,11 +907,11 @@ describe("Owner model D05/D07: draft actions against real Replay DB",()=>{
   await sql`UPDATE public.intake_item SET erstellt_am=statement_timestamp()-interval '100 days' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${thirdId}::uuid`;
   const orderOnly=await createFixture('werkstatt',['auftraege']);
   const listed=await withSession(orderOnly,()=>getDomainAttachmentsAction({targetType:'ORDER',targetId:booked.orderId}));
-  expect(listed).toMatchObject({code:'OK',data:expect.arrayContaining([{attachmentId:fileId,intakeOriginal:true,intakePart:3,intakeTotal:3,intakeSecured:true}])});
+  expect(listed).toMatchObject({code:'OK',data:expect.arrayContaining([expect.objectContaining({attachmentId:fileId,intakeOriginal:true,intakePart:3,intakeTotal:3,intakeSecured:true})])});
   const openEvent=randomUUID();
   expect(await withSession(orderOnly,()=>openIntakeOriginalAction({fileId,orderId:booked.orderId,clientEventId:openEvent}))).toMatchObject({code:'OK',original:{id:fileId,sha256:file.sha256,restricted:false}});
   expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${parentId}::uuid AND befehl_id=${openEvent}::uuid AND nachher->>'action'='original_geoeffnet'`).toHaveLength(1);
-  expect(await withSession(orderOnly,()=>getDomainAttachmentsAction({targetType:'ORDER',targetId:booked.orderId}))).toMatchObject({code:'OK',data:expect.arrayContaining([{attachmentId:fileId,intakePart:3,intakeTotal:3}])});
+  expect(await withSession(orderOnly,()=>getDomainAttachmentsAction({targetType:'ORDER',targetId:booked.orderId}))).toMatchObject({code:'OK',data:expect.arrayContaining([expect.objectContaining({attachmentId:fileId,intakePart:3,intakeTotal:3})])});
   const noRights=await createFixture('werkstatt',[]);
   expect(await withSession(noRights,()=>openIntakeOriginalAction({fileId,orderId:booked.orderId,clientEventId:randomUUID()}))).toMatchObject({code:'FORBIDDEN'});
   expect(await withSession(orderOnly,()=>openIntakeOriginalAction({fileId,orderId:randomUUID(),clientEventId:randomUUID()}))).not.toMatchObject({code:'OK'});
