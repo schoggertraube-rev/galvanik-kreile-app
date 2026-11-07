@@ -6,8 +6,8 @@ export {readIntakeAssignment,assignIntakeCustomer,setIntakeNoBusiness,createCust
 export {selectIntakeConcern,finishIntakeUse,reopenIntake} from './server/intakeLifecycle';
 export {recordIntakeTaskEffect} from './server/intakeTaskEffect';
 export {saveIntakeProspect} from './server/intakeProspect';
-export {readOpenIntakeMails} from "./server/intakeMailRead";
-export {importIntakeGraphMail} from './server/intakeMailImport';
+export {readOpenIntakeMails,readLinkedIntakeMails} from "./server/intakeMailRead";
+export {importIntakeGraphMail,linkImportedMail} from './server/intakeMailImport';
 export {openIntakeOriginal,confirmIntakeOriginal,readOrderIntakeOriginals} from "./server/intakeOriginal";
 export { saveGoodsReceipt,readGoodsReceipts,createGoodsReceiptStationBinding,writeCreatedOrderGoodsReceipt } from "./server/goodsReceipt";
 export type { GoodsReceiptResult,GoodsReceiptDependencies } from "./server/goodsReceipt";

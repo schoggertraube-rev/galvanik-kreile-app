@@ -380,7 +380,8 @@
         "getMicrosoftGraphStatusAction",
         "listOutlookInboxAction",
         "attachOutlookMailAction",
-        "sendCustomerMailAction"
+        "sendCustomerMailAction",
+        "importOutlookMailAction"
       ],
       "classification": "REAL_PENDING_SECRET",
       "open_reason": "Tenant-bound Microsoft Graph mail port. Preview activation is externally blocked by invalid_client and remains In Klärung.",

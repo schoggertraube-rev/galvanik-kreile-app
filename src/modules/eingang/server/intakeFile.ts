@@ -28,7 +28,7 @@ function inputFile(value: unknown): value is IntakeFileInput {
     && (item.deviceId === undefined || typeof item.deviceId === "string" && UUID.test(item.deviceId))
     && (item.captureOrigin === undefined || item.captureOrigin === "warenfoto" || item.captureOrigin === "dokument");
 }
-export async function prepareIntakeFile(input: unknown): Promise<IntakeFileGrant | Failure> {
+export async function prepareIntakeFile(input: unknown, ensureOriginal=false): Promise<IntakeFileGrant | Failure> {
   if (!inputFile(input)) return { code: "VALIDATION_ERROR", message: "Datei benötigt Name, Typ, SHA-256 und 1 bis 150 MB Inhalt." };
   const auth = await fileAuthorization();
   if ("code" in auth) return auth as Failure;
@@ -58,7 +58,7 @@ export async function prepareIntakeFile(input: unknown): Promise<IntakeFileGrant
       return row;
     });
     if('code' in pending)return pending;
-    if (["fertig", "fehler"].includes(pending.erkennung_status)) return { code: "OK", upload: null };
+    if (!ensureOriginal && ["fertig", "fehler"].includes(pending.erkennung_status)) return { code: "OK", upload: null };
     const existing = await createAdminClient().storage.from(BUCKET).info(pending.speicherpfad);
     if (!existing.error && existing.data) return { code: "OK", upload: null };
     const grant = await createAdminClient().storage.from(BUCKET).createSignedUploadUrl(pending.speicherpfad, { upsert: false });
@@ -96,7 +96,7 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
       if(!retry)return snapshot();
       file.erkennung_status='wartet';
     }
-    if (["fertig", "fehler"].includes(file.erkennung_status)) return snapshot();
+    if (!originalOnly && ["fertig", "fehler"].includes(file.erkennung_status)) return snapshot();
     const stored = await createAdminClient().storage.from(BUCKET).download(file.speicherpfad);
     if (stored.error || !stored.data) throw new Error("INTAKE_FILE_UPLOAD_INCOMPLETE");
     const bytes = new Uint8Array(await stored.data.arrayBuffer());
@@ -107,6 +107,8 @@ export async function finishIntakeFile(fileId: string, retryKey?: string, origin
         await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
         SELECT ${auth.tenantId},${file.item_id}::uuid,'original_gespeichert',${fileId}::uuid,${auth.userId},${JSON.stringify({fileId,sha256:file.sha256,bytes:bytes.byteLength})}::jsonb
         WHERE NOT EXISTS(SELECT 1 FROM public.intake_event WHERE tenant_id=${auth.tenantId} AND item_id=${file.item_id}::uuid AND art='original_gespeichert' AND befehl_id=${fileId}::uuid)`);
+        // As with a goods photo, completion records secured bytes, not an OCR success.
+        await tx.execute(sql`UPDATE public.intake_file SET erkennung_status='fertig',lesbar=false WHERE tenant_id=${auth.tenantId} AND id=${fileId}::uuid AND erkennung_status IN ('wartet','fehler')`);
       });
       return snapshot();
     }
