@@ -22,7 +22,8 @@ Die Kundenkarte bietet Absprachen und Eigenheiten. Typisierte Absprachen für Za
 - Der lokale Sichtlauf nutzt einen frischen App-Build, eine isolierte Replay-Datenbank und synthetische Nutzer. Die temporären Aufrufrouten öffnen die vorhandenen Kunden-, Auftrags- und Warenausgangsansichten; es wurden keine Dev-Daten verwendet.
 - Kundenbearbeitung: In beiden geprüften Zuständen und allen drei Größen wurden 15 von 15 Elementen gefunden, jeweils ohne roten Befund; die gelben Befunde betreffen Auswahlfarben und Fokusreihenfolge.
 - Absprache: Für den Leerzustand und für bestehende Absprachen wurden getrennte synthetische Kunden verwendet. Der Prüfer sucht beim Knopf `ganzer-kunde-kunde-west` den festen Beispielnamen aus dem Sichtvertrag; die App zeigt stattdessen den tatsächlichen Kundennamen. Die Abweichung der Hauptaktion in Leer- und Widerrufszustand ist gemäß P80 als `Endversion-Angleich absprache Hauptaktion` einzuordnen.
-- Kundenkarte, Auftragskarte und Warenausgang wurden ebenfalls geöffnet; der vollständige Sichtvertrag meldet dort weitere rote Kennungen. Ihre Zuordnung zum geänderten Paketumfang beziehungsweise zum späteren R53-Angleich ist noch offen. Diese Ansichten gelten damit noch nicht als abgenommen.
+- Warenausgangskopf: `rauspruefen.kopf.auftrag` und `rauspruefen.kopf.kunde` sind als `Endversion-Angleich 10.1 Kopf-Knöpfe` für den Folge-Angleich vermerkt (P98). Die aktuelle Ansicht zeigt die Werte als Fakten und bietet separate Aufrufknöpfe; die Vorgabe der verknüpften Werte ist noch nicht erfüllt.
+- Kundenkarte, Auftragskarte und Warenausgang wurden ebenfalls geöffnet; der vollständige Sichtvertrag meldet dort weitere rote Kennungen. Gemäß P98 gehören Punkte außerhalb der in `paket_folge.AP-ABS.eingriffe` bezeichneten Änderungen zum späteren R53-Angleich beziehungsweise Teil 2b. Sie sind damit nicht als repariert oder als vollständig abgenommene Ansichten auszugeben.
 
 ## Owner-Klickweg nach Abschluss der Prüfungen
 
