@@ -536,6 +536,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const intakeConcerns = recognizeNoteConcerns(intakeRecognitionText).filter(concern => !intakeDismissedConcerns.includes(concern.id));
   const [lastRecognizedText, setLastRecognizedText] = useState("");
   const [recognitionBusy, setRecognitionBusy] = useState(false);
+  const [recognitionOverflow, setRecognitionOverflow] = useState<{ total: number; adopted: number; saved: number; text: string; items: IntakePositionDraft[] } | null>(null);
+  const overflowRequest = useRef<Parameters<IntakeDraftPorts["saveDraft"]>[0] | null>(null);
   const [recognitionMarkers, setRecognitionMarkers] = useState<Array<{ key: string; label: string; value: string; source: string }>>([]);
   const [recognitionConfirmed, setRecognitionConfirmed] = useState(false);
   const [intakeSuggestionState, setIntakeSuggestionState] = useState<IntakeSuggestionState>({ kind: "idle" });
@@ -1077,6 +1079,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setIntakeRecognitionText("");
     setLastRecognizedText("");
     setRecognitionBusy(false);
+    setRecognitionOverflow(null);
+    overflowRequest.current=null;
     setRecognitionMarkers([]);
     setRecognitionConfirmed(false);
     setIntakeHandover("");
@@ -1093,6 +1097,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
   const saveIntakeDraft = async () => {
     if(draftWorking.current||directIntakeInFlight.current)return;
+    if(recognitionOverflow?.items.length){setFeedback({kind:"error",message:"Bitte die übrigen Positionen zuerst als weiteren Beleg speichern."});return;}
     if(!ports.drafts){setFeedback({kind:"error",message:"Entwurf nicht gespeichert · alle Eingaben sind noch da. Code: INTAKE_DRAFT_PORT_UNAVAILABLE."});return;}
     draftWorking.current=true;setBusy(true);setFeedback(null);
     const id=activeDraft?.id??intakeClientKey;
@@ -1164,6 +1169,43 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     date:directWishDate,confirmed:directConfirmedDate,term:intakeTermStatus,handover:intakeHandover,payment:intakePaymentMode,source:intakeSource,note:directNote,
     geprueft:intakeChecked,dismissedConcerns:intakeDismissedConcerns,documents:intakeSourceCaptures.map(capture=>capture.id),recognitionMarkers,recognitionConfirmed,lastRecognizedText,
     intakeWishDateOrigin,intakeHandoverOrigin,intakePaymentOrigin,intakeOrigin,intakeSourceOrigin,intakeTermChoice,intakeProcessingWeeks,intakeTermOrigin,intakeTermExpired};}
+
+  const saveRecognitionOverflow = async () => {
+    if (!recognitionOverflow?.items.length || draftWorking.current || directIntakeInFlight.current) return;
+    if (!ports.drafts) { setFeedback({kind:"error",message:"Weiterer Beleg nicht gespeichert · die Positionen sind noch da. Code: INTAKE_DRAFT_PORT_UNAVAILABLE."}); return; }
+    draftWorking.current=true; setBusy(true); setFeedback(null);
+    const id=overflowRequest.current?.id ?? crypto.randomUUID();
+    const items=recognitionOverflow.items.slice(0,20);
+    const markers=items.flatMap((item,index)=>[
+      {key:`position-${index}-name`,label:`Position ${index+1}`,value:item.name,source:"Text"},
+      ...(item.quantity?[{key:`position-${index}-quantity`,label:"Menge",value:item.quantity,source:"Text"}]:[]),
+      {key:`position-${index}-unit`,label:"Einheit",value:item.unit??"",source:"Text"},
+      {key:`position-${index}-surface`,label:"Oberfläche",value:item.surfaceRequested,source:"Text"},
+    ]);
+    const request=overflowRequest.current ?? {id,clientEventId:crypto.randomUUID(),art:"eingang" as const,
+      payload:{...draftPayload(),clientKey:id,text:recognitionOverflow.text,items,documents:[],geprueft:false,recognitionMarkers:markers,recognitionConfirmed:false,lastRecognizedText:recognitionOverflow.text},
+      lastField:null,expectedVersion:null};
+    overflowRequest.current=request;
+    try {
+      const result=await ports.drafts.saveDraft(request);
+      if(result.code!=="OK") { setFeedback({kind:"error",message:"Weiterer Beleg nicht gespeichert · die Positionen sind noch da. "+result.message}); return; }
+      const stored=result.drafts.find(draft=>draft.id===id&&draft.art==="eingang");
+      const storedItems=stored?.payload.items;
+      const requestedItems=request.payload.items;
+      if(stored?.payload.clientKey!==id || !Array.isArray(storedItems) || !Array.isArray(requestedItems)
+        || storedItems.length!==requestedItems.length
+        || requestedItems.some((item,index)=>storedItems[index]?.name!==item.name || storedItems[index]?.quantity!==item.quantity || storedItems[index]?.unit!==item.unit)) {
+        setFeedback({kind:"error",message:"Weiterer Beleg nicht bestätigt · die Positionen sind noch da. Erneut speichern. Code: INTAKE_OVERFLOW_READBACK_MISMATCH."});
+        return;
+      }
+      overflowRequest.current=null;
+      setRecognitionOverflow(current=>current?{...current,saved:current.saved+1,items:current.items.slice(20)}:null);
+      window.dispatchEvent(new Event("kreile:intake-drafts-changed"));
+    } catch(cause) {
+      console.error("[INTAKE_OVERFLOW_DRAFT_FAILED]",cause);
+      setFeedback({kind:"error",message:"Weiterer Beleg nicht gespeichert · die Positionen sind noch da. Code: INTAKE_OVERFLOW_DRAFT_FAILED."});
+    } finally { draftWorking.current=false; setBusy(false); }
+  };
 
   async function saveIntakeTextOriginal():Promise<IntakeCapture[]>{
     if(!intakeRecognitionText.trim())return intakeSourceCaptures;
@@ -1720,6 +1762,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
 
   const recognizeDirectIntakeText = async () => {
     if (!intakeRecognitionText.trim()) return;
+    if (recognitionOverflow?.items.length) { setFeedback({kind:"validation",message:"Bitte die übrigen Positionen zuerst als weiteren Beleg speichern."}); return; }
     setRecognitionBusy(true);
     setFeedback(null);
     try {
@@ -1760,6 +1803,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         setIntakeWishDateOrigin("recognized");
         setIntakeTermStatus((current) => current || "wish");
       }
+      let adoptedPositions = result.data.positions;
+      let adoptedOffset = 0;
       if (result.data.positions.length > 0) {
         const recognized = result.data.positions.map((position) => {
           const unit = normaliseOrderPositionUnit(position.unit);
@@ -1775,19 +1820,24 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
           executionRequested: position.executionRequested,
           unit,
         }); });
-        setDirectItems((current) => {
-          const existing = current.length === 1 && !current[0]?.name.trim() ? [] : current;
-          return [...existing, ...recognized].slice(0, 20);
-        });
+        const existing = directItems.length === 1 && !directItems[0]?.name.trim() ? [] : directItems;
+        adoptedOffset = existing.length;
+        const available = Math.max(0,20-existing.length);
+        const adopted = recognized.slice(0,available);
+        adoptedPositions = result.data.positions.slice(0,available);
+        setDirectItems([...existing,...adopted]);
+        const rest=recognized.slice(available);
+        overflowRequest.current=null;
+        setRecognitionOverflow(rest.length?{total:recognized.length,adopted:adopted.length,saved:0,text:intakeRecognitionText,items:rest}:null);
       }
       const labels: Record<string, string> = { dueDate: "Liefertermin" };
       setRecognitionMarkers([
         ...result.data.fields.filter((field) => field.field === "dueDate").map((field) => ({ key: field.field, label: labels[field.field] ?? field.field, value: field.value, source: field.source })),
-        ...result.data.positions.flatMap((position, index) => [
-          { key: `position-${index}-name`, label: `Position ${index + 1}`, value: position.name, source: position.source },
-          ...(position.quantity ? [{ key: `position-${index}-quantity`, label: "Menge", value: String(position.quantity), source: position.source }] : []),
-          { key: `position-${index}-unit`, label: "Einheit", value: position.unit, source: position.source },
-          { key: `position-${index}-surface`, label: "Oberfläche", value: position.surfaceRequested, source: position.source },
+        ...adoptedPositions.flatMap((position, index) => [
+          { key: `position-${index+adoptedOffset}-name`, label: `Position ${index + adoptedOffset + 1}`, value: position.name, source: position.source },
+          ...(position.quantity ? [{ key: `position-${index+adoptedOffset}-quantity`, label: "Menge", value: String(position.quantity), source: position.source }] : []),
+          { key: `position-${index+adoptedOffset}-unit`, label: "Einheit", value: position.unit, source: position.source },
+          { key: `position-${index+adoptedOffset}-surface`, label: "Oberfläche", value: position.surfaceRequested, source: position.source },
         ]),
       ]);
       setLastRecognizedText(intakeRecognitionText);
@@ -2142,6 +2192,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const submitIntakePage = async (event: FormEvent) => {
     event.preventDefault();
     if (directIntakeInFlight.current) return;
+    if (recognitionOverflow?.items.length) { setFeedback({kind:"validation",message:"Bitte die übrigen Positionen zuerst als weiteren Beleg speichern."}); return; }
     const firstOpen = requiredIntakeChecks.find((entry) => !entry.complete);
     if (firstOpen) {
       setFeedback({ kind: "validation", message: `Noch offen: ${firstOpen.label}` });
@@ -2332,6 +2383,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                   {concern.label} · Vorschlag<KrButton art="leise" icon="x" text="" aria-label={concern.label+" abwählen"} data-spec-id={"eingang.anliegen."+concern.id+".abwaehlen"} onClick={()=>{intakeTextStand.current=crypto.randomUUID();setIntakeDismissedConcerns(previous=>[...previous,concern.id]);}}/>
                 </span>)}</div>:null}
                 {recognitionBusy ? <Hinweis>Angaben werden erkannt … Das Formular bleibt bedienbar.</Hinweis> : null}
+                {recognitionOverflow?.items.length ? <Hinweis ton="warn"><span>{recognitionOverflow.total} Positionen erkannt · {recognitionOverflow.adopted} übernommen · {recognitionOverflow.items.length} noch offen</span><KrButton art="sekundaer" text={recognitionOverflow.saved ? "Rest als weiteren Beleg anlegen" : "Rest als zweiten Beleg anlegen"} disabled={busy} onClick={()=>void saveRecognitionOverflow()}/></Hinweis> : null}
+                {recognitionOverflow && !recognitionOverflow.items.length && recognitionOverflow.saved ? <Hinweis ton="ok">{recognitionOverflow.saved === 1 ? "Weiterer Beleg" : `${recognitionOverflow.saved} weitere Belege`} als Entwurf gespeichert · auf Der Tag</Hinweis> : null}
                   {recognitionMarkers.length > 0 ? <div className={`ev-erkannt${recognitionConfirmed ? " ev-erkannt--ok" : ""}`} aria-live="polite">
                     <div className="ev-erkannt-kopf"><b>{recognitionConfirmed ? `${recognitionMarkers.length} Angaben bestätigt` : `${recognitionMarkers.length} Angaben erkannt und vorausgefüllt`}</b>
                       {!recognitionConfirmed ? <KrButton data-spec-id="eingang.alles-bestaetigen" className="kr-btn--ton-blau" icon="check" text="Alles bestätigen" onClick={() => setRecognitionConfirmed(true)} /> : null}

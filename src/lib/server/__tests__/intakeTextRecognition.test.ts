@@ -45,6 +45,13 @@ describe("recognizeIntakeText", () => {
     ]);
   });
 
+  it("gibt auch Positionen nach der zwanzigsten an die Erfassung zurück", () => {
+    const text = Array.from({ length: 23 }, (_, index) => `1 Stück Prüfkörper ${index + 1} verzinken`).join("\n");
+    const result = recognizeIntakeText(text);
+    expect(result.positions).toHaveLength(23);
+    expect(result.positions[22]).toMatchObject({ name: "Prüfkörper 23", quantity: "1" });
+  });
+
   it("erkennt den Wunsch-Wochentag statt des Maildatums", () => {
     const result = recognizeIntakeText("Mail vom 01.11.: Brauche die Teile bis Mittwoch.", new Date("2026-11-02T00:00:00.000Z"));
     expect(result.fields).toEqual(expect.arrayContaining([expect.objectContaining({ field: "dueDate", value: "2026-11-04" })]));

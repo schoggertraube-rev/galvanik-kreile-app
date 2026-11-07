@@ -110,7 +110,7 @@ export function recognizeIntakeText(text: string, today = new Date()): IntakeTex
       executionRequested: execution?.execution ?? "offen",
       source: `Text Abschnitt ${index + 1}`,
     }];
-  }).slice(0, 20);
+  });
 
   return { fields, positions };
 }
