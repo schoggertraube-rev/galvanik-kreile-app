@@ -347,6 +347,7 @@ export async function readQuote(tx: PrivilegedTenantTransaction, tenantId: strin
   return quote;
 }
 
+export type QuoteFollowupBinding=(tx:PrivilegedTenantTransaction,input:{quote:QuoteReadback;action:'sent'|'changed'|'accept'|'reject'|'conditional';phase:'before'|'after'})=>Promise<string|null>;
 export type QuoteSourceBinding=(tx:PrivilegedTenantTransaction,input:{source:NonNullable<CreateQuoteInput['source']>;quoteId:string;customerId:string;clientEventId:string;effect?:'ware'|'accept'|'reject'|'conditional'})=>Promise<void|{code:'FORBIDDEN'|'NOT_FOUND'|'CONFLICT'|'VALIDATION_ERROR'|'UNAVAILABLE';message:string}>;
 class QuoteSourceFailure extends Error {constructor(readonly result:Exclude<CreateQuoteResult,{code:'OK'}>){super(result.message);}}
 export async function createQuoteCommand(authorization: QuoteCommandContext, input: unknown,bindSource?:QuoteSourceBinding): Promise<CreateQuoteResult> {
@@ -437,7 +438,7 @@ export async function listOpenQuotesCommand(authorization: QuoteCommandContext):
   }
 }
 
-export async function updateQuoteCommand(authorization: QuoteCommandContext, input: unknown): Promise<UpdateQuoteResult> {
+export async function updateQuoteCommand(authorization: QuoteCommandContext, input: unknown,followup:QuoteFollowupBinding): Promise<UpdateQuoteResult> {
   const normalized = normalizeUpdate(input);
   if (!normalized) return { code: "VALIDATION_ERROR", message: "KV-Daten sind unvollständig oder ungültig." };
   if (!authorization.capabilities.canUpdateQuote) return { code: "FORBIDDEN", message: "KVs dürfen mit dieser Rolle nicht bearbeitet werden." };
@@ -460,7 +461,8 @@ export async function updateQuoteCommand(authorization: QuoteCommandContext, inp
         throw new Error("QUOTE_UPDATE_RESULT_INVALID");
       }
       if(!outcome.replayed&&normalized.calculation)await writeCalculationSnapshot(tx,authorization,normalized.quoteId,normalized.clientEventId,normalized.calculation,calculationBefore);
-      const quote = await readQuote(tx, authorization.tenantId, normalized.quoteId);
+      let quote = await readQuote(tx, authorization.tenantId, normalized.quoteId);
+      if(!outcome.replayed&&quote?.lifecycle?.stage==='geaendert_seit_versand'){await followup(tx,{quote,action:'changed',phase:'after'});quote=await readQuote(tx,authorization.tenantId,normalized.quoteId);}
       const rows = await tx.execute<UpdateReceiptRow>(sql`
         SELECT * FROM private.v_quote_update_receipts_v1
         WHERE quote_id = ${normalized.quoteId}::uuid AND actor_id = ${authorization.userId}::uuid

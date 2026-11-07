@@ -10,15 +10,21 @@ import {
   type AuthorizationSnapshot,
 } from "@/lib/server/authorization";
 import { readCustomerSummary } from "@/lib/server/customerSummaryRead";
+import {withPrivilegedTenantTransaction} from "@/lib/server/privilegedDb";
 import { createOrderIntake } from "@/lib/server/commands/orderIntakeCommand";
 import { readOrderIntakeReceipt } from "@/lib/server/orderIntakeRead";
-import {recordIntakeQuoteEffect,bindQuoteGoodsReceiptToCreatedOrder,writeQuoteGoodsReceiptInTransaction} from '@/modules/eingang/server-public';
+import {recordIntakeQuoteEffect,bindQuoteGoodsReceiptToCreatedOrder,writeQuoteGoodsReceiptInTransaction,recordIntakeTaskEffect} from '@/modules/eingang/server-public';
 import {parseQuoteGoodsReceiptInput} from '@/modules/eingang/public';
+import {syncQuoteFollowupTask,readQuoteFollowupTasksForToday} from '@/modules/tasks/server-public';
+import {readCustomerProfile} from '@/modules/customers/server-public';
+import {readQuoteSettingsInTransaction} from '@/modules/fundament/server-public';
+import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import { readCompanyDocumentSettings } from "@/modules/fundament/server-public";
 import {
   createQuoteCommand,
   changeQuoteLifecycleCommand,
   type QuoteLifecycleInput,
+  type QuoteFollowupBinding,
   listOpenQuotesCommand,
   prepareQuoteConversionCommand,
   readQuoteCommand,
@@ -48,6 +54,23 @@ function quoteCommandContext(authorization: AuthorizationSnapshot): QuoteCommand
   };
 }
 
+function quoteFollowupBinding(auth:AuthorizationSnapshot):QuoteFollowupBinding{
+ return async(tx,{quote,action,phase})=>{
+  const life=quote.lifecycle;if(!life)throw Error('QUOTE_FOLLOWUP_LIFECYCLE_MISSING');
+  const deps={effect:(transaction:typeof tx,snapshot:AuthorizationSnapshot,effect:Parameters<typeof recordIntakeTaskEffect>[2])=>recordIntakeTaskEffect(transaction,snapshot,effect,readCustomerProfile)};
+  const request={quoteId:quote.quoteId,quoteNumber:quote.quoteNumber,customerName:quote.customerDisplayName,edition:life.edition,sentEdition:life.sentEdition,dueDate:null as string|null,reason:action==='accept'?'KV zugesagt':action==='reject'?'KV abgesagt':action==='conditional'?'KV mit Vorbehalt · Anpassung erforderlich':'Neue KV-Fassung'};
+  if(phase==='before'){
+   if(action==='sent'&&life.sentEdition!==null&&life.sentEdition!==life.edition)await syncQuoteFollowupTask(tx,auth,{...request,edition:life.sentEdition,action:'cancel'},deps);
+   return null;
+  }
+  if(action!=='sent'||life.acceptedEdition===life.edition){await syncQuoteFollowupTask(tx,auth,{...request,action:'cancel'},deps);return null;}
+  const settings=await readQuoteSettingsInTransaction(tx,auth.tenantId),days=settings?.followupDays;
+  if(days!==null&&days!==undefined){const date=new Date(berlinCalendarDay()+'T12:00:00Z');date.setUTCDate(date.getUTCDate()+days);request.dueDate=date.toISOString().slice(0,10);}
+  await syncQuoteFollowupTask(tx,auth,{...request,action:'sent'},deps);
+  return days===null||days===undefined?'Nachfassfrist fehlt · in Einstellungen ergänzen. Es wurde kein Ersatzdatum erfunden.':null;
+ };
+}
+
 function authorizationFailure(result: Awaited<ReturnType<typeof resolveAuthorization>>) {
   if (result.ok) return null;
   return result.reason === "AUTHORIZATION_UNAVAILABLE"
@@ -60,7 +83,7 @@ export async function changeQuoteLifecycleAction(input:QuoteLifecycleInput) {
     const auth=await resolveAuthorization();
     const failure=authorizationFailure(auth);
     if (failure||!auth.ok) return failure!;
-    const result=await changeQuoteLifecycleCommand(quoteCommandContext(auth.data),input,(tx,source)=>recordIntakeQuoteEffect(tx,auth.data,source));
+    const result=await changeQuoteLifecycleCommand(quoteCommandContext(auth.data),input,(tx,source)=>recordIntakeQuoteEffect(tx,auth.data,source),quoteFollowupBinding(auth.data));
     if (result.code==='OK') {
       revalidatePath('/');
       revalidatePath('/customers');
@@ -135,7 +158,7 @@ export async function updateQuoteAction(input: UpdateQuoteInput) {
   }
   const failure = authorizationFailure(authorization);
   if (failure || !authorization.ok) return failure!;
-  const result = await updateQuoteCommand(quoteCommandContext(authorization.data), input);
+  const result = await updateQuoteCommand(quoteCommandContext(authorization.data), input,quoteFollowupBinding(authorization.data));
   if (result.code === "OK") {
     revalidatePath("/customers");
     revalidatePath(`/customers/${result.quote.customerId}`);
@@ -296,4 +319,14 @@ export async function readQuotePdfAction(input: { quoteId: string }) {
   } catch {
     return { code: "UNAVAILABLE" as const, message: "KV-PDF konnte nicht sicher erstellt werden." };
   }
+}
+
+
+export async function getQuoteFollowupsForTodayAction(){
+ noStore();
+ try{const auth=await resolveAuthorization();const denied=authorizationFailure(auth);if(denied||!auth.ok)return denied!;
+  if(!quoteCommandContext(auth.data).capabilities.canReadQuote)return {code:'FORBIDDEN' as const,message:'KV-Nachfassen ist nicht freigegeben.'};
+  const tasks=await withPrivilegedTenantTransaction(auth.data,tx=>readQuoteFollowupTasksForToday(tx,auth.data));
+  return {code:'OK' as const,tasks};
+ }catch(error){console.error('[QUOTE_FOLLOWUP_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV-Nachfassaufgaben konnten nicht geladen werden.'};}
 }

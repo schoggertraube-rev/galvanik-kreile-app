@@ -3,7 +3,7 @@ import {createHash, randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import type {QuoteCommandContext, QuoteCommandFailure, QuoteReadback,CreateQuoteInput} from './types';
-import {readQuote,type QuoteSourceBinding} from './quoteCommands';
+import {readQuote,type QuoteSourceBinding,type QuoteFollowupBinding} from './quoteCommands';
 import {readQuoteJournal,quoteJournalActorIsActive,appendQuoteJournal} from '@/lib/server/quoteJournalPort';
 
 type Identity = {quoteId:string; clientEventId:string; expectedVersion:number; edition:number;source?:NonNullable<CreateQuoteInput['source']>};
@@ -13,7 +13,7 @@ export type QuoteLifecycleInput = Identity & (
   | {action:'conditional'; evidence:string}
   | {action:'reject'; reason:string}
 );
-type Result = QuoteCommandFailure | {code:'OK';quote:QuoteReadback;eventId:string;replayed:boolean};
+type Result = QuoteCommandFailure | {code:'OK';quote:QuoteReadback;eventId:string;replayed:boolean;notices?:string[]};
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 function normalize(value:unknown):QuoteLifecycleInput|null {
   if (!value||typeof value!=='object'||Array.isArray(value)) return null;
@@ -34,7 +34,7 @@ function normalize(value:unknown):QuoteLifecycleInput|null {
 /** Explicit manual sent/acceptance/decline records. Actual mail dispatch stays in communications. */
 class QuoteLifecycleSourceFailure extends Error{constructor(readonly result:QuoteCommandFailure){super(result.code);}}
 
-export async function changeQuoteLifecycleCommand(auth:QuoteCommandContext, raw:unknown,bindSource?:QuoteSourceBinding):Promise<Result> {
+export async function changeQuoteLifecycleCommand(auth:QuoteCommandContext, raw:unknown,bindSource:QuoteSourceBinding|undefined,followup:QuoteFollowupBinding):Promise<Result> {
   const input=normalize(raw);
   if (!input) return {code:'VALIDATION_ERROR',message:'KV-Fassung, Nachweis oder Entscheidung fehlt.'};
   if (!auth.capabilities.canUpdateQuote||!auth.capabilities.canReadQuote) return {code:'FORBIDDEN',message:'KV-Entscheidung ist nicht freigegeben.'};
@@ -59,6 +59,7 @@ export async function changeQuoteLifecycleCommand(auth:QuoteCommandContext, raw:
       if ((input.action==='accept'||input.action==='conditional')&&life.sentEdition!==life.edition) return {code:'VALIDATION_ERROR',message:'Zusage gilt nur für die aktuelle versendete Fassung. Aktuellen KV senden.'};
       if (input.action==='accept'&&life.conditional?.edition===life.edition) return {code:'VALIDATION_ERROR',message:'Zusage mit Vorbehalt erfordert eine geänderte, neu versendete Fassung.'};
       if (!await quoteJournalActorIsActive(tx,auth)) return {code:'FORBIDDEN',message:'Login ist nicht mehr aktiv.'};
+      await followup(tx,{quote,action:input.action,phase:'before'});
       const version=quote.version+1,eventId=randomUUID();
       await tx.execute(sql`INSERT INTO private.quote_positions(tenant_id,quote_id,revision,position,name,quantity,material,surface_requested,unit_price_cents,zeilen_gesamt_cents,unit)
         SELECT tenant_id,quote_id,${version},position,name,quantity,material,surface_requested,unit_price_cents,zeilen_gesamt_cents,unit FROM private.quote_positions
@@ -68,18 +69,19 @@ export async function changeQuoteLifecycleCommand(auth:QuoteCommandContext, raw:
         : input.action==='accept'
           ? sql`zugesagt_fassung=fassung,zugesagt_am=statement_timestamp(),zusage_nachweis=${input.evidence},vorbehalt_fassung=NULL,vorbehalt_am=NULL,vorbehalt_grund=NULL`
           : input.action==='conditional'
-            ? sql`zugesagt_fassung=NULL,zugesagt_am=NULL,zusage_nachweis=NULL,vorbehalt_fassung=fassung,vorbehalt_am=statement_timestamp(),vorbehalt_grund=${input.evidence},nachfass_am=NULL`
-          : sql`abgesagt_am=statement_timestamp(),absage_grund=${input.reason},nachfass_am=NULL`;
+            ? sql`zugesagt_fassung=NULL,zugesagt_am=NULL,zusage_nachweis=NULL,vorbehalt_fassung=fassung,vorbehalt_am=statement_timestamp(),vorbehalt_grund=${input.evidence}`
+          : sql`abgesagt_am=statement_timestamp(),absage_grund=${input.reason}`;
       await tx.execute(sql`UPDATE private.quotes SET ${mutation},version=${version},updated_by=${auth.userId}::uuid,updated_at=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${input.quoteId}::uuid`);
       if(input.source){
         if(!bindSource)throw new QuoteLifecycleSourceFailure({code:'UNAVAILABLE',message:'Antwort-Anliegen konnte nicht mitgespeichert werden. Nichts geändert.'});
         const failure=await bindSource(tx,{source:input.source,quoteId:input.quoteId,customerId:quote.customerId,clientEventId:input.clientEventId,effect:input.action==='conditional'?'conditional':input.action==='accept'?'accept':'reject'});
         if(failure)throw new QuoteLifecycleSourceFailure(failure);
       }
+      const followupNotice=await followup(tx,{quote,action:input.action,phase:'after'});
       await appendQuoteJournal(tx,auth,{id:eventId,type:'QUOTE_LIFECYCLE_V04',clientEventId:input.clientEventId,correlationId:randomUUID(),version,description:input.action==='sent'?'KV-Versand ausdrücklich vermerkt':input.action==='accept'?'KV-Zusage vermerkt':input.action==='conditional'?'KV-Vorbehalt vermerkt · neue Fassung erforderlich':'KV-Absage vermerkt',payload:{quoteId:input.quoteId,intent,action:input.action,edition:life.edition,before:life,proof:input.action==='reject'?input.reason:input.evidence,manual:input.action==='sent',...(input.source?{source:input.source}:{} )}});
       const result=await readQuote(tx,auth.tenantId,input.quoteId);
       if (!result?.lifecycle||result.version!==version) throw Error('QUOTE_LIFECYCLE_WRITE_READBACK_INVALID');
-      return {code:'OK',quote:result,eventId,replayed:false};
+      return {code:'OK',quote:result,eventId,replayed:false,...(followupNotice?{notices:[followupNotice]}:{})};
     });
   } catch (error) {
     console.error('[QUOTE_LIFECYCLE_FAILED]',error instanceof Error?error.name:'UnknownError');

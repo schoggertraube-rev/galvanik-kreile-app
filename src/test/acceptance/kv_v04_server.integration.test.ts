@@ -401,3 +401,44 @@ it('KV-06/07b/08 records reply decisions and exactly their concern in one transa
  }
  expect((await sql`SELECT count(*)::int n FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`)[0].n).toBe(0);
 });
+
+
+it('KV-09 uses one canonical follow-up task and a protected quote projection, with Today readback and completion evidence',async()=>{
+ const fixture=await createFixture();
+ await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,kv_nachfass_tage,updated_at) SELECT ${randomUUID()},${KREILE_TENANT_SLUG},'TEST KV followup',5,statement_timestamp() WHERE NOT EXISTS(SELECT 1 FROM public.company_settings WHERE tenant_id=${KREILE_TENANT_SLUG})`;
+ const {createQuoteAction,changeQuoteLifecycleAction,readQuoteAction,getQuoteFollowupsForTodayAction}=await import('@/app/actions/quotes.actions');
+ const {getIntakeTaskAction,saveIntakeTaskAction}=await import('@/app/actions/eingang.actions');
+ const {berlinCalendarDay}=await import('@/lib/domain/workingDays');
+ const today=berlinCalendarDay(),clock=new Date(today+'T12:00:00Z');clock.setUTCDate(clock.getUTCDate()-1);const past=clock.toISOString().slice(0,10);
+ const create=()=>withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',validUntil:'2027-05-20',note:'TEST KV Nachfassen',positions:[{name:'TEST Halter',quantity:1,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]}));
+ const created=await create();if(created.code!=='OK')throw Error('TEST_FOLLOWUP_QUOTE:'+created.code);const quoteId=created.quote.quoteId;
+ const sent={action:'sent' as const,quoteId,clientEventId:randomUUID(),expectedVersion:1,edition:1,channel:'druck' as const,evidence:'TEST KV-Nachfass Fassung gedruckt'};
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction(sent))).toMatchObject({code:'OK',quote:{version:2,lifecycle:{followupAt:expect.any(String)}}});
+ const [task]=await sql`SELECT id::text,faellig_am::text,client_key::text,bezug_typ,bezug_id,status,titel FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_typ='kv' AND bezug_id=${quoteId}`;
+ expect(task).toMatchObject({status:'offen',bezug_typ:'kv',bezug_id:quoteId,titel:expect.stringContaining(created.quote.quoteNumber)});expect(task.faellig_am>today).toBe(true);
+ expect((await sql`SELECT nachfass_am::text FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${quoteId}::uuid`)[0].nachfass_am).toBe(task.faellig_am);
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction(sent))).toMatchObject({code:'OK',replayed:true});
+ expect((await sql`SELECT count(*)::int n FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_id=${quoteId}`)[0].n).toBe(1);
+ expect(await withSession(fixture,()=>getQuoteFollowupsForTodayAction())).toMatchObject({code:'OK',tasks:[]});
+ const editDue=async(taskId:string)=>{const read=await withSession(fixture,()=>getIntakeTaskAction({taskId}));if(read.code!=='OK'||!read.task)throw Error('TEST_FOLLOWUP_TASK_READ');const value=read.task;return withSession(fixture,()=>saveIntakeTaskAction({clientKey:value.client_key,taskId:value.id,version:value.version,kind:value.art,title:value.titel,dueDate:past,time:value.uhrzeit,forLogin:value.fuer_login,forArea:value.fuer_bereich,reference:{type:value.bezug_typ,id:value.bezug_id},note:value.notiz}));};
+ expect(await editDue(task.id)).toMatchObject({code:'OK',task:{version:2,faellig_am:past}});
+ expect((await sql`SELECT quote.nachfass_am::text,task.faellig_am::text FROM private.quotes quote JOIN public.tasks task ON task.tenant_id=quote.tenant_id AND task.bezug_id=quote.id::text WHERE quote.tenant_id=${KREILE_TENANT_SLUG} AND quote.id=${quoteId}::uuid`)[0]).toMatchObject({nachfass_am:past,faellig_am:past});
+ expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{version:2,lifecycle:{followupAt:past}}});
+ expect(await withSession(fixture,()=>getQuoteFollowupsForTodayAction())).toMatchObject({code:'OK',tasks:[{id:task.id,dueDate:past,quoteId}]});
+ const dashboard=()=>withSession(fixture,async()=>{const {resolveAuthorization}=await import('@/lib/server/authorization');const auth=await resolveAuthorization();if(!auth.ok)throw Error('TEST_FOLLOWUP_AUTH');const {readTodayDashboard}=await import('@/lib/server/todayDashboard');const {getComplaints}=await import('@/app/actions/complaints.actions');return readTodayDashboard(auth.data,getComplaints,getQuoteFollowupsForTodayAction);});
+ expect((await dashboard()).items).toContainEqual(expect.objectContaining({key:'task:'+task.id,kind:'task',target:{screen:'aufgabe',arg:task.id}}));
+ await expect(sql`UPDATE private.quotes SET nachfass_am='2040-01-01'::date WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${quoteId}::uuid`).rejects.toThrow('QUOTE_FOLLOWUP_REQUIRES_CANONICAL_TASK');
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'accept',quoteId,clientEventId:randomUUID(),expectedVersion:2,edition:1,evidence:'TEST Kunde hat zugesagt'}))).toMatchObject({code:'OK',quote:{lifecycle:{stage:'zugesagt',followupAt:null}}});
+ expect((await sql`SELECT status,version,erledigt_notiz FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${task.id}::uuid`)[0]).toMatchObject({status:'erledigt',version:3,erledigt_notiz:'KV zugesagt'});
+ expect((await sql`SELECT count(*)::int n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND nachher->>'taskId'=${task.id} AND nachher->>'action'='aufgabe.erledigt'`)[0].n).toBe(1);
+ expect((await dashboard()).items.some(item=>item.key==='task:'+task.id)).toBe(false);
+ expect(await withSession(fixture,()=>getIntakeTaskAction({taskId:task.id}))).toMatchObject({code:'OK',task:{status:'erledigt'}});
+ const expiring=await create();if(expiring.code!=='OK')throw Error('TEST_EXPIRING_QUOTE');const expiryId=expiring.quote.quoteId;
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction({...sent,quoteId:expiryId,clientEventId:randomUUID()}))).toMatchObject({code:'OK'});
+ const [expiryTask]=await sql`SELECT id::text FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND bezug_typ='kv' AND bezug_id=${expiryId}`;expect(await editDue(expiryTask.id)).toMatchObject({code:'OK'});
+ // Only this new TEST fixture represents elapsed calendar time; no product decision is mocked.
+ await sql`UPDATE private.quotes SET valid_until=${past}::date WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${expiryId}::uuid`;
+ expect(await withSession(fixture,()=>readQuoteAction({quoteId:expiryId}))).toMatchObject({code:'OK',quote:{lifecycle:{stage:'abgelaufen'}}});
+ expect(await withSession(fixture,()=>getQuoteFollowupsForTodayAction())).toMatchObject({code:'OK',tasks:[]});
+ expect((await sql`SELECT id::text,status FROM public.tasks WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${expiryTask.id}::uuid`)[0]).toMatchObject({id:expiryTask.id,status:'offen'});
+});

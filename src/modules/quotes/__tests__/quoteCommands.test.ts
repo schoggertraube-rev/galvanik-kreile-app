@@ -175,9 +175,9 @@ describe("quotes command boundary", () => {
       throw new Error(`unexpected SQL: ${query.text}`);
     });
     const { updateQuoteCommand } = await import("../server/quoteCommands");
-    await expect(updateQuoteCommand(authorization, update)).resolves.toMatchObject({
+    await expect(updateQuoteCommand(authorization, update,async()=>null)).resolves.toMatchObject({
       code: "OK", quote: { version: 2, dueDate: "2026-10-20" }, receipt: { expectedVersion: 1, aggregateVersion: 2 },
     });
-    await expect(updateQuoteCommand({ ...authorization, capabilities: { ...authorization.capabilities, canUpdateQuote: false } }, update)).resolves.toMatchObject({ code: "FORBIDDEN" });
+    await expect(updateQuoteCommand({ ...authorization, capabilities: { ...authorization.capabilities, canUpdateQuote: false } }, update,async()=>null)).resolves.toMatchObject({ code: "FORBIDDEN" });
   });
 });

@@ -20,3 +20,5 @@ export type {
   ReadQuoteCreateReceiptResult,
   ReadQuoteUpdateReceiptResult,
 } from "./server/types";
+
+export type {QuoteFollowupBinding} from './server/quoteCommands';

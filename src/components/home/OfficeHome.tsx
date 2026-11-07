@@ -1,3 +1,4 @@
+import {getQuoteFollowupsForTodayAction} from "@/app/actions/quotes.actions";
 import {getComplaints} from '@/app/actions/complaints.actions';
 import { hasAnyAuthorizationArea, hasAuthorizationArea, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import { getOperationalOrders } from "@/lib/server/operationalOrders";
@@ -33,7 +34,7 @@ export async function loadOfficeHome(authorization: AuthorizationSnapshot): Prom
   if (!hasAnyAuthorizationArea(authorization)) return { kind: "no_areas" };
 
   try {
-    const [orders, dashboard] = await Promise.all([getOperationalOrders(authorization), readTodayDashboard(authorization,getComplaints)]);
+    const [orders, dashboard] = await Promise.all([getOperationalOrders(authorization), readTodayDashboard(authorization,getComplaints,getQuoteFollowupsForTodayAction)]);
     const common = {
       role: authorization.role,
       canCreateOrder: hasAuthorizationArea(authorization, "eingang"),

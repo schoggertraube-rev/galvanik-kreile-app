@@ -37,7 +37,8 @@
     "@/modules/quotes/server-public#readQuoteConversionReceiptCommand",
     "@/modules/quotes/server-public#updateQuoteCommand",
     "@/modules/quotes/server-public#changeQuoteLifecycleCommand",
-    "@/modules/quotes/server-public#QuoteLifecycleInput"
+    "@/modules/quotes/server-public#QuoteLifecycleInput",
+    "@/modules/quotes/server-public#QuoteFollowupBinding"
   ],
   "capabilities": [
     "quotes:create",
@@ -50,7 +51,8 @@
     "20260916090000_path1_quote_product_lifecycle.sql",
     "20261107193000_kv_v04_content_editions.sql",
     "20261107211500_kv_v04_conditional_acceptance.sql",
-    "20261107214500_kv_v04_independent_metadata.sql"
+    "20261107214500_kv_v04_independent_metadata.sql",
+    "20261107221000_kv_v04_followup_projection.sql"
   ],
   "viewsFunctions": [
     "private.create_quote_v1",
@@ -60,7 +62,10 @@
     "private.v_quote_create_receipts_v1",
     "private.v_quotes_v1",
     "private.v_open_quotes_v1",
-    "private.v_quote_update_receipts_v1"
+    "private.v_quote_update_receipts_v1",
+    "private.quote_followup_key",
+    "private.project_quote_followup_task",
+    "private.protect_quote_followup_projection"
   ],
   "ownsTables": [
     "private.quote_conversion_receipts",
