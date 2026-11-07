@@ -113,7 +113,7 @@ export function GoodsReceiptDialog({orderId,sourceId,ports,onClose,onOriginal,on
   const value=current.current;if(!value)return;
   const card=first.includes('Foto')||first.includes('Abweichung')?1:first==='Zustand'?2:3;
   change({...value,card});
-  const position=/^Position (\d+) prüfen$/u.exec(first)?.[1];
+  const position=/^Menge bestätigen · Position (\d+)$/u.exec(first)?.[1];
   const selector=first==='Zustand'?'[data-spec-id="ware.warenzustand"] button':first==='Abweichungsgrund'?'[data-spec-id="ware.grund"] button':first.includes('Abweichung')?'[data-spec-id="ware.foto.abweichung"]':first.includes('Foto')?'[data-spec-id="ware.foto.paket"]':first==='Packstücke'?'[data-spec-id="ware.packstuecke-plus"]':first==='Verfahren/Termin wie im KV'?'[data-spec-id="ware.verfahren"] button':position?`[data-goods-position="${position}"] [data-spec-id="ware.position.stimmt"]`:'[data-spec-id="ware.position.stimmt"]';
   requestAnimationFrame(()=>{const field=document.querySelector<HTMLElement>(selector);field?.scrollIntoView({block:'nearest'});field?.focus();});
  };
@@ -142,7 +142,7 @@ export function GoodsReceiptDialog({orderId,sourceId,ports,onClose,onOriginal,on
   const gaps=primary&&data.canStartGalvanik?goodsReceiptGaps(value,data.order.fromQuote):value.condition?[]:['Zustand'];
   if(gaps.length){
    const missingPosition=gaps[0]==='Positionen prüfen'?data.order.items.findIndex(item=>value.quantities.some(row=>row.itemId===item.id&&!row.confirmed&&row.received===null)):-1;
-   const first=missingPosition>=0?`Position ${missingPosition+1} prüfen`:gaps[0];
+   const first=missingPosition>=0?`Menge bestätigen · Position ${missingPosition+1}`:gaps[0];
    focusGap(first);setError('Noch offen: '+first);return;
   }
   submitting.current=true;setBusy(true);

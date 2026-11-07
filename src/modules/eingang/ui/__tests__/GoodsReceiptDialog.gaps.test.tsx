@@ -24,7 +24,7 @@ it("U242 names and focuses the first unchecked position, not the first row", asy
   render(<GoodsReceiptDialog orderId={order.id} ports={ports} onClose={vi.fn()} onOriginal={vi.fn()} onMessage={vi.fn()}/>);
   await screen.findByText("SYNTHETISCH Teil 2");
   fireEvent.click(screen.getByRole("button",{name:"Annehmen · in Galvanik"}));
-  expect(await screen.findByRole("alert")).toHaveTextContent("Noch offen: Position 2 prüfen");
+  expect(await screen.findByRole("alert")).toHaveTextContent("Noch offen: Menge bestätigen · Position 2");
   const second=screen.getByText("SYNTHETISCH Teil 2").closest("article");
   if(!second)throw Error("SECOND_POSITION_MISSING");
   await waitFor(()=>expect(within(second).getByRole("button",{name:"stimmt"})).toHaveFocus());
