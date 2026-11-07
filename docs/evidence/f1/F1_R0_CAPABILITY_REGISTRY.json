@@ -441,6 +441,7 @@
         "chooseIntakeCaptureKindAction",
         "getIntakeDraftsAction",
         "saveIntakeDraftAction",
+        "createIntakeContinuationAction",
         "discardIntakeDraftAction",
         "retryIntakeRecognitionAction",
         "saveIntakeProspectAction",
