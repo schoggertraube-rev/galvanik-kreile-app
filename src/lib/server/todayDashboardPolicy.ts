@@ -166,7 +166,7 @@ export type TodayMoneyCase = "overdue_invoice" | "open_prepayment";
 export type TodayOrderGuidance = {
   field: "action" | "today";
   caseId: "due" | "finished_waiting" | "tight" | "problem" | "ready_today";
-  primaryActionLabel: "Fertig melden" | "Ware raus" | "Kunde vorwarnen" | "Problem lösen";
+  primaryActionLabel: "Fertig melden" | "Ware raus" | "Kunde vorwarnen" | "Auftrag öffnen · Risiko gemeldet";
   reason: "due_today" | "overdue" | "finished_overdue" | "tight_schedule" | "reported_risk" | "ready_today";
 };
 
@@ -198,7 +198,7 @@ export function deriveOrderGuidance(order: TodayOrder, today: string): TodayOrde
     return { field: "action", caseId: "tight", primaryActionLabel: "Kunde vorwarnen", reason: "tight_schedule" };
   }
   if (risky) {
-    return { field: "action", caseId: "problem", primaryActionLabel: "Problem lösen", reason: "reported_risk" };
+    return { field: "action", caseId: "problem", primaryActionLabel: "Auftrag öffnen · Risiko gemeldet", reason: "reported_risk" };
   }
   if (dueToday && finished) {
     return { field: "today", caseId: "ready_today", primaryActionLabel: "Ware raus", reason: "ready_today" };

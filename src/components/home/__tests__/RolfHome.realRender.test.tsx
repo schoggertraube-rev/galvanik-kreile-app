@@ -82,10 +82,10 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     expect(screen.getByTestId("rolf-v11-home")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Der Tag" })).toHaveClass("kr-seite-titel");
     expect(screen.getByRole("region", { name: "Lage" })).toBeInTheDocument();
-    expect(within(screen.getByRole("region", { name: "Lage" })).queryByText("Konflikt")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Lage" })).queryByText("blockiert")).not.toBeInTheDocument();
     expect(screen.getByText("Heute fällig")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Später" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Weitere" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Weitere Aktionen" })).toBeInTheDocument();
     const open = screen.getByRole("button", { name: "Ware raus" });
     expect(open.closest(".kr-hb-eintrag")).toHaveClass("kr-hb-eintrag--konflikt", "kr-fokus");
     fireEvent.click(open);
@@ -140,11 +140,11 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     expect(ports.requestCreate).not.toHaveBeenCalled();
   });
 
-  it("benennt mehrere Konflikte im Plural", () => {
+  it("benennt mehrere blockierte Aufgaben mit ihrer Anzahl", () => {
     const firstConflict = { ...dashboard.items[0], field: "action" as const };
     const secondConflict = { ...dashboard.items[0], field: "action" as const, key: "order:order-2", orderId: "order-2", title: "A-2026-0002 · Muster GmbH" };
     render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items: [firstConflict, secondConflict], visibleFields: [...dashboard.visibleFields] }, projection }} />);
-    expect(within(screen.getByRole("region", { name: "Lage" })).getByText("Konflikte")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Lage" })).getByText("blockiert")).toBeInTheDocument();
   });
 
   it("zählt in der Lage nur Einträge aus dem Handlungsbedarf", () => {
@@ -155,22 +155,22 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     ];
     render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: { ...dashboard, items, visibleFields: [...dashboard.visibleFields] }, projection }} />);
     const lage = within(screen.getByRole("region", { name: "Lage" }));
-    expect(lage.getByText("Warnung")).toBeInTheDocument();
-    expect(lage.queryByText("Konflikt")).not.toBeInTheDocument();
-    expect(lage.queryByText("Entscheidung")).not.toBeInTheDocument();
+    expect(lage.getByText("wird knapp")).toBeInTheDocument();
+    expect(lage.queryByText("blockiert")).not.toBeInTheDocument();
+    expect(lage.queryByText("wartet auf dich")).not.toBeInTheDocument();
   });
 
   it("zeigt nach der Weitergabe Status, Frist und Rückgängig", async () => {
     const actionDashboard = { ...dashboard, items: [{ ...dashboard.items[0], field: "action" as const, dueDate: "2026-10-30" }], visibleFields: [...dashboard.visibleFields] };
     const { container } = render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "meister", canCreateOrder: true, canWorkOrders: true, canDelegate: true, dashboard: actionDashboard, projection }} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Weitere" }));
+    fireEvent.click(screen.getByRole("button", { name: "Weitere Aktionen" }));
     expect(screen.getByRole("button", { name: "an Werkstatt Zwei geben" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "an Phillip geben" }));
 
     expect(await screen.findByText("bei Phillip · Frist 30.10.26")).toBeInTheDocument();
     expect(container.querySelector(".kr-hb-eintrag")).toHaveClass("kr-hb-eintrag--gedimmt");
-    expect(within(screen.getByRole("region", { name: "Lage" })).queryByText("Konflikt")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Lage" })).queryByText("blockiert")).not.toBeInTheDocument();
     expect(actionPorts.assignOrder).toHaveBeenCalledWith(expect.objectContaining({ orderId: "order-1", assigneeUserId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", expectedVersion: 1 }));
 
     fireEvent.click(screen.getByRole("button", { name: "Rückgängig" }));
@@ -206,7 +206,7 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
     expect(titles).toEqual(expect.arrayContaining([expect.stringContaining("Konflikt"), expect.stringContaining("Warnung früh"), expect.stringContaining("Warnung spät"), expect.stringContaining("Entscheidung")]));
     expect(titles.map((title) => title?.split(" · ").at(-1))).toEqual(["Konflikt", "Warnung früh", "Warnung spät", "Entscheidung"]);
     const filters = [...within(screen.getByRole("region", { name: "Lage" })).getAllByRole("button")].map((button) => button.textContent);
-    expect(filters).toEqual(["1Konflikt", "2Warnungen", "1Entscheidung"]);
+    expect(filters).toEqual(["1blockiert", "2werden knapp", "1wartet auf dich"]);
   });
 
   it("uses the concrete money action for overdue invoices and open prepayment", () => {
@@ -244,7 +244,7 @@ describe("Rolf 'Der Tag' in V1.1 mit echter Projektion", () => {
   it("führt readonly ohne Warenausgang-Aktion", () => {
     render(<RolfHomeClient ports={actionPorts} model={{ kind: "data", role: "readonly", canCreateOrder: false, canWorkOrders: false, canDelegate: false, dashboard: { ...dashboard, visibleFields: [...dashboard.visibleFields] }, projection }} />);
     expect(screen.queryByRole("button", { name: /Ware raus öffnen/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Weitere" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Weitere Aktionen" })).not.toBeInTheDocument();
   });
 
   it.each([
