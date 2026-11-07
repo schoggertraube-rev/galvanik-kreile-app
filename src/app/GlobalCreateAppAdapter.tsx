@@ -38,7 +38,7 @@ import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { isAppRole } from "@/lib/auth/authorizationContract";
 import { useOverlayStore } from "@/lib/overlayStore";
 import {ComplaintDialogs,type ComplaintPorts} from '@/modules/eingang/public';
-import {getComplaintDialogAction,reklamationAusfuehrenAction,nacharbeitAnlegenAction,sendeReklamationErgebnisAction} from '@/app/actions/complaints.actions';
+import {getComplaintDialogAction,reklamationAusfuehrenAction,nacharbeitAnlegenAction,sendeReklamationErgebnisAction,sendeNacharbeitBegleitscheinAction} from '@/app/actions/complaints.actions';
 import {uploadDomainAttachment} from '@/components/attachments/DomainAttachmentPanel';
 import {getDomainAttachmentOriginalAction,getDomainAttachmentsAction} from '@/app/actions/domainAttachments.actions';
 
@@ -68,7 +68,7 @@ export function GlobalCreateAppAdapter() {
     return null;
   });
   const { canAction, hasArea, name, role, areas } = usePermissions();
-  const complaintPorts=useMemo<ComplaintPorts>(()=>({areas,read:getComplaintDialogAction,listDeliveredOrders:getComplaintOrderChoicesAction,write:reklamationAusfuehrenAction,rework:nacharbeitAnlegenAction,sendResult:sendeReklamationErgebnisAction,openOrder,ResultMail:input=><CommunicationPanel targetType="ORDER" targetId={input.orderId} composer={input}/>,
+  const complaintPorts=useMemo<ComplaintPorts>(()=>({areas,read:getComplaintDialogAction,listDeliveredOrders:getComplaintOrderChoicesAction,write:reklamationAusfuehrenAction,rework:nacharbeitAnlegenAction,sendResult:sendeReklamationErgebnisAction,sendReminder:sendeNacharbeitBegleitscheinAction,openOrder,ResultMail:input=><CommunicationPanel targetType="ORDER" targetId={input.orderId} composer={input}/>,
     addPhoto:async(orderId,file)=>({code:'OK',id:await uploadDomainAttachment('ORDER',orderId,file)}),
     openPhoto:async(photoId,_sourceItemId,orderId)=>{
       const rows=await getDomainAttachmentsAction({targetType:'ORDER',targetId:orderId});

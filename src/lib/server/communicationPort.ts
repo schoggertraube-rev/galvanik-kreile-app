@@ -17,6 +17,18 @@ import {
 import { importDomainAttachmentBytes } from "@/lib/server/domainAttachment";
 
 type TargetType = "CUSTOMER" | "ORDER";
+export async function readComplaintGoodsReminderContext(auth:AuthorizationSnapshot,orderId:string) {
+  if(!hasAuthorizationArea(auth,'kunden'))return null;
+  const rows=await withPrivilegedTenantTransaction(auth,tx=>tx.execute<{complaintId:string;version:number;orderId:string;number:string;customerName:string;complaintNumber:string}>(sql`SELECT complaint_id AS "complaintId",version,nacharbeit_auftrag_id AS "orderId",rework_order_number AS number,source_customer_name AS "customerName",nummer AS "complaintNumber" FROM public.v_complaint_rework_context_v1 WHERE tenant_id=${auth.tenantId} AND nacharbeit_auftrag_id=${orderId} AND stand='massnahme_nacharbeit' AND rework_ware='erwartet'`));
+  return rows.length===1?rows[0]:null;
+}
+export async function readComplaintGoodsReminderDates(tx:import('./privilegedDb').PrivilegedTenantTransaction,auth:AuthorizationSnapshot,ids:readonly string[]) {
+  if(!ids.length||!hasAuthorizationArea(auth,'kunden'))return [];
+  return tx.execute<{complaintId:string;sentAt:string}>(sql`SELECT complaint.complaint_id AS "complaintId",max(thread.updated_at)::text AS "sentAt"
+    FROM public.v_complaint_rework_context_v1 complaint JOIN public.communication_threads thread ON thread.tenant_id=complaint.tenant_id AND thread.order_id=complaint.nacharbeit_auftrag_id AND thread.customer_id=complaint.customer_id
+    JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id AND message.direction='outgoing' AND message.channel='email' AND message.summary='Reklamation '||complaint.complaint_id||' · Begleitschein'
+    WHERE complaint.tenant_id=${auth.tenantId} AND complaint.complaint_id=ANY(ARRAY[${sql.join(ids.map(id=>sql`${id}`),sql`, `)}]::text[]) AND thread.status='sent' AND thread.updated_at>=complaint.rework_ware_since GROUP BY complaint.complaint_id`);
+}
 type Result<T> = { code: "OK"; data: T } | { code: "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_ERROR" | "CONFLICT" | "IN_KLAERUNG" | "UNAVAILABLE"; message: string };
 type Target = { customerId: string; orderId: string | null; email: string; label: string };
 type ThreadRow = { id: string; customer_id: string | null; order_id: string | null; status: string | null; created_at: Date | string | null };
@@ -214,20 +226,22 @@ export async function attachInboxMessage(
 
 export async function sendCommunicationMail(
   auth: AuthorizationSnapshot,
-  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; attachment?: GraphMailAttachment; complaintResult?:{complaintId:string;version:number} },
+  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; attachment?: GraphMailAttachment; complaintResult?:{complaintId:string;version:number;kind?:'reminder'} },
 ): Promise<Result<CommunicationReceipt>> {
   if (!validTarget(input?.targetType, input?.targetId) || !/^[0-9a-f-]{36}$/i.test(input.clientRequestId) || input.subject.trim().length < 1 || input.subject.length > 500 || input.body.trim().length < 1 || input.body.length > 20_000) {
     return { code: "VALIDATION_ERROR", message: "Empfänger, Betreff oder Nachricht ist ungültig." };
   }
   // The bound 4.8 result mail requires Kunden. It grants no inbox or arbitrary
   // mail access: target, state and version are read from the complaint itself.
+  const reminder=input.complaintResult?.kind==='reminder';
+  const complaintSummary=input.complaintResult?'Reklamation '+input.complaintResult.complaintId+(reminder?' · Begleitschein':' · Ergebnis'):null;
   if(input.complaintResult){
     if(!hasAuthorizationArea(auth,'kunden')||input.targetType!=='ORDER')return {code:'FORBIDDEN',message:'Kunde informieren erfordert Kunden.'};
-    const context=await withPrivilegedTenantTransaction(auth,tx=>tx.execute(sql`SELECT complaint_id FROM public.v_complaint_rework_context_v1 complaint WHERE tenant_id=${auth.tenantId} AND complaint_id=${input.complaintResult!.complaintId} AND source_order_id=${input.targetId} AND (
-      version=${input.complaintResult!.version} AND stand='kunde_informieren' OR EXISTS(
+    const context=await withPrivilegedTenantTransaction(auth,tx=>tx.execute(sql`SELECT complaint_id FROM public.v_complaint_rework_context_v1 complaint WHERE tenant_id=${auth.tenantId} AND complaint_id=${input.complaintResult!.complaintId} AND ${reminder?sql`nacharbeit_auftrag_id=${input.targetId}`:sql`source_order_id=${input.targetId}`} AND (
+      version=${input.complaintResult!.version} AND ${reminder?sql`stand='massnahme_nacharbeit' AND rework_ware='erwartet'`:sql`stand='kunde_informieren'`} OR EXISTS(
         SELECT 1 FROM public.communication_threads thread JOIN public.communication_messages message ON message.tenant_id=thread.tenant_id AND message.thread_id=thread.id
-        WHERE thread.tenant_id=${auth.tenantId} AND thread.source='MS_GRAPH_OUT:'||${input.clientRequestId} AND thread.status='sent' AND thread.order_id=complaint.source_order_id AND thread.customer_id=complaint.customer_id
-        AND message.direction='outgoing' AND message.channel='email' AND message.summary=${'Reklamation '+input.complaintResult!.complaintId+' · Ergebnis'}))`)).catch(error=>{logCommunicationFailure('COMPLAINT_MAIL_CONTEXT_FAILED',error);return null;});
+        WHERE thread.tenant_id=${auth.tenantId} AND thread.source='MS_GRAPH_OUT:'||${input.clientRequestId} AND thread.status='sent' AND thread.order_id=${input.targetId} AND thread.customer_id=complaint.customer_id
+        AND message.direction='outgoing' AND message.channel='email' AND message.summary=${complaintSummary}))`)).catch(error=>{logCommunicationFailure('COMPLAINT_MAIL_CONTEXT_FAILED',error);return null;});
     if(!context)return {code:'UNAVAILABLE',message:'Reklamationsstand konnte nicht geprüft werden.'};
     if(context.length!==1)return {code:'CONFLICT',message:'Die Reklamation wurde inzwischen geändert.'};
   } else if (!canWrite(auth)) return { code: "FORBIDDEN", message: "E-Mails dürfen für diese Rolle nicht versendet werden." };
@@ -254,7 +268,7 @@ export async function sendCommunicationMail(
         if(input.complaintResult){
           const confirmed=await tx.execute(sql`SELECT message.id FROM public.communication_messages message JOIN public.communication_threads thread ON thread.tenant_id=message.tenant_id AND thread.id=message.thread_id
             WHERE message.tenant_id=${auth.tenantId} AND message.thread_id=${existing[0].id} AND message.direction='outgoing' AND message.channel='email'
-            AND message.summary=${'Reklamation '+input.complaintResult.complaintId+' · Ergebnis'} AND message.body=${input.body.trim()} AND thread.subject=${input.subject.trim()}`);
+            AND message.summary=${complaintSummary} AND message.body=${input.body.trim()} AND thread.subject=${input.subject.trim()}`);
           if(confirmed.length!==1)throw Error('COMMUNICATION_REPLAY_INTENT_MISMATCH');
         }
         return { threadId: existing[0].id, recordedAt: iso(existing[0].created_at), replay: { threadId: existing[0].id, messageId: null, customerId: target.customerId, orderId: target.orderId, recordedAt: iso(existing[0].created_at), replayed: true } };
@@ -296,7 +310,7 @@ export async function sendCommunicationMail(
       if (updated.length !== 1) throw new Error("COMMUNICATION_THREAD_FINALIZE_FAILED");
       const messages = await tx.execute<{ id: string }>(sql`
         INSERT INTO public.communication_messages (id, tenant_id, thread_id, direction, channel, body, summary, created_by)
-        VALUES (${messageId}, ${auth.tenantId}, ${pending.threadId}, 'outgoing', 'email', ${input.body.trim()}, ${input.complaintResult?'Reklamation '+input.complaintResult.complaintId+' · Ergebnis':input.attachment ? `Anhang: ${input.attachment.filename}` : 'Ohne Anhang'}, ${auth.userId}) RETURNING id
+        VALUES (${messageId}, ${auth.tenantId}, ${pending.threadId}, 'outgoing', 'email', ${input.body.trim()}, ${complaintSummary??(input.attachment ? `Anhang: ${input.attachment.filename}` : 'Ohne Anhang')}, ${auth.userId}) RETURNING id
       `);
       if (messages.length !== 1 || messages[0]?.id !== messageId) throw new Error("COMMUNICATION_MESSAGE_INSERT_FAILED");
     });

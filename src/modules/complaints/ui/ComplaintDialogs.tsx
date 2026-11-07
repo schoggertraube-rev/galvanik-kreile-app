@@ -13,6 +13,7 @@ export function ComplaintDialogs({ports,onRefresh}:{ports:ComplaintPorts;onRefre
   useEffect(()=>{
     const open=(event:Event)=>{
       const value=(event as CustomEvent<{ziel?:string;arg?:unknown}>).detail;
+      if(value?.ziel==='mail'&&typeof value.arg==='string'&&value.arg.endsWith('#auftragsbestaetigung')){const id=value.arg.slice(0,-'#auftragsbestaetigung'.length);if(id){event.preventDefault();setEntry({key:crypto.randomUUID(),request:{reminderOrderId:id}});}return;}
       if(value?.ziel!=='reklamation'||typeof value.arg!=='string'||!value.arg)return;
       const [id,mode]=value.arg.split('#',2);
       if(!id)return;

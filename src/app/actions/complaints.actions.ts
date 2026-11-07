@@ -2,9 +2,9 @@
 import {unstable_noStore as noStore} from "next/cache";
 import {readComplaints,executeComplaint,readComplaintOrderSource,readComplaintOrderChoices} from "@/modules/complaints/server-public";
 import {recordIntakeComplaintEffect} from "@/modules/eingang/server-public";
-import {resolveAuthorization} from '@/lib/server/authorization';
-import {sendCommunicationMail} from '@/lib/server/communicationPort';
-import {readComplaintResultMail} from '@/lib/server/commands/emailTemplateCommand';
+import {resolveAuthorization,hasAuthorizationArea} from '@/lib/server/authorization';
+import {sendCommunicationMail,readComplaintGoodsReminderContext} from '@/lib/server/communicationPort';
+import {readComplaintResultMail,readComplaintGoodsMail} from '@/lib/server/commands/emailTemplateCommand';
 import {COMPLAINT_DEFECTS,type ComplaintWriteResult,type ComplaintRequest,type ComplaintDialogData} from '@/modules/complaints/public';
 import {readIntakeCapture} from '@/modules/eingang/server-public';
 import {readIntakeSuggestions} from '@/lib/server/intakeSuggestions';
@@ -36,6 +36,19 @@ export async function sendeReklamationErgebnisAction(input:{complaintId:string;v
 
 export async function getComplaintDialogAction(request:ComplaintRequest):Promise<{code:'OK';data:ComplaintDialogData}|{code:string;message:string}> {
  noStore();
+ if(request&&typeof request==='object'&&'reminderOrderId'in request){
+  if(Object.keys(request).length!==1||typeof request.reminderOrderId!=='string'||!request.reminderOrderId||request.reminderOrderId.length>128)return {code:'VALIDATION_ERROR',message:'Nacharbeitsbezug ist ungültig.'};
+  try{
+   const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED',message:'Sitzung fehlt.'};
+   if(!hasAuthorizationArea(auth.data,'kunden'))return {code:'FORBIDDEN',message:'Kunde erinnern benötigt Kunden.'};
+   const context=await readComplaintGoodsReminderContext(auth.data,request.reminderOrderId);
+   if(!context)return {code:'NOT_FOUND',message:'Nacharbeit wartet nicht mehr auf Ware oder ist nicht verfügbar.'};
+   if(!context.number||!context.customerName||!context.complaintNumber)return {code:'UNAVAILABLE',message:'Auftrags-, Kunden- oder Reklamationsnummer fehlt.'};
+   const base=await getComplaintDialogAction({complaintId:context.complaintId});if(base.code!=='OK'||!('data'in base))return base;
+   const resultMail=await readComplaintGoodsMail(auth.data,{Kunde:context.customerName,Auftragsnummer:context.number,'RK-Nummer':context.complaintNumber});
+   return {code:'OK',data:{...base.data,resultMail}};
+  }catch(error){console.error('[COMPLAINT_REMINDER_READ_FAILED]',error);return {code:'UNAVAILABLE',message:'Begleitschein-Erinnerung konnte nicht geladen werden.'};}
+ }
  if(!request||typeof request!=='object'||Array.isArray(request)||Object.keys(request).some(key=>!['complaintId','orderId','sourceItemId'].includes(key))||Object.values(request).some(value=>typeof value!=='string'||!value||value.length>128)||('complaintId'in request)==('orderId'in request))return {code:'VALIDATION_ERROR',message:'Reklamationsbezug ist ungültig.'};
  try {
   const authorization=await resolveAuthorization();if(!authorization.ok)return {code:'UNAUTHENTICATED',message:'Sitzung konnte nicht geprüft werden.'};
@@ -64,4 +77,12 @@ export async function getComplaintDialogAction(request:ComplaintRequest):Promise
   }
   return {code:'OK',data:{complaint,source:{id:source.id,number:source.number,customerName:source.customerName,items:source.items.map(item=>({id:item.id,name:item.name,quantity:item.quantity,unit:item.unit}))},initial,suggestedDate,resultMail,rework:complaint?.nacharbeitAuftragId&&complaint.reworkStation?{station:complaint.reworkStation,goods:complaint.reworkGoods??null}:null}};
  }catch(error){console.error('[COMPLAINT_DIALOG_READ_FAILED]',error);return {code:'UNAVAILABLE',message:'Reklamation konnte nicht geladen werden. Code: COMPLAINT_DIALOG_READ_FAILED.'};}
+}
+
+export async function sendeNacharbeitBegleitscheinAction(input:{complaintId:string;version:number;orderId:string;clientKey:string;subject:string;body:string}){
+ if(!input||typeof input!=='object'||Object.keys(input).sort().join(',')!=='body,clientKey,complaintId,orderId,subject,version'||typeof input.complaintId!=='string'||!input.complaintId||input.complaintId.length>128||typeof input.orderId!=='string'||!input.orderId||input.orderId.length>128||!Number.isSafeInteger(input.version)||input.version<1||typeof input.clientKey!=='string'||!/^[0-9a-f-]{36}$/i.test(input.clientKey)||typeof input.subject!=='string'||!input.subject.trim()||input.subject.length>500||typeof input.body!=='string'||!input.body.trim()||input.body.length>20000)return {code:'VALIDATION_ERROR' as const,message:'Nacharbeit oder Nachricht ist ungültig.'};
+ try{
+  const auth=await resolveAuthorization();if(!auth.ok)return {code:'UNAUTHENTICATED' as const,message:'Sitzung fehlt.'};
+  return await sendCommunicationMail(auth.data,{targetType:'ORDER',targetId:input.orderId,clientRequestId:input.clientKey,subject:input.subject,body:input.body,complaintResult:{complaintId:input.complaintId,version:input.version,kind:'reminder'}});
+ }catch(error){console.error('[COMPLAINT_REMINDER_SEND_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'Versandergebnis konnte nicht sicher bestätigt werden. Eingaben und Kennung behalten.'};}
 }

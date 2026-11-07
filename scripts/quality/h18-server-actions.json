@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "be1140d22334e9fa7abf9c06a7f25f676f077bbd5d065001a711aad6d0946bf7",
+  "inventorySha256": "a568a539234430bd4299f81b7e997101c664da0a87348620ae453d45d7507bd9",
   "testedWriteActions": {
     "src/app/actions/eingang.actions.ts#saveIncomingInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
@@ -212,7 +212,8 @@
       "src/test/h18_workshop_actions.integration.test.ts"
     ],
     "src/app/actions/complaints.actions.ts#getComplaintDialogAction": [
-      "src/test/h18_workshop_actions.integration.test.ts"
+      "src/test/h18_workshop_actions.integration.test.ts",
+      "src/test/acceptance/complaint_goods_reminder.integration.test.ts"
     ],
     "src/app/actions/settings.actions.ts#readEmailTemplatesAction": [
       "src/test/h18_settings_actions.integration.test.ts"
@@ -222,6 +223,9 @@
     ],
     "src/app/actions/complaints.actions.ts#getComplaintOrderChoicesAction": [
       "src/test/h18_workshop_actions.integration.test.ts"
+    ],
+    "src/app/actions/complaints.actions.ts#sendeNacharbeitBegleitscheinAction": [
+      "src/test/acceptance/complaint_goods_reminder.integration.test.ts"
     ]
   },
   "writeActionOverrides": {
