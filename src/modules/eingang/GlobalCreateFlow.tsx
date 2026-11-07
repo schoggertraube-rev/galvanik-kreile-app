@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { FormEvent, KeyboardEvent, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { kundeVollstaendigkeit, CUSTOMER_FIELD_LABELS, KundeFormular, EMPTY_CUSTOMER_FORM, customerDisplayName, customerFieldError, kundeValidierung, type CustomerFormValue, type CreateCustomerInput, type CustomerAddressInput, type CustomerAddressResult, type CustomerComparisonValue } from "@/modules/customers/public";
+import { kundeVollstaendigkeit, customerPaymentLabel, CUSTOMER_FIELD_LABELS, KundeFormular, EMPTY_CUSTOMER_FORM, customerDisplayName, customerFieldError, kundeValidierung, type CustomerFormValue, type CreateCustomerInput, type CustomerAddressInput, type CustomerAddressResult, type CustomerComparisonValue } from "@/modules/customers/public";
 import type { CatalogServiceChoice } from "@/modules/katalog/public";
 import {
   intakePaymentContract,
@@ -2231,6 +2231,18 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         navigate("customer");setCustomerSource(source?{itemId:source.id,version:source.version}:null);if(source){setIntakeSourceCaptures([source]);setCustomerRecognitionText(captureRecognitionText(source));}
       }} />) : null}
       {open && step === "customer" ? (() => {
+        const focusCustomerField = (id: string) => {
+          const target = document.querySelector<HTMLElement>(`[data-spec-id="kundeneu.${id}"]`)
+            ?? document.querySelector<HTMLElement>('[data-spec-id="kundeneu.kundentyp"]');
+          (target?.matches("input,select,textarea,button") ? target : target?.querySelector<HTMLElement>("input,select,textarea,button"))?.focus();
+        };
+        const customerChecklistRow = (row: { id: string; label: string; value: string; target: string; origin?: string; invalid?: boolean; instruction?: string }) => {
+          const pending = row.origin?.startsWith("erkannt") && row.value && !row.invalid;
+          const complete = Boolean(row.value) && !row.invalid && !pending;
+          const text = pending ? `${row.label} ${row.value} · erkannt, bestätigen` : complete ? `${row.label} ${row.value} · vorhanden` : row.instruction ?? `${row.label} ${row.id === "kundentyp" || row.id === "zahlungsbedingung" ? "wählen" : "eintragen"}`;
+          return <button type="button" className={`ev-kf-pl-z ${styles.customerChecklistRow}`} key={row.id} data-spec-id={`kundeneu.pruefliste.${row.id}`} onClick={() => focusCustomerField(row.target)}><Chip text={pending ? "erkannt" : complete ? "ok" : "offen"} ton={complete ? "ok" : "warn"}/><span>{text}</span></button>;
+        };
+        const addressTarget = ({ street:"strasse", houseNumber:"hausnummer", zipCode:"plz", city:"ort", country:"land" } as const)[customerReadiness.felder.find((field): field is "street" | "houseNumber" | "zipCode" | "city" | "country" => ["street", "houseNumber", "zipCode", "city", "country"].includes(field)) ?? "street"];
         const customerDialog = <KrDialog
           key="customer"
           titel="Kunde anlegen"
@@ -2294,9 +2306,17 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 {customerAddress ? <div className="ev-kf-adrz" role="status">{customerAddress.message}</div> : null}
                 <section className="ev-kf-pl">
                   <b>Prüfliste</b><small>Pflicht</small>
-                  {[{id:"kundentyp",label:"Firma oder Privat",value:customerType},{id:"name",label:"Name / Firma",value:customerName},{id:"telefon",label:"Telefon",value:customerDraft.phone}].map(row=><div className="ev-kf-pl-z" key={row.id} data-spec-id={"kundeneu.pruefliste."+row.id}><Chip text={row.value ? "ok" : "fehlt"} ton={row.value ? "ok" : "warn"}/>{row.label}</div>)}
+                  {[
+                    {id:"kundentyp",label:"Firma oder Privat",value:customerType === "business" ? "Firma" : customerType === "privat" ? "Privat" : customerType === "lieferant" ? "Lieferant" : "",target:"kundentyp",origin:customerOrigins.customerType},
+                    {id:"name",label:"Name / Firma",value:customerName,target:customerType === "privat" ? "nachname" : "name",origin:customerType === "privat" ? customerOrigins.lastName : customerOrigins.companyName,invalid:customerReadiness.fehlt.includes("Name")},
+                    {id:"telefon",label:"Telefon",value:customerDraft.phone,target:"telefon",origin:customerOrigins.phone,invalid:customerReadiness.fehlt.includes("Telefon")},
+                  ].map(customerChecklistRow)}
                   <small>Für Aufträge nötig</small>
-                  {[{id:"email",label:"E-Mail",value:customerDraft.email},{id:"anschrift",label:"Anschrift",value:customerAddress?.blocked?"prüfen":customerReadiness.fehlt.includes("Anschrift")?"":"OK"},...(ports.canManageMoney?[{id:"zahlungsbedingung",label:"Zahlungsbedingung",value:customerDraft.paymentPreference}]:[])].map(row=><div className="ev-kf-pl-z" key={row.id} data-spec-id={"kundeneu.pruefliste."+row.id}><Chip text={row.value === "prüfen" ? "prüfen" : row.value ? "ok" : "fehlt"} ton={row.value && row.value!=="prüfen" ? "ok" : "warn"}/>{row.label}</div>)}
+                  {[
+                    {id:"email",label:"E-Mail",value:customerDraft.email,target:"email",origin:customerOrigins.email,invalid:customerReadiness.fehlt.includes("E-Mail")},
+                    {id:"anschrift",label:"Anschrift",value:customerReadiness.fehlt.includes("Anschrift") || customerAddress?.blocked ? "" : "vollständig",target:addressTarget,instruction:customerAddress?.blocked ? "Anschrift mit den Vorschlägen abgleichen" : undefined},
+                    ...(ports.canManageMoney?[{id:"zahlungsbedingung",label:"Zahlungsbedingung",value:customerDraft.paymentPreference ? customerPaymentLabel(customerDraft.paymentPreference) : "",target:"zahlungsbedingung",origin:customerOrigins.paymentPreference,invalid:customerReadiness.fehlt.includes("Zahlungsbedingung")}]:[]),
+                  ].map(customerChecklistRow)}
                   <small className="ev-kf-pl-i" data-spec-id="kundeneu.pruefliste.info">Kundennummer wird beim Speichern vergeben</small>
                   <small className="ev-kf-pl-i">{customerReadiness.text}</small>
                 </section>

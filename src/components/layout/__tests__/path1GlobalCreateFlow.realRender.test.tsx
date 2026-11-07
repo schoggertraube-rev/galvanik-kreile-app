@@ -1288,6 +1288,24 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(value.createQuote).not.toHaveBeenCalled();
   });
 
+  it("führt aus der Kunden-Prüfliste zu den konkret offenen Feldern", async () => {
+    render(<GlobalCreateFlow ports={ports()} />);
+    await openIntent("CUSTOMER");
+    const dialog = screen.getByRole("dialog", { name: /Kunde anlegen/ });
+    fireEvent.click(within(dialog).getByRole("button", { name: /Firma oder Privat wählen/ }));
+    expect(within(screen.getByRole("group", { name: "Kundentyp" })).getByRole("button", { name: "Firma" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Firma" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /Name \/ Firma eintragen/ }));
+    expect(screen.getByLabelText("Firmenname")).toHaveFocus();
+    fireEvent.change(screen.getByLabelText("Firmenname"), { target: { value: "SYNTHETISCH Muster" } });
+    expect(within(dialog).getByRole("button", { name: /Name \/ Firma SYNTHETISCH Muster · vorhanden/ })).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: /Anschrift eintragen/ }));
+    expect(screen.getByLabelText("Straße")).toHaveFocus();
+    fireEvent.change(screen.getByLabelText("Straße"), { target: { value: "Testweg" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /Anschrift eintragen/ }));
+    expect(screen.getByLabelText("Nr.")).toHaveFocus();
+  });
+
   it("keeps the draft visible for validation and conflict responses without false success", async () => {
     const createCustomer = vi.fn<GlobalCreatePorts["createCustomer"]>().mockResolvedValue({
       code: "VALIDATION_ERROR",
