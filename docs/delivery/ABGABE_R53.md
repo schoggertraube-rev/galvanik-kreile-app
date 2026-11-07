@@ -43,6 +43,11 @@ Sichtlauf und die CI-Prüfungen des PR-Kopfs stehen noch aus.
   wie „Kunde wählen“ statt des isolierten Wortes „fehlt“ nennt. Der
   generierte Akzeptanzfall bleibt unverändert; zwei realRender-Fälle prüfen
   leere und ausgefüllte Kundenangaben sowie den Zustandswechsel.
+- Der anfänglich grüne generierte CI-Lauf enthielt nur je einen Rauchtest pro
+  Seite. Der PR-Umfang wurde anschließend auf die tatsächlich berührten
+  Ablaufbereiche erweitert: Eingang, Kundenanlage und -bearbeitung, Ware,
+  Mail-Eingang, Eingangsrechnung, Original, Nachrichten, Anliegenwahl und
+  Entwurf. Ihr vollständiger Lauf am endgültigen Kopf steht noch aus.
 - Der bisherige CI-Lauf auf `e57f8b5a` meldete E01 und im vollständigen
   Replay den bereits früher beobachteten Tablet-Navigationsfehler nach
   `/settings`. Für den neuen Kopf sind beide Prüfungen erneut offen. Die
