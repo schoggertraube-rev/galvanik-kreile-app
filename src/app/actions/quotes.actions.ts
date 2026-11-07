@@ -161,7 +161,7 @@ export async function updateQuoteAction(input: UpdateQuoteInput) {
   }
   const failure = authorizationFailure(authorization);
   if (failure || !authorization.ok) return failure!;
-  const result = await updateQuoteCommand(quoteCommandContext(authorization.data), input,quoteFollowupBinding(authorization.data));
+  const result = await updateQuoteCommand(quoteCommandContext(authorization.data), input,quoteFollowupBinding(authorization.data),(tx,source)=>recordIntakeQuoteEffect(tx,authorization.data,source));
   if (result.code === "OK") {
     revalidatePath("/customers");
     revalidatePath(`/customers/${result.quote.customerId}`);

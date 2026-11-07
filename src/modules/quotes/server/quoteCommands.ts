@@ -194,14 +194,14 @@ function normalizeConvert(value: unknown): ConvertQuoteInput | null {
 }
 
 function normalizeUpdate(value: unknown): UpdateQuoteInput | null {
-  if (!plainObject(value) || !exactKeys(value, ["clientEventId", "dueDate", "expectedVersion", "note", "positions", "quoteId",...(Object.hasOwn(value,"calculation")?["calculation"]:[])])) return null;
+  if (!plainObject(value) || !exactKeys(value, ["clientEventId", "dueDate", "expectedVersion", "note", "positions", "quoteId",...["calculation","source","termStatus"].filter(key=>Object.hasOwn(value,key))])) return null;
   if (typeof value.quoteId !== "string" || !UUID_PATTERN.test(value.quoteId)
     || typeof value.clientEventId !== "string" || !UUID_PATTERN.test(value.clientEventId)
     || typeof value.expectedVersion !== "number" || !Number.isSafeInteger(value.expectedVersion) || value.expectedVersion < 1) return null;
   const created = normalizeCreate({
     clientEventId: value.clientEventId,
     customerId: "placeholder",
-    ...(Object.hasOwn(value,"calculation")?{calculation:value.calculation}:{}),
+    ...Object.fromEntries(["calculation","source","termStatus"].filter(key=>Object.hasOwn(value,key)).map(key=>[key,value[key]])),
     dueDate: value.dueDate,
     note: value.note,
     positions: value.positions,
@@ -215,6 +215,8 @@ function normalizeUpdate(value: unknown): UpdateQuoteInput | null {
     note: created.note,
     positions: created.positions,
     ...(created.calculation?{calculation:created.calculation}:{}),
+    ...(created.source?{source:created.source}:{}),
+    ...(Object.hasOwn(value,"termStatus")?{termStatus:created.termStatus}:{}),
   };
 }
 
@@ -355,7 +357,7 @@ export async function readQuote(tx: PrivilegedTenantTransaction, tenantId: strin
 }
 
 export type QuoteFollowupBinding=(tx:PrivilegedTenantTransaction,input:{quote:QuoteReadback;action:'sent'|'changed'|'accept'|'reject'|'conditional';phase:'before'|'after'})=>Promise<string|null>;
-export type QuoteSourceBinding=(tx:PrivilegedTenantTransaction,input:{source:NonNullable<CreateQuoteInput['source']>;quoteId:string;customerId:string;clientEventId:string;effect?:'ware'|'accept'|'reject'|'conditional'})=>Promise<void|{code:'FORBIDDEN'|'NOT_FOUND'|'CONFLICT'|'VALIDATION_ERROR'|'UNAVAILABLE';message:string}>;
+export type QuoteSourceBinding=(tx:PrivilegedTenantTransaction,input:{source:NonNullable<CreateQuoteInput['source']>;quoteId:string;customerId:string;clientEventId:string;effect?:'ware'|'accept'|'reject'|'conditional'|'amend'})=>Promise<void|{code:'FORBIDDEN'|'NOT_FOUND'|'CONFLICT'|'VALIDATION_ERROR'|'UNAVAILABLE';message:string}>;
 class QuoteSourceFailure extends Error {constructor(readonly result:Exclude<CreateQuoteResult,{code:'OK'}>){super(result.message);}}
 export async function createQuoteCommand(authorization: QuoteCommandContext, input: unknown,bindSource?:QuoteSourceBinding): Promise<CreateQuoteResult> {
   const normalized = normalizeCreate(input);
@@ -445,7 +447,7 @@ export async function listOpenQuotesCommand(authorization: QuoteCommandContext):
   }
 }
 
-export async function updateQuoteCommand(authorization: QuoteCommandContext, input: unknown,followup:QuoteFollowupBinding): Promise<UpdateQuoteResult> {
+export async function updateQuoteCommand(authorization: QuoteCommandContext, input: unknown,followup:QuoteFollowupBinding,bindSource?:QuoteSourceBinding): Promise<UpdateQuoteResult> {
   const normalized = normalizeUpdate(input);
   if (!normalized) return { code: "VALIDATION_ERROR", message: "KV-Daten sind unvollständig oder ungültig." };
   if (!authorization.capabilities.canUpdateQuote) return { code: "FORBIDDEN", message: "KVs dürfen mit dieser Rolle nicht bearbeitet werden." };
@@ -470,10 +472,16 @@ export async function updateQuoteCommand(authorization: QuoteCommandContext, inp
         throw new Error("QUOTE_UPDATE_RESULT_INVALID");
       }
       if(!outcome.replayed&&normalized.calculation)await writeCalculationSnapshot(tx,authorization,normalized.quoteId,normalized.clientEventId,normalized.calculation,calculationBefore);
+      if(!outcome.replayed&&(Object.hasOwn(normalized,'termStatus')||before&&before.dueDate!==normalized.dueDate))await tx.execute(sql`UPDATE private.quotes SET intake_term_status=${normalized.termStatus??null} WHERE tenant_id=${authorization.tenantId} AND id=${normalized.quoteId}::uuid`);
       let quote = await readQuote(tx, authorization.tenantId, normalized.quoteId);
       if(!outcome.replayed&&before?.lifecycle&&quote?.lifecycle&&quote.lifecycle.edition===before.lifecycle.edition&&quoteContent(before)!==quoteContent(quote)&&await quoteHasPreparedDocument(tx,authorization.tenantId,normalized.quoteId,before.lifecycle.edition)){
         await tx.execute(sql`UPDATE private.quotes SET fassung=fassung+1 WHERE tenant_id=${authorization.tenantId} AND id=${normalized.quoteId}::uuid`);
         quote=await readQuote(tx,authorization.tenantId,normalized.quoteId);
+      }
+      if(!outcome.replayed&&normalized.source){
+        if(!bindSource||!quote)throw new QuoteSourceFailure({code:'UNAVAILABLE',message:'Nachtrags-Original konnte nicht mitgespeichert werden. Nichts geändert.'});
+        const failure=await bindSource(tx,{source:normalized.source,quoteId:quote.quoteId,customerId:quote.customerId,clientEventId:normalized.clientEventId,effect:'amend'});
+        if(failure)throw new QuoteSourceFailure(failure);
       }
       if(!outcome.replayed&&quote?.lifecycle?.stage==='geaendert_seit_versand'){await followup(tx,{quote,action:'changed',phase:'after'});quote=await readQuote(tx,authorization.tenantId,normalized.quoteId);}
       const rows = await tx.execute<UpdateReceiptRow>(sql`
@@ -495,6 +503,7 @@ export async function updateQuoteCommand(authorization: QuoteCommandContext, inp
       } };
     });
   } catch (error) {
+    if(error instanceof QuoteSourceFailure){console.error('[QUOTE_SOURCE_REJECTED]',error.result.code);return error.result;}
     console.error("quote_update_command_failed", { message: diagnostic(error, "message"), details: diagnostic(error, "details"), hint: diagnostic(error, "hint") });
     return { code: "UNAVAILABLE", message: "KV konnte nicht sicher aktualisiert werden." };
   }

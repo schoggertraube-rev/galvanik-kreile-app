@@ -50,6 +50,8 @@ export type ConvertQuoteInput = {
 };
 
 export type UpdateQuoteInput = {
+  source?:CreateQuoteInput['source'];
+  termStatus?:CreateQuoteInput['termStatus'];
   calculation?:QuoteCalculation;
   quoteId: string;
   clientEventId: string;

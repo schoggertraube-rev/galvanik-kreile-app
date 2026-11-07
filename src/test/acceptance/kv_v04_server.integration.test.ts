@@ -582,3 +582,34 @@ it('KV-04 reserves the PDF edition, preserves a real concurrent edit and never m
   expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND correlation_id=${failedInput.clientRequestId}::uuid AND event_type='COMMUNICATION_DOCUMENT_SENT_V1'`)[0].n).toBe(0);
  }finally{vi.unstubAllGlobals();for(const key of envNames){const value=previous.get(key);if(value===undefined)delete process.env[key];else process.env[key]=value;}}
 });
+
+
+it('KV-12 applies a mail term amendment to the existing quote and concern atomically, invalidates old acceptance and preserves the source',async()=>{
+ const fixture=await createFixture();
+ await sql`INSERT INTO public.app_user_rights(tenant_id,user_id,bereich,granted_by) VALUES(${KREILE_TENANT_SLUG},${fixture.actorId}::uuid,'mails',${fixture.actorId}::uuid)`;
+ const {createQuoteAction,changeQuoteLifecycleAction,updateQuoteAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
+ const {saveIntakeNoteAction,selectIntakeConcernAction}=await import('@/app/actions/eingang.actions');
+ const positions=[{name:'TEST Halter',quantity:4,material:null,surfaceRequested:'Verchromen',unitPriceCents:1000}];
+ const quote=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2026-11-18',termStatus:'bestaetigt',note:'TEST Ursprungs-KV',positions}));
+ if(quote.code!=='OK')throw Error('TEST_AMEND_QUOTE:'+quote.code);
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'sent',quoteId:quote.quote.quoteId,clientEventId:randomUUID(),expectedVersion:1,edition:1,channel:'druck',evidence:'TEST Ursprung ausgegeben'}))).toMatchObject({code:'OK'});
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'accept',quoteId:quote.quote.quoteId,clientEventId:randomUUID(),expectedVersion:2,edition:1,evidence:'TEST ursprüngliche Fassung zugesagt'}))).toMatchObject({code:'OK'});
+ const itemId=randomUUID(),text='Bitte Liefertermin auf 20.11.2026 ändern. TEST weitere Aufgabe erledigen.';
+ const original=await withSession(fixture,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text,context:{customerId:fixture.customerId}}));
+ if(original.code!=='OK')throw Error('TEST_AMEND_SOURCE:'+original.code);
+ // Existing imported TEST mail precondition; no external mail-import claim.
+ await sql`UPDATE public.intake_item SET kanal='mail',richtung='rein',graph_message_id=${'TEST-amend-'+itemId},empfangen_am=statement_timestamp(),absender_name='TEST Kunde',absender_adresse='test-amend@example.invalid' WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`;
+ const chosen=await withSession(fixture,()=>selectIntakeConcernAction({itemId,version:original.capture.version,clientEventId:randomUUID(),concern:'aenderung'}));
+ if(chosen.code!=='OK')throw Error('TEST_AMEND_CONCERN:'+chosen.code);
+ const input={quoteId:quote.quote.quoteId,clientEventId:randomUUID(),expectedVersion:3,dueDate:'2026-11-20',termStatus:'bestaetigt' as const,note:'TEST Ursprungs-KV · Liefertermin aus Nachtrag übernommen',positions,source:{itemId,version:chosen.capture.version,message:true}};
+ expect(await withSession(fixture,()=>updateQuoteAction({...input,source:{...input.source,version:input.source.version+1}}))).toMatchObject({code:'CONFLICT'});
+ expect(await withSession(fixture,()=>readQuoteAction({quoteId:quote.quote.quoteId}))).toMatchObject({code:'OK',quote:{version:3,dueDate:'2026-11-18',lifecycle:{edition:1,acceptedEdition:1}}});
+ const updated=await withSession(fixture,()=>updateQuoteAction(input));
+ expect(updated).toMatchObject({code:'OK',quote:{version:4,dueDate:'2026-11-20',termStatus:'bestaetigt',lifecycle:{edition:2,acceptedEdition:1,stage:'geaendert_seit_versand'}}});
+ expect(await withSession(fixture,()=>updateQuoteAction(input))).toMatchObject({code:'OK',replayed:true});
+ const [row]=await sql`SELECT text,vorgang_art,vorgang_id,anliegen_offen FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`;
+ expect(row).toMatchObject({text,vorgang_art:'kv',vorgang_id:quote.quote.quoteId,anliegen_offen:expect.arrayContaining(['aufgabe'])});
+ expect(row.anliegen_offen).not.toContain('aenderung');
+ expect((await sql`SELECT count(*)::int n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND nachher->>'action'='kv.geaendert'`)[0].n).toBe(1);
+ expect((await sql`SELECT count(*)::int n FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`)[0].n).toBe(1);
+});
