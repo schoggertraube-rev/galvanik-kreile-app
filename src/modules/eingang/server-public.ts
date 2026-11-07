@@ -7,7 +7,8 @@ export {selectIntakeConcern,finishIntakeUse,reopenIntake} from './server/intakeL
 export {recordIntakeTaskEffect} from './server/intakeTaskEffect';
 export {recordIntakeComplaintEffect} from './server/intakeComplaintEffect';
 export {saveIntakeProspect} from './server/intakeProspect';
-export {readOpenIntakeMails} from "./server/intakeMailRead";
+export {readOpenIntakeMails,readLinkedIntakeMails} from "./server/intakeMailRead";
+export {importIntakeGraphMail,linkImportedMail,readIntakeMailImportReceipt} from './server/intakeMailImport';
 export {openIntakeOriginal,confirmIntakeOriginal,readOrderIntakeOriginals} from "./server/intakeOriginal";
 export { saveGoodsReceipt,readGoodsReceipts,createGoodsReceiptStationBinding,writeCreatedOrderGoodsReceipt } from "./server/goodsReceipt";
 export type { GoodsReceiptResult,GoodsReceiptDependencies } from "./server/goodsReceipt";

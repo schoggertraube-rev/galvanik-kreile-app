@@ -3,18 +3,15 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
-import {hasAuthorizationArea} from "@/lib/server/authorization";
-import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import {hasAuthorizationArea} from '@/lib/server/authorization';
+import {withPrivilegedTenantTransaction,type PrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
 import {
   listMicrosoftGraphInbox,
   readMicrosoftGraphConfigurationStatus,
-  readMicrosoftGraphAttachments,
-  readMicrosoftGraphMessage,
   sendMicrosoftGraphMail,
   type GraphInboxMessage,
   type GraphMailAttachment,
 } from "@/lib/server/microsoftGraph";
-import { importDomainAttachmentBytes } from "@/lib/server/domainAttachment";
 
 type TargetType = "CUSTOMER" | "ORDER";
 type Result<T> = { code: "OK"; data: T } | { code: "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_ERROR" | "CONFLICT" | "IN_KLAERUNG" | "UNAVAILABLE"; message: string };
@@ -52,9 +49,10 @@ function iso(value: Date | string | null) {
   return date.toISOString();
 }
 
-async function resolveTarget(auth: AuthorizationSnapshot, type: TargetType, id: string): Promise<Target | null> {
-  return withPrivilegedTenantTransaction(auth, async (tx) => {
-    const rows = type === "CUSTOMER"
+async function resolveTarget(auth:AuthorizationSnapshot,type:TargetType,id:string):Promise<Target|null>{return withPrivilegedTenantTransaction(auth,tx=>readCommunicationTargetInTransaction(tx,auth,type,id));}
+export async function readCommunicationTargetInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,type:TargetType,id:string):Promise<Target|null>{
+ if(!validTarget(type,id))return null;
+  const rows = type === "CUSTOMER"
       ? await tx.execute<{ customer_id: string; order_id: null; email: string | null; label: string }>(sql`
           SELECT id AS customer_id, NULL::text AS order_id, email, name AS label
           FROM public.customers WHERE tenant_id=${auth.tenantId} AND id=${id} LIMIT 2
@@ -69,7 +67,15 @@ async function resolveTarget(auth: AuthorizationSnapshot, type: TargetType, id: 
     if (rows.length !== 1 || !rows[0]) return null;
     const email = rows[0].email?.trim().toLowerCase() ?? "";
     return { customerId: rows[0].customer_id, orderId: rows[0].order_id, email, label: rows[0].label };
-  });
+}
+/** Historical correspondence is projected into the intake once, without changing its target. */
+export async function readCommunicationImportContext(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,graphId:string){
+ const rows=await tx.execute<{customerId:string|null;orderId:string|null}>(sql`SELECT thread.customer_id AS "customerId",thread.order_id AS "orderId" FROM public.communication_threads thread WHERE thread.tenant_id=${auth.tenantId} AND thread.source=${'MS_GRAPH_IN:'+graphId}`);
+ if(rows.length>1)throw Error('COMMUNICATION_SOURCE_AMBIGUOUS');
+ const previous=rows[0];if(!previous||!previous.customerId&&!previous.orderId)return null;
+ const target=await readCommunicationTargetInTransaction(tx,auth,previous.orderId?'ORDER':'CUSTOMER',previous.orderId??previous.customerId!);
+ if(!target||previous.customerId&&previous.customerId!==target.customerId)throw Error('COMMUNICATION_LEGACY_TARGET_INVALID');
+ return {customerId:target.customerId,orderId:target.orderId};
 }
 
 export async function readCommunicationInbox(auth: AuthorizationSnapshot): Promise<Result<GraphInboxMessage[]>> {
@@ -109,6 +115,7 @@ export async function readLinkedCommunicationMessages(
       ) message ON true
       WHERE thread.tenant_id = ${auth.tenantId}
         AND thread.source LIKE 'MS_GRAPH_IN:%'
+        AND NOT EXISTS(SELECT 1 FROM public.intake_item canonical WHERE canonical.tenant_id=thread.tenant_id AND canonical.graph_message_id=substring(thread.source FROM 13) AND canonical.kunde_id IS NOT NULL)
         AND ((${input.targetType} = 'ORDER' AND thread.order_id = ${target.orderId})
           OR (${input.targetType} = 'CUSTOMER' AND thread.customer_id = ${target.customerId}))
       ORDER BY message.created_at DESC, thread.id DESC
@@ -143,6 +150,7 @@ export async function readLinkedCommunicationMessages(
 export async function attachInboxMessage(
   auth: AuthorizationSnapshot,
   input: { targetType: TargetType; targetId: string; graphMessageId: string },
+  persistedMessage:GraphInboxMessage,
 ): Promise<Result<CommunicationReceipt>> {
   if (!validTarget(input?.targetType, input?.targetId) || typeof input.graphMessageId !== "string" || input.graphMessageId.length < 1 || input.graphMessageId.length > 1024) {
     return { code: "VALIDATION_ERROR", message: "Mail oder Zuordnung ist ungültig." };
@@ -153,10 +161,7 @@ export async function attachInboxMessage(
     return null;
   });
   if (!target) return { code: "NOT_FOUND", message: "Kunde oder Auftrag ist nicht verfügbar." };
-  const graph = await readMicrosoftGraphMessage(input.graphMessageId);
-  if (graph.code !== "OK") return graph;
-  const graphAttachments = graph.data.hasAttachments ? await readMicrosoftGraphAttachments(input.graphMessageId) : { code: "OK" as const, data: { attachments: [], skipped: 0 } };
-  if (graphAttachments.code !== "OK") return graphAttachments;
+  const graph = {code:'OK' as const,data:persistedMessage};
   const source = `MS_GRAPH_IN:${graph.data.id}`;
   try {
     const stored = await withPrivilegedTenantTransaction(auth, async (tx) => {
@@ -168,7 +173,9 @@ export async function attachInboxMessage(
       if (existing.length > 1) throw new Error("COMMUNICATION_SOURCE_AMBIGUOUS");
       if (existing[0]) {
         if (existing[0].customer_id !== target.customerId || existing[0].order_id !== target.orderId) {
-          return { code: "CONFLICT" as const, message: "Diese Mail ist bereits einem anderen Vorgang zugeordnet." };
+          // The app action has already authorized and committed the canonical intake binding.
+          // This historical correspondence row is only its projection, never another decision.
+          await tx.execute(sql`UPDATE public.communication_threads SET customer_id=${target.customerId},order_id=${target.orderId},updated_at=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${existing[0].id}`);
         }
         return { code: "OK" as const, data: { threadId: existing[0].id, messageId: null, customerId: target.customerId, orderId: target.orderId, recordedAt: iso(existing[0].created_at), replayed: true } };
       }
@@ -189,23 +196,7 @@ export async function attachInboxMessage(
       return { code: "OK" as const, data: { threadId, messageId, customerId: target.customerId, orderId: target.orderId, recordedAt: iso(threads[0].created_at), replayed: false } };
     });
     if (stored.code !== "OK") return stored;
-    let imported = 0;
-    for (const attachment of graphAttachments.data.attachments) {
-      const saved = await importDomainAttachmentBytes(auth, {
-        targetType: input.targetType, targetId: input.targetId,
-        sourceKey: `MS_GRAPH:${graph.data.id}:${attachment.id}`,
-        mimeType: attachment.contentType,
-        bytes: attachment.bytes,
-      });
-      if (saved.code === "OK") imported += 1;
-    }
-    const failed = graphAttachments.data.attachments.length - imported;
-    return { code: "OK", data: {
-      ...stored.data,
-      attachmentsImported: imported,
-      attachmentsSkipped: graphAttachments.data.skipped,
-      ...(failed > 0 ? { attachmentWarning: `${failed} unterstützte Mailanhänge konnten nicht sicher gespeichert werden.` } : {}),
-    } };
+    return stored;
   } catch (error) {
     logCommunicationFailure("COMMUNICATION_ATTACH_FAILED", error);
     return { code: "UNAVAILABLE", message: "Die Mail konnte nicht sicher am Vorgang abgelegt werden." };

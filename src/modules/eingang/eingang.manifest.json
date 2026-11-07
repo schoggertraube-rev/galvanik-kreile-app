@@ -139,6 +139,10 @@
     "@/modules/eingang/server-public#setIntakeNoBusiness",
     "@/modules/eingang/server-public#createCustomerForIntake",
     "@/modules/eingang/public#AssignmentPorts",
+    "@/modules/eingang/server-public#importIntakeGraphMail",
+    "@/modules/eingang/server-public#linkImportedMail",
+    "@/modules/eingang/server-public#readLinkedIntakeMails",
+    "@/modules/eingang/server-public#readIntakeMailImportReceipt",
     "@/modules/eingang/server-public#recordIntakeComplaintEffect",
     "@/modules/eingang/public#ComplaintDialogs",
     "@/modules/eingang/public#ComplaintPorts"
@@ -184,7 +188,6 @@
     "tasks",
     "customers",
     "orders",
-    "quotes",
-    "complaints"
+    "quotes"
   ]
 }

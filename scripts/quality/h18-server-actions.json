@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "be1140d22334e9fa7abf9c06a7f25f676f077bbd5d065001a711aad6d0946bf7",
+  "inventorySha256": "d0bcd0447e4724b56acde07ed32547145276f163e5764742c8685c359ca300aa",
   "testedWriteActions": {
     "src/app/actions/eingang.actions.ts#saveIncomingInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
@@ -222,6 +222,15 @@
     ],
     "src/app/actions/complaints.actions.ts#getComplaintOrderChoicesAction": [
       "src/test/h18_workshop_actions.integration.test.ts"
+    ],
+    "src/app/actions/eingang.actions.ts#getOpenIntakeMailsAction": [
+      "src/test/acceptance/ein34_mail_import.integration.test.ts"
+    ],
+    "src/app/actions/communications.actions.ts#importOutlookMailAction": [
+      "src/test/acceptance/ein34_mail_import.integration.test.ts"
+    ],
+    "src/app/actions/communications.actions.ts#attachOutlookMailAction": [
+      "src/test/acceptance/ein34_mail_import.integration.test.ts"
     ]
   },
   "writeActionOverrides": {
@@ -237,7 +246,6 @@
     "src/app/actions/auth.ts#logout": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/baths.actions.ts#createBathMeasurementDb": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/baths.actions.ts#updateBathDb": "H18.8 Bestand ohne Replay-Action-Test",
-    "src/app/actions/communications.actions.ts#attachOutlookMailAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/communications.actions.ts#sendCustomerMailAction": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/company.actions.ts#updateCompanySettings": "H18.8 Bestand ohne Replay-Action-Test",
     "src/app/actions/customers.actions.ts#createCustomerDb": "H18.8 Bestand ohne Replay-Action-Test",

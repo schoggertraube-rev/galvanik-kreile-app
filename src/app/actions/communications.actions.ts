@@ -1,15 +1,19 @@
 "use server";
 
 import { unstable_noStore as noStore } from "next/cache";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import { resolveAuthorization,hasAuthorizationArea } from "@/lib/server/authorization";
 import {
   attachInboxMessage,
   readCommunicationInbox,
   readLinkedCommunicationMessages,
   sendCommunicationMail,
+  readCommunicationTargetInTransaction,
+  readCommunicationImportContext,
 } from "@/lib/server/communicationPort";
 import { readMicrosoftGraphConfigurationStatus } from "@/lib/server/microsoftGraph";
 import { readQuoteAction, readQuotePdfAction } from "@/app/actions/quotes.actions";
+import {linkImportedMail,readLinkedIntakeMails,readIntakeMailImportReceipt} from '@/modules/eingang/server-public';
+import {readCustomerProfile} from '@/modules/customers/server-public';
 
 type TargetInput = { targetType: "CUSTOMER" | "ORDER"; targetId: string };
 
@@ -32,15 +36,24 @@ export async function listOutlookInboxAction(input?: TargetInput) {
   noStore();
   const authorizationResult = await authorization();
   if (!authorizationResult.ok) return { code: "UNAUTHENTICATED" as const, message: authorizationResult.message };
-  return input
-    ? readLinkedCommunicationMessages(authorizationResult.data, input)
-    : readCommunicationInbox(authorizationResult.data);
+  if(!input)return readCommunicationInbox(authorizationResult.data);
+  const legacy=await readLinkedCommunicationMessages(authorizationResult.data,input);
+  if(legacy.code!=='OK')return legacy;
+  const canonical=await readLinkedIntakeMails(authorizationResult.data,input);
+  if(canonical.code!=='OK')return canonical;
+  const unique=new Map([...legacy.data,...canonical.data].map(message=>[message.id,message]));
+  return {code:'OK' as const,data:[...unique.values()].sort((a,b)=>Date.parse(b.receivedAt)-Date.parse(a.receivedAt))};
 }
 
 export async function attachOutlookMailAction(input: TargetInput & { graphMessageId: string }) {
   const authorizationResult = await authorization();
   if (!authorizationResult.ok) return { code: "UNAUTHENTICATED" as const, message: authorizationResult.message };
-  return attachInboxMessage(authorizationResult.data, input);
+  const imported=await importOutlookMailAction(input?.graphMessageId);
+  if(imported.code!=='OK')return imported;
+  const linked=await linkImportedMail(authorizationResult.data,{itemId:imported.itemId,targetType:input.targetType,targetId:input.targetId},readCommunicationTargetInTransaction,readCustomerProfile);
+  if(linked.code!=='OK')return linked;
+  const correspondence=await attachInboxMessage(authorizationResult.data,input,imported.message);
+  return correspondence.code==='OK'?{...correspondence,data:{...correspondence.data,attachmentsImported:imported.originalCount,attachmentsSkipped:imported.filteredAttachments}}:correspondence;
 }
 
 export async function sendCustomerMailAction(input: TargetInput & {
@@ -76,4 +89,27 @@ export async function sendCustomerMailAction(input: TargetInput & {
     body: input.body,
     attachment,
   });
+}
+
+import {importIntakeGraphMail} from '@/modules/eingang/server-public';
+import {readMicrosoftGraphAttachments,readMicrosoftGraphMime,readMicrosoftGraphMessage,type GraphInboxMessage} from '@/lib/server/microsoftGraph';
+async function importIntakeMessage(auth:Parameters<typeof importIntakeGraphMail>[0],mail:GraphInboxMessage){
+ const [mime,files]=await Promise.all([readMicrosoftGraphMime(mail.id),readMicrosoftGraphAttachments(mail.id)]);
+ if(mime.code!=='OK')return mime;
+ if(files.code!=='OK')return files;
+ const result=await importIntakeGraphMail(auth,mail,[{key:'mime',name:'Original.eml',mime:'message/rfc822',bytes:mime.data},...files.data.attachments.map(file=>({key:file.id,name:file.filename,mime:file.contentType,bytes:file.bytes}))],readCommunicationImportContext,files.data.skipped);
+ if(result.code!=='OK')return result;
+ const saved=await readIntakeMailImportReceipt(auth,{itemId:result.itemId});
+ return saved.code==='OK'?{...saved,replayed:result.replayed}:saved;
+}
+export async function importOutlookMailAction(graphMessageId:string){
+ const authorization=await resolveAuthorization();
+ if(!authorization.ok)return {code:'UNAUTHENTICATED' as const,message:'Sitzung nicht verfügbar.'};
+ if(!hasAuthorizationArea(authorization.data,'eingang')||!hasAuthorizationArea(authorization.data,'mails'))return {code:'FORBIDDEN' as const,message:'Mail-Import benötigt Eingang und Mails.'};
+ if(typeof graphMessageId!=='string'||!graphMessageId||graphMessageId.length>1024)return {code:'VALIDATION_ERROR' as const,message:'Mailkennung ungültig.'};
+ const saved=await readIntakeMailImportReceipt(authorization.data,{graphMessageId});
+ if(saved.code!=='NOT_FOUND')return saved;
+ const mail=await readMicrosoftGraphMessage(graphMessageId);
+ if(mail.code!=='OK')return mail;
+ return importIntakeMessage(authorization.data,mail.data);
 }

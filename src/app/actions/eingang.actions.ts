@@ -50,7 +50,23 @@ export async function getIntakeTaskAction(input:TaskOpenRequest){return readTask
 import {readOpenIntakeMails} from '@/modules/eingang/server-public';
 import {saveIntakeProspect} from '@/modules/eingang/server-public';
 export async function saveIntakeProspectAction(input:unknown){return saveIntakeProspect(input,createCustomerInTransaction,readCustomerProfile);}
-export async function getOpenIntakeMailsAction(){return readOpenIntakeMails();}
+export async function getOpenIntakeMailsAction(){const notice=await syncIntakeMailbox();const result=await readOpenIntakeMails();return result.code==='OK'?{...result,...(notice?{notice}:{})}:result;}
+import {listMicrosoftGraphInbox} from '@/lib/server/microsoftGraph';
+import {importOutlookMailAction} from '@/app/actions/communications.actions';
+async function syncIntakeMailbox():Promise<string|null>{
+ const authorization=await resolveAuthorization();
+ if(!authorization.ok||!hasAuthorizationArea(authorization.data,'eingang')||!hasAuthorizationArea(authorization.data,'mails'))return null;
+ try{
+  const inbox=await listMicrosoftGraphInbox();
+  if(inbox.code!=='OK')return inbox.message;
+  for(const mail of inbox.data){
+   // Graph's flag excludes inline-only images; inspect attachments independently.
+   const imported=await importOutlookMailAction(mail.id);
+   if(imported.code!=='OK')return imported.message;
+  }
+  return null;
+ }catch(error){console.error('[INTAKE_MAIL_SYNC_FAILED]',error);return 'Neue Mails momentan nicht abrufbar · bereits gesicherte Eingänge bleiben verfügbar.';}
+}
 import { processIntakeDeviceRequest, discardIntakeCapture, chooseIntakeCaptureKind } from "@/modules/eingang/server-public";
 export async function chooseIntakeCaptureKindAction(input: unknown) { return chooseIntakeCaptureKind(input); }
 import { readIntakeDrafts, writeIntakeDraft, discardIntakeDraft, retryIntakeRecognition, createIntakeContinuation } from "@/modules/eingang/server-public";
