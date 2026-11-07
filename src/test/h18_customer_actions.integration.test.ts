@@ -813,6 +813,59 @@ describe("Owner model D05/D07: draft actions against real Replay DB",()=>{
   expect(await sql`SELECT event_type FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND user_id=${owner.actorId}::uuid AND client_event_id IN (${input.clientEventId}::uuid,${deletion.clientEventId}::uuid)`).toHaveLength(2);
  });
 
+ it("P101 creates one tenant-bound continuation and draft, then rereads the same original",async()=>{
+  const actor=await createFixture();
+  const {saveIntakeNoteAction,createIntakeContinuationAction,getIntakeCaptureAction,getIntakeDraftsAction}=await import("@/app/actions/eingang.actions");
+  const parentId=randomUUID(),childId=randomUUID(),draftId=randomUUID(),clientEventId=randomUUID(),text="SYNTHETISCH P101 Original mit 23 Positionen";
+  const original=await withSession(actor,()=>saveIntakeNoteAction({itemId:parentId,textstand:randomUUID(),text,concerns:[]}));
+  expect(original.code).toBe("OK");if(original.code!=="OK")throw Error("P101_ORIGINAL_REQUIRED");
+  const payload={clientKey:childId,text,documents:[childId],items:[{key:randomUUID(),name:"SYNTHETISCH Position 21",quantity:"1"}]};
+  const input={parentId,parentVersion:original.capture.version,textSourceId:parentId,childId,draftId,clientEventId,fileId:null,payload};
+  expect(await withSession(actor,()=>createIntakeContinuationAction(input))).toMatchObject({code:"OK",childId,draftId,replayed:false});
+  expect(await withSession(actor,()=>createIntakeContinuationAction(input))).toMatchObject({code:"OK",childId,draftId,replayed:true});
+  const [row]=await sql`SELECT fortsetzung_von::text,file_id::text,text FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${childId}::uuid`;
+  expect(row).toEqual({fortsetzung_von:parentId,file_id:null,text:null});
+  expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${childId}::uuid AND art='angelegt' AND befehl_id=${clientEventId}::uuid`).toHaveLength(1);
+  expect(await withSession(actor,()=>getIntakeDraftsAction())).toMatchObject({code:"OK",drafts:[{id:draftId,payload}]});
+  expect(await withSession(actor,()=>getIntakeCaptureAction(childId))).toMatchObject({code:"OK",capture:{id:childId,text,continuation:{sourceId:parentId}}});
+  expect(await withSession(actor,()=>getIntakeCaptureAction(parentId))).toMatchObject({code:"OK",capture:{continuation:{childIds:[childId]}}});
+  expect(await withSession(actor,()=>createIntakeContinuationAction({...input,payload:{...payload,text:"SYNTHETISCH verändert"}}))).toMatchObject({code:"CONFLICT"});
+  const {erfasseAuftragAusEingangAction}=await import("@/app/actions/eingang.actions");
+  const position={catalogServiceId:null,name:"SYNTHETISCH Position",quantity:1,material:null,surfaceRequested:"verzinken",executionRequested:"offen" as const,unit:"stueck",unitPriceCents:null,vatRateBasisPoints:null};
+  const common={geprueft:true,text,dueDate:"2026-11-19",termStatus:"bestaetigt" as const,intakeSource:"persoenlich" as const,handoverMode:"pickup" as const,paymentMode:"vorkasse" as const,items:[position]};
+  const first=await withSession(actor,()=>erfasseAuftragAusEingangAction({...common,clientKey:randomUUID(),sourceCaptures:[{id:parentId,version:original.capture.version}],customer:{mode:"NEW" as const,customerType:"business" as const,companyName:"SYNTHETISCH P101 "+randomUUID(),salutation:"ohne" as const,firstName:"Ada",lastName:"Prüferin",email:"p101@example.invalid",phone:"+49 711 5550190",street:"Kundenweg",houseNumber:"7",zipCode:"70176",city:"Stuttgart",country:"DE",paymentPreference:"vorkasse"}}));
+  if(first.code!=="OK")throw Error("P101_FIRST_ORDER_FAILED:"+first.message);
+  const [firstOrder]=await sql<{customer_id:string}[]>`SELECT customer_id FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${first.orderId}`;
+  if(!firstOrder)throw Error("P101_FIRST_ORDER_MISSING");
+  const second=await withSession(actor,()=>erfasseAuftragAusEingangAction({...common,clientKey:childId,draftId,sourceCaptures:[{id:childId,version:1}],customer:{mode:"EXISTING" as const,customerId:firstOrder.customer_id}}));
+  if(second.code!=="OK")throw Error("P101_SECOND_ORDER_FAILED:"+second.message);
+  expect(second.orderId).not.toBe(first.orderId);
+  expect(await sql`SELECT id::text,vorgang_id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id IN (${parentId}::uuid,${childId}::uuid) ORDER BY id`).toEqual(expect.arrayContaining([{id:parentId,vorgang_id:first.orderId},{id:childId,vorgang_id:second.orderId}]));
+  expect(await sql`SELECT id FROM private.intake_drafts WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${draftId}::uuid`).toHaveLength(0);
+  expect(await withSession(actor,()=>getIntakeCaptureAction(childId))).toMatchObject({code:"OK",capture:{orderId:second.orderId,text,continuation:{sourceId:parentId}}});
+ });
+
+ it("P101 verknüpft gesicherte Originaldateien ohne Kopie und friert den Quellstand ein",async()=>withLocalReplayStorage(async()=>{
+  const actor=await createFixture();
+  const {prepareIntakeFileAction,finishIntakeFileAction,saveIntakeNoteAction,createIntakeContinuationAction,getIntakeCaptureAction}=await import("@/app/actions/eingang.actions");
+  const {uploadIntakeOriginal}=await import("@/modules/eingang/public");
+  const bytes=Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aLp8AAAAASUVORK5CYII=","base64");
+  const parentId=randomUUID(),fileId=randomUUID(),textSourceId=randomUUID(),childId=randomUUID(),draftId=randomUUID();
+  const file={itemId:parentId,fileId,name:"SYNTHETISCH-P101.png",mime:"image/png",bytes:bytes.length,sha256:createHash("sha256").update(bytes).digest("hex")};
+  const grant=await withSession(actor,()=>prepareIntakeFileAction(file));if(grant.code!=="OK")throw Error("P101_UPLOAD_GRANT:"+grant.message);
+  if(grant.upload)expect(await uploadIntakeOriginal(grant.upload,new File([Uint8Array.from(bytes).buffer],file.name,{type:file.mime}))).toMatchObject({ok:true});
+  const parent=await withSession(actor,()=>finishIntakeFileAction(fileId));if(parent.code!=="OK")throw Error("P101_FILE_FINISH:"+parent.message);
+  const text="SYNTHETISCH Text zu 23 Positionen";
+  expect(await withSession(actor,()=>saveIntakeNoteAction({itemId:textSourceId,textstand:randomUUID(),text,concerns:[]}))).toMatchObject({code:"OK"});
+  const payload={clientKey:childId,text,documents:[childId],items:[{key:randomUUID(),name:"SYNTHETISCH Position 21",quantity:"1"}]};
+  const command={parentId,parentVersion:parent.capture.version,textSourceId,childId,draftId,clientEventId:randomUUID(),fileId,payload};
+  expect(await withSession(actor,()=>createIntakeContinuationAction(command))).toMatchObject({code:"OK",replayed:false});
+  expect(await withSession(actor,()=>getIntakeCaptureAction(childId))).toMatchObject({code:"OK",capture:{text,files:[{id:fileId,secured:true}],continuation:{sourceId:parentId}}});
+  expect(await sql`SELECT item_id::text FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${fileId}::uuid`).toEqual([{item_id:parentId}]);
+  expect(await sql`SELECT file_id::text,fortsetzung_von::text FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${childId}::uuid`).toEqual([{file_id:fileId,fortsetzung_von:parentId}]);
+  expect(await sql`SELECT id FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${childId}::uuid`).toHaveLength(0);
+ }));
+
  it("P66 keeps the newer draft when an older browser session saves later",async()=>{
   const owner=await createFixture();
   const {saveIntakeDraftAction,getIntakeDraftsAction}=await import("@/app/actions/eingang.actions");

@@ -63,6 +63,8 @@ describe("recognizeIntakeText", () => {
     const result = recognizeIntakeText(text);
     expect(result.positions).toHaveLength(20);
     expect(result.totalPositions).toBe(23);
+    expect(result.overflowPositions).toHaveLength(3);
+    expect(result.overflowPositions?.[0]?.name).toBe("Prüfkörper 21");
   });
 
   it("erkennt den Wunsch-Wochentag statt des Maildatums", () => {

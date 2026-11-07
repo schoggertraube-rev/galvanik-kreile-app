@@ -102,3 +102,65 @@ export async function writeIntakeDraftInTransaction(tx:PrivilegedTenantTransacti
   await appendIntakeDraftEvent(tx,auth,{kind:"INTAKE_DRAFT_SAVED_V1",clientEventId:input.clientEventId as string,draftId:input.id as string,intent});
   return null;
 }
+
+/** P101: create a continuation and its existing draft atomically, without copying an original. */
+export async function createIntakeContinuation(input: unknown) {
+  if (!object(input) || Object.keys(input).sort().join(",") !== "childId,clientEventId,draftId,fileId,parentId,parentVersion,payload,textSourceId"
+    || ![input.childId, input.clientEventId, input.draftId, input.parentId, input.textSourceId].every(value => typeof value === "string" && UUID.test(value))
+    || !(input.fileId === null || typeof input.fileId === "string" && UUID.test(input.fileId))
+    || !Number.isSafeInteger(input.parentVersion) || (input.parentVersion as number) < 1
+    || !object(input.payload) || input.payload.clientKey !== input.childId
+    || !Array.isArray(input.payload.items) || input.payload.items.length < 1 || input.payload.items.length > 20
+    || !Array.isArray(input.payload.documents) || input.payload.documents.length !== 1 || input.payload.documents[0] !== input.childId
+    || typeof input.payload.text !== "string" || JSON.stringify(input.payload).length > 250_000) {
+    return { code: "VALIDATION_ERROR" as const, message: "Fortsetzung ist unvollständig oder ungültig." };
+  }
+  const auth = await authorizeDraft("eingang");
+  if ("code" in auth) return auth;
+  const value = input as { childId:string; clientEventId:string; draftId:string; fileId:string|null; parentId:string; parentVersion:number; payload:Record<string,unknown>; textSourceId:string };
+  const intent = createHash("sha256").update(JSON.stringify(value)).digest("hex");
+  try {
+    return await withPrivilegedTenantTransaction(auth, async tx => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended('intake-continuation:'||${auth.tenantId}||':'||${value.childId},0))`);
+      const prior = await tx.execute<{ intent:string; draftId:string }>(sql`SELECT nachher->>'intent' AS intent,nachher->>'draftId' AS "draftId" FROM public.intake_event
+        WHERE tenant_id=${auth.tenantId} AND item_id=${value.childId}::uuid AND art='angelegt' AND befehl_id=${value.clientEventId}::uuid`);
+      if (prior.length) return prior.length === 1 && prior[0]!.intent === intent && prior[0]!.draftId === value.draftId
+        ? { code:"OK" as const, childId:value.childId, draftId:value.draftId, replayed:true }
+        : { code:"CONFLICT" as const, message:"Diese Fortsetzung wurde bereits anders verwendet." };
+      const parents = await tx.execute<{kanal:string; version:number; text:string|null}>(sql`SELECT kanal,version,text FROM public.intake_item
+        WHERE tenant_id=${auth.tenantId} AND id=${value.parentId}::uuid FOR UPDATE`);
+      const parent = parents[0];
+      if (!parent) return { code:"NOT_FOUND" as const, message:"Der ursprüngliche Eingang wurde nicht gefunden." };
+      if (parent.kanal === "mail" && !hasAuthorizationArea(auth,"mails")) return { code:"FORBIDDEN" as const, message:"Mail-Inhalte benötigen das Recht Mails." };
+      if (parent.version !== value.parentVersion) return { code:"CONFLICT" as const, message:"Das Original wurde geändert · bitte erneut laden." };
+      const textSources = await tx.execute<{kanal:string; text:string|null}>(sql`SELECT kanal,text FROM public.intake_item
+        WHERE tenant_id=${auth.tenantId} AND id=${value.textSourceId}::uuid FOR SHARE`);
+      const textSource = textSources[0];
+      if (!textSource || textSource.text !== value.payload.text) return { code:"CONFLICT" as const, message:"Der Originaltext wurde geändert · bitte erneut laden." };
+      if (textSource.kanal === "mail" && !hasAuthorizationArea(auth,"mails")) return { code:"FORBIDDEN" as const, message:"Mail-Inhalte benötigen das Recht Mails." };
+      const files = await tx.execute<{id:string;secured:boolean}>(sql`SELECT file.id::text,EXISTS(
+        SELECT 1 FROM public.intake_event original WHERE original.tenant_id=file.tenant_id AND original.item_id=file.item_id
+          AND original.art='original_gespeichert' AND original.nachher->>'fileId'=file.id::text) AS secured
+        FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${value.parentId}::uuid ORDER BY file.reihenfolge,file.id`);
+      if(files.some(file=>!file.secured))return {code:"CONFLICT" as const,message:"Ein Original ist noch nicht sicher gespeichert · bitte erneut versuchen."};
+      if(files.length && !value.fileId || value.fileId && !files.some(file=>file.id===value.fileId))
+        return {code:"VALIDATION_ERROR" as const,message:"Das Original gehört nicht zum ursprünglichen Eingang."};
+      const event = await tx.execute<{id:string}>(sql`SELECT id::text FROM public.intake_event WHERE tenant_id=${auth.tenantId}
+        AND item_id=${value.textSourceId}::uuid AND art='original_gespeichert' AND nachher->>'text'=${textSource.text}
+        ORDER BY zeit DESC,id DESC LIMIT 1`);
+      if (!event.length) return { code:"CONFLICT" as const, message:"Der unveränderte Originaltext ist nicht nachgewiesen." };
+      const existing = await tx.execute(sql`SELECT id FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND (id=${value.childId}::uuid OR client_key=${value.childId})`);
+      if (existing.length) return { code:"CONFLICT" as const, message:"Die Eingangskennung wird bereits verwendet." };
+      const draftResult = await writeIntakeDraftInTransaction(tx,auth,{id:value.draftId,clientEventId:value.clientEventId,art:"eingang",payload:value.payload,lastField:null,expectedVersion:null});
+      if (draftResult) return draftResult;
+      await tx.execute(sql`INSERT INTO public.intake_item(id,tenant_id,client_key,kanal,richtung,quelle,erstellt_von,fortsetzung_von,file_id)
+        VALUES(${value.childId}::uuid,${auth.tenantId},${value.childId},${parent.kanal === "mail" || textSource.kanal === "mail" ? "mail" : parent.kanal},'intern','app',${auth.userId}::uuid,${value.parentId}::uuid,${value.fileId}::uuid)`);
+      await tx.execute(sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher)
+        VALUES(${auth.tenantId},${value.childId}::uuid,'angelegt',${value.clientEventId}::uuid,${auth.userId},${JSON.stringify({fortsetzungVon:value.parentId,fileId:value.fileId,draftId:value.draftId,textSourceId:value.textSourceId,originalTextEventId:event[0]!.id,originalFileIds:files.map(file=>file.id),intent})}::jsonb)`);
+      return { code:"OK" as const, childId:value.childId, draftId:value.draftId, replayed:false };
+    });
+  } catch (error) {
+    console.error("[INTAKE_CONTINUATION_CREATE_FAILED]",error);
+    return { code:"UNAVAILABLE" as const, message:"Fortsetzung nicht sicher gespeichert · Original und Eingaben bleiben erhalten. Code: INTAKE_CONTINUATION_CREATE_FAILED." };
+  }
+}

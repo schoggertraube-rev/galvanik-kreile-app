@@ -20,6 +20,7 @@ export type IntakeTextRecognition = {
   fields: IntakeTextRecognitionField[];
   positions: IntakeTextRecognitionPosition[];
   totalPositions?: number;
+  overflowPositions?: IntakeTextRecognitionPosition[];
 };
 
 const SURFACES: Array<{ pattern: RegExp; surface: string }> = [
@@ -115,5 +116,5 @@ export function recognizeIntakeText(text: string, today = new Date()): IntakeTex
     }];
   });
 
-  return { fields, positions: positions.slice(0, 20), ...(positions.length > 20 ? { totalPositions: positions.length } : {}) };
+  return { fields, positions: positions.slice(0, 20), ...(positions.length > 20 ? { totalPositions: positions.length, overflowPositions: positions.slice(20) } : {}) };
 }

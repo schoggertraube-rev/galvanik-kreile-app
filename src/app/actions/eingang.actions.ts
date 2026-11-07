@@ -53,7 +53,7 @@ export async function saveIntakeProspectAction(input:unknown){return saveIntakeP
 export async function getOpenIntakeMailsAction(){return readOpenIntakeMails();}
 import { processIntakeDeviceRequest, discardIntakeCapture, chooseIntakeCaptureKind } from "@/modules/eingang/server-public";
 export async function chooseIntakeCaptureKindAction(input: unknown) { return chooseIntakeCaptureKind(input); }
-import { readIntakeDrafts, writeIntakeDraft, discardIntakeDraft, retryIntakeRecognition } from "@/modules/eingang/server-public";
+import { readIntakeDrafts, writeIntakeDraft, discardIntakeDraft, retryIntakeRecognition, createIntakeContinuation } from "@/modules/eingang/server-public";
 import {saveGoodsReceipt,readGoodsReceipts,createGoodsReceiptStationBinding,type GoodsReceiptResult} from "@/modules/eingang/server-public";
 import {parseGoodsReceiptInput} from "@/modules/eingang/public";
 import {transitionWareneingangToGalvanik} from "@/lib/server/commands/orderStationCommand";
@@ -73,6 +73,7 @@ export async function saveGoodsReceiptAction(input:unknown):Promise<GoodsReceipt
 
 export async function getIntakeDraftsAction() { return readIntakeDrafts(); }
 export async function saveIntakeDraftAction(input:unknown) { return writeIntakeDraft(input); }
+export async function createIntakeContinuationAction(input:unknown) { return createIntakeContinuation(input); }
 export async function discardIntakeDraftAction(input:unknown) { return discardIntakeDraft(input); }
 export async function retryIntakeRecognitionAction(input:unknown) { return retryIntakeRecognition(input); }
 

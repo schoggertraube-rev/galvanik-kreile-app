@@ -10,7 +10,7 @@ import { CAPTURE_KINDS, captureRecognition } from "../captureRecognition";
 import { intakeInvoiceReviewRequired } from "../intakeLifecycleContract";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-type Row = { id: string; kanal:string; version: number; text: string | null; kunde_id: string | null; vorgang_id: string | null; vorgang_art?:string|null; zuordnung: string; einsatz: string; anliegen: string[]; anliegen_abgewaehlt:string[];anliegen_offen?:string[] };
+type Row = { id: string; kanal:string; version: number; text: string | null; fortsetzung_von:string|null; kunde_id: string | null; vorgang_id: string | null; vorgang_art?:string|null; zuordnung: string; einsatz: string; anliegen: string[]; anliegen_abgewaehlt:string[];anliegen_offen?:string[] };
 function failure(code: Exclude<IntakeCaptureResult, { code: "OK" }>["code"], message: string): Exclude<IntakeCaptureResult, { code: "OK" }> { return { code, message }; }
 function record(input: unknown): input is Record<string, unknown> { return input !== null && typeof input === "object" && !Array.isArray(input); }
 function mayAccessCaptureContent(auth:AuthorizationSnapshot,channel:string){return channel!=='mail'||hasAuthorizationArea(auth,'mails');}
@@ -27,7 +27,7 @@ export async function authorizedIntakeContext(ctx?: IntakeContext): Promise<Auth
 }
 export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot, itemId: string, ctx?: IntakeContext,invoiceOnly=false): Promise<IntakeCaptureResult> {
   return withPrivilegedTenantTransaction(auth, async tx => {
-    const rows = await tx.execute<Row>(sql`SELECT id::text,kanal, version, text, kunde_id, vorgang_id,vorgang_art, zuordnung, einsatz, anliegen,anliegen_abgewaehlt,anliegen_offen
+    const rows = await tx.execute<Row>(sql`SELECT id::text,kanal, version, text, fortsetzung_von::text, kunde_id, vorgang_id,vorgang_art, zuordnung, einsatz, anliegen,anliegen_abgewaehlt,anliegen_offen
       FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND id=${itemId}::uuid`);
     if (rows.length !== 1) return failure("NOT_FOUND", "Eingang wurde nicht gefunden.");
     const row = rows[0];
@@ -39,13 +39,24 @@ export async function intakeCaptureSnapshot(auth: AuthorizationSnapshot, itemId:
         EXISTS(SELECT 1 FROM public.intake_event original WHERE original.tenant_id=file.tenant_id AND original.item_id=file.item_id AND original.art='original_gespeichert' AND original.nachher->>'fileId'=file.id::text) AS secured,
         (SELECT event.nachher->>'code' FROM public.intake_event event WHERE event.tenant_id=file.tenant_id AND event.item_id=file.item_id
           AND event.art='erkannt' AND event.nachher->>'fileId'=file.id::text ORDER BY event.zeit DESC,event.id DESC LIMIT 1) AS "errorCode"
-      FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND file.item_id=${itemId}::uuid
+      FROM public.intake_file file WHERE file.tenant_id=${auth.tenantId} AND (file.item_id=${itemId}::uuid OR (
+        file.item_id=${row.fortsetzung_von}::uuid AND EXISTS(SELECT 1 FROM public.intake_event created
+          WHERE created.tenant_id=${auth.tenantId} AND created.item_id=${itemId}::uuid AND created.art='angelegt'
+            AND jsonb_exists(created.nachher->'originalFileIds',file.id::text))))
       AND (${!invoiceOnly} OR file.art<>'mime' AND file.mime<>'message/rfc822' AND lower(file.dateiname) NOT LIKE '%.eml') ORDER BY file.reihenfolge,file.id`);
     const suggestions=await tx.execute<NonNullable<IntakeCapture["suggestions"]>[number]>(sql`SELECT id::text,file_id::text AS "fileId",order_id AS "orderId",
       feld AS field,wert AS value,sicherheit AS confidence,regel AS rule,grund AS reason,fundstelle AS source,status,geprueft_von::text AS "verifiedBy",geprueft_am::text AS "verifiedAt"
       FROM public.intake_suggestion WHERE tenant_id=${auth.tenantId} AND item_id=${itemId}::uuid AND (${!invoiceOnly} OR feld LIKE 'rechnung.%') ORDER BY id`);
     const contentAllowed=!invoiceOnly&&(row.kanal!=='mail'||hasAuthorizationArea(auth,'mails'));
-    const capture: IntakeCapture = { id: row.id, version: row.version, text: contentAllowed?row.text:null, customerId: row.kunde_id,
+    const continuations = await tx.execute<{id:string}>(sql`SELECT id::text FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND fortsetzung_von=${itemId}::uuid ORDER BY erstellt_am,id`);
+    const sourceText = row.fortsetzung_von ? await tx.execute<{text:string|null}>(sql`SELECT original.nachher->>'text' AS text
+      FROM public.intake_event created JOIN public.intake_event original ON original.tenant_id=created.tenant_id
+        AND original.item_id::text=created.nachher->>'textSourceId' AND original.id::text=created.nachher->>'originalTextEventId'
+      WHERE created.tenant_id=${auth.tenantId} AND created.item_id=${itemId}::uuid AND created.art='angelegt'
+      ORDER BY created.zeit,created.id LIMIT 1`) : [];
+    if(row.fortsetzung_von && !sourceText.length) return failure("UNAVAILABLE", "Original der Fortsetzung nicht nachweisbar · Code: INTAKE_CONTINUATION_ORIGINAL_MISSING.");
+    const capture: IntakeCapture = { id: row.id, version: row.version, text: contentAllowed?(row.fortsetzung_von?row.text??sourceText[0]?.text??null:row.text):null, customerId: row.kunde_id,
+      continuation:{sourceId:row.fortsetzung_von,childIds:continuations.map(value=>value.id)},
       orderId: invoiceOnly?null:row.vorgang_id, assignment: row.zuordnung, usage: row.einsatz, concerns: invoiceOnly?row.anliegen.filter(value=>value==='rechnung'):contentAllowed?row.anliegen:[],dismissedConcerns:contentAllowed?row.anliegen_abgewaehlt:[],openConcerns:contentAllowed?row.anliegen_offen:[],
       files: files.map(file => ({ ...file, bytes: Number(file.bytes) })),suggestions:contentAllowed||invoiceOnly?suggestions:[] };
     capture.recognition = invoiceOnly ? { kind: "rechnung", text: "" } : captureRecognition(capture);

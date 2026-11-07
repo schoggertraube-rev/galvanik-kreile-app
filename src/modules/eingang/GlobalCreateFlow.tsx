@@ -202,6 +202,7 @@ export type GlobalCreatePorts = {
   } } | Failure>;
   saveProspect?:(input:IntakeProspectInput)=>Promise<IntakeProspectResult>;
   drafts?: IntakeDraftPorts;
+  createContinuation?: (input:{parentId:string;parentVersion:number;textSourceId:string;childId:string;draftId:string;clientEventId:string;fileId:string|null;payload:Record<string,unknown>})=>Promise<{code:"OK";childId:string;draftId:string;replayed:boolean}|{code:"UNAUTHENTICATED"|"FORBIDDEN"|"VALIDATION_ERROR"|"NOT_FOUND"|"CONFLICT"|"UNAVAILABLE";message:string}>;
   discardCapture?: (input:{itemId:string;version:number;clientEventId:string})=>Promise<IntakeCaptureResult>;
   canCreateCustomer: boolean;
   canReadCustomers?:boolean;
@@ -260,6 +261,10 @@ export type GlobalCreatePorts = {
 
 type Step = "choose" | "customer" | "customer-saved" | "customer-picker" | "quote-list" | "quote" | "quote-saved" | "order-saved" | "direct-intake" | "denied";
 type Feedback = { kind: "validation" | "conflict" | "denied" | "error" | "unclear" | "save-failed"; message: string; requestId?: string };
+const canonicalDraftPayload = (value: unknown) => JSON.stringify(value, (_key, entry: unknown) =>
+  entry && typeof entry === "object" && !Array.isArray(entry)
+    ? Object.fromEntries(Object.entries(entry).sort(([left], [right]) => left.localeCompare(right)))
+    : entry);
 type OpenQuotesState =
   | { kind: "idle" | "loading" | "empty" }
   | { kind: "data"; quotes: QuoteReadback[] }
@@ -537,6 +542,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [lastRecognizedText, setLastRecognizedText] = useState("");
   const [recognitionBusy, setRecognitionBusy] = useState(false);
   const [remainingRecognizedPositions, setRemainingRecognizedPositions] = useState(0);
+  const [overflowPositions,setOverflowPositions]=useState<IntakeTextRecognition["positions"]>([]);
+  const [continuation,setContinuation]=useState<{childId:string;draftId:string|null;count:number|null;orderId?:string|null}|null>(null);
+  const continuationRequest=useRef<Parameters<NonNullable<GlobalCreatePorts["createContinuation"]>>[0]|null>(null);
   const [recognitionMarkers, setRecognitionMarkers] = useState<Array<{ key: string; label: string; value: string; source: string }>>([]);
   const [recognitionConfirmed, setRecognitionConfirmed] = useState(false);
   const [intakeSuggestionState, setIntakeSuggestionState] = useState<IntakeSuggestionState>({ kind: "idle" });
@@ -909,7 +917,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       deny("quote");
       return;
     }
-    setIntakeChecked(false);setActiveDraft(null);draftOperation.current=null;
+    setIntakeChecked(false);setActiveDraft(null);draftOperation.current=null;setOverflowPositions([]);setRemainingRecognizedPositions(0);setContinuation(null);continuationRequest.current=null;
     const initial:IntakeComparison={text:sourceCapture?captureRecognitionText(sourceCapture):"",customerId:"",query:"",items:[newIntakePosition()],kind:fromCustomerCard?"auftrag":"",date:"",confirmed:"",term:"",handover:"",payment:"",source:"",note:"",documents:sourceCapture?[sourceCapture.id]:[]};
     setDirectItems(initial.items);setDirectWishDate("");setDirectConfirmedDate("");setDirectNote("");setIntakeRecognitionText(initial.text);setLastRecognizedText("");setRecognitionMarkers([]);setRecognitionConfirmed(false);setIntakeSuggestionState({kind:"idle"});setIntakeTermChoice(null);
     setCaptureInIntake(false);setIntakeSourceCaptures(sourceCapture?[sourceCapture]:[]);
@@ -1078,7 +1086,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setIntakeRecognitionText("");
     setLastRecognizedText("");
     setRecognitionBusy(false);
-    setRemainingRecognizedPositions(0);
+    setRemainingRecognizedPositions(0);setOverflowPositions([]);setContinuation(null);continuationRequest.current=null;
     setRecognitionMarkers([]);
     setRecognitionConfirmed(false);
     setIntakeHandover("");
@@ -1149,6 +1157,16 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       }));
       if(saved.customerMode==="NEW"&&saved.customerFields){setDirectCustomerMode("NEW");setDirectCustomer(saved.customerFields);}
       if(saved.customerMode==="EXISTING"&&saved.customerFields)setDirectCustomer(current=>({...current,...Object.fromEntries(Object.entries(saved.customerFields).filter(([key,value])=>key in current&&!current[key as keyof CustomerFormValue]&&value))}));
+      const childId=captures.flatMap(capture=>capture.continuation?.childIds??[])[0];
+      if(childId){
+        const child=await ports.getCapture?.(childId);
+        if(!child||child.code!=="OK")throw Error("INTAKE_CONTINUATION_READBACK_FAILED");
+        const nextDraft=result.drafts.find(value=>value.payload.clientKey===childId);
+        setContinuation({childId,draftId:nextDraft?.id??null,count:Array.isArray(nextDraft?.payload.items)?nextDraft.payload.items.length:null,orderId:child.capture.orderId});
+      }
+      const savedOverflow=Array.isArray(saved.overflowPositions)?saved.overflowPositions:[];
+      setOverflowPositions(childId?[]:savedOverflow);
+      setRemainingRecognizedPositions(childId?0:typeof saved.remainingRecognizedPositions==="number"?saved.remainingRecognizedPositions:savedOverflow.length);
       setActiveDraft(draft);setIntakeClientKey(saved.clientKey);setIntakeCustomerQuery(saved.query);setIntakeRecognitionText(saved.text);
       setIntakeDismissedConcerns(saved.dismissedConcerns??captures.find(capture=>capture.id===saved.clientKey)?.dismissedConcerns??[]);
       setDirectItems(saved.items);setIntakeKind(saved.kind);setDirectWishDate(saved.date);setDirectConfirmedDate(saved.confirmed);
@@ -1165,21 +1183,85 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   };
   function draftPayload(){return {version:1,customerMode:directCustomerMode,customerFields:directCustomer,customerName:directCustomerId?customerDisplayName(directCustomer):"",clientKey:intakeClientKey,customerId:directCustomerId,query:intakeCustomerQuery,text:intakeRecognitionText,items:directItems,kind:intakeKind,
     date:directWishDate,confirmed:directConfirmedDate,term:intakeTermStatus,handover:intakeHandover,payment:intakePaymentMode,source:intakeSource,note:directNote,
-    geprueft:intakeChecked,dismissedConcerns:intakeDismissedConcerns,documents:intakeSourceCaptures.map(capture=>capture.id),recognitionMarkers,recognitionConfirmed,lastRecognizedText,
+    geprueft:intakeChecked,dismissedConcerns:intakeDismissedConcerns,documents:intakeSourceCaptures.map(capture=>capture.id),recognitionMarkers,recognitionConfirmed,lastRecognizedText,remainingRecognizedPositions,overflowPositions,
     intakeWishDateOrigin,intakeHandoverOrigin,intakePaymentOrigin,intakeOrigin,intakeSourceOrigin,intakeTermChoice,intakeProcessingWeeks,intakeTermOrigin,intakeTermExpired};}
 
   async function saveIntakeTextOriginal():Promise<IntakeCapture[]>{
     if(!intakeRecognitionText.trim())return intakeSourceCaptures;
     // Unchanged source text is already an original; never manufacture a copied note.
-    if(intakeSourceCaptures.some(value=>value.id!==intakeClientKey&&value.text?.trim()===intakeRecognitionText.trim()))return intakeSourceCaptures;
+    if(intakeSourceCaptures.some(value=>value.id!==intakeClientKey&&value.text===intakeRecognitionText))return intakeSourceCaptures;
     const selectedConcerns=intakeConcerns.map(value=>value.id);
-    if(intakeSourceCaptures.some(value=>value.id===intakeClientKey&&value.text===intakeRecognitionText.trim()
-      &&JSON.stringify(value.concerns)===JSON.stringify(selectedConcerns)))return intakeSourceCaptures;
+    if(intakeSourceCaptures.some(value=>value.id===intakeClientKey&&value.text===intakeRecognitionText
+      &&(value.continuation?.sourceId || JSON.stringify(value.concerns)===JSON.stringify(selectedConcerns))))return intakeSourceCaptures;
     if(!ports.saveCaptureNote)throw Error("INTAKE_ORIGINAL_WRITE_PORT_UNAVAILABLE");
     const saved=await ports.saveCaptureNote({itemId:intakeClientKey,textstand:intakeTextStand.current,text:intakeRecognitionText,concerns:selectedConcerns});
     if(saved.code!=="OK")throw Error(saved.message);
     const sources=[...intakeSourceCaptures.filter(value=>value.id!==saved.capture.id),saved.capture];
     setIntakeSourceCaptures(sources);return sources;
+  }
+
+  async function createContinuationDraft() {
+    if (draftWorking.current || busy || !remainingRecognizedPositions) return;
+    if (!ports.createContinuation || !ports.getCapture || !ports.drafts) { setFeedback({kind:"error",message:"Fortsetzung ist nicht verfügbar · Original und Eingaben bleiben erhalten. Code: INTAKE_CONTINUATION_PORT_MISSING."}); return; }
+    if (overflowPositions.length !== remainingRecognizedPositions || overflowPositions.length > 20) { setFeedback({kind:"validation",message:"Mehr als 20 weitere Positionen · bitte den Rest in höchstens 20 Positionen je Beleg aufteilen."}); return; }
+    draftWorking.current=true;setBusy(true);setFeedback(null);
+    try {
+      if (!continuationRequest.current) {
+        const sources=await saveIntakeTextOriginal();
+        const parentDraftId=activeDraft?.id??intakeClientKey;
+        const parentPayload={...draftPayload(),documents:sources.map(source=>source.id)};
+        const parentSaved=await ports.drafts.saveDraft({id:parentDraftId,clientEventId:draftOperation.current??=crypto.randomUUID(),art:"eingang",payload:parentPayload,lastField:null,expectedVersion:activeDraft?.version??null});
+        if(parentSaved.code!=="OK"){setFeedback({kind:"error",message:parentSaved.message});return;}
+        const parentDraft=parentSaved.drafts.find(value=>value.id===parentDraftId);
+        if(!parentDraft||canonicalDraftPayload(parentDraft.payload)!==canonicalDraftPayload(parentPayload))throw Error("INTAKE_CONTINUATION_PARENT_DRAFT_MISSING");
+        setActiveDraft(parentDraft);draftOperation.current=null;
+        const textSource=sources.find(source=>source.text===intakeRecognitionText);
+        const parent=sources.find(source=>source.files.some(file=>file.secured))??textSource;
+        if(!textSource||!parent) throw Error("INTAKE_CONTINUATION_SOURCE_MISSING");
+        const childId=crypto.randomUUID(),draftId=crypto.randomUUID(),clientEventId=crypto.randomUUID();
+        const items=overflowPositions.map(position=>{
+          const unit=normaliseOrderPositionUnit(position.unit),surface=position.surfaceRequested?normaliseOrderPositionSurface(position.surfaceRequested):"";
+          if(!unit||surface===null)throw Error("INTAKE_CONTINUATION_POSITION_INVALID");
+          return {...newIntakePosition(),catalogServiceId:FREE_TEXT_SERVICE,name:position.name,quantity:position.quantity,surfaceRequested:surface,surfaceTouched:false,executionRequested:position.executionRequested,unit};
+        });
+        const markers=overflowPositions.flatMap((position,index)=>[
+          {key:`position-${index}-name`,label:`Position ${index+1}`,value:position.name,source:position.source},
+          ...(position.quantity?[{key:`position-${index}-quantity`,label:"Menge",value:position.quantity,source:position.source}]:[]),
+          {key:`position-${index}-unit`,label:"Einheit",value:position.unit,source:position.source},
+          ...(position.surfaceRequested?[{key:`position-${index}-surface`,label:"Oberfläche",value:position.surfaceRequested,source:position.source}]:[]),
+        ]);
+        const payload={...draftPayload(),clientKey:childId,items,documents:[childId],geprueft:false,recognitionMarkers:markers,recognitionConfirmed:false,remainingRecognizedPositions:0,overflowPositions:[]};
+        continuationRequest.current={parentId:parent.id,parentVersion:parent.version,textSourceId:textSource.id,childId,draftId,clientEventId,fileId:parent.files.find(file=>file.secured)?.id??null,payload};
+      }
+      const result=await ports.createContinuation(continuationRequest.current);
+      if(result.code!=="OK"){setFeedback({kind:"error",message:result.message});return;}
+      const [captured,drafts]=await Promise.all([ports.getCapture(result.childId),ports.drafts.readDrafts()]);
+      const draft=drafts.code==="OK"?drafts.drafts.find(value=>value.id===result.draftId):null;
+      if(captured.code!=="OK"||captured.capture.continuation?.sourceId!==continuationRequest.current.parentId||!draft||canonicalDraftPayload(draft.payload)!==canonicalDraftPayload(continuationRequest.current.payload))
+        throw Error("INTAKE_CONTINUATION_READBACK_FAILED");
+      setContinuation({childId:result.childId,draftId:result.draftId,count:overflowPositions.length});setRemainingRecognizedPositions(0);setOverflowPositions([]);
+      window.dispatchEvent(new Event("kreile:intake-drafts-changed"));
+    } catch(error) {console.error("[INTAKE_CONTINUATION_CLIENT_FAILED]",error);setFeedback({kind:"error",message:"Fortsetzung nicht sicher gelesen · Original und Eingaben bleiben erhalten. Erneut versuchen. Code: INTAKE_CONTINUATION_CLIENT_FAILED."});}
+    finally {draftWorking.current=false;setBusy(false);}
+  }
+
+  async function openContinuationDraft() {
+    if(!continuation||!ports.drafts||draftWorking.current||busy)return;
+    if(!continuation.draftId&&!continuation.orderId){setFeedback({kind:"error",message:"Beleg 2 ist vorhanden, aber sein Entwurf ist nicht verfügbar. Code: INTAKE_CONTINUATION_DRAFT_MISSING."});return;}
+    const nextDraftId=continuation.draftId,nextOrderId=continuation.orderId;
+    draftWorking.current=true;setBusy(true);setFeedback(null);
+    try {
+      const sources=await saveIntakeTextOriginal(),parentDraftId=activeDraft?.id??intakeClientKey;
+      const parentPayload={...draftPayload(),documents:sources.map(value=>value.id)};
+      const saved=await ports.drafts.saveDraft({id:parentDraftId,clientEventId:draftOperation.current??=crypto.randomUUID(),art:"eingang",payload:parentPayload,lastField:null,expectedVersion:activeDraft?.version??null});
+      if(saved.code!=="OK"){setFeedback({kind:"error",message:saved.message});return;}
+      const parentDraft=saved.drafts.find(value=>value.id===parentDraftId);
+      if(!parentDraft||canonicalDraftPayload(parentDraft.payload)!==canonicalDraftPayload(parentPayload))throw Error("INTAKE_CONTINUATION_PARENT_READBACK_FAILED");
+      draftOperation.current=null;window.dispatchEvent(new Event("kreile:intake-drafts-changed"));
+      if(nextOrderId)ports.openOrder(nextOrderId);
+      else if(nextDraftId)await restoreIntakeDraft(nextDraftId);
+    } catch(error){console.error("[INTAKE_CONTINUATION_OPEN_FAILED]",error);setFeedback({kind:"error",message:"Beleg 2 konnte nicht geöffnet werden · beide Entwürfe bleiben erhalten. Code: INTAKE_CONTINUATION_OPEN_FAILED."});}
+    finally {draftWorking.current=false;setBusy(false);}
   }
 
   const openWithIntent = (request: GlobalCreateIntent | GlobalCreateRequest) => {
@@ -1765,10 +1847,11 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         setIntakeWishDateOrigin("recognized");
         setIntakeTermStatus((current) => current || "wish");
       }
-      let adoptedPositions = result.data.positions;
+      const allPositions = [...result.data.positions,...(result.data.overflowPositions??[])];
+      let adoptedPositions = allPositions;
       let adoptedOffset = 0;
-      if (result.data.positions.length > 0) {
-        const recognized = result.data.positions.map((position) => {
+      if (allPositions.length > 0) {
+        const recognized = allPositions.map((position) => {
           const unit = normaliseOrderPositionUnit(position.unit);
           const surface = position.surfaceRequested ? normaliseOrderPositionSurface(position.surfaceRequested) : "";
           if (!unit || surface === null) throw new Error("INTAKE_RECOGNITION_POSITION_INVALID");
@@ -1785,8 +1868,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
         const existing = directItems.length === 1 && !directItems[0]?.name.trim() ? [] : directItems;
         adoptedOffset = existing.length;
         const available = Math.max(0, 20 - existing.length);
-        adoptedPositions = result.data.positions.slice(0, available);
-        setRemainingRecognizedPositions(Math.max(0,(result.data.totalPositions ?? result.data.positions.length)-available));
+        adoptedPositions = allPositions.slice(0, available);
+        setOverflowPositions(allPositions.slice(available));
+        setRemainingRecognizedPositions(Math.max(0,(result.data.totalPositions ?? allPositions.length)-available));
         setDirectItems([...existing, ...recognized.slice(0, available)]);
       }
       const labels: Record<string, string> = { dueDate: "Liefertermin" };
@@ -2364,7 +2448,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                   {concern.label} · Vorschlag<KrButton art="leise" icon="x" text="" aria-label={concern.label+" abwählen"} data-spec-id={"eingang.anliegen."+concern.id+".abwaehlen"} onClick={()=>{intakeTextStand.current=crypto.randomUUID();setIntakeDismissedConcerns(previous=>[...previous,concern.id]);}}/>
                 </span>)}</div>:null}
                 {recognitionBusy ? <Hinweis>Angaben werden erkannt … Das Formular bleibt bedienbar.</Hinweis> : null}
-                {remainingRecognizedPositions ? <Hinweis ton="warn">{remainingRecognizedPositions} weitere Positionen nicht übernommen · Original bleibt erhalten · vor dem Buchen aufteilen</Hinweis> : null}
+                {remainingRecognizedPositions ? <Hinweis ton="warn">{directItems.length+remainingRecognizedPositions} Positionen erkannt · {directItems.length} übernommen · {remainingRecognizedPositions} weitere Positionen<KrButton text="Rest als zweiten Beleg anlegen" onClick={()=>void createContinuationDraft()} disabled={busy}/></Hinweis> : null}
+                {continuation ? <Hinweis>{continuation.count??"Weitere"} Positionen · Beleg 2 gesichert <KrButton text={continuation.orderId?"Auftrag von Beleg 2 öffnen":"Beleg 2 öffnen"} onClick={()=>void openContinuationDraft()} disabled={busy}/></Hinweis> : null}
+                {intakeSourceCaptures.find(capture=>capture.continuation?.sourceId) ? <Hinweis>Beleg 2/2 · Fortsetzung von Eingang {intakeSourceCaptures.find(capture=>capture.continuation?.sourceId)?.continuation?.sourceId}</Hinweis> : null}
                   {recognitionMarkers.length > 0 ? <div className={`ev-erkannt${recognitionConfirmed ? " ev-erkannt--ok" : ""}`} aria-live="polite">
                     <div className="ev-erkannt-kopf"><b>{recognitionConfirmed ? `${recognitionMarkers.length} Angaben bestätigt` : `${recognitionMarkers.length} Angaben erkannt und vorausgefüllt`}</b>
                       {!recognitionConfirmed ? <KrButton data-spec-id="eingang.alles-bestaetigen" className="kr-btn--ton-blau" icon="check" text="Alles bestätigen" onClick={() => setRecognitionConfirmed(true)} /> : null}

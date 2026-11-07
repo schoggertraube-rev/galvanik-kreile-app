@@ -102,6 +102,7 @@
     "@/modules/eingang/server-public#IntakeFileChange",
     "@/modules/eingang/server-public#processIntakeDeviceRequest",
     "@/modules/eingang/server-public#readIntakeDrafts",
+    "@/modules/eingang/server-public#createIntakeContinuation",
     "@/modules/eingang/server-public#writeIntakeDraft",
     "@/modules/eingang/server-public#discardIntakeDraft",
     "@/modules/eingang/server-public#retryIntakeRecognition",

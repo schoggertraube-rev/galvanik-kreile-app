@@ -9,7 +9,7 @@ import {saveIntakeTaskAction,completeIntakeTaskAction,getIntakeTaskAction,create
 import type {TaskPorts,AssignmentPorts} from '@/modules/eingang/public';
 import { chooseIntakeCaptureKindAction } from "@/app/actions/eingang.actions";
 import { createCustomerAction, getCustomersDb, readCustomerCreateReceiptAction, readCustomerAddressAction } from "@/app/actions/customers.actions";
-import { erfasseAuftragAusEingangAction, getIntakeDraftsAction, saveIntakeDraftAction, discardIntakeDraftAction, getIntakePendingScopeAction, saveIntakeNoteAction, recognizeIntakeNoteAction, prepareIntakeFileAction, finishIntakeFileAction, getIntakeCaptureAction, saveIntakeDeviceRequestAction, discardIntakeCaptureAction } from "@/app/actions/eingang.actions";
+import { erfasseAuftragAusEingangAction, getIntakeDraftsAction, saveIntakeDraftAction, discardIntakeDraftAction, createIntakeContinuationAction, getIntakePendingScopeAction, saveIntakeNoteAction, recognizeIntakeNoteAction, prepareIntakeFileAction, finishIntakeFileAction, getIntakeCaptureAction, saveIntakeDeviceRequestAction, discardIntakeCaptureAction } from "@/app/actions/eingang.actions";
 import {getGoodsReceiptsAction,saveGoodsReceiptAction,openIntakeOriginalAction,confirmIntakeOriginalAction,retryIntakeRecognitionAction} from "@/app/actions/eingang.actions";
 import { convertQuoteToOrderAction, createQuoteAction, listOpenQuotesAction, readQuoteAction, readQuoteCreateReceiptAction, readQuoteConversionReceiptAction, readQuoteUpdateReceiptAction, updateQuoteAction } from "@/app/actions/quotes.actions";
 import { getOrderIntakeReceiptAction, getOrderIntakeSuggestionsAction, recognizeOrderIntakeTextAction, searchOrderIntakeCustomersAction } from "@/app/warendurchlauf/actions";
@@ -141,6 +141,7 @@ export function GlobalCreateAppAdapter() {
         },
         saveProspect:saveIntakeProspectAction,
         drafts: { readDrafts: getIntakeDraftsAction, saveDraft: saveIntakeDraftAction, discardDraft: discardIntakeDraftAction },
+        createContinuation: createIntakeContinuationAction,
         canCreateCustomer,
         canReadCustomers:hasArea("kunden"),
         canReadMails: hasArea("mails"),

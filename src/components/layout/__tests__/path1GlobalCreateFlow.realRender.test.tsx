@@ -5,7 +5,7 @@ import {
   type GlobalCreatePorts,
   type GlobalCreateIntent,
 } from "@/components/layout/GlobalCreateFlow";
-import {IntakeMessageDialogs,type IntakeCapture} from '@/modules/eingang/public';
+import {IntakeMessageDialogs,type IntakeCapture,type IntakeDraftPorts} from '@/modules/eingang/public';
 
 const CUSTOMER_ID = "72d8c6c6-397c-4a9c-b464-d2e5595eb42a";
 const QUOTE_ID = "1c32e174-8494-46f0-9f5f-1a45f2a60bd1";
@@ -1548,10 +1548,34 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     render(<GlobalCreateFlow ports={api}/>);openFlow();
     fireEvent.change(await screen.findByRole('textbox',{name:'Schnell erfassen'}),{target:{value:'SYNTHETISCH 23 Positionen'}});
     fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
-    expect(await screen.findByText(/3 weitere Positionen nicht übernommen/)).toBeInTheDocument();
+    expect(await screen.findByText(/3 weitere Positionen/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button',{name:'Wareneingang buchen'}));
     expect(await screen.findByText(/Nicht alle Positionen sind übernommen/)).toBeInTheDocument();
     expect(api.createDirectIntake).not.toHaveBeenCalled();
+  });
+
+  it("P101 sichert die weiteren Positionen und öffnet sie ohne den ersten Entwurf zu verlieren",async()=>{
+    const positions=Array.from({length:23},(_,index)=>({name:`SYNTHETISCH Teil ${index+1}`,quantity:'1',unit:'Stück' as const,surfaceRequested:'Verzinken',executionRequested:'offen' as const,source:'Text'}));
+    let input:Parameters<NonNullable<GlobalCreatePorts["createContinuation"]>>[0]|null=null;
+    const createContinuation=vi.fn<NonNullable<GlobalCreatePorts["createContinuation"]>>(async value=>{input=value;return {code:'OK',childId:value.childId,draftId:value.draftId,replayed:false};});
+    const readDrafts=vi.fn(async()=>({code:'OK' as const,drafts:input?[{id:input.draftId,art:'eingang' as const,payload:input.payload,zuletzt_feld:null,version:0,updated_at:'2026-11-07T06:00:00Z'}]:[]}));
+    const saveDraft=vi.fn(async(value:Parameters<IntakeDraftPorts["saveDraft"]>[0])=>({code:'OK' as const,drafts:[{id:value.id,art:'eingang' as const,payload:value.payload,zuletzt_feld:null,version:value.expectedVersion===null?0:value.expectedVersion+1,updated_at:'2026-11-07T06:00:00Z'}]}));
+    const getCapture=vi.fn(async(id:string)=>input&&id===input.childId?{code:'OK' as const,capture:{id,version:1,text:String(input.payload.text),customerId:null,orderId:null,assignment:'offen',usage:'offen',concerns:[],files:[],continuation:{sourceId:input.parentId,childIds:[]}}}:{code:'NOT_FOUND' as const,message:'Eingang fehlt'});
+    const api=ports({createContinuation,getCapture,drafts:{readDrafts,saveDraft,discardDraft:vi.fn()},recognizeIntakeText:vi.fn().mockResolvedValue({code:'OK',data:{fields:[],positions:positions.slice(0,20),overflowPositions:positions.slice(20),totalPositions:23}})});
+    render(<GlobalCreateFlow ports={api}/>);openFlow();
+    fireEvent.change(await screen.findByRole('textbox',{name:'Schnell erfassen'}),{target:{value:'SYNTHETISCH 23 Positionen'}});
+    fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    fireEvent.click(await screen.findByRole('button',{name:'Rest als zweiten Beleg anlegen'}));
+    const open=await screen.findByRole('button',{name:'Beleg 2 öffnen'});
+    expect(createContinuation).toHaveBeenCalledTimes(1);
+    const sent=createContinuation.mock.calls[0]?.[0];
+    expect(sent?.payload.items).toHaveLength(3);
+    expect(sent?.payload.documents).toEqual([sent?.childId]);
+    fireEvent.click(open);
+    await waitFor(()=>expect(saveDraft).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText(/Beleg 2\/2 · Fortsetzung von Eingang/)).toBeInTheDocument();
+    expect(screen.getByDisplayValue('SYNTHETISCH Teil 21')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('SYNTHETISCH Teil 23')).toBeInTheDocument();
   });
 
   it("E22 visibly adjusts a selected pickup payment to advance payment when handover changes to shipping",async()=>{
