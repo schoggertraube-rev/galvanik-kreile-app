@@ -65,3 +65,21 @@ describe('4.8 real component interactions (isolated TEST ports; server effects h
     expect(onClose).toHaveBeenCalledTimes(1);expect(ports.write).not.toHaveBeenCalled();
   });
 });
+
+it('reopened completed rework preserves the historical link and starts a new complaint only after discarding edits',async()=>{
+ const data:ComplaintDialogData={...base,complaint:{id:'test-complaint',customerId:'test-customer',orderId:base.source.id,itemId:null,legacyPositionId:null,reason:'Blasen',stationId:null,description:'',photoIds:[],createdAt:'2026-11-07T10:00:00Z',resolvedAt:null,resolution:null,status:'open',nummer:'RK-TEST-4C',stand:'aufgenommen',version:4,wareZurueck:'ja',nacharbeitAuftragId:'test-rework',reworkNumber:'A-TEST-REWORK'},rework:{station:'abgeholt',goods:'raus'}};
+ const {ports}=setup(data),opened=vi.fn((event:Event)=>event.preventDefault());
+ window.addEventListener('kreile:oeffne',opened);
+ try{
+  const next=await screen.findByRole('button',{name:'Neue Reklamation zum Nacharbeitsauftrag A-TEST-REWORK aufnehmen'});
+  fireEvent.click(screen.getByRole('button',{name:'berechtigt'}));
+  expect(screen.getByRole('button',{name:'Nacharbeit'})).toBeDisabled();
+  fireEvent.click(next);
+  expect(await screen.findByRole('dialog',{name:'Änderungen nicht gespeichert'})).toBeInTheDocument();
+  expect(opened).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button',{name:'Verwerfen'}));
+  expect(opened).toHaveBeenCalledTimes(1);
+  expect((opened.mock.calls[0][0] as CustomEvent).detail).toEqual({ziel:'reklamation',arg:'test-rework#aufnehmen'});
+  expect(ports.write).not.toHaveBeenCalled();expect(ports.rework).not.toHaveBeenCalled();
+ }finally{window.removeEventListener('kreile:oeffne',opened);}
+});

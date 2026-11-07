@@ -726,6 +726,15 @@ describe("H18 workshop Server Actions against the real replay database", () => {
     });
     const closedView = await withSession(fixture, () => getLiveOrderCardAction({ orderId: created.receipt.orderId }));
     expect(closedView).toMatchObject({ code: "OK", data: { card: { id: created.receipt.orderId, station: "abgeholt" } } });
+    const [closedComplaint] = await sql`SELECT version FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${complaint.complaintId}`;
+    const reopened=await complaintWrite(fixture,{action:'wieder_oeffnen',clientKey:randomUUID(),complaintId:complaint.complaintId,version:closedComplaint.version,reason:'TEST erneuter Mangel nach Nacharbeit'});
+    const duplicate=await withSession(fixture,()=>nacharbeitAnlegenAction({reklamationId:complaint.complaintId,version:reopened.version,bewertung:'berechtigt',massnahme:'nacharbeit',liefertermin:'2027-05-20'}));
+    expect(duplicate).toMatchObject({code:'VALIDATION_ERROR',message:expect.stringContaining('Neue Reklamation zum Nacharbeitsauftrag')});
+    const [history]=await sql`SELECT count(*)::int AS n,min(id) AS id FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND nacharbeit_zu=${complaint.complaintId}`;
+    expect(history).toEqual({n:1,id:created.receipt.orderId});
+    const next=await complaintWrite(fixture,{action:'aufnehmen',clientKey:randomUUID(),orderId:created.receipt.orderId,intakeItemId:null,intakeVersion:null,parts:[{position_id:receivedItem.id,menge:1}],defect:'Blasen',description:'TEST neuer Kreislauf zur Nacharbeit',photoIds:[],goodsReturn:'offen'});
+    const [nextRow]=await sql`SELECT order_id FROM public.complaints WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${next.complaintId}`;
+    expect(nextRow).toEqual({order_id:created.receipt.orderId});
   });
 });
 
