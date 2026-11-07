@@ -10,6 +10,10 @@ import type { AppSession } from "@/lib/server/appSession";
 (globalThis as typeof globalThis & { AsyncLocalStorage: typeof AsyncLocalStorage }).AsyncLocalStorage = AsyncLocalStorage;
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
+// Isolate configuration only; Actions, authorization, DB and transaction ports remain real.
+const testTenant=vi.hoisted(()=> 'test-kv-v04-'+globalThis.crypto.randomUUID());
+vi.mock('@/lib/tenant',()=>({KREILE_TENANT_SLUG:testTenant}));
+
 const DATABASE_URL = process.env.DATABASE_URL;
 const EXPECTED_DATABASE_URL = process.env.H18_EXPECTED_DATABASE_URL;
 if (!DATABASE_URL || !EXPECTED_DATABASE_URL || DATABASE_URL !== EXPECTED_DATABASE_URL) {
@@ -75,7 +79,7 @@ async function withSession<T>(fixture: Fixture, work: () => Promise<T>): Promise
   return withRequest(`${COOKIE_NAME}=${signAppSession(session, getSecretKey())}`, work);
 }
 
-async function createFixture(): Promise<Fixture> {
+async function createFixture(settings=true): Promise<Fixture> {
   const actorId = randomUUID();
   const customerId = randomUUID();
   const updatedAt = new Date(Date.now() - 5_000).toISOString();
@@ -91,7 +95,7 @@ async function createFixture(): Promise<Fixture> {
     await transaction`
       INSERT INTO public.app_user_rights (tenant_id, user_id, bereich, granted_by)
       SELECT ${KREILE_TENANT_SLUG}, ${actorId}::uuid, area, ${actorId}::uuid
-      FROM unnest(ARRAY['eingang', 'auftraege', 'kunden', 'geld']::text[]) area
+      FROM unnest(${transaction.array(['eingang','auftraege','kunden','geld',...(settings?['einstellungen']:[])])}::text[]) area
     `;
     await transaction`
       INSERT INTO public.customers (
@@ -157,4 +161,24 @@ it('KV-04/05 records sent edition, acceptance evidence, changes and decline thro
  expect(await withSession(fixture,()=>changeQuoteLifecycleAction(rejected))).toMatchObject({code:'OK',quote:{version:5,lifecycle:{stage:'abgesagt',declineReason:rejected.reason}}});
  expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${rejected.clientEventId}::uuid AND event_type='QUOTE_LIFECYCLE_V04'`)[0].n).toBe(1);
  expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{version:5,lifecycle:{stage:'abgesagt'}}});
+});
+
+it('KV-03 settings persist explicit nullable approaches with DB/event/view, without changing the shared hourly-rate truth',async()=>{
+ const fixture=await createFixture();
+ await sql`INSERT INTO public.company_settings(id,tenant_id,company_name,updated_at) VALUES(${randomUUID()},${KREILE_TENANT_SLUG},'TEST KV V04 settings',statement_timestamp())`;
+ await sql`INSERT INTO private.extra_work_hourly_rates(id,tenant_id,hourly_rate_cents,version,created_by) VALUES(${randomUUID()}::uuid,${KREILE_TENANT_SLUG},7500,1,${fixture.actorId}::uuid)`;
+ const {readQuoteDefaultsAction}=await import('@/app/actions/quotes.actions');
+ const {saveQuoteSettingsAction}=await import('@/app/actions/settings.actions');
+ const initial=await withSession(fixture,()=>readQuoteDefaultsAction());
+ expect(initial).toMatchObject({code:'OK',settings:{hourlyRateCents:7500,setupCents:null,materialCents:null,followupDays:null,validityDays:null}});
+ if(initial.code!=='OK')throw Error('KV_SETTINGS_READ:'+initial.code);
+ const input={clientEventId:randomUUID(),expectedUpdatedAt:initial.settings.updatedAt,setupCents:100,materialCents:200,followupDays:5,validityDays:30};
+ expect(await withSession(fixture,()=>saveQuoteSettingsAction(input))).toMatchObject({code:'OK',settings:{hourlyRateCents:7500,setupCents:100,materialCents:200,followupDays:5,validityDays:30}});
+ expect((await sql`SELECT c.kv_ruest_cents::text,c.kv_material_cents::text,c.kv_nachfass_tage,c.kv_gueltigkeit_tage,e.event_type FROM public.company_settings c JOIN public.events e ON e.tenant_id=c.tenant_id AND e.client_event_id=${input.clientEventId}::uuid WHERE c.tenant_id=${KREILE_TENANT_SLUG}`)[0]).toMatchObject({kv_ruest_cents:'100',kv_material_cents:'200',kv_nachfass_tage:5,kv_gueltigkeit_tage:30,event_type:'QUOTE_SETTINGS_UPDATED_V04'});
+ expect(await withSession(fixture,()=>readQuoteDefaultsAction())).toMatchObject({code:'OK',settings:{hourlyRateCents:7500,setupCents:100,materialCents:200}});
+ expect(await withSession(fixture,()=>saveQuoteSettingsAction(input))).toMatchObject({code:'OK',replayed:true});
+ expect(await withSession(fixture,()=>saveQuoteSettingsAction({...input,clientEventId:randomUUID()}))).toMatchObject({code:'CONFLICT'});
+ const restricted=await createFixture(false);
+ expect(await withSession(restricted,()=>saveQuoteSettingsAction(input))).toMatchObject({code:'FORBIDDEN'});
+ expect((await sql`SELECT count(*)::int n FROM private.extra_work_hourly_rates WHERE tenant_id=${KREILE_TENANT_SLUG}`)[0].n).toBe(1);
 });

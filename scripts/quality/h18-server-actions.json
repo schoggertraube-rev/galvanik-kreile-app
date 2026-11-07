@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "8efcc0ed98b5bd980939fc64a10c806c3501575f73158584998d6901c25d6775",
+  "inventorySha256": "bc8866ff2da4015160010e2ea2759d0bd8c9446b290e81b76945e9dc247f7ae9",
   "testedWriteActions": {
     "src/app/actions/eingang.actions.ts#saveIncomingInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
@@ -208,6 +208,9 @@
       "src/test/h18_customer_actions.integration.test.ts"
     ],
     "src/app/actions/quotes.actions.ts#changeQuoteLifecycleAction": [
+      "src/test/acceptance/kv_v04_server.integration.test.ts"
+    ],
+    "src/app/actions/settings.actions.ts#saveQuoteSettingsAction": [
       "src/test/acceptance/kv_v04_server.integration.test.ts"
     ]
   },

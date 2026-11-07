@@ -60,6 +60,14 @@ export async function readShippingSettingsAction(){
  const {readShippingSettings}=await import("@/modules/fundament/server-public");
  return readShippingSettings({...resolved.context,canRead:resolved.context.canManageCompany===true||resolved.authorization.areas?.includes("auftraege")===true});
 }
+export async function saveQuoteSettingsAction(input:unknown) {
+  const resolved=await settingsContext();
+  if (!resolved) return {code:'UNAUTHENTICATED' as const,message:'Sitzung fehlt.'};
+  const {saveQuoteSettings}=await import('@/modules/fundament/server-public');
+  const result=await saveQuoteSettings(resolved.context,input);
+  if (result.code==='OK') revalidatePath('/settings');
+  return result;
+}
 export async function saveShippingSettingsAction(input:unknown){
  const resolved=await settingsContext();if(!resolved)return {code:"UNAUTHENTICATED" as const,message:"Sitzung fehlt."};
  const {updateShippingSettings}=await import("@/modules/fundament/server-public");return updateShippingSettings(resolved.context,input);

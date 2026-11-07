@@ -71,6 +71,15 @@ export async function changeQuoteLifecycleAction(input:QuoteLifecycleInput) {
   }
 }
 
+export async function readQuoteDefaultsAction() {
+  noStore();
+  const auth=await resolveAuthorization();
+  const failure=authorizationFailure(auth);
+  if (failure||!auth.ok) return failure!;
+  const {readQuoteSettings}=await import('@/modules/fundament/server-public');
+  return readQuoteSettings({tenantId:auth.data.tenantId,actorId:auth.data.userId,canRead:quoteCommandContext(auth.data).capabilities.canReadQuote});
+}
+
 export async function createQuoteAction(input: CreateQuoteInput) {
   let authorization;
   try {
