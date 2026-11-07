@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "246b5a79c82324114744e7b5485edaae5e36f17f8e8f25b381be58b26a9ea049",
+  "inventorySha256": "040c7d39ce710cfd01b2d35dbc8ba00439cd6673e639cad1f75e45055142d282",
   "testedWriteActions": {
     "src/app/actions/eingang.actions.ts#saveIncomingInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
@@ -204,6 +204,15 @@
     ],
     "src/app/actions/eingang.actions.ts#createIntakeContinuationAction": [
       "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/complaints.actions.ts#reklamationAusfuehrenAction": [
+      "src/test/h18_workshop_actions.integration.test.ts"
+    ],
+    "src/app/actions/complaints.actions.ts#sendeReklamationErgebnisAction": [
+      "src/test/h18_workshop_actions.integration.test.ts"
+    ],
+    "src/app/actions/complaints.actions.ts#getComplaintDialogAction": [
+      "src/test/h18_workshop_actions.integration.test.ts"
     ]
   },
   "writeActionOverrides": {

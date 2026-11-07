@@ -34,14 +34,27 @@
     "@/modules/orders/public#goodsOutAgreementReceiptText",
     "@/modules/orders/public#getUrgency",
     "@/modules/orders/public#isOrderLifecycleStatus",
-    "@/modules/orders/server-public#nacharbeitAnlegen"
+    "@/modules/orders/server-public#nacharbeitAnlegen",
+    "@/modules/orders/public#ComplaintPanel"
   ],
   "capabilities": [],
-  "migrations": ["20261106020000_ein4b_nacharbeit.sql"],
+  "migrations": [
+    "20261106020000_ein4b_nacharbeit.sql"
+  ],
   "viewsFunctions": [],
-  "ownsTables": ["public.orders", "public.items", "public.events"],
+  "ownsTables": [
+    "public.orders",
+    "public.items",
+    "public.events"
+  ],
   "storagePurposes": [],
-  "events": { "emits": [], "consumes": [] },
+  "events": {
+    "emits": [],
+    "consumes": []
+  },
   "config": {},
-  "dependencies": ["customers", "complaints"]
+  "dependencies": [
+    "customers",
+    "complaints"
+  ]
 }

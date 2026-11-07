@@ -126,6 +126,7 @@ export function CustomerCardView({
   onSaveCustomer,
   onNewOrder,
   documentsPanel,
+  complaintsPanel,
   canManageMoney=false,
   canDecide=false,
   initialEdit=false,
@@ -142,6 +143,7 @@ export function CustomerCardView({
   onSaveCustomer?: (input: UpdateCustomerInput) => Promise<{ ok: true } | { ok: false; message: string }>;
   onNewOrder?: () => void;
   documentsPanel?: ReactNode;
+  complaintsPanel?: ReactNode;
   takeover?:unknown;
   canManageMoney?:boolean;canDecide?:boolean;initialEdit?:boolean;missingFirst?:boolean;
   checkAddress?:(input:CustomerAddressInput)=>Promise<{code:"OK";data:CustomerAddressResult}|{code:string;message:string}>;
@@ -218,6 +220,7 @@ export function CustomerCardView({
   />;
 
   const main = <>
+    {complaintsPanel}
     {missingForOrder.length ? <KartenBlock><Hinweis ton="warn">{readiness.text}</Hinweis></KartenBlock> : null}
     {next ? <KartenBlock><NaechsteAktion
       titel={`${next.orderNumber} · ${next.title} · Termin ${due(next.dueAt)}`}

@@ -39,6 +39,8 @@ import {createOrderIntakeAction} from "@/app/actions/eingang.actions";
 import { uploadSignedOrderAttachment } from "@/app/warendurchlauf/galvanik/GalvanikHandoffAttachmentAppAdapter";
 import { DomainAttachmentPanel } from "@/components/attachments/DomainAttachmentPanel";
 import { CommunicationPanel } from "@/components/communication/CommunicationPanel";
+import {ComplaintPanel} from '@/modules/orders/public';
+import {getComplaints} from '@/app/actions/complaints.actions';
 import { requestGlobalCreate } from "@/components/layout/GlobalCreateFlow";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useOverlayStore } from "@/lib/overlayStore";
@@ -977,6 +979,7 @@ export function OrderCardAppAdapter({
     onClose ?? (fallbackHref ? () => router.replace(fallbackHref) : storeClose);
   return <>
     <OrderCardView
+      complaintsPanel={state.kind==='data'?<ComplaintPanel filter={{orderId:state.card.id}} read={getComplaints} orderId={state.card.id} mayRecord={hasArea('auftraege')} delivered={state.card.station==='abgeholt'}/>:null}
       state={state}
       actions={actions}
       attachmentPanel={

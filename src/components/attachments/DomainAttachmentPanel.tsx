@@ -45,6 +45,20 @@ function sizeLabel(bytes: number | null) {
   return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+/** Shared upload path for the existing order panel and complaint originals. */
+export async function uploadDomainAttachment(targetType:'CUSTOMER'|'ORDER',targetId:string,file:File) {
+  if(!ACCEPTED.has(file.type)||file.size<1||file.size>MAX_BYTES)throw Error('Erlaubt sind PDF, JPG, PNG und WebP bis 20 MB.');
+  const bytes=new Uint8Array(await file.arrayBuffer());
+  const contentSha256=await sha256(bytes);
+  const reserved=await reserveDomainAttachmentAction({targetType,targetId,clientRequestId:crypto.randomUUID(),mimeType:file.type,fileBytes:bytes.byteLength,contentSha256});
+  if(reserved.code!=='OK')throw Error(reserved.message);
+  if(!reserved.data.upload)throw Error('Uploadfreigabe fehlt.');
+  await uploadSigned(reserved.data.upload.path,reserved.data.upload.token,file.type,bytes);
+  const finalized=await finalizeDomainAttachmentAction({attachmentId:reserved.data.receipt.attachmentId,fileBytes:bytes.byteLength,contentSha256});
+  if(finalized.code!=='OK')throw Error(finalized.message);
+  return finalized.data.receipt.attachmentId;
+}
+
 export function DomainAttachmentPanel({ targetType, targetId }: { targetType: "CUSTOMER" | "ORDER"; targetId: string }) {
   const input = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState<Attachment[]>([]);
@@ -85,14 +99,7 @@ export function DomainAttachmentPanel({ targetType, targetId }: { targetType: "C
     }
     setState("uploading"); setMessage("Datei wird sicher gespeichert …");
     try {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      const contentSha256 = await sha256(bytes);
-      const reserved = await reserveDomainAttachmentAction({ targetType, targetId, clientRequestId: crypto.randomUUID(), mimeType: file.type, fileBytes: bytes.byteLength, contentSha256 });
-      if (reserved.code !== "OK") throw new Error(reserved.message);
-      if (!reserved.data.upload) throw new Error("Uploadfreigabe fehlt.");
-      await uploadSigned(reserved.data.upload.path, reserved.data.upload.token, file.type, bytes);
-      const finalized = await finalizeDomainAttachmentAction({ attachmentId: reserved.data.receipt.attachmentId, fileBytes: bytes.byteLength, contentSha256 });
-      if (finalized.code !== "OK") throw new Error(finalized.message);
+      await uploadDomainAttachment(targetType,targetId,file);
       await load();
     } catch (error) {
       setState("error"); setMessage(error instanceof Error ? error.message : "Datei konnte nicht sicher gespeichert werden.");

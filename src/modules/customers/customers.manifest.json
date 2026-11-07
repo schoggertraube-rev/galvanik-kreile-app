@@ -77,7 +77,8 @@
     "@/modules/customers/server-public#ReadCustomerOrderReadinessInput",
     "@/modules/customers/server-public#ReadCustomerOrderReadinessResult",
     "@/modules/customers/server-public#updateCustomerInTransaction",
-    "@/modules/customers/public#CustomerUpdateCommandResult"
+    "@/modules/customers/public#CustomerUpdateCommandResult",
+    "@/modules/customers/public#ComplaintPanel"
   ],
   "capabilities": [
     "customers:create"
@@ -127,5 +128,7 @@
     "consumes": []
   },
   "config": {},
-  "dependencies": []
+  "dependencies": [
+    "complaints"
+  ]
 }
