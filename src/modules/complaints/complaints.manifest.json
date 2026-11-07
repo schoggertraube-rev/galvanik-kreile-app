@@ -7,14 +7,47 @@
     "@/modules/complaints/public#ComplaintFilter",
     "@/modules/complaints/public#ComplaintReadResult",
     "@/modules/complaints/public#createComplaintRepository",
-    "@/modules/complaints/server-public#readComplaints"
+    "@/modules/complaints/server-public#readComplaints",
+    "@/modules/complaints/public#COMPLAINT_DEFECTS",
+    "@/modules/complaints/public#validComplaintCommand",
+    "@/modules/complaints/public#ComplaintCommand",
+    "@/modules/complaints/public#ComplaintWriteResult",
+    "@/modules/complaints/server-public#executeComplaint",
+    "@/modules/complaints/public#ComplaintState",
+    "@/modules/complaints/public#ComplaintDialogs",
+    "@/modules/complaints/public#ComplaintPanel",
+    "@/modules/complaints/public#COMPLAINT_CHANGED_EVENT",
+    "@/modules/complaints/public#COMPLAINT_STATE_LABELS",
+    "@/modules/complaints/public#ComplaintPorts",
+    "@/modules/complaints/public#ComplaintDialogData",
+    "@/modules/complaints/public#ComplaintRequest",
+    "@/modules/complaints/public#complaintAttention",
+    "@/modules/complaints/server-public#readComplaintOrderSource",
+    "@/modules/complaints/server-public#readComplaintOrderChoices"
   ],
-  "capabilities": ["reklamation:lesen"],
-  "migrations": ["20261104012000_ein4_nachrichten.sql", "20261106020000_ein4b_nacharbeit.sql"],
-  "viewsFunctions": ["public.v_complaint_rework_context_v1"],
-  "ownsTables": ["public.complaints"],
+  "capabilities": [
+    "reklamation:lesen",
+    "reklamation:schreiben"
+  ],
+  "migrations": [
+    "20261104012000_ein4_nachrichten.sql",
+    "20261106020000_ein4b_nacharbeit.sql",
+    "20261107152034_ein4c_complaint_lifecycle.sql",
+    "20261107171549_ein4c_result_mail_template.sql"
+  ],
+  "viewsFunctions": [
+    "public.v_complaint_rework_context_v1"
+  ],
+  "ownsTables": [
+    "public.complaints"
+  ],
   "storagePurposes": [],
-  "events": {"emits": [], "consumes": []},
+  "events": {
+    "emits": [
+      "COMPLAINT_CHANGED_V1"
+    ],
+    "consumes": []
+  },
   "config": {},
   "dependencies": []
 }

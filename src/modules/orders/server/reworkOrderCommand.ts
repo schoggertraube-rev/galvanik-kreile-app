@@ -1,5 +1,6 @@
 import "server-only";
 
+import {isWorkingDay,berlinCalendarDay} from "@/lib/domain/workingDays";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { hasAuthorizationArea, resolveAuthorization } from "@/lib/server/authorization";
@@ -173,6 +174,8 @@ function isValidInput(input: unknown): input is NacharbeitAnlegenInput {
     && (value.bewertung === "berechtigt" || value.bewertung === "kulanz")
     && value.massnahme === "nacharbeit"
     && isIsoDate(value.liefertermin)
+    && isWorkingDay(value.liefertermin)
+    && value.liefertermin >= berlinCalendarDay()
     && toPositiveInteger(value.version) === value.version;
 }
 
@@ -327,7 +330,10 @@ export async function nacharbeitAnlegen(input: unknown): Promise<NacharbeitAnleg
       if (persistedVersion !== input.version) {
         return { code: "CONFLICT", message: "Reklamation wurde bereits geändert." };
       }
-      if (context.ware_zurueck !== "ja") {
+      if (context.nacharbeit_auftrag_id) {
+        return { code: "VALIDATION_ERROR", message: "Zu dieser Reklamation besteht bereits eine Nacharbeit. Neue Reklamation zum Nacharbeitsauftrag aufnehmen." };
+      }
+      if (!["ja", "offen"].includes(context.ware_zurueck ?? "")) {
         return { code: "VALIDATION_ERROR", message: "Nacharbeit braucht die Teile." };
       }
       if (

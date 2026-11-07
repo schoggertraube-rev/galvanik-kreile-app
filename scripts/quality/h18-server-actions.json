@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "inventorySha256": "bc8866ff2da4015160010e2ea2759d0bd8c9446b290e81b76945e9dc247f7ae9",
+  "inventorySha256": "209d00b1414e9b051e933ba13162b06582e39e2fcd040d61d09aa3cdad5a4db9",
   "testedWriteActions": {
     "src/app/actions/eingang.actions.ts#saveIncomingInvoiceAction": [
       "src/test/h18_invoice_actions.integration.test.ts"
@@ -206,6 +206,24 @@
     ],
     "src/app/actions/eingang.actions.ts#createIntakeContinuationAction": [
       "src/test/h18_customer_actions.integration.test.ts"
+    ],
+    "src/app/actions/complaints.actions.ts#reklamationAusfuehrenAction": [
+      "src/test/h18_workshop_actions.integration.test.ts"
+    ],
+    "src/app/actions/complaints.actions.ts#sendeReklamationErgebnisAction": [
+      "src/test/h18_workshop_actions.integration.test.ts"
+    ],
+    "src/app/actions/complaints.actions.ts#getComplaintDialogAction": [
+      "src/test/h18_workshop_actions.integration.test.ts"
+    ],
+    "src/app/actions/settings.actions.ts#readEmailTemplatesAction": [
+      "src/test/h18_settings_actions.integration.test.ts"
+    ],
+    "src/app/actions/settings.actions.ts#saveEmailTemplateAction": [
+      "src/test/h18_settings_actions.integration.test.ts"
+    ],
+    "src/app/actions/complaints.actions.ts#getComplaintOrderChoicesAction": [
+      "src/test/h18_workshop_actions.integration.test.ts"
     ],
     "src/app/actions/quotes.actions.ts#changeQuoteLifecycleAction": [
       "src/test/acceptance/kv_v04_server.integration.test.ts"

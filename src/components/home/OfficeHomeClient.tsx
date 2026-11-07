@@ -83,7 +83,7 @@ export function OfficeHomeClient({ model, ports }: { model: OfficeHomeModel; por
       setMailMessage("Die Mail konnte nicht sicher gelesen werden.");
     }
   };
-  const primary = (item: TodayItem) => { if (item.kind === "order" && item.orderId) openOrder(item.orderId); else if (item.kind === "mail" && item.graphMessageId) void openMail(item.graphMessageId); else if (item.kind === "invoice" && item.invoiceId) openInvoice(item.invoiceId); else if (item.kind === "bundle" && item.bundleSurface) router.push(`/warendurchlauf?bundle=1&surface=${encodeURIComponent(item.bundleSurface)}`); };
+  const primary = (item: TodayItem) => { if(item.kind==='complaint'&&item.target){const handled=!window.dispatchEvent(new CustomEvent('kreile:oeffne',{cancelable:true,detail:{ziel:item.target.screen,arg:item.target.arg}}));if(!handled)setMessage('Aktion konnte nicht geöffnet werden · Reklamation bleibt offen.');}else if (item.kind === "order" && item.orderId) openOrder(item.orderId); else if (item.kind === "mail" && item.graphMessageId) void openMail(item.graphMessageId); else if (item.kind === "invoice" && item.invoiceId) openInvoice(item.invoiceId); else if (item.kind === "bundle" && item.bundleSurface) router.push(`/warendurchlauf?bundle=1&surface=${encodeURIComponent(item.bundleSurface)}`); };
   const dashboardItems = model.kind === "data" || model.kind === "empty" ? model.dashboard.items : [];
   const keyboardItems = sortHandlungsEintraege(dashboardItems.filter((item) => item.field === "action" && !item.assignedToName && !delegated[item.key] && (filter === "alle" || actionType(item) === filter)).map((item) => ({ item, art: actionType(item), gedimmt: Boolean(item.snoozedUntil), termin: item.dueDate })));
   const keyboardSelection = useListenTastatur({
