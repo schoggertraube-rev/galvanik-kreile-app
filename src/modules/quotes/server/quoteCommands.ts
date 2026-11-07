@@ -130,14 +130,15 @@ function normalizeCreate(value: unknown): CreateQuoteInput | null {
     || !INTAKE_SOURCE_VALUES.includes(value.intakeSource as typeof INTAKE_SOURCE_VALUES[number]))) return null;
   const positions = [];
   for (const candidate of value.positions) {
-    if (!plainObject(candidate) || !exactKeys(candidate, ["material", "name", "quantity", "surfaceRequested", "unitPriceCents"])) return null;
+    if (!plainObject(candidate) || !exactKeys(candidate, ["material", "name", "quantity", "surfaceRequested", "unitPriceCents", ...(Object.hasOwn(candidate,"lineTotalCents")?["lineTotalCents"]:[])])) return null;
     const name = text(candidate.name, 2, 160);
     const material = candidate.material === null ? null : text(candidate.material, 1, 120);
     const surfaceRequested = normaliseOrderPositionSurface(candidate.surfaceRequested);
     if (!name || material === null && candidate.material !== null || !surfaceRequested
       || typeof candidate.quantity !== "number" || orderPositionQuantityError(candidate.quantity, null) !== null
       || typeof candidate.unitPriceCents !== "number" || orderPositionPriceError(candidate.unitPriceCents, true) !== null) return null;
-    positions.push({ name, quantity: candidate.quantity, material, surfaceRequested, unitPriceCents: candidate.unitPriceCents });
+    if (Object.hasOwn(candidate,"lineTotalCents") && (typeof candidate.lineTotalCents!=="number" || !Number.isSafeInteger(candidate.lineTotalCents) || candidate.lineTotalCents<0 || candidate.lineTotalCents>999999999999)) return null;
+    positions.push({ name, quantity: candidate.quantity, material, surfaceRequested, unitPriceCents: candidate.unitPriceCents, ...(Object.hasOwn(candidate,"lineTotalCents")?{lineTotalCents:candidate.lineTotalCents as number}:{}) });
   }
   return {
     clientEventId: value.clientEventId, customerId, dueDate: value.dueDate, note, positions,
@@ -240,14 +241,17 @@ function parsePositions(value: unknown): QuotePosition[] | null {
     unitPriceCents: Number(position.unitPriceCents),
     lineTotalCents: Number(position.lineTotalCents),
   }));
-  const valid = positions.every((position) => UUID_PATTERN.test(position.id)
+  const valid = positions.every((position,index) => UUID_PATTERN.test(position.id)
     && Number.isSafeInteger(position.position) && position.position >= 1 && position.position <= 20
     && Boolean(text(position.name, 2, 160)) && Number.isSafeInteger(position.quantity) && position.quantity >= 1
     && (position.material === null || Boolean(text(position.material, 1, 120)))
     && Boolean(text(position.surfaceRequested, 2, 160))
-    && Number.isSafeInteger(position.unitPriceCents) && position.unitPriceCents >= 0
+    && Number.isFinite(position.unitPriceCents) && position.unitPriceCents >= 0
     && Number.isSafeInteger(position.lineTotalCents)
-    && position.lineTotalCents === position.quantity * position.unitPriceCents);
+    && position.lineTotalCents >= 0
+    && (value[index].explicitLineTotal === true
+      ? Math.abs(position.quantity * position.unitPriceCents-position.lineTotalCents)<0.0001
+      : Number.isSafeInteger(position.unitPriceCents) && position.lineTotalCents === position.quantity * position.unitPriceCents));
   return valid ? positions : null;
 }
 

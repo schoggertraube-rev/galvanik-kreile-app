@@ -37,8 +37,17 @@
     "@/modules/quotes/server-public#readQuoteConversionReceiptCommand",
     "@/modules/quotes/server-public#updateQuoteCommand"
   ],
-  "capabilities": ["quotes:create", "quotes:read", "quotes:update", "quotes:convert-to-order"],
-  "migrations": ["20260914110000_path1_quote_persistence_contract.sql", "20260916090000_path1_quote_product_lifecycle.sql"],
+  "capabilities": [
+    "quotes:create",
+    "quotes:read",
+    "quotes:update",
+    "quotes:convert-to-order"
+  ],
+  "migrations": [
+    "20260914110000_path1_quote_persistence_contract.sql",
+    "20260916090000_path1_quote_product_lifecycle.sql",
+    "20261107193000_kv_v04_content_editions.sql"
+  ],
   "viewsFunctions": [
     "private.create_quote_v1",
     "private.prepare_quote_conversion_v1",
@@ -59,7 +68,19 @@
     "private.quotes"
   ],
   "storagePurposes": [],
-  "events": { "emits": ["QUOTE_AWARDED_V1", "QUOTE_CREATED_V1", "QUOTE_UPDATED_V1"], "consumes": ["ORDER_INTAKE_CREATED_V1"] },
+  "events": {
+    "emits": [
+      "QUOTE_AWARDED_V1",
+      "QUOTE_CREATED_V1",
+      "QUOTE_UPDATED_V1"
+    ],
+    "consumes": [
+      "ORDER_INTAKE_CREATED_V1"
+    ]
+  },
   "config": {},
-  "dependencies": ["orders", "customers"]
+  "dependencies": [
+    "orders",
+    "customers"
+  ]
 }

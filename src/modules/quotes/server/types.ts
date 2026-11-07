@@ -17,6 +17,8 @@ export type QuotePositionInput = {
   material: string | null;
   surfaceRequested: string;
   unitPriceCents: number;
+  /** Exact total for calculations that cannot be divided into integer unit cents. */
+  lineTotalCents?: number;
 };
 
 export type CreateQuoteInput = {
