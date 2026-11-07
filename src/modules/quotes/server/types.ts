@@ -40,6 +40,7 @@ export type ConvertQuoteInput = {
   clientEventId: string;
   expectedVersion: number;
   confirmedAward: true;
+  goodsReceiptId?:string;
   /** The order promise is intentionally distinct from the customer's KV wish date. */
   confirmedOrderDueDate: string;
   handoverMode: "pickup" | "shipping";
@@ -162,7 +163,7 @@ export type ReadQuoteUpdateReceiptResult =
   | QuoteCommandFailure;
 
 export type QuoteOrderInput = {
-  geprueft: false;
+  geprueft: boolean;
   clientEventId: string;
   customer: { mode: "EXISTING"; customerId: string };
   dueDate: string;

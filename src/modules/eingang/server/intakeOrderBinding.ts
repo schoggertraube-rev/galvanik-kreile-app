@@ -8,6 +8,7 @@ import { hasAuthorizationArea, type AuthorizationSnapshot } from "@/lib/server/a
 import type { PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 import {readIntakeProspectReference,type IntakeProspectReference} from './intakeProspect';
 import {mayUseContinuationSources} from "./intakeContinuationAccess";
+import {quoteHasCreatedOrder} from '@/lib/server/quoteGoodsContextPort';
 
 export type IntakeOrderSource = { id: string; version: number };
 type Row = { id:string; kanal:string; fortsetzung_von:string|null; kunde_id:string|null; vorgang_art:string|null; vorgang_id:string|null; version:number; kennzeichen:string[]; erstellt_von:string; text:string|null };
@@ -21,7 +22,8 @@ export async function bindIntakeOriginalToOrder(tx:PrivilegedTenantTransaction,a
   if((row.kanal==='mail'||row.erstellt_von!==auth.userId)&&!hasAuthorizationArea(auth,'mails'))throw Error('INTAKE_CAPTURE_FORBIDDEN');
   if(row.fortsetzung_von&&!await mayUseContinuationSources(tx,auth,row.id))throw Error('INTAKE_CAPTURE_FORBIDDEN');
   if(row.kennzeichen.includes('in_erfassung_verworfen')||row.kunde_id&&row.kunde_id!==input.customerId)throw Error('INTAKE_CAPTURE_CUSTOMER_CONFLICT');
-  if(row.vorgang_id&&(row.vorgang_art!=='auftrag'||row.vorgang_id!==input.orderId))throw Error('INTAKE_CAPTURE_ALREADY_ASSIGNED');
+  if(row.vorgang_id&&(row.vorgang_art!=='auftrag'||row.vorgang_id!==input.orderId)
+    &&!(row.vorgang_art==='kv'&&await quoteHasCreatedOrder(tx,auth.tenantId,row.vorgang_id,input.orderId)))throw Error('INTAKE_CAPTURE_ALREADY_ASSIGNED');
   const usage=input.complete&&row.anliegen_offen.length===0?'erledigt':row.einsatz;
   if(row.vorgang_id&&usage===row.einsatz)return;
   const changed=await tx.execute(sql`UPDATE public.intake_item SET kunde_id=${input.customerId},vorgang_art='auftrag',vorgang_id=${input.orderId},zuordnung='hand',einsatz=${usage},

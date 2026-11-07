@@ -17,3 +17,8 @@ export type QuoteGoodsSummary={id:string;orderId:string|null;edition:number;loca
 export async function readQuoteGoodsSummaries(tx:PrivilegedTenantTransaction,tenantId:string,quoteId:string):Promise<QuoteGoodsSummary[]>{
  return [...await tx.execute<QuoteGoodsSummary>(sql`SELECT id::text,auftrag_id AS "orderId",kv_fassung AS edition,lagerort AS location,gesperrt AS blocked,version FROM public.v_quote_goods_receipt_v1 WHERE tenant_id=${tenantId} AND kv_id=${quoteId}::uuid AND status<>'entwurf' ORDER BY erstellt_am,id`)];
 }
+
+export async function quoteHasCreatedOrder(tx:PrivilegedTenantTransaction,tenantId:string,quoteId:string,orderId:string){
+ const rows=await tx.execute(sql`SELECT receipt.id FROM private.quote_conversion_receipts receipt JOIN private.quotes quote ON quote.tenant_id=receipt.tenant_id AND quote.id=receipt.quote_id AND quote.linked_order_id=receipt.order_id WHERE receipt.tenant_id=${tenantId} AND receipt.quote_id=${quoteId}::uuid AND receipt.order_id=${orderId}`);
+ return rows.length===1;
+}

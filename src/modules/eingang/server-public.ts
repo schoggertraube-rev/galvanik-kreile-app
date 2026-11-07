@@ -10,7 +10,7 @@ export {recordIntakeComplaintEffect} from './server/intakeComplaintEffect';
 export {saveIntakeProspect} from './server/intakeProspect';
 export {readOpenIntakeMails} from "./server/intakeMailRead";
 export {openIntakeOriginal,confirmIntakeOriginal,readOrderIntakeOriginals} from "./server/intakeOriginal";
-export { saveGoodsReceipt,readGoodsReceipts,createGoodsReceiptStationBinding,writeCreatedOrderGoodsReceipt } from "./server/goodsReceipt";
+export { saveGoodsReceipt,readGoodsReceipts,createGoodsReceiptStationBinding,writeCreatedOrderGoodsReceipt,bindQuoteGoodsReceiptToCreatedOrder } from "./server/goodsReceipt";
 export type { GoodsReceiptResult,GoodsReceiptDependencies } from "./server/goodsReceipt";
 export { readIntakeDrafts, writeIntakeDraft, discardIntakeDraft, createIntakeContinuation } from "./server/intakeDraft";
 

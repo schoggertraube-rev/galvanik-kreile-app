@@ -12,7 +12,7 @@ import {
 import { readCustomerSummary } from "@/lib/server/customerSummaryRead";
 import { createOrderIntake } from "@/lib/server/commands/orderIntakeCommand";
 import { readOrderIntakeReceipt } from "@/lib/server/orderIntakeRead";
-import {recordIntakeQuoteEffect} from '@/modules/eingang/server-public';
+import {recordIntakeQuoteEffect,bindQuoteGoodsReceiptToCreatedOrder} from '@/modules/eingang/server-public';
 import { readCompanyDocumentSettings } from "@/modules/fundament/server-public";
 import {
   createQuoteCommand,
@@ -207,11 +207,27 @@ export async function convertQuoteToOrderAction(input: ConvertQuoteInput) {
   if (failure || !authorization.ok) return failure!;
 
   const commandContext = quoteCommandContext(authorization.data);
-  const prepared = await prepareQuoteConversionCommand(commandContext, input);
+  const prepared = await prepareQuoteConversionCommand(commandContext, input,{planOnly:true});
   if (prepared.code !== "OK") return prepared;
 
-  const order = await createOrderIntake(prepared.orderInput);
-  if (order.code !== "OK") return order;
+  let goods:Awaited<ReturnType<typeof bindQuoteGoodsReceiptToCreatedOrder>>|null=null;
+  let boundFailure:{code:'VALIDATION_ERROR'|'CONFLICT'|'UNAVAILABLE'|'FORBIDDEN'|'NOT_FOUND';message:string}|null=null;
+  const check=async(tx:Parameters<typeof bindQuoteGoodsReceiptToCreatedOrder>[0],planOnly:boolean)=>{
+    const result=await prepareQuoteConversionCommand(commandContext,input,{transaction:tx,planOnly});
+    if(result.code!=='OK'){boundFailure=result;throw Error('QUOTE_ORDER_BINDING_FAILED');}
+  };
+  const order = await createOrderIntake(prepared.orderInput,undefined,{
+    before:tx=>check(tx,true),
+    beforeEvent:tx=>check(tx,false),
+    after:async(tx,auth,receipt)=>{
+      try{goods=await bindQuoteGoodsReceiptToCreatedOrder(tx,auth,{quoteId:input.quoteId,receiptId:input.goodsReceiptId!,clientEventId:input.clientEventId,orderId:receipt.orderId,items:receipt.items});}
+      catch(error){
+        if(error&&typeof error==='object'&&'result'in error){const result=error.result as {code:string;message:string};boundFailure={code:result.code==='CONFLICT'?'CONFLICT':'VALIDATION_ERROR',message:result.message};}
+        throw error;
+      }
+    },
+  });
+  if (order.code !== "OK") return boundFailure??order;
 
   const persisted = await readQuoteConversionReceiptCommand(commandContext, {
     quoteId: input.quoteId,
@@ -233,6 +249,7 @@ export async function convertQuoteToOrderAction(input: ConvertQuoteInput) {
     quote: persisted.quote,
     quoteReceipt: persisted.receipt,
     orderReceipt: order.receipt,
+    goodsReceipt:goods,
     replayed: prepared.replayed && order.replayed,
   };
 }

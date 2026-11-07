@@ -166,9 +166,10 @@ function normalizeCreate(value: unknown): CreateQuoteInput | null {
 }
 
 function normalizeConvert(value: unknown): ConvertQuoteInput | null {
-  if (!plainObject(value) || !exactKeys(value, ["clientEventId", "confirmedAward", "confirmedOrderDueDate", "expectedVersion", "handoverMode", "paymentMode", "quoteId"])) return null;
+  if (!plainObject(value) || !exactKeys(value, ["clientEventId", "confirmedAward", "confirmedOrderDueDate", "expectedVersion", "handoverMode", "paymentMode", "quoteId",...(plainObject(value)&&Object.hasOwn(value,"goodsReceiptId")?["goodsReceiptId"]:[])])) return null;
   if (typeof value.quoteId !== "string" || !UUID_PATTERN.test(value.quoteId)
     || typeof value.clientEventId !== "string" || !UUID_PATTERN.test(value.clientEventId)
+    || (value.goodsReceiptId!==undefined&&(typeof value.goodsReceiptId!=="string"||!UUID_PATTERN.test(value.goodsReceiptId)))
     || value.confirmedAward !== true || typeof value.expectedVersion !== "number"
     || !Number.isSafeInteger(value.expectedVersion) || value.expectedVersion < 1
     || !validDate(value.confirmedOrderDueDate)
@@ -542,18 +543,27 @@ export async function readQuoteUpdateReceiptCommand(
   }
 }
 
-export async function prepareQuoteConversionCommand(authorization: QuoteCommandContext, input: unknown): Promise<PrepareQuoteConversionResult> {
+export async function prepareQuoteConversionCommand(authorization: QuoteCommandContext, input: unknown,options:{transaction?:PrivilegedTenantTransaction;planOnly?:boolean}={}): Promise<PrepareQuoteConversionResult> {
   const normalized = normalizeConvert(input);
   if (!normalized) return { code: "VALIDATION_ERROR", message: "Beauftragungsdaten sind ungültig." };
   if (!authorization.capabilities.canConvertQuote) return { code: "FORBIDDEN", message: "KV darf mit dieser Rolle nicht beauftragt werden." };
+  if(!normalized.goodsReceiptId)return {code:"VALIDATION_ERROR",message:"Ware zuerst zum KV annehmen; ohne Warenbeleg entsteht kein Auftrag."};
   const intentSha256 = hashIntent(normalized);
   try {
-    return await withPrivilegedTenantTransaction(authorization, async (tx) => {
+    const run=async(tx:PrivilegedTenantTransaction):Promise<PrepareQuoteConversionResult>=>{
+      await tx.execute(sql`SELECT id FROM private.quotes WHERE tenant_id=${authorization.tenantId} AND id=${normalized.quoteId}::uuid FOR UPDATE`);
       const quote = await readQuote(tx, authorization.tenantId, normalized.quoteId);
       if (!quote) return { code: "NOT_FOUND", message: "KV ist nicht verfügbar." };
+      if(!quote.lifecycle||quote.lifecycle.acceptedEdition!==quote.lifecycle.edition||!quote.lifecycle.acceptedAt||!quote.lifecycle.acceptanceEvidence?.trim()||quote.lifecycle.declinedAt)return {code:'VALIDATION_ERROR',message:'Aktuelle KV-Fassung ohne Vorbehalt zusagen; danach Ware zum Auftrag buchen.'};
+      const goods=quote.lifecycle.goods?.find(row=>row.id===normalized.goodsReceiptId);
+      if(!goods||goods.blocked||goods.orderId!==quote.linkedOrderId)return {code:'VALIDATION_ERROR',message:'Passender angenommener Warenbeleg fehlt oder ist gesperrt.'};
+      if(quote.linkedOrderId){
+        const prior=await tx.execute<{order_id:string;intent_sha256:string}>(sql`SELECT order_id,intent_sha256 FROM private.quote_conversion_receipts WHERE tenant_id=${authorization.tenantId} AND quote_id=${normalized.quoteId}::uuid AND actor_id=${authorization.userId}::uuid AND client_event_id=${normalized.clientEventId}::uuid`);
+        if(prior.length!==1||prior[0].order_id!==quote.linkedOrderId||prior[0].intent_sha256!==intentSha256)return {code:'CONFLICT',message:'KV wurde bereits mit einer anderen Buchung zum Auftrag.'};
+      }else if(quote.version!==normalized.expectedVersion)return {code:'CONFLICT',message:'KV-Fassung wurde geaendert. Neu lesen und abgleichen.'};
       const sourceOrderInput: Omit<QuoteOrderInput, "handoverMode" | "paymentMode"> = {
-        // A released quote has not passed the goods inspection in 3.7.
-        geprueft: false,
+        // The selected canonical goods record has passed the inspection.
+        geprueft: true,
         clientEventId: normalized.clientEventId,
         customer: { mode: "EXISTING", customerId: quote.customerId },
         dueDate: quote.dueDate,
@@ -576,6 +586,7 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
         handoverMode: normalized.handoverMode,
         paymentMode: normalized.paymentMode,
       };
+      if(options.planOnly)return {code:"OK",quoteId:normalized.quoteId,orderInput,replayed:Boolean(quote.linkedOrderId)};
       const orderIntentSha256 = hashOrderIntent(orderInput);
       const rows = await tx.execute<{ result_code: string; order_input: unknown; replayed: boolean }>(sql`
         SELECT * FROM private.prepare_quote_conversion_v1(
@@ -612,7 +623,8 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
           && item.material === sourceOrderInput.items[index]?.material
           && item.surfaceRequested === sourceOrderInput.items[index]?.surfaceRequested)) throw new Error("QUOTE_ORDER_INPUT_INVALID");
       return { code: "OK", quoteId: normalized.quoteId, orderInput, replayed: result.replayed };
-    });
+    };
+    return options.transaction?await run(options.transaction):await withPrivilegedTenantTransaction(authorization,run);
   } catch (error) {
     console.error("quote_conversion_prepare_failed", { message: diagnostic(error, "message"), details: diagnostic(error, "details"), hint: diagnostic(error, "hint") });
     return { code: "UNAVAILABLE", message: "KV konnte nicht sicher beauftragt werden." };

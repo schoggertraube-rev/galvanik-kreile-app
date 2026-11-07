@@ -236,7 +236,7 @@ it('KV-07b conditional response clears acceptance, creates no order and requires
 
 it('KV-07 stores early goods once in the existing receipt, derives the lock and rereads the KV without an order',async()=>{
  const fixture=await createFixture();
- const {createQuoteAction,changeQuoteLifecycleAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
+ const {createQuoteAction,changeQuoteLifecycleAction,readQuoteAction,convertQuoteToOrderAction}=await import('@/app/actions/quotes.actions');
  const {saveIntakeNoteAction,saveGoodsReceiptAction}=await import('@/app/actions/eingang.actions');
  const created=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',note:'TEST Ware vor Zusage',positions:[{name:'TEST Weber-Trompeten',quantity:4,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]}));
  if(created.code!=='OK')throw Error('TEST_EARLY_GOODS_QUOTE:'+created.code);
@@ -262,4 +262,24 @@ it('KV-07 stores early goods once in the existing receipt, derives the lock and 
  expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'accept',quoteId,clientEventId:randomUUID(),expectedVersion:2,edition:1,evidence:'TEST aktuelle Fassung ohne Vorbehalt angenommen'}))).toMatchObject({code:'OK'});
  expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{linkedOrderId:null,lifecycle:{goods:[{id:input.id,blocked:false,orderId:null}]}}});
  expect((await sql`SELECT count(*)::int AS n FROM public.goods_receipt WHERE tenant_id=${KREILE_TENANT_SLUG} AND kv_id=${quoteId}::uuid`)[0].n).toBe(1);
+ const award={quoteId,clientEventId:randomUUID(),expectedVersion:3,confirmedAward:true as const,confirmedOrderDueDate:'2027-04-20',handoverMode:'pickup' as const,paymentMode:'rechnung' as const,goodsReceiptId:input.id};
+ expect(await withSession(fixture,()=>convertQuoteToOrderAction({...award,goodsReceiptId:undefined}))).toMatchObject({code:'VALIDATION_ERROR'});
+ // Change only this TEST fixture to exercise a late failure after the canonical order event.
+ await sql`UPDATE public.goods_receipt SET mengen=jsonb_set(mengen,'{0,bestaetigt}','3'::jsonb) WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.id}::uuid`;
+ const mismatch=await withSession(fixture,()=>convertQuoteToOrderAction(award));
+ expect(mismatch).toMatchObject({code:'VALIDATION_ERROR',message:expect.stringContaining('Mengenabweichung')});
+ expect((await sql`SELECT count(*)::int AS n FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`)[0].n).toBe(0);
+ expect((await sql`SELECT count(*)::int AS n FROM private.quote_conversion_requests WHERE tenant_id=${KREILE_TENANT_SLUG} AND quote_id=${quoteId}::uuid`)[0].n).toBe(0);
+ expect((await sql`SELECT linked_order_id,version FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${quoteId}::uuid`)[0]).toMatchObject({linked_order_id:null,version:3});
+ await sql`UPDATE public.goods_receipt SET mengen=jsonb_set(mengen,'{0,bestaetigt}','4'::jsonb) WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.id}::uuid`;
+ const converted=await withSession(fixture,()=>convertQuoteToOrderAction(award));
+ expect(converted).toMatchObject({code:'OK',quote:{status:'converted',lifecycle:{stage:'umgewandelt'}},goodsReceipt:{receipt:{id:input.id,kv_id:quoteId}}});
+ if(converted.code!=='OK')throw Error('TEST_GOODS_CONVERSION:'+converted.code+':'+converted.message);
+ expect((await sql`SELECT receipt.auftrag_id,receipt.kv_id::text,orders.ware,orders.station,orders.geprueft FROM public.goods_receipt receipt JOIN public.orders orders ON orders.tenant_id=receipt.tenant_id AND orders.id=receipt.auftrag_id WHERE receipt.tenant_id=${KREILE_TENANT_SLUG} AND receipt.id=${input.id}::uuid`)[0]).toMatchObject({auftrag_id:converted.orderReceipt.orderId,kv_id:quoteId,ware:'da',station:'angenommen',geprueft:true});
+ expect((await sql`SELECT count(*)::int AS n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND order_id=${converted.orderReceipt.orderId} AND event_type IN ('ORDER_INTAKE_CREATED_V1','GOODS_RECEIPT_SAVED_V1')`)[0].n).toBe(2);
+ expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{linkedOrderId:converted.orderReceipt.orderId,lifecycle:{goods:[{id:input.id,orderId:converted.orderReceipt.orderId,blocked:false}]}}});
+ expect(await withSession(fixture,()=>convertQuoteToOrderAction(award))).toMatchObject({code:'OK',replayed:true,orderReceipt:{orderId:converted.orderReceipt.orderId}});
+ expect((await sql`SELECT count(*)::int AS n FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`)[0].n).toBe(1);
+ expect((await sql`SELECT count(*)::int AS n FROM public.goods_receipt WHERE tenant_id=${KREILE_TENANT_SLUG} AND kv_id=${quoteId}::uuid`)[0].n).toBe(1);
+
 });

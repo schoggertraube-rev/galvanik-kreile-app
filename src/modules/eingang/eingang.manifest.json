@@ -142,7 +142,8 @@
     "@/modules/eingang/server-public#recordIntakeComplaintEffect",
     "@/modules/eingang/public#ComplaintDialogs",
     "@/modules/eingang/public#ComplaintPorts",
-    "@/modules/eingang/server-public#recordIntakeQuoteEffect"
+    "@/modules/eingang/server-public#recordIntakeQuoteEffect",
+    "@/modules/eingang/server-public#bindQuoteGoodsReceiptToCreatedOrder"
   ],
   "capabilities": [
     "eingang:auftrag-anlegen"
