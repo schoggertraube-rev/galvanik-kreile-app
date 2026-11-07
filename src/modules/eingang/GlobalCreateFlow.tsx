@@ -260,6 +260,10 @@ export type GlobalCreatePorts = {
 
 type Step = "choose" | "customer" | "customer-saved" | "customer-picker" | "quote-list" | "quote" | "quote-saved" | "order-saved" | "direct-intake" | "denied";
 type Feedback = { kind: "validation" | "conflict" | "denied" | "error" | "unclear" | "save-failed"; message: string; requestId?: string };
+const canonicalDraftPayload = (value: unknown) => JSON.stringify(value, (_key, entry: unknown) =>
+  entry && typeof entry === "object" && !Array.isArray(entry)
+    ? Object.fromEntries(Object.entries(entry).sort(([left], [right]) => left.localeCompare(right)))
+    : entry);
 type OpenQuotesState =
   | { kind: "idle" | "loading" | "empty" }
   | { kind: "data"; quotes: QuoteReadback[] }
@@ -1190,11 +1194,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       const result=await ports.drafts.saveDraft(request);
       if(result.code!=="OK") { setFeedback({kind:"error",message:"Weiterer Beleg nicht gespeichert · die Positionen sind noch da. "+result.message}); return; }
       const stored=result.drafts.find(draft=>draft.id===id&&draft.art==="eingang");
-      const storedItems=stored?.payload.items;
-      const requestedItems=request.payload.items;
-      if(stored?.payload.clientKey!==id || !Array.isArray(storedItems) || !Array.isArray(requestedItems)
-        || storedItems.length!==requestedItems.length
-        || requestedItems.some((item,index)=>storedItems[index]?.name!==item.name || storedItems[index]?.quantity!==item.quantity || storedItems[index]?.unit!==item.unit)) {
+      if(!stored || canonicalDraftPayload(stored.payload)!==canonicalDraftPayload(request.payload)) {
         setFeedback({kind:"error",message:"Weiterer Beleg nicht bestätigt · die Positionen sind noch da. Erneut speichern. Code: INTAKE_OVERFLOW_READBACK_MISMATCH."});
         return;
       }

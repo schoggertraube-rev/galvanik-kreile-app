@@ -1501,7 +1501,9 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
 
   it("sichert erkannte Positionen über 20 als eigenen Entwurf und behält sie bei einem Fehler",async()=>{
     const positions=Array.from({length:23},(_,index)=>({name:`SYNTHETISCH Teil ${index+1}`,quantity:'1',unit:'Stück' as const,surfaceRequested:'Verzinken',executionRequested:'offen' as const,source:'Text'}));
-    const saveDraft=vi.fn().mockResolvedValueOnce({code:'UNAVAILABLE',message:'Speicher nicht erreichbar.'}).mockResolvedValueOnce({code:'OK',drafts:[]}).mockImplementationOnce(async input=>({code:'OK',drafts:[{id:input.id,art:'eingang',payload:input.payload}]}));
+    const saveDraft=vi.fn().mockResolvedValueOnce({code:'UNAVAILABLE',message:'Speicher nicht erreichbar.'}).mockResolvedValueOnce({code:'OK',drafts:[]})
+      .mockImplementationOnce(async input=>({code:'OK',drafts:[{id:input.id,art:'eingang',payload:{...input.payload,source:'abweichend'}}]}))
+      .mockImplementationOnce(async input=>({code:'OK',drafts:[{id:input.id,art:'eingang',payload:input.payload}]}));
     const drafts={saveDraft,readDrafts:vi.fn().mockResolvedValue({code:'OK',drafts:[]}),discardDraft:vi.fn()};
     const api=ports({drafts,recognizeIntakeText:vi.fn().mockResolvedValue({code:'OK',data:{fields:[],positions}})});
     render(<GlobalCreateFlow ports={api}/>);openFlow();
@@ -1517,8 +1519,12 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(await screen.findByText(/Weiterer Beleg nicht bestätigt/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button',{name:'Rest als zweiten Beleg anlegen'}));
     await waitFor(()=>expect(saveDraft).toHaveBeenCalledTimes(3));
+    expect(await screen.findByText(/Weiterer Beleg nicht bestätigt/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Rest als zweiten Beleg anlegen'}));
+    await waitFor(()=>expect(saveDraft).toHaveBeenCalledTimes(4));
     expect(saveDraft.mock.calls[1][0]).toEqual(saveDraft.mock.calls[0][0]);
     expect(saveDraft.mock.calls[2][0]).toEqual(saveDraft.mock.calls[0][0]);
+    expect(saveDraft.mock.calls[3][0]).toEqual(saveDraft.mock.calls[0][0]);
     expect(saveDraft.mock.calls[0][0].payload.items).toHaveLength(3);
     expect(saveDraft.mock.calls[0][0].payload.items[0].name).toBe('SYNTHETISCH Teil 21');
     expect(await screen.findByText(/Weiterer Beleg als Entwurf gespeichert/)).toBeInTheDocument();
