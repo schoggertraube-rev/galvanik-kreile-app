@@ -60,7 +60,7 @@ export async function changeQuoteLifecycleAction(input:QuoteLifecycleInput) {
     const auth=await resolveAuthorization();
     const failure=authorizationFailure(auth);
     if (failure||!auth.ok) return failure!;
-    const result=await changeQuoteLifecycleCommand(quoteCommandContext(auth.data),input);
+    const result=await changeQuoteLifecycleCommand(quoteCommandContext(auth.data),input,(tx,source)=>recordIntakeQuoteEffect(tx,auth.data,source));
     if (result.code==='OK') {
       revalidatePath('/');
       revalidatePath('/customers');

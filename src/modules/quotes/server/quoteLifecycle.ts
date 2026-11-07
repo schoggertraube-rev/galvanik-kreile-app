@@ -2,11 +2,11 @@ import 'server-only';
 import {createHash, randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {withPrivilegedTenantTransaction} from '@/lib/server/privilegedDb';
-import type {QuoteCommandContext, QuoteCommandFailure, QuoteReadback} from './types';
-import {readQuote} from './quoteCommands';
+import type {QuoteCommandContext, QuoteCommandFailure, QuoteReadback,CreateQuoteInput} from './types';
+import {readQuote,type QuoteSourceBinding} from './quoteCommands';
 import {readQuoteJournal,quoteJournalActorIsActive,appendQuoteJournal} from '@/lib/server/quoteJournalPort';
 
-type Identity = {quoteId:string; clientEventId:string; expectedVersion:number; edition:number};
+type Identity = {quoteId:string; clientEventId:string; expectedVersion:number; edition:number;source?:NonNullable<CreateQuoteInput['source']>};
 export type QuoteLifecycleInput = Identity & (
   | {action:'sent'; channel:'mail'|'druck'; evidence:string}
   | {action:'accept'; evidence:string}
@@ -19,19 +19,22 @@ function normalize(value:unknown):QuoteLifecycleInput|null {
   if (!value||typeof value!=='object'||Array.isArray(value)) return null;
   const row=value as Record<string,unknown>;
   const specific=row.action==='sent'?['channel','evidence']:(row.action==='accept'||row.action==='conditional')?['evidence']:row.action==='reject'?['reason']:null;
-  if (!specific||Object.keys(row).sort().join('|')!==['quoteId','clientEventId','expectedVersion','edition','action',...specific].sort().join('|')) return null;
+  if (!specific||Object.keys(row).sort().join('|')!==['quoteId','clientEventId','expectedVersion','edition','action',...specific,...(Object.hasOwn(row,'source')?['source']:[])].sort().join('|')) return null;
   if (typeof row.quoteId!=='string'||!uuid.test(row.quoteId)||typeof row.clientEventId!=='string'||!uuid.test(row.clientEventId)
     ||!Number.isSafeInteger(row.expectedVersion)||Number(row.expectedVersion)<1||!Number.isSafeInteger(row.edition)||Number(row.edition)<1) return null;
   if (row.action==='sent'&&row.channel!=='mail'&&row.channel!=='druck') return null;
   const proof=row.action==='reject'?row.reason:row.evidence;
   if (typeof proof!=='string'||proof.trim().length<3||proof.trim().length>(row.action==='reject'?2000:4000)) return null;
-  const identity={quoteId:row.quoteId,clientEventId:row.clientEventId,expectedVersion:Number(row.expectedVersion),edition:Number(row.edition)};
+  if(Object.hasOwn(row,'source')){const source=row.source;if(row.action==='sent'||!source||typeof source!=='object'||Array.isArray(source)||Object.keys(source).sort().join(',')!=='itemId,message,version')return null;const item=source as Record<string,unknown>;if(typeof item.itemId!=='string'||!uuid.test(item.itemId)||!Number.isSafeInteger(item.version)||Number(item.version)<1||typeof item.message!=='boolean')return null;}
+  const identity={quoteId:row.quoteId,clientEventId:row.clientEventId,expectedVersion:Number(row.expectedVersion),edition:Number(row.edition),...(Object.hasOwn(row,'source')?{source:row.source as NonNullable<CreateQuoteInput['source']>}:{} )};
   return row.action==='sent'?{...identity,action:'sent',channel:row.channel as 'mail'|'druck',evidence:proof.trim()}
     :row.action==='accept'||row.action==='conditional'?{...identity,action:row.action,evidence:proof.trim()}:{...identity,action:'reject',reason:proof.trim()};
 }
 
 /** Explicit manual sent/acceptance/decline records. Actual mail dispatch stays in communications. */
-export async function changeQuoteLifecycleCommand(auth:QuoteCommandContext, raw:unknown):Promise<Result> {
+class QuoteLifecycleSourceFailure extends Error{constructor(readonly result:QuoteCommandFailure){super(result.code);}}
+
+export async function changeQuoteLifecycleCommand(auth:QuoteCommandContext, raw:unknown,bindSource?:QuoteSourceBinding):Promise<Result> {
   const input=normalize(raw);
   if (!input) return {code:'VALIDATION_ERROR',message:'KV-Fassung, Nachweis oder Entscheidung fehlt.'};
   if (!auth.capabilities.canUpdateQuote||!auth.capabilities.canReadQuote) return {code:'FORBIDDEN',message:'KV-Entscheidung ist nicht freigegeben.'};
@@ -68,13 +71,19 @@ export async function changeQuoteLifecycleCommand(auth:QuoteCommandContext, raw:
             ? sql`zugesagt_fassung=NULL,zugesagt_am=NULL,zusage_nachweis=NULL,vorbehalt_fassung=fassung,vorbehalt_am=statement_timestamp(),vorbehalt_grund=${input.evidence},nachfass_am=NULL`
           : sql`abgesagt_am=statement_timestamp(),absage_grund=${input.reason},nachfass_am=NULL`;
       await tx.execute(sql`UPDATE private.quotes SET ${mutation},version=${version},updated_by=${auth.userId}::uuid,updated_at=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${input.quoteId}::uuid`);
-      await appendQuoteJournal(tx,auth,{id:eventId,type:'QUOTE_LIFECYCLE_V04',clientEventId:input.clientEventId,correlationId:randomUUID(),version,description:input.action==='sent'?'KV-Versand ausdrücklich vermerkt':input.action==='accept'?'KV-Zusage vermerkt':input.action==='conditional'?'KV-Vorbehalt vermerkt · neue Fassung erforderlich':'KV-Absage vermerkt',payload:{quoteId:input.quoteId,intent,action:input.action,edition:life.edition,before:life,proof:input.action==='reject'?input.reason:input.evidence,manual:input.action==='sent'}});
+      if(input.source){
+        if(!bindSource)throw new QuoteLifecycleSourceFailure({code:'UNAVAILABLE',message:'Antwort-Anliegen konnte nicht mitgespeichert werden. Nichts geändert.'});
+        const failure=await bindSource(tx,{source:input.source,quoteId:input.quoteId,customerId:quote.customerId,clientEventId:input.clientEventId,effect:input.action==='conditional'?'conditional':input.action==='accept'?'accept':'reject'});
+        if(failure)throw new QuoteLifecycleSourceFailure(failure);
+      }
+      await appendQuoteJournal(tx,auth,{id:eventId,type:'QUOTE_LIFECYCLE_V04',clientEventId:input.clientEventId,correlationId:randomUUID(),version,description:input.action==='sent'?'KV-Versand ausdrücklich vermerkt':input.action==='accept'?'KV-Zusage vermerkt':input.action==='conditional'?'KV-Vorbehalt vermerkt · neue Fassung erforderlich':'KV-Absage vermerkt',payload:{quoteId:input.quoteId,intent,action:input.action,edition:life.edition,before:life,proof:input.action==='reject'?input.reason:input.evidence,manual:input.action==='sent',...(input.source?{source:input.source}:{} )}});
       const result=await readQuote(tx,auth.tenantId,input.quoteId);
       if (!result?.lifecycle||result.version!==version) throw Error('QUOTE_LIFECYCLE_WRITE_READBACK_INVALID');
       return {code:'OK',quote:result,eventId,replayed:false};
     });
   } catch (error) {
     console.error('[QUOTE_LIFECYCLE_FAILED]',error instanceof Error?error.name:'UnknownError');
+    if(error instanceof QuoteLifecycleSourceFailure)return error.result;
     return {code:'UNAVAILABLE',message:'KV-Entscheidung konnte nicht sicher bestätigt werden. Eingaben und Kennung behalten.'};
   }
 }

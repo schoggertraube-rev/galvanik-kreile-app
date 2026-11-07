@@ -369,3 +369,35 @@ it('KV-03 snapshots explicit configured calculations, preserves sent prices and 
  expect(await withSession(fixture,()=>createQuoteAction({...input,clientEventId:randomUUID(),calculation:{...calculation,hourlyRateCents:null}}))).toMatchObject({code:'VALIDATION_ERROR'});
  expect(await withSession(fixture,()=>createQuoteAction({...input,clientEventId:randomUUID(),calculation:{...calculation,hours:'9'}}))).toMatchObject({code:'VALIDATION_ERROR'});
 });
+
+
+it('KV-06/07b/08 records reply decisions and exactly their concern in one transaction with readback',async()=>{
+ const fixture=await createFixture();
+ const {createQuoteAction,changeQuoteLifecycleAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
+ const {saveIntakeNoteAction,selectIntakeConcernAction,getIntakeCaptureAction}=await import('@/app/actions/eingang.actions');
+ for(const action of ['accept','conditional','reject'] as const){
+  const created=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2027-04-20',note:'TEST reply '+action,positions:[{name:'TEST Teil',quantity:1,material:null,surfaceRequested:'verchromen',unitPriceCents:1000}]}));
+  if(created.code!=='OK')throw Error('TEST_REPLY_QUOTE:'+created.code);
+  const quoteId=created.quote.quoteId;
+  expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'sent',quoteId,clientEventId:randomUUID(),expectedVersion:1,edition:1,channel:'druck',evidence:'TEST aktuelle Fassung ausgegeben'}))).toMatchObject({code:'OK'});
+  const itemId=randomUUID(),capture=await withSession(fixture,()=>saveIntakeNoteAction({itemId,textstand:randomUUID(),text:'TEST Bitte andere offene Arbeit erledigen',context:{customerId:fixture.customerId},concerns:['aufgabe']}));
+  if(capture.code!=='OK')throw Error('TEST_REPLY_CAPTURE:'+capture.code);
+  const selected=await withSession(fixture,()=>selectIntakeConcernAction({itemId,version:capture.capture.version,clientEventId:randomUUID(),concern:action==='reject'?'kv_ablehnung':'kv_annahme'}));
+  if(selected.code!=='OK')throw Error('TEST_REPLY_CONCERN:'+selected.code);
+  const identity={quoteId,clientEventId:randomUUID(),expectedVersion:2,edition:1,source:{itemId,version:selected.capture.version,message:false}};
+  const input=action==='reject'?{...identity,action,reason:'TEST Vorhaben abgesagt'}:{...identity,action,evidence:action==='conditional'?'TEST einverstanden, aber Preis anpassen':'TEST aktuelle Fassung verbindlich angenommen'};
+  expect(await withSession(fixture,()=>changeQuoteLifecycleAction({...input,source:{...input.source,version:input.source.version+1}}))).toMatchObject({code:'CONFLICT'});
+  expect((await sql`SELECT version,zugesagt_fassung,abgesagt_am FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${quoteId}::uuid`)[0]).toMatchObject({version:2,zugesagt_fassung:null,abgesagt_am:null});
+  expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid`)[0].n).toBe(0);
+  const result=await withSession(fixture,()=>changeQuoteLifecycleAction(input));
+  expect(result).toMatchObject({code:'OK',quote:{version:3,linkedOrderId:null,lifecycle:{stage:action==='accept'?'zugesagt':action==='reject'?'abgesagt':'versendet',acceptedEdition:action==='accept'?1:null}}});
+  const concerns=action==='conditional'?['aufgabe','aenderung']:['aufgabe'];
+  expect((await sql`SELECT vorgang_art,vorgang_id,einsatz,anliegen_offen FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`)[0]).toMatchObject({vorgang_art:'kv',vorgang_id:quoteId,einsatz:'offen',anliegen_offen:concerns});
+  expect((await sql`SELECT e.event_type,e.payload->'source'->>'itemId' AS source,i.nachher->>'action' AS action FROM public.events e JOIN public.intake_event i ON i.tenant_id=e.tenant_id AND i.befehl_id=e.client_event_id AND i.art='anliegen' WHERE e.tenant_id=${KREILE_TENANT_SLUG} AND e.client_event_id=${input.clientEventId}::uuid`)[0]).toMatchObject({event_type:'QUOTE_LIFECYCLE_V04',source:itemId,action:action==='accept'?'kv.zugesagt':action==='reject'?'kv.abgesagt':'kv.anpassen'});
+  expect(await withSession(fixture,()=>getIntakeCaptureAction(itemId))).toMatchObject({code:'OK',capture:{usage:'offen',concerns:expect.arrayContaining(concerns),openConcerns:concerns}});
+  expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{version:3}});
+  expect(await withSession(fixture,()=>changeQuoteLifecycleAction(input))).toMatchObject({code:'OK',replayed:true});
+  expect((await sql`SELECT count(*)::int n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND art='anliegen' AND befehl_id=${input.clientEventId}::uuid`)[0].n).toBe(1);
+ }
+ expect((await sql`SELECT count(*)::int n FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`)[0].n).toBe(0);
+});
