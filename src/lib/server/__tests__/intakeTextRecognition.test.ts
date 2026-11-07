@@ -39,9 +39,9 @@ describe("recognizeIntakeText", () => {
     ]);
   });
 
-  it("erfindet keine Oberfläche, wenn im Text keine genannt wird", () => {
+  it("kennzeichnet eine nicht genannte Oberfläche als ungeklärten Zustand statt als Treffer", () => {
     expect(recognizeIntakeText("2 Stück Halter").positions).toEqual([
-      expect.objectContaining({ name: "Halter", quantity: "2", surfaceRequested: "" }),
+      expect.objectContaining({ name: "Halter", quantity: "2", surfaceRequested: "noch zu klären", surfaceRecognized: false }),
     ]);
   });
 

@@ -12,6 +12,7 @@ export type IntakeTextRecognitionPosition = {
   quantity: string;
   unit: "Stück" | "kg";
   surfaceRequested: string;
+  surfaceRecognized?: boolean;
   executionRequested: "hochglanz" | "glaenzend" | "matt" | "gelb_passiviert" | "blau_passiviert" | "offen";
   source: string;
 };
@@ -110,7 +111,8 @@ export function recognizeIntakeText(text: string, today = new Date()): IntakeTex
       name,
       quantity: NUMBER_WORDS[quantityMatch[1]!.toLowerCase()] ?? quantityMatch[1]!.replace(",", "."),
       unit: /^kg$/i.test(quantityMatch[2]!) ? "kg" as const : "Stück" as const,
-      surfaceRequested: surface?.surface ?? "",
+      surfaceRequested: surface?.surface ?? "noch zu klären",
+      surfaceRecognized: Boolean(surface),
       executionRequested: execution?.execution ?? "offen",
       source: `Text Abschnitt ${index + 1}`,
     }];

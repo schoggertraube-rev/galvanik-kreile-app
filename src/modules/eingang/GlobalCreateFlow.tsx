@@ -1229,7 +1229,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
           {key:`position-${index}-name`,label:`Position ${index+1}`,value:position.name,source:position.source},
           ...(position.quantity?[{key:`position-${index}-quantity`,label:"Menge",value:position.quantity,source:position.source}]:[]),
           {key:`position-${index}-unit`,label:"Einheit",value:position.unit,source:position.source},
-          ...(position.surfaceRequested?[{key:`position-${index}-surface`,label:"Oberfläche",value:position.surfaceRequested,source:position.source}]:[]),
+          ...(position.surfaceRequested && position.surfaceRecognized!==false?[{key:`position-${index}-surface`,label:"Oberfläche",value:position.surfaceRequested,source:position.source}]:[]),
         ]);
         const payload={...draftPayload(),clientKey:childId,items,documents:[childId],geprueft:false,recognitionMarkers:markers,recognitionConfirmed:false,remainingRecognizedPositions:0,overflowPositions:[]};
         continuationRequest.current={parentId:parent.id,parentVersion:parent.version,textSourceId:textSource.id,childId,draftId,clientEventId,fileId:parent.files.find(file=>file.secured)?.id??null,payload};
@@ -1881,7 +1881,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
           { key: `position-${index+adoptedOffset}-name`, label: `Position ${index + adoptedOffset + 1}`, value: position.name, source: position.source },
           ...(position.quantity ? [{ key: `position-${index+adoptedOffset}-quantity`, label: "Menge", value: String(position.quantity), source: position.source }] : []),
           { key: `position-${index+adoptedOffset}-unit`, label: "Einheit", value: position.unit, source: position.source },
-          ...(position.surfaceRequested ? [{ key: `position-${index+adoptedOffset}-surface`, label: "Oberfläche", value: position.surfaceRequested, source: position.source }] : []),
+          ...(position.surfaceRequested && position.surfaceRecognized !== false ? [{ key: `position-${index+adoptedOffset}-surface`, label: "Oberfläche", value: position.surfaceRequested, source: position.source }] : []),
         ]),
       ]);
       setLastRecognizedText(intakeRecognitionText);

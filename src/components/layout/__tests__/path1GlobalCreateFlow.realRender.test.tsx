@@ -957,15 +957,14 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
 
   it("zeigt eine nicht erkannte Oberfläche als offen statt als erkannt", async () => {
     const recognizeIntakeText = vi.fn<GlobalCreatePorts["recognizeIntakeText"]>().mockResolvedValue({
-      code: "OK", data: { fields: [], positions: [{ name: "Halter", quantity: "2", unit: "Stück", surfaceRequested: "", executionRequested: "offen", source: "Text Abschnitt 1" }] },
+      code: "OK", data: { fields: [], positions: [{ name: "Halter", quantity: "2", unit: "Stück", surfaceRequested: "noch zu klären", surfaceRecognized: false, executionRequested: "offen", source: "Text Abschnitt 1" }] },
     });
     render(<GlobalCreateFlow ports={ports({ recognizeIntakeText })} />);
     openFlow();
     fireEvent.change(screen.getByRole("textbox", { name: "Schnell erfassen" }), { target: { value: "2 Stück Halter" } });
     fireEvent.click(screen.getByRole("button", { name: "Angaben erkennen" }));
     await waitFor(() => expect(screen.getByLabelText("Teil / Leistung")).toHaveValue("Halter"));
-    expect(screen.getByRole("combobox", { name: "Oberfläche" })).toHaveValue("");
-    expect(screen.getByText("Oberfläche wählen · Position 1")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Oberfläche" })).toHaveValue("offen");
     expect(screen.queryByText(/Oberfläche noch zu klären · erkannt/)).not.toBeInTheDocument();
   });
 
