@@ -144,6 +144,8 @@ export async function bindQuoteGoodsReceiptToCreatedOrder(tx:PrivilegedTenantTra
  await tx.execute(sql`UPDATE public.goods_receipt SET auftrag_id=${order.id},mengen=${JSON.stringify(quantities)}::jsonb,version=version+1,geaendert_am=statement_timestamp() WHERE tenant_id=${auth.tenantId} AND id=${input.receiptId}::uuid AND version=${before.version} AND auftrag_id IS NULL`);
  await updateGoodsReceiptOrder(tx,auth,order,'da','creation');
  await bindIntakeOriginalToOrder(tx,auth,{itemId:before.item_id,orderId:order.id,customerId:order.customerId,clientEventId:input.clientEventId,complete:true});
+ const originals=await tx.execute<{id:string}>(sql`SELECT id::text FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND vorgang_art='kv' AND vorgang_id=${input.quoteId} ORDER BY id FOR UPDATE`);
+ for(const original of originals)await bindIntakeOriginalToOrder(tx,auth,{itemId:original.id,orderId:order.id,customerId:order.customerId,clientEventId:input.clientEventId,complete:true,quoteId:input.quoteId});
  const receipt=await readReceipt(tx,auth,input.receiptId);if(!receipt||receipt.auftrag_id!==order.id||receipt.version!==before.version+1)throw Error('QUOTE_GOODS_ORDER_READBACK_INVALID');
  await appendGoodsReceiptEvent(tx,auth,{clientEventId:input.clientEventId,orderId:order.id,receiptId:input.receiptId,version:order.version,intent:createHash('sha256').update(JSON.stringify(input)).digest('hex'),before,after:receipt});
  return {code:'OK' as const,receipt,replayed:false};

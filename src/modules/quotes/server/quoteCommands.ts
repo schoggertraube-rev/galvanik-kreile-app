@@ -590,7 +590,7 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
         dueDate: quote.dueDate,
         termStatus: quote.termStatus === null ? null : "bestaetigt",
         intakeSource: quote.intakeSource,
-        note: quote.note,
+        note: [quote.note,quote.lifecycle?.specialRequests?"Sonderwünsche: "+quote.lifecycle.specialRequests:null].filter(value=>value!==null).join(" · ").replace(/\s+/gu," ")||null,
         items: quote.positions.map(({ name, quantity, material, surfaceRequested }) => ({
           catalogServiceId: null,
           name, quantity, material, surfaceRequested,
@@ -636,7 +636,7 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
       if (!plainObject(persistedOrderInput) || !plainObject(persistedOrderInput.customer)
         || persistedOrderInput.clientEventId !== normalized.clientEventId
         || persistedOrderInput.customer.mode !== "EXISTING" || persistedOrderInput.customer.customerId !== sourceOrderInput.customer.customerId
-        || persistedOrderInput.dueDate !== sourceOrderInput.dueDate || persistedOrderInput.note !== sourceOrderInput.note
+        || persistedOrderInput.dueDate !== sourceOrderInput.dueDate || persistedOrderInput.note !== quote.note
         || !Array.isArray(persistedOrderInput.items) || persistedOrderInput.items.length !== sourceOrderInput.items.length
         || !persistedOrderInput.items.every((item, index) => plainObject(item)
           && item.name === sourceOrderInput.items[index]?.name
