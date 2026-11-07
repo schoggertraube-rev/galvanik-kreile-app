@@ -24,4 +24,31 @@ describe("recognizeIntakeText", () => {
   it("returns no guessed values for text without an explicit pattern", () => {
     expect(recognizeIntakeText("Bitte wie besprochen bearbeiten.")).toEqual({ fields: [], positions: [] });
   });
+
+  it("erkennt Zahlwörter und bevorzugt die ausdrücklich genannte Ersatzoberfläche", () => {
+    const result = recognizeIntakeText("Bitte zwölf Teile nicht verchromen, nur vernickeln.");
+    expect(result.positions).toEqual([
+      expect.objectContaining({ name: "Teile", quantity: "12", surfaceRequested: "Vernickeln" }),
+    ]);
+  });
+
+  it("übernimmt bei unbestimmter Menge keine Zahl", () => {
+    const result = recognizeIntakeText("Ein paar Teile verzinken.");
+    expect(result.positions).toEqual([
+      expect.objectContaining({ name: "Teile", quantity: "", surfaceRequested: "Verzinken" }),
+    ]);
+  });
+
+  it.each([["ein Dutzend", "12"], ["zwanzig", "20"], ["dreißig", "30"], ["hundert", "100"]])("erkennt die Menge %s", (word, quantity) => {
+    expect(recognizeIntakeText(`${word} Teile verzinken`).positions).toEqual([
+      expect.objectContaining({ name: "Teile", quantity }),
+    ]);
+  });
+
+  it("erkennt den Wunsch-Wochentag statt des Maildatums", () => {
+    const result = recognizeIntakeText("Mail vom 01.11.: Brauche die Teile bis Mittwoch.", new Date("2026-11-02T00:00:00.000Z"));
+    expect(result.fields).toEqual(expect.arrayContaining([expect.objectContaining({ field: "dueDate", value: "2026-11-04" })]));
+    expect(recognizeIntakeText("Mail vom 01.11.: Bitte bearbeiten.", new Date("2026-11-02T00:00:00.000Z")).fields).not.toEqual(expect.arrayContaining([expect.objectContaining({ field: "dueDate" })]));
+    expect(recognizeIntakeText("Nicht bis 12.11., sondern bis 13.11.", new Date("2026-11-02T00:00:00.000Z")).fields).toEqual(expect.arrayContaining([expect.objectContaining({ field: "dueDate", value: "2026-11-13" })]));
+  });
 });
