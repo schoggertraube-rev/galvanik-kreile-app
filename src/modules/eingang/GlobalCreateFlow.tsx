@@ -281,7 +281,7 @@ type PositionDraft = {
   unitPriceCents: number | null;
 };
 type IntakeExecution = "hochglanz" | "glaenzend" | "matt" | "gelb_passiviert" | "blau_passiviert" | "offen";
-type IntakePositionDraft = { key:string; catalogServiceId:string; name:string; quantity:string; material:string; surfaceRequested:string; surfaceTouched:boolean; executionRequested:IntakeExecution; unit:string|null; unitPriceCents:number|null; priceText?:string; vatRateBasisPoints:0|700|1900|null };
+type IntakePositionDraft = { key:string; catalogServiceId:string; name:string; quantity:string; material:string; surfaceRequested:string; surfaceTouched:boolean; executionRequested:IntakeExecution; unit:string|null; unitPriceCents:number|null; priceText?:string; vatRateBasisPoints:0|700|1900|null; recognitionOrigin?:{source:string;name:string;edited:boolean} };
 type IntakeSuggestionState = { kind: "idle" | "loading" | "error" } | { kind: "data"; data: IntakeSuggestions; loading: boolean };
 type IntakeTermChoice = IntakeTermSelection;
 type IntakeChecklistEntry = {
@@ -542,6 +542,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [intakeDismissedConcerns, setIntakeDismissedConcerns] = useState<string[]>([]);
   const intakeConcerns = recognizeNoteConcerns(intakeRecognitionText).filter(concern => !intakeDismissedConcerns.includes(concern.id));
   const [lastRecognizedText, setLastRecognizedText] = useState("");
+  const [intakeRecognitionTracked,setIntakeRecognitionTracked]=useState(true);
   const [recognitionBusy, setRecognitionBusy] = useState(false);
   const [remainingRecognizedPositions, setRemainingRecognizedPositions] = useState(0);
   const [overflowPositions,setOverflowPositions]=useState<IntakeTextRecognition["positions"]>([]);
@@ -922,7 +923,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     }
     setIntakeChecked(false);setActiveDraft(null);draftOperation.current=null;setOverflowPositions([]);setRemainingRecognizedPositions(0);setContinuation(null);setContinuationIndex(1);setContinuationTotal(1);continuationRequest.current=null;
     const initial:IntakeComparison={text:sourceCapture?captureRecognitionText(sourceCapture):"",customerId:"",query:"",items:[newIntakePosition()],kind:fromCustomerCard?"auftrag":"",date:"",confirmed:"",term:"",handover:"",payment:"",source:"",note:"",documents:sourceCapture?[sourceCapture.id]:[]};
-    setDirectItems(initial.items);setDirectWishDate("");setDirectConfirmedDate("");setDirectNote("");setIntakeRecognitionText(initial.text);setLastRecognizedText("");setRecognitionMarkers([]);setRecognitionConfirmed(false);setIntakeSuggestionState({kind:"idle"});setIntakeTermChoice(null);
+    setDirectItems(initial.items);setDirectWishDate("");setDirectConfirmedDate("");setDirectNote("");setIntakeRecognitionText(initial.text);setLastRecognizedText("");setIntakeRecognitionTracked(true);setRecognitionMarkers([]);setRecognitionConfirmed(false);setIntakeSuggestionState({kind:"idle"});setIntakeTermChoice(null);
     setCaptureInIntake(false);setIntakeSourceCaptures(sourceCapture?[sourceCapture]:[]);
     setDirectCustomerMode("NONE");
     setDirectCustomerId("");
@@ -1090,7 +1091,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setLastRecognizedText("");
     setRecognitionBusy(false);
     setRemainingRecognizedPositions(0);setOverflowPositions([]);setContinuation(null);continuationRequest.current=null;
-    setRecognitionMarkers([]);
+    setRecognitionMarkers([]);setIntakeRecognitionTracked(true);
     setRecognitionConfirmed(false);
     setIntakeHandover("");
     setIntakeKind("");
@@ -1178,7 +1179,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       setDirectItems(saved.items);setIntakeKind(saved.kind);setDirectWishDate(saved.date);setDirectConfirmedDate(saved.confirmed);
       setIntakeTermStatus(saved.term);setIntakeHandover(saved.handover);setIntakePaymentMode(saved.payment);setIntakeSource(saved.source);setDirectNote(saved.note);
       setIntakeChecked(saved.geprueft);setIntakeSourceCaptures(captures);setRecognitionMarkers(saved.recognitionMarkers);setRecognitionConfirmed(saved.recognitionConfirmed);
-      setLastRecognizedText(saved.lastRecognizedText);setIntakeWishDateOrigin(saved.intakeWishDateOrigin);setIntakeHandoverOrigin(saved.intakeHandoverOrigin);
+      setLastRecognizedText(saved.lastRecognizedText);setIntakeRecognitionTracked(saved.recognitionTracked===true||!saved.lastRecognizedText);setIntakeWishDateOrigin(saved.intakeWishDateOrigin);setIntakeHandoverOrigin(saved.intakeHandoverOrigin);
       setIntakePaymentOrigin(saved.intakePaymentOrigin);setIntakeOrigin(saved.intakeOrigin);setIntakeSourceOrigin(saved.intakeSourceOrigin??null);setIntakeTermChoice(saved.intakeTermChoice);setIntakeProcessingWeeks(saved.intakeProcessingWeeks??null);setIntakeTermOrigin(saved.intakeTermOrigin??null);setIntakeTermExpired(saved.intakeTermExpired??false);
       setIntakeBaseline(intakeComparison(saved));
       if(draft.zuletzt_feld)requestAnimationFrame(()=>requestAnimationFrame(()=>{
@@ -1189,7 +1190,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   };
   function draftPayload(){return {version:1,customerMode:directCustomerMode,customerFields:directCustomer,customerName:directCustomerId?customerDisplayName(directCustomer):"",clientKey:intakeClientKey,customerId:directCustomerId,query:intakeCustomerQuery,text:intakeRecognitionText,items:directItems,kind:intakeKind,
     date:directWishDate,confirmed:directConfirmedDate,term:intakeTermStatus,handover:intakeHandover,payment:intakePaymentMode,source:intakeSource,note:directNote,
-    geprueft:intakeChecked,dismissedConcerns:intakeDismissedConcerns,documents:intakeSourceCaptures.map(capture=>capture.id),recognitionMarkers,recognitionConfirmed,lastRecognizedText,remainingRecognizedPositions,overflowPositions,continuationIndex,continuationTotal,
+    geprueft:intakeChecked,dismissedConcerns:intakeDismissedConcerns,documents:intakeSourceCaptures.map(capture=>capture.id),recognitionMarkers,recognitionConfirmed,lastRecognizedText,recognitionTracked:intakeRecognitionTracked,remainingRecognizedPositions,overflowPositions,continuationIndex,continuationTotal,
     intakeWishDateOrigin,intakeHandoverOrigin,intakePaymentOrigin,intakeOrigin,intakeSourceOrigin,intakeTermChoice,intakeProcessingWeeks,intakeTermOrigin,intakeTermExpired};}
 
   async function saveIntakeTextOriginal(shouldUpdateState?:()=>boolean):Promise<IntakeCapture[]>{
@@ -1740,9 +1741,11 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     const index = directItems.findIndex(item => item.key === key);
     setRecognitionMarkers(current => current.filter(marker => marker.key !== `position-${index}-${field}`));
   };
-  const updateDirectItem = (key: string, field: keyof Omit<IntakePositionDraft, "key" | "surfaceTouched">, value: string) => {
+  const markPositionEdited = (item:IntakePositionDraft):IntakePositionDraft => item.recognitionOrigin
+    ? {...item,recognitionOrigin:{...item.recognitionOrigin,edited:true}} : item;
+  const updateDirectItem = (key: string, field: keyof Omit<IntakePositionDraft, "key" | "surfaceTouched" | "recognitionOrigin">, value: string) => {
     confirmRecognizedPositionField(key, field);
-    setDirectItems((current) => current.map((item) => item.key === key ? { ...item, [field]: value } : item));
+    setDirectItems((current) => current.map((item) => item.key === key ? { ...markPositionEdited(item), [field]: value } : item));
   };
 
   const setDirectPositionName = (key: string, name: string) => {
@@ -1751,11 +1754,11 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     const service = matches.length === 1 ? matches[0] : null;
     setDirectItems((current) => current.map((item) => {
       if (item.key !== key) return item;
-      if (!service) return { ...item, catalogServiceId: FREE_TEXT_SERVICE, name, unit: null, unitPriceCents: item.priceText===undefined?null:item.unitPriceCents, vatRateBasisPoints: item.priceText===undefined||item.unitPriceCents===null?null:FREE_TEXT_VAT_RATE_BASIS_POINTS };
+      if (!service) return { ...markPositionEdited(item), catalogServiceId: FREE_TEXT_SERVICE, name, unit: null, unitPriceCents: item.priceText===undefined?null:item.unitPriceCents, vatRateBasisPoints: item.priceText===undefined||item.unitPriceCents===null?null:FREE_TEXT_VAT_RATE_BASIS_POINTS };
       const surfaceRequested = item.surfaceTouched ? item.surfaceRequested : service.surface;
       const catalogMatchesSurface = surfaceRequested === service.surface;
       return {
-        ...item,
+        ...markPositionEdited(item),
         catalogServiceId: catalogMatchesSurface ? service.id : FREE_TEXT_SERVICE,
         name: service.name,
         surfaceRequested,
@@ -1772,8 +1775,8 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       if (item.key !== key) return item;
       const service = catalogServices.find((candidate) => candidate.id === item.catalogServiceId);
       return service?.surface === surfaceRequested
-        ? { ...item, surfaceRequested, surfaceTouched: true }
-        : { ...item, catalogServiceId: FREE_TEXT_SERVICE, surfaceRequested, surfaceTouched: true, unitPriceCents: item.priceText===undefined?null:item.unitPriceCents, vatRateBasisPoints: item.priceText===undefined||item.unitPriceCents===null?null:FREE_TEXT_VAT_RATE_BASIS_POINTS };
+        ? { ...markPositionEdited(item), surfaceRequested, surfaceTouched: true }
+        : { ...markPositionEdited(item), catalogServiceId: FREE_TEXT_SERVICE, surfaceRequested, surfaceTouched: true, unitPriceCents: item.priceText===undefined?null:item.unitPriceCents, vatRateBasisPoints: item.priceText===undefined||item.unitPriceCents===null?null:FREE_TEXT_VAT_RATE_BASIS_POINTS };
     }));
   };
 
@@ -1782,9 +1785,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     setDirectItems((current) => current.map((item) => {
       if (item.key !== key) return item;
       const service = catalogServices.find((candidate) => candidate.id === item.catalogServiceId);
-      if (!service || service.unit === unit) return { ...item, unit: unit || null };
+      if (!service || service.unit === unit) return { ...markPositionEdited(item), unit: unit || null };
       return {
-        ...item,
+        ...markPositionEdited(item),
         catalogServiceId: FREE_TEXT_SERVICE,
         unit: unit || null,
         unitPriceCents: item.priceText===undefined?null:item.unitPriceCents,
@@ -1818,6 +1821,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
     if(continuation||intakeSourceCaptures.some(capture=>capture.continuation?.sourceId)){
       setFeedback({kind:"validation",message:"Der Originaltext ist bereits auf Belege aufgeteilt · bitte die Positionen in diesem Beleg direkt bearbeiten."});return;
     }
+    if(lastRecognizedText&&!intakeRecognitionTracked){
+      setFeedback({kind:"validation",message:"Älterer Entwurf · bestehende Positionen bleiben erhalten. Bitte Änderungen an den Positionen direkt eintragen."});return;
+    }
     if (remainingRecognizedPositions) { setFeedback({kind:"validation",message:"Nicht alle Positionen sind übernommen. Das Original bleibt erhalten; die Aufteilung ist noch nicht bestätigt."}); return; }
     const generation=intakeRecognitionGeneration.current,run=++intakeRecognitionRun.current,controller=new AbortController();
     let timedOut=false;
@@ -1845,6 +1851,32 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
       const values = Object.fromEntries(result.data.fields.map((field) => [field.field, field.value]));
       const recognizedCustomers = await beforeDeadline(findRecognizedCustomers(intakeRecognitionText, ports.searchIntakeCustomers, { phone: values.phone, email: values.email }));
       if(!isCurrent())return;
+      const allPositions = [...result.data.positions,...(result.data.overflowPositions??[])];
+      const candidates=allPositions.map(position=>{
+        const unit=normaliseOrderPositionUnit(position.unit),surface=position.surfaceRequested?normaliseOrderPositionSurface(position.surfaceRequested):"";
+        if(!unit||surface===null)throw Error("INTAKE_RECOGNITION_POSITION_INVALID");
+        return {position,item:{...newIntakePosition(),catalogServiceId:FREE_TEXT_SERVICE,name:position.name,quantity:position.quantity,surfaceRequested:surface,surfaceTouched:false,executionRequested:position.executionRequested,unit,
+          recognitionOrigin:{source:position.source,name:position.name,edited:false}} satisfies IntakePositionDraft};
+      });
+      const existing=directItems.length===1&&!directItems[0]?.name.trim()?[]:directItems;
+      const used=new Set<number>();
+      const rows:Array<{item:IntakePositionDraft;position?:IntakeTextRecognition["positions"][number];oldIndex?:number}>=[];
+      for(const [oldIndex,item] of existing.entries()){
+        const origin=item.recognitionOrigin;
+        if(!origin){rows.push({item,oldIndex});continue;}
+        const match=candidates.findIndex((candidate,index)=>!used.has(index)&&candidate.position.source===origin.source);
+        if(origin.edited){
+          if(match>=0&&candidates[match]!.position.name.localeCompare(origin.name,"de-DE",{sensitivity:"base"})!==0){
+            setFeedback({kind:"validation",message:`Position ${oldIndex+1} wurde von Hand geändert und passt nicht eindeutig zum neuen Text · bitte die Position direkt abgleichen.`});return;
+          }
+          if(match>=0)used.add(match);
+          rows.push({item,oldIndex});continue;
+        }
+        if(match>=0){used.add(match);rows.push(candidates[match]!);}
+      }
+      for(const [index,candidate] of candidates.entries())if(!used.has(index))rows.push(candidate);
+      const displayed=rows.slice(0,20),overflow=rows.slice(20).flatMap(row=>row.position?[row.position]:[]);
+      const unavailable=Math.max(0,(result.data.totalPositions??allPositions.length)-allPositions.length);
       setRemainingRecognizedPositions(0);
       if (recognizedCustomers.code !== "OK") {
         setIntakeCustomerResults([]);
@@ -1869,48 +1901,24 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
           setIntakeCustomerSearchState("idle");
         }
       }
-      if (values.dueDate && !directWishDate) {
+      if (values.dueDate && (!directWishDate||intakeWishDateOrigin==="recognized")) {
         setDirectWishDate(values.dueDate);
         setDirectConfirmedDate(values.dueDate);
         setIntakeWishDateOrigin("recognized");
         setIntakeTermStatus((current) => current || "wish");
       }
-      const allPositions = [...result.data.positions,...(result.data.overflowPositions??[])];
-      let adoptedPositions = allPositions;
-      let adoptedOffset = 0;
-      if (allPositions.length > 0) {
-        const recognized = allPositions.map((position) => {
-          const unit = normaliseOrderPositionUnit(position.unit);
-          const surface = position.surfaceRequested ? normaliseOrderPositionSurface(position.surfaceRequested) : "";
-          if (!unit || surface === null) throw new Error("INTAKE_RECOGNITION_POSITION_INVALID");
-          return ({
-          ...newIntakePosition(),
-          catalogServiceId: FREE_TEXT_SERVICE,
-          name: position.name,
-          quantity: position.quantity,
-          surfaceRequested: surface,
-          surfaceTouched: false,
-          executionRequested: position.executionRequested,
-          unit,
-        }); });
-        const existing = directItems.length === 1 && !directItems[0]?.name.trim() ? [] : directItems;
-        setContinuationIndex(1);setContinuationTotal(Math.max(1,Math.ceil((existing.length+(result.data.totalPositions??allPositions.length))/20)));
-        adoptedOffset = existing.length;
-        const available = Math.max(0, 20 - existing.length);
-        adoptedPositions = allPositions.slice(0, available);
-        setOverflowPositions(allPositions.slice(available));
-        setRemainingRecognizedPositions(Math.max(0,(result.data.totalPositions ?? allPositions.length)-available));
-        setDirectItems([...existing, ...recognized.slice(0, available)]);
-      }
+      setContinuationIndex(1);setContinuationTotal(Math.max(1,Math.ceil((rows.length+unavailable)/20)));
+      setOverflowPositions(overflow);setRemainingRecognizedPositions(overflow.length+unavailable);
+      setDirectItems(displayed.length?displayed.map(row=>row.item):[newIntakePosition()]);
       const labels: Record<string, string> = { dueDate: "Liefertermin" };
       setRecognitionMarkers([
-        ...result.data.fields.filter((field) => field.field === "dueDate").map((field) => ({ key: field.field, label: labels[field.field] ?? field.field, value: field.value, source: field.source })),
-        ...adoptedPositions.flatMap((position, index) => [
-          { key: `position-${index+adoptedOffset}-name`, label: `Position ${index + adoptedOffset + 1}`, value: position.name, source: position.source },
-          ...(position.quantity ? [{ key: `position-${index+adoptedOffset}-quantity`, label: "Menge", value: String(position.quantity), source: position.source }] : []),
-          { key: `position-${index+adoptedOffset}-unit`, label: "Einheit", value: position.unit, source: position.source },
-          ...(position.surfaceRequested && position.surfaceRecognized !== false ? [{ key: `position-${index+adoptedOffset}-surface`, label: "Oberfläche", value: position.surfaceRequested, source: position.source }] : []),
-        ]),
+        ...result.data.fields.filter((field) => field.field === "dueDate"&&(!directWishDate||intakeWishDateOrigin==="recognized")).map((field) => ({ key: field.field, label: labels[field.field] ?? field.field, value: field.value, source: field.source })),
+        ...displayed.flatMap((row,index)=>row.position?[
+          { key:`position-${index}-name`,label:`Position ${index+1}`,value:row.position.name,source:row.position.source },
+          ...(row.position.quantity?[{key:`position-${index}-quantity`,label:"Menge",value:String(row.position.quantity),source:row.position.source}]:[]),
+          {key:`position-${index}-unit`,label:"Einheit",value:row.position.unit,source:row.position.source},
+          ...(row.position.surfaceRequested&&row.position.surfaceRecognized!==false?[{key:`position-${index}-surface`,label:"Oberfläche",value:row.position.surfaceRequested,source:row.position.source}]:[]),
+        ]:row.oldIndex===undefined?[]:recognitionMarkers.filter(marker=>marker.key.startsWith(`position-${row.oldIndex}-`)).map(marker=>({...marker,key:marker.key.replace(`position-${row.oldIndex}-`,`position-${index}-`),label:marker.key.endsWith('-name')?`Position ${index+1}`:marker.label}))),
       ]);
       setLastRecognizedText(intakeRecognitionText);
       setRecognitionConfirmed(false);
@@ -2558,7 +2566,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                     {ports.canManageMoney?<Feld label="Preis netto je Einheit"><>
                       <Eingabe aria-label="Preis netto je Einheit" data-spec-id="eingang.preis" inputMode="decimal" aria-invalid={intakePriceError(item,intakeKind==='kv')!==null} value={item.priceText??(item.unitPriceCents===null?'':(item.unitPriceCents/100).toFixed(2).replace('.',','))} onChange={event=>{
                         const text=event.target.value.trim(),cents=/^\d+(?:[.,]\d{1,2})?$/.test(text)?Math.round(Number(text.replace(',','.'))*100):null;
-                        setDirectItems(current=>current.map(line=>line.key===item.key?{...line,priceText:event.target.value,unitPriceCents:cents,vatRateBasisPoints:line.catalogServiceId===FREE_TEXT_SERVICE?cents===null?null:FREE_TEXT_VAT_RATE_BASIS_POINTS:line.vatRateBasisPoints}:line));
+                        setDirectItems(current=>current.map(line=>line.key===item.key?{...markPositionEdited(line),priceText:event.target.value,unitPriceCents:cents,vatRateBasisPoints:line.catalogServiceId===FREE_TEXT_SERVICE?cents===null?null:FREE_TEXT_VAT_RATE_BASIS_POINTS:line.vatRateBasisPoints}:line));
                       }}/>
                       {intakePriceError(item,intakeKind==='kv')?<span className="kr-feld-fehler" data-spec-id="eingang.preis.fehler">{intakePriceError(item,intakeKind==='kv')}</span>:<small>{item.unitPriceCents===null?'Preis fehlt':intakeQuantityError(item)??`= ${euro(Math.round(Number(item.quantity.replace(',','.'))*item.unitPriceCents))} netto`}</small>}
                     </></Feld>:null}

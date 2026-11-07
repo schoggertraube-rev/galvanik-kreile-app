@@ -1487,6 +1487,39 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(api.createDirectIntake).not.toHaveBeenCalled();
   });
 
+  it('replaces untouched recognized positions on a second recognition and keeps the manually edited one',async()=>{
+    const line=(name:string,quantity:string,source:string)=>({name,quantity,source,unit:'Stück' as const,surfaceRequested:'Verzinken',executionRequested:'offen' as const});
+    const recognizeIntakeText=vi.fn().mockResolvedValueOnce({code:'OK',data:{fields:[],positions:[line('SYNTHETISCH A','1','Text Abschnitt 1'),line('SYNTHETISCH B','2','Text Abschnitt 2')]}})
+      .mockResolvedValueOnce({code:'OK',data:{fields:[],positions:[line('SYNTHETISCH A','3','Text Abschnitt 1'),line('SYNTHETISCH B','4','Text Abschnitt 2')]}});
+    const api=ports({recognizeIntakeText});render(<GlobalCreateFlow ports={api}/>);openFlow();
+    const text=await screen.findByRole('textbox',{name:'Schnell erfassen'});
+    fireEvent.change(text,{target:{value:'SYNTHETISCH Ausgangstext'}});fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    await waitFor(()=>expect(screen.getAllByRole('spinbutton',{name:'Menge'})).toHaveLength(2));
+    fireEvent.change(screen.getAllByRole('spinbutton',{name:'Menge'})[0],{target:{value:'9'}});
+    fireEvent.change(text,{target:{value:'SYNTHETISCH geänderter Text'}});fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    await waitFor(()=>expect(screen.getAllByRole('spinbutton',{name:'Menge'})[1]).toHaveValue(4));
+    expect(screen.getAllByRole('spinbutton',{name:'Menge'})).toHaveLength(2);
+    expect(screen.getAllByRole('spinbutton',{name:'Menge'})[0]).toHaveValue(9);
+    expect(screen.getAllByLabelText('Teil / Leistung').map(input=>(input as HTMLInputElement).value)).toEqual(['SYNTHETISCH A','SYNTHETISCH B']);
+    expect(api.createDirectIntake).not.toHaveBeenCalled();
+  });
+
+  it('does not replace a manually edited position when the new text cannot be matched safely',async()=>{
+    const line=(name:string)=>({name,quantity:'1',source:'Text Abschnitt 1',unit:'Stück' as const,surfaceRequested:'Verzinken',executionRequested:'offen' as const});
+    const recognizeIntakeText=vi.fn().mockResolvedValueOnce({code:'OK',data:{fields:[],positions:[line('SYNTHETISCH A')]}})
+      .mockResolvedValueOnce({code:'OK',data:{fields:[],positions:[line('SYNTHETISCH anderes Teil')]}});
+    const api=ports({recognizeIntakeText});render(<GlobalCreateFlow ports={api}/>);openFlow();
+    const text=await screen.findByRole('textbox',{name:'Schnell erfassen'});
+    fireEvent.change(text,{target:{value:'SYNTHETISCH Ausgangstext'}});fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    await screen.findByDisplayValue('SYNTHETISCH A');
+    fireEvent.change(screen.getByRole('spinbutton',{name:'Menge'}),{target:{value:'9'}});
+    fireEvent.change(text,{target:{value:'SYNTHETISCH anderer Text'}});fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    expect(await screen.findByText(/Position 1 wurde von Hand geändert und passt nicht eindeutig/)).toBeInTheDocument();
+    expect(screen.getByDisplayValue('SYNTHETISCH A')).toBeInTheDocument();
+    expect(screen.getByRole('spinbutton',{name:'Menge'})).toHaveValue(9);
+    expect(screen.queryByDisplayValue('SYNTHETISCH anderes Teil')).not.toBeInTheDocument();
+  });
+
   it("E40 shows a non-blocking photo warning only when goods are present", () => {
     render(<GlobalCreateFlow ports={ports()} />);
     openFlow();
