@@ -1,6 +1,6 @@
 # KV V04 Server-A – Zwischenabgabe, noch nicht mergebereit
 
-Produktstand `2be47beaa3a7bcb0d240cda0eff4ba6631d9bb8e`. PR-Kopf und Git-Preview werden im PR am exakten Kopf gebunden. Kein neuer V04-Oberflächenbau; Freigabe des Durchstich-Moduls steht aus.
+Produkt-/Registerstand `7938c5f00c9cba3e4d30d5e340ef32ea19e95a65`. Der frühere kombinierte 15-Fälle-Lauf gehört zu `2be47bea`; spätere Änderungen wurden ausschließlich gezielt geprüft. PR-Kopf und Git-Preview werden im PR am exakten Kopf gebunden. Kein neuer V04-Oberflächenbau; Freigabe des Durchstich-Moduls steht aus.
 
 ## Gebaut und gezielt belegt
 
@@ -45,3 +45,5 @@ Fünf unveränderte additive Migrationen nach echter Abbruchprobe angewandt. Alt
 Bestehender Quote-Command-Unit-Test: nur SQL-Vorbedingung für die neue ausdrückliche FOR-UPDATE-Sperre ergänzt; alle bisherigen Ergebnis-/Receipt-/Versions-/Rechteassertionen unverändert.
 
 Thread-Bezug gezielt gegen Replay belegt: abgeschlossenes importiertes TEST-Mail-Original → bestehender Quote-Writer → reales PDF → bestehender Mail-Writer/Graph-Reply an exakt diese Nachricht → Dokumentereignisse mit Item-/Graph-ID → KV-Ansicht; identischer Retry sendet nicht doppelt. Import-/Graph-HTTP-Grenze ist synthetisch, keine externe Zustellbehauptung. Vorbedingung auf vorhandenen MIME-Artvertrag und die echte Anliegen-Auswahl mechanisch korrigiert. Acht bestehende Graph-Adapterfälle bleiben grün. Grundlage des vorhandenen Providers: [Microsoft Graph reply](https://learn.microsoft.com/en-us/graph/api/message-reply?view=graph-rest-1.0), derselbe Mail.Send-Zugang, keine neue Abhängigkeit.
+
+Konkrete erhaltene Replay-Zeilen für Nachtrag, Kopie und Reply: `docs/evidence/kv-v04/replay-proof.json` (Loopback, synthetische TEST-Tenants, Testdatei-SHA, Quote-/Auftrags-/Thread-/Event-IDs, nachgelesene Summen und Termine). Zusätzliche reine Abgabe-Commits ändern diesen Produktstand nicht; der genaue PR-Kopf samt CI/Preview wird im PR gebunden.

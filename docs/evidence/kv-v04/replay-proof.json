@@ -1,0 +1,54 @@
+{
+  "capturedAt": "2026-11-07T22:31:13.052Z",
+  "database": "loopback-only",
+  "syntheticTenants": true,
+  "sourceSha": "7938c5f00c9cba3e4d30d5e340ef32ea19e95a65",
+  "testFile": "src/test/acceptance/kv_v04_server.integration.test.ts",
+  "testSha256": "cc141c990e3a829ead86a31c412dc6a4d4a23b4f6559cfaec2d9ccc717056b10",
+  "provider": "Graph HTTP TEST boundary only; no live delivery claimed",
+  "amendment": {
+    "tenant_id": "test-kv-v04-a325b1ea-9e6d-4933-9c01-f372c34eeaac",
+    "quote_id": "9f3dacf1-ab56-4a74-946f-c33fedd8a144",
+    "quote_number": "KV-2026-0001",
+    "fassung": 2,
+    "linked_order_id": "8aaa6556-c552-4c0a-88e4-f9f7e5bc46cc",
+    "quote_due_date": "2026-11-20",
+    "order_due_date": "2026-11-20",
+    "transferred_mail": 1
+  },
+  "copy": {
+    "tenant_id": "test-kv-v04-dc10f1c0-0be9-4fb8-be53-78c1e0ad8031",
+    "quote_id": "1808de6e-7d52-47ee-bc8b-69f797f8f8f3",
+    "quote_number": "KV-2026-0003",
+    "total_net_cents": 1000,
+    "note": "TEST Kopie von KV-2026-0002",
+    "positions": [
+      {
+        "quantity": 3,
+        "exactLineTotalCents": 1000,
+        "storedUnitPriceCents": 333
+      }
+    ],
+    "quote_count": 2
+  },
+  "reply": {
+    "tenant_id": "test-kv-v04-14d80e99-af19-4ab8-bbd7-fb4a13c57694",
+    "event_id": "28b26d3a-85ac-4af6-b5a8-f635113a64ef",
+    "request_id": "105f5a44-e577-4ded-ab4c-ff95bc0eebfd",
+    "thread_id": "b2713427-f9c3-44b9-a661-4585e782e0f1",
+    "document": {
+      "id": "0acfd382-269b-4451-8013-4bb0ee9bb83f",
+      "kind": "QUOTE",
+      "number": "KV-2026-0001",
+      "sha256": "e530ad817ff0b5e8efa35b53edb2c3734ffb58dc26e91544550def1201664b83",
+      "source": {
+        "itemId": "17f5f060-6ce5-4bf0-a7a5-75fca917e98c",
+        "graphMessageId": "TEST-source-KV-mail/859251ad-c881-43d2-b9e9-c0207f9f538f"
+      },
+      "edition": 1,
+      "version": 1
+    },
+    "status": "sent",
+    "sent_message_count": 1
+  }
+}
