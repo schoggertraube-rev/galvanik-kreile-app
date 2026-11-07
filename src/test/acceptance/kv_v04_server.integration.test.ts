@@ -587,7 +587,7 @@ it('KV-04 reserves the PDF edition, preserves a real concurrent edit and never m
 it('KV-12 applies a mail term amendment to the existing quote and concern atomically, invalidates old acceptance and preserves the source',async()=>{
  const fixture=await createFixture();
  await sql`INSERT INTO public.app_user_rights(tenant_id,user_id,bereich,granted_by) VALUES(${KREILE_TENANT_SLUG},${fixture.actorId}::uuid,'mails',${fixture.actorId}::uuid)`;
- const {createQuoteAction,changeQuoteLifecycleAction,updateQuoteAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
+ const {createQuoteAction,changeQuoteLifecycleAction,updateQuoteAction,readQuoteAction,convertQuoteToOrderAction}=await import('@/app/actions/quotes.actions');
  const {saveIntakeNoteAction,selectIntakeConcernAction}=await import('@/app/actions/eingang.actions');
  const positions=[{name:'TEST Halter',quantity:4,material:null,surfaceRequested:'Verchromen',unitPriceCents:1000}];
  const quote=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2026-11-18',termStatus:'bestaetigt',note:'TEST Ursprungs-KV',positions}));
@@ -612,4 +612,27 @@ it('KV-12 applies a mail term amendment to the existing quote and concern atomic
  expect(row.anliegen_offen).not.toContain('aenderung');
  expect((await sql`SELECT count(*)::int n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND nachher->>'action'='kv.geaendert'`)[0].n).toBe(1);
  expect((await sql`SELECT count(*)::int n FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`)[0].n).toBe(1);
+ // Reuse the canonical new-goods command after the amended edition is really accepted.
+ const quoteId=quote.quote.quoteId,goodsItem=randomUUID();
+ const goodsCapture=await withSession(fixture,()=>saveIntakeNoteAction({itemId:goodsItem,textstand:randomUUID(),text:'TEST Ware zum geaenderten KV',context:{customerId:fixture.customerId}}));
+ if(goodsCapture.code!=='OK')throw Error('TEST_AMEND_GOODS_CAPTURE:'+goodsCapture.code);
+ const photos=[{fileId:randomUUID(),kind:'uebersicht' as const},{fileId:randomUUID(),kind:'teile' as const}];
+ for(const [index,photo] of photos.entries()){
+  const hash=(index?'d':'c').repeat(64);
+  await sql`INSERT INTO public.intake_file(id,tenant_id,item_id,client_key,art,dateiname,mime,bytes,sha256,speicherpfad,aufgenommen_am,aufgenommen_von,reihenfolge,lesbar,geoeffnet,erkennung_status) VALUES(${photo.fileId}::uuid,${KREILE_TENANT_SLUG},${goodsItem}::uuid,${photo.fileId},'foto',${'TEST-Nachtrag-Ware-'+index+'.jpg'},'image/jpeg',32,${hash},${KREILE_TENANT_SLUG+'/'+hash},statement_timestamp(),${fixture.actorId}::uuid,${index+1},true,false,'fertig')`;
+  await sql`INSERT INTO public.intake_event(tenant_id,item_id,art,befehl_id,von,nachher) VALUES(${KREILE_TENANT_SLUG},${goodsItem}::uuid,'original_gespeichert',${photo.fileId}::uuid,${fixture.actorId},${sql.json({fileId:photo.fileId,sha256:hash,bytes:32})})`;
+ }
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'sent',quoteId,clientEventId:randomUUID(),expectedVersion:4,edition:2,channel:'druck',evidence:'TEST Nachtrag aktuelle Fassung ausgegeben'}))).toMatchObject({code:'OK'});
+ expect(await withSession(fixture,()=>changeQuoteLifecycleAction({action:'accept',quoteId,clientEventId:randomUUID(),expectedVersion:5,edition:2,evidence:'TEST Nachtrag aktuelle Fassung zugesagt'}))).toMatchObject({code:'OK'});
+ const current=await withSession(fixture,()=>readQuoteAction({quoteId}));if(current.code!=='OK')throw Error('TEST_AMEND_CURRENT');
+ const goods={id:randomUUID(),clientKey:randomUUID(),clientEventId:randomUUID(),itemId:goodsItem,quoteId,expectedQuoteVersion:6,sourceVersion:goodsCapture.capture.version,expectedVersion:0,mode:'erfassung' as const,command:'accept' as const,card:1,packagesReceived:1,packagesTotal:1,condition:'unauffaellig' as const,deviations:[],foundUnattended:false,foundAt:null,procedure:'stimmt' as const,procedureNote:null,photos,quantities:current.quote.positions.map(position=>({itemId:position.id,expected:position.quantity,received:null,confirmed:true,note:null})),location:'TEST Nachtrag Regal'};
+ const award={quoteId,clientEventId:randomUUID(),expectedVersion:6,confirmedAward:true as const,confirmedOrderDueDate:'2026-11-20',handoverMode:'pickup' as const,paymentMode:'rechnung' as const,goodsReceiptId:goods.id};
+ const converted=await withSession(fixture,()=>convertQuoteToOrderAction(award,goods));
+ expect(converted).toMatchObject({code:'OK'});if(converted.code!=='OK')throw Error('TEST_AMEND_CONVERSION:'+converted.code+':'+converted.message);
+ expect((await sql`SELECT due_date::date::text FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${converted.orderReceipt.orderId}`)[0]).toMatchObject({due_date:'2026-11-20'});
+ const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
+ const card=await withSession(fixture,()=>getLiveOrderCardAction({orderId:converted.orderReceipt.orderId}));
+ expect(card).toMatchObject({code:'OK',data:{card:{dueAt:expect.stringContaining('2026-11-20')}}});
+ expect((await withSession(fixture,()=>readQuoteAction({quoteId})))).toMatchObject({code:'OK',quote:{dueDate:'2026-11-20',linkedOrderId:converted.orderReceipt.orderId}});
+ expect((await sql`SELECT vorgang_art,vorgang_id,text,anliegen_offen FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`)[0]).toMatchObject({vorgang_art:'auftrag',vorgang_id:converted.orderReceipt.orderId,text,anliegen_offen:expect.arrayContaining(['aufgabe'])});
 });
