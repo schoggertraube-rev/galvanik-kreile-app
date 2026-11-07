@@ -549,7 +549,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const [continuationIndex,setContinuationIndex]=useState(1),[continuationTotal,setContinuationTotal]=useState(1);
   const [continuation,setContinuation]=useState<{childId:string;draftId:string|null;count:number|null;orderId?:string|null}|null>(null);
   const continuationRequest=useRef<Parameters<NonNullable<GlobalCreatePorts["createContinuation"]>>[0]|null>(null);
-  const [recognitionMarkers, setRecognitionMarkers] = useState<Array<{ key: string; label: string; value: string; source: string }>>([]);
+  const [recognitionMarkers, setRecognitionMarkers] = useState<Array<{ key: string; label: string; value: string; source: string; confirmed?:boolean }>>([]);
   const [recognitionConfirmed, setRecognitionConfirmed] = useState(false);
   const [intakeSuggestionState, setIntakeSuggestionState] = useState<IntakeSuggestionState>({ kind: "idle" });
   const [intakeProcessingWeeks,setIntakeProcessingWeeks]=useState<1|2|3|5|null>(null);
@@ -1918,7 +1918,7 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
           ...(row.position.quantity?[{key:`position-${index}-quantity`,label:"Menge",value:String(row.position.quantity),source:row.position.source}]:[]),
           {key:`position-${index}-unit`,label:"Einheit",value:row.position.unit,source:row.position.source},
           ...(row.position.surfaceRequested&&row.position.surfaceRecognized!==false?[{key:`position-${index}-surface`,label:"Oberfläche",value:row.position.surfaceRequested,source:row.position.source}]:[]),
-        ]:row.oldIndex===undefined?[]:recognitionMarkers.filter(marker=>marker.key.startsWith(`position-${row.oldIndex}-`)).map(marker=>({...marker,key:marker.key.replace(`position-${row.oldIndex}-`,`position-${index}-`),label:marker.key.endsWith('-name')?`Position ${index+1}`:marker.label}))),
+        ]:row.oldIndex===undefined?[]:recognitionMarkers.filter(marker=>marker.key.startsWith(`position-${row.oldIndex}-`)).map(marker=>({...marker,confirmed:recognitionConfirmed||marker.confirmed,key:marker.key.replace(`position-${row.oldIndex}-`,`position-${index}-`),label:marker.key.endsWith('-name')?`Position ${index+1}`:marker.label}))),
       ]);
       setLastRecognizedText(intakeRecognitionText);
       setRecognitionConfirmed(false);
@@ -1957,9 +1957,9 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
   const firstMissingUnit = directItems.findIndex((item) => !item.unit);
   const firstMissingSurface = directItems.findIndex((item) => item.surfaceRequested.trim().length < 2);
   const firstInvalidPrice = ports.canManageMoney?directItems.findIndex(item=>intakePriceError(item,intakeKind==='kv')!==null):-1;
-  const pendingPositionField = (field: string) => !recognitionConfirmed && recognitionMarkers.some(marker => marker.key.startsWith("position-") && marker.key.endsWith("-" + field));
-  const pendingPositionIndex = (field: string) => Number(recognitionMarkers.find(marker=>marker.key.startsWith("position-")&&marker.key.endsWith("-"+field))?.key.match(/^position-(\d+)-/)?.[1] ?? 0);
-  const hasPendingRecognizedDueDate = !recognitionConfirmed && recognitionMarkers.some((marker) => marker.key === "dueDate");
+  const pendingPositionField = (field: string) => !recognitionConfirmed && recognitionMarkers.some(marker => !marker.confirmed && marker.key.startsWith("position-") && marker.key.endsWith("-" + field));
+  const pendingPositionIndex = (field: string) => Number(recognitionMarkers.find(marker=>!marker.confirmed&&marker.key.startsWith("position-")&&marker.key.endsWith("-"+field))?.key.match(/^position-(\d+)-/)?.[1] ?? 0);
+  const hasPendingRecognizedDueDate = !recognitionConfirmed && recognitionMarkers.some((marker) => !marker.confirmed && marker.key === "dueDate");
   const currentTerm=intakeSuggestionState.kind==="data"?intakeSuggestionState.data.term:null;
   const termNeedsDecision=intakeTermExpired||!intakeTermChoice&&Boolean(currentTerm?.unavailableReason||currentTerm?.rating==="nicht_machbar"||currentTerm?.rating==="unmoeglich");
   const intakeChecklist: IntakeChecklistEntry[] = [
@@ -2498,8 +2498,13 @@ export function GlobalCreateFlow({ ports }: { ports: GlobalCreatePorts }) {
                 {intakeSourceCaptures.find(capture=>capture.continuation?.sourceId) ? <Hinweis>Beleg {continuationIndex}/{continuationTotal} · Fortsetzung von Eingang {intakeSourceCaptures.find(capture=>capture.continuation?.sourceId)?.continuation?.sourceId}</Hinweis> : null}
                   {recognitionMarkers.length > 0 ? <div className={`ev-erkannt${recognitionConfirmed ? " ev-erkannt--ok" : ""}`} aria-live="polite">
                     <div className="ev-erkannt-kopf"><b>{recognitionConfirmed ? `${recognitionMarkers.length} Angaben bestätigt` : `${recognitionMarkers.length} Angaben erkannt und vorausgefüllt`}</b>
-                      {!recognitionConfirmed ? <KrButton data-spec-id="eingang.alles-bestaetigen" className="kr-btn--ton-blau" icon="check" text="Alles bestätigen" onClick={() => setRecognitionConfirmed(true)} /> : null}
-                    </div><div className="ev-erk-chips">{recognitionMarkers.map((marker) => <span className="ev-erk-chip" key={marker.key} data-spec-id={marker.key.includes("quantity") ? "eingang.menge.herkunft" : undefined}>{marker.label}<b>{marker.value}</b> · {recognitionConfirmed ? "bestätigt" : `erkannt · ${marker.source}`}</span>)}</div>
+                      {!recognitionConfirmed ? <KrButton data-spec-id="eingang.alles-bestaetigen" className="kr-btn--ton-blau" icon="check" text="Alles bestätigen" onClick={() => {
+                        setDirectItems(current=>current.map((item,index)=>recognitionMarkers.some(marker=>marker.key.startsWith(`position-${index}-`))?markPositionEdited(item):item));
+                        if(recognitionMarkers.some(marker=>marker.key==="dueDate"))setIntakeWishDateOrigin("manual");
+                        setRecognitionMarkers(current=>current.map(marker=>({...marker,confirmed:true})));
+                        setRecognitionConfirmed(true);
+                      }} /> : null}
+                    </div><div className="ev-erk-chips">{recognitionMarkers.map((marker) => <span className="ev-erk-chip" key={marker.key} data-spec-id={marker.key.includes("quantity") ? "eingang.menge.herkunft" : undefined}>{marker.label}<b>{marker.value}</b> · {recognitionConfirmed||marker.confirmed ? "bestätigt" : `erkannt · ${marker.source}`}</span>)}</div>
                   </div> : null}
               </section>
               <datalist id="kr-service-catalog">{catalogServices.map((service) => <option key={service.id} value={service.name}>{service.surface}</option>)}</datalist>

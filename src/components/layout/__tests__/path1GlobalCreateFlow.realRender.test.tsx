@@ -1520,6 +1520,23 @@ describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
     expect(screen.queryByDisplayValue('SYNTHETISCH anderes Teil')).not.toBeInTheDocument();
   });
 
+  it('retains confirmed positions and marks them confirmed after recognizing the changed text',async()=>{
+    const line=(quantity:string)=>({name:'SYNTHETISCH A',quantity,source:'Text Abschnitt 1',unit:'Stück' as const,surfaceRequested:'Verzinken',executionRequested:'offen' as const});
+    const recognizeIntakeText=vi.fn().mockResolvedValueOnce({code:'OK',data:{fields:[],positions:[line('1')]}})
+      .mockResolvedValueOnce({code:'OK',data:{fields:[],positions:[line('4')]}});
+    render(<GlobalCreateFlow ports={ports({recognizeIntakeText})}/>);openFlow();
+    const text=await screen.findByRole('textbox',{name:'Schnell erfassen'});
+    fireEvent.change(text,{target:{value:'SYNTHETISCH Ausgangstext'}});fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    await screen.findByDisplayValue('SYNTHETISCH A');
+    fireEvent.click(screen.getByRole('button',{name:'Alles bestätigen'}));
+    fireEvent.change(text,{target:{value:'SYNTHETISCH geänderter Text'}});fireEvent.click(screen.getByRole('button',{name:'Angaben erkennen'}));
+    await waitFor(()=>expect(recognizeIntakeText).toHaveBeenCalledTimes(2));
+    await waitFor(()=>expect(screen.queryByRole('button',{name:'Angaben erkennen'})).not.toBeInTheDocument());
+    await waitFor(()=>expect(screen.getByRole('spinbutton',{name:'Menge'})).toHaveValue(1));
+    expect(screen.getAllByRole('spinbutton',{name:'Menge'})).toHaveLength(1);
+    expect(document.querySelector('[data-spec-id="eingang.menge.herkunft"]')).toHaveTextContent('bestätigt');
+  });
+
   it('keeps a manually edited position after saving, reopening and recognizing the draft again',async()=>{
     const line=(name:string,quantity:string,source:string)=>({name,quantity,source,unit:'Stück' as const,surfaceRequested:'Verzinken',executionRequested:'offen' as const});
     const recognizeIntakeText=vi.fn().mockResolvedValueOnce({code:'OK',data:{fields:[],positions:[line('SYNTHETISCH A','1','Text Abschnitt 1'),line('SYNTHETISCH B','2','Text Abschnitt 2')]}})
