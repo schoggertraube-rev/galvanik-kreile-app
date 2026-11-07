@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHash,randomUUID } from "node:crypto";
 import {calculateQuote,type QuoteCalculation} from "../quoteCalculation";
-import {appendQuoteJournal} from "@/lib/server/quoteJournalPort";
+import {appendQuoteJournal,quoteHasPreparedDocument} from "@/lib/server/quoteJournalPort";
 import {readQuoteGoodsSummaries} from "@/lib/server/quoteGoodsContextPort";
 import { sql } from "drizzle-orm";
 import { normaliseOrderPositionSurface, orderPositionSurfaceLabel, orderPositionUnitLabel, orderPositionQuantityError, orderPositionPriceError } from "@/lib/orderPositionContract";
@@ -220,6 +220,13 @@ function normalizeUpdate(value: unknown): UpdateQuoteInput | null {
 
 function hashIntent(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value), "utf8").digest("hex");
+}
+
+function quoteContent(quote:QuoteReadback){return JSON.stringify({customerId:quote.customerId,dueDate:quote.dueDate,validUntil:quote.validUntil,termStatus:quote.termStatus,intakeSource:quote.intakeSource,note:quote.note,positions:quote.positions.map(p=>({name:p.name,quantity:p.quantity,material:p.material,surface:p.surfaceRequested,price:p.unitPriceCents,total:p.lineTotalCents})),calculation:quote.lifecycle?.calculation,specialRequests:quote.lifecycle?.specialRequests,deliveryWeeks:quote.lifecycle?.deliveryWeeks});}
+
+/** Holds the quote only during pending-mail preparation, never during Graph I/O. */
+export async function lockQuoteDeliverySnapshot(tx:PrivilegedTenantTransaction,tenantId:string,input:{id:string;version:number;edition:number}){
+ const rows=await tx.execute(sql`SELECT id FROM private.quotes WHERE tenant_id=${tenantId} AND id=${input.id}::uuid AND version=${input.version} AND fassung=${input.edition} FOR SHARE`);return rows.length===1;
 }
 
 function hashQuoteWriteIntent(input: CreateQuoteInput | UpdateQuoteInput): string {
@@ -445,6 +452,8 @@ export async function updateQuoteCommand(authorization: QuoteCommandContext, inp
   const intentSha256 = hashQuoteWriteIntent(normalized);
   try {
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
+      await tx.execute(sql`SELECT id FROM private.quotes WHERE tenant_id=${authorization.tenantId} AND id=${normalized.quoteId}::uuid FOR UPDATE`);
+      const before=await readQuote(tx,authorization.tenantId,normalized.quoteId);
       const calculationBefore=normalized.calculation?await readCalculationSnapshot(tx,authorization.tenantId,normalized.quoteId):null;
       const result = await tx.execute<{ result_code: string; result_quote_id: string | null; replayed: boolean }>(sql`
         SELECT * FROM private.update_quote_v1(
@@ -462,6 +471,10 @@ export async function updateQuoteCommand(authorization: QuoteCommandContext, inp
       }
       if(!outcome.replayed&&normalized.calculation)await writeCalculationSnapshot(tx,authorization,normalized.quoteId,normalized.clientEventId,normalized.calculation,calculationBefore);
       let quote = await readQuote(tx, authorization.tenantId, normalized.quoteId);
+      if(!outcome.replayed&&before?.lifecycle&&quote?.lifecycle&&quote.lifecycle.edition===before.lifecycle.edition&&quoteContent(before)!==quoteContent(quote)&&await quoteHasPreparedDocument(tx,authorization.tenantId,normalized.quoteId,before.lifecycle.edition)){
+        await tx.execute(sql`UPDATE private.quotes SET fassung=fassung+1 WHERE tenant_id=${authorization.tenantId} AND id=${normalized.quoteId}::uuid`);
+        quote=await readQuote(tx,authorization.tenantId,normalized.quoteId);
+      }
       if(!outcome.replayed&&quote?.lifecycle?.stage==='geaendert_seit_versand'){await followup(tx,{quote,action:'changed',phase:'after'});quote=await readQuote(tx,authorization.tenantId,normalized.quoteId);}
       const rows = await tx.execute<UpdateReceiptRow>(sql`
         SELECT * FROM private.v_quote_update_receipts_v1

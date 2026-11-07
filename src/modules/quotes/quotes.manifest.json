@@ -38,7 +38,8 @@
     "@/modules/quotes/server-public#updateQuoteCommand",
     "@/modules/quotes/server-public#changeQuoteLifecycleCommand",
     "@/modules/quotes/server-public#QuoteLifecycleInput",
-    "@/modules/quotes/server-public#QuoteFollowupBinding"
+    "@/modules/quotes/server-public#QuoteFollowupBinding",
+    "@/modules/quotes/server-public#lockQuoteDeliverySnapshot"
   ],
   "capabilities": [
     "quotes:create",

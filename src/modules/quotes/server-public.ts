@@ -2,6 +2,7 @@ import "server-only";
 
 export {
   createQuoteCommand,
+  lockQuoteDeliverySnapshot,
   updateQuoteCommand,
   prepareQuoteConversionCommand,
   readQuoteCreateReceiptCommand,

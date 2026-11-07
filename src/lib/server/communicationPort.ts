@@ -206,7 +206,7 @@ export async function attachInboxMessage(
 
 export async function sendCommunicationMail(
   auth: AuthorizationSnapshot,
-  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; attachment?: GraphMailAttachment; document?:CommunicationDocument; complaintResult?:{complaintId:string;version:number} },
+  input: { targetType: TargetType; targetId: string; clientRequestId: string; subject: string; body: string; attachment?: GraphMailAttachment; document?:CommunicationDocument; beforePrepare?:(tx:PrivilegedTenantTransaction)=>Promise<boolean>; complaintResult?:{complaintId:string;version:number} },
 ): Promise<Result<CommunicationReceipt>> {
   if (!validTarget(input?.targetType, input?.targetId) || !/^[0-9a-f-]{36}$/i.test(input.clientRequestId) || input.subject.trim().length < 1 || input.subject.length > 500 || input.body.trim().length < 1 || input.body.length > 20_000) {
     return { code: "VALIDATION_ERROR", message: "Empfänger, Betreff oder Nachricht ist ungültig." };
@@ -254,6 +254,7 @@ export async function sendCommunicationMail(
         return { threadId: existing[0].id, recordedAt: iso(existing[0].created_at), replay: { threadId: existing[0].id, messageId: null, customerId: target.customerId, orderId: target.orderId, recordedAt: iso(existing[0].created_at), replayed: true } };
       }
       if(readMicrosoftGraphConfigurationStatus().code!=='READY')throw Error('COMMUNICATION_NOT_CONFIGURED');
+      if(input.document&&(!input.beforePrepare||!await input.beforePrepare(tx)))throw Error('COMMUNICATION_DOCUMENT_SNAPSHOT_CHANGED');
       const threadId = randomUUID();
       const rows = await tx.execute<ThreadRow>(sql`
         INSERT INTO public.communication_threads (id, tenant_id, customer_id, order_id, source, subject, status, priority, category, created_by)
@@ -266,6 +267,7 @@ export async function sendCommunicationMail(
     });
   } catch (error) {
     logCommunicationFailure("COMMUNICATION_SEND_PREPARE_FAILED", error);
+    if(error instanceof Error&&error.message==='COMMUNICATION_DOCUMENT_SNAPSHOT_CHANGED')return {code:'VALIDATION_ERROR',message:'KV wurde seit der PDF-Erstellung geändert. Es wurde nichts gesendet. Aktuellen KV erneut wählen.'};
     if(error instanceof Error&&error.message==='COMMUNICATION_NOT_CONFIGURED')return {code:'IN_KLAERUNG',message:'Microsoft 365 ist noch nicht für die Preview verbunden.'};
     return { code: error instanceof Error && error.message === "COMMUNICATION_OUTCOME_UNCLEAR" ? "CONFLICT" : "UNAVAILABLE", message: error instanceof Error && error.message === "COMMUNICATION_OUTCOME_UNCLEAR" ? "Der Ausgang dieses Versands ist ungeklärt. Nicht erneut senden; zuerst im Outlook-Ausgang prüfen." : "Der Mailversand konnte nicht sicher vorbereitet werden." };
   }
