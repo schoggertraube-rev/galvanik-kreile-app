@@ -165,6 +165,7 @@ describe("quotes command boundary", () => {
     const update = { quoteId: QUOTE, clientEventId: CLIENT, expectedVersion: 1, dueDate: "2026-10-20", note: "Geändert", positions: input.positions };
     const updateIntent = createHash("sha256").update(JSON.stringify(update), "utf8").digest("hex");
     execute.mockImplementation((query: { text: string }) => {
+      if (query.text.includes("FROM private.quotes") && query.text.includes("FOR UPDATE")) return Promise.resolve([{id:QUOTE}]);
       if (query.text.includes("private.update_quote_v1")) return Promise.resolve([{ result_code: "OK", result_quote_id: QUOTE, replayed: false }]);
       if (query.text.includes("private.v_quotes_v1")) return Promise.resolve([{ ...quoteRow, version: 2, due_date: "2026-10-20", note: "Geändert", updated_at: "2026-09-16T10:01:00.000Z" }]);
       if (query.text.includes("private.v_quote_update_receipts_v1")) return Promise.resolve([{

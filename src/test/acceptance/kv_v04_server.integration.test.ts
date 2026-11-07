@@ -325,6 +325,9 @@ it('KV-06 books new goods and order atomically only after current acceptance, in
  const {getLiveOrderCardAction}=await import('@/app/actions/orders.actions');
  expect((await sql`SELECT freetext_original FROM public.orders WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${converted.orderReceipt.orderId}`)[0].freetext_original).toContain('TEST alte Halter erhalten');
  expect(await withSession(fixture,()=>getLiveOrderCardAction({orderId:converted.orderReceipt.orderId}))).toMatchObject({code:'OK',data:{card:{commercialQuote:{quoteId,totalNetCents:4000,specialRequests:'TEST alte Halter erhalten',positions:[{quantity:4,lineTotalCents:4000}]}}}});
+ const {prepareQuoteCopyAction}=await import('@/app/actions/quotes.actions');
+ const copy=await withSession(fixture,()=>prepareQuoteCopyAction({kind:'order',id:converted.orderReceipt.orderId,customerId:fixture.customerId}));
+ expect(copy).toMatchObject({code:'OK',preparation:{source:{kind:'order',id:converted.orderReceipt.orderId},positions:[{quantity:4,lineTotalCents:4000}],specialRequests:'TEST alte Halter erhalten',comparison:{actualHours:null,orderId:converted.orderReceipt.orderId},missing:[]}});
  expect((await sql`SELECT count(*)::int n FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${itemId}::uuid AND art='ware' AND befehl_id=${input.clientEventId}::uuid`)[0].n).toBe(1);
  expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{linkedOrderId:converted.orderReceipt.orderId,lifecycle:{goods:[{id:input.id,blocked:false,orderId:converted.orderReceipt.orderId}]}}});
  expect(await withSession(fixture,()=>convertQuoteToOrderAction(award,input))).toMatchObject({code:'OK',replayed:true});
@@ -635,4 +638,27 @@ it('KV-12 applies a mail term amendment to the existing quote and concern atomic
  expect(card).toMatchObject({code:'OK',data:{card:{dueAt:expect.stringContaining('2026-11-20')}}});
  expect((await withSession(fixture,()=>readQuoteAction({quoteId})))).toMatchObject({code:'OK',quote:{dueDate:'2026-11-20',linkedOrderId:converted.orderReceipt.orderId}});
  expect((await sql`SELECT vorgang_art,vorgang_id,text,anliegen_offen FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${itemId}::uuid`)[0]).toMatchObject({vorgang_art:'auftrag',vorgang_id:converted.orderReceipt.orderId,text,anliegen_offen:expect.arrayContaining(['aufgabe'])});
+});
+
+it('KV-11 copies exact existing quote contents through the sole create writer and keeps missing actual hours honest',async()=>{
+ const fixture=await createFixture();
+ const {createQuoteAction,prepareQuoteCopyAction,readQuoteAction}=await import('@/app/actions/quotes.actions');
+ const original=await withSession(fixture,()=>createQuoteAction({clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2026-12-01',note:'TEST Kopiervorlage',specialRequests:'TEST alte Halter erhalten',positions:[{name:'TEST Halter',quantity:3,material:null,surfaceRequested:'verchromen',unitPriceCents:333,lineTotalCents:1000}]}));
+ if(original.code!=='OK')throw Error('TEST_COPY_QUOTE:'+original.code);
+ const prepared=await withSession(fixture,()=>prepareQuoteCopyAction({kind:'quote',id:original.quote.quoteId,customerId:fixture.customerId}));
+ expect(prepared).toMatchObject({code:'OK',preparation:{source:{kind:'quote',id:original.quote.quoteId,version:1},customerId:fixture.customerId,positions:[{quantity:3,unitPriceCents:333,lineTotalCents:1000}],specialRequests:'TEST alte Halter erhalten',comparison:{actualHours:null,actualHoursReason:expect.stringContaining('fehlen')},missing:[]}});
+ if(prepared.code!=='OK')throw Error('TEST_COPY_READ:'+prepared.code);
+ expect((await sql`SELECT count(*)::int n FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`)[0].n).toBe(1);
+ expect(await withSession(fixture,()=>prepareQuoteCopyAction({kind:'quote',id:original.quote.quoteId,customerId:'TEST-other-customer'}))).toMatchObject({code:'CONFLICT'});
+ const positions=prepared.preparation.positions.map(position=>{if(position.unitPriceCents===null||position.lineTotalCents===null)throw Error('TEST_COPY_PRICE_MISSING');return {...position,unitPriceCents:position.unitPriceCents,lineTotalCents:position.lineTotalCents};});
+ const input={clientEventId:randomUUID(),customerId:fixture.customerId,dueDate:'2026-12-08',note:'TEST Kopie von '+prepared.preparation.source.number,positions,specialRequests:prepared.preparation.specialRequests};
+ const created=await withSession(fixture,()=>createQuoteAction(input));
+ expect(created).toMatchObject({code:'OK',quote:{totalNetCents:1000,dueDate:'2026-12-08',lifecycle:{edition:1,sentEdition:null,acceptedEdition:null,specialRequests:'TEST alte Halter erhalten'}}});
+ if(created.code!=='OK')throw Error('TEST_COPY_CREATE:'+created.code);
+ expect(created.quote.quoteId).not.toBe(original.quote.quoteId);
+ expect(await withSession(fixture,()=>createQuoteAction(input))).toMatchObject({code:'OK',replayed:true,quote:{quoteId:created.quote.quoteId}});
+ expect((await sql`SELECT count(*)::int n FROM private.quotes WHERE tenant_id=${KREILE_TENANT_SLUG} AND customer_id=${fixture.customerId}`)[0].n).toBe(2);
+ expect((await sql`SELECT count(*)::int n FROM public.events WHERE tenant_id=${KREILE_TENANT_SLUG} AND client_event_id=${input.clientEventId}::uuid`)[0].n).toBe(1);
+ expect(await withSession(fixture,()=>readQuoteAction({quoteId:created.quote.quoteId}))).toMatchObject({code:'OK',quote:{totalNetCents:1000,positions:[{quantity:3,lineTotalCents:1000}]}});
+ expect(await withSession(fixture,()=>readQuoteAction({quoteId:original.quote.quoteId}))).toMatchObject({code:'OK',quote:{version:1,dueDate:'2026-12-01',totalNetCents:1000}});
 });

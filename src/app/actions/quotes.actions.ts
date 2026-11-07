@@ -25,6 +25,7 @@ import {berlinCalendarDay} from '@/lib/domain/workingDays';
 import { readCompanyDocumentSettings } from "@/modules/fundament/server-public";
 import {
   createQuoteCommand,
+  readQuoteCopyCommand,
   changeQuoteLifecycleCommand,
   type QuoteLifecycleInput,
   type QuoteFollowupBinding,
@@ -360,4 +361,74 @@ export async function prepareQuoteFromIntakeAction(input:{sourceItemId:string;cu
   const specialRequests=[...hints,...(recognition.instructions??[]).map(value=>value.text)];
   return {code:'OK' as const,preparation:{source:{itemId:source.itemId,version:source.version,message:source.channel==='mail'},text,files:source.files,customer:customer?{id:customer.id,name:customer.name}:null,customerQuery:matches.query,proposals:matches.customers.map(value=>({id:value.id,name:value.name,reason:'Treffer im Original: '+matches.query})),recognition,confirmedCustomerHints:hints,specialRequests:specialRequests.length?[...new Set(specialRequests)].join('\n'):null}};
  }catch(error){console.error('[QUOTE_INTAKE_PREPARATION_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV-Vorbereitung konnte nicht sicher gelesen werden. Original bleibt erhalten.'};}
+}
+
+/** Read-only copy preparation. Saving still uses createQuoteAction and its receipt. */
+export async function prepareQuoteCopyAction(input: { kind: 'quote' | 'order'; id: string; customerId: string }) {
+  noStore();
+  if (!input || typeof input !== 'object' || Array.isArray(input)
+    || Object.keys(input).some(key => !['kind', 'id', 'customerId'].includes(key))
+    || !['quote', 'order'].includes(input.kind)
+    || typeof input.id !== 'string' || !input.id || input.id.length > 128
+    || typeof input.customerId !== 'string' || !input.customerId || input.customerId.length > 128) {
+    return { code: 'VALIDATION_ERROR' as const, message: 'Kopiervorlage und Kunde fehlen.' };
+  }
+  try {
+    const result = await resolveAuthorization();
+    const denied = authorizationFailure(result);
+    if (denied || !result.ok) return denied!;
+    const context = quoteCommandContext(result.data);
+    if (!context.capabilities.canCreateQuote || !context.capabilities.canReadQuote) {
+      return { code: 'FORBIDDEN' as const, message: 'KV-Kopiervorbereitung ist nicht freigegeben.' };
+    }
+    let quote;
+    let copyPositions: import('@/modules/quotes/public').QuotePositionInput[] | undefined;
+    let order: import('@/lib/server/orderCardRead').LiveOrderCard | null = null;
+    if (input.kind === 'order') {
+      const { getLiveOrderCardAction } = await import('@/app/actions/orders.actions');
+      const source = await getLiveOrderCardAction({ orderId: input.id });
+      if (source.code !== 'OK') return source;
+      order = source.data.card;
+      if (order.customerId !== input.customerId) {
+        return { code: 'CONFLICT' as const, message: 'Die Kopiervorlage gehört einem anderen Kunden.' };
+      }
+      if (order.commercialQuote) {
+        const sourceQuote = await readQuoteCopyCommand(context, { quoteId: order.commercialQuote.quoteId });
+        if (sourceQuote.code !== 'OK') return sourceQuote;
+        quote = sourceQuote.quote;
+        copyPositions = sourceQuote.positions;
+      }
+    } else {
+      const source = await readQuoteCopyCommand(context, { quoteId: input.id });
+      if (source.code !== 'OK') return source;
+      quote = source.quote;
+      copyPositions = source.positions;
+    }
+    if (quote && quote.customerId !== input.customerId) {
+      return { code: 'CONFLICT' as const, message: 'Die Kopiervorlage gehört einem anderen Kunden.' };
+    }
+    const positions = copyPositions ?? order!.items.map(item => ({ name: item.name, quantity: item.quantity, material: item.material,
+        surfaceRequested: item.surfaceRequested, unitPriceCents: item.unitPriceCents,
+        lineTotalCents: item.unitPriceCents === null || !Number.isSafeInteger(item.quantity * item.unitPriceCents)
+          ? null : item.quantity * item.unitPriceCents }));
+    return {
+      code: 'OK' as const,
+      preparation: {
+        source: { kind: input.kind, id: input.id, number: order?.orderNumber ?? quote!.quoteNumber,
+          version: order?.version ?? quote!.version },
+        customerId: input.customerId,
+        positions,
+        specialRequests: quote?.lifecycle?.specialRequests ?? null,
+        previousCalculation: quote?.lifecycle?.calculation ?? null,
+        comparison: { plannedHours: quote?.lifecycle?.calculation?.hours ?? null,
+          actualHours: null, actualHoursReason: 'Ist-Stunden fehlen: keine gebundene aktive Zeiterfassung.',
+          orderId: order?.id ?? quote?.linkedOrderId ?? null },
+        missing: positions.some(position => position.unitPriceCents === null || position.lineTotalCents === null)
+          ? ['Preis'] : [],
+      },
+    };
+  } catch (error) {
+    console.error('[QUOTE_COPY_PREPARATION_FAILED]', error);
+    return { code: 'UNAVAILABLE' as const, message: 'Kopiervorlage konnte nicht sicher gelesen werden. Es wurde kein KV angelegt.' };
+  }
 }

@@ -23,3 +23,5 @@ export type {
 } from "./server/types";
 
 export type {QuoteFollowupBinding} from './server/quoteCommands';
+
+export {readQuoteCopyCommand} from "./server/quoteCommands";

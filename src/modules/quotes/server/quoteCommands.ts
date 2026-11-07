@@ -721,3 +721,18 @@ async function writeCalculationSnapshot(tx:PrivilegedTenantTransaction,auth:Quot
  if(rows.length!==1)throw Error('QUOTE_CALCULATION_WRITE_FAILED');
  await appendQuoteJournal(tx,auth,{id:randomUUID(),type:'QUOTE_CALCULATION_V04',clientEventId:randomUUID(),correlationId:randomUUID(),version:rows[0].version,description:'KV-Kalkulation in derselben Speicherung gesichert',payload:{quoteId,requestKey,edition:rows[0].edition,before,after:calculation}});
 }
+
+/** Copy the stored integer input alongside its exact total, never reverse-round the display price. */
+export async function readQuoteCopyCommand(authorization: QuoteCommandContext, input: { quoteId: string }) {
+ if (!plainObject(input) || !exactKeys(input,['quoteId']) || typeof input.quoteId!=='string' || !UUID_PATTERN.test(input.quoteId)) return {code:'VALIDATION_ERROR' as const,message:'KV-Kennung ist ungueltig.'};
+ if (!authorization.capabilities.canReadQuote) return {code:'FORBIDDEN' as const,message:'KV darf nicht gelesen werden.'};
+ try {
+  return await withPrivilegedTenantTransaction(authorization,async tx=>{
+   const quote=await readQuote(tx,authorization.tenantId,input.quoteId);
+   if(!quote)return {code:'NOT_FOUND' as const,message:'KV ist nicht verfuegbar.'};
+   const rows=await tx.execute<{position:number;unitPriceCents:number;lineTotalCents:number}>(sql`SELECT position,unit_price_cents::float8 AS "unitPriceCents",coalesce(zeilen_gesamt_cents,line_total_cents)::float8 AS "lineTotalCents" FROM private.quote_positions WHERE tenant_id=${authorization.tenantId} AND quote_id=${input.quoteId}::uuid AND revision=${quote.version} ORDER BY position`);
+   if(rows.length!==quote.positions.length||rows.some((row,index)=>row.position!==quote.positions[index].position||!Number.isSafeInteger(row.unitPriceCents)||row.unitPriceCents<0||row.lineTotalCents!==quote.positions[index].lineTotalCents))throw Error('QUOTE_COPY_SOURCE_INVALID');
+   return {code:'OK' as const,quote,positions:quote.positions.map((position,index)=>({name:position.name,quantity:position.quantity,material:position.material,surfaceRequested:position.surfaceRequested,unitPriceCents:rows[index].unitPriceCents,lineTotalCents:rows[index].lineTotalCents}))};
+  });
+ }catch(error){console.error('[QUOTE_COPY_READ_FAILED]',error);return {code:'UNAVAILABLE' as const,message:'KV-Kopiervorlage konnte nicht sicher gelesen werden.'};}
+}
