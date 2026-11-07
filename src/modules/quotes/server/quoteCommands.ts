@@ -570,13 +570,13 @@ export async function prepareQuoteConversionCommand(authorization: QuoteCommandC
   const normalized = normalizeConvert(input);
   if (!normalized) return { code: "VALIDATION_ERROR", message: "Beauftragungsdaten sind ungültig." };
   if (!authorization.capabilities.canConvertQuote) return { code: "FORBIDDEN", message: "KV darf mit dieser Rolle nicht beauftragt werden." };
-  if(!normalized.goodsReceiptId)return {code:"VALIDATION_ERROR",message:"Ware zuerst zum KV annehmen; ohne Warenbeleg entsteht kein Auftrag."};
   const intentSha256 = hashIntent(normalized);
   try {
     const run=async(tx:PrivilegedTenantTransaction):Promise<PrepareQuoteConversionResult>=>{
       await tx.execute(sql`SELECT id FROM private.quotes WHERE tenant_id=${authorization.tenantId} AND id=${normalized.quoteId}::uuid FOR UPDATE`);
       const quote = await readQuote(tx, authorization.tenantId, normalized.quoteId);
       if (!quote) return { code: "NOT_FOUND", message: "KV ist nicht verfügbar." };
+      if(!normalized.goodsReceiptId)return {code:'VALIDATION_ERROR',message:`Auftrag entsteht mit dem Wareneingang · Ware zu KV ${quote.quoteNumber} annehmen`};
       if(!quote.lifecycle||quote.lifecycle.acceptedEdition!==quote.lifecycle.edition||!quote.lifecycle.acceptedAt||!quote.lifecycle.acceptanceEvidence?.trim()||quote.lifecycle.declinedAt)return {code:'VALIDATION_ERROR',message:'Aktuelle KV-Fassung ohne Vorbehalt zusagen; danach Ware zum Auftrag buchen.'};
       const goods=quote.lifecycle.goods?.find(row=>row.id===normalized.goodsReceiptId);
       if((!goods&&!(options.planOnly&&!quote.linkedOrderId&&options.pendingGoodsId===normalized.goodsReceiptId))||(goods&&(goods.blocked||goods.orderId!==quote.linkedOrderId)))return {code:'VALIDATION_ERROR',message:'Passender angenommener Warenbeleg fehlt oder ist gesperrt.'};

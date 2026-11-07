@@ -263,7 +263,7 @@ it('KV-07 stores early goods once in the existing receipt, derives the lock and 
  expect(await withSession(fixture,()=>readQuoteAction({quoteId}))).toMatchObject({code:'OK',quote:{linkedOrderId:null,lifecycle:{goods:[{id:input.id,blocked:false,orderId:null}]}}});
  expect((await sql`SELECT count(*)::int AS n FROM public.goods_receipt WHERE tenant_id=${KREILE_TENANT_SLUG} AND kv_id=${quoteId}::uuid`)[0].n).toBe(1);
  const award={quoteId,clientEventId:randomUUID(),expectedVersion:3,confirmedAward:true as const,confirmedOrderDueDate:'2027-04-20',handoverMode:'pickup' as const,paymentMode:'rechnung' as const,goodsReceiptId:input.id};
- expect(await withSession(fixture,()=>convertQuoteToOrderAction({...award,goodsReceiptId:undefined}))).toMatchObject({code:'VALIDATION_ERROR'});
+ expect(await withSession(fixture,()=>convertQuoteToOrderAction({...award,goodsReceiptId:undefined}))).toMatchObject({code:'VALIDATION_ERROR',message:`Auftrag entsteht mit dem Wareneingang · Ware zu KV ${created.quote.quoteNumber} annehmen`});
  // Change only this TEST fixture to exercise a late failure after the canonical order event.
  await sql`UPDATE public.goods_receipt SET mengen=jsonb_set(mengen,'{0,bestaetigt}','3'::jsonb) WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${input.id}::uuid`;
  const mismatch=await withSession(fixture,()=>convertQuoteToOrderAction(award));
