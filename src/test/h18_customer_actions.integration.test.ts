@@ -823,6 +823,8 @@ describe("Owner model D05/D07: draft actions against real Replay DB",()=>{
   const input={parentId,parentVersion:original.capture.version,textSourceId:parentId,childId,draftId,clientEventId,fileId:null,payload};
   expect(await withSession(actor,()=>createIntakeContinuationAction(input))).toMatchObject({code:"OK",childId,draftId,replayed:false});
   expect(await withSession(actor,()=>createIntakeContinuationAction(input))).toMatchObject({code:"OK",childId,draftId,replayed:true});
+  const anotherId=randomUUID();
+  expect(await withSession(actor,()=>createIntakeContinuationAction({...input,childId:anotherId,draftId:randomUUID(),clientEventId:randomUUID(),payload:{...payload,clientKey:anotherId,documents:[anotherId]}}))).toMatchObject({code:"CONFLICT"});
   const [row]=await sql`SELECT fortsetzung_von::text,file_id::text,text FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${childId}::uuid`;
   expect(row).toEqual({fortsetzung_von:parentId,file_id:null,text:null});
   expect(await sql`SELECT id FROM public.intake_event WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id=${childId}::uuid AND art='angelegt' AND befehl_id=${clientEventId}::uuid`).toHaveLength(1);
@@ -843,6 +845,17 @@ describe("Owner model D05/D07: draft actions against real Replay DB",()=>{
   expect(await sql`SELECT id::text,vorgang_id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id IN (${parentId}::uuid,${childId}::uuid) ORDER BY id`).toEqual(expect.arrayContaining([{id:parentId,vorgang_id:first.orderId},{id:childId,vorgang_id:second.orderId}]));
   expect(await sql`SELECT id FROM private.intake_drafts WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${draftId}::uuid`).toHaveLength(0);
   expect(await withSession(actor,()=>getIntakeCaptureAction(childId))).toMatchObject({code:"OK",capture:{orderId:second.orderId,text,continuation:{sourceId:parentId}}});
+ });
+
+ it("P101 erzeugt bei zwei gleichzeitigen Versuchen genau eine Fortsetzung",async()=>{
+  const actor=await createFixture(),parentId=randomUUID(),text="SYNTHETISCH gleichzeitige Fortsetzung";
+  const {saveIntakeNoteAction,createIntakeContinuationAction}=await import("@/app/actions/eingang.actions");
+  const parent=await withSession(actor,()=>saveIntakeNoteAction({itemId:parentId,textstand:randomUUID(),text,concerns:[]}));
+  if(parent.code!=="OK")throw Error("P101_PARENT_REQUIRED");
+  const input=()=>{const childId=randomUUID();return {parentId,parentVersion:parent.capture.version,textSourceId:parentId,childId,draftId:randomUUID(),clientEventId:randomUUID(),fileId:null,payload:{clientKey:childId,text,documents:[childId],items:[{key:randomUUID(),name:"SYNTHETISCH Teil",quantity:"1"}]}};};
+  const [a,b]=await Promise.all([withSession(actor,()=>createIntakeContinuationAction(input())),withSession(actor,()=>createIntakeContinuationAction(input()))]);
+  expect([a.code,b.code].sort()).toEqual(["CONFLICT","OK"]);
+  expect(await sql`SELECT id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND fortsetzung_von=${parentId}::uuid`).toHaveLength(1);
  });
 
  it("P101 verknüpft gesicherte Originaldateien ohne Kopie und friert den Quellstand ein",async()=>withLocalReplayStorage(async()=>{

@@ -133,6 +133,8 @@ export async function createIntakeContinuation(input: unknown) {
       if (!parent) return { code:"NOT_FOUND" as const, message:"Der ursprüngliche Eingang wurde nicht gefunden." };
       if (parent.kanal === "mail" && !hasAuthorizationArea(auth,"mails")) return { code:"FORBIDDEN" as const, message:"Mail-Inhalte benötigen das Recht Mails." };
       if (parent.version !== value.parentVersion) return { code:"CONFLICT" as const, message:"Das Original wurde geändert · bitte erneut laden." };
+      const siblings=await tx.execute(sql`SELECT id FROM public.intake_item WHERE tenant_id=${auth.tenantId} AND fortsetzung_von=${value.parentId}::uuid LIMIT 1`);
+      if(siblings.length)return {code:"CONFLICT" as const,message:"Eine Fortsetzung ist bereits vorhanden · ursprünglichen Eingang erneut öffnen."};
       const textSources = await tx.execute<{kanal:string; text:string|null}>(sql`SELECT kanal,text FROM public.intake_item
         WHERE tenant_id=${auth.tenantId} AND id=${value.textSourceId}::uuid FOR SHARE`);
       const textSource = textSources[0];
