@@ -837,6 +837,9 @@ describe("Owner model D05/D07: draft actions against real Replay DB",()=>{
   expect(await withSession(other,()=>getIntakeCaptureAction(childId))).toMatchObject({code:"FORBIDDEN"});
   expect(await withSession(actor,()=>getIntakeCaptureAction(parentId))).toMatchObject({code:"OK",capture:{continuation:{childIds:[childId]}}});
   expect(await withSession(actor,()=>createIntakeContinuationAction({...input,payload:{...payload,text:"SYNTHETISCH verändert"}}))).toMatchObject({code:"CONFLICT"});
+  const thirdId=randomUUID(),thirdDraftId=randomUUID();
+  const thirdPayload={clientKey:thirdId,text,documents:[thirdId],items:[{key:randomUUID(),name:"SYNTHETISCH Position 41",quantity:"1"}]};
+  expect(await withSession(actor,()=>createIntakeContinuationAction({parentId:childId,parentVersion:1,textSourceId:parentId,childId:thirdId,draftId:thirdDraftId,clientEventId:randomUUID(),fileId:null,payload:thirdPayload}))).toMatchObject({code:"OK"});
   const {erfasseAuftragAusEingangAction}=await import("@/app/actions/eingang.actions");
   const position={catalogServiceId:null,name:"SYNTHETISCH Position",quantity:1,material:null,surfaceRequested:"verzinken",executionRequested:"offen" as const,unit:"stueck",unitPriceCents:null,vatRateBasisPoints:null};
   const common={geprueft:true,text,dueDate:"2026-11-19",termStatus:"bestaetigt" as const,intakeSource:"persoenlich" as const,handoverMode:"pickup" as const,paymentMode:"vorkasse" as const,items:[position]};
@@ -846,10 +849,14 @@ describe("Owner model D05/D07: draft actions against real Replay DB",()=>{
   if(!firstOrder)throw Error("P101_FIRST_ORDER_MISSING");
   const second=await withSession(actor,()=>erfasseAuftragAusEingangAction({...common,clientKey:childId,draftId,sourceCaptures:[{id:childId,version:1}],customer:{mode:"EXISTING" as const,customerId:firstOrder.customer_id}}));
   if(second.code!=="OK")throw Error("P101_SECOND_ORDER_FAILED:"+second.message);
+  const third=await withSession(actor,()=>erfasseAuftragAusEingangAction({...common,clientKey:thirdId,draftId:thirdDraftId,sourceCaptures:[{id:thirdId,version:1}],customer:{mode:"EXISTING" as const,customerId:firstOrder.customer_id}}));
+  if(third.code!=="OK")throw Error("P102_THIRD_ORDER_FAILED:"+third.message);
   expect(second.orderId).not.toBe(first.orderId);
-  expect(await sql`SELECT id::text,vorgang_id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id IN (${parentId}::uuid,${childId}::uuid) ORDER BY id`).toEqual(expect.arrayContaining([{id:parentId,vorgang_id:first.orderId},{id:childId,vorgang_id:second.orderId}]));
+  expect(new Set([first.orderId,second.orderId,third.orderId]).size).toBe(3);
+  expect(await sql`SELECT id::text,vorgang_id FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id IN (${parentId}::uuid,${childId}::uuid,${thirdId}::uuid) ORDER BY id`).toEqual(expect.arrayContaining([{id:parentId,vorgang_id:first.orderId},{id:childId,vorgang_id:second.orderId},{id:thirdId,vorgang_id:third.orderId}]));
   expect(await sql`SELECT id FROM private.intake_drafts WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${draftId}::uuid`).toHaveLength(0);
   expect(await withSession(actor,()=>getIntakeCaptureAction(childId))).toMatchObject({code:"OK",capture:{orderId:second.orderId,text,continuation:{sourceId:parentId}}});
+  expect(await withSession(actor,()=>getIntakeCaptureAction(thirdId))).toMatchObject({code:"OK",capture:{orderId:third.orderId,text,continuation:{sourceId:childId}}});
  });
 
  it("P101 erzeugt bei zwei gleichzeitigen Versuchen genau eine Fortsetzung",async()=>{
@@ -864,8 +871,8 @@ describe("Owner model D05/D07: draft actions against real Replay DB",()=>{
  });
 
  it("P101 verknüpft gesicherte Originaldateien ohne Kopie und friert den Quellstand ein",async()=>withLocalReplayStorage(async()=>{
-  const actor=await createFixture();
-  const {prepareIntakeFileAction,finishIntakeFileAction,saveIntakeNoteAction,createIntakeContinuationAction,getIntakeCaptureAction}=await import("@/app/actions/eingang.actions");
+  const actor=await createFixture("meister",["auftraege","kunden","geld","eingang","mails"]);
+  const {prepareIntakeFileAction,finishIntakeFileAction,saveIntakeNoteAction,createIntakeContinuationAction,getIntakeCaptureAction,getIntakeMessagesAction,openIntakeOriginalAction}=await import("@/app/actions/eingang.actions");
   const {uploadIntakeOriginal}=await import("@/modules/eingang/public");
   const bytes=Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aLp8AAAAASUVORK5CYII=","base64");
   const parentId=randomUUID(),fileId=randomUUID(),textSourceId=randomUUID(),childId=randomUUID(),draftId=randomUUID();
@@ -888,6 +895,10 @@ describe("Owner model D05/D07: draft actions against real Replay DB",()=>{
   expect(await withSession(actor,()=>getIntakeCaptureAction(thirdId))).toMatchObject({code:"OK",capture:{text,files:[{id:fileId,secured:true}],continuation:{sourceId:childId,textSourceId}}});
   expect(await sql`SELECT file_id::text,fortsetzung_von::text FROM public.intake_item WHERE tenant_id=${KREILE_TENANT_SLUG} AND id=${thirdId}::uuid`).toEqual([{file_id:fileId,fortsetzung_von:childId}]);
   expect(await sql`SELECT id FROM public.intake_file WHERE tenant_id=${KREILE_TENANT_SLUG} AND item_id IN (${childId}::uuid,${thirdId}::uuid)`).toHaveLength(0);
+  const messages=await withSession(actor,()=>getIntakeMessagesAction('alle'));
+  if(messages.code!=="OK")throw Error("P102_MESSAGE_READ_FAILED:"+messages.message);
+  expect(messages.messages.find(row=>row.id===thirdId)).toMatchObject({text,fileIds:[fileId]});
+  expect(await withSession(actor,()=>openIntakeOriginalAction({fileId,clientEventId:randomUUID()}))).toMatchObject({code:"OK",original:{id:fileId,sha256:file.sha256,restricted:false}});
  }));
 
  it("P66 keeps the newer draft when an older browser session saves later",async()=>{

@@ -298,6 +298,22 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("PATH1 V5 globaler Kunde-KV-Auftrag-Fluss", () => {
+  it("keeps the secured original reachable from a continuation and does not claim an unconfirmed file is saved",async()=>{
+    const sourceId='1d3ebdf6-bd5d-4bb4-97e1-cc071cd6676e',fileId='9cb71504-2d70-43d2-b316-9b35635dc9ac';
+    const capture:IntakeCapture={id:sourceId,version:1,text:'SYNTHETISCH Original',customerId:null,orderId:null,assignment:'offen',usage:'offen',concerns:[],continuation:{sourceId:'b9fef876-f146-41b8-85f3-d2a3aa091689',childIds:[]},files:[
+      {id:fileId,name:'SYNTHETISCH Beleg.pdf',mime:'application/pdf',bytes:24,readable:true,status:'fertig',secured:true},
+      {id:'4a047452-75ab-4bac-8520-c17af67cb1d5',name:'SYNTHETISCH offen.pdf',mime:'application/pdf',bytes:24,readable:true,status:'wartet',secured:false},
+    ]};
+    const openCaptureObject=vi.fn().mockReturnValueOnce(true).mockReturnValueOnce(false);
+    const api=ports({getCapture:vi.fn().mockResolvedValue({code:'OK',capture}),openCaptureObject});
+    render(<GlobalCreateFlow ports={api}/>);
+    await act(async()=>{window.dispatchEvent(new CustomEvent('path1:global-create-open',{detail:{intent:'DIRECT_INTAKE',prefill:{sourceItemId:sourceId,intakeKind:'auftrag'}}}));});
+    const open=await screen.findByRole('button',{name:'SYNTHETISCH Beleg.pdf · Original öffnen'});
+    expect(screen.getByText('SYNTHETISCH offen.pdf · Original noch nicht bestätigt')).toBeInTheDocument();
+    fireEvent.click(open);expect(openCaptureObject).toHaveBeenCalledWith('original',`${sourceId}#${fileId}`);
+    fireEvent.click(open);expect(await screen.findByText(/Original konnte nicht geöffnet werden/)).toBeInTheDocument();
+    expect(api.createDirectIntake).not.toHaveBeenCalled();
+  });
   it("P44: selects an actual intake mail through 3.4 and returns to the same capture without losing manual entries",async()=>{
     const value=ports({canReadMails:true});
     const mailId='22fe6577-b527-4dce-aacd-b0546cf30918';
