@@ -25,7 +25,7 @@ export async function bindIntakeOriginalToOrder(tx:PrivilegedTenantTransaction,a
   if(row.vorgang_id&&(row.vorgang_art!=='auftrag'||row.vorgang_id!==input.orderId)
     &&!(row.vorgang_art==='kv'&&await quoteHasCreatedOrder(tx,auth.tenantId,row.vorgang_id,input.orderId)))throw Error('INTAKE_CAPTURE_ALREADY_ASSIGNED');
   const usage=input.complete&&row.anliegen_offen.length===0?'erledigt':row.einsatz;
-  if(row.vorgang_id&&usage===row.einsatz)return;
+  if(row.vorgang_art==='auftrag'&&row.vorgang_id===input.orderId&&usage===row.einsatz)return;
   const changed=await tx.execute(sql`UPDATE public.intake_item SET kunde_id=${input.customerId},vorgang_art='auftrag',vorgang_id=${input.orderId},zuordnung='hand',einsatz=${usage},
     geaendert_von=${auth.userId}::uuid,geaendert_am=statement_timestamp(),updated_at=statement_timestamp(),version=version+1
     WHERE tenant_id=${auth.tenantId} AND id=${input.itemId}::uuid AND version=${row.version} RETURNING id`);

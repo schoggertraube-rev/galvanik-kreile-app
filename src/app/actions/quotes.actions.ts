@@ -12,7 +12,8 @@ import {
 import { readCustomerSummary } from "@/lib/server/customerSummaryRead";
 import { createOrderIntake } from "@/lib/server/commands/orderIntakeCommand";
 import { readOrderIntakeReceipt } from "@/lib/server/orderIntakeRead";
-import {recordIntakeQuoteEffect,bindQuoteGoodsReceiptToCreatedOrder} from '@/modules/eingang/server-public';
+import {recordIntakeQuoteEffect,bindQuoteGoodsReceiptToCreatedOrder,writeQuoteGoodsReceiptInTransaction} from '@/modules/eingang/server-public';
+import {parseQuoteGoodsReceiptInput} from '@/modules/eingang/public';
 import { readCompanyDocumentSettings } from "@/modules/fundament/server-public";
 import {
   createQuoteCommand,
@@ -196,7 +197,9 @@ export async function readQuoteConversionReceiptAction(input: { quoteId: string;
   }
 }
 
-export async function convertQuoteToOrderAction(input: ConvertQuoteInput) {
+export async function convertQuoteToOrderAction(input: ConvertQuoteInput,newGoodsInput?:unknown) {
+  const newGoods=newGoodsInput===undefined?null:parseQuoteGoodsReceiptInput(newGoodsInput);
+  if(newGoodsInput!==undefined&&(!newGoods||newGoods.quoteId!==input.quoteId||newGoods.id!==input.goodsReceiptId||newGoods.expectedQuoteVersion!==input.expectedVersion))return {code:"VALIDATION_ERROR" as const,message:"KV und neue Warenprüfung passen nicht zusammen."};
   let authorization;
   try {
     authorization = await resolveAuthorization();
@@ -207,18 +210,23 @@ export async function convertQuoteToOrderAction(input: ConvertQuoteInput) {
   if (failure || !authorization.ok) return failure!;
 
   const commandContext = quoteCommandContext(authorization.data);
-  const prepared = await prepareQuoteConversionCommand(commandContext, input,{planOnly:true});
+  const prepared = await prepareQuoteConversionCommand(commandContext, input,{planOnly:true,pendingGoodsId:newGoods?.id});
   if (prepared.code !== "OK") return prepared;
 
   let goods:Awaited<ReturnType<typeof bindQuoteGoodsReceiptToCreatedOrder>>|null=null;
   let boundFailure:{code:'VALIDATION_ERROR'|'CONFLICT'|'UNAVAILABLE'|'FORBIDDEN'|'NOT_FOUND';message:string}|null=null;
+  const saveGoods=async(tx:Parameters<typeof bindQuoteGoodsReceiptToCreatedOrder>[0],auth:AuthorizationSnapshot)=>{
+    if(!newGoods)return;
+    const saved=await writeQuoteGoodsReceiptInTransaction(tx,auth,newGoods);
+    if(saved.code!=='OK'){boundFailure={code:saved.code==='UNAUTHENTICATED'?'FORBIDDEN':saved.code,message:saved.message};throw Error('QUOTE_NEW_GOODS_FAILED');}
+  };
   const check=async(tx:Parameters<typeof bindQuoteGoodsReceiptToCreatedOrder>[0],planOnly:boolean)=>{
-    const result=await prepareQuoteConversionCommand(commandContext,input,{transaction:tx,planOnly});
+    const result=await prepareQuoteConversionCommand(commandContext,input,{transaction:tx,planOnly,pendingGoodsId:newGoods?.id});
     if(result.code!=='OK'){boundFailure=result;throw Error('QUOTE_ORDER_BINDING_FAILED');}
   };
   const order = await createOrderIntake(prepared.orderInput,undefined,{
-    before:tx=>check(tx,true),
-    beforeEvent:tx=>check(tx,false),
+    before:async(tx,auth)=>{await check(tx,true);if(newGoods&&prepared.replayed)await saveGoods(tx,auth);},
+    beforeEvent:async(tx,auth)=>{await saveGoods(tx,auth);await check(tx,false);},
     after:async(tx,auth,receipt)=>{
       try{goods=await bindQuoteGoodsReceiptToCreatedOrder(tx,auth,{quoteId:input.quoteId,receiptId:input.goodsReceiptId!,clientEventId:input.clientEventId,orderId:receipt.orderId,items:receipt.items});}
       catch(error){

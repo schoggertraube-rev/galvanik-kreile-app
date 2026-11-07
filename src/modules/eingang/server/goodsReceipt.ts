@@ -148,3 +148,8 @@ export async function bindQuoteGoodsReceiptToCreatedOrder(tx:PrivilegedTenantTra
  await appendGoodsReceiptEvent(tx,auth,{clientEventId:input.clientEventId,orderId:order.id,receiptId:input.receiptId,version:order.version,intent:createHash('sha256').update(JSON.stringify(input)).digest('hex'),before,after:receipt});
  return {code:'OK' as const,receipt,replayed:false};
 }
+
+/** Existing receipt writer participating in the canonical order transaction. */
+export async function writeQuoteGoodsReceiptInTransaction(tx:PrivilegedTenantTransaction,auth:AuthorizationSnapshot,input:unknown){
+ return saveQuoteGoodsReceipt(input,{transaction:tx,authorization:auth,allowAccepted:true});
+}
